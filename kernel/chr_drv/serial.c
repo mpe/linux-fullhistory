@@ -14,44 +14,48 @@
  */
 
 #include <signal.h>
- 
+#include <errno.h>
+
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/tty.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
+#include <asm/segment.h>
 
 #define WAKEUP_CHARS (3*TTY_BUF_SIZE/4)
 
+/*
+ * note that IRQ9 is what many docs call IRQ2 - on the AT hardware
+ * the old IRQ2 line has been changed to IRQ9. The serial_table
+ * structure considers IRQ2 to be the same as IRQ9.
+ */
+extern void IRQ9_interrupt(void);
 extern void IRQ3_interrupt(void);
 extern void IRQ4_interrupt(void);
+extern void IRQ5_interrupt(void);
 
-#define PORT_UNKNOWN	0
-#define PORT_8250	1
-#define PORT_16450	2
-#define PORT_16550	3
-#define PORT_16550A	4
+struct serial_struct serial_table[NR_SERIALS] = {
+	{ PORT_UNKNOWN, 0, 0x3F8, 4, NULL},
+	{ PORT_UNKNOWN, 1, 0x2F8, 3, NULL},
+	{ PORT_UNKNOWN, 2, 0x3E8, 4, NULL},
+	{ PORT_UNKNOWN, 3, 0x2E8, 3, NULL},
+};
 
-int port_table[] = {
-	PORT_UNKNOWN,
-	PORT_UNKNOWN,
-	PORT_UNKNOWN,
-	PORT_UNKNOWN,
-	PORT_UNKNOWN
-};	
+static struct serial_struct * irq_info[16] = { NULL, };
 
-static void modem_status_intr(unsigned line, unsigned port, struct tty_struct * tty)
+static void modem_status_intr(struct serial_struct * info)
 {
-	unsigned char status = inb(port+6);
+	unsigned char status = inb(info->port+6);
 
-	if ((status & 0x88) == 0x08 && tty->pgrp > 0)
-		kill_pg(tty->pgrp,SIGHUP,1);
+	if ((status & 0x88) == 0x08 && info->tty->pgrp > 0)
+		kill_pg(info->tty->pgrp,SIGHUP,1);
 #if 0
 	if ((status & 0x10) == 0x10)
-		tty->stopped = 0;
+		info->tty->stopped = 0;
 	else
-		tty->stopped = 1;
+		info->tty->stopped = 1;
 #endif
 }
 
@@ -64,65 +68,65 @@ static void modem_status_intr(unsigned line, unsigned port, struct tty_struct * 
  * again. With serial lines, the interrupts can happen so often that the
  * races actually are noticeable.
  */
-static void send_intr(unsigned line, unsigned port, struct tty_struct * tty)
+static void send_intr(struct serial_struct * info)
 {
+	unsigned short port = info->port;
+	unsigned int timer = SER1_TIMEOUT + info->line;
+	struct tty_queue * queue = info->tty->write_q;
 	int c, i = 0;
 
-#define TIMER ((SER1_TIMEOUT-1)+line)
-	timer_active &= ~(1 << TIMER);
+	timer_active &= ~(1 << timer);
 	do {
-		if ((c = GETCH(tty->write_q)) < 0)
+		if ((c = GETCH(queue)) < 0)
 			return;
 		outb(c,port);
 		i++;
-	} while ( port_table[line] == PORT_16550A &&
-		  i < 14 && !EMPTY(tty->write_q));
-	timer_table[TIMER].expires = jiffies + 10;
-	timer_active |= 1 << TIMER;
-	if (LEFT(tty->write_q) > WAKEUP_CHARS)
-		wake_up(&tty->write_q->proc_list);
-#undef TIMER
+	} while (info->type == PORT_16550A &&
+		  i < 14 && !EMPTY(queue));
+	timer_table[timer].expires = jiffies + 10;
+	timer_active |= 1 << timer;
+	if (LEFT(queue) > WAKEUP_CHARS)
+		wake_up(&queue->proc_list);
 }
 
-static void receive_intr(unsigned line, unsigned port, struct tty_struct * tty)
+static void receive_intr(struct serial_struct * info)
 {
-	while (!FULL(tty->read_q)) {
-		if (!(inb(port+5) & 1))
-			break;
-		PUTCH(inb(port),tty->read_q);
-	};
-	timer_active |= (1<<(SER1_TIMER-1))<<line;
+	unsigned short port = info->port;
+	struct tty_queue * queue = info->tty->read_q;
+
+	while (inb(port+5) & 1)
+		PUTCH(inb(port),queue);
+	timer_active |= (1<<SER1_TIMER)<<info->line;
 }
 
-static void line_status_intr(unsigned line, unsigned port, struct tty_struct * tty)
+static void line_status_intr(struct serial_struct * info)
 {
-	unsigned char status = inb(port+5);
+	unsigned char status = inb(info->port+5);
 
 /*	printk("line status: %02x\n",status); */
 }
 
-static void (*jmp_table[4])(unsigned,unsigned,struct tty_struct *) = {
+static void (*jmp_table[4])(struct serial_struct *) = {
 	modem_status_intr,
 	send_intr,
 	receive_intr,
 	line_status_intr
 };
 
-static void check_tty(unsigned line,struct tty_struct * tty)
+static void check_tty(struct serial_struct * info)
 {
-	unsigned short port;
 	unsigned char ident;
 
-	if (!(port = tty->read_q->data))
+	if (!info || !info->tty || !info->port)
 		return;
 	while (1) {
-		ident = inb(port+2) & 7;
+		ident = inb(info->port+2) & 7;
 		if (ident & 1)
 			return;
 		ident >>= 1;
 		if (ident > 3)
 			return;
-		jmp_table[ident](line,port,tty);
+		jmp_table[ident](info);
 	}
 }
 
@@ -131,8 +135,7 @@ static void check_tty(unsigned line,struct tty_struct * tty)
  */
 void do_IRQ3(void)
 {
-	check_tty(2,tty_table+65);
-	check_tty(4,tty_table+67);
+	check_tty(irq_info[3]);
 }
 
 /*
@@ -140,8 +143,17 @@ void do_IRQ3(void)
  */
 void do_IRQ4(void)
 {
-	check_tty(1,tty_table+64);
-	check_tty(3,tty_table+66);	
+	check_tty(irq_info[4]);
+}
+
+void do_IRQ5(void)
+{
+	check_tty(irq_info[5]);
+}
+
+void do_IRQ9(void)
+{
+	check_tty(irq_info[9]);
 }
 
 static void com1_timer(void)
@@ -168,52 +180,51 @@ static void com4_timer(void)
  * Again, we disable interrupts to be sure there aren't any races:
  * see send_intr for details.
  */
-static inline void do_rs_write(unsigned line, struct tty_struct * tty)
+static inline void do_rs_write(struct serial_struct * info)
 {
-	int port;
-
-#define TIMER ((SER1_TIMEOUT-1)+line)
-	if (!tty || !tty->write_q || EMPTY(tty->write_q))
+	if (!info->tty || !info->port)
 		return;
-	if (!(port = tty->write_q->data))
+	if (!info->tty->write_q || EMPTY(info->tty->write_q))
 		return;
 	cli();
-	if (inb_p(port+5) & 0x20)
-		send_intr(line,port,tty);
+	if (inb_p(info->port+5) & 0x20)
+		send_intr(info);
 	else {
-		timer_table[TIMER].expires = jiffies + 10;
-		timer_active |= 1 << TIMER;
+		unsigned int timer = SER1_TIMEOUT+info->line;
+
+		timer_table[timer].expires = jiffies + 10;
+		timer_active |= 1 << timer;
 	}
 	sti();
-#undef TIMER
 }
 
 static void com1_timeout(void)
 {
-	do_rs_write(1,tty_table+64);
+	do_rs_write(serial_table);
 }
 
 static void com2_timeout(void)
 {
-	do_rs_write(2,tty_table+65);
+	do_rs_write(serial_table + 1);
 }
 
 static void com3_timeout(void)
 {
-	do_rs_write(3,tty_table+66);
+	do_rs_write(serial_table + 2);
 }
 
 static void com4_timeout(void)
 {
-	do_rs_write(4,tty_table+67);
+	do_rs_write(serial_table + 3);
 }
 
-static void init(int port, int line)
+static void init(struct serial_struct * info)
 {
 	unsigned char status1, status2, scratch;
+	unsigned short port = info->port;
 
 	if (inb(port+5) == 0xff) {
-		port_table[line] = PORT_UNKNOWN;
+		info->type = PORT_UNKNOWN;
 		return;
 	}
 	
@@ -227,51 +238,57 @@ static void init(int port, int line)
 		outb_p(0x01, port+2);
 		scratch = inb(port+2) >> 6;
 		switch (scratch) {
-			case 0:  printk("serial port at 0x%04x is a 16450\n", port);
-				 port_table[line] = PORT_16450;
-				 break;
-			case 1:  printk("serial port at 0x%04x is unknown\n", port);
-				 port_table[line] = PORT_UNKNOWN;
-				 break;
-			case 2:  printk("serial port at 0x%04x is a 16550 (FIFO's disabled)\n", port);
-				 port_table[line] = PORT_16550;
-				 outb_p(0x00, port+2);
-				 break;
-			case 3:  printk("serial port at 0x%04x is a 16550a (FIFO's enabled)\n", port);
-				 port_table[line] = PORT_16550A;
-				 outb_p(0xc7, port+2);
-				 break;
+			case 0:
+				info->type = PORT_16450;
+				break;
+			case 1:
+				info->type = PORT_UNKNOWN;
+				break;
+			case 2:
+				info->type = PORT_16550;
+				outb_p(0x00, port+2);
+				break;
+			case 3:
+				info->type = PORT_16550A;
+				outb_p(0xc7, port+2);
+				break;
 		}
 	} else
-		printk("serial port at 0x%04x is a 8250\n", port);
-	
+		info->type = PORT_8250;
 	outb_p(0x80,port+3);	/* set DLAB of line control reg */
-	outb_p(0x30,port);	/* LS of divisor (48 -> 2400 bps */
+	outb_p(0x30,port);	/* LS of divisor (48 -> 2400 bps) */
 	outb_p(0x00,port+1);	/* MS of divisor */
 	outb_p(0x03,port+3);	/* reset DLAB */
 	outb_p(0x00,port+4);	/* reset DTR,RTS, OUT_2 */
-	outb_p(0x0f,port+1);	/* enable all intrs */
+	outb_p(0x00,port+1);	/* disable all intrs */
 	(void)inb(port);	/* read data port to reset things (?) */
 }
 
-/*
- * this routine enables interrupts on 'line', and disables them on
- * 'line ^ 2', as they share the same IRQ. Braindamaged AT hardware.
- */
-void serial_open(unsigned line)
+void serial_close(unsigned line, struct file * filp)
 {
-	unsigned short port;
-	unsigned short port2;
+	struct serial_struct * info;
+	int irq;
 
-	if (line>3)
+	if (line >= NR_SERIALS)
 		return;
-	port = tty_table[64+line].read_q->data;
-	if (!port)
+	info = serial_table + line;
+	if (!info->port)
 		return;
-	port2 = tty_table[64+(line ^ 2)].read_q->data;
-	cli();
-	if (port2)
-		outb_p(0x00,port2+4);
+	outb(0x00,info->port+4);	/* reset DTR, RTS, */
+	irq = info->irq;
+	if (irq == 2)
+		irq = 9;
+	if (irq_info[irq] == info) {
+		irq_info[irq] = NULL;
+		if (irq < 8)
+			outb(inb_p(0x21) | (1<<irq),0x21);
+		else
+			outb(inb_p(0xA1) | (1<<(irq-8)),0xA1);
+	}
+}
+
+static void startup(unsigned short port)
+{
 	outb_p(0x03,port+3);	/* reset DLAB */
 	outb_p(0x0f,port+4);	/* set DTR,RTS, OUT_2 */
 	outb_p(0x0f,port+1);	/* enable all intrs */
@@ -279,11 +296,106 @@ void serial_open(unsigned line)
 	inb_p(port+0);
 	inb_p(port+6);
 	inb(port+2);
+}
+
+/*
+ * this routine enables interrupts on 'line', and disables them for any
+ * other serial line that shared the same IRQ. Braindamaged AT hardware.
+ */
+int serial_open(unsigned line, struct file * filp)
+{
+	struct serial_struct * info;
+	int irq;
+	unsigned short port;
+
+	if (line >= NR_SERIALS)
+		return -ENODEV;
+	info = serial_table + line;
+	if (!(port = info->port))
+		return -ENODEV;
+	irq = info->irq;
+	if (irq == 2)
+		irq = 9;
+	if (irq_info[irq] && irq_info[irq] != info)
+		return -EBUSY;
+	cli();
+	startup(port);
+	irq_info[irq] = info;
+	if (irq < 8)
+		outb(inb_p(0x21) & ~(1<<irq),0x21);
+	else
+		outb(inb_p(0xA1) & ~(1<<(irq-8)),0xA1);
 	sti();
+	return 0;
+}
+
+int get_serial_info(unsigned int line, struct serial_struct * info)
+{
+	if (line >= NR_SERIALS)
+		return -ENODEV;
+	if (!info)
+		return -EFAULT;
+	memcpy_tofs(info,serial_table+line,sizeof(*info));
+	return 0;
+}
+
+int set_serial_info(unsigned int line, struct serial_struct * info)
+{
+	struct serial_struct tmp;
+	unsigned new_port;
+	unsigned irq,new_irq;
+
+	if (!suser())
+		return -EPERM;
+	if (line >= NR_SERIALS)
+		return -ENODEV;
+	if (!info)
+		return -EFAULT;
+	memcpy_fromfs(&tmp,info,sizeof(tmp));
+	info = serial_table + line;
+	if (!(new_port = tmp.port))
+		new_port = info->port;
+	if (!(new_irq = tmp.irq))
+		new_irq = info->irq;
+	if (new_irq > 15 || new_port > 0xffff)
+		return -EINVAL;
+	if (new_irq == 2)
+		new_irq = 9;
+	irq = info->irq;
+	if (irq == 2)
+		irq = 9;
+	if (irq != new_irq) {
+		if (irq_info[new_irq])
+			return -EBUSY;
+		cli();
+		irq_info[new_irq] = irq_info[irq];
+		irq_info[irq] = NULL;
+		info->irq = new_irq;
+		if (irq < 8)
+			outb(inb_p(0x21) | (1<<irq),0x21);
+		else
+			outb(inb_p(0xA1) | (1<<(irq-8)),0xA1);
+		if (new_irq < 8)
+			outb(inb_p(0x21) & ~(1<<new_irq),0x21);
+		else
+			outb(inb_p(0xA1) & ~(1<<(new_irq-8)),0xA1);
+	}
+	cli();
+	if (new_port != info->port) {
+		outb(0x00,info->port+4);	/* reset DTR, RTS, */
+		info->port = new_port;
+		init(info);
+		startup(new_port);
+	}
+	sti();
+	return 0;
 }
 
 long rs_init(long kmem_start)
 {
+	int i;
+	struct serial_struct * info;
+
 /* SERx_TIMER timers are used for receiving: timeout is always 0 (immediate) */
 	timer_table[SER1_TIMER].fn = com1_timer;
 	timer_table[SER1_TIMER].expires = 0;
@@ -304,11 +416,26 @@ long rs_init(long kmem_start)
 	timer_table[SER4_TIMEOUT].expires = 0;
 	set_intr_gate(0x23,IRQ3_interrupt);
 	set_intr_gate(0x24,IRQ4_interrupt);
-	init(tty_table[64].read_q->data, 1);
-	init(tty_table[65].read_q->data, 2);
-	init(tty_table[66].read_q->data, 3);
-	init(tty_table[67].read_q->data, 4);
-	outb(inb_p(0x21)&0xE7,0x21);
+	set_intr_gate(0x25,IRQ5_interrupt);
+	set_intr_gate(0x29,IRQ9_interrupt);
+	for (i = 0, info = serial_table; i < NR_SERIALS; i++,info++) {
+		info->tty = (tty_table+64) + i;
+		init(info);
+		switch (info->type) {
+			case PORT_8250:
+				printk("serial port at 0x%04x is a 8250\n", info->port);
+				break;
+			case PORT_16450:
+				printk("serial port at 0x%04x is a 16450\n", info->port);
+				break;
+			case PORT_16550:
+				printk("serial port at 0x%04x is a 16550\n", info->port);
+				break;
+			case PORT_16550A:
+				printk("serial port at 0x%04x is a 16550A\n", info->port);
+				break;
+		}
+	}
 	return kmem_start;
 }
 
@@ -321,7 +448,7 @@ long rs_init(long kmem_start)
  */
 void rs_write(struct tty_struct * tty)
 {
-	int line = tty - tty_table - 63;
+	int line = tty - tty_table - 64;
 
-	do_rs_write(line,tty);
+	do_rs_write(serial_table+line);
 }

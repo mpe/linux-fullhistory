@@ -35,6 +35,8 @@
 #define TIOCINQ		FIONREAD
 #define TIOCLINUX	0x541C
 #define TIOCCONS	0x541D
+#define TIOCGSERIAL	0x541E
+#define TIOCSSERIAL	0x541F
 
 struct winsize {
 	unsigned short ws_row;

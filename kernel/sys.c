@@ -164,6 +164,9 @@ void ctrl_alt_del(void)
 {
 	if (C_A_D)
 		hard_reset_now();
+	else
+		if (task[1])
+			send_sig(SIGINT,task[1],1);
 }
 	
 

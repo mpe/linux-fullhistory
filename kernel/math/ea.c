@@ -84,7 +84,7 @@ char * ea(struct info * info, unsigned short code)
 			EIP += 4;
 			break;
 		case 3:
-			math_abort(info,1<<(SIGILL-1));
+			math_abort(info,SIGILL);
 	}
 	I387.foo = offset;
 	I387.fos = 0x17;

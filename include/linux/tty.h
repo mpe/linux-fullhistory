@@ -34,6 +34,23 @@ struct tty_queue {
 	unsigned char buf[TTY_BUF_SIZE];
 };
 
+struct serial_struct {
+	unsigned short type;
+	unsigned short line;
+	unsigned short port;
+	unsigned short irq;
+	struct tty_struct * tty;
+};
+
+/*
+ * These are the supported serial types.
+ */
+#define PORT_UNKNOWN	0
+#define PORT_8250	1
+#define PORT_16450	2
+#define PORT_16550	3
+#define PORT_16550A	4
+
 #define IS_A_CONSOLE(min)	(((min) & 0xC0) == 0x00)
 #define IS_A_SERIAL(min)	(((min) & 0xC0) == 0x40)
 #define IS_A_PTY(min)		((min) & 0x80)
@@ -161,6 +178,7 @@ do { \
 } while (0)
 
 extern struct tty_struct tty_table[];
+extern struct serial_struct serial_table[];
 extern struct tty_struct * redirect;
 extern int fg_console;
 extern unsigned long video_num_columns;
@@ -195,7 +213,10 @@ extern void con_write(struct tty_struct * tty);
 extern void mpty_write(struct tty_struct * tty);
 extern void spty_write(struct tty_struct * tty);
 
-extern void serial_open(unsigned int line);
+extern int  serial_open(unsigned int line, struct file * filp);
+extern void serial_close(unsigned int line, struct file * filp);
+extern int get_serial_info(unsigned int, struct serial_struct *);
+extern int set_serial_info(unsigned int, struct serial_struct *);
 
 void copy_to_cooked(struct tty_struct * tty);
 

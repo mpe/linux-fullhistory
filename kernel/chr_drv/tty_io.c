@@ -485,14 +485,13 @@ static int tty_open(struct inode * inode, struct file * filp)
 		tty->pgrp = current->pgrp;
 	}
 	if (IS_A_SERIAL(dev))
-		serial_open(dev-64);
+		return serial_open(dev-64,filp);
 	return 0;
 }
 
 static void tty_release(struct inode * inode, struct file * filp)
 {
 	int dev;
-	unsigned short port;
 	struct tty_struct * tty, * slave;
 
 	dev = inode->i_rdev;
@@ -507,9 +506,9 @@ static void tty_release(struct inode * inode, struct file * filp)
 		return;
 	if (tty == redirect)
 		redirect = NULL;
-	if (port = tty->read_q->data)
-		outb(0x0c,port+4);	/* reset DTR, RTS, */
-	if (IS_A_PTY_MASTER(dev)) {
+	if (IS_A_SERIAL(dev))
+		serial_close(dev-64,filp);
+	else if (IS_A_PTY_MASTER(dev)) {
 		slave = tty_table + PTY_OTHER(dev);
 		if (slave->pgrp > 0)
 			kill_pg(slave->pgrp,SIGHUP,1);
@@ -550,14 +549,6 @@ long tty_init(long kmem_start)
 	chrdev_fops[5] = &tty_fops;
 	for (i=0 ; i < QUEUES ; i++)
 		tty_queues[i] = (struct tty_queue) {0,0,0,0,""};
-	rs_queues[0] = (struct tty_queue) {0x3f8,0,0,0,""};
-	rs_queues[1] = (struct tty_queue) {0x3f8,0,0,0,""};
-	rs_queues[3] = (struct tty_queue) {0x2f8,0,0,0,""};
-	rs_queues[4] = (struct tty_queue) {0x2f8,0,0,0,""};
-	rs_queues[6] = (struct tty_queue) {0x3e8,0,0,0,""};
-	rs_queues[7] = (struct tty_queue) {0x3e8,0,0,0,""};
-	rs_queues[9] = (struct tty_queue) {0x2e8,0,0,0,""};
-	rs_queues[10] = (struct tty_queue) {0x2e8,0,0,0,""};
 	for (i=0 ; i<256 ; i++) {
 		tty_table[i] =  (struct tty_struct) {
 		 	{0, 0, 0, 0, 0, INIT_C_CC},

@@ -89,7 +89,7 @@ ENOSYS = 38
 .globl _general_protection,_irq13,_reserved
 .globl _alignment_check,_page_fault
 .globl _keyboard_interrupt,_hd_interrupt
-.globl _IRQ3_interrupt,_IRQ4_interrupt
+.globl _IRQ3_interrupt,_IRQ4_interrupt,_IRQ5_interrupt,_IRQ9_interrupt
 
 #define SAVE_ALL \
 	cld; \
@@ -272,6 +272,28 @@ _IRQ4_interrupt:
 	call _do_IRQ4
 	cli
 	UNBLK_FIRST(0x10)
+	jmp ret_from_sys_call
+
+.align 2
+_IRQ5_interrupt:
+	pushl $-1
+	SAVE_ALL
+	ACK_FIRST(0x20)
+	sti
+	call _do_IRQ5
+	cli
+	UNBLK_FIRST(0x20)
+	jmp ret_from_sys_call
+
+.align 2
+_IRQ9_interrupt:
+	pushl $-1
+	SAVE_ALL
+	ACK_SECOND(0x02)
+	sti
+	call _do_IRQ9
+	cli
+	UNBLK_SECOND(0x02)
 	jmp ret_from_sys_call
 
 .align 2

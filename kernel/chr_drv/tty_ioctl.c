@@ -27,13 +27,13 @@ static unsigned short quotient[] = {
 	64, 48, 24, 12, 6, 3
 };
 
-static void change_speed(struct tty_struct * tty)
+static void change_speed(struct serial_struct * info)
 {
 	unsigned short port,quot;
 
-	if (!(port = tty->read_q->data))
+	if (!(port = info->port))
 		return;
-	quot = quotient[tty->termios.c_cflag & CBAUD];
+	quot = quotient[info->tty->termios.c_cflag & CBAUD];
 	cli();
 	outb_p(0x80,port+3);		/* set DLAB */
 	outb_p(quot & 0xff,port);	/* LS of divisor */
@@ -75,11 +75,11 @@ static void wait_until_sent(struct tty_struct * tty)
 	sti();
 }
 
-static void send_break(struct tty_struct * tty)
+static void send_break(struct serial_struct * info)
 {
 	unsigned short port;
 
-	if (!(port = tty->read_q->data))
+	if (!(port = info->port))
 		return;
 	port += 3;
 	current->state = TASK_INTERRUPTIBLE;
@@ -144,7 +144,8 @@ static int set_termios(struct tty_struct * tty, struct termios * termios,
 	}
 	for (i=0 ; i< (sizeof (*termios)) ; i++)
 		((char *)&tty->termios)[i]=get_fs_byte(i+(char *)termios);
-	change_speed(tty);
+	if (IS_A_SERIAL(channel))
+		change_speed(serial_table+channel-64);
 	return 0;
 }
 
@@ -192,7 +193,8 @@ static int set_termio(struct tty_struct * tty, struct termio * termio,
 	tty->termios.c_line = tmp_termio.c_line;
 	for(i=0 ; i < NCC ; i++)
 		tty->termios.c_cc[i] = tmp_termio.c_cc[i];
-	change_speed(tty);
+	if (IS_A_SERIAL(channel))
+		change_speed(serial_table+channel-64);
 	return 0;
 }
 
@@ -279,9 +281,11 @@ int tty_ioctl(struct inode * inode, struct file * file,
 		case TCSETA:
 			return set_termio(tty,(struct termio *) arg, dev);
 		case TCSBRK:
+			if (!IS_A_SERIAL(dev))
+				return -EINVAL;
 			wait_until_sent(tty);
 			if (!arg)
-				send_break(tty);
+				send_break(serial_table+dev-64);
 			return 0;
 		case TCXONC:
 			switch (arg) {
@@ -394,6 +398,15 @@ int tty_ioctl(struct inode * inode, struct file * file,
 			else
 				redirect = tty;
 			return 0;
+		case TIOCGSERIAL:
+			if (!IS_A_SERIAL(dev))
+				return -EINVAL;
+			verify_area((void *) arg,sizeof(struct serial_struct));
+			return get_serial_info(dev-64,(struct serial_struct *) arg);
+		case TIOCSSERIAL:
+			if (!IS_A_SERIAL(dev))
+				return -EINVAL;
+			return set_serial_info(dev-64,(struct serial_struct *) arg);
 		default:
 			return vt_ioctl(tty, dev, cmd, arg);
 	}

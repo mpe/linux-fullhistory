@@ -284,7 +284,10 @@ static void forget_original_parent(struct task_struct * father)
 
 	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p)
 		if (*p && (*p)->p_opptr == father)
-			(*p)->p_opptr = task[1];
+			if (task[1])
+				(*p)->p_opptr = task[1];
+			else
+				(*p)->p_opptr = task[0];
 }
 
 volatile void do_exit(long code)
@@ -342,7 +345,10 @@ volatile void do_exit(long code)
 		current->p_cptr = p->p_osptr;
 		p->p_ysptr = NULL;
 		p->flags &= ~PF_PTRACED;
-		p->p_pptr = task[1];
+		if (task[1])
+			p->p_pptr = task[1];
+		else
+			p->p_pptr = task[0];
 		p->p_osptr = p->p_pptr->p_cptr;
 		p->p_osptr->p_ysptr = p;
 		p->p_pptr->p_cptr = p;
