@@ -79,7 +79,7 @@ int nfs_mmap(struct inode * inode, struct file * file,
 	mpnt->vm_offset = off;
 	mpnt->vm_ops = &nfs_file_mmap;
 	insert_vm_struct(current, mpnt);
-	merge_segments(current->mmap, NULL, NULL);
+	merge_segments(current->mm->mmap, NULL, NULL);
 	return 0;
 }
 
@@ -101,11 +101,11 @@ static void nfs_file_mmap_nopage(int error_code, struct vm_area_struct * area,
 
 	page = get_free_page(GFP_KERNEL);
 	if (share_page(area, area->vm_task, inode, address, error_code, page)) {
-		++area->vm_task->min_flt;
+		++area->vm_task->mm->min_flt;
 		return;
 	}
 
-	++area->vm_task->maj_flt;
+	++area->vm_task->mm->maj_flt;
 	if (!page) {
 		oom(current);
 		put_page(area->vm_task, BAD_PAGE, address, PAGE_PRIVATE);

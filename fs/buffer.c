@@ -254,7 +254,7 @@ asmlinkage int sys_fsync(unsigned int fd)
 	struct file * file;
 	struct inode * inode;
 
-	if (fd>=NR_OPEN || !(file=current->filp[fd]) || !(inode=file->f_inode))
+	if (fd>=NR_OPEN || !(file=current->files->fd[fd]) || !(inode=file->f_inode))
 		return -EBADF;
 	if (!file->f_op || !file->f_op->fsync)
 		return -EINVAL;
@@ -1096,7 +1096,7 @@ static unsigned long check_aligned(struct buffer_head * first, unsigned long add
 	while (nrbuf-- > 0)
 		brelse(bh[nrbuf]);
 	free_page(address);
-	++current->min_flt;
+	++current->mm->min_flt;
 	return page;
 no_go:
 	while (nrbuf-- > 0)
@@ -1154,7 +1154,7 @@ static unsigned long try_to_load_aligned(unsigned long address,
 	read_buffers(arr,block);
 	while (block-- > 0)
 		brelse(arr[block]);
-	++current->maj_flt;
+	++current->mm->maj_flt;
 	return address;
 not_aligned:
 	while ((tmp = bh) != NULL) {
@@ -1213,7 +1213,7 @@ unsigned long bread_page(unsigned long address, dev_t dev, int b[], int size, in
 		if (where)
 			return where;
 	}
-	++current->maj_flt;
+	++current->mm->maj_flt;
  	for (i=0, j=0; j<PAGE_SIZE ; i++, j+= size) {
 		bh[i] = NULL;
 		if (b[i])

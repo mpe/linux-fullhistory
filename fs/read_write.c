@@ -22,7 +22,7 @@ asmlinkage int sys_readdir(unsigned int fd, struct dirent * dirent, unsigned int
 	struct file * file;
 	struct inode * inode;
 
-	if (fd >= NR_OPEN || !(file = current->filp[fd]) ||
+	if (fd >= NR_OPEN || !(file = current->files->fd[fd]) ||
 	    !(inode = file->f_inode))
 		return -EBADF;
 	error = -ENOTDIR;
@@ -39,7 +39,7 @@ asmlinkage int sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
 	struct file * file;
 	int tmp = -1;
 
-	if (fd >= NR_OPEN || !(file=current->filp[fd]) || !(file->f_inode))
+	if (fd >= NR_OPEN || !(file=current->files->fd[fd]) || !(file->f_inode))
 		return -EBADF;
 	if (origin > 2)
 		return -EINVAL;
@@ -73,7 +73,7 @@ asmlinkage int sys_read(unsigned int fd,char * buf,unsigned int count)
 	struct file * file;
 	struct inode * inode;
 
-	if (fd>=NR_OPEN || !(file=current->filp[fd]) || !(inode=file->f_inode))
+	if (fd>=NR_OPEN || !(file=current->files->fd[fd]) || !(inode=file->f_inode))
 		return -EBADF;
 	if (!(file->f_mode & 1))
 		return -EBADF;
@@ -93,7 +93,7 @@ asmlinkage int sys_write(unsigned int fd,char * buf,unsigned int count)
 	struct file * file;
 	struct inode * inode;
 	
-	if (fd>=NR_OPEN || !(file=current->filp[fd]) || !(inode=file->f_inode))
+	if (fd>=NR_OPEN || !(file=current->files->fd[fd]) || !(inode=file->f_inode))
 		return -EBADF;
 	if (!(file->f_mode & 2))
 		return -EBADF;

@@ -63,7 +63,7 @@ unsigned long * create_elf_tables(char * p,int argc,int envc,struct elfhdr * exe
 		mpnt->vm_offset = 0;
 		mpnt->vm_ops = NULL;
 		insert_vm_struct(current, mpnt);
-		current->stk_vma = mpnt;
+		current->mm->stk_vma = mpnt;
 	}
 	sp = (unsigned long *) (0xfffffffc & (unsigned long) p);
 	if(exec) sp -= DLINFO_ITEMS*2;
@@ -94,19 +94,19 @@ unsigned long * create_elf_tables(char * p,int argc,int envc,struct elfhdr * exe
 	};
 
 	put_fs_long((unsigned long)argc,--sp);
-	current->arg_start = (unsigned long) p;
+	current->mm->arg_start = (unsigned long) p;
 	while (argc-->0) {
 		put_fs_long((unsigned long) p,argv++);
 		while (get_fs_byte(p++)) /* nothing */ ;
 	}
 	put_fs_long(0,argv);
-	current->arg_end = current->env_start = (unsigned long) p;
+	current->mm->arg_end = current->mm->env_start = (unsigned long) p;
 	while (envc-->0) {
 		put_fs_long((unsigned long) p,envp++);
 		while (get_fs_byte(p++)) /* nothing */ ;
 	}
 	put_fs_long(0,envp);
-	current->env_end = (unsigned long) p;
+	current->mm->env_end = (unsigned long) p;
 	return sp;
 }
 
@@ -161,7 +161,7 @@ static unsigned int load_elf_interp(struct elfhdr * interp_elf_ex,
 	
 	elf_exec_fileno = open_inode(interpreter_inode, O_RDONLY);
 	if (elf_exec_fileno < 0) return 0xffffffff;
-	file = current->filp[elf_exec_fileno];
+	file = current->files->fd[elf_exec_fileno];
 
 	eppnt = elf_phdata;
 	for(i=0; i<interp_elf_ex->e_phnum; i++, eppnt++)
@@ -210,9 +210,9 @@ static unsigned int load_aout_interp(struct exec * interp_ex,
   int retval;
   unsigned int elf_entry;
   
-  current->brk = interp_ex->a_bss +
-    (current->end_data = interp_ex->a_data +
-     (current->end_code = interp_ex->a_text));
+  current->mm->brk = interp_ex->a_bss +
+    (current->mm->end_data = interp_ex->a_data +
+     (current->mm->end_code = interp_ex->a_text));
   elf_entry = interp_ex->a_entry;
   
   
@@ -318,7 +318,7 @@ int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		return elf_exec_fileno;
 	}
 	
-	file = current->filp[elf_exec_fileno];
+	file = current->files->fd[elf_exec_fileno];
 	
 	elf_stack = 0xffffffff;
 	elf_interpreter = NULL;
@@ -416,17 +416,17 @@ int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	/* OK, This is the point of no return */
 	flush_old_exec(bprm);
 
-	current->end_data = 0;
-	current->end_code = 0;
-	current->start_mmap = ELF_START_MMAP;
-	current->mmap = NULL;
+	current->mm->end_data = 0;
+	current->mm->end_code = 0;
+	current->mm->start_mmap = ELF_START_MMAP;
+	current->mm->mmap = NULL;
 	elf_entry = (unsigned int) elf_ex.e_entry;
 	
 	/* Do this so that we can load the interpreter, if need be.  We will
 	   change some of these later */
-	current->rss = 0;
+	current->mm->rss = 0;
 	bprm->p += change_ldt(0, bprm->page);
-	current->start_stack = bprm->p;
+	current->mm->start_stack = bprm->p;
 	
 	/* Now we do a little grungy work by mmaping the ELF image into
 	   the correct location in memory.  At this point, we assume that
@@ -512,18 +512,18 @@ int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			load_addr,    
 			(interpreter_type == INTERPRETER_AOUT ? 0 : 1));
 	if(interpreter_type == INTERPRETER_AOUT)
-	  current->arg_start += strlen(passed_fileno) + 1;
-	current->start_brk = current->brk = elf_brk;
-	current->end_code = end_code;
-	current->start_code = start_code;
-	current->end_data = end_data;
-	current->start_stack = bprm->p;
+	  current->mm->arg_start += strlen(passed_fileno) + 1;
+	current->mm->start_brk = current->mm->brk = elf_brk;
+	current->mm->end_code = end_code;
+	current->mm->start_code = start_code;
+	current->mm->end_data = end_data;
+	current->mm->start_stack = bprm->p;
 	current->suid = current->euid = bprm->e_uid;
 	current->sgid = current->egid = bprm->e_gid;
 
 	/* Calling sys_brk effectively mmaps the pages that we need for the bss and break
 	   sections */
-	current->brk = (elf_bss + 0xfff) & 0xfffff000;
+	current->mm->brk = (elf_bss + 0xfff) & 0xfffff000;
 	sys_brk((elf_brk + 0xfff) & 0xfffff000);
 
 	padzero(elf_bss);
@@ -558,7 +558,7 @@ int load_elf_library(int fd){
 	int i,j, k;
 	
 	len = 0;
-	file = current->filp[fd];
+	file = current->files->fd[fd];
 	inode = file->f_inode;
 	elf_bss = 0;
 	

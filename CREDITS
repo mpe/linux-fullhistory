@@ -186,6 +186,14 @@ N: Ralf Flaxa
 E: rfflaxa@immd4.informatik.uni-erlangen.de
 D: The Linux Support Team Erlangen
 
+N: Lawrence Foard
+E: entropy@world.std.com
+D: Floppy track reading, fs code
+S: Suite #108 
+S: 217 Park Ave.
+S: Worcester Ma 01609
+S: USA
+
 N: Nigel Gamble
 E: nigel%gamble.uucp@gate.net
 D: Interrupt-driven printer driver

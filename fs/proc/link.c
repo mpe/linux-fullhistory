@@ -66,10 +66,10 @@ static int proc_follow_link(struct inode * dir, struct inode * inode,
 	inode = NULL;
 	switch (ino) {
 		case 4:
-			inode = p->pwd;
+			inode = p->fs->pwd;
 			break;
 		case 5:
-			inode = p->root;
+			inode = p->fs->root;
 			break;
 		case 6:
 			inode = p->executable;
@@ -78,14 +78,14 @@ static int proc_follow_link(struct inode * dir, struct inode * inode,
 			switch (ino >> 8) {
 				case 1:
 					ino &= 0xff;
-					if (ino < NR_OPEN && p->filp[ino])
-						inode = p->filp[ino]->f_inode;
+					if (ino < NR_OPEN && p->files->fd[ino])
+						inode = p->files->fd[ino]->f_inode;
 					break;
 				case 2:
 					ino &= 0xff;
 					{ int j = ino;
 					  struct vm_area_struct * mpnt;
-					  for(mpnt = p->mmap; mpnt && j >= 0;
+					  for(mpnt = p->mm->mmap; mpnt && j >= 0;
 					      mpnt = mpnt->vm_next){
 					    if(mpnt->vm_inode) {
 					      if(j == 0) {

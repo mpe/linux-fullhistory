@@ -105,13 +105,13 @@ static int proc_lookupfd(struct inode * dir,const char * name, int len,
 	if (!pid || i >= NR_TASKS)
 		return -ENOENT;
 	if (!ino) {
-		if (fd >= NR_OPEN || !p->filp[fd] || !p->filp[fd]->f_inode)
+		if (fd >= NR_OPEN || !p->files->fd[fd] || !p->files->fd[fd]->f_inode)
 			return -ENOENT;
 		ino = (pid << 16) + 0x100 + fd;
 	} else {
 		int j = 0;
 		struct vm_area_struct * mpnt;
-		for (mpnt = p->mmap; mpnt; mpnt = mpnt->vm_next)
+		for (mpnt = p->mm->mmap; mpnt; mpnt = mpnt->vm_next)
 			if (mpnt->vm_inode)
 				j++;
 		if (fd >= j)
@@ -163,12 +163,12 @@ static int proc_readfd(struct inode * inode, struct file * filp,
 		if (!ino) {
 			if (fd >= NR_OPEN)
 				break;
-			if (!p->filp[fd] || !p->filp[fd]->f_inode)
+			if (!p->files->fd[fd] || !p->files->fd[fd]->f_inode)
 				continue;
 		} else {
 			int j = 0;
 			struct vm_area_struct * mpnt;
-			for (mpnt = p->mmap ; mpnt ; mpnt = mpnt->vm_next)
+			for (mpnt = p->mm->mmap ; mpnt ; mpnt = mpnt->vm_next)
 				if (mpnt->vm_inode)
 					j++;
 			if (fd >= j)

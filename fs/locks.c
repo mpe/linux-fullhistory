@@ -58,7 +58,7 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 	struct file *filp;
 	struct file_lock *fl,file_lock;
 
-	if (fd >= NR_OPEN || !(filp = current->filp[fd]))
+	if (fd >= NR_OPEN || !(filp = current->files->fd[fd]))
 		return -EBADF;
 	error = verify_area(VERIFY_WRITE,l, sizeof(*l));
 	if (error)
@@ -102,7 +102,7 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	 * Get arguments and validate them ...
 	 */
 
-	if (fd >= NR_OPEN || !(filp = current->filp[fd]))
+	if (fd >= NR_OPEN || !(filp = current->files->fd[fd]))
 		return -EBADF;
 	error = verify_area(VERIFY_WRITE, l, sizeof(*l));
 	if (error)

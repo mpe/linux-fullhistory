@@ -543,7 +543,7 @@ static int parse_opts(char *opts, uid_t *uid, gid_t *gid, umode_t *umask,
 
 	*uid = current->uid;
 	*gid = current->gid;
-	*umask = current->umask;
+	*umask = current->fs->umask;
 	*lowercase = 1;
 	*conv = CONV_BINARY;
 

@@ -384,7 +384,7 @@ load_object (struct linux_binprm * bprm, struct pt_regs *regs, int lib_ok)
 	    status = fd;
 	}
 	else
-	    fp = current->filp[fd];
+	    fp = current->files->fd[fd];
     }
     else
 	fd = -1;		/* Invalidate the open file descriptor */
@@ -441,8 +441,8 @@ load_object (struct linux_binprm * bprm, struct pt_regs *regs, int lib_ok)
 /*
  *  Define the initial locations for the various items in the new process
  */
-	    current->mmap        = NULL;
-	    current->rss         = 0;
+	    current->mm->mmap        = NULL;
+	    current->mm->rss         = 0;
 /*
  *  Construct the parameter and environment string table entries.
  */
@@ -455,20 +455,20 @@ load_object (struct linux_binprm * bprm, struct pt_regs *regs, int lib_ok)
 /*
  *  Do the end processing once the stack has been constructed
  */
-	    current->start_code  = text_vaddr & PAGE_MASK;
-	    current->end_code    = text_vaddr + text_size;
-	    current->end_data    = data_vaddr + data_size;
-	    current->start_brk   =
-	    current->brk         = bss_vaddr + bss_size;
-	    current->suid        =
-	    current->euid        = bprm->e_uid;
-	    current->sgid        =
-	    current->egid        = bprm->e_gid;
-	    current->executable  = bprm->inode; /* Store inode for file  */
+	    current->mm->start_code  = text_vaddr & PAGE_MASK;
+	    current->mm->end_code    = text_vaddr + text_size;
+	    current->mm->end_data    = data_vaddr + data_size;
+	    current->mm->start_brk   =
+	    current->mm->brk         = bss_vaddr + bss_size;
+	    current->suid            =
+	    current->euid            = bprm->e_uid;
+	    current->sgid            =
+	    current->egid            = bprm->e_gid;
+	    current->executable      = bprm->inode; /* Store inode for file  */
 	    ++bprm->inode->i_count;             /* Count the open inode  */
-	    regs->eip            = start_addr;  /* Current EIP register  */
-	    regs->esp            =
-	    current->start_stack = bprm->p;
+	    regs->eip                = start_addr;  /* Current EIP register  */
+	    regs->esp                =
+	    current->mm->start_stack = bprm->p;
 	}
 /*
  *   Map the text pages
@@ -756,7 +756,7 @@ load_coff_library (int fd)
 
         memset (bprm, '\0', sizeof (struct linux_binprm));
 
-	file           = current->filp[fd];
+	file           = current->files->fd[fd];
 	bprm->inode    = file->f_inode;   /* The only item _really_ needed */
 	bprm->filename = "";              /* Make it a legal string        */
 /*

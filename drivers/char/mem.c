@@ -109,7 +109,7 @@ static int mmap_mem(struct inode * inode, struct file * file,
 	mpnt->vm_offset = off;
 	mpnt->vm_ops = NULL;
 	insert_vm_struct(current, mpnt);
-	merge_segments(current->mmap, NULL, NULL);
+	merge_segments(current->mm->mmap, NULL, NULL);
 	return 0;
 }
 
@@ -202,7 +202,7 @@ static int mmap_zero(struct inode * inode, struct file * file,
 	mpnt->vm_offset = off;
 	mpnt->vm_ops = NULL;
 	insert_vm_struct(current, mpnt);
-	merge_segments(current->mmap, ignoff_mergep, inode);
+	merge_segments(current->mm->mmap, ignoff_mergep, inode);
 	return 0;
 }
 

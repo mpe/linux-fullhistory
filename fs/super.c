@@ -7,6 +7,8 @@
 /*
  * super.c contains code to handle the super-block tables.
  */
+#include <stdarg.h>
+
 #include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -69,6 +71,101 @@ int unregister_filesystem(struct file_system_type * fs)
 		tmp = &(*tmp)->next;
 	}
 	return -EINVAL;
+}
+
+static int fs_index(const char * __name)
+{
+	struct file_system_type * tmp;
+	char * name;
+	int err, index;
+
+	err = getname(__name, &name);
+	if (err)
+		return err;
+	index = 0;
+	for (tmp = file_systems ; tmp ; tmp = tmp->next) {
+		if (strcmp(tmp->name, name) == 0) {
+			putname(name);
+			return index;
+		}
+		index++;
+	}
+	putname(name);
+	return -EINVAL;
+}
+
+static int fs_name(unsigned int index, char * buf)
+{
+	struct file_system_type * tmp;
+	int err, len;
+
+	tmp = file_systems;
+	while (tmp && index > 0) {
+		tmp = tmp->next;
+		index--;
+	}
+	if (!tmp)
+		return -EINVAL;
+	len = strlen(tmp->name) + 1;
+	err = verify_area(VERIFY_WRITE, buf, len);
+	if (err)
+		return err;
+	memcpy_tofs(buf, tmp->name, len);
+	return 0;
+}
+
+static int fs_maxindex(void)
+{
+	struct file_system_type * tmp;
+	int index;
+
+	index = 0;
+	for (tmp = file_systems ; tmp ; tmp = tmp->next)
+		index++;
+	return index;
+}
+
+/*
+ * Whee.. Weird sysv syscall. 
+ */
+asmlinkage int sys_sysfs(int option, ...)
+{
+	va_list args;
+	int retval = -EINVAL;
+	unsigned int index;
+
+	va_start(args, option);
+	switch (option) {
+		case 1:
+			retval = fs_index(va_arg(args, const char *));
+			break;
+
+		case 2:
+			index = va_arg(args, unsigned int);
+			retval = fs_name(index, va_arg(args, char *));
+			break;
+
+		case 3:
+			retval = fs_maxindex();
+			break;
+	}
+	va_end(args);
+	return retval;
+}
+
+int get_filesystem_list(char * buf)
+{
+	int len = 0;
+	struct file_system_type * tmp;
+
+	tmp = file_systems;
+	while (tmp && len < PAGE_SIZE - 80) {
+		len += sprintf(buf+len, "%s\t%s\n",
+			tmp->requires_dev ? "" : "nodev",
+			tmp->name);
+		tmp = tmp->next;
+	}
+	return len;
 }
 
 struct file_system_type *get_fs_type(char *name)
@@ -422,7 +519,7 @@ static int copy_mount_options (const void * data, unsigned long *where)
 	if (!data)
 		return 0;
 
-	for (vma = current->mmap ; ; ) {
+	for (vma = current->mm->mmap ; ; ) {
 		if (!vma ||
 		    (unsigned long) data < vma->vm_start) {
 			return -EFAULT;
@@ -557,8 +654,8 @@ void mount_root(void)
 			inode->i_count += 3 ;	/* NOTE! it is logically used 4 times, not 1 */
 			sb->s_covered = inode;
 			sb->s_flags = root_mountflags;
-			current->pwd = inode;
-			current->root = inode;
+			current->fs->pwd = inode;
+			current->fs->root = inode;
 			printk ("VFS: Mounted root (%s filesystem)%s.\n",
 				fs_type->name,
 				(sb->s_flags & MS_RDONLY) ? " readonly" : "");

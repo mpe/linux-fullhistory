@@ -307,8 +307,8 @@ int unmap_page_range(unsigned long from, unsigned long size)
 				*page_table = 0;
 				if (1 & page) {
 					if (!(mem_map[MAP_NR(page)] & MAP_PAGE_RESERVED))
-						if (current->rss > 0)
-							--current->rss;
+						if (current->mm->rss > 0)
+							--current->mm->rss;
 					free_page(PAGE_MASK & page);
 				} else
 					swap_free(page);
@@ -367,8 +367,8 @@ int zeromap_page_range(unsigned long from, unsigned long size, int mask)
 				*page_table = 0;
 				if (page & PAGE_PRESENT) {
 					if (!(mem_map[MAP_NR(page)] & MAP_PAGE_RESERVED))
-						if (current->rss > 0)
-							--current->rss;
+						if (current->mm->rss > 0)
+							--current->mm->rss;
 					free_page(PAGE_MASK & page);
 				} else
 					swap_free(page);
@@ -429,8 +429,8 @@ int remap_page_range(unsigned long from, unsigned long to, unsigned long size, i
 				*page_table = 0;
 				if (PAGE_PRESENT & page) {
 					if (!(mem_map[MAP_NR(page)] & MAP_PAGE_RESERVED))
-						if (current->rss > 0)
-							--current->rss;
+						if (current->mm->rss > 0)
+							--current->mm->rss;
 					free_page(PAGE_MASK & page);
 				} else
 					swap_free(page);
@@ -451,7 +451,7 @@ int remap_page_range(unsigned long from, unsigned long to, unsigned long size, i
 			else {
 				*page_table++ = (to | mask);
 				if (!(mem_map[MAP_NR(to)] & MAP_PAGE_RESERVED)) {
-					++current->rss;
+					++current->mm->rss;
 					mem_map[MAP_NR(to)]++;
 				}
 			}
@@ -572,13 +572,13 @@ static void __do_wp_page(unsigned long error_code, unsigned long address,
 		goto bad_wp_page;
 	if (old_page & PAGE_RW)
 		goto end_wp_page;
-	tsk->min_flt++;
+	tsk->mm->min_flt++;
 	prot = (old_page & ~PAGE_MASK) | PAGE_RW;
 	old_page &= PAGE_MASK;
 	if (mem_map[MAP_NR(old_page)] != 1) {
 		if (new_page) {
 			if (mem_map[MAP_NR(old_page)] & MAP_PAGE_RESERVED)
-				++tsk->rss;
+				++tsk->mm->rss;
 			copy_page(old_page,new_page);
 			*(unsigned long *) pte = new_page | prot;
 			free_page(old_page);
@@ -770,7 +770,7 @@ int share_page(struct vm_area_struct * area, struct task_struct * tsk,
 			   we can share pages with */
 			if(area){
 			  struct vm_area_struct * mpnt;
-			  for (mpnt = (*p)->mmap; mpnt; mpnt = mpnt->vm_next) {
+			  for (mpnt = (*p)->mm->mmap; mpnt; mpnt = mpnt->vm_next) {
 			    if (mpnt->vm_ops == area->vm_ops &&
 			       mpnt->vm_inode->i_ino == area->vm_inode->i_ino&&
 			       mpnt->vm_inode->i_dev == area->vm_inode->i_dev){
@@ -836,15 +836,15 @@ void do_no_page(unsigned long error_code, unsigned long address,
 	tmp = *(unsigned long *) page;
 	if (tmp & PAGE_PRESENT)
 		return;
-	++tsk->rss;
+	++tsk->mm->rss;
 	if (tmp) {
-		++tsk->maj_flt;
+		++tsk->mm->maj_flt;
 		swap_in((unsigned long *) page);
 		return;
 	}
 	address &= 0xfffff000;
 	tmp = 0;
-	for (mpnt = tsk->mmap; mpnt != NULL; mpnt = mpnt->vm_next) {
+	for (mpnt = tsk->mm->mmap; mpnt != NULL; mpnt = mpnt->vm_next) {
 		if (address < mpnt->vm_start)
 			break;
 		if (address >= mpnt->vm_end) {
@@ -852,7 +852,7 @@ void do_no_page(unsigned long error_code, unsigned long address,
 			continue;
 		}
 		if (!mpnt->vm_ops || !mpnt->vm_ops->nopage) {
-			++tsk->min_flt;
+			++tsk->mm->min_flt;
 			get_empty_page(tsk,address);
 			return;
 		}
@@ -861,9 +861,9 @@ void do_no_page(unsigned long error_code, unsigned long address,
 	}
 	if (tsk != current)
 		goto ok_no_page;
-	if (address >= tsk->end_data && address < tsk->brk)
+	if (address >= tsk->mm->end_data && address < tsk->mm->brk)
 		goto ok_no_page;
-	if (mpnt && mpnt == tsk->stk_vma &&
+	if (mpnt && mpnt == tsk->mm->stk_vma &&
 	    address - tmp > mpnt->vm_start - address &&
 	    tsk->rlim[RLIMIT_STACK].rlim_cur > mpnt->vm_end - address) {
 		mpnt->vm_start = address;
@@ -876,7 +876,7 @@ void do_no_page(unsigned long error_code, unsigned long address,
 	if (error_code & 4)	/* user level access? */
 		return;
 ok_no_page:
-	++tsk->min_flt;
+	++tsk->mm->min_flt;
 	get_empty_page(tsk,address);
 }
 
@@ -1166,11 +1166,11 @@ void file_mmap_nopage(int error_code, struct vm_area_struct * area, unsigned lon
 
 	page = get_free_page(GFP_KERNEL);
 	if (share_page(area, area->vm_task, inode, address, error_code, page)) {
-		++area->vm_task->min_flt;
+		++area->vm_task->mm->min_flt;
 		return;
 	}
 
-	++area->vm_task->maj_flt;
+	++area->vm_task->mm->maj_flt;
 	if (!page) {
 		oom(current);
 		put_page(area->vm_task, BAD_PAGE, address, PAGE_PRIVATE);

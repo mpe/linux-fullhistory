@@ -596,7 +596,7 @@ static void setup_mailboxes(int bse, struct Scsi_Host * shpnt)
     struct mailbox * mb;
     struct ccb  *ccb;
 
-    unchar cmd[5] = {CMD_MBINIT, AHA1542_MAILBOXES};
+    unchar cmd[5] = {CMD_MBINIT, AHA1542_MAILBOXES, 0, 0, 0};
 
     mb = HOSTDATA(shpnt)->mb;
     ccb = HOSTDATA(shpnt)->ccb;

@@ -59,15 +59,15 @@ asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	struct file * filp;
 	int on;
 
-	if (fd >= NR_OPEN || !(filp = current->filp[fd]))
+	if (fd >= NR_OPEN || !(filp = current->files->fd[fd]))
 		return -EBADF;
 	switch (cmd) {
 		case FIOCLEX:
-			FD_SET(fd, &current->close_on_exec);
+			FD_SET(fd, &current->files->close_on_exec);
 			return 0;
 
 		case FIONCLEX:
-			FD_CLR(fd, &current->close_on_exec);
+			FD_CLR(fd, &current->files->close_on_exec);
 			return 0;
 
 		case FIONBIO:

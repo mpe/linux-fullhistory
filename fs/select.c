@@ -95,9 +95,9 @@ static int do_select(int n, fd_set *in, fd_set *out, fd_set *ex,
 				goto end_check;
 			if (!(set & 1))
 				continue;
-			if (!current->filp[i])
+			if (!current->files->fd[i])
 				return -EBADF;
-			if (!current->filp[i]->f_inode)
+			if (!current->files->fd[i]->f_inode)
 				return -EBADF;
 			max = i;
 		}
@@ -116,17 +116,17 @@ end_check:
 repeat:
 	current->state = TASK_INTERRUPTIBLE;
 	for (i = 0 ; i < n ; i++) {
-		if (FD_ISSET(i,in) && check(SEL_IN,wait,current->filp[i])) {
+		if (FD_ISSET(i,in) && check(SEL_IN,wait,current->files->fd[i])) {
 			FD_SET(i, res_in);
 			count++;
 			wait = NULL;
 		}
-		if (FD_ISSET(i,out) && check(SEL_OUT,wait,current->filp[i])) {
+		if (FD_ISSET(i,out) && check(SEL_OUT,wait,current->files->fd[i])) {
 			FD_SET(i, res_out);
 			count++;
 			wait = NULL;
 		}
-		if (FD_ISSET(i,ex) && check(SEL_EX,wait,current->filp[i])) {
+		if (FD_ISSET(i,ex) && check(SEL_EX,wait,current->files->fd[i])) {
 			FD_SET(i, res_ex);
 			count++;
 			wait = NULL;

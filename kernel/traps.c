@@ -148,20 +148,22 @@ asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 
 asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 {
+	if (regs->eflags & VM_MASK) {
+		handle_vm86_debug((struct vm86_regs *) regs, error_code);
+		return;
+	}
 	if (current->flags & PF_PTRACED)
 		current->blocked &= ~(1 << (SIGTRAP-1));
 	send_sig(SIGTRAP, current, 1);
 	current->tss.trap_no = 1;
 	current->tss.error_code = error_code;
-	if((regs->cs & 3) == 0) {
-	  /* If this is a kernel mode trap, then reset db7 and allow us to continue */
-	  __asm__("movl $0,%%edx\n\t" \
-		  "movl %%edx,%%db7\n\t" \
-		  : /* no output */ \
-		  : /* no input */ :"dx");
-
-	  return;
-	};
+	if ((regs->cs & 3) == 0) {
+		/* If this is a kernel mode trap, then reset db7 and allow us to continue */
+		__asm__("movl %0,%%db7"
+			: /* no output */
+			: "r" (0));
+		return;
+	}
 	die_if_kernel("debug",regs,error_code);
 }
 

@@ -52,7 +52,7 @@ static int ext_follow_link(struct inode * dir, struct inode * inode,
 
 	*res_inode = NULL;
 	if (!dir) {
-		dir = current->root;
+		dir = current->fs->root;
 		dir->i_count++;
 	}
 	if (!inode) {

@@ -19,25 +19,25 @@ extern int sock_fcntl (struct file *, unsigned int cmd, unsigned long arg);
 
 static int dupfd(unsigned int fd, unsigned int arg)
 {
-	if (fd >= NR_OPEN || !current->filp[fd])
+	if (fd >= NR_OPEN || !current->files->fd[fd])
 		return -EBADF;
 	if (arg >= NR_OPEN)
 		return -EINVAL;
 	while (arg < NR_OPEN)
-		if (current->filp[arg])
+		if (current->files->fd[arg])
 			arg++;
 		else
 			break;
 	if (arg >= NR_OPEN)
 		return -EMFILE;
-	FD_CLR(arg, &current->close_on_exec);
-	(current->filp[arg] = current->filp[fd])->f_count++;
+	FD_CLR(arg, &current->files->close_on_exec);
+	(current->files->fd[arg] = current->files->fd[fd])->f_count++;
 	return arg;
 }
 
 asmlinkage int sys_dup2(unsigned int oldfd, unsigned int newfd)
 {
-	if (oldfd >= NR_OPEN || !current->filp[oldfd])
+	if (oldfd >= NR_OPEN || !current->files->fd[oldfd])
 		return -EBADF;
 	if (newfd == oldfd)
 		return newfd;
@@ -67,18 +67,18 @@ asmlinkage int sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {	
 	struct file * filp;
 
-	if (fd >= NR_OPEN || !(filp = current->filp[fd]))
+	if (fd >= NR_OPEN || !(filp = current->files->fd[fd]))
 		return -EBADF;
 	switch (cmd) {
 		case F_DUPFD:
 			return dupfd(fd,arg);
 		case F_GETFD:
-			return FD_ISSET(fd, &current->close_on_exec);
+			return FD_ISSET(fd, &current->files->close_on_exec);
 		case F_SETFD:
 			if (arg&1)
-				FD_SET(fd, &current->close_on_exec);
+				FD_SET(fd, &current->files->close_on_exec);
 			else
-				FD_CLR(fd, &current->close_on_exec);
+				FD_CLR(fd, &current->files->close_on_exec);
 			return 0;
 		case F_GETFL:
 			return filp->f_flags;

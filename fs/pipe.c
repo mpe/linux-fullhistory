@@ -394,20 +394,20 @@ asmlinkage int sys_pipe(unsigned long * fildes)
 		return -ENFILE;
 	j=0;
 	for(i=0;j<2 && i<NR_OPEN;i++)
-		if (!current->filp[i]) {
-			current->filp[ fd[j]=i ] = f[j];
+		if (!current->files->fd[i]) {
+			current->files->fd[ fd[j]=i ] = f[j];
 			j++;
 		}
 	if (j==1)
-		current->filp[fd[0]]=NULL;
+		current->files->fd[fd[0]]=NULL;
 	if (j<2) {
 		f[0]->f_count--;
 		f[1]->f_count--;
 		return -EMFILE;
 	}
 	if (!(inode=get_pipe_inode())) {
-		current->filp[fd[0]] = NULL;
-		current->filp[fd[1]] = NULL;
+		current->files->fd[fd[0]] = NULL;
+		current->files->fd[fd[1]] = NULL;
 		f[0]->f_count--;
 		f[1]->f_count--;
 		return -ENFILE;

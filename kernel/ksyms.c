@@ -10,6 +10,12 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
+#include <linux/binfmts.h>
+#include <linux/ptrace.h>
+#include <linux/sys.h>
+#include <linux/utsname.h>
+  
+extern void *sys_call_table;
 
 #define X(name)	{ (void *) &name, "_" #name }
 
@@ -18,12 +24,30 @@ extern char * ftape_big_buffer;
 extern void (*do_floppy)(void);
 #endif
 
+#ifdef CONFIG_BINFMT_IBCS
+extern int do_execve(char * filename, char ** argv, char ** envp,
+		struct pt_regs * regs);
+extern void flush_old_exec(struct linux_binprm * bprm);
+extern int open_inode(struct inode * inode, int mode);
+extern int read_exec(struct inode *inode, unsigned long offset,
+	char * addr, unsigned long count);
+
+extern void check_pending(int signum);
+extern int do_signal(unsigned long oldmask, struct pt_regs * regs);
+extern int (*ibcs_invmapsig)(int);
+
+extern void (* iABI_hook)(struct pt_regs * regs);
+#endif
+
 struct {
 	void *addr;
 	const char *name;
 } symbol_table[] = {
-	/* process memory management */
+	/* system info variables */
+	X(EISA_bus),
 	X(wp_works_ok),
+
+	/* process memory management */
 	X(__verify_write),
 	X(do_mmap),
 	X(do_munmap),
@@ -50,6 +74,10 @@ struct {
 	X(register_blkdev),
 	X(unregister_blkdev),
 
+	/* filesystem registration */
+	X(register_filesystem),
+	X(unregister_filesystem),
+
 	/* interrupt handling */
 	X(request_irq),
 	X(free_irq),
@@ -66,11 +94,43 @@ struct {
 	X(printk),
 	X(sprintf),
 	X(vsprintf),
+	X(system_utsname),
+	X(sys_call_table),
 
 #ifdef CONFIG_FTAPE
 	/* The next labels are needed for ftape driver.  */
 	X(ftape_big_buffer),
 	X(do_floppy),
+#endif
+
+#ifdef CONFIG_BINFMT_IBCS
+/*
+ * The following are needed if iBCS support is modular rather than
+ * compiled in.
+ */
+	/* Emulator hooks. */
+	X(iABI_hook),
+	X(ibcs_invmapsig),
+
+	/* Signal interfaces */
+	X(do_signal),
+	X(check_pending),
+	X(send_sig),
+
+	/* Program loader interfaces */
+	X(change_ldt),
+	X(copy_strings),
+	X(create_tables),
+	X(do_execve),
+	X(flush_old_exec),
+	X(formats),
+	X(insert_vm_struct),
+	X(open_inode),
+	X(read_exec),
+	X(zeromap_page_range),
+
+	/* Miscellaneous access points */
+	X(si_meminfo),
 #endif
 };
 

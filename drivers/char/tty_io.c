@@ -1650,7 +1650,7 @@ void do_SAK( struct tty_struct *tty)
 			send_sig(SIGKILL, *p, 1);
 		else {
 			for (i=0; i < NR_OPEN; i++) {
-				filp = (*p)->filp[i];
+				filp = (*p)->files->fd[i];
 				if (filp && (filp->f_op == &tty_fops) &&
 				    (MINOR(filp->f_rdev) == line)) {
 					send_sig(SIGKILL, *p, 1);

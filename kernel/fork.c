@@ -89,14 +89,14 @@ static struct file * copy_fd(struct file * old_file)
 	return new_file;
 }
 
-int dup_mmap(struct task_struct * tsk)
+static int dup_mmap(struct task_struct * tsk)
 {
 	struct vm_area_struct * mpnt, **p, *tmp;
 
-	tsk->mmap = NULL;
-	tsk->stk_vma = NULL;
-	p = &tsk->mmap;
-	for (mpnt = current->mmap ; mpnt ; mpnt = mpnt->vm_next) {
+	tsk->mm->mmap = NULL;
+	tsk->mm->stk_vma = NULL;
+	p = &tsk->mm->mmap;
+	for (mpnt = current->mm->mmap ; mpnt ; mpnt = mpnt->vm_next) {
 		tmp = (struct vm_area_struct *) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
 		if (!tmp)
 			return -ENOMEM;
@@ -107,14 +107,63 @@ int dup_mmap(struct task_struct * tsk)
 			tmp->vm_inode->i_count++;
 		*p = tmp;
 		p = &tmp->vm_next;
-		if (current->stk_vma == mpnt)
-			tsk->stk_vma = tmp;
+		if (current->mm->stk_vma == mpnt)
+			tsk->mm->stk_vma = tmp;
 	}
 	return 0;
 }
 
+/*
+ * SHAREFD not yet implemented..
+ */
+static void copy_files(unsigned long clone_flags, struct task_struct * p)
+{
+	int i;
+	struct file * f;
+
+	if (clone_flags & COPYFD) {
+		for (i=0; i<NR_OPEN;i++)
+			if ((f = p->files->fd[i]) != NULL)
+				p->files->fd[i] = copy_fd(f);
+	} else {
+		for (i=0; i<NR_OPEN;i++)
+			if ((f = p->files->fd[i]) != NULL)
+				f->f_count++;
+	}
+}
+
+/*
+ * CLONEVM not yet correctly implemented: needs to clone the mmap
+ * instead of duplicating it..
+ */
+static int copy_mm(unsigned long clone_flags, struct task_struct * p)
+{
+	if (clone_flags & COPYVM) {
+		p->mm->swappable = 1;
+		p->mm->min_flt = p->mm->maj_flt = 0;
+		p->mm->cmin_flt = p->mm->cmaj_flt = 0;
+		if (copy_page_tables(p))
+			return 1;
+		dup_mmap(p);
+	} else {
+		if (clone_page_tables(p))
+			return 1;
+		dup_mmap(p);		/* wrong.. */
+	}
+	return 0;
+}
+
+static void copy_fs(unsigned long clone_flags, struct task_struct * p)
+{
+	if (current->fs->pwd)
+		current->fs->pwd->i_count++;
+	if (current->fs->root)
+		current->fs->root->i_count++;
+	if (current->executable)
+		current->executable->i_count++;
+}
+
 #define IS_CLONE (regs.orig_eax == __NR_clone)
-#define copy_vm(p) ((clone_flags & COPYVM)?copy_page_tables(p):clone_page_tables(p))
 
 /*
  *  Ok, this is the main fork-routine. It copies the system process
@@ -126,7 +175,6 @@ asmlinkage int sys_fork(struct pt_regs regs)
 	struct pt_regs * childregs;
 	struct task_struct *p;
 	int i,nr;
-	struct file *f;
 	unsigned long clone_flags = COPYVM | SIGCHLD;
 
 	if(!(p = (struct task_struct*)__get_free_page(GFP_KERNEL)))
@@ -141,7 +189,6 @@ asmlinkage int sys_fork(struct pt_regs regs)
 	p->state = TASK_UNINTERRUPTIBLE;
 	p->flags &= ~(PF_PTRACED|PF_TRACESYS);
 	p->pid = last_pid;
-	p->swappable = 1;
 	p->p_pptr = p->p_opptr = current;
 	p->p_cptr = NULL;
 	SET_LINKS(p);
@@ -151,8 +198,6 @@ asmlinkage int sys_fork(struct pt_regs regs)
 	p->leader = 0;		/* process leadership doesn't inherit */
 	p->utime = p->stime = 0;
 	p->cutime = p->cstime = 0;
-	p->min_flt = p->maj_flt = 0;
-	p->cmin_flt = p->cmaj_flt = 0;
 	p->start_time = jiffies;
 /*
  * set up new TSS and kernel stack
@@ -196,24 +241,10 @@ asmlinkage int sys_fork(struct pt_regs regs)
 	if (last_task_used_math == current)
 		__asm__("clts ; fnsave %0 ; frstor %0":"=m" (p->tss.i387));
 	p->semun = NULL; p->shm = NULL;
-	if (copy_vm(p) || shm_fork(current, p))
+	if (copy_mm(clone_flags, p) || shm_fork(current, p))
 		goto bad_fork_cleanup;
-	if (clone_flags & COPYFD) {
-		for (i=0; i<NR_OPEN;i++)
-			if ((f = p->filp[i]) != NULL)
-				p->filp[i] = copy_fd(f);
-	} else {
-		for (i=0; i<NR_OPEN;i++)
-			if ((f = p->filp[i]) != NULL)
-				f->f_count++;
-	}
-	if (current->pwd)
-		current->pwd->i_count++;
-	if (current->root)
-		current->root->i_count++;
-	if (current->executable)
-		current->executable->i_count++;
-	dup_mmap(p);
+	copy_files(clone_flags, p);
+	copy_fs(clone_flags, p);
 	set_tss_desc(gdt+(nr<<1)+FIRST_TSS_ENTRY,&(p->tss));
 	if (p->ldt)
 		set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY,p->ldt, 512);

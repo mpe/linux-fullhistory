@@ -172,6 +172,75 @@ struct tss_struct {
 	union i387_union i387;
 };
 
+#define INIT_TSS  { \
+	0,0, \
+	sizeof(init_kernel_stack) + (long) &init_kernel_stack, \
+	KERNEL_DS, 0, \
+	0,0,0,0,0,0, \
+	(long) &swapper_pg_dir, \
+	0,0,0,0,0,0,0,0,0,0, \
+	USER_DS,0,USER_DS,0,USER_DS,0,USER_DS,0,USER_DS,0,USER_DS,0, \
+	_LDT(0),0, \
+	0, 0x8000, \
+	{~0, }, /* ioperm */ \
+	_TSS(0), 0, 0,0, \
+	{ { 0, }, }  /* 387 state */ \
+}
+
+struct files_struct {
+	int count;
+	fd_set close_on_exec;
+	struct file * fd[NR_OPEN];
+};
+
+#define INIT_FILES { \
+	0, \
+	{ { 0, } }, \
+	{ NULL, } \
+}
+
+struct fs_struct {
+	int count;
+	unsigned short umask;
+	struct inode * root, * pwd;
+};
+
+#define INIT_FS { \
+	0, \
+	0022, \
+	NULL, NULL \
+}
+
+struct mm_struct {
+	int count;
+	unsigned long start_code, end_code, end_data;
+	unsigned long start_brk, brk, start_stack, start_mmap;
+	unsigned long arg_start, arg_end, env_start, env_end;
+	unsigned long rss;
+	unsigned long min_flt, maj_flt, cmin_flt, cmaj_flt;
+	int swappable:1;
+#ifdef NEW_SWAP
+	unsigned long old_maj_flt;	/* old value of maj_flt */
+	unsigned long dec_flt;		/* page fault count of the last time */
+	unsigned long swap_cnt;		/* number of pages to swap on next pass */
+	short swap_table;		/* current page table */
+	short swap_page;		/* current page */
+#endif NEW_SWAP
+	struct vm_area_struct * mmap;
+	struct vm_area_struct * stk_vma;
+};
+
+#define INIT_MM { \
+		0, \
+		0, 0, 0, \
+		0, 0, 0, 0, \
+		0, 0, 0, 0, \
+		0, \
+/* ?_flt */	0, 0, 0, 0, \
+		0, \
+/* swap */	0, 0, 0, 0, 0, \
+		NULL, NULL }
+
 struct task_struct {
 /* these are hardcoded - don't touch */
 	volatile long state;	/* -1 unrunnable, 0 runnable, >0 stopped */
@@ -190,10 +259,7 @@ struct task_struct {
 	int exit_code, exit_signal;
 	int elf_executable:1;
 	int dumpable:1;
-	int swappable:1;
 	int did_exec:1;
-	unsigned long start_code,end_code,end_data,start_brk,brk,start_stack,start_mmap;
-	unsigned long arg_start, arg_end, env_start, env_end;
 	int pid,pgrp,session,leader;
 	int	groups[NGROUPS];
 	/* 
@@ -201,23 +267,16 @@ struct task_struct {
 	 * older sibling, respectively.  (p->father can be replaced with 
 	 * p->p_pptr->pid)
 	 */
-	struct task_struct *p_opptr,*p_pptr, *p_cptr, *p_ysptr, *p_osptr;
+	struct task_struct *p_opptr, *p_pptr, *p_cptr, *p_ysptr, *p_osptr;
 	struct wait_queue *wait_chldexit;	/* for wait4() */
-	/*
-	 * For ease of programming... Normal sleeps don't need to
-	 * keep track of a wait-queue: every task has an entry of its own
-	 */
 	unsigned short uid,euid,suid;
 	unsigned short gid,egid,sgid;
 	unsigned long timeout;
 	unsigned long it_real_value, it_prof_value, it_virt_value;
 	unsigned long it_real_incr, it_prof_incr, it_virt_incr;
-	long utime,stime,cutime,cstime,start_time;
-	unsigned long min_flt, maj_flt;
-	unsigned long cmin_flt, cmaj_flt;
+	long utime, stime, cutime, cstime, start_time;
 	struct rlimit rlim[RLIM_NLIMITS]; 
 	unsigned short used_math;
-	unsigned short rss;	/* number of resident pages */
 	char comm[16];
 /* virtual 86 mode stuff */
 	struct vm86_struct * vm86_info;
@@ -226,27 +285,19 @@ struct task_struct {
 /* file system info */
 	int link_count;
 	int tty;		/* -1 if no tty, so it must be signed */
-	unsigned short umask;
-	struct inode * pwd;
-	struct inode * root;
 	struct inode * executable;
-	struct vm_area_struct * mmap;
 	struct shm_desc *shm;
 	struct sem_undo *semun;
-	struct file * filp[NR_OPEN];
-	fd_set close_on_exec;
 /* ldt for this task - used by Wine.  If NULL, default_ldt is used */
 	struct desc_struct *ldt;
 /* tss for this task */
 	struct tss_struct tss;
-#ifdef NEW_SWAP
-	unsigned long old_maj_flt;	/* old value of maj_flt */
-	unsigned long dec_flt;		/* page fault count of the last time */
-	unsigned long swap_cnt;		/* number of pages to swap on next pass */
-	short swap_table;		/* current page table */
-	short swap_page;		/* current page */
-#endif NEW_SWAP
-	struct vm_area_struct *stk_vma;
+/* filesystem information */
+	struct fs_struct fs[1];
+/* open file information */
+	struct files_struct files[1];
+/* memory management info */
+	struct mm_struct mm[1];
 };
 
 /*
@@ -274,38 +325,25 @@ struct task_struct {
 /* schedlink */	&init_task,&init_task, \
 /* signals */	{{ 0, },}, \
 /* stack */	0,(unsigned long) &init_kernel_stack, \
-/* ec,brk... */	0,0,0,0,0,0,0,0,0,0,0,0,0, \
-/* argv.. */	0,0,0,0, \
+/* ec,brk... */	0,0,0,0,0, \
 /* pid etc.. */	0,0,0,0, \
 /* suppl grps*/ {NOGROUP,}, \
 /* proc links*/ &init_task,&init_task,NULL,NULL,NULL,NULL, \
 /* uid etc */	0,0,0,0,0,0, \
 /* timeout */	0,0,0,0,0,0,0,0,0,0,0,0, \
-/* min_flt */	0,0,0,0, \
 /* rlimits */   { {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX},  \
 		  {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX},  \
 		  {       0, LONG_MAX}, {LONG_MAX, LONG_MAX}}, \
 /* math */	0, \
-/* rss */	2, \
 /* comm */	"swapper", \
 /* vm86_info */	NULL, 0, 0, 0, 0, \
-/* fs info */	0,-1,0022,NULL,NULL,NULL,NULL, \
+/* fs info */	0,-1,NULL, \
 /* ipc */	NULL, NULL, \
-/* filp */	{NULL,}, \
-/* cloe */	{{ 0, }}, \
 /* ldt */	NULL, \
-/*tss*/	{0,0, \
-	 sizeof(init_kernel_stack) + (long) &init_kernel_stack, KERNEL_DS, 0, \
-	 0,0,0,0,0,0, \
-	 (long) &swapper_pg_dir, \
-	 0,0,0,0,0,0,0,0,0,0, \
-	 USER_DS,0,USER_DS,0,USER_DS,0,USER_DS,0,USER_DS,0,USER_DS,0, \
-	 _LDT(0),0, \
-	 0, 0x8000, \
-/* ioperm */ 	{~0, }, \
-	 _TSS(0), 0, 0,0, \
-/* 387 state */	{ { 0, }, } \
-	} \
+/* tss */	INIT_TSS, \
+/* fs */	{ INIT_FS }, \
+/* files */	{ INIT_FILES }, \
+/* mm */	{ INIT_MM } \
 }
 
 extern struct task_struct init_task;

@@ -531,5 +531,6 @@ _sys_call_table:
 	.long _sys_getpgid
 	.long _sys_fchdir
 	.long _sys_bdflush
+	.long _sys_sysfs		/* 135 */
 
-	.space (NR_syscalls-130)*4
+	.space (NR_syscalls-135)*4

@@ -75,7 +75,7 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
 	*conversion = 'b';
 	*uid = current->uid;
 	*gid = current->gid;
-	*umask = current->umask;
+	*umask = current->fs->umask;
 	*debug = *fat = *quiet = 0;
 	if (!options) return 1;
 	for (this_char = strtok(options,","); this_char; this_char = strtok(NULL,",")) {

@@ -190,11 +190,15 @@ void ctrl_alt_del(void)
 	
 
 /*
- * This is done BSD-style, with no consideration of the saved gid, except
- * that if you set the effective gid, it sets the saved gid too.  This 
- * makes it possible for a setgid program to completely drop its privileges,
- * which is often a useful assertion to make when you are doing a security
- * audit over a program.
+ * Unprivileged users may change the real gid to the effective gid
+ * or vice versa.  (BSD-style)
+ *
+ * If you set the real gid at all, or set the effective gid to a value not
+ * equal to the real gid, then the saved gid is set to the new effective gid.
+ *
+ * This makes it possible for a setgid program to completely drop its
+ * privileges, which is often a useful assertion to make when you are doing
+ * a security audit over a program.
  *
  * The general idea is that a program which uses just setregid() will be
  * 100% compatible with BSD.  A program which uses just setgid() will be
@@ -215,14 +219,16 @@ asmlinkage int sys_setregid(gid_t rgid, gid_t egid)
 	if (egid != (gid_t) -1) {
 		if ((old_rgid == egid) ||
 		    (current->egid == egid) ||
-		    suser()) {
+		    suser())
 			current->egid = egid;
-			current->sgid = egid;
-		} else {
+		else {
 			current->gid = old_rgid;
 			return(-EPERM);
 		}
 	}
+	if (rgid != (gid_t) -1 ||
+	    egid != (gid_t) -1 && egid != old_rgid)
+		current->sgid = current->egid;
 	return 0;
 }
 
@@ -271,13 +277,15 @@ asmlinkage int sys_old_syscall(void)
 }
 
 /*
- * Unprivileged users may change the real user id to the effective uid
+ * Unprivileged users may change the real uid to the effective uid
  * or vice versa.  (BSD-style)
  *
- * When you set the effective uid, it sets the saved uid too.  This 
- * makes it possible for a setuid program to completely drop its privileges,
- * which is often a useful assertion to make when you are doing a security
- * audit over a program.
+ * If you set the real uid at all, or set the effective uid to a value not
+ * equal to the real uid, then the saved uid is set to the new effective uid.
+ *
+ * This makes it possible for a setuid program to completely drop its
+ * privileges, which is often a useful assertion to make when you are doing
+ * a security audit over a program.
  *
  * The general idea is that a program which uses just setreuid() will be
  * 100% compatible with BSD.  A program which uses just setuid() will be
@@ -286,10 +294,10 @@ asmlinkage int sys_old_syscall(void)
 asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 {
 	int old_ruid = current->uid;
-	
+
 	if (ruid != (uid_t) -1) {
 		if ((current->euid==ruid) ||
-		    (old_ruid == ruid) ||
+		    (old_ruid == ruid) || 
 		    suser())
 			current->uid = ruid;
 		else
@@ -298,14 +306,16 @@ asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 	if (euid != (uid_t) -1) {
 		if ((old_ruid == euid) ||
 		    (current->euid == euid) ||
-		    suser()) {
+		    suser())
 			current->euid = euid;
-			current->suid = euid;
-		} else {
+		else {
 			current->uid = old_ruid;
 			return(-EPERM);
 		}
 	}
+	if (ruid != (uid_t) -1 ||
+	    euid != (uid_t) -1 && euid != old_ruid)
+		current->suid = current->euid;
 	return 0;
 }
 
@@ -351,18 +361,18 @@ asmlinkage int sys_brk(unsigned long brk)
 	unsigned long rlim;
 	unsigned long newbrk, oldbrk;
 
-	if (brk < current->end_code)
-		return current->brk;
+	if (brk < current->mm->end_code)
+		return current->mm->brk;
 	newbrk = PAGE_ALIGN(brk);
-	oldbrk = PAGE_ALIGN(current->brk);
+	oldbrk = PAGE_ALIGN(current->mm->brk);
 	if (oldbrk == newbrk)
-		return current->brk = brk;
+		return current->mm->brk = brk;
 
 	/*
 	 * Always allow shrinking brk
 	 */
-	if (brk <= current->brk) {
-		current->brk = brk;
+	if (brk <= current->mm->brk) {
+		current->mm->brk = brk;
 		do_munmap(newbrk, oldbrk-newbrk);
 		return brk;
 	}
@@ -372,8 +382,9 @@ asmlinkage int sys_brk(unsigned long brk)
 	rlim = current->rlim[RLIMIT_DATA].rlim_cur;
 	if (rlim >= RLIM_INFINITY)
 		rlim = ~0;
-	if (brk - current->end_code > rlim || brk >= current->start_stack - 16384)
-		return current->brk;
+	if (brk - current->mm->end_code > rlim ||
+	    brk >= current->mm->start_stack - 16384)
+		return current->mm->brk;
 	/*
 	 * stupid algorithm to decide if we have enough memory: while
 	 * simple, it hopefully works in most obvious cases.. Easy to
@@ -385,17 +396,17 @@ asmlinkage int sys_brk(unsigned long brk)
 	freepages -= (high_memory - 0x100000) >> 16;
 	freepages -= (newbrk-oldbrk) >> 12;
 	if (freepages < 0)
-		return current->brk;
+		return current->mm->brk;
 #if 0
-	freepages += current->rss;
+	freepages += current->mm->rss;
 	freepages -= oldbrk >> 12;
 	if (freepages < 0)
-		return current->brk;
+		return current->mm->brk;
 #endif
 	/*
 	 * Ok, we have probably got enough memory - let it rip.
 	 */
-	current->brk = brk;
+	current->mm->brk = brk;
 	do_mmap(NULL, oldbrk, newbrk-oldbrk,
 		PROT_READ|PROT_WRITE|PROT_EXEC,
 		MAP_FIXED|MAP_PRIVATE, 0);
@@ -688,24 +699,24 @@ int getrusage(struct task_struct *p, int who, struct rusage *ru)
 			r.ru_utime.tv_usec = CT_TO_USECS(p->utime);
 			r.ru_stime.tv_sec = CT_TO_SECS(p->stime);
 			r.ru_stime.tv_usec = CT_TO_USECS(p->stime);
-			r.ru_minflt = p->min_flt;
-			r.ru_majflt = p->maj_flt;
+			r.ru_minflt = p->mm->min_flt;
+			r.ru_majflt = p->mm->maj_flt;
 			break;
 		case RUSAGE_CHILDREN:
 			r.ru_utime.tv_sec = CT_TO_SECS(p->cutime);
 			r.ru_utime.tv_usec = CT_TO_USECS(p->cutime);
 			r.ru_stime.tv_sec = CT_TO_SECS(p->cstime);
 			r.ru_stime.tv_usec = CT_TO_USECS(p->cstime);
-			r.ru_minflt = p->cmin_flt;
-			r.ru_majflt = p->cmaj_flt;
+			r.ru_minflt = p->mm->cmin_flt;
+			r.ru_majflt = p->mm->cmaj_flt;
 			break;
 		default:
 			r.ru_utime.tv_sec = CT_TO_SECS(p->utime + p->cutime);
 			r.ru_utime.tv_usec = CT_TO_USECS(p->utime + p->cutime);
 			r.ru_stime.tv_sec = CT_TO_SECS(p->stime + p->cstime);
 			r.ru_stime.tv_usec = CT_TO_USECS(p->stime + p->cstime);
-			r.ru_minflt = p->min_flt + p->cmin_flt;
-			r.ru_majflt = p->maj_flt + p->cmaj_flt;
+			r.ru_minflt = p->mm->min_flt + p->mm->cmin_flt;
+			r.ru_majflt = p->mm->maj_flt + p->mm->cmaj_flt;
 			break;
 	}
 	lp = (unsigned long *) &r;
@@ -725,8 +736,8 @@ asmlinkage int sys_getrusage(int who, struct rusage *ru)
 
 asmlinkage int sys_umask(int mask)
 {
-	int old = current->umask;
+	int old = current->fs->umask;
 
-	current->umask = mask & S_IRWXUGO;
+	current->fs->umask = mask & S_IRWXUGO;
 	return (old);
 }

@@ -102,6 +102,7 @@ struct vm86_struct {
 #ifdef __KERNEL__
 
 void handle_vm86_fault(struct vm86_regs *, long);
+void handle_vm86_debug(struct vm86_regs *, long);
 
 #endif
 

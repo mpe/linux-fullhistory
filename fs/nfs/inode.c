@@ -77,7 +77,7 @@ struct super_block *nfs_read_super(struct super_block *sb, void *raw_data,
 		printk("nfs warning: mount version %s than kernel\n",
 			data->version < NFS_MOUNT_VERSION ? "older" : "newer");
 	}
-	if (fd >= NR_OPEN || !(filp = current->filp[fd])) {
+	if (fd >= NR_OPEN || !(filp = current->files->fd[fd])) {
 		printk("nfs_read_super: invalid file descriptor\n");
 		sb->s_dev = 0;
 		return NULL;

@@ -317,7 +317,7 @@ static int swap_out(unsigned int priority)
 	    }
 
 	    p = task[swap_task];
-	    if(p && p->swappable && p->rss)
+	    if(p && p->mm->swappable && p->mm->rss)
 		break;
 
 	    swap_task++;
@@ -326,23 +326,23 @@ static int swap_out(unsigned int priority)
 	/*
 	 * Determine the number of pages to swap from this process.
 	 */
-	if(! p -> swap_cnt) {
-	    p->dec_flt = (p->dec_flt * 3) / 4 + p->maj_flt - p->old_maj_flt;
-	    p->old_maj_flt = p->maj_flt;
+	if(! p->mm->swap_cnt) {
+	    p->mm->dec_flt = (p->mm->dec_flt * 3) / 4 + p->mm->maj_flt - p->mm->old_maj_flt;
+	    p->mm->old_maj_flt = p->mm->maj_flt;
 
-	    if(p->dec_flt >= SWAP_RATIO / SWAP_MIN) {
-		p->dec_flt = SWAP_RATIO / SWAP_MIN;
-		p->swap_cnt = SWAP_MIN;
-	    } else if(p->dec_flt <= SWAP_RATIO / SWAP_MAX)
-		p->swap_cnt = SWAP_MAX;
+	    if(p->mm->dec_flt >= SWAP_RATIO / SWAP_MIN) {
+		p->mm->dec_flt = SWAP_RATIO / SWAP_MIN;
+		p->mm->swap_cnt = SWAP_MIN;
+	    } else if(p->mm->dec_flt <= SWAP_RATIO / SWAP_MAX)
+		p->mm->swap_cnt = SWAP_MAX;
 	    else
-		p->swap_cnt = SWAP_RATIO / p->dec_flt;
+		p->mm->swap_cnt = SWAP_RATIO / p->mm->dec_flt;
 	}
 
 	/*
 	 * Go through process' page directory.
 	 */
-	for(table = p->swap_table; table < 1024; table++) {
+	for(table = p->mm->swap_table; table < 1024; table++) {
 	    pg_table = ((unsigned long *) p->tss.cr3)[table];
 	    if(pg_table >= high_memory)
 		    continue;
@@ -359,34 +359,34 @@ static int swap_out(unsigned int priority)
 	    /*
 	     * Go through this page table.
 	     */
-	    for(page = p->swap_page; page < 1024; page++) {
+	    for(page = p->mm->swap_page; page < 1024; page++) {
 		switch(try_to_swap_out(page + (unsigned long *) pg_table)) {
 		    case 0:
 			break;
 
 		    case 1:
-			p->rss--;
+			p->mm->rss--;
 			/* continue with the following page the next time */
-			p->swap_table = table;
-			p->swap_page  = page + 1;
-			if((--p->swap_cnt) == 0)
+			p->mm->swap_table = table;
+			p->mm->swap_page  = page + 1;
+			if((--p->mm->swap_cnt) == 0)
 			    swap_task++;
 			return 1;
 
 		    default:
-			p->rss--;
+			p->mm->rss--;
 			break;
 		}
 	    }
 
-	    p->swap_page = 0;
+	    p->mm->swap_page = 0;
 	}
 
 	/*
 	 * Finish work with this process, if we reached the end of the page
 	 * directory.  Mark restart from the beginning the next time.
 	 */
-	p->swap_table = 0;
+	p->mm->swap_table = 0;
     }
     return 0;
 }
@@ -419,7 +419,7 @@ check_task:
 		goto check_task;
 	}
 	p = task[swap_task];
-	if (!p || !p->swappable) {
+	if (!p || !p->mm->swappable) {
 		swap_task++;
 		goto check_task;
 	}
@@ -450,8 +450,8 @@ check_table:
 	}
 	switch (try_to_swap_out(swap_page + (unsigned long *) pg_table)) {
 		case 0: break;
-		case 1: p->rss--; return 1;
-		default: p->rss--;
+		case 1: p->mm->rss--; return 1;
+		default: p->mm->rss--;
 	}
 	swap_page++;
 	goto check_table;
@@ -689,7 +689,7 @@ repeat:
 				read_swap_page(page, (char *) tmp);
 				if (*ppage == page) {
 					*ppage = tmp | (PAGE_DIRTY | PAGE_PRIVATE);
-					++p->rss;
+					++p->mm->rss;
 					swap_free(page);
 					tmp = 0;
 				}

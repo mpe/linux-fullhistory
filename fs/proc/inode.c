@@ -169,7 +169,7 @@ void proc_read_inode(struct inode * inode)
 	switch (ino >> 8) {
 		case 1:
 			ino &= 0xff;
-			if (ino >= NR_OPEN || !p->filp[ino])
+			if (ino >= NR_OPEN || !p->files->fd[ino])
 				return;
 			inode->i_op = &proc_link_inode_operations;
 			inode->i_size = 64;
@@ -180,7 +180,7 @@ void proc_read_inode(struct inode * inode)
 			{
 				int j = 0;
 				struct vm_area_struct * mpnt;
-				for (mpnt = p->mmap ; mpnt ; mpnt = mpnt->vm_next)
+				for (mpnt = p->mm->mmap ; mpnt ; mpnt = mpnt->vm_next)
 					if(mpnt->vm_inode)
 						j++;
 				if (ino >= j)

@@ -86,7 +86,7 @@ int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		/* Maybe this works.. Ugly it is. */
 		addr = SHM_RANGE_START;
 		while (addr+len < SHM_RANGE_END) {
-			for (vmm = current->mmap ; vmm ; vmm = vmm->vm_next) {
+			for (vmm = current->mm->mmap ; vmm ; vmm = vmm->vm_next) {
 				if (addr >= vmm->vm_end)
 					continue;
 				if (addr + len <= vmm->vm_start)
@@ -146,7 +146,7 @@ asmlinkage int sys_mmap(unsigned long *buffer)
 	flags = get_fs_long(buffer+3);
 	if (!(flags & MAP_ANONYMOUS)) {
 		unsigned long fd = get_fs_long(buffer+4);
-		if (fd >= NR_OPEN || !(file = current->filp[fd]))
+		if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 			return -EBADF;
 	}
 	return do_mmap(file, get_fs_long(buffer), get_fs_long(buffer+1),
@@ -259,7 +259,7 @@ int do_munmap(unsigned long addr, size_t len)
 	 * every area affected in some way (by any overlap) is put
 	 * on the list.  If nothing is put on, nothing is affected.
 	 */
-	npp = &current->mmap;
+	npp = &current->mm->mmap;
 	free = NULL;
 	for (mpnt = *npp; mpnt != NULL; mpnt = *npp) {
 		unsigned long end = addr+len;
@@ -346,7 +346,7 @@ int generic_mmap(struct inode * inode, struct file * file,
 	mpnt->vm_offset = off;
 	mpnt->vm_ops = &file_mmap;
 	insert_vm_struct(current, mpnt);
-	merge_segments(current->mmap, NULL, NULL);
+	merge_segments(current->mm->mmap, NULL, NULL);
 	
 	return 0;
 }
@@ -361,9 +361,9 @@ void insert_vm_struct(struct task_struct *t, struct vm_area_struct *vmp)
 {
 	struct vm_area_struct **nxtpp, *mpnt;
 
-	nxtpp = &t->mmap;
+	nxtpp = &t->mm->mmap;
 	
-	for(mpnt = t->mmap; mpnt != NULL; mpnt = mpnt->vm_next)
+	for(mpnt = t->mm->mmap; mpnt != NULL; mpnt = mpnt->vm_next)
 	{
 		if (mpnt->vm_start > vmp->vm_start)
 			break;
@@ -464,7 +464,7 @@ static int anon_map(struct inode *ino, struct file * file,
 	mpnt->vm_offset = 0;
 	mpnt->vm_ops = NULL;
 	insert_vm_struct(current, mpnt);
-	merge_segments(current->mmap, ignoff_mergep, NULL);
+	merge_segments(current->mm->mmap, ignoff_mergep, NULL);
 
 	return 0;
 }

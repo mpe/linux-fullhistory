@@ -112,13 +112,13 @@ get_fd(struct inode *inode)
   file = get_empty_filp();
   if (!file) return(-1);
   for (fd = 0; fd < NR_OPEN; ++fd)
-	if (!current->filp[fd]) break;
+	if (!current->files->fd[fd]) break;
   if (fd == NR_OPEN) {
 	file->f_count = 0;
 	return(-1);
   }
-  FD_CLR(fd, &current->close_on_exec);
-  current->filp[fd] = file;
+  FD_CLR(fd, &current->files->close_on_exec);
+  current->files->fd[fd] = file;
   file->f_op = &socket_file_ops;
   file->f_mode = 3;
   file->f_flags = 0;
@@ -166,7 +166,7 @@ sockfd_lookup(int fd, struct file **pfile)
 {
   struct file *file;
 
-  if (fd < 0 || fd >= NR_OPEN || !(file = current->filp[fd])) return(NULL);
+  if (fd < 0 || fd >= NR_OPEN || !(file = current->files->fd[fd])) return(NULL);
   if (pfile) *pfile = file;
   return(socki_lookup(file->f_inode));
 }
@@ -548,7 +548,7 @@ sock_bind(int fd, struct sockaddr *umyaddr, int addrlen)
   int i;
 
   DPRINTF((net_debug, "NET: sock_bind: fd = %d\n", fd));
-  if (fd < 0 || fd >= NR_OPEN || current->filp[fd] == NULL)
+  if (fd < 0 || fd >= NR_OPEN || current->files->fd[fd] == NULL)
 								return(-EBADF);
   if (!(sock = sockfd_lookup(fd, NULL))) return(-ENOTSOCK);
   if ((i = sock->ops->bind(sock, umyaddr, addrlen)) < 0) {
@@ -570,7 +570,7 @@ sock_listen(int fd, int backlog)
   struct socket *sock;
 
   DPRINTF((net_debug, "NET: sock_listen: fd = %d\n", fd));
-  if (fd < 0 || fd >= NR_OPEN || current->filp[fd] == NULL)
+  if (fd < 0 || fd >= NR_OPEN || current->files->fd[fd] == NULL)
 								return(-EBADF);
   if (!(sock = sockfd_lookup(fd, NULL))) return(-ENOTSOCK);
   if (sock->state != SS_UNCONNECTED) {
@@ -596,7 +596,7 @@ sock_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrlen)
   int i;
 
   DPRINTF((net_debug, "NET: sock_accept: fd = %d\n", fd));
-  if (fd < 0 || fd >= NR_OPEN || ((file = current->filp[fd]) == NULL))
+  if (fd < 0 || fd >= NR_OPEN || ((file = current->files->fd[fd]) == NULL))
 								return(-EBADF);
   
   if (!(sock = sockfd_lookup(fd, &file))) return(-ENOTSOCK);
@@ -651,7 +651,7 @@ sock_connect(int fd, struct sockaddr *uservaddr, int addrlen)
   int i;
 
   DPRINTF((net_debug, "NET: sock_connect: fd = %d\n", fd));
-  if (fd < 0 || fd >= NR_OPEN || (file=current->filp[fd]) == NULL)
+  if (fd < 0 || fd >= NR_OPEN || (file=current->files->fd[fd]) == NULL)
 								return(-EBADF);
   
   if (!(sock = sockfd_lookup(fd, &file))) return(-ENOTSOCK);
@@ -686,7 +686,7 @@ sock_getsockname(int fd, struct sockaddr *usockaddr, int *usockaddr_len)
   struct socket *sock;
 
   DPRINTF((net_debug, "NET: sock_getsockname: fd = %d\n", fd));
-  if (fd < 0 || fd >= NR_OPEN || current->filp[fd] == NULL)
+  if (fd < 0 || fd >= NR_OPEN || current->files->fd[fd] == NULL)
 								return(-EBADF);
   if (!(sock = sockfd_lookup(fd, NULL))) return(-ENOTSOCK);
   return(sock->ops->getname(sock, usockaddr, usockaddr_len, 0));
@@ -699,7 +699,7 @@ sock_getpeername(int fd, struct sockaddr *usockaddr, int *usockaddr_len)
   struct socket *sock;
 
   DPRINTF((net_debug, "NET: sock_getpeername: fd = %d\n", fd));
-  if (fd < 0 || fd >= NR_OPEN || current->filp[fd] == NULL)
+  if (fd < 0 || fd >= NR_OPEN || current->files->fd[fd] == NULL)
 			return(-EBADF);
   if (!(sock = sockfd_lookup(fd, NULL))) return(-ENOTSOCK);
   return(sock->ops->getname(sock, usockaddr, usockaddr_len, 1));
@@ -716,7 +716,7 @@ sock_send(int fd, void * buff, int len, unsigned flags)
 	"NET: sock_send(fd = %d, buff = %X, len = %d, flags = %X)\n",
        							fd, buff, len, flags));
 
-  if (fd < 0 || fd >= NR_OPEN || ((file = current->filp[fd]) == NULL))
+  if (fd < 0 || fd >= NR_OPEN || ((file = current->files->fd[fd]) == NULL))
 								return(-EBADF);
   if (!(sock = sockfd_lookup(fd, NULL))) return(-ENOTSOCK);
 
@@ -735,7 +735,7 @@ sock_sendto(int fd, void * buff, int len, unsigned flags,
 	"NET: sock_sendto(fd = %d, buff = %X, len = %d, flags = %X,"
 	 " addr=%X, alen = %d\n", fd, buff, len, flags, addr, addr_len));
 
-  if (fd < 0 || fd >= NR_OPEN || ((file = current->filp[fd]) == NULL))
+  if (fd < 0 || fd >= NR_OPEN || ((file = current->files->fd[fd]) == NULL))
 								return(-EBADF);
   if (!(sock = sockfd_lookup(fd, NULL))) return(-ENOTSOCK);
 
@@ -754,7 +754,7 @@ sock_recv(int fd, void * buff, int len, unsigned flags)
 	"NET: sock_recv(fd = %d, buff = %X, len = %d, flags = %X)\n",
 							fd, buff, len, flags));
 
-  if (fd < 0 || fd >= NR_OPEN || ((file = current->filp[fd]) == NULL))
+  if (fd < 0 || fd >= NR_OPEN || ((file = current->files->fd[fd]) == NULL))
 								return(-EBADF);
   if (!(sock = sockfd_lookup(fd, NULL))) return(-ENOTSOCK);
 
@@ -773,7 +773,7 @@ sock_recvfrom(int fd, void * buff, int len, unsigned flags,
 	"NET: sock_recvfrom(fd = %d, buff = %X, len = %d, flags = %X,"
 	" addr=%X, alen=%X\n", fd, buff, len, flags, addr, addr_len));
 
-  if (fd < 0 || fd >= NR_OPEN || ((file = current->filp[fd]) == NULL))
+  if (fd < 0 || fd >= NR_OPEN || ((file = current->files->fd[fd]) == NULL))
 								return(-EBADF);
   if (!(sock = sockfd_lookup(fd, NULL))) return(-ENOTSOCK);
 
@@ -793,7 +793,7 @@ sock_setsockopt(int fd, int level, int optname, char *optval, int optlen)
   DPRINTF((net_debug, "                     optval = %X, optlen = %d)\n",
 							optval, optlen));
 
-  if (fd < 0 || fd >= NR_OPEN || ((file = current->filp[fd]) == NULL))
+  if (fd < 0 || fd >= NR_OPEN || ((file = current->files->fd[fd]) == NULL))
 								return(-EBADF);
   if (!(sock = sockfd_lookup(fd, NULL))) return(-ENOTSOCK);
 
@@ -812,7 +812,7 @@ sock_getsockopt(int fd, int level, int optname, char *optval, int *optlen)
   DPRINTF((net_debug, "                     optval = %X, optlen = %X)\n",
 						optval, optlen));
 
-  if (fd < 0 || fd >= NR_OPEN || ((file = current->filp[fd]) == NULL))
+  if (fd < 0 || fd >= NR_OPEN || ((file = current->files->fd[fd]) == NULL))
 								return(-EBADF);
   if (!(sock = sockfd_lookup(fd, NULL))) return(-ENOTSOCK);
 	    
@@ -829,7 +829,7 @@ sock_shutdown(int fd, int how)
 
   DPRINTF((net_debug, "NET: sock_shutdown(fd = %d, how = %d)\n", fd, how));
 
-  if (fd < 0 || fd >= NR_OPEN || ((file = current->filp[fd]) == NULL))
+  if (fd < 0 || fd >= NR_OPEN || ((file = current->files->fd[fd]) == NULL))
 								return(-EBADF);
 
   if (!(sock = sockfd_lookup(fd, NULL))) return(-ENOTSOCK);

@@ -160,9 +160,13 @@ sbintr (int unit)
 	irq_ok = 1;
 	break;
 
+#ifndef EXCLUDE_MIDI
+
       case IMODE_MIDI:
 	sb_midi_interrupt (unit);
 	break;
+
+#endif
 
       default:
 	printk ("SoundBlaster: Unexpected interrupt\n");

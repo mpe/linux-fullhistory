@@ -344,7 +344,7 @@ static int shm_map (struct shm_desc *shmd, int remap)
 				if (!remap)
 					return -EINVAL;
 				if (*page_table & PAGE_PRESENT) {
-					--current->rss;
+					--current->mm->rss;
 					free_page (*page_table & PAGE_MASK);
 				}
 				else
@@ -419,7 +419,7 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 		else
 			return -EINVAL;
 	}
-	if ((addr > current->start_stack - 16384 - PAGE_SIZE*shp->shm_npages))
+	if ((addr > current->mm->start_stack - 16384 - PAGE_SIZE*shp->shm_npages))
 		return -EINVAL;
 	if (shmflg & SHM_REMAP)
 		for (shmd = current->shm; shmd; shmd = shmd->task_next) {
@@ -449,7 +449,7 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	shmd->task = current;
 
 	shp->shm_nattch++;            /* prevent destruction */
-	if (addr < current->end_data) {
+	if (addr < current->mm->end_data) {
 		iput (current->executable);
 		current->executable = NULL;
 /*		current->end_data = current->end_code = 0; */
@@ -626,10 +626,10 @@ void shm_no_page (unsigned long *ptent)
 		shm_rss++;
 		shp->shm_pages[idx] = page | (PAGE_SHARED | PAGE_DIRTY);
 	} else 
-		--current->maj_flt;  /* was incremented in do_no_page */
+		--current->mm->maj_flt;  /* was incremented in do_no_page */
 
 done:
-	current->min_flt++;
+	current->mm->min_flt++;
 	page = shp->shm_pages[idx];
 	if (code & SHM_READ_ONLY)           /* write-protect */
 		page &= ~2;
@@ -717,7 +717,7 @@ int shm_swap (int prio)
 		tmp = shmd->shm_sgn | idx << SHM_IDX_SHIFT;
 		*pte = tmp;
 		mem_map[MAP_NR(page)]--;
-		shmd->task->rss--;
+		shmd->task->mm->rss--;
 		invalid++;
 	}
 

@@ -141,6 +141,7 @@
 #define __NR_getpgid		132
 #define __NR_fchdir		133
 #define __NR_bdflush		134
+#define __NR_sysfs		135
 
 extern int errno;
 

@@ -14,8 +14,25 @@
 #include <asm/io.h>
 
 /*
- * 16-bit register defines..
+ * Known problems:
+ *
+ * Interrupt handling is not guaranteed:
+ * - a real x86 will disable all interrupts for one instruction
+ *   after a "mov ss,xx" to make stack handling atomic even without
+ *   the 'lss' instruction. We can't guarantee this in v86 mode,
+ *   as the next instruction might result in a page fault or similar.
+ * - a real x86 will have interrupts disabled for one instruction
+ *   past the 'sti' that enables them. We don't bother with all the
+ *   details yet..
+ *
+ * Hopefully these problems do not actually matter for anything.
  */
+
+/*
+ * 8- and 16-bit register defines..
+ */
+#define AL(regs)	(((unsigned char *) ((regs)->eax))[0])
+#define AH(regs)	(((unsigned char *) ((regs)->eax))[1])
 #define IP(regs)	(*(unsigned short *)&((regs)->eip))
 #define SP(regs)	(*(unsigned short *)&((regs)->esp))
 
@@ -272,7 +289,7 @@ static void do_int(struct vm86_regs *regs, int i, unsigned char * ssp, unsigned 
 	if (seg == BIOSSEG || regs->cs == BIOSSEG ||
 	    is_revectored(i, &current->vm86_info->int_revectored))
 		return_to_32bit(regs, VM86_INTx + (i << 8));
-	if (i==0x21 && is_revectored((regs->eax >> 4) & 0xff,&current->vm86_info->int21_revectored)) {
+	if (i==0x21 && is_revectored(AH(regs),&current->vm86_info->int21_revectored)) {
 		return_to_32bit(regs, VM86_INTx + (i << 8));
 	}
 	pushw(ssp, sp, get_vflags(regs));
@@ -286,6 +303,10 @@ static void do_int(struct vm86_regs *regs, int i, unsigned char * ssp, unsigned 
 	return;
 }
 
+void handle_vm86_debug(struct vm86_regs * regs, long error_code)
+{
+	do_int(regs, 3, (unsigned char *) (regs->ss << 4), SP(regs));
+}
 
 void handle_vm86_fault(struct vm86_regs * regs, long error_code)
 {
@@ -359,6 +380,12 @@ void handle_vm86_fault(struct vm86_regs * regs, long error_code)
 		return;
 
 	/* sti */
+	/*
+	 * Damn. This is incorrect: the 'sti' instruction should actually
+	 * enable interrupts after the /next/ instruction. Not good.
+	 *
+	 * Probably needs some horsing around with the TF flag. Aiee..
+	 */
 	case 0xfb:
 		IP(regs)++;
 		set_IF(regs);

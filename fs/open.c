@@ -55,7 +55,7 @@ asmlinkage int sys_fstatfs(unsigned int fd, struct statfs * buf)
 	error = verify_area(VERIFY_WRITE, buf, sizeof(struct statfs));
 	if (error)
 		return error;
-	if (fd >= NR_OPEN || !(file = current->filp[fd]))
+	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 		return -EBADF;
 	if (!(inode = file->f_inode))
 		return -ENOENT;
@@ -96,7 +96,7 @@ asmlinkage int sys_ftruncate(unsigned int fd, unsigned int length)
 	struct inode * inode;
 	struct file * file;
 
-	if (fd >= NR_OPEN || !(file = current->filp[fd]))
+	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 		return -EBADF;
 	if (!(inode = file->f_inode))
 		return -ENOENT;
@@ -205,8 +205,8 @@ asmlinkage int sys_chdir(const char * filename)
 		iput(inode);
 		return -EACCES;
 	}
-	iput(current->pwd);
-	current->pwd = inode;
+	iput(current->fs->pwd);
+	current->fs->pwd = inode;
 	return (0);
 }
 
@@ -215,7 +215,7 @@ asmlinkage int sys_fchdir(unsigned int fd)
 	struct inode * inode;
 	struct file * file;
 
-	if (fd >= NR_OPEN || !(file = current->filp[fd]))
+	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 		return -EBADF;
 	if (!(inode = file->f_inode))
 		return -ENOENT;
@@ -223,8 +223,8 @@ asmlinkage int sys_fchdir(unsigned int fd)
 		return -ENOTDIR;
 	if (!permission(inode,MAY_EXEC))
 		return -EACCES;
-	iput(current->pwd);
-	current->pwd = inode;
+	iput(current->fs->pwd);
+	current->fs->pwd = inode;
 	inode->i_count++;
 	return (0);
 }
@@ -245,8 +245,8 @@ asmlinkage int sys_chroot(const char * filename)
 		iput(inode);
 		return -EPERM;
 	}
-	iput(current->root);
-	current->root = inode;
+	iput(current->fs->root);
+	current->fs->root = inode;
 	return (0);
 }
 
@@ -255,7 +255,7 @@ asmlinkage int sys_fchmod(unsigned int fd, mode_t mode)
 	struct inode * inode;
 	struct file * file;
 
-	if (fd >= NR_OPEN || !(file = current->filp[fd]))
+	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 		return -EBADF;
 	if (!(inode = file->f_inode))
 		return -ENOENT;
@@ -306,7 +306,7 @@ asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 	struct inode * inode;
 	struct file * file;
 
-	if (fd >= NR_OPEN || !(file = current->filp[fd]))
+	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 		return -EBADF;
 	if (!(inode = file->f_inode))
 		return -ENOENT;
@@ -380,15 +380,15 @@ int do_open(const char * filename,int flags,int mode)
 	int flag,error,fd;
 
 	for(fd=0 ; fd<NR_OPEN ; fd++)
-		if (!current->filp[fd])
+		if (!current->files->fd[fd])
 			break;
 	if (fd>=NR_OPEN)
 		return -EMFILE;
-	FD_CLR(fd,&current->close_on_exec);
+	FD_CLR(fd,&current->files->close_on_exec);
 	f = get_empty_filp();
 	if (!f)
 		return -ENFILE;
-	current->filp[fd] = f;
+	current->files->fd[fd] = f;
 	f->f_flags = flag = flags;
 	f->f_mode = (flag+1) & O_ACCMODE;
 	if (f->f_mode)
@@ -397,7 +397,7 @@ int do_open(const char * filename,int flags,int mode)
 		flag |= 2;
 	error = open_namei(filename,flag,mode,&inode,NULL);
 	if (error) {
-		current->filp[fd]=NULL;
+		current->files->fd[fd]=NULL;
 		f->f_count--;
 		return error;
 	}
@@ -413,7 +413,7 @@ int do_open(const char * filename,int flags,int mode)
 		if (error) {
 			iput(inode);
 			f->f_count--;
-			current->filp[fd]=NULL;
+			current->files->fd[fd]=NULL;
 			return error;
 		}
 	}
@@ -468,10 +468,10 @@ asmlinkage int sys_close(unsigned int fd)
 
 	if (fd >= NR_OPEN)
 		return -EBADF;
-	FD_CLR(fd, &current->close_on_exec);
-	if (!(filp = current->filp[fd]))
+	FD_CLR(fd, &current->files->close_on_exec);
+	if (!(filp = current->files->fd[fd]))
 		return -EBADF;
-	current->filp[fd] = NULL;
+	current->files->fd[fd] = NULL;
 	return (close_fp (filp, fd));
 }
 

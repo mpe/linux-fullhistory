@@ -52,8 +52,9 @@ static void extended_partition(struct gendisk *hd, int dev)
 	   * This block is from a device that we're about to stomp on.
 	   * So make sure nobody thinks this block is usable.
 	   */
-		bh->b_dirt=0;
-		bh->b_uptodate=0;
+		bh->b_dirt = 0;
+		bh->b_uptodate = 0;
+		bh->b_req = 0;
 		if (*(unsigned short *) (bh->b_data+510) == 0xAA55) {
 			p = (struct partition *) (0x1BE + bh->b_data);
 		/*
@@ -193,7 +194,7 @@ static void setup_dev(struct gendisk *dev)
 	blk_size[dev->major] = dev->sizes;
 }
 	
-void device_setup(void * BIOS)
+void device_setup(void)
 {
 	struct gendisk *p;
 	int nr=0;

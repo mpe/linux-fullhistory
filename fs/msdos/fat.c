@@ -7,6 +7,7 @@
 #include <linux/msdos_fs.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
+#include <linux/string.h>
 #include <linux/stat.h>
 
 
