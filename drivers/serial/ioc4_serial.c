@@ -2665,7 +2665,7 @@ ioc4_serial_core_attach(struct pci_dev *pdev)
 				__FUNCTION__, (void *)the_port,
 				(void *)port));
 
-		the_port->lock = SPIN_LOCK_UNLOCKED;
+		spin_lock_init(&the_port->lock);
 		/* membase, iobase and mapbase just need to be non-0 */
 		the_port->membase = (unsigned char __iomem *)1;
 		the_port->line = the_port->iobase = ii;

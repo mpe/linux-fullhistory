@@ -39,7 +39,7 @@
 #define	PCI_GEN2_DEC			0xEC
 
 static LIST_HEAD(tpm_chip_list);
-static spinlock_t driver_lock = SPIN_LOCK_UNLOCKED;
+static DEFINE_SPINLOCK(driver_lock);
 static int dev_mask[32];
 
 static void user_reader_timeout(unsigned long ptr)

@@ -1968,7 +1968,7 @@ static int driver_initialize(struct pci_dev *pdev)
 		ctrl_enable_mac(adapter, 1);
 	}
 
-	adapter->lock = SPIN_LOCK_UNLOCKED;
+	spin_lock_init(&adapter->lock);
 
 out:
 	return ret;

@@ -779,10 +779,10 @@ static int __init hp_sdc_init(void)
 	uint8_t ts_sync[6];
 	struct semaphore s_sync;
 
-  	hp_sdc.lock		= RW_LOCK_UNLOCKED;
-  	hp_sdc.ibf_lock		= RW_LOCK_UNLOCKED;
-  	hp_sdc.rtq_lock		= RW_LOCK_UNLOCKED;
-  	hp_sdc.hook_lock	= RW_LOCK_UNLOCKED;
+  	rwlock_init(&hp_sdc.lock);
+  	rwlock_init(&hp_sdc.ibf_lock);
+  	rwlock_init(&hp_sdc.rtq_lock);
+  	rwlock_init(&hp_sdc.hook_lock);
 
 	hp_sdc.timer		= NULL;
 	hp_sdc.hil		= NULL;

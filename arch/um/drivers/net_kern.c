@@ -383,7 +383,6 @@ static int eth_configure(int n, void *init, char *mac,
 	save = lp->user[0];
 	*lp = ((struct uml_net_private)
 		{ .list  		= LIST_HEAD_INIT(lp->list),
-		  .lock 		= SPIN_LOCK_UNLOCKED,
 		  .dev 			= dev,
 		  .fd 			= -1,
 		  .mac 			= { 0xfe, 0xfd, 0x0, 0x0, 0x0, 0x0},
@@ -400,6 +399,7 @@ static int eth_configure(int n, void *init, char *mac,
 		  .user  		= { save } });
 
 	init_timer(&lp->tl);
+	spin_lock_init(&lp->lock);
 	lp->tl.function = uml_net_user_timer_expire;
 	if (lp->have_mac)
 		memcpy(lp->mac, device->mac, sizeof(lp->mac));
