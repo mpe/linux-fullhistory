@@ -301,7 +301,8 @@ struct mm_struct * mm_alloc(void)
 	if (mm) {
 		memset(mm, 0, sizeof(*mm));
 		init_new_context(mm);
-		atomic_set(&mm->count, 1);
+		atomic_set(&mm->mm_users, 1);
+		atomic_set(&mm->mm_count, 1);
 		init_MUTEX(&mm->mmap_sem);
 		mm->page_table_lock = SPIN_LOCK_UNLOCKED;
 	}
@@ -333,16 +334,26 @@ void mm_release(void)
 }
 
 /*
+ * Called when the last reference to the mm
+ * is dropped: either by a lazy thread or by
+ * mmput
+ */
+inline void __mmdrop(struct mm_struct *mm)
+{
+	if (mm == &init_mm) BUG();
+	free_page_tables(mm);
+	kmem_cache_free(mm_cachep, mm);
+}
+
+/*
  * Decrement the use count and release all resources for an mm.
  */
 void mmput(struct mm_struct *mm)
 {
-	if (atomic_dec_and_test(&mm->count)) {
-		if (mm == &init_mm) BUG();
+	if (atomic_dec_and_test(&mm->mm_users)) {
 		release_segments(mm);
 		exit_mmap(mm);
-		free_page_tables(mm);
-		kmem_cache_free(mm_cachep, mm);
+		mmdrop(mm);
 	}
 }
 
@@ -368,7 +379,7 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 		return 0;
 
 	if (clone_flags & CLONE_VM) {
-		mmget(mm);
+		atomic_inc(&mm->mm_users);
 		goto good_mm;
 	}
 

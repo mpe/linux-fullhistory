@@ -333,6 +333,9 @@ static ssize_t lp_write(struct file * file, const char * buf,
 	if (copy_from_user (kbuf, buf, copy_size))
 		return -EFAULT;
 
+	if (down_interruptible (&lp_table[minor].port_mutex))
+		return -EINTR;
+
  	/* Claim Parport or sleep until it becomes available
  	 */
  	lp_parport_claim (minor);
@@ -341,10 +344,6 @@ static ssize_t lp_write(struct file * file, const char * buf,
 	parport_negotiate (port, IEEE1284_MODE_COMPAT);
 
 	do {
-		/* Wait until lp_read has finished. */
-		if (down_interruptible (&lp_table[minor].port_mutex))
-			break;
-
 		/* Write the data. */
 		written = parport_write (port, kbuf, copy_size);
 		if (written >= 0) {
@@ -353,8 +352,6 @@ static ssize_t lp_write(struct file * file, const char * buf,
 			buf  += written;
 			retv += written;
 		}
-
-		up (&lp_table[minor].port_mutex);
 
 		if (signal_pending (current)) {
 			if (retv == 0)
@@ -392,6 +389,8 @@ static ssize_t lp_write(struct file * file, const char * buf,
 
  	lp_parport_release (minor);
 
+	up (&lp_table[minor].port_mutex);
+
  	return retv;
 }
 
@@ -414,35 +413,36 @@ static ssize_t lp_read(struct file * file, char * buf,
 	if (count > LP_BUFFER_SIZE)
 		count = LP_BUFFER_SIZE;
 
+	if (down_interruptible (&lp_table[minor].port_mutex))
+		return -EINTR;
+
 	lp_parport_claim (minor);
 
-	if (!down_interruptible (&lp_table[minor].port_mutex)) {
-		for (;;) {
-			retval = parport_read (port, kbuf, count);
+	for (;;) {
+		retval = parport_read (port, kbuf, count);
 
-			if (retval)
-				break;
+		if (retval)
+			break;
 
-			if (file->f_flags & O_NONBLOCK)
-				break;
+		if (file->f_flags & O_NONBLOCK)
+			break;
 
-			/* Wait for an interrupt. */
-			interruptible_sleep_on_timeout (&lp_table[minor].waitq,
-							LP_TIMEOUT_POLLED);
+		/* Wait for an interrupt. */
+		interruptible_sleep_on_timeout (&lp_table[minor].waitq,
+						LP_TIMEOUT_POLLED);
 
-			if (signal_pending (current)) {
-				retval = -EINTR;
-				break;
-			}
+		if (signal_pending (current)) {
+			retval = -EINTR;
+			break;
 		}
-
-		up (&lp_table[minor].port_mutex);
 	}
 
 	lp_parport_release (minor);
 
 	if (retval > 0 && copy_to_user (buf, kbuf, retval))
 		retval = -EFAULT;
+
+	up (&lp_table[minor].port_mutex);
 
 	return retval;
 }

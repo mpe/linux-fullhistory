@@ -170,7 +170,8 @@ struct mm_struct {
 	struct vm_area_struct * mmap_avl;	/* tree of VMAs */
 	struct vm_area_struct * mmap_cache;	/* last find_vma result */
 	pgd_t * pgd;
-	atomic_t count;
+	atomic_t mm_users;			/* How many users with user space? */
+	atomic_t mm_count;			/* How many references to "struct mm_struct" (users count as 1) */
 	int map_count;				/* number of VMAs */
 	struct semaphore mmap_sem;
 	spinlock_t page_table_lock;
@@ -193,7 +194,7 @@ struct mm_struct {
 #define INIT_MM(name) {					\
 		&init_mmap, NULL, NULL,			\
 		swapper_pg_dir, 			\
-		ATOMIC_INIT(2), 1,			\
+		ATOMIC_INIT(2), ATOMIC_INIT(1), 1,	\
 		__MUTEX_INITIALIZER(name.mmap_sem),	\
 		SPIN_LOCK_UNLOCKED,			\
 		0,					\
@@ -591,10 +592,16 @@ extern inline int capable(int cap)
  * Routines for handling mm_structs
  */
 extern struct mm_struct * mm_alloc(void);
-static inline void mmget(struct mm_struct * mm)
+
+/* mmdrop drops the mm and the page tables */
+extern inline void FASTCALL(__mmdrop(struct mm_struct *));
+static inline void mmdrop(struct mm_struct * mm)
 {
-	atomic_inc(&mm->count);
+	if (atomic_dec_and_test(&mm->mm_count))
+		__mmdrop(mm);
 }
+
+/* mmput gets rid of the mappings and all user-space */
 extern void mmput(struct mm_struct *);
 /* Remove the current tasks stale references to the old mm_struct */
 extern void mm_release(void);

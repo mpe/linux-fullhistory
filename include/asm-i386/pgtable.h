@@ -101,7 +101,7 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 static inline void flush_tlb_current_task(void)
 {
 	/* just one copy of this mm? */
-	if (atomic_read(&current->mm->count) == 1)
+	if (atomic_read(&current->mm->mm_users) == 1)
 		local_flush_tlb();	/* and that's us, so.. */
 	else
 		smp_flush_tlb();
@@ -113,7 +113,7 @@ static inline void flush_tlb_current_task(void)
 
 static inline void flush_tlb_mm(struct mm_struct * mm)
 {
-	if (mm == current->mm && atomic_read(&mm->count) == 1)
+	if (mm == current->mm && atomic_read(&mm->mm_users) == 1)
 		local_flush_tlb();
 	else
 		smp_flush_tlb();
@@ -122,7 +122,7 @@ static inline void flush_tlb_mm(struct mm_struct * mm)
 static inline void flush_tlb_page(struct vm_area_struct * vma,
 	unsigned long va)
 {
-	if (vma->vm_mm == current->mm && atomic_read(&current->mm->count) == 1)
+	if (vma->vm_mm == current->mm && atomic_read(&current->mm->mm_users) == 1)
 		__flush_tlb_one(va);
 	else
 		smp_flush_tlb();

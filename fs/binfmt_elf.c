@@ -1060,7 +1060,7 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 
 	if (!current->dumpable ||
 	    limit < ELF_EXEC_PAGESIZE ||
-	    atomic_read(&current->mm->count) != 1)
+	    atomic_read(&current->mm->mm_users) != 1)
 		return 0;
 	current->dumpable = 0;
 

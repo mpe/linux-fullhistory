@@ -156,8 +156,7 @@ void scheduling_functions_start_here(void) { }
  *	 +1000: realtime process, select this.
  */
 
-static inline int goodness (struct task_struct * prev,
-				 struct task_struct * p, int this_cpu)
+static inline int goodness(struct task_struct * p, int this_cpu, struct mm_struct *this_mm)
 {
 	int weight;
 
@@ -190,7 +189,7 @@ static inline int goodness (struct task_struct * prev,
 #endif
 
 	/* .. and a slight advantage to the current MM */
-	if (p->mm == prev->mm)
+	if (p->mm == this_mm)
 		weight += 1;
 	weight += p->priority;
 
@@ -207,24 +206,22 @@ out:
  * to care about SCHED_YIELD is when we calculate the previous process'
  * goodness ...
  */
-static inline int prev_goodness (struct task_struct * prev,
-					struct task_struct * p, int this_cpu)
+static inline int prev_goodness(struct task_struct * p, int this_cpu, struct mm_struct *this_mm)
 {
 	if (p->policy & SCHED_YIELD) {
 		p->policy &= ~SCHED_YIELD;
 		return 0;
 	}
-	return goodness(prev, p, this_cpu);
+	return goodness(p, this_cpu, this_mm);
 }
 
 /*
  * the 'goodness value' of replacing a process on a given CPU.
  * positive value means 'replace', zero or negative means 'dont'.
  */
-static inline int preemption_goodness (struct task_struct * prev,
-				struct task_struct * p, int cpu)
+static inline int preemption_goodness(struct task_struct * prev, struct task_struct * p, int cpu)
 {
-	return goodness(prev, p, cpu) - goodness(prev, prev, cpu);
+	return goodness(p, cpu, prev->mm) - goodness(prev, cpu, prev->mm);
 }
 
 /*
@@ -624,11 +621,14 @@ signed long schedule_timeout(signed long timeout)
  */
 static inline void __schedule_tail(struct task_struct *prev)
 {
-	struct mm_struct *mm = NULL;
 	if (!current->active_mm) BUG();
+
 	if (!prev->mm) {
-		mm = prev->active_mm;
-		prev->active_mm = NULL;
+		struct mm_struct *mm = prev->active_mm;
+		if (mm) {
+			prev->active_mm = NULL;
+			mmdrop(mm);
+		}
 	}
 #ifdef __SMP__
 	if ((prev->state == TASK_RUNNING) &&
@@ -637,16 +637,6 @@ static inline void __schedule_tail(struct task_struct *prev)
 	wmb();
 	prev->has_cpu = 0;
 #endif /* __SMP__ */
-
-	reacquire_kernel_lock(current);
-	/*
-	 * mmput can sleep. As such, we have to wait until
-	 * after we released "prev" back into the scheduler
-	 * pool and until we have re-aquired out locking
-	 * state until we can actually do this.
-	 */
-	if (mm)
-		mmput(mm);
 }
 
 void schedule_tail(struct task_struct *prev)
@@ -732,7 +722,7 @@ still_running_back:
 	while (tmp != &runqueue_head) {
 		p = list_entry(tmp, struct task_struct, run_list);
 		if (can_schedule(p)) {
-			int weight = goodness(prev, p, this_cpu);
+			int weight = goodness(p, this_cpu, prev->active_mm);
 			if (weight > c)
 				c = weight, next = p;
 		}
@@ -805,14 +795,13 @@ still_running_back:
 			set_mmu_context(prev,next);
 			if (next->active_mm) BUG();
 			next->active_mm = mm;
-			mmget(mm);
+			atomic_inc(&mm->mm_count);
 		}
 	}
 
 	get_mmu_context(next);
 	switch_to(prev, next, prev);
 	__schedule_tail(prev);
-	return;
 
 same_process:
 	reacquire_kernel_lock(current);
@@ -831,7 +820,7 @@ recalculate:
 	goto repeat_schedule;
 
 still_running:
-	c = prev_goodness(prev, prev, this_cpu);
+	c = prev_goodness(prev, this_cpu, prev->active_mm);
 	next = prev;
 	goto still_running_back;
 
@@ -2055,6 +2044,6 @@ void __init sched_init(void)
 	/*
 	 * The boot idle thread does lazy MMU switching as well:
 	 */
-	mmget(&init_mm);
+	atomic_inc(&init_mm.mm_count);
 }
 

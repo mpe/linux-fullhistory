@@ -94,7 +94,7 @@ static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
 		if (!mm->segments)
 			goto out_unlock;
 		
-		if (atomic_read(&mm->count) > 1)
+		if (atomic_read(&mm->mm_users) > 1)
 			printk(KERN_WARNING "LDT allocated for cloned task!\n");
 		/*
 		 * Possibly do an SMP cross-call to other CPUs to reload

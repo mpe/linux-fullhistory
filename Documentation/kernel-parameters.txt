@@ -19,7 +19,7 @@ restrictions referred to are that the relevant option is valid if:
     HW		Appropriate hardware is enabled.
     ISDN	Appropriate ISDN support is enabled.
     JOY 	Appropriate joystick support is enabled.
-    LPT 	Printer support is enabled.
+    LP		Printer support is enabled.
     MCA 	MCA bus support is enabled.
     MDA 	The MDA console is enabled.
     MOUSE	Appropriate mouse support is enabled.
@@ -29,6 +29,7 @@ restrictions referred to are that the relevant option is valid if:
     PCI 	PCI bus support is enabled.
     PCMCIA	The PCMCIA subsystem is enabled.
     PNP 	Plug & Play support is enabled.
+    PPT		Parallel port support is enabled.
     PS2 	Appropriate PS/2 support is enabled.
     RAM 	RAMdisc support is enabled.
     SCSI	Appropriate SCSI support is enabled.
@@ -187,7 +188,21 @@ running once the system is up.
 
     load_ramdisk=	[RAM]
 
-    lp= 		[LPT] Parallel Printer.
+    lp=0 		[LP] Specify parallel ports to use, e.g,
+or  lp=port[,port...]	lp=none,parport0 (lp0 not configured, lp1 uses
+or  lp=reset		first parallel port).  'lp=0' disables the printer
+or  lp=auto		driver.  'lp=reset' (which can be specified in
+			addition to the ports) causes attached
+			printers to be reset.  Using
+			lp=port1,port2,... specifies the parallel
+			ports to associate lp devices with, starting
+			with lp0.  A port specification may be 'none'
+			to skip that lp device, or a parport name such
+			as 'parport0'.  Specifying 'lp=auto' instead
+			of a port specification list means that device
+			IDs from each port should be examined, to see
+			if an IEEE 1284-compliant printer is attached;
+			if so, the driver will manage that printer.
 
     ltpc=		[HW]
 
@@ -244,7 +259,19 @@ running once the system is up.
 
     panic=		
 
-    parport=		[HW,LP]
+    parport=0			[HW,PPT] Specify parallel ports.  0
+or  parport=auto		disables.  Use 'auto' to force the driver
+or  parport=0xBBB[,IRQ[,DMA]]	to use any IRQ/DMA settings detected
+				(the default is to ignore detected
+				IRQ/DMA settings because of possible
+				conflicts).  You can specify the base
+				address, IRQ, and DMA settings; IRQ
+				and DMA should be numbers or 'auto'
+				(for using detected settings on that
+				particular port).  Parallel ports are
+				assigned in the order they are
+				specified on the command line,
+				starting with parport0.
 
     pas16=		[HW,SCSI]
 
@@ -262,7 +289,7 @@ running once the system is up.
 
     pirq=		[SMP,APIC]
 
-    plip=		[LP,NET] Parallel port network link.
+    plip=		[PPT,NET] Parallel port network link.
 
     profile=
 

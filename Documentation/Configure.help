@@ -11945,13 +11945,15 @@ CONFIG_USB_ACM
 
 Support for user-space parallel port device drivers
 CONFIG_PPDEV
-  Saying Y to this adds support for /dev/parport device nodes.
-  NB. You have to make them before you can use them:
-    mknod /dev/parport00 c 99 0
-    mknod /dev/parport01 c 99 1
-    mknod /dev/parport10 c 99 16
-    mknod /dev/parport11 c 99 17
-    etc..
+  Saying Y to this adds support for /dev/parport device nodes.  This
+  is needed for programs that want portable access to the parallel
+  port, for instance deviceid (which displays Plug-and-Play device
+  IDs) and vlp (which makes a Linux computer act as though it's a
+  printer).
+
+  This is the parallel port equivalent of SCSI generic support (sg).
+  It is safe to say N to this -- it is not needed for normal printing
+  or parallel port CD-ROM/disk support.
 
 #
 # A couple of things I keep forgetting:

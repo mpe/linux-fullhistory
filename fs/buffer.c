@@ -1977,14 +1977,14 @@ asmlinkage int sys_bdflush(int func, long data)
 		 * to and from bdflush.
 		 */
 		user_mm = current->mm;
-		mmget(user_mm);
+		atomic_inc(&user_mm->mm_count);
 		current->mm = NULL;
 		/* active_mm is still 'user_mm' */
 
 		error = sync_old_buffers();
 
 		current->mm = user_mm;
-		mmput(current->active_mm);
+		mmdrop(current->active_mm);
 		current->active_mm = user_mm;
 
 		goto out;

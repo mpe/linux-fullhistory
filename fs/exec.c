@@ -365,17 +365,10 @@ end_readexec:
 
 static int exec_mmap(void)
 {
-	struct mm_struct * mm, * old_mm;
+	struct mm_struct * mm, * old_mm, * active_mm;
 
-	/*
-	 * NOTE: This works even if "old_mm" is a lazy
-	 * memory state. If count == 1 at this point,
-	 * we know that we're the only holders of that
-	 * lazy mm, so we can turn it into a real mm.
-	 */
-	old_mm = current->active_mm;
-	if (atomic_read(&old_mm->count) == 1) {
-		current->mm = old_mm;
+	old_mm = current->mm;
+	if (old_mm && atomic_read(&old_mm->mm_users) == 1) {
 		flush_cache_mm(old_mm);
 		mm_release();
 		release_segments(old_mm);
@@ -385,27 +378,28 @@ static int exec_mmap(void)
 	}
 
 	mm = mm_alloc();
-	if (!mm)
-		goto fail_nomem;
+	if (mm) {
+		mm->cpu_vm_mask = (1UL << smp_processor_id());
+		mm->total_vm = 0;
+		mm->rss = 0;
+		mm->pgd = pgd_alloc();
+		if (mm->pgd) {
+			struct mm_struct *active_mm = current->active_mm;
 
-	mm->cpu_vm_mask = (1UL << smp_processor_id());
-	mm->total_vm = 0;
-	mm->rss = 0;
-	mm->pgd = pgd_alloc();
-	if (!mm->pgd)
-		goto fail_free;
-
-	current->mm = mm;
-	current->active_mm = mm;
-	SET_PAGE_DIR(current, mm->pgd);
-	activate_context(current);
-	mm_release();
-	mmput(old_mm);
-	return 0;
-
-fail_free:
-	kmem_cache_free(mm_cachep, mm);
-fail_nomem:
+			current->mm = mm;
+			current->active_mm = mm;
+			SET_PAGE_DIR(current, mm->pgd);
+			activate_context(current);
+			mm_release();
+			if (old_mm) {
+				mmput(old_mm);
+				return 0;
+			}
+			mmdrop(active_mm);
+			return 0;
+		}
+		kmem_cache_free(mm_cachep, mm);
+	}
 	return -ENOMEM;
 }
 
@@ -625,7 +619,7 @@ int prepare_binprm(struct linux_binprm *bprm)
 	if (id_change || cap_raised) {
 		/* We can't suid-execute if we're sharing parts of the executable */
 		/* or if we're being traced (or if suid execs are not allowed)    */
-		/* (current->mm->count > 1 is ok, as we'll get a new mm anyway)   */
+		/* (current->mm->mm_users > 1 is ok, as we'll get a new mm anyway)   */
 		if (IS_NOSUID(inode)
 		    || must_not_trace_exec(current)
 		    || (atomic_read(&current->fs->count) > 1)

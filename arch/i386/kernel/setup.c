@@ -1029,7 +1029,7 @@ void cpu_init (void)
 	/*
 	 * set up and load the per-CPU TSS and LDT
 	 */
-	mmget(&init_mm);
+	atomic_inc(&init_mm.mm_count);
 	current->active_mm = &init_mm;
 	t->esp0 = current->thread.esp0;
 	set_tss_desc(nr,t);

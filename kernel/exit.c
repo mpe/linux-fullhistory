@@ -229,31 +229,20 @@ void exit_sighand(struct task_struct *tsk)
 	__exit_sighand(tsk);
 }
 
+/*
+ * Turn us into a lazy TLB process if we
+ * aren't already..
+ */
 static inline void __exit_mm(struct task_struct * tsk)
 {
 	struct mm_struct * mm = tsk->mm;
 
-	/* Lazy TLB process? */
-	if (!mm) {
-		mm = tsk->active_mm;
-		goto drop_mm;
+	if (mm) {
+		mm_release();
+		atomic_inc(&mm->mm_count);
+		tsk->mm = NULL;
+		mmput(mm);
 	}
-
-	/* Set us up to use the kernel mm state */
-	flush_cache_mm(mm);
-	flush_tlb_mm(mm);
-	destroy_context(mm);
-	mm_release();
-
-	/* This turns us into a task with no MM */
-	tsk->mm = NULL;
-
-drop_mm:
-	mmget(&init_mm);
-	tsk->active_mm = &init_mm;
-	tsk->swappable = 0;
-	SET_PAGE_DIR(tsk, swapper_pg_dir);
-	mmput(mm);
 }
 
 void exit_mm(struct task_struct *tsk)
