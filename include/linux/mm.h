@@ -436,7 +436,7 @@ struct zone_t;
 extern void remove_inode_page(struct page *);
 extern unsigned long page_unuse(struct page *);
 extern int shrink_mmap(int, int, zone_t *);
-extern void truncate_inode_pages(struct inode *, loff_t);
+extern void truncate_inode_pages(struct address_space *, loff_t);
 
 /* generic vm_area_ops exported for stackable file systems */
 extern int filemap_swapout(struct page * page, struct file *file);

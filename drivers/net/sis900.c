@@ -1,6 +1,6 @@
 /* sis900.c: A SiS 900/7016 PCI Fast Ethernet driver for Linux.
    Copyright 1999 Silicon Integrated System Corporation 
-   Revision:	1.06.03	Dec 23 1999
+   Revision:	1.06.04	Feb 11 2000
    
    Modified from the driver which is originally written by Donald Becker. 
    
@@ -135,7 +135,7 @@ struct sis900_private {
 	int LinkOn;
 };
 
-MODULE_AUTHOR("Jim Huang <cmhuang@sis.com.tw>");
+MODULE_AUTHOR("Jim Huang <cmhuang@sis.com.tw>, Ollie Lho <ollie@sis.com.tw>");
 MODULE_DESCRIPTION("SiS 900 PCI Fast Ethernet driver");
 MODULE_PARM(multicast_filter_limit, "i");
 MODULE_PARM(max_interrupt_work, "i");
@@ -257,7 +257,7 @@ static struct net_device * sis900_mac_probe (struct mac_chip_info * mac, struct 
 	net_dev->irq = irq;
 	sis_priv->pci_dev = pci_dev;
 	sis_priv->mac = mac;
-	sis_priv->lock = SPIN_LOCK_UNLOCKED;
+	spin_lock_init(&sis_priv->lock);
 
 	/* probe for mii transciver */
 	if (sis900_mii_probe(net_dev) == 0) {
@@ -668,8 +668,8 @@ static void sis900_timer(unsigned long data)
 		next_tick = 5*HZ;
 		/* change what cur_phy means */
 		if (mii_phy->phy_addr != sis_priv->cur_phy) {
-			printk(KERN_INFO "%s: Changing transceiver to %s\n", net_dev->name,
-			       mii_phy->chip_info->name);
+			printk(KERN_INFO "%s: Changing transceiver to %s\n",
+			       net_dev->name, mii_phy->chip_info->name);
 			status = mdio_read(net_dev, sis_priv->cur_phy, MII_CONTROL);
 			mdio_write(net_dev, sis_priv->cur_phy, 
 				   MII_CONTROL, status | MII_CNTL_ISOLATE);
@@ -798,9 +798,10 @@ static void sis900_tx_timeout(struct net_device *net_dev)
 	/* Disable interrupts by clearing the interrupt mask. */
 	outl(0x0000, ioaddr + imr);
 
-	/* discard unsent packets, should this code section be protected by
-	   cli(), sti() ?? */
+	/* use spinlock to prevent interrupt handler accessing buffer ring */
 	spin_lock_irqsave(&sis_priv->lock, flags);
+
+	/* discard unsent packets */
 	sis_priv->dirty_tx = sis_priv->cur_tx = 0;
 	for (i = 0; i < NUM_TX_DESC; i++) {
 		if (sis_priv->tx_skbuff[i] != NULL) {
@@ -811,13 +812,15 @@ static void sis900_tx_timeout(struct net_device *net_dev)
 			sis_priv->stats.tx_dropped++;
 		}
 	}
+	sis_priv->tx_full = 0;
+	netif_wake_queue(net_dev);
+
 	spin_unlock_irqrestore(&sis_priv->lock, flags);
 
 	net_dev->trans_start = jiffies;
-	sis_priv->tx_full = 0;
-	netif_start_queue(net_dev);
 
 	/* FIXME: Should we restart the transmission thread here  ?? */
+	outl(TxENA, ioaddr + cr);
 
 	/* Enable all known interrupts by setting the interrupt mask. */
 	outl((RxSOVR|RxORN|RxERR|RxOK|TxURN|TxERR|TxIDLE), ioaddr + imr);
@@ -830,6 +833,9 @@ sis900_start_xmit(struct sk_buff *skb, struct net_device *net_dev)
 	struct sis900_private *sis_priv = (struct sis900_private *)net_dev->priv;
 	long ioaddr = net_dev->base_addr;
 	unsigned int  entry;
+	unsigned long flags;
+
+	spin_lock_irqsave(&sis_priv->lock, flags);
 
 	/* Calculate the next Tx descriptor entry. */
 	entry = sis_priv->cur_tx % NUM_TX_DESC;
@@ -841,13 +847,15 @@ sis900_start_xmit(struct sk_buff *skb, struct net_device *net_dev)
 	outl(TxENA, ioaddr + cr);
 
 	if (++sis_priv->cur_tx - sis_priv->dirty_tx < NUM_TX_DESC) {
-		/* Typical path, clear tbusy to indicate more 
-		   transmission is possible */
+		/* Typical path, tell upper layer that more transmission is possible */
 		netif_start_queue(net_dev);
 	} else {
-		/* no more transmit descriptor avaiable, tbusy remain set */
+		/* buffer full, tell upper layer no more transmission */
 		sis_priv->tx_full = 1;
+		netif_stop_queue(net_dev);
 	}
+
+	spin_unlock_irqrestore(&sis_priv->lock, flags);
 
 	net_dev->trans_start = jiffies;
 
@@ -922,7 +930,7 @@ static int sis900_rx(struct net_device *net_dev)
 	if (sis900_debug > 3)
 		printk(KERN_INFO "sis900_rx, cur_rx:%4.4d, dirty_rx:%4.4d "
 		       "status:0x%8.8x\n",
-		       sis_priv->cur_rx, sis_priv->dirty_rx,rx_status);
+		       sis_priv->cur_rx, sis_priv->dirty_rx, rx_status);
 	
 	while (rx_status & OWN) {
 		unsigned int rx_size;
@@ -1060,8 +1068,8 @@ static void sis900_finish_xmit (struct net_device *net_dev)
 	
 	if (sis_priv->tx_full && test_bit(LINK_STATE_XOFF, &net_dev->flags) && 
 	    sis_priv->cur_tx - sis_priv->dirty_tx < NUM_TX_DESC - 4) {
-		/* The ring is no longer full, clear tbusy, tx_full and
-		   schedule more transmission by marking NET_BH */
+		/* The ring is no longer full, clear tx_full and schedule more transmission
+		   by netif_wake_queue(net_dev) */
 		sis_priv->tx_full = 0;
 		netif_wake_queue (net_dev);
 	}

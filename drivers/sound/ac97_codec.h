@@ -116,7 +116,8 @@
 	SOUND_MIXER_PHONEIN|SOUND_MIXER_PHONEOUT)
 
 #define AC97_RECORD_MASK (SOUND_MASK_MIC|\
-	SOUND_MASK_CD| SOUND_MASK_VIDEO| SOUND_MASK_LINE1| SOUND_MASK_LINE|\
+	SOUND_MASK_CD|SOUND_MASK_VIDEO|\
+	SOUND_MASK_LINE1| SOUND_MASK_LINE|\
 	SOUND_MASK_PHONEIN)
 
 #define supported_mixer(CODEC,FOO) ( CODEC->supported_mixers & (1<<FOO) )
@@ -153,6 +154,8 @@ struct ac97_codec {
 	unsigned int mixer_state[SOUND_MIXER_NRDEVICES];
 };
 
+extern int ac97_read_proc (char *page_out, char **start, off_t off,
+			   int count, int *eof, void *data);
 extern int ac97_probe_codec(struct ac97_codec *);
 
 #endif /* _AC97_CODEC_H_ */

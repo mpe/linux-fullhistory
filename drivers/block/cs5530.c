@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/cs5530.c		Version 0.2	Jan 30, 2000
+ * linux/drivers/block/cs5530.c		Version 0.5	Feb 13, 2000
  *
  * Copyright (C) 2000			Mark Lord <mlord@pobox.com>
  * May be copied or modified under the terms of the GNU General Public License
@@ -285,8 +285,6 @@ static int cs5530_config_dma (ide_drive_t *drive)
 	}
 	outb(inb(hwif->dma_base+2)|(unit?0x40:0x20), hwif->dma_base+2);	/* set DMA_capable bit */
 
-	if (!strcmp(drive->name, "hdc"))	/* FIXME */
-		return 0;
 	/*
 	 * Finally, turn DMA on in software, and exit.
 	 */

@@ -253,7 +253,7 @@ static int		dfx_close(struct net_device *dev);
 
 static void		dfx_int_pr_halt_id(DFX_board_t *bp);
 static void		dfx_int_type_0_process(DFX_board_t *bp);
-static void		dfx_int_common(DFX_board_t *bp);
+static void		dfx_int_common(struct net_device *dev);
 static void		dfx_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 
 static struct		net_device_stats *dfx_ctl_get_stats(struct net_device *dev);
@@ -272,7 +272,7 @@ static void		dfx_rcv_init(DFX_board_t *bp);
 static void		dfx_rcv_queue_process(DFX_board_t *bp);
 
 static int		dfx_xmt_queue_pkt(struct sk_buff *skb, struct net_device *dev);
-static void		dfx_xmt_done(DFX_board_t *bp);
+static int		dfx_xmt_done(DFX_board_t *bp);
 static void		dfx_xmt_flush(DFX_board_t *bp);
 
 /* Define module-wide (static) variables */
@@ -1423,9 +1423,7 @@ int dfx_open(
 
 	/* Set device structure info */
 
-	dev->tbusy			= 0;
-	dev->interrupt		= DFX_UNMASK_INTERRUPTS;
-	dev->start			= 1;
+	netif_start_queue(dev);
 	return(0);
 	}
 
@@ -1511,9 +1509,8 @@ int dfx_close(
 
 	/* Clear device structure flags */
 
-	dev->start = 0;
-	dev->tbusy = 1;
-
+	netif_stop_queue(dev);
+	
 	/* Deregister (free) IRQ */
 
 	free_irq(dev->irq, dev);
@@ -1804,16 +1801,15 @@ void dfx_int_type_0_process(
  *   or updating completion indices.
  */
 
-void dfx_int_common(
-	DFX_board_t	*bp
-	)
-
-	{
+void dfx_int_common(struct net_device *dev)
+{
+	DFX_board_t 	*bp = (DFX_board_t *) dev->priv;
 	PI_UINT32	port_status;		/* Port Status register */
 
 	/* Process xmt interrupts - frequent case, so always call this routine */
 
-	dfx_xmt_done(bp);				/* free consumed xmt packets */
+	if(dfx_xmt_done(bp))				/* free consumed xmt packets */
+		netif_wake_queue(dev);
 
 	/* Process rcv interrupts - frequent case, so always call this routine */
 
@@ -1889,20 +1885,11 @@ void dfx_interrupt(
 
 	/* Get board pointer only if device structure is valid */
 
-	if (dev == NULL)
-		{
-		printk("dfx_interrupt(): irq %d for unknown device!\n", irq);
-		return;
-		}
 	bp = (DFX_board_t *) dev->priv;
 
 	spin_lock(&bp->lock);
 	
 	/* See if we're already servicing an interrupt */
-
-	if (dev->interrupt)
-		printk("%s: Re-entering the interrupt handler!\n", dev->name);
-	dev->interrupt = DFX_MASK_INTERRUPTS;	/* ensure non reentrancy */
 
 	/* Service adapter interrupts */
 
@@ -1914,7 +1901,7 @@ void dfx_interrupt(
 
 		/* Call interrupt service routine for this adapter */
 
-		dfx_int_common(bp);
+		dfx_int_common(dev);
 
 		/* Clear PDQ interrupt status bit and reenable interrupts */
 
@@ -1932,7 +1919,7 @@ void dfx_interrupt(
 
 		/* Call interrupt service routine for this adapter */
 
-		dfx_int_common(bp);
+		dfx_int_common(dev);
 
 		/* Reenable interrupts at the ESIC */
 
@@ -1941,7 +1928,6 @@ void dfx_interrupt(
 		dfx_port_write_byte(bp, PI_ESIC_K_IO_CONFIG_STAT_0, tmp);
 		}
 
-	dev->interrupt = DFX_UNMASK_INTERRUPTS;
 	spin_unlock(&bp->lock);
 	return;
 	}
@@ -3199,6 +3185,8 @@ int dfx_xmt_queue_pkt(
 	XMT_DRIVER_DESCR	*p_xmt_drv_descr;	/* ptr to transmit driver descriptor */
 	unsigned long		flags;
 
+	netif_stop_queue(dev);
+	
 	/*
 	 * Verify that incoming transmit request is OK
 	 *
@@ -3213,7 +3201,7 @@ int dfx_xmt_queue_pkt(
 		printk("%s: Invalid packet length - %u bytes\n", 
 			dev->name, skb->len);
 		bp->xmt_length_errors++;		/* bump error counter */
-		mark_bh(NET_BH);
+		netif_wake_queue(dev);
 		dev_kfree_skb(skb);
 		return(0);				/* return "success" */
 	}
@@ -3237,6 +3225,7 @@ int dfx_xmt_queue_pkt(
 			{
 			bp->xmt_discards++;					/* bump error counter */
 			dev_kfree_skb(skb);		/* free sk_buff now */
+			netif_wake_queue(dev);
 			return(0);							/* return "success" */
 			}
 		}
@@ -3339,6 +3328,7 @@ int dfx_xmt_queue_pkt(
 	bp->rcv_xmt_reg.index.xmt_prod = prod;
 	dfx_port_write_long(bp, PI_PDQ_K_REG_TYPE_2_PROD, bp->rcv_xmt_reg.lword);
 	spin_unlock_irqrestore(&bp->lock, flags);
+	netif_wake_queue(dev);
 	return(0);							/* packet queued to adapter */
 	}
 
@@ -3375,13 +3365,14 @@ int dfx_xmt_queue_pkt(
  *   None
  */
 
-void dfx_xmt_done(
+int dfx_xmt_done(
 	DFX_board_t *bp
 	)
 
 	{
 	XMT_DRIVER_DESCR	*p_xmt_drv_descr;	/* ptr to transmit driver descriptor */
 	PI_TYPE_2_CONSUMER	*p_type_2_cons;		/* ptr to rcv/xmt consumer block register */
+	int 			freed = 0;		/* buffers freed */
 
 	/* Service all consumed transmit frames */
 
@@ -3413,8 +3404,9 @@ void dfx_xmt_done(
 		 */
 
 		bp->rcv_xmt_reg.index.xmt_comp += 1;
+		freed++;
 		}
-	return;
+	return freed;
 	}
 
 

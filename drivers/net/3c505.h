@@ -289,4 +289,5 @@ typedef struct {
 
 	unsigned int rx_active;  /* number of receive PCBs */
         volatile unsigned char hcr_val;  /* what we think the HCR contains */
+        spinlock_t lock;	/* Interrupt v tx lock */
 } elp_device;

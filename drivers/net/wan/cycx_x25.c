@@ -93,6 +93,9 @@
 /* This is an extension of the 'struct net_device' we create for each network
    interface to keep the rest of X.25 channel-specific data. */
 typedef struct x25_channel {
+	/* This member must be first. */
+	struct net_device *slave;	/* WAN slave */
+
 	char name[WAN_IFNAME_SZ+1];	/* interface name, ASCIIZ */
 	char addr[WAN_ADDRESS_SZ+1];	/* media address, ASCIIZ */
 	char *local_addr;		/* local media address, ASCIIZ -
@@ -1253,11 +1256,13 @@ static int x25_send (cycx_t *card, u8 link, u8 lcn, u8 bitm, int len, void *buf)
 static struct net_device *get_dev_by_lcn (wan_device_t *wandev, s16 lcn)
 {
 	struct net_device *dev = wandev->dev;
+	x25_channel_t *chan;
 
-	for (; dev; dev = dev->slave)
-		if (((x25_channel_t*)dev->priv)->lcn == lcn)
+	while (dev) {
+		if (chan->lcn == lcn)
 			break;
-	
+		dev = chan->slave;
+	}	
 	return dev;
 }
 
@@ -1265,11 +1270,13 @@ static struct net_device *get_dev_by_lcn (wan_device_t *wandev, s16 lcn)
 static struct net_device *get_dev_by_dte_addr (wan_device_t *wandev, char *dte)
 {
 	struct net_device *dev = wandev->dev;
+	x25_channel_t *chan;
 
-	for (; dev; dev = dev->slave)
-		if (!strcmp(((x25_channel_t*)dev->priv)->addr, dte))
+	while (dev) {
+		if (!strcmp(chan->addr, dte))
 			break;
-
+		dev = chan->slave;
+	}
 	return dev;
 }
 
@@ -1553,12 +1560,13 @@ static void x25_dump_devs(wan_device_t *wandev)
 	printk(KERN_INFO "name: addr:           txoff:  protocol:\n");
 	printk(KERN_INFO "---------------------------------------\n");
 
-	for (; dev; dev = dev->slave) {
+	while(dev) {
 		x25_channel_t *chan = dev->priv;
 
 		printk(KERN_INFO "%-5.5s %-15.15s   %d     ETH_P_%s\n",
 				 chan->name, chan->addr, test_bit(LINK_STATE_XOFF, &dev->state),
 				 chan->protocol == ETH_P_IP ? "IP" : "X25");
+		dev = chan->slave;
 	}
 }
 

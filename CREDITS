@@ -637,18 +637,18 @@ S: Grevgatan 11
 S: S-114 53 Stockholm
 S: Sweden
 
-N: Stephane Eranian
-E: eranian@hpl.hp.com
-D: Linux/ia64
-S: 1501 Page Mill Rd, MS 1U17
-S: Palo Alto, CA 94304
-S: USA
-
 N: Paal-Kristian Engstad
 E: engstad@intermetrics.com
 D: Kernel smbfs (to mount WfW, NT and OS/2 network drives.)
 S: 17101 Springdale Street #225
 S: Huntington Beach, California 92649
+S: USA
+
+N: Stephane Eranian
+E: eranian@hpl.hp.com
+D: Linux/ia64
+S: 1501 Page Mill Rd, MS 1U17
+S: Palo Alto, CA 94304
 S: USA
 
 N: Johannes Erdfelt
@@ -1832,16 +1832,16 @@ S: M"ullerstr. 69
 S: 13349 Berlin
 S: Germany
 
-N: Nicolas Pitre
-E: nico@cam.org
-D: StrongARM SA1100 support integrator & hacker
-S: Montreal, Quebec, Canada
-
 N: Emanuel Pirker
 E: epirker@edu.uni-klu.ac.at
 D: AIC5800 IEEE 1394, RAW I/O on 1394
 D: Starter of Linux1394 effort
 S: ask per mail for current address
+
+N: Nicolas Pitre
+E: nico@cam.org
+D: StrongARM SA1100 support integrator & hacker
+S: Montreal, Quebec, Canada
 
 N: Ken Pizzini
 E: ken@halcyon.com
@@ -2613,13 +2613,6 @@ D: Miscellaneous kernel fixes
 S: 3078 Sulphur Spring Court
 S: San Jose, California 95148
 S: USA
-
-N: Alessandro Zummo
-E: azummo@ita.flashnet.it
-W: http://freepage.logicom.it/azummo/
-D: CMI8330 support is sb_card.c
-D: ISAPnP fixes in sb_card.c
-S: Italy
 
 N: Alessandro Zummo
 E: azummo@ita.flashnet.it

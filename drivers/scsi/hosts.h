@@ -504,6 +504,15 @@ extern void scsi_unregister_module(int, void *);
  * tackle the character devices first, as there aren't any locking implications
  * in the block device layer.   The block devices will require more work.
  */
+#ifndef CONFIG_SD_EXTRA_DEVS
+#define CONFIG_SD_EXTRA_DEVS 2
+#endif
+#ifndef CONFIG_ST_EXTRA_DEVS
+#define CONFIG_ST_EXTRA_DEVS 2
+#endif
+#ifndef CONFIG_SR_EXTRA_DEVS
+#define CONFIG_SR_EXTRA_DEVS 2
+#endif
 #define SD_EXTRA_DEVS CONFIG_SD_EXTRA_DEVS
 #define ST_EXTRA_DEVS CONFIG_ST_EXTRA_DEVS
 #define SR_EXTRA_DEVS CONFIG_SR_EXTRA_DEVS

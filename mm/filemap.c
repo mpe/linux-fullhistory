@@ -124,7 +124,7 @@ void invalidate_inode_pages(struct inode * inode)
  * Truncate the page cache at a set offset, removing the pages
  * that are beyond that offset (and zeroing out partial pages).
  */
-void truncate_inode_pages(struct inode * inode, loff_t lstart)
+void truncate_inode_pages(struct address_space * mapping, loff_t lstart)
 {
 	struct list_head *head, *curr;
 	struct page * page;
@@ -134,7 +134,7 @@ void truncate_inode_pages(struct inode * inode, loff_t lstart)
 	start = (lstart + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
 
 repeat:
-	head = &inode->i_mapping->pages;
+	head = &mapping->pages;
 	spin_lock(&pagecache_lock);
 	curr = head->next;
 	while (curr != head) {

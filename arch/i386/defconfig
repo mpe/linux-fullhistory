@@ -273,7 +273,6 @@ CONFIG_NET_ETHERNET=y
 CONFIG_NET_PCI=y
 # CONFIG_PCNET32 is not set
 # CONFIG_APRICOT is not set
-# CONFIG_CS89x0 is not set
 # CONFIG_DE4X5 is not set
 # CONFIG_TULIP is not set
 # CONFIG_DGRS is not set

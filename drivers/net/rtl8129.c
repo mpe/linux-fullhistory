@@ -1,4 +1,4 @@
-/* rtl8139.c: A RealTek RTL8129/8139 Fast Ethernet driver for Linux. */
+/* rtl8129.c: A RealTek RTL8129 Fast Ethernet driver for Linux. */
 /*
 	Written 1997-1999 by Donald Becker.
 
@@ -6,8 +6,7 @@
 	of the GNU Public License, incorporated herein by reference.
     All other rights reserved.
 
-	This driver is for boards based on the RTL8129 and RTL8139 PCI ethernet
-	chips.
+	This driver is for boards based on the RTL8129 PCI ethernet chip.
 
 	The author may be reached as becker@CESDIS.gsfc.nasa.gov, or C/O
 	Center of Excellence in Space Data and Information Sciences
@@ -20,7 +19,7 @@
 */
 
 static const char *version =
-"rtl8139.c:v1.07 5/6/99 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/rtl8139.html\n";
+"rtl8129.c:v1.07 5/6/99 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/rtl8139.html\n";
 
 /* A few user-configurable values. */
 /* Maximum events (Rx packets, etc.) to handle at each interrupt. */
@@ -66,6 +65,7 @@ static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 #include <linux/ioport.h>
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
+#include <linux/init.h>
 #include <linux/pci.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -286,17 +286,13 @@ struct rtl8129_private {
 	unsigned int mediasense:1;			/* Media sensing in progress. */
 };
 
-#ifdef MODULE
-#if LINUX_VERSION_CODE > 0x20115
 MODULE_AUTHOR("Donald Becker <becker@cesdis.gsfc.nasa.gov>");
-MODULE_DESCRIPTION("RealTek RTL8129/8139 Fast Ethernet driver");
+MODULE_DESCRIPTION("RealTek RTL8129 Fast Ethernet driver");
 MODULE_PARM(options, "1-" __MODULE_STRING(MAX_UNITS) "i");
 MODULE_PARM(full_duplex, "1-" __MODULE_STRING(MAX_UNITS) "i");
 MODULE_PARM(multicast_filter_limit, "i");
 MODULE_PARM(max_interrupt_work, "i");
 MODULE_PARM(debug, "i");
-#endif
-#endif
 
 static int rtl8129_open(struct net_device *dev);
 static int read_eeprom(long ioaddr, int location);
@@ -323,7 +319,7 @@ static struct net_device *root_rtl8129_dev = NULL;
    well when dynamically adding drivers.  So instead we detect just the
    Rtl81*9 cards in slot order. */
 
-int rtl8139_probe(void)
+static int __init rtl8129_probe(void)
 {
 	int cards_found = 0;
 	int pci_index = 0;
@@ -786,7 +782,7 @@ static void rtl8129_timer(unsigned long data)
 	if (inw(ioaddr + IntrStatus) & (TxOK | RxOK)) {
 		int status = inw(ioaddr + IntrStatus);
 		if (status & (TxOK | RxOK)) {	/* Double check */
-			printk(KERN_ERR "%s: RTL8139 Interrupt line blocked, status %x.\n",
+			printk(KERN_ERR "%s: RTL8129 Interrupt line blocked, status %x.\n",
 				   dev->name, status);
 			rtl8129_interrupt(dev->irq, dev, 0);
 		}
@@ -1438,14 +1434,8 @@ static void set_rx_mode(struct net_device *dev)
 	return;
 }
 
-#ifdef MODULE
-int init_module(void)
-{
-	return rtl8139_probe();
-}
 
-void
-cleanup_module(void)
+static void __exit rtl8129_cleanup (void)
 {
 	struct net_device *next_dev;
 
@@ -1463,12 +1453,13 @@ cleanup_module(void)
 	}
 }
 
-#endif  /* MODULE */
-
+module_init(rtl8129_probe);
+module_exit(rtl8129_cleanup);
+
 /*
  * Local variables:
- *  compile-command: "gcc -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c rtl8139.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"
- *  SMP-compile-command: "gcc -D__SMP__ -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c rtl8139.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"
+ *  compile-command: "gcc -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c rtl8129.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"
+ *  SMP-compile-command: "gcc -D__SMP__ -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c rtl8129.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"
  *  c-indent-level: 4
  *  c-basic-offset: 4
  *  tab-width: 4

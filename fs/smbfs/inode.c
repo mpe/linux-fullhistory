@@ -489,7 +489,8 @@ dentry->d_parent->d_name.name, dentry->d_name.name,
 		 */
 		if (attr->ia_size < inode->i_size)
 		{
-			truncate_inode_pages(inode, attr->ia_size);
+			/* must die */
+			truncate_inode_pages(inode->i_mapping, attr->ia_size);
 			inode->i_size = attr->ia_size;
 		}
 		refresh = 1;
@@ -562,6 +563,8 @@ dentry->d_parent->d_name.name, dentry->d_name.name, fattr.f_mode,attr->ia_mode);
 out:
 	if (refresh)
 		smb_refresh_inode(dentry);
+	if (!error && (attr->ia_valid & ATTR_SIZE))
+		vmtruncate(inode, attr->ia_size);
 	return error;
 }
 

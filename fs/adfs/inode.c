@@ -334,8 +334,10 @@ adfs_notify_change(struct dentry *dentry, struct iattr *attr)
 	if (error)
 		goto out;
 
-	if (ia_valid & ATTR_SIZE)
+	if (ia_valid & ATTR_SIZE) {
 		inode->i_size = attr->ia_size;
+		vmtruncate(inode, attr->ia_size);
+	}
 	if (ia_valid & ATTR_MTIME) {
 		inode->i_mtime = attr->ia_mtime;
 		adfs_unix2adfs_time(inode, attr->ia_mtime);

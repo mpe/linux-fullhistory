@@ -731,6 +731,8 @@ olddentry->d_parent->d_name.name, olddentry->d_name.name,
 oldinode->i_ino, oldinode->i_nlink));
 		newattrs.ia_valid = 0;
 		ret = umsdos_notify_change_locked(olddentry, &newattrs);
+		if (ret == 0)
+			mark_inode_dirty(olddentry->d_inode);
 	}
 	if (olddir != dir)
 		up(&olddir->i_sem);
@@ -1069,6 +1071,8 @@ link->d_parent->d_name.name, link->d_name.name, ret));
 		inode->i_nlink--;
 		newattrs.ia_valid = 0;
 		ret = umsdos_notify_change_locked(link, &newattrs);
+		if (!ret)
+			mark_inode_dirty(link->d_inode);
 	}
 
 out_cleanup:

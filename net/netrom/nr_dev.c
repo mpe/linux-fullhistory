@@ -62,7 +62,7 @@ int nr_rx_ip(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_device_stats *stats = (struct net_device_stats *)dev->priv;
 
-	if (!dev->start) {
+	if (!test_bit(LINK_STATE_START, &dev->state)) {
 		stats->rx_errors++;
 		return 0;
 	}
@@ -181,60 +181,25 @@ static int nr_set_mac_address(struct net_device *dev, void *addr)
 
 static int nr_open(struct net_device *dev)
 {
-	dev->tbusy = 0;
-	dev->start = 1;
-
 	MOD_INC_USE_COUNT;
-
+	netif_start_queue(dev);
 	ax25_listen_register((ax25_address *)dev->dev_addr, NULL);
-
 	return 0;
 }
 
 static int nr_close(struct net_device *dev)
 {
-	dev->tbusy = 1;
-	dev->start = 0;
-
+	netif_stop_queue(dev);
 	ax25_listen_release((ax25_address *)dev->dev_addr, NULL);
-
 	MOD_DEC_USE_COUNT;
-
 	return 0;
 }
 
 static int nr_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_device_stats *stats = (struct net_device_stats *)dev->priv;
-
-	if (skb == NULL || dev == NULL)
-		return 0;
-
-	if (!dev->start) {
-		printk(KERN_ERR "NET/ROM: nr_xmit - called when iface is down\n");
-		return 1;
-	}
-
-	cli();
-
-	if (dev->tbusy != 0) {
-		sti();
-		stats->tx_errors++;
-		return 1;
-	}
-
-	dev->tbusy = 1;
-
-	sti();
-
-	kfree_skb(skb);
-
+	dev_kfree_skb(skb);
 	stats->tx_errors++;
-
-	dev->tbusy = 0;
-
-	mark_bh(NET_BH);
-
 	return 0;
 }
 
@@ -246,7 +211,6 @@ static struct net_device_stats *nr_get_stats(struct net_device *dev)
 int nr_init(struct net_device *dev)
 {
 	dev->mtu		= NR_MAX_PACKET_SIZE;
-	dev->tbusy		= 0;
 	dev->hard_start_xmit	= nr_xmit;
 	dev->open		= nr_open;
 	dev->stop		= nr_close;

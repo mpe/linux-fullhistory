@@ -526,7 +526,10 @@ static int device_shutdown (wan_device_t* wandev)
 	for (dev = wandev->dev; dev;)
 	{
 		if (delete_interface(wandev, dev->name, 0))
-			dev = dev->slave;
+		{
+			struct net_device **slave = dev->priv;
+			dev = *slave;
+		}
 	}
 	if (wandev->ndev)
 		return -EBUSY;	/* there are opened interfaces  */
@@ -608,8 +611,10 @@ static int device_new_if (wan_device_t* wandev, wanif_conf_t* u_conf)
 #endif				
 			err = register_netdev(dev);
 			if (!err) {
+				struct net_device **slave = dev->priv;
+
 				cli();	/***** critical section start *****/
-				dev->slave = wandev->dev;
+				*slave = wandev->dev;
 				wandev->dev = dev;
 				++wandev->ndev;
 				sti();	/****** critical section end ******/
@@ -684,14 +689,19 @@ static int delete_interface (wan_device_t *wandev, char *name, int force)
 {
 	struct net_device *dev, *prev;
 
-	for (dev = wandev->dev, prev = NULL;
-		dev && strcmp(name, dev->name);
-		prev = dev, dev = dev->slave);
+	dev = wandev->dev;
+	prev = NULL;
+	while (dev && strcmp(name, dev->name)) {
+		struct net_device **slave = dev->priv;
+
+		prev = dev;
+		dev = *slave;
+	}
 
 	if (dev == NULL)
 		return -ENODEV;	/* interface not found */
 
-	if (dev->start) {
+	if (test_bit(LINK_STATE_START, &dev->state)) {
 		if (force) {
 			printk(KERN_WARNING
 				"%s: deleting opened interface %s!\n",
@@ -705,10 +715,16 @@ static int delete_interface (wan_device_t *wandev, char *name, int force)
 		wandev->del_if(wandev, dev);
 
 	cli();			/***** critical section start *****/
-	if (prev)
-		prev->slave = dev->slave;
-	else
-		wandev->dev = dev->slave;
+	if (prev) {
+		struct net_device **prev_slave = prev->priv;
+		struct net_device **slave = dev->priv;
+
+		*prev_slave = *slave;
+	} else {
+		struct net_device **slave = dev->priv;
+
+		wandev->dev = *slave;
+	}
 	--wandev->ndev;
 	sti();			/****** critical section end ******/
 

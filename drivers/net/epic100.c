@@ -424,6 +424,8 @@ static struct net_device *epic_probe1(struct pci_dev *pdev, long ioaddr, int irq
 	dev->do_ioctl = &mii_ioctl;
 	dev->tx_timeout = epic_tx_timeout;
 	dev->watchdog_timeo = TX_TIMEOUT;
+	
+	netif_stop_queue (dev);
 
 	return dev;
 }
@@ -526,13 +528,15 @@ epic_open(struct net_device *dev)
 	int mii_reg5;
 	ep->full_duplex = ep->force_fd;
 
+	MOD_INC_USE_COUNT;
+
 	/* Soft reset the chip. */
 	outl(0x4001, ioaddr + GENCTL);
 
-	if (request_irq(dev->irq, &epic_interrupt, SA_SHIRQ, "SMC EPIC/100", dev))
-		return -EAGAIN;
-
-	MOD_INC_USE_COUNT;
+	if (request_irq(dev->irq, &epic_interrupt, SA_SHIRQ, "SMC EPIC/100", dev)) {
+		MOD_DEC_USE_COUNT;
+		return -EBUSY;
+	}
 
 	epic_init_ring(dev);
 
@@ -580,8 +584,6 @@ epic_open(struct net_device *dev)
 	set_rx_mode(dev);
 	outl(0x000A, ioaddr + COMMAND);
 
-	netif_start_queue(dev);
-
 	/* Enable interrupts by setting the interrupt mask. */
 	outl((ep->chip_id == 6 ? PCIBusErr175 : PCIBusErr170)
 		 | CntFull | TxUnderrun | TxDone
@@ -594,10 +596,12 @@ epic_open(struct net_device *dev)
 			   dev->name, ioaddr, dev->irq, inl(ioaddr + GENCTL),
 			   ep->full_duplex ? "full" : "half");
 
+	netif_start_queue(dev);
+
 	/* Set the timer to switch to check for link beat and perhaps switch
 	   to an alternate media type. */
 	init_timer(&ep->timer);
-	ep->timer.expires = RUN_AT((24*HZ)/10);			/* 2.4 sec. */
+	ep->timer.expires = RUN_AT(3*HZ);			/* 3 sec. */
 	ep->timer.data = (unsigned long)dev;
 	ep->timer.function = &epic_timer;				/* timer handler */
 	add_timer(&ep->timer);
@@ -612,6 +616,8 @@ static void epic_pause(struct net_device *dev)
 	long ioaddr = dev->base_addr;
 	struct epic_private *ep = (struct epic_private *)dev->priv;
 
+	netif_stop_queue (dev);
+	
 	/* Disable interrupts by clearing the interrupt mask. */
 	outl(0x00000000, ioaddr + INTMASK);
 	/* Stop the chip's Tx and Rx DMA processes. */
@@ -670,11 +676,13 @@ static void epic_restart(struct net_device *dev)
 		 | CntFull | TxUnderrun | TxDone
 		 | RxError | RxOverflow | RxFull | RxHeader | RxDone,
 		 ioaddr + INTMASK);
+
+	netif_start_queue (dev);
+	
 	printk(KERN_DEBUG "%s: epic_restart() done, cmd status %4.4x, ctl %4.4x"
 		   " interrupt %4.4x.\n",
 			   dev->name, inl(ioaddr + COMMAND), inl(ioaddr + GENCTL),
 		   inl(ioaddr + INTSTAT));
-	return;
 }
 
 static void epic_timer(unsigned long data)
@@ -737,7 +745,8 @@ static void epic_tx_timeout(struct net_device *dev)
 
 	dev->trans_start = jiffies;
 	ep->stats.tx_errors++;
-	return;
+	
+	netif_start_queue (dev);
 }
 
 /* Initialize the Rx and Tx rings, along with various 'dev' bits. */
@@ -789,6 +798,8 @@ epic_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	int entry;
 	u32 flag;
 
+	netif_stop_queue (dev);
+
 	/* Caution: the write order is important here, set the base address
 	   with the "ownership" bits last. */
 
@@ -805,13 +816,10 @@ epic_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	
 	if (ep->cur_tx - ep->dirty_tx < TX_RING_SIZE/2) {/* Typical path */
 	  flag = 0x10; /* No interrupt */
-	  netif_start_queue(dev);
 	} else if (ep->cur_tx - ep->dirty_tx == TX_RING_SIZE/2) {
 	  flag = 0x14; /* Tx-done intr. */
-	  netif_start_queue(dev);
 	} else if (ep->cur_tx - ep->dirty_tx < TX_RING_SIZE - 2) {
 	  flag = 0x10; /* No Tx-done intr. */
-	  netif_start_queue(dev);
 	} else {
 	  /* Leave room for two additional entries. */
 	  flag = 0x14; /* Tx-done intr. */
@@ -825,6 +833,10 @@ epic_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	outl(0x0004, dev->base_addr + COMMAND);
 
 	dev->trans_start = jiffies;
+
+	if (! ep->tx_full)
+		netif_start_queue (dev);
+
 	if (epic_debug > 4)
 		printk(KERN_DEBUG "%s: Queued Tx packet size %d to slot %d, "
 			   "flag %2.2x Tx status %8.8x.\n",
@@ -911,8 +923,12 @@ static void epic_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 			    dirty_tx > ep->cur_tx - TX_RING_SIZE + 2) {
 				/* The ring is no longer full, clear tbusy. */
 				ep->tx_full = 0;
-				netif_wake_queue (dev);
 			}
+			
+			if (ep->tx_full)
+				netif_stop_queue (dev);
+			else
+				netif_wake_queue (dev);
 
 			ep->dirty_tx = dirty_tx;
 		}

@@ -643,7 +643,6 @@ static int scc_open(struct net_device *dev)
   }
 
   /* Initialize local variables */
-  dev->tbusy = 0;
   priv->rx_ptr = 0;
   priv->rx_over = 0;
   priv->rx_head = priv->rx_tail = priv->rx_count = 0;
@@ -732,7 +731,7 @@ static int scc_open(struct net_device *dev)
   /* Configure PI2 DMA */
   if (info->type <= TYPE_PI2) outb_p(1, io + PI_DREQ_MASK);
 
-  dev->start = 1;
+  netif_start_queue(dev);
   info->open++;
   MOD_INC_USE_COUNT;
 
@@ -747,9 +746,8 @@ static int scc_close(struct net_device *dev)
   int io = dev->base_addr;
   int cmd = priv->cmd;
 
-  dev->start = 0;
+  netif_stop_queue(dev);
   info->open--;
-  MOD_DEC_USE_COUNT;
 
   if (info->type == TYPE_TWIN)
     /* Drop DTR */
@@ -768,6 +766,7 @@ static int scc_close(struct net_device *dev)
     if (info->type <= TYPE_PI2) outb_p(0, io + PI_DREQ_MASK);
     free_irq(dev->irq, info);
   }
+  MOD_DEC_USE_COUNT;
   return 0;
 }
 
@@ -779,16 +778,16 @@ static int scc_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
   
   switch (cmd) {
   case SIOCGSCCPARAM:
-    rc = verify_area(VERIFY_WRITE, ifr->ifr_data, sizeof(struct scc_param));
-    if (rc) return rc;
-    copy_to_user(ifr->ifr_data, &priv->param, sizeof(struct scc_param));
+    if(copy_to_user(ifr->ifr_data, &priv->param, sizeof(struct scc_param)))
+    	return -EFAULT;
     return 0;
   case SIOCSSCCPARAM:
-    if (!suser()) return -EPERM;
-    rc = verify_area(VERIFY_READ, ifr->ifr_data, sizeof(struct scc_param));
-    if (rc) return rc;
-    if (dev->start) return -EAGAIN;
-    copy_from_user(&priv->param, ifr->ifr_data, sizeof(struct scc_param));
+    if (!capable(CAP_NET_ADMIN)) 
+    	return -EPERM;
+    if (test_bit(LINK_STATE_START, &dev->state)) 
+    	return -EAGAIN;
+    if(copy_from_user(&priv->param, ifr->ifr_data, sizeof(struct scc_param)))
+    	return -EFAULT;
     dev->dma = priv->param.dma;
     return 0;
   default:
@@ -806,18 +805,8 @@ static int scc_send_packet(struct sk_buff *skb, struct net_device *dev)
   int i;
 
   /* Block a timer-based transmit from overlapping */
-  if (test_and_set_bit(0, (void *) &priv->tx_sem) != 0) {
-    atomic_inc((void *) &priv->stats.tx_dropped);
-    dev_kfree_skb(skb);
-    return 0;
-  }
-
-  /* Return with an error if we cannot accept more data */
-  if (dev->tbusy) {
-    priv->tx_sem = 0;
-    return -1;
-  }
-
+  netif_stop_queue(dev);
+  
   /* Transfer data to DMA buffer */
   i = priv->tx_head;
   memcpy(priv->tx_buf[i], skb->data+1, skb->len-1);
@@ -829,7 +818,8 @@ static int scc_send_packet(struct sk_buff *skb, struct net_device *dev)
   /* Set the busy flag if we just filled up the last buffer */
   priv->tx_head = (i + 1) % NUM_TX_BUF;
   priv->tx_count++;
-  if (priv->tx_count == NUM_TX_BUF) dev->tbusy = 1;
+  if (priv->tx_count != NUM_TX_BUF)
+  	netif_wake_queue(dev);
 
   /* Set new TX state */
   if (priv->tx_state == TX_IDLE) {
@@ -1139,7 +1129,6 @@ static void es_isr(struct net_device *dev)
     /* Remove frame from FIFO */
     priv->tx_tail = (i + 1) % NUM_TX_BUF;
     priv->tx_count--;
-    dev->tbusy = 0;
     /* Check if another frame is available and we are allowed to transmit */
     if (priv->tx_count && (jiffies - priv->tx_start) < priv->param.txtime) {
       if (dev->dma) {
@@ -1171,7 +1160,7 @@ static void es_isr(struct net_device *dev)
       priv->stats.tx_packets++;
     }
     /* Inform upper layers */
-    mark_bh(NET_BH);
+    netif_wake_queue(dev);
   }
 
   /* DCD transition */

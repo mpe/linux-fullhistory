@@ -167,6 +167,9 @@
  */
 typedef struct fr_channel
 {
+	/* This member must be first. */
+	struct net_device *slave;	/* WAN slave */
+
 	char name[WAN_IFNAME_SZ+1];	/* interface name, ASCIIZ */
 	unsigned dlci_configured  ;	/* check whether configured or not */
 	unsigned cir_status;		/* check whether CIR enabled or not */
@@ -1960,7 +1963,9 @@ goto L4;
 	// Used to send inarp request at given interval 
 	if (card->wandev.state == WAN_CONNECTED) {
         	int num_remaining = 0;
-                for (dev=card->wandev.dev;dev;dev=dev->slave) {
+
+		dev = card->wandev.dev;
+		while (dev) {
                 	fr_channel_t *chan = dev->priv;
 
                         if (chan->inarp == INARP_REQUEST &&
@@ -1972,6 +1977,7 @@ goto L4;
                                 	chan->inarp_tick = jiffies;
                                 }
 			}
+			dev = chan->slave;
 		}
 		if (!num_remaining) {   // no more to process 
                         flags->imask &= ~FR_INTR_TIMER;
@@ -2135,65 +2141,68 @@ static void process_route (sdla_t* card)
 
 
 	/* Dynamic Route adding/removing */
-	for (dev = card->wandev.dev; dev ; dev = dev->slave) {
-	     if ( ((fr_channel_t*)dev->priv)->route_flag == ADD_ROUTE   ||
-		((fr_channel_t*)dev->priv)->route_flag == REMOVE_ROUTE ) {
-		fs = get_fs();
+	dev = card->wandev.dev;
+	while (dev) {
+		fr_channel_t *chan = dev->priv;
+
+		if (chan->route_flag == ADD_ROUTE   ||
+		    chan->route_flag == REMOVE_ROUTE ) {
+			fs = get_fs();
 		
-		in_dev = dev->ip_ptr;
+			in_dev = dev->ip_ptr;
 
-		if( in_dev != NULL && in_dev->ifa_list != NULL) {
-			memset(&route, 0, sizeof(route));
-			route.rt_dev   = dev->name;
-			route.rt_flags = 0;
+			if( in_dev != NULL && in_dev->ifa_list != NULL) {
+				memset(&route, 0, sizeof(route));
+				route.rt_dev   = dev->name;
+				route.rt_flags = 0;
 
-			((struct sockaddr_in *) &(route.rt_dst)) ->
-				sin_addr.s_addr=in_dev->ifa_list->ifa_address;
-			((struct sockaddr_in *) &(route.rt_dst)) ->
-				sin_family = AF_INET;
-			((struct sockaddr_in *) &(route.rt_genmask)) ->
-				sin_addr.s_addr = 0xFFFFFFFF;
-			((struct sockaddr_in *) &(route.rt_genmask)) ->
-				sin_family = AF_INET;
+				((struct sockaddr_in *) &(route.rt_dst)) ->
+					sin_addr.s_addr=in_dev->ifa_list->ifa_address;
+				((struct sockaddr_in *) &(route.rt_dst)) ->
+					sin_family = AF_INET;
+				((struct sockaddr_in *) &(route.rt_genmask)) ->
+					sin_addr.s_addr = 0xFFFFFFFF;
+				((struct sockaddr_in *) &(route.rt_genmask)) ->
+					sin_family = AF_INET;
 
-			switch(((fr_channel_t*)dev->priv)->route_flag) {
+				switch(chan->route_flag) {
 
-			case ADD_ROUTE:
-				set_fs(get_ds());     /* get user space block */
-				err = ip_rt_ioctl( SIOCADDRT, &route);	
-				set_fs(fs);	      /* restore old block */
+				case ADD_ROUTE:
+					set_fs(get_ds());     /* get user space block */
+					err = ip_rt_ioctl( SIOCADDRT, &route);	
+					set_fs(fs);	      /* restore old block */
 
-				if (err) {
-					printk(KERN_INFO "%s: Adding of route failed.  Error: %d\n", card->devname,err);
-					printk(KERN_INFO "%s: Address: %s\n",
-					((fr_channel_t*)dev->priv)->name,
-					in_ntoa(in_dev->ifa_list->ifa_address) );
-				}
-				else {
-					((fr_channel_t*)dev->priv)->
-						route_flag = ROUTE_ADDED;
-				}
-				break;
+					if (err) {
+						printk(KERN_INFO "%s: Adding of route failed.  Error: %d\n", card->devname,err);
+						printk(KERN_INFO "%s: Address: %s\n",
+						       chan->name,
+						       in_ntoa(in_dev->ifa_list->ifa_address) );
+					} else {
+						chan->route_flag = ROUTE_ADDED;
+					}
+					break;
 
-			case REMOVE_ROUTE:
-				set_fs(get_ds());     /* get user space block */
-				err = ip_rt_ioctl( SIOCDELRT, &route);
-				set_fs(fs);	      /* restore old block */
+				case REMOVE_ROUTE:
+					set_fs(get_ds());     /* get user space block */
+					err = ip_rt_ioctl( SIOCDELRT, &route);
+					set_fs(fs);	      /* restore old block */
 
-				if (err) {
-			     		printk(KERN_INFO "%s: Deleting of route failed.  Error: %d\n", card->devname,err);
-			    		printk(KERN_INFO "%s: Address: %s\n",
-					dev->name,in_ntoa(in_dev->ifa_list->ifa_address) );
-				} else {
-			    	 	printk(KERN_INFO "%s: Removed route.\n",
-					((fr_channel_t*)dev->priv)->name);
-			     		((fr_channel_t*)dev->priv)->route_flag = NO_ROUTE;
-				}
-				break;
-			} /* Case Statement */
-		}
-	     } /* If ADD/DELETE ROUTE */
-	}  /* Device 'For' Loop */
+					if (err) {
+						printk(KERN_INFO "%s: Deleting of route failed.  Error: %d\n", card->devname,err);
+						printk(KERN_INFO "%s: Address: %s\n",
+						       dev->name,in_ntoa(in_dev->ifa_list->ifa_address) );
+					} else {
+						printk(KERN_INFO "%s: Removed route.\n",
+						       chan->name);
+						chan->route_flag = NO_ROUTE;
+					}
+					break;
+				} /* Case Statement */
+			}
+		} /* If ADD/DELETE ROUTE */
+
+		dev = chan->slave;
+	}  /* Device 'While' Loop */
 
 	card->poll = NULL;
 }
@@ -2568,7 +2577,8 @@ static int fr_event (sdla_t *card, int event, fr_mbox_t* mbox)
 			struct net_device *dev;
 
 			/* Remove all routes from associated DLCI's */
-			for (dev = card->wandev.dev; dev; dev = dev->slave) {
+			dev = card->wandev.dev;
+			while (dev) {
 				fr_channel_t *chan = dev->priv;
 				if (chan->route_flag == ROUTE_ADDED) {
 					chan->route_flag = REMOVE_ROUTE;
@@ -2578,6 +2588,8 @@ static int fr_event (sdla_t *card, int event, fr_mbox_t* mbox)
 				if (chan->inarp == INARP_CONFIGURED) {
 					chan->inarp = INARP_REQUEST;
 				}
+
+				dev = chan->slave;
 			}
 
 			wanpipe_set_state(card, WAN_DISCONNECTED);
@@ -2590,12 +2602,14 @@ static int fr_event (sdla_t *card, int event, fr_mbox_t* mbox)
 			int num_requests = 0;
 
 			/* Remove all routes from associated DLCI's */
-			for (dev = card->wandev.dev; dev; dev = dev->slave) {
+			dev = card->wandev.dev;
+			while (dev) {
 				fr_channel_t *chan = dev->priv;	
 				if( chan->inarp == INARP_REQUEST ){
 					num_requests++;
 					chan->inarp_tick = jiffies;
 				}
+				dev = chan->slave;
 			}
 
 			/* Allow timer interrupts */
@@ -2731,8 +2745,8 @@ static int fr_dlci_change (sdla_t *card, fr_mbox_t* mbox)
 		}
 	}
 	
-	for (dev2 =card->wandev.dev; dev2; dev2 = dev2->slave){
-		
+	dev2 = card->wandev.dev;
+	while (dev2) {
 		chan = dev2->priv;
 	
 		if (chan->dlci_configured == DLCI_CONFIG_PENDING) {
@@ -2741,6 +2755,7 @@ static int fr_dlci_change (sdla_t *card, fr_mbox_t* mbox)
 			}
 		}
 
+		dev2 = chan->slave;
 	}
 	return 1;
 }

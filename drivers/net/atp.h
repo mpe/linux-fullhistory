@@ -4,15 +4,14 @@
 
 struct net_local 
 {
-#ifdef __KERNEL__
 	struct net_device_stats stats;
-#endif
 	ushort saved_tx_size;
 	unsigned char
 	re_tx,			/* Number of packet retransmissions. */
 	tx_unit_busy,
 	addr_mode,		/* Current Rx filter e.g. promiscuous, etc. */
 	pac_cnt_in_tx_buf;
+	spinlock_t lock;		/* Safety lock */
 };
 
 struct rx_header {
@@ -52,8 +51,7 @@ enum page0_regs
 	CMR2_h = 0x1d, 
 };
 
-enum eepage_regs
-{ PROM_CMD = 6, PROM_DATA = 7 };	/* Note that PROM_CMD is in the "high" bits. */
+enum eepage_regs { PROM_CMD = 6, PROM_DATA = 7 };	/* Note that PROM_CMD is in the "high" bits. */
 
 
 #define ISR_TxOK	0x01

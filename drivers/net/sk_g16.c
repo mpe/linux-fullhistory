@@ -472,6 +472,7 @@ static spinlock_t SK_lock = SPIN_LOCK_UNLOCKED;
 int          SK_init(struct net_device *dev);
 static int   SK_probe(struct net_device *dev, short ioaddr);
 
+static void  SK_timeout(struct net_device *dev);
 static int   SK_open(struct net_device *dev);
 static int   SK_send_packet(struct sk_buff *skb, struct net_device *dev);
 static void  SK_interrupt(int irq, void *dev_id, struct pt_regs * regs);
@@ -778,11 +779,13 @@ int __init SK_probe(struct net_device *dev, short ioaddr)
 
     /* Assign our Device Driver functions */
 
-    dev->open                   = &SK_open;
-    dev->stop                   = &SK_close;
-    dev->hard_start_xmit        = &SK_send_packet;
-    dev->get_stats              = &SK_get_stats;
-    dev->set_multicast_list     = &set_multicast_list;
+    dev->open                   = SK_open;
+    dev->stop                   = SK_close;
+    dev->hard_start_xmit        = SK_send_packet;
+    dev->get_stats              = SK_get_stats;
+    dev->set_multicast_list     = set_multicast_list;
+    dev->tx_timeout		= SK_timeout;
+    dev->watchdog_timeo		= HZ/7;
 
 
     /* Set the generic fields of the device structure */
@@ -1169,30 +1172,18 @@ static int SK_lance_init(struct net_device *dev, unsigned short mode)
  *     YY/MM/DD  uid  Description
 -*/
 
+static int SK_timeout(struct net_device *dev)
+{
+	printk(KERN_WARNING "%s: xmitter timed out, try to restart!\n", dev->name);
+	SK_lance_init(dev, MODE_NORMAL); /* Reinit LANCE */
+	netif_start_queue(dev);		 /* Clear Transmitter flag */
+	dev->trans_start = jiffies;      /* Mark Start of transmission */
+}
+
 static int SK_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
     struct priv *p = (struct priv *) dev->priv;
     struct tmd *tmdp;
-
-    if (test_bit(LINK_STATE_XOFF, &dev->flags))
-    {
-	/* if Transmitter more than 150ms busy -> time_out */
-
-	int tickssofar = jiffies - dev->trans_start;
-	if (tickssofar < 15)
-	{
-	    return 1;                    /* We have to try transmit later */
-	}
-
-	printk("%s: xmitter timed out, try to restart!\n", dev->name);
-
-	SK_lance_init(dev, MODE_NORMAL); /* Reinit LANCE */
-
-	netif_start_queue(dev);		 /* Clear Transmitter flag */
-
-	dev->trans_start = jiffies;      /* Mark Start of transmission */
-
-    }
 
     PRINTK2(("## %s: SK_send_packet() called, CSR0 %#04x.\n", 
 	    SK_NAME, SK_read_reg(CSR0)));

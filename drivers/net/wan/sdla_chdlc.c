@@ -74,6 +74,9 @@
 
 typedef struct chdlc_private_area
 {
+	/* This member must be first. */
+	struct net_device *slave;		/* WAN slave */
+
 	sdla_t		*card;
 	int 		TracingEnabled;		/* For enabling Tracing */
 	unsigned long 	curr_trace_addr;	/* Used for Tracing */

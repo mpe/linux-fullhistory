@@ -58,8 +58,9 @@ static const char *version =
 #include <linux/skbuff.h>
 #include <linux/delay.h>
 
-static int fmv18x_probe_list[] __initdata =
-{0x220, 0x240, 0x260, 0x280, 0x2a0, 0x2c0, 0x300, 0x340, 0};
+static int fmv18x_probe_list[] __initdata = {
+	0x220, 0x240, 0x260, 0x280, 0x2a0, 0x2c0, 0x300, 0x340, 0
+};
 
 /* use 0 for production, 1 for verification, >2 for debug */
 #ifndef NET_DEBUG
@@ -127,14 +128,8 @@ static void set_multicast_list(struct net_device *dev);
    If dev->base_addr == 2, allocate space for the device and return success
    (detachable devices only).
    */
-#ifdef HAVE_DEVLIST
-/* Support for an alternate probe manager, which will eliminate the
-   boilerplate below. */
-struct netdev_entry fmv18x_drv =
-{"fmv18x", fmv18x_probe1, FMV18X_IO_EXTENT, fmv18x_probe_list};
-#else
-int __init 
-fmv18x_probe(struct net_device *dev)
+
+int __init fmv18x_probe(struct net_device *dev)
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -154,7 +149,6 @@ fmv18x_probe(struct net_device *dev)
 
 	return ENODEV;
 }
-#endif
 
 /* The Fujitsu datasheet suggests that the NIC be probed for by checking its
    "signature", the default bit pattern after a reset.  This *doesn't* work --
@@ -584,11 +578,6 @@ static int net_close(struct net_device *dev)
 static struct net_device_stats *net_get_stats(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
-
-	cli();
-	/* ToDo: Update the statistics from the device registers. */
-	sti();
-
 	return &lp->stats;
 }
 

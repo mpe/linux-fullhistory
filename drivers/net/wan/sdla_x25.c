@@ -75,6 +75,9 @@
  */
 typedef struct x25_channel
 {
+	/* This member must be first. */
+	struct net_device *slave;	/* WAN slave */
+
 	char name[WAN_IFNAME_SZ+1];	/* interface name, ASCIIZ */
 	char addr[WAN_ADDRESS_SZ+1];	/* media address, ASCIIZ */
 	unsigned lcn;			/* logical channel number */
@@ -708,11 +711,13 @@ static int if_send (struct sk_buff* skb, struct net_device* dev)
 			return dev->tbusy;
 		}
 		printk(KERN_INFO "%s: Transmit time out %s!\n",
-			card->devname, dev->name)
-		;
-		for( dev2 = card->wandev.dev; dev2; dev2 = dev2->slave)
-		{
+		       card->devname, dev->name);
+
+		dev2 = card->wandev.dev;
+		while (dev2) {
+			x25_channel_t *chan2 = dev2->priv;
 	        	dev2->tbusy = 0;
+			dev2 = chan2->slave;
 		}
 	}
 	chan->tick_counter = jiffies;
@@ -898,13 +903,17 @@ static void wpx_isr (sdla_t* card)
 
 	if(card->buff_int_mode_unbusy)
 	{
-		for(dev = card->wandev.dev; dev; dev = dev->slave)
-		{
-			if(((x25_channel_t*)dev->priv)->devtint)
-			{
+		x25_channel_t *chan;
+
+		dev = card->wandev.dev;
+		while (dev) {
+			chan = dev->priv;
+			if(chan->devtint) {
 				mark_bh(NET_BH);
 				return;
 			}	
+
+			dev = chan->slave;
 		}
 	}
 }
@@ -1042,12 +1051,15 @@ static void rx_intr (sdla_t* card)
 static void tx_intr (sdla_t* card)
 {
 	struct net_device *dev;
+	x25_channel_t *chan;
 
 	/* unbusy all devices and then dev_tint(); */
-	for(dev = card->wandev.dev; dev; dev = dev->slave)
-	{
-		((x25_channel_t*)dev->priv)->devtint = dev->tbusy; 
+	dev = card->wandev.dev;
+	while (dev) {
+		chan->devtint = dev->tbusy; 
 		dev->tbusy = 0;
+
+		dev = chan->slave;
 	}
 
 }
@@ -1170,8 +1182,8 @@ static void poll_active (sdla_t* card)
 	/* Fetch X.25 asynchronous events */
 	x25_fetch_events(card);
 
-	for (dev = card->wandev.dev; dev; dev = dev->slave)
-	{
+	dev = card->wandev.dev;
+	while (dev) {
 		x25_channel_t* chan = dev->priv;
 		struct sk_buff* skb = chan->tx_skb;
 
@@ -1199,6 +1211,8 @@ static void poll_active (sdla_t* card)
 				chan_disc(dev);
 			}
 		}
+
+		dev = chan->slave;
 	}
 }
 
@@ -1785,8 +1799,8 @@ static int incoming_call (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 		card->devname, new_lcn, mb->data);
 
 	/* Find available channel */
-	for (dev = wandev->dev; dev; dev = dev->slave)
-	{
+	dev = wandev->dev;
+	while (dev) {
 		chan = dev->priv;
 
 		if (!chan->svc || (chan->state != WAN_DISCONNECTED))
@@ -1796,6 +1810,8 @@ static int incoming_call (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 	        /* If just an '@' is specified, accept all incoming calls */
 	        if (strcmp(chan->addr, "") == 0)
 	                break;
+
+		dev = chan->slave;
 	}
 
 	if (dev == NULL)
@@ -1912,8 +1928,14 @@ static int restart_event (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 		card->devname, mb->cmd.cause, mb->cmd.diagn);
 
 	/* down all logical channels */
-	for (dev = wandev->dev; dev; dev = dev->slave)
+	dev = wandev->dev;
+	while (dev) {
+		x25_channel_t *chan = dev->priv;
+
 		set_chan_state(dev, WAN_DISCONNECTED);
+		dev = chan->slave;
+	}
+
 	return (cmd == X25_WRITE) ? 0 : 1;
 }
 
@@ -1979,10 +2001,14 @@ static int disconnect (sdla_t* card)
 static struct net_device* get_dev_by_lcn (wan_device_t* wandev, unsigned lcn)
 {
 	struct net_device* dev;
+	x25_channel_t *chan;
 
-	for (dev = wandev->dev; dev; dev = dev->slave)
-		if (((x25_channel_t*)dev->priv)->lcn == lcn)
+	dev = wandev->dev;
+	while (dev) {
+		if (chan->lcn == lcn)
 			break;
+		dev = chan->slave;
+	}
 	return dev;
 }
 

@@ -96,16 +96,7 @@ static int csr0 = 0x00A00000 | 0x4800;
 #endif
 
 #include <linux/version.h>
-#ifdef MODULE
-#ifdef MODVERSIONS
-#include <linux/modversions.h>
-#endif
 #include <linux/module.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
-
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -139,9 +130,6 @@ MODULE_PARM(options, "1-" __MODULE_STRING(MAX_UNITS) "i");
 MODULE_PARM(full_duplex, "1-" __MODULE_STRING(MAX_UNITS) "i");
 
 #define RUN_AT(x) (jiffies + (x))
-
-#define NETSTATS_VER2
-#define PCI_SUPPORT_VER3
 
 #define tulip_debug debug
 #ifdef TULIP_DEBUG
@@ -2352,8 +2340,8 @@ static void tulip_tx_timeout(struct net_device *dev)
 	outl(0, ioaddr + CSR1);
 
 	dev->trans_start = jiffies;
+	netif_wake_queue (dev);
 	tp->stats.tx_errors++;
-	return;
 }
 
 /* Initialize the Rx and Tx rings, along with various 'dev' bits. */

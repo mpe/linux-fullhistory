@@ -222,7 +222,7 @@ static int bpq_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_ty
 
 	dev = bpq_get_ax25_dev(dev);
 
-	if (dev == NULL || dev->start == 0) {
+	if (dev == NULL || test_bit(LINK_STATE_START, &dev->state) == 0) {
 		kfree_skb(skb);
 		return 0;
 	}
@@ -275,7 +275,7 @@ static int bpq_xmit(struct sk_buff *skb, struct net_device *dev)
 	 * Just to be *really* sure not to send anything if the interface
 	 * is down, the ethernet device may have gone.
 	 */
-	if (!dev->start) {
+	if (!test_bit(LINK_STATE_START, &dev->state)) {
 		bpq_check_devices(dev);
 		kfree_skb(skb);
 		return -ENODEV;
@@ -407,22 +407,15 @@ static int bpq_open(struct net_device *dev)
 {
 	if (bpq_check_devices(dev))
 		return -ENODEV;		/* oops, it's gone */
-
-	dev->tbusy = 0;
-	dev->start = 1;
-
 	MOD_INC_USE_COUNT;
-
+	netif_start_queue(dev);
 	return 0;
 }
 
 static int bpq_close(struct net_device *dev)
 {
-	dev->tbusy = 1;
-	dev->start = 0;
-
+	netif_stop_queue(dev);
 	MOD_DEC_USE_COUNT;
-
 	return 0;
 }
 

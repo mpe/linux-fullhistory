@@ -101,6 +101,7 @@
 #include <linux/in.h>
 #include <linux/malloc.h>
 #include <linux/ioport.h>
+#include <linux/spinlock.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
@@ -374,7 +375,7 @@ static inline unsigned int send_pcb_fast(unsigned int base_addr, unsigned char b
 static inline void prime_rx(struct net_device *dev)
 {
 	elp_device *adapter = dev->priv;
-	while (adapter->rx_active < ELP_RX_PCBS && dev->start) {
+	while (adapter->rx_active < ELP_RX_PCBS && test_bit(LINK_STATE_START, &dev->state)) {
 		if (!start_receive(dev, &adapter->itx_pcb))
 			break;
 	}
@@ -672,23 +673,10 @@ static void elp_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 	elp_device *adapter;
 	int timeout;
 
-	if (irq < 0 || irq > 15) {
-		printk("elp_interrupt(): illegal IRQ number found in interrupt routine (%i)\n", irq);
-		return;
-	}
 	dev = dev_id;
-
-	if (dev == NULL) {
-		printk("elp_interrupt(): irq %d for unknown device.\n", irq);
-		return;
-	}
 	adapter = (elp_device *) dev->priv;
-
-	if (dev->interrupt) {
-		printk("%s: re-entering the interrupt handler!\n", dev->name);
-		return;
-	}
-	dev->interrupt = 1;
+	
+	spin_lock(&adapter->lock);
 
 	do {
 		/*
@@ -702,20 +690,19 @@ static void elp_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 				printk("%s: %s DMA complete, status %02x\n", dev->name, adapter->current_dma.direction ? "tx" : "rx", inb_status(dev->base_addr));
 			}
 
-			outb_control(adapter->hcr_val & ~(DMAE | TCEN | DIR),
-				     dev);
+			outb_control(adapter->hcr_val & ~(DMAE | TCEN | DIR), dev);
 			if (adapter->current_dma.direction) {
 				dev_kfree_skb_irq(adapter->current_dma.skb);
 			} else {
 				struct sk_buff *skb = adapter->current_dma.skb;
 				if (skb) {
-				  if (adapter->current_dma.target) {
-				    /* have already done the skb_put() */
-				    memcpy(adapter->current_dma.target, adapter->dma_buffer, adapter->current_dma.length);
-				  }
-				  skb->protocol = eth_type_trans(skb,dev);
-				  adapter->stats.rx_bytes += skb->len;
-				  netif_rx(skb);
+					if (adapter->current_dma.target) {
+				  	/* have already done the skb_put() */
+				  	memcpy(adapter->current_dma.target, adapter->dma_buffer, adapter->current_dma.length);
+					}
+					skb->protocol = eth_type_trans(skb,dev);
+					adapter->stats.rx_bytes += skb->len;
+					netif_rx(skb);
 				}
 			}
 			adapter->dmaing = 0;
@@ -733,15 +720,14 @@ static void elp_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 			check_3c505_dma(dev);
 		}
 
-		sti();
-
 		/*
 		 * receive a PCB from the adapter
 		 */
 		timeout = jiffies + 3*HZ/100;
 		while ((inb_status(dev->base_addr) & ACRF) != 0 && time_before(jiffies, timeout)) {
 			if (receive_pcb(dev, &adapter->irx_pcb)) {
-				switch (adapter->irx_pcb.command) {
+				switch (adapter->irx_pcb.command) 
+				{
 				case 0:
 					break;
 					/*
@@ -750,19 +736,15 @@ static void elp_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 				case 0xff:
 				case CMD_RECEIVE_PACKET_COMPLETE:
 					/* if the device isn't open, don't pass packets up the stack */
-					if (dev->start == 0)
+					if (test_bit(LINK_STATE_START, &dev->state) == 0)
 						break;
-					cli();
 					len = adapter->irx_pcb.data.rcv_resp.pkt_len;
 					dlen = adapter->irx_pcb.data.rcv_resp.buf_len;
 					if (adapter->irx_pcb.data.rcv_resp.timeout != 0) {
-						printk("%s: interrupt - packet not received correctly\n", dev->name);
-						sti();
+						printk(KERN_ERR "%s: interrupt - packet not received correctly\n", dev->name);
 					} else {
 						if (elp_debug >= 3) {
-							sti();
 							printk("%s: interrupt - packet received of length %i (%i)\n", dev->name, len, dlen);
-							cli();
 						}
 						if (adapter->irx_pcb.command == 0xff) {
 							if (elp_debug >= 2)
@@ -772,7 +754,6 @@ static void elp_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 						} else {
 							receive_packet(dev, dlen);
 						}
-						sti();
 						if (elp_debug >= 3)
 							printk("%s: packet received\n", dev->name);
 					}
@@ -839,7 +820,7 @@ static void elp_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 				case CMD_TRANSMIT_PACKET_COMPLETE:
 					if (elp_debug >= 3)
 						printk("%s: interrupt - packet sent\n", dev->name);
-					if (dev->start == 0)
+					if (test_bit(LINK_STATE_START, &dev->state) == 0)
 						break;
 					switch (adapter->irx_pcb.data.xmit_resp.c_stat) {
 					case 0xffff:
@@ -851,8 +832,7 @@ static void elp_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 						printk(KERN_INFO "%s: transmit timed out, FIFO underrun\n", dev->name);
 						break;
 					}
-					dev->tbusy = 0;
-					mark_bh(NET_BH);
+					netif_wake_queue(dev);
 					break;
 
 					/*
@@ -875,7 +855,7 @@ static void elp_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 	/*
 	 * indicate no longer in interrupt routine
 	 */
-	dev->interrupt = 0;
+	spin_unlock(&adapter->lock);
 }
 
 
@@ -913,16 +893,6 @@ static int elp_open(struct net_device *dev)
 	adapter_reset(dev);
 
 	/*
-	 * interrupt routine not entered
-	 */
-	dev->interrupt = 0;
-
-	/*
-	 *  transmitter not busy
-	 */
-	dev->tbusy = 0;
-
-	/*
 	 * no receive PCBs active
 	 */
 	adapter->rx_active = 0;
@@ -931,6 +901,8 @@ static int elp_open(struct net_device *dev)
 	adapter->send_pcb_semaphore = 0;
 	adapter->rx_backlog.in = 0;
 	adapter->rx_backlog.out = 0;
+	
+	spin_lock_init(&adapter->lock);
 
 	/*
 	 * install our interrupt service routine
@@ -1008,8 +980,8 @@ static int elp_open(struct net_device *dev)
 	/*
 	 * device is now officially open!
 	 */
-	dev->start = 1;
 
+	netif_wake_queue(dev);
 	MOD_INC_USE_COUNT;
 
 	return 0;		/* Always succeed */
@@ -1085,6 +1057,25 @@ static int send_packet(struct net_device *dev, struct sk_buff *skb)
 	return TRUE;
 }
 
+/*
+ *	The upper layer thinks we timed out
+ */
+ 
+static void elp_timeout(struct net_device *dev)
+{
+	unsigned long flags;
+	elp_device *adapter = dev->priv;
+	int stat;
+
+	stat = inb_status(dev->base_addr);
+	printk(KERN_WARNING "%s: transmit timed out, lost %s?\n", dev->name, (stat & ACRF) ? "interrupt" : "command");
+	if (elp_debug >= 1)
+		printk("%s: status %#02x\n", dev->name, stat);
+	dev->trans_start = jiffies;
+	adapter->stats.tx_dropped++;
+	netif_wake_queue(dev);
+}
+
 /******************************************************
  *
  * start the transmitter
@@ -1094,40 +1085,17 @@ static int send_packet(struct net_device *dev, struct sk_buff *skb)
 
 static int elp_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
-	if (dev->interrupt) {
-		printk("%s: start_xmit aborted (in irq)\n", dev->name);
-		return 1;
-	}
-
+	unsigned long flags;
+	elp_device *adapter = dev->priv;
+	
+	spin_lock_irqsave(&adapter->lock, flags);
 	check_3c505_dma(dev);
-
-	/*
-	 * if the transmitter is still busy, we have a transmit timeout...
-	 */
-	if (dev->tbusy) {
-		elp_device *adapter = dev->priv;
-       		int tickssofar = jiffies - dev->trans_start;
-		int stat;
-
-		if (tickssofar < 1000)
-			return 1;
-
-		stat = inb_status(dev->base_addr);
-		printk("%s: transmit timed out, lost %s?\n", dev->name, (stat & ACRF) ? "interrupt" : "command");
-		if (elp_debug >= 1)
-			printk("%s: status %#02x\n", dev->name, stat);
-		dev->trans_start = jiffies;
-		dev->tbusy = 0;
-		adapter->stats.tx_dropped++;
-	}
 
 	if (elp_debug >= 3)
 		printk("%s: request to send packet of length %d\n", dev->name, (int) skb->len);
 
-	if (test_and_set_bit(0, (void *) &dev->tbusy)) {
-		printk("%s: transmitter access conflict\n", dev->name);
-		return 1;
-	}
+	netif_stop_queue(dev);
+	
 	/*
 	 * send the packet at skb->data for skb->len
 	 */
@@ -1135,7 +1103,7 @@ static int elp_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		if (elp_debug >= 2) {
 			printk("%s: failed to transmit packet\n", dev->name);
 		}
-		dev->tbusy = 0;
+		spin_unlock_irqrestore(&adapter->lock, flags);
 		return 1;
 	}
 	if (elp_debug >= 3)
@@ -1147,7 +1115,8 @@ static int elp_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	dev->trans_start = jiffies;
 
 	prime_rx(dev);
-
+	spin_unlock_irqrestore(&adapter->lock, flags);
+	netif_start_queue(dev);
 	return 0;
 }
 
@@ -1166,7 +1135,7 @@ static struct net_device_stats *elp_get_stats(struct net_device *dev)
 
 	/* If the device is closed, just return the latest stats we have,
 	   - we cannot ask from the adapter without interrupts */
-	if (!dev->start)
+	if (!test_bit(LINK_STATE_START, &dev->state))
 		return &adapter->stats;
 
 	/* send a get statistics command to the board */
@@ -1203,6 +1172,8 @@ static int elp_close(struct net_device *dev)
 	if (elp_debug >= 3)
 		printk("%s: request to close device\n", dev->name);
 
+	netif_stop_queue(dev);
+
 	/* Someone may request the device statistic information even when
 	 * the interface is closed. The following will update the statistics
 	 * structure in the driver, so we'll be able to give current statistics.
@@ -1213,16 +1184,6 @@ static int elp_close(struct net_device *dev)
 	 * disable interrupts on the board
 	 */
 	outb_control(0, dev);
-
-	/*
-	 *  flag transmitter as busy (i.e. not available)
-	 */
-	dev->tbusy = 1;
-
-	/*
-	 *  indicate device is closed
-	 */
-	dev->start = 0;
 
 	/*
 	 * release the IRQ
@@ -1252,10 +1213,13 @@ static void elp_set_mc_list(struct net_device *dev)
 	elp_device *adapter = (elp_device *) dev->priv;
 	struct dev_mc_list *dmi = dev->mc_list;
 	int i;
+	unsigned long flags;
 
 	if (elp_debug >= 3)
 		printk("%s: request to set multicast list\n", dev->name);
 
+	spin_lock_irqsave(&adapter->lock, flags);
+	
 	if (!(dev->flags & (IFF_PROMISC | IFF_ALLMULTI))) {
 		/* send a "load multicast list" command to the board, max 10 addrs/cmd */
 		/* if num_addrs==0 the list will be cleared */
@@ -1291,9 +1255,13 @@ static void elp_set_mc_list(struct net_device *dev)
 	adapter->tx_pcb.length = 2;
 	adapter->got[CMD_CONFIGURE_82586] = 0;
 	if (!send_pcb(dev, &adapter->tx_pcb))
+	{
+		spin_unlock_irqrestore(&lp->lock, flags);
 		printk("%s: couldn't send 82586 configure command\n", dev->name);
+	}
 	else {
 		int timeout = jiffies + TIMEOUT;
+		spin_unlock_irqrestore(&lp->lock, flags);
 		while (adapter->got[CMD_CONFIGURE_82586] == 0 && time_before(jiffies, timeout));
 		if (time_after_eq(jiffies, timeout))
 			TIMEOUT_MSG(__LINE__);
@@ -1313,10 +1281,12 @@ static inline void elp_init(struct net_device *dev)
 	/*
 	 * set ptrs to various functions
 	 */
-	dev->open = elp_open;	/* local */
-	dev->stop = elp_close;	/* local */
-	dev->get_stats = elp_get_stats;		/* local */
-	dev->hard_start_xmit = elp_start_xmit;	/* local */
+	dev->open = elp_open;				/* local */
+	dev->stop = elp_close;				/* local */
+	dev->get_stats = elp_get_stats;			/* local */
+	dev->hard_start_xmit = elp_start_xmit;		/* local */
+	dev->tx_timeout = elp_timeout;			/* local */
+	dev->watchdog_timeo = 10*HZ;
 	dev->set_multicast_list = elp_set_mc_list;	/* local */
 
 	/* Setup the generic properties */

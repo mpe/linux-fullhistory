@@ -919,7 +919,8 @@ u_int tag;
 				/* An IP frame was transmitted to a Bad AL_PA. Free up
 			 	 * the skb used.
 			 	 */
-				dev_kfree_skb((struct sk_buff *)(bus_to_virt(transaction_id)));
+				dev_kfree_skb_irq((struct sk_buff *)(bus_to_virt(transaction_id)));
+				netif_wake_queue(fi->dev);
 			}
 		} /* End of IP frame timing out. */
 	} /* End of frame timing out. */
@@ -977,7 +978,8 @@ u_int tag;
 			 * Free the skb that was used for this IP frame.
 			 */
 			if ((status == 0) && (seq_count > 1)) {
-				dev_kfree_skb((struct sk_buff *)(bus_to_virt(transaction_id)));
+				dev_kfree_skb_irq((struct sk_buff *)(bus_to_virt(transaction_id)));
+				netif_wake_queue(fi->dev);
 			}
 		}
 	}
@@ -2914,65 +2916,59 @@ static void update_EDB_indx(struct fc_info *fi)
 
 static int iph5526_open(struct net_device *dev)
 {
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
+	netif_start_queue(dev);
 	MOD_INC_USE_COUNT;
 	return 0;
 }
 
 static int iph5526_close(struct net_device *dev)
 {
-	dev->tbusy = 1;
-	dev->start = 0;
+	netif_stop_queue(dev);
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
+static void iph5526_timeout(struct net_device *dev)
+{
+	struct fc_info *fi = (struct fc_info*)dev->priv;
+	printk(KERN_WARNING "%s: timed out on send.\n", dev->name);
+	fi->fc_stats.rx_dropped++;
+	dev->trans_start = jiffies;
+	netif_wake_queue(dev);
+}
+
 static int iph5526_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
-struct fc_info *fi = (struct fc_info*)dev->priv;
-int status = 0;
-short type = 0;
-u_long flags;
+	struct fc_info *fi = (struct fc_info*)dev->priv;
+	int status = 0;
+	short type = 0;
+	u_long flags;
+	struct fcllc *fcllc;
+	
 	ENTER("iph5526_send_packet");
-	if (dev->tbusy) {
-		printk(KERN_WARNING "%s: DEVICE BUSY\n", dev->name);
-		dev->tbusy = 0;
-		fi->fc_stats.rx_dropped++;
-		dev->trans_start = jiffies;
-		return 0;
-	}
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
-		printk(KERN_WARNING "%s: Transmitter access conflict.\n", 
-dev->name);
-		fi->fc_stats.rx_dropped++;
-		return 1;
-	}
-	else {
-		struct fcllc *fcllc;
-		/* Strip off the pseudo header.
-		 */
-		skb->data = skb->data + 2*FC_ALEN; 
-		skb->len = skb->len - 2*FC_ALEN;
-		fcllc = (struct fcllc *)skb->data;
-		type = ntohs(fcllc->ethertype);
+	
+	netif_stop_queue(dev);
+	/* Strip off the pseudo header.
+	 */
+	skb->data = skb->data + 2*FC_ALEN; 
+	skb->len = skb->len - 2*FC_ALEN;
+	fcllc = (struct fcllc *)skb->data;
+	type = ntohs(fcllc->ethertype);
 
-		spin_lock_irqsave(&fi->fc_lock, flags);
-		switch(type) {
-			case ETH_P_IP:
-				status = tx_ip_packet(skb, skb->len, fi);
-				break;
-			case ETH_P_ARP:
-				status = tx_arp_packet(skb->data, skb->len, fi);
-				break;
-			default:
-				T_MSG("WARNING!!! Received Unknown Packet Type... Discarding...");
-				fi->fc_stats.rx_dropped++;
-				break;
-		}
-		spin_unlock_irqrestore(&fi->fc_lock, flags);
+	spin_lock_irqsave(&fi->fc_lock, flags);
+	switch(type) {
+		case ETH_P_IP:
+			status = tx_ip_packet(skb, skb->len, fi);
+			break;
+		case ETH_P_ARP:
+			status = tx_arp_packet(skb->data, skb->len, fi);
+			break;
+		default:
+			T_MSG("WARNING!!! Received Unknown Packet Type... Discarding...");
+			fi->fc_stats.rx_dropped++;
+			break;
 	}
+	spin_unlock_irqrestore(&fi->fc_lock, flags);
 
 	if (status) {
 		fi->fc_stats.tx_bytes += skb->len;
@@ -2981,14 +2977,14 @@ dev->name);
 	else
 		fi->fc_stats.rx_dropped++;
 	dev->trans_start = jiffies;
-	dev->tbusy = 0;
 	/* We free up the IP buffers in the OCI_interrupt handler.
 	 * status == 0 implies that the frame was not transmitted. So the
 	 * skb is freed here.
 	 */
 	if ((type == ETH_P_ARP) || (status == 0))
 		dev_kfree_skb(skb);
-	mark_bh(NET_BH);
+	else
+		netif_wake_queue(dev);
 	LEAVE("iph5526_send_packet");
 	return 0;
 }

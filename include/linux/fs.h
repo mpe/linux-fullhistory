@@ -349,7 +349,8 @@ struct address_space {
 	unsigned long		nrpages;	/* number of pages */
 	struct address_space_operations *a_ops;	/* methods */
 	void			*host;		/* owner: inode, block_device */
-	void			*private;	/* private data */
+	struct vm_area_struct	*i_mmap;	/* list of mappings */
+	spinlock_t		i_shared_lock;  /* and spinlock protecting it */
 };
 
 struct block_device {
@@ -387,10 +388,8 @@ struct inode {
 	struct super_block	*i_sb;
 	wait_queue_head_t	i_wait;
 	struct file_lock	*i_flock;
-	struct vm_area_struct	*i_mmap;
-	struct address_space	*i_mapping;	
+	struct address_space	*i_mapping;
 	struct address_space	i_data;	
-	spinlock_t		i_shared_lock;
 	struct dquot		*i_dquot[MAXQUOTAS];
 	struct pipe_inode_info	*i_pipe;
 	struct block_device	*i_bdev;

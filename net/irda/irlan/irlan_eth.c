@@ -62,8 +62,6 @@ int irlan_eth_init(struct net_device *dev)
 	dev->get_stats	        = irlan_eth_get_stats;
 	dev->set_multicast_list = irlan_eth_set_multicast_list;
 
-	dev->tbusy = 1;
-	
 	ether_setup(dev);
 	
 	/* 
@@ -124,9 +122,7 @@ int irlan_eth_open(struct net_device *dev)
 	ASSERT(self != NULL, return -1;);
 
 	/* Ready to play! */
-/* 	dev->tbusy = 0; */ /* Wait until data link is ready */
-	dev->interrupt = 0;
-	dev->start = 1;
+/* 	netif_start_queue(dev) */ /* Wait until data link is ready */
 
 	self->notify_irmanager = TRUE;
 
@@ -153,9 +149,8 @@ int irlan_eth_close(struct net_device *dev)
 	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 	
 	/* Stop device */
-	dev->tbusy = 1;
-	dev->start = 0;
-
+	netif_stop_queue(dev);
+	
 	irlan_mod_dec_use_count();
 
 	irlan_close_data_channel(self);
@@ -192,10 +187,6 @@ int irlan_eth_xmit(struct sk_buff *skb, struct net_device *dev)
 	ASSERT(self != NULL, return 0;);
 	ASSERT(self->magic == IRLAN_MAGIC, return 0;);
 
-	/* Check if IrTTP can accept more frames */
-	if (dev->tbusy)
-		return -EBUSY;
-	
 	/* skb headroom large enough to contain all IrDA-headers? */
 	if ((skb_headroom(skb) < self->max_header_size) || (skb_shared(skb))) {
 		struct sk_buff *new_skb = 
@@ -279,7 +270,7 @@ int irlan_eth_receive(void *instance, void *sap, struct sk_buff *skb)
  * Function irlan_eth_flow (status)
  *
  *    Do flow control between IP/Ethernet and IrLAN/IrTTP. This is done by 
- *    controlling the dev->tbusy variable.
+ *    controlling the queue stop/start.
  */
 void irlan_eth_flow_indication(void *instance, void *sap, LOCAL_FLOW flow)
 {
@@ -297,15 +288,13 @@ void irlan_eth_flow_indication(void *instance, void *sap, LOCAL_FLOW flow)
 	
 	switch (flow) {
 	case FLOW_STOP:
-		dev->tbusy = 1;
+		netif_stop_queue(dev);
 		break;
 	case FLOW_START:
 	default:
 		/* Tell upper layers that its time to transmit frames again */
-		dev->tbusy = 0;
-
 		/* Schedule network layer */
-		mark_bh(NET_BH);		
+		netif_start_queue(dev);
 		break;
 	}
 }

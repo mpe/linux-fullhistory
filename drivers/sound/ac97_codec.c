@@ -19,9 +19,11 @@
  *	along with this program; if not, write to the Free Software
  *	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- *  History
- *	Jan 14 2000 Ollie Lho <ollie@sis.com.tw> 
- *	Isloated from trident.c to support multiple ac97 codec
+ * History
+ * v0.2 Feb 10 2000 Ollie Lho
+ *	add ac97_read_proc for /proc/driver/vnedor/ac97
+ * v0.1 Jan 14 2000 Ollie Lho <ollie@sis.com.tw> 
+ *	Isolated from trident.c to support multiple ac97 codec
  */
 #include <linux/module.h>
 #include <linux/version.h>
@@ -40,7 +42,7 @@ static struct {
 	unsigned int id;
 	char *name;
 	int  (*init)  (struct ac97_codec *codec);
-} snd_ac97_codec_ids[] = {
+} ac97_codec_ids[] = {
 	{0x414B4D00, "Asahi Kasei AK4540"     , NULL},
 	{0x41445340, "Analog Devices AD1881"  , NULL},
 	{0x43525900, "Cirrus Logic CS4297"    , NULL},
@@ -52,9 +54,46 @@ static struct {
 	{0x83847605, "SigmaTel STAC9704"      , NULL},
 	{0x83847608, "SigmaTel STAC9708"      , NULL},
 	{0x83847609, "SigmaTel STAC9721/23"   , NULL},
+	{0x54524108, "TriTech TR28028"        , NULL},
+	{0x574D4C00, "Wolfson WM9704"         , NULL},
 	{0x00000000, NULL, NULL}
 };
 
+static const char *ac97_stereo_enhancements[] =
+{
+	/*   0 */ "No 3D Stereo Enhancement",
+	/*   1 */ "Analog Devices Phat Stereo",
+	/*   2 */ "Creative Stereo Enhancement",
+	/*   3 */ "National Semi 3D Stereo Enhancement",
+	/*   4 */ "YAMAHA Ymersion",
+	/*   5 */ "BBE 3D Stereo Enhancement",
+	/*   6 */ "Crystal Semi 3D Stereo Enhancement",
+	/*   7 */ "Qsound QXpander",
+	/*   8 */ "Spatializer 3D Stereo Enhancement",
+	/*   9 */ "SRS 3D Stereo Enhancement",
+	/*  10 */ "Platform Tech 3D Stereo Enhancement",
+	/*  11 */ "AKM 3D Audio",
+	/*  12 */ "Aureal Stereo Enhancement",
+	/*  13 */ "Aztech 3D Enhancement",
+	/*  14 */ "Binaura 3D Audio Enhancement",
+	/*  15 */ "ESS Technology Stereo Enhancement",
+	/*  16 */ "Harman International VMAx",
+	/*  17 */ "Nvidea 3D Stereo Enhancement",
+	/*  18 */ "Philips Incredible Sound",
+	/*  19 */ "Texas Instruments 3D Stereo Enhancement",
+	/*  20 */ "VLSI Technology 3D Stereo Enhancement",
+	/*  21 */ "TriTech 3D Stereo Enhancement",
+	/*  22 */ "Realtek 3D Stereo Enhancement",
+	/*  23 */ "Samsung 3D Stereo Enhancement",
+	/*  24 */ "Wolfson Microelectronics 3D Enhancement",
+	/*  25 */ "Delta Integration 3D Enhancement",
+	/*  26 */ "SigmaTel 3D Enhancement",
+	/*  27 */ "Reserved 27",
+	/*  28 */ "Rockwell 3D Stereo Enhancement",
+	/*  29 */ "Reserved 29",
+	/*  30 */ "Reserved 30",
+	/*  31 */ "Reserved 31"
+};
 
 /* this table has default mixer values for all OSS mixers. */
 static struct mixer_defaults {
@@ -86,9 +125,9 @@ static struct ac97_mixer_hw {
 } ac97_hw[SOUND_MIXER_NRDEVICES]= {
 	[SOUND_MIXER_VOLUME]	=	{AC97_MASTER_VOL_STEREO,63},
 	[SOUND_MIXER_BASS]	=	{AC97_MASTER_TONE,	15},
-	[SOUND_MIXER_TREBLE]	=	{AC97_MASTER_TONE, 	15},
+	[SOUND_MIXER_TREBLE]	=	{AC97_MASTER_TONE,	15},
 	[SOUND_MIXER_PCM]	=	{AC97_PCMOUT_VOL,	31},
-	[SOUND_MIXER_SPEAKER]	=	{AC97_PCBEEP_VOL,  	15},
+	[SOUND_MIXER_SPEAKER]	=	{AC97_PCBEEP_VOL,	15},
 	[SOUND_MIXER_LINE]	=	{AC97_LINEIN_VOL,	31},
 	[SOUND_MIXER_MIC]	=	{AC97_MIC_VOL,		31},
 	[SOUND_MIXER_CD]	=	{AC97_CD_VOL,		31},
@@ -155,10 +194,13 @@ static int ac97_read_mixer(struct ac97_codec *codec, int oss_channel)
 			right = 100 - ((right * 100) / mh->scale);
 			left = 100 - ((left * 100) / mh->scale);
 		}
-
 		ret = left | (right << 8);
 	} else if (oss_channel == SOUND_MIXER_SPEAKER) {
 		ret = 100 - ((((val & 0x1e)>>1) * 100) / mh->scale);
+	} else if (oss_channel == SOUND_MIXER_PHONEIN) {
+		ret = 100 - (((val & 0x1f) * 100) / mh->scale);
+	} else if (oss_channel == SOUND_MIXER_PHONEOUT) {
+		ret = 100 - (((val & 0x1f) * 100) / mh->scale);
 	} else if (oss_channel == SOUND_MIXER_MIC) {
 		ret = 100 - (((val & 0x1f) * 100) / mh->scale);
 		/*  the low bit is optional in the tone sliders and masking
@@ -200,10 +242,14 @@ static void ac97_write_mixer(struct ac97_codec *codec, int oss_channel,
 		} else {
 			right = ((100 - right) * mh->scale) / 100;
 			left = ((100 - left) * mh->scale) / 100;
-		}
+		}			
 		val = (left << 8) | right;
 	} else if (oss_channel == SOUND_MIXER_SPEAKER) {
 		val = (((100 - left) * mh->scale) / 100) << 1;
+	} else if (oss_channel == SOUND_MIXER_PHONEIN) {
+		val = (((100 - left) * mh->scale) / 100);
+	} else if (oss_channel == SOUND_MIXER_PHONEOUT) {
+		val = (((100 - left) * mh->scale) / 100);
 	} else if (oss_channel == SOUND_MIXER_MIC) {
 		val = codec->codec_read(codec , mh->offset) & ~0x801f;
 		val |= (((100 - left) * mh->scale) / 100);
@@ -212,11 +258,10 @@ static void ac97_write_mixer(struct ac97_codec *codec, int oss_channel,
 	} else if (oss_channel == SOUND_MIXER_BASS) {
 		val = codec->codec_read(codec , mh->offset) & ~0x0f00;
 		val |= ((((100 - left) * mh->scale) / 100) << 8) & 0x0e00;
-	} else if (oss_channel == SOUND_MIXER_TREBLE)	 {
+	} else if (oss_channel == SOUND_MIXER_TREBLE) {
 		val = codec->codec_read(codec , mh->offset) & ~0x000f;
 		val |= (((100 - left) * mh->scale) / 100) & 0x000e;
 	}
-
 #ifdef DEBUG
 	printk(" 0x%04x", val);
 #endif
@@ -335,11 +380,11 @@ static int ac97_mixer_ioctl(struct ac97_codec *codec, unsigned int cmd, unsigned
 				return -EINVAL;
 
 			/* do we ever want to touch the hardware? */
-			/* val = codec->read_mixer(card,i); */
-			val = codec->mixer_state[i];
+			val = codec->read_mixer(card, i);
+			/* val = codec->mixer_state[i]; */
 			break;
 		}
-		return put_user(val,(int *)arg);
+		return put_user(val, (int *)arg);
 	}
 
 	if (_IOC_DIR(cmd) == (_IOC_WRITE|_IOC_READ)) {
@@ -368,6 +413,76 @@ static int ac97_mixer_ioctl(struct ac97_codec *codec, unsigned int cmd, unsigned
 	return -EINVAL;
 }
 
+/* entry point for /proc/driver/controller_vendor/ac97/%d */
+int ac97_read_proc (char *page, char **start, off_t off,
+		    int count, int *eof, void *data)
+{
+	int len = 0, cap, extid, val, id1, id2;
+	struct ac97_codec *codec;
+
+	if ((codec = data) == NULL)
+		return -ENODEV;
+
+	id1 = codec->codec_read(codec, AC97_VENDOR_ID1);
+	id2 = codec->codec_read(codec, AC97_VENDOR_ID2);
+	len += sprintf (page+len, "Vendor name      : %s\n", codec->name);
+	len += sprintf (page+len, "Vendor id        : %04X %04X\n", id1, id2);
+
+	extid = codec->codec_read(codec, AC97_EXTENDED_ID);
+	extid &= ~((1<<2)|(1<<4)|(1<<5)|(1<<10)|(1<<11)|(1<<12)|(1<<13));
+	len += sprintf (page+len, "AC97 Version     : %s\n",
+			extid ? "2.0 or later" : "1.0");
+
+	cap = codec->codec_read(codec, AC97_RESET);
+	len += sprintf (page+len, "Capabilities     :%s%s%s%s%s%s\n",
+			cap & 0x0001 ? " -dedicated MIC PCM IN channel-" : "",
+			cap & 0x0002 ? " -reserved1-" : "",
+			cap & 0x0004 ? " -bass & treble-" : "",
+			cap & 0x0008 ? " -simulated stereo-" : "",
+			cap & 0x0010 ? " -headphone out-" : "",
+			cap & 0x0020 ? " -loudness-" : "");
+	val = cap & 0x00c0;
+	len += sprintf (page+len, "DAC resolutions  :%s%s%s\n",
+			" -16-bit-",
+			val & 0x0040 ? " -18-bit-" : "",
+			val & 0x0080 ? " -20-bit-" : "");
+	val = cap & 0x0300;
+	len += sprintf (page+len, "ADC resolutions  :%s%s%s\n",
+			" -16-bit-",
+			val & 0x0100 ? " -18-bit-" : "",
+			val & 0x0200 ? " -20-bit-" : "");
+	len += sprintf (page+len, "3D enhancement   : %s\n",
+			ac97_stereo_enhancements[(cap >> 10) & 0x1f]);
+
+	val = codec->codec_read(codec, AC97_GENERAL_PURPOSE);
+	len += sprintf (page+len, "POP path         : %s 3D\n"
+			"Sim. stereo      : %s\n"
+			"3D enhancement   : %s\n"
+			"Loudness         : %s\n"
+			"Mono output      : %s\n"
+			"MIC select       : %s\n"
+			"ADC/DAC loopback : %s\n",
+			val & 0x8000 ? "post" : "pre",
+			val & 0x4000 ? "on" : "off",
+			val & 0x2000 ? "on" : "off",
+			val & 0x1000 ? "on" : "off",
+			val & 0x0200 ? "MIC" : "MIX",
+			val & 0x0100 ? "MIC2" : "MIC1",
+			val & 0x0080 ? "on" : "off");
+
+	cap = extid;
+	len += sprintf (page+len, "Ext Capabilities :%s%s%s%s%s%s%s\n",
+			cap & 0x0001 ? " -var rate PCM audio-" : "",
+			cap & 0x0002 ? " -2x PCM audio out-" : "",
+			cap & 0x0008 ? " -var rate MIC in-" : "",
+			cap & 0x0040 ? " -PCM center DAC-" : "",
+			cap & 0x0080 ? " -PCM surround DAC-" : "",
+			cap & 0x0100 ? " -PCM LFE DAC-" : "",
+			cap & 0x0200 ? " -slot/DAC mappings-" : "");
+
+	return len;
+}
+
 int ac97_probe_codec(struct ac97_codec *codec)
 {
 	u16 id1, id2, cap;
@@ -381,10 +496,10 @@ int ac97_probe_codec(struct ac97_codec *codec)
 	
 	id1 = codec->codec_read(codec, AC97_VENDOR_ID1);
 	id2 = codec->codec_read(codec, AC97_VENDOR_ID2);
-	for (i = 0; i < sizeof (snd_ac97_codec_ids); i++) {
-		if (snd_ac97_codec_ids[i].id == ((id1 << 16) | id2)) {
-			codec->name = snd_ac97_codec_ids[i].name;
-			codec->codec_init = snd_ac97_codec_ids[i].init;
+	for (i = 0, codec->name = NULL; i < arraysize (ac97_codec_ids[i]); i++) {
+		if (ac97_codec_ids[i].id == ((id1 << 16) | id2)) {
+			codec->name = ac97_codec_ids[i].name;
+			codec->codec_init = ac97_codec_ids[i].init;
 			break;
 		}
 	}
@@ -392,7 +507,6 @@ int ac97_probe_codec(struct ac97_codec *codec)
 		codec->name = "Unknown";
 	printk(KERN_INFO "ac97_codec: ac97 vendor id1: 0x%04x, id2: 0x%04x (%s)\n",
 	       id1, id2, codec->name);
-	printk(KERN_INFO "ac97_codec: capability: 0x%04x\n", cap);
 
 	/* mixer masks */
 	codec->supported_mixers = AC97_SUPPORTED_MASK;
@@ -437,4 +551,5 @@ static int sigmatel_init(struct ac97_codec * codec)
 	return 1;
 }
 
+EXPORT_SYMBOL(ac97_read_proc);
 EXPORT_SYMBOL(ac97_probe_codec);

@@ -155,6 +155,9 @@
   
 typedef struct ppp_private_area
 {
+	/* This member must be first. */
+	struct net_device *slave;	/* WAN slave */
+
 	sdla_t* card;	
 	unsigned long router_start_time;	/*router start time in sec */
 	unsigned long tick_counter;		/*used for 5 second counter*/

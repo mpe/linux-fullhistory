@@ -249,9 +249,8 @@ affs_notify_change(struct dentry *dentry, struct iattr *attr)
 	if (attr->ia_valid & ATTR_MODE)
 		inode->u.affs_i.i_protect = mode_to_prot(attr->ia_mode);
 
-	inode_setattr(inode, attr);
-	mark_inode_dirty(inode);
 	error = 0;
+	inode_setattr(inode, attr);
 out:
 	return error;
 }

@@ -120,7 +120,7 @@ void irlan_watchdog_timer_expired(void *data)
 	ASSERT(self->magic == IRLAN_MAGIC, return;);
 
 	/* Check if device still configured */
-	if (self->dev.start) {
+	if (test_bit(LINK_STATE_START, &self->dev.state)) {
 		IRDA_DEBUG(0, __FUNCTION__ 
 		      "(), notifying irmanager to stop irlan!\n");
 		mgr_event.event = EVENT_IRLAN_STOP;
@@ -363,7 +363,7 @@ void irlan_close(struct irlan_cb *self)
 	ASSERT(self->magic == IRLAN_MAGIC, return;);
 
 	/* Check if device is still configured */
-	if (self->dev.start) {
+	if (test_bit(LINK_STATE_START, &self->dev.state)) {
 		IRDA_DEBUG(0, __FUNCTION__ 
 		       "(), Device still configured, closing later!\n");
 
@@ -420,7 +420,7 @@ void irlan_connect_indication(void *instance, void *sap, struct qos_info *qos,
 		irlan_open_unicast_addr(self);
 	}
 	/* Ready to transfer Ethernet frames (at last) */
-	self->dev.tbusy = 0;
+	netif_start_queue(&self->dev);
 }
 
 void irlan_connect_confirm(void *instance, void *sap, struct qos_info *qos, 
@@ -454,8 +454,7 @@ void irlan_connect_confirm(void *instance, void *sap, struct qos_info *qos,
  	irlan_set_multicast_filter(self, TRUE);
 
 	/* Ready to transfer Ethernet frames */
-	self->dev.tbusy = 0;
-
+	netif_start_queue(&self->dev);
 	irlan_eth_send_gratuitous_arp(&self->dev);
 }
 
@@ -1196,7 +1195,7 @@ static int irlan_proc_read(char *buf, char **start, off_t offset, int len)
 						  buf+len);
 			
 			len += sprintf(buf+len, "tx busy: %s\n", 
-				       self->dev.tbusy ? "TRUE" : "FALSE");
+				       test_bit(LINK_STATE_XOFF, &self->dev.state) ? "TRUE" : "FALSE");
 			
 			len += sprintf(buf+len, "\n");
 		}

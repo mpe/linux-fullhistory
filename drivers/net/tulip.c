@@ -102,12 +102,6 @@ static int rx_copybreak = 100;
 #define IRQ(irq, dev_id, pt_regs) (irq, pt_regs)
 #endif
 
-/* This my implementation of shared IRQs, now only used for 1.2.13. */
-#ifdef HAVE_SHARED_IRQ
-#define USE_SHARED_IRQ
-#include <linux/shared_irq.h>
-#endif
-
 /* The total size is unusually large: The 21040 aligns each of its 16
    longword-wide registers on a quadword boundary. */
 #define TULIP_TOTAL_SIZE 0x80

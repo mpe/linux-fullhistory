@@ -910,7 +910,7 @@ static inline int port_detect \
    if (info.sign != EATA_SIGNATURE) return FALSE;
 
    if (DEV2H(info.data_len) < EATA_2_0A_SIZE) {
-      printk("%s: config structure size (%ld bytes) too short, detaching.\n",
+      printk("%s: config structure size (%d bytes) too short, detaching.\n",
              name, DEV2H(info.data_len));
       return FALSE;
       }

@@ -61,7 +61,7 @@ dep_bool '  SYSV filesystem write support (DANGEROUS)' CONFIG_SYSV_FS_WRITE $CON
 
 tristate 'UDF filesystem support (read only)' CONFIG_UDF_FS
 if [ "$CONFIG_UDF_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  dep_bool '  UDF write support (DANGEROUS)' CONFIG_UDF_RW
+  bool '  UDF write support (DANGEROUS)' CONFIG_UDF_RW
 fi
 
 tristate 'UFS filesystem support (read only)' CONFIG_UFS_FS

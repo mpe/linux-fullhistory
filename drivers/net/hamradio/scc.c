@@ -317,12 +317,12 @@ static inline void scc_sti(int irq)
 
 static inline void scc_lock_dev(struct scc_channel *scc)
 {
-	scc->dev->tbusy = 1;
+	netif_stop_queue(scc->dev);
 }
 
 static inline void scc_unlock_dev(struct scc_channel *scc)
 {
-	scc->dev->tbusy = 0;
+	netif_wake_queue(scc->dev);
 }
 
 static inline void scc_discard_buffers(struct scc_channel *scc)
@@ -1660,9 +1660,7 @@ static int scc_net_open(struct net_device *dev)
  
 	init_channel(scc);
 
-	dev->tbusy = 0;
-	dev->start = 1;
-
+	netif_start_queue(dev);
 	return 0;
 }
 
@@ -1692,9 +1690,7 @@ static int scc_net_close(struct net_device *dev)
 	
 	scc_discard_buffers(scc);
 
-	dev->tbusy = 1;
-	dev->start = 0;
-
+	netif_stop_queue(dev);
 	return 0;
 }
 
@@ -1727,7 +1723,7 @@ static int scc_net_tx(struct sk_buff *skb, struct net_device *dev)
 	unsigned long flags;
 	char kisscmd;
 	
-	if (scc == NULL || scc->magic != SCC_MAGIC || dev->tbusy)
+	if (scc == NULL || scc->magic != SCC_MAGIC)
 	{
 		dev_kfree_skb(skb);
 		return 0;
@@ -1753,7 +1749,7 @@ static int scc_net_tx(struct sk_buff *skb, struct net_device *dev)
 		return 0;
 	}
 
-	save_flags(flags);
+	save_flags(flags); 
 	cli();
 	
 	if (skb_queue_len(&scc->tx_queue) > scc->dev->tx_queue_len)

@@ -303,6 +303,7 @@ static int ewrk3_hw_init(struct net_device *dev, u_long iobase);
 static void ewrk3_init(struct net_device *dev);
 static int ewrk3_rx(struct net_device *dev);
 static int ewrk3_tx(struct net_device *dev);
+static void ewrk3_timeout(struct net_device *dev);
 
 static void EthwrkSignature(char *name, char *eeprom_image);
 static int DevicePresent(u_long iobase);
@@ -601,12 +602,14 @@ ewrk3_hw_init(struct net_device *dev, u_long iobase)
 				printk(version);
 			}
 			/* The EWRK3-specific entries in the device structure. */
-			dev->open = &ewrk3_open;
-			dev->hard_start_xmit = &ewrk3_queue_pkt;
-			dev->stop = &ewrk3_close;
-			dev->get_stats = &ewrk3_get_stats;
-			dev->set_multicast_list = &set_multicast_list;
-			dev->do_ioctl = &ewrk3_ioctl;
+			dev->open = ewrk3_open;
+			dev->hard_start_xmit = ewrk3_queue_pkt;
+			dev->stop = ewrk3_close;
+			dev->get_stats = ewrk3_get_stats;
+			dev->set_multicast_list = set_multicast_list;
+			dev->do_ioctl = ewrk3_ioctl;
+			dev->tx_timeout = ewrk3_timeout;
+			dev->watchdog_timeo = QUEUE_PKT_TIMEOUT;
 
 			dev->mem_start = 0;
 
@@ -616,7 +619,6 @@ ewrk3_hw_init(struct net_device *dev, u_long iobase)
 	} else {
 		status = -ENXIO;
 	}
-
 	return status;
 }
 
@@ -664,10 +666,7 @@ static int ewrk3_open(struct net_device *dev)
 				printk("  cmr:  0x%02x\n", inb(EWRK3_CMR));
 				printk("  fmqc: 0x%02x\n", inb(EWRK3_FMQC));
 			}
-			dev->tbusy = 0;
-			dev->start = 1;
-			dev->interrupt = UNMASK_INTERRUPTS;
-
+			netif_start_queue(dev);
 			/*
 			   ** Unmask EWRK3 board interrupts
 			 */
@@ -676,10 +675,9 @@ static int ewrk3_open(struct net_device *dev)
 
 		}
 	} else {
-		dev->start = 0;
-		dev->tbusy = 1;
-		printk("%s: ewrk3 available for hard strapped set up only.\n", dev->name);
-		printk("      Run the 'ewrk3setup' utility or remove the hard straps.\n");
+		printk(KERN_ERR "%s: ewrk3 available for hard strapped set up only.\n", dev->name);
+		printk(KERN_ERR "      Run the 'ewrk3setup' utility or remove the hard straps.\n");
+		return -EINVAL;
 	}
 
 	MOD_INC_USE_COUNT;
@@ -722,6 +720,43 @@ static void ewrk3_init(struct net_device *dev)
 }
 
 /*
+ *  Transmit timeout
+ */
+ 
+static void ewrk3_timeout(struct net_device *dev)
+{
+	struct ewrk3_private *lp = (struct ewrk3_private *) dev->priv;
+	u_char icr, csr;
+	u_long iobase = dev->base_addr;
+	
+	if (!lp->hard_strapped) 
+	{
+		printk(KERN_WARNING"%s: transmit timed/locked out, status %04x, resetting.\n",
+		       dev->name, inb(EWRK3_CSR));
+
+		/*
+		   ** Mask all board interrupts
+		 */
+		DISABLE_IRQs;
+
+		/*
+		   ** Stop the TX and RX...
+		 */
+		STOP_EWRK3;
+
+		ewrk3_init(dev);
+
+		/*
+		   ** Unmask EWRK3 board interrupts
+		 */
+		ENABLE_IRQs;
+
+		dev->trans_start = jiffies;
+		netif_wake_queue(dev);
+	}
+}
+
+/*
    ** Writes a socket buffer to the free page queue
  */
 static int ewrk3_queue_pkt(struct sk_buff *skb, struct net_device *dev)
@@ -729,142 +764,104 @@ static int ewrk3_queue_pkt(struct sk_buff *skb, struct net_device *dev)
 	struct ewrk3_private *lp = (struct ewrk3_private *) dev->priv;
 	u_long iobase = dev->base_addr;
 	int status = 0;
-	u_char icr, csr;
+	u_char icr;
 
-	/* Transmitter timeout, serious problems. */
-	if (dev->tbusy || lp->lock) {
-		int tickssofar = jiffies - dev->trans_start;
-		if (tickssofar < QUEUE_PKT_TIMEOUT) {
-			status = -1;
-		} else if (!lp->hard_strapped) {
-			printk("%s: transmit timed/locked out, status %04x, resetting.\n",
-			       dev->name, inb(EWRK3_CSR));
+	netif_stop_queue(dev);
+#ifdef CONFIG_SMP
+#error "This needs spinlocks"
+#endif
+	DISABLE_IRQs;	/* So that the page # remains correct */
 
+	/*
+	   ** Get a free page from the FMQ when resources are available
+	 */
+	if (inb(EWRK3_FMQC) > 0) 
+	{
+		u_long buf = 0;
+		u_char page;
+
+		if ((page = inb(EWRK3_FMQ)) < lp->mPage) {
 			/*
-			   ** Mask all board interrupts
+			   ** Set up shared memory window and pointer into the window
 			 */
-			DISABLE_IRQs;
-
-			/*
-			   ** Stop the TX and RX...
-			 */
-			STOP_EWRK3;
-
-			ewrk3_init(dev);
-
-			/*
-			   ** Unmask EWRK3 board interrupts
-			 */
-			ENABLE_IRQs;
-
-			dev->tbusy = 0;
-			dev->trans_start = jiffies;
-		}
-	} else if (skb->len > 0) {
-
-		/*
-		   ** Block a timer-based transmit from overlapping.  This could better be
-		   ** done with atomic_swap(1, dev->tbusy), but set_bit() works as well.
-		 */
-		if (test_and_set_bit(0, (void *) &dev->tbusy) != 0)
-			printk("%s: Transmitter access conflict.\n", dev->name);
-
-		DISABLE_IRQs;	/* So that the page # remains correct */
-
-		/*
-		   ** Get a free page from the FMQ when resources are available
-		 */
-		if (inb(EWRK3_FMQC) > 0) {
-			u_long buf = 0;
-			u_char page;
-
-			if ((page = inb(EWRK3_FMQ)) < lp->mPage) {
-				/*
-				   ** Set up shared memory window and pointer into the window
-				 */
-				while (test_and_set_bit(0, (void *) &lp->lock) != 0);	/* Wait for lock to free */
-				if (lp->shmem_length == IO_ONLY) {
-					outb(page, EWRK3_IOPR);
-				} else if (lp->shmem_length == SHMEM_2K) {
-					buf = lp->shmem_base;
-					outb(page, EWRK3_MPR);
-				} else if (lp->shmem_length == SHMEM_32K) {
-					buf = ((((short) page << 11) & 0x7800) + lp->shmem_base);
-					outb((page >> 4), EWRK3_MPR);
-				} else if (lp->shmem_length == SHMEM_64K) {
-					buf = ((((short) page << 11) & 0xf800) + lp->shmem_base);
-					outb((page >> 5), EWRK3_MPR);
-				} else {
-					status = -1;
-					printk("%s: Oops - your private data area is hosed!\n", dev->name);
-				}
-
-				if (!status) {
-
-					/*
-					   ** Set up the buffer control structures and copy the data from
-					   ** the socket buffer to the shared memory .
-					 */
-
-					if (lp->shmem_length == IO_ONLY) {
-						int i;
-						u_char *p = skb->data;
-
-						outb((char) (TCR_QMODE | TCR_PAD | TCR_IFC), EWRK3_DATA);
-						outb((char) (skb->len & 0xff), EWRK3_DATA);
-						outb((char) ((skb->len >> 8) & 0xff), EWRK3_DATA);
-						outb((char) 0x04, EWRK3_DATA);
-						for (i = 0; i < skb->len; i++) {
-							outb(*p++, EWRK3_DATA);
-						}
-						outb(page, EWRK3_TQ);	/* Start sending pkt */
-					} else {
-						writeb((char) (TCR_QMODE | TCR_PAD | TCR_IFC), (char *) buf);	/* ctrl byte */
-						buf += 1;
-						writeb((char) (skb->len & 0xff), (char *) buf);		/* length (16 bit xfer) */
-						buf += 1;
-						if (lp->txc) {
-							writeb((char) (((skb->len >> 8) & 0xff) | XCT), (char *) buf);
-							buf += 1;
-							writeb(0x04, (char *) buf);	/* index byte */
-							buf += 1;
-							writeb(0x00, (char *) (buf + skb->len));	/* Write the XCT flag */
-							isa_memcpy_toio(buf, skb->data, PRELOAD);	/* Write PRELOAD bytes */
-							outb(page, EWRK3_TQ);	/* Start sending pkt */
-							isa_memcpy_toio(buf + PRELOAD, skb->data + PRELOAD, skb->len - PRELOAD);
-							writeb(0xff, (char *) (buf + skb->len));	/* Write the XCT flag */
-						} else {
-							writeb((char) ((skb->len >> 8) & 0xff), (char *) buf);
-							buf += 1;
-							writeb(0x04, (char *) buf);	/* index byte */
-							buf += 1;
-							isa_memcpy_toio(buf, skb->data, skb->len);		/* Write data bytes */
-							outb(page, EWRK3_TQ);	/* Start sending pkt */
-						}
-					}
-
-					dev->trans_start = jiffies;
-					dev_kfree_skb(skb);
-
-				} else {	/* return unused page to the free memory queue */
-					outb(page, EWRK3_FMQ);
-				}
-				lp->lock = 0;	/* unlock the page register */
+			while (test_and_set_bit(0, (void *) &lp->lock) != 0);	/* Wait for lock to free */
+			if (lp->shmem_length == IO_ONLY) {
+				outb(page, EWRK3_IOPR);
+			} else if (lp->shmem_length == SHMEM_2K) {
+				buf = lp->shmem_base;
+				outb(page, EWRK3_MPR);
+			} else if (lp->shmem_length == SHMEM_32K) {
+				buf = ((((short) page << 11) & 0x7800) + lp->shmem_base);
+				outb((page >> 4), EWRK3_MPR);
+			} else if (lp->shmem_length == SHMEM_64K) {
+				buf = ((((short) page << 11) & 0xf800) + lp->shmem_base);
+				outb((page >> 5), EWRK3_MPR);
 			} else {
-				printk("ewrk3_queue_pkt(): Invalid free memory page (%d).\n",
-				       (u_char) page);
+				status = -1;
+				printk(KERN_ERR "%s: Oops - your private data area is hosed!\n", dev->name);
 			}
-		} else {
-			printk("ewrk3_queue_pkt(): No free resources...\n");
-			printk("ewrk3_queue_pkt(): CSR: %02x ICR: %02x FMQC: %02x\n", inb(EWRK3_CSR), inb(EWRK3_ICR), inb(EWRK3_FMQC));
-		}
 
-		/* Check for free resources: clear 'tbusy' if there are some */
-		if (inb(EWRK3_FMQC) > 0) {
-			dev->tbusy = 0;
+			if (!status) {
+				/*
+				   ** Set up the buffer control structures and copy the data from
+				   ** the socket buffer to the shared memory .
+				 */
+					if (lp->shmem_length == IO_ONLY) {
+					int i;
+					u_char *p = skb->data;
+						outb((char) (TCR_QMODE | TCR_PAD | TCR_IFC), EWRK3_DATA);
+					outb((char) (skb->len & 0xff), EWRK3_DATA);
+					outb((char) ((skb->len >> 8) & 0xff), EWRK3_DATA);
+					outb((char) 0x04, EWRK3_DATA);
+					for (i = 0; i < skb->len; i++) {
+						outb(*p++, EWRK3_DATA);
+					}
+					outb(page, EWRK3_TQ);	/* Start sending pkt */
+				} else {
+					writeb((char) (TCR_QMODE | TCR_PAD | TCR_IFC), (char *) buf);	/* ctrl byte */
+					buf += 1;
+					writeb((char) (skb->len & 0xff), (char *) buf);		/* length (16 bit xfer) */
+					buf += 1;
+					if (lp->txc) {
+						writeb((char) (((skb->len >> 8) & 0xff) | XCT), (char *) buf);
+						buf += 1;
+						writeb(0x04, (char *) buf);	/* index byte */
+						buf += 1;
+						writeb(0x00, (char *) (buf + skb->len));	/* Write the XCT flag */
+						isa_memcpy_toio(buf, skb->data, PRELOAD);	/* Write PRELOAD bytes */
+						outb(page, EWRK3_TQ);	/* Start sending pkt */
+						isa_memcpy_toio(buf + PRELOAD, skb->data + PRELOAD, skb->len - PRELOAD);
+						writeb(0xff, (char *) (buf + skb->len));	/* Write the XCT flag */
+					} else {
+						writeb((char) ((skb->len >> 8) & 0xff), (char *) buf);
+						buf += 1;
+						writeb(0x04, (char *) buf);	/* index byte */
+						buf += 1;
+						isa_memcpy_toio(buf, skb->data, skb->len);		/* Write data bytes */
+						outb(page, EWRK3_TQ);	/* Start sending pkt */
+					}
+				}
+
+				dev->trans_start = jiffies;
+				dev_kfree_skb(skb);
+			} else {	/* return unused page to the free memory queue */
+				outb(page, EWRK3_FMQ);
+			}
+			lp->lock = 0;	/* unlock the page register */
+		} else {
+			printk("ewrk3_queue_pkt(): Invalid free memory page (%d).\n",
+			       (u_char) page);
 		}
-		ENABLE_IRQs;
+	} else {
+		printk(KERN_WARNING "%s: ewrk3_queue_pkt(): No free resources...\n", dev->name);
+		printk(KERN_WARNING "%s: ewrk3_queue_pkt(): CSR: %02x ICR: %02x FMQC: %02x\n", dev->name, inb(EWRK3_CSR), inb(EWRK3_ICR), inb(EWRK3_FMQC));
 	}
+
+	/* Check for free resources: clear 'tbusy' if there are some */
+	if (inb(EWRK3_FMQC) > 0) {
+		netif_wake_queue(dev);
+	}
+	ENABLE_IRQs;
 	return status;
 }
 
@@ -878,60 +875,46 @@ static void ewrk3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	u_long iobase;
 	u_char icr, cr, csr;
 
-	if (dev == NULL) {
-		printk("ewrk3_interrupt(): irq %d for unknown device.\n", irq);
+	lp = (struct ewrk3_private *) dev->priv;
+	iobase = dev->base_addr;
+
+	/* get the interrupt information */
+	csr = inb(EWRK3_CSR);
+
+	/*
+	 ** Mask the EWRK3 board interrupts and turn on the LED
+	 */
+	DISABLE_IRQs;
+
+	cr = inb(EWRK3_CR);
+	cr |= CR_LED;
+	outb(cr, EWRK3_CR);
+
+	if (csr & CSR_RNE)	/* Rx interrupt (packet[s] arrived) */
+		ewrk3_rx(dev);
+
+	if (csr & CSR_TNE)	/* Tx interrupt (packet sent) */
+		ewrk3_tx(dev);
+
+	/*
+	 ** Now deal with the TX/RX disable flags. These are set when there
+	 ** are no more resources. If resources free up then enable these
+	 ** interrupts, otherwise mask them - failure to do this will result
+	 ** in the system hanging in an interrupt loop.
+	 */
+	if (inb(EWRK3_FMQC)) {	/* any resources available? */
+		lp->irq_mask |= ICR_TXDM | ICR_RXDM;	/* enable the interrupt source */
+		csr &= ~(CSR_TXD | CSR_RXD);	/* ensure restart of a stalled TX or RX */
+		outb(csr, EWRK3_CSR);
+		netif_wake_queue(dev);
 	} else {
-		lp = (struct ewrk3_private *) dev->priv;
-		iobase = dev->base_addr;
-
-		if (dev->interrupt)
-			printk("%s: Re-entering the interrupt handler.\n", dev->name);
-
-		dev->interrupt = MASK_INTERRUPTS;
-
-		/* get the interrupt information */
-		csr = inb(EWRK3_CSR);
-
-		/*
-		   ** Mask the EWRK3 board interrupts and turn on the LED
-		 */
-		DISABLE_IRQs;
-
-		cr = inb(EWRK3_CR);
-		cr |= CR_LED;
-		outb(cr, EWRK3_CR);
-
-		if (csr & CSR_RNE)	/* Rx interrupt (packet[s] arrived) */
-			ewrk3_rx(dev);
-
-		if (csr & CSR_TNE)	/* Tx interrupt (packet sent) */
-			ewrk3_tx(dev);
-
-		/*
-		   ** Now deal with the TX/RX disable flags. These are set when there
-		   ** are no more resources. If resources free up then enable these
-		   ** interrupts, otherwise mask them - failure to do this will result
-		   ** in the system hanging in an interrupt loop.
-		 */
-		if (inb(EWRK3_FMQC)) {	/* any resources available? */
-			lp->irq_mask |= ICR_TXDM | ICR_RXDM;	/* enable the interrupt source */
-			csr &= ~(CSR_TXD | CSR_RXD);	/* ensure restart of a stalled TX or RX */
-			outb(csr, EWRK3_CSR);
-			dev->tbusy = 0;		/* clear TX busy flag */
-			mark_bh(NET_BH);
-		} else {
-			lp->irq_mask &= ~(ICR_TXDM | ICR_RXDM);		/* disable the interrupt source */
-		}
-
-		/* Unmask the EWRK3 board interrupts and turn off the LED */
-		cr &= ~CR_LED;
-		outb(cr, EWRK3_CR);
-
-		dev->interrupt = UNMASK_INTERRUPTS;
-		ENABLE_IRQs;
+		lp->irq_mask &= ~(ICR_TXDM | ICR_RXDM);		/* disable the interrupt source */
 	}
 
-	return;
+	/* Unmask the EWRK3 board interrupts and turn off the LED */
+	cr &= ~CR_LED;
+	outb(cr, EWRK3_CR);
+	ENABLE_IRQs;
 }
 
 static int ewrk3_rx(struct net_device *dev)
@@ -1120,9 +1103,8 @@ static int ewrk3_close(struct net_device *dev)
 	u_long iobase = dev->base_addr;
 	u_char icr, csr;
 
-	dev->start = 0;
-	dev->tbusy = 1;
-
+	netif_stop_queue(dev);
+	
 	if (ewrk3_debug > 1) {
 		printk("%s: Shutting down ethercard, status was %2.2x.\n",
 		       dev->name, inb(EWRK3_CSR));
@@ -1369,8 +1351,7 @@ static void __init eisa_probe(struct net_device *dev, u_long ioaddr)
    ** are not available then insert a new device structure at the end of
    ** the current list.
  */
-static struct net_device * __init 
-alloc_device(struct net_device *dev, u_long iobase)
+static struct net_device * __init  alloc_device(struct net_device *dev, u_long iobase)
 {
 	struct net_device *adev = NULL;
 	int fixed = 0, new_dev = 0;

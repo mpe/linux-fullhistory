@@ -693,6 +693,8 @@ int ncp_notify_change(struct dentry *dentry, struct iattr *attr)
 		/* According to ndir, the changes only take effect after
 		   closing the file */
 		result = ncp_make_closed(inode);
+		if (!result)
+			vmtruncate(inode, attr->ia_size);
 	}
 out:
 	return result;

@@ -62,8 +62,10 @@ void inode_setattr(struct inode * inode, struct iattr * attr)
 		inode->i_uid = attr->ia_uid;
 	if (ia_valid & ATTR_GID)
 		inode->i_gid = attr->ia_gid;
-	if (ia_valid & ATTR_SIZE)
+	if (ia_valid & ATTR_SIZE) {
 		inode->i_size = attr->ia_size;
+		vmtruncate(inode, attr->ia_size);
+	}
 	if (ia_valid & ATTR_ATIME)
 		inode->i_atime = attr->ia_atime;
 	if (ia_valid & ATTR_MTIME)
@@ -99,7 +101,5 @@ int notify_change(struct dentry * dentry, struct iattr * attr)
 		if (!error)
 			inode_setattr(inode, attr);
 	}
-	if (!error && (attr->ia_valid & ATTR_SIZE))
-		vmtruncate(inode, attr->ia_size);
 	return error;
 }

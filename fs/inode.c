@@ -94,7 +94,7 @@ static void init_once(void * foo, kmem_cache_t * cachep, unsigned long flags)
 		INIT_LIST_HEAD(&inode->i_data.pages);
 		INIT_LIST_HEAD(&inode->i_dentry);
 		sema_init(&inode->i_sem, 1);
-		spin_lock_init(&inode->i_shared_lock);
+		spin_lock_init(&inode->i_data.i_shared_lock);
 	}
 }
 
@@ -280,7 +280,7 @@ static void dispose_list(struct list_head * head)
 
 		inode = list_entry(inode_entry, struct inode, i_list);
 		if (inode->i_data.nrpages)
-			truncate_inode_pages(inode, 0);
+			truncate_inode_pages(&inode->i_data, 0);
 		clear_inode(inode);
 		destroy_inode(inode);
 	}
@@ -673,7 +673,7 @@ void iput(struct inode *inode)
 					void (*delete)(struct inode *) = op->delete_inode;
 					spin_unlock(&inode_lock);
 					if (inode->i_data.nrpages)
-						truncate_inode_pages(inode, 0);
+						truncate_inode_pages(&inode->i_data, 0);
 					delete(inode);
 					spin_lock(&inode_lock);
 				}

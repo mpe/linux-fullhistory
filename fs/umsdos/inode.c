@@ -170,11 +170,19 @@ int umsdos_notify_change_locked(struct dentry *, struct iattr *);
 int UMSDOS_notify_change (struct dentry *dentry, struct iattr *attr)
 {
 	struct inode *dir = dentry->d_parent->d_inode;
+	struct inode *inode = dentry->d_inode;
 	int ret;
+
+	ret = inode_change_ok (inode, attr);
+	if (ret)
+		goto out;
 
 	down(&dir->i_sem);
 	ret = umsdos_notify_change_locked(dentry, attr);
 	up(&dir->i_sem);
+	if (ret == 0)
+		inode_setattr (inode, attr);
+out:
 	return ret;
 }
 
@@ -185,19 +193,12 @@ int umsdos_notify_change_locked(struct dentry *dentry, struct iattr *attr)
 {
 	struct inode *inode = dentry->d_inode;
 	struct dentry *demd;
-	int ret;
+	int ret = 0;
 	struct file filp;
 	struct umsdos_dirent entry;
 
 Printk(("UMSDOS_notify_change: entering for %s/%s (%d)\n",
 dentry->d_parent->d_name.name, dentry->d_name.name, inode->u.umsdos_i.i_patched));
-
-	ret = inode_change_ok (inode, attr);
-	if (ret) {
-printk("UMSDOS_notify_change: %s/%s change not OK, ret=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, ret);
-		goto out;
-	}
 
 	if (inode->i_nlink == 0)
 		goto out;
@@ -276,8 +277,6 @@ dentry->d_parent->d_name.name, dentry->d_name.name, entry.nlink, ret);
 out_dput:
 	dput(demd);
 out:
-	if (ret == 0)
-		inode_setattr (inode, attr);
 	return ret;
 }
 
