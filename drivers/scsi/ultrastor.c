@@ -124,12 +124,16 @@
  * Release ICM slot by clearing first byte on 24F.
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <linux/stddef.h>
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/ioport.h>
-
+#include <linux/proc_fs.h>
 #include <asm/io.h>
 #include <asm/bitops.h>
 #include <asm/system.h>
@@ -1140,3 +1144,10 @@ static void ultrastor_interrupt(int irq, struct pt_regs *regs)
     printk("USx4F: interrupt: returning\n");
 #endif
 }
+
+#ifdef MODULE
+/* Eventually this will go into an include file, but this will be later */
+Scsi_Host_Template driver_template = ULTRASTOR_14F;
+
+#include "scsi_module.c"
+#endif

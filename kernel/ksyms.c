@@ -71,7 +71,13 @@ extern char * ftape_big_buffer;
 #include "../drivers/scsi/scsi.h"
 #include "../drivers/scsi/hosts.h"
 #include "../drivers/scsi/constants.h"
+
+extern int generic_proc_info(char *, char **, off_t, int, int, int);
 #endif
+
+int (* dispatch_scsi_info_ptr) (int ino, char *buffer, char **start, 
+				off_t offset, int length, 
+				int inode, int func) = 0; /* Dirty hack */
 
 extern int sys_tz;
 extern int request_dma(unsigned int dmanr, char * deviceID);
@@ -83,7 +89,8 @@ extern void (* iABI_hook)(struct pt_regs * regs);
 struct symbol_table symbol_table = {
 #include <linux/symtab_begin.h>
 #ifdef CONFIG_MODVERSIONS
-	{ (void *)1 /* Version version :-) */, "_Using_Versions" },
+	{ (void *)1 /* Version version :-) */,
+		SYMBOL_NAME_STR (Using_Versions) },
 #endif
 	/* stackable module support */
 	X(rename_module_symbol),
@@ -144,6 +151,7 @@ struct symbol_table symbol_table = {
 	X(close_fp),
 	X(check_disk_change),
 	X(invalidate_buffers),
+	X(invalidate_inodes),
 	X(fsync_dev),
 	X(permission),
 	X(inode_setattr),
@@ -325,8 +333,13 @@ struct symbol_table symbol_table = {
 	X(kill_fasync),
 #endif
 #ifdef CONFIG_SCSI
-	/* Supports loadable scsi drivers */
-    	/* 
+	/* Supports loadable scsi drivers 
+ 	 * technically some of this stuff could be moved to scsi.c, but
+ 	 * scsi.c is initialized before the memory manager is set up.
+ 	 * So we add it here too.  There is a duplicate set in scsi.c
+ 	 * that is used when the entire scsi subsystem is a loadable
+ 	 * module.
+    	 * 
  	 * in_scan_scsis is a hack, and should go away once the new 
 	 * memory allocation code is in the NCR driver 
 	 */
@@ -338,9 +351,26 @@ struct symbol_table symbol_table = {
 	X(scsi_register),
 	X(scsi_unregister),
 	X(scsicam_bios_param),
-        X(scsi_init_malloc),
-        X(scsi_init_free),
-	X(print_command),
+ 	X(allocate_device),
+ 	X(scsi_do_cmd),
+ 	X(scsi_command_size),
+ 	X(scsi_init_malloc),
+ 	X(scsi_init_free),
+ 	X(scsi_ioctl),
+  	X(print_command),
+      	X(print_msg),
+  	X(print_status),
+ 	X(print_sense),
+ 	X(dma_free_sectors),
+ 	X(kernel_scsi_ioctl),
+ 	X(need_isa_buffer),
+ 	X(request_queueable),
+ 	X(dispatch_scsi_info_ptr),
+	X(generic_proc_info),
+ 	X(scsi_devices),
+ 	X(free_pages),
+ 	X(intr_count),
+ 	X(mem_map),
     	X(print_msg),
 	X(print_status),
 #endif

@@ -74,11 +74,7 @@ FPU_result_1:
 
 
 .text
-	.align 2,144
-
-.globl _div_Xsig
-
-_div_Xsig:
+ENTRY(div_Xsig)
 	pushl	%ebp
 	movl	%esp,%ebp
 #ifndef NON_REENTRANT_FPU

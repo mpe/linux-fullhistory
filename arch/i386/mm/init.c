@@ -149,7 +149,7 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	int reservedpages = 0;
 	int datapages = 0;
 	unsigned long tmp;
-	extern int etext;
+	extern int _etext;
 
 	end_mem &= PAGE_MASK;
 	high_memory = end_mem;
@@ -185,7 +185,7 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 		if (mem_map[MAP_NR(tmp)]) {
 			if (tmp >= 0xA0000 && tmp < 0x100000)
 				reservedpages++;
-			else if (tmp < (unsigned long) &etext)
+			else if (tmp < (unsigned long) &_etext)
 				codepages++;
 			else
 				datapages++;

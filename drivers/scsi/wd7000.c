@@ -100,6 +100,10 @@
  *                                                           J.B. Jan 1994.
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <stdarg.h>
 #include <linux/kernel.h>
 #include <linux/head.h>
@@ -111,7 +115,7 @@
 #include <asm/dma.h>
 #include <asm/io.h>
 #include <linux/ioport.h>
-
+#include <linux/proc_fs.h>
 #include "../block/blk.h"
 #include "scsi.h"
 #include "hosts.h"
@@ -223,9 +227,9 @@ static const Signature signatures[] = {
 
 /* ASC Status Port
  */
-#define INT_IM	        0x80		/* Interrupt Image Flag */
-#define CMD_RDY	        0x40		/* Command Port Ready */
-#define CMD_REJ	        0x20		/* Command Port Byte Rejected */
+#define INT_IM		0x80		/* Interrupt Image Flag */
+#define CMD_RDY		0x40		/* Command Port Ready */
+#define CMD_REJ		0x20		/* Command Port Byte Rejected */
 #define ASC_INIT        0x10		/* ASC Initialized Flag */
 #define ASC_STATMASK    0xf0		/* The lower 4 Bytes are reserved */
 
@@ -246,7 +250,7 @@ static const Signature signatures[] = {
 #define HARD_RESET_ACK    6     /* SCSI bus hard reset acknowledge */
 #define START_OGMB        0x80  /* start command in OGMB (n) */
 #define SCAN_OGMBS        0xc0  /* start multiple commands, signature (n) */
-                                /*    where (n) = lower 6 bits */
+				/*    where (n) = lower 6 bits */
 /* For INITIALIZATION:
  */
 typedef struct initCmd {
@@ -284,10 +288,10 @@ typedef struct initCmd {
 
 /* CONTROL port bits
  */
-#define INT_EN	        0x08	/* Interrupt Enable	*/
-#define DMA_EN	        0x04	/* DMA Enable		*/
+#define INT_EN		0x08	/* Interrupt Enable	*/
+#define DMA_EN		0x04	/* DMA Enable		*/
 #define SCSI_RES	0x02	/* SCSI Reset		*/
-#define ASC_RES	        0x01	/* ASC Reset		*/
+#define ASC_RES		0x01	/* ASC Reset		*/
 
 /*
    Driver data structures:
@@ -336,7 +340,7 @@ typedef struct scb {		/* Command Control Block 5.4.1 */
   unchar linkptr[3];		/* Next Command Link Pointer */
   unchar direc;			/* Transfer Direction */
   unchar reserved2[6];		/* SCSI Command Descriptor Block */
-                                /* end of hardware SCB */
+				/* end of hardware SCB */
   Scsi_Cmnd *SCpnt;             /* Scsi_Cmnd using this SCB */
   Sgb sgb[WD7000_SG];           /* Scatter/gather list for this SCB */
   Adapter *host;                /* host adapter */
@@ -361,7 +365,7 @@ typedef struct scb {		/* Command Control Block 5.4.1 */
 #define ICB_OP_RECV_SDATA       0x83  /* receive data with status from init. */
 #define ICB_OP_SEND_DATA        0x84  /* send data with status to initiator */
 #define ICB_OP_SEND_STAT        0x86  /* send command status to initiator */
-                             /* 0x87 is reserved */
+			     /* 0x87 is reserved */
 #define ICB_OP_READ_INIT        0x88  /* read initialization bytes */
 #define ICB_OP_READ_ID          0x89  /* read adapter's SCSI ID */
 #define ICB_OP_SET_UMASK        0x8A  /* set unsolicited interrupt mask */
@@ -516,7 +520,7 @@ static inline int scsi2int( unchar *scsi )
 */
 #undef any2scsi
 #define any2scsi(up, p)			\
-(up)[0] = (((unsigned long)(p)) >> 16);	        \
+(up)[0] = (((unsigned long)(p)) >> 16);		\
 (up)[1] = ((unsigned long)(p)) >> 8;		\
 (up)[2] = ((unsigned long)(p));
 
@@ -568,7 +572,7 @@ static inline int command_out(Adapter *host, unchar *cmd, int len)
 {
     WAIT(host->iobase+ASC_STAT,ASC_STATMASK,CMD_RDY,0);
     while (len--)  {
-        do  {
+	do  {
 	    outb(*cmd, host->iobase+ASC_COMMAND);
 	    WAIT(host->iobase+ASC_STAT, ASC_STATMASK, CMD_RDY, 0);
 	}  while (inb(host->iobase+ASC_STAT) & CMD_REJ);
@@ -606,14 +610,14 @@ static inline Scb *alloc_scbs(int needed)
     save_flags(flags);
     cli();
     while (busy)  { /* someone else is allocating */
-        sti();	/* Yes this is really needed here */
+	sti();	/* Yes this is really needed here */
 	now = jiffies;  while (jiffies == now)  /* wait a jiffy */;
 	cli();
     }
     busy = 1;          /* not busy now; it's our turn */
 
     while (freescbs < needed)  {
-        timeout = jiffies + WAITnexttimeout;
+	timeout = jiffies + WAITnexttimeout;
 	do {
 	    sti();	/* Yes this is really needed here */
 	    now = jiffies;   while (jiffies == now) /* wait a jiffy */;
@@ -712,7 +716,7 @@ static int mail_out( Adapter *host, Scb *scbptr )
     printk(", scb is %x",(unsigned int) scbptr);
 #endif
     if (i >= OGMB_CNT) {
-        /*
+	/*
 	 *  Alternatively, we might issue the "interrupt on free OGMB",
 	 *  and sleep, but it must be ensured that it isn't the init
 	 *  task running.  Instead, this version assumes that the caller
@@ -720,8 +724,8 @@ static int mail_out( Adapter *host, Scb *scbptr )
 	 *  that marks OGMB's free, waiting even with interrupts off
 	 *  should work, since they are freed very quickly in most cases.
 	 */
-        #ifdef DEBUG
-        printk(", no free OGMBs.\n");
+	#ifdef DEBUG
+	printk(", no free OGMBs.\n");
 #endif
 	return 0;
     }
@@ -763,23 +767,23 @@ int make_code(unsigned hosterr, unsigned scsierr)
 		hosterr = DID_BAD_TARGET;
 		break;
 	case 80: /* Unexpected Reselection */
-        case 81: /* Unexpected Selection */
+	case 81: /* Unexpected Selection */
 		hosterr = DID_BAD_INTR;
 		break;
-        case 82: /* Abort Command Message  */
+	case 82: /* Abort Command Message  */
 		hosterr = DID_ABORT;
 		break;
 	case 83: /* SCSI Bus Software Reset */
 	case 84: /* SCSI Bus Hardware Reset */
 		hosterr = DID_RESET;
 		break;
-        default: /* Reserved */
+	default: /* Reserved */
 		hosterr = DID_ERROR;
 		break;
 	}
 #ifdef DEBUG
     if (scsierr||hosterr)
-        printk("\nSCSI command error: SCSI %02x host %04x return %d",
+	printk("\nSCSI command error: SCSI %02x host %04x return %d",
 	       scsierr,in_error,hosterr);
 #endif
     return scsierr | (hosterr << 16);
@@ -817,7 +821,7 @@ void wd7000_intr_handle(int irq, struct pt_regs * regs)
 #endif
 
     if (!(inb(host->iobase+ASC_STAT) & INT_IM))  {
-        /* NB: these are _very_ possible if IRQ 15 is being used, since
+	/* NB: these are _very_ possible if IRQ 15 is being used, since
 	   it's the "garbage collector" on the 2nd 8259 PIC.  Specifically,
 	   any interrupt signal into the 8259 which can't be identified
 	   comes out as 7 from the 8259, which is 15 to the host.  Thus, it
@@ -833,7 +837,7 @@ void wd7000_intr_handle(int irq, struct pt_regs * regs)
     }
 
     if (flag & MB_INTR)  {
-        /* The interrupt is for a mailbox */
+	/* The interrupt is for a mailbox */
 	if (!(flag & IMB_INTR)) {
 #ifdef DEBUG
 	    printk("wd7000_intr_handle: free outgoing mailbox");
@@ -851,16 +855,16 @@ void wd7000_intr_handle(int irq, struct pt_regs * regs)
 	    icmb_status = icmbs[icmb].status;
 	    if (icmb_status & 0x80)  {  /* unsolicited - result in ICMB */
 #ifdef DEBUG
- 	        printk("wd7000_intr_handle: unsolicited interrupt %02xh\n",
+ 		printk("wd7000_intr_handle: unsolicited interrupt %02xh\n",
 		       icmb_status);
 #endif
-	        wd7000_intr_ack(host);
-	        return;
+		wd7000_intr_ack(host);
+		return;
 	    }
 	    scb = (struct scb *) scsi2int((unchar *)icmbs[icmb].scbptr);
 	    icmbs[icmb].status = 0;
 	    if (!(scb->op & ICB_OP_MASK))  {   /* an SCB is done */
-	        SCpnt = scb->SCpnt;
+		SCpnt = scb->SCpnt;
 		if (--(SCpnt->SCp.phase) <= 0)  {  /* all scbs are done */
 		    host_error = scb->vue | (icmb_status << 8);
 		    scsi_error = scb->status;
@@ -872,7 +876,7 @@ void wd7000_intr_handle(int irq, struct pt_regs * regs)
 		    SCpnt->scsi_done(SCpnt);
 		}
 	    }  else  {    /* an ICB is done */
-	        icb = (IcbAny *) scb;
+		icb = (IcbAny *) scb;
 		icb->status = icmb_status;
 		icb->phase  = 0;
 	    }
@@ -907,10 +911,10 @@ int wd7000_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
     scb->host = host;
 
     if (SCpnt->use_sg)  {
-        struct scatterlist *sg = (struct scatterlist *) SCpnt->request_buffer;
-        unsigned i;
+	struct scatterlist *sg = (struct scatterlist *) SCpnt->request_buffer;
+	unsigned i;
 
-        if (SCpnt->host->sg_tablesize == SG_NONE)  {
+	if (SCpnt->host->sg_tablesize == SG_NONE)  {
 	    panic("wd7000_queuecommand: scatter/gather not supported.\n");
 	}
 #ifdef DEBUG
@@ -925,7 +929,7 @@ int wd7000_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	for (i = 0;  i < SCpnt->use_sg;  i++)  {
  	    any2scsi(sgb[i].ptr, (int) sg[i].address);
  	    any2scsi(sgb[i].len, sg[i].length);
-        }
+	}
     }  else  {
 	scb->op = 0;
 	any2scsi(scb->dataptr, (int) SCpnt->request_buffer);
@@ -968,11 +972,11 @@ int wd7000_diagnostics( Adapter *host, int code )
     	barrier(); /* wait for completion */
 
     if (icb.phase)  {
-        printk("wd7000_diagnostics: timed out.\n");
+	printk("wd7000_diagnostics: timed out.\n");
 	return 0;
     }
     if (make_code(icb.vue|(icb.status << 8),0))  {
-        printk("wd7000_diagnostics: failed (%02x,%02x)\n",
+	printk("wd7000_diagnostics: failed (%02x,%02x)\n",
 	       icb.vue, icb.status);
 	return 0;
     }
@@ -984,7 +988,7 @@ int wd7000_diagnostics( Adapter *host, int code )
 int wd7000_init( Adapter *host )
 {
     InitCmd init_cmd = {
-        INITIALIZATION, 7, BUS_ON, BUS_OFF, 0, 0,0,0, OGMB_CNT, ICMB_CNT
+	INITIALIZATION, 7, BUS_ON, BUS_OFF, 0, 0,0,0, OGMB_CNT, ICMB_CNT
     };
     int diag;
 
@@ -999,8 +1003,8 @@ int wd7000_init( Adapter *host )
     WAIT(host->iobase+ASC_STAT, ASC_STATMASK, CMD_RDY, 0);
 
     if ((diag = inb(host->iobase+ASC_INTR_STAT)) != 1)  {
-        printk("wd7000_init: ");
-        switch (diag)  {
+	printk("wd7000_init: ");
+	switch (diag)  {
 	case 2:
 	  printk("RAM failure.\n");
 	  break;
@@ -1023,7 +1027,7 @@ int wd7000_init( Adapter *host )
 	  printk("diagnostic code %02Xh received.\n", diag);
 	  break;
 	}
-        return 0;
+	return 0;
     }
     
     /* Clear mailboxes */
@@ -1038,11 +1042,11 @@ int wd7000_init( Adapter *host )
     WAIT(host->iobase+ASC_STAT, ASC_STATMASK, ASC_INIT, 0);
 
     if (request_irq(host->irq, wd7000_intr_handle, SA_INTERRUPT, "wd7000")) {
-        printk("wd7000_init: can't get IRQ %d.\n", host->irq);
+	printk("wd7000_init: can't get IRQ %d.\n", host->irq);
 	return 0;
     }
     if (request_dma(host->dma,"wd7000"))  {
-        printk("wd7000_init: can't get DMA channel %d.\n", host->dma);
+	printk("wd7000_init: can't get DMA channel %d.\n", host->dma);
 	free_irq(host->irq);
 	return 0;
     }
@@ -1050,9 +1054,9 @@ int wd7000_init( Adapter *host )
     wd7000_enable_intr(host);
 
     if (!wd7000_diagnostics(host,ICB_DIAG_FULL))  {
-        free_dma(host->dma);
-        free_irq(host->irq);
-        return 0;
+	free_dma(host->dma);
+	free_irq(host->irq);
+	return 0;
     }
 
     return 1;
@@ -1105,10 +1109,10 @@ int wd7000_detect(Scsi_Host_Template * tpnt)
 
     cfg = configs;
     for (i = 0; i < NUM_CONFIGS; i++)  {
-        sig = signatures;
+	sig = signatures;
 	for (j = 0; j < NUM_SIGNATURES; j++)  {
 	    if (!memcmp(cfg->bios+sig->ofs, sig->sig, sig->len))  {
-	        /* matched this one */
+		/* matched this one */
 #ifdef DEBUG
 		printk("WD-7000 SST BIOS detected at %04X: checking...\n",
 		       (int) cfg->bios);
@@ -1136,7 +1140,7 @@ int wd7000_detect(Scsi_Host_Template * tpnt)
 		       (int)host);
 #endif
 		memset( host, 0, sizeof(Adapter) );
-	        host->sh = sh;
+		host->sh = sh;
 		host->irq = cfg->irq;
 		host->iobase = cfg->iobase;
 		host->dma = cfg->dma;
@@ -1154,7 +1158,7 @@ int wd7000_detect(Scsi_Host_Template * tpnt)
 
 		printk("Western Digital WD-7000 (%d.%d) ",
 		       host->rev1, host->rev2);
-                printk("using IO %xh IRQ %d DMA %d.\n",
+		printk("using IO %xh IRQ %d DMA %d.\n",
 		       host->iobase, host->irq, host->dma);
 
 		request_region(host->iobase, 4,"wd7000"); /* Register our ports */
@@ -1183,7 +1187,7 @@ int wd7000_abort(Scsi_Cmnd * SCpnt)
     Adapter *host = (Adapter *) SCpnt->host->hostdata;
 
     if (inb(host->iobase+ASC_STAT) & INT_IM)  {
-        printk("wd7000_abort: lost interrupt\n");
+	printk("wd7000_abort: lost interrupt\n");
 	wd7000_intr_handle(host->irq, NULL);
 	return SCSI_ABORT_SUCCESS;
     }
@@ -1215,3 +1219,10 @@ int wd7000_biosparam(Disk * disk, int dev, int* ip)
 /*  if (ip[2] >= 1024) ip[2] = 1024; */
   return 0;
 }
+
+#ifdef MODULE
+/* Eventually this will go into an include file, but this will be later */
+Scsi_Host_Template driver_template = WD7000;
+
+#include "scsi_module.c"
+#endif

@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 4
+SUBLEVEL = 5
 
 ARCH = i386
 
@@ -236,6 +236,7 @@ clean:	archclean
 mrproper: clean
 	rm -f include/linux/autoconf.h include/linux/version.h
 	rm -f drivers/sound/local.h
+	rm -f drivers/scsi/aic7xxx_asm drivers/scsi/aic7xxx_seq.h
 	rm -f drivers/char/uni_hash_tbl.h drivers/char/conmakehash
 	rm -f .version .config* config.in config.old
 	rm -f include/asm
@@ -246,6 +247,8 @@ ifdef CONFIG_MODVERSIONS
 endif
 
 distclean: mrproper
+	rm -f core `find . -name '*.orig' -print`
+
 
 backup: mrproper
 	cd .. && tar cf - linux | gzip -9 > backup.gz

@@ -152,7 +152,7 @@ int check_disk_change(dev_t dev)
 	if (!fops->check_media_change(dev))
 		return 0;
 
-	printk("VFS: Disk change detected on device %d/%d\n",
+	printk(KERN_DEBUG "VFS: Disk change detected on device %d/%d\n",
 					MAJOR(dev), MINOR(dev));
 	for (i=0 ; i<NR_SUPER ; i++)
 		if (super_blocks[i].s_dev == dev)

@@ -10,7 +10,7 @@
  *		be here without 3C505 technical reference provided by
  *		3Com.
  *
- * Version:	@(#)3c505.c	0.8	4-Jun-95
+ * Version:	@(#)3c505.c	0.8.1	26-Jun-95
  *
  * Authors:	Linux 3c505 device driver by
  *			Craig Southeren, <craigs@ineluki.apana.org.au>
@@ -101,7 +101,7 @@ static int elp_debug = 0;
  *  3 = messages when interrupts received
  */
 
-#define	ELP_VERSION	"0.7.0"
+#define	ELP_VERSION	"0.8.1"
 
 /*****************************************************************
  *
@@ -182,7 +182,7 @@ outw_data (unsigned int val, unsigned int base_addr)
  *****************************************************************/
 
 typedef struct {
-	short got[NUM_TRANSMIT_CMDS];	/* flags for command completion */
+	volatile short got[NUM_TRANSMIT_CMDS];	/* flags for command completion */
 	pcb_struct tx_pcb;	/* PCB for foreground sending */
 	pcb_struct rx_pcb;	/* PCB for foreground receiving */
 	pcb_struct itx_pcb;	/* PCB for background sending */

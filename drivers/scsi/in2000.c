@@ -54,14 +54,17 @@
  * larger SCSI hard drives (untested).
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/head.h>
 #include <linux/types.h>
 #include <linux/string.h>
-
 #include <linux/sched.h>
+#include <linux/proc_fs.h>
 #include <asm/dma.h>
-
 #include <asm/system.h>
 #include <asm/io.h>
 #include "../block/blk.h"
@@ -235,7 +238,7 @@ DEB(printk("FIr:%d %02x %08x %08x\n", in2000_datalen,fic,count2,(unsigned int)in
 	  else if(fic > 64) count = 512;
 	    else if (fic > 32) count = 256;
 	      else if ( count2 < in2000_datalen ) /* if drive has < what we want */
-	        count = in2000_datalen - count2;	/* FIFO has the rest */
+		count = in2000_datalen - count2;	/* FIFO has the rest */
 	if ( count > in2000_datalen )	/* count2 is lesser of FIFO & rqst */
 	    count2 = in2000_datalen >> 1;	/* converted to word count */
 	else
@@ -544,7 +547,7 @@ int in2000_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
     outb(CONTROL,INSTAT);	/* WD BUS Mode */
     outb(0x4C,INDATA);
     if ( in2000_datalen )		/* if data xfer cmd */
-        outb(0,ININTR);		/* Enable FIFO intrpt some boards? */
+	outb(0,ININTR);		/* Enable FIFO intrpt some boards? */
     outb(COMMAND,INSTAT);
     outb(0,INNLED);
     outb(8,INDATA);		/* Select w/ATN & Transfer */

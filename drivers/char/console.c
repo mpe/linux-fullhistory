@@ -8,10 +8,10 @@
  *	console.c
  *
  * This module exports the console io functions:
- * 
+ *
  *     'void do_keyboard_interrupt(void)'
  *
- *     'int vc_allocate(unsigned int console)' 
+ *     'int vc_allocate(unsigned int console)'
  *     'int vc_cons_allocated(unsigned int console)'
  *     'int vc_resize(unsigned long lines, unsigned long cols)'
  *     'void vc_disallocate(unsigned int currcons)'
@@ -33,7 +33,7 @@
  *     'void scrollback(int lines)'
  *     'void scrollfront(int lines)'
  *
- *     'int con_get_font(char *data)' 
+ *     'int con_get_font(char *data)'
  *     'int con_set_font(char *data, int ch512)'
  *     'int con_adjust_height(int fontheight)'
  *
@@ -49,7 +49,7 @@
  * Hopefully this will be a rather complete VT102 implementation.
  *
  * Beeping thanks to John T Kohl.
- * 
+ *
  * Virtual Consoles, Screen Blanking, Screen Dumping, Color, Graphics
  *   Chars, and VT100 enhancements by Peter MacDonald.
  *
@@ -234,7 +234,7 @@ struct vc_data {
 	unsigned long	vc_report_mouse : 2;
 	unsigned char	vc_utf		: 1;	/* Unicode UTF-8 encoding */
 	unsigned char	vc_utf_count;
-	         long	vc_utf_char;
+		 long	vc_utf_char;
 	unsigned long	vc_tab_stop[5];		/* Tab stops. 160 columns. */
 	unsigned char   vc_palette[16*3];       /* Colour palette for VGA+ */
 	unsigned short * vc_translate;
@@ -278,7 +278,7 @@ static struct vc {
 #define utf_char	(vc_cons[currcons].d->vc_utf_char)
 #define video_mem_start	(vc_cons[currcons].d->vc_video_mem_start)
 #define video_mem_end	(vc_cons[currcons].d->vc_video_mem_end)
-#define video_erase_char (vc_cons[currcons].d->vc_video_erase_char)	
+#define video_erase_char (vc_cons[currcons].d->vc_video_erase_char)
 #define disp_ctrl	(vc_cons[currcons].d->vc_disp_ctrl)
 #define toggle_meta	(vc_cons[currcons].d->vc_toggle_meta)
 #define decscnm		(vc_cons[currcons].d->vc_decscnm)
@@ -584,7 +584,7 @@ void scrollback(int lines)
 			int count ;
 			unsigned short * d = (unsigned short *) video_mem_base;
 			unsigned short * s = (unsigned short *) last_origin;
-			
+
 			lines += last_origin_rel;
 			/* in case the top part of the screen has been modified since
 			 * the scroll wrapped, copy the top bit back to the bottom */
@@ -710,7 +710,7 @@ static void scrup(int currcons, unsigned int t, unsigned int b)
 				count--;
 				scr_writew(video_erase_char, d++);
 			}
-                        if (scr_end > last_origin)   /* we've wrapped into kept region */
+			if (scr_end > last_origin)   /* we've wrapped into kept region */
 				__scrollback_mode = 0;
 		}
 		set_origin(currcons);
@@ -997,7 +997,7 @@ static void csi_m(int currcons)
 			default:
 				if (par[i] >= 30 && par[i] <= 37)
 					color = color_table[par[i]-30]
-						| background; 
+						| background;
 				else if (par[i] >= 40 && par[i] <= 47)
 					color = (color_table[par[i]-40]<<4)
 						| foreground;
@@ -1326,7 +1326,7 @@ static void restore_cur(int currcons)
 	need_wrap = 0;
 }
 
-enum { ESnormal, ESesc, ESsquare, ESgetpars, ESgotpars, ESfunckey, 
+enum { ESnormal, ESesc, ESsquare, ESgetpars, ESgotpars, ESfunckey,
 	EShash, ESsetG0, ESsetG1, ESpercent, ESignore, ESnonstd,
 	ESpalette };
 
@@ -1437,7 +1437,7 @@ static int con_write(struct tty_struct * tty, int from_user,
 		if (utf) {
 		    /* Combine UTF-8 into Unicode */
 		    /* Incomplete characters silently ignored */
-		    if(c > 0x7f) {   
+		    if(c > 0x7f) {
 			if (utf_count > 0 && (c & 0xc0) == 0x80) {
 				utf_char = (utf_char << 6) | (c & 0x3f);
 				utf_count--;
@@ -1483,10 +1483,10 @@ static int con_write(struct tty_struct * tty, int from_user,
 		 */
 		ok = (tc && (c >= 32 || (!utf && !(((disp_ctrl ? CTRL_ALWAYS
 					    : CTRL_ACTION) >> c) & 1))));
-		
+
 		if (vc_state == ESnormal && ok) {
-		        /* Now try to find out how to display it */
-		        tc = conv_uni_to_pc(tc);
+			/* Now try to find out how to display it */
+			tc = conv_uni_to_pc(tc);
 			if ( tc == -4 )
 			  {
 			    /* If we got -4 (not found) then see if we have
@@ -1623,7 +1623,7 @@ static int con_write(struct tty_struct * tty, int from_user,
 				  case '=':  /* Appl. keypad */
 					set_kbd(kbdapplic);
 				 	continue;
-				}	
+				}
 				continue;
 			case ESnonstd:
 				if (c=='P') {   /* palette escape sequence */
@@ -2020,10 +2020,10 @@ long con_init(long kmem_start)
 	console_driver.start = con_start;
 	console_driver.throttle = con_throttle;
 	console_driver.unthrottle = con_unthrottle;
-	
+
 	if (tty_register_driver(&console_driver))
 		panic("Couldn't register console driver\n");
-	
+
 	con_setsize(ORIG_VIDEO_LINES, ORIG_VIDEO_COLS);
 	video_page = ORIG_VIDEO_PAGE; 			/* never used */
 	__scrollback_mode = 0 ;
@@ -2034,7 +2034,7 @@ long con_init(long kmem_start)
 		timer_table[BLANK_TIMER].expires = jiffies+blankinterval;
 		timer_active |= 1<<BLANK_TIMER;
 	}
-	
+
 	if (ORIG_VIDEO_MODE == 7)	/* Is this a monochrome display? */
 	{
 		video_mem_base = 0xb0000;
@@ -2063,44 +2063,51 @@ long con_init(long kmem_start)
 		video_port_val	= 0x3d5;
 		if ((ORIG_VIDEO_EGA_BX & 0xff) != 0x10)
 		{
-                        int i ;
+			int i ;
 
-                        video_mem_term = 0xc0000;
+			video_mem_term = 0xc0000;
 
-                        if (!ORIG_VIDEO_ISVGA) {
-                                video_type = VIDEO_TYPE_EGAC;
-                                display_desc = "EGA";
-                                request_region(0x3c0,32,"ega");
-                        } else {
-                                video_type = VIDEO_TYPE_VGAC;
-                                display_desc = "VGA+";
-                                request_region(0x3c0,32,"vga+");
+			if (!ORIG_VIDEO_ISVGA) {
+				video_type = VIDEO_TYPE_EGAC;
+				display_desc = "EGA";
+				request_region(0x3c0,32,"ega");
+			} else {
+				video_type = VIDEO_TYPE_VGAC;
+				display_desc = "VGA+";
+				request_region(0x3c0,32,"vga+");
 
-                                /* get 64K rather than 32K of video RAM */
-                                video_mem_base = 0xa0000 ;
-                                video_mem_term = 0xb0000 ;
-                                outb_p (6, 0x3ce) ;
-                                outb_p (6, 0x3cf) ;
+#ifdef VGA_CAN_DO_64KB
+				/*
+				 * get 64K rather than 32K of video RAM.
+				 * This doesn't actually work on all "VGA"
+				 * controllers (it seems like setting MM=01
+				 * and COE=1 isn't necessarily a good idea)
+				 */
+				video_mem_base = 0xa0000 ;
+				video_mem_term = 0xb0000 ;
+				outb_p (6, 0x3ce) ;
+				outb_p (6, 0x3cf) ;
+#endif
 
-                                /* normalise the palette registers, to point the                                 * 16 screen colours to the first 16 DAC entries */
+				/* normalise the palette registers, to point the                                 * 16 screen colours to the first 16 DAC entries */
 
-                                for (i=0; i<16; i++) {
-                                        inb_p (0x3da) ;
-                                        outb_p (i, 0x3c0) ;
-                                        outb_p (i, 0x3c0) ;
-                                }
-                                outb_p (0x20, 0x3c0) ;
+				for (i=0; i<16; i++) {
+					inb_p (0x3da) ;
+					outb_p (i, 0x3c0) ;
+					outb_p (i, 0x3c0) ;
+				}
+				outb_p (0x20, 0x3c0) ;
 
-                                /* now set the DAC registers back to their default
-                                 * values */
+				/* now set the DAC registers back to their default
+				 * values */
 
-                                for (i=0; i<16; i++) {
+				for (i=0; i<16; i++) {
 					outb_p (color_table[i], 0x3c8) ;
-                                        outb_p (default_red[i], 0x3c9) ;
-                                        outb_p (default_grn[i], 0x3c9) ;
-                                        outb_p (default_blu[i], 0x3c9) ;
-                                }
-                        }
+					outb_p (default_red[i], 0x3c9) ;
+					outb_p (default_grn[i], 0x3c9) ;
+					outb_p (default_blu[i], 0x3c9) ;
+				}
+			}
 		}
 		else
 		{
@@ -2110,7 +2117,7 @@ long con_init(long kmem_start)
 			request_region(0x3d4,2,"cga");
 		}
 	}
-	
+
 	/* Initialize the variables used for scrolling (mostly EGA/VGA)	*/
 
 	/* Due to kmalloc roundup allocating statically is more efficient -
@@ -2149,6 +2156,7 @@ long con_init(long kmem_start)
 	   can figure out the appropriate screen size should we load
 	   a different font */
 
+	printable = 1;
 	if ( video_type == VIDEO_TYPE_VGAC || video_type == VIDEO_TYPE_EGAC
 	    || video_type == VIDEO_TYPE_EGAM )
 	{
@@ -2159,7 +2167,6 @@ long con_init(long kmem_start)
 		       video_font_height, video_scan_lines);
 	}
 
-	printable = 1;
 	printk("Console: %s %s %ldx%ld, %d virtual console%s (max %d)\n",
 		can_do_color ? "colour" : "mono",
 		display_desc,
@@ -2325,7 +2332,7 @@ void update_screen(int new_console)
 		console_blanked = -1;	   /* no longer of the form console+1 */
 	fg_console = new_console; /* this is the only (nonzero) assignment to fg_console */
 				  /* consequently, fg_console will always be allocated */
-	set_scrmem(fg_console, 0); 
+	set_scrmem(fg_console, 0);
 	set_origin(fg_console);
 	set_cursor(fg_console);
 	set_leds();
@@ -2342,14 +2349,14 @@ int con_open(struct tty_struct *tty, struct file * filp)
 	int i;
 
 	idx = MINOR(tty->device) - tty->driver.minor_start;
-	
+
 	i = vc_allocate(idx);
 	if (i)
 		return i;
 
 	vt_cons[idx]->vc_num = idx;
 	tty->driver_data = vt_cons[idx];
-	
+
 	if (!tty->winsize.ws_row && !tty->winsize.ws_col) {
 		tty->winsize.ws_row = video_num_lines;
 		tty->winsize.ws_col = video_num_columns;
@@ -2493,28 +2500,28 @@ static int set_get_font(char * arg, int set, int ch512)
 
 static int set_get_cmap(unsigned char * arg, int set) {
 #ifdef CAN_LOAD_PALETTE
-        int i;
+	int i;
 
-        /* no use to set colourmaps in less than colour VGA */
+	/* no use to set colourmaps in less than colour VGA */
 
-        if (video_type != VIDEO_TYPE_VGAC)
+	if (video_type != VIDEO_TYPE_VGAC)
 		return -EINVAL;
 
-        i = verify_area(set ? VERIFY_READ : VERIFY_WRITE, (void *)arg, 16*3);
-        if (i)
+	i = verify_area(set ? VERIFY_READ : VERIFY_WRITE, (void *)arg, 16*3);
+	if (i)
 		return i;
 
-        for (i=0; i<16; i++) {
-                if (set) {
+	for (i=0; i<16; i++) {
+		if (set) {
 			default_red[i] = get_user(arg++) ;
 			default_grn[i] = get_user(arg++) ;
 			default_blu[i] = get_user(arg++) ;
 		} else {
 			put_user (default_red[i], arg++) ;
-                        put_user (default_grn[i], arg++) ;
-                        put_user (default_blu[i], arg++) ;
-                }
-        }
+			put_user (default_grn[i], arg++) ;
+			put_user (default_blu[i], arg++) ;
+		}
+	}
 	if (set) {
 		for (i=0; i<MAX_NR_CONSOLES; i++)
 			if (vc_cons_allocated(i)) {
@@ -2528,9 +2535,9 @@ static int set_get_cmap(unsigned char * arg, int set) {
 		set_palette() ;
 	}
 
-        return 0;
+	return 0;
 #else
-        return -EINVAL;
+	return -EINVAL;
 #endif
 }
 
@@ -2541,12 +2548,12 @@ static int set_get_cmap(unsigned char * arg, int set) {
 
 int con_set_cmap (unsigned char *arg)
 {
-        return set_get_cmap (arg,1);
+	return set_get_cmap (arg,1);
 }
 
 int con_get_cmap (unsigned char *arg)
 {
-        return set_get_cmap (arg,0);
+	return set_get_cmap (arg,0);
 }
 
 void reset_palette (int currcons)
@@ -2568,12 +2575,12 @@ void set_palette (void)
 	    vt_cons[fg_console]->vc_mode == KD_GRAPHICS)
 		return ;
 
-        for (i=j=0; i<16; i++) {
+	for (i=j=0; i<16; i++) {
 		outb_p (color_table[i], dac_reg) ;
 		outb_p (vc_cons[fg_console].d->vc_palette[j++]>>2, dac_val) ;
 		outb_p (vc_cons[fg_console].d->vc_palette[j++]>>2, dac_val) ;
 		outb_p (vc_cons[fg_console].d->vc_palette[j++]>>2, dac_val) ;
-        }
+	}
 }
 
 /*
@@ -2613,18 +2620,18 @@ int con_adjust_height(unsigned long fontheight)
 
 	if (fontheight > 32 || (video_type != VIDEO_TYPE_VGAC &&
 	    video_type != VIDEO_TYPE_EGAC && video_type != VIDEO_TYPE_EGAM))
-	        return -EINVAL;
+		return -EINVAL;
 
 	if ( fontheight == video_font_height || fontheight == 0 )
 		return 0;
-	
+
 	video_font_height = fontheight;
 
 	rows = video_scan_lines/fontheight;	/* Number of video rows we end up with */
 	maxscan = rows*fontheight - 1;		/* Scan lines to actually display-1 */
 
 	/* Reprogram the CRTC for the new font size
-           Note: the attempt to read the overflow register will fail
+	   Note: the attempt to read the overflow register will fail
 	   on an EGA, but using 0xff for the previous value appears to
 	   be OK for EGA text modes in the range 257-512 scan lines, so I
 	   guess we don't need to worry about it.
@@ -2636,11 +2643,11 @@ int con_adjust_height(unsigned long fontheight)
 	cli();
 	outb_p( 0x07, video_port_reg );		/* CRTC overflow register */
 	ovr = inb_p(video_port_val);
-	outb_p( 0x09, video_port_reg );	        /* Font size register */
+	outb_p( 0x09, video_port_reg );		/* Font size register */
 	fsr = inb_p(video_port_val);
-	outb_p( 0x0a, video_port_reg );	        /* Cursor start */
+	outb_p( 0x0a, video_port_reg );		/* Cursor start */
 	curs = inb_p(video_port_val);
-	outb_p( 0x0b, video_port_reg );	        /* Cursor end */
+	outb_p( 0x0b, video_port_reg );		/* Cursor end */
 	cure = inb_p(video_port_val);
 	sti();
 
@@ -2655,13 +2662,13 @@ int con_adjust_height(unsigned long fontheight)
 	cli();
 	outb_p( 0x07, video_port_reg );		/* CRTC overflow register */
 	outb_p( ovr, video_port_val );
-	outb_p( 0x09, video_port_reg );	        /* Font size */
+	outb_p( 0x09, video_port_reg );		/* Font size */
 	outb_p( fsr, video_port_val );
-	outb_p( 0x0a, video_port_reg );	        /* Cursor start */
+	outb_p( 0x0a, video_port_reg );		/* Cursor start */
 	outb_p( curs, video_port_val );
-	outb_p( 0x0b, video_port_reg );	        /* Cursor end */
+	outb_p( 0x0b, video_port_reg );		/* Cursor end */
 	outb_p( cure, video_port_val );
-	outb_p( 0x12, video_port_reg );	        /* Vertical display limit */
+	outb_p( 0x12, video_port_reg );		/* Vertical display limit */
 	outb_p( vde, video_port_val );
 	sti();
 
@@ -2671,7 +2678,7 @@ int con_adjust_height(unsigned long fontheight)
 	  return 0;
 	}
 
-	vc_resize(rows, 0);	                /* Adjust console size */
+	vc_resize(rows, 0);			/* Adjust console size */
 
 	return rows;
 }

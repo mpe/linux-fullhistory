@@ -38,6 +38,7 @@
    ethernet adaptor have the name "eth[0123...]".
    */
 
+extern int hp100_probe(struct device *dev);
 extern int ultra_probe(struct device *dev);
 extern int wd_probe(struct device *dev);
 extern int el2_probe(struct device *dev);
@@ -74,12 +75,15 @@ extern int de620_probe(struct device *);
 static int
 ethif_probe(struct device *dev)
 {
-    short base_addr = dev->base_addr;
+    u_long base_addr = dev->base_addr;
 
-    if (base_addr < 0  ||  base_addr == 1)
+    if ((base_addr == 0xffe0)  ||  (base_addr == 1))
 	return 1;		/* ENXIO */
 
     if (1
+#if defined(CONFIG_HP100)
+	&& hp100_probe(dev)
+#endif	
 #if defined(CONFIG_ULTRA)
 	&& ultra_probe(dev)
 #endif

@@ -48,15 +48,15 @@
 #                       If you want at least one board to not autosense then
 #                       no board can autosense. For a board mix of several
 #	                types, OR the manual values [eg for a DE500 (100M) with
-#	                a DE450 (AUI) use '-DDE4X5_AUTOSENSE=(0x80|0x08)']
-#                       For full auto media/mode selection           = 0x4000
-#                       For manual TP media selection                = 0x01
-#                       For manual TP/Nway media selection (DC21041) = 0x02
-#                       For manual BNC media selection               = 0x04
-#                       For manual AUI media selection               = 0x08
-#                       For manual BNC/AUI media selection (DC21040) = 0x10
-#                       For manual 10Mb/s mode selection   (DC21140) = 0x40
-#                       For manual 100Mb/s mode selection  (DC21140) = 0x80
+#	                a DE450 (AUI) use '-DDE4X5_AUTOSENSE=(_100Mb|AUI)']
+#                       For full auto media/mode selection           = AUTO
+#                       For manual TP media selection                = TP
+#                       For manual TP/Nway media selection (DC21041) = TP_NW
+#                       For manual BNC media selection               = BNC
+#                       For manual AUI media selection               = AUI
+#                       For manual BNC/AUI media selection (DC21040) = BNC_AUI
+#                       For manual 10Mb/s mode selection   (DC21140) = _10Mb
+#                       For manual 100Mb/s mode selection  (DC21140) = _100Mb
 #                       The DC21040 will default to TP if TP_NW is specified
 #                       The DC21041 will default to BNC if BNC_AUI is specified
 #                       The DC21140 needs it's speed to be manually set to
@@ -83,5 +83,6 @@ HP_OPTS		=
 PLIP_OPTS	=
 DEPCA_OPTS	= -DDEPCA_DEBUG=1
 EWRK3_OPTS	= -DEWRK3_DEBUG=1
-DE4X5_OPTS	= -DDE4X5_DEBUG=1 -DDE4X5_AUTOSENSE=0x4000
+DE4X5_OPTS	= -DDE4X5_DEBUG=1 -DDE4X5_AUTOSENSE=AUTO
 ELP_OPTS	= -DELP_DEBUG=1 -DELP_NEED_HARD_RESET=0
+

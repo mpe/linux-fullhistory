@@ -102,8 +102,13 @@
  *     (255 is the IRQ_NONE constant in NCR5380.h)
  */
  
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <asm/system.h>
 #include <linux/signal.h>
+#include <linux/proc_fs.h>
 #include <linux/sched.h>
 #include <asm/io.h>
 #include "../block/blk.h"
@@ -138,7 +143,7 @@ static struct override {
     [] = PAS16_OVERRIDE;
 #else
     [4] = {{0,IRQ_AUTO}, {0,IRQ_AUTO}, {0,IRQ_AUTO},
-        {0,IRQ_AUTO}};
+	{0,IRQ_AUTO}};
 #endif
 
 #define NO_OVERRIDES (sizeof(overrides) / sizeof(struct override))
@@ -156,18 +161,18 @@ static struct base {
 
 unsigned short  pas16_offset[ 8 ] =
     {
-        0x1c00,    /* OUTPUT_DATA_REG */
-        0x1c01,    /* INITIATOR_COMMAND_REG */
-        0x1c02,    /* MODE_REG */
-        0x1c03,    /* TARGET_COMMAND_REG */
-        0x3c00,    /* STATUS_REG ro, SELECT_ENABLE_REG wo */
-        0x3c01,    /* BUS_AND_STATUS_REG ro, START_DMA_SEND_REG wo */
-        0x3c02,    /* INPUT_DATA_REGISTER ro, (N/A on PAS16 ?)
-                    * START_DMA_TARGET_RECEIVE_REG wo
-                    */
-        0x3c03,    /* RESET_PARITY_INTERRUPT_REG ro,
-                    * START_DMA_INITIATOR_RECEIVE_REG wo
-                    */
+	0x1c00,    /* OUTPUT_DATA_REG */
+	0x1c01,    /* INITIATOR_COMMAND_REG */
+	0x1c02,    /* MODE_REG */
+	0x1c03,    /* TARGET_COMMAND_REG */
+	0x3c00,    /* STATUS_REG ro, SELECT_ENABLE_REG wo */
+	0x3c01,    /* BUS_AND_STATUS_REG ro, START_DMA_SEND_REG wo */
+	0x3c02,    /* INPUT_DATA_REGISTER ro, (N/A on PAS16 ?)
+		    * START_DMA_TARGET_RECEIVE_REG wo
+		    */
+	0x3c03,    /* RESET_PARITY_INTERRUPT_REG ro,
+		    * START_DMA_INITIATOR_RECEIVE_REG wo
+		    */
     };
 
 
@@ -205,13 +210,13 @@ void	init_board( unsigned short io_port, int irq, int force_irq )
 	unsigned int	tmp;
 	unsigned int	pas_irq_code;
 
-        /* Initialize the SCSI part of the board */
+	/* Initialize the SCSI part of the board */
 
-        outb( 0x30, io_port + P_TIMEOUT_COUNTER_REG );  /* Timeout counter */
-        outb( 0x01, io_port + P_TIMEOUT_STATUS_REG_OFFSET );   /* Reset TC */
-        outb( 0x01, io_port + WAIT_STATE );   /* 1 Wait state */
+	outb( 0x30, io_port + P_TIMEOUT_COUNTER_REG );  /* Timeout counter */
+	outb( 0x01, io_port + P_TIMEOUT_STATUS_REG_OFFSET );   /* Reset TC */
+	outb( 0x01, io_port + WAIT_STATE );   /* 1 Wait state */
 
-        NCR5380_read( RESET_PARITY_INTERRUPT_REG );
+	NCR5380_read( RESET_PARITY_INTERRUPT_REG );
 
 	/* Set the SCSI interrupt pointer without mucking up the sound
 	 * interrupt pointer in the same byte.
@@ -311,13 +316,13 @@ void pas16_setup(char *str, int *ints) {
     static int commandline_current = 0;
     int i;
     if (ints[0] != 2) 
-        printk("pas16_setup : usage pas16=io_port,irq\n");
+	printk("pas16_setup : usage pas16=io_port,irq\n");
     else 
-        if (commandline_current < NO_OVERRIDES) {
-            overrides[commandline_current].io_port = (unsigned short) ints[1];
-            overrides[commandline_current].irq = ints[2];
-            for (i = 0; i < NO_BASES; ++i)
-                if (bases[i].io_port == (unsigned short) ints[1]) {
+	if (commandline_current < NO_OVERRIDES) {
+	    overrides[commandline_current].io_port = (unsigned short) ints[1];
+	    overrides[commandline_current].irq = ints[2];
+	    for (i = 0; i < NO_BASES; ++i)
+		if (bases[i].io_port == (unsigned short) ints[1]) {
  		    bases[i].noauto = 1;
 		    break;
 		}
@@ -359,12 +364,12 @@ int pas16_detect(Scsi_Host_Template * tpnt) {
 #if (PDEBUG & PDEBUG_INIT)
     printk("scsi-pas16 : probing io_port %04x\n", (unsigned int) bases[current_base].io_port);
 #endif
-	        if ( !bases[current_base].noauto &&
+		if ( !bases[current_base].noauto &&
 		     pas16_hw_detect( current_base ) ){
-		        io_port = bases[current_base].io_port;
+			io_port = bases[current_base].io_port;
 			init_board( io_port, default_irqs[ current_base ], 0 ); 
 #if (PDEBUG & PDEBUG_INIT)
-		        printk("scsi-pas16 : detected board.\n");
+			printk("scsi-pas16 : detected board.\n");
 #endif
 		}
     }
@@ -397,8 +402,8 @@ int pas16_detect(Scsi_Host_Template * tpnt) {
 	if (instance->irq == IRQ_NONE) {
 	    printk("scsi%d : interrupts not enabled. for better interactive performance,\n", instance->host_no);
 	    printk("scsi%d : please jumper the board for a free IRQ.\n", instance->host_no);
-            /* Disable 5380 interrupts, leave drive params the same */
-            outb( 0x4d, io_port + SYS_CONFIG_4 );
+	    /* Disable 5380 interrupts, leave drive params the same */
+	    outb( 0x4d, io_port + SYS_CONFIG_4 );
 	    outb( (inb(io_port + IO_CONFIG_3) & 0x0f), io_port + IO_CONFIG_3 );
 	}
 
@@ -450,11 +455,11 @@ int pas16_biosparam(Disk * disk, int dev, int * ip)
   ip[1] = 32;
   ip[2] = size >> 11;		/* I think I have it as /(32*64) */
   if( ip[2] > 1024 ) {		/* yes, >, not >= */
-        ip[0]=255;
-        ip[1]=63;
-        ip[2]=size/(63*255);
-        if( ip[2] > 1023 )	/* yes >1023... */
-                ip[2] = 1023;
+	ip[0]=255;
+	ip[1]=63;
+	ip[2]=size/(63*255);
+	if( ip[2] > 1023 )	/* yes >1023... */
+		ip[2] = 1023;
   }
 
   return 0;
@@ -477,7 +482,7 @@ static inline int NCR5380_pread (struct Scsi_Host *instance, unsigned char *dst,
     int len) {
     register unsigned char  *d = dst;
     register unsigned short reg = (unsigned short) (instance->io_port + 
-        P_DATA_REG_OFFSET);
+	P_DATA_REG_OFFSET);
     register i = len;
 
     while ( !(inb(instance->io_port + P_STATUS_REG_OFFSET) & P_ST_RDY) );
@@ -485,7 +490,7 @@ static inline int NCR5380_pread (struct Scsi_Host *instance, unsigned char *dst,
     insb( reg, d, i );
 
     if ( inb(instance->io_port + P_TIMEOUT_STATUS_REG_OFFSET) & P_TS_TIM) {
-        outb( P_TS_CT, instance->io_port + P_TIMEOUT_STATUS_REG_OFFSET);
+	outb( P_TS_CT, instance->io_port + P_TIMEOUT_STATUS_REG_OFFSET);
 	printk("scsi%d : watchdog timer fired in NCR5380_pread()\n",
 	    instance->host_no);
 	return -1;
@@ -517,7 +522,7 @@ static inline int NCR5380_pwrite (struct Scsi_Host *instance, unsigned char *src
     outsb( reg, s, i );
 
     if (inb(instance->io_port + P_TIMEOUT_STATUS_REG_OFFSET) & P_TS_TIM) {
-        outb( P_TS_CT, instance->io_port + P_TIMEOUT_STATUS_REG_OFFSET);
+	outb( P_TS_CT, instance->io_port + P_TIMEOUT_STATUS_REG_OFFSET);
 	printk("scsi%d : watchdog timer fired in NCR5380_pwrite()\n",
 	    instance->host_no);
 	return -1;

@@ -64,7 +64,7 @@ int scsicam_bios_param (Disk *disk, /* SCSI disk */
 
 /*
  * Function : static int partsize(struct buffer_head *bh, unsigned long 
- *	capacity,unsigned int *cyls, unsigned int *hds, unsigned int secs);
+ *     capacity,unsigned int *cyls, unsigned int *hds, unsigned int *secs);
  *
  * Purpose : to determine the BIOS mapping used to create the partition
  *	table, storing the results in *cyls, *hds, and *secs 
@@ -129,7 +129,7 @@ static int partsize(struct buffer_head *bh, unsigned long capacity,
 
 /*
  * Function : static int setsize(unsigned long capacity,unsigned int *cyls,
- *	unsigned int *hds, unsigned int secs);
+ *	unsigned int *hds, unsigned int *secs);
  *
  * Purpose : to determine a near-optimal int 0x13 mapping for a
  *	SCSI disk in terms of lost space of size capacity, storing

@@ -36,6 +36,10 @@ ifdef CONFIG_NET_IPIP
 NETDRV_OBJS := $(NETDRV_OBJS) tunnel.o
 endif
 
+ifdef CONFIG_HP100
+NETDRV_OBJS := $(NETDRV_OBJS) hp100.o
+endif
+
 ifdef CONFIG_WD80x3
 NETDRV_OBJS := $(NETDRV_OBJS) wd.o
 CONFIG_8390 = CONFIG_8390
@@ -212,7 +216,7 @@ else
 MODULES := $(MODULES) de4x5.o
 endif
 de4x5.o: de4x5.c CONFIG
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(DE4x5_OPTS) -c $<
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(DE4X5_OPTS) -c $<
 
 ifdef CONFIG_NI52
 NETDRV_OBJS := $(NETDRV_OBJS) ni52.o

@@ -153,7 +153,7 @@
 /*
 ** PCI Configuration Base I/O Address Register (PCI_CBIO)
 */
-#define CBIO_MASK   0x0000ff80       /* Base I/O Address Mask */
+#define CBIO_MASK   0xffffff80       /* Base I/O Address Mask */
 #define CBIO_IOSI   0x00000001       /* I/O Space Indicator (RO, value is 1) */
 
 /*
@@ -642,6 +642,3 @@ struct de4x5_ioctl {
 #define DE4X5_GET_OMR           0x0c /* Get the OMR Register contents */
 #define DE4X5_SET_OMR           0x0d /* Set the OMR Register contents */
 #define DE4X5_GET_REG           0x0e /* Get the DE4X5 Registers */
-
-
-

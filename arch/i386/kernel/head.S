@@ -9,15 +9,9 @@
  */
 
 .text
-.globl _idt,_gdt,_stext,__stext
-.globl _swapper_pg_dir,_pg0
-.globl _empty_bad_page
-.globl _empty_bad_page_table
-.globl _empty_zero_page
-
-#define __ASSEMBLY__
 #include <linux/tasks.h>
 #include <linux/fd.h>
+#include <linux/linkage.h>
 #include <asm/segment.h>
 
 #define CL_MAGIC_ADDR	0x90020
@@ -29,8 +23,8 @@
  * swapper_pg_dir is the main page directory, address 0x00001000 (or at
  * address 0x00101000 for a compressed boot).
  */
-_stext:
-__stext:
+ENTRY(stext)
+ENTRY(_stext)
 startup_32:
 	cld
 	movl $(KERNEL_DS),%eax
@@ -43,8 +37,8 @@ startup_32:
  * Clear BSS first so that there are no surprises...
  */
 	xorl %eax,%eax
-	movl $__edata,%edi
-	movl $__end,%ecx
+	movl $ SYMBOL_NAME(_edata),%edi
+	movl $ SYMBOL_NAME(_end),%ecx
 	subl %edi,%ecx
 	cld
 	rep
@@ -72,7 +66,7 @@ startup_32:
  * is for the command line.
  */
 	movl $0x90000,%esi
-	movl $_empty_zero_page,%edi
+	movl $ SYMBOL_NAME(empty_zero_page),%edi
 	movl $512,%ecx
 	cld
 	rep
@@ -83,7 +77,7 @@ startup_32:
 	stosl
 	cmpw $(CL_MAGIC),CL_MAGIC_ADDR
 	jne 1f
-	movl $_empty_zero_page+2048,%edi
+	movl $ SYMBOL_NAME(empty_zero_page)+2048,%edi
 	movzwl CL_OFFSET,%esi
 	addl $(CL_BASE_ADDR),%esi
 	movl $2048,%ecx
@@ -96,7 +90,7 @@ startup_32:
  * apply at our cpl of 0 and the stack ought to be aligned already, and
  * we don't need to preserve eflags.
  */
-	movl $3,_x86
+	movl $3, SYMBOL_NAME(x86)
 	pushfl			# push EFLAGS
 	popl %eax		# get EFLAGS
 	movl %eax,%ecx		# save original EFLAGS
@@ -108,7 +102,7 @@ startup_32:
 	xorl %ecx,%eax		# change in flags
 	andl $0x40000,%eax	# check if AC bit changed
 	je is386
-	movl $4,_x86
+	movl $4,SYMBOL_NAME(x86)
 	movl %ecx,%eax
 	xorl $0x200000,%eax	# check ID flag
 	pushl %eax
@@ -125,19 +119,19 @@ isnew:	pushl %ecx		# restore original EFLAGS
 	.byte 0x0f, 0xa2	# check the processor type
 	movb %al, %cl		# save reg for future use
 	andb $0x0f,%ah		# mask processor family
-	movb %ah, _x86
+	movb %ah,SYMBOL_NAME(x86)
 	andb $0xf0, %eax	# mask model
 	shrb $4, %al
-	movb %al, _x86_model
+	movb %al,SYMBOL_NAME(x86_model)
 	andb $0x0f, %cl		# mask mask revision
-	movb %cl, _x86_mask
-	movl %edx, _x86_capability
+	movb %cl,SYMBOL_NAME(x86_mask)
+	movl %edx,SYMBOL_NAME(x86_capability)
 	/* get vendor info */
 	xorl %eax, %eax			# call CPUID with 0 -> return vendor ID
 	.byte 0x0f, 0xa2		# CPUID
-	movl %ebx, _x86_vendor_id	# lo 4 chars
-	movl %edx, _x86_vendor_id+4	# next 4 chars
-	movl %ecx, _x86_vendor_id+8	# last 4 chars
+	movl %ebx,SYMBOL_NAME(x86_vendor_id)	# lo 4 chars
+	movl %edx,SYMBOL_NAME(x86_vendor_id)+4	# next 4 chars
+	movl %ecx,SYMBOL_NAME(x86_vendor_id)+8	# last 4 chars
 
 	movl %cr0,%eax		# 486+
 	andl $0x80000011,%eax	# Save PG,PE,ET
@@ -172,7 +166,7 @@ is386:	pushl %ecx		# restore original EFLAGS
 	pushl %eax
 	pushl %eax
 	cld			# gcc2 wants the direction flag cleared at all times
-	call _start_kernel
+	call SYMBOL_NAME(start_kernel)
 L6:
 	jmp L6			# main should never return here, but
 				# just in case, we know what happens.
@@ -181,7 +175,7 @@ L6:
  * We depend on ET to be correct. This checks for 287/387.
  */
 check_x87:
-	movb $0,_hard_math
+	movb $0,SYMBOL_NAME(hard_math)
 	clts
 	fninit
 	fstsw %ax
@@ -191,8 +185,8 @@ check_x87:
 	xorl $4,%eax		/* set EM */
 	movl %eax,%cr0
 	ret
-.align 2
-1:	movb $1,_hard_math
+	ALIGN
+1:	movb $1,SYMBOL_NAME(hard_math)
 	.byte 0xDB,0xE4		/* fsetpm for 287, ignored by 387 */
 	ret
 
@@ -212,7 +206,7 @@ setup_idt:
 	movw %dx,%ax		/* selector = 0x0010 = cs */
 	movw $0x8E00,%dx	/* interrupt gate - dpl=0, present */
 
-	lea _idt,%edi
+	lea SYMBOL_NAME(idt),%edi
 	mov $256,%ecx
 rp_sidt:
 	movl %eax,(%edi)
@@ -234,24 +228,26 @@ rp_sidt:
  * (ref: update, 25Sept92)  -- croutons@crunchy.uucp 
  * (ref: 92.10.11 - Linus Torvalds. Corrected 16M limit - no upper memory limit)
  */
-.align 2
+	ALIGN
 setup_paging:
 	movl $1024*2,%ecx		/* 2 pages - swapper_pg_dir+1 page table */
 	xorl %eax,%eax
-	movl $_swapper_pg_dir,%edi	/* swapper_pg_dir is at 0x1000 */
+	movl $ SYMBOL_NAME(swapper_pg_dir),%edi	/* swapper_pg_dir is at 0x1000 */
 	cld;rep;stosl
 /* Identity-map the kernel in low 4MB memory for ease of transition */
-	movl $_pg0+7,_swapper_pg_dir		/* set present bit/user r/w */
+/* set present bit/user r/w */
+	movl $ SYMBOL_NAME(pg0)+7,SYMBOL_NAME(swapper_pg_dir)
 /* But the real place is at 0xC0000000 */
-	movl $_pg0+7,_swapper_pg_dir+3072	/* set present bit/user r/w */
-	movl $_pg0+4092,%edi
+/* set present bit/user r/w */
+	movl $ SYMBOL_NAME(pg0)+7,SYMBOL_NAME(swapper_pg_dir)+3072
+	movl $ SYMBOL_NAME(pg0)+4092,%edi
 	movl $0x03ff007,%eax		/*  4Mb - 4096 + 7 (r/w user,p) */
 	std
 1:	stosl			/* fill the page backwards - more efficient :-) */
 	subl $0x1000,%eax
 	jge 1b
 	cld
-	movl $_swapper_pg_dir,%eax
+	movl $ SYMBOL_NAME(swapper_pg_dir),%eax
 	movl %eax,%cr3			/* cr3 - page directory start */
 	movl %cr0,%eax
 	orl $0x80000000,%eax
@@ -269,33 +265,33 @@ setup_paging:
  * by 2-3k.  This would be a good thing to do at some point.....
  */
 .org 0x1000
-_swapper_pg_dir:
+ENTRY(swapper_pg_dir)
 /*
  * The page tables are initialized to only 4MB here - the final page
  * tables are set up later depending on memory size.
  */
 .org 0x2000
-_pg0:
+ENTRY(pg0)
 
 .org 0x3000
-_empty_bad_page:
+ENTRY(empty_bad_page)
 
 .org 0x4000
-_empty_bad_page_table:
+ENTRY(empty_bad_page_table)
 
 .org 0x5000
-_empty_zero_page:
+ENTRY(empty_zero_page)
 
 .org 0x6000
 
 stack_start:
-	.long _init_user_stack+4096
+	.long SYMBOL_NAME(init_user_stack)+4096
 	.long KERNEL_DS
 
 /* This is the default interrupt "handler" :-) */
 int_msg:
 	.asciz "Unknown interrupt\n"
-.align 2
+	ALIGN
 ignore_int:
 	cld
 	pushl %eax
@@ -309,7 +305,7 @@ ignore_int:
 	mov %ax,%es
 	mov %ax,%fs
 	pushl $int_msg
-	call _printk
+	call SYMBOL_NAME(printk)
 	popl %eax
 	pop %fs
 	pop %es
@@ -322,28 +318,26 @@ ignore_int:
 /*
  * The interrupt descriptor table has room for 256 idt's
  */
-.align 4
+	ALIGN
 .word 0
 idt_descr:
 	.word 256*8-1		# idt contains 256 entries
-	.long 0xc0000000+_idt
+	.long 0xc0000000+SYMBOL_NAME(idt)
 
-.align 4
-_idt:
+ENTRY(idt)
 	.fill 256,8,0		# idt is uninitialized
 
-.align 4
+	ALIGN
 .word 0
 gdt_descr:
 	.word (8+2*NR_TASKS)*8-1
-	.long 0xc0000000+_gdt
+	.long 0xc0000000+SYMBOL_NAME(gdt)
 
 /*
  * This gdt setup gives the kernel a 1GB address space at virtual
  * address 0xC0000000 - space enough for expansion, I hope.
  */
-.align 4
-_gdt:
+ENTRY(gdt)
 	.quad 0x0000000000000000	/* NULL descriptor */
 	.quad 0x0000000000000000	/* not used */
 	.quad 0xc0c39a000000ffff	/* 0x10 kernel 1GB code at 0xC0000000 */

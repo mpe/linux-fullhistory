@@ -17,8 +17,6 @@
 #include <asm/system.h>
 #include <asm/dma.h>
 
-#define GFP_LEVEL_MASK 0xf
-
 /* I want this low enough for a while to catch errors.
    I want this number to be increased in the near future:
         loadable device drivers should use this function to get memory */

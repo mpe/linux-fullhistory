@@ -235,6 +235,9 @@ extern unsigned long get_unmapped_area(unsigned long, unsigned long);
 
 #define GFP_DMA		0x80
 
+#define GFP_LEVEL_MASK 0xf
+
+
 /*
  * vm_ops not present page codes for shared memory.
  *

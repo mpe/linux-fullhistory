@@ -88,6 +88,19 @@ struct timex {
 				 */
 	struct timeval time;	/* (read only) */
 	long tick;		/* (modified) usecs between clock ticks */
+
+	long ppsfreq;           /* pps frequency (scaled ppm) (ro) */
+	long jitter;            /* pps jitter (us) (ro) */
+	int shift;              /* interval duration (s) (shift) (ro) */
+	long stabil;            /* pps stability (scaled ppm) (ro) */
+	long jitcnt;            /* jitter limit exceeded (ro) */
+	long calcnt;            /* calibration intervals (ro) */
+	long errcnt;            /* calibration errors (ro) */
+	long stbcnt;            /* stability limit exceeded (ro) */
+
+	int  :32; int  :32; int  :32; int  :32;
+	int  :32; int  :32; int  :32; int  :32;
+	int  :32; int  :32; int  :32; int  :32;
 };
 
 /*

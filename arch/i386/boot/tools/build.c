@@ -30,11 +30,14 @@
 #include <fcntl.h>
 #include <linux/a.out.h>
 #include <linux/config.h>
+#include <errno.h>
 
 #define MINIX_HEADER 32
 
 #define N_MAGIC_OFFSET 1024
+#ifndef __BFD__
 static int GCC_HEADER = sizeof(struct exec);
+#endif
 
 #define SYS_SIZE DEF_SYSSIZE
 
@@ -89,7 +92,9 @@ int main(int argc, char ** argv)
 	int i,c,id, sz;
 	unsigned long sys_size;
 	char buf[1024];
+#ifndef __BFD__
 	struct exec *ex = (struct exec *)buf;
+#endif
 	char major_root, minor_root;
 	struct stat sb;
 	unsigned char setup_sectors;
@@ -190,6 +195,7 @@ int main(int argc, char ** argv)
 	
 	if ((id=open(argv[3],O_RDONLY,0))<0)
 		die("Unable to open 'system'");
+#ifndef __BFD__
 	if (read(id,buf,GCC_HEADER) != GCC_HEADER)
 		die("Unable to read header of 'system'");
 	if (N_MAGIC(*ex) == ZMAGIC) {
@@ -203,6 +209,14 @@ int main(int argc, char ** argv)
 		ex->a_data /1024,
 		ex->a_bss  /1024);
 	sz = N_SYMOFF(*ex) - GCC_HEADER + 4;
+#else
+	if (fstat (id, &sb)) {
+	  perror ("fstat");
+	  die ("Unable to stat 'system'");
+	}
+	sz = sb.st_size;
+	fprintf (stderr, "System is %d kB\n", sz/1024);
+#endif
 	sys_size = (sz + 15) / 16;
 	if (sys_size > SYS_SIZE)
 		die("System is too big");

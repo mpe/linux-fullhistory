@@ -13,6 +13,10 @@
 
   Last modified: Sat Feb 18 10:51:25 1995 by root@kai.home
 */
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif /* MODULE */
 
 #include <linux/fs.h>
 #include <linux/kernel.h>
@@ -87,14 +91,14 @@ static int st_buffer_size = ST_BUFFER_SIZE;
 static int st_write_threshold = ST_WRITE_THRESHOLD;
 static int st_max_buffers = ST_MAX_BUFFERS;
 
-static Scsi_Tape * scsi_tapes;
+static Scsi_Tape * scsi_tapes = NULL;
 
 static void st_init(void);
 static int st_attach(Scsi_Device *);
 static int st_detect(Scsi_Device *);
 static void st_detach(Scsi_Device *);
 
-struct Scsi_Device_Template st_template = {NULL, "tape", "st", TYPE_TAPE, 
+struct Scsi_Device_Template st_template = {NULL, "tape", "st", NULL, TYPE_TAPE, 
 					     SCSI_TAPE_MAJOR, 0, 0, 0, 0,
 					     st_detect, st_init,
 					     NULL, st_attach, st_detach};
@@ -467,8 +471,8 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     cmd[0] = TEST_UNIT_READY;
     SCpnt->request.dev = dev;
     scsi_do_cmd(SCpnt,
-                (void *) cmd, (void *) (STp->buffer)->b_data,
-                0, st_sleep_done, ST_LONG_TIMEOUT,
+		(void *) cmd, (void *) (STp->buffer)->b_data,
+		0, st_sleep_done, ST_LONG_TIMEOUT,
 		MAX_READY_RETRIES);
 
 
@@ -504,11 +508,11 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     if ((STp->buffer)->last_result_fatal != 0) {
       if ((SCpnt->sense_buffer[0] & 0x70) == 0x70 &&
 	  (SCpnt->sense_buffer[2] & 0x0f) == NO_TAPE) {
-        (STp->mt_status)->mt_fileno = STp->drv_block = 0 ;
+	(STp->mt_status)->mt_fileno = STp->drv_block = 0 ;
 	printk("st%d: No tape.\n", dev);
 	STp->ready = ST_NO_TAPE;
       } else {
-        (STp->mt_status)->mt_fileno = STp->drv_block = (-1);
+	(STp->mt_status)->mt_fileno = STp->drv_block = (-1);
 	STp->ready = ST_NOT_READY;
       }
       SCpnt->request.dev = -1;  /* Mark as not busy */
@@ -529,7 +533,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     cmd[0] = READ_BLOCK_LIMITS;
     SCpnt->request.dev = dev;
     scsi_do_cmd(SCpnt,
-                (void *) cmd, (void *) (STp->buffer)->b_data,
+		(void *) cmd, (void *) (STp->buffer)->b_data,
 		6, st_sleep_done, ST_TIMEOUT, MAX_READY_RETRIES);
 
 
@@ -564,8 +568,8 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     cmd[4] = 12;
     SCpnt->request.dev = dev;
     scsi_do_cmd(SCpnt,
-                (void *) cmd, (void *) (STp->buffer)->b_data,
-                12, st_sleep_done, ST_TIMEOUT, MAX_READY_RETRIES);
+		(void *) cmd, (void *) (STp->buffer)->b_data,
+		12, st_sleep_done, ST_TIMEOUT, MAX_READY_RETRIES);
 
 
     /* this must be done with interrupts off */
@@ -650,6 +654,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 
     if (scsi_tapes[dev].device->host->hostt->usage_count)
       (*scsi_tapes[dev].device->host->hostt->usage_count)++;
+    if(st_template.usage_count) (*st_template.usage_count)++;
 
     return 0;
 }
@@ -739,6 +744,7 @@ scsi_tape_close(struct inode * inode, struct file * filp)
 
     if (scsi_tapes[dev].device->host->hostt->usage_count)
       (*scsi_tapes[dev].device->host->hostt->usage_count)--;
+    if(st_template.usage_count) (*st_template.usage_count)--;
 
     return;
 }
@@ -845,7 +851,7 @@ st_write(struct inode * inode, struct file * filp, char * buf, int count)
 		    (STp->buffer)->buffer_bytes, b_point, do_count);
 
       if (STp->block_size == 0)
-        blks = transfer = do_count;
+	blks = transfer = do_count;
       else {
 	blks = ((STp->buffer)->buffer_bytes + do_count) /
 	  STp->block_size;
@@ -1675,10 +1681,10 @@ st_int_ioctl(struct inode * inode,struct file * file,
        STp->drv_block = 0;
      }
      undone = (
-          (SCpnt->sense_buffer[3] << 24) +
-          (SCpnt->sense_buffer[4] << 16) +
-          (SCpnt->sense_buffer[5] << 8) +
-          SCpnt->sense_buffer[6] );
+	  (SCpnt->sense_buffer[3] << 24) +
+	  (SCpnt->sense_buffer[4] << 16) +
+	  (SCpnt->sense_buffer[5] << 8) +
+	  SCpnt->sense_buffer[6] );
      if ( (cmd_in == MTFSF) || (cmd_in == MTFSFM) ) {
        if (fileno >= 0)
 	 (STp->mt_status)->mt_fileno = fileno - undone ;
@@ -1759,7 +1765,7 @@ st_ioctl(struct inode * inode,struct file * file,
 
      i = verify_area(VERIFY_WRITE, (void *)arg, sizeof(mtc));
      if (i)
-        return i;
+	return i;
 
      memcpy_fromfs((char *) &mtc, (char *)arg, sizeof(struct mtop));
 
@@ -1972,9 +1978,9 @@ static int st_detect(Scsi_Device * SDp)
 {
   if(SDp->type != TYPE_TAPE) return 0;
 
-  printk("Detected scsi tape st%d at scsi%d, id %d, lun %d\n", 
+  printk("Detected scsi tape st%d at scsi%d, channel %d, id %d, lun %d\n", 
 	 st_template.dev_noticed++,
-	 SDp->host->host_no , SDp->id, SDp->lun); 
+	 SDp->host->host_no, SDp->channel, SDp->id, SDp->lun); 
   
   return 1;
 }
@@ -2070,3 +2076,38 @@ static void st_detach(Scsi_Device * SDp)
     }
   return;
 }
+
+
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+
+int init_module(void) {
+  st_template.usage_count = &mod_use_count_;
+  return scsi_register_module(MODULE_SCSI_DEV, &st_template);
+}
+
+void cleanup_module( void) 
+{
+  int i;
+
+  if (MOD_IN_USE) {
+    printk(KERN_INFO __FILE__ ": module is in use, remove rejected\n");
+    return;
+  }
+  scsi_unregister_module(MODULE_SCSI_DEV, &st_template);
+  unregister_chrdev(SCSI_GENERIC_MAJOR, "st");
+  if(scsi_tapes != NULL) {
+    scsi_init_free((char *) scsi_tapes,
+		   (st_template.dev_noticed + ST_EXTRA_DEVS) 
+		   * sizeof(Scsi_Tape));
+    
+    for (i=0; i < st_nbr_buffers; i++) {
+      scsi_init_free((char *) st_buffers[i],
+		     sizeof(ST_buffer) - 1 + st_buffer_size);
+    }
+    
+    scsi_init_free((char *) st_buffers, st_nbr_buffers * sizeof(ST_buffer *));
+  }
+  st_template.dev_max = 0;
+}
+#endif /* MODULE */

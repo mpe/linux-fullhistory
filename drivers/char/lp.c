@@ -588,7 +588,7 @@ void cleanup_module(void)
         else {
                unregister_chrdev(LP_MAJOR,"lp");
 	       for (offset = 0; offset < LP_NO; offset++) 
-			if(LP_F(offset) && LP_EXIST) 
+			if (LP_F(offset) & LP_EXIST) 
 		 		release_region(LP_B(offset),3);
 	}
 }

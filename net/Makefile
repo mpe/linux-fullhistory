@@ -24,7 +24,7 @@ all:		network.a
 
 network.a:	subdirs $(OBJS)
 		rm -f $@
-		ar rcs $@ $(OBJS) $(SUBOBJS)
+		$(AR) rcs $@ $(OBJS) $(SUBOBJS)
 
 subdirs:	dummy
 		set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i; done

@@ -31,6 +31,6 @@ struct sg_header
 #define SG_DEFAULT_RETRIES 1
 
 #define SG_MAX_QUEUE 4 /* maximum outstanding request, arbitrary, may be
-                          changed if sufficient DMA buffer room available */
+			  changed if sufficient DMA buffer room available */
 
 #define SG_BIG_BUFF 32768

@@ -41,6 +41,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( NCR,		NCR_53C825,	"53c825"),
 	DEVICE( ADAPTEC,	ADAPTEC_2940,	"2940"),
 	DEVICE( ADAPTEC,	ADAPTEC_294x,	"294x"),
+	DEVICE( ADAPTEC,	ADAPTEC_7850,	"AIC-7850"),
 	DEVICE( DPT,		DPT,		"SmartCache/Raid"),
 	DEVICE( S3,		S3_864_1,	"Vision 864-P"),
 	DEVICE( S3,		S3_864_2,	"Vision 864-P"),
@@ -57,9 +58,11 @@ struct pci_dev_info dev_info[] = {
 	BRIDGE( UMC,		UMC_UM8881F,	"UM8881F",		0x02),
 	BRIDGE( UMC,		UMC_UM8891A,	"UM8891A", 		0x01),
 	DEVICE( UMC,		UMC_UM8886F,	"UM8886F"),
+	DEVICE( UMC,		UMC_UM8886A,	"UM8886A"),
 	DEVICE( UMC,		UMC_UM8673F,	"UM8673F"),
 	DEVICE( DEC,		DEC_TULIP,	"DC21040"),
-	DEVICE( DEC,		DEC_TULIP_FAST,	"DC21040"),
+	DEVICE( DEC,		DEC_TULIP_FAST,	"DC21140"),
+	DEVICE( DEC,		DEC_TULIP_PLUS,	"DC21041"),
 	DEVICE( DEC,		DEC_FDDI,	"DEFPA"),
 	DEVICE( DEC,		DEC_BRD,	"DC21050"),
 	DEVICE( MATROX,		MATROX_MGA_2,	"Atlas PX2085"),
@@ -80,6 +83,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( CIRRUS,		CIRRUS_5434_4,	"GD 5434"),
 	DEVICE( CIRRUS,		CIRRUS_5434_8,	"GD 5434"),
 	DEVICE( CIRRUS,		CIRRUS_6729,	"CL 6729"),
+	DEVICE( CIRRUS,		CIRRUS_7542,	"CL 7542"),
 	DEVICE( BUSLOGIC,	BUSLOGIC_946C,	"946C"),
 	DEVICE( BUSLOGIC,	BUSLOGIC_946C_2,"946C"),
 	DEVICE( N9,		N9_I128,	"Imagine 128"),
@@ -128,7 +132,8 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( PROMISE,	PROMISE_5300,	"DC5030"),
 	DEVICE( QLOGIC,		QLOGIC_ISP1020,	"ISP1020"),
 	DEVICE( QLOGIC,		QLOGIC_ISP1022,	"ISP1022"),
-	DEVICE( X,		X_AGX016,	"ITT AGX016")
+	DEVICE( X,		X_AGX016,	"ITT AGX016"),
+	DEVICE( VORTEX,		VORTEX_GDT,	"GDT 6000b")
 };
 
 
@@ -327,6 +332,9 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_3COM:		return "3Com";
 	      case PCI_VENDOR_ID_PROMISE:	return "Promise Technology";
 	      case PCI_VENDOR_ID_QLOGIC:	return "Q Logic";
+	      case PCI_VENDOR_ID_X:		return "X TECHNOLOGY";
+	      case PCI_VENDOR_ID_ACC:		return "ACC MICROELECTRONICS";
+	      case PCI_VENDOR_ID_VORTEX:	return "VORTEX";
 	      default:				return "Unknown vendor";
 	}
 }

@@ -78,12 +78,15 @@ extern int NCR53c7xx_release(struct Scsi_Host *);
 #define NCR53c7xx_release NULL
 #endif
 
-#define NCR53c7xx {NULL, NULL, "NCR53c{7,8}xx (rel 4)", NCR53c7xx_detect, 	\
+extern int generic_proc_info(char *, char **, off_t, int, int, int);
+
+#define NCR53c7xx {NULL, NULL, generic_proc_info, "NCR53c7xx",          \
+ 	PROC_SCSI_NCR53C7xx, "NCR53c{7,8}xx (rel 4)", NCR53c7xx_detect, \
     	NULL, /* info */ NULL, /* command, deprecated */ NULL, 		\
 	NCR53c7xx_queue_command, NCR53c7xx_abort, NCR53c7xx_reset,	\
-        NULL /* slave attach */, scsicam_bios_param, /* can queue */ 1, \
+	NULL /* slave attach */, scsicam_bios_param, /* can queue */ 1, \
 	/* id */ 7, 127 /* old SG_ALL */, /* cmd per lun */ 1 , 	\
-        /* present */ 0, /* unchecked isa dma */ 0, DISABLE_CLUSTERING} 
+	/* present */ 0, /* unchecked isa dma */ 0, DISABLE_CLUSTERING} 
 #endif /* defined(HOSTS_C) || defined(MODULE) */ 
 
 #ifndef HOSTS_C
@@ -385,9 +388,9 @@ extern int NCR53c7xx_release(struct Scsi_Host *);
 /* 0x80 - 0x04 are reserved */
 #define CTEST0_700_RTRG		0x02	/* Real target mode */
 #define CTEST0_700_DDIR		0x01	/* Data direction, 1 = 
-	                                 * SCSI bus to host, 0  =
-	                                 * host to SCSI.
-	                                 */
+					 * SCSI bus to host, 0  =
+					 * host to SCSI.
+					 */
 
 #define CTEST1_REG_700		0x15	/* Chip test 1 ro */
 #define CTEST1_REG_800		0x19	/* Chip test 1 ro */
@@ -544,7 +547,7 @@ extern int NCR53c7xx_release(struct Scsi_Host *);
 #define CTEST7_EVP		0x04	/* 1 = host bus even parity, 0 = odd */
 #define CTEST7_10_TT1		0x02	/* Transfer type */
 #define CTEST7_00_DC		0x02	/* Set to drive DC low during instruction 
-                                           fetch */
+					   fetch */
 #define CTEST7_DIFF		0x01	/* Differential mode */
 
 #define CTEST7_SAVE ( CTEST7_EVP | CTEST7_DIFF )
@@ -620,8 +623,8 @@ extern int NCR53c7xx_release(struct Scsi_Host *);
 					 * speeds.
 					 */
 #define CTEST8_0066_DAS		0x02	/* Disable automatic target/initiator
-			                 * switching.
-			                 */
+					 * switching.
+					 */
 #define CTEST8_0066_LDE		0x01	/* Last disconnect enable.
 					 * The status of pending 
 					 * disconnect is maintained by
@@ -980,11 +983,12 @@ struct NCR53c7x0_cmd {
 
 
     volatile struct NCR53c7x0_cmd *next, *prev;	
-                                        /* Linux maintained lists.  Note that
+					/* Linux maintained lists.  Note that
 					   hostdata->free is a singly linked
 					   list; the rest are doubly linked */
     					 
 
+    long dsa_size; /* Size of DSA structure */
 
     u32 *data_transfer_start;		/* Start of data transfer routines */
     u32 *data_transfer_end;		/* Address after end of data transfer o
@@ -1058,7 +1062,7 @@ struct NCR53c7x0_hostdata {
 	 * NCR53c700-66 = 70066
 	 * NCR53c710 = 710
 	 * NCR53c720 = 720 
-         * NCR53c810 = 810
+	 * NCR53c810 = 810
 	 */
 
     /*
@@ -1216,7 +1220,7 @@ struct NCR53c7x0_hostdata {
 					   to other target/lun combinations */
 
     int debug_count_limit;		/* Number of commands to execute
-				           before puking to limit debugging 
+					   before puking to limit debugging 
 					   output */
 				    
 
@@ -1364,7 +1368,7 @@ struct NCR53c7x0_hostdata {
 		(offset)]);						\
     	}
 
-#define patch_abs_rwri_data(script, offset, symbol, value)	        \
+#define patch_abs_rwri_data(script, offset, symbol, value)		\
     	for (i = 0; i < (sizeof (A_##symbol##_used) / sizeof 		\
     	    (u32)); ++i)						\
     	    (script)[A_##symbol##_used[i] - (offset)] =			\

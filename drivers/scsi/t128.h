@@ -117,7 +117,8 @@ int t128_reset(Scsi_Cmnd *);
 
 #ifdef HOSTS_C
 
-#define TRANTOR_T128 {NULL, NULL, "Trantor T128/T128F/T228", t128_detect, NULL,  \
+#define TRANTOR_T128 {NULL, NULL, generic_proc_info, "t128", PROC_SCSI_T128, \
+	"Trantor T128/T128F/T228", t128_detect, NULL,  \
 	NULL,							\
 	NULL, t128_queue_command, t128_abort, t128_reset, NULL, 	\
 	t128_biosparam, 						\

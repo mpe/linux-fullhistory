@@ -438,9 +438,9 @@ static __inline__ void run_main(void) {
     cli();
     if (!main_running) {
 	main_running = 1;
-        NCR5380_main();
+	NCR5380_main();
 	/* 
-         * main_running is cleared in NCR5380_main once it can't do 
+	 * main_running is cleared in NCR5380_main once it can't do 
 	 * more work, and NCR5380_main exits with interrupts disabled.
 	 */
 	sti();
@@ -808,8 +808,8 @@ static void NCR5380_init (struct Scsi_Host *instance, int flags) {
 #ifndef AUTOSENSE
     if ((instance->cmd_per_lun > 1) || instance->can_queue > 1)) 
 	 printk("scsi%d : WARNING : support for multiple outstanding commands enabled\n"
-	        "         without AUTOSENSE option, contingent allegiance conditions may\n"
-	        "         be incorrectly cleared.\n", instance->host_no);
+		"         without AUTOSENSE option, contingent allegiance conditions may\n"
+		"         be incorrectly cleared.\n", instance->host_no);
 #endif /* def AUTOSENSE */
 
     NCR5380_write(INITIATOR_COMMAND_REG, ICR_BASE);
@@ -1108,7 +1108,7 @@ static void NCR5380_intr (int irq, struct pt_regs * regs) {
 				     && jiffies < timeout)
 				;
 			      if (jiffies >= timeout)
-			        printk("scsi: timeout at %d\n", __LINE__);
+				printk("scsi: timeout at %d\n", __LINE__);
 			    }
 #else /* NCR_TIMEOUT */
 			    while (NCR5380_read(BUS_AND_STATUS_REG) & BASR_ACK);
@@ -1621,8 +1621,8 @@ static int NCR5380_transfer_dma (struct Scsi_Host *instance,
     NCR5380_setup(instance);
 
     if ((tmp = (NCR5380_read(STATUS_REG) & PHASE_MASK)) != p) {
-        *phase = tmp;
-        return -1;
+	*phase = tmp;
+	return -1;
     }
 #if defined(REAL_DMA) || defined(REAL_DMA_POLL) 
 #ifdef READ_OVERRUNS
@@ -1737,17 +1737,17 @@ static int NCR5380_transfer_dma (struct Scsi_Host *instance,
 #ifdef READ_OVERRUNS
       udelay(10);
       if (((NCR5380_read(BUS_AND_STATUS_REG) & (BASR_PHASE_MATCH|BASR_ACK)) ==
-           (BASR_PHASE_MATCH | BASR_ACK))) {
-        saved_data = NCR5380_read(INPUT_DATA_REGISTER);
-        overrun = 1;
+	   (BASR_PHASE_MATCH | BASR_ACK))) {
+	saved_data = NCR5380_read(INPUT_DATA_REGISTER);
+	overrun = 1;
       }
 #endif
     } else {
       int limit = 100;
       while (((tmp = NCR5380_read(BUS_AND_STATUS_REG)) & BASR_ACK) ||
-            (NCR5380_read(STATUS_REG) & SR_REQ)) {
-        if (!(tmp & BASR_PHASE_MATCH)) break;
-        if (--limit < 0) break;
+	    (NCR5380_read(STATUS_REG) & SR_REQ)) {
+	if (!(tmp & BASR_PHASE_MATCH)) break;
+	if (--limit < 0) break;
       }
     }
 
@@ -1770,15 +1770,15 @@ static int NCR5380_transfer_dma (struct Scsi_Host *instance,
     if (*phase == p && (p & SR_IO) && residue == 0) {
       if (overrun) {
 #if (NDEBUG & NDEBUG_DMA)
-        printk("Got an input overrun, using saved byte\n");
+	printk("Got an input overrun, using saved byte\n");
 #endif
-        **data = saved_data;
-        *data += 1;
-        *count -= 1;
-        cnt = toPIO = 1;
+	**data = saved_data;
+	*data += 1;
+	*count -= 1;
+	cnt = toPIO = 1;
       } else {
-        printk("No overrun??\n");
-        cnt = toPIO = 2;
+	printk("No overrun??\n");
+	cnt = toPIO = 2;
       }
 #if (NDEBUG & NDEBUG_DMA)
       printk("Doing %d-byte PIO to 0x%X\n", cnt, *data);
@@ -1839,7 +1839,7 @@ static int NCR5380_transfer_dma (struct Scsi_Host *instance,
 #if 1
 		while (!(NCR5380_read(BUS_AND_STATUS_REG) & 
 			BASR_DRQ) && (NCR5380_read(BUS_AND_STATUS_REG) &
-		        BASR_PHASE_MATCH));
+			BASR_PHASE_MATCH));
 #else
 		if (NCR5380_read(STATUS_REG) & SR_REQ) {
 		    for (; timeout && 
@@ -1989,16 +1989,16 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance) {
 		if (!cmd->device->borken &&
 		    (transfersize = NCR5380_dma_xfer_len(instance, cmd)) != 0) {
 #else
-                transfersize = cmd->transfersize;
+		transfersize = cmd->transfersize;
 
 #ifdef LIMIT_TRANSFERSIZE  /* If we have problems with interrupt service */
-                if( transfersize > 512 )
-                    transfersize = 512;
+		if( transfersize > 512 )
+		    transfersize = 512;
 #endif  /* LIMIT_TRANSFERSIZE */
 
-                if (!cmd->device->borken && transfersize && 
-                    cmd->SCp.this_residual && !(cmd->SCp.this_residual % 
-                    transfersize)) {
+		if (!cmd->device->borken && transfersize && 
+		    cmd->SCp.this_residual && !(cmd->SCp.this_residual % 
+		    transfersize)) {
 #endif
 		    len = transfersize;
 		    if (NCR5380_transfer_dma(instance, &phase,
@@ -2132,8 +2132,8 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance) {
 			cli();
 			cmd->host_scribble = (unsigned char *) 
 			    hostdata->issue_queue;
-		        hostdata->issue_queue = (Scsi_Cmnd *) cmd;
-		        sti();
+			hostdata->issue_queue = (Scsi_Cmnd *) cmd;
+			sti();
 #if (NDEBUG & NDEBUG_QUEUES)
 			printk("scsi%d : REQUEST SENSE added to head of issue queue\n");
 #endif
@@ -2176,7 +2176,7 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance) {
 		    sti();
 #if (NDEBUG & NDEBUG_QUEUES)
 		    printk("scsi%d : command for target %d lun %d was moved from connected to"
-		           "  the disconnected_queue\n", instance->host_no, 
+			   "  the disconnected_queue\n", instance->host_no, 
 			    cmd->target, cmd->lun);
 #endif
 		    /* 
@@ -2663,7 +2663,7 @@ int NCR5380_abort (Scsi_Cmnd *cmd) {
 #if (NDEBUG & NDEBUG_ABORT)
     printk("scsi%d : abort failed, command connected.\n", instance->host_no);
 #endif
-        return SCSI_ABORT_NOT_RUNNING;
+	return SCSI_ABORT_NOT_RUNNING;
     }
 
 /*
@@ -2693,13 +2693,13 @@ int NCR5380_abort (Scsi_Cmnd *cmd) {
 
     for (tmp = (Scsi_Cmnd *) hostdata->disconnected_queue; tmp; 
 	tmp = (Scsi_Cmnd *) tmp->host_scribble) 
-        if (cmd == tmp) {
-            sti(); 
+	if (cmd == tmp) {
+	    sti(); 
 #if (NDEBUG & NDEBUG_ABORT)
     printk("scsi%d : aborting disconnected command.\n", instance->host_no);
 #endif
   
-            if (NCR5380_select (instance, cmd, (int) cmd->tag)) 
+	    if (NCR5380_select (instance, cmd, (int) cmd->tag)) 
 		return SCSI_ABORT_BUSY;
 
 #if (NDEBUG & NDEBUG_ABORT)
@@ -2740,7 +2740,7 @@ int NCR5380_abort (Scsi_Cmnd *cmd) {
 
     sti();
     printk("scsi%d : warning : SCSI command probably completed successfully\n"
-           "         before abortion\n", instance->host_no); 
+	   "         before abortion\n", instance->host_no); 
     return SCSI_ABORT_NOT_RUNNING;
 }
 

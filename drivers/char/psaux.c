@@ -488,7 +488,7 @@ static int poll_aux_status(void)
 	int retries=0;
 
 	while ((inb(AUX_STATUS)&0x03) && retries < MAX_RETRIES) {
- 		if (inb_p(AUX_STATUS) & AUX_OBUF_FULL == AUX_OBUF_FULL)
+ 		if ((inb_p(AUX_STATUS) & AUX_OBUF_FULL) == AUX_OBUF_FULL)
 			inb_p(AUX_INPUT_PORT);
 		current->state = TASK_INTERRUPTIBLE;
 		current->timeout = jiffies + (5*HZ + 99) / 100;

@@ -91,12 +91,11 @@ comment 'SCSI low-level drivers'
 
 bool 'Adaptec AHA152X support' CONFIG_SCSI_AHA152X y
 bool 'Adaptec AHA1542 support' CONFIG_SCSI_AHA1542 n
-bool 'Adaptec AHA1740 support' CONFIG_SCSI_AHA1740 y
-if [ "$CONFIG_PCI" = "y" ]; then
-  bool 'Adaptec AHA274X/284X/294X support' CONFIG_SCSI_AIC7XXX n
-fi
+bool 'Adaptec AHA1740 support' CONFIG_SCSI_AHA1740 n
+bool 'Adaptec AHA274X/284X/294X support' CONFIG_SCSI_AIC7XXX n
 bool 'BusLogic SCSI support' CONFIG_SCSI_BUSLOGIC n
-bool 'EATA-DMA (DPT,NEC&ATT for ISA,EISA,PCI) support' CONFIG_SCSI_EATA_DMA n
+bool 'EATA-DMA (DPT, NEC, ATT, Olivetti) support' CONFIG_SCSI_EATA_DMA n
+bool 'EATA-PIO (old DPT PM2001, PM2012A) support' CONFIG_SCSI_EATA_PIO n
 bool 'UltraStor 14F/34F support' CONFIG_SCSI_U14_34F n
 bool 'Future Domain 16xx SCSI support' CONFIG_SCSI_FUTURE_DOMAIN n
 bool 'Generic NCR5380 SCSI support' CONFIG_SCSI_GENERIC_NCR5380 n
@@ -173,6 +172,7 @@ if [ "$CONFIG_NET_ISA" = "y" ]; then
 	fi
 	bool 'HP PCLAN+ (27247B and 27252A) support' CONFIG_HPLAN_PLUS n
 	bool 'HP PCLAN (27245 and other 27xxx series) support' CONFIG_HPLAN n
+	bool 'HP 10/100VG PCLAN (257X series) support' CONFIG_HP100 y
 	bool 'NE2000/NE1000 support' CONFIG_NE2000 y
 	if [ "$CONFIG_AX25" = "y" ]; then
 		bool 'Ottawa PI and PI/2 support' CONFIG_PI y
@@ -185,7 +185,7 @@ if [ "$CONFIG_NET_EISA" = "y" ]; then
 		bool 'Ansel Communications EISA 3200 support' CONFIG_AC3200 n
 	fi
 	bool 'Apricot Xen-II on board ethernet' CONFIG_APRICOT n
-	bool 'DE425, DE434, DE435 support' CONFIG_DE4X5 n
+	bool 'DE425, DE434, DE435, DE500 support' CONFIG_DE4X5 n
 #	bool 'DEC 21040 PCI support' CONFIG_DEC_ELCP n
 #	bool 'LPL T100V 100Mbs support' CONFIG_LPL_T100 n
 #	bool 'PCnet32 (32 bit VLB and PCI LANCE) support' CONFIG_PCNET32 n

@@ -293,10 +293,10 @@ static void NCR5380_reselect (struct Scsi_Host *instance);
 static int NCR5380_select (struct Scsi_Host *instance, Scsi_Cmnd *cmd, int tag);
 #if defined(PSEUDO_DMA) || defined(REAL_DMA) || defined(REAL_DMA_POLL)
 static int NCR5380_transfer_dma (struct Scsi_Host *instance,
-        unsigned char *phase, int *count, unsigned char **data);
+	unsigned char *phase, int *count, unsigned char **data);
 #endif
 static int NCR5380_transfer_pio (struct Scsi_Host *instance,
-        unsigned char *phase, int *count, unsigned char **data);
+	unsigned char *phase, int *count, unsigned char **data);
 
 #if (defined(REAL_DMA) || defined(REAL_DMA_POLL)) && defined(i386)
 static __inline__ int NCR5380_i386_dma_setup (struct Scsi_Host *instance,

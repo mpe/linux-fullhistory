@@ -13,7 +13,7 @@
 #include "hosts.h"
 #include "scsi_ioctl.h"
 
-#define MAX_RETRIES 5	
+#define MAX_RETRIES 5   
 #define MAX_TIMEOUT 900
 #define MAX_BUF 4096
 
@@ -28,25 +28,25 @@
 
 static int ioctl_probe(struct Scsi_Host * host, void *buffer)
 {
-	int temp;
-	unsigned int len,slen;
-	const char * string;
-	
-	if ((temp = host->hostt->present) && buffer) {
-		len = get_user ((unsigned int *) buffer);
-		if(host->hostt->info)
-		  string = host->hostt->info(host);
-		else 
-		  string = host->hostt->name;
-		if(string) {
-		  slen = strlen(string);
-		  if (len > slen)
-		    len = slen + 1;
-		  verify_area(VERIFY_WRITE, buffer, len);
-		  memcpy_tofs (buffer, string, len);
-		}
+    int temp;
+    unsigned int len,slen;
+    const char * string;
+    
+    if ((temp = host->hostt->present) && buffer) {
+	len = get_user ((unsigned int *) buffer);
+	if(host->hostt->info)
+	    string = host->hostt->info(host);
+	else 
+	    string = host->hostt->name;
+	if(string) {
+	    slen = strlen(string);
+	    if (len > slen)
+		len = slen + 1;
+	    verify_area(VERIFY_WRITE, buffer, len);
+	    memcpy_tofs (buffer, string, len);
 	}
-	return temp;
+    }
+    return temp;
 }
 
 /*
@@ -78,53 +78,53 @@ static int ioctl_probe(struct Scsi_Host * host, void *buffer)
 
 static void scsi_ioctl_done (Scsi_Cmnd * SCpnt)
 {
-  struct request * req;
-  
-  req = &SCpnt->request;
-  req->dev = 0xfffe; /* Busy, but indicate request done */
-  
-  if (req->sem != NULL) {
-    up(req->sem);
-  }
-}	
+    struct request * req;
+    
+    req = &SCpnt->request;
+    req->dev = 0xfffe; /* Busy, but indicate request done */
+    
+    if (req->sem != NULL) {
+	up(req->sem);
+    }
+}   
 
 static int ioctl_internal_command(Scsi_Device *dev, char * cmd)
 {
-	int result;
-	Scsi_Cmnd * SCpnt;
-
-	SCpnt = allocate_device(NULL, dev, 1);
-	scsi_do_cmd(SCpnt,  cmd, NULL,  0,
-			scsi_ioctl_done,  MAX_TIMEOUT,
-			MAX_RETRIES);
-
-	if (SCpnt->request.dev != 0xfffe){
-	  struct semaphore sem = MUTEX_LOCKED;
-	  SCpnt->request.sem = &sem;
-	  down(&sem);
-	  /* Hmm.. Have to ask about this one */
-	  while (SCpnt->request.dev != 0xfffe) schedule();
-	};
-
-	if(driver_byte(SCpnt->result) != 0)
-	  switch(SCpnt->sense_buffer[2] & 0xf) {
-	  case ILLEGAL_REQUEST:
+    int result;
+    Scsi_Cmnd * SCpnt;
+    
+    SCpnt = allocate_device(NULL, dev, 1);
+    scsi_do_cmd(SCpnt,  cmd, NULL,  0,
+		scsi_ioctl_done,  MAX_TIMEOUT,
+		MAX_RETRIES);
+    
+    if (SCpnt->request.dev != 0xfffe){
+	struct semaphore sem = MUTEX_LOCKED;
+	SCpnt->request.sem = &sem;
+	down(&sem);
+	/* Hmm.. Have to ask about this one */
+	while (SCpnt->request.dev != 0xfffe) schedule();
+    };
+    
+    if(driver_byte(SCpnt->result) != 0)
+	switch(SCpnt->sense_buffer[2] & 0xf) {
+	case ILLEGAL_REQUEST:
 	    if(cmd[0] == ALLOW_MEDIUM_REMOVAL) dev->lockable = 0;
 	    else printk("SCSI device (ioctl) reports ILLEGAL REQUEST.\n");
 	    break;
-	  case NOT_READY: /* This happens if there is no disc in drive */
+	case NOT_READY: /* This happens if there is no disc in drive */
 	    if(dev->removable){
-	      printk("Device not ready.  Make sure there is a disc in the drive.\n");
-	      break;
+		printk("Device not ready.  Make sure there is a disc in the drive.\n");
+		break;
 	    };
-	  case UNIT_ATTENTION:
+	case UNIT_ATTENTION:
 	    if (dev->removable){
-	      dev->changed = 1;
-	      SCpnt->result = 0; /* This is no longer considered an error */
-	      printk("Disc change detected.\n");
-	      break;
+		dev->changed = 1;
+		SCpnt->result = 0; /* This is no longer considered an error */
+		printk("Disc change detected.\n");
+		break;
 	    };
-	  default: /* Fall through for non-removable media */
+	default: /* Fall through for non-removable media */
 	    printk("SCSI CD error: host %d id %d lun %d return code = %x\n",
 		   dev->host->host_no,
 		   dev->id,
@@ -134,167 +134,171 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd)
 		   sense_class(SCpnt->sense_buffer[0]),
 		   sense_error(SCpnt->sense_buffer[0]),
 		   SCpnt->sense_buffer[2] & 0xf);
-
-	  };
-
-	result = SCpnt->result;
-	SCpnt->request.dev = -1;
-	wake_up(&SCpnt->device->device_wait);
-	return result;
+	    
+	};
+    
+    result = SCpnt->result;
+    SCpnt->request.dev = -1;
+    wake_up(&SCpnt->device->device_wait);
+    return result;
 }
 
 static int ioctl_command(Scsi_Device *dev, void *buffer)
 {
-	char * buf;
-	char cmd[12];
-	char * cmd_in;
-	Scsi_Cmnd * SCpnt;
-	unsigned char opcode;
-	int inlen, outlen, cmdlen;
-	int needed, buf_needed;
-	int result;
-
-	if (!buffer)
-		return -EINVAL;
-	
-	inlen = get_user((unsigned int *) buffer);
-	outlen = get_user( ((unsigned int *) buffer) + 1);
-
-	cmd_in = (char *) ( ((int *)buffer) + 2);
-	opcode = get_user(cmd_in); 
-
-	needed = buf_needed = (inlen > outlen ? inlen : outlen);
-	if(buf_needed){
-	  buf_needed = (buf_needed + 511) & ~511;
-	  if (buf_needed > MAX_BUF) buf_needed = MAX_BUF;
-	  buf = (char *) scsi_malloc(buf_needed);
-	  if (!buf) return -ENOMEM;
-	  memset(buf, 0, buf_needed);
-	} else
-	  buf = NULL;
-
-	memcpy_fromfs ((void *) cmd,  cmd_in,  cmdlen = COMMAND_SIZE (opcode));
-	memcpy_fromfs ((void *) buf,  (void *) (cmd_in + cmdlen), inlen > MAX_BUF ? MAX_BUF : inlen);
-
-	cmd[1] = ( cmd[1] & 0x1f ) | (dev->lun << 5);
-
+    char * buf;
+    char cmd[12];
+    char * cmd_in;
+    Scsi_Cmnd * SCpnt;
+    unsigned char opcode;
+    int inlen, outlen, cmdlen;
+    int needed, buf_needed;
+    int result;
+    
+    if (!buffer)
+	return -EINVAL;
+    
+ 	inlen = get_user((unsigned int *) buffer);
+ 	outlen = get_user( ((unsigned int *) buffer) + 1);
+  
+  	cmd_in = (char *) ( ((int *)buffer) + 2);
+ 	opcode = get_user(cmd_in); 
+    
+    needed = buf_needed = (inlen > outlen ? inlen : outlen);
+    if(buf_needed){
+	buf_needed = (buf_needed + 511) & ~511;
+	if (buf_needed > MAX_BUF) buf_needed = MAX_BUF;
+	buf = (char *) scsi_malloc(buf_needed);
+	if (!buf) return -ENOMEM;
+	memset(buf, 0, buf_needed);
+    } else
+	buf = NULL;
+    
+    memcpy_fromfs ((void *) cmd,  cmd_in,  cmdlen = COMMAND_SIZE (opcode));
+    memcpy_fromfs ((void *) buf,  (void *) (cmd_in + cmdlen), inlen > MAX_BUF ? MAX_BUF : inlen);
+    
+    cmd[1] = ( cmd[1] & 0x1f ) | (dev->lun << 5);
+    
 #ifndef DEBUG_NO_CMD
+    
+    SCpnt = allocate_device(NULL, dev, 1);
+    
+    scsi_do_cmd(SCpnt,  cmd,  buf, needed,  scsi_ioctl_done,  MAX_TIMEOUT, 
+		MAX_RETRIES);
+    
+    if (SCpnt->request.dev != 0xfffe){
+	struct semaphore sem = MUTEX_LOCKED;
+	SCpnt->request.sem = &sem;
+	down(&sem);
+	/* Hmm.. Have to ask about this one */
+	while (SCpnt->request.dev != 0xfffe) schedule();
+    };
+    
+    
+    /* If there was an error condition, pass the info back to the user. */
+    if(SCpnt->result) {
+	result = verify_area(VERIFY_WRITE, cmd_in, sizeof(SCpnt->sense_buffer));
+	if (result)
+	    return result;
+	memcpy_tofs((void *) cmd_in,  SCpnt->sense_buffer, sizeof(SCpnt->sense_buffer));
+    } else {
 	
-	SCpnt = allocate_device(NULL, dev, 1);
-
-	scsi_do_cmd(SCpnt,  cmd,  buf, needed,  scsi_ioctl_done,  MAX_TIMEOUT, 
-			MAX_RETRIES);
-
-	if (SCpnt->request.dev != 0xfffe){
-	  struct semaphore sem = MUTEX_LOCKED;
-	  SCpnt->request.sem = &sem;
-	  down(&sem);
-	  /* Hmm.. Have to ask about this one */
-	  while (SCpnt->request.dev != 0xfffe) schedule();
-	};
-
-
-	/* If there was an error condition, pass the info back to the user. */
-	if(SCpnt->result) {
-	  result = verify_area(VERIFY_WRITE, cmd_in, sizeof(SCpnt->sense_buffer));
-	  if (result)
+	result = verify_area(VERIFY_WRITE, cmd_in, (outlen > MAX_BUF) ? MAX_BUF  : outlen);
+	if (result)
 	    return result;
-	  memcpy_tofs((void *) cmd_in,  SCpnt->sense_buffer, sizeof(SCpnt->sense_buffer));
-	} else {
-
-	  result = verify_area(VERIFY_WRITE, cmd_in, (outlen > MAX_BUF) ? MAX_BUF  : outlen);
-	  if (result)
-	    return result;
-	  memcpy_tofs ((void *) cmd_in,  buf,  (outlen > MAX_BUF) ? MAX_BUF  : outlen);
-	};
-	result = SCpnt->result;
-	SCpnt->request.dev = -1;  /* Mark as not busy */
-	if (buf) scsi_free(buf, buf_needed);
-
-	if(SCpnt->device->scsi_request_fn)
-	  (*SCpnt->device->scsi_request_fn)();
-
-	wake_up(&SCpnt->device->device_wait);
-	return result;
+	memcpy_tofs ((void *) cmd_in,  buf,  (outlen > MAX_BUF) ? MAX_BUF  : outlen);
+    };
+    result = SCpnt->result;
+    SCpnt->request.dev = -1;  /* Mark as not busy */
+    if (buf) scsi_free(buf, buf_needed);
+    
+    if(SCpnt->device->scsi_request_fn)
+	(*SCpnt->device->scsi_request_fn)();
+    
+    wake_up(&SCpnt->device->device_wait);
+    return result;
 #else
-	{
+    {
 	int i;
 	printk("scsi_ioctl : device %d.  command = ", dev->id);
 	for (i = 0; i < 12; ++i)
-		printk("%02x ", cmd[i]);
+	    printk("%02x ", cmd[i]);
 	printk("\nbuffer =");
 	for (i = 0; i < 20; ++i)
-		printk("%02x ", buf[i]);
+	    printk("%02x ", buf[i]);
 	printk("\n");
 	printk("inlen = %d, outlen = %d, cmdlen = %d\n",
-		inlen, outlen, cmdlen);
+	       inlen, outlen, cmdlen);
 	printk("buffer = %d, cmd_in = %d\n", buffer, cmd_in);
-	}
-	return 0;
+    }
+    return 0;
 #endif
 }
 
 /*
-	the scsi_ioctl() function differs from most ioctls in that it does
-	not take a major/minor number as the dev filed.  Rather, it takes
-	a pointer to a scsi_devices[] element, a structure. 
-*/
+ * the scsi_ioctl() function differs from most ioctls in that it does
+ * not take a major/minor number as the dev filed.  Rather, it takes
+ * a pointer to a scsi_devices[] element, a structure. 
+ */
 int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
 {
-        char scsi_cmd[12];
-
-	/* No idea how this happens.... */
-	if (!dev) return -ENXIO;
-	
-	switch (cmd) {
-	        case SCSI_IOCTL_GET_IDLUN:
-	                verify_area(VERIFY_WRITE, (void *) arg, sizeof(int));
-			put_user(dev->id + (dev->lun << 8) + 
-				 (dev->host->host_no << 16), (unsigned int *) arg);
-			return 0;
-		case SCSI_IOCTL_TAGGED_ENABLE:
-			if(!suser())  return -EACCES;
-			if(!dev->tagged_supported) return -EINVAL;
-			dev->tagged_queue = 1;
-			dev->current_tag = 1;
-			break;
-		case SCSI_IOCTL_TAGGED_DISABLE:
-			if(!suser())  return -EACCES;
-			if(!dev->tagged_supported) return -EINVAL;
-			dev->tagged_queue = 0;
-			dev->current_tag = 0;
-			break;
-		case SCSI_IOCTL_PROBE_HOST:
-			return ioctl_probe(dev->host, arg);
-		case SCSI_IOCTL_SEND_COMMAND:
-			if(!suser())  return -EACCES;
-			return ioctl_command((Scsi_Device *) dev, arg);
-		case SCSI_IOCTL_DOORLOCK:
-			if (!dev->removable || !dev->lockable) return 0;
-		        scsi_cmd[0] = ALLOW_MEDIUM_REMOVAL;
-			scsi_cmd[1] = dev->lun << 5;
-			scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[5] = 0;
-			scsi_cmd[4] = SCSI_REMOVAL_PREVENT;
-			return ioctl_internal_command((Scsi_Device *) dev, scsi_cmd);
-			break;
-		case SCSI_IOCTL_DOORUNLOCK:
-			if (!dev->removable || !dev->lockable) return 0;
-		        scsi_cmd[0] = ALLOW_MEDIUM_REMOVAL;
-			scsi_cmd[1] = dev->lun << 5;
-			scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[5] = 0;
-			scsi_cmd[4] = SCSI_REMOVAL_ALLOW;
-			return ioctl_internal_command((Scsi_Device *) dev, scsi_cmd);
-		case SCSI_IOCTL_TEST_UNIT_READY:
-		        scsi_cmd[0] = TEST_UNIT_READY;
-			scsi_cmd[1] = dev->lun << 5;
-			scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[5] = 0;
-			scsi_cmd[4] = 0;
-			return ioctl_internal_command((Scsi_Device *) dev, scsi_cmd);
-			break;
-		default :			
-			return -EINVAL;
-	}
+    char scsi_cmd[12];
+    
+    /* No idea how this happens.... */
+    if (!dev) return -ENXIO;
+    
+    switch (cmd) {
+    case SCSI_IOCTL_GET_IDLUN:
+	verify_area(VERIFY_WRITE, (void *) arg, sizeof(int));
+	put_user(dev->id + (dev->lun << 8) + (dev->host->host_no << 16) +
+		    /* This has been added to support 
+		     * multichannel HBAs, it might cause 
+		     * problems with some software */ 
+		    (dev->channel << 24), 
+		    (unsigned long *) arg);
+	return 0;
+    case SCSI_IOCTL_TAGGED_ENABLE:
+	if(!suser())  return -EACCES;
+	if(!dev->tagged_supported) return -EINVAL;
+	dev->tagged_queue = 1;
+	dev->current_tag = 1;
+	break;
+    case SCSI_IOCTL_TAGGED_DISABLE:
+	if(!suser())  return -EACCES;
+	if(!dev->tagged_supported) return -EINVAL;
+	dev->tagged_queue = 0;
+	dev->current_tag = 0;
+	break;
+    case SCSI_IOCTL_PROBE_HOST:
+	return ioctl_probe(dev->host, arg);
+    case SCSI_IOCTL_SEND_COMMAND:
+	if(!suser())  return -EACCES;
+	return ioctl_command((Scsi_Device *) dev, arg);
+    case SCSI_IOCTL_DOORLOCK:
+	if (!dev->removable || !dev->lockable) return 0;
+	scsi_cmd[0] = ALLOW_MEDIUM_REMOVAL;
+	scsi_cmd[1] = dev->lun << 5;
+	scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[5] = 0;
+	scsi_cmd[4] = SCSI_REMOVAL_PREVENT;
+	return ioctl_internal_command((Scsi_Device *) dev, scsi_cmd);
+	break;
+    case SCSI_IOCTL_DOORUNLOCK:
+	if (!dev->removable || !dev->lockable) return 0;
+	scsi_cmd[0] = ALLOW_MEDIUM_REMOVAL;
+	scsi_cmd[1] = dev->lun << 5;
+	scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[5] = 0;
+	scsi_cmd[4] = SCSI_REMOVAL_ALLOW;
+	return ioctl_internal_command((Scsi_Device *) dev, scsi_cmd);
+    case SCSI_IOCTL_TEST_UNIT_READY:
+	scsi_cmd[0] = TEST_UNIT_READY;
+	scsi_cmd[1] = dev->lun << 5;
+	scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[5] = 0;
+	scsi_cmd[4] = 0;
+	return ioctl_internal_command((Scsi_Device *) dev, scsi_cmd);
+	break;
+    default :           
 	return -EINVAL;
+    }
+    return -EINVAL;
 }
 
 /*
@@ -303,28 +307,30 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
  */
 
 int kernel_scsi_ioctl (Scsi_Device *dev, int cmd, void *arg) {
-  unsigned long oldfs;
-  int tmp;
-  oldfs = get_fs();
-  set_fs(get_ds());
-  tmp = scsi_ioctl (dev, cmd, arg);
-  set_fs(oldfs);
-  return tmp;
+    unsigned long oldfs;
+    int tmp;
+    oldfs = get_fs();
+    set_fs(get_ds());
+    tmp = scsi_ioctl (dev, cmd, arg);
+    set_fs(oldfs);
+    return tmp;
 }
 
 /*
- * Overrides for Emacs so that we follow Linus's tabbing style.
+ * Overrides for Emacs so that we almost follow Linus's tabbing style.
  * Emacs will notice this stuff at the end of the file and automatically
  * adjust the settings for this buffer only.  This must remain at the end
  * of the file.
  * ---------------------------------------------------------------------------
  * Local variables:
- * c-indent-level: 8
+ * c-indent-level: 4
  * c-brace-imaginary-offset: 0
- * c-brace-offset: -8
- * c-argdecl-indent: 8
- * c-label-offset: -8
- * c-continued-statement-offset: 8
+ * c-brace-offset: -4
+ * c-argdecl-indent: 4
+ * c-label-offset: -4
+ * c-continued-statement-offset: 4
  * c-continued-brace-offset: 0
+ * indent-tabs-mode: nil
+ * tab-width: 8
  * End:
  */

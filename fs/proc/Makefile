@@ -14,7 +14,7 @@
 .s.o:
 	$(AS) -o $*.o $<
 
-OBJS=	inode.o root.o base.o mem.o link.o fd.o array.o kmsg.o net.o
+OBJS=	inode.o root.o base.o mem.o link.o fd.o array.o kmsg.o net.o scsi.o
 
 proc.o: $(OBJS)
 	$(LD) -r -o proc.o $(OBJS)

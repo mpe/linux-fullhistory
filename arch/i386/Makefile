@@ -21,10 +21,29 @@
 # ZLINKFLAGS   = -Ttext 0x1000
 # LINKFLAGS    = -Ttext 0x100000
 #
+#
+
+ifdef CONFIG_KERNEL_ELF
+
+LD=ld -m elf_i386
+CPP=$(CC) -E -D__ELF__
+OBJDUMP =objdump
+OBJDUMP_FLAGS=-k -q 
+LDFLAGS=-e startup_32 
+LDFLAGS=-e stext
+ZIMAGE_OFFSET=0x1000
+IMAGE_OFFSET=0x100000
+ZLINKFLAGS =-Ttext $(ZIMAGE_OFFSET) $(LDFLAGS)
+LINKFLAGS =-Ttext $(IMAGE_OFFSET) $(LDFLAGS)
+
+else
+
+#
 # -qmagic (we need to remove the 32 byte header for bootup purposes)
 #
 ZLINKFLAGS =-qmagic -Ttext 0xfe0
 LINKFLAGS =-qmagic -Ttext 0xfffe0
+endif
 CFLAGS := $(CFLAGS) -pipe
 
 ifdef CONFIG_M486
@@ -42,11 +61,6 @@ HEAD := arch/i386/kernel/head.o
 SUBDIRS := $(SUBDIRS) arch/i386/kernel arch/i386/mm arch/i386/lib
 ARCHIVES := arch/i386/kernel/kernel.o arch/i386/mm/mm.o $(ARCHIVES)
 LIBS := $(TOPDIR)/arch/i386/lib/lib.a $(LIBS) $(TOPDIR)/arch/i386/lib/lib.a
-
-ifdef CONFIG_IBCS
-SUBDIRS := $(SUBDIRS) arch/i386/ibcs
-DRIVERS := $(DRIVERS) arch/i386/ibcs/ibcs.o
-endif
 
 ifdef CONFIG_MATH_EMULATION
 SUBDIRS := $(SUBDIRS) arch/i386/math-emu

@@ -90,8 +90,3 @@ wrmces:
 	call_pal PAL_wrmces
 	ret ($26)
 	.end wrmces
-
-.align 9
-.globl floppy_track_buffer
-floppy_track_buffer:
-	.space 512*2*MAX_BUFFER_SECTORS,1

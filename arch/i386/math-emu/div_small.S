@@ -17,11 +17,7 @@
 #include "fpu_asm.h"
 
 .text
-	.align 2,144
-
-.globl _div_small
-
-_div_small:
+ENTRY(div_small)
 	pushl	%ebp
 	movl	%esp,%ebp
 

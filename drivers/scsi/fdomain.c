@@ -188,6 +188,10 @@
 
  **************************************************************************/
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <linux/sched.h>
 #include <asm/io.h>
 #include "../block/blk.h"
@@ -198,9 +202,10 @@
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/ioport.h>
+#include <linux/proc_fs.h>
 #include <linux/bios32.h>
 #include <linux/pci.h>
-
+  
 #define VERSION          "$Revision: 5.31 $"
 
 /* START OF USER DEFINABLE OPTIONS */
@@ -419,9 +424,9 @@ static void print_banner( struct Scsi_Host *shpnt )
 	   (unsigned)bios_base, shpnt->this_id );
 
 				/* If this driver works for later FD PCI
-                                   boards, we will have to modify banner
-                                   for additional PCI cards, but for now if
-                                   it's PCI it's a TMC-3260 - JTM */
+				   boards, we will have to modify banner
+				   for additional PCI cards, but for now if
+				   it's PCI it's a TMC-3260 - JTM */
    printk( "scsi%d <fdomain>: %s chip at 0x%x irq ",
 	   shpnt->host_no,
 	   chip == tmc1800 ? "TMC-1800"
@@ -471,7 +476,7 @@ static int fdomain_is_valid_port( int port )
       if (inb( port + LSB_ID_Code ) != 0x27) return 0;
       if (inb( port + MSB_ID_Code ) != 0x61) return 0;
       chip = tmc1800;
-   } else {			            /* test for 0xe960 id */
+   } else {				    /* test for 0xe960 id */
       if (inb( port + MSB_ID_Code ) != 0x60) return 0;
       chip = tmc18c50;
 
@@ -493,8 +498,8 @@ static int fdomain_is_valid_port( int port )
 #else
 
 				/* That should have worked, but appears to
-                                   have problems.  Lets assume it is an
-                                   18c30 if the RAM is disabled. */
+				   have problems.  Lets assume it is an
+				   18c30 if the RAM is disabled. */
 
       if (inb( port + Configuration2 ) & 0x02) {
 	 chip      = tmc18c30;
@@ -1024,7 +1029,7 @@ static int fdomain_arbitrate( void )
    outb( adapter_mask, port_base + SCSI_Data_NoACK ); /* Set our id bit */
    outb( 0x04 | PARITY_MASK, TMC_Cntl_port ); /* Start arbitration */
 
-   timeout = jiffies + 50;	              /* 500 mS */
+   timeout = jiffies + 50;		      /* 500 mS */
    while (jiffies < timeout) {
       status = inb( TMC_Status_port );        /* Read adapter status */
       if (status & 0x02)		      /* Arbitration complete */
@@ -1057,12 +1062,12 @@ static int fdomain_select( int target )
    /* Stop arbitration and enable parity */
    outb( PARITY_MASK, TMC_Cntl_port ); 
 
-   timeout = jiffies + 35;	        /* 350mS -- because of timeouts
+   timeout = jiffies + 35;		/* 350mS -- because of timeouts
 					   (was 250mS) */
 
    while (jiffies < timeout) {
       status = inb( SCSI_Status_port ); /* Read adapter status */
-      if (status & 1) {		        /* Busy asserted */
+      if (status & 1) {			/* Busy asserted */
 	 /* Enable SCSI Bus (on error, should make bus idle with 0) */
 	 outb( 0x80, SCSI_Cntl_port );
 	 return 0;
@@ -1109,10 +1114,10 @@ void fdomain_16x0_intr( int irq, struct pt_regs * regs )
    unsigned data_count;
 
 				/* The fdomain_16x0_intr is only called via
-                                   the interrupt handler.  The goal of the
-                                   sti() here is to allow other
-                                   interruptions while this routine is
-                                   running. */
+				   the interrupt handler.  The goal of the
+				   sti() here is to allow other
+				   interruptions while this routine is
+				   running. */
 
    sti();			/* Yes, we really want sti() here */
    
@@ -1840,7 +1845,7 @@ int fdomain_16x0_biosparam( Scsi_Disk *disk, int dev, int *info_array )
       retcode = kernel_scsi_ioctl( disk->device,
 				   SCSI_IOCTL_SEND_COMMAND,
 				   (void *)buf );
-      if (!retcode		                    /* SCSI command ok */
+      if (!retcode				    /* SCSI command ok */
 	  && data[511] == 0xaa && data[510] == 0x55 /* Partition table valid */
 	  && data[0x1c2]) {			    /* Partition type */
 
@@ -1848,7 +1853,7 @@ int fdomain_16x0_biosparam( Scsi_Disk *disk, int dev, int *info_array )
 
 	    Start: 0x1b3h
 	    Offset: 0 = partition status
-	            1 = starting head
+		    1 = starting head
 		    2 = starting sector and cylinder (word, encoded)
 		    4 = partition type
 		    5 = ending head
@@ -1863,23 +1868,23 @@ int fdomain_16x0_biosparam( Scsi_Disk *disk, int dev, int *info_array )
 	    3) partitions never divide cylinders
 
 	    Note that (1) may be FALSE for NetBSD (and other BSD flavors),
-            as well as for Linux.  Note also, that Linux doesn't pay any
-            attention to the fields that are used by this algorithm -- it
-            only uses the absolute sector data.  Recent versions of Linux's
-            fdisk(1) will fill this data in correctly, and forthcoming
-            versions will check for consistency.
+	    as well as for Linux.  Note also, that Linux doesn't pay any
+	    attention to the fields that are used by this algorithm -- it
+	    only uses the absolute sector data.  Recent versions of Linux's
+	    fdisk(1) will fill this data in correctly, and forthcoming
+	    versions will check for consistency.
 
 	    Checking for a non-zero partition type is not part of the
-            Future Domain algorithm, but it seemed to be a reasonable thing
-            to do, especially in the Linux and BSD worlds. */
+	    Future Domain algorithm, but it seemed to be a reasonable thing
+	    to do, especially in the Linux and BSD worlds. */
 
 	 info_array[0] = data[0x1c3] + 1;	    /* heads */
 	 info_array[1] = data[0x1c4] & 0x3f;	    /* sectors */
       } else {
 
  	 /* Note that this new method guarantees that there will always be
-            less than 1024 cylinders on a platter.  This is good for drives
-            up to approximately 7.85GB (where 1GB = 1024 * 1024 kB). */
+	    less than 1024 cylinders on a platter.  This is good for drives
+	    up to approximately 7.85GB (where 1GB = 1024 * 1024 kB). */
 
 	 if ((unsigned int)size >= 0x7e0000U) {
 	    info_array[0] = 0xff; /* heads   = 255 */
@@ -1898,3 +1903,10 @@ int fdomain_16x0_biosparam( Scsi_Disk *disk, int dev, int *info_array )
    
    return 0;
 }
+
+#ifdef MODULE
+/* Eventually this will go into an include file, but this will be later */
+Scsi_Host_Template driver_template = FDOMAIN_16X0;
+
+#include "scsi_module.c"
+#endif

@@ -17,8 +17,6 @@
 #include "fpu_asm.h"
 
 .text
-	.align 2,144
-
 /*---------------------------------------------------------------------------+
  |   unsigned shrx(void *arg1, unsigned arg2)                                |
  |                                                                           |
@@ -33,9 +31,7 @@
  |   Results returned in the 64 bit arg and eax.                             |
  +---------------------------------------------------------------------------*/
 
-	.globl	_shrx
-
-_shrx:
+ENTRY(shrx)
 	push	%ebp
 	movl	%esp,%ebp
 	pushl	%esi
@@ -113,8 +109,7 @@ L_more_than_95:
  |   part which has been shifted out of the arg.                             |
  |   Results returned in the 64 bit arg and eax.                             |
  +---------------------------------------------------------------------------*/
-	.globl	_shrxs
-_shrxs:
+ENTRY(shrxs)
 	push	%ebp
 	movl	%esp,%ebp
 	pushl	%esi

@@ -168,6 +168,7 @@
 #include <linux/errno.h>
 #include <linux/bios32.h>
 #include <linux/pci.h>
+#include <linux/proc_fs.h>
 #include <linux/string.h>
 #include <linux/mm.h>
 #include "../block/blk.h"
@@ -218,7 +219,7 @@ static Scsi_Host_Template *the_template = NULL;
  *
  *     NCR53c720/710 - need to add fatal interrupt or GEN code for 
  *		command completion signaling.   Need to take care of 
- *	        ADD WITH CARRY instructions since carry is unimplemented.
+ *		ADD WITH CARRY instructions since carry is unimplemented.
  *		Also need to modify all SDID, SCID, etc. registers,
  *		and table indirect select code since these use bit
  *		fielded (ie 1<<target) instead of binary encoded
@@ -642,7 +643,7 @@ NCR53c7x0_init (struct Scsi_Host *host) {
     hostdata->expecting_sto = 0;
 
     if ((hostdata->run_tests && hostdata->run_tests(host) == -1) ||
-        (hostdata->options & OPTION_DEBUG_TESTS_ONLY)) {
+	(hostdata->options & OPTION_DEBUG_TESTS_ONLY)) {
     	/* XXX Should disable interrupts, etc. here */
 	scsi_unregister (host);
     	return -1;
@@ -720,8 +721,8 @@ static int normal_init (Scsi_Host_Template *tpnt, int board, int chip,
     	/* Size of dynamic part of command structure : */
 	2 * /* Worst case : we don't know if we need DATA IN or DATA out */
 		( 2 * /* Current instructions per scatter/gather segment */ 
-        	  tpnt->sg_tablesize + 
-                  3 /* Current startup / termination required per phase */
+		  tpnt->sg_tablesize + 
+		  3 /* Current startup / termination required per phase */
 		) *
 	8 /* Each instruction is eight bytes */;
     /* Note that alignment will be guaranteed, since we put the command
@@ -742,7 +743,7 @@ static int normal_init (Scsi_Host_Template *tpnt, int board, int chip,
 
        ASSUMPTION : 
        	 Regardless of how many simultaneous SCSI commands we allow,
-         the probe code only executes a _single_ instruction at a time,
+	 the probe code only executes a _single_ instruction at a time,
 	 so we only need one here, and don't need to allocate NCR53c7x0_cmd
 	 structures for each target until we are no longer in scan_scsis
 	 and kmalloc() has become functional (memory_init() happens 
@@ -879,9 +880,9 @@ static int ncr_pci_init (Scsi_Host_Template *tpnt, int board, int chip,
 	(error = pcibios_read_config_word (bus, device_fn, PCI_COMMAND, 
 	    &command)) ||
 	(error = pcibios_read_config_dword (bus, device_fn, 
-	    PCI_BASE_ADDRESS_0, &io_port)) || 
+	    PCI_BASE_ADDRESS_0, (int *) &io_port)) || 
 	(error = pcibios_read_config_dword (bus, device_fn, 
-	    PCI_BASE_ADDRESS_1, &base)) ||
+	    PCI_BASE_ADDRESS_1, (int *) &base)) ||
 	(error = pcibios_read_config_byte (bus, device_fn, PCI_CLASS_REVISION,
 	    &revision)) ||
 	(error = pcibios_read_config_byte (bus, device_fn, PCI_INTERRUPT_LINE,
@@ -951,7 +952,7 @@ static int ncr_pci_init (Scsi_Host_Template *tpnt, int board, int chip,
 
     if (chip && device_id != expected_id) 
 	printk ("scsi-ncr53c7,8xx : warning : device id of 0x%04x doesn't\n"
-                "                   match expected 0x%04x\n",
+		"                   match expected 0x%04x\n",
 	    (unsigned int) device_id, (unsigned int) expected_id );
     
     if (max_revision != -1 && revision > max_revision) 
@@ -1015,7 +1016,7 @@ int NCR53c7xx_detect(Scsi_Host_Template *tpnt) {
 		!pcibios_find_device (PCI_VENDOR_ID_NCR, 
 		    pci_chip_ids[i].pci_device_id, pci_index, &pci_bus, 
 		    &pci_device_fn) && 
-	        !ncr_pci_init (tpnt, BOARD_GENERIC, pci_chip_ids[i].chip, 
+		!ncr_pci_init (tpnt, BOARD_GENERIC, pci_chip_ids[i].chip, 
 		    pci_bus, pci_device_fn, /* no options */ 0); 
 		++count, ++pci_index);
     }
@@ -1275,7 +1276,7 @@ static int NCR53c8xx_run_tests (struct Scsi_Host *host) {
 
 	if (hostdata->test_dest != 0xdeadbeef) {
 	    printk ("scsi%d : driver test 1 read 0x%x instead of 0xdeadbeef indicating a\n"
-                    "        probable cache invalidation problem.  Please configure caching\n"
+		    "        probable cache invalidation problem.  Please configure caching\n"
 		    "        as write-through or disabled\n",
 		host->host_no, hostdata->test_dest);
 	}
@@ -1872,7 +1873,7 @@ static int NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 	 * status, etc are used.
     	 */
 
-        cmd->cmd->result = 0xffff;		
+	cmd->cmd->result = 0xffff;		
 
 	/* 
 	 * Restart command as a REQUEST SENSE.
@@ -2285,13 +2286,19 @@ NCR53c8x0_soft_reset (struct Scsi_Host *host) {
      * and SCSI recommended .5s selection timeout.
      */
 
+    /*
+     * The new gcc won't recognize preprocessing directives
+     * within macro args.
+     */
+#if 0
     NCR53c7x0_write8(STIME0_REG_800, 
     	((14 << STIME0_800_SEL_SHIFT) & STIME0_800_SEL_MASK) 
 /* Disable HTH interrupt */
-#if 0
-	| ((15 << STIME0_800_HTH_SHIFT) & STIME0_800_HTH_MASK)
+	| ((15 << STIME0_800_HTH_SHIFT) & STIME0_800_HTH_MASK));
+#else
+    NCR53c7x0_write8(STIME0_REG_800, 
+    	((14 << STIME0_800_SEL_SHIFT) & STIME0_800_SEL_MASK));
 #endif
-    );
 
 
 
@@ -2344,7 +2351,7 @@ create_cmd (Scsi_Cmnd *cmd) {
     NCR53c7x0_local_declare();
     struct Scsi_Host *host = cmd->host;
     struct NCR53c7x0_hostdata *hostdata = (struct NCR53c7x0_hostdata *)
-        host->hostdata;	
+	host->hostdata;	
     struct NCR53c7x0_cmd *tmp = NULL; 	/* NCR53c7x0_cmd structure for this command */
     int datain,  		/* Number of instructions per phase */
 	dataout;
@@ -2601,7 +2608,7 @@ create_cmd (Scsi_Cmnd *cmd) {
 		DCMD_TCI_CD | DCMD_TCI_IO | DCMD_TCI_MSG) << 24) | 
 		DBC_TCI_WAIT_FOR_VALID | DBC_TCI_COMPARE_PHASE | DBC_TCI_TRUE;
 	    cmd_datain[3] = virt_to_bus(hostdata->script) +
-	        hostdata->E_msg_in;
+		hostdata->E_msg_in;
 #if 0
 	    print_insn (host, cmd_datain, "dynamic ", 1);
 	    print_insn (host, cmd_datain + 2, "dynamic ", 1);
@@ -2615,7 +2622,7 @@ create_cmd (Scsi_Cmnd *cmd) {
 		DCMD_TCI_CD | DCMD_TCI_IO | DCMD_TCI_MSG) << 24) | 
 		DBC_TCI_WAIT_FOR_VALID | DBC_TCI_COMPARE_PHASE | DBC_TCI_TRUE;
 	    cmd_dataout[3] = virt_to_bus(hostdata->script) +
-	        hostdata->E_msg_in;
+		hostdata->E_msg_in;
 #if 0
 	    print_insn (host, cmd_dataout, "dynamic ", 1);
 	    print_insn (host, cmd_dataout + 2, "dynamic ", 1);
@@ -2900,7 +2907,7 @@ static void intr_scsi (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
 
     /* selection timeout */
     if ((is_8xx_chip && (sist1 & SIST1_800_STO)) ||
-        (!is_8xx_chip && (sstat0_sist0 & SSTAT0_700_STO))) {
+	(!is_8xx_chip && (sstat0_sist0 & SSTAT0_700_STO))) {
 	fatal = 1;
 	if (hostdata->options & OPTION_DEBUG_INTR) {
 	    printk ("scsi%d : Selection Timeout\n", host->host_no);
@@ -3112,8 +3119,8 @@ static void NCR53c7x0_intr (int irq, struct pt_regs * regs) {
 restart:
 		    for (cmd_prev_ptr = (struct NCR53c7x0_cmd **) 
 			 &(hostdata->running_list), cmd = 
-                         (struct NCR53c7x0_cmd *) hostdata->running_list; cmd ;
-                         cmd_prev_ptr = (struct NCR53c7x0_cmd **) &(cmd->next), 
+			 (struct NCR53c7x0_cmd *) hostdata->running_list; cmd ;
+			 cmd_prev_ptr = (struct NCR53c7x0_cmd **) &(cmd->next), 
     	    	    	 cmd = (struct NCR53c7x0_cmd *) cmd->next) {
 			Scsi_Cmnd *tmp;
 
@@ -3766,9 +3773,9 @@ int NCR53c7xx_abort (Scsi_Cmnd *cmd) {
  */
 
     for (curr = (volatile struct NCR53c7x0_cmd *) hostdata->issue_queue, 
-         prev = (volatile struct NCR53c7x0_cmd **) &(hostdata->issue_queue);
+	 prev = (volatile struct NCR53c7x0_cmd **) &(hostdata->issue_queue);
 	 curr && curr->cmd != cmd; prev = (volatile struct NCR53c7x0_cmd **)
-         &(curr->next), curr = (volatile struct NCR53c7x0_cmd *) curr->next);
+	 &(curr->next), curr = (volatile struct NCR53c7x0_cmd *) curr->next);
 
     if (curr) {
 	*prev = (struct NCR53c7x0_cmd *) curr->next;
@@ -3793,7 +3800,7 @@ int NCR53c7xx_abort (Scsi_Cmnd *cmd) {
     for (curr = (volatile struct NCR53c7x0_cmd *) hostdata->running_list, 
     	 prev = (volatile struct NCR53c7x0_cmd **) &(hostdata->running_list);
 	 curr && curr->cmd != cmd; prev = (volatile struct NCR53c7x0_cmd **) 
-         &(curr->next), curr = (volatile struct NCR53c7x0_cmd *) curr->next);
+	 &(curr->next), curr = (volatile struct NCR53c7x0_cmd *) curr->next);
 
     if (curr) {
 	restore_flags(flags);
@@ -3973,7 +3980,7 @@ ncr_halt (struct Scsi_Host *host) {
 		tmp = NCR53c7x0_read8(SSTAT0_REG);
 	    }
 	} else if (istat & ISTAT_DIP) {
-            NCR53c7x0_write8(hostdata->istat, 0);
+	    NCR53c7x0_write8(hostdata->istat, 0);
 	    tmp = NCR53c7x0_read8(DSTAT_REG);
 	    if (tmp & DSTAT_ABRT)
 		break;

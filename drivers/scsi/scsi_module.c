@@ -1,5 +1,5 @@
 /*
- *	scsi_module.c Copyright (1994, 1995) Eric Youngdale.
+ *  scsi_module.c Copyright (1994, 1995) Eric Youngdale.
  *
  * Support for loading low-level scsi drivers using the linux kernel loadable
  * module interface.
@@ -35,15 +35,34 @@
 char kernel_version[] = UTS_RELEASE;
 
 int init_module(void) {
-	driver_template.usage_count = &mod_use_count_;
-	scsi_register_module(MODULE_SCSI_HA, &driver_template);
-	return (driver_template.present == 0);
+    driver_template.usage_count = &mod_use_count_;
+    scsi_register_module(MODULE_SCSI_HA, &driver_template);
+    return (driver_template.present == 0);
 }
 
 void cleanup_module( void) {
-	if (MOD_IN_USE) {
-		printk(KERN_INFO __FILE__ ": module is in use, remove rejected\n");
-	      }
-	scsi_unregister_module(MODULE_SCSI_HA, &driver_template);
+    if (MOD_IN_USE) {
+	printk(KERN_INFO __FILE__ ": module is in use, remove rejected\n");
+	return;
+    }
+    scsi_unregister_module(MODULE_SCSI_HA, &driver_template);
 }
 
+/*
+ * Overrides for Emacs so that we almost follow Linus's tabbing style.
+ * Emacs will notice this stuff at the end of the file and automatically
+ * adjust the settings for this buffer only.  This must remain at the end
+ * of the file.
+ * ---------------------------------------------------------------------------
+ * Local variables:
+ * c-indent-level: 4
+ * c-brace-imaginary-offset: 0
+ * c-brace-offset: -4
+ * c-argdecl-indent: 4
+ * c-label-offset: -4
+ * c-continued-statement-offset: 4
+ * c-continued-brace-offset: 0
+ * indent-tabs-mode: nil
+ * tab-width: 8
+ * End:
+ */

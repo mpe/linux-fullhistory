@@ -15,24 +15,24 @@ int eata2x_abort(Scsi_Cmnd *);
 int eata2x_reset(Scsi_Cmnd *);
 
 #define EATA {                                                 \
-                NULL, /* Ptr for modules */                    \
-                NULL, /* usage count for modules */	       \
-                "EATA/DMA 2.0x rev. " EATA_VERSION " ",        \
-                eata2x_detect,	        	               \
-                NULL, /* Release */     	               \
-		NULL,	                                       \
+		NULL, /* Ptr for modules */                    \
+		NULL, /* usage count for modules */	       \
+		"EATA/DMA 2.0x rev. " EATA_VERSION " ",        \
+		eata2x_detect,				       \
+		NULL, /* Release */     		       \
+		NULL,					       \
 		NULL,    			       	       \
 		eata2x_queuecommand,			       \
 		eata2x_abort,				       \
 		eata2x_reset,				       \
-	        NULL,		                               \
+		NULL,					       \
 		scsicam_bios_param,   			       \
 		0,   /* can_queue, reset by detect */          \
-                7,   /* this_id, reset by detect */            \
-                0,   /* sg_tablesize, reset by detect */       \
-                0,   /* cmd_per_lun, reset by detect */        \
+		7,   /* this_id, reset by detect */            \
+		0,   /* sg_tablesize, reset by detect */       \
+		0,   /* cmd_per_lun, reset by detect */        \
 		0,   /* number of boards present */            \
-                1,   /* unchecked isa dma, reset by detect */  \
-                ENABLE_CLUSTERING                              \
-                }
+		1,   /* unchecked isa dma, reset by detect */  \
+		ENABLE_CLUSTERING                              \
+		}
 #endif

@@ -165,6 +165,26 @@ void proc_read_inode(struct inode * inode)
 		return;
 	}
 
+	if (ino == PROC_SCSI_SCSI) {
+		inode->i_mode = S_IFREG | S_IWUSR;
+		inode->i_op = &proc_scsi_inode_operations;
+		return;
+	}
+	/* files within /proc/scsi */
+	if ((ino > PROC_SCSI_SCSI) && (ino < PROC_SCSI_FILE)) {
+	        inode->i_nlink = 2;
+		inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO;
+		inode->i_op = &proc_scsi_inode_operations;
+		return;
+	}
+
+	/* files within /proc/scsi/<driver>/  */
+	if ((ino >= PROC_SCSI_FILE) && (ino <= PROC_SCSI_LAST)) {
+		inode->i_mode = S_IFREG | S_IRUGO | S_IWUSR;
+		inode->i_op = &proc_scsi_inode_operations;
+		return;
+	}
+
 	if (!pid) {
 		switch (ino) {
 			case PROC_KMSG:
@@ -176,6 +196,11 @@ void proc_read_inode(struct inode * inode)
 				inode->i_nlink = 2;
 				inode->i_op = &proc_net_inode_operations;
 				break;
+			case PROC_SCSI:
+                                inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO;
+                                inode->i_nlink = 2;
+                                inode->i_op = &proc_scsi_inode_operations;
+                                break;
 			case PROC_KCORE:
 				inode->i_mode = S_IFREG | S_IRUSR;
 				inode->i_op = &proc_kcore_inode_operations;

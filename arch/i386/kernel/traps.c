@@ -99,7 +99,7 @@ int kstack_depth_to_print = 24;
 	unsigned long esp;
 	unsigned short ss;
 	unsigned long *stack, addr, module_start, module_end;
-	extern char start_kernel, etext;
+	extern char start_kernel, _etext;
 
 	esp = (unsigned long) &regs->esp;
 	ss = KERNEL_DS;
@@ -147,7 +147,7 @@ int kstack_depth_to_print = 24;
 		 * out the call path that was taken.
 		 */
 		if (((addr >= (unsigned long) &start_kernel) &&
-		     (addr <= (unsigned long) &etext)) ||
+		     (addr <= (unsigned long) &_etext)) ||
 		    ((addr >= module_start) && (addr <= module_end))) {
 			if (i && ((i % 8) == 0))
 				printk("\n       ");

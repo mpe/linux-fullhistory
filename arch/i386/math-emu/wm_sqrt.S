@@ -74,10 +74,7 @@ FPU_fsqrt_arg_0:
 
 
 .text
-	.align 2,144
-
-.globl _wm_sqrt
-_wm_sqrt:
+ENTRY(wm_sqrt)
 	pushl	%ebp
 	movl	%esp,%ebp
 #ifndef NON_REENTRANT_FPU

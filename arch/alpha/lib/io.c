@@ -100,6 +100,40 @@ void writel(unsigned int b, unsigned long addr)
 }
 
 /*
+ * Read COUNT 8-bit bytes from port PORT into memory starting at
+ * SRC.
+ */
+#undef insb
+void insb (unsigned long port, void *dst, unsigned long count)
+{
+	while (((unsigned long)dst) & 0x3) {
+		if (!count)
+			return;
+		count--;
+		*(unsigned char *) dst = inb(port);
+		((unsigned char *) dst)++;
+	}
+
+	while (count >= 4) {
+		unsigned int w;
+		count -= 4;
+		w = inb(port);
+		w |= inb(port) << 8;
+		w |= inb(port) << 16;
+		w |= inb(port) << 24;
+		*(unsigned int *) dst = w;
+		((unsigned int *) dst)++;
+	}
+
+	while (count) {
+		--count;
+		*(unsigned char *) dst = inb(port);
+		((unsigned char *) dst)++;
+	}
+}
+
+
+/*
  * Read COUNT 16-bit words from port PORT into memory starting at
  * SRC.  SRC must be at least short aligned.  This is used by the
  * IDE driver to read disk sectors.  Performance is important, but
@@ -109,28 +143,28 @@ void writel(unsigned int b, unsigned long addr)
 #undef insw
 void insw (unsigned long port, void *dst, unsigned long count)
 {
-	unsigned int *ip, w;
-
 	if (((unsigned long)dst) & 0x3) {
 		if (((unsigned long)dst) & 0x1) {
 			panic("insw: memory not short aligned");
 		}
-		*(unsigned short*)dst = inw(port);
-		dst += 2;
-		--count;
+		if (!count)
+			return;
+		count--;
+		*(unsigned short* ) dst = inw(port);
+		((unsigned short *) dst)++;
 	}
 
-	ip = dst;
 	while (count >= 2) {
-		w  = inw(port);
-		w |= inw(port) << 16;
+		unsigned int w;
 		count -= 2;
-		*ip++ = w;
+		w = inw(port);
+		w |= inw(port) << 16;
+		*(unsigned int *) dst = w;
+		((unsigned int *) dst)++;
 	}
 
 	if (count) {
-		w = inw(port);
-		*(unsigned short*)ip = w;
+		*(unsigned short*) dst = inw(port);
 	}
 }
 
@@ -145,20 +179,32 @@ void insw (unsigned long port, void *dst, unsigned long count)
 #undef insl
 void insl (unsigned long port, void *dst, unsigned long count)
 {
-	unsigned int *ip, w;
-
 	if (((unsigned long)dst) & 0x3) {
 		panic("insl: memory not aligned");
 	}
 
-	ip = dst;
-	while (count > 0) {
-		w  = inw(port);
+	while (count) {
 		--count;
-		*ip++ = w;
+		*(unsigned int *) dst = inl(port);
+		((unsigned int *) dst)++;
 	}
 }
 
+/*
+ * Like insb but in the opposite direction.
+ * Don't worry as much about doing aligned memory transfers:
+ * doing byte reads the "slow" way isn't nearly as slow as
+ * doing byte writes the slow way (no r-m-w cycle).
+ */
+#undef outsb
+void outsb(unsigned long port, void * src, unsigned long count)
+{
+	while (count) {
+		count--;
+		outb(*(char *)src, port);
+		((char *) src)++;
+	}
+}
 
 /*
  * Like insw but in the opposite direction.  This is used by the IDE
@@ -169,27 +215,26 @@ void insl (unsigned long port, void *dst, unsigned long count)
 #undef outsw
 void outsw (unsigned long port, void *src, unsigned long count)
 {
-	unsigned int *ip, w;
-
 	if (((unsigned long)src) & 0x3) {
 		if (((unsigned long)src) & 0x1) {
 			panic("outsw: memory not short aligned");
 		}
 		outw(*(unsigned short*)src, port);
-		src += 2;
+		((unsigned short *) src)++;
 		--count;
 	}
 
-	ip = src;
 	while (count >= 2) {
-		w = *ip++;
+		unsigned int w;
 		count -= 2;
+		w = *(unsigned int *) src;
+		((unsigned int *) src)++;
 		outw(w >>  0, port);
 		outw(w >> 16, port);
 	}
 
 	if (count) {
-		outw(*(unsigned short*)ip, port);
+		outw(*(unsigned short *) src, port);
 	}
 }
 
@@ -203,16 +248,55 @@ void outsw (unsigned long port, void *src, unsigned long count)
 #undef outsw
 void outsl (unsigned long port, void *src, unsigned long count)
 {
-	unsigned int *ip, w;
-
 	if (((unsigned long)src) & 0x3) {
 		panic("outsw: memory not aligned");
 	}
 
-	ip = src;
-	while (count > 0) {
-		w = *ip++;
+	while (count) {
 		--count;
-		outw(w, port);
+		outl(*(unsigned int *) src, port);
+		((unsigned int *) src)++;
+	}
+}
+
+
+/*
+ * Copy data from IO memory space to "real" memory space.
+ * This needs to be optimized.
+ */
+void memcpy_fromio(void * to, unsigned long from, unsigned long count)
+{
+	while (count) {
+		count--;
+		*(char *) to = readb(from);
+		((char *) to)++;
+		from++;
+	}
+}
+
+/*
+ * Copy data from "real" memory space to IO memory space.
+ * This needs to be optimized.
+ */
+void memcpy_toio(unsigned long to, void * from, unsigned long count)
+{
+	while (count) {
+		count--;
+		writeb(*(char *) from, to);
+		((char *) from)++;
+		to++;
+	}
+}
+
+/*
+ * "memset" on IO memory space.
+ * This needs to be optimized.
+ */
+void memset_io(unsigned long dst, int c, unsigned long count)
+{
+	while (count) {
+		count--;
+		writeb(c, dst);
+		dst++;
 	}
 }

@@ -124,6 +124,7 @@
 #include <linux/string.h>
 #include <linux/ioport.h>
 #include <linux/sched.h>
+#include <linux/proc_fs.h>
 #include <linux/unistd.h>
 #include <asm/io.h>
 #include <asm/irq.h>

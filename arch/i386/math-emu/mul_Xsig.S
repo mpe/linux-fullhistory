@@ -24,9 +24,7 @@
 #include "fpu_asm.h"
 
 .text
-	.align 2,144
-.globl _mul32_Xsig
-_mul32_Xsig:
+ENTRY(mul32_Xsig)
 	pushl %ebp
 	movl %esp,%ebp
 	subl $16,%esp
@@ -66,9 +64,7 @@ _mul32_Xsig:
 	ret
 
 
-	.align 2,144
-.globl _mul64_Xsig
-_mul64_Xsig:
+ENTRY(mul64_Xsig)
 	pushl %ebp
 	movl %esp,%ebp
 	subl $16,%esp
@@ -121,9 +117,7 @@ _mul64_Xsig:
 
 
 
-	.align 2,144
-.globl _mul_Xsig_Xsig
-_mul_Xsig_Xsig:
+ENTRY(mul_Xsig_Xsig)
 	pushl %ebp
 	movl %esp,%ebp
 	subl $16,%esp

@@ -44,7 +44,7 @@ extern inline void set_hae(unsigned long new_hae)
 /*
  * Change virtual addresses to physical addresses and vv.
  */
-extern inline unsigned long virt_to_phys(void * address)
+extern inline unsigned long virt_to_phys(volatile void * address)
 {
 	return 0xffffffffUL & (unsigned long) address;
 }
@@ -89,5 +89,22 @@ extern void _outl (unsigned int l,unsigned long port);
 #else
 #include <asm/jensen.h>
 #endif
+
+/*
+ * String version of IO memory access ops:
+ */
+extern void memcpy_fromio(void *, unsigned long, unsigned long);
+extern void memcpy_toio(unsigned long, void *, unsigned long);
+extern void memset_io(unsigned long, int, unsigned long);
+
+/*
+ * String versions of in/out ops:
+ */
+extern void insb (unsigned long port, void *src, unsigned long count);
+extern void insw (unsigned long port, void *src, unsigned long count);
+extern void insl (unsigned long port, void *src, unsigned long count);
+extern void outsb (unsigned long port, void *dst, unsigned long count);
+extern void outsw (unsigned long port, void *dst, unsigned long count);
+extern void outsl (unsigned long port, void *dst, unsigned long count);
 
 #endif

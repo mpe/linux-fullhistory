@@ -194,6 +194,31 @@ void copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 }
 
 /*
+ * fill in the fpu structure for a core dump..
+ */
+int dump_fpu (struct user_i387_struct* fpu)
+{
+	int fpvalid;
+
+/* Flag indicating the math stuff is valid. We don't support this for the
+   soft-float routines yet */
+	if (hard_math) {
+		if ((fpvalid = current->used_math) != 0) {
+			if (last_task_used_math == current)
+				__asm__("clts ; fnsave %0": :"m" (*fpu));
+			else
+				memcpy(fpu,&current->tss.i387.hard,sizeof(*fpu));
+		}
+	} else {
+		/* we should dump the emulator state here, but we need to
+		   convert it into standard 387 format first.. */
+		fpvalid = 0;
+	}
+
+	return fpvalid;
+}
+
+/*
  * fill in the user structure for a core dump..
  */
 void dump_thread(struct pt_regs * regs, struct user * dump)
@@ -216,20 +241,7 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 
 	dump->regs = *regs;
 
-/* Flag indicating the math stuff is valid. We don't support this for the
-   soft-float routines yet */
-	if (hard_math) {
-		if ((dump->u_fpvalid = current->used_math) != 0) {
-			if (last_task_used_math == current)
-				__asm__("clts ; fnsave %0": :"m" (dump->i387));
-			else
-				memcpy(&dump->i387,&current->tss.i387.hard,sizeof(dump->i387));
-		}
-	} else {
-		/* we should dump the emulator state here, but we need to
-		   convert it into standard 387 format first.. */
-		dump->u_fpvalid = 0;
-	}
+	dump->u_fpvalid = dump_fpu (&dump->i387);
 }
 
 asmlinkage int sys_fork(struct pt_regs regs)

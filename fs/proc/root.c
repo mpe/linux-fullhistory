@@ -65,6 +65,7 @@ static struct proc_dir_entry root_dir[] = {
 	{ PROC_CPUINFO,		7, "cpuinfo" },
 	{ PROC_SELF,		4, "self" },	/* will change inode # */
 	{ PROC_NET,		3, "net" },
+   	{ PROC_SCSI,	        4, "scsi" },
 #ifdef CONFIG_DEBUG_MALLOC
 	{ PROC_MALLOC,		6, "malloc" },
 #endif

@@ -49,10 +49,10 @@ __asm__("str %%ax\n\t" \
  */
 #define switch_to(tsk) do { \
 __asm__("cli\n\t" \
-	"xchgl %%ecx,_current\n\t" \
+	"xchgl %%ecx,"SYMBOL_NAME_STR(current)"\n\t" \
 	"ljmp %0\n\t" \
 	"sti\n\t" \
-	"cmpl %%ecx,_last_task_used_math\n\t" \
+	"cmpl %%ecx,"SYMBOL_NAME_STR(last_task_used_math)"\n\t" \
 	"jne 1f\n\t" \
 	"clts\n" \
 	"1:" \

@@ -46,6 +46,9 @@
  *	transfer rate if handshaking isn't working correctly.
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
 
 #include <asm/io.h>
 #include <asm/system.h>
@@ -53,6 +56,7 @@
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/config.h>
+#include <linux/proc_fs.h>
 
 #include "../block/blk.h"
 #include "scsi.h"
@@ -294,7 +298,7 @@ int seagate_st0x_detect (Scsi_Host_Template * tpnt)
 		}
 
       /* If the user specified the controller type from the command line,
-         controller_type will be non-zero, so don't try and detect one */
+	 controller_type will be non-zero, so don't try and detect one */
 
 	if (!controller_type) {
 #ifdef OVERRIDE
@@ -375,7 +379,7 @@ int seagate_st0x_detect (Scsi_Host_Template * tpnt)
 #ifdef LINKED
 		" LINKED"
 #endif
-              "\n", tpnt->name);
+	      "\n", tpnt->name);
 		return 1;
 		}
 	else
@@ -389,10 +393,10 @@ int seagate_st0x_detect (Scsi_Host_Template * tpnt)
 	 
 const char *seagate_st0x_info(struct Scsi_Host * shpnt) {
       static char buffer[64];
-        sprintf(buffer, "%s at irq %d, address 0x%05X", 
+	sprintf(buffer, "%s at irq %d, address 0x%05X", 
 		(controller_type == SEAGATE) ? ST0X_ID_STR : FD_ID_STR,
 		irq, (unsigned int)base_address);
-        return buffer;
+	return buffer;
 }
 
 /*
@@ -707,9 +711,9 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
 			}
 
 		buffer=current_buffer;	
-                cmnd=current_cmnd;      /* WDE add */
-                data=current_data;      /* WDE add */
-                len=current_bufflen;    /* WDE add */
+		cmnd=current_cmnd;      /* WDE add */
+		data=current_data;      /* WDE add */
+		len=current_bufflen;    /* WDE add */
 		nobuffs=current_nobuffs;
 
 /*
@@ -778,7 +782,7 @@ connect_loop :
 
 #if !defined (ARBITRATE) 
 		while (((STATUS |  STATUS | STATUS) & 
-		         (STAT_BSY | STAT_SEL)) && 
+			 (STAT_BSY | STAT_SEL)) && 
 			 (!st0x_aborted) && (jiffies < clock));
 
 		if (jiffies > clock)
@@ -894,7 +898,7 @@ connect_loop :
 
 /* Establish current pointers.  Take into account scatter / gather */
 
-        if ((nobuffs = SCint->use_sg)) {
+	if ((nobuffs = SCint->use_sg)) {
 #if (DEBUG & DEBUG_SG)
 	{
 	int i;
@@ -906,17 +910,17 @@ connect_loop :
 	}
 #endif
 		
-                buffer = (struct scatterlist *) SCint->buffer;
-                len = buffer->length;
-                data = (unsigned char *) buffer->address;
-        } else {
+		buffer = (struct scatterlist *) SCint->buffer;
+		len = buffer->length;
+		data = (unsigned char *) buffer->address;
+	} else {
 #if (DEBUG & DEBUG_SG)
 	printk("scsi%d : scatter gather not requested.\n", hostno);
 #endif
-                buffer = NULL;
-                len = SCint->request_bufflen;
-                data = (unsigned char *) SCint->request_buffer;
-        }
+		buffer = NULL;
+		len = SCint->request_bufflen;
+		data = (unsigned char *) SCint->request_buffer;
+	}
 
 #if (DEBUG & (PHASE_DATAIN | PHASE_DATAOUT))
 	printk("scsi%d : len = %d\n", hostno, len);
@@ -1034,12 +1038,12 @@ connect_loop :
 #ifdef FAST 
 if (!len) {
 #if 0 
-        printk("scsi%d: underflow to target %d lun %d \n", 
-                hostno, target, lun);
-        st0x_aborted = DID_ERROR;
-        fast = 0;
+	printk("scsi%d: underflow to target %d lun %d \n", 
+		hostno, target, lun);
+	st0x_aborted = DID_ERROR;
+	fast = 0;
 #endif
-        break;
+	break;
 }
 
 if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
@@ -1048,12 +1052,12 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 #endif
 	) {
 #if (DEBUG & DEBUG_FAST) 
-        printk("scsi%d : FAST transfer, underflow = %d, transfersize = %d\n"
-               "         len = %d, data = %08x\n", hostno, SCint->underflow, 
-               SCint->transfersize, len, data);
+	printk("scsi%d : FAST transfer, underflow = %d, transfersize = %d\n"
+	       "         len = %d, data = %08x\n", hostno, SCint->underflow, 
+	       SCint->transfersize, len, data);
 #endif
 
-        __asm__("
+	__asm__("
 	cld;
 "
 #ifdef FAST32
@@ -1063,14 +1067,14 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 "
 #else
 "1:	lodsb;
-        movb %%al, (%%edi);
+	movb %%al, (%%edi);
 "
 #endif
 "	loop 1b;" : :
-        /* input */
-        "D" (st0x_dr), "S" (data), "c" (SCint->transfersize) :
-        /* clobbered */
-        "eax", "ecx", "esi" );
+	/* input */
+	"D" (st0x_dr), "S" (data), "c" (SCint->transfersize) :
+	/* clobbered */
+	"eax", "ecx", "esi" );
 
 	len -= transfersize;
 	data += transfersize;
@@ -1105,8 +1109,8 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 
 	cld
 
-	movl _st0x_cr_sr, %%ebx
-	movl _st0x_dr, %%edi
+	movl " SYMBOL_NAME_STR(st0x_cr_sr) ", %%ebx
+	movl " SYMBOL_NAME_STR(st0x_dr) ", %%edi
 	
 1:	movb (%%ebx), %%al\n"
 /*
@@ -1140,16 +1144,16 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 "eax", "ebx", "edi"); 
 }
 
-                        if (!len && nobuffs) {
-                                --nobuffs;
-                                ++buffer;
-                                len = buffer->length;
-                                data = (unsigned char *) buffer->address;
+			if (!len && nobuffs) {
+				--nobuffs;
+				++buffer;
+				len = buffer->length;
+				data = (unsigned char *) buffer->address;
 #if (DEBUG & DEBUG_SG)
 	printk("scsi%d : next scatter-gather buffer len = %d address = %08x\n",
 		hostno, len, data);
 #endif
-                        }
+			}
 			break;
 
 		case REQ_DATAIN : 
@@ -1175,11 +1179,11 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 #endif
 	) {
 #if (DEBUG & DEBUG_FAST) 
-        printk("scsi%d : FAST transfer, underflow = %d, transfersize = %d\n"
-               "         len = %d, data = %08x\n", hostno, SCint->underflow, 
-               SCint->transfersize, len, data);
+	printk("scsi%d : FAST transfer, underflow = %d, transfersize = %d\n"
+	       "         len = %d, data = %08x\n", hostno, SCint->underflow, 
+	       SCint->transfersize, len, data);
 #endif
-        __asm__("
+	__asm__("
 	cld;
 "
 #ifdef FAST32
@@ -1189,15 +1193,15 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 "
 #else
 "1:	movb (%%esi), %%al;
-        stosb;
+	stosb;
 "
 #endif
 
 "	loop 1b;" : :
-        /* input */
-        "S" (st0x_dr), "D" (data), "c" (SCint->transfersize) :
-        /* clobbered */
-        "eax", "ecx", "edi");
+	/* input */
+	"S" (st0x_dr), "D" (data), "c" (SCint->transfersize) :
+	/* clobbered */
+	"eax", "ecx", "edi");
 
 	len -= transfersize;
 	data += transfersize;
@@ -1241,8 +1245,8 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 	jz 2f
 
 	cld
-	movl _st0x_cr_sr, %%esi
-	movl _st0x_dr, %%ebx
+	movl " SYMBOL_NAME_STR(st0x_cr_sr) ", %%esi
+	movl " SYMBOL_NAME_STR(st0x_dr) ", %%ebx
 
 1:	movb (%%esi), %%al\n"
 /*
@@ -1286,16 +1290,16 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 #endif
 }
 	
-                        if (!len && nobuffs) {
-                                --nobuffs;
-                                ++buffer;
-                                len = buffer->length;
-                                data = (unsigned char *) buffer->address;
+			if (!len && nobuffs) {
+				--nobuffs;
+				++buffer;
+				len = buffer->length;
+				data = (unsigned char *) buffer->address;
 #if (DEBUG & DEBUG_SG)
 	printk("scsi%d : next scatter-gather buffer len = %d address = %08x\n",
 		hostno, len, data);
 #endif
-                        }
+			}
 
 			break;
 
@@ -1358,9 +1362,9 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 			switch (message = DATA) {
 			case DISCONNECT :
 				should_reconnect = 1;
-                                current_data = data;    /* WDE add */
+				current_data = data;    /* WDE add */
 				current_buffer = buffer;
-                                current_bufflen = len;  /* WDE add */
+				current_bufflen = len;  /* WDE add */
 				current_nobuffs = nobuffs;
 #ifdef LINKED
 				linked_connected = 0;
@@ -1392,7 +1396,7 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 				break;
 			case SAVE_POINTERS :
 				current_buffer = buffer;
-                                current_bufflen = len;  /* WDE add */
+				current_bufflen = len;  /* WDE add */
 				current_data = data;	/* WDE mod */
 				current_nobuffs = nobuffs;
 #if (DEBUG & PHASE_MSGIN)
@@ -1471,7 +1475,7 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 	printk("\n");
 #endif
 	printk("scsi%d : status = ", hostno);
-        print_status(status);
+	print_status(status);
 	printk("message = %02x\n", message);
 #endif
 
@@ -1697,3 +1701,10 @@ printk("scsi%d : heads = %d cylinders = %d sectors = %d total = %d formatted = %
     
   return result;
 }
+
+#ifdef MODULE
+/* Eventually this will go into an include file, but this will be later */
+Scsi_Host_Template driver_template = SEAGATE_ST0X;
+
+#include "scsi_module.c"
+#endif

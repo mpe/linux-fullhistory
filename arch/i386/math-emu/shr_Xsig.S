@@ -21,10 +21,7 @@
 #include "fpu_asm.h"
 
 .text
-	.align 2,144
-
-	.globl	_shr_Xsig
-_shr_Xsig:
+ENTRY(shr_Xsig)
 	push	%ebp
 	movl	%esp,%ebp
 	pushl	%esi

@@ -2,6 +2,7 @@
 #define _LINUX_PROC_FS_H
 
 #include <linux/config.h>
+#include <linux/fs.h>
 
 /*
  * The proc filesystem constants/structures
@@ -18,6 +19,7 @@ enum root_directory_inos {
 	PROC_PCI,
 	PROC_SELF,	/* will change inode # */
 	PROC_NET,
+        PROC_SCSI,
 #ifdef CONFIG_DEBUG_MALLOC
 	PROC_MALLOC,
 #endif
@@ -104,6 +106,32 @@ enum net_directory_inos {
 	PROC_NET_LAST
 };
 
+enum scsi_directory_inos {
+	PROC_SCSI_SCSI = 256,
+	PROC_SCSI_EATA,
+	PROC_SCSI_EATA_PIO,
+	PROC_SCSI_AHA152X,
+	PROC_SCSI_AHA1542,
+	PROC_SCSI_AHA1740,
+	PROC_SCSI_AIC7XXX,
+	PROC_SCSI_BUSLOGIC,
+	PROC_SCSI_U14_34F,
+	PROC_SCSI_FUTURE_DOMAIN,
+	PROC_SCSI_GENERIC_NCR5380,
+	PROC_SCSI_IN2000,
+	PROC_SCSI_PAS16,
+	PROC_SCSI_QLOGIC,
+	PROC_SCSI_SEAGATE,
+	PROC_SCSI_T128,
+	PROC_SCSI_NCR53C7xx,
+	PROC_SCSI_ULTRASTOR,
+	PROC_SCSI_7000FASST,
+	PROC_SCSI_SCSI_DEBUG,	
+	PROC_SCSI_NOT_PRESENT,
+	PROC_SCSI_FILE,                        /* I'm asuming here that we */
+	PROC_SCSI_LAST = (PROC_SCSI_FILE + 16) /* won't ever see more than */
+};                                             /* 16 HBAs in one machine   */
+
 #define PROC_SUPER_MAGIC 0x9fa0
 
 struct proc_dir_entry {
@@ -123,6 +151,7 @@ extern int proc_match(int, const char *, struct proc_dir_entry *);
 extern struct inode_operations proc_root_inode_operations;
 extern struct inode_operations proc_base_inode_operations;
 extern struct inode_operations proc_net_inode_operations;
+extern struct inode_operations proc_scsi_inode_operations;
 extern struct inode_operations proc_mem_inode_operations;
 extern struct inode_operations proc_array_inode_operations;
 extern struct inode_operations proc_arraylong_inode_operations;

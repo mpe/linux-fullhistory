@@ -11,8 +11,17 @@
 AS86    =as86 -0 -a
 LD86    =ld86 -0
 
+ifdef CONFIG_KERNEL_ELF
+CFLAGS := $(CFLAGS) -D__BFD__
+endif
+
 zImage: $(CONFIGURE) bootsect setup compressed/vmlinux tools/build
+ifdef CONFIG_KERNEL_ELF
+	$(OBJDUMP) $(OBJDUMP_FLAGS) -o $(ZIMAGE_OFFSET) compressed/vmlinux > compressed/vmlinux.out
+	tools/build bootsect setup compressed/vmlinux.out $(ROOT_DEV) > zImage
+else
 	tools/build bootsect setup compressed/vmlinux $(ROOT_DEV) > zImage
+endif
 	sync
 
 compressed/vmlinux: $(TOPDIR)/vmlinux
@@ -56,5 +65,5 @@ dep:
 
 clean:
 	rm -f bootsect setup
-	rm -f zImage tools/build
+	rm -f zImage tools/build compressed/vmlinux.out
 	@$(MAKE) -C compressed clean

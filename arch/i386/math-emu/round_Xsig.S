@@ -22,11 +22,7 @@
 
 
 .text
-
-	.align 2,144
-.globl _round_Xsig
-
-_round_Xsig:
+ENTRY(round_Xsig)
 	pushl	%ebp
 	movl	%esp,%ebp
 	pushl	%ebx		/* Reserve some space */
@@ -86,10 +82,7 @@ L_exit:
 
 
 
-	.align 2,144
-.globl _norm_Xsig
-
-_norm_Xsig:
+ENTRY(norm_Xsig)
 	pushl	%ebp
 	movl	%esp,%ebp
 	pushl	%ebx		/* Reserve some space */

@@ -159,6 +159,8 @@ int aha1740_abort(Scsi_Cmnd *);
 int aha1740_reset(Scsi_Cmnd *);
 int aha1740_biosparam(Disk *, int, int*);
 
+extern int generic_proc_info(char *, char **, off_t, int, int, int);
+
 #define AHA1740_ECBS 32
 #define AHA1740_SCATTER 16
 
@@ -167,6 +169,9 @@ int aha1740_biosparam(Disk *, int, int*);
 #endif
 
 #define AHA1740 {NULL,	NULL,				\
+		   generic_proc_info,                   \
+		   "aha1740",                           \
+		   PROC_SCSI_AHA1740,                   \
 		   "Adaptec 174x (EISA)",		\
 		   aha1740_detect,			\
 		   NULL,				\
@@ -175,7 +180,7 @@ int aha1740_biosparam(Disk *, int, int*);
 		   aha1740_queuecommand,		\
 		   aha1740_abort,			\
 		   aha1740_reset,			\
-		   NULL,		                \
+		   NULL,				\
 		   aha1740_biosparam,                   \
 		   AHA1740_ECBS, 			\
 		   7, 					\

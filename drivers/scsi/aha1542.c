@@ -23,17 +23,16 @@
 #include <linux/types.h>
 #include <linux/string.h>
 #include <linux/ioport.h>
-
 #include <linux/delay.h>
-
 #include <linux/sched.h>
+#include <linux/proc_fs.h>
 #include <asm/dma.h>
-
 #include <asm/system.h>
 #include <asm/io.h>
 #include "../block/blk.h"
 #include "scsi.h"
 #include "hosts.h"
+
 
 #include "aha1542.h"
 
@@ -94,7 +93,7 @@ static char *setup_str[MAXBOARDS] = {(char *)NULL,(char *)NULL};
 
 struct aha1542_hostdata{
 	/* This will effectively start both of them at the first mailbox */
-        int bios_translation;   /* Mapping bios uses - for compatibility */
+	int bios_translation;   /* Mapping bios uses - for compatibility */
 	int aha1542_last_mbi_used;
 	int aha1542_last_mbo_used;
 	Scsi_Cmnd * SCint[AHA1542_MAILBOXES];
@@ -889,7 +888,7 @@ void aha1542_setup( char *str, int *ints)
 	case 6:
 	    atbt = 0x04;
 	    break;
-        case 7:
+	case 7:
 	    atbt = 0x01;
 	    break;
 	case 8:

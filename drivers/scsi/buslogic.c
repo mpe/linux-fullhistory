@@ -89,7 +89,7 @@
 #include <linux/ioport.h>
 #include <linux/delay.h>
 #include <linux/config.h>
-
+#include <linux/proc_fs.h>
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/dma.h>

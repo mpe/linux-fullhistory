@@ -289,14 +289,6 @@ extern void outb(unsigned char b, unsigned long addr);
 extern void outw(unsigned short b, unsigned long addr);
 extern void outl(unsigned int b, unsigned long addr);
 
-/*
- * String versions of in/out ops:
- */
-extern void insw (unsigned long port, void *src, unsigned long count);
-extern void insl (unsigned long port, void *src, unsigned long count);
-extern void outsw (unsigned long port, void *dst, unsigned long count);
-extern void outsl (unsigned long port, void *dst, unsigned long count);
-
 extern unsigned long readb(unsigned long addr);
 extern unsigned long readw(unsigned long addr);
 

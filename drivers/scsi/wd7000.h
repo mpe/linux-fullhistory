@@ -19,6 +19,8 @@ int wd7000_abort(Scsi_Cmnd *);
 int wd7000_reset(Scsi_Cmnd *);
 int wd7000_biosparam(Disk *, int, int*);
 
+extern int generic_proc_info(char *, char **, off_t, int, int, int);
+
 #ifndef NULL
 #define NULL 0L
 #endif
@@ -37,13 +39,16 @@ int wd7000_biosparam(Disk *, int, int*);
 #define WD7000_Q    16
 #define WD7000_SG   16
 
-#define WD7000 { NULL, NULL, \
+#define WD7000 { NULL, NULL,            \
+	generic_proc_info,              \
+	"wd7000",                       \
+	PROC_SCSI_7000FASST,            \
 	"Western Digital WD-7000",      \
 	wd7000_detect,                  \
 	NULL,				\
-	NULL,		                \
-	wd7000_command,	                \
-	wd7000_queuecommand,	        \
+	NULL,				\
+	wd7000_command,			\
+	wd7000_queuecommand,		\
 	wd7000_abort,			\
 	wd7000_reset,			\
 	NULL,                           \

@@ -9,12 +9,12 @@
 #include "scsi.h"
 #include "hosts.h"
 
-#define CONST_COMMAND 	0x01
-#define CONST_STATUS 	0x02
-#define CONST_SENSE 	0x04
-#define CONST_XSENSE 	0x08
-#define CONST_CMND	0x10
-#define CONST_MSG	0x20
+#define CONST_COMMAND   0x01
+#define CONST_STATUS    0x02
+#define CONST_SENSE     0x04
+#define CONST_XSENSE    0x08
+#define CONST_CMND      0x10
+#define CONST_MSG       0x20
 
 static const char unknown[] = "UNKNOWN";
 
@@ -45,15 +45,15 @@ static const char *group_1_commands[] = {
 /* 2e-31 */ "Write Verify","Verify", "Search High", "Search Equal", 
 /* 32-34 */ "Search Low", "Set Limits", "Prefetch or Read Position", 
 /* 35-37 */ "Synchronize Cache","Lock/Unlock Cache", "Read Defect Data", 
-/* 38-3c */ unknown, "Compare","Copy Verify", "Write Buffer", "Read Buffer", 
-/* 3d-39 */ unknown, "Read Long",  unknown,
+/* 38-3c */ "Medium Scan", "Compare","Copy Verify", "Write Buffer", "Read Buffer", 
+/* 3d-3f */ "Update Block", "Read Long",  "Write Long",
 };
 
 
 static const char *group_2_commands[] = {
-/* 40-41 */ "Change Definition", unknown, 
-/* 42-48 */ unknown, unknown, unknown, unknown, unknown, unknown, unknown,
-/* 49-4f */ unknown, unknown, unknown, "Log Select", "Log Sense", unknown,
+/* 40-41 */ "Change Definition", "Write Same", 
+/* 42-48 */ unknown, unknown, unknown, unknown, unknown, unknown, unknown, 
+/* 49-4f */ unknown, unknown, unknown, "Log Select", "Log Sense", unknown, unknown,
 /* 50-55 */ unknown, unknown, unknown, unknown, unknown, "Mode Select (10)",
 /* 56-5b */ unknown, unknown, unknown, unknown, "Mode Sense (10)", unknown,
 /* 5c-5f */ unknown, unknown, unknown,
@@ -64,46 +64,47 @@ static const char *group_2_commands[] = {
 #define group(opcode) (((opcode) >> 5) & 7)
 
 #define RESERVED_GROUP  0
-#define VENDOR_GROUP 	1
-#define NOTEXT_GROUP	2
+#define VENDOR_GROUP    1
+#define NOTEXT_GROUP    2
 
 static const char **commands[] = {
-group_0_commands, group_1_commands, group_2_commands, 
-(const char **) RESERVED_GROUP, (const char **) RESERVED_GROUP, 
-(const char **) NOTEXT_GROUP, (const char **) VENDOR_GROUP, 
-(const char **) VENDOR_GROUP};
+    group_0_commands, group_1_commands, group_2_commands, 
+    (const char **) RESERVED_GROUP, (const char **) RESERVED_GROUP, 
+    (const char **) NOTEXT_GROUP, (const char **) VENDOR_GROUP, 
+    (const char **) VENDOR_GROUP
+};
 
 static const char reserved[] = "RESERVED";
 static const char vendor[] = "VENDOR SPECIFIC";
 
 static void print_opcode(int opcode) {
-  const char **table = commands[ group(opcode) ];
-  switch ((unsigned long) table) {
-  case RESERVED_GROUP:
-  	printk("%s(0x%02x) ", reserved, opcode); 
-  	break;
-  case NOTEXT_GROUP:
-  	printk("%s(0x%02x) ", unknown, opcode); 
-  	break;
-  case VENDOR_GROUP:
-  	printk("%s(0x%02x) ", vendor, opcode); 
-  	break;
-  default:
-  	printk("%s ",table[opcode & 0x1f]);
-  }
+    const char **table = commands[ group(opcode) ];
+    switch ((unsigned long) table) {
+    case RESERVED_GROUP:
+	printk("%s(0x%02x) ", reserved, opcode); 
+	break;
+    case NOTEXT_GROUP:
+	printk("%s(0x%02x) ", unknown, opcode); 
+	break;
+    case VENDOR_GROUP:
+	printk("%s(0x%02x) ", vendor, opcode); 
+	break;
+    default:
+	printk("%s ",table[opcode & 0x1f]);
+    }
 }
 #else /* CONST & CONST_COMMAND */
 static void print_opcode(int opcode) {
-  printk("0x%02x ", opcode);
+    printk("0x%02x ", opcode);
 }
 #endif  
 
 void print_command (unsigned char *command) {
-  int i,s;
-  print_opcode(command[0]);
-  for ( i = 1, s = COMMAND_SIZE(command[0]); i < s; ++i) 
-  	printk("%02x ", command[i]);
-  printk("\n");
+    int i,s;
+    print_opcode(command[0]);
+    for ( i = 1, s = COMMAND_SIZE(command[0]); i < s; ++i) 
+	printk("%02x ", command[i]);
+    printk("\n");
 }
 
 #if (CONSTANTS & CONST_STATUS)
@@ -116,11 +117,11 @@ static const char * statuses[] = {
 #endif
 
 void print_status (int status) {
-  status = (status >> 1) & 0xf;
+    status = (status >> 1) & 0xf;
 #if (CONSTANTS & CONST_STATUS)
-  printk("%s ",statuses[status]);
+    printk("%s ",statuses[status]);
 #else
-  printk("0x%0x ", status); 
+    printk("0x%0x ", status); 
 #endif 
 }
 
@@ -137,15 +138,15 @@ void print_status (int status) {
 #define C 0x200  /* COMMUNICATION DEVICE */
 
 struct error_info{
-  unsigned char code1, code2;
-  unsigned short int devices;
-  char * text;
+    unsigned char code1, code2;
+    unsigned short int devices;
+    char * text;
 };
 
 struct error_info2{
-  unsigned char code1, code2_min, code2_max;
-  unsigned short int devices;
-  char * text;
+    unsigned char code1, code2_min, code2_max;
+    unsigned short int devices;
+    char * text;
 };
 
 static struct error_info2 additional2[] =
@@ -353,54 +354,54 @@ static struct error_info additional[] =
 
 #if (CONSTANTS & CONST_SENSE)
 static char *snstext[] = {
-	"None","Recovered Error","Not Ready","Medium Error","Hardware Error",
-	"Illegal Request","Unit Attention","Data Protect","Blank Check",
-	"Key=9","Copy Aborted","Aborted Command","End-Of-Medium",
-	"Volume Overflow", "Miscompare", "Key=15"};
+    "None","Recovered Error","Not Ready","Medium Error","Hardware Error",
+    "Illegal Request","Unit Attention","Data Protect","Blank Check",
+    "Key=9","Copy Aborted","Aborted Command","End-Of-Medium",
+    "Volume Overflow", "Miscompare", "Key=15"};
 #endif
 
 
 /* Print sense information */
 void print_sense(char * devclass, Scsi_Cmnd * SCpnt)
 {
-	int i, s;
-	int sense_class, valid, code;
-	unsigned char * sense_buffer = SCpnt->sense_buffer;
-	char * error = NULL;
-	int dev = SCpnt->request.dev;
-
-	sense_class = (sense_buffer[0] >> 4) & 0x07;
-	code = sense_buffer[0] & 0xf;
-	valid = sense_buffer[0] & 0x80;
-
-	if (sense_class == 7) { 
-	  s = sense_buffer[7] + 8;
-	  if(s > sizeof(SCpnt->sense_buffer)) s = sizeof(SCpnt->sense_buffer);
-
-	  if (!valid)
+    int i, s;
+    int sense_class, valid, code;
+    unsigned char * sense_buffer = SCpnt->sense_buffer;
+    char * error = NULL;
+    int dev = SCpnt->request.dev;
+    
+    sense_class = (sense_buffer[0] >> 4) & 0x07;
+    code = sense_buffer[0] & 0xf;
+    valid = sense_buffer[0] & 0x80;
+    
+    if (sense_class == 7) { 
+	s = sense_buffer[7] + 8;
+	if(s > sizeof(SCpnt->sense_buffer)) s = sizeof(SCpnt->sense_buffer);
+	
+	if (!valid)
 	    printk("extra data not valid ");
-	  
-	  if (sense_buffer[2] & 0x80) printk( "FMK ");
-	  if (sense_buffer[2] & 0x40) printk( "EOM ");
-	  if (sense_buffer[2] & 0x20) printk( "ILI ");
-
-	  switch (code) {
-	  case 0x0:
+	
+	if (sense_buffer[2] & 0x80) printk( "FMK ");
+	if (sense_buffer[2] & 0x40) printk( "EOM ");
+	if (sense_buffer[2] & 0x20) printk( "ILI ");
+	
+	switch (code) {
+	case 0x0:
 	    error = "Current";
 	    break;
-	  case 0x1:
+	case 0x1:
 	    error = "Deferred";
 	    break;
-	  default:
+	default:
 	    error = "Invalid";
-	  }
-	  
-	  printk("%s error ", error);
-	  
+	}
+	
+	printk("%s error ", error);
+	
 #if (CONSTANTS & CONST_SENSE)
-	  printk( "%s%x: sense key %s\n", devclass, dev, snstext[sense_buffer[2] & 0x0f]);
+	printk( "%s%x: sense key %s\n", devclass, dev, snstext[sense_buffer[2] & 0x0f]);
 #else
-	  printk("%s%x: sns = %2x %2x\n", devclass, dev, sense_buffer[0], sense_buffer[2]);
+	printk("%s%x: sns = %2x %2x\n", devclass, dev, sense_buffer[0], sense_buffer[2]);
 #endif
 	
 	/* Check to see if additional sense information is available */
@@ -409,42 +410,42 @@ void print_sense(char * devclass, Scsi_Cmnd * SCpnt)
 	
 #if (CONSTANTS & CONST_XSENSE)
 	for(i=0; additional[i].text; i++)
-		if(additional[i].code1 == sense_buffer[12] &&
-		   additional[i].code2 == sense_buffer[13])
-			printk("Additional sense indicates %s\n", additional[i].text);
+	    if(additional[i].code1 == sense_buffer[12] &&
+	       additional[i].code2 == sense_buffer[13])
+		printk("Additional sense indicates %s\n", additional[i].text);
 	
 	for(i=0; additional2[i].text; i++)
-		if(additional2[i].code1 == sense_buffer[12] &&
-		   additional2[i].code2_min >= sense_buffer[13]  &&
-		   additional2[i].code2_max <= sense_buffer[13]) {
-			printk("Additional sense indicates ");
-			printk(additional2[i].text, sense_buffer[13]);
-			printk("\n");
-		};
+	    if(additional2[i].code1 == sense_buffer[12] &&
+	       additional2[i].code2_min >= sense_buffer[13]  &&
+	       additional2[i].code2_max <= sense_buffer[13]) {
+		printk("Additional sense indicates ");
+		printk(additional2[i].text, sense_buffer[13]);
+		printk("\n");
+	    };
 #else
 	printk("ASC=%2x ASCQ=%2x\n", sense_buffer[12], sense_buffer[13]);
 #endif
-	} else { 
-
+    } else { 
+	
 #if (CONSTANTS & CONST_SENSE)
-	  if (sense_buffer[0] < 15)
+	if (sense_buffer[0] < 15)
 	    printk("%s%x: old sense key %s\n", devclass, dev, snstext[sense_buffer[0] & 0x0f]);
-	  else
+	else
 #endif
 	    printk("%s%x: sns = %2x %2x\n", devclass, dev, sense_buffer[0], sense_buffer[2]);
-
-	  printk("Non-extended sense class %d code 0x%0x ", sense_class, code);
-	  s = 4;
-	}
 	
-      done:
+	printk("Non-extended sense class %d code 0x%0x ", sense_class, code);
+	s = 4;
+    }
+    
+ done:
 #if !(CONSTANTS & CONST_SENSE)
-	printk("Raw sense data:");
-	for (i = 0; i < s; ++i) 
-	  printk("0x%02x ", sense_buffer[i]);
-	printk("\n");
+    printk("Raw sense data:");
+    for (i = 0; i < s; ++i) 
+	printk("0x%02x ", sense_buffer[i]);
+    printk("\n");
 #endif
-	return;
+    return;
 }
 
 #if (CONSTANTS & CONST_MSG) 
@@ -486,11 +487,11 @@ int print_msg (const unsigned char *msg) {
 	switch (msg[2]) {
 	case EXTENDED_MODIFY_DATA_POINTER:
 	    printk("pointer = %d", (int) (msg[3] << 24) | (msg[4] << 16) | 
-		(msg[5] << 8) | msg[6]);
+		   (msg[5] << 8) | msg[6]);
 	    break;
 	case EXTENDED_SDTR:
 	    printk("period = %d ns, offset = %d", (int) msg[3] * 4, (int) 
-		msg[4]);
+		   msg[4]);
 	    break;
 	case EXTENDED_WDTR:
 	    printk("width = 2^%d bytes", msg[3]);
@@ -503,18 +504,18 @@ int print_msg (const unsigned char *msg) {
 	for (i = 0; i < len; ++i)
 	    printk("%02x ", msg[i]);
 #endif
-    /* Identify */
+	/* Identify */
     } else if (msg[0] & 0x80) {
 #if (CONSTANTS & CONST_MSG)
 	printk("Identify disconnect %sallowed %s %d ",
-	    (msg[0] & 0x40) ? "" : "not ",
-	    (msg[0] & 0x20) ? "target routine" : "lun",
-	    msg[0] & 0x7);
+	       (msg[0] & 0x40) ? "" : "not ",
+	       (msg[0] & 0x20) ? "target routine" : "lun",
+	       msg[0] & 0x7);
 #else
-    printk("%02x ", msg[0]);
+	printk("%02x ", msg[0]);
 #endif
-    len = 1;
-    /* Normal One byte */
+	len = 1;
+	/* Normal One byte */
     } else if (msg[0] < 0x1f) {
 #if (CONSTANTS & CONST_MSG)
 	if (msg[0] < NO_ONE_BYTE_MSGS)
@@ -525,15 +526,15 @@ int print_msg (const unsigned char *msg) {
 	printk("%02x ", msg[0]);
 #endif
 	len = 1;
-    /* Two byte */
+	/* Two byte */
     } else if (msg[0] <= 0x2f) {
 #if (CONSTANTS & CONST_MSG)
 	if ((msg[0] - 0x20) < NO_TWO_BYTE_MSGS)
 	    printk("%s %02x ", two_byte_msgs[msg[0] - 0x20], 
-		msg[1]);
+		   msg[1]);
 	else 
 	    printk("reserved two byte (%02x %02x) ", 
-		msg[0], msg[1]);
+		   msg[0], msg[1]);
 #else
 	printk("%02x %02x", msg[0], msg[1]);
 #endif
@@ -542,16 +543,35 @@ int print_msg (const unsigned char *msg) {
 #if (CONSTANTS & CONST_MSG)
 	printk(reserved);
 #else
-	printk("%02x ", msg[0]);
+    printk("%02x ", msg[0]);
 #endif
     return len;
 }
 
 void print_Scsi_Cmnd (Scsi_Cmnd *cmd) {
     printk("scsi%d : destination target %d, lun %d\n", 
-    cmd->host->host_no, 
-    cmd->target, 
-    cmd->lun);
+	   cmd->host->host_no, 
+	   cmd->target, 
+	   cmd->lun);
     printk("        command = ");
     print_command (cmd->cmnd);
 }
+
+/*
+ * Overrides for Emacs so that we almost follow Linus's tabbing style.
+ * Emacs will notice this stuff at the end of the file and automatically
+ * adjust the settings for this buffer only.  This must remain at the end
+ * of the file.
+ * ---------------------------------------------------------------------------
+ * Local variables:
+ * c-indent-level: 4
+ * c-brace-imaginary-offset: 0
+ * c-brace-offset: -4
+ * c-argdecl-indent: 4
+ * c-label-offset: -4
+ * c-continued-statement-offset: 4
+ * c-continued-brace-offset: 0
+ * indent-tabs-mode: nil
+ * tab-width: 8
+ * End:
+ */

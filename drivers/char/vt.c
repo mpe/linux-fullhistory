@@ -66,8 +66,8 @@ extern unsigned int keymap_count;
  * routines to load custom translation table, EGA/VGA font and
  * VGA colour palette from console.c
  */
-extern int con_set_trans_old(char * table);
-extern int con_get_trans_old(char * table);
+extern int con_set_trans_old(unsigned char * table);
+extern int con_get_trans_old(unsigned char * table);
 extern int con_set_trans_new(unsigned short * table);
 extern int con_get_trans_new(unsigned short * table);
 extern void con_clear_unimap(struct unimapinit *ui);
@@ -1007,10 +1007,10 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	case PIO_SCRNMAP:
 		if (!perm)
 			return -EPERM;
-		return con_set_trans_old((char *)arg);
+		return con_set_trans_old((unsigned char *)arg);
 
 	case GIO_SCRNMAP:
-		return con_get_trans_old((char *)arg);
+		return con_get_trans_old((unsigned char *)arg);
 
 	case PIO_UNISCRNMAP:
 		if (!perm)

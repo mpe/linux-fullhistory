@@ -13,8 +13,8 @@
 	$(AS) -o $*.o $<
 .c.o:
 	$(CC) $(CFLAGS) -c $<
-.S.s:
-	$(CPP) -D__ASSEMBLY__ -traditional $< -o $*.s
+#.S.s:
+#	$(CPP) -D__ASSEMBLY__ -traditional $< -o $*.s
 .S.o:
 	$(CC) -D__ASSEMBLY__ -traditional -c $< -o $*.o
 
@@ -23,10 +23,11 @@ OBJS  = process.o signal.o entry.o traps.o irq.o vm86.o bios32.o ptrace.o \
 
 all: kernel.o head.o
 
-head.o: head.s
+#head.o: head.s
 
-head.s: head.S $(TOPDIR)/include/linux/tasks.h
-	$(CPP) -traditional -o $*.s $<
+head.o: head.S $(TOPDIR)/include/linux/tasks.h
+	$(CC) -D__ASSEMBLY__ -traditional -c $*.S -o $*.o
+#	$(CPP) -traditional -o $*.s $<
 
 kernel.o: $(OBJS)
 	$(LD) -r -o kernel.o $(OBJS)

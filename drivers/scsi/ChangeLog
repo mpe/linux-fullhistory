@@ -1,3 +1,19 @@
+Mon May 15 19:33:14 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
+	* scsi.c: Added native multichannel and wide scsi support. 
+
+	* proc.c (dispatch_scsi_info) (build_proc_dir_hba_entries): 
+	Updated /proc/scsi interface.  
+
+Thu May  4 17:58:48 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
+
+	* sd.c (requeue_sd_request): zero out the scatterlist only if
+	scsi_malloc returned memory for it.	
+
+	* eata_dma.c (register_HBA) (eata_queue): add support for
+	large scatter/gatter tables and set use_clustering accordingly
+
+	* hosts.c: make use_clustering changable in the Scsi_Host structure.
+
 Wed Apr 12 15:25:52 1995  Eric Youngdale  (eric@andante)
 
 	* Linux 1.2.5 released.
@@ -7,7 +23,12 @@ Wed Apr 12 15:25:52 1995  Eric Youngdale  (eric@andante)
 	complete commands per interrupt.  Seems to come up with faster
 	cards.
 
-	* eata_dma.c: Modularize.  Update to 2.3.5r.
+	* eata_dma.c: Update to 2.3.5r. Modularize. Improved error handling
+        thruout and fixed bug interrupt routine which resulted in shifted 
+        status bytes. Added blink LED state checks for ISA and EISA HBAs.
+        Memory mamagement bug seems to have disapeared ==> increasing 
+        C_P_L_CURRENT_MAX to 16 for now. Decreasing C_P_L_DIV to 3 for 
+        performance reasons.  
 
 	* scsi.c: If we get a FMK, EOM, or ILI when attempting to scan
 	the bus, assume that it was just noise on the bus, and ignore
@@ -86,11 +107,11 @@ Mon Feb 20 08:57:17 1995  Eric Youngdale  (eric@andante)
 
 	* hosts.h: Change io_port to long int from short.
 
-	* 53c7,8xx.c: crash on AEN fixed, SCSI reset is no longer a NOP,
-	  NULL pointer panic on odd UDCs fixed, two bugs in diagnostic output 
-	  fixed, should initialize correctly if left running, now loadable, 
- 	  new memory allocation, extraneous diagnostic output suppressed,
-	  splx() replaced with save/restore flags. [ Drew ]
+ 	* 53c7,8xx.c: crash on AEN fixed, SCSI reset is no longer a NOP,
+ 	  NULL pointer panic on odd UDCs fixed, two bugs in diagnostic output 
+ 	  fixed, should initialize correctly if left running, now loadable, 
+  	  new memory allocation, extraneous diagnostic output suppressed,
+ 	  splx() replaced with save/restore flags. [ Drew ]
 
 	* hosts.c, hosts.h, scsi_ioctl.c, sd.c, sd_ioctl.c, sg.c, sr.c,
 	sr_ioctl.c: Add special junk at end that Emacs will use for
@@ -119,7 +140,10 @@ Wed Feb 15 10:52:56 1995  Eric Youngdale  (eric@andante)
 
 	* eata.c: Update to 1.17.
 
-	* eata_dma.c: Add more support for /proc/scsi, add HBA_interpret flag.
+	* eata_dma.c: Update to 2.31a. Add more support for /proc/scsi. 
+        Continuing modularization. Less crashes because of the bug in the
+        memory management ==> increase C_P_L_CURRENT_MAX to 10
+        and decrease C_P_L_DIV to 4.
 
 	* hosts.c: If we remove last host registered, reuse host number.
 	When freeing memory from host being deregistered, free extra_bytes
@@ -188,8 +212,12 @@ Wed Feb  1 09:20:45 1995  Eric Youngdale  (eric@andante)
 	* NCR5380.c: Update interrupt handler with new arglist.  Minor
 	cleanups.
 
-	* eata_dma.c: Modularize.  Add hooks for /proc/scsi.  
-	New version 2.3.0a.
+	* eata_dma.c: Begin to modularize.  Add hooks for /proc/scsi.  
+	New version 2.3.0a. Add code in interrupt handler to allow
+        certain CDROM drivers to be detected which return a 
+        CHECK_CONDITION during SCSI bus scan. Add opcode check to get
+        all DATA IN and DATA OUT phases right. Utilize HBA_interpret flag.
+	Improvements in HBA identification. Various other minor stuff.
 	
 	* hosts.c: Initialize ->dma_channel and ->io_port when registering
 	a new host.
@@ -238,7 +266,9 @@ Mon Jan 23 23:53:10 1995  Eric Youngdale  (eric@andante)
 
 	* 53c7,8xx.h: Change SG size to 127.
 
-	* eata_dma: Update to version 0i.
+	* eata_dma: Update to version 2.10i. Remove bug in the registration
+        of multiple HBAs and channels. Minor other improvements and stylistic 
+        changes.
 
 	* scsi.c: Test for Toshiba XM-3401TA and exclude from detection
 	as toshiba drive - photo cd does not work with this drive.
@@ -262,7 +292,9 @@ Sun Jan 22 22:08:46 1995  Eric Youngdale  (eric@andante)
 
 	* aha152x.c: Update to version 1.8 from Juergen.
 
-	* eata_dma.c: Update from Michael Neuffer
+	* eata_dma.c: Update from Michael Neuffer.
+        Remove hard limit of 2 commands per lun and make it better 
+        configurable. Improvements in HBA identification.
 
 	* in2000.c: Fix biosparam to support large disks.
 
@@ -278,7 +310,7 @@ Wed Jan 18 23:33:09 1995  Eric Youngdale  (eric@andante)
 	* buslogic.c: Likewise.
 
 	* eata_dma.c: Use min of 2 cmd_per_lun for OCS_enabled boards.
-
+          
 	* scsi.c: Make RECOVERED_ERROR a SUGGEST_IS_OK.
 
 	* sd.c: Fail if we are opening a non-existent partition.
@@ -290,7 +322,7 @@ Wed Jan 18 23:33:09 1995  Eric Youngdale  (eric@andante)
 	* sr_ioctl.c: Remove CDROMMULTISESSION_SYS ioctl.
 
 	* ultrastor.c: Fix bug in call to ultrastor_interrupt (wrong #args).
-
+ 
 Mon Jan 16 07:18:23 1995  Eric Youngdale  (eric@andante)
 
 	* Linux 1.1.82 released.

@@ -147,6 +147,7 @@
 #include <linux/ioport.h>
 #include <asm/io.h>
 #include <asm/system.h>
+#include <linux/proc_fs.h>
 #include "../block/blk.h"
 #include "scsi.h"
 #include "hosts.h"
@@ -336,7 +337,7 @@ static int board_inquiry(unsigned int j) {
 }
 
 static inline int port_detect(ushort *port_base, unsigned int j, 
-                              Scsi_Host_Template * tpnt) {
+			      Scsi_Host_Template * tpnt) {
    unsigned char irq, dma_channel, subversion;
    unsigned char in_byte;
 
@@ -358,8 +359,8 @@ static inline int port_detect(ushort *port_base, unsigned int j,
       unsigned char heads;
       unsigned char sectors;
       } mapping_table[4] = { 
-           { 16, 63 }, { 64, 32 }, { 64, 63 }, { 64, 32 }
-           };
+	   { 16, 63 }, { 64, 32 }, { 64, 63 }, { 64, 32 }
+	   };
 
    struct config_1 {
       unsigned char bios_segment: 3;
@@ -381,7 +382,7 @@ static inline int port_detect(ushort *port_base, unsigned int j,
 
    if(check_region(*port_base, REGION_SIZE)) {
       printk("%s: address 0x%03x in use, skipping probe.\n", 
-             name, *port_base);
+	     name, *port_base);
       return FALSE;
       }
 
@@ -407,7 +408,7 @@ static inline int port_detect(ushort *port_base, unsigned int j,
 
    if (subversion == ISA && request_dma(dma_channel, driver_name)) {
       printk("%s: unable to allocate DMA channel %u, detaching.\n",
-             name, dma_channel);
+	     name, dma_channel);
       free_irq(irq);
       return FALSE;
       }
@@ -487,20 +488,20 @@ static inline int port_detect(ushort *port_base, unsigned int j,
       HD(j)->board_id[40] = 0;
 
       if (strcmp(&HD(j)->board_id[32], "06000600")) {
-         printk("%s: %s.\n", BN(j), &HD(j)->board_id[8]);
-         printk("%s: firmware %s is outdated, FW PROM should be 28004-006.\n",
-                BN(j), &HD(j)->board_id[32]);
-         sh[j]->hostt->use_clustering = DISABLE_CLUSTERING;
-         sh[j]->sg_tablesize = MAX_SAFE_SGLIST;
-         }
+	 printk("%s: %s.\n", BN(j), &HD(j)->board_id[8]);
+	 printk("%s: firmware %s is outdated, FW PROM should be 28004-006.\n",
+		BN(j), &HD(j)->board_id[32]);
+	 sh[j]->hostt->use_clustering = DISABLE_CLUSTERING;
+	 sh[j]->sg_tablesize = MAX_SAFE_SGLIST;
+	 }
       }
 
    printk("%s: PORT 0x%03x, BIOS 0x%05x, IRQ %u, DMA %u, SG %d, "\
-          "Mbox %d, CmdLun %d, C%d.\n", BN(j), sh[j]->io_port, 
-          (int)sh[j]->base, sh[j]->irq, 
-          sh[j]->dma_channel, sh[j]->sg_tablesize, 
-          sh[j]->can_queue, sh[j]->cmd_per_lun,
-          sh[j]->hostt->use_clustering);
+	  "Mbox %d, CmdLun %d, C%d.\n", BN(j), sh[j]->io_port, 
+	  (int)sh[j]->base, sh[j]->irq, 
+	  sh[j]->dma_channel, sh[j]->sg_tablesize, 
+	  sh[j]->can_queue, sh[j]->cmd_per_lun,
+	  sh[j]->hostt->use_clustering);
    return TRUE;
 }
 
@@ -574,18 +575,18 @@ int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
       if (i >= sh[j]->can_queue) i = 0;
 
       if (HD(j)->cp_stat[i] == FREE) {
-         HD(j)->last_cp_used = i;
-         break;
-         }
+	 HD(j)->last_cp_used = i;
+	 break;
+	 }
       }
 
    if (k == sh[j]->can_queue) {
       printk("%s: qcomm, no free mailbox, resetting.\n", BN(j));
 
       if (HD(j)->in_reset) 
-         printk("%s: qcomm, already in reset.\n", BN(j));
+	 printk("%s: qcomm, already in reset.\n", BN(j));
       else if (u14_34f_reset(SCpnt) == SCSI_RESET_SUCCESS) 
-         panic("%s: qcomm, SCSI_RESET_SUCCESS.\n", BN(j));
+	 panic("%s: qcomm, SCSI_RESET_SUCCESS.\n", BN(j));
 
       SCpnt->result = DID_BUS_BUSY << 16; 
       SCpnt->host_scribble = NULL;
@@ -604,7 +605,7 @@ int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
    SCpnt->host_scribble = (unsigned char *) &cpp->index;
 
    if (do_trace) printk("%s: qcomm, mbox %d, target %d, pid %ld.\n",
-                        BN(j), i, SCpnt->target, SCpnt->pid);
+			BN(j), i, SCpnt->target, SCpnt->pid);
 
    cpp->opcode = OP_SCSI;
    cpp->xdir = DTD_SCSI;
@@ -630,7 +631,7 @@ int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
       SCpnt->result = DID_ERROR << 16;
       SCpnt->host_scribble = NULL;
       printk("%s: qcomm, target %d, pid %ld, adapter busy, DID_ERROR, done.\n", 
-             BN(j), SCpnt->target, SCpnt->pid);
+	     BN(j), SCpnt->target, SCpnt->pid);
       restore_flags(flags);
       done(SCpnt);
       return 0;
@@ -656,13 +657,13 @@ int u14_34f_abort(Scsi_Cmnd *SCarg) {
 
    if (SCarg->host_scribble == NULL) {
       printk("%s: abort, target %d, pid %ld inactive.\n",
-             BN(j), SCarg->target, SCarg->pid);
+	     BN(j), SCarg->target, SCarg->pid);
       return SCSI_ABORT_NOT_RUNNING;
       }
 
    i = *(unsigned int *)SCarg->host_scribble;
    printk("%s: abort, mbox %d, target %d, pid %ld.\n",
-          BN(j), i, SCarg->target, SCarg->pid);
+	  BN(j), i, SCarg->target, SCarg->pid);
 
    if (i >= sh[j]->can_queue)
       panic("%s: abort, invalid SCarg->host_scribble.\n", BN(j));
@@ -683,8 +684,8 @@ int u14_34f_abort(Scsi_Cmnd *SCarg) {
       printk("%s: abort, mbox %d is in use.\n", BN(j), i);
 
       if (SCarg != HD(j)->cp[i].SCpnt)
-         panic("%s: abort, mbox %d, SCarg %p, cp SCpnt %p.\n",
-               BN(j), i, SCarg, HD(j)->cp[i].SCpnt);
+	 panic("%s: abort, mbox %d, SCarg %p, cp SCpnt %p.\n",
+	       BN(j), i, SCarg, HD(j)->cp[i].SCpnt);
 
       restore_flags(flags);
       return SCSI_ABORT_SNOOZE;
@@ -714,7 +715,7 @@ int u14_34f_reset(Scsi_Cmnd * SCarg) {
    cli();
    j = ((struct hostdata *) SCarg->host->hostdata)->board_number;
    printk("%s: reset, enter, target %d, pid %ld.\n", 
-          BN(j), SCarg->target, SCarg->pid);
+	  BN(j), SCarg->target, SCarg->pid);
 
    if (SCarg->host_scribble == NULL)
       printk("%s: reset, pid %ld inactive.\n", BN(j), SCarg->pid);
@@ -740,27 +741,27 @@ int u14_34f_reset(Scsi_Cmnd * SCarg) {
       if (HD(j)->cp_stat[i] == FREE) continue;
 
       if (HD(j)->cp_stat[i] == LOCKED) {
-         HD(j)->cp_stat[i] = FREE;
-         printk("%s: reset, locked mbox %d forced free.\n", BN(j), i);
-         continue;
-         }
+	 HD(j)->cp_stat[i] = FREE;
+	 printk("%s: reset, locked mbox %d forced free.\n", BN(j), i);
+	 continue;
+	 }
 
       SCpnt = HD(j)->cp[i].SCpnt;
       HD(j)->cp_stat[i] = IN_RESET;
       printk("%s: reset, mbox %d in reset, pid %ld.\n",
-             BN(j), i, SCpnt->pid);
+	     BN(j), i, SCpnt->pid);
 
       if (SCpnt == NULL)
-         panic("%s: reset, mbox %d, SCpnt == NULL.\n", BN(j), i);
+	 panic("%s: reset, mbox %d, SCpnt == NULL.\n", BN(j), i);
 
       if (SCpnt->host_scribble == NULL)
-         panic("%s: reset, mbox %d, garbled SCpnt.\n", BN(j), i);
+	 panic("%s: reset, mbox %d, garbled SCpnt.\n", BN(j), i);
 
       if (*(unsigned int *)SCpnt->host_scribble != i) 
-         panic("%s: reset, mbox %d, index mismatch.\n", BN(j), i);
+	 panic("%s: reset, mbox %d, index mismatch.\n", BN(j), i);
 
       if (SCpnt->scsi_done == NULL) 
-         panic("%s: reset, mbox %d, SCpnt->scsi_done == NULL.\n", BN(j), i);
+	 panic("%s: reset, mbox %d, SCpnt->scsi_done == NULL.\n", BN(j), i);
 
       if (SCpnt == SCarg) arg_done = TRUE;
       }
@@ -798,7 +799,7 @@ int u14_34f_reset(Scsi_Cmnd * SCarg) {
       HD(j)->cp_stat[i] = LOCKED;
 
       printk("%s, reset, mbox %d locked, DID_RESET, pid %ld done.\n",
-             BN(j), i, SCpnt->pid);
+	     BN(j), i, SCpnt->pid);
       restore_flags(flags);
       SCpnt->scsi_done(SCpnt);
       cli();
@@ -843,7 +844,7 @@ static void u14_34f_interrupt_handler(int irq, struct pt_regs * regs) {
       }
 
    if (do_trace) printk("%s: ihdlr, enter, irq %d, calls %d.\n", 
-                        driver_name, irq, calls[irq]);
+			driver_name, irq, calls[irq]);
 
    /* Service all the boards configured on this irq */
    for (j = 0; sh[j] != NULL; j++) {
@@ -854,156 +855,156 @@ static void u14_34f_interrupt_handler(int irq, struct pt_regs * regs) {
 
       /* Loop until all interrupts for a board are serviced */
       while (inb(sh[j]->io_port + REG_SYS_INTR) & IRQ_ASSERTED) {
-         total_loops++;
-         loops++;
+	 total_loops++;
+	 loops++;
 
-         if (do_trace) printk("%s: ihdlr, start service, count %d.\n",
-                              BN(j), HD(j)->iocount);
+	 if (do_trace) printk("%s: ihdlr, start service, count %d.\n",
+			      BN(j), HD(j)->iocount);
 
-         spp = (struct mscp *)inl(sh[j]->io_port + REG_ICM);
+	 spp = (struct mscp *)inl(sh[j]->io_port + REG_ICM);
 
-         /* Clear interrupt pending flag */
-         outb(CMD_CLR_INTR, sh[j]->io_port + REG_SYS_INTR);
+	 /* Clear interrupt pending flag */
+	 outb(CMD_CLR_INTR, sh[j]->io_port + REG_SYS_INTR);
 
-         i = spp - HD(j)->cp;
+	 i = spp - HD(j)->cp;
 
-         if (i >= sh[j]->can_queue)
-            panic("%s: ihdlr, invalid mscp address.\n", BN(j));
+	 if (i >= sh[j]->can_queue)
+	    panic("%s: ihdlr, invalid mscp address.\n", BN(j));
 
-         if (HD(j)->cp_stat[i] == IGNORE) {
-            HD(j)->cp_stat[i] = FREE;
-            continue;
-            }
-         else if (HD(j)->cp_stat[i] == LOCKED) {
-            HD(j)->cp_stat[i] = FREE;
-            printk("%s: ihdlr, mbox %d unlocked, count %d.\n",
-                   BN(j), i, HD(j)->iocount);
-            continue;
-            }
-         else if (HD(j)->cp_stat[i] == FREE) {
-            printk("%s: ihdlr, mbox %d is free, count %d.\n", 
-                   BN(j), i, HD(j)->iocount);
-            continue;
-            }
-         else if (HD(j)->cp_stat[i] == IN_RESET)
-            printk("%s: ihdlr, mbox %d is in reset.\n", BN(j), i);
-         else if (HD(j)->cp_stat[i] != IN_USE) 
-            panic("%s: ihdlr, mbox %d, invalid cp_stat.\n", BN(j), i);
+	 if (HD(j)->cp_stat[i] == IGNORE) {
+	    HD(j)->cp_stat[i] = FREE;
+	    continue;
+	    }
+	 else if (HD(j)->cp_stat[i] == LOCKED) {
+	    HD(j)->cp_stat[i] = FREE;
+	    printk("%s: ihdlr, mbox %d unlocked, count %d.\n",
+		   BN(j), i, HD(j)->iocount);
+	    continue;
+	    }
+	 else if (HD(j)->cp_stat[i] == FREE) {
+	    printk("%s: ihdlr, mbox %d is free, count %d.\n", 
+		   BN(j), i, HD(j)->iocount);
+	    continue;
+	    }
+	 else if (HD(j)->cp_stat[i] == IN_RESET)
+	    printk("%s: ihdlr, mbox %d is in reset.\n", BN(j), i);
+	 else if (HD(j)->cp_stat[i] != IN_USE) 
+	    panic("%s: ihdlr, mbox %d, invalid cp_stat.\n", BN(j), i);
 
-         HD(j)->cp_stat[i] = FREE;
-         SCpnt = spp->SCpnt;
+	 HD(j)->cp_stat[i] = FREE;
+	 SCpnt = spp->SCpnt;
 
-         if (SCpnt == NULL) 
-            panic("%s: ihdlr, mbox %d, SCpnt == NULL.\n", BN(j), i);
+	 if (SCpnt == NULL) 
+	    panic("%s: ihdlr, mbox %d, SCpnt == NULL.\n", BN(j), i);
 
-         if (SCpnt->host_scribble == NULL) 
-            panic("%s: ihdlr, mbox %d, pid %ld, SCpnt %p garbled.\n",
-                  BN(j), i, SCpnt->pid, SCpnt);
+	 if (SCpnt->host_scribble == NULL) 
+	    panic("%s: ihdlr, mbox %d, pid %ld, SCpnt %p garbled.\n",
+		  BN(j), i, SCpnt->pid, SCpnt);
 
-         if (*(unsigned int *)SCpnt->host_scribble != i) 
-            panic("%s: ihdlr, mbox %d, pid %ld, index mismatch %d,"\
-                  " irq %d.\n", BN(j), i, SCpnt->pid, 
-                  *(unsigned int *)SCpnt->host_scribble, irq);
+	 if (*(unsigned int *)SCpnt->host_scribble != i) 
+	    panic("%s: ihdlr, mbox %d, pid %ld, index mismatch %d,"\
+		  " irq %d.\n", BN(j), i, SCpnt->pid, 
+		  *(unsigned int *)SCpnt->host_scribble, irq);
 
-         tstatus = status_byte(spp->target_status);
+	 tstatus = status_byte(spp->target_status);
 
-         switch (spp->adapter_status) {
-            case ASOK:     /* status OK */
+	 switch (spp->adapter_status) {
+	    case ASOK:     /* status OK */
 
-               /* Forces a reset if a disk drive keeps returning BUSY */
-               if (tstatus == BUSY && SCpnt->device->type != TYPE_TAPE) 
-                  status = DID_ERROR << 16;
+	       /* Forces a reset if a disk drive keeps returning BUSY */
+	       if (tstatus == BUSY && SCpnt->device->type != TYPE_TAPE) 
+		  status = DID_ERROR << 16;
 
-               /* If there was a bus reset, redo operation on each target */
-               else if (tstatus != GOOD
-                        && SCpnt->device->type == TYPE_DISK
-                        && HD(j)->target_reset[SCpnt->target])
-                  status = DID_BUS_BUSY << 16;
+	       /* If there was a bus reset, redo operation on each target */
+	       else if (tstatus != GOOD
+			&& SCpnt->device->type == TYPE_DISK
+			&& HD(j)->target_reset[SCpnt->target])
+		  status = DID_BUS_BUSY << 16;
 
-               /* Works around a flaw in scsi.c */
-               else if (tstatus == CHECK_CONDITION
-                        && SCpnt->device->type == TYPE_DISK
-                        && (SCpnt->sense_buffer[2] & 0xf) == RECOVERED_ERROR)
-                  status = DID_BUS_BUSY << 16;
+	       /* Works around a flaw in scsi.c */
+	       else if (tstatus == CHECK_CONDITION
+			&& SCpnt->device->type == TYPE_DISK
+			&& (SCpnt->sense_buffer[2] & 0xf) == RECOVERED_ERROR)
+		  status = DID_BUS_BUSY << 16;
 
-               else
-                  status = DID_OK << 16;
+	       else
+		  status = DID_OK << 16;
 
-               if (tstatus == GOOD)
-                  HD(j)->target_reset[SCpnt->target] = FALSE;
+	       if (tstatus == GOOD)
+		  HD(j)->target_reset[SCpnt->target] = FALSE;
 
-               if (spp->target_status && SCpnt->device->type == TYPE_DISK)
-                  printk("%s: ihdlr, target %d:%d, pid %ld, target_status "\
-                         "0x%x, sense key 0x%x.\n", BN(j), 
-                         SCpnt->target, SCpnt->lun, SCpnt->pid,
-                         spp->target_status, SCpnt->sense_buffer[2]);
+	       if (spp->target_status && SCpnt->device->type == TYPE_DISK)
+		  printk("%s: ihdlr, target %d:%d, pid %ld, target_status "\
+			 "0x%x, sense key 0x%x.\n", BN(j), 
+			 SCpnt->target, SCpnt->lun, SCpnt->pid,
+			 spp->target_status, SCpnt->sense_buffer[2]);
 
-               HD(j)->target_time_out[SCpnt->target] = 0;
+	       HD(j)->target_time_out[SCpnt->target] = 0;
 
-               break;
-            case ASST:     /* Selection Time Out */
+	       break;
+	    case ASST:     /* Selection Time Out */
 
-               if (HD(j)->target_time_out[SCpnt->target] > 1)
-                  status = DID_ERROR << 16;
-               else {
-                  status = DID_TIME_OUT << 16;
-                  HD(j)->target_time_out[SCpnt->target]++;
-                  }
+	       if (HD(j)->target_time_out[SCpnt->target] > 1)
+		  status = DID_ERROR << 16;
+	       else {
+		  status = DID_TIME_OUT << 16;
+		  HD(j)->target_time_out[SCpnt->target]++;
+		  }
 
-               break;
-            case 0x92:     /* Data over/under-run */
-            case 0x93:     /* Unexpected bus free */
-            case 0x94:     /* Target bus phase sequence failure */
-            case 0x96:     /* Illegal SCSI command */
-            case 0xa3:     /* SCSI bus reset error */
+	       break;
+	    case 0x92:     /* Data over/under-run */
+	    case 0x93:     /* Unexpected bus free */
+	    case 0x94:     /* Target bus phase sequence failure */
+	    case 0x96:     /* Illegal SCSI command */
+	    case 0xa3:     /* SCSI bus reset error */
 
-               if (SCpnt->device->type != TYPE_TAPE)
-                  status = DID_BUS_BUSY << 16;
-               else
-                  status = DID_ERROR << 16;
+	       if (SCpnt->device->type != TYPE_TAPE)
+		  status = DID_BUS_BUSY << 16;
+	       else
+		  status = DID_ERROR << 16;
 
-               for (k = 0; k < MAX_TARGET; k++) 
-                  HD(j)->target_reset[k] = TRUE;
+	       for (k = 0; k < MAX_TARGET; k++) 
+		  HD(j)->target_reset[k] = TRUE;
 
-               break;
-            case 0x01:     /* Invalid command */
-            case 0x02:     /* Invalid parameters */
-            case 0x03:     /* Invalid data list */
-            case 0x84:     /* SCSI bus abort error */
-            case 0x9b:     /* Auto request sense error */
-            case 0x9f:     /* Unexpected command complete message error */
-            case 0xff:     /* Invalid parameter in the S/G list */
-            default:
-               status = DID_ERROR << 16;
-               break;
-            }
+	       break;
+	    case 0x01:     /* Invalid command */
+	    case 0x02:     /* Invalid parameters */
+	    case 0x03:     /* Invalid data list */
+	    case 0x84:     /* SCSI bus abort error */
+	    case 0x9b:     /* Auto request sense error */
+	    case 0x9f:     /* Unexpected command complete message error */
+	    case 0xff:     /* Invalid parameter in the S/G list */
+	    default:
+	       status = DID_ERROR << 16;
+	       break;
+	    }
 
-         SCpnt->result = status | spp->target_status;
-         HD(j)->iocount++;
+	 SCpnt->result = status | spp->target_status;
+	 HD(j)->iocount++;
 
-         if (loops > 1) HD(j)->multicount++;
+	 if (loops > 1) HD(j)->multicount++;
 
 #if defined (DEBUG_INTERRUPT)
-         if (SCpnt->result || do_trace) 
+	 if (SCpnt->result || do_trace) 
 #else
-         if ((spp->adapter_status != ASOK && HD(j)->iocount >  1000) ||
-             (spp->adapter_status != ASOK && 
-              spp->adapter_status != ASST && HD(j)->iocount <= 1000) ||
-             do_trace)
+	 if ((spp->adapter_status != ASOK && HD(j)->iocount >  1000) ||
+	     (spp->adapter_status != ASOK && 
+	      spp->adapter_status != ASST && HD(j)->iocount <= 1000) ||
+	     do_trace)
 #endif
-            printk("%s: ihdlr, mbox %d, err 0x%x:%x,"\
-                   " target %d:%d, pid %ld, count %d.\n",
-                   BN(j), i, spp->adapter_status, spp->target_status,
-                   SCpnt->target, SCpnt->lun, SCpnt->pid, HD(j)->iocount);
+	    printk("%s: ihdlr, mbox %d, err 0x%x:%x,"\
+		   " target %d:%d, pid %ld, count %d.\n",
+		   BN(j), i, spp->adapter_status, spp->target_status,
+		   SCpnt->target, SCpnt->lun, SCpnt->pid, HD(j)->iocount);
 
-         /* Set the command state to inactive */
-         SCpnt->host_scribble = NULL;
+	 /* Set the command state to inactive */
+	 SCpnt->host_scribble = NULL;
 
-         restore_flags(flags);
-         SCpnt->scsi_done(SCpnt);
-         cli();
+	 restore_flags(flags);
+	 SCpnt->scsi_done(SCpnt);
+	 cli();
 
-         }   /* Multiple command loop */
+	 }   /* Multiple command loop */
 
       }   /* Boards loop */
 
@@ -1011,16 +1012,16 @@ static void u14_34f_interrupt_handler(int irq, struct pt_regs * regs) {
 
    if (total_loops == 0) 
      printk("%s: ihdlr, irq %d, no command completed, calls %d.\n",
-            driver_name, irq, calls[irq]);
+	    driver_name, irq, calls[irq]);
 
    if (do_trace) printk("%s: ihdlr, exit, irq %d, calls %d.\n",
-                        driver_name, irq, calls[irq]);
+			driver_name, irq, calls[irq]);
 
 #if defined (DEBUG_STATISTICS)
    if ((calls[irq] % 100000) == 10000)
       for (j = 0; sh[j] != NULL; j++)
-         printk("%s: ihdlr, calls %d, count %d, multi %d.\n", BN(j),
-                calls[(sh[j]->irq)], HD(j)->iocount, HD(j)->multicount);
+	 printk("%s: ihdlr, calls %d, count %d, multi %d.\n", BN(j),
+		calls[(sh[j]->irq)], HD(j)->iocount, HD(j)->multicount);
 #endif
 
    restore_flags(flags);

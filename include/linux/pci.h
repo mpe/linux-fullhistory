@@ -47,7 +47,7 @@
 #define PCI_DEVICE_ID		0x02	/* 16 bits */
 #define PCI_COMMAND		0x04	/* 16 bits */
 #define  PCI_COMMAND_IO		0x1	/* Enable response in I/O space */
-#define  PCI_COMMAND_MEMORY	0x2	/* Enable response in I/O space */
+#define  PCI_COMMAND_MEMORY	0x2	/* Enable response in Memory space */
 #define  PCI_COMMAND_MASTER	0x4	/* Enable bus mastering */
 #define  PCI_COMMAND_SPECIAL	0x8	/* Enable response to special cycles */
 #define  PCI_COMMAND_INVALIDATE	0x10	/* Use memory write and invalidate */
@@ -171,6 +171,7 @@
 #define PCI_VENDOR_ID_ADAPTEC		0x9004
 #define PCI_DEVICE_ID_ADAPTEC_2940	0x7178
 #define PCI_DEVICE_ID_ADAPTEC_294x	0x7078
+#define PCI_DEVICE_ID_ADAPTEC_7850	0x5078
 
 #define PCI_VENDOR_ID_DPT               0x1044   
 #define PCI_DEVICE_ID_DPT               0xa400  
@@ -195,11 +196,13 @@
 #define PCI_DEVICE_ID_UMC_UM8881F	0x8881
 #define PCI_DEVICE_ID_UMC_UM8891A	0x0891
 #define PCI_DEVICE_ID_UMC_UM8886F	0x8886
+#define PCI_DEVICE_ID_UMC_UM8886A	0x886a
 #define PCI_DEVICE_ID_UMC_UM8673F	0x0101
 
 #define PCI_VENDOR_ID_DEC		0x1011
 #define PCI_DEVICE_ID_DEC_TULIP		0x0002
 #define PCI_DEVICE_ID_DEC_TULIP_FAST	0x0009
+#define PCI_DEVICE_ID_DEC_TULIP_PLUS	0x0014
 #define PCI_DEVICE_ID_DEC_FDDI		0x000F
 #define PCI_DEVICE_ID_DEC_BRD		0x0001
 
@@ -232,6 +235,7 @@
 #define PCI_DEVICE_ID_CIRRUS_5434_4	0x00A4
 #define PCI_DEVICE_ID_CIRRUS_5434_8	0x00A8
 #define PCI_DEVICE_ID_CIRRUS_6729	0x1100
+#define PCI_DEVICE_ID_CIRRUS_7542	0x1200
 
 #define PCI_VENDOR_ID_BUSLOGIC		0x104B
 #define PCI_DEVICE_ID_BUSLOGIC_946C	0x1040
@@ -339,6 +343,12 @@
 
 #define PCI_VENDOR_ID_X			0x1061
 #define PCI_DEVICE_ID_X_AGX016		0x0001
+
+#define PCI_VENDOR_ID_ACC		0x10aa
+
+#define PCI_VENDOR_ID_VORTEX		0x1119
+#define PCI_DEVICE_ID_VORTEX_GDT	0x0001
+
 
 /*
  * The PCI interface treats multi-function devices as independent

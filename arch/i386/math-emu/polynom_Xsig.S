@@ -36,9 +36,7 @@
 #define OVERFLOWED      -16(%ebp)	/* addition overflow flag */
 
 .text
-	.align 2,144
-.globl _polynomial_Xsig
-_polynomial_Xsig:
+ENTRY(polynomial_Xsig)
 	pushl	%ebp
 	movl	%esp,%ebp
 	subl	$32,%esp

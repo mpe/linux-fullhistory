@@ -211,7 +211,7 @@ unsigned char inverse_translate(unsigned char c) {
  * 0xf000-0xf0ff "transparent" Unicodes) whereas the "new" variants set
  * unicodes explictly.
  */
-int con_set_trans_old(char * arg)
+int con_set_trans_old(unsigned char * arg)
 {
 	int i;
 	unsigned short *p = translations[USER_MAP];
@@ -227,7 +227,7 @@ int con_set_trans_old(char * arg)
 	return 0;
 }
 
-int con_get_trans_old(char * arg)
+int con_get_trans_old(unsigned char * arg)
 {
 	int i, ch;
 	unsigned short *p = translations[USER_MAP];

@@ -17,12 +17,16 @@
  * if it doesn't work for your devices, take a look.
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/head.h>
 #include <linux/types.h>
 #include <linux/string.h>
 #include <linux/ioport.h>
-
+#include <linux/proc_fs.h>
 #include <linux/sched.h>
 #include <asm/dma.h>
 
@@ -123,7 +127,7 @@ sense[0],sense[1],sense[2],sense[3]);
 		retval = DID_ERROR; /* Didn't find a better error */
 	    }
 	    /* In any other case return DID_OK so for example
-               CONDITION_CHECKS make it through to the appropriate
+	       CONDITION_CHECKS make it through to the appropriate
 	       device driver */
 	}
     }
@@ -181,7 +185,7 @@ void aha1740_intr_handle(int irq, struct pt_regs * regs)
 	ecbptr = (struct ecb *) bus_to_virt(inl(MBOXIN0));
 	outb(G2CNTRL_IRST,G2CNTRL); /* interrupt reset */
       
-        switch ( adapstat & G2INTST_MASK )
+	switch ( adapstat & G2INTST_MASK )
 	{
 	case	G2INTST_CCBRETRY:
 	case	G2INTST_CCBERROR:
@@ -253,22 +257,22 @@ int aha1740_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
     
     if(*cmd == REQUEST_SENSE)
     {
-        if (bufflen != sizeof(SCpnt->sense_buffer))
+	if (bufflen != sizeof(SCpnt->sense_buffer))
 	{
 	    printk("Wrong buffer length supplied for request sense (%d)\n",bufflen);
-        }
-        SCpnt->result = 0;
-        done(SCpnt); 
-        return 0;
+	}
+	SCpnt->result = 0;
+	done(SCpnt); 
+	return 0;
     }
 
 #ifdef DEBUG
     if (*cmd == READ_10 || *cmd == WRITE_10)
-        i = xscsi2int(cmd+2);
+	i = xscsi2int(cmd+2);
     else if (*cmd == READ_6 || *cmd == WRITE_6)
-        i = scsi2int(cmd+2);
+	i = scsi2int(cmd+2);
     else
-        i = -1;
+	i = -1;
     printk("aha1740_queuecommand: dev %d cmd %02x pos %d len %d ", target, *cmd, i, bufflen);
     printk("scsi cmd:");
     for (i = 0; i < SCpnt->cmd_len; i++) printk("%02x ", cmd[i]);
@@ -313,35 +317,35 @@ int aha1740_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 
     if (SCpnt->use_sg)
     {
-        struct scatterlist * sgpnt;
-        struct aha1740_chain * cptr;
-        int i;
+	struct scatterlist * sgpnt;
+	struct aha1740_chain * cptr;
+	int i;
 #ifdef DEBUG
-        unsigned char * ptr;
+	unsigned char * ptr;
 #endif
-        ecb[ecbno].sg = 1;	  /* SCSI Initiator Command  w/scatter-gather*/
-        SCpnt->host_scribble = (unsigned char *) scsi_malloc(512);
-        sgpnt = (struct scatterlist *) SCpnt->request_buffer;
-        cptr = (struct aha1740_chain *) SCpnt->host_scribble; 
-        if (cptr == NULL) panic("aha1740.c: unable to allocate DMA memory\n");
-        for(i=0; i<SCpnt->use_sg; i++)
+	ecb[ecbno].sg = 1;	  /* SCSI Initiator Command  w/scatter-gather*/
+	SCpnt->host_scribble = (unsigned char *) scsi_malloc(512);
+	sgpnt = (struct scatterlist *) SCpnt->request_buffer;
+	cptr = (struct aha1740_chain *) SCpnt->host_scribble; 
+	if (cptr == NULL) panic("aha1740.c: unable to allocate DMA memory\n");
+	for(i=0; i<SCpnt->use_sg; i++)
 	{
 	    cptr[i].dataptr = (long) sgpnt[i].address;
 	    cptr[i].datalen = sgpnt[i].length;
-        }
-        ecb[ecbno].datalen = SCpnt->use_sg * sizeof(struct aha1740_chain);
-        ecb[ecbno].dataptr = (long) cptr;
+	}
+	ecb[ecbno].datalen = SCpnt->use_sg * sizeof(struct aha1740_chain);
+	ecb[ecbno].dataptr = (long) cptr;
 #ifdef DEBUG
-        printk("cptr %x: ",cptr);
-        ptr = (unsigned char *) cptr;
-        for(i=0;i<24;i++) printk("%02x ", ptr[i]);
+	printk("cptr %x: ",cptr);
+	ptr = (unsigned char *) cptr;
+	for(i=0;i<24;i++) printk("%02x ", ptr[i]);
 #endif
     }
     else
     {
-        SCpnt->host_scribble = NULL;
-        ecb[ecbno].datalen = bufflen;
-        ecb[ecbno].dataptr = (long) buff;
+	SCpnt->host_scribble = NULL;
+	ecb[ecbno].datalen = bufflen;
+	ecb[ecbno].dataptr = (long) buff;
     }
     ecb[ecbno].lun = SCpnt->lun;
     ecb[ecbno].ses = 1;	/* Suppress underrun errors */
@@ -355,9 +359,9 @@ int aha1740_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 #ifdef DEBUG
     {
 	int i;
-        printk("aha1740_command: sending.. ");
-        for (i = 0; i < sizeof(ecb[ecbno])-10; i++)
-            printk("%02x ", ((unchar *)&ecb[ecbno])[i]);
+	printk("aha1740_command: sending.. ");
+	for (i = 0; i < sizeof(ecb[ecbno])-10; i++)
+	    printk("%02x ", ((unchar *)&ecb[ecbno])[i]);
     }
     printk("\n");
 #endif
@@ -366,7 +370,7 @@ int aha1740_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	  non-terminating while loops with interrupts disabled.  So did
 	  I when I wrote it, but the Adaptec Spec says the card is so fast,
 	  that this problem virtually never occurs so I've kept it.  We
-          do printk a warning first, so that you'll know if it happens.
+	  do printk a warning first, so that you'll know if it happens.
 	  In practice the only time we've seen this message is when some-
 	  thing else is in the driver was broken, like _makecode(), or
 	  when a scsi device hung the scsi bus.  Even under these conditions,
@@ -451,8 +455,8 @@ int aha1740_detect(Scsi_Host_Template * tpnt)
 
     if ( (inb(G2STAT) & (G2STAT_MBXOUT | G2STAT_BUSY) ) != G2STAT_MBXOUT )
     {	/* If the card isn't ready, hard reset it */
-        outb(G2CNTRL_HRST,G2CNTRL);
-        outb(0,G2CNTRL);    
+	outb(G2CNTRL_HRST,G2CNTRL);
+	outb(0,G2CNTRL);    
     }
 
     printk("Configuring Adaptec at IO:%x, IRQ %d\n",base,
@@ -462,8 +466,8 @@ int aha1740_detect(Scsi_Host_Template * tpnt)
 
     if (request_irq(irq_level,aha1740_intr_handle, 0, "aha1740"))
     {
-        printk("Unable to allocate IRQ for adaptec controller.\n");
-        return 0;
+	printk("Unable to allocate IRQ for adaptec controller.\n");
+	return 0;
     }
     request_region(base, 0x5c,"aha1740");  /* Reserve the space that we need to use */
     return 1;
@@ -503,6 +507,13 @@ DEB(printk("aha1740_biosparam\n"));
 /*  if (ip[2] >= 1024) ip[2] = 1024; */
   return 0;
 }
+
+#ifdef MODULE
+/* Eventually this will go into an include file, but this will be later */
+Scsi_Host_Template driver_template = AHA1740;
+
+#include "scsi_module.c"
+#endif
 
 /* Okay, you made it all the way through.  As of this writing, 3/31/93, I'm
 brad@saturn.gaylord.com or brad@bradpc.gaylord.com.  I'll try to help as time

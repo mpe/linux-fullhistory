@@ -101,6 +101,7 @@ int in2000_abort(Scsi_Cmnd *);
 int in2000_reset(Scsi_Cmnd *);
 int in2000_biosparam(Disk *, int, int*);
 
+extern int generic_proc_info(char *, char **, off_t, int, int, int);
 
 #ifndef NULL
 	#define NULL 0
@@ -108,12 +109,14 @@ int in2000_biosparam(Disk *, int, int*);
 
 /* next may be "SG_NONE" or "SG_ALL" or nr. of (1k) blocks per R/W Cmd. */
 #define IN2000_SG SG_ALL
-#define IN2000 {NULL, NULL, "Always IN2000", in2000_detect, NULL,	\
+#define IN2000 {NULL, NULL, generic_proc_info,  \
+		"in2000", PROC_SCSI_IN2000, \
+		"Always IN2000", in2000_detect, NULL,	\
 		NULL, in2000_command,		\
 		in2000_queuecommand,		\
 		in2000_abort,			\
 		in2000_reset,			\
-	        NULL,		                \
+		NULL,				\
 		in2000_biosparam,               \
 		1, 7, IN2000_SG, 1, 0, 0}
 

@@ -1517,7 +1517,7 @@ ppp_ioctl(struct tty_struct *tty, struct file *file, unsigned int i,
   case PPPIOCSDEBUG:
     error = verify_area (VERIFY_READ, (void *) l, sizeof (temp_i));
     if (error == 0) {
-      ppp_debug = get_int ((int *) l);
+      ppp_debug = get_user ((int *) l);
       ppp_debug_netpackets = (ppp_debug & 0xff00) >> 8;
       ppp_debug &= 0xff;
       PRINTKN (1, (KERN_INFO "ppp_ioctl: set debug level %d, netpacket %d\n", 

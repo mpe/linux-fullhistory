@@ -62,6 +62,8 @@
 #define STOP    	0x0004 	/* Stop */
 #define STRT    	0x0002 	/* Start */
 #define INIT    	0x0001 	/* Initialize */
+#define INTM            0xff00  /* Interrupt Mask */
+#define INTE            0xfff0  /* Interrupt Enable */
 
 /*
 ** CONTROL AND STATUS REGISTER 3 (CSR3)
@@ -110,6 +112,7 @@
 #define T_DEF     	0x0400 	/* Deferred */
 #define T_STP       0x02000000 	/* Start of Packet */
 #define T_ENP       0x01000000	/* End of Packet */
+#define T_FLAGS     0xff000000  /* TX Flags Field */
 
 /*
 ** Transmit Message Descriptor 3 (TMD3) bit definitions.
@@ -139,10 +142,44 @@
 /*
 ** Miscellaneous
 */
+#define HASH_TABLE_LEN   64           /* Bits */
+#define HASH_BITS        0x003f       /* 6 LS bits */
 
 #define MASK_INTERRUPTS   1
 #define UNMASK_INTERRUPTS 0
 
-#define EISA_EN         0x0001   /* Enable EISA bus buffers */
-#define DEPCA_EISA_ID   ioaddr+0x80   /* ID long word for EISA card */
-#define DEPCA_EISA_CTRL ioaddr+0x84   /* Control word for EISA card */
+#define EISA_EN         0x0001        /* Enable EISA bus buffers */
+#define EISA_ID         iobase+0x0080 /* ID long word for EISA card */
+#define EISA_CTRL       iobase+0x0084 /* Control word for EISA card */
+
+/*
+** Include the IOCTL stuff
+*/
+#include <linux/sockios.h>
+
+#define	DEPCAIOCTL	SIOCDEVPRIVATE
+
+struct depca_ioctl {
+	unsigned short cmd;                /* Command to run */
+	unsigned short len;                /* Length of the data buffer */
+	unsigned char  *data;              /* Pointer to the data buffer */
+};
+
+/* 
+** Recognised commands for the driver 
+*/
+#define DEPCA_GET_HWADDR	0x01 /* Get the hardware address */
+#define DEPCA_SET_HWADDR	0x02 /* Get the hardware address */
+#define DEPCA_SET_PROM  	0x03 /* Set Promiscuous Mode */
+#define DEPCA_CLR_PROM  	0x04 /* Clear Promiscuous Mode */
+#define DEPCA_SAY_BOO	        0x05 /* Say "Boo!" to the kernel log file */
+#define DEPCA_GET_MCA   	0x06 /* Get a multicast address */
+#define DEPCA_SET_MCA   	0x07 /* Set a multicast address */
+#define DEPCA_CLR_MCA    	0x08 /* Clear a multicast address */
+#define DEPCA_MCA_EN    	0x09 /* Enable a multicast address group */
+#define DEPCA_GET_STATS  	0x0a /* Get the driver statistics */
+#define DEPCA_CLR_STATS 	0x0b /* Zero out the driver statistics */
+#define DEPCA_GET_REG   	0x0c /* Get the Register contents */
+#define DEPCA_SET_REG   	0x0d /* Set the Register contents */
+#define DEPCA_DUMP              0x0f /* Dump the DEPCA Status */
+

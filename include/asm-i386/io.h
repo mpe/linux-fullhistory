@@ -43,7 +43,7 @@
  * make the kernel segment mapped at 0, we need to do translation
  * on the i386 as well)
  */
-extern inline unsigned long virt_to_phys(void * address)
+extern inline unsigned long virt_to_phys(volatile void * address)
 {
 	return (unsigned long) address;
 }
@@ -65,23 +65,13 @@ extern inline void * phys_to_virt(unsigned long address)
  * differently. On the x86 architecture, we just read/write the
  * memory location directly.
  */
-extern inline unsigned long readb(unsigned long addr)
-{ return *(unsigned char *) addr; }
+#define readb(addr) (*(volatile unsigned char *) (addr))
+#define readw(addr) (*(volatile unsigned short *) (addr))
+#define readl(addr) (*(volatile unsigned int *) (addr))
 
-extern inline unsigned long readw(unsigned long addr)
-{ return *(unsigned short *) addr; }
-
-extern inline unsigned long readl(unsigned long addr)
-{ return *(unsigned int *) addr; }
-
-extern inline void writeb(unsigned char b, unsigned long addr)
-{ *(unsigned char *) addr = b; }
-
-extern inline void writew(unsigned short b, unsigned long addr)
-{ *(unsigned short *) addr = b; }
-
-extern inline void writel(unsigned int b, unsigned long addr)
-{ *(unsigned int *) addr = b; }
+#define writeb(b,addr) ((*(volatile unsigned char *) (addr)) = (b))
+#define writew(b,addr) ((*(volatile unsigned short *) (addr)) = (b))
+#define writel(b,addr) ((*(volatile unsigned int *) (addr)) = (b))
 
 #define memset_io(a,b,c)	memset((void *)(a),(b),(c))
 #define memcpy_fromio(a,b,c)	memcpy((a),(void *)(b),(c))

@@ -27,7 +27,7 @@ static char buf[1024];
 
 extern void console_print(const char *);
 
-#define DEFAULT_MESSAGE_LOGLEVEL 7 /* KERN_DEBUG */
+#define DEFAULT_MESSAGE_LOGLEVEL 6 /* KERN_INFO */
 #define DEFAULT_CONSOLE_LOGLEVEL 7 /* anything more serious than KERN_DEBUG */
 
 unsigned long log_size = 0;
@@ -164,7 +164,7 @@ asmlinkage int printk(const char *fmt, ...)
 			) {
 				p -= 3;
 				p[0] = '<';
-				p[1] = DEFAULT_MESSAGE_LOGLEVEL - 1 + '0';
+				p[1] = DEFAULT_MESSAGE_LOGLEVEL + '0';
 				p[2] = '>';
 			} else
 				msg += 3;

@@ -9,9 +9,10 @@
 #ifndef _FPU_ASM_H_
 #define _FPU_ASM_H_
 
+#include <linux/linkage.h>
 #include "fpu_emu.h"
 
-#define	EXCEPTION	_exception
+#define	EXCEPTION	SYMBOL_NAME(exception)
 
 
 #define PARAM1	8(%ebp)
