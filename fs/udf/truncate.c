@@ -64,7 +64,7 @@ static void trunc(struct inode * inode)
 	lb_addr bloc, eloc, neloc = { 0, 0 };
 	Uint32 extoffset, elen, offset, nelen = 0, lelen = 0, lenalloc;
 	int etype;
-	int first_block = (inode->i_size + inode->i_sb->s_blocksize - 1) / inode->i_sb->s_blocksize;
+	int first_block = (inode->i_size + inode->i_sb->s_blocksize - 1) >> inode->i_sb->s_blocksize_bits;
 	struct buffer_head *bh = NULL;
 	int adsize;
 

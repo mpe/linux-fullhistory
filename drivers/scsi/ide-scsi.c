@@ -299,6 +299,11 @@ static void idescsi_end_request (byte uptodate, ide_hwgroup_t *hwgroup)
 	scsi->pc = NULL;
 }
 
+static inline unsigned long get_timeout(idescsi_pc_t *pc)
+{
+	return IDE_MAX(WAIT_CMD, pc->timeout - jiffies);
+}
+
 /*
  *	Our interrupt handler.
  */
@@ -359,8 +364,7 @@ static void idescsi_pc_intr (ide_drive_t *drive)
 				pc->actually_transferred += temp;
 				pc->current_position += temp;
 				idescsi_discard_data (drive,bcount - temp);
-				drive->timeout = IDE_MAX(WAIT_CMD, pc->timeout - jiffies);
-				ide_set_handler(drive, &idescsi_pc_intr);
+				ide_set_handler(drive, &idescsi_pc_intr, get_timeout(pc), NULL);
 				return;
 			}
 #if IDESCSI_DEBUG_LOG
@@ -384,8 +388,7 @@ static void idescsi_pc_intr (ide_drive_t *drive)
 	pc->actually_transferred+=bcount;				/* Update the current position */
 	pc->current_position+=bcount;
 
-	drive->timeout = IDE_MAX(WAIT_CMD, pc->timeout - jiffies);
-	ide_set_handler(drive, &idescsi_pc_intr);	/* And set the interrupt handler again */
+	ide_set_handler(drive, &idescsi_pc_intr, get_timeout(pc), NULL);	/* And set the interrupt handler again */
 }
 
 static void idescsi_transfer_pc (ide_drive_t *drive)
@@ -404,8 +407,7 @@ static void idescsi_transfer_pc (ide_drive_t *drive)
 		ide_do_reset (drive);
 		return;
 	}
-	drive->timeout = IDE_MAX(WAIT_CMD, pc->timeout - jiffies);
-	ide_set_handler(drive, &idescsi_pc_intr);	/* Set the interrupt routine */
+	ide_set_handler(drive, &idescsi_pc_intr, get_timeout(pc), NULL);	/* Set the interrupt routine */
 	atapi_output_bytes (drive, scsi->pc->c, 12);			/* Send the actual packet */
 }
 
@@ -439,8 +441,7 @@ static void idescsi_issue_pc (ide_drive_t *drive, idescsi_pc_t *pc)
 		(void) (HWIF(drive)->dmaproc(ide_dma_begin, drive));
 	}
 	if (test_bit (IDESCSI_DRQ_INTERRUPT, &scsi->flags)) {
-		drive->timeout = IDE_MAX(WAIT_CMD, pc->timeout - jiffies);
-		ide_set_handler (drive, &idescsi_transfer_pc);
+		ide_set_handler (drive, &idescsi_transfer_pc, get_timeout(pc), NULL);
 		OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG);		/* Issue the packet command */
 	} else {
 		OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG);

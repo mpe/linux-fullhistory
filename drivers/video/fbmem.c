@@ -527,7 +527,7 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 	if ((vma->vm_end - vma->vm_start + off) > len)
 		return -EINVAL;
 	off += start;
-	vma->vm_pgoff = off >> PAGE_CACHE_SHIFT;
+	vma->vm_pgoff = off >> PAGE_SHIFT;
 #if defined(__mc68000__)
 	if (CPU_IS_020_OR_030)
 		pgprot_val(vma->vm_page_prot) |= _PAGE_NOCACHE030;

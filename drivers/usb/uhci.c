@@ -41,6 +41,7 @@
 #include <linux/smp_lock.h>
 #include <linux/errno.h>
 #include <linux/unistd.h>
+#include <linux/interrupt.h>
 #include <linux/spinlock.h>
 
 #include <asm/uaccess.h>
@@ -73,20 +74,20 @@ static LIST_HEAD(uhci_list);
  * function prototypes
  */
 
-static int uhci_get_current_frame_number (struct usb_device *usb_dev);
+static int uhci_get_current_frame_number(struct usb_device *usb_dev);
 
-static int uhci_init_isoc (struct usb_device *usb_dev,
+static int uhci_init_isoc(struct usb_device *usb_dev,
 				unsigned int pipe,
 				int frame_count,
 				void *context,
 				struct usb_isoc_desc **isocdesc);
 
-static void uhci_free_isoc (struct usb_isoc_desc *isocdesc);
+static void uhci_free_isoc(struct usb_isoc_desc *isocdesc);
 
-static int uhci_run_isoc (struct usb_isoc_desc *isocdesc,
+static int uhci_run_isoc(struct usb_isoc_desc *isocdesc,
 				struct usb_isoc_desc *pr_isocdesc);
 
-static int uhci_kill_isoc (struct usb_isoc_desc *isocdesc);
+static int uhci_kill_isoc(struct usb_isoc_desc *isocdesc);
 
 /*
  * Map status to standard result codes
@@ -123,14 +124,11 @@ static int uhci_map_status(int status, int dir_out)
 /*
  * Return the result of a TD..
  */
-static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned long *rval, int debug)
+static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned long *rval)
 {
 	unsigned int status;
 	struct uhci_td *tmp;
 	int count = 1000, actlength, explength;
-
-	if (rval)
-		*rval = 0;
 
 	/* Start at the TD first in the chain, if possible */
 	if (td->qh && td->qh->first)
@@ -140,6 +138,9 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned 
 
 	if (!tmp)
 		return USB_ST_INTERNALERROR;
+
+	if (rval)
+		 *rval = 0;
 
 	/* Locate the first failing td, if any */
 	do {
@@ -154,12 +155,12 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned 
 			actlength = uhci_actual_length(tmp->status);
 			if (rval)
 				*rval += actlength;
-			/* This check is bogus, at least for acm. It
-                           always expects 64, but gets as many bytes
-                           as available (typically 1) -- pavel */
-			if (0 && (explength != actlength)) {
-				/* Reset the data toggle on error. */
-				if (debug || uhci_debug)
+
+			if (explength != actlength) {
+				/* If the packet is short, none of the */
+				/*  packets after this were processed, so */
+				/*  fix the DT accordingly */
+				if (in_interrupt() || uhci_debug)
 					printk(KERN_DEBUG "Set toggle from %p rval %ld%c for status=%x to %d, exp=%d, act=%d\n",
 						tmp, rval ? *rval : 0,
 						rval ? '*' : '/', tmp->status,
@@ -168,12 +169,11 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned 
 				usb_settoggle(dev->usb, uhci_endpoint(tmp->info),
 					uhci_packetout(tmp->info),
 					uhci_toggle(tmp->info) ^ 1);
-				break;	// Short packet
+				break;	/* Short packet */
 			}
 		}
 
-		if ((tmp->link & UHCI_PTR_TERM) ||
-		    (tmp->link & UHCI_PTR_QH))
+		if ((tmp->link & UHCI_PTR_TERM) || (tmp->link & UHCI_PTR_QH))
 			break;
 
 		tmp = uhci_ptr_to_virt(tmp->link);
@@ -181,8 +181,6 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned 
 
 	if (!count) {
 		printk(KERN_ERR "runaway td's in uhci_td_result!\n");
-		/* Force debugging on */
-		debug = 1;
 	} else {
 		/* If we got to the last TD */
 
@@ -200,7 +198,7 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned 
 			return USB_ST_NOERROR;
 
 		/* We got to an error, but the controller hasn't finished */
-		/*  with it yet. */
+		/*  with it yet */
 		if (tmp->status & TD_CTRL_ACTIVE)
 			return USB_ST_NOCHANGE;
 
@@ -212,7 +210,7 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned 
 	}
 
 	/* Some debugging code */
-	if (debug && uhci_debug) {
+	if (!count || (!in_interrupt() && uhci_debug)) {
 		printk(KERN_DEBUG "uhci_td_result() failed with status %x\n",
 			status);
 
@@ -296,7 +294,7 @@ static void uhci_remove_qh(struct uhci_qh *qh, struct uhci_qh *remqh)
 		if (lqh->link & UHCI_PTR_TERM)
 			break;
 
-		lqh = uhci_ptr_to_virt(lqh->link);
+		lqh = (struct uhci_qh *)uhci_ptr_to_virt(lqh->link);
 	}
 
 	if (lqh->link & UHCI_PTR_TERM) {
@@ -561,13 +559,17 @@ static void uhci_remove_frame_list(struct uhci *uhci, struct uhci_td *td)
 	 * udelay(1000) doesn't sound nice, and schedule()
 	 * can't be used as this is called from within interrupt context.
 	 */
+	/*
+	 * we should do the same thing as we do with the QH's
+	 * see uhci_insert_tds_in_qh and uhci_remove_td --jerdfelt
+	 */
 	/* for now warn if there's a possible problem */
 	if (td->status & TD_CTRL_ACTIVE) {
 		unsigned frn = inw(uhci->io_addr + USBFRNUM);
 		__u32 link = uhci->fl->frame[frn % UHCI_NUMFRAMES];
 		if (!(link & (UHCI_PTR_TERM | UHCI_PTR_QH))) {
 			struct uhci_td *tdl = (struct uhci_td *)uhci_ptr_to_virt(link);
-			for (;;) {
+			for (;tdl;) {
 				if (tdl == td) {
 					printk(KERN_WARNING "uhci_remove_frame_list: td possibly still in use!!\n");
 					break;
@@ -589,7 +591,7 @@ static void uhci_remove_frame_list(struct uhci *uhci, struct uhci_td *td)
  */
 static void uhci_remove_transfer(struct uhci_td *td, char removeirq)
 {
-	int maxcount = 1000;
+	int count = 1000;
 	struct uhci_td *curtd;
 	unsigned int nextlink;
 
@@ -598,7 +600,7 @@ static void uhci_remove_transfer(struct uhci_td *td, char removeirq)
 	else
 		curtd = td;
 
-	/* Remove it from the skeleton */
+	/* Remove the QH from the skeleton and then free it */
 	uhci_remove_qh(td->qh->skel, td->qh);
 	uhci_qh_free(td->qh);
 
@@ -606,21 +608,24 @@ static void uhci_remove_transfer(struct uhci_td *td, char removeirq)
 		nextlink = curtd->link;
 
 		/* IOC? => remove handler */
-		if (removeirq && (td->status & TD_CTRL_IOC))
+		/* HACK: Don't remove if already removed. Prevents deadlock */
+		/*  in uhci_interrupt_notify and callbacks */
+		if (removeirq && (td->status & TD_CTRL_IOC) &&
+		    td->irq_list.next != &td->irq_list)
 			uhci_remove_irq_list(td);
 
+		/* Remove the TD and then free it */
 		uhci_remove_td(curtd);
 		uhci_td_free(curtd);
 
 		if (nextlink & UHCI_PTR_TERM)	/* Tail? */
 			break;
 
-		curtd = (struct uhci_td *)uhci_ptr_to_virt(nextlink);
-		if (!--maxcount) {
-			printk(KERN_ERR "runaway td's!?\n");
-			break;
-		}
-	} while (1);
+		curtd = (struct uhci_td *)uhci_ptr_to_virt(nextlink & ~UHCI_PTR_BITS);
+	} while (count--);
+
+	if (!count)
+		printk(KERN_ERR "runaway td's!?\n");
 }
 
 /*
@@ -644,17 +649,18 @@ static int uhci_request_irq(struct usb_device *usb_dev, unsigned int pipe,
 			uhci_td_free(td);
 		if (qh)
 			uhci_qh_free(qh);
-		return (-ENOMEM);
+		return USB_ST_INTERNALERROR;
 	}
 
 	/* Destination: pipe destination with INPUT */
 	destination = (pipe & PIPE_DEVEP_MASK) | usb_packetid(pipe);
 
 	/* Infinite errors is 0, so no bits */
-	status = (pipe & TD_CTRL_LS) | TD_CTRL_IOC | TD_CTRL_ACTIVE | TD_CTRL_SPD;
+	status = (pipe & TD_CTRL_LS) | TD_CTRL_IOC | TD_CTRL_ACTIVE |
+			TD_CTRL_SPD;
 
 	td->link = UHCI_PTR_TERM;		/* Terminate */
-	td->status = status;
+	td->status = status;			/* In */
 	td->info = destination | ((usb_maxpacket(usb_dev, pipe, usb_pipeout(pipe)) - 1) << 21) |
 		(usb_gettoggle(usb_dev, usb_pipeendpoint(pipe), usb_pipeout(pipe)) << TD_TOKEN_TOGGLE);
 
@@ -678,6 +684,7 @@ static int uhci_request_irq(struct usb_device *usb_dev, unsigned int pipe,
 	uhci_insert_qh(qh->skel, qh);
 
 	*handle = (void *)td;
+
 	return 0;
 }
 
@@ -742,7 +749,7 @@ static int uhci_get_current_frame_number(struct usb_device *usb_dev)
  * Returns 0 for success or negative value for error.
  * Sets isocdesc before successful return.
  */
-static int uhci_init_isoc (struct usb_device *usb_dev,
+static int uhci_init_isoc(struct usb_device *usb_dev,
 				unsigned int pipe,
 				int frame_count,        /* bandwidth % = 100 * this / 1024 */
 				void *context,
@@ -948,7 +955,6 @@ static int uhci_run_isoc (struct usb_isoc_desc *isocdesc,
 	 * frame_desc array, but this way won't take less bandwidth
 	 * allocation into account.
 	 */
-
 	if (isocdesc->frame_spacing <= 0)
 		isocdesc->frame_spacing = 1;
 
@@ -1038,7 +1044,7 @@ static int uhci_kill_isoc (struct usb_isoc_desc *isocdesc)
 	return 0;
 } /* end uhci_kill_isoc */
 
-static void uhci_free_isoc (struct usb_isoc_desc *isocdesc)
+static void uhci_free_isoc(struct usb_isoc_desc *isocdesc)
 {
 	int i;
 
@@ -1083,9 +1089,11 @@ static int uhci_run_control(struct uhci_device *dev, struct uhci_td *first, stru
 {
 	DECLARE_WAITQUEUE(wait, current);
 	struct uhci_qh *qh = uhci_qh_alloc(dev);
+	unsigned long rval;
+	int ret;
 
 	if (!qh)
-		return -1;
+		return USB_ST_INTERNALERROR;
 
 	current->state = TASK_UNINTERRUPTIBLE;
 	add_wait_queue(&qh->wakeup, &wait);
@@ -1108,9 +1116,12 @@ static int uhci_run_control(struct uhci_device *dev, struct uhci_td *first, stru
 	/* Remove it from the skeleton */
 	uhci_remove_qh(&dev->uhci->skel_control_qh, qh);
 
+	/* Need to check result before free'ing the qh */
+	ret = uhci_td_result(dev, last, &rval);
+
 	uhci_qh_free(qh);
 
-	return uhci_td_result(dev, last, NULL, 1);
+	return (ret < 0) ? ret : rval;
 }
 
 /*
@@ -1149,14 +1160,10 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, devre
 	int maxsze = usb_maxpacket(usb_dev, pipe, usb_pipeout(pipe));
 	__u32 nextlink;
 	unsigned long bytesrequested = len;
-	unsigned long bytesread = 0;
-#ifdef DUMP_RAW
-	unsigned char *orig_data = (unsigned char *) data;
-#endif
 
 	first = td = uhci_td_alloc(dev);
 	if (!td)
-		return -ENOMEM;
+		return USB_ST_INTERNALERROR;
 
 	/* The "pipe" thing contains the destination in bits 8--18 */
 	destination = (pipe & PIPE_DEVEP_MASK) | USB_PID_SETUP;
@@ -1184,7 +1191,7 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, devre
 	td = uhci_td_alloc(dev);
 	if (!td) {
 		uhci_td_free(prevtd);
- 		return -ENOMEM;
+		return USB_ST_INTERNALERROR;
 	}
 
 	prevtd->link = virt_to_bus(td) | UHCI_PTR_DEPTH;
@@ -1214,16 +1221,18 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, devre
 		prevtd = td;
 		td = uhci_td_alloc(dev);
 		if (!td)
-			return -ENOMEM;
+			return USB_ST_INTERNALERROR;
 		prevtd->link = virt_to_bus(td) | UHCI_PTR_DEPTH;	/* Update previous TD */
 	}
 
 	/*
 	 * Build the final TD for control status 
+	 *
+	 * It's IN if the pipe is an output pipe or we're not expecting
+	 * data back.
 	 */
-	/* It's only IN if the pipe is out AND we aren't expecting data */
 	destination &= ~0xFF;
-	if (usb_pipeout(pipe) | (bytesrequested == 0))
+	if (usb_pipeout(pipe) || !bytesrequested)
 		destination |= USB_PID_IN;
 	else
 		destination |= USB_PID_OUT;
@@ -1243,10 +1252,6 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, devre
 	count = 1000;
 	td = first;
 	do {
-		if (!uhci_status_bits(td->status) && ((td->info & 0xFF) ==
-		    USB_PID_IN))
-			bytesread += uhci_actual_length(td->status);
-
 		nextlink = td->link;
 		uhci_remove_td(td);
 		uhci_td_free(td);
@@ -1260,36 +1265,9 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, devre
 	if (!count)
 		printk(KERN_ERR "runaway td's!?\n");
 
-	if (ret && (bytesread >= bytesrequested)) {
-		printk(KERN_DEBUG "Recovered sufficient data (asked for %ld, got %ld) from failed cmd\n",
-			bytesrequested, bytesread);
-		ret = 0;
-	}
-
-	if (uhci_debug && ret) {
-		__u8 *p = (__u8 *)cmd;
-
-		printk("dev %d, pipe %X requested %ld bytes, got %ld, status=%d:\n",
-			usb_dev->devnum, pipe, bytesrequested, bytesread, ret);
-		printk(KERN_DEBUG "Failed cmd - %02X %02X %02X %02X %02X %02X %02X %02X\n",
-		       p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
-	}
-
-#ifdef DUMP_RAW
-	if (!ret && usb_pipein(pipe)) {	/* good Input control msg */
-		int i;
-
-		printk (KERN_CRIT "ctrl msg [%02x %02x %04x %04x %04x] on pipe %x returned:\n",
-			cmd->requesttype, cmd->request,
-			cmd->value, cmd->index, cmd->length, pipe);
-		for (i = 0; i < bytesrequested; ) {
-			printk(" %02x", orig_data[i]);
-			if (++i % 16 == 0)
-				printk("\n");
-		}
-		if (i % 16 != 0)
-			printk("\n");
-	}
+#ifdef UHCI_DEBUG
+	if (ret >= 0 && ret != bytesrequested && bytesrequested)
+		printk("requested %ld bytes, got %d\n", bytesrequested, ret); 
 #endif
 
 	return ret;
@@ -1309,9 +1287,10 @@ static int uhci_run_bulk(struct uhci_device *dev, struct uhci_td *first, struct 
 {
 	DECLARE_WAITQUEUE(wait, current);
 	struct uhci_qh *qh = uhci_qh_alloc(dev);
+	int ret;
 
 	if (!qh)
-		return -ENOMEM;
+		return USB_ST_INTERNALERROR;
 
 	current->state = TASK_UNINTERRUPTIBLE;
 	add_wait_queue(&qh->wakeup, &wait);
@@ -1333,9 +1312,11 @@ static int uhci_run_bulk(struct uhci_device *dev, struct uhci_td *first, struct 
 
 	uhci_remove_qh(&dev->uhci->skel_bulk_qh, qh);
 
+	ret = uhci_td_result(dev, last, rval);
+
 	uhci_qh_free(qh);
 
-	return uhci_td_result(dev, last, rval, 1);
+	return ret;
 }
 
 /*
@@ -1350,9 +1331,10 @@ static int uhci_run_bulk(struct uhci_device *dev, struct uhci_td *first, struct 
 static int uhci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *data, int len, unsigned long *rval, int timeout)
 {
 	struct uhci_device *dev = usb_to_uhci(usb_dev);
-	struct uhci_td *first, *td, *prevtd;
+	struct uhci_td *first, *td, *prevtd, *curtd;
 	unsigned long destination, status;
-	int ret;
+	unsigned int nextlink;
+	int ret, count;
 	int maxsze = usb_maxpacket(usb_dev, pipe, usb_pipeout(pipe));
 
 	if (usb_endpoint_halted(usb_dev, usb_pipeendpoint(pipe), usb_pipeout(pipe)) &&
@@ -1370,7 +1352,7 @@ static int uhci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 	 */
         first = td = uhci_td_alloc(dev);
 	if (!td)
-		return -ENOMEM;
+		return USB_ST_INTERNALERROR;
 
 	prevtd = first;		// This is fake, but at least it's not NULL
 	while (len > 0) {
@@ -1395,7 +1377,7 @@ static int uhci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 			prevtd = td;
 			td = uhci_td_alloc(dev);
 			if (!td)
-				return -ENOMEM;
+				return USB_ST_INTERNALERROR;
 
 			prevtd->link = virt_to_bus(td) | UHCI_PTR_DEPTH;/* Update previous TD */
 		}
@@ -1412,30 +1394,28 @@ static int uhci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 	/* Start it up.. */
 	ret = uhci_run_bulk(dev, first, td, rval, timeout);
 
-	{
-		int count = 100;
-		struct uhci_td *curtd = first;
-		unsigned int nextlink;
+	count = 1000;
+	curtd = first;
 
-		do {
-			nextlink = curtd->link;
-			uhci_remove_td(curtd);
-			uhci_td_free(curtd);
+	do {
+		nextlink = curtd->link;
+		uhci_remove_td(curtd);
+		uhci_td_free(curtd);
 
-			if (nextlink & UHCI_PTR_TERM)	/* Tail? */
-				break;
+		if (nextlink & UHCI_PTR_TERM)	/* Tail? */
+			break;
 
-			curtd = uhci_ptr_to_virt(nextlink);
-		} while (--count);
+		curtd = uhci_ptr_to_virt(nextlink);
+	} while (--count);
 
-		if (!count)
-			printk(KERN_DEBUG "runaway td's!?\n");
-	}
+	if (!count)
+		printk(KERN_DEBUG "uhci: runaway td's!?\n");
 
-	return ret;
+	return ret < 0;
 }
 
-static void * uhci_request_bulk(struct usb_device *usb_dev, unsigned int pipe, usb_device_irq handler, void *data, int len, void *dev_id)
+static void *uhci_request_bulk(struct usb_device *usb_dev, unsigned int pipe,
+		usb_device_irq handler, void *data, int len, void *dev_id)
 {
 	struct uhci_device *dev = usb_to_uhci(usb_dev);
 	struct uhci *uhci = dev->uhci;
@@ -1460,7 +1440,7 @@ static void * uhci_request_bulk(struct usb_device *usb_dev, unsigned int pipe, u
 		if (pktsze > maxsze)
 			pktsze = maxsze;
 
-		td->status = status;
+		td->status = status;                                    /* Status */
 		td->info = destination | ((pktsze-1) << 21) |
 			(usb_gettoggle(usb_dev, usb_pipeendpoint(pipe), usb_pipeout(pipe)) << TD_TOKEN_TOGGLE); /* pktsze bytes of data */
 		td->buffer = virt_to_bus(data);
@@ -1468,6 +1448,7 @@ static void * uhci_request_bulk(struct usb_device *usb_dev, unsigned int pipe, u
 		td->qh = bulk_qh;
 		td->dev = dev;
 		td->pipetype = PIPE_BULK;
+
 		data += pktsze;
 		len -= pktsze;
 
@@ -1619,9 +1600,9 @@ static void uhci_connect_change(struct uhci *uhci, unsigned int port, unsigned i
 	if (usb_new_device(usb_dev)) {
 		unsigned short status = inw(port);
 
-		printk(KERN_INFO "uhci: disabling malfunctioning port %d\n",
+		printk(KERN_INFO "uhci: disabling port %d\n",
 			nr + 1);
-		outw(status | USBPORTSC_PE, port);
+		outw(status & ~USBPORTSC_PE, port);
 	}
 }
 
@@ -1699,7 +1680,7 @@ static int fixup_isoc_desc (struct uhci_td *td)
 	return 0;
 }
 
-int uhci_isoc_callback(struct uhci *uhci, struct uhci_td *td, int status, unsigned long rval)
+static int uhci_isoc_callback(struct uhci *uhci, struct uhci_td *td, int status, unsigned long rval)
 {
 	struct usb_isoc_desc *isocdesc = td->dev_id;
 	int ret;
@@ -1732,6 +1713,7 @@ int uhci_isoc_callback(struct uhci *uhci, struct uhci_td *td, int status, unsign
 		/* TBD */
 		/* usb_dev = td->dev->usb; */
 
+		/* Safe since uhci_interrupt_notify holds the lock */
 		list_add(&td->irq_list, &uhci->interrupt_list);
 
 		td->status = (td->status & (TD_CTRL_SPD | TD_CTRL_C_ERR_MASK |
@@ -1766,20 +1748,49 @@ int uhci_isoc_callback(struct uhci *uhci, struct uhci_td *td, int status, unsign
 	return 0;
 }
 
-int uhci_callback(struct uhci *uhci, struct uhci_td *td, int status, unsigned long rval)
+static int uhci_bulk_callback(struct uhci *uhci, struct uhci_td *td, int status, unsigned long rval)
 {
 	if (td->completed(status, bus_to_virt(td->buffer), rval, td->dev_id)) {
 		struct usb_device *usb_dev = td->dev->usb;
 
+		/* This is safe since uhci_interrupt_notify holds the lock */
+		list_add(&td->irq_list, &uhci->interrupt_list);
+
+		/* Reset the status */
+		td->status = (td->status & TD_CTRL_LS) | TD_CTRL_ACTIVE | TD_CTRL_IOC | TD_CTRL_SPD;
+
+		/* Reset the info */
+		td->info = (td->info & (PIPE_DEVEP_MASK | 0xFF | (TD_CTRL_ACTLEN_MASK << 21))) |
+			(usb_gettoggle(usb_dev, uhci_endpoint(td->info), uhci_packetout(td->info)) << TD_TOKEN_TOGGLE); /* pktsze bytes of data */
+
+		usb_dotoggle(usb_dev, uhci_endpoint(td->info), uhci_packetout(td->info));
+		/* The HC only removes it when it completed */
+		/* successfully, so force remove and re-add it */
+		uhci_remove_td(td);
+		uhci_insert_td_in_qh(td->qh, td);
+	}
+
+	return 0;
+}
+
+static int uhci_callback(struct uhci *uhci, struct uhci_td *td, int status, unsigned long rval)
+{
+	if (td->completed(status, bus_to_virt(td->buffer), rval, td->dev_id)) {
+		struct usb_device *usb_dev = td->dev->usb;
+
+		if (td->pipetype != PIPE_INTERRUPT)
+			return 0;
+
+		/* This is safe since uhci_interrupt_notify holds the lock */
 		list_add(&td->irq_list, &uhci->interrupt_list);
 
 		usb_dotoggle(usb_dev, uhci_endpoint(td->info), uhci_packetout(td->info));
 		td->info &= ~(1 << TD_TOKEN_TOGGLE);	/* clear data toggle */
 		td->info |= usb_gettoggle(usb_dev, uhci_endpoint(td->info),
-			uhci_packetout(td->info)) << TD_TOKEN_TOGGLE; /* toggle between data0 and data1 */
+			uhci_packetout(td->info)) << TD_TOKEN_TOGGLE;	/* toggle between data0 and data1 */
 		td->status = (td->status & 0x2F000000) | TD_CTRL_ACTIVE | TD_CTRL_IOC;
 		/* The HC only removes it when it completed */
-		/* successfully, so force remove and re-add it. */
+		/* successfully, so force remove and re-add it */
 		uhci_remove_td(td);
 		uhci_insert_td_in_qh(td->qh, td);
 	} else if (td->flags & UHCI_TD_REMOVE) {
@@ -1797,7 +1808,7 @@ int uhci_callback(struct uhci *uhci, struct uhci_td *td, int status, unsigned lo
 
 	return 0;
 }
- 
+
 static void uhci_interrupt_notify(struct uhci *uhci)
 {
 	struct list_head *tmp, *head = &uhci->interrupt_list;
@@ -1813,8 +1824,7 @@ static void uhci_interrupt_notify(struct uhci *uhci)
 
 		/* We're interested if there was an error or if the chain of */
 		/*  TD's completed successfully */
-		status = uhci_td_result(td->dev, td, &rval, 0);
-
+		status = uhci_td_result(td->dev, td, &rval);
 		if (status == USB_ST_NOCHANGE)
 			continue;
 
@@ -1822,10 +1832,14 @@ static void uhci_interrupt_notify(struct uhci *uhci)
 		list_del(&td->irq_list);
 		INIT_LIST_HEAD(&td->irq_list);
 
-		if (td->pipetype == PIPE_ISOCHRONOUS) {
+		switch (td->pipetype) {
+		case PIPE_ISOCHRONOUS:
 			uhci_isoc_callback(uhci, td, status, rval);
-		}
-		else {
+			break;
+		case PIPE_BULK:
+			uhci_bulk_callback(uhci, td, status, rval);
+			break;
+		default:
 			uhci_callback(uhci, td, status, rval);
 		}
 
@@ -1904,8 +1918,8 @@ static void uhci_init_ticktd(struct uhci *uhci)
 	td->link = uhci->fl->frame[0];
 	td->backptr = &uhci->fl->frame[0];
 	td->status = TD_CTRL_IOC;
-	td->info = (15 << 21) | (0x7f << 8) | USB_PID_IN;
-		/* (ignored) input packet, 16 bytes, device 127 */
+	/* (ignored) input packet, 0 bytes, device 127 */
+	td->info = (UHCI_NULL_DATA_SIZE << 21) | (0x7f << 8) | USB_PID_IN;
 	td->buffer = 0;
 	td->qh = NULL;
 	td->pipetype = -1;
@@ -2272,8 +2286,8 @@ static int start_uhci(struct pci_dev *dev)
 		if (check_region(io_addr, io_size))
 			break;
 
-                /* disable legacy emulation */
-                pci_write_config_word(dev, USBLEGSUP, USBLEGSUP_DEFAULT);
+		/* disable legacy emulation */
+		pci_write_config_word(dev, USBLEGSUP, USBLEGSUP_DEFAULT);
 
 		pci_enable_device(dev);
 

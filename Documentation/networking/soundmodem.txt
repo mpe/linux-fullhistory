@@ -39,7 +39,7 @@ Every time the driver is inserted into the kernel, it has to know which
 modems it should access at which ports. This can be done with the setbaycom
 utility. If you are only using one modem, you can also configure the
 driver from the insmod command line (or by means of an option line in
-/etc/conf.modules).
+/etc/modules.conf).
 
 Examples:
   insmod soundmodem mode="sbc:afsk1200" iobase=0x220 irq=5 dma=1

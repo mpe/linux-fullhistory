@@ -18,7 +18,7 @@ force the card into a mode in which it can be programmed.
 If you have another OS installed on your computer it is recommended
 that Linux and the other OS use the same resources.
 
-Also, it is recommended that resources specified in /etc/conf.modules
+Also, it is recommended that resources specified in /etc/modules.conf
 and resources specified in /etc/isapnp.conf agree.
 
 Compiling the sound driver
@@ -68,9 +68,9 @@ address is hard-coded into the driver.
 Using kmod and autoloading the sound driver
 -------------------------------------------
 Comment: as of linux-2.1.90 kmod is replacing kerneld.
-The config file '/etc/conf.modules' is used as before.
+The config file '/etc/modules.conf' is used as before.
 
-This is the sound part of my /etc/conf.modules file.
+This is the sound part of my /etc/modules.conf file.
 Following that I will explain each line.
 
 alias mixer0 mad16

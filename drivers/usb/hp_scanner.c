@@ -299,12 +299,8 @@ usb_driver scanner_driver = {
 int
 usb_hp_scanner_init(void)
 {
-	if (usb_register(&scanner_driver) < 0) {
-		printk(KERN_ERR "USB scanner driver cannot register: "
-			"minor number %d already in use\n",
-			scanner_driver.minor);
+	if (usb_register(&scanner_driver) < 0)
 		return -1;
-	}
 
 	printk(KERN_DEBUG "USB Scanner support registered.\n");
 	return 0;

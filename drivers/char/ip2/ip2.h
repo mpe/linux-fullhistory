@@ -70,8 +70,7 @@
  * console warning.
  
  * When the driver is loaded as a module these setting can be overridden on the 
- * modprobe command line or on an option line in /etc/conf.modules 
- * or /etc/modules.conf depending on your distrubution.
+ * modprobe command line or on an option line in /etc/modules.conf.
  * If the driver is built-in the configuration must be 
  * set here for ISA cards and address set to 1 and 2 for PCI and EISA.
  *
@@ -92,8 +91,8 @@
 
  /* this structure is zeroed out because the suggested method is to configure
   * the driver as a module, set up the parameters with an options line in
-  * /etc/modules.conf or /etc/conf.modules and load with modprobe, kerneld or
-  * kmod, the kernel module loader
+  * /etc/modules.conf and load with modprobe, kerneld or kmod, the kernel
+  * module loader
   */
 static ip2config_t ip2config =
 {

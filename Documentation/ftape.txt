@@ -244,14 +244,14 @@ C. Boot and load time configuration
 
    insmod ftape.o ft_tracing=4
 
-   or by editing the file `/etc/conf.modules' in which case they take
+   or by editing the file `/etc/modules.conf' in which case they take
    effect each time when the module is loaded with `modprobe' (please
    refer to the modules documentation, i.e. `modules.txt' and the
    respective manual pages). Thus, you should add a line
 
    options ftape ft_tracing=4
 
-   to `/etc/conf.modules` if you intend to increase the debugging
+   to `/etc/modules.conf` if you intend to increase the debugging
    output of the driver.
 
 
@@ -299,7 +299,7 @@ C. Boot and load time configuration
 5. Example module parameter setting
    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    To do the same, but with ftape compiled as a loadable kernel
-   module, add the following line to `/etc/conf.modules':
+   module, add the following line to `/etc/modules.conf':
 
    options ftape ft_probe_fc10=1 ft_tracing=4
 

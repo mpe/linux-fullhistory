@@ -330,6 +330,7 @@ ssize_t read_kcore(struct file *file, char *buffer, size_t buflen,
 	copy_to_user(buffer,__va(*fpos),buflen);
 #endif
 	acc += buflen;
+	*fpos += buflen;
 
 	return acc;
 

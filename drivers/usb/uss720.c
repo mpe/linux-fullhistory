@@ -640,12 +640,8 @@ MODULE_DESCRIPTION("USB Parport Cable driver for Cables using the Lucent Technol
 
 static int __init uss720_init(void)
 {
-	if (usb_register(&uss720_driver) < 0) {
-		printk(KERN_ERR "USB uss720 driver cannot register: "
-			"minor number %d already in use\n",
-			uss720_driver.minor);
+	if (usb_register(&uss720_driver) < 0)
 		return -1;
-	}
 
         printk(KERN_INFO "uss720: USB<->IEEE1284 cable driver v0.4 registered.\n"
 	       KERN_INFO "uss720: (C) 1999 by Thomas Sailer, <sailer@ife.ee.ethz.ch>\n");

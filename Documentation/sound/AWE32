@@ -83,7 +83,7 @@ Compile it. Copy sfxload program to /usr/bin. To enable AWE general midi
 synthesis you should also get the sound bank file for general midi from
 http://members.xoom.com/yar/synthgm.sbk.gz. Copy it to /usr and gunzip it there.
 
-7) Edit /etc/conf.modules, inserting at the end of the file:
+7) Edit /etc/modules.conf, inserting at the end of the file:
 
 alias midi awe_wave
 post-install awe_wave /usr/bin/sfxload /usr/synthfm.sbk

@@ -1,4 +1,4 @@
-/* $Id: uaccess.h,v 1.3 1999/10/12 14:46:20 gniibe Exp $
+/* $Id: uaccess.h,v 1.6 1999/10/29 13:10:44 gniibe Exp $
  *
  * User space memory access functions
  *
@@ -392,16 +392,14 @@ extern __inline__ long __strnlen_user(const char *__s, long __n)
 	unsigned long __dummy;
 
 	__asm__ __volatile__(
-		"mov	#-1,%1\n"
-		"9:\n\t"
+		"9:\n"
 		"cmp/eq	%4,%0\n\t"
-		"bt	5f\n\t"
-		"cmp/eq	#0,%1\n\t"
-		"bf/s	9b\n\t"
+		"bt	2f\n"
 		"1:\t"
-		" mov.b	@%0+,%1\n\t"
-		"5:\t"
-		"sub	%3,%0\n"
+		"mov.b	@(%0,%3),%1\n\t"
+		"tst	%1,%1\n\t"
+		"bf/s	9b\n\t"
+		" add	#1,%0\n"
 		"2:\n"
 		".section .fixup,\"ax\"\n"
 		"3:\n\t"
@@ -415,14 +413,14 @@ extern __inline__ long __strnlen_user(const char *__s, long __n)
 		"	.balign 4\n"
 		"	.long 1b,3b\n"
 		".previous"
-		: "=&r" (res), "=&z" (__dummy)
-		: "0" (__s), "r" (__s), "r" (__s+__n), "i" (-EFAULT));
+		: "=z" (res), "=&r" (__dummy)
+		: "0" (0), "r" (__s), "r" (__n), "i" (-EFAULT));
 	return res;
 }
 
 extern __inline__ long strnlen_user(const char *s, long n)
 {
-	if(!access_ok(VERIFY_READ, s, n))
+	if (!__addr_ok(s))
 		return 0;
 	else
 		return __strnlen_user(s, n);

@@ -1,8 +1,13 @@
 The BFS filesystem is used on SCO UnixWare machines for /stand slice.
-There are no special mount options supported by bfs at this time. 
-You can mount it only read-only at this stage. Even if you attempt to
-mount it read-write it will be automatically mounted read-only, unless
-you have enabled "BFS write support" when configuring the kernel.
+By default, if you attempt to mount it read-write it will be automatically
+mounted read-only. If you want to enable (limited) write support, you need
+to select "BFS write support" when configuring the kernel. The write support
+at this stage is limited to the blocks preallocated for a given inode.
+This means that writes beyond the value of inode->iu_eblock will fail with EIO.
+In particular, this means you can create empty files but not write data to them
+or you can write data to the existing files and increase their size but not the
+number of blocks allocated to them. I am currently working on removing this
+limitation, i.e. ability to migrate inodes within BFS filesystem.
 
 In order to access /stand partition under Linux you obviously need to
 know the partition number and the kernel must support UnixWare disk slices

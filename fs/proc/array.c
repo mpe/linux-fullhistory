@@ -54,8 +54,6 @@
 #include <linux/kernel.h>
 #include <linux/kernel_stat.h>
 #include <linux/tty.h>
-#include <linux/user.h>
-#include <linux/a.out.h>
 #include <linux/string.h>
 #include <linux/mman.h>
 #include <linux/proc_fs.h>
@@ -67,6 +65,7 @@
 #include <linux/slab.h>
 #include <linux/smp.h>
 #include <linux/signal.h>
+#include <linux/highmem.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>

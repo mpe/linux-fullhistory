@@ -61,7 +61,7 @@
    - Added support for promiscuous mode.
 
    v2.60 ALPHA (96/11/23)
-   - Added patch from Vojtech Pavlik <vojtech@atrey.karlin.mff.cuni.cz>
+   - Added patch from Vojtech Pavlik <vojtech@suse.cz>
    and Martin Mares <mj@k332.feld.cvut.cz> to make the driver work
    with the new Linux 2.1.x memory management.  I modified their
    patch quite a bit though; bugs are my fault.  More changes should
@@ -89,7 +89,7 @@
 
    v2.50 (96/02/24)
    - Massively improved autoprobe routines; they now work even as a
-   module.  Thanks to Vojtech Pavlik <Vojtech.Pavlik@st.mff.cuni.cz>
+   module.  Thanks to Vojtech Pavlik <vojtech@suse.cz>
    for his ideas and help in this area.
    - Changed printk's around quite a lot.
 

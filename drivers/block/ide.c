@@ -498,25 +498,14 @@ void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup)
 }
 
 /*
- * The below two are helpers used when modifying the drive timeout.
- */
-static inline unsigned long set_timeout(ide_drive_t *drive, unsigned long timeout)
-{
-	unsigned long foo = drive->timeout;
-	drive->timeout = timeout;
-	return foo;
-}
-
-#define restore_timeout(drive, old)	(drive->timeout = old)
-
-/*
  * This should get invoked any time we exit the driver to
  * wait for an interrupt response from a drive.  handler() points
  * at the appropriate code to handle the next interrupt, and a
  * timer is started to prevent us from waiting forever in case
  * something goes wrong (see the ide_timer_expiry() handler later on).
  */
-void ide_set_handler (ide_drive_t *drive, ide_handler_t *handler)
+void ide_set_handler (ide_drive_t *drive, ide_handler_t *handler,
+		      unsigned int timeout, ide_expiry_t *expiry)
 {
 	unsigned long flags;
 	ide_hwgroup_t *hwgroup = HWGROUP(drive);
@@ -528,12 +517,10 @@ void ide_set_handler (ide_drive_t *drive, ide_handler_t *handler)
 			drive->name, hwgroup->handler, handler);
 	}
 #endif
-	hwgroup->handler       = handler;
-	/* 0 means don't timeout */
-	if (drive->timeout && !timer_pending(&hwgroup->timer)) {
-		hwgroup->timer.expires = jiffies + drive->timeout;
-		add_timer(&(hwgroup->timer));
-	}
+	hwgroup->handler	= handler;
+	hwgroup->expiry		= expiry;
+	hwgroup->timer.expires	= jiffies + timeout;
+	add_timer(&(hwgroup->timer));
 	spin_unlock_irqrestore(&hwgroup->spinlock, flags);
 }
 
@@ -580,7 +567,6 @@ static void do_reset1 (ide_drive_t *, int);		/* needed below */
 static void atapi_reset_pollfunc (ide_drive_t *drive)
 {
 	ide_hwgroup_t *hwgroup = HWGROUP(drive);
-	unsigned long old_timeout;
 	byte stat;
 
 	SELECT_DRIVE(HWIF(drive),drive);
@@ -590,9 +576,7 @@ static void atapi_reset_pollfunc (ide_drive_t *drive)
 		printk("%s: ATAPI reset complete\n", drive->name);
 	} else {
 		if (0 < (signed long)(hwgroup->poll_timeout - jiffies)) {
-			old_timeout = set_timeout(drive, HZ / 20);
-			ide_set_handler (drive, &atapi_reset_pollfunc);
-			restore_timeout(drive, old_timeout);
+			ide_set_handler (drive, &atapi_reset_pollfunc, HZ/20, NULL);
 			return;	/* continue polling */
 		}
 		hwgroup->poll_timeout = 0;	/* end of polling */
@@ -613,14 +597,11 @@ static void reset_pollfunc (ide_drive_t *drive)
 {
 	ide_hwgroup_t *hwgroup = HWGROUP(drive);
 	ide_hwif_t *hwif = HWIF(drive);
-	unsigned long old_timeout;
 	byte tmp;
 
 	if (!OK_STAT(tmp=GET_STAT(), 0, BUSY_STAT)) {
 		if (0 < (signed long)(hwgroup->poll_timeout - jiffies)) {
-			old_timeout = set_timeout(drive, HZ / 20);
-			ide_set_handler (drive, &reset_pollfunc);
-			restore_timeout(drive, old_timeout);
+			ide_set_handler (drive, &reset_pollfunc, HZ/20, NULL);
 			return;	/* continue polling */
 		}
 		printk("%s: reset timed-out, status=0x%02x\n", hwif->name, tmp);
@@ -688,7 +669,6 @@ static void do_reset1 (ide_drive_t *drive, int  do_not_try_atapi)
 	unsigned long flags;
 	ide_hwif_t *hwif = HWIF(drive);
 	ide_hwgroup_t *hwgroup = HWGROUP(drive);
-	unsigned long old_timeout;
 
 	__save_flags(flags);	/* local CPU only */
 	__cli();		/* local CPU only */
@@ -700,9 +680,7 @@ static void do_reset1 (ide_drive_t *drive, int  do_not_try_atapi)
 		udelay (20);
 		OUT_BYTE (WIN_SRST, IDE_COMMAND_REG);
 		hwgroup->poll_timeout = jiffies + WAIT_WORSTCASE;
-		old_timeout = set_timeout(drive, HZ / 20);
-		ide_set_handler (drive, &atapi_reset_pollfunc);
-		restore_timeout(drive, old_timeout);
+		ide_set_handler (drive, &atapi_reset_pollfunc, HZ/20, NULL);
 		__restore_flags (flags);	/* local CPU only */
 		return;
 	}
@@ -732,9 +710,7 @@ static void do_reset1 (ide_drive_t *drive, int  do_not_try_atapi)
 	OUT_BYTE(drive->ctl|2,IDE_CONTROL_REG);	/* clear SRST, leave nIEN */
 	udelay(10);			/* more than enough time */
 	hwgroup->poll_timeout = jiffies + WAIT_WORSTCASE;
-	old_timeout = set_timeout(drive, HZ / 20);
-	ide_set_handler (drive, &reset_pollfunc);
-	restore_timeout(drive, old_timeout);
+	ide_set_handler (drive, &reset_pollfunc, HZ/20, NULL);
 
 	/*
 	 * Some weird controller like resetting themselves to a strange
@@ -934,7 +910,7 @@ void ide_error (ide_drive_t *drive, const char *msg, byte stat)
  */
 void ide_cmd(ide_drive_t *drive, byte cmd, byte nsect, ide_handler_t *handler)
 {
-	ide_set_handler (drive, handler);
+	ide_set_handler (drive, handler, WAIT_CMD, NULL);
 	if (IDE_CONTROL_REG)
 		OUT_BYTE(drive->ctl,IDE_CONTROL_REG);	/* clear nIEN */
 	OUT_BYTE(nsect,IDE_NSECTOR_REG);
@@ -1425,7 +1401,9 @@ void ide_timer_expiry (unsigned long data)
 	ide_hwgroup_t *hwgroup = (ide_hwgroup_t *) data;
 	ide_drive_t   *drive;
 	ide_handler_t *handler;
+	ide_expiry_t  *expiry;
 	unsigned long flags;
+	unsigned long wait;
 
 	spin_lock_irqsave(&hwgroup->spinlock, flags);
 	drive = hwgroup->drive;
@@ -1434,9 +1412,22 @@ void ide_timer_expiry (unsigned long data)
 		do_hwgroup_request(hwgroup);
 		return;
 	}
+
 	hwgroup->busy = 1;	/* should already be "1" */
+
+	if ((expiry = hwgroup->expiry) != NULL) {
+		/* continue */
+		if ((wait = expiry(drive)) != 0) {
+			/* reset timer */
+			hwgroup->timer.expires	= jiffies + wait;
+			add_timer(&(hwgroup->timer));
+			spin_unlock_irqrestore(&hwgroup->spinlock, flags);
+			return;
+		}
+	}
+
 	hwgroup->handler = NULL;
-	/* polling in progress or just don't timeout */
+
 	if (hwgroup->poll_timeout != 0) {
 		spin_unlock_irqrestore(&hwgroup->spinlock, flags);
 		handler(drive);

@@ -10,10 +10,10 @@
 #define FIONREAD	_IOR('f', 127, int)
 #define TIOCINQ		FIONREAD
 
-#define TCGETS		_IOR('t', 19, struct termios)
-#define TCSETS		_IOW('t', 20, struct termios)
-#define TCSETSW		_IOW('t', 21, struct termios)
-#define TCSETSF		_IOW('t', 22, struct termios)
+#define TCGETS		0x5401
+#define TCSETS		0x5402
+#define TCSETSW		0x5403
+#define TCSETSF		0x5404
 
 #define TCGETA		_IOR('t', 23, struct termio)
 #define TCSETA		_IOW('t', 24, struct termio)
@@ -84,8 +84,8 @@
 #define TIOCSERCONFIG	_IO('T', 83) /* 0x5453 */
 #define TIOCSERGWILD	_IOR('T', 84,  int) /* 0x5454 */
 #define TIOCSERSWILD	_IOW('T', 85,  int) /* 0x5455 */
-#define TIOCGLCKTRMIOS	_IOR('T', 86, struct termios) /* 0x5456 */
-#define TIOCSLCKTRMIOS	_IOW('T', 87, struct termios) /* 0x5457 */
+#define TIOCGLCKTRMIOS	0x5456
+#define TIOCSLCKTRMIOS	0x5457
 #define TIOCSERGSTRUCT	_IOR('T', 88, struct async_struct) /* 0x5458 */ /* For debugging only */
 #define TIOCSERGETLSR   _IOR('T', 89, unsigned int) /* 0x5459 */ /* Get line status register */
   /* ioctl (fd, TIOCSERGETLSR, &result) where result may be as below */

@@ -687,15 +687,8 @@ void ext2_read_inode (struct inode * inode)
 		inode->u.ext2_i.i_dir_acl = le32_to_cpu(raw_inode->i_dir_acl);
 	else {
 		inode->u.ext2_i.i_dir_acl = 0;
-		inode->u.ext2_i.i_high_size =
-			le32_to_cpu(raw_inode->i_size_high);
-#if BITS_PER_LONG < 64
-		if (raw_inode->i_size_high)
-			inode->i_size = (__u32)-1;
-#else
-		inode->i_size |= ((__u64)le32_to_cpu(raw_inode->i_size_high))
-			<< 32;
-#endif
+		inode->u.ext2_i.i_high_size = le32_to_cpu(raw_inode->i_size_high);
+		inode->i_size |= ((__u64)le32_to_cpu(raw_inode->i_size_high)) << 32;
 	}
 	inode->i_generation = le32_to_cpu(raw_inode->i_generation);
 	inode->u.ext2_i.i_block_group = block_group;
@@ -816,14 +809,9 @@ static int ext2_update_inode(struct inode * inode, int do_sync)
 	raw_inode->i_file_acl = cpu_to_le32(inode->u.ext2_i.i_file_acl);
 	if (S_ISDIR(inode->i_mode))
 		raw_inode->i_dir_acl = cpu_to_le32(inode->u.ext2_i.i_dir_acl);
-	else { 
-#if BITS_PER_LONG < 64
-		raw_inode->i_size_high =
-			cpu_to_le32(inode->u.ext2_i.i_high_size);
-#else
+	else
 		raw_inode->i_size_high = cpu_to_le32(inode->i_size >> 32);
-#endif
-	}
+
 	raw_inode->i_generation = cpu_to_le32(inode->i_generation);
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
 		raw_inode->i_block[0] = cpu_to_le32(kdev_t_to_nr(inode->i_rdev));

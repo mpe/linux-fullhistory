@@ -1612,10 +1612,11 @@ S: 644 00 Brno
 S: Czech Republic
 
 N: Vojtech Pavlik
-E: vojtech@ucw.cz
+E: vojtech@suse.cz
 D: Joystick driver
 D: arcnet-hardware readme
 D: Minor ARCnet hacking
+D: USB hacking
 S: Ucitelska 1576
 S: Prague 8
 S: 182 00 Czech Republic

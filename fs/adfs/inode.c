@@ -181,7 +181,7 @@ void adfs_read_inode (struct inode *inode)
 		inode->i_nlink	 = 2;
 		inode->i_size	 = ADFS_NEWDIR_SIZE;
 		inode->i_blksize = PAGE_SIZE;
-		inode->i_blocks  = inode->i_size / sb->s_blocksize;
+		inode->i_blocks  = inode->i_size >> sb->s_blocksize_bits;
 		inode->i_mtime   =
 		inode->i_atime   =
 		inode->i_ctime   = 0;

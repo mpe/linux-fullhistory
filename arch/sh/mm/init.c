@@ -1,4 +1,4 @@
-/* $Id: init.c,v 1.4 1999/10/23 01:37:02 gniibe Exp $
+/* $Id: init.c,v 1.4 1999/10/23 01:37:02 gniibe Exp gniibe $
  *
  *  linux/arch/sh/mm/init.c
  *
@@ -193,13 +193,14 @@ pgd_t swapper_pg_dir[1024];
  */
 void __init paging_init(void)
 {
+	int i;
 	pgd_t * pg_dir;
 
 	/* We don't need kernel mapping as hardware support that. */
 	pg_dir = swapper_pg_dir;
 
-	/* Unmap the original low memory mappings to detect NULL reference */
-	pgd_val(pg_dir[0]) = 0;
+	for (i=0; i < USER_PTRS_PER_PGD*2; i++)
+		pgd_val(pg_dir[i]) = 0;
 
 	/* Enable MMU */
 	ctrl_outl(MMU_CONTROL_INIT, MMUCR);

@@ -1309,14 +1309,7 @@ static struct usb_driver cpia_driver = {
 
 int usb_cpia_init(void)
 {
-	if (usb_register(&cpia_driver) < 0) {
-		printk(KERN_ERR "USB cpia driver cannot register: "
-			"minor number %d already in use\n",
-			cpia_driver.minor);
-		return -1;
-	}
-
-	return 0;
+	return usb_register(&cpia_driver);
 }
 
 void usb_cpia_cleanup(void)

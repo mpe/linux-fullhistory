@@ -256,14 +256,7 @@ usb_kbd_disconnect(struct usb_device *dev, void *ptr)
 
 int usb_kbd_init(void)
 {
-    if (usb_register(&usb_kbd_driver) < 0) {
-	printk(KERN_ERR "USB keyboard driver cannot register: "
-		"minor number %d already in use\n",
-		usb_kbd_driver.minor);
-	return -1;
-    }
-
-    return 0;
+	return usb_register(&usb_kbd_driver);
 }
 
 void usb_kbd_cleanup(void)

@@ -35,7 +35,7 @@ auto-detected IRQ.  Currently, PC-style (parport_pc), Sun Ultra/AX
 KMod
 ----
 
-If you use kmod, you will find it useful to edit /etc/conf.modules.
+If you use kmod, you will find it useful to edit /etc/modules.conf.
 Here is an example of the lines that need to be added:
 
 	post-install parport modprobe -k parport_pc

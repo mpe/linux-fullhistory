@@ -92,7 +92,7 @@ extern void flush_tlb_page(struct vm_area_struct *vma, unsigned long page);
 #define KERNEL_PGD_PTRS (PTRS_PER_PGD-USER_PGD_PTRS)
 
 #define TWOLEVEL_PGDIR_SHIFT	22
-#define BOOT_USER_PGD_PTRS (__PAGE_OFFSET >> TWOLEVEL_PGDIR_SHIFT)
+#define BOOT_USER_PGD_PTRS (PAGE_OFFSET >> TWOLEVEL_PGDIR_SHIFT)
 #define BOOT_KERNEL_PGD_PTRS (1024-BOOT_USER_PGD_PTRS)
 
 #ifndef __ASSEMBLY__
@@ -183,7 +183,7 @@ extern void __handle_bad_pmd_kernel(pmd_t * pmd);
 #define pte_none(x)	(!pte_val(x))
 #define pte_present(x)	(pte_val(x) & (_PAGE_PRESENT | _PAGE_PROTNONE))
 #define pte_clear(xp)	do { pte_val(*(xp)) = 0; } while (0)
-#define pte_pagenr(x)	((unsigned long)((pte_val(x) >> PAGE_SHIFT)))
+#define pte_pagenr(x)	((unsigned long)(((pte_val(x) -__MEMORY_START) >> PAGE_SHIFT)))
 
 #define pmd_none(x)	(!pmd_val(x))
 #define	pmd_bad(x)	((pmd_val(x) & (~PAGE_MASK & ~_PAGE_USER)) != _KERNPG_TABLE)
@@ -194,7 +194,7 @@ extern void __handle_bad_pmd_kernel(pmd_t * pmd);
  * Permanent address of a page. Obviously must never be
  * called on a highmem page.
  */
-#define page_address(page) ({ if (PageHighMem(page)) BUG(); PAGE_OFFSET + (((page) - mem_map) << PAGE_SHIFT); })
+#define page_address(page) ({ PAGE_OFFSET + (((page) - mem_map) << PAGE_SHIFT) + __MEMORY_START; })
 #define pages_to_mb(x) ((x) >> (20-PAGE_SHIFT))
 #define pte_page(x) (mem_map+pte_pagenr(x))
 
@@ -228,7 +228,7 @@ extern inline pte_t mk_pte(struct page *page, pgprot_t pgprot)
 	pte_t __pte;
 
 	pte_val(__pte) = (page-mem_map)*(unsigned long long)PAGE_SIZE +
-				pgprot_val(pgprot);
+				__MEMORY_START + pgprot_val(pgprot);
 	return __pte;
 }
 
@@ -274,8 +274,13 @@ extern __inline__ pgd_t *get_pgd_slow(void)
 	pgd_t *ret = (pgd_t *)__get_free_page(GFP_KERNEL);
 
 	if (ret) {
+		/* Clear User space */
 		memset(ret, 0, USER_PTRS_PER_PGD * sizeof(pgd_t));
-		memcpy(ret + USER_PTRS_PER_PGD, swapper_pg_dir + USER_PTRS_PER_PGD, (PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
+
+		/* XXX: Copy vmalloc-ed space??? */
+		memcpy(ret + USER_PTRS_PER_PGD,
+		       swapper_pg_dir + USER_PTRS_PER_PGD,
+		       (PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
 	}
 	return ret;
 }
@@ -412,8 +417,12 @@ extern pgd_t swapper_pg_dir[1024];
 extern void update_mmu_cache(struct vm_area_struct * vma,
 			     unsigned long address, pte_t pte);
 
-#define SWP_TYPE(entry) (((pte_val(entry)) >> 1) & 0x3f)
-#define SWP_OFFSET(entry) ((pte_val(entry)) >> 8)
+/* Encode and de-code a swap entry */
+#define SWP_TYPE(x)			(((x).val >> 1) & 0x3f)
+#define SWP_OFFSET(x)			((x).val >> 8)
+#define SWP_ENTRY(type, offset)		((swp_entry_t) { ((type) << 1) | ((offset) << 8) })
+#define pte_to_swp_entry(pte)		((swp_entry_t) { pte_val(pte) })
+#define swp_entry_to_pte(x)		((pte_t) { (x).val })
 
 #define module_map      vmalloc
 #define module_unmap    vfree

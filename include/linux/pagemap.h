@@ -1,8 +1,6 @@
 #ifndef _LINUX_PAGEMAP_H
 #define _LINUX_PAGEMAP_H
 
-#include <asm/system.h>
-
 /*
  * Page-mapping primitive inline functions
  *
@@ -11,8 +9,10 @@
 
 #include <linux/mm.h>
 #include <linux/fs.h>
-#include <linux/highmem.h>
 #include <linux/list.h>
+
+#include <asm/system.h>
+#include <asm/pgtable.h>
 
 /*
  * The page cache can done in larger chunks than

@@ -26,7 +26,7 @@ Note that it is no longer necessary or possible to configure sound in the
 drivers/sound dir. Now one simply configures and makes one's kernel and
 modules in the usual way.
 
- Then, add to your /etc/modules.conf or /etc/conf.modules something like:
+ Then, add to your /etc/modules.conf something like:
 
 alias char-major-14 sb
 post-install sb /sbin/modprobe "-k" "adlib_card"
@@ -82,7 +82,7 @@ wasteful of RAM, but it guarantees that sound always works.
 
 To make the sound driver use persistent DMA buffers we need to pass the
 sound.o module a "dmabuf=1" command-line argument. This is normally done
-in /etc/conf.modules (or the more proper /etc/modules.conf) like so:
+in /etc/modules.conf like so:
 
 options sound		dmabuf=1
 

@@ -381,8 +381,7 @@ icside_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 		if (drive->media != ide_disk)
 			return 0;
 
-		drive->timeout = WAIT_CMD;
-		ide_set_handler(drive, &ide_dma_intr);
+		ide_set_handler(drive, &ide_dma_intr, WAIT_CMD, NULL);
 		OUT_BYTE(reading ? WIN_READDMA : WIN_WRITEDMA,
 			 IDE_COMMAND_REG);
 

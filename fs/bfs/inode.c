@@ -196,6 +196,7 @@ static void bfs_put_super(struct super_block *s)
 {
 	brelse(s->su_sbh);
 	kfree(s->su_imap);
+	kfree(s->su_bmap);
 	MOD_DEC_USE_COUNT;
 }
 
@@ -294,24 +295,33 @@ static struct super_block * bfs_read_super(struct super_block * s,
 	s->su_lasti = (bfs_sb->s_start - BFS_BSIZE)/sizeof(struct bfs_inode) 
 			+ BFS_ROOT_INO - 1;
 
+	s->su_bmap = kmalloc(sizeof(struct bfs_bmap) * s->su_lasti, GFP_KERNEL);
+	if (!s->su_bmap)
+		goto out;
 	imap_len = s->su_lasti/8 + 1;
 	s->su_imap = kmalloc(imap_len, GFP_KERNEL);
-	if (!s->su_imap)
+	if (!s->su_imap) {
+		kfree(s->su_bmap);
 		goto out;
+	}
 	memset(s->su_imap, 0, imap_len);
-	for (i=0; i<BFS_ROOT_INO; i++)
+	for (i=0; i<BFS_ROOT_INO; i++) {
+		s->su_bmap[i].start = s->su_bmap[i].end = 0;
 		set_bit(i, s->su_imap);
+	}
 
 	s->s_op = &bfs_sops;
 	inode = iget(s, BFS_ROOT_INO);
 	if (!inode) {
 		kfree(s->su_imap);
+		kfree(s->su_bmap);
 		goto out;
 	}
 	s->s_root = d_alloc_root(inode);
 	if (!s->s_root) {
 		iput(inode);
 		kfree(s->su_imap);
+		kfree(s->su_bmap);
 		goto out;
 	}
 
@@ -323,9 +333,10 @@ static struct super_block * bfs_read_super(struct super_block * s,
 	s->su_lf_ioff = 0;
 	for (i=BFS_ROOT_INO; i<=s->su_lasti; i++) {
 		inode = iget(s,i);
-		if (inode->iu_dsk_ino == 0)
+		if (inode->iu_dsk_ino == 0) {
 			s->su_freei++;
-		else {
+			s->su_bmap[i].start = s->su_bmap[i].end = 0;
+		} else {
 			set_bit(i, s->su_imap);
 			s->su_freeb -= inode->i_blocks;
 			if (inode->iu_eblock > s->su_lf_eblk) {
@@ -333,6 +344,8 @@ static struct super_block * bfs_read_super(struct super_block * s,
 				s->su_lf_sblk = inode->iu_sblock;
 				s->su_lf_ioff = BFS_INO2OFF(i);
 			}
+			s->su_bmap[i].start = inode->iu_sblock;
+			s->su_bmap[i].end = inode->iu_eblock;
 		}
 		iput(inode);
 	}

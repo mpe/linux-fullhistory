@@ -3621,14 +3621,7 @@ static void usb_audio_disconnect(struct usb_device *dev, void *ptr)
 
 int usb_audio_init(void)
 {
-	if (usb_register(&usb_audio_driver) < 0) {
-		printk(KERN_ERR "USB Audio driver cannot register: "
-			"minor number %d already in use\n",
-			usb_audio_driver.minor);
-		return -1;
-	}
-
-	return 0;
+	return usb_register(&usb_audio_driver);
 }
 
 #ifdef MODULE

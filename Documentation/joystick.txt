@@ -1,5 +1,5 @@
 		     Linux Joystick driver v1.2.13
-	       (c) 1996-1998 Vojtech Pavlik <vojtech@ucw.cz>
+	       (c) 1996-1998 Vojtech Pavlik <vojtech@suse.cz>
 ----------------------------------------------------------------------------
 
 0. Disclaimer
@@ -19,7 +19,7 @@ with this program; if not, write to the Free Software Foundation, Inc., 59
 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
   Should you need to contact me, the author, you can do so either by e-mail
-- mail your message to <vojtech@ucw.cz>, or by paper mail: Vojtech Pavlik,
+- mail your message to <vojtech@suse.cz>, or by paper mail: Vojtech Pavlik,
 Ucitelska 1576, Prague 8, 182 00 Czech Republic
 
   For your convenience, the GNU General Public License version 2 is included
@@ -58,20 +58,20 @@ them. Bug reports and success stories are also welcome.
   The joystick package is available at the following FTP sites:
 
 	ftp://atrey.karlin.mff.cuni.cz/pub/linux/joystick/
-	ftp://artax.karlin.mff.cuni.cz/pub/linux/joystick/
 
-  The joystick driver is also included in the Linux 2.1 kernels:
+  The joystick driver is also included in the Linux 2.1+ kernels:
 
-	ftp://linux.kernel.org/pub/linux/kernel/v2.1/
+	ftp://linux.kernel.org/pub/linux/kernel/
 
   And a homepage of the driver is at:
 
+	http://www.suse.cz/development/joystick/
+
+  Mirrors of the homepage are at:
+
 	http://atrey.karlin.mff.cuni.cz/~vojtech/joystick/
-	http://artax.karlin.mff.cuni.cz/~vojtech/joystick/
-
-  A mirror of the homepage is at:
-
 	http://www.trylinux.com/projects/joystick/
+	http://www.linuxgames.com/joystick/
 
   There is also a mailing list for the driver at:
 

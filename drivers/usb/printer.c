@@ -419,12 +419,8 @@ static struct usb_driver printer_driver = {
 
 int usb_printer_init(void)
 {
-	if (usb_register(&printer_driver)) {
-		printk(KERN_ERR "USB Printer driver cannot register: "
-			"minor number %d already in use\n",
-			printer_driver.minor);
+	if (usb_register(&printer_driver))
 		return -1;
-	}
 
 	printk(KERN_INFO "USB Printer support registered.\n");
 	return 0;

@@ -125,7 +125,7 @@ struct uhci_framelist {
 #define TD_TOKEN_TOGGLE		19
 
 #define uhci_maxlen(token)	((token) >> 21)
-#define uhci_expected_length(info) (((info >> 21) + 1) & TD_CTRL_ACTLEN_MASK) /* 1-based */ 
+#define uhci_expected_length(info) (((info >> 21) + 1) & TD_CTRL_ACTLEN_MASK) /* 1-based */
 #define uhci_toggle(token)	(((token) >> TD_TOKEN_TOGGLE) & 1)
 #define uhci_endpoint(token)	(((token) >> 15) & 0xf)
 #define uhci_devaddr(token)	(((token) >> 8) & 0x7f)
@@ -133,7 +133,6 @@ struct uhci_framelist {
 #define uhci_packetid(token)	((token) & 0xff)
 #define uhci_packetout(token)	(uhci_packetid(token) != USB_PID_IN)
 #define uhci_packetin(token)	(uhci_packetid(token) == USB_PID_IN)
-
 
 /*
  * The documentation says "4 words for hardware, 4 words for software".
@@ -163,15 +162,15 @@ struct uhci_td {
 	void *dev_id;
 
 	atomic_t refcnt;		/* Reference counting */
+
 	struct uhci_device *dev;	/* The owning device */
 	struct uhci_qh *qh;		/* QH this TD is a part of (ignored for Isochronous) */
+	unsigned char pipetype;		/* Control, Bulk, Interrupt, Isoc */
 	int flags;			/* Remove, etc */
 	int isoc_td_number;		/* 0-relative number within a usb_isoc_desc. */
-	int pipetype;			/* Control, Bulk, Interrupt, or Isoc */
-	int bandwidth_alloc;		/* in microsecs; used only for Interrupt
+	int bandwidth_alloc;            /* in microsecs; used only for Interrupt
 					 * transfers, to return its bandwidth */
 } __attribute__((aligned(16)));
-
 
 /*
  * Note the alignment requirements of the entries
@@ -233,6 +232,7 @@ struct uhci_device {
  * other than that, that is what we're doing now
  *
  * And now we don't put Iso transfers in QH's, so we don't waste one on it
+ * --jerdfelt
  *
  * To keep with Linus' nomenclature, this is called the QH skeleton. These
  * labels (below) are only signficant to the root hub's QH's
@@ -281,7 +281,7 @@ static inline int __interval_to_skel(int interval)
 		if (interval < 8) {
 			return 2;		/* int4 for 4-7 ms */
 		}
-		return 3;			/* int 8 for 8-15 ms */
+		return 3;			/* int8 for 8-15 ms */
 	}
 	if (interval < 64) {
 		if (interval < 32) {

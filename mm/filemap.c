@@ -839,6 +839,7 @@ static void generic_file_readahead(int reada_ok,
 	struct file * filp, struct inode * inode,
 	struct page * page)
 {
+	unsigned long end_index = inode->i_size >> PAGE_CACHE_SHIFT;
 	unsigned long index = page->index;
 	unsigned long max_ahead, ahead;
 	unsigned long raend;
@@ -858,10 +859,10 @@ static void generic_file_readahead(int reada_ok,
 	if (PageLocked(page)) {
 		if (!filp->f_ralen || index >= raend || index + filp->f_ralen < raend) {
 			raend = index;
-			if (raend < (unsigned long) (inode->i_size >> PAGE_CACHE_SHIFT))
+			if (raend < end_index)
 				max_ahead = filp->f_ramax;
 			filp->f_rawin = 0;
-			filp->f_ralen = PAGE_CACHE_SIZE;
+			filp->f_ralen = 1;
 			if (!max_ahead) {
 				filp->f_raend  = index + filp->f_ralen;
 				filp->f_rawin += filp->f_ralen;
@@ -876,7 +877,7 @@ static void generic_file_readahead(int reada_ok,
  *   it is the moment to try to read ahead asynchronously.
  * We will later force unplug device in order to force asynchronous read IO.
  */
-	else if (reada_ok && filp->f_ramax && raend >= PAGE_CACHE_SIZE &&
+	else if (reada_ok && filp->f_ramax && raend >= 1 &&
 		 index <= raend && index + filp->f_ralen >= raend) {
 /*
  * Add ONE page to max_ahead in order to try to have about the same IO max size
@@ -884,9 +885,9 @@ static void generic_file_readahead(int reada_ok,
  * Compute the position of the last page we have tried to read in order to 
  * begin to read ahead just at the next page.
  */
-		raend -= PAGE_CACHE_SIZE;
-		if (raend < inode->i_size)
-			max_ahead = filp->f_ramax + PAGE_CACHE_SIZE;
+		raend -= 1;
+		if (raend < end_index)
+			max_ahead = filp->f_ramax + 1;
 
 		if (max_ahead) {
 			filp->f_rawin = filp->f_ralen;
@@ -901,10 +902,10 @@ static void generic_file_readahead(int reada_ok,
  */
 	ahead = 0;
 	while (ahead < max_ahead) {
-		ahead += PAGE_CACHE_SIZE;
-		if ((raend + ahead) >= inode->i_size)
+		ahead ++;
+		if ((raend + ahead) >= end_index)
 			break;
-		if (page_cache_read(filp, (raend + ahead) >> PAGE_CACHE_SHIFT) < 0)
+		if (page_cache_read(filp, raend + ahead) < 0)
 			break;
 	}
 /*
@@ -925,7 +926,7 @@ static void generic_file_readahead(int reada_ok,
 
 		filp->f_ralen += ahead;
 		filp->f_rawin += filp->f_ralen;
-		filp->f_raend = raend + ahead + PAGE_CACHE_SIZE;
+		filp->f_raend = raend + ahead + 1;
 
 		filp->f_ramax += filp->f_ramax;
 
@@ -1791,12 +1792,15 @@ generic_file_write(struct file *file, const char *buf,
 {
 	struct dentry	*dentry = file->f_dentry; 
 	struct inode	*inode = dentry->d_inode; 
-	unsigned long	pos = *ppos;
 	unsigned long	limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
+	loff_t		pos = *ppos;
 	struct page	*page, **hash, *cached_page;
 	unsigned long	written;
 	long		status;
 	int		err;
+
+	if (pos < 0)
+		return -EINVAL;
 
 	cached_page = NULL;
 
@@ -1816,37 +1820,35 @@ generic_file_write(struct file *file, const char *buf,
 	 * Check whether we've reached the file size limit.
 	 */
 	err = -EFBIG;
-	if (pos >= limit) {
-		send_sig(SIGXFSZ, current, 0);
-		goto out;
+	if (limit != RLIM_INFINITY) {
+		if (pos >= limit) {
+			send_sig(SIGXFSZ, current, 0);
+			goto out;
+		}
+		if (count > limit - pos) {
+			send_sig(SIGXFSZ, current, 0);
+			count = limit - pos;
+		}
 	}
 
 	status  = 0;
-	/*
-	 * Check whether to truncate the write,
-	 * and send the signal if we do.
-	 */
-	if (count > limit - pos) {
-		send_sig(SIGXFSZ, current, 0);
-		count = limit - pos;
-	}
 
 	while (count) {
-		unsigned long bytes, pgoff, offset;
+		unsigned long bytes, index, offset;
 
 		/*
 		 * Try to find the page in the cache. If it isn't there,
 		 * allocate a free page.
 		 */
 		offset = (pos & (PAGE_CACHE_SIZE -1)); /* Within page */
-		pgoff = pos >> PAGE_CACHE_SHIFT;
+		index = pos >> PAGE_CACHE_SHIFT;
 		bytes = PAGE_CACHE_SIZE - offset;
 		if (bytes > count)
 			bytes = count;
 
-		hash = page_hash(&inode->i_data, pgoff);
+		hash = page_hash(&inode->i_data, index);
 repeat_find:
-		page = __find_lock_page(&inode->i_data, pgoff, hash);
+		page = __find_lock_page(&inode->i_data, index, hash);
 		if (!page) {
 			if (!cached_page) {
 				cached_page = page_cache_alloc();
@@ -1856,7 +1858,7 @@ repeat_find:
 				break;
 			}
 			page = cached_page;
-			if (add_to_page_cache_unique(page,&inode->i_data,pgoff,hash))
+			if (add_to_page_cache_unique(page, &inode->i_data, index, hash))
 				goto repeat_find;
 
 			cached_page = NULL;

@@ -41,14 +41,14 @@ static struct file_operations bfs_file_operations = {
 static int bfs_get_block(struct inode * inode, long block, 
 	struct buffer_head * bh_result, int create)
 {
-	if (!create) {
+	long phys = inode->iu_sblock + block;
+	if (!create || phys <= inode->iu_eblock) {
 		bh_result->b_dev = inode->i_dev;
-		bh_result->b_blocknr = inode->iu_sblock + block;
+		bh_result->b_blocknr = phys;
 		bh_result->b_state |= (1UL << BH_Mapped);
 		return 0;
-	} else 
-		DBG(KERN_ERR "BFS-fs: %s(create=%d) impossible!\n", 
-			__FUNCTION__, create);
+	} 
+	/* no support for file migration, working on it */
 	return -EIO;
 }
 

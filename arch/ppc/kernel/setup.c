@@ -245,6 +245,9 @@ int get_cpuinfo(char *buffer)
 		case 10:
 			len += sprintf(len+buffer, "604ev5 (MachV)\n");
 			break;
+		case 12:
+			len += sprintf(len+buffer, "7400 (G4)\n");
+			break;
 		case 50:
 			len += sprintf(len+buffer, "821\n");
 		case 80:

@@ -403,6 +403,12 @@ typedef struct hwif_s {
  */
 typedef void (ide_handler_t)(ide_drive_t *);
 
+/*
+ * when ide_timer_expiry fires, invoke a handler of this type
+ * to decide what to do.
+ */
+typedef int (ide_expiry_t)(ide_drive_t *);
+
 typedef struct hwgroup_s {
 	spinlock_t		spinlock; /* protects "busy" and "handler" */
 	ide_handler_t		*handler;/* irq handler, if active */
@@ -413,6 +419,7 @@ typedef struct hwgroup_s {
 	struct timer_list	timer;	/* failsafe timer */
 	struct request		wrq;	/* local copy of current write rq */
 	unsigned long		poll_timeout;	/* timeout value during long polls */
+	ide_expiry_t		*expiry; /* queried upon timeouts */
 	} ide_hwgroup_t;
 
 /*
@@ -584,7 +591,7 @@ void atapi_output_bytes (ide_drive_t *drive, void *buffer, unsigned int bytecoun
  * This is used on exit from the driver, to designate the next irq handler
  * and also to start the safety timer.
  */
-void ide_set_handler (ide_drive_t *drive, ide_handler_t *handler);
+void ide_set_handler (ide_drive_t *drive, ide_handler_t *handler, unsigned int timeout, ide_expiry_t *expiry);
 
 /*
  * Error reporting, in human readable form (luxurious, but a memory hog).

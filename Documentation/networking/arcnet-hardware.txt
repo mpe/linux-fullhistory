@@ -78,7 +78,7 @@ CABLING ARCNET NETWORKS
 -----------------------
 
 This section was rewritten by 
-        Vojtech Pavlik     <Vojtech.Pavlik@st.mff.cuni.cz>
+        Vojtech Pavlik     <vojtech@suse.cz>
 using information from several people, including:
         Avery Pennraun     <apenwarr@worldvisions.ca>
  	Stephen A. Wood    <saw@hallc1.cebaf.gov>
@@ -270,7 +270,7 @@ All ARCnet cards should have a total of four or five different settings:
     that IRQ2 is the same as IRQ9, as far as Linux is concerned.  You can
     "cat /proc/interrupts" for a somewhat complete list of which ones are in
     use at any given time.  Here is a list of common usages from Vojtech
-    Pavlik <Vojtech.Pavlik@st.mff.cuni.cz>:
+    Pavlik <vojtech@suse.cz>:
     	("Not on bus" means there is no way for a card to generate this
 	interrupt)
 	IRQ  0 - Timer 0 (Not on bus)
@@ -347,8 +347,7 @@ All ARCnet cards should have a total of four or five different settings:
     network.
     
 Also, on many cards (not mine, though) there are red and green LED's. 
-Vojtech Pavlik <Vojtech.Pavlik@st.mff.cuni.cz> tells me this is what they
-mean:
+Vojtech Pavlik <vojtech@suse.cz> tells me this is what they mean:
 	GREEN           RED             Status
 	-----		---		------
 	OFF             OFF             Power off
@@ -1735,11 +1734,11 @@ JP 6  : IRQ set (ONLY ONE jumper on 1-5 for IRQ 2-6)
 ** Acer **
 8-bit card, Model 5210-003
 --------------------------
-  - from Vojtech Pavlik <Vojtech.Pavlik@st.mff.cuni.cz> using portions of
-    the existing arcnet-hardware file.
+  - from Vojtech Pavlik <vojtech@suse.cz> using portions of the existing
+    arcnet-hardware file.
 
-This is a 90C26 based card.  Its configuration seems similar to 
-the SMC PC100, but has some additional jumpers I don't know.
+This is a 90C26 based card.  Its configuration seems similar to the SMC
+PC100, but has some additional jumpers I don't know the meaning of.
 
                __
               |  |
@@ -1903,7 +1902,7 @@ guess the purpose.
 ** Datapoint? **
 LAN-ARC-8, an 8-bit card
 ------------------------
-  - from Vojtech Pavlik <Vojtech.Pavlik@st.mff.cuni.cz>
+  - from Vojtech Pavlik <vojtech@suse.cz>
 
 This is another SMC 90C65-based ARCnet card. I couldn't identify the
 manufacturer, but it might be DataPoint, because the card has the
@@ -2043,7 +2042,7 @@ parameters.  These two switches are normally left in the OFF position.
 ** Topware **
 8-bit card, TA-ARC/10
 -------------------------
-  - from Vojtech Pavlik <Vojtech.Pavlik@st.mff.cuni.cz>
+  - from Vojtech Pavlik <vojtech@suse.cz>
 
 This is another very similar 90C65 card. Most of the switches and jumpers
 are the same as on other clones.
@@ -2752,7 +2751,7 @@ Setting the Timeouts
 ** No Name **
 8-bit cards ("Made in Taiwan R.O.C.")
 -----------
-  - from Vojtech Pavlik <Vojtech.Pavlik@st.mff.cuni.cz>
+  - from Vojtech Pavlik <vojtech@suse.cz>
 
 I have named this ARCnet card "NONAME", since I got only the card with
 no manual at all and the only text identifying the manufacturer is 

@@ -190,7 +190,7 @@ Here's my autoconf.h SOUND section:
 6) How do I configure my card ?
 ************************************************************
 
-You need to edit /etc/conf.modules. Here's mine (edited to show the
+You need to edit /etc/modules.conf. Here's mine (edited to show the
 relevant details):
 
   # Sound system

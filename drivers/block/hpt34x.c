@@ -299,8 +299,7 @@ int hpt34x_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 			drive->waiting_for_dma = 1;
 			if (drive->media != ide_disk)
 				return 0;
-			drive->timeout = WAIT_CMD;
-			ide_set_handler(drive, &ide_dma_intr);	/* issue cmd to drive */
+			ide_set_handler(drive, &ide_dma_intr, WAIT_CMD, NULL);	/* issue cmd to drive */
 			OUT_BYTE((reading == 9) ? WIN_READDMA : WIN_WRITEDMA, IDE_COMMAND_REG);
 			return 0;
 		case ide_dma_end:	/* returns 1 on error, 0 otherwise */

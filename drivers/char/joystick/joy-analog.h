@@ -26,7 +26,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  * 
  * Should you need to contact me, the author, you can do so either by
- * e-mail - mail your message to <vojtech@ucw.cz>, or by paper mail:
+ * e-mail - mail your message to <vojtech@suse.cz>, or by paper mail:
  * Vojtech Pavlik, Ucitelska 1576, Prague 8, 182 00 Czech Republic
  */
 
@@ -238,7 +238,7 @@ static int __init js_an_probe_devs(struct js_an_info *info, int exist, int mask0
 				break;
 			default:
 				printk(KERN_WARNING "joy-analog: Unknown joystick device detected "
-					"(data=%#x), contact <vojtech@ucw.cz>\n", exist);
+					"(data=%#x), contact <vojtech@suse.cz>\n", exist);
 				return -1;
 		}
 	}

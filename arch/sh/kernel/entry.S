@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.16 1999/10/21 14:00:27 gniibe Exp $
+/* $Id: entry.S,v 1.19 1999/10/31 13:19:35 gniibe Exp gniibe $
  *
  *  linux/arch/sh/entry.S
  *
@@ -61,7 +61,11 @@ ENOSYS = 38
 #if defined(__sh3__)
 TRA     = 0xffffffd0
 EXPEVT  = 0xffffffd4
+#ifdef CONFIG_CPU_SUBTYPE_SH7709
+INTEVT  = 0xa4000000		! INTEVTE2(0xa4000000)
+#else
 INTEVT  = 0xffffffd8
+#endif
 MMU_TEA = 0xfffffffc		! TLB Exception Address Register
 #elif defined(__SH4__)
 TRA     = 0xff000020
@@ -251,6 +255,11 @@ system_call:
 	mov.l	1f,r2
 	mov.l	@r2,r8
 	!
+	! DEBUG DEBUG
+	! mov.l	led,r1
+	! mov	r0,r2
+	! mov.b	r2,@r1
+	!
 #ifdef CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
 	mov	#0x20,r1
 	extu.b	r1,r1
@@ -320,6 +329,7 @@ system_call:
 3:	.long	SYMBOL_NAME(syscall_trace)
 2:	.long	0xefffffff	! BL=0
 1:	.long	TRA
+led:	.long	0xa8000000	! For my board -- gN
 
 	.section	.fixup,"ax"
 fixup_syscall_argerr:
@@ -571,6 +581,37 @@ ENTRY(interrupt_table)
 	.long	SYMBOL_NAME(do_IRQ)	!      rovi
 	.long	SYMBOL_NAME(do_IRQ)
 	.long	SYMBOL_NAME(do_IRQ)
+#if defined(CONFIG_CPU_SUBTYPE_SH7709)
+	.long	SYMBOL_NAME(do_IRQ)	! 32 IRQ  irq0
+	.long	SYMBOL_NAME(do_IRQ)	! 33      irq1
+	.long	SYMBOL_NAME(do_IRQ)	! 34      irq2
+	.long	SYMBOL_NAME(do_IRQ)	! 35      irq3
+	.long	SYMBOL_NAME(do_IRQ)	! 36      irq4
+	.long	SYMBOL_NAME(do_IRQ)	! 37      irq5
+	.long	SYMBOL_NAME(do_IRQ)	! 38
+	.long	SYMBOL_NAME(do_IRQ)	! 39
+	.long	SYMBOL_NAME(do_IRQ)	! 40 PINT pint0-7
+	.long	SYMBOL_NAME(do_IRQ)	! 41      pint8-15
+	.long	SYMBOL_NAME(do_IRQ)	! 42
+	.long	SYMBOL_NAME(do_IRQ)	! 43
+	.long	SYMBOL_NAME(do_IRQ)	! 44
+	.long	SYMBOL_NAME(do_IRQ)	! 45
+	.long	SYMBOL_NAME(do_IRQ)	! 46
+	.long	SYMBOL_NAME(do_IRQ)	! 47
+	.long	SYMBOL_NAME(do_IRQ)	! 48 DMAC dei0
+	.long	SYMBOL_NAME(do_IRQ)	! 49      dei1
+	.long	SYMBOL_NAME(do_IRQ)	! 50      dei2
+	.long	SYMBOL_NAME(do_IRQ)	! 51      dei3
+	.long	SYMBOL_NAME(do_IRQ)	! 52 IrDA eri1
+	.long	SYMBOL_NAME(do_IRQ)	! 53      rxi1
+	.long	SYMBOL_NAME(do_IRQ)	! 54      bri1
+	.long	SYMBOL_NAME(do_IRQ)	! 55      txi1
+	.long	SYMBOL_NAME(do_IRQ)	! 56 SCIF eri2
+	.long	SYMBOL_NAME(do_IRQ)	! 57      rxi2
+	.long	SYMBOL_NAME(do_IRQ)	! 58      bri2
+	.long	SYMBOL_NAME(do_IRQ)	! 59      txi2
+	.long	SYMBOL_NAME(do_IRQ)	! 60 ADC  adi
+#elif defined(__SH4__)
 	.long	SYMBOL_NAME(do_IRQ)	! Hitachi UDI
 	.long	SYMBOL_NAME(do_IRQ)	! GPIO
 	.long	SYMBOL_NAME(do_IRQ)	! DMAC dmte0
@@ -589,6 +630,7 @@ ENTRY(interrupt_table)
 	.long	error
 	.long	error ! fpu
 	.long	error ! fpu
+#endif
 
 ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_ni_syscall)	/* 0  -  old "setup()" system call*/
@@ -608,7 +650,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_mknod)
 	.long SYMBOL_NAME(sys_chmod)		/* 15 */
 	.long SYMBOL_NAME(sys_lchown)
-	.long SYMBOL_NAME(sys_ni_syscall)				/* old break syscall holder */
+	.long SYMBOL_NAME(sys_ni_syscall)	/* old break syscall holder */
 	.long SYMBOL_NAME(sys_stat)
 	.long SYMBOL_NAME(sys_lseek)
 	.long SYMBOL_NAME(sys_getpid)		/* 20 */
@@ -622,8 +664,8 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_fstat)
 	.long SYMBOL_NAME(sys_pause)
 	.long SYMBOL_NAME(sys_utime)		/* 30 */
-	.long SYMBOL_NAME(sys_ni_syscall)				/* old stty syscall holder */
-	.long SYMBOL_NAME(sys_ni_syscall)				/* old gtty syscall holder */
+	.long SYMBOL_NAME(sys_ni_syscall)	/* old stty syscall holder */
+	.long SYMBOL_NAME(sys_ni_syscall)	/* old gtty syscall holder */
 	.long SYMBOL_NAME(sys_access)
 	.long SYMBOL_NAME(sys_nice)
 	.long SYMBOL_NAME(sys_ni_syscall)	/* 35 */		/* old ftime syscall holder */
@@ -635,7 +677,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_dup)
 	.long SYMBOL_NAME(sys_pipe)
 	.long SYMBOL_NAME(sys_times)
-	.long SYMBOL_NAME(sys_ni_syscall)				/* old prof syscall holder */
+	.long SYMBOL_NAME(sys_ni_syscall)	/* old prof syscall holder */
 	.long SYMBOL_NAME(sys_brk)		/* 45 */
 	.long SYMBOL_NAME(sys_setgid)
 	.long SYMBOL_NAME(sys_getgid)
@@ -644,12 +686,12 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_getegid)		/* 50 */
 	.long SYMBOL_NAME(sys_acct)
 	.long SYMBOL_NAME(sys_umount)					/* recycled never used phys() */
-	.long SYMBOL_NAME(sys_ni_syscall)				/* old lock syscall holder */
+	.long SYMBOL_NAME(sys_ni_syscall)	/* old lock syscall holder */
 	.long SYMBOL_NAME(sys_ioctl)
 	.long SYMBOL_NAME(sys_fcntl)		/* 55 */
-	.long SYMBOL_NAME(sys_ni_syscall)				/* old mpx syscall holder */
+	.long SYMBOL_NAME(sys_ni_syscall)	/* old mpx syscall holder */
 	.long SYMBOL_NAME(sys_setpgid)
-	.long SYMBOL_NAME(sys_ni_syscall)				/* old ulimit syscall holder */
+	.long SYMBOL_NAME(sys_ni_syscall)	/* old ulimit syscall holder */
 	.long SYMBOL_NAME(sys_ni_syscall)	/* sys_olduname */
 	.long SYMBOL_NAME(sys_umask)		/* 60 */
 	.long SYMBOL_NAME(sys_chroot)
@@ -689,7 +731,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_fchown)		/* 95 */
 	.long SYMBOL_NAME(sys_getpriority)
 	.long SYMBOL_NAME(sys_setpriority)
-	.long SYMBOL_NAME(sys_ni_syscall)				/* old profil syscall holder */
+	.long SYMBOL_NAME(sys_ni_syscall)	/* old profil syscall holder */
 	.long SYMBOL_NAME(sys_statfs)
 	.long SYMBOL_NAME(sys_fstatfs)		/* 100 */
 	.long SYMBOL_NAME(sys_ni_syscall)		/* ioperm */

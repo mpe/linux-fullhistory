@@ -32,8 +32,7 @@
 static long long ext2_file_lseek(struct file *, long long, int);
 #if BITS_PER_LONG < 64
 static int ext2_open_file (struct inode *, struct file *);
-
-#else
+#endif
 
 #define EXT2_MAX_SIZE(bits)							\
 	(((EXT2_NDIR_BLOCKS + (1LL << (bits - 2)) + 				\
@@ -45,9 +44,6 @@ static long long ext2_max_sizes[] = {
 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 EXT2_MAX_SIZE(10), EXT2_MAX_SIZE(11), EXT2_MAX_SIZE(12), EXT2_MAX_SIZE(13)
 };
-
-#endif
-
 
 /*
  * Make sure the offset never goes beyond the 32-bit mark..
@@ -67,12 +63,8 @@ static long long ext2_file_lseek(
 			offset += file->f_pos;
 	}
 	if (((unsigned long long) offset >> 32) != 0) {
-#if BITS_PER_LONG < 64
-		return -EINVAL;
-#else
 		if (offset > ext2_max_sizes[EXT2_BLOCK_SIZE_BITS(inode->i_sb)])
 			return -EINVAL;
-#endif
 	} 
 	if (offset != file->f_pos) {
 		file->f_pos = offset;
@@ -131,11 +123,12 @@ static int ext2_release_file (struct inode * inode, struct file * filp)
 #if BITS_PER_LONG < 64
 /*
  * Called when an inode is about to be open.
- * We use this to disallow opening RW large files on 32bit systems.
+ * We use this to disallow opening RW large files on 32bit systems if
+ * the caller didn't specify O_LARGEFILE.
  */
 static int ext2_open_file (struct inode * inode, struct file * filp)
 {
-	if (inode->u.ext2_i.i_high_size && (filp->f_mode & FMODE_WRITE))
+	if (inode->u.ext2_i.i_high_size && !(filp->f_flags & O_LARGEFILE))
 		return -EFBIG;
 	return 0;
 }

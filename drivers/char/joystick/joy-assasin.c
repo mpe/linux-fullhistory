@@ -25,7 +25,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  * 
  * Should you need to contact me, the author, you can do so either by
- * e-mail - mail your message to <vojtech@ucw.cz>, or by paper mail:
+ * e-mail - mail your message to <vojtech@suse.cz>, or by paper mail:
  * Vojtech Pavlik, Ucitelska 1576, Prague 8, 182 00 Czech Republic
  */
 
@@ -49,7 +49,7 @@
 #define JS_AS_MODE_OEM		3	/* Panther OEM version */
 #define JS_AS_MODE_PXL		4	/* Panther XL */
 
-MODULE_AUTHOR("Vojtech Pavlik <vojtech@ucw.cz>");
+MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
 MODULE_PARM(js_as, "2-24i");
 
 static int js_as[]={-1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0};
@@ -319,7 +319,7 @@ static struct js_port __init *js_as_probe(int io, int mask0, int mask1, struct j
 		info = port->info;
 	} else {
 		printk(KERN_WARNING "joy-assasin: unknown joystick device detected "
-			"(io=%#x, id=%d), contact <vojtech@ucw.cz>\n", io, data[0]);
+			"(io=%#x, id=%d), contact <vojtech@suse.cz>\n", io, data[0]);
 		return port;
 	}
 

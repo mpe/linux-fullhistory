@@ -245,7 +245,7 @@ When using ide.c/ide-tape.c as modules in combination with kerneld, add:
 	alias block-major-3 ide-probe
 	alias char-major-37 ide-tape
 
-respectively to /etc/conf.modules.
+respectively to /etc/modules.conf.
 
 When ide.c is used as a module, you can pass command line parameters to the
 driver using the "options=" keyword to insmod, while replacing any ',' with

@@ -96,7 +96,7 @@ extern __inline__ int test_and_change_bit(int nr, void * addr)
 
 extern __inline__ int test_bit(int nr, const void *addr)
 {
-	return 1UL & (((const int *) addr)[nr >> 5] >> (nr & 31));
+	return 1UL & (((const unsigned int *) addr)[nr >> 5] >> (nr & 31));
 }
 
 extern __inline__ unsigned long ffz(unsigned long word)
@@ -107,8 +107,8 @@ extern __inline__ unsigned long ffz(unsigned long word)
 		"shlr	%1\n\t"
 		"bt/s	1b\n\t"
 		" add	#1, %0"
-		: "=r" (result)
-		: "r" (word), "0" (~0L));
+		: "=r" (result), "=r" (word)
+		: "0" (~0L), "1" (word));
 	return result;
 }
 
@@ -151,10 +151,18 @@ found_middle:
 #define find_first_zero_bit(addr, size) \
         find_next_zero_bit((addr), (size), 0)
 
+#ifdef __LITTLE_ENDIAN__
+#define ext2_set_bit(nr, addr) test_and_set_bit((nr), (addr))
+#define ext2_clear_bit(nr, addr) test_and_clear_bit((nr), (addr))
+#define ext2_test_bit(nr, addr) test_bit((nr), (addr))
+#define ext2_find_first_zero_bit(addr, size) find_first_zero_bit((addr), (size))
+#define ext2_find_next_zero_bit(addr, size, offset) \
+                find_next_zero_bit((addr), (size), (offset))
+#else
 extern __inline__ int ext2_set_bit(int nr,void * addr)
 {
 	int		mask, retval;
-	unsigned long flags;
+	unsigned long	flags;
 	unsigned char	*ADDR = (unsigned char *) addr;
 
 	ADDR += nr >> 3;
@@ -169,7 +177,7 @@ extern __inline__ int ext2_set_bit(int nr,void * addr)
 extern __inline__ int ext2_clear_bit(int nr, void * addr)
 {
 	int		mask, retval;
-	unsigned long flags;
+	unsigned long	flags;
 	unsigned char	*ADDR = (unsigned char *) addr;
 
 	ADDR += nr >> 3;
@@ -243,6 +251,7 @@ found_first:
 found_middle:
 	return result + ffz(__swab32(tmp));
 }
+#endif
 
 /* Bitmap functions for the minix filesystem.  */
 #define minix_set_bit(nr,addr) test_and_set_bit(nr,addr)

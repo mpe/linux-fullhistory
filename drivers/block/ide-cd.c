@@ -659,6 +659,21 @@ static int cdrom_decode_status (ide_drive_t *drive, int good_stat,
 	return 1;
 }
 
+static int cdrom_timer_expiry(ide_drive_t *drive)
+{
+	struct request *rq = HWGROUP(drive)->rq;
+	struct packet_command *pc = (struct packet_command *) rq->buffer;
+	unsigned long wait = 0;
+
+	printk("in expiry\n");
+	/* blank and format can take an extremly long time to
+	 * complete, if the IMMED bit was not set.
+	 */
+	if (pc->c[0] == GPCMD_BLANK || pc->c[0] == GPCMD_FORMAT_UNIT)
+		wait = 60*60*HZ;
+
+	return wait;
+}
 
 /* Set up the device registers for transferring a packet command on DEV,
    expecting to later transfer XFERLEN bytes.  HANDLER is the routine
@@ -692,7 +707,7 @@ static int cdrom_start_packet_command (ide_drive_t *drive, int xferlen,
 		(void) (HWIF(drive)->dmaproc(ide_dma_begin, drive));
 
 	if (CDROM_CONFIG_FLAGS (drive)->drq_interrupt) {
-		ide_set_handler (drive, handler);
+		ide_set_handler (drive, handler, WAIT_CMD, cdrom_timer_expiry);
 		OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG); /* packet command */
 	} else {
 		OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG); /* packet command */
@@ -701,7 +716,6 @@ static int cdrom_start_packet_command (ide_drive_t *drive, int xferlen,
 
 	return 0;
 }
-
 
 /* Send a packet command to DRIVE described by CMD_BUF and CMD_LEN.
    The device registers must have already been prepared
@@ -712,11 +726,6 @@ static int cdrom_transfer_packet_command (ide_drive_t *drive,
                                           unsigned char *cmd_buf, int cmd_len,
 					  ide_handler_t *handler)
 {
-	/* don't timeout for blank and format commands. they may take
-	 * a _very_ long time. */
-	if (cmd_buf[0] == GPCMD_BLANK || cmd_buf[0] == GPCMD_FORMAT_UNIT)
-		drive->timeout = 0;
-
 	if (CDROM_CONFIG_FLAGS (drive)->drq_interrupt) {
 		/* Here we should have been called after receiving an interrupt
 		   from the device.  DRQ should how be set. */
@@ -732,7 +741,7 @@ static int cdrom_transfer_packet_command (ide_drive_t *drive,
 	}
 
 	/* Arm the interrupt handler. */
-	ide_set_handler (drive, handler);
+	ide_set_handler (drive, handler, WAIT_CMD, cdrom_timer_expiry);
 
 	/* Send the command to the device. */
 	atapi_output_bytes (drive, cmd_buf, cmd_len);
@@ -957,7 +966,7 @@ static void cdrom_read_intr (ide_drive_t *drive)
 
 	/* Done moving data!
 	   Wait for another interrupt. */
-	ide_set_handler(drive, &cdrom_read_intr);
+	ide_set_handler(drive, &cdrom_read_intr, WAIT_CMD, NULL);
 }
 
 /*
@@ -1195,9 +1204,6 @@ static void cdrom_pc_intr (ide_drive_t *drive)
 	struct request *rq = HWGROUP(drive)->rq;
 	struct packet_command *pc = (struct packet_command *)rq->buffer;
 
-	/* restore timeout after blank or format command */
-	drive->timeout = WAIT_CMD;
-
 	/* Check for errors. */
 	if (cdrom_decode_status (drive, 0, &stat))
 		return;
@@ -1283,7 +1289,7 @@ static void cdrom_pc_intr (ide_drive_t *drive)
 	}
 
 	/* Now we wait for another interrupt. */
-	ide_set_handler (drive, &cdrom_pc_intr);
+	ide_set_handler (drive, &cdrom_pc_intr, WAIT_CMD, cdrom_timer_expiry);
 }
 
 
@@ -2398,7 +2404,6 @@ int ide_cdrom_setup (ide_drive_t *drive)
 
 	drive->special.all	= 0;
 	drive->ready_stat	= 0;
-	drive->timeout		= WAIT_CMD;
 
 	CDROM_STATE_FLAGS (drive)->media_changed = 1;
 	CDROM_STATE_FLAGS (drive)->toc_valid     = 0;
@@ -2431,10 +2436,14 @@ int ide_cdrom_setup (ide_drive_t *drive)
 	/* limit transfer size per interrupt. */
 	CDROM_CONFIG_FLAGS (drive)->limit_nframes = 0;
 	if (drive->id != NULL) {
+		/* a testament to the nice quality of Samsung drives... */
 		if (!strcmp(drive->id->model, "SAMSUNG CD-ROM SCR-2430"))
 			CDROM_CONFIG_FLAGS (drive)->limit_nframes = 1;
 		else if (!strcmp(drive->id->model, "SAMSUNG CD-ROM SCR-2432"))
 			CDROM_CONFIG_FLAGS (drive)->limit_nframes = 1;
+		/* the 3231 model does not support the SET_CD_SPEED command */
+		else if (!strcmp(drive->id->model, "SAMSUNG CD-ROM SCR-3231"))
+			cdi->mask |= CDC_SELECT_SPEED;
 	}
 
 #if ! STANDARD_ATAPI

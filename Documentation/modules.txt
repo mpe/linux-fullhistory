@@ -117,7 +117,7 @@ Using the modprobe utility, you can load any module like this:
 without paying much attention to which kernel you are running, or what
 other modules this module depends on.
 
-With the help of the modprobe configuration file: "/etc/conf.modules"
+With the help of the modprobe configuration file: "/etc/modules.conf"
 you can tune the behaviour of modprobe in many ways, including an
 automatic setting of insmod options for each module.
 And, yes, there _are_ man-pages for all this...
@@ -164,10 +164,10 @@ This is what happens:
 	  fits this symbolic description.
 	- modprobe looks into its internal "alias" translation table
 	  to see if there is a match.  This table can be reconfigured
-	  and expanded by having "alias" lines in "/etc/conf.modules".
+	  and expanded by having "alias" lines in "/etc/modules.conf".
 	- insmod is then asked to insert the module(s) that modprobe
 	  has decided that the kernel needs.  Every module will be
-	  configured according to the "options" lines in "/etc/conf.modules".
+	  configured according to the "options" lines in "/etc/modules.conf".
 	- modprobe exits and kerneld tells the kernel that the request
 	  succeeded (or failed...)
 	- The kernel uses the freshly installed feature just as if it
@@ -191,7 +191,7 @@ for maintainers of distributions.
 
 To use kerneld with the least amount of "hassle", you need modprobe from
 a release that can be considered "recent" w.r.t. your kernel, and also
-a configuration file for modprobe ("/etc/conf.modules").
+a configuration file for modprobe ("/etc/modules.conf").
 Since modprobe already knows about most modules, the minimal configuration
 file could look something like this:
 
@@ -207,10 +207,6 @@ You could add these lines as well, but they are only "cosmetic":
 	alias net-pf-3 off	# no ax25 module available (yet)
 	alias net-pf-4 off	# if you don't use the ipx module
 	alias net-pf-5 off	# if you don't use the appletalk module
-
-Finally, for the "purists":
-You can name the modprobe configuration either "/etc/conf.modules" or
-"/etc/modules.conf", since modprobe knows what to do in each case...
 
 
 Written by:

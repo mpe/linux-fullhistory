@@ -2993,7 +2993,7 @@ CONFIG_UNIX
   here and read Documentation/modules.txt. The module will be called
   unix.o. If you try building this as a module and you have said Y to
   "Kernel module loader support" above, be sure to add 'alias net-pf-1
-  unix' to your /etc/conf.modules file. Note that several important
+  unix' to your /etc/modules.conf file. Note that several important
   services won't work correctly if you say M here and then neglect to
   load the module.
 
@@ -3717,7 +3717,7 @@ CONFIG_PACKET
   whenever you want). If you want to compile it as a module, say M
   here and read Documentation/modules.txt; if you use modprobe or
   kmod, you may also want to add "alias net-pf-17 af_packet" to 
-  /etc/conf.modules. 
+  /etc/modules.conf. 
 
   If unsure, say Y.
 
@@ -7858,6 +7858,18 @@ CONFIG_USB_CPIA
   The module will be called cpia.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
+USB Kodak DC-2xx Camera support
+CONFIG_USB_DC2XX
+  Say Y here if you want to connect this type of still camera to
+  your computer's USB port.  See drivers/usb/README.dc2xx for more
+  information; some non-Kodak cameras may also work with this
+  driver, given application support (such as www.gPhoto.org).
+
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called dc2xx.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+
 USB SCSI Support
 CONFIG_USB_SCSI
   Say Y here if you want to connect SCSI devices to your computer's
@@ -7994,7 +8006,9 @@ CONFIG_BFS_FS
   during the boot process. It is usually mounted under /stand and
   corresponds to the slice marked as "STAND" in the UnixWare
   partition. This is useful if you want to access files on your /stand
-  slice from Linux. If you don't know what it is, say N.
+  slice from Linux. More information on this filesystem can be found in
+  Documentation/filesystems/bfs.txt file. If you do not know what it is, 
+  say N.
 
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),

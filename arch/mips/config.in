@@ -69,6 +69,9 @@ else
    bool 'Generate little endian code' CONFIG_CPU_LITTLE_ENDIAN
 fi
 
+if [ "$CONFIG_PROC_FS" = "y" ]; then
+   define_bool CONFIG_KCORE_ELF y
+fi
 define_bool CONFIG_ELF_KERNEL y
 
 if [ "$CONFIG_CPU_LITTLE_ENDIAN" = "n" ]; then

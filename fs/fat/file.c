@@ -182,6 +182,7 @@ ssize_t default_fat_file_write(
 
 void fat_truncate(struct inode *inode)
 {
+	struct msdos_sb_info *sbi = MSDOS_SB(inode->i_sb);
 	int cluster;
 
 	/* Why no return value?  Surely the disk could fail... */
@@ -189,9 +190,9 @@ void fat_truncate(struct inode *inode)
 		return /* -EPERM */;
 	if (IS_IMMUTABLE(inode))
 		return /* -EPERM */;
-	cluster = SECTOR_SIZE*MSDOS_SB(inode->i_sb)->cluster_size;
+	cluster = SECTOR_SIZE*sbi->cluster_size;
 	MSDOS_I(inode)->i_realsize = ((inode->i_size-1) | (SECTOR_SIZE-1)) + 1;
-	(void) fat_free(inode,(inode->i_size+(cluster-1))/cluster);
+	fat_free(inode,(inode->i_size+(cluster-1))>>sbi->cluster_bits);
 	MSDOS_I(inode)->i_attrs |= ATTR_ARCH;
 	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
 	mark_inode_dirty(inode);

@@ -16,10 +16,13 @@
  */
 extern unsigned long mmu_context_cache;
 
-#define MMU_CONTEXT_ASID_MASK 0xff
-#define MMU_CONTEXT_VERSION_MASK 0xffffff00
-#define MMU_CONTEXT_FIRST_VERSION 0x100
-#define NO_CONTEXT 0
+#define MMU_CONTEXT_ASID_MASK		0x000000ff
+#define MMU_CONTEXT_VERSION_MASK	0xffffff00
+#define MMU_CONTEXT_FIRST_VERSION	0x00000100
+#define NO_CONTEXT			0
+
+/* ASID is 8-bit value, so it can't be 0x100 */
+#define MMU_NO_ASID			0x100
 
 extern __inline__ void
 get_new_mmu_context(struct mm_struct *mm)
@@ -34,7 +37,7 @@ get_new_mmu_context(struct mm_struct *mm)
 		flush_tlb_all();
 		/* Fix version if needed.
 		   Note that we avoid version #0 to distingush NO_CONTEXT. */
-		if (!mc) 
+		if (!mc)
 			mmu_context_cache = mc = MMU_CONTEXT_FIRST_VERSION;
 	}
 	mm->context = mc;
@@ -71,7 +74,7 @@ extern __inline__ void init_new_context(struct task_struct *tsk,
  */
 extern __inline__ void destroy_context(struct mm_struct *mm)
 {
-	mm->context = NO_CONTEXT;
+	/* Do nothing */
 }
 
 /* Other MMU related constants. */
@@ -84,11 +87,11 @@ extern __inline__ void destroy_context(struct mm_struct *mm)
 
 #define MMUCR		0xFFFFFFE0	/* MMU Control Register */
 
-#define MMU_TLB_ADDRESS_ARRAY 0xF2000000
-#define MMU_PAGE_ASSOC_BIT 0x80
+#define MMU_TLB_ADDRESS_ARRAY	0xF2000000
+#define MMU_PAGE_ASSOC_BIT	0x80
 
-#define MMU_NTLB_ENTRIES       128	/* for 7708 */
-#define MMU_CONTROL_INIT 0x007	/* SV=0, TF=1, IX=1, AT=1 */
+#define MMU_NTLB_ENTRIES	128	/* for 7708 */
+#define MMU_CONTROL_INIT	0x007	/* SV=0, TF=1, IX=1, AT=1 */
 
 #elif defined(__SH4__)
 #define MMU_PTEH	0xFF000000	/* Page table entry register HIGH */
@@ -98,26 +101,26 @@ extern __inline__ void destroy_context(struct mm_struct *mm)
 
 #define MMUCR		0xFF000010	/* MMU Control Register */
 
-#define MMU_ITLB_ADDRESS_ARRAY 0xF2000000
-#define MMU_UTLB_ADDRESS_ARRAY 0xF6000000
-#define MMU_PAGE_ASSOC_BIT 0x80
+#define MMU_ITLB_ADDRESS_ARRAY	0xF2000000
+#define MMU_UTLB_ADDRESS_ARRAY	0xF6000000
+#define MMU_PAGE_ASSOC_BIT	0x80
 
-#define MMU_NTLB_ENTRIES       64	/* for 7750 */
-#define MMU_CONTROL_INIT 0x205	/* SQMD=1, SV=0, TI=1, AT=1 */
+#define MMU_NTLB_ENTRIES	64	/* for 7750 */
+#define MMU_CONTROL_INIT	0x205	/* SQMD=1, SV=0, TI=1, AT=1 */
 #endif
 
-extern __inline__ void set_asid (unsigned long asid)
+extern __inline__ void set_asid(unsigned long asid)
 {
 	__asm__ __volatile__ ("mov.l	%0,%1"
 			      : /* no output */
 			      : "r" (asid), "m" (__m(MMU_PTEH)));
 }
 
-extern __inline__ unsigned long get_asid (void)
+extern __inline__ unsigned long get_asid(void)
 {
 	unsigned long asid;
 
-	__asm__ __volatile__ ("mov.l %1,%0"
+	__asm__ __volatile__ ("mov.l	%1,%0"
 			      : "=r" (asid)
 			      : "m" (__m(MMU_PTEH)));
 	asid &= MMU_CONTEXT_ASID_MASK;
@@ -143,8 +146,9 @@ extern __inline__ void switch_mm(struct mm_struct *prev,
 	if (prev != next) {
 		unsigned long __pgdir = (unsigned long)next->pgd;
 
-		__asm__ __volatile__("mov.l	%0,%1": \
-				     :"r" (__pgdir), "m" (__m(MMU_TTB)));
+		__asm__ __volatile__("mov.l	%0,%1"
+				     : /* no output */
+				     : "r" (__pgdir), "m" (__m(MMU_TTB)));
 		activate_context(next);
 		clear_bit(cpu, &prev->cpu_vm_mask);
 	}

@@ -63,8 +63,12 @@ asmlinkage off_t sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
 	    !(inode = dentry->d_inode))
 		goto out_putf;
 	retval = -EINVAL;
-	if (origin <= 2)
-		retval = llseek(file, offset, origin);
+	if (origin <= 2) {
+		loff_t res = llseek(file, offset, origin);
+		retval = res;
+		if (res != (loff_t)retval)
+			retval = -EOVERFLOW;	/* LFS: should only happen on 32 bit platforms */
+	}
 out_putf:
 	fput(file);
 bad:

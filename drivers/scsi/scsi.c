@@ -21,7 +21,7 @@
  *  support added by Michael Neuffer <mike@i-connect.net>
  *
  *  Added request_module("scsi_hostadapter") for kerneld:
- *  (Put an "alias scsi_hostadapter your_hostadapter" in /etc/conf.modules)
+ *  (Put an "alias scsi_hostadapter your_hostadapter" in /etc/modules.conf)
  *  Bjorn Ekwall  <bj0rn@blox.se>
  *  (changed to kmod)
  *

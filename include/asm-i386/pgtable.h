@@ -293,7 +293,6 @@ extern inline pte_t mk_pte(struct page *page, pgprot_t pgprot)
 extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 { pte_val(pte) = (pte_val(pte) & _PAGE_CHG_MASK) | pgprot_val(newprot); return pte; }
 
-#define page_pte_prot(page,prot) mk_pte(page, prot)
 #define page_pte(page) page_pte_prot(page, __pgprot(0))
 
 #define pmd_page(pmd) \

@@ -39,9 +39,6 @@ typedef struct { unsigned long pgprot; } pgprot_t;
 #define pgd_val(x)	((x).pgd)
 #define pgprot_val(x)	((x).pgprot)
 
-#define __pte(x)	((pte_t) { (x) } )
-#define __pmd(x)	((pmd_t) { (x) } )
-#define __pgd(x)	((pgd_t) { (x) } )
 #define __pgprot(x)	((pgprot_t) { (x) } )
 
 #endif /* !__ASSEMBLY__ */
@@ -56,13 +53,12 @@ typedef struct { unsigned long pgprot; } pgprot_t;
  *
  * which has the same constant encoded..
  */
-#define __PAGE_OFFSET		(0x80000000)
 
 #define __MEMORY_START		CONFIG_MEMORY_START
 
-#define PAGE_OFFSET		((unsigned long)__PAGE_OFFSET+__MEMORY_START)
-#define __pa(x)			((unsigned long)(x)-__PAGE_OFFSET)
-#define __va(x)			((void *)((unsigned long)(x)+__PAGE_OFFSET))
+#define PAGE_OFFSET		(0x80000000)
+#define __pa(x)			((unsigned long)(x)-PAGE_OFFSET)
+#define __va(x)			((void *)((unsigned long)(x)+PAGE_OFFSET))
 #define MAP_NR(addr)		((__pa(addr)-__MEMORY_START) >> PAGE_SHIFT)
 
 #ifndef __ASSEMBLY__
@@ -74,7 +70,6 @@ extern int console_loglevel;
  */
 #define BUG() do { \
 	printk("kernel BUG at %s:%d!\n", __FILE__, __LINE__); \
-	console_loglevel = 0; \
 	asm volatile("nop"); \
 } while (0)
 

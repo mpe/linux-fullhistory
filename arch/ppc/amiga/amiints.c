@@ -53,10 +53,10 @@
 #include <asm/amigappc.h>
 #endif
 
-extern int cia_request_irq(struct ciabase *base,int irq,
+extern int cia_request_irq(int irq,
                            void (*handler)(int, void *, struct pt_regs *),
                            unsigned long flags, const char *devname, void *dev_id);
-extern void cia_free_irq(struct ciabase *base, unsigned int irq, void *dev_id);
+extern void cia_free_irq(unsigned int irq, void *dev_id);
 extern void cia_init_IRQ(struct ciabase *base);
 extern int cia_get_irq_list(struct ciabase *base, char *buf);
 
@@ -89,7 +89,8 @@ static void ami_badint(int irq, void *dev_id, struct pt_regs *fp)
  * the amiga IRQ handling routines.
  */
 
-void __init amiga_init_IRQ(void)
+__init
+void amiga_init_IRQ(void)
 {
 	int i;
 
@@ -216,13 +217,8 @@ int amiga_request_irq(unsigned int irq,
 		return sys_request_irq(irq - IRQ_AMIGA_AUTO, handler,
 		                       flags, devname, dev_id);
 
-	if (irq >= IRQ_AMIGA_CIAB)
-		return cia_request_irq(&ciab_base, irq - IRQ_AMIGA_CIAB,
-		                       handler, flags, devname, dev_id);
-
 	if (irq >= IRQ_AMIGA_CIAA)
-		return cia_request_irq(&ciaa_base, irq - IRQ_AMIGA_CIAA,
-		                       handler, flags, devname, dev_id);
+		return cia_request_irq(irq, handler, flags, devname, dev_id);
 
 	/*
 	 * IRQ_AMIGA_PORTS & IRQ_AMIGA_EXTER defaults to shared,
@@ -262,13 +258,8 @@ void amiga_free_irq(unsigned int irq, void *dev_id)
 	if (irq >= IRQ_AMIGA_AUTO)
 		sys_free_irq(irq - IRQ_AMIGA_AUTO, dev_id);
 
-	if (irq >= IRQ_AMIGA_CIAB) {
-		cia_free_irq(&ciab_base, irq - IRQ_AMIGA_CIAB, dev_id);
-		return;
-	}
-
 	if (irq >= IRQ_AMIGA_CIAA) {
-		cia_free_irq(&ciaa_base, irq - IRQ_AMIGA_CIAA, dev_id);
+		cia_free_irq(irq, dev_id);
 		return;
 	}
 
@@ -314,17 +305,9 @@ void amiga_enable_irq(unsigned int irq)
 		return;
 	}
 
-	if (irq >= IRQ_AMIGA_CIAB) {
-		cia_set_irq(&ciab_base, (1 << (irq - IRQ_AMIGA_CIAB)));
-		cia_able_irq(&ciab_base, CIA_ICR_SETCLR |
-		             (1 << (irq - IRQ_AMIGA_CIAB)));
-		return;
-	}
-
 	if (irq >= IRQ_AMIGA_CIAA) {
-		cia_set_irq(&ciaa_base, (1 << (irq - IRQ_AMIGA_CIAA)));
-		cia_able_irq(&ciaa_base, CIA_ICR_SETCLR |
-		             (1 << (irq - IRQ_AMIGA_CIAA)));
+		cia_set_irq(irq, 0);
+		cia_able_irq(irq, 1);
 		return;
 	}
 
@@ -349,13 +332,8 @@ void amiga_disable_irq(unsigned int irq)
 		return;
 	}
 
-	if (irq >= IRQ_AMIGA_CIAB) {
-		cia_able_irq(&ciab_base, 1 << (irq - IRQ_AMIGA_CIAB));
-		return;
-	}
-
 	if (irq >= IRQ_AMIGA_CIAA) {
-		cia_able_irq(&ciaa_base, 1 << (irq - IRQ_AMIGA_CIAA));
+		cia_able_irq(irq, 0);
 		return;
 	}
 
@@ -528,10 +506,20 @@ static void ami_int7(int irq, void *dev_id, struct pt_regs *fp)
 	panic ("level 7 interrupt received\n");
 }
 
+#ifdef CONFIG_APUS
+/* The PPC irq handling links all handlers requested on the same vector
+   and executes them in a loop. Having ami_badint at the end of the chain
+   is a bad idea. */
+void (*amiga_default_handler[SYS_IRQS])(int, void *, struct pt_regs *) = {
+	NULL, ami_int1, NULL, NULL /* FB expects to replace ami_int3*/,
+	ami_int4, ami_int5, NULL, ami_int7
+};
+#else
 void (*amiga_default_handler[SYS_IRQS])(int, void *, struct pt_regs *) = {
 	ami_badint, ami_int1, ami_badint, ami_int3,
 	ami_int4, ami_int5, ami_badint, ami_int7
 };
+#endif
 
 int amiga_get_irq_list(char *buf)
 {

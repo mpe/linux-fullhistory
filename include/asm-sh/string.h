@@ -120,24 +120,6 @@ extern void *memchr(const void *__s, int __c, size_t __n);
 #define __HAVE_ARCH_BCOPY
 
 #define __HAVE_ARCH_MEMSCAN
-extern __inline__ void *memscan(void *__addr, int __c, size_t __size)
-{
-	register char *__end;
-	unsigned long __dummy;
-
-	__asm__("mov	#0,%2\n"
-		"1:\n\t"
-		"cmp/eq	%0,%1\n\t"
-		"bt	2f\n\t"
-		"cmp/eq	%5,%2\n\t"
-		"bf/s	1b\n\t"
-		" mov.b	@%0+,%2\n\t"
-		"add	#-1,%0\n\t"
-		"2:"
-		: "=r" (__addr), "=r" (__end), "=&z" (__dummy)
-		: "0" (__addr), "1" ((char *)__addr + __size), "r" (__c));
-
-	return __addr;
-}
+#define memscan memchr
 
 #endif /* __ASM_SH_STRING_H */

@@ -59,7 +59,7 @@ d) Run "make config" or "make menuconfig" or "make xconfig"
 e) Set address on ISA cards then:
    edit /usr/src/linux/drivers/char/ip2/ip2.h if needed 
 	or
-   edit /etc/conf.modules (or /etc/modules.conf) if needed (module).
+   edit /etc/modules.conf if needed (module).
 	or both to match this setting.
 f) Run "make dep"
 g) Run "make modules"

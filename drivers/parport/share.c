@@ -137,7 +137,7 @@ struct parport *parport_enumerate(void)
 		request_module ("parport_lowlevel");
 		if (portlist)
 			/* The user has a parport_lowlevel alias in
-			 * conf.modules. Warn them that it won't work
+			 * modules.conf. Warn them that it won't work
 			 * for long. */
 			printk (KERN_WARNING
 				"parport: 'parport_lowlevel' is deprecated; "

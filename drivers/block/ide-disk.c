@@ -175,7 +175,7 @@ read_next:
 	if (i > 0) {
 		if (msect)
 			goto read_next;
-		ide_set_handler (drive, &read_intr);
+		ide_set_handler (drive, &read_intr, WAIT_CMD, NULL);
 	}
 }
 
@@ -206,7 +206,7 @@ static void write_intr (ide_drive_t *drive)
 				ide_end_request(1, hwgroup);
 			if (i > 0) {
 				idedisk_output_data (drive, rq->buffer, SECTOR_WORDS);
-				ide_set_handler (drive, &write_intr);
+				ide_set_handler (drive, &write_intr, WAIT_CMD, NULL);
 			}
 			goto out;
 		}
@@ -271,7 +271,7 @@ static void multwrite_intr (ide_drive_t *drive)
 		if (stat & DRQ_STAT) {
 			if (rq->nr_sectors) {
 				ide_multwrite(drive, drive->mult_count);
-				ide_set_handler (drive, &multwrite_intr);
+				ide_set_handler (drive, &multwrite_intr, WAIT_CMD, NULL);
 				goto out;
 			}
 		} else {
@@ -385,7 +385,7 @@ static void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned long bl
 		if (drive->using_dma && !(HWIF(drive)->dmaproc(ide_dma_read, drive)))
 			return;
 #endif /* CONFIG_BLK_DEV_IDEDMA */
-		ide_set_handler(drive, &read_intr);
+		ide_set_handler(drive, &read_intr, WAIT_CMD, NULL);
 		OUT_BYTE(drive->mult_count ? WIN_MULTREAD : WIN_READ, IDE_COMMAND_REG);
 		return;
 	}
@@ -404,10 +404,10 @@ static void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned long bl
 			__cli();	/* local CPU only */
 		if (drive->mult_count) {
 			HWGROUP(drive)->wrq = *rq; /* scratchpad */
-			ide_set_handler (drive, &multwrite_intr);
+			ide_set_handler (drive, &multwrite_intr, WAIT_CMD, NULL);
 			ide_multwrite(drive, drive->mult_count);
 		} else {
-			ide_set_handler (drive, &write_intr);
+			ide_set_handler (drive, &write_intr, WAIT_CMD, NULL);
 			idedisk_output_data(drive, rq->buffer, SECTOR_WORDS);
 		}
 		return;
@@ -506,7 +506,6 @@ static void idedisk_pre_reset (ide_drive_t *drive)
 	drive->special.all = 0;
 	drive->special.b.set_geometry = 1;
 	drive->special.b.recalibrate  = 1;
-	drive->timeout = WAIT_CMD;
 	if (OK_TO_RESET_CONTROLLER)
 		drive->mult_count = 0;
 	if (!drive->keep_settings)

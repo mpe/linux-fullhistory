@@ -365,10 +365,10 @@ InstructionAccess:
 /* External interrupt */
 	. = 0x500;
 HardwareInterrupt:
-#ifndef CONFIG_APUS
 	EXCEPTION_PROLOG;
 	addi	r3,r1,STACK_FRAME_OVERHEAD
 	li	r20,MSR_KERNEL
+#ifndef CONFIG_APUS
 	li	r4,0
 	bl	transfer_to_handler
 	.globl do_IRQ_intercept
@@ -376,9 +376,6 @@ do_IRQ_intercept:
 	.long	do_IRQ;
 	.long	ret_from_except
 #else
- 	EXCEPTION_PROLOG;
- 	addi	r3,r1,STACK_FRAME_OVERHEAD
- 	li	r20,MSR_KERNEL
 	bl	apus_interrupt_entry
 #endif /* CONFIG_APUS */
 
@@ -447,7 +444,7 @@ SystemCall:
 	STD_EXCEPTION(0xd00, SingleStep, SingleStepException)
 
 	STD_EXCEPTION(0xe00, Trap_0e, UnknownException)
-	STD_EXCEPTION(0xf00, Trap_0f, UnknownException)
+	STD_EXCEPTION(0xf20, AltiVec, AltiVecUnavailable)
 
 /*
  * Handle TLB miss for instruction on 603/603e.
@@ -807,6 +804,59 @@ KernelFP:
 	.align	4
 
 /*
+ * Take away the altivec regs.
+ *
+ * For now, ignore the vrsave regs and save them all
+ *   -- Cort
+ */
+	.globl giveup_altivec
+giveup_altivec:
+#ifdef CONFIG_ALTIVEC	
+	/* check for altivec */
+	mfspr	r4,PVR
+	srwi	r4,r4,16
+	cmpi	0,r4,12
+	bnelr
+
+	/* save altivec regs */
+	addi	r4,r3,THREAD+THREAD_VRSAVE
+	mfspr	r5,256		/* vrsave */
+	stw	r5,0(r4)
+	
+	/* get regs for the task */
+	addi	r4,r3,THREAD+PT_REGS
+	/* turn off the altivec bit in the tasks regs */
+	lwz	r5,_MSR(r4)
+	lis	r6,MSR_VEC@h
+	andi.	r5,r5,r6
+	stw	r5,_MSR(r4)
+#endif /* CONFIG_ALTIVEC */
+	blr
+	
+	.globl load_up_altivec
+load_up_altivec:
+#ifdef CONFIG_ALTIVEC	
+	/* check for altivec */
+	mfspr	r4,PVR
+	srwi	r4,r4,16
+	cmpi	0,r4,12
+	bnelr
+	
+	/* restore altivec regs */
+	addi	r4,r3,THREAD+THREAD_VRSAVE
+	lwz	r5,0(r4)
+	mtspr	256,r5		/* vrsave */
+	
+	/* get regs for the task */
+	addi	r4,r3,THREAD+PT_REGS
+	/* turn on the altivec bit in the tasks regs */
+	lwz	r5,_MSR(r4)
+	oris	r5,r5,MSR_VEC@h
+	stw	r5,_MSR(r4)
+#endif /* CONFIG_ALTIVEC */
+	blr
+	
+/*
  * giveup_fpu(tsk)
  * Disable FP for the task given as the argument,
  * and save the floating-point registers in its thread_struct.
@@ -957,14 +1007,69 @@ fix_mem_constants:
 
 	isync				/* No speculative loading until now */
 	blr
+	
+apus_interrupt_entry:
+	/* This is horrible, but there's no way around it. Enable the
+	 * data cache so the IRQ hardware register can be accessed
+	 * without cache intervention. Then disable interrupts and get
+	 * the current emulated m68k IPL value. 
+	 */
+	
+	mfmsr	20
+	xori	r20,r20,MSR_DR
+	sync
+	mtmsr	r20
+	sync
 
-       /* On APUS the first 0x4000 bytes of the kernel will be mapped
-        * at a different physical address than the rest. For this
-        * reason, the exception code cannot use relative branches to
-        * access the code below.
-        */
-	. = 0x4000
-#endif
+	lis	r4,APUS_IPL_EMU@h
+
+	li	r20,(IPLEMU_SETRESET|IPLEMU_DISABLEINT)
+	stb	r20,APUS_IPL_EMU@l(r4)
+	eieio
+
+	lbz	r3,APUS_IPL_EMU@l(r4)
+
+	li	r2,IPLEMU_IPLMASK
+	rlwinm. r20,r3,32-3,29,31
+	bne	2f
+	mr	r20,r2		/* lvl7! Need to reset state machine. */
+	b	3f
+2:	cmp	0,r20,r2
+	beq	1f
+3:	eieio
+	stb     r2,APUS_IPL_EMU@l(r4)
+	ori	r20,r20,IPLEMU_SETRESET
+	eieio
+	stb     r20,APUS_IPL_EMU@l(r4)
+1:	eieio
+	li	r20,IPLEMU_DISABLEINT
+	stb	r20,APUS_IPL_EMU@l(r4)
+
+	/* At this point we could do some magic to avoid the overhead
+	 * of calling the C interrupt handler in case of a spurious
+	 * interrupt. Could not get a simple hack to work though.
+	 */
+	
+	mfmsr	r20
+	xori	r20,r20,MSR_DR
+	sync
+	mtmsr	r20
+	sync
+
+	stw	r3,(_CCR+4)(r21);
+
+	addi	r3,r1,STACK_FRAME_OVERHEAD;
+	li	r20,MSR_KERNEL;
+	bl	transfer_to_handler;
+	.long	do_IRQ;
+	.long	ret_from_except
+
+/***********************************************************************
+ *  Please note that on APUS the exception handlers are located at the
+ *  physical address 0xfff0000. For this reason, the exception handlers
+ *  cannot use relative branches to access the code below.
+ ***********************************************************************/
+#endif /* CONFIG_APUS */
 
 #ifdef CONFIG_SMP
 	.globl	__secondary_hold
@@ -1165,6 +1270,19 @@ start_here:
 	bl	identify_machine
 	bl	MMU_init
 
+#ifdef CONFIG_APUS
+	/* Copy exception code to exception vector base on APUS. */
+	lis	r4,KERNELBASE@h
+#ifdef CONFIG_APUS_FAST_EXCEPT
+	lis	r3,0xfff0		/* Copy to 0xfff00000 */
+#else
+	lis	r3,0			/* Copy to 0x00000000 */
+#endif
+	li	r5,0x4000		/* # bytes of memory to copy */
+	li	r6,0
+	bl	copy_and_flush		/* copy the first 0x4000 bytes */
+#endif  /* CONFIG_APUS */
+
 /*
  * Go back to running unmapped so we can load up new values
  * for SDR1 (hash table pointer) and the segment registers
@@ -1283,3 +1401,4 @@ clear_bats:
 	mtspr	IBAT3L,r20
 	
 	blr
+

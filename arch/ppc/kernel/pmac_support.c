@@ -60,6 +60,7 @@ unsigned char nvram_read_byte(int addr)
 	struct adb_request req;
 
 	switch (nvram_naddrs) {
+#ifdef CONFIG_ADB_PMU
 	case -1:
 		if (pmu_request(&req, NULL, 3, PMU_READ_NVRAM,
 				(addr >> 8) & 0xff, addr & 0xff))
@@ -67,6 +68,7 @@ unsigned char nvram_read_byte(int addr)
 		while (!req.complete)
 			pmu_poll();
 		return req.reply[1];
+#endif
 	case 1:
 		return nvram_data[(addr & (NVRAM_SIZE - 1)) * nvram_mult];
 	case 2:
@@ -82,6 +84,7 @@ void nvram_write_byte(unsigned char val, int addr)
 	struct adb_request req;
 
 	switch (nvram_naddrs) {
+#ifdef CONFIG_ADB_PMU
 	case -1:
 		if (pmu_request(&req, NULL, 4, PMU_WRITE_NVRAM,
 				(addr >> 8) & 0xff, addr & 0xff, val))
@@ -89,6 +92,7 @@ void nvram_write_byte(unsigned char val, int addr)
 		while (!req.complete)
 			pmu_poll();
 		break;
+#endif
 	case 1:
 		nvram_data[(addr & (NVRAM_SIZE - 1)) * nvram_mult] = val;
 		break;

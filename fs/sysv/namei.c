@@ -324,7 +324,7 @@ static int empty_dir(struct inode * inode)
 	block = 0;
 	bh = NULL;
 	pos = offset = 2*SYSV_DIRSIZE;
-	if (inode->i_size % SYSV_DIRSIZE)
+	if ((unsigned long)(inode->i_size) % SYSV_DIRSIZE)
 		goto bad_dir;
 	if (inode->i_size < pos)
 		goto bad_dir;

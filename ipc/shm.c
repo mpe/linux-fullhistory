@@ -84,26 +84,26 @@ static pte_t **shm_alloc(unsigned long pages)
 	unsigned short last = pages % PTRS_PER_PTE;
 	pte_t **ret, **ptr;
 
-	ret = kmalloc ((dir+1) * sizeof(unsigned long), GFP_KERNEL);
-	if (ret == NULL)
-		return NULL;
+	ret = kmalloc ((dir+1) * sizeof(pte_t *), GFP_KERNEL);
+	if (!ret)
+		goto out;
 
 	for (ptr = ret; ptr < ret+dir ; ptr++)
 	{
 		*ptr = (pte_t *)__get_free_page (GFP_KERNEL);
-		if (*ptr == NULL)
+		if (!*ptr)
 			goto free;
 		memset (*ptr, 0, PAGE_SIZE); 
 	}
 
 	/* The last one is probably not of PAGE_SIZE: we use kmalloc */
 	if (last) {
-		*ptr = kmalloc (last*sizeof(pte_t *), GFP_KERNEL);
-		if (*ptr == NULL)
+		*ptr = kmalloc (last*sizeof(pte_t), GFP_KERNEL);
+		if (!*ptr)
 			goto free;
-		memset (*ptr, 0, last*sizeof(pte_t *));
+		memset (*ptr, 0, last*sizeof(pte_t));
 	}
-	
+out:	
 	return ret;
 
 free:
@@ -897,10 +897,10 @@ failed:
 		unlock_kernel();
 		return 0;
 	}
-	if (page_count(page_map))
+	if (page_count(page_map) != 1)
 		goto check_table;
 	if (!(page_map = prepare_highmem_swapout(page_map)))
-		goto check_table;
+		goto failed;
 	SHM_ENTRY (shp, idx) = swp_entry_to_pte(swap_entry);
 	swap_successes++;
 	shm_swp++;

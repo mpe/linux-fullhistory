@@ -1,4 +1,4 @@
-/* $Id: checksum.S,v 1.1 1999/09/18 16:56:53 gniibe Exp $
+/* $Id: checksum.S,v 1.2 1999/10/29 13:06:55 gniibe Exp $
  *
  * INET		An implementation of the TCP/IP protocol suite for the LINUX
  *		operating system.  INET is implemented using the  BSD Socket
@@ -192,7 +192,7 @@ DST(	mov.w	r0,@r5	)
 	mov	#-5,r0
 	shld	r0,r6
 	tst	r6,r6
-	bf/s	2f
+	bt/s	2f
 	 clrt
 SRC(1:	mov.l	@r4+,r0	)
 SRC(	mov.l	@r4+,r1	)

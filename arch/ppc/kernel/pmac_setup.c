@@ -96,6 +96,7 @@ unsigned char drive_info;
 
 int ppc_override_l2cr = 0;
 int ppc_override_l2cr_value;
+int has_l2cache = 0;
 
 extern char saved_command_line[];
 
@@ -147,6 +148,7 @@ pmac_get_cpuinfo(char *buffer)
 		unsigned int *dc = (unsigned int *)
 			get_property(np, "d-cache-size", NULL);
 		len += sprintf(buffer+len, "L2 cache\t:");
+		has_l2cache = 1;
 		if (get_property(np, "cache-unified", NULL) != 0 && dc) {
 			len += sprintf(buffer+len, " %dK unified", *dc / 1024);
 		} else {
@@ -359,7 +361,8 @@ static void __init ohare_init(void)
 				sysctrl_regs[4] |= 0x04000020;
 			else
 				sysctrl_regs[4] |= 0x04000000;
-			printk(KERN_INFO "Level 2 cache enabled\n");
+			if(has_l2cache)
+				printk(KERN_INFO "Level 2 cache enabled\n");
 		}
 	}
 }

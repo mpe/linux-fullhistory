@@ -30,7 +30,7 @@ extern int console_loglevel;
 extern struct vfsmount *vfsmntlist;
 
 /* Machine specific power off function */
-extern void (*sysrq_power_off)(void) = NULL;
+void (*sysrq_power_off)(void) = NULL;
 
 /* Send a signal to all user processes */
 

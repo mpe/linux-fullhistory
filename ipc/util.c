@@ -101,7 +101,7 @@ asmlinkage long sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 	return -ENOSYS;
 }
 
-asmlinkage long sys_shmget (key_t key, int size, int flag)
+asmlinkage long sys_shmget (key_t key, size_t size, int shmflag)
 {
 	return -ENOSYS;
 }

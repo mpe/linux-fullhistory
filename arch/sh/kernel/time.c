@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.3 1999/10/17 10:30:15 gniibe Exp $
+/* $Id: time.c,v 1.7 1999/11/06 02:00:37 gniibe Exp $
  *
  *  linux/arch/sh/kernel/time.c
  *
@@ -43,7 +43,10 @@
 #define TMU0_TCNT	0xfffffe98	/* Long access */
 #define TMU0_TCR	0xfffffe9c	/* Word access */
 
-#define INTERVAL	37500 /* (1000000*CLOCK_MHZ/HZ/2) ??? */
+#define INTERVAL	37500 /* (1000000*CLOCK_MHZ/HZ/2) ??? for CqREEK */
+#if 0 /* Takeshi's board */
+#define INTERVAL	83333
+#endif
 
 /* SH-3 RTC */
 #define R64CNT  	0xfffffec0
@@ -195,6 +198,13 @@ static inline void do_timer_interrupt(int irq, void *dev_id, struct pt_regs *reg
 {
 	do_timer(regs);
 
+#ifdef TAKESHI
+	{
+		unsigned long what_is_this=0xa4000124;
+
+		ctrl_outb(ctrl_inb(what_is_this)+1,what_is_this);
+	}
+#endif
 #if 0
 	if (!user_mode(regs))
 		sh_do_profile(regs->pc);

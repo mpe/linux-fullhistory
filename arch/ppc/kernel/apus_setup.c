@@ -32,7 +32,10 @@
 #include <linux/ide.h>
 #define ide_init_hwif_ports m68k_ide_init_hwif_ports
 #define ide_default_irq m68k_ide_default_irq
+#undef ide_request_irq
 #define ide_request_irq m68k_ide_request_irq
+#undef ide_free_irq
+#define ide_free_irq m68k_ide_free_irq
 #define ide_default_io_base m68k_ide_default_io_base
 #define ide_check_region m68k_ide_check_region
 #define ide_request_region m68k_ide_request_region
@@ -40,7 +43,6 @@
 #define ide_fix_driveid m68k_ide_fix_driveid
 #define ide_init_default_hwifs m68k_ide_init_default_hwifs
 #define select_t m68k_select_t
-#define ide_free_irq m68k_ide_free_irq
 //#include <asm/hdreg.h>
 #include <asm-m68k/ide.h>
 #undef ide_free_irq
@@ -59,6 +61,7 @@
 #include <asm/bootinfo.h>
 #include <asm/setup.h>
 #include <asm/amigahw.h>
+#include <asm/amigaints.h>
 #include <asm/amigappc.h>
 #include <asm/pgtable.h>
 #include <asm/io.h>
@@ -70,6 +73,8 @@
 
 unsigned long m68k_machtype __apusdata;
 char debug_device[6] __apusdata = "";
+
+extern void amiga_init_IRQ(void);
 
 void (*mach_sched_init) (void (*handler)(int, void *, struct pt_regs *)) __initdata;
 /* machine dependent keyboard functions */
@@ -162,57 +167,6 @@ int apus_set_rtc_time(unsigned long nowtime)
 #endif
 }
 
-__apus
-int  apus_request_irq(unsigned int irq, 
-		      void (*handler)(int, void *, struct pt_regs *),
-		      unsigned long flags, const char *devname, 
-		      void *dev_id)
-{
-#ifdef CONFIG_APUS
-	extern int  amiga_request_irq(unsigned int irq, 
-				      void (*handler)(int, void *, 
-						      struct pt_regs *),
-				      unsigned long flags, 
-				      const char *devname, 
-				      void *dev_id);
-
-	return amiga_request_irq (irq, handler, flags, devname, dev_id);
-#else
-	return 0;
-#endif
-}
-
-__apus
-void apus_free_irq(unsigned int irq, void *dev_id)
-{
-#ifdef CONFIG_APUS
-	extern void amiga_free_irq(unsigned int irq, void *dev_id);
-
-	amiga_free_irq (irq, dev_id);
-#endif
-}
-
-__apus
-void apus_process_int(unsigned long vec, void *fp)
-{
-#ifdef CONFIG_APUS
-	extern void process_int(unsigned long vec, struct pt_regs *fp);
-
-	process_int (vec, (struct pt_regs*)fp);
-#endif
-}
-
-__apus
-int apus_get_irq_list(char *buf)
-{
-#ifdef CONFIG_APUS
-	extern int m68k_get_irq_list (char*);
-	
-	return m68k_get_irq_list (buf);
-#else
-	return 0;
-#endif
-}
 
 
 /* Here some functions we don't support, but which the other ports reference */
@@ -297,6 +251,7 @@ void __init apus_setup_arch(void)
 
 	config_amiga();
 
+#if 0 /* Enable for logging - also include logging.o in Makefile rule */
 	{
 #define LOG_SIZE 4096
 		void* base;
@@ -309,6 +264,7 @@ void __init apus_setup_arch(void)
 		base = amiga_chip_alloc(LOG_SIZE+sizeof(klog_data_t));
 		LOG_INIT(base, base+sizeof(klog_data_t), LOG_SIZE);
 	}
+#endif
 #endif
 }
 
@@ -760,66 +716,121 @@ void apus_ide_init_hwif_ports (hw_regs_t *hw, ide_ioreg_t data_port,
         m68k_ide_init_hwif_ports(hw, data_port, ctrl_port, irq);
 }
 #endif
-/****************************************************** from irq.c */
-#define VEC_SPUR    (24)
+/****************************************************** IRQ stuff */
 
-void
-apus_do_IRQ(struct pt_regs *regs,
-	    int            cpu,
-            int            isfake)
+__apus
+int apus_get_irq_list(char *buf)
 {
-	int old_level, new_level;
-
-	new_level = (~(regs->mq) >> 3) & IPLEMU_IPLMASK;
-		
-	if (0 != new_level && 7 != new_level) {
-		old_level = ~(regs->mq) & IPLEMU_IPLMASK;
-
-		apus_process_int (VEC_SPUR+new_level, regs);
-		
-		APUS_WRITE(APUS_IPL_EMU, IPLEMU_SETRESET | IPLEMU_DISABLEINT);
-		APUS_WRITE(APUS_IPL_EMU, IPLEMU_IPLMASK);
-		APUS_WRITE(APUS_IPL_EMU, (IPLEMU_SETRESET
-					  | (~(old_level) & IPLEMU_IPLMASK)));
-		APUS_WRITE(APUS_IPL_EMU, IPLEMU_DISABLEINT);
-	}
+#ifdef CONFIG_APUS
+	extern int amiga_get_irq_list(char *buf);
+	
+	return amiga_get_irq_list (buf);
+#else
+	return 0;
+#endif
 }
+
+/* IPL must be between 0 and 7 */
+__apus
+static inline void apus_set_IPL(int ipl)
+{
+	APUS_WRITE(APUS_IPL_EMU, IPLEMU_SETRESET | IPLEMU_DISABLEINT);
+	APUS_WRITE(APUS_IPL_EMU, IPLEMU_IPLMASK);
+	APUS_WRITE(APUS_IPL_EMU, IPLEMU_SETRESET | ((~ipl) & IPLEMU_IPLMASK));
+	APUS_WRITE(APUS_IPL_EMU, IPLEMU_DISABLEINT);
+}
+
+__apus
+static inline unsigned long apus_get_IPL(void)
+{
+	unsigned short __f;
+	APUS_READ(APUS_IPL_EMU, __f);
+	return ((~__f) & IPLEMU_IPLMASK);
+}
+
+__apus
+static inline unsigned long apus_get_prev_IPL(void)
+{
+	unsigned short __f;
+	APUS_READ(APUS_IPL_EMU, __f);
+	return ((~__f >> 3) & IPLEMU_IPLMASK);
+}
+
 
 __apus
 static void apus_save_flags(unsigned long* flags)
 {
-	unsigned short __f;
-	APUS_READ(APUS_IPL_EMU, __f);
-	return ((~__f) & IPLEMU_IPLMASK) << 8;
+	*flags = apus_get_IPL();
 }
 
 __apus
 static void apus_restore_flags(unsigned long flags)
 {
-	APUS_WRITE(APUS_IPL_EMU, IPLEMU_SETRESET | IPLEMU_DISABLEINT);
-	APUS_WRITE(APUS_IPL_EMU, IPLEMU_IPLMASK);
-	APUS_WRITE(APUS_IPL_EMU, IPLEMU_SETRESET
-                   | (~(flags >> 8) & IPLEMU_IPLMASK));
-	APUS_WRITE(APUS_IPL_EMU, IPLEMU_DISABLEINT);
+	apus_set_IPL(flags);
 }
 
 __apus
 static void apus_sti(void)
 {
-	APUS_WRITE(APUS_IPL_EMU, IPLEMU_SETRESET | IPLEMU_DISABLEINT);
-	APUS_WRITE(APUS_IPL_EMU, IPLEMU_IPLMASK);
-	APUS_WRITE(APUS_IPL_EMU, IPLEMU_SETRESET | IPLEMU_IPLMASK);
-	APUS_WRITE(APUS_IPL_EMU, IPLEMU_DISABLEINT);
+	apus_set_IPL(0);
 }
 
 __apus
 static void apus_cli(void)
 {
-	APUS_WRITE(APUS_IPL_EMU, IPLEMU_SETRESET | IPLEMU_DISABLEINT);
-	APUS_WRITE(APUS_IPL_EMU, IPLEMU_IPLMASK);
-	APUS_WRITE(APUS_IPL_EMU, IPLEMU_SETRESET);
-	APUS_WRITE(APUS_IPL_EMU, IPLEMU_DISABLEINT);
+	apus_set_IPL(7);
 }
+
+
+#ifdef CONFIG_APUS
+void free_irq(unsigned int irq, void *dev_id)
+{
+	extern void amiga_free_irq(unsigned int irq, void *dev_id);
+
+	amiga_free_irq (irq, dev_id);
+}
+
+int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
+	unsigned long irqflags, const char * devname, void *dev_id)
+{
+	extern int  amiga_request_irq(unsigned int irq, 
+				      void (*handler)(int, void *, 
+						      struct pt_regs *),
+				      unsigned long flags, 
+				      const char *devname, 
+				      void *dev_id);
+
+	return amiga_request_irq (irq, handler, irqflags, devname, dev_id);
+}
+#endif
+
+__apus
+int apus_get_irq(struct pt_regs* regs)
+{
+#ifdef CONFIG_APUS
+	int level = apus_get_IPL();
+	unsigned short ints = custom.intreqr & custom.intenar;
+
+	if (0 == level)
+		return -1;
+	if (7 == level)
+		return -2;
+
+	return level;
+#else
+	return 0;
+#endif
+}
+
+
+__apus
+void apus_post_irq(int level)
+{
+	/* Restore IPL to the previous value */
+	apus_set_IPL(apus_get_IPL());
+}
+
+
 
 /****************************************************** keyboard */
 __apus
@@ -859,36 +870,54 @@ static void apus_kbd_init_hw(void)
 #ifdef CONFIG_APUS
 	extern int amiga_keyb_init(void);
 
-printk("**** " __FUNCTION__ "\n");
 	amiga_keyb_init();
 #endif
 }
 
 
 /****************************************************** init */
-extern void amiga_disable_irq(unsigned int irq);
-extern void amiga_enable_irq(unsigned int irq);
-extern void m68k_init_IRQ (void);
 
-struct hw_interrupt_type amiga_irq_ctl = {
-	" Amiga    ",
-        NULL,
-        NULL,
-        NULL,
-        amiga_enable_irq,
-        amiga_disable_irq,
-        NULL,
-        0
+/* The number of spurious interrupts */
+volatile unsigned int num_spurious;
+
+#define NUM_IRQ_NODES 100
+static irq_node_t nodes[NUM_IRQ_NODES];
+
+extern void (*amiga_default_handler[AUTO_IRQS])(int, void *, struct pt_regs *);
+
+static const char *default_names[SYS_IRQS] = {
+	"spurious int", "int1 handler", "int2 handler", "int3 handler",
+	"int4 handler", "int5 handler", "int6 handler", "int7 handler"
 };
+
+irq_node_t *new_irq_node(void)
+{
+	irq_node_t *node;
+	short i;
+
+	for (node = nodes, i = NUM_IRQ_NODES-1; i >= 0; node++, i--)
+		if (!node->handler)
+			return node;
+
+	printk ("new_irq_node: out of nodes\n");
+	return NULL;
+}
 
 __init
 void apus_init_IRQ(void)
 {
 	int i;
 
-	for (i = 0; i < NR_IRQS; i++)
-		irq_desc[i].ctl = &amiga_irq_ctl;
-	m68k_init_IRQ ();
+	for (i = 0; i < NUM_IRQ_NODES; i++)
+		nodes[i].handler = NULL;
+
+	for (i = 0; i < AUTO_IRQS; i++) {
+		if (amiga_default_handler[i] != NULL)
+			sys_request_irq(i, amiga_default_handler[i],
+					0, default_names[i], NULL);
+	}
+
+	amiga_init_IRQ();
 
 	int_control.int_sti = apus_sti;
 	int_control.int_cli = apus_cli;
@@ -924,7 +953,8 @@ void apus_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.get_cpuinfo    = apus_get_cpuinfo;
 	ppc_md.irq_cannonicalize = NULL;
 	ppc_md.init_IRQ       = apus_init_IRQ;
-	ppc_md.do_IRQ         = apus_do_IRQ;
+	ppc_md.get_irq        = apus_get_irq;
+	ppc_md.post_irq       = apus_post_irq;
 #ifdef CONFIG_HEARTBEAT
 	ppc_md.heartbeat      = apus_heartbeat;
 	ppc_md.heartbeat_count = 1;
@@ -968,4 +998,10 @@ void apus_init(unsigned long r3, unsigned long r4, unsigned long r5,
 
         ppc_ide_md.io_base = _IO_BASE;
 #endif		
+}
+
+
+/*************************************************** coexistence */
+void __init adbdev_init(void)
+{
 }

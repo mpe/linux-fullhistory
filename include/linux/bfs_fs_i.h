@@ -10,9 +10,9 @@
  * BFS file system in-core inode info
  */
 struct bfs_inode_info {
-	__u32	i_dsk_ino;	/* inode number from the disk, can be 0 */
-	__u32	i_sblock;
-	__u32	i_eblock;
+	unsigned long i_dsk_ino; /* inode number from the disk, can be 0 */
+	unsigned long i_sblock;
+	unsigned long i_eblock;
 };
 
 #endif	/* _LINUX_BFS_FS_I */

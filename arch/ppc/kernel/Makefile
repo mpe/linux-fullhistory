@@ -60,15 +60,12 @@ ifdef CONFIG_MBX
 O_OBJS += i8259.o
 endif
 else
-ifeq ($(CONFIG_APUS),y)
-O_OBJS += apus_setup.o prom.o open_pic.o
-else
-ifneq ($(CONFIG_8xx),y)
 O_OBJS += chrp_setup.o chrp_pci.o chrp_time.o \
 	  pmac_time.o pmac_pci.o pmac_setup.o \
 	  prom.o open_pic.o feature.o \
 	  i8259.o pmac_pic.o indirect_pci.o \
 	  gemini_pci.o gemini_prom.o gemini_setup.o
+
 ifeq ($(CONFIG_NVRAM),y)
 O_OBJS += pmac_support.o
 endif
@@ -83,7 +80,8 @@ endif
 ifeq ($(CONFIG_PMAC), y)
 endif
 
-endif
+ifdef CONFIG_APUS
+O_OBJS += apus_setup.o
 endif
 endif
 

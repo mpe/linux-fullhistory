@@ -490,9 +490,9 @@ S:	Maintained
 
 JOYSTICK DRIVER
 P:	Vojtech Pavlik
-M:	vojtech@ucw.cz
+M:	vojtech@suse.cz
 L:	linux-joystick@atrey.karlin.mff.cuni.cz
-W:	http://atrey.karlin.mff.cuni.cz/~vojtech/joystick/
+W:	http://www.suse.cz/development/joystick/
 S:	Maintained
 
 KERNEL AUTOMOUNTER (AUTOFS)

@@ -72,6 +72,24 @@ extern __inline__ unsigned long inl(unsigned long addr)
        return readl(addr);
 }
 
+extern __inline__ void insb(unsigned long addr, void *buffer, int count)
+{
+	unsigned char *buf=buffer;
+	while(count--) *buf++=inb(addr);
+}
+
+extern __inline__ void insw(unsigned long addr, void *buffer, int count)
+{
+	unsigned short *buf=buffer;
+	while(count--) *buf++=inw(addr);
+}
+
+extern __inline__ void insl(unsigned long addr, void *buffer, int count)
+{
+	unsigned long *buf=buffer;
+	while(count--) *buf++=inl(addr);
+}
+
 extern __inline__ void outb(unsigned char b, unsigned long addr)
 {
        return writeb(b,addr);
@@ -85,6 +103,24 @@ extern __inline__ void outw(unsigned short b, unsigned long addr)
 extern __inline__ void outl(unsigned int b, unsigned long addr)
 {
        return writel(b,addr);
+}
+
+extern __inline__ void outsb(unsigned long addr, const void *buffer, int count)
+{
+	const unsigned char *buf=buffer;
+	while(count--) outb(*buf++, addr);
+}
+
+extern __inline__ void outsw(unsigned long addr, const void *buffer, int count)
+{
+	const unsigned short *buf=buffer;
+	while(count--) outw(*buf++, addr);
+}
+
+extern __inline__ void outsl(unsigned long addr, const void *buffer, int count)
+{
+	const unsigned long *buf=buffer;
+	while(count--) outl(*buf++, addr);
 }
 
 extern __inline__ unsigned long ctrl_inb(unsigned long addr)

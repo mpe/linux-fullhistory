@@ -105,7 +105,7 @@ static int usb_hub_configure(struct usb_hub *hub)
 	int i;
 
 	/* Get the length first */
-	if (usb_get_hub_descriptor(dev, buffer, 4))
+	if (usb_get_hub_descriptor(dev, buffer, 4) < 0)
 		return -1;
 
 	header = (struct usb_descriptor_header *)buffer;
@@ -113,7 +113,7 @@ static int usb_hub_configure(struct usb_hub *hub)
 	if (!bitmap)
 		return -1;
 
-	if (usb_get_hub_descriptor(dev, bitmap, header->bLength))
+	if (usb_get_hub_descriptor(dev, bitmap, header->bLength) < 0)
 		return -1;
 
 	descriptor = (struct usb_hub_descriptor *)bitmap;
@@ -166,7 +166,7 @@ static int usb_hub_configure(struct usb_hub *hub)
 
 	kfree(bitmap);
 
-	if (usb_get_hub_status(dev, buffer))
+	if (usb_get_hub_status(dev, buffer) < 0)
 		return -1;
 
 	hubsts = (struct usb_hub_status *)buffer;
@@ -305,7 +305,7 @@ static void usb_hub_port_connect_change(struct usb_device *hub, int port)
 	wait_ms(50);	/* FIXME: This is from the *BSD stack, thanks! :) */
 
 	/* Check status */
-	if (usb_get_port_status(hub, port + 1, &portsts)) {
+	if (usb_get_port_status(hub, port + 1, &portsts) < 0) {
 		printk(KERN_ERR "get_port_status failed\n");
 		return;
 	}
@@ -377,7 +377,7 @@ static void usb_hub_events(void)
 			struct usb_port_status portsts;
 			unsigned short portstatus, portchange;
 
-			if (usb_get_port_status(dev, i + 1, &portsts)) {
+			if (usb_get_port_status(dev, i + 1, &portsts) < 0) {
 				printk(KERN_ERR "get_port_status failed\n");
 				continue;
 			}
@@ -474,12 +474,8 @@ int usb_hub_init(void)
 {
 	int pid;
 
-	if (usb_register(&hub_driver) < 0) {
-		printk(KERN_ERR "USB hub driver cannot register: "
-			"minor number %d already in use\n",
-			hub_driver.minor);
+	if (usb_register(&hub_driver) < 0)
 		return -1;
-	}
 
 	pid = kernel_thread(usb_hub_thread, NULL,
 		CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
@@ -492,7 +488,7 @@ int usb_hub_init(void)
 	/* Fall through if kernel_thread failed */
 	usb_deregister(&hub_driver);
 
-	return 1;
+	return -1;
 }
 
 void usb_hub_cleanup(void)

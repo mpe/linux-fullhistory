@@ -129,6 +129,42 @@ MachineCheckException(struct pt_regs *regs)
 }
 
 void
+AltiVecUnavailable(struct pt_regs *regs)
+{
+	/*
+	 * This should be changed so we don't take a trap if coming
+	 * back when last_task_used_altivec == current.  We should also
+	 * allow the kernel to use the altivec regs on UP to store tasks
+	 * regs during switch
+	 *  -- Cort
+	 */
+	if ( regs->msr & MSR_VEC )
+	{
+		show_regs(regs);
+		panic("AltiVec trap with Altivec enabled!\n");
+	}
+		
+	if ( !user_mode(regs) )
+	{
+		show_regs(regs);
+		panic("Kernel Used Altivec with MSR_VEC off!\n");
+	}
+#ifdef __SMP__
+	printk("User Mode altivec trap should not happen in SMP!\n");
+#else
+	if ( last_task_used_altivec != current )
+	{
+		if ( last_task_used_altivec )
+			giveup_altivec(current);
+		load_up_altivec(current);
+		last_task_used_altivec = current;
+	}
+	/* enable altivec for the task on return */
+	regs->msr |= MSR_VEC;
+#endif		
+}
+
+void
 UnknownException(struct pt_regs *regs)
 {
 	printk("Bad trap at PC: %lx, SR: %lx, vector=%lx\n",

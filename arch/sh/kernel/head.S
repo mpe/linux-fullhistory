@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.6 1999/10/05 12:34:16 gniibe Exp $
+/* $Id: head.S,v 1.7 1999/10/27 09:41:42 gniibe Exp gniibe $
  *
  *  arch/sh/kernel/head.S
  *
@@ -18,9 +18,8 @@ ENTRY(empty_zero_page)
 	.long	0		/* RAMDISK_FLAGS */
 	.long	0x0200		/* ORIG_ROOT_DEV */
 	.long	1		/* LOADER_TYPE */
-	.long	0x88400000	/* INITRD_START */
-	.long	0x00400000	/* INITRD_SIZE */
-	.long	0x89000000	/* MEMORY_END */
+	.long	0x00360000	/* INITRD_START */
+	.long	0x000a0000	/* INITRD_SIZE */
 	.long	0
 
 	.text	

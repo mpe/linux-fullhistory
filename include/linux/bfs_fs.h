@@ -32,7 +32,7 @@ struct bfs_inode {
 	__u32 i_atime;
 	__u32 i_mtime;
 	__u32 i_ctime;
-	__u8  i_padding[16];
+	__u32 i_padding[4];
 };
 
 #define BFS_NAMELEN		14	
@@ -55,7 +55,7 @@ struct bfs_super_block {
 	__s32 s_bto;
 	char  s_fsname[6];
 	char  s_volume[6];
-	__u8  s_padding[472];
+	__u32 s_padding[118];
 };
 
 #define BFS_NZFILESIZE(ip) \

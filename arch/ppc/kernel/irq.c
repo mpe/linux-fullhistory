@@ -67,14 +67,6 @@ void disable_irq(unsigned int irq_nr);
 
 volatile unsigned char *chrp_int_ack_special;
 
-#ifdef CONFIG_APUS
-/* Rename a few functions. Requires the CONFIG_APUS protection. */
-#define request_irq nop_ppc_request_irq
-#define free_irq nop_ppc_free_irq
-#define get_irq_list nop_get_irq_list
-#define VEC_SPUR    (24)
-#endif
-
 #define MAXCOUNT 10000000
 
 #define NR_MASK_WORDS	((NR_IRQS + 31) / 32)
@@ -94,8 +86,9 @@ atomic_t ppc_n_lost_interrupts;
  * this needs to be removed.
  * -- Cort
  */
-static char cache_bitmask = 0;
-static struct irqaction malloc_cache[8];
+#define IRQ_KMALLOC_ENTRIES 8
+static int cache_bitmask = 0;
+static struct irqaction malloc_cache[IRQ_KMALLOC_ENTRIES];
 extern int mem_init_done;
 
 void *irq_kmalloc(size_t size, int pri)
@@ -103,7 +96,7 @@ void *irq_kmalloc(size_t size, int pri)
 	unsigned int i;
 	if ( mem_init_done )
 		return kmalloc(size,pri);
-	for ( i = 0; i <= 3 ; i++ )
+	for ( i = 0; i < IRQ_KMALLOC_ENTRIES ; i++ )
 		if ( ! ( cache_bitmask & (1<<i) ) )
 		{
 			cache_bitmask |= (1<<i);
@@ -115,7 +108,7 @@ void *irq_kmalloc(size_t size, int pri)
 void irq_kfree(void *ptr)
 {
 	unsigned int i;
-	for ( i = 0 ; i <= 3 ; i++ )
+	for ( i = 0 ; i < IRQ_KMALLOC_ENTRIES ; i++ )
 		if ( ptr == &malloc_cache[i] )
 		{
 			cache_bitmask &= ~(1<<i);
@@ -124,15 +117,17 @@ void irq_kfree(void *ptr)
 	kfree(ptr);
 }
 
-#ifndef CONFIG_8xx
-int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
-#else
+#ifdef CONFIG_8xx
 /* Name change so we can catch standard drivers that potentially mess up
  * the internal interrupt controller on 8xx and 82xx.  Just bear with me,
  * I don't like this either and I am searching a better solution.  For
  * now, this is what I need. -- Dan
  */
 int request_8xxirq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
+#elif defined(CONFIG_APUS)
+int sys_request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
+#else
+int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
 #endif
 	unsigned long irqflags, const char * devname, void *dev_id)
 {
@@ -191,6 +186,12 @@ int request_8xxirq(unsigned int irq, void (*handler)(int, void *, struct pt_regs
 	return 0;
 }
 
+#ifdef CONFIG_APUS
+void sys_free_irq(unsigned int irq, void *dev_id)
+{
+	sys_request_irq(irq, NULL, 0, NULL, dev_id);
+}
+#else
 void free_irq(unsigned int irq, void *dev_id)
 {
 #ifndef CONFIG_8xx
@@ -199,6 +200,7 @@ void free_irq(unsigned int irq, void *dev_id)
 	request_8xxirq(irq, NULL, 0, NULL, dev_id);
 #endif
 }
+#endif
 
 /* XXX should implement irq disable depth like on intel */
 void disable_irq_nosync(unsigned int irq_nr)
@@ -219,6 +221,9 @@ void enable_irq(unsigned int irq_nr)
 
 int get_irq_list(char *buf)
 {
+#ifdef CONFIG_APUS
+	return apus_get_irq_list (buf);
+#else
 	int i, len = 0, j;
 	struct irqaction * action;
 
@@ -255,6 +260,7 @@ int get_irq_list(char *buf)
 #endif		
 	len += sprintf(buf+len, "BAD: %10u\n", ppc_spurious_interrupts);
 	return len;
+#endif /* CONFIG_APUS */
 }
 
 /*
@@ -266,7 +272,7 @@ void ppc_irq_dispatch_handler(struct pt_regs *regs, int irq)
 	int status;
 	struct irqaction *action;
 	int cpu = smp_processor_id();
-	
+
 	mask_and_ack_irq(irq);
 	status = 0;
 	action = irq_desc[irq].action;

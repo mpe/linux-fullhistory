@@ -11,9 +11,22 @@ endmenu
 
 mainmenu_option next_comment
 comment 'Processor type and features'
-choice 'Processor family' \
-   "SH-3	CONFIG_CPU_SH3 \
-    SH-4	CONFIG_CPU_SH4" SH-3
+choice 'Processor type' \
+   "SH7708 CONFIG_CPU_SUBTYPE_SH7708 \
+    SH7709 CONFIG_CPU_SUBTYPE_SH7709 \
+    SH7750 CONFIG_CPU_SUBTYPE_SH7750" SH7708
+if [ "$CONFIG_CPU_SUBTYPE_SH7708" = "y" ]; then
+   define_bool CONFIG_CPU_SH3 y
+   define_bool CONFIG_CPU_SH4 n
+fi
+if [ "$CONFIG_CPU_SUBTYPE_SH7709" = "y" ]; then
+   define_bool CONFIG_CPU_SH3 y
+   define_bool CONFIG_CPU_SH4 n
+fi
+if [ "$CONFIG_CPU_SUBTYPE_SH7750" = "y" ]; then
+   define_bool CONFIG_CPU_SH3 n
+   define_bool CONFIG_CPU_SH4 y
+fi
 bool 'Little Endian' CONFIG_LITTLE_ENDIAN
 hex 'Physical memory start address' CONFIG_MEMORY_START 08000000
 bool 'Use SH CPU internal real time clock' CONFIG_SH_CPU_RTC
@@ -34,6 +47,12 @@ bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
 bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
 bool 'Sysctl support' CONFIG_SYSCTL
+
+if [ "$CONFIG_PROC_FS" = "y" ]; then
+   choice 'Kernel core (/proc/kcore) format' \
+	"ELF		CONFIG_KCORE_ELF	\
+	 A.OUT		CONFIG_KCORE_AOUT" ELF
+fi
 
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
@@ -61,6 +80,10 @@ endmenu
 
 if [ "$CONFIG_NET" = "y" ]; then
    source net/Config.in
+   mainmenu_option next_comment
+   comment 'Network device drivers'
+      source drivers/net/Config.in
+   endmenu
 fi
 
 mainmenu_option next_comment

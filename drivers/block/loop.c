@@ -151,12 +151,12 @@ static void figure_loop_size(struct loop_device *lo)
 	int	size;
 
 	if (S_ISREG(lo->lo_dentry->d_inode->i_mode))
-		size = (lo->lo_dentry->d_inode->i_size - lo->lo_offset) / BLOCK_SIZE;
+		size = (lo->lo_dentry->d_inode->i_size - lo->lo_offset) >> BLOCK_SIZE_BITS;
 	else {
 		kdev_t lodev = lo->lo_device;
 		if (blk_size[MAJOR(lodev)])
 			size = blk_size[MAJOR(lodev)][MINOR(lodev)] -
-                                lo->lo_offset / BLOCK_SIZE;
+                                (lo->lo_offset >> BLOCK_SIZE_BITS);
 		else
 			size = MAX_DISK_SIZE;
 	}

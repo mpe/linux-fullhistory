@@ -24,8 +24,8 @@
  * it uses USB for speed.  Set up /dev/kodak, get gphoto (www.gphoto.org),
  * and have fun!
  *
- * This should also work for non-Kodak DigitaOS cameras, with minor
- * tweaks for the relevant vendor and product IDs.
+ * This should also work for a number of other digital (non-Kodak) cameras,
+ * by adding the vendor and product IDs to the table below.
  */
 
 /*
@@ -40,6 +40,7 @@
  *	of gPhoto 0.36pre, the USB updates are integrated.
  * 12 Oct, 1999 -- handle DC-280 interface class (0xff not 0x0);
  *	added timeouts to bulk_msg calls.  Minor updates, docs.
+ * 03 Nov, 1999 -- update for 2.3.25 kernel API changes.
  */
 
 #include <linux/kernel.h>
@@ -60,6 +61,7 @@
 
 
 /* XXX need to get registered minor number, cdev 10/MINOR */
+/* XXX or: cdev USB_MAJOR(180)/USB_CAMERA_MINOR */
 #define	USB_CAMERA_MINOR	170
 
 
@@ -75,43 +77,56 @@
 static struct camera {
 	short		idVendor;
 	short		idProduct;
+
+	/* should get this name from the USB subsystem */
 	const char	*nameProduct;
 } cameras [] = {
     { 0x040a, 0x0120, "Kodak DC-240" },
     { 0x040a, 0x0130, "Kodak DC-280" },
 
-	/* Kodak has several other USB-enabled cameras, which (along with
+	/* Kodak has several other USB-enabled devices, which (along with
 	 * models from other vendors) all use the Flashpoint "Digita
 	 * OS" and its wire protocol.  This driver should work with such
-	 * cameras, which need different application level protocol code
-	 * from the DC-240/280 models.
+	 * devices, which need different application level protocol code
+	 * from the DC-240/280 models.  Note that Digita isn't just for
+	 * cameras -- Epson has a non-USB Digita photo printer.
 	 */
 /*  { 0x040a, 0x0100, "Kodak DC-220" }, */
     { 0x040a, 0x0110, "Kodak DC-260" },
 /*  { 0x040a, 0x0115, "Kodak DC-265" }, */
 /*  { 0x040a, 0x0140, "Kodak DC-290" }, */
+
 /*  { 0xffff, 0xffff, "Minolta Dimage EX 1500" }, */
-/*  { 0xffff, 0xffff, "HP PhotoSmart C500" }, */
+/*  { 0x03f0, 0xffff, "HP PhotoSmart C500" }, */
+
+	/* Other USB cameras may well work here too, so long as they
+	 * just stick to half duplex packet exchanges.
+	 */
 };
 
 
-/* For now, we only support one camera at a time: there's one
- * application-visible device (e.g. /dev/kodak) and the second
- * camera detected on the bus is ignored.
- */
-static struct camera_state {
+struct camera_state {
 	/* these fields valid (dev != 0) iff camera connected */
 	struct usb_device	*dev;		/* USB device handle */
 	char			inEP;		/* read endpoint */
 	char			outEP;		/* write endpoint */
 	struct camera		*info;		/* DC-240, etc */
 
+	/* valid iff isOpen */
 	int			isOpen;		/* device opened? */
 	int			isActive;	/* I/O taking place? */
 	char			*buf;		/* buffer for I/O */
 
+	/* always valid */
 	wait_queue_head_t	wait;		/* for timed waits */
-} static_camera_state;
+};
+
+
+/* For now, we only support one camera at a time: there's one
+ * application-visible device (e.g. /dev/kodak) and the second
+ * (to Nth) camera detected on the bus is ignored.
+ */
+static struct camera_state static_camera_state;
 
 
 static ssize_t camera_read (struct file *file,
@@ -128,7 +143,8 @@ static ssize_t camera_read (struct file *file,
 
 	/* Big reads are common, for image downloading.  Smaller ones
 	 * are also common (even "directory listing" commands don't
-	 * send very much data).  We preserve packet boundaries here.
+	 * send very much data).  We preserve packet boundaries here,
+	 * they matter in the application protocol.
 	 */
 	for (retries = 0; retries < MAX_READ_RETRY; retries++) {
 		unsigned long		count;
@@ -293,7 +309,7 @@ static int camera_release (struct inode *inode, struct file *file)
 
 	/* XXX should define some ioctls to expose camera type
 	 * to applications ... what USB exposes should suffice.
-	 * Perhaps there's a packet size limitation too?
+	 * apps should be able to see the camera type.
 	 */
 static struct file_operations usb_camera_fops = {
 	NULL,		/* llseek */
@@ -314,17 +330,20 @@ static struct file_operations usb_camera_fops = {
 };
 
 static struct miscdevice usb_camera = {
-	USB_CAMERA_MINOR, "USB camera (Kodak DC-2xx)", &usb_camera_fops
+	USB_CAMERA_MINOR,
+	"USB camera (Kodak DC-2xx)",
+	&usb_camera_fops
 };
 
 
 
-static int camera_probe(struct usb_device *dev)
+static void * camera_probe(struct usb_device *dev, unsigned int ifnum)
 {
 	int				i;
 	struct camera			*camera_info = NULL;
-	struct usb_interface_descriptor	*intf_desc;
+	struct usb_interface_descriptor	*interface;
 	struct usb_endpoint_descriptor	*endpoint;
+
 	struct camera_state		*camera = &static_camera_state;
 
 	/* Is it a supported camera? */
@@ -337,27 +356,28 @@ static int camera_probe(struct usb_device *dev)
 		break;
 	}
 	if (camera_info == NULL)
-		return -1;
+		return NULL;
 
 	/* these have one config, one interface */
 	if (dev->descriptor.bNumConfigurations != 1
 			|| dev->config[0].bNumInterfaces != 1) {
 		printk (KERN_INFO "Bogus camera config info\n");
-		return -1;
+		return NULL;
 	}
 
 	/* the interface class bit is odd -- the dc240 and dc260 return
 	 * a zero there, and at least some dc280s report 0xff
 	 */
-	intf_desc = &dev->config[0].interface[0].altsetting[0];
-	if ((intf_desc->bInterfaceClass != 0
-				&& intf_desc->bInterfaceClass != 0xff)
-			|| intf_desc->bInterfaceSubClass != 0
-			|| intf_desc->bInterfaceProtocol != 0
-			|| intf_desc->bNumEndpoints != 2
+	// interface = &dev->config[0].interface[0].altsetting[0];
+	interface = &dev->actconfig->interface[ifnum].altsetting[0];
+	if ((interface->bInterfaceClass != 0
+				&& interface->bInterfaceClass != 0xff)
+			|| interface->bInterfaceSubClass != 0
+			|| interface->bInterfaceProtocol != 0
+			|| interface->bNumEndpoints != 2
 			) {
 		printk (KERN_INFO "Bogus camera interface info\n");
-		return -1;
+		return NULL;
 	}
 
 	/* can only show one camera at a time through /dev ... */
@@ -368,11 +388,13 @@ static int camera_probe(struct usb_device *dev)
 	} else {
 		printk(KERN_INFO "Ignoring additional USB Camera (%s)\n",
 				camera_info->nameProduct);
-		return -1;
+		return NULL;
 	}
 
+// XXX there are now masks for these constants ... see printer.c
+
 	/* get input and output endpoints (either order) */
-	endpoint = intf_desc->endpoint;
+	endpoint = interface->endpoint;
 	camera->outEP = camera->inEP =  -1;
 	if ((endpoint [0].bEndpointAddress & 0x80) == 0x80)
 		camera->inEP = endpoint [0].bEndpointAddress & 0x7f;
@@ -389,35 +411,33 @@ static int camera_probe(struct usb_device *dev)
 			) {
 		printk (KERN_INFO "Bogus camera endpoints\n");
 		camera->dev = NULL;
-		return -1;
+		return NULL;
 	}
 
 
 	if (usb_set_configuration (dev, dev->config[0].bConfigurationValue)) {
 		printk (KERN_INFO "Failed usb_set_configuration: camera\n");
 		camera->dev = NULL;
-		return -1;
+		return NULL;
 	}
 
 	camera->info = camera_info;
-	return 0;
+	return camera;
 }
 
-static void camera_disconnect(struct usb_device *dev)
+static void camera_disconnect(struct usb_device *dev, void *ptr)
 {
-	struct camera_state	*camera = &static_camera_state;
+	struct camera_state	*camera = (struct camera_state *) ptr;
 	struct camera		*info = camera->info;
 
 	if (camera->dev != dev)
 		return;
 
-	/* Because this (currently) gets called whenever the USB bus
-	 * gets reconfigured (e.g. loading a new USB device driver)
-	 * we aren't reflecting this up to userland, though maybe
-	 * that'd be better.  The good consequence is bus reconfig
-	 * not breaking apps, and the ability to remove camera for
+	/* Currently not reflecting this up to userland; at one point
+	 * it got called on bus reconfig, which we clearly don't want.
+	 * A good consequence is the ability to remove camera for
 	 * a while without apps needing to do much more than ignore
-	 * some particular error returns.  On the bad side, if the
+	 * some particular error returns.  On the bad side, if one
 	 * camera is swapped for another one, we won't be telling.
 	 */
 	camera->info = NULL;
@@ -430,7 +450,10 @@ static struct usb_driver camera_driver = {
 	"dc2xx",
 	camera_probe,
 	camera_disconnect,
-	{ NULL, NULL }
+	{ NULL, NULL },
+
+	NULL,	/* &usb_camera_fops, */
+	0	/* USB_CAMERA_MINOR */
 };
 
 
@@ -446,8 +469,9 @@ int usb_dc2xx_init(void)
 	camera->isActive = 0;
 	init_waitqueue_head (&camera->wait);
 
+	if (usb_register (&camera_driver) < 0)
+		return -1;
 	misc_register (&usb_camera);
-	usb_register (&camera_driver);
 
 	return 0;
 }

@@ -24,6 +24,8 @@
  * len is in words and is always >= 5.
  */
 _GLOBAL(ip_fast_csum)
+	cmpi	0,r4,0
+	beq	10f
 	lwz	r0,0(r3)
 	lwzu	r5,4(r3)
 	addi	r4,r4,-2
@@ -38,6 +40,8 @@ _GLOBAL(ip_fast_csum)
 	not	r3,r3
 	srwi	r3,r3,16
 	blr
+10:	li	r3,0
+	blr	
 
 /*
  * Compute checksum of TCP or UDP pseudo-header:

@@ -1,5 +1,5 @@
 		  Linux Joystick parport drivers v1.2 BETA
-		  (c) 1998 Vojtech Pavlik <vojtech@ucw.cz>
+		  (c) 1998 Vojtech Pavlik <vojtech@suse.cz>
 	       (c) 1998 Andree Borrmann <a.borrmann@tu-bs.de>
 ----------------------------------------------------------------------------
 

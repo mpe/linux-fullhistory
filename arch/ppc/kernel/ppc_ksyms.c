@@ -209,8 +209,10 @@ EXPORT_SYMBOL(adb_request);
 EXPORT_SYMBOL(adb_register);
 EXPORT_SYMBOL(cuda_request);
 EXPORT_SYMBOL(cuda_poll);
+#ifdef CONFIG_ADB_PMU
 EXPORT_SYMBOL(pmu_request);
 EXPORT_SYMBOL(pmu_poll);
+#endif /* CONFIG_ADB_PMU */
 #endif /* CONFIG_ADB */
 #ifdef CONFIG_PMAC_PBOOK
 EXPORT_SYMBOL(pmu_register_sleep_notifier);

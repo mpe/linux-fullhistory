@@ -58,9 +58,9 @@ struct page *highmem_start_page;
  * a common occurrence (no need to read the page to know
  * that it's zero - better for the cache and memory subsystem).
  */
-static inline void copy_cow_page(struct page * from, struct page * to)
+static inline void copy_cow_page(struct page * from, struct page * to, unsigned long address)
 {
-	if (from == ZERO_PAGE(to)) {
+	if (from == ZERO_PAGE(address)) {
 		clear_highpage(to);
 		return;
 	}
@@ -416,11 +416,11 @@ static struct page * follow_page(unsigned long address)
  * Given a physical address, is there a useful struct page pointing to it?
  */
 
-struct page * get_page_map(struct page *page)
+struct page * get_page_map(struct page *page, unsigned long vaddr)
 {
 	if (MAP_NR(page) >= max_mapnr)
 		return 0;
-	if (page == ZERO_PAGE(page))
+	if (page == ZERO_PAGE(vaddr))
 		return 0;
 	if (PageReserved(page))
 		return 0;
@@ -484,7 +484,7 @@ int map_user_kiobuf(int rw, struct kiobuf *iobuf, unsigned long va, size_t len)
 			dprintk (KERN_ERR "Missing page in map_user_kiobuf\n");
 			goto retry;
 		}
-		map = get_page_map(map);
+		map = get_page_map(map, ptr);
 		if (map) {
 			if (TryLockPage(map)) {
 				goto retry;
@@ -743,7 +743,7 @@ struct page * put_dirty_page(struct task_struct * tsk, struct page *page,
 		return 0;
 	}
 	flush_page_to_ram(page);
-	set_pte(pte, pte_mkwrite(page_pte_prot(page, PAGE_COPY)));
+	set_pte(pte, pte_mkwrite(mk_pte(page, PAGE_COPY)));
 /* no need for flush_tlb */
 	return page;
 }
@@ -819,7 +819,7 @@ static int do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	if (pte_val(*page_table) == pte_val(pte)) {
 		if (PageReserved(old_page))
 			++vma->vm_mm->rss;
-		copy_cow_page(old_page, new_page);
+		copy_cow_page(old_page, new_page, address);
 		flush_page_to_ram(new_page);
 		flush_cache_page(vma, address);
 		set_pte(page_table, pte_mkwrite(pte_mkdirty(mk_pte(new_page, vma->vm_page_prot))));

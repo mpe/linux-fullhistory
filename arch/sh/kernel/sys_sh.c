@@ -44,9 +44,8 @@ asmlinkage int sys_pipe(unsigned long * fildes)
 }
 
 asmlinkage unsigned long
-sys_mmap(int fd, unsigned long addr,
-	 unsigned long len, unsigned long prot,
-	 unsigned long flags, unsigned long off)
+sys_mmap(unsigned long addr, unsigned long len, unsigned long prot, 
+	 unsigned long flags, int fd, unsigned long off)
 {
 	int error = -EFAULT;
 	struct file *file = NULL;

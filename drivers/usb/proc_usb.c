@@ -968,27 +968,16 @@ static struct inode_operations proc_usb_device_inode_operations = {
         NULL                               /* revalidate   */
 };
 
-#define PROCUSB_MAXBUSSES 64
-
-static unsigned long busnumbermap[(PROCUSB_MAXBUSSES+8 * sizeof(unsigned long)-1) / (8 * sizeof(unsigned long))] = { 0, };
-
 void proc_usb_add_bus(struct usb_bus *bus)
 {
-	int bnum;
 	char buf[16];
 
-	bus->proc_busnum = -1;
 	bus->proc_entry = NULL;
 	if (!usbdir)
 		return;
-	bnum = find_first_zero_bit(busnumbermap, PROCUSB_MAXBUSSES);
-	if (bnum >= PROCUSB_MAXBUSSES)
-		return;
-	sprintf(buf, "%03d", bnum);
+	sprintf(buf, "%03d", bus->busnum);
 	if (!(bus->proc_entry = create_proc_entry(buf, S_IFDIR, usbdir)))
 		return;
-	set_bit(bnum, busnumbermap);
-	bus->proc_busnum = bnum;
 	bus->proc_entry->data = bus;
 }
 
@@ -998,7 +987,6 @@ void proc_usb_remove_bus(struct usb_bus *bus)
 	if (!bus->proc_entry)
 		return;
 	remove_proc_entry(bus->proc_entry->name, usbdir);
-	clear_bit(bus->proc_busnum, busnumbermap);
 }
 
 void proc_usb_add_device(struct usb_device *dev)

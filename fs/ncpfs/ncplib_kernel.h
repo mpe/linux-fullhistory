@@ -36,7 +36,8 @@
 #define NCP_MIN_SYMLINK_SIZE	8
 #define NCP_MAX_SYMLINK_SIZE	512
 
-#define NCP_BLOCK_SIZE		512
+#define NCP_BLOCK_SHIFT		9
+#define NCP_BLOCK_SIZE		(1 << (NCP_BLOCK_SHIFT))
 
 int ncp_negotiate_buffersize(struct ncp_server *, int, int *);
 int ncp_negotiate_size_and_options(struct ncp_server *server, int size,

@@ -498,7 +498,6 @@ hfs_s32 hfs_do_write(struct inode *inode, struct hfs_fork * fork, hfs_u32 pos,
 				written = -EFAULT;
 			break;
 		}
-		update_vm_cache(inode,pos,p,c);
 		pos += c;
 		written += c;
 		buf += c;

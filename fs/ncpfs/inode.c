@@ -122,12 +122,8 @@ void ncp_update_inode2(struct inode* inode, struct ncp_entry_info *nwinfo)
 		}
 		if (nwi->attributes & aRONLY) inode->i_mode &= ~0222;
 	}
-	inode->i_blocks = 0;
-	if ((inode->i_size)&&(inode->i_blksize)) {
-		inode->i_blocks = (inode->i_size-1)/(inode->i_blksize)+1;
-	}
+	inode->i_blocks = (inode->i_size + NCP_BLOCK_SIZE - 1) >> NCP_BLOCK_SHIFT;
 
-	/* TODO: times? I'm not sure... */
 	inode->i_mtime = ncp_date_dos2unix(le16_to_cpu(nwinfo->i.modifyTime),
 			  		   le16_to_cpu(nwinfo->i.modifyDate));
 	inode->i_ctime = ncp_date_dos2unix(le16_to_cpu(nwinfo->i.creationTime),
@@ -192,14 +188,10 @@ static void ncp_set_attr(struct inode *inode, struct ncp_entry_info *nwinfo)
 	inode->i_nlink = 1;
 	inode->i_uid = server->m.uid;
 	inode->i_gid = server->m.gid;
-	inode->i_blksize = NCP_BLOCK_SIZE;
 	inode->i_rdev = 0;
+	inode->i_blksize = NCP_BLOCK_SIZE;
 
-	inode->i_blocks = 0;
-	if ((inode->i_blksize != 0) && (inode->i_size != 0)) {
-		inode->i_blocks =
-		    (inode->i_size - 1) / inode->i_blksize + 1;
-	}
+	inode->i_blocks = (inode->i_size + NCP_BLOCK_SIZE - 1) >> NCP_BLOCK_SHIFT;
 
 	inode->i_mtime = ncp_date_dos2unix(le16_to_cpu(nwi->modifyTime),
 			  		   le16_to_cpu(nwi->modifyDate));

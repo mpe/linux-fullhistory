@@ -1,4 +1,4 @@
-/* $Id: setup.c,v 1.7 1999/10/23 01:34:50 gniibe Exp $
+/* $Id: setup.c,v 1.7 1999/10/23 01:34:50 gniibe Exp gniibe $
  *
  *  linux/arch/sh/kernel/setup.c
  *
@@ -135,9 +135,9 @@ static inline void parse_mem_cmdline (char ** cmdline_p)
 	memcpy(saved_command_line, COMMAND_LINE, COMMAND_LINE_SIZE);
 	saved_command_line[COMMAND_LINE_SIZE-1] = '\0';
 
-	memory_start = (unsigned long)__va(0)+__MEMORY_START;
+	memory_start = (unsigned long)PAGE_OFFSET+__MEMORY_START;
 	/* Default is 4Mbyte. */
-	memory_end = (unsigned long)__va(0x00400000)+__MEMORY_START;
+	memory_end = (unsigned long)PAGE_OFFSET+0x00400000+__MEMORY_START;
 
 	for (;;) {
 		/*
@@ -214,7 +214,7 @@ void __init setup_arch(char **cmdline_p)
 	/*
 	 * Initialize the boot-time allocator (with low memory only):
 	 */
-	bootmap_size = init_bootmem(start_pfn, max_low_pfn);
+	bootmap_size = init_bootmem(start_pfn, max_low_pfn, __MEMORY_START);
 
 	/*
 	 * FIXME: what about high memory?
@@ -259,16 +259,18 @@ void __init setup_arch(char **cmdline_p)
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	if (LOADER_TYPE) {
-		initrd_start = INITRD_START ? INITRD_START : 0;
-		initrd_end = initrd_start+INITRD_SIZE;
-		if (initrd_end > memory_end) {
+		if (INITRD_START + INITRD_SIZE <= (max_low_pfn << PAGE_SHIFT)) {
+			reserve_bootmem(INITRD_START, INITRD_SIZE);
+			initrd_start =
+				INITRD_START ? INITRD_START + PAGE_OFFSET + __MEMORY_START : 0;
+			initrd_end = initrd_start+INITRD_SIZE;
+		} else {
 			printk("initrd extends beyond end of memory "
 			       "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
-			       initrd_end,memory_end);
+			    INITRD_START + INITRD_SIZE,
+			    max_low_pfn << PAGE_SHIFT);
 			initrd_start = 0;
-		} else
-			reserve_bootmem(__pa(initrd_start)-__MEMORY_START,
-					INITRD_SIZE);
+		}
 	}
 #endif
 

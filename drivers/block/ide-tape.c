@@ -1833,7 +1833,7 @@ static void idetape_pc_intr (ide_drive_t *drive)
 			if (temp > pc->buffer_size) {
 				printk (KERN_ERR "ide-tape: The tape wants to send us more data than expected - discarding data\n");
 				idetape_discard_data (drive,bcount.all);
-				ide_set_handler (drive,&idetape_pc_intr);
+				ide_set_handler (drive,&idetape_pc_intr,IDETAPE_WAIT_CMD,NULL);
 				return;
 			}
 #if IDETAPE_DEBUG_LOG
@@ -1855,7 +1855,7 @@ static void idetape_pc_intr (ide_drive_t *drive)
 	pc->actually_transferred+=bcount.all;					/* Update the current position */
 	pc->current_position+=bcount.all;
 
-	ide_set_handler (drive,&idetape_pc_intr);		/* And set the interrupt handler again */
+	ide_set_handler (drive,&idetape_pc_intr,IDETAPE_WAIT_CMD,NULL);		/* And set the interrupt handler again */
 }
 
 /*
@@ -1928,7 +1928,7 @@ static void idetape_transfer_pc(ide_drive_t *drive)
 		ide_do_reset (drive);
 		return;
 	}
-	ide_set_handler(drive, &idetape_pc_intr);	/* Set the interrupt routine */
+	ide_set_handler(drive, &idetape_pc_intr, IDETAPE_WAIT_CMD, NULL);	/* Set the interrupt routine */
 	atapi_output_bytes (drive,pc->c,12);			/* Send the actual packet */
 }
 
@@ -1995,7 +1995,7 @@ static void idetape_issue_packet_command (ide_drive_t *drive, idetape_pc_t *pc)
 	}
 #endif /* CONFIG_BLK_DEV_IDEDMA */
 	if (test_bit(IDETAPE_DRQ_INTERRUPT, &tape->flags)) {
-		ide_set_handler(drive, &idetape_transfer_pc);
+		ide_set_handler(drive, &idetape_transfer_pc, IDETAPE_WAIT_CMD, NULL);
 		OUT_BYTE(WIN_PACKETCMD, IDE_COMMAND_REG);
 	} else {
 		OUT_BYTE(WIN_PACKETCMD, IDE_COMMAND_REG);
@@ -3579,7 +3579,6 @@ static void idetape_setup (ide_drive_t *drive, idetape_tape_t *tape, int minor)
 	spin_lock_init(&tape->spinlock);
 	drive->driver_data = tape;
 	drive->ready_stat = 0;			/* An ATAPI device ignores DRDY */
-	drive->timeout = IDETAPE_WAIT_CMD;
 #ifdef CONFIG_BLK_DEV_IDEPCI
 	/*
 	 *  These two ide-pci host adapters appear to need this disabled.

@@ -1381,7 +1381,7 @@ unsigned long __init *gemini_find_end_of_memory(void)
 	set_phys_avail();
 	return ret;
 }
-#endif /* defined(CONFIG_GEMINI) || defined(CONFIG_ALL_PPC) */
+#endif /* defined(CONFIG_GEMINI) */
 
 #ifdef CONFIG_APUS
 #define HARDWARE_MAPPED_SIZE (512*1024)

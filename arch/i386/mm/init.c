@@ -379,10 +379,16 @@ void __init zap_low_mappings (void)
 {
 	int i;
 	/*
-	 * Zap initial low-memory mappings:
+	 * Zap initial low-memory mappings.
+	 *
+	 * Note that "pgd_clear()" doesn't do it for
+	 * us in this case, because pgd_clear() is a
+	 * no-op in the 2-level case (pmd_clear() is
+	 * the thing that clears the page-tables in
+	 * that case).
 	 */
 	for (i = 0; i < USER_PTRS_PER_PGD; i++)
-		pgd_clear(swapper_pg_dir + i);
+		pgd_val(swapper_pg_dir[i]) = 0;
 }
 
 /*
