@@ -315,7 +315,8 @@ xfrm_state_find(xfrm_address_t *daddr, xfrm_address_t *saddr,
 		    x->props.reqid == tmpl->reqid &&
 		    xfrm_state_addr_check(x, daddr, saddr, family) &&
 		    tmpl->mode == x->props.mode &&
-		    tmpl->id.proto == x->id.proto) {
+		    tmpl->id.proto == x->id.proto &&
+		    (tmpl->id.spi == x->id.spi || !tmpl->id.spi)) {
 			/* Resolution logic:
 			   1. There is a valid state with matching selector.
 			      Done.
