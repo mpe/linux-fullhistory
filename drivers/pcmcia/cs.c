@@ -565,7 +565,9 @@ static int socket_suspend(struct pcmcia_socket *skt)
 
 	send_event(skt, CS_EVENT_PM_SUSPEND, CS_EVENT_PRI_LOW);
 	skt->socket = dead_socket;
-	skt->ops->suspend(skt);
+	skt->ops->set_socket(skt, &skt->socket);
+	if (skt->ops->suspend)
+		skt->ops->suspend(skt);
 	skt->state |= SOCKET_SUSPEND;
 
 	return CS_SUCCESS;
