@@ -173,11 +173,11 @@ get_max:
 
 int do_select(int n, fd_set_bits *fds, long *timeout)
 {
-	poll_table *wait;
+	poll_table *wait, *orig_wait;
 	int retval, i, off;
 	long __timeout = *timeout;
 
-	wait = NULL;
+	orig_wait = wait = NULL;
 
  	read_lock(&current->files->file_lock);
 	retval = max_select_fd(n, fds);
@@ -187,7 +187,7 @@ int do_select(int n, fd_set_bits *fds, long *timeout)
 		return retval;
 	n = retval;
 	if (__timeout) {
- 		wait = alloc_wait(n);
+ 		orig_wait = wait = alloc_wait(n);
  		if (!wait)
 			return -ENOMEM;
  	}
@@ -235,7 +235,7 @@ int do_select(int n, fd_set_bits *fds, long *timeout)
 	}
 	current->state = TASK_RUNNING;
 
-	free_wait(wait);
+	free_wait(orig_wait);
 
 	/*
 	 * Up-to-date the caller timeout.
