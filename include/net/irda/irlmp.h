@@ -71,22 +71,23 @@ typedef enum {
 	S_END,
 } SERVICE;
 
-typedef void (*DISCOVERY_CALLBACK1) (discovery_t *);
-typedef void (*DISCOVERY_CALLBACK2) (hashbin_t *);
+typedef void (*DISCOVERY_CALLBACK1) (discovery_t *, void *);
+typedef void (*DISCOVERY_CALLBACK2) (hashbin_t *, void *);
 
 typedef struct {
-	queue_t queue; /* Must be first */
+	irda_queue_t queue; /* Must be first */
 
 	__u16 hints; /* Hint bits */
 } irlmp_service_t;
 
 typedef struct {
-	queue_t queue; /* Must be first */
+	irda_queue_t queue; /* Must be first */
 
 	__u16 hint_mask;
 
-	DISCOVERY_CALLBACK1 callback1;
-	DISCOVERY_CALLBACK2 callback2;
+	DISCOVERY_CALLBACK1 disco_callback;	/* Selective discovery */
+	DISCOVERY_CALLBACK1 expir_callback;	/* Selective expiration */
+	void *priv;                /* Used to identify client */
 } irlmp_client_t;
 
 struct lap_cb; /* Forward decl. */
@@ -95,7 +96,7 @@ struct lap_cb; /* Forward decl. */
  *  Information about each logical LSAP connection
  */
 struct lsap_cb {
-	queue_t queue;      /* Must be first */
+	irda_queue_t queue;      /* Must be first */
 	magic_t magic;
 
 	int  connected;
@@ -121,7 +122,7 @@ struct lsap_cb {
  *  Information about each registred IrLAP layer
  */
 struct lap_cb {
-	queue_t queue; /* Must be first */
+	irda_queue_t queue; /* Must be first */
 	magic_t magic;
 
 	int reason;    /* LAP disconnect reason */
@@ -174,10 +175,10 @@ struct irlmp_cb {
  	hashbin_t *clients;
 	hashbin_t *services;
 
-	hashbin_t *cachelog;
-	int running;
+	hashbin_t *cachelog;	/* Current discovery log */
+	spinlock_t log_lock;	/* discovery log spinlock */
 
-	spinlock_t lock;
+	int running;
 
 	__u16_host_order hints; /* Hint bits */
 };
@@ -191,11 +192,12 @@ void irlmp_close_lsap( struct lsap_cb *self);
 __u16 irlmp_service_to_hint(int service);
 __u32 irlmp_register_service(__u16 hints);
 int irlmp_unregister_service(__u32 handle);
-__u32 irlmp_register_client(__u16 hint_mask, DISCOVERY_CALLBACK1 callback1,
-			    DISCOVERY_CALLBACK2 callback2);
+__u32 irlmp_register_client(__u16 hint_mask, DISCOVERY_CALLBACK1 disco_clb,
+			    DISCOVERY_CALLBACK1 expir_clb, void *priv);
 int irlmp_unregister_client(__u32 handle);
 int irlmp_update_client(__u32 handle, __u16 hint_mask, 
-			DISCOVERY_CALLBACK1, DISCOVERY_CALLBACK2);
+			DISCOVERY_CALLBACK1 disco_clb,
+			DISCOVERY_CALLBACK1 expir_clb, void *priv);
 
 void irlmp_register_link(struct irlap_cb *, __u32 saddr, notify_t *);
 void irlmp_unregister_link(__u32 saddr);
@@ -214,8 +216,10 @@ int  irlmp_disconnect_request(struct lsap_cb *, struct sk_buff *userdata);
 
 void irlmp_discovery_confirm(hashbin_t *discovery_log);
 void irlmp_discovery_request(int nslots);
+struct irda_device_info *irlmp_get_discoveries(int *pn, __u16 mask);
 void irlmp_do_discovery(int nslots);
 discovery_t *irlmp_get_discovery_response(void);
+void irlmp_discovery_expiry(discovery_t *expiry);
 
 int  irlmp_data_request(struct lsap_cb *, struct sk_buff *);
 void irlmp_data_indication(struct lsap_cb *, struct sk_buff *);
@@ -229,7 +233,7 @@ void irlmp_connless_data_indication(struct lsap_cb *, struct sk_buff *);
 #endif /* CONFIG_IRDA_ULTRA */
 
 void irlmp_status_request(void);
-void irlmp_status_indication(LINK_STATUS link, LOCK_STATUS lock);
+void irlmp_status_indication(struct lap_cb *, LINK_STATUS link, LOCK_STATUS lock);
 
 int  irlmp_slsap_inuse(__u8 slsap);
 __u8 irlmp_find_free_slsap(void);
@@ -248,9 +252,12 @@ static inline hashbin_t *irlmp_get_cachelog(void) { return irlmp->cachelog; }
 
 static inline int irlmp_get_lap_tx_queue_len(struct lsap_cb *self)
 {
-	ASSERT(self != NULL, return 0;);
-	ASSERT(self->lap != NULL, return 0;);
-	ASSERT(self->lap->irlap != NULL, return 0;);
+	if (self == NULL)
+		return 0;
+	if (self->lap == NULL)
+		return 0;
+	if (self->lap->irlap == NULL)
+		return 0;
 
 	return IRLAP_GET_TX_QUEUE_LEN(self->lap->irlap);
 }

@@ -1,11 +1,19 @@
 /*
- * $Id: t1isa.c,v 1.13 2000/08/04 15:36:31 calle Exp $
+ * $Id: t1isa.c,v 1.15 2000/11/01 14:05:02 calle Exp $
  * 
  * Module for AVM T1 HEMA-card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: t1isa.c,v $
+ * Revision 1.15  2000/11/01 14:05:02  calle
+ * - use module_init/module_exit from linux/init.h.
+ * - all static struct variables are initialized with "membername:" now.
+ * - avm_cs.c, let it work with newer pcmcia-cs.
+ *
+ * Revision 1.14  2000/10/10 17:44:19  kai
+ * changes from/for 2.2.18
+ *
  * Revision 1.13  2000/08/04 15:36:31  calle
  * copied wrong from file to file :-(
  *
@@ -85,13 +93,14 @@
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
 #include <linux/capi.h>
+#include <linux/init.h>
 #include <asm/io.h>
 #include "capicmd.h"
 #include "capiutil.h"
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.13 $";
+static char *revision = "$Revision: 1.15 $";
 
 /* ------------------------------------------------------------- */
 
@@ -145,7 +154,7 @@ static int t1_detectandinit(unsigned int base, unsigned irq, int cardnr)
 	cli();
 	/* board reset */
 	t1outp(base, T1_RESETBOARD, 0xf);
-	udelay(100 * 1000);
+	mdelay(100);
 	dummy = t1inp(base, T1_FASTLINK+T1_OUTSTAT); /* first read */
 
 	/* write config */
@@ -157,18 +166,18 @@ static int t1_detectandinit(unsigned int base, unsigned irq, int cardnr)
 	t1outp(base, ((base >> 4)) & 0x3, cregs[7]);
 	restore_flags(flags);
 
-	udelay(100 * 1000);
+	mdelay(100);
 	t1outp(base, T1_FASTLINK+T1_RESETLINK, 0);
 	t1outp(base, T1_SLOWLINK+T1_RESETLINK, 0);
-	udelay(10 * 1000);
+	mdelay(10);
 	t1outp(base, T1_FASTLINK+T1_RESETLINK, 1);
 	t1outp(base, T1_SLOWLINK+T1_RESETLINK, 1);
-	udelay(100 * 1000);
+	mdelay(100);
 	t1outp(base, T1_FASTLINK+T1_RESETLINK, 0);
 	t1outp(base, T1_SLOWLINK+T1_RESETLINK, 0);
-	udelay(10 * 1000);
+	mdelay(10);
 	t1outp(base, T1_FASTLINK+T1_ANALYSE, 0);
-	udelay(5 * 1000);
+	mdelay(5);
 	t1outp(base, T1_SLOWLINK+T1_ANALYSE, 0);
 
 	if (t1inp(base, T1_FASTLINK+T1_OUTSTAT) != 0x1) /* tx empty */

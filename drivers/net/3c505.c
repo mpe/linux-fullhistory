@@ -854,6 +854,7 @@ static void elp_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 static int elp_open(struct net_device *dev)
 {
 	elp_device *adapter;
+	int retval;
 
 	adapter = dev->priv;
 
@@ -893,16 +894,21 @@ static int elp_open(struct net_device *dev)
 	/*
 	 * install our interrupt service routine
 	 */
-	if (request_irq(dev->irq, &elp_interrupt, 0, "3c505", dev)) {
-		return -EAGAIN;
+	if ((retval = request_irq(dev->irq, &elp_interrupt, 0, dev->name, dev))) {
+		printk(KERN_ERR "%s: could not allocate IRQ%d\n", dev->name, dev->irq);
+		return retval;
 	}
-	if (request_dma(dev->dma, "3c505")) {
-		printk("%s: could not allocate DMA channel\n", dev->name);
-		return -EAGAIN;
+	if ((retval = request_dma(dev->dma, dev->name))) {
+		free_irq(dev->irq, dev);
+		printk(KERN_ERR "%s: could not allocate DMA%d channel\n", dev->name, dev->dma);
+		return retval;
 	}
 	adapter->dma_buffer = (void *) dma_mem_alloc(DMA_BUFFER_SIZE);
 	if (!adapter->dma_buffer) {
-		printk("Could not allocate DMA buffer\n");
+		printk(KERN_ERR "%s: could not allocate DMA buffer\n", dev->name);
+		free_dma(dev->dma);
+		free_irq(dev->irq, dev);
+		return -ENOMEM;
 	}
 	adapter->dmaing = 0;
 
@@ -915,7 +921,7 @@ static int elp_open(struct net_device *dev)
 	 * configure adapter memory: we need 10 multicast addresses, default==0
 	 */
 	if (elp_debug >= 3)
-		printk("%s: sending 3c505 memory configuration command\n", dev->name);
+		printk(KERN_DEBUG "%s: sending 3c505 memory configuration command\n", dev->name);
 	adapter->tx_pcb.command = CMD_CONFIGURE_ADAPTER_MEMORY;
 	adapter->tx_pcb.data.memconf.cmd_q = 10;
 	adapter->tx_pcb.data.memconf.rcv_q = 20;
@@ -1412,6 +1418,7 @@ int __init elplus_probe(struct net_device *dev)
 {
 	elp_device *adapter;
 	int i, tries, tries1, timeout, okay;
+	unsigned long cookie = 0;
 
 	/*
 	 *  setup adapter structure
@@ -1479,21 +1486,21 @@ int __init elplus_probe(struct net_device *dev)
 			 */
 			adapter->tx_pcb.command = CMD_STATION_ADDRESS;
 			adapter->tx_pcb.length = 0;
-			autoirq_setup(0);
+			cookie = probe_irq_on();
 			if (!send_pcb(dev, &adapter->tx_pcb)) {
 				printk("%s: could not send first PCB\n", dev->name);
-				autoirq_report(0);
+				probe_irq_off(cookie);
 				continue;
 			}
 			if (!receive_pcb(dev, &adapter->rx_pcb)) {
 				printk("%s: could not read first PCB\n", dev->name);
-				autoirq_report(0);
+				probe_irq_off(cookie);
 				continue;
 			}
 			if ((adapter->rx_pcb.command != CMD_ADDRESS_RESPONSE) ||
 			    (adapter->rx_pcb.length != 6)) {
 				printk("%s: first PCB wrong (%d, %d)\n", dev->name, adapter->rx_pcb.command, adapter->rx_pcb.length);
-				autoirq_report(0);
+				probe_irq_off(cookie);
 				continue;
 			}
 			goto okay;
@@ -1511,13 +1518,13 @@ int __init elplus_probe(struct net_device *dev)
 
       okay:
 	if (dev->irq) {		/* Is there a preset IRQ? */
-		int rpt = autoirq_report(0);
+		int rpt = probe_irq_off(cookie);
 		if (dev->irq != rpt) {
 			printk("%s: warning, irq %d configured but %d detected\n", dev->name, dev->irq, rpt);
 		}
-		/* if dev->irq == autoirq_report(0), all is well */
+		/* if dev->irq == probe_irq_off(cookie), all is well */
 	} else		       /* No preset IRQ; just use what we can detect */
-		dev->irq = autoirq_report(0);
+		dev->irq = probe_irq_off(cookie);
 	switch (dev->irq) {    /* Legal, sane? */
 	case 0:
 		printk("%s: IRQ probe failed: check 3c505 jumpers.\n",
@@ -1527,7 +1534,7 @@ int __init elplus_probe(struct net_device *dev)
 	case 6:
 	case 8:
 	case 13:
-		printk("%s: Impossible IRQ %d reported by autoirq_report().\n",
+		printk("%s: Impossible IRQ %d reported by probe_irq_off().\n",
 		       dev->name, dev->irq);
 		return -ENODEV;
 	}
@@ -1607,17 +1614,10 @@ int __init elplus_probe(struct net_device *dev)
 }
 
 #ifdef MODULE
-static struct net_device dev_3c505[ELP_MAX_CARDS] =
-{
-	{ "",		/* device name is inserted by net_init.c */
-	0, 0, 0, 0,
-	0, 0,
-	0, 0, 0, NULL, elplus_probe},
-};
-
-static int io[ELP_MAX_CARDS] = { 0, };
-static int irq[ELP_MAX_CARDS] = { 0, };
-static int dma[ELP_MAX_CARDS] = { 0, };
+static struct net_device dev_3c505[ELP_MAX_CARDS];
+static int io[ELP_MAX_CARDS];
+static int irq[ELP_MAX_CARDS];
+static int dma[ELP_MAX_CARDS];
 MODULE_PARM(io, "1-" __MODULE_STRING(ELP_MAX_CARDS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(ELP_MAX_CARDS) "i");
 MODULE_PARM(dma, "1-" __MODULE_STRING(ELP_MAX_CARDS) "i");
@@ -1630,6 +1630,7 @@ int init_module(void)
 		struct net_device *dev = &dev_3c505[this_dev];
 		dev->irq = irq[this_dev];
 		dev->base_addr = io[this_dev];
+		dev->init = elplus_probe;
 		if (dma[this_dev]) {
 			dev->dma = dma[this_dev];
 		} else {

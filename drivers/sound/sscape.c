@@ -14,6 +14,7 @@
  * Thomas Sailer   	: ioctl code reworked (vmalloc/vfree removed)
  * Sergey Smitienko	: ensoniq p'n'p support
  * Christoph Hellwig	: adapted to module_init/module_exit
+ * Bartlomiej Zolnierkiewicz : added __init to attach_sscape()
  */
 
 #include <linux/init.h>
@@ -609,7 +610,7 @@ static coproc_operations sscape_coproc_operations =
 static int sscape_detected = 0;
 static int sscape_is_pnp   = 0;
 
-void attach_sscape(struct address_info *hw_config)
+void __init attach_sscape(struct address_info *hw_config)
 {
 #ifndef SSCAPE_REGS
 	/*

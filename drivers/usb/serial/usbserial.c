@@ -15,6 +15,11 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (11/01/2000) Adam J. Richter
+ *	instead of using idVendor/idProduct pairs, usb serial drivers
+ *	now identify their hardware interest with usb_device_id tables,
+ *	which they usually have anyhow for use with MODULE_DEVICE_TABLE.
+ *
  * (10/05/2000) gkh
  *	Fixed bug with urb->dev not being set properly, now that the usb
  *	core needs it.
@@ -288,11 +293,12 @@ MODULE_PARM_DESC(vendor, "User specified USB idVendor");
 MODULE_PARM(product, "i");
 MODULE_PARM_DESC(product, "User specified USB idProduct");
 
+static struct usb_device_id generic_device_ids[2]; /* Initially all zeroes. */
+
 /* All of the device info needed for the Generic Serial Converter */
 static struct usb_serial_device_type generic_device = {
 	name:			"Generic",
-	idVendor:		&vendor,		/* use the user specified vendor id */
-	idProduct:		&product,		/* use the user specified product id */
+	id_table:		generic_device_ids,
 	needs_interrupt_in:	DONT_CARE,		/* don't have to have an interrupt in endpoint */
 	needs_bulk_in:		DONT_CARE,		/* don't have to have a bulk in endpoint */
 	needs_bulk_out:		DONT_CARE,		/* don't have to have a bulk out endpoint */
@@ -316,14 +322,24 @@ static void serial_unthrottle (struct tty_struct * tty);
 static int  serial_ioctl (struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned long arg);
 static void serial_set_termios (struct tty_struct *tty, struct termios * old);
 
-static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum);
+static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum,
+			       const struct usb_device_id *id);
 static void usb_serial_disconnect(struct usb_device *dev, void *ptr);
 
 static struct usb_driver usb_serial_driver = {
 	name:		"serial",
 	probe:		usb_serial_probe,
 	disconnect:	usb_serial_disconnect,
+	id_table:	NULL, 			/* check all devices */
 };
+
+/* There is no MODULE_DEVICE_TABLE for usbserial.c.  Instead
+   the MODULE_DEVICE_TABLE declarations in each serial driver
+   cause the "hotplug" program to pull in whatever module is necessary
+   via modprobe, and modprobe will load usbserial because the serial
+   drivers depend on it.
+*/
+   
 
 static int			serial_refcount;
 static struct tty_driver	serial_tty_driver;
@@ -957,7 +973,8 @@ static void port_softint(void *private)
 
 
 
-static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
+static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum,
+			       const struct usb_device_id *id)
 {
 	struct usb_serial *serial = NULL;
 	struct usb_serial_port *port;
@@ -981,19 +998,17 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 	int num_bulk_out = 0;
 	int num_ports;
 	int max_endpoints;
+	const struct usb_device_id *id_pattern = NULL;
 
 	
 	/* loop through our list of known serial converters, and see if this
 	   device matches. */
 	found = 0;
+	interface = &dev->actconfig->interface[ifnum];
 	list_for_each (tmp, &usb_serial_driver_list) {
 		type = list_entry(tmp, struct usb_serial_device_type, driver_list);
-		dbg ("Looking at %s Vendor id=%.4x Product id=%.4x", 
-			type->name, *(type->idVendor), *(type->idProduct));
-
-		/* look at the device descriptor */
-		if ((dev->descriptor.idVendor == *(type->idVendor)) &&
-		    (dev->descriptor.idProduct == *(type->idProduct))) {
+		id_pattern = usb_match_id(dev, interface, type->id_table);
+		if (id_pattern != NULL) {
 			dbg("descriptor matches");
 			found = 1;
 			break;
@@ -1009,7 +1024,6 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 	interrupt_pipe = bulk_in_pipe = bulk_out_pipe = HAS_NOT;
 			
 	/* check out the endpoints */
-	interface = &dev->actconfig->interface[ifnum];
 	iface_desc = &interface->altsetting[0];
 	for (i = 0; i < iface_desc->bNumEndpoints; ++i) {
 		endpoint = &iface_desc->endpoint[i];
@@ -1335,6 +1349,8 @@ int usb_serial_init(void)
 	}
 
 #ifdef CONFIG_USB_SERIAL_GENERIC
+	generic_device_ids[0].idVendor = vendor;
+	generic_device_ids[0].idProduct = product;
 	/* register our generic driver with ourselves */
 	usb_serial_register (&generic_device);
 #endif

@@ -1296,6 +1296,33 @@ void pmu_blink(int n)
  * Put the powerbook to sleep.
  */
  
+static u32 save_via[8];
+static void save_via_state(void)
+{
+	save_via[0] = in_8(&via[ANH]);
+	save_via[1] = in_8(&via[DIRA]);
+	save_via[2] = in_8(&via[B]);
+	save_via[3] = in_8(&via[DIRB]);
+	save_via[4] = in_8(&via[PCR]);
+	save_via[5] = in_8(&via[ACR]);
+	save_via[6] = in_8(&via[T1CL]);
+	save_via[7] = in_8(&via[T1CH]);
+}
+static void restore_via_state(void)
+{
+	out_8(&via[ANH], save_via[0]);
+	out_8(&via[DIRA], save_via[1]);
+	out_8(&via[B], save_via[2]);
+	out_8(&via[DIRB], save_via[3]);
+	out_8(&via[PCR], save_via[4]);
+	out_8(&via[ACR], save_via[5]);
+	out_8(&via[T1CL], save_via[6]);
+	out_8(&via[T1CH], save_via[7]);
+	out_8(&via[IER], IER_CLR | 0x7f);	/* disable all intrs */
+	out_8(&via[IFR], 0x7f);				/* clear IFR */
+	out_8(&via[IER], IER_SET | SR_INT | CB1_INT);
+}
+
 #define FEATURE_CTRL(base)	((unsigned int *)(base + 0x38))
 #define	GRACKLE_PM	(1<<7)
 #define GRACKLE_DOZE	(1<<5)
@@ -1304,11 +1331,11 @@ void pmu_blink(int n)
 
 int __openfirmware powerbook_sleep_G3(void)
 {
-	int ret;
 	unsigned long save_l2cr;
 	unsigned long wait;
 	unsigned short pmcr1;
 	struct adb_request req;
+	int ret, timeout;
 
 	/* Notify device drivers */
 	ret = broadcast_sleep(PBOOK_SLEEP_REQUEST, PBOOK_SLEEP_REJECT);
@@ -1333,39 +1360,60 @@ int __openfirmware powerbook_sleep_G3(void)
 	}
 
 	/* Give the disks a little time to actually finish writing */
-	for (wait = jiffies + (HZ/4); time_before(jiffies, wait); )
+	for (wait = jiffies + (HZ/2); time_before(jiffies, wait); )
 		mb();
+
+	/* Wait for completion of async backlight requests */
+	while (!bright_req_1.complete || !bright_req_2.complete || !bright_req_3.complete)
+		pmu_poll();
+	
+	/* Turn off various things. Darwin does some retry tests here... */
+	pmu_request(&req, NULL, 2, PMU_POWER_CTRL0, PMU_POW0_OFF|PMU_POW0_HARD_DRIVE);
+	while (!req.complete)
+		pmu_poll();
+	pmu_request(&req, NULL, 2, PMU_POWER_CTRL,
+		PMU_POW_OFF|PMU_POW_BACKLIGHT|PMU_POW_IRLED|PMU_POW_MEDIABAY);
+	while (!req.complete)
+		pmu_poll();
 
 	/* Disable all interrupts except pmu */
 	sleep_save_intrs(vias->intrs[0].line);
 
+	/* Make sure the PMU is idle */
+	while (pmu_state != idle)
+		pmu_poll();
+
 	/* Make sure the decrementer won't interrupt us */
 	asm volatile("mtdec %0" : : "r" (0x7fffffff));
-
-	feature_prepare_for_sleep();
+	/* Make sure any pending DEC interrupt occuring while we did
+	 * the above didn't re-enable the DEC */
+	mb();
+	asm volatile("mtdec %0" : : "r" (0x7fffffff));
+	
+	/* Giveup the FPU */
+	if (current->thread.regs && (current->thread.regs->msr & MSR_FP) != 0)
+		giveup_fpu(current);
 
 	/* For 750, save backside cache setting and disable it */
 	save_l2cr = _get_L2CR();	/* (returns 0 if not 750) */
 	if (save_l2cr)
 		_set_L2CR(0);
 
-	if (current->thread.regs && (current->thread.regs->msr & MSR_FP) != 0)
-		giveup_fpu(current);
+	/* Ask the PMU to put us to sleep */
+	pmu_request(&req, NULL, 5, PMU_SLEEP, 'M', 'A', 'T', 'T');
+	while (!req.complete)
+		pmu_poll();
+
+	/* The VIA is supposed not to be restored correctly*/
+	save_via_state();
+	/* We shut down some HW */
+	feature_prepare_for_sleep();
 
 	grackle_pcibios_read_config_word(0,0,0x70,&pmcr1);
 	/* Apparently, MacOS uses NAP mode for Grackle ??? */
 	pmcr1 &= ~(GRACKLE_DOZE|GRACKLE_SLEEP); 
 	pmcr1 |= GRACKLE_PM|GRACKLE_NAP;
 	grackle_pcibios_write_config_word(0, 0, 0x70, pmcr1);
-
-	/* Ask the PMU to put us to sleep */
-	pmu_request(&req, NULL, 5, PMU_SLEEP, 'M', 'A', 'T', 'T');
-	while (!req.complete)
-		pmu_poll();
-
-	cli();
-	while (pmu_state != idle)
-		pmu_poll();
 
 	/* Call low-level ASM sleep handler */
 	low_sleep_handler();
@@ -1374,33 +1422,54 @@ int __openfirmware powerbook_sleep_G3(void)
 	grackle_pcibios_read_config_word(0, 0, 0x70, &pmcr1);
 	pmcr1 &= ~(GRACKLE_PM|GRACKLE_DOZE|GRACKLE_SLEEP|GRACKLE_NAP); 
 	grackle_pcibios_write_config_word(0, 0, 0x70, pmcr1);
-
-	/* Make sure the PMU is idle */
-	while (pmu_state != idle)
-		pmu_poll();
-
-	sti();
-
+	
+	/* Restore things */
 	feature_wake_up();
-
-	/* The PGD is only a placeholder until Dan finds a way to make
-	 * this work properly on the 8xx processors.  It is only used on
-	 * 8xx processors, it is ignored here.
-	 */
-	set_context(current->mm->context, current->mm->pgd);
-
+	restore_via_state();
+	
 	/* Restore L2 cache */
 	if (save_l2cr)
- 		_set_L2CR(save_l2cr | 0x200000); /* set invalidate bit */
+ 		_set_L2CR(save_l2cr);
+	
+	/* Restore userland MMU context */
+	set_context(current->mm->context, current->mm->pgd);
 
-	/* reenable interrupts */
-	sleep_restore_intrs();
+	/* Re-enable DEC interrupts and kick DEC */
+	asm volatile("mtdec %0" : : "r" (0x7fffffff));
+	sti();
+	asm volatile("mtdec %0" : : "r" (0x10000000));
 
-	/* Tell PMU we are ready */
-	pmu_request(&req, NULL, 2, PMU_SYSTEM_READY, 2);
+	/* Power things up */
+	pmu_request(&req, NULL, 2, PMU_SET_INTR_MASK, 0xfc);
 	while (!req.complete)
 		pmu_poll();
-		
+	pmu_request(&req, NULL, 2, PMU_POWER_CTRL0,
+			PMU_POW0_ON|PMU_POW0_HARD_DRIVE);
+	while (!req.complete)
+		pmu_poll();
+	pmu_request(&req, NULL, 2, PMU_POWER_CTRL,
+			PMU_POW_ON|PMU_POW_BACKLIGHT|PMU_POW_CHARGER|PMU_POW_IRLED|PMU_POW_MEDIABAY);
+	while (!req.complete)
+		pmu_poll();
+
+	/* ack all pending interrupts */
+	timeout = 100000;
+	interrupt_data[0] = 1;
+	while (interrupt_data[0] || pmu_state != idle) {
+		if (--timeout < 0)
+			break;
+		if (pmu_state == idle)
+			adb_int_pending = 1;
+		via_pmu_interrupt(0, 0, 0);
+		udelay(10);
+	}
+
+	/* reenable interrupt controller */
+	sleep_restore_intrs();
+
+	/* Leave some time for HW to settle down */
+	mdelay(100);
+
 	/* Notify drivers */
 	mdelay(10);
 	broadcast_wake();

@@ -79,7 +79,7 @@ struct irda_task;
 typedef int (*IRDA_TASK_CALLBACK) (struct irda_task *task);
 
 struct irda_task {
-	queue_t q;
+	irda_queue_t q;
 	magic_t magic;
 
 	IRDA_TASK_STATE state;
@@ -111,7 +111,7 @@ typedef struct {
 
 /* Dongle registration info */
 struct dongle_reg {
-	queue_t q;         /* Must be first */
+	irda_queue_t q;         /* Must be first */
 	IRDA_DONGLE type;
 
 	void (*open)(dongle_t *dongle, struct qos_info *qos);

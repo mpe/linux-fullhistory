@@ -221,7 +221,11 @@ int __init pluto_detect(Scsi_Host_Template *tpnt)
 				if (!ages) continue;
 				
 				host = scsi_register (tpnt, sizeof (struct pluto));
-				if (!host) panic ("Cannot register PLUTO host\n");
+				if(!host)
+				{
+					kfree(ages);
+					continue;
+				}
 				
 				nplutos++;
 				

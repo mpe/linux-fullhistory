@@ -9,6 +9,10 @@
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
+ *
+ * Changes:
+ * 11-10-2000	Bartlomiej Zolnierkiewicz <bkz@linux-ide.org>
+ *		Added __init to gus_midi_init()
  */
 #include "sound_config.h"
 
@@ -199,7 +203,7 @@ static struct midi_operations gus_midi_operations =
 	buffer_status:	gus_midi_buffer_status,
 };
 
-void gus_midi_init(struct address_info *hw_config)
+void __init gus_midi_init(struct address_info *hw_config)
 {
 	int dev = sound_alloc_mididev();
 

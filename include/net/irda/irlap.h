@@ -81,7 +81,7 @@
 #define irda_incomp      (*self->decompressor.cp->incomp)
 
 struct irda_compressor {
-	queue_t q;
+	irda_queue_t q;
 
 	struct compressor *cp;
 	void *state; /* Not used by IrDA */
@@ -90,7 +90,7 @@ struct irda_compressor {
 
 /* Main structure of IrLAP */
 struct irlap_cb {
-	queue_t q;     /* Must be first */
+	irda_queue_t q;     /* Must be first */
 	magic_t magic;
 
 	struct net_device  *netdev;
@@ -214,7 +214,7 @@ void irlap_unitdata_indication(struct irlap_cb *, struct sk_buff *);
 void irlap_disconnect_request(struct irlap_cb *);
 void irlap_disconnect_indication(struct irlap_cb *, LAP_REASON reason);
 
-void irlap_status_indication(int quality_of_link);
+void irlap_status_indication(struct irlap_cb *, int quality_of_link);
 
 void irlap_test_request(__u8 *info, int len);
 

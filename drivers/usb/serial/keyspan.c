@@ -22,6 +22,9 @@
   Tip 'o the hat to Linuxcare for supporting staff in their work on
   open source projects.
 
+ (11/01/2000) Adam J. Richter
+	usb_device_id table support.
+ 
  (10/05/2000) gkh
 	Fixed bug with urb->dev not being set properly, now that the usb
 	core needs it.

@@ -2,6 +2,7 @@
  * PreP compliant NVRAM access
  */
 
+#ifdef __KERNEL__
 #ifndef _PPC_NVRAM_H
 #define _PPC_NVRAM_H
 
@@ -64,3 +65,4 @@ struct pmac_machine_location {
 #define PMAC_NVRAM_GET_OFFSET	_IOWR('p', 0x40, int) /* Get NVRAM partition offset */
 
 #endif
+#endif /* __KERNEL__ */

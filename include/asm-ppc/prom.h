@@ -4,6 +4,7 @@
  *
  * Copyright (C) 1996 Paul Mackerras.
  */
+#ifdef __KERNEL__
 #ifndef _PPC_PROM_H
 #define _PPC_PROM_H
 
@@ -98,3 +99,4 @@ extern void map_bootx_text(void);
 
 
 #endif /* _PPC_PROM_H */
+#endif /* __KERNEL__ */

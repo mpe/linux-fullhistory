@@ -44,6 +44,8 @@
  * 03 Nov, 1999 -- update for 2.3.25 kernel API changes.
  * 08 Jan, 2000 .. multiple camera support
  * 12 Aug, 2000 .. add some real locking, remove an Oops
+ * 10 Oct, 2000 .. usb_device_id table created. 
+ * 01 Nov, 2000 .. usb_device_id support added by Adam J. Richter
  *
  * Thanks to:  the folk who've provided USB product IDs, sent in
  * patches, and shared their sucesses!
@@ -59,7 +61,12 @@
 #include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/module.h>
-#undef DEBUG
+
+#ifdef CONFIG_USB_DEBUG
+	#define DEBUG
+#else
+	#undef DEBUG
+#endif
 #include <linux/usb.h>
 
 
@@ -82,7 +89,7 @@
 
 
 /* table of cameras that work through this driver */
-static __devinitdata struct usb_device_id camera_table [] = {
+static struct usb_device_id camera_table [] = {
 
 	/* These have the same application level protocol */  
     { idVendor: 0x040a, idProduct: 0x0120 },		// Kodak DC-240
@@ -105,7 +112,7 @@ static __devinitdata struct usb_device_id camera_table [] = {
 	 * means, among other things, no iso or interrupt endpoints.
 	 */
 
-    { }						// TERMINATING ENTRY
+    { }						/* Terminating entry */
 };
 
 MODULE_DEVICE_TABLE (usb, camera_table);
@@ -346,7 +353,7 @@ static /* const */ struct file_operations usb_camera_fops = {
 
 
 static void * __devinit
-camera_bind (struct usb_device *dev, unsigned int ifnum, const struct usb_device_id *camera_info)
+camera_probe (struct usb_device *dev, unsigned int ifnum, const struct usb_device_id *camera_info)
 {
 	int				i;
 	struct usb_interface_descriptor	*interface;
@@ -471,7 +478,7 @@ static /* const */ struct usb_driver camera_driver = {
 	name:		"dc2xx",
 
 	id_table:	camera_table,
-	bind:		camera_bind,
+	probe:		camera_probe,
 	disconnect:	camera_disconnect,
 
 	fops:		&usb_camera_fops,

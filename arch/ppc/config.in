@@ -98,6 +98,7 @@ bool 'High memory support (experimental)' CONFIG_HIGHMEM
 bool 'Mac-on-Linux support' CONFIG_MOL
 
 define_bool CONFIG_ISA n
+define_bool CONFIG_EISA n
 define_bool CONFIG_SBUS n
 
 if [ "$CONFIG_APUS" = "y" -o "$CONFIG_4xx" = "y" -o \

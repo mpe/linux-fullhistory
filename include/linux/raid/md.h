@@ -28,7 +28,6 @@
 #include <asm/bitops.h>
 #include <linux/module.h>
 #include <linux/hdreg.h>
-#include <linux/sysctl.h>
 #include <linux/proc_fs.h>
 #include <linux/smp_lock.h>
 #include <linux/delay.h>

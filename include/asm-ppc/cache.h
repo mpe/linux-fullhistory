@@ -1,6 +1,7 @@
 /*
  * include/asm-ppc/cache.h
  */
+#ifdef __KERNEL__
 #ifndef __ARCH_PPC_CACHE_H
 #define __ARCH_PPC_CACHE_H
 
@@ -83,3 +84,4 @@ extern void flush_dcache_range(unsigned long start, unsigned long stop);
 #endif /* CONFIG_8xx */
 
 #endif
+#endif /* __KERNEL__ */

@@ -12,6 +12,7 @@
  * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
  * Alan Cox	   : Swatted a double allocation of device bug. Made a few
  *		     more things module options.
+ * Bartlomiej Zolnierkiewicz : Added __init to pas_pcm_init()
  */
 
 #include "sound_config.h"
@@ -385,7 +386,7 @@ static struct audio_driver pas_audio_driver =
 	trigger:	pas_audio_trigger
 };
 
-void pas_pcm_init(struct address_info *hw_config)
+void __init pas_pcm_init(struct address_info *hw_config)
 {
 	DEB(printk("pas2_pcm.c: long pas_pcm_init()\n"));
 

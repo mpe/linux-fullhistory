@@ -115,6 +115,8 @@
  *	themselves, but we'll see.  
  *	
  * History
+ *  (still v0.14) Nov 10 2000 - Bartlomiej Zolnierkiewicz <bkz@linux-ide.org>
+ *	add __init to maestro_ac97_init() and maestro_install()
  *  (still based on v0.14) Mar 29 2000 - Zach Brown <zab@redhat.com>
  *	move to 2.3 power management interface, which
  *		required hacking some suspend/resume/check paths 
@@ -812,7 +814,7 @@ ac97_recmask_io(struct ess_card *card, int read, int mask)
  *	The PT101 setup is untested.
  */
  
-static u16 maestro_ac97_init(struct ess_card *card)
+static u16 __init maestro_ac97_init(struct ess_card *card)
 {
 	u16 vend1, vend2, caps;
 
@@ -3290,7 +3292,7 @@ parse_power(struct ess_card *card, struct pci_dev *pcidev)
 	return card->power_regs ? 1 : 0;
 }
 
-static int 
+static int __init
 maestro_install(struct pci_dev *pcidev, int card_type)
 {
 	u32 n;

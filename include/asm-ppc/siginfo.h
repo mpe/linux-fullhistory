@@ -3,8 +3,6 @@
 
 /* Copied from i386 from alpha. */
 
-#include <linux/types.h>
-
 typedef union sigval {
 	int sival_int;
 	void *sival_ptr;

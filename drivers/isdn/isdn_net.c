@@ -1,4 +1,4 @@
-/* $Id: isdn_net.c,v 1.135 2000/08/10 22:52:46 kai Exp $
+/* $Id: isdn_net.c,v 1.140 2000/11/01 17:54:01 detabc Exp $
 
  * Linux ISDN subsystem, network interfaces and related functions (linklevel).
  *
@@ -181,7 +181,7 @@ static __inline__ void isdn_net_zero_frame_cnt(isdn_net_local *lp)
 int isdn_net_force_dial_lp(isdn_net_local *);
 static int isdn_net_start_xmit(struct sk_buff *, struct net_device *);
 
-char *isdn_net_revision = "$Revision: 1.135 $";
+char *isdn_net_revision = "$Revision: 1.140 $";
 
  /*
   * Code for raw-networking over ISDN
@@ -190,7 +190,6 @@ char *isdn_net_revision = "$Revision: 1.135 $";
 static void
 isdn_net_unreachable(struct net_device *dev, struct sk_buff *skb, char *reason)
 {
-
 	if(skb) {
 
 		u_short proto = ntohs(skb->protocol);
@@ -704,6 +703,7 @@ isdn_net_dial(void)
 					i = isdn_dc2minor(lp->isdn_device, lp->isdn_channel);
 					if (i >= 0) {
 						strcpy(dev->num[i], cmd.parm.setup.phone);
+						dev->usage[i] |= ISDN_USAGE_OUTGOING;
 						isdn_info_update();
 					}
 					printk(KERN_INFO "%s: dialing %d %s...\n", lp->name,
@@ -1001,8 +1001,7 @@ void isdn_net_write_super(isdn_net_local *lp, struct sk_buff *skb)
 /*
  * called from tq_immediate
  */
-static void
-isdn_net_softint(void *private)
+static void isdn_net_softint(void *private)
 {
 	isdn_net_local *lp = private;
 	struct sk_buff *skb;
@@ -1086,9 +1085,7 @@ isdn_net_xmit(struct net_device *ndev, struct sk_buff *skb)
 		return isdn_ppp_xmit(skb, ndev);
 	}
 #endif
-	
 	nd = ((isdn_net_local *) ndev->priv)->netdev;
-
 	lp = isdn_net_get_locked_lp(nd);
 	if (!lp) {
 		printk(KERN_WARNING "%s: all channels busy - requeuing!\n", ndev->name);
@@ -1218,6 +1215,7 @@ isdn_net_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 		buf = skb->data;
 		isdn_dumppkt("S:", buf, skb->len, 40);
 #endif
+
 		if (!(lp->flags & ISDN_NET_CONNECTED)) {
 			int chi;
 			/* only do autodial if allowed by config */
@@ -1532,7 +1530,6 @@ isdn_net_receive(struct net_device *ndev, struct sk_buff *skb)
 		lp->stats.rx_packets++;
 		lp->stats.rx_bytes += skb->len;
 	}
-
 	skb->dev = ndev;
 	skb->pkt_type = PACKET_HOST;
 	skb->mac.raw = skb->data;
@@ -1615,6 +1612,7 @@ isdn_net_receive(struct net_device *ndev, struct sk_buff *skb)
 			isdn_ppp_receive(lp->netdev, olp, skb);
 			return;
 #endif
+
 		default:
 #ifdef CONFIG_ISDN_X25
 		  /* try if there are generic sync_device receiver routines */

@@ -34,11 +34,15 @@
 #define IAS_OCT_SEQ 2
 #define IAS_STRING  3
 
+/* Object ownership of attributes (user or kernel) */
+#define IAS_KERNEL_ATTR	0
+#define IAS_USER_ATTR	1
+
 /*
  *  LM-IAS Object
  */
 struct ias_object {
-	queue_t q;     /* Must be first! */
+	irda_queue_t q;     /* Must be first! */
 	magic_t magic;
 	
 	char  *name;
@@ -51,6 +55,7 @@ struct ias_object {
  */
 struct ias_value {
         __u8    type;    /* Value description */
+	__u8	owner;	/* Managed from user/kernel space */
 	int     charset; /* Only used by string type */
         int     len;
 	
@@ -66,7 +71,7 @@ struct ias_value {
  *  Attributes used by LM-IAS objects
  */
 struct ias_attrib {
-	queue_t q; /* Must be first! */
+	irda_queue_t q; /* Must be first! */
 	int magic;
 
         char *name;   	         /* Attribute name */
@@ -78,12 +83,15 @@ char *strdup(char *str);
 struct ias_object *irias_new_object(char *name, int id);
 void irias_insert_object(struct ias_object *obj);
 int  irias_delete_object(struct ias_object *obj);
+int  irias_delete_attrib(struct ias_object *obj, struct ias_attrib *attrib);
 void __irias_delete_object(struct ias_object *obj);
 
-void irias_add_integer_attrib(struct ias_object *obj, char *name, int value);
-void irias_add_string_attrib(struct ias_object *obj, char *name, char *value);
+void irias_add_integer_attrib(struct ias_object *obj, char *name, int value,
+			      int user);
+void irias_add_string_attrib(struct ias_object *obj, char *name, char *value,
+			     int user);
 void irias_add_octseq_attrib(struct ias_object *obj, char *name, __u8 *octets,
-			     int len);
+			     int len, int user);
 int irias_object_change_attribute(char *obj_name, char *attrib_name, 
 				  struct ias_value *new_value);
 struct ias_object *irias_find_object(char *name);

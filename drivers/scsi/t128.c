@@ -234,6 +234,9 @@ int __init t128_detect(Scsi_Host_Template * tpnt){
 	    break;
 
 	instance = scsi_register (tpnt, sizeof(struct NCR5380_hostdata));
+	if(instance == NULL)
+		break;
+		
 	instance->base = base;
 
 	NCR5380_init(instance, 0);

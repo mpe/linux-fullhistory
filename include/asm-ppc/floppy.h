@@ -7,6 +7,7 @@
  *
  * Copyright (C) 1995
  */
+#ifdef __KERNEL__
 #ifndef __ASM_PPC_FLOPPY_H
 #define __ASM_PPC_FLOPPY_H
 
@@ -54,3 +55,4 @@ static int FDC2 = -1;
 #define CROSS_64KB(a,s)	(0)
 
 #endif /* __ASM_PPC_FLOPPY_H */
+#endif /* __KERNEL__ */

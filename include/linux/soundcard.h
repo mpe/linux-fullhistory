@@ -76,8 +76,8 @@
  */
 
 #ifndef _SIOWR
-#if defined(_IOWR) && (defined(_AIX) || (!defined(sun) && !defined(sparc) && !defined(__INCioctlh) && !defined(__Lynx__)))
-/* Use already defined ioctl defines if they exist (except with Sun) */
+#if defined(_IOWR) && (defined(_AIX) || (!defined(sun) && !defined(sparc) && !defined(__sparc__) && !defined(__INCioctlh) && !defined(__Lynx__)))
+/* Use already defined ioctl defines if they exist (except with Sun or Sparc) */
 #define	SIOCPARM_MASK	IOCPARM_MASK
 #define	SIOC_VOID	IOC_VOID
 #define	SIOC_OUT	IOC_OUT
@@ -179,7 +179,7 @@ typedef struct seq_event_rec {
  * Some big endian/little endian handling macros
  */
 
-#if defined(_AIX) || defined(AIX) || defined(sparc) || defined(HPPA) || defined(PPC)
+#if defined(_AIX) || defined(AIX) || defined(sparc) || defined(__sparc__) || defined(HPPA) || defined(PPC)
 /* Big endian machines */
 #  define _PATCHKEY(id) (0xfd00|id)
 #  define AFMT_S16_NE AFMT_S16_BE

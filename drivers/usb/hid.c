@@ -1373,9 +1373,6 @@ static struct hid_device *usb_hid_configure(struct usb_device *dev, int ifnum, c
 		if ((hid_blacklist[n].idVendor == dev->descriptor.idVendor) &&
 			(hid_blacklist[n].idProduct == dev->descriptor.idProduct)) return NULL;
 
-	if (interface->bInterfaceClass != USB_INTERFACE_CLASS_HID)
-		return NULL;
-
 	if (usb_get_extra_descriptor(interface, USB_DT_HID, &hdesc)
 		&& usb_get_extra_descriptor(&interface->endpoint[0], USB_DT_HID, &hdesc)) {
 			dbg("class descriptor not present\n");
@@ -1471,7 +1468,8 @@ static struct hid_device *usb_hid_configure(struct usb_device *dev, int ifnum, c
 	return hid;
 }
 
-static void* hid_probe(struct usb_device *dev, unsigned int ifnum)
+static void* hid_probe(struct usb_device *dev, unsigned int ifnum,
+		       const struct usb_device_id *id)
 {
 	struct hid_device *hid;
 	char name[128];
@@ -1527,10 +1525,18 @@ static void hid_disconnect(struct usb_device *dev, void *ptr)
 	hid_free_device(hid);
 }
 
+static struct usb_device_id hid_usb_ids [] = {
+    { bInterfaceClass: USB_INTERFACE_CLASS_HID},
+    { }						/* Terminating entry */
+};
+
+MODULE_DEVICE_TABLE (usb, hid_usb_ids);
+
 static struct usb_driver hid_driver = {
 	name:		"hid",
 	probe:		hid_probe,
-	disconnect:	hid_disconnect
+	disconnect:	hid_disconnect,
+	id_table:	hid_usb_ids,
 };
 
 static int __init hid_init(void)

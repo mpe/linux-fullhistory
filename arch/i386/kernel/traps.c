@@ -63,6 +63,7 @@ struct desc_struct default_ldt[] = { { 0, 0 }, { 0, 0 }, { 0, 0 },
 struct desc_struct idt_table[256] __attribute__((__section__(".data.idt"))) = { {0, 0}, };
 
 extern int console_loglevel;
+extern void bust_spinlocks(void);
 
 static inline void console_silent(void)
 {
@@ -394,19 +395,7 @@ static int __init setup_nmi_watchdog(char *str)
 
 __setup("nmi_watchdog=", setup_nmi_watchdog);
 
-extern spinlock_t console_lock, timerlist_lock;
 static spinlock_t nmi_print_lock = SPIN_LOCK_UNLOCKED;
-
-/*
- * Unlock any spinlocks which will prevent us from getting the
- * message out (timerlist_lock is aquired through the
- * console unblank code)
- */
-void bust_spinlocks(void)
-{
-	spin_lock_init(&console_lock);
-	spin_lock_init(&timerlist_lock);
-}
 
 inline void nmi_watchdog_tick(struct pt_regs * regs)
 {
@@ -962,8 +951,10 @@ cobalt_init(void)
 #endif
 void __init trap_init(void)
 {
+#ifdef CONFIG_EISA
 	if (isa_readl(0x0FFFD9) == 'E'+('I'<<8)+('S'<<16)+('A'<<24))
 		EISA_bus = 1;
+#endif
 
 	set_trap_gate(0,&divide_error);
 	set_trap_gate(1,&debug);

@@ -104,8 +104,6 @@ void irlan_client_start_kick_timer(struct irlan_cb *self, int timeout)
  */
 void irlan_client_wakeup(struct irlan_cb *self, __u32 saddr, __u32 daddr)
 {
-	struct irmanager_event mgr_event;
-
 	IRDA_DEBUG(1, __FUNCTION__ "()\n");
 
 	ASSERT(self != NULL, return;);
@@ -117,41 +115,24 @@ void irlan_client_wakeup(struct irlan_cb *self, __u32 saddr, __u32 daddr)
 	 */
 	if ((self->client.state != IRLAN_IDLE) || 
 	    (self->provider.access_type == ACCESS_DIRECT))
-		return;
-
-	/* saddr may have changed! */
-	self->saddr = saddr;
-	
-	/* Before we try to connect, we check if network device is up. If it
-	 * is up, that means that the "user" really wants to connect. If not
-	 * we notify the user about the possibility of an IrLAN connection
-	 */
-	if (netif_running(&self->dev)) {
-		/* Open TSAPs */
-		irlan_client_open_ctrl_tsap(self);
- 		irlan_open_data_tsap(self);
-		
-		irlan_do_client_event(self, IRLAN_DISCOVERY_INDICATION, NULL);
-	} else if (self->notify_irmanager) {
-		/* 
-		 * Tell irmanager that the device can now be 
-		 * configured but only if the device was not taken
-		 * down by the user
-		 */
-		mgr_event.event = EVENT_IRLAN_START;
-		strcpy(mgr_event.devname, self->dev.name);
-		irmanager_notify(&mgr_event);
-		
-		/* 
-		 * We set this so that we only notify once, since if 
-		 * configuration of the network device fails, the user
-		 * will have to sort it out first anyway. No need to 
-		 * try again.
-		 */
-		self->notify_irmanager = FALSE;
+	{
+			IRDA_DEBUG(0, __FUNCTION__ "(), already awake!\n");
+			return;
 	}
-	/* Restart watchdog timer */
-	irlan_start_watchdog_timer(self, IRLAN_TIMEOUT);
+
+	/* Address may have changed! */
+	self->saddr = saddr;
+
+	if (self->disconnect_reason == LM_USER_REQUEST) {
+			IRDA_DEBUG(0, __FUNCTION__ "(), still stopped by user\n");
+			return;
+	}
+
+	/* Open TSAPs */
+	irlan_client_open_ctrl_tsap(self);
+	irlan_open_data_tsap(self);
+
+	irlan_do_client_event(self, IRLAN_DISCOVERY_INDICATION, NULL);
 	
 	/* Start kick timer */
 	irlan_client_start_kick_timer(self, 2*HZ);
@@ -163,7 +144,7 @@ void irlan_client_wakeup(struct irlan_cb *self, __u32 saddr, __u32 daddr)
  *    Remote device with IrLAN server support discovered
  *
  */
-void irlan_client_discovery_indication(discovery_t *discovery) 
+void irlan_client_discovery_indication(discovery_t *discovery, void *priv) 
 {
 	struct irlan_cb *self;
 	__u32 saddr, daddr;
@@ -176,29 +157,16 @@ void irlan_client_discovery_indication(discovery_t *discovery)
 	saddr = discovery->saddr;
 	daddr = discovery->daddr;
 
-	/* 
-	 *  Check if we already dealing with this provider.
-	 */
-	self = (struct irlan_cb *) hashbin_find(irlan, daddr, NULL);
-      	if (self) {
+	/* Find instance */
+	self = (struct irlan_cb *) hashbin_get_first(irlan);
+	if (self) {
 		ASSERT(self->magic == IRLAN_MAGIC, return;);
 
 		IRDA_DEBUG(1, __FUNCTION__ "(), Found instance (%08x)!\n",
 		      daddr);
 		
 		irlan_client_wakeup(self, saddr, daddr);
-
-		return;
 	}
-	
-	/* 
-	 * We have no instance for daddr, so start a new one
-	 */
-	IRDA_DEBUG(1, __FUNCTION__ "(), starting new instance!\n");
-	self = irlan_open(saddr, daddr, TRUE);
-
-	/* Restart watchdog timer */
-	irlan_start_watchdog_timer(self, IRLAN_TIMEOUT);
 }
 	
 /*
@@ -449,9 +417,7 @@ static void irlan_check_response_param(struct irlan_cb *self, char *param,
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRLAN_MAGIC, return;);
 
-	/*
-	 *  Media type
-	 */
+	/* Media type */
 	if (strcmp(param, "MEDIA") == 0) {
 		if (strcmp(value, "802.3") == 0)
 			self->media = MEDIA_802_3;
@@ -487,9 +453,7 @@ static void irlan_check_response_param(struct irlan_cb *self, char *param,
 			IRDA_DEBUG(2, __FUNCTION__ "(), unknown access type!\n");
 		}
 	}
-	/*
-	 *  IRLAN version
-	 */
+	/* IRLAN version */
 	if (strcmp(param, "IRLAN_VER") == 0) {
 		IRDA_DEBUG(4, "IrLAN version %d.%d\n", (__u8) value[0], 
 		      (__u8) value[1]);
@@ -498,9 +462,7 @@ static void irlan_check_response_param(struct irlan_cb *self, char *param,
 		self->version[1] = value[1];
 		return;
 	}
-	/*
-	 *  Which remote TSAP to use for data channel
-	 */
+	/* Which remote TSAP to use for data channel */
 	if (strcmp(param, "DATA_CHAN") == 0) {
 		self->dtsap_sel_data = value[0];
 		IRDA_DEBUG(4, "Data TSAP = %02x\n", self->dtsap_sel_data);
@@ -521,9 +483,7 @@ static void irlan_check_response_param(struct irlan_cb *self, char *param,
 			   self->client.max_frame);
 	}
 	 
-	/*
-	 *  RECONNECT_KEY, in case the link goes down!
-	 */
+	/* RECONNECT_KEY, in case the link goes down! */
 	if (strcmp(param, "RECONNECT_KEY") == 0) {
 		IRDA_DEBUG(4, "Got reconnect key: ");
 		/* for (i = 0; i < val_len; i++) */
@@ -532,9 +492,7 @@ static void irlan_check_response_param(struct irlan_cb *self, char *param,
 		self->client.key_len = val_len;
 		IRDA_DEBUG(4, "\n");
 	}
-	/*
-	 *  FILTER_ENTRY, have we got an ethernet address?
-	 */
+	/* FILTER_ENTRY, have we got an ethernet address? */
 	if (strcmp(param, "FILTER_ENTRY") == 0) {
 		bytes = value;
 		IRDA_DEBUG(4, "Ethernet address = %02x:%02x:%02x:%02x:%02x:%02x\n",

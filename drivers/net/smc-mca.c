@@ -194,7 +194,7 @@ int __init ultramca_probe(struct net_device *dev)
 	}
 
 	if(!adapter_found) {
-		return ((base_addr || irq) ? ENXIO : ENODEV);
+		return ((base_addr || irq) ? -ENXIO : -ENODEV);
 	}
 
         /* Adapter found. */
@@ -249,6 +249,9 @@ int __init ultramca_probe(struct net_device *dev)
 	if (dev->mem_start == 0) /* sanity check, shouldn't happen */
 		return -ENODEV;
 
+	if (!request_region(ioaddr, ULTRA_IO_EXTENT, dev->name))
+		return -EBUSY;
+
 	reg4 = inb(ioaddr + 4) & 0x7f;
 	outb(reg4, ioaddr + 4);
 
@@ -279,13 +282,9 @@ int __init ultramca_probe(struct net_device *dev)
 
 	if (ethdev_init(dev)) {
 		printk (KERN_INFO ", no memory for dev->priv.\n");
+		release_region(ioaddr, ULTRA_IO_EXTENT);
 		return -ENOMEM;
 	}
-
-	/* OK, we are certain this is going to work.  Setup the device.
-	 */
-
-	request_region(ioaddr, ULTRA_IO_EXTENT, "smc-mca");
 
 	/* The 8390 isn't at the base address, so fake the offset
 	 */
@@ -322,9 +321,10 @@ int __init ultramca_probe(struct net_device *dev)
 static int ultramca_open(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET; /* ASIC addr */
+	int retval;
 
-	if (request_irq(dev->irq, ei_interrupt, 0, ei_status.name, dev))
-		return -EAGAIN;
+	if ((retval = request_irq(dev->irq, ei_interrupt, 0, dev->name, dev)))
+		return retval;
 
 	outb(ULTRA_MEMENB, ioaddr); /* Enable memory */
 	outb(0x80, ioaddr + 5);     /* ??? */

@@ -370,7 +370,8 @@ static struct usb_driver mdc800_usb_driver;
 /*
  * Callback to search the Mustek MDC800 on the USB Bus
  */
-static void* mdc800_usb_probe (struct usb_device *dev ,unsigned int ifnum )
+static void* mdc800_usb_probe (struct usb_device *dev ,unsigned int ifnum,
+			       const struct usb_device_id *id)
 {
 	int i,j;
 	struct usb_interface_descriptor	*intf_desc;
@@ -378,11 +379,6 @@ static void* mdc800_usb_probe (struct usb_device *dev ,unsigned int ifnum )
 
 	dbg ("(mdc800_usb_probe) called.");
 
-
-	if (dev->descriptor.idVendor != MDC800_VENDOR_ID)
-		return 0;
-	if (dev->descriptor.idProduct != MDC800_PRODUCT_ID)
-		return 0;
 
 	if (mdc800->dev != 0)
 	{
@@ -873,17 +869,23 @@ static struct file_operations mdc800_device_ops =
 
 
 
+static struct usb_device_id mdc800_table [] = {
+    { idVendor: MDC800_VENDOR_ID, idProduct: MDC800_PRODUCT_ID },
+    { }						/* Terminating entry */
+};
+
+MODULE_DEVICE_TABLE (usb, mdc800_table);
 /*
  * USB Driver Struct for this device
  */
 static struct usb_driver mdc800_usb_driver =
 {
-	"mdc800",
-	mdc800_usb_probe,
-	mdc800_usb_disconnect,
-	{ 0,0 },
-	&mdc800_device_ops,
-	MDC800_DEVICE_MINOR_BASE
+	name:		"mdc800",
+	probe:		mdc800_usb_probe,
+	disconnect:	mdc800_usb_disconnect,
+	fops:		&mdc800_device_ops,
+	minor:		MDC800_DEVICE_MINOR_BASE,
+	id_table:	mdc800_table
 };
 
 

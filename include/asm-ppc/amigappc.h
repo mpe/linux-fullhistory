@@ -11,6 +11,7 @@
 ** Created: 7/22/97 by Jesper Skov
 */
 
+#ifdef __KERNEL__
 #ifndef _M68K_AMIGAPPC_H
 #define _M68K_AMIGAPPC_H
 
@@ -81,3 +82,4 @@ do {							\
 #define INTLVL_MASK             (0x7f)
 
 #endif /* _M68k_AMIGAPPC_H */
+#endif /* __KERNEL__ */

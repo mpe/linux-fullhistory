@@ -44,8 +44,8 @@
 /*
  * The DISCOVERY structure is used for both discovery requests and responses
  */
-typedef struct {
-	queue_t q;               /* Must be first! */
+typedef struct discovery_t {
+	irda_queue_t q;          /* Must be first! */
 
 	__u32      saddr;        /* Which link the device was discovered */
 	__u32      daddr;        /* Remote device address */
@@ -59,10 +59,12 @@ typedef struct {
 	int        gen_addr_bit; /* Need to generate a new device address? */
 	int        nslots;       /* Number of slots to use when discovering */
 	unsigned long timestamp; /* Time discovered */
+	unsigned long first_timestamp; /* First time discovered */
 } discovery_t;
 
 void irlmp_add_discovery(hashbin_t *cachelog, discovery_t *discovery);
 void irlmp_add_discovery_log(hashbin_t *cachelog, hashbin_t *log);
 void irlmp_expire_discoveries(hashbin_t *log, __u32 saddr, int force);
+struct irda_device_info *irlmp_copy_discoveries(hashbin_t *log, int *pn, __u16 mask);
 
 #endif

@@ -398,6 +398,7 @@ static int __init el1_probe1(struct net_device *dev, int ioaddr)
 
 static int el_open(struct net_device *dev)
 {
+	int retval;
 	int ioaddr = dev->base_addr;
 	struct net_local *lp = (struct net_local *)dev->priv;
 	unsigned long flags;
@@ -407,9 +408,9 @@ static int el_open(struct net_device *dev)
 	if (el_debug > 2)
 		printk("%s: Doing el_open()...", dev->name);
 
-	if (request_irq(dev->irq, &el_interrupt, 0, "3c501", dev)) {
+	if ((retval = request_irq(dev->irq, &el_interrupt, 0, dev->name, dev))) {
 		MOD_DEC_USE_COUNT;
-		return -EAGAIN;
+		return retval;
 	}
 
 	spin_lock_irqsave(&lp->lock, flags);

@@ -10,6 +10,7 @@
 ** Created 10/2/92 by Greg Harp
 */
 
+#ifdef __KERNEL__
 #ifndef _ASMm68k_AMIGAINTS_H_
 #define _ASMm68k_AMIGAINTS_H_
 
@@ -133,3 +134,4 @@ extern unsigned char cia_set_irq(unsigned int irq, int set);
 extern unsigned char cia_able_irq(unsigned int irq, int enable);
 
 #endif /* asm-m68k/amigaints.h */
+#endif /* __KERNEL__ */

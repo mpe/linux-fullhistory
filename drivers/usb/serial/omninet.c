@@ -10,6 +10,9 @@
  *
  * Please report both successes and troubles to the author at omninet@kroah.com
  *
+ * (11/01/2000) Adam J. Richter
+ *	usb_device_id table support
+ * 
  * (10/05/2000) gkh
  *	Fixed bug with urb->dev not being set properly, now that the usb
  *	core needs it.
@@ -66,14 +69,17 @@ static int  omninet_write		(struct usb_serial_port *port, int from_user, const u
 static int  omninet_write_room		(struct usb_serial_port *port);
 static void omninet_shutdown		(struct usb_serial *serial);
 
-/* All of the device info needed for the omni.net */
-static __u16	zyxel_vendor_id			= ZYXEL_VENDOR_ID;
-static __u16	zyxel_omninet_product_id	= ZYXEL_OMNINET_ID;
+static __devinitdata struct usb_device_id id_table [] = {
+    { idVendor: ZYXEL_VENDOR_ID, idProduct: ZYXEL_OMNINET_ID },
+    { }						/* Terminating entry */
+};
+
+MODULE_DEVICE_TABLE (usb, id_table);
+
 
 struct usb_serial_device_type zyxel_omninet_device = {
 	name:			"ZyXEL - omni.net lcd plus usb",
-	idVendor:		&zyxel_vendor_id,
-	idProduct:		&zyxel_omninet_product_id,
+	id_table:		id_table,
 	needs_interrupt_in:	MUST_HAVE,
 	needs_bulk_in:		MUST_HAVE,
 	needs_bulk_out:		MUST_HAVE,

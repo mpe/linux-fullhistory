@@ -156,7 +156,7 @@ void oom_kill(void)
 	if (p == NULL)
 		panic("Out of memory and no killable processes...\n");
 
-	printk(KERN_ERR "Out of Memory: Killed process %d (%s).", p->pid, p->comm);
+	printk(KERN_ERR "Out of Memory: Killed process %d (%s).\n", p->pid, p->comm);
 
 	/*
 	 * We give our sacrificial lamb high priority and access to

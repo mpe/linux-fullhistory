@@ -159,15 +159,13 @@ typedef struct {
 	unsigned short		slave_timeout;		/* when? */
 } ax25_dama_info;
 
-#ifndef _LINUX_SYSCTL_H
-#include <linux/sysctl.h>
-#endif
+struct ctl_table;
 
 typedef struct ax25_dev {
 	struct ax25_dev		*next;
-	struct net_device		*dev;
-	struct net_device		*forward;
-	struct ctl_table	systable[AX25_MAX_VALUES+1];
+	struct net_device	*dev;
+	struct net_device	*forward;
+	struct ctl_table	*systable;
 	int			values[AX25_MAX_VALUES];
 #if defined(CONFIG_AX25_DAMA_SLAVE) || defined(CONFIG_AX25_DAMA_MASTER)
 	ax25_dama_info		dama;

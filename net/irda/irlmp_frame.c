@@ -34,6 +34,9 @@
 #include <net/irda/irlmp_frame.h>
 #include <net/irda/discovery.h>
 
+#define	DISCO_SMALL_DELAY	250	/* Delay for some discoveries in ms */
+struct timer_list disco_delay;		/* The timer associated */
+
 static struct lsap_cb *irlmp_find_lsap(struct lap_cb *self, __u8 dlsap, 
 				       __u8 slsap, int status, hashbin_t *);
 
@@ -124,9 +127,11 @@ void irlmp_link_data_indication(struct lap_cb *self, struct sk_buff *skb,
 				       irlmp->unconnected_lsaps);
 		
 		/* Maybe LSAP was already connected, so try one more time */
-		if (!lsap)
+		if (!lsap) {
+			IRDA_DEBUG(1, __FUNCTION__ "(), incoming connection for LSAP already connected\n");
 			lsap = irlmp_find_lsap(self, dlsap_sel, slsap_sel, 0,
 					       self->lsaps);
+		}
 	} else
 		lsap = irlmp_find_lsap(self, dlsap_sel, slsap_sel, 0, 
 				       self->lsaps);
@@ -338,10 +343,50 @@ void irlmp_link_connect_confirm(struct lap_cb *self, struct qos_info *qos,
 }
 
 /*
+ * Function irlmp_discovery_timeout (priv)
+ *
+ *    Create a discovery event to the state machine (called after a delay)
+ *
+ * Note : irlmp_do_lap_event will handle the very rare case where the LAP
+ * is destroyed while we were sleeping.
+ */
+static void irlmp_discovery_timeout(u_long	priv)
+{
+	struct lap_cb *self;
+
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
+
+	self = (struct lap_cb *) priv;
+	ASSERT(self != NULL, return;);
+
+	/* Just handle it the same way as a discovery confirm */
+	irlmp_do_lap_event(self, LM_LAP_DISCOVERY_CONFIRM, NULL);
+}
+
+/*
  * Function irlmp_link_discovery_indication (self, log)
  *
  *    Device is discovering us
  *
+ * It's not an answer to our own discoveries, just another device trying
+ * to perform discovery, but we don't want to miss the opportunity
+ * to exploit this information, because :
+ *	o We may not actively perform discovery (just passive discovery)
+ *	o This type of discovery is much more reliable. In some cases, it
+ *	  seem that less than 50% of our discoveries get an answer, while
+ *	  we always get ~100% of these.
+ *	o Make faster discovery, statistically divide time of discovery
+ *	  events by 2 (important for the latency aspect and user feel)
+ * However, when both devices discover each other, they might attempt to
+ * connect to each other, and it would create collisions on the medium.
+ * The trick here is to defer the event by a little delay to avoid both
+ * devices to jump in exactly at the same time...
+ *
+ * The delay is currently set to 0.25s, which leave enough time to perform
+ * a connection and don't interfer with next discovery (the lowest discovery
+ * period/timeout that may be set is 1s). The message triggering this
+ * event was the last of the discovery, so the medium is now free...
+ * Maybe more testing is needed to get the value right...
  */
 void irlmp_link_discovery_indication(struct lap_cb *self, 
 				     discovery_t *discovery)
@@ -351,11 +396,14 @@ void irlmp_link_discovery_indication(struct lap_cb *self,
 
 	irlmp_add_discovery(irlmp->cachelog, discovery);
 	
-#if 0   /* This will just cause a lot of connection collisions */
-
-	/* Just handle it the same way as a discovery confirm */
-	irlmp_do_lap_event(self, LM_LAP_DISCOVERY_CONFIRM, NULL);
-#endif
+	/* If delay was activated, kill it! */
+	if(timer_pending(&disco_delay))
+		del_timer(&disco_delay);
+	/* Set delay timer to expire in 0.25s. */
+	disco_delay.expires = jiffies + (DISCO_SMALL_DELAY * HZ/1000);
+	disco_delay.function = irlmp_discovery_timeout;
+	disco_delay.data = (unsigned long) self;
+	add_timer(&disco_delay);
 }
 
 /*
@@ -374,7 +422,12 @@ void irlmp_link_discovery_confirm(struct lap_cb *self, hashbin_t *log)
 	ASSERT(self->magic == LMP_LAP_MAGIC, return;);
 	
 	irlmp_add_discovery_log(irlmp->cachelog, log);
-      
+
+	/* If discovery delay was activated, kill it! */
+	if(timer_pending(&disco_delay))
+		del_timer(&disco_delay);
+
+	/* Propagate event to the state machine */
 	irlmp_do_lap_event(self, LM_LAP_DISCOVERY_CONFIRM, NULL);
 }
 

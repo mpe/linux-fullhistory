@@ -16,6 +16,10 @@
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
+ *
+ * Changes:
+ * 11-10-2000	Bartlomiej Zolnierkiewicz <bkz@linux-ide.org>
+ *		Added __init to sb_rst() and sb_cmd()
  */
 
 #include <linux/init.h>
@@ -40,7 +44,7 @@ static void sleep( unsigned howlong )
 #define SBDSP_STATUS     SBDSP_COMMAND
 #define SBDSP_DATA_AVAIL 0xE
 
-static int sb_rst(int base)
+static int __init sb_rst(int base)
 {
 	int   i;
    
@@ -62,7 +66,7 @@ static int sb_rst(int base)
 	return 1;
 }
 
-static int sb_cmd( int base, unsigned char val )
+static int __init sb_cmd( int base, unsigned char val )
 {
 	int  i;
 

@@ -677,6 +677,8 @@ int sym53c416_detect(Scsi_Host_Template *tpnt)
       if(hosts[i].irq && !check_region(hosts[i].base, IO_RANGE))
         {
         shpnt = scsi_register(tpnt, 0);
+        if(shpnt==NULL)
+        	continue;
         save_flags(flags);
         cli();
         /* Request for specified IRQ */

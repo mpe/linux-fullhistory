@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.176 2000/10/06 22:45:41 davem Exp $
+ * Version:	$Id: tcp.c,v 1.179 2000/11/10 04:02:04 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -2011,7 +2011,7 @@ static int wait_for_connect(struct sock * sk, long timeo)
 	 */
 	add_wait_queue_exclusive(sk->sleep, &wait);
 	for (;;) {
-		current->state = TASK_EXCLUSIVE | TASK_INTERRUPTIBLE;
+		current->state = TASK_INTERRUPTIBLE;
 		release_sock(sk);
 		if (sk->tp_pinfo.af_tcp.accept_queue == NULL)
 			timeo = schedule_timeout(timeo);

@@ -187,8 +187,7 @@ __down_write(struct rw_semaphore *sem, int count)
 		add_wait_queue_exclusive(&sem->wait, &wait);
 	
 		while (atomic_read(&sem->count) < 0) {
-			set_task_state(tsk, (TASK_UNINTERRUPTIBLE
-					     | TASK_EXCLUSIVE));
+			set_task_state(tsk, TASK_UNINTERRUPTIBLE);
 			if (atomic_read(&sem->count) >= RW_LOCK_BIAS)
 				break;
 			schedule();
@@ -208,8 +207,7 @@ __down_write(struct rw_semaphore *sem, int count)
 		while (1) {
 			if (test_and_clear_bit(1, &sem->granted))
 				break;
-			set_task_state(tsk, (TASK_UNINTERRUPTIBLE
-					     | TASK_EXCLUSIVE));
+			set_task_state(tsk, TASK_UNINTERRUPTIBLE);
 			if ((sem->granted & 2) == 0)
 				schedule();
 		}

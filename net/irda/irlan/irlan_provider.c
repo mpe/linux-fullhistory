@@ -116,16 +116,16 @@ static int irlan_provider_data_indication(void *instance, void *sap,
 /*
  * Function irlan_provider_connect_indication (handle, skb, priv)
  *
- *    Got connection from peer IrLAN layer
+ *    Got connection from peer IrLAN client
  *
  */
 static void irlan_provider_connect_indication(void *instance, void *sap, 
 					      struct qos_info *qos,
 					      __u32 max_sdu_size, 
 					      __u8 max_header_size,
-					       struct sk_buff *skb)
+					      struct sk_buff *skb)
 {
-	struct irlan_cb *self, *new;
+	struct irlan_cb *self;
 	struct tsap_cb *tsap;
 	__u32 saddr, daddr;
 
@@ -137,82 +137,24 @@ static void irlan_provider_connect_indication(void *instance, void *sap,
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRLAN_MAGIC, return;);
 	
-	self->provider.max_sdu_size = max_sdu_size;
-	self->provider.max_header_size = max_header_size;
-
 	ASSERT(tsap == self->provider.tsap_ctrl,return;);
 	ASSERT(self->provider.state == IRLAN_IDLE, return;);
 
 	daddr = irttp_get_daddr(tsap);
 	saddr = irttp_get_saddr(tsap);
+	self->provider.max_sdu_size = max_sdu_size;
+	self->provider.max_header_size = max_header_size;
 
-	/* Check if we already dealing with this client or peer */
-	new = (struct irlan_cb *) hashbin_find(irlan, daddr, NULL);
-      	if (new) {
-		ASSERT(new->magic == IRLAN_MAGIC, return;);
-		IRDA_DEBUG(0, __FUNCTION__ "(), found instance!\n");
-
-		/* Update saddr, since client may have moved to a new link */
-		new->saddr = saddr;
-		IRDA_DEBUG(2, __FUNCTION__ "(), saddr=%08x\n", new->saddr);
-
-		/* Make sure that any old provider control TSAP is removed */
-		if ((new != self) && new->provider.tsap_ctrl) {
-			irttp_disconnect_request(new->provider.tsap_ctrl, 
-						 NULL, P_NORMAL);
-			irttp_close_tsap(new->provider.tsap_ctrl);
-			new->provider.tsap_ctrl = NULL;
-		}
-	} else {
-		/* This must be the master instance, so start a new instance */
-		IRDA_DEBUG(0, __FUNCTION__ "(), starting new provider!\n");
-
-		new = irlan_open(saddr, daddr, TRUE); 
-	}
-
-	/*  
-	 * Check if the connection came in on the master server, or the
-	 * slave server. If it came on the slave, then everything is
-	 * really, OK (reconnect), if not we need to dup the connection and
-	 * hand it over to the slave.  
-	 */
-	if (new != self) {
-				
-		/* Now attach up the new "socket" */
-		new->provider.tsap_ctrl = irttp_dup(self->provider.tsap_ctrl, 
-						    new);
-		if (!new->provider.tsap_ctrl) {
-			IRDA_DEBUG(0, __FUNCTION__ "(), dup failed!\n");
-			return;
-		}
-		
-		/* new->stsap_sel = new->tsap->stsap_sel; */
-		new->dtsap_sel_ctrl = new->provider.tsap_ctrl->dtsap_sel;
-
-		/* Clean up the original one to keep it in listen state */
-		self->provider.tsap_ctrl->dtsap_sel = LSAP_ANY;
-		self->provider.tsap_ctrl->lsap->dlsap_sel = LSAP_ANY;
-		self->provider.tsap_ctrl->lsap->lsap_state = LSAP_DISCONNECTED;
-		
-		/* 
-		 * Use the new instance from here instead of the master
-		 * struct! 
-		 */
-		self = new;
-	}
-	/* Check if network device has been registered */
-	if (!self->netdev_registered)
-		irlan_register_netdev(self);
-	
 	irlan_do_provider_event(self, IRLAN_CONNECT_INDICATION, NULL);
 
 	/*  
 	 * If we are in peer mode, the client may not have got the discovery
 	 * indication it needs to make progress. If the client is still in 
-	 * IDLE state, we must kick it to 
+	 * IDLE state, we must kick it. 
 	 */
 	if ((self->provider.access_type == ACCESS_PEER) && 
-	    (self->client.state == IRLAN_IDLE)) {
+	    (self->client.state == IRLAN_IDLE)) 
+	{
 		irlan_client_wakeup(self, self->saddr, self->daddr);
 	}
 }
@@ -231,11 +173,6 @@ void irlan_provider_connect_response(struct irlan_cb *self,
 
 	/* Just accept */
 	irttp_connect_response(tsap, IRLAN_MTU, NULL);
-
-	/* Check if network device has been registered */
-	if (!self->netdev_registered)
-		irlan_register_netdev(self);
-		
 }
 
 void irlan_provider_disconnect_indication(void *instance, void *sap, 

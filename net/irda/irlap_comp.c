@@ -63,7 +63,7 @@ int irda_register_compressor( struct compressor *cp)
         new->cp = cp;
 
 	/* Insert IrDA compressor into hashbin */
-	hashbin_insert( irlap_compressors, (queue_t *) new, cp->compress_proto,
+	hashbin_insert( irlap_compressors, (irda_queue_t *) new, cp->compress_proto,
 			NULL);
 	
         return 0;

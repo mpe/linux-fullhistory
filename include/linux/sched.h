@@ -85,7 +85,6 @@ extern int last_pid;
 #define TASK_UNINTERRUPTIBLE	2
 #define TASK_ZOMBIE		4
 #define TASK_STOPPED		8
-#define TASK_EXCLUSIVE		32
 
 #define __set_task_state(tsk, state_value)		\
 	do { (tsk)->state = (state_value); } while (0)
@@ -533,8 +532,8 @@ extern unsigned long prof_shift;
 
 #define CURRENT_TIME (xtime.tv_sec)
 
-extern void FASTCALL(__wake_up(wait_queue_head_t *q, unsigned int mode));
-extern void FASTCALL(__wake_up_sync(wait_queue_head_t *q, unsigned int mode));
+extern void FASTCALL(__wake_up(wait_queue_head_t *q, unsigned int mode, unsigned int wq_mode));
+extern void FASTCALL(__wake_up_sync(wait_queue_head_t *q, unsigned int mode, unsigned int wq_mode));
 extern void FASTCALL(sleep_on(wait_queue_head_t *q));
 extern long FASTCALL(sleep_on_timeout(wait_queue_head_t *q,
 				      signed long timeout));
@@ -543,12 +542,12 @@ extern long FASTCALL(interruptible_sleep_on_timeout(wait_queue_head_t *q,
 						    signed long timeout));
 extern void FASTCALL(wake_up_process(struct task_struct * tsk));
 
-#define wake_up(x)			__wake_up((x),TASK_UNINTERRUPTIBLE | TASK_INTERRUPTIBLE | TASK_EXCLUSIVE)
-#define wake_up_all(x)			__wake_up((x),TASK_UNINTERRUPTIBLE | TASK_INTERRUPTIBLE)
-#define wake_up_sync(x)			__wake_up_sync((x),TASK_UNINTERRUPTIBLE | TASK_INTERRUPTIBLE | TASK_EXCLUSIVE)
-#define wake_up_interruptible(x)	__wake_up((x),TASK_INTERRUPTIBLE | TASK_EXCLUSIVE)
-#define wake_up_interruptible_all(x)	__wake_up((x),TASK_INTERRUPTIBLE)
-#define wake_up_interruptible_sync(x)	__wake_up_sync((x),TASK_INTERRUPTIBLE | TASK_EXCLUSIVE)
+#define wake_up(x)			__wake_up((x),TASK_UNINTERRUPTIBLE | TASK_INTERRUPTIBLE,WQ_FLAG_EXCLUSIVE)
+#define wake_up_all(x)			__wake_up((x),TASK_UNINTERRUPTIBLE | TASK_INTERRUPTIBLE,0)
+#define wake_up_sync(x)			__wake_up_sync((x),TASK_UNINTERRUPTIBLE | TASK_INTERRUPTIBLE,WQ_FLAG_EXCLUSIVE)
+#define wake_up_interruptible(x)	__wake_up((x),TASK_INTERRUPTIBLE,WQ_FLAG_EXCLUSIVE)
+#define wake_up_interruptible_all(x)	__wake_up((x),TASK_INTERRUPTIBLE,0)
+#define wake_up_interruptible_sync(x)	__wake_up_sync((x),TASK_INTERRUPTIBLE,WQ_FLAG_EXCLUSIVE)
 
 extern int in_group_p(gid_t);
 extern int in_egroup_p(gid_t);

@@ -101,8 +101,6 @@ static int MainDaemon(void *cpu_pointer)
 	MOD_INC_USE_COUNT;
 
 	
-	current->state |= TASK_EXCLUSIVE;
-
 	CPUNR=0;
 	if (cpu_pointer!=NULL)
 	CPUNR=(int)*(int*)cpu_pointer;
@@ -148,7 +146,7 @@ static int MainDaemon(void *cpu_pointer)
 			changes +=AcceptConnections(CPUNR,MainSocket);
 		}
 		
-		set_current_state(TASK_INTERRUPTIBLE|TASK_EXCLUSIVE);	
+		set_current_state(TASK_INTERRUPTIBLE);	
 		if (changes==0) 
 		{
 			(void)interruptible_sleep_on_timeout(&(DummyWQ[CPUNR]),1);	

@@ -7,7 +7,6 @@
 
 struct msqid64_ds {
 	struct ipc64_perm msg_perm;
-	unsigned int	__unused0;
 	unsigned int	__unused1;
 	__kernel_time_t msg_stime;	/* last msgsnd time */
 	unsigned int	__unused2;

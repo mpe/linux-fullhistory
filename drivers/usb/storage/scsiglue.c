@@ -1,7 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  * SCSI layer glue code
  *
- * $Id: scsiglue.c,v 1.15 2000/10/19 18:44:11 mdharm Exp $
+ * $Id: scsiglue.c,v 1.17 2000/11/02 21:27:49 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -47,6 +47,7 @@
 #include "scsiglue.h"
 #include "usb.h"
 #include "debug.h"
+#include "transport.h"
 
 #include <linux/malloc.h>
 
@@ -105,7 +106,7 @@ static int detect(struct SHT *sht)
 
 /* Release all resources used by the virtual host
  *
- * NOTE: There is no contention here, because we're allready deregistered
+ * NOTE: There is no contention here, because we're already deregistered
  * the driver and we're doing each virtual host in turn, not in parallel
  */
 static int release(struct Scsi_Host *psh)
@@ -218,6 +219,7 @@ static int bus_reset( Scsi_Cmnd *srb )
 {
 	struct us_data *us = (struct us_data *)srb->host->hostdata[0];
 	int i;
+	int result;
 
 	/* we use the usb_reset_device() function to handle this for us */
 	US_DEBUGP("bus_reset() called\n");
@@ -228,6 +230,15 @@ static int bus_reset( Scsi_Cmnd *srb )
 		return SUCCESS;
 	}
 
+	/* release the IRQ, if we have one */
+	down(&(us->irq_urb_sem));
+	if (us->irq_urb) {
+		US_DEBUGP("-- releasing irq URB\n");
+		result = usb_unlink_urb(us->irq_urb);
+		US_DEBUGP("-- usb_unlink_urb() returned %d\n", result);
+	}
+	up(&(us->irq_urb_sem));
+
 	/* attempt to reset the port */
 	if (usb_reset_device(us->pusb_dev) < 0)
 		return FAILED;
@@ -237,6 +248,7 @@ static int bus_reset( Scsi_Cmnd *srb )
         for (i = 0; i < us->pusb_dev->actconfig->bNumInterfaces; i++) {
  		struct usb_interface *intf =
 			&us->pusb_dev->actconfig->interface[i];
+		struct usb_device_id *id;
 
 		/* if this is an unclaimed interface, skip it */
 		if (!intf->driver) {
@@ -254,8 +266,20 @@ static int bus_reset( Scsi_Cmnd *srb )
 		US_DEBUGPX("simulating disconnect/reconnect.\n");
 		down(&intf->driver->serialize);
 		intf->driver->disconnect(us->pusb_dev, intf->private_data);
-		intf->driver->probe(us->pusb_dev, i);
+		id = usb_match_id(us->pusb_dev, intf, intf->driver->id_table);
+		intf->driver->probe(us->pusb_dev, i, id);
 		up(&intf->driver->serialize);
+	}
+
+	/* re-allocate the IRQ URB and submit it to restore connectivity
+	 * for CBI devices
+	 */
+	if (us->protocol == US_PR_CBI) {
+		down(&(us->irq_urb_sem));
+		us->irq_urb->dev = us->pusb_dev;
+		result = usb_submit_urb(us->irq_urb);
+		US_DEBUGP("usb_submit_urb() returns %d\n", result);
+		up(&(us->irq_urb_sem));
 	}
 
 	US_DEBUGP("bus_reset() complete\n");

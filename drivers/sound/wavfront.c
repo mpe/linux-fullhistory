@@ -60,7 +60,12 @@
  *
  * This program is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
- * for more info.  */
+ * for more info.
+ *
+ * Changes:
+ * 11-10-2000	Bartlomiej Zolnierkiewicz <bkz@linux-ide.org>
+ *		Added some __init and __initdata to entries in yss225.c
+ */
 
 #include <linux/module.h>
 
@@ -2247,9 +2252,7 @@ wavefront_should_cause_interrupt (int val, int port, int timeout)
 	restore_flags (flags);
 }
 
-static int
-wavefront_hw_reset (void)
-
+static int __init wavefront_hw_reset (void)
 {
 	int bits;
 	int hwv[2];
@@ -2703,8 +2706,7 @@ static int __init wavefront_config_midi (void)
 	return 0;
 }
 
-static int
-wavefront_do_reset (int atboot)
+static int __init wavefront_do_reset (int atboot)
 {
 	char voices[1];
 
@@ -3076,7 +3078,7 @@ wffx_ioctl (wavefront_fx_info *r)
    a somewhat "algorithmic" approach.
 */
 
-static int wffx_init (void)
+static int __init wffx_init (void)
 {
 	int i;
 	int j;

@@ -5,6 +5,7 @@
  * Copyright (C) 1996 Paul Mackerras.
  */
 
+#ifdef __KERNEL__
 #ifndef _ASM_DBDMA_H_
 #define _ASM_DBDMA_H_
 /*
@@ -90,3 +91,4 @@ struct dbdma_cmd {
 #define DBDMA_ALIGN(x)	(((unsigned)(x) + sizeof(struct dbdma_cmd) - 1) \
 			 & -sizeof(struct dbdma_cmd))
 #endif /* _ASM_DBDMA_H_ */
+#endif /* __KERNEL__ */

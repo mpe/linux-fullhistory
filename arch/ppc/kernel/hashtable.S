@@ -90,9 +90,14 @@ hash_page:
 	REST_2GPRS(7, r21)
 #endif
 	/* Get PTE (linux-style) and check access */
+	lis	r0,KERNELBASE@h		/* check if kernel address */
+	cmplw	0,r3,r0
 	mfspr	r2,SPRG3		/* current task's THREAD (phys) */
 	lwz	r5,PGDIR(r2)		/* virt page-table root */
-	tophys(r5,r5)			/* convert to phys addr */
+	blt+	112f			/* assume user more likely */
+	lis	r5,swapper_pg_dir@ha	/* if kernel address, use */
+	addi	r5,r5,swapper_pg_dir@l	/* kernel page table */
+112:	tophys(r5,r5)			/* convert to phys addr */
 	rlwimi	r5,r3,12,20,29		/* insert top 10 bits of address */
 	lwz	r5,0(r5)		/* get pmd entry */
 	rlwinm.	r5,r5,0,0,19		/* extract address of pte page */
@@ -152,11 +157,7 @@ hash_page:
 	mfsrin	r5,r3			/* get segment reg for segment */
 	rlwinm	r5,r5,0,5,31
 	sldi	r5,r5,12
-	
-#ifndef CONFIG_SMP				/* do this later for SMP */
 	ori	r5,r5,1			/* set V (valid) bit */
-#endif
-	
 	rlwimi	r5,r3,16,20,24		/* put in API (abbrev page index) */
 	/* Get the address of the primary PTE group in the hash table */
 	.globl	hash_page_patch_A
@@ -284,7 +285,9 @@ found_slot:
  */
 found_empty:
 found_slot:
-	std	r5,0(r3)	/* clear V (valid) bit in PTE */
+	li	r0,1
+	andc	r5,r5,r0	/* clear V (valid) bit in PTE */
+	std	r5,0(r3)
 	sync
 	tlbsync
 	sync
@@ -299,11 +302,7 @@ found_slot:
 	/* Construct the high word of the PPC-style PTE */
 	mfsrin	r5,r3			/* get segment reg for segment */
 	rlwinm	r5,r5,7,1,24		/* put VSID in 0x7fffff80 bits */
-	
-#ifndef CONFIG_SMP				/* do this later for SMP */
 	oris	r5,r5,0x8000		/* set V (valid) bit */
-#endif
-	
 	rlwimi	r5,r3,10,26,31		/* put in API (abbrev page index) */
 	/* Get the address of the primary PTE group in the hash table */
 	.globl	hash_page_patch_A
@@ -417,7 +416,8 @@ found_slot:
  */
 found_empty:
 found_slot:
-	stw	r5,0(r3)	/* clear V (valid) bit in PTE */
+	rlwinm	r5,r5,0,1,31	/* clear V (valid) bit in PTE */
+	stw	r5,0(r3)
 	sync
 	tlbsync
 	sync

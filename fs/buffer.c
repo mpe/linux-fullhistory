@@ -707,11 +707,8 @@ void set_blocksize(kdev_t dev, int size)
  */
 static void refill_freelist(int size)
 {
-	if (!grow_buffers(size)) {
+	if (!grow_buffers(size)) 
 		wakeup_bdflush(1);  /* Sets task->state to TASK_RUNNING */
-		current->policy |= SCHED_YIELD;
-		schedule();
-	}
 }
 
 void init_buffer(struct buffer_head *bh, bh_end_io_t *handler, void *private)

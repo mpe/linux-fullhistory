@@ -75,6 +75,7 @@
 #define SIOCGIFDIVERT	0x8944		/* Frame diversion support */
 #define SIOCSIFDIVERT	0x8945		/* Set frame diversion options */
 
+#define SIOCETHTOOL	0x8946		/* Ethtool interface		*/
 
 /* ARP cache control calls. */
 		    /*  0x8950 - 0x8952  * obsolete calls, don't re-use */

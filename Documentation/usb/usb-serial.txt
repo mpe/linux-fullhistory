@@ -151,6 +151,37 @@ Digi AccelePort Driver
   driver.
 
 
+Belkin USB Serial Adapter F5U103
+
+  Single port DB-9/PS-2 serial adapter from Belkin with firmware by eTEK Labs.
+
+Current status:
+  The following have been tested and work:
+    Baud rate    300-230400               
+    Data bits    5-8
+    Stop bits    1-2
+    Parity       N,E,O,M,S
+    Handshake    None, Software (XON/XOFF), Hardware (CTSRTS,CTSDTR)*
+    Break        Set and clear
+    Line contrl  Input/Output query and control **
+
+    *  Hardware input flow control is only enabled for firmware
+       levels above 2.06.  Read source code comments describing Belkin
+       firmware errata.  Hardware output flow control is working for all
+       firmware versions.
+    ** Queries of inputs (CTS,DSR,CD,RI) show the last
+       reported state.  Queries of outputs (DTR,RTS) show the last
+       requested state and may not reflect current state as set by
+       automatic hardware flow control.
+
+TO DO List:
+  -- Add true modem contol line query capability.  Currently tracks the
+     states reported by the interrupt and the states requested.
+  -- Add error reporting back to application for UART error conditions.
+  -- Add support for flush ioctls.
+  -- Add everything else that is missing :)
+
+
 Generic Serial driver
 
   If your device is not one of the above listed devices, compatible with

@@ -141,10 +141,10 @@ static int __init hpp_probe1(struct net_device *dev, int ioaddr)
 	unsigned char checksum = 0;
 	const char *name = "HP-PC-LAN+";
 	int mem_start;
-	static unsigned version_printed = 0;
+	static unsigned version_printed;
 
-	if (!request_region(ioaddr, HP_IO_EXTENT, "hp-plus"))
-		return -ENODEV;
+	if (!request_region(ioaddr, HP_IO_EXTENT, dev->name))
+		return -EBUSY;
 
 	/* Check for the HP+ signature, 50 48 0x 53. */
 	if (inw(ioaddr + HP_ID) != 0x4850
@@ -249,9 +249,10 @@ hpp_open(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr - NIC_OFFSET;
 	int option_reg;
+	int retval;
 
-	if (request_irq(dev->irq, ei_interrupt, 0, "hp-plus", dev)) {
-	    return -EAGAIN;
+	if ((retval = request_irq(dev->irq, ei_interrupt, 0, dev->name, dev))) {
+	    return retval;
 	}
 
 	/* Reset the 8390 and HP chip. */

@@ -1,3 +1,4 @@
+#ifdef __KERNEL__
 #ifndef _ASM_KMAP_TYPES_H
 #define _ASM_KMAP_TYPES_H
 
@@ -8,3 +9,4 @@ enum km_type {
 };
 
 #endif
+#endif /* __KERNEL__ */

@@ -86,6 +86,9 @@ struct qos_info {
 #endif
 };
 
+extern int sysctl_max_baud_rate;
+extern int sysctl_max_inactive_time;
+
 extern __u32 baud_rates[];
 extern __u32 data_sizes[];
 extern __u32 min_turn_times[];
@@ -100,15 +103,7 @@ __u32 irlap_requested_line_capacity(struct qos_info *qos);
 __u32 irlap_min_turn_time_in_bytes(__u32 speed, __u32 min_turn_time);
 
 int msb_index(__u16 byte);
-int value_index(__u32 value, __u32 *array);
-__u32 byte_value(__u8 byte, __u32 *array);
-__u32 index_value(int index, __u32 *array);
-
 void irda_qos_bits_to_value(struct qos_info *qos);
 
 #endif
-
-
-
-
 

@@ -54,6 +54,7 @@ MODULE_DESCRIPTION("USB/RS232 I-Force joysticks and wheels driver");
 
 struct iforce {
 	signed char data[IFORCE_MAX_LENGTH];
+	struct usb_device *usbdev;
 	struct input_dev dev;
 	struct urb irq;
 	int open;
@@ -113,9 +114,11 @@ static int iforce_open(struct input_dev *dev)
 {
 	struct iforce *iforce = dev->private;
 
-	if (dev->idbus == BUS_USB && !iforce->open++)
+	if (dev->idbus == BUS_USB && !iforce->open++) {
+		iforce->irq.dev = iforce->usbdev;
 		if (usb_submit_urb(&iforce->irq))
 			return -EIO;
+	}
 
 	return 0;
 }
@@ -177,14 +180,11 @@ static void iforce_usb_irq(struct urb *urb)
 	iforce_process_packet(&iforce->dev, iforce->data[0], 8, iforce->data + 1);
 }
 
-static void *iforce_usb_probe(struct usb_device *dev, unsigned int ifnum)
+static void *iforce_usb_probe(struct usb_device *dev, unsigned int ifnum,
+			      const struct usb_device_id *id)
 {
 	struct usb_endpoint_descriptor *endpoint;
 	struct iforce *iforce;
-
-	if (dev->descriptor.idVendor != USB_VENDOR_ID_LOGITECH ||
-	    dev->descriptor.idProduct != USB_DEVICE_ID_LOGITECH_WMFORCE)
-		return NULL;
 
 	endpoint = dev->config[0].interface[ifnum].altsetting[0].endpoint + 0;
 
@@ -216,10 +216,21 @@ static void iforce_usb_disconnect(struct usb_device *dev, void *ptr)
 	kfree(iforce);
 }
 
+static struct usb_device_id iforce_usb_ids [] = {
+    {
+	idVendor: USB_VENDOR_ID_LOGITECH,
+	idProduct: USB_DEVICE_ID_LOGITECH_WMFORCE
+    },
+    { }						/* Terminating entry */
+};
+
+MODULE_DEVICE_TABLE (usb, iforce_usb_ids);
+
 static struct usb_driver iforce_usb_driver = {
 	name:		"iforce",
 	probe:		iforce_usb_probe,
 	disconnect:	iforce_usb_disconnect,
+	id_table:	iforce_usb_ids,
 };
 
 #endif

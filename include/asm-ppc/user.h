@@ -1,3 +1,4 @@
+#ifdef __KERNEL__
 #ifndef _PPC_USER_H
 #define _PPC_USER_H
 
@@ -50,3 +51,4 @@ struct user {
 #define HOST_STACK_END_ADDR	(u.start_stack + u.u_ssize * NBPG)
 
 #endif /* _PPC_USER_H */
+#endif /* __KERNEL__ */

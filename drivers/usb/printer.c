@@ -393,15 +393,18 @@ static ssize_t usblp_read(struct file *file, char *buffer, size_t count, loff_t 
 	return count;
 }
 
-static void *usblp_probe(struct usb_device *dev, unsigned int ifnum)
+static void *usblp_probe(struct usb_device *dev, unsigned int ifnum,
+			 const struct usb_device_id *id)
 {
 	struct usb_interface_descriptor *interface;
 	struct usb_endpoint_descriptor *epread, *epwrite;
 	struct usblp *usblp;
-	int minor, i, alts = -1, bidir = 0;
+	int minor, i, bidir = 0;
+	int alts = dev->actconfig->interface[ifnum].act_altsetting;
 	int length, err;
 	char *buf;
 
+	/* If a bidirectional interface exists, use it. */
 	for (i = 0; i < dev->actconfig->interface[ifnum].num_altsetting; i++) {
 
 		interface = &dev->actconfig->interface[ifnum].altsetting[i];
@@ -411,17 +414,12 @@ static void *usblp_probe(struct usb_device *dev, unsigned int ifnum)
 		   (interface->bInterfaceProtocol > 1 && interface->bNumEndpoints < 2))
 			continue;
 
-		if (alts == -1)
-			alts = i;
-
-		if (!bidir && interface->bInterfaceProtocol > 1) {
+		if (interface->bInterfaceProtocol > 1) {
 			bidir = 1;
 			alts = i;
+			break;
 		}
 	}
-
-	if (alts == -1)
-		return NULL;
 
 	interface = &dev->actconfig->interface[ifnum].altsetting[alts];
 	if (usb_set_interface(dev, ifnum, alts))
@@ -544,12 +542,22 @@ static struct file_operations usblp_fops = {
 	release:	usblp_release,
 };
 
+static struct usb_device_id usblp_ids [] = {
+    { bInterfaceClass: 7, bInterfaceSubClass: 1, bInterfaceProtocol: 1},
+    { bInterfaceClass: 7, bInterfaceSubClass: 1, bInterfaceProtocol: 2},
+    { bInterfaceClass: 7, bInterfaceSubClass: 1, bInterfaceProtocol: 3},
+    { }						/* Terminating entry */
+};
+
+MODULE_DEVICE_TABLE (usb, usblp_ids);
+
 static struct usb_driver usblp_driver = {
 	name:		"usblp",
 	probe:		usblp_probe,
 	disconnect:	usblp_disconnect,
 	fops:		&usblp_fops,
-	minor:		USBLP_MINOR_BASE
+	minor:		USBLP_MINOR_BASE,
+	id_table:	usblp_ids,
 };
 
 static int __init usblp_init(void)

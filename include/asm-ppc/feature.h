@@ -12,6 +12,7 @@
  *
  * 
  */
+#ifdef __KERNEL__
 #ifndef __ASM_PPC_FEATURE_H
 #define __ASM_PPC_FEATURE_H
 
@@ -93,3 +94,4 @@ extern void	feature_prepare_for_sleep(void);
 extern void	feature_wake_up(void);
 
 #endif /* __ASM_PPC_FEATURE_H */
+#endif /* __KERNEL__ */

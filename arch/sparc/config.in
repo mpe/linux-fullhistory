@@ -31,6 +31,7 @@ bool 'Symmetric multi-processing support (does not work on sun4/sun4c)' CONFIG_S
 
 # Global things across all Sun machines.
 define_bool CONFIG_ISA n
+define_bool CONFIG_EISA n
 define_bool CONFIG_PCMCIA n
 define_bool CONFIG_SBUS y
 define_bool CONFIG_SBUSCHAR y

@@ -2,6 +2,8 @@
 
 		      Jonathan Naylor 29.12.96
 
+Changed (Henner Eisen, 2000-10-29): int return value for data_indication() 
+
 The LAPB module will be a separately compiled module for use by any parts of
 the Linux operating system that require a LAPB service. This document
 defines the interfaces to, and the services provided by this module. The
@@ -37,7 +39,7 @@ struct lapb_register_struct {
 	void (*connect_indication)(int token, int reason);
 	void (*disconnect_confirmation)(int token, int reason);
 	void (*disconnect_indication)(int token, int reason);
-	void (*data_indication)(int token, struct sk_buff *skb);
+	int  (*data_indication)(int token, struct sk_buff *skb);
 	void (*data_transmit)(int token, struct sk_buff *skb);
 };
 
@@ -240,13 +242,17 @@ LAPB_TIMEDOUT		No response was received in N2 tries from the remote
 			system.
 
 
-void (*data_indication)(void *token, struct sk_buff *skb);
+int (*data_indication)(void *token, struct sk_buff *skb);
 
 This is called by the LAPB module when data has been received from the
 remote system that should be passed onto the next layer in the protocol
 stack. The skbuff becomes the property of the device driver and the LAPB
 module will not perform any more actions on it. The skb->data pointer will
 be pointing to the first byte of data after the LAPB header.
+
+This method should return NET_RX_DROP (as defined in the header
+file include/linux/netdevice.h) if and only if the frame was dropped
+before it could be delivered to the upper layer.
 
 
 void (*data_transmit)(void *token, struct sk_buff *skb);

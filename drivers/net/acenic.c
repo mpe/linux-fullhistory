@@ -56,12 +56,9 @@
 #include <linux/delay.h>
 #include <linux/mm.h>
 
-#undef ETHTOOL
 #undef INDEX_DEBUG
 
-#ifdef ETHTOOL
 #include <linux/ethtool.h>
-#endif
 #include <net/sock.h>
 #include <net/ip.h>
 
@@ -2427,7 +2424,6 @@ static int ace_change_mtu(struct net_device *dev, int new_mtu)
 
 static int ace_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
-#ifdef ETHTOOL
 	struct ace_private *ap = dev->priv;
 	struct ace_regs *regs = ap->regs;
 	struct ethtool_cmd ecmd;
@@ -2453,7 +2449,7 @@ static int ace_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 	if (copy_from_user(&ecmd, ifr->ifr_data, sizeof(ecmd)))
 		return -EFAULT;
 
-	if (ecmd.cmd == ETH_GSET) {
+	if (ecmd.cmd == ETHTOOL_GSET) {
 		ecmd.supported =
 			(SUPPORTED_10baseT_Half | SUPPORTED_10baseT_Full |
 			 SUPPORTED_100baseT_Half | SUPPORTED_100baseT_Full |
@@ -2486,17 +2482,18 @@ static int ace_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		else
 			ecmd.autoneg = AUTONEG_DISABLE;
 
+#if 0
 		ecmd.trace = readl(&regs->TuneTrace);
-
 		ecmd.txcoal = readl(&regs->TuneTxCoalTicks);
 		ecmd.rxcoal = readl(&regs->TuneRxCoalTicks);
+#endif
 		ecmd.maxtxpkt = readl(&regs->TuneMaxTxDesc);
 		ecmd.maxrxpkt = readl(&regs->TuneMaxRxDesc);
 
 		if(copy_to_user(ifr->ifr_data, &ecmd, sizeof(ecmd)))
 			return -EFAULT;
 		return 0;
-	} else if (ecmd.cmd == ETH_SSET) {
+	} else if (ecmd.cmd == ETHTOOL_SSET) {
 		if(!capable(CAP_NET_ADMIN))
 			return -EPERM;
 
@@ -2554,7 +2551,6 @@ static int ace_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		}
 		return 0;
 	}
-#endif
 
 	return -EOPNOTSUPP;
 }

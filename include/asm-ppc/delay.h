@@ -1,3 +1,4 @@
+#ifdef __KERNEL__
 #ifndef _PPC_DELAY_H
 #define _PPC_DELAY_H
 
@@ -31,3 +32,4 @@ extern __inline__ void udelay(unsigned long usecs)
 }
 
 #endif /* defined(_PPC_DELAY_H) */
+#endif /* __KERNEL__ */

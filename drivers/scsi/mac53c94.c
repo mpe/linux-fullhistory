@@ -78,8 +78,8 @@ mac53c94_detect(Scsi_Host_Template *tp)
 			panic("53c94: expected 2 addrs and intrs (got %d/%d)",
 			      node->n_addrs, node->n_intrs);
 		host = scsi_register(tp, sizeof(struct fsc_state));
-		if (host == 0)
-			panic("couldn't register 53c94 host");
+		if (host == NULL)
+			break;
 		host->unique_id = nfscs;
 #ifndef MODULE
 		note_scsi_host(node, host);

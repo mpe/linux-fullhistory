@@ -96,7 +96,7 @@ static void netlink_sock_destruct(struct sock *sk)
 #endif
 }
 
-/* This lock without TASK_EXCLUSIVE is good on UP and it is _very_ bad on SMP.
+/* This lock without WQ_FLAG_EXCLUSIVE is good on UP and it is _very_ bad on SMP.
  * Look, when several writers sleep and reader wakes them up, all but one
  * immediately hit write lock and grab all the cpus. Exclusive sleep solves
  * this, _but_ remember, it adds useless work on UP machines.
@@ -111,7 +111,7 @@ static void netlink_table_grab(void)
 
 		add_wait_queue_exclusive(&nl_table_wait, &wait);
 		for(;;) {
-			set_current_state(TASK_UNINTERRUPTIBLE|TASK_EXCLUSIVE);
+			set_current_state(TASK_UNINTERRUPTIBLE);
 			if (atomic_read(&nl_table_users) == 0)
 				break;
 			write_unlock_bh(&nl_table_lock);

@@ -1,3 +1,4 @@
+#ifdef __KERNEL__
 #ifndef _PPC_IO_H
 #define _PPC_IO_H
 
@@ -92,7 +93,7 @@ extern __inline__ unsigned int name(unsigned int port)	\
 		"3:	li	%0,-1\n"		\
 		"	b	2b\n"			\
 		".previous\n"				\
-		".section __ex_table,\"ax\"\n"		\
+		".section __ex_table,\"a\"\n"		\
 		"	.align	2\n"			\
 		"	.long	1b,3b\n"		\
 		".previous"				\
@@ -108,7 +109,7 @@ extern __inline__ void name(unsigned int val, unsigned int port) \
 		op " %0,0,%1\n"				\
 		"1:	sync\n"				\
 		"2:\n"					\
-		".section __ex_table,\"ax\"\n"		\
+		".section __ex_table,\"a\"\n"		\
 		"	.align	2\n"			\
 		"	.long	1b,2b\n"		\
 		".previous"				\
@@ -347,7 +348,6 @@ extern inline void out_be32(volatile unsigned *addr, int val)
 	__asm__ __volatile__("stw%U0%X0 %1,%0; eieio" : "=m" (*addr) : "r" (val));
 }
 
-#ifdef __KERNEL__
 static inline int check_signature(unsigned long io_addr,
 	const unsigned char *signature, int length)
 {
@@ -370,6 +370,5 @@ out:
 #define dma_cache_wback(_start,_size)		do { } while (0)
 #define dma_cache_wback_inv(_start,_size)	do { } while (0)
 
-#endif /* __KERNEL__ */
-
 #endif
+#endif /* __KERNEL__ */

@@ -5,6 +5,7 @@
  *
  * Copyright (c) 1998 Dan Malek (dmalek@jlc.net)
  */
+#ifdef __KERNEL__
 #ifndef __MACH_RPX_DEFS
 #define __MACH_RPX_DEFS
 
@@ -82,3 +83,4 @@ extern bd_t m8xx_board_info;
 #define _MACH_8xx (_MACH_classic)
 
 #endif
+#endif /* __KERNEL__ */

@@ -389,6 +389,11 @@ int i91u_detect(Scsi_Host_Template * tpnt)
 
 		pHCB->HCS_Index = i;	/* 7/29/98 */
 		hreg = scsi_register(tpnt, sizeof(HCS));
+		if(hreg == NULL)
+		{
+			release_region(pHCB->HCS_Base, 256);
+			return 0;
+		}
 		hreg->io_port = pHCB->HCS_Base;
 		hreg->n_io_port = 0xff;
 		hreg->can_queue = tul_num_scb;	/* 03/05/98                      */

@@ -1,9 +1,12 @@
 /*
- * $Id: avmcard.h,v 1.7 2000/01/25 14:33:38 calle Exp $
+ * $Id: avmcard.h,v 1.8 2000/10/10 17:44:19 kai Exp $
  *
  * Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: avmcard.h,v $
+ * Revision 1.8  2000/10/10 17:44:19  kai
+ * changes from/for 2.2.18
+ *
  * Revision 1.7  2000/01/25 14:33:38  calle
  * - Added Support AVM B1 PCI V4.0 (tested with prototype)
  *   - splitted up t1pci.c into b1dma.c for common function with b1pciv4
@@ -347,13 +350,13 @@ static inline unsigned int b1_rd_reg(unsigned int base,
 static inline void b1_reset(unsigned int base)
 {
 	b1outp(base, B1_RESET, 0);
-	udelay(55 * 2 * 1000);	/* 2 TIC's */
+	mdelay(55 * 2);	/* 2 TIC's */
 
 	b1outp(base, B1_RESET, 1);
-	udelay(55 * 2 * 1000);	/* 2 TIC's */
+	mdelay(55 * 2);	/* 2 TIC's */
 
 	b1outp(base, B1_RESET, 0);
-	udelay(55 * 2 * 1000);	/* 2 TIC's */
+	mdelay(55 * 2);	/* 2 TIC's */
 }
 
 static inline unsigned char b1_disable_irq(unsigned int base)

@@ -158,7 +158,6 @@ void udf_expand_file_adinicb(struct inode * inode, int newsize, int * err)
 {
 	struct buffer_head *bh = NULL;
 	struct page *page;
-	unsigned long kaddr = 0;
 	int block;
 
 	/* from now on we have normal address_space methods */
@@ -183,10 +182,10 @@ void udf_expand_file_adinicb(struct inode * inode, int newsize, int * err)
 		PAGE_BUG(page);
 	if (!Page_Uptodate(page))
 	{
-		kaddr = kmap(page);
-		memset((char *)kaddr + UDF_I_LENALLOC(inode), 0x00,
+		char *kaddr = kmap(page);
+		memset(kaddr + UDF_I_LENALLOC(inode), 0x00,
 			PAGE_CACHE_SIZE - UDF_I_LENALLOC(inode));
-		memcpy((char *)kaddr, bh->b_data + udf_file_entry_alloc_offset(inode),
+		memcpy(kaddr, bh->b_data + udf_file_entry_alloc_offset(inode),
 			UDF_I_LENALLOC(inode));
 		flush_dcache_page(page);
 		SetPageUptodate(page);

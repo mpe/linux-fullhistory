@@ -93,6 +93,7 @@
 #include <net/profile.h>
 #include <linux/init.h>
 #include <linux/kmod.h>
+#include <linux/module.h>
 #if defined(CONFIG_NET_RADIO) || defined(CONFIG_NET_PCMCIA_RADIO)
 #include <linux/wireless.h>		/* Note : will define WIRELESS_EXT */
 #endif	/* CONFIG_NET_RADIO || CONFIG_NET_PCMCIA_RADIO */
@@ -666,9 +667,15 @@ int dev_open(struct net_device *dev)
 	/*
 	 *	Call device private open method
 	 */
-	 
-	if (dev->open) 
-  		ret = dev->open(dev);
+	if (try_inc_mod_count(dev->owner)) {
+		if (dev->open) {
+			ret = dev->open(dev);
+			if (ret != 0 && dev->owner)
+				__MOD_DEC_USE_COUNT(dev->owner);
+		}
+	} else {
+		ret = -ENODEV;
+	}
 
 	/*
 	 *	If it went open OK then:
@@ -783,6 +790,12 @@ int dev_close(struct net_device *dev)
 	 *	Tell people we are down
 	 */
 	notifier_call_chain(&netdev_chain, NETDEV_DOWN, dev);
+
+	/*
+	 * Drop the module refcount
+	 */
+	if (dev->owner)
+		__MOD_DEC_USE_COUNT(dev->owner);
 
 	return(0);
 }
@@ -2056,8 +2069,9 @@ static int dev_ifsioc(struct ifreq *ifr, unsigned int cmd)
 		 */
 
 		default:
-			if (cmd >= SIOCDEVPRIVATE &&
-			    cmd <= SIOCDEVPRIVATE + 15) {
+			if ((cmd >= SIOCDEVPRIVATE &&
+			    cmd <= SIOCDEVPRIVATE + 15) ||
+			    cmd == SIOCETHTOOL) {
 				if (dev->do_ioctl) {
 					if (!netif_device_present(dev))
 						return -ENODEV;
@@ -2199,8 +2213,9 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		 */	
 		 
 		default:
-			if (cmd >= SIOCDEVPRIVATE &&
-			    cmd <= SIOCDEVPRIVATE + 15) {
+			if ((cmd >= SIOCDEVPRIVATE &&
+			    cmd <= SIOCDEVPRIVATE + 15) ||
+			    cmd == SIOCETHTOOL) {
 				dev_load(ifr.ifr_name);
 				rtnl_lock();
 				ret = dev_ifsioc(&ifr, cmd);

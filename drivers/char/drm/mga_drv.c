@@ -338,7 +338,7 @@ static int mga_takedown(drm_device_t *dev)
 /* mga_init is called via init_module at module load time, or via
  * linux/init/main.c (this is not currently supported). */
 
-static int mga_init(void)
+static int __init mga_init(void)
 {
 	int		      retcode;
 	drm_device_t	      *dev = &mga_device;
@@ -398,7 +398,7 @@ static int mga_init(void)
 
 /* mga_cleanup is called via cleanup_module at module unload time. */
 
-static void mga_cleanup(void)
+static void __exit mga_cleanup(void)
 {
 	drm_device_t	      *dev = &mga_device;
 

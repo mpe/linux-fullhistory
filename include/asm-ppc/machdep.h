@@ -1,4 +1,4 @@
-
+#ifdef __KERNEL__
 #ifndef _PPC_MACHDEP_H
 #define _PPC_MACHDEP_H
 
@@ -101,3 +101,4 @@ typedef enum sys_ctrler_kind {
 extern sys_ctrler_t sys_ctrler;
 
 #endif /* _PPC_MACHDEP_H */
+#endif /* __KERNEL__ */

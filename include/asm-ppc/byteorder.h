@@ -7,6 +7,7 @@
 
 #include <asm/types.h>
 
+#ifdef __KERNEL__
 #ifdef __GNUC__
 
 extern __inline__ unsigned ld_le16(const volatile unsigned short *addr)
@@ -72,11 +73,13 @@ static __inline__ __const__ __u32 ___arch__swab32(__u32 value)
 #define __arch__swab16s(addr) st_le16(addr,*addr)
 #define __arch__swab32s(addr) st_le32(addr,*addr)
 
-#endif /* __GNUC__ */
-
-#if defined(__GNUC__) && !defined(__STRICT_ANSI__)
+#ifndef __STRICT_ANSI__
 #define __BYTEORDER_HAS_U64__
 #endif
+
+#endif /* __GNUC__ */
+#endif /* __KERNEL__ */
+
 #include <linux/byteorder/big_endian.h>
 
 #endif /* _PPC_BYTEORDER_H */

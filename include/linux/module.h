@@ -344,4 +344,10 @@ __attribute__((section("__ksymtab"))) =			\
 #define EXPORT_NO_SYMBOLS
 #endif /* MODULE */
 
+#ifdef CONFIG_MODULES
+#define SET_MODULE_OWNER(some_struct) do { some_struct->owner = THIS_MODULE; } while (0)
+#else
+#define SET_MODULE_OWNER(some_struct) do { } while (0)
+#endif
+
 #endif /* _LINUX_MODULE_H */

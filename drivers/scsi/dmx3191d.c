@@ -82,6 +82,11 @@ int __init dmx3191d_detect(Scsi_Host_Template *tmpl) {
 		request_region(port, DMX3191D_REGION, DMX3191D_DRIVER_NAME);
 
 		instance = scsi_register(tmpl, sizeof(struct NCR5380_hostdata));
+		if(instance == NULL)
+		{
+			release_region(port, DMX3191D_REGION);
+			continue;
+		}
 		instance->io_port = port;
 		instance->irq = pdev->irq;
 		NCR5380_init(instance, FLAG_NO_PSEUDO_DMA | FLAG_DTC3181E);

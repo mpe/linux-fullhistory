@@ -7,7 +7,6 @@
 
 struct semid64_ds {
 	struct ipc64_perm sem_perm;		/* permissions .. see ipc.h */
-	unsigned int	__unused0;
 	unsigned int	__unused1;
 	__kernel_time_t	sem_otime;		/* last semop time */
 	unsigned int	__unused2;

@@ -1,5 +1,6 @@
 #include <linux/config.h>
 
+#ifdef __KERNEL__
 #ifndef __PPC_MMU_CONTEXT_H
 #define __PPC_MMU_CONTEXT_H
 
@@ -112,3 +113,4 @@ static inline void activate_mm(struct mm_struct *active_mm, struct mm_struct *mm
    ((segment < 8) ? ((segment) | (context)<<4) : (segment))
 
 #endif
+#endif /* __KERNEL__ */

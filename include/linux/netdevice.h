@@ -383,6 +383,9 @@ struct net_device
 	int			(*neigh_setup)(struct net_device *dev, struct neigh_parms *);
 	int			(*accept_fastpath)(struct net_device *, struct dst_entry*);
 
+	/* open/release and usage marking */
+	struct module *owner;
+
 	/* bridge stuff */
 	struct net_bridge_port	*br_port;
 

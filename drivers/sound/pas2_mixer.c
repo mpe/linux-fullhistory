@@ -14,6 +14,7 @@
  */
 /*
  * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
+ * Bartlomiej Zolnierkiewicz : added __init to pas_init_mixer()
  */
 #include "sound_config.h"
 
@@ -315,7 +316,7 @@ static struct mixer_operations pas_mixer_operations =
 	ioctl:	pas_mixer_ioctl
 };
 
-int
+int __init
 pas_init_mixer(void)
 {
 	int             d;

@@ -3,6 +3,7 @@
  *
  * ppc architecture timex specifications
  */
+#ifdef __KERNEL__
 #ifndef _ASMppc_TIMEX_H
 #define _ASMppc_TIMEX_H
 
@@ -39,3 +40,4 @@ static inline cycles_t get_cycles(void)
 }
 
 #endif
+#endif /* __KERNEL__ */

@@ -195,7 +195,7 @@ struct rw_semaphore *down_write_failed_biased(struct rw_semaphore *sem)
 	for (;;) {
 		if (sem->write_bias_granted && xchg(&sem->write_bias_granted, 0))
 			break;
-		set_task_state(tsk, TASK_UNINTERRUPTIBLE | TASK_EXCLUSIVE);
+		set_task_state(tsk, TASK_UNINTERRUPTIBLE);
 		if (!sem->write_bias_granted)
 			schedule();
 	}
@@ -251,7 +251,7 @@ struct rw_semaphore *down_write_failed(struct rw_semaphore *sem)
 	add_wait_queue_exclusive(&sem->wait, &wait);
 
 	while (atomic_read(&sem->count) < 0) {
-		set_task_state(tsk, TASK_UNINTERRUPTIBLE | TASK_EXCLUSIVE);
+		set_task_state(tsk, TASK_UNINTERRUPTIBLE);
 		if (atomic_read(&sem->count) >= 0)
 			break;	/* we must attempt to acquire or bias the lock */
 		schedule();

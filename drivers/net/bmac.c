@@ -1371,9 +1371,9 @@ static void __init bmac_probe1(struct device_node *bmac, int is_bmac_plus)
 	return;
 
 err_out_irq1:
-	free_irq(bmac->intrs[1].line);
+	free_irq(bmac->intrs[1].line, dev);
 err_out_irq0:
-	free_irq(dev->irq);
+	free_irq(dev->irq, dev);
 err_out_iounmap_rx:
 	iounmap((void *)bp->rx_dma);
 err_out_iounmap_tx:

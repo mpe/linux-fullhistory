@@ -50,6 +50,8 @@
  *          setting is the previous hardcoded setting "/etc/sound/pss_synth".
  * 00-03-03: Christoph Hellwig <chhellwig@gmx.net>
  *	    Adapted to module_init/module_exit
+ * 11-10-2000: Bartlomiej Zolnierkiewicz <bkz@linux-ide.org>
+ *	    Added __init to probe_pss(), attach_pss() and probe_pss_mpu()
  */
 
 
@@ -168,7 +170,7 @@ static void pss_write(pss_confdata *devc, int data)
  	printk(KERN_WARNING "PSS: DSP Command (%04x) Timeout.\n", data);
 }
 
-int probe_pss(struct address_info *hw_config)
+int __init probe_pss(struct address_info *hw_config)
 {
 	unsigned short id;
 	int irq, dma;
@@ -644,7 +646,7 @@ void configure_nonsound_components(void)
 	}
 }
 
-void attach_pss(struct address_info *hw_config)
+void __init attach_pss(struct address_info *hw_config)
 {
 	unsigned short  id;
 	char tmp[100];
@@ -693,7 +695,7 @@ void attach_pss(struct address_info *hw_config)
 	conf_printf(tmp, hw_config);
 }
 
-int probe_pss_mpu(struct address_info *hw_config)
+int __init probe_pss_mpu(struct address_info *hw_config)
 {
 	int timeout;
 

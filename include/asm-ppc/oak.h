@@ -11,6 +11,7 @@
  *
  */
 
+#ifdef __KERNEL__
 #ifndef	__OAK_H__
 #define	__OAK_H__
 
@@ -66,3 +67,4 @@ typedef struct board_info {
 #endif
 
 #endif /* __OAK_H__ */
+#endif /* __KERNEL__ */

@@ -12,6 +12,7 @@
  *	History
  *	LAPB 001	Jonathan Naylor	Started Coding
  *	LAPB 002	Jonathan Naylor	New timer architecture.
+ *	2000-10-29	Henner Eisen	lapb_data_indication() return status.
  */
  
 #include <linux/config.h>
@@ -370,14 +371,11 @@ void lapb_disconnect_indication(lapb_cb *lapb, int reason)
 
 int lapb_data_indication(lapb_cb *lapb, struct sk_buff *skb)
 {
-	int used = 0;
-
 	if (lapb->callbacks.data_indication != NULL) {
-		(lapb->callbacks.data_indication)(lapb->token, skb);
-		used = 1;
+		return (lapb->callbacks.data_indication)(lapb->token, skb);
 	}
-
-	return used;
+	kfree_skb(skb);
+	return NET_RX_CN_HIGH; /* For now; must be != NET_RX_DROP */ 
 }
 
 int lapb_data_transmit(lapb_cb *lapb, struct sk_buff *skb)

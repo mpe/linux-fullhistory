@@ -10,6 +10,7 @@
 /*             i.e. only one bit is on for each enum                          */
 /* Reserved fields must be filled with zeros.                                */
 
+#ifdef __KERNEL__
 #ifndef _RESIDUAL_
 #define _RESIDUAL_
 
@@ -330,3 +331,4 @@ extern PnP_TAG_PACKET *PnP_find_large_vendor_packet(unsigned char *p,
 #endif /* __ASSEMBLY__ */
 #endif  /* ndef _RESIDUAL_ */
 
+#endif /* __KERNEL__ */

@@ -13,6 +13,7 @@
  *
  * Thomas Sailer	ioctl code reworked (vmalloc/vfree removed)
  * Alan Cox		modularisation, use normal request_irq, use dev_id
+ * Bartlomiej Zolnierkiewicz	removed some __init to allow using many drivers
  */
 
 #include <linux/module.h>
@@ -908,7 +909,7 @@ static struct midi_operations mpu401_midi_proto =
 
 static struct midi_operations mpu401_midi_operations[MAX_MIDI_DEV];
 
-static void __init mpu401_chk_version(int n, struct mpu_config *devc)
+static void mpu401_chk_version(int n, struct mpu_config *devc)
 {
 	int tmp;
 	unsigned long flags;
@@ -939,7 +940,7 @@ static void __init mpu401_chk_version(int n, struct mpu_config *devc)
 	restore_flags(flags);
 }
 
-void __init attach_mpu401(struct address_info *hw_config, struct module *owner)
+void attach_mpu401(struct address_info *hw_config, struct module *owner)
 {
 	unsigned long flags;
 	char revision_char;
@@ -1166,7 +1167,7 @@ static void set_uart_mode(int dev, struct mpu_config *devc, int arg)
 
 }
 
-int __init probe_mpu401(struct address_info *hw_config)
+int probe_mpu401(struct address_info *hw_config)
 {
 	int ok = 0;
 	struct mpu_config tmp_devc;
@@ -1662,7 +1663,7 @@ static void timer_ext_event(struct mpu_config *devc, int event, int parm)
 	}
 }
 
-static int __init mpu_timer_init(int midi_dev)
+static int mpu_timer_init(int midi_dev)
 {
 	struct mpu_config *devc;
 	int n;
@@ -1724,7 +1725,7 @@ static int __initdata irq = -1;
 MODULE_PARM(irq, "i");
 MODULE_PARM(io, "i");
 
-int init_mpu401(void)
+int __init init_mpu401(void)
 {
 	/* Can be loaded either for module use or to provide functions
 	   to others */
@@ -1739,7 +1740,7 @@ int init_mpu401(void)
 	return 0;
 }
 
-void cleanup_mpu401(void)
+void __exit cleanup_mpu401(void)
 {
 	if (io != -1 && irq != -1) {
 		/* Check for use by, for example, sscape driver */

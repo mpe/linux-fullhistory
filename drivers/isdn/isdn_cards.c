@@ -1,4 +1,4 @@
-/* $Id: isdn_cards.c,v 1.11 2000/05/11 22:29:20 kai Exp $
+/* $Id: isdn_cards.c,v 1.13 2000/10/28 23:03:38 kai Exp $
 
  * Linux ISDN subsystem, initialization for non-modularized drivers.
  *
@@ -42,6 +42,9 @@ extern void eicon_init(void);
 extern void kcapi_init(void);
 extern void capi_init(void);
 extern void capidrv_init(void);
+#endif
+#if CONFIG_ISDN_DRV_ACT2000
+extern void act2000_init(void);
 #endif
 
 void

@@ -432,10 +432,20 @@ static void cpia_usb_free_resources(struct usb_cpia *ucpia, int try)
 		ucpia->sbuf[1].urb = NULL;
 	}
 
+	if (ucpia->sbuf[1].data) {
+		kfree(ucpia->sbuf[1].data);
+		ucpia->sbuf[1].data = NULL;
+	}
+ 
 	if (ucpia->sbuf[0].urb) {
 		usb_unlink_urb(ucpia->sbuf[0].urb);
 		usb_free_urb(ucpia->sbuf[0].urb);
 		ucpia->sbuf[0].urb = NULL;
+	}
+
+	if (ucpia->sbuf[0].data) {
+		kfree(ucpia->sbuf[0].data);
+		ucpia->sbuf[0].data = NULL;
 	}
 }
 
@@ -461,7 +471,8 @@ int cpia_usb_init(void)
 
 /* Probing and initializing */
 
-static void *cpia_probe(struct usb_device *udev, unsigned int ifnum)
+static void *cpia_probe(struct usb_device *udev, unsigned int ifnum,
+			const struct usb_device_id *id)
 {
 	struct usb_interface_descriptor *interface;
 	struct usb_cpia *ucpia;
@@ -474,13 +485,6 @@ static void *cpia_probe(struct usb_device *udev, unsigned int ifnum)
 
 	interface = &udev->actconfig->interface[ifnum].altsetting[0];
 
-	/* Is it a CPiA? */
-	if (udev->descriptor.idVendor != 0x0553)
-		return NULL;
-	if (udev->descriptor.idProduct != 0x0002)
-		return NULL;
-
-	/* We found a CPiA */
 	printk(KERN_INFO "USB CPiA camera found\n");
 
 	ucpia = kmalloc(sizeof(*ucpia), GFP_KERNEL);
@@ -552,11 +556,18 @@ fail_alloc_0:
 
 static void cpia_disconnect(struct usb_device *dev, void *ptr);
 
+static struct usb_device_id cpia_id_table [] = {
+	{ idVendor: 0x0553, idProduct: 0x0002 },
+	{ }					/* Terminating entry */
+};
+
+MODULE_DEVICE_TABLE (usb, cpia_id_table);
+
 static struct usb_driver cpia_driver = {
-	"cpia",
-	cpia_probe,
-	cpia_disconnect,
-	{ NULL, NULL }
+	name:		"cpia",
+	probe:		cpia_probe,
+	disconnect:	cpia_disconnect,
+	id_table:	cpia_id_table,
 };
 
 /* don't use dev, it may be NULL! (see usb_cpia_cleanup) */

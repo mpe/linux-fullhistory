@@ -8,6 +8,7 @@
  *  for more details.
  */
 
+#ifdef __KERNEL__
 #ifndef _ASMPPC_RAVEN_H
 #define _ASMPPC_RAVEN_H
 
@@ -31,3 +32,4 @@ extern struct hw_interrupt_type raven_pic;
 
 extern int raven_init(void);
 #endif _ASMPPC_RAVEN_H
+#endif /* __KERNEL__ */

@@ -148,6 +148,37 @@ int irias_delete_object(struct ias_object *obj)
 }
 
 /*
+ * Function irias_delete_attrib (obj)
+ *
+ *    Remove attribute from hashbin and, if it was the last attribute of
+ *    the object, remove the object as well.
+ *
+ */
+int irias_delete_attrib(struct ias_object *obj, struct ias_attrib *attrib) 
+{
+	struct ias_attrib *node;
+
+	ASSERT(obj != NULL, return -1;);
+	ASSERT(obj->magic == IAS_OBJECT_MAGIC, return -1;);
+	ASSERT(attrib != NULL, return -1;);
+
+	/* Remove atribute from object */
+	node = hashbin_remove(obj->attribs, 0, attrib->name);
+	if (!node)
+		return 0; /* Already removed or non-existent */
+
+	/* Deallocate attribute */
+	__irias_delete_attrib(node);
+
+	/* Check if object has still some attributes */
+	node = (struct ias_attrib *) hashbin_get_first(obj->attribs);
+	if (!node)
+		irias_delete_object(obj);
+
+	return 0;
+}
+
+/*
  * Function irias_insert_object (obj)
  *
  *    Insert an object into the LM-IAS database
@@ -158,7 +189,7 @@ void irias_insert_object(struct ias_object *obj)
 	ASSERT(obj != NULL, return;);
 	ASSERT(obj->magic == IAS_OBJECT_MAGIC, return;);
 	
-	hashbin_insert(objects, (queue_t *) obj, 0, obj->name);
+	hashbin_insert(objects, (irda_queue_t *) obj, 0, obj->name);
 }
 
 /*
@@ -201,7 +232,8 @@ struct ias_attrib *irias_find_attrib(struct ias_object *obj, char *name)
  *    Add attribute to object
  *
  */
-void irias_add_attrib( struct ias_object *obj, struct ias_attrib *attrib)
+void irias_add_attrib( struct ias_object *obj, struct ias_attrib *attrib,
+		       int owner)
 {
 	ASSERT(obj != NULL, return;);
 	ASSERT(obj->magic == IAS_OBJECT_MAGIC, return;);
@@ -209,7 +241,10 @@ void irias_add_attrib( struct ias_object *obj, struct ias_attrib *attrib)
 	ASSERT(attrib != NULL, return;);
 	ASSERT(attrib->magic == IAS_ATTRIB_MAGIC, return;);
 
-	hashbin_insert(obj->attribs, (queue_t *) attrib, 0, attrib->name);
+	/* Set if attrib is owned by kernel or user space */
+	attrib->value->owner = owner;
+
+	hashbin_insert(obj->attribs, (irda_queue_t *) attrib, 0, attrib->name);
 }
 
 /*
@@ -262,7 +297,8 @@ int irias_object_change_attribute(char *obj_name, char *attrib_name,
  *    Add an integer attribute to an LM-IAS object
  *
  */
-void irias_add_integer_attrib(struct ias_object *obj, char *name, int value)
+void irias_add_integer_attrib(struct ias_object *obj, char *name, int value,
+			      int owner)
 {
 	struct ias_attrib *attrib;
 
@@ -284,7 +320,7 @@ void irias_add_integer_attrib(struct ias_object *obj, char *name, int value)
 	/* Insert value */
 	attrib->value = irias_new_integer_value(value);
 	
-	irias_add_attrib(obj, attrib);
+	irias_add_attrib(obj, attrib, owner);
 }
 
  /*
@@ -295,7 +331,7 @@ void irias_add_integer_attrib(struct ias_object *obj, char *name, int value)
  */
 
 void irias_add_octseq_attrib(struct ias_object *obj, char *name, __u8 *octets,
-			     int len)
+			     int len, int owner)
 {
 	struct ias_attrib *attrib;
 	
@@ -319,7 +355,7 @@ void irias_add_octseq_attrib(struct ias_object *obj, char *name, __u8 *octets,
 	
 	attrib->value = irias_new_octseq_value( octets, len);
 	
-	irias_add_attrib(obj, attrib);
+	irias_add_attrib(obj, attrib, owner);
 }
 
 /*
@@ -328,7 +364,8 @@ void irias_add_octseq_attrib(struct ias_object *obj, char *name, __u8 *octets,
  *    Add a string attribute to an LM-IAS object
  *
  */
-void irias_add_string_attrib(struct ias_object *obj, char *name, char *value)
+void irias_add_string_attrib(struct ias_object *obj, char *name, char *value,
+			     int owner)
 {
 	struct ias_attrib *attrib;
 
@@ -351,7 +388,7 @@ void irias_add_string_attrib(struct ias_object *obj, char *name, char *value)
 
 	attrib->value = irias_new_string_value(value);
 
-	irias_add_attrib(obj, attrib);
+	irias_add_attrib(obj, attrib, owner);
 }
 
 /*

@@ -99,6 +99,25 @@ void irlap_start_mbusy_timer(struct irlap_cb *self)
 			 (void *) self, irlap_media_busy_expired);
 }
 
+void irlap_stop_mbusy_timer(struct irlap_cb *self)
+{
+	/* If timer is activated, kill it! */
+	if(timer_pending(&self->media_busy_timer))
+		del_timer(&self->media_busy_timer);
+
+#ifdef CONFIG_IRDA_ULTRA
+	/* Send any pending Ultra frames if any */
+	if (!skb_queue_empty(&self->txq_ultra))
+		/* Note : we don't send the frame, just post an event.
+		 * Frames will be sent only if we are in NDM mode (see
+		 * irlap_event.c).
+		 * Also, moved this code from irlap_media_busy_expired()
+		 * to here to catch properly all cases...
+		 * Jean II */
+		irlap_do_event(self, SEND_UI_FRAME, NULL, NULL);
+#endif /* CONFIG_IRDA_ULTRA */
+}
+
 void irlmp_start_watchdog_timer(struct lsap_cb *self, int timeout) 
 {
 	irda_start_timer(&self->watchdog_timer, timeout, (void *) self,
@@ -115,6 +134,13 @@ void irlmp_start_idle_timer(struct lap_cb *self, int timeout)
 {
 	irda_start_timer(&self->idle_timer, timeout, (void *) self,
 			 irlmp_idle_timer_expired);
+}
+
+void irlmp_stop_idle_timer(struct lap_cb *self) 
+{
+	/* If timer is activated, kill it! */
+	if(timer_pending(&self->idle_timer))
+		del_timer(&self->idle_timer);
 }
 
 /*
@@ -210,8 +236,5 @@ void irlap_media_busy_expired(void* data)
 	ASSERT(self != NULL, return;);
 
 	irda_device_set_media_busy(self->netdev, FALSE);
-
-	/* Send any pending Ultra frames if any */
-	if (!skb_queue_empty(&self->txq_ultra))
-		irlap_do_event(self, SEND_UI_FRAME, NULL, NULL);
+	/* Note : will deal with Ultra frames */
 }

@@ -11,6 +11,9 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (11/01/2000) Adam J. Richter
+ *	usb_device_id table support
+ * 
  * (10/05/2000) gkh
  *	Fixed bug with urb->dev not being set properly, now that the usb
  *	core needs it.
@@ -77,6 +80,31 @@
 #define CONNECT_TECH_FAKE_WHITE_HEAT_ID	0x0001
 #define CONNECT_TECH_WHITE_HEAT_ID	0x8001
 
+/*
+   ID tables for whiteheat are unusual, because we want to different
+   things for different versions of the device.  Eventually, this
+   will be doable from a single table.  But, for now, we define two
+   separate ID tables, and then a third table that combines them
+   just for the purpose of exporting the autoloading information.
+*/
+static __devinitdata struct usb_device_id id_table_std [] = {
+    {idVendor: CONNECT_TECH_VENDOR_ID, idProduct: CONNECT_TECH_WHITE_HEAT_ID},
+    { }						/* Terminating entry */
+};
+
+static __devinitdata struct usb_device_id id_table_prerenumeration [] = {
+    {idVendor: CONNECT_TECH_VENDOR_ID, idProduct: CONNECT_TECH_WHITE_HEAT_ID},
+    { }						/* Terminating entry */
+};
+
+static __devinitdata struct usb_device_id id_table_combined [] = {
+    {idVendor: CONNECT_TECH_VENDOR_ID, idProduct: CONNECT_TECH_WHITE_HEAT_ID},
+    {idVendor: CONNECT_TECH_VENDOR_ID, idProduct: CONNECT_TECH_FAKE_WHITE_HEAT_ID},
+    { }						/* Terminating entry */
+};
+
+MODULE_DEVICE_TABLE (usb, id_table_combined);
+
 /* function prototypes for the Connect Tech WhiteHEAT serial converter */
 static int  whiteheat_open		(struct usb_serial_port *port, struct file *filp);
 static void whiteheat_close		(struct usb_serial_port *port, struct file *filp);
@@ -87,14 +115,9 @@ static void whiteheat_unthrottle	(struct usb_serial_port *port);
 static int  whiteheat_startup		(struct usb_serial *serial);
 static void whiteheat_shutdown		(struct usb_serial *serial);
 
-/* All of the device info needed for the Connect Tech WhiteHEAT */
-static __u16	connecttech_vendor_id			= CONNECT_TECH_VENDOR_ID;
-static __u16	connecttech_whiteheat_fake_product_id	= CONNECT_TECH_FAKE_WHITE_HEAT_ID;
-static __u16	connecttech_whiteheat_product_id	= CONNECT_TECH_WHITE_HEAT_ID;
 struct usb_serial_device_type whiteheat_fake_device = {
 	name:			"Connect Tech - WhiteHEAT - (prerenumeration)",
-	idVendor:		&connecttech_vendor_id,			/* the Connect Tech vendor id */
-	idProduct:		&connecttech_whiteheat_fake_product_id,	/* the White Heat initial product id */
+	id_table:		id_table_prerenumeration,
 	needs_interrupt_in:	DONT_CARE,				/* don't have to have an interrupt in endpoint */
 	needs_bulk_in:		DONT_CARE,				/* don't have to have a bulk in endpoint */
 	needs_bulk_out:		DONT_CARE,				/* don't have to have a bulk out endpoint */
@@ -104,10 +127,10 @@ struct usb_serial_device_type whiteheat_fake_device = {
 	num_ports:		1,
 	startup:		whiteheat_startup	
 };
+
 struct usb_serial_device_type whiteheat_device = {
 	name:			"Connect Tech - WhiteHEAT",
-	idVendor:		&connecttech_vendor_id,			/* the Connect Tech vendor id */
-	idProduct:		&connecttech_whiteheat_product_id,	/* the White Heat real product id */
+	id_table:		id_table_std,
 	needs_interrupt_in:	DONT_CARE,				/* don't have to have an interrupt in endpoint */
 	needs_bulk_in:		DONT_CARE,				/* don't have to have a bulk in endpoint */
 	needs_bulk_out:		DONT_CARE,				/* don't have to have a bulk out endpoint */

@@ -4,6 +4,7 @@
  * For now, implementation resides in arch/ppc/kernel/pmac_support.c
  * 
  */
+#ifdef __KERNEL__
 #ifndef __ASM_PPC_BACKLIGHT_H
 #define __ASM_PPC_BACKLIGHT_H
 
@@ -26,3 +27,4 @@ extern int set_backlight_level(int level);
 extern int get_backlight_level(void);
 
 #endif
+#endif /* __KERNEL__ */

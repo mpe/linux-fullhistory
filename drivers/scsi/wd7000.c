@@ -1626,6 +1626,8 @@ int wd7000_detect (Scsi_Host_Template *tpnt)
 		 *  array hostdata.
 		 */
 		sh = scsi_register (tpnt, sizeof (Adapter));
+		if(sh==NULL)
+			continue;
 		host = (Adapter *) sh->hostdata;
 
 #ifdef WD7000_DEBUG

@@ -1,12 +1,12 @@
 #ifndef __PPC_PCI_H
 #define __PPC_PCI_H
+#ifdef __KERNEL__
 
 /* Values for the `which' argument to sys_pciconfig_iobase syscall.  */
 #define IOBASE_BRIDGE_NUMBER	0
 #define IOBASE_MEMORY		1
 #define IOBASE_IO		2
 
-#ifdef __KERNEL__
 
 /* Can be used to override the logic in pci_scan_bus for skipping
  * already-configured bus numbers - to be used for buggy BIOSes

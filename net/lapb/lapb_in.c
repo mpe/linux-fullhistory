@@ -12,6 +12,7 @@
  *	History
  *	LAPB 001	Jonathan Naulor	Started Coding
  *	LAPB 002	Jonathan Naylor	New timer architecture.
+ *	2000-10-29	Henner Eisen	lapb_data_indication() return status.
  */
 
 #include <linux/config.h>
@@ -464,8 +465,21 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 				lapb_check_iframes_acked(lapb, frame->nr);
 			}
 			if (frame->ns == lapb->vr) {
+				int cn;
+				cn = lapb_data_indication(lapb, skb);
+				queued = 1;
+				/*
+				 * If upper layer has dropped the frame, we
+				 * basically ignore any further protocol
+				 * processing. This will cause the peer
+				 * to re-transmit the frame later like
+				 * a frame lost on the wire.
+				 */
+				if(cn == NET_RX_DROP){
+					printk(KERN_DEBUG "LAPB: rx congestion\n");
+					break;
+				}
 				lapb->vr = (lapb->vr + 1) % modulus;
-				queued = lapb_data_indication(lapb, skb);
 				lapb->condition &= ~LAPB_REJECT_CONDITION;
 				if (frame->pf) {
 					lapb_enquiry_response(lapb);

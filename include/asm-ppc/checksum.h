@@ -1,3 +1,4 @@
+#ifdef __KERNEL__
 #ifndef _PPC_CHECKSUM_H
 #define _PPC_CHECKSUM_H
 
@@ -111,3 +112,4 @@ extern unsigned short csum_tcpudp_magic(unsigned long saddr,
 					unsigned int sum);
 
 #endif
+#endif /* __KERNEL__ */

@@ -343,7 +343,7 @@ mii_lookup_and_reset(struct gmac *gm)
 	mdelay(10);
 	
 	/* Find the PHY */
-	for(i=31; i>0; --i) {
+	for(i=0; i<=31; i++) {
 		mii_control = mii_read(gm, i, MII_CR);
 		mii_status = mii_read(gm, i, MII_SR);
 		if (mii_control != -1  && mii_status != -1 &&
@@ -351,7 +351,7 @@ mii_lookup_and_reset(struct gmac *gm)
 			break;
 	}
 	gm->phy_addr = i;
-	if (gm->phy_addr < 0)
+	if (gm->phy_addr > 31)
 		return 0;
 
 	/* Reset it */
@@ -972,10 +972,11 @@ gmac_tx_timeout(struct net_device *dev)
 {
 	struct gmac *gm = (struct gmac *) dev->priv;
 	int i, timeout;
-	
+	unsigned long flags;
+		
 	printk (KERN_ERR "%s: transmit timed out, resetting\n", dev->name);
 
-	spin_lock_irq(&gm->lock);
+	spin_lock_irqsave(&gm->lock, flags);
 
 	/* Stop chip */
 	gmac_stop_dma(gm);
@@ -1011,7 +1012,7 @@ gmac_tx_timeout(struct net_device *dev)
 	/* Restart chip */
 	gmac_start_dma(gm);
 	
-	spin_unlock_irq(&gm->lock);
+	spin_unlock_irqrestore(&gm->lock, flags);
 
 	netif_wake_queue(dev);
 }
@@ -1024,9 +1025,10 @@ gmac_xmit_start(struct sk_buff *skb, struct net_device *dev)
 {
 	struct gmac *gm = (struct gmac *) dev->priv;
 	volatile struct gmac_dma_desc *dp;
+	unsigned long flags;
 	int i;
 
-	spin_lock_irq(&gm->lock);
+	spin_lock_irqsave(&gm->lock, flags);
 
 	i = gm->next_tx;
 	if (gm->tx_buff[i] != 0) {
@@ -1036,7 +1038,7 @@ gmac_xmit_start(struct sk_buff *skb, struct net_device *dev)
 		 * Can this ever happen in 2.4 ?
 		 */
 		netif_stop_queue(dev);
-		spin_unlock_irq(&gm->lock);
+		spin_unlock_irqrestore(&gm->lock, flags);
 		return 1;
 	}
 	gm->next_tx = (i + 1) & (NTX - 1);
@@ -1058,7 +1060,7 @@ gmac_xmit_start(struct sk_buff *skb, struct net_device *dev)
 	if (gm->tx_buff[gm->next_tx] != 0)
 		netif_stop_queue(dev);
 
-	spin_unlock_irq(&gm->lock);
+	spin_unlock_irqrestore(&gm->lock, flags);
 
 	dev->trans_start = jiffies;
 
@@ -1078,9 +1080,12 @@ gmac_tx_cleanup(struct net_device *dev, int force_cleanup)
 	int gone, i;
 
 	i = gm->tx_gone;
-	gone = GM_IN(GM_TX_COMP);
-	
-	while (force_cleanup || i != gone) {
+
+	/* Note: If i==gone, we empty the entire ring. This works because
+	 * if the ring was empty, we wouldn't have received the interrupt
+	 */
+	do {
+		gone = GM_IN(GM_TX_COMP);
 		skb = gm->tx_buff[i];
 		if (skb == NULL)
 			break;
@@ -1095,14 +1100,12 @@ gmac_tx_cleanup(struct net_device *dev, int force_cleanup)
 		dev_kfree_skb_irq(skb);
 		if (++i >= NTX)
 			i = 0;
-	}
+	} while (force_cleanup || i != gone);
 	gm->tx_gone = i;
 
 	if (!force_cleanup && netif_queue_stopped(dev) &&
 	    (gm->tx_buff[gm->next_tx] == 0))
 		netif_wake_queue(dev);
-
-	spin_unlock(&gm->lock);
 }
 
 /*
@@ -1373,6 +1376,8 @@ gmac_probe1(struct device_node *gmac)
 	dev->irq = gmac->intrs[0].line;
 	gm->dev = dev;
 	gm->of_node = gmac;
+
+	spin_lock_init(&gm->lock);
 	
 	if (pci_device_loc(gmac, &gm->pci_bus, &gm->pci_devfn)) {
 		gm->pci_bus = gm->pci_devfn = 0xff;

@@ -6,6 +6,7 @@
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
+#ifdef __KERNEL__
 #ifndef _PPC_KGDB_H
 #define _PPC_KGDB_H
 
@@ -46,3 +47,4 @@ extern char getDebugChar(void);   /* read and return a single char */
 
 #endif /* !(__ASSEMBLY__) */
 #endif /* !(_PPC_KGDB_H) */
+#endif /* __KERNEL__ */

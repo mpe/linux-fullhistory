@@ -16,7 +16,7 @@ if [ "$CONFIG_SERIAL" = "y" ]; then
       tristate '   Dual serial port support' CONFIG_DUALSP_SERIAL
    fi
 fi
-dep_bool 'Extended dumb serial driver options' CONFIG_SERIAL_EXTENDED $CONFIG_SERIAL
+dep_mbool 'Extended dumb serial driver options' CONFIG_SERIAL_EXTENDED $CONFIG_SERIAL
 if [ "$CONFIG_SERIAL_EXTENDED" = "y" ]; then
    bool '  Support more than 4 serial ports' CONFIG_SERIAL_MANY_PORTS
    bool '  Support for sharing serial interrupts' CONFIG_SERIAL_SHARE_IRQ

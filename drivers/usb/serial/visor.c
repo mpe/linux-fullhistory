@@ -11,6 +11,9 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (11/01/2000) Adam J. Richter
+ *	usb_device_id table support
+ * 
  * (10/05/2000) gkh
  *	Fixed bug with urb->dev not being set properly, now that the usb
  *	core needs it.
@@ -101,13 +104,20 @@ static void visor_set_termios	(struct usb_serial_port *port, struct termios *old
 static void visor_write_bulk_callback	(struct urb *urb);
 static void visor_read_bulk_callback	(struct urb *urb);
 
+
+static __devinitdata struct usb_device_id id_table [] = {
+	{ idVendor: HANDSPRING_VENDOR_ID, idProduct: HANDSPRING_VISOR_ID },
+	{ }					/* Terminating entry */
+};
+
+MODULE_DEVICE_TABLE (usb, id_table);
+
+
+
 /* All of the device info needed for the Handspring Visor */
-static __u16	handspring_vendor_id	= HANDSPRING_VENDOR_ID;
-static __u16	handspring_product_id	= HANDSPRING_VISOR_ID;
 struct usb_serial_device_type handspring_device = {
 	name:			"Handspring Visor",
-	idVendor:		&handspring_vendor_id,	/* the Handspring vendor ID */
-	idProduct:		&handspring_product_id,	/* the Handspring Visor product id */
+	id_table:		id_table,
 	needs_interrupt_in:	MUST_HAVE_NOT,		/* this device must not have an interrupt in endpoint */
 	needs_bulk_in:		MUST_HAVE,		/* this device must have a bulk in endpoint */
 	needs_bulk_out:		MUST_HAVE,		/* this device must have a bulk out endpoint */

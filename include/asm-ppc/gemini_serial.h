@@ -1,3 +1,4 @@
+#ifdef __KERNEL__
 #ifndef __ASMPPC_GEMINI_SERIAL_H
 #define __ASMPPC_GEMINI_SERIAL_H
 
@@ -37,3 +38,4 @@
         PU32_SERIAL_PORT_DEFNS
 
 #endif
+#endif /* __KERNEL__ */

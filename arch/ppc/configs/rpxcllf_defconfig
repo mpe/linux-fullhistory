@@ -41,8 +41,10 @@ CONFIG_MATH_EMULATION=y
 # General setup
 #
 # CONFIG_HIGHMEM is not set
+# CONFIG_MOL is not set
 # CONFIG_ISA is not set
 # CONFIG_SBUS is not set
+# CONFIG_PCI_QSPAN is not set
 # CONFIG_PCI is not set
 CONFIG_NET=y
 CONFIG_SYSCTL=y
@@ -78,18 +80,25 @@ CONFIG_KERNEL_ELF=y
 # CONFIG_BLK_DEV_XD is not set
 # CONFIG_PARIDE is not set
 # CONFIG_BLK_CPQ_DA is not set
+# CONFIG_BLK_CPQ_CISS_DA is not set
 # CONFIG_BLK_DEV_DAC960 is not set
 CONFIG_BLK_DEV_LOOP=y
 # CONFIG_BLK_DEV_NBD is not set
-# CONFIG_BLK_DEV_LVM is not set
+CONFIG_BLK_DEV_RAM=y
+CONFIG_BLK_DEV_RAM_SIZE=4096
+CONFIG_BLK_DEV_INITRD=y
+
+#
+# Multi-device support (RAID and LVM)
+#
+# CONFIG_MD is not set
 # CONFIG_BLK_DEV_MD is not set
 # CONFIG_MD_LINEAR is not set
 # CONFIG_MD_RAID0 is not set
 # CONFIG_MD_RAID1 is not set
 # CONFIG_MD_RAID5 is not set
-CONFIG_BLK_DEV_RAM=y
-CONFIG_BLK_DEV_RAM_SIZE=4096
-CONFIG_BLK_DEV_INITRD=y
+# CONFIG_BLK_DEV_LVM is not set
+# CONFIG_LVM_PROC_FS is not set
 
 #
 # Networking options
@@ -127,6 +136,7 @@ CONFIG_SYN_COOKIES=y
 # CONFIG_X25 is not set
 # CONFIG_LAPB is not set
 # CONFIG_LLC is not set
+# CONFIG_NET_DIVERT is not set
 # CONFIG_ECONET is not set
 # CONFIG_WAN_ROUTER is not set
 # CONFIG_NET_FASTROUTE is not set
@@ -180,6 +190,7 @@ CONFIG_NET_ETHERNET=y
 # CONFIG_NET_VENDOR_RACAL is not set
 # CONFIG_AT1700 is not set
 # CONFIG_DEPCA is not set
+# CONFIG_HP100 is not set
 # CONFIG_NET_ISA is not set
 # CONFIG_NET_PCI is not set
 # CONFIG_NET_POCKET is not set
@@ -187,8 +198,9 @@ CONFIG_NET_ETHERNET=y
 #
 # Ethernet (1000 Mbit)
 #
-# CONFIG_YELLOWFIN is not set
 # CONFIG_ACENIC is not set
+# CONFIG_HAMACHI is not set
+# CONFIG_YELLOWFIN is not set
 # CONFIG_SK98LIN is not set
 # CONFIG_FDDI is not set
 # CONFIG_HIPPI is not set

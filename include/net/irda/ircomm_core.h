@@ -53,7 +53,7 @@ typedef struct {
 } call_t;
 
 struct ircomm_cb {
-	queue_t queue;
+	irda_queue_t queue;
 	magic_t magic;
 
 	notify_t notify;

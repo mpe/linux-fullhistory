@@ -79,6 +79,7 @@ EXPORT_SYMBOL(do_lost_interrupts);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
 EXPORT_SYMBOL(disable_irq_nosync);
+EXPORT_SYMBOL(probe_irq_mask);
 #ifdef CONFIG_SMP
 EXPORT_SYMBOL(kernel_flag);
 #endif /* CONFIG_SMP */
@@ -222,6 +223,8 @@ EXPORT_SYMBOL(cuda_poll);
 #ifdef CONFIG_ADB_PMU
 EXPORT_SYMBOL(pmu_request);
 EXPORT_SYMBOL(pmu_poll);
+EXPORT_SYMBOL(pmu_suspend);
+EXPORT_SYMBOL(pmu_resume);
 #endif /* CONFIG_ADB_PMU */
 #ifdef CONFIG_PMAC_PBOOK
 EXPORT_SYMBOL(pmu_register_sleep_notifier);
@@ -298,6 +301,7 @@ EXPORT_SYMBOL(console_lock);
 EXPORT_SYMBOL(xmon);
 #endif
 EXPORT_SYMBOL(down_read_failed);
+EXPORT_SYMBOL(down_write_failed);
 
 #if defined(CONFIG_KGDB) || defined(CONFIG_XMON)
 extern void (*debugger)(struct pt_regs *regs);

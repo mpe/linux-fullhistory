@@ -7,7 +7,7 @@
  *		handler for protocols to use and generic option handler.
  *
  *
- * Version:	$Id: sock.c,v 1.100 2000/09/18 05:59:48 davem Exp $
+ * Version:	$Id: sock.c,v 1.101 2000/11/10 04:02:04 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -819,7 +819,7 @@ void __lock_sock(struct sock *sk)
 
 	add_wait_queue_exclusive(&sk->lock.wq, &wait);
 	for(;;) {
-		current->state = TASK_EXCLUSIVE | TASK_UNINTERRUPTIBLE;
+		current->state = TASK_UNINTERRUPTIBLE;
 		spin_unlock_bh(&sk->lock.slock);
 		schedule();
 		spin_lock_bh(&sk->lock.slock);

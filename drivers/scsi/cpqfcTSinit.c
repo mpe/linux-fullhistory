@@ -290,6 +290,9 @@ int cpqfcTS_detect(Scsi_Host_Template *ScsiHostTemplate)
 		      (ULONG)sizeof(CPQFCHBA));
 
       HostAdapter = scsi_register( ScsiHostTemplate, sizeof( CPQFCHBA ) );
+      
+      if(HostAdapter == NULL)
+      	continue;
       DEBUG_PCI( printk("  HBA found!\n"));
       DEBUG_PCI( printk("  HostAdapter->PciDev->irq = %u\n", PciDev->irq) );
       DEBUG_PCI(printk("  PciDev->baseaddress[]= %lx\n", PciDev->base_address[0]));

@@ -37,7 +37,7 @@ static struct page* ncp_file_mmap_nopage(struct vm_area_struct *area,
 	struct dentry *dentry = file->f_dentry;
 	struct inode *inode = dentry->d_inode;
 	struct page* page;
-	unsigned long pg_addr;
+	char *pg_addr;
 	unsigned int already_read;
 	unsigned int count;
 	int bufsize;
@@ -71,7 +71,7 @@ static struct page* ncp_file_mmap_nopage(struct vm_area_struct *area,
 			if (ncp_read_kernel(NCP_SERVER(inode),
 				     NCP_FINFO(inode)->file_handle,
 				     pos, to_read,
-				     (char *) (pg_addr + already_read),
+				     pg_addr + already_read,
 				     &read_this_time) != 0) {
 				read_this_time = 0;
 			}
@@ -87,8 +87,7 @@ static struct page* ncp_file_mmap_nopage(struct vm_area_struct *area,
 	}
 
 	if (already_read < PAGE_SIZE)
-		memset((char*)(pg_addr + already_read), 0, 
-		       PAGE_SIZE - already_read);
+		memset(pg_addr + already_read, 0, PAGE_SIZE - already_read);
 	flush_dcache_page(page);
 	kunmap(page);
 	return page;

@@ -112,8 +112,7 @@ struct usb_serial {
 /* This structure defines the individual serial converter. */
 struct usb_serial_device_type {
 	char	*name;
-	__u16	*idVendor;
-	__u16	*idProduct;
+	const struct usb_device_id *id_table;
 	char	needs_interrupt_in;
 	char	needs_bulk_in;
 	char	needs_bulk_out;
@@ -125,7 +124,9 @@ struct usb_serial_device_type {
 	struct list_head	driver_list;
 	
 	/* function call to make before accepting driver */
-	int (*startup) (struct usb_serial *serial);	/* return 0 to continue initialization, anything else to abort */
+	/* return 0 to continue initialization, anything else to abort */
+	int (*startup) (struct usb_serial *serial);
+	
 	void (*shutdown) (struct usb_serial *serial);
 
 	/* serial function calls */

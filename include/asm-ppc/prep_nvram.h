@@ -17,6 +17,7 @@
   For enum's: if given in hex then they are bit significant, i.e. only
   one bit is on for each enum.
 */
+#ifdef __KERNEL__
 #ifndef _PPC_PREP_NVRAM_H
 #define _PPC_PREP_NVRAM_H
 
@@ -144,3 +145,4 @@ void prep_nvram_write_val(int           addr,
 			  unsigned char val);
 
 #endif /* _PPC_PREP_NVRAM_H */
+#endif /* __KERNEL__ */

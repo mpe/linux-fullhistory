@@ -1,11 +1,19 @@
 /*
- * $Id: c4.c,v 1.16 2000/08/20 07:30:13 keil Exp $
+ * $Id: c4.c,v 1.18 2000/11/01 14:05:02 calle Exp $
  * 
  * Module for AVM C4 card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: c4.c,v $
+ * Revision 1.18  2000/11/01 14:05:02  calle
+ * - use module_init/module_exit from linux/init.h.
+ * - all static struct variables are initialized with "membername:" now.
+ * - avm_cs.c, let it work with newer pcmcia-cs.
+ *
+ * Revision 1.17  2000/10/10 17:44:19  kai
+ * changes from/for 2.2.18
+ *
  * Revision 1.16  2000/08/20 07:30:13  keil
  * changes for 2.4
  *
@@ -80,7 +88,7 @@
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.16 $";
+static char *revision = "$Revision: 1.18 $";
 
 #undef CONFIG_C4_DEBUG
 #undef CONFIG_C4_POLLDEBUG
@@ -410,7 +418,7 @@ static int c4_detect(avmcard *card)
 		return 8;
 	if (c4_poke(card, DC21285_ARMCSR_BASE+DRAM_TIMING, 0)) return 9;
 
-        udelay(1000);
+        mdelay(1);
 
 	if (c4_peek(card, DC21285_DRAM_A0MR, &dummy)) return 10;
 	if (c4_peek(card, DC21285_DRAM_A1MR, &dummy)) return 11;
@@ -422,7 +430,7 @@ static int c4_detect(avmcard *card)
 	if (c4_poke(card, DC21285_DRAM_A2MR+CAS_OFFSET, 0)) return 16;
 	if (c4_poke(card, DC21285_DRAM_A3MR+CAS_OFFSET, 0)) return 17;
 
-        udelay(1000);
+        mdelay(1);
 
 	if (c4_poke(card, DC21285_ARMCSR_BASE+DRAM_TIMING, DRAM_TIMING_DEF))
 		return 18;
@@ -927,7 +935,7 @@ static int c4_load_firmware(struct capi_ctr *ctrl, capiloaddata *data)
 	c4outmeml(card->mbase+MBOX_UP_LEN, 0);
 	c4outmeml(card->mbase+MBOX_DOWN_LEN, 0);
 	c4outmeml(card->mbase+DOORBELL, DBELL_INIT);
-	udelay(1000);
+	mdelay(1);
 	c4outmeml(card->mbase+DOORBELL,
 			DBELL_UP_HOST | DBELL_DOWN_HOST | DBELL_RESET_HOST);
 

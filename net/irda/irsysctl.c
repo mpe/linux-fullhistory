@@ -29,10 +29,11 @@
 #include <asm/segment.h>
 
 #include <net/irda/irda.h>
+#include <net/irda/irias_object.h>
 
 #define NET_IRDA 412 /* Random number */
 enum { DISCOVERY=1, DEVNAME, COMPRESSION, DEBUG, SLOTS, DISCOVERY_TIMEOUT, 
-       SLOT_TIMEOUT };
+       SLOT_TIMEOUT, MAX_BAUD_RATE, MAX_INACTIVE_TIME };
 
 extern int  sysctl_discovery;
 extern int  sysctl_discovery_slots;
@@ -41,17 +42,35 @@ extern int  sysctl_slot_timeout;
 extern int  sysctl_fast_poll_increase;
 int         sysctl_compression = 0;
 extern char sysctl_devname[];
+extern int  sysctl_max_baud_rate;
+extern int  sysctl_max_inactive_time;
 
 #ifdef CONFIG_IRDA_DEBUG
 extern unsigned int irda_debug;
 #endif
+
+static int do_devname(ctl_table *table, int write, struct file *filp,
+		      void *buffer, size_t *lenp)
+{
+	int ret;
+
+	ret = proc_dostring(table, write, filp, buffer, lenp);
+	if (ret == 0 && write) {
+		struct ias_value *val;
+
+		val = irias_new_string_value(sysctl_devname);
+		if (val)
+			irias_object_change_attribute("Device", "DeviceName", val);
+	}
+	return ret;
+}
 
 /* One file */
 static ctl_table irda_table[] = {
 	{ DISCOVERY, "discovery", &sysctl_discovery,
 	  sizeof(int), 0644, NULL, &proc_dointvec },
 	{ DEVNAME, "devname", sysctl_devname,
-	  65, 0644, NULL, &proc_dostring, &sysctl_string},
+	  65, 0644, NULL, &do_devname, &sysctl_string},
 	{ COMPRESSION, "compression", &sysctl_compression,
 	  sizeof(int), 0644, NULL, &proc_dointvec },
 #ifdef CONFIG_IRDA_DEBUG
@@ -67,6 +86,10 @@ static ctl_table irda_table[] = {
 	{ DISCOVERY_TIMEOUT, "discovery_timeout", &sysctl_discovery_timeout,
 	  sizeof(int), 0644, NULL, &proc_dointvec },
 	{ SLOT_TIMEOUT, "slot_timeout", &sysctl_slot_timeout,
+	  sizeof(int), 0644, NULL, &proc_dointvec },
+	{ MAX_BAUD_RATE, "max_baud_rate", &sysctl_max_baud_rate,
+	  sizeof(int), 0644, NULL, &proc_dointvec },
+	{ MAX_INACTIVE_TIME, "max_inactive_time", &sysctl_max_inactive_time,
 	  sizeof(int), 0644, NULL, &proc_dointvec },
 	{ 0 }
 };

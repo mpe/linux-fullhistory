@@ -10,6 +10,8 @@
 #ifndef __ASMPPC_IDE_H
 #define __ASMPPC_IDE_H
 
+#ifdef __KERNEL__
+
 #include <linux/sched.h>
 #include <asm/processor.h>
 
@@ -18,8 +20,6 @@
 #endif
 
 #include <asm/hdreg.h>
-
-#ifdef __KERNEL__
 
 #include <linux/config.h>
 #include <linux/hdreg.h>

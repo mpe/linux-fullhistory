@@ -343,6 +343,11 @@ int probe_irq_off (unsigned long irqs)
 	return 0;
 }
 
+unsigned int probe_irq_mask(unsigned long irqs)
+{
+	return 0;
+}
+
 void __init init_IRQ(void)
 {
 	static int once = 0;

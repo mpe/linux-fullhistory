@@ -1,4 +1,4 @@
-/* $Id: isdn.h,v 1.106 2000/08/10 22:52:46 kai Exp $
+/* $Id: isdn.h,v 1.110 2000/11/01 17:54:01 detabc Exp $
 
  * Main header for the Linux ISDN subsystem (linklevel).
  *
@@ -66,8 +66,7 @@
 #undef CONFIG_ISDN_WITH_ABC_CH_EXTINUSE
 #undef CONFIG_ISDN_WITH_ABC_CONN_ERROR
 #undef CONFIG_ISDN_WITH_ABC_RAWIPCOMPRESS
-#undef CONFIG_ISDN_WITH_ABC_IPV4_RW_SOCKADDR 
-#undef CONFIG_ISDN_WITH_ABC_IPV4_RWUDP_SOCKADDR 
+#undef CONFIG_ISDN_WITH_ABC_IPTABLES_NETFILTER
 
 
 /* New ioctl-codes */

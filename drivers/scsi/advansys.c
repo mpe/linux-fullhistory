@@ -4774,6 +4774,9 @@ advansys_detect(Scsi_Host_Template *tpnt)
              */
             ASC_DBG(2, "advansys_detect: scsi_register()\n");
             shp = scsi_register(tpnt, sizeof(asc_board_t));
+            
+            if(shp==NULL)
+            	continue;
 
             /* Save a pointer to the Scsi_host of each board found. */
             asc_host[asc_board_count++] = shp;

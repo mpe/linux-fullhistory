@@ -1,4 +1,4 @@
-/* $Id: module.c,v 1.11 1999/10/30 09:48:04 keil Exp $
+/* $Id: module.c,v 1.12 2000/05/06 00:52:36 kai Exp $
  *
  * ISDN lowlevel-module for the IBM ISDN-S0 Active 2000.
  *
@@ -20,6 +20,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: module.c,v $
+ * Revision 1.12  2000/05/06 00:52:36  kai
+ * merged changes from kernel tree
+ * fixed timer and net_device->name breakage
+ *
  * Revision 1.11  1999/10/30 09:48:04  keil
  * miss one prefix act2000
  *

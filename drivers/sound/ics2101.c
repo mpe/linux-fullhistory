@@ -12,6 +12,7 @@
  *
  *
  * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
+ * Bartlomiej Zolnierkiewicz : added __init to ics2101_mixer_init()
  */
 #include "sound_config.h"
 
@@ -212,8 +213,7 @@ static struct mixer_operations ics2101_mixer_operations =
 	ioctl:	ics2101_mixer_ioctl
 };
 
-int
-ics2101_mixer_init(void)
+int __init ics2101_mixer_init(void)
 {
 	int i;
 	int n;

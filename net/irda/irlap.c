@@ -154,7 +154,7 @@ struct irlap_cb *irlap_open(struct net_device *dev, struct qos_info *qos)
 	
 	irlap_next_state(self, LAP_NDM);
 
-	hashbin_insert(irlap, (queue_t *) self, self->saddr, NULL);
+	hashbin_insert(irlap, (irda_queue_t *) self, self->saddr, NULL);
 
 	irlmp_register_link(self, self->saddr, &self->notify);
 	
@@ -232,7 +232,8 @@ void irlap_connect_indication(struct irlap_cb *self, struct sk_buff *skb)
 	ASSERT(self->magic == LAP_MAGIC, return;);
 
 	irlap_init_qos_capabilities(self, NULL); /* No user QoS! */
-	
+
+	skb_get(skb); /*LEVEL4*/
 	irlmp_link_connect_indication(self->notify.instance, self->saddr, 
 				      self->daddr, &self->qos_tx, skb);
 }
@@ -248,6 +249,7 @@ void irlap_connect_response(struct irlap_cb *self, struct sk_buff *skb)
 	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 	
 	irlap_do_event(self, CONNECT_RESPONSE, skb, NULL);
+	kfree_skb(skb);
 }
 
 /*
@@ -292,6 +294,7 @@ void irlap_connect_confirm(struct irlap_cb *self, struct sk_buff *skb)
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == LAP_MAGIC, return;);
 
+	skb_get(skb); /*LEVEL4*/
 	irlmp_link_connect_confirm(self->notify.instance, &self->qos_tx, skb);
 }
 
@@ -310,6 +313,7 @@ void irlap_data_indication(struct irlap_cb *self, struct sk_buff *skb,
 
 #ifdef CONFIG_IRDA_COMPRESSION
 	if (self->qos_tx.compression.value) {
+		skb_get(skb); /*LEVEL4*/
 		skb = irlap_decompress_frame(self, skb);
 		if (!skb) {
 			IRDA_DEBUG(1, __FUNCTION__ "(), Decompress error!\n");
@@ -317,6 +321,7 @@ void irlap_data_indication(struct irlap_cb *self, struct sk_buff *skb,
 		}
 	}
 #endif
+	skb_get(skb); /*LEVEL4*/
 	irlmp_link_data_indication(self->notify.instance, skb, unreliable);
 }
 
@@ -373,6 +378,7 @@ void irlap_data_request(struct irlap_cb *self, struct sk_buff *skb,
 			ASSERT(skb != NULL, return;);
 		}
 		irlap_do_event(self, SEND_I_CMD, skb, NULL);
+		kfree_skb(skb);
 	} else
 		skb_queue_tail(&self->txq, skb);
 }
@@ -422,6 +428,7 @@ void irlap_unitdata_indication(struct irlap_cb *self, struct sk_buff *skb)
 	/* Hide LAP header from IrLMP layer */
 	skb_pull(skb, LAP_ADDR_HEADER+LAP_CTRL_HEADER);
 
+	skb_get(skb); /*LEVEL4*/
 	irlmp_link_unitdata_indication(self->notify.instance, skb);
 }
 #endif /* CONFIG_IRDA_ULTRA */
@@ -610,7 +617,7 @@ void irlap_discovery_indication(struct irlap_cb *self, discovery_t *discovery)
  *    
  *
  */
-void irlap_status_indication(int quality_of_link) 
+void irlap_status_indication(struct irlap_cb *self, int quality_of_link) 
 {
 	switch (quality_of_link) {
 	case STATUS_NO_ACTIVITY:
@@ -622,7 +629,8 @@ void irlap_status_indication(int quality_of_link)
 	default:
 		break;
 	}
-	irlmp_status_indication(quality_of_link, LOCK_NO_CHANGE);
+	irlmp_status_indication(self->notify.instance,
+				quality_of_link, LOCK_NO_CHANGE);
 }
 
 /*
@@ -664,11 +672,16 @@ void irlap_reset_confirm(void)
  */
 int irlap_generate_rand_time_slot(int S, int s) 
 {
+	static int rand;
 	int slot;
 	
 	ASSERT((S - s) > 0, return 0;);
 
-	slot = s + jiffies % (S-s);
+	rand += jiffies;
+	rand ^= (rand << 12);
+	rand ^= (rand >> 20);
+
+	slot = s + rand % (S-s);
 	
 	ASSERT((slot >= s) || (slot < S), return 0;);
 	
@@ -863,6 +876,8 @@ void irlap_flush_all_queues(struct irlap_cb *self)
  */
 void irlap_change_speed(struct irlap_cb *self, __u32 speed, int now)
 {
+	struct sk_buff *skb;
+
 	IRDA_DEBUG(0, __FUNCTION__ "(), setting speed to %d\n", speed);
 
 	ASSERT(self != NULL, return;);
@@ -871,8 +886,11 @@ void irlap_change_speed(struct irlap_cb *self, __u32 speed, int now)
 	self->speed = speed;
 
 	/* Change speed now, or just piggyback speed on frames */
-	if (now)
-		irda_device_change_speed(self->netdev, speed);
+	if (now) {
+		/* Send down empty frame to trigger speed change */
+		skb = dev_alloc_skb(0);
+		irlap_queue_xmit(self, skb);
+	}
 }
 
 #ifdef CONFIG_IRDA_COMPRESSION
@@ -973,8 +991,8 @@ void irlap_init_qos_capabilities(struct irlap_cb *self,
 	/* Set data size */
 	/*self->qos_rx.data_size.bits &= 0x03;*/
 
-	/* Set disconnect time */
-	self->qos_rx.link_disc_time.bits &= 0x07;
+	/* Set disconnect time -> done properly in qos.c */
+	/*self->qos_rx.link_disc_time.bits &= 0x07;*/
 
 	irda_qos_bits_to_value(&self->qos_rx);
 }
@@ -998,7 +1016,7 @@ void irlap_apply_default_connection_parameters(struct irlap_cb *self)
 	irda_device_set_media_busy(self->netdev, TRUE);
 
 	/* Default value in NDM */
-	self->bofs_count = 11;
+	self->bofs_count = 12;
 
 	/* 
 	 * Generate random connection address for this session, which must
@@ -1026,8 +1044,8 @@ void irlap_apply_default_connection_parameters(struct irlap_cb *self)
 	self->qos_rx.data_size.value = 64;
 	self->qos_tx.window_size.value = 1;
 	self->qos_rx.window_size.value = 1;
-	self->qos_tx.additional_bofs.value = 11;
-	self->qos_rx.additional_bofs.value = 11;
+	self->qos_tx.additional_bofs.value = 12;
+	self->qos_rx.additional_bofs.value = 12;
 	self->qos_tx.link_disc_time.value = 0;
 	self->qos_rx.link_disc_time.value = 0;
 
@@ -1071,7 +1089,12 @@ void irlap_apply_connection_parameters(struct irlap_cb *self)
 	 */
 	ASSERT(self->qos_tx.max_turn_time.value != 0, return;);
 	if (self->qos_tx.link_disc_time.value == 3)
-		self->N1 = 0;
+		/* 
+		 * If we set N1 to 0, it will trigger immediately, which is
+		 * not what we want. What we really want is to disable it,
+		 * Jean II 
+		 */
+		self->N1 = -1; /* Disable */
 	else
 		self->N1 = 3000 / self->qos_tx.max_turn_time.value;
 	

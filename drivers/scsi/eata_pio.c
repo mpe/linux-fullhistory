@@ -728,6 +728,12 @@ int register_pio_HBA(long base, struct get_conf *gc, Scsi_Host_Template * tpnt)
     size = sizeof(hostdata) + (sizeof(struct eata_ccb) * ntohs(gc->queuesiz));
     
     sh = scsi_register(tpnt, size);
+    if(sh == NULL)
+    {
+    	release_region(base, 8);
+    	return FALSE;
+    }
+    
     hd = SD(sh);                   
     
     memset(hd->ccb, 0, (sizeof(struct eata_ccb) * ntohs(gc->queuesiz)));

@@ -1,3 +1,4 @@
+#ifdef __KERNEL__
 #ifndef _PPC_UACCESS_H
 #define _PPC_UACCESS_H
 
@@ -274,3 +275,4 @@ extern __inline__ int strnlen_user(const char *str, long len)
 #endif  /* __ASSEMBLY__ */
 
 #endif	/* _PPC_UACCESS_H */
+#endif /* __KERNEL__ */

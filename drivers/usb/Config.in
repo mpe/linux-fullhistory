@@ -37,6 +37,7 @@ comment 'USB Devices'
    if [ "$CONFIG_USB_SERIAL" != "n" ]; then
       bool '    USB Generic Serial Driver' CONFIG_USB_SERIAL_GENERIC
       dep_tristate '    USB Handspring Visor Driver' CONFIG_USB_SERIAL_VISOR $CONFIG_USB_SERIAL
+      dep_tristate '    USB Digi International AccelePort USB Serial Driver' CONFIG_USB_SERIAL_DIGI_ACCELEPORT $CONFIG_USB_SERIAL
       if [ "$CONFIG_EXPERIMENTAL" != "n" ]; then
          dep_tristate '    USB ConnectTech WhiteHEAT Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_WHITEHEAT $CONFIG_USB_SERIAL
          dep_tristate '    USB FTDI Single Port Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_FTDI_SIO $CONFIG_USB_SERIAL
@@ -49,8 +50,8 @@ comment 'USB Devices'
             bool '      USB Keyspan USA-18X Firmware' CONFIG_USB_SERIAL_KEYSPAN_USA18X
             bool '      USB Keyspan USA-19W Firmware' CONFIG_USB_SERIAL_KEYSPAN_USA19W
          fi
-         dep_tristate '    USB Digi International AccelePort USB Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_DIGI_ACCELEPORT $CONFIG_USB_SERIAL
          dep_tristate '    USB ZyXEL omni.net LCD Plus Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_OMNINET $CONFIG_USB_SERIAL
+         dep_tristate '    USB Belkin and Peracom Single Port Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_BELKIN $CONFIG_USB_SERIAL
       fi
       bool '    USB Serial Converter verbose debug' CONFIG_USB_SERIAL_DEBUG
    fi

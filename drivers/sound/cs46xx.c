@@ -25,7 +25,9 @@
  * Changes:
  *	20000815	Updated driver to kernel 2.4, some cleanups/fixes
  *			Nils Faerber <nils@kernelconcepts.de>
- *
+ *	20001110	Added __initdata to BA1Struct in cs461x_image.h
+ *			and three more __init here
+ *			Bartlomiej Zolnierkiewicz <bkz@linux-ide.org>
  */
  
 #include <linux/module.h>
@@ -1999,7 +2001,7 @@ static int __init cs_ac97_init(struct cs_card *card)
 /* Boot the card
  */
  
-static void cs461x_download(struct cs_card *card, u32 *src, unsigned long offset, unsigned long len)
+static void __init cs461x_download(struct cs_card *card, u32 *src, unsigned long offset, unsigned long len)
 {
 	unsigned long counter;
 	void *dst;
@@ -2024,7 +2026,7 @@ struct BA1struct {
 
 #include "cs461x_image.h"
 
-static void cs461x_download_image(struct cs_card *card)
+static void __init cs461x_download_image(struct cs_card *card)
 {
 	int idx;
 	unsigned long offset = 0;
@@ -2240,7 +2242,7 @@ static void cs461x_proc_stop(struct cs_card *card)
 
 
 
-static int cs_hardware_init(struct cs_card *card)
+static int __init cs_hardware_init(struct cs_card *card)
 {
 	unsigned long end_time;
 	unsigned int tmp;

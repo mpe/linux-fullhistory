@@ -250,6 +250,9 @@ int sun3scsi_detect(Scsi_Host_Template * tpnt)
 #endif
 
 	instance = scsi_register (tpnt, sizeof(struct NCR5380_hostdata));
+	if(instance == NULL)
+		return 0;
+		
 	default_instance = instance;
 
         instance->io_port = (unsigned long) ioaddr;

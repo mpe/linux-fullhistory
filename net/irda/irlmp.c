@@ -74,6 +74,7 @@ int irlmp_proc_read(char *buf, char **start, off_t offst, int len);
  */
 int __init irlmp_init(void)
 {
+	IRDA_DEBUG(0, __FUNCTION__ "()\n");
 	/* Initialize the irlmp structure. */
 	irlmp = kmalloc( sizeof(struct irlmp_cb), GFP_KERNEL);
 	if (irlmp == NULL)
@@ -81,7 +82,7 @@ int __init irlmp_init(void)
 	memset(irlmp, 0, sizeof(struct irlmp_cb));
 	
 	irlmp->magic = LMP_MAGIC;
-	spin_lock_init(&irlmp->lock);
+	spin_lock_init(&irlmp->log_lock);
 
 	irlmp->clients = hashbin_new(HB_GLOBAL);
 	irlmp->services = hashbin_new(HB_GLOBAL);
@@ -178,7 +179,7 @@ struct lsap_cb *irlmp_open_lsap(__u8 slsap_sel, notify_t *notify, __u8 pid)
 	irlmp_next_lsap_state(self, LSAP_DISCONNECTED);
 	
 	/* Insert into queue of unconnected LSAPs */
-	hashbin_insert(irlmp->unconnected_lsaps, (queue_t *) self, (int) self, 
+	hashbin_insert(irlmp->unconnected_lsaps, (irda_queue_t *) self, (int) self, 
 		       NULL);
 	
 	return self;
@@ -284,9 +285,9 @@ void irlmp_register_link(struct irlap_cb *irlap, __u32 saddr, notify_t *notify)
 	init_timer(&lap->idle_timer);
 
 	/*
-	 *  Insert into queue of unconnected LSAPs
+	 *  Insert into queue of LMP links
 	 */
-	hashbin_insert(irlmp->links, (queue_t *) lap, lap->saddr, NULL);
+	hashbin_insert(irlmp->links, (irda_queue_t *) lap, lap->saddr, NULL);
 
 	/* 
 	 *  We set only this variable so IrLAP can tell us on which link the
@@ -395,9 +396,25 @@ int irlmp_connect_request(struct lsap_cb *self, __u8 dlsap_sel,
 		return -EHOSTUNREACH;
 	}
 
+	/* Check if LAP is disconnected or already connected */
 	if (lap->daddr == DEV_ADDR_ANY)
 		lap->daddr = daddr;
 	else if (lap->daddr != daddr) {
+		struct lsap_cb *any_lsap;
+
+		/* Check if some LSAPs are active on this LAP */
+		any_lsap = (struct lsap_cb *) hashbin_get_first(lap->lsaps);
+		if (any_lsap == NULL) {
+			/* No active connection, but LAP hasn't been
+			 * disconnected yet (waiting for timeout in LAP).
+			 * Maybe we could give LAP a bit of help in this case.
+			 */
+			IRDA_DEBUG(0, __FUNCTION__ "(), sorry, but I'm waiting for LAP to timeout!\n");
+			return -EAGAIN;
+		}
+
+		/* LAP is already connected to a different node, and LAP
+		 * can only talk to one node at a time */
 		IRDA_DEBUG(0, __FUNCTION__ "(), sorry, but link is busy!\n");
 		return -EBUSY;
 	}
@@ -415,7 +432,7 @@ int irlmp_connect_request(struct lsap_cb *self, __u8 dlsap_sel,
 	ASSERT(lsap->lap != NULL, return -1;);
 	ASSERT(lsap->lap->magic == LMP_LAP_MAGIC, return -1;);
 
-	hashbin_insert(self->lap->lsaps, (queue_t *) self, (int) self, NULL);
+	hashbin_insert(self->lap->lsaps, (irda_queue_t *) self, (int) self, NULL);
 
 	self->connected = TRUE;
 	
@@ -557,7 +574,7 @@ struct lsap_cb *irlmp_dup(struct lsap_cb *orig, void *instance)
 	
 	init_timer(&new->watchdog_timer);
 	
-	hashbin_insert(irlmp->unconnected_lsaps, (queue_t *) new, (int) new, 
+	hashbin_insert(irlmp->unconnected_lsaps, (irda_queue_t *) new, (int) new, 
 		       NULL);
 
 	/* Make sure that we invalidate the cache */
@@ -612,7 +629,7 @@ int irlmp_disconnect_request(struct lsap_cb *self, struct sk_buff *userdata)
 	ASSERT(lsap->magic == LMP_LSAP_MAGIC, return -1;);
 	ASSERT(lsap == self, return -1;);
 
-	hashbin_insert(irlmp->unconnected_lsaps, (queue_t *) self, (int) self, 
+	hashbin_insert(irlmp->unconnected_lsaps, (irda_queue_t *) self, (int) self, 
 		       NULL);
 	
 	/* Reset some values */
@@ -658,7 +675,7 @@ void irlmp_disconnect_indication(struct lsap_cb *self, LM_REASON reason,
 
 	ASSERT(lsap != NULL, return;);
 	ASSERT(lsap == self, return;);
-	hashbin_insert(irlmp->unconnected_lsaps, (queue_t *) lsap, (int) lsap, 
+	hashbin_insert(irlmp->unconnected_lsaps, (irda_queue_t *) lsap, (int) lsap, 
 		       NULL);
 
 	self->lap = NULL;
@@ -749,6 +766,18 @@ void irlmp_discovery_request(int nslots)
 		irlmp_do_discovery(nslots);
 }
 
+/*
+ * Function irlmp_get_discoveries (pn, mask)
+ *
+ *    Return the current discovery log
+ *
+ */
+struct irda_device_info *irlmp_get_discoveries(int *pn, __u16 mask)
+{
+	/* Return current cached discovery log */
+	return(irlmp_copy_discoveries(irlmp->cachelog, pn, mask));
+}
+
 #if 0
 /*
  * Function irlmp_check_services (discovery)
@@ -759,7 +788,6 @@ void irlmp_discovery_request(int nslots)
 void irlmp_check_services(discovery_t *discovery)
 {
 	struct irlmp_client *client;
-	struct irmanager_event event;
 	__u8 *service_log;
 	__u8 service;
 	int i = 0;
@@ -787,14 +815,7 @@ void irlmp_check_services(discovery_t *discovery)
 				continue;
 			/*  
 			 * Found no clients for dealing with this service,
-			 * so ask the user space irmanager to try to load
-			 * the right module for us 
 			 */
-			event.event = EVENT_DEVICE_DISCOVERED;
-			event.service = service;
-			event.daddr = discovery->daddr;
-			sprintf(event.info, "%s", discovery->info);
-			irmanager_notify(&event);
 		}
 	}
 	kfree(service_log);
@@ -805,17 +826,24 @@ void irlmp_check_services(discovery_t *discovery)
  *
  *    Notify all about discovered devices
  *
+ * Clients registered with IrLMP are :
+ *	o IrComm
+ *	o IrLAN
+ *	o Any socket (in any state - ouch, that may be a lot !)
+ * The client may have defined a callback to be notified in case of
+ * partial/selective discovery based on the hints that it passed to IrLMP.
  */
-void irlmp_notify_client(irlmp_client_t *client, hashbin_t *log)
+static inline void
+irlmp_notify_client(irlmp_client_t *client, hashbin_t *log)
 {
 	discovery_t *discovery;
 
 	IRDA_DEBUG(3, __FUNCTION__ "()\n");
 	
-	/* Check if client wants the whole log */
-	if (client->callback2)
-		client->callback2(log);
-	
+	/* Check if client wants or not partial/selective log (optimisation) */
+	if (!client->disco_callback)
+		return;
+
 	/* 
 	 * Now, check all discovered devices (if any), and notify client 
 	 * only about the services that the client is interested in 
@@ -828,10 +856,9 @@ void irlmp_notify_client(irlmp_client_t *client, hashbin_t *log)
 		 * Any common hint bits? Remember to mask away the extension
 		 * bits ;-)
 		 */
-		if (client->hint_mask & discovery->hints.word & 0x7f7f) {
-			if (client->callback1)
-				client->callback1(discovery);
-		}
+		if (client->hint_mask & discovery->hints.word & 0x7f7f)
+			client->disco_callback(discovery, client->priv);
+
 		discovery = (discovery_t *) hashbin_get_next(log);
 	}
 }
@@ -864,9 +891,40 @@ void irlmp_discovery_confirm(hashbin_t *log)
 }
 
 /*
+ * Function irlmp_discovery_expiry (expiry)
+ *
+ *	This device is no longer been discovered, and therefore it is beeing
+ *	purged from the discovery log. Inform all clients who have
+ *	registered for this event...
+ * 
+ *	Note : called exclusively from discovery.c
+ *	Note : as we are currently processing the log, the clients callback
+ *	should *NOT* attempt to touch the log now.
+ */
+void irlmp_discovery_expiry(discovery_t *expiry) 
+{
+	irlmp_client_t *client;
+	
+	IRDA_DEBUG(3, __FUNCTION__ "()\n");
+
+	ASSERT(expiry != NULL, return;);
+	
+	client = (irlmp_client_t *) hashbin_get_first(irlmp->clients);
+	while (client != NULL) {
+		/* Check if we should notify client */
+		if ((client->expir_callback) &&
+		    (client->hint_mask & expiry->hints.word & 0x7f7f))
+			client->expir_callback(expiry, client->priv);
+
+		/* Next client */
+		client = (irlmp_client_t *) hashbin_get_next(irlmp->clients);
+	}
+}
+
+/*
  * Function irlmp_get_discovery_response ()
  *
- *    Used by IrLAP to get the disocvery info it needs when answering
+ *    Used by IrLAP to get the discovery info it needs when answering
  *    discovery requests by other devices.
  */
 discovery_t *irlmp_get_discovery_response()
@@ -1046,9 +1104,35 @@ void irlmp_status_request(void)
 	IRDA_DEBUG(0, __FUNCTION__ "(), Not implemented\n");
 }
 
-void irlmp_status_indication(LINK_STATUS link, LOCK_STATUS lock) 
+/*
+ * Propagate status indication from LAP to LSAPs (via LMP)
+ * This don't trigger any change of state in lap_cb, lmp_cb or lsap_cb,
+ * and the event is stateless, therefore we can bypass both state machines
+ * and send the event direct to the LSAP user.
+ * Jean II
+ */
+void irlmp_status_indication(struct lap_cb *self,
+			     LINK_STATUS link, LOCK_STATUS lock) 
 {
-	IRDA_DEBUG(1, __FUNCTION__ "(), Not implemented\n");
+	struct lsap_cb *next;
+	struct lsap_cb *curr;
+
+	/* Send status_indication to all LSAPs using this link */
+	next = (struct lsap_cb *) hashbin_get_first( self->lsaps);
+	while (next != NULL ) {
+		curr = next;
+		next = (struct lsap_cb *) hashbin_get_next(self->lsaps);
+
+		ASSERT(curr->magic == LMP_LSAP_MAGIC, return;);
+		/*
+		 *  Inform service user if he has requested it
+		 */
+		if (curr->notify.status_indication != NULL)
+			curr->notify.status_indication(curr->notify.instance, 
+						       link, lock);
+		else
+			IRDA_DEBUG(2, __FUNCTION__ "(), no handler\n");
+	}
 }
 
 /*
@@ -1207,7 +1291,7 @@ __u32 irlmp_register_service(__u16 hints)
 		return 0;
 	}
 	service->hints = hints;
-	hashbin_insert(irlmp->services, (queue_t *) service, handle, NULL);
+	hashbin_insert(irlmp->services, (irda_queue_t *) service, handle, NULL);
 
 	return handle;
 }
@@ -1255,15 +1339,20 @@ int irlmp_unregister_service(__u32 handle)
  * Function irlmp_register_client (hint_mask, callback1, callback2)
  *
  *    Register a local client with IrLMP
+ *	First callback is selective discovery (based on hints)
+ *	Second callback is for selective discovery expiries
  *
  *    Returns: handle > 0 on success, 0 on error
  */
-__u32 irlmp_register_client(__u16 hint_mask, DISCOVERY_CALLBACK1 callback1,
-			    DISCOVERY_CALLBACK2 callback2)
+__u32 irlmp_register_client(__u16 hint_mask, DISCOVERY_CALLBACK1 disco_clb,
+			    DISCOVERY_CALLBACK1 expir_clb, void *priv)
 {
 	irlmp_client_t *client;
 	__u32 handle;
 
+	IRDA_DEBUG(0, __FUNCTION__ "()\n");
+	ASSERT(irlmp != NULL, return 0;);
+	
 	/* Get a unique handle for this client */
 	get_random_bytes(&handle, sizeof(handle));
 	while (hashbin_find(irlmp->clients, handle, NULL) || !handle)
@@ -1273,16 +1362,16 @@ __u32 irlmp_register_client(__u16 hint_mask, DISCOVERY_CALLBACK1 callback1,
  	client = kmalloc(sizeof(irlmp_client_t), GFP_ATOMIC);
 	if (!client) {
 		IRDA_DEBUG( 1, __FUNCTION__ "(), Unable to kmalloc!\n");
-
 		return 0;
 	}
 
 	/* Register the details */
 	client->hint_mask = hint_mask;
-	client->callback1 = callback1;
-	client->callback2 = callback2;
+	client->disco_callback = disco_clb;
+	client->expir_callback = expir_clb;
+	client->priv = priv;
 
- 	hashbin_insert(irlmp->clients, (queue_t *) client, handle, NULL);
+ 	hashbin_insert(irlmp->clients, (irda_queue_t *) client, handle, NULL);
 
 	return handle;
 }
@@ -1296,8 +1385,8 @@ __u32 irlmp_register_client(__u16 hint_mask, DISCOVERY_CALLBACK1 callback1,
  *    Returns: 0 on success, -1 on error
  */
 int irlmp_update_client(__u32 handle, __u16 hint_mask, 
-			DISCOVERY_CALLBACK1 callback1, 
-			DISCOVERY_CALLBACK2 callback2)
+			DISCOVERY_CALLBACK1 disco_clb, 
+			DISCOVERY_CALLBACK1 expir_clb, void *priv)
 {
 	irlmp_client_t *client;
 
@@ -1311,8 +1400,9 @@ int irlmp_update_client(__u32 handle, __u16 hint_mask,
 	}
 
 	client->hint_mask = hint_mask;
-	client->callback1 = callback1;
-	client->callback2 = callback2;
+	client->disco_callback = disco_clb;
+	client->expir_callback = expir_clb;
+	client->priv = priv;
 	
 	return 0;
 }

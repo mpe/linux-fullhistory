@@ -101,9 +101,9 @@ int __init hp_probe1(struct net_device *dev, int ioaddr)
 {
 	int i, retval, board_id, wordmode;
 	const char *name;
-	static unsigned version_printed = 0;
+	static unsigned version_printed;
 
-	if (!request_region(ioaddr, HP_IO_EXTENT, "hp"))
+	if (!request_region(ioaddr, HP_IO_EXTENT, dev->name))
 		return -ENODEV;
 
 	/* Check for the HP physical address, 08 00 09 xx xx xx. */
@@ -155,7 +155,7 @@ int __init hp_probe1(struct net_device *dev, int ioaddr)
 				outb_p(irqmap[irq] | HP_RUN, ioaddr + HP_CONFIGURE);
 				outb_p( 0x00 | HP_RUN, ioaddr + HP_CONFIGURE);
 				if (irq == probe_irq_off(cookie)		 /* It's a good IRQ line! */
-					&& request_irq (irq, ei_interrupt, 0, "hp", dev) == 0) {
+					&& request_irq (irq, ei_interrupt, 0, dev->name, dev) == 0) {
 					printk(" selecting IRQ %d.\n", irq);
 					dev->irq = *irqp;
 					break;
@@ -170,9 +170,8 @@ int __init hp_probe1(struct net_device *dev, int ioaddr)
 	} else {
 		if (dev->irq == 2)
 			dev->irq = 9;
-		if (request_irq(dev->irq, ei_interrupt, 0, "hp", dev)) {
+		if ((retval = request_irq(dev->irq, ei_interrupt, 0, dev->name, dev))) {
 			printk (" unable to get IRQ %d.\n", dev->irq);
-			retval = -EBUSY;
 			goto out1;
 		}
 	}

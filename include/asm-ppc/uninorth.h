@@ -3,6 +3,7 @@
  *             from Apple. This chip is used on "Core99" machines
  *
  */
+#ifdef __KERNEL__
 
 
 /*
@@ -79,5 +80,4 @@
  */
 #define UNI_N_HWINIT_STATE_CPU1_FLAG	0x10000000
 
-
-
+#endif /* __KERNEL__ */

@@ -46,11 +46,13 @@
 #include <linux/malloc.h>
 #include <linux/vt_kern.h>
 #include <linux/selection.h>
+#include <linux/spinlock.h>
 #include <linux/ioport.h>
 #include <linux/init.h>
 
 #include <asm/io.h>
 
+static spinlock_t vga_lock = SPIN_LOCK_UNLOCKED;
 
 #define BLANK 0x0020
 
@@ -152,8 +154,7 @@ static inline void write_vga(unsigned char reg, unsigned int val)
 	 * ddprintk might set the console position from interrupt
 	 * handlers, thus the write has to be IRQ-atomic.
 	 */
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&vga_lock, flags);	
 
 #ifndef SLOW_VGA
 	v1 = reg + (val & 0xff00);
@@ -166,7 +167,7 @@ static inline void write_vga(unsigned char reg, unsigned int val)
 	outb_p(reg+1, vga_video_port_reg);
 	outb_p(val & 0xff, vga_video_port_val);
 #endif
-	restore_flags(flags);
+	spin_unlock_irqrestore(&vga_lock, flags);
 }
 
 static const char __init *vgacon_startup(void)
@@ -415,7 +416,7 @@ static void vgacon_set_cursor_size(int xpos, int from, int to)
 	if ((from == lastfrom) && (to == lastto)) return;
 	lastfrom = from; lastto = to;
 
-	save_flags(flags); cli();
+	spin_lock_irqsave(&vga_lock, flags);
 	outb_p(0x0a, vga_video_port_reg);		/* Cursor start */
 	curs = inb_p(vga_video_port_val);
 	outb_p(0x0b, vga_video_port_reg);		/* Cursor end */
@@ -428,7 +429,7 @@ static void vgacon_set_cursor_size(int xpos, int from, int to)
 	outb_p(curs, vga_video_port_val);
 	outb_p(0x0b, vga_video_port_reg);		/* Cursor end */
 	outb_p(cure, vga_video_port_val);
-	restore_flags(flags);
+	spin_unlock_irqrestore(&vga_lock, flags);
 }
 
 static void vgacon_cursor(struct vc_data *c, int mode)
@@ -533,11 +534,11 @@ static void vga_vesa_blank(int mode)
 {
 	/* save original values of VGA controller registers */
 	if(!vga_vesa_blanked) {
-		cli();
+		spin_lock_irq(&vga_lock);
 		vga_state.SeqCtrlIndex = inb_p(seq_port_reg);
 		vga_state.CrtCtrlIndex = inb_p(vga_video_port_reg);
 		vga_state.CrtMiscIO = inb_p(video_misc_rd);
-		sti();
+		spin_unlock_irq(&vga_lock);
 
 		outb_p(0x00,vga_video_port_reg);	/* HorizontalTotal */
 		vga_state.HorizontalTotal = inb_p(vga_video_port_val);
@@ -561,7 +562,7 @@ static void vga_vesa_blank(int mode)
 
 	/* assure that video is enabled */
 	/* "0x20" is VIDEO_ENABLE_bit in register 01 of sequencer */
-	cli();
+	spin_lock_irq(&vga_lock);
 	outb_p(0x01,seq_port_reg);
 	outb_p(vga_state.ClockingMode | 0x20,seq_port_val);
 
@@ -598,13 +599,13 @@ static void vga_vesa_blank(int mode)
 	/* restore both index registers */
 	outb_p(vga_state.SeqCtrlIndex,seq_port_reg);
 	outb_p(vga_state.CrtCtrlIndex,vga_video_port_reg);
-	sti();
+	spin_unlock_irq(&vga_lock);
 }
 
 static void vga_vesa_unblank(void)
 {
 	/* restore original values of VGA controller registers */
-	cli();
+	spin_lock_irq(&vga_lock);
 	outb_p(vga_state.CrtMiscIO,video_misc_wr);
 
 	outb_p(0x00,vga_video_port_reg);		/* HorizontalTotal */
@@ -629,7 +630,7 @@ static void vga_vesa_unblank(void)
 	/* restore index/control registers */
 	outb_p(vga_state.SeqCtrlIndex,seq_port_reg);
 	outb_p(vga_state.CrtCtrlIndex,vga_video_port_reg);
-	sti();
+	spin_unlock_irq(&vga_lock);
 }
 
 static void vga_pal_blank(void)
@@ -750,7 +751,7 @@ vgacon_do_font_op(char *arg, int set, int ch512)
 		charmap += 4*cmapsz;
 #endif
 
-	cli();
+	spin_lock_irq(&vga_lock);
 	outb_p( 0x00, seq_port_reg );   /* First, the sequencer */
 	outb_p( 0x01, seq_port_val );   /* Synchronous reset */
 	outb_p( 0x02, seq_port_reg );
@@ -766,7 +767,7 @@ vgacon_do_font_op(char *arg, int set, int ch512)
 	outb_p( 0x00, gr_port_val );    /* disable odd-even addressing */
 	outb_p( 0x06, gr_port_reg );
 	outb_p( 0x00, gr_port_val );    /* map start at A000:0000 */
-	sti();
+	spin_unlock_irq(&vga_lock);
 	
 	if (arg) {
 		if (set)
@@ -793,7 +794,7 @@ vgacon_do_font_op(char *arg, int set, int ch512)
 		}
 	}
 	
-	cli();
+	spin_lock_irq(&vga_lock);
 	outb_p( 0x00, seq_port_reg );   /* First, the sequencer */
 	outb_p( 0x01, seq_port_val );   /* Synchronous reset */
 	outb_p( 0x02, seq_port_reg );
@@ -833,8 +834,7 @@ vgacon_do_font_op(char *arg, int set, int ch512)
 		inb_p( video_port_status );
 		outb_p ( 0x20, attrib_port );
 	}
-	sti();
-
+	spin_unlock_irq(&vga_lock);
 	return 0;
 }
 
@@ -865,12 +865,12 @@ vgacon_adjust_height(unsigned fontheight)
 	   registers; they are write-only on EGA, but it appears that they
 	   are all don't care bits on EGA, so I guess it doesn't matter. */
 
-	cli();
+	spin_lock_irq(&vga_lock);
 	outb_p( 0x07, vga_video_port_reg );		/* CRTC overflow register */
 	ovr = inb_p(vga_video_port_val);
 	outb_p( 0x09, vga_video_port_reg );		/* Font size register */
 	fsr = inb_p(vga_video_port_val);
-	sti();
+	spin_lock_irq(&vga_lock);
 
 	vde = maxscan & 0xff;			/* Vertical display end reg */
 	ovr = (ovr & 0xbd) +			/* Overflow register */
@@ -878,14 +878,14 @@ vgacon_adjust_height(unsigned fontheight)
 	      ((maxscan & 0x200) >> 3);
 	fsr = (fsr & 0xe0) + (fontheight-1);    /*  Font size register */
 
-	cli();
+	spin_lock_irq(&vga_lock);
 	outb_p( 0x07, vga_video_port_reg );		/* CRTC overflow register */
 	outb_p( ovr, vga_video_port_val );
 	outb_p( 0x09, vga_video_port_reg );		/* Font size */
 	outb_p( fsr, vga_video_port_val );
 	outb_p( 0x12, vga_video_port_reg );		/* Vertical display limit */
 	outb_p( vde, vga_video_port_val );
-	sti();
+	spin_unlock_irq(&vga_lock);	
 
 	vc_resize_all(rows, 0);			/* Adjust console size */
 	return 0;

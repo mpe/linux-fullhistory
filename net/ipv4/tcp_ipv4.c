@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.218 2000/10/18 18:04:22 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.219 2000/11/10 04:02:04 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -301,7 +301,7 @@ void tcp_put_port(struct sock *sk)
 	local_bh_enable();
 }
 
-/* This lock without TASK_EXCLUSIVE is good on UP and it can be very bad on SMP.
+/* This lock without WQ_FLAG_EXCLUSIVE is good on UP and it can be very bad on SMP.
  * Look, when several writers sleep and reader wakes them up, all but one
  * immediately hit write lock and grab all the cpus. Exclusive sleep solves
  * this, _but_ remember, it adds useless work on UP machines (wake up each
@@ -317,7 +317,7 @@ void tcp_listen_wlock(void)
 
 		add_wait_queue_exclusive(&tcp_lhash_wait, &wait);
 		for (;;) {
-			set_current_state(TASK_UNINTERRUPTIBLE|TASK_EXCLUSIVE);
+			set_current_state(TASK_UNINTERRUPTIBLE);
 			if (atomic_read(&tcp_lhash_users) == 0)
 				break;
 			write_unlock_bh(&tcp_lhash_lock);

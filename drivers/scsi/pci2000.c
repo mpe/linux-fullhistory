@@ -682,6 +682,8 @@ int Pci2000_Detect (Scsi_Host_Template *tpnt)
 		if (pci_enable_device(pdev))
 			continue;
 		pshost = scsi_register (tpnt, sizeof(ADAPTER2000));
+		if(pshost == NULL)
+			continue;
 		padapter = HOSTDATA(pshost);
 
 		padapter->basePort = pci_resource_start (pdev, 1);

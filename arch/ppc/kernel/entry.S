@@ -298,12 +298,10 @@ _GLOBAL(_switch)
 	SYNC
 	RFI
 
-#ifdef CONFIG_SMP	
-	.globl	ret_from_smpfork
-ret_from_smpfork:
+	.globl	ret_from_fork
+ret_from_fork:
 	bl	schedule_tail
 	b	ret_from_except
-#endif
 
 	.globl	ret_from_intercept
 ret_from_intercept:

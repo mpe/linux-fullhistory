@@ -417,8 +417,11 @@ extern void si_meminfo(struct sysinfo * val);
 extern void swapin_readahead(swp_entry_t);
 
 /* mmap.c */
+extern void lock_vma_mappings(struct vm_area_struct *);
+extern void unlock_vma_mappings(struct vm_area_struct *);
 extern void merge_segments(struct mm_struct *, unsigned long, unsigned long);
 extern void insert_vm_struct(struct mm_struct *, struct vm_area_struct *);
+extern void __insert_vm_struct(struct mm_struct *, struct vm_area_struct *);
 extern void build_mmap_avl(struct mm_struct *);
 extern void exit_mmap(struct mm_struct *);
 extern unsigned long get_unmapped_area(unsigned long, unsigned long);

@@ -58,6 +58,8 @@
 extern int irtty_init(void);
 extern int nsc_ircc_init(void);
 extern int ircc_init(void);
+extern int toshoboe_init(void);
+extern int litelink_init(void);
 extern int w83977af_init(void);
 extern int esi_init(void);
 extern int tekram_init(void);
@@ -183,7 +185,7 @@ void irda_device_set_media_busy(struct net_device *dev, int status)
 		IRDA_DEBUG( 4, "Media busy!\n");
 	} else {
 		self->media_busy = FALSE;
-		del_timer(&self->media_busy_timer);
+		irlap_stop_mbusy_timer(self);
 	}
 }
 
@@ -379,7 +381,7 @@ struct irda_task *irda_task_execute(void *instance,
 	init_timer(&task->timer);
 
 	/* Register task */
-	hashbin_insert(tasks, (queue_t *) task, (int) task, NULL);
+	hashbin_insert(tasks, (irda_queue_t *) task, (int) task, NULL);
 
 	/* No time to waste, so lets get going! */
 	ret = irda_task_kick(task);
@@ -518,7 +520,7 @@ int irda_device_register_dongle(struct dongle_reg *new)
         }
 	
 	/* Insert IrDA dongle into hashbin */
-	hashbin_insert(dongles, (queue_t *) new, new->type, NULL);
+	hashbin_insert(dongles, (irda_queue_t *) new, new->type, NULL);
 	
         return 0;
 }

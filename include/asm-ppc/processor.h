@@ -1,3 +1,4 @@
+#ifdef __KERNEL__
 #ifndef __ASM_PPC_PROCESSOR_H
 #define __ASM_PPC_PROCESSOR_H
 
@@ -727,3 +728,4 @@ void _nmask_and_or_msr(unsigned long nmask, unsigned long or_val);
 #endif /* CONFIG_MACH_SPECIFIC */
 
 #endif /* __ASM_PPC_PROCESSOR_H */
+#endif /* __KERNEL__ */

@@ -114,15 +114,18 @@ void ax25_register_sysctl(void)
 	memset(ax25_table, 0x00, ax25_table_size);
 
 	for (n = 0, ax25_dev = ax25_dev_list; ax25_dev != NULL; ax25_dev = ax25_dev->next) {
+		ctl_table *child = kmalloc(sizeof(ax25_param_table, GFP_ATOMIC);
+		if (!child) {
+			while (n--)
+				kfree(ax25_table[n].child);
+			kfree(ax25_table);
+			return;
+		}
+		memcpy(child, ax25_param_table, sizeof(ax25_param_table));
+		ax25_table[n].child = ax25_dev->systable = child;
 		ax25_table[n].ctl_name     = n + 1;
 		ax25_table[n].procname     = ax25_dev->dev->name;
-		ax25_table[n].data         = NULL;
-		ax25_table[n].maxlen       = 0;
 		ax25_table[n].mode         = 0555;
-		ax25_table[n].child        = ax25_dev->systable;
-		ax25_table[n].proc_handler = NULL;
-
-		memcpy(ax25_dev->systable, ax25_param_table, sizeof(ax25_dev->systable));
 
 #ifndef CONFIG_AX25_DAMA_SLAVE
 		/* 
@@ -131,13 +134,13 @@ void ax25_register_sysctl(void)
 		 * AX.25 DAMA slave code, do we?
 		 */
 
-		ax25_dev->systable[AX25_VALUES_DS_TIMEOUT].procname = NULL;
+		child[AX25_VALUES_DS_TIMEOUT].procname = NULL;
 #endif
 
-		ax25_dev->systable[AX25_MAX_VALUES].ctl_name = 0;	/* just in case... */
+		child[AX25_MAX_VALUES].ctl_name = 0;	/* just in case... */
 
 		for (k = 0; k < AX25_MAX_VALUES; k++)
-			ax25_dev->systable[k].data = &ax25_dev->values[k];
+			child[k].data = &ax25_dev->values[k];
 
 		n++;
 	}
@@ -149,9 +152,11 @@ void ax25_register_sysctl(void)
 
 void ax25_unregister_sysctl(void)
 {
+	ctl_table *p;
 	unregister_sysctl_table(ax25_table_header);
 
-	kfree(ax25_table);
-
 	ax25_dir_table[0].child = NULL;
+	for (p = ax25_table; p->ctl_name; p++)
+		kfree(p->child);
+	kfree(ax25_table);
 }

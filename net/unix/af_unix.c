@@ -8,7 +8,7 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
- * Version:	$Id: af_unix.c,v 1.107 2000/10/19 01:05:36 davem Exp $
+ * Version:	$Id: af_unix.c,v 1.108 2000/11/10 04:02:04 davem Exp $
  *
  * Fixes:
  *		Linus Torvalds	:	Assorted bug cures.
@@ -832,7 +832,7 @@ static long unix_wait_for_peer(unix_socket *other, long timeo)
 	int sched;
 	DECLARE_WAITQUEUE(wait, current);
 
-	__set_current_state(TASK_INTERRUPTIBLE|TASK_EXCLUSIVE);
+	__set_current_state(TASK_INTERRUPTIBLE);
 	add_wait_queue_exclusive(&other->protinfo.af_unix.peer_wait, &wait);
 
 	sched = (!other->dead &&

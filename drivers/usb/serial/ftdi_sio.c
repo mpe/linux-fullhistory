@@ -12,6 +12,9 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  *
+ * (11/01/2000) Adam J. Richter
+ *	usb_device_id table support
+ * 
  * (10/05/2000) gkh
  *	Fixed bug with urb->dev not being set properly, now that the usb
  *	core needs it.
@@ -71,6 +74,14 @@
 #define FTDI_VENDOR_ID			0x0403
 #define FTDI_SIO_SERIAL_CONVERTER_ID	0x8372
 
+static __devinitdata struct usb_device_id id_table [] = {
+    { idVendor: FTDI_VENDOR_ID, idProduct: FTDI_SIO_SERIAL_CONVERTER_ID },
+    { }						/* Terminating entry */
+};
+
+MODULE_DEVICE_TABLE (usb, id_table);
+
+
 /* function prototypes for a FTDI serial converter */
 static int  ftdi_sio_startup		(struct usb_serial *serial);
 static int  ftdi_sio_open		(struct usb_serial_port *port, struct file *filp);
@@ -82,12 +93,9 @@ static void ftdi_sio_set_termios	(struct usb_serial_port *port, struct termios *
 static int  ftdi_sio_ioctl		(struct usb_serial_port *port, struct file * file, unsigned int cmd, unsigned long arg);
 
 /* All of the device info needed for the FTDI SIO serial converter */
-static __u16	ftdi_vendor_id		= FTDI_VENDOR_ID;
-static __u16	ftdi_sio_product_id	= FTDI_SIO_SERIAL_CONVERTER_ID;
 struct usb_serial_device_type ftdi_sio_device = {
 	name:			"FTDI SIO",
-	idVendor:		&ftdi_vendor_id,	/* the FTDI vendor ID */
-	idProduct:		&ftdi_sio_product_id,	/* the FTDI SIO product id */
+	id_table:		id_table,
 	needs_interrupt_in:	MUST_HAVE_NOT,		/* this device must not have an interrupt in endpoint */
 	needs_bulk_in:		MUST_HAVE,		/* this device must have a bulk in endpoint */
 	needs_bulk_out:		MUST_HAVE,		/* this device must have a bulk out endpoint */

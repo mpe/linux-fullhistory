@@ -107,7 +107,7 @@ int __init iriap_init(void)
 
 	/* Register the Device object with LM-IAS */
 	obj = irias_new_object("Device", IAS_DEVICE_ID);
-	irias_add_string_attrib(obj, "DeviceName", "Linux");
+	irias_add_string_attrib(obj, "DeviceName", "Linux", IAS_KERNEL_ATTR);
 
 	oct_seq[0] = 0x01;  /* Version 1 */
 	oct_seq[1] = 0x00;  /* IAS support bits */
@@ -115,7 +115,8 @@ int __init iriap_init(void)
 #ifdef CONFIG_IRDA_ULTRA
 	oct_seq[2] |= 0x04; /* Connectionless Data support */
 #endif
-	irias_add_octseq_attrib(obj, "IrLMPSupport", oct_seq, 3);
+	irias_add_octseq_attrib(obj, "IrLMPSupport", oct_seq, 3,
+				IAS_KERNEL_ATTR);
 	irias_insert_object(obj);
 
 	/*  
@@ -179,7 +180,7 @@ struct iriap_cb *iriap_open(__u8 slsap_sel, int mode, void *priv,
 
 	init_timer(&self->watchdog_timer);
 
-	hashbin_insert(iriap, (queue_t *) self, (int) self, NULL);
+	hashbin_insert(iriap, (irda_queue_t *) self, (int) self, NULL);
 	
 	/* Initialize state machines */
 	iriap_next_client_state(self, S_DISCONNECT);
@@ -866,7 +867,7 @@ static int iriap_data_indication(void *instance, void *sap,
 			iriap_getvaluebyclass_confirm(self, skb);
 			break;
 		case IAS_CLASS_UNKNOWN:
-			WARNING(__FUNCTION__ "(), No such class!\n");
+			IRDA_DEBUG(1, __FUNCTION__ "(), No such class!\n");
 			/* Finished, close connection! */
 			iriap_disconnect_request(self);
 
@@ -880,7 +881,7 @@ static int iriap_data_indication(void *instance, void *sap,
 			dev_kfree_skb(skb);
 			break;
 		case IAS_ATTRIB_UNKNOWN:
-			WARNING(__FUNCTION__ "(), No such attribute!\n");
+			IRDA_DEBUG(1, __FUNCTION__ "(), No such attribute!\n");
 		       	/* Finished, close connection! */
 			iriap_disconnect_request(self);
 
@@ -889,7 +890,7 @@ static int iriap_data_indication(void *instance, void *sap,
 			 * no to use self anymore after calling confirm 
 			 */
 			if (self->confirm)
-				self->confirm(IAS_CLASS_UNKNOWN, 0, NULL, 
+				self->confirm(IAS_ATTRIB_UNKNOWN, 0, NULL, 
 					      self->priv);
 			dev_kfree_skb(skb);
 			break;

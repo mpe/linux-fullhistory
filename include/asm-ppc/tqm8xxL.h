@@ -10,6 +10,7 @@
  *
  * Copyright (c) 1999 Wolfgang Denk (wd@denx.de)
  */
+#ifdef __KERNEL__
 #ifndef __MACH_TQM8xxL_DEFS
 #define __MACH_TQM8xxL_DEFS
 
@@ -64,3 +65,4 @@ typedef struct bd_info {
 
 #endif	/* __MACH_TQM8xxL_DEFS */
 
+#endif /* __KERNEL__ */

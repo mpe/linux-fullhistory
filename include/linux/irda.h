@@ -78,14 +78,17 @@ enum {
 #define SOL_IRLMP      266 /* Same as SOL_IRDA for now */
 #define SOL_IRTTP      266 /* Same as SOL_IRDA for now */
 
-#define IRLMP_ENUMDEVICES        1
-#define IRLMP_IAS_SET            2
-#define IRLMP_IAS_QUERY          3
-#define IRLMP_HINTS_SET          4
+#define IRLMP_ENUMDEVICES        1	/* Return discovery log */
+#define IRLMP_IAS_SET            2	/* Set an attribute in local IAS */
+#define IRLMP_IAS_QUERY          3	/* Query remote IAS for attribute */
+#define IRLMP_HINTS_SET          4	/* Set hint bits advertised */
 #define IRLMP_QOS_SET            5
 #define IRLMP_QOS_GET            6
 #define IRLMP_MAX_SDU_SIZE       7
-#define IRLMP_IAS_GET            8
+#define IRLMP_IAS_GET            8	/* Get an attribute from local IAS */
+#define IRLMP_IAS_DEL		 9	/* Remove attribute from local IAS */
+#define IRLMP_HINT_MASK_SET	10	/* Set discovery filter */
+#define IRLMP_WAITDEVICE	11	/* Wait for a new discovery */
 
 #define IRTTP_MAX_SDU_SIZE IRLMP_MAX_SDU_SIZE /* Compatibility */
 
@@ -93,6 +96,12 @@ enum {
 #define IAS_MAX_OCTET_STRING  1024
 #define IAS_MAX_CLASSNAME       64
 #define IAS_MAX_ATTRIBNAME     256
+
+/* Attribute type needed for struct irda_ias_set */
+#define IAS_MISSING 0
+#define IAS_INTEGER 1
+#define IAS_OCT_SEQ 2
+#define IAS_STRING  3
 
 #define LSAP_ANY              0xff
 
@@ -132,6 +141,7 @@ struct irda_ias_set {
 			__u8 string[IAS_MAX_STRING];
 		} irda_attrib_string;
 	} attribute;
+	__u32       daddr;    /* Address of device (for some queries only) */
 };
 
 /* Some private IOCTL's (max 16) */

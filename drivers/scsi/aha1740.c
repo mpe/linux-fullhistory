@@ -541,6 +541,11 @@ int aha1740_detect(Scsi_Host_Template * tpnt)
 	    continue;
 	}
 	shpnt = scsi_register(tpnt, sizeof(struct aha1740_hostdata));
+	if(shpnt == NULL)
+	{
+		free_irq(irq_level, NULL);
+		continue;
+	}
 	request_region(slotbase, SLOTSIZE, "aha1740");
 	shpnt->base = 0;
 	shpnt->io_port = slotbase;

@@ -936,6 +936,7 @@ static int sq_release(struct inode *inode, struct file *file)
 static int sq_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		    u_long arg)
 {
+	int val;
 	u_long fmt;
 	int data;
 	int size, nbufs;
@@ -1013,7 +1014,7 @@ static int sq_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		} else
 			size = write_sq.bufSize;
 		sq_setup(&write_sq, write_sq.numBufs, nbufs, size);
-		return 0;
+		return IOCTL_OUT(arg,write_sq.bufSize | write_sq.numBufs << 16);
 	case SNDCTL_DSP_GETOSPACE:
 		info.fragments = write_sq.max_active - write_sq.count;
 		info.fragstotal = write_sq.max_active;
@@ -1022,6 +1023,9 @@ static int sq_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		if (copy_to_user((void *)arg, &info, sizeof(info)))
 			return -EFAULT;
 		return 0;
+	case SNDCTL_DSP_GETCAPS:
+		val = 1;        /* Revision level of this ioctl() */
+		return IOCTL_OUT(arg,val);
 
 	default:
 		return mixer_ioctl(inode, file, cmd, arg);

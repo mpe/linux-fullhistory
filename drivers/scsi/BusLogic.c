@@ -2793,6 +2793,11 @@ int BusLogic_DetectHostAdapter(SCSI_Host_Template_T *HostTemplate)
 	Register the SCSI Host structure.
       */
       Host = scsi_register(HostTemplate, sizeof(BusLogic_HostAdapter_T));
+      if(Host==NULL)
+      {
+      	release_region(HostAdapter->IO_Address, HostAdapter->AddressCount);
+      	continue;
+      }
       HostAdapter = (BusLogic_HostAdapter_T *) Host->hostdata;
       memcpy(HostAdapter, PrototypeHostAdapter, sizeof(BusLogic_HostAdapter_T));
       HostAdapter->SCSI_Host = Host;

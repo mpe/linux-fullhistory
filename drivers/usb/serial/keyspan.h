@@ -117,28 +117,96 @@ struct ezusb_hex_record {
 
 	/* Device info for the Keyspan serial converter */
 #define KEYSPAN_VENDOR_ID			(0x06cd)
-static __u16	keyspan_vendor_id		= KEYSPAN_VENDOR_ID;
 
     /* Product IDs for the five products supported, pre-renumeration */
-static __u16	keyspan_usa18x_pre_product_id	= 0x0105;	
-static __u16	keyspan_usa19_pre_product_id	= 0x0103;	
-static __u16	keyspan_usa19w_pre_product_id	= 0x0106;	
-static __u16	keyspan_usa28_pre_product_id	= 0x0101;	
-static __u16	keyspan_usa28x_pre_product_id	= 0x0102;	
+#define	keyspan_usa18x_pre_product_id	0x0105
+#define	keyspan_usa19_pre_product_id	0x0103
+#define	keyspan_usa19w_pre_product_id	0x0106
+#define	keyspan_usa28_pre_product_id	0x0101
+#define	keyspan_usa28x_pre_product_id	0x0102
 
     /* Product IDs post-renumeration */
-static __u16	keyspan_usa18x_product_id	= 0x0112;	
-static __u16	keyspan_usa19_product_id	= 0x0107;	
-static __u16	keyspan_usa19w_product_id	= 0x0108;	
-static __u16	keyspan_usa28_product_id	= 0x010f;	
-static __u16	keyspan_usa28x_product_id	= 0x0110;	
+#define	keyspan_usa18x_product_id	0x0112
+#define	keyspan_usa19_product_id	0x0107
+#define	keyspan_usa19w_product_id	0x0108
+#define	keyspan_usa28_product_id	0x010f
+#define	keyspan_usa28x_product_id	0x0110
+
+static __devinitdata struct usb_device_id keyspan_ids_combined[] = {
+    {idVendor: KEYSPAN_VENDOR_ID, idProduct: keyspan_usa18x_pre_product_id},
+    {idVendor: KEYSPAN_VENDOR_ID, idProduct: keyspan_usa19_pre_product_id},
+    {idVendor: KEYSPAN_VENDOR_ID, idProduct: keyspan_usa19w_pre_product_id},
+    {idVendor: KEYSPAN_VENDOR_ID, idProduct: keyspan_usa28_pre_product_id},
+    {idVendor: KEYSPAN_VENDOR_ID, idProduct: keyspan_usa28x_pre_product_id},
+    {idVendor: KEYSPAN_VENDOR_ID, idProduct: keyspan_usa18x_product_id},
+    {idVendor: KEYSPAN_VENDOR_ID, idProduct: keyspan_usa19_product_id},
+    {idVendor: KEYSPAN_VENDOR_ID, idProduct: keyspan_usa19w_product_id},
+    {idVendor: KEYSPAN_VENDOR_ID, idProduct: keyspan_usa28_product_id},
+    {idVendor: KEYSPAN_VENDOR_ID, idProduct: keyspan_usa28x_product_id},
+    { } /* Terminating entry */
+};
+
+MODULE_DEVICE_TABLE(usb, keyspan_ids_combined);
+
+/* Eventually, we will not need separate id tables for each USB
+   ID pattern.  But, for now, it looks like we need slightly different
+   behavior for each match. */
+
+static __devinitdata struct usb_device_id keyspan_usa18x_pre_ids[] = {
+    {idVendor: KEYSPAN_VENDOR_ID, idProduct: keyspan_usa18x_pre_product_id},
+    { }	/* Terminating entry */
+};
+
+static __devinitdata struct usb_device_id keyspan_usa19_pre_ids[] = {
+    {idVendor: KEYSPAN_VENDOR_ID, idProduct: keyspan_usa19_pre_product_id},
+    { } /* Terminating entry */
+};
+
+static __devinitdata struct usb_device_id keyspan_usa19w_pre_ids[] = {
+    {idVendor: KEYSPAN_VENDOR_ID, idProduct: keyspan_usa19w_pre_product_id},
+    { } /* Terminating entry */
+};
+
+static __devinitdata struct usb_device_id keyspan_usa28_pre_ids[] = {
+    {idVendor: KEYSPAN_VENDOR_ID, idProduct: keyspan_usa28_pre_product_id},
+    { } /* Terminating entry */
+};
+
+static __devinitdata struct usb_device_id keyspan_usa28x_pre_ids[] = {
+    {idVendor: KEYSPAN_VENDOR_ID, idProduct: keyspan_usa28x_pre_product_id},
+    { } /* Terminating entry */
+};
+
+static __devinitdata struct usb_device_id keyspan_usa18x_ids[] = {
+    {idVendor: KEYSPAN_VENDOR_ID, idProduct: keyspan_usa18x_product_id},
+    { } /* Terminating entry */
+};
+
+static __devinitdata struct usb_device_id keyspan_usa19_ids[] = {
+    {idVendor: KEYSPAN_VENDOR_ID, idProduct: keyspan_usa19_product_id},
+    { } /* Terminating entry */
+};
+
+static __devinitdata struct usb_device_id keyspan_usa19w_ids[] = {
+    {idVendor: KEYSPAN_VENDOR_ID, idProduct: keyspan_usa19w_product_id},
+    { } /* Terminating entry */
+};
+
+static __devinitdata struct usb_device_id keyspan_usa28_ids[] = {
+    {idVendor: KEYSPAN_VENDOR_ID, idProduct: keyspan_usa28_product_id},
+    { } /* Terminating entry */
+};
+
+static __devinitdata struct usb_device_id keyspan_usa28x_ids[] = {
+    {idVendor: KEYSPAN_VENDOR_ID, idProduct: keyspan_usa28x_product_id},
+    { } /* Terminating entry */
+};
 
     /* Structs for the devices, pre and post renumeration.
        These are incomplete at present - HAB 20000708  */
 struct usb_serial_device_type keyspan_usa18x_pre_device = {
 	name:			"Keyspan USA18X - (prerenumeration)",
-	idVendor:		&keyspan_vendor_id,
-	idProduct:		&keyspan_usa18x_pre_product_id,
+	id_table:		keyspan_usa18x_pre_ids,
 	needs_interrupt_in:	DONT_CARE,
 	needs_bulk_in:		DONT_CARE,
 	needs_bulk_out:		DONT_CARE,
@@ -151,8 +219,7 @@ struct usb_serial_device_type keyspan_usa18x_pre_device = {
 
 struct usb_serial_device_type keyspan_usa19_pre_device = {
 	name:			"Keyspan USA19 - (prerenumeration)",
-	idVendor:		&keyspan_vendor_id,
-	idProduct:		&keyspan_usa19_pre_product_id,
+	id_table:		keyspan_usa19_pre_ids,
 	needs_interrupt_in:	DONT_CARE,
 	needs_bulk_in:		DONT_CARE,
 	needs_bulk_out:		DONT_CARE,
@@ -166,8 +233,7 @@ struct usb_serial_device_type keyspan_usa19_pre_device = {
 
 struct usb_serial_device_type keyspan_usa19w_pre_device = {
 	name:			"Keyspan USA19W - (prerenumeration)",
-	idVendor:		&keyspan_vendor_id,
-	idProduct:		&keyspan_usa19w_pre_product_id,
+	id_table:		keyspan_usa19w_pre_ids,
 	needs_interrupt_in:	DONT_CARE,
 	needs_bulk_in:		DONT_CARE,
 	needs_bulk_out:		DONT_CARE,
@@ -181,8 +247,7 @@ struct usb_serial_device_type keyspan_usa19w_pre_device = {
 
 struct usb_serial_device_type keyspan_usa28_pre_device = {
 	name:			"Keyspan USA28 - (prerenumeration)",
-	idVendor:		&keyspan_vendor_id,
-	idProduct:		&keyspan_usa28_pre_product_id,
+	id_table:		keyspan_usa28_pre_ids,
 	needs_interrupt_in:	DONT_CARE,
 	needs_bulk_in:		DONT_CARE,
 	needs_bulk_out:		DONT_CARE,
@@ -195,8 +260,7 @@ struct usb_serial_device_type keyspan_usa28_pre_device = {
 
 struct usb_serial_device_type keyspan_usa28x_pre_device = {
 	name:			"Keyspan USA28X - (prerenumeration)",
-	idVendor:		&keyspan_vendor_id,
-	idProduct:		&keyspan_usa28x_pre_product_id,
+	id_table:		keyspan_usa28x_pre_ids,
 	needs_interrupt_in:	DONT_CARE,
 	needs_bulk_in:		DONT_CARE,
 	needs_bulk_out:		DONT_CARE,
@@ -210,8 +274,7 @@ struct usb_serial_device_type keyspan_usa28x_pre_device = {
 
 struct usb_serial_device_type keyspan_usa18x_device = {
 	name:			"Keyspan USA18X",
-	idVendor:		&keyspan_vendor_id,
-	idProduct:		&keyspan_usa18x_product_id,
+	id_table:		keyspan_usa18x_ids,
 	needs_interrupt_in:	DONT_CARE,	
 	needs_bulk_in:		DONT_CARE,
 	needs_bulk_out:		DONT_CARE,
@@ -228,8 +291,7 @@ struct usb_serial_device_type keyspan_usa18x_device = {
 
 struct usb_serial_device_type keyspan_usa19_device = {
 	name:			"Keyspan USA19",
-	idVendor:		&keyspan_vendor_id,
-	idProduct:		&keyspan_usa19_product_id,
+	id_table:		keyspan_usa19_ids,
 	needs_interrupt_in:	DONT_CARE,	
 	needs_bulk_in:		MUST_HAVE,
 	needs_bulk_out:		MUST_HAVE,
@@ -256,8 +318,7 @@ struct usb_serial_device_type keyspan_usa19_device = {
 
 struct usb_serial_device_type keyspan_usa19w_device = {
 	name:			"Keyspan USA19W",
-	idVendor:		&keyspan_vendor_id,
-	idProduct:		&keyspan_usa19w_product_id,
+	id_table:		keyspan_usa19w_ids,
 	needs_interrupt_in:	DONT_CARE,	
 	needs_bulk_in:		DONT_CARE,
 	needs_bulk_out:		DONT_CARE,
@@ -275,8 +336,7 @@ struct usb_serial_device_type keyspan_usa19w_device = {
 
 struct usb_serial_device_type keyspan_usa28_device = {
 	name:			"Keyspan USA28",
-	idVendor:		&keyspan_vendor_id,
-	idProduct:		&keyspan_usa28_product_id,
+	id_table:		keyspan_usa28_ids,
 	needs_interrupt_in:	DONT_CARE,	
 	needs_bulk_in:		DONT_CARE,
 	needs_bulk_out:		DONT_CARE,
@@ -294,8 +354,7 @@ struct usb_serial_device_type keyspan_usa28_device = {
 
 struct usb_serial_device_type keyspan_usa28x_device = {
 	name:			"Keyspan USA28X",
-	idVendor:		&keyspan_vendor_id,
-	idProduct:		&keyspan_usa28x_product_id,
+	id_table:		keyspan_usa28x_ids,
 	needs_interrupt_in:	DONT_CARE,	
 	needs_bulk_in:		DONT_CARE,
 	needs_bulk_out:		DONT_CARE,

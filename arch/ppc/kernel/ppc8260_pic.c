@@ -79,7 +79,7 @@ static void m8260_mask_and_ack(unsigned int irq_nr)
 	sipnr = &(immr->im_intctl.ic_sipnrh);
 	ppc_cached_irq_mask[word] &= ~(1 << (31 - bit));
 	simr[word] = ppc_cached_irq_mask[word];
-	sipnr[word] = 1 << bit;
+	sipnr[word] = 1 << (31 - bit);
 }
 
 struct hw_interrupt_type ppc8260_pic = {

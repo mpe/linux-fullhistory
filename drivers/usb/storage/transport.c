@@ -1,6 +1,6 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: transport.c,v 1.30 2000/10/24 02:01:18 mdharm Exp $
+ * $Id: transport.c,v 1.32 2000/11/03 00:18:04 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -91,11 +91,11 @@ unsigned int usb_stor_transfer_length(Scsi_Cmnd *srb)
 
 	static char *lengths =
 		
-		/* 0123456789ABCDEF   0123456789ABCDEF */
+	      /* 0123456789ABCDEF   0123456789ABCDEF */
 		
 		"00XLZ6XZBXBBXXXB" "00LBBLG0R0L0GG0X"  /* 00-1F */
 		"XXXXT8XXB4B0BBBB" "ZZZ0B00HCSSZTBHH"  /* 20-3F */
-		"M0HHB0X000H0HH0X" "XHH00HXX0TH0H0XX"  /* 40-5F */
+		"M0HHB0X000H0HH0X" "XHH0HHXX0TH0H0XX"  /* 40-5F */
 		"XXXXXXXXXXXXXXXX" "XXXXXXXXXXXXXXXX"  /* 60-7F */
 		"XXXXXXXXXXXXXXXX" "XXXXXXXXXXXXXXXX"  /* 80-9F */
 		"X0XXX00XB0BXBXBB" "ZZZ0XUIDU000XHBX"  /* A0-BF */
@@ -185,6 +185,7 @@ unsigned int usb_stor_transfer_length(Scsi_Cmnd *srb)
 	   SEND_MESSAGE_6 0a   !!! Same as WRITE_6 - is in bytes
 	   SEND_MESSAGE_10 2a  !!! Same as WRITE_10 - is in bytes
 	   SEND_MESSAGE_12 aa  !!! Same as WRITE_12 - is in bytes
+	   SEND_OPC 54
 	   SEND_VOLUME_TAG b6 !!! Think this is in bytes
 	   SET_LIMITS 33
 	   SET_LIMITS_12 b3
@@ -544,7 +545,7 @@ int usb_stor_transfer_partial(struct us_data *us, char *buf, int length)
 
 	/* uh oh... we have an error code, so something went wrong. */
 	if (result) {
-		/* NAK - that means we've retried a few times allready */
+		/* NAK - that means we've retried a few times already */
 		if (result == -ETIMEDOUT) {
 			US_DEBUGP("usb_stor_transfer_partial(): device NAKed\n");
 			return US_BULK_TRANSFER_FAILED;

@@ -1,3 +1,4 @@
+#ifdef __KERNEL__
 #ifndef _PPC_SCATTERLIST_H
 #define _PPC_SCATTERLIST_H
 
@@ -12,3 +13,4 @@ struct scatterlist {
 
 
 #endif /* !(_PPC_SCATTERLIST_H) */
+#endif /* __KERNEL__ */

@@ -2,6 +2,7 @@
  * PowerPC memory management structures
  */
 
+#ifdef __KERNEL__
 #ifndef _PPC_MMU_H_
 #define _PPC_MMU_H_
 
@@ -363,3 +364,4 @@ extern void _tlbia(void);		/* invalidate all TLB entries */
 #define TLB_G           0x00000001      /* Memory is guarded from prefetch */
 
 #endif /* _PPC_MMU_H_ */
+#endif /* __KERNEL__ */

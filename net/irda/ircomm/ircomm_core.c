@@ -127,7 +127,7 @@ struct ircomm_cb *ircomm_open(notify_t *notify, __u8 service_type, int line)
 	self->service_type = service_type;
 	self->line = line;
 
-	hashbin_insert(ircomm, (queue_t *) self, line, NULL);
+	hashbin_insert(ircomm, (irda_queue_t *) self, line, NULL);
 
 	ircomm_next_state(self, IRCOMM_IDLE);	
 
@@ -512,6 +512,9 @@ int ircomm_proc_read(char *buf, char **start, off_t offset, int len)
 #endif /* CONFIG_PROC_FS */
 
 #ifdef MODULE
+MODULE_AUTHOR("Dag Brattli <dagb@cs.uit.no>");
+MODULE_DESCRIPTION("IrCOMM protocol");
+
 int init_module(void) 
 {
 	return ircomm_init();

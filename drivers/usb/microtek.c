@@ -140,14 +140,17 @@
 
 /* USB layer driver interface */
 
-static void *mts_usb_probe(struct usb_device *dev, unsigned int interface);
+static void *mts_usb_probe(struct usb_device *dev, unsigned int interface,
+			 const struct usb_device_id *id);
 static void mts_usb_disconnect(struct usb_device *dev, void *ptr);
 
+static struct usb_device_id mts_usb_ids [];
+
 static struct usb_driver mts_usb_driver = {
-	"microtek",
-	mts_usb_probe,
-	mts_usb_disconnect,
-	{ NULL, NULL } /* we need no fops. let gcc fill it */
+	name:		"microtek",
+	probe:		mts_usb_probe,
+	disconnect:	mts_usb_disconnect,
+	id_table:	mts_usb_ids,
 };
 
 
@@ -792,8 +795,6 @@ static void mts_usb_disconnect (struct usb_device *dev, void *ptr)
 
 struct vendor_product
 {
-	u16 idVendor;
-	u16 idProduct;
 	char* name;
 	enum
 	{
@@ -808,37 +809,37 @@ struct vendor_product
 /* These are taken from the msmUSB.inf file on the Windows driver CD */
 const static struct vendor_product mts_supported_products[] =
 {
-	{
-		0x4ce, 0x300,"Phantom 336CX",mts_sup_unknown
-	},
-	{
-		0x5da, 0x94,"Phantom 336CX",mts_sup_unknown
-	},
-	{
-		0x5da, 0x99,"Scanmaker X6",mts_sup_alpha
-	},
-	{
-		0x5da, 0x9a,"Phantom C6",mts_sup_unknown
-	},
-	{
-		0x5da, 0xa0,"Phantom 336CX",mts_sup_unknown
-	},
-	{
-		0x5da, 0xa3,"ScanMaker V6USL",mts_sup_unknown
-	},
-	{
-		0x5da, 0x80a3,"ScanMaker V6USL",mts_sup_unknown
-	},
-	{
-		0x5da, 0x80ac,"Scanmaker V6UL",mts_sup_unknown
-	}
-}
-;
-const static struct vendor_product* mts_last_product = &mts_supported_products[ sizeof(mts_supported_products) / sizeof(struct vendor_product) ];
-		/* Must never be derefed, points to one after last entry */
+	{ "Phantom 336CX",	mts_sup_unknown},
+	{ "Phantom 336CX",	mts_sup_unknown},
+	{ "Scanmaker X6",	mts_sup_alpha},
+	{ "Phantom C6",		mts_sup_unknown},
+	{ "Phantom 336CX",	mts_sup_unknown},
+	{ "ScanMaker V6USL",	mts_sup_unknown},
+	{ "ScanMaker V6USL",	mts_sup_unknown},
+	{ "Scanmaker V6UL",	mts_sup_unknown},
+};
+
+/* The entries of microtek_table must correspond, line-by-line to
+   the entries of mts_supported_products[]. */
+
+static struct usb_device_id mts_usb_ids [] =
+{
+	{idVendor: 0x4ce, idProduct: 0x0300},
+	{idVendor: 0x5da, idProduct: 0x0094},
+	{idVendor: 0x5da, idProduct: 0x0099},
+	{idVendor: 0x5da, idProduct: 0x009a},
+	{idVendor: 0x5da, idProduct: 0x00a0},
+	{idVendor: 0x5da, idProduct: 0x00a3},
+	{idVendor: 0x5da, idProduct: 0x80a3},
+	{idVendor: 0x5da, idProduct: 0x80ac},
+    { }						/* Terminating entry */
+};
+
+MODULE_DEVICE_TABLE (usb, mts_usb_ids);
 
 
-static void * mts_usb_probe (struct usb_device *dev, unsigned int interface)
+static void * mts_usb_probe (struct usb_device *dev, unsigned int interface,
+			     const struct usb_device_id *id)
 {
 	int i;
 	int result;
@@ -861,20 +862,8 @@ static void * mts_usb_probe (struct usb_device *dev, unsigned int interface)
 		   (int)dev->descriptor.idVendor );
 
 	MTS_DEBUG_GOT_HERE();
-	
-	/* checking IDs */
-	for( p = mts_supported_products; p != mts_last_product; p++ )
-		if ( dev->descriptor.idVendor == p->idVendor &&
-		     dev->descriptor.idProduct == p->idProduct )
-			goto is_supported;
-		else
-			MTS_DEBUG( "doesn't appear to be model %s\n", p->name );
 
-	MTS_DEBUG( "returning NULL: unsupported\n" );
-	
-	return NULL;
-	
- is_supported:
+	p = &mts_supported_products[id - mts_usb_ids];
 
 	MTS_DEBUG_GOT_HERE();
 

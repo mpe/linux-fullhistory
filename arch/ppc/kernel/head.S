@@ -521,10 +521,15 @@ InstructionTLBMiss:
  */
 	mfctr	r0
 	/* Get PTE (linux-style) and check access */
+	mfspr	r3,IMISS
+	lis	r1,KERNELBASE@h		/* check if kernel address */
+	cmplw	0,r3,r1
 	mfspr	r2,SPRG3
 	lwz	r2,PGDIR(r2)
-	tophys(r2,r2)
-	mfspr	r3,IMISS
+	blt+	112f
+	lis	r2,swapper_pg_dir@ha	/* if kernel address, use */
+	addi	r2,r2,swapper_pg_dir@l	/* kernel page table */
+112:	tophys(r2,r2)
 	rlwimi	r2,r3,12,20,29		/* insert top 10 bits of address */
 	lwz	r2,0(r2)		/* get pmd entry */
 	rlwinm.	r2,r2,0,0,19		/* extract address of pte page */
@@ -588,10 +593,15 @@ DataLoadTLBMiss:
  */
 	mfctr	r0
 	/* Get PTE (linux-style) and check access */
+	mfspr	r3,DMISS
+	lis	r1,KERNELBASE@h		/* check if kernel address */
+	cmplw	0,r3,r1
 	mfspr	r2,SPRG3
 	lwz	r2,PGDIR(r2)
-	tophys(r2,r2)
-	mfspr	r3,DMISS
+	blt+	112f
+	lis	r2,swapper_pg_dir@ha	/* if kernel address, use */
+	addi	r2,r2,swapper_pg_dir@l	/* kernel page table */
+112:	tophys(r2,r2)
 	rlwimi	r2,r3,12,20,29		/* insert top 10 bits of address */
 	lwz	r2,0(r2)		/* get pmd entry */
 	rlwinm.	r2,r2,0,0,19		/* extract address of pte page */
@@ -654,10 +664,15 @@ DataStoreTLBMiss:
  */
 	mfctr	r0
 	/* Get PTE (linux-style) and check access */
+	mfspr	r3,DMISS
+	lis	r1,KERNELBASE@h		/* check if kernel address */
+	cmplw	0,r3,r1
 	mfspr	r2,SPRG3
 	lwz	r2,PGDIR(r2)
-	tophys(r2,r2)
-	mfspr	r3,DMISS
+	blt+	112f
+	lis	r2,swapper_pg_dir@ha	/* if kernel address, use */
+	addi	r2,r2,swapper_pg_dir@l	/* kernel page table */
+112:	tophys(r2,r2)
 	rlwimi	r2,r3,12,20,29		/* insert top 10 bits of address */
 	lwz	r2,0(r2)		/* get pmd entry */
 	rlwinm.	r2,r2,0,0,19		/* extract address of pte page */

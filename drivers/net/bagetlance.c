@@ -477,7 +477,7 @@ int __init bagetlance_probe( struct net_device *dev )
 	if (found)
 		/* Assume there's only one board possible... That seems true, since
 		 * the Riebl/PAM board's address cannot be changed. */
-		return( ENODEV );
+		return( -ENODEV );
 
 	for( i = 0; i < N_LANCE_ADDR; ++i ) {
 		if (lance_probe1( dev, &lance_addr_list[i] )) {
@@ -486,7 +486,7 @@ int __init bagetlance_probe( struct net_device *dev )
 		}
 	}
 
-	return( ENODEV );
+	return( -ENODEV );
 }
 
 

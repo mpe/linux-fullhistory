@@ -145,7 +145,7 @@
 /* minor number of /dev/swmodem (temporary, experimental) */
 #define SND_DEV_SWMODEM	7
 
-static const unsigned ali_multi_channels_5_1[] = { ALI_SURR_LEFT_CHANNEL, ALI_SURR_RIGHT_CHANNEL,ALI_CENTER_CHANNEL, ALI_LEF_CHANNEL/*, ALI_SURR_LEFT_CHANNEL, ALI_SURR_RIGHT_CHANNEL*/};
+static const unsigned ali_multi_channels_5_1[] = { ALI_CENTER_CHANNEL, ALI_LEF_CHANNEL, ALI_SURR_LEFT_CHANNEL, ALI_SURR_RIGHT_CHANNEL};
 
 static const unsigned sample_size[] = { 1, 2, 2, 4 };
 static const unsigned sample_shift[] = { 0, 1, 1, 2 };

@@ -667,6 +667,12 @@ int atari_scsi_detect (Scsi_Host_Template *host)
 	}
 #endif
 	instance = scsi_register (host, sizeof (struct NCR5380_hostdata));
+	if(instance == NULL)
+	{
+		atari_stram_free(atari_dma_buffer);
+		atari_dma_buffer = 0;
+		return 0;
+	}
 	atari_scsi_host = instance;
        /* Set irq to 0, to avoid that the mid-level code disables our interrupt
         * during queue_command calls. This is completely unnecessary, and even

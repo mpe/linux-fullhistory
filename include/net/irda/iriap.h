@@ -58,7 +58,7 @@ typedef void (*CONFIRM_CALLBACK)(int result, __u16 obj_id,
 				 struct ias_value *value, void *priv);
 
 struct iriap_cb {
-	queue_t q;      /* Must be first */	
+	irda_queue_t q; /* Must be first */	
 	magic_t magic;  /* Magic cookie */
 
 	int          mode;   /* Client or server */

@@ -1,3 +1,4 @@
+#ifdef __KERNEL__
 #ifndef _PPC_SEMAPHORE_HELPER_H
 #define _PPC_SEMAPHORE_HELPER_H
 
@@ -105,3 +106,4 @@ static inline int waking_non_zero_trylock(struct semaphore *sem)
 }
 
 #endif /* _PPC_SEMAPHORE_HELPER_H */
+#endif /* __KERNEL__ */

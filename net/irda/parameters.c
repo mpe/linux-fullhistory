@@ -513,10 +513,7 @@ int irda_param_extract(void *self, __u8 *buf, int len, pi_param_info_t *info)
 		      buf[0]);
 		
 		/* Skip this parameter */
-		n += (2 + buf[n+1]);
-		len -= (2 + buf[n+1]);
-
-		return 0;  /* Continue */
+		return 2 + buf[n + 1];  /* Continue */
 	}
 
 	/* Lookup the info on how to parse this parameter */
@@ -532,10 +529,7 @@ int irda_param_extract(void *self, __u8 *buf, int len, pi_param_info_t *info)
 	if (!pi_minor_info->func) {
 		MESSAGE(__FUNCTION__"(), no handler for pi=%#x\n", buf[n]);
 		/* Skip this parameter */
-		n += (2 + buf[n+1]);
-		len -= (2 + buf[n+1]);
-
-		return 0; /* Continue */
+		return 2 + buf[n + 1]; /* Continue */
 	}
 
 	/* Parse parameter value */

@@ -1734,6 +1734,8 @@ int atp870u_detect(Scsi_Host_Template * tpnt)
 			dev->ultra_map = 0xffff;
 		}
 		shpnt = scsi_register(tpnt, 4);
+		if(shpnt==NULL)
+			return count;
 
 		save_flags(flags);
 		cli();

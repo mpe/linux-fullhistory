@@ -488,6 +488,9 @@ int __init seagate_st0x_detect (Scsi_Host_Template * tpnt)
  *      loose our first interrupt.
  */
   instance = scsi_register (tpnt, 0);
+  if(instance == NULL)
+  	return 0;
+  	
   hostno = instance->host_no;
   if (request_irq (irq, do_seagate_reconnect_intr, SA_INTERRUPT,
 		   (controller_type == SEAGATE) ? "seagate" : "tmc-8xx", NULL)) {

@@ -3,6 +3,7 @@
  *
  * Default SMP lock implementation
  */
+#ifdef __KERNEL__
 #include <linux/interrupt.h>
 #include <linux/spinlock.h>
 
@@ -49,3 +50,4 @@ extern __inline__ void unlock_kernel(void)
 	if (--current->lock_depth < 0)
 		spin_unlock(&kernel_flag);
 }
+#endif /* __KERNEL__ */

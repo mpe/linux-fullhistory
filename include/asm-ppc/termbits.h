@@ -1,8 +1,6 @@
 #ifndef _PPC_TERMBITS_H
 #define _PPC_TERMBITS_H
 
-#include <linux/posix_types.h>
-
 typedef unsigned char	cc_t;
 typedef unsigned int	speed_t;
 typedef unsigned int	tcflag_t;

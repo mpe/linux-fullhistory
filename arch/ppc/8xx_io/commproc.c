@@ -149,7 +149,7 @@ cpm_interrupt(int irq, void * dev, struct pt_regs * regs)
 	/* After servicing the interrupt, we have to remove the status
 	 * indicator.
 	 */
-	((immap_t *)IMAP_ADDR)->im_cpic.cpic_cisr |= (1 << vec);
+	((immap_t *)IMAP_ADDR)->im_cpic.cpic_cisr = (1 << vec);
 	
 }
 

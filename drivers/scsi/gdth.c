@@ -3125,6 +3125,8 @@ int __init gdth_detect(Scsi_Host_Template *shtp)
             break;
         if (gdth_search_isa(isa_bios)) {        /* controller found */
             shp = scsi_register(shtp,sizeof(gdth_ext_str));
+            if(shp == NULL)
+            	continue;
             ha = HADATA(shp);
             if (!gdth_init_isa(isa_bios,ha)) {
                 scsi_unregister(shp);
@@ -3197,6 +3199,8 @@ int __init gdth_detect(Scsi_Host_Template *shtp)
             break;
         if (gdth_search_eisa(eisa_slot)) {      /* controller found */
             shp = scsi_register(shtp,sizeof(gdth_ext_str));
+            if(shp == NULL)
+            	continue;
             ha = HADATA(shp);
             if (!gdth_init_eisa(eisa_slot,ha)) {
                 scsi_unregister(shp);
@@ -3268,6 +3272,8 @@ int __init gdth_detect(Scsi_Host_Template *shtp)
             if (gdth_ctr_count >= MAXHA)
                 break;
             shp = scsi_register(shtp,sizeof(gdth_ext_str));
+            if(shp == NULL)
+            	continue;
             ha = HADATA(shp);
             if (!gdth_init_pci(&pcistr[ctr],ha)) {
                 scsi_unregister(shp);
@@ -3571,25 +3577,31 @@ static void gdth_flush(int hanum)
     ha = HADATA(gdth_ctr_tab[hanum]);
 
     sdev = scsi_get_host_dev(gdth_ctr_tab[hanum]);
-    scp  = scsi_allocate_device(sdev, 1, FALSE);
+    if(sdev)
+    	scp  = scsi_allocate_device(sdev, 1, FALSE);
+    
+    if(sdev!= NULL && scp != NULL)
+    {
+        scp->cmd_len = 12;
+        scp->use_sg = 0;
 
-    scp->cmd_len = 12;
-    scp->use_sg = 0;
-
-    for (i = 0; i < MAX_HDRIVES; ++i) {
-        if (ha->hdr[i].present) {
-            gdtcmd.BoardNode = LOCALBOARD;
-            gdtcmd.Service = CACHESERVICE;
-            gdtcmd.OpCode = GDT_FLUSH;
-            gdtcmd.u.cache.DeviceNo = i;
-            gdtcmd.u.cache.BlockNo = 1;
-            gdtcmd.u.cache.sg_canz = 0;
-            TRACE2(("gdth_flush(): flush ha %d drive %d\n", hanum, i));
-            gdth_do_cmd(scp, &gdtcmd, 30);
+        for (i = 0; i < MAX_HDRIVES; ++i) {
+            if (ha->hdr[i].present) {
+                gdtcmd.BoardNode = LOCALBOARD;
+                gdtcmd.Service = CACHESERVICE;
+                gdtcmd.OpCode = GDT_FLUSH;
+                gdtcmd.u.cache.DeviceNo = i;
+                gdtcmd.u.cache.BlockNo = 1;
+                gdtcmd.u.cache.sg_canz = 0;
+                TRACE2(("gdth_flush(): flush ha %d drive %d\n", hanum, i));
+                 gdth_do_cmd(scp, &gdtcmd, 30);
+            }
         }
     }
-    scsi_release_command(scp);
-    scsi_free_host_dev(sdev);
+    if(scp!=NULL)
+    	scsi_release_command(scp);
+    if(sdev!=NULL)
+        scsi_free_host_dev(sdev);
 }
 
 /* shutdown routine */

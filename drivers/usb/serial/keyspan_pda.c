@@ -12,6 +12,9 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (11/01/2000) Adam J. Richter
+ *	usb_device_id table support
+ * 
  * (10/05/2000) gkh
  *	Fixed bug with urb->dev not being set properly, now that the usb
  *	core needs it.
@@ -93,12 +96,23 @@ struct keyspan_pda_private {
 #define KEYSPAN_PDA_FAKE_ID		0x0103
 #define KEYSPAN_PDA_ID			0x0104 /* no clue */
 
-/* All of the device info needed for the Keyspan PDA serial converter */
-static __u16	keyspan_vendor_id		= KEYSPAN_VENDOR_ID;
-static __u16	keyspan_pda_fake_product_id	= KEYSPAN_PDA_FAKE_ID;
-static __u16	keyspan_pda_product_id		= KEYSPAN_PDA_ID;
+static __devinitdata struct usb_device_id id_table_combined [] = {
+    { idVendor: KEYSPAN_VENDOR_ID, idProduct: KEYSPAN_PDA_FAKE_ID },
+    { idVendor: KEYSPAN_VENDOR_ID, idProduct: KEYSPAN_PDA_ID },
+    { }						/* Terminating entry */
+};
 
+MODULE_DEVICE_TABLE (usb, id_table_combined);
 
+static __devinitdata struct usb_device_id id_table_std [] = {
+    { idVendor: KEYSPAN_VENDOR_ID, idProduct: KEYSPAN_PDA_ID },
+    { }						/* Terminating entry */
+};
+
+static __devinitdata struct usb_device_id id_table_fake [] = {
+    { idVendor: KEYSPAN_VENDOR_ID, idProduct: KEYSPAN_PDA_FAKE_ID },
+    { }						/* Terminating entry */
+};
 
 static void keyspan_pda_wakeup_write( struct usb_serial_port *port )
 {
@@ -746,8 +760,7 @@ static void keyspan_pda_shutdown (struct usb_serial *serial)
 
 struct usb_serial_device_type keyspan_pda_fake_device = {
 	name:			"Keyspan PDA - (prerenumeration)",
-	idVendor:		&keyspan_vendor_id,
-	idProduct:		&keyspan_pda_fake_product_id,
+	id_table:		id_table_fake,
 	needs_interrupt_in:	DONT_CARE,
 	needs_bulk_in:		DONT_CARE,
 	needs_bulk_out:		DONT_CARE,
@@ -760,8 +773,7 @@ struct usb_serial_device_type keyspan_pda_fake_device = {
 
 struct usb_serial_device_type keyspan_pda_device = {
 	name:			"Keyspan PDA",
-	idVendor:		&keyspan_vendor_id,
-	idProduct:		&keyspan_pda_product_id,
+	id_table:		id_table_std,
 	needs_interrupt_in:	MUST_HAVE,
 	needs_bulk_in:		DONT_CARE,
 	needs_bulk_out:		MUST_HAVE,

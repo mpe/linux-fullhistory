@@ -6,6 +6,7 @@
  */
 
 
+#ifdef __KERNEL__
 #ifndef _PPC_BOOTINFO_H
 #define _PPC_BOOTINFO_H
 
@@ -33,3 +34,4 @@ struct bi_record {
 
 #endif /* _PPC_BOOTINFO_H */
 
+#endif /* __KERNEL__ */

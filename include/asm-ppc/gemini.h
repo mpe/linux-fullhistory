@@ -6,6 +6,7 @@
  *  "Gemini" boards.
  *
  */
+#ifdef __KERNEL__
 #ifndef __PPC_GEMINI_H
 #define __PPC_GEMINI_H
 
@@ -164,3 +165,4 @@ extern void gemini_prom_init(void);
 extern void gemini_init_l2(void);
 #endif /* __ASSEMBLY__ */
 #endif
+#endif /* __KERNEL__ */

@@ -3,6 +3,7 @@
  *
  * Copyright (C) 1999 Cort Dougan <cort@cs.nmt.edu>
  */
+#ifdef __KERNEL__
 #ifndef _PPC_HW_IRQ_H
 #define _PPC_HW_IRQ_H
 
@@ -40,3 +41,4 @@ extern atomic_t ppc_n_lost_interrupts;
 #define mask_and_ack_irq(irq) ({if (irq_desc[irq].handler && irq_desc[irq].handler->ack) irq_desc[irq].handler->ack(irq);})
 
 #endif /* _PPC_HW_IRQ_H */
+#endif /* __KERNEL__ */

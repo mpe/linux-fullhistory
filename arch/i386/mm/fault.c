@@ -24,7 +24,6 @@
 #include <asm/hardirq.h>
 
 extern void die(const char *,struct pt_regs *,long);
-extern void bust_spinlocks(void);
 
 /*
  * Ugly, ugly, but the goto's result in better assembly..
@@ -76,6 +75,19 @@ check_stack:
 
 bad_area:
 	return 0;
+}
+
+extern spinlock_t console_lock, timerlist_lock;
+
+/*
+ * Unlock any spinlocks which will prevent us from getting the
+ * message out (timerlist_lock is aquired through the
+ * console unblank code)
+ */
+void bust_spinlocks(void)
+{
+	spin_lock_init(&console_lock);
+	spin_lock_init(&timerlist_lock);
 }
 
 asmlinkage void do_invalid_op(struct pt_regs *, unsigned long);

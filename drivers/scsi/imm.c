@@ -198,6 +198,8 @@ int imm_detect(Scsi_Host_Template * host)
 	host->can_queue = IMM_CAN_QUEUE;
 	host->sg_tablesize = imm_sg;
 	hreg = scsi_register(host, 0);
+	if(hreg == NULL)
+		continue;
 	hreg->io_port = pb->base;
 	hreg->n_io_port = ports;
 	hreg->dma_channel = -1;

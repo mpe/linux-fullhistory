@@ -58,7 +58,7 @@ void __down(struct semaphore * sem)
 {
 	struct task_struct *tsk = current;
 	DECLARE_WAITQUEUE(wait, tsk);
-	tsk->state = TASK_UNINTERRUPTIBLE|TASK_EXCLUSIVE;
+	tsk->state = TASK_UNINTERRUPTIBLE;
 	add_wait_queue_exclusive(&sem->wait, &wait);
 
 	spin_lock_irq(&semaphore_lock);
@@ -78,7 +78,7 @@ void __down(struct semaphore * sem)
 		spin_unlock_irq(&semaphore_lock);
 
 		schedule();
-		tsk->state = TASK_UNINTERRUPTIBLE|TASK_EXCLUSIVE;
+		tsk->state = TASK_UNINTERRUPTIBLE;
 		spin_lock_irq(&semaphore_lock);
 	}
 	spin_unlock_irq(&semaphore_lock);
@@ -92,7 +92,7 @@ int __down_interruptible(struct semaphore * sem)
 	int retval = 0;
 	struct task_struct *tsk = current;
 	DECLARE_WAITQUEUE(wait, tsk);
-	tsk->state = TASK_INTERRUPTIBLE|TASK_EXCLUSIVE;
+	tsk->state = TASK_INTERRUPTIBLE;
 	add_wait_queue_exclusive(&sem->wait, &wait);
 
 	spin_lock_irq(&semaphore_lock);
@@ -128,7 +128,7 @@ int __down_interruptible(struct semaphore * sem)
 		spin_unlock_irq(&semaphore_lock);
 
 		schedule();
-		tsk->state = TASK_INTERRUPTIBLE|TASK_EXCLUSIVE;
+		tsk->state = TASK_INTERRUPTIBLE;
 		spin_lock_irq(&semaphore_lock);
 	}
 	spin_unlock_irq(&semaphore_lock);
@@ -197,7 +197,7 @@ struct rw_semaphore *down_write_failed_biased(struct rw_semaphore *sem)
 	for (;;) {
 		if (sem->write_bias_granted && xchg(&sem->write_bias_granted, 0))
 			break;
-		set_task_state(tsk, TASK_UNINTERRUPTIBLE | TASK_EXCLUSIVE);
+		set_task_state(tsk, TASK_UNINTERRUPTIBLE);
 		if (!sem->write_bias_granted)
 			schedule();
 	}
@@ -255,7 +255,7 @@ struct rw_semaphore *down_write_failed(struct rw_semaphore *sem)
 	add_wait_queue_exclusive(&sem->wait, &wait);
 
 	while (atomic_read(&sem->count) < 0) {
-		set_task_state(tsk, TASK_UNINTERRUPTIBLE | TASK_EXCLUSIVE);
+		set_task_state(tsk, TASK_UNINTERRUPTIBLE);
 		if (atomic_read(&sem->count) >= 0)
 			break;	/* we must attempt to acquire or bias the lock */
 		schedule();

@@ -46,6 +46,9 @@
  * Version 0.85 (00/08/15):
  * 		- resource release on failure in comx_mkdir
  * 		- fix return value on failure at comx_write_proc
+ *
+ * Changed      (00/10/29, Henner Eisen):
+ * 		- comx_rx() / comxlapb_data_indication() return status.
  */
 
 #define VERSION "0.85"

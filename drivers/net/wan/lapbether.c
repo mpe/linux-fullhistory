@@ -16,6 +16,7 @@
  *
  *	History
  *	LAPBETH 001	Jonathan Naylor		Cloned from bpqether.c
+ *	2000-10-29	Henner Eisen	lapb_data_indication() return status.
  */
 
 #include <linux/errno.h>
@@ -185,7 +186,7 @@ static int lapbeth_rcv(struct sk_buff *skb, struct net_device *dev, struct packe
 	return 0;
 }
 
-static void lapbeth_data_indication(void *token, struct sk_buff *skb)
+static int lapbeth_data_indication(void *token, struct sk_buff *skb)
 {
 	struct lapbethdev *lapbeth = (struct lapbethdev *)token;
 	unsigned char *ptr;
@@ -198,7 +199,7 @@ static void lapbeth_data_indication(void *token, struct sk_buff *skb)
 	skb->mac.raw  = skb->data;
 	skb->pkt_type = PACKET_HOST;
 
-	netif_rx(skb);
+	return netif_rx(skb);
 }
 
 /*

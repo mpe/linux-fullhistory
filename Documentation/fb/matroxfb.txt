@@ -253,7 +253,7 @@ depth:X  - Bits per pixel: 0=text, 4,8,15,16,24 or 32. Default depends on
            `vesa'.
 
 If you know capabilities of your monitor, you can specify some (or all) of
-`pixclk', `fh' and `fv'. In this case, `pixclock' is computed so that
+`maxclk', `fh' and `fv'. In this case, `pixclock' is computed so that
 pixclock <= maxclk, real_fh <= fh and real_fv <= fv.
 
 maxclk:X - maximum dotclock. X can be specified in MHz, kHz or Hz. Default is

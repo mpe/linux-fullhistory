@@ -48,7 +48,7 @@
  * IrCOMM TTY driver state
  */
 struct ircomm_tty_cb {
-	queue_t queue;            /* Must be first */
+	irda_queue_t queue;            /* Must be first */
 	magic_t magic;
 
 	int state;                /* Connect state */

@@ -6,6 +6,7 @@
  * Paul Mackerras' version and mine for PReP and Pmac.
  */
 
+#ifdef __KERNEL__
 #include <linux/config.h>
 #include <linux/mc146818rtc.h>
 
@@ -113,3 +114,4 @@ extern __inline__ unsigned binary_tbl(void) {
 ({unsigned z; asm ("mulhwu %0,%1,%2" : "=r" (z) : "r" (x), "r" (y)); z;})
 
 unsigned mulhwu_scale_factor(unsigned, unsigned);
+#endif /* __KERNEL__ */

@@ -10,6 +10,7 @@
  * a combination that I found difficult to separate into logical
  * functional files.....but anyone else is welcome to try.  -- Dan
  */
+#ifdef __KERNEL__
 #ifndef __IMMAP_8XX__
 #define __IMMAP_8XX__
 
@@ -453,3 +454,4 @@ typedef struct immap {
 } immap_t;
 
 #endif /* __IMMAP_8XX__ */
+#endif /* __KERNEL__ */

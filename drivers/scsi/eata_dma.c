@@ -554,7 +554,17 @@ int eata_queue(Scsi_Cmnd * cmd, void (* done) (Scsi_Cmnd *))
 				  GFP_ATOMIC | GFP_DMA);
 	}
 	if (ccb->sg_list == NULL)
-	    panic("eata_dma: Run out of DMA memory for SG lists !\n");
+	{
+	    /*
+	     *	Claim the bus was busy. Actually we are the problem but this
+	     *  will do a deferred retry for us ;)
+	     */
+	    printk(KERN_ERR "eata_dma: Run out of DMA memory for SG lists !\n");
+	    cmd->result = DID_BUS_BUSY << 16;
+	    ccb->status = FREE;    
+	    done(cmd);
+	    return(0);
+	}
 	ccb->cp_dataDMA = htonl(virt_to_bus(ccb->sg_list)); 
 	
 	ccb->cp_datalen = htonl(cmd->use_sg * sizeof(struct eata_sg_list));
@@ -909,8 +919,17 @@ char * get_board_data(u32 base, u32 irq, u32 id)
 
     cp = (struct eata_ccb *) kmalloc(sizeof(struct eata_ccb),
 				     GFP_ATOMIC | GFP_DMA);
+				     
+    if(cp==NULL)
+    	return NULL;
+    	
     sp = (struct eata_sp *) kmalloc(sizeof(struct eata_sp), 
 					     GFP_ATOMIC | GFP_DMA);
+    if(sp==NULL)
+    {
+        kfree(cp);
+        return NULL;
+    }				  
 
     buff = dma_scratch;
  
@@ -1463,6 +1482,10 @@ int eata_detect(Scsi_Host_Template * tpnt)
 
     if(status == NULL || dma_scratch == NULL) {
 	printk("eata_dma: can't allocate enough memory to probe for hosts !\n");
+	if(status)
+		kfree(status);
+	if(dma_scratch)
+		kfree(dma_scratch);
 	return(0);
     }
 

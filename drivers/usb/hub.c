@@ -235,7 +235,9 @@ static int usb_hub_configure(struct usb_hub *hub, struct usb_endpoint_descriptor
 	return 0;
 }
 
-static void *hub_probe(struct usb_device *dev, unsigned int i)
+static void *hub_probe(struct usb_device *dev, unsigned int i,
+		       const struct usb_device_id *id)
+
 {
 	struct usb_interface_descriptor *interface;
 	struct usb_endpoint_descriptor *endpoint;
@@ -243,10 +245,6 @@ static void *hub_probe(struct usb_device *dev, unsigned int i)
 	unsigned long flags;
 
 	interface = &dev->actconfig->interface[i].altsetting[0];
-
-	/* Is it a hub? */
-	if (interface->bInterfaceClass != USB_CLASS_HUB)
-		return NULL;
 
 	/* Some hubs have a subclass of 1, which AFAICT according to the */
 	/*  specs is not defined, but it works */
@@ -769,11 +767,19 @@ static int usb_hub_thread(void *__hub)
 	return 0;
 }
 
+static struct usb_device_id hub_id_table [] = {
+    { bInterfaceClass: USB_CLASS_HUB},
+    { }						/* Terminating entry */
+};
+
+MODULE_DEVICE_TABLE (usb, hub_id_table);
+
 static struct usb_driver hub_driver = {
 	name:		"hub",
 	probe:		hub_probe,
 	ioctl:		hub_ioctl,
-	disconnect:	hub_disconnect
+	disconnect:	hub_disconnect,
+	id_table:	hub_id_table,
 };
 
 /*

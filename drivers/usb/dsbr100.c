@@ -70,7 +70,8 @@
 
 #define TB_LEN 16
 
-static void *usb_dsbr100_probe(struct usb_device *dev, unsigned int ifnum);
+static void *usb_dsbr100_probe(struct usb_device *dev, unsigned int ifnum,
+			 const struct usb_device_id *id);
 static void usb_dsbr100_disconnect(struct usb_device *dev, void *ptr);
 static int usb_dsbr100_ioctl(struct video_device *dev, unsigned int cmd, 
 	void *arg);
@@ -105,13 +106,20 @@ static struct video_device usb_dsbr100_radio=
 
 static int users = 0;
 
+static struct usb_device_id usb_dsbr100_table [] = {
+    { idVendor: DSB100_VENDOR, idProduct: DSB100_PRODUCT },
+    { }						/* Terminating entry */
+};
+
+MODULE_DEVICE_TABLE (usb, usb_dsbr100_table);
+
 static struct usb_driver usb_dsbr100_driver = {
 	name:		"dsbr100",
 	probe:		usb_dsbr100_probe,
 	disconnect:	usb_dsbr100_disconnect,
-	driver_list: {NULL,NULL},
-	fops: NULL,
-	minor: 0
+	fops:		NULL,
+	minor:		0,
+	id_table:	usb_dsbr100_table,
 };
 
 
@@ -164,13 +172,11 @@ static void dsbr100_getstat(usb_dsbr100 *radio)
 }
 
 
-static void *usb_dsbr100_probe(struct usb_device *dev, unsigned int ifnum)
+static void *usb_dsbr100_probe(struct usb_device *dev, unsigned int ifnum,
+			 const struct usb_device_id *id)
 {
 	usb_dsbr100 *radio;
 
-	if (dev->descriptor.idVendor!=DSB100_VENDOR ||
-			dev->descriptor.idProduct!=DSB100_PRODUCT)
-		return NULL;
 	if (!(radio = kmalloc(sizeof(usb_dsbr100),GFP_KERNEL)))
 		return NULL;
 	usb_dsbr100_radio.priv = radio;

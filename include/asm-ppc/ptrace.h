@@ -17,32 +17,26 @@
  * the PT_* values below.  This simplifies arch/ppc/kernel/ptrace.c.
  */
 
-#include <linux/config.h>
-
 #ifndef __ASSEMBLY__
-#ifdef CONFIG_PPC64BRIDGE
-#define PPC_REG unsigned long /*long*/
-#else
-#define PPC_REG unsigned long
-#endif
 struct pt_regs {
-	PPC_REG gpr[32];
-	PPC_REG nip;
-	PPC_REG msr;
-	PPC_REG orig_gpr3;	/* Used for restarting system calls */
-	PPC_REG ctr;
-	PPC_REG link;
-	PPC_REG xer;
-	PPC_REG ccr;
-	PPC_REG mq;		/* 601 only (not used at present) */
-				/* Used on APUS to hold IPL value. */
-	PPC_REG trap;		/* Reason for being here */
-	PPC_REG dar;		/* Fault registers */
-	PPC_REG dsisr;
-	PPC_REG result; 	/* Result of a system call */
+	unsigned long gpr[32];
+	unsigned long nip;
+	unsigned long msr;
+	unsigned long orig_gpr3;	/* Used for restarting system calls */
+	unsigned long ctr;
+	unsigned long link;
+	unsigned long xer;
+	unsigned long ccr;
+	unsigned long mq;		/* 601 only (not used at present) */
+					/* Used on APUS to hold IPL value. */
+	unsigned long trap;		/* Reason for being here */
+	unsigned long dar;		/* Fault registers */
+	unsigned long dsisr;
+	unsigned long result; 		/* Result of a system call */
 };
 #endif
 
+#ifdef __KERNEL__
 #define STACK_FRAME_OVERHEAD	16	/* size of minimum stack frame */
 
 /* Size of stack frame allocated when calling signal handler. */
@@ -50,6 +44,8 @@ struct pt_regs {
 
 #define instruction_pointer(regs) ((regs)->nip)
 #define user_mode(regs) (((regs)->msr & MSR_PR) != 0)
+
+#endif /* __KERNEL__ */
 
 /*
  * Offsets used by 'ptrace' system call interface.

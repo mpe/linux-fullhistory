@@ -69,7 +69,7 @@ typedef void (*TODO_CALLBACK)( void *self, __u32 param);
  *  addtional information
  */
 struct irda_event {
-	queue_t q; /* Must be first */
+	irda_queue_t q; /* Must be first */
 	
 	struct irmanager_event event;
 };
@@ -78,7 +78,7 @@ struct irda_event {
  *  Funtions with needs to be called with a process context
  */
 struct irda_todo {
-	queue_t q; /* Must be first */
+	irda_queue_t q; /* Must be first */
 
 	void *self;
 	TODO_CALLBACK callback;
@@ -94,8 +94,8 @@ struct irda_cb {
 
 	int in_use;
 
-	queue_t *event_queue; /* Events queued for the irmanager */
-	queue_t *todo_queue;  /* Todo list */
+	irda_queue_t *event_queue; /* Events queued for the irmanager */
+	irda_queue_t *todo_queue;  /* Todo list */
 };
 
 int irmod_init_module(void);

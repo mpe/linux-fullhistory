@@ -597,6 +597,8 @@ int Psi240i_Detect (Scsi_Host_Template *tpnt)
 			continue;
 
 		pshost = scsi_register (tpnt, sizeof(ADAPTER240I));
+		if(pshost == NULL)
+			continue;
 
 		save_flags (flags);
 		cli ();

@@ -183,14 +183,27 @@ static void bluetooth_ctrl_callback		(struct urb *urb);
 static void bluetooth_read_bulk_callback	(struct urb *urb);
 static void bluetooth_write_bulk_callback	(struct urb *urb);
 
-static void * usb_bluetooth_probe	(struct usb_device *dev, unsigned int ifnum);
+static void * usb_bluetooth_probe(struct usb_device *dev, unsigned int ifnum,
+			 	  const struct usb_device_id *id);
 static void usb_bluetooth_disconnect	(struct usb_device *dev, void *ptr);
 
+
+static struct usb_device_id usb_bluetooth_ids [] = {
+    {
+	bDeviceClass: WIRELESS_CLASS_CODE,
+	bDeviceSubClass: RF_SUBCLASS_CODE,
+	bDeviceProtocol: BLUETOOTH_PROGRAMMING_PROTOCOL_CODE
+    },
+    { }						/* Terminating entry */
+};
+
+MODULE_DEVICE_TABLE (usb, usb_bluetooth_ids);
 
 static struct usb_driver usb_bluetooth_driver = {
 	name:		"bluetooth",
 	probe:		usb_bluetooth_probe,
 	disconnect:	usb_bluetooth_disconnect,
+	id_table:	usb_bluetooth_ids,
 };
 
 static int			bluetooth_refcount;
@@ -950,7 +963,8 @@ static void bluetooth_softint(void *private)
 }
 
 
-static void * usb_bluetooth_probe(struct usb_device *dev, unsigned int ifnum)
+static void * usb_bluetooth_probe(struct usb_device *dev, unsigned int ifnum,
+			 	  const struct usb_device_id *id)
 {
 	struct usb_bluetooth *bluetooth = NULL;
 	struct usb_interface_descriptor *interface;
@@ -966,16 +980,6 @@ static void * usb_bluetooth_probe(struct usb_device *dev, unsigned int ifnum)
 	int num_interrupt_in = 0;
 	int num_bulk_in = 0;
 	int num_bulk_out = 0;
-
-	/* see if this device has the proper class signature */
-	if ((dev->descriptor.bDeviceClass != WIRELESS_CLASS_CODE) || 
-	    (dev->descriptor.bDeviceSubClass != RF_SUBCLASS_CODE) ||
-	    (dev->descriptor.bDeviceProtocol != BLUETOOTH_PROGRAMMING_PROTOCOL_CODE)) {
-		dbg (__FUNCTION__ " - class signature %d, %d, %d did not match", 
-		     dev->descriptor.bDeviceClass, dev->descriptor.bDeviceSubClass,
-		     dev->descriptor.bDeviceProtocol);
-		return NULL;
-	}
 
 	interface = &dev->actconfig->interface[ifnum].altsetting[0];
 	control_out_endpoint = interface->bInterfaceNumber;

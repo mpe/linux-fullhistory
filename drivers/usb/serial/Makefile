@@ -21,6 +21,7 @@ obj-$(CONFIG_USB_SERIAL_KEYSPAN_PDA)		+= keyspan_pda.o
 obj-$(CONFIG_USB_SERIAL_KEYSPAN)		+= keyspan.o
 obj-$(CONFIG_USB_SERIAL_OMNINET)		+= omninet.o
 obj-$(CONFIG_USB_SERIAL_DIGI_ACCELEPORT)	+= digi_acceleport.o
+obj-$(CONFIG_USB_SERIAL_BELKIN)			+= belkin_sa.o
  
 # Objects that export symbols.
 export-objs	:= usbserial.o

@@ -153,7 +153,18 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 
     } else {
         SDev = scsi_get_host_dev(HBA_ptr);
+        
+        if(SDev == NULL)
+            return -ENOMEM;
+        	
 	scmd  = scsi_allocate_request(SDev);
+	
+	if(scmd == NULL)
+	{
+	    scsi_free_host_dev(SDev);
+	    return -ENOMEM;
+	}
+	
 
 	cmnd[0] = LOG_SENSE;
 	cmnd[1] = 0;

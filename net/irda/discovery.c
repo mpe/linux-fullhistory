@@ -43,13 +43,25 @@
  *
  *    Add a new discovery to the cachelog, and remove any old discoveries
  *    from the same device
+ *
+ * Note : we try to preserve the time this device was *first* discovered
+ * (as opposed to the time of last discovery used for cleanup). This is
+ * used by clients waiting for discovery events to tell if the device
+ * discovered is "new" or just the same old one. They can't rely there
+ * on a binary flag (new/old), because not all discovery events are
+ * propagated to them, and they might not always listen, so they would
+ * miss some new devices popping up...
+ * Jean II
  */
 void irlmp_add_discovery(hashbin_t *cachelog, discovery_t *new)
 {
 	discovery_t *discovery, *node;
 	unsigned long flags;
 
-	spin_lock_irqsave(&irlmp->lock, flags);
+	/* Set time of first discovery if node is new (see below) */
+	new->first_timestamp = new->timestamp;
+
+	spin_lock_irqsave(&irlmp->log_lock, flags);
 
 	/* 
 	 * Remove all discoveries of devices that has previously been 
@@ -59,27 +71,31 @@ void irlmp_add_discovery(hashbin_t *cachelog, discovery_t *new)
 	 */
 	discovery = (discovery_t *) hashbin_get_first(cachelog);
 	while (discovery != NULL ) {
-			node = discovery;
+		node = discovery;
 
-			/* Be sure to stay one item ahead */
-			discovery = (discovery_t *) hashbin_get_next(cachelog);
-			
-			if ((node->daddr == new->daddr) || 
-			    (strcmp(node->nickname, new->nickname) == 0))
-			{
-				/* This discovery is a previous discovery 
-				 * from the same device, so just remove it
-				 */
-				hashbin_remove(cachelog, node->daddr, NULL);
-				kfree(node);
-			}
+		/* Be sure to stay one item ahead */
+		discovery = (discovery_t *) hashbin_get_next(cachelog);
+
+		if ((node->saddr == new->saddr) &&
+		    ((node->daddr == new->daddr) || 
+		     (strcmp(node->nickname, new->nickname) == 0)))
+		{
+			/* This discovery is a previous discovery 
+			 * from the same device, so just remove it
+			 */
+			hashbin_remove_this(cachelog, (irda_queue_t *) node);
+			/* Check if hints bits have changed */
+			if(node->hints.word == new->hints.word)
+				/* Set time of first discovery for this node */
+				new->first_timestamp = node->first_timestamp;
+			kfree(node);
 		}
-
+	}
 
 	/* Insert the new and updated version */
-	hashbin_insert(cachelog, (queue_t *) new, new->daddr, NULL);
+	hashbin_insert(cachelog, (irda_queue_t *) new, new->daddr, NULL);
 
-	spin_unlock_irqrestore(&irlmp->lock, flags);
+	spin_unlock_irqrestore(&irlmp->log_lock, flags);
 }
 
 /*
@@ -120,12 +136,17 @@ void irlmp_add_discovery_log(hashbin_t *cachelog, hashbin_t *log)
  *
  *    Go through all discoveries and expire all that has stayed to long
  *
+ * Note : this assume that IrLAP won't change its saddr, which
+ * currently is a valid assumption...
  */
 void irlmp_expire_discoveries(hashbin_t *log, __u32 saddr, int force)
 {
 	discovery_t *discovery, *curr;
+	unsigned long flags;
 
 	IRDA_DEBUG(4, __FUNCTION__ "()\n");
+
+	spin_lock_irqsave(&irlmp->log_lock, flags);
 
 	discovery = (discovery_t *) hashbin_get_first(log);
 	while (discovery != NULL) {
@@ -135,14 +156,20 @@ void irlmp_expire_discoveries(hashbin_t *log, __u32 saddr, int force)
 		discovery = (discovery_t *) hashbin_get_next(log);
 
 		/* Test if it's time to expire this discovery */
-		if ((curr->saddr == saddr) && (force ||
-		    ((jiffies - curr->timestamp) > DISCOVERY_EXPIRE_TIMEOUT)))
+		if ((curr->saddr == saddr) &&
+		    (force ||
+		     ((jiffies - curr->timestamp) > DISCOVERY_EXPIRE_TIMEOUT)))
 		{
-			curr = hashbin_remove(log, curr->daddr, NULL);
+			/* Tell IrLMP and registered clients about it */
+			irlmp_discovery_expiry(curr);
+			/* Remove it from the log */
+			curr = hashbin_remove_this(log, (irda_queue_t *) curr);
 			if (curr)
 				kfree(curr);
 		}
 	}
+
+	spin_unlock_irqrestore(&irlmp->log_lock, flags);
 }
 
 /*
@@ -169,6 +196,75 @@ void irlmp_dump_discoveries(hashbin_t *log)
 }
 
 /*
+ * Function irlmp_copy_discoveries (log, pn, mask)
+ *
+ *    Copy all discoveries in a buffer
+ *
+ * This function implement a safe way for lmp clients to access the
+ * discovery log. The basic problem is that we don't want the log
+ * to change (add/remove) while the client is reading it. If the
+ * lmp client manipulate directly the hashbin, he is sure to get
+ * into troubles...
+ * The idea is that we copy all the current discovery log in a buffer
+ * which is specific to the client and pass this copy to him. As we
+ * do this operation with the spinlock grabbed, we are safe...
+ * Note : we don't want those clients to grab the spinlock, because
+ * we have no control on how long they will hold it...
+ * Note : we choose to copy the log in "struct irda_device_info" to
+ * save space...
+ * Note : the client must kfree himself() the log...
+ * Jean II
+ */
+struct irda_device_info *irlmp_copy_discoveries(hashbin_t *log, int *pn, __u16 mask)
+{
+	discovery_t *			discovery;
+	unsigned long			flags;
+	struct irda_device_info *	buffer;
+	int				i = 0;
+	int				n;
+
+	ASSERT(pn != NULL, return NULL;);
+
+	/* Check if log is empty */
+	if(log == NULL)
+		return NULL;
+
+	/* Save spin lock - spinlock should be discovery specific */
+	spin_lock_irqsave(&irlmp->log_lock, flags);
+
+	/* Create the client specific buffer */
+	n = HASHBIN_GET_SIZE(log);
+	buffer = kmalloc(n * sizeof(struct irda_device_info), GFP_ATOMIC);
+	if (buffer == NULL) {
+		spin_unlock_irqrestore(&irlmp->log_lock, flags);
+		return NULL;
+	}
+
+	discovery = (discovery_t *) hashbin_get_first(log);
+	while ((discovery != NULL) && (i < n)) {
+		/* Mask out the ones we don't want */
+		if (discovery->hints.word & mask) {
+			/* Copy discovery information */
+			buffer[i].saddr = discovery->saddr;
+			buffer[i].daddr = discovery->daddr;
+			buffer[i].charset = discovery->charset;
+			buffer[i].hints[0] = discovery->hints.byte[0];
+			buffer[i].hints[1] = discovery->hints.byte[1];
+			strncpy(buffer[i].info, discovery->nickname,
+				NICKNAME_MAX_LEN);
+			i++;
+		}
+		discovery = (discovery_t *) hashbin_get_next(log);
+	}
+
+	spin_unlock_irqrestore(&irlmp->log_lock, flags);
+
+	/* Get the actual number of device in the buffer and return */
+	*pn = i;
+	return(buffer);
+}
+
+/*
  * Function irlmp_find_device (name, saddr)
  *
  *    Look through the discovery log at each of the links and try to find 
@@ -180,7 +276,7 @@ __u32 irlmp_find_device(hashbin_t *cachelog, char *name, __u32 *saddr)
 	unsigned long flags;
 	discovery_t *d;
 
-	spin_lock_irqsave(&irlmp->lock, flags);
+	spin_lock_irqsave(&irlmp->log_lock, flags);
 
 	/* Look at all discoveries for that link */
 	d = (discovery_t *) hashbin_get_first(cachelog);
@@ -192,13 +288,13 @@ __u32 irlmp_find_device(hashbin_t *cachelog, char *name, __u32 *saddr)
 		if (strcmp(name, d->nickname) == 0) {
 			*saddr = d->saddr;
 			
-			spin_unlock_irqrestore(&irlmp->lock, flags);
+			spin_unlock_irqrestore(&irlmp->log_lock, flags);
 			return d->daddr;
 		}
 		d = (discovery_t *) hashbin_get_next(cachelog);
 	}
 
-	spin_unlock_irqrestore(&irlmp->lock, flags);
+	spin_unlock_irqrestore(&irlmp->log_lock, flags);
 
 	return 0;
 }
@@ -209,23 +305,23 @@ __u32 irlmp_find_device(hashbin_t *cachelog, char *name, __u32 *saddr)
  *    Print discovery information in /proc file system
  *
  */
-int discovery_proc_read(char *buf, char **start, off_t offset, int len, 
+int discovery_proc_read(char *buf, char **start, off_t offset, int length, 
 			int unused)
 {
 	discovery_t *discovery;
 	unsigned long flags;
 	hashbin_t *cachelog = irlmp_get_cachelog();
+	int		len = 0;
 
 	if (!irlmp)
 		return len;
 
 	len = sprintf(buf, "IrLMP: Discovery log:\n\n");	
 	
-	save_flags(flags);
-	cli();
-	
+	spin_lock_irqsave(&irlmp->log_lock, flags);
+
 	discovery = (discovery_t *) hashbin_get_first(cachelog);
-	while ( discovery != NULL) {
+	while (( discovery != NULL) && (len < length)) {
 		len += sprintf(buf+len, "nickname: %s,", discovery->nickname);
 		
 		len += sprintf(buf+len, " hint: 0x%02x%02x", 
@@ -266,7 +362,7 @@ int discovery_proc_read(char *buf, char **start, off_t offset, int len,
 		
 		discovery = (discovery_t *) hashbin_get_next(cachelog);
 	}
-	restore_flags(flags);
+	spin_unlock_irqrestore(&irlmp->log_lock, flags);
 
 	return len;
 }

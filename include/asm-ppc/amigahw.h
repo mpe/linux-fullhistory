@@ -1,3 +1,4 @@
+#ifdef __KERNEL__
 #ifndef __ASMPPC_AMIGAHW_H
 #define __ASMPPC_AMIGAHW_H
 
@@ -13,3 +14,4 @@
 
 
 #endif /* __ASMPPC_AMIGAHW_H */
+#endif /* __KERNEL__ */

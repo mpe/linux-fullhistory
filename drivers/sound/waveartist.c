@@ -17,6 +17,10 @@
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
+ *
+ * Changes:
+ * 11-10-2000	Bartlomiej Zolnierkiewicz <bkz@linux-ide.org>
+ *		Added __init to waveartist_init()
  */
 
 /* Debugging */
@@ -1190,8 +1194,7 @@ static struct mixer_operations waveartist_mixer_operations =
 	ioctl:	waveartist_mixer_ioctl
 };
 
-static int
-waveartist_init(wavnc_info *devc)
+static int __init waveartist_init(wavnc_info *devc)
 {
 	wavnc_port_info *portc;
 	char rev[3], dev_name[64];

@@ -59,6 +59,7 @@ static unsigned char usb_kbd_keycode[256] = {
 
 struct usb_kbd {
 	struct input_dev dev;
+	struct usb_device *usbdev;
 	unsigned char new[8];
 	unsigned char old[8];
 	struct urb irq, led;
@@ -116,6 +117,7 @@ int usb_kbd_event(struct input_dev *dev, unsigned int type, unsigned int code, i
 		return 0;
 
 	kbd->leds = kbd->newleds;
+	kbd->led.dev = kbd->usbdev;
 	if (usb_submit_urb(&kbd->led))
 		err("usb_submit_urb(leds) failed");
 
@@ -133,6 +135,7 @@ static void usb_kbd_led(struct urb *urb)
 		return;
 
 	kbd->leds = kbd->newleds;
+	kbd->led.dev = kbd->usbdev;
 	if (usb_submit_urb(&kbd->led))
 		err("usb_submit_urb(leds) failed");
 }
@@ -144,6 +147,7 @@ static int usb_kbd_open(struct input_dev *dev)
 	if (kbd->open++)
 		return 0;
 
+	kbd->irq.dev = kbd->usbdev;
 	if (usb_submit_urb(&kbd->irq))
 		return -EIO;
 
@@ -158,20 +162,19 @@ static void usb_kbd_close(struct input_dev *dev)
 		usb_unlink_urb(&kbd->irq);
 }
 
-static void *usb_kbd_probe(struct usb_device *dev, unsigned int ifnum)
+static void *usb_kbd_probe(struct usb_device *dev, unsigned int ifnum,
+			   const struct usb_device_id *id)
 {
+	struct usb_interface *iface;
 	struct usb_interface_descriptor *interface;
 	struct usb_endpoint_descriptor *endpoint;
 	struct usb_kbd *kbd;
 	int i, pipe, maxp;
 	char *buf;
 
-	if (dev->descriptor.bNumConfigurations != 1) return NULL;
-	interface = dev->config[0].interface[ifnum].altsetting + 0;
+	iface = &dev->actconfig->interface[ifnum];
+	interface = &iface->altsetting[iface->act_altsetting];
 
-	if (interface->bInterfaceClass != 3) return NULL;
-	if (interface->bInterfaceSubClass != 1) return NULL;
-	if (interface->bInterfaceProtocol != 1) return NULL;
 	if (interface->bNumEndpoints != 1) return NULL;
 
 	endpoint = interface->endpoint + 0;
@@ -186,6 +189,8 @@ static void *usb_kbd_probe(struct usb_device *dev, unsigned int ifnum)
 
 	if (!(kbd = kmalloc(sizeof(struct usb_kbd), GFP_KERNEL))) return NULL;
 	memset(kbd, 0, sizeof(struct usb_kbd));
+
+	kbd->usbdev = dev;
 
 	kbd->dev.evbit[0] = BIT(EV_KEY) | BIT(EV_LED) | BIT(EV_REP);
 	kbd->dev.ledbit[0] = BIT(LED_NUML) | BIT(LED_CAPSL) | BIT(LED_SCROLLL) | BIT(LED_COMPOSE) | BIT(LED_KANA);
@@ -251,10 +256,18 @@ static void usb_kbd_disconnect(struct usb_device *dev, void *ptr)
 	kfree(kbd);
 }
 
+static struct usb_device_id usb_kbd_id_table [] = {
+    { bInterfaceClass: 3, bInterfaceSubClass: 1, bInterfaceProtocol: 1},
+    { }						/* Terminating entry */
+};
+
+MODULE_DEVICE_TABLE (usb, usb_kbd_id_table);
+
 static struct usb_driver usb_kbd_driver = {
 	name:		"keyboard",
 	probe:		usb_kbd_probe,
-	disconnect:	usb_kbd_disconnect
+	disconnect:	usb_kbd_disconnect,
+	id_table:	usb_kbd_id_table,
 };
 
 static int __init usb_kbd_init(void)

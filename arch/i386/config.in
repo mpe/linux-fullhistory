@@ -194,6 +194,8 @@ fi
 
 source drivers/pci/Config.in
 
+bool 'EISA support' CONFIG_EISA
+
 if [ "$CONFIG_VISWS" != "y" ]; then
    bool 'MCA support' CONFIG_MCA
 fi

@@ -76,12 +76,14 @@ inline void irlap_start_wd_timer(struct irlap_cb *self, int timeout);
 inline void irlap_start_backoff_timer(struct irlap_cb *self, int timeout);
 
 void irlap_start_mbusy_timer(struct irlap_cb *);
+void irlap_stop_mbusy_timer(struct irlap_cb *);
 
 struct lsap_cb;
 struct lap_cb;
 inline void irlmp_start_watchdog_timer(struct lsap_cb *, int timeout);
 inline void irlmp_start_discovery_timer(struct irlmp_cb *, int timeout);
 inline void irlmp_start_idle_timer(struct lap_cb *, int timeout);
+inline void irlmp_stop_idle_timer(struct lap_cb *self); 
 
 #endif
 

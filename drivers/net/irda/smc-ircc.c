@@ -589,6 +589,8 @@ static void ircc_change_speed(void *priv, __u32 speed)
 	
 	register_bank(iobase, 0);
 	outb(fast, iobase+IRCC_LCR_A);
+	
+	netif_start_queue(dev);
 }
 
 /*
@@ -612,13 +614,19 @@ static int ircc_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	iobase = self->io.fir_base;
 
-	spin_lock_irqsave(&self->lock, flags);
+	netif_stop_queue(dev);
 
 	/* Check if we need to change the speed after this frame */
-	if ((speed = irda_get_speed(skb)) != self->io.speed)
-		self->new_speed = speed;
+	if ((speed = irda_get_speed(skb)) != self->io.speed) {
+		/* Check for empty frame */
+		if (!skb->len) {
+			smc_ircc_change_speed(self, speed); 
+			return 0;
+		} else
+			self->new_speed = speed;
+	}
 	
-	netif_stop_queue(dev);
+	spin_lock_irqsave(&self->lock, flags);
 
 	memcpy(self->tx_buff.head, skb->data, skb->len);
 
@@ -814,7 +822,7 @@ static void ircc_dma_receive_complete(struct ircc_cb *self, int iobase)
 	else
 		len -= 4;
 
-	if ((len < 2) && (len > 2050)) {
+	if ((len < 2) || (len > 2050)) {
 		WARNING(__FUNCTION__ "(), bogus len=%d\n", len);
 		return;
 	}
@@ -1039,7 +1047,9 @@ static int ircc_pmproc(struct pm_dev *dev, pm_request_t rqst, void *data)
 MODULE_AUTHOR("Thomas Davis <tadavis@jps.net>");
 MODULE_DESCRIPTION("SMC IrCC controller driver");
 MODULE_PARM(ircc_dma, "1i");
+MODULE_PARM_DESC(ircc_dma, "DMA channel");
 MODULE_PARM(ircc_irq, "1i");
+MODULE_PARM_DESC(ircc_irq, "IRQ line");
 
 int init_module(void)
 {

@@ -3,6 +3,7 @@
  * Taken from asm-sparc/smp.h
  */
 
+#ifdef __KERNEL__
 #ifndef _PPC_SMP_H
 #define _PPC_SMP_H
 
@@ -59,3 +60,4 @@ extern struct klock_info_struct klock_info;
 #endif /* !(CONFIG_SMP) */
 
 #endif /* !(_PPC_SMP_H) */
+#endif /* __KERNEL__ */

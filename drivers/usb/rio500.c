@@ -407,18 +407,10 @@ read_rio(struct file *file, char *buffer, size_t count, loff_t * ppos)
 	return read_count;
 }
 
-static void *probe_rio(struct usb_device *dev, unsigned int ifnum)
+static void *probe_rio(struct usb_device *dev, unsigned int ifnum,
+		       const struct usb_device_id *id)
 {
 	struct rio_usb_data *rio = &rio_instance;
-
-	if (dev->descriptor.idVendor != 0x841) {
-		return NULL;
-	}
-
-	if (dev->descriptor.idProduct != 0x1 /* RIO 500 */ ) {
-		warn(KERN_INFO "Rio player model not supported/tested.");
-		return NULL;
-	}
 
 	info("USB Rio found at address %d", dev->devnum);
 
@@ -470,14 +462,20 @@ file_operations usb_rio_fops = {
 	release:	close_rio,
 };
 
-static struct
-usb_driver rio_driver = {
-	"rio500",
-	probe_rio,
-	disconnect_rio,
-	{NULL, NULL},
-	&usb_rio_fops,
-	RIO_MINOR
+static struct usb_device_id rio_table [] = {
+    { idVendor: 0x0841, idProduct: 1 },		/* Rio 500 */
+    { }						/* Terminating entry */
+};
+
+MODULE_DEVICE_TABLE (usb, rio_table);
+
+static struct usb_driver rio_driver = {
+	name:		"rio500",
+	probe:		probe_rio,
+	disconnect:	disconnect_rio,
+	fops:		&usb_rio_fops,
+	minor:		RIO_MINOR,
+	id_table:	rio_table,
 };
 
 int usb_rio_init(void)

@@ -1,7 +1,9 @@
 #ifndef _ASMPPC_SIGNAL_H
 #define _ASMPPC_SIGNAL_H
 
+#ifdef __KERNEL__
 #include <linux/types.h>
+#endif /* __KERNEL__ */
 
 /* Avoid too many header ordering problems.  */
 struct siginfo;

@@ -10,6 +10,7 @@
  * values have to start from 0x20
  * (i.e. linux_logo_{red,green,blue}[0] is color 0x20)
  */
+#ifdef __KERNEL__
  
 #include <linux/init.h>
 
@@ -39,3 +40,4 @@ extern unsigned char linux_logo16_blue[];
 extern unsigned char linux_logo16[];
 
 #endif
+#endif /* __KERNEL__ */

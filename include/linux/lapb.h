@@ -28,7 +28,7 @@ struct lapb_register_struct {
 	void (*connect_indication)(void *token, int reason);
 	void (*disconnect_confirmation)(void *token, int reason);
 	void (*disconnect_indication)(void *token, int reason);
-	void (*data_indication)(void *token, struct sk_buff *skb);
+	int  (*data_indication)(void *token, struct sk_buff *skb);
 	void (*data_transmit)(void *token, struct sk_buff *skb);
 };
 

@@ -2135,7 +2135,6 @@ void vt_console_print(struct console *co, const char * b, unsigned count)
 		}
 	}
 	set_cursor(currcons);
-	poke_blanked_console();
 
 quit:
 	clear_bit(0, &printing);

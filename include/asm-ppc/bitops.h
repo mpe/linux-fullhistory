@@ -3,6 +3,7 @@
  * bitops.h: Bit string operations on the ppc
  */
 
+#ifdef __KERNEL__
 #ifndef _PPC_BITOPS_H
 #define _PPC_BITOPS_H
 
@@ -351,3 +352,4 @@ found_middle:
 #endif	/* __KERNEL__ */
 
 #endif /* _PPC_BITOPS_H */
+#endif /* __KERNEL__ */

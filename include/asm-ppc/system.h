@@ -3,6 +3,7 @@
  *
  * Copyright (C) 1999 Cort Dougan <cort@cs.nmt.edu>
  */
+#ifdef __KERNEL__
 #ifndef __PPC_SYSTEM_H
 #define __PPC_SYSTEM_H
 
@@ -224,3 +225,4 @@ __cmpxchg(volatile void *ptr, unsigned long old, unsigned long new, int size)
   })
 
 #endif /* __PPC_SYSTEM_H */
+#endif /* __KERNEL__ */

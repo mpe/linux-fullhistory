@@ -43,6 +43,21 @@
 #define CI_BZIP2  27 /* Random pick */
 #endif
 
+/*
+ * Maximum values of the baud rate we negociate with the other end.
+ * Most often, you don't have to change that, because Linux-IrDA will
+ * use the maximum offered by the link layer, which usually works fine.
+ * In some very rare cases, you may want to limit it to lower speeds...
+ */
+int sysctl_max_baud_rate = 16000000;
+/*
+ * Maximum value of the lap disconnect timer we negociate with the other end.
+ * Most often, the value below represent the best compromise, but some user
+ * may want to keep the LAP alive longuer or shorter in case of link failure.
+ * Remember that the threshold time (early warning) is fixed to 3s...
+ */
+int sysctl_max_inactive_time = 12;
+
 static int irlap_param_baud_rate(void *instance, irda_param_t *param, int get);
 static int irlap_param_link_disconnect(void *instance, irda_param_t *parm, 
 				       int get);
@@ -55,6 +70,10 @@ static int irlap_param_additional_bofs(void *instance, irda_param_t *parm,
 				       int get);
 static int irlap_param_min_turn_time(void *instance, irda_param_t *param, 
 				     int get);
+static int value_index(__u32 value, __u32 *array, int size);
+static __u32 byte_value(__u8 byte, __u32 *array);
+static __u32 index_value(int index, __u32 *array);
+static int value_lower_bits(__u32 value, __u32 *array, int size, __u16 *field);
 
 __u32 min_turn_times[]  = { 10000, 5000, 1000, 500, 100, 50, 10, 0 }; /* us */
 __u32 baud_rates[]      = { 2400, 9600, 19200, 38400, 57600, 115200, 576000, 
@@ -147,19 +166,31 @@ void irda_qos_compute_intersection(struct qos_info *qos, struct qos_info *new)
  */
 void irda_init_max_qos_capabilies(struct qos_info *qos)
 {
+	int i;
 	/* 
 	 *  These are the maximum supported values as specified on pages
 	 *  39-43 in IrLAP
 	 */
 
+	/* Use sysctl to set some configurable values... */
+	/* Set configured max speed */
+	i = value_lower_bits(sysctl_max_baud_rate, baud_rates, 10,
+			     &qos->baud_rate.bits);
+	sysctl_max_baud_rate = index_value(i, baud_rates);
+
+	/* Set configured max disc time */
+	i = value_lower_bits(sysctl_max_inactive_time, link_disc_times, 8,
+			     &qos->link_disc_time.bits);
+	sysctl_max_inactive_time = index_value(i, link_disc_times);
+
 	/* LSB is first byte, MSB is second byte */
-	qos->baud_rate.bits     = 0x01ff; 
+	qos->baud_rate.bits    &= 0x03ff;
 
 	qos->window_size.bits     = 0x7f;
 	qos->min_turn_time.bits   = 0xff;
 	qos->max_turn_time.bits   = 0x0f;
 	qos->data_size.bits       = 0x3f;
-	qos->link_disc_time.bits  = 0xff;
+	qos->link_disc_time.bits &= 0xff;
 	qos->additional_bofs.bits = 0xff;
 
 #ifdef CONFIG_IRDA_COMPRESSION	
@@ -197,7 +228,7 @@ void irlap_adjust_qos_settings(struct qos_info *qos)
 	 * The data size must be adjusted according to the baud rate and max 
 	 * turn time
 	 */
-	index = value_index(qos->data_size.value, data_sizes);
+	index = value_index(qos->data_size.value, data_sizes, 6);
 	line_capacity = irlap_max_line_capacity(qos->baud_rate.value, 
 						qos->max_turn_time.value);
 
@@ -537,8 +568,8 @@ __u32 irlap_max_line_capacity(__u32 speed, __u32 max_turn_time)
 	IRDA_DEBUG(2, __FUNCTION__ "(), speed=%d, max_turn_time=%d\n",
 		   speed, max_turn_time);
 
-	i = value_index(speed, baud_rates);
-	j = value_index(max_turn_time, max_turn_times);
+	i = value_index(speed, baud_rates, 10);
+	j = value_index(max_turn_time, max_turn_times, 4);
 
 	ASSERT(((i >=0) && (i <=10)), return 0;);
 	ASSERT(((j >=0) && (j <=4)), return 0;);
@@ -574,7 +605,7 @@ __u32 irlap_min_turn_time_in_bytes(__u32 speed, __u32 min_turn_time)
 	return bytes;
 }
 
-__u32 byte_value(__u8 byte, __u32 *array) 
+static __u32 byte_value(__u8 byte, __u32 *array) 
 {
 	int index;
 
@@ -602,20 +633,19 @@ int msb_index (__u16 word)
 		msb >>=1;
 		index--;
 	}
-	
 	return index;
 }
 
 /*
- * Function value_index (value, array)
+ * Function value_index (value, array, size)
  *
  *    Returns the index to the value in the specified array
  */
-int value_index(__u32 value, __u32 *array) 
+static int value_index(__u32 value, __u32 *array, int size)
 {
 	int i;
 	
-	for (i=0;i<8;i++)
+	for (i=0; i < size; i++)
 		if (array[i] == value)
 			break;
 	return i;
@@ -627,9 +657,36 @@ int value_index(__u32 value, __u32 *array)
  *    Returns value to index in array, easy!
  *
  */
-__u32 index_value(int index, __u32 *array) 
+static __u32 index_value(int index, __u32 *array) 
 {
 	return array[index];
+}
+
+/*
+ * Function value_lower_bits (value, array)
+ *
+ *    Returns a bit field marking all possibility lower than value.
+ *    We may need a "value_higher_bits" in the future...
+ */
+static int value_lower_bits(__u32 value, __u32 *array, int size, __u16 *field)
+{
+	int	i;
+	__u16	mask = 0x1;
+	__u16	result = 0x0;
+
+	for (i=0; i < size; i++) {
+		/* Add the current value to the bit field, shift mask */
+		result |= mask;
+		mask <<= 1;
+		/* Finished ? */
+		if (array[i] >= value)
+			break;
+	}
+	/* Send back a valid index */
+	if(i >= size)
+	  i = size - 1;	/* Last item */
+	*field = result;
+	return i;
 }
 
 void irda_qos_bits_to_value(struct qos_info *qos)
@@ -667,10 +724,3 @@ void irda_qos_bits_to_value(struct qos_info *qos)
 		qos->compression.value = 0;
 #endif
 }
-
-
-
-
-
-
-

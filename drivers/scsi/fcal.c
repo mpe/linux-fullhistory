@@ -128,7 +128,11 @@ int __init fcal_detect(Scsi_Host_Template *tpnt)
 		if (!ages) continue;
 				
 		host = scsi_register (tpnt, sizeof (struct fcal));
-		if (!host) panic ("Cannot register FCAL host\n");
+		if (!host) 
+		{
+			kfree(ages);
+			continue;
+		}
 				
 		nfcals++;
 				

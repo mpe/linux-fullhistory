@@ -100,7 +100,7 @@ static int rd_hardsec[NUM_RAMDISKS];		/* Size of real blocks in bytes */
 static int rd_blocksizes[NUM_RAMDISKS];		/* Size of 1024 byte blocks :)  */
 static int rd_kbsize[NUM_RAMDISKS];		/* Size in blocks of 1024 bytes */
 static devfs_handle_t devfs_handle;
-static struct inode *rd_inode[NUM_RAMDISKS];		/* Protected device inodes */
+static struct inode *rd_inode[NUM_RAMDISKS];	/* Protected device inodes */
 
 /*
  * Parameters for the boot-loading of the RAM disk.  These are set by
@@ -108,7 +108,7 @@ static struct inode *rd_inode[NUM_RAMDISKS];		/* Protected device inodes */
  * architecture-specific setup routine (from the stored boot sector
  * information). 
  */
-int rd_size = 4096;		/* Size of the RAM disks */
+int rd_size = CONFIG_BLK_DEV_RAM_SIZE;		/* Size of the RAM disks */
 /*
  * It would be very desiderable to have a soft-blocksize (that in the case
  * of the ramdisk driver is also the hardblocksize ;) of PAGE_SIZE because
@@ -120,7 +120,7 @@ int rd_size = 4096;		/* Size of the RAM disks */
  * behaviour. The default is still BLOCK_SIZE (needed by rd_load_image that
  * supposes the filesystem in the image uses a BLOCK_SIZE blocksize).
  */
-int rd_blocksize = BLOCK_SIZE;	/* Size of the RAM disks */
+int rd_blocksize = BLOCK_SIZE;			/* blocksize of the RAM disks */
 
 #ifndef MODULE
 

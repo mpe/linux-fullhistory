@@ -319,11 +319,8 @@ copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 {
 	unsigned long msr;
 	struct pt_regs * childregs, *kregs;
-#ifdef CONFIG_SMP
-	extern void ret_from_smpfork(void);
-#else
-	extern void ret_from_except(void);
-#endif
+	extern void ret_from_fork(void);
+	
 	/* Copy registers */
 	childregs = ((struct pt_regs *)
 		     ((unsigned long)p + sizeof(union task_union)
@@ -336,11 +333,7 @@ copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	p->thread.ksp = (unsigned long) childregs - STACK_FRAME_OVERHEAD;
 	p->thread.ksp -= sizeof(struct pt_regs ) + STACK_FRAME_OVERHEAD;
 	kregs = (struct pt_regs *)(p->thread.ksp + STACK_FRAME_OVERHEAD);
-#ifdef CONFIG_SMP
-	kregs->nip = (unsigned long)ret_from_smpfork;
-#else	
-	kregs->nip = (unsigned long)ret_from_except;
-#endif	
+	kregs->nip = (unsigned long)ret_from_fork;
 	asm volatile("mfmsr %0" : "=r" (msr):);
 	kregs->msr = msr;
 	kregs->gpr[1] = (unsigned long)childregs - STACK_FRAME_OVERHEAD;

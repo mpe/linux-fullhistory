@@ -140,7 +140,6 @@ struct sis900_private {
 	BufferDesc rx_ring[NUM_RX_DESC];
 
 	unsigned int tx_full;			/* The Tx queue is full.    */
-	int LinkOn;
 };
 
 MODULE_AUTHOR("Jim Huang <cmhuang@sis.com.tw>, Ollie Lho <ollie@sis.com.tw>");
@@ -374,9 +373,9 @@ static int __init sis900_mii_probe (struct net_device * net_dev)
 	}
 
 	if (sis_priv->mii->status & MII_STAT_LINK)
-		sis_priv->LinkOn = TRUE;
+		netif_carrier_on(net_dev);
 	else
-		sis_priv->LinkOn = FALSE;
+		netif_carrier_off(net_dev);
 
 	return 1;
 }
@@ -709,7 +708,7 @@ static void sis630e_set_eq(struct net_device *net_dev)
 	u16 reg14h, eq_value, max_value=0, min_value=0;
 	int i, maxcount=10;
 
-	if (sis_priv->LinkOn == TRUE) {
+	if (netif_carrier_ok(net_dev)) {
 		reg14h=mdio_read(net_dev, sis_priv->cur_phy, MII_RESV);
 		mdio_write(net_dev, sis_priv->cur_phy, MII_RESV, (0x2200 | reg14h) & 0xBFFF);
 		for (i=0; i < maxcount; i++) {
@@ -753,10 +752,10 @@ static void sis900_timer(unsigned long data)
 	/* current mii phy is failed to link, try another one */
 	while (!(status & MII_STAT_LINK)) {
 		if (mii_phy->next == NULL) {
-			if (sis_priv->LinkOn) {
+			if (netif_carrier_ok(net_dev)) {
 				/* link stat change from ON to OFF */
 				next_tick = HZ;
-				sis_priv->LinkOn = FALSE;
+				netif_carrier_off(net_dev);
 
 				/* Equalizer workaroung Rule */
 				pci_read_config_byte(sis_priv->pci_dev, PCI_CLASS_REVISION, &revision);
@@ -774,9 +773,9 @@ static void sis900_timer(unsigned long data)
 		status = mdio_read(net_dev, mii_phy->phy_addr, MII_STATUS);
 	}
 
-	if (!sis_priv->LinkOn) {
+	if (!netif_carrier_ok(net_dev)) {
 		/* link stat change forn OFF to ON, read and report link mode */
-		sis_priv->LinkOn = TRUE;
+		netif_carrier_on(net_dev);
 		next_tick = 5*HZ;
 
 		/* Equalizer workaroung Rule */
@@ -1340,7 +1339,7 @@ static int sis900_set_config(struct net_device *dev, struct ifmap *map)
                 		be temporary down and we need to reflect that here. When
                 		the Link comes up again, it will be sensed by the sis_timer
                 		procedure, which also does all the rest for us */
-                		sis_priv->LinkOn=FALSE;
+				netif_carrier_off(dev);
                 
                 		/* read current state */
                 		status = mdio_read(dev, mii_phy->phy_addr, MII_CONTROL);
@@ -1360,7 +1359,7 @@ static int sis900_set_config(struct net_device *dev, struct ifmap *map)
                 		be temporary down and we need to reflect that here. When
                 		the Link comes up again, it will be sensed by the sis_timer
                 		procedure, which also does all the rest for us */
-                		sis_priv->LinkOn=FALSE;
+				netif_carrier_off(dev);
         
                 		/* set Speed to 10Mbps */
                 		/* read current state */
@@ -1379,7 +1378,7 @@ static int sis900_set_config(struct net_device *dev, struct ifmap *map)
                 		be temporary down and we need to reflect that here. When
                 		the Link comes up again, it will be sensed by the sis_timer
                 		procedure, which also does all the rest for us */
-                		sis_priv->LinkOn=FALSE;
+				netif_carrier_off(dev);
                 
                 		/* set Speed to 100Mbps */
                 		/* disable auto negotiation and enable 100MBit Mode */

@@ -1154,6 +1154,8 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
 			shpnt = scsi_register(tpnt,
 					sizeof(struct aha1542_hostdata));
 
+			if(shpnt==NULL)
+				continue;
 			/* For now we do this - until kmalloc is more intelligent
 			   we are resigned to stupid hacks like this */
 			if (SCSI_PA(shpnt) >= ISA_DMA_THRESHOLD) {

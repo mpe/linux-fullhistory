@@ -63,7 +63,7 @@
  *  connection.
  */
 struct tsap_cb {
-	queue_t q;            /* Must be first */
+	irda_queue_t q;            /* Must be first */
 	magic_t magic;        /* Just in case */
 
 	__u8 stsap_sel;       /* Source TSAP */
@@ -129,6 +129,8 @@ int irttp_connect_response(struct tsap_cb *self, __u32 max_sdu_size,
 int irttp_disconnect_request(struct tsap_cb *self, struct sk_buff *skb,
 			     int priority);
 void irttp_flow_request(struct tsap_cb *self, LOCAL_FLOW flow);
+void irttp_status_indication(void *instance,
+			     LINK_STATUS link, LOCK_STATUS lock);
 struct tsap_cb *irttp_dup(struct tsap_cb *self, void *instance);
 
 static __inline __u32 irttp_get_saddr(struct tsap_cb *self)

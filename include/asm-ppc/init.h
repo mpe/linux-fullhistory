@@ -1,3 +1,4 @@
+#ifdef __KERNEL__
 #ifndef _PPC_INIT_H
 #define _PPC_INIT_H
 
@@ -35,3 +36,4 @@
 	__argopenfirmware
 	
 #endif /* _PPC_INIT_H */
+#endif /* __KERNEL__ */

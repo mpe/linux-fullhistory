@@ -44,7 +44,8 @@ extern int printk(const char *fmt, ...);
 #endif
 
 struct __wait_queue {
-	unsigned int compiler_warning;
+	unsigned int flags;
+#define WQ_FLAG_EXCLUSIVE	0x01
 	struct task_struct * task;
 	struct list_head task_list;
 #if WAITQUEUE_DEBUG
@@ -109,7 +110,7 @@ typedef struct __wait_queue_head wait_queue_head_t;
 #endif
 
 #define __WAITQUEUE_INITIALIZER(name,task) \
-	{ 0x1234567, task, { NULL, NULL } __WAITQUEUE_DEBUG_INIT(name)}
+	{ 0x0, task, { NULL, NULL } __WAITQUEUE_DEBUG_INIT(name)}
 #define DECLARE_WAITQUEUE(name,task) \
 	wait_queue_t name = __WAITQUEUE_INITIALIZER(name,task)
 

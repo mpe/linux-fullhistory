@@ -272,8 +272,14 @@ toshoboe_hard_xmit (struct sk_buff *skb, struct net_device *dev)
     );
 
   /* Check if we need to change the speed */
-  if ((speed = irda_get_speed(skb)) != self->io.speed)
-	  self->new_speed = speed;
+  if ((speed = irda_get_speed(skb)) != self->io.speed) {
+	/* Check for empty frame */
+	if (!skb->len) {
+	    toshoboe_change_speed(self, speed); 
+	    return 0;
+	} else
+	    self->new_speed = speed;
+  }
 
   netif_stop_queue(dev);
   
@@ -628,7 +634,10 @@ static int toshoboe_net_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 
 #ifdef MODULE
 
+MODULE_DESCRIPTION("Toshiba OBOE IrDA Device Driver");
+MODULE_AUTHOR("James McKenzie <james@fishsoup.dhs.org>");
 MODULE_PARM (max_baud, "i");
+MODULE_PARM_DESC(max_baus, "Maximum baud rate");
 
 static int
 toshoboe_close (struct toshoboe_cb *self)

@@ -1,4 +1,3 @@
-
 /*
  * A collection of structures, addresses, and values associated with
  * the Motorola MBX boards.  This was originally created for the
@@ -8,6 +7,7 @@
  *
  * Copyright (c) 1997 Dan Malek (dmalek@jlc.net)
  */
+#ifdef __KERNEL__
 #ifndef __MACH_MBX_DEFS
 #define __MACH_MBX_DEFS
 
@@ -87,3 +87,4 @@ typedef struct bd_info {
 */
 #define _MACH_8xx (_MACH_mbx)
 #endif
+#endif /* __KERNEL__ */

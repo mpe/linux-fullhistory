@@ -8,6 +8,7 @@
  * All CPM control and status is available through the MPC8260 internal
  * memory map.  See immap.h for details.
  */
+#ifdef __KERNEL__
 #ifndef __CPM_82XX__
 #define __CPM_82XX__
 
@@ -697,3 +698,4 @@ typedef struct iic {
 #define BD_IIC_START		((ushort)0x0400)
 
 #endif /* __CPM_82XX__ */
+#endif /* __KERNEL__ */

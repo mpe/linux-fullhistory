@@ -39,7 +39,17 @@ static int gdth_set_info(char *buffer,int length,int vh,int hanum,int busnum)
     piowr = (gdth_iowr_str *)buffer;
 
     sdev = scsi_get_host_dev(gdth_ctr_vtab[vh]);
+    
+    if(sdev==NULL)
+    	return -ENOMEM;
+
     scp  = scsi_allocate_device(sdev, 1, FALSE);
+    
+    if(scp==NULL)
+    {
+	scsi_free_host_dev(sdev);
+        return -ENOMEM;
+    }
     scp->cmd_len = 12;
     scp->use_sg = 0;
 

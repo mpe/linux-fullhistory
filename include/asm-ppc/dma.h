@@ -6,6 +6,8 @@
  * Changes for ppc sound by Christoph Nadig
  */
 
+#ifdef __KERNEL__
+
 #include <linux/config.h>
 #include <asm/io.h>
 #include <linux/spinlock.h>
@@ -410,3 +412,4 @@ extern int isa_dma_bridge_buggy;
 #define isa_dma_bridge_buggy   (0)
 #endif
 #endif /* _ASM_DMA_H */
+#endif /* __KERNEL__ */

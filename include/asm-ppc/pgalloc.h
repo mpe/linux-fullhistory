@@ -1,3 +1,4 @@
+#ifdef __KERNEL__
 #ifndef _PPC_PGALLOC_H
 #define _PPC_PGALLOC_H
 
@@ -50,33 +51,6 @@ extern atomic_t zerototal;	     /* # pages zero'd over time */
 extern unsigned long get_zero_page_fast(void);
 
 extern void __bad_pte(pmd_t *pmd);
-
-extern inline void set_pgdir(unsigned long address, pgd_t entry)
-{
-	struct task_struct * p;
-	pgd_t *pgd;
-#ifdef CONFIG_SMP
-	int i;
-#endif	
-        
-	read_lock(&tasklist_lock);
-	for_each_task(p) {
-		if (!p->mm)
-			continue;
-		*pgd_offset(p->mm,address) = entry;
-	}
-	read_unlock(&tasklist_lock);
-#ifndef CONFIG_SMP
-	for (pgd = (pgd_t *)pgd_quicklist; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
-		pgd[address >> PGDIR_SHIFT] = entry;
-#else
-	/* To pgd_alloc/pgd_free, one holds master kernel lock and so does our callee, so we can
-	   modify pgd caches of other CPUs as well. -jj */
-	for (i = 0; i < NR_CPUS; i++)
-		for (pgd = (pgd_t *)cpu_data[i].pgd_cache; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
-			pgd[address >> PGDIR_SHIFT] = entry;
-#endif
-}
 
 /* We don't use pmd cache, so this is a dummy routine */
 extern __inline__ pmd_t *get_pmd_fast(void)
@@ -200,3 +174,4 @@ extern inline pte_t * pte_alloc(pmd_t * pmd, unsigned long address)
 extern int do_check_pgt_cache(int, int);
 
 #endif /* _PPC_PGALLOC_H */
+#endif /* __KERNEL__ */

@@ -53,6 +53,21 @@ static const char version[] = "1.25";
 
 #undef OV511_GBR422		/* Experimental -- sets the 7610 to GBR422 */
 
+static struct usb_device_id ov511_table [] = {
+
+    { idVendor: 0x05a9, idProduct: 0x0511, bInterfaceClass: 0xFF },
+    { idVendor: 0x05a9, idProduct: 0xA511, bInterfaceClass: 0xFF },
+    { idVendor: 0x05a9, idProduct: 0x0002, bInterfaceClass: 0xFF },
+
+    { idVendor: 0x0813, idProduct: 0x0511, bInterfaceClass: 0xFF },
+    { idVendor: 0x0813, idProduct: 0xA511, bInterfaceClass: 0xFF },
+
+    { }						/* Terminating entry */
+};
+
+MODULE_DEVICE_TABLE (usb, ov511_table);
+
+
 #define OV511_I2C_RETRIES 3
 
 /* Video Size 640 x 480 x 3 bytes for RGB */
@@ -3144,7 +3159,8 @@ error:
  *
  ***************************************************************************/
 
-static void* ov511_probe(struct usb_device *dev, unsigned int ifnum)
+static void* ov511_probe(struct usb_device *dev, unsigned int ifnum,
+			 const struct usb_device_id *id)
 {
 	struct usb_interface_descriptor *interface;
 	struct usb_ov511 *ov511;
@@ -3158,18 +3174,9 @@ static void* ov511_probe(struct usb_device *dev, unsigned int ifnum)
 
 	interface = &dev->actconfig->interface[ifnum].altsetting[0];
 
-	/* Is it an OV511/OV511+? */
-	if (dev->descriptor.idVendor != 0x05a9 
-	 && dev->descriptor.idVendor != 0x0813)
-		return NULL;
-	if (dev->descriptor.idProduct != 0x0511
-	 && dev->descriptor.idProduct != 0xA511
-	 && dev->descriptor.idProduct != 0x0002)
-		return NULL;
-
-	/* Checking vendor/product should be enough, but what the hell */
-	if (interface->bInterfaceClass != 0xFF) 
-		return NULL;
+	/* Checking vendor/product should be enough, but what the hell.
+	   USB ID matching cannot check for a bInterfaceSubclass value
+	   of 0, so we check it here. */
 	if (interface->bInterfaceSubClass != 0x00)
 		return NULL;
 
@@ -3196,14 +3203,9 @@ static void* ov511_probe(struct usb_device *dev, unsigned int ifnum)
 		ov511->bridge = BRG_OV511PLUS;
 		break;
 	case 0x0002:
-		if (dev->descriptor.idVendor != 0x0813)
-			goto error;
 		info("Intel Play Me2Cam (OV511+) found");
 		ov511->bridge = BRG_OV511PLUS;
 		break;
-	default:
-		err("Unknown product ID");
-		goto error;
 	}
 
 	ov511->customid = ov511_reg_read(dev, OV511_REG_SYSTEM_CUSTOM_ID);
@@ -3321,10 +3323,10 @@ static void ov511_disconnect(struct usb_device *dev, void *ptr)
 }
 
 static struct usb_driver ov511_driver = {
-	"ov511",
-	ov511_probe,
-	ov511_disconnect,
-	{ NULL, NULL }
+	name:		"ov511",
+	probe:		ov511_probe,
+	disconnect:	ov511_disconnect,
+	id_table:	ov511_table,
 };
 
 

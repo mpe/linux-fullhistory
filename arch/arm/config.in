@@ -5,6 +5,7 @@
 mainmenu_name "Linux Kernel Configuration"
 
 define_bool CONFIG_ARM y
+define_bool CONFIG_EISA n
 define_bool CONFIG_SBUS n
 define_bool CONFIG_UID16 y
 

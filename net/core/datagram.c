@@ -66,7 +66,7 @@ static int wait_for_packet(struct sock * sk, int *err, long *timeo_p)
 
 	DECLARE_WAITQUEUE(wait, current);
 
-	__set_current_state(TASK_INTERRUPTIBLE|TASK_EXCLUSIVE);
+	__set_current_state(TASK_INTERRUPTIBLE);
 	add_wait_queue_exclusive(sk->sleep, &wait);
 
 	/* Socket errors? */

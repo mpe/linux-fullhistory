@@ -857,7 +857,7 @@ static int ibmlana_open(struct IBMLANA_NETDEV *dev)
 
 	result =
 	    request_irq(priv->realirq, irq_handler,
-			SA_SHIRQ | SA_SAMPLE_RANDOM, "ibm_lana", dev);
+			SA_SHIRQ | SA_SAMPLE_RANDOM, dev->name, dev);
 	if (result != 0) {
 		printk("%s: failed to register irq %d\n", dev->name,
 		       dev->irq);
@@ -1046,7 +1046,7 @@ int ibmlana_probe(struct IBMLANA_NETDEV *dev)
 	/* can't work without an MCA bus ;-) */
 
 	if (MCA_bus == 0)
-		return ENODEV;
+		return -ENODEV;
 
 	/* start address of 1 --> forced detection */
 
@@ -1101,19 +1101,18 @@ int ibmlana_probe(struct IBMLANA_NETDEV *dev)
 	/* nothing found ? */
 
 	if (slot == -1)
-		return ((base != 0) || (irq != 0)) ? ENXIO : ENODEV;
+		return ((base != 0) || (irq != 0)) ? -ENXIO : -ENODEV;
 
 	/* announce success */
 	printk("%s: IBM LAN Adapter/A found in slot %d\n", dev->name,
 	       slot + 1);
 
 	/* try to obtain I/O range */
-	if (check_region(iobase, IBM_LANA_IORANGE) < 0) {
-		printk("cannot allocate I/O range at %#x!\n", iobase);
+	if (!request_region(iobase, IBM_LANA_IORANGE, dev->name)) {
+		printk("%s: cannot allocate I/O range at %#x!\n", dev->name, iobase);
 		startslot = slot + 1;
-		return 0;
+		return -EBUSY;
 	}
-	request_region(iobase, IBM_LANA_IORANGE, "ibm_lana");
 
 	/* make procfs entries */
 
@@ -1128,6 +1127,10 @@ int ibmlana_probe(struct IBMLANA_NETDEV *dev)
 
 	priv = dev->priv =
 	    (ibmlana_priv *) kmalloc(sizeof(ibmlana_priv), GFP_KERNEL);
+	if (!priv) {
+		release_region(iobase, IBM_LANA_IORANGE);
+		return -ENOMEM;
+	}
 	priv->slot = slot;
 	priv->realirq = irq;
 	priv->medium = medium;
@@ -1189,24 +1192,11 @@ int ibmlana_probe(struct IBMLANA_NETDEV *dev)
 
 #define DEVMAX 5
 
-#if (LINUX_VERSION_CODE >= 0x020363)
-static struct IBMLANA_NETDEV moddevs[DEVMAX] =
-    { {"    ", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, ibmlana_probe},
-{"    ", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, ibmlana_probe},
-{"    ", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, ibmlana_probe},
-{"    ", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, ibmlana_probe},
-{"    ", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, ibmlana_probe}
+static struct IBMLANA_NETDEV moddevs[DEVMAX] = {
+	{ init: ibmlana_probe }, { init: ibmlana_probe }, 
+	{ init: ibmlana_probe }, { init: ibmlana_probe },
+	{ init: ibmlana_probe }
 };
-#else
-static char NameSpace[8 * DEVMAX];
-static struct IBMLANA_NETDEV moddevs[DEVMAX] =
-    { {NameSpace + 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, ibmlana_probe},
-{NameSpace + 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, ibmlana_probe},
-{NameSpace + 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, ibmlana_probe},
-{NameSpace + 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, ibmlana_probe},
-{NameSpace + 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, ibmlana_probe}
-};
-#endif
 
 int irq = 0;
 int io = 0;

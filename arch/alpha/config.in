@@ -68,6 +68,7 @@ unset CONFIG_ALPHA_LARGE_VMALLOC
 # Most of these machines have ISA slots; not exactly sure which don't,
 # and this doesn't activate hordes of code, so do it always.
 define_bool CONFIG_ISA y
+define_bool CONFIG_EISA y
 define_bool CONFIG_SBUS n
 
 if [ "$CONFIG_ALPHA_JENSEN" = "y" ]

@@ -1550,36 +1550,29 @@ static int rr_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 
 	rrpriv = (struct rr_private *)dev->priv;
 
-
 	switch(cmd){
 	case SIOCRRGFW:
-		if (!capable(CAP_SYS_RAWIO)){
-			error = -EPERM;
-			goto out;
-		}
+		if (!capable(CAP_SYS_RAWIO))
+			return -EPERM;
 
 		image = kmalloc(EEPROM_WORDS * sizeof(u32), GFP_KERNEL);
 		if (!image){
 			printk(KERN_ERR "%s: Unable to allocate memory "
 			       "for EEPROM image\n", dev->name);
-			error = -ENOMEM;
-			goto out;
+			return -ENOMEM;
 		}
 		
 		spin_lock(&rrpriv->lock);
 		
 		if (rrpriv->fw_running){
 			printk("%s: Firmware already running\n", dev->name);
-			kfree(image);
 			error = -EPERM;
 			goto out_spin;
 		}
 
 		i = rr_read_eeprom(rrpriv, 0, image, EEPROM_BYTES);
 		if (i != EEPROM_BYTES){
-			kfree(image);
-			printk(KERN_ERR "%s: Error reading EEPROM\n",
-			       dev->name);
+			printk(KERN_ERR "%s: Error reading EEPROM\n", dev->name);
 			error = -EFAULT;
 			goto out_spin;
 		}
@@ -1591,9 +1584,8 @@ static int rr_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 		return error;
 		
 	case SIOCRRPFW:
-		if (!capable(CAP_SYS_RAWIO)){
+		if (!capable(CAP_SYS_RAWIO))
 			return -EPERM;
-		}
 
 		image = kmalloc(EEPROM_WORDS * sizeof(u32), GFP_KERNEL);
 		if (!image){
@@ -1604,18 +1596,21 @@ static int rr_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 
 		oldimage = kmalloc(EEPROM_WORDS * sizeof(u32), GFP_KERNEL);
 		if (!oldimage){
+			kfree(image);
 			printk(KERN_ERR "%s: Unable to allocate memory "
 			       "for old EEPROM image\n", dev->name);
 			return -ENOMEM;
 		}
 
 		error = copy_from_user(image, rq->ifr_data, EEPROM_BYTES);
-		if (error)
-			error = -EFAULT;
+		if (error) {
+			kfree(image);
+			kfree(oldimage);
+			return -EFAULT;
+		}
 
 		spin_lock(&rrpriv->lock);
 		if (rrpriv->fw_running){
-			kfree(image);
 			kfree(oldimage);
 			printk("%s: Firmware already running\n", dev->name);
 			error = -EPERM;
@@ -1652,6 +1647,7 @@ static int rr_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	}
 
  out_spin:
+	kfree(image);
 	spin_unlock(&rrpriv->lock);
 	return error;
 }

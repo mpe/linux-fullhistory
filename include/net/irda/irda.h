@@ -110,8 +110,14 @@ if(!(expr)) { \
 
 typedef enum { FLOW_STOP, FLOW_START } LOCAL_FLOW;
 
+/* A few forward declarations (to make compiler happy) */
+struct tsap_cb;		/* in <net/irda/irttp.h> */
+struct lsap_cb;		/* in <net/irda/irlmp.h> */
+struct iriap_cb;	/* in <net/irda/iriap.h> */
+struct ias_value;	/* in <net/irda/irias_object.h> */
+struct discovery_t;	/* in <net/irda/discovery.h> */
+
 /* IrDA Socket */
-struct tsap_cb;
 struct irda_sock {
 	__u32 saddr;          /* my local address */
 	__u32 daddr;          /* peer address */
@@ -137,14 +143,18 @@ struct irda_sock {
 
 	struct ias_object *ias_obj;   /* Our service name + lsap in IAS */
 	struct iriap_cb *iriap;	      /* Used to query remote IAS */
-	struct ias_value *ias_result; /* Used by getsockopt(IRLMP_IAS_QUERY) */
+	struct ias_value *ias_result; /* Result of remote IAS query */
+
+	hashbin_t *cachelog;		/* Result of discovery query */
+	struct discovery_t *cachediscovery;	/* Result of selective discovery query */
 
 	int nslots;           /* Number of slots to use for discovery */
 
 	int errno;            /* status of the IAS query */
 
 	struct sock *sk;
-	wait_queue_head_t ias_wait;       /* Wait for LM-IAS answer */
+	wait_queue_head_t query_wait;	/* Wait for the answer to a query */
+	struct timer_list watchdog;	/* Timeout for discovery */
 
 	LOCAL_FLOW tx_flow;
 	LOCAL_FLOW rx_flow;
@@ -166,12 +176,14 @@ typedef union {
  * (must not exceed 48 bytes, check with struct sk_buff) 
  */
 struct irda_skb_cb {
-	magic_t magic;     /* Be sure that we can trust the information */
-	__u32   speed;     /* The Speed this frame should be sent with */
-	__u16     mtt;     /* Minimum turn around time */
-	int     xbofs;     /* Number of xbofs required, used by SIR mode */
-	__u8     line;     /* Used by IrCOMM in IrLPT mode */
-	void (*destructor)(struct sk_buff *skb); /* Used for flow control */
+	magic_t magic;       /* Be sure that we can trust the information */
+	__u32   speed;       /* The Speed this frame should be sent with */
+	__u16   mtt;         /* Minimum turn around time */
+	__u16   xbofs;       /* Number of xbofs required, used by SIR mode */
+	void    *context;    /* May be used by drivers */
+	void    (*destructor)(struct sk_buff *skb); /* Used for flow control */
+	__u16   xbofs_delay; /* Number of xbofs used for generating the mtt */
+	__u8    line;        /* Used by IrCOMM in IrLPT mode */
 };
 
 /* Misc status information */
@@ -232,6 +244,8 @@ typedef struct {
 	void (*disconnect_indication)(void *instance, void *sap, 
 				      LM_REASON reason, struct sk_buff *);
 	void (*flow_indication)(void *instance, void *sap, LOCAL_FLOW flow);
+	void (*status_indication)(void *instance,
+				  LINK_STATUS link, LOCK_STATUS lock);
 	void *instance; /* Layer instance pointer */
 	char name[16];  /* Name of layer */
 } notify_t;

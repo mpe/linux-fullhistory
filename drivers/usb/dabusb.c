@@ -718,18 +718,14 @@ static int dabusb_find_struct (void)
 }
 
 /* --------------------------------------------------------------------- */
-static void *dabusb_probe (struct usb_device *usbdev, unsigned int ifnum)
+static void *dabusb_probe (struct usb_device *usbdev, unsigned int ifnum,
+			   const struct usb_device_id *id)
 {
 	int devnum;
 	pdabusb_t s;
 
 	dbg("dabusb: probe: vendor id 0x%x, device id 0x%x ifnum:%d",
 	  usbdev->descriptor.idVendor, usbdev->descriptor.idProduct, ifnum);
-
-	/* the 1234:5678 is just a self assigned test ID */
-	if ((usbdev->descriptor.idVendor != 0x0547 || usbdev->descriptor.idProduct != 0x2131) &&
-	    (usbdev->descriptor.idVendor != 0x0547 || usbdev->descriptor.idProduct != 0x9999))
-		return NULL;
 
 	/* We don't handle multiple configurations */
 	if (usbdev->descriptor.bNumConfigurations != 1)
@@ -790,14 +786,22 @@ static void dabusb_disconnect (struct usb_device *usbdev, void *ptr)
 	MOD_DEC_USE_COUNT;
 }
 
+static struct usb_device_id dabusb_ids [] = {
+    { idVendor: 0x0547, idProduct: 0x2131 },
+    { idVendor: 0x0547, idProduct: 0x9999 },
+    { }						/* Terminating entry */
+};
+
+MODULE_DEVICE_TABLE (usb, dabusb_ids);
+
 static struct usb_driver dabusb_driver =
 {
-	"dabusb",
-	dabusb_probe,
-	dabusb_disconnect,
-	{NULL, NULL},
-	&dabusb_fops,
-	DABUSB_MINOR
+	name:		"dabusb",
+	probe:		dabusb_probe,
+	disconnect:	dabusb_disconnect,
+	fops:		&dabusb_fops,
+	minor:		DABUSB_MINOR,
+	id_table:	dabusb_ids,
 };
 
 /* --------------------------------------------------------------------- */

@@ -1,3 +1,4 @@
+#ifdef __KERNEL__
 #ifndef __ASM_SOFTIRQ_H
 #define __ASM_SOFTIRQ_H
 
@@ -10,3 +11,4 @@
 #define in_softirq() (local_bh_count(smp_processor_id()) != 0)
 
 #endif	/* __ASM_SOFTIRQ_H */
+#endif /* __KERNEL__ */

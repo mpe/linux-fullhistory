@@ -2,6 +2,7 @@
  * include/asm-ppc/serial.h
  */
 
+#ifdef __KERNEL__
 #include <linux/config.h>
 
 #ifdef CONFIG_GEMINI
@@ -127,3 +128,4 @@
 	MCA_SERIAL_PORT_DFNS
 
 #endif /* CONFIG_GEMINI */
+#endif /* __KERNEL__ */

@@ -161,28 +161,26 @@ struct irlan_provider_cb {
  *  IrLAN control block
  */
 struct irlan_cb {
-	queue_t q; /* Must be first */
+	irda_queue_t q; /* Must be first */
 
 	int    magic;
 	struct net_device dev;        /* Ethernet device structure*/
 	struct net_device_stats stats;
 
-	__u32 saddr;              /* Source device address */
-	__u32 daddr;              /* Destination device address */
-	int   netdev_registered;
-	int   notify_irmanager;
+	__u32 saddr;               /* Source device address */
+	__u32 daddr;               /* Destination device address */
+	int disconnect_reason;     /* Why we got disconnected */
 	
-	int media;                /* Media type */
-	__u8 version[2];          /* IrLAN version */
+	int media;                 /* Media type */
+	__u8 version[2];           /* IrLAN version */
 	
-	struct tsap_cb *tsap_data;
+	struct tsap_cb *tsap_data; /* Data TSAP */
 
-	int  master;              /* Master instance? */
-	int  use_udata;           /* Use Unit Data transfers */
+	int  use_udata;            /* Use Unit Data transfers */
 
-	__u8 stsap_sel_data;      /* Source data TSAP selector */
-	__u8 dtsap_sel_data;      /* Destination data TSAP selector */
-	__u8 dtsap_sel_ctrl;      /* Destination ctrl TSAP selector */
+	__u8 stsap_sel_data;       /* Source data TSAP selector */
+	__u8 dtsap_sel_data;       /* Destination data TSAP selector */
+	__u8 dtsap_sel_ctrl;       /* Destination ctrl TSAP selector */
 
 	struct irlan_client_cb   client;   /* Client specific fields */
 	struct irlan_provider_cb provider; /* Provider specific fields */
@@ -190,10 +188,11 @@ struct irlan_cb {
 	__u32 max_sdu_size;
 	__u8  max_header_size;
 	
+	wait_queue_head_t open_wait;
 	struct timer_list watchdog_timer;
 };
 
-struct irlan_cb *irlan_open(__u32 saddr, __u32 daddr, int netdev);
+struct irlan_cb *irlan_open(__u32 saddr, __u32 daddr);
 void irlan_close(struct irlan_cb *self);
 void irlan_close_tsaps(struct irlan_cb *self);
 void irlan_mod_inc_use_count(void);

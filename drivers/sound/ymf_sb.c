@@ -43,6 +43,10 @@
    Thu Sep 21 05:32:51 BRT 2000 0.0.5
    * got rid of attach_uart401 and attach_sbmpu
      Arnaldo Carvalho de Melo <acme@conectiva.com.br>
+
+   Fri Nov 10 21:24:11 CET 2000 0.0.6
+   * added some __init and __initdata to entries in 724hwmcode.h
+     Bartlomiej Zolnierkiewicz <bkz@linux-ide.org>
  */
 
 #include <linux/module.h>
@@ -220,7 +224,7 @@
 
 #define PFX		"ymf_sb: "
 
-#define YMFSB_VERSION	"0.0.5"
+#define YMFSB_VERSION	"0.0.6"
 #define YMFSB_CARD_NAME	"YMF7xx Legacy Audio driver " YMFSB_VERSION
 
 #ifdef SUPPORT_UART401_MIDI
@@ -338,7 +342,7 @@ static int writeAc97( int adr, unsigned short val )
 	return 0;
 }
 
-static int checkCodec( struct pci_dev *pcidev )
+static int __init checkCodec( struct pci_dev *pcidev )
 {
 	u8 tmp8;
 
@@ -357,7 +361,7 @@ static int checkCodec( struct pci_dev *pcidev )
 	return 0;
 }
 
-static int setupLegacyIO( struct pci_dev *pcidev )
+static int __init setupLegacyIO( struct pci_dev *pcidev )
 {
 	int v;
 	int sbio=0,mpuio=0,oplio=0,dma=0;
@@ -500,7 +504,7 @@ static void disableDSP( void )
 	return;
 }
 
-static int setupInstruction( struct pci_dev *pcidev )
+static int __init setupInstruction( struct pci_dev *pcidev )
 {
 	int i;
 	int val;

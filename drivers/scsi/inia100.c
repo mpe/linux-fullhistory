@@ -363,6 +363,7 @@ int inia100_detect(Scsi_Host_Template * tpnt)
 		sz = orc_num_scb * sizeof(ESCB);
 		if ((pHCB->HCS_virEscbArray = (PVOID) kmalloc(sz, GFP_ATOMIC | GFP_DMA)) == NULL) {
 			printk("inia100: ESCB memory allocation error\n");
+			/* ?? does pHCB->HCS_virtScbArray leak ??*/
 			return (0);
 		}
 		memset((unsigned char *) pHCB->HCS_virEscbArray, 0, sz);
@@ -383,7 +384,8 @@ int inia100_detect(Scsi_Host_Template * tpnt)
 
 		hreg = scsi_register(tpnt, sizeof(ORC_HCS));
 		if (hreg == NULL) {
-			printk("Invalid scsi_register pointer.\n");
+			release_region(pHCB->HCS_Base, 256);	/* Register */
+			return 0;
 		}
 		hreg->io_port = pHCB->HCS_Base;
 		hreg->n_io_port = 0xff;

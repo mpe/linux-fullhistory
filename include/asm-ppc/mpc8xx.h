@@ -5,6 +5,7 @@
  * file that has to include MPC8xx configuration, they all include
  * this one and the configuration switching is done here.
  */
+#ifdef __KERNEL__
 #ifndef __CONFIG_8xx_DEFS
 #define __CONFIG_8xx_DEFS
 
@@ -79,3 +80,4 @@ extern int request_8xxirq(unsigned int irq,
 		       void *dev_id);
 #endif /* CONFIG_8xx */
 #endif
+#endif /* __KERNEL__ */

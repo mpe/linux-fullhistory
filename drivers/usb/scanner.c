@@ -244,6 +244,82 @@
  */ 
 #include "scanner.h"
 
+/* Table of scanners that may work with this driver */
+static struct usb_device_id scanner_device_ids [] = {
+	/* Acer */
+    { idVendor: 0x04a5, idProduct: 0x2060 },/* Prisa Acerscan 620U & 640U (!)*/
+    { idVendor: 0x04a5, idProduct: 0x2040 },/* Prisa AcerScan 620U (!) */
+    { idVendor: 0x04a5, idProduct: 0x2022 },/* Vuego Scan Brisa 340U */
+	/* Agfa */
+    { idVendor: 0x06bd, idProduct: 0x0001 },	/* SnapScan 1212U */
+    { idVendor: 0x06bd, idProduct: 0x2061 },	/* Another SnapScan 1212U (?)*/
+    { idVendor: 0x06bd, idProduct: 0x0100 },	/* SnapScan Touch */
+	/* Colorado -- See Primax/Colorado below */
+	/* Epson -- See Seiko/Epson below */
+	/* Genius */
+    { idVendor: 0x0458, idProduct: 0x2001 },	/* ColorPage-Vivid Pro */
+	/* Hewlett Packard */
+    { idVendor: 0x03f0, idProduct: 0x0205 },	/* 3300C */
+    { idVendor: 0x03f0, idProduct: 0x0101 },	/* 4100C */
+    { idVendor: 0x03f0, idProduct: 0x0105 },	/* 4200C */
+    { idVendor: 0x03f0, idProduct: 0x0102 },	/* PhotoSmart S20 */
+    { idVendor: 0x03f0, idProduct: 0x0401 },	/* 5200C */
+    { idVendor: 0x03f0, idProduct: 0x0701 },	/* 5300C */
+    { idVendor: 0x03f0, idProduct: 0x0201 },	/* 6200C */
+    { idVendor: 0x03f0, idProduct: 0x0601 },	/* 6300C */
+	/* iVina */
+    { idVendor: 0x0638, idProduct: 0x0268 },     /* 1200U */
+	/* Microtek */
+    { idVendor: 0x05da, idProduct: 0x0099 },	/* ScanMaker X6 - X6U */
+    { idVendor: 0x05da, idProduct: 0x0094 },	/* Phantom 336CX - C3 */
+    { idVendor: 0x05da, idProduct: 0x00a0 },	/* Phantom 336CX - C3 #2 */
+    { idVendor: 0x05da, idProduct: 0x009a },	/* Phantom C6 */
+    { idVendor: 0x05da, idProduct: 0x00a3 },	/* ScanMaker V6USL */
+    { idVendor: 0x05da, idProduct: 0x80a3 },	/* ScanMaker V6USL #2 */
+    { idVendor: 0x05da, idProduct: 0x80ac },	/* ScanMaker V6UL - SpicyU */
+	/* Mustek */
+    { idVendor: 0x055f, idProduct: 0x0001 },	/* 1200 CU */
+    { idVendor: 0x0400, idProduct: 0x1000 },	/* BearPaw 1200 */
+    { idVendor: 0x055f, idProduct: 0x0002 },	/* 600 CU */
+    { idVendor: 0x055f, idProduct: 0x0003 },	/* 1200 USB */
+    { idVendor: 0x055f, idProduct: 0x0006 },	/* 1200 UB */
+	/* Primax/Colorado */
+    { idVendor: 0x0461, idProduct: 0x0300 },	/* G2-300 #1 */
+    { idVendor: 0x0461, idProduct: 0x0380 },	/* G2-600 #1 */
+    { idVendor: 0x0461, idProduct: 0x0301 },	/* G2E-300 #1 */
+    { idVendor: 0x0461, idProduct: 0x0381 },	/* ReadyScan 636i */
+    { idVendor: 0x0461, idProduct: 0x0302 },	/* G2-300 #2 */
+    { idVendor: 0x0461, idProduct: 0x0382 },	/* G2-600 #2 */
+    { idVendor: 0x0461, idProduct: 0x0303 },	/* G2E-300 #2 */
+    { idVendor: 0x0461, idProduct: 0x0383 },	/* G2E-600 */
+    { idVendor: 0x0461, idProduct: 0x0340 },	/* Colorado USB 9600 */
+    { idVendor: 0x0461, idProduct: 0x0360 },	/* Colorado USB 19200 */
+    { idVendor: 0x0461, idProduct: 0x0341 },	/* Colorado 600u */
+    { idVendor: 0x0461, idProduct: 0x0361 },	/* Colorado 1200u */
+	/* Seiko/Epson Corp. */
+    { idVendor: 0x04b8, idProduct: 0x0101 },/* Perfection 636U and 636Photo */
+    { idVendor: 0x04b8, idProduct: 0x0103 },/* Perfection 610 */
+    { idVendor: 0x04b8, idProduct: 0x0104 },/* Perfection 1200U and 1200Photo*/
+    { idVendor: 0x04b8, idProduct: 0x0107 },/* Expression 1600 */
+	/* Umax */
+    { idVendor: 0x1606, idProduct: 0x0010 },	/* Astra 1220U */
+    { idVendor: 0x1606, idProduct: 0x0002 },	/* Astra 1236U */
+    { idVendor: 0x1606, idProduct: 0x0030 },	/* Astra 2000U */
+    { idVendor: 0x1606, idProduct: 0x0230 },	/* Astra 2200U */
+	/* Visioneer */
+    { idVendor: 0x04a7, idProduct: 0x0221 },	/* OneTouch 5300 USB */
+    { idVendor: 0x04a7, idProduct: 0x0211 },	/* OneTouch 7600 USB */
+    { idVendor: 0x04a7, idProduct: 0x0231 },	/* 6100 USB */
+    { idVendor: 0x04a7, idProduct: 0x0311 },	/* 6200 EPP/USB */
+    { idVendor: 0x04a7, idProduct: 0x0321 },	/* OneTouch 8100 EPP/USB */
+    { idVendor: 0x04a7, idProduct: 0x0331 }, 	/* OneTouch 8600 EPP/USB */
+
+    { }						/* Terminating entry */
+};
+
+MODULE_DEVICE_TABLE (usb, scanner_device_ids);
+
+
 static void
 irq_scanner(struct urb *urb)
 {
@@ -548,7 +624,8 @@ read_scanner(struct file * file, char * buffer,
 }
 
 static void *
-probe_scanner(struct usb_device *dev, unsigned int ifnum)
+probe_scanner(struct usb_device *dev, unsigned int ifnum,
+	      const struct usb_device_id *id)
 {
 	struct scn_usb_data *scn;
 	struct usb_interface_descriptor *interface;
@@ -591,7 +668,7 @@ probe_scanner(struct usb_device *dev, unsigned int ifnum)
  * Until we detect a device which is pleasing, we silently punt.
  */
 
-	for (ix = 0; ix < sizeof (scanner_device_ids) / sizeof (struct scanner_device); ix++) {
+	for (ix = 0; ix < sizeof (scanner_device_ids) / sizeof (struct usb_device_id); ix++) {
 		if ((dev->descriptor.idVendor == scanner_device_ids [ix].idVendor) &&
 		    (dev->descriptor.idProduct == scanner_device_ids [ix].idProduct)) {
 			valid_device = 1;
@@ -875,12 +952,14 @@ file_operations usb_scanner_fops = {
 
 static struct
 usb_driver scanner_driver = {
-       "usbscanner",
-       probe_scanner,
-       disconnect_scanner,
-       { NULL, NULL },
-       &usb_scanner_fops,
-       SCN_BASE_MNR
+	name:		"usbscanner",
+	probe:		probe_scanner,
+	disconnect:	disconnect_scanner,
+	fops:		&usb_scanner_fops,
+	minor:		SCN_BASE_MNR,
+	id_table:	NULL, /* This would be scanner_device_ids, but we
+				 need to check every USB device, in case
+				 we match a user defined vendor/product ID. */
 };
 
 void __exit

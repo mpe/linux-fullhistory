@@ -1,3 +1,4 @@
+#ifdef __KERNEL__
 #ifndef __ASM_HARDIRQ_H
 #define __ASM_HARDIRQ_H
 
@@ -99,3 +100,4 @@ extern void synchronize_irq(void);
 #endif /* CONFIG_SMP */
 
 #endif /* __ASM_HARDIRQ_H */
+#endif /* __KERNEL__ */

@@ -200,12 +200,12 @@ static int ne2_procinfo(char *buf, int slot, struct net_device *dev)
 
 static int __init ne2_probe1(struct net_device *dev, int slot)
 {
-	int i, base_addr, irq;
+	int i, base_addr, irq, retval;
 	unsigned char POS;
 	unsigned char SA_prom[32];
 	const char *name = "NE/2";
 	int start_page, stop_page;
-	static unsigned version_printed = 0;
+	static unsigned version_printed;
 
 	if (ei_debug && version_printed++ == 0)
 		printk(version);
@@ -226,6 +226,9 @@ static int __init ne2_probe1(struct net_device *dev, int slot)
 	base_addr = addresses[i - 1];
 	irq = irqs[(POS & 0x60)>>5];
 
+	if (!request_region(base_addr, NE_IO_EXTENT, dev->name))
+		return -EBUSY;
+
 #ifdef DEBUG
 	printk("POS info : pos 2 = %#x ; base = %#x ; irq = %ld\n", POS,
 			base_addr, irq);
@@ -239,7 +242,8 @@ static int __init ne2_probe1(struct net_device *dev, int slot)
 	outb(0x21, base_addr + NE_CMD);
 	if (inb(base_addr + NE_CMD) != 0x21) {
 		printk("NE/2 adapter not responding\n");
-		return -ENODEV;
+		retval = -ENODEV;
+		goto out;
 	}
 
 	/* In the crynwr sources they do a RAM-test here. I skip it. I suppose
@@ -260,7 +264,8 @@ static int __init ne2_probe1(struct net_device *dev, int slot)
 		while ((inb_p(base_addr + EN0_ISR) & ENISR_RESET) == 0)
 			if (jiffies - reset_start_time > 2*HZ/100) {
 				printk(" not found (no reset ack).\n");
-				return -ENODEV;
+				retval = -ENODEV;
+				goto out;
 			}
 
 		outb_p(0xff, base_addr + EN0_ISR);         /* Ack all intr. */
@@ -309,14 +314,11 @@ static int __init ne2_probe1(struct net_device *dev, int slot)
 
 	/* Snarf the interrupt now.  There's no point in waiting since we cannot
 	   share and the board will usually be enabled. */
-	{
-		int irqval = request_irq(dev->irq, ei_interrupt, 
-				0, name, dev);
-		if (irqval) {
-			printk (" unable to get IRQ %d (irqval=%d).\n", 
-					dev->irq, +irqval);
-			return -EAGAIN;
-		}
+	retval = request_irq(dev->irq, ei_interrupt, 0, dev->name, dev);
+	if (retval) {
+		printk (" unable to get IRQ %d (irqval=%d).\n", 
+				dev->irq, retval);
+		goto out;
 	}
 
 	dev->base_addr = base_addr;
@@ -325,10 +327,9 @@ static int __init ne2_probe1(struct net_device *dev, int slot)
 	if (ethdev_init(dev)) {
 		printk (" unable to get memory for dev->priv.\n");
 		free_irq(dev->irq, dev);
-		return -ENOMEM;
+		retval = -ENOMEM;
+		goto out;
 	}
-
-	request_region(base_addr, NE_IO_EXTENT, name);
 
 	for(i = 0; i < ETHER_ADDR_LEN; i++) {
 		printk(" %2.2x", SA_prom[i]);
@@ -362,6 +363,9 @@ static int __init ne2_probe1(struct net_device *dev, int slot)
 	dev->stop = &ne_close;
 	NS8390_init(dev, 0);
 	return 0;
+out:
+	release_region(base_addr, NE_IO_EXTENT);
+	return retval;
 }
 
 static int ne_open(struct net_device *dev)

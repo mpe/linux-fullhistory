@@ -14,6 +14,8 @@
  *		Alan Cox		General clean up, use kernel IRQ 
  *					system
  *		Christoph Hellwig	Adapted to module_init/module_exit
+ *		Bartlomiej Zolnierkiewicz
+ *					Added __init to download_code()
  *
  *	Status:
  *		Andrew J. Kroll		Tested 06/01/1999 with:
@@ -104,7 +106,7 @@ static void mauiintr(int irq, void *dev_id, struct pt_regs *dummy)
 	irq_ok = 1;
 }
 
-static int download_code(void)
+static int __init download_code(void)
 {
 	int i, lines = 0;
 	int eol_seen = 0, done = 0;

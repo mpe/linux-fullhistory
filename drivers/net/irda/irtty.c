@@ -176,7 +176,7 @@ static int irtty_open(struct tty_struct *tty)
 		MINOR(tty->device) - tty->driver.minor_start +
 		tty->driver.name_base);
 
-	hashbin_insert(irtty, (queue_t *) self, (int) self, NULL);
+	hashbin_insert(irtty, (irda_queue_t *) self, (int) self, NULL);
 
 	if (tty->driver.flush_buffer)
 		tty->driver.flush_buffer(tty);
@@ -233,8 +233,6 @@ static int irtty_open(struct tty_struct *tty)
 		ERROR(__FUNCTION__ "(), dev_alloc() failed!\n");
 		return -ENOMEM;
 	}
-	/* dev_alloc doesn't clear the struct */
-	memset(((__u8*)dev)+sizeof(char*),0,sizeof(struct net_device)-sizeof(char*));
 
 	dev->priv = (void *) self;
 	self->netdev = dev;
@@ -640,8 +638,16 @@ static int irtty_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 	netif_stop_queue(dev);
 	
 	/* Check if we need to change the speed */
-	if ((speed = irda_get_speed(skb)) != self->io.speed)
-		self->new_speed = speed;
+	if ((speed = irda_get_speed(skb)) != self->io.speed) {
+		/* Check for empty frame */
+		if (!skb->len) {
+			irda_task_execute(self, irtty_change_speed, 
+					  irtty_change_speed_complete, 
+					  NULL, (void *) speed);
+			return 0;
+		} else
+			self->new_speed = speed;
+	}
 
 	/* Init tx buffer*/
 	self->tx_buff.data = self->tx_buff.head;
@@ -1029,6 +1035,7 @@ MODULE_AUTHOR("Dag Brattli <dagb@cs.uit.no>");
 MODULE_DESCRIPTION("IrDA TTY device driver");
 
 MODULE_PARM(qos_mtt_bits, "i");
+MODULE_PARM_DESC(qos_mtt_bits, "Minimum Turn Time");
 
 /*
  * Function init_module (void)

@@ -629,8 +629,16 @@ int irport_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 	netif_stop_queue(dev);
 	
 	/* Check if we need to change the speed */
-	if ((speed = irda_get_speed(skb)) != self->io.speed)
-		self->new_speed = speed;
+	if ((speed = irda_get_speed(skb)) != self->io.speed) {
+		/* Check for empty frame */
+		if (!skb->len) {
+			irda_task_execute(self, __irport_change_speed, 
+					  irport_change_speed_complete, 
+					  NULL, (void *) speed);
+			return 0;
+		} else
+			self->new_speed = speed;
+	}
 
 	spin_lock_irqsave(&self->lock, flags);
 
@@ -999,7 +1007,9 @@ static struct net_device_stats *irport_net_get_stats(struct net_device *dev)
 
 #ifdef MODULE
 MODULE_PARM(io, "1-4i");
+MODULE_PARM_DESC(io, "Base I/O adresses");
 MODULE_PARM(irq, "1-4i");
+MODULE_PARM_DESC(irq, "IRQ lines");
 
 MODULE_AUTHOR("Dag Brattli <dagb@cs.uit.no>");
 MODULE_DESCRIPTION("Half duplex serial driver for IrDA SIR mode");

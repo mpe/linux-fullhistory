@@ -1,6 +1,8 @@
 #ifndef _PPC_STRING_H_
 #define _PPC_STRING_H_
 
+#ifdef __KERNEL__
+
 #define __HAVE_ARCH_STRCPY
 #define __HAVE_ARCH_STRNCPY
 #define __HAVE_ARCH_STRLEN
@@ -25,5 +27,7 @@ extern void * memcpy(void *,const void *,__kernel_size_t);
 extern void * memmove(void *,const void *,__kernel_size_t);
 extern int memcmp(const void *,const void *,__kernel_size_t);
 extern void * memchr(const void *,int,__kernel_size_t);
+
+#endif /* __KERNEL__ */
 
 #endif

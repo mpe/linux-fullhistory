@@ -10,6 +10,7 @@
  *
  */
 
+#ifdef __KERNEL__
 #ifndef __BOARD_H__
 #define	__BOARD_H__
 
@@ -40,3 +41,4 @@ extern unsigned char __res[];
 #endif
 
 #endif /* __BOARD_H__ */
+#endif /* __KERNEL__ */

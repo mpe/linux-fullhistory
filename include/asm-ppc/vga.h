@@ -4,6 +4,7 @@
  *	(c) 1998 Martin Mares <mj@ucw.cz>
  */
 
+#ifdef __KERNEL__
 #ifndef _LINUX_ASM_VGA_H_
 #define _LINUX_ASM_VGA_H_
 
@@ -42,3 +43,4 @@ extern unsigned long vgacon_remap_base;
 #define vga_writeb(x,y) (*(y) = (x))
 
 #endif
+#endif /* __KERNEL__ */

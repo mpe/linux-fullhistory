@@ -220,7 +220,11 @@ static inline void clear_in_cr4 (unsigned long mask)
 /*
  * Bus types (default is ISA, but people can check others with these..)
  */
+#ifdef CONFIG_EISA
 extern int EISA_bus;
+#else
+#define EISA_bus (0)
+#endif
 extern int MCA_bus;
 
 /* from system description table in BIOS.  Mostly for MCA use, but

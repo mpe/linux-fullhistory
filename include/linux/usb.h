@@ -350,7 +350,11 @@ struct usb_device_id {
 struct usb_driver {
 	const char *name;
 
-	void * (*probe)(struct usb_device *, unsigned int);
+	void *(*probe)(
+	    struct usb_device *dev,		/* the device */
+	    unsigned intf,			/* what interface */
+	    const struct usb_device_id *id	/* from id_table */
+	    );
 	void (*disconnect)(struct usb_device *, void *);
 
 	struct list_head driver_list;
@@ -367,11 +371,6 @@ struct usb_driver {
 	 * binding policy can be driven from user mode too
 	 */
 	const struct usb_device_id *id_table;
-	void *(*bind)(
-	    struct usb_device *dev,		/* the device */
-	    unsigned intf,			/* what interface */
-	    const struct usb_device_id *id	/* from id_table */
-	    );
 
 	/* suspend before the bus suspends;
 	 * disconnect or resume when the bus resumes */
@@ -601,6 +600,9 @@ extern void usb_scan_devices(void);
 extern void usb_driver_claim_interface(struct usb_driver *driver, struct usb_interface *iface, void* priv);
 extern int usb_interface_claimed(struct usb_interface *iface);
 extern void usb_driver_release_interface(struct usb_driver *driver, struct usb_interface *iface);
+const struct usb_device_id *usb_match_id(struct usb_device *dev,
+					 struct usb_interface *interface,
+					 const struct usb_device_id *id);
 
 extern struct usb_bus *usb_alloc_bus(struct usb_operations *);
 extern void usb_free_bus(struct usb_bus *);

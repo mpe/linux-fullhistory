@@ -45,7 +45,7 @@ struct irtty_info {
 #define IRTTY_IOC_MAXNR   2
 
 struct irtty_cb {
-	queue_t q;     /* Must be first */
+	irda_queue_t q;     /* Must be first */
 	magic_t magic;
 
 	struct net_device *netdev; /* Yes! we are some kind of netdevice */

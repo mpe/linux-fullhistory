@@ -152,7 +152,7 @@ void down_read_failed(struct rw_semaphore *sem)
 	add_wait_queue_exclusive(&sem->wait, &wait);
 
 	do {
-		__set_task_state(tsk, TASK_UNINTERRUPTIBLE | TASK_EXCLUSIVE);
+		__set_task_state(tsk, TASK_UNINTERRUPTIBLE);
 		spin_unlock_irq(&sem->lock);
 		schedule();
 		spin_lock_irq(&sem->lock);
@@ -169,7 +169,7 @@ void down_write_failed(struct rw_semaphore *sem)
 	add_wait_queue_exclusive(&sem->wait, &wait);
 
 	do {
-		__set_task_state(tsk, TASK_UNINTERRUPTIBLE | TASK_EXCLUSIVE);
+		__set_task_state(tsk, TASK_UNINTERRUPTIBLE);
 		spin_unlock_irq(&sem->lock);
 		schedule();
 		spin_lock_irq(&sem->lock);

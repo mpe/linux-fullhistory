@@ -1,6 +1,7 @@
 /*
  * Machine dependent access functions for RTC registers.
  */
+#ifdef __KERNEL__
 #ifndef __ASM_PPC_MC146818RTC_H
 #define __ASM_PPC_MC146818RTC_H
 
@@ -27,3 +28,4 @@ outb_p((val),RTC_PORT(1)); \
 #define RTC_IRQ 8
 
 #endif /* __ASM_PPC_MC146818RTC_H */
+#endif /* __KERNEL__ */

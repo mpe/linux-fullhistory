@@ -2691,16 +2691,23 @@ static /*const*/ struct file_operations usb_audio_fops = {
 
 /* --------------------------------------------------------------------- */
 
-static void * usb_audio_probe(struct usb_device *dev, unsigned int ifnum);
+static void * usb_audio_probe(struct usb_device *dev, unsigned int ifnum,
+			      const struct usb_device_id *id);
 static void usb_audio_disconnect(struct usb_device *dev, void *ptr);
 
+static struct usb_device_id usb_audio_ids [] = {
+    { bInterfaceClass: USB_CLASS_AUDIO, bInterfaceSubClass: 1},
+    { }						/* Terminating entry */
+};
+
+MODULE_DEVICE_TABLE (usb, usb_audio_ids);
+
 static struct usb_driver usb_audio_driver = {
-	"audio",
-	usb_audio_probe,
-	usb_audio_disconnect,
-	LIST_HEAD_INIT(usb_audio_driver.driver_list), 
-	NULL,
-	0
+	name:		"audio",
+	probe:		usb_audio_probe,
+	disconnect:	usb_audio_disconnect,
+	driver_list:	LIST_HEAD_INIT(usb_audio_driver.driver_list), 
+	id_table:	usb_audio_ids,
 };
 
 static void *find_descriptor(void *descstart, unsigned int desclen, void *after, 
@@ -3640,7 +3647,8 @@ ret:
 
 /* we only care for the currently active configuration */
 
-static void *usb_audio_probe(struct usb_device *dev, unsigned int ifnum)
+static void *usb_audio_probe(struct usb_device *dev, unsigned int ifnum,
+			     const struct usb_device_id *id)
 {
 	struct usb_config_descriptor *config = dev->actconfig;	
 	unsigned char *buffer;
@@ -3653,25 +3661,13 @@ static void *usb_audio_probe(struct usb_device *dev, unsigned int ifnum)
 	       config->interface[ifnum].altsetting[0].bInterfaceClass,
 	       config->interface[ifnum].altsetting[0].bInterfaceSubClass);
 #endif
-	if (config->interface[ifnum].altsetting[0].bInterfaceClass != USB_CLASS_AUDIO ||
-	    config->interface[ifnum].altsetting[0].bInterfaceSubClass != 1) {
-#if 0
-		printk(KERN_DEBUG "usbaudio: vendor id 0x%04x, product id 0x%04x contains no AudioControl interface\n",
-		       dev->descriptor.idVendor, dev->descriptor.idProduct);
-#endif
-		return NULL;
-	}
+
 	/*
 	 * audiocontrol interface found
 	 * find which configuration number is active
 	 */
-	for (i = 0; i < dev->descriptor.bNumConfigurations; i++)
-		if (dev->config+i == config)
-			goto configfound;
-	printk(KERN_ERR "usbaudio: cannot find active configuration number of device %d\n", dev->devnum);
-	return NULL;
+	i = dev->actconfig - config;
 
- configfound:
 	if (usb_set_configuration(dev, config->bConfigurationValue) < 0) {
 		printk(KERN_ERR "usbaudio: set_configuration failed (ConfigValue 0x%x)\n", config->bConfigurationValue);
 		return NULL;

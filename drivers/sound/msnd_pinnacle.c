@@ -1404,7 +1404,7 @@ static int __init attach_multisound(void)
 }
 
 #ifdef MODULE
-static void unload_multisound(void)
+static void __exit unload_multisound(void)
 {
 	release_region(dev.io, dev.numio);
 	free_irq(dev.irq, &dev);

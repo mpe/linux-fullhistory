@@ -451,20 +451,14 @@ int __init eth16i_probe(struct net_device *dev)
 		return -ENXIO;
 
 	/* Seek card from the ISA io address space */
-	for(i = 0; (ioaddr = eth16i_portlist[i]) ; i++) {
-		if(check_region(ioaddr, ETH16I_IO_EXTENT))
-			continue;
+	for(i = 0; (ioaddr = eth16i_portlist[i]) ; i++)
 		if(eth16i_probe1(dev, ioaddr) == 0)
 			return 0;
-	}
 
 	/* Seek card from the EISA io address space */
-	for(i = 0; (ioaddr = eth32i_portlist[i]) ; i++) {
-		if(check_region(ioaddr, ETH16I_IO_EXTENT))
-			continue;
+	for(i = 0; (ioaddr = eth32i_portlist[i]) ; i++)
 		if(eth16i_probe1(dev, ioaddr) == 0)
 			return 0;
-	}
 
 	return -ENODEV;
 }
@@ -472,9 +466,14 @@ int __init eth16i_probe(struct net_device *dev)
 static int __init eth16i_probe1(struct net_device *dev, int ioaddr)
 {
 	struct eth16i_local *lp;
-	
-	static unsigned version_printed = 0;
+	static unsigned version_printed;
+	int retval;
+
 	boot = 1;  /* To inform initilization that we are in boot probe */
+
+	/* Let's grab the region */
+	if (!request_region(ioaddr, ETH16I_IO_EXTENT, dev->name))
+		return -EBUSY;
 
 	/*
 	  The MB86985 chip has on register which holds information in which 
@@ -485,14 +484,18 @@ static int __init eth16i_probe1(struct net_device *dev, int ioaddr)
 
 	if(ioaddr < 0x1000) {
 		if(eth16i_portlist[(inb(ioaddr + JUMPERLESS_CONFIG) & 0x07)] 
-		   != ioaddr)
-			return -ENODEV;
+		   != ioaddr) {
+			retval = -ENODEV;
+			goto out;
+		}
 	}
 
 	/* Now we will go a bit deeper and try to find the chip's signature */
 
-	if(eth16i_check_signature(ioaddr) != 0) 
-		return -ENODEV;
+	if(eth16i_check_signature(ioaddr) != 0) {
+		retval = -ENODEV;
+		goto out;
+	}
 
 	/* 
 	   Now it seems that we have found a ethernet chip in this particular
@@ -516,17 +519,15 @@ static int __init eth16i_probe1(struct net_device *dev, int ioaddr)
 
 	/* Try to obtain interrupt vector */
 
-	if (request_irq(dev->irq, (void *)&eth16i_interrupt, 0, "eth16i", dev)) {	
+	if ((retval = request_irq(dev->irq, (void *)&eth16i_interrupt, 0, dev->name, dev))) {
 		printk(KERN_WARNING "%s: %s at %#3x, but is unusable due conflicting IRQ %d.\n", 
 		       dev->name, cardname, ioaddr, dev->irq);
-		return -EAGAIN;
+		goto out;
 	}
 
 	printk(KERN_INFO "%s: %s at %#3x, IRQ %d, ",
 	       dev->name, cardname, ioaddr, dev->irq);
 
-	/* Let's grab the region */
-	request_region(ioaddr, ETH16I_IO_EXTENT, "eth16i");
 
 	/* Now we will have to lock the chip's io address */
 	eth16i_select_regbank(TRANSCEIVER_MODE_RB, ioaddr);
@@ -540,8 +541,11 @@ static int __init eth16i_probe1(struct net_device *dev, int ioaddr)
 	/* Initialize the device structure */
 	if(dev->priv == NULL) {
 		dev->priv = kmalloc(sizeof(struct eth16i_local), GFP_KERNEL);
-		if(dev->priv == NULL)
-			return -ENOMEM;
+		if(dev->priv == NULL) {
+			free_irq(dev->irq, dev);
+			retval = -ENOMEM;
+			goto out;
+		}
 	}
 
 	memset(dev->priv, 0, sizeof(struct eth16i_local));
@@ -562,6 +566,9 @@ static int __init eth16i_probe1(struct net_device *dev, int ioaddr)
 	boot = 0;
 
 	return 0;
+out:
+	release_region(ioaddr, ETH16I_IO_EXTENT);
+	return retval;
 }
 
 

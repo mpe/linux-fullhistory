@@ -69,6 +69,7 @@ static void (*state[])(struct net_device *dev, struct net_device_stats *stats,
  */
 int async_wrap_skb(struct sk_buff *skb, __u8 *tx_buff, int buffsize)
 {
+	struct irda_skb_cb *cb = (struct irda_skb_cb *) skb->cb;
 	int xbofs;
  	int i;
 	int n;
@@ -85,7 +86,8 @@ int async_wrap_skb(struct sk_buff *skb, __u8 *tx_buff, int buffsize)
 	 *  Send  XBOF's for required min. turn time and for the negotiated
 	 *  additional XBOFS
 	 */
-	if (((struct irda_skb_cb *)(skb->cb))->magic != LAP_MAGIC) {
+	
+	if (cb->magic != LAP_MAGIC) {
 		/* 
 		 * This will happen for all frames sent from user-space.
 		 * Nothing to worry about, but we set the default number of 
@@ -94,7 +96,7 @@ int async_wrap_skb(struct sk_buff *skb, __u8 *tx_buff, int buffsize)
 		IRDA_DEBUG(1, __FUNCTION__ "(), wrong magic in skb!\n");
 		xbofs = 10;
 	} else
-		xbofs = ((struct irda_skb_cb *)(skb->cb))->xbofs;
+		xbofs = cb->xbofs + cb->xbofs_delay;
 
 	IRDA_DEBUG(4, __FUNCTION__ "(), xbofs=%d\n", xbofs);
 
@@ -287,6 +289,8 @@ static void state_link_escape(struct net_device *dev,
 {
 	switch (byte) {
 	case BOF: /* New frame? */
+		IRDA_DEBUG(1, __FUNCTION__ 
+			   "(), Discarding incomplete frame\n");
 		rx_buff->state = BEGIN_FRAME;
 		irda_device_set_media_busy(dev, TRUE);
 		break;
@@ -328,6 +332,8 @@ static void state_inside_frame(struct net_device *dev,
 
 	switch (byte) {
 	case BOF: /* New frame? */
+		IRDA_DEBUG(1, __FUNCTION__ 
+			   "(), Discarding incomplete frame\n");
 		rx_buff->state = BEGIN_FRAME;
 		irda_device_set_media_busy(dev, TRUE);
 		break;

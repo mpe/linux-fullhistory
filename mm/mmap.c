@@ -67,7 +67,7 @@ int vm_enough_memory(long pages)
 }
 
 /* Remove one vm structure from the inode's i_mapping address space. */
-static inline void remove_shared_vm_struct(struct vm_area_struct *vma)
+static inline void __remove_shared_vm_struct(struct vm_area_struct *vma)
 {
 	struct file * file = vma->vm_file;
 
@@ -75,12 +75,39 @@ static inline void remove_shared_vm_struct(struct vm_area_struct *vma)
 		struct inode *inode = file->f_dentry->d_inode;
 		if (vma->vm_flags & VM_DENYWRITE)
 			atomic_inc(&inode->i_writecount);
-		spin_lock(&inode->i_mapping->i_shared_lock);
 		if(vma->vm_next_share)
 			vma->vm_next_share->vm_pprev_share = vma->vm_pprev_share;
 		*vma->vm_pprev_share = vma->vm_next_share;
-		spin_unlock(&inode->i_mapping->i_shared_lock);
 	}
+}
+
+static inline void remove_shared_vm_struct(struct vm_area_struct *vma)
+{
+	lock_vma_mappings(vma);
+	__remove_shared_vm_struct(vma);
+	unlock_vma_mappings(vma);
+}
+
+void lock_vma_mappings(struct vm_area_struct *vma)
+{
+	struct address_space *mapping;
+
+	mapping = NULL;
+	if (vma->vm_file)
+		mapping = vma->vm_file->f_dentry->d_inode->i_mapping;
+	if (mapping)
+		spin_lock(&mapping->i_shared_lock);
+}
+
+void unlock_vma_mappings(struct vm_area_struct *vma)
+{
+	struct address_space *mapping;
+
+	mapping = NULL;
+	if (vma->vm_file)
+		mapping = vma->vm_file->f_dentry->d_inode->i_mapping;
+	if (mapping)
+		spin_unlock(&mapping->i_shared_lock);
 }
 
 /*
@@ -316,13 +343,22 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr, unsigned lon
 	 * after the call.  Save the values we need now ...
 	 */
 	flags = vma->vm_flags;
-	addr = vma->vm_start; /* can addr have changed?? */
+
+	/* Can addr have changed??
+	 *
+	 * Answer: Yes, several device drivers can do it in their
+	 *         f_op->mmap method. -DaveM
+	 */
+	addr = vma->vm_start;
+
+	lock_vma_mappings(vma);
 	spin_lock(&mm->page_table_lock);
-	insert_vm_struct(mm, vma);
+	__insert_vm_struct(mm, vma);
 	if (correct_wcount)
 		atomic_inc(&file->f_dentry->d_inode->i_writecount);
 	merge_segments(mm, vma->vm_start, vma->vm_end);
 	spin_unlock(&mm->page_table_lock);
+	unlock_vma_mappings(vma);
 	
 	mm->total_vm += len >> PAGE_SHIFT;
 	if (flags & VM_LOCKED) {
@@ -534,10 +570,12 @@ static struct vm_area_struct * unmap_fixup(struct mm_struct *mm,
 	/* Work out to one of the ends. */
 	if (end == area->vm_end) {
 		area->vm_end = addr;
+		lock_vma_mappings(area);
 		spin_lock(&mm->page_table_lock);
 	} else if (addr == area->vm_start) {
 		area->vm_pgoff += (end - area->vm_start) >> PAGE_SHIFT;
 		area->vm_start = end;
+		lock_vma_mappings(area);
 		spin_lock(&mm->page_table_lock);
 	} else {
 	/* Unmapping a hole: area->vm_start < addr <= end < area->vm_end */
@@ -560,12 +598,18 @@ static struct vm_area_struct * unmap_fixup(struct mm_struct *mm,
 		if (mpnt->vm_ops && mpnt->vm_ops->open)
 			mpnt->vm_ops->open(mpnt);
 		area->vm_end = addr;	/* Truncate area */
+
+		/* Because mpnt->vm_file == area->vm_file this locks
+		 * things correctly.
+		 */
+		lock_vma_mappings(area);
 		spin_lock(&mm->page_table_lock);
-		insert_vm_struct(mm, mpnt);
+		__insert_vm_struct(mm, mpnt);
 	}
 
-	insert_vm_struct(mm, area);
+	__insert_vm_struct(mm, area);
 	spin_unlock(&mm->page_table_lock);
+	unlock_vma_mappings(area);
 	return extra;
 }
 
@@ -811,10 +855,12 @@ unsigned long do_brk(unsigned long addr, unsigned long len)
 	flags = vma->vm_flags;
 	addr = vma->vm_start;
 
+	lock_vma_mappings(vma);
 	spin_lock(&mm->page_table_lock);
-	insert_vm_struct(mm, vma);
+	__insert_vm_struct(mm, vma);
 	merge_segments(mm, vma->vm_start, vma->vm_end);
 	spin_unlock(&mm->page_table_lock);
+	unlock_vma_mappings(vma);
 	
 	mm->total_vm += len >> PAGE_SHIFT;
 	if (flags & VM_LOCKED) {
@@ -877,9 +923,10 @@ void exit_mmap(struct mm_struct * mm)
 }
 
 /* Insert vm structure into process list sorted by address
- * and into the inode's i_mmap ring.
+ * and into the inode's i_mmap ring.  If vm_file is non-NULL
+ * then the i_shared_lock must be held here.
  */
-void insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vmp)
+void __insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vmp)
 {
 	struct vm_area_struct **pprev;
 	struct file * file;
@@ -916,13 +963,18 @@ void insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vmp)
 			head = &mapping->i_mmap_shared;
       
 		/* insert vmp into inode's share list */
-		spin_lock(&mapping->i_shared_lock);
 		if((vmp->vm_next_share = *head) != NULL)
 			(*head)->vm_pprev_share = &vmp->vm_next_share;
 		*head = vmp;
 		vmp->vm_pprev_share = head;
-		spin_unlock(&mapping->i_shared_lock);
 	}
+}
+
+void insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vmp)
+{
+	lock_vma_mappings(vmp);
+	__insert_vm_struct(mm, vmp);
+	unlock_vma_mappings(vmp);
 }
 
 /* Merge the list of memory segments if possible.
@@ -986,11 +1038,13 @@ void merge_segments (struct mm_struct * mm, unsigned long start_addr, unsigned l
 			mpnt->vm_pgoff += (mpnt->vm_end - mpnt->vm_start) >> PAGE_SHIFT;
 			mpnt->vm_start = mpnt->vm_end;
 			spin_unlock(&mm->page_table_lock);
+			unlock_vma_mappings(mpnt);
 			mpnt->vm_ops->close(mpnt);
+			lock_vma_mappings(mpnt);
 			spin_lock(&mm->page_table_lock);
 		}
 		mm->map_count--;
-		remove_shared_vm_struct(mpnt);
+		__remove_shared_vm_struct(mpnt);
 		if (mpnt->vm_file)
 			fput(mpnt->vm_file);
 		kmem_cache_free(vm_area_cachep, mpnt);

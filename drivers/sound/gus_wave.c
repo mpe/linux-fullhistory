@@ -14,6 +14,7 @@
  * Thomas Sailer    : ioctl code reworked (vmalloc/vfree removed)
  * Frank van de Pol : Fixed GUS MAX interrupt handling. Enabled simultanious
  *                    usage of CS4231A codec, GUS wave and MIDI for GUS MAX.
+ * Bartlomiej Zolnierkiewicz : added some __init/__exit
  */
  
  
@@ -853,7 +854,7 @@ static void gus_initialize(void)
 }
 
 
-static void pnp_mem_init(void)
+static void __init pnp_mem_init(void)
 {
 #include "iwmem.h"
 #define CHUNK_SIZE (256*1024)
@@ -1022,7 +1023,7 @@ static void pnp_mem_init(void)
 	gus_write8(0x19, (gus_read8(0x19) | 0x01) & ~0x02);
 }
 
-int gus_wave_detect(int baseaddr)
+int __init gus_wave_detect(int baseaddr)
 {
 	unsigned long   i, max_mem = 1024L;
 	unsigned long   loc;
@@ -2901,7 +2902,7 @@ static struct mixer_operations gus_mixer_operations =
 	ioctl:	gus_default_mixer_ioctl
 };
 
-static int gus_default_mixer_init(void)
+static int __init gus_default_mixer_init(void)
 {
 	int n;
 
@@ -2926,7 +2927,7 @@ static int gus_default_mixer_init(void)
 	return n;
 }
 
-void gus_wave_init(struct address_info *hw_config)
+void __init gus_wave_init(struct address_info *hw_config)
 {
 	unsigned long flags;
 	unsigned char val;
@@ -3167,7 +3168,7 @@ void gus_wave_init(struct address_info *hw_config)
 	}
 }
 
-void gus_wave_unload(struct address_info *hw_config)
+void __exit gus_wave_unload(struct address_info *hw_config)
 {
 #ifdef CONFIG_SOUND_GUSMAX
 	if (have_gus_max)

@@ -9,12 +9,20 @@
 CONFIG_EXPERIMENTAL=y
 
 #
+# Loadable module support
+#
+CONFIG_MODULES=y
+# CONFIG_MODVERSIONS is not set
+CONFIG_KMOD=y
+
+#
 # Platform support
 #
 CONFIG_PPC=y
 CONFIG_6xx=y
 # CONFIG_4xx is not set
-# CONFIG_PPC64 is not set
+# CONFIG_POWER3 is not set
+# CONFIG_POWER4 is not set
 # CONFIG_8260 is not set
 # CONFIG_8xx is not set
 # CONFIG_ALL_PPC is not set
@@ -26,15 +34,10 @@ CONFIG_ALTIVEC=y
 CONFIG_MACH_SPECIFIC=y
 
 #
-# Loadable module support
-#
-CONFIG_MODULES=y
-CONFIG_MODVERSIONS=y
-CONFIG_KMOD=y
-
-#
 # General setup
 #
+# CONFIG_HIGHMEM is not set
+# CONFIG_MOL is not set
 # CONFIG_ISA is not set
 # CONFIG_SBUS is not set
 CONFIG_PCI=y
@@ -46,6 +49,7 @@ CONFIG_KCORE_ELF=y
 CONFIG_BINFMT_ELF=y
 CONFIG_KERNEL_ELF=y
 # CONFIG_BINFMT_MISC is not set
+# CONFIG_PCI_NAMES is not set
 # CONFIG_HOTPLUG is not set
 # CONFIG_PCMCIA is not set
 
@@ -55,33 +59,47 @@ CONFIG_KERNEL_ELF=y
 # CONFIG_PARPORT is not set
 # CONFIG_VGA_CONSOLE is not set
 # CONFIG_FB is not set
-# CONFIG_PMAC_PBOOK is not set
-# CONFIG_MAC_FLOPPY is not set
-# CONFIG_MAC_SERIAL is not set
-# CONFIG_ADB is not set
+# CONFIG_PPC_RTC is not set
 # CONFIG_PROC_DEVICETREE is not set
 # CONFIG_BOOTX_TEXT is not set
 # CONFIG_MOTOROLA_HOTSWAP is not set
 
 #
+# Memory Technology Devices (MTD)
+#
+# CONFIG_MTD is not set
+
+#
 # Plug and Play configuration
 #
 # CONFIG_PNP is not set
+# CONFIG_ISAPNP is not set
 
 #
 # Block devices
 #
 # CONFIG_BLK_DEV_FD is not set
-
-#
-# Additional Block Devices
-#
+# CONFIG_BLK_DEV_XD is not set
+# CONFIG_PARIDE is not set
+# CONFIG_BLK_CPQ_DA is not set
+# CONFIG_BLK_CPQ_CISS_DA is not set
+# CONFIG_BLK_DEV_DAC960 is not set
 # CONFIG_BLK_DEV_LOOP is not set
 # CONFIG_BLK_DEV_NBD is not set
-# CONFIG_BLK_DEV_LVM is not set
-# CONFIG_BLK_DEV_MD is not set
-# CONFIG_RAID15_DANGEROUS is not set
 # CONFIG_BLK_DEV_RAM is not set
+# CONFIG_BLK_DEV_INITRD is not set
+
+#
+# Multi-device support (RAID and LVM)
+#
+# CONFIG_MD is not set
+# CONFIG_BLK_DEV_MD is not set
+# CONFIG_MD_LINEAR is not set
+# CONFIG_MD_RAID0 is not set
+# CONFIG_MD_RAID1 is not set
+# CONFIG_MD_RAID5 is not set
+# CONFIG_BLK_DEV_LVM is not set
+# CONFIG_LVM_PROC_FS is not set
 
 #
 # Networking options
@@ -98,17 +116,11 @@ CONFIG_INET=y
 CONFIG_IP_MULTICAST=y
 # CONFIG_IP_ADVANCED_ROUTER is not set
 # CONFIG_IP_PNP is not set
-# CONFIG_IP_ROUTER is not set
 # CONFIG_NET_IPIP is not set
 # CONFIG_NET_IPGRE is not set
 # CONFIG_IP_MROUTE is not set
-CONFIG_IP_ALIAS=y
+# CONFIG_INET_ECN is not set
 CONFIG_SYN_COOKIES=y
-
-#
-# (it is safe to leave these untouched)
-#
-CONFIG_SKB_LARGE=y
 # CONFIG_IPV6 is not set
 # CONFIG_KHTTPD is not set
 # CONFIG_ATM is not set
@@ -119,10 +131,11 @@ CONFIG_SKB_LARGE=y
 # CONFIG_IPX is not set
 # CONFIG_ATALK is not set
 # CONFIG_DECNET is not set
+# CONFIG_BRIDGE is not set
 # CONFIG_X25 is not set
 # CONFIG_LAPB is not set
-# CONFIG_BRIDGE is not set
 # CONFIG_LLC is not set
+# CONFIG_NET_DIVERT is not set
 # CONFIG_ECONET is not set
 # CONFIG_WAN_ROUTER is not set
 # CONFIG_NET_FASTROUTE is not set
@@ -167,6 +180,7 @@ CONFIG_SCSI_CONSTANTS=y
 #
 # SCSI low-level drivers
 #
+# CONFIG_BLK_DEV_3W_XXXX_RAID is not set
 # CONFIG_SCSI_7000FASST is not set
 # CONFIG_SCSI_ACARD is not set
 # CONFIG_SCSI_AHA152X is not set
@@ -178,6 +192,8 @@ CONFIG_SCSI_CONSTANTS=y
 # CONFIG_SCSI_AM53C974 is not set
 # CONFIG_SCSI_MEGARAID is not set
 # CONFIG_SCSI_BUSLOGIC is not set
+# CONFIG_SCSI_CPQFCTS is not set
+# CONFIG_SCSI_DMX3191D is not set
 # CONFIG_SCSI_DTC3280 is not set
 # CONFIG_SCSI_EATA is not set
 # CONFIG_SCSI_EATA_DMA is not set
@@ -185,22 +201,39 @@ CONFIG_SCSI_CONSTANTS=y
 # CONFIG_SCSI_FUTURE_DOMAIN is not set
 # CONFIG_SCSI_GDTH is not set
 # CONFIG_SCSI_GENERIC_NCR5380 is not set
+# CONFIG_SCSI_INITIO is not set
+# CONFIG_SCSI_INIA100 is not set
 # CONFIG_SCSI_NCR53C406A is not set
-# CONFIG_SCSI_SYM53C416 is not set
-# CONFIG_SCSI_SIM710 is not set
-# CONFIG_SCSI_NCR53C7xx_sync is not set
-# CONFIG_SCSI_NCR53C7xx_FAST is not set
-# CONFIG_SCSI_NCR53C7xx_DISCONNECT is not set
+# CONFIG_SCSI_NCR53C7xx is not set
+CONFIG_SCSI_NCR53C8XX=y
+# CONFIG_SCSI_SYM53C8XX is not set
+CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS=8
+CONFIG_SCSI_NCR53C8XX_MAX_TAGS=32
+CONFIG_SCSI_NCR53C8XX_SYNC=20
+# CONFIG_SCSI_NCR53C8XX_PROFILE is not set
+# CONFIG_SCSI_NCR53C8XX_IOMAPPED is not set
+# CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT is not set
 # CONFIG_SCSI_PAS16 is not set
 # CONFIG_SCSI_PCI2000 is not set
 # CONFIG_SCSI_PCI2220I is not set
 # CONFIG_SCSI_PSI240I is not set
 # CONFIG_SCSI_QLOGIC_FAS is not set
+# CONFIG_SCSI_QLOGIC_ISP is not set
+# CONFIG_SCSI_QLOGIC_FC is not set
+# CONFIG_SCSI_QLOGIC_1280 is not set
+# CONFIG_SCSI_SIM710 is not set
+# CONFIG_SCSI_SYM53C416 is not set
+# CONFIG_SCSI_DC390T is not set
 # CONFIG_SCSI_T128 is not set
 # CONFIG_SCSI_U14_34F is not set
 # CONFIG_SCSI_DEBUG is not set
 # CONFIG_SCSI_MESH is not set
 # CONFIG_SCSI_MAC53C94 is not set
+
+#
+# IEEE 1394 (FireWire) support
+#
+# CONFIG_IEEE1394 is not set
 
 #
 # Network device support
@@ -214,6 +247,7 @@ CONFIG_NETDEVICES=y
 # CONFIG_DUMMY is not set
 # CONFIG_BONDING is not set
 # CONFIG_EQUALIZER is not set
+# CONFIG_TUN is not set
 # CONFIG_ETHERTAP is not set
 # CONFIG_NET_SB1000 is not set
 
@@ -232,6 +266,7 @@ CONFIG_NCR885E=y
 # CONFIG_NET_VENDOR_RACAL is not set
 # CONFIG_AT1700 is not set
 # CONFIG_DEPCA is not set
+# CONFIG_HP100 is not set
 # CONFIG_NET_ISA is not set
 # CONFIG_NET_PCI is not set
 # CONFIG_NET_POCKET is not set
@@ -239,8 +274,9 @@ CONFIG_NCR885E=y
 #
 # Ethernet (1000 Mbit)
 #
-# CONFIG_YELLOWFIN is not set
 # CONFIG_ACENIC is not set
+# CONFIG_HAMACHI is not set
+# CONFIG_YELLOWFIN is not set
 # CONFIG_SK98LIN is not set
 # CONFIG_FDDI is not set
 # CONFIG_HIPPI is not set
@@ -295,6 +331,15 @@ CONFIG_NCR885E=y
 # CONFIG_FB is not set
 
 #
+# Input core support
+#
+# CONFIG_INPUT is not set
+
+#
+# Macintosh device drivers
+#
+
+#
 # Character devices
 #
 # CONFIG_VT is not set
@@ -320,19 +365,19 @@ CONFIG_UNIX98_PTY_COUNT=256
 # Joysticks
 #
 # CONFIG_JOYSTICK is not set
+
+#
+# Input core support is needed for joysticks
+#
 # CONFIG_QIC02_TAPE is not set
 
 #
 # Watchdog Cards
 #
 # CONFIG_WATCHDOG is not set
+# CONFIG_INTEL_RNG is not set
 # CONFIG_NVRAM is not set
 # CONFIG_RTC is not set
-
-#
-# Video For Linux
-#
-# CONFIG_VIDEO_DEV is not set
 # CONFIG_DTLK is not set
 # CONFIG_R3964 is not set
 # CONFIG_APPLICOM is not set
@@ -341,8 +386,13 @@ CONFIG_UNIX98_PTY_COUNT=256
 # Ftape, the floppy tape device driver
 #
 # CONFIG_FTAPE is not set
-# CONFIG_DRM is not set
 # CONFIG_AGP is not set
+# CONFIG_DRM is not set
+
+#
+# Multimedia devices
+#
+# CONFIG_VIDEO_DEV is not set
 
 #
 # File systems
@@ -351,27 +401,39 @@ CONFIG_UNIX98_PTY_COUNT=256
 # CONFIG_AUTOFS_FS is not set
 # CONFIG_AUTOFS4_FS is not set
 # CONFIG_ADFS_FS is not set
+# CONFIG_ADFS_FS_RW is not set
 # CONFIG_AFFS_FS is not set
 # CONFIG_HFS_FS is not set
 # CONFIG_BFS_FS is not set
 # CONFIG_FAT_FS is not set
+# CONFIG_MSDOS_FS is not set
+# CONFIG_UMSDOS_FS is not set
+# CONFIG_VFAT_FS is not set
 # CONFIG_EFS_FS is not set
+# CONFIG_JFFS_FS is not set
 # CONFIG_CRAMFS is not set
 # CONFIG_RAMFS is not set
 CONFIG_ISO9660_FS=y
 # CONFIG_JOLIET is not set
 # CONFIG_MINIX_FS is not set
 # CONFIG_NTFS_FS is not set
+# CONFIG_NTFS_RW is not set
 # CONFIG_HPFS_FS is not set
 CONFIG_PROC_FS=y
 # CONFIG_DEVFS_FS is not set
+# CONFIG_DEVFS_MOUNT is not set
+# CONFIG_DEVFS_DEBUG is not set
 CONFIG_DEVPTS_FS=y
 # CONFIG_QNX4FS_FS is not set
+# CONFIG_QNX4FS_RW is not set
 # CONFIG_ROMFS_FS is not set
 CONFIG_EXT2_FS=y
 # CONFIG_SYSV_FS is not set
+# CONFIG_SYSV_FS_WRITE is not set
 # CONFIG_UDF_FS is not set
+# CONFIG_UDF_RW is not set
 # CONFIG_UFS_FS is not set
+# CONFIG_UFS_FS_WRITE is not set
 
 #
 # Network File Systems
@@ -379,11 +441,23 @@ CONFIG_EXT2_FS=y
 # CONFIG_CODA_FS is not set
 CONFIG_NFS_FS=y
 # CONFIG_NFS_V3 is not set
+# CONFIG_ROOT_NFS is not set
 # CONFIG_NFSD is not set
+# CONFIG_NFSD_V3 is not set
 CONFIG_SUNRPC=y
 CONFIG_LOCKD=y
 # CONFIG_SMB_FS is not set
 # CONFIG_NCP_FS is not set
+# CONFIG_NCPFS_PACKET_SIGNING is not set
+# CONFIG_NCPFS_IOCTL_LOCKING is not set
+# CONFIG_NCPFS_STRONG is not set
+# CONFIG_NCPFS_NFS_NS is not set
+# CONFIG_NCPFS_OS2_NS is not set
+# CONFIG_NCPFS_SMALLDOS is not set
+# CONFIG_NCPFS_MOUNT_SUBDIR is not set
+# CONFIG_NCPFS_NDS_DOMAINS is not set
+# CONFIG_NCPFS_NLS is not set
+# CONFIG_NCPFS_EXTRAS is not set
 
 #
 # Partition Types

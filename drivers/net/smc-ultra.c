@@ -112,41 +112,44 @@ int __init ultra_probe(struct net_device *dev)
 	else if (base_addr != 0)	/* Don't probe at all. */
 		return -ENXIO;
 
-	for (i = 0; ultra_portlist[i]; i++) {
-		int ioaddr = ultra_portlist[i];
-		if (check_region(ioaddr, ULTRA_IO_EXTENT))
-			continue;
-		if (ultra_probe1(dev, ioaddr) == 0)
+	for (i = 0; ultra_portlist[i]; i++)
+		if (ultra_probe1(dev, ultra_portlist[i]) == 0)
 			return 0;
-	}
 
 	return -ENODEV;
 }
 
 static int __init ultra_probe1(struct net_device *dev, int ioaddr)
 {
-	int i;
+	int i, retval;
 	int checksum = 0;
 	const char *model_name;
 	unsigned char eeprom_irq = 0;
-	static unsigned version_printed = 0;
+	static unsigned version_printed;
 	/* Values from various config regs. */
 	unsigned char num_pages, irqreg, addr, piomode;
 	unsigned char idreg = inb(ioaddr + 7);
 	unsigned char reg4 = inb(ioaddr + 4) & 0x7f;
 
+	if (!request_region(ioaddr, ULTRA_IO_EXTENT, dev->name))
+		return -EBUSY;
+
 	/* Check the ID nibble. */
 	if ((idreg & 0xF0) != 0x20 			/* SMC Ultra */
-		&& (idreg & 0xF0) != 0x40) 		/* SMC EtherEZ */
-		return -ENODEV;
+		&& (idreg & 0xF0) != 0x40) {		/* SMC EtherEZ */
+		retval = -ENODEV;
+		goto out;
+	}
 
 	/* Select the station address register set. */
 	outb(reg4, ioaddr + 4);
 
 	for (i = 0; i < 8; i++)
 		checksum += inb(ioaddr + 8 + i);
-	if ((checksum & 0xff) != 0xFF)
-		return -ENODEV;
+	if ((checksum & 0xff) != 0xFF) {
+		retval = -ENODEV;
+		goto out;
+	}
 
 	if (ei_debug  &&  version_printed++ == 0)
 		printk(version);
@@ -181,7 +184,8 @@ static int __init ultra_probe1(struct net_device *dev, int ioaddr)
 
 		if (irq == 0) {
 			printk(", failed to detect IRQ line.\n");
-			return -EAGAIN;
+			retval =  -EAGAIN;
+			goto out;
 		}
 		dev->irq = irq;
 		eeprom_irq = 1;
@@ -190,11 +194,9 @@ static int __init ultra_probe1(struct net_device *dev, int ioaddr)
 	/* Allocate dev->priv and fill in 8390 specific dev fields. */
 	if (ethdev_init(dev)) {
 		printk (", no memory for dev->priv.\n");
-                return -ENOMEM;
+                retval = -ENOMEM;
+		goto out;
         }
-
-	/* OK, we are certain this is going to work.  Setup the device. */
-	request_region(ioaddr, ULTRA_IO_EXTENT, model_name);
 
 	/* The 8390 isn't at the base address, so fake the offset */
 	dev->base_addr = ioaddr+ULTRA_NIC_OFFSET;
@@ -236,17 +238,22 @@ static int __init ultra_probe1(struct net_device *dev, int ioaddr)
 	NS8390_init(dev, 0);
 
 	return 0;
+out:
+	release_region(ioaddr, ULTRA_IO_EXTENT);
+	return retval;
 }
 
 static int
 ultra_open(struct net_device *dev)
 {
+	int retval;
 	int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET; /* ASIC addr */
 	unsigned char irq2reg[] = {0, 0, 0x04, 0x08, 0, 0x0C, 0, 0x40,
-							   0, 0x04, 0x44, 0x48, 0, 0, 0, 0x4C, };
+				   0, 0x04, 0x44, 0x48, 0, 0, 0, 0x4C, };
 
-	if (request_irq(dev->irq, ei_interrupt, 0, ei_status.name, dev))
-		return -EAGAIN;
+	retval = request_irq(dev->irq, ei_interrupt, 0, dev->name, dev);
+	if (retval)
+		return retval;
 
 	outb(0x00, ioaddr);	/* Disable shared memory for safety. */
 	outb(0x80, ioaddr + 5);

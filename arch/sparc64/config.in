@@ -29,6 +29,7 @@ bool 'Symmetric multi-processing support' CONFIG_SMP
 # Global things across all Sun machines.
 define_bool CONFIG_HAVE_DEC_LOCK y
 define_bool CONFIG_ISA n
+define_bool CONFIG_EISA n
 define_bool CONFIG_PCMCIA n
 define_bool CONFIG_SBUS y
 define_bool CONFIG_SBUSCHAR y

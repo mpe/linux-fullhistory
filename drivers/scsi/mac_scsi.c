@@ -258,6 +258,8 @@ int macscsi_detect(Scsi_Host_Template * tpnt)
     for (count = 0; count < mac_num_scsi; count++) {
 #endif
         instance = scsi_register (tpnt, sizeof(struct NCR5380_hostdata));
+        if(instance == NULL)
+        	continue;
 	default_instance = instance;
 
 	if (macintosh_config->ident == MAC_MODEL_IIFX) {

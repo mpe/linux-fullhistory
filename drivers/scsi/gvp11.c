@@ -304,6 +304,8 @@ int __init gvp11_detect(Scsi_Host_Template *tpnt)
 #endif
 
 	instance = scsi_register (tpnt, sizeof (struct WD33C93_hostdata));
+	if(instance == NULL)
+		goto release;
 	instance->base = ZTWO_VADDR(address);
 	instance->irq = IRQ_AMIGA_PORTS;
 	instance->unique_id = z->slotaddr;

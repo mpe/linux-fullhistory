@@ -11,6 +11,10 @@
  * This driver was written by someone who wishes to remain anonymous. 
  * It is in the public domain, so share and enjoy.  Try to make a profit
  * off of it; go on, I dare you.  
+ *
+ * Changes:
+ * 11-10-2000	Bartlomiej Zolnierkiewicz <bkz@linux-ide.org>
+ *		Added some __init
  */
 
 #define __NO_VERSION__
@@ -945,7 +949,7 @@ static struct ac97_mixer_value_list mixer_defaults[] = {
 
 
 /* Installs the AC97 mixer into CARD.  */
-static int
+static int __init
 nm256_install_mixer (struct nm256_info *card)
 {
     int mixer;
@@ -989,7 +993,7 @@ nm256_full_reset (struct nm256_info *card)
  * RAM.
  */
 
-static void
+static void __init
 nm256_peek_for_sig (struct nm256_info *card)
 {
     u32 port1offset 
@@ -1031,7 +1035,7 @@ nm256_peek_for_sig (struct nm256_info *card)
  * VERSTR is a human-readable version string.
  */
 
-static int
+static int __init
 nm256_install(struct pci_dev *pcidev, enum nm256rev rev, char *verstr)
 {
     struct nm256_info *card;
@@ -1252,7 +1256,7 @@ handle_pm_event (struct pm_dev *dev, pm_request_t rqst, void *data)
  *	the sound cards are.
  */
  
-int
+int __init
 init_nm256(void)
 {
     struct pci_dev *pcidev = NULL;

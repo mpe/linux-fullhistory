@@ -1,3 +1,4 @@
+#ifdef __KERNEL__
 #ifndef __ASM_SPINLOCK_H
 #define __ASM_SPINLOCK_H
 
@@ -54,3 +55,4 @@ extern void _write_unlock(rwlock_t *rw);
 #define read_unlock(rw)		_read_unlock(rw)
 
 #endif /* __ASM_SPINLOCK_H */
+#endif /* __KERNEL__ */

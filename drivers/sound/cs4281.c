@@ -40,6 +40,7 @@
 //                libOSSm.so)
 // 10/11/00 trw - modified for 2.4.0-test9 kernel enhancements (NR_MAP removal)
 // 11/03/00 trw - fixed interrupt loss/stutter, added debug.
+// 11/10/00 bkz - added __devinit to cs4281_hw_init()
 //
 // *****************************************************************************
 
@@ -655,7 +656,7 @@ static int cs4281_write_ac97(struct cs4281_state *card, u32 offset,
 //******************************************************************************
 // "Init4281()" -- Bring up the part.
 //******************************************************************************
-static int cs4281_hw_init(struct cs4281_state *card)
+static int __devinit cs4281_hw_init(struct cs4281_state *card)
 {
 	u32 ac97_slotid;
 	u32 temp1, temp2;

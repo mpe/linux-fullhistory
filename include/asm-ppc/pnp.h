@@ -1,3 +1,4 @@
+#ifdef __KERNEL__
 /* 11/02/95                                                                   */
 /*----------------------------------------------------------------------------*/
 /*      Plug and Play header definitions                                      */
@@ -641,3 +642,4 @@ typedef union _PnP_TAG_PACKET {
 
 #endif /* __ASSEMBLY__ */
 #endif  /* ndef _PNP_ */
+#endif /* __KERNEL__ */

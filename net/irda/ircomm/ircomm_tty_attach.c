@@ -46,7 +46,8 @@
 #include <net/irda/ircomm_tty_attach.h>
 
 static void ircomm_tty_ias_register(struct ircomm_tty_cb *self);
-static void ircomm_tty_discovery_indication(discovery_t *discovery);
+static void ircomm_tty_discovery_indication(discovery_t *discovery,
+					    void *priv);
 static void ircomm_tty_getvalue_confirm(int result, __u16 obj_id, 
 					struct ias_value *value, void *priv);
 void ircomm_tty_start_watchdog_timer(struct ircomm_tty_cb *self, int timeout);
@@ -213,7 +214,7 @@ static void ircomm_tty_ias_register(struct ircomm_tty_cb *self)
 		/* Register IrLPT with LM-IAS */
 		self->obj = irias_new_object("IrLPT", IAS_IRLPT_ID);
 		irias_add_integer_attrib(self->obj, "IrDA:IrLMP:LsapSel", 
-					 self->slsap_sel);
+					 self->slsap_sel, IAS_KERNEL_ATTR);
 		irias_insert_object(self->obj);
 	} else {
 		hints = irlmp_service_to_hint(S_COMM);
@@ -221,7 +222,7 @@ static void ircomm_tty_ias_register(struct ircomm_tty_cb *self)
 		/* Register IrCOMM with LM-IAS */
 		self->obj = irias_new_object("IrDA:IrCOMM", IAS_IRCOMM_ID);
 		irias_add_integer_attrib(self->obj, "IrDA:TinyTP:LsapSel", 
-					 self->slsap_sel);
+					 self->slsap_sel, IAS_KERNEL_ATTR);
 		
 		/* Code the parameters into the buffer */
 		irda_param_pack(oct_seq, "bbbbbb", 
@@ -229,12 +230,13 @@ static void ircomm_tty_ias_register(struct ircomm_tty_cb *self)
 				IRCOMM_PORT_TYPE,    1, IRCOMM_SERIAL);
 		
 		/* Register parameters with LM-IAS */
-		irias_add_octseq_attrib(self->obj, "Parameters", oct_seq, 6);
+		irias_add_octseq_attrib(self->obj, "Parameters", oct_seq, 6,
+					IAS_KERNEL_ATTR);
 		irias_insert_object(self->obj);
 	}
 	self->skey = irlmp_register_service(hints);
 	self->ckey = irlmp_register_client(
-		hints, ircomm_tty_discovery_indication, NULL);
+		hints, ircomm_tty_discovery_indication, NULL, (void *) self);
 }
 
 /*
@@ -302,7 +304,8 @@ int ircomm_tty_send_initial_parameters(struct ircomm_tty_cb *self)
  *    device it is, and which services it has.
  *
  */
-static void ircomm_tty_discovery_indication(discovery_t *discovery)
+static void ircomm_tty_discovery_indication(discovery_t *discovery,
+					    void *priv)
 {
 	struct ircomm_tty_cb *self;
 	struct ircomm_tty_info info;

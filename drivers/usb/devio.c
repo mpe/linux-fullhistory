@@ -292,7 +292,8 @@ static void destroy_all_async(struct dev_state *ps)
  * interface claiming
  */
 
-static void *driver_probe(struct usb_device *dev, unsigned int intf)
+static void *driver_probe(struct usb_device *dev, unsigned int intf,
+			  const struct usb_device_id *id)
 {
 	return NULL;
 }
@@ -541,13 +542,17 @@ static int proc_control(struct dev_state *ps, void *arg)
 		i = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), ctrl.request, ctrl.requesttype,
 				       ctrl.value, ctrl.index, tbuf, ctrl.length, tmo);
 		if ((i > 0) && ctrl.length) {
-			if (copy_to_user(ctrl.data, tbuf, ctrl.length))
+			if (copy_to_user(ctrl.data, tbuf, ctrl.length)) {
+				free_page((unsigned long)tbuf);
 				return -EFAULT;
+			}
 		}
 	} else {
 		if (ctrl.length) {
-			if (copy_from_user(tbuf, ctrl.data, ctrl.length))
+			if (copy_from_user(tbuf, ctrl.data, ctrl.length)) {
+				free_page((unsigned long)tbuf);
 				return -EFAULT;
+			}
 		}
 		i = usb_control_msg(dev, usb_sndctrlpipe(dev, 0), ctrl.request, ctrl.requesttype,
 				       ctrl.value, ctrl.index, tbuf, ctrl.length, tmo);
@@ -594,13 +599,17 @@ static int proc_bulk(struct dev_state *ps, void *arg)
 		}
 		i = usb_bulk_msg(dev, pipe, tbuf, len1, &len2, tmo);
 		if (!i && len2) {
-			if (copy_to_user(bulk.data, tbuf, len2))
+			if (copy_to_user(bulk.data, tbuf, len2)) {
+				free_page((unsigned long)tbuf);
 				return -EFAULT;
+			}
 		}
 	} else {
 		if (len1) {
-			if (copy_from_user(tbuf, bulk.data, len1))
+			if (copy_from_user(tbuf, bulk.data, len1)) {
+				free_page((unsigned long)tbuf);
 				return -EFAULT;
+			}
 		}
 		i = usb_bulk_msg(dev, pipe, tbuf, len1, &len2, tmo);
 	}
@@ -697,9 +706,11 @@ static int proc_resetdevice(struct dev_state *ps)
 			continue;
 
 		if (intf->driver) {
+			const struct usb_device_id *id;
 			down(&intf->driver->serialize);
 			intf->driver->disconnect(ps->dev, intf->private_data);
-			intf->driver->probe(ps->dev, i);
+			id = usb_match_id(ps->dev,intf,intf->driver->id_table);
+			intf->driver->probe(ps->dev, i, id);
 			up(&intf->driver->serialize);
 		}
 	}

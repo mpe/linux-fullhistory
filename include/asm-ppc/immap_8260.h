@@ -7,6 +7,7 @@
  * this will be, as I don't have any knowledge of the subsequent
  * parts at this time.  I copied this from the 8xx_immap.h.
  */
+#ifdef __KERNEL__
 #ifndef __IMMAP_82XX__
 #define __IMMAP_82XX__
 
@@ -433,3 +434,4 @@ typedef struct immap {
 immap_t	*immr;
 
 #endif /* __IMMAP_82XX__ */
+#endif /* __KERNEL__ */

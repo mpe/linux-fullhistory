@@ -1,4 +1,4 @@
-/* $Id: icn.c,v 1.63 2000/05/06 00:52:39 kai Exp $
+/* $Id: icn.c,v 1.64 2000/10/02 17:33:43 keil Exp $
 
  * ISDN low-level module for the ICN active ISDN-Card.
  *
@@ -19,6 +19,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: icn.c,v $
+ * Revision 1.64  2000/10/02 17:33:43  keil
+ * Fix NULL pointer error  (thanks Luca Montecchia)
+ *
  * Revision 1.63  2000/05/06 00:52:39  kai
  * merged changes from kernel tree
  * fixed timer and net_device->name breakage
@@ -251,7 +254,7 @@
 #undef MAP_DEBUG
 
 static char
-*revision = "$Revision: 1.63 $";
+*revision = "$Revision: 1.64 $";
 
 static int icn_addcard(int, char *, char *);
 
@@ -1873,7 +1876,7 @@ icn_setup(char *line)
 		portbase = ints[1];
 	if (ints[0] > 1)
 		membase = ints[2];
-	if (strlen(str)) {
+	if (str && *str) {
 		strcpy(sid, str);
 		icn_id = sid;
 		if ((p = strchr(sid, ','))) {

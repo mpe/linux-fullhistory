@@ -1,3 +1,4 @@
+#ifdef __KERNEL__
 #ifndef _PPC_PGTABLE_H
 #define _PPC_PGTABLE_H
 
@@ -489,3 +490,4 @@ extern void kernel_set_cachemode (unsigned long address, unsigned long size,
 
 #endif __ASSEMBLY__
 #endif /* _PPC_PGTABLE_H */
+#endif /* __KERNEL__ */

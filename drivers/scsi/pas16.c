@@ -440,6 +440,9 @@ int __init pas16_detect(Scsi_Host_Template * tpnt)
 	    break;
 
 	instance = scsi_register (tpnt, sizeof(struct NCR5380_hostdata));
+	if(instance == NULL)
+		break;
+		
 	instance->io_port = io_port;
 
 	NCR5380_init(instance, 0);

@@ -5,6 +5,7 @@
  * file that has to include MPC8260 configuration, they all include
  * this one and the configuration switching is done here.
  */
+#ifdef __KERNEL__
 #ifndef __CONFIG_8260_DEFS
 #define __CONFIG_8260_DEFS
 
@@ -40,3 +41,4 @@ extern int request_8xxirq(unsigned int irq,
 
 #endif /* CONFIG_8260 */
 #endif
+#endif /* __KERNEL__ */

@@ -1076,9 +1076,15 @@ static int nsc_ircc_hard_xmit_sir(struct sk_buff *skb, struct net_device *dev)
 	netif_stop_queue(dev);
 		
 	/* Check if we need to change the speed */
-	if ((speed = irda_get_speed(skb)) != self->io.speed)
-		self->new_speed = speed;
-	
+	if ((speed = irda_get_speed(skb)) != self->io.speed) {
+		/* Check for empty frame */
+		if (!skb->len) {
+			nsc_ircc_change_speed(self, speed); 
+			return 0;
+		} else
+			self->new_speed = speed;
+	}
+
 	spin_lock_irqsave(&self->lock, flags);
 	
 	/* Save current bank */
@@ -1120,8 +1126,14 @@ static int nsc_ircc_hard_xmit_fir(struct sk_buff *skb, struct net_device *dev)
 	netif_stop_queue(dev);
 	
 	/* Check if we need to change the speed */
-	if ((speed = irda_get_speed(skb)) != self->io.speed)
-		self->new_speed = speed;
+	if ((speed = irda_get_speed(skb)) != self->io.speed) {
+		/* Check for empty frame */
+		if (!skb->len) {
+			nsc_ircc_change_speed_complete(self, speed); 
+			return 0;
+		} else
+			self->new_speed = speed;
+	}
 
 	spin_lock_irqsave(&self->lock, flags);
 
@@ -2029,10 +2041,15 @@ MODULE_AUTHOR("Dag Brattli <dagb@cs.uit.no>");
 MODULE_DESCRIPTION("NSC IrDA Device Driver");
 
 MODULE_PARM(qos_mtt_bits, "i");
+MODULE_PARM_DESC(qos_mtt_bits, "Minimum Turn Time");
 MODULE_PARM(io,  "1-4i");
+MODULE_PARM_DESC(io, "Base I/O addresses");
 MODULE_PARM(irq, "1-4i");
+MODULE_PARM_DESC(irq, "IRQ lines");
 MODULE_PARM(dma, "1-4i");
+MODULE_PARM_DESC(dma, "DMA channels");
 MODULE_PARM(dongle_id, "i");
+MODULE_PARM_DESC(dongle_id, "Type-id of used dongle");
 
 int init_module(void)
 {

@@ -7,7 +7,7 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
-ALL_SUB_DIRS := irlan ircomm compressors
+ALL_SUB_DIRS := irlan irnet ircomm compressors
 SUB_DIRS :=
 MOD_SUB_DIRS :=
 OX_OBJS :=
@@ -17,7 +17,7 @@ O_OBJS	 := iriap.o iriap_event.o irlmp.o irlmp_event.o irlmp_frame.o \
             irlap.o irlap_event.o irlap_frame.o timer.o qos.o irqueue.o \
             irttp.o irda_device.o irias_object.o crc.o wrapper.o af_irda.o \
 	    discovery.o parameters.o
-OX_OBJS := irmod.o
+OX_OBJS := irsyms.o
 
 ifeq ($(CONFIG_IRDA),m)
 M_OBJS   := $(O_TARGET)
@@ -41,6 +41,15 @@ O_OBJS += irlan/irlan.o
 else
   ifeq ($(CONFIG_IRLAN),m)
   MOD_SUB_DIRS += irlan
+  endif
+endif
+
+ifeq ($(CONFIG_IRNET),y)
+SUB_DIRS += irnet
+O_OBJS += irnet/irnet.o
+else
+  ifeq ($(CONFIG_IRNET),m)
+  MOD_SUB_DIRS += irnet
   endif
 endif
 

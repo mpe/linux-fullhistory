@@ -207,6 +207,8 @@ int __init a2091_detect(Scsi_Host_Template *tpnt)
 	    continue;
 
 	instance = scsi_register (tpnt, sizeof (struct WD33C93_hostdata));
+	if(instance == NULL)
+		continue;
 	instance->base = ZTWO_VADDR(address);
 	instance->irq = IRQ_AMIGA_PORTS;
 	instance->unique_id = z->slotaddr;

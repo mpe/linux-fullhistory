@@ -122,7 +122,7 @@ int irlmp_do_lsap_event(struct lsap_cb *self, IRLMP_EVENT event,
 	ASSERT(self->magic == LMP_LSAP_MAGIC, return -1;);
 
 	IRDA_DEBUG(4, __FUNCTION__ "(), EVENT = %s, STATE = %s\n",
-		   irlmp_event[event], irlmp_state[ self->lsap_state]);
+		   irlmp_event[event], irlsap_state[ self->lsap_state]);
 
 	return (*lsap_state[self->lsap_state]) (self, event, skb);
 }
@@ -393,6 +393,14 @@ static void irlmp_state_active(struct lap_cb *self, IRLMP_EVENT event,
 		irlmp_next_lap_state(self, LAP_STANDBY);		
 		self->refcount = 0;
 		
+		/* In some case, at this point our side has already closed
+		 * all lsaps, and we are waiting for the idle_timer to
+		 * expire. If another device reconnect immediately, the
+		 * idle timer will expire in the midle of the connection
+		 * initialisation, screwing up things a lot...
+		 * Therefore, we must stop the timer... */
+		irlmp_stop_idle_timer(self);
+
 		/* 
 		 *  Inform all connected LSAP's using this link
 		 */
@@ -410,7 +418,8 @@ static void irlmp_state_active(struct lap_cb *self, IRLMP_EVENT event,
 		}
 		break;
 	default:
-		IRDA_DEBUG(0, __FUNCTION__ "(), Unknown event %d\n", event);
+		IRDA_DEBUG(0, __FUNCTION__ "(), Unknown event %s\n",
+			   irlmp_event[event]);
 		if (skb)
  			dev_kfree_skb(skb);
 		break;
@@ -514,7 +523,7 @@ static int irlmp_state_connect(struct lsap_cb *self, IRLMP_EVENT event,
 		ASSERT(self->lap != NULL, return -1;);
 		ASSERT(self->lap->lsaps != NULL, return -1;);
 		
-		hashbin_insert(self->lap->lsaps, (queue_t *) self, (int) self, 
+		hashbin_insert(self->lap->lsaps, (irda_queue_t *) self, (int) self, 
 			       NULL);
 
 		irlmp_send_lcf_pdu(self->lap, self->dlsap_sel, 

@@ -157,8 +157,6 @@ typedef struct pegasus {
 
 struct usb_eth_dev {
 	char	*name;
-	__u16	vendor;
-	__u16	device;
 	__u32	private; /* LSB is gpio reset value */
 };
 
@@ -176,56 +174,32 @@ MODULE_PARM_DESC(loopback, "Enable MAC loopback mode (bit 0)");
 MODULE_PARM_DESC(mii_mode, "Enable HomePNA mode (bit 0) - default = MII mode = 0");
 
 
+#define PEGASUS_DEV(product_name, vendor_id, product_id, flags) \
+	{name: product_name, private: flags},
+
 static struct usb_eth_dev usb_dev_id[] = {
-	{"Billionton USB-100", 0x08dd, 0x0986,
-		DEFAULT_GPIO_RESET},
-	{"Billionton USBLP-100", 0x08dd, 0x0987,
-		DEFAULT_GPIO_RESET | HAS_HOME_PNA},
-	{"Billionton USBEL-100", 0x08dd, 0x0988,
-		DEFAULT_GPIO_RESET},
-	{"Billionton USBE-100", 0x08dd, 0x8511,
-		DEFAULT_GPIO_RESET | PEGASUS_II},
-	{"Corega FEter USB-TX", 0x7aa, 0x0004,
-		DEFAULT_GPIO_RESET},
-	{"MELCO/BUFFALO LUA-TX", 0x0411, 0x0001,
-		DEFAULT_GPIO_RESET},
-	{"D-Link DSB-650TX", 0x2001, 0x4001,
-		LINKSYS_GPIO_RESET},
-	{"D-Link DSB-650TX", 0x2001, 0x4002,
-		LINKSYS_GPIO_RESET},
-	{"D-Link DSB-650TX(PNA)", 0x2001, 0x4003,
-		DEFAULT_GPIO_RESET | HAS_HOME_PNA},
-	{"D-Link DSB-650", 0x2001, 0xabc1,
-		DEFAULT_GPIO_RESET},
-	{"D-Link DU-E10", 0x07b8, 0xabc1,
-		DEFAULT_GPIO_RESET},
-	{"D-Link DU-E100", 0x07b8, 0x4002,
-		DEFAULT_GPIO_RESET},
-	{"Linksys USB10TX", 0x066b, 0x2202,
-		LINKSYS_GPIO_RESET},
-	{"Linksys USB100TX", 0x066b, 0x2203,
-		LINKSYS_GPIO_RESET},
-	{"Linksys USB100TX", 0x066b, 0x2204,
-		LINKSYS_GPIO_RESET | HAS_HOME_PNA},
-	{"Linksys USB Ethernet Adapter", 0x066b, 0x2206,
-		LINKSYS_GPIO_RESET},
-	{"SMC 202 USB Ethernet", 0x0707, 0x0200,
-		DEFAULT_GPIO_RESET},
-	{"ADMtek AN986 \"Pegasus\" USB Ethernet (eval board)", 0x07a6, 0x0986,
-		DEFAULT_GPIO_RESET | HAS_HOME_PNA},
-	{"Accton USB 10/100 Ethernet Adapter", 0x083a, 0x1046, 
-		DEFAULT_GPIO_RESET},
-	{"IO DATA USB ET/TX", 0x04bb, 0x0904,
-		DEFAULT_GPIO_RESET},
-	{"LANEED USB Ethernet LD-USB/TX", 0x056e, 0x4002,
-		DEFAULT_GPIO_RESET},
-	{"SOHOware NUB100 Ethernet", 0x15e8, 0x9100,
-		DEFAULT_GPIO_RESET},
-	{"ADMtek ADM8511 \"Pegasus II\" USB Ethernet", 0x07a6, 0x8511, 
-		DEFAULT_GPIO_RESET | PEGASUS_II},
-	{NULL, 0, 0, 0}
+
+#	define PEGASUS_DEV(product_name, vendor_id, product_id, flags) \
+		{name: product_name, private: flags},
+#	include "pegasus_devs.h"
+#	undef PEGASUS_DEV
+
+	{NULL, 0 }
 };
 
+
+/* The entries in this table MUST CORRESPOND LINE-BY-LINE to the
+   entries of usb_dev_id[]. */
+static struct usb_device_id pegasus_ids [] = {
+#	define PEGASUS_DEV(product_name, vendor_id, product_id, flags) \
+		{idVendor: vendor_id, idProduct: product_id },
+#	include "pegasus_devs.h"
+#	undef PEGASUS_DEV
+
+    { }						/* Terminating entry */
+};
+
+MODULE_DEVICE_TABLE (usb, pegasus_ids);
 
 static int update_eth_regs_async( pegasus_t * );
 /* Aargh!!! I _really_ hate such tweaks */
@@ -858,20 +832,6 @@ static void pegasus_set_multicast( struct net_device *net )
 }
 
 
-static int check_device_ids( __u16 vendor, __u16 product )
-{
-	int i=0;
-	
-	while ( usb_dev_id[i].name ) {
-		if ( (usb_dev_id[i].vendor == vendor) && 
-			(usb_dev_id[i].device == product) )
-			return i;
-		i++;
-	}
-	return	-1;
-}
-
-
 static __u8 mii_phy_probe( pegasus_t *pegasus )
 {
 	int	i;
@@ -900,15 +860,12 @@ static inline void setup_pegasus_II( pegasus_t *pegasus )
 }
 
 
-static void * pegasus_probe( struct usb_device *dev, unsigned int ifnum )
+static void * pegasus_probe( struct usb_device *dev, unsigned int ifnum,
+			     const struct usb_device_id *id)
 {
 	struct net_device *net;
 	pegasus_t *pegasus;
-	int	dev_indx;
-
-	if ( (dev_indx = check_device_ids(dev->descriptor.idVendor, dev->descriptor.idProduct)) == -1 ) {
-		return NULL;
-	}
+	const int dev_indx = id - pegasus_ids;
 
 	if (usb_set_configuration(dev, dev->config[0].bConfigurationValue)) {
 		err("usb_set_configuration() failed");
@@ -995,6 +952,7 @@ static struct usb_driver pegasus_driver = {
 	name:		"pegasus",
 	probe:		pegasus_probe,
 	disconnect:	pegasus_disconnect,
+	id_table:	pegasus_ids,
 };
 
 int __init pegasus_init(void)

@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.102 2000/11/08 05:13:30 davem Exp $
+/* $Id: ioctl32.c,v 1.103 2000/11/10 05:44:33 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997-2000  Jakub Jelinek  (jakub@redhat.com)
@@ -71,7 +71,7 @@
 #include <asm/openpromio.h>
 #include <asm/envctrl.h>
 #include <asm/audioio.h>
-#include <asm/ethtool.h>
+#include <linux/ethtool.h>
 #include <asm/display7seg.h>
 #include <asm/module.h>
 #include <linux/soundcard.h>

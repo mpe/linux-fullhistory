@@ -30,8 +30,8 @@
 #include <linux/types.h>
 #include <linux/spinlock.h>
 
-#ifndef QUEUE_H
-#define QUEUE_H
+#ifndef IRDA_QUEUE_H
+#define IRDA_QUEUE_H
 
 #define NAME_SIZE      32
 
@@ -62,39 +62,40 @@ typedef void (*FREE_FUNC)(void *arg);
  */
 #define GET_HASHBIN(x) ( x & HASHBIN_MASK )
 
-struct irqueue {
-	struct irqueue *q_next;
-	struct irqueue *q_prev;
+struct irda_queue {
+	struct irda_queue *q_next;
+	struct irda_queue *q_prev;
 
 	char   q_name[NAME_SIZE];
 	__u32  q_hash;
 };
-typedef struct irqueue queue_t;
+typedef struct irda_queue irda_queue_t;
 
 typedef struct hashbin_t {
 	__u32      magic;
 	int        hb_type;
 	int        hb_size;
 	spinlock_t hb_mutex[HASHBIN_SIZE] ALIGN;
-	queue_t   *hb_queue[HASHBIN_SIZE] ALIGN;
+	irda_queue_t   *hb_queue[HASHBIN_SIZE] ALIGN;
 
-	queue_t* hb_current;
+	irda_queue_t* hb_current;
 } hashbin_t;
 
 hashbin_t *hashbin_new(int type);
 int      hashbin_delete(hashbin_t* hashbin, FREE_FUNC func);
 int      hashbin_clear(hashbin_t* hashbin, FREE_FUNC free_func);
-void     hashbin_insert(hashbin_t* hashbin, queue_t* entry, __u32 hashv, 
+void     hashbin_insert(hashbin_t* hashbin, irda_queue_t* entry, __u32 hashv, 
 			char* name);
 void*    hashbin_find(hashbin_t* hashbin, __u32 hashv, char* name);
 void*    hashbin_remove(hashbin_t* hashbin, __u32 hashv, char* name);
 void*    hashbin_remove_first(hashbin_t *hashbin);
-queue_t *hashbin_get_first(hashbin_t *hashbin);
-queue_t *hashbin_get_next(hashbin_t *hashbin);
+void*	 hashbin_remove_this( hashbin_t* hashbin, irda_queue_t* entry);
+irda_queue_t *hashbin_get_first(hashbin_t *hashbin);
+irda_queue_t *hashbin_get_next(hashbin_t *hashbin);
 
-void enqueue_last(queue_t **queue, queue_t* element);
-void enqueue_first(queue_t **queue, queue_t* element);
-queue_t *dequeue_first(queue_t **queue);
+void enqueue_last(irda_queue_t **queue, irda_queue_t* element);
+void enqueue_first(irda_queue_t **queue, irda_queue_t* element);
+irda_queue_t *dequeue_first(irda_queue_t **queue);
 
 #define HASHBIN_GET_SIZE(hashbin) hashbin->hb_size
 

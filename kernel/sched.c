@@ -535,7 +535,7 @@ handle_softirq_back:
 		goto move_rr_last;
 move_rr_back:
 
-	switch (prev->state & ~TASK_EXCLUSIVE) {
+	switch (prev->state) {
 		case TASK_INTERRUPTIBLE:
 			if (signal_pending(prev)) {
 				prev->state = TASK_RUNNING;
@@ -694,7 +694,7 @@ scheduling_in_interrupt:
 }
 
 static inline void __wake_up_common (wait_queue_head_t *q, unsigned int mode,
-						const int sync)
+				     unsigned int wq_mode, const int sync)
 {
 	struct list_head *tmp, *head;
 	struct task_struct *p, *best_exclusive;
@@ -730,7 +730,7 @@ static inline void __wake_up_common (wait_queue_head_t *q, unsigned int mode,
 #endif
 		p = curr->task;
 		state = p->state;
-		if (state & (mode & ~TASK_EXCLUSIVE)) {
+		if (state & mode) {
 #if WAITQUEUE_DEBUG
 			curr->__waker = (long)__builtin_return_address(0);
 #endif
@@ -739,7 +739,7 @@ static inline void __wake_up_common (wait_queue_head_t *q, unsigned int mode,
 			 * prefer processes which are affine to this
 			 * CPU.
 			 */
-			if (irq && (state & mode & TASK_EXCLUSIVE)) {
+			if (irq && (curr->flags & wq_mode & WQ_FLAG_EXCLUSIVE)) {
 				if (!best_exclusive)
 					best_exclusive = p;
 				if (p->processor == best_cpu) {
@@ -751,7 +751,7 @@ static inline void __wake_up_common (wait_queue_head_t *q, unsigned int mode,
 					wake_up_process_synchronous(p);
 				else
 					wake_up_process(p);
-				if (state & mode & TASK_EXCLUSIVE)
+				if (curr->flags & wq_mode & WQ_FLAG_EXCLUSIVE)
 					break;
 			}
 		}
@@ -767,14 +767,14 @@ out:
 	return;
 }
 
-void __wake_up(wait_queue_head_t *q, unsigned int mode)
+void __wake_up(wait_queue_head_t *q, unsigned int mode, unsigned int wq_mode)
 {
-	__wake_up_common(q, mode, 0);
+	__wake_up_common(q, mode, wq_mode, 0);
 }
 
-void __wake_up_sync(wait_queue_head_t *q, unsigned int mode)
+void __wake_up_sync(wait_queue_head_t *q, unsigned int mode, unsigned int wq_mode)
 {
-	__wake_up_common(q, mode, 1);
+	__wake_up_common(q, mode, wq_mode, 1);
 }
 
 #define	SLEEP_ON_VAR				\

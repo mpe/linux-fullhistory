@@ -11,6 +11,7 @@
  *
  */
 
+#ifdef __KERNEL__
 #ifndef	__WALNUT_H__
 #define	__WALNUT_H__
 
@@ -26,3 +27,4 @@ extern "C" {
 #endif
 
 #endif /* __WALNUT_H__ */
+#endif /* __KERNEL__ */

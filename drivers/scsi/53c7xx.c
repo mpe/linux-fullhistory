@@ -1125,6 +1125,7 @@ ncr53c7xx_init (Scsi_Host_Template *tpnt, int board, int chip,
     int script_len = 0, dsa_len = 0, size = 0, max_cmd_size = 0,
 	schedule_size = 0, ok = 0;
     void *tmp;
+    unsigned long page;
 
     switch (chip) {
     case 710:
@@ -1191,6 +1192,12 @@ ncr53c7xx_init (Scsi_Host_Template *tpnt, int board, int chip,
        */
 	(sizeof(void *) - sizeof(u32)) + max_cmd_size + schedule_size;
 
+    page = __get_free_pages(GFP_ATOMIC,1);
+    if(page==0)
+    {
+    	printk(KERN_ERR "53c7xx: out of memory.\n");
+    	return -ENOMEM;
+    }
 #ifdef FORCE_DSA_ALIGNMENT
     /*
      * 53c710 rev.0 doesn't have an add-with-carry instruction.
@@ -1203,10 +1210,11 @@ ncr53c7xx_init (Scsi_Host_Template *tpnt, int board, int chip,
       panic("53c7xx: hostdata > 8K");
     instance = scsi_register (tpnt, 4);
     if (!instance)
+    {
+        free_page(page);
 	return -1;
-    instance->hostdata[0] = __get_free_pages(GFP_ATOMIC, 1);
-    if (instance->hostdata[0] == 0)
-        panic ("53c7xx: Couldn't get hostdata memory");
+    }
+    instance->hostdata[0] = page;
     memset((void *)instance->hostdata[0], 0, 8192);
     cache_push(virt_to_phys((void *)(instance->hostdata[0])), 8192);
     cache_clear(virt_to_phys((void *)(instance->hostdata[0])), 8192);
@@ -3087,7 +3095,7 @@ allocate_cmd (Scsi_Cmnd *cmd) {
             panic ("53c7xx: allocate_cmd size > 4K");
         real = get_free_page(GFP_ATOMIC);
         if (real == 0)
-            panic ("53c7xx: Couldn't get memory for allocate_cmd");
+        	return NULL;
         memset((void *)real, 0, 4096);
         cache_push(virt_to_phys((void *)real), 4096);
         cache_clear(virt_to_phys((void *)real), 4096);

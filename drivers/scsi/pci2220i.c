@@ -2545,6 +2545,9 @@ int Pci2220i_Detect (Scsi_Host_Template *tpnt)
 		if (pci_enable_device(pcidev))
 			continue;
 		pshost = scsi_register (tpnt, sizeof(ADAPTER2220I));
+		if(pshost==NULL)
+			continue;
+			
 		padapter = HOSTDATA(pshost);
 
 		if ( GetRegs (pshost, FALSE, pcidev) )

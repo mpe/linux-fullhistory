@@ -2024,8 +2024,10 @@ char buf[32];
  */
 
       tpnt->proc_name = "in2000";
-      detect_count++;
       instance  = scsi_register(tpnt, sizeof(struct IN2000_hostdata));
+      if(instance == NULL)
+      	continue;
+      detect_count++;
       if (!instance_list)
          instance_list = instance;
       hostdata = (struct IN2000_hostdata *)instance->hostdata;

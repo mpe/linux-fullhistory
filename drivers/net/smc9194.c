@@ -200,13 +200,6 @@ static int smc_open(struct net_device *dev);
 static void smc_timeout(struct net_device *dev);
 
 /*
- . This is called by the kernel to send a packet out into the net.  it's
- . responsible for doing a best-effort send, but if it's simply not possible
- . to send it, the packet gets dropped.
-*/
-static int smc_send_packet(struct sk_buff *skb, struct net_device *dev);
-
-/*
  . This is called by the kernel in response to 'ifconfig ethX down'.  It
  . is responsible for cleaning up everything that the open routine
  . does, and maybe putting the card into a powerdown state.
@@ -512,6 +505,10 @@ static int smc_wait_to_send_packet( struct sk_buff * skb, struct net_device * de
 	unsigned short 		numPages;
 	word			time_out;
 
+	netif_stop_queue(dev);
+	/* Well, I want to send the packet.. but I don't know
+	   if I can send it right now...  */
+
 	if ( lp->saved_skb) {
 		/* THIS SHOULD NEVER HAPPEN. */
 		lp->stats.tx_aborted_errors++;
@@ -626,7 +623,7 @@ static void smc_hardware_send_packet( struct net_device * dev )
 	if ( packet_no & 0x80 ) {
 		/* or isn't there?  BAD CHIP! */
 		printk(KERN_DEBUG CARDNAME": Memory allocation failed. \n");
-		kfree_skb(skb);
+		dev_kfree_skb(skb);
 		lp->saved_skb = NULL;
 		netif_wake_queue(dev);
 		return;
@@ -761,6 +758,7 @@ int __init smc_init(struct net_device *dev)
 int __init smc_findirq( int ioaddr )
 {
 	int	timeout = 20;
+	unsigned long cookie;
 
 
 	/* I have to do a STI() here, because this is called from
@@ -768,7 +766,7 @@ int __init smc_findirq( int ioaddr )
 	   rather difficult to get interrupts for auto detection */
 	sti();
 
-	autoirq_setup( 0 );
+	cookie = probe_irq_on();
 
 	/*
 	 * What I try to do here is trigger an ALLOC_INT. This is done
@@ -821,7 +819,7 @@ int __init smc_findirq( int ioaddr )
 	cli();
 
 	/* and return what I found */
-	return autoirq_report( 0 );
+	return probe_irq_off(cookie);
 }
 
 /*----------------------------------------------------------------------
@@ -921,13 +919,6 @@ static int __init smc_initcard(struct net_device *dev, int ioaddr)
 	int	memory;
 
 	int   irqval;
-
-	/* see if I need to initialize the ethernet card structure */
-	if (dev == NULL) {
-		dev = init_etherdev(0, 0);
-		if (dev == NULL)
-			return -ENOMEM;
-	}
 
 	if (version_printed++ == 0)
 		printk("%s", version);
@@ -1060,7 +1051,7 @@ static int __init smc_initcard(struct net_device *dev, int ioaddr)
 
 	dev->open		        = smc_open;
 	dev->stop		        = smc_close;
-	dev->hard_start_xmit    	= smc_send_packet;
+	dev->hard_start_xmit    	= smc_wait_to_send_packet;
 	dev->tx_timeout		    	= smc_timeout;
 	dev->watchdog_timeo		= HZ/20;
 	dev->get_stats			= smc_query_statistics;
@@ -1179,14 +1170,6 @@ static void smc_timeout(struct net_device *dev)
 	/* clear anything saved */
 	((struct smc_local *)dev->priv)->saved_skb = NULL;
 	netif_wake_queue(dev);
-}
-
-static int smc_send_packet(struct sk_buff *skb, struct net_device *dev)
-{
-	netif_stop_queue(dev);
-	/* Well, I want to send the packet.. but I don't know
-	   if I can send it right now...  */
-	return smc_wait_to_send_packet( skb, dev );
 }
 
 /*--------------------------------------------------------------------
@@ -1594,15 +1577,11 @@ static void smc_set_multicast_list(struct net_device *dev)
 
 #ifdef MODULE
 
-static struct net_device devSMC9194 = {
-	"", /* device name is inserted by linux/drivers/net/net_init.c */
-	0, 0, 0, 0,
-	0, 0,  /* I/O address, IRQ */
-	0, 0, 0, NULL, smc_init };
+static struct net_device devSMC9194 = { init: smc_init };
 
-int io = 0;
-int irq = 0;
-int ifport = 0;
+static int io;
+static int irq;
+static int ifport;
 
 MODULE_PARM(io, "i");
 MODULE_PARM(irq, "i");

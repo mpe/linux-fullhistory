@@ -33,6 +33,7 @@ bool 'Support for SNI RM200 PCI' CONFIG_SNI_RM200_PCI
 #
 unset CONFIG_ARC32
 unset CONFIG_ISA
+unset CONFIG_EISA
 unset CONFIG_PCI
 unset CONFIG_MIPS_JAZZ
 unset CONFIG_VIDEO_G364
@@ -59,7 +60,6 @@ if [ "$CONFIG_ACER_PICA_61" = "y" ]; then
    define_bool CONFIG_PC_KEYB y
 fi
 if [ "$CONFIG_COBALT_MICRO_SERVER" = "y" ]; then
-   define_bool CONFIG_ISA n
    define_bool CONFIG_COBALT_27 y
    define_bool CONFIG_COBALT_LCD y
    define_bool CONFIG_COBALT_SERIAL y
@@ -83,6 +83,9 @@ fi
 
 if [ "$CONFIG_ISA" != "y" ]; then
    define_bool CONFIG_ISA n
+   define_bool CONFIG_EISA n
+else
+   define_bool CONFIG_EISA y
 fi
 
 if [ "$CONFIG_PCI" != "y" ]; then

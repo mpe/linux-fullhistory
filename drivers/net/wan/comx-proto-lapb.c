@@ -15,6 +15,9 @@
  * Version 0.80 (99/06/14):
  *		- cleaned up the source code a bit
  *		- ported back to kernel, now works as non-module
+ *
+ * Changed      (00/10/29, Henner Eisen):
+ * 		- comx_rx() / comxlapb_data_indication() return status.
  * 
  */
 
@@ -359,7 +362,7 @@ static void comxlapb_disconnected(void *token, int reason)
 	comx_status(ch->dev, ch->line_status);
 }
 
-static void comxlapb_data_indication(void *token, struct sk_buff *skb)
+static int comxlapb_data_indication(void *token, struct sk_buff *skb)
 {
 	struct comx_channel *ch = token; 
 
@@ -373,7 +376,7 @@ static void comxlapb_data_indication(void *token, struct sk_buff *skb)
 
 	skb->dev = ch->dev;
 	skb->mac.raw = skb->data;
-	comx_rx(ch->dev, skb);
+	return comx_rx(ch->dev, skb);
 }
 
 static void comxlapb_data_transmit(void *token, struct sk_buff *skb)

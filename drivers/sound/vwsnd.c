@@ -135,6 +135,10 @@
  *	For AFMT_S8, AFMT_MU_LAW and AFMT_A_LAW output, we have to XOR
  *	the 0x80 bit in software to compensate for Lithium's XOR.
  *	This happens in pcm_copy_{in,out}().
+ *
+ * Changes:
+ * 11-10-2000	Bartlomiej Zolnierkiewicz <bkz@linux-ide.org>
+ *		Added some __init/__exit
  */
 
 #include <linux/module.h>
@@ -1330,7 +1334,7 @@ static void ad1843_shutdown_adc(lithium_t *lith)
  *
  * return 0 on success, -errno on failure.  */
 
-static int ad1843_init(lithium_t *lith)
+static int __init ad1843_init(lithium_t *lith)
 {
 	unsigned long later;
 	int err;
@@ -3239,7 +3243,7 @@ static struct file_operations vwsnd_mixer_fops = {
 
 /* driver probe routine.  Return nonzero if hardware is found. */
 
-static int probe_vwsnd(struct address_info *hw_config)
+static int __init probe_vwsnd(struct address_info *hw_config)
 {
 	lithium_t lith;
 	int w;
@@ -3291,7 +3295,7 @@ static int probe_vwsnd(struct address_info *hw_config)
  * Return +minor_dev on success, -errno on failure.
  */
 
-static int attach_vwsnd(struct address_info *hw_config)
+static int __init attach_vwsnd(struct address_info *hw_config)
 {
 	vwsnd_dev_t *devc = NULL;
 	int err = -ENOMEM;
@@ -3417,7 +3421,7 @@ static int attach_vwsnd(struct address_info *hw_config)
 	return err;
 }
 
-static int unload_vwsnd(struct address_info *hw_config)
+static int __exit unload_vwsnd(struct address_info *hw_config)
 {
 	vwsnd_dev_t *devc, **devcp;
 
@@ -3481,10 +3485,3 @@ static void __exit cleanup_vwsnd(void)
 
 module_init(init_vwsnd);
 module_exit(cleanup_vwsnd);
-
-/*
- * Local variables:
- * compile-command: "cd ../..; make modules SUBDIRS=drivers/sound"
- * c-basic-offset: 8
- * End:
- */

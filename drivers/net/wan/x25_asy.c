@@ -9,6 +9,9 @@
  *	recommendations. Its primarily for testing purposes. If you wanted
  *	to do CCITT then in theory all you need is to nick the HDLC async
  *	checksum routines from ppp.c
+ *      Changes:
+ *
+ *	2000-10-29	Henner Eisen	lapb_data_indication() return status.
  */
 
 #include <linux/module.h>
@@ -390,9 +393,9 @@ static int x25_asy_xmit(struct sk_buff *skb, struct net_device *dev)
  *	at the net layer.
  */
   
-static void x25_asy_data_indication(void *token, struct sk_buff *skb)
+static int x25_asy_data_indication(void *token, struct sk_buff *skb)
 {
-	netif_rx(skb);
+	return netif_rx(skb);
 }
 
 /*
