@@ -33,12 +33,13 @@ int ext2_ioctl (struct inode * inode, struct file * filp, unsigned int cmd,
 	case EXT2_IOC_SETFLAGS:
 		flags = get_fs_long ((long *) arg);
 		/*
-		 * Only the super-user can change the IMMUTABLE flag
+		 * The IMMUTABLE flag can only be changed by the super user
+		 * when the security level is zero.
 		 */
 		if ((flags & EXT2_IMMUTABLE_FL) ^
 		    (inode->u.ext2_i.i_flags & EXT2_IMMUTABLE_FL)) {
 			/* This test looks nicer. Thanks to Pauline Middelink */
-			if (!fsuser())
+			if (!fsuser() || securelevel > 0)
 				return -EPERM;
 		} else
 			if ((current->fsuid != inode->i_uid) && !fsuser())

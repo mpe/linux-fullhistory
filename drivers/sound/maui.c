@@ -32,7 +32,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_MAUI)
+#if defined(CONFIG_MAUI)
 
 static int      maui_base = 0x330;
 
@@ -191,13 +191,16 @@ probe_maui (struct address_info *hw_config)
       return 0;
     }
 
-  printk ("WaveFront hardware version %d.%d\n", tmp1, tmp2);
+  if (trace_init)
+    printk ("WaveFront hardware version %d.%d\n", tmp1, tmp2);
 
   if (!maui_write (0x9F))	/* Report firmware version */
     return 0;
   if ((tmp1 = maui_read ()) == -1 || (tmp2 = maui_read ()) == -1)
     return 0;
-  printk ("WaveFront firmware version %d.%d\n", tmp1, tmp2);
+
+  if (trace_init)
+    printk ("WaveFront firmware version %d.%d\n", tmp1, tmp2);
 
   if (!maui_write (0x85))	/* Report free DRAM */
     return 0;
@@ -206,7 +209,8 @@ probe_maui (struct address_info *hw_config)
     {
       tmp1 |= maui_read () << (7 * i);
     }
-  printk ("Available DRAM %dk\n", tmp1 / 1024);
+  if (trace_init)
+    printk ("Available DRAM %dk\n", tmp1 / 1024);
 
   request_region (hw_config->io_base + 2, 6, "Maui");
 
@@ -222,7 +226,7 @@ attach_maui (long mem_start, struct address_info *hw_config)
 {
   int             this_dev = num_midis;
 
-  printk (" <Maui>");
+  conf_printf ("Maui", hw_config);
 
   hw_config->irq *= -1;
   mem_start = attach_mpu401 (mem_start, hw_config);

@@ -110,6 +110,13 @@ static inline void add_page_to_inode_queue(struct inode * inode, struct page * p
 	*p = page;
 }
 
+extern void __wait_on_page(struct page *);
+static inline void wait_on_page(struct page * page)
+{
+	if (page->locked)
+		__wait_on_page(page);
+}
+
 extern void update_vm_cache(struct inode *, unsigned long, const char *, int);
 
 #endif

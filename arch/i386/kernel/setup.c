@@ -196,7 +196,7 @@ static const char * i486model(unsigned int nr)
 static const char * i586model(unsigned int nr)
 {
 	static const char *model[] = {
-		"0", "Pentium 60/66","Pentium 75+"
+		"0", "Pentium 60/66","Pentium 75+","OverDrive PODP5V83"
 	};
 	if (nr < sizeof(model)/sizeof(char *))
 		return model[nr];

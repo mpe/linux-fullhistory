@@ -56,6 +56,7 @@ static struct buffer_head * lru_list[NR_LIST] = {NULL, };
 static struct buffer_head * next_to_age[NR_LIST] = {NULL, };
 static struct buffer_head * free_list[NR_SIZES] = {NULL, };
 static struct buffer_head * unused_list = NULL;
+struct buffer_head * reuse_list = NULL;
 static struct wait_queue * buffer_wait = NULL;
 
 int nr_buffers = 0;
@@ -459,7 +460,7 @@ static inline struct buffer_head * find_buffer(kdev_t dev, int block, int size)
 	struct buffer_head * tmp;
 
 	for (tmp = hash(dev,block) ; tmp != NULL ; tmp = tmp->b_next)
-		if (tmp->b_dev == dev && tmp->b_blocknr == block)
+		if (tmp->b_blocknr == block && tmp->b_dev == dev)
 			if (tmp->b_size == size)
 				return tmp;
 			else {
@@ -980,10 +981,38 @@ static void get_more_buffer_heads(void)
 	}
 }
 
+/* 
+ * We can't put completed temporary IO buffer_heads directly onto the
+ * unused_list when they become unlocked, since the device driver
+ * end_request routines still expect access to the buffer_head's
+ * fields after the final unlock.  So, the device driver puts them on
+ * the reuse_list instead once IO completes, and we recover these to
+ * the unused_list here.
+ *
+ * The reuse_list receives buffers from interrupt routines, so we need
+ * to be IRQ-safe here.
+ */
+static inline void recover_reusable_buffer_heads(void)
+{
+	struct buffer_head *bh;
+	unsigned long flags;
+	
+	save_flags(flags);
+	cli();
+	while (reuse_list) {
+		bh = reuse_list;
+		reuse_list = bh->b_next_free;
+		restore_flags(flags);
+		put_unused_buffer_head(bh);
+		cli();
+	}
+}
+
 static struct buffer_head * get_unused_buffer_head(void)
 {
 	struct buffer_head * bh;
 
+	recover_reusable_buffer_heads();
 	get_more_buffer_heads();
 	if (!unused_list)
 		return NULL;
@@ -1033,22 +1062,14 @@ no_grow:
 	return NULL;
 }
 
-static void read_buffers(struct buffer_head * bh[], int nrbuf)
-{
-	ll_rw_block(READ, nrbuf, bh);
-	bh += nrbuf;
-	do {
-		nrbuf--;
-		bh--;
-		wait_on_buffer(*bh);
-	} while (nrbuf > 0);
-}
-
 static int bread_page(unsigned long address, kdev_t dev, int b[], int size)
 {
-	struct buffer_head *bh, *next, *arr[MAX_BUF_PER_PAGE];
+	struct buffer_head *bh, *prev, *next, *arr[MAX_BUF_PER_PAGE];
 	int block, nr;
+	struct page *page;
 
+	page = mem_map + MAP_NR(address);
+	page->uptodate = 0;
 	bh = create_buffers(address, size);
 	if (!bh)
 		return -ENOMEM;
@@ -1057,6 +1078,17 @@ static int bread_page(unsigned long address, kdev_t dev, int b[], int size)
 	do {
 		struct buffer_head * tmp;
 		block = *(b++);
+
+		set_bit(BH_FreeOnIO, &next->b_state);
+		next->b_list = BUF_CLEAN;
+		next->b_dev = dev;
+		next->b_blocknr = block;
+		next->b_count = 1;
+		next->b_flushtime = 0;
+		clear_bit(BH_Dirty, &next->b_state);
+		clear_bit(BH_Req, &next->b_state);
+		set_bit(BH_Uptodate, &next->b_state);
+		
 		if (!block) {
 			memset(next->b_data, 0, size);
 			continue;
@@ -1071,32 +1103,47 @@ static int bread_page(unsigned long address, kdev_t dev, int b[], int size)
 			brelse(tmp);
 			continue;
 		}
-		arr[nr++] = next;
-		next->b_dev = dev;
-		next->b_blocknr = block;
-		next->b_count = 1;
-		next->b_flushtime = 0;
-		clear_bit(BH_Dirty, &next->b_state);
 		clear_bit(BH_Uptodate, &next->b_state);
-		clear_bit(BH_Req, &next->b_state);
-		next->b_list = BUF_CLEAN;
-	} while ((next = next->b_this_page) != NULL);
-
+		arr[nr++] = next;
+	} while (prev = next, (next = next->b_this_page) != NULL);
+	prev->b_this_page = bh;
+	
 	if (nr)
-		read_buffers(arr,nr);
-	++current->maj_flt;
-
-	while ((next = bh) != NULL) {
-		bh = bh->b_this_page;
-		put_unused_buffer_head(next);
+		ll_rw_block(READ, nr, arr);
+	else {
+		page->locked = 0;
+		page->uptodate = 1;
+		wake_up(&page->wait);
 	}
+	++current->maj_flt;
 	return 0;
 }
 
+void mark_buffer_uptodate(struct buffer_head * bh, int on)
+{
+	if (on) {
+		struct buffer_head *tmp = bh;
+		int page_uptodate = 1;
+		set_bit(BH_Uptodate, &bh->b_state);
+		do {
+			if (!test_bit(BH_Uptodate, &tmp->b_state)) {
+				page_uptodate = 0;
+				break;
+			}
+			tmp=tmp->b_this_page;
+		} while (tmp && tmp != bh);
+		if (page_uptodate)
+			mem_map[MAP_NR(bh->b_data)].uptodate = 1;
+	} else
+		clear_bit(BH_Uptodate, &bh->b_state);
+}
+
 /*
- * Generic "readpage" function for block devices that have the
- * normal bmap functionality. This is most of the block device
- * filesystems.
+ * Generic "readpage" function for block devices that have the normal
+ * bmap functionality. This is most of the block device filesystems.
+ * Reads the page asynchronously --- the unlock_buffer() and
+ * mark_buffer_uptodate() functions propogate buffer state into the
+ * page struct once IO has completed.
  */
 int generic_readpage(struct inode * inode, struct page * page)
 {
@@ -1104,6 +1151,9 @@ int generic_readpage(struct inode * inode, struct page * page)
 	int *p, nr[PAGE_SIZE/512];
 	int i;
 
+	wait_on_page(page);
+	page->locked = 1;
+	
 	i = PAGE_SIZE >> inode->i_sb->s_blocksize_bits;
 	block = page->offset >> inode->i_sb->s_blocksize_bits;
 	p = nr;
@@ -1114,20 +1164,11 @@ int generic_readpage(struct inode * inode, struct page * page)
 		p++;
 	} while (i > 0);
 
-	/*
-	 * We should make this asynchronous, but this is good enough for now..
-	 */
-
 	/* IO start */
 	page->count++;
 	address = page_address(page);
 	bread_page(address, inode->i_dev, nr, inode->i_sb->s_blocksize);
-
-	/* IO ready (this part should be in the "page ready callback" function) */
-	page->uptodate = 1;
-	wake_up(&page->wait);
 	free_page(address);
-
 	return 0;
 }
 

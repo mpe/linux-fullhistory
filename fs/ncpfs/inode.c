@@ -483,25 +483,31 @@ int ncp_malloced;
 int ncp_current_malloced;
 #endif
 
-#ifdef MODULE
-
 static struct file_system_type ncp_fs_type = {
         ncp_read_super, "ncpfs", 0, NULL
         };
 
-int
+int init_ncp_fs(void)
+{
+        return register_filesystem(&ncp_fs_type);
+}
+
+#ifdef MODULE
 init_module( void)
 {
+	int status;
+
         DPRINTK("ncpfs: init_module called\n");
 
 #ifdef DEBUG_NCP_MALLOC
         ncp_malloced = 0;
         ncp_current_malloced = 0;
 #endif
-
         ncp_init_dir_cache();
-        register_filesystem(&ncp_fs_type);
-        return 0;
+
+	if ((status = init_ncp_fs()) == 0)
+		register_symtab(0);
+	return status;
 }
 
 void

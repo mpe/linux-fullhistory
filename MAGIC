@@ -74,6 +74,7 @@ Ioctl	Include File		Comments
 0x06	linux/lp.h
 0x12	linux/fs.h
 0x20	linux/cm206.h
+0x22	linux/scc.h
 'A'	linux/apm_bios.h
 'C'	linux/soundcard.h
 'K'	linux/kd.h
@@ -83,7 +84,6 @@ Ioctl	Include File		Comments
 'S'	linux/cdrom.h		conflict!
 'S'	linux/scsi.h		conflict!
 'T'	linux/soundcard.h	conflict!
-'T'	linux/scc.h		conflict!
 'T'	asm/termios.h		conflict!
 'V'	linux/vt.h
 'Y'	linux/cyclades.h	codes in 0x004359NN

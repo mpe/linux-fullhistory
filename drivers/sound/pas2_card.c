@@ -30,7 +30,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_PAS)
+#if defined(CONFIG_PAS)
 
 #define DEFINE_TRANSLATIONS
 #include "pas.h"
@@ -93,14 +93,14 @@ pasintr (int irq, struct pt_regs *dummy)
 
   if (status & I_S_PCM_SAMPLE_BUFFER_IRQ)
     {
-#ifndef EXCLUDE_AUDIO
+#ifdef CONFIG_AUDIO
       pas_pcm_interrupt (status, 1);
 #endif
       status &= ~I_S_PCM_SAMPLE_BUFFER_IRQ;
     }
   if (status & I_S_MIDI_IRQ)
     {
-#ifndef EXCLUDE_MIDI
+#ifdef CONFIG_MIDI
       pas_midi_interrupt ();
 #endif
       status &= ~I_S_MIDI_IRQ;
@@ -259,7 +259,7 @@ config_pas_hw (struct address_info *hw_config)
   mix_write (P_M_MV508_ADDRESS | 5, PARALLEL_MIXER);
   mix_write (5, PARALLEL_MIXER);
 
-#if !defined(EXCLUDE_SB_EMULATION) && !defined(EXCLUDE_SB)
+#if defined(CONFIG_SB_EMULATION) && defined(CONFIG_SB)
 
   {
     struct address_info *sb_config;
@@ -369,17 +369,22 @@ attach_pas_card (long mem_start, struct address_info *hw_config)
 
       if ((pas_model = pas_read (CHIP_REV)))
 	{
-	  printk (" <%s rev %d>", pas_model_names[(int) pas_model], pas_read (BOARD_REV_ID));
+	  char            temp[100];
+
+	  sprintf (temp,
+		   "%s rev %d", pas_model_names[(int) pas_model],
+		   pas_read (BOARD_REV_ID));
+	  conf_printf (temp, hw_config);
 	}
 
       if (config_pas_hw (hw_config))
 	{
 
-#ifndef EXCLUDE_AUDIO
+#ifdef CONFIG_AUDIO
 	  mem_start = pas_pcm_init (mem_start, hw_config);
 #endif
 
-#if !defined(EXCLUDE_SB_EMULATION) && !defined(EXCLUDE_SB)
+#if defined(CONFIG_SB_EMULATION) && defined(CONFIG_SB)
 
 	  sb_dsp_disable_midi ();	/*
 					 * The SB emulation don't support *
@@ -388,7 +393,7 @@ attach_pas_card (long mem_start, struct address_info *hw_config)
 #endif
 
 
-#ifndef EXCLUDE_MIDI
+#ifdef CONFIG_MIDI
 	  mem_start = pas_midi_init (mem_start);
 #endif
 

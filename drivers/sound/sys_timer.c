@@ -31,9 +31,7 @@
 #define SEQUENCER_C
 #include "sound_config.h"
 
-#ifdef CONFIGURE_SOUNDCARD
-
-#ifndef EXCLUDE_SEQUENCER
+#ifdef CONFIG_SEQUENCER
 
 static volatile int opened = 0, tmr_running = 0;
 static volatile time_t tmr_offs, tmr_ctr;
@@ -113,6 +111,7 @@ def_tmr_open (int dev, int mode)
   curr_timebase = HZ;
   opened = 1;
 
+  ;
 
   {
     def_tmr.expires = (1) + jiffies;
@@ -306,5 +305,4 @@ struct sound_timer_operations default_sound_timer =
   def_tmr_arm
 };
 
-#endif
 #endif

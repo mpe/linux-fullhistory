@@ -149,7 +149,7 @@ S: USA
 
 N: Andries Brouwer
 E: aeb@cwi.nl
-D: International character handling for keyboard and console
+D: random Linux hacker
 S: Bessemerstraat 21
 S: Amsterdam
 S: The Netherlands
@@ -601,7 +601,7 @@ S: Boulder, Colorado 80303
 S: USA
 
 N: H.J. Lu
-E: hjl@nynexst.com
+E: hjl@gnu.ai.mit.edu
 D: GCC + libraries hacker
 
 N: Tuomas J. Lukka
@@ -722,7 +722,7 @@ S: Muskego, Wisconsin 53150
 S: USA
 
 N: Harald Milz
-E: hm@ix.de
+E: hm@seneca.linux.de
 D: Linux Projects Map, Linux Commercial-HOWTO
 D: general Linux publicity in Germany, vacation port
 D: UUCP and CNEWS binary packages for LST
@@ -894,7 +894,8 @@ S: B2240 Zandhoven
 S: Belgium
 
 N: Martin Schulze
-E: joey@infodrom.north.de
+E: joey@linux.de
+W: http://home.pages.de/~joey/
 D: Random Linux Hacker, Linux Promoter
 D: CD-List, Books-List, Ex-FAQ
 D: Linux-Support, -Mailbox, -Stammtisch

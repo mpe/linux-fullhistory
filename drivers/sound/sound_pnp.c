@@ -28,7 +28,7 @@
  */
 #include "sound_config.h"
 
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_PNP)
+#if defined(CONFIG_PNP)
 
 #include <linux/pnp.h>
 

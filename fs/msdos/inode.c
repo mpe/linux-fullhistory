@@ -515,15 +515,55 @@ int msdos_notify_change(struct inode * inode,struct iattr * attr)
 	return 0;
 }
 
-#ifdef MODULE
+static struct symbol_table msdos_syms = {
+/* Should this be surrounded with "#ifdef CONFIG_MODULES" ? */
+#include <linux/symtab_begin.h>
+	/*
+	 * Support for umsdos fs
+	 *
+	 * These symbols are _always_ exported, in case someone
+	 * wants to install the umsdos module later.
+	 */
+	X(msdos_bmap),
+	X(msdos_create),
+	X(msdos_file_read),
+	X(msdos_file_write),
+	X(msdos_lookup),
+	X(msdos_mkdir),
+	X(msdos_mmap),
+	X(msdos_put_inode),
+	X(msdos_put_super),
+	X(msdos_read_inode),
+	X(msdos_read_super),
+	X(msdos_readdir),
+	X(msdos_rename),
+	X(msdos_rmdir),
+	X(msdos_smap),
+	X(msdos_statfs),
+	X(msdos_truncate),
+	X(msdos_unlink),
+	X(msdos_unlink_umsdos),
+	X(msdos_write_inode),
+#include <linux/symtab_end.h>
+};
 
 static struct file_system_type msdos_fs_type = {
 	msdos_read_super, "msdos", 1, NULL
 };
 
+int init_msdos_fs(void)
+{
+	int status;
+
+	if ((status = register_filesystem(&msdos_fs_type)) == 0)
+		status = register_symtab(&msdos_syms);
+	return status;
+}
+
+#ifdef MODULE
 int init_module(void)
 {
-	return register_filesystem(&msdos_fs_type);
+	return init_msdos_fs();
 }
 
 void cleanup_module(void)

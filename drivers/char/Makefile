@@ -95,6 +95,7 @@ endif
 ifdef CONFIG_SOFT_WATCHDOG
 L_OBJS += softdog.o
 M = y
+# This is not modularized, so if configured then "mouse.c" will be resident
 endif
 
 ifdef CONFIG_QIC02_TAPE
@@ -106,16 +107,20 @@ LX_OBJS += apm_bios.o
 endif
 
 ifdef M
-L_OBJS += mouse.o
+LX_OBJS += mouse.o
 else
   ifdef MM
-  M_OBJS += mouse.o
+  MX_OBJS += mouse.o
   endif
 endif
-  
-ifdef CONFIG_SCC
+
+ifeq ($(CONFIG_SCC),y)
 L_OBJS += scc.o
-endif
+else
+  ifeq ($(CONFIG_SCC),m)
+  M_OBJS += scc.o
+  endif
+endif  
 
 ifdef CONFIG_TGA_CONSOLE
 L_OBJS += tga.o

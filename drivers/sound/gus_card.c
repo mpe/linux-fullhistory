@@ -29,7 +29,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_GUS)
+#if defined(CONFIG_GUS)
 
 #include "gus_hw.h"
 
@@ -64,7 +64,7 @@ attach_gus_card (long mem_start, struct address_info *hw_config)
       if (hw_config->dma2 != -1 && hw_config->dma2 != hw_config->dma)
 	if (sound_alloc_dma (hw_config->dma2, "GUS(2)"))
 	  printk ("gus_card.c: Can't allocate DMA channel2\n");
-#ifndef EXCLUDE_MIDI
+#ifdef CONFIG_MIDI
       mem_start = gus_midi_init (mem_start);
 #endif
       return mem_start;
@@ -93,7 +93,7 @@ attach_gus_card (long mem_start, struct address_info *hw_config)
 	  if (hw_config->dma2 != -1 && hw_config->dma2 != hw_config->dma)
 	    if (sound_alloc_dma (hw_config->dma2, "GUS"))
 	      printk ("gus_card.c: Can't allocate DMA channel2\n");
-#ifndef EXCLUDE_MIDI
+#ifdef CONFIG_MIDI
 	  mem_start = gus_midi_init (mem_start);
 #endif
 	  return mem_start;
@@ -166,7 +166,7 @@ gusintr (int irq, struct pt_regs *dummy)
 
   sti ();
 
-#ifndef EXCLUDE_GUSMAX
+#ifdef CONFIG_GUSMAX
   if (have_gus_max)
     ad1848_interrupt (irq, NULL);
 #endif
@@ -183,16 +183,19 @@ gusintr (int irq, struct pt_regs *dummy)
 
       if (src & (MIDI_TX_IRQ | MIDI_RX_IRQ))
 	{
-#ifndef EXCLUDE_MIDI
+#ifdef CONFIG_MIDI
 	  gus_midi_interrupt (0);
 #endif
 	}
 
       if (src & (GF1_TIMER1_IRQ | GF1_TIMER2_IRQ))
 	{
-#ifndef EXCLUDE_SEQUENCER
+#ifdef CONFIG_SEQUENCER
 	  if (gus_timer_enabled)
-	    sound_timer_interrupt ();
+	    {
+	      sound_timer_interrupt ();
+	    }
+
 	  gus_write8 (0x45, 0);	/* Ack IRQ */
 	  gus_timer_command (4, 0x80);	/* Reset IRQ flags */
 
@@ -213,7 +216,7 @@ gusintr (int irq, struct pt_regs *dummy)
 /*
  * Some extra code for the 16 bit sampling option
  */
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_GUS16)
+#if defined(CONFIG_GUS16)
 
 int
 probe_gus_db16 (struct address_info *hw_config)
@@ -224,8 +227,10 @@ probe_gus_db16 (struct address_info *hw_config)
 long
 attach_gus_db16 (long mem_start, struct address_info *hw_config)
 {
+#ifdef CONFIG_GUS
   gus_pcm_volume = 100;
   gus_wave_volume = 90;
+#endif
 
   ad1848_init ("GUS 16 bit sampling", hw_config->io_base,
 	       hw_config->irq,

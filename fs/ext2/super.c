@@ -685,15 +685,23 @@ int ext2_remount (struct super_block * sb, int * flags, char * data)
 	return 0;
 }
 
-#ifdef MODULE
-
 static struct file_system_type ext2_fs_type = {
         ext2_read_super, "ext2", 1, NULL
 };
 
-int init_module(void)
+int init_ext2_fs(void)
 {
         return register_filesystem(&ext2_fs_type);
+}
+
+#ifdef MODULE
+int init_module(void)
+{
+	int status;
+
+	if ((status = init_ext2_fs()) == 0)
+		register_symtab(0);
+	return status;
 }
 
 void cleanup_module(void)

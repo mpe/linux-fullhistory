@@ -969,8 +969,6 @@ int sysv_sync_inode(struct inode * inode)
         return err;
 }
 
-#ifdef MODULE
-
 /* Every kernel module contains stuff like this. */
 
 static struct file_system_type sysv_fs_type[3] = {
@@ -979,7 +977,7 @@ static struct file_system_type sysv_fs_type[3] = {
 	{sysv_read_super, "coherent", 1, NULL}
 };
 
-int init_module(void)
+int init_sysv_fs(void)
 {
 	int i;
 	int ouch;
@@ -988,7 +986,17 @@ int init_module(void)
 		if ((ouch = register_filesystem(&sysv_fs_type[i])) != 0)
 			return ouch;
 	}
-	return 0;
+        return ouch;
+}
+
+#ifdef MODULE
+int init_module(void)
+{
+	int status;
+
+	if ((status = init_sysv_fs()) == 0)
+		register_symtab(0);
+	return status;
 }
 
 void cleanup_module(void)

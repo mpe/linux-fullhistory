@@ -48,6 +48,10 @@ ifeq ($(CONFIG_BLK_DEV_TRITON),y)
 L_OBJS += triton.o
 endif
 
+ifeq ($(CONFIG_BLK_DEV_CMD640),y)
+L_OBJS += cmd640.o
+endif
+
 ifeq ($(CONFIG_BLK_DEV_IDECD),y)
 L_OBJS += ide-cd.o
 endif

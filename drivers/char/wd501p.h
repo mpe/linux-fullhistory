@@ -18,6 +18,8 @@
  *	Release 0.04.
  *
  */
+
+#include <linux/config.h>
  
 #define WATCHDOG_MINOR		130	/* Watchdog timer     */
 #define TEMP_MINOR		131	/* Temperature Sensor */

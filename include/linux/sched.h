@@ -316,6 +316,8 @@ extern unsigned long * prof_buffer;
 extern unsigned long prof_len;
 extern unsigned long prof_shift;
 
+extern int securelevel;	/* system security level */
+
 #define CURRENT_TIME (xtime.tv_sec)
 
 extern void sleep_on(struct wait_queue ** p);

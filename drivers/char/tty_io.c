@@ -73,6 +73,10 @@
 #include "vt_kern.h"
 #include "selection.h"
 
+#ifdef CONFIG_KERNELD
+#include <linux/kerneld.h>
+#endif
+
 #define CONSOLE_DEV MKDEV(TTY_MAJOR,0)
 #define TTY_DEV MKDEV(TTYAUX_MAJOR,0)
 
@@ -211,8 +215,17 @@ static int tty_set_ldisc(struct tty_struct *tty, int ldisc)
 	int	retval = 0;
 	struct	tty_ldisc o_ldisc;
 
-	if ((ldisc < N_TTY) || (ldisc >= NR_LDISCS) ||
-	    !(ldiscs[ldisc].flags & LDISC_FLAG_DEFINED))
+	if ((ldisc < N_TTY) || (ldisc >= NR_LDISCS))
+		return -EINVAL;
+#ifdef CONFIG_KERNELD
+	/* Eduardo Blanco <ejbs@cs.cs.com.uy> */
+	if (!(ldiscs[ldisc].flags & LDISC_FLAG_DEFINED)) {
+		char modname [20];
+		sprintf(modname, "tty-ldisc-%d", ldisc);
+		request_module (modname);
+	}
+#endif
+	if (!(ldiscs[ldisc].flags & LDISC_FLAG_DEFINED))
 		return -EINVAL;
 
 	if (tty->ldisc.num == ldisc)

@@ -1,4 +1,4 @@
-#define DISABLED_OPTIONS 	(B(OPT_PNP))
+#define DISABLED_OPTIONS 	(B(OPT_PNP)|B(OPT_AEDSP16))
 /*
  * sound/configure.c  - Configuration program for the Linux Sound Driver
  *
@@ -67,6 +67,7 @@
 #define OPT_SEQUENCER	24
 #define OPT_LAST	24	/* Last defined OPT number */
 
+#define DUMMY_OPTS (B(OPT_MIDI_AUTO)|B(OPT_YM3812_AUTO))
 
 #define ANY_DEVS (B(OPT_AUDIO)|B(OPT_MIDI)|B(OPT_SEQUENCER)|B(OPT_GUS)| \
 		  B(OPT_MPU401)|B(OPT_PSS)|B(OPT_GUS16)|B(OPT_GUSMAX)| \
@@ -204,9 +205,12 @@ extra_options[] =
 char           *oldconf = "/etc/soundconf";
 
 int             old_config_used = 0;
+int             def_size, sb_base = 0;
 
 unsigned long   selected_options = 0;
 int             sb_dma = 0;
+
+int             dump_only = 0;
 
 void            build_defines (void);
 
@@ -242,8 +246,7 @@ think_positively (int def_answ)
       fprintf (stderr, "\n\nERROR! Cannot read stdin\n");
 
       perror ("stdin");
-      printf ("#undef CONFIGURE_SOUNDCARD\n");
-      printf ("#undef KERNEL_SOUNDCARD\n");
+      printf ("invalid_configuration__run_make_config_again\n");
       exit (-1);
     }
 
@@ -273,8 +276,7 @@ play_it_again_Sam:
       fprintf (stderr, "\n\nERROR! Cannot read stdin\n");
 
       perror ("stdin");
-      printf ("#undef CONFIGURE_SOUNDCARD\n");
-      printf ("#undef KERNEL_SOUNDCARD\n");
+      printf ("invalid_configuration__run_make_config_again\n");
       exit (-1);
     }
 
@@ -292,6 +294,74 @@ play_it_again_Sam:
     }
 
   return num;
+}
+
+#define FMT_HEX 1
+#define FMT_INT 2
+
+void
+ask_int_choice (int mask, char *macro,
+		char *question,
+		int format,
+		int defa,
+		char *choices)
+{
+  int             num, i;
+
+  if (dump_only)
+    {
+
+      for (i = 0; i < OPT_LAST; i++)
+	if (mask == B (i))
+	  {
+	    int             j;
+
+	    for (j = 0; j < strlen (choices); j++)
+	      if (choices[j] == '\'')
+		choices[j] = '_';
+
+	    printf ("\nif [ \"$CONFIG_%s\" = \"y\" ]; then\n",
+		    hw_table[i].macro);
+	    if (format == FMT_INT)
+	      printf ("int '%s %s' %s %d\n", question, choices, macro, defa);
+	    else
+	      printf ("hex '%s %s' %s %x\n", question, choices, macro, defa);
+	    printf ("fi\n");
+	  }
+    }
+  else
+    {
+      if (!(mask & selected_options))
+	return;
+
+      fprintf (stderr, "\n%s\n", question);
+      fprintf (stderr, "Possible values are: %s\n", choices);
+
+      if (format == FMT_INT)
+	{
+	  if (defa == -1)
+	    fprintf (stderr, "\t(-1 disables this feature)\n");
+	  fprintf (stderr, "The default value is %d\n", defa);
+	  fprintf (stderr, "Enter the value: ");
+	  num = ask_value ("%d", defa);
+	  if (num == -1)
+	    return;
+	  fprintf (stderr, "%s set to %d.\n", question, num);
+	  printf ("#define %s %d\n", macro, num);
+	}
+      else
+	{
+	  if (defa == 0)
+	    fprintf (stderr, "\t(0 disables this feature)\n");
+	  fprintf (stderr, "The default value is %x\n", defa);
+	  fprintf (stderr, "Enter the value: ");
+	  num = ask_value ("%x", defa);
+	  if (num == 0)
+	    return;
+	  fprintf (stderr, "%s set to %x.\n", question, num);
+	  printf ("#define %s 0x%x\n", macro, num);
+	}
+    }
 }
 
 void
@@ -398,9 +468,29 @@ use_old_config (char *filename)
 	  if (strcmp (tmp, "SELECTED_SOUND_OPTIONS") == 0)
 	    continue;
 
+	  if (strcmp (tmp, "KERNEL_SOUNDCARD") == 0)
+	    continue;
+
 	  tmp[8] = 0;		/* Truncate the string */
 	  if (strcmp (tmp, "EXCLUDE_") == 0)
 	    continue;		/* Skip excludes */
+
+	  strncpy (tmp, id, i);
+	  tmp[7] = 0;		/* Truncate the string */
+
+	  if (strcmp (tmp, "CONFIG_") == 0)
+	    {
+	      strncpy (tmp, &id[7], i - 7);
+	      tmp[i - 7] = 0;
+
+	      for (i = 0; i <= OPT_LAST; i++)
+		if (strcmp (hw_table[i].macro, tmp) == 0)
+		  {
+		    selected_options |= (1 << i);
+		    break;
+		  }
+	      continue;
+	    }
 
 	  printf ("%s", buf);
 	  continue;
@@ -416,7 +506,11 @@ use_old_config (char *filename)
 	    i++;
 
 	  strncpy (tmp, id, i);
-	  tmp[i] = 0;
+	  tmp[7] = 0;		/* Truncate the string */
+	  if (strcmp (tmp, "CONFIG_") == 0)
+	    continue;
+
+	  strncpy (tmp, id, i);
 
 	  tmp[8] = 0;		/* Truncate the string */
 	  if (strcmp (tmp, "EXCLUDE_") != 0)
@@ -440,9 +534,9 @@ use_old_config (char *filename)
   for (i = 0; i <= OPT_LAST; i++)
     if (!hw_table[i].alias)
       if (selected_options & B (i))
-	printf ("#undef  EXCLUDE_%s\n", hw_table[i].macro);
+	printf ("#define CONFIG_%s\n", hw_table[i].macro);
       else
-	printf ("#define EXCLUDE_%s\n", hw_table[i].macro);
+	printf ("#undef  CONFIG_%s\n", hw_table[i].macro);
 
 
   printf ("\n");
@@ -452,9 +546,9 @@ use_old_config (char *filename)
   while (extra_options[i].name != NULL)
     {
       if (selected_options & extra_options[i].mask)
-	printf ("#undef  EXCLUDE_%s\n", extra_options[i].name);
+	printf ("#define CONFIG_%s\n", extra_options[i].name);
       else
-	printf ("#define EXCLUDE_%s\n", extra_options[i].name);
+	printf ("#undef  CONFIG_%s\n", extra_options[i].name);
       i++;
     }
 
@@ -502,15 +596,483 @@ build_defines (void)
   fclose (optf);
 }
 
+void
+ask_parameters (void)
+{
+  int             num;
+
+  build_defines ();
+  /*
+   * IRQ and DMA settings
+   */
+
+  ask_int_choice (B (OPT_AEDSP16), "AEDSP16_BASE",
+		  "I/O base for Audio Excel DSP 16",
+		  FMT_HEX,
+		  0x220,
+		  "220 or 240");
+
+  ask_int_choice (B (OPT_SB), "SBC_BASE",
+		  "I/O base for SB",
+		  FMT_HEX,
+		  0x220,
+		  "");
+
+  ask_int_choice (B (OPT_SB), "SBC_IRQ",
+		  "SoundBlaster IRQ",
+		  FMT_INT,
+		  7,
+		  "");
+
+  ask_int_choice (B (OPT_SB), "SBC_DMA",
+		  "SoundBlaster DMA",
+		  FMT_INT,
+		  1,
+		  "");
+
+  ask_int_choice (B (OPT_SB), "SB_DMA2",
+		  "SoundBlaster 16 bit DMA (if required)",
+		  FMT_INT,
+		  -1,
+		  "5, 6 or 7");
+
+  ask_int_choice (B (OPT_SB), "SB_MPU_BASE",
+		  "MPU401 I/O base of SB16, Jazz16 and ES1688",
+		  FMT_HEX,
+		  0,
+		  "");
+
+  ask_int_choice (B (OPT_SB), "SB_MPU_IRQ",
+		  "SB MPU401 IRQ (SB16, Jazz16 and ES1688)",
+		  FMT_INT,
+		  -1,
+		  "");
+
+  ask_int_choice (B (OPT_PAS), "PAS_IRQ",
+		  "PAS16 IRQ",
+		  FMT_INT,
+		  10,
+		  "");
+
+  ask_int_choice (B (OPT_PAS), "PAS_DMA",
+		  "PAS16 DMA",
+		  FMT_INT,
+		  3,
+		  "");
+
+  if (selected_options & B (OPT_PAS))
+    {
+      fprintf (stderr, "\nEnable Joystick port on ProAudioSpectrum (n/y) ? ");
+      if (think_positively (0))
+	printf ("#define PAS_JOYSTICK_ENABLE\n");
+
+
+      fprintf (stderr, "PAS16 could be noisy with some mother boards\n"
+	       "There is a command line switch (was it :T?)\n"
+	       "in the DOS driver for PAS16 which solves this.\n"
+	       "Don't enable this feature unless you have problems!\n"
+	       "Do you have to use this switch with DOS (y/n) ?");
+      if (think_positively (0))
+	printf ("#define BROKEN_BUS_CLOCK\n");
+    }
+
+
+  ask_int_choice (B (OPT_GUS), "GUS_BASE",
+		  "I/O base for Gravis UltraSound (GUS)",
+		  FMT_HEX,
+		  0x220,
+		  "210, 220, 230, 240, 250 or 260");
+
+
+  ask_int_choice (B (OPT_GUS), "GUS_IRQ",
+		  "GUS IRQ",
+		  FMT_INT,
+		  15,
+		  "");
+
+  ask_int_choice (B (OPT_GUS), "GUS_DMA",
+		  "GUS DMA",
+		  FMT_INT,
+		  6,
+		  "");
+
+  ask_int_choice (B (OPT_GUS), "GUS_DMA2",
+		  "Second DMA channel for GUS",
+		  FMT_INT,
+		  -1,
+		  "");
+
+  ask_int_choice (B (OPT_GUS16), "GUS16_BASE",
+		  "I/O base for the 16 bit daughtercard of GUS",
+		  FMT_HEX,
+		  0x530,
+		  "530, 604, E80 or F40");
+
+
+  ask_int_choice (B (OPT_GUS16), "GUS16_IRQ",
+		  "GUS 16 bit daughtercard IRQ",
+		  FMT_INT,
+		  7,
+		  "3, 4, 5, 7, or 9");
+
+  ask_int_choice (B (OPT_GUS16), "GUS16_DMA",
+		  "GUS DMA",
+		  FMT_INT,
+		  3,
+		  "0, 1 or 3");
+
+  ask_int_choice (B (OPT_MPU401), "MPU_BASE",
+		  "I/O base for MPU401",
+		  FMT_HEX,
+		  0x330,
+		  "");
+
+  ask_int_choice (B (OPT_MPU401), "MPU_IRQ",
+		  "MPU401 IRQ",
+		  FMT_INT,
+		  9,
+		  "");
+
+  ask_int_choice (B (OPT_MAUI), "MAUI_BASE",
+		  "I/O base for Maui",
+		  FMT_HEX,
+		  0x330,
+		  "210, 230, 260, 290, 300, 320, 338 or 330");
+
+  ask_int_choice (B (OPT_MAUI), "MAUI_IRQ",
+		  "Maui IRQ",
+		  FMT_INT,
+		  9,
+		  "5, 9, 12 or 15");
+
+  ask_int_choice (B (OPT_UART6850), "U6850_BASE",
+		  "I/O base for UART 6850 MIDI port",
+		  FMT_HEX,
+		  0,
+		  "(Unknown)");
+
+  ask_int_choice (B (OPT_UART6850), "U6850_IRQ",
+		  "UART6850 IRQ",
+		  FMT_INT,
+		  -1,
+		  "(Unknown)");
+
+  ask_int_choice (B (OPT_PSS), "PSS_BASE",
+		  "PSS I/O base",
+		  FMT_HEX,
+		  0x220,
+		  "220 or 240");
+
+  ask_int_choice (B (OPT_PSS), "PSS_MSS_BASE",
+		  "PSS audio I/O base",
+		  FMT_HEX,
+		  0x530,
+		  "530, 604, E80 or F40");
+
+  ask_int_choice (B (OPT_PSS), "PSS_MSS_IRQ",
+		  "PSS audio IRQ",
+		  FMT_INT,
+		  11,
+		  "7, 9, 10 or 11");
+
+  ask_int_choice (B (OPT_PSS), "PSS_MSS_DMA",
+		  "PSS audio DMA",
+		  FMT_INT,
+		  3,
+		  "0, 1 or 3");
+
+  ask_int_choice (B (OPT_PSS), "PSS_MPU_BASE",
+		  "PSS MIDI I/O base",
+		  FMT_HEX,
+		  0x330,
+		  "");
+
+  ask_int_choice (B (OPT_PSS), "PSS_MPU_IRQ",
+		  "PSS MIDI IRQ",
+		  FMT_INT,
+		  9,
+		  "3, 4, 5, 7 or 9");
+
+  ask_int_choice (B (OPT_MSS), "MSS_BASE",
+		  "MSS/WSS I/O base",
+		  FMT_HEX,
+		  0x530,
+		  "530, 604, E80 or F40");
+
+  ask_int_choice (B (OPT_MSS), "MSS_IRQ",
+		  "MSS/WSS IRQ",
+		  FMT_INT,
+		  11,
+		  "7, 9, 10 or 11");
+
+  ask_int_choice (B (OPT_MSS), "MSS_DMA",
+		  "MSS/WSS DMA",
+		  FMT_INT,
+		  3,
+		  "0, 1 or 3");
+
+  ask_int_choice (B (OPT_SSCAPE), "SSCAPE_BASE",
+		  "Soundscape MIDI I/O base",
+		  FMT_HEX,
+		  0x330,
+		  "");
+
+  ask_int_choice (B (OPT_SSCAPE), "SSCAPE_IRQ",
+		  "Soundscape MIDI IRQ",
+		  FMT_INT,
+		  9,
+		  "");
+
+  ask_int_choice (B (OPT_SSCAPE), "SSCAPE_DMA",
+		  "Soundscape initialization DMA",
+		  FMT_INT,
+		  3,
+		  "0, 1 or 3");
+
+  ask_int_choice (B (OPT_SSCAPE), "SSCAPE_MSS_BASE",
+		  "Soundscape audio I/O base",
+		  FMT_HEX,
+		  0x534,
+		  "534, 608, E84 or F44");
+
+  ask_int_choice (B (OPT_SSCAPE), "SSCAPE_MSS_IRQ",
+		  "Soundscape audio IRQ",
+		  FMT_INT,
+		  11,
+		  "7, 9, 10 or 11");
+
+  ask_int_choice (B (OPT_SSCAPE), "SSCAPE_MSS_DMA",
+		  "Soundscape audio DMA",
+		  FMT_INT,
+		  0,
+		  "0, 1 or 3");
+
+  if (selected_options & B (OPT_SSCAPE))
+    {
+      int             reveal_spea;
+
+      fprintf (stderr, "Is your SoundScape card made/marketed by Reveal or Spea? ");
+      reveal_spea = think_positively (0);
+      if (reveal_spea)
+	printf ("#define REVEAL_SPEA\n");
+
+    }
+
+  ask_int_choice (B (OPT_TRIX), "TRIX_BASE",
+		  "AudioTriX audio I/O base",
+		  FMT_HEX,
+		  0x530,
+		  "530, 604, E80 or F40");
+
+  ask_int_choice (B (OPT_TRIX), "TRIX_IRQ",
+		  "AudioTriX audio IRQ",
+		  FMT_INT,
+		  11,
+		  "7, 9, 10 or 11");
+
+  ask_int_choice (B (OPT_TRIX), "TRIX_DMA",
+		  "AudioTriX audio DMA",
+		  FMT_INT,
+		  0,
+		  "0, 1 or 3");
+
+  ask_int_choice (B (OPT_TRIX), "TRIX_DMA2",
+		  "AudioTriX second (duplex) DMA",
+		  FMT_INT,
+		  3,
+		  "0, 1 or 3");
+
+  ask_int_choice (B (OPT_TRIX), "TRIX_MPU_BASE",
+		  "AudioTriX MIDI I/O base",
+		  FMT_HEX,
+		  0x330,
+		  "330, 370, 3B0 or 3F0");
+
+  ask_int_choice (B (OPT_TRIX), "TRIX_MPU_IRQ",
+		  "AudioTriX MIDI IRQ",
+		  FMT_INT,
+		  9,
+		  "3, 4, 5, 7 or 9");
+
+  ask_int_choice (B (OPT_TRIX), "TRIX_SB_BASE",
+		  "AudioTriX SB I/O base",
+		  FMT_HEX,
+		  0x220,
+		  "220, 210, 230, 240, 250, 260 or 270");
+
+  ask_int_choice (B (OPT_TRIX), "TRIX_SB_IRQ",
+		  "AudioTriX SB IRQ",
+		  FMT_INT,
+		  7,
+		  "3, 4, 5 or 7");
+
+  ask_int_choice (B (OPT_TRIX), "TRIX_SB_DMA",
+		  "AudioTriX SB DMA",
+		  FMT_INT,
+		  1,
+		  "1 or 3");
+
+  ask_int_choice (B (OPT_CS4232), "CS4232_BASE",
+		  "CS4232 audio I/O base",
+		  FMT_HEX,
+		  0x530,
+		  "530, 604, E80 or F40");
+
+  ask_int_choice (B (OPT_CS4232), "CS4232_IRQ",
+		  "CS4232 audio IRQ",
+		  FMT_INT,
+		  11,
+		  "5, 7, 9, 11, 12 or 15");
+
+  ask_int_choice (B (OPT_CS4232), "CS4232_DMA",
+		  "CS4232 audio DMA",
+		  FMT_INT,
+		  0,
+		  "0, 1 or 3");
+
+  ask_int_choice (B (OPT_CS4232), "CS4232_DMA2",
+		  "CS4232 second (duplex) DMA",
+		  FMT_INT,
+		  3,
+		  "0, 1 or 3");
+
+  ask_int_choice (B (OPT_CS4232), "CS4232_MPU_BASE",
+		  "CS4232 MIDI I/O base",
+		  FMT_HEX,
+		  0x330,
+		  "330, 370, 3B0 or 3F0");
+
+  ask_int_choice (B (OPT_CS4232), "CS4232_MPU_IRQ",
+		  "CS4232 MIDI IRQ",
+		  FMT_INT,
+		  9,
+		  "5, 7, 9, 11, 12 or 15");
+
+  ask_int_choice (B (OPT_MAD16), "MAD16_BASE",
+		  "MAD16 audio I/O base",
+		  FMT_HEX,
+		  0x530,
+		  "530, 604, E80 or F40");
+
+  ask_int_choice (B (OPT_MAD16), "MAD16_IRQ",
+		  "MAD16 audio IRQ",
+		  FMT_INT,
+		  11,
+		  "7, 9, 10 or 11");
+
+  ask_int_choice (B (OPT_MAD16), "MAD16_DMA",
+		  "MAD16 audio DMA",
+		  FMT_INT,
+		  3,
+		  "0, 1 or 3");
+
+  ask_int_choice (B (OPT_MAD16), "MAD16_DMA2",
+		  "MAD16 second (duplex) DMA",
+		  FMT_INT,
+		  0,
+		  "0, 1 or 3");
+
+  ask_int_choice (B (OPT_MAD16), "MAD16_MPU_BASE",
+		  "MAD16 MIDI I/O base",
+		  FMT_HEX,
+		  0x330,
+		  "300, 310, 320 or 330 (0 disables)");
+
+  ask_int_choice (B (OPT_MAD16), "MAD16_MPU_IRQ",
+		  "MAD16 MIDI IRQ",
+		  FMT_INT,
+		  9,
+		  "5, 7, 9 or 10");
+  ask_int_choice (B (OPT_AUDIO), "DSP_BUFFSIZE",
+		  "Audio DMA buffer size",
+		  FMT_INT,
+		  65536,
+		  "4096, 16384, 32768 or 65536");
+}
+
+void
+dump_script (void)
+{
+  int             i;
+
+  for (i = 0; i <= OPT_LAST; i++)
+    if (!(DUMMY_OPTS & B (i)))
+      if (!(DISABLED_OPTIONS & B (i)))
+	{
+	  printf ("bool '%s' CONFIG_%s\n", questions[i], hw_table[i].macro);
+	}
+
+  dump_only = 1;
+  selected_options = 0;
+  ask_parameters ();
+
+  printf ("#\n$MAKE -C drivers/sound kernelconfig || exit 1\n");
+}
+
+void
+dump_fixed_local (void)
+{
+  int             i = 0;
+
+  printf ("/* Computer generated file. Please don't edit! */\n\n");
+  printf ("#define KERNEL_COMPATIBLE_CONFIG\n\n");
+  printf ("#define SELECTED_SOUND_OPTIONS\t0x%08x\n\n", selected_options);
+
+  while (extra_options[i].name != NULL)
+    {
+      int             n = 0, j;
+
+      printf ("#if ");
+
+      for (j = 0; j < OPT_LAST; j++)
+	if (!(DISABLED_OPTIONS & B (j)))
+	  if (extra_options[i].mask & B (j))
+	    {
+	      if (n)
+		printf (" || ");
+	      if (!(n++ % 2))
+		printf ("\\\n  ");
+
+	      printf ("defined(CONFIG_%s)", hw_table[j].macro);
+	    }
+
+      printf ("\n");
+      printf ("#\tdefine CONFIG_%s\n", extra_options[i].name);
+      printf ("#endif\n\n");
+      i++;
+    }
+}
+
+void
+dump_fixed_defines (void)
+{
+  int             i = 0;
+
+  printf ("# Computer generated file. Please don't edit\n\n");
+
+  while (extra_options[i].name != NULL)
+    {
+      int             n = 0, j;
+
+      for (j = 0; j < OPT_LAST; j++)
+	if (!(DISABLED_OPTIONS & B (j)))
+	  if (extra_options[i].mask & B (j))
+	    {
+	      printf ("ifdef CONFIG_%s\n", hw_table[j].macro);
+	      printf ("CONFIG_%s=y\n", extra_options[i].name);
+	      printf ("endif\n\n");
+	    }
+
+      i++;
+    }
+}
+
 int
 main (int argc, char *argv[])
 {
-  int             i, num, def_size, full_driver = 1;
+  int             i, num, full_driver = 1;
   char            answ[10];
-  int             sb_base = 0;
   char            old_config_file[200];
-
-  fprintf (stderr, "\nConfiguring the sound support\n\n");
 
   if (getuid () != 0)		/* Not root */
     {
@@ -528,7 +1090,24 @@ main (int argc, char *argv[])
       if (strcmp (argv[1], "-o") == 0 &&
 	  use_old_config (oldconf))
 	exit (0);
+      else if (strcmp (argv[1], "script") == 0)
+	{
+	  dump_script ();
+	  exit (0);
+	}
+      else if (strcmp (argv[1], "fixedlocal") == 0)
+	{
+	  dump_fixed_local ();
+	  exit (0);
+	}
+      else if (strcmp (argv[1], "fixeddefines") == 0)
+	{
+	  dump_fixed_defines ();
+	  exit (0);
+	}
     }
+
+  fprintf (stderr, "\nConfiguring the sound support\n\n");
 
   if (access (oldconf, R_OK) == 0)
     {
@@ -540,7 +1119,10 @@ main (int argc, char *argv[])
 
     }
 
-  printf ("/*\tGenerated by configure. Don't edit!!!!\t*/\n\n");
+  printf ("/*\tGenerated by configure. Don't edit!!!!\t*/\n");
+  printf ("/*\tMaking changes to this file is not as simple as it may look.\t*/\n\n");
+  printf ("/*\tIf you change the CONFIG_ settings in local.h you\t*/\n");
+  printf ("/*\t_have_ to edit .defines too.\t*/\n\n");
 
   {
     /*
@@ -590,18 +1172,6 @@ main (int argc, char *argv[])
       fprintf (stderr, "Do you want support for the MV Jazz16 (ProSonic etc.) ? ");
       if (think_positively (0))
 	{
-	  printf ("#define JAZZ16\n");
-	  do
-	    {
-	      fprintf (stderr, "\tValid 16 bit DMA channels for ProSonic/Jazz 16 are\n");
-	      fprintf (stderr, "\t1, 3, 5 (default), 7\n");
-	      fprintf (stderr, "\tEnter 16bit DMA channel for Prosonic : ");
-	      num = ask_value ("%d", 5);
-	    }
-	  while (num != 1 && num != 3 && num != 5 && num != 7);
-	  fprintf (stderr, "ProSonic 16 bit DMA set to %d\n", num);
-	  printf ("#define JAZZ_DMA16 %d\n", num);
-
 	  fprintf (stderr, "Do you have SoundMan Wave (n/y) ? ");
 
 	  if (think_positively (0))
@@ -687,9 +1257,8 @@ main (int argc, char *argv[])
 
       if (sel1 == 0)
 	{
-	  printf ("#undef CONFIGURE_SOUNDCARD\n");
-	  printf ("#undef KERNEL_SOUNDCARD\n");
-	  fprintf (stderr, "ERROR!!!!!\nYou loose: you must select at least one mode when using Audio Excel!\n");
+	  printf ("invalid_configuration__run_make_config_again\n");
+	  fprintf (stderr, "ERROR!!!!!\nYou must select at least one mode when using Audio Excel!\n");
 	  exit (-1);
 	}
       if (selected_options & B (OPT_MPU401))
@@ -769,20 +1338,17 @@ main (int argc, char *argv[])
 
   if (!(selected_options & ANY_DEVS))
     {
-      printf ("#undef CONFIGURE_SOUNDCARD\n");
-      printf ("#undef KERNEL_SOUNDCARD\n");
+      printf ("invalid_configuration__run_make_config_again\n");
       fprintf (stderr, "\n*** This combination is useless. Sound driver disabled!!! ***\n\n");
       exit (0);
     }
-  else
-    printf ("#define KERNEL_SOUNDCARD\n");
 
   for (i = 0; i <= OPT_LAST; i++)
     if (!hw_table[i].alias)
       if (selected_options & B (i))
-	printf ("#undef  EXCLUDE_%s\n", hw_table[i].macro);
+	printf ("#define CONFIG_%s\n", hw_table[i].macro);
       else
-	printf ("#define EXCLUDE_%s\n", hw_table[i].macro);
+	printf ("#undef  CONFIG_%s\n", hw_table[i].macro);
 
 
   printf ("\n");
@@ -792,922 +1358,15 @@ main (int argc, char *argv[])
   while (extra_options[i].name != NULL)
     {
       if (selected_options & extra_options[i].mask)
-	printf ("#undef  EXCLUDE_%s\n", extra_options[i].name);
+	printf ("#define CONFIG_%s\n", extra_options[i].name);
       else
-	printf ("#define EXCLUDE_%s\n", extra_options[i].name);
+	printf ("#undef  CONFIG_%s\n", extra_options[i].name);
       i++;
     }
 
   printf ("\n");
 
-
-
-  build_defines ();
-  /*
-   * IRQ and DMA settings
-   */
-
-  if (selected_options & B (OPT_AEDSP16))
-    {
-      fprintf (stderr, "\nI/O base for Audio Excel DSP 16 ?\n"
-	       "Warning:\n"
-	       "If you are using Audio Excel SoundBlaster emulation,\n"
-	"you must use the same I/O base for Audio Excel and SoundBlaster.\n"
-	       "The factory default is 220 (other possible value is 240)\n"
-	       "Enter the Audio Excel DSP 16 I/O base: ");
-
-      num = ask_value ("%x", 0x220);
-      fprintf (stderr, "Audio Excel DSP 16 I/O base set to %03x\n", num);
-      printf ("#define AEDSP16_BASE 0x%03x\n", num);
-    }
-
-  if ((selected_options & B (OPT_SB)) && selected_options & (B (OPT_AUDIO) | B (OPT_MIDI)))
-    {
-      fprintf (stderr, "\nI/O base for SB?\n"
-	       "The factory default is 220\n"
-	       "Enter the SB I/O base: ");
-
-      sb_base = num = ask_value ("%x", 0x220);
-      fprintf (stderr, "SB I/O base set to %03x\n", num);
-      printf ("#define SBC_BASE 0x%03x\n", num);
-
-      fprintf (stderr, "\nIRQ number for SoundBlaster?\n"
-	       "The IRQ address is defined by the jumpers on your card.\n"
-	  "The factory default is either 5 or 7 (depending on the model).\n"
-	       "Valid values are 9(=2), 5, 7 and 10.\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 7);
-      if (num != 9 && num != 5 && num != 7 && num != 10)
-	{
-
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 7;
-	}
-      fprintf (stderr, "SoundBlaster IRQ set to %d\n", num);
-
-      printf ("#define SBC_IRQ %d\n", num);
-
-      if (selected_options & (B (OPT_SBPRO) | B (OPT_PAS)))
-	{
-	  fprintf (stderr, "\nDMA channel for SoundBlaster?\n"
-		   "For SB 1.0, 1.5 and 2.0 this MUST be 1\n"
-		   "SB Pro supports DMA channels 0, 1 and 3 (jumper)\n"
-		   "For SB16 give the 8 bit DMA# here\n"
-		   "The default value is 1\n"
-		   "Enter the value: ");
-
-	  num = ask_value ("%d", 1);
-	  if (num < 0 || num > 3)
-	    {
-
-	      fprintf (stderr, "*** Illegal input! ***\n");
-	      num = 1;
-	    }
-	  fprintf (stderr, "SoundBlaster DMA set to %d\n", num);
-	  printf ("#define SBC_DMA %d\n", num);
-	  sb_dma = num;
-	}
-
-      if (selected_options & B (OPT_SB16))
-	{
-
-	  fprintf (stderr, "\n16 bit DMA channel for SoundBlaster 16?\n"
-		   "Possible values are 5, 6 or 7\n"
-		   "The default value is 6\n"
-		   "Enter the value: ");
-
-	  num = ask_value ("%d", 6);
-	  if ((num < 5 || num > 7) && (num != sb_dma))
-	    {
-
-	      fprintf (stderr, "*** Illegal input! ***\n");
-	      num = 6;
-	    }
-	  fprintf (stderr, "SoundBlaster DMA set to %d\n", num);
-	  printf ("#define SB16_DMA %d\n", num);
-
-	  fprintf (stderr, "\nI/O base for SB16 Midi?\n"
-		   "Possible values are 300 and 330\n"
-		   "The factory default is 330\n"
-		   "Enter the SB16 Midi I/O base: ");
-
-	  num = ask_value ("%x", 0x330);
-	  fprintf (stderr, "SB16 Midi I/O base set to %03x\n", num);
-	  printf ("#define SB16MIDI_BASE 0x%03x\n", num);
-	}
-    }
-
-  if (selected_options & B (OPT_PAS))
-    {
-
-      if (selected_options & (B (OPT_AUDIO) | B (OPT_MIDI)))
-	{
-	  fprintf (stderr, "\nIRQ number for ProAudioSpectrum?\n"
-		   "The recommended value is the IRQ used under DOS.\n"
-		   "Please refer to the ProAudioSpectrum User's Guide.\n"
-		   "The default value is 10.\n"
-		   "Enter the value: ");
-
-	  num = ask_value ("%d", 10);
-	  if (num == 6 || num < 3 || num > 15 || num == 2)	/*
-								 * Illegal
-								 */
-	    {
-
-	      fprintf (stderr, "*** Illegal input! ***\n");
-	      num = 10;
-	    }
-	  fprintf (stderr, "ProAudioSpectrum IRQ set to %d\n", num);
-	  printf ("#define PAS_IRQ %d\n", num);
-	}
-
-      if (selected_options & B (OPT_AUDIO))
-	{
-	  fprintf (stderr, "\nDMA number for ProAudioSpectrum?\n"
-		   "The recommended value is the DMA channel under DOS.\n"
-		   "Please refer to the ProAudioSpectrum User's Guide.\n"
-		   "The default value is 3\n"
-		   "Enter the value: ");
-
-	  num = ask_value ("%d", 3);
-	  if (num == 4 || num < 0 || num > 7)
-	    {
-
-	      fprintf (stderr, "*** Illegal input! ***\n");
-	      num = 3;
-	    }
-	  fprintf (stderr, "\nProAudioSpectrum DMA set to %d\n", num);
-	  printf ("#define PAS_DMA %d\n", num);
-	}
-      fprintf (stderr, "\nEnable Joystick port on ProAudioSpectrum (n/y) ? ");
-      if (think_positively (0))
-	printf ("#define PAS_JOYSTICK_ENABLE\n");
-
-      fprintf (stderr, "PAS16 could be noisy with some mother boards\n"
-	       "There is a command line switch (was it :T?)\n"
-	       "in the DOS driver for PAS16 which solves this.\n"
-	       "Don't enable this feature unless you have problems!\n"
-	       "Do you have to use this switch with DOS (y/n) ?");
-      if (think_positively (0))
-	printf ("#define BROKEN_BUS_CLOCK\n");
-    }
-
-  if (selected_options & B (OPT_GUS))
-    {
-      fprintf (stderr, "\nI/O base for Gravis Ultrasound?\n"
-	       "Valid choices are 210, 220, 230, 240, 250 or 260\n"
-	       "The factory default is 220\n"
-	       "Enter the GUS I/O base: ");
-
-      num = ask_value ("%x", 0x220);
-      if ((num > 0x260) || ((num & 0xf0f) != 0x200) || ((num & 0x0f0) > 0x060))
-	{
-
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 0x220;
-	}
-
-      if ((selected_options & B (OPT_SB)) && (num == sb_base))
-	{
-	  fprintf (stderr, "FATAL ERROR!!!!!!!!!!!!!!\n"
-		   "\t0x220 cannot be used if SoundBlaster is enabled.\n"
-		   "\tRun the config again.\n");
-	  printf ("#undef CONFIGURE_SOUNDCARD\n");
-	  printf ("#undef KERNEL_SOUNDCARD\n");
-	  exit (-1);
-	}
-      fprintf (stderr, "GUS I/O base set to %03x\n", num);
-      printf ("#define GUS_BASE 0x%03x\n", num);
-
-      fprintf (stderr, "\nIRQ number for Gravis UltraSound?\n"
-	       "The recommended value is the IRQ used under DOS.\n"
-	       "Please refer to the Gravis Ultrasound User's Guide.\n"
-	       "The default value is 15.\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 15);
-      if (num == 6 || num < 3 || num > 15 || num == 2)	/*
-							 * Invalid
-							 */
-	{
-
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 15;
-	}
-      fprintf (stderr, "Gravis UltraSound IRQ set to %d\n", num);
-      printf ("#define GUS_IRQ %d\n", num);
-
-      fprintf (stderr, "\nDMA number for Gravis UltraSound?\n"
-	       "The recommended value is the DMA channel under DOS.\n"
-	       "Please refer to the Gravis Ultrasound User's Guide.\n"
-	       "The default value is 6\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 6);
-      if (num == 4 || num < 0 || num > 7)
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 6;
-	}
-      fprintf (stderr, "\nGravis UltraSound DMA set to %d\n", num);
-      printf ("#define GUS_DMA %d\n", num);
-
-      fprintf (stderr, "\nSecond DMA channel for GUS (optional)?\n"
-	       "The default value is 7 (-1 disables)\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 7);
-      if (num > 7)
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 7;
-	}
-
-      fprintf (stderr, "\nGUS DMA2 set to %d\n", num);
-      printf ("#define GUS_DMA2 %d\n", num);
-
-      if (selected_options & B (OPT_GUS16))
-	{
-	  fprintf (stderr, "\nI/O base for GUS16 (GUS 16 bit sampling option)?\n"
-		   "The factory default is 530\n"
-		   "Other possible values are  604, E80 or F40\n"
-		   "Enter the GUS16 I/O base: ");
-
-	  num = ask_value ("%x", 0x530);
-	  fprintf (stderr, "GUS16 I/O base set to %03x\n", num);
-	  printf ("#define GUS16_BASE 0x%03x\n", num);
-
-	  fprintf (stderr, "\nIRQ number for GUS16?\n"
-		   "Valid numbers are: 3, 4, 5, 7, or 9(=2).\n"
-		   "The default value is 7.\n"
-		   "Enter the value: ");
-
-	  num = ask_value ("%d", 7);
-	  if (num == 6 || num < 3 || num > 15)
-	    {
-	      fprintf (stderr, "*** Illegal input! ***\n");
-	      num = 7;
-	    }
-	  fprintf (stderr, "GUS16 IRQ set to %d\n", num);
-	  printf ("#define GUS16_IRQ %d\n", num);
-
-	  fprintf (stderr, "\nDMA number for GUS16?\n"
-		   "The default value is 3\n"
-		   "Enter the value: ");
-
-	  num = ask_value ("%d", 3);
-	  if (num < 0 || num > 3)
-	    {
-	      fprintf (stderr, "*** Illegal input! ***\n");
-	      num = 3;
-	    }
-	  fprintf (stderr, "\nGUS16 DMA set to %d\n", num);
-	  printf ("#define GUS16_DMA %d\n", num);
-	}
-    }
-
-  if (selected_options & B (OPT_MPU401))
-    {
-      fprintf (stderr, "\nI/O base for MPU-401?\n"
-	       "The factory default is 330\n"
-	       "Enter the MPU-401 I/O base: ");
-
-      num = ask_value ("%x", 0x330);
-      fprintf (stderr, "MPU-401 I/O base set to %03x\n", num);
-      printf ("#define MPU_BASE 0x%03x\n", num);
-
-      fprintf (stderr, "\nIRQ number for MPU-401?\n"
-	       "Valid numbers are: 3, 4, 5, 7 and 9(=2).\n"
-	       "The default value is 9.\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 9);
-      if (num == 6 || num < 3 || num > 15)
-	{
-
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 5;
-	}
-      fprintf (stderr, "MPU-401 IRQ set to %d\n", num);
-      printf ("#define MPU_IRQ %d\n", num);
-    }
-
-  if (selected_options & B (OPT_MAUI))
-    {
-      fprintf (stderr, "\nI/O base for TB Maui (MIDI I/O of TB Tropez)?\n"
-	       "The factory default is 330\n"
-	"Valid alternatives are 210, 230, 260, 290, 300, 320, 338 and 330\n"
-	       "Enter the Maui/Tropez MIDI I/O base: ");
-
-      num = ask_value ("%x", 0x330);
-      fprintf (stderr, "Maui I/O base set to %03x\n", num);
-      printf ("#define MAUI_BASE 0x%03x\n", num);
-
-      fprintf (stderr, "\nIRQ number for TB Maui (TB Tropez MIDI)?\n"
-	       "Valid numbers are: 5, 9, 12 and 15.\n"
-	       "The default value is 9.\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 9);
-      if (num == 6 || num < 3 || num > 15)
-	{
-
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 5;
-	}
-      fprintf (stderr, "Maui/Tropez MIDI IRQ set to %d\n", num);
-      printf ("#define MAUI_IRQ %d\n", num);
-    }
-
-  if (selected_options & B (OPT_UART6850))
-    {
-      fprintf (stderr, "\nI/O base for 6850 UART Midi?\n"
-	       "Be carefull. No defaults.\n"
-	       "Enter the 6850 UART I/O base: ");
-
-      num = ask_value ("%x", 0);
-      if (num == 0)
-	{
-	  /*
-	     * Invalid value entered
-	   */
-	  printf ("#define EXCLUDE_UART6850\n");
-	}
-      else
-	{
-	  fprintf (stderr, "6850 UART I/O base set to %03x\n", num);
-	  printf ("#define U6850_BASE 0x%03x\n", num);
-
-	  fprintf (stderr, "\nIRQ number for 6850 UART?\n"
-		   "Valid numbers are: 3, 4, 5, 7 and 9(=2).\n"
-		   "The default value is 5.\n"
-		   "Enter the value: ");
-
-	  num = ask_value ("%d", 5);
-	  if (num == 6 || num < 3 || num > 15)
-	    {
-
-	      fprintf (stderr, "*** Illegal input! ***\n");
-	      num = 5;
-	    }
-	  fprintf (stderr, "6850 UART IRQ set to %d\n", num);
-	  printf ("#define U6850_IRQ %d\n", num);
-	}
-    }
-
-  if (selected_options & B (OPT_PSS))
-    {
-      fprintf (stderr, "\nI/O base for PSS?\n"
-	       "The factory default is 220 (240 also possible)\n"
-	       "Enter the PSS I/O base: ");
-
-      num = ask_value ("%x", 0x220);
-      fprintf (stderr, "PSS I/O base set to %03x\n", num);
-      printf ("#define PSS_BASE 0x%03x\n", num);
-
-#if YOU_WANT_TO_WASTE_RESOURCES
-      fprintf (stderr, "\nIRQ number for PSS?\n"
-	       "Valid numbers are: 3, 4, 5, 7, 9(=2) or 10.\n"
-	       "The default value is 10.\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 10);
-      if (num == 6 || num < 3 || num > 15)
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 7;
-	}
-      fprintf (stderr, "PSS IRQ set to %d\n", num);
-      printf ("#define PSS_IRQ %d\n", num);
-
-      fprintf (stderr, "\nDMA number for ECHO-PSS?\n"
-	       "The default value is 5\n"
-	       "Valid values are 5, 6 and 7\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 5);
-      if (num < 5 || num > 7)
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 5;
-	}
-      fprintf (stderr, "\nECHO-PSS DMA set to %d\n", num);
-      printf ("#define PSS_DMA %d\n", num);
-#endif
-
-      fprintf (stderr, "\nMSS (MS Sound System) I/O base for the PSS card?\n"
-	       "The factory default is 530\n"
-	       "Other possible values are  604, E80 or F40\n"
-	       "Enter the MSS I/O base: ");
-
-      num = ask_value ("%x", 0x530);
-      fprintf (stderr, "PSS/MSS I/O base set to %03x\n", num);
-      printf ("#define PSS_MSS_BASE 0x%03x\n", num);
-
-      fprintf (stderr, "\nIRQ number for the MSS mode of PSS ?\n"
-	       "Valid numbers are: 7, 9(=2), 10 and 11.\n"
-	       "The default value is 11.\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 11);
-      if (num == 6 || num < 3 || num > 15)
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 11;
-	}
-      fprintf (stderr, "PSS/MSS IRQ set to %d\n", num);
-      printf ("#define PSS_MSS_IRQ %d\n", num);
-
-      fprintf (stderr, "\nMSS DMA number for PSS?\n"
-	       "Valid values are 0, 1 and 3.\n"
-	       "The default value is 3\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 3);
-      if (num == 4 || num < 0 || num > 7)
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 3;
-	}
-      fprintf (stderr, "\nPSS/MSS DMA set to %d\n", num);
-      printf ("#define PSS_MSS_DMA %d\n", num);
-
-      fprintf (stderr, "\nMIDI I/O base for PSS?\n"
-	       "The factory default is 330\n"
-	       "Enter the PSS MIDI I/O base: ");
-
-      num = ask_value ("%x", 0x330);
-      fprintf (stderr, "PSS/MIDI I/O base set to %03x\n", num);
-      printf ("#define PSS_MPU_BASE 0x%03x\n", num);
-
-      fprintf (stderr, "\nIRQ number for PSS MIDI?\n"
-	       "Valid numbers are: 3, 4, 5, 7 and 9(=2).\n"
-	       "The default value is 9.\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 9);
-      if (num == 6 || num < 3 || num > 15)
-	{
-
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 5;
-	}
-      fprintf (stderr, "PSS MIDI IRQ set to %d\n", num);
-      printf ("#define PSS_MPU_IRQ %d\n", num);
-    }
-
-  if (selected_options & B (OPT_MSS))
-    {
-      fprintf (stderr, "\nI/O base for MSS (MS Sound System)?\n"
-	       "The factory default is 530\n"
-	       "Other possible values are  604, E80 or F40\n"
-	       "Enter the MSS I/O base: ");
-
-      num = ask_value ("%x", 0x530);
-      fprintf (stderr, "MSS I/O base set to %03x\n", num);
-      printf ("#define MSS_BASE 0x%03x\n", num);
-
-      fprintf (stderr, "\nIRQ number for MSS?\n"
-	       "Valid numbers are: 7, 9(=2), 10 and 11.\n"
-	       "The default value is 10.\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 10);
-      if (num == 6 || num < 3 || num > 15)
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 7;
-	}
-      fprintf (stderr, "MSS IRQ set to %d\n", num);
-      printf ("#define MSS_IRQ %d\n", num);
-
-      fprintf (stderr, "\nDMA number for MSS?\n"
-	       "Valid values are 0, 1 and 3.\n"
-	       "The default value is 3\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 3);
-      if (num == 4 || num < 0 || num > 7)
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 3;
-	}
-      fprintf (stderr, "\nMSS DMA set to %d\n", num);
-      printf ("#define MSS_DMA %d\n", num);
-    }
-
-  if (selected_options & B (OPT_SSCAPE))
-    {
-      int             reveal_spea;
-
-      fprintf (stderr, "\n(MIDI) I/O base for Ensoniq Soundscape?\n"
-	       "The factory default is 330\n"
-	       "Other possible values are 320, 340 or 350\n"
-	       "Enter the Soundscape I/O base: ");
-
-      num = ask_value ("%x", 0x330);
-      fprintf (stderr, "Soundscape I/O base set to %03x\n", num);
-      printf ("#define SSCAPE_BASE 0x%03x\n", num);
-
-      fprintf (stderr, "Is your SoundScape card made/marketed by Reveal or Spea? ");
-      reveal_spea = think_positively (0);
-      if (reveal_spea)
-	printf ("#define REVEAL_SPEA\n");
-
-      fprintf (stderr, "\nIRQ number for Soundscape?\n");
-
-      if (reveal_spea)
-	fprintf (stderr, "Check valid interrupts from the manual of your card.\n");
-      else
-	fprintf (stderr, "Valid numbers are: 5, 7, 9(=2) and 10.\n");
-
-      fprintf (stderr, "The default value is 9.\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 9);
-      if (num == 6 || num < 3 || num > 15)
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 9;
-	}
-      fprintf (stderr, "Soundscape IRQ set to %d\n", num);
-      printf ("#define SSCAPE_IRQ %d\n", num);
-
-      fprintf (stderr, "\nDMA number for Soundscape?\n"
-	       "Valid values are 1 and 3 (sometimes 0)"
-	       "The default value is 3\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 3);
-      if (num == 4 || num < 0 || num > 7)
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 3;
-	}
-      fprintf (stderr, "\nSoundscape DMA set to %d\n", num);
-      printf ("#define SSCAPE_DMA %d\n", num);
-
-      fprintf (stderr, "\nMSS (MS Sound System) I/O base for the SSCAPE card?\n"
-	       "The factory default is 534\n"
-	       "Other possible values are  608, E84 or F44\n"
-	       "Enter the MSS I/O base: ");
-
-      num = ask_value ("%x", 0x534);
-      fprintf (stderr, "SSCAPE/MSS I/O base set to %03x\n", num);
-      printf ("#define SSCAPE_MSS_BASE 0x%03x\n", num);
-
-      fprintf (stderr, "\nIRQ number for the MSS mode of SSCAPE ?\n");
-      if (reveal_spea)
-	fprintf (stderr, "Valid numbers are: 5, 7, 9(=2) and 15.\n");
-      else
-	fprintf (stderr, "Valid numbers are: 5, 7, 9(=2) and 10.\n");
-      fprintf (stderr, "The default value is 5.\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 5);
-      if (num == 6 || num < 3 || num > 15)
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 10;
-	}
-      fprintf (stderr, "SSCAPE/MSS IRQ set to %d\n", num);
-      printf ("#define SSCAPE_MSS_IRQ %d\n", num);
-
-      fprintf (stderr, "\nMSS DMA number for SSCAPE?\n"
-	       "Valid values are 0, 1 and 3.\n"
-	       "The default value is 3\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 3);
-      if (num == 4 || num < 0 || num > 7)
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 3;
-	}
-      fprintf (stderr, "\nSSCAPE/MSS DMA set to %d\n", num);
-      printf ("#define SSCAPE_MSS_DMA %d\n", num);
-    }
-  if (selected_options & B (OPT_TRIX))
-    {
-
-      fprintf (stderr, "\nWindows Sound System I/O base for the AudioTriX card?\n"
-	       "The factory default is 530\n"
-	       "Other possible values are  604, E80 or F40\n"
-	       "Enter the MSS I/O base: ");
-
-      num = ask_value ("%x", 0x530);
-      fprintf (stderr, "AudioTriX MSS I/O base set to %03x\n", num);
-      printf ("#define TRIX_BASE 0x%03x\n", num);
-
-      fprintf (stderr, "\nIRQ number for the WSS mode of AudioTriX ?\n"
-	       "Valid numbers are: 5, 7, 9(=2), 10 and 11.\n"
-	       "The default value is 11.\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 11);
-      if (num != 5 && num != 7 && num != 9 && num != 10 && num != 11)
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 11;
-	}
-      fprintf (stderr, " AudioTriX WSS IRQ set to %d\n", num);
-      printf ("#define TRIX_IRQ %d\n", num);
-
-      fprintf (stderr, "\nWSS DMA number for AudioTriX?\n"
-	       "Valid values are 0, 1 and 3.\n"
-	       "The default value is 3\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 3);
-      if (num != 0 && num != 1 && num != 3)
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 3;
-	}
-      fprintf (stderr, "\nAudioTriX/WSS DMA set to %d\n", num);
-      printf ("#define TRIX_DMA %d\n", num);
-
-      fprintf (stderr, "\nSecond (capture) DMA number for AudioTriX?\n"
-	       "Valid values are 0, 1 and 3.\n"
-	       "The default value is 0\n"
-	       "(-1 disables the second DMA)\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 0);
-      if (num != 0 && num != 1 && num != 3 || num != -1)
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 0;
-	}
-      fprintf (stderr, "\nAudioTriX/WSS DMA2 set to %d\n", num);
-      printf ("#define TRIX_DMA2 %d\n", num);
-
-      fprintf (stderr, "\nSoundBlaster I/O address for the AudioTriX card?\n"
-	       "The factory default is 220\n"
-	  "Other possible values are 200, 210, 230, 240, 250, 260 and 270\n"
-	       "Enter the MSS I/O base: ");
-
-      num = ask_value ("%x", 0x220);
-      fprintf (stderr, "AudioTriX SB I/O base set to %03x\n", num);
-      printf ("#define TRIX_SB_BASE 0x%03x\n", num);
-
-      fprintf (stderr, "\nIRQ number for the SB mode of AudioTriX ?\n"
-	       "Valid numbers are: 3, 4, 5 and 7.\n"
-	       "The default value is 7.\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 7);
-      if (num != 3 && num != 4 && num != 5 && num != 7)
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 7;
-	}
-      fprintf (stderr, " AudioTriX SB IRQ set to %d\n", num);
-      printf ("#define TRIX_SB_IRQ %d\n", num);
-
-      fprintf (stderr, "\nSB DMA number for AudioTriX?\n"
-	       "Valid values are 1 and 3.\n"
-	       "The default value is 1\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 1);
-      if (num != 1 && num != 3)
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 1;
-	}
-      fprintf (stderr, "\nAudioTriX/SB DMA set to %d\n", num);
-      printf ("#define TRIX_SB_DMA %d\n", num);
-
-      fprintf (stderr, "\nMIDI (MPU-401) I/O address for the AudioTriX card?\n"
-	       "The factory default is 330\n"
-	       "Other possible values are 330, 370, 3B0 and 3F0\n"
-	       "Enter the MPU I/O base: ");
-
-      num = ask_value ("%x", 0x330);
-      fprintf (stderr, "AudioTriX MIDI I/O base set to %03x\n", num);
-      printf ("#define TRIX_MPU_BASE 0x%03x\n", num);
-
-      fprintf (stderr, "\nMIDI IRQ number for the AudioTriX ?\n"
-	       "Valid numbers are: 3, 4, 5, 7 and 9(=2).\n"
-	       "The default value is 5.\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 5);
-      if (num != 3 && num != 4 && num != 5 && num != 7 && num != 9)
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 5;
-	}
-      fprintf (stderr, " AudioTriX MIDI IRQ set to %d\n", num);
-      printf ("#define TRIX_MPU_IRQ %d\n", num);
-    }
-
-  if (selected_options & B (OPT_CS4232))
-    {
-      int             dma1;
-
-      fprintf (stderr, "\nWindows Sound System I/O base for CS4232?\n"
-	       "The factory default is 534\n"
-	       "Other possible values are  608, E84 or F44\n"
-	       "Enter the MSS I/O base: ");
-
-      num = ask_value ("%x", 0x534);
-      fprintf (stderr, "CS4232 MSS I/O base set to %03x\n", num);
-      printf ("#define CS4232_BASE 0x%03x\n", num);
-
-      fprintf (stderr, "\nIRQ number for the WSS mode of CS4232 ?\n"
-	       "Valid numbers are: 5, 7, 9(=2), 11, 12 or 15.\n"
-	       "The default value is 11.\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 11);
-      if (num != 5 && num != 7 && num != 9 && num != 11 && num != 12 || num != 15)
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 11;
-	}
-      fprintf (stderr, " CS4232 WSS IRQ set to %d\n", num);
-      printf ("#define CS4232_IRQ %d\n", num);
-
-      fprintf (stderr, "\nWSS DMA number for CS4232?\n"
-	       "Valid values are 0, 1 and 3.\n"
-	       "The default value is 0\n"
-	       "(select the lowes possible one if you want to\n"
-	       "use full duplex mode)\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 0);
-      if (num != 0 && num != 1 && num != 3)
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 0;
-	}
-      fprintf (stderr, "\nCS4232/WSS DMA set to %d\n", num);
-      printf ("#define CS4232_DMA %d\n", num);
-      dma1 = num;
-
-      fprintf (stderr, "\n Second WSS DMA number for CS4232?\n"
-	       "Valid values are 0, 1 and 3.\n"
-	       "The default value is 3\n"
-	       "Enter the value (-1 disables duplex mode): ");
-
-      num = ask_value ("%d", 3);
-      if (num == dma1 || (num != -1 && num != 0 && num != 1 && num != 3))
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 3;
-	}
-      fprintf (stderr, "\nCS4232/WSS DMA2 set to %d\n", num);
-      printf ("#define CS4232_DMA2 %d\n", num);
-
-      fprintf (stderr, "\nMIDI (MPU-401) I/O address for the CS4232 card?\n"
-	       "The factory default is 330\n"
-	       "Other possible values are 330, 370, 3B0 and 3F0\n"
-	       "Enter the MPU I/O base: ");
-
-      num = ask_value ("%x", 0x330);
-      fprintf (stderr, "CS4232 MIDI I/O base set to %03x\n", num);
-      printf ("#define CS4232_MPU_BASE 0x%03x\n", num);
-
-      fprintf (stderr, "\nMIDI IRQ number for CS4232?\n"
-	       "Valid numbers are: 5, 7, 9(=2), 11, 12 or 15.\n"
-	       "The default value is 5.\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 5);
-      if (num != 5 && num != 7 && num != 9 && num != 11 && num != 12 || num != 15)
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 5;
-	}
-      fprintf (stderr, " CS4232 MIDI IRQ set to %d\n", num);
-      printf ("#define CS4232_MPU_IRQ %d\n", num);
-    }
-
-  if (selected_options & B (OPT_MAD16))
-    {
-      fprintf (stderr, "\n*** Options for the MAD16 and Mozart based cards ***\n\n");
-
-      fprintf (stderr, "\nWindows Sound System I/O base for the MAD16/Mozart card?\n"
-	       "The factory default is 530\n"
-	       "Other possible values are  604, E80 or F40\n"
-	       "(Check which ones are supported by your card!!!!!!)\n"
-	       "Enter the MSS I/O base: ");
-
-      num = ask_value ("%x", 0x530);
-      fprintf (stderr, "MAD16 MSS I/O base set to %03x\n", num);
-      printf ("#define MAD16_BASE 0x%03x\n", num);
-
-      if ((sb_base == 0x220 && (num == 0x530 || num == 0x480)) ||
-	  (sb_base == 0x240 && (num == 0xf40 || num == 0x604)))
-	{
-	  fprintf (stderr, "FATAL ERROR!!!!!!!!!!!!!!\n"
-		   "\tThis I/O port selection makes MAD16/Mozart\n"
-		   "\tto use 0x%03x as the SB port.\n"
-		   "\tThis conflicts with the true SB card.\n"
-		   "\tRun the config again and select another I/O base.\n",
-		   sb_base);
-	  printf ("#undef CONFIGURE_SOUNDCARD\n");
-	  printf ("#undef KERNEL_SOUNDCARD\n");
-	  exit (-1);
-	}
-
-      fprintf (stderr, "\nIRQ number for the WSS mode of MAD16/Mozart ?\n"
-	       "Valid numbers are: 7, 9(=2), 10 and 11.\n"
-	       "The default value is 11.\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 11);
-      if (num != 7 && num != 9 && num != 10 && num != 11)
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 11;
-	}
-      fprintf (stderr, " MAD16 WSS IRQ set to %d\n", num);
-      printf ("#define MAD16_IRQ %d\n", num);
-
-      fprintf (stderr, "\nWSS DMA (playback) number for MAD16/Mozart?\n"
-	       "Valid values are 0, 1 and 3.\n"
-	       "The default value is 3\n"
-	       "Enter the value: ");
-
-      num = ask_value ("%d", 3);
-      if (num != 0 && num != 1 && num != 3)
-	{
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = 3;
-	}
-      fprintf (stderr, "\nMAD16/WSS DMA set to %d\n", num);
-      printf ("#define MAD16_DMA %d\n", num);
-
-      num = (num == 0) ? 1 : 0;
-
-      fprintf (stderr, "\nMAD16/Mozart supports full duplex mode if the\n"
-	       "card has a suitable codec chip (CS423x or AD1845).\n"
-	       "This mode requires another DMA channel (DMA%d)\n"
-	       "Do you want to enable this mode? (n/y)", num);
-
-      if (think_positively (0))
-	{
-	  fprintf (stderr, "\nMAD16/WSS capture DMA set to %d\n", num);
-	  printf ("#define MAD16_DMA2 %d\n", num);
-	}
-      else
-	printf ("#define MAD16_DMA2 -1\n");
-
-
-      fprintf (stderr, "\nMIDI (MPU-401/SB) I/O address for the MAD16 card?\n"
-	       "(This is the second MIDI port in TB Tropez)\n"
-	       "Other possible values are 330, 320, 310 and 300\n"
-	       "For 82C928 and Mozart you may use any nonzero value\n"
-	       "since the driver ignores this setting.\n"
-	       "The factory default is 330 (use 0 to disable)\n"
-	       "Enter the MIDI I/O base: ");
-
-      num = ask_value ("%x", 0x330);
-      if (num == 0)
-	fprintf (stderr, "MAD16/Mozart MIDI port disabled\n");
-      else
-	{
-	  fprintf (stderr, "MAD16 MIDI I/O base set to %03x\n", num);
-	  printf ("#define MAD16_MPU_BASE 0x%03x\n", num);
-
-	  fprintf (stderr, "\nMIDI IRQ number for the MAD16 ?\n"
-		   "Valid numbers are: 5, 7, 9(=2) and 10.\n"
-		   "The default value is 5.\n"
-		   "Enter the value: ");
-
-	  num = ask_value ("%d", 5);
-	  if (num != 3 && num != 4 && num != 5 && num != 7 && num != 9)
-	    {
-	      fprintf (stderr, "*** Illegal input! ***\n");
-	      num = 5;
-	    }
-	  fprintf (stderr, " MAD16 MIDI IRQ set to %d\n", num);
-	  printf ("#define MAD16_MPU_IRQ %d\n", num);
-	}
-    }
-
-  if (selected_options & B (OPT_AUDIO))
-    {
-      def_size = 65536;
-
-      fprintf (stderr, "\nSelect the DMA buffer size (4096, 16384, 32768 or 65536 bytes)\n"
-	       "%d is recommended value for this configuration.\n"
-	       "Enter the value: ", def_size);
-
-      num = ask_value ("%d", def_size);
-      if (num != 4096 && num != 16384 && num != 32768 && num != 65536)
-	{
-
-	  fprintf (stderr, "*** Illegal input! ***\n");
-	  num = def_size;
-	}
-      fprintf (stderr, "The DMA buffer size set to %d\n", num);
-      printf ("#define DSP_BUFFSIZE %d\n", num);
-    }
+  ask_parameters ();
 
   printf ("#define SELECTED_SOUND_OPTIONS\t0x%08x\n", selected_options);
   fprintf (stderr, "The sound driver is now configured.\n");

@@ -98,6 +98,7 @@ extern int nfs_rpc_call(struct nfs_server *server, int *start, int *end, int siz
 
 extern struct super_block *nfs_read_super(struct super_block *sb, 
 					  void *data,int);
+extern int init_nfs_fs(void);
 extern struct inode *nfs_fhget(struct super_block *sb, struct nfs_fh *fhandle,
 			       struct nfs_fattr *fattr);
 extern void nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr);

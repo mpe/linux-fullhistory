@@ -1,5 +1,7 @@
 Changes from version 0.5a to version 0.5b
 =========================================
+	- Now that we have sysctl(), the immutable flag cannot be changed when
+	  the system is running at security level > 0.
 	- Some cleanups in the code.
 	- More consistency checks on directories.
 	- The ext2.diff patch from Tom May <ftom@netcom.com> has been

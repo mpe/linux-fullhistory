@@ -6,7 +6,7 @@
  *
  */
 
-#include <linux/autoconf.h>
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/msg.h>
@@ -190,7 +190,7 @@ static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgty
 			return -EIDRM;
 		if ((msgflg & IPC_KERNELD) == 0)
 			/*
-			 * Non-root processes may recieve from kerneld! 
+			 * Non-root processes may receive from kerneld! 
 			 * i.e. no permission check if called from the kernel
 			 * otoh we don't want user level non-root snoopers...
 			 */
@@ -554,7 +554,7 @@ asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 /*
  * We do perhaps need a "flush" for waiting processes,
  * so that if they are terminated, a call from do_exit
- * will minimize the possibility of orphaned recieved
+ * will minimize the possibility of orphaned received
  * messages in the queue.  For now we just make sure
  * that the queue is shut down whenever kerneld dies.
  */

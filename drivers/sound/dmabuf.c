@@ -29,16 +29,14 @@
 
 #include "sound_config.h"
 
-#ifdef CONFIGURE_SOUNDCARD
+#if defined(CONFIG_AUDIO) || defined(CONFIG_GUS)
 
-#if !defined(EXCLUDE_AUDIO) || !defined(EXCLUDE_GUS)
-
-static struct wait_queue *in_sleeper[MAX_AUDIO_DEV] =
+static wait_handle *in_sleeper[MAX_AUDIO_DEV] =
 {NULL};
 static volatile struct snd_wait in_sleep_flag[MAX_AUDIO_DEV] =
 {
   {0}};
-static struct wait_queue *out_sleeper[MAX_AUDIO_DEV] =
+static wait_handle *out_sleeper[MAX_AUDIO_DEV] =
 {NULL};
 static volatile struct snd_wait out_sleep_flag[MAX_AUDIO_DEV] =
 {
@@ -133,6 +131,9 @@ reorganize_buffers (int dev, struct dma_buffparms *dmap)
     }
 
   bsz &= ~0x03;			/* Force size which is multiple of 4 bytes */
+#ifdef OS_DMA_ALIGN_CHECK
+  OS_DMA_ALIGN_CHECK (bsz);
+#endif
 
   n = dsp_dev->buffsize / bsz;
   if (n > MAX_SUB_BUFFERS)
@@ -158,7 +159,9 @@ dma_init_buffers (int dev, struct dma_buffparms *dmap)
       out_sleep_flag[dev].mode = WK_NONE;
     }
   else
-    in_sleep_flag[dev].mode = WK_NONE;
+    {
+      in_sleep_flag[dev].mode = WK_NONE;
+    }
 
   dmap->flags = DMA_BUSY;	/* Other flags off */
   dmap->qlen = dmap->qhead = dmap->qtail = 0;
@@ -168,6 +171,8 @@ dma_init_buffers (int dev, struct dma_buffparms *dmap)
   dmap->dma_mode = DMODE_NONE;
   dmap->mapping_flags = 0;
   dmap->neutral_byte = 0x00;
+  dmap->cfrag = -1;
+  dmap->closing = 0;
 }
 
 static int
@@ -262,6 +267,8 @@ DMAbuf_open (int dev, int mode)
       }
   audio_devs[dev]->open_mode = mode;
   audio_devs[dev]->go = 1;
+  in_sleep_flag[dev].mode = WK_NONE;
+  out_sleep_flag[dev].mode = WK_NONE;
 
   audio_devs[dev]->ioctl (dev, SOUND_PCM_WRITE_BITS, (ioctl_arg) 8, 1);
   audio_devs[dev]->ioctl (dev, SOUND_PCM_WRITE_CHANNELS, (ioctl_arg) 1, 1);
@@ -335,19 +342,19 @@ dma_sync (int dev)
       save_flags (flags);
       cli ();
 
-      while (!(current->signal & ~current->blocked)
-	     && audio_devs[dev]->dmap_out->qlen)
+      while (!current_got_fatal_signal ()
+	     && audio_devs[dev]->dmap_out->qlen > 1)
 	{
 
 	  {
 	    unsigned long   tl;
 
-	    if (10 * HZ)
-	      current->timeout = tl = jiffies + (10 * HZ);
+	    if (HZ)
+	      current_set_timeout (tl = jiffies + (HZ));
 	    else
 	      tl = 0xffffffff;
 	    out_sleep_flag[dev].mode = WK_SLEEP;
-	    interruptible_sleep_on (&out_sleeper[dev]);
+	    module_interruptible_sleep_on (&out_sleeper[dev]);
 	    if (!(out_sleep_flag[dev].mode & WK_WAKEUP))
 	      {
 		if (jiffies >= tl)
@@ -372,7 +379,7 @@ dma_sync (int dev)
       cli ();
       if (audio_devs[dev]->local_qlen)	/* Device has hidden buffers */
 	{
-	  while (!((current->signal & ~current->blocked))
+	  while (!(current_got_fatal_signal ())
 		 && audio_devs[dev]->local_qlen (dev))
 	    {
 
@@ -380,11 +387,11 @@ dma_sync (int dev)
 		unsigned long   tl;
 
 		if (HZ)
-		  current->timeout = tl = jiffies + (HZ);
+		  current_set_timeout (tl = jiffies + (HZ));
 		else
 		  tl = 0xffffffff;
 		out_sleep_flag[dev].mode = WK_SLEEP;
-		interruptible_sleep_on (&out_sleeper[dev]);
+		module_interruptible_sleep_on (&out_sleeper[dev]);
 		if (!(out_sleep_flag[dev].mode & WK_WAKEUP))
 		  {
 		    if (jiffies >= tl)
@@ -404,7 +411,10 @@ DMAbuf_release (int dev, int mode)
 {
   unsigned long   flags;
 
-  if (!((current->signal & ~current->blocked))
+  audio_devs[dev]->dmap_out->closing = 1;
+  audio_devs[dev]->dmap_in->closing = 1;
+
+  if (!(current_got_fatal_signal ())
       && (audio_devs[dev]->dmap_out->dma_mode == DMODE_OUTPUT))
     {
       dma_sync (dev);
@@ -412,7 +422,6 @@ DMAbuf_release (int dev, int mode)
 
   save_flags (flags);
   cli ();
-  audio_devs[dev]->reset (dev);
 
   audio_devs[dev]->close (dev);
 
@@ -485,6 +494,14 @@ DMAbuf_getrdbuffer (int dev, char **buf, int *len, int dontblock)
 
   save_flags (flags);
   cli ();
+#ifdef ALLOW_BUFFER_MAPPING
+  if (audio_devs[dev]->dmap_in->mapping_flags & DMA_MAP_MAPPED)
+    {
+      printk ("Sound: Can't read from mmapped device (1)\n");
+      return -EINVAL;
+    }
+  else
+#endif
   if (!dmap->qlen)
     {
       int             timeout;
@@ -520,11 +537,11 @@ DMAbuf_getrdbuffer (int dev, char **buf, int *len, int dontblock)
 	unsigned long   tl;
 
 	if (timeout)
-	  current->timeout = tl = jiffies + (timeout);
+	  current_set_timeout (tl = jiffies + (timeout));
 	else
 	  tl = 0xffffffff;
 	in_sleep_flag[dev].mode = WK_SLEEP;
-	interruptible_sleep_on (&in_sleeper[dev]);
+	module_interruptible_sleep_on (&in_sleeper[dev]);
 	if (!(in_sleep_flag[dev].mode & WK_WAKEUP))
 	  {
 	    if (jiffies >= tl)
@@ -536,6 +553,7 @@ DMAbuf_getrdbuffer (int dev, char **buf, int *len, int dontblock)
 	{
 	  printk ("Sound: DMA (input) timed out - IRQ/DRQ config error?\n");
 	  err = EIO;
+	  audio_devs[dev]->reset (dev);
 	  ;
 	}
       else
@@ -559,6 +577,14 @@ DMAbuf_rmchars (int dev, int buff_no, int c)
 
   int             p = dmap->counts[dmap->qhead] + c;
 
+#ifdef ALLOW_BUFFER_MAPPING
+  if (audio_devs[dev]->dmap_in->mapping_flags & DMA_MAP_MAPPED)
+    {
+      printk ("Sound: Can't read from mmapped device (2)\n");
+      return -EINVAL;
+    }
+  else
+#endif
   if (p >= dmap->fragment_size)
     {				/* This buffer is completely empty */
       dmap->counts[dmap->qhead] = 0;
@@ -622,6 +648,11 @@ dma_set_fragment (int dev, struct dma_buffparms *dmap, ioctl_arg arg, int fact)
 
   if (count < 2)
     return -EINVAL;
+
+#ifdef OS_DMA_MINBITS
+  if (bytes < OS_DMA_MINBITS)
+    bytes = OS_DMA_MINBITS;
+#endif
 
   dmap->fragment_size = (1 << bytes);
   dmap->max_fragments = count;
@@ -739,6 +770,10 @@ DMAbuf_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
 	  if (cmd == SNDCTL_DSP_GETISPACE && audio_devs[dev]->flags & DMA_DUPLEX)
 	    dmap = dmap_in;
 
+#ifdef ALLOW_BUFFER_MAPPING
+	  if (dmap->mapping_flags & DMA_MAP_MAPPED)
+	    return -EINVAL;
+#endif
 
 	  if (!(dmap->flags & DMA_ALLOC_DONE))
 	    reorganize_buffers (dev, dmap);
@@ -758,7 +793,7 @@ DMAbuf_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
 		    {
 		      int             tmp = audio_devs[dev]->local_qlen (dev);
 
-		      if (tmp & info->fragments)
+		      if (tmp && info->fragments)
 			tmp--;	/*
 				   * This buffer has been counted twice
 				 */
@@ -809,6 +844,18 @@ DMAbuf_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
 	    activate_recording (dev, dmap_in);
 	  }
 
+#ifdef ALLOW_BUFFER_MAPPING
+	if ((changed & bits) & PCM_ENABLE_OUTPUT &&
+	    dmap_out->mapping_flags & DMA_MAP_MAPPED &&
+	    audio_devs[dev]->go)
+	  {
+	    if (!(dmap_out->flags & DMA_ALLOC_DONE))
+	      reorganize_buffers (dev, dmap_out);
+
+	    dmap_out->counts[dmap_out->qhead] = dmap_out->fragment_size;
+	    DMAbuf_start_output (dev, 0, dmap_out->fragment_size);
+	  }
+#endif
 
 	audio_devs[dev]->enable_bits = bits;
 	if (changed && audio_devs[dev]->trigger)
@@ -817,6 +864,16 @@ DMAbuf_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
       }
     case SNDCTL_DSP_GETTRIGGER:
       return snd_ioctl_return ((int *) arg, audio_devs[dev]->enable_bits);
+      break;
+
+    case SNDCTL_DSP_SETSYNCRO:
+
+      if (!audio_devs[dev]->trigger)
+	return -EINVAL;
+
+      audio_devs[dev]->trigger (dev, 0);
+      audio_devs[dev]->go = 0;
+      return 0;
       break;
 
     case SNDCTL_DSP_GETIPTR:
@@ -832,6 +889,10 @@ DMAbuf_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
 	info.bytes += info.ptr;
 	memcpy_tofs ((&((char *) arg)[0]), (char *) &info, sizeof (info));
 
+#ifdef ALLOW_BUFFER_MAPPING
+	if (audio_devs[dev]->dmap_in->mapping_flags & DMA_MAP_MAPPED)
+	  audio_devs[dev]->dmap_in->qlen = 0;	/* Acknowledge interrupts */
+#endif
 	restore_flags (flags);
 	return 0;
       }
@@ -850,6 +911,10 @@ DMAbuf_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
 	info.bytes += info.ptr;
 	memcpy_tofs ((&((char *) arg)[0]), (char *) &info, sizeof (info));
 
+#ifdef ALLOW_BUFFER_MAPPING
+	if (audio_devs[dev]->dmap_out->mapping_flags & DMA_MAP_MAPPED)
+	  audio_devs[dev]->dmap_out->qlen = 0;	/* Acknowledge interrupts */
+#endif
 	restore_flags (flags);
 	return 0;
       }
@@ -879,6 +944,10 @@ DMAbuf_start_devices (unsigned int devmask)
 	  {
 	    /* OK to start the device */
 	    audio_devs[dev]->go = 1;
+
+	    if (audio_devs[dev]->trigger)
+	      audio_devs[dev]->trigger (dev,
+			audio_devs[dev]->enable_bits * audio_devs[dev]->go);
 	  }
 }
 
@@ -902,7 +971,7 @@ space_in_queue (int dev)
   if (audio_devs[dev]->local_qlen)
     {
       tmp = audio_devs[dev]->local_qlen (dev);
-      if (tmp & len)
+      if (tmp && len)
 	tmp--;			/*
 				   * This buffer has been counted twice
 				 */
@@ -921,6 +990,13 @@ DMAbuf_getwrbuffer (int dev, char **buf, int *size, int dontblock)
   int             abort, err = EIO;
   struct dma_buffparms *dmap = audio_devs[dev]->dmap_out;
 
+#ifdef ALLOW_BUFFER_MAPPING
+  if (audio_devs[dev]->dmap_out->mapping_flags & DMA_MAP_MAPPED)
+    {
+      printk ("Sound: Can't write to mmapped device (3)\n");
+      return -EINVAL;
+    }
+#endif
 
   if (dmap->dma_mode == DMODE_INPUT)	/* Direction change */
     {
@@ -983,11 +1059,11 @@ DMAbuf_getwrbuffer (int dev, char **buf, int *size, int dontblock)
 	unsigned long   tl;
 
 	if (timeout)
-	  current->timeout = tl = jiffies + (timeout);
+	  current_set_timeout (tl = jiffies + (timeout));
 	else
 	  tl = 0xffffffff;
 	out_sleep_flag[dev].mode = WK_SLEEP;
-	interruptible_sleep_on (&out_sleeper[dev]);
+	module_interruptible_sleep_on (&out_sleeper[dev]);
 	if (!(out_sleep_flag[dev].mode & WK_WAKEUP))
 	  {
 	    if (jiffies >= tl)
@@ -1001,8 +1077,9 @@ DMAbuf_getwrbuffer (int dev, char **buf, int *size, int dontblock)
 	  err = EIO;
 	  abort = 1;
 	  ;
+	  audio_devs[dev]->reset (dev);
 	}
-      else if ((current->signal & ~current->blocked))
+      else if (current_got_fatal_signal ())
 	{
 	  err = EINTR;
 	  abort = 1;
@@ -1023,19 +1100,58 @@ DMAbuf_getwrbuffer (int dev, char **buf, int *size, int dontblock)
 }
 
 int
+DMAbuf_get_curr_buffer (int dev, int *buf_no, char **dma_buf, int *buf_ptr, int *buf_size)
+{
+  struct dma_buffparms *dmap = audio_devs[dev]->dmap_out;
+
+  if (dmap->cfrag < 0)
+    return -1;
+
+  *dma_buf = dmap->raw_buf + dmap->qtail * dmap->fragment_size;
+  *buf_ptr = dmap->counts[dmap->qtail];
+  *buf_size = dmap->fragment_size;
+  return *buf_no = dmap->cfrag;
+}
+
+int
+DMAbuf_set_count (int dev, int buff_no, int l)
+{
+  struct dma_buffparms *dmap = audio_devs[dev]->dmap_out;
+
+  if (buff_no == dmap->qtail)
+    {
+      dmap->cfrag = buff_no;
+      dmap->counts[buff_no] = l;
+    }
+  else
+    dmap->cfrag = -1;
+  return 0;
+}
+
+int
 DMAbuf_start_output (int dev, int buff_no, int l)
 {
   struct dma_buffparms *dmap = audio_devs[dev]->dmap_out;
 
+  dmap->cfrag = -1;
 /*
  * Bypass buffering if using mmaped access
  */
 
+#ifdef ALLOW_BUFFER_MAPPING
+  if (audio_devs[dev]->dmap_out->mapping_flags & DMA_MAP_MAPPED)
+    {
+      l = dmap->fragment_size;
+      dmap->counts[dmap->qtail] = l;
+      dmap->flags &= ~DMA_RESTART;
+      dmap->qtail = (dmap->qtail + 1) % dmap->nbufs;
+    }
+  else
+#else
   if (dmap != NULL)
+#endif
     {
 
-      if (buff_no != dmap->qtail)
-	printk ("Sound warning: DMA buffers out of sync %d != %d\n", buff_no, dmap->qtail);
 
       dmap->qlen++;
       if (dmap->qlen <= 0 || dmap->qlen > dmap->nbufs)
@@ -1165,12 +1281,43 @@ DMAbuf_outputintr (int dev, int event_type)
   unsigned long   flags;
   struct dma_buffparms *dmap = audio_devs[dev]->dmap_out;
 
+  int             p;
+
   dmap->byte_counter += dmap->counts[dmap->qhead];
 
 #ifdef OS_DMA_INTR
   sound_dma_intr (dev, audio_devs[dev]->dmap_out, audio_devs[dev]->dmachan1);
 #endif
 
+#ifdef ALLOW_BUFFER_MAPPING
+  if (dmap->mapping_flags & DMA_MAP_MAPPED)
+    {
+      /* mmapped access */
+
+      p = dmap->fragment_size * dmap->qhead;
+      memset (dmap->raw_buf + p,
+	      dmap->neutral_byte,
+	      dmap->fragment_size);
+
+      dmap->qhead = (dmap->qhead + 1) % dmap->nbufs;
+      dmap->qlen++;		/* Yes increment it (don't decrement) */
+      dmap->flags &= ~DMA_ACTIVE;
+      dmap->counts[dmap->qhead] = dmap->fragment_size;
+
+      if (!(audio_devs[dev]->flags & DMA_AUTOMODE))
+	{
+	  audio_devs[dev]->output_block (dev, dmap->raw_buf_phys +
+					 dmap->qhead * dmap->fragment_size,
+					 dmap->counts[dmap->qhead], 1,
+				  !(audio_devs[dev]->flags & DMA_AUTOMODE));
+	  if (audio_devs[dev]->trigger)
+	    audio_devs[dev]->trigger (dev,
+			audio_devs[dev]->enable_bits * audio_devs[dev]->go);
+	}
+      dmap->flags |= DMA_ACTIVE;
+    }
+  else
+#endif
   if (event_type != 2)
     {
       if (dmap->qlen <= 0 || dmap->qlen > dmap->nbufs)
@@ -1183,6 +1330,27 @@ DMAbuf_outputintr (int dev, int event_type)
       dmap->qlen--;
       dmap->qhead = (dmap->qhead + 1) % dmap->nbufs;
       dmap->flags &= ~DMA_ACTIVE;
+
+      if (event_type == 1 && dmap->qlen < 1)
+	{
+	  dmap->underrun_count++;
+	  /* Ignore underrun. Just move the tail pointer forward and go */
+	  if (dmap->closing)
+	    {
+	      audio_devs[dev]->halt_xfer (dev);
+	    }
+	  else
+	    {
+	      dmap->qlen++;
+	      dmap->cfrag = -1;
+	      dmap->qtail = (dmap->qtail + 1) % dmap->nbufs;
+
+	      p = dmap->fragment_size * dmap->qhead;
+	      memset (dmap->raw_buf + p,
+		      dmap->neutral_byte,
+		      dmap->fragment_size);
+	    }
+	}
 
       if (dmap->qlen)
 	{
@@ -1198,21 +1366,6 @@ DMAbuf_outputintr (int dev, int event_type)
 	    }
 	  dmap->flags |= DMA_ACTIVE;
 	}
-      else if (event_type == 1)
-	{
-	  dmap->underrun_count++;
-	  if ((audio_devs[dev]->flags & DMA_DUPLEX) &&
-	      audio_devs[dev]->halt_output)
-	    audio_devs[dev]->halt_output (dev);
-	  else
-	    audio_devs[dev]->halt_xfer (dev);
-
-	  if ((audio_devs[dev]->flags & DMA_AUTOMODE) &&
-	      audio_devs[dev]->flags & NEEDS_RESTART)
-	    dmap->flags |= DMA_RESTART;
-	  else
-	    dmap->flags &= ~DMA_RESTART;
-	}
     }				/* event_type != 2 */
 
   save_flags (flags);
@@ -1221,7 +1374,7 @@ DMAbuf_outputintr (int dev, int event_type)
     {
       {
 	out_sleep_flag[dev].mode = WK_WAKEUP;
-	wake_up (&out_sleeper[dev]);
+	module_wake_up (&out_sleeper[dev]);
       };
     }
   restore_flags (flags);
@@ -1239,29 +1392,11 @@ DMAbuf_inputintr (int dev)
   sound_dma_intr (dev, audio_devs[dev]->dmap_in, audio_devs[dev]->dmachan2);
 #endif
 
-  if (dmap->qlen == (dmap->nbufs - 1))
+#ifdef ALLOW_BUFFER_MAPPING
+  if (dmap->mapping_flags & DMA_MAP_MAPPED)
     {
-      printk ("Sound: Recording overrun\n");
-      dmap->underrun_count++;
-      if ((audio_devs[dev]->flags & DMA_DUPLEX) &&
-	  audio_devs[dev]->halt_input)
-	audio_devs[dev]->halt_input (dev);
-      else
-	audio_devs[dev]->halt_xfer (dev);
-
-      dmap->flags &= ~DMA_ACTIVE;
-      if (audio_devs[dev]->flags & DMA_AUTOMODE)
-	dmap->flags |= DMA_RESTART;
-      else
-	dmap->flags &= ~DMA_RESTART;
-    }
-  else
-    {
-      dmap->qlen++;
-      if (dmap->qlen <= 0 || dmap->qlen > dmap->nbufs)
-	printk ("\nSound: Audio queue4 corrupted for dev%d (%d/%d)\n",
-		dev, dmap->qlen, dmap->nbufs);
       dmap->qtail = (dmap->qtail + 1) % dmap->nbufs;
+      dmap->qlen++;
 
       if (!(audio_devs[dev]->flags & DMA_AUTOMODE))
 	{
@@ -1276,6 +1411,50 @@ DMAbuf_inputintr (int dev)
 
       dmap->flags |= DMA_ACTIVE;
     }
+  else
+#endif
+  if (dmap->qlen == (dmap->nbufs - 1))
+    {
+      printk ("Sound: Recording overrun\n");
+      dmap->underrun_count++;
+
+      if (audio_devs[dev]->flags & DMA_AUTOMODE)
+	{
+	  /* Force restart on next write */
+	  if ((audio_devs[dev]->flags & DMA_DUPLEX) &&
+	      audio_devs[dev]->halt_input)
+	    audio_devs[dev]->halt_input (dev);
+	  else
+	    audio_devs[dev]->halt_xfer (dev);
+
+	  dmap->flags &= ~DMA_ACTIVE;
+	  if (audio_devs[dev]->flags & DMA_AUTOMODE)
+	    dmap->flags |= DMA_RESTART;
+	  else
+	    dmap->flags &= ~DMA_RESTART;
+	}
+    }
+  else
+    {
+      dmap->qlen++;
+      if (dmap->qlen <= 0 || dmap->qlen > dmap->nbufs)
+	printk ("\nSound: Audio queue4 corrupted for dev%d (%d/%d)\n",
+		dev, dmap->qlen, dmap->nbufs);
+      dmap->qtail = (dmap->qtail + 1) % dmap->nbufs;
+    }
+
+  if (!(audio_devs[dev]->flags & DMA_AUTOMODE))
+    {
+      audio_devs[dev]->start_input (dev, dmap->raw_buf_phys +
+				    dmap->qtail * dmap->fragment_size,
+				    dmap->fragment_size, 1,
+				  !(audio_devs[dev]->flags & DMA_AUTOMODE));
+      if (audio_devs[dev]->trigger)
+	audio_devs[dev]->trigger (dev,
+			audio_devs[dev]->enable_bits * audio_devs[dev]->go);
+    }
+
+  dmap->flags |= DMA_ACTIVE;
 
   save_flags (flags);
   cli ();
@@ -1283,7 +1462,7 @@ DMAbuf_inputintr (int dev)
     {
       {
 	in_sleep_flag[dev].mode = WK_WAKEUP;
-	wake_up (&in_sleeper[dev]);
+	module_wake_up (&in_sleeper[dev]);
       };
     }
   restore_flags (flags);
@@ -1352,7 +1531,7 @@ DMAbuf_reset_dma (int dev)
 }
 
 int
-DMAbuf_select (int dev, struct fileinfo *file, int sel_type, select_table * wait)
+DMAbuf_select (int dev, struct fileinfo *file, int sel_type, select_table_handle * wait)
 {
   struct dma_buffparms *dmap;
   unsigned long   flags;
@@ -1362,6 +1541,20 @@ DMAbuf_select (int dev, struct fileinfo *file, int sel_type, select_table * wait
     case SEL_IN:
       dmap = audio_devs[dev]->dmap_in;
 
+#ifdef ALLOW_BUFFER_MAPPING
+      if (dmap->mapping_flags & DMA_MAP_MAPPED)
+	{
+	  if (dmap->qlen)
+	    return 1;
+
+	  save_flags (flags);
+	  cli ();
+	  in_sleep_flag[dev].mode = WK_SLEEP;
+	  module_select_wait (&in_sleeper[dev], wait);
+	  restore_flags (flags);
+	  return 0;
+	}
+#endif
 
       if (dmap->dma_mode != DMODE_INPUT)
 	{
@@ -1384,7 +1577,7 @@ DMAbuf_select (int dev, struct fileinfo *file, int sel_type, select_table * wait
 	  save_flags (flags);
 	  cli ();
 	  in_sleep_flag[dev].mode = WK_SLEEP;
-	  select_wait (&in_sleeper[dev], wait);
+	  module_select_wait (&in_sleeper[dev], wait);
 	  restore_flags (flags);
 	  return 0;
 	}
@@ -1394,6 +1587,20 @@ DMAbuf_select (int dev, struct fileinfo *file, int sel_type, select_table * wait
     case SEL_OUT:
       dmap = audio_devs[dev]->dmap_out;
 
+#ifdef ALLOW_BUFFER_MAPPING
+      if (dmap->mapping_flags & DMA_MAP_MAPPED)
+	{
+	  if (dmap->qlen)
+	    return 1;
+
+	  save_flags (flags);
+	  cli ();
+	  out_sleep_flag[dev].mode = WK_SLEEP;
+	  module_select_wait (&out_sleeper[dev], wait);
+	  restore_flags (flags);
+	  return 0;
+	}
+#endif
 
       if (dmap->dma_mode == DMODE_INPUT)
 	{
@@ -1410,7 +1617,7 @@ DMAbuf_select (int dev, struct fileinfo *file, int sel_type, select_table * wait
 	  save_flags (flags);
 	  cli ();
 	  out_sleep_flag[dev].mode = WK_SLEEP;
-	  select_wait (&out_sleeper[dev], wait);
+	  module_select_wait (&out_sleeper[dev], wait);
 	  restore_flags (flags);
 	  return 0;
 	}
@@ -1425,7 +1632,7 @@ DMAbuf_select (int dev, struct fileinfo *file, int sel_type, select_table * wait
 }
 
 
-#else /* EXCLUDE_AUDIO */
+#else /* CONFIG_AUDIO */
 /*
  * Stub versions if audio services not included
  */
@@ -1513,6 +1720,4 @@ DMAbuf_outputintr (int dev, int underrun_flag)
 {
   return;
 }
-#endif
-
 #endif

@@ -22,6 +22,7 @@
 			  sanity checks and bad clone support optional.
     Paul Gortmaker	: new reset code, reset card after probe at boot.
     Paul Gortmaker	: multiple card support for module users.
+    Paul Gortmaker	: Support for PCI ne2k clones, similar to lance.c
 
 */
 
@@ -32,10 +33,12 @@ static const char *version =
 
 
 #include <linux/module.h>
-
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
+#include <linux/pci.h>
+#include <linux/bios32.h>
 #include <asm/system.h>
 #include <asm/io.h>
 
@@ -90,6 +93,9 @@ bad_clone_list[] = {
 #define NESM_START_PG	0x40	/* First page of TX buffer */
 #define NESM_STOP_PG	0x80	/* Last page +1 of RX ring */
 
+/* Non-zero only if the current card is a PCI with BIOS-set IRQ. */
+static unsigned char pci_irq_line = 0;
+
 int ne_probe(struct device *dev);
 static int ne_probe1(struct device *dev, int ioaddr);
 
@@ -131,16 +137,56 @@ struct netdev_entry netcard_drv =
 {"ne", ne_probe1, NE_IO_EXTENT, netcard_portlist};
 #else
 
+/*  Note that this probe only picks up one card at a time, even for multiple
+    PCI ne2k cards. Use "ether=0,0,eth1" if you have a second PCI ne2k card.
+    This keeps things consistent regardless of the bus type of the card. */
+
 int ne_probe(struct device *dev)
 {
     int i;
     int base_addr = dev ? dev->base_addr : 0;
 
+    /* First check any supplied i/o locations. User knows best. <cough> */
     if (base_addr > 0x1ff)	/* Check a single specified location. */
 	return ne_probe1(dev, base_addr);
     else if (base_addr != 0)	/* Don't probe at all. */
 	return ENXIO;
 
+    /* Then look for any installed PCI clones */
+#if defined(CONFIG_PCI)
+    if (pcibios_present()) {
+	int pci_index;
+	for (pci_index = 0; pci_index < 8; pci_index++) {
+		unsigned char pci_bus, pci_device_fn;
+		unsigned int pci_ioaddr;
+
+		/* Currently only Realtek are making PCI ne2k clones. */
+		if (pcibios_find_device (PCI_VENDOR_ID_REALTEK,
+				PCI_DEVICE_ID_REALTEK_8029, pci_index,
+				&pci_bus, &pci_device_fn) != 0)
+			break;	/* OK, now try to probe for std. ISA card */
+		pcibios_read_config_byte(pci_bus, pci_device_fn,
+				PCI_INTERRUPT_LINE, &pci_irq_line);
+		pcibios_read_config_dword(pci_bus, pci_device_fn,
+				PCI_BASE_ADDRESS_0, &pci_ioaddr);
+		/* Strip the I/O address out of the returned value */
+		pci_ioaddr &= PCI_BASE_ADDRESS_IO_MASK;
+		/* Avoid already found cards from previous ne_probe() calls */
+		if (check_region(pci_ioaddr, NE_IO_EXTENT))
+			continue;
+		printk("ne.c: PCI BIOS reports ne2000 clone at i/o %#x, irq %d.\n",
+				pci_ioaddr, pci_irq_line);
+		if (ne_probe1(dev, pci_ioaddr) != 0) {	/* Shouldn't happen. */
+			printk(KERN_ERR "ne.c: Probe of PCI card at %#x failed.\n", pci_ioaddr);
+			break;	/* Hrmm, try to probe for ISA card... */
+		}
+		pci_irq_line = 0;
+		return 0;
+	}
+    }
+#endif  /* defined(CONFIG_PCI) */
+
+    /* Last resort. The semi-risky ISA auto-probe. */
     for (i = 0; netcard_portlist[i]; i++) {
 	int ioaddr = netcard_portlist[i];
 	if (check_region(ioaddr, NE_IO_EXTENT))
@@ -289,6 +335,10 @@ static int ne_probe1(struct device *dev, int ioaddr)
     if (dev == NULL) {
 	printk("ne.c: Passed a NULL device.\n");
 	dev = init_etherdev(0, 0);
+    }
+
+    if (pci_irq_line) {
+	dev->irq = pci_irq_line;
     }
 
     if (dev->irq < 2) {

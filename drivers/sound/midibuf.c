@@ -29,7 +29,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_MIDI)
+#if defined(CONFIG_MIDI)
 
 /*
  * Don't make MAX_QUEUE_SIZE larger than 4000
@@ -37,12 +37,12 @@
 
 #define MAX_QUEUE_SIZE	4000
 
-static struct wait_queue *midi_sleeper[MAX_MIDI_DEV] =
+static wait_handle *midi_sleeper[MAX_MIDI_DEV] =
 {NULL};
 static volatile struct snd_wait midi_sleep_flag[MAX_MIDI_DEV] =
 {
   {0}};
-static struct wait_queue *input_sleeper[MAX_MIDI_DEV] =
+static wait_handle *input_sleeper[MAX_MIDI_DEV] =
 {NULL};
 static volatile struct snd_wait input_sleep_flag[MAX_MIDI_DEV] =
 {
@@ -106,18 +106,18 @@ drain_midi_queue (int dev)
    */
 
   if (midi_devs[dev]->buffer_status != NULL)
-    while (!(current->signal & ~current->blocked) &&
+    while (!current_got_fatal_signal () &&
 	   midi_devs[dev]->buffer_status (dev))
 
       {
 	unsigned long   tl;
 
 	if (HZ / 10)
-	  current->timeout = tl = jiffies + (HZ / 10);
+	  current_set_timeout (tl = jiffies + (HZ / 10));
 	else
 	  tl = 0xffffffff;
 	midi_sleep_flag[dev].mode = WK_SLEEP;
-	interruptible_sleep_on (&midi_sleeper[dev]);
+	module_interruptible_sleep_on (&midi_sleeper[dev]);
 	if (!(midi_sleep_flag[dev].mode & WK_WAKEUP))
 	  {
 	    if (jiffies >= tl)
@@ -146,7 +146,7 @@ midi_input_intr (int dev, unsigned char data)
       if ((input_sleep_flag[dev].mode & WK_SLEEP))
 	{
 	  input_sleep_flag[dev].mode = WK_WAKEUP;
-	  wake_up (&input_sleeper[dev]);
+	  module_wake_up (&input_sleeper[dev]);
 	};
     }
 
@@ -185,7 +185,7 @@ midi_poll (unsigned long dummy)
 		(midi_sleep_flag[dev].mode & WK_SLEEP))
 	      {
 		midi_sleep_flag[dev].mode = WK_WAKEUP;
-		wake_up (&midi_sleeper[dev]);
+		module_wake_up (&midi_sleeper[dev]);
 	      };
 	  }
 
@@ -203,7 +203,6 @@ int
 MIDIbuf_open (int dev, struct fileinfo *file)
 {
   int             mode, err;
-  unsigned long   flags;
 
   dev = dev >> 4;
   mode = file->mode & O_ACCMODE;
@@ -224,19 +223,13 @@ MIDIbuf_open (int dev, struct fileinfo *file)
      *    Interrupts disabled. Be careful
    */
 
-  save_flags (flags);
-  cli ();
   if ((err = midi_devs[dev]->open (dev, mode,
 				   midi_input_intr, midi_output_intr)) < 0)
     {
-      restore_flags (flags);
       return err;
     }
 
   parms[dev].prech_timeout = 0;
-
-  midi_sleep_flag[dev].mode = WK_NONE;
-  input_sleep_flag[dev].mode = WK_NONE;
 
   midi_in_buf[dev] = (struct midi_buf *) kmalloc (sizeof (struct midi_buf), GFP_KERNEL);
 
@@ -244,7 +237,6 @@ MIDIbuf_open (int dev, struct fileinfo *file)
     {
       printk ("midi: Can't allocate buffer\n");
       midi_devs[dev]->close (dev);
-      restore_flags (flags);
       return -EIO;
     }
   midi_in_buf[dev]->len = midi_in_buf[dev]->head = midi_in_buf[dev]->tail = 0;
@@ -257,20 +249,23 @@ MIDIbuf_open (int dev, struct fileinfo *file)
       midi_devs[dev]->close (dev);
       kfree (midi_in_buf[dev]);
       midi_in_buf[dev] = NULL;
-      restore_flags (flags);
       return -EIO;
     }
   midi_out_buf[dev]->len = midi_out_buf[dev]->head = midi_out_buf[dev]->tail = 0;
-  if (!open_devs)
-
-    {
-      poll_timer.expires = (1) + jiffies;
-      add_timer (&poll_timer);
-    };				/*
-				   * Come back later
-				 */
   open_devs++;
-  restore_flags (flags);
+
+  midi_sleep_flag[dev].mode = WK_NONE;
+  input_sleep_flag[dev].mode = WK_NONE;
+
+  if (open_devs < 2)		/* This was first open */
+    {
+      ;
+
+      {
+	poll_timer.expires = (1) + jiffies;
+	add_timer (&poll_timer);
+      };			/* Start polling */
+    }
 
   return err;
 }
@@ -283,6 +278,9 @@ MIDIbuf_release (int dev, struct fileinfo *file)
 
   dev = dev >> 4;
   mode = file->mode & O_ACCMODE;
+
+  if (dev < 0 || dev >= num_midis)
+    return;
 
   save_flags (flags);
   cli ();
@@ -298,18 +296,18 @@ MIDIbuf_release (int dev, struct fileinfo *file)
 						   * devices
 						 */
 
-      while (!(current->signal & ~current->blocked) &&
+      while (!current_got_fatal_signal () &&
 	     DATA_AVAIL (midi_out_buf[dev]))
 
 	{
 	  unsigned long   tl;
 
 	  if (0)
-	    current->timeout = tl = jiffies + (0);
+	    current_set_timeout (tl = jiffies + (0));
 	  else
 	    tl = 0xffffffff;
 	  midi_sleep_flag[dev].mode = WK_SLEEP;
-	  interruptible_sleep_on (&midi_sleeper[dev]);
+	  module_interruptible_sleep_on (&midi_sleeper[dev]);
 	  if (!(midi_sleep_flag[dev].mode & WK_WAKEUP))
 	    {
 	      if (jiffies >= tl)
@@ -325,14 +323,17 @@ MIDIbuf_release (int dev, struct fileinfo *file)
 				 */
     }
 
+  restore_flags (flags);
+
   midi_devs[dev]->close (dev);
+
   kfree (midi_in_buf[dev]);
   kfree (midi_out_buf[dev]);
   midi_in_buf[dev] = NULL;
   midi_out_buf[dev] = NULL;
+  if (open_devs < 2)
+    del_timer (&poll_timer);;
   open_devs--;
-  del_timer (&poll_timer);;
-  restore_flags (flags);
 }
 
 int
@@ -365,11 +366,11 @@ MIDIbuf_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count
 	    unsigned long   tl;
 
 	    if (0)
-	      current->timeout = tl = jiffies + (0);
+	      current_set_timeout (tl = jiffies + (0));
 	    else
 	      tl = 0xffffffff;
 	    midi_sleep_flag[dev].mode = WK_SLEEP;
-	    interruptible_sleep_on (&midi_sleeper[dev]);
+	    module_interruptible_sleep_on (&midi_sleeper[dev]);
 	    if (!(midi_sleep_flag[dev].mode & WK_WAKEUP))
 	      {
 		if (jiffies >= tl)
@@ -377,7 +378,7 @@ MIDIbuf_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count
 	      }
 	    midi_sleep_flag[dev].mode &= ~WK_SLEEP;
 	  };
-	  if ((current->signal & ~current->blocked))
+	  if (current_got_fatal_signal ())
 	    {
 	      restore_flags (flags);
 	      return -EINTR;
@@ -424,11 +425,11 @@ MIDIbuf_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 	unsigned long   tl;
 
 	if (parms[dev].prech_timeout)
-	  current->timeout = tl = jiffies + (parms[dev].prech_timeout);
+	  current_set_timeout (tl = jiffies + (parms[dev].prech_timeout));
 	else
 	  tl = 0xffffffff;
 	input_sleep_flag[dev].mode = WK_SLEEP;
-	interruptible_sleep_on (&input_sleeper[dev]);
+	module_interruptible_sleep_on (&input_sleeper[dev]);
 	if (!(input_sleep_flag[dev].mode & WK_WAKEUP))
 	  {
 	    if (jiffies >= tl)
@@ -436,7 +437,7 @@ MIDIbuf_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 	  }
 	input_sleep_flag[dev].mode &= ~WK_SLEEP;
       };
-      if ((current->signal & ~current->blocked))
+      if (current_got_fatal_signal ())
 	c = -EINTR;		/*
 				   * The user is getting restless
 				 */
@@ -501,7 +502,7 @@ MIDIbuf_ioctl (int dev, struct fileinfo *file,
 }
 
 int
-MIDIbuf_select (int dev, struct fileinfo *file, int sel_type, select_table * wait)
+MIDIbuf_select (int dev, struct fileinfo *file, int sel_type, select_table_handle * wait)
 {
   dev = dev >> 4;
 
@@ -511,7 +512,7 @@ MIDIbuf_select (int dev, struct fileinfo *file, int sel_type, select_table * wai
       if (!DATA_AVAIL (midi_in_buf[dev]))
 	{
 	  input_sleep_flag[dev].mode = WK_SLEEP;
-	  select_wait (&input_sleeper[dev], wait);
+	  module_select_wait (&input_sleeper[dev], wait);
 	  return 0;
 	}
       return 1;
@@ -521,7 +522,7 @@ MIDIbuf_select (int dev, struct fileinfo *file, int sel_type, select_table * wai
       if (SPACE_AVAIL (midi_out_buf[dev]))
 	{
 	  midi_sleep_flag[dev].mode = WK_SLEEP;
-	  select_wait (&midi_sleeper[dev], wait);
+	  module_select_wait (&midi_sleeper[dev], wait);
 	  return 0;
 	}
       return 1;

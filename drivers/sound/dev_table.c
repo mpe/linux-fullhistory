@@ -30,8 +30,6 @@
 #define _DEV_TABLE_C_
 #include "sound_config.h"
 
-#ifdef CONFIGURE_SOUNDCARD
-
 int             sound_started = 0;
 
 int             sndtable_get_cardcount (void);
@@ -48,6 +46,33 @@ snd_find_driver (int type)
   return -1;
 }
 
+static long
+start_services (long mem_start)
+{
+  int             soundcards_installed;
+
+  if (!(soundcards_installed = sndtable_get_cardcount ()))
+    return mem_start;		/* No cards detected */
+
+#ifdef CONFIG_AUDIO
+  if (num_audiodevs)		/* Audio devices present */
+    {
+      DMAbuf_init (0);
+      audio_init (0);
+    }
+#endif
+
+#ifdef CONFIG_MIDI
+  if (num_midis)
+    MIDIbuf_init (0);
+#endif
+
+#ifdef CONFIG_SEQUENCER
+  if (num_midis + num_synths)
+    sequencer_init (0);
+#endif
+  return mem_start;
+}
 
 static long
 start_cards (long mem_start)
@@ -56,7 +81,8 @@ start_cards (long mem_start)
   int             drv;
 
   sound_started = 1;
-  printk ("Sound initialization started\n");
+  if (trace_init)
+    printk ("Sound initialization started\n");
 
 /*
  * Check the number of cards actually defined in the table
@@ -83,27 +109,9 @@ start_cards (long mem_start)
 
 	if (sound_drivers[drv].probe (&snd_installed_cards[i].config))
 	  {
-	    int             tmp;
-
-	    printk ("snd%d",
-		    snd_installed_cards[i].card_type);
 
 	    mem_start = sound_drivers[drv].attach (mem_start, &snd_installed_cards[i].config);
-	    printk (" at 0x%x",
-		    snd_installed_cards[i].config.io_base);
 
-	    if ((tmp = snd_installed_cards[i].config.irq) != 0)
-	      printk (" irq %d",
-		      (tmp > 0) ? tmp : -tmp);
-
-	    if (snd_installed_cards[i].config.dma >= 0)
-	      printk (" drq %d",
-		      snd_installed_cards[i].config.dma);
-	    if (snd_installed_cards[i].config.dma2 != -1)
-	      printk (",%d\n",
-		      snd_installed_cards[i].config.dma2);
-	    else
-	      printk ("\n");
 	  }
 	else
 	  snd_installed_cards[i].enabled = 0;	/*
@@ -111,7 +119,8 @@ start_cards (long mem_start)
 						 */
       }
 
-  printk ("Sound initialization complete\n");
+  if (trace_init)
+    printk ("Sound initialization complete\n");
   return mem_start;
 }
 
@@ -130,7 +139,8 @@ sound_unload_drivers (void)
   if (!sound_started)
     return;
 
-  printk ("Sound unload started\n");
+  if (trace_init)
+    printk ("Sound unload started\n");
 
   for (i = 0; i < n && snd_installed_cards[i].card_type; i++)
     if (snd_installed_cards[i].enabled)
@@ -141,7 +151,8 @@ sound_unload_drivers (void)
 	    snd_installed_cards[i].enabled = 0;
 	  }
 
-  printk ("Sound unload complete\n");
+  if (trace_init)
+    printk ("Sound unload complete\n");
 }
 
 void
@@ -182,6 +193,8 @@ sndtable_probe (int unit, struct address_info *hw_config)
 {
   int             i, sel = -1, n = num_sound_cards;
 
+  DDB (printk ("sndtable_probe(%d)\n", unit));
+
   if (!unit)
     return TRUE;
 
@@ -221,16 +234,22 @@ sndtable_probe (int unit, struct address_info *hw_config)
       if ((drv = snd_find_driver (snd_installed_cards[sel].card_type)) == -1)
 	{
 	  snd_installed_cards[sel].enabled = 0;
+	  DDB (printk ("Failed to find driver\n"));
 	  return FALSE;
 	}
+      DDB (printk ("Driver name '%s'\n", sound_drivers[drv].name));
 
-
-      snd_installed_cards[sel].config.card_subtype =
+      hw_config->card_subtype =
+	snd_installed_cards[sel].config.card_subtype =
 	sound_drivers[drv].card_subtype;
 
       if (sound_drivers[drv].probe (hw_config))
-	return TRUE;
+	{
+	  return TRUE;
+	  DDB (printk ("Hardware probed OK\n"));
+	}
 
+      DDB (printk ("Failed to find hardware\n"));
       snd_installed_cards[sel].enabled = 0;	/*
 						 * Mark as not detected
 						 */
@@ -278,26 +297,17 @@ sndtable_init_card (int unit, struct address_info *hw_config)
 	  {
 
 	    DDB (printk ("Located card - calling attach routine\n"));
-	    printk ("snd%d", unit);
 	    if (sound_drivers[drv].attach (0, hw_config) != 0)
 	      panic ("sound: Invalid memory allocation\n");
 
 	    DDB (printk ("attach routine finished\n"));
-	    printk (" at 0x%x irq %d drq %d",
-		    snd_installed_cards[i].config.io_base,
-		    snd_installed_cards[i].config.irq,
-		    snd_installed_cards[i].config.dma);
-	    if (snd_installed_cards[i].config.dma2 != -1)
-	      printk (",%d\n",
-		      snd_installed_cards[i].config.dma2);
-	    else
-	      printk ("\n");
 	  }
+	start_services (0);
 	return TRUE;
       }
 
-  printk ("sndtable_init_card: No card defined with type=%d, num cards: %d\n",
-	  unit, num_sound_cards);
+  DDB (printk ("sndtable_init_card: No card defined with type=%d, num cards: %d\n",
+	       unit, num_sound_cards));
   return FALSE;
 }
 
@@ -413,7 +423,3 @@ sound_getconf (int card_type)
 
   return &snd_installed_cards[ptr].config;
 }
-
-
-
-#endif

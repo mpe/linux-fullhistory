@@ -15,7 +15,6 @@ void midi_synth_controller (int dev, int channel, int ctrl_num, int value);
 int midi_synth_patchmgr (int dev, struct patmgr_info *rec);
 void midi_synth_bender (int dev, int chn, int value);
 void midi_synth_setup_voice (int dev, int voice, int chn);
-void do_midi_msg (int synthno, unsigned char *msg, int mlen);
 int midi_synth_send_sysex(int dev, unsigned char *bytes,int len);
 
 #ifndef _MIDI_SYNTH_C_

@@ -15,7 +15,9 @@ enum token {
   tok_define,
   tok_choose,
   tok_choice,
+  tok_endmenu,
   tok_unknown
+
 };
 
 enum operator {

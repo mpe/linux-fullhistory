@@ -1,7 +1,7 @@
 /*
- *  linux/drivers/block/triton.c	Version 1.04  Dec 1, 1995
+ *  linux/drivers/block/triton.c	Version 1.05  Jan 11, 1996
  *
- *  Copyright (c) 1995  Mark Lord
+ *  Copyright (c) 1995-1996  Mark Lord
  *  May be copied or modified under the terms of the GNU General Public License
  */
 
@@ -95,11 +95,6 @@
  *
  * And, yes, Intel Zappa boards really *do* use the Triton IDE ports.
  */
-#define _TRITON_C
-#include <linux/config.h>
-#ifndef CONFIG_BLK_DEV_TRITON
-#define CONFIG_BLK_DEV_TRITON y
-#endif
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/timer.h>
@@ -127,15 +122,15 @@ const char *good_dma_drives[] = {"Micropolis 2112A"};
  * Our Physical Region Descriptor (PRD) table should be large enough
  * to handle the biggest I/O request we are likely to see.  Since requests
  * can have no more than 256 sectors, and since the typical blocksize is
- * two sectors, we can get by with a limit of 128 entries here for the
+ * two sectors, we could get by with a limit of 128 entries here for the
  * usual worst case.  Most requests seem to include some contiguous blocks,
  * further reducing the number of table entries required.
  *
- * Note that the driver reverts to PIO mode for individual requests that exceed
+ * The driver reverts to PIO mode for individual requests that exceed
  * this limit (possible with 512 byte blocksizes, eg. MSDOS f/s), so handling
  * 100% of all crazy scenarios here is not necessary.
  *
- * As it turns out, though, we must allocate a full 4KB page for this,
+ * As it turns out though, we must allocate a full 4KB page for this,
  * so the two PRD tables (ide0 & ide1) will each get half of that,
  * allowing each to have about 256 entries (8 bytes each) from this.
  */
@@ -288,7 +283,7 @@ static int triton_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	outl(virt_to_bus (HWIF(drive)->dmatable), dma_base + 4); /* PRD table */
 	outb(reading, dma_base);			/* specify r/w */
 	outb(0x26, dma_base+2);				/* clear status bits */
-	ide_set_handler (drive, &dma_intr, WAIT_CMD);	/* issue cmd to drive */
+	ide_set_handler(drive, &dma_intr, WAIT_CMD);	/* issue cmd to drive */
 	OUT_BYTE(reading ? WIN_READDMA : WIN_WRITEDMA, IDE_COMMAND_REG);
 	outb(inb(dma_base)|1, dma_base);		/* begin DMA */
 	return 0;
@@ -316,6 +311,48 @@ static void print_triton_drive_flags (unsigned int unit, byte flags)
 	printk(" fastPIO=%s\n",	((flags&9)==1)	? "on " : "off");
 }
 
+static void init_triton_dma (ide_hwif_t *hwif, unsigned short base)
+{
+	static unsigned long dmatable = 0;
+
+	printk("    %s: BusMaster DMA at 0x%04x-0x%04x", hwif->name, base, base+7);
+	if (check_region(base, 8)) {
+		printk(" -- ERROR, PORTS ALREADY IN USE");
+	} else {
+		request_region(base, 8, hwif->name);
+		hwif->dma_base = base;
+		if (!dmatable) {
+			/*
+			 * Since we know we are on a PCI bus, we could
+			 * actually use __get_free_pages() here instead
+			 * of __get_dma_pages() -- no ISA limitations.
+			 */
+			dmatable = __get_dma_pages(GFP_KERNEL, 0);
+		}
+		if (dmatable) {
+			hwif->dmatable = (unsigned long *) dmatable;
+			dmatable += (PRD_ENTRIES * PRD_BYTES);
+			outl(virt_to_bus(hwif->dmatable), base + 4);
+			hwif->dmaproc  = &triton_dmaproc;
+		}
+	}
+	printk("\n");
+}
+
+/*
+ * calc_mode() returns the ATA PIO mode number, based on the number
+ * of cycle clks passed in.  Assumes 33Mhz bus operation (30ns per clk).
+ */
+byte calc_mode (byte clks)
+{
+	if (clks == 3)	return 5;
+	if (clks == 4)	return 4;
+	if (clks <  6)	return 3;
+	if (clks <  8)	return 2;
+	if (clks < 13)	return 1;
+	return 0;
+}
+
 /*
  * ide_init_triton() prepares the IDE driver for DMA operation.
  * This routine is called once, from ide.c during driver initialization,
@@ -324,26 +361,33 @@ static void print_triton_drive_flags (unsigned int unit, byte flags)
 void ide_init_triton (byte bus, byte fn)
 {
 	int rc = 0, h;
+	int dma_enabled = 0;
 	unsigned short bmiba, pcicmd;
 	unsigned int timings;
-	unsigned long dmatable = 0;
 	extern ide_hwif_t ide_hwifs[];
 
+	printk("ide: Triton BM-IDE on PCI bus %d function %d\n", bus, fn);
 	/*
 	 * See if IDE and BM-DMA features are enabled:
 	 */
 	if ((rc = pcibios_read_config_word(bus, fn, 0x04, &pcicmd)))
 		goto quit;
-	if ((pcicmd & 5) != 5) {
-		if ((pcicmd & 1) == 0)
-			printk("ide: Triton IDE ports are not enabled\n");
-		else
-			printk("ide: Triton BM-DMA feature is not enabled\n");
+	if ((pcicmd & 1) == 0)  {
+		printk("ide: Triton IDE ports are not enabled\n");
 		goto quit;
 	}
-#if 0
-	(void) pcibios_write_config_word(bus, fn, 0x42, 0x8037); /* for my MC2112A */
-#endif
+	if ((pcicmd & 4) == 0) {
+		printk("ide: Triton BM-DMA feature is not enabled -- upgrade your BIOS\n");
+	} else {
+		/*
+		 * Get the bmiba base address
+		 */
+		if ((rc = pcibios_read_config_word(bus, fn, 0x20, &bmiba)))
+			goto quit;
+		bmiba &= 0xfff0;	/* extract port base address */
+		dma_enabled = 1;
+	}
+
 	/*
 	 * See if ide port(s) are enabled
 	 */
@@ -353,52 +397,32 @@ void ide_init_triton (byte bus, byte fn)
 		printk("ide: neither Triton IDE port is enabled\n");
 		goto quit;
 	}
-	printk("ide: Triton BM-IDE on PCI bus %d function %d\n", bus, fn);
-
-	/*
-	 * Get the bmiba base address
-	 */
-	if ((rc = pcibios_read_config_word(bus, fn, 0x20, &bmiba)))
-		goto quit;
-	bmiba &= 0xfff0;	/* extract port base address */
 
 	/*
 	 * Save the dma_base port addr for each interface
 	 */
 	for (h = 0; h < MAX_HWIFS; ++h) {
+		byte s_clks, r_clks;
 		ide_hwif_t *hwif = &ide_hwifs[h];
-		unsigned short base, time;
-		if (hwif->io_base == 0x1f0 && (timings & 0x8000)) {
+		unsigned short time;
+		if (hwif->io_base == 0x1f0) {
 			time = timings & 0xffff;
-			base = bmiba;
-		} else if (hwif->io_base == 0x170 && (timings & 0x80000000)) {
+			if ((timings & 0x8000) == 0)	/* interface enabled? */
+				continue;
+			if (dma_enabled)
+				init_triton_dma(hwif, bmiba);
+		} else if (hwif->io_base == 0x170) {
 			time = timings >> 16;
-			base = bmiba + 8;
+			if ((timings & 0x8000) == 0)	/* interface enabled? */
+				continue;
+			if (dma_enabled)
+				init_triton_dma(hwif, bmiba + 8);
 		} else
 			continue;
-		printk("    %s: BusMaster DMA at 0x%04x-0x%04x", hwif->name, base, base+7);
-		if (check_region(base, 8)) {
-			printk(" -- ERROR, PORTS ALREADY IN USE");
-		} else {
-			request_region(base, 8, hwif->name);
-			hwif->dma_base = base;
-			if (!dmatable) {
-				/*
-				 * Since we know we are on a PCI bus, we could
-				 * actually use __get_free_pages() here instead
-				 * of __get_dma_pages() -- no ISA limitations.
-				 */
-				dmatable = __get_dma_pages(GFP_KERNEL, 0);
-			}
-			if (dmatable) {
-				hwif->dmatable = (unsigned long *) dmatable;
-				dmatable += (PRD_ENTRIES * PRD_BYTES);
-				outl(virt_to_bus(hwif->dmatable), base + 4);
-				hwif->dmaproc  = &triton_dmaproc;
-			}
-		}
-		printk("\n    %s timing: (0x%04x) sample_CLKs=%d, recovery_CLKs=%d\n",
-		 hwif->name, time, ((~time>>12)&3)+2, ((~time>>8)&3)+1);
+		s_clks = ((~time >> 12) & 3) + 2;
+		r_clks = ((~time >>  8) & 3) + 1;
+		printk("    %s timing: (0x%04x) sample_CLKs=%d, recovery_CLKs=%d (PIO mode%d)\n",
+		 hwif->name, time, s_clks, r_clks, calc_mode(s_clks+r_clks));
 		print_triton_drive_flags (0, time & 0xf);
 		print_triton_drive_flags (1, (time >> 4) & 0xf);
 	}

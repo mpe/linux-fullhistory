@@ -29,11 +29,9 @@
 
 #include "sound_config.h"
 
-#ifdef CONFIGURE_SOUNDCARD
-
 #include "gus_hw.h"
 
-#if !defined(EXCLUDE_GUS) && !defined(EXCLUDE_MIDI)
+#if defined(CONFIG_GUS) && defined(CONFIG_MIDI)
 
 static int      midi_busy = 0, input_opened = 0;
 static int      my_dev;
@@ -75,14 +73,8 @@ gus_midi_open (int dev, int mode,
       input_opened = 1;
     }
 
-  if (mode == OPEN_WRITE || mode == OPEN_READWRITE)
-    {
-      gus_midi_control |= MIDI_ENABLE_XMIT;
-    }
 
-  outb (gus_midi_control, u_MidiControl);	/*
-						   * Enable
-						 */
+  outb (gus_midi_control, u_MidiControl);	/* Enable */
 
   midi_busy = 1;
   qlen = qhead = qtail = output_used = 0;
@@ -276,37 +268,37 @@ gus_midi_interrupt (int dummy)
   save_flags (flags);
   cli ();
 
-  stat = GUS_MIDI_STATUS ();
-
-  if (stat & MIDI_RCV_FULL)
+  while ((stat = GUS_MIDI_STATUS ()) & (MIDI_RCV_FULL | MIDI_XMIT_EMPTY))
     {
-      data = inb (u_MidiData);
-      if (input_opened)
-	midi_input_intr (my_dev, data);
-    }
-
-  if (stat & MIDI_XMIT_EMPTY)
-    {
-      while (qlen && dump_to_midi (tmp_queue[qhead]))
+      if (stat & MIDI_RCV_FULL)
 	{
-	  qlen--;
-	  qhead++;
+	  data = inb (u_MidiData);
+	  if (input_opened)
+	    midi_input_intr (my_dev, data);
 	}
 
-      if (!qlen)
+      if (stat & MIDI_XMIT_EMPTY)
 	{
-	  /*
-	   * Disable Midi output interrupts, since no data in the buffer
-	   */
-	  gus_midi_control &= ~MIDI_ENABLE_XMIT;
-	  outb (gus_midi_control, u_MidiControl);
-	}
-    }
+	  while (qlen && dump_to_midi (tmp_queue[qhead]))
+	    {
+	      qlen--;
+	      qhead++;
+	    }
 
+	  if (!qlen)
+	    {
+	      /*
+	       * Disable Midi output interrupts, since no data in the buffer
+	       */
+	      gus_midi_control &= ~MIDI_ENABLE_XMIT;
+	      outb (gus_midi_control, u_MidiControl);
+	      outb (gus_midi_control, u_MidiControl);
+	    }
+	}
+
+    }
 
   restore_flags (flags);
 }
-
-#endif
 
 #endif

@@ -1,7 +1,18 @@
+
 #define ALLOW_SELECT
-#undef ALLOW_BUFFER_MAPPING
 #undef NO_INLINE_ASM
-#undef SHORT_BANNERS
+#define SHORT_BANNERS
+
+#include <linux/config.h>
+
+#ifdef MODULE
+#define __NO_VERSION__
+#include <linux/module.h>
+#include <linux/version.h>
+#ifdef MODVERSIONS
+#include <linux/modversions.h>
+#endif
+#endif
 
 #include <linux/param.h>
 #include <linux/types.h>
@@ -22,6 +33,7 @@
 #include <linux/string.h>
 #include <linux/ioport.h>
 
+#include <linux/wrapper.h>
 
 #include <linux/soundcard.h>
 
@@ -46,3 +58,5 @@ extern caddr_t sound_mem_blocks[1024];
 extern int sound_num_blocks;
 
 typedef int sound_os_info;
+
+#undef PSEUDO_DMA_AUTOINIT

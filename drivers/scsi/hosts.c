@@ -41,6 +41,10 @@
 
 #include "hosts.h"
 
+#ifdef CONFIG_SCSI_ADVANSYS
+#include "advansys.h"
+#endif
+
 #ifdef CONFIG_SCSI_AHA152X
 #include "aha152x.h"
 #endif
@@ -158,6 +162,9 @@ Scsi_Host_Template * scsi_hosts = NULL;
 
 static Scsi_Host_Template builtin_scsi_hosts[] =
 {
+#ifdef CONFIG_SCSI_ADVANSYS
+	ADVANSYS,
+#endif
 /* BusLogic must come before aha1542.c */
 #ifdef CONFIG_SCSI_BUSLOGIC
     BUSLOGIC,

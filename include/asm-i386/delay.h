@@ -13,7 +13,11 @@
 
 extern __inline__ void __delay(int loops)
 {
-	__asm__(".align 2,0x90\n1:\tdecl %0\n\tjns 1b": :"a" (loops):"ax");
+	__asm__ __volatile__(
+		".align 2,0x90\n1:\tdecl %0\n\tjns 1b"
+		:/* no outputs */
+		:"a" (loops)
+		:"ax");
 }
 
 /*

@@ -29,7 +29,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_SB) && !defined(EXCLUDE_MIDI)
+#if defined(CONFIG_SB) && defined(CONFIG_MIDI)
 
 #include "sb.h"
 #undef SB_TEST_IRQ

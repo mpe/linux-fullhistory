@@ -1,9 +1,9 @@
 
-VoxWare v3.5-alpha5 release notes
+VoxWare v3.5-alpha4 release notes
 ---------------------------------
 
 IMPORTANT! This version of the driver is compatible only with Linux versions
-	   1.3.33 and later. It may work with earlier ones as a loadable
+	   1.3.58 and later. It may work with earlier ones as a loadable
 	   module but...
 
 	   Also this is an ALPHA test version which has not been tested
@@ -33,11 +33,11 @@ them are still on my mailbox and they should be included in versions
 after v3.0 (I will not add aditional features before v3.0 is ready).
 
    ====================================================
--  THIS VERSION ____REQUIRES____ Linux 1.3.33 OR LATER.
+-  THIS VERSION ____REQUIRES____ Linux 1.3.58 OR LATER.
    ====================================================
 
 -  THIS VERSION MAY NOT WORK WITH Linux VERSIONS RELEASED
-   AFTER end of Nov 1995. If this version doesn't compile with
+   AFTER end of Feb 1996. If this version doesn't compile with
    your kernel version, please use the sound driver version
    included in your kernel.
 
@@ -65,7 +65,7 @@ MediaTriX AudioTriX Pro (OPL4 and the optional effect daughtercard
 	the snd-util-3.0.tar.gz package which does it).
 Ensoniq SoundScape (works but needs some improvements)
 MV Jazz16 based soundcards (ProSonic, 3D etc).
-SoundMan Wave (recording may not work, mixer support is limited)
+SoundMan Wave
 Mozart (OAK OTI-601 interface chip) based soundcards.
 MAD16 (an interface chip by OPTi) based soundcards (TB Tropez ???).
 (NOTE! The MAD16 looks similar to the Mozart chip. It could be a good

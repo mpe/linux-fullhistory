@@ -390,6 +390,7 @@ extern int sysv_file_read(struct inode *, struct file *, char *, int);
 extern void sysv_truncate(struct inode *);
 extern void sysv_put_super(struct super_block *);
 extern struct super_block *sysv_read_super(struct super_block *,void *,int);
+extern int init_sysv_fs(void);
 extern void sysv_write_super(struct super_block *);
 extern void sysv_read_inode(struct inode *);
 extern int sysv_notify_change(struct inode *, struct iattr *);

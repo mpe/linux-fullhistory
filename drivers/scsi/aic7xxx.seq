@@ -136,9 +136,9 @@ CMDCMPLT	= 0x02				# Command Complete
 SEND_REJECT	= 0x11				# sending a message reject
 NO_IDENT	= 0x21				# no IDENTIFY after reconnect
 NO_MATCH	= 0x31				# no cmd match for reconnect
-MSG_SDTR	= 0x41				# SDTR message recieved
-MSG_WDTR	= 0x51				# WDTR message recieved
-MSG_REJECT	= 0x61				# Reject message recieved
+MSG_SDTR	= 0x41				# SDTR message received
+MSG_WDTR	= 0x51				# WDTR message received
+MSG_REJECT	= 0x61				# Reject message received
 BAD_STATUS	= 0x71				# Bad status from target
 RESIDUAL	= 0x81				# Residual byte count != 0
 ABORT_TAG	= 0x91				# Sent an ABORT_TAG message

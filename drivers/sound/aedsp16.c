@@ -32,10 +32,10 @@
 #include "sound_config.h"
 
 #ifndef AEDSP16_BASE
-#define EXCLUDE_AEDSP16
+#undef CONFIG_AEDSP16
 #endif
 
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_AEDSP16)
+#if defined(CONFIG_AEDSP16)
 /*
 
    READ THIS
@@ -865,4 +865,4 @@ ResetAEDSP16 (void)
 
 #endif /* 0 */
 
-#endif /* !EXCLUDE_AEDSP16 */
+#endif /* CONFIG_AEDSP16 */

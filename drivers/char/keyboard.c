@@ -87,12 +87,6 @@ extern void change_console(unsigned int new_console);
 extern void scrollback(int);
 extern void scrollfront(int);
 
-#ifdef __i386__
-#define fake_keyboard_interrupt() __asm__ __volatile__("int $0x21")
-#else
-#define fake_keyboard_interrupt() do ; while (0)
-#endif
-
 unsigned char kbd_read_mask = 0x01;	/* modified by psaux.c */
 
 /*
@@ -128,6 +122,8 @@ static struct tty_struct * tty = NULL;
 static volatile unsigned char reply_expected = 0;
 static volatile unsigned char acknowledge = 0;
 static volatile unsigned char resend = 0;
+/* used by kbd_bh - set by keyboard_interrupt */
+static volatile unsigned char do_poke_blanked_console = 0;
 
 extern void compute_shiftstate(void);
 
@@ -384,6 +380,7 @@ static void keyboard_interrupt(int irq, struct pt_regs *regs)
 		prev_scancode = 0;
 		goto end_kbd_intr;
 	}
+	do_poke_blanked_console = 1;
 	add_keyboard_randomness(scancode);
 
 	tty = ttytab[fg_console];
@@ -1178,11 +1175,10 @@ static void kbd_bh(void * unused)
 		}
 		want_console = -1;
 	}
-	poke_blanked_console();
-	cli();
-	if ((inb_p(0x64) & kbd_read_mask) == 0x01)
-		fake_keyboard_interrupt();
-	sti();
+	if (do_poke_blanked_console) { /* do not unblank for a LED change */
+		do_poke_blanked_console = 0;
+		poke_blanked_console();
+	}
 }
 
 int kbd_init(void)

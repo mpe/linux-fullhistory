@@ -873,15 +873,23 @@ int minix_sync_inode(struct inode * inode)
 	return err;
 }
 
-#ifdef MODULE
-
 static struct file_system_type minix_fs_type = {
 	minix_read_super, "minix", 1, NULL
 };
 
+int init_minix_fs(void)
+{
+        return register_filesystem(&minix_fs_type);
+}
+
+#ifdef MODULE
 int init_module(void)
 {
-	return register_filesystem(&minix_fs_type);
+	int status;
+
+	if ((status = init_minix_fs()) == 0)
+		register_symtab(0);
+	return status;
 }
 
 void cleanup_module(void)

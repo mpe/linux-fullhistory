@@ -29,16 +29,10 @@
 
 #include "sound_config.h"
 
-#ifdef CONFIGURE_SOUNDCARD
-
 struct sbc_device
   {
     int             usecount;
   };
-
-static struct sbc_device sbc_devices[SND_NDEVS] =
-{
-  {0}};
 
 static int      in_use = 0;	/*
 
@@ -210,7 +204,7 @@ init_status (void)
       return;
     }
 
-#ifdef EXCLUDE_AUDIO
+#ifndef CONFIG_AUDIO
   if (!put_status ("\nAudio devices: NOT ENABLED IN CONFIG\n"))
     return;
 #else
@@ -235,7 +229,7 @@ init_status (void)
     }
 #endif
 
-#ifdef EXCLUDE_SEQUENCER
+#ifndef CONFIG_SEQUENCER
   if (!put_status ("\nSynth devices: NOT ENABLED IN CONFIG\n"))
     return;
 #else
@@ -255,7 +249,7 @@ init_status (void)
     }
 #endif
 
-#ifdef EXCLUDE_MIDI
+#ifndef CONFIG_MIDI
   if (!put_status ("\nMidi devices: NOT ENABLED IN CONFIG\n"))
     return;
 #else
@@ -339,7 +333,7 @@ sound_read_sw (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
       return read_status (buf, count);
       break;
 
-#ifndef EXCLUDE_AUDIO
+#ifdef CONFIG_AUDIO
     case SND_DEV_DSP:
     case SND_DEV_DSP16:
     case SND_DEV_AUDIO:
@@ -347,14 +341,14 @@ sound_read_sw (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
       break;
 #endif
 
-#ifndef EXCLUDE_SEQUENCER
+#ifdef CONFIG_SEQUENCER
     case SND_DEV_SEQ:
     case SND_DEV_SEQ2:
       return sequencer_read (dev, file, buf, count);
       break;
 #endif
 
-#ifndef EXCLUDE_MIDI
+#ifdef CONFIG_MIDI
     case SND_DEV_MIDIN:
       return MIDIbuf_read (dev, file, buf, count);
 #endif
@@ -375,14 +369,14 @@ sound_write_sw (int dev, struct fileinfo *file, const snd_rw_buf * buf, int coun
   switch (dev & 0x0f)
     {
 
-#ifndef EXCLUDE_SEQUENCER
+#ifdef CONFIG_SEQUENCER
     case SND_DEV_SEQ:
     case SND_DEV_SEQ2:
       return sequencer_write (dev, file, buf, count);
       break;
 #endif
 
-#ifndef EXCLUDE_AUDIO
+#ifdef CONFIG_AUDIO
     case SND_DEV_DSP:
     case SND_DEV_DSP16:
     case SND_DEV_AUDIO:
@@ -390,7 +384,7 @@ sound_write_sw (int dev, struct fileinfo *file, const snd_rw_buf * buf, int coun
       break;
 #endif
 
-#ifndef EXCLUDE_MIDI
+#ifdef CONFIG_MIDI
     case SND_DEV_MIDIN:
       return MIDIbuf_write (dev, file, buf, count);
 #endif
@@ -407,7 +401,7 @@ sound_open_sw (int dev, struct fileinfo *file)
 {
   int             retval;
 
-  DEB (printk ("sound_open_sw(dev=%d) : usecount=%d\n", dev, sbc_devices[dev].usecount));
+  DEB (printk ("sound_open_sw(dev=%d)\n", dev));
 
   if ((dev >= SND_NDEVS) || (dev < 0))
     {
@@ -431,7 +425,7 @@ sound_open_sw (int dev, struct fileinfo *file)
       return 0;
       break;
 
-#ifndef EXCLUDE_SEQUENCER
+#ifdef CONFIG_SEQUENCER
     case SND_DEV_SEQ:
     case SND_DEV_SEQ2:
       if ((retval = sequencer_open (dev, file)) < 0)
@@ -439,14 +433,14 @@ sound_open_sw (int dev, struct fileinfo *file)
       break;
 #endif
 
-#ifndef EXCLUDE_MIDI
+#ifdef CONFIG_MIDI
     case SND_DEV_MIDIN:
       if ((retval = MIDIbuf_open (dev, file)) < 0)
 	return retval;
       break;
 #endif
 
-#ifndef EXCLUDE_AUDIO
+#ifdef CONFIG_AUDIO
     case SND_DEV_DSP:
     case SND_DEV_DSP16:
     case SND_DEV_AUDIO:
@@ -460,7 +454,6 @@ sound_open_sw (int dev, struct fileinfo *file)
       return -ENXIO;
     }
 
-  sbc_devices[dev].usecount++;
   in_use++;
 
   return 0;
@@ -484,20 +477,20 @@ sound_release_sw (int dev, struct fileinfo *file)
     case SND_DEV_CTL:
       break;
 
-#ifndef EXCLUDE_SEQUENCER
+#ifdef CONFIG_SEQUENCER
     case SND_DEV_SEQ:
     case SND_DEV_SEQ2:
       sequencer_release (dev, file);
       break;
 #endif
 
-#ifndef EXCLUDE_MIDI
+#ifdef CONFIG_MIDI
     case SND_DEV_MIDIN:
       MIDIbuf_release (dev, file);
       break;
 #endif
 
-#ifndef EXCLUDE_AUDIO
+#ifdef CONFIG_AUDIO
     case SND_DEV_DSP:
     case SND_DEV_DSP16:
     case SND_DEV_AUDIO:
@@ -508,8 +501,6 @@ sound_release_sw (int dev, struct fileinfo *file)
     default:
       printk ("Sound error: Releasing unknown device 0x%02x\n", dev);
     }
-
-  sbc_devices[dev].usecount--;
   in_use--;
 }
 
@@ -527,7 +518,7 @@ sound_ioctl_sw (int dev, struct fileinfo *file,
 
 	switch (dtype)
 	  {
-#ifndef EXCLUDE_AUDIO
+#ifdef CONFIG_AUDIO
 	  case SND_DEV_DSP:
 	  case SND_DEV_DSP16:
 	  case SND_DEV_AUDIO:
@@ -559,14 +550,14 @@ sound_ioctl_sw (int dev, struct fileinfo *file,
       return mixer_devs[dev]->ioctl (dev, cmd, arg);
       break;
 
-#ifndef EXCLUDE_SEQUENCER
+#ifdef CONFIG_SEQUENCER
     case SND_DEV_SEQ:
     case SND_DEV_SEQ2:
       return sequencer_ioctl (dev, file, cmd, arg);
       break;
 #endif
 
-#ifndef EXCLUDE_AUDIO
+#ifdef CONFIG_AUDIO
     case SND_DEV_DSP:
     case SND_DEV_DSP16:
     case SND_DEV_AUDIO:
@@ -574,7 +565,7 @@ sound_ioctl_sw (int dev, struct fileinfo *file,
       break;
 #endif
 
-#ifndef EXCLUDE_MIDI
+#ifdef CONFIG_MIDI
     case SND_DEV_MIDIN:
       return MIDIbuf_ioctl (dev, file, cmd, arg);
       break;
@@ -587,5 +578,3 @@ sound_ioctl_sw (int dev, struct fileinfo *file,
 
   return -EPERM;
 }
-
-#endif

@@ -48,6 +48,9 @@ function mainmenu_option () {
 function mainmenu_name () {
 	:
 }
+function endmenu () {
+	:
+}
 
 #
 # help prints the corresponding help text from Configure.help to stdout
@@ -262,6 +265,35 @@ function int () {
           case "$ans" in
              [1-9] | [1-9][0-9] | [1-9][0-9][0-9] | [1-9][0-9][0-9][0-9] ) 
                  define_int "$2" "$ans"
+                 break;;
+             * ) help "$2"
+                 ;;
+          esac
+        done
+}
+#
+# define_hex sets the value of a hexadecimal argument
+#
+#	define_hex define value
+#
+function define_hex () {
+	echo "$1=$2" >>$CONFIG
+	echo "#define $1 0x$2" >>$CONFIG_H
+	eval "$1=$2"
+}
+
+#
+# hex processes an hexadecimal argument
+#
+#	hex question define default
+#
+function hex () {
+	def=$(eval echo "\${$2:-$3}")
+        while :; do
+          readln "$1 ($2) [$def] " "$def"
+          case "$ans" in
+             [1-9] | [1-9][0-9] | [1-9][0-9][0-9] | [1-9][0-9][0-9][0-9] ) 
+                 define_hex "$2" "$ans"
                  break;;
              * ) help "$2"
                  ;;

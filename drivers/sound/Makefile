@@ -25,14 +25,6 @@ OBJS   = audio.o dmabuf.o sb_dsp.o \
 	 mad16.o mad16_sb_midi.o cs4232.o maui.o sound_pnp.o
 endif
 
-ifndef HOSTCC
-#
-#	Running outside the kernel build.
-#
-CC	= gcc
-HOSTCC	= gcc
-CFLAGS	= -D__KERNEL__ -DMODULE -I/usr/src/linux/include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -pipe -m486
-
 
 build:
 	@echo Compiling modularized sound driver
@@ -44,18 +36,27 @@ install:	sound.o
 
 .c.o:
 	$(CC) $(CFLAGS) -c $<
-endif
 
 ifeq ($(CONFIG_SOUND),y)
-OBJS += $(FIXEDOBJS)
 
 all:	local.h sound.a
+
+OBJS += $(FIXEDOBJS)
 
 else
 all:
 endif
 
+ifndef HOSTCC
+#
+#	Running outside the kernel build.
+#
+CC	= gcc
+HOSTCC	= gcc
+CFLAGS	= -D__KERNEL__ -DMODULE -DMODVERSIONS -I/usr/src/linux/include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -pipe -m486
+else
 include $(TOPDIR)/Rules.make
+endif
 
 sound.a: $(OBJS) 
 	-rm -f sound.a
@@ -64,7 +65,7 @@ sound.a: $(OBJS)
 
 clean:
 	rm -f core core.* *.o *.a tmp_make *~ x y z *%
-	rm -f configure sound_stub.c
+	rm -f configure sound_stub.c objects/*.o
 
 indent:
 	for n in *.c;do echo indent $$n;indent $$n;done
@@ -100,6 +101,24 @@ oldconfig: setup-$(TARGET_OS) configure
 #	@echo \#define SOUND_CONFIG_DOMAIN \"`hostname -d`\" >> local.h 2>/dev/null
 	@echo \#define SOUND_UNAME_A \"`uname -a`\" >> local.h
 
+kernelconfig: setup-$(TARGET_OS)
+	rm -f configure
+	$(HOSTCC) -o configure configure.c
+	./configure fixedlocal > local.h
+	./configure fixeddefines > .defines
+	@echo \#define SOUND_CONFIG_DATE \"`date`\" >> local.h
+	@echo \#define SOUND_CONFIG_BY \"`whoami`\" >> local.h
+#	@echo \#define SOUND_CONFIG_HOST \"`hostname`\" >> local.h 2>/dev/null
+#	@echo \#define SOUND_CONFIG_DOMAIN \"`hostname -d`\" >> local.h 2>/dev/null
+	@echo \#define SOUND_UNAME_A \"`uname -a`\" >> local.h
+
+script: setup-$(TARGET_OS)
+	rm -f configure
+	$(HOSTCC) -o configure configure.c
+	./configure script > Config.in
+	./configure fixedlocal > local.h
+	./configure fixeddefines > .defines
+
 clrconf:
 	rm -f local.h .depend synth-ld.h trix_boot.h smw-midi0001.h .defines
 
@@ -118,4 +137,12 @@ sound.o: local.h $(FIXEDOBJS) sound.a
 	$(LD) -r -o sound.o $(FIXEDOBJS) sound.a
 
 modules: local.h sound.o
-	ln -fs `pwd`/sound.o $(TOPDIR)/modules/sound.o
+	ln -fs `pwd`/sound.o /usr/src/linux/modules/sound.o
+
+
+#
+# include a dependency file if one exists
+#
+ifeq (.depend,$(wildcard .depend))
+include .depend
+endif

@@ -31,7 +31,7 @@
 #include <linux/ultrasound.h>
 #include "gus_hw.h"
 
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_GUS)
+#if defined(CONFIG_GUS)
 
 #define MAX_SAMPLE	150
 #define MAX_PATCH	256
@@ -112,7 +112,7 @@ static int      gus_sampling_speed;
 static int      gus_sampling_channels;
 static int      gus_sampling_bits;
 
-static struct wait_queue *dram_sleeper = NULL;
+static wait_handle *dram_sleeper = NULL;
 static volatile struct snd_wait dram_sleep_flag =
 {0};
 
@@ -1734,11 +1734,11 @@ guswave_load_patch (int dev, int format, const snd_rw_buf * addr,
 	    unsigned long   tl;
 
 	    if (HZ)
-	      current->timeout = tl = jiffies + (HZ);
+	      current_set_timeout (tl = jiffies + (HZ));
 	    else
 	      tl = 0xffffffff;
 	    dram_sleep_flag.mode = WK_SLEEP;
-	    interruptible_sleep_on (&dram_sleeper);
+	    module_interruptible_sleep_on (&dram_sleeper);
 	    if (!(dram_sleep_flag.mode & WK_WAKEUP))
 	      {
 		if (jiffies >= tl)
@@ -2829,7 +2829,7 @@ gus_default_mixer_ioctl (int dev, unsigned int cmd, ioctl_arg arg)
 			 SOUND_MASK_SYNTH|SOUND_MASK_PCM)
   if (((cmd >> 8) & 0xff) == 'M')
     {
-      if (cmd & IOC_IN)
+      if (_IOC_DIR (cmd) & _IOC_WRITE)
 	switch (cmd & 0xff)
 	  {
 	  case SOUND_MIXER_RECSRC:
@@ -3052,7 +3052,7 @@ gus_wave_init (long mem_start, struct address_info *hw_config)
 	  model_num = "MAX";
 	  gus_type = 0x40;
 	  mixer_type = CS4231;
-#ifndef EXCLUDE_GUSMAX
+#ifdef CONFIG_GUSMAX
 	  {
 	    unsigned char   max_config = 0x40;	/* Codec enable */
 
@@ -3098,10 +3098,8 @@ gus_wave_init (long mem_start, struct address_info *hw_config)
        */
     }
 
-
-  printk (" <Gravis UltraSound %s (%dk)>", model_num, (int) gus_mem_size / 1024);
-
   sprintf (gus_info.name, "Gravis UltraSound %s (%dk)", model_num, (int) gus_mem_size / 1024);
+  conf_printf (gus_info.name, hw_config);
 
   if (num_synths >= MAX_SYNTH_DEV)
     printk ("GUS Error: Too many synthesizers\n");
@@ -3109,7 +3107,7 @@ gus_wave_init (long mem_start, struct address_info *hw_config)
     {
       voice_alloc = &guswave_operations.alloc;
       synth_devs[num_synths++] = &guswave_operations;
-#ifndef EXCLUDE_SEQUENCER
+#ifdef CONFIG_SEQUENCER
       gus_tmr_install (gus_base + 8);
 #endif
     }
@@ -3157,7 +3155,7 @@ gus_wave_init (long mem_start, struct address_info *hw_config)
 void
 gus_wave_unload (void)
 {
-#ifndef EXCLUDE_GUSMAX
+#ifdef CONFIG_GUSMAX
   if (have_gus_max)
     {
       ad1848_unload (gus_base + 0x10c,
@@ -3389,7 +3387,7 @@ guswave_dma_irq (void)
 	if ((dram_sleep_flag.mode & WK_SLEEP))
 	  {
 	    dram_sleep_flag.mode = WK_WAKEUP;
-	    wake_up (&dram_sleeper);
+	    module_wake_up (&dram_sleeper);
 	  };
 	break;
 
@@ -3426,7 +3424,7 @@ guswave_dma_irq (void)
 
 }
 
-#ifndef EXCLUDE_SEQUENCER
+#ifdef CONFIG_SEQUENCER
 /*
  * Timer stuff
  */
@@ -3469,7 +3467,7 @@ arm_timer (int timer, unsigned int interval)
       gus_timer_command (0x04, 0x02);	/* Start timer 2 */
     }
 
-  gus_timer_enabled = 0;
+  gus_timer_enabled = 1;
 }
 
 static unsigned int
@@ -3510,6 +3508,7 @@ gus_tmr_restart (int dev)
     gus_write8 (0x45, 0x04);	/* Start timer 1 again */
   else
     gus_write8 (0x45, 0x08);	/* Start timer 2 again */
+  gus_timer_enabled = 1;
 }
 
 static struct sound_lowlev_timer gus_tmr =

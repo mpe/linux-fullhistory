@@ -30,9 +30,7 @@
 
 #include "sound_config.h"
 
-#ifdef CONFIGURE_SOUNDCARD
-
-#if !defined(EXCLUDE_UART6850) && !defined(EXCLUDE_MIDI)
+#if defined(CONFIG_UART6850) && defined(CONFIG_MIDI)
 
 #define	DATAPORT   (uart6850_base)	/*
 					   * * * Midi6850 Data I/O Port on IBM
@@ -117,9 +115,7 @@ poll_uart6850 (unsigned long dummy)
   unsigned long   flags;
 
   if (!(uart6850_opened & OPEN_READ))
-    return;			/*
-				 * No longer required
-				 */
+    return;			/* Device has been closed */
 
   save_flags (flags);
   cli ();
@@ -150,6 +146,7 @@ uart6850_open (int dev, int mode,
       return -EBUSY;
     }
 
+  ;
   uart6850_cmd (UART_RESET);
 
   uart6850_input_loop ();
@@ -298,7 +295,7 @@ attach_uart6850 (long mem_start, struct address_info *hw_config)
 
   restore_flags (flags);
 
-  printk (" <6850 Midi Interface>");
+  conf_printf ("6850 Midi Interface", hw_config);
 
   std_midi_synth.midi_dev = my_dev = num_midis;
   midi_devs[num_midis++] = &uart6850_operations;
@@ -338,7 +335,5 @@ unload_uart6850 (struct address_info *hw_config)
 {
   snd_release_irq (hw_config->irq);
 }
-
-#endif
 
 #endif

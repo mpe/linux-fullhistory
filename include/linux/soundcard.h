@@ -148,6 +148,16 @@
 #define SNDCTL_TMR_SELECT		_IOW ('T', 8, int)
 
 /*
+ *	Endian aware patch key generation algorithm.
+ */
+
+#if defined(_AIX) || defined(AIX)
+#  define _PATCHKEY(id) (0xfd00|id)
+#else
+#  define _PATCHKEY(id) ((id<<8)|0xfd)
+#endif
+
+/*
  *	Sample loading mechanism for internal synthesizers (/dev/sequencer)
  *	The following patch_info structure has been designed to support
  *	Gravis UltraSound. It tries to be universal format for uploading
@@ -155,9 +165,10 @@
  */
 
 struct patch_info {
-		short key;		/* Use GUS_PATCH here */
-#define GUS_PATCH	0x04fd
-#define OBSOLETE_GUS_PATCH	0x02fd
+		unsigned short key;		/* Use GUS_PATCH here */
+#define GUS_PATCH	_PATCHKEY(0x04)
+#define OBSOLETE_GUS_PATCH	_PATCHKEY(0x02)
+
 		short device_no;	/* Synthesizer number */
 		short instr_no;		/* Midi pgm# */
 
@@ -236,8 +247,8 @@ struct patch_info {
 
 struct sysex_info {
 		short key;		/* Use GUS_PATCH here */
-#define SYSEX_PATCH	0x05fd
-#define MAUI_PATCH	0x06fd		/* For future use */
+#define SYSEX_PATCH	_PATCHKEY(0x05)
+#define MAUI_PATCH	_PATCHKEY(0x06)
 		short device_no;	/* Synthesizer number */
 		long len;	/* Size of the sysex data in bytes */
 		unsigned char data[1];	/* Sysex data starts here */
@@ -488,9 +499,9 @@ struct patmgr_info {	/* Note! size must be < 4k since kmalloc() is used */
 typedef unsigned char sbi_instr_data[32];
 
 struct sbi_instrument {
-		unsigned short	key;		/* 	Initialize to FM_PATCH or OPL3_PATCH */
-#define FM_PATCH	0x01fd
-#define OPL3_PATCH	0x03fd
+		unsigned short	key;	/* FM_PATCH or OPL3_PATCH */
+#define FM_PATCH	_PATCHKEY(0x01)
+#define OPL3_PATCH	_PATCHKEY(0x03)
 		short		device;		/*	Synth# (0-4)	*/
 		int 		channel;	/*	Program# to be initialized 	*/
 		sbi_instr_data	operators;	/*	Register settings for operator cells (.SBI format)	*/
@@ -507,6 +518,7 @@ struct synth_info {	/* Read only */
 		int	synth_subtype;
 #define FM_TYPE_ADLIB			0x00
 #define FM_TYPE_OPL3			0x01
+#define MIDI_TYPE_MPU401		0x401
 
 #define SAMPLE_TYPE_GUS			0x10
 
@@ -628,6 +640,7 @@ typedef struct buffmem_desc {
 	} buffmem_desc;
 #define SNDCTL_DSP_MAPINBUF		_IOR ('P', 19, buffmem_desc)
 #define SNDCTL_DSP_MAPOUTBUF		_IOR ('P', 20, buffmem_desc)
+#define SNDCTL_DSP_SETSYNCRO		_IO  ('P', 21)
 
 #define SOUND_PCM_READ_RATE		_IOR ('P', 2, int)
 #define SOUND_PCM_READ_CHANNELS		_IOR ('P', 6, int)
@@ -650,6 +663,7 @@ typedef struct buffmem_desc {
 #define SOUND_PCM_GETCAPS		SNDCTL_DSP_GETCAPS
 #define SOUND_PCM_GETTRIGGER		SNDCTL_DSP_GETTRIGGER
 #define SOUND_PCM_SETTRIGGER		SNDCTL_DSP_SETTRIGGER
+#define SOUND_PCM_SETSYNCRO		SNDCTL_DSP_SETSYNCRO
 #define SOUND_PCM_GETIPTR		SNDCTL_DSP_GETIPTR
 #define SOUND_PCM_GETOPTR		SNDCTL_DSP_GETOPTR
 #define SOUND_PCM_MAPINBUF		SNDCTL_DSP_MAPINBUF
@@ -739,10 +753,18 @@ typedef struct copr_msg {
 #define SOUND_ONOFF_MIN		28
 #define SOUND_ONOFF_MAX		30
 #define SOUND_MIXER_MUTE	28	/* 0 or 1 */
-#define SOUND_MIXER_ENHANCE	29	/* Enhanced stereo (0, 40, 60 or 80) */
 #define SOUND_MIXER_LOUD	30	/* 0 or 1 */
 
 /* Note!	Number 31 cannot be used since the sign bit is reserved */
+
+
+/*
+ * SOUND_MIXER_ENHANCE is an unsupported and undocumented call which
+ * will be removed from the API in future.
+ */
+#define SOUND_MIXER_ENHANCE	29	/* Enhanced stereo (0, 40, 60 or 80) */
+
+
 
 #define SOUND_DEVICE_LABELS	{"Vol  ", "Bass ", "Trebl", "Synth", "Pcm  ", "Spkr ", "Line ", \
 				 "Mic  ", "CD   ", "Mix  ", "Pcm2 ", "Rec  ", "IGain", "OGain", \

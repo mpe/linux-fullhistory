@@ -3,7 +3,9 @@
  *
  *  Copyright (C) 1991, 1992, 1993, 1994  Linus Torvalds
  *
- *  Swap reorganised 29.12.95, 
+ *  Swap reorganised 29.12.95, Stephen Tweedie.
+ *  kswapd added: 7.1.96  sct
+ *  Version: $Id: vmscan.c,v 1.3.2.3 1996/01/17 02:43:11 linux Exp $
  */
 
 #include <linux/mm.h>
@@ -357,6 +359,7 @@ int try_to_free_page(int priority, unsigned long limit)
 int kswapd(void *unused)
 {
 	int i;
+	char *revision="$Revision: 1.3.2.3 $", *s, *e;
 	
 	current->session = 1;
 	current->pgrp = 1;
@@ -380,15 +383,21 @@ int kswapd(void *unused)
 				    namings for POSIX.4 realtime scheduling
 				    priorities.  */
 
-	printk ("Started kswapd v$Revision: 1.1.2.3 $\n");
 	init_swap_timer();
 	
+	if ((s = strchr(revision, ':')) &&
+	    (e = strchr(s, '$')))
+		s++, i = e - s;
+	else
+		s = revision, i = -1;
+	printk ("Started kswapd v%.*s\n", i, s);
+
 	while (1) {
 		kswapd_awake = 0;
 		current->signal = 0;
 		interruptible_sleep_on(&kswapd_wait);
 		kswapd_awake = 1;
-		
+		swapstats.wakeups++;
 		/* Do the background pageout: */
 		for (i=0; i < kswapd_ctl.maxpages; i++)
 			try_to_free_page(GFP_KERNEL, ~0UL);

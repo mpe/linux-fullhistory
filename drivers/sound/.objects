@@ -64,14 +64,10 @@ ifdef CONFIG_PSS
 	OBJS := $(OBJS)  pss.o
 endif
 
-ifdef CONFIG_SB16
-	OBJS := $(OBJS)  sb16_dsp.o
-endif
-
 ifdef CONFIG_SB
 	OBJS := $(OBJS)  sb16_midi.o sb_card.o sb_dsp.o sb_midi.o sb_mixer.o
 	OBJS := $(OBJS)  sb_card.o
-	OBJS := $(OBJS)  sb_dsp.o
+	OBJS := $(OBJS)  sb_dsp.o sb16_dsp.o
 	OBJS := $(OBJS)  sb_midi.o
 	OBJS := $(OBJS)  sb_mixer.o
 endif
@@ -92,12 +88,12 @@ ifdef CONFIG_SSCAPE
 	OBJS := $(OBJS)  sscape.o
 endif
 
-ifdef CONFIG_SEQUENCER
-	OBJS := $(OBJS)  sys_timer.o
-endif
-
 ifdef CONFIG_TRIX
 	OBJS := $(OBJS)  trix.o
+endif
+
+ifdef CONFIG_SEQUENCER
+	OBJS := $(OBJS)  sys_timer.o
 endif
 
 ifdef CONFIG_UART6850

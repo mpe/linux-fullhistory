@@ -29,11 +29,9 @@
 
 #include "sound_config.h"
 
-#ifdef CONFIGURE_SOUNDCARD
-
 #include "pas.h"
 
-#if !defined(EXCLUDE_PAS) && !defined(EXCLUDE_MIDI)
+#if defined(CONFIG_PAS) && defined(CONFIG_MIDI)
 
 static int      midi_busy = 0, input_opened = 0;
 static int      my_dev;
@@ -335,7 +333,5 @@ pas_midi_interrupt (void)
 					   * Acknowledge interrupts
 					 */
 }
-
-#endif
 
 #endif

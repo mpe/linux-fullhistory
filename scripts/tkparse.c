@@ -381,6 +381,11 @@ int parse(char * pnt) {
       tok = tok_fi;
       pnt += 2;
     }
+  else if (strncmp(pnt, "endmenu", 7) == 0) 
+    {
+      tok = tok_endmenu;
+      pnt += 7;
+    }
 
   if( tok == tok_unknown)
     {
@@ -476,6 +481,7 @@ int parse(char * pnt) {
     case tok_else:
     case tok_fi:
     case tok_sound:
+    case tok_endmenu:
       break;
     case tok_if:
       /*
@@ -692,6 +698,7 @@ main(int argc, char * argv[])
 	  dump_if(cfg->cond);
 	  break;
 	case tok_nop:
+	case tok_endmenu:
 	  break;
 	default:
 	  printf("\n");

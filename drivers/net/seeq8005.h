@@ -118,7 +118,7 @@
 #define	SEEQCFG2_SLOTSEL	(0x0040)	/* 0= standard IEEE802.3, 1= smaller,faster, non-standard */
 #define SEEQCFG2_NO_PREAM	(0x0080)	/* 1= user supplies Xmit preamble bytes */
 #define SEEQCFG2_ADDR_LEN	(0x0100)	/* 1= 2byte addresses */
-#define SEEQCFG2_REC_CRC	(0x0200)	/* 0= recieved packets will have CRC stripped from them */
+#define SEEQCFG2_REC_CRC	(0x0200)	/* 0= received packets will have CRC stripped from them */
 #define SEEQCFG2_XMIT_NO_CRC	(0x0400)	/* dont xmit CRC with each packet (user supplies it) */
 #define SEEQCFG2_LOOPBACK	(0x0800)
 #define SEEQCFG2_CTRLO		(0x1000)
@@ -133,7 +133,7 @@ struct seeq_pkt_hdr {
 			unused:1,
 			data_follows:1,		/* if not set, process this as a header and pointer only */
 			chain_cont:1,		/* if set, more headers in chain 		only cmd bit valid in recv header */
-			xmit_recv:1;		/* if set, a xmit packet, else a recieve packet.*/
+			xmit_recv:1;		/* if set, a xmit packet, else a receive packet.*/
 	unsigned char	status;
 };
 

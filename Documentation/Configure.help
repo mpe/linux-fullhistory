@@ -221,7 +221,7 @@ CONFIG_MAX_16M
   This is for some buggy motherboards which cannot properly deal with
   the memory above 16MB. If you have more than 16MB of RAM and
   experience weird problems, you might want to try Y, everyone else
-  says N. Note for machines with more that 64MB of RAM: in order for the
+  says N. Note for machines with more than 64MB of RAM: in order for the
   kernel to be able to use the memory above 64MB, pass the command
   line option "mem=XXXM" (where XXX is the memory size in
   megabytes) to your kernel. See the documentation of your boot loader
@@ -379,7 +379,7 @@ CONFIG_MODVERSIONS
 
 Kernel daemon support
 CONFIG_KERNELD
-  Normally when you have seleceted some drivers and/or filesystems
+  Normally when you have selected some drivers and/or filesystems
   to be created as loadable modules, you also have the responsibility
   to load the corresponding module (via insmod/modprobe) before you
   use it.  If you select Y here, the kernel will take care of this
@@ -1861,7 +1861,7 @@ CONFIG_QUOTA
   ext2 filesystem; you need the software available via ftp (user:
   anonymous) from
   sunsite.unc.edu:/pub/Linux/systm/Admin/quota_acct.tar.gz in order to
-  use it. Obviously, this is only useful for multi user systems. If
+  use it. Probably this is only useful for multi user systems. If
   unsure, say N.
 
 Standard (minix) fs support

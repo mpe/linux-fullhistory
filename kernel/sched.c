@@ -38,6 +38,9 @@
 /*
  * kernel variables
  */
+
+int securelevel = 0;			/* system security level */
+
 long tick = 1000000 / HZ;               /* timer interrupt period */
 volatile struct timeval xtime;		/* The current time */
 int tickadj = 500/HZ;			/* microsecs */

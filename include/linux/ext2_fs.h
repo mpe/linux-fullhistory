@@ -475,6 +475,7 @@ extern void ext2_put_super (struct super_block *);
 extern void ext2_write_super (struct super_block *);
 extern int ext2_remount (struct super_block *, int *, char *);
 extern struct super_block * ext2_read_super (struct super_block *,void *,int);
+extern int init_ext2_fs(void);
 extern void ext2_statfs (struct super_block *, struct statfs *, int);
 
 /* truncate.c */

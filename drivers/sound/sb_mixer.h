@@ -50,6 +50,9 @@
 #define SB16_RECORDING_DEVICES		(SOUND_MASK_SYNTH | SOUND_MASK_LINE | SOUND_MASK_MIC | \
 					 SOUND_MASK_CD)
 
+#define ES688_RECORDING_DEVICES SBPRO_RECORDING_DEVICES
+#define ES688_MIXER_DEVICES (SBPRO_MIXER_DEVICES|SOUND_MASK_LINE2|SOUND_MASK_SPEAKER)
+
 #define SB16_MIXER_DEVICES		(SOUND_MASK_SYNTH | SOUND_MASK_PCM | SOUND_MASK_SPEAKER | SOUND_MASK_LINE | SOUND_MASK_MIC | \
 					 SOUND_MASK_CD | \
 					 SOUND_MASK_IGAIN | SOUND_MASK_OGAIN | \
@@ -131,6 +134,25 @@ MIX_ENT(SOUND_MIXER_IMIX,	0x00, 0, 0, 0x00, 0, 0),
 MIX_ENT(SOUND_MIXER_ALTPCM,	0x00, 0, 0, 0x00, 0, 0),
 MIX_ENT(SOUND_MIXER_RECLEV,	0x00, 0, 0, 0x00, 0, 0)
 };
+mixer_tab es688_mix = {
+MIX_ENT(SOUND_MIXER_VOLUME,	0x32, 7, 4, 0x32, 3, 4),
+MIX_ENT(SOUND_MIXER_BASS,	0x00, 0, 0, 0x00, 0, 0),
+MIX_ENT(SOUND_MIXER_TREBLE,	0x00, 0, 0, 0x00, 0, 0),
+MIX_ENT(SOUND_MIXER_SYNTH,	0x36, 7, 4, 0x36, 3, 4),
+MIX_ENT(SOUND_MIXER_PCM,	0x14, 7, 4, 0x14, 3, 4),
+MIX_ENT(SOUND_MIXER_SPEAKER,	0x3c, 2, 3, 0x00, 0, 0),
+MIX_ENT(SOUND_MIXER_LINE,	0x3e, 7, 4, 0x3e, 3, 4),
+MIX_ENT(SOUND_MIXER_MIC,	0x1a, 7, 4, 0x1a, 3, 4),
+MIX_ENT(SOUND_MIXER_CD,		0x38, 7, 4, 0x38, 3, 4),
+MIX_ENT(SOUND_MIXER_IMIX,	0x00, 0, 0, 0x00, 0, 0),
+MIX_ENT(SOUND_MIXER_ALTPCM,	0x00, 0, 0, 0x00, 0, 0),
+MIX_ENT(SOUND_MIXER_RECLEV,	0x00, 0, 0, 0x00, 0, 0),
+MIX_ENT(SOUND_MIXER_IGAIN,	0x00, 0, 0, 0x00, 0, 0),
+MIX_ENT(SOUND_MIXER_OGAIN,	0x00, 0, 0, 0x00, 0, 0),
+MIX_ENT(SOUND_MIXER_LINE1,	0x00, 0, 0, 0x00, 0, 0),
+MIX_ENT(SOUND_MIXER_LINE2,	0x3a, 7, 4, 0x3a, 3, 4),
+MIX_ENT(SOUND_MIXER_LINE3,	0x00, 0, 0, 0x00, 0, 0)
+};
 
 #ifdef	__SGNXPRO__
 mixer_tab sgnxpro_mix = {
@@ -187,7 +209,10 @@ static unsigned short levels[SOUND_MIXER_NRDEVICES] =
   0x4b4b,			/* SB PCM */
   0x4b4b,			/* Recording level */
   0x4b4b,			/* Input gain */
-  0x4b4b};			/* Output gain */
+  0x4b4b,			/* Output gain */
+  0x4040,			/* Line1 */
+  0x4040,			/* Line2 */
+  0x1515			/* Line3 */
 
 #else  /* If the user selected just plain SB Pro */
 
@@ -206,7 +231,11 @@ static unsigned short levels[SOUND_MIXER_NRDEVICES] =
   0x4b4b,			/* SB PCM */
   0x4b4b,			/* Recording level */
   0x4b4b,			/* Input gain */
-  0x4b4b};			/* Output gain */
+  0x4b4b,			/* Output gain */
+  0x4040,			/* Line1 */
+  0x4040,			/* Line2 */
+  0x1515			/* Line3 */
+};
 #endif /* SM_GAMES */
 
 static unsigned char sb16_recmasks_L[SOUND_MIXER_NRDEVICES] =

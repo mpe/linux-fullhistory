@@ -7,10 +7,7 @@
  *  anything out of the ordinary is seen.
  */
 
-#ifdef MODULE
-#include <linux/autoconf.h>
 #include <linux/module.h>
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>

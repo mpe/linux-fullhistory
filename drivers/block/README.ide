@@ -350,13 +350,19 @@ then use the kernel command line parameters to pass the *logical* geometry,
 as in:  hda=525,64,63
 
 If the BIOS does not support this form of drive translation, then several
-options remain, listed below in inverse order of popularity:
+options remain, listed below in order of popularity:
 
-	- boot from a floppy disk instead of the hard drive (takes 10 seconds).
 	- use a partition below the 1024 cyl boundary to hold the linux
 	boot files (kernel images and /boot directory), and place the rest
 	of linux anywhere else on the drive.  These files can reside in a DOS
 	partition, or in a tailor-made linux boot partition.
+	- use DiskManager software from OnTrack, supplied free with
+	many new hard drive purchases.
+	- use EZ-Drive software (similar to DiskManager).  Note though,
+	that LILO must *not* use the MBR when EZ-Drive is present.
+	Instead, install LILO on the first sector of your linux partition,
+	and mark it as "active" or "bootable" with fdisk.
+	- boot from a floppy disk instead of the hard drive (takes 10 seconds).
 
 If you cannot use drive translation, *and* your BIOS also restricts you to
 entering no more than 1024 cylinders in the geometry field in the CMOS setup,

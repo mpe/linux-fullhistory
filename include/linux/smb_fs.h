@@ -114,6 +114,7 @@ int smb_ioctl (struct inode * inode, struct file * filp,
 /* linux/fs/smbfs/inode.c */
 struct super_block *smb_read_super(struct super_block *sb,
                                    void *raw_data, int silent);
+extern int init_smb_fs(void);
 int smb_notify_change(struct inode *inode, struct iattr *attr);
 void smb_invalidate_connection(struct smb_server *server);
 int smb_conn_is_valid(struct smb_server *server);

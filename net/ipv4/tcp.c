@@ -256,7 +256,7 @@
  * 
  * Use of PSH (4.2.2.2)
  *   MAY aggregate data sent without the PSH flag. (does)
- *   MAY queue data recieved without the PSH flag. (does)
+ *   MAY queue data received without the PSH flag. (does)
  *   SHOULD collapse successive PSH flags when it packetizes data. (doesn't)
  *   MAY implement PSH on send calls. (doesn't, thus:)
  *     MUST NOT buffer data indefinitely (doesn't [1 second])
@@ -281,12 +281,12 @@
  *	[Follows BSD 1 byte of urgent data]
  * 
  * TCP Options (4.2.2.5)
- *   MUST be able to recieve TCP options in any segment. (does)
+ *   MUST be able to receive TCP options in any segment. (does)
  *   MUST ignore unsupported options (does)
  *   
  * Maximum Segment Size Option (4.2.2.6)
  *   MUST implement both sending and receiving MSS. (does)
- *   SHOULD send an MSS with every SYN where recieve MSS != 536 (MAY send
+ *   SHOULD send an MSS with every SYN where receive MSS != 536 (MAY send
  *     it always). (does, even when MSS == 536, which is legal)
  *   MUST assume MSS == 536 if no MSS received at connection setup (does)
  *   MUST calculate "effective send MSS" correctly:
@@ -798,7 +798,7 @@ static void reset_xmit_timer(struct sock *sk, int why, unsigned long when)
 {
 	del_timer(&sk->retransmit_timer);
 	sk->ip_xmit_timeout = why;
-	if((int)when < 0)
+	if((long)when < 0)
 	{
 		when=3;
 		printk("Error: Negative timer in xmit_timer\n");
@@ -3643,10 +3643,10 @@ extern __inline__ int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long 
 			sk->rto = ((sk->rtt >> 2) + sk->mdev) >> 1;
 			if (sk->rto > 120*HZ)
 				sk->rto = 120*HZ;
-			if (sk->rto < 20)	/* Was 1*HZ, then 1 - turns out we must allow about
+			if (sk->rto < HZ/5)	/* Was 1*HZ, then 1 - turns out we must allow about
 						   .2 of a second because of BSD delayed acks - on a 100Mb/sec link
 						   .2 of a second is going to need huge windows (SIGH) */
-			sk->rto = 20;
+			sk->rto = HZ/5;
 		}
 	}
 
@@ -3743,8 +3743,8 @@ extern __inline__ int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long 
 				sk->rto = ((sk->rtt >> 2) + sk->mdev) >> 1;
 				if (sk->rto > 120*HZ)
 					sk->rto = 120*HZ;
-				if (sk->rto < 20)	/* Was 1*HZ - keep .2 as minimum cos of the BSD delayed acks */
-					sk->rto = 20;
+				if (sk->rto < HZ/5)	/* Was 1*HZ - keep .2 as minimum cos of the BSD delayed acks */
+					sk->rto = HZ/5;
 				sk->backoff = 0;
 			}
 			flag |= (2|4);	/* 2 is really more like 'don't adjust the rtt 

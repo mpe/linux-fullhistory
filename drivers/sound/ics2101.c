@@ -28,7 +28,7 @@
  */
 
 #include "sound_config.h"
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_GUS)
+#if defined(CONFIG_GUS)
 
 #include <linux/ultrasound.h>
 #include "gus_hw.h"
@@ -134,7 +134,7 @@ ics2101_mixer_ioctl (int dev, unsigned int cmd, ioctl_arg arg)
 {
   if (((cmd >> 8) & 0xff) == 'M')
     {
-      if (cmd & IOC_IN)
+      if (_IOC_DIR (cmd) & _IOC_WRITE)
 	switch (cmd & 0xff)
 	  {
 	  case SOUND_MIXER_RECSRC:

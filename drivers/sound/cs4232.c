@@ -34,7 +34,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_CS4232)
+#if defined(CONFIG_CS4232)
 
 #define KEY_PORT	0x279	/* Same as LPT1 status port */
 #define CSN_NUM		0x99	/* Just a random number */
@@ -44,6 +44,7 @@
 #define CS_OUT3(a, b, c)	{CS_OUT(a);CS_OUT(b);CS_OUT(c);}
 
 static int      mpu_base = 0, mpu_irq = 0;
+static int      mpu_detected = 0;
 
 int
 probe_cs4232_mpu (struct address_info *hw_config)
@@ -88,6 +89,9 @@ probe_cs4232 (struct address_info *hw_config)
       return 0;
     }
 
+  if (ad1848_detect (hw_config->io_base, NULL, hw_config->osp))
+    return 1;			/* The card is already active */
+
 /*
  * This version of the driver doesn't use the PnP method when configuring
  * the card but a simplified method defined by Crystal. This means that
@@ -108,14 +112,6 @@ probe_cs4232 (struct address_info *hw_config)
 
   CS_OUT2 (0x06, CSN_NUM);
 
-/*
- * Ensure that there is no other codec using the same address.
- */
-
-  CS_OUT2 (0x15, 0x00);		/* Select logical device 0 (WSS/SB/FM) */
-  CS_OUT2 (0x33, 0x00);		/* Inactivate logical dev 0 */
-  if (ad1848_detect (hw_config->io_base, NULL, hw_config->osp))
-    return 0;
 
 /*
  * Then set some config bytes. First logical device 0 
@@ -144,7 +140,7 @@ probe_cs4232 (struct address_info *hw_config)
  * Initialize logical device 3 (MPU)
  */
 
-#if (!defined(EXCLUDE_MPU401) || !defined(EXCLUDE_MPU_EMU)) && !defined(EXCLUDE_MIDI)
+#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
   if (mpu_base != 0 && mpu_irq != 0)
     {
       CS_OUT2 (0x15, 0x03);	/* Select logical device 3 (MPU) */
@@ -182,7 +178,7 @@ attach_cs4232 (long mem_start, struct address_info *hw_config)
 	       0,
 	       hw_config->osp);
 
-#if (!defined(EXCLUDE_MPU401) || !defined(EXCLUDE_MPU_EMU)) && !defined(EXCLUDE_MIDI)
+#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
   if (mpu_base != 0 && mpu_irq != 0)
     {
       static struct address_info hw_config2 =
@@ -201,6 +197,7 @@ attach_cs4232 (long mem_start, struct address_info *hw_config)
 
       if (probe_mpu401 (&hw_config2))
 	{
+	  mpu_detected = 1;
 	  mem_start = attach_mpu401 (mem_start, &hw_config2);
 	}
       else
@@ -227,8 +224,8 @@ unload_cs4232 (struct address_info *hw_config)
 		 dma2,		/* Capture DMA */
 		 0);
 
-#if (!defined(EXCLUDE_MPU401) || !defined(EXCLUDE_MPU_EMU)) && !defined(EXCLUDE_MIDI)
-  if (mpu_base != 0 && mpu_irq != 0)
+#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
+  if (mpu_base != 0 && mpu_irq != 0 && mpu_detected)
     {
       static struct address_info hw_config2 =
       {0};			/* Ensure it's initialized */

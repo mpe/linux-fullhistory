@@ -104,6 +104,14 @@ void cleanup_module(void)
 
 #endif
 
+static struct symbol_table mouse_syms = {
+/* Should this be surrounded with "#ifdef CONFIG_MODULES" ? */
+#include <linux/symtab_begin.h>
+	X(mouse_register),
+	X(mouse_deregister),
+#include <linux/symtab_end.h>
+};
+
 int mouse_init(void)
 {
 #ifndef MODULE
@@ -128,5 +136,6 @@ int mouse_init(void)
 		 MOUSE_MAJOR);
 		return -EIO;
 	}
-	return 0;
+
+	return register_symtab(&mouse_syms);
 }

@@ -29,15 +29,12 @@
 /*
  * Created modular version by Peter Trattler (peter@sbox.tu-graz.ac.at)
  */
-#include <linux/module.h>
 
 #include "sound_config.h"
 
-#ifdef CONFIGURE_SOUNDCARD
-
 #include <linux/major.h>
 
-#ifndef EXCLUDE_PNP
+#ifdef CONFIG_PNP
 #include <linux/pnp.h>
 #endif
 
@@ -73,37 +70,37 @@ snd_ioctl_return (int *addr, int value)
 }
 
 static int
-sound_read (struct inode *inode, struct file *file, char *buf, int count)
+sound_read (inode_handle * inode, file_handle * file, char *buf, int count)
 {
   int             dev;
 
-  dev = inode->i_rdev;
+  dev = inode_get_rdev (inode);
   dev = MINOR (dev);
-  files[dev].flags = file->f_flags;
+  files[dev].flags = file_get_flags (file);
 
   return sound_read_sw (dev, &files[dev], buf, count);
 }
 
 static int
-sound_write (struct inode *inode, struct file *file, const char *buf, int count)
+sound_write (inode_handle * inode, file_handle * file, const char *buf, int count)
 {
   int             dev;
 
-  dev = inode->i_rdev;
+  dev = inode_get_rdev (inode);
   dev = MINOR (dev);
-  files[dev].flags = file->f_flags;
+  files[dev].flags = file_get_flags (file);
 
   return sound_write_sw (dev, &files[dev], buf, count);
 }
 
 static int
-sound_lseek (struct inode *inode, struct file *file, off_t offset, int orig)
+sound_lseek (inode_handle * inode, file_handle * file, off_t offset, int orig)
 {
   return -EPERM;
 }
 
 static int
-sound_open (struct inode *inode, struct file *file)
+sound_open (inode_handle * inode, file_handle * file)
 {
   int             dev, retval;
   struct fileinfo tmp_file;
@@ -114,7 +111,7 @@ sound_open (struct inode *inode, struct file *file)
       return -EBUSY;
     }
 
-  dev = inode->i_rdev;
+  dev = inode_get_rdev (inode);
   dev = MINOR (dev);
 
   if (!soundcard_configured && dev != SND_DEV_CTL && dev != SND_DEV_STATUS)
@@ -124,7 +121,7 @@ sound_open (struct inode *inode, struct file *file)
     }
 
   tmp_file.mode = 0;
-  tmp_file.flags = file->f_flags;
+  tmp_file.flags = file_get_flags (file);
 
   if ((tmp_file.flags & O_ACCMODE) == O_RDWR)
     tmp_file.mode = OPEN_READWRITE;
@@ -145,13 +142,13 @@ sound_open (struct inode *inode, struct file *file)
 }
 
 static void
-sound_release (struct inode *inode, struct file *file)
+sound_release (inode_handle * inode, file_handle * file)
 {
   int             dev;
 
-  dev = inode->i_rdev;
+  dev = inode_get_rdev (inode);
   dev = MINOR (dev);
-  files[dev].flags = file->f_flags;
+  files[dev].flags = file_get_flags (file);
 
   sound_release_sw (dev, &files[dev]);
 #ifdef MODULE
@@ -160,31 +157,31 @@ sound_release (struct inode *inode, struct file *file)
 }
 
 static int
-sound_ioctl (struct inode *inode, struct file *file,
+sound_ioctl (inode_handle * inode, file_handle * file,
 	     unsigned int cmd, unsigned long arg)
 {
   int             dev, err;
 
-  dev = inode->i_rdev;
+  dev = inode_get_rdev (inode);
   dev = MINOR (dev);
-  files[dev].flags = file->f_flags;
+  files[dev].flags = file_get_flags (file);
 
-  if (cmd & IOC_INOUT)
+  if (_IOC_DIR (cmd) != _IOC_NONE)
     {
       /*
          * Have to validate the address given by the process.
        */
       int             len;
 
-      len = (cmd & IOCSIZE_MASK) >> IOCSIZE_SHIFT;
+      len = _IOC_SIZE (cmd);
 
-      if (cmd & IOC_IN)
+      if (_IOC_DIR (cmd) == _IOC_WRITE)
 	{
 	  if ((err = verify_area (VERIFY_READ, (void *) arg, len)) < 0)
 	    return err;
 	}
 
-      if (cmd & IOC_OUT)
+      if (_IOC_DIR (cmd) == _IOC_READ)
 	{
 	  if ((err = verify_area (VERIFY_WRITE, (void *) arg, len)) < 0)
 	    return err;
@@ -198,32 +195,32 @@ sound_ioctl (struct inode *inode, struct file *file,
 }
 
 static int
-sound_select (struct inode *inode, struct file *file, int sel_type, select_table * wait)
+sound_select (inode_handle * inode, file_handle * file, int sel_type, select_table_handle * wait)
 {
   int             dev;
 
-  dev = inode->i_rdev;
+  dev = inode_get_rdev (inode);
   dev = MINOR (dev);
-  files[dev].flags = file->f_flags;
+  files[dev].flags = file_get_flags (file);
 
   DEB (printk ("sound_select(dev=%d, type=0x%x)\n", dev, sel_type));
 
   switch (dev & 0x0f)
     {
-#ifndef EXCLUDE_SEQUENCER
+#ifdef CONFIG_SEQUENCER
     case SND_DEV_SEQ:
     case SND_DEV_SEQ2:
       return sequencer_select (dev, &files[dev], sel_type, wait);
       break;
 #endif
 
-#ifndef EXCLUDE_MIDI
+#ifdef CONFIG_MIDI
     case SND_DEV_MIDIN:
       return MIDIbuf_select (dev, &files[dev], sel_type, wait);
       break;
 #endif
 
-#ifndef EXCLUDE_AUDIO
+#ifdef CONFIG_AUDIO
     case SND_DEV_DSP:
     case SND_DEV_DSP16:
     case SND_DEV_AUDIO:
@@ -238,8 +235,98 @@ sound_select (struct inode *inode, struct file *file, int sel_type, select_table
   return 0;
 }
 
+#ifdef ALLOW_BUFFER_MAPPING
+static int
+sound_mmap (inode_handle * inode, file_handle * file, vm_area_handle * vma)
+{
+  int             dev, dev_class;
+  unsigned long   size, i;
+  struct dma_buffparms *dmap = NULL;
 
-static struct file_operations sound_fops =
+  dev = inode_get_rdev (inode);
+  dev = MINOR (dev);
+  files[dev].flags = file_get_flags (file);
+
+  dev_class = dev & 0x0f;
+  dev >>= 4;
+
+  if (dev_class != SND_DEV_DSP && dev_class != SND_DEV_DSP16 && dev_class != SND_DEV_AUDIO)
+    {
+      printk ("Sound: mmap() not supported for other than audio devices\n");
+      return -EINVAL;
+    }
+
+  if ((vma_get_flags (vma) & (VM_READ | VM_WRITE)) == (VM_READ | VM_WRITE))
+    {
+      printk ("Sound: Cannot do read/write mmap()\n");
+      return -EINVAL;
+    }
+
+  if (vma_get_flags (vma) & VM_READ)
+    {
+      dmap = audio_devs[dev]->dmap_in;
+    }
+  else if (vma_get_flags (vma) & VM_WRITE)
+    {
+      dmap = audio_devs[dev]->dmap_out;
+    }
+  else
+    {
+      printk ("Sound: Undefined mmap() access\n");
+      return -EINVAL;
+    }
+
+  if (dmap == NULL)
+    {
+      printk ("Sound: mmap() error. dmap == NULL\n");
+      return -EIO;
+    }
+
+  if (dmap->raw_buf == NULL)
+    {
+      printk ("Sound: mmap() called when raw_buf == NULL\n");
+      return -EIO;
+    }
+
+  if (dmap->mapping_flags)
+    {
+      printk ("Sound: mmap() called twice for the same DMA buffer\n");
+      return -EIO;
+    }
+
+  if (vma_get_offset (vma) != 0)
+    {
+      printk ("Sound: mmap() offset must be 0.\n");
+      return -EINVAL;
+    }
+
+  size = vma_get_end (vma) - vma_get_start (vma);
+
+  if (size != dmap->bytes_in_use)
+    {
+      printk ("Sound: mmap() size = %ld. Should be %d\n",
+	      size, dmap->bytes_in_use);
+    }
+
+
+  if (remap_page_range (vma_get_start (vma), dmap->raw_buf_phys,
+			vma_get_end (vma) - vma_get_start (vma),
+			vma_get_page_prot (vma)))
+    return -EAGAIN;
+
+  vma_set_inode (vma, inode);
+  inode_inc_count (inode);
+
+  dmap->mapping_flags |= DMA_MAP_MAPPED;
+
+  memset (dmap->raw_buf,
+	  dmap->neutral_byte,
+	  dmap->bytes_in_use);
+  return 0;
+}
+#endif
+
+static struct file_operation_handle sound_fops =
 {
   sound_lseek,
   sound_read,
@@ -247,7 +334,11 @@ static struct file_operations sound_fops =
   NULL,				/* sound_readdir */
   sound_select,
   sound_ioctl,
+#ifdef ALLOW_BUFFER_MAPPING
+  sound_mmap,
+#else
   NULL,
+#endif
   sound_open,
   sound_release
 };
@@ -256,7 +347,7 @@ void
 soundcard_init (void)
 {
 #ifndef MODULE
-  register_chrdev (SOUND_MAJOR, "sound", &sound_fops);
+  module_register_chrdev (SOUND_MAJOR, "sound", &sound_fops);
   chrdev_registered = 1;
 #endif
 
@@ -265,14 +356,14 @@ soundcard_init (void)
   sndtable_init (0);		/* Initialize call tables and
 				   * detect cards */
 
-#ifndef EXCLUDE_PNP
+#ifdef CONFIG_PNP
   sound_pnp_init ();
 #endif
 
   if (sndtable_get_cardcount () == 0)
     return;			/* No cards detected */
 
-#ifndef EXCLUDE_AUDIO
+#ifdef CONFIG_AUDIO
   if (num_audiodevs)		/* Audio devices present */
     {
       DMAbuf_init (0);
@@ -280,12 +371,12 @@ soundcard_init (void)
     }
 #endif
 
-#ifndef EXCLUDE_MIDI
+#ifdef CONFIG_MIDI
   if (num_midis)
     MIDIbuf_init (0);
 #endif
 
-#ifndef EXCLUDE_SEQUENCER
+#ifdef CONFIG_SEQUENCER
   if (num_midis + num_synths)
     sequencer_init (0);
 #endif
@@ -309,6 +400,8 @@ free_all_irqs (void)
   irqs = 0;
 }
 
+char            kernel_version[] = UTS_RELEASE;
+
 #endif
 
 static int      debugmem = 0;	/* switched off by default */
@@ -323,7 +416,7 @@ init_module (void)
   int             ints[21];
   int             i;
 
-  if (0 < 0)
+  if (connect_wrapper (WRAPPER_VERSION) < 0)
     {
       printk ("Sound: Incompatible kernel (wrapper) version\n");
       return -EINVAL;
@@ -340,7 +433,7 @@ init_module (void)
   if (i)
     sound_setup ("sound=", ints);
 
-  err = register_chrdev (SOUND_MAJOR, "sound", &sound_fops);
+  err = module_register_chrdev (SOUND_MAJOR, "sound", &sound_fops);
   if (err)
     {
       printk ("sound: driver already loaded/included in kernel\n");
@@ -369,9 +462,9 @@ cleanup_module (void)
       int             i;
 
       if (chrdev_registered)
-	unregister_chrdev (SOUND_MAJOR, "sound");
+	module_unregister_chrdev (SOUND_MAJOR, "sound");
 
-#ifndef EXCLUDE_SEQUENCER
+#ifdef CONFIG_SEQUENCER
       sound_stop_timer ();
 #endif
       sound_unload_drivers ();
@@ -388,7 +481,7 @@ cleanup_module (void)
 	    sound_free_dma (i);
 	  }
 
-#ifndef EXCLUDE_PNP
+#ifdef CONFIG_PNP
       sound_pnp_disconnect ();
 #endif
 
@@ -397,7 +490,7 @@ cleanup_module (void)
 #endif
 
 void
-tenmicrosec (void)
+tenmicrosec (sound_os_info * osp)
 {
   int             i;
 
@@ -466,7 +559,7 @@ sound_free_dma (int chn)
 {
   if (dma_alloc_map[chn] != DMA_MAP_FREE)
     {
-      printk ("sound_free_dma: Bad access to DMA channel %d\n", chn);
+      /* printk ("sound_free_dma: Bad access to DMA channel %d\n", chn); */
       return;
     }
   free_dma (chn);
@@ -491,7 +584,7 @@ sound_close_dma (int chn)
   restore_flags (flags);
 }
 
-#ifndef EXCLUDE_SEQUENCER
+#ifdef CONFIG_SEQUENCER
 
 
 static struct timer_list seq_timer =
@@ -507,6 +600,7 @@ request_sound_timer (int count)
   else
     count += seq_time;
 
+  ;
 
   {
     seq_timer.expires = ((count - jiffies)) + jiffies;
@@ -521,7 +615,7 @@ sound_stop_timer (void)
 }
 #endif
 
-#ifndef EXCLUDE_AUDIO
+#ifdef CONFIG_AUDIO
 
 #ifdef KMALLOC_DMA_BROKEN
 fatal_error__This_version_is_not_compatible_with_this_kernel;
@@ -534,6 +628,10 @@ sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan)
 {
   char           *start_addr, *end_addr;
   int             i, dma_pagesize;
+
+#ifdef ALLOW_BUFFER_MAPPING
+  dmap->mapping_flags &= ~DMA_MAP_MAPPED;
+#endif
 
   if (dmap->raw_buf != NULL)
     return 0;			/* Already done */
@@ -611,7 +709,7 @@ sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan)
 
   for (i = MAP_NR (start_addr); i <= MAP_NR (end_addr); i++)
     {
-      mem_map[i].reserved = 1;
+      mem_map_reserve (i);
     }
 
   return 0;
@@ -622,6 +720,12 @@ sound_free_dmap (int dev, struct dma_buffparms *dmap)
 {
   if (dmap->raw_buf == NULL)
     return;
+
+#ifdef ALLOW_BUFFER_MAPPING
+  if (dmap->mapping_flags & DMA_MAP_MAPPED)
+    return;			/* Don't free mmapped buffer. Will use it next time */
+#endif
+
   {
     int             sz, size, i;
     unsigned long   start_addr, end_addr;
@@ -635,7 +739,7 @@ sound_free_dmap (int dev, struct dma_buffparms *dmap)
 
     for (i = MAP_NR (start_addr); i <= MAP_NR (end_addr); i++)
       {
-	mem_map[i].reserved = 0;
+	mem_map_unreserve (i);
       }
 
     free_pages ((unsigned long) dmap->raw_buf, sz);
@@ -651,13 +755,45 @@ soud_map_buffer (int dev, struct dma_buffparms *dmap, buffmem_desc * info)
   return -EINVAL;
 }
 
-#else
-
 void
-soundcard_init (void)		/* Dummy version */
+conf_printf (char *name, struct address_info *hw_config)
 {
+  if (!trace_init)
+    return;
+
+  printk ("<%s> at 0x%03x", name, hw_config->io_base);
+
+  if (hw_config->irq)
+    printk (" irq %d", hw_config->irq);
+
+  if (hw_config->dma != -1 || hw_config->dma2 != -1)
+    {
+      printk (" dma %d", hw_config->dma);
+      if (hw_config->dma2 != -1)
+	printk (",%d", hw_config->dma2);
+    }
+
+  printk ("\n");
 }
 
-#endif
+void
+conf_printf2 (char *name, int base, int irq, int dma, int dma2)
+{
+  if (!trace_init)
+    return;
 
+  printk ("<%s> at 0x%03x", name, base);
+
+  if (irq)
+    printk (" irq %d", irq);
+
+  if (dma != -1 || dma2 != -1)
+    {
+      printk (" dma %d", dma);
+      if (dma2 != -1)
+	printk (",%d", dma2);
+    }
+
+  printk ("\n");
+}
 #endif

@@ -451,15 +451,24 @@ int ext_sync_inode (struct inode *inode)
 	return err;
 }
 
-#ifdef MODULE
 
 static struct file_system_type ext_fs_type = {
         ext_read_super, "ext", 1, NULL
 };
 
-int init_module(void)
+int init_ext_fs(void)
 {
         return register_filesystem(&ext_fs_type);
+}
+
+#ifdef MODULE
+int init_module(void)
+{
+	int status;
+
+	if ((status = init_ext_fs()) == 0)
+		register_symtab(0);
+	return status;
 }
 
 void cleanup_module(void)

@@ -33,6 +33,7 @@ endif
 
 ifeq ($(CONFIG_SCSI),y)
 L_OBJS += hosts.o scsi.o scsi_ioctl.o constants.o scsicam.o scsi_proc.o
+LX_OBJS += scsi_syms.o
 else
   ifeq ($(CONFIG_SCSI),m)
     MX_OBJS += scsi_syms.o
@@ -70,6 +71,14 @@ else
   ifeq ($(CONFIG_CHR_DEV_SG),m)
   M_OBJS += sg.o
   endif
+endif
+
+ifeq ($(CONFIG_SCSI_ADVANSYS),y)
+L_OBJS += advansys.o
+else
+	ifeq ($(CONFIG_SCSI_ADVANSYS),m)
+	M_OBJS += advansys.o
+	endif
 endif
 
 ifeq ($(CONFIG_SCSI_QLOGIC),y)

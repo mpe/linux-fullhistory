@@ -32,11 +32,11 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_MIDI)
+#if defined(CONFIG_MIDI)
 
 #define _MIDI_SYNTH_C_
 
-static struct wait_queue *sysex_sleeper = NULL;
+static wait_handle *sysex_sleeper = NULL;
 static volatile struct snd_wait sysex_sleep_flag =
 {0};
 
@@ -47,7 +47,7 @@ static int      sysex_state[MAX_MIDI_DEV] =
 {0};
 static unsigned char prev_out_status[MAX_MIDI_DEV];
 
-#ifdef EXCLUDE_SEQUENCER
+#ifndef CONFIG_SEQUENCER
 #define STORE(cmd)
 #else
 #define STORE(cmd) \
@@ -472,6 +472,8 @@ midi_synth_open (int dev, int mode)
   inc->m_prev_status = 0x00;
   restore_flags (flags);
 
+  sysex_sleep_flag.mode = WK_NONE;
+
   return 1;
 }
 
@@ -545,7 +547,7 @@ midi_synth_load_patch (int dev, int format, const snd_rw_buf * addr,
 
   sysex_sleep_flag.mode = WK_NONE;
 
-  for (i = 0; i < left && !(current->signal & ~current->blocked); i++)
+  for (i = 0; i < left && !current_got_fatal_signal (); i++)
     {
       unsigned char   data;
 
@@ -566,17 +568,17 @@ midi_synth_load_patch (int dev, int format, const snd_rw_buf * addr,
 	}
 
       while (!midi_devs[orig_dev]->putc (orig_dev, (unsigned char) (data & 0xff)) &&
-	     !(current->signal & ~current->blocked))
+	     !current_got_fatal_signal ())
 
 	{
 	  unsigned long   tl;
 
 	  if (1)
-	    current->timeout = tl = jiffies + (1);
+	    current_set_timeout (tl = jiffies + (1));
 	  else
 	    tl = 0xffffffff;
 	  sysex_sleep_flag.mode = WK_SLEEP;
-	  interruptible_sleep_on (&sysex_sleeper);
+	  module_interruptible_sleep_on (&sysex_sleeper);
 	  if (!(sysex_sleep_flag.mode & WK_WAKEUP))
 	    {
 	      if (jiffies >= tl)
@@ -638,8 +640,8 @@ midi_synth_controller (int dev, int channel, int ctrl_num, int value)
   int             orig_dev = synth_devs[dev]->midi_dev;
   int             chn, msg;
 
-  if (ctrl_num < 1 || ctrl_num > 127)
-    return;			/* NOTE! Controller # 0 ignored */
+  if (ctrl_num < 0 || ctrl_num > 127)
+    return;
   if (channel < 0 || channel > 15)
     return;
 

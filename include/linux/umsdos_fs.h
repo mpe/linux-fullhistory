@@ -136,6 +136,7 @@ extern struct file_operations  umsdos_file_operations;
 extern struct inode_operations umsdos_file_inode_operations;
 extern struct inode_operations umsdos_file_inode_operations_no_bmap;
 extern struct inode_operations umsdos_symlink_inode_operations;
+extern int init_umsdos_fs(void);
 
 #include <linux/umsdos_fs.p>
 

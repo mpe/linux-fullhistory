@@ -105,6 +105,15 @@ struct vm_operations_struct {
 	pte_t (*swapin)(struct vm_area_struct *, unsigned long, unsigned long);
 };
 
+/*
+ * Try to keep the most commonly accessed fields in single cache lines
+ * here (16 bytes or greater).  This ordering should be particularly
+ * beneficial on 32-bit processors.
+ *
+ * The first line is data used in linear searches (eg. clock algorithm
+ * scans).  The second line is data used in page searches through the
+ * page-cache.  -- sct 
+ */
 typedef struct page {
 	unsigned int count;
 	unsigned dirty:16,
@@ -112,14 +121,19 @@ typedef struct page {
 		 uptodate:1,
 		 error:1,
 		 referenced:1,
-		 unused:4,
+		 locked:1,
+		 unused:3,
 		 reserved:1;
+	struct wait_queue *wait;
+	struct page *next;
+
+	struct page *next_hash;
 	unsigned long offset;
 	struct inode *inode;
-	struct wait_queue *wait;
 	struct page *write_list;
-	struct page *next, *prev;
-	struct page *next_hash, *prev_hash;
+
+	struct page *prev;
+	struct page *prev_hash;
 } mem_map_t;
 
 extern mem_map_t * mem_map;

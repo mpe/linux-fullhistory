@@ -30,11 +30,9 @@
 
 #include "sound_config.h"
 
-#ifdef CONFIGURE_SOUNDCARD
-
 #include "pas.h"
 
-#if !defined(EXCLUDE_PAS) && !defined(EXCLUDE_AUDIO)
+#if defined(CONFIG_PAS) && defined(CONFIG_AUDIO)
 
 #define TRACE(WHAT)		/*
 				   * * * (WHAT)   */
@@ -444,7 +442,5 @@ pas_pcm_interrupt (unsigned char status, int cause)
 	}
     }
 }
-
-#endif
 
 #endif

@@ -37,9 +37,6 @@
 #ifndef SUPPORT_RZ1000			/* 1 to support RZ1000 chipset */
 #define SUPPORT_RZ1000		1	/* 0 to reduce kernel size */
 #endif
-#ifndef SUPPORT_CMD640			/* 1 to support CMD640 chipset */
-#define SUPPORT_CMD640		1	/* 0 to reduce kernel size */
-#endif
 #ifndef SUPPORT_UMC8672			/* 1 to support UMC8672 chipset */
 #define SUPPORT_UMC8672		1	/* 0 to reduce kernel size */
 #endif
@@ -57,6 +54,10 @@
 #endif
 #ifndef FANCY_STATUS_DUMPS		/* 1 for human-readable drive errors */
 #define FANCY_STATUS_DUMPS	1	/* 0 to reduce kernel size */
+#endif
+
+#if defined(CONFIG_BLK_DEV_IDECD) || defined(CONFIG_BLK_DEV_IDETAPE)
+#define CONFIG_BLK_DEV_IDEATAPI 1
 #endif
 
 /*
@@ -393,6 +394,7 @@ typedef struct hwif_s {
 	char 		name[5];	/* name of interface, eg. "ide0" */
 	unsigned	noprobe : 1;	/* don't probe for this interface */
 	unsigned	present : 1;	/* this interface exists */
+	unsigned	serialized : 1;	/* valid only for ide_hwifs[0] */
 #if (DISK_RECOVERY_TIME > 0)
 	unsigned long	last_time;	/* time when previous rq was done */
 #endif
@@ -603,4 +605,3 @@ void idetape_register_chrdev (void);
 #ifdef CONFIG_BLK_DEV_TRITON
 void ide_init_triton (byte, byte);
 #endif /* CONFIG_BLK_DEV_TRITON */
-

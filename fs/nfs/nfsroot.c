@@ -15,6 +15,7 @@
  *
  *	Alan Cox	:	Removed get_address name clash with FPU.
  *	Alan Cox	:	Reformatted a bit.
+ *	Michael Rausch  :	Fixed recognition of an incoming RARP answer.
  *
  */
 
@@ -317,6 +318,7 @@ static int do_rarp(void)
 {
 	int retries = 0;
 	unsigned long timeout = 0;
+	volatile struct device **root_dev_ptr = (volatile struct device **) &root_dev;
 
 	/* Setup RARP protocol */
 	root_rarp_open();
@@ -329,16 +331,16 @@ static int do_rarp(void)
 	 * [Actually we could now, but the nothing else running note still 
 	 *  applies.. - AC]
 	 */
-	for (retries = 0; retries < RARP_RETRIES && root_dev == NULL; retries++) {
+	for (retries = 0; retries < RARP_RETRIES && *root_dev_ptr == NULL; retries++) {
 		if (root_rarp_send() < 0)
 			break;
 		timeout = jiffies + (RARP_TIMEOUT * HZ);
-		while (jiffies < timeout && root_dev == NULL)
-			;;
+		while (jiffies < timeout && *root_dev_ptr == NULL)
+			;
 	}
 
 	root_rarp_close();
-	if (root_dev == NULL && timeout > 0) {
+	if (*root_dev_ptr == NULL && timeout > 0) {
 		printk(KERN_ERR "NFS: Timed out while waiting for RARP answer\n");
 		return -1;
 	}

@@ -16,11 +16,9 @@ if [ "$CONFIG_ST506" = "y" ]; then
     bool '   Use new IDE driver for primary/secondary i/f' CONFIG_BLK_DEV_IDE
   fi
   if [ "$CONFIG_BLK_DEV_IDE" = "y" ]; then
-    bool '   Include support for IDE/ATAPI CDROM or TAPE' CONFIG_BLK_DEV_IDEATAPI
-    if [ "$CONFIG_BLK_DEV_IDEATAPI" = "y" ]; then
-      bool '      Include support for IDE/ATAPI CDROM' CONFIG_BLK_DEV_IDECD
-      bool '      Include ALPHA support for IDE/ATAPI TAPE' CONFIG_BLK_DEV_IDETAPE
-    fi
+    bool '   Include IDE/ATAPI CDROM support' CONFIG_BLK_DEV_IDECD
+    bool '   Include (ALPHA) IDE/ATAPI TAPE support' CONFIG_BLK_DEV_IDETAPE
+    bool '   Special CMD640 chipset support' CONFIG_BLK_DEV_CMD640
     if [ "$CONFIG_PCI" = "y" ]; then
       bool '   PCI Triton IDE Bus Master DMA support' CONFIG_BLK_DEV_TRITON
     fi
@@ -28,3 +26,4 @@ if [ "$CONFIG_ST506" = "y" ]; then
 fi
 
 bool 'XT harddisk support' CONFIG_BLK_DEV_XD
+endmenu

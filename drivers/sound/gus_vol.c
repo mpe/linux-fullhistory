@@ -4,7 +4,7 @@
  * Greg Lee 1993.
  */
 #include "sound_config.h"
-#ifndef EXCLUDE_GUS
+#ifdef CONFIG_GUS
 #include "gus_linearvol.h"
 
 #define GUS_VOLUME	gus_wave_volume

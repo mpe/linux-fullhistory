@@ -72,7 +72,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_MAD16)
+#if defined(CONFIG_MAD16)
 
 static int      already_initialized = 0;
 
@@ -451,7 +451,7 @@ attach_mad16_mpu (long mem_start, struct address_info *hw_config)
 {
   if (board_type < C929)	/* Early chip. No MPU support. Just SB MIDI */
     {
-#ifndef EXCLUDE_MIDI
+#ifdef CONFIG_MIDI
 
       if (mad_read (MC1_PORT) & 0x20)
 	hw_config->io_base = 0x240;
@@ -464,7 +464,7 @@ attach_mad16_mpu (long mem_start, struct address_info *hw_config)
 #endif
     }
 
-#if (!defined(EXCLUDE_MPU401) || !defined(EXCLUDE_MPU_EMU)) && !defined(EXCLUDE_MIDI)
+#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
   if (!already_initialized)
     return mem_start;
 
@@ -477,7 +477,7 @@ attach_mad16_mpu (long mem_start, struct address_info *hw_config)
 int
 probe_mad16_mpu (struct address_info *hw_config)
 {
-#if (!defined(EXCLUDE_MPU401) || !defined(EXCLUDE_MPU_EMU)) && !defined(EXCLUDE_MIDI)
+#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
   static int      mpu_attached = 0;
   static int      valid_ports[] =
   {0x330, 0x320, 0x310, 0x300};
@@ -497,7 +497,7 @@ probe_mad16_mpu (struct address_info *hw_config)
   if (board_type < C929)	/* Early chip. No MPU support. Just SB MIDI */
     {
 
-#ifndef EXCLUDE_MIDI
+#ifdef CONFIG_MIDI
       unsigned char   tmp;
 
       tmp = mad_read (MC3_PORT);
@@ -597,7 +597,15 @@ unload_mad16 (struct address_info *hw_config)
 void
 unload_mad16_mpu (struct address_info *hw_config)
 {
-#if (!defined(EXCLUDE_MPU401) || !defined(EXCLUDE_MPU_EMU)) && !defined(EXCLUDE_MIDI)
+#ifdef CONFIG_MIDI
+  if (board_type < C929)	/* Early chip. No MPU support. Just SB MIDI */
+    {
+      mad16_sb_dsp_unload (hw_config);
+      return;
+    }
+#endif
+
+#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
   unload_mpu401 (hw_config);
 #endif
 }

@@ -1,5 +1,37 @@
-Changelog for version 3.5-alpha3
+Changelog for version 3.5-alpha8
 --------------------------------
+
+Since 3.5-alpha7
+- Linux kernel compatible configuration (_EXPERIMENTAL_). Enable
+  using command "cd /linux/drivers/sound;make script" and then
+  just run kernel's make config normally.
+- Minor fixes to the SB support. Hopefully the driver works with
+  all SB models now.
+- Added support for ESS ES1688 "AudioDrive" based cards.
+
+Since 3.5-alpha6
+- SB Pro and SB16 supports are no longer separately selectable options.
+  Enabling SB enables them too.
+- Changed all #ifndef EXCLUDE_xx stuff to #ifdef CONFIG_xx. Modified
+configure to handle this. 
+- Removed initialization messages from the
+modularized version. They can be enabled by using init_trace=1 in
+the insmod command line (insmod sound init_trace=1).
+- More AIX stuff.
+- Added support for syncronizing dsp/audio devices with /dev/sequencer.
+- mmap() support for dsp/audio devices.
+
+Since 3.5-alpha5
+- AIX port.
+- Changed some xxx_PATCH macros in soundcard.h to work with
+  big endian machines.
+
+Since 3.5-alpha4
+- Removed the 'setfx' stuff from the version distributed with kernel
+  sources. Running 'setfx' is required again.
+
+Since 3.5-alpha3
+- Moved stuff from the 'setfx' program to the AudioTriX Pro driver.
 
 Since 3.5-alpha2
 - Modifications to makefile and configure.c. Unnecessary sources

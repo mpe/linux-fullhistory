@@ -29,22 +29,13 @@
 
 #include "sound_config.h"
 
-#ifdef CONFIGURE_SOUNDCARD
-#ifndef EXCLUDE_AUDIO
+#ifdef CONFIG_AUDIO
 
 #include "ulaw.h"
 #include "coproc.h"
 
 #define ON		1
 #define OFF		0
-
-static int      wr_buff_no[MAX_AUDIO_DEV];	/*
-
-						 * != -1, if there is
-						 * a incomplete output
-						 * block in the queue.
-						 */
-static int      wr_buff_size[MAX_AUDIO_DEV], wr_buff_ptr[MAX_AUDIO_DEV];
 
 static int      audio_mode[MAX_AUDIO_DEV];
 static int      dev_nblock[MAX_AUDIO_DEV];	/* 1 if in noblocking mode */
@@ -53,12 +44,11 @@ static int      dev_nblock[MAX_AUDIO_DEV];	/* 1 if in noblocking mode */
 #define		AM_WRITE	1
 #define 	AM_READ		2
 
-static char    *wr_dma_buf[MAX_AUDIO_DEV];
 static int      audio_format[MAX_AUDIO_DEV];
 static int      local_conversion[MAX_AUDIO_DEV];
 
 static int
-set_format (int dev, long fmt)
+set_format (int dev, int fmt)
 {
   if (fmt != AFMT_QUERY)
     {
@@ -87,7 +77,7 @@ int
 audio_open (int dev, struct fileinfo *file)
 {
   int             ret;
-  long            bits;
+  int             bits;
   int             dev_type = dev & 0x0f;
   int             mode = file->mode & O_ACCMODE;
 
@@ -126,12 +116,22 @@ audio_open (int dev, struct fileinfo *file)
   else
     set_format (dev, bits);
 
-  wr_buff_no[dev] = -1;
   audio_mode[dev] = AM_NONE;
-  wr_buff_size[dev] = wr_buff_ptr[dev] = 0;
   dev_nblock[dev] = 0;
 
   return ret;
+}
+
+void
+sync_output (int dev)
+{
+  int             buf_no, buf_ptr, buf_size;
+  char           *dma_buf;
+
+  if (DMAbuf_get_curr_buffer (dev, &buf_no, &dma_buf, &buf_ptr, &buf_size) >= 0)
+    {
+      DMAbuf_start_output (dev, buf_no, buf_ptr);
+    }
 }
 
 void
@@ -142,12 +142,7 @@ audio_release (int dev, struct fileinfo *file)
   dev = dev >> 4;
   mode = file->mode & O_ACCMODE;
 
-  if (wr_buff_no[dev] >= 0)
-    {
-      DMAbuf_start_output (dev, wr_buff_no[dev], wr_buff_ptr[dev]);
-
-      wr_buff_no[dev] = -1;
-    }
+  sync_output (dev);
 
   if (audio_devs[dev]->coproc)
     audio_devs[dev]->coproc->close (audio_devs[dev]->coproc->devc, COPR_PCM);
@@ -188,8 +183,9 @@ translate_bytes (const void *table, void *buff, int n)
 int
 audio_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count)
 {
-  int             c, p, l;
+  int             c, p, l, buf_no, buf_ptr, buf_size;
   int             err;
+  char           *dma_buf;
 
   dev = dev >> 4;
 
@@ -198,7 +194,6 @@ audio_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count)
 
   if ((audio_mode[dev] & AM_READ) && !(audio_devs[dev]->flags & DMA_DUPLEX))
     {				/* Direction change */
-      wr_buff_no[dev] = -1;
     }
 
   if (audio_devs[dev]->flags & DMA_DUPLEX)
@@ -206,57 +201,41 @@ audio_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count)
   else
     audio_mode[dev] = AM_WRITE;
 
-  if (!count)			/*
-				 * Flush output
-				 */
+  if (!count)			/* Flush output */
     {
-      if (wr_buff_no[dev] >= 0)
-	{
-	  DMAbuf_start_output (dev, wr_buff_no[dev], wr_buff_ptr[dev]);
-
-	  wr_buff_no[dev] = -1;
-	}
+      sync_output (dev);
       return 0;
     }
 
   while (c)
-    {				/*
-				 * Perform output blocking
-				 */
-      if (wr_buff_no[dev] < 0)	/*
-				 * There is no incomplete buffers
-				 */
+    {
+      if (DMAbuf_get_curr_buffer (dev, &buf_no, &dma_buf, &buf_ptr, &buf_size) < 0)
 	{
-	  if ((wr_buff_no[dev] = DMAbuf_getwrbuffer (dev, &wr_dma_buf[dev],
-						     &wr_buff_size[dev],
-						     dev_nblock[dev])) < 0)
+	  if ((buf_no = DMAbuf_getwrbuffer (dev, &dma_buf,
+					    &buf_size,
+					    dev_nblock[dev])) < 0)
 	    {
 	      /* Handle nonblocking mode */
-	      if (dev_nblock[dev] && wr_buff_no[dev] == -EAGAIN)
+	      if (dev_nblock[dev] && buf_no == -EAGAIN)
 		return p;	/* No more space. Return # of accepted bytes */
-	      return wr_buff_no[dev];
+	      return buf_no;
 	    }
-	  wr_buff_ptr[dev] = 0;
+	  buf_ptr = 0;
 	}
 
       l = c;
-      if (l > (wr_buff_size[dev] - wr_buff_ptr[dev]))
-	l = (wr_buff_size[dev] - wr_buff_ptr[dev]);
+      if (l > (buf_size - buf_ptr))
+	l = (buf_size - buf_ptr);
 
       if (!audio_devs[dev]->copy_from_user)
 	{			/*
 				 * No device specific copy routine
 				 */
-	  memcpy_fromfs (&wr_dma_buf[dev][wr_buff_ptr[dev]], &((buf)[p]), l);
+	  memcpy_fromfs (&dma_buf[buf_ptr], &((buf)[p]), l);
 	}
       else
 	audio_devs[dev]->copy_from_user (dev,
-			      wr_dma_buf[dev], wr_buff_ptr[dev], buf, p, l);
-
-
-      /*
-       * Insert local processing here
-       */
+					 dma_buf, buf_ptr, buf, p, l);
 
       if (local_conversion[dev] == AFMT_MU_LAW)
 	{
@@ -264,22 +243,23 @@ audio_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count)
 	   * This just allows interrupts while the conversion is running
 	   */
 	  sti ();
-	  translate_bytes (ulaw_dsp, (unsigned char *) &wr_dma_buf[dev][wr_buff_ptr[dev]], l);
+	  translate_bytes (ulaw_dsp, (unsigned char *) &dma_buf[buf_ptr], l);
 	}
 
       c -= l;
       p += l;
-      wr_buff_ptr[dev] += l;
+      buf_ptr += l;
 
-      if (wr_buff_ptr[dev] >= wr_buff_size[dev])
+      if (buf_ptr >= buf_size)
 	{
-	  if ((err = DMAbuf_start_output (dev, wr_buff_no[dev], wr_buff_ptr[dev])) < 0)
+	  if ((err = DMAbuf_start_output (dev, buf_no, buf_ptr)) < 0)
 	    {
 	      return err;
 	    }
 
-	  wr_buff_no[dev] = -1;
 	}
+      else
+	DMAbuf_set_count (dev, buf_no, buf_ptr);
 
     }
 
@@ -291,7 +271,7 @@ audio_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 {
   int             c, p, l;
   char           *dmabuf;
-  int             buff_no;
+  int             buf_no;
 
   dev = dev >> 4;
   p = 0;
@@ -299,13 +279,7 @@ audio_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 
   if ((audio_mode[dev] & AM_WRITE) && !(audio_devs[dev]->flags & DMA_DUPLEX))
     {
-      if (wr_buff_no[dev] >= 0)
-	{
-	  DMAbuf_start_output (dev, wr_buff_no[dev], wr_buff_ptr[dev]);
-
-	  if (!(audio_devs[dev]->flags & DMA_DUPLEX))
-	    wr_buff_no[dev] = -1;
-	}
+      sync_output (dev);
     }
 
   if (audio_devs[dev]->flags & DMA_DUPLEX)
@@ -315,15 +289,15 @@ audio_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 
   while (c)
     {
-      if ((buff_no = DMAbuf_getrdbuffer (dev, &dmabuf, &l,
-					 dev_nblock[dev])) < 0)
+      if ((buf_no = DMAbuf_getrdbuffer (dev, &dmabuf, &l,
+					dev_nblock[dev])) < 0)
 	{
 	  /* Nonblocking mode handling. Return current # of bytes */
 
-	  if (dev_nblock[dev] && buff_no == -EAGAIN)
+	  if (dev_nblock[dev] && buf_no == -EAGAIN)
 	    return p;
 
-	  return buff_no;
+	  return buf_no;
 	}
 
       if (l > c)
@@ -345,7 +319,7 @@ audio_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 
       memcpy_tofs (&((buf)[p]), dmabuf, l);
 
-      DMAbuf_rmchars (dev, buff_no, l);
+      DMAbuf_rmchars (dev, buf_no, l);
 
       p += l;
       c -= l;
@@ -374,27 +348,16 @@ audio_ioctl (int dev, struct fileinfo *file,
     switch (cmd)
       {
       case SNDCTL_DSP_SYNC:
-	if (wr_buff_no[dev] >= 0)
-	  {
-	    DMAbuf_start_output (dev, wr_buff_no[dev], wr_buff_ptr[dev]);
-
-	    wr_buff_no[dev] = -1;
-	  }
+	sync_output (dev);
 	return DMAbuf_ioctl (dev, cmd, arg, 0);
 	break;
 
       case SNDCTL_DSP_POST:
-	if (wr_buff_no[dev] >= 0)
-	  {
-	    DMAbuf_start_output (dev, wr_buff_no[dev], wr_buff_ptr[dev]);
-
-	    wr_buff_no[dev] = -1;
-	  }
+	sync_output (dev);
 	return 0;
 	break;
 
       case SNDCTL_DSP_RESET:
-	wr_buff_no[dev] = -1;
 	audio_mode[dev] = AM_NONE;
 	return DMAbuf_ioctl (dev, cmd, arg, 0);
 	break;
@@ -428,14 +391,16 @@ audio_ioctl (int dev, struct fileinfo *file,
 
 	{
 	  audio_buf_info  info;
+	  char           *dma_buf;
+	  int             buf_no, buf_ptr, buf_size;
 
 	  int             err = DMAbuf_ioctl (dev, cmd, (ioctl_arg) & info, 1);
 
 	  if (err < 0)
 	    return err;
 
-	  if (wr_buff_no[dev] != -1)
-	    info.bytes += wr_buff_size[dev] - wr_buff_ptr[dev];
+	  if (DMAbuf_get_curr_buffer (dev, &buf_no, &dma_buf, &buf_ptr, &buf_size) >= 0)
+	    info.bytes += buf_size - buf_ptr;
 
 	  memcpy_tofs ((&((char *) arg)[0]), (char *) &info, sizeof (info));
 	  return 0;
@@ -482,8 +447,10 @@ audio_init (long mem_start)
 }
 
 int
-audio_select (int dev, struct fileinfo *file, int sel_type, select_table * wait)
+audio_select (int dev, struct fileinfo *file, int sel_type, select_table_handle * wait)
 {
+  char           *dma_buf;
+  int             buf_no, buf_ptr, buf_size;
 
   dev = dev >> 4;
 
@@ -493,7 +460,6 @@ audio_select (int dev, struct fileinfo *file, int sel_type, select_table * wait)
       if (!(audio_mode[dev] & AM_READ) && !(audio_devs[dev]->flags & DMA_DUPLEX))
 	return 0;		/* Not recording */
 
-
       return DMAbuf_select (dev, file, sel_type, wait);
       break;
 
@@ -501,7 +467,7 @@ audio_select (int dev, struct fileinfo *file, int sel_type, select_table * wait)
       if (!(audio_mode[dev] & AM_WRITE) && !(audio_devs[dev]->flags & DMA_DUPLEX))
 	return 0;		/* Wrong direction */
 
-      if (wr_buff_no[dev] != -1)
+      if (DMAbuf_get_curr_buffer (dev, &buf_no, &dma_buf, &buf_ptr, &buf_size) >= 0)
 	{
 	  return 1;		/* There is space in the current buffer */
 	}
@@ -517,5 +483,4 @@ audio_select (int dev, struct fileinfo *file, int sel_type, select_table * wait)
 }
 
 
-#endif
 #endif

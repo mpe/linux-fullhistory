@@ -98,6 +98,7 @@ enum net_directory_inos {
 
 enum scsi_directory_inos {
 	PROC_SCSI_SCSI = 256,
+	PROC_SCSI_ADVANSYS,
 	PROC_SCSI_EATA,
 	PROC_SCSI_EATA_PIO,
 	PROC_SCSI_AHA152X,
@@ -223,6 +224,7 @@ static inline int proc_scsi_unregister(struct proc_dir_entry *driver, int x)
 }
 
 extern struct super_block *proc_read_super(struct super_block *,void *,int);
+extern int init_proc_fs(void);
 extern struct inode * proc_get_inode(struct super_block *, int, struct proc_dir_entry *);
 extern void proc_statfs(struct super_block *, struct statfs *, int);
 extern void proc_read_inode(struct inode *);

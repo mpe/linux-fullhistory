@@ -26,6 +26,8 @@
 #ifndef _ROUTE_H
 #define _ROUTE_H
 
+#include <linux/config.h>
+
 /*
  * 0 - no debugging messages
  * 1 - rare events and bugs situations (default)

@@ -10,7 +10,7 @@ tristate 'PPP (point-to-point) support' CONFIG_PPP
 if [ ! "$CONFIG_PPP" = "n" ]; then
   comment 'CCP compressors for PPP are only built as modules.'
 fi
-bool 'Z8530 SCC kiss emulation driver for AX.25' CONFIG_SCC
+tristate 'Z8530 SCC kiss emulation driver for AX.25' CONFIG_SCC
 tristate 'PLIP (parallel port) support' CONFIG_PLIP
 tristate 'EQL (serial line load balancing) support' CONFIG_EQUALIZER
 bool 'Do you want to be offered ALPHA test drivers' CONFIG_NET_ALPHA

@@ -32,18 +32,18 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_SB)
+#if defined(CONFIG_SB)
 
 #include "sb.h"
 
 long
 attach_sb_card (long mem_start, struct address_info *hw_config)
 {
-#if !defined(EXCLUDE_AUDIO) || !defined(EXCLUDE_MIDI)
+#if defined(CONFIG_AUDIO) || defined(CONFIG_MIDI)
   if (!sb_dsp_detect (hw_config))
     return mem_start;
   mem_start = sb_dsp_init (mem_start, hw_config);
-  request_region (hw_config->io_base, 16, "SB");
+  request_region (hw_config->io_base, 16, "SoundBlaster");
 #endif
 
   return mem_start;
@@ -59,7 +59,7 @@ probe_sb (struct address_info *hw_config)
       return 0;
     }
 
-#if !defined(EXCLUDE_AEDSP16) && defined(AEDSP16_SBPRO)
+#if defined(CONFIG_AEDSP16) && defined(AEDSP16_SBPRO)
   /*
      * Initialize Audio Excel DSP 16 to SBPRO.
    */

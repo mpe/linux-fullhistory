@@ -43,14 +43,20 @@ struct page * page_hash_table[PAGE_HASH_SIZE];
 
 void invalidate_inode_pages(struct inode * inode, unsigned long start)
 {
-	struct page ** p = &inode->i_pages;
+	struct page ** p;
 	struct page * page;
 
+repeat:
+	p = &inode->i_pages;
 	while ((page = *p) != NULL) {
 		unsigned long offset = page->offset;
 
 		/* page wholly truncated - free it */
 		if (offset >= start) {
+			if (page->locked) {
+				wait_on_page(page);
+				goto repeat;
+			}
 			inode->i_nrpages--;
 			if ((*p = page->next) != NULL)
 				(*p)->prev = page->prev;
@@ -107,7 +113,7 @@ int shrink_mmap(int priority, unsigned long limit)
 			page->referenced = 1;
 		else if (page->referenced)
 			page->referenced = 0;
-		else if (page->count) {
+		else if (page->count && !page->locked) {
 			/* The page is an old, unshared page --- try
                            to discard it. */
 			if (page->inode) {
@@ -179,13 +185,15 @@ static unsigned long try_to_read_ahead(struct inode * inode, unsigned long offse
 {
 	struct page * page;
 
+	offset &= PAGE_MASK;
 	if (!page_cache) {
 		page_cache = __get_free_page(GFP_KERNEL);
 		if (!page_cache)
 			return 0;
 	}
-#ifdef readahead_makes_sense_due_to_asynchronous_reads
-	offset = (offset + PAGE_SIZE) & PAGE_MASK;
+	if (offset >= inode->i_size)
+		return page_cache;
+#if 1
 	page = find_page(inode, offset);
 	if (page) {
 		page->count--;
@@ -202,11 +210,8 @@ static unsigned long try_to_read_ahead(struct inode * inode, unsigned long offse
 	add_page_to_inode_queue(inode, page);
 	add_page_to_hash_queue(inode, page);
 
-	/* 
-	 * And start IO on it..
-	 * (this should be asynchronous, but currently isn't)
-	 */
 	inode->i_op->readpage(inode, page);
+
 	free_page(page_cache);
 	return 0;
 #else
@@ -214,17 +219,41 @@ static unsigned long try_to_read_ahead(struct inode * inode, unsigned long offse
 #endif
 }
 
+/* 
+ * Wait for IO to complete on a locked page.
+ */
+void __wait_on_page(struct page *page)
+{
+	struct wait_queue wait = { current, NULL };
+
+	page->count++;
+	add_wait_queue(&page->wait, &wait);
+repeat:
+	current->state = TASK_UNINTERRUPTIBLE;
+	if (page->locked) {
+		schedule();
+		goto repeat;
+	}
+	remove_wait_queue(&page->wait, &wait);
+	page->count--;
+	current->state = TASK_RUNNING;
+}
+
+
 /*
  * This is a generic file read routine, and uses the
  * inode->i_op->readpage() function for the actual low-level
  * stuff.
  */
+#define READAHEAD_PAGES 3
+#define MAX_IO_PAGES 4
 int generic_file_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
-	int read = 0;
+	int read = 0, newpage = 0;
 	unsigned long pos;
 	unsigned long page_cache = 0;
-
+	int pre_read = 0;
+	
 	if (count <= 0)
 		return 0;
 
@@ -232,6 +261,8 @@ int generic_file_read(struct inode * inode, struct file * filp, char * buf, int 
 	do {
 		struct page *page;
 		unsigned long offset, addr, nr;
+		int i;
+		off_t p;
 
 		if (pos >= inode->i_size)
 			break;
@@ -278,21 +309,49 @@ int generic_file_read(struct inode * inode, struct file * filp, char * buf, int 
 		add_page_to_inode_queue(inode, page);
 		add_page_to_hash_queue(inode, page);
 
-		/* 
-		 * And start IO on it..
-		 * (this should be asynchronous, but currently isn't)
-		 */
 		inode->i_op->readpage(inode, page);
+		/* We only set "newpage" when we encounter a
+                   completely uncached page.  This way, we do no
+                   readahead if we are still just reading data out of
+                   the cache (even if the cached page is not yet
+                   uptodate --- it may be currently being read as a
+                   result of previous readahead).  -- sct */
+		newpage = 1;
 
 found_page:
 		addr = page_address(page);
 		if (nr > count)
 			nr = count;
-		if (!page->uptodate) {
-			page_cache = try_to_read_ahead(inode, offset, page_cache);
-			if (!page->uptodate)
-				sleep_on(&page->wait);
+		/* We have two readahead cases.  First, do data
+                   pre-read if the current read request is for more
+                   than one page, so we can merge the adjacent
+                   requests. */
+		if (newpage && nr < count) {
+			if (pre_read > 0)
+				pre_read -= PAGE_SIZE;
+			else {
+				pre_read = (MAX_IO_PAGES-1) * PAGE_SIZE;
+				if (pre_read > (count - nr))
+					pre_read = count - nr;
+				for (i=0, p=pos; i<pre_read; i+=PAGE_SIZE) {
+					p += PAGE_SIZE;
+					page_cache = try_to_read_ahead(inode, p, page_cache);
+				}
+			}
 		}
+		else
+		/* Second, do readahead at the end of the read, if we
+                   are still waiting on the current IO to complete, if
+                   readahead is flagged for the file, and if we have
+                   finished with the current block. */
+		if (newpage && nr == count && filp->f_reada
+		    && !((pos + nr) & ~PAGE_MASK)) {
+			for (i=0, p=pos; i<READAHEAD_PAGES; i++) {
+				p += PAGE_SIZE;
+				page_cache = try_to_read_ahead(inode, p, page_cache);
+			}
+		}
+		wait_on_page(page);
 		if (nr > inode->i_size - pos)
 			nr = inode->i_size - pos;
 		memcpy_tofs(buf, (void *) (addr + offset), nr);
@@ -304,6 +363,7 @@ found_page:
 	} while (count);
 
 	filp->f_pos = pos;
+	filp->f_reada = 1;
 	if (page_cache)
 		free_page(page_cache);
 	if (!IS_RDONLY(inode)) {
@@ -315,7 +375,7 @@ found_page:
 
 /*
  * Find a cached page and wait for it to become up-to-date, return
- * the page address.
+ * the page address.  Increments the page count.
  */
 static inline unsigned long fill_page(struct inode * inode, unsigned long offset)
 {
@@ -344,8 +404,7 @@ static inline unsigned long fill_page(struct inode * inode, unsigned long offset
 	add_page_to_hash_queue(inode, page);
 	inode->i_op->readpage(inode, page);
 found_page:
-	if (!page->uptodate)
-		sleep_on(&page->wait);
+	wait_on_page(page);
 	return page_address(page);
 }
 

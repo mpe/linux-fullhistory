@@ -108,7 +108,6 @@
 #include <asm/io.h>
 #include <asm/byteorder.h>
 
-#define _IDE_CD_C	/* used in blk.h */
 #include "ide.h"
 
 

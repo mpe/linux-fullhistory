@@ -300,8 +300,6 @@
 #include <asm/segment.h>
 #include <asm/io.h>
 
-#define _IDE_TAPE_C			/* For ide_end_request in blk.h */
-
 /*
  *	Main Linux ide driver include file
  *

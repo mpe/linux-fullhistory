@@ -16,6 +16,7 @@ if [ "$CONFIG_MODULES" = "y" ]; then
   MODULES=y
   bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
 fi
+endmenu
 
 mainmenu_option next_comment
 comment 'General setup'
@@ -57,6 +58,7 @@ fi
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
+endmenu
 
 source drivers/block/Config.in
 
@@ -72,6 +74,7 @@ tristate 'SCSI support' CONFIG_SCSI
 if [ "$CONFIG_SCSI" != "n" ]; then
   source drivers/scsi/Config.in
 fi
+endmenu
 
 if [ "$CONFIG_NET" = "y" ]; then
   mainmenu_option next_comment
@@ -81,6 +84,7 @@ if [ "$CONFIG_NET" = "y" ]; then
   if [ "$CONFIG_NETDEVICES" = "y" ]; then
     source drivers/net/Config.in
   fi
+  endmenu
 fi
 
 mainmenu_option next_comment
@@ -90,6 +94,7 @@ bool 'Support non-SCSI/IDE/ATAPI drives' CONFIG_CD_NO_IDESCSI
 if [ "$CONFIG_CD_NO_IDESCSI" != "n" ]; then
   source drivers/cdrom/Config.in
 fi
+endmenu
 
 source fs/Config.in
 
@@ -102,6 +107,7 @@ tristate 'Sound card support' CONFIG_SOUND
 if [ "$CONFIG_SOUND" != "n" ]; then
   source drivers/sound/Config.in
 fi
+endmenu
 
 mainmenu_option next_comment
 comment 'Kernel hacking'
@@ -111,3 +117,4 @@ bool 'Kernel profiling support' CONFIG_PROFILE
 if [ "$CONFIG_PROFILE" = "y" ]; then
   int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
 fi
+endmenu

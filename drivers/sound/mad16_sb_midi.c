@@ -29,7 +29,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_MAD16) && !defined(EXCLUDE_MIDI)
+#if defined(CONFIG_MAD16) && defined(CONFIG_MIDI)
 
 #define sbc_base mad16_sb_base
 #include "sb.h"
@@ -39,6 +39,7 @@ static int      my_dev;
 static int      mad16_sb_base = 0x220;
 static int      mad16_sb_irq = 0;
 static int      mad16_sb_dsp_ok = 0;
+static int      mad16_sb_dsp_attached = 0;
 static sound_os_info *midi_osp;
 
 int             mad16_sb_midi_mode = NORMAL_MIDI;
@@ -111,11 +112,11 @@ mad16_sb_reset_dsp (void)
   int             loopc;
 
   outb (1, DSP_RESET);
-  tenmicrosec ();
+  tenmicrosec (midi_osp);
   outb (0, DSP_RESET);
-  tenmicrosec ();
-  tenmicrosec ();
-  tenmicrosec ();
+  tenmicrosec (midi_osp);
+  tenmicrosec (midi_osp);
+  tenmicrosec (midi_osp);
 
   for (loopc = 0; loopc < 1000 && !(inb (DSP_DATA_AVAIL) & 0x80); loopc++);	/*
 										   * Wait
@@ -165,6 +166,7 @@ mad16_sb_dsp_init (long mem_start, struct address_info *hw_config)
  * mad16_sb_midi_init -- everything else is done elsewhere */
 {
 
+  mad16_sb_dsp_attached = 1;
   midi_osp = hw_config->osp;
   if (snd_set_irq_handler (mad16_sb_irq, mad16_sbintr, "MAD16 SB MIDI", midi_osp) < 0)
     {
@@ -174,11 +176,21 @@ mad16_sb_dsp_init (long mem_start, struct address_info *hw_config)
 
   request_region (hw_config->io_base, 16, "mad16/Mozart MIDI");
 
-  printk (" <MAD16 MIDI (SB mode)>");
+  conf_printf ("MAD16 MIDI (SB mode)", hw_config);
   mad16_sb_midi_init (2);
 
   mad16_sb_dsp_ok = 1;
   return mem_start;
+}
+
+void
+mad16_sb_dsp_unload (struct address_info *hw_config)
+{
+  if (!mad16_sb_dsp_attached)
+    return;
+
+  release_region (hw_config->io_base, 16);
+  snd_release_irq (hw_config->irq);
 }
 
 static int

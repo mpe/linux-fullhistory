@@ -118,4 +118,7 @@ asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 	return -ENOSYS;
 }
 
+void kerneld_exit(void)
+{
+}
 #endif /* CONFIG_SYSVIPC */

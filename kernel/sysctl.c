@@ -5,7 +5,7 @@
  * Added /proc support, Dec 1995
  */
 
-#include <linux/autoconf.h>
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/sysctl.h>
@@ -81,6 +81,9 @@ static void register_proc_table(ctl_table *, struct proc_dir_entry *);
 static void unregister_proc_table(ctl_table *, struct proc_dir_entry *);
 #endif
 
+static int do_securelevel_strategy (ctl_table *, int *, int, void *, size_t *,
+				    void *, size_t, void **);
+
 /* The default sysctl tables: */
 
 static ctl_table root_table[] = {
@@ -108,6 +111,8 @@ static ctl_table kern_table[] = {
 	 0444, NULL, &proc_dointvec},
 	{KERN_MAXFILE, "file-max", &max_files, sizeof(int),
 	 0644, NULL, &proc_dointvec},
+	{KERN_SECURELVL, "securelevel", &securelevel, sizeof(int),
+	 0444, NULL, &proc_dointvec, (ctl_handler *)&do_securelevel_strategy},
 	{0}
 };
 
@@ -293,6 +298,27 @@ int do_sysctl_strategy (ctl_table *table,
 	return 0;
 }
 
+/*
+ * This function only checks permission for changing the security level
+ * If the tests are successfull, the actual change is done by
+ * do_sysctl_strategy
+ */
+static int do_securelevel_strategy (ctl_table *table, 
+				    int *name, int nlen,
+				    void *oldval, size_t *oldlenp,
+				    void *newval, size_t newlen, void **context)
+{
+	int level;
+
+	if (newval && newlen) {
+		if (newlen != sizeof (int))
+			return -EINVAL;
+		memcpy_fromfs (&level, newval, newlen);
+		if (level < securelevel && current->pid != 1)
+			return -EPERM;
+	}
+	return 0;
+}
 
 struct ctl_table_header *register_sysctl_table(ctl_table * table, 
 					       int insert_at_head)

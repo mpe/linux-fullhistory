@@ -1,4 +1,4 @@
-/*
+/* -*- linux-c -*-
  * APM BIOS driver for Linux
  * Copyright 1994, 1995 Stephen Rothwell (Stephen.Rothwell@pd.necisa.oz.au)
  *
@@ -16,6 +16,10 @@
  *
  * October 1995, Rik Faith (faith@cs.unc.edu):
  *    Minor enhancements and updates (to the patch set) for 1.3.x
+ *    Documentation
+ * January 1996, Rik Faith (faith@cs.unc.edu):
+ *    Make /proc/apm easy to format (bump driver version)
+ *
  *
  * Reference:
  *
@@ -24,9 +28,9 @@
  *   Intel Order Number 241704-001.  Microsoft Part Number 781-110-X01.
  *
  * [This document is available free from Intel by calling 800.628.8686 (fax
- * 916.356.6100) or 800.548.4725.  It is also available from Microsoft by
- * calling 206.882.8080; and is ftpable from
- * ftp://ftp.intel.com/pub/IAL/software_specs/apmv11.doc]
+ * 916.356.6100) or 800.548.4725; or via anonymous ftp from
+ * ftp://ftp.intel.com/pub/IAL/software_specs/apmv11.doc.  It is also
+ * available from Microsoft by calling 206.882.8080.]
  *
  */
 
@@ -288,7 +292,7 @@ static struct apm_bios_struct *	user_list = NULL;
 
 static struct timer_list	apm_timer;
 
-static char			driver_version[] = "0.6b";
+static char			driver_version[] = "0.7";/* no spaces */
 
 #ifdef APM_DEBUG
 static char *	apm_event_name[] = {
@@ -882,69 +886,91 @@ static int do_open(struct inode * inode, struct file * filp)
 int apm_proc(char *buf)
 {
 	char *		p;
-	char *		power_stat;
-	char *		bat_stat;
 	unsigned short	bx;
 	unsigned short	cx;
 	unsigned short	dx;
 	unsigned short	error;
+	unsigned short  ac_line_status = 0xff;
+	unsigned short  battery_status = 0xff;
+	unsigned short  battery_flag   = 0xff;
+	unsigned short  percentage     = -1;
+	int             time_units     = -1;
+	char            *units         = "?";
 
 	if (apm_bios_info.version == 0)
 		return 0;
 	p = buf;
-	p += sprintf(p, "BIOS version: %d.%d\nFlags: 0x%02x\n",
+
+	if ((apm_bios_info.flags & APM_32_BIT_SUPPORT) != 0) {
+		if (!(error = apm_get_power_status(&bx, &cx, &dx))) {
+			ac_line_status = (bx >> 8) & 0xff;
+			battery_status = bx & 0xff;
+			if ((cx & 0xff) != 0xff)
+				percentage = cx & 0xff;
+	
+			if (apm_bios_info.version > 0x100) {
+				battery_flag = (cx >> 8) & 0xff;
+				if (dx != 0xffff) {
+					if ((dx & 0x8000) == 0x8000) {
+						units = "min";
+						time_units = dx & 0x7ffe;
+					} else {
+						units = "sec";
+						time_units = dx & 0x7fff;
+					}
+				}
+			}
+		}
+	}
+	/* Arguments, with symbols from linux/apm_bios.h.  Information is
+	   from the Get Power Status (0x0a) call unless otherwise noted.
+
+	   0) Linux driver version (this will change if format changes)
+	   1) APM BIOS Version.  Usually 1.0 or 1.1.
+	   2) APM flags from APM Installation Check (0x00):
+	      bit 0: APM_16_BIT_SUPPORT
+	      bit 1: APM_32_BIT_SUPPORT
+	      bit 2: APM_IDLE_SLOWS_CLOCK
+	      bit 3: APM_BIOS_DISABLED
+	      bit 4: APM_BIOS_DISENGAGED
+	   3) AC line status
+	      0x00: Off-line
+	      0x01: On-line
+	      0x02: On backup power (APM BIOS 1.1 only)
+	      0xff: Unknown
+	   4) Battery status
+	      0x00: High
+	      0x01: Low
+	      0x02: Critical
+	      0x03: Charging
+	      0xff: Unknown
+	   5) Battery flag
+	      bit 0: High
+	      bit 1: Low
+	      bit 2: Critical
+	      bit 3: Charging
+	      bit 7: No system battery
+	      0xff: Unknown
+	   6) Remaining battery life (percentage of charge):
+	      0-100: valid
+	      -1: Unknown
+	   7) Remaining battery life (time units):
+	      Number of remaining minutes or seconds
+	      -1: Unknown
+	   8) min = minutes; sec = seconds */
+	    
+	p += sprintf(p, "%s %d.%d 0x%02x 0x%02x 0x%02x 0x%02x %d%% %d %s\n",
+		     driver_version,
 		     (apm_bios_info.version >> 8) & 0xff,
 		     apm_bios_info.version & 0xff,
-		     apm_bios_info.flags);
-	if ((apm_bios_info.flags & APM_32_BIT_SUPPORT) == 0)
-		return p - buf;
-	p += sprintf(p, "Entry %x:%lx cseg16 %x dseg %x",
-		     apm_bios_info.cseg, apm_bios_info.offset,
-		     apm_bios_info.cseg_16, apm_bios_info.dseg);
-	if (apm_bios_info.version > 0x100)
-		p += sprintf(p, " cseg len %x, dseg len %x",
-			     apm_bios_info.cseg_len, apm_bios_info.dseg_len);
-	*p++ = '\n';
-	error = apm_get_power_status(&bx, &cx, &dx);
-	if (error) {
-		strcpy(p, "Power status not available\n");
-		p += strlen(p);
-		return p - buf;
-	}
-	switch ((bx >> 8) & 0xff) {
-	case 0: power_stat = "off line"; break;
-	case 1: power_stat = "on line"; break;
-	case 2: power_stat = "on backup power"; break;
-	default: power_stat = "unknown"; break;
-	}
-	switch (bx & 0xff) {
-	case 0: bat_stat = "high"; break;
-	case 1: bat_stat = "low"; break;
-	case 2: bat_stat = "critical"; break;
-	case 3: bat_stat = "charging"; break;
-	default: bat_stat = "unknown"; break;
-	}
-	p += sprintf(p, "AC: %s\nBattery status: %s\nBattery life: ",
-		     power_stat, bat_stat);
-	if ((cx & 0xff) == 0xff) {
-		strcpy(p, "unknown");
-		p += strlen(p);
-	} else
-		p += sprintf(p, "%d%%", cx & 0xff);
-	*p++ = '\n';
-	if (apm_bios_info.version > 0x100) {
-		p += sprintf(p, "Battery flag: 0x%02x\nBattery life: ",
-			     (cx >> 8) & 0xff);
-		if (dx == 0xffff) {
-			strcpy(p, "unknown");
-			p += strlen(p);
-		}
-		else
-			p += sprintf(p, "%d %s", dx & 0x7fff,
-				     ((dx & 0x8000) == 0)
-				     ? "seconds" : "minutes");
-		*p++ = '\n';
-	}
+		     apm_bios_info.flags,
+		     ac_line_status,
+		     battery_status,
+		     battery_flag,
+		     percentage,
+		     time_units,
+		     units );
+
 	return p - buf;
 }
 
@@ -1000,12 +1026,12 @@ static int apm_setup(void)
 		set_limit(gdt[APM_DS >> 3], 64 * 1024);
 	} else {
 		set_limit(gdt[APM_CS >> 3], apm_bios_info.cseg_len);
-		/*
-		 * This is not clear from the spec, but at least one
-		 * machine needs this to be a 64k segment.
-		 */
+		/* This is not clear from the spec, but at least one
+		   machine needs CS_16 to be a 64k segment, and the DEC
+		   Hinote Ultra CT475 (and others?) needs DS to be a 64k
+		   segment. */
 		set_limit(gdt[APM_CS_16 >> 3], 64 * 1024);
-		set_limit(gdt[APM_DS >> 3], apm_bios_info.dseg_len);
+		set_limit(gdt[APM_DS >> 3], 64 * 1024);
 		apm_bios_info.version = 0x0101;
 		error = apm_driver_version(&apm_bios_info.version);
 		if (error != 0)
@@ -1047,10 +1073,12 @@ static int apm_setup(void)
 			       (cx >> 8) & 0xff);
 			if (dx == 0xffff)
 				printk("unknown\n");
-			else
-				printk("%d %s\n", dx & 0x7fff,
-				       ((dx & 0x8000) == 0)
-				       ? "seconds" : "minutes");
+			else {
+				if ((dx & 0x8000)) 
+					printk("%d minutes\n", dx & 0x7ffe );
+				else
+					printk("%d seconds\n", dx & 0x7fff );
+			}
 		}
 	}
 

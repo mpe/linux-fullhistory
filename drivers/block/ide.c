@@ -1,8 +1,9 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.24  Jan 4, 1996
+ *  linux/drivers/block/ide.c	Version 5.25  Jan 11, 1996
  *
  *  Copyright (C) 1994-1996  Linus Torvalds & authors (see below)
  */
+#define _IDE_C		/* needed by <linux/blk.h> */
 
 /*
  * This is the multiple IDE interface driver, as evolved from hd.c.
@@ -109,7 +110,7 @@
  *			assembly syntax tweak to vlb_sync
  *			removeable drive support from scuba@cs.tu-berlin.de
  *			add transparent support for DiskManager-6.0x "Dynamic
- *			 Disk Overlay" (DDO), most of this in in genhd.c
+ *			 Disk Overlay" (DDO), most of this is in genhd.c
  *			eliminate "multiple mode turned off" message at boot
  *  Version 4.10	fix bug in ioctl for "hdparm -c3"
  *			fix DM6:DDO support -- now works with LILO, fdisk, ...
@@ -180,11 +181,13 @@
  *  Version 5.22	fix ide_xlate_1024() to work with/without drive->id
  *  Version 5.23	miscellaneous touch-ups
  *  Version 5.24	fix #if's for SUPPORT_CMD640
+ *  Version 5.25	more touch-ups, fix cdrom resets, ...
+ *			cmd640.c now configs/compiles separate from ide.c
  *
  *  Driver compile-time options are in ide.h
  *
  *  To do, in likely order of completion:
- *	- make cmd640.c and umc8672.c compile separately from ide.c
+ *	- make umc8672.c compile separately from ide.c
  *	- add ALI M1443/1445 chipset support from derekn@vw.ece.cmu.edu
  *	- add ioctls to get/set interface timings on various interfaces
  *	- add Promise Caching controller support from peterd@pnd-pc.demon.co.uk
@@ -222,18 +225,12 @@
 
 #include "ide.h"
 
-#if SUPPORT_CMD640
-void cmd640_tune_drive(ide_drive_t *);
-static int cmd640_vlb = 0;
-#endif
-
        ide_hwif_t	ide_hwifs[MAX_HWIFS];		/* hwif info */
 static ide_hwgroup_t	*irq_to_hwgroup [16];
 static const byte	ide_hwif_to_major[MAX_HWIFS] = {IDE0_MAJOR, IDE1_MAJOR, IDE2_MAJOR, IDE3_MAJOR};
 
 static const unsigned short default_io_base[MAX_HWIFS] = {0x1f0, 0x170, 0x1e8, 0x168};
 static const byte	default_irqs[MAX_HWIFS]     = {14, 15, 11, 10};
-static int		serialized = 0;		/* "serialize" option */
 static int		disallow_unmask = 0;	/* for buggy hardware */
 
 #if (DISK_RECOVERY_TIME > 0)
@@ -881,7 +878,8 @@ void ide_error (ide_drive_t *drive, const char *msg, byte stat)
 	err = ide_dump_status(drive, msg, stat);
 	if ((rq = HWGROUP(drive)->rq) == NULL || drive == NULL)
 		return;
-	if (rq->cmd != READ && rq->cmd != WRITE) { /* retry only "normal" i/o */
+	/* retry only "normal" I/O: */
+	if (rq->cmd != READ && rq->cmd != WRITE && drive->media != ide_cdrom) {
 		rq->errors = 1;
 		ide_end_drive_cmd(drive, stat, err);
 		return;
@@ -1346,7 +1344,7 @@ static inline void do_request (ide_hwif_t *hwif, struct request *rq)
 #if FAKE_FDISK_FOR_EZDRIVE
 	if (block == 0 && drive->ezdrive) {
 		block = 1;
-		printk("%s: [EZD] accessing sector 1 instead of sector 0\n", drive->name);
+		printk("%s: [EZD] accessing sector 1 in place of sector 0\n", drive->name);
 	}
 #endif /* FAKE_FDISK_FOR_EZDRIVE */
 	((ide_hwgroup_t *)hwif->hwgroup)->drive = drive;
@@ -2210,8 +2208,11 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 			printk(", DMA");
 	}
 	printk("\n");
-#if SUPPORT_CMD640
-	cmd640_tune_drive(drive);	/* but can we tune a fish? */
+#ifdef CONFIG_BLK_DEV_CMD640
+	{
+		extern void cmd640_tune_drive (ide_drive_t *);
+		cmd640_tune_drive(drive);	/* but can we tune a fish? */
+	}
 #endif
 }
 
@@ -2527,10 +2528,6 @@ static void init_qd6580 (void)
 #include "umc8672.c"	/* until we tidy up the interface some more */
 #endif
 
-#if SUPPORT_CMD640
-#include "cmd640.c"	/* until we tidy up the interface some more */
-#endif
-
 /*
  * stridx() returns the offset of c within s,
  * or -1 if c is '\0' or not found within s.
@@ -2699,12 +2696,15 @@ void ide_setup (char *s)
 				init_qd6580();
 				goto done;
 #endif /* SUPPORT_QD6580 */
-#if SUPPORT_CMD640
+#ifdef CONFIG_BLK_DEV_CMD640
 			case -5: /* "cmd640_vlb" */
+				{
+				extern int cmd640_vlb;
 				if (hw > 1) goto bad_hwif;
-				cmd640_vlb = 1;
+					cmd640_vlb = 1;
+				}
 				break;
-#endif /* SUPPORT_CMD640 */
+#endif /* CONFIG_BLK_DEV_CMD640 */
 #if SUPPORT_HT6560B
 			case -4: /* "ht6560b" */
 				if (hw > 1) goto bad_hwif;
@@ -2736,7 +2736,7 @@ void ide_setup (char *s)
 			case -2: /* "serialize" */
 			do_serialize:
 				if (hw > 1) goto bad_hwif;
-				serialized = 1;
+				ide_hwifs[0].serialized = 1;
 				goto done;
 			case -1: /* "noprobe" */
 				hwif->noprobe = 1;
@@ -2890,7 +2890,7 @@ static int init_irq (ide_hwif_t *hwif)
 	 * Check for serialization with ide1.
 	 * This code depends on us having already taken care of ide1.
 	 */
-	if (serialized && hwif->name[3] == '0' && ide_hwifs[1].present)
+	if (hwif->serialized && hwif->name[3] == '0' && ide_hwifs[1].present)
 		hwgroup = ide_hwifs[1].hwgroup;
 	/*
 	 * If this is the first interface in a group,
@@ -2941,23 +2941,14 @@ static struct file_operations ide_fops = {
 
 #ifdef CONFIG_PCI
 
-void ide_pci_access_error (int rc)
+#if SUPPORT_RZ1000
+
+static void ide_pci_access_error (int rc)
 {
 	printk("ide: pcibios access failed - %s\n", pcibios_strerror(rc));
 }
 
-#if SUPPORT_RZ1000 || SUPPORT_CMD640
-void buggy_interface_fallback (int rc)
-{
-	ide_pci_access_error (rc);
-	serialized = 1;
-	disallow_unmask = 1;
-	printk("serialized, disabled unmasking\n");
-}
-#endif /* SUPPORT_RZ1000 || SUPPORT_CMD640 */
-
-#if SUPPORT_RZ1000
-void init_rz1000 (byte bus, byte fn)
+static void init_rz1000 (byte bus, byte fn)
 {
 	int rc;
 	unsigned short reg;
@@ -2970,8 +2961,12 @@ void init_rz1000 (byte bus, byte fn)
 	} else {
 		if ((rc = pcibios_read_config_word(bus, fn, 0x40, &reg))
 		 || (rc =  pcibios_write_config_word(bus, fn, 0x40, reg & 0xdfff)))
-			buggy_interface_fallback (rc);
-		else
+		{
+			ide_pci_access_error (rc);
+			ide_hwifs[0].serialized = 1;
+			disallow_unmask = 1;
+			printk("serialized, disabled unmasking\n");
+		} else
 			printk("disabled read-ahead\n");
 	}
 }
@@ -3012,7 +3007,7 @@ static void ide_init_pci (void)
 	/*
 	 * Apparently the BIOS32 services on Intel motherboards are buggy,
 	 * and won't find the PCI_DEVICE_ID_INTEL_82371_1 for us.
-	 * So we instead search for PCI_DEVICE_ID_INTEL_82371_0, and then add 1.
+	 * So instead, we search for PCI_DEVICE_ID_INTEL_82371_0, and then add 1.
 	 */
 	ide_probe_pci (PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371_0, &ide_init_triton, 1);
 #endif
@@ -3038,8 +3033,11 @@ int ide_init (void)
 	if (pcibios_present())
 		ide_init_pci ();
 #endif /* CONFIG_PCI */
-#if SUPPORT_CMD640
-	ide_probe_for_cmd640x();
+#ifdef CONFIG_BLK_DEV_CMD640
+	{
+		extern void ide_probe_for_cmd640x (void);
+		ide_probe_for_cmd640x();
+	}
 #endif
 
 	/*

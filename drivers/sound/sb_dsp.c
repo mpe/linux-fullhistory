@@ -35,23 +35,22 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_SB)
-
-#ifdef SM_WAVE
-#define JAZZ16
-#endif
+#if defined(CONFIG_SB)
 
 #include "sb.h"
 #include "sb_mixer.h"
 #undef SB_TEST_IRQ
 
 int             sbc_base = 0;
-static int      sbc_irq = 0;
+static int      sbc_irq = 0, sbc_dma;
 static int      open_mode = 0;	/* Read, write or both */
 int             Jazz16_detected = 0;
+int             AudioDrive = 0;	/* 1=ES1688 detected */
+static int      ess_mpu_irq = 0;
 int             sb_no_recording = 0;
 static int      dsp_count = 0;
 static int      trigger_bits;
+static int      mpu_base = 0, mpu_irq = 0;
 
 /*
  * The DSP channel can be used either for input or output. Variable
@@ -68,46 +67,32 @@ int             sb_dsp_ok = 0;	/*
 				 * initialization  *  */
 static int      midi_disabled = 0;
 int             sb_dsp_highspeed = 0;
-int             sbc_major = 1, sbc_minor = 0;	/*
-
-
-						   * *  * * DSP version   */
+int             sbc_major = 1, sbc_minor = 0;
 static int      dsp_stereo = 0;
 static int      dsp_current_speed = DSP_DEFAULT_SPEED;
 static int      sb16 = 0;
 static int      irq_verified = 0;
 
 int             sb_midi_mode = NORMAL_MIDI;
-int             sb_midi_busy = 0;	/*
-
-
-					 * *  * * 1 if the process has output
-					 * to *  * MIDI   */
+int             sb_midi_busy = 0;
 int             sb_dsp_busy = 0;
 
-volatile int    sb_irq_mode = IMODE_NONE;	/*
-
-
-						 * *  * * IMODE_INPUT, *
-						 * IMODE_OUTPUT * * or *
-						 * IMODE_NONE   */
+volatile int    sb_irq_mode = IMODE_NONE;
 static volatile int irq_ok = 0;
 
 static int      dma8 = 1;
+static int      dsp_16bit = 0;
 
-#ifdef JAZZ16
 /* 16 bit support
  */
 
-static int      dsp_16bit = 0;
-static int      dma16 = 5;
+static int      dma16 = 1;
 
 static int      dsp_set_bits (int arg);
 static int      initialize_ProSonic16 (void);
 
 /* end of 16 bit support
  */
-#endif
 
 int             sb_duplex_midi = 0;
 static int      my_dev = 0;
@@ -116,11 +101,12 @@ volatile int    sb_intr_active = 0;
 
 static int      dsp_speed (int);
 static int      dsp_set_stereo (int mode);
-int             sb_dsp_command (unsigned char val);
 static void     sb_dsp_reset (int dev);
 sound_os_info  *sb_osp = NULL;
 
-#if !defined(EXCLUDE_MIDI) || !defined(EXCLUDE_AUDIO)
+static void     ess_init (void);
+
+#if defined(CONFIG_MIDI) || defined(CONFIG_AUDIO)
 
 /*
  * Common code for the midi and pcm functions
@@ -154,8 +140,40 @@ sb_dsp_command (unsigned char val)
     }
 
   printk ("SoundBlaster: DSP Command(%x) Timeout.\n", val);
-  printk ("IRQ conflict???\n");
   return 0;
+}
+
+static int
+ess_write (unsigned char reg, unsigned char data)
+{
+  /* Write a byte to an extended mode register of ES1688 */
+
+  if (!sb_dsp_command (reg))
+    return 0;
+
+  return sb_dsp_command (data);
+}
+
+static int
+ess_read (unsigned char reg)
+{
+/* Read a byte from an extended mode register of ES1688 */
+
+  int             i;
+
+  if (!sb_dsp_command (0xc0))	/* Read register command */
+    return -1;
+
+  if (!sb_dsp_command (reg))
+    return -1;
+
+  for (i = 1000; i; i--)
+    {
+      if (inb (DSP_DATA_AVAIL) & 0x80)
+	return inb (DSP_READ);
+    }
+
+  return -1;
 }
 
 void
@@ -163,22 +181,18 @@ sbintr (int irq, struct pt_regs *dummy)
 {
   int             status;
 
-#ifndef EXCLUDE_SBPRO
-  if (sb16)
+  if (sb16 && !AudioDrive)
     {
       unsigned char   src = sb_getmixer (IRQ_STAT);	/* Interrupt source register */
 
-#ifndef EXCLUDE_SB16
       if (src & 3)
 	sb16_dsp_interrupt (irq);
 
-#ifndef EXCLUDE_MIDI
+#ifdef CONFIG_MIDI
       if (src & 4)
 	sb16midiintr (irq);	/*
 				 * SB MPU401 interrupt
 				 */
-#endif
-
 #endif
 
       if (!(src & 1))
@@ -186,26 +200,23 @@ sbintr (int irq, struct pt_regs *dummy)
 				 * Not a DSP interupt
 				 */
     }
-#endif
 
   status = inb (DSP_DATA_AVAIL);	/*
 					   * Clear interrupt
 					 */
-
   if (sb_intr_active)
     switch (sb_irq_mode)
       {
       case IMODE_OUTPUT:
-	sb_intr_active = 0;
+	if (!AudioDrive)
+	  sb_intr_active = 0;
 	DMAbuf_outputintr (my_dev, 1);
 	break;
 
       case IMODE_INPUT:
-	sb_intr_active = 0;
+	if (!AudioDrive)
+	  sb_intr_active = 0;
 	DMAbuf_inputintr (my_dev);
-	/*
-	 * A complete buffer has been input. Let's start new one
-	 */
 	break;
 
       case IMODE_INIT:
@@ -214,7 +225,7 @@ sbintr (int irq, struct pt_regs *dummy)
 	break;
 
       case IMODE_MIDI:
-#ifndef EXCLUDE_MIDI
+#ifdef CONFIG_MIDI
 	sb_midi_interrupt (irq);
 #endif
 	break;
@@ -240,24 +251,31 @@ sb_reset_dsp (void)
 {
   int             loopc;
 
-  outb (1, DSP_RESET);
-  tenmicrosec ();
+  if (AudioDrive)
+    outb (3, DSP_RESET);	/* Reset FIFO too */
+  else
+    outb (1, DSP_RESET);
+
+  tenmicrosec (sb_osp);
   outb (0, DSP_RESET);
-  tenmicrosec ();
-  tenmicrosec ();
-  tenmicrosec ();
+  tenmicrosec (sb_osp);
+  tenmicrosec (sb_osp);
+  tenmicrosec (sb_osp);
 
   for (loopc = 0; loopc < 1000 && !(inb (DSP_DATA_AVAIL) & 0x80); loopc++);
 
   if (inb (DSP_READ) != 0xAA)
     return 0;			/* Sorry */
 
+  if (AudioDrive)
+    sb_dsp_command (0xc6);	/* Enable extended mode */
+
   return 1;
 }
 
 #endif
 
-#ifndef EXCLUDE_AUDIO
+#ifdef CONFIG_AUDIO
 
 static void
 dsp_speaker (char state)
@@ -269,11 +287,44 @@ dsp_speaker (char state)
 }
 
 static int
+ess_speed (int speed)
+{
+  int             rate;
+  unsigned char   bits = 0;
+
+  if (speed < 4000)
+    speed = 4000;
+  else if (speed > 48000)
+    speed = 48000;
+
+  if (speed > 22000)
+    {
+      bits = 0x80;
+      rate = 256 - (795500 + speed / 2) / speed;
+      speed = 795500 / (256 - rate);
+    }
+  else
+    {
+      rate = 128 - (397700 + speed / 2) / speed;
+      speed = 397700 / (128 - rate);
+    }
+
+  bits |= (unsigned char) rate;
+  ess_write (0xa1, bits);
+
+  dsp_current_speed = speed;
+  return speed;
+}
+
+static int
 dsp_speed (int speed)
 {
   unsigned char   tconst;
   unsigned long   flags;
   int             max_speed = 44100;
+
+  if (AudioDrive)
+    return ess_speed (speed);
 
   if (speed < 4000)
     speed = 4000;
@@ -306,7 +357,7 @@ dsp_speed (int speed)
   /*
    * Max. stereo speed is 22050
    */
-  if (dsp_stereo && speed > 22050 && Jazz16_detected == 0)
+  if (dsp_stereo && speed > 22050 && Jazz16_detected == 0 && AudioDrive == 0)
     speed = 22050;
 #endif
 
@@ -373,9 +424,6 @@ dsp_set_stereo (int mode)
 {
   dsp_stereo = 0;
 
-#ifdef EXCLUDE_SBPRO
-  return 0;
-#else
   if (sbc_major < 3 || sb16)
     return 0;			/*
 				 * Sorry no stereo
@@ -389,14 +437,30 @@ dsp_set_stereo (int mode)
 
   dsp_stereo = !!mode;
   return dsp_stereo;
-#endif
+}
+
+static unsigned long trg_buf;
+static int      trg_bytes;
+static int      trg_intrflag;
+static int      trg_restart;
+
+static void
+sb_dsp_output_block (int dev, unsigned long buf, int nr_bytes,
+		     int intrflag, int restart_dma)
+{
+  trg_buf = buf;
+  trg_bytes = nr_bytes;
+  trg_intrflag = intrflag;
+  trg_restart = restart_dma;
+  sb_irq_mode = IMODE_OUTPUT;
 }
 
 static void
-sb_dsp_output_block (int dev, unsigned long buf, int count,
-		     int intrflag, int restart_dma)
+actually_output_block (int dev, unsigned long buf, int nr_bytes,
+		       int intrflag, int restart_dma)
 {
   unsigned long   flags;
+  int             count = nr_bytes;
 
   if (!sb_irq_mode)
     dsp_speaker (ON);
@@ -411,7 +475,17 @@ sb_dsp_output_block (int dev, unsigned long buf, int count,
   dsp_count = count;
 
   sb_irq_mode = IMODE_OUTPUT;
-  if (sb_dsp_highspeed)
+
+  if (AudioDrive)
+    {
+      int             c = 0x10000 - count;	/* ES1688 increments the count */
+
+      ess_write (0xa4, (unsigned char) (c & 0xff));
+      ess_write (0xa5, (unsigned char) ((c >> 8) & 0xff));
+
+      ess_write (0xb8, ess_read (0xb8) | 0x01);		/* Go */
+    }
+  else if (sb_dsp_highspeed)
     {
       save_flags (flags);
       cli ();
@@ -451,6 +525,17 @@ static void
 sb_dsp_start_input (int dev, unsigned long buf, int count, int intrflag,
 		    int restart_dma)
 {
+  trg_buf = buf;
+  trg_bytes = count;
+  trg_intrflag = intrflag;
+  trg_restart = restart_dma;
+  sb_irq_mode = IMODE_INPUT;
+}
+
+static void
+actually_start_input (int dev, unsigned long buf, int count, int intrflag,
+		      int restart_dma)
+{
   unsigned long   flags;
 
   if (sb_no_recording)
@@ -475,7 +560,17 @@ sb_dsp_start_input (int dev, unsigned long buf, int count, int intrflag,
   dsp_count = count;
 
   sb_irq_mode = IMODE_INPUT;
-  if (sb_dsp_highspeed)
+
+  if (AudioDrive)
+    {
+      int             c = 0x10000 - count;	/* ES1688 increments the count */
+
+      ess_write (0xa4, (unsigned char) (c & 0xff));
+      ess_write (0xa5, (unsigned char) ((c >> 8) & 0xff));
+
+      ess_write (0xb8, ess_read (0xb8) | 0x01);		/* Go */
+    }
+  else if (sb_dsp_highspeed)
     {
       save_flags (flags);
       cli ();
@@ -515,13 +610,24 @@ sb_dsp_start_input (int dev, unsigned long buf, int count, int intrflag,
 static void
 sb_dsp_trigger (int dev, int bits)
 {
-  if (bits == trigger_bits)
-    return;
 
   if (!bits)
     sb_dsp_command (0xd0);	/* Halt DMA */
   else if (bits & sb_irq_mode)
-    sb_dsp_command (0xd4);	/* Continue DMA */
+    {
+      switch (sb_irq_mode)
+	{
+	case IMODE_INPUT:
+	  actually_start_input (my_dev, trg_buf, trg_bytes,
+				trg_intrflag, trg_restart);
+	  break;
+
+	case IMODE_OUTPUT:
+	  actually_output_block (my_dev, trg_buf, trg_bytes,
+				 trg_intrflag, trg_restart);
+	  break;
+	}
+    }
 
   trigger_bits = bits;
 }
@@ -542,30 +648,61 @@ sb_dsp_prepare_for_input (int dev, int bsize, int bcount)
 				 * SB Pro
 				 */
     {
-#ifdef JAZZ16
-      /* Select correct dma channel
-         * for 16/8 bit acccess
-       */
-      audio_devs[my_dev]->dmachan1 = dsp_16bit ? dma16 : dma8;
-      if (dsp_stereo)
-	sb_dsp_command (dsp_16bit ? 0xac : 0xa8);
+      if (AudioDrive)
+	{
+
+	  /* ess_init(); */
+	  ess_write (0xb8, 0x0e);	/* Auto init DMA mode */
+	  ess_write (0xa8, (ess_read (0xa8) & ~0x04) |
+		     (2 - dsp_stereo));		/* Mono/stereo */
+	  ess_write (0xb9, 2);	/* Demand mode (2 bytes/xfer) */
+
+	  if (!dsp_stereo)
+	    {
+	      if (dsp_16bit == 0)
+		{		/* 8 bit mono */
+		  ess_write (0xb7, 0x51);
+		  ess_write (0xb7, 0xd0);
+		}
+	      else
+		{		/* 16 bit mono */
+		  ess_write (0xb7, 0x71);
+		  ess_write (0xb7, 0xf4);
+		}
+	    }
+	  else
+	    {			/* Stereo */
+	      if (!dsp_16bit)
+		{		/* 8 bit stereo */
+		  ess_write (0xb7, 0x51);
+		  ess_write (0xb7, 0x98);
+		}
+	      else
+		{		/* 16 bit stereo */
+		  ess_write (0xb7, 0x71);
+		  ess_write (0xb7, 0xbc);
+		}
+	    }
+
+	  ess_write (0xb1, (ess_read (0xb1) & 0x0f) | 0x50);
+	  ess_write (0xb2, (ess_read (0xb2) & 0x0f) | 0x50);
+	}
       else
-	sb_dsp_command (dsp_16bit ? 0xa4 : 0xa0);
-#else
-      /* 8 bit only cards use this
-       */
-      if (dsp_stereo)
-	sb_dsp_command (0xa8);
-      else
-	sb_dsp_command (0xa0);
-#endif
-      dsp_speed (dsp_current_speed);	/*
-					 * Speed must be recalculated if
-					 * #channels * changes
-					 */
+	{			/* !AudioDrive */
+
+	  /* Select correct dma channel
+	     * for 16/8 bit acccess
+	   */
+	  audio_devs[my_dev]->dmachan1 = dsp_16bit ? dma16 : dma8;
+	  if (dsp_stereo)
+	    sb_dsp_command (dsp_16bit ? 0xac : 0xa8);
+	  else
+	    sb_dsp_command (dsp_16bit ? 0xa4 : 0xa0);
+
+	  dsp_speed (dsp_current_speed);
+	}			/* !AudioDrive */
     }
   trigger_bits = 0;
-  sb_dsp_command (0xd0);	/* Halt DMA */
   return 0;
 }
 
@@ -573,34 +710,72 @@ static int
 sb_dsp_prepare_for_output (int dev, int bsize, int bcount)
 {
   dsp_cleanup ();
-  dsp_speaker (ON);
+  dsp_speaker (OFF);
 
-#ifndef EXCLUDE_SBPRO
-  if (sbc_major == 3)		/*
-				 * SB Pro
-				 */
+  if (sbc_major == 3)		/* SB Pro (at least ) */
     {
-#ifdef JAZZ16
-      /* 16 bit specific instructions
-       */
-      audio_devs[my_dev]->dmachan1 = dsp_16bit ? dma16 : dma8;
-      if (Jazz16_detected != 2)	/* SM Wave */
-	sb_mixer_set_stereo (dsp_stereo);
-      if (dsp_stereo)
-	sb_dsp_command (dsp_16bit ? 0xac : 0xa8);
+
+      if (AudioDrive)
+	{
+
+	  /* ess_init(); */
+	  ess_write (0xb8, 4);	/* Auto init DMA mode */
+	  ess_write (0xa8, ess_read (0xa8) |
+		     (2 - dsp_stereo));		/* Mono/stereo */
+	  ess_write (0xb9, 2);	/* Demand mode (2 bytes/xfer) */
+
+	  if (!dsp_stereo)
+	    {
+	      if (dsp_16bit == 0)
+		{		/* 8 bit mono */
+		  ess_write (0xb6, 0x80);
+		  ess_write (0xb7, 0x51);
+		  ess_write (0xb7, 0xd0);
+		}
+	      else
+		{		/* 16 bit mono */
+		  ess_write (0xb6, 0x00);
+		  ess_write (0xb7, 0x71);
+		  ess_write (0xb7, 0xf4);
+		}
+	    }
+	  else
+	    {			/* Stereo */
+	      if (!dsp_16bit)
+		{		/* 8 bit stereo */
+		  ess_write (0xb6, 0x80);
+		  ess_write (0xb7, 0x51);
+		  ess_write (0xb7, 0x98);
+		}
+	      else
+		{		/* 16 bit stereo */
+		  ess_write (0xb6, 0x00);
+		  ess_write (0xb7, 0x71);
+		  ess_write (0xb7, 0xbc);
+		}
+	    }
+
+	  ess_write (0xb1, (ess_read (0xb1) & 0x0f) | 0x50);
+	  ess_write (0xb2, (ess_read (0xb2) & 0x0f) | 0x50);
+	}
       else
-	sb_dsp_command (dsp_16bit ? 0xa4 : 0xa0);
-#else
-      sb_mixer_set_stereo (dsp_stereo);
-#endif
-      dsp_speed (dsp_current_speed);	/*
-					 * Speed must be recalculated if
-					 * #channels * changes
-					 */
+	{			/* !AudioDrive */
+
+	  /* 16 bit specific instructions (Jazz16)
+	   */
+	  audio_devs[my_dev]->dmachan1 = dsp_16bit ? dma16 : dma8;
+	  if (Jazz16_detected != 2)	/* SM Wave */
+	    sb_mixer_set_stereo (dsp_stereo);
+	  if (dsp_stereo)
+	    sb_dsp_command (dsp_16bit ? 0xac : 0xa8);
+	  else
+	    sb_dsp_command (dsp_16bit ? 0xa4 : 0xa0);
+	}			/* !AudioDrive */
+
     }
-#endif
+
   trigger_bits = 0;
-  sb_dsp_command (0xd0);	/* Halt DMA */
+  dsp_speaker (ON);
   return 0;
 }
 
@@ -653,11 +828,9 @@ sb_dsp_open (int dev, int mode)
 
   /* Allocate 8 bit dma
    */
-#ifdef JAZZ16
   audio_devs[my_dev]->dmachan1 = dma8;
-#endif
-#ifdef JAZZ16
-  /* Allocate 16 bit dma
+
+  /* Allocate 16 bit dma (jazz16)
    */
   if (Jazz16_detected != 0)
     if (dma16 != dma8)
@@ -669,7 +842,6 @@ sb_dsp_open (int dev, int mode)
 	    return -EBUSY;
 	  }
       }
-#endif
 
   sb_irq_mode = IMODE_NONE;
 
@@ -682,7 +854,6 @@ sb_dsp_open (int dev, int mode)
 static void
 sb_dsp_close (int dev)
 {
-#ifdef JAZZ16
   /* Release 16 bit dma channel
    */
   if (Jazz16_detected)
@@ -692,7 +863,6 @@ sb_dsp_close (int dev)
       if (dma16 != dma8)
 	sound_close_dma (dma16);
     }
-#endif
 
   /* DMAbuf_close_dma (dev); */
   sb_free_irq ();
@@ -704,14 +874,11 @@ sb_dsp_close (int dev)
   open_mode = 0;
 }
 
-#ifdef JAZZ16
-/* Function dsp_set_bits() only required for 16 bit cards
- */
 static int
 dsp_set_bits (int arg)
 {
   if (arg)
-    if (Jazz16_detected == 0)
+    if (Jazz16_detected == 0 && AudioDrive == 0)
       dsp_16bit = 0;
     else
       switch (arg)
@@ -725,10 +892,9 @@ dsp_set_bits (int arg)
 	default:
 	  dsp_16bit = 0;
 	}
+
   return dsp_16bit ? 16 : 8;
 }
-
-#endif /* ifdef JAZZ16 */
 
 static int
 sb_dsp_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
@@ -737,7 +903,7 @@ sb_dsp_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
     {
     case SOUND_PCM_WRITE_RATE:
       if (local)
-	return dsp_speed ((long) arg);
+	return dsp_speed ((int) arg);
       return snd_ioctl_return ((int *) arg, dsp_speed (get_fs_long ((long *) arg)));
       break;
 
@@ -749,7 +915,7 @@ sb_dsp_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
 
     case SOUND_PCM_WRITE_CHANNELS:
       if (local)
-	return dsp_set_stereo ((long) arg - 1) + 1;
+	return dsp_set_stereo ((int) arg - 1) + 1;
       return snd_ioctl_return ((int *) arg, dsp_set_stereo (get_fs_long ((long *) arg) - 1) + 1);
       break;
 
@@ -761,11 +927,10 @@ sb_dsp_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
 
     case SNDCTL_DSP_STEREO:
       if (local)
-	return dsp_set_stereo ((long) arg);
+	return dsp_set_stereo ((int) arg);
       return snd_ioctl_return ((int *) arg, dsp_set_stereo (get_fs_long ((long *) arg)));
       break;
 
-#ifdef JAZZ16
       /* Word size specific cases here.
          * SNDCTL_DSP_SETFMT=SOUND_PCM_WRITE_BITS
        */
@@ -780,14 +945,6 @@ sb_dsp_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
 	return dsp_16bit ? 16 : 8;
       return snd_ioctl_return ((int *) arg, dsp_16bit ? 16 : 8);
       break;
-#else
-    case SOUND_PCM_WRITE_BITS:
-    case SOUND_PCM_READ_BITS:
-      if (local)
-	return 8;
-      return snd_ioctl_return ((int *) arg, 8);	/* Only 8 bits/sample supported */
-      break;
-#endif /* ifdef JAZZ16  */
 
     case SOUND_PCM_WRITE_FILTER:
     case SOUND_PCM_READ_FILTER:
@@ -818,8 +975,6 @@ sb_dsp_reset (int dev)
 #endif
 
 
-#ifdef JAZZ16
-
 /*
  * Initialization of a Media Vision ProSonic 16 Soundcard.
  * The function initializes a ProSonic 16 like PROS.EXE does for DOS. It sets
@@ -845,7 +1000,6 @@ get_sb_byte (void)
   return 0xffff;
 }
 
-#ifdef SM_WAVE
 /*
  * Logitech Soundman Wave detection and initialization by Hannu Savolainen.
  *
@@ -914,7 +1068,7 @@ initialize_smw (int mpu_base)
   outb ((control & 0xfe) | 2, mpu_base + 7);	/* xxxxxxx0 resets the mc */
 
   for (i = 0; i < 300; i++)	/* Wait at least 1ms */
-    tenmicrosec ();
+    tenmicrosec (sb_osp);
 
   outb (control & 0xfc, mpu_base + 7);	/* xxxxxx00 enables RAM */
 
@@ -923,7 +1077,7 @@ initialize_smw (int mpu_base)
    */
   smw_putmem (mp_base, 0, 0x00);
   smw_putmem (mp_base, 1, 0xff);
-  tenmicrosec ();
+  tenmicrosec (sb_osp);
 
   if (smw_getmem (mp_base, 0) != 0x00 || smw_getmem (mp_base, 1) != 0xff)
     {
@@ -995,8 +1149,6 @@ initialize_smw (int mpu_base)
   return 1;
 }
 
-#endif
-
 static int
 initialize_ProSonic16 (void)
 {
@@ -1005,23 +1157,9 @@ initialize_ProSonic16 (void)
   {0, 0, 2, 3, 0, 1, 0, 4, 0, 2, 5, 0, 0, 0, 0, 6}, dma_translat[8] =
   {0, 1, 0, 2, 0, 3, 0, 4};
 
-  struct address_info *mpu_config;
-
-  int             mpu_base, mpu_irq;
-
-  if ((mpu_config = sound_getconf (SNDCARD_MPU401)))
-    {
-      mpu_base = mpu_config->io_base;
-      mpu_irq = mpu_config->irq;
-    }
-  else
-    {
-      mpu_base = mpu_irq = 0;
-    }
-
   outb (0xAF, 0x201);		/* ProSonic/Jazz16 wakeup */
   for (x = 0; x < 1000; ++x)	/* wait 10 milliseconds */
-    tenmicrosec ();
+    tenmicrosec (sb_osp);
   outb (0x50, 0x201);
   outb ((sbc_base & 0x70) | ((mpu_base & 0x30) >> 4), 0x201);
 
@@ -1036,18 +1174,15 @@ initialize_ProSonic16 (void)
 	return 1;
 
       if (sb_dsp_command (0xFB) &&	/* set DMA-channels and Interrupts */
-	  sb_dsp_command ((dma_translat[JAZZ_DMA16] << 4) | dma_translat[dma8]) &&
+	  sb_dsp_command ((dma_translat[dma16] << 4) | dma_translat[dma8]) &&
       sb_dsp_command ((int_translat[mpu_irq] << 4) | int_translat[sbc_irq]))
 	{
 	  Jazz16_detected = 1;
-	  if (mpu_base == 0)
-	    printk ("Jazz16: No MPU401 devices configured - MIDI port not initialized\n");
 
-#ifdef SM_WAVE
 	  if (mpu_base != 0)
 	    if (initialize_smw (mpu_base))
 	      Jazz16_detected = 2;
-#endif
+
 	  sb_dsp_disable_midi ();
 	}
 
@@ -1056,37 +1191,29 @@ initialize_ProSonic16 (void)
   return 0;			/* No SB or ProSonic16 detected */
 }
 
-#endif /* ifdef JAZZ16  */
-
 int
 sb_dsp_detect (struct address_info *hw_config)
 {
   sbc_base = hw_config->io_base;
   sbc_irq = hw_config->irq;
+  sbc_dma = hw_config->dma;
   sb_osp = hw_config->osp;
 
   if (sb_dsp_ok)
     return 0;			/*
 				 * Already initialized
 				 */
-  dma8 = hw_config->dma;
-
-#ifdef JAZZ16
-  dma16 = JAZZ_DMA16;
+  dma8 = dma16 = hw_config->dma;
 
   if (!initialize_ProSonic16 ())
     return 0;
-#else
-  if (!sb_reset_dsp ())
-    return 0;
-#endif
 
   return 1;			/*
 				 * Detected
 				 */
 }
 
-#ifndef EXCLUDE_AUDIO
+#ifdef CONFIG_AUDIO
 static struct audio_operations sb_dsp_operations =
 {
   "SoundBlaster",
@@ -1111,15 +1238,153 @@ static struct audio_operations sb_dsp_operations =
 
 #endif
 
+static void
+ess_init (void)			/* ESS1688 Initialization */
+{
+  unsigned char   cfg, irq_bits = 0, dma_bits = 0;
+
+  AudioDrive = 1;
+  midi_disabled = 1;
+
+  sb_reset_dsp ();		/* Turn on extended mode */
+
+/*
+ *    Set IRQ configuration register
+ */
+
+  cfg = 0x50;			/* Enable only DMA counter interrupt */
+
+  switch (sbc_irq)
+    {
+    case 2:
+    case 9:
+      irq_bits = 0;
+      break;
+
+    case 5:
+      irq_bits = 1;
+      break;
+
+    case 7:
+      irq_bits = 2;
+      break;
+
+    case 10:
+      irq_bits = 3;
+      break;
+
+    default:
+      irq_bits = 0;
+      cfg = 0x10;		/* Disable all interrupts */
+      printk ("\nESS1688: Invalid IRQ %d\n", sbc_irq);
+    }
+
+  if (!ess_write (0xb1, cfg | (irq_bits << 2)))
+    printk ("\nESS1688: Failed to write to IRQ config register\n");
+
+/*
+ *    Set DMA configuration register
+ */
+
+  cfg = 0x50;			/* Extended mode DMA ebable */
+
+  if (sbc_dma > 3 || sbc_dma < 0 || sbc_dma == 2)
+    {
+      dma_bits = 0;
+      cfg = 0x00;		/* Disable all DMA */
+      printk ("\nESS1688: Invalid DMA %d\n", sbc_dma);
+    }
+  else
+    {
+      if (sbc_dma == 3)
+	dma_bits = 3;
+      else
+	dma_bits = sbc_dma + 1;
+    }
+
+  if (!ess_write (0xb2, cfg | (dma_bits << 2)))
+    printk ("\nESS1688: Failed to write to DMA config register\n");
+
+/*
+ * Enable joystick and OPL3
+ */
+
+  cfg = sb_getmixer (0x40);
+  sb_setmixer (0x40, cfg | 0x03);
+}
+
+void
+ess_midi_init (struct address_info *hw_config)	/* called from sb16_midi.c */
+{
+  unsigned char   cfg, tmp;
+
+  cfg = sb_getmixer (0x40) & 0x03;
+
+  tmp = (hw_config->io_base & 0x0f0) >> 4;
+
+  if (tmp > 3)
+    {
+      sb_setmixer (0x40, cfg);
+      return;
+    }
+
+  cfg |= tmp << 3;
+
+  tmp = 1;			/* MPU enabled without interrupts */
+
+  switch (hw_config->irq)
+    {
+    case 9:
+      tmp = 0x4;
+      break;
+    case 5:
+      tmp = 0x5;
+      break;
+    case 7:
+      tmp = 0x6;
+      break;
+    case 10:
+      tmp = 0x7;
+      break;
+    }
+
+  cfg |= tmp << 5;
+
+  if (tmp != 1)
+    {
+      ess_mpu_irq = hw_config->irq;
+
+      if (snd_set_irq_handler (ess_mpu_irq, sbmidiintr, "ES1688 MIDI", sb_osp) < 0)
+	printk ("ES1688: Can't allocate IRQ%d\n", ess_mpu_irq);
+    }
+
+  sb_setmixer (0x40, cfg);
+}
+
+void
+Jazz16_midi_init (struct address_info *hw_config)
+{
+  mpu_base = hw_config->io_base;
+  mpu_irq = hw_config->irq;
+
+  initialize_ProSonic16 ();
+}
+
+void
+Jazz16_set_dma16 (int dma)
+{
+  dma16 = dma;
+
+  initialize_ProSonic16 ();
+}
+
 long
 sb_dsp_init (long mem_start, struct address_info *hw_config)
 {
   int             i;
+  int             ess_major = 0, ess_minor = 0;
 
-#ifndef EXCLUDE_SBPRO
   int             mixer_type = 0;
-
-#endif
 
   sb_osp = hw_config->osp;
   sbc_major = sbc_minor = 0;
@@ -1158,7 +1423,6 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
 
   if (sbc_major == 3 && sbc_minor == 1)
     {
-      int             ess_major = 0, ess_minor = 0;
 
 /*
  * Try to detect ESS chips.
@@ -1183,28 +1447,12 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
 		}
 	    }
 	}
-
-      if (ess_major == 0x48 && (ess_minor & 0xf0) == 0x80)
-	printk ("Hmm... Could this be an ESS488 based card (rev %d)\n",
-		ess_minor & 0x0f);
-      else if (ess_major == 0x68 && (ess_minor & 0xf0) == 0x80)
-	printk ("Hmm... Could this be an ESS688 based card (rev %d)\n",
-		ess_minor & 0x0f);
     }
 
   if (snd_set_irq_handler (sbc_irq, sbintr, "SoundBlaster", sb_osp) < 0)
     printk ("sb_dsp: Can't allocate IRQ\n");;
 
-#ifndef EXCLUDE_SBPRO
-  if (sbc_major >= 3)
-    mixer_type = sb_mixer_init (sbc_major);
-#else
-  if (sbc_major >= 3)
-    printk ("\n\n\n\nNOTE! SB Pro support is required with your soundcard!\n\n\n");
-#endif
-
-
-#ifndef EXCLUDE_AUDIO
+#ifdef CONFIG_AUDIO
   if (sbc_major >= 3)
     {
       if (Jazz16_detected)
@@ -1228,6 +1476,20 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
 	{
 	  sprintf (sb_dsp_operations.name, "SoundBlaster 16 %d.%d", sbc_major, sbc_minor);
 	}
+      else if (ess_major != 0)
+	{
+	  if (ess_major == 0x48 && (ess_minor & 0xf0) == 0x80)
+	    sprintf (sb_dsp_operations.name, "ESS ES488 AudioDrive (rev %d)",
+		     ess_minor & 0x0f);
+	  else if (ess_major == 0x68 && (ess_minor & 0xf0) == 0x80)
+	    {
+	      sprintf (sb_dsp_operations.name,
+		       "ESS ES1688 AudioDrive (rev %d)",
+		       ess_minor & 0x0f);
+	      sb_dsp_operations.format_mask |= AFMT_S16_LE;
+	      ess_init ();
+	    }
+	}
       else
 	{
 	  sprintf (sb_dsp_operations.name, "SoundBlaster Pro %d.%d", sbc_major, sbc_minor);
@@ -1238,23 +1500,26 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
       sprintf (sb_dsp_operations.name, "SoundBlaster %d.%d", sbc_major, sbc_minor);
     }
 
-  printk (" <%s>", sb_dsp_operations.name);
+  conf_printf (sb_dsp_operations.name, hw_config);
 
-#if !defined(EXCLUDE_SB16) && !defined(EXCLUDE_SBPRO)
-  if (!sb16)			/*
-				 * There is a better driver for SB16
-				 */
-#endif
+  if (sbc_major >= 3)
+    mixer_type = sb_mixer_init (sbc_major);
+
+  if (!sb16)
     if (num_audiodevs < MAX_AUDIO_DEV)
       {
 	audio_devs[my_dev = num_audiodevs++] = &sb_dsp_operations;
+
+	if (AudioDrive)
+	  audio_devs[my_dev]->flags |= DMA_AUTOMODE;
+
 	audio_devs[my_dev]->buffsize = DSP_BUFFSIZE;
 	dma8 = audio_devs[my_dev]->dmachan1 = hw_config->dma;
 	audio_devs[my_dev]->dmachan2 = -1;
-	if (sound_alloc_dma (hw_config->dma, "soundblaster"))
+	if (sound_alloc_dma (hw_config->dma, "SoundBlaster"))
 	  printk ("sb_dsp.c: Can't allocate DMA channel\n");
-#ifdef JAZZ16
-	/* Allocate 16 bit dma
+
+	/* Allocate 16 bit dma (Jazz16)
 	 */
 	if (Jazz16_detected != 0)
 	  if (dma16 != dma8)
@@ -1264,15 +1529,14 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
 		  printk ("Jazz16: Can't allocate 16 bit DMA channel\n");
 		}
 	    }
-#endif
       }
     else
       printk ("SB: Too many DSP devices available\n");
 #else
-  printk (" <SoundBlaster (configured without audio support)>");
+  conf_printf ("SoundBlaster (configured without audio support)", hw_config);
 #endif
 
-#ifndef EXCLUDE_MIDI
+#ifdef CONFIG_MIDI
   if (!midi_disabled && !sb16)	/*
 				 * Midi don't work in the SB emulation mode *
 				 * of PAS, SB16 has better midi interface
@@ -1288,16 +1552,20 @@ void
 sb_dsp_unload (void)
 {
   sound_free_dma (dma8);
-#ifdef JAZZ16
-  /* Allocate 16 bit dma
+
+  /* Free 16 bit dma (Jazz16)
    */
   if (Jazz16_detected != 0)
     if (dma16 != dma8)
       {
 	sound_free_dma (dma16);
       }
-#endif
   snd_release_irq (sbc_irq);
+
+  if (AudioDrive && ess_mpu_irq)
+    {
+      snd_release_irq (ess_mpu_irq);
+    }
 }
 
 void

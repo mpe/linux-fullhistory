@@ -801,15 +801,23 @@ void leak_check_brelse(struct buffer_head * bh){
 
 #endif
 
-#ifdef MODULE
-
 static struct file_system_type iso9660_fs_type = {
 	isofs_read_super, "iso9660", 1, NULL
 };
 
+int init_iso9660_fs(void)
+{
+        return register_filesystem(&iso9660_fs_type);
+}
+
+#ifdef MODULE
 int init_module(void)
 {
-	return register_filesystem(&iso9660_fs_type);
+	int status;
+
+	if ((status = init_iso9660_fs()) == 0)
+		register_symtab(0);
+	return status;
 }
 
 void cleanup_module(void)

@@ -29,7 +29,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_YM3812)
+#if defined(CONFIG_YM3812)
 
 long
 attach_adlib_card (long mem_start, struct address_info *hw_config)

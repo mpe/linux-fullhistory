@@ -1,7 +1,7 @@
 /*
  * The Mitsumi CDROM interface
  * Copyright (C) 1995 Heiko Schlittermann <heiko@lotte.sax.de>
- * VERSION: 1.5
+ * VERSION: 1.5a
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,7 +34,7 @@
 
 #if RCS
 static const char *mcdx_c_version
-		= "mcdx.c,v 1.19 1995/11/20 17:06:25 heiko Exp";
+		= "mcdx.c,v 1.19.2.1 1996/01/13 21:25:55 heiko Exp";
 #endif
 
 #include <linux/version.h>
@@ -768,8 +768,10 @@ mcdx_close(struct inode *ip, struct file *fp)
 		/* invalidate_inodes(ip->i_rdev); */
 		invalidate_buffers(ip->i_rdev);
 
+#if !MCDX_QUIET
 		if (-1 == mcdx_lockdoor(stuffp, 0, 3))
 				INFO(("close() Cannot unlock the door\n"));
+#endif
 
         /* eject if wished */
         if (stuffp->eject_sw) mcdx_eject(stuffp, 1);
@@ -794,10 +796,8 @@ int check_mcdx_media_change(kdev_t full_dev)
 
 void mcdx_setup(char *str, int *pi)
 {
-#if MCDX_DEBUG
-    printk(MCDX ":: setup(%s, %d) called\n",
-	    str, pi[0]);
-#endif
+	if (pi[0] > 0) mcdx_drive_map[0][0] = pi[1];
+	if (pi[0] > 1) mcdx_drive_map[0][1] = pi[2];
 }
 
 /* DIRTY PART ******************************************************/ 
@@ -1051,10 +1051,10 @@ int mcdx_init(void)
 {
 	int drive;
 
-	WARN(("Version 1.5 "
-			"mcdx.c,v 1.19 1995/11/20 17:06:25 heiko Exp\n"));
-	INFO((": Version 1.5 "
-			"mcdx.c,v 1.19 1995/11/20 17:06:25 heiko Exp\n"));
+	WARN(("Version 1.5a "
+			"mcdx.c,v 1.19.2.1 1996/01/13 21:25:55 heiko Exp\n"));
+	INFO((": Version 1.5a "
+			"mcdx.c,v 1.19.2.1 1996/01/13 21:25:55 heiko Exp\n"));
 
 	/* zero the pointer array */
 	for (drive = 0; drive < MCDX_NDRIVES; drive++)
@@ -1245,7 +1245,7 @@ static int mcdx_transfer(struct s_drive_stuff *stuffp,
 	stuffp->lock = current->pid;
 
 	do {
-	    int sig = 0;
+	    /* int sig = 0; */
 	    int to = 0;
 
 		/* wait for the drive become idle */

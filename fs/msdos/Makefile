@@ -8,7 +8,8 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := msdos.o
-O_OBJS   := buffer.o namei.o inode.o file.o dir.o misc.o fat.o mmap.o
+O_OBJS   := buffer.o namei.o file.o dir.o misc.o fat.o mmap.o
+OX_OBJS  := inode.o
 M_OBJS   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

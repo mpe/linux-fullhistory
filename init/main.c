@@ -62,6 +62,7 @@ extern void xd_setup(char *str, int *ints);
 extern void floppy_setup(char *str, int *ints);
 extern void st_setup(char *str, int *ints);
 extern void st0x_setup(char *str, int *ints);
+extern void advansys_setup(char *str, int *ints);
 extern void tmc8xx_setup(char *str, int *ints);
 extern void t128_setup(char *str, int *ints);
 extern void pas16_setup(char *str, int *ints);
@@ -200,6 +201,9 @@ struct {
 #endif
 #ifdef CONFIG_SCSI
 	{ "max_scsi_luns=", scsi_luns_setup },
+#endif
+#ifdef CONFIG_SCSI_ADVANSYS
+	{ "advansys=", advansys_setup },
 #endif
 #if defined(CONFIG_BLK_DEV_HD)
 	{ "hd=", hd_setup },
@@ -489,6 +493,7 @@ static void parse_options(char *line)
 
 
 extern void setup_arch(char **, unsigned long *, unsigned long *);
+extern void arch_syms_export(void);
 
 #ifndef __SMP__
 
@@ -635,6 +640,7 @@ asmlinkage void start_kernel(void)
 	apm_bios_init();
 #endif
 	dquot_init();
+	arch_syms_export();
 	sti();
 	check_bugs();
 

@@ -40,7 +40,7 @@ Sound Blasters
 		cards in the market (July95). It's likely that your card
 		is compatible just with SB Pro but there is also a non SB
 		compatible 16 bit mode. Usually it's MSS/WSS but could also
-		be a proprietary one like MV Jazz16.
+		be a proprietary one like MV Jazz16 or ESS ES688.
 
 Gravis Ultrasound (GUS)
 	GUS
@@ -116,6 +116,8 @@ Ensoniq SoundScape and compatibles
 	OTTO synthesizer chip used in their professional MIDI synthesizers.
 	Several companies (including Ensoniq, Reveal and Spea) are selling
 	cards based on this architecture.
+
+	NOTE! The new PnP SoundScape is not supported yet.
 
 MAD16 and Mozart based cards
 	The Mozart (OAK OTI-601) and MAD16 Pro (OPTi 82C929) interface
@@ -337,12 +339,11 @@ select some options automaticly as well.
 	  have one of them. In addition the MAD16 chip is used in some
 	  cards made by known manufacturers such as Turtle Beach (Tropez),
 	  Reveal (some models) and Diamond (latest ones).
-  "SoundBlaster Pro support",
-	- Enable this option if your card is SB Pro or SB16. Enable it
-	  also with any SB Pro clones. Answering 'n' saves some amount of
-	  memory but 'y' is the safe alterative.
-  "SoundBlaster 16 support",
-	- Enable if you have a SB16 (including the AWE32).
+  "Support for TB Maui"
+	- This is just an experimental extension to the MPU401 driver.
+	  Don't enable this option unless you are writing a .MOD
+	  player for Maui.
+
   "Audio Excel DSP 16 initialization support",
 	- Don't know much about this card. Look at aedsp16.c for more info.
 
@@ -468,6 +469,10 @@ Configuring GUS is simple. Just enable the GUS support and GUS MAX or
 the 16 bit daughtercard if you have them. Note that enabling the daughter
 card disables GUS MAX driver.
 
+NOTE for owners of the 16 bit daughtercard: By default the daughtercard
+uses /dev/dsp (and /dev/audio). Command "ln -sf /dev/dsp1 /dev/dsp"
+selects the daughter card as the default device.
+
 With just the standard GUS enabled the configuration program prompts
 for the I/O, IRQ and DMA numbers for the card. Use the same values than
 with DOS.
@@ -559,22 +564,16 @@ Also the ATP has a microcontroller for the General MIDI emulation (OPL4).
 For this reason the driver asks for the name of a file containing the
 microcode (TRXPRO.HEX). This file is usually located in the directory
 where the DOS drivers were installed. You must have access to this file
-when configuring the driver.
+when configuring the driver. 
 
-IMPORTANT!!!!!!!!!!!
-
-The OPL4/OPL3 chip and the (optional) effects daughtercard require 
-initialization after boot. Since information about the effect processor
-is not public, the initialization must be done by running a special program
-after boot. The setfx program is distributed in Linux binary form (only)
-in snd-util-3.0.tar.gz package.
-It's calls ioperm() so it must be run as root.
-
-Another way to initialize the effects processor (and OPL4) is to boot DOS
-before running Linux.
+If you have the effects daughtercard, it must be initialized by running
+the setfx program of snd-util-3.0.tar.gz package. This step is not required
+when using the (future) binary distribution version of the driver.
 
 Ensoniq SoundScape
 ------------------
+
+NOTE!	The new PnP SoundScape is not supported yet.
 
 The SoundScape driver handles initialization of MSS and MPU supports
 itself so you don't need to enable other drivers than SoundScape
@@ -695,11 +694,14 @@ MIDI0001.BIN and it's located in the DOS/Windows driver directory. The file
 may also be called as TSUNAMI.BIN or something else (older cards?).
 
 The OPL4 synth will be inaccessible without loading the microcontroller code.
-Also remember to enable MPU401 support if you want to use the OPL4 mode.
+
+Also remember to enable SB MPU401 support if you want to use the OPL4 mode.
+(Don't enable the 'normal' MPU401 device as with some earlier driver
+versions (pre 3.5-alpha8)).
 
 NOTE!	Don't answer 'y' when the driver asks about SM Games support
 	(the next question after the MIDI0001.BIN name). However
-	aneswering 'y' is not dangerous. 
+	aneswering 'y' doesn't cause damage your computer so don't panic. 
 
 Sound Galaxies
 --------------
@@ -722,6 +724,11 @@ SG NX Pro. Answer 'y' to these questions if you have one of the above 8 or
 There are some new Sound Galaxies in the market. I have no experience with
 them so read the card's manual carefully.
 
+ESS ES1688 'AudioDrive' based cards
+-----------------------------------
+
+Configure these cards just like SB Pro. Enable the 'SB MPU401 MIDI port'
+if you want to use MIDI features of the card.
 
 Reveal cards
 ------------
@@ -779,12 +786,6 @@ SB but that may require a TSR which is not possible with Linux. If
 the card is compatible with MSS, it's a better choise. Some cards
 don't work in the SB and MSS modes at the same time.
 
-There are some cards which will be supported by VoxWare sooner or later
-(currently at least cards based on the ESS chipset). Such cards are
-so common that there is some idea in writing the driver. Check the
-VoxWare home page (http://personal.eunet.fi/pp/voxware) for latest
-information.
-
 Then there are cards which are no longer manufactured and/or which
 are relatively rarely used (such as the 8 bit ProAudioSpectrum
 models). It's extremely unlikely that such cards never get supported.
@@ -837,8 +838,8 @@ for some of the banned cards. Please, don't send me messages asking if
 there is any plans to write a driver for the cards mentioned above. I 
 will put any news to the VoxWare www home page (see below).
 
-There are some common audio chipsets that are supported yet. For example
-the ESS chips and Sierra Aria. It's likely that these architectures
+There are some common audio chipsets that are not supported yet. For example
+Sierra Aria and IBM Mwave. It's possible that these architectures
 get some support in future but I can't make any promises. Just look
 at the home page for latest info.
 

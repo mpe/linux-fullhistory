@@ -1,7 +1,7 @@
 /*
- *  linux/drivers/block/cmd640.c	Version 0.02  Nov 30, 1995
+ *  linux/drivers/block/cmd640.c	Version 0.04  Jan 11, 1996
  *
- *  Copyright (C) 1995  Linus Torvalds & author (see below)
+ *  Copyright (C) 1995-1996  Linus Torvalds & author (see below)
  */
 
 /*
@@ -18,7 +18,48 @@
  *			read-ahead for versions 'B' and 'C' of chip by
  *			default, some code cleanup.
  *
+ *  Version 0.03	Added reset of secondary interface,
+ *			and black list for devices which are not compatible
+ *			with read ahead mode. Separate function for setting
+ *			readahead is added, possibly it will be called some
+ *			day from ioctl processing code.
+ *
+ *  Version 0.04	Now configs/compiles separate from ide.c  -ml
  */
+
+/*
+ *  There is a known problem with current version of this driver.
+ *  If the only device on secondary interface is CD-ROM, at some
+ *  computers it is not recognized. In all reported cases CD-ROM
+ *  was 2x or 4x speed Mitsumi drive.
+ *
+ *  The following workarounds could work:
+ * 
+ *    1. put CD-ROM as slave on primary interface
+ *
+ *    2. or define symbol at next line as 0
+ * 
+ */
+
+#define CMD640_NORMAL_INIT 1
+
+#undef REALLY_SLOW_IO		/* most systems can safely undef this */
+
+#include <linux/types.h>
+#include <linux/kernel.h>
+#include <linux/delay.h>
+#include <linux/timer.h>
+#include <linux/mm.h>
+#include <linux/ioport.h>
+#include <linux/blkdev.h>
+#include <linux/hdreg.h>
+#include <asm/io.h>
+
+#include "ide.h"
+
+extern ide_hwif_t ide_hwifs[];
+
+int cmd640_vlb = 0;
 
 /*
  * CMD640 specific registers definition.
@@ -76,7 +117,7 @@ static int 	bus_speed; /* MHz */
 
 /*
  * For some unknown reasons pcibios functions which read and write registers
- * do not work with cmd640. We use direct io instead.
+ * do not always work with cmd640. We use direct io instead.
  */
 
 /* PCI method 1 access */
@@ -230,6 +271,35 @@ static int probe_for_cmd640_vlb(void) {
 }
 
 /*
+ * Low level reset for controller, actually it has nothing specific for
+ * CMD640, but I don't know how to use standard reset routine before
+ * we recognized any drives.
+ */
+
+static void cmd640_reset_controller(int iface_no)
+{
+	int retry_count = 600;
+	int base_port = iface_no ? 0x170 : 0x1f0;
+
+	outb_p(4, base_port + 7);
+	udelay(5);
+	outb_p(0, base_port + 7);
+
+	do {
+		udelay(5);
+		retry_count -= 1;
+	} while ((inb_p(base_port + 7) & 0x80) && retry_count);
+
+	if (retry_count == 0)
+		printk("cmd640: failed to reset controller %d\n", iface_no);
+#if 0	
+	else
+		printk("cmd640: controller %d reset [%d]\n", 
+			iface_no, retry_count);
+#endif
+}
+
+/*
  * Probe for Cmd640x and initialize it if found
  */
 
@@ -282,31 +352,34 @@ int ide_probe_for_cmd640x(void)
 
 	/*
 	 * Set the maximum allowed bus speed (it is safest until we
-	 * 				      find how detect bus speed)
+	 * 				      find how to detect bus speed)
 	 * Normally PCI bus runs at 33MHz, but often works overclocked to 40
 	 */
 	bus_speed = (bus_type == vlb) ? 50 : 40; 
 
-#if 1	/* don't know if this is reliable yet */
 	/*
 	 * Enable readahead for versions above 'A'
 	 */
 	cmd_read_ahead = (cmd640_chip_version > 1);
-#else
-	cmd_read_ahead = 0;
-#endif
+
 	/*
 	 * Setup Control Register
 	 */
 	b = get_cmd640_reg(cmd640_key, CNTRL);	
+
+#if CMD640_NORMAL_INIT
 	if (second_port)
 		b |= CNTRL_ENA_2ND;
 	else
 		b &= ~CNTRL_ENA_2ND;
+#endif 
+
 	if (cmd_read_ahead)
 		b &= ~(CNTRL_DIS_RA0 | CNTRL_DIS_RA1);
 	else
 		b |= (CNTRL_DIS_RA0 | CNTRL_DIS_RA1);
+
+
 	put_cmd640_reg(cmd640_key, CNTRL, b);
 
 	/*
@@ -317,9 +390,11 @@ int ide_probe_for_cmd640x(void)
 		b = cmd_read_ahead ? 0 : (DIS_RA2 | DIS_RA3);
 		put_cmd640_reg(cmd640_key, ARTTIM23, b);
 		put_cmd640_reg(cmd640_key, DRWTIM23, 0);
+
+		cmd640_reset_controller(1);
 	}
 
-	serialized = 1;
+	ide_hwifs[0].serialized = 1;
 
 	printk("ide: buggy CMD640%c interface at ", 
 	       'A' - 1 + cmd640_chip_version);
@@ -357,6 +432,48 @@ static int as_clocks(int a) {
 		case 0xc0 :	return 5;
 		default :	return -1;
 	}
+}
+
+/*
+ * Sets readahead mode for specific drive
+ *  in the future it could be called from ioctl
+ */
+
+static void set_readahead_mode(int mode, int if_num, int dr_num)
+{
+	static int masks[2][2] = 
+		{ 
+			{CNTRL_DIS_RA0, CNTRL_DIS_RA1}, 
+			{DIS_RA2, 	DIS_RA3}
+		};
+
+	int port = (if_num == 0) ? CNTRL : ARTTIM23;
+	int mask = masks[if_num][dr_num];
+	byte b;
+
+	b = get_cmd640_reg(cmd640_key, port);
+	if (mode)
+		b &= mask; /* Enable readahead for specific drive */
+	else
+		b |= mask; /* Disable readahed for specific drive */
+	put_cmd640_reg(cmd640_key, port, b);
+}		
+
+static struct readahead_black_list {
+	const char* 	name;
+	int		mode;	
+} drives_ra[] = {
+	{ "ST3655A",	0 },
+ 	{ NULL, 0 }
+};	
+
+static int known_drive_readahead(char* name) {
+	int i;
+
+	for (i = 0; drives_ra[i].name != NULL; i++)
+		if (strcmp(name, drives_ra[i].name) == 0)
+			return drives_ra[i].mode;
+	return -1;
 }
 
 /*
@@ -400,7 +517,7 @@ static void cmd640_set_timing(int if_num, int dr_num, int r1, int r2) {
 	}
 }
 
-struct pio_timing {
+static struct pio_timing {
 	int	mc_time;	/* Minimal cycle time (ns) */
 	int	av_time;	/* Address valid to DIOR-/DIOW- setup (ns) */
 	int	ds_time;	/* DIOR data setup	(ns) */
@@ -413,7 +530,7 @@ struct pio_timing {
 	{ 20,	50,	100 }	/* PIO Mode ? */
 };
 
-struct drive_pio_info {
+static struct drive_pio_info {
 	const char	*name;
 	int		pio;
 } drive_pios[] = {
@@ -426,6 +543,7 @@ struct drive_pio_info {
 	{ "QUANTUM LPS240A", 0 },
 	{ "QUANTUM LPS270A", 3 },
 	{ "QUANTUM LPS540A", 3 },
+	{ "QUANTUM FIREBALL1080A", 3 },
 	{ NULL,	0 }
 };
 
@@ -480,7 +598,7 @@ static void set_pio_mode(int if_num, int drv_num, int mode_num) {
 	outb_p((drv_num | 0xa) << 4, p_base + 6);
 	outb_p(0xef, p_base + 7);
 	for (i = 0; (i < 100) && (inb (p_base + 7) & 0x80); i++)
-		delay_10ms();
+		udelay(10000);
 }
 
 void cmd640_tune_drive(ide_drive_t* drive) {
@@ -491,6 +609,7 @@ void cmd640_tune_drive(ide_drive_t* drive) {
 	int mc_time, av_time, ds_time;
 	struct hd_driveid* id;
 	int r1, r2;
+	int mode;
 
 	/*
 	 * Determine if drive is under cmd640 control
@@ -530,6 +649,13 @@ void cmd640_tune_drive(ide_drive_t* drive) {
 				&r1, &r2);
 	set_pio_mode(interface_number, drive_number, max_pio);
 	cmd640_set_timing(interface_number, drive_number, r1, r2);
+
+	/*
+	 * Disable (or set) readahead mode for known drive
+	 */
+	if ((mode = known_drive_readahead(id->model)) != -1) {
+		set_readahead_mode(mode, interface_number, drive_number);
+		printk("Readahead %s,", mode ? "enabled" : "disabled");
+	}
 	printk ("Mode and Timing set to PIO%d (0x%x 0x%x)\n", max_pio, r1, r2);
 }
-

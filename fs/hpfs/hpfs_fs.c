@@ -1744,15 +1744,23 @@ static void brelse4(struct quad_buffer_head *qbh)
 	kfree_s(qbh->data, 2048);
 }
 
-#ifdef MODULE
-
 static struct file_system_type hpfs_fs_type = {
         hpfs_read_super, "hpfs", 1, NULL
 };
 
-int init_module(void)
+int init_hpfs_fs(void)
 {
         return register_filesystem(&hpfs_fs_type);
+}
+
+#ifdef MODULE
+int init_module(void)
+{
+	int status;
+
+	if ((status = init_hpfs_fs()) == 0)
+		register_symtab(0);
+	return status;
 }
 
 void cleanup_module(void)

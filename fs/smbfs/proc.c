@@ -1664,7 +1664,7 @@ smb_proc_reconnect(struct smb_server *server)
 	}
 	
 	if (server->packet[0] != 0x82) {
-		printk("smb_proc_connect: Did not recieve positive response "
+		printk("smb_proc_connect: Did not receive positive response "
                        "(err = %x)\n", 
 		       server->packet[0]);
                 smb_dont_catch_keepalive(server);

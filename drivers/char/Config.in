@@ -48,3 +48,4 @@ if [ "$CONFIG_WATCHDOG" = "y" ]; then
      bool '   Software Watchdog' CONFIG_SOFT_WATCHDOG
   fi
 fi
+endmenu

@@ -192,8 +192,6 @@ struct dquot {
 /*
  * declaration of quota_function calls in kernel.
  */
-int quota_off (kdev_t dev, short type);
-int sync_dquots (kdev_t dev, short type);
 
 extern void dquot_initialize(struct inode *inode, short type);
 extern void dquot_drop(struct inode *inode);

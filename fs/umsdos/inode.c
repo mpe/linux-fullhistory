@@ -494,15 +494,23 @@ struct super_block *UMSDOS_read_super(
 }
 
 
-#ifdef MODULE
-
 static struct file_system_type umsdos_fs_type = {
 	UMSDOS_read_super, "umsdos", 1, NULL
 };
 
+int init_umsdos_fs(void)
+{
+        return register_filesystem(&umsdos_fs_type);
+}
+
+#ifdef MODULE
 int init_module(void)
 {
-	return register_filesystem(&umsdos_fs_type);
+	int status;
+
+	if ((status = init_umsdos_fs()) == 0)
+		register_symtab(0);
+	return status;
 }
 
 void cleanup_module(void)

@@ -35,20 +35,6 @@
  * (Actually this is not a mapping but rather some kind of interleaving
  * solution).
  */
-#ifdef GUSMAX_MIXER
-#define MODE1_REC_DEVICES		(SOUND_MASK_LINE | SOUND_MASK_MIC | \
-					 SOUND_MASK_CD|SOUND_MASK_IMIX)
-
-#define MODE1_MIXER_DEVICES		(SOUND_MASK_SYNTH | SOUND_MASK_MIC | \
-					 SOUND_MASK_CD | \
-					 SOUND_MASK_IGAIN | \
-					 SOUND_MASK_PCM|SOUND_MASK_IMIX)
-
-#define MODE2_MIXER_DEVICES		(SOUND_MASK_SYNTH | SOUND_MASK_LINE | SOUND_MASK_MIC | \
-					 SOUND_MASK_CD | SOUND_MASK_SPEAKER | \
-					 SOUND_MASK_IGAIN | \
-					 SOUND_MASK_PCM | SOUND_MASK_IMIX)
-#else	/* Generic mapping */
 #define MODE1_REC_DEVICES		(SOUND_MASK_LINE3 | SOUND_MASK_MIC | \
 					 SOUND_MASK_LINE1|SOUND_MASK_IMIX)
 
@@ -61,7 +47,8 @@
 					 SOUND_MASK_LINE3 | SOUND_MASK_SPEAKER | \
 					 SOUND_MASK_IGAIN | \
 					 SOUND_MASK_PCM | SOUND_MASK_IMIX)
-#endif
+
+#define MODE3_MIXER_DEVICES		(MODE2_MIXER_DEVICES | SOUND_MASK_VOLUME)
 
 struct mixer_def {
 	unsigned int regno: 7;
@@ -93,8 +80,8 @@ typedef struct mixer_def mixer_ent;
 #define MIX_ENT(name, reg_l, pola_l, pos_l, len_l, reg_r, pola_r, pos_r, len_r)	\
 	{{reg_l, pola_l, pos_l, len_l}, {reg_r, pola_r, pos_r, len_r}}
 
-mixer_ent mix_devices[32][2] = {	/* As used in GUS MAX */
-MIX_ENT(SOUND_MIXER_VOLUME,	 0, 0, 0, 0,	 0, 0, 0, 0),
+mixer_ent mix_devices[32][2] = {
+MIX_ENT(SOUND_MIXER_VOLUME,	27, 1, 0, 4,	29, 1, 0, 4),
 MIX_ENT(SOUND_MIXER_BASS,	 0, 0, 0, 0,	 0, 0, 0, 0),
 MIX_ENT(SOUND_MIXER_TREBLE,	 0, 0, 0, 0,	 0, 0, 0, 0),
 MIX_ENT(SOUND_MIXER_SYNTH,	 4, 1, 0, 5,	 5, 1, 0, 5),
@@ -115,11 +102,11 @@ MIX_ENT(SOUND_MIXER_LINE3,	18, 1, 0, 5,	19, 1, 0, 5)
 
 static unsigned short default_mixer_levels[SOUND_MIXER_NRDEVICES] =
 {
-  0x5a5a,			/* Master Volume */
+  0x3232,			/* Master Volume */
   0x3232,			/* Bass */
   0x3232,			/* Treble */
   0x4b4b,			/* FM */
-  0x4040,			/* PCM */
+  0x3232,			/* PCM */
   0x4b4b,			/* PC Speaker */
   0x2020,			/* Ext Line */
   0x1010,			/* Mic */

@@ -82,6 +82,8 @@ static int scan_scsis_single (int channel,int dev,int lun,int * max_scsi_dev ,
                  struct Scsi_Host *shpnt, char * scsi_result);
 void scsi_build_commandblocks(Scsi_Device * SDpnt);
 
+extern struct symbol_table scsi_symbol_table;
+
 
 static FreeSectorBitmap * dma_malloc_freelist = NULL;
 static int scsi_need_isa_bounce_buffers;
@@ -395,8 +397,8 @@ static void scan_scsis (struct Scsi_Host *shpnt, unchar hardcoded,
 
 
   /* Make sure we have something that is valid for DMA purposes */
-  scsi_result = ((!dma_malloc_freelist || !shpnt->unchecked_isa_dma)
-                 ? &scsi_result0[0] : scsi_malloc (512));
+  scsi_result = ( ( !shpnt->unchecked_isa_dma )
+                 ? &scsi_result0[0] : scsi_init_malloc (512, GFP_DMA));
 
   if (scsi_result == NULL) {
     printk ("Unable to obtain scsi_result buffer\n");
@@ -489,7 +491,7 @@ static void scan_scsis (struct Scsi_Host *shpnt, unchar hardcoded,
 
     /* If we allocated a buffer so we could do DMA, free it now */
     if (scsi_result != &scsi_result0[0] && scsi_result != NULL)
-      scsi_free (scsi_result, 512);
+      scsi_init_free (scsi_result, 512);
 
 }
 
@@ -2329,6 +2331,7 @@ int scsi_dev_init(void)
     timer_table[SCSI_TIMER].fn = scsi_main_timeout;
     timer_table[SCSI_TIMER].expires = 0;
 
+    register_symtab(&scsi_symbol_table);
 
     /* Register the /proc/scsi/scsi entry */
 #if CONFIG_PROC_FS 
@@ -3116,8 +3119,6 @@ scsi_dump_status(void)
 #endif
 
 #ifdef MODULE
-
-extern struct symbol_table scsi_symbol_table;
 
 int init_module(void) {
     unsigned long size;

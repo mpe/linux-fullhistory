@@ -5,9 +5,11 @@
 int DMAbuf_open(int dev, int mode);
 int DMAbuf_release(int dev, int mode);
 int DMAbuf_getwrbuffer(int dev, char **buf, int *size, int dontblock);
+int DMAbuf_get_curr_buffer(int dev, int *buff_no, char **dma_buf, int *buff_ptr, int *buff_size);
 int DMAbuf_getrdbuffer(int dev, char **buf, int *len, int dontblock);
 int DMAbuf_rmchars(int dev, int buff_no, int c);
 int DMAbuf_start_output(int dev, int buff_no, int l);
+int DMAbuf_set_count(int dev, int buff_no, int l);
 int DMAbuf_ioctl(int dev, unsigned int cmd, ioctl_arg arg, int local);
 long DMAbuf_init(long mem_start);
 int DMAbuf_start_dma (int dev, unsigned long physaddr, int count, int dma_mode);
@@ -16,7 +18,7 @@ void DMAbuf_close_dma (int dev);
 void DMAbuf_reset_dma (int dev);
 void DMAbuf_inputintr(int dev);
 void DMAbuf_outputintr(int dev, int underflow_flag);
-int DMAbuf_select(int dev, struct fileinfo *file, int sel_type, select_table * wait);
+int DMAbuf_select(int dev, struct fileinfo *file, int sel_type, select_table_handle * wait);
 void DMAbuf_start_devices(unsigned int devmask);
 
 /*
@@ -32,7 +34,7 @@ int audio_ioctl (int dev, struct fileinfo *file,
 int audio_lseek (int dev, struct fileinfo *file, off_t offset, int orig);
 long audio_init (long mem_start);
 
-int audio_select(int dev, struct fileinfo *file, int sel_type, select_table * wait);
+int audio_select(int dev, struct fileinfo *file, int sel_type, select_table_handle * wait);
 
 /*
  *	System calls for the /dev/sequencer
@@ -52,7 +54,7 @@ unsigned long compute_finetune(unsigned long base_freq, int bend, int range);
 void seq_input_event(unsigned char *event, int len);
 void seq_copy_to_input (unsigned char *event, int len);
 
-int sequencer_select(int dev, struct fileinfo *file, int sel_type, select_table * wait);
+int sequencer_select(int dev, struct fileinfo *file, int sel_type, select_table_handle * wait);
 
 /*
  *	System calls for the /dev/midi
@@ -68,7 +70,7 @@ int MIDIbuf_lseek (int dev, struct fileinfo *file, off_t offset, int orig);
 void MIDIbuf_bytes_received(int dev, unsigned char *buf, int count);
 long MIDIbuf_init(long mem_start);
 
-int MIDIbuf_select(int dev, struct fileinfo *file, int sel_type, select_table * wait);
+int MIDIbuf_select(int dev, struct fileinfo *file, int sel_type, select_table_handle * wait);
 
 /*
  *
@@ -77,7 +79,7 @@ int MIDIbuf_select(int dev, struct fileinfo *file, int sel_type, select_table * 
 
 /*	From soundcard.c	*/
 void soundcard_init(void);
-void tenmicrosec(void);
+void tenmicrosec(sound_os_info *osp);
 void request_sound_timer (int count);
 void sound_stop_timer(void);
 int snd_ioctl_return(int *addr, int value);
@@ -85,6 +87,8 @@ int snd_set_irq_handler (int interrupt_level, void(*hndlr)(int, struct pt_regs *
 void snd_release_irq(int vect);
 void sound_dma_malloc(int dev);
 void sound_dma_free(int dev);
+void conf_printf(char *name, struct address_info *hw_config);
+void conf_printf2(char *name, int base, int irq, int dma, int dma2);
 
 /*	From sound_switch.c	*/
 int sound_read_sw (int dev, struct fileinfo *file, snd_rw_buf *buf, int count);
@@ -114,6 +118,7 @@ void sb16midiintr (int unit);
 long attach_sb16midi(long mem_start, struct address_info * hw_config);
 int probe_sb16midi(struct address_info *hw_config);
 void sb_midi_interrupt(int dummy);
+void sbmidiintr(int irq, struct pt_regs * dummy);
 
 /*	From sb_midi.c	*/
 void sb_midi_init(int model);
@@ -268,6 +273,7 @@ long attach_mad16_mpu (long mem_start, struct address_info *hw_config);
 int probe_mad16_mpu (struct address_info *hw_config);
 int mad16_sb_dsp_detect (struct address_info *hw_config);
 long mad16_sb_dsp_init (long mem_start, struct address_info *hw_config);
+void mad16_sb_dsp_unload(struct address_info *hw_config);
 
 /*	Unload routines from various source files*/
 void unload_pss(struct address_info *hw_info);

@@ -30,9 +30,9 @@
 #define PATMGR_C
 #include "sound_config.h"
 
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_SEQUENCER)
+#if defined(CONFIG_SEQUENCER)
 
-static struct wait_queue *server_procs[MAX_SYNTH_DEV] =
+static wait_handle *server_procs[MAX_SYNTH_DEV] =
 {NULL};
 static volatile struct snd_wait server_wait_flag[MAX_SYNTH_DEV] =
 {
@@ -49,7 +49,7 @@ static int      pmgr_opened[MAX_SYNTH_DEV] =
 #define A_TO_S	1
 #define S_TO_A 	2
 
-static struct wait_queue *appl_proc = NULL;
+static wait_handle *appl_proc = NULL;
 static volatile struct snd_wait appl_wait_flag =
 {0};
 
@@ -83,7 +83,7 @@ pmgr_release (int dev)
       if ((appl_wait_flag.mode & WK_SLEEP))
 	{
 	  appl_wait_flag.mode = WK_WAKEUP;
-	  wake_up (&appl_proc);
+	  module_wake_up (&appl_proc);
 	};
     }
 
@@ -102,31 +102,18 @@ pmgr_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
       return -EIO;
     }
 
-  while (!ok && !(current->signal & ~current->blocked))
+  while (!ok && !current_got_fatal_signal ())
     {
       save_flags (flags);
       cli ();
 
       while (!(mbox[dev] && msg_direction[dev] == A_TO_S) &&
-	     !(current->signal & ~current->blocked))
+	     !current_got_fatal_signal ())
 	{
 
-	  {
-	    unsigned long   tl;
-
-	    if (0)
-	      current->timeout = tl = jiffies + (0);
-	    else
-	      tl = 0xffffffff;
-	    server_wait_flag[dev].mode = WK_SLEEP;
-	    interruptible_sleep_on (&server_procs[dev]);
-	    if (!(server_wait_flag[dev].mode & WK_WAKEUP))
-	      {
-		if (jiffies >= tl)
-		  server_wait_flag[dev].mode |= WK_TIMEOUT;
-	      }
-	    server_wait_flag[dev].mode &= ~WK_SLEEP;
-	  };
+	  server_wait_flag[dev].mode = WK_SLEEP;
+	  module_interruptible_sleep_on (&server_procs[dev]);
+	  server_wait_flag[dev].mode &= ~WK_SLEEP;;
 	}
 
       if (mbox[dev] && msg_direction[dev] == A_TO_S)
@@ -193,7 +180,7 @@ pmgr_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count)
 	{
 	  {
 	    appl_wait_flag.mode = WK_WAKEUP;
-	    wake_up (&appl_proc);
+	    module_wake_up (&appl_proc);
 	  };
 	}
     }
@@ -224,27 +211,14 @@ pmgr_access (int dev, struct patmgr_info *rec)
 	{
 	  {
 	    server_wait_flag[dev].mode = WK_WAKEUP;
-	    wake_up (&server_procs[dev]);
+	    module_wake_up (&server_procs[dev]);
 	  };
 	}
 
 
-      {
-	unsigned long   tl;
-
-	if (0)
-	  current->timeout = tl = jiffies + (0);
-	else
-	  tl = 0xffffffff;
-	appl_wait_flag.mode = WK_SLEEP;
-	interruptible_sleep_on (&appl_proc);
-	if (!(appl_wait_flag.mode & WK_WAKEUP))
-	  {
-	    if (jiffies >= tl)
-	      appl_wait_flag.mode |= WK_TIMEOUT;
-	  }
-	appl_wait_flag.mode &= ~WK_SLEEP;
-      };
+      appl_wait_flag.mode = WK_SLEEP;
+      module_interruptible_sleep_on (&appl_proc);
+      appl_wait_flag.mode &= ~WK_SLEEP;;
 
       if (msg_direction[dev] != S_TO_A)
 	{
@@ -274,8 +248,18 @@ pmgr_inform (int dev, int event, unsigned long p1, unsigned long p2,
   unsigned long   flags;
   int             err = 0;
 
+  struct patmgr_info *tmp_mbox;
+
   if (!pmgr_opened[dev])
     return 0;
+
+  tmp_mbox = (struct patmgr_info *) kmalloc (sizeof (struct patmgr_info), GFP_KERNEL);
+
+  if (tmp_mbox == NULL)
+    {
+      printk ("pmgr: Couldn't allocate memory for a message\n");
+      return 0;
+    }
 
   save_flags (flags);
   cli ();
@@ -284,13 +268,8 @@ pmgr_inform (int dev, int event, unsigned long p1, unsigned long p2,
     printk ("  PATMGR: Server %d mbox full. Why?\n", dev);
   else
     {
-      if ((mbox[dev] =
-	   (struct patmgr_info *) kmalloc (sizeof (struct patmgr_info), GFP_KERNEL)) == NULL)
-	{
-	  printk ("pmgr: Couldn't allocate memory for a message\n");
-	  return 0;
-	}
 
+      mbox[dev] = tmp_mbox;
       mbox[dev]->key = PM_K_EVENT;
       mbox[dev]->command = event;
       mbox[dev]->parm1 = p1;
@@ -302,34 +281,20 @@ pmgr_inform (int dev, int event, unsigned long p1, unsigned long p2,
 	{
 	  {
 	    server_wait_flag[dev].mode = WK_WAKEUP;
-	    wake_up (&server_procs[dev]);
+	    module_wake_up (&server_procs[dev]);
 	  };
 	}
 
 
-      {
-	unsigned long   tl;
-
-	if (0)
-	  current->timeout = tl = jiffies + (0);
-	else
-	  tl = 0xffffffff;
-	appl_wait_flag.mode = WK_SLEEP;
-	interruptible_sleep_on (&appl_proc);
-	if (!(appl_wait_flag.mode & WK_WAKEUP))
-	  {
-	    if (jiffies >= tl)
-	      appl_wait_flag.mode |= WK_TIMEOUT;
-	  }
-	appl_wait_flag.mode &= ~WK_SLEEP;
-      };
-      if (mbox[dev])
-	kfree (mbox[dev]);
+      appl_wait_flag.mode = WK_SLEEP;
+      module_interruptible_sleep_on (&appl_proc);
+      appl_wait_flag.mode &= ~WK_SLEEP;;
       mbox[dev] = NULL;
       msg_direction[dev] = 0;
     }
 
   restore_flags (flags);
+  kfree (tmp_mbox);
 
   return err;
 }

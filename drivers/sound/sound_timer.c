@@ -28,9 +28,7 @@
 #define SEQUENCER_C
 #include "sound_config.h"
 
-#ifdef CONFIGURE_SOUNDCARD
-
-#if !defined(EXCLUDE_SEQUENCER)
+#if defined(CONFIG_SEQUENCER)
 
 static volatile int initialized = 0, opened = 0, tmr_running = 0;
 static volatile time_t tmr_offs, tmr_ctr;
@@ -351,5 +349,4 @@ sound_timer_init (struct sound_lowlev_timer *t, char *name)
   sound_timer_devs[n] = &sound_timer;
 }
 
-#endif
 #endif

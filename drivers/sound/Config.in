@@ -1,8 +1,12 @@
 #
 # Sound driver configuration
 #
-# This is really ugly: it should probably be changed
-# to use the normal config script setup
+#--------
+# There is another confic script which is compatible with rest of
+# the kernel. It can be activated by running 'make script' in this
+# directory. Please note that this is an _experimental_ feature which
+# doesn't work with all cards (PSS, SM Wave, AudioTriX Pro).
+#--------
 #
 $MAKE -C drivers/sound config || exit 1
 

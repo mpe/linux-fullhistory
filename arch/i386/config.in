@@ -12,6 +12,7 @@ if [ "$CONFIG_MODULES" = "y" ]; then
   bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
   bool 'Kernel daemon support (e.g. autoload of modules)' CONFIG_KERNELD
 fi
+endmenu
 
 mainmenu_option next_comment
 comment 'General setup'
@@ -32,6 +33,7 @@ choice 'Processor type' \
 	"386		CONFIG_M386	\
 	 486		CONFIG_M486	\
 	 Pentium	CONFIG_M586" Pentium
+endmenu
 
 source drivers/block/Config.in
 
@@ -47,6 +49,7 @@ tristate 'SCSI support' CONFIG_SCSI
 if [ "$CONFIG_SCSI" != "n" ]; then
   source drivers/scsi/Config.in
 fi
+endmenu
 
 if [ "$CONFIG_NET" = "y" ]; then
   mainmenu_option next_comment
@@ -56,6 +59,7 @@ if [ "$CONFIG_NET" = "y" ]; then
   if [ "$CONFIG_NETDEVICES" = "y" ]; then
     source drivers/net/Config.in
   fi
+  endmenu
 fi
 
 mainmenu_option next_comment
@@ -65,6 +69,7 @@ bool 'Support non-SCSI/IDE/ATAPI CDROM drives' CONFIG_CD_NO_IDESCSI
 if [ "$CONFIG_CD_NO_IDESCSI" != "n" ]; then
   source drivers/cdrom/Config.in
 fi
+endmenu
 
 source fs/Config.in
 
@@ -77,6 +82,7 @@ tristate 'Sound card support' CONFIG_SOUND
 if [ "$CONFIG_SOUND" != "n" ]; then
   source drivers/sound/Config.in
 fi
+endmenu
 
 mainmenu_option next_comment
 comment 'Kernel hacking'
@@ -86,3 +92,4 @@ bool 'Kernel profiling support' CONFIG_PROFILE
 if [ "$CONFIG_PROFILE" = "y" ]; then
   int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
 fi
+endmenu

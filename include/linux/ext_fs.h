@@ -91,6 +91,7 @@ extern void ext_truncate(struct inode *);
 extern void ext_put_super(struct super_block *);
 extern void ext_write_super(struct super_block *);
 extern struct super_block *ext_read_super(struct super_block *,void *,int);
+extern int init_ext_fs(void);
 extern void ext_read_inode(struct inode *);
 extern void ext_write_inode(struct inode *);
 extern void ext_put_inode(struct inode *);

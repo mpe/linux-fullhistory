@@ -38,7 +38,7 @@
 #include "sb.h"
 #include "sb_mixer.h"
 
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_SB16) && !defined(EXCLUDE_SB) && !defined(EXCLUDE_AUDIO) && !defined(EXCLUDE_SBPRO)
+#if defined(CONFIG_SB) && defined(CONFIG_AUDIO)
 
 extern int      sbc_base;
 extern sound_os_info *sb_osp;
@@ -157,7 +157,7 @@ sb16_dsp_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
     {
     case SOUND_PCM_WRITE_RATE:
       if (local)
-	return dsp_set_speed ((long) arg);
+	return dsp_set_speed ((int) arg);
       return snd_ioctl_return ((int *) arg, dsp_set_speed (get_fs_long ((long *) arg)));
 
     case SOUND_PCM_READ_RATE:
@@ -167,12 +167,12 @@ sb16_dsp_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
 
     case SNDCTL_DSP_STEREO:
       if (local)
-	return dsp_set_stereo ((long) arg);
+	return dsp_set_stereo ((int) arg);
       return snd_ioctl_return ((int *) arg, dsp_set_stereo (get_fs_long ((long *) arg)));
 
     case SOUND_PCM_WRITE_CHANNELS:
       if (local)
-	return dsp_set_stereo ((long) arg - 1) + 1;
+	return dsp_set_stereo ((int) arg - 1) + 1;
       return snd_ioctl_return ((int *) arg, dsp_set_stereo (get_fs_long ((long *) arg) - 1) + 1);
 
     case SOUND_PCM_READ_CHANNELS:
@@ -182,7 +182,7 @@ sb16_dsp_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
 
     case SNDCTL_DSP_SETFMT:
       if (local)
-	return dsp_set_bits ((long) arg);
+	return dsp_set_bits ((int) arg);
       return snd_ioctl_return ((int *) arg, dsp_set_bits (get_fs_long ((long *) arg)));
 
     case SOUND_PCM_READ_BITS:
@@ -260,8 +260,23 @@ sb16_dsp_close (int dev)
   restore_flags (flags);
 }
 
+static unsigned long trg_buf;
+static int      trg_bytes;
+static int      trg_intrflag;
+static int      trg_restart;
+
 static void
 sb16_dsp_output_block (int dev, unsigned long buf, int count, int intrflag, int dma_restart)
+{
+  trg_buf = buf;
+  trg_bytes = count;
+  trg_intrflag = intrflag;
+  trg_restart = dma_restart;
+  irq_mode = IMODE_OUTPUT;
+}
+
+static void
+actually_output_block (int dev, unsigned long buf, int count, int intrflag, int dma_restart)
 {
   unsigned long   flags, cnt;
 
@@ -321,6 +336,16 @@ sb16_dsp_output_block (int dev, unsigned long buf, int count, int intrflag, int 
 
 static void
 sb16_dsp_start_input (int dev, unsigned long buf, int count, int intrflag, int dma_restart)
+{
+  trg_buf = buf;
+  trg_bytes = count;
+  trg_intrflag = intrflag;
+  trg_restart = dma_restart;
+  irq_mode = IMODE_INPUT;
+}
+
+static void
+actually_start_input (int dev, unsigned long buf, int count, int intrflag, int dma_restart)
 {
   unsigned long   flags, cnt;
 
@@ -415,7 +440,18 @@ sb16_dsp_trigger (int dev, int bits)
   if (!bits)
     sb_dsp_command (0xd0);	/* Halt DMA */
   else if (bits & irq_mode)
-    sb_dsp_command (0xd4);	/* Continue DMA */
+    switch (irq_mode)
+      {
+      case IMODE_INPUT:
+	actually_start_input (my_dev, trg_buf, trg_bytes,
+			      trg_intrflag, trg_restart);
+	break;
+
+      case IMODE_OUTPUT:
+	actually_output_block (my_dev, trg_buf, trg_bytes,
+			       trg_intrflag, trg_restart);
+	break;
+      }
 }
 
 static void
@@ -491,7 +527,7 @@ sb16_dsp_init (long mem_start, struct address_info *hw_config)
 
   sprintf (sb16_dsp_operations.name, "SoundBlaster 16 %d.%d", sbc_major, sbc_minor);
 
-  printk (" <%s>", sb16_dsp_operations.name);
+  conf_printf (sb16_dsp_operations.name, hw_config);
 
   if (num_audiodevs < MAX_AUDIO_DEV)
     {
@@ -520,10 +556,18 @@ int
 sb16_dsp_detect (struct address_info *hw_config)
 {
   struct address_info *sb_config;
-  extern int      sbc_major;
+  extern int      sbc_major, Jazz16_detected;
+
+  extern void     Jazz16_set_dma16 (int dma);
 
   if (sb16_dsp_ok)
     return 1;			/* Can't drive two cards */
+
+  if (Jazz16_detected)
+    {
+      Jazz16_set_dma16 (hw_config->dma);
+      return 0;
+    }
 
   if (!(sb_config = sound_getconf (SNDCARD_SB)))
     {

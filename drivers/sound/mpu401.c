@@ -35,14 +35,12 @@
 
 #include "sound_config.h"
 
-#ifdef CONFIGURE_SOUNDCARD
-
-#if (!defined(EXCLUDE_MPU401) || !defined(EXCLUDE_MPU_EMU)) && !defined(EXCLUDE_MIDI)
+#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
 #include "coproc.h"
 
 static int      init_sequence[20];	/* NOTE! pos 0 = len, start pos 1. */
 
-#ifndef EXCLUDE_SEQUENCER
+#ifdef CONFIG_SEQUENCER
 static int      timer_mode = TMR_INTERNAL, timer_caps = TMR_INTERNAL;
 
 #endif
@@ -122,7 +120,7 @@ static void     mpu_timer_interrupt (void);
 static void     timer_ext_event (struct mpu_config *devc, int event, int parm);
 
 static struct synth_info mpu_synth_info_proto =
-{"MPU-401 MIDI interface", 0, SYNTH_TYPE_MIDI, 0, 0, 128, 0, 128, SYNTH_CAP_INPUT};
+{"MPU-401 MIDI interface", 0, SYNTH_TYPE_MIDI, MIDI_TYPE_MPU401, 0, 128, 0, 128, SYNTH_CAP_INPUT};
 
 static struct synth_info mpu_synth_info[MAX_MIDI_DEV];
 
@@ -153,7 +151,7 @@ static unsigned char len_tab[] =	/* # of data bytes following a status
   0				/* Fx */
 };
 
-#ifdef EXCLUDE_SEQUENCER
+#ifndef CONFIG_SEQUENCER
 #define STORE(cmd)
 #else
 #define STORE(cmd) \
@@ -576,11 +574,11 @@ mpu401_out (int dev, unsigned char midi_byte)
   devc = &dev_conf[dev];
 
   /*
-   * Sometimes it takes about 13000 loops before the output becomes ready
+   * Sometimes it takes about 30000 loops before the output becomes ready
    * (After reset). Normally it takes just about 10 loops.
    */
 
-  for (timeout = 3000; timeout > 0 && !output_ready (devc); timeout--);
+  for (timeout = 30000; timeout > 0 && !output_ready (devc); timeout--);
 
   save_flags (flags);
   cli ();
@@ -919,6 +917,7 @@ mpu_synth_open (int dev, int mode)
     {
       mpu_cmd (midi_dev, 0x8B, 0);	/* Enable data in stop mode */
       mpu_cmd (midi_dev, 0x34, 0);	/* Return timing bytes in stop mode */
+      mpu_cmd (midi_dev, 0x87, 0);	/* Enable pitch & controller */
     }
 
   return 0;
@@ -1129,9 +1128,6 @@ attach_mpu401 (long mem_start, struct address_info *hw_config)
 	MPU_CAP_CLS | MPU_CAP_2PORT;
 
       revision_char = (devc->revision == 0x7f) ? 'M' : ' ';
-      printk (" <MQX-%d%c MIDI Interface>",
-	      ports,
-	      revision_char);
       sprintf (mpu_synth_info[num_midis].name,
 	       "MQX-%d%c MIDI Interface #%d",
 	       ports,
@@ -1147,10 +1143,6 @@ attach_mpu401 (long mem_start, struct address_info *hw_config)
 
       devc->capabilities |= MPU_CAP_SYNC | MPU_CAP_FSK;
 
-      printk (" <MPU-401 MIDI Interface %d.%d%c>",
-	      (int) (devc->version & 0xf0) >> 4,
-	      devc->version & 0x0f,
-	      revision_char);
       sprintf (mpu_synth_info[num_midis].name,
 	       "MPU-401 %d.%d%c Midi interface #%d",
 	       (int) (devc->version & 0xf0) >> 4,
@@ -1161,6 +1153,8 @@ attach_mpu401 (long mem_start, struct address_info *hw_config)
 
   strcpy (mpu401_midi_operations[num_midis].info.name,
 	  mpu_synth_info[num_midis].name);
+
+  conf_printf (mpu_synth_info[num_midis].name, hw_config);
 
   mpu401_synth_operations[num_midis]->midi_dev = devc->devno = num_midis;
   mpu401_synth_operations[devc->devno]->info =
@@ -1273,7 +1267,7 @@ probe_mpu401 (struct address_info *hw_config)
   tmp_devc.opened = 0;
   tmp_devc.osp = hw_config->osp;
 
-#if !defined(EXCLUDE_AEDSP16) && defined(AEDSP16_MPU401)
+#if defined(CONFIG_AEDSP16) && defined(AEDSP16_MPU401)
   /*
      * Initialize Audio Excel DSP 16 to MPU-401, before any operation.
    */
@@ -1311,7 +1305,7 @@ unload_mpu401 (struct address_info *hw_config)
  *      Timer stuff
  ****************************************************/
 
-#if !defined(EXCLUDE_SEQUENCER)
+#if defined(CONFIG_SEQUENCER)
 
 static volatile int timer_initialized = 0, timer_open = 0, tmr_running = 0;
 static volatile int curr_tempo, curr_timebase, hw_timebase;
@@ -1827,7 +1821,5 @@ mpu_timer_init (int midi_dev)
 #endif
 
 
-
-#endif
 
 #endif

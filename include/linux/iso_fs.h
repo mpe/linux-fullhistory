@@ -175,6 +175,7 @@ extern int isofs_bmap(struct inode *,int);
 
 extern void isofs_put_super(struct super_block *);
 extern struct super_block *isofs_read_super(struct super_block *,void *,int);
+extern int init_iso9660_fs(void);
 extern void isofs_read_inode(struct inode *);
 extern void isofs_put_inode(struct inode *);
 extern void isofs_statfs(struct super_block *, struct statfs *, int);

@@ -34,7 +34,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_SB) && !defined(EXCLUDE_SBPRO)
+#if defined(CONFIG_SB)
 #define __SB_MIXER_C__
 
 #include "sb.h"
@@ -44,6 +44,7 @@
 extern int      sbc_base;
 extern int      Jazz16_detected;
 extern sound_os_info *sb_osp;
+extern int      AudioDrive;
 
 static int      mixer_initialized = 0;
 
@@ -64,9 +65,9 @@ sb_setmixer (unsigned int port, unsigned int value)
   outb ((unsigned char) (port & 0xff), MIXER_ADDR);	/*
 							   * Select register
 							 */
-  tenmicrosec ();
+  tenmicrosec (sb_osp);
   outb ((unsigned char) (value & 0xff), MIXER_DATA);
-  tenmicrosec ();
+  tenmicrosec (sb_osp);
   restore_flags (flags);
 }
 
@@ -81,9 +82,9 @@ sb_getmixer (unsigned int port)
   outb ((unsigned char) (port & 0xff), MIXER_ADDR);	/*
 							   * Select register
 							 */
-  tenmicrosec ();
+  tenmicrosec (sb_osp);
   val = inb (MIXER_DATA);
-  tenmicrosec ();
+  tenmicrosec (sb_osp);
   restore_flags (flags);
 
   return val;
@@ -201,7 +202,6 @@ sb_mixer_get (int dev)
   return levels[dev];
 }
 
-#ifdef JAZZ16
 static char     smw_mix_regs[] =	/* Left mixer registers */
 {
   0x0b,				/* SOUND_MIXER_VOLUME */
@@ -293,8 +293,6 @@ smw_mixer_set (int dev, int value)
   return left | (right << 8);
 }
 
-#endif
-
 static int
 sb_mixer_set (int dev, int value)
 {
@@ -304,10 +302,8 @@ sb_mixer_set (int dev, int value)
   int             regoffs;
   unsigned char   val;
 
-#ifdef JAZZ16
   if (Jazz16_detected == 2)
     return smw_mixer_set (dev, value);
-#endif
 
   if (left > 100)
     left = 100;
@@ -449,7 +445,7 @@ sb_mixer_ioctl (int dev, unsigned int cmd, ioctl_arg arg)
 {
   if (((cmd >> 8) & 0xff) == 'M')
     {
-      if (cmd & IOC_IN)
+      if (_IOC_DIR (cmd) & _IOC_WRITE)
 	switch (cmd & 0xff)
 	  {
 	  case SOUND_MIXER_RECSRC:
@@ -539,8 +535,13 @@ sb_mixer_init (int major_model)
     case 3:
       mixer_caps = SOUND_CAP_EXCL_INPUT;
 
-#ifdef JAZZ16
-      if (Jazz16_detected == 2)	/* SM Wave */
+      if (AudioDrive)
+	{
+	  supported_devices = ES688_MIXER_DEVICES;
+	  supported_rec_devices = ES688_RECORDING_DEVICES;
+	  iomap = &es688_mix;
+	}
+      else if (Jazz16_detected == 2)	/* SM Wave */
 	{
 	  supported_devices = 0;
 	  supported_rec_devices = 0;
@@ -549,7 +550,6 @@ sb_mixer_init (int major_model)
 	  mixer_type = 1;
 	}
       else
-#endif
 #ifdef __SGNXPRO__
       if (mixer_type == 2)	/* A SGNXPRO was detected */
 	{

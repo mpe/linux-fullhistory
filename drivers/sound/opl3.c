@@ -36,7 +36,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_YM3812)
+#if defined(CONFIG_YM3812)
 
 #include "opl3.h"
 
@@ -226,7 +226,7 @@ opl3_detect (int ioaddr, sound_os_info * osp)
    */
 
   for (i = 0; i < 50; i++)
-    tenmicrosec ();
+    tenmicrosec (devc->osp);
 
   stat2 = inb (ioaddr);		/*
 				   * Read status after timers have expired
@@ -281,18 +281,18 @@ opl3_detect (int ioaddr, sound_os_info * osp)
 	  int             tmp;
 
 	  outb (0x02, ioaddr - 8);	/* Select OPL4 ID register */
-	  tenmicrosec ();
+	  tenmicrosec (devc->osp);
 	  tmp = inb (ioaddr - 7);	/* Read it */
-	  tenmicrosec ();
+	  tenmicrosec (devc->osp);
 
 	  if (tmp == 0x20)	/* OPL4 should return 0x20 here */
 	    {
 	      detected_model = 4;
 
 	      outb (0xF8, ioaddr - 8);	/* Select OPL4 FM mixer control */
-	      tenmicrosec ();
+	      tenmicrosec (devc->osp);
 	      outb (0x1B, ioaddr - 7);	/* Write value */
-	      tenmicrosec ();
+	      tenmicrosec (devc->osp);
 	    }
 	  else
 	    detected_model = 3;
@@ -775,7 +775,7 @@ opl3_command (int io_addr, unsigned int addr, unsigned int val)
   outb ((unsigned char) (addr & 0xff), io_addr);
 
   if (!devc->model != 2)
-    tenmicrosec ();
+    tenmicrosec (devc->osp);
   else
     for (i = 0; i < 2; i++)
       inb (io_addr);
@@ -784,9 +784,9 @@ opl3_command (int io_addr, unsigned int addr, unsigned int val)
 
   if (devc->model != 2)
     {
-      tenmicrosec ();
-      tenmicrosec ();
-      tenmicrosec ();
+      tenmicrosec (devc->osp);
+      tenmicrosec (devc->osp);
+      tenmicrosec (devc->osp);
     }
   else
     for (i = 0; i < 2; i++)
@@ -1222,9 +1222,9 @@ opl3_init (long mem_start, int ioaddr, sound_os_info * osp)
   if (devc->model == 2)
     {
       if (devc->is_opl4)
-	printk (" <Yamaha OPL4/OPL3 FM>");
+	conf_printf2 ("Yamaha OPL4/OPL3 FM", ioaddr, 0, -1, -1);
       else
-	printk (" <Yamaha OPL-3 FM>");
+	conf_printf2 ("Yamaha OPL3 FM", ioaddr, 0, -1, -1);
 
       devc->v_alloc->max_voice = devc->nr_voice = 18;
       devc->fm_info.nr_drums = 0;
@@ -1242,7 +1242,7 @@ opl3_init (long mem_start, int ioaddr, sound_os_info * osp)
     }
   else
     {
-      printk (" <Yamaha 2-OP FM>");
+      conf_printf2 ("Yamaha OPL2 FM", ioaddr, 0, -1, -1);
       devc->v_alloc->max_voice = devc->nr_voice = 9;
       devc->fm_info.nr_drums = 0;
 

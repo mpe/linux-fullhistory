@@ -24,16 +24,14 @@
  *
  *  proc net directory handling functions
  */
-#include <linux/autoconf.h>
-
-#include <asm/segment.h>
-
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <linux/fcntl.h>
 #include <linux/mm.h>
+
+#include <asm/segment.h>
 
 #define PROC_BLOCK_SIZE	(3*1024)		/* 4K page size but our output routines use some slack for overruns */
 

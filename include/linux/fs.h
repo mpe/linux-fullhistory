@@ -136,14 +136,35 @@ typedef char buffer_block[BLOCK_SIZE];
 #define BH_Touched	4	/* 1 if the buffer has been touched (aging) */
 #define BH_Has_aged	5	/* 1 if the buffer has been aged (aging) */
 #define BH_Protected	6	/* 1 if the buffer is protected */
+#define BH_FreeOnIO	7	/* 1 to discard the buffer_head after IO */
 
+/*
+ * Try to keep the most commonly used fields in single cache lines (16
+ * bytes) to improve performance.  This ordering should be
+ * particularly beneficial on 32-bit processors.
+ * 
+ * We use the first 16 bytes for the data which is used in searches
+ * over the block hash lists (ie. getblk(), find_buffer() and
+ * friends).
+ * 
+ * The second 16 bytes we use for lru buffer scans, as used by
+ * sync_buffers() and refill_freelist().  -- sct
+ */
 struct buffer_head {
-	char * b_data;			/* pointer to data block (1024 bytes) */
-	unsigned long b_size;		/* block size */
+	/* First cache line: */
 	unsigned long b_blocknr;	/* block number */
 	kdev_t b_dev;			/* device (B_FREE = free) */
+	struct buffer_head * b_next;	/* Hash queue list */
+	struct buffer_head * b_this_page;	/* circular list of buffers in one page */
+
+	/* Second cache line: */
 	unsigned long b_state;		/* buffer state bitmap (see above) */
+	struct buffer_head * b_next_free;
 	unsigned int b_count;		/* users using this block */
+	unsigned long b_size;		/* block size */
+
+	/* Non-performance-critical data follows. */
+	char * b_data;			/* pointer to data block (1024 bytes) */
 	unsigned int b_list;		/* List that this buffer appears */
 	unsigned long b_flushtime;      /* Time when this (dirty) buffer
 					 * should be written */
@@ -151,10 +172,7 @@ struct buffer_head {
 					 * last used. */
 	struct wait_queue * b_wait;
 	struct buffer_head * b_prev;		/* doubly linked list of hash-queue */
-	struct buffer_head * b_next;
 	struct buffer_head * b_prev_free;	/* doubly linked list of buffers */
-	struct buffer_head * b_next_free;
-	struct buffer_head * b_this_page;	/* circular list of buffers in one page */
 	struct buffer_head * b_reqnext;		/* request queue */
 };
 
@@ -507,13 +525,7 @@ extern int nr_buffer_heads;
 #define BUF_SHARED 5   /* Buffers shared */
 #define NR_LIST 6
 
-extern inline void mark_buffer_uptodate(struct buffer_head * bh, int on)
-{
-	if (on)
-		set_bit(BH_Uptodate, &bh->b_state);
-	else
-		clear_bit(BH_Uptodate, &bh->b_state);
-}
+void mark_buffer_uptodate(struct buffer_head * bh, int on);
 
 extern inline void mark_buffer_clean(struct buffer_head * bh)
 {

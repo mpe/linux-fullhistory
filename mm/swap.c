@@ -58,6 +58,8 @@ swap_control_t swap_control = {
 	RCL_ROUND_ROBIN		/* Balancing policy */
 };
 
+swapstat_t swapstats = {0};
+
 /* General swap control */
 
 /* Parse the kernel command line "swap=" option at load time: */

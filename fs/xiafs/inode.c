@@ -511,17 +511,25 @@ int xiafs_sync_inode (struct inode *inode)
     return err;
 }
 
-#ifdef MODULE
-
 /* Every kernel module contains stuff like this. */
 
 static struct file_system_type xiafs_fs_type = {
 	xiafs_read_super, "xiafs", 1, NULL
 };
 
+int init_xiafs_fs(void)
+{
+        return register_filesystem(&xiafs_fs_type);
+}
+
+#ifdef MODULE
 int init_module(void)
 {
-	return register_filesystem(&xiafs_fs_type);
+	int status;
+
+	if ((status = init_xiafs_fs()) == 0)
+		register_symtab(0);
+	return status;
 }
 
 void cleanup_module(void)

@@ -142,6 +142,7 @@ int ncp_ioctl (struct inode * inode, struct file * filp,
 /* linux/fs/ncpfs/inode.c */
 struct super_block *ncp_read_super(struct super_block *sb,
                                    void *raw_data, int silent);
+extern int init_ncp_fs(void);
 void ncp_invalidate_connection(struct ncp_server *server);
 int ncp_conn_is_valid(struct ncp_server *server);
 

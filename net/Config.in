@@ -20,3 +20,4 @@ bool 'Kernel/User network link driver(ALPHA)' CONFIG_NETLINK
 if [ "$CONFIG_NETLINK" = "y" ]; then
   bool 'Routing messages' CONFIG_RTNETLINK
 fi
+endmenu

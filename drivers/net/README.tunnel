@@ -113,9 +113,9 @@ address on network B, and machine B is simply acting as a proxy
 for machine A.  Machine A needs it's tunnel address to be on network 
 B so that when packets from machine B are unwrapped, the Linux 
 routing system knows that the address is a local one.  Due to a 
-feature of Linux, any packets recieved locally, bound for another
+feature of Linux, any packets received locally, bound for another
 local address, are simply routed through the loopback interface.
-This means that the tunnel device should never recieve packets.  Even
+This means that the tunnel device should never receive packets.  Even
 on machine B, it is the ethernet interface that is receiving wrapped
 packets, and once they are unwrapped they go back out the ethernet
 interface.  This could cause Linux to generate ICMP redirect messages

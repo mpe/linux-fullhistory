@@ -288,17 +288,25 @@ int nfs_notify_change(struct inode *inode, struct iattr *attr)
 	return error;
 }
 
-#ifdef MODULE
-
 /* Every kernel module contains stuff like this. */
 
 static struct file_system_type nfs_fs_type = {
 	nfs_read_super, "nfs", 0, NULL
 };
 
+int init_nfs_fs(void)
+{
+        return register_filesystem(&nfs_fs_type);
+}
+
+#ifdef MODULE
 int init_module(void)
 {
-	return register_filesystem(&nfs_fs_type);
+	int status;
+
+	if ((status = init_nfs_fs()) == 0)
+		register_symtab(0);
+	return status;
 }
 
 void cleanup_module(void)

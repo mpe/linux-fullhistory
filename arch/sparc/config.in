@@ -17,6 +17,7 @@ define_bool CONFIG_SUN_CONSOLE y
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
+endmenu
 
 source drivers/block/Config.in
 
@@ -32,6 +33,7 @@ tristate 'SCSI support' CONFIG_SCSI
 if [ "$CONFIG_SCSI" != "n" ]; then
 	source drivers/scsi/Config.in
 fi
+endmenu
 
 if [ "$CONFIG_NET" = "y" ]; then
 	mainmenu_option next_comment
@@ -41,6 +43,7 @@ if [ "$CONFIG_NET" = "y" ]; then
 	if [ "$CONFIG_NETDEVICES" = "y" ]; then
 		source drivers/net/Config.in
 	fi
+	endmenu
 fi
 
 source fs/Config.in

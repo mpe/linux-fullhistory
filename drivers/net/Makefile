@@ -352,10 +352,10 @@ endif
 # If anything built-in uses slhc, then build it into the kernel also.
 # If not, but a module uses it, build as a module.
 ifdef CONFIG_SLHC_BUILTIN
-L_OBJS += slhc.o
+LX_OBJS += slhc.o
 else
   ifdef CONFIG_SLHC_MODULE
-  M_OBJS += slhc.o
+  MX_OBJS += slhc.o
   endif
 endif
 

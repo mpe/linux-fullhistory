@@ -42,6 +42,17 @@ typedef struct kswapd_control_v1
 typedef kswapd_control_v1 kswapd_control_t;
 extern kswapd_control_t kswapd_ctl;
 
+typedef struct swapstat_v1
+{
+	int	wakeups;
+	int	pages_reclaimed;
+	int	pages_shm;
+	int	pages_mmap;
+	int	pages_swap;
+} swapstat_v1;
+typedef swapstat_v1 swapstat_t;
+extern swapstat_t swapstats;
+
 #define SC_VERSION	1
 #define SC_MAX_VERSION	1
 

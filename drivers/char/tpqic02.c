@@ -193,8 +193,6 @@
  * Also, be careful to avoid IO conflicts with other devices!
  */
 
-#include <linux/autoconf.h>
-
 
 /*
 #define TDEBUG

@@ -28,18 +28,8 @@
  *
  */
 
-#undef CONFIGURE_SOUNDCARD
-#undef DYNAMIC_BUFFER
-
-#include "local.h"
-
-#ifdef KERNEL_SOUNDCARD
-#define CONFIGURE_SOUNDCARD
-#define DYNAMIC_BUFFER
-#undef LOADABLE_SOUNDCARD
-#endif
-
 #include "os.h"
+#include "local.h"
 #include "soundvers.h"
 
 #if defined(ISC) || defined(SCO) || defined(SVR42)
@@ -51,12 +41,9 @@
 
 
 
-
 #ifndef SND_DEFAULT_ENABLE
 #define SND_DEFAULT_ENABLE	1
 #endif
-
-#ifdef CONFIGURE_SOUNDCARD
 
 #ifndef MAX_REALTIME_FACTOR
 #define MAX_REALTIME_FACTOR	4
@@ -89,10 +76,16 @@
 #define PAS_BASE	0x388
 #endif
 
-#ifdef JAZZ16
-#ifndef JAZZ_DMA16
-#define JAZZ_DMA16	5
+#if defined(SB16_DMA) && !defined(SB_DMA2)
+#  define SB_DMA2 SB16_DMA
 #endif
+
+#if defined(SB16MIDI_BASE) && !defined(SB_MPU_BASE)
+#   define SB_MPU_BASE SB16MIDI_BASE
+#endif
+
+#ifndef SB_MPU_IRQ
+#  define SB_MPU_IRQ SBC_IRQ
 #endif
 
 /* SEQ_MAX_QUEUE is the maximum number of sequencer events buffered by the
@@ -198,5 +191,3 @@ struct channel_info {
 
 #define TIMER_ARMED	121234
 #define TIMER_NOT_ARMED	1
-
-#endif

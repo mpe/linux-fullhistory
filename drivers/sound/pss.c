@@ -29,7 +29,7 @@
 
 #include "sound_config.h"
 
-#if defined (CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_PSS) && !defined(EXCLUDE_AUDIO)
+#if defined(CONFIG_PSS) && defined(CONFIG_AUDIO)
 
 /*
  * PSS registers.
@@ -108,13 +108,6 @@ probe_pss (struct address_info *hw_config)
       printk ("PSS: I/O port conflict\n");
       return 0;
     }
-
-  if (irq != 3 && irq != 5 && irq != 7 && irq != 9 &&
-      irq != 10 && irq != 11 && irq != 12)
-    return 0;
-
-  if (dma != 5 && dma != 6 && dma != 7)
-    return 0;
 
   id = inw (REG (PSS_ID));
   if ((id >> 8) != 'E')
@@ -329,6 +322,7 @@ long
 attach_pss (long mem_start, struct address_info *hw_config)
 {
   unsigned short  id;
+  char            tmp[100];
 
   devc->base = hw_config->io_base;
   devc->irq = hw_config->irq;
@@ -370,7 +364,8 @@ attach_pss (long mem_start, struct address_info *hw_config)
 #endif
 
   pss_initialized = 1;
-  printk (" <ECHO-PSS  Rev. %d>", id);
+  sprintf (tmp, "ECHO-PSS  Rev. %d", id);
+  conf_printf (tmp, hw_config);
 
   return mem_start;
 }
@@ -426,7 +421,7 @@ probe_pss_mpu (struct address_info *hw_config)
 	break;			/* No more input */
     }
 
-#if (!defined(EXCLUDE_MPU401) || !defined(EXCLUDE_MPU_EMU)) && !defined(EXCLUDE_MIDI)
+#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
   return probe_mpu401 (hw_config);
 #else
   return 0
@@ -700,7 +695,7 @@ attach_pss_mpu (long mem_start, struct address_info *hw_config)
   int             prev_devs;
   long            ret;
 
-#if (!defined(EXCLUDE_MPU401) || !defined(EXCLUDE_MPU_EMU)) && !defined(EXCLUDE_MIDI)
+#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
   prev_devs = num_midis;
   ret = attach_mpu401 (mem_start, hw_config);
 

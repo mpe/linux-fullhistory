@@ -29,7 +29,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_SSCAPE)
+#if defined(CONFIG_SSCAPE)
 
 #include "coproc.h"
 
@@ -102,7 +102,7 @@ static struct sscape_info dev_info =
 {0};
 static struct sscape_info *devc = &dev_info;
 
-static struct wait_queue *sscape_sleeper = NULL;
+static wait_handle *sscape_sleeper = NULL;
 static volatile struct snd_wait sscape_sleep_flag =
 {0};
 
@@ -309,7 +309,7 @@ sscapeintr (int irq, struct pt_regs *dummy)
     {
       {
 	sscape_sleep_flag.mode = WK_WAKEUP;
-	wake_up (&sscape_sleeper);
+	module_wake_up (&sscape_sleeper);
       };
     }
 
@@ -318,7 +318,7 @@ sscapeintr (int irq, struct pt_regs *dummy)
       printk ("SSCAPE: Host interrupt, data=%02x\n", host_read (devc));
     }
 
-#if (!defined(EXCLUDE_MPU401) || !defined(EXCLUDE_MPU_EMU)) && !defined(EXCLUDE_MIDI)
+#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
   if (bits & 0x01)
     {
       mpuintr (irq, NULL);
@@ -338,35 +338,6 @@ sscapeintr (int irq, struct pt_regs *dummy)
 
 }
 
-static void
-sscape_enable_intr (struct sscape_info *devc, unsigned intr_bits)
-{
-  unsigned char   temp, orig;
-
-  temp = orig = sscape_read (devc, GA_INTENA_REG);
-  temp |= intr_bits;
-  temp |= 0x80;			/* Master IRQ enable */
-
-  if (temp == orig)
-    return;			/* No change */
-
-  sscape_write (devc, GA_INTENA_REG, temp);
-}
-
-static void
-sscape_disable_intr (struct sscape_info *devc, unsigned intr_bits)
-{
-  unsigned char   temp, orig;
-
-  temp = orig = sscape_read (devc, GA_INTENA_REG);
-  temp &= ~intr_bits;
-  if ((temp & ~0x80) == 0x00)
-    temp = 0x00;		/* Master IRQ disable */
-  if (temp == orig)
-    return;			/* No change */
-
-  sscape_write (devc, GA_INTENA_REG, temp);
-}
 
 static void
 do_dma (struct sscape_info *devc, int dma_chan, unsigned long buf, int blk_size, int mode)
@@ -431,6 +402,7 @@ sscape_coproc_open (void *dev_info, int sub_device)
 	return -EIO;
     }
 
+  sscape_sleep_flag.mode = WK_NONE;
   return 0;
 }
 
@@ -445,7 +417,7 @@ sscape_coproc_close (void *dev_info, int sub_device)
   if (devc->dma_allocated)
     {
       sscape_write (devc, GA_DMAA_REG, 0x20);	/* DMA channel disabled */
-#ifndef EXCLUDE_NATIVE_PCM
+#ifdef CONFIG_NATIVE_PCM
 #endif
       devc->dma_allocated = 0;
     }
@@ -478,7 +450,7 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
       cli ();
       if (devc->dma_allocated == 0)
 	{
-#ifndef EXCLUDE_NATIVE_PCM
+#ifdef CONFIG_NATIVE_PCM
 #endif
 
 	  devc->dma_allocated = 1;
@@ -523,11 +495,11 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
 	unsigned long   tl;
 
 	if (1)
-	  current->timeout = tl = jiffies + (1);
+	  current_set_timeout (tl = jiffies + (1));
 	else
 	  tl = 0xffffffff;
 	sscape_sleep_flag.mode = WK_SLEEP;
-	interruptible_sleep_on (&sscape_sleeper);
+	module_interruptible_sleep_on (&sscape_sleeper);
 	if (!(sscape_sleep_flag.mode & WK_WAKEUP))
 	  {
 	    if (jiffies >= tl)
@@ -571,11 +543,11 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
 	    unsigned long   tl;
 
 	    if (1)
-	      current->timeout = tl = jiffies + (1);
+	      current_set_timeout (tl = jiffies + (1));
 	    else
 	      tl = 0xffffffff;
 	    sscape_sleep_flag.mode = WK_SLEEP;
-	    interruptible_sleep_on (&sscape_sleeper);
+	    module_interruptible_sleep_on (&sscape_sleeper);
 	    if (!(sscape_sleep_flag.mode & WK_WAKEUP))
 	      {
 		if (jiffies >= tl)
@@ -604,11 +576,11 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
 	    unsigned long   tl;
 
 	    if (1)
-	      current->timeout = tl = jiffies + (1);
+	      current_set_timeout (tl = jiffies + (1));
 	    else
 	      tl = 0xffffffff;
 	    sscape_sleep_flag.mode = WK_SLEEP;
-	    interruptible_sleep_on (&sscape_sleeper);
+	    module_interruptible_sleep_on (&sscape_sleeper);
 	    if (!(sscape_sleep_flag.mode & WK_WAKEUP))
 	      {
 		if (jiffies >= tl)
@@ -917,10 +889,10 @@ attach_sscape (long mem_start, struct address_info *hw_config)
   if (old_hardware)
     {
       valid_interrupts = valid_interrupts_old;
-      printk (" <Ensoniq Soundscape (old)>");
+      conf_printf ("Ensoniq Soundscape (old)", hw_config);
     }
   else
-    printk (" <Ensoniq Soundscape>");
+    conf_printf ("Ensoniq Soundscape", hw_config);
 
   for (i = 0; i < sizeof (valid_interrupts); i++)
     if (hw_config->irq == valid_interrupts[i])
@@ -964,7 +936,7 @@ attach_sscape (long mem_start, struct address_info *hw_config)
 
       case 9:			/* Master control reg. Don't modify CR-ROM bits. Disable SB emul */
 	sscape_write (devc, i,
-		      (sscape_read (devc, i) & 0xf0) | 0x00);
+		      (sscape_read (devc, i) & 0xf0) | 0x08);
 	break;
 
       default:
@@ -986,7 +958,7 @@ attach_sscape (long mem_start, struct address_info *hw_config)
   }
 #endif
 
-#if !defined(EXCLUDE_MIDI) && !defined(EXCLUDE_MPU_EMU)
+#if defined(CONFIG_MIDI) && defined(CONFIG_MPU_EMU)
   if (probe_mpu401 (hw_config))
     hw_config->always_detect = 1;
   {
@@ -1003,7 +975,7 @@ attach_sscape (long mem_start, struct address_info *hw_config)
 #ifndef EXCLUDE_NATIVE_PCM
   /* Not supported yet */
 
-#ifndef EXCLUDE_AUDIO
+#ifdef CONFIG_AUDIO
   if (num_audiodevs < MAX_AUDIO_DEV)
     {
       audio_devs[my_dev = num_audiodevs++] = &sscape_audio_operations;
@@ -1088,7 +1060,6 @@ probe_sscape (struct address_info *hw_config)
 
   if (old_hardware)		/* Check that it's really an old Spea/Reveal card. */
     {
-      int             status = 0;
       unsigned char   tmp;
       int             cc;
 
@@ -1153,7 +1124,7 @@ attach_ss_ms_sound (long mem_start, struct address_info *hw_config)
 
   int             i, irq_bits = 0xff;
 
-#ifdef EXCLUDE_NATIVE_PCM
+#ifndef CONFIG_NATIVE_PCM
   int             prev_devs = num_audiodevs;
 
 #endif
@@ -1192,7 +1163,7 @@ attach_ss_ms_sound (long mem_start, struct address_info *hw_config)
 	       0,
 	       devc->osp);
 
-#ifdef EXCLUDE_NATIVE_PCM
+#ifndef CONFIG_NATIVE_PCM
   if (num_audiodevs == (prev_devs + 1))		/* The AD1848 driver installed itself */
     audio_devs[prev_devs]->coproc = &sscape_coproc_operations;
 #endif

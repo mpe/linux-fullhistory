@@ -551,6 +551,7 @@ ncp_init_root(struct ncp_server *server)
         root->finfo.opened = 0;
 	i->attributes  = aDIR;
 	i->dataStreamSize = 1024;
+	i->volNumber = NCP_NUMBER_OF_VOLUMES+1;	/* illegal volnum */
 	ncp_date_unix2dos(0, &(i->creationTime), &(i->creationDate));
 	ncp_date_unix2dos(0, &(i->modifyTime), &(i->modifyDate));
 	ncp_date_unix2dos(0, &dummy, &(i->lastAccessDate));
@@ -608,6 +609,7 @@ ncp_find_inode(struct inode *dir, const char *name)
         do
 	{
 		if (   (result->dir->finfo.i.DosDirNum == dir_info->DosDirNum)
+		    && (result->dir->finfo.i.volNumber == dir_info->volNumber)
 		    && (strcmp(result->finfo.i.entryName, name) == 0))
 		{
                         return result;
@@ -626,8 +628,9 @@ ncp_lookup(struct inode *dir, const char *__name, int len,
 {
 	struct nw_file_info finfo;
 	struct ncp_server *server;
-        struct ncp_inode_info *result_info;
-        int found_in_cache;
+	struct ncp_inode_info *result_info;
+	int found_in_cache;
+	char name[len+1];
 
 	*result = NULL;
 
@@ -671,7 +674,9 @@ ncp_lookup(struct inode *dir, const char *__name, int len,
 		}
 	}
 
-        result_info = ncp_find_inode(dir, __name);
+	memcpy(name, __name, len);
+	name[len] = 0;
+	result_info = ncp_find_inode(dir, name);
 
         if (result_info != 0)
 	{
@@ -710,7 +715,7 @@ ncp_lookup(struct inode *dir, const char *__name, int len,
                         DDPRINTK("ncp_lookup: trying index: %d, name: %s\n",
                                 i, c_entry[i].i.entryName);
 
-                        if (strcmp(c_entry[i].i.entryName, __name) == 0)
+                        if (strcmp(c_entry[i].i.entryName, name) == 0)
 			{
                                 DPRINTK("ncp_lookup: found in cache!\n");
 				finfo.i = c_entry[i].i;
@@ -724,20 +729,15 @@ ncp_lookup(struct inode *dir, const char *__name, int len,
 
         if (found_in_cache == 0)
 	{
-		char this_name[len+1];
-
-		memcpy(this_name, __name, len);
-		this_name[len] = 0;
-		str_upper(this_name);
+		str_upper(name);
 
 		DDPRINTK("ncp_lookup: do_lookup on %s/%s\n",
-			 NCP_ISTRUCT(dir)->entryName, this_name);
+			 NCP_ISTRUCT(dir)->entryName, name);
 
 		if (ncp_do_lookup(server,
 				  dir->i_ino == (int)&(NCP_SERVER(dir)->root)
 				  ? NULL : NCP_ISTRUCT(dir),
-				  this_name,
-				  &(finfo.i)) != 0)
+				  name, &(finfo.i)) != 0)
 		{
                         iput(dir);
                         return -ENOENT;

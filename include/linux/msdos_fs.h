@@ -164,6 +164,7 @@ extern void msdos_put_inode(struct inode *inode);
 extern void msdos_put_super(struct super_block *sb);
 extern struct super_block *msdos_read_super(struct super_block *s,
 					    void *data,int);
+extern int init_msdos_fs(void);
 extern void msdos_statfs(struct super_block *sb,struct statfs *buf, int);
 extern int msdos_bmap(struct inode *inode,int block);
 extern void msdos_read_inode(struct inode *inode);

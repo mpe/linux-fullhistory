@@ -421,6 +421,9 @@ set_get_cmap(unsigned char * arg, int set) {
  * dummy routines for the VESA blanking code, which is VGA only,
  * so we don't have to carry that stuff around for the TGA...
  */
+void vesa_powerdown(void)
+{
+}
 void vesa_blank(void)
 {
 }

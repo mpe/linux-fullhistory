@@ -85,6 +85,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( MATROX,		MATROX_MGA_IMP,	"MGA Impression"),
 	DEVICE( CT,		CT_65545,	"65545"),
 	DEVICE( FD,		FD_36C70,	"TMC-18C30"),
+	DEVICE( SI,		SI_6201,	"6201"),
 	DEVICE( SI,		SI_6202,	"6202"),
 	DEVICE( SI,		SI_503,		"85C503"),
 	DEVICE( SI,		SI_501,		"85C501"),

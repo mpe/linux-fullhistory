@@ -30,11 +30,12 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_TRIX)
+#if defined(CONFIG_TRIX)
 
 #ifdef INCLUDE_TRIX_BOOT
 #include "trix_boot.h"
 #endif
+
 
 static int      kilroy_was_here = 0;	/* Don't detect twice */
 static int      sb_initialized = 0;
@@ -80,6 +81,7 @@ download_boot (int base)
   outb (0x00, base + 6);	/* Reset */
   outb (0x50, 0x390);		/* ?????? */
 #endif
+
 }
 
 static int
@@ -324,20 +326,20 @@ probe_trix_sb (struct address_info *hw_config)
 long
 attach_trix_sb (long mem_start, struct address_info *hw_config)
 {
-#ifndef EXCLUDE_SB
+#ifdef CONFIG_SB
   extern int      sb_no_recording;
 
   sb_dsp_disable_midi ();
   sb_no_recording = 1;
 #endif
-  printk (" <AudioTriX (SB)>");
+  conf_printf ("AudioTriX (SB)", hw_config);
   return mem_start;
 }
 
 long
 attach_trix_mpu (long mem_start, struct address_info *hw_config)
 {
-#if (!defined(EXCLUDE_MPU401) || !defined(EXCLUDE_MPU_EMU)) && !defined(EXCLUDE_MIDI)
+#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
   return attach_mpu401 (mem_start, hw_config);
 #else
   return mem_start;
@@ -347,7 +349,7 @@ attach_trix_mpu (long mem_start, struct address_info *hw_config)
 int
 probe_trix_mpu (struct address_info *hw_config)
 {
-#if (!defined(EXCLUDE_MPU401) || !defined(EXCLUDE_MPU_EMU)) && !defined(EXCLUDE_MIDI)
+#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
   unsigned char   conf;
   static char     irq_bits[] =
   {-1, -1, -1, 1, 2, 3, -1, 4, -1, 5};
@@ -439,7 +441,7 @@ unload_trix_wss (struct address_info *hw_config)
 void
 unload_trix_mpu (struct address_info *hw_config)
 {
-#if (!defined(EXCLUDE_MPU401) || !defined(EXCLUDE_MPU_EMU)) && !defined(EXCLUDE_MIDI)
+#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
   unload_mpu401 (hw_config);
 #endif
 }

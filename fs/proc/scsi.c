@@ -20,13 +20,13 @@
  *  TODO: Improve support to write to the driver files
  *	  Add some more comments
  */
-#include <linux/autoconf.h>
-#include <asm/segment.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <linux/mm.h>
+
+#include <asm/segment.h>
 
 /* forward references */
 static int proc_readscsi(struct inode * inode, struct file * file,

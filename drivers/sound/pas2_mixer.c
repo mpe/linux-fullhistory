@@ -31,7 +31,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_PAS)
+#if defined(CONFIG_PAS)
 
 #include "pas.h"
 
@@ -264,7 +264,7 @@ pas_mixer_ioctl (int dev, unsigned int cmd, ioctl_arg arg)
 
   if (((cmd >> 8) & 0xff) == 'M')
     {
-      if (cmd & IOC_IN)
+      if (_IOC_DIR (cmd) & _IOC_WRITE)
 	return snd_ioctl_return ((int *) arg, pas_mixer_set (cmd & 0xff, get_fs_long ((long *) arg)));
       else
 	{			/*

@@ -43,4 +43,8 @@ try recompiling the driver with some strategically chosen #undef DEBUG_...'s
 changed into #defines (you'll find them in .../include/linux/optcd.h) and
 include the messages generated in your bug report. Good luck.
 
+I have inserted code to support multisession. It works for me, although
+it is very slow during disk detection. At this time multisession support
+is to be considered experimental. Please mail me your experiences.
+
 Leo Spiekman (spiekman@dutette.et.tudelft.nl)

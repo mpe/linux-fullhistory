@@ -403,15 +403,20 @@ int smb_malloced;
 int smb_current_malloced;
 #endif
 
-#ifdef MODULE
-
 static struct file_system_type smb_fs_type = {
         smb_read_super, "smbfs", 0, NULL
         };
 
-int
-init_module( void)
+int init_smb_fs(void)
 {
+        return register_filesystem(&smb_fs_type);
+}
+
+#ifdef MODULE
+int init_module(void)
+{
+	int status;
+
         DPRINTK("smbfs: init_module called\n");
 
 #ifdef DEBUG_SMB_MALLOC
@@ -420,7 +425,10 @@ init_module( void)
 #endif
 
         smb_init_dir_cache();
-        return register_filesystem(&smb_fs_type);
+
+	if ((status = init_smb_fs()) == 0)
+		register_symtab(0);
+	return status;
 }
 
 void
