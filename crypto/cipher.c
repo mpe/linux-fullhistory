@@ -129,7 +129,9 @@ static int crypt(struct crypto_tfm *tfm,
 			complete_dst(&walk_out, bsize, dst_p, in_place);
 
 			nbytes -= bsize;
-		} while (nbytes && !scatterwalk_across_pages(&walk_in, bsize));
+		} while (nbytes &&
+			 !scatterwalk_across_pages(&walk_in, bsize) &&
+			 !scatterwalk_across_pages(&walk_out, bsize));
 
 		scatterwalk_done(&walk_in, 0, nbytes);
 		scatterwalk_done(&walk_out, 1, nbytes);
