@@ -42,8 +42,10 @@ extern void cifs_delete_inode(struct inode *);
 
 /* Functions related to inodes */
 extern struct inode_operations cifs_dir_inode_ops;
-extern int cifs_create(struct inode *, struct dentry *, int, struct nameidata *);
-extern struct dentry *cifs_lookup(struct inode *, struct dentry *, struct nameidata *);
+extern int cifs_create(struct inode *, struct dentry *, int, 
+		       struct nameidata *);
+extern struct dentry * cifs_lookup(struct inode *, struct dentry *,
+				  struct nameidata *);
 extern int cifs_unlink(struct inode *, struct dentry *);
 extern int cifs_hardlink(struct dentry *, struct inode *, struct dentry *);
 extern int cifs_mknod(struct inode *, struct dentry *, int, dev_t);
@@ -82,7 +84,8 @@ extern struct dentry_operations cifs_dentry_ops;
 /* Functions related to symlinks */
 extern int cifs_follow_link(struct dentry *direntry, struct nameidata *nd);
 extern void cifs_put_link(struct dentry *direntry, struct nameidata *nd);
-extern int cifs_readlink(struct dentry *direntry, char __user *buffer, int buflen);
+extern int cifs_readlink(struct dentry *direntry, char __user *buffer, 
+			 int buflen);
 extern int cifs_symlink(struct inode *inode, struct dentry *direntry,
 			const char *symname);
 extern int	cifs_removexattr(struct dentry *, const char *);
@@ -90,5 +93,5 @@ extern int 	cifs_setxattr(struct dentry *, const char *, const void *,
 			 size_t, int);
 extern ssize_t	cifs_getxattr(struct dentry *, const char *, void *, size_t);
 extern ssize_t	cifs_listxattr(struct dentry *, char *, size_t);
-#define CIFS_VERSION   "1.30"
+#define CIFS_VERSION   "1.31"
 #endif				/* _CIFSFS_H */
