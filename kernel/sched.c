@@ -286,7 +286,8 @@ void wake_up(struct wait_queue **q)
 			}
 		}
 		if (!tmp->next) {
-			printk("wait_queue is bad (eip = %08lx)\n",((unsigned long *) q)[-1]);
+			printk("wait_queue is bad (eip = %p)\n",
+				__builtin_return_address(0));
 			printk("        q = %p\n",q);
 			printk("       *q = %p\n",*q);
 			printk("      tmp = %p\n",tmp);
@@ -312,7 +313,8 @@ void wake_up_interruptible(struct wait_queue **q)
 			}
 		}
 		if (!tmp->next) {
-			printk("wait_queue is bad (eip = %08lx)\n",((unsigned long *) q)[-1]);
+			printk("wait_queue is bad (eip = %p)\n",
+				__builtin_return_address(0));
 			printk("        q = %p\n",q);
 			printk("       *q = %p\n",*q);
 			printk("      tmp = %p\n",tmp);
@@ -377,8 +379,8 @@ void add_timer(struct timer_list * timer)
 
 #if SLOW_BUT_DEBUGGING_TIMERS
 	if (timer->next || timer->prev) {
-		printk("add_timer() called with non-zero list from %08lx\n",
-			((unsigned long *) &timer)[-1]);
+		printk("add_timer() called with non-zero list from %p\n",
+			__builtin_return_address(0));
 		return;
 	}
 #endif
@@ -416,8 +418,8 @@ int del_timer(struct timer_list * timer)
 		}
 	}
 	if (timer->next || timer->prev)
-		printk("del_timer() called from %08lx with timer not initialized\n",
-			((unsigned long *) &timer)[-1]);
+		printk("del_timer() called from %p with timer not initialized\n",
+			__builtin_return_address(0));
 	restore_flags(flags);
 	return 0;
 #else	

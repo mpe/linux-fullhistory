@@ -1,10 +1,8 @@
 #ifndef _BLK_H
 #define _BLK_H
 
-#include <linux/major.h>
-#include <linux/sched.h>
+#include <linux/blkdev.h>
 #include <linux/locks.h>
-#include <linux/genhd.h>
 
 /*
  * NR_REQUEST is the number of entries in the request-queue.
@@ -19,26 +17,6 @@
 #define NR_REQUEST	64
 
 /*
- * Ok, this is an expanded form so that we can use the same
- * request for paging requests when that is implemented. In
- * paging, 'bh' is NULL, and the semaphore is used to wait
- * for read/write completion.
- */
-struct request {
-	int dev;		/* -1 if no request */
-	int cmd;		/* READ or WRITE */
-	int errors;
-	unsigned long sector;
-	unsigned long nr_sectors;
-	unsigned long current_nr_sectors;
-	char * buffer;
-	struct semaphore * sem;
-	struct buffer_head * bh;
-	struct buffer_head * bhtail;
-	struct request * next;
-};
-
-/*
  * This is used in the elevator algorithm: Note that
  * reads always go before writes. This is natural: reads
  * are much more time-critical than writes.
@@ -47,17 +25,6 @@ struct request {
 ((s1)->cmd < (s2)->cmd || ((s1)->cmd == (s2)->cmd && \
 ((s1)->dev < (s2)->dev || (((s1)->dev == (s2)->dev && \
 (s1)->sector < (s2)->sector)))))
-
-struct blk_dev_struct {
-	void (*request_fn)(void);
-	struct request * current_request;
-};
-
-
-struct sec_size {
-	unsigned block_size;
-	unsigned block_size_bits;
-};
 
 /*
  * These will have to be changed to be aware of different buffer
@@ -69,15 +36,6 @@ struct sec_size {
 	((BLOCK_SIZE >> 9)  -  1))
 
 #define SUBSECTOR(block) (CURRENT->current_nr_sectors > 0)
-
-extern struct sec_size * blk_sec[MAX_BLKDEV];
-extern struct blk_dev_struct blk_dev[MAX_BLKDEV];
-extern struct wait_queue * wait_for_request;
-extern void resetup_one_dev(struct gendisk *dev, int drive);
-
-extern int * blk_size[MAX_BLKDEV];
-
-extern int * blksize_size[MAX_BLKDEV];
 
 extern unsigned long hd_init(unsigned long mem_start, unsigned long mem_end);
 extern unsigned long cdu31a_init(unsigned long mem_start, unsigned long mem_end);

@@ -5,7 +5,7 @@
  *            and for "no-sound" interfaces like Lasermate and the
  *            Panasonic CI-101P.
  *
- *  NOTE:     This is release 2.5.
+ *  NOTE:     This is release 2.6.
  *            It works with my SbPro & drive CR-521 V2.11 from 2/92
  *            and with the new CR-562-B V0.75 on a "naked" Panasonic
  *            CI-101P interface. And vice versa. 
@@ -119,13 +119,15 @@
  *
  *  2.4  Use different names for device registering.
  *       
- *  2.5  Added "#ifdef EJECT" code (default: enabled) to automatically eject
+ *  2.5  Added "#if EJECT" code (default: enabled) to automatically eject
  *       the tray during last call to "sbpcd_release".
- *       Added "#ifdef JUKEBOX" code (default: disabled) to automatically eject
+ *       Added "#if JUKEBOX" code (default: disabled) to automatically eject
  *       the tray during call to "sbpcd_open" if no disk is in.
  *       Turn on the CD volume of "compatible" sound cards, too; just define
  *       SOUND_BASE (in sbpcd.h) accordingly (default: disabled).
  *
+ *  2.6  Nothing new.  
+ *       
  *  TODO
  *
  *     disk change detection
@@ -201,7 +203,7 @@
 
 #include "blk.h"
 
-#define VERSION "2.5 Eberhard Moenkeberg <emoenke@gwdg.de>"
+#define VERSION "2.6 Eberhard Moenkeberg <emoenke@gwdg.de>"
 
 #define SBPCD_DEBUG
 
@@ -217,7 +219,7 @@
 /*
  * still testing around...
  */
-#define JUKEBOX 0 /* tray control: eject if no disk is in */
+#define JUKEBOX 0 /* tray control: eject tray if no disk is in */
 #define EJECT 1 /* tray control: eject tray after last use */
 #define LONG_TIMING 0 /* test against timeouts with "gold" CDs on CR-521 */
 #define MANY_SESSION 0 /* this will conflict with "true" multi-session! */
@@ -2561,7 +2563,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 
     case CDROMSTART:  /* Spin up the drive */
       DPRINTF((DBG_IOC,"SBPCD: ioctl: CDROMSTART entered.\n"));
-      i=xx_SpinUp();
+      xx_SpinUp();
       DriveStruct[d].audio_state=0;
       return (0);
       
@@ -3321,7 +3323,7 @@ static void sbpcd_release(struct inode * ip, struct file * file)
 	  do
 	    i=yy_LockDoor(0);
 	  while (i!=0);
-#ifdef EJECT
+#if EJECT
 	  if (new_drive) yy_SpinDown();
 #endif
 	}

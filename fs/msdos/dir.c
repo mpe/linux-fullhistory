@@ -85,22 +85,20 @@ int msdos_readdir(
 			for (i = last = 0; i < 8; i++) {
 				if (!(c = de->name[i])) break;
 				if (c >= 'A' && c <= 'Z') c += 32;
-				if (c != ' '){
+				if (c != ' ')
 					last = i+1;
-					*ptname++ = c;
-				}
+				ptname[i] = c;
 			}
 			i = last;
-			*ptname++ = '.';
+			ptname[i] = '.';
 			i++;
 			for (i2 = 0; i2 < 3; i2++) {
 				if (!(c = de->ext[i2])) break;
 				if (c >= 'A' && c <= 'Z') c += 32;
-				if (c != ' '){
+				if (c != ' ')
 					last = i+1;
-					*ptname++ = c;
-				}
-				i++;
+				ptname[i] = c;
+                               i++;
 			}
 			if ((i = last) != 0) {
 				if (!strcmp(de->name,MSDOS_DOT))

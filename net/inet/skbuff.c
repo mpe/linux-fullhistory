@@ -9,13 +9,13 @@
  *	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
  */
- 
+
 /*
  *	Note: There are a load of cli()/sti() pairs protecting the net_memory type
  *	variables. Without them for some reason the ++/-- operators do not come out
  *	atomic. Also with gcc 2.4.5 these counts can come out wrong anyway - use 2.5.8!!
  */
- 
+
 #include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -40,7 +40,7 @@
 /*
  *	Resource tracking variables
  */
- 
+
 volatile unsigned long net_memory = 0;
 volatile unsigned long net_skbcount = 0;
 volatile unsigned long net_locked = 0;
@@ -62,7 +62,7 @@ void show_net_buffers(void)
 
 /*
  *	Debugging paranoia. Can go later when this crud stack works
- */ 
+ */
 
 int skb_check(struct sk_buff *skb, int head, int line, char *file)
 {
@@ -159,7 +159,6 @@ void skb_queue_head_init(struct sk_buff_head *list)
 /*
  *	Insert an sk_buff at the start of a list.
  */
-    
 void skb_queue_head(struct sk_buff_head *list_,struct sk_buff *newsk)
 {
 	unsigned long flags;
@@ -180,14 +179,13 @@ void skb_queue_head(struct sk_buff_head *list_,struct sk_buff *newsk)
 
 	newsk->next->prev = newsk;
 	newsk->prev->next = newsk;
-	
+
 	restore_flags(flags);
 }
 
 /*
  *	Insert an sk_buff at the end of a list.
  */
- 
 void skb_queue_tail(struct sk_buff_head *list_, struct sk_buff *newsk)
 {
 	unsigned long flags;
@@ -227,13 +225,13 @@ struct sk_buff *skb_dequeue(struct sk_buff_head *list_)
 	cli();
 
 	IS_SKB_HEAD(list);
-	
+
 	result = list->next;
 	if (result == list) {
 		restore_flags(flags);
 		return NULL;
 	}
-	
+
 	result->next->prev = list;
 	list->next = result->next;
 
@@ -242,14 +240,13 @@ struct sk_buff *skb_dequeue(struct sk_buff_head *list_)
 
 	restore_flags(flags);
 
-	IS_SKB(result);	
+	IS_SKB(result);
 	return result;
 }
 
 /*
  *	Insert a packet before another one in a list.
  */
- 
 void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
 {
 	unsigned long flags;
@@ -270,14 +267,13 @@ void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
 	newsk->prev = old->prev;
 	old->prev = newsk;
 	newsk->prev->next = newsk;
-	
+
 	restore_flags(flags);
 }
 
 /*
  *	Place a packet after a given packet in a list.
  */
- 
 void skb_append(struct sk_buff *old, struct sk_buff *newsk)
 {
 	unsigned long flags;
@@ -309,7 +305,6 @@ void skb_append(struct sk_buff *old, struct sk_buff *newsk)
  *	MUST EXIST when you unlink. Thus a list must have its contents unlinked
  *	_FIRST_.
  */
- 
 void skb_unlink(struct sk_buff *skb)
 {
 	unsigned long flags;
@@ -329,7 +324,7 @@ void skb_unlink(struct sk_buff *skb)
 #ifdef PARANOID_BUGHUNT_MODE	/* This is legal but we sometimes want to watch it */
 	else
 		printk("skb_unlink: not a linked element\n");
-#endif		
+#endif
 	restore_flags(flags);
 }
 
@@ -340,26 +335,26 @@ void skb_unlink(struct sk_buff *skb)
 
 void kfree_skb(struct sk_buff *skb, int rw)
 {
-	if (skb == NULL) 
+	if (skb == NULL)
 	{
-		printk("kfree_skb: skb = NULL (from %08lx)\n",
-			((unsigned long *) &skb)[-1]);
+		printk("kfree_skb: skb = NULL (from %p)\n",
+			__builtin_return_address(0));
 		return;
   	}
 	IS_SKB(skb);
-	if (skb->lock) 
+	if (skb->lock)
 	{
 		skb->free = 3;    /* Free when unlocked */
 		net_free_locked++;
 		return;
   	}
   	if (skb->free == 2)
-		printk("Warning: kfree_skb passed an skb that nobody set the free flag on! (from %08lx)\n",
-			((unsigned long *) &skb)[-1]);
+		printk("Warning: kfree_skb passed an skb that nobody set the free flag on! (from %p)\n",
+			__builtin_return_address(0));
 	if (skb->next)
-	 	printk("Warning: kfree_skb passed an skb still on a list (from %08lx).\n",
-			((unsigned long *) &skb)[-1]);
-	if (skb->sk) 
+	 	printk("Warning: kfree_skb passed an skb still on a list (from %p).\n",
+			__builtin_return_address(0));
+	if (skb->sk)
 	{
 	        if(skb->sk->prot!=NULL)
 		{
@@ -378,16 +373,16 @@ void kfree_skb(struct sk_buff *skb, int rw)
 				skb->sk->wmem_alloc-=skb->mem_len;
 			if(!skb->sk->dead)
 				skb->sk->write_space(skb->sk);
-#ifdef CONFIG_SLAVE_BALANCING				
+#ifdef CONFIG_SLAVE_BALANCING
 			if(skb->in_dev_queue && skb->dev!=NULL)
 				skb->dev->pkt_queue--;
 #endif
 			kfree_skbmem(skb,skb->mem_len);
 		}
-	} 
-	else 
+	}
+	else
 	{
-#ifdef CONFIG_SLAVE_BALANCING				
+#ifdef CONFIG_SLAVE_BALANCING
 		if(skb->in_dev_queue && skb->dev!=NULL)
 			skb->dev->pkt_queue--;
 #endif
@@ -399,45 +394,44 @@ void kfree_skb(struct sk_buff *skb, int rw)
  *	Allocate a new skbuff. We do this ourselves so we can fill in a few 'private'
  *	fields and also do memory statistics to find all the [BEEP] leaks.
  */
- 
- struct sk_buff *alloc_skb(unsigned int size,int priority)
- {
- 	struct sk_buff *skb;
- 	unsigned long flags;
- 		
- 	if (intr_count && priority!=GFP_ATOMIC) {
+struct sk_buff *alloc_skb(unsigned int size,int priority)
+{
+	struct sk_buff *skb;
+	unsigned long flags;
+
+	if (intr_count && priority!=GFP_ATOMIC) {
 		static int count = 0;
 		if (++count < 5) {
-			printk("alloc_skb called nonatomically from interrupt %08lx\n",
-				((unsigned long *)&size)[-1]);
+			printk("alloc_skb called nonatomically from interrupt %p\n",
+				__builtin_return_address(0));
 			priority = GFP_ATOMIC;
 		}
- 	}
- 	
- 	size+=sizeof(struct sk_buff);
- 	skb=(struct sk_buff *)kmalloc(size,priority);
- 	if (skb == NULL)
- 	{
- 		net_fails++;
- 		return NULL;
- 	}
+	}
+
+	size+=sizeof(struct sk_buff);
+	skb=(struct sk_buff *)kmalloc(size,priority);
+	if (skb == NULL)
+	{
+		net_fails++;
+		return NULL;
+	}
 #ifdef PARANOID_BUGHUNT_MODE
 	if(skb->magic_debug_cookie == SK_GOOD_SKB)
 		printk("Kernel kmalloc handed us an existing skb (%p)\n",skb);
-#endif		 	
+#endif
 
 	net_allocs++;
-	
- 	skb->free = 2;	/* Invalid so we pick up forgetful users */
+
+	skb->free = 2;	/* Invalid so we pick up forgetful users */
 	skb->lock = 0;
 	skb->pkt_type = PACKET_HOST;	/* Default type */
- 	skb->truesize = size;
- 	skb->mem_len = size;
- 	skb->mem_addr = skb;
-#ifdef CONFIG_SLAVE_BALANCING 	
- 	skb->in_dev_queue = 0;
-#endif 	
- 	skb->fraglist = NULL;
+	skb->truesize = size;
+	skb->mem_len = size;
+	skb->mem_addr = skb;
+#ifdef CONFIG_SLAVE_BALANCING
+	skb->in_dev_queue = 0;
+#endif
+	skb->fraglist = NULL;
 	skb->prev = skb->next = NULL;
 	skb->link3 = NULL;
 	skb->sk = NULL;
@@ -446,19 +440,19 @@ void kfree_skb(struct sk_buff *skb, int rw)
 	skb->localroute = 0;
 	save_flags(flags);
 	cli();
- 	net_memory += size;
- 	net_skbcount++;
- 	restore_flags(flags);
+	net_memory += size;
+	net_skbcount++;
+	restore_flags(flags);
 #if CONFIG_SKB_CHECK
 	skb->magic_debug_cookie = SK_GOOD_SKB;
 #endif
- 	skb->users = 0;
- 	return skb;
+	skb->users = 0;
+	return skb;
 }
 
 /*
  *	Free an skbuff by memory
- */ 	
+ */
 
 void kfree_skbmem(struct sk_buff *skb,unsigned size)
 {
@@ -469,11 +463,11 @@ void kfree_skbmem(struct sk_buff *skb,unsigned size)
 	if(skb->in_dev_queue && skb->dev!=NULL)
 		skb->dev->pkt_queue--;
 	restore_flags(flags);
-#endif	
+#endif
 	IS_SKB(skb);
 	if(size!=skb->truesize)
 		printk("kfree_skbmem: size mismatch.\n");
-		
+
 	if(skb->magic_debug_cookie == SK_GOOD_SKB)
 	{
 		save_flags(flags);
@@ -498,13 +492,13 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 {
 	struct sk_buff *n;
 	unsigned long offset;
-	
+
 	n=alloc_skb(skb->mem_len-sizeof(struct sk_buff),priority);
 	if(n==NULL)
 		return NULL;
-		
+
 	offset=((char *)n)-((char *)skb);
-		
+
 	memcpy(n->data,skb->data,skb->mem_len-sizeof(struct sk_buff));
 	n->len=skb->len;
 	n->link3=NULL;
@@ -528,8 +522,8 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 	n->pkt_type=skb->pkt_type;
 	return n;
 }
-	
-	
+
+
 /*
  *     Skbuff device locking
  */
@@ -560,7 +554,7 @@ void dev_kfree_skb(struct sk_buff *skb, int mode)
 	cli();
 	if(skb->lock==1)
 		net_locked--;
-		
+
 	if (!--skb->lock && (skb->free == 1 || skb->free == 3))
 	{
 		restore_flags(flags);

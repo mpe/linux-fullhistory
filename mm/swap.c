@@ -618,8 +618,8 @@ unsigned long __get_free_pages(int priority, unsigned long order)
 	if (intr_count && priority != GFP_ATOMIC) {
 		static int count = 0;
 		if (++count < 5) {
-			printk("gfp called nonatomically from interrupt %08lx\n",
-				((unsigned long *)&priority)[-1]);
+			printk("gfp called nonatomically from interrupt %p\n",
+				__builtin_return_address(0));
 			priority = GFP_ATOMIC;
 		}
 	}

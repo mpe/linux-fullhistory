@@ -903,7 +903,7 @@ static void ni52_rcv_int(struct device *dev)
 }
 
 /**********************************************************
- * I never got this error , (which should occure if someone 
+ * I never got this error , (which should occur if someone 
  * wants to blast your machine) so I couldn't debug it for now.
  * but we _try_ to fix the receiver not ready int.
  */
@@ -1095,7 +1095,7 @@ static struct enet_statistics *ni52_get_stats(struct device *dev)
 {
   struct priv *p = (struct priv *) dev->priv;
 #ifdef DEBUG3
-  printk("ni52: errs, crc %d, align %d, ressource %d, ovrn %d.\n",(int) p->scb->crc_errs,(int) p->scb->aln_errs,(int) p->scb->rsc_errs,(int) p->scb->ovrn_errs); 
+  printk("ni52: errs, crc %d, align %d, resource %d, ovrn %d.\n",(int) p->scb->crc_errs,(int) p->scb->aln_errs,(int) p->scb->rsc_errs,(int) p->scb->ovrn_errs); 
 #endif
   return &p->stats;
 }
@@ -1108,7 +1108,7 @@ static void set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 */
 
   if(!num_addrs)
-    printk("%s: Currently, the Ni52 driver doesn't support promiscous or multicast mode.\n",dev->name);
+    printk("%s: Currently, the Ni52 driver doesn't support promiscuous or multicast mode.\n",dev->name);
 
 #if 0
   p->scb->cmd = CUC_SUSPEND;

@@ -798,7 +798,6 @@ static void sd_init_done (Scsi_Cmnd * SCpnt)
 
 static int sd_init_onedisk(int i)
 {
-  int j = 0;
   unsigned char cmd[10];
   unsigned char *buffer;
   char spintime;
@@ -969,7 +968,7 @@ static int sd_init_onedisk(int i)
 	    rscsi_disks[i].capacity = 0;
 	  } else {
 	    printk ("scsi : deleting disk entry.\n");
-	    rscsi_disks[j].device = NULL;
+	    rscsi_disks[i].device = NULL;
 	    sd_template.nr_dev--;
 	    return i;
 	  };

@@ -307,9 +307,11 @@ static void identify_intr(void)
 		if (NULL != (hd_ident_info[dev] = (struct hd_driveid *)kmalloc(sizeof(id),GFP_ATOMIC)))
 			*hd_ident_info[dev] = id;
 		
-		/* Quantum drives go weird at this point, so reset them! In */
-		/* fact, do a reset in any case in case we changed the geometry */
-		special_op[dev] += reset = 1;
+		/* Quantum drives go weird at this point, so reset them! */
+		/* In fact, we should probably do a reset in any case in */
+		/* case we changed the geometry */
+		if (!strncmp(id.model, "QUANTUM", 7))
+			special_op[dev] += reset = 1;
 
 		/* flush remaining 384 (reserved/undefined) ID bytes: */
 		insw(HD_DATA,(char *)&id,sizeof(id)/2);
@@ -367,7 +369,8 @@ static void reset_controller(void)
 
 	outb_p(4,HD_CMD);
 	for(i = 0; i < 1000; i++) nop();
-	outb(hd_info[0].ctl & 0x0f ,HD_CMD);
+	outb_p(hd_info[0].ctl & 0x0f,HD_CMD);
+	for(i = 0; i < 1000; i++) nop();
 	if (drive_busy())
 		printk("HD-controller still busy\n");
 	if ((hd_error = inb(HD_ERROR)) != 1)

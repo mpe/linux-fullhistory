@@ -1,5 +1,5 @@
-This README belongs to release 2.5 of the SoundBlaster Pro (Matsushita,
-Kotobuki, Panasonic, CreativeLabs) CD-ROM driver for Linux.
+This README belongs to release 2.6 or newer of the SoundBlaster Pro
+(Matsushita, Kotobuki, Panasonic, CreativeLabs) CD-ROM driver for Linux.
 
 The driver is able to drive the whole family of "traditional" IDE-style (that
 has nothing to do with the new "Enhanced IDE" drive standard) Matsushita,
@@ -14,7 +14,8 @@ It will work with the soundcard interfaces (SB Pro, SB 16, Galaxy, SoundFX,
 ...) and/or with the "no-sound" cards (Panasonic CI-101P, LaserMate,
 WDH-7001C, older Aztech cards, ...).
 It should work too now with the "configurable" interface "Sequoia S-1000",
-which is found on the Spea Media FX sound card.
+which is found on the Spea Media FX sound card. I still need feedback about
+this.
 The interface type has to get configured in /usr/include/linux/sbpcd.h, 
 because the behavior is different.
 
@@ -113,8 +114,10 @@ To install:
           sbpcd=0x330,SPEA
       (these strings are case sensitive!).
       This is especially useful if you install a fresh distribution.
-2. Do a "make config" and select "yes" for Matsushita CD-ROM support and for
-   ISO9660 FileSystem support.
+2. "cd /usr/src/linux" and do a "make config" and select "y" for Matsushita
+   CD-ROM support and for ISO9660 FileSystem support. If you do not have a
+   second, third, or fourth controller and/or did not prepare sbpcd2 etc.,
+   do not say "y" to the secondary Matsushita CD-ROM questions.
    SCSI and/or SCSI CD-ROM support is not needed.
 
 3. Then do a "make dep", then make the kernel image ("make zlilo" or else).
@@ -142,8 +145,13 @@ To install:
 
 5. Reboot with the new kernel.
 
-You should now be able to do "mount -t iso9660 -o block=2048 /dev/sbpcd /mnt"
-and see the contents of your CD in the /mnt directory, and/or hear music with
+You should now be able to do
+              mkdir /CD
+and 
+              mount -t iso9660 -o ro /dev/sbpcd /CD
+or
+              mount -t iso9660 -o ro,block=2048 /dev/sbpcd /CD
+and see the contents of your CD in the /CD directory, and/or hear music with
 "workman -c /dev/sbpcd &".
 
 

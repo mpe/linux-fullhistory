@@ -1061,7 +1061,7 @@ static unsigned long try_to_load_aligned(unsigned long address,
 	buffermem += PAGE_SIZE;
 	bh->b_this_page = tmp;
 	mem_map[MAP_NR(address)]++;
-	buffer_pages[address >> PAGE_SHIFT] = bh;
+	buffer_pages[MAP_NR(address)] = bh;
 	read_buffers(arr,block);
 	while (block-- > 0)
 		brelse(arr[block]);
@@ -1190,7 +1190,7 @@ static int grow_buffers(int pri, int size)
 			break;
 	}
 	free_list[isize] = bh;
-	buffer_pages[page >> PAGE_SHIFT] = bh;
+	buffer_pages[MAP_NR(page)] = bh;
 	tmp->b_this_page = bh;
 	wake_up(&buffer_wait);
 	buffermem += PAGE_SIZE;
@@ -1234,7 +1234,7 @@ static int try_to_free(struct buffer_head * bh, struct buffer_head ** bhp)
 		put_unused_buffer_head(p);
 	} while (tmp != bh);
 	buffermem -= PAGE_SIZE;
-	buffer_pages[page >> PAGE_SHIFT] = NULL;
+	buffer_pages[MAP_NR(page)] = NULL;
 	free_page(page);
 	return !mem_map[MAP_NR(page)];
 }
@@ -1538,7 +1538,7 @@ static unsigned long try_to_generate_cluster(dev_t dev, int block, int size)
 			break;
 	}
 	buffermem += PAGE_SIZE;
-	buffer_pages[page >> PAGE_SHIFT] = bh;
+	buffer_pages[MAP_NR(page)] = bh;
 	bh->b_this_page = tmp;
 	while (nblock-- > 0)
 		brelse(arr[nblock]);
@@ -1605,9 +1605,9 @@ void buffer_init(void)
 						     sizeof(struct buffer_head *));
 
 
-	buffer_pages = (struct buffer_head **) vmalloc((high_memory >>PAGE_SHIFT) * 
+	buffer_pages = (struct buffer_head **) vmalloc(MAP_NR(high_memory) * 
 						     sizeof(struct buffer_head *));
-	for (i = 0 ; i < high_memory >> PAGE_SHIFT ; i++)
+	for (i = 0 ; i < MAP_NR(high_memory) ; i++)
 		buffer_pages[i] = NULL;
 
 	for (i = 0 ; i < nr_hash ; i++)

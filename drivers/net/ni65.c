@@ -298,7 +298,7 @@ static int ni65_probe1(struct device *dev,int ioaddr)
      }
    }
 
-  return 0; /* we've found everyting */
+  return 0; /* we've found everything */
 }
 
 /* 

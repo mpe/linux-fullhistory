@@ -629,7 +629,7 @@ are any multiple of 512 bytes long.  */
 #endif
 
 /* Some dumb host adapters can speed transfers by knowing the
- * minimum tranfersize in advance.
+ * minimum transfersize in advance.
  *
  * We shouldn't disconnect in the middle of a sector, but the cdrom
  * sector size can be larger than the size of a buffer and the

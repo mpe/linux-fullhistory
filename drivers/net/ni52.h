@@ -50,7 +50,7 @@ struct scp_struct
  */
 struct iscp_struct
 {
-  unsigned char  busy;          /* 586 clears after succesful init */
+  unsigned char  busy;          /* 586 clears after successful init */
   unsigned char  zero_dummy;    /* hast to be zero */
   unsigned short scb_offset;    /* pointeroffset to the scb_base */
   char          *scb_base;      /* base-address of all 16-bit offsets */
@@ -72,7 +72,7 @@ struct scb_struct
 };
 
 /*
- * possbile command values for the command word
+ * possible command values for the command word
  */
 #define RUC_MASK	0x0070	/* mask for RU commands */
 #define RUC_NOP		0x0000	/* NOP-command */
@@ -95,11 +95,11 @@ struct scb_struct
 #define ACK_RNR		0x1000	/* ack. STAT_RNR */
 
 /*
- * possbile status values for the status word
+ * possible status values for the status word
  */
 #define STAT_MASK	0xf000	/* mask for cause of interrupt */
 #define STAT_CX		0x8000	/* CU finished cmd with its I bit set */
-#define STAT_FR		0x4000	/* RU finished receiveing a frame */
+#define STAT_FR		0x4000	/* RU finished receiving a frame */
 #define STAT_CNA	0x2000	/* CU left active state */
 #define STAT_RNR	0x1000	/* RU left ready state */
 
@@ -130,7 +130,7 @@ struct rfd_struct
 #define RFD_LAST     0x8000	/* last: last rfd in the list */
 #define RFD_SUSP     0x4000	/* last: suspend RU after  */
 #define RFD_ERRMASK  0x0fe1     /* status: errormask */
-#define RFD_MATCHADD 0x0002     /* status: Destinationaddress !matchs IA */
+#define RFD_MATCHADD 0x0002     /* status: Destinationaddress !matches IA */
 #define RFD_RNR      0x0200	/* status: receiver out of resources */
 
 /*
@@ -140,7 +140,7 @@ struct rbd_struct
 {
   unsigned short status;	/* status word,number of used bytes in buff */
   unsigned short next;		/* pointeroffset to next RBD */
-  char          *buffer;	/* recevie buffer address pointer */
+  char          *buffer;	/* receive buffer address pointer */
   unsigned short size;		/* size of this buffer */
   unsigned short zero_dummy;    /* dummy */
 };
@@ -180,7 +180,7 @@ struct rbd_struct
  */
 struct nop_cmd_struct
 {
-  unsigned short cmd_status;	/* statius of this command */
+  unsigned short cmd_status;	/* status of this command */
   unsigned short cmd_cmd;       /* the command itself (+bits) */
   unsigned short cmd_link;      /* offsetpointer to next command */
 };
@@ -247,7 +247,7 @@ struct transmit_cmd_struct
 #define TCMD_MAXCOLLMASK 0x000f
 #define TCMD_MAXCOLL     0x0020
 #define TCMD_HEARTBEAT   0x0040
-#define TCMD_DEFFERED    0x0080
+#define TCMD_DEFERRED    0x0080
 #define TCMD_UNDERRUN    0x0100
 #define TCMD_LOSTCTS     0x0200
 #define TCMD_NOCARRIER   0x0400
@@ -262,7 +262,7 @@ struct tdr_cmd_struct
 };
 
 #define TDR_LNK_OK	0x8000	/* No link problem identified */
-#define TDR_XCVR_PRB	0x4000	/* indiactes a transceiver problem */
+#define TDR_XCVR_PRB	0x4000	/* indicates a transceiver problem */
 #define TDR_ET_OPN	0x2000	/* open, no correct termination */
 #define TDR_ET_SRT	0x1000	/* TDR detected a short circuit */
 #define TDR_TIMEMASK	0x07ff	/* mask for the time field */

@@ -127,7 +127,7 @@ static int initialising=1;
 #define N_DRIVE 8
 #else
 #define N_FDC 1
-#define N_DRIVE 4
+#define N_DRIVE 2
 #endif
 
 #define TYPE(x) ( ((x)>>2) & 0x1f )
@@ -298,11 +298,12 @@ static struct floppy_struct floppy_type[32] = {
 #define SECTSIZE ( _FD_SECTSIZE(*floppy))
 
 /* Auto-detection: Disk type used until the next media change occurs. */
-struct floppy_struct *current_type[N_DRIVE] = { NULL, NULL, NULL, NULL
+struct floppy_struct *current_type[N_DRIVE] = {
+	NULL, NULL
 #ifdef HAVE_2_CONTROLLERS
-				          ,NULL, NULL, NULL, NULL
+	,NULL, NULL, NULL, NULL, NULL, NULL
 #endif
-					};
+};
 
 /*
  * User-provided type information. current_type points to
@@ -483,7 +484,7 @@ static void reset_fdc_info(int mode)
 			UDRS->track = NEED_2_RECAL;
 }
 
-/* selects the fdc and drive, and enables the fdc's its input/dma. */
+/* selects the fdc and drive, and enables the fdc's input/dma. */
 static void set_fdc(int drive)
 {
 	if ( drive >= 0 ){
@@ -544,10 +545,10 @@ static void motor_off_callback(unsigned long nr)
 
 static struct timer_list motor_off_timer[N_DRIVE] = {
 	{ NULL, NULL, 0, 0, motor_off_callback },
-	{ NULL, NULL, 0, 1, motor_off_callback },
-	{ NULL, NULL, 0, 2, motor_off_callback },
-	{ NULL, NULL, 0, 3, motor_off_callback }
+	{ NULL, NULL, 0, 1, motor_off_callback }
 #ifdef HAVE_2_CONTROLLERS
+	,{ NULL, NULL, 0, 2, motor_off_callback },
+	{ NULL, NULL, 0, 3, motor_off_callback }
 	,{ NULL, NULL, 0, 4, motor_off_callback },
 	{ NULL, NULL, 0, 5, motor_off_callback },
 	{ NULL, NULL, 0, 6, motor_off_callback },

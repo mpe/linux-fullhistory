@@ -171,8 +171,8 @@ void * kmalloc (size_t size, int priority)
 	if (intr_count && priority != GFP_ATOMIC) {
 		static int count = 0;
 		if (++count < 5) {
-			printk("kmalloc called nonatomically from interrupt %08lx\n",
-				((unsigned long *)&size)[-1]);
+			printk("kmalloc called nonatomically from interrupt %p\n",
+				__builtin_return_address(0));
 			priority = GFP_ATOMIC;
 		}
 	}

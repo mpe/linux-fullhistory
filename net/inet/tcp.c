@@ -365,7 +365,7 @@ static int tcp_readable(struct sock *sk)
 		sum = skb->len -(counted - skb->h.th->seq);	/* Length - header but start from where we are up to (avoid overlaps) */
 		if (skb->h.th->syn)
 			sum++;
-		if (sum >= 0) 
+		if (sum > 0) 
 		{					/* Add it up, move on */
 			amount += sum;
 			if (skb->h.th->syn) 
@@ -3389,7 +3389,6 @@ static inline int tcp_urg(struct sock *sk, struct tcphdr *th,
  *  If we are in FINWAIT-2, a received FIN moves us to TIME-WAIT.
  *
  */
- 
 static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th, 
 	 unsigned long saddr, struct device *dev)
 {
