@@ -1264,7 +1264,7 @@ static int __init tridentfb_init(void)
 	tridentfb_setup(option);
 #endif
 	output("Trident framebuffer %s initializing\n", VERSION);
-	return pci_module_init(&tridentfb_pci_driver);
+	return pci_register_driver(&tridentfb_pci_driver);
 }
 
 static void __exit tridentfb_exit(void)

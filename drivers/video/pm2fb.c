@@ -1282,7 +1282,7 @@ static int __init pm2fb_init(void)
 	pm2fb_setup(option);
 #endif
 
-	return pci_module_init(&pm2fb_driver);
+	return pci_register_driver(&pm2fb_driver);
 }
 
 module_init(pm2fb_init);

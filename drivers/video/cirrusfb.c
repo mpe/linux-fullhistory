@@ -2623,7 +2623,7 @@ static int __init cirrusfb_init(void)
 	error |= zorro_module_init(&cirrusfb_zorro_driver);
 #endif
 #ifdef CONFIG_PCI
-	error |= pci_module_init(&cirrusfb_pci_driver);
+	error |= pci_register_driver(&cirrusfb_pci_driver);
 #endif
 	return error;
 }

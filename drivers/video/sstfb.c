@@ -1575,7 +1575,7 @@ static int __devinit sstfb_init(void)
 		return -ENODEV;
 	sstfb_setup(option);
 #endif
-	return pci_module_init(&sstfb_driver);
+	return pci_register_driver(&sstfb_driver);
 }
 
 #ifdef MODULE

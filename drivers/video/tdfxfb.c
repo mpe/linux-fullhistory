@@ -1350,7 +1350,7 @@ static int __init tdfxfb_init(void)
 
 	tdfxfb_setup(option);
 #endif
-        return pci_module_init(&tdfxfb_driver);
+        return pci_register_driver(&tdfxfb_driver);
 }
 
 static void __exit tdfxfb_exit(void)

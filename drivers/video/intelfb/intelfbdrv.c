@@ -360,7 +360,7 @@ intelfb_init(void)
 	intelfb_setup(option);
 #endif
 
-	return pci_module_init(&intelfb_driver);
+	return pci_register_driver(&intelfb_driver);
 }
 
 static void __exit

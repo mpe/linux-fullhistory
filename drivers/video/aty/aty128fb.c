@@ -2461,7 +2461,7 @@ static int __init aty128fb_init(void)
 	aty128fb_setup(option);
 #endif
 
-	return pci_module_init(&aty128fb_driver);
+	return pci_register_driver(&aty128fb_driver);
 }
 
 static void __exit aty128fb_exit(void)
