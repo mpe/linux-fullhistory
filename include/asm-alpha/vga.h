@@ -11,6 +11,7 @@
 
 #define VT_BUF_HAVE_RW
 #define VT_BUF_HAVE_MEMSETW
+#define VT_BUF_HAVE_MEMCPYW
 #define VT_BUF_HAVE_MEMCPYF
 
 extern inline void scr_writew(u16 val, u16 *addr)
@@ -37,15 +38,10 @@ extern inline void scr_memsetw(u16 *s, u16 c, unsigned int count)
 		memsetw(s, c, count);
 }
 
-extern inline void scr_memcpyw_from(u16 *d, const u16 *s, unsigned int count)
-{
-	memcpy_fromio(d, s, count);
-}
-
-extern inline void scr_memcpyw_to(u16 *d, const u16 *s, unsigned int count)
-{
-	memcpy_toio(d, s, count);
-}
+/* Do not trust that the usage will be correct; analyze the arguments.  */
+extern void scr_memcpyw(u16 *d, const u16 *s, unsigned int count);
+#define scr_memcpyw_from scr_memcpyw
+#define scr_memcpyw_to   scr_memcpyw
 
 /* ??? These are currently only used for downloading character sets.  As
    such, they don't need memory barriers.  Is this all they are intended

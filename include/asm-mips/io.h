@@ -375,6 +375,8 @@ __OUTS(w,l,4)
 	__inslc((port),(addr),(count)) : \
 	__insl((port),(addr),(count)))
 
+#define IO_SPACE_LIMIT 0xffff
+
 /*
  * The caches on some architectures aren't dma-coherent and have need to
  * handle this in software.  There are three types of operations that

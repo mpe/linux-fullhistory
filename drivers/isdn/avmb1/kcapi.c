@@ -877,14 +877,8 @@ drivercb_attach_ctr(struct capi_driver *driver, char *name, void *driverdata)
 	*pp = card;
 	driver->ncontroller++;
 	sprintf(card->procfn, "capi/controllers/%d", card->cnr);
-	card->procent = create_proc_entry(card->procfn, 0, 0);
-	if (card->procent) {
-	   card->procent->read_proc = 
-		(int (*)(char *,char **,off_t,int,int *,void *))
-			driver->ctr_read_proc;
-	   card->procent->data = card;
-	}
-
+	card->procent = create_proc_read_entry(card->procfn, 0, 0,
+					driver->ctr_read_proc, card);
 	ncards++;
 	printk(KERN_NOTICE "kcapi: Controller %d: %s attached\n",
 			card->cnr, card->name);
@@ -960,17 +954,11 @@ struct capi_driver_interface *attach_capi_driver(struct capi_driver *driver)
 		t1isa_driver = driver;
 #endif
 	sprintf(driver->procfn, "capi/drivers/%s", driver->name);
-	driver->procent = create_proc_entry(driver->procfn, 0, 0);
-	if (driver->procent) {
-	   if (driver->driver_read_proc) {
-		   driver->procent->read_proc = 
-	       		(int (*)(char *,char **,off_t,int,int *,void *))
-					driver->driver_read_proc;
-	   } else {
-		   driver->procent->read_proc = driver_read_proc;
-	   }
-	   driver->procent->data = driver;
-	}
+	driver->procent = create_proc_read_entry(driver->procfn, 0, 0,
+						driver->driver_read_proc
+						? driver->driver_read_proc
+						: driver_read_proc,
+					        driver);
 	return &di;
 }
 

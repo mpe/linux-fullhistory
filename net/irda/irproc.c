@@ -66,7 +66,7 @@ void irda_proc_register(void)
 {
 	int i;
 
-	proc_irda = create_proc_entry("net/irda", S_IFDIR, NULL);
+	proc_irda = proc_mkdir("net/irda", NULL);
 	proc_irda->owner = THIS_MODULE;
 
 	for (i=0;i<IRDA_ENTRIES_NUM;i++)

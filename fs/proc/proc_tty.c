@@ -171,18 +171,11 @@ void proc_tty_unregister_driver(struct tty_driver *driver)
  */
 void __init proc_tty_init(void)
 {
-	struct proc_dir_entry *ent;
-	
-	ent = create_proc_entry("tty", S_IFDIR, 0);
-	if (!ent)
+	if (!proc_mkdir("tty", 0))
 		return;
-	proc_tty_ldisc = create_proc_entry("tty/ldisc", S_IFDIR, 0);
-	proc_tty_driver = create_proc_entry("tty/driver", S_IFDIR, 0);
+	proc_tty_ldisc = proc_mkdir("tty/ldisc", 0);
+	proc_tty_driver = proc_mkdir("tty/driver", 0);
 
-	ent = create_proc_entry("tty/ldiscs", 0, 0);
-	ent->read_proc = tty_ldiscs_read_proc;
-
-	ent = create_proc_entry("tty/drivers", 0, 0);
-	ent->read_proc = tty_drivers_read_proc;
+	create_proc_read_entry("tty/ldiscs", 0, 0, tty_ldiscs_read_proc,NULL);
+	create_proc_read_entry("tty/drivers", 0, 0, tty_drivers_read_proc,NULL);
 }
-

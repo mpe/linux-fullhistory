@@ -146,7 +146,7 @@ polaris_write_config_word(struct pci_dev *dev, int where, u16 value)
 
         __kernel_stw(value, *(vusp)pci_addr);
 	mb();
-	__kernel_ldbu(*(vusp)pci_addr);
+	__kernel_ldwu(*(vusp)pci_addr);
 	return PCIBIOS_SUCCESSFUL;
 }
 

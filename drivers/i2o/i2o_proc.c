@@ -3181,7 +3181,7 @@ static int i2o_proc_add_controller(struct i2o_controller *pctrl,
 
 	sprintf(buff, "iop%d", pctrl->unit);
 
-	dir = create_proc_entry(buff, S_IFDIR, root);
+	dir = proc_mkdir(buff, root);
 	if(!dir)
 		return -1;
 
@@ -3193,7 +3193,7 @@ static int i2o_proc_add_controller(struct i2o_controller *pctrl,
 	{
 		sprintf(buff, "%0#5x", dev->lct_data->tid);
 
-		dir1 = create_proc_entry(buff, S_IFDIR, dir);
+		dir1 = proc_mkdir(buff, dir);
 		dev->proc_entry = dir1;
 
 		if(!dir1)
@@ -3295,7 +3295,7 @@ static int create_i2o_procfs(void)
 	struct i2o_controller *pctrl = NULL;
 	int i;
 
-	i2o_proc_dir_root = create_proc_entry("i2o", S_IFDIR, 0);
+	i2o_proc_dir_root = proc_mkdir("i2o", 0);
 	if(!i2o_proc_dir_root)
 		return -1;
 

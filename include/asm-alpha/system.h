@@ -86,6 +86,30 @@ struct el_common_EV5_uncorrectable_mcheck {
         unsigned long   ld_lock;          /* Contents of EV5 LD_LOCK register*/
 };
 
+struct el_common_EV6_mcheck {
+	unsigned int FrameSize;		/* Bytes, including this field */
+	unsigned int FrameFlags;	/* <31> = Retry, <30> = Second Error */
+	unsigned int CpuOffset;		/* Offset to CPU-specific info */
+	unsigned int SystemOffset;	/* Offset to system-specific info */
+	unsigned int MCHK_Code;
+	unsigned int MCHK_Frame_Rev;
+	unsigned long I_STAT;		/* EV6 Internal Processor Registers */
+	unsigned long DC_STAT;		/* (See the 21264 Spec) */
+	unsigned long C_ADDR;
+	unsigned long DC1_SYNDROME;
+	unsigned long DC0_SYNDROME;
+	unsigned long C_STAT;
+	unsigned long C_STS;
+	unsigned long RESERVED0;
+	unsigned long EXC_ADDR;
+	unsigned long IER_CM;
+	unsigned long ISUM;
+	unsigned long MM_STAT;
+	unsigned long PAL_BASE;
+	unsigned long I_CTL;
+	unsigned long PCTX;
+};
+
 extern void halt(void) __attribute__((noreturn));
 
 #define prepare_to_switch()	do { } while(0)

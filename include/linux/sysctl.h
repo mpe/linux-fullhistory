@@ -97,7 +97,7 @@ enum
 	KERN_RTSIGNR=32,	/* Number of rt sigs queued */
 	KERN_RTSIGMAX=33,	/* Max queuable */
 	
-	KERN_SHMMAX=34,         /* int: Maximum shared memory segment */
+	KERN_SHMMAX=34,         /* long: Maximum shared memory segment */
 	KERN_MSGMAX=35,         /* int: Maximum size of a messege */
 	KERN_MSGMNB=36,         /* int: Maximum message queue size */
 	KERN_MSGPOOL=37,        /* int: Maximum system message pool size */
@@ -106,8 +106,9 @@ enum
  	KERN_RANDOM=40,		/* Random driver */
  	KERN_SHMALL=41,		/* int: Maximum size of shared memory */
  	KERN_MSGMNI=42,		/* int: msg queue identifiers */
- 	KERN_SEM=43,		/* int: sysv semaphore limits */
- 	KERN_SPARC_STOP_A=44	/* int: Sparc Stop-A enable */
+ 	KERN_SEM=43,		/* struct: sysv semaphore limits */
+ 	KERN_SPARC_STOP_A=44,	/* int: Sparc Stop-A enable */
+ 	KERN_SHMMNI=45		/* int: shm array identifiers */
 };
 
 

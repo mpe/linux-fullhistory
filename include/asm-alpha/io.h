@@ -132,20 +132,22 @@ extern void _sethae (unsigned long addr);	/* cached version */
 # include <asm/core_apecs.h>
 #elif defined(CONFIG_ALPHA_CIA)
 # include <asm/core_cia.h>
+#elif defined(CONFIG_ALPHA_IRONGATE)
+# include <asm/core_irongate.h>
+#elif defined(CONFIG_ALPHA_JENSEN)
+# include <asm/jensen.h>
 #elif defined(CONFIG_ALPHA_LCA)
 # include <asm/core_lca.h>
 #elif defined(CONFIG_ALPHA_MCPCIA)
 # include <asm/core_mcpcia.h>
+#elif defined(CONFIG_ALPHA_POLARIS)
+# include <asm/core_polaris.h>
 #elif defined(CONFIG_ALPHA_PYXIS)
 # include <asm/core_pyxis.h>
 #elif defined(CONFIG_ALPHA_T2)
 # include <asm/core_t2.h>
 #elif defined(CONFIG_ALPHA_TSUNAMI)
 # include <asm/core_tsunami.h>
-#elif defined(CONFIG_ALPHA_JENSEN)
-# include <asm/jensen.h>
-#elif defined(CONFIG_ALPHA_POLARIS)
-# include <asm/core_polaris.h>
 #else
 #error "What system is this?"
 #endif
@@ -223,6 +225,8 @@ extern void		_writeq(unsigned long b, unsigned long addr);
 #ifndef outl_p
 # define outl_p		outl
 #endif
+
+#define IO_SPACE_LIMIT 0xffff
 
 #else 
 

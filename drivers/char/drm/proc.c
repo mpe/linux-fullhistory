@@ -79,7 +79,7 @@ int drm_proc_init(drm_device_t *dev)
 	struct proc_dir_entry *ent;
 	int		      i, j;
 
-	drm_root = create_proc_entry("video", S_IFDIR, NULL);
+	drm_root = proc_mkdir("video", NULL);
 	if (!drm_root) {
 		DRM_ERROR("Cannot create /proc/video\n");
 		return -1;
@@ -89,7 +89,7 @@ int drm_proc_init(drm_device_t *dev)
 				   add some global support for /proc/video. */
 	for (i = 0; i < 8; i++) {
 		sprintf(drm_slot_name, "video/%d", i);
-		drm_dev_root = create_proc_entry(drm_slot_name, S_IFDIR, NULL);
+		drm_dev_root = proc_mkdir(drm_slot_name, NULL);
 		if (!drm_dev_root) {
 			DRM_ERROR("Cannot create /proc/%s\n", drm_slot_name);
 			remove_proc_entry("video", NULL);
@@ -103,20 +103,17 @@ int drm_proc_init(drm_device_t *dev)
 	}
 
 	for (i = 0; i < DRM_PROC_ENTRIES; i++) {
-		ent = create_proc_entry(drm_proc_list[i].name,
-					S_IFREG|S_IRUGO, drm_dev_root);
-		if (!ent) {
-			DRM_ERROR("Cannot create /proc/%s/%s\n",
-				  drm_slot_name, drm_proc_list[i].name);
-			for (j = 0; j < i; j++)
-				remove_proc_entry(drm_proc_list[i].name,
-						  drm_dev_root);
-			remove_proc_entry(drm_slot_name, NULL);
-			remove_proc_entry("video", NULL);
-			return -1;
-		}
-		ent->read_proc = drm_proc_list[i].f;
-		ent->data      = dev;
+		if (create_proc_read_entry(drm_proc_list[i].name,0,drm_dev_root,
+					   drm_proc_list[i].f, dev))
+			continue;
+
+		DRM_ERROR("Cannot create /proc/%s/%s\n",
+			  drm_slot_name, drm_proc_list[i].name);
+		for (j = 0; j < i; j++)
+			remove_proc_entry(drm_proc_list[i].name, drm_dev_root);
+		remove_proc_entry(drm_slot_name, NULL);
+		remove_proc_entry("video", NULL);
+		return -1;
 	}
 
 	return 0;

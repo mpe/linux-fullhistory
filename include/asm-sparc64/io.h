@@ -180,6 +180,8 @@ extern __inline__ void _writel(unsigned int l, unsigned long addr)
 #define writew(__w, __addr)	(_writew((__w), (unsigned long)(__addr)))
 #define writel(__l, __addr)	(_writel((__l), (unsigned long)(__addr)))
 
+#define IO_SPACE_LIMIT 0xffffffff
+
 /*
  * Memcpy to/from I/O space is just a regular memory operation on
  * Ultra as well.

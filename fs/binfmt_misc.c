@@ -476,7 +476,7 @@ static int __init init_misc_binfmt(void)
 	int error = -ENOENT;
 	struct proc_dir_entry *status = NULL, *reg;
 
-	bm_dir = create_proc_entry("sys/fs/binfmt_misc", S_IFDIR, NULL);
+	bm_dir = proc_mkdir("sys/fs/binfmt_misc", NULL); /* WTF??? */
 	if (!bm_dir)
 		goto out;
 	bm_dir->owner = THIS_MODULE;

@@ -119,12 +119,14 @@ WEAK(eb164_mv);
 WEAK(eb64p_mv);
 WEAK(eb66_mv);
 WEAK(eb66p_mv);
+WEAK(eiger_mv);
 WEAK(jensen_mv);
 WEAK(lx164_mv);
 WEAK(miata_mv);
 WEAK(mikasa_mv);
 WEAK(mikasa_primo_mv);
 WEAK(monet_mv);
+WEAK(nautilus_mv);
 WEAK(noname_mv);
 WEAK(noritake_mv);
 WEAK(noritake_primo_mv);
@@ -192,7 +194,9 @@ reserve_std_resources(void)
 #define for_each_mem_cluster(memdesc, cluster, i)		\
 	for ((cluster) = (memdesc)->cluster, (i) = 0;		\
 	     (i) < (memdesc)->numclusters; (i)++, (cluster)++)
-static void __init setup_memory(void)
+
+static void __init
+setup_memory(void)
 {
 	struct memclust_struct * cluster;
 	struct memdesc_struct * memdesc;
@@ -201,18 +205,18 @@ static void __init setup_memory(void)
 	extern char _end[];
 	int i;
 
-	/* find free clusters, and init and free the bootmem accordingly */
-	memdesc = (struct memdesc_struct *) (hwrpb->mddt_offset + (unsigned long) hwrpb);
+	/* Find free clusters, and init and free the bootmem accordingly.  */
+	memdesc = (struct memdesc_struct *)
+	  (hwrpb->mddt_offset + (unsigned long) hwrpb);
 
-	for_each_mem_cluster(memdesc, cluster, i)
-	{
+	for_each_mem_cluster(memdesc, cluster, i) {
 		printk("memcluster %d, usage %01lx, start %8lu, end %8lu\n",
 		       i, cluster->usage, cluster->start_pfn,
 		       cluster->start_pfn + cluster->numpages);
 
 		/* Bit 0 is console/PALcode reserved.  Bit 1 is
 		   non-volatile memory -- we might want to mark
-		   this for later */
+		   this for later.  */
 		if (cluster->usage & 3)
 			continue;
 
@@ -220,12 +224,13 @@ static void __init setup_memory(void)
 		if (end > max_low_pfn)
 			max_low_pfn = end;
 	}
+
 	/* Enforce maximum of 2GB even if there is more.  Blah.  */
 	if (max_low_pfn > PFN_MAX)
 		max_low_pfn = PFN_MAX;
 	printk("max_low_pfn %ld\n", max_low_pfn);
 
-	/* find the end of the kernel memory */
+	/* Find the end of the kernel memory.  */
 	start_pfn = PFN_UP(virt_to_phys(_end));
 	printk("_end %p, start_pfn %ld\n", _end, start_pfn);
 
@@ -235,14 +240,13 @@ static void __init setup_memory(void)
 	if (max_low_pfn <= start_pfn)
 		panic("not enough memory to boot");
 
-	/* we need to know how many physically contigous pages
-	   we'll need for the bootmap */
+	/* We need to know how many physically contigous pages
+	   we'll need for the bootmap.  */
 	bootmap_pages = bootmem_bootmap_pages(max_low_pfn);
 	printk("bootmap size: %ld pages\n", bootmap_pages);
 
-	/* now find a good region where to allocate the bootmap */
-	for_each_mem_cluster(memdesc, cluster, i)
-	{
+	/* Now find a good region where to allocate the bootmap.  */
+	for_each_mem_cluster(memdesc, cluster, i) {
 		if (cluster->usage & 3)
 			continue;
 
@@ -256,8 +260,7 @@ static void __init setup_memory(void)
 			start = start_pfn;
 		if (end > max_low_pfn)
 			end = max_low_pfn;
-		if (end - start >= bootmap_pages)
-		{
+		if (end - start >= bootmap_pages) {
 			printk("allocating bootmap in area %ld:%ld\n",
 			       start, start+bootmap_pages);
 			bootmap_start = start;
@@ -265,20 +268,18 @@ static void __init setup_memory(void)
 		}
 	}
 
-	if (bootmap_start == -1)
-	{
+	if (bootmap_start == -1) {
 		max_low_pfn >>= 1;
 		printk("bootmap area not found now trying with %ld pages\n",
 		       max_low_pfn);
 		goto try_again;
 	}
 
-	/* allocate the bootmap and mark the whole MM as reserved */
+	/* Allocate the bootmap and mark the whole MM as reserved.  */
 	bootmap_size = init_bootmem(bootmap_start, max_low_pfn);
 
-	/* mark the free regions */
-	for_each_mem_cluster(memdesc, cluster, i)
-	{
+	/* Mark the free regions.  */
+	for_each_mem_cluster(memdesc, cluster, i) {
 		if (cluster->usage & 3)
 			continue;
 
@@ -301,7 +302,7 @@ static void __init setup_memory(void)
 		       PFN_UP(start), PFN_DOWN(end));
 	}
 
-	/* reserve the bootmap memory */
+	/* Reserve the bootmap memory.  */
 	reserve_bootmem(PFN_PHYS(bootmap_start), bootmap_size);
 	printk("reserving bootmap %ld:%ld\n", bootmap_start,
 	       bootmap_start + PFN_UP(bootmap_size));
@@ -316,11 +317,13 @@ static void __init setup_memory(void)
 		if (initrd_end > phys_to_virt(PFN_PHYS(max_low_pfn))) {
 			printk("initrd extends beyond end of memory "
 			       "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
-			       initrd_end, phys_to_virt(PFN_PHYS(max_low_pfn)));
+			       initrd_end,
+			       phys_to_virt(PFN_PHYS(max_low_pfn)));
 			initrd_start = initrd_end = 0;
+		} else {
+			reserve_bootmem(virt_to_phys(initrd_start),
+					INITRD_SIZE);
 		}
-		else
-			reserve_bootmem(virt_to_phys(initrd_start), INITRD_SIZE);
 	}
 #endif /* CONFIG_BLK_DEV_INITRD */
 }
@@ -336,7 +339,7 @@ setup_arch(char **cmdline_p)
 	struct percpu_struct *cpu;
 	char *type_name, *var_name, *p;
 
-	hwrpb = (struct hwrpb_struct*)(IDENT_ADDR + INIT_HWRPB->phys_addr);
+	hwrpb = (struct hwrpb_struct*) __va(INIT_HWRPB->phys_addr);
 
 	/* 
 	 * Locate the command line.
@@ -394,9 +397,10 @@ setup_arch(char **cmdline_p)
 		      type_name, (*var_name ? " variation " : ""), var_name,
 		      hwrpb->sys_type, hwrpb->sys_variation);
 	}
-	if (vec != &alpha_mv)
+	if (vec != &alpha_mv) {
 		alpha_mv = *vec;
-
+	}
+	
 #ifdef CONFIG_ALPHA_GENERIC
 	/* Assume that we've booted from SRM if we havn't booted from MILO.
 	   Detect the later by looking for "MILO" in the system serial nr.  */
@@ -490,10 +494,12 @@ static char systype_names[][16] = {
 	"Mikasa", "EB64", "EB66", "EB64+", "AlphaBook1",
 	"Rawhide", "K2", "Lynx", "XL", "EB164", "Noritake",
 	"Cortex", "29", "Miata", "XXM", "Takara", "Yukon",
-	"Tsunami", "Wildfire", "CUSCO"
+	"Tsunami", "Wildfire", "CUSCO", "Eiger"
 };
 
 static char unofficial_names[][8] = {"100", "Ruffian"};
+
+static char api_names[][16] = {"200", "Nautilus"};
 
 static char eb164_names[][8] = {"EB164", "PC164", "LX164", "SX164", "RX164"};
 static int eb164_indices[] = {0,0,0,1,1,1,1,1,2,2,2,2,3,3,3,3,4};
@@ -517,7 +523,6 @@ static char tsunami_names[][16] = {
 	"Goldrush", "Webbrick", "Catamaran"
 };
 static int tsunami_indices[] = {0,1,2,3,4,5,6,7,8};
-
 
 static struct alpha_machine_vector * __init
 get_sysvec(long type, long variation, long cpu)
@@ -561,12 +566,19 @@ get_sysvec(long type, long variation, long cpu)
 		NULL,		/* Tsunami -- see variation.  */
 		NULL,		/* Wildfire */
 		NULL,		/* CUSCO */
+		&eiger_mv,	/* Eiger */
 	};
 
 	static struct alpha_machine_vector *unofficial_vecs[] __initlocaldata =
 	{
 		NULL,		/* 100 */
 		&ruffian_mv,
+	};
+
+	static struct alpha_machine_vector *api_vecs[] __initlocaldata =
+	{
+		NULL,		/* 200 */
+		&nautilus_mv,
 	};
 
 	static struct alpha_machine_vector *alcor_vecs[] __initlocaldata = 
@@ -617,6 +629,9 @@ get_sysvec(long type, long variation, long cpu)
 	vec = NULL;
 	if (type < N(systype_vecs)) {
 		vec = systype_vecs[type];
+	} else if ((type > ST_API_BIAS) &&
+		   (type - ST_API_BIAS) < N(api_vecs)) {
+		vec = api_vecs[type - ST_API_BIAS];
 	} else if ((type > ST_UNOFFICIAL_BIAS) &&
 		   (type - ST_UNOFFICIAL_BIAS) < N(unofficial_vecs)) {
 		vec = unofficial_vecs[type - ST_UNOFFICIAL_BIAS];
@@ -690,12 +705,14 @@ get_sysvec_byname(const char *name)
 		&eb64p_mv,
 		&eb66_mv,
 		&eb66p_mv,
+		&eiger_mv,
 		&jensen_mv,
 		&lx164_mv,
 		&miata_mv,
 		&mikasa_mv,
 		&mikasa_primo_mv,
 		&monet_mv,
+		&nautilus_mv,
 		&noname_mv,
 		&noritake_mv,
 		&noritake_primo_mv,
@@ -736,6 +753,9 @@ get_sysnames(long type, long variation,
 	   else set type name to family */
 	if (type < N(systype_names)) {
 		*type_name = systype_names[type];
+	} else if ((type > ST_API_BIAS) &&
+		   (type - ST_API_BIAS) < N(api_names)) {
+		*type_name = api_names[type - ST_API_BIAS];
 	} else if ((type > ST_UNOFFICIAL_BIAS) &&
 		   (type - ST_UNOFFICIAL_BIAS) < N(unofficial_names)) {
 		*type_name = unofficial_names[type - ST_UNOFFICIAL_BIAS];

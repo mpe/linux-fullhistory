@@ -684,7 +684,7 @@ static void create_proc_ide_drives(ide_hwif_t *hwif)
 		if (drive->proc)
 			continue;
 
-		drive->proc = create_proc_entry(drive->name, S_IFDIR, parent);
+		drive->proc = proc_mkdir(drive->name, parent);
 		if (drive->proc) {
 			ide_add_proc_entries(drive->proc, generic_drive_entries, drive);
 			if (driver) {
@@ -731,16 +731,15 @@ void create_proc_ide_interfaces(void)
 
 	for (h = 0; h < MAX_HWIFS; h++) {
 		ide_hwif_t *hwif = &ide_hwifs[h];
-		int exist = (hwif->proc != NULL);
 
 		if (!hwif->present)
 			continue;
-		if (!exist)
-			hwif->proc = create_proc_entry(hwif->name, S_IFDIR, proc_ide_root);
-		if (!hwif->proc)
-			return;
-		if (!exist)
+		if (!hwif->proc) {
+			hwif->proc = proc_mkdir(hwif->name, proc_ide_root);
+			if (!hwif->proc)
+				return;
 			ide_add_proc_entries(hwif->proc, hwif_entries, hwif);
+		}
 		create_proc_ide_drives(hwif);
 	}
 }
@@ -768,7 +767,7 @@ static void destroy_proc_ide_interfaces(void)
 
 void proc_ide_create(void)
 {
-	proc_ide_root = create_proc_entry("ide", S_IFDIR, 0);
+	proc_ide_root = proc_mkdir("ide", 0);
 	if (!proc_ide_root) return;
 
 	create_proc_ide_interfaces();

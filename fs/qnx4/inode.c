@@ -72,14 +72,6 @@ static void qnx4_write_super(struct super_block *sb)
 	sb->s_dirt = 0;
 }
 
-static void qnx4_put_inode(struct inode *inode)
-{
-	if (inode->i_nlink != 0) {
-		return;
-	}
-	inode->i_size = 0;
-}
-
 static void qnx4_write_inode(struct inode *inode)
 {
 	struct qnx4_inode_entry *raw_inode;
@@ -134,15 +126,13 @@ static struct super_operations qnx4_sops =
 #else
 	NULL,
 #endif
-#ifdef CONFIG_QNX4FS_RW
-	qnx4_put_inode,
-	qnx4_delete_inode,
-	NULL,			/* notify_change */
-#else
 	NULL,			/* put_inode */
+#ifdef CONFIG_QNX4FS_RW
+	qnx4_delete_inode,
+#else
 	NULL,			/* delete_inode */
-	NULL,			/* notify_change */
 #endif
+	NULL,			/* notify_change */
 	qnx4_put_super,
 #ifdef CONFIG_QNX4FS_RW
 	qnx4_write_super,

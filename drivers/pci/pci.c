@@ -6,7 +6,7 @@
  *	Copyright 1993 -- 1997 Drew Eckhardt, Frederic Potter,
  *	David Mosberger-Tang
  *
- *	Copyright 1997 -- 1999 Martin Mares <mj@atrey.karlin.mff.cuni.cz>
+ *	Copyright 1997 -- 1999 Martin Mares <mj@suse.cz>
  */
 
 #include <linux/types.h>
@@ -437,7 +437,6 @@ static unsigned int __init pci_do_scan_bus(struct pci_bus *bus)
 		dev = dev_cache;
 		memset(dev, 0, sizeof(*dev));
 		dev->bus = bus;
-		dev->sysdata = bus->sysdata;
 		dev->devfn  = devfn;
 
 		if (pci_read_config_byte(dev, PCI_HEADER_TYPE, &hdr_type))
@@ -557,7 +556,6 @@ static unsigned int __init pci_do_scan_bus(struct pci_bus *bus)
 			child->self = dev;
 			child->parent = bus;
 			child->ops = bus->ops;
-			child->sysdata = bus->sysdata;
 
 			/*
 			 * Set up the primary, secondary and subordinate

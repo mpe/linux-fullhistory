@@ -168,3 +168,8 @@ pcibios_update_irq(struct pci_dev *dev, int irq)
 	pci_write_config_byte(dev, PCI_INTERRUPT_LINE, irq);
 	/* XXX FIXME - update OF device tree node interrupt property */
 }
+
+void __init
+pcibios_align_resource(void *data, struct resource *res, unsigned long size)
+{
+}

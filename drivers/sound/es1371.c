@@ -3101,9 +3101,7 @@ static int __init probe_chip(struct pci_dev *pcidev, int index)
 		goto err_dev4;
 #ifdef ES1371_DEBUG
 	/* intialize the debug proc device */
-	s->ps = create_proc_entry("es1371", S_IFREG | S_IRUGO, NULL);
-	if (s->ps)
-		s->ps->read_proc = proc_es1371_dump;
+	s->ps = create_proc_read_entry("es1371",0,NULL,proc_es1371_dump,NULL);
 #endif /* ES1371_DEBUG */
 	
 	/* initialize codec registers */

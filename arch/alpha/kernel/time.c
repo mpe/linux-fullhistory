@@ -174,7 +174,7 @@ static inline unsigned long mktime(unsigned int year, unsigned int mon,
 
 #ifdef CONFIG_RTC
 void
-rtc_init_pit (void)
+rtc_init_pit(void)
 {
 	unsigned char control;
 
@@ -192,6 +192,25 @@ rtc_init_pit (void)
 	outb(0xb6, 0x43);	/* pit counter 2: speaker */
 	outb(0x31, 0x42);
 	outb(0x13, 0x42);
+}
+
+void
+rtc_kill_pit(void)
+{
+	unsigned char control;
+
+	cli();
+
+	/* Reset periodic interrupt frequency.  */
+	CMOS_WRITE(0x26, RTC_FREQ_SELECT);
+
+	/* Turn on periodic interrupts.  */
+	control = CMOS_READ(RTC_CONTROL);
+	control |= RTC_PIE;
+	CMOS_WRITE(control, RTC_CONTROL);	
+	CMOS_READ(RTC_INTR_FLAGS);
+
+	sti();
 }
 #endif
 

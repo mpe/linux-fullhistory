@@ -213,7 +213,7 @@ void proc_device_tree_init(void)
 	struct device_node *root;
 	if ( !have_of )
 		return;
-	proc_device_tree = create_proc_entry("device-tree", S_IFDIR, 0);
+	proc_device_tree = proc_mkdir("device-tree", 0);
 	if (proc_device_tree == 0)
 		return;
 	root = find_path_device("/");

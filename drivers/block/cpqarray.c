@@ -223,7 +223,7 @@ struct file_operations ida_fops  = {
 static void __init ida_procinit(int i)
 {
 	if (proc_array == NULL) {
-		proc_array = create_proc_entry("driver/array", S_IFDIR, NULL);
+		proc_array = proc_mkdir("driver/array", NULL);
 		if (!proc_array) return;
 	}
 

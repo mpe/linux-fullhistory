@@ -98,6 +98,8 @@ extern __inline__ void outl(unsigned int b, unsigned long addr)
 #define inb_p inb
 #define outb_p outb
 
+#define IO_SPACE_LIMIT 0xffffffff
+
 extern void sun4c_mapioaddr(unsigned long, unsigned long, int bus_type, int rdonly);
 extern void srmmu_mapioaddr(unsigned long, unsigned long, int bus_type, int rdonly);
 

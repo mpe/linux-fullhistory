@@ -45,7 +45,7 @@ struct msginfo {
 	unsigned short  msgseg; 
 };
 
-#define MSGMNI   128   /* <= IPCMNI */     /* max # of msg queue identifiers */
+#define MSGMNI    16   /* <= IPCMNI */     /* max # of msg queue identifiers */
 #define MSGMAX  8192   /* <= INT_MAX */   /* max size of message (bytes) */
 #define MSGMNB 16384   /* <= INT_MAX */   /* default max size of a message queue */
 

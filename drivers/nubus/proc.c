@@ -95,7 +95,7 @@ static void nubus_proc_populate(struct nubus_dev* dev,
 		struct nubus_dir dir;
 		
 		sprintf(name, "%x", ent.type);
-		e = create_proc_entry(name, S_IFDIR, parent);
+		e = proc_mkdir(name, parent);
 		if (!e) return;
 
 		/* And descend */
@@ -131,8 +131,7 @@ int nubus_proc_attach_device(struct nubus_dev *dev)
 		
 	/* Create a directory */
 	sprintf(name, "%x", dev->board->slot);
-	e = dev->procdir = create_proc_entry(name, S_IFDIR,
-					     proc_bus_nubus_dir);
+	e = dev->procdir = proc_mkdir(name, proc_bus_nubus_dir);
 	if (!e)
 		return -ENOMEM;
 
@@ -169,7 +168,7 @@ void __init nubus_proc_init(void)
 {
 	if (!MACH_IS_MAC)
 		return;
-	proc_bus_nubus_dir = create_proc_entry("nubus", S_IFDIR, proc_bus);
+	proc_bus_nubus_dir = proc_mkdir("nubus", proc_bus);
 	create_proc_info_entry("devices", 0, proc_bus_nubus_dir,
 				get_nubus_dev_info);
 	proc_bus_nubus_add_devices();

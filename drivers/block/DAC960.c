@@ -3474,7 +3474,7 @@ static void DAC960_CreateProcEntries(void)
 {
   static PROC_DirectoryEntry_T *StatusProcEntry;
   int ControllerNumber;
-  DAC960_ProcDirectoryEntry = create_proc_entry("driver/rd", S_IFDIR, NULL);
+  DAC960_ProcDirectoryEntry = proc_mkdir("driver/rd", NULL);
   StatusProcEntry = create_proc_read_entry("status", 0,
 					   DAC960_ProcDirectoryEntry,
 					   DAC960_ProcReadStatus, NULL);

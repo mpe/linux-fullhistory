@@ -1614,10 +1614,7 @@ int init_module(void)
 
 #if OLYMPIC_NETWORK_MONITOR
 #ifdef CONFIG_PROC_FS
-	struct proc_dir_entry *ent ; 
-
-	ent = create_proc_entry("net/olympic_tr",0,0); 
-	ent->read_proc = &olympic_proc_info ; 
+	create_proc_read_entry("net/olympic_tr",0,0,olympic_proc_info,NULL); 
 #endif
 #endif
         for (i = 0; (i<OLYMPIC_MAX_ADAPTERS); i++) {

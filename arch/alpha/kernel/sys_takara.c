@@ -40,9 +40,13 @@ takara_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
 			outb(mask, 0x21);	/* ISA PIC1 */
 		else
 			outb(mask >> 8, 0xA1);	/* ISA PIC2 */
-	} else if (irq <= 31) {
-		regaddr = 0x510 + ((irq - 16) & 0x0c);
-		outl((mask >> ((irq - 16) & 0x0c)) & 0xf0000Ul, regaddr);
+	} else {
+		if (irq > 63)
+			mask = _alpha_irq_masks[1] << 16;
+		else
+			mask = mask >> ((irq - 16) & 0x30);
+		regaddr = 0x510 + (((irq - 16) >> 2) & 0x0c);
+		outl(mask & 0xffff0000UL, regaddr);
 	}
 }
 
@@ -87,10 +91,6 @@ static void
 takara_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 {
 	int irq = (vector - 0x800) >> 4;
-
-	if (irq > 15)
-		irq = ((vector - 0x800) >> 6) + 12;
-	
 	handle_irq(irq, irq, regs);
 }
 
@@ -99,10 +99,9 @@ takara_init_irq(void)
 {
 	STANDARD_INIT_IRQ_PROLOG;
 
-	if (alpha_using_srm)
+	if (alpha_using_srm) {
 		alpha_mv.device_interrupt = takara_srm_device_interrupt;
-
-	if (!alpha_using_srm) {
+	} else {
 		unsigned int ctlreg = inl(0x500);
 
 		/* Return to non-accelerated mode.  */
@@ -125,6 +124,37 @@ takara_init_irq(void)
  * doesn't explicitly generate PCI-type interrupts, so we can
  * assign it whatever the hell IRQ we like and it doesn't matter.
  */
+
+static int __init
+takara_map_irq_srm(struct pci_dev *dev, u8 slot, u8 pin)
+{
+	static char irq_tab[15][5] __initlocaldata = {
+		{ 16+3, 16+3, 16+3, 16+3, 16+3},   /* slot  6 == device 3 */
+		{ 16+2, 16+2, 16+2, 16+2, 16+2},   /* slot  7 == device 2 */
+		{ 16+1, 16+1, 16+1, 16+1, 16+1},   /* slot  8 == device 1 */
+		{   -1,   -1,   -1,   -1,   -1},   /* slot  9 == nothing */
+		{   -1,   -1,   -1,   -1,   -1},   /* slot 10 == nothing */
+		{   -1,   -1,   -1,   -1,   -1},   /* slot 11 == nothing */
+		/* These are behind the bridges.  */
+		{   12,   12,   13,   14,   15},   /* slot 12 == nothing */
+		{    8,    8,    9,   19,   11},   /* slot 13 == nothing */
+		{    4,    4,    5,    6,    7},   /* slot 14 == nothing */
+		{    0,    0,    1,    2,    3},   /* slot 15 == nothing */
+		{   -1,   -1,   -1,   -1,   -1},   /* slot 16 == nothing */
+		{64+ 0, 64+0, 64+1, 64+2, 64+3},   /* slot 17= device 4 */
+		{48+ 0, 48+0, 48+1, 48+2, 48+3},   /* slot 18= device 3 */
+		{32+ 0, 32+0, 32+1, 32+2, 32+3},   /* slot 19= device 2 */
+		{16+ 0, 16+0, 16+1, 16+2, 16+3},   /* slot 20= device 1 */
+	};
+	const long min_idsel = 6, max_idsel = 20, irqs_per_slot = 5;
+        int irq = COMMON_TABLE_LOOKUP;
+	if (irq >= 0 && irq < 16) {
+		/* Guess that we are behind a bridge.  */
+		unsigned int busslot = PCI_SLOT(dev->bus->self->devfn);
+		irq += irq_tab[busslot-min_idsel][0];
+	}
+	return irq;
+}
 
 static int __init
 takara_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
@@ -165,10 +195,13 @@ takara_swizzle(struct pci_dev *dev, u8 *pinp)
 		if (pin == 1)
 			pin += (20 - busslot);
 		else {
-			/* Must be a card-based bridge.  */
-			printk(KERN_WARNING "takara_swizzle: cannot handle "
-			       "card-bridge behind builtin bridge yet.\n");
+			printk(KERN_WARNING "takara_swizzle: can only "
+			       "handle cards with INTA IRQ pin.\n");
 		}
+	} else {
+		/* Must be a card-based bridge.  */
+		printk(KERN_WARNING "takara_swizzle: cannot handle "
+		       "card-bridge behind builtin bridge yet.\n");
 	}
 
 	*pinp = pin;
@@ -178,8 +211,11 @@ takara_swizzle(struct pci_dev *dev, u8 *pinp)
 static void __init
 takara_init_pci(void)
 {
+	if (alpha_using_srm)
+		alpha_mv.pci_map_irq = takara_map_irq_srm;
+
 	common_init_pci();
-	/* ns87312_enable_ide(0x26e); */
+	ns87312_enable_ide(0x26e);
 }
 
 
@@ -198,8 +234,8 @@ struct alpha_machine_vector takara_mv __initmv = {
 	min_io_address:		DEFAULT_IO_BASE,
 	min_mem_address:	CIA_DEFAULT_MEM_BASE,
 
-	nr_irqs:		20,
-	irq_probe_mask:		_PROBE_MASK(20),
+	nr_irqs:		128,
+	irq_probe_mask:		_PROBE_MASK(48),
 	update_irq_hw:		takara_update_irq_hw,
 	ack_irq:		common_ack_irq,
 	device_interrupt:	takara_device_interrupt,

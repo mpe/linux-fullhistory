@@ -42,8 +42,8 @@ int __local_irq_count;
 int __local_bh_count;
 #endif
 
-#if NR_IRQS > 64
-#  error Unable to handle more than 64 irq levels.
+#if NR_IRQS > 128
+#  error Unable to handle more than 128 irq levels.
 #endif
 
 #ifdef CONFIG_ALPHA_GENERIC
@@ -60,7 +60,8 @@ int __local_bh_count;
 /*
  * Shadow-copy of masked interrupts.
  */
-unsigned long alpha_irq_mask = ~0UL;
+
+unsigned long _alpha_irq_masks[2] = { ~0UL, ~0UL };
 
 /*
  * The ack_irq routine used by 80% of the systems.
@@ -110,6 +111,8 @@ void (*perf_irq)(unsigned long, struct pt_regs *) = dummy_perf;
 # define IACK_SC	TSUNAMI_IACK_SC
 #elif defined(CONFIG_ALPHA_POLARIS)
 # define IACK_SC	POLARIS_IACK_SC
+#elif defined(CONFIG_ALPHA_IRONGATE)
+# define IACK_SC        IRONGATE_IACK_SC
 #else
   /* This is bogus but necessary to get it to compile on all platforms. */
 # define IACK_SC	1L
@@ -185,13 +188,15 @@ static struct irqaction *irq_action[NR_IRQS];
 static inline void
 mask_irq(unsigned long irq)
 {
-	alpha_mv.update_irq_hw(irq, alpha_irq_mask |= 1UL << irq, 0);
+	set_bit(irq, _alpha_irq_masks);
+	alpha_mv.update_irq_hw(irq, alpha_irq_mask, 0);
 }
 
 static inline void
 unmask_irq(unsigned long irq)
 {
-	alpha_mv.update_irq_hw(irq, alpha_irq_mask &= ~(1UL << irq), 1);
+	clear_bit(irq, _alpha_irq_masks);
+	alpha_mv.update_irq_hw(irq, alpha_irq_mask, 1);
 }
 
 void
@@ -437,17 +442,13 @@ static inline void
 get_irqlock(int cpu, void* where)
 {
 	if (!spin_trylock(&global_irq_lock)) {
-		/* do we already hold the lock? */
-		if (cpu == global_irq_holder) {
-#if 0
-			printk("get_irqlock: already held at %08lx\n",
-			       previous_irqholder);
-#endif
+		/* Do we already hold the lock?  */
+		if (cpu == global_irq_holder)
 			return;
-		}
-		/* Uhhuh.. Somebody else got it. Wait.. */
+		/* Uhhuh.. Somebody else got it.  Wait.  */
 		spin_lock(&global_irq_lock);
 	}
+
 	/*
 	 * Ok, we got the lock bit.
 	 * But that's actually just the easy part.. Now
@@ -819,7 +820,9 @@ probe_irq_on(void)
 	unsigned long delay;
 	unsigned int i;
 
-	for (i = ACTUAL_NR_IRQS - 1; i > 0; i--) {
+	/* Handle only the first 64 IRQs here.  This is enough for
+	   [E]ISA, which is the only thing that needs probing anyway.  */
+	for (i = (ACTUAL_NR_IRQS - 1) & 63; i > 0; i--) {
 		if (!(PROBE_MASK & (1UL << i))) {
 			continue;
 		}
@@ -852,6 +855,8 @@ probe_irq_off(unsigned long irqs)
 {
 	int i;
 	
+	/* Handle only the first 64 IRQs here.  This is enough for
+	   [E]ISA, which is the only thing that needs probing anyway.  */
         irqs &= alpha_irq_mask;
 	if (!irqs)
 		return 0;

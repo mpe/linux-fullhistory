@@ -141,22 +141,7 @@ common_kill_arch (int mode, char *restart_cmd)
 
 #ifdef CONFIG_RTC
 	/* Reset rtc to defaults.  */
-	{
-		unsigned char control;
-
-		cli();
-
-		/* Reset periodic interrupt frequency.  */
-		CMOS_WRITE(0x26, RTC_FREQ_SELECT);
-
-		/* Turn on periodic interrupts.  */
-		control = CMOS_READ(RTC_CONTROL);
-		control |= RTC_PIE;
-		CMOS_WRITE(control, RTC_CONTROL);	
-		CMOS_READ(RTC_INTR_FLAGS);
-
-		sti();
-	}
+	rtc_kill_pit();
 #endif
 
 	if (!alpha_using_srm && mode != LINUX_REBOOT_CMD_RESTART) {

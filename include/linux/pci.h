@@ -3,7 +3,7 @@
  *
  *	PCI defines and function prototypes
  *	Copyright 1994, Drew Eckhardt
- *	Copyright 1997--1999 Martin Mares <mj@atrey.karlin.mff.cuni.cz>
+ *	Copyright 1997--1999 Martin Mares <mj@suse.cz>
  *
  *	For more information, please consult the following manuals (look at
  *	http://www.pcisig.com/ for how to get them):
@@ -417,6 +417,7 @@ void pcibios_fixup_pbus_ranges(struct pci_bus *, struct pbus_set_ranges_data *);
 int pcibios_enable_device(struct pci_dev *);
 char *pcibios_setup (char *str);
 
+void pcibios_align_resource(void *, struct resource *, unsigned long);
 void pcibios_update_resource(struct pci_dev *, struct resource *,
 			     struct resource *, int);
 void pcibios_update_irq(struct pci_dev *, int irq);

@@ -1,7 +1,7 @@
 /*
  *	Generate devlist.h from the PCI ID file.
  *
- *	(c) 1999 Martin Mares <mj@ucw.cz>
+ *	(c) 1999 Martin Mares <mj@suse.cz>
  */
 
 #include <stdio.h>

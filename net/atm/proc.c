@@ -523,7 +523,7 @@ void atm_proc_dev_deregister(struct atm_dev *dev)
 int __init atm_proc_init(void)
 {
 	struct proc_dir_entry *dev=NULL,*pvc=NULL,*svc=NULL,*arp=NULL,*lec=NULL;
-	atm_proc_root = create_proc_entry("atm", S_IFDIR, &proc_root);
+	atm_proc_root = proc_mkdir("atm", &proc_root);
 	if (!atm_proc_root)
 		return -ENOMEM;
 	dev = create_proc_entry("devices",0,atm_proc_root);

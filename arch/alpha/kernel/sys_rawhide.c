@@ -29,42 +29,55 @@
 #include "pci_impl.h"
 #include "machvec_impl.h"
 
+static unsigned int hose_irq_masks[4] = {
+	0xff0000, 0xfe0000, 0xff0000, 0xff0000
+};
+
+
+/* Note that `mask' initially contains only the low 64 bits.  */
 
 static void
 rawhide_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
 {
-	if (irq >= 40) {
-		/* PCI bus 1 with builtin NCR810 SCSI */
-		*(vuip)MCPCIA_INT_MASK0(5) =
-			(~((mask) >> 40) & 0x00ffffffU) | 0x00fe0000U;
-		mb();
-		/* ... and read it back to make sure it got written.  */
-	  	*(vuip)MCPCIA_INT_MASK0(5);
+	unsigned int saddle, hose, new_irq;
+
+	if (irq < 16) {
+		if (irq < 8)
+			outb(mask, 0x21);		/* ISA PIC1 */
+		else
+			outb(mask >> 8, 0xA1);		/* ISA PIC2 */
+		return;
 	}
-	else if (irq >= 16) {
-		/* PCI bus 0 with EISA bridge */
-		*(vuip)MCPCIA_INT_MASK0(4) =
-			(~((mask) >> 16) & 0x00ffffffU) | 0x00ff0000U;
-		mb();
-		/* ... and read it back to make sure it got written.  */
-	  	*(vuip)MCPCIA_INT_MASK0(4);
+
+	saddle = (irq > 63);
+	mask = _alpha_irq_masks[saddle];
+
+	if (saddle == 0) {
+		/* Saddle 0 includes EISA interrupts.  */
+		mask >>= 16;
+		new_irq = irq - 16;
+	} else {
+		new_irq = irq - 64;
 	}
-	else if (irq >= 8)
-		outb(mask >> 8, 0xA1);	/* ISA PIC2 */
-	else
-		outb(mask, 0x21);	/* ISA PIC1 */
+
+	hose = saddle << 1;
+	if (new_irq >= 24) {
+		mask >>= 24;
+		hose += 1;
+	}
+
+	*(vuip)MCPCIA_INT_MASK0(hose) =
+		(~mask & 0x00ffffff) | hose_irq_masks[hose];
+	mb();
+	*(vuip)MCPCIA_INT_MASK0(hose);
 }
 
 static void 
 rawhide_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 {
-	int irq, ack;
+	int irq;
 
-	ack = irq = (vector - 0x800) >> 4;
-
-	/* ??? A 4 bus RAWHIDE has 67 interrupts.  Oops.  We need
-	   something wider than one word for our own internal
-	   manipulations.  */
+	irq = (vector - 0x800) >> 4;
 
         /*
          * The RAWHIDE SRM console reports PCI interrupts with a vector
@@ -73,37 +86,37 @@ rawhide_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 	 * it line up with the actual bit numbers from the REQ registers,
 	 * which is how we manage the interrupts/mask. Sigh...
 	 *
-	 * also, PCI #1 interrupts are offset some more... :-(
+	 * Also, PCI #1 interrupts are offset some more... :-(
          */
-	if (irq == 52)
-		ack = irq = 56; /* SCSI on PCI 1 is special */
-	else {
-		if (irq >= 24) /* adjust all PCI interrupts down 8 */
-			ack = irq = irq - 8;
-		if (irq >= 48) /* adjust PCI bus 1 interrupts down another 8 */
-			ack = irq = irq - 8;
+
+	if (irq == 52) {
+		/* SCSI on PCI1 is special.  */
+		irq = 72;
 	}
 
-	handle_irq(irq, ack, regs);
+	/* Adjust by which hose it is from.  */
+	irq -= ((irq + 16) >> 2) & 0x38;
+
+	handle_irq(irq, irq, regs);
 }
 
 static void __init
 rawhide_init_irq(void)
 {
+	struct pci_controler *hose;
+
+	mcpcia_init_hoses();
+
 	STANDARD_INIT_IRQ_PROLOG;
 
-	/* HACK ALERT! only PCI busses 0 and 1 are used currently,
-	   (MIDs 4 and 5 respectively) and routing is only to CPU #1*/
+	/* HACK ALERT! Routing is only to CPU #0.  */
+	for (hose = hose_head; hose; hose = hose->next) {
+		int h = hose->index;
 
-	*(vuip)MCPCIA_INT_MASK0(4) =
-		(~((alpha_irq_mask) >> 16) & 0x00ffffffU) | 0x00ff0000U; mb();
-	/* ... and read it back to make sure it got written.  */
-	*(vuip)MCPCIA_INT_MASK0(4);
-
-	*(vuip)MCPCIA_INT_MASK0(5) =
-		(~((alpha_irq_mask) >> 40) & 0x00ffffffU) | 0x00fe0000U; mb();
-	/* ... and read it back to make sure it got written.  */
-	*(vuip)MCPCIA_INT_MASK0(5);
+		*(vuip)MCPCIA_INT_MASK0(h) = hose_irq_masks[h];
+		mb();
+		*(vuip)MCPCIA_INT_MASK0(h);
+	}
 
 	enable_irq(2);
 }
@@ -177,8 +190,8 @@ struct alpha_machine_vector rawhide_mv __initmv = {
 	min_io_address:		DEFAULT_IO_BASE,
 	min_mem_address:	MCPCIA_DEFAULT_MEM_BASE,
 
-	nr_irqs:		64,
-	irq_probe_mask:		_PROBE_MASK(64),
+	nr_irqs:		128,
+	irq_probe_mask:		_PROBE_MASK(128),
 	update_irq_hw:		rawhide_update_irq_hw,
 	ack_irq:		common_ack_irq,
 	device_interrupt:	rawhide_srm_device_interrupt,

@@ -190,12 +190,7 @@ static int sem_revalidate(int semid, struct semid_ds* sma, int nsems, short flg)
 	smanew = sem_lock(semid);
 	if(smanew==NULL)
 		return -EIDRM;
-	if(smanew != sma)
-		goto out_EIDRM;
-	if(sem_checkid(sma,semid))
-		goto out_EIDRM;
-	if(sma->sem_nsems != nsems) {
-out_EIDRM:
+	if(smanew != sma || sem_checkid(sma,semid) || sma->sem_nsems != nsems) {
 		sem_unlock(semid);
 		return -EIDRM;
 	}

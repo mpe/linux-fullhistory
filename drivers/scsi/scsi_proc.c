@@ -120,7 +120,7 @@ void build_proc_dir_entries(Scsi_Host_Template * tpnt)
 	struct Scsi_Host *hpnt;
 	char name[10];	/* see scsi_unregister_host() */
 
-	tpnt->proc_dir = create_proc_entry(tpnt->proc_name, S_IFDIR, proc_scsi);
+	tpnt->proc_dir = proc_mkdir(tpnt->proc_name, proc_scsi);
 	tpnt->proc_dir->owner = tpnt->module;
 
 	hpnt = scsi_hostlist;

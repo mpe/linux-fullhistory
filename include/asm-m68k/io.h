@@ -47,6 +47,8 @@
 #define outb(x,addr) ((void) writeb(x,addr))
 #define outb_p(x,addr) outb(x,addr)
 
+#define IO_SPACE_LIMIT 0xffff
+
 
 /* Values for nocacheflag and cmode */
 #define IOMAP_FULL_CACHING		0

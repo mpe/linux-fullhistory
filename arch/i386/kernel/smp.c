@@ -102,7 +102,8 @@
 /* The 'big kernel lock' */
 spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
 
-volatile unsigned long smp_invalidate_needed;
+volatile unsigned long smp_invalidate_needed; /* immediate flush required */
+unsigned int cpu_tlbbad[NR_CPUS]; /* flush before returning to user space */
 
 /*
  * the following functions deal with sending IPIs between CPUs.
@@ -319,13 +320,9 @@ static void flush_tlb_others(unsigned int cpumask)
 			/*
 			 * Take care of "crossing" invalidates
 			 */
-			if (test_bit(cpu, &smp_invalidate_needed)) {
-				struct mm_struct *mm = current->mm;
-				clear_bit(cpu, &smp_invalidate_needed);
-				if (mm)
-					atomic_set_mask(1 << cpu, &mm->cpu_vm_mask);
-				local_flush_tlb();
-			}
+			if (test_bit(cpu, &smp_invalidate_needed))
+				do_flush_tlb_local();
+
 			--stuck;
 			if (!stuck) {
 				printk("stuck on TLB IPI wait (CPU#%d)\n",cpu);
@@ -345,7 +342,7 @@ static void flush_tlb_others(unsigned int cpumask)
  */	
 void flush_tlb_current_task(void)
 {
-	unsigned long vm_mask = 1 << current->processor;
+	unsigned long vm_mask = 1 << smp_processor_id();
 	struct mm_struct *mm = current->mm;
 	unsigned long cpu_mask = mm->cpu_vm_mask & ~vm_mask;
 
@@ -356,7 +353,7 @@ void flush_tlb_current_task(void)
 
 void flush_tlb_mm(struct mm_struct * mm)
 {
-	unsigned long vm_mask = 1 << current->processor;
+	unsigned long vm_mask = 1 << smp_processor_id();
 	unsigned long cpu_mask = mm->cpu_vm_mask & ~vm_mask;
 
 	mm->cpu_vm_mask = 0;
@@ -369,7 +366,7 @@ void flush_tlb_mm(struct mm_struct * mm)
 
 void flush_tlb_page(struct vm_area_struct * vma, unsigned long va)
 {
-	unsigned long vm_mask = 1 << current->processor;
+	unsigned long vm_mask = 1 << smp_processor_id();
 	struct mm_struct *mm = vma->vm_mm;
 	unsigned long cpu_mask = mm->cpu_vm_mask & ~vm_mask;
 
@@ -381,12 +378,29 @@ void flush_tlb_page(struct vm_area_struct * vma, unsigned long va)
 	flush_tlb_others(cpu_mask);
 }
 
-void flush_tlb_all(void)
+static inline void do_flush_tlb_all_local(void)
 {
-	flush_tlb_others(~(1 << current->processor));
 	local_flush_tlb();
+	if(current->mm==0) {
+		unsigned long cpu = smp_processor_id();
+		clear_bit(cpu, &current->active_mm->cpu_vm_mask);
+
+		cpu_tlbbad[cpu] = 1;
+	}
 }
 
+static void flush_tlb_all_ipi(void* info)
+{
+	do_flush_tlb_all_local();
+}
+
+void flush_tlb_all(void)
+{
+	if(cpu_online_map ^ (1<<smp_processor_id()))
+		smp_call_function (flush_tlb_all_ipi,0,1,1);
+
+	do_flush_tlb_all_local();
+}
 
 /*
  * this function sends a 'reschedule' IPI to another CPU.
@@ -518,15 +532,9 @@ asmlinkage void smp_reschedule_interrupt(void)
  */
 asmlinkage void smp_invalidate_interrupt(void)
 {
-	struct task_struct *tsk = current;
-	unsigned int cpu = tsk->processor;
+	if (test_bit(smp_processor_id(), &smp_invalidate_needed))
+		do_flush_tlb_local();
 
-	if (test_and_clear_bit(cpu, &smp_invalidate_needed)) {
-		struct mm_struct *mm = tsk->mm;
-		if (mm)
-			atomic_set_mask(1 << cpu, &mm->cpu_vm_mask);
-		local_flush_tlb();
-	}
 	ack_APIC_irq();
 
 }

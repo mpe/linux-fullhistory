@@ -84,7 +84,7 @@ pdev_assign_unassigned_resources(struct pci_dev *dev, u32 min_io, u32 min_mem)
 		DBGC(("  for root[%lx:%lx] min[%lx] size[%lx]\n",
 		      root->start, root->end, min, size));
 
-		if (allocate_resource(root, res, size, min, -1, size, dev) < 0) {
+		if (allocate_resource(root, res, size, min, -1, size, pcibios_align_resource, dev) < 0) {
 			printk(KERN_ERR
 			       "PCI: Failed to allocate resource %d for %s\n",
 			       i, dev->name);

@@ -9,11 +9,12 @@
 #include <linux/config.h>
 #include <asm/pgalloc.h>
 
-/* Whee.  Both TSUNAMI and POLARIS don't have an HAE.  Fix things up for
+/* Whee.  IRONGATE, POLARIS and TSUNAMI don't have an HAE.  Fix things up for
    the GENERIC kernel by defining the HAE address to be that of the cache.
    Now we can read and write it as we like.  ;-)  */
-#define TSUNAMI_HAE_ADDRESS	(&alpha_mv.hae_cache)
+#define IRONGATE_HAE_ADDRESS	(&alpha_mv.hae_cache)
 #define POLARIS_HAE_ADDRESS	(&alpha_mv.hae_cache)
+#define TSUNAMI_HAE_ADDRESS	(&alpha_mv.hae_cache)
 
 #if CIA_ONE_HAE_WINDOW
 #define CIA_HAE_ADDRESS		(&alpha_mv.hae_cache)
@@ -91,10 +92,11 @@
 
 #define DO_APECS_IO	IO(APECS,apecs)
 #define DO_CIA_IO	IO(CIA,cia)
+#define DO_IRONGATE_IO	IO(IRONGATE,irongate)
 #define DO_LCA_IO	IO(LCA,lca)
 #define DO_MCPCIA_IO	IO(MCPCIA,mcpcia)
-#define DO_PYXIS_IO	IO(PYXIS,pyxis)
 #define DO_POLARIS_IO	IO(POLARIS,polaris)
+#define DO_PYXIS_IO	IO(PYXIS,pyxis)
 #define DO_T2_IO	IO(T2,t2)
 #define DO_TSUNAMI_IO	IO(TSUNAMI,tsunami)
 
@@ -104,6 +106,7 @@
 
 #define DO_APECS_BUS	BUS(apecs)
 #define DO_CIA_BUS	BUS(cia)
+#define DO_IRONGATE_BUS	BUS(irongate)
 #define DO_LCA_BUS	BUS(lca)
 #define DO_MCPCIA_BUS	BUS(mcpcia)
 #define DO_PYXIS_BUS	BUS(pyxis)

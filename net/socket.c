@@ -340,18 +340,9 @@ struct socket *sock_alloc(void)
 	struct inode * inode;
 	struct socket * sock;
 
-	lock_kernel();
-	/* Damn! get_empty_inode is not SMP safe.
-	   I ask, why does it have decorative spinlock
-	   at the very beginning? Probably, dcache ops should
-	   be lock_kernel'ed inside inode.c
-	 */
 	inode = get_empty_inode();
-	if (!inode) {
-		unlock_kernel();
+	if (!inode)
 		return NULL;
-	}
-	unlock_kernel();
 
 	sock = socki_lookup(inode);
 

@@ -327,15 +327,10 @@ int register_ss_entry(int nsock, ss_entry_t ss_entry)
 #ifdef CONFIG_PROC_FS
 	if (proc_pccard) {
 	    char name[3];
-#ifdef PCMCIA_DEBUG
-	    struct proc_dir_entry *ent;
-#endif
 	    sprintf(name, "%02d", i);
-	    s->proc = create_proc_entry(name, S_IFDIR, proc_pccard);
+	    s->proc = proc_mkdir(name, proc_pccard);
 #ifdef PCMCIA_DEBUG
-	    ent = create_proc_entry("clients", 0, s->proc);
-	    ent->read_proc = proc_read_clients;
-	    ent->data = s;
+	    create_proc_read_entry("clients",0,s->proc,proc_read_clients,s);
 #endif
 	    ss_entry(ns, SS_ProcSetup, s->proc);
 	}
@@ -2236,7 +2231,7 @@ static int __init init_pcmcia_cs(void)
 	apm_register_callback(&handle_apm_event);
 #endif
 #ifdef CONFIG_PROC_FS
-    proc_pccard = create_proc_entry("pccard", S_IFDIR, proc_bus);
+    proc_pccard = proc_mkdir("pccard", proc_bus);
 #endif
     return 0;
 }

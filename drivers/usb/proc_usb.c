@@ -978,7 +978,7 @@ void proc_usb_add_bus(struct usb_bus *bus)
 	if (!usbdir)
 		return;
 	sprintf(buf, "%03d", bus->busnum);
-	if (!(bus->proc_entry = create_proc_entry(buf, S_IFDIR, usbdir)))
+	if (!(bus->proc_entry = proc_mkdir(buf, usbdir)))
 		return;
 	bus->proc_entry->data = bus;
 }
@@ -1024,7 +1024,7 @@ void proc_usb_cleanup (void)
 
 int proc_usb_init (void)
 {
-	usbdir = create_proc_entry ("usb", S_IFDIR, proc_bus);
+	usbdir = proc_mkdir ("usb", proc_bus);
 	if (!usbdir) {
 		printk ("proc_usb: cannot create /proc/bus/usb entry\n");
 		return -1;

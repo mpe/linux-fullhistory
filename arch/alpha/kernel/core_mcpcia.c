@@ -43,7 +43,7 @@
 # define DBG_CFG(args)
 #endif
 
-#define MCPCIA_MAX_HOSES 2
+#define MCPCIA_MAX_HOSES 4
 
 /* Dodge has PCI0 and PCI1 at MID 4 and 5 respectively.  Durango adds
    PCI2 and PCI3 at MID 6 and 7 respectively.  */
@@ -205,7 +205,7 @@ mk_conf_addr(struct pci_dev *dev, int where, struct pci_controler *hose,
 static int
 mcpcia_read_config_byte(struct pci_dev *dev, int where, u8 *value)
 {
-	struct pci_controler *hose = dev->sysdata;
+	struct pci_controler *hose = dev->sysdata ? : probing_hose;
 	unsigned long addr, w;
 	unsigned char type1;
 
@@ -221,7 +221,7 @@ mcpcia_read_config_byte(struct pci_dev *dev, int where, u8 *value)
 static int
 mcpcia_read_config_word(struct pci_dev *dev, int where, u16 *value)
 {
-	struct pci_controler *hose = dev->sysdata;
+	struct pci_controler *hose = dev->sysdata ? : probing_hose;
 	unsigned long addr, w;
 	unsigned char type1;
 
@@ -237,7 +237,7 @@ mcpcia_read_config_word(struct pci_dev *dev, int where, u16 *value)
 static int
 mcpcia_read_config_dword(struct pci_dev *dev, int where, u32 *value)
 {
-	struct pci_controler *hose = dev->sysdata;
+	struct pci_controler *hose = dev->sysdata ? : probing_hose;
 	unsigned long addr;
 	unsigned char type1;
 
@@ -252,7 +252,7 @@ mcpcia_read_config_dword(struct pci_dev *dev, int where, u32 *value)
 static int
 mcpcia_write_config(struct pci_dev *dev, int where, u32 value, long mask)
 {
-	struct pci_controler *hose = dev->sysdata;
+	struct pci_controler *hose = dev->sysdata ? : probing_hose;
 	unsigned long addr;
 	unsigned char type1;
 
@@ -305,6 +305,7 @@ mcpcia_probe_hose(int h)
 	mb();
 	mb();
 	draina();
+	wrmces(7);
 	mcheck_expected(cpu) = 1;
 	mcheck_taken(cpu) = 0;
 	mcheck_extra(cpu) = mid;
@@ -346,18 +347,33 @@ mcpcia_new_hose(int h)
 	io->start = MCPCIA_IO(mid) - MCPCIA_IO_BIAS;
 	io->end = io->start + 0xffff;
 	io->name = pci_io_names[h];
+	io->flags = IORESOURCE_IO;
 
 	mem->start = MCPCIA_DENSE(mid) - MCPCIA_MEM_BIAS;
 	mem->end = mem->start + 0xffffffff;
 	mem->name = pci_mem_names[h];
+	mem->flags = IORESOURCE_MEM;
 
 	hae_mem->start = mem->start;
 	hae_mem->end = mem->start + MCPCIA_MEM_MASK;
 	hae_mem->name = pci_hae0_name;
+	hae_mem->flags = IORESOURCE_MEM;
 
-	request_resource(&ioport_resource, io);
-	request_resource(&iomem_resource, mem);
-	request_resource(mem, hae_mem);
+	if (request_resource(&ioport_resource, io) < 0)
+		printk(KERN_ERR "Failed to request IO on hose %d\n", h);
+	if (request_resource(&iomem_resource, mem) < 0)
+		printk(KERN_ERR "Failed to request MEM on hose %d\n", h);
+	if (request_resource(mem, hae_mem) < 0)
+		printk(KERN_ERR "Failed to request HAE_MEM on hose %d\n", h);
+}
+
+static void
+mcpcia_pci_clr_err(int mid)
+{
+	*(vuip)MCPCIA_CAP_ERR(mid);
+	*(vuip)MCPCIA_CAP_ERR(mid) = 0xffffffff;   /* Clear them all.  */
+	mb();
+	*(vuip)MCPCIA_CAP_ERR(mid);  /* Re-read for force write.  */
 }
 
 static void __init
@@ -366,19 +382,13 @@ mcpcia_startup_hose(struct pci_controler *hose)
 	int mid = hose2mid(hose->index);
 	unsigned int tmp;
 
-	/* 
-	 * Set up error reporting. Make sure CPU_PE is OFF in the mask.
-	 */
-#if 0
-	tmp = *(vuip)MCPCIA_ERR_MASK(mid);
-	tmp &= ~4;
-	*(vuip)MCPCIA_ERR_MASK(mid) = tmp;
-	mb();
-	tmp = *(vuip)MCPCIA_ERR_MASK(mid);
-#endif
+	mcpcia_pci_clr_err(mid);
 
+	/* 
+	 * Set up error reporting.
+	 */
 	tmp = *(vuip)MCPCIA_CAP_ERR(mid);
-	tmp |= 0x0006;   /* master/target abort */
+	tmp |= 0x0006;		/* master/target abort */
 	*(vuip)MCPCIA_CAP_ERR(mid) = tmp;
 	mb();
 	tmp = *(vuip)MCPCIA_CAP_ERR(mid);
@@ -422,40 +432,41 @@ mcpcia_startup_hose(struct pci_controler *hose)
 void __init
 mcpcia_init_arch(void)
 {
-	extern asmlinkage void entInt(void);
-	struct pci_controler *hose;
-	int h, hose_count = 0;
-
-	/* Ho hum.. init_arch is called before init_IRQ, but we need to be
-	   able to handle machine checks.  So install the handler now.  */
-	wrent(entInt, 0);
-
 	/* With multiple PCI busses, we play with I/O as physical addrs.  */
 	ioport_resource.end = ~0UL;
 	iomem_resource.end = ~0UL;
 
+	/* Allocate hose 0.  That's the one that all the ISA junk hangs
+	   off of, from which we'll be registering stuff here in a bit.
+	   Other hose detection is done in mcpcia_init_hoses, which is
+	   called from init_IRQ.  */
+
+	mcpcia_new_hose(0);
+}
+
+/* This is called from init_IRQ, since we cannot take interrupts
+   before then.  Which means we cannot do this in init_arch.  */
+
+void __init
+mcpcia_init_hoses(void)
+{
+	struct pci_controler *hose;
+	int h, hose_count = 0;
+
 	/* First, find how many hoses we have.  */
 	for (h = 0; h < MCPCIA_MAX_HOSES; ++h) {
 		if (mcpcia_probe_hose(h)) {
-			mcpcia_new_hose(h);
+			if (h != 0)
+				mcpcia_new_hose(h);
 			hose_count++;
 		}
 	}
 
-	printk("mcpcia_init_arch: found %d hoses\n", hose_count);
+	printk("mcpcia_init_hoses: found %d hoses\n", hose_count);
 
 	/* Now do init for each hose.  */
 	for (hose = hose_head; hose; hose = hose->next)
 		mcpcia_startup_hose(hose);
-}
-
-static void
-mcpcia_pci_clr_err(int mid)
-{
-	*(vuip)MCPCIA_CAP_ERR(mid);
-	*(vuip)MCPCIA_CAP_ERR(mid) = 0xffffffff;   /* Clear them all.  */
-	mb();
-	*(vuip)MCPCIA_CAP_ERR(mid);  /* Re-read for force write.  */
 }
 
 static void
@@ -468,65 +479,65 @@ mcpcia_print_uncorrectable(struct el_MCPCIA_uncorrected_frame_mcheck *logout)
 
 	/* Print PAL fields */
 	for (i = 0; i < 24; i += 2) {
-		printk("\tpal temp[%d-%d]\t\t= %16lx %16lx\n\r",
+		printk("  paltmp[%d-%d] = %16lx %16lx\n",
 		       i, i+1, frame->paltemp[i], frame->paltemp[i+1]);
 	}
 	for (i = 0; i < 8; i += 2) {
-		printk("\tshadow[%d-%d]\t\t= %16lx %16lx\n\r",
+		printk("  shadow[%d-%d] = %16lx %16lx\n",
 		       i, i+1, frame->shadow[i], 
 		       frame->shadow[i+1]);
 	}
-	printk("\tAddr of excepting instruction\t= %16lx\n\r",
+	printk("  Addr of excepting instruction  = %16lx\n",
 	       frame->exc_addr);
-	printk("\tSummary of arithmetic traps\t= %16lx\n\r",
+	printk("  Summary of arithmetic traps    = %16lx\n",
 	       frame->exc_sum);
-	printk("\tException mask\t\t\t= %16lx\n\r",
+	printk("  Exception mask                 = %16lx\n",
 	       frame->exc_mask);
-	printk("\tBase address for PALcode\t= %16lx\n\r",
+	printk("  Base address for PALcode       = %16lx\n",
 	       frame->pal_base);
-	printk("\tInterrupt Status Reg\t\t= %16lx\n\r",
+	printk("  Interrupt Status Reg           = %16lx\n",
 	       frame->isr);
-	printk("\tCURRENT SETUP OF EV5 IBOX\t= %16lx\n\r",
+	printk("  CURRENT SETUP OF EV5 IBOX      = %16lx\n",
 	       frame->icsr);
-	printk("\tI-CACHE Reg %s parity error\t= %16lx\n\r",
+	printk("  I-CACHE Reg %s parity error   = %16lx\n",
 	       (frame->ic_perr_stat & 0x800L) ? 
 	       "Data" : "Tag", 
 	       frame->ic_perr_stat); 
-	printk("\tD-CACHE error Reg\t\t= %16lx\n\r",
+	printk("  D-CACHE error Reg              = %16lx\n",
 	       frame->dc_perr_stat);
 	if (frame->dc_perr_stat & 0x2) {
 		switch (frame->dc_perr_stat & 0x03c) {
 		case 8:
-			printk("\t\tData error in bank 1\n\r");
+			printk("    Data error in bank 1\n");
 			break;
 		case 4:
-			printk("\t\tData error in bank 0\n\r");
+			printk("    Data error in bank 0\n");
 			break;
 		case 20:
-			printk("\t\tTag error in bank 1\n\r");
+			printk("    Tag error in bank 1\n");
 			break;
 		case 10:
-			printk("\t\tTag error in bank 0\n\r");
+			printk("    Tag error in bank 0\n");
 			break;
 		}
 	}
-	printk("\tEffective VA\t\t\t= %16lx\n\r",
+	printk("  Effective VA                   = %16lx\n",
 	       frame->va);
-	printk("\tReason for D-stream\t\t= %16lx\n\r",
+	printk("  Reason for D-stream            = %16lx\n",
 	       frame->mm_stat);
-	printk("\tEV5 SCache address\t\t= %16lx\n\r",
+	printk("  EV5 SCache address             = %16lx\n",
 	       frame->sc_addr);
-	printk("\tEV5 SCache TAG/Data parity\t= %16lx\n\r",
+	printk("  EV5 SCache TAG/Data parity     = %16lx\n",
 	       frame->sc_stat);
-	printk("\tEV5 BC_TAG_ADDR\t\t\t= %16lx\n\r",
+	printk("  EV5 BC_TAG_ADDR                = %16lx\n",
 	       frame->bc_tag_addr);
-	printk("\tEV5 EI_ADDR: Phys addr of Xfer\t= %16lx\n\r",
+	printk("  EV5 EI_ADDR: Phys addr of Xfer = %16lx\n",
 	       frame->ei_addr);
-	printk("\tFill Syndrome\t\t\t= %16lx\n\r",
+	printk("  Fill Syndrome                  = %16lx\n",
 	       frame->fill_syndrome);
-	printk("\tEI_STAT reg\t\t\t= %16lx\n\r",
+	printk("  EI_STAT reg                    = %16lx\n",
 	       frame->ei_stat);
-	printk("\tLD_LOCK\t\t\t\t= %16lx\n\r",
+	printk("  LD_LOCK                        = %16lx\n",
 	       frame->ld_lock);
 }
 
@@ -547,7 +558,8 @@ mcpcia_machine_check(unsigned long vector, unsigned long la_ptr,
 	if (mcheck_expected(cpu)) {
 		mcpcia_pci_clr_err(mcheck_extra(cpu));
 	} else {
-		/* FIXME: how do we figure out which hose the error was on?  */	
+		/* FIXME: how do we figure out which hose the
+		   error was on?  */	
 		struct pci_controler *hose;
 		for (hose = hose_head; hose; hose = hose->next)
 			mcpcia_pci_clr_err(hose2mid(hose->index));

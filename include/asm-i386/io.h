@@ -101,6 +101,8 @@ __OUTS(b)
 __OUTS(w)
 __OUTS(l)
 
+#define IO_SPACE_LIMIT 0xffff
+
 #ifdef __KERNEL__
 
 #include <linux/vmalloc.h>
@@ -242,9 +244,6 @@ static inline int isa_check_signature(unsigned long io_addr,
 out:
 	return retval;
 }
-
-
-
 
 /* Nothing to do */
 

@@ -55,10 +55,15 @@
 #define ST_DEC_TSUNAMI		 34	/* Tsunami systype	*/
 #define ST_DEC_WILDFIRE		 35	/* Wildfire systype	*/
 #define ST_DEC_CUSCO		 36	/* CUSCO systype	*/
+#define ST_DEC_EIGER		 37	/* Eiger systype	*/
 
 /* UNOFFICIAL!!! */
 #define ST_UNOFFICIAL_BIAS	100
 #define ST_DTI_RUFFIAN		101	/* RUFFIAN systype	*/
+
+/* Alpha Processor, Inc. systems */
+#define ST_API_BIAS		200			/* Offset for API systems */
+#define ST_API_NAUTILUS		(ST_API_BIAS + 1)	/* Nautilus systype */
 
 struct pcb_struct {
 	unsigned long ksp;

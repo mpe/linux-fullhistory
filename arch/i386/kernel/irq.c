@@ -204,13 +204,8 @@ atomic_t global_bh_lock;
  */
 static inline void check_smp_invalidate(int cpu)
 {
-	if (test_bit(cpu, &smp_invalidate_needed)) {
-		struct mm_struct *mm = current->mm;
-		clear_bit(cpu, &smp_invalidate_needed);
-		if (mm)
-			atomic_set_mask(1 << cpu, &mm->cpu_vm_mask);
-		local_flush_tlb();
-	}
+	if (test_bit(cpu, &smp_invalidate_needed))
+		do_flush_tlb_local();
 }
 
 static void show(char * str)

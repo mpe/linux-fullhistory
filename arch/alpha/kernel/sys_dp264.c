@@ -418,7 +418,7 @@ struct alpha_machine_vector dp264_mv __initmv = {
 	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		64,
-	irq_probe_mask:		_PROBE_MASK(64),
+	irq_probe_mask:		TSUNAMI_PROBE_MASK,
 	update_irq_hw:		dp264_update_irq_hw,
 	ack_irq:		common_ack_irq,
 	device_interrupt:	dp264_device_interrupt,
@@ -445,7 +445,7 @@ struct alpha_machine_vector monet_mv __initmv = {
 	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		64,
-	irq_probe_mask:		_PROBE_MASK(64),
+	irq_probe_mask:		TSUNAMI_PROBE_MASK,
 	update_irq_hw:		dp264_update_irq_hw,
 	ack_irq:		common_ack_irq,
 	device_interrupt:	dp264_device_interrupt,
@@ -471,7 +471,7 @@ struct alpha_machine_vector webbrick_mv __initmv = {
 	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		64,
-	irq_probe_mask:		_PROBE_MASK(64),
+	irq_probe_mask:		TSUNAMI_PROBE_MASK,
 	update_irq_hw:		dp264_update_irq_hw,
 	ack_irq:		common_ack_irq,
 	device_interrupt:	dp264_device_interrupt,
@@ -479,7 +479,7 @@ struct alpha_machine_vector webbrick_mv __initmv = {
 	init_arch:		tsunami_init_arch,
 	init_irq:		dp264_init_irq,
 	init_pit:		common_init_pit,
-	init_pci:		dp264_init_pci,
+	init_pci:		common_init_pci,
 	kill_arch:		common_kill_arch,
 	pci_map_irq:		webbrick_map_irq,
 	pci_swizzle:		common_swizzle,
@@ -497,7 +497,7 @@ struct alpha_machine_vector clipper_mv __initmv = {
 	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		64,
-	irq_probe_mask:		_PROBE_MASK(64),
+	irq_probe_mask:		TSUNAMI_PROBE_MASK,
 	update_irq_hw:		clipper_update_irq_hw,
 	ack_irq:		common_ack_irq,
 	device_interrupt:	dp264_device_interrupt,

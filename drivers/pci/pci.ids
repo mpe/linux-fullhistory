@@ -693,16 +693,17 @@
 1056  ICL
 # Motorola made a mistake and used this value, please duplicate Moto
 # entries here -- Cort
-1507  Motorola Computer Group
+1507  Motorola
 	0001  MPC105 [Eagle]
 	0002  MPC106 [Grackle]
+	0003  MPC8240 [Kahlua]
 	0100  MC145575 [HFC-PCI]
 	0431  KTI829c 100VG
 	4801  Raven
 	4802  Falcon
 	4803  Hawk
 	4806  CPX8216
-1057  Motorola Computer Group
+1057  Motorola
 	0001  MPC105 [Eagle]
 	0002  MPC106 [Grackle]
 	0100  MC145575 [HFC-PCI]

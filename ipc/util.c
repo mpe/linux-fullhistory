@@ -35,11 +35,12 @@ void __init ipc_init_ids(struct ipc_ids* ids, int size)
 {
 	int i;
 	sema_init(&ids->sem,1);
+
+	if(size > IPCMNI)
+		size = IPCMNI;
 	ids->size = size;
 	if(size == 0)
 		return;
-	if(size > IPCMNI)
-		size = IPCMNI;
 
 	ids->in_use = 0;
 	ids->max_id = -1;
@@ -59,9 +60,8 @@ void __init ipc_init_ids(struct ipc_ids* ids, int size)
 		ids->size = 0;
 	}
 	ids->ary = SPIN_LOCK_UNLOCKED;
-	for(i=0;i<size;i++) {
+	for(i=0;i<size;i++)
 		ids->entries[i].p = NULL;
-	}
 }
 
 int ipc_findkey(struct ipc_ids* ids, key_t key)

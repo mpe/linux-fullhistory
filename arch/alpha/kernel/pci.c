@@ -40,6 +40,7 @@ const char pci_hae0_name[] = "HAE0";
  */
 
 struct pci_controler *hose_head, **hose_tail = &hose_head;
+struct pci_controler *probing_hose;
 
 /*
  * Quirks.
@@ -70,13 +71,15 @@ struct pci_fixup pcibios_fixups[] __initdata = {
 #define KB			1024
 #define MB			(1024*KB)
 #define GB			(1024*MB)
-unsigned long resource_fixup(struct pci_dev * dev, struct resource * res,
-			     unsigned long start, unsigned long size)
-{
-	unsigned long alignto;
 
-	if (res->flags & IORESOURCE_IO)
-	{
+void __init
+pcibios_align_resource(void *data, struct resource *res, unsigned long size)
+{
+	struct pci_dev * dev = data;
+	unsigned long alignto;
+	unsigned long start = res->start;
+
+	if (res->flags & IORESOURCE_IO) {
 		/*
 		 * Aligning to 0x800 rather than the minimum base of
 		 * 0x400 is an attempt to avoid having devices in 
@@ -88,8 +91,7 @@ unsigned long resource_fixup(struct pci_dev * dev, struct resource * res,
 		alignto = MAX(0x800, size);
 		start = ALIGN(start, alignto);
 	}
-	else if	(res->flags & IORESOURCE_MEM)
-	{
+	else if	(res->flags & IORESOURCE_MEM) {
 		/*
 		 * The following holds at least for the Low Cost
 		 * Alpha implementation of the PCI interface:
@@ -105,17 +107,17 @@ unsigned long resource_fixup(struct pci_dev * dev, struct resource * res,
 		 * address space must be accessed through
 		 * dense memory space only!
 		 */
-		/* align to multiple of size of minimum base */
+
+		/* Align to multiple of size of minimum base.  */
 		alignto = MAX(0x1000, size);
 		start = ALIGN(start, alignto);
-		if (size > 7 * 16*MB)
+		if (size > 7 * 16*MB) {
 			printk(KERN_WARNING "PCI: dev %s "
 			       "requests %ld bytes of contiguous "
 			       "address space---don't use sparse "
 			       "memory accesses on this device!\n",
 			       dev->name, size);
-		else
-		{
+		} else {
 			if (((start / (16*MB)) & 0x7) == 0) {
 				start &= ~(128*MB - 1);
 				start += 16*MB;
@@ -129,7 +131,7 @@ unsigned long resource_fixup(struct pci_dev * dev, struct resource * res,
 		}
 	}
 
-	return start;
+	res->start = start;
 }
 #undef MAX
 #undef ALIGN
@@ -148,8 +150,7 @@ pcibios_assign_special(struct pci_dev * dev)
 	   so leave them unchanged.  This is true, for instance, of the
 	   Contaq 82C693 as seen on SX164 and DP264.  */
 
-	if (dev->class >> 8 == PCI_CLASS_STORAGE_IDE)
-	{
+	if (dev->class >> 8 == PCI_CLASS_STORAGE_IDE) {
 		int i;
 
 		/* Resource 1 of IDE controller is the address of HD_CMD
@@ -212,14 +213,16 @@ pcibios_fixup_bus(struct pci_bus *bus)
 {
 	/* Propogate hose info into the subordinate devices.  */
 
-	struct pci_controler *hose = (struct pci_controler *) bus->sysdata;
+	struct pci_controler *hose = probing_hose;
 	struct pci_dev *dev;
 
 	bus->resource[0] = hose->io_space;
 	bus->resource[1] = hose->mem_space;
-	for (dev = bus->devices; dev; dev = dev->sibling)
+	for (dev = bus->devices; dev; dev = dev->sibling) {
+		dev->sysdata = hose;
 		if ((dev->class >> 8) != PCI_CLASS_BRIDGE_PCI)
 			pcibios_fixup_device_resources(dev, bus);
+	}
 }
 
 void __init
@@ -232,9 +235,10 @@ pcibios_update_resource(struct pci_dev *dev, struct resource *root,
 	where = PCI_BASE_ADDRESS_0 + (resource * 4);
 	reg = (res->start - root->start) | (res->flags & 0xf);
 	pci_write_config_dword(dev, where, reg);
-	if ((res->flags & (PCI_BASE_ADDRESS_SPACE | PCI_BASE_ADDRESS_MEM_TYPE_MASK))
-	    == (PCI_BASE_ADDRESS_SPACE_MEMORY | PCI_BASE_ADDRESS_MEM_TYPE_64))
-	{
+	if ((res->flags & (PCI_BASE_ADDRESS_SPACE
+			   | PCI_BASE_ADDRESS_MEM_TYPE_MASK))
+	    == (PCI_BASE_ADDRESS_SPACE_MEMORY
+		| PCI_BASE_ADDRESS_MEM_TYPE_64)) {
 		pci_write_config_dword(dev, where+4, 0);
 		printk(KERN_WARNING "PCI: dev %s type 64-bit\n", dev->name);
 	}
@@ -273,7 +277,8 @@ common_swizzle(struct pci_dev *dev, u8 *pinp)
 }
 
 void __init
-pcibios_fixup_pbus_ranges(struct pci_bus * bus, struct pbus_set_ranges_data * ranges)
+pcibios_fixup_pbus_ranges(struct pci_bus * bus,
+			  struct pbus_set_ranges_data * ranges)
 {
 	ranges->io_start -= bus->resource[0]->start;
 	ranges->io_end -= bus->resource[0]->start;
@@ -292,11 +297,13 @@ common_init_pci(void)
 	for (next_busno = 0, hose = hose_head; hose; hose = hose->next) {
 		hose->first_busno = next_busno;
 		hose->last_busno = 0xff;
+		probing_hose = hose;
 		bus = pci_scan_bus(next_busno, alpha_mv.pci_ops, hose);
 		hose->bus = bus;
 		next_busno = hose->last_busno = bus->subordinate;
 		next_busno += 1;
 	}
+	probing_hose = NULL;
 
 	pci_assign_unassigned_resources(alpha_mv.min_io_address,
 				        alpha_mv.min_mem_address);

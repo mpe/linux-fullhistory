@@ -57,12 +57,6 @@ enum {
  *  |	        		     | v
  *  +================================+
  */
-#define PT_REG(reg)	(PAGE_SIZE*2 - sizeof(struct pt_regs)		\
-			 + (long)&((struct pt_regs *)0)->reg)
-
-#define SW_REG(reg)	(PAGE_SIZE*2 - sizeof(struct pt_regs)		\
-			 - sizeof(struct switch_stack)			\
-			 + (long)&((struct switch_stack *)0)->reg)
 
 /* 
  * The following table maps a register index into the stack offset at

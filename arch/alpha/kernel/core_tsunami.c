@@ -84,7 +84,7 @@ static int
 mk_conf_addr(struct pci_dev *dev, int where, unsigned long *pci_addr,
 	     unsigned char *type1)
 {
-	struct pci_controler *hose = dev->sysdata;
+	struct pci_controler *hose = dev->sysdata ? : probing_hose;
 	unsigned long addr;
 	u8 bus = dev->bus->number;
 	u8 device_fn = dev->devfn;
@@ -155,6 +155,7 @@ tsunami_write_config_byte(struct pci_dev *dev, int where, u8 value)
 
 	__kernel_stb(value, *(vucp)addr);
 	mb();
+	__kernel_ldbu(*(vucp)addr);
 	return PCIBIOS_SUCCESSFUL;
 }
 
@@ -169,6 +170,7 @@ tsunami_write_config_word(struct pci_dev *dev, int where, u16 value)
 
 	__kernel_stw(value, *(vusp)addr);
 	mb();
+	__kernel_ldwu(*(vusp)addr);
 	return PCIBIOS_SUCCESSFUL;
 }
 
@@ -183,6 +185,7 @@ tsunami_write_config_dword(struct pci_dev *dev, int where, u32 value)
 
 	*(vuip)addr = value;
 	mb();
+	*(vuip)addr;
 	return PCIBIOS_SUCCESSFUL;
 }
 
@@ -261,22 +264,19 @@ tsunami_init_one_pchip(tsunami_pchip *pchip, int index)
 	hose->index = index;
 
 	hose->io_space->start = TSUNAMI_IO(index) - TSUNAMI_IO_BIAS;
-	hose->io_space->end = hose->io_space->start + TSUNAMI_IO_SPACE;
+	hose->io_space->end = hose->io_space->start + 0xffff;
 	hose->io_space->name = pci_io_names[index];
 	hose->io_space->flags = IORESOURCE_IO;
 
 	hose->mem_space->start = TSUNAMI_MEM(index) - TSUNAMI_MEM_BIAS;
-	/* the IOMEM address space is larger than 32bit but most pci
-	   cars doesn't support 64bit address space so we stick with
-	   32bit here (see the TSUNAMI_MEM_SPACE define). */
 	hose->mem_space->end = hose->mem_space->start + 0xffffffff;
 	hose->mem_space->name = pci_mem_names[index];
 	hose->mem_space->flags = IORESOURCE_MEM;
 
 	if (request_resource(&ioport_resource, hose->io_space) < 0)
-		printk(KERN_ERR "failed to request IO on hose %d", index);
+		printk(KERN_ERR "Failed to request IO on hose %d\n", index);
 	if (request_resource(&iomem_resource, hose->mem_space) < 0)
-		printk(KERN_ERR "failed to request IOMEM on hose %d", index);
+		printk(KERN_ERR "Failed to request MEM on hose %d\n", index);
 
 	/*
 	 * Set up the PCI->physical memory translation windows.

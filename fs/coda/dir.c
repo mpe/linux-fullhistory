@@ -84,7 +84,6 @@ struct inode_operations coda_dir_inode_operations =
 	NULL,	                /* truncate */
 	coda_permission,        /* permission */
 	NULL,                   /* smap */
-	NULL,                   /* update page */
         coda_revalidate_inode   /* revalidate */
 };
 

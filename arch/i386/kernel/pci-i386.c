@@ -12,7 +12,7 @@
  *	Hannover, Germany
  *	hm@ix.de
  *
- * Copyright 1997--1999 Martin Mares <mj@atrey.karlin.mff.cuni.cz>
+ * Copyright 1997--1999 Martin Mares <mj@suse.cz>
  *
  * For more information, please consult the following manuals (look at
  * http://www.pcisig.com/ for how to get them):
@@ -122,12 +122,12 @@ static int __init pcibios_assign_resource(struct pci_dev *dev, int i)
 			printk(KERN_ERR "PCI: I/O Region %s/%d too large (%ld bytes)\n", dev->slot_name, i, size);
 			return -EFBIG;
 		}
-		if (allocate_resource(pr, r, size, 0x1000, ~0, 1024, dev)) {
+		if (allocate_resource(pr, r, size, 0x1000, ~0, 1024, NULL, NULL)) {
 			printk(KERN_ERR "PCI: Allocation of I/O region %s/%d (%ld bytes) failed\n", dev->slot_name, i, size);
 			return -EBUSY;
 		}
 	} else {
-		if (allocate_resource(pr, r, size, 0x10000000, ~0, size, dev)) {
+		if (allocate_resource(pr, r, size, 0x10000000, ~0, size, NULL, NULL)) {
 			printk(KERN_ERR "PCI: Allocation of memory region %s/%d (%ld bytes) failed\n", dev->slot_name, i, size);
 			return -EBUSY;
 		}
@@ -291,12 +291,6 @@ void __init pcibios_resource_survey(void)
 	pcibios_allocate_resources(0);
 	pcibios_allocate_resources(1);
 	pcibios_assign_resources();
-}
-
-unsigned long resource_fixup(struct pci_dev * dev, struct resource * res,
-			     unsigned long start, unsigned long size)
-{
-	return start;
 }
 
 int pcibios_enable_resources(struct pci_dev *dev)

@@ -127,13 +127,18 @@ extern long kernel_thread(int (*fn)(void *), void *arg, unsigned long flags);
 #define forget_segments()		do { } while (0)
 
 unsigned long get_wchan(struct task_struct *p);
-/*
-* See arch/alpha/kernel/ptrace.c for details.
-*/
-#define PT_REG(reg)		(PAGE_SIZE - sizeof(struct pt_regs)	\
-				 + (long)&((struct pt_regs *)0)->reg)
+
+/* See arch/alpha/kernel/ptrace.c for details.  */
+#define PT_REG(reg)	(PAGE_SIZE*2 - sizeof(struct pt_regs)		\
+			 + (long)&((struct pt_regs *)0)->reg)
+
+#define SW_REG(reg)	(PAGE_SIZE*2 - sizeof(struct pt_regs)		\
+			 - sizeof(struct switch_stack)			\
+			 + (long)&((struct switch_stack *)0)->reg)
+
 #define KSTK_EIP(tsk) \
-    (*(unsigned long *)(PT_REG(pc) + PAGE_SIZE + (unsigned long)(tsk)))
+    (*(unsigned long *)(PT_REG(pc) + (unsigned long)(tsk)))
+
 #define KSTK_ESP(tsk)	((tsk) == current ? rdusp() : (tsk)->thread.usp)
 
 /* NOTE: The task struct and the stack go together!  */

@@ -12,8 +12,6 @@
 .S.o:
 	$(CC) -D__ASSEMBLY__ $(AFLAGS) -c -o $*.o $<
 
-all: kernel.o head.o
-
 O_TARGET := kernel.o
 O_OBJS   := entry.o traps.o process.o osf_sys.o irq.o signal.o setup.o \
 	    ptrace.o time.o fpreg.o semaphore.o
@@ -22,12 +20,12 @@ OX_OBJS  := alpha_ksyms.o
 
 ifdef CONFIG_ALPHA_GENERIC
 
-O_OBJS	 += core_apecs.o core_cia.o core_lca.o core_mcpcia.o core_pyxis.o \
-	    core_t2.o core_tsunami.o core_polaris.o \
-	    sys_alcor.o sys_cabriolet.o sys_dp264.o sys_eb64p.o \
-	    sys_jensen.o sys_miata.o sys_mikasa.o sys_noritake.o \
-	    sys_rawhide.o sys_ruffian.o sys_sable.o sys_sio.o \
-	    sys_sx164.o sys_takara.o sys_rx164.o \
+O_OBJS	 += core_apecs.o core_cia.o core_irongate.o core_lca.o core_mcpcia.o \
+	    core_polaris.o core_pyxis.o core_t2.o core_tsunami.o \
+	    sys_alcor.o sys_cabriolet.o sys_dp264.o sys_eb64p.o sys_eiger.o \
+	    sys_jensen.o sys_miata.o sys_mikasa.o sys_nautilus.o \
+	    sys_noritake.o sys_rawhide.o sys_ruffian.o sys_rx164.o \
+	    sys_sable.o sys_sio.o sys_sx164.o sys_takara.o sys_rx164.o \
 	    es1888.o smc37c669.o smc37c93x.o ns87312.o pci.o
 else
 
@@ -41,6 +39,9 @@ O_OBJS   += core_apecs.o
 endif
 ifdef CONFIG_ALPHA_CIA
 O_OBJS   += core_cia.o
+endif
+ifdef CONFIG_ALPHA_IRONGATE
+O_OBJS   += core_irongate.o
 endif
 ifdef CONFIG_ALPHA_LCA
 O_OBJS   += core_lca.o
@@ -74,6 +75,9 @@ endif
 ifneq ($(CONFIG_ALPHA_EB64P)$(CONFIG_ALPHA_EB66),)
 O_OBJS   += sys_eb64p.o
 endif
+ifdef CONFIG_ALPHA_EIGER
+O_OBJS   += sys_eiger.o
+endif
 ifdef CONFIG_ALPHA_JENSEN
 O_OBJS   += sys_jensen.o
 endif
@@ -82,6 +86,9 @@ O_OBJS   += sys_miata.o es1888.o smc37c669.o
 endif
 ifdef CONFIG_ALPHA_MIKASA
 O_OBJS   += sys_mikasa.o
+endif
+ifdef CONFIG_ALPHA_NAUTILUS
+O_OBJS   += sys_nautilus.o
 endif
 ifdef CONFIG_ALPHA_NORITAKE
 O_OBJS   += sys_noritake.o

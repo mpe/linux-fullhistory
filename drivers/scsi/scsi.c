@@ -2049,7 +2049,7 @@ int __init scsi_dev_init(void)
 	 * This makes /proc/scsi and /proc/scsi/scsi visible.
 	 */
 #ifdef CONFIG_PROC_FS
-	proc_scsi = create_proc_entry ("scsi", S_IFDIR, 0);
+	proc_scsi = proc_mkdir("scsi", 0);
 	if (!proc_scsi) {
 		printk (KERN_ERR "cannot init /proc/scsi\n");
 		return -ENOMEM;
@@ -3335,7 +3335,7 @@ int init_module(void)
 	 * This makes /proc/scsi and /proc/scsi/scsi visible.
 	 */
 #ifdef CONFIG_PROC_FS
-	proc_scsi = create_proc_entry ("scsi", S_IFDIR, 0);
+	proc_scsi = proc_mkdir("scsi", 0);
 	if (!proc_scsi) {
 		printk (KERN_ERR "cannot init /proc/scsi\n");
 		return -ENOMEM;

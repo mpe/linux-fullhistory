@@ -439,11 +439,11 @@ D: Linux/SMP x86 (up to 2.0 only)
 D: Initial Mac68K port
 D: Video4Linux design, bw-qcam and PMS driver ports.
 D: 2.1.x modular sound
-S: c/o I2IT Limited
-S: The Innovation Centre
-S: Singleton Park
-S: Swansea, SA2 8PP
-S: Wales, United Kingdom
+S: c/o Red Hat UK Ltd
+S: Alexandra House
+S: Alexandra Terrace
+S: Guildford, GU1 3DA
+S: United Kingdom
 
 N: Laurence Culhane
 E: loz@holmes.demon.co.uk

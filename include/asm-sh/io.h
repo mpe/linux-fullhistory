@@ -158,6 +158,8 @@ extern __inline__ void ctrl_outl(unsigned int b, unsigned long addr)
 
 #ifdef __KERNEL__
 
+#define IO_SPACE_LIMIT 0xffff
+
 #include <asm/addrspace.h>
 
 /*

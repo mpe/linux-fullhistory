@@ -64,7 +64,7 @@ static int FDC2 = -1;
 #ifdef CONFIG_ALPHA_GENERIC
 # define CROSS_64KB(a,s)   (__CROSS_64KB(a,s) && ~alpha_mv.max_dma_address)
 #else
-# if defined(CONFIG_ALPHA_XL) || defined(CONFIG_ALPHA_RUFFIAN)
+# if defined(CONFIG_ALPHA_XL) || defined(CONFIG_ALPHA_RUFFIAN) || defined(CONFIG_ALPHA_NAUTILUS)
 #  define CROSS_64KB(a,s)  __CROSS_64KB(a,s)
 # else
 #  define CROSS_64KB(a,s)  (0)

@@ -13,9 +13,10 @@
 #include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/spinlock.h>
+#include <asm/io.h>
 
-struct resource ioport_resource = { "PCI IO", 0x0000, 0xFFFF, IORESOURCE_IO };
-struct resource iomem_resource = { "PCI mem", 0x00000000, 0xFFFFFFFF, IORESOURCE_MEM };
+struct resource ioport_resource = { "PCI IO", 0x0000, IO_SPACE_LIMIT, IORESOURCE_IO };
+struct resource iomem_resource = { "PCI mem", 0x00000000, 0xffffffff, IORESOURCE_MEM };
 
 static rwlock_t resource_lock = RW_LOCK_UNLOCKED;
 
@@ -126,31 +127,32 @@ int release_resource(struct resource *old)
 static int find_resource(struct resource *root, struct resource *new,
 			 unsigned long size,
 			 unsigned long min, unsigned long max,
-			 unsigned long align, struct pci_dev * dev)
+			 unsigned long align,
+			 void (*alignf)(void *, struct resource *, unsigned long),
+			 void *alignf_data)
 {
 	struct resource *this = root->child;
-	unsigned long start, end;
 
-	start = root->start;
+	new->start = root->start;
 	for(;;) {
 		if (this)
-			end = this->start;
+			new->end = this->start;
 		else
-			end = root->end;
-		if (start < min)
-			start = min;
-		if (end > max)
-			end = max;
-		start = (start + align - 1) & ~(align - 1);
-		start = resource_fixup (dev, new, start, size);
-		if (start < end && end - start + 1 >= size) {
-			new->start = start;
-			new->end = start + size - 1;
+			new->end = root->end;
+		if (new->start < min)
+			new->start = min;
+		if (new->end > max)
+			new->end = max;
+		new->start = (new->start + align - 1) & ~(align - 1);
+		if (alignf)
+			alignf(alignf_data, new, size);
+		if (new->start < new->end && new->end - new->start + 1 >= size) {
+			new->end = new->start + size - 1;
 			return 0;
 		}
 		if (!this)
 			break;
-		start = this->end + 1;
+		new->start = this->end + 1;
 		this = this->sibling;
 	}
 	return -EBUSY;
@@ -162,12 +164,14 @@ static int find_resource(struct resource *root, struct resource *new,
 int allocate_resource(struct resource *root, struct resource *new,
 		      unsigned long size,
 		      unsigned long min, unsigned long max,
-		      unsigned long align, struct pci_dev * dev)
+		      unsigned long align,
+		      void (*alignf)(void *, struct resource *, unsigned long),
+		      void *alignf_data)
 {
 	int err;
 
 	write_lock(&resource_lock);
-	err = find_resource(root, new, size, min, max, align, dev);
+	err = find_resource(root, new, size, min, max, align, alignf, alignf_data);
 	if (err >= 0 && __request_resource(root, new))
 		err = -EBUSY;
 	write_unlock(&resource_lock);

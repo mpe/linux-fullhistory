@@ -125,6 +125,7 @@ static inline u8 bridge_swizzle(u8 pin, u8 slot)
 
 /* The hose list.  */
 extern struct pci_controler *hose_head, **hose_tail;
+extern struct pci_controler *probing_hose;
 
 extern void common_init_pci(void);
 extern u8 common_swizzle(struct pci_dev *, u8 *);

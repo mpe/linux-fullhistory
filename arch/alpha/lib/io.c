@@ -2,8 +2,11 @@
  * Alpha IO and memory functions.. Just expand the inlines in the header
  * files..
  */
+
 #include <linux/kernel.h>
 #include <linux/types.h>
+#include <linux/string.h>
+
 #include <asm/io.h>
 
 unsigned int _inb(unsigned long addr)
@@ -561,4 +564,29 @@ void _memset_c_io(unsigned long to, unsigned long c, long count)
 		__raw_writeb(c, to);
 	}
 	mb();
+}
+
+void
+scr_memcpyw(u16 *d, const u16 *s, unsigned int count)
+{
+	if (! __is_ioaddr((unsigned long) s)) {
+		/* Source is memory.  */
+		if (! __is_ioaddr((unsigned long) d))
+			memcpy(d, s, count);
+		else
+			memcpy_toio(d, s, count);
+	} else {
+		/* Source is screen.  */
+		if (! __is_ioaddr((unsigned long) d))
+			memcpy_fromio(d, s, count);
+		else {
+			/* FIXME: Should handle unaligned ops and
+			   operation widening.  */
+			count /= 2;
+			while (count--) {
+				u16 tmp = __raw_readw((unsigned long)(s++));
+				__raw_writew(tmp, (unsigned long)(d++));
+			}
+		}
+	}
 }

@@ -899,11 +899,8 @@ int __init init_pcmcia_ds(void)
 	major_dev = i;
 
 #ifdef CONFIG_PROC_FS
-    if (proc_pccard) {
-	struct proc_dir_entry *ent;
-	ent = create_proc_entry("drivers", 0, proc_pccard);
-	ent->read_proc = proc_read_drivers;
-    }
+    if (proc_pccard)
+	create_proc_read_entry("drivers",0,proc_pccard,proc_read_drivers,NULL);
     init_status = 0;
 #endif
     return 0;

@@ -21,6 +21,12 @@ extern struct pci_ops cia_pci_ops;
 extern void cia_init_arch(void);
 extern void cia_machine_check(u64, u64, struct pt_regs *);
 
+/* core_irongate.c */
+extern struct pci_ops irongate_pci_ops;
+extern int irongate_pci_clr_err(void);
+extern void irongate_init_arch(void);
+extern void irongate_machine_check(u64, u64, struct pt_regs *);
+
 /* core_lca.c */
 extern struct pci_ops lca_pci_ops;
 extern void lca_init_arch(void);
@@ -29,6 +35,7 @@ extern void lca_machine_check(u64, u64, struct pt_regs *);
 /* core_mcpcia.c */
 extern struct pci_ops mcpcia_pci_ops;
 extern void mcpcia_init_arch(void);
+extern void mcpcia_init_hoses(void);
 extern void mcpcia_machine_check(u64, u64, struct pt_regs *);
 
 /* core_polaris.c */
@@ -67,6 +74,7 @@ extern int smp_boot_cpuid;
 /* time.c */
 extern void timer_interrupt(int irq, void *dev, struct pt_regs * regs);
 extern void rtc_init_pit(void);
+extern void rtc_kill_pit(void);
 extern void common_init_pit(void);
 extern unsigned long est_cycle_freq;
 

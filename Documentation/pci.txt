@@ -4,7 +4,7 @@
 
 		"What should you avoid when writing PCI drivers"
 
-	  by Martin Mares <mj@atrey.karlin.mff.cuni.cz> on 03-Nov-1999
+		  by Martin Mares <mj@suse.cz> on 21-Nov-1999
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -74,6 +74,12 @@ config space. You should use the values in the pci_dev structure as they might
 have been remapped by the kernel.
 
    See Documentation/IO-mapping.txt for how to access device memory.
+
+   You still need to call request_region() for I/O regions and request_mem_region()
+for memory regions to make sure nobody else is using the same device.
+
+   All interrupt handlers should be registered with SA_SHIRQ and use the devid
+to map IRQs to devices (remember that all PCI interrupts are shared).
 
 5. Other interesting functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -389,8 +389,10 @@ pyxis_init_arch(void)
 static inline void
 pyxis_pci_clr_err(void)
 {
-	*(vuip)PYXIS_ERR;
-	*(vuip)PYXIS_ERR = 0x0180;
+	unsigned int tmp;
+
+	tmp = *(vuip)PYXIS_ERR;
+	*(vuip)PYXIS_ERR = tmp;
 	mb();
 	*(vuip)PYXIS_ERR;  /* re-read to force write */
 }

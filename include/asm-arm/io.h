@@ -211,6 +211,8 @@ extern void _memset_io(unsigned long, int, unsigned long);
 #define memset_io(addr,c,len)		_memset_io((unsigned long)(addr),(c),(len))
 #endif
 
+#define IO_SPACE_LIMIT 0xffff
+
 /*
  * This isn't especially architecture dependent so it seems like it
  * might as well go here as anywhere.

@@ -350,3 +350,8 @@ char * __init pcibios_setup(char *str)
 	}
 	return str;
 }
+
+void __init
+pcibios_align_resource(void *data, struct resource *res, unsigned long size)
+{
+}

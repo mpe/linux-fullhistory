@@ -329,10 +329,10 @@ int divert_dev_init(void)
 	init_waitqueue_head(&rd_queue);
 
 #ifdef CONFIG_PROC_FS
-  isdn_proc_entry = create_proc_entry("isdn", S_IFDIR | S_IRUGO | S_IXUGO ,proc_net);
+  isdn_proc_entry = proc_mkdir("isdn", proc_net);
   if (!isdn_proc_entry) 
     return(-1);
-  isdn_divert_entry = create_proc_entry("divert",S_IFREG | S_IRUGO,isdn_proc_entry); 
+  isdn_divert_entry = create_proc_entry("divert",0,isdn_proc_entry); 
   if (!isdn_divert_entry) 
    {
      remove_proc_entry("isdn",proc_net);

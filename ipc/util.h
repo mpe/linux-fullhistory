@@ -45,6 +45,26 @@ int ipcperms (struct ipc_perm *ipcp, short flg);
 void* ipc_alloc(int size);
 void ipc_free(void* ptr, int size);
 
+extern inline void ipc_lockall(struct ipc_ids* ids)
+{
+	spin_lock(&ids->ary);
+}
+
+extern inline struct ipc_perm* ipc_get(struct ipc_ids* ids, int id)
+{
+	struct ipc_perm* out;
+	int lid = id % SEQ_MULTIPLIER;
+	if(lid > ids->size)
+		return NULL;
+
+	out = ids->entries[lid].p;
+	return out;
+}
+
+extern inline void ipc_unlockall(struct ipc_ids* ids)
+{
+	spin_unlock(&ids->ary);
+}
 extern inline struct ipc_perm* ipc_lock(struct ipc_ids* ids, int id)
 {
 	struct ipc_perm* out;

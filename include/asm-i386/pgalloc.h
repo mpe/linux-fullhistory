@@ -242,6 +242,23 @@ static inline void flush_tlb_range(struct mm_struct * mm, unsigned long start, u
 	flush_tlb_mm(mm);
 }
 
+extern volatile unsigned long smp_invalidate_needed;
+extern unsigned int cpu_tlbbad[NR_CPUS];
+
+static inline void do_flush_tlb_local(void)
+{
+	unsigned long cpu = smp_processor_id();
+	struct mm_struct *mm = current->mm;
+
+	clear_bit(cpu, &smp_invalidate_needed);
+	if (mm) {
+		set_bit(cpu, &mm->cpu_vm_mask);
+		local_flush_tlb();
+	} else {
+		cpu_tlbbad[cpu] = 1;
+	}
+}
+
 #endif
 
 #endif /* _I386_PGALLOC_H */

@@ -435,8 +435,10 @@ cia_init_arch(void)
 	hae_mem->start = 0;
 	hae_mem->end = CIA_MEM_R1_MASK;
 	hae_mem->name = pci_hae0_name;
+	hae_mem->flags = IORESOURCE_MEM;
 
-	request_resource(&iomem_resource, hae_mem);
+	if (request_resource(&iomem_resource, hae_mem) < 0)
+		printk(KERN_ERR "Failed to request HAE_MEM\n");
 }
 
 static inline void

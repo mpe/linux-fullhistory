@@ -215,7 +215,7 @@ static int qnx4_readpage(struct file *file, struct page *page)
 	struct buffer_head *bh;
 	int res = -EIO;
 
-	QNX4DEBUG(("qnx4: readpage offset=[%ld]\n", (long) page->offset));
+	QNX4DEBUG(("qnx4: readpage index=[%ld]\n", (long) page->index));
 
 	if (qnx4_ino->i_xblk != 0) {
 		printk("qnx4: sorry, this file is extended, don't know how to handle it (yet) !\n");
@@ -226,7 +226,7 @@ static int qnx4_readpage(struct file *file, struct page *page)
 	buf = page_address(page);
 	clear_bit(PG_uptodate, &page->flags);
 	clear_bit(PG_error, &page->flags);
-	offset = page->offset;
+	offset = page->index<<PAGE_SHIFT;
 
 	if (offset < inode->i_size) {
 		res = 0;

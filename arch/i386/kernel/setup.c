@@ -286,16 +286,9 @@ struct resource standard_io_resources[] = {
 
 #define STANDARD_IO_RESOURCES (sizeof(standard_io_resources)/sizeof(struct resource))
 
-/* System RAM - interrupted by the 640kB-1M hole */
-#define code_resource (ram_resources[3])
-#define data_resource (ram_resources[4])
-static struct resource ram_resources[] = {
-	{ "System RAM", 0x000000, 0x09ffff, IORESOURCE_BUSY },
-	{ "System RAM", 0x100000, 0x100000, IORESOURCE_BUSY },
-	{ "Video RAM area", 0x0a0000, 0x0bffff, IORESOURCE_BUSY },
-	{ "Kernel code", 0x100000, 0 },
-	{ "Kernel data", 0, 0 }
-};
+static struct resource code_resource = { "Kernel code", 0x100000, 0 };
+static struct resource data_resource = { "Kernel data", 0, 0 };
+static struct resource vram_resource = { "Video RAM area", 0xa0000, 0xbffff, IORESOURCE_BUSY };
 
 /* System ROM resources */
 #define MAXROMS 6
@@ -647,11 +640,6 @@ void __init setup_arch(char **cmdline_p)
 	bootmap_size = init_bootmem(start_pfn, max_low_pfn);
 
 	/*
-	 * FIXME: what about high memory?
-	 */
-	ram_resources[1].end = PFN_PHYS(max_low_pfn);
-
-	/*
 	 * Register fully available low RAM pages with the bootmem allocator.
 	 */
 	for (i = 0; i < e820.nr_map; i++) {
@@ -736,15 +724,36 @@ void __init setup_arch(char **cmdline_p)
 #endif
 
 	/*
-	 * Request the standard RAM and ROM resources -
-	 * they eat up PCI memory space
+	 * Request address space for all standard RAM and ROM resources
+	 * and also for regions reported as reserved by the e820.
 	 */
-	request_resource(&iomem_resource, ram_resources+0);
-	request_resource(&iomem_resource, ram_resources+1);
-	request_resource(&iomem_resource, ram_resources+2);
-	request_resource(ram_resources+1, &code_resource);
-	request_resource(ram_resources+1, &data_resource);
 	probe_roms();
+	for (i = 0; i < e820.nr_map; i++) {
+		struct resource *res;
+		if (e820.map[i].addr + e820.map[i].size > 0x100000000ULL)
+			continue;
+		res = alloc_bootmem_low(sizeof(struct resource));
+		switch (e820.map[i].type) {
+		case E820_RAM:	res->name = "System RAM"; break;
+		case E820_ACPI:	res->name = "ACPI Tables"; break;
+		case E820_NVS:	res->name = "ACPI Non-volatile Storage"; break;
+		default:	res->name = "reserved";
+		}
+		res->start = e820.map[i].addr;
+		res->end = res->start + e820.map[i].size - 1;
+		res->flags = IORESOURCE_MEM | IORESOURCE_BUSY;
+		request_resource(&iomem_resource, res);
+		if (e820.map[i].type == E820_RAM) {
+			/*
+			 *  We dont't know which RAM region contains kernel data,
+			 *  so we try it repeatedly and let the resource manager
+			 *  test it.
+			 */
+			request_resource(res, &code_resource);
+			request_resource(res, &data_resource);
+		}
+	}
+	request_resource(&iomem_resource, &vram_resource);
 
 	/* request I/O space for devices used on all i[345]86 PCs */
 	for (i = 0; i < STANDARD_IO_RESOURCES; i++)
