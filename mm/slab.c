@@ -1959,18 +1959,17 @@ static void *cache_free_debugcheck(kmem_cache_t *cachep, void *objp,
 
 static void check_slabp(kmem_cache_t *cachep, struct slab *slabp)
 {
-	int i;
+	kmem_bufctl_t i;
 	int entries = 0;
 	
 	check_spinlock_acquired(cachep);
 	/* Check slab's freelist to see if this obj is there. */
 	for (i = slabp->free; i != BUFCTL_END; i = slab_bufctl(slabp)[i]) {
 		entries++;
-		if (entries > cachep->num || i < 0 || i >= cachep->num)
+		if (entries > cachep->num || i >= cachep->num)
 			goto bad;
 	}
 	if (entries != cachep->num - slabp->inuse) {
-		int i;
 bad:
 		printk(KERN_ERR "slab: Internal list corruption detected in cache '%s'(%d), slabp %p(%d). Hexdump:\n",
 				cachep->name, cachep->num, slabp, slabp->inuse);
