@@ -90,6 +90,8 @@ xfs_args_allocate(
 	/* Copy the already-parsed mount(2) flags we're interested in */
 	if (sb->s_flags & MS_NOATIME)
 		args->flags |= XFSMNT_NOATIME;
+	if (sb->s_flags & MS_SYNCHRONOUS)
+		args->flags |= XFSMNT_WSYNC;
 
 	/* Default to 32 bit inodes on Linux all the time */
 	args->flags |= XFSMNT_32BITINODES;
