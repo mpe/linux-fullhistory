@@ -2,6 +2,7 @@
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <asm/uaccess.h>
+#include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/delay.h>
 #include <linux/ioctl.h>
@@ -10,6 +11,7 @@
 
 #include "usb.h"
 
+/* WARNING: These DATA_DUMP's can produce a lot of data. Caveat Emptor. */
 // #define RD_DATA_DUMP /* Enable to dump data - limited to 24 bytes */
 // #define WR_DATA_DUMP /* DEBUG does not have to be defined. */
 

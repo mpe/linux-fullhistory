@@ -5,6 +5,10 @@
 #include <linux/sched.h>
 #include <linux/genhd.h>
 #include <linux/tqueue.h>
+#include <linux/list.h>
+
+struct request_queue;
+typedef struct request_queue request_queue_t;
 
 /*
  * Ok, this is an expanded form so that we can use the same
@@ -13,6 +17,9 @@
  * for read/write completion.
  */
 struct request {
+	struct list_head queue;
+	int elevator_sequence;
+
 	volatile int rq_status;	/* should split this into a few status bits */
 #define RQ_INACTIVE		(-1)
 #define RQ_ACTIVE		1
@@ -33,27 +40,42 @@ struct request {
 	struct semaphore * sem;
 	struct buffer_head * bh;
 	struct buffer_head * bhtail;
-	struct request * next;
+	request_queue_t * q;
 };
 
-typedef struct request_queue request_queue_t;
 typedef int (merge_request_fn) (request_queue_t *q, 
 				struct request  *req,
-				struct buffer_head *bh);
+				struct buffer_head *bh,
+				int);
 typedef int (merge_requests_fn) (request_queue_t *q, 
 				 struct request  *req,
-				 struct request  *req2);
+				 struct request  *req2,
+				 int);
 typedef void (request_fn_proc) (request_queue_t *q);
 typedef request_queue_t * (queue_proc) (kdev_t dev);
 typedef void (make_request_fn) (int rw, struct buffer_head *bh);
 typedef void (plug_device_fn) (request_queue_t *q, kdev_t device);
 typedef void (unplug_device_fn) (void *q);
 
+typedef struct elevator_s
+{
+	int sequence;
+	int read_latency;
+	int write_latency;
+	int max_bomb_segments;
+	int read_pendings;
+} elevator_t;
+
 struct request_queue
 {
-	struct request		* current_request;
+	struct list_head queue_head;
+	/* together with queue_head for cacheline sharing */
+	elevator_t elevator;
+	unsigned int nr_segments;
+
 	request_fn_proc		* request_fn;
-	merge_request_fn	* merge_fn;
+	merge_request_fn	* back_merge_fn;
+	merge_request_fn	* front_merge_fn;
 	merge_requests_fn	* merge_requests_fn;
 	make_request_fn		* make_request_fn;
 	plug_device_fn		* plug_device_fn;
@@ -141,5 +163,13 @@ extern int * max_segments[MAX_BLKDEV];
 /* read-ahead in pages.. */
 #define MAX_READAHEAD	31
 #define MIN_READAHEAD	3
+
+#define ELEVATOR_DEFAULTS ((elevator_t) { 0, NR_REQUEST>>1, NR_REQUEST<<5, 4, 0, })
+
+#define blkdev_entry_to_request(entry) list_entry((entry), struct request, queue)
+#define blkdev_entry_next_request(entry) blkdev_entry_to_request((entry)->next)
+#define blkdev_entry_prev_request(entry) blkdev_entry_to_request((entry)->prev)
+#define blkdev_next_request(req) blkdev_entry_to_request((req)->queue.next)
+#define blkdev_prev_request(req) blkdev_entry_to_request((req)->queue.prev)
 
 #endif

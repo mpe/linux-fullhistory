@@ -1168,7 +1168,7 @@ static void do_stram_request( void )
 {
 	unsigned long start, len;
 
-	while( CURRENT ) {
+	while( !QUEUE_EMPTY ) {
 		if (MAJOR(CURRENT->rq_dev) != MAJOR_NR)
 			panic("stram: request list destroyed");
 		if (CURRENT->bh) {

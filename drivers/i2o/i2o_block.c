@@ -461,7 +461,7 @@ static void i2ob_request(request_queue_t * q)
 	struct i2ob_device *dev;
 	u32 m;
 
-	while (CURRENT) {
+	while (!QUEUE_EMPTY) {
 		/*
 		 *	On an IRQ completion if there is an inactive
 		 *	request on the queue head it means it isnt yet
@@ -515,8 +515,7 @@ static void i2ob_request(request_queue_t * q)
 			}
 		}
 		req->errors = 0;
-		CURRENT = CURRENT->next;
-		req->next = NULL;
+		blkdev_dequeue_request(req);
 		req->sem = NULL;
 		
 		ireq = i2ob_qhead;

@@ -476,7 +476,7 @@ static void do_ps2esdi_request(request_queue_t * q)
 	if (virt_to_bus(CURRENT->buffer + CURRENT->nr_sectors * 512) > 16 * MB) {
 		printk("%s: DMA above 16MB not supported\n", DEVICE_NAME);
 		end_request(FAIL);
-		if (CURRENT)
+		if (!QUEUE_EMPTY)
 			do_ps2esdi_request(q);
 		return;
 	}			/* check for above 16Mb dmas */
@@ -510,7 +510,7 @@ static void do_ps2esdi_request(request_queue_t * q)
 		default:
 			printk("%s: Unknown command\n", DEVICE_NAME);
 			end_request(FAIL);
-			if (CURRENT)
+			if (!QUEUE_EMPTY)
 				do_ps2esdi_request(q);
 			break;
 		}		/* handle different commands */
@@ -520,7 +520,7 @@ static void do_ps2esdi_request(request_queue_t * q)
 		printk("Grrr. error. ps2esdi_drives: %d, %lu %lu\n", ps2esdi_drives,
 		       CURRENT->sector, ps2esdi[MINOR(CURRENT->rq_dev)].nr_sects);
 		end_request(FAIL);
-		if (CURRENT)
+		if (!QUEUE_EMPTY)
 			do_ps2esdi_request(q);
 	}
 
@@ -591,7 +591,7 @@ static void ps2esdi_readwrite(int cmd, u_char drive, u_int block, u_int count)
 			return do_ps2esdi_request(NULL);
 		else {
 			end_request(FAIL);
-			if (CURRENT)
+			if (!QUEUE_EMPTY)
 				do_ps2esdi_request(NULL);
 		}
 	}
@@ -894,7 +894,7 @@ static void ps2esdi_normal_interrupt_handler(u_int int_ret_code)
 				do_ps2esdi_request(NULL);
 			else {
 				end_request(FAIL);
-				if (CURRENT)
+				if (!QUEUE_EMPTY)
 					do_ps2esdi_request(NULL);
 			}
 			break;
@@ -940,7 +940,7 @@ static void ps2esdi_normal_interrupt_handler(u_int int_ret_code)
 			do_ps2esdi_request(NULL);
 		else {
 			end_request(FAIL);
-			if (CURRENT)
+			if (!QUEUE_EMPTY)
 				do_ps2esdi_request(NULL);
 		}
 		break;
@@ -950,7 +950,7 @@ static void ps2esdi_normal_interrupt_handler(u_int int_ret_code)
 		outb((int_ret_code & 0xe0) | ATT_EOI, ESDI_ATTN);
 		outb(CTRL_ENABLE_INTR, ESDI_CONTROL);
 		end_request(FAIL);
-		if (CURRENT)
+		if (!QUEUE_EMPTY)
 			do_ps2esdi_request(NULL);
 		break;
 
@@ -986,7 +986,7 @@ static void ps2esdi_continue_request(void)
 		do_ps2esdi_request(NULL);
 	} else {
 		end_request(SUCCES);
-		if (CURRENT)
+		if (!QUEUE_EMPTY)
 			do_ps2esdi_request(NULL);
 	}
 }

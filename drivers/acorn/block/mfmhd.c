@@ -758,7 +758,7 @@ static void request_done(int uptodate)
 		/* No - its the end of the line */
 		/* end_request's should have happened at the end of sector DMAs */
 		/* Turns Drive LEDs off - may slow it down? */
-		if (!CURRENT)
+		if (QUEUE_EMPTY)
 			issue_command(CMD_CKV, block, 2);
 
 		Busy = 0;
@@ -891,7 +891,7 @@ static void mfm_request(void)
 {
 	DBG("mfm_request CURRENT=%p Busy=%d\n", CURRENT, Busy);
 
-	if (!CURRENT) {
+	if (QUEUE_EMPTY) {
 		DBG("mfm_request: Exited due to NULL Current 1\n");
 		return;
 	}
@@ -918,7 +918,7 @@ static void mfm_request(void)
 
 		DBG("mfm_request: before INIT_REQUEST\n");
 
-		if (!CURRENT) {
+		if (QUEUE_EMPTY) {
 			printk("mfm_request: Exiting due to !CURRENT (pre)\n");
 			CLEAR_INTR;
 			Busy = 0;

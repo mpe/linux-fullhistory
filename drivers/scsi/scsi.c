@@ -2193,19 +2193,24 @@ static void scsi_dump_status(int level)
 			/* Now dump the request lists for each block device */
 			printk("Dump of pending block device requests\n");
 			for (i = 0; i < MAX_BLKDEV; i++) {
-				if (blk_dev[i].request_queue.current_request) {
+				struct list_head * queue_head;
+
+				queue_head = &blk_dev[i].request_queue.queue_head;
+				if (!list_empty(queue_head)) {
 					struct request *req;
+					struct list_head * entry;
+
 					printk("%d: ", i);
-					req = blk_dev[i].request_queue.current_request;
-					while (req) {
+					entry = queue_head->next;
+					do {
+						req = blkdev_entry_to_request(entry);
 						printk("(%s %d %ld %ld %ld) ",
 						   kdevname(req->rq_dev),
 						       req->cmd,
 						       req->sector,
 						       req->nr_sectors,
 						req->current_nr_sectors);
-						req = req->next;
-					}
+					} while ((entry = entry->next) != queue_head);
 					printk("\n");
 				}
 			}
@@ -2220,8 +2225,6 @@ static void scsi_dump_status(int level)
 
 int init_module(void)
 {
-	unsigned long size;
-	int has_space = 0;
 	struct proc_dir_entry *generic;
 
         if( scsi_init_minimal_dma_pool() != 0 )

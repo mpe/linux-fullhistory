@@ -8,7 +8,7 @@ fi
 
 dep_tristate '  SCSI tape support' CONFIG_CHR_DEV_ST $CONFIG_SCSI
 
-if [ "$CONFIG_BLK_DEV_ST" != "n" ]; then
+if [ "$CONFIG_CHR_DEV_ST" != "n" ]; then
    int  'Maximum number of SCSI tapes that can be loaded as modules' CONFIG_ST_EXTRA_DEVS 2
 fi
 

@@ -184,10 +184,10 @@ struct request *nbd_read_stat(struct nbd_device *lo)
 	DEBUG("reading control, ");
 	reply.magic = 0;
 	result = nbd_xmit(0, lo->sock, (char *) &reply, sizeof(reply));
-	req = lo->tail;
 	if (result <= 0)
 		HARDFAIL("Recv control failed.");
 	memcpy(&xreq, reply.handle, sizeof(xreq));
+	req = blkdev_entry_prev_request(&lo->queue_head);
 
 	if (xreq != req)
 		FAIL("Unexpected handle received.\n");
@@ -216,47 +216,42 @@ void nbd_do_it(struct nbd_device *lo)
 {
 	struct request *req;
 
-	while (1) {
+	down (&lo->queue_lock);
+	while (!list_empty(&lo->queue_head)) {
 		req = nbd_read_stat(lo);
 		if (!req)
-			return;
-		down (&lo->queue_lock);
+			goto out;
 #ifdef PARANOIA
-		if (req != lo->tail) {
+		if (req != blkdev_entry_prev_request(&lo->queue_head)) {
 			printk(KERN_ALERT "NBD: I have problem...\n");
 		}
 		if (lo != &nbd_dev[MINOR(req->rq_dev)]) {
 			printk(KERN_ALERT "NBD: request corrupted!\n");
-			goto next;
+			continue;
 		}
 		if (lo->magic != LO_MAGIC) {
 			printk(KERN_ALERT "NBD: nbd_dev[] corrupted: Not enough magic\n");
-			up (&lo->queue_lock);
-			return;
+			goto out;
 		}
 #endif
-		nbd_end_request(req);
-		if (lo->tail == lo->head) {
-#ifdef PARANOIA
-			if (lo->tail->next)
-				printk(KERN_ERR "NBD: I did not expect this\n");
-#endif
-			lo->head = NULL;
-		}
-		lo->tail = lo->tail->next;
-	next:
+		list_del(&req->queue);
 		up (&lo->queue_lock);
+		
+		nbd_end_request(req);
+
+		down (&lo->queue_lock);
 	}
+ out:
+	up (&lo->queue_lock);
 }
 
 void nbd_clear_que(struct nbd_device *lo)
 {
 	struct request *req;
+	unsigned long flags;
 
-	while (1) {
-		req = lo->tail;
-		if (!req)
-			return;
+	while (!list_empty(&lo->queue_head)) {
+		req = blkdev_entry_prev_request(&lo->queue_head);
 #ifdef PARANOIA
 		if (lo != &nbd_dev[MINOR(req->rq_dev)]) {
 			printk(KERN_ALERT "NBD: request corrupted when clearing!\n");
@@ -268,15 +263,12 @@ void nbd_clear_que(struct nbd_device *lo)
 		}
 #endif
 		req->errors++;
+		list_del(&req->queue);
+		up(&lo->queue_lock);
+
 		nbd_end_request(req);
-		if (lo->tail == lo->head) {
-#ifdef PARANOIA
-			if (lo->tail->next)
-				printk(KERN_ERR "NBD: I did not assume this\n");
-#endif
-			lo->head = NULL;
-		}
-		lo->tail = lo->tail->next;
+
+		down(&lo->queue_lock);
 	}
 }
 
@@ -296,7 +288,7 @@ static void do_nbd_request(request_queue_t * q)
 	int dev;
 	struct nbd_device *lo;
 
-	while (CURRENT) {
+	while (!QUEUE_EMPTY) {
 		req = CURRENT;
 		dev = MINOR(req->rq_dev);
 #ifdef PARANOIA
@@ -314,28 +306,23 @@ static void do_nbd_request(request_queue_t * q)
 		requests_in++;
 #endif
 		req->errors = 0;
-		CURRENT = CURRENT->next;
-		req->next = NULL;
-
+		blkdev_dequeue_request(req);
 		spin_unlock_irq(&io_request_lock);
-		down (&lo->queue_lock);
-		if (lo->head == NULL) {
-			lo->head = req;
-			lo->tail = req;
-		} else {
-			lo->head->next = req;
-			lo->head = req;
-		}
 
+		down (&lo->queue_lock);
+		list_add(&req->queue, &lo->queue_head);
 		nbd_send_req(lo->sock, req);	/* Why does this block?         */
 		up (&lo->queue_lock);
+
 		spin_lock_irq(&io_request_lock);
 		continue;
 
 	      error_out:
 		req->errors++;
+		blkdev_dequeue_request(req);
+		spin_unlock(&io_request_lock);
 		nbd_end_request(req);
-		CURRENT = CURRENT->next;
+		spin_lock(&io_request_lock);
 	}
 	return;
 }
@@ -359,11 +346,14 @@ static int nbd_ioctl(struct inode *inode, struct file *file,
 	lo = &nbd_dev[dev];
 	switch (cmd) {
 	case NBD_CLEAR_SOCK:
+		down(&lo->queue_lock);
 		nbd_clear_que(lo);
-		if (lo->head || lo->tail) {
+		if (!list_empty(&lo->queue_head)) {
+			up(&lo->queue_lock);
 			printk(KERN_ERR "nbd: Some requests are in progress -> can not turn off.\n");
 			return -EBUSY;
 		}
+		up(&lo->queue_lock);
 		file = lo->file;
 		if (!file)
 			return -EINVAL;
@@ -415,8 +405,8 @@ static int nbd_ioctl(struct inode *inode, struct file *file,
 		return 0;
 #ifdef PARANOIA
 	case NBD_PRINT_DEBUG:
-		printk(KERN_INFO "NBD device %d: head = %lx, tail = %lx. Global: in %d, out %d\n",
-		       dev, (long) lo->head, (long) lo->tail, requests_in, requests_out);
+		printk(KERN_INFO "NBD device %d: queue_head = %p. Global: in %d, out %d\n",
+		       dev, lo->queue_head, requests_in, requests_out);
 		return 0;
 #endif
 	case BLKGETSIZE:
@@ -480,6 +470,7 @@ int nbd_init(void)
 	blksize_size[MAJOR_NR] = nbd_blksizes;
 	blk_size[MAJOR_NR] = nbd_sizes;
 	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), do_nbd_request);
+	blk_queue_headactive(BLK_DEFAULT_QUEUE(MAJOR_NR), 0);
 	for (i = 0; i < MAX_NBD; i++) {
 		nbd_dev[i].refcnt = 0;
 		nbd_dev[i].file = NULL;

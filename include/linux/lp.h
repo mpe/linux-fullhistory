@@ -26,8 +26,6 @@
 #define LP_TRUST_IRQ_  0x0200 /* obsolete */
 #define LP_NO_REVERSE  0x0400 /* No reverse mode available. */
 #define LP_DATA_AVAIL  0x0800 /* Data is available. */
-#define LP_HAVE_PORT_BIT   12 /* (0x1000) Port is claimed. */
-#define LP_PORT_BUSY   (1<<13) /* Reading or writing. */
 
 /* 
  * bit defines for 8255 status port

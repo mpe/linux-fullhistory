@@ -980,7 +980,7 @@ static int update_toc(void)
 
 
 #define CURRENT_VALID \
-	(CURRENT && MAJOR(CURRENT -> rq_dev) == MAJOR_NR \
+	(!QUEUE_EMPTY && MAJOR(CURRENT -> rq_dev) == MAJOR_NR \
 	 && CURRENT -> cmd == READ && CURRENT -> sector != -1)
 
 

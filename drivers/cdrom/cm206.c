@@ -816,7 +816,7 @@ static void do_cm206_request(request_queue_t * q)
   
   while(1) {	 /* repeat until all requests have been satisfied */
     INIT_REQUEST;
-    if (CURRENT == NULL || CURRENT->rq_status == RQ_INACTIVE)
+    if (QUEUE_EMPTY || CURRENT->rq_status == RQ_INACTIVE)
       return;
     if (CURRENT->cmd != READ) {
       debug(("Non-read command %d on cdrom\n", CURRENT->cmd));

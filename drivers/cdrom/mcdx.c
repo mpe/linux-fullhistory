@@ -530,7 +530,7 @@ void do_mcdx_request(request_queue_t * q)
 
   again:
 
-	if (CURRENT == NULL) {
+	if (QUEUE_EMPTY) {
 		xtrace(REQUEST, "end_request(0): CURRENT == NULL\n");
 		return;
 	}

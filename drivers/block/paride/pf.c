@@ -854,7 +854,7 @@ static void do_pf_request (request_queue_t * q)
 
         if (pf_busy) return;
 repeat:
-        if ((!CURRENT) || (CURRENT->rq_status == RQ_INACTIVE)) return;
+        if (QUEUE_EMPTY || (CURRENT->rq_status == RQ_INACTIVE)) return;
         INIT_REQUEST;
 
         pf_unit = unit = DEVICE_NR(CURRENT->rq_dev);
@@ -874,7 +874,7 @@ repeat:
 	pf_cmd = CURRENT->cmd;
 	pf_run = pf_count;
         while ((pf_run <= cluster) &&
-	       (req = req->next) && 
+	       (req = blkdev_next_request(req)) && 
 	       (pf_block+pf_run == req->sector) &&
 	       (pf_cmd == req->cmd) &&
 	       (pf_unit == DEVICE_NR(req->rq_dev)))
@@ -904,7 +904,7 @@ static void pf_next_buf( int unit )
 	
 /* paranoia */
 
-	if ((!CURRENT) ||
+	if (QUEUE_EMPTY ||
 	    (CURRENT->cmd != pf_cmd) ||
 	    (DEVICE_NR(CURRENT->rq_dev) != pf_unit) ||
 	    (CURRENT->rq_status == RQ_INACTIVE) ||

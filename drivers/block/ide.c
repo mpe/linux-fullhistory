@@ -501,8 +501,7 @@ void ide_end_request (byte uptodate, ide_hwgroup_t *hwgroup)
 
 	if (!end_that_request_first(rq, uptodate, hwgroup->drive->name)) {
 		add_blkdev_randomness(MAJOR(rq->rq_dev));
-		hwgroup->drive->queue.current_request = rq->next;
-		blk_dev[MAJOR(rq->rq_dev)].request_queue.current_request = NULL;
+		blkdev_dequeue_request(rq);
         	hwgroup->rq = NULL;
 		end_that_request_last(rq);
 	}
@@ -772,8 +771,7 @@ void ide_end_drive_cmd (ide_drive_t *drive, byte stat, byte err)
 		}
 	}
 	spin_lock_irqsave(&io_request_lock, flags);
-	drive->queue.current_request = rq->next;
-	blk_dev[MAJOR(rq->rq_dev)].request_queue.current_request = NULL;
+	blkdev_dequeue_request(rq);
 	HWGROUP(drive)->rq = NULL;
 	rq->rq_status = RQ_INACTIVE;
 	spin_unlock_irqrestore(&io_request_lock, flags);
@@ -1076,7 +1074,7 @@ static ide_startstop_t start_request (ide_drive_t *drive)
 {
 	ide_startstop_t startstop;
 	unsigned long block, blockend;
-	struct request *rq = drive->queue.current_request;
+	struct request *rq = blkdev_entry_next_request(&drive->queue.queue_head);
 	unsigned int minor = MINOR(rq->rq_dev), unit = minor >> PARTN_BITS;
 	ide_hwif_t *hwif = HWIF(drive);
 
@@ -1159,13 +1157,12 @@ repeat:
 	best = NULL;
 	drive = hwgroup->drive;
 	do {
-		if (drive->queue.current_request && (!drive->sleep || 0 <= (signed long)(jiffies - drive->sleep))) {
+		if (!list_empty(&drive->queue.queue_head) && (!drive->sleep || 0 <= (signed long)(jiffies - drive->sleep))) {
 			if (!best
 			 || (drive->sleep && (!best->sleep || 0 < (signed long)(best->sleep - drive->sleep)))
 			 || (!best->sleep && 0 < (signed long)(WAKEUP(best) - WAKEUP(drive))))
 			{
-				struct blk_dev_struct *bdev = &blk_dev[HWIF(drive)->major];
-				if( !bdev->request_queue.plugged )
+				if( !drive->queue.plugged )
 					best = drive;
 			}
 		}
@@ -1229,7 +1226,6 @@ repeat:
  */
 static void ide_do_request (ide_hwgroup_t *hwgroup, int masked_irq)
 {
-	struct blk_dev_struct *bdev;
 	ide_drive_t	*drive;
 	ide_hwif_t	*hwif;
 	ide_startstop_t	startstop;
@@ -1246,9 +1242,6 @@ static void ide_do_request (ide_hwgroup_t *hwgroup, int masked_irq)
 			hwgroup->rq = NULL;
 			drive = hwgroup->drive;
 			do {
-				bdev = &blk_dev[HWIF(drive)->major];
-				if( !bdev->request_queue.plugged )
-					bdev->request_queue.current_request = NULL;		/* (broken since patch-2.1.15) */
 				if (drive->sleep && (!sleep || 0 < (signed long)(sleep - drive->sleep)))
 					sleep = drive->sleep;
 			} while ((drive = drive->next) != hwgroup->drive);
@@ -1285,10 +1278,9 @@ static void ide_do_request (ide_hwgroup_t *hwgroup, int masked_irq)
 		drive->sleep = 0;
 		drive->service_start = jiffies;
 
-		bdev = &blk_dev[hwif->major];
-		if ( bdev->request_queue.plugged )	/* FIXME: paranoia */
+		if ( drive->queue.plugged )	/* paranoia */
 			printk("%s: Huh? nuking plugged queue\n", drive->name);
-		bdev->request_queue.current_request = hwgroup->rq = drive->queue.current_request;
+		hwgroup->rq = blkdev_entry_next_request(&drive->queue.queue_head);
 		/*
 		 * Some systems have trouble with IDE IRQs arriving while
 		 * the driver is still setting things up.  So, here we disable
@@ -1670,7 +1662,7 @@ void ide_init_drive_cmd (struct request *rq)
 	rq->sem = NULL;
 	rq->bh = NULL;
 	rq->bhtail = NULL;
-	rq->next = NULL;
+	rq->q = NULL;
 }
 
 /*
@@ -1703,7 +1695,7 @@ int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t actio
 	unsigned long flags;
 	ide_hwgroup_t *hwgroup = HWGROUP(drive);
 	unsigned int major = HWIF(drive)->major;
-	struct request *cur_rq;
+	struct list_head * queue_head;
 	DECLARE_MUTEX_LOCKED(sem);
 
 #ifdef CONFIG_BLK_DEV_PDC4030
@@ -1716,20 +1708,17 @@ int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t actio
 	if (action == ide_wait)
 		rq->sem = &sem;
 	spin_lock_irqsave(&io_request_lock, flags);
-	cur_rq = drive->queue.current_request;
-	if (cur_rq == NULL || action == ide_preempt) {
-		rq->next = cur_rq;
-		drive->queue.current_request = rq;
+	queue_head = &drive->queue.queue_head;
+	if (list_empty(queue_head) || action == ide_preempt) {
 		if (action == ide_preempt)
 			hwgroup->rq = NULL;
 	} else {
 		if (action == ide_wait || action == ide_end) {
-			while (cur_rq->next != NULL)	/* find end of list */
-				cur_rq = cur_rq->next;
-		}
-		rq->next = cur_rq->next;
-		cur_rq->next = rq;
+			queue_head = queue_head->prev;
+		} else
+			queue_head = queue_head->next;
 	}
+	list_add(&rq->queue, queue_head);
 	ide_do_request(hwgroup, 0);
 	spin_unlock_irqrestore(&io_request_lock, flags);
 	if (action == ide_wait) {

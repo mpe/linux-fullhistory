@@ -803,7 +803,7 @@ do_cdu535_request(request_queue_t * q)
 		 * The beginning here is stolen from the hard disk driver.  I hope
 		 * it's right.
 		 */
-		if (!(CURRENT) || CURRENT->rq_status == RQ_INACTIVE) {
+		if (QUEUE_EMPTY || CURRENT->rq_status == RQ_INACTIVE) {
 			return;
 		}
 		INIT_REQUEST;

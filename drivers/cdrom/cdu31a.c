@@ -1672,7 +1672,7 @@ do_cdu31a_request(request_queue_t * q)
       if (signal_pending(current))
       {
          restore_flags(flags);
-         if (CURRENT && CURRENT->rq_status != RQ_INACTIVE)
+         if (!QUEUE_EMPTY && CURRENT->rq_status != RQ_INACTIVE)
          {
             end_request(0);
          }
@@ -1705,7 +1705,7 @@ cdu31a_request_startover:
        * The beginning here is stolen from the hard disk driver.  I hope
        * it's right.
        */
-      if (!(CURRENT) || CURRENT->rq_status == RQ_INACTIVE)
+      if (QUEUE_EMPTY || CURRENT->rq_status == RQ_INACTIVE)
       {
          goto end_do_cdu31a_request;
       }

@@ -1385,12 +1385,12 @@ static void redo_fd_request(void)
 	char *data;
 	unsigned long flags;
 
-	if (CURRENT && CURRENT->rq_status == RQ_INACTIVE){
+	if (!QUEUE_EMPTY && CURRENT->rq_status == RQ_INACTIVE){
 		return;
 	}
 
  repeat:
-	if (!CURRENT) {
+	if (QUEUE_EMPTY) {
 		/* Nothing left to do */
 		return;
 	}

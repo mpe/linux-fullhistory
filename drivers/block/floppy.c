@@ -2259,7 +2259,7 @@ static void request_done(int uptodate)
 	probing = 0;
 	reschedule_timeout(MAXTIMEOUT, "request done %d", uptodate);
 
-	if (!CURRENT){
+	if (QUEUE_EMPTY){
 		DPRINT("request list destroyed in floppy request done\n");
 		return;
 	}
@@ -2273,14 +2273,14 @@ static void request_done(int uptodate)
 			DRS->maxtrack = 1;
 
 		/* unlock chained buffers */
-		while (current_count_sectors && CURRENT &&
+		while (current_count_sectors && !QUEUE_EMPTY &&
 		       current_count_sectors >= CURRENT->current_nr_sectors){
 			current_count_sectors -= CURRENT->current_nr_sectors;
 			CURRENT->nr_sectors -= CURRENT->current_nr_sectors;
 			CURRENT->sector += CURRENT->current_nr_sectors;
 			end_request(1);
 		}
-		if (current_count_sectors && CURRENT){
+		if (current_count_sectors && !QUEUE_EMPTY){
 			/* "unlock" last subsector */
 			CURRENT->buffer += current_count_sectors <<9;
 			CURRENT->current_nr_sectors -= current_count_sectors;
@@ -2289,7 +2289,7 @@ static void request_done(int uptodate)
 			return;
 		}
 
-		if (current_count_sectors && !CURRENT)
+		if (current_count_sectors && QUEUE_EMPTY)
 			DPRINT("request list destroyed in floppy request done\n");
 
 	} else {
@@ -2852,14 +2852,14 @@ static void redo_fd_request(void)
 	if (current_drive < N_DRIVE)
 		floppy_off(current_drive);
 
-	if (CURRENT && CURRENT->rq_status == RQ_INACTIVE){
+	if (!QUEUE_EMPTY && CURRENT->rq_status == RQ_INACTIVE){
 		CLEAR_INTR;
 		unlock_fdc();
 		return;
 	}
 
 	while(1){
-		if (!CURRENT) {
+		if (QUEUE_EMPTY) {
 			CLEAR_INTR;
 			unlock_fdc();
 			return;

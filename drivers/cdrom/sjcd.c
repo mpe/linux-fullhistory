@@ -938,7 +938,7 @@ static void sjcd_invalidate_buffers( void ){
  */
 
 #define CURRENT_IS_VALID                                      \
-    ( CURRENT != NULL && MAJOR( CURRENT->rq_dev ) == MAJOR_NR && \
+    ( !QUEUE_EMPTY && MAJOR( CURRENT->rq_dev ) == MAJOR_NR && \
       CURRENT->cmd == READ && CURRENT->sector != -1 )
 
 static void sjcd_transfer( void ){

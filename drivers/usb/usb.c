@@ -588,7 +588,7 @@ static int usb_start_wait_urb(urb_t *urb, int timeout, int* actual_length)
 }
 
 /*-------------------------------------------------------------------*/
-// returns status (negative) are length (positive)
+// returns status (negative) or length (positive)
 int usb_internal_control_msg(struct usb_device *usb_dev, unsigned int pipe, 
 			    devrequest *cmd,  void *data, int len, int timeout)
 {

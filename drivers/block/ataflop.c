@@ -624,7 +624,7 @@ static void fd_error( void )
 		return;
 	}
 		
-	if (!CURRENT) return;
+	if (QUEUE_EMPTY) return;
 	CURRENT->errors++;
 	if (CURRENT->errors >= MAX_ERRORS) {
 		printk(KERN_ERR "fd%d: too many errors.\n", SelectedDrive );
@@ -1450,18 +1450,18 @@ static void redo_fd_request(void)
 	int device, drive, type;
   
 	DPRINT(("redo_fd_request: CURRENT=%08lx CURRENT->dev=%04x CURRENT->sector=%ld\n",
-		(unsigned long)CURRENT, CURRENT ? CURRENT->rq_dev : 0,
-		CURRENT ? CURRENT->sector : 0 ));
+		(unsigned long)CURRENT, !QUEUE_EMPTY ? CURRENT->rq_dev : 0,
+		!QUEUE_EMPTY ? CURRENT->sector : 0 ));
 
 	IsFormatting = 0;
 
-	if (CURRENT && CURRENT->rq_status == RQ_INACTIVE){
+	if (!QUEUE_EMPTY && CURRENT->rq_status == RQ_INACTIVE){
 		return;
 	}
 
 repeat:
     
-	if (!CURRENT)
+	if (QUEUE_EMPTY)
 		goto the_end;
 
 	if (MAJOR(CURRENT->rq_dev) != MAJOR_NR)

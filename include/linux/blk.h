@@ -96,6 +96,18 @@ void initrd_init(void);
  * code duplication in drivers.
  */
 
+extern inline void blkdev_dequeue_request(struct request * req)
+{
+	if (req->q)
+	{
+		if (req->cmd == READ)
+			req->q->elevator.read_pendings--;
+		req->q->nr_segments -= req->nr_segments;
+		req->q = NULL;
+	}
+	list_del(&req->queue);
+}
+
 int end_that_request_first(struct request *req, int uptodate, char *name);
 void end_that_request_last(struct request *req);
 
@@ -373,7 +385,10 @@ static void floppy_off(unsigned int nr);
 #if !defined(IDE_DRIVER)
 
 #ifndef CURRENT
-#define CURRENT (blk_dev[MAJOR_NR].request_queue.current_request)
+#define CURRENT blkdev_entry_next_request(&blk_dev[MAJOR_NR].request_queue.queue_head)
+#endif
+#ifndef QUEUE_EMPTY
+#define QUEUE_EMPTY list_empty(&blk_dev[MAJOR_NR].request_queue.queue_head)
 #endif
 
 #ifndef DEVICE_NAME
@@ -418,7 +433,7 @@ static void (DEVICE_REQUEST)(request_queue_t *);
 #endif
 
 #define INIT_REQUEST \
-	if (!CURRENT) {\
+	if (QUEUE_EMPTY) {\
 		CLEAR_INTR; \
 		return; \
 	} \
@@ -446,7 +461,7 @@ static void end_request(int uptodate) {
 	add_blkdev_randomness(MAJOR(req->rq_dev));
 #endif
 	DEVICE_OFF(req->rq_dev);
-	CURRENT = req->next;
+	blkdev_dequeue_request(req);
 	end_that_request_last(req);
 }
 

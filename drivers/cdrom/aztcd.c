@@ -234,7 +234,7 @@ static int aztcd_blocksizes[1] = {2048};
 #endif
 
 #define CURRENT_VALID \
-  (CURRENT && MAJOR(CURRENT -> rq_dev) == MAJOR_NR && CURRENT -> cmd == READ \
+  (!QUEUE_EMPTY && MAJOR(CURRENT -> rq_dev) == MAJOR_NR && CURRENT -> cmd == READ \
    && CURRENT -> sector != -1)
 
 #define AFL_STATUSorDATA (AFL_STATUS | AFL_DATA)

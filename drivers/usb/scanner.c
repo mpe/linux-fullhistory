@@ -130,10 +130,29 @@
  *    - Added Microtek X6 ID's. Thanks to Oliver Neukum
  *      <Oliver.Neukum@lrz.uni-muenchen.de>.
  *
+ * 
+ *  0.4.1  2/15/2000
+ *  
+ *    - Fixed 'count' bug in read_scanner(). Thanks to Henrik
+ *      Johansson <henrikjo@post.utfors.se> for identifying it.  Amazing
+ *      it has worked this long.
+ *    - Fixed '>=' bug in both read/write_scanner methods.
+ *    - Cleaned up both read/write_scanner() methods so that they are 
+ *      a little more readable.
+ *    - Added a lot of Microtek ID's.  Thanks to Adrian Perez Jorge.
+ *    - Adopted the __initcall().
+ *    - Added #include <linux/init.h> to scanner.h for __initcall().
+ *    - Added one liner in irq_scanner() to keep gcc from complaining 
+ *      about an unused variable (data) if debugging was disabled
+ *      in scanner.c.
+ *    - Increased the timeout parameter in read_scanner() to 120 Secs.
+ *
  *
  *  TODO
  *
  *    - Select/poll methods
+ *    - More testing
+ *    - Proper registry/assignment for LM9830 ioctl's
  *
  *
  *  Thanks to:
@@ -143,6 +162,9 @@
  *    - To Linus Torvalds for this great OS.
  *    - The GNU folks.
  *    - The folks that forwarded Vendor:Product ID's to me.
+ *    - Johannes Erdfelt for the loaning of a USB analyzer for tracking an
+ *      issue with HP-4100 and uhci.
+ *    - Adolfo Montero for his assistance.
  *    - And anybody else who chimed in with reports and suggestions.
  *
  *  Performance:
@@ -167,6 +189,7 @@ irq_scanner(struct urb *urb)
 
 	struct scn_usb_data *scn = urb->context;
 	unsigned char *data = &scn->button;
+	data += 0;		/* Keep gcc from complaining about unused var */
 
 	if (urb->status) {
 		return;
@@ -253,11 +276,11 @@ write_scanner(struct file * file, const char * buffer,
 	struct scn_usb_data *scn;
 	struct usb_device *dev;
 	
-	ssize_t bytes_written = 0;
+	ssize_t bytes_written = 0; /* Overall count of bytes written */
 	ssize_t ret = 0;
 
-	int copy_size;
-	int partial;
+	int this_write;		/* Number of bytes to write */
+	int partial;		/* Number of bytes successfully written */
 	int result = 0;
 	
 	char *obuf;
@@ -275,15 +298,15 @@ write_scanner(struct file * file, const char * buffer,
 			break;
 		}
 
-		copy_size = (count > OBUF_SIZE) ? OBUF_SIZE : count;
+		this_write = (count >= OBUF_SIZE) ? OBUF_SIZE : count;
 		
-		if (copy_from_user(scn->obuf, buffer, copy_size)) {
+		if (copy_from_user(scn->obuf, buffer, this_write)) {
 			ret = -EFAULT;
 			break;
 		}
 
-		result = usb_bulk_msg(dev,usb_sndbulkpipe(dev, scn->bulk_out_ep), obuf, copy_size, &partial, 60*HZ);
-		dbg("write stats(%d): result:%d copy_size:%d partial:%d", scn->scn_minor, result, copy_size, partial);
+		result = usb_bulk_msg(dev,usb_sndbulkpipe(dev, scn->bulk_out_ep), obuf, this_write, &partial, 60*HZ);
+		dbg("write stats(%d): result:%d this_write:%d partial:%d", scn->scn_minor, result, this_write, partial);
 
 		if (result == USB_ST_TIMEOUT) {	/* NAK -- shouldn't happen */
 			warn("write_scanner: NAK recieved.");
@@ -306,7 +329,7 @@ write_scanner(struct file * file, const char * buffer,
 			printk("\n");
 		}
 #endif
-		if (partial != copy_size) { /* Unable to write complete amount */
+		if (partial != this_write) { /* Unable to write all contents of obuf */
 			ret = -EIO;
 			break;
 		}
@@ -332,10 +355,11 @@ read_scanner(struct file * file, char * buffer,
 	struct scn_usb_data *scn;
 	struct usb_device *dev;
 
-	ssize_t read_count, ret = 0;
+	ssize_t bytes_read = 0;	/* Overall count of bytes_read */
+	ssize_t ret = 0;
 
-	int partial;
-	int this_read;
+	int partial;		/* Number of bytes successfully read */
+	int this_read;		/* Max number of bytes to read */
 	int result;
 
 	char *ibuf;
@@ -346,7 +370,7 @@ read_scanner(struct file * file, char * buffer,
 
 	dev = scn->scn_dev;
 
-	read_count = 0;
+	bytes_read = 0;
 
 	while (count) {
 		if (signal_pending(current)) {
@@ -354,9 +378,9 @@ read_scanner(struct file * file, char * buffer,
 			break;
 		}
 
-		this_read = (count > IBUF_SIZE) ? IBUF_SIZE : count;
+		this_read = (count >= IBUF_SIZE) ? IBUF_SIZE : count;
 		
-		result = usb_bulk_msg(dev, usb_rcvbulkpipe(dev, scn->bulk_in_ep), ibuf, this_read, &partial, 60*HZ);
+		result = usb_bulk_msg(dev, usb_rcvbulkpipe(dev, scn->bulk_in_ep), ibuf, this_read, &partial, 120*HZ);
 		dbg("read stats(%d): result:%d this_read:%d partial:%d", scn->scn_minor, result, this_read, partial);
 
 		if (result == USB_ST_TIMEOUT) { /* NAK -- shouldn't happen */
@@ -382,24 +406,22 @@ read_scanner(struct file * file, char * buffer,
 #endif
 
 		if (partial) { /* Data returned */
-			count = this_read = partial;
-		} else {
-			ret = 0;
-			read_count = 0;
-			break;
-		}
-
-		if (this_read) {
 			if (copy_to_user(buffer, ibuf, this_read)) {
 				ret = -EFAULT;
 				break;
 			}
-			count -= this_read;
-			read_count += this_read;
-			buffer += this_read;
+			count -= partial;
+			bytes_read += partial;
+			buffer += partial;
+			
+		} else {
+			ret = 0;
+			break;
 		}
+		
 	}
-	return ret ? ret : read_count;
+	
+	return ret ? ret : bytes_read;
 }
 
 static void *
@@ -442,7 +464,8 @@ probe_scanner(struct usb_device *dev, unsigned int ifnum)
  * that this will allow developers a means to produce applications
  * that will support USB products.
  *
- * Until we detect a device which is pleasing, we silently punt.  */
+ * Until we detect a device which is pleasing, we silently punt.
+ */
 
 	do {
 		if (dev->descriptor.idVendor == 0x03f0) {          /* Hewlett Packard */
@@ -460,6 +483,7 @@ probe_scanner(struct usb_device *dev, unsigned int ifnum)
 		
 		if (dev->descriptor.idVendor == 0x06bd) {	   /* Agfa */
 		    	if (dev->descriptor.idProduct == 0x0001 || /* SnapScan 1212U */
+		    	    dev->descriptor.idProduct == 0x2061 || /* Another SnapScan 1212U (?) */
 		    	    dev->descriptor.idProduct == 0x0100) { /* SnapScan Touch */
 				valid_device = 1;
 				break;
@@ -490,7 +514,13 @@ probe_scanner(struct usb_device *dev, unsigned int ifnum)
 		}
 
 		if (dev->descriptor.idVendor == 0x05da) {          /* Microtek */
-			if (dev->descriptor.idProduct == 0x0099) { /* X6 */
+			if (dev->descriptor.idProduct == 0x0099 || /* ScanMaker X6 - X6U */
+			    dev->descriptor.idProduct == 0x0094 || /* Phantom 336CX - C3 */
+			    dev->descriptor.idProduct == 0x00a0 || /* Phantom 336CX - C3 #2 */
+			    dev->descriptor.idProduct == 0x009a || /* Phantom C6 */
+			    dev->descriptor.idProduct == 0x00a3 || /* ScanMaker V6USL */
+			    dev->descriptor.idProduct == 0x80a3 || /* ScanMaker V6USL #2 */
+			    dev->descriptor.idProduct == 0x80ac) { /* ScanMaker V6UL - SpicyU */
 				valid_device = 1;
 				break;
 			}
@@ -763,11 +793,18 @@ ioctl_scanner(struct inode *inode, struct file *file,
 
 static struct
 file_operations usb_scanner_fops = {
-	read:		read_scanner,
-	write:		write_scanner,
-	ioctl:		ioctl_scanner,
-	open:		open_scanner,
-	release:	close_scanner,
+	NULL,		/* seek */
+	read_scanner,
+	write_scanner,
+	NULL,		/* readdir */
+	NULL,		/* poll */
+	ioctl_scanner,
+	NULL,		/* mmap */
+	open_scanner,
+	NULL,		/* flush */
+	close_scanner,
+	NULL,         
+	NULL,           /* fasync */
 };
 
 static struct
@@ -780,8 +817,15 @@ usb_driver scanner_driver = {
        SCN_BASE_MNR
 };
 
-int
-usb_scanner_init(void)
+#ifdef MODULE
+void cleanup_module(void)
+{
+	usb_deregister(&scanner_driver);
+}
+int init_module(void)
+#else
+int usb_scanner_init(void)
+#endif
 {
         if (usb_register(&scanner_driver) < 0)
                 return -1;
@@ -790,18 +834,4 @@ usb_scanner_init(void)
 	return 0;
 }
 
-#ifdef MODULE
-
-int
-init_module(void)
-{
-	return usb_scanner_init();
-}
-
-void
-cleanup_module(void)
-{
-	usb_deregister(&scanner_driver);
-}
-#endif
-
+__initcall(usb_scanner_init);

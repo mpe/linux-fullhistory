@@ -272,10 +272,7 @@ printk("nfsd_setattr: size change??\n");
 		if (err)
 			goto out_nfserr;
 
-		err = locks_verify_area(FLOCK_VERIFY_WRITE, inode, NULL,
-				  iap->ia_size<inode->i_size ? iap->ia_size : inode->i_size,
-				  abs(inode->i_size - iap->ia_size));
-
+		err = locks_verify_truncate(inode, NULL, iap->ia_size);
 		if (err)
 			goto out_nfserr;
 		DQUOT_INIT(inode);
@@ -1061,9 +1058,7 @@ nfsd_truncate(struct svc_rqst *rqstp, struct svc_fh *fhp, unsigned long size)
 	err = get_write_access(inode);
 	if (err)
 		goto out_nfserr;
-	err = locks_verify_area(FLOCK_VERIFY_WRITE, inode, NULL,
-				  size<inode->i_size ? size : inode->i_size,
-				  abs(inode->i_size - size));
+	err = locks_verify_truncate(inode, NULL, size);
 	if (err)
 		goto out_nfserr;
 

@@ -198,8 +198,6 @@ static int lo_send(struct loop_device *lo, char *data, int len, loff_t pos,
 		offset = 0;
 		index++;
 		pos += size;
-		if (pos > lo->lo_dentry->d_inode->i_size)
-			lo->lo_dentry->d_inode->i_size = pos;
 		UnlockPage(page);
 		page_cache_release(page);
 	}
@@ -277,7 +275,7 @@ static void do_lo_request(request_queue_t * q)
 repeat:
 	INIT_REQUEST;
 	current_request=CURRENT;
-	CURRENT=current_request->next;
+	blkdev_dequeue_request(current_request);
 	if (MINOR(current_request->rq_dev) >= max_loop)
 		goto error_out;
 	lo = &loop_dev[MINOR(current_request->rq_dev)];
@@ -375,15 +373,13 @@ done:
 	spin_lock_irq(&io_request_lock);
 	current_request->sector += current_request->current_nr_sectors;
 	current_request->nr_sectors -= current_request->current_nr_sectors;
-	current_request->next=CURRENT;
-	CURRENT=current_request;
+	list_add(&current_request->queue, &current_request->q->queue_head);
 	end_request(1);
 	goto repeat;
 error_out_lock:
 	spin_lock_irq(&io_request_lock);
 error_out:
-	current_request->next=CURRENT;
-	CURRENT=current_request;
+	list_add(&current_request->queue, &current_request->q->queue_head);
 	end_request(0);
 	goto repeat;
 }
@@ -790,6 +786,7 @@ int __init loop_init(void)
 	}		
 
 	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
+	blk_queue_headactive(BLK_DEFAULT_QUEUE(MAJOR_NR), 0);
 	for (i=0; i < max_loop; i++) {
 		memset(&loop_dev[i], 0, sizeof(struct loop_device));
 		loop_dev[i].lo_number = i;

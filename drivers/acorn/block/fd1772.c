@@ -591,7 +591,7 @@ static void fd_error(void)
 {
 	printk("FDC1772: fd_error\n");
 	/*panic("fd1772: fd_error"); *//* DAG tmp */
-	if (!CURRENT)
+	if (QUEUE_EMPTY)
 		return;
 	CURRENT->errors++;
 	if (CURRENT->errors >= MAX_ERRORS) {
@@ -1230,14 +1230,14 @@ static void redo_fd_request(void)
 
 	DPRINT(("redo_fd_request: CURRENT=%08lx CURRENT->rq_dev=%04x CURRENT->sector=%ld\n",
 		(unsigned long) CURRENT, CURRENT ? CURRENT->rq_dev : 0,
-		CURRENT ? CURRENT->sector : 0));
+		!QUEUE_EMPTY ? CURRENT->sector : 0));
 
-	if (CURRENT && CURRENT->rq_status == RQ_INACTIVE)
+	if (!QUEUE_EMPTY && CURRENT->rq_status == RQ_INACTIVE)
 		goto the_end;
 
       repeat:
 
-	if (!CURRENT)
+	if (QUEUE_EMPTY)
 		goto the_end;
 
 	if (MAJOR(CURRENT->rq_dev) != MAJOR_NR)

@@ -880,14 +880,16 @@ static void do_ida_request(int ctlr)
 	cmdlist_t *c;
 	int seg, sect;
 	char *lastdataend;
-	request_queue_t * q;
+	struct list_head * queue_head;
 	struct buffer_head *bh;
 	struct request *creq;
 
-	q = &blk_dev[MAJOR_NR+ctlr].request_queue;
+	queue_head = &blk_dev[MAJOR_NR+ctlr].request_queue.queue_head;
 
-	creq = q->current_request;
-	if (creq == NULL || creq->rq_status == RQ_INACTIVE)
+	if (list_empty(queue_head))
+		goto doreq_done;
+	creq = blkdev_entry_next_request(queue_head);
+	if (creq->rq_status == RQ_INACTIVE)
 		goto doreq_done;
 
 	if (ctlr != MAJOR(creq->rq_dev)-MAJOR_NR ||
@@ -961,10 +963,9 @@ DBGPX(
 		bh->b_reqnext = NULL;
 DBGPX(		printk("More to do on same request %p\n", creq); );
 	} else {
-DBGPX(		printk("Done with %p, queueing %p\n", creq, creq->next); );
-		creq->rq_status = RQ_INACTIVE;
-		q->current_request = creq->next;
-		wake_up(&wait_for_request);
+DBGPX(		printk("Done with %p\n", creq); );
+		blkdev_dequeue_request(creq);
+		end_that_request_last(creq);
 	}
 
 	c->req.hdr.cmd = (creq->cmd == READ) ? IDA_READ : IDA_WRITE;

@@ -1009,37 +1009,58 @@ static boolean DAC960_ReportDeviceConfiguration(DAC960_Controller_T *Controller)
 }
 
 
-static int DAC_merge_fn(request_queue_t *q, struct request *req, 
-			struct buffer_head *bh) 
+static inline int DAC_new_segment(request_queue_t *q, struct request *req,
+				  int __max_segments)
 {
 	int max_segments;
 	DAC960_Controller_T * Controller = q->queuedata;
 
 	max_segments = Controller->MaxSegmentsPerRequest[MINOR(req->rq_dev)];
+	if (__max_segments < max_segments)
+		max_segments = __max_segments;
 
-	if (req->bhtail->b_data + req->bhtail->b_size != bh->b_data) {
-		if (req->nr_segments < max_segments) {
-			req->nr_segments++;
-			return 1;
-		}
-		return 0;
+	if (req->nr_segments < max_segments) {
+		req->nr_segments++;
+		q->nr_segments++;
+		return 1;
 	}
+	return 0;
+}
 
-	return 1;
+static int DAC_back_merge_fn(request_queue_t *q, struct request *req, 
+			     struct buffer_head *bh, int __max_segments)
+{
+	if (req->bhtail->b_data + req->bhtail->b_size == bh->b_data)
+		return 1;
+	return DAC_new_segment(q, req, __max_segments);
+}
+
+static int DAC_front_merge_fn(request_queue_t *q, struct request *req, 
+			      struct buffer_head *bh, int __max_segments)
+{
+	if (bh->b_data + bh->b_size == req->bh->b_data)
+		return 1;
+	return DAC_new_segment(q, req, __max_segments);
 }
 
 static int DAC_merge_requests_fn(request_queue_t *q,
 				 struct request *req,
-				 struct request *next)
+				 struct request *next,
+				 int __max_segments)
 {
 	int max_segments;
 	DAC960_Controller_T * Controller = q->queuedata;
 	int total_segments = req->nr_segments + next->nr_segments;
 
 	max_segments = Controller->MaxSegmentsPerRequest[MINOR(req->rq_dev)];
+	if (__max_segments < max_segments)
+		max_segments = __max_segments;
 
 	if (req->bhtail->b_data + req->bhtail->b_size == next->bh->b_data)
+	{
 		total_segments--;
+		q->nr_segments--;
+	}
     
 	if (total_segments > max_segments)
 		return 0;
@@ -1080,7 +1101,8 @@ static boolean DAC960_RegisterBlockDevice(DAC960_Controller_T *Controller)
   q = BLK_DEFAULT_QUEUE(MajorNumber);
   blk_init_queue(q, RequestFunctions[Controller->ControllerNumber]);
   blk_queue_headactive(q, 0);
-  q->merge_fn = DAC_merge_fn;
+  q->back_merge_fn = DAC_back_merge_fn;
+  q->front_merge_fn = DAC_front_merge_fn;
   q->merge_requests_fn = DAC_merge_requests_fn;
   q->queuedata = (void *) Controller;
 
@@ -1156,7 +1178,6 @@ static void DAC960_UnregisterBlockDevice(DAC960_Controller_T *Controller)
   blk_size[MajorNumber] = NULL;
   blksize_size[MajorNumber] = NULL;
   max_sectors[MajorNumber] = NULL;
-  max_segments[MajorNumber] = NULL;
   /*
     Remove the Generic Disk Information structure from the list.
   */
@@ -1305,15 +1326,17 @@ static int DAC960_Finalize(NotifierBlock_T *NotifierBlock,
 static boolean DAC960_ProcessRequest(DAC960_Controller_T *Controller,
 				     boolean WaitForCommand)
 {
-  IO_Request_T **RequestQueuePointer =
-    &blk_dev[DAC960_MAJOR + Controller->ControllerNumber].request_queue.current_request;
+  struct list_head * queue_head;
   IO_Request_T *Request;
   DAC960_Command_T *Command;
   char *RequestBuffer;
+
+  queue_head = &blk_dev[DAC960_MAJOR + Controller->ControllerNumber].request_queue.queue_head;
   while (true)
     {
-      Request = *RequestQueuePointer;
-      if (Request == NULL || Request->rq_status == RQ_INACTIVE) return false;
+      if (list_empty(queue_head)) return false;
+      Request = blkdev_entry_next_request(queue_head);
+      if (Request->rq_status == RQ_INACTIVE) return false;
       Command = DAC960_AllocateCommand(Controller);
       if (Command != NULL) break;
       if (!WaitForCommand) return false;
@@ -1335,7 +1358,7 @@ static boolean DAC960_ProcessRequest(DAC960_Controller_T *Controller,
   Command->BufferHeader = Request->bh;
   RequestBuffer = Request->buffer;
   Request->rq_status = RQ_INACTIVE;
-  *RequestQueuePointer = Request->next;
+  blkdev_dequeue_request(Request);
   wake_up(&wait_for_request);
   if (Command->SegmentCount == 1)
     {

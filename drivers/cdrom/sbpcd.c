@@ -4791,9 +4791,7 @@ static void sbp_transfer(struct request *req)
  */
 #undef DEBUG_GTL
 static inline void sbpcd_end_request(struct request *req, int uptodate) {
-	req->next=CURRENT;
-	CURRENT=req;
-	up(&ioctl_read_sem);
+	list_add(&req->queue, &req->q->queue_head);
 	end_request(uptodate);
 }
 /*==========================================================================*/
@@ -4815,7 +4813,7 @@ static void DO_SBPCD_REQUEST(request_queue_t * q)
 #ifdef DEBUG_GTL
 	xnr=++xx_nr;
 
-	if(!CURRENT)
+	if(QUEUE_EMPTY)
 	{
 		printk( "do_sbpcd_request[%di](NULL), Pid:%d, Time:%li\n",
 			xnr, current->pid, jiffies);
@@ -4830,15 +4828,15 @@ static void DO_SBPCD_REQUEST(request_queue_t * q)
 #endif
 	INIT_REQUEST;
 	req=CURRENT;		/* take out our request so no other */
-	CURRENT=req->next;	/* task can fuck it up         GTL  */
-	spin_unlock_irq(&io_request_lock);		/* FIXME!!!! */
+	blkdev_dequeue_request(req);	/* task can fuck it up         GTL  */
 	
-	down(&ioctl_read_sem);
 	if (req->rq_status == RQ_INACTIVE)
 		sbpcd_end_request(req, 0);
 	if (req -> sector == -1)
 		sbpcd_end_request(req, 0);
+	spin_unlock_irq(&io_request_lock);
 
+	down(&ioctl_read_sem);
 	if (req->cmd != READ)
 	{
 		msg(DBG_INF, "bad cmd %d\n", req->cmd);
@@ -4875,8 +4873,9 @@ static void DO_SBPCD_REQUEST(request_queue_t * q)
 		printk(" do_sbpcd_request[%do](%p:%ld+%ld) end 2, Time:%li\n",
 			xnr, req, req->sector, req->nr_sectors, jiffies);
 #endif
+		up(&ioctl_read_sem);
+		spin_lock_irq(&io_request_lock);
 		sbpcd_end_request(req, 1);
-		spin_lock_irq(&io_request_lock);		/* FIXME!!!! */
 		goto request_loop;
 	}
 
@@ -4915,8 +4914,9 @@ static void DO_SBPCD_REQUEST(request_queue_t * q)
 			printk(" do_sbpcd_request[%do](%p:%ld+%ld) end 3, Time:%li\n",
 				xnr, req, req->sector, req->nr_sectors, jiffies);
 #endif
+			up(&ioctl_read_sem);
+			spin_lock_irq(&io_request_lock);
 			sbpcd_end_request(req, 1);
-			spin_lock_irq(&io_request_lock);	/* FIXME!!!! */
 			goto request_loop;
 		}
 	}
@@ -4929,9 +4929,10 @@ static void DO_SBPCD_REQUEST(request_queue_t * q)
 	printk(" do_sbpcd_request[%do](%p:%ld+%ld) end 4 (error), Time:%li\n",
 		xnr, req, req->sector, req->nr_sectors, jiffies);
 #endif
-	sbpcd_end_request(req, 0);
+	up(&ioctl_read_sem);
 	sbp_sleep(0);    /* wait a bit, try again */
-	spin_lock_irq(&io_request_lock);		/* FIXME!!!! */
+	spin_lock_irq(&io_request_lock);
+	sbpcd_end_request(req, 0);
 	goto request_loop;
 }
 /*==========================================================================*/
@@ -5741,6 +5742,7 @@ int __init SBPCD_INIT(void)
 #endif MODULE
 	}
 	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
+	blk_queue_headactive(BLK_DEFAULT_QUEUE(MAJOR_NR), 0);
 	read_ahead[MAJOR_NR] = buffers * (CD_FRAMESIZE / 512);
 	
 	request_region(CDo_command,4,major_name);

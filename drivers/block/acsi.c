@@ -769,7 +769,7 @@ static void unexpected_acsi_interrupt( void )
 static void bad_rw_intr( void )
 
 {
-	if (!CURRENT)
+	if (QUEUE_EMPTY)
 		return;
 
 	if (++CURRENT->errors >= MAX_ERRORS)
@@ -843,7 +843,7 @@ static void acsi_times_out( unsigned long dummy )
 
 	DEVICE_INTR = NULL;
 	printk( KERN_ERR "ACSI timeout\n" );
-	if (!CURRENT) return;
+	if (QUEUE_EMPTY) return;
 	if (++CURRENT->errors >= MAX_ERRORS) {
 #ifdef DEBUG
 		printk( KERN_ERR "ACSI: too many errors.\n" );
@@ -953,7 +953,7 @@ static void redo_acsi_request( void )
 	unsigned long		pbuffer;
 	struct buffer_head	*bh;
 	
-	if (CURRENT && CURRENT->rq_status == RQ_INACTIVE) {
+	if (!QUEUE_EMPTY && CURRENT->rq_status == RQ_INACTIVE) {
 		if (!DEVICE_INTR) {
 			ENABLE_IRQ();
 			stdma_release();
@@ -969,7 +969,7 @@ static void redo_acsi_request( void )
 	/* Another check here: An interrupt or timer event could have
 	 * happened since the last check!
 	 */
-	if (CURRENT && CURRENT->rq_status == RQ_INACTIVE) {
+	if (!QUEUE_EMPTY && CURRENT->rq_status == RQ_INACTIVE) {
 		if (!DEVICE_INTR) {
 			ENABLE_IRQ();
 			stdma_release();
@@ -979,7 +979,7 @@ static void redo_acsi_request( void )
 	if (DEVICE_INTR)
 		return;
 
-	if (!CURRENT) {
+	if (QUEUE_EMPTY) {
 		CLEAR_INTR;
 		ENABLE_IRQ();
 		stdma_release();

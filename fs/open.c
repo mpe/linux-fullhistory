@@ -112,9 +112,7 @@ static inline long do_sys_truncate(const char * path, loff_t length)
 	if (error)
 		goto dput_and_out;
 
-	error = locks_verify_area(FLOCK_VERIFY_WRITE, inode, NULL,
-				  length < inode->i_size ? length : inode->i_size,
-				  abs(inode->i_size - length));
+	error = locks_verify_truncate(inode, NULL, length);
 	if (!error) {
 		DQUOT_INIT(inode);
 		error = do_truncate(dentry, length);
@@ -157,9 +155,7 @@ static inline long do_sys_ftruncate(unsigned int fd, loff_t length)
 	error = -EPERM;
 	if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
 		goto out_putf;
-	error = locks_verify_area(FLOCK_VERIFY_WRITE, inode, file,
-				  length<inode->i_size ? length : inode->i_size,
-				  abs(inode->i_size - length));
+	error = locks_verify_truncate(inode, file, length);
 	lock_kernel();
 	if (!error)
 		error = do_truncate(dentry, length);

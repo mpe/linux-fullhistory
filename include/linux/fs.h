@@ -744,6 +744,19 @@ extern inline int locks_verify_area(int read_write, struct inode *inode,
 	return 0;
 }
 
+extern inline int locks_verify_truncate(struct inode *inode,
+				    struct file *filp,
+				    loff_t size)
+{
+	if (inode->i_flock && MANDATORY_LOCK(inode))
+		return locks_mandatory_area(
+			FLOCK_VERIFY_WRITE, inode, filp,
+			size < inode->i_size ? size : inode->i_size,
+			abs(inode->i_size - size)
+		);
+	return 0;
+}
+
 
 /* fs/open.c */
 

@@ -279,13 +279,13 @@ unsigned int block,dev;
 unsigned int nsect;
 
 repeat:
-	if (!(CURRENT) || CURRENT->rq_status == RQ_INACTIVE) return;
+	if (QUEUE_EMPTY || CURRENT->rq_status == RQ_INACTIVE) return;
 	INIT_REQUEST;
 	dev = MINOR(CURRENT->rq_dev);
 	block = CURRENT->sector;
 	nsect = CURRENT->nr_sectors;
 
-	if (CURRENT == NULL || CURRENT -> sector == -1)
+	if (QUEUE_EMPTY || CURRENT -> sector == -1)
 		return;
 
 	if (CURRENT -> cmd != READ)

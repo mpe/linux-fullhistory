@@ -868,7 +868,7 @@ static void do_pd_request (request_queue_t * q)
 
         if (pd_busy) return;
 repeat:
-        if ((!CURRENT) || (CURRENT->rq_status == RQ_INACTIVE)) return;
+        if (QUEUE_EMPTY || (CURRENT->rq_status == RQ_INACTIVE)) return;
         INIT_REQUEST;
 
         pd_dev = MINOR(CURRENT->rq_dev);
@@ -890,7 +890,7 @@ repeat:
 	pd_cmd = CURRENT->cmd;
 	pd_run = pd_count;
         while ((pd_run <= cluster) &&
-	       (req = req->next) && 
+	       (req = blkdev_next_request(req)) && 
 	       (pd_block+pd_run == req->sector) &&
 	       (pd_cmd == req->cmd) &&
 	       (pd_dev == MINOR(req->rq_dev)))
@@ -922,7 +922,7 @@ static void pd_next_buf( int unit )
 	
 /* paranoia */
 
-	if ((!CURRENT) ||
+	if (QUEUE_EMPTY ||
 	    (CURRENT->cmd != pd_cmd) ||
 	    (MINOR(CURRENT->rq_dev) != pd_dev) ||
 	    (CURRENT->rq_status == RQ_INACTIVE) ||

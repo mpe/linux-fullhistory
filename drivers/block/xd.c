@@ -274,7 +274,7 @@ static void do_xd_request (request_queue_t * q)
 	sti();
 	if (xdc_busy)
 		return;
-	while (code = 0, CURRENT) {
+	while (code = 0, !QUEUE_EMPTY) {
 		INIT_REQUEST;	/* do some checking on the request structure */
 
 		if (CURRENT_DEV < xd_drives

@@ -86,6 +86,7 @@ int scsi_insert_special_cmd(Scsi_Cmnd * SCpnt, int at_head)
 	q = &SCpnt->device->request_queue;
 	SCpnt->request.cmd = SPECIAL;
 	SCpnt->request.special = (void *) SCpnt;
+	SCpnt->request.q = NULL;
 
 	/*
 	 * We have the option of inserting the head or the tail of the queue.
@@ -96,8 +97,7 @@ int scsi_insert_special_cmd(Scsi_Cmnd * SCpnt, int at_head)
 	spin_lock_irqsave(&io_request_lock, flags);
 
 	if (at_head) {
-		SCpnt->request.next = q->current_request;
-		q->current_request = &SCpnt->request;
+		list_add(&SCpnt->request.queue, &q->queue_head);
 	} else {
 		/*
 		 * FIXME(eric) - we always insert at the tail of the
@@ -107,19 +107,7 @@ int scsi_insert_special_cmd(Scsi_Cmnd * SCpnt, int at_head)
 		 * request might not float high enough in the queue
 		 * to be scheduled.
 		 */
-		SCpnt->request.next = NULL;
-		if (q->current_request == NULL) {
-			q->current_request = &SCpnt->request;
-		} else {
-			struct request *req;
-
-			for (req = q->current_request; req; req = req->next) {
-				if (req->next == NULL) {
-					req->next = &SCpnt->request;
-					break;
-				}
-			}
-		}
+		list_add_tail(&SCpnt->request.queue, &q->queue_head);
 	}
 
 	/*
@@ -239,9 +227,8 @@ void scsi_queue_next_request(request_queue_t * q, Scsi_Cmnd * SCpnt)
 		 * in which case we need to request the blocks that come after
 		 * the bad sector.
 		 */
-		SCpnt->request.next = q->current_request;
-		q->current_request = &SCpnt->request;
 		SCpnt->request.special = (void *) SCpnt;
+		list_add(&SCpnt->request.queue, &q->queue_head);
 	}
 
 	/*
@@ -260,7 +247,7 @@ void scsi_queue_next_request(request_queue_t * q, Scsi_Cmnd * SCpnt)
 	 * use function pointers to pick the right one.
 	 */
 	if (SDpnt->single_lun
-	    && q->current_request == NULL
+	    && list_empty(&q->queue_head)
 	    && SDpnt->device_busy == 0) {
 		request_queue_t *q;
 
@@ -850,18 +837,18 @@ void scsi_request_fn(request_queue_t * q)
 		}
 
 		/*
-		 * Loop through all of the requests in this queue, and find
-		 * one that is queueable.
-		 */
-		req = q->current_request;
-
-		/*
 		 * If we couldn't find a request that could be queued, then we
 		 * can also quit.
 		 */
-		if (!req) {
+		if (list_empty(&q->queue_head))
 			break;
-		}
+
+		/*
+		 * Loop through all of the requests in this queue, and find
+		 * one that is queueable.
+		 */
+		req = blkdev_entry_next_request(&q->queue_head);
+
 		/*
 		 * Find the actual device driver associated with this command.
 		 * The SPECIAL requests are things like character device or
@@ -922,8 +909,7 @@ void scsi_request_fn(request_queue_t * q)
 		 * reason to search the list, because all of the commands
 		 * in this queue are for the same device.
 		 */
-		q->current_request = req->next;
-		SCpnt->request.next = NULL;
+		blkdev_dequeue_request(req);
 
 		if (req != &SCpnt->request) {
 			memcpy(&SCpnt->request, req, sizeof(struct request));
@@ -932,7 +918,6 @@ void scsi_request_fn(request_queue_t * q)
 			 * We have copied the data out of the request block - it is now in
 			 * a field in SCpnt.  Release the request block.
 			 */
-			req->next = NULL;
 			req->rq_status = RQ_INACTIVE;
 			wake_up(&wait_for_request);
 		}

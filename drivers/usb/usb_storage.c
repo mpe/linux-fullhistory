@@ -1021,7 +1021,7 @@ static int Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 		  bcb.Flags, bcb.Length);
 	result = usb_bulk_msg(us->pusb_dev, pipe, &bcb,
 			      US_BULK_CB_WRAP_LEN, &partial, HZ*5);
-	US_DEBUGP("Bulk command transfer result 0x%x\n", result);
+	US_DEBUGP("Bulk command transfer result=%d\n", result);
 
 	/* if we stall, we need to clear it before we go on */
 	if (result == -EPIPE) {
@@ -1820,7 +1820,7 @@ static void storage_disconnect(struct usb_device *dev, void *ptr)
  * Initialization and registration
  ***********************************************************************/
 
-static int __init usb_stor_init(void)
+int __init usb_stor_init(void)
 {
 	//  MOD_INC_USE_COUNT;
 
@@ -1840,7 +1840,7 @@ static int __init usb_stor_init(void)
 	return 0;
 }
 
-static void __exit usb_stor_exit(void)
+void __exit usb_stor_exit(void)
 {
 	usb_deregister(&storage_driver) ;
 }

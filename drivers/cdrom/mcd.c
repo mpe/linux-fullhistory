@@ -134,7 +134,7 @@ static int mcdPresent = 0;
 /* #define DOUBLE_QUICK_ONLY */
 
 #define CURRENT_VALID \
-(CURRENT && MAJOR(CURRENT -> rq_dev) == MAJOR_NR && CURRENT -> cmd == READ \
+(!QUEUE_EMPTY && MAJOR(CURRENT -> rq_dev) == MAJOR_NR && CURRENT -> cmd == READ \
 && CURRENT -> sector != -1)
 
 #define MFL_STATUSorDATA (MFL_STATUS | MFL_DATA)
