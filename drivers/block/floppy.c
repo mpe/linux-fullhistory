@@ -419,10 +419,7 @@ int floppy_change(struct buffer_head * bh)
 		bh->b_uptodate = 0;
 		ll_rw_block(READ, 1, &bh);
 	}
-	cli();
-	while (bh->b_lock)
-		sleep_on(&bh->b_wait);
-	sti();
+	wait_on_buffer(bh);
 	if (changed_floppies & mask) {
 		changed_floppies &= ~mask;
 		recalibrate = 1;

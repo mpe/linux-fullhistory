@@ -19,7 +19,6 @@
  *		Alan Cox	:	Checks sk->broadcast.
  *		Alan Cox	:	Uses skb_free_datagram/skb_copy_datagram
  *		Alan Cox	:	Raw passes ip options too
- *		Gerhard Koerting:	Pass the right part of the data!
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -113,9 +112,6 @@ raw_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
   skb->sk = sk;
   skb->len = len;
   skb->dev = dev;
-  /* Undo IP's work and go get the IP header back [HACK] */
-  skb->h.raw = ((char *)(skb+1))+dev->hard_header_len;
-  skb->len += skb->h.iph->ihl*sizeof(long);
   skb->saddr = daddr;
   skb->daddr = saddr;
 

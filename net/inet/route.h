@@ -26,6 +26,7 @@
 struct rtable {
   struct rtable		*rt_next;
   unsigned long		rt_dst;
+  unsigned long		rt_mask;
   unsigned long		rt_gateway;
   u_char		rt_flags;
   u_char		rt_metric;

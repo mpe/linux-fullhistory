@@ -1,6 +1,6 @@
 VERSION = 0.99
 PATCHLEVEL = 14
-ALPHA = g
+ALPHA = i
 
 all:	Version zImage
 
@@ -135,14 +135,13 @@ tools/version.h: $(CONFIGURE) Makefile
 	@echo \#define LINUX_COMPILE_HOST \"`hostname`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_DOMAIN \"`domainname`\" >> tools/version.h
 
-tools/build: $(CONFIGURE) tools/build.c
-	$(HOSTCC) $(CFLAGS) \
-	-o tools/build tools/build.c
+tools/build: tools/build.c $(CONFIGURE)
+	$(HOSTCC) $(CFLAGS) -o $@ $<
 
 boot/head.o: $(CONFIGURE) boot/head.s
 
-boot/head.s: $(CONFIGURE) boot/head.S include/linux/tasks.h
-	$(CPP) -traditional boot/head.S -o boot/head.s
+boot/head.s: boot/head.S $(CONFIGURE) include/linux/tasks.h
+	$(CPP) -traditional $< -o $@
 
 tools/version.o: tools/version.c tools/version.h
 
@@ -159,19 +158,23 @@ tools/system:	boot/head.o init/main.o tools/version.o linuxsubdirs
 	nm tools/zSystem | grep -v '\(compiled\)\|\(\.o$$\)\|\( a \)' | \
 		sort > System.map
 
-boot/setup: boot/setup.s
-	$(AS86) -o boot/setup.o boot/setup.s
-	$(LD86) -s -o boot/setup boot/setup.o
+boot/setup: boot/setup.o
+	$(LD86) -s -o $@ $<
 
-boot/setup.s: $(CONFIGURE) boot/setup.S include/linux/config.h Makefile
-	$(CPP) -traditional $(SVGA_MODE) $(RAMDISK) boot/setup.S -o boot/setup.s
+boot/setup.o: boot/setup.s
+	$(AS86) -o $@ $<
 
-boot/bootsect.s: $(CONFIGURE) boot/bootsect.S include/linux/config.h Makefile
-	$(CPP) -traditional $(SVGA_MODE) $(RAMDISK) boot/bootsect.S -o boot/bootsect.s
+boot/setup.s: boot/setup.S $(CONFIGURE) include/linux/config.h Makefile
+	$(CPP) -traditional $(SVGA_MODE) $(RAMDISK) $< -o $@
 
-boot/bootsect:	boot/bootsect.s
-	$(AS86) -o boot/bootsect.o boot/bootsect.s
-	$(LD86) -s -o boot/bootsect boot/bootsect.o
+boot/bootsect: boot/bootsect.o
+	$(LD86) -s -o $@ $<
+
+boot/bootsect.o: boot/bootsect.s
+	$(AS86) -o $@ $<
+
+boot/bootsect.s: boot/bootsect.S $(CONFIGURE) include/linux/config.h Makefile
+	$(CPP) -traditional $(SVGA_MODE) $(RAMDISK) $< -o $@
 
 zBoot/zSystem: zBoot/*.c zBoot/*.S tools/zSystem
 	$(MAKE) -C zBoot

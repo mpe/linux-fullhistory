@@ -12,7 +12,6 @@
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/xia_fs.h>
-#include <linux/tty.h>
 #include <linux/stat.h>
 #include <linux/fcntl.h>
 

@@ -9,7 +9,6 @@
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
-#include <linux/tty.h>
 
 #include <asm/segment.h>
 #include <asm/io.h>

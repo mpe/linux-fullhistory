@@ -1573,7 +1573,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 	 */
 	if (info->flags & ASYNC_CLOSING) {
 		interruptible_sleep_on(&info->close_wait);
-		return -ERESTARTNOINTR;
+		return -EAGAIN;
 	}
 
 	/*
@@ -1631,10 +1631,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 		current->state = TASK_INTERRUPTIBLE;
 		if (tty_hung_up_p(filp) ||
 		    !(info->flags & ASYNC_INITIALIZED)) {
-			if (info->flags & ASYNC_HUP_NOTIFY)
-				retval = -EAGAIN;
-			else
-				retval = -ERESTARTNOINTR;
+			retval = -EAGAIN;
 			break;
 		}
 		if (!(info->flags & ASYNC_CALLOUT_ACTIVE) &&
@@ -1696,10 +1693,10 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 	tty->stop = rs_stop;
 	tty->start = rs_start;
 	tty->hangup = rs_hangup;
-	if (info->flags & ASYNC_SPLIT_TERMIOS) {
-		if (info->flags & ASYNC_NORMAL_ACTIVE)
+	if ((info->count == 1) && (info->flags & ASYNC_SPLIT_TERMIOS)) {
+		if (MAJOR(filp->f_rdev) == 4) 
 			*tty->termios = info->normal_termios;
-		if (info->flags & ASYNC_CALLOUT_ACTIVE)
+		else 
 			*tty->termios = info->callout_termios;
 	}
 	/*

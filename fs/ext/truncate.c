@@ -12,7 +12,6 @@
 
 #include <linux/sched.h>
 #include <linux/ext_fs.h>
-#include <linux/tty.h>
 #include <linux/stat.h>
 #include <linux/fcntl.h>
 #include <linux/errno.h>

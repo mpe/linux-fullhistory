@@ -1,3 +1,5 @@
+#ifndef _LINUX_SYS_H
+#define _LINUX_SYS_H
 /*
  * system call entry points
  */
@@ -170,3 +172,4 @@ typedef int (*fn_ptr)();
 }
 #endif
 
+#endif

@@ -196,8 +196,7 @@ static int mmap_zero(struct inode * inode, struct file * file,
 	mpnt->vm_end = addr + len;
 	mpnt->vm_page_prot = prot;
 	mpnt->vm_share = NULL;
-	mpnt->vm_inode = inode;
-	inode->i_count++;
+	mpnt->vm_inode = NULL;
 	mpnt->vm_offset = off;
 	mpnt->vm_ops = NULL;
 	insert_vm_struct(current, mpnt);

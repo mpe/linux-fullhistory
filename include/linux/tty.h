@@ -97,7 +97,6 @@ struct serial_struct {
 /*
  * Definitions for async_struct (and serial_struct) flags field
  */
-#define ASYNC_HUP_NOTIFY 0x0001 /* Notify blocked open on hangups */
 #define ASYNC_FOURPORT  0x0002	/* Set OU1, OUT2 per AST Fourport settings */
 #define ASYNC_SAK	0x0004	/* Secure Attention Key (Orange book) */
 #define ASYNC_SPLIT_TERMIOS 0x0008 /* Separate termios for dialin/callout */

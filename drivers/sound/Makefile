@@ -28,11 +28,6 @@ all:	local.h sound.a
 	@echo "Please make a new /usr/include/sys/soundcard.h containing
 	@echo "just a line #include <linux/soundcard.h>"
 
-os.h:
-	@$(MAKE) setup-$(TARGET_OS)
-	@$(MAKE) config
-	@$(MAKE) dep
-
 sound.a: $(OBJS) 
 	-rm -f sound.a
 	$(AR) rcs sound.a $(OBJS)
@@ -40,7 +35,7 @@ sound.a: $(OBJS)
 
 clean:
 	rm -f core core.* *.o *.a tmp_make *~ x z *%
-	rm -f configure Makefile sound_stub.c
+	rm -f configure sound_stub.c
 	for i in *.c;do rm -f `basename $$i .c`.s;done
 
 indent:
@@ -48,15 +43,10 @@ indent:
 
 local.h:
 	$(MAKE) clean
-	$(MAKE) setup-$(TARGET_OS)
 	$(MAKE) config
 	$(MAKE) dep
 
-soundcard.c: $(TARGET_OS)/soundcard.c
-	ln -sf $(TARGET_OS)/soundcard.c soundcard.c
-
 config: configure /usr/include/sys/soundcard.h
-	@$(MAKE) setup-$(TARGET_OS)
 	@echo Compiling Sound Driver v $(VERSION) for Linux
 	@./configure > local.h
 	@echo \#define SOUND_VERSION_STRING \"$(VERSION)\" >> local.h
@@ -66,7 +56,7 @@ config: configure /usr/include/sys/soundcard.h
 	@echo \#define SOUND_CONFIG_DOMAIN \"`domainname`\" >> local.h
 
 clrconf:
-	rm -f local.h .depend os.h soundcard.c
+	rm -f local.h .depend
 
 configure: configure.c /usr/include/sys/soundcard.h
 	$(HOSTCC) -o configure configure.c
