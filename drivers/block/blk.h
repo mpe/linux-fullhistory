@@ -304,6 +304,7 @@ static void end_request(int uptodate)
 	CURRENT = req->next;
 	if ((p = req->waiting) != NULL) {
 		req->waiting = NULL;
+		p->swapping = 0;
 		p->state = TASK_RUNNING;
 		if (p->counter > current->counter)
 			need_resched = 1;

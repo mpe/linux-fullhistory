@@ -327,8 +327,12 @@ void ll_rw_page(int rw, int dev, int page, char * buffer)
 	req->waiting = current;
 	req->bh = NULL;
 	req->next = NULL;
+	current->swapping = 1;
 	current->state = TASK_SWAPPING;
 	add_request(major+blk_dev,req);
+	/* The I/O may have inadvertently chagned the task state.
+	   Make sure we really wait until the I/O is done */
+	if (current->swapping) current->state = TASK_SWAPPING;
 	schedule();
 }
 
@@ -462,8 +466,12 @@ void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buf)
 		req->waiting = current;
 		req->bh = NULL;
 		req->next = NULL;
+		current->swapping = 1;
 		current->state = TASK_UNINTERRUPTIBLE;
 		add_request(major+blk_dev,req);
+		/* The I/O may have inadvertently chagned the task state.
+		   Make sure we really wait until the I/O is done */
+		if (current->swapping) current->state = TASK_UNINTERRUPTIBLE;
 		schedule();
 	}
 }

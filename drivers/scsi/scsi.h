@@ -556,6 +556,7 @@ static void end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)
 	DEVICE_OFF(req->dev);
 	if ((p = req->waiting) != NULL) {
 		req->waiting = NULL;
+		p->swapping = 0;
 		p->state = TASK_RUNNING;
 		if (p->counter > current->counter)
 			need_resched = 1;
@@ -585,20 +586,17 @@ static void end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)
 #endif
 
 #define SCSI_SLEEP(QUEUE, CONDITION) {				\
-	long old_state;						\
 	if (CONDITION) {					\
 		struct wait_queue wait = { current, NULL};	\
 		add_wait_queue(QUEUE, &wait);			\
 sleep_repeat:							\
-		old_state = current->state;			\
 		current->state = TASK_UNINTERRUPTIBLE;		\
 		if (CONDITION) {				\
 			schedule();				\
 			goto sleep_repeat;			\
 		}						\
 		remove_wait_queue(QUEUE, &wait);		\
-		if (current->state == TASK_UNINTERRUPTIBLE)	\
-			current->state = old_state;		\
+		current->state = TASK_RUNNING;			\
 	}; }
 
 #endif

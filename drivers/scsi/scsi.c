@@ -220,7 +220,7 @@ static void scan_scsis (struct Scsi_Host * shpnt)
   int dev, lun, type;
   unsigned char scsi_cmd [12];
   unsigned char scsi_result [256];
-  Scsi_Device * SDpnt;
+  Scsi_Device * SDpnt, *SDtail;
   Scsi_Cmnd  SCmd;
   
   ++in_scan;
@@ -229,6 +229,10 @@ static void scan_scsis (struct Scsi_Host * shpnt)
   SCmd.next = NULL;
   SCmd.prev = NULL;
   SDpnt = (Scsi_Device *) scsi_init_malloc(sizeof (Scsi_Device));
+  SDtail = scsi_devices;
+  if(scsi_devices) {
+    while(SDtail->next) SDtail = SDtail->next;
+  }
 
   shpnt->host_queue = &SCmd;  /* We need this so that
 					 commands can time out */
@@ -465,8 +469,13 @@ static void scan_scsis (struct Scsi_Host * shpnt)
 		    
 		    while (SCmd.request.dev != 0xfffe);
 		  };
-		  SDpnt->next = scsi_devices;
-		  scsi_devices = SDpnt;
+		  /* Add this device to the linked list at the end */
+		  if(SDtail)
+		    SDtail->next = SDpnt;
+		  else
+		    scsi_devices = SDpnt;
+		  SDtail = SDpnt;
+
 		  ++NR_SCSI_DEVICES;
 		  SDpnt = (Scsi_Device *) scsi_init_malloc(sizeof (Scsi_Device));
 		  /* Some scsi devices cannot be polled for lun != 0

@@ -264,6 +264,7 @@ struct task_struct {
 	unsigned long personality;
 	int dumpable:1;
 	int did_exec:1;
+	volatile int swapping:1;
 	int pid,pgrp,session,leader;
 	int	groups[NGROUPS];
 	/* 
@@ -331,7 +332,7 @@ struct task_struct {
 /* schedlink */	&init_task,&init_task, \
 /* signals */	{{ 0, },}, \
 /* stack */	0,(unsigned long) &init_kernel_stack, \
-/* ec,brk... */	0,0,0,0,0, \
+/* ec,brk... */	0,0,0,0,0,0, \
 /* pid etc.. */	0,0,0,0, \
 /* suppl grps*/ {NOGROUP,}, \
 /* proc links*/ &init_task,&init_task,NULL,NULL,NULL,NULL, \

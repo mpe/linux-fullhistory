@@ -184,8 +184,11 @@ static void hd_out(unsigned int drive,unsigned int nsect,unsigned int sect,
 {
 	unsigned short port;
 
-	if (drive>1 || head>15)
-		panic("Trying to write bad sector");
+	if (drive>1 || head>15) {
+		printk("bad drive mapping, trying to access drive=%d, cyl=%d, head=%d, sect=%d\n",
+			drive, cyl, head, sect);
+		panic("harddisk driver problem");
+	}
 #if (HD_DELAY > 0)
 	while (read_timer() - last_req < HD_DELAY)
 		/* nothing */;

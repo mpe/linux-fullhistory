@@ -5,7 +5,7 @@
  *            and for "no-sound" interfaces like Lasermate and the
  *            Panasonic CI-101P.
  *
- *  NOTE:     This is release 2.2.
+ *  NOTE:     This is release 2.3.
  *            It works with my SbPro & drive CR-521 V2.11 from 2/92
  *            and with the new CR-562-B V0.75 on a "naked" Panasonic
  *            CI-101P interface. And vice versa. 
@@ -108,10 +108,14 @@
  *
  *  2.1  Found bug with multisession CDs (accessing frame 16).
  *       "read audio" works now with address type CDROM_MSF, too.
- *       Bigger audio frame buffer: allows reading max. 4 frames at time; but
- *       reading more than one frame at once gives poor quality.
+ *       Bigger audio frame buffer: allows reading max. 4 frames at time; this
+ *       gives a significant speedup, but reading more than one frame at once
+ *       gives missing chunks at each single frame boundary.
  *
- *  2.2  
+ *  2.2  Kernel interface cleanups: timers, init, setup, media check.
+ *
+ *  2.3  Let "door lock" and "eject" live together.
+ *       Implemented "close tray" (done automatically during open).
  *
  *  TODO
  *
@@ -188,7 +192,7 @@
 
 #include "blk.h"
 
-#define VERSION "2.2 Eberhard Moenkeberg <emoenke@gwdg.de>"
+#define VERSION "2.3 Eberhard Moenkeberg <emoenke@gwdg.de>"
 
 #define SBPCD_DEBUG
 
@@ -224,22 +228,18 @@
  */
 #if !(SBPCD_ISSUE-1)
 #define DO_SBPCD_REQUEST(a) do_sbpcd_request(a)
-#define SBPCD_SETUP(a,b) sbpcd_setup(a,b)
 #define SBPCD_INIT(a,b) sbpcd_init(a,b)
 #endif
 #if !(SBPCD_ISSUE-2)
 #define DO_SBPCD_REQUEST(a) do_sbpcd2_request(a)
-#define SBPCD_SETUP(a,b) sbpcd2_setup(a,b)
 #define SBPCD_INIT(a,b) sbpcd2_init(a,b)
 #endif
 #if !(SBPCD_ISSUE-3)
 #define DO_SBPCD_REQUEST(a) do_sbpcd3_request(a)
-#define SBPCD_SETUP(a,b) sbpcd3_setup(a,b)
 #define SBPCD_INIT(a,b) sbpcd3_init(a,b)
 #endif
 #if !(SBPCD_ISSUE-4)
 #define DO_SBPCD_REQUEST(a) do_sbpcd4_request(a)
-#define SBPCD_SETUP(a,b) sbpcd4_setup(a,b)
 #define SBPCD_INIT(a,b) sbpcd4_init(a,b)
 #endif
 /*==========================================================================*/
@@ -1269,9 +1269,14 @@ static int DriveReset(void)
       if (!st_caddy_in) break;
     }
   while (!st_diskok);
+#if 000
   DriveStruct[d].CD_changed=1;
-  i=DiskInfo();
-  if (i<0) return (-2);
+#endif
+  if ((st_door_closed) && (st_caddy_in))
+    {
+      i=DiskInfo();
+      if (i<0) return (-2);
+    }
   return (0);
 }
 /*==========================================================================*/
@@ -1306,6 +1311,21 @@ static int yy_LockDoor(char lock)
   drvcmd[0]=0x0C;
   if (lock==1) drvcmd[1]=0x01;
   flags_cmd_out=f_putcmd|f_ResponseStatus|f_obey_p_check;
+  response_count=0;
+  i=cmd_out();
+  return (i);
+}
+/*==========================================================================*/
+static int yy_CloseTray(void)
+{
+  int i;
+
+  if (!new_drive) return (0);
+  DPRINTF((DBG_LCK,"SBPCD: yy_CloseTray (drive %d)\n", d));
+
+  clr_cmdbuf();
+  drvcmd[0]=0x07;
+  flags_cmd_out=f_putcmd|f_respo2|f_ResponseStatus|f_obey_p_check;
   response_count=0;
   i=cmd_out();
   return (i);
@@ -1608,10 +1628,12 @@ static int xx_ReadTocEntry(int num)
   DriveStruct[d].TocEnt_format=infobuf[3];
   if (new_drive) i=4;
   else i=5;
-  DriveStruct[d].TocEnt_address=make32(make16(0,infobuf[i]),make16(infobuf[i+1],infobuf[i+2]));
+  DriveStruct[d].TocEnt_address=make32(make16(0,infobuf[i]),
+				       make16(infobuf[i+1],infobuf[i+2]));
   DPRINTF((DBG_TOC,"SBPCD: TocEntry: %02X %02X %02X %02X %08X\n",
-	   DriveStruct[d].TocEnt_nixbyte,DriveStruct[d].TocEnt_ctl_adr,DriveStruct[d].TocEnt_number,
-	   DriveStruct[d].TocEnt_format,DriveStruct[d].TocEnt_address));
+	   DriveStruct[d].TocEnt_nixbyte, DriveStruct[d].TocEnt_ctl_adr,
+	   DriveStruct[d].TocEnt_number, DriveStruct[d].TocEnt_format,
+	   DriveStruct[d].TocEnt_address));
   return (0);
 }
 /*==========================================================================*/
@@ -2527,7 +2549,11 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
       DriveStruct[d].CD_changed=0xFF;
       DriveStruct[d].diskstate_flags=0;
 #endif WORKMAN
+      do i=yy_LockDoor(0);
+      while (i!=0);
+      DriveStruct[d].open_count=0; /* to get it locked next time again */
       i=yy_SpinDown();
+      DPRINTF((DBG_IOX,"SBPCD: ioctl: yy_SpinDown returned %d.\n", i));
       if (i<0) return (-EIO);
       DriveStruct[d].audio_state=0;
       return (0);
@@ -3193,6 +3219,10 @@ static int sbpcd_open(struct inode *ip, struct file *fp)
     }
   switch_drive(i);
 
+  flags_cmd_out |= f_respo2;
+  xx_ReadStatus();                         /* command: give 1-byte status */
+  i=ResponseStatus();
+  if (!st_door_closed) yy_CloseTray();
   if (!st_spinning) xx_SpinUp();
 
   flags_cmd_out |= f_respo2;
@@ -3207,7 +3237,7 @@ static int sbpcd_open(struct inode *ip, struct file *fp)
   if (!st_door_closed||!st_caddy_in)
     {
       printk("SBPCD: sbpcd_open: no disk in drive\n");
-      return (-EIO);
+      return (-ENXIO);
     }
 
 /*
@@ -3245,7 +3275,7 @@ static void sbpcd_release(struct inode * ip, struct file * file)
   switch_drive(i);
 
   DriveStruct[d].sbp_first_frame=DriveStruct[d].sbp_last_frame=-1;
-  fsync_dev(ip->i_rdev);                   /* nonsense if read only device? */
+  sync_dev(ip->i_rdev);                   /* nonsense if read only device? */
   invalidate_buffers(ip->i_rdev);
   DriveStruct[d].diskstate_flags &= ~cd_size_bit;
 
@@ -3254,11 +3284,14 @@ static void sbpcd_release(struct inode * ip, struct file * file)
  */
   DPRINTF((DBG_LCK,"SBPCD: open_count: %d -> %d\n",
 	   DriveStruct[d].open_count,DriveStruct[d].open_count-1));
-  if (--DriveStruct[d].open_count==0) 
+  if (DriveStruct[d].open_count!=0) /* CDROMEJECT may have been done */
     {
-      do
-	i=yy_LockDoor(0);
-      while (i!=0);
+      if (--DriveStruct[d].open_count==0) 
+	{
+	  do
+	    i=yy_LockDoor(0);
+	  while (i!=0);
+	}
     }
 }
 /*==========================================================================*/
@@ -3305,7 +3338,7 @@ static struct file_operations sbpcd_fops =
 #if (SBPCD_ISSUE-1)
 static
 #endif
-void SBPCD_SETUP(char *s, int *p)
+void sbpcd_setup(char *s, int *p)
 {
   DPRINTF((DBG_INI,"SBPCD: sbpcd_setup called with %04X,%s\n",p[1], s));
   sbpro_type=0;
@@ -3422,7 +3455,7 @@ unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
       if (autoprobe[port_index+1]==0) type=str_lm;
       else if (autoprobe[port_index+1]==1) type=str_sb;
       else type=str_sp;
-      SBPCD_SETUP(type, addr);
+      sbpcd_setup(type, addr);
       DPRINTF((DBG_INF,"SBPCD: Trying to detect a %s CD-ROM drive at 0x%X.\n",
 	             type, CDo_command));
 

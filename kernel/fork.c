@@ -188,6 +188,7 @@ asmlinkage int sys_fork(struct pt_regs regs)
 		(*p->binfmt->use_count)++;
 
 	p->did_exec = 0;
+	p->swapping = 0;
 	p->kernel_stack_page = 0;
 	p->state = TASK_UNINTERRUPTIBLE;
 	p->flags &= ~(PF_PTRACED|PF_TRACESYS);

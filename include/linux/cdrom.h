@@ -17,7 +17,10 @@
 #define CD_MINS                   74  /* max. minutes per CD             */
 #define CD_SECS                   60  /* seconds per minute              */
 #define CD_FRAMES                 75  /* frames per second               */
+#define CD_CHUNK_SIZE             24  /* lowest-level "data bytes piece" */
+#define CD_NUM_OF_CHUNKS          98  /* chunks per frame                */
 #define CD_FRAMESIZE            2048  /* bytes per frame, cooked mode    */
+#define CD_FRAMESIZE_RAW0       2336  /* bytes per frame, "raw" mode     */
 #define CD_FRAMESIZE_XA         2340  /* bytes per frame, "xa" mode      */
 #define CD_FRAMESIZE_RAW        2352  /* bytes per frame, "raw" mode     */
 #define CD_FRAMESIZE_SUB          96  /* subchannel data size            */
