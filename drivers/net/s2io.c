@@ -620,79 +620,15 @@ static int init_nic(struct s2io_nic *nic)
 	mac_info_t *mac_control;
 	struct config_param *config;
 	int mdio_cnt = 0, dtx_cnt = 0;
-	unsigned long long print_var, mem_share;
+	unsigned long long mem_share;
 
 	mac_control = &nic->mac_control;
 	config = &nic->config;
 
-	/* 
-	 * Set proper endian settings and verify the same by 
-	 * reading the PIF Feed-back register.
-	 */
-#ifdef  __BIG_ENDIAN
-	/*
-	 * The device by default set to a big endian format, so 
-	 * a big endian driver need not set anything.
-	 */
-	writeq(0xffffffffffffffffULL, &bar0->swapper_ctrl);
-	val64 = (SWAPPER_CTRL_PIF_R_FE |
-		 SWAPPER_CTRL_PIF_R_SE |
-		 SWAPPER_CTRL_PIF_W_FE |
-		 SWAPPER_CTRL_PIF_W_SE |
-		 SWAPPER_CTRL_TXP_FE |
-		 SWAPPER_CTRL_TXP_SE |
-		 SWAPPER_CTRL_TXD_R_FE |
-		 SWAPPER_CTRL_TXD_W_FE |
-		 SWAPPER_CTRL_TXF_R_FE |
-		 SWAPPER_CTRL_RXD_R_FE |
-		 SWAPPER_CTRL_RXD_W_FE |
-		 SWAPPER_CTRL_RXF_W_FE |
-		 SWAPPER_CTRL_XMSI_FE |
-		 SWAPPER_CTRL_XMSI_SE |
-		 SWAPPER_CTRL_STATS_FE | SWAPPER_CTRL_STATS_SE);
-	writeq(val64, &bar0->swapper_ctrl);
-#else
-	/* 
-	 * Initially we enable all bits to make it accessible by 
-	 * the driver, then we selectively enable only those bits 
-	 * that we want to set.
-	 */
-	writeq(0xffffffffffffffffULL, &bar0->swapper_ctrl);
-	val64 = (SWAPPER_CTRL_PIF_R_FE |
-		 SWAPPER_CTRL_PIF_R_SE |
-		 SWAPPER_CTRL_PIF_W_FE |
-		 SWAPPER_CTRL_PIF_W_SE |
-		 SWAPPER_CTRL_TXP_FE |
-		 SWAPPER_CTRL_TXP_SE |
-		 SWAPPER_CTRL_TXD_R_FE |
-		 SWAPPER_CTRL_TXD_R_SE |
-		 SWAPPER_CTRL_TXD_W_FE |
-		 SWAPPER_CTRL_TXD_W_SE |
-		 SWAPPER_CTRL_TXF_R_FE |
-		 SWAPPER_CTRL_RXD_R_FE |
-		 SWAPPER_CTRL_RXD_R_SE |
-		 SWAPPER_CTRL_RXD_W_FE |
-		 SWAPPER_CTRL_RXD_W_SE |
-		 SWAPPER_CTRL_RXF_W_FE |
-		 SWAPPER_CTRL_XMSI_FE |
-		 SWAPPER_CTRL_XMSI_SE |
-		 SWAPPER_CTRL_STATS_FE | SWAPPER_CTRL_STATS_SE);
-	writeq(val64, &bar0->swapper_ctrl);
-#endif
-
-	/* 
-	 * Verifying if endian settings are accurate by 
-	 * reading a feedback register.
-	 */
-	val64 = readq(&bar0->pif_rd_swapper_fb);
-	if (val64 != 0x0123456789ABCDEFULL) {
-		/* Endian settings are incorrect, calls for another dekko. */
-		print_var = (unsigned long long) val64;
-		DBG_PRINT(INIT_DBG, "%s: Endian settings are wrong",
-			  dev->name);
-		DBG_PRINT(ERR_DBG, ", feedback read %llx\n", print_var);
-
-		return FAILURE;
+	/* Initialize swapper control register */
+	if (s2io_set_swapper(nic)) {
+		DBG_PRINT(ERR_DBG,"ERROR: Setting Swapper failed\n");
+		return -1;
 	}
 
 	/* Remove XGXS from reset state */
@@ -920,11 +856,15 @@ static int init_nic(struct s2io_nic *nic)
 	 * Initializing the Transmit and Receive Traffic Interrupt 
 	 * Scheme.
 	 */
-	/* TTI Initialization */
-	val64 = TTI_DATA1_MEM_TX_TIMER_VAL(0xFFF) |
+	/* TTI Initialization. Default Tx timer gets us about
+	 * 250 interrupts per sec. Continuous interrupts are enabled
+	 * by default.
+	 */
+	val64 = TTI_DATA1_MEM_TX_TIMER_VAL(0x2078) |
 	    TTI_DATA1_MEM_TX_URNG_A(0xA) |
 	    TTI_DATA1_MEM_TX_URNG_B(0x10) |
-	    TTI_DATA1_MEM_TX_URNG_C(0x30) | TTI_DATA1_MEM_TX_TIMER_AC_EN;
+	    TTI_DATA1_MEM_TX_URNG_C(0x30) | TTI_DATA1_MEM_TX_TIMER_AC_EN |
+		TTI_DATA1_MEM_TX_TIMER_CI_EN;
 	writeq(val64, &bar0->tti_data1_mem);
 
 	val64 = TTI_DATA2_MEM_TX_UFC_A(0x10) |
@@ -2508,23 +2448,74 @@ static int s2io_set_swapper(nic_t * sp)
 {
 	struct net_device *dev = sp->dev;
 	XENA_dev_config_t __iomem *bar0 = sp->bar0;
-	u64 val64;
+	u64 val64, valt, valr;
 
 	/* 
 	 * Set proper endian settings and verify the same by reading
 	 * the PIF Feed-back register.
 	 */
+
+	val64 = readq(&bar0->pif_rd_swapper_fb);
+	if (val64 != 0x0123456789ABCDEFULL) {
+		int i = 0;
+		u64 value[] = { 0xC30000C3C30000C3ULL,   /* FE=1, SE=1 */
+				0x8100008181000081ULL,  /* FE=1, SE=0 */
+				0x4200004242000042ULL,  /* FE=0, SE=1 */
+				0};                     /* FE=0, SE=0 */
+
+		while(i<4) {
+			writeq(value[i], &bar0->swapper_ctrl);
+			val64 = readq(&bar0->pif_rd_swapper_fb);
+			if (val64 == 0x0123456789ABCDEFULL)
+				break;
+			i++;
+		}
+		if (i == 4) {
+			DBG_PRINT(ERR_DBG, "%s: Endian settings are wrong, ",
+				dev->name);
+			DBG_PRINT(ERR_DBG, "feedback read %llx\n",
+				(unsigned long long) val64);
+			return FAILURE;
+		}
+		valr = value[i];
+	} else {
+		valr = readq(&bar0->swapper_ctrl);
+	}
+
+	valt = 0x0123456789ABCDEFULL;
+	writeq(valt, &bar0->xmsi_address);
+	val64 = readq(&bar0->xmsi_address);
+
+	if(val64 != valt) {
+		int i = 0;
+		u64 value[] = { 0x00C3C30000C3C300ULL,  /* FE=1, SE=1 */
+				0x0081810000818100ULL,  /* FE=1, SE=0 */
+				0x0042420000424200ULL,  /* FE=0, SE=1 */
+				0};                     /* FE=0, SE=0 */
+
+		while(i<4) {
+			writeq((value[i] | valr), &bar0->swapper_ctrl);
+			writeq(valt, &bar0->xmsi_address);
+			val64 = readq(&bar0->xmsi_address);
+			if(val64 == valt)
+				break;
+			i++;
+		}
+		if(i == 4) {
+			DBG_PRINT(ERR_DBG, "Write failed, Xmsi_addr ");
+			DBG_PRINT(ERR_DBG, "reads:0x%llx\n",val64);
+			return FAILURE;
+		}
+	}
+	val64 = readq(&bar0->swapper_ctrl);
+	val64 &= 0xFFFF000000000000ULL;
+
 #ifdef  __BIG_ENDIAN
 	/* 
 	 * The device by default set to a big endian format, so a 
 	 * big endian driver need not set anything.
 	 */
-	writeq(0xffffffffffffffffULL, &bar0->swapper_ctrl);
-	val64 = (SWAPPER_CTRL_PIF_R_FE |
-		 SWAPPER_CTRL_PIF_R_SE |
-		 SWAPPER_CTRL_PIF_W_FE |
-		 SWAPPER_CTRL_PIF_W_SE |
-		 SWAPPER_CTRL_TXP_FE |
+	val64 |= (SWAPPER_CTRL_TXP_FE |
 		 SWAPPER_CTRL_TXP_SE |
 		 SWAPPER_CTRL_TXD_R_FE |
 		 SWAPPER_CTRL_TXD_W_FE |
@@ -2542,12 +2533,7 @@ static int s2io_set_swapper(nic_t * sp)
 	 * driver, then we selectively enable only those bits that 
 	 * we want to set.
 	 */
-	writeq(0xffffffffffffffffULL, &bar0->swapper_ctrl);
-	val64 = (SWAPPER_CTRL_PIF_R_FE |
-		 SWAPPER_CTRL_PIF_R_SE |
-		 SWAPPER_CTRL_PIF_W_FE |
-		 SWAPPER_CTRL_PIF_W_SE |
-		 SWAPPER_CTRL_TXP_FE |
+	val64 |= (SWAPPER_CTRL_TXP_FE |
 		 SWAPPER_CTRL_TXP_SE |
 		 SWAPPER_CTRL_TXD_R_FE |
 		 SWAPPER_CTRL_TXD_R_SE |
@@ -2564,6 +2550,7 @@ static int s2io_set_swapper(nic_t * sp)
 		 SWAPPER_CTRL_STATS_FE | SWAPPER_CTRL_STATS_SE);
 	writeq(val64, &bar0->swapper_ctrl);
 #endif
+	val64 = readq(&bar0->swapper_ctrl);
 
 	/* 
 	 * Verifying if endian settings are accurate by reading a 
