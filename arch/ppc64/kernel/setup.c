@@ -269,15 +269,9 @@ static void __init setup_cpu_maps(void)
 		nthreads = len / sizeof(u32);
 
 		for (j = 0; j < nthreads && cpu < NR_CPUS; j++) {
-			/*
-			 * Only spin up secondary threads if SMT is enabled.
-			 * We must leave space in the logical map for the
-			 * threads.
-			 */
-			if (j == 0 || smt_enabled_at_boot) {
-				cpu_set(cpu, cpu_present_map);
-				set_hard_smp_processor_id(cpu, intserv[j]);
-			}
+			cpu_set(cpu, cpu_present_map);
+			set_hard_smp_processor_id(cpu, intserv[j]);
+
 			if (intserv[j] == boot_cpuid_phys)
 				swap_cpuid = cpu;
 			cpu_set(cpu, cpu_possible_map);

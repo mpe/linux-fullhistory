@@ -488,9 +488,8 @@ int __devinit __cpu_up(unsigned int cpu)
 	if (!cpu_enable(cpu))
 		return 0;
 
-	/* At boot, don't bother with non-present cpus -JSCHOPP */
-	if (system_state < SYSTEM_RUNNING && !cpu_present(cpu))
-		return -ENOENT;
+	if (smp_ops->cpu_bootable && !smp_ops->cpu_bootable(cpu))
+		return -EINVAL;
 
 	paca[cpu].default_decr = tb_ticks_per_jiffy / decr_overclock;
 
@@ -604,14 +603,6 @@ void __init smp_cpus_done(unsigned int max_cpus)
 	smp_ops->setup_cpu(boot_cpuid);
 
 	set_cpus_allowed(current, old_mask);
-
-	/*
-	 * We know at boot the maximum number of cpus we can add to
-	 * a partition and set cpu_possible_map accordingly. cpu_present_map
-	 * needs to match for the hotplug code to allow us to hot add
-	 * any offline cpus.
-	 */
-	cpu_present_map = cpu_possible_map;
 }
 
 #ifdef CONFIG_HOTPLUG_CPU
