@@ -12,6 +12,7 @@
  * Task size: 3GB
  */
 #define TASK_SIZE	(0xc0000000UL)
+#define TASK_SIZE_26	(0x04000000UL)
 
 /*
  * Page offset: 3GB

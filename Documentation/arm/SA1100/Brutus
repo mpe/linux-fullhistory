@@ -1,0 +1,36 @@
+Brutus is an evaluation platform for the SA1100 manufactured by Intel.  
+For more details, see:
+
+http://developer.intel.com/design/strong/applnots/sa1100lx/getstart.htm
+
+To compile for Brutus, you must issue the following comands:
+
+	make brutus_config
+	make config
+	[accept all the defaults]
+	make dep
+	make zImage
+
+The resulting kernel will end up in linux/arch/arm/boot/zImage.  This file
+must be loaded at 0xc0008000 in Brutus's memory and execution started at
+0xc0008000 as well.
+
+But prior to execute the kernel, a ramdisk image must also be loaded in
+memory.  Use memory address 0x00800000 for this.
+
+Currently supported:
+	- RS232 serial ports
+	- audio output
+	- LCD screen
+	- keyboard (needs to be cleaned up badly... any volunteer?)
+	
+A full PCMCIA support is still missing, although it's possible to hack
+some drivers in order to drive already inserted cards at boot time with
+little modifications.
+
+Any contribution is welcome.
+
+Please send patches to nico@cam.org
+
+Have Fun !
+

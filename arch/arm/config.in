@@ -20,7 +20,7 @@ choice 'ARM system type'	\
 	 RiscPC			CONFIG_ARCH_RPC \
 	 EBSA-110		CONFIG_ARCH_EBSA110 \
 	 FootBridge-based	CONFIG_FOOTBRIDGE" RiscPC
-
+# 	 SA1100-based		CONFIG_ARCH_SA1100
 if [ "$CONFIG_FOOTBRIDGE" = "y" ]; then
    bool 'FootBridge in HOST mode' CONFIG_HOST_FOOTBRIDGE
    if [ "$CONFIG_HOST_FOOTBRIDGE" = "y" ]; then
@@ -31,15 +31,27 @@ if [ "$CONFIG_FOOTBRIDGE" = "y" ]; then
 fi
 
 if [ "$CONFIG_HOST_FOOTBRIDGE" = "y" ]; then
-   bool '  Include support for Intel EBSA285' CONFIG_ARCH_EBSA285
-   bool '  Include support for Chalice CATS boards' CONFIG_CATS
-   bool '  Include support for Corel NetWinder' CONFIG_ARCH_NETWINDER
+   bool '  Include support for EBSA285' CONFIG_ARCH_EBSA285
+   bool '  Include support for CATS' CONFIG_CATS
+   bool '  Include support for NetWinder' CONFIG_ARCH_NETWINDER
 fi
 
 if [ "$CONFIG_ADDIN_FOOTBRIDGE" = "y" ]; then
    # If we get any other footbridge-based plug-in boards, then
    # add your architecture options here
    define_bool CONFIG_ARCH_CO285 y
+fi
+
+if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
+   define_bool CONFIG_CPU_SA1100 y
+   choice 'SA1100 implementation' \
+	"Brutus			CONFIG_SA1100_BRUTUS \
+	 empeg			CONFIG_SA1100_EMPEG \
+	 Itsy			CONFIG_SA1100_ITSY \
+	 LART			CONFIG_SA1100_LART \
+	 PLEB			CONFIG_SA1100_PLEB \
+	 Victor			CONFIG_SA1100_VICTOR \
+	 Tifon			CONFIG_SA1100_TIFON" Brutus
 fi
 
 #
@@ -76,6 +88,7 @@ else
    # Select CPU and optimisation dependent on architecture
    #
    if [ "$CONFIG_ARCH_EBSA110" = "y" -o \
+        "$CONFIG_ARCH_SA1100" = "y" -o \
         "$CONFIG_FOOTBRIDGE" = "y" -o \
         "$CONFIG_ARCH_NEXUSPCI" = "y" ]; then
       define_bool CONFIG_CPU_32v4 y
@@ -139,21 +152,10 @@ if [ "$CONFIG_CPU_32" = "y" ]; then
    tristate 'RISC OS personality' CONFIG_ARTHUR
 fi
 
-tristate 'Parallel port support' CONFIG_PARPORT
-if [ "$CONFIG_PARPORT" != "n" ]; then
-   if [ "$CONFIG_ARCH_ARC" = "y" ]; then
-      dep_tristate '  Archimedes hardware' CONFIG_PARPORT_ARC $CONFIG_PARPORT
-   fi
-   dep_tristate '  PC-style hardware' CONFIG_PARPORT_PC $CONFIG_PARPORT
-   # If exactly one hardware type is selected then parport will optimise away
-   # support for loading any others.  Defeat this if the user is keen.
-   if [ "$CONFIG_PARPORT_PC" = "n" -o "$CONFIG_PARPORT_ARC" = "n" ]; then
-      if [ "$CONFIG_PARPORT_PC" != "n" -o "$CONFIG_PARPORT_ARC" != "n" ]; then
-         bool '   Support foreign hardware' CONFIG_PARPORT_OTHER
-      fi
-   fi
-fi
+source drivers/parport/Config.in
+
 if [ "$CONFIG_ARCH_EBSA110" = "y" -o \
+     "$CONFIG_ARCH_SA1100" = "y" -o \
      "$CONFIG_ARCH_NETWINDER" = "y" -o \
      "$CONFIG_CATS" = "y" ]; then
    string 'Initial kernel command string' CONFIG_CMDLINE
@@ -165,10 +167,10 @@ if [ "$CONFIG_ARCH_NETWINDER" = "y" -o \
    bool 'Timer and CPU usage LEDs' CONFIG_LEDS
    if [ "$CONFIG_LEDS" = "y" ]; then
       if [ "$CONFIG_ARCH_NETWINDER" = "y" -o \
-           "$CONFIG_ARCH_EBSA285" = "y" -o   \
+	   "$CONFIG_ARCH_EBSA285" = "y" -o   \
 	   "$CONFIG_ARCH_CO285" = "y" ]; then
-	 bool '  Timer LED' CONFIG_LEDS_TIMER
-	 bool '  CPU usage LED' CONFIG_LEDS_CPU
+         bool '  Timer LED' CONFIG_LEDS_TIMER
+         bool '  CPU usage LED' CONFIG_LEDS_CPU
       fi
    fi
 fi
@@ -186,11 +188,11 @@ fi
 
 source drivers/char/Config.in
 if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
-   if [ "$CONFIG_MOUSE" = "y" ]; then
+   if [ "$CONFIG_BUSMOUSE" = "y" ]; then
       if [ "$CONFIG_ARCH_RPC" != "y" ]; then
-	 define_bool CONFIG_KBDMOUSE y
+         define_bool CONFIG_KBDMOUSE y
       else
-	 define_bool CONFIG_RPCMOUSE y
+         define_bool CONFIG_RPCMOUSE y
       fi
    fi
 fi
@@ -230,7 +232,7 @@ fi
 #
 # tristate 'ISDN support' CONFIG_ISDN
 # if [ "$CONFIG_ISDN" != "n" ]; then
-#   source drivers/isdn/Config.in
+#    source drivers/isdn/Config.in
 # fi
 # endmenu
 
@@ -267,17 +269,17 @@ bool 'Include debugging information in kernel binary' CONFIG_DEBUG_INFO
 #bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC
 bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  if [ "$CONFIG_CPU_26" = "y" ]; then
-    bool 'Disable pgtable cache (EXPERIMENTAL)' CONFIG_NO_PGT_CACHE
-  fi
+   if [ "$CONFIG_CPU_26" = "y" ]; then
+      bool 'Disable pgtable cache (EXPERIMENTAL)' CONFIG_NO_PGT_CACHE
+   fi
 
-  # These options are only for real kernel hackers
-  # who want to get their hands dirty. 
-  bool 'Kernel low-level debugging functions' CONFIG_DEBUG_LL
-  if [ "$CONFIG_DEBUG_LL" = "y" ]; then
-    if [ "$CONFIG_FOOTBRIDGE" = "y" ]; then
-      bool 'Kernel low-level debugging messages via DC21285 port' CONFIG_DEBUG_DC21285_PORT
-    fi
-  fi
+   # These options are only for real kernel hackers
+   # who want to get their hands dirty. 
+   bool 'Kernel low-level debugging functions' CONFIG_DEBUG_LL
+   if [ "$CONFIG_DEBUG_LL" = "y" ]; then
+      if [ "$CONFIG_FOOTBRIDGE" = "y" ]; then
+         bool 'Kernel low-level debugging messages via DC21285 port' CONFIG_DEBUG_DC21285_PORT
+      fi
+   fi
 fi
 endmenu

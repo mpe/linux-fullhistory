@@ -1,3 +1,4 @@
+
 /*
     NetWinder Floating Point Emulator
     (c) Rebel.com, 1998-1999
@@ -20,30 +21,16 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#include "config.h"
-
-#ifdef MODULE
 #include <linux/module.h>
 #include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
+#include <linux/config.h>
 
 /* XXX */
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
-#include <linux/mm.h>
 #include <linux/init.h>
-#include <linux/spinlock.h>
-
-#include <asm/system.h>
-#include <asm/uaccess.h>
-#include <asm/io.h>
-#include <asm/atomic.h>
-#include <asm/pgtable.h>
 /* XXX */
 
 #include "softfloat.h"
@@ -62,7 +49,7 @@ typedef struct task_struct*	PTASK;
 int fp_printk(const char *,...);
 void fp_send_sig(unsigned long sig, PTASK p, int priv);
 #if LINUX_VERSION_CODE > 0x20115
-MODULE_AUTHOR("Scott Bambrough <scottb@netwinder.org>");
+MODULE_AUTHOR("Scott Bambrough <scottb@rebel.com>");
 MODULE_DESCRIPTION("NWFPE floating point emulator");
 #endif
 
@@ -73,57 +60,51 @@ MODULE_DESCRIPTION("NWFPE floating point emulator");
 #endif
 
 /* kernel function prototypes required */
-void C_SYMBOL_NAME(fp_setup)(void);
+void fp_setup(void);
 
 /* external declarations for saved kernel symbols */
-extern unsigned int C_SYMBOL_NAME(kern_fp_enter);
+extern void (*kern_fp_enter)(void);
+
+/* Original value of fp_enter from kernel before patched by fpe_init. */ 
+static void (*orig_fp_enter)(void);
 
 /* forward declarations */
 extern void nwfpe_enter(void);
 
-/* Original value of fp_enter from kernel before patched by fpe_init. */ 
-static unsigned int orig_fp_enter;
-
 /* Address of user registers on the kernel stack. */
 unsigned int *userRegisters;
 
-void __init C_SYMBOL_NAME(fpe_version)(void)
+void __init fpe_version(void)
 {
   static const char szTitle[] = "<4>NetWinder Floating Point Emulator ";
-  static const char szVersion[] = "V0.94.1 ";
+  static const char szVersion[] = "V0.95 ";
   static const char szCopyright[] = "(c) 1998-1999 Rebel.com\n";
-  C_SYMBOL_NAME(fp_printk)(szTitle);
-  C_SYMBOL_NAME(fp_printk)(szVersion);
-  C_SYMBOL_NAME(fp_printk)(szCopyright);
+  fp_printk(szTitle);
+  fp_printk(szVersion);
+  fp_printk(szCopyright);
 }
 
 int __init fpe_init(void)
 {
-  /* Display title, version and copyright information. */
-  C_SYMBOL_NAME(fpe_version)();
+  if (sizeof(FPA11) > sizeof(union fp_state))
+    printk(KERN_ERR "nwfpe: bad structure size\n");
+  else {
+    /* Display title, version and copyright information. */
+    fpe_version();
 
-  /* Save pointer to the old FP handler and then patch ourselves in */
-  orig_fp_enter = C_SYMBOL_NAME(kern_fp_enter);
-  C_SYMBOL_NAME(kern_fp_enter) = (unsigned int)C_SYMBOL_NAME(nwfpe_enter);
+    /* Save pointer to the old FP handler and then patch ourselves in */
+    orig_fp_enter = kern_fp_enter;
+    kern_fp_enter = nwfpe_enter;
+  }
 
   return 0;
 }
 
-#ifdef MODULE
-int init_module(void)
-{
-  return(fpe_init());
-}
-
-void cleanup_module(void)
+void __exit fpe_exit(void)
 {
   /* Restore the values we saved earlier. */
-  C_SYMBOL_NAME(kern_fp_enter) = orig_fp_enter;
+  kern_fp_enter = orig_fp_enter;
 }
-#endif
-
-#define _ARM_pc 60
-#define _ARM_cpsr 64
 
 /*
 ScottB:  November 4, 1998
@@ -135,7 +116,7 @@ fpmodule.c to integrate with the NetBSD kernel (I hope!).
 
 [1/1/99: Not quite true any more unfortunately.  There is Linux-specific
 code to access data in user space in some other source files at the 
-moment.  --philb]
+moment (grep for get_user / put_user calls).  --philb]
 
 float_exception_flags is a global variable in SoftFloat.
 
@@ -147,8 +128,9 @@ cumulative exceptions flag byte are set and we return.
 
 void float_raise(signed char flags)
 {
-#if 0
-  printk(KERN_DEBUG "NWFPE: exception %08x at %08x from %08x\n", flags,
+#ifdef CONFIG_DEBUG_USER
+  printk(KERN_DEBUG "NWFPE: %s[%d] takes exception %08x at %p from %08x\n",
+	 current->comm, current->pid, flags,
 	 __builtin_return_address(0), userRegisters[15]);
 #endif
 
@@ -156,7 +138,7 @@ void float_raise(signed char flags)
   if (readFPSR() & (flags << 16))
   {
     /* raise exception */
-    C_SYMBOL_NAME(fp_send_sig)(SIGFPE,C_SYMBOL_NAME(current),1);
+    fp_send_sig(SIGFPE, current, 1);
   }
   else
   {
@@ -164,3 +146,6 @@ void float_raise(signed char flags)
     writeFPSR(flags);
   }
 }
+
+module_init(fpe_init);
+module_exit(fpe_exit);

@@ -539,7 +539,7 @@ static void delete_empty_dnode(struct inode *i, dnode_secno dno)
 				brelse(bh);
 			}
 			i->i_hpfs_dno = down;
-			for_all_poss(i, hpfs_pos_subst, ((loff_t)dno << 4) | 1, (loff_t) -2);
+			for_all_poss(i, hpfs_pos_subst, ((loff_t)dno << 4) | 1, (loff_t) 12);
 			return;
 		}
 		if (!(dnode = hpfs_map_dnode(i->i_sb, up, &qbh))) return;
@@ -876,7 +876,7 @@ struct hpfs_dirent *map_pos_dirent(struct inode *inode, loff_t *posp,
 	hpfs_brelse4(&qbh0);
 	
 	bail:
-	*posp = -2;
+	*posp = 12;
 	return de;
 }
 

@@ -23,13 +23,13 @@
 #define PIT1_COUNT 0xecbe
 #elif defined(MCLK_47_8)
 /*
- * This should be 0x10AE1, but that doesn't exactly fit.
+ * This should be 0x10B43, but that doesn't exactly fit.
  * We run the timer interrupt at 5ms, and then divide it by
  * two in software...  This is so that the user processes
  * see exactly the same model whichever ARM processor they're
  * running on.
  */
-#define PIT1_COUNT 0x8570
+#define PIT1_COUNT 0x85A1
 #define DIVISOR 2
 #endif
  

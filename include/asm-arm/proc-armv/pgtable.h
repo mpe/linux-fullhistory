@@ -1,7 +1,7 @@
 /*
  * linux/include/asm-arm/proc-armv/pgtable.h
  *
- * Copyright (C) 1995, 1996, 1997 Russell King
+ * Copyright (C) 1995-1999 Russell King
  *
  * 12-Jan-1997	RMK	Altered flushing routines to use function pointers
  *			now possible to combine ARM6, ARM7 and StrongARM versions.
@@ -11,106 +11,7 @@
 #ifndef __ASM_PROC_PGTABLE_H
 #define __ASM_PROC_PGTABLE_H
 
-#include <asm/arch/memory.h>		/* For TASK_SIZE */
-
-#define LIBRARY_TEXT_START 0x0c000000
-
-/*
- * Cache flushing...
- */
-#define flush_cache_all()						\
-	cpu_flush_cache_all()
-
-#define flush_cache_mm(_mm)						\
-	do {								\
-		if ((_mm) == current->mm)				\
-			cpu_flush_cache_all();				\
-	} while (0)
-
-#define flush_cache_range(_mm,_start,_end)				\
-	do {								\
-		if ((_mm) == current->mm)				\
-			cpu_flush_cache_area((_start), (_end), 1);	\
-	} while (0)
-
-#define flush_cache_page(_vma,_vmaddr)					\
-	do {								\
-		if ((_vma)->vm_mm == current->mm)			\
-			cpu_flush_cache_area((_vmaddr),			\
-				(_vmaddr) + PAGE_SIZE,			\
-				((_vma)->vm_flags & VM_EXEC) ? 1 : 0);	\
-	} while (0)
-
-#define clean_cache_range(_start,_end)					\
-	do {								\
-		unsigned long _s, _sz;					\
-		_s = (unsigned long)_start;				\
-		_sz = (unsigned long)_end - _s;				\
-		cpu_clean_cache_area(_s, _sz);				\
-	} while (0)
-
-#define clean_cache_area(_start,_size)					\
-	do {								\
-		unsigned long _s;					\
-		_s = (unsigned long)_start;				\
-		cpu_clean_cache_area(_s, _size);			\
-	} while (0)
-
-#define flush_icache_range(_start,_end)					\
-	cpu_flush_icache_area((_start), (_end) - (_start))
-
-/*
- * We don't have a MEMC chip...
- */
-#define update_memc_all()		do { } while (0)
-#define update_memc_task(tsk)		do { } while (0)
-#define update_memc_mm(mm)		do { } while (0)
-#define update_memc_addr(mm,addr,pte)	do { } while (0)
-
-/*
- * This flushes back any buffered write data.  We have to clean and flush the entries
- * in the cache for this page.  Is it necessary to invalidate the I-cache?
- */
-#define flush_page_to_ram(_page)					\
-	cpu_flush_ram_page((_page) & PAGE_MASK);
-
-/*
- * TLB flushing:
- *
- *  - flush_tlb() flushes the current mm struct TLBs
- *  - flush_tlb_all() flushes all processes TLBs
- *  - flush_tlb_mm(mm) flushes the specified mm context TLB's
- *  - flush_tlb_page(vma, vmaddr) flushes one page
- *  - flush_tlb_range(mm, start, end) flushes a range of pages
- *
- * GCC uses conditional instructions, and expects the assembler code to do so as well.
- *
- * We drain the write buffer in here to ensure that the page tables in ram
- * are really up to date.  It is more efficient to do this here...
- */
-#define flush_tlb() flush_tlb_all()
-
-#define flush_tlb_all()								\
-	cpu_flush_tlb_all()
-
-#define flush_tlb_mm(_mm)							\
-	do {									\
-		if ((_mm) == current->mm)					\
-			cpu_flush_tlb_all();					\
-	} while (0)
-
-#define flush_tlb_range(_mm,_start,_end)					\
-	do {									\
-		if ((_mm) == current->mm)					\
-			cpu_flush_tlb_area((_start), (_end), 1);		\
-	} while (0)
-
-#define flush_tlb_page(_vma,_vmaddr)						\
-	do {									\
-		if ((_vma)->vm_mm == current->mm)				\
-			cpu_flush_tlb_area((_vmaddr), (_vmaddr) + PAGE_SIZE,	\
-				 ((_vma)->vm_flags & VM_EXEC) ? 1 : 0);		\
-	} while (0)
+#include <asm/proc/domain.h>
 
 /*
  * PMD_SHIFT determines the size of the area a second-level page table can map
@@ -135,8 +36,8 @@
 #define PTRS_PER_PGD    4096
 #define USER_PTRS_PER_PGD	(TASK_SIZE/PGDIR_SIZE)
 
-
-/* Just any arbitrary offset to the start of the vmalloc VM area: the
+/*
+ * Just any arbitrary offset to the start of the vmalloc VM area: the
  * current 8MB value just means that there will be a 8MB "hole" after the
  * physical memory until the kernel virtual memory starts.  That means that
  * any out-of-bounds memory accesses will hopefully be caught.
@@ -148,75 +49,6 @@
 #define VMALLOC_VMADDR(x) ((unsigned long)(x))
 #define VMALLOC_END       (PAGE_OFFSET + 0x10000000)
 
-
-/*
- * Domains
- */
-#define DOMAIN_USER	0
-#define DOMAIN_KERNEL	1
-#define DOMAIN_TABLE	1
-#define DOMAIN_IO	2
-
-
-
-#undef TEST_VERIFY_AREA
-
-/*
- * The sa110 doesn't have any external MMU info: the kernel page
- * tables contain all the necessary information.
- */
-extern __inline__ void update_mmu_cache(struct vm_area_struct * vma,
-	unsigned long address, pte_t pte)
-{
-}
-
-
-/*
- * BAD_PAGETABLE is used when we need a bogus page-table, while
- * BAD_PAGE is used for a bogus page.
- *
- * ZERO_PAGE is a global shared page that is always zero: used
- * for zero-mapped memory areas etc..
- */
-extern pte_t __bad_page(void);
-extern pte_t * __bad_pagetable(void);
-extern unsigned long *empty_zero_page;
-
-#define BAD_PAGETABLE	__bad_pagetable()
-#define BAD_PAGE	__bad_page()
-#define ZERO_PAGE(vaddr)	((unsigned long) empty_zero_page)
-
-/* number of bits that fit into a memory pointer */
-#define BYTES_PER_PTR	(sizeof(unsigned long))
-#define BITS_PER_PTR	(8*BYTES_PER_PTR)
-
-/* to align the pointer to a pointer address */
-#define PTR_MASK	(~(sizeof(void*)-1))
-
-/* sizeof(void*)==1<<SIZEOF_PTR_LOG2 */
-#define SIZEOF_PTR_LOG2	2
-
-/* to find an entry in a page-table */
-#define PAGE_PTR(address) \
-((unsigned long)(address)>>(PAGE_SHIFT-SIZEOF_PTR_LOG2)&PTR_MASK&~PAGE_MASK)
-
-/* to set the page-dir
- * Note that we need to flush the cache and TLBs
- * if we are affecting the current task.
- */
-#define SET_PAGE_DIR(tsk,pgdir)					\
-do {								\
-	tsk->tss.memmap = __virt_to_phys((unsigned long)pgdir);	\
-	if ((tsk) == current) {					\
-		flush_cache_all();				\
-		__asm__ __volatile__(				\
-		"mcr%?	p15, 0, %0, c2, c0, 0\n"		\
-		: : "r" (tsk->tss.memmap));			\
-		flush_tlb_all();				\
-	}							\
-} while (0)
-
-
 extern unsigned long get_page_2k(int priority);
 extern void free_page_2k(unsigned long page);
 
@@ -225,21 +57,6 @@ extern void free_page_2k(unsigned long page);
  * used to allocate a kernel page table - this turns on ASN bits
  * if any.
  */
-
-#ifndef __SMP__
-extern struct pgtable_cache_struct {
-	unsigned long *pgd_cache;
-	unsigned long *pte_cache;
-	unsigned long pgtable_cache_sz;
-} quicklists;
-
-#define pgd_quicklist (quicklists.pgd_cache)
-#define pmd_quicklist ((unsigned long *)0)
-#define pte_quicklist (quicklists.pte_cache)
-#define pgtable_cache_size (quicklists.pgtable_cache_sz)
-#else
-#error Pgtable caches have to be per-CPU, so that no locking is needed.
-#endif
 
 /****************
 * PMD functions *
@@ -275,22 +92,9 @@ extern __inline__ int pmd_present(pmd_t pmd)
 	return ((pmd_val(pmd) + 1) & 2);
 }
 
-/* We don't use pmd cache, so this is a dummy routine */
-extern __inline__ pmd_t *get_pmd_fast(void)
-{
-	return (pmd_t *)0;
-}
-
-extern __inline__ void free_pmd_fast(pmd_t *pmd)
-{
-}
-
 extern __inline__ void free_pmd_slow(pmd_t *pmd)
 {
 }
-
-extern void __bad_pmd(pmd_t *pmd);
-extern void __bad_pmd_kernel(pmd_t *pmd);
 
 /*
  * allocating and freeing a pmd is trivial: the 1-entry pmd is
@@ -378,28 +182,7 @@ extern __inline__ unsigned long pte_page(pte_t pte)
 	return __phys_to_virt(pte_val(pte) & PAGE_MASK);
 }
 
-extern pte_t *get_pte_slow(pmd_t *pmd, unsigned long address_preadjusted);
 extern pte_t *get_pte_kernel_slow(pmd_t *pmd, unsigned long address_preadjusted);
-
-extern __inline__ pte_t *get_pte_fast(void)
-{
-	unsigned long *ret;
-
-	if((ret = (unsigned long *)pte_quicklist) != NULL) {
-		pte_quicklist = (unsigned long *)(*ret);
-		ret[0] = ret[1];
-		clean_cache_area(ret, 4);
-		pgtable_cache_size--;
-	}
-	return (pte_t *)ret;
-}
-
-extern __inline__ void free_pte_fast(pte_t *pte)
-{
-	*(unsigned long *)pte = (unsigned long) pte_quicklist;
-	pte_quicklist = (unsigned long *) pte;
-	pgtable_cache_size++;
-}
 
 extern __inline__ void free_pte_slow(pte_t *pte)
 {
@@ -539,6 +322,8 @@ extern __inline__ pte_t * pte_alloc_kernel(pmd_t *pmd, unsigned long address)
 
 extern __inline__ pte_t * pte_alloc(pmd_t * pmd, unsigned long address)
 {
+	extern pte_t *get_pte_slow(pmd_t *pmd, unsigned long address_preadjusted);
+
 	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
 
 	if (pmd_none(*pmd)) {
@@ -569,36 +354,10 @@ extern __inline__ pte_t * pte_alloc(pmd_t * pmd, unsigned long address)
 /* to find an entry in a kernel page-table-directory */
 #define pgd_offset_k(address) pgd_offset(&init_mm, address)
 
-/* used for quicklists */
-#define __pgd_next(pgd) (((unsigned long *)pgd)[1])
-
 /* to find an entry in a page-table-directory */
 extern __inline__ pgd_t * pgd_offset(struct mm_struct * mm, unsigned long address)
 {
 	return mm->pgd + (address >> PGDIR_SHIFT);
-}
-
-extern pgd_t *get_pgd_slow(void);
-
-extern __inline__ pgd_t *get_pgd_fast(void)
-{
-	unsigned long *ret;
-
-	if((ret = pgd_quicklist) != NULL) {
-		pgd_quicklist = (unsigned long *)__pgd_next(ret);
-		ret[1] = ret[2];
-		clean_cache_area(ret + 1, 4);
-		pgtable_cache_size--;
-	} else
-		ret = (unsigned long *)get_pgd_slow();
-	return (pgd_t *)ret;
-}
-
-extern __inline__ void free_pgd_fast(pgd_t *pgd)
-{
-	__pgd_next(pgd) = (unsigned long) pgd_quicklist;
-	pgd_quicklist = (unsigned long *) pgd;
-	pgtable_cache_size++;
 }
 
 extern __inline__ void free_pgd_slow(pgd_t *pgd)
@@ -630,28 +389,17 @@ extern __inline__ void free_pgd_slow(pgd_t *pgd)
 }
 
 #define pgd_free(pgd)		free_pgd_fast(pgd)
-#define pgd_alloc()		get_pgd_fast()
 
-extern __inline__ void set_pgdir(unsigned long address, pgd_t entry)
+extern __inline__ pgd_t *pgd_alloc(void)
 {
-	struct task_struct * p;
+	extern pgd_t *get_pgd_slow(void);
 	pgd_t *pgd;
 
-	read_lock(&tasklist_lock);
-	for_each_task(p) {
-		if (!p->mm)
-			continue;
-		*pgd_offset(p->mm,address) = entry;
-	}
-	read_unlock(&tasklist_lock);
-	for (pgd = (pgd_t *)pgd_quicklist; pgd; pgd = (pgd_t *)__pgd_next(pgd))
-		pgd[address >> PGDIR_SHIFT] = entry;
+	pgd = get_pgd_fast();
+	if (!pgd)
+		pgd = get_pgd_slow();
+
+	return pgd;
 }
 
-extern pgd_t swapper_pg_dir[PTRS_PER_PGD];
-
-#define SWP_TYPE(entry) (((entry) >> 2) & 0x7f)
-#define SWP_OFFSET(entry) ((entry) >> 9)
-#define SWP_ENTRY(type,offset) (((type) << 2) | ((offset) << 9))
-
-#endif /* __ASM_PROC_PAGE_H */
+#endif /* __ASM_PROC_PGTABLE_H */

@@ -41,11 +41,9 @@ static const struct inode_operations hpfs_file_iops =
 	NULL,				/* rename */
 	NULL,				/* readlink */
 	NULL,				/* follow_link */
-	(int (*)(struct inode *, int))
-#warning Someone needs to code up hpfs_get_block properly... -DaveM
-	&hpfs_bmap,			/* get_block */
+	&hpfs_get_block,		/* get_block */
 	block_read_full_page,		/* readpage */
-	hpfs_writepage,			/* writepage */
+	block_write_full_page,		/* writepage */
 	block_flushpage,		/* flushpage */
 	hpfs_truncate,			/* truncate */
 	NULL,				/* permission */
@@ -55,7 +53,7 @@ static const struct inode_operations hpfs_file_iops =
 
 static const struct file_operations hpfs_dir_ops =
 {
-	NULL,				/* lseek - default */
+	hpfs_dir_lseek,			/* lseek */
 	hpfs_dir_read,			/* read */
 	NULL,				/* write - bad */
 	hpfs_readdir,			/* readdir */

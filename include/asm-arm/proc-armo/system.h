@@ -13,6 +13,8 @@ extern const char xchg_str[];
 
 extern __inline__ unsigned long __xchg(unsigned long x, volatile void *ptr, int size)
 {
+	extern void arm_invalidptr(const char *, int);
+
 	switch (size) {
 		case 1:	return cpu_xchg_1(x, ptr);
 		case 2:	return cpu_xchg_2(x, ptr);
@@ -27,11 +29,6 @@ extern __inline__ unsigned long __xchg(unsigned long x, volatile void *ptr, int 
  * messes up if we don't
  */
 #define proc_hard_reset()	cpu_proc_fin()
-
-/*
- * This processor does not idle
- */
-#define proc_idle()
 
 /*
  * A couple of speedups for the ARM

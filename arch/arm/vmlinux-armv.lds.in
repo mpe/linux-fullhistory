@@ -3,11 +3,10 @@
  * Written by Martin Mares <mj@atrey.karlin.mff.cuni.cz>
  */
 OUTPUT_ARCH(arm)
-ENTRY(_start)
+ENTRY(stext)
 SECTIONS
 {
   . = TEXTADDR;
-  _text = .;			/* Text and read-only data	*/
   .text : { }			/* Set text start address	*/
 
   __init_begin = .;		/* Init code and data		*/
@@ -38,6 +37,7 @@ SECTIONS
   . = ALIGN(4096);
   __netwinder_end = .;
 
+  _text = .;			/* Text and read-only data	*/
   .text.real : {		/* Real text segment		*/
 	*(.text)
 	*(.fixup)
@@ -56,6 +56,8 @@ SECTIONS
   __start___ksymtab = .;	/* Kernel symbol table		*/
   __ksymtab : { *(__ksymtab) }
   __stop___ksymtab = .;
+
+  .got : { *(.got) }		/* Global offset table		*/
 
   _etext = .;			/* End of text section		*/
 

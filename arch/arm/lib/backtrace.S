@@ -21,6 +21,11 @@ ENTRY(__backtrace)
 		mov	r0, fp
 
 ENTRY(c_backtrace)
+
+#ifndef CONFIG_FRAME_POINTER
+		mov	pc, lr
+#else
+
 		stmfd	sp!, {r4 - r8, lr}	@ Save an extra register so we have a location...
 #ifdef CONFIG_CPU_32
 		tst	r1, #0x10		@ 26 or 32-bit?
@@ -103,3 +108,5 @@ ENTRY(c_backtrace)
 		.align
 .Ldsi:		.word	0x00e92dd8 >> 2
 		.word	0x00e92d00 >> 2
+
+#endif

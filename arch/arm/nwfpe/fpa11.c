@@ -19,9 +19,9 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#include "config.h"
+#include <asm/system.h>
+
 #include "fpa11.h"
-#include "milieu.h"
 #include "fpopcode.h"
 
 #include "fpmodule.h"
@@ -39,17 +39,18 @@ FPA11 *fpa11;
 void resetFPA11(void)
 {
   int i;
-  /* initialize the registers */
+
+  /* initialize the register type array */
   for (i=0;i<=7;i++)
   {
-    fpa11->fpreg[i].fType = typeNone;
+    fpa11->fType[i] = typeNone;
   }
   
   /* FPSR: set system id to FP_EMULATOR, clear all other bits */
   fpa11->fpsr = FP_EMULATOR;
   
   /* FPCR: set SB, AB and DA bits, clear all others */
-#if MAINTAIN_FPCR         
+#if MAINTAIN_FPCR
   fpa11->fpcr = MASK_RESET;
 #endif
 }
@@ -128,6 +129,9 @@ void SetRoundingPrecision(const unsigned int opcode)
 unsigned int EmulateAll(unsigned int opcode)
 {
   unsigned int nRc = 0;
+  unsigned long flags;
+
+  save_flags(flags); sti();
 
   if (fpa11->initflag == 0)		/* good place for __builtin_expect */
   {
@@ -161,6 +165,8 @@ unsigned int EmulateAll(unsigned int opcode)
     /* Invalid instruction detected.  Return FALSE. */
     nRc = 0;
   }
+
+  restore_flags(flags);
 
   return(nRc);
 }

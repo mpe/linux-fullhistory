@@ -13,14 +13,11 @@
 
 #include <linux/config.h>
 #include <linux/sched.h>
-#include <linux/malloc.h>
-#include <linux/mman.h>
+#include <linux/errno.h>
 #include <linux/init.h>
 
-#include <asm/page.h>
 #include <asm/dma.h>
 #include <asm/io.h>
-#include <asm/hardware.h>
 
 #include "dma.h"
 #include "dma-isa.h"

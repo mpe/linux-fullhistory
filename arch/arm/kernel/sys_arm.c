@@ -19,6 +19,7 @@
 #include <linux/shm.h>
 #include <linux/stat.h>
 #include <linux/mman.h>
+#include <linux/fs.h>
 #include <linux/file.h>
 #include <linux/utsname.h>
 

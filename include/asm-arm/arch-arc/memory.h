@@ -15,6 +15,7 @@
  * User space: 26MB
  */
 #define TASK_SIZE	(0x01a00000UL)
+#define TASK_SIZE_26	(0x01a00000UL)
 
 /*
  * Page offset: 32MB

@@ -20,7 +20,6 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#include "config.h"
 #include "milieu.h"
 #include "softfloat.h"
 #include "fpopcode.h"
@@ -65,37 +64,10 @@ unsigned int EmulateCPRT(const unsigned int opcode)
     case  WFS_CODE >> 20: writeFPSR(readRegister(getRd(opcode))); break;
     case  RFS_CODE >> 20: writeRegister(getRd(opcode),readFPSR()); break;
 
-#if 0
-    /* ?? Not at all sure about the mode checks here.  Linux never
-       calls the emulator from a non-USR fault but we always run in SVC
-       mode.  Is there even any point trying to emulate the way FPA11
-       behaves in this respect?
-
-       No - and I quote: 'The FPCR may only be present in some
-       implementations: it is there to control the hardware in an
-       implementation-specific manner, ...  The user mode of the
-       ARM is not permitted to use this register, and the WFC and
-       RFC instructions will trap if tried from user mode.'
-       Therefore, we do not provide the RFC and WFC instructions.
-        (rmk, 3/05/1999)
-     */
-    case  WFC_CODE >> 20:
-    {
-       int mode = 0;
-       __asm__ volatile ("mrs %0, cpsr; and %0, %0, #0x1f;" : : "g" (mode));
-       nRc = (0x13 == mode) ? 1 : 0;	/* in SVC processor mode? */
-       if (nRc) writeFPCR(readRegister(getRd(opcode)));
-    }
-    break;
-    
-    case  RFC_CODE >> 20:
-    {
-       int mode = 0;
-       __asm__ volatile ("mrs %0, cpsr; and %0, %0, #0x1f;" : : "g" (mode));
-       nRc = (0x13 == mode) ? 1 : 0;	/* in SVC processor mode? */
-       if (nRc) writeRegister(getRd(opcode),readFPCR()); break;
-    }
-    break;
+#if 0    /* We currently have no use for the FPCR, so there's no point
+	    in emulating it. */
+    case  WFC_CODE >> 20: writeFPCR(readRegister(getRd(opcode)));
+    case  RFC_CODE >> 20: writeRegister(getRd(opcode),readFPCR()); break;
 #endif
 
     default: nRc = 0;
@@ -114,24 +86,24 @@ unsigned int PerformFLT(const unsigned int opcode)
    {
       case ROUND_SINGLE:
       {
-        fpa11->fpreg[getFn(opcode)].fType = typeSingle;
-        fpa11->fpreg[getFn(opcode)].fValue.fSingle =
+        fpa11->fType[getFn(opcode)] = typeSingle;
+        fpa11->fpreg[getFn(opcode)].fSingle =
 	   int32_to_float32(readRegister(getRd(opcode)));
       }
       break;
 
       case ROUND_DOUBLE:
       {
-        fpa11->fpreg[getFn(opcode)].fType = typeDouble;
-        fpa11->fpreg[getFn(opcode)].fValue.fDouble =
+        fpa11->fType[getFn(opcode)] = typeDouble;
+        fpa11->fpreg[getFn(opcode)].fDouble =
             int32_to_float64(readRegister(getRd(opcode)));
       }
       break;
         
       case ROUND_EXTENDED:
       {
-        fpa11->fpreg[getFn(opcode)].fType = typeExtended;
-        fpa11->fpreg[getFn(opcode)].fValue.fExtended =
+        fpa11->fType[getFn(opcode)] = typeExtended;
+        fpa11->fpreg[getFn(opcode)].fExtended =
 	   int32_to_floatx80(readRegister(getRd(opcode)));
       }
       break;
@@ -149,26 +121,26 @@ unsigned int PerformFIX(const unsigned int opcode)
    
    SetRoundingMode(opcode);
 
-   switch (fpa11->fpreg[Fn].fType)
+   switch (fpa11->fType[Fn])
    {
       case typeSingle:
       {
          writeRegister(getRd(opcode),
-	               float32_to_int32(fpa11->fpreg[Fn].fValue.fSingle));
+	               float32_to_int32(fpa11->fpreg[Fn].fSingle));
       }
       break;
 
       case typeDouble:
       {
          writeRegister(getRd(opcode),
-	               float64_to_int32(fpa11->fpreg[Fn].fValue.fDouble));
+	               float64_to_int32(fpa11->fpreg[Fn].fDouble));
       }
       break;
       	               
       case typeExtended:
       {
          writeRegister(getRd(opcode),
-	               floatx80_to_int32(fpa11->fpreg[Fn].fValue.fExtended));
+	               floatx80_to_int32(fpa11->fpreg[Fn].fExtended));
       }
       break;
       
@@ -226,27 +198,27 @@ static unsigned int PerformComparison(const unsigned int opcode)
       ?? Might be some mileage in avoiding this conversion if possible.
       Eg, if both operands are 32-bit, detect this and do a 32-bit
       comparison (cheaper than an 80-bit one).  */
-   switch (fpa11->fpreg[Fn].fType)
+   switch (fpa11->fType[Fn])
    {
       case typeSingle: 
         //fp_printk("single.\n");
-	if (float32_is_nan(fpa11->fpreg[Fn].fValue.fSingle))
+	if (float32_is_nan(fpa11->fpreg[Fn].fSingle))
 	   goto unordered;
-        rFn = float32_to_floatx80(fpa11->fpreg[Fn].fValue.fSingle);
+        rFn = float32_to_floatx80(fpa11->fpreg[Fn].fSingle);
       break;
 
       case typeDouble: 
         //fp_printk("double.\n");
-	if (float64_is_nan(fpa11->fpreg[Fn].fValue.fDouble))
+	if (float64_is_nan(fpa11->fpreg[Fn].fDouble))
 	   goto unordered;
-        rFn = float64_to_floatx80(fpa11->fpreg[Fn].fValue.fDouble);
+        rFn = float64_to_floatx80(fpa11->fpreg[Fn].fDouble);
       break;
       
       case typeExtended: 
         //fp_printk("extended.\n");
-	if (floatx80_is_nan(fpa11->fpreg[Fn].fValue.fExtended))
+	if (floatx80_is_nan(fpa11->fpreg[Fn].fExtended))
 	   goto unordered;
-        rFn = fpa11->fpreg[Fn].fValue.fExtended;
+        rFn = fpa11->fpreg[Fn].fExtended;
       break;
       
       default: return 0;
@@ -262,27 +234,27 @@ static unsigned int PerformComparison(const unsigned int opcode)
    else
    {
      //fp_printk("Fm = r%d which contains a ",Fm);
-      switch (fpa11->fpreg[Fm].fType)
+      switch (fpa11->fType[Fm])
       {
          case typeSingle: 
            //fp_printk("single.\n");
-	   if (float32_is_nan(fpa11->fpreg[Fm].fValue.fSingle))
+	   if (float32_is_nan(fpa11->fpreg[Fm].fSingle))
 	      goto unordered;
-           rFm = float32_to_floatx80(fpa11->fpreg[Fm].fValue.fSingle);
+           rFm = float32_to_floatx80(fpa11->fpreg[Fm].fSingle);
          break;
 
          case typeDouble: 
            //fp_printk("double.\n");
-	   if (float64_is_nan(fpa11->fpreg[Fm].fValue.fDouble))
+	   if (float64_is_nan(fpa11->fpreg[Fm].fDouble))
 	      goto unordered;
-           rFm = float64_to_floatx80(fpa11->fpreg[Fm].fValue.fDouble);
+           rFm = float64_to_floatx80(fpa11->fpreg[Fm].fDouble);
          break;
       
          case typeExtended: 
            //fp_printk("extended.\n");
-	   if (floatx80_is_nan(fpa11->fpreg[Fm].fValue.fExtended))
+	   if (floatx80_is_nan(fpa11->fpreg[Fm].fExtended))
 	      goto unordered;
-           rFm = fpa11->fpreg[Fm].fValue.fExtended;
+           rFm = fpa11->fpreg[Fm].fExtended;
          break;
       
          default: return 0;
@@ -303,6 +275,7 @@ static unsigned int PerformComparison(const unsigned int opcode)
       the data sheet, observation of how the Acorn emulator actually
       behaves (and how programs expect it to) and guesswork.  */
    flags |= CC_OVERFLOW;
+   flags &= ~(CC_ZERO | CC_NEGATIVE);
 
    if (BIT_AC & readFPSR()) flags |= CC_CARRY;
 

@@ -226,6 +226,7 @@ void hpfs_set_dentry_operations(struct dentry *);
 
 int hpfs_dir_read(struct file *, char *, size_t, loff_t *);
 int hpfs_dir_release(struct inode *, struct file *);
+loff_t hpfs_dir_lseek(struct file *, loff_t, int);
 int hpfs_readdir(struct file *, void *, filldir_t);
 struct dentry *hpfs_lookup(struct inode *, struct dentry *);
 
@@ -258,9 +259,8 @@ int hpfs_open(struct inode *, struct file *);
 int hpfs_file_fsync(struct file *, struct dentry *);
 secno hpfs_bmap(struct inode *, unsigned);
 void hpfs_truncate(struct inode *);
-ssize_t hpfs_file_read(struct file *, char *, size_t, loff_t *);
-ssize_t hpfs_file_write(struct file *, const char *, size_t, loff_t *);
-int hpfs_writepage (struct file *, struct page *);
+int hpfs_get_block(struct inode *inode, long iblock, struct buffer_head *bh_result, int create);
+ssize_t hpfs_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos);
 
 /* inode.c */
 

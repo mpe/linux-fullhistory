@@ -30,7 +30,7 @@ void __bad_pmd_kernel(pmd_t *pmd)
  * This is useful to dump out the page tables associated with
  * 'addr' in mm 'mm'.
  */
-void show_pte(struct mm_struct *mm, unsigned long addr)
+static void show_pte(struct mm_struct *mm, unsigned long addr)
 {
 	pgd_t *pgd;
 
@@ -62,7 +62,9 @@ void show_pte(struct mm_struct *mm, unsigned long addr)
 
 		pte = pte_offset(pmd, addr);
 		printk(", *pte = %08lx", pte_val(*pte));
+#ifdef CONFIG_CPU_32
 		printk(", *ppte = %08lx", pte_val(pte[-PTRS_PER_PTE]));
+#endif
 	} while(0);
 
 	printk("\n");
@@ -73,7 +75,7 @@ void show_pte(struct mm_struct *mm, unsigned long addr)
  * terminate things with extreme prejudice.
  */
 static void
-kernel_page_fault(unsigned long addr, int mode, struct pt_regs *regs,
+kernel_page_fault(unsigned long addr, int write_access, struct pt_regs *regs,
 		  struct task_struct *tsk, struct mm_struct *mm)
 {
 	char *reason;
@@ -90,7 +92,7 @@ kernel_page_fault(unsigned long addr, int mode, struct pt_regs *regs,
 
 	printk(KERN_ALERT "pgd = %p\n", mm->pgd);
 	show_pte(mm, addr);
-	die("Oops", regs, mode);
+	die("Oops", regs, write_access);
 
 	do_exit(SIGKILL);
 }
@@ -153,7 +155,7 @@ bad_area:
 	up(&mm->mmap_sem);
 
 	/* User mode accesses just cause a SIGSEGV */
-	if (mode & FAULT_CODE_USER) {
+	if (user_mode(regs)) {
 		tsk->thread.error_code = mode;
 		tsk->thread.trap_no = 14;
 #ifdef CONFIG_DEBUG_USER
@@ -194,7 +196,7 @@ do_sigbus:
 	force_sig(SIGBUS, tsk);
 
 	/* Kernel mode? Handle exceptions or die */
-	if (!(mode & FAULT_CODE_USER))
+	if (!user_mode(regs))
 		goto no_context;
 }
 

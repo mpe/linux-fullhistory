@@ -9,6 +9,7 @@
 #include <linux/linkage.h>
 #include <asm/assembler.h>
 #include <asm/procinfo.h>
+#include <asm/errno.h>
 #include "../lib/constants.h"
 
 /*
@@ -70,6 +71,19 @@ ENTRY(cpu_arm7_flush_tlb_area)
 		mov	pc, lr
 
 /*
+ * Function: arm6_7_flush_tlb_page (unsigned long address, int flags)
+ *
+ * Params  : address	Address
+ *	   : flags	b0 = I-TLB as well
+ *
+ * Purpose : flush a TLB entry
+ */
+ENTRY(cpu_arm6_flush_tlb_page)
+ENTRY(cpu_arm7_flush_tlb_page)
+		mcr	p15, 0, r0, c6, c0, 0		@ flush TLB
+		mov	pc, lr
+
+/*
  * Function: arm6_7_data_abort ()
  *
  * Params  : r0 = address of aborted instruction
@@ -89,35 +103,14 @@ msg:		.ascii	"DA*%p=%p\n\0"
 		.align
 
 ENTRY(cpu_arm6_data_abort)
+Ldata_simple:
 		ldr	r4, [r0]			@ read instruction causing problem
 		mov	r2, r4, lsr #19			@ r2 b1 = L
-		and	r1, r4, #15 << 24
-		add	pc, pc, r1, lsr #22		@ Now branch to the relevent processing routine
-		movs	pc, lr
-		b	Ldata_unknown
-		b	Ldata_unknown
-		b	Ldata_unknown
-		b	Ldata_unknown
-		b	Ldata_earlyldrpost		@ ldr	rd, [rn], #m
-		b	Ldata_simple			@ ldr	rd, [rn, #m]	@ RegVal
-		b	Ldata_earlyldrpost		@ ldr	rd, [rn], rm
-		b	Ldata_simple			@ ldr	rd, [rn, rm]
-		b	Ldata_ldmstm			@ ldm*a	rn, <rlist>
-		b	Ldata_ldmstm			@ ldm*b	rn, <rlist>
-		b	Ldata_unknown
-		b	Ldata_unknown
-		b	Ldata_simple			@ ldc	rd, [rn], #m	@ Same as ldr	rd, [rn], #m
-		b	Ldata_simple			@ ldc	rd, [rn, #m]
-		b	Ldata_unknown
-Ldata_unknown:	@ Part of jumptable
-		ldr	r3, [sp, #15 * 4]		@ Get PC
-		str	r3, [sp, #-4]!
-		mov	r1, r1, lsr #2
-		mov	r3, r4
-		mov	r2, r0
-		adr	r0, Lukabttxt
-		bl	SYMBOL_NAME(panic)
-Lstop:		b	Lstop
+		and	r2, r2, #2			@ check read/write bit
+		mrc	p15, 0, r0, c6, c0, 0		@ get FAR
+		mrc	p15, 0, r1, c5, c0, 0		@ get FSR
+		and	r1, r1, #15
+		mov	pc, lr
 
 ENTRY(cpu_arm7_data_abort)
 		ldr	r4, [r0]			@ read instruction causing problem
@@ -140,7 +133,15 @@ ENTRY(cpu_arm7_data_abort)
 		b	Ldata_simple			@ ldc	rd, [rn], #m	@ Same as ldr	rd, [rn], #m
 		b	Ldata_simple			@ ldc	rd, [rn, #m]
 		b	Ldata_unknown
-		b	Ldata_unknown
+Ldata_unknown:	@ Part of jumptable
+		ldr	r3, [sp, #15 * 4]		@ Get PC
+		str	r3, [sp, #-4]!
+		mov	r1, r1, lsr #2
+		mov	r3, r4
+		mov	r2, r0
+		adr	r0, Lukabttxt
+		bl	SYMBOL_NAME(panic)
+Lstop:		b	Lstop
 
 Ldata_ldmstm:	tst	r4, #1 << 21			@ check writeback bit
 		beq	Ldata_simple
@@ -165,31 +166,16 @@ Ldata_ldmstm:	tst	r4, #1 << 21			@ check writeback bit
 		add	r7, r0, r7, lsl #2		@ Do correction (signed)
 		str	r7, [sp, r5, lsr #14]		@ Put register
 
-Ldata_simple:	and	r2, r2, #2			@ check read/write bit
-		mrc	p15, 0, r0, c6, c0, 0		@ get FAR
-		mrc	p15, 0, r1, c5, c0, 0		@ get FSR
-		and	r1, r1, #15
-		mov	pc, lr
-
-Ldata_earlyldrpost:
-		tst	r2, #4
-		and	r2, r2, #2			@ check read/write bit
-		orrne	r2, r2, #1			@ T bit
-		mrc	p15, 0, r0, c6, c0, 0		@ get FAR
-		mrc	p15, 0, r1, c5, c0, 0		@ get FSR
-		and	r1, r1, #15
-		mov	pc, lr
-
 Ldata_lateldrpostconst:
 		movs	r1, r4, lsl #20			@ Get offset
-		beq	Ldata_earlyldrpost		@ if offset is zero, no effect
+		beq	Ldata_simple			@ if offset is zero, no effect
 		and	r5, r4, #15 << 16		@ Get Rn
 		ldr	r0, [sp, r5, lsr #14]
 		tst	r4, #1 << 23			@ U bit
 		subne	r0, r0, r1, lsr #20
 		addeq	r0, r0, r1, lsr #20
 		str	r0, [sp, r5, lsr #14]		@ Put register
-		b	Ldata_earlyldrpost
+		b	Ldata_simple
 
 Ldata_lateldrpreconst:
 		tst	r4, #1 << 21			@ check writeback bit
@@ -252,7 +238,7 @@ Ldata_lateldrpostreg:
 		subne	r0, r0, r1
 		addeq	r0, r0, r1
 		str	r0, [sp, r5, lsr #14]		@ Put register
-		b	Ldata_earlyldrpost
+		b	Ldata_simple
 
 Ldata_lateldrprereg:
 		tst	r4, #1 << 21			@ check writeback bit
@@ -319,10 +305,24 @@ ENTRY(cpu_arm7_check_bugs)
 		mrs	ip, cpsr
 		bic	ip, ip, #F_BIT
 		msr	cpsr, ip
+		mov	pc, lr
+
 ENTRY(cpu_arm6_proc_init)
 ENTRY(cpu_arm7_proc_init)
+		mov	pc, lr
+
 ENTRY(cpu_arm6_proc_fin)
 ENTRY(cpu_arm7_proc_fin)
+		mrs	r0, cpsr
+		orr	r0, r0, #F_BIT | I_BIT
+		msr	cpsr, r0
+		mov	r0, #0x31			@ ....S..DP...M
+		mcr	p15, 0, r0, c1, c0, 0		@ disable caches
+		mov	pc, lr
+
+ENTRY(cpu_arm6_do_idle)
+ENTRY(cpu_arm7_do_idle)
+		mov	r0, #-EINVAL
 		mov	pc, lr
 
 /*
@@ -381,23 +381,22 @@ ENTRY(cpu_arm6_set_pte)
 ENTRY(cpu_arm7_set_pte)
 		str	r1, [r0], #-1024		@ linux version
 
+		eor	r1, r1, #LPTE_PRESENT | LPTE_YOUNG | LPTE_WRITE | LPTE_DIRTY
+
 		bic	r2, r1, #0xff0
 		bic	r2, r2, #3
 		orr	r2, r2, #HPTE_TYPE_SMALL
 
-		tst	r1, #LPTE_USER | LPTE_EXEC
+		tst	r1, #LPTE_USER | LPTE_EXEC	@ User or Exec?
 		orrne	r2, r2, #HPTE_AP_READ
 
-		tst	r1, #LPTE_WRITE
-		tstne	r1, #LPTE_DIRTY
-		orrne	r2, r2, #HPTE_AP_WRITE
+		tst	r1, #LPTE_WRITE | LPTE_DIRTY	@ Write and Dirty?
+		orreq	r2, r2, #HPTE_AP_WRITE
 
-		tst	r1, #LPTE_PRESENT
-		tstne	r1, #LPTE_YOUNG
-		moveq	r2, #0
+		tst	r1, #LPTE_PRESENT | LPTE_YOUNG	@ Present and Young
+		movne	r2, #0
 
 		str	r2, [r0]			@ hardware version
-		mcr	p15, 0, r0, c7, c10, 1		@ clean D entry	 (drain is done by TLB fns)
 		mov	pc, lr
 
 /*
@@ -407,13 +406,9 @@ ENTRY(cpu_arm7_set_pte)
  */
 ENTRY(cpu_arm6_reset)
 ENTRY(cpu_arm7_reset)
-		mrs	r1, cpsr
-		orr	r1, r1, #F_BIT|I_BIT
-		msr	cpsr, r1
 		mov	r0, #0
 		mcr	p15, 0, r0, c7, c0, 0		@ flush cache
 		mcr	p15, 0, r0, c5, c0, 0		@ flush TLB
-		mov	r1, #F_BIT | I_BIT | 3
 		mov	pc, lr
 
 cpu_armvlsi_name:
@@ -427,6 +422,26 @@ cpu_arm710_name:
 		.align
 
 		.section ".text.init", #alloc, #execinstr
+
+__arm6_setup:	mov	r0, #0
+		mcr	p15, 0, r0, c7, c0		@ flush caches on v3
+		mcr	p15, 0, r0, c5, c0		@ flush TLBs on v3
+		mcr	p15, 0, r4, c2, c0		@ load page table pointer
+		mov	r0, #0x1f			@ Domains 0, 1 = client
+		mcr	p15, 0, r0, c3, c0		@ load domain access register
+		mov	r0, #0x3d			@ ....S..DPWC.M
+		orr	r0, r0, #0x100
+		mov	pc, lr
+
+__arm7_setup:	mov	r0, #0
+		mcr	p15, 0, r0, c7, c0		@ flush caches on v3
+		mcr	p15, 0, r0, c5, c0		@ flush TLBs on v3
+		mcr	p15, 0, r4, c2, c0		@ load page table pointer
+		mov	r0, #0x1f			@ Domains 0, 1 = client
+		mcr	p15, 0, r0, c3, c0		@ load domain access register
+		mov	r0, #0x7d			@ ....S.LDPWC.M
+		orr	r0, r0, #0x100
+		mov	pc, lr
 
 /*
  * Purpose : Function pointers used to access above functions - all calls
@@ -452,6 +467,8 @@ ENTRY(arm6_processor_functions)
 		.word	cpu_arm6_flush_icache_area
 		.word	cpu_arm6_cache_wback_area
 		.word	cpu_arm6_cache_purge_area
+		.word	cpu_arm6_flush_tlb_page
+		.word	cpu_arm7_do_idle
 		.size	arm6_processor_functions, . - arm6_processor_functions
 
 /*
@@ -478,6 +495,8 @@ ENTRY(arm7_processor_functions)
 		.word	cpu_arm7_flush_icache_area
 		.word	cpu_arm7_cache_wback_area
 		.word	cpu_arm7_cache_purge_area
+		.word	cpu_arm7_flush_tlb_page
+		.word	cpu_arm7_do_idle
 		.size	arm7_processor_functions, . - arm7_processor_functions
 
 		.type	cpu_arm6_info, #object
@@ -519,9 +538,11 @@ cpu_elf_name:	.asciz	"v3"
 __arm6_proc_info:
 		.long	0x41560600
 		.long	0xfffffff0
+		.long	0x00000c12
+		b	__arm6_setup
 		.long	cpu_arch_name
 		.long	cpu_elf_name
-		.long	HWCAP_SWP
+		.long	HWCAP_SWP | HWCAP_26BIT
 		.long	cpu_arm6_info
 		.long	arm6_processor_functions
 		.size	__arm6_proc_info, . - __arm6_proc_info
@@ -530,9 +551,11 @@ __arm6_proc_info:
 __arm610_proc_info:
 		.long	0x41560610
 		.long	0xfffffff0
+		.long	0x00000c12
+		b	__arm6_setup
 		.long	cpu_arch_name
 		.long	cpu_elf_name
-		.long	HWCAP_SWP
+		.long	HWCAP_SWP | HWCAP_26BIT
 		.long	cpu_arm610_info
 		.long	arm6_processor_functions
 		.size	__arm610_proc_info, . - __arm610_proc_info
@@ -541,9 +564,11 @@ __arm610_proc_info:
 __arm7_proc_info:
 		.long	0x41007000
 		.long	0xffffff00
+		.long	0x00000c12
+		b	__arm7_setup
 		.long	cpu_arch_name
 		.long	cpu_elf_name
-		.long	HWCAP_SWP
+		.long	HWCAP_SWP | HWCAP_26BIT
 		.long	cpu_arm7_info
 		.long	arm7_processor_functions
 		.size	__arm7_proc_info, . - __arm7_proc_info
@@ -552,9 +577,11 @@ __arm7_proc_info:
 __arm710_proc_info:
 		.long	0x41007100
 		.long	0xfff8ff00
+		.long	0x00000c12
+		b	__arm7_setup
 		.long	cpu_arch_name
 		.long	cpu_elf_name
-		.long	HWCAP_SWP
+		.long	HWCAP_SWP | HWCAP_26BIT
 		.long	cpu_arm710_info
 		.long	arm7_processor_functions
 		.size	__arm710_proc_info, . - __arm710_proc_info

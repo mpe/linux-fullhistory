@@ -2,7 +2,7 @@
  * linux/include/asm-arm/proc-armv/uaccess.h
  */
 
-#include <asm/hardware.h>
+#include <asm/arch/memory.h>
 #include <asm/proc/domain.h>
 
 /*
@@ -10,11 +10,6 @@
  */
 #define KERNEL_DS	0x00000000
 #define USER_DS		PAGE_OFFSET
-
-#define get_ds()	(KERNEL_DS)
-#define get_fs()	(current->addr_limit)
-
-#define segment_eq(a,b)	((a) == (b))
 
 extern __inline__ void set_fs (mm_segment_t fs)
 {
@@ -39,8 +34,6 @@ extern __inline__ void set_fs (mm_segment_t fs)
 		: "0" (current->addr_limit), "r" (addr) \
 		: "cc"); \
 	(flag == 0); })
-
-#define access_ok(type,addr,size) (__range_ok(addr,size) == 0)
 
 #define __put_user_asm_byte(x,addr,err)				\
 	__asm__ __volatile__(					\
@@ -172,6 +165,6 @@ extern unsigned long __arch_strncpy_from_user(char *to, const char *from, unsign
 #define __do_strncpy_from_user(dst,src,count,res)		\
 	(res) = __arch_strncpy_from_user(dst,src,count)
 
-extern unsigned long __arch_strlen_user(const char *s);
-#define __do_strlen_user(s,res)					\
-	(res) = __arch_strlen_user(s)
+extern unsigned long __arch_strnlen_user(const char *s, long n);
+#define __do_strnlen_user(s,n,res)					\
+	(res) = __arch_strnlen_user(s,n)

@@ -41,8 +41,6 @@ struct context_save_struct {
 	  domain_val(DOMAIN_KERNEL, DOMAIN_MANAGER) |			\
 	  domain_val(DOMAIN_IO, DOMAIN_CLIENT)
 
-#define SWAPPER_PG_DIR	(((unsigned long)swapper_pg_dir) - PAGE_OFFSET)
-
 #define start_thread(regs,pc,sp)					\
 ({									\
 	unsigned long *stack = (unsigned long *)sp;			\

@@ -494,8 +494,5 @@ void __init init_IRQ(void)
 	}
 
 	irq_init_irq();
-#ifdef CONFIG_ARCH_ACORN
-	init_FIQ();
-#endif
 	init_dma();
 }

@@ -362,6 +362,7 @@ static inline long open(const char *file, int flag, int mode)
 
 static inline long close(int fd)
 {
+	extern long sys_close(unsigned int);
 	return sys_close(fd);
 }
 
@@ -397,6 +398,3 @@ static inline _syscall3(int,execve,const char *,file,char **,argv,char **,envp);
 
 #endif
 #endif /* __ASM_ARM_UNISTD_H */
-
-
-

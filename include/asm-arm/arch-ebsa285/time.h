@@ -282,7 +282,7 @@ set_dummy_time(unsigned long secs)
  */
 extern __inline__ void setup_timer(void)
 {
-	if (machine_arch_type == MACH_TYPE_CO285)
+	if (machine_is_co285())
 		/*
 		 * Add-in 21285s shouldn't access the RTC
 		 */

@@ -34,19 +34,13 @@
 #define NO_DOOR_LOCKING 0
 #endif
 
-
-/* Size of buffer to allocate, in blocks, for audio reads. */
-
-#ifndef CDROM_NBLOCKS_BUFFER
-#define CDROM_NBLOCKS_BUFFER 8
-#endif
-
-
 /************************************************************************/
 
-#define SECTOR_SIZE 512
-#define SECTOR_BITS 9
-#define SECTORS_PER_FRAME (CD_FRAMESIZE / SECTOR_SIZE)
+#define SECTOR_SIZE		512
+#define SECTOR_BITS 		9
+#define SECTORS_PER_FRAME	(CD_FRAMESIZE / SECTOR_SIZE)
+#define SECTOR_BUFFER_SIZE	(CD_FRAMESIZE * 32)
+#define SECTORS_BUFFER		(SECTOR_BUFFER_SIZE / SECTOR_SIZE)
 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 
@@ -84,7 +78,8 @@ struct ide_cd_config_flags {
 	__u8 seeking		: 1; /* Seeking in progress */
 	__u8 audio_play		: 1; /* can do audio related commands */
 	__u8 close_tray		: 1; /* can close the tray */
-	__u8 reserved		: 4;
+	__u8 writing		: 1; /* pseudo write in progress */
+	__u8 reserved		: 3;
 	byte max_speed;		     /* Max speed of the drive */
 };
 #define CDROM_CONFIG_FLAGS(drive) (&(((struct cdrom_info *)(drive->driver_data))->config_flags))
@@ -488,12 +483,10 @@ struct atapi_slot {
 	byte reserved2[3];
 };
 
-
 struct atapi_changer_info {
 	struct atapi_mechstat_header hdr;
 	struct atapi_slot slots[0];
 };
-
 
 /* Extra per-device info for cdrom drives. */
 struct cdrom_info {
@@ -503,17 +496,9 @@ struct cdrom_info {
 
 	struct atapi_toc *toc;
 
-	/* Sector buffer.  If a read request wants only the first part
-	   of a cdrom block, we cache the rest of the block here,
-	   in the expectation that the data is going to be wanted soon.
-	   SECTOR_BUFFERED is the number of the first buffered sector,
-	   and NSECTORS_BUFFERED is the number of sectors in the buffer.
-	   Before the buffer is allocated, we should have
-	   SECTOR_BUFFER == NULL and NSECTORS_BUFFERED == 0. */
-
-	unsigned long sector_buffered;
-	unsigned long nsectors_buffered;
-	char *sector_buffer;
+	unsigned long	sector_buffered;
+	unsigned long	nsectors_buffered;
+	unsigned char	*buffer;
 
 	/* The result of the last successful request sense command
 	   on this device. */
@@ -533,10 +518,6 @@ struct cdrom_info {
         /* Per-device info needed by cdrom.c generic driver. */
         struct cdrom_device_info devinfo;
 };
-
-
-#define SECTOR_BUFFER_SIZE CD_FRAMESIZE
-
 
 /****************************************************************************
  * Descriptions of ATAPI error codes.
@@ -653,6 +634,7 @@ const struct {
 	{ 0x000013, "Play operation successfully completed" },
 	{ 0x000014, "Play operation stopped due to error" },
 	{ 0x000015, "No current audio status to return" },
+	{ 0x010c0a, "Write error - padding blocks added" },
 	{ 0x011700, "Recovered data with no error correction applied" },
 	{ 0x011701, "Recovered data with retries" },
 	{ 0x011702, "Recovered data with positive head offset" },
@@ -669,6 +651,7 @@ const struct {
 	{ 0x015d01, 
 	    "Failure prediction threshold exceeded - Predicted media failure" },
 	{ 0x015dff, "Failure prediction threshold exceeded - False" },
+	{ 0x017301, "Power calibration area almost full" },
 	{ 0x020400, "Logical unit not ready - cause not reportable" },
 	/* Following is misspelled in ATAPI 2.6, _and_ in Mt. Fuji */
 	{ 0x020401,
@@ -681,9 +664,35 @@ const struct {
 	{ 0x023a00, "Medium not present" },
 	{ 0x025300, "Media load or eject failed" },
 	{ 0x025700, "Unable to recover table of contents" },
+	{ 0x030300, "Peripheral device write fault" },
+	{ 0x030301, "No write current" },
+	{ 0x030302, "Excessive write errors" },
+	{ 0x030c00, "Write error" },
+	{ 0x030c01, "Write error - Recovered with auto reallocation" },
+	{ 0x030c02, "Write error - auto reallocation failed" },
+	{ 0x030c03, "Write error - recommend reassignment" },
+	{ 0x030c04, "Compression check miscompare error" },
+	{ 0x030c05, "Data expansion occurred during compress" },
+	{ 0x030c06, "Block not compressible" },
+	{ 0x030c07, "Write error - recovery needed" },
+	{ 0x030c08, "Write error - recovery failed" },
+	{ 0x030c09, "Write error - loss of streaming" },
 	{ 0x031100, "Unrecovered read error" },
 	{ 0x031106, "CIRC unrecovered error" },
 	{ 0x033101, "Format command failed" },
+	{ 0x033200, "No defect spare location available" },
+	{ 0x033201, "Defect list update failure" },
+	{ 0x035100, "Erase failure" },
+	{ 0x037200, "Session fixation error" },
+	{ 0x037201, "Session fixation error writin lead-in" },
+	{ 0x037202, "Session fixation error writin lead-out" },
+	{ 0x037300, "CD control error" },
+	{ 0x037302, "Power calibration area is full" },
+	{ 0x037303, "Power calibration area error" },
+	{ 0x037304, "Program memory area / RMA update failure" },
+	{ 0x037305, "Program memory area / RMA is full" },
+	{ 0x037306, "Program memory area / RMA is (almost) full" },
+
 	{ 0x040200, "No seek complete" },
 	{ 0x040300, "Write fault" },
 	{ 0x040900, "Track following error" },
@@ -701,11 +710,15 @@ const struct {
 	{ 0x052000, "Invalid command operation code" },
 	{ 0x052c00, "Command sequence error" },
 	{ 0x052100, "Logical block address out of range" },
+	{ 0x052102, "Invalid address for write" },
 	{ 0x052400, "Invalid field in command packet" },
 	{ 0x052600, "Invalid field in parameter list" },
 	{ 0x052601, "Parameter not supported" },
 	{ 0x052602, "Parameter value invalid" },
 	{ 0x052700, "Write protected media" },
+	{ 0x052c00, "Command sequence error" },
+	{ 0x052c03, "Current program area is not empty" },
+	{ 0x052c04, "Current program area is empty" },
 	{ 0x053001, "Cannot read medium - unknown format" },
 	{ 0x053002, "Cannot read medium - incompatible format" },
 	{ 0x053900, "Saving parameters not supported" },
@@ -714,11 +727,15 @@ const struct {
 	{ 0x055500, "System resource failure" },
 	{ 0x056300, "End of user area encountered on this track" },
 	{ 0x056400, "Illegal mode for this track or incompatible medium" },
-	{ 0x056f00, 
-	    "Copy protection key exchange failure - Authentication failure" },
+	{ 0x056f00, "Copy protection key exchange failure - Authentication failure" },
 	{ 0x056f01, "Copy protection key exchange failure - Key not present" },
-	{ 0x056f02, 
-	    "Copy protection key exchange failure - Key not established" },
+	{ 0x056f02, "Copy protection key exchange failure - Key not established" },
+	{ 0x056f03, "Read of scrambled sector without authentication" },
+	{ 0x056f04, "Media region code is mismatched to logical unit" },
+	{ 0x056f05,  "Drive region must be permanent / region reset count error" },
+	{ 0x057203, "Session fixation error - incomplete track in session" },
+	{ 0x057204, "Empty or partially written reserved track" },
+	{ 0x057205, "No more RZONE reservations are allowed" },
 	{ 0x05bf00, "Loss of streaming" },
 	{ 0x062800, "Not ready to ready transition, medium may have changed" },
 	{ 0x062900, "Power on, reset or hardware reset occurred" },

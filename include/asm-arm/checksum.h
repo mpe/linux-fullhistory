@@ -9,10 +9,6 @@
 #ifndef __ASM_ARM_CHECKSUM_H
 #define __ASM_ARM_CHECKSUM_H
 
-#ifndef __ASM_ARM_SEGMENT_H
-#include <asm/segment.h>
-#endif
-
 /*
  * computes the checksum of a memory block at buff, length len,
  * and adds in "sum" (32-bit)
@@ -64,17 +60,14 @@ csum_partial_copy(const char *src, char *dst, int len, int sum);
  *	which always checksum on 4 octet boundaries.
  *
  *	Converted and optimised for ARM by R. M. King.
- *
- *	Note: the order that the LDM registers are loaded with respect to
- *	the adc's doesn't matter.
  */
 static inline unsigned short
 ip_fast_csum(unsigned char * iph, unsigned int ihl)
 {
 	unsigned int sum, tmp1;
 
-    __asm__ __volatile__("
-	sub	%2, %2, #5
+    __asm__ __volatile__(
+	"sub	%2, %2, #5		@ ip_fast_csum 
 	ldr	%0, [%1], #4
 	ldr	%3, [%1], #4
 	adds	%0, %0, %3
@@ -94,7 +87,8 @@ ip_fast_csum(unsigned char * iph, unsigned int ihl)
 	mov	%0, %0, lsr #16
 	"
 	: "=&r" (sum), "=&r" (iph), "=&r" (ihl), "=&r" (tmp1)
-	: "1" (iph), "2" (ihl));
+	: "1" (iph), "2" (ihl)
+	: "cc");
 	return(sum);
 }
 
@@ -104,25 +98,28 @@ ip_fast_csum(unsigned char * iph, unsigned int ihl)
 static inline unsigned int
 csum_fold(unsigned int sum)
 {
-	__asm__("
-	adds	%0, %0, %0, lsl #16
+	__asm__(
+	"adds	%0, %1, %1, lsl #16	@ csum_fold
 	addcs	%0, %0, #0x10000"
 	: "=r" (sum)
-	: "0" (sum));
+	: "r" (sum)
+	: "cc");
 	return (~sum) >> 16;
 }
 
-static inline unsigned long
+static inline unsigned int
 csum_tcpudp_nofold(unsigned long saddr, unsigned long daddr, unsigned short len,
-		   unsigned short proto, unsigned int sum)
+		   unsigned int proto, unsigned int sum)
 {
-	__asm__("
-	adds	%0, %0, %1
-	adcs	%0, %0, %2
+	__asm__(
+	"adds	%0, %1, %2		@ csum_tcpudp_nofold
 	adcs	%0, %0, %3
+	adcs	%0, %0, %4
+	adcs	%0, %0, %5
 	adc	%0, %0, #0"
-	: "=&r"(sum)
-	: "r" (daddr), "r" (saddr), "r" ((ntohs(len)<<16)+proto*256), "0" (sum));
+	: "=r"(sum)
+	: "r" (sum), "r" (daddr), "r" (saddr), "r" (ntohs(len) << 16), "Ir" (proto*256)
+	: "cc");
 	return sum;
 }	
 /*
@@ -131,7 +128,7 @@ csum_tcpudp_nofold(unsigned long saddr, unsigned long daddr, unsigned short len,
  */
 static inline unsigned short int
 csum_tcpudp_magic(unsigned long saddr, unsigned long daddr, unsigned short len,
-		  unsigned short proto, unsigned int sum)
+		  unsigned int proto, unsigned int sum)
 {
 	return csum_fold(csum_tcpudp_nofold(saddr, daddr, len, proto, sum));
 }

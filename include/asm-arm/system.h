@@ -18,9 +18,15 @@
 #define __netwinder_text
 #endif
 
+/* information about the system we're running on */
+extern unsigned int system_rev;
+extern unsigned int system_serial_low;
+extern unsigned int system_serial_high;
+
 /* The type of machine we're running on */
 extern unsigned int __machine_arch_type;
 
+/* see arch/arm/kernel/setup.c for a description of these */
 #define MACH_TYPE_EBSA110	0
 #define MACH_TYPE_RISCPC	1
 #define MACH_TYPE_NEXUSPCI	3
@@ -32,7 +38,10 @@ extern unsigned int __machine_arch_type;
 #define MACH_TYPE_CLPS7110	9
 #define MACH_TYPE_ARCHIMEDES	10
 #define MACH_TYPE_A5K		11
-#define MACH_TYPE_SA1100	12	/* not allocated!!! */
+#define MACH_TYPE_ETOILE	12
+#define MACH_TYPE_LACIE_NAS	13
+#define MACH_TYPE_CLPS7500	14
+#define MACH_TYPE_SHARK		15
 
 /*
  * Sort out a definition for machine_arch_type
@@ -127,14 +136,12 @@ extern unsigned int __machine_arch_type;
 #define tas(ptr) (xchg((ptr),1))
 
 extern void arm_malalignedptr(const char *, void *, volatile void *);
-extern void arm_invalidptr(const char *, int);
 extern asmlinkage void __backtrace(void);
 
 /*
  * Include processor dependent parts
  */
 #include <asm/proc/system.h>
-#include <asm/arch/system.h>
 
 #define mb() __asm__ __volatile__ ("" : : : "memory")
 #define rmb() mb()

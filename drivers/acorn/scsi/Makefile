@@ -108,14 +108,8 @@ endif
 
 include $(TOPDIR)/Rules.make
 
+.S.o:
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c -o $*.o $<
+
 acornscsi_mod.o: acornscsi.o acornscsi-io.o
 	$(LD) $(LD_RFLAG) -r -o $@ acornscsi.o acornscsi-io.o
-
-%.o: %.S
-ifndef $(CONFIG_BINUTILS_NEW)
-	$(CC) $(CFLAGS) -D__ASSEMBLY__ -E $< | tr ';$$' '\n#' > ..tmp.$<.s
-	$(CC) $(CFLAGS:-pipe=) -c -o $@ ..tmp.$<.s
-	$(RM) ..tmp.$<.s
-else
-	$(CC) $(CFLAGS) -D__ASSEMBLY__ -c -o $@ $<
-endif

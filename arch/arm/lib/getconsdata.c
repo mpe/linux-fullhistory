@@ -6,7 +6,7 @@
 #include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
-#include <linux/unistd.h>
+
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
 
@@ -14,13 +14,6 @@
 
 #define OFF_TSK(n) (unsigned long)&(((struct task_struct *)0)->n)
 #define OFF_MM(n) (unsigned long)&(((struct mm_struct *)0)->n)
-
-#ifdef KERNEL_DOMAIN
-unsigned long DOM_KERNELDOMAIN = KERNEL_DOMAIN;
-#endif
-#ifdef USER_DOMAIN
-unsigned long DOM_USERDOMAIN = USER_DOMAIN;
-#endif
 
 unsigned long TSK_STATE = OFF_TSK(state);
 unsigned long TSK_FLAGS = OFF_TSK(flags);
@@ -34,10 +27,7 @@ unsigned long PGD = OFF_MM(pgd);
 
 unsigned long TSS_SAVE = OFF_TSK(thread.save);
 unsigned long TSS_FPESAVE = OFF_TSK(thread.fpstate.soft.save);
-#ifdef CONFIG_CPU_26
-unsigned long TSS_MEMMAP = OFF_TSK(thread.memmap);
-unsigned long TSS_MEMCMAP = OFF_TSK(thread.memcmap);
-#elif defined(CONFIG_CPU_32)
+#ifdef CONFIG_CPU_32
 unsigned long TSS_DOMAIN = OFF_TSK(thread.domain);
 #endif
 
@@ -85,6 +75,8 @@ unsigned long LPTE_WRITE      = L_PTE_WRITE;
 unsigned long LPTE_EXEC       = L_PTE_EXEC;
 unsigned long LPTE_DIRTY      = L_PTE_DIRTY;
 #endif
+
+unsigned long PAGE_SZ = PAGE_SIZE;
 
 unsigned long KSWI_BASE = 0x900000;
 unsigned long KSWI_SYS_BASE = 0x9f0000;

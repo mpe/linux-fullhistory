@@ -447,8 +447,8 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			unsigned long tmp;
 
 			ret = read_long(child, addr, &tmp);
-			if (ret)
-				put_user(tmp, (unsigned long *) data);
+			if (!ret)
+				ret = put_user(tmp, (unsigned long *) data);
 			goto out;
 		}
 

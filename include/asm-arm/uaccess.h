@@ -5,6 +5,7 @@
  * User space memory access functions
  */
 #include <linux/sched.h>
+#include <asm/errno.h>
 
 #define VERIFY_READ 0
 #define VERIFY_WRITE 1
@@ -30,11 +31,17 @@ struct exception_table_entry
 /* Returns 0 if exception not found and fixup otherwise.  */
 extern unsigned long search_exception_table(unsigned long);
 
+#define get_ds()	(KERNEL_DS)
+#define get_fs()	(current->addr_limit)
+#define segment_eq(a,b)	((a) == (b))
+
 #include <asm/proc/uaccess.h>
 
-extern inline int verify_area(int type, const void * addr, unsigned long size)
+#define access_ok(type,addr,size)	(__range_ok(addr,size) == 0)
+
+extern __inline__ int verify_area(int type, const void * addr, unsigned long size)
 {
-	return access_ok(type,addr,size) ? 0 : -EFAULT;
+	return access_ok(type, addr, size) ? 0 : -EFAULT;
 }
 
 /*
@@ -121,12 +128,14 @@ static __inline__ long __strncpy_from_user (char *dst, const char *src, long cou
 	return res;
 }
 
-extern __inline__ long strlen_user (const char *s)
+#define strlen_user(s)	strnlen_user(s, ~0UL >> 1)
+
+extern __inline__ long strnlen_user(const char *s, long n)
 {
 	unsigned long res = 0;
 
 	if (__addr_ok(s))
-		__do_strlen_user (s, res);
+		__do_strnlen_user(s, n, res);
 
 	return res;
 }

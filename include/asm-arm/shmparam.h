@@ -1,12 +1,6 @@
 #ifndef _ASMARM_SHMPARAM_H
 #define _ASMARM_SHMPARAM_H
 
-/*
- * Include the machine specific shm parameters before the processor
- * dependent parameters so that the machine parameters can override
- * the processor parameters
- */
-#include <asm/arch/shmparam.h>
 #include <asm/proc/shmparam.h>
 
 /*

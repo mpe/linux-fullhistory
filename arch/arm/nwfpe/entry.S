@@ -3,7 +3,7 @@
     (c) Corel Computer Corporation, 1998
     (c) Philip Blundell 1998-1999
 
-    Direct questions, comments to Scott Bambrough <scottb@corelcomputer.com>
+    Direct questions, comments to Scott Bambrough <scottb@netwinder.org>
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -85,14 +85,15 @@ nwfpe_enter:
         mov r10, lr			@ save the failure-return addresses
 
         ldr r5, [r4, #60]	 	@ get contents of PC;
-	ldr r0, [r5, #-4]		@ get actual instruction into r0
+	sub r8, r5, #4
+.Lx2:	ldrt r0, [r8], #0		@ get actual instruction into r0
 emulate:
 	bl EmulateAll			@ emulate the instruction
    	cmp r0, #0			@ was emulation successful
         moveq pc, r10			@ no, return failure
 
 next:
-__x1:	ldrt	r6, [r5], #4		@ get the next instruction and
+.Lx1:	ldrt r6, [r5], #4		@ get the next instruction and
 					@ increment PC
 
 	and   r2, r6, #0x0F000000	@ test for FP insns
@@ -114,13 +115,15 @@ __x1:	ldrt	r6, [r5], #4		@ get the next instruction and
         mov r0, r6			@ prepare for EmulateAll()
    	b emulate			@ if r0 != 0, goto EmulateAll
 
-	@ We need to be prepared for the instruction at __x1 to fault.
-	@ Emit the appropriate exception gunk to fix things up.
+	@ We need to be prepared for the instruction at .Lx1 or .Lx2
+	@ to fault.
 	.section .fixup,"ax"
 	.align
-__f1:	mov	pc, r9
+.Lfix:	mov	pc, r9
 	.previous
+
 	.section __ex_table,"a"
 	.align 3
-	.long	__x1, __f1
+	.long	.Lx2, .Lfix
+	.long	.Lx1, .Lfix
 	.previous

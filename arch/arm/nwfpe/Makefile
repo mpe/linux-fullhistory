@@ -14,16 +14,15 @@ else
 NWFPE_OBJS += entry.o
 endif
 
-L_TARGET := math-emu.a
-
 ifeq ($(CONFIG_NWFPE),y)
-L_OBJS = $(NWFPE_OBJS)
+O_TARGET := math-emu.o
+O_OBJS = $(NWFPE_OBJS)
 else
   ifeq ($(CONFIG_NWFPE),m)
     M_OBJS = nwfpe.o
     MI_OBJS = $(NWFPE_OBJS)
   endif
-endif    
+endif
 
 include $(TOPDIR)/Rules.make
 

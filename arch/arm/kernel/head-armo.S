@@ -1,5 +1,5 @@
 /*
- * linux/arch/arm/kernel/head.S
+ * linux/arch/arm/kernel/head-armo.S
  *
  * Copyright (C) 1994, 1995, 1996, 1997 Russell King
  *
@@ -7,11 +7,13 @@
  */
 #include <linux/linkage.h>
 
-		.text
-		.align
+		.globl	SYMBOL_NAME(swapper_pg_dir)
+		.equ	SYMBOL_NAME(swapper_pg_dir),	0x0207d000
+
 /*
  * Entry point.
  */
+		.section ".text.init",#alloc,#execinstr
 ENTRY(stext)
 ENTRY(_stext)
 __entry:	cmp	pc, #0x02000000

@@ -19,7 +19,6 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#include "config.h"
 #include "fpa11.h"
 #include "fpopcode.h"
 
@@ -48,14 +47,14 @@ unsigned int EmulateCPDO(const unsigned int opcode)
    if (MONADIC_INSTRUCTION(opcode))
      nType = nDest;
    else
-     nType = fpa11->fpreg[getFn(opcode)].fType;
+     nType = fpa11->fType[getFn(opcode)];
    
    if (!CONSTANT_FM(opcode))
    {
      register unsigned int Fm = getFm(opcode);
-     if (nType < fpa11->fpreg[Fm].fType)
+     if (nType < fpa11->fType[Fm])
      {
-        nType = fpa11->fpreg[Fm].fType;
+        nType = fpa11->fType[Fm];
      }
    }
 
@@ -71,7 +70,7 @@ unsigned int EmulateCPDO(const unsigned int opcode)
       destination register is the correct size.  If not force it
       to be. */
    Fd = getFd(opcode);
-   nType = fpa11->fpreg[Fd].fType;
+   nType = fpa11->fType[Fd];
    if ((0 != nRc) && (nDest != nType))
    {
      switch (nDest)
@@ -79,38 +78,38 @@ unsigned int EmulateCPDO(const unsigned int opcode)
        case typeSingle:
        {
          if (typeDouble == nType)
-           fpa11->fpreg[Fd].fValue.fSingle = 
-              float64_to_float32(fpa11->fpreg[Fd].fValue.fDouble);
+           fpa11->fpreg[Fd].fSingle = 
+              float64_to_float32(fpa11->fpreg[Fd].fDouble);
          else
-           fpa11->fpreg[Fd].fValue.fSingle = 
-              floatx80_to_float32(fpa11->fpreg[Fd].fValue.fExtended);
+           fpa11->fpreg[Fd].fSingle = 
+              floatx80_to_float32(fpa11->fpreg[Fd].fExtended);
        }
        break;
           
        case typeDouble:
        {
          if (typeSingle == nType)
-           fpa11->fpreg[Fd].fValue.fDouble = 
-              float32_to_float64(fpa11->fpreg[Fd].fValue.fSingle);
+           fpa11->fpreg[Fd].fDouble = 
+              float32_to_float64(fpa11->fpreg[Fd].fSingle);
          else
-           fpa11->fpreg[Fd].fValue.fDouble = 
-              floatx80_to_float64(fpa11->fpreg[Fd].fValue.fExtended);
+           fpa11->fpreg[Fd].fDouble = 
+              floatx80_to_float64(fpa11->fpreg[Fd].fExtended);
        }
        break;
           
        case typeExtended:
        {
          if (typeSingle == nType)
-           fpa11->fpreg[Fd].fValue.fExtended = 
-              float32_to_floatx80(fpa11->fpreg[Fd].fValue.fSingle);
+           fpa11->fpreg[Fd].fExtended = 
+              float32_to_floatx80(fpa11->fpreg[Fd].fSingle);
          else
-           fpa11->fpreg[Fd].fValue.fExtended = 
-              float64_to_floatx80(fpa11->fpreg[Fd].fValue.fDouble);
+           fpa11->fpreg[Fd].fExtended = 
+              float64_to_floatx80(fpa11->fpreg[Fd].fDouble);
        }
        break;
      }
      
-     fpa11->fpreg[Fd].fType = nDest;
+     fpa11->fType[Fd] = nDest;
    }
    
    return nRc;

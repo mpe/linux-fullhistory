@@ -49,7 +49,7 @@
 #define SCREEN1_BASE		0x01f88000
 
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 /*
  * for use with inb/outb
@@ -101,5 +101,17 @@
 #define PCIO_BASE		0x03010000
 
 #endif
+
+#ifdef HAS_EXPMASK
+#ifndef __ASSEMBLY__
+#define __EXPMASK(offset)	(((volatile unsigned char *)EXPMASK_BASE)[offset])
+#else
+#define __EXPMASK(offset)	offset
 #endif
 
+#define	EXPMASK_STATUS	__EXPMASK(0x00)
+#define EXPMASK_ENABLE	__EXPMASK(0x04)
+
+#endif
+
+#endif

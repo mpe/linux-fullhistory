@@ -293,10 +293,10 @@ void hpfs_remove_btree(struct super_block *s, struct bplus_header *btree)
 	if (!level) return;
 	if (s->s_hpfs_chk)
 		if (hpfs_stop_cycles(s, ano, &c1, &c2, "hpfs_remove_btree #2")) return;
+	brelse(bh);
 	hpfs_free_sectors(s, ano, 1);
 	oano = ano;
 	ano = anode->up;
-	brelse(bh);
 	if (--level) {
 		anode = hpfs_map_anode(s, ano, &bh);
 		btree1 = &anode->btree;

@@ -138,7 +138,7 @@ static void __netwinder_text netwinder_leds_event(led_event_t evt)
 	switch (evt) {
 	case led_start:
 		led_state |= LED_STATE_ENABLED;
-		hw_led_state = 0;
+		hw_led_state = GPIO_GREEN_LED;
 		break;
 
 	case led_stop:
@@ -223,25 +223,19 @@ static void dummy_leds_event(led_event_t evt)
 {
 }
 
-void __init
+static void __init
 init_leds_event(led_event_t evt)
 {
-	switch (machine_arch_type) {
+	leds_event = dummy_leds_event;
+
 #ifdef CONFIG_FOOTBRIDGE
-	case MACH_TYPE_EBSA285:
-	case MACH_TYPE_CO285:
+	if (machine_is_ebsa285() || machine_is_co285())
 		leds_event = ebsa285_leds_event;
-		break;
 #endif
 #ifdef CONFIG_ARCH_NETWINDER
-	case MACH_TYPE_NETWINDER:
+	if (machine_is_netwinder())
 		leds_event = netwinder_leds_event;
-		break;
 #endif
-
-	default:
-		leds_event = dummy_leds_event;
-	}
 
 	leds_event(evt);
 }

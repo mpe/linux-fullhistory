@@ -10,7 +10,7 @@
  *  26-Jan-1999	PJB	Don't use IACK on CATS
  *  16-Mar-1999	RMK	Added autodetect of ISA PICs
  */
-#include <linux/config.h>
+/* no need for config.h - arch/arm/kernel/irq.c does this for us */
 #include <asm/hardware.h>
 #include <asm/dec21285.h>
 #include <asm/irq.h>
@@ -135,28 +135,21 @@ static __inline__ void irq_init_irq(void)
 	 * Determine the ISA settings for
 	 * the machine we're running on.
 	 */
-	switch (machine_arch_type) {
-	default:
-		isa_irq = -1;
-		break;
+	isa_irq = -1;
 
-	case MACH_TYPE_EBSA285:
+	if (machine_is_ebsa285())
 		/* The following is dependent on which slot
 		 * you plug the Southbridge card into.  We
 		 * currently assume that you plug it into
 		 * the right-hand most slot.
 		 */
 		isa_irq = IRQ_PCI;
-		break;
 
-	case MACH_TYPE_CATS:
+	if (machine_is_cats())
 		isa_irq = IRQ_IN2;
-		break;
 
-	case MACH_TYPE_NETWINDER:
+	if (machine_is_netwinder())
 		isa_irq = IRQ_IN3;
-		break;
-	}
 
 	if (isa_irq != -1) {
 		/*
@@ -176,8 +169,6 @@ static __inline__ void irq_init_irq(void)
 		outb(0x01, PIC_MASK_HI);	/* x86			*/
 		outb(0xfa, PIC_MASK_HI);	/* pattern: 11111010	*/
 
-//		outb(0x68, PIC_LO);		/* enable special mode	*/
-//		outb(0x68, PIC_HI);		/* enable special mode	*/
 		outb(0x0b, PIC_LO);
 		outb(0x0b, PIC_HI);
 

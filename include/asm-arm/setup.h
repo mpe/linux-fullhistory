@@ -1,12 +1,23 @@
 /*
  * include/asm/setup.h
  *
- * Structure passed to kernel to tell it about the hardware it's running on
+ * Structure passed to kernel to tell it about the
+ * hardware it's running on.  See linux/Documentation/arm/Setup
+ * for more info.
  *
- * Copyright (C) 1997,1998 Russell King
+ * Copyright (C) 1997-1999 Russell King
  */
 #ifndef __ASMARM_SETUP_H
 #define __ASMARM_SETUP_H
+
+/*
+ * Usage:
+ *  - do not go blindly adding fields, add them at the end
+ *  - when adding fields, don't rely on the address until
+ *    a patch from me has been released
+ *  - unused fields should be zero (for future expansion)
+ */
+#define COMMAND_LINE_SIZE 1024
 
 struct param_struct {
     union {
@@ -33,6 +44,9 @@ struct param_struct {
 	    unsigned long initrd_start;		/* 64 */
 	    unsigned long initrd_size;		/* 68 */
 	    unsigned long rd_start;		/* 72 */
+	    unsigned long system_rev;		/* 76 */
+	    unsigned long system_serial_low;	/* 80 */
+	    unsigned long system_serial_high;	/* 84 */
 	} s;
 	char unused[256];
     } u1;
@@ -43,7 +57,7 @@ struct param_struct {
 	    char n[1024 - sizeof(unsigned long)];
 	} s;
     } u2;
-    char commandline[256];
+    char commandline[COMMAND_LINE_SIZE];
 };
 
 #endif

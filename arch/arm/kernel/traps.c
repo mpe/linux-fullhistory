@@ -365,7 +365,6 @@ asmlinkage void baddataabort(int code, unsigned long instr, struct pt_regs *regs
 	{
 		pgd_t *pgd;
 
-		printk ("current->thread.memmap = %08lX\n", current->thread.memmap);
 		pgd = pgd_offset(current->mm, addr);
 		printk ("*pgd = %08lx", pgd_val (*pgd));
 		if (!pgd_none (*pgd)) {

@@ -58,91 +58,96 @@ void hpfs_truncate(struct inode *i)
 	hpfs_write_inode(i);
 }
 
-int hpfs_getblk_block(struct inode *inode, long block, int create, int *err, int *created)
+int hpfs_get_block(struct inode *inode, long iblock, struct buffer_head *bh_result, int create)
 {
-	int add;
-	int sec = 0;
-	down(&inode->i_sem);
-	if (err) *err = 0;
-	if (created) *created = 0;
-	if (!inode->i_blocks) {
-		hpfs_error(inode->i_sb, "hpfs_get_block: inode %08x has no blocks", inode->i_ino);
-		if (err) *err = -EFSERROR;
-		up(&inode->i_sem);
+	secno s;
+	if (iblock < inode->i_blocks - 1) {
+		s = hpfs_bmap(inode, iblock);
+		bh_result->b_dev = inode->i_dev;
+		bh_result->b_blocknr = s;
+		bh_result->b_state |= (1UL << BH_Mapped);
 		return 0;
 	}
-	if (block < ((add = inode->i_blocks - 1))) {
-		int bm;
-		if (!(bm = hpfs_bmap(inode, block))) {
-			hpfs_error(inode->i_sb, "hpfs_get_block: cound not bmap block %08x, inode %08x, size %08x", (int)block, inode->i_ino, (int)inode->i_size);
-			*err = -EFSERROR;
-		}
-		up(&inode->i_sem);
-		return bm;
+	if (!create) return 0;
+	if (iblock > inode->i_blocks - 1) {
+		//hpfs_error(inode->i_sb, "hpfs_get_block beyond file end (requested %08x, inode size %08x", (int)iblock, (int)inode->i_blocks - 1);
+		printk("HPFS: could not write beyond file end. This is known bug.\n");
+		return -EFSERROR;
 	}
-	if (!create) {
-		if (err) *err = -EFBIG;
-		up(&inode->i_sem);
-		return 0;
+	if ((s = hpfs_add_sector_to_btree(inode->i_sb, inode->i_ino, 1, inode->i_blocks - 1)) == -1) {
+		hpfs_truncate_btree(inode->i_sb, inode->i_ino, 1, inode->i_blocks - 1);
+		return -ENOSPC;
 	}
-	if (created) *created = 1;
-	while (add <= block) {
-		if ((sec = hpfs_add_sector_to_btree(inode->i_sb, inode->i_ino, 1, add)) == -1) {
-			if (err) *err = -ENOSPC;
-			hpfs_truncate_btree(inode->i_sb, inode->i_ino, 1, inode->i_blocks - 1);
-			return 0;
-		} /* FIXME: clear block */
-		add++;
-	}
-	inode->i_blocks = add + 1;
-	up(&inode->i_sem);
-	return sec;
+	inode->i_blocks++;
+	bh_result->b_dev = inode->i_dev;
+	bh_result->b_blocknr = s;
+	bh_result->b_state |= (1UL << BH_Mapped) | (1UL << BH_New);
+	return 0;
 }
 
-/* copied from ext2fs */
-static int hpfs_get_block(struct inode *inode, unsigned long block, struct buffer_head *bh, int update)
+static int hpfs_write_partial_page(struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf)
 {
-	if (!bh->b_blocknr) {
-		int error, created;
-		unsigned long blocknr;
+	struct dentry *dentry = file->f_dentry;
+	struct inode *inode = dentry->d_inode;
+	struct page *new_page, **hash;
+	unsigned long pgpos;
+	unsigned long page_cache = 0;
+	long status;
 
-		blocknr = hpfs_getblk_block(inode, block, 1, &error, &created);
-		if (!blocknr) {
-			if (!error)
-				error = -ENOSPC;
-			return error;
+	printk("- off: %08x\n", (int)page->offset);
+	pgpos = (inode->i_blocks - 1) * 512 & PAGE_CACHE_MASK;
+	while (pgpos < page->offset) {
+long pgp = pgpos;
+		printk("pgpos: %08x, bl: %d\n", (int)pgpos, (int)inode->i_blocks);
+		hash = page_hash(inode, pgpos);
+repeat_find:	new_page = __find_lock_page(inode, pgpos, hash);
+		if (!new_page) {
+			if (!page_cache) {
+				page_cache = page_cache_alloc();
+				if (page_cache)
+					goto repeat_find;
+				status = -ENOMEM;
+				goto out;
+			}
+			new_page = page_cache_entry(page_cache);
+			if (add_to_page_cache_unique(new_page,inode,pgpos,hash))
+				goto repeat_find;
+			page_cache = 0;
 		}
-
-		bh->b_dev = inode->i_dev;
-		bh->b_blocknr = blocknr;
-
-		if (!update)
-			return 0;
-
-		if (created) {
-			memset(bh->b_data, 0, bh->b_size);
-			set_bit(BH_Uptodate, &bh->b_state);
-			return 0;
+		printk("A\n");
+		status = block_write_cont_page(file, new_page, PAGE_SIZE, 0, NULL);
+		printk("B\n");
+		UnlockPage(new_page);
+		page_cache_release(new_page);
+		if (status < 0)
+			goto out;
+		pgpos = (inode->i_blocks - 1) * 512 & PAGE_CACHE_MASK;
+		printk("pgpos2: %08x, bl: %d\n", (int)pgpos, (int)inode->i_blocks);
+		if (pgpos == pgp) {
+			status = -1;
+			printk("ERROR\n");
+			goto out;
 		}
 	}
-
-	if (!update)
-		return 0;
-
-	lock_kernel();
-	ll_rw_block(READ, 1, &bh);
-	wait_on_buffer(bh);
-	unlock_kernel();
-
-	return buffer_uptodate(bh) ? 0 : -EIO;
+	//if ((status = block_write_cont_page(file, page, PAGE_SIZE, 0, NULL)) < 0) goto out;
+	printk("C\n");
+	status = block_write_cont_page(file, page, offset, bytes, buf);
+	printk("D\n");
+out:
+	printk("O\n");
+	if (page_cache)
+		page_cache_free(page_cache);
+	printk("E\n");
+	return status;
 }
+
 
 ssize_t hpfs_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 {
 	ssize_t retval;
 
 	retval = generic_file_write(file, buf, count,
-				    ppos, block_write_partial_page);
+				    ppos, /*hpfs_write_partial_page*/block_write_partial_page);
 	if (retval > 0) {
 		struct inode *inode = file->f_dentry->d_inode;
 		inode->i_mtime = CURRENT_TIME;

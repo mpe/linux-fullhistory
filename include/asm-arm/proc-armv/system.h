@@ -11,6 +11,8 @@ extern const char xchg_str[];
 
 extern __inline__ unsigned long __xchg(unsigned long x, volatile void *ptr, int size)
 {
+	extern void arm_invalidptr(const char *, int);
+
 	switch (size) {
 		case 1:	__asm__ __volatile__ ("swpb %0, %1, [%2]" : "=r" (x) : "r" (x), "r" (ptr) : "memory");
 			break;
@@ -31,16 +33,6 @@ extern __inline__ unsigned long __xchg(unsigned long x, volatile void *ptr, int 
 
 extern unsigned long cr_no_alignment;	/* defined in entry-armv.S */
 extern unsigned long cr_alignment;	/* defined in entry-armv.S */
-
-/*
- * We can wait for an interrupt...
- */
-#define proc_idle()						\
-	do {							\
-	__asm__ __volatile__(					\
-"	mcr	p15, 0, %0, c15, c8, 2	@ proc_idle"		\
-	  : : "r" (0));						\
-	} while (0)
 
 /*
  * A couple of speedups for the ARM

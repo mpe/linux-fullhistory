@@ -27,8 +27,12 @@
  * FIFO.  Unfortunately, it is not possible to tell the DC21285 to
  * flush this - flushing the area causes the bus to lock.
  */
-
+#include <linux/errno.h>
+#include <linux/mm.h>
 #include <linux/vmalloc.h>
+
+#include <asm/page.h>
+#include <asm/pgtable.h>
 #include <asm/io.h>
 
 static inline void remap_area_pte(pte_t * pte, unsigned long address, unsigned long size,
@@ -145,5 +149,5 @@ void * __ioremap(unsigned long phys_addr, unsigned long size, unsigned long flag
 
 void __iounmap(void *addr)
 {
-	return vfree((void *) (PAGE_MASK & (unsigned long) addr));
+	vfree((void *) (PAGE_MASK & (unsigned long) addr));
 }

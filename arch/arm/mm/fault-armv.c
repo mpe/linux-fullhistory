@@ -25,103 +25,11 @@
 #include <asm/unaligned.h>
 
 #define FAULT_CODE_READ		0x02
-#define FAULT_CODE_USER		0x01
 
 #define DO_COW(m)		(!((m) & FAULT_CODE_READ))
 #define READ_FAULT(m)		((m) & FAULT_CODE_READ)
 
 #include "fault-common.c"
-
-/*
- * need to get a 16k page for level 1
- */
-pgd_t *get_pgd_slow(void)
-{
-	pgd_t *pgd = (pgd_t *)__get_free_pages(GFP_KERNEL,2);
-	pgd_t *init;
-	pmd_t *new_pmd;
-
-	if (pgd) {
-		init = pgd_offset(&init_mm, 0);
-		memzero(pgd, USER_PTRS_PER_PGD * BYTES_PER_PTR);
-		memcpy(pgd + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
-			(PTRS_PER_PGD - USER_PTRS_PER_PGD) * BYTES_PER_PTR);
-		clean_cache_area(pgd, PTRS_PER_PGD * BYTES_PER_PTR);
-
-		/*
-		 * On ARM, first page must always be allocated
-		 */
-		if (!pmd_alloc(pgd, 0))
-			goto nomem;
-		else {
-			pmd_t *old_pmd = pmd_offset(init, 0);
-			new_pmd = pmd_offset(pgd, 0);
-
-			if (!pte_alloc(new_pmd, 0))
-				goto nomem_pmd;
-			else {
-				pte_t *new_pte = pte_offset(new_pmd, 0);
-				pte_t *old_pte = pte_offset(old_pmd, 0);
-
-				set_pte (new_pte, *old_pte);
-			}
-		}
-	}
-	return pgd;
-
-nomem_pmd:
-	pmd_free(new_pmd);
-nomem:
-	return NULL;
-}
-
-pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
-{
-	pte_t *pte;
-
-	pte = (pte_t *)get_page_2k(GFP_KERNEL);
-	if (pmd_none(*pmd)) {
-		if (pte) {
-			memzero(pte, 2 * PTRS_PER_PTE * BYTES_PER_PTR);
-			clean_cache_area(pte, PTRS_PER_PTE * BYTES_PER_PTR);
-			pte += PTRS_PER_PTE;
-			set_pmd(pmd, mk_user_pmd(pte));
-			return pte + offset;
-		}
-		set_pmd(pmd, mk_user_pmd(BAD_PAGETABLE));
-		return NULL;
-	}
-	free_page_2k((unsigned long)pte);
-	if (pmd_bad(*pmd)) {
-		__bad_pmd(pmd);
-		return NULL;
-	}
-	return (pte_t *) pmd_page(*pmd) + offset;
-}
-
-pte_t *get_pte_kernel_slow(pmd_t *pmd, unsigned long offset)
-{
-	pte_t *pte;
-
-	pte = (pte_t *)get_page_2k(GFP_KERNEL);
-	if (pmd_none(*pmd)) {
-		if (pte) {
-			memzero(pte, 2 * PTRS_PER_PTE * BYTES_PER_PTR);
-			clean_cache_area(pte, PTRS_PER_PTE * BYTES_PER_PTR);
-			pte += PTRS_PER_PTE;
-			set_pmd(pmd, mk_kernel_pmd(pte));
-			return pte + offset;
-		}
-		set_pmd(pmd, mk_kernel_pmd(BAD_PAGETABLE));
-		return NULL;
-	}
-	free_page_2k((unsigned long)pte);
-	if (pmd_bad(*pmd)) {
-		__bad_pmd_kernel(pmd);
-		return NULL;
-	}
-	return (pte_t *) pmd_page(*pmd) + offset;
-}
 
 #ifdef DEBUG
 static int sp_valid(unsigned long *sp)
@@ -406,6 +314,10 @@ do_alignment_exception(struct pt_regs *regs)
 
 #endif
 
+#define BUG_PROC_MSG \
+  "Buggy processor (%08X), trying to continue.\n" \
+  "Please read http://www.arm.linux.org.uk/state.html for more information"
+
 asmlinkage void
 do_DataAbort(unsigned long addr, int fsr, int error_code, struct pt_regs *regs)
 {
@@ -416,17 +328,11 @@ do_DataAbort(unsigned long addr, int fsr, int error_code, struct pt_regs *regs)
 				/*
 				 * I want statistical information on this problem!
 				 */
-				printk(KERN_ERR "Buggy processor (%08X), "
-					"trying to continue.\n"
-					"Please send contents of /proc/cpuinfo "
-					"and this message to linux@arm.linux.org.uk",
-					fsr);
+				printk(KERN_ERR BUG_PROC_MSG, fsr);
 				first = 0;
 			}
 			return;
 		}
-
-		error_code |= FAULT_CODE_USER;
 	}
 
 #define DIE(signr,nam)\
@@ -522,6 +428,6 @@ do_DataAbort(unsigned long addr, int fsr, int error_code, struct pt_regs *regs)
 asmlinkage int
 do_PrefetchAbort(unsigned long addr, struct pt_regs *regs)
 {
-	do_page_fault(addr, FAULT_CODE_USER|FAULT_CODE_READ, regs);
+	do_page_fault(addr, FAULT_CODE_READ, regs);
 	return 1;
 }

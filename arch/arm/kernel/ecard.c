@@ -82,7 +82,7 @@ static unsigned int have_expmask;
 /* List of descriptions of cards which don't have an extended
  * identification, or chunk directories containing a description.
  */
-static const struct expcard_blacklist __init blacklist[] = {
+static struct expcard_blacklist __initdata blacklist[] = {
 	{ MANU_ACORN, PROD_ACORN_ETHER1, "Acorn Ether1" }
 };
 
@@ -827,6 +827,8 @@ unsigned int ecard_address(ecard_t *ec, card_type_t type, card_speed_t speed)
 			ectcr |= 1 << slot;
 		break;
 #endif
+	default:
+		break;
 	}
 
 #ifdef IOMD_ECTCR

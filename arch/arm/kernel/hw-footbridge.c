@@ -25,269 +25,8 @@
 #include <asm/system.h>
 
 #define IRDA_IO_BASE		0x180
-#define ETHER10_IO_BASE		0x301
 #define GP1_IO_BASE		0x338
 #define GP2_IO_BASE		0x33a
-#define DEC21143_IO_BASE	0x401
-#define DEC21143_MEM_BASE	0x00800000
-#define CYBER2000_MEM_BASE	0x01000000
-
-int	have_isa_bridge;
-
-extern int setup_arm_irq(int, struct irqaction *);
-extern void pci_set_cmd(struct pci_dev *dev, unsigned short clear, unsigned short set);
-extern void pci_set_base_addr(struct pci_dev *dev, int idx, unsigned int addr);
-extern void pci_set_irq_line(struct pci_dev *dev, unsigned int irq);
-extern void (*kd_mksound)(unsigned int hz, unsigned int ticks);
-
-#ifdef CONFIG_PCI
-
-static int irqmap_ebsa[] __initdata = { IRQ_IN1, IRQ_IN0, IRQ_PCI, IRQ_IN3 };
-
-static int __init ebsa_irqval(struct pci_dev *dev)
-{
-	unsigned char pin;
-	
-	pcibios_read_config_byte(dev->bus->number,
-				 dev->devfn,
-				 PCI_INTERRUPT_PIN,
-				 &pin);
-	
-	return irqmap_ebsa[(PCI_SLOT(dev->devfn) + pin) & 3];
-}
-
-#ifdef CONFIG_CATS
-static int irqmap_cats[] __initdata = { IRQ_PCI, IRQ_IN0, IRQ_IN1, IRQ_IN3 };
-
-static int __init cats_irqval(struct pci_dev *dev)
-{
-	if (dev->irq >= 128)
-		return 16 + (dev->irq & 0x1f);
-
-	switch (dev->irq) {
-	case 1:
-	case 2:
-	case 3:
-	case 4:
-		return irqmap_cats[dev->irq - 1];
-	case 0:
-		return 0;
-	}
-
-	printk("PCI: device %02x:%02x has unknown irq line %x\n",
-	       dev->bus->number, dev->devfn, dev->irq);
-	return 0;
-}
-#endif
-
-void __init pcibios_fixup_ebsa285(struct pci_dev *dev)
-{
-	/* Latency timer of 32 */
-	pci_write_config_byte(dev, PCI_LATENCY_TIMER, 32);
-
-	/* 32-byte cache line size */
-	pci_write_config_byte(dev, PCI_CACHE_LINE_SIZE, 8);
-
-	/* Set SysErr enable, Parity enable */
-	pci_set_cmd(dev, 0, PCI_COMMAND_FAST_BACK | PCI_COMMAND_SERR | PCI_COMMAND_PARITY);
-
-	/* If this device is an ISA bridge, set the
-	 * have_isa_bridge flag.  We will then go looking
-	 * for things like keyboard, etc
-	 */
-	if ((dev->class >> 8) == PCI_CLASS_BRIDGE_ISA ||
-	    (dev->class >> 8) == PCI_CLASS_BRIDGE_EISA)
-		have_isa_bridge = !0;
-
-	/* sort out the irq mapping for this device */
-	switch (machine_arch_type) {
-	case MACH_TYPE_EBSA285:
-		dev->irq = ebsa_irqval(dev);
-		/* Turn on bus mastering - boot loader doesn't
-		 * - perhaps it should! - dag
-		 */
-		pci_set_cmd(dev, 0, PCI_COMMAND_MASTER);
-		break;
-
-#ifdef CONFIG_CATS
-	case MACH_TYPE_CATS:
-		dev->irq = cats_irqval(dev);
-		/* Turn on bus mastering - boot loader doesn't
-		 * - perhaps it should! - dag
-		 */
-		pci_set_cmd(dev, 0, PCI_COMMAND_MASTER);
-		break;
-#endif
-#ifdef CONFIG_ARCH_NETWINDER
-	case MACH_TYPE_NETWINDER:
-		/* disable ROM */
-		pci_write_config_dword(dev, PCI_ROM_ADDRESS, 0);
-
-#define DEV(v,d) ((v)<<16|(d))
-		switch (DEV(dev->vendor, dev->device)) {
-		/* Ether 100 */
-		case DEV(PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_21142):
-			pci_set_base_addr(dev, 0, DEC21143_IO_BASE);
-			pci_set_base_addr(dev, 1, DEC21143_MEM_BASE);
-			pci_set_cmd(dev, 0, PCI_COMMAND_MASTER | PCI_COMMAND_MEMORY | PCI_COMMAND_IO);
-			/* Put the chip to sleep in case the driver isn't loaded */
-			pci_write_config_dword(dev, 0x40, 0x80000000);
-			dev->irq = IRQ_NETWINDER_ETHER100;
-			break;
-
-		/* Ether 10 */
-		case DEV(PCI_VENDOR_ID_WINBOND2,0x5a5a):
-			pci_set_base_addr(dev, 0, ETHER10_IO_BASE);
-			pci_set_cmd(dev, PCI_COMMAND_MASTER | PCI_COMMAND_MEMORY, PCI_COMMAND_IO);
-			dev->irq = IRQ_NETWINDER_ETHER10;
-			break;
-
-		/* ISA bridge */
-		case DEV(PCI_VENDOR_ID_WINBOND,PCI_DEVICE_ID_WINBOND_83C553):
-			pci_set_base_addr(dev, 0, 0);
-			pci_set_cmd(dev, PCI_COMMAND_MASTER | PCI_COMMAND_MEMORY, PCI_COMMAND_IO);
-			/*
-			 * Enable all memory requests from ISA to be channeled to PCI
-			 */
-			pci_write_config_byte(dev, 0x48, 255);
-			/*
-			 * Disable ping-pong (as per errata)
-			 */
-			pci_write_config_byte(dev, 0x42, 0);
-			/*
-			 * Enable PCI packet retry
-			 */
-			pci_write_config_byte(dev, 0x40, 0x22);
-			/*
-			 * Do not use PCI CPU park enable, park on
-			 * last master, disable GAT bit
-			 */
-			pci_write_config_byte(dev, 0x83, 0x02);
-			/*
-			 * Default rotating priorities
-			 */
-			pci_write_config_byte(dev, 0x80, 0xe0);
-			/*
-			 * Rotate bank 4
-			 */
-			pci_write_config_byte(dev, 0x81, 0x01);
-			break;
-
-		/* IDE */
-		case DEV(PCI_VENDOR_ID_WINBOND,PCI_DEVICE_ID_WINBOND_82C105):
-			pci_set_base_addr(dev, 0, 0x1f1);
-			pci_set_base_addr(dev, 1, 0x3f5);
-			pci_set_base_addr(dev, 2, 0x171);
-			pci_set_base_addr(dev, 3, 0x375);
-			pci_set_base_addr(dev, 4, 0xe801);
-			pci_set_cmd(dev, PCI_COMMAND_MEMORY, PCI_COMMAND_MASTER | PCI_COMMAND_IO);
-			dev->irq = IRQ_ISA_HARDDISK1;
-			break;
-
-		/* VGA */
-		case DEV(PCI_VENDOR_ID_INTERG,0x2000):
-			pci_set_base_addr(dev, 0, CYBER2000_MEM_BASE);
-			pci_set_cmd(dev, PCI_COMMAND_MASTER, PCI_COMMAND_IO | PCI_COMMAND_MEMORY);
-			dev->irq = IRQ_NETWINDER_VGA;
-			break;
-		}
-#endif
-	}
-}
-
-static inline void
-report_pci_dev_error(void)
-{
-	struct pci_dev *dev;
-
-	for (dev = pci_devices; dev; dev = dev->next) {
-		unsigned short status;
-
-		pci_read_config_word(dev, PCI_STATUS, &status);
-		if (status & 0xf900) {
-			printk(KERN_DEBUG "PCI: [%04X:%04X] status = %X\n",
-				dev->vendor, dev->device, status);
-
-			pci_write_config_word(dev, PCI_STATUS, status & 0xf900);
-		}
-	}
-}
-#else
-#define report_pci_dev_error()
-#endif
-
-/*
- * Warn on PCI errors.  Please report any occurances!
- */
-static void
-irq_pci_err(int irq, void *dev_id, struct pt_regs *regs)
-{
-	static unsigned long next_warn;
-	unsigned long cmd       = *CSR_PCICMD & 0x0000ffff;
-	unsigned long ctrl      = (*CSR_SA110_CNTL) & 0xffffde07;
-	unsigned long irqstatus = *CSR_IRQ_RAWSTATUS;
-	int warn = time_after_eq(jiffies, next_warn);
-
-	ctrl |= SA110_CNTL_DISCARDTIMER;
-
-	if (warn) {
-		next_warn = jiffies + 3 * HZ / 100;
-		printk(KERN_DEBUG "PCI: ");
-	}
-
-	if (irqstatus & (1 << 31)) {
-		if (warn)
-			printk("parity error ");
-		cmd |= 1 << 31;
-	}
-
-	if (irqstatus & (1 << 30)) {
-		if (warn)
-			printk("target abort ");
-		cmd |= 1 << 28;
-	}
-
-	if (irqstatus & (1 << 29)) {
-		if (warn)
-			printk("master abort ");
-		cmd |= 1 << 29;
-	}
-
-	if (irqstatus & (1 << 28)) {
-		if (warn)
-			printk("data parity error ");
-		cmd |= 1 << 24;
-	}
-
-	if (irqstatus & (1 << 27)) {
-		if (warn)
-			printk("discard timer expired ");
-		ctrl &= ~SA110_CNTL_DISCARDTIMER;
-	}
-
-	if (irqstatus & (1 << 23)) {
-		if (warn)
-			printk("system error ");
-		ctrl |= SA110_CNTL_RXSERR;
-	}
-
-	if (warn)
-		printk("pc=[<%08lX>]\n", instruction_pointer(regs));
-
-	report_pci_dev_error();
-
-	*CSR_PCICMD = cmd;
-	*CSR_SA110_CNTL = ctrl;
-}
-
-static struct irqaction irq_pci_error = {
-	irq_pci_err, SA_INTERRUPT, 0, "PCI error", NULL, NULL
-};
-
-void __init pcibios_init_ebsa285(void)
-{
-	setup_arm_irq(IRQ_PCI_ERR, &irq_pci_error);
-}
 
 /*
  * Netwinder stuff
@@ -627,7 +366,7 @@ void __netwinder_text cpld_modify(int mask, int set)
 
 	current_cpld = (current_cpld & ~mask) | set;
 
-	gpio_modify_io(GPIO_DATA, 0);
+	gpio_modify_io(GPIO_DATA | GPIO_IOCLK | GPIO_IOLOAD, 0);
 	gpio_modify_op(GPIO_IOLOAD, 0);
 
 	for (msk = 8; msk; msk >>= 1) {
@@ -647,7 +386,7 @@ static void __init cpld_init(void)
 	unsigned long flags;
 
 	spin_lock_irqsave(&gpio_lock, flags);
-	cpld_modify(-1, CPLD_UNMUTE | 4);
+	cpld_modify(-1, CPLD_UNMUTE | CPLD_7111_DISABLE);
 	spin_unlock_irqrestore(&gpio_lock, flags);
 }
 
@@ -713,12 +452,15 @@ static inline void rwa010_global_init(void)
 
 	dprintk("Card no = %d\n", inb(0x203));
 
+	/* disable the modem section of the chip */
 	WRITE_RWA(7, 3);
 	WRITE_RWA(0x30, 0);
 
+	/* disable the cdrom section of the chip */
 	WRITE_RWA(7, 4);
 	WRITE_RWA(0x30, 0);
 
+	/* disable the MPU-401 section of the chip */
 	WRITE_RWA(7, 2);
 	WRITE_RWA(0x30, 0);
 }
@@ -925,6 +667,7 @@ void __init hw_init(void)
 	extern void register_isa_ports(unsigned int, unsigned int, 
 				       unsigned int);
 	register_isa_ports(DC21285_PCI_MEM, DC21285_PCI_IO, 0);
+
 #ifdef CONFIG_ARCH_NETWINDER
 	/*
 	 * this ought to have a better home...

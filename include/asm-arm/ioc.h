@@ -5,7 +5,7 @@
 
 #ifndef IOC_CONTROL
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 #define __IOC(offset)	(IOC_BASE + (offset >> 2))
 #else
 #define __IOC(offset)	offset

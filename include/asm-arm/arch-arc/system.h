@@ -1,11 +1,8 @@
 /*
  * linux/include/asm-arm/arch-arc/system.h
  *
- * Copyright (c) 1996 Russell King and Dave Gilbert
+ * Copyright (c) 1996-1999 Russell King and Dave Gilbert
  */
-#ifndef __ASM_ARCH_SYSTEM_H
-#define __ASM_ARCH_SYSTEM_H
-
 #include <linux/config.h>
 
 #ifdef CONFIG_ARCH_ARC
@@ -23,14 +20,11 @@
 
 #endif
 
+#define arch_do_idle() do { } while (0)
+
 extern __inline__ void arch_reset(char mode)
 {
 	extern void ecard_reset(int card);
-
-	/*
-	 * Do any cleanups that the processor may require
-	 */
-	cpu_proc_fin();
 
 	/*
 	 * Reset all expansion cards.
@@ -43,5 +37,3 @@ extern __inline__ void arch_reset(char mode)
 	*(unsigned long *)0 = *(unsigned long *)0x03800000;
 	((void(*)(void))0)();
 }
-
-#endif

@@ -31,7 +31,7 @@
 #include <asm/ioc.h>
 #include <asm/hardware.h>
 
-#include "../../char/mouse.h"
+#include "../../char/busmouse.h"
 
 extern void kbd_reset_kdown(void);
 
@@ -47,7 +47,7 @@ static char kbd_txval[4];
 static unsigned char kbd_txhead, kbd_txtail;
 #define KBD_INCTXPTR(ptr) ((ptr) = ((ptr) + 1) & 3)
 static int kbd_id = -1;
-static struct wait_queue *kbd_waitq;
+static DECLARE_WAIT_QUEUE_HEAD(kbd_waitq);
 #ifdef CONFIG_KBDMOUSE
 static int mousedev;
 #endif

@@ -8,7 +8,7 @@
 #ifndef __ASM_ARCH_HARDWARE_H
 #define __ASM_ARCH_HARDWARE_H
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 /*
  * IO definitions
@@ -28,11 +28,11 @@
  */
 #define FLUSH_BASE_PHYS		0x40000000
 
-#else
+#else	/* __ASSEMBLY__ */
 
 #define IO_BASE			0
 
-#endif
+#endif	/* __ASSEMBLY__ */
 
 #define IO_SIZE			0x20000000
 #define IO_START		0xe0000000

@@ -4,18 +4,20 @@
 
 #define ELF_EXEC_PAGESIZE	4096
 
-/* We can execute both 32-bit and 26-bit code. */
-#define ELF_PROC_OK(x)		(1)
-
 #ifdef __KERNEL__
 
-#if 0		/* not yet */
+/* 32-bit code is always OK.  Some cpus can do 26-bit, some can't.  */
+#define ELF_PROC_OK(x)				\
+	((! ((x)->e_flags & EF_ARM_APCS26))	\
+	|| (elf_hwcap & HWCAP_26BIT))
+
+/* Old NetWinder binaries were compiled in such a way that the iBCS
+   heuristic always trips on them.  Until these binaries become uncommon
+   enough not to care, don't trust the `ibcs' flag here.  In any case
+   there is no other ELF system currently supported by iBCS.
+   @@ Could print a warning message to encourage users to upgrade.  */
 #define SET_PERSONALITY(ex,ibcs2) \
-	current_personality = (ex->e_flags & EF_ARM_APCS26) ? \
+	current->personality = (ex.e_flags & EF_ARM_APCS26) ? \
 	PER_LINUX : PER_LINUX_32BIT
-#else
-#define SET_PERSONALITY(ex,ibcs2) \
-	current->personality = PER_LINUX_32BIT
-#endif
 
 #endif

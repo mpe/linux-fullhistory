@@ -396,7 +396,6 @@ static void promise_complete_pollfunc(ide_drive_t *drive)
 
 	if (GET_STAT() & BUSY_STAT) {
 		if (time_before(jiffies, hwgroup->poll_timeout)) {
-			drive->timeout = 1;
 			ide_set_handler(drive, &promise_complete_pollfunc);
 			return; /* continue polling... */
 		}
@@ -426,7 +425,6 @@ static void promise_write_pollfunc (ide_drive_t *drive)
 
 	if (IN_BYTE(IDE_NSECTOR_REG) != 0) {
 		if (time_before(jiffies, hwgroup->poll_timeout)) {
-			drive->timeout = 1;
 			ide_set_handler (drive, &promise_write_pollfunc);
 			return; /* continue polling... */
 		}
@@ -441,7 +439,6 @@ static void promise_write_pollfunc (ide_drive_t *drive)
 	 */
 	ide_multwrite(drive, 4);
 	hwgroup->poll_timeout = jiffies + WAIT_WORSTCASE;
-	drive->timeout = 1;
 	ide_set_handler(drive, &promise_complete_pollfunc);
 #ifdef DEBUG_WRITE
 	printk(KERN_DEBUG "%s: Done last 4 sectors - status = %02x\n",
@@ -475,7 +472,6 @@ static void promise_write (ide_drive_t *drive)
 	if (rq->nr_sectors > 4) {
 		ide_multwrite(drive, rq->nr_sectors - 4);
 		hwgroup->poll_timeout = jiffies + WAIT_WORSTCASE;
-		drive->timeout = 1;
 		ide_set_handler (drive, &promise_write_pollfunc);
 	} else {
 	/*
@@ -484,7 +480,6 @@ static void promise_write (ide_drive_t *drive)
 	 */
 		ide_multwrite(drive, rq->nr_sectors);
 		hwgroup->poll_timeout = jiffies + WAIT_WORSTCASE;
-		drive->timeout = 1;
 		ide_set_handler(drive, &promise_complete_pollfunc);
 #ifdef DEBUG_WRITE
 		printk(KERN_DEBUG "%s: promise_write: <= 4 sectors, "

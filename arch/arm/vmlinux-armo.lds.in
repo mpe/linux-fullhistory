@@ -3,16 +3,36 @@
  * Written by Martin Mares <mj@atrey.karlin.mff.cuni.cz>
  */
 OUTPUT_ARCH(arm)
-ENTRY(_start)
+ENTRY(stext)
 SECTIONS
 {
   . = TEXTADDR;
+  __init_begin = .;
+  .text.init : { *(.text.init) }
+  __proc_info_begin = .;
+  .proc.info : { *(.proc.info) }
+  __proc_info_end = .;
+  .data.init : { *(.data.init) }
+  . = ALIGN(16);
+  __setup_start = .;
+  .setup.init : { *(.setup.init) }
+  __setup_end = .;
+  __initcall_start = .;
+  .initcall.init : { *(.initcall.init) }
+  __initcall_end = .;
+  . = ALIGN(32768);
+  __init_end = .;
+
+  .init.task : {
+	*(.init.task)
+  }
+
   _text = .;			/* Text and read-only data */
   .text : {
 	*(.text)
 	*(.fixup)
 	*(.gnu.warning)
-	} = 0x9090
+	}
   .text.lock : { *(.text.lock) }	/* out-of-line lock text */
   .rodata : { *(.rodata) }
   .kstrtab : { *(.kstrtab) }
@@ -26,26 +46,16 @@ SECTIONS
   __ksymtab : { *(__ksymtab) }
   __stop___ksymtab = .;
 
+  .got : { *(.got) }		/* Global offset table */
+
   _etext = .;			/* End of text section */
 
-  . = ALIGN(8192);
   .data : {			/* Data */
-	*(.init.task)
 	*(.data)
 	CONSTRUCTORS
 	}
 
   _edata = .;			/* End of data section */
-
-  . = ALIGN(32768);		/* Init code and data */
-  __init_begin = .;
-  .text.init : { *(.text.init) }
-  __proc_info_begin = .;
-  .proc.info : { *(.proc.info) }
-  __proc_info_end = .;
-  .data.init : { *(.data.init) }
-  . = ALIGN(32768);
-  __init_end = .;
 
   __bss_start = .;		/* BSS */
   .bss : {

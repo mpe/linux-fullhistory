@@ -498,6 +498,18 @@ void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup)
 }
 
 /*
+ * The below two are helpers used when modifying the drive timeout.
+ */
+static inline unsigned long set_timeout(ide_drive_t *drive, unsigned long timeout)
+{
+	unsigned long foo = drive->timeout;
+	drive->timeout = timeout;
+	return foo;
+}
+
+#define restore_timeout(drive, old)	(drive->timeout = old)
+
+/*
  * This should get invoked any time we exit the driver to
  * wait for an interrupt response from a drive.  handler() points
  * at the appropriate code to handle the next interrupt, and a
@@ -517,8 +529,11 @@ void ide_set_handler (ide_drive_t *drive, ide_handler_t *handler)
 	}
 #endif
 	hwgroup->handler       = handler;
-	hwgroup->timer.expires = jiffies + drive->timeout;
-	add_timer(&(hwgroup->timer));
+	/* 0 means don't timeout */
+	if (drive->timeout && !timer_pending(&hwgroup->timer)) {
+		hwgroup->timer.expires = jiffies + drive->timeout;
+		add_timer(&(hwgroup->timer));
+	}
 	spin_unlock_irqrestore(&hwgroup->spinlock, flags);
 }
 
@@ -575,10 +590,9 @@ static void atapi_reset_pollfunc (ide_drive_t *drive)
 		printk("%s: ATAPI reset complete\n", drive->name);
 	} else {
 		if (0 < (signed long)(hwgroup->poll_timeout - jiffies)) {
-			old_timeout = drive->timeout;
-			drive->timeout = HZ / 20;
+			old_timeout = set_timeout(drive, HZ / 20);
 			ide_set_handler (drive, &atapi_reset_pollfunc);
-			drive->timeout = old_timeout;
+			restore_timeout(drive, old_timeout);
 			return;	/* continue polling */
 		}
 		hwgroup->poll_timeout = 0;	/* end of polling */
@@ -604,10 +618,9 @@ static void reset_pollfunc (ide_drive_t *drive)
 
 	if (!OK_STAT(tmp=GET_STAT(), 0, BUSY_STAT)) {
 		if (0 < (signed long)(hwgroup->poll_timeout - jiffies)) {
-			old_timeout = drive->timeout;
-			drive->timeout = HZ / 20;
+			old_timeout = set_timeout(drive, HZ / 20);
 			ide_set_handler (drive, &reset_pollfunc);
-			drive->timeout = old_timeout;
+			restore_timeout(drive, old_timeout);
 			return;	/* continue polling */
 		}
 		printk("%s: reset timed-out, status=0x%02x\n", hwif->name, tmp);
@@ -687,10 +700,9 @@ static void do_reset1 (ide_drive_t *drive, int  do_not_try_atapi)
 		udelay (20);
 		OUT_BYTE (WIN_SRST, IDE_COMMAND_REG);
 		hwgroup->poll_timeout = jiffies + WAIT_WORSTCASE;
-		old_timeout = drive->timeout;
-		drive->timeout = HZ / 20;
+		old_timeout = set_timeout(drive, HZ / 20);
 		ide_set_handler (drive, &atapi_reset_pollfunc);
-		drive->timeout = old_timeout;
+		restore_timeout(drive, old_timeout);
 		__restore_flags (flags);	/* local CPU only */
 		return;
 	}
@@ -720,10 +732,9 @@ static void do_reset1 (ide_drive_t *drive, int  do_not_try_atapi)
 	OUT_BYTE(drive->ctl|2,IDE_CONTROL_REG);	/* clear SRST, leave nIEN */
 	udelay(10);			/* more than enough time */
 	hwgroup->poll_timeout = jiffies + WAIT_WORSTCASE;
-	old_timeout = drive->timeout;
-	drive->timeout = HZ / 20;
+	old_timeout = set_timeout(drive, HZ / 20);
 	ide_set_handler (drive, &reset_pollfunc);
-	drive->timeout = old_timeout;
+	restore_timeout(drive, old_timeout);
 
 	/*
 	 * Some weird controller like resetting themselves to a strange
@@ -923,7 +934,6 @@ void ide_error (ide_drive_t *drive, const char *msg, byte stat)
  */
 void ide_cmd(ide_drive_t *drive, byte cmd, byte nsect, ide_handler_t *handler)
 {
-	drive->timeout = WAIT_CMD;
 	ide_set_handler (drive, handler);
 	if (IDE_CONTROL_REG)
 		OUT_BYTE(drive->ctl,IDE_CONTROL_REG);	/* clear nIEN */

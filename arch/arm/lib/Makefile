@@ -1,11 +1,11 @@
 #
 # linux/arch/arm/lib/Makefile
 #
-# Copyright (C) 1995-1998 Russell King
+# Copyright (C) 1995-1999 Russell King
 #
 
 L_TARGET := lib.a
-L_OBJS   := backtrace.o bitops.o checksum.o delay.o memcpy.o \
+L_OBJS   := backtrace.o bitops.o checksum.o delay.o \
 	    string.o system.o uaccess.o
 
 ifeq ($(PROCESSOR),armo)
@@ -13,7 +13,7 @@ ifeq ($(PROCESSOR),armo)
 endif
 
 ifdef CONFIG_ARCH_ACORN
-  L_OBJS += loaders.o io-acorn.o
+  L_OBJS += io-acorn.o
   ifdef CONFIG_ARCH_A5K
     L_OBJS += floppydma.o
   endif
@@ -34,13 +34,13 @@ endif
 
 include $(TOPDIR)/Rules.make
 
+.S.o:
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c -o $*.o $<
+
 constants.h: getconsdata.o extractconstants.pl
 	$(PERL) extractconstants.pl $(OBJDUMP) > $@
 
 getconsdata.o: getconsdata.c
 	$(CC) $(CFLAGS) -c getconsdata.c
 
-checksum.o: constants.h
-
-%.o: %.S
-	$(CC) $(CFLAGS) -D__ASSEMBLY__ -c -o $@ $<
+checksum.o string.o: constants.h

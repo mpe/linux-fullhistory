@@ -42,6 +42,8 @@ struct user_fp {
 	} fpregs[8];
 	unsigned int fpsr:32;
 	unsigned int fpcr:32;
+	unsigned char ftype[8];
+	unsigned int init_flag;
 };
 
 /* When the kernel dumps core, it starts by dumping the user struct -

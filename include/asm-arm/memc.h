@@ -4,7 +4,7 @@
 #define VDMA_START	1
 #define VDMA_END	2
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 extern void memc_write(unsigned int reg, unsigned long val);
 
 #define video_set_dma(start,end,offset)				\

@@ -1,24 +1,22 @@
 /*
  * linux/include/asm-arm/arch-ebsa285/system.h
  *
- * Copyright (c) 1996,1997,1998 Russell King.
+ * Copyright (c) 1996-1999 Russell King.
  */
 #include <asm/dec21285.h>
 #include <asm/io.h>
 #include <asm/hardware.h>
 #include <asm/leds.h>
 
+#define arch_do_idle()		cpu_do_idle()
+
 extern __inline__ void arch_reset(char mode)
 {
-	cli();
-
 	if (mode == 's') {
 		__asm__ volatile (
 		"mov	lr, #0x41000000		@ prepare to jump to ROM
-		 mov	r0, #0x130
-		 mcr	p15, 0, r0, c1, c0	@ MMU off
-		 mcr	p15, 0, ip, c7, c7	@ flush caches
-		 mov	pc, lr" : : : "cc");
+		 mcr	p15, 0, %0, c1, c0, 0	@ MMU off
+		 mov	pc, lr" : : "r" (cpu_reset()) : "cc");
 	} else {
 		if (machine_is_netwinder()) {
 			/* open up the SuperIO chip
@@ -51,6 +49,3 @@ extern __inline__ void arch_reset(char mode)
 		}
 	}
 }
-
-#define arch_start_idle()	leds_event(led_idle_start)
-#define arch_end_idle()		leds_event(led_idle_end)

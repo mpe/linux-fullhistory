@@ -17,15 +17,18 @@ int request_dma(int channel, const char *device_id)
 	return -EINVAL;
 }
 
-void free_dma(int channel)
-{
-}
-
-int get_dma_list(char *buf)
+int no_dma(void)
 {
 	return 0;
 }
 
-void __init init_dma(void)
-{
-}
+#define GLOBAL_ALIAS(_a,_b) asm (".set " #_a "," #_b "; .globl " #_a)
+GLOBAL_ALIAS(disable_dma, no_dma);
+GLOBAL_ALIAS(enable_dma, no_dma);
+GLOBAL_ALIAS(free_dma, no_dma);
+GLOBAL_ALIAS(get_dma_residue, no_dma);
+GLOBAL_ALIAS(get_dma_list, no_dma);
+GLOBAL_ALIAS(set_dma_mode, no_dma);
+GLOBAL_ALIAS(set_dma_count, no_dma);
+GLOBAL_ALIAS(set_dma_addr, no_dma);
+GLOBAL_ALIAS(init_dma, no_dma);

@@ -15,7 +15,6 @@
 #ifndef __ASM_PROC_PROCESSOR_H
 #define __ASM_PROC_PROCESSOR_H
 
-#include <asm/assembler.h>
 #include <linux/string.h>
 
 #define KERNEL_STACK_SIZE 4096
@@ -45,20 +44,16 @@ typedef struct {
 	unsigned long (*copy_to_user)(void *to, const void *from, unsigned long sz);
 	unsigned long (*clear_user)(void *addr, unsigned long sz);
 	unsigned long (*strncpy_from_user)(char *to, const char *from, unsigned long sz);
-	unsigned long (*strlen_user)(const char *s);
+	unsigned long (*strnlen_user)(const char *s, long n);
 } uaccess_t;
 
 extern uaccess_t uaccess_user, uaccess_kernel;
 
 #define EXTRA_THREAD_STRUCT							\
-	uaccess_t	*uaccess;		/* User access functions*/	\
-	unsigned long	memcmap[256];
+	uaccess_t	*uaccess;		/* User access functions*/
 
 #define EXTRA_THREAD_STRUCT_INIT		\
-	,&uaccess_kernel,			\
-	{ 0, }
-
-#define SWAPPER_PG_DIR ((unsigned long)swapper_pg_dir)
+	,&uaccess_kernel
 
 #define start_thread(regs,pc,sp)					\
 ({									\

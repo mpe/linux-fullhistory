@@ -26,7 +26,7 @@ switch_mm(struct mm_struct *prev, struct mm_struct *next,
 	  struct task_struct *tsk, unsigned int cpu)
 {
 	if (prev != next) {
-		cpu_switch_mm(__virt_to_phys((unsigned long)next->pgd), tsk);
+		cpu_switch_mm(next->pgd, tsk);
 		clear_bit(cpu, &prev->cpu_vm_mask);
 	}
 	set_bit(cpu, &next->cpu_vm_mask);

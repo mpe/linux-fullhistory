@@ -122,8 +122,10 @@
 #define GPIO_RESET		0x001
 
 /* CPLD pins */
-#define CPLD_DSRESET		8
+#define CPLD_DS_ENABLE		8
+#define CPLD_7111_DISABLE	4
 #define CPLD_UNMUTE		2
+#define CPLD_FLASH_WR_ENABLE	1
 
 #ifndef __ASSEMBLY__
 extern void gpio_modify_op(int mask, int set);

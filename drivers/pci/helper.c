@@ -57,7 +57,7 @@ int pci_simple_probe (struct pci_simple_probe_entry *list, size_t match_limit,
 			if (match_limit && match_limit == matches)
 				return matches;
 
-			ent++;
+			break; /* stop list search on first match */
 		}
 
 		dev = pci_find_device (PCI_ANY_ID, PCI_ANY_ID, dev);

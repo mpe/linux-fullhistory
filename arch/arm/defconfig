@@ -55,7 +55,7 @@ CONFIG_BINFMT_ELF=y
 # CONFIG_ARTHUR is not set
 CONFIG_PARPORT=y
 CONFIG_PARPORT_PC=y
-CONFIG_CMDLINE="root=/dev/hda2 ro mem=32M parport=0x378,7 ide0=autotune"
+CONFIG_CMDLINE="root=/dev/hda1 ro mem=32M parport=0x378,7 ide0=autotune"
 CONFIG_LEDS=y
 CONFIG_LEDS_TIMER=y
 # CONFIG_LEDS_CPU is not set

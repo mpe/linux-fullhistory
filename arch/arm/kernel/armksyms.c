@@ -2,12 +2,14 @@
 #include <linux/module.h>
 #include <linux/user.h>
 #include <linux/string.h>
+#include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/mman.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/in6.h>
 
+#include <asm/byteorder.h>
 #include <asm/elf.h>
 #include <asm/io.h>
 #include <asm/dma.h>
@@ -93,6 +95,9 @@ EXPORT_SYMBOL(__ioremap);
 EXPORT_SYMBOL(__iounmap);
 #endif
 EXPORT_SYMBOL(kernel_thread);
+EXPORT_SYMBOL(system_rev);
+EXPORT_SYMBOL(system_serial_low);
+EXPORT_SYMBOL(system_serial_high);
 
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
@@ -108,7 +113,7 @@ EXPORT_SYMBOL(cpu_clean_cache_area);
 EXPORT_SYMBOL(cpu_flush_ram_page);
 EXPORT_SYMBOL(cpu_flush_tlb_all);
 EXPORT_SYMBOL(cpu_flush_tlb_area);
-EXPORT_SYMBOL(cpu_switch_mm);
+EXPORT_SYMBOL(cpu_set_pgd);
 EXPORT_SYMBOL(cpu_set_pmd);
 EXPORT_SYMBOL(cpu_set_pte);
 EXPORT_SYMBOL(cpu_flush_icache_area);
@@ -165,19 +170,20 @@ EXPORT_SYMBOL_NOVERS(strpbrk);
 EXPORT_SYMBOL_NOVERS(strtok);
 EXPORT_SYMBOL_NOVERS(strrchr);
 EXPORT_SYMBOL_NOVERS(strstr);
-EXPORT_SYMBOL_NOVERS(memset);
+EXPORT_SYMBOL_NOVERS(__memset);
+EXPORT_SYMBOL_NOVERS(memset); /* needed for some versions of gcc */
 EXPORT_SYMBOL_NOVERS(memcpy);
 EXPORT_SYMBOL_NOVERS(memmove);
 EXPORT_SYMBOL_NOVERS(memcmp);
 EXPORT_SYMBOL_NOVERS(memscan);
-EXPORT_SYMBOL_NOVERS(memzero);
+EXPORT_SYMBOL_NOVERS(__memzero);
 
 	/* user mem (segment) */
 #if defined(CONFIG_CPU_32)
 EXPORT_SYMBOL(__arch_copy_from_user);
 EXPORT_SYMBOL(__arch_copy_to_user);
 EXPORT_SYMBOL(__arch_clear_user);
-EXPORT_SYMBOL(__arch_strlen_user);
+EXPORT_SYMBOL(__arch_strnlen_user);
 #elif defined(CONFIG_CPU_26)
 EXPORT_SYMBOL(uaccess_kernel);
 EXPORT_SYMBOL(uaccess_user);

@@ -26,6 +26,8 @@ extern int net_dev_init(void);
 extern void console_map_init(void);
 extern int soc_probe(void);
 extern int atmdev_init(void);
+extern int i2o_init(void);
+extern int cpqarray_init(void);
 
 void __init device_init(void)
 {

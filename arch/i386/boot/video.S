@@ -1152,7 +1152,7 @@ dosvga:	lodsw
 	pushw	%es
 	movw	$0xc000, %bx
 	movw	%bx, %es
-	call	ax				# Call test routine
+	call	*%ax				# Call test routine
 	popw	%es
 	popw	%di
 	popw	%si
@@ -1741,7 +1741,7 @@ even7:	movb	$0x0c, %al
 	cmpb	%bh, %al
 	jne	isnot
 	
-	movb	$VIDEO_FIRST_V7>>8, $svga_prefix # Use special mode switching
+	movb	$VIDEO_FIRST_V7>>8, svga_prefix # Use special mode switching
 	ret
 
 video7_md:

@@ -10,8 +10,6 @@
 #ifndef __ASM_ARCH_PROCESSOR_H
 #define __ASM_ARCH_PROCESSOR_H
 
-#include <asm/arch/memory.h>
-
 /*
  * Bus types
  */

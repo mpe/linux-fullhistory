@@ -64,12 +64,12 @@ _start:
 	movw	%ax, %ds
 	movw	$INITSEG, %ax
 	movw	%ax, %es
-	movw	$128, %cx
+	movw	$256, %cx
 	subw	%si, %si
 	subw	%di, %di
 	cld
 	rep
-	movsl
+	movsw
 	ljmp	$INITSEG, $go
 
 # bde - changed 0xff00 to 0x4000 to use debugger at 0x6400 up (bde).  We
@@ -105,11 +105,11 @@ go:	movw	$0x4000-12, %di		# 0x4000 is an arbitrary value >=
 	movw	$0x78, %bx		# fs:bx is parameter table address
 	pushw	%ds
 	ldsw	%fs:(%bx), %si		# ds:si is source
-	movb	$3, %cl			# copy 12 bytes
+	movb	$6, %cl			# copy 12 bytes
 	cld
 	pushw	%di			# di = 0x4000-12.
 	rep
-	movsl
+	movsw
 	popw	%di
 	popw	%ds
 	movb	$36, 0x4(%di)		# patch sector count
@@ -118,7 +118,7 @@ go:	movw	$0x4000-12, %di		# 0x4000 is an arbitrary value >=
 
 # Load the setup-sectors directly after the bootblock.
 # Note that 'es' is already set up.
-# Also, cx = 0 from rep movsl above.
+# Also, cx = 0 from rep movsw above.
 
 load_setup:
 	xorb	%ah, %ah		# reset FDC 
@@ -247,7 +247,7 @@ die:	jne	die			# es must be at 64kB boundary
 	xorw	%bx, %bx		# bx is starting address within segment
 rp_read:
 #ifdef __BIG_KERNEL__
-	.word 0x1eff, 0x0220		# lcall *bootsect_kludge in setup.S
+	lcall	bootsect_kludge		# in setup.S
 #else
 	movw	%es, %ax
 	subw	$SYSSEG, %ax

@@ -7,7 +7,16 @@
  * malloc by Hannu Savolainen 1993 and Matthias Urlichs 1994
  *
  * Modified for ARM Linux by Russell King
+ *
+ * Nicolas Pitre <nico@visuaide.com>  1999/04/14 :
+ *  For this code to run directly from Flash, all constant variables must
+ *  be marked with 'const' and all other variables initialized at run-time 
+ *  only.  This way all non constant variables will end up in the bss segment,
+ *  which should point to addresses in RAM and cleared to 0 on start.
+ *  This allows for a much quicker boot time.
  */
+
+unsigned int __machine_arch_type;
 
 #include <asm/uaccess.h>
 #include <asm/arch/uncompress.h>
@@ -22,7 +31,7 @@
 /*
  * Optimised C version of memzero for the ARM.
  */
-extern __inline__ __ptr_t __memzero (__ptr_t s, size_t n)
+void __memzero (__ptr_t s, size_t n)
 {
 	union { void *vp; unsigned long *ulp; unsigned char *ucp; } u;
 	int i;
@@ -62,10 +71,7 @@ extern __inline__ __ptr_t __memzero (__ptr_t s, size_t n)
 
 	if (n & 1)
 		*u.ucp++ = 0;
-	return s;
 }
-
-#define memzero(s,n) __memzero(s,n)
 
 extern __inline__ __ptr_t memcpy(__ptr_t __dest, __const __ptr_t __src,
 			    size_t __n)
@@ -157,11 +163,11 @@ static void gzip_mark(void **);
 static void gzip_release(void **);
 
 extern char input_data[];
-extern int  input_len;
+extern char input_data_end[];
 
 static uch *output_data;
 static ulg output_ptr;
-static ulg bytes_out = 0;
+static ulg bytes_out;
 
 static void *malloc(int size);
 static void free(void *where);
@@ -226,13 +232,14 @@ static void gzip_release(void **ptr)
  * Fill the input buffer. This is called only when the buffer is empty
  * and at least one byte is really needed.
  */
-int fill_inbuf()
+int fill_inbuf(void)
 {
 	if (insize != 0)
 		error("ran out of input data\n");
 
 	inbuf = input_data;
-	insize = input_len;
+	insize = &input_data_end[0] - &input_data[0];
+
 	inptr = 1;
 	return inbuf[0];
 }
@@ -241,7 +248,7 @@ int fill_inbuf()
  * Write the output window window[0..outcnt-1] and update crc and bytes_out.
  * (Used for the decompressed data only.)
  */
-void flush_window()
+void flush_window(void)
 {
 	ulg c = crc;
 	unsigned n;
@@ -257,6 +264,7 @@ void flush_window()
 	bytes_out += (ulg)outcnt;
 	output_ptr += (ulg)outcnt;
 	outcnt = 0;
+	puts(".");
 }
 
 static void error(char *x)
@@ -270,21 +278,19 @@ static void error(char *x)
 	while(1);	/* Halt */
 }
 
-#define STACK_SIZE (4096)
-
-ulg user_stack [STACK_SIZE];
-
 #ifndef STANDALONE_DEBUG
 
-ulg decompress_kernel(ulg output_start, ulg free_mem_ptr_p, ulg free_mem_ptr_end_p)
+ulg
+decompress_kernel(ulg output_start, ulg free_mem_ptr_p, ulg free_mem_ptr_end_p,
+		  int arch_id)
 {
-	free_mem_ptr = free_mem_ptr_p;
-	free_mem_ptr_end = free_mem_ptr_end_p;
+	output_data		= (uch *)output_start;	/* Points to kernel start */
+	free_mem_ptr		= free_mem_ptr_p;
+	free_mem_ptr_end	= free_mem_ptr_end_p;
+	__machine_arch_type	= arch_id;
 
-	proc_decomp_setup ();
-	arch_decomp_setup ();
-
-	output_data = (uch *)output_start;	/* Points to kernel start */
+	proc_decomp_setup();
+	arch_decomp_setup();
 
 	makecrc();
 	puts("Uncompressing Linux...");

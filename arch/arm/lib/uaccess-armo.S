@@ -30,7 +30,7 @@ SYMBOL_NAME(uaccess_user):
 		.word	__arch_copy_to_user
 		.word	__arch_clear_user
 		.word	__arch_strncpy_from_user
-		.word	__arch_strlen_user
+		.word	__arch_strnlen_user
 
 
 @ In : r0 = x, r1 = addr, r2 = error

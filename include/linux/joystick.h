@@ -173,26 +173,16 @@ typedef struct { int something; } spinlock_t;
  * Parport stuff
  */
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
 #define USE_PARPORT
-#endif
 
-#ifdef USE_PARPORT
 #include <linux/parport.h>
+#include <linux/parport_pc.h>
 #define JS_PAR_DATA_IN(y)	parport_read_data(y->port)
 #define JS_PAR_DATA_OUT(x,y)	parport_write_data(y->port, x)
 #define JS_PAR_STATUS(y)	parport_read_status(y->port)
 #define JS_PAR_CTRL_IN(y)	parport_read_control(y->port)
 #define JS_PAR_CTRL_OUT(x,y)	parport_write_control(y->port, x)
-#define JS_PAR_ECTRL_OUT(x,y)	parport_write_econtrol(y->port, x)
-#else
-#define JS_PAR_DATA_IN(y)	inb(y)
-#define JS_PAR_DATA_OUT(x,y)	outb(x,y)
-#define JS_PAR_STATUS(y)	inb(y+1)
-#define JS_PAR_CTRL_IN(y)	inb(y+2)
-#define JS_PAR_CTRL_OUT(x,y)	outb(x,y+2)
-#define JS_PAR_ECTRL_OUT(x,y)	outb(x,y+0x402)
-#endif
+#define JS_PAR_ECTRL_OUT(x,y)	outb(x, ECONTROL(y->port))
 
 #define JS_PAR_STATUS_INVERT	(0x80)
 #define JS_PAR_CTRL_INVERT	(0x04)

@@ -9,10 +9,12 @@
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/ioport.h>
+#include <linux/mm.h>
 
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
 
+#ifdef CONFIG_CPU_32
 asmlinkage int sys_iopl(unsigned long turn_on)
 {
 	if (turn_on && !capable(CAP_SYS_RAWIO))
@@ -25,3 +27,9 @@ asmlinkage int sys_iopl(unsigned long turn_on)
 
 	return 0;
 }
+#else
+asmlinkage int sys_iopl(unsigned long turn_on)
+{
+	return -ENOSYS;
+}
+#endif

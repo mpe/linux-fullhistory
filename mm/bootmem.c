@@ -16,6 +16,7 @@
 #include <linux/interrupt.h>
 #include <linux/init.h>
 #include <linux/bootmem.h>
+#include <asm/dma.h>
 
 /*
  * Pointer to a bitmap - the bits represent all physical memory pages
@@ -24,8 +25,9 @@
  * Access to this subsystem has to be serialized externally. (this is
  * true for the boot process anyway)
  */
-static void * bootmem_map = NULL;
 unsigned long max_low_pfn;
+
+static void * bootmem_map = NULL;
 
 /*
  * Called once to set up the allocator itself.
@@ -107,20 +109,32 @@ static unsigned long last_offset = 0;
 /*
  * alignment has to be a power of 2 value.
  */
-void * __init __alloc_bootmem (unsigned long size, unsigned long align)
+void * __init __alloc_bootmem (unsigned long size, unsigned long align, unsigned long goal)
 {
 	int area = 0;
 	unsigned long i, start = 0, reserved;
 	void *ret;
 	unsigned long offset, remaining_size;
-	unsigned long areasize;
+	unsigned long areasize, preferred;
 
 	if (!bootmem_map) BUG();
 	if (!size) BUG();
 
+	/*
+	 * We try to allocate bootmem pages above 'goal'
+	 * first, then we try to allocate lower pages.
+	 */
+	if (goal) {
+		preferred = goal >> PAGE_SHIFT;
+		if (preferred >= max_low_pfn)
+			preferred = 0;
+	} else
+		preferred = 0;
+
 	areasize = (size+PAGE_SIZE-1)/PAGE_SIZE;
 
-	for (i = 0; i < max_low_pfn; i++) {
+restart_scan:
+	for (i = preferred; i < max_low_pfn; i++) {
 		reserved = test_bit(i, bootmem_map);
 		if (!reserved) {
 			if (!area) {
@@ -133,6 +147,10 @@ void * __init __alloc_bootmem (unsigned long size, unsigned long align)
 			area = 0;
 			start = -1;
 		}
+	}
+	if (preferred) {
+		preferred = 0;
+		goto restart_scan;
 	}
 	BUG();
 found:
@@ -186,7 +204,6 @@ unsigned long __init free_all_bootmem (void)
 
 	if (!bootmem_map) BUG();
 
-	printk("freeing all bootmem().\n");
 	page = mem_map;
 	count = 0;
 	for (i = 0; i < max_low_pfn; i++, page++) {
@@ -194,6 +211,8 @@ unsigned long __init free_all_bootmem (void)
 			count++;
 			ClearPageReserved(page);
 			set_page_count(page, 1);
+			if (i >= (__pa(MAX_DMA_ADDRESS) >> PAGE_SHIFT))
+				clear_bit(PG_DMA, &page->flags);
 			__free_page(page);
 		}
 	}

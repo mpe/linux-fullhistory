@@ -74,8 +74,9 @@ ENTRY(csum_partial)
 		stmfd	sp!, {r1 - r2, r4 - r8, fp, ip, lr, pc}
 		.endm
 
-#define LOAD_REGS(cond)					\
-		LOADREGS(##cond##ea,fp,{r1 - r2, r4 - r8, fp, sp, pc})
+		.macro	load_regs,flags
+		ldm\flags	fp, {r1, r2, r4-r8, fp, sp, pc}
+		.endm
 
 		.macro	load1b,	reg1
 9999:		ldrbt	\reg1, [r0], $1
@@ -134,8 +135,9 @@ ENTRY(csum_partial)
 		mov	r9, r9, lsr #24
 		.endm
 
-#define LOAD_REGS(cond)					\
-		LOADREGS(##cond##ea,fp,{r1 - r2, r4 - r9, fp, sp, pc})
+		.macro	load_regs,flags
+		ldm\flags	fp, {r1, r2, r4-r9, fp, sp, pc}^
+		.endm
 
 		.macro	load1b,	reg1
 		tst	r9, #0x01
@@ -245,7 +247,7 @@ ENTRY(csum_partial_copy_from_user)
 		adcs	r3, r3, r4
 4:		ands	r2, r2, #3
 		adceq	r0, r3, #0
-		LOAD_REGS(eq)
+		load_regs	eqea
 		load1l	r4
 		tst	r2, #2
 		beq	.exit
@@ -259,11 +261,11 @@ ENTRY(csum_partial_copy_from_user)
 		andne	r4, r4, #255
 		adcnes	r3, r3, r4
 		adcs	r0, r3, #0
-		LOAD_REGS(al)
+		load_regs	ea
 
 .too_small_user:
 		teq	r2, #0
-		LOAD_REGS(eq)
+		load_regs	eqea
 		cmp	r2, #2
 		blt	.too_small_user1
 		load2b	ip, r8
@@ -278,7 +280,7 @@ ENTRY(csum_partial_copy_from_user)
 		strb	ip, [r1], #1
 		adcs	r3, r3, ip
 .csum_exit:	adc	r0, r3, #0
-		LOAD_REGS(al)
+		load_regs	ea
 
 .src_not_aligned_user:
 		cmp	r2, #4
@@ -331,7 +333,7 @@ ENTRY(csum_partial_copy_from_user)
 		mov	r4, r5, lsr #8
 4:		ands	r2, r2, #3
 		adceq	r0, r3, #0
-		LOAD_REGS(eq)
+		load_regs	eqea
 		tst	r2, #2
 		beq	.exit
 		adcs	r3, r3, r4, lsl #16
@@ -384,7 +386,7 @@ ENTRY(csum_partial_copy_from_user)
 		mov	r4, r5, lsr #16
 4:		ands	r2, r2, #3
 		adceq	r0, r3, #0
-		LOAD_REGS(eq)
+		load_regs	eqea
 		tst	r2, #2
 		beq	.exit
 		adcs	r3, r3, r4, lsl #16
@@ -437,7 +439,7 @@ ENTRY(csum_partial_copy_from_user)
 		mov	r4, r5, lsr #24
 4:		ands	r2, r2, #3
 		adceq	r0, r3, #0
-		LOAD_REGS(eq)
+		load_regs	eqea
 		tst	r2, #2
 		beq	.exit
 		adcs	r3, r3, r4, lsl #16
@@ -461,7 +463,7 @@ ENTRY(csum_partial_copy_from_user)
 6002:		teq	r2, r1
 		strneb	r3, [r1], #1
 		bne	6002b
-		LOAD_REGS(al)
+		load_regs	ea
 #if defined(CONFIG_CPU_32)
 		.previous
 #endif

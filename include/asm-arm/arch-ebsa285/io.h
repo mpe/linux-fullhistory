@@ -74,7 +74,9 @@ extern __inline__ void __outw(unsigned int value, unsigned int port)
 	void *_ret = NULL;						\
 	if (valid_ioaddr(_addr, _size)) {				\
 		_addr = io_to_phys(_addr);				\
-		_ret = __ioremap(_addr, _size, 0) - IO_FUDGE_FACTOR;	\
+		_ret = __ioremap(_addr, _size, 0);			\
+		if (_ret)						\
+			_ret = (void *)((int) _ret - IO_FUDGE_FACTOR);	\
 	}								\
 	_ret; })
 

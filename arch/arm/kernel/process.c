@@ -1,7 +1,7 @@
 /*
  *  linux/arch/arm/kernel/process.c
  *
- *  Copyright (C) 1996 Russell King - Converted to ARM.
+ *  Copyright (C) 1996-1999 Russell King - Converted to ARM.
  *  Origional Copyright (C) 1995  Linus Torvalds
  */
 
@@ -32,6 +32,7 @@
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
+#include <asm/arch/system.h>
 #include <asm/io.h>
 
 extern char *processor_modes[];
@@ -60,26 +61,38 @@ void cpu_idle(void)
 	current->priority = 0;
 	current->counter = -100;
 	while (1) {
-		if (!current->need_resched && !hlt_counter)
-			proc_idle();
-		schedule();
+		if (!hlt_counter)
+			arch_do_idle();
+		if (current->need_resched) {
+			schedule();
 #ifndef CONFIG_NO_PGT_CACHE
-		check_pgt_cache();
+			check_pgt_cache();
 #endif
+		}
 	}
 }
 
 static char reboot_mode = 'h';
 
-void __init reboot_setup(char *str, int *ints)
+int __init reboot_setup(char *str)
 {
 	reboot_mode = str[0];
+	return 0;
 }
+
+__setup("reboot=", reboot_setup);
 
 void machine_restart(char * __unused)
 {
+	/*
+	 * Turn off caches, interrupts, etc
+	 */
+	cpu_proc_fin();
+
 	arch_reset(reboot_mode);
-	panic("Reboot failed\n");
+
+	printk("Reboot failed -- System halted\n");
+
 	while (1);
 }
 
@@ -133,6 +146,35 @@ void show_regs(struct pt_regs * regs)
 		  	ctrl, transbase, dac);
 	}
 #endif
+}
+
+void show_fpregs(struct user_fp *regs)
+{
+	int i;
+
+	for (i = 0; i < 8; i++) {
+		unsigned long *p;
+		char type;
+
+		p = (unsigned long *)(regs->fpregs + i);
+
+		switch (regs->ftype[i]) {
+			case 1: type = 'f'; break;
+			case 2: type = 'd'; break;
+			case 3: type = 'e'; break;
+			default: type = '?'; break;
+		}
+		if (regs->init_flag)
+			type = '?';
+
+		printk("  f%d(%c): %08lx %08lx %08lx%c",
+			i, type, p[0], p[1], p[2], i & 1 ? '\n' : ' ');
+	}
+			
+
+	printk("FPSR: %08lx FPCR: %08lx\n",
+		(unsigned long)regs->fpsr,
+		(unsigned long)regs->fpcr);
 }
 
 /*
@@ -206,6 +248,7 @@ void exit_thread(void)
 void flush_thread(void)
 {
 	memset(&current->thread.debug, 0, sizeof(current->thread.debug));
+	memset(&current->thread.fpstate, 0, sizeof(current->thread.fpstate));
 	current->used_math = 0;
 	current->flags &= ~PF_USEDFPU;
 }
@@ -237,12 +280,10 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
  */
 int dump_fpu (struct pt_regs *regs, struct user_fp *fp)
 {
-	int fpvalid = 0;
-
 	if (current->used_math)
-		memcpy (fp, &current->thread.fpstate.soft, sizeof (fp));
+		memcpy(fp, &current->thread.fpstate.soft, sizeof (fp));
 
-	return fpvalid;
+	return current->used_math;
 }
 
 /*
@@ -281,6 +322,7 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
  */
 pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 {
+	extern long sys_exit(int) __attribute__((noreturn));
 	pid_t __ret;
 
 	__asm__ __volatile__(

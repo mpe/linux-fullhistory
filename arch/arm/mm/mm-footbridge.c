@@ -1,9 +1,9 @@
 /*
- * arch/arm/mm/mm-ebsa285.c
+ * arch/arm/mm/mm-footbridge.c
  *
  * Extra MM routines for the EBSA285 architecture
  *
- * Copyright (C) 1998 Russell King, Dave Gilbert.
+ * Copyright (C) 1998-1999 Russell King, Dave Gilbert.
  */
 #include <linux/config.h>
 #include <linux/sched.h>
@@ -13,8 +13,9 @@
 #include <asm/pgtable.h>
 #include <asm/page.h>
 #include <asm/io.h>
-#include <asm/proc/mm-init.h>
 #include <asm/dec21285.h>
+
+#include "map.h"
 
 /*
  * The first entry allows us to fiddle with the EEPROM from user-space.
@@ -32,15 +33,15 @@
  * The mapping when the footbridge is in host mode.
  */
 #define MAPPING \
- { FLASH_BASE,   DC21285_FLASH,			FLASH_SIZE,	DOMAIN_IO, 0, 1 }, \
- { PCIMEM_BASE,  DC21285_PCI_MEM,		PCIMEM_SIZE,	DOMAIN_IO, 0, 1 }, \
- { PCICFG0_BASE, DC21285_PCI_TYPE_0_CONFIG,	PCICFG0_SIZE,	DOMAIN_IO, 0, 1 }, \
- { PCICFG1_BASE, DC21285_PCI_TYPE_1_CONFIG,	PCICFG1_SIZE,	DOMAIN_IO, 0, 1 }, \
- { PCIIACK_BASE, DC21285_PCI_IACK,		PCIIACK_SIZE,	DOMAIN_IO, 0, 1 }, \
- { WFLUSH_BASE,  DC21285_OUTBOUND_WRITE_FLUSH,	WFLUSH_SIZE,	DOMAIN_IO, 0, 1 }, \
- { ARMCSR_BASE,  DC21285_ARMCSR_BASE,		ARMCSR_SIZE,	DOMAIN_IO, 0, 1 }, \
- { PCIO_BASE,    DC21285_PCI_IO,		PCIO_SIZE,	DOMAIN_IO, 0, 1 }, \
- { XBUS_BASE,    0x40000000,			XBUS_SIZE,	DOMAIN_IO, 0, 1 }
+ { FLASH_BASE,   DC21285_FLASH,			FLASH_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
+ { PCIMEM_BASE,  DC21285_PCI_MEM,		PCIMEM_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
+ { PCICFG0_BASE, DC21285_PCI_TYPE_0_CONFIG,	PCICFG0_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
+ { PCICFG1_BASE, DC21285_PCI_TYPE_1_CONFIG,	PCICFG1_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
+ { PCIIACK_BASE, DC21285_PCI_IACK,		PCIIACK_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
+ { WFLUSH_BASE,  DC21285_OUTBOUND_WRITE_FLUSH,	WFLUSH_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
+ { ARMCSR_BASE,  DC21285_ARMCSR_BASE,		ARMCSR_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
+ { PCIO_BASE,    DC21285_PCI_IO,		PCIO_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
+ { XBUS_BASE,    0x40000000,			XBUS_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }
 
 #else
 
@@ -79,13 +80,26 @@ unsigned long __bus_to_virt(unsigned long res)
  * The mapping when the footbridge is in add-in mode.
  */
 #define MAPPING \
- { PCIO_BASE,	 DC21285_PCI_IO,		PCIO_SIZE,	DOMAIN_IO, 0, 1 }, \
- { XBUS_BASE,	 0x40000000,			XBUS_SIZE,	DOMAIN_IO, 0, 1 }, \
- { ARMCSR_BASE,  DC21285_ARMCSR_BASE,		ARMCSR_SIZE,	DOMAIN_IO, 0, 1 }, \
- { WFLUSH_BASE,	 DC21285_OUTBOUND_WRITE_FLUSH,	WFLUSH_SIZE,	DOMAIN_IO, 0, 1 }, \
- { FLASH_BASE,	 DC21285_FLASH,			FLASH_SIZE,	DOMAIN_IO, 0, 1 }, \
- { PCIMEM_BASE,	 DC21285_PCI_MEM,		PCIMEM_SIZE,	DOMAIN_IO, 0, 1 }
+ { PCIO_BASE,	 DC21285_PCI_IO,		PCIO_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
+ { XBUS_BASE,	 0x40000000,			XBUS_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
+ { ARMCSR_BASE,  DC21285_ARMCSR_BASE,		ARMCSR_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
+ { WFLUSH_BASE,	 DC21285_OUTBOUND_WRITE_FLUSH,	WFLUSH_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
+ { FLASH_BASE,	 DC21285_FLASH,			FLASH_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }, \
+ { PCIMEM_BASE,	 DC21285_PCI_MEM,		PCIMEM_SIZE,	DOMAIN_IO, 0, 1, 0, 0 }
 
 #endif
 
-#include "mm-armv.c"
+struct mem_desc mem_desc[] __initdata = {
+	0, 0
+};
+
+unsigned int __initdata mem_desc_size = 0;
+
+struct map_desc io_desc[] __initdata = {
+	MAPPING
+};
+
+#define SIZE(x) (sizeof(x) / sizeof(x[0]))
+
+unsigned int __initdata io_desc_size = SIZE(io_desc);
+

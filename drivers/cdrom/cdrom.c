@@ -308,8 +308,6 @@ struct file_operations cdrom_fops =
  */
 #define ENSURE(call, bits) if (cdo->call == NULL) *change_capability &= ~(bits)
 
-static int cdrom_setup_writemode(struct cdrom_device_info *cdi);
-
 int register_cdrom(struct cdrom_device_info *cdi)
 {
 	static char banner_printed = 0;
@@ -357,9 +355,6 @@ int register_cdrom(struct cdrom_device_info *cdi)
 	cdinfo(CD_REG_UNREG, "drive \"/dev/%s\" registered\n", cdi->name);
 	cdi->next = topCdromPtr; 	
 	topCdromPtr = cdi;
-	if (CDROM_CAN(CDC_CD_R) || CDROM_CAN(CDC_CD_RW) || CDROM_CAN(CDC_DVD_R))
-		(void)cdrom_setup_writemode(cdi);
-				
 	return 0;
 }
 #undef ENSURE
@@ -415,6 +410,8 @@ struct cdrom_device_info *cdrom_find_device (kdev_t dev)
 	return cdi;
 }
 
+static int cdrom_setup_writemode(struct cdrom_device_info *cdi);
+
 /* We use the open-option O_NONBLOCK to indicate that the
  * purpose of opening is only for subsequent ioctl() calls; no device
  * integrity checks are performed.
@@ -426,22 +423,31 @@ struct cdrom_device_info *cdrom_find_device (kdev_t dev)
 static
 int cdrom_open(struct inode *ip, struct file *fp)
 {
+	struct cdrom_device_info *cdi;
 	kdev_t dev = ip->i_rdev;
-	struct cdrom_device_info *cdi = cdrom_find_device(dev);
-	int purpose = !!(fp->f_flags & O_NONBLOCK);
-	int ret=0;
+	int ret;
 
 	cdinfo(CD_OPEN, "entering cdrom_open\n"); 
-	if (cdi == NULL)
+	if ((cdi = cdrom_find_device(dev)) == NULL)
 		return -ENODEV;
-	if (fp->f_mode & FMODE_WRITE)
-		return -EROFS;
-	purpose = purpose || !(cdi->options & CDO_USE_FFLAGS);
-	if (purpose)
-		ret = cdi->ops->open(cdi, purpose);
+
+	/* just CD-RW for now. DVD-RW will come soon, CD-R and DVD-R
+	 * need to be handled differently. */
+	if ((fp->f_mode & FMODE_WRITE) && !CDROM_CAN(CDC_CD_RW))
+			return -EROFS;
+
+	/* if this was a O_NONBLOCK open and we should honor the flags,
+	 * do a quick open without drive/disc integrity checks. */
+	if ((fp->f_flags & O_NONBLOCK) && (cdi->options & CDO_USE_FFLAGS))
+		ret = cdi->ops->open(cdi, 1);
 	else
 		ret = open_for_data(cdi);
+
 	if (!ret) cdi->use_count++;
+
+	if (fp->f_mode & FMODE_WRITE && !cdi->write.writeable)
+		cdi->write.writeable = !cdrom_setup_writemode(cdi);
+
 	cdinfo(CD_OPEN, "Use count for \"/dev/%s\" now %d\n", cdi->name, cdi->use_count);
 	/* Do this on open.  Don't wait for mount, because they might
 	    not be mounting, but opening with O_NONBLOCK */
@@ -536,7 +542,7 @@ int open_for_data(struct cdrom_device_info * cdi)
 	if (CDROM_CAN(CDC_LOCK) && cdi->options & CDO_LOCK) {
 			cdo->lock_door(cdi, 1);
 			cdinfo(CD_OPEN, "door locked.\n");
-	}	
+	}
 	cdinfo(CD_OPEN, "device opened successfully.\n"); 
 	return ret;
 
@@ -627,7 +633,7 @@ int cdrom_release(struct inode *ip, struct file *fp)
 	if (cdi->use_count > 0) cdi->use_count--;
 	if (cdi->use_count == 0)
 		cdinfo(CD_CLOSE, "Use count for \"/dev/%s\" now zero\n", cdi->name);
-	if (cdi->use_count == 0 &&      /* last process that closes dev*/
+	if (cdi->use_count == 0 &&
 	    cdo->capability & CDC_LOCK && !keeplocked) {
 		cdinfo(CD_CLOSE, "Unlocking door!\n");
 		cdo->lock_door(cdi, 0);
@@ -2168,6 +2174,28 @@ use_last_written:
 	}
 }
 
+/* return the buffer size of writeable drives */
+static int cdrom_read_buffer_capacity(struct cdrom_device_info *cdi)
+{
+	struct cdrom_device_ops *cdo = cdi->ops;
+	struct cdrom_generic_command cgc;
+	struct {
+		unsigned int pad;
+		unsigned int buffer_size;
+		unsigned int buffer_free;
+	} buf;
+	int ret;
+
+	init_cdrom_command(&cgc, &buf, 12);
+	cgc.cmd[0] = 0x5c;
+	cgc.cmd[8] = 12;
+
+	if ((ret = cdo->generic_packet(cdi, &cgc)))
+		return ret;
+	
+	return be32_to_cpu(buf.buffer_size);
+}
+
 /* return 0 if succesful and the disc can be considered writeable. */
 static int cdrom_setup_writemode(struct cdrom_device_info *cdi)
 {
@@ -2180,6 +2208,7 @@ static int cdrom_setup_writemode(struct cdrom_device_info *cdi)
 	memset(&di, 0, sizeof(disc_information));
 	memset(&ti, 0, sizeof(track_information));
 	memset(&wp, 0, sizeof(write_param_page));
+	memset(&cdi->write, 0, sizeof(struct cdrom_write_settings));
 
 	if ((ret = cdrom_get_disc_info(cdi->dev, &di)))
 		return ret;
@@ -2188,35 +2217,53 @@ static int cdrom_setup_writemode(struct cdrom_device_info *cdi)
 	if ((ret = cdrom_get_track_info(cdi->dev, last_track, 1, &ti)))
 		return ret;
 
+	/* if the media is erasable, then it is either CD-RW or
+	 * DVD-RW - use fixed packets for those. non-erasable media
+	 * indicated CD-R or DVD-R media, use varible sized packets for
+	 * those (where the packet size is a bit less than the buffer
+	 * capacity of the drive. */
+	if (di.erasable) {
+		cdi->write.fpacket = 1;
+		/* FIXME: DVD-RW is 16, should get the packet size instead */
+		cdi->write.packet_size = 32;
+	} else {
+		int buf_size;		
+		cdi->write.fpacket = 0;
+		buf_size = cdrom_read_buffer_capacity(cdi);
+		buf_size -= 100*1024;
+		cdi->write.packet_size = buf_size / CD_FRAMESIZE;
+	}
+
 	init_cdrom_command(&cgc, &wp, 0x3c);
 	if ((ret = cdrom_mode_sense(cdi, &cgc, GPMODE_WRITE_PARMS_PAGE, 0)))
 		return ret;
 
 	/* sanity checks */
-	if ((ti.damage && !ti.nwa_v) || ti.blank)
+	if ((ti.damage && !ti.nwa_v) || ti.blank) {
+		cdinfo(CD_WARNING, "can't write to this disc\n"); 
 		return 1;
-
-	cdi->packet_size = wp.packet_size = be32_to_cpu(ti.fixed_packet_size);
-	cdi->nwa = ti.nwa_v ? be32_to_cpu(ti.next_writable) : 0;
-	wp.track_mode = ti.track_mode;
-	/* write_type 0 == packet/incremental writing */
-	wp.write_type = 0;
-
-	/* MODE1 or MODE2 writing */
-	switch (ti.data_mode) {
-	case 1: wp.data_block_type =  8; break;
-	case 2: wp.data_block_type = 13; break;
-	default: return 1;
 	}
+
+	/* NWA is only for CD-R and DVD-R. -RW media is randomly
+	 * writeable once it has been formatted. */
+	cdi->write.nwa = ti.nwa_v ? be32_to_cpu(ti.next_writable) : 0;
+
+	wp.fp			= cdi->write.fpacket ? 1 : 0;
+	wp.track_mode		= 0;
+	wp.write_type		= 0;
+	wp.data_block_type 	= 8;
+	wp.session_format 	= 0;
+	wp.multi_session	= 3;
+	wp.audio_pause		= cpu_to_be16(0x96);
+	wp.packet_size		= cdi->write.fpacket ? cpu_to_be32(cdi->write.packet_size) : 0;
+	wp.track_mode		= 5; /* should be ok with both CD and DVD */
 
 	if ((ret = cdrom_mode_select(cdi, &cgc)))
 		return ret;
 
-	printk("%s: writeable with %s packets of %lu in length", cdi->name,
-						wp.fp ? "fixed" : "variable",
-						(unsigned long)cdi->packet_size);
-	printk(", nwa = %lu\n", (unsigned long)cdi->nwa);
-
+	cdinfo(CD_WARNING, "%s: writeable with %lu block %s packets\n",
+				cdi->name, cdi->write.packet_size,
+				cdi->write.fpacket ? "fixed" : "variable");
 	return 0;
 }
 
@@ -2479,14 +2526,17 @@ static void cdrom_sysctl_register(void)
 
 	initialized = 1;
 }
-
-static void cdrom_sysctl_unregister(void)
-{
-	unregister_sysctl_table(cdrom_sysctl_header);
-}
 #endif /* endif CONFIG_SYSCTL */
 
+
 #ifdef MODULE
+static void cdrom_sysctl_unregister(void)
+{
+#ifdef CONFIG_SYSCTL
+	unregister_sysctl_table(cdrom_sysctl_header);
+#endif
+}
+
 int init_module(void)
 {
 #ifdef CONFIG_SYSCTL

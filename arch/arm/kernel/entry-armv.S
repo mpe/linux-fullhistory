@@ -298,6 +298,30 @@ irq_prio_ebsa110:
 
 		.macro	irq_prio_table
 		.endm
+
+#elif defined(CONFIG_ARCH_SA1100)
+
+		.macro	disable_fiq
+		.endm
+
+		.macro	get_irqnr_and_base, irqnr, irqstat, base
+		mov	r4, #0xfa000000			@ ICIP = 0xfa050000
+		add	r4, r4, #0x00050000
+		ldr	\irqstat, [r4]			@ get irqs
+		ldr	\irqnr, [r4, #4]		@ ICMR = 0xfa050004
+		ands	\irqstat, \irqstat, \irqnr
+		mov	\irqnr, #0
+		beq	1002f
+1001:		tst	\irqstat, #1
+		addeq	\irqnr, \irqnr, #1
+		moveq	\irqstat, \irqstat, lsr #1
+		beq	1001b
+1002:
+		.endm
+
+		.macro	irq_prio_table
+		.endm
+
 #else
 #error Unknown architecture
 #endif
@@ -449,11 +473,15 @@ __dabt_svc:	sub	sp, sp, #S_FRAME_SIZE
 		add	r5, sp, #S_SP
 		mov	r1, lr
 		stmia	r5, {r0 - r4}			@ save sp_SVC, lr_SVC, pc, cpsr, old_ro
+
+		mrs	r9, cpsr			@ Enable interrupts if they were
 		tst	r3, #I_BIT
-		mrseq	r0, cpsr			@ Enable interrupts if they were
-		biceq	r0, r0, #I_BIT			@ previously
-		msreq	cpsr, r0
+		biceq	r9, r9, #I_BIT			@ previously
+
 		mov	r0, r2
+/*
+ * This routine must not corrupt r9
+ */
 #ifdef MULTI_CPU
 		ldr	r2, .LCprocfns
 		mov	lr, pc
@@ -461,6 +489,7 @@ __dabt_svc:	sub	sp, sp, #S_FRAME_SIZE
 #else
 		bl	cpu_data_abort
 #endif
+		msr	cpsr, r9
 		mov	r3, sp
 		bl	SYMBOL_NAME(do_DataAbort)
 		ldr	r0, [sp, #S_PSR]
@@ -544,9 +573,6 @@ __dabt_usr:	sub	sp, sp, #S_FRAME_SIZE		@ Allocate frame size in one go
 #endif
 
 		mov	fp, #0
-		mrs	r2, cpsr			@ Enable interrupts if they were
-		bic	r2, r2, #I_BIT			@ previously
-		msr	cpsr, r2
 #ifdef MULTI_CPU
 		ldr	r2, .LCprocfns
 		mov	lr, pc
@@ -554,6 +580,10 @@ __dabt_usr:	sub	sp, sp, #S_FRAME_SIZE		@ Allocate frame size in one go
 #else
 		bl	cpu_data_abort
 #endif
+		mrs	r3, cpsr			@ Enable interrupts if they were
+		bic	r3, r3, #I_BIT			@ previously
+		msr	cpsr, r3
+
 		mov	r3, sp
 		adrsvc	al, lr, ret_from_sys_call
 		b	SYMBOL_NAME(do_DataAbort)

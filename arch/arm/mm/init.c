@@ -1,7 +1,7 @@
 /*
  *  linux/arch/arm/mm/init.c
  *
- *  Copyright (C) 1995, 1996  Russell King
+ *  Copyright (C) 1995-1999  Russell King
  */
 
 #include <linux/config.h>
@@ -15,6 +15,7 @@
 #include <linux/mman.h>
 #include <linux/mm.h>
 #include <linux/swap.h>
+#include <linux/swapctl.h>
 #include <linux/smp.h>
 #include <linux/init.h>
 #ifdef CONFIG_BLK_DEV_INITRD
@@ -26,14 +27,18 @@
 #include <asm/pgtable.h>
 #include <asm/dma.h>
 #include <asm/hardware.h>
-#include <asm/proc/mm-init.h>
+
+#include "map.h"
 
 pgd_t swapper_pg_dir[PTRS_PER_PGD];
 #ifndef CONFIG_NO_PGT_CACHE
 struct pgtable_cache_struct quicklists;
 #endif
 
-extern char _etext, _stext, _edata, __bss_start, _end;
+extern unsigned long free_area_init(unsigned long, unsigned long);
+extern void show_net_buffers(void);
+
+extern char _etext, _text, _edata, __bss_start, _end;
 extern char __init_begin, __init_end;
 
 int do_check_pgt_cache(int low, int high)
@@ -67,7 +72,6 @@ int do_check_pgt_cache(int low, int high)
  * ZERO_PAGE is a special page that is used for zero-initialized
  * data and COW.
  */
-#if PTRS_PER_PTE != 1
 pte_t *empty_bad_page_table;
 
 pte_t *__bad_pagetable(void)
@@ -81,7 +85,6 @@ pte_t *__bad_pagetable(void)
 
 	return empty_bad_page_table;
 }
-#endif
 
 unsigned long *empty_zero_page;
 unsigned long *empty_bad_page;
@@ -126,30 +129,54 @@ void show_mem(void)
  */
 unsigned long __init paging_init(unsigned long start_mem, unsigned long end_mem)
 {
-	extern unsigned long free_area_init(unsigned long, unsigned long);
-
 	start_mem = PAGE_ALIGN(start_mem);
+
 	empty_zero_page = (unsigned long *)start_mem;
+	memzero(empty_zero_page, PAGE_SIZE);
 	start_mem += PAGE_SIZE;
+
 	empty_bad_page = (unsigned long *)start_mem;
 	start_mem += PAGE_SIZE;
-#if PTRS_PER_PTE != 1
+
 #ifdef CONFIG_CPU_32
 	start_mem += PTRS_PER_PTE * BYTES_PER_PTR;
 #endif
 	empty_bad_page_table = (pte_t *)start_mem;
 	start_mem += PTRS_PER_PTE * BYTES_PER_PTR;
-#endif
-	memzero (empty_zero_page, PAGE_SIZE);
-	start_mem = setup_pagetables (start_mem, end_mem);
+
+	start_mem = setup_page_tables(start_mem, end_mem);
 
 	flush_tlb_all();
-	update_memc_all();
 
 	end_mem &= PAGE_MASK;
 	high_memory = (void *)end_mem;
 
 	return free_area_init(start_mem, end_mem);
+}
+
+static inline void free_unused_mem_map(void)
+{
+	struct page *page, *end;
+
+	end = mem_map + max_mapnr;
+
+	for (page = mem_map; page < end; page++) {
+		unsigned long low, high;
+
+		if (!PageSkip(page))
+			continue;
+
+		low = PAGE_ALIGN((unsigned long)(page + 1));
+		if (page->next_hash < page)
+			high = ((unsigned long)end) & PAGE_MASK;
+		else
+			high = ((unsigned long)page->next_hash) & PAGE_MASK;
+
+		while (low < high) {
+			clear_bit(PG_reserved, &mem_map[MAP_NR(low)].flags);
+			low += PAGE_SIZE;
+		}
+	}
 }
 
 /*
@@ -159,28 +186,48 @@ unsigned long __init paging_init(unsigned long start_mem, unsigned long end_mem)
  */
 void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 {
-	extern void sound_init(void);
 	int codepages = 0;
 	int reservedpages = 0;
 	int datapages = 0;
-	int initpages = 0;
+	int initpages = 0, i, min_nr;
 	unsigned long tmp;
 
-	end_mem &= PAGE_MASK;
-	high_memory = (void *)end_mem;
-	max_mapnr = num_physpages = MAP_NR(end_mem);
+	end_mem      &= PAGE_MASK;
+	high_memory   = (void *)end_mem;
+	max_mapnr     = MAP_NR(end_mem);
+	num_physpages = 0;
+
+	/* setup address validity bitmap */
+	start_mem = create_mem_holes(start_mem, end_mem);
+
+	start_mem = PAGE_ALIGN(start_mem);
 
 	/* mark usable pages in the mem_map[] */
-	mark_usable_memory_areas(&start_mem, end_mem);
+	mark_usable_memory_areas(start_mem, end_mem);
+
+	/* free unused mem_map[] entries */
+	free_unused_mem_map();
 
 #define BETWEEN(w,min,max) ((w) >= (unsigned long)(min) && \
 			    (w) < (unsigned long)(max))
 
 	for (tmp = PAGE_OFFSET; tmp < end_mem ; tmp += PAGE_SIZE) {
+		if (PageSkip(mem_map+MAP_NR(tmp))) {
+			unsigned long next;
+
+			next = mem_map[MAP_NR(tmp)].next_hash - mem_map;
+
+			next = (next << PAGE_SHIFT) + PAGE_OFFSET;
+
+			if (next < tmp || next >= end_mem)
+				break;
+			tmp = next;
+		}
+		num_physpages++;
 		if (PageReserved(mem_map+MAP_NR(tmp))) {
 			if (BETWEEN(tmp, &__init_begin, &__init_end))
 				initpages++;
-			else if (BETWEEN(tmp, &_stext, &_etext))
+			else if (BETWEEN(tmp, &_text, &_etext))
 				codepages++;
 			else if (BETWEEN(tmp, &_etext, &_edata))
 				datapages++;
@@ -201,11 +248,24 @@ void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 
 	printk ("Memory: %luk/%luM available (%dk code, %dk reserved, %dk data, %dk init)\n",
 		 (unsigned long) nr_free_pages << (PAGE_SHIFT-10),
-		 max_mapnr >> (20 - PAGE_SHIFT),
-		 codepages << (PAGE_SHIFT-10),
+		 num_physpages >> (20 - PAGE_SHIFT),
+		 codepages     << (PAGE_SHIFT-10),
 		 reservedpages << (PAGE_SHIFT-10),
-		 datapages << (PAGE_SHIFT-10),
-		 initpages << (PAGE_SHIFT-10));
+		 datapages     << (PAGE_SHIFT-10),
+		 initpages     << (PAGE_SHIFT-10));
+
+	i = nr_free_pages >> 7;
+	if (PAGE_SIZE < 32768)
+		min_nr = 10;
+	else
+		min_nr = 2;
+	if (i < min_nr)
+		i = min_nr;
+	if (i > 256)
+		i = 256;
+	freepages.min = i;
+	freepages.low = i * 2;
+	freepages.high = i * 3;
 
 #ifdef CONFIG_CPU_26
 	if (max_mapnr <= 128) {
@@ -241,14 +301,16 @@ void free_initmem (void)
 
 #ifdef CONFIG_FOOTBRIDGE
 	{
-	extern int __netwinder_begin, __netwinder_end, __ebsa285_begin, __ebsa285_end;
+	extern int __netwinder_begin, __netwinder_end,
+		   __ebsa285_begin, __ebsa285_end;
 
 	if (!machine_is_netwinder())
 		free_area((unsigned long)(&__netwinder_begin),
 			  (unsigned long)(&__netwinder_end),
 			  "netwinder");
 
-	if (!machine_is_ebsa285() && !machine_is_cats() && !machine_is_co285())
+	if (!machine_is_ebsa285() && !machine_is_cats() &&
+	    !machine_is_co285())
 		free_area((unsigned long)(&__ebsa285_begin),
 			  (unsigned long)(&__ebsa285_end),
 			  "ebsa285/cats");
@@ -260,22 +322,28 @@ void free_initmem (void)
 
 void si_meminfo(struct sysinfo *val)
 {
-	int i;
+	struct page *page, *end;
 
-	i = MAP_NR(high_memory);
 	val->totalram = 0;
 	val->sharedram = 0;
 	val->freeram = nr_free_pages << PAGE_SHIFT;
 	val->bufferram = atomic_read(&buffermem);
-	while (i-- > 0)  {
-		if (PageReserved(mem_map+i))
+	for (page = mem_map, end = mem_map + max_mapnr;
+	     page < end; page++) {
+		if (PageSkip(page)) {
+			if (page->next_hash < page)
+				break;
+			page = page->next_hash;
+		}
+		if (PageReserved(page))
 			continue;
 		val->totalram++;
-		if (!atomic_read(&mem_map[i].count))
+		if (!atomic_read(&page->count))
 			continue;
-		val->sharedram += atomic_read(&mem_map[i].count) - 1;
+		val->sharedram += atomic_read(&page->count) - 1;
 	}
 	val->totalram <<= PAGE_SHIFT;
 	val->sharedram <<= PAGE_SHIFT;
+	val->totalbig = 0;
+	val->freebig = 0;
 }
-

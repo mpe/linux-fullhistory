@@ -69,3 +69,23 @@ extern unsigned char pckbd_sysrq_xlate[128];
 #define kbd_enable_irq()
 
 #define SYSRQ_KEY	0x54
+
+/* resource allocation */
+#define kbd_request_region()
+#define kbd_request_irq(handler) request_irq(KEYBOARD_IRQ, handler, 0, \
+					     "keyboard", NULL)
+
+/* How to access the keyboard macros on this platform.  */
+#define kbd_read_input() inb(KBD_DATA_REG)
+#define kbd_read_status() inb(KBD_STATUS_REG)
+#define kbd_write_output(val) outb(val, KBD_DATA_REG)
+#define kbd_write_command(val) outb(val, KBD_CNTL_REG)
+
+/* Some stoneage hardware needs delays after some operations.  */
+#define kbd_pause() do { } while(0)
+
+#define aux_request_irq(hand, dev_id)					\
+	request_irq(AUX_IRQ, hand, SA_SHIRQ, "PS/2 Mouse", dev_id)
+
+#define aux_free_irq(dev_id) free_irq(AUX_IRQ, dev_id)
+

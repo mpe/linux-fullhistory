@@ -32,17 +32,11 @@ endif
 
 include $(TOPDIR)/Rules.make
 
+.S.o:
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c -o $*.o $<
+
 fd1772_mod.o: $(FLOPPY)
 	$(LD) -r -o $@ $(FLOPPY)
 
 mfmhd_mod.o: mfmhd.o mfm.o
 	$(LD) -r -o $@ mfmhd.o mfm.o
-
-%.o: %.S
-ifndef $(CONFIG_BINUTILS_NEW)
-	$(CC) $(CFLAGS) -D__ASSEMBLY__ -E $< | tr ';$$' '\n#' > ..tmp.s
-	$(CC) $(CFLAGS) -c -o $@ ..tmp.s
-	$(RM) ..tmp.s
-else
-	$(CC) $(CFLAGS) -D__ASSEMBLY__ -c -o $@ $<
-endif

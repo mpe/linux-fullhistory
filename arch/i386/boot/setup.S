@@ -209,14 +209,14 @@ bad_sig:
 	addw	$SYSSEG, %bx
 	movw	%bx, %cs:start_sys_seg
 # Move rest of setup code/data to here
-	movw	$2048, %di			# four sectors loaded by LILO
+	movw	$4096, %di			# four sectors loaded by LILO
 	subw	%si, %si
 	movw	%cs, %ax			# aka SETUPSEG
 	movw	%ax, %es
 	movw	$SYSSEG, %ax
 	movw	%ax, %ds
 	rep
-	movsl
+	movsw
 	movw	%cs, %ax			# aka SETUPSEG
 	movw	%ax, %ds
 	cmpw	$SIG1, setup_sig1
@@ -532,9 +532,9 @@ do_move:
 	addw	$0x100, %bx
 	subw	%di, %di
 	subw	%si, %si
-	movw 	$0x400, %cx
+	movw 	$0x800, %cx
 	rep
-	movsl
+	movsw
 	cmpw	%bp, %bx			# assume start_sys_seg > 0x200,
 						# so we will perhaps read one
 						# page more than needed, but

@@ -273,6 +273,7 @@ struct cdrom_generic_command
 	unsigned char 	*buffer;
 	unsigned int 	buflen;
 	int		stat;
+	void		*reserved[4];
 };
 
 
@@ -655,6 +656,14 @@ typedef union {
 } dvd_authinfo;
 
 #ifdef __KERNEL__
+
+struct cdrom_write_settings {
+	unsigned char fpacket;		/* fixed/variable packets */
+	unsigned long packet_size;	/* write out this number of packets */
+	unsigned long nwa;		/* next writeable address */
+	unsigned char writeable;	/* cdrom is writeable */
+};
+
 /* Uniform cdrom data structures for cdrom.c */
 struct cdrom_device_info {
 	struct cdrom_device_ops  *ops;  /* link to device_ops */
@@ -673,8 +682,7 @@ struct cdrom_device_info {
 /* per-device flags */
         __u8 sanyo_slot		: 2;	/* Sanyo 3 CD changer support */
         __u8 reserved		: 6;	/* not used yet */
-	__u32 packet_size;		/* write out this number of packets */
-	__u32 nwa;			/* next writeable address */
+	struct cdrom_write_settings write;
 };
 
 struct cdrom_device_ops {

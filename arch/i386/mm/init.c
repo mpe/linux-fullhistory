@@ -286,7 +286,7 @@ static void __init pagetable_init(void)
 	for (; (i < PTRS_PER_PGD) && (vaddr <= end); pgd++, i++) {
 		vaddr = i*PGDIR_SIZE;
 #if CONFIG_X86_PAE
-		pmd = (pmd_t *) alloc_bootmem_pages(PAGE_SIZE);
+		pmd = (pmd_t *) alloc_bootmem_low_pages(PAGE_SIZE);
 		memset((void*)pmd, 0, PAGE_SIZE);
 		pgd_val(*pgd) = __pa(pmd) + 0x1;
 #else
@@ -311,7 +311,7 @@ static void __init pagetable_init(void)
 				continue;
 			}
 
-			pte = (pte_t *) alloc_bootmem_pages(PAGE_SIZE);
+			pte = (pte_t *) alloc_bootmem_low_pages(PAGE_SIZE);
 			memset((void*)pte, 0, PAGE_SIZE);
 			pmd_val(*pmd) = _KERNPG_TABLE + __pa(pte);
 
@@ -340,7 +340,7 @@ static void __init pagetable_init(void)
 	for ( ; (i < PTRS_PER_PGD) && vaddr; pgd++, i++) {
 #if CONFIG_X86_PAE
 		if (pgd_none(*pgd)) {
-			pmd = (pmd_t *) alloc_bootmem_pages(PAGE_SIZE);
+			pmd = (pmd_t *) alloc_bootmem_low_pages(PAGE_SIZE);
 			memset((void*)pmd, 0, PAGE_SIZE);
 			pgd_val(*pgd) = __pa(pmd) + 0x1;
 			if (pmd != pmd_offset(pgd, vaddr))
@@ -352,7 +352,7 @@ static void __init pagetable_init(void)
 #endif
 		for (; (j < PTRS_PER_PMD) && vaddr; pmd++, j++) {
 			if (pmd_none(*pmd)) {
-				pte = (pte_t *) alloc_bootmem_pages(PAGE_SIZE);
+				pte = (pte_t *) alloc_bootmem_low_pages(PAGE_SIZE);
 				memset((void*)pte, 0, PAGE_SIZE);
 				pmd_val(*pmd) = _KERNPG_TABLE + __pa(pte);
 				if (pte != pte_offset(pmd, 0))

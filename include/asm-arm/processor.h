@@ -32,11 +32,10 @@ typedef unsigned long mm_segment_t;		/* domain register	*/
 
 #ifdef __KERNEL__
 
-#include <asm/assembler.h> 
-
 #define NR_DEBUGS	5
 
-#include <asm/proc/ptrace.h>
+#include <asm/ptrace.h>
+#include <asm/arch/memory.h>
 #include <asm/arch/processor.h>
 #include <asm/proc/processor.h>
 
@@ -80,7 +79,7 @@ struct thread_struct {
  */
 extern __inline__ unsigned long thread_saved_pc(struct thread_struct *t)
 {
-	return t->save ? t->save->pc & ~PCMASK : 0;
+	return t->save ? pc_pointer(t->save->pc) : 0;
 }
 
 extern __inline__ unsigned long get_css_fp(struct thread_struct *t)

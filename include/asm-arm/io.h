@@ -25,7 +25,7 @@ extern void __iounmap(void *addr);
 
 #endif
 
-#include <asm/hardware.h>
+#include <asm/arch/hardware.h>
 #include <asm/arch/memory.h>
 #include <asm/arch/io.h>
 #include <asm/proc/io.h>

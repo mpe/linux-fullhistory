@@ -22,7 +22,7 @@
 
 #include <asm/uaccess.h>
 
-#define LOG_BUF_LEN	(16384*16)
+#define LOG_BUF_LEN	(16384)
 #define LOG_BUF_MASK	(LOG_BUF_LEN-1)
 
 static char buf[1024];

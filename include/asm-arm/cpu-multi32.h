@@ -88,6 +88,14 @@ extern struct processor {
 	 * purge cached data without (necessarily) writing it back
 	 */
 	void (*_cache_purge_area)(unsigned long start, unsigned long end);
+	/*
+	 * flush a specific TLB
+	 */
+	void (*_flush_tlb_page)(unsigned long address, int flags);
+	/*
+	 * Idle the processor
+	 */
+	int (*_do_idle)(void);
 } processor;
 
 extern const struct processor arm6_processor_functions;
@@ -98,6 +106,7 @@ extern const struct processor sa110_processor_functions;
 #define cpu_check_bugs()			processor._check_bugs()
 #define cpu_proc_init()				processor._proc_init()
 #define cpu_proc_fin()				processor._proc_fin()
+#define cpu_do_idle()				processor._do_idle()
 
 #define cpu_flush_cache_all()			processor._flush_cache_all()
 #define cpu_flush_cache_area(start,end,flags)	processor._flush_cache_area(start,end,flags)
@@ -106,12 +115,15 @@ extern const struct processor sa110_processor_functions;
 #define cpu_flush_ram_page(page)		processor._flush_ram_page(page)
 #define cpu_flush_tlb_all()			processor._flush_tlb_all()
 #define cpu_flush_tlb_area(start,end,flags)	processor._flush_tlb_area(start,end,flags)
-#define cpu_switch_mm(pgd,tsk)			processor._set_pgd(pgd)
+#define cpu_flush_tlb_page(addr,flags)		processor._flush_tlb_page(addr,flags)
+#define cpu_set_pgd(pgd)			processor._set_pgd(pgd)
 #define cpu_set_pmd(pmdp, pmd)			processor._set_pmd(pmdp, pmd)
 #define cpu_set_pte(ptep, pte)			processor._set_pte(ptep, pte)
 #define cpu_reset()				processor.reset()
 #define cpu_flush_icache_area(start,end)	processor._flush_icache_area(start,end)
 #define cpu_cache_wback_area(start,end)		processor._cache_wback_area(start,end)
 #define cpu_cache_purge_area(start,end)		processor._cache_purge_area(start,end)
+
+#define cpu_switch_mm(pgd,tsk)			cpu_set_pgd(__virt_to_phys((unsigned long)(pgd)))
 
 #endif

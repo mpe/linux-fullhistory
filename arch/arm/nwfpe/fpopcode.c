@@ -19,7 +19,6 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#include "config.h"
 #include "softfloat.h"
 #include "fpopcode.h"
 #include "fpsr.h"

@@ -126,6 +126,13 @@ void isa_disable_dma(int channel, dma_t *dma)
 	outb(channel | 4, isa_dma_port[channel][ISA_DMA_MASK]);
 }
 
+static struct resource dma_resources[] = {
+	{ "dma1",		0x0000, 0x000f },
+	{ "dma low page", 	0x0080, 0x008f },
+	{ "dma2",		0x00c0, 0x00df },
+	{ "dma high page",	0x0480, 0x048f }
+};
+
 int __init isa_init_dma(void)
 {
 	int dmac_found;

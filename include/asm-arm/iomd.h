@@ -1,6 +1,6 @@
 #include <linux/config.h>
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 #define __IOMD(offset)	(IO_IOMD_BASE + (offset >> 2))
 #else
 #define __IOMD(offset)	offset
@@ -215,7 +215,7 @@
 #define VDMA_START	IOMD_VIDSTART
 #define VDMA_END	IOMD_VIDEND
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 extern unsigned int vram_half_sam;
 #define video_set_dma(start,end,offset)				\
 do {								\

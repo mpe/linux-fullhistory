@@ -152,4 +152,6 @@ static __inline__ void irq_init_irq(void)
 			break;
 		}
 	}
+
+	init_FIQ();
 }

@@ -7,6 +7,7 @@
  */
 #include <linux/kernel.h>
 #include <linux/pci.h>
+#include <linux/errno.h>
 #include <linux/init.h>
 
 #include <asm/irq.h>
@@ -71,6 +72,38 @@ struct pci_fixup pcibios_fixups[] = {
 	{ PCI_FIXUP_HEADER, PCI_VENDOR_ID_WINBOND, PCI_DEVICE_ID_WINBOND_83C553, pci_fixup_83c553 },
 	{ 0 }
 };
+
+/*
+ * Assign new address to PCI resource.  We hope our resource information
+ * is complete.  On the PC, we don't re-assign resources unless we are
+ * forced to do so.
+ *
+ * Expects start=0, end=size-1, flags=resource type.
+ */
+
+int __init pcibios_assign_resource(struct pci_dev *dev, int i)
+{
+	struct resource *r = &dev->resource[i];
+	struct resource *pr = pci_find_parent_resource(dev, r);
+	unsigned long size = r->end + 1;
+	unsigned long flags = 0;
+
+	if (!pr)
+		return -EINVAL;
+	if (r->flags & IORESOURCE_IO) {
+		if (size > 0x100)
+			return -EFBIG;
+		if (allocate_resource(pr, r, size, 0x9000, ~0, 1024))
+			return -EBUSY;
+		flags = PCI_BASE_ADDRESS_SPACE_IO;
+	} else {
+		if (allocate_resource(pr, r, size, 0x00100000, 0x7fffffff, size))
+			return -EBUSY;
+	}
+	if (i < 6)
+		pci_write_config_dword(dev, PCI_BASE_ADDRESS_0 + 4*i, r->start | flags);
+	return 0;
+}
 
 /*
  * Assign an address to an I/O range.
