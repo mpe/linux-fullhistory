@@ -43,25 +43,23 @@ static struct dentry * udf_follow_link(struct dentry * dentry,
  * symlinks can't do much...
  */
 struct inode_operations udf_symlink_inode_operations = {
-    NULL,			/* no file-operations */
-    NULL,			/* create */
-    NULL,			/* lookup */
-    NULL,			/* link */
-    NULL,			/* unlink */
-    NULL,			/* symlink */
-    NULL,			/* mkdir */
-    NULL,			/* rmdir */
-    NULL,			/* mknod */
-    NULL,			/* rename */
-    udf_readlink,	/* readlink */
-    udf_follow_link,/* follow_link */
+	NULL,			/* no file-operations */
+	NULL,			/* create */
+	NULL,			/* lookup */
+	NULL,			/* link */
+	NULL,			/* unlink */
+	NULL,			/* symlink */
+	NULL,			/* mkdir */
+	NULL,			/* rmdir */
+	NULL,			/* mknod */
+	NULL,			/* rename */
+	udf_readlink,		/* readlink */
+	udf_follow_link,	/* follow_link */
 	NULL,			/* get_block */
-    NULL,			/* readpage */
-    NULL,			/* writepage */
-	NULL,			/* flushpage */
-    NULL,			/* truncate */
-    NULL,			/* permission */
-    NULL,			/* smap */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
+	NULL,			/* truncate */
+	NULL,			/* permission */
 	NULL			/* revalidate */
 };
 

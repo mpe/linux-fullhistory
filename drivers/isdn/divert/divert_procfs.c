@@ -294,22 +294,6 @@ static struct file_operations isdn_fops =
 
 struct inode_operations divert_file_inode_operations = {
     &isdn_fops,  /* default proc file-ops */
-    NULL,	 /* create	*/
-    NULL,	 /* lookup	*/
-    NULL,	 /* link		*/
-    NULL,	 /* unlink	*/
-    NULL,	 /* symlink	*/
-    NULL,	 /* mkdir	*/
-    NULL,	 /* rmdir	   */
-    NULL,	 /* mknod	   */
-    NULL,	    /* rename	   */
-    NULL,	    /* readlink	   */
-    NULL,	    /* follow_link */
-    NULL,	    /* readpage	   */
-    NULL,	    /* writepage   */
-    NULL,	    /* bmap	   */
-    NULL,	    /* truncate	   */
-    NULL	    /* permission  */
 };
 
 

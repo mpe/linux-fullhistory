@@ -369,10 +369,8 @@ static struct inode_operations proc_mem_inode_operations = {
 	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	proc_permission,	/* permission */
-	NULL,			/* smap */
 	NULL			/* revalidate */
 };
 
@@ -794,7 +792,6 @@ static struct inode_operations proc_fd_inode_operations = {
 	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	proc_permission,	/* permission */
 };

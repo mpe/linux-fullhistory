@@ -43,10 +43,8 @@ struct inode_operations efs_dir_inode_operations = {
 	efs_get_block,		/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	NULL,			/* permission */
-	NULL,			/* smap */
 	NULL			/* revalidate */
 };
 

@@ -63,25 +63,6 @@ static struct file_operations ppc_htab_operations = {
  */
 struct inode_operations proc_ppc_htab_inode_operations = {
     &ppc_htab_operations,  /* default proc file-ops */
-    NULL,	    /* create	   */
-    NULL,	    /* lookup	   */
-    NULL,	    /* link	   */
-    NULL,	    /* unlink	   */
-    NULL,	    /* symlink	   */
-    NULL,	    /* mkdir	   */
-    NULL,	    /* rmdir	   */
-    NULL,	    /* mknod	   */
-    NULL,	    /* rename	   */
-    NULL,	    /* readlink	   */
-    NULL,	    /* follow_link */
-    NULL,	    /* get_block   */
-    NULL,	    /* readpage	   */
-    NULL,	    /* writepage   */
-    NULL,	    /* flushpage   */
-    NULL,	    /* truncate	   */
-    NULL,	    /* permission  */
-    NULL,	    /* smap        */
-    NULL	    /* revalidate  */
 };
 
 /* these will go into processor.h when I'm done debugging -- Cort */

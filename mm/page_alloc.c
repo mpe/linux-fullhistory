@@ -5,6 +5,7 @@
  *  Swap reorganised 29.12.95, Stephen Tweedie
  *  Support of BIGMEM added by Gerhard Wichert, Siemens AG, July 1999
  *  Reshaped it to be a zoned allocator, Ingo Molnar, Red Hat, 1999
+ *  Discontiguous memory support, Kanoj Sarcar, SGI, Nov 1999
  */
 
 #include <linux/config.h>
@@ -15,18 +16,18 @@
 #include <linux/pagemap.h>
 #include <linux/bootmem.h>
 
+/* Use NUMNODES instead of numnodes for better code inside kernel APIs */
+#ifndef CONFIG_DISCONTIGMEM
+#define NUMNODES 1
+#else
+#define NUMNODES numnodes
+#endif
+
 int nr_swap_pages = 0;
 int nr_lru_pages;
 LIST_HEAD(lru_cache);
 
-static zone_t zones [MAX_NR_ZONES] =
-	{
-		{ SPIN_LOCK_UNLOCKED, name: "DMA" },
-		{ SPIN_LOCK_UNLOCKED, name: "Normal" },
-		{ SPIN_LOCK_UNLOCKED, name: "HighMem" }
-	};
-
-zonelist_t zonelists [NR_GFPINDEX];
+static char *zone_names[MAX_NR_ZONES] = { "DMA", "Normal", "HighMem" };
 
 /*
  * Free_page() adds the page to the free lists. This is optimized for
@@ -351,10 +352,12 @@ unsigned int nr_free_pages (void)
 {
 	unsigned int sum;
 	zone_t *zone;
+	int i;
 
 	sum = 0;
-	for (zone = zones; zone < zones + MAX_NR_ZONES; zone++)
-		sum += zone->free_pages;
+	for (i = 0; i < NUMNODES; i++)
+		for (zone = NODE_DATA(i)->node_zones; zone < NODE_DATA(i)->node_zones + MAX_NR_ZONES; zone++)
+			sum += zone->free_pages;
 	return sum;
 }
 
@@ -365,17 +368,24 @@ unsigned int nr_free_buffer_pages (void)
 {
 	unsigned int sum;
 	zone_t *zone;
+	int i;
 
 	sum = nr_lru_pages;
-	for (zone = zones; zone <= zones+ZONE_NORMAL; zone++)
-		sum += zone->free_pages;
+	for (i = 0; i < NUMNODES; i++)
+		for (zone = NODE_DATA(i)->node_zones; zone <= NODE_DATA(i)->node_zones+ZONE_NORMAL; zone++)
+			sum += zone->free_pages;
 	return sum;
 }
 
 #if CONFIG_HIGHMEM
 unsigned int nr_free_highpages (void)
 {
-	return zones[ZONE_HIGHMEM].free_pages;
+	int i;
+	unsigned int pages = 0;
+
+	for (i = 0; i < NUMNODES; i++)
+		pages += NODE_DATA(i)->node_zones[ZONE_HIGHMEM].free_pages;
+	return pages;
 }
 #endif
 
@@ -384,7 +394,7 @@ unsigned int nr_free_highpages (void)
  * We also calculate the percentage fragmentation. We do this by counting the
  * memory on each free list with the exception of the first item on the list.
  */
-void show_free_areas(void)
+void show_free_areas_core(int nid)
 {
  	unsigned long order;
 	unsigned type;
@@ -402,7 +412,7 @@ void show_free_areas(void)
 
 	for (type = 0; type < MAX_NR_ZONES; type++) {
 		struct list_head *head, *curr;
-		zone_t *zone = zones + type;
+		zone_t *zone = NODE_DATA(nid)->node_zones + type;
  		unsigned long nr, total, flags;
 
 		printk("  %s: ", zone->name);
@@ -434,12 +444,15 @@ void show_free_areas(void)
 #endif	
 }
 
+void show_free_areas(void)
+{
+	show_free_areas_core(0);
+}
+
 /*
- * Builds allocation fallback zone lists. We are basically ready
- * to do NUMA-allocations, only this function has to be modified
- * and the zonelists array be made per-CPU.
+ * Builds allocation fallback zone lists.
  */
-static inline void build_zonelists (void)
+static inline void build_zonelists(pg_data_t *pgdat)
 {
 	int i, j, k;
 
@@ -447,7 +460,7 @@ static inline void build_zonelists (void)
 		zonelist_t *zonelist;
 		zone_t *zone;
 
-		zonelist = zonelists + i;
+		zonelist = pgdat->node_zonelists + i;
 		memset(zonelist, 0, sizeof(*zonelist));
 
 		zonelist->gfp_mask = i;
@@ -465,7 +478,7 @@ static inline void build_zonelists (void)
 			 * fallthrough:
 			 */
 			case ZONE_HIGHMEM:
-				zone = zones + ZONE_HIGHMEM;
+				zone = pgdat->node_zones + ZONE_HIGHMEM;
 				if (zone->size) {
 #ifndef CONFIG_HIGHMEM
 					BUG();
@@ -473,11 +486,13 @@ static inline void build_zonelists (void)
 					zonelist->zones[j++] = zone;
 				}
 			case ZONE_NORMAL:
-				zone = zones + ZONE_NORMAL;
+				zone = pgdat->node_zones + ZONE_NORMAL;
 				if (zone->size)
 					zonelist->zones[j++] = zone;
 			case ZONE_DMA:
-				zonelist->zones[j++] = zones + ZONE_DMA;
+				zone = pgdat->node_zones + ZONE_DMA;
+				if (zone->size)
+					zonelist->zones[j++] = zone;
 		}
 		zonelist->zones[j++] = NULL;
 	} 
@@ -491,9 +506,10 @@ static inline void build_zonelists (void)
  *   - mark all memory queues empty
  *   - clear the memory bitmaps
  */
-void __init free_area_init(unsigned int *zones_size)
+void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
+	unsigned int *zones_size, unsigned long zone_start_paddr)
 {
-	struct page * p;
+	struct page *p, *lmem_map;
 	unsigned long i, j;
 	unsigned long map_size;
 	unsigned int totalpages, offset;
@@ -503,7 +519,7 @@ void __init free_area_init(unsigned int *zones_size)
 		unsigned long size = zones_size[i];
 		totalpages += size;
 	}
-	printk("totalpages: %08x\n", totalpages);
+	printk("On node %d totalpages: %08x\n", nid, totalpages);
 
 	/*
 	 * Select nr of pages we try to keep free for important stuff
@@ -524,16 +540,22 @@ void __init free_area_init(unsigned int *zones_size)
 	/*
 	 * Some architectures (with lots of mem and discontinous memory
 	 * maps) have to search for a good mem_map area:
+	 * For discontigmem, the conceptual mem map array starts from 
+	 * PAGE_OFFSET, we need to align the actual array onto a mem map 
+	 * boundary, so that MAP_NR works.
 	 */
-	map_size = totalpages*sizeof(struct page);
-	mem_map = (struct page *) alloc_bootmem(map_size);
+	map_size = (totalpages + 1)*sizeof(struct page);
+	lmem_map = (struct page *) alloc_bootmem_node(nid, map_size);
+	lmem_map = (struct page *)(PAGE_OFFSET + 
+			MAP_ALIGN((unsigned long)lmem_map - PAGE_OFFSET));
+	*gmap = pgdat->node_mem_map = lmem_map;
 
 	/*
 	 * Initially all pages are reserved - free ones are freed
 	 * up by free_all_bootmem() once the early boot process is
 	 * done.
 	 */
-	for (p = mem_map; p < mem_map + totalpages; p++) {
+	for (p = lmem_map; p < lmem_map + totalpages; p++) {
 		set_page_count(p, 0);
 		p->flags = (1 << PG_DMA);
 		SetPageReserved(p);
@@ -541,9 +563,9 @@ void __init free_area_init(unsigned int *zones_size)
 		memlist_init(&p->list);
 	}
 
-	offset = 0;	
+	offset = lmem_map - mem_map;	
 	for (j = 0; j < MAX_NR_ZONES; j++) {
-		zone_t *zone = zones + j;
+		zone_t *zone = pgdat->node_zones + j;
 		unsigned long mask = -1;
 		unsigned long size;
 
@@ -551,6 +573,8 @@ void __init free_area_init(unsigned int *zones_size)
 
 		printk("zone(%ld): %ld pages.\n", j, size);
 		zone->size = size;
+		zone->name = zone_names[j];
+		zone->lock = SPIN_LOCK_UNLOCKED;
 		if (!size)
 			continue;
 
@@ -567,8 +591,10 @@ void __init free_area_init(unsigned int *zones_size)
 		for (i = 0; i < size; i++) {
 			struct page *page = mem_map + offset + i;
 			page->zone = zone;
-			if (j != ZONE_HIGHMEM)
-				page->virtual = __page_address(page);
+			if (j != ZONE_HIGHMEM) {
+				page->virtual = (unsigned long)(__va(zone_start_paddr));
+				zone_start_paddr += PAGE_SIZE;
+			}
 		}
 
 		offset += size;
@@ -582,8 +608,13 @@ void __init free_area_init(unsigned int *zones_size)
 			bitmap_size = (bitmap_size + 7) >> 3;
 			bitmap_size = LONG_ALIGN(bitmap_size);
 			zone->free_area[i].map = 
-				(unsigned int *) alloc_bootmem(bitmap_size);
+			  (unsigned int *) alloc_bootmem_node(nid, bitmap_size);
 		}
 	}
-	build_zonelists();
+	build_zonelists(pgdat);
+}
+
+void __init free_area_init(unsigned int *zones_size)
+{
+	free_area_init_core(0, NODE_DATA(0), &mem_map, zones_size, 0);
 }

@@ -401,9 +401,7 @@ struct inode_operations smb_file_inode_operations =
 	NULL,			/* get_block */
 	smb_readpage,		/* readpage */
 	smb_writepage,		/* writepage */
-	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	smb_file_permission,	/* permission */
-	NULL,			/* smap */
 	smb_revalidate_inode,	/* revalidate */
 };

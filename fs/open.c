@@ -55,14 +55,14 @@ out:
 	return error;
 }
 
-int do_truncate(struct dentry *dentry, unsigned long length)
+int do_truncate(struct dentry *dentry, loff_t length)
 {
 	struct inode *inode = dentry->d_inode;
 	int error;
 	struct iattr newattrs;
 
-	/* Not pretty: "inode->i_size" shouldn't really be "off_t". But it is. */
-	if ((off_t) length < 0)
+	/* Not pretty: "inode->i_size" shouldn't really be signed. But it is. */
+	if (length < 0)
 		return -EINVAL;
 
 	down(&inode->i_sem);

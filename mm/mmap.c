@@ -160,8 +160,8 @@ static inline unsigned long vm_flags(unsigned long prot, unsigned long flags)
 #undef _trans
 }
 
-unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
-	unsigned long prot, unsigned long flags, unsigned long off)
+unsigned long do_mmap_pgoff(struct file * file, unsigned long addr, unsigned long len,
+	unsigned long prot, unsigned long flags, unsigned long pgoff)
 {
 	struct mm_struct * mm = current->mm;
 	struct vm_area_struct * vma;
@@ -176,14 +176,9 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	if (len > TASK_SIZE || addr > TASK_SIZE-len)
 		return -EINVAL;
 
-	if (off & ~PAGE_MASK)
-		return -EINVAL;
-
 	/* offset overflow? */
-	if (off + len < off)
+	if ((pgoff + (len >> PAGE_SHIFT)) < pgoff)
 		return -EINVAL;
-
-	off = off >> PAGE_SHIFT;
 
 	/* Too many mappings? */
 	if (mm->map_count > MAX_MAP_COUNT)
@@ -274,7 +269,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		vma->vm_flags |= VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
 	vma->vm_page_prot = protection_map[vma->vm_flags & 0x0f];
 	vma->vm_ops = NULL;
-	vma->vm_pgoff = off;
+	vma->vm_pgoff = pgoff;
 	vma->vm_file = NULL;
 	vma->vm_private_data = NULL;
 

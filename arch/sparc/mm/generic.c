@@ -91,7 +91,9 @@ static inline int io_remap_pmd_range(pmd_t * pmd, unsigned long address, unsigne
 		pte_t * pte = pte_alloc(pmd, address);
 		if (!pte)
 			return -ENOMEM;
+		spin_lock(&current->mm->page_table_lock);
 		io_remap_pte_range(pte, address, end - address, address + offset, prot, space);
+		spin_unlock(&current->mm->page_table_lock);
 		address = (address + PMD_SIZE) & PMD_MASK;
 		pmd++;
 	} while (address < end);

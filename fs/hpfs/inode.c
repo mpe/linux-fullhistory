@@ -44,10 +44,8 @@ static const struct inode_operations hpfs_file_iops =
 	&hpfs_get_block,		/* get_block */
 	block_read_full_page,		/* readpage */
 	block_write_full_page,		/* writepage */
-	block_flushpage,		/* flushpage */
 	hpfs_truncate,			/* truncate */
 	NULL,				/* permission */
-	NULL,				/* smap */
 	NULL,				/* revalidate */
 };
 
@@ -87,10 +85,8 @@ static const struct inode_operations hpfs_dir_iops =
 	NULL,				/* get_block */
 	NULL,				/* readpage */
 	NULL,				/* writepage */
-	NULL,				/* flushpage */
 	NULL,				/* truncate */
 	NULL,				/* permission */
-	NULL,				/* smap */
 	NULL				/* revalidate */
 };
 
@@ -111,10 +107,8 @@ const struct inode_operations hpfs_symlink_iops =
 	NULL,				/* get_block */
 	NULL,				/* readpage */
 	NULL,				/* writepage */
-	NULL,				/* flushpage */
 	NULL,				/* truncate */
 	NULL,				/* permission */
-	NULL,				/* smap */
 	NULL				/* revalidate */
 };
 

@@ -111,11 +111,9 @@ sys_create_module(const char *name_user, size_t size)
 	long namelen, error;
 	struct module *mod;
 
+	if (!capable(CAP_SYS_MODULE))
+		return -EPERM;
 	lock_kernel();
-	if (!capable(CAP_SYS_MODULE)) {
-		error = -EPERM;
-		goto err0;
-	}
 	if ((namelen = get_mod_name(name_user, &name)) < 0) {
 		error = namelen;
 		goto err0;
@@ -162,13 +160,13 @@ sys_init_module(const char *name_user, struct module *mod_user)
 {
 	struct module mod_tmp, *mod;
 	char *name, *n_name;
-	long namelen, n_namelen, i, error = -EPERM;
+	long namelen, n_namelen, i, error;
 	unsigned long mod_user_size;
 	struct module_ref *dep;
 
-	lock_kernel();
 	if (!capable(CAP_SYS_MODULE))
-		goto err0;
+		return -EPERM;
+	lock_kernel();
 	if ((namelen = get_mod_name(name_user, &name)) < 0) {
 		error = namelen;
 		goto err0;
@@ -354,13 +352,13 @@ sys_delete_module(const char *name_user)
 {
 	struct module *mod, *next;
 	char *name;
-	long error = -EPERM;
+	long error;
 	int something_changed;
 
-	lock_kernel();
 	if (!capable(CAP_SYS_MODULE))
-		goto out;
+		return -EPERM;
 
+	lock_kernel();
 	if (name_user) {
 		if ((error = get_mod_name(name_user, &name)) < 0)
 			goto out;

@@ -1236,7 +1236,7 @@ static void unmap_buffer(struct buffer_head * bh)
  * we have truncated the file and are going to free the
  * blocks on-disk..
  */
-int block_flushpage(struct inode *inode, struct page *page, unsigned long offset)
+int block_flushpage(struct page *page, unsigned long offset)
 {
 	struct buffer_head *head, *bh, *next;
 	unsigned int curr_off = 0;

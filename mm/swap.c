@@ -30,13 +30,13 @@
  * start background swapping if we fall below freepages.high free
  * pages, and we begin intensive swapping below freepages.low.
  *
- * These values are there to keep GCC from complaining. Actual
- * initialization is done in mm/page_alloc.c or arch/sparc(64)/mm/init.c.
+ * Actual initialization is done in mm/page_alloc.c or 
+ * arch/sparc(64)/mm/init.c.
  */
 freepages_t freepages = {
-	48,	/* freepages.min */
-	96,	/* freepages.low */
-	144	/* freepages.high */
+	0,	/* freepages.min */
+	0,	/* freepages.low */
+	0	/* freepages.high */
 };
 
 /* How many pages do we try to swap or page in/out together? */

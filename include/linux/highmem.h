@@ -23,7 +23,7 @@ extern struct buffer_head * create_bounce(int rw, struct buffer_head * bh_orig);
 extern inline unsigned int nr_free_highpages(void) { return 0; }
 #define prepare_highmem_swapout(page) page
 #define replace_with_highmem(page) page
-#define kmap(page) __page_address(page)
+#define kmap(page) page_address(page)
 #define kunmap(page) do { } while (0)
 
 #endif /* CONFIG_HIGHMEM */

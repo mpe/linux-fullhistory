@@ -949,25 +949,6 @@ static struct file_operations proc_usb_device_file_operations = {
 
 static struct inode_operations proc_usb_device_inode_operations = {
         &proc_usb_device_file_operations,  /* file-ops */
-        NULL,                              /* create       */
-        NULL,                              /* lookup       */
-        NULL,                              /* link         */
-        NULL,                              /* unlink       */
-        NULL,                              /* symlink      */
-        NULL,                              /* mkdir        */
-        NULL,                              /* rmdir        */
-        NULL,                              /* mknod        */
-        NULL,                              /* rename       */
-        NULL,                              /* readlink     */
-        NULL,                              /* follow_link  */
-        NULL,                              /* get_block    */
-        NULL,                              /* readpage     */
-        NULL,                              /* writepage    */
-        NULL,                              /* flushpage    */
-        NULL,                              /* truncate     */
-        NULL,                              /* permission   */
-        NULL,                              /* smap         */
-        NULL                               /* revalidate   */
 };
 
 void proc_usb_add_bus(struct usb_bus *bus)

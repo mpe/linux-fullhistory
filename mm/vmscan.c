@@ -158,15 +158,15 @@ drop_pte:
 	if (!(page = prepare_highmem_swapout(page)))
 		goto out_swap_free;
 
-	vma->vm_mm->rss--;
-	set_pte(page_table, swp_entry_to_pte(entry));
-	vmlist_access_unlock(vma->vm_mm);
-
-	flush_tlb_page(vma, address);
 	swap_duplicate(entry);	/* One for the process, one for the swap cache */
 
 	/* This will also lock the page */
 	add_to_swap_cache(page, entry);
+	/* Put the swap entry into the pte after the page is in swapcache */
+	vma->vm_mm->rss--;
+	set_pte(page_table, swp_entry_to_pte(entry));
+	flush_tlb_page(vma, address);
+	vmlist_access_unlock(vma->vm_mm);
 
 	/* OK, do a physical asynchronous write to swap.  */
 	rw_swap_page(WRITE, page, 0);

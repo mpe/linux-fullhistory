@@ -9,6 +9,7 @@
 #include <linux/config.h>
 #include <linux/string.h>
 #include <linux/list.h>
+#include <linux/mmzone.h>
 
 extern unsigned long max_mapnr;
 extern unsigned long num_physpages;
@@ -118,8 +119,6 @@ struct vm_operations_struct {
 typedef struct {
 	unsigned long val;
 } swp_entry_t;
-
-struct zone_struct;
 
 /*
  * Try to keep the most commonly accessed fields in single cache lines
@@ -286,94 +285,30 @@ typedef struct page {
 extern mem_map_t * mem_map;
 
 /*
- * Free memory management - zoned buddy allocator.
- */
-
-#if CONFIG_AP1000
-/* the AP+ needs to allocate 8MB contiguous, aligned chunks of ram
-   for the ring buffers */
-#define MAX_ORDER 12
-#else
-#define MAX_ORDER 10
-#endif
-
-typedef struct free_area_struct {
-	struct list_head free_list;
-	unsigned int * map;
-} free_area_t;
-
-typedef struct zone_struct {
-	/*
-	 * Commonly accessed fields:
-	 */
-	spinlock_t lock;
-	unsigned long offset;
-	unsigned long free_pages;
-	int low_on_memory;
-	unsigned long pages_low, pages_high;
-
-	/*
-	 * free areas of different sizes
-	 */
-	free_area_t free_area[MAX_ORDER];
-
-	/*
-	 * rarely used fields:
-	 */
-	char * name;
-	unsigned long size;
-} zone_t;
-
-#define ZONE_DMA		0
-#define ZONE_NORMAL		1
-#define ZONE_HIGHMEM		2
-
-/*
- * NUMA architectures will have more:
- */
-#define MAX_NR_ZONES		3
-
-/*
- * One allocation request operates on a zonelist. A zonelist
- * is a list of zones, the first one is the 'goal' of the
- * allocation, the other zones are fallback zones, in decreasing
- * priority. On NUMA we want to fall back on other CPU's zones
- * as well.
- *
- * Right now a zonelist takes up less than a cacheline. We never
- * modify it apart from boot-up, and only a few indices are used,
- * so despite the zonelist table being relatively big, the cache
- * footprint of this construct is very small.
- */
-typedef struct zonelist_struct {
-	zone_t * zones [MAX_NR_ZONES+1]; // NULL delimited
-	int gfp_mask;
-} zonelist_t;
-
-#define NR_GFPINDEX		0x100
-
-extern zonelist_t zonelists [NR_GFPINDEX];
-
-/*
  * There is only one page-allocator function, and two main namespaces to
  * it. The alloc_page*() variants return 'struct page *' and as such
  * can allocate highmem pages, the *get*page*() variants return
  * virtual kernel addresses to the allocated page(s).
  */
 extern struct page * FASTCALL(__alloc_pages(zonelist_t *zonelist, unsigned long order));
+extern struct page * alloc_pages_node(int nid, int gfp_mask, unsigned long order);
 
+#ifndef CONFIG_DISCONTIGMEM
 extern inline struct page * alloc_pages(int gfp_mask, unsigned long order)
 {
 	/*  temporary check. */
-	if (zonelists[gfp_mask].gfp_mask != (gfp_mask))
+	if (contig_page_data.node_zonelists[gfp_mask].gfp_mask != (gfp_mask))
 		BUG();
 	/*
 	 * Gets optimized away by the compiler.
 	 */
 	if (order >= MAX_ORDER)
 		return NULL;
-	return __alloc_pages(zonelists+(gfp_mask), order);
+	return __alloc_pages(contig_page_data.node_zonelists+(gfp_mask), order);
 }
+#else /* !CONFIG_DISCONTIGMEM */
+extern struct page * alloc_pages(int gfp_mask, unsigned long order);
+#endif /* !CONFIG_DISCONTIGMEM */
 
 #define alloc_page(gfp_mask) \
 		alloc_pages(gfp_mask, 0)
@@ -385,7 +320,7 @@ extern inline unsigned long __get_free_pages (int gfp_mask, unsigned long order)
 	page = alloc_pages(gfp_mask, order);
 	if (!page)
 		return 0;
-	return __page_address(page);
+	return page_address(page);
 }
 
 #define __get_free_page(gfp_mask) \
@@ -425,8 +360,12 @@ extern inline void __free_pages(struct page *page, unsigned long order)
 
 extern inline void free_pages(unsigned long addr, unsigned long order)
 {
-	unsigned long map_nr = MAP_NR(addr);
+	unsigned long map_nr;
 
+#ifdef CONFIG_DISCONTIGMEM
+	if (addr == 0) return;
+#endif
+	map_nr = MAP_NR(addr);
 	if (map_nr < max_mapnr)
 		__free_pages(mem_map + map_nr, order);
 }
@@ -434,6 +373,7 @@ extern inline void free_pages(unsigned long addr, unsigned long order)
 #define free_page(addr) free_pages((addr),0)
 
 extern void show_free_areas(void);
+extern void show_free_areas_node(int nid);
 extern struct page * put_dirty_page(struct task_struct * tsk, struct page *page,
 	unsigned long address);
 
@@ -444,7 +384,7 @@ extern int copy_page_range(struct mm_struct *dst, struct mm_struct *src, struct 
 extern int remap_page_range(unsigned long from, unsigned long to, unsigned long size, pgprot_t prot);
 extern int zeromap_page_range(unsigned long from, unsigned long size, pgprot_t prot);
 
-extern void vmtruncate(struct inode * inode, unsigned long offset);
+extern void vmtruncate(struct inode * inode, loff_t offset);
 extern int handle_mm_fault(struct task_struct *tsk,struct vm_area_struct *vma, unsigned long address, int write_access);
 extern int make_pages_present(unsigned long addr, unsigned long end);
 extern int access_process_vm(struct task_struct *tsk, unsigned long addr, void *buf, int len, int write);
@@ -456,6 +396,8 @@ extern int check_pgt_cache(void);
 
 extern void paging_init(void);
 extern void free_area_init(unsigned int * zones_size);
+extern void free_area_init_node(int nid, pg_data_t *pgdat, 
+		unsigned int * zones_size, unsigned long zone_start_paddr);
 extern void mem_init(void);
 extern void show_mem(void);
 extern void oom(struct task_struct * tsk);
@@ -470,8 +412,23 @@ extern void build_mmap_avl(struct mm_struct *);
 extern void exit_mmap(struct mm_struct *);
 extern unsigned long get_unmapped_area(unsigned long, unsigned long);
 
-extern unsigned long do_mmap(struct file *, unsigned long, unsigned long,
-	unsigned long, unsigned long, unsigned long);
+extern unsigned long do_mmap_pgoff(struct file *file, unsigned long addr,
+	unsigned long len, unsigned long prot,
+	unsigned long flag, unsigned long pgoff);
+
+extern inline unsigned long do_mmap(struct file *file, unsigned long addr,
+	unsigned long len, unsigned long prot,
+	unsigned long flag, unsigned long offset)
+{
+	unsigned long ret = -EINVAL;
+	if ((offset + PAGE_ALIGN(len)) < offset)
+		goto out;
+	if (!(offset & ~PAGE_MASK))
+		ret = do_mmap_pgoff(file, addr, len, prot, flag, offset >> PAGE_SHIFT);
+out:
+	return ret;
+}
+
 extern int do_munmap(unsigned long, size_t);
 extern unsigned long do_brk(unsigned long, unsigned long);
 
@@ -479,8 +436,7 @@ extern unsigned long do_brk(unsigned long, unsigned long);
 extern void remove_inode_page(struct page *);
 extern unsigned long page_unuse(struct page *);
 extern int shrink_mmap(int, int);
-extern void truncate_inode_pages(struct inode *, unsigned long);
-extern void put_cached_page(unsigned long);
+extern void truncate_inode_pages(struct inode *, loff_t);
 
 /*
  * GFP bitmasks..

@@ -82,10 +82,8 @@ struct inode_operations hfs_hdr_inode_operations = {
 				   header part has no disk block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* flushpage */
 	hdr_truncate,		/* truncate */
 	NULL,			/* permission */
-	NULL,			/* smap */
 	NULL			/* revalidate */
 };
 

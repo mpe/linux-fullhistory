@@ -77,9 +77,7 @@ struct inode_operations sysv_file_inode_operations = {
 	sysv_get_block,		/* get_block */
 	block_read_full_page,	/* readpage */
 	block_write_full_page,	/* writepage */
-	block_flushpage,	/* flushpage */
 	sysv_truncate,		/* truncate */
 	NULL,   		/* permission */
-	NULL,			/* smap */
 	NULL			/* revalidate */
 };

@@ -85,7 +85,6 @@ extern void __handle_bad_pmd_kernel(pmd_t *pmd);
  * Permanent address of a page.
  */
 #define page_address(page)	({ if (!(page)->virtual) BUG(); (page)->virtual; })
-#define __page_address(page)	(PAGE_OFFSET + (((page) - mem_map) << PAGE_SHIFT))
 #define pages_to_mb(x)		((x) >> (20 - PAGE_SHIFT))
 #define pte_page(x)		(mem_map + pte_pagenr(x))
 

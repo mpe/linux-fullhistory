@@ -252,6 +252,5 @@ struct inode_operations umsdos_rdir_inode_operations =
 	NULL,			/* get_block */
 	NULL,			/* truncate */
 	NULL,			/* permission */
-	NULL,			/* smap */
 	NULL,			/* revalidate */
 };

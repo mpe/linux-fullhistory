@@ -66,10 +66,8 @@ struct inode_operations ext2_dir_inode_operations = {
 	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	ext2_permission,	/* permission */
-	NULL,			/* smap */
 	NULL			/* revalidate */
 };
 

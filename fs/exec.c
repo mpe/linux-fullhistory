@@ -371,6 +371,7 @@ static int exec_mmap(void)
 	if (mm) {
 		struct mm_struct *active_mm = current->active_mm;
 
+		init_new_context(current, mm);
 		current->mm = mm;
 		current->active_mm = mm;
 		activate_mm(active_mm, mm);

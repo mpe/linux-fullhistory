@@ -89,14 +89,12 @@ struct inode_operations udf_file_inode_operations = {
 	udf_get_block,			/* get_block */
 	block_read_full_page,	/* readpage */
 	block_write_full_page,	/* writepage */
-	block_flushpage,		/* flushpage */
 #ifdef CONFIG_UDF_RW
 	udf_truncate,			/* truncate */
 #else
 	NULL,					/* truncate */
 #endif
 	NULL,					/* permission */
-	NULL,					/* smap */
 	NULL					/* revalidate */
 };
 
@@ -134,14 +132,12 @@ struct inode_operations udf_file_inode_operations_adinicb = {
 	udf_get_block,			/* get_block */
 	block_read_full_page,	/* readpage */
 	block_write_full_page,	/* writepage */
-	block_flushpage,		/* flushpage */
 #ifdef CONFIG_UDF_RW
 	udf_truncate,			/* truncate */
 #else
 	NULL,					/* truncate */
 #endif
 	NULL,					/* permission */
-	NULL,					/* smap */
 	NULL					/* revalidate */
 };
 

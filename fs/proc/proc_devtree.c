@@ -41,62 +41,6 @@ static int property_read_proc(char *page, char **start, off_t off,
  * and "@10" to it.
  */
 
-static int devtree_readlink(struct dentry *, char *, int);
-static struct dentry *devtree_follow_link(struct dentry *, struct dentry *, unsigned int);
-
-struct inode_operations devtree_symlink_inode_operations = {
-	NULL,			/* no file-operations */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	devtree_readlink,	/* readlink */
-	devtree_follow_link,	/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* flushpage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL,			/* smap */
-	NULL			/* revalidate */
-};
-
-static struct dentry *devtree_follow_link(struct dentry *dentry,
-					  struct dentry *base,
-					  unsigned int follow)
-{
-	struct inode *inode = dentry->d_inode;
-	struct proc_dir_entry * de;
-	char *link;
-
-	de = (struct proc_dir_entry *) inode->u.generic_ip;
-	link = (char *) de->data;
-	return lookup_dentry(link, base, follow);
-}
-
-static int devtree_readlink(struct dentry *dentry, char *buffer, int buflen)
-{
-	struct inode *inode = dentry->d_inode;
-	struct proc_dir_entry * de;
-	char *link;
-	int linklen;
-
-	de = (struct proc_dir_entry *) inode->u.generic_ip;
-	link = (char *) de->data;
-	linklen = strlen(link);
-	if (linklen > buflen)
-		linklen = buflen;
-	if (copy_to_user(buffer, link, linklen))
-		return -EFAULT;
-	return linklen;
-}
-
 /*
  * Process a node, adding entries for its children and its properties.
  */
@@ -115,18 +59,11 @@ static void add_node(struct device_node *np, struct proc_dir_entry *de)
 		 * Unfortunately proc_register puts each new entry
 		 * at the beginning of the list.  So we rearrange them.
 		 */
-		ent = kmalloc(sizeof(struct proc_dir_entry), GFP_KERNEL);
+		ent = create_proc_read_entry(de, 0, pp->name,
+						property_read_proc, pp);
 		if (ent == 0)
 			break;
-		memset(ent, 0, sizeof(struct proc_dir_entry));
-		ent->name = pp->name;
-		ent->namelen = strlen(pp->name);
-		ent->mode = S_IFREG | S_IRUGO;
-		ent->nlink = 1;
-		ent->data = pp;
-		ent->read_proc = property_read_proc;
 		ent->size = pp->length;
-		proc_register(de, ent);
 		*lastp = ent;
 		lastp = &ent->next;
 	}
@@ -140,15 +77,9 @@ static void add_node(struct device_node *np, struct proc_dir_entry *de)
 		l = strlen(p);
 		if (l > 2 && p[l-2] == '@' && p[l-1] == '0')
 			l -= 2;
-		ent = kmalloc(sizeof(struct proc_dir_entry), GFP_KERNEL);
+		ent = proc_mkdir(de, p);
 		if (ent == 0)
 			break;
-		memset(ent, 0, sizeof(struct proc_dir_entry));
-		ent->name = p;
-		ent->namelen = l;
-		ent->mode = S_IFDIR | S_IRUGO | S_IXUGO;
-		ent->nlink = 2;
-		proc_register(de, ent);
 		*lastp = ent;
 		lastp = &ent->next;
 		add_node(child, ent);
@@ -168,18 +99,9 @@ static void add_node(struct device_node *np, struct proc_dir_entry *de)
 			if (sib->name && strcmp(sib->name, child->name) == 0)
 				break;
 		if (sib == child && strncmp(p, child->name, l) != 0) {
-			al = kmalloc(sizeof(struct proc_dir_entry),
-				     GFP_KERNEL);
+			al = proc_symlink(de, child->name, ent->name);
 			if (al == 0)
 				break;
-			memset(al, 0, sizeof(struct proc_dir_entry));
-			al->name = child->name;
-			al->namelen = strlen(child->name);
-			al->mode = S_IFLNK | S_IRUGO | S_IXUGO;
-			al->nlink = 1;
-			al->data = (void *) ent->name;
-			al->ops = &devtree_symlink_inode_operations;
-			proc_register(de, al);
 			*lastp = al;
 			lastp = &al->next;
 		}
@@ -187,16 +109,9 @@ static void add_node(struct device_node *np, struct proc_dir_entry *de)
 		/*
 		 * Add another directory with the @address part as its name.
 		 */
-		al = kmalloc(sizeof(struct proc_dir_entry), GFP_KERNEL);
+		al = proc_symlink(de, at, ent->name);
 		if (al == 0)
 			break;
-		memset(al, 0, sizeof(struct proc_dir_entry));
-		al->name = at;
-		al->namelen = strlen(at);
-		al->mode = S_IFLNK | S_IRUGO | S_IXUGO;
-		al->nlink = 1;
-		al->data = (void *) ent->name;
-		al->ops = &devtree_symlink_inode_operations;
 		proc_register(de, al);
 		*lastp = al;
 		lastp = &al->next;

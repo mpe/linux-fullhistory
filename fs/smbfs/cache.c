@@ -38,102 +38,54 @@ printk_name(const char *name, int len)
 }
 #endif
 
-/*
- * Get a page for this inode, if new is set then we want to allocate
- * the page if it isn't in memory. As I understand it the rest of the
- * smb-cache code assumes we return a locked page.
- */
-static unsigned long
-get_cached_page(struct address_space *mapping, unsigned long offset, int new)
-{
-	struct page * page;
-	struct page ** hash;
-	struct page *cached_page = NULL;
-
- again:
-	hash = page_hash(mapping, offset);
-	page = __find_lock_page(mapping, offset, hash);
-	if(!page && new) {
-		/* not in cache, alloc a new page if we didn't do it yet */
-		if (!cached_page) {
-			cached_page = page_cache_alloc();
-			if (!cached_page)
-				return 0;
-			/* smb code assumes pages are zeroed */
-			clear_page(page_address(cached_page));
-			goto again;
-		}
-		page = cached_page;
-		if (page->buffers)
-			BUG();
-		printk(KERN_DEBUG "smbfs: get_cached_page\n");
-		if (add_to_page_cache_unique(page, mapping, offset, hash))
-			/* Hmm, a page has materialized in the
-                           cache. Fine. Go back and get that page
-                          instead... */
-			goto again;
-		cached_page = NULL;
-	}
-	printk(KERN_DEBUG "smbfs: get_cached_page done\n");
-	if (cached_page)
-		page_cache_free(cached_page);
-	if(!page)
-		return 0;
-	if(!PageLocked(page))
-		BUG();
-	return page_address(page);
-}
-
 static inline struct address_space * 
 get_cache_inode(struct cache_head *cachep)
 {
-	return (mem_map + MAP_NR((unsigned long) cachep))->mapping;
+	return page_cache_entry((unsigned long) cachep)->mapping;
 }
 
 /*
- * Get a pointer to the cache_head structure,
- * mapped as the page at offset 0. The page is
- * kept locked while we're using the cache.
+ * Try to reassemble the old dircache. If we fail - set ->valid to 0.
+ * In any case, get at least the page at offset 0 (with ->valid==0 if
+ * the old one didn't make it, indeed).
  */
 struct cache_head *
 smb_get_dircache(struct dentry * dentry)
 {
 	struct address_space * mapping = &dentry->d_inode->i_data;
-	struct cache_head * cachep;
+	struct cache_head * cachep = NULL;
+	struct page *page;
 
-#ifdef SMBFS_DEBUG_VERBOSE
-	printk("smb_get_dircache: finding cache for %s/%s\n",
-	       dentry->d_parent->d_name.name, dentry->d_name.name);
-#endif
-	cachep = (struct cache_head *) get_cached_page(mapping, 0, 1);
-	if (!cachep)
+	page = find_lock_page(mapping, 0);
+	if (!page) {
+		/* Sorry, not even page 0 around */
+		page = grab_cache_page(mapping, 0);
+		if (!page)
+			goto out;
+		cachep = (struct cache_head *)kmap(page);
+		memset((char*)cachep, 0, PAGE_SIZE);
 		goto out;
-	if (cachep->valid)
-	{
+	}
+	cachep = (struct cache_head *)kmap(page);
+	if (cachep->valid) {
+		/*
+		 * OK, at least the page 0 survived and seems to be promising.
+		 * Let's try to reassemble the rest.
+		 */
 		struct cache_index * index = cachep->index;
-		struct cache_block * block;
 		unsigned long offset;
 		int i;
 
-		cachep->valid = 0;
-		/*
-		 * Here we only want to find existing cache blocks,
-		 * not add new ones.
-		 */
-		for (i = 0; i < cachep->pages; i++, index++) {
-#ifdef SMBFS_PARANOIA
-if (index->block)
-printk("smb_get_dircache: cache %s/%s has existing block!\n",
-dentry->d_parent->d_name.name, dentry->d_name.name);
-#endif
-			offset = PAGE_SIZE + (i << PAGE_SHIFT);
-			block = (struct cache_block *) get_cached_page(mapping,
-								offset, 0);
-			if (!block)
+		for (offset = 0, i = 0; i < cachep->pages; i++, index++) {
+			offset += PAGE_SIZE;
+			page = find_lock_page(mapping,offset>>PAGE_CACHE_SHIFT);
+			if (!page) {
+				/* Alas, poor Yorick */
+				cachep->valid = 0;
 				goto out;
-			index->block = block;
+			}
+			index->block = (struct cache_block *) kmap(page);
 		}
-		cachep->valid = 1;
 	}
 out:
 	return cachep;
@@ -146,18 +98,20 @@ static void
 smb_free_cache_blocks(struct cache_head * cachep)
 {
 	struct cache_index * index = cachep->index;
+	struct page * page;
 	int i;
 
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_free_cache_blocks: freeing %d blocks\n", cachep->pages);
 #endif
-	for (i = 0; i < cachep->pages; i++, index++)
-	{
-		if (index->block)
-		{
-			put_cached_page((unsigned long) index->block);
-			index->block = NULL;
-		}
+	for (i = 0; i < cachep->pages; i++, index++) {
+		if (!index->block)
+			continue;
+		page = page_cache_entry((unsigned long) index->block);
+		index->block = NULL;
+		kunmap(page);
+		UnlockPage(page);
+		page_cache_release(page);
 	}
 }
 
@@ -167,11 +121,15 @@ printk("smb_free_cache_blocks: freeing %d blocks\n", cachep->pages);
 void
 smb_free_dircache(struct cache_head * cachep)
 {
+	struct page *page;
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_free_dircache: freeing cache\n");
 #endif
 	smb_free_cache_blocks(cachep);
-	put_cached_page((unsigned long) cachep);
+	page = page_cache_entry((unsigned long) cachep);
+	kunmap(page);
+	UnlockPage(page);
+	page_cache_release(page);
 }
 
 /*
@@ -199,6 +157,7 @@ smb_add_to_cache(struct cache_head * cachep, struct cache_dirent *entry,
 	struct address_space * mapping = get_cache_inode(cachep);
 	struct cache_index * index;
 	struct cache_block * block;
+	struct page *page;
 	unsigned long page_off;
 	unsigned int nent, offset, len = entry->len;
 	unsigned int needed = len + sizeof(struct cache_entry);
@@ -220,8 +179,7 @@ printk(" at %ld\n", fpos);
 		goto get_block;
 
 	/* space available? */
-	if (needed < index->space)
-	{
+	if (needed < index->space) {
 	add_entry:
 		nent = index->num_entries;
 		index->num_entries++;
@@ -249,26 +207,17 @@ len, fpos, cachep->entries);
 	if (cachep->idx > NINDEX) /* not likely */
 		goto out_full;
 	index++;
-#ifdef SMBFS_PARANOIA
-if (index->block)
-printk("smb_add_to_cache: new index already has block!\n");
-#endif
-
 	/*
-	 * Get the next cache block
+	 * Get the next cache block. We don't care for its contents.
 	 */
 get_block:
 	cachep->pages++;
 	page_off = PAGE_SIZE + (cachep->idx << PAGE_SHIFT);
-	block = (struct cache_block *) get_cached_page(mapping, page_off, 1);
-	if (block)
-	{
+	page = grab_cache_page(mapping, page_off>>PAGE_CACHE_SHIFT);
+	if (page) {
+		block = (struct cache_block *)kmap(page);
 		index->block = block;
 		index->space = PAGE_SIZE;
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_add_to_cache: mapping=%p, pages=%d, block at %ld\n",
-mapping, cachep->pages, page_off);
-#endif
 		goto add_entry;
 	}
 	/*

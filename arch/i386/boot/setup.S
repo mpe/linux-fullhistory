@@ -208,7 +208,7 @@ bad_sig:
 	addw	$SYSSEG, %bx
 	movw	%bx, %cs:start_sys_seg
 # Move rest of setup code/data to here
-	movw	$4096, %di			# four sectors loaded by LILO
+	movw	$2048, %di			# four sectors loaded by LILO
 	subw	%si, %si
 	movw	%cs, %ax			# aka SETUPSEG
 	movw	%ax, %es

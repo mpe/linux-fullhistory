@@ -39,6 +39,7 @@
 #include <linux/iobuf.h>
 #include <linux/console.h>
 #include <linux/poll.h>
+#include <linux/mmzone.h>
 #include <linux/mm.h>
 #include <linux/capability.h>
 
@@ -83,7 +84,7 @@ EXPORT_SYMBOL(get_option);
 EXPORT_SYMBOL(get_options);
 
 /* process memory management */
-EXPORT_SYMBOL(do_mmap);
+EXPORT_SYMBOL(do_mmap_pgoff);
 EXPORT_SYMBOL(do_munmap);
 EXPORT_SYMBOL(do_brk);
 EXPORT_SYMBOL(exit_mm);
@@ -93,8 +94,11 @@ EXPORT_SYMBOL(exit_sighand);
 
 /* internal kernel memory management */
 EXPORT_SYMBOL(__alloc_pages);
+EXPORT_SYMBOL(alloc_pages_node);
 EXPORT_SYMBOL(__free_pages_ok);
-EXPORT_SYMBOL(zonelists);
+#ifndef CONFIG_DISCONTIGMEM
+EXPORT_SYMBOL(contig_page_data);
+#endif
 EXPORT_SYMBOL(kmem_find_general_cachep);
 EXPORT_SYMBOL(kmem_cache_create);
 EXPORT_SYMBOL(kmem_cache_destroy);
@@ -184,7 +188,6 @@ EXPORT_SYMBOL(block_read_full_page);
 EXPORT_SYMBOL(block_write_full_page);
 EXPORT_SYMBOL(block_write_partial_page);
 EXPORT_SYMBOL(block_write_cont_page);
-EXPORT_SYMBOL(block_flushpage);
 EXPORT_SYMBOL(generic_file_read);
 EXPORT_SYMBOL(do_generic_file_read);
 EXPORT_SYMBOL(generic_file_write);
@@ -199,7 +202,6 @@ EXPORT_SYMBOL(posix_block_lock);
 EXPORT_SYMBOL(posix_unblock_lock);
 EXPORT_SYMBOL(locks_mandatory_area);
 EXPORT_SYMBOL(dput);
-EXPORT_SYMBOL(put_cached_page);
 EXPORT_SYMBOL(is_root_busy);
 EXPORT_SYMBOL(prune_dcache);
 EXPORT_SYMBOL(shrink_dcache_sb);
@@ -212,7 +214,6 @@ EXPORT_SYMBOL(vfs_unlink);
 EXPORT_SYMBOL(vfs_rename);
 EXPORT_SYMBOL(__pollwait);
 EXPORT_SYMBOL(ROOT_DEV);
-EXPORT_SYMBOL(add_to_page_cache_unique);
 EXPORT_SYMBOL(__find_get_page);
 EXPORT_SYMBOL(__find_lock_page);
 EXPORT_SYMBOL(grab_cache_page);

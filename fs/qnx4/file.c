@@ -192,14 +192,12 @@ struct inode_operations qnx4_file_inode_operations =
 	qnx4_bmap,	        /* get_block */
 	qnx4_readpage,		/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* flushpage */
 #ifdef CONFIG_QNX4FS_RW
 	qnx4_truncate,		/* truncate */
 #else
 	NULL,
 #endif
 	NULL,			/* permission */
-	NULL,			/* smap */
 	NULL			/* revalidate */
 };
 
@@ -221,7 +219,6 @@ static int qnx4_readpage(struct dentry *dentry, struct page *page)
 		return -EIO;
 	}
 	atomic_inc(&page->count);
-	set_bit(PG_locked, &page->flags);
 	buf = page_address(page);
 	clear_bit(PG_uptodate, &page->flags);
 	clear_bit(PG_error, &page->flags);
@@ -252,8 +249,7 @@ static int qnx4_readpage(struct dentry *dentry, struct page *page)
 	} else {
 		set_bit(PG_uptodate, &page->flags);
 	}
-	clear_bit(PG_locked, &page->flags);
-	wake_up(&page->wait);
+	Unlock_Page(page);
 /*  free_page(buf); */
 
 	return res;

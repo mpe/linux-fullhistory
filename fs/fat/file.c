@@ -60,10 +60,8 @@ struct inode_operations fat_file_inode_operations = {
 	fat_get_block,		/* get_block */
 	block_read_full_page,	/* readpage */
 	NULL,			/* writepage */
-	block_flushpage,	/* flushpage */
 	fat_truncate,		/* truncate */
 	NULL,			/* permission */
-	NULL,			/* smap */
 	NULL			/* revalidate */
 };
 

@@ -49,10 +49,8 @@ struct inode_operations coda_ioctl_inode_operations =
 	NULL,		        /* get_block */
 	NULL,	                /* readpage */
 	NULL,		        /* writepage */
-	NULL,		        /* flushpage */
 	NULL,	                /* truncate */
 	coda_ioctl_permission,  /* permission */
-	NULL,                   /* smap */
         NULL                    /* revalidate */
 };
 

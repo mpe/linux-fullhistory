@@ -283,10 +283,8 @@ struct inode_operations bfs_dir_inops = {
 	get_block:		NULL,
 	readpage:		NULL,
 	writepage:		NULL,
-	flushpage:		NULL,
 	truncate:		NULL,
 	permission:		NULL,
-	smap:			NULL,
 	revalidate:		NULL
 };
 

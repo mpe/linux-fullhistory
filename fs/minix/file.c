@@ -73,9 +73,7 @@ struct inode_operations minix_file_inode_operations = {
 	minix_get_block,	/* get_block */
 	block_read_full_page,	/* readpage */
 	block_write_full_page,	/* writepage */
-	block_flushpage,	/* flushpage */
 	minix_truncate,		/* truncate */
 	NULL,			/* permission */
-	NULL,			/* smap */
 	NULL,			/* revalidate */
 };

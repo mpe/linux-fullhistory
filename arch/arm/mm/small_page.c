@@ -116,7 +116,7 @@ again:
 		remove_page_from_queue(page);
 	restore_flags(flags);
 
-	return __page_address(page) + (offset << order->shift);
+	return page_address(page) + (offset << order->shift);
 
 need_new_page:
 	page = alloc_page(priority);

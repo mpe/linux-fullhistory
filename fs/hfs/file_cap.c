@@ -80,10 +80,8 @@ struct inode_operations hfs_cap_info_inode_operations = {
 	NULL,				/* get_block - none */
 	NULL,				/* readpage */
 	NULL,				/* writepage */
-	NULL,				/* flushpage */
 	cap_info_truncate,		/* truncate */
 	NULL,				/* permission */
-	NULL,				/* smap */
 	NULL				/* revalidata */
 };
 

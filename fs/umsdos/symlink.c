@@ -138,10 +138,8 @@ struct inode_operations umsdos_symlink_inode_operations =
 	fat_get_block,		/* get_block */
 	block_read_full_page,	/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	NULL,			/* permission */
-	NULL,			/* smap */
 	NULL			/* revalidate */
 };
 

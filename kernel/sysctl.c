@@ -135,10 +135,8 @@ struct inode_operations proc_sys_inode_operations =
 	NULL,		/* get_block */
 	NULL,		/* readpage */
 	NULL,		/* writepage */
-	NULL,		/* flushpage */
 	NULL,		/* truncate */
 	proc_sys_permission, /* permission */
-	NULL,		/* smap */
 	NULL		/* revalidate */
 };
 

@@ -68,9 +68,7 @@ struct inode_operations bfs_file_inops = {
 	get_block:		bfs_get_block,	
 	readpage:		block_read_full_page,
 	writepage:		block_write_full_page,
-	flushpage:		block_flushpage,
 	truncate:		NULL,
 	permission:		NULL,
-	smap:			NULL,
 	revalidate:		NULL
 };

@@ -212,22 +212,6 @@ static struct file_operations isapnp_info_entry_operations =
 static struct inode_operations isapnp_info_entry_inode_operations =
 {
 	&isapnp_info_entry_operations,	/* default sound info directory file-ops */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* bmap */
-	NULL,			/* truncate */
-	NULL			/* permission */
 };
 
 static int __init isapnp_proc_init(void)

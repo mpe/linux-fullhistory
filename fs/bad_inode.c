@@ -63,10 +63,8 @@ struct inode_operations bad_inode_ops =
 	EIO_ERROR,		/* get_block */
 	EIO_ERROR,		/* readpage */
 	EIO_ERROR,		/* writepage */
-	EIO_ERROR,		/* flushpage */
 	EIO_ERROR,		/* truncate */
 	EIO_ERROR,		/* permission */
-	EIO_ERROR,		/* smap */
 	EIO_ERROR		/* revalidate */
 };
 

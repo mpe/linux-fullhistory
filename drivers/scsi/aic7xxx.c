@@ -1500,7 +1500,7 @@ aic_outb(struct aic7xxx_host *p, unsigned char val, long port)
  *   to a parameter with a ':' between the parameter and the value.
  *   ie. aic7xxx=unpause:0x0A,extended
  *-F*************************************************************************/
-static void
+static int
 aic7xxx_setup(char *s)
 {
   int   i, n;
@@ -1638,6 +1638,7 @@ aic7xxx_setup(char *s)
       }
     }
   }
+  return 1;
 }
 
 __setup("aic7xxx=", aic7xxx_setup);

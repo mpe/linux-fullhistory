@@ -64,9 +64,7 @@ struct inode_operations adfs_file_inode_operations = {
 	adfs_bmap,		/* get_block			*/
 	block_read_full_page,	/* readpage			*/
 	NULL,			/* writepage			*/
-	NULL,			/* flushpage			*/
 	NULL,			/* truncate			*/
 	NULL,			/* permission			*/
-	NULL,			/* smap				*/
 	NULL			/* revalidate			*/
 };

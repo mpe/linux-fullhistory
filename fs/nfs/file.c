@@ -74,10 +74,8 @@ struct inode_operations nfs_file_inode_operations = {
 	NULL,			/* get_block */
 	nfs_readpage,		/* readpage */
 	nfs_writepage,		/* writepage */
-	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	NULL,			/* permission */
-	NULL,			/* smap */
 	nfs_revalidate,		/* revalidate */
 };
 

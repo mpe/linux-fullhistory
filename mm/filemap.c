@@ -124,13 +124,14 @@ void invalidate_inode_pages(struct inode * inode)
  * Truncate the page cache at a set offset, removing the pages
  * that are beyond that offset (and zeroing out partial pages).
  */
-void truncate_inode_pages(struct inode * inode, unsigned long start)
+void truncate_inode_pages(struct inode * inode, loff_t lstart)
 {
 	struct list_head *head, *curr;
 	struct page * page;
-	unsigned partial = start & (PAGE_CACHE_SIZE - 1);
+	unsigned partial = lstart & (PAGE_CACHE_SIZE - 1);
+	unsigned long start;
 
-	start = (start + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
+	start = (lstart + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
 
 repeat:
 	head = &inode->i_data.pages;
@@ -151,8 +152,7 @@ repeat:
 
 			lock_page(page);
 
-			if (!inode->i_op->flushpage ||
-			    inode->i_op->flushpage(inode, page, 0))
+			if (!page->buffers || block_flushpage(page, 0))
 				lru_cache_del(page);
 
 			/*
@@ -195,8 +195,8 @@ repeat:
 		lock_page(page);
 
 		memclear_highpage_flush(page, partial, PAGE_CACHE_SIZE-partial);
-		if (inode->i_op->flushpage)
-			inode->i_op->flushpage(inode, page, partial);
+		if (page->buffers)
+			block_flushpage(page, partial);
 
 		partial = 0;
 
@@ -456,10 +456,8 @@ static int do_buffer_fdatasync(struct inode *inode, unsigned long start, unsigne
  * Two-stage data sync: first start the IO, then go back and
  * collect the information..
  */
-int generic_buffer_fdatasync(struct inode *inode, unsigned long start, unsigned long end)
+int generic_buffer_fdatasync(struct inode *inode, unsigned long start_idx, unsigned long end_idx)
 {
-	unsigned long start_idx = start >> PAGE_CACHE_SHIFT;
-	unsigned long end_idx = (end + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
 	int retval;
 
 	retval = do_buffer_fdatasync(inode, start_idx, end_idx, writeout_one_page);
@@ -497,7 +495,7 @@ void add_to_page_cache(struct page * page, struct address_space * mapping, unsig
 	spin_unlock(&pagecache_lock);
 }
 
-int add_to_page_cache_unique(struct page * page,
+static int add_to_page_cache_unique(struct page * page,
 	struct address_space *mapping, unsigned long offset,
 	struct page **hash)
 {
@@ -1434,22 +1432,19 @@ page_not_uptodate:
  * if the disk is full.
  */
 static inline int do_write_page(struct inode * inode, struct file * file,
-	struct page * page, unsigned long offset)
+	struct page * page, unsigned long index)
 {
 	int retval;
-	unsigned long size;
 	int (*writepage) (struct dentry *, struct page *);
 
-	size = (offset << PAGE_CACHE_SHIFT) + PAGE_CACHE_SIZE;
 	/* refuse to extend file size.. */
 	if (S_ISREG(inode->i_mode)) {
-		if (size > inode->i_size)
-			size = inode->i_size;
+		unsigned long size_idx = (inode->i_size + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
+
 		/* Ho humm.. We should have tested for this earlier */
-		if (size < offset)
+		if (size_idx <= index)
 			return -EIO;
 	}
-	retval = -EIO;
 	writepage = inode->i_op->writepage;
 	lock_page(page);
 
@@ -1460,7 +1455,7 @@ static inline int do_write_page(struct inode * inode, struct file * file,
 }
 
 static int filemap_write_page(struct file *file,
-			      unsigned long offset,
+			      unsigned long index,
 			      struct page * page,
 			      int wait)
 {
@@ -1477,7 +1472,7 @@ static int filemap_write_page(struct file *file,
 	 * vma/file is guaranteed to exist in the unmap/sync cases because
 	 * mmap_sem is held.
 	 */
-	result = do_write_page(inode, file, page, offset);
+	result = do_write_page(inode, file, page, index);
 	return result;
 }
 
@@ -1947,24 +1942,6 @@ generic_file_write(struct file *file, const char *buf,
 out:
 	up(&inode->i_sem);
 	return err;
-}
-
-/*
- * Support routines for directory caching using the page cache.
- */
-
-/*
- * Unlock and free a page.
- */
-void put_cached_page(unsigned long addr)
-{
-	struct page * page = page_cache_entry(addr);
-
-	UnlockPage(page);
-	if (page_count(page) != 2)
-		panic("put_cached_page: page count=%d\n", 
-			page_count(page));
-	page_cache_release(page);
 }
 
 void __init page_cache_init(unsigned long mempages)

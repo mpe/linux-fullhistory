@@ -75,7 +75,11 @@ having the vmlist protection in this case.
 The vmlist lock nests with the inode i_shared_lock and the kmem cache
 c_spinlock spinlocks. This is okay, since code that holds i_shared_lock 
 never asks for memory, and the kmem code asks for pages after dropping
-c_spinlock.
+c_spinlock. The vmlist lock also nests with pagecache_lock and 
+pagemap_lru_lock spinlocks, and no code asks for memory with these locks
+held.
+
+The vmlist lock is grabbed while holding the kernel_lock spinning monitor.
 
 The vmlist lock can be a sleeping or spin lock. In either case, care
 must be taken that it is not held on entry to the driver methods, since
@@ -106,3 +110,29 @@ from disk, and an unmap -> swap_free making the handle unused, the swap
 delete and readahead code grabs a temp reference on the swaphandle to
 prevent warning messages from swap_duplicate <- read_swap_cache_async.
 
+Swap cache locking
+------------------
+Pages are added into the swap cache with kernel_lock held, to make sure
+that multiple pages are not being added (and hence lost) by associating
+all of them with the same swaphandle.
+
+Pages are guaranteed not to be removed from the scache if the page is 
+"shared": ie, other processes hold reference on the page or the associated 
+swap handle. The only code that does not follow this rule is shrink_mmap,
+which deletes pages from the swap cache if no process has a reference on 
+the page (multiple processes might have references on the corresponding
+swap handle though). lookup_swap_cache() races with shrink_mmap, when
+establishing a reference on a scache page, so, it must check whether the
+page it located is still in the swapcache, or shrink_mmap deleted it.
+(This race is due to the fact that shrink_mmap looks at the page ref
+count with pagecache_lock, but then drops pagecache_lock before deleting
+the page from the scache).
+
+do_wp_page and do_swap_page have MP races in them while trying to figure
+out whether a page is "shared", by looking at the page_count + swap_count.
+To preserve the sum of the counts, the page lock _must_ be acquired before
+calling is_page_shared (else processes might switch their swap_count refs
+to the page count refs, after the page count ref has been snapshotted).
+
+Swap device deletion code currently breaks all the scache assumptions,
+since it grabs neither mmap_sem nor page_table_lock.

@@ -54,10 +54,8 @@ struct inode_operations adfs_dir_inode_operations = {
 	NULL,			/* get_block */
 	NULL,			/* read page */
 	NULL,			/* write page */
-	NULL,			/* flush page */
 	NULL,			/* truncate */
 	NULL,			/* permission */
-	NULL,			/* smap */
 	NULL			/* revalidate */
 };
 

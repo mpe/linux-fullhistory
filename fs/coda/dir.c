@@ -80,10 +80,8 @@ struct inode_operations coda_dir_inode_operations =
 	NULL,		        /* get_block */
 	NULL,	                /* readpage */
 	NULL,		        /* writepage */
-	NULL,		        /* flushpage */
 	NULL,	                /* truncate */
 	coda_permission,        /* permission */
-	NULL,                   /* smap */
         coda_revalidate_inode   /* revalidate */
 };
 

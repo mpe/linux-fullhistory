@@ -106,6 +106,7 @@ extern struct page * read_swap_cache_async(swp_entry_t, int);
  */
 extern void __delete_from_swap_cache(struct page *page);
 extern void delete_from_swap_cache(struct page *page);
+extern void delete_from_swap_cache_nolock(struct page *page);
 extern void free_page_and_swap_cache(struct page *page);
 
 /* linux/mm/swapfile.c */

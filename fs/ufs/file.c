@@ -153,9 +153,7 @@ struct inode_operations ufs_file_inode_operations = {
 	ufs_getfrag_block,	/* get_block */
 	block_read_full_page,	/* readpage */
 	block_write_full_page,	/* writepage */
-	block_flushpage,	/* flushpage */
 	ufs_truncate,		/* truncate */
 	NULL, 			/* permission */
-	NULL,			/* smap */
 	NULL			/* revalidate */
 };

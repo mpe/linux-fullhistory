@@ -81,10 +81,8 @@ struct inode_operations nfs_dir_inode_operations = {
 	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	NULL,			/* permission */
-	NULL,			/* smap */
 	nfs_revalidate,		/* revalidate */
 };
 
@@ -302,51 +300,23 @@ out_error:
  *	 page-in of the RPC reply, nowhere else, this simplies
  *	 things substantially.
  */
-static struct page *try_to_get_dirent_page(struct file *file, __u32 cookie, int refetch_ok)
+
+static int nfs_dir_filler(struct dentry *dentry, struct page *page)
 {
 	struct nfs_readdirargs rd_args;
 	struct nfs_readdirres rd_res;
-	struct dentry *dentry = file->f_dentry;
 	struct inode *inode = dentry->d_inode;
-	struct page *page, **hash, *page_cache;
-	long offset;
+	long offset = page->index;
 	__u32 *cookiep;
-
-	page = NULL;
-	page_cache = page_cache_alloc();
-	if (!page_cache)
-		goto out;
-
-	if ((offset = nfs_readdir_offset(inode, cookie)) < 0) {
-		if (!refetch_ok ||
-		    (offset = refetch_to_readdir_cookie(file, inode)) < 0) {
-			page_cache_free(page_cache);
-			goto out;
-		}
-	}
-
-	cookiep = find_cookie(inode, offset);
-	if (!cookiep) {
-		/* Gross fatal error. */
-		page_cache_free(page_cache);
-		goto out;
-	}
-
-	hash = page_hash(&inode->i_data, offset);
-repeat:
-	page = __find_lock_page(&inode->i_data, offset, hash);
-	if (page) {
-		page_cache_free(page_cache);
-		goto unlock_out;
-	}
-
-	page = page_cache;
-	if (add_to_page_cache_unique(page, &inode->i_data, offset, hash)) {
-		page_cache_release(page);
-		goto repeat;
-	}
+	int err;
 
 	kmap(page);
+
+	err = -EIO;
+	cookiep = find_cookie(inode, offset);
+	if (!cookiep)
+		goto fail;
+
 	rd_args.fh = NFS_FH(dentry);
 	rd_res.buffer = (char *)page_address(page);
 	rd_res.bufsiz = PAGE_CACHE_SIZE;
@@ -355,27 +325,55 @@ repeat:
 		rd_args.buffer = rd_res.buffer;
 		rd_args.bufsiz = rd_res.bufsiz;
 		rd_args.cookie = rd_res.cookie;
-		if (rpc_call(NFS_CLIENT(inode),
-			     NFSPROC_READDIR, &rd_args, &rd_res, 0) < 0)
-			goto error;
+		err = rpc_call(NFS_CLIENT(inode),
+			     NFSPROC_READDIR, &rd_args, &rd_res, 0); 
+		if (err < 0)
+			goto fail;
 	} while(rd_res.bufsiz > 0);
 
+	err = -EIO;
 	if (rd_res.bufsiz < 0)
 		NFS_DIREOF(inode) = rd_res.cookie;
 	else if (create_cookie(rd_res.cookie, offset, inode))
-		goto error;
+		goto fail;
 
 	SetPageUptodate(page);
-unmap_out:
 	kunmap(page);
-unlock_out:
 	UnlockPage(page);
-out:
+	return 0;
+fail:
+	SetPageError(page);
+	kunmap(page);
+	UnlockPage(page);
+	return err;
+}
+
+static struct page *try_to_get_dirent_page(struct file *file, __u32 cookie, int refetch_ok)
+{
+	struct dentry *dentry = file->f_dentry;
+	struct inode *inode = dentry->d_inode;
+	struct page *page;
+	long offset;
+
+	if ((offset = nfs_readdir_offset(inode, cookie)) < 0) {
+		if (!refetch_ok ||
+		    (offset = refetch_to_readdir_cookie(file, inode)) < 0) {
+			goto fail;
+		}
+	}
+
+	page = read_cache_page(&inode->i_data, offset,
+				(filler_t *)nfs_dir_filler, dentry);
+	if (IS_ERR(page))
+		goto fail;
+	if (!Page_Uptodate(page))
+		goto fail2;
 	return page;
 
-error:
-	SetPageError(page);
-	goto unmap_out;
+fail2:
+	page_cache_release(page);
+fail:
+	return NULL;
 }
 
 /* Seek up to dirent assosciated with the passed in cookie,
