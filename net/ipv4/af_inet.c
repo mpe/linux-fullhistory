@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.91 1999/06/09 08:28:55 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.93 1999/07/02 11:26:24 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -162,9 +162,6 @@ static __inline__ void kill_sk_queues(struct sock *sk)
 
 static __inline__ void kill_sk_now(struct sock *sk)
 {
-	/* No longer exists. */
-	del_from_prot_sklist(sk);
-
 	/* Remove from protocol hash chains. */
 	sk->prot->unhash(sk);
 
@@ -239,7 +236,7 @@ int inet_setsockopt(struct socket *sock, int level, int optname,
 {
 	struct sock *sk=sock->sk;
 	if (sk->prot->setsockopt==NULL)
-		return(-EOPNOTSUPP);
+		return -EOPNOTSUPP;
 	return sk->prot->setsockopt(sk,level,optname,optval,optlen);
 }
 
@@ -256,7 +253,7 @@ int inet_getsockopt(struct socket *sock, int level, int optname,
 {
 	struct sock *sk=sock->sk;
 	if (sk->prot->getsockopt==NULL)
-		return(-EOPNOTSUPP);
+		return -EOPNOTSUPP;
 	return sk->prot->getsockopt(sk,level,optname,optval,optlen);
 }
 
@@ -268,12 +265,10 @@ static int inet_autobind(struct sock *sk)
 {
 	/* We may need to bind the socket. */
 	if (sk->num == 0) {
-		sk->num = sk->prot->good_socknum();
-		if (sk->num == 0) 
-			return(-EAGAIN);
+		if (sk->prot->get_port(sk, 0) != 0)
+			return -EAGAIN;
 		sk->sport = htons(sk->num);
 		sk->prot->hash(sk);
-		add_to_prot_sklist(sk);
 	}
 	return 0;
 }
@@ -293,29 +288,38 @@ static void inet_listen_write_space(struct sock *sk)
 int inet_listen(struct socket *sock, int backlog)
 {
 	struct sock *sk = sock->sk;
+	unsigned char old_state;
 
 	if (sock->state != SS_UNCONNECTED || sock->type != SOCK_STREAM)
-		return(-EINVAL);
+		return -EINVAL;
 
-	if (inet_autobind(sk) != 0)
-		return -EAGAIN;
-
-	/* We might as well re use these. */ 
 	if ((unsigned) backlog == 0)	/* BSDism */
 		backlog = 1;
 	if ((unsigned) backlog > SOMAXCONN)
 		backlog = SOMAXCONN;
 	sk->max_ack_backlog = backlog;
-	if (sk->state != TCP_LISTEN) {
-		sk->ack_backlog = 0;
+
+	/* Really, if the socket is already in listen state
+	 * we can only allow the backlog to be adjusted.
+	 */
+	old_state = sk->state;
+	if (old_state != TCP_LISTEN) {
 		sk->state = TCP_LISTEN;
+		sk->ack_backlog = 0;
+		if (sk->num == 0) {
+			if (sk->prot->get_port(sk, 0) != 0) {
+				sk->state = old_state;
+				return -EAGAIN;
+			}
+			sk->sport = htons(sk->num);
+		}
+
 		dst_release(xchg(&sk->dst_cache, NULL));
-		sk->prot->rehash(sk);
-		add_to_prot_sklist(sk);
+		sk->prot->hash(sk);
+		sk->socket->flags |= SO_ACCEPTCON;
 		sk->write_space = inet_listen_write_space;
 	}
-	sk->socket->flags |= SO_ACCEPTCON;
-	return(0);
+	return 0;
 }
 
 /*
@@ -427,7 +431,6 @@ static int inet_create(struct socket *sock, int protocol)
 
 		/* Add to protocol hash chains. */
 		sk->prot->hash(sk);
-		add_to_prot_sklist(sk);
 	}
 
 	if (sk->prot->init) {
@@ -486,11 +489,9 @@ int inet_release(struct socket *sock, struct socket *peersock)
 		 */
 		timeout = 0;
 		if (sk->linger && !(current->flags & PF_EXITING)) {
-			timeout = MAX_SCHEDULE_TIMEOUT;
-
-			/* XXX This makes no sense whatsoever... -DaveM */
-			if (!sk->lingertime)
-				timeout = HZ*sk->lingertime;
+			timeout = HZ * sk->lingertime;
+			if (!timeout)
+				timeout = MAX_SCHEDULE_TIMEOUT;
 		}
 		sock->sk = NULL;
 		sk->socket = NULL;
@@ -543,21 +544,17 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	if((snum >= PORT_MASQ_BEGIN) && (snum <= PORT_MASQ_END))
 		return -EADDRINUSE;
 #endif		 
-	if (snum == 0) 
-		snum = sk->prot->good_socknum();
-	if (snum < PROT_SOCK && !capable(CAP_NET_BIND_SERVICE))
-		return(-EACCES);
+	if (snum && snum < PROT_SOCK && !capable(CAP_NET_BIND_SERVICE))
+		return -EACCES;
 	
 	/* Make sure we are allowed to bind here. */
-	if(sk->prot->verify_bind(sk, snum))
+	if (sk->prot->get_port(sk, snum) != 0)
 		return -EADDRINUSE;
 
-	sk->num = snum;
-	sk->sport = htons(snum);
+	sk->sport = htons(sk->num);
 	sk->daddr = 0;
 	sk->dport = 0;
-	sk->prot->rehash(sk);
-	add_to_prot_sklist(sk);
+	sk->prot->hash(sk);
 	dst_release(sk->dst_cache);
 	sk->dst_cache=NULL;
 	return(0);
@@ -570,12 +567,12 @@ int inet_dgram_connect(struct socket *sock, struct sockaddr * uaddr,
 	int err;
 
 	if (inet_autobind(sk) != 0)
-		return(-EAGAIN);
+		return -EAGAIN;
 	if (sk->prot->connect == NULL) 
-		return(-EOPNOTSUPP);
+		return -EOPNOTSUPP;
 	err = sk->prot->connect(sk, (struct sockaddr *)uaddr, addr_len);
 	if (err < 0) 
-		return(err);
+		return err;
 	return(0);
 }
 
@@ -626,18 +623,20 @@ int inet_stream_connect(struct socket *sock, struct sockaddr * uaddr,
 		if (flags & O_NONBLOCK)
 			return -EALREADY;
 	} else {
+		if (sk->prot->connect == NULL) 
+			return -EOPNOTSUPP;
+
 		/* We may need to bind the socket. */
 		if (inet_autobind(sk) != 0)
-			return(-EAGAIN);
-		if (sk->prot->connect == NULL) 
-			return(-EOPNOTSUPP);
+			return -EAGAIN;
+
 		err = sk->prot->connect(sk, uaddr, addr_len);
 		/* Note: there is a theoretical race here when an wake up
 		   occurred before inet_wait_for_connect is entered. In 2.3
 		   the wait queue setup should be moved before the low level
 		   connect call. -AK*/
 		if (err < 0)
-			return(err);
+			return err;
   		sock->state = SS_CONNECTING;
 	}
 	
@@ -645,7 +644,7 @@ int inet_stream_connect(struct socket *sock, struct sockaddr * uaddr,
 		goto sock_error;
 
 	if (sk->state != TCP_ESTABLISHED && (flags & O_NONBLOCK)) 
-	  	return (-EINPROGRESS);
+	  	return -EINPROGRESS;
 
 	if (sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV) {
 		inet_wait_for_connect(sk);
@@ -656,7 +655,7 @@ int inet_stream_connect(struct socket *sock, struct sockaddr * uaddr,
 	sock->state = SS_CONNECTED;
 	if ((sk->state != TCP_ESTABLISHED) && sk->err)
 		goto sock_error; 
-	return(0);
+	return 0;
 
 sock_error:	
 	/* This is ugly but needed to fix a race in the ICMP error handler */
@@ -750,7 +749,7 @@ static int inet_getname(struct socket *sock, struct sockaddr *uaddr,
 	sin->sin_family = AF_INET;
 	if (peer) {
 		if (!tcp_connected(sk->state)) 
-			return(-ENOTCONN);
+			return -ENOTCONN;
 		sin->sin_port = sk->dport;
 		sin->sin_addr.s_addr = sk->daddr;
 	} else {
@@ -774,12 +773,12 @@ int inet_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 	int err;
 	
 	if (sock->flags & SO_ACCEPTCON)
-		return(-EINVAL);
+		return -EINVAL;
 	if (sk->prot->recvmsg == NULL) 
-		return(-EOPNOTSUPP);
+		return -EOPNOTSUPP;
 	/* We may need to bind the socket. */
 	if (inet_autobind(sk) != 0)
-		return(-EAGAIN);
+		return -EAGAIN;
 	err = sk->prot->recvmsg(sk, msg, size, flags&MSG_DONTWAIT,
 				flags&~MSG_DONTWAIT, &addr_len);
 	if (err >= 0)
@@ -796,15 +795,15 @@ int inet_sendmsg(struct socket *sock, struct msghdr *msg, int size,
 	if (sk->shutdown & SEND_SHUTDOWN) {
 		if (!(msg->msg_flags&MSG_NOSIGNAL))
 			send_sig(SIGPIPE, current, 1);
-		return(-EPIPE);
+		return -EPIPE;
 	}
 	if (sk->prot->sendmsg == NULL) 
-		return(-EOPNOTSUPP);
+		return -EOPNOTSUPP;
 	if(sk->err)
 		return sock_error(sk);
 
 	/* We may need to bind the socket. */
-	if(inet_autobind(sk) != 0)
+	if (inet_autobind(sk) != 0)
 		return -EAGAIN;
 
 	return sk->prot->sendmsg(sk, msg, size);
@@ -822,11 +821,13 @@ int inet_shutdown(struct socket *sock, int how)
 		       1->2 bit 2 snds.
 		       2->3 */
 	if ((how & ~SHUTDOWN_MASK) || how==0)	/* MAXINT->0 */
-		return(-EINVAL);
+		return -EINVAL;
+	if (!sk)
+		return -ENOTCONN;
 	if (sock->state == SS_CONNECTING && sk->state == TCP_ESTABLISHED)
 		sock->state = SS_CONNECTED;
-	if (!sk || !tcp_connected(sk->state)) 
-		return(-ENOTCONN);
+	if (!tcp_connected(sk->state)) 
+		return -ENOTCONN;
 	sk->shutdown |= how;
 	if (sk->prot->shutdown)
 		sk->prot->shutdown(sk, how);

@@ -400,7 +400,7 @@ struct fown_struct {
 };
 
 struct file {
-	struct file		*f_next, **f_pprev;
+	struct list_head	f_list;
 	struct dentry		*f_dentry;
 	struct file_operations	*f_op;
 	atomic_t		f_count;
@@ -417,6 +417,9 @@ struct file {
 	/* needed for tty driver, and maybe others */
 	void			*private_data;
 };
+extern spinlock_t files_lock;
+#define file_list_lock() spin_lock(&files_lock);
+#define file_list_unlock() spin_unlock(&files_lock);
 
 #define get_file(x)	atomic_inc(&(x)->f_count)
 #define file_count(x)	atomic_read(&(x)->f_count)
@@ -527,6 +530,7 @@ struct super_block {
 	short int		s_ibasket_count;
 	short int		s_ibasket_max;
 	struct list_head	s_dirty;	/* dirty inodes */
+	struct list_head	s_files;
 
 	union {
 		struct minix_sb_info	minix_sb;
@@ -745,8 +749,6 @@ extern struct file_system_type *get_fs_type(const char *);
 extern int fs_may_remount_ro(struct super_block *);
 extern int fs_may_mount(kdev_t);
 
-extern struct file *inuse_filps;
-
 extern int try_to_free_buffers(struct page *);
 extern void refile_buffer(struct buffer_head * buf);
 
@@ -855,6 +857,8 @@ extern struct inode * get_empty_inode(void);
 extern void insert_inode_hash(struct inode *);
 extern void remove_inode_hash(struct inode *);
 extern struct file * get_empty_filp(void);
+extern void file_move(struct file *f, struct list_head *list);
+extern void file_moveto(struct file *new, struct file *old);
 extern struct buffer_head * get_hash_table(kdev_t, int, int);
 extern struct buffer_head * getblk(kdev_t, int, int);
 extern void ll_rw_block(int, int, struct buffer_head * bh[]);

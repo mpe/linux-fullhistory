@@ -5,7 +5,8 @@
 #ifndef __LINUX_FILE_H
 #define __LINUX_FILE_H
 
-extern void __fput(struct file *);
+extern void __fput(struct file *);	/* goner? */
+extern void _fput(struct file *);
 
 /*
  * Check whether the specified task has the fd open. Since the task
@@ -78,7 +79,11 @@ extern inline void fd_install(unsigned int fd, struct file * file)
  * I suspect there are many other similar "optimizations" across the
  * kernel...
  */
-extern void fput(struct file *); 
+extern inline void fput(struct file * file)
+{
+	if (atomic_dec_and_test(&file->f_count))
+		_fput(file);
+}
 extern void put_filp(struct file *);
 
 #endif /* __LINUX_FILE_H */

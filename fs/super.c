@@ -531,6 +531,7 @@ static struct super_block *get_empty_super(void)
 		INIT_LIST_HEAD(&s->s_dirty);
 		list_add (&s->s_list, super_blocks.prev);
 		init_waitqueue_head(&s->s_wait);
+		INIT_LIST_HEAD(&s->s_files);
 	}
 	return s;
 }

@@ -150,15 +150,6 @@ void handle_sysrq(int key, struct pt_regs *pt_regs,
 
 /* Aux routines for the syncer */
 
-static void all_files_read_only(void)	    /* Kill write permissions of all files */
-{
-	struct file *file;
-
-	for (file = inuse_filps; file; file = file->f_next)
-		if (file->f_dentry && atomic_read(&file->f_count) && S_ISREG(file->f_dentry->d_inode->i_mode))
-			file->f_mode &= ~2;
-}
-
 static int is_local_disk(kdev_t dev)	    /* Guess if the device is a local hard drive */
 {
 	unsigned int major = MAJOR(dev);
@@ -192,6 +183,7 @@ static void go_sync(kdev_t dev, int remount_flag)
 		struct super_block *sb = get_super(dev);
 		struct vfsmount *vfsmnt;
 		int ret, flags;
+		struct list_head *p;
 
 		if (!sb) {
 			printk("Superblock not found\n");
@@ -201,6 +193,15 @@ static void go_sync(kdev_t dev, int remount_flag)
 			printk("R/O\n");
 			return;
 		}
+
+		file_list_lock();
+		for (p = sb->s_files.next; p != &sb->s_files; p = p->next) {
+			struct file *file = list_entry(p, struct file, f_list);
+			if (file->f_dentry && file_count(file)
+				&& S_ISREG(file->f_dentry->d_inode->i_mode))
+				file->f_mode &= ~2;
+		}
+		file_list_unlock();
 		DQUOT_OFF(dev);
 		fsync_dev(dev);
 		flags = MS_RDONLY;
@@ -239,9 +240,6 @@ void do_emergency_sync(void)
 	lock_kernel();
 	remount_flag = (emergency_sync_scheduled == EMERG_REMOUNT);
 	emergency_sync_scheduled = 0;
-
-	if (remount_flag)
-		all_files_read_only();
 
 	for (mnt = vfsmntlist; mnt; mnt = mnt->mnt_next)
 		if (is_local_disk(mnt->mnt_dev))

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.180 1999/06/09 08:29:19 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.181 1999/07/02 11:26:31 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -132,28 +132,9 @@ static __inline__ int tcp_sk_hashfn(struct sock *sk)
 	return tcp_hashfn(laddr, lport, faddr, fport);
 }
 
-/* Invariant, sk->num is non-zero. */
-void tcp_bucket_unlock(struct sock *sk)
-{
-	struct tcp_bind_bucket *tb;
-	unsigned short snum = sk->num;
-
-	SOCKHASH_LOCK_WRITE();
-	for(tb = tcp_bhash[tcp_bhashfn(snum)]; tb; tb = tb->next) {
-		if(tb->port == snum) {
-			if(tb->owners == NULL &&
-			   (tb->flags & TCPB_FLAG_LOCKED)) {
-				tb->flags &= ~(TCPB_FLAG_LOCKED |
-					       TCPB_FLAG_FASTREUSE);
-				tcp_inc_slow_timer(TCP_SLT_BUCKETGC);
-			}
-			break;
-		}
-	}
-	SOCKHASH_UNLOCK_WRITE();
-}
-
-/* The sockhash lock must be held as a writer here. */
+/* Allocate and initialize a new TCP local port bind bucket.
+ * The sockhash lock must be held as a writer here.
+ */
 struct tcp_bind_bucket *tcp_bucket_create(unsigned short snum)
 {
 	struct tcp_bind_bucket *tb;
@@ -163,7 +144,7 @@ struct tcp_bind_bucket *tcp_bucket_create(unsigned short snum)
 		struct tcp_bind_bucket **head =
 			&tcp_bhash[tcp_bhashfn(snum)];
 		tb->port = snum;
-		tb->flags = TCPB_FLAG_LOCKED;
+		tb->fastreuse = 0;
 		tb->owners = NULL;
 		if((tb->next = *head) != NULL)
 			tb->next->pprev = &tb->next;
@@ -186,133 +167,176 @@ static __inline__ int tcp_bucket_check(unsigned short snum)
 	tb = tcp_bhash[tcp_bhashfn(snum)];
 	for( ; (tb && (tb->port != snum)); tb = tb->next)
 		;
-	if(tb == NULL && tcp_bucket_create(snum) == NULL)
-		ret = 1;
+	ret = 0
+	if (tb == NULL) {
+		if ((tb = tcp_bucket_create(snum)) == NULL)
+			ret = 1;
+	}
 	SOCKHASH_UNLOCK_WRITE();
 
 	return ret;
 }
 #endif
 
-static int tcp_v4_verify_bind(struct sock *sk, unsigned short snum)
+static __inline__ void __tcp_inherit_port(struct sock *sk, struct sock *child)
+{
+	struct tcp_bind_bucket *tb = (struct tcp_bind_bucket *)sk->prev;
+
+	if ((child->bind_next = tb->owners) != NULL)
+		tb->owners->bind_pprev = &child->bind_next;
+	tb->owners = child;
+	child->bind_pprev = &tb->owners;
+	child->prev = (struct sock *) tb;
+}
+
+__inline__ void tcp_inherit_port(struct sock *sk, struct sock *child)
+{
+	SOCKHASH_LOCK_WRITE();
+	__tcp_inherit_port(sk, child);
+	SOCKHASH_UNLOCK_WRITE();
+}
+
+/* Obtain a reference to a local port for the given sock,
+ * if snum is zero it means select any available local port.
+ */
+static int tcp_v4_get_port(struct sock *sk, unsigned short snum)
 {
 	struct tcp_bind_bucket *tb;
-	int result = 0;
 
 	SOCKHASH_LOCK_WRITE();
-	for(tb = tcp_bhash[tcp_bhashfn(snum)];
-	    (tb && (tb->port != snum));
-	    tb = tb->next)
-		;
-	if(tb && tb->owners) {
-		/* Fast path for reuse ports, see include/net/tcp.h for a very
-		 * detailed description of why this works, and why it is worth
-		 * the effort at all. -DaveM
-		 */
-		if((tb->flags & TCPB_FLAG_FASTREUSE)	&&
-		   (sk->reuse != 0)) {
-			goto go_like_smoke;
+	if (snum == 0) {
+		int rover = tcp_port_rover;
+		int low = sysctl_local_port_range[0];
+		int high = sysctl_local_port_range[1];
+		int remaining = (high - low) + 1;
+
+		do {	rover++;
+			if ((rover < low) || (rover > high))
+				rover = low;
+			tb = tcp_bhash[tcp_bhashfn(rover)];
+			for ( ; tb; tb = tb->next)
+				if (tb->port == rover)
+					goto next;
+			break;
+		next:
+		} while (--remaining > 0);
+		tcp_port_rover = rover;
+
+		/* Exhausted local port range during search? */
+		if (remaining <= 0)
+			goto fail;
+
+		/* OK, here is the one we will use. */
+		snum = rover;
+		tb = NULL;
+	} else {
+		for (tb = tcp_bhash[tcp_bhashfn(snum)];
+		     tb != NULL;
+		     tb = tb->next)
+			if (tb->port == snum)
+				break;
+	}
+	if (tb != NULL && tb->owners != NULL) {
+		if (tb->fastreuse != 0 && sk->reuse != 0) {
+			goto success;
 		} else {
-			struct sock *sk2;
+			struct sock *sk2 = tb->owners;
 			int sk_reuse = sk->reuse;
 
-			/* We must walk the whole port owner list in this case. -DaveM */
-			for(sk2 = tb->owners; sk2; sk2 = sk2->bind_next) {
+			for( ; sk2 != NULL; sk2 = sk2->bind_next) {
 				if (sk->bound_dev_if == sk2->bound_dev_if) {
-					if(!sk_reuse || !sk2->reuse || sk2->state == TCP_LISTEN) {
-						if(!sk2->rcv_saddr		||
-						   !sk->rcv_saddr		||
-						   (sk2->rcv_saddr == sk->rcv_saddr))
+					if (!sk_reuse	||
+					    !sk2->reuse	||
+					    sk2->state == TCP_LISTEN) {
+						if (!sk2->rcv_saddr	||
+						    !sk->rcv_saddr	||
+						    (sk2->rcv_saddr == sk->rcv_saddr))
 							break;
 					}
 				}
 			}
-			if(sk2 != NULL)
-				result = 1;
+			/* If we found a conflict, fail. */
+			if (sk2 != NULL)
+				goto fail;
 		}
 	}
-	if(result == 0) {
-		if(tb == NULL) {
-			if((tb = tcp_bucket_create(snum)) == NULL)
-				result = 1;
-			else if (sk->reuse && sk->state != TCP_LISTEN)
-				tb->flags |= TCPB_FLAG_FASTREUSE;
-		} else {
-			/* It could be pending garbage collection, this
-			 * kills the race and prevents it from disappearing
-			 * out from under us by the time we use it.  -DaveM
-			 */
-			if(tb->owners == NULL) {
-				if (!(tb->flags & TCPB_FLAG_LOCKED)) {
-					tb->flags = (TCPB_FLAG_LOCKED |
-						     ((sk->reuse &&
-						       sk->state != TCP_LISTEN) ?
-						      TCPB_FLAG_FASTREUSE : 0));
-					tcp_dec_slow_timer(TCP_SLT_BUCKETGC);
-				} else if (!(tb->flags & TCPB_FLAG_GOODSOCKNUM)) {
-					/* Someone is in between the bind
-					 * and the actual connect or listen.
-					 * See if it was a legitimate reuse
-					 * and we are as well, else punt.
-					 */
-					if (sk->reuse == 0 ||
-					    !(tb->flags & TCPB_FLAG_FASTREUSE))
-						result = 1;
-				} else
-					tb->flags &= ~TCPB_FLAG_GOODSOCKNUM;
-			}
-		}
-	}
-go_like_smoke:
+	if (tb == NULL &&
+	    (tb = tcp_bucket_create(snum)) == NULL)
+			goto fail;
+	if (tb->owners == NULL) {
+		if (sk->reuse && sk->state != TCP_LISTEN)
+			tb->fastreuse = 1;
+		else
+			tb->fastreuse = 0;
+	} else if (tb->fastreuse &&
+		   ((sk->reuse == 0) || (sk->state == TCP_LISTEN)))
+		tb->fastreuse = 0;
+success:
+	sk->num = snum;
+	if ((sk->bind_next = tb->owners) != NULL)
+		tb->owners->bind_pprev = &sk->bind_next;
+	tb->owners = sk;
+	sk->bind_pprev = &tb->owners;
+	sk->prev = (struct sock *) tb;
+
 	SOCKHASH_UNLOCK_WRITE();
-	return result;
+	return 0;
+
+fail:
+	SOCKHASH_UNLOCK_WRITE();
+	return 1;
 }
 
-unsigned short tcp_good_socknum(void)
+/* Get rid of any references to a local port held by the
+ * given sock.
+ */
+__inline__ void __tcp_put_port(struct sock *sk)
 {
 	struct tcp_bind_bucket *tb;
-	int low = sysctl_local_port_range[0];
-	int high = sysctl_local_port_range[1];
-	int remaining = (high - low) + 1;
-	int rover;
 
+	tb = (struct tcp_bind_bucket *) sk->prev;
+	if (sk->bind_next)
+		sk->bind_next->bind_pprev = sk->bind_pprev;
+	*(sk->bind_pprev) = sk->bind_next;
+	sk->prev = NULL;
+	if (tb->owners == NULL) {
+		if (tb->next)
+			tb->next->pprev = tb->pprev;
+		*(tb->pprev) = tb->next;
+		kmem_cache_free(tcp_bucket_cachep, tb);
+	}
+}
+
+void tcp_put_port(struct sock *sk)
+{
 	SOCKHASH_LOCK_WRITE();
-	rover = tcp_port_rover;
-	do {
-		rover += 1;
-		if((rover < low) || (rover > high))
-			rover = low;
-		tb = tcp_bhash[tcp_bhashfn(rover)];
-		for( ; tb; tb = tb->next) {
-			if(tb->port == rover)
-				goto next;
-		}
-		break;
-	next:
-	} while(--remaining > 0);
-	tcp_port_rover = rover;
-	tb = NULL;
-	if((remaining <= 0) || ((tb = tcp_bucket_create(rover)) == NULL))
-		rover = 0;
-	if (tb != NULL)
-		tb->flags |= TCPB_FLAG_GOODSOCKNUM;
+	__tcp_put_port(sk);
 	SOCKHASH_UNLOCK_WRITE();
+}
 
-	return rover;
+static __inline__ void __tcp_v4_hash(struct sock *sk)
+{
+	struct sock **skp;
+
+	if(sk->state == TCP_LISTEN)
+		skp = &tcp_listening_hash[tcp_sk_listen_hashfn(sk)];
+	else
+		skp = &tcp_ehash[(sk->hashent = tcp_sk_hashfn(sk))];
+
+	if((sk->next = *skp) != NULL)
+		(*skp)->pprev = &sk->next;
+	*skp = sk;
+	sk->pprev = skp;
+	sk->prot->inuse++;
+	if(sk->prot->highestinuse < sk->prot->inuse)
+		sk->prot->highestinuse = sk->prot->inuse;
 }
 
 static void tcp_v4_hash(struct sock *sk)
 {
 	if (sk->state != TCP_CLOSE) {
-		struct sock **skp;
-
 		SOCKHASH_LOCK_WRITE();
-		skp = &tcp_ehash[(sk->hashent = tcp_sk_hashfn(sk))];
-		if((sk->next = *skp) != NULL)
-			(*skp)->pprev = &sk->next;
-		*skp = sk;
-		sk->pprev = skp;
-		tcp_sk_bindify(sk);
+		__tcp_v4_hash(sk);
 		SOCKHASH_UNLOCK_WRITE();
 	}
 }
@@ -325,39 +349,9 @@ static void tcp_v4_unhash(struct sock *sk)
 			sk->next->pprev = sk->pprev;
 		*sk->pprev = sk->next;
 		sk->pprev = NULL;
+		sk->prot->inuse--;
 		tcp_reg_zap(sk);
-		tcp_sk_unbindify(sk);
-	}
-	SOCKHASH_UNLOCK_WRITE();
-}
-
-static void tcp_v4_rehash(struct sock *sk)
-{
-	unsigned char state;
-
-	SOCKHASH_LOCK_WRITE();
-	state = sk->state;
-	if(sk->pprev != NULL) {
-		if(sk->next)
-			sk->next->pprev = sk->pprev;
-		*sk->pprev = sk->next;
-		sk->pprev = NULL;
-		tcp_reg_zap(sk);
-	}
-	if(state != TCP_CLOSE) {
-		struct sock **skp;
-
-		if(state == TCP_LISTEN)
-			skp = &tcp_listening_hash[tcp_sk_listen_hashfn(sk)];
-		else
-			skp = &tcp_ehash[(sk->hashent = tcp_sk_hashfn(sk))];
-
-		if((sk->next = *skp) != NULL)
-			(*skp)->pprev = &sk->next;
-		*skp = sk;
-		sk->pprev = skp;
-		if(state == TCP_LISTEN)
-			tcp_sk_bindify(sk);
+		__tcp_put_port(sk);
 	}
 	SOCKHASH_UNLOCK_WRITE();
 }
@@ -1344,7 +1338,6 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 #endif
 
 		memcpy(newsk, sk, sizeof(*newsk));
-		newsk->sklist_next = NULL;
 		newsk->state = TCP_SYN_RECV;
 
 		/* Clone the TCP header template */
@@ -1536,8 +1529,11 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	if (newsk->sndbuf < (3 * newtp->pmtu_cookie))
 		newsk->sndbuf = min ((3 * newtp->pmtu_cookie), sysctl_wmem_max);
  
-	tcp_v4_hash(newsk);
-	add_to_prot_sklist(newsk);
+	SOCKHASH_LOCK_WRITE();
+	__tcp_v4_hash(newsk);
+	__tcp_inherit_port(sk, newsk);
+	SOCKHASH_UNLOCK_WRITE();
+
 	sk->data_ready(sk, 0); /* Deliver SIGIO */ 
 
 	return newsk;
@@ -1780,6 +1776,25 @@ do_time_wait:
 	goto discard_it;
 }
 
+static void __tcp_v4_rehash(struct sock *sk)
+{
+	struct sock **skp = &tcp_ehash[(sk->hashent = tcp_sk_hashfn(sk))];
+
+	SOCKHASH_LOCK_WRITE();
+	if(sk->pprev) {
+		if(sk->next)
+			sk->next->pprev = sk->pprev;
+		*sk->pprev = sk->next;
+		sk->pprev = NULL;
+		tcp_reg_zap(sk);
+	}
+	if((sk->next = *skp) != NULL)
+		(*skp)->pprev = &sk->next;
+	*skp = sk;
+	sk->pprev = skp;
+	SOCKHASH_UNLOCK_WRITE();
+}
+
 int tcp_v4_rebuild_header(struct sock *sk)
 {
 	struct rtable *rt = (struct rtable *)sk->dst_cache;
@@ -1853,7 +1868,12 @@ do_rewrite:
 
 		sk->saddr = new_saddr;
 		sk->rcv_saddr = new_saddr;
-		tcp_v4_rehash(sk);
+
+		/* XXX The only one ugly spot where we need to
+		 * XXX really change the sockets identity after
+		 * XXX it has entered the hashes. -DaveM
+		 */
+		__tcp_v4_rehash(sk);
 	} 
         
 	return 0;
@@ -1948,20 +1968,192 @@ static int tcp_v4_destroy_sock(struct sock *sk)
   	while((skb = __skb_dequeue(&tp->out_of_order_queue)) != NULL)
 		kfree_skb(skb);
 
-	/* Clean up a locked TCP bind bucket, this only happens if a
+	/* Clean up a referenced TCP bind bucket, this only happens if a
 	 * port is allocated for a socket, but it never fully connects.
-	 * In which case we will find num to be non-zero and daddr to
-	 * be zero.
 	 */
-	if(sk->daddr == 0 && sk->num != 0)
-		tcp_bucket_unlock(sk);
+	if(sk->prev != NULL)
+		tcp_put_port(sk);
 
 	return 0;
 }
 
+/* Proc filesystem TCP sock list dumping. */
+static void get_openreq(struct sock *sk, struct open_request *req, char *tmpbuf, int i)
+{
+	sprintf(tmpbuf, "%4d: %08lX:%04X %08lX:%04X"
+		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %u",
+		i,
+		(long unsigned int)req->af.v4_req.loc_addr,
+		ntohs(sk->sport),
+		(long unsigned int)req->af.v4_req.rmt_addr,
+		ntohs(req->rmt_port),
+		TCP_SYN_RECV,
+		0,0, /* could print option size, but that is af dependent. */
+		1,   /* timers active (only the expire timer) */  
+		(unsigned long)(req->expires - jiffies), 
+		req->retrans,
+		sk->socket ? sk->socket->inode->i_uid : 0,
+		0,  /* non standard timer */  
+		0 /* open_requests have no inode */
+		); 
+}
+
+static void get_tcp_sock(struct sock *sp, char *tmpbuf, int i)
+{
+	unsigned int dest, src;
+	__u16 destp, srcp;
+	int timer_active, timer_active1, timer_active2;
+	unsigned long timer_expires;
+	struct tcp_opt *tp = &sp->tp_pinfo.af_tcp;
+
+	dest  = sp->daddr;
+	src   = sp->rcv_saddr;
+	destp = ntohs(sp->dport);
+	srcp  = ntohs(sp->sport);
+	timer_active1 = tp->retransmit_timer.prev != NULL;
+	timer_active2 = sp->timer.prev != NULL;
+	timer_active	= 0;
+	timer_expires	= (unsigned) -1;
+	if (timer_active1 && tp->retransmit_timer.expires < timer_expires) {
+		timer_active	= 1;
+		timer_expires	= tp->retransmit_timer.expires;
+	}
+	if (timer_active2 && sp->timer.expires < timer_expires) {
+		timer_active	= 2;
+		timer_expires	= sp->timer.expires;
+	}
+	if(timer_active == 0)
+		timer_expires = jiffies;
+
+	sprintf(tmpbuf, "%4d: %08X:%04X %08X:%04X"
+		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %ld",
+		i, src, srcp, dest, destp, sp->state, 
+		tp->write_seq-tp->snd_una, tp->rcv_nxt-tp->copied_seq,
+		timer_active, timer_expires-jiffies,
+		tp->retransmits,
+		sp->socket ? sp->socket->inode->i_uid : 0,
+		timer_active ? sp->timeout : 0,
+		sp->socket ? sp->socket->inode->i_ino : 0);
+}
+
+static void get_timewait_sock(struct tcp_tw_bucket *tw, char *tmpbuf, int i)
+{
+	extern int tcp_tw_death_row_slot;
+	unsigned int dest, src;
+	__u16 destp, srcp;
+	int slot_dist;
+
+	dest  = tw->daddr;
+	src   = tw->rcv_saddr;
+	destp = ntohs(tw->dport);
+	srcp  = ntohs(tw->sport);
+
+	slot_dist = tw->death_slot;
+	if(slot_dist > tcp_tw_death_row_slot)
+		slot_dist = (TCP_TWKILL_SLOTS - slot_dist) + tcp_tw_death_row_slot;
+	else
+		slot_dist = tcp_tw_death_row_slot - slot_dist;
+
+	sprintf(tmpbuf, "%4d: %08X:%04X %08X:%04X"
+		" %02X %08X:%08X %02X:%08X %08X %5d %8d %d",
+		i, src, srcp, dest, destp, TCP_TIME_WAIT, 0, 0,
+		3, slot_dist * TCP_TWKILL_PERIOD, 0, 0, 0, 0);
+}
+
+int tcp_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+{
+	int len = 0, num = 0, i;
+	off_t begin, pos = 0;
+	char tmpbuf[129];
+
+	if (offset < 128)
+		len += sprintf(buffer, "%-127s\n",
+			       "  sl  local_address rem_address   st tx_queue "
+			       "rx_queue tr tm->when retrnsmt   uid  timeout inode");
+
+	pos = 128;
+	SOCKHASH_LOCK_READ();
+
+	/* First, walk listening socket table. */
+	for(i = 0; i < TCP_LHTABLE_SIZE; i++) {
+		struct sock *sk = tcp_listening_hash[i];
+
+		for (sk = tcp_listening_hash[i]; sk; sk = sk->next, num++) {
+			struct open_request *req;
+			struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+
+			if (sk->family != PF_INET)
+				continue;
+			pos += 128;
+			if (pos >= offset) {
+				get_tcp_sock(sk, tmpbuf, num);
+				len += sprintf(buffer+len, "%-127s\n", tmpbuf);
+				if (len >= length)
+					goto out;
+			}
+			for (req = tp->syn_wait_queue; req; req = req->dl_next, num++) {
+				if (req->sk)
+					continue;
+				pos += 128;
+				if (pos < offset)
+					continue;
+				get_openreq(sk, req, tmpbuf, num);
+				len += sprintf(buffer+len, "%-127s\n", tmpbuf);
+				if(len >= length) 
+					goto out;
+			}
+		}
+	}
+
+	/* Next, walk established hash chain. */
+	for (i = 0; i < (tcp_ehash_size >> 1); i++) {
+		struct sock *sk;
+
+		for(sk = tcp_ehash[i]; sk; sk = sk->next, num++) {
+			if (sk->family != PF_INET)
+				continue;
+			pos += 128;
+			if (pos < offset)
+				continue;
+			get_tcp_sock(sk, tmpbuf, num);
+			len += sprintf(buffer+len, "%-127s\n", tmpbuf);
+			if(len >= length)
+				goto out;
+		}
+	}
+
+	/* Finally, walk time wait buckets. */
+	for (i = (tcp_ehash_size>>1); i < tcp_ehash_size; i++) {
+		struct tcp_tw_bucket *tw;
+		for (tw = (struct tcp_tw_bucket *)tcp_ehash[i];
+		     tw != NULL;
+		     tw = (struct tcp_tw_bucket *)tw->next, num++) {
+			if (tw->family != PF_INET)
+				continue;
+			pos += 128;
+			if (pos < offset)
+				continue;
+			get_timewait_sock(tw, tmpbuf, num);
+			len += sprintf(buffer+len, "%-127s\n", tmpbuf);
+			if(len >= length)
+				goto out;
+		}
+	}
+
+out:
+	SOCKHASH_UNLOCK_READ();
+
+	begin = len - (pos - offset);
+	*start = buffer + begin;
+	len -= begin;
+	if(len > length)
+		len = length;
+	if (len < 0)
+		len = 0; 
+	return len;
+}
+
 struct proto tcp_prot = {
-	(struct sock *)&tcp_prot,	/* sklist_next */
-	(struct sock *)&tcp_prot,	/* sklist_prev */
 	tcp_close,			/* close */
 	tcp_v4_connect,			/* connect */
 	tcp_accept,			/* accept */
@@ -1981,9 +2173,7 @@ struct proto tcp_prot = {
 	tcp_v4_do_rcv,			/* backlog_rcv */
 	tcp_v4_hash,			/* hash */
 	tcp_v4_unhash,			/* unhash */
-	tcp_v4_rehash,			/* rehash */
-	tcp_good_socknum,		/* good_socknum */
-	tcp_v4_verify_bind,		/* verify_bind */
+	tcp_v4_get_port,		/* get_port */
 	128,				/* max_header */
 	0,				/* retransmits */
 	"TCP",				/* name */

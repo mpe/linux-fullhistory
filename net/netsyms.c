@@ -60,6 +60,9 @@ extern __u32 sysctl_rmem_max;
 #include <net/transp_v6.h>
 
 extern int tcp_tw_death_row_slot;
+extern int sysctl_local_port_range[2];
+extern int tcp_port_rover;
+extern int udp_port_rover;
 #endif
 
 #endif
@@ -281,13 +284,11 @@ EXPORT_SYMBOL(inet_sendmsg);
 EXPORT_SYMBOL(inet_recvmsg);
 
 /* Socket demultiplexing. */
-EXPORT_SYMBOL(tcp_good_socknum);
 EXPORT_SYMBOL(tcp_ehash);
 EXPORT_SYMBOL(tcp_ehash_size);
 EXPORT_SYMBOL(tcp_listening_hash);
 EXPORT_SYMBOL(tcp_bhash);
 EXPORT_SYMBOL(tcp_bhash_size);
-EXPORT_SYMBOL(udp_good_socknum);
 EXPORT_SYMBOL(udp_hash);
 
 EXPORT_SYMBOL(destroy_sock);
@@ -328,7 +329,9 @@ EXPORT_SYMBOL(tcp_v4_send_check);
 EXPORT_SYMBOL(tcp_v4_conn_request);
 EXPORT_SYMBOL(tcp_create_openreq_child);
 EXPORT_SYMBOL(tcp_bucket_create);
-EXPORT_SYMBOL(tcp_bucket_unlock);
+EXPORT_SYMBOL(__tcp_put_port);
+EXPORT_SYMBOL(tcp_put_port);
+EXPORT_SYMBOL(tcp_inherit_port);
 EXPORT_SYMBOL(tcp_v4_syn_recv_sock);
 EXPORT_SYMBOL(tcp_v4_do_rcv);
 EXPORT_SYMBOL(tcp_v4_connect);
@@ -344,6 +347,9 @@ EXPORT_SYMBOL(tcp_transmit_skb);
 EXPORT_SYMBOL(tcp_connect);
 EXPORT_SYMBOL(tcp_make_synack);
 EXPORT_SYMBOL(tcp_tw_death_row_slot);
+EXPORT_SYMBOL(sysctl_local_port_range);
+EXPORT_SYMBOL(tcp_port_rover);
+EXPORT_SYMBOL(udp_port_rover);
 EXPORT_SYMBOL(tcp_sync_mss);
 EXPORT_SYMBOL(net_statistics); 
 

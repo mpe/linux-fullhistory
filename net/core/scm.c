@@ -232,8 +232,8 @@ void scm_detach_fds(struct msghdr *msg, struct scm_cookie *scm)
 			break;
 		}
 		/* Bump the usage count and install the file. */
-		atomic_inc(&fp[i]->f_count);
-		current->files->fd[new_fd] = fp[i];
+		get_file(fp[i]);
+		fd_install(new_fd, fp[i]);
 	}
 
 	if (i > 0)
@@ -271,10 +271,9 @@ struct scm_fp_list *scm_fp_dup(struct scm_fp_list *fpl)
 
 	new_fpl = kmalloc(sizeof(*fpl), GFP_KERNEL);
 	if (new_fpl) {
-		memcpy(new_fpl, fpl, sizeof(*fpl));
-
 		for (i=fpl->count-1; i>=0; i--)
-			atomic_inc(&fpl->fp[i]->f_count);
+			get_file(fpl->fp[i]);
+		memcpy(new_fpl, fpl, sizeof(*fpl));
 	}
 	return new_fpl;
 }

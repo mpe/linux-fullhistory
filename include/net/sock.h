@@ -371,10 +371,6 @@ do {	spin_lock_init(&((__sk)->lock.slock)); \
 } while(0);
 
 struct sock {
-	/* This must be first. */
-	struct sock		*sklist_next;
-	struct sock		*sklist_prev;
-
 	/* Local port binding hash linkage. */
 	struct sock		*bind_next;
 	struct sock		**bind_pprev;
@@ -579,10 +575,6 @@ do {	if((__sk)->backlog.tail == NULL) {		\
  * transport -> network interface is defined by struct inet_proto
  */
 struct proto {
-	/* These must be first. */
-	struct sock		*sklist_next;
-	struct sock		*sklist_prev;
-
 	void			(*close)(struct sock *sk, 
 					long timeout);
 	int			(*connect)(struct sock *sk,
@@ -621,9 +613,7 @@ struct proto {
 	/* Keeping track of sk's, looking them up, and port selection methods. */
 	void			(*hash)(struct sock *sk);
 	void			(*unhash)(struct sock *sk);
-	void			(*rehash)(struct sock *sk);
-	unsigned short		(*good_socknum)(void);
-	int			(*verify_bind)(struct sock *sk, unsigned short snum);
+	int			(*get_port)(struct sock *sk, unsigned short snum);
 
 	unsigned short		max_header;
 	unsigned long		retransmits;
@@ -666,40 +656,6 @@ extern rwlock_t sockhash_lock;
 #define SOCKHASH_UNLOCK_READ_BH()	read_unlock(&sockhash_lock)
 #define SOCKHASH_LOCK_WRITE_BH()	write_lock(&sockhash_lock)
 #define SOCKHASH_UNLOCK_WRITE_BH()	write_unlock(&sockhash_lock)
-
-/* Some things in the kernel just want to get at a protocols
- * entire socket list commensurate, thus...
- */
-static __inline__ void add_to_prot_sklist(struct sock *sk)
-{
-	SOCKHASH_LOCK_WRITE();
-	if(!sk->sklist_next) {
-		struct proto *p = sk->prot;
-
-		sk->sklist_prev = (struct sock *) p;
-		sk->sklist_next = p->sklist_next;
-		p->sklist_next->sklist_prev = sk;
-		p->sklist_next = sk;
-
-		/* Charge the protocol. */
-		sk->prot->inuse += 1;
-		if(sk->prot->highestinuse < sk->prot->inuse)
-			sk->prot->highestinuse = sk->prot->inuse;
-	}
-	SOCKHASH_UNLOCK_WRITE();
-}
-
-static __inline__ void del_from_prot_sklist(struct sock *sk)
-{
-	SOCKHASH_LOCK_WRITE();
-	if(sk->sklist_next) {
-		sk->sklist_next->sklist_prev = sk->sklist_prev;
-		sk->sklist_prev->sklist_next = sk->sklist_next;
-		sk->sklist_next = NULL;
-		sk->prot->inuse--;
-	}
-	SOCKHASH_UNLOCK_WRITE();
-}
 
 /* Used by processes to "lock" a socket state, so that
  * interrupts and bottom half handlers won't change it

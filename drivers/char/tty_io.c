@@ -173,13 +173,15 @@ inline int tty_paranoia_check(struct tty_struct *tty, kdev_t device,
 static int check_tty_count(struct tty_struct *tty, const char *routine)
 {
 #ifdef CHECK_TTY_COUNT
-	struct file *f;
+	struct list_head *p;
 	int count = 0;
 	
-	for(f = inuse_filps; f; f = f->f_next) {
-		if(f->private_data == tty)
+	file_list_lock();
+	for(p = tty->tty_files.next; p != &tty->tty_files; p = p->next) {
+		if(list_entry(p, struct file, f_list)->private_data == tty)
 			count++;
 	}
+	file_list_unlock();
 	if (tty->driver.type == TTY_DRIVER_TYPE_PTY &&
 	    tty->driver.subtype == PTY_TYPE_SLAVE &&
 	    tty->link && tty->link->count)
@@ -383,9 +385,9 @@ static struct file_operations hung_up_tty_fops = {
 void do_tty_hangup(void *data)
 {
 	struct tty_struct *tty = (struct tty_struct *) data;
-	struct file * filp;
 	struct file * cons_filp = NULL;
 	struct task_struct *p;
+	struct list_head *l;
 	int    closecount = 0, n;
 
 	if (!tty)
@@ -395,12 +397,10 @@ void do_tty_hangup(void *data)
 	lock_kernel();
 	
 	check_tty_count(tty, "do_tty_hangup");
-	for (filp = inuse_filps; filp; filp = filp->f_next) {
-		if (filp->private_data != tty)
-			continue;
+	file_list_lock();
+	for (l = tty->tty_files.next; l != &tty->tty_files; l = l->next) {
+		struct file * filp = list_entry(l, struct file, f_list);
 		if (!filp->f_dentry)
-			continue;
-		if (!filp->f_dentry->d_inode)
 			continue;
 		if (filp->f_dentry->d_inode->i_rdev == CONSOLE_DEV ||
 		    filp->f_dentry->d_inode->i_rdev == SYSCONS_DEV) {
@@ -410,9 +410,10 @@ void do_tty_hangup(void *data)
 		if (filp->f_op != &tty_fops)
 			continue;
 		closecount++;
-		tty_fasync(-1, filp, 0);
+		tty_fasync(-1, filp, 0);	/* can't block */
 		filp->f_op = &hung_up_tty_fops;
 	}
+	file_list_unlock();
 	
 	/* FIXME! What are the locking issues here? This may me overdoing things.. */
 	{
@@ -1307,6 +1308,7 @@ retry_open:
 init_dev_done:
 #endif
 	filp->private_data = tty;
+	file_move(filp, &tty->tty_files);
 	check_tty_count(tty, "tty_open");
 	if (tty->driver.type == TTY_DRIVER_TYPE_PTY &&
 	    tty->driver.subtype == PTY_TYPE_MASTER)
@@ -1937,6 +1939,7 @@ static void initialize_tty_struct(struct tty_struct *tty)
 	tty->tq_hangup.routine = do_tty_hangup;
 	tty->tq_hangup.data = tty;
 	sema_init(&tty->atomic_read, 1);
+	INIT_LIST_HEAD(&tty->tty_files);
 }
 
 /*

@@ -50,7 +50,8 @@ good_area:
 	start &= PAGE_MASK;
 
 	for (;;) {
-		handle_mm_fault(current->mm, vma, start, 1);
+		if (handle_mm_fault(current, vma, start, 1) <= 0)
+			goto bad_area;
 		if (!size)
 			break;
 		size--;
@@ -162,8 +163,13 @@ good_area:
 	 * make sure we exit gracefully rather than endlessly redo
 	 * the fault.
 	 */
-	if (!handle_mm_fault(mm, vma, address, write))
-		goto do_sigbus;
+	{
+		int fault = handle_mm_fault(tsk, vma, address, write);
+		if (fault < 0)
+			goto out_of_memory;
+		if (!fault)
+			goto do_sigbus;
+	}
 
 	/*
 	 * Did it hit the DOS screen memory VA from vm86 mode?
@@ -255,6 +261,13 @@ no_context:
  * We ran out of memory, or some other thing happened to us that made
  * us unable to handle the page fault gracefully.
  */
+out_of_memory:
+	up(&mm->mmap_sem);
+	printk("VM: killing process %s\n", tsk->comm);
+	if (error_code & 4)
+		do_exit(SIGKILL);
+	goto no_context;
+
 do_sigbus:
 	up(&mm->mmap_sem);
 

@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.44 1999/06/09 08:29:29 davem Exp $
+ *	$Id: af_inet6.c,v 1.45 1999/07/02 11:26:38 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -157,7 +157,6 @@ static int inet6_create(struct socket *sock, int protocol)
 		 */
 		sk->sport = ntohs(sk->num);
 		sk->prot->hash(sk);
-		add_to_prot_sklist(sk);
 	}
 
 	if (sk->prot->init) {
@@ -205,13 +204,13 @@ static int inet6_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 		
 	addr_type = ipv6_addr_type(&addr->sin6_addr);
 	if ((addr_type & IPV6_ADDR_MULTICAST) && sock->type == SOCK_STREAM)
-		return(-EINVAL);
+		return -EINVAL;
 
 	/* Check if the address belongs to the host. */
 	if (addr_type == IPV6_ADDR_MAPPED) {
 		v4addr = addr->sin6_addr.s6_addr32[3];
 		if (inet_addr_type(v4addr) != RTN_LOCAL)
-			return(-EADDRNOTAVAIL);
+			return -EADDRNOTAVAIL;
 	} else {
 		if (addr_type != IPV6_ADDR_ANY) {
 			/* ipv4 addr of the socket is invalid.  Only the
@@ -220,7 +219,7 @@ static int inet6_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 			v4addr = LOOPBACK4_IPV6;
 			if (!(addr_type & IPV6_ADDR_MULTICAST))	{
 				if (ipv6_chk_addr(&addr->sin6_addr, NULL, 0) == NULL)
-					return(-EADDRNOTAVAIL);
+					return -EADDRNOTAVAIL;
 			}
 		}
 	}
@@ -236,21 +235,17 @@ static int inet6_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 		       sizeof(struct in6_addr));
 
 	snum = ntohs(addr->sin6_port);
-	if (snum == 0) 
-		snum = sk->prot->good_socknum();
-	if (snum < PROT_SOCK && !capable(CAP_NET_BIND_SERVICE))
-		return(-EACCES);
+	if (snum && snum < PROT_SOCK && !capable(CAP_NET_BIND_SERVICE))
+		return -EACCES;
 
 	/* Make sure we are allowed to bind here. */
-	if(sk->prot->verify_bind(sk, snum))
+	if(sk->prot->get_port(sk, snum) != 0)
 		return -EADDRINUSE;
 
-	sk->num = snum;
 	sk->sport = ntohs(sk->num);
 	sk->dport = 0;
 	sk->daddr = 0;
-	sk->prot->rehash(sk);
-	add_to_prot_sklist(sk);
+	sk->prot->hash(sk);
 
 	return(0);
 }
@@ -318,7 +313,7 @@ static int inet6_getname(struct socket *sock, struct sockaddr *uaddr,
 	sk = sock->sk;
 	if (peer) {
 		if (!tcp_connected(sk->state))
-			return(-ENOTCONN);
+			return -ENOTCONN;
 		sin->sin6_port = sk->dport;
 		memcpy(&sin->sin6_addr, &sk->net_pinfo.af_inet6.daddr,
 		       sizeof(struct in6_addr));

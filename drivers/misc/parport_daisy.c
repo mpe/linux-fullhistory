@@ -15,7 +15,6 @@
  *
  */
 
-#include <linux/config.h>
 #include <linux/parport.h>
 #include <linux/delay.h>
 #include <asm/uaccess.h>

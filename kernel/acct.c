@@ -276,7 +276,7 @@ static int do_acct_process(long exitcode, struct file *file)
 	 */
 	if (!file)
 		return 0;
-	atomic_inc(&file->f_count);
+	get_file(file);
 	if (!check_free_space(file)) {
 		fput(file);
 		return 0;

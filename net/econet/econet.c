@@ -759,7 +759,8 @@ static struct sock *ec_listening_socket(unsigned char port, unsigned char
 		    (opt->station == station || opt->station == 0) &&
 		    (opt->net == net || opt->net == 0))
 			return sk;
-		sk = sk->sklist_next;
+
+		sk = sk->next;
 	}
 
 	return NULL;

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.169 1999/06/09 08:29:13 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.170 1999/07/02 11:26:28 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -917,24 +917,25 @@ extern void tcp_tw_deschedule(struct tcp_tw_bucket *tw);
 /* Must be called only from BH context. */
 void tcp_timewait_kill(struct tcp_tw_bucket *tw)
 {
+	struct tcp_bind_bucket *tb = tw->tb;
+
 	SOCKHASH_LOCK_WRITE_BH();
 
-	/* Unlink from various places. */
+	/* Disassociate with bind bucket. */
 	if(tw->bind_next)
 		tw->bind_next->bind_pprev = tw->bind_pprev;
 	*(tw->bind_pprev) = tw->bind_next;
-	if(tw->tb->owners == NULL)
-		tcp_inc_slow_timer(TCP_SLT_BUCKETGC);
+	if (tb->owners == NULL) {
+		if (tb->next)
+			tb->next->pprev = tb->pprev;
+		*(tb->pprev) = tb->next;
+		kmem_cache_free(tcp_bucket_cachep, tb);
+	}
 
+	/* Unlink from established hashes. */
 	if(tw->next)
 		tw->next->pprev = tw->pprev;
 	*tw->pprev = tw->next;
-
-	/* We decremented the prot->inuse count when we entered TIME_WAIT
-	 * and the sock from which this came was destroyed.
-	 */
-	tw->sklist_next->sklist_prev = tw->sklist_prev;
-	tw->sklist_prev->sklist_next = tw->sklist_next;
 
 	SOCKHASH_UNLOCK_WRITE_BH();
 
@@ -1040,11 +1041,9 @@ static __inline__ void tcp_tw_hashdance(struct sock *sk, struct tcp_tw_bucket *t
 		sk->bind_next->bind_pprev = &tw->bind_next;
 	tw->bind_pprev = sk->bind_pprev;
 	*sk->bind_pprev = (struct sock *)tw;
+	sk->prev = NULL;
 
-	/* Step 3: Same for the protocol sklist. */
-	(tw->sklist_next = sk->sklist_next)->sklist_prev = (struct sock *)tw;
-	(tw->sklist_prev = sk->sklist_prev)->sklist_next = (struct sock *)tw;
-	sk->sklist_next = NULL;
+	/* Step 3: Un-charge protocol socket in-use count. */
 	sk->prot->inuse--;
 
 	/* Step 4: Hash TW into TIMEWAIT half of established hash table. */

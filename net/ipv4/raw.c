@@ -5,7 +5,7 @@
  *
  *		RAW - implementation of IP "raw" sockets.
  *
- * Version:	$Id: raw.c,v 1.41 1999/05/30 01:16:19 davem Exp $
+ * Version:	$Id: raw.c,v 1.42 1999/07/02 11:26:26 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -70,57 +70,29 @@ struct sock *raw_v4_htable[RAWV4_HTABLE_SIZE];
 
 static void raw_v4_hash(struct sock *sk)
 {
-	struct sock **skp;
-	int num = sk->num;
+	struct sock **skp = &raw_v4_htable[sk->num & (RAWV4_HTABLE_SIZE - 1)];
 
-	num &= (RAWV4_HTABLE_SIZE - 1);
-	skp = &raw_v4_htable[num];
 	SOCKHASH_LOCK_WRITE();
-	sk->next = *skp;
+	if ((sk->next = *skp) != NULL)
+		(*skp)->pprev = &sk->next;
 	*skp = sk;
-	sk->hashent = num;
+	sk->pprev = skp;
+	sk->prot->inuse++;
+	if(sk->prot->highestinuse < sk->prot->inuse)
+		sk->prot->highestinuse = sk->prot->inuse;
 	SOCKHASH_UNLOCK_WRITE();
 }
 
 static void raw_v4_unhash(struct sock *sk)
 {
-	struct sock **skp;
-	int num = sk->num;
-
-	num &= (RAWV4_HTABLE_SIZE - 1);
-	skp = &raw_v4_htable[num];
-
 	SOCKHASH_LOCK_WRITE();
-	while(*skp != NULL) {
-		if(*skp == sk) {
-			*skp = sk->next;
-			break;
-		}
-		skp = &((*skp)->next);
+	if (sk->pprev) {
+		if (sk->next)
+			sk->next->pprev = sk->pprev;
+		*sk->pprev = sk->next;
+		sk->pprev = NULL;
+		sk->prot->inuse--;
 	}
-	SOCKHASH_UNLOCK_WRITE();
-}
-
-static void raw_v4_rehash(struct sock *sk)
-{
-	struct sock **skp;
-	int num = sk->num;
-	int oldnum = sk->hashent;
-
-	num &= (RAWV4_HTABLE_SIZE - 1);
-	skp = &raw_v4_htable[oldnum];
-
-	SOCKHASH_LOCK_WRITE();
-	while(*skp != NULL) {
-		if(*skp == sk) {
-			*skp = sk->next;
-			break;
-		}
-		skp = &((*skp)->next);
-	}
-	sk->next = raw_v4_htable[num];
-	raw_v4_htable[num] = sk;
-	sk->hashent = num;
 	SOCKHASH_UNLOCK_WRITE();
 }
 
@@ -640,9 +612,69 @@ static int raw_getsockopt(struct sock *sk, int level, int optname,
 	return -ENOPROTOOPT;
 }
 
+static void get_raw_sock(struct sock *sp, char *tmpbuf, int i)
+{
+	unsigned int dest, src;
+	__u16 destp, srcp;
+	int timer_active;
+	unsigned long timer_expires;
+
+	dest  = sp->daddr;
+	src   = sp->rcv_saddr;
+	destp = ntohs(sp->dport);
+	srcp  = ntohs(sp->sport);
+	timer_active = (sp->timer.prev != NULL) ? 2 : 0;
+	timer_expires = (timer_active == 2 ? sp->timer.expires : jiffies);
+	sprintf(tmpbuf, "%4d: %08X:%04X %08X:%04X"
+		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %ld",
+		i, src, srcp, dest, destp, sp->state, 
+		atomic_read(&sp->wmem_alloc), atomic_read(&sp->rmem_alloc),
+		timer_active, timer_expires-jiffies, 0,
+		sp->socket->inode->i_uid, timer_active ? sp->timeout : 0,
+		sp->socket ? sp->socket->inode->i_ino : 0);
+}
+
+int raw_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+{
+	int len = 0, num = 0, i;
+	off_t pos = 0;
+	off_t begin;
+	char tmpbuf[129];
+
+	if (offset < 128) 
+		len += sprintf(buffer, "%-127s\n",
+			       "  sl  local_address rem_address   st tx_queue "
+			       "rx_queue tr tm->when retrnsmt   uid  timeout inode");
+	pos = 128;
+	SOCKHASH_LOCK_READ();
+	for (i = 0; i < RAWV4_HTABLE_SIZE; i++) {
+		struct sock *sk;
+
+		for (sk = raw_v4_htable[i]; sk; sk = sk->next, num++) {
+			if (sk->family != PF_INET)
+				continue;
+			pos += 128;
+			if (pos < offset)
+				continue;
+			get_raw_sock(sk, tmpbuf, i);
+			len += sprintf(buffer+len, "%-127s\n", tmpbuf);
+			if(len >= length)
+				goto out;
+		}
+	}
+out:
+	SOCKHASH_UNLOCK_READ();
+	begin = len - (pos - offset);
+	*start = buffer + begin;
+	len -= begin;
+	if(len > length)
+		len = length;
+	if (len < 0)
+		len = 0; 
+	return len;
+}
+
 struct proto raw_prot = {
-	(struct sock *)&raw_prot,	/* sklist_next */
-	(struct sock *)&raw_prot,	/* sklist_prev */
 	raw_close,			/* close */
 	udp_connect,			/* connect */
 	NULL,				/* accept */
@@ -666,9 +698,7 @@ struct proto raw_prot = {
 	raw_rcv_skb,			/* backlog_rcv */
 	raw_v4_hash,			/* hash */
 	raw_v4_unhash,			/* unhash */
-	raw_v4_rehash,			/* rehash */
-	NULL,				/* good_socknum */
-	NULL,				/* verify_bind */
+	NULL,				/* get_port */
 	128,				/* max_header */
 	0,				/* retransmits */
 	"RAW",				/* name */

@@ -119,7 +119,11 @@ int open_dentry(struct dentry * dentry, int mode)
 {
 	struct inode * inode = dentry->d_inode;
 	struct file * f;
+	struct list_head * l = NULL;
 	int fd, error;
+
+	if (inode->i_sb)
+		l = &inode->i_sb->s_files;
 
 	error = -EINVAL;
 	if (!inode->i_op || !inode->i_op->default_file_ops)
@@ -141,6 +145,7 @@ int open_dentry(struct dentry * dentry, int mode)
 			if (error)
 				goto out_filp;
 		}
+		file_move(f, l);
 		fd_install(fd, f);
 		dget(dentry);
 	}

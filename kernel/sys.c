@@ -944,27 +944,27 @@ int getrusage(struct task_struct *p, int who, struct rusage *ru)
 			r.ru_utime.tv_usec = CT_TO_USECS(p->times.tms_utime);
 			r.ru_stime.tv_sec = CT_TO_SECS(p->times.tms_stime);
 			r.ru_stime.tv_usec = CT_TO_USECS(p->times.tms_stime);
-			r.ru_minflt = 0;
-			r.ru_majflt = 0;
-			r.ru_nswap = 0;
+			r.ru_minflt = p->min_flt;
+			r.ru_majflt = p->maj_flt;
+			r.ru_nswap = p->nswap;
 			break;
 		case RUSAGE_CHILDREN:
 			r.ru_utime.tv_sec = CT_TO_SECS(p->times.tms_cutime);
 			r.ru_utime.tv_usec = CT_TO_USECS(p->times.tms_cutime);
 			r.ru_stime.tv_sec = CT_TO_SECS(p->times.tms_cstime);
 			r.ru_stime.tv_usec = CT_TO_USECS(p->times.tms_cstime);
-			r.ru_minflt = 0;
-			r.ru_majflt = 0;
-			r.ru_nswap = 0;
+			r.ru_minflt = p->cmin_flt;
+			r.ru_majflt = p->cmaj_flt;
+			r.ru_nswap = p->cnswap;
 			break;
 		default:
 			r.ru_utime.tv_sec = CT_TO_SECS(p->times.tms_utime + p->times.tms_cutime);
 			r.ru_utime.tv_usec = CT_TO_USECS(p->times.tms_utime + p->times.tms_cutime);
 			r.ru_stime.tv_sec = CT_TO_SECS(p->times.tms_stime + p->times.tms_cstime);
 			r.ru_stime.tv_usec = CT_TO_USECS(p->times.tms_stime + p->times.tms_cstime);
-			r.ru_minflt = 0;
-			r.ru_majflt = 0;
-			r.ru_nswap = 0;
+			r.ru_minflt = p->min_flt + p->cmin_flt;
+			r.ru_majflt = p->maj_flt + p->cmaj_flt;
+			r.ru_nswap = p->nswap + p->cnswap;
 			break;
 	}
 	return copy_to_user(ru, &r, sizeof(r)) ? -EFAULT : 0;

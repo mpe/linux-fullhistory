@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/raw.c
  *
- *	$Id: raw.c,v 1.26 1999/06/09 10:11:18 davem Exp $
+ *	$Id: raw.c,v 1.27 1999/07/02 11:26:40 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -45,57 +45,29 @@ struct sock *raw_v6_htable[RAWV6_HTABLE_SIZE];
 
 static void raw_v6_hash(struct sock *sk)
 {
-	struct sock **skp;
-	int num = sk->num;
+	struct sock **skp = &raw_v6_htable[sk->num & (RAWV6_HTABLE_SIZE - 1)];
 
-	num &= (RAWV6_HTABLE_SIZE - 1);
-	skp = &raw_v6_htable[num];
 	SOCKHASH_LOCK_WRITE();
-	sk->next = *skp;
+	if ((sk->next = *skp) != NULL)
+		(*skp)->pprev = &sk->next;
 	*skp = sk;
-	sk->hashent = num;
+	sk->pprev = skp;
+	sk->prot->inuse++;
+	if(sk->prot->highestinuse < sk->prot->inuse)
+		sk->prot->highestinuse = sk->prot->inuse;
 	SOCKHASH_UNLOCK_WRITE();
 }
 
 static void raw_v6_unhash(struct sock *sk)
 {
-	struct sock **skp;
-	int num = sk->num;
-
-	num &= (RAWV6_HTABLE_SIZE - 1);
-	skp = &raw_v6_htable[num];
-
 	SOCKHASH_LOCK_WRITE();
-	while(*skp != NULL) {
-		if(*skp == sk) {
-			*skp = sk->next;
-			break;
-		}
-		skp = &((*skp)->next);
+	if (sk->pprev) {
+		if (sk->next)
+			sk->next->pprev = sk->pprev;
+		*sk->pprev = sk->next;
+		sk->pprev = NULL;
+		sk->prot->inuse--;
 	}
-	SOCKHASH_UNLOCK_WRITE();
-}
-
-static void raw_v6_rehash(struct sock *sk)
-{
-	struct sock **skp;
-	int num = sk->num;
-	int oldnum = sk->hashent;
-
-	num &= (RAWV6_HTABLE_SIZE - 1);
-	skp = &raw_v6_htable[oldnum];
-
-	SOCKHASH_LOCK_WRITE();
-	while(*skp != NULL) {
-		if(*skp == sk) {
-			*skp = sk->next;
-			break;
-		}
-		skp = &((*skp)->next);
-	}
-	sk->next = raw_v6_htable[num];
-	raw_v6_htable[num] = sk;
-	sk->hashent = num;
 	SOCKHASH_UNLOCK_WRITE();
 }
 
@@ -636,9 +608,80 @@ static int rawv6_init_sk(struct sock *sk)
 	return(0);
 }
 
+static void get_raw6_sock(struct sock *sp, char *tmpbuf, int i)
+{
+	struct in6_addr *dest, *src;
+	__u16 destp, srcp;
+	int timer_active;
+	unsigned long timer_expires;
+
+	dest  = &sp->net_pinfo.af_inet6.daddr;
+	src   = &sp->net_pinfo.af_inet6.rcv_saddr;
+	destp = ntohs(sp->dport);
+	srcp  = ntohs(sp->sport);
+	timer_active = (sp->timer.prev != NULL) ? 2 : 0;
+	timer_expires = (timer_active == 2 ? sp->timer.expires : jiffies);
+	sprintf(tmpbuf,
+		"%4d: %08X%08X%08X%08X:%04X %08X%08X%08X%08X:%04X "
+		"%02X %08X:%08X %02X:%08lX %08X %5d %8d %ld",
+		i,
+		src->s6_addr32[0], src->s6_addr32[1],
+		src->s6_addr32[2], src->s6_addr32[3], srcp,
+		dest->s6_addr32[0], dest->s6_addr32[1],
+		dest->s6_addr32[2], dest->s6_addr32[3], destp,
+		sp->state, 
+		atomic_read(&sp->wmem_alloc), atomic_read(&sp->rmem_alloc),
+		timer_active, timer_expires-jiffies, 0,
+		sp->socket->inode->i_uid, timer_active ? sp->timeout : 0,
+		sp->socket ? sp->socket->inode->i_ino : 0);
+}
+
+int raw6_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+{
+	int len = 0, num = 0, i;
+	off_t pos = 0;
+	off_t begin;
+	char tmpbuf[150];
+
+	if (offset < 149)
+		len += sprintf(buffer, "%-148s\n",
+			       "  sl  "						/* 6 */
+			       "local_address                         "		/* 38 */
+			       "remote_address                        "		/* 38 */
+			       "st tx_queue rx_queue tr tm->when retrnsmt"	/* 41 */
+			       "   uid  timeout inode");			/* 21 */
+										/*----*/
+										/*144 */
+	pos = 149;
+	SOCKHASH_LOCK_READ();
+	for (i = 0; i < RAWV6_HTABLE_SIZE; i++) {
+		struct sock *sk;
+
+		for (sk = raw_v6_htable[i]; sk; sk = sk->next, num++) {
+			if (sk->family != PF_INET6)
+				continue;
+			pos += 149;
+			if (pos < offset)
+				continue;
+			get_raw6_sock(sk, tmpbuf, i);
+			len += sprintf(buffer+len, "%-148s\n", tmpbuf);
+			if(len >= length)
+				goto out;
+		}
+	}
+out:
+	SOCKHASH_UNLOCK_READ();
+	begin = len - (pos - offset);
+	*start = buffer + begin;
+	len -= begin;
+	if(len > length)
+		len = length;
+	if (len < 0)
+		len = 0; 
+	return len;
+}
+
 struct proto rawv6_prot = {
-	(struct sock *)&rawv6_prot,	/* sklist_next */
-	(struct sock *)&rawv6_prot,	/* sklist_prev */
 	rawv6_close,			/* close */
 	udpv6_connect,			/* connect */
 	NULL,				/* accept */
@@ -658,9 +701,7 @@ struct proto rawv6_prot = {
 	rawv6_rcv_skb,			/* backlog_rcv */
 	raw_v6_hash,			/* hash */
 	raw_v6_unhash,			/* unhash */
-	raw_v6_rehash,			/* rehash */
-	NULL,				/* good_socknum */
-	NULL,				/* verify_bind */
+	NULL,				/* get_port */
 	128,				/* max_header */
 	0,				/* retransmits */
 	"RAW",				/* name */

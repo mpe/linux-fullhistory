@@ -305,6 +305,7 @@ create_write_request(struct file * file, struct page *page, unsigned int offset,
 		goto out_req;
 
 	/* Put the task on inode's writeback request list. */
+	get_file(file);
 	wreq->wb_file = file;
 	wreq->wb_pid    = current->pid;
 	wreq->wb_page   = page;
@@ -467,7 +468,6 @@ nfs_updatepage(struct file *file, struct page *page, unsigned long offset, unsig
 	 * The IO completion will then free the page and the dentry.
 	 */
 	get_page(page);
-	atomic_inc(&file->f_count);
 
 	/* Schedule request */
 	synchronous = schedule_write_request(req, synchronous);

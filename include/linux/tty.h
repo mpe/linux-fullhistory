@@ -277,6 +277,7 @@ struct tty_struct {
 	struct tq_struct tq_hangup;
 	void *disc_data;
 	void *driver_data;
+	struct list_head tty_files;
 
 #define N_TTY_BUF_SIZE 4096
 	

@@ -577,32 +577,35 @@ we_slept:
 static void add_dquot_ref(kdev_t dev, short type)
 {
 	struct super_block *sb = get_super(dev);
-	struct file *filp;
+	struct list_head *p;
 	struct inode *inode;
 
 	if (!sb || !sb->dq_op)
 		return;	/* nothing to do */
 
-	for (filp = inuse_filps; filp; filp = filp->f_next) {
+	file_list_lock();
+	for (p = sb->s_files.next; p != &sb->s_files; p = p->next) {
+		struct file *filp = list_entry(p, struct file, f_list);
 		if (!filp->f_dentry)
-			continue;
-		if (filp->f_dentry->d_sb != sb)
 			continue;
 		inode = filp->f_dentry->d_inode;
 		if (!inode)
 			continue;
 		/* N.B. race problem -- filp could become unused */
 		if (filp->f_mode & FMODE_WRITE) {
+			file_list_unlock();
 			sb->dq_op->initialize(inode, type);
 			inode->i_flags |= S_QUOTA;
+			file_list_lock();
 		}
 	}
+	file_list_unlock();
 }
 
 static void reset_dquot_ptrs(kdev_t dev, short type)
 {
 	struct super_block *sb = get_super(dev);
-	struct file *filp;
+	struct list_head *p;
 	struct inode *inode;
 	struct dquot *dquot;
 	int cnt;
@@ -614,10 +617,10 @@ restart:
 	/* free any quota for unused dentries */
 	shrink_dcache_sb(sb);
 
-	for (filp = inuse_filps; filp; filp = filp->f_next) {
+	file_list_lock();
+	for (p = sb->s_files.next; p != &sb->s_files; p = p->next) {
+		struct file *filp = list_entry(p, struct file, f_list);
 		if (!filp->f_dentry)
-			continue;
-		if (filp->f_dentry->d_sb != sb)
 			continue;
 		inode = filp->f_dentry->d_inode;
 		if (!inode)
@@ -637,12 +640,14 @@ restart:
 			inode->i_flags &= ~S_QUOTA;
 		put_it:
 			if (dquot != NODQUOT) {
+				file_list_unlock();
 				dqput(dquot);
 				/* we may have blocked ... */
 				goto restart;
 			}
 		}
 	}
+	file_list_unlock();
 }
 
 static inline void dquot_incr_inodes(struct dquot *dquot, unsigned long number)

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_timer.c,v 1.64 1999/05/27 00:37:31 davem Exp $
+ * Version:	$Id: tcp_timer.c,v 1.65 1999/07/02 11:26:35 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -31,7 +31,6 @@ int sysctl_tcp_retries2 = TCP_RETR2;
 static void tcp_sltimer_handler(unsigned long);
 static void tcp_syn_recv_timer(unsigned long);
 static void tcp_keepalive(unsigned long data);
-static void tcp_bucketgc(unsigned long);
 static void tcp_twkill(unsigned long);
 
 struct timer_list	tcp_slow_timer = {
@@ -44,8 +43,7 @@ struct timer_list	tcp_slow_timer = {
 struct tcp_sl_timer tcp_slt_array[TCP_SLT_MAX] = {
 	{ATOMIC_INIT(0), TCP_SYNACK_PERIOD, 0, tcp_syn_recv_timer},/* SYNACK	*/
 	{ATOMIC_INIT(0), TCP_KEEPALIVE_PERIOD, 0, tcp_keepalive},  /* KEEPALIVE	*/
-	{ATOMIC_INIT(0), TCP_TWKILL_PERIOD, 0, tcp_twkill},        /* TWKILL	*/
-	{ATOMIC_INIT(0), TCP_BUCKETGC_PERIOD, 0, tcp_bucketgc}     /* BUCKETGC	*/
+	{ATOMIC_INIT(0), TCP_TWKILL_PERIOD, 0, tcp_twkill}         /* TWKILL	*/
 };
 
 const char timer_bug_msg[] = KERN_DEBUG "tcpbug: unknown timer value\n";
@@ -250,43 +248,6 @@ static __inline__ int tcp_keepopen_proc(struct sock *sk)
 		}
 	}
 	return res;
-}
-
-/* Garbage collect TCP bind buckets. */
-static void tcp_bucketgc(unsigned long data)
-{
-	int i, reaped = 0;;
-
-	SOCKHASH_LOCK_WRITE_BH();
-	for(i = 0; i < tcp_bhash_size; i++) {
-		struct tcp_bind_bucket *tb = tcp_bhash[i];
-
-		while(tb) {
-			struct tcp_bind_bucket *next = tb->next;
-
-			if((tb->owners == NULL) &&
-			   !(tb->flags & TCPB_FLAG_LOCKED)) {
-				reaped++;
-
-				/* Unlink bucket. */
-				if(tb->next)
-					tb->next->pprev = tb->pprev;
-				*tb->pprev = tb->next;
-
-				/* Finally, free it up. */
-				kmem_cache_free(tcp_bucket_cachep, tb);
-			}
-			tb = next;
-		}
-	}
-	SOCKHASH_UNLOCK_WRITE_BH();
-
-	if(reaped != 0) {
-		struct tcp_sl_timer *slt = (struct tcp_sl_timer *)data;
-
-		/* Eat timer references. */
-		atomic_sub(reaped, &slt->count);
-	}
 }
 
 /* Kill off TIME_WAIT sockets once their lifetime has expired. */

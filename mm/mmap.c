@@ -460,13 +460,13 @@ struct vm_area_struct * find_vma_prev(struct mm_struct * mm, unsigned long addr,
 	return NULL;
 }
 
-struct vm_area_struct * find_extend_vma(struct mm_struct * mm, unsigned long addr)
+struct vm_area_struct * find_extend_vma(struct task_struct * tsk, unsigned long addr)
 {
 	struct vm_area_struct * vma;
 	unsigned long start;
 
 	addr &= PAGE_MASK;
-	vma = find_vma(mm,addr);
+	vma = find_vma(tsk->mm,addr);
 	if (!vma)
 		return NULL;
 	if (vma->vm_start <= addr)

@@ -365,24 +365,36 @@ int proc_register(struct proc_dir_entry * dir, struct proc_dir_entry * dp)
  */
 static void proc_kill_inodes(int ino)
 {
-	struct file *filp;
+	struct list_head *p;
+	struct super_block *sb;
 
-	/* inuse_filps is protected by the single kernel lock */
-	for (filp = inuse_filps; filp; filp = filp->f_next) {
-		struct dentry * dentry;
-		struct inode * inode;
+	/*
+	 * Actually it's a partial revoke(). We have to go through all
+	 * copies of procfs. proc_super_blocks is protected by the big
+	 * lock for the time being.
+	 */
+	for (sb = proc_super_blocks;
+	     sb;
+	     sb = (struct super_block*)sb->u.generic_sbp) {
+		file_list_lock();
+		for (p = sb->s_files.next; p != &sb->s_files; p = p->next) {
+			struct file * filp = list_entry(p, struct file, f_list);
+			struct dentry * dentry;
+			struct inode * inode;
 
-		dentry = filp->f_dentry;
-		if (!dentry)
-			continue;
-		if (dentry->d_op != &proc_dentry_operations)
-			continue;
-		inode = dentry->d_inode;
-		if (!inode)
-			continue;
-		if (inode->i_ino != ino)
-			continue;
-		filp->f_op = NULL;
+			dentry = filp->f_dentry;
+			if (!dentry)
+				continue;
+			if (dentry->d_op != &proc_dentry_operations)
+				continue;
+			inode = dentry->d_inode;
+			if (!inode)
+				continue;
+			if (inode->i_ino != ino)
+				continue;
+			filp->f_op = NULL;
+		}
+		file_list_unlock();
 	}
 }
 

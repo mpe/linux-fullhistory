@@ -47,7 +47,7 @@ static int try_to_swap_out(struct task_struct * tsk, struct vm_area_struct* vma,
 		goto out_failed;
 
 	page = mem_map + MAP_NR(page_addr);
-	write_lock(&tsk->mm->page_table_lock);
+	spin_lock(&tsk->mm->page_table_lock);
 	if (pte_val(pte) != pte_val(*page_table))
 		goto out_failed_unlock;
 
@@ -138,7 +138,7 @@ drop_pte:
 	if (vma->vm_ops && vma->vm_ops->swapout) {
 		pid_t pid = tsk->pid;
 		pte_clear(page_table);
-		write_unlock(&tsk->mm->page_table_lock);
+		spin_unlock(&tsk->mm->page_table_lock);
 		flush_tlb_page(vma, address);
 		vma->vm_mm->rss--;
 		
@@ -158,9 +158,9 @@ drop_pte:
 		goto out_failed; /* No swap space left */
 		
 	vma->vm_mm->rss--;
-	tsk->mm->nswap++;
+	tsk->nswap++;
 	set_pte(page_table, __pte(entry));
-	write_unlock(&tsk->mm->page_table_lock);
+	spin_unlock(&tsk->mm->page_table_lock);
 
 	flush_tlb_page(vma, address);
 	swap_duplicate(entry);	/* One for the process, one for the swap cache */
@@ -175,7 +175,7 @@ out_free_success:
 	__free_page(page);
 	return 1;
 out_failed_unlock:
-	write_unlock(&tsk->mm->page_table_lock);
+	spin_unlock(&tsk->mm->page_table_lock);
 out_failed:
 	return 0;
 }
@@ -352,7 +352,7 @@ static int swap_out(unsigned int priority, int gfp_mask)
 		read_lock(&tasklist_lock);
 		p = init_task.next_task;
 		for (; p != &init_task; p = p->next_task) {
-			if (!p->mm->swappable)
+			if (!p->swappable)
 				continue;
 	 		if (p->mm->rss <= 0)
 				continue;

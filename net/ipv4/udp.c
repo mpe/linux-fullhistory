@@ -5,7 +5,7 @@
  *
  *		The User Datagram Protocol (UDP).
  *
- * Version:	$Id: udp.c,v 1.70 1999/06/13 05:55:16 davem Exp $
+ * Version:	$Id: udp.c,v 1.71 1999/07/02 11:26:33 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -123,164 +123,102 @@ struct udp_mib		udp_statistics;
 
 struct sock *udp_hash[UDP_HTABLE_SIZE];
 
-static int udp_v4_verify_bind(struct sock *sk, unsigned short snum)
+/* Shared by v4/v6 udp. */
+int udp_port_rover = 0;
+
+static int udp_v4_get_port(struct sock *sk, unsigned short snum)
 {
-	struct sock *sk2;
-	int retval = 0, sk_reuse = sk->reuse;
+	SOCKHASH_LOCK_WRITE();
+	if (snum == 0) {
+		int best_size_so_far, best, result, i;
 
-	SOCKHASH_LOCK_READ();
-	for(sk2 = udp_hash[snum & (UDP_HTABLE_SIZE - 1)]; sk2 != NULL; sk2 = sk2->next) {
-		if((sk2->num == snum) && (sk2 != sk)) {
-			unsigned char state = sk2->state;
-			int sk2_reuse = sk2->reuse;
+		if (udp_port_rover > sysctl_local_port_range[1] ||
+		    udp_port_rover < sysctl_local_port_range[0])
+			udp_port_rover = sysctl_local_port_range[0];
+		best_size_so_far = 32767;
+		best = result = udp_port_rover;
+		for (i = 0; i < UDP_HTABLE_SIZE; i++, result++) {
+			struct sock *sk;
+			int size;
 
-			/* Two sockets can be bound to the same port if they're
-			 * bound to different interfaces.
-			 */
-
-			if(sk2->bound_dev_if != sk->bound_dev_if)
-				continue;
-
-			if(!sk2->rcv_saddr || !sk->rcv_saddr) {
-				if((!sk2_reuse)			||
-				   (!sk_reuse)			||
-				   (state == TCP_LISTEN)) {
-					retval = 1;
-					break;
-				}
-			} else if(sk2->rcv_saddr == sk->rcv_saddr) {
-				if((!sk_reuse)			||
-				   (!sk2_reuse)			||
-				   (state == TCP_LISTEN)) {
-					retval = 1;
-					break;
-				}
+			sk = udp_hash[result & (UDP_HTABLE_SIZE - 1)];
+			if (!sk) {
+				if (result > sysctl_local_port_range[1])
+					result = sysctl_local_port_range[0] +
+						((result - sysctl_local_port_range[0]) &
+						 (UDP_HTABLE_SIZE - 1));
+				goto gotit;
 			}
+			size = 0;
+			do {
+				if (++size >= best_size_so_far)
+					goto next;
+			} while ((sk = sk->next) != NULL);
+			best_size_so_far = size;
+			best = result;
+		next:
+		}
+		result = best;
+		for(;; result += UDP_HTABLE_SIZE) {
+			if (result > sysctl_local_port_range[1])
+				result = sysctl_local_port_range[0]
+					+ ((result - sysctl_local_port_range[0]) &
+					   (UDP_HTABLE_SIZE - 1));
+			if (!udp_lport_inuse(result))
+				break;
+		}
+gotit:
+		udp_port_rover = snum = result;
+	} else {
+		struct sock *sk2;
+
+		for (sk2 = udp_hash[snum & (UDP_HTABLE_SIZE - 1)];
+		     sk2 != NULL;
+		     sk2 = sk2->next) {
+			if (sk2->num == snum &&
+			    sk2 != sk &&
+			    sk2->bound_dev_if == sk->bound_dev_if &&
+			    (!sk2->rcv_saddr ||
+			     !sk->rcv_saddr ||
+			     sk2->rcv_saddr == sk->rcv_saddr) &&
+			    (!sk2->reuse || !sk->reuse))
+				goto fail;
 		}
 	}
-	SOCKHASH_UNLOCK_READ();
-	return retval;
-}
-
-static inline int udp_lport_inuse(u16 num)
-{
-	struct sock *sk = udp_hash[num & (UDP_HTABLE_SIZE - 1)];
-
-	for(; sk != NULL; sk = sk->next) {
-		if(sk->num == num)
-			return 1;
-	}
+	sk->num = snum;
+	SOCKHASH_UNLOCK_WRITE();
 	return 0;
-}
 
-/* Shared by v4/v6 udp. */
-unsigned short udp_good_socknum(void)
-{
-	int result;
-	static int start = 0;
-	int i, best, best_size_so_far;
-
-	SOCKHASH_LOCK_READ();
-        if (start > sysctl_local_port_range[1] || start < sysctl_local_port_range[0])
-                start = sysctl_local_port_range[0];
-
-	best_size_so_far = 32767;	/* "big" num */
-        best = result = start;
-
-        for(i = 0; i < UDP_HTABLE_SIZE; i++, result++) {
-		struct sock *sk;
-		int size;
-
-		sk = udp_hash[result & (UDP_HTABLE_SIZE - 1)];
-
-                if(!sk) {
-                        if (result > sysctl_local_port_range[1])
-                                result = sysctl_local_port_range[0]
-                                        + ((result - sysctl_local_port_range[0]) & (UDP_HTABLE_SIZE - 1));
-			goto out;
-                }
-
-		/* Is this one better than our best so far? */
-		size = 0;
-		do {
-			if(++size >= best_size_so_far)
-				goto next;
-		} while((sk = sk->next) != NULL);
-		best_size_so_far = size;
-		best = result;
-        next:
-	}
-
-	result = best;
-
-        for(;; result += UDP_HTABLE_SIZE) {
-                /* Get into range (but preserve hash bin)... */
-                if (result > sysctl_local_port_range[1])
-                        result = sysctl_local_port_range[0]
-                                + ((result - sysctl_local_port_range[0]) & (UDP_HTABLE_SIZE - 1));
-                if (!udp_lport_inuse(result))
-                        break;
-        }
-out:
-	start = result;
-	SOCKHASH_UNLOCK_READ();
-	return result;
+fail:
+	SOCKHASH_UNLOCK_WRITE();
+	return 1;
 }
 
 static void udp_v4_hash(struct sock *sk)
 {
-	struct sock **skp;
-	int num = sk->num;
-
-	num &= (UDP_HTABLE_SIZE - 1);
-	skp = &udp_hash[num];
+	struct sock **skp = &udp_hash[sk->num & (UDP_HTABLE_SIZE - 1)];
 
 	SOCKHASH_LOCK_WRITE();
-	sk->next = *skp;
+	if ((sk->next = *skp) != NULL)
+		(*skp)->pprev = &sk->next;
 	*skp = sk;
-	sk->hashent = num;
+	sk->pprev = skp;
+	sk->prot->inuse++;
+	if(sk->prot->highestinuse < sk->prot->inuse)
+		sk->prot->highestinuse = sk->prot->inuse;
 	SOCKHASH_UNLOCK_WRITE();
 }
 
 static void udp_v4_unhash(struct sock *sk)
 {
-	struct sock **skp;
-	int num = sk->num;
-
-	num &= (UDP_HTABLE_SIZE - 1);
-	skp = &udp_hash[num];
-
 	SOCKHASH_LOCK_WRITE();
-	while(*skp != NULL) {
-		if(*skp == sk) {
-			*skp = sk->next;
-			break;
-		}
-		skp = &((*skp)->next);
+	if (sk->pprev) {
+		if (sk->next)
+			sk->next->pprev = sk->pprev;
+		*sk->pprev = sk->next;
+		sk->pprev = NULL;
+		sk->prot->inuse--;
 	}
-	SOCKHASH_UNLOCK_WRITE();
-}
-
-static void udp_v4_rehash(struct sock *sk)
-{
-	struct sock **skp;
-	int num = sk->num;
-	int oldnum = sk->hashent;
-
-	num &= (UDP_HTABLE_SIZE - 1);
-	skp = &udp_hash[oldnum];
-
-	SOCKHASH_LOCK_WRITE();
-	while(*skp != NULL) {
-		if(*skp == sk) {
-			*skp = sk->next;
-			break;
-		}
-		skp = &((*skp)->next);
-	}
-	sk->next = udp_hash[num];
-	udp_hash[num] = sk;
-	sk->hashent = num;
 	SOCKHASH_UNLOCK_WRITE();
 }
 
@@ -653,7 +591,7 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	if (msg->msg_name) {
 		struct sockaddr_in * usin = (struct sockaddr_in*)msg->msg_name;
 		if (msg->msg_namelen < sizeof(*usin))
-			return(-EINVAL);
+			return -EINVAL;
 		if (usin->sin_family != AF_INET)
 			return -EINVAL;
 
@@ -788,7 +726,6 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 		{
 			unsigned long amount;
 
-			if (sk->state == TCP_LISTEN) return(-EINVAL);
 			amount = sock_wspace(sk);
 			return put_user(amount, (int *)arg);
 		}
@@ -798,8 +735,6 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 			struct sk_buff *skb;
 			unsigned long amount;
 
-			if (sk->state == TCP_LISTEN)
-				return(-EINVAL);
 			amount = 0;
 			/* N.B. Is this interrupt safe??
 			   -> Yes. Interrupts do not remove skbs. --ANK (980725)
@@ -817,7 +752,7 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 		}
 
 		default:
-			return(-ENOIOCTLCMD);
+			return -ENOIOCTLCMD;
 	}
 	return(0);
 }
@@ -945,7 +880,7 @@ int udp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 	
 	if (addr_len < sizeof(*usin)) 
-	  	return(-EINVAL);
+	  	return -EINVAL;
 
 	/*
 	 *	1003.1g - break association.
@@ -961,7 +896,7 @@ int udp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	}
 
 	if (usin->sin_family && usin->sin_family != AF_INET) 
-	  	return(-EAFNOSUPPORT);
+	  	return -EAFNOSUPPORT;
 
 	dst_release(xchg(&sk->dst_cache, NULL));
 
@@ -1226,9 +1161,69 @@ csum_error:
 	return(0);
 }
 
+static void get_udp_sock(struct sock *sp, char *tmpbuf, int i)
+{
+	unsigned int dest, src;
+	__u16 destp, srcp;
+	int timer_active;
+	unsigned long timer_expires;
+
+	dest  = sp->daddr;
+	src   = sp->rcv_saddr;
+	destp = ntohs(sp->dport);
+	srcp  = ntohs(sp->sport);
+	timer_active = (sp->timer.prev != NULL) ? 2 : 0;
+	timer_expires = (timer_active == 2 ? sp->timer.expires : jiffies);
+	sprintf(tmpbuf, "%4d: %08X:%04X %08X:%04X"
+		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %ld",
+		i, src, srcp, dest, destp, sp->state, 
+		atomic_read(&sp->wmem_alloc), atomic_read(&sp->rmem_alloc),
+		timer_active, timer_expires-jiffies, 0,
+		sp->socket->inode->i_uid, timer_active ? sp->timeout : 0,
+		sp->socket ? sp->socket->inode->i_ino : 0);
+}
+
+int udp_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+{
+	int len = 0, num = 0, i;
+	off_t pos = 0;
+	off_t begin;
+	char tmpbuf[129];
+
+	if (offset < 128) 
+		len += sprintf(buffer, "%-127s\n",
+			       "  sl  local_address rem_address   st tx_queue "
+			       "rx_queue tr tm->when retrnsmt   uid  timeout inode");
+	pos = 128;
+	SOCKHASH_LOCK_READ();
+	for (i = 0; i < UDP_HTABLE_SIZE; i++) {
+		struct sock *sk;
+
+		for (sk = udp_hash[i]; sk; sk = sk->next, num++) {
+			if (sk->family != PF_INET)
+				continue;
+			pos += 128;
+			if (pos < offset)
+				continue;
+			get_udp_sock(sk, tmpbuf, i);
+			len += sprintf(buffer+len, "%-127s\n", tmpbuf);
+			if(len >= length)
+				goto out;
+		}
+	}
+out:
+	SOCKHASH_UNLOCK_READ();
+	begin = len - (pos - offset);
+	*start = buffer + begin;
+	len -= begin;
+	if(len > length)
+		len = length;
+	if (len < 0)
+		len = 0; 
+	return len;
+}
+
 struct proto udp_prot = {
-	(struct sock *)&udp_prot,	/* sklist_next */
-	(struct sock *)&udp_prot,	/* sklist_prev */
 	udp_close,			/* close */
 	udp_connect,			/* connect */
 	NULL,				/* accept */
@@ -1248,9 +1243,7 @@ struct proto udp_prot = {
 	udp_queue_rcv_skb,		/* backlog_rcv */
 	udp_v4_hash,			/* hash */
 	udp_v4_unhash,			/* unhash */
-	udp_v4_rehash,			/* rehash */
-	udp_good_socknum,		/* good_socknum */
-	udp_v4_verify_bind,		/* verify_bind */
+	udp_v4_get_port,		/* good_socknum */
 	128,				/* max_header */
 	0,				/* retransmits */
  	"UDP",				/* name */

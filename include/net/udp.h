@@ -23,6 +23,7 @@
 #define _UDP_H
 
 #include <linux/udp.h>
+#include <net/sock.h>
 
 #define UDP_HTABLE_SIZE		128
 
@@ -32,7 +33,18 @@
  */
 extern struct sock *udp_hash[UDP_HTABLE_SIZE];
 
-extern unsigned short udp_good_socknum(void);
+extern int udp_port_rover;
+
+static inline int udp_lport_inuse(u16 num)
+{
+	struct sock *sk = udp_hash[num & (UDP_HTABLE_SIZE - 1)];
+
+	for(; sk != NULL; sk = sk->next) {
+		if(sk->num == num)
+			return 1;
+	}
+	return 0;
+}
 
 /* Note: this must match 'valbool' in sock_setsockopt */
 #define UDP_CSUM_NOXMIT		1

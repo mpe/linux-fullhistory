@@ -1597,7 +1597,7 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 		bh = bh->b_this_page;
 	} while (bh != head);
 	if (rw == READ)
-		++current->mm->maj_flt;
+		++current->maj_flt;
 	if ((rw == READ) && nr) {
 		if (Page_Uptodate(page))
 			BUG();
@@ -1663,7 +1663,7 @@ int block_read_full_page(struct file * file, struct page * page)
 		nr++;
 	} while (iblock++, (bh = bh->b_this_page) != head);
 
-	++current->mm->maj_flt;
+	++current->maj_flt;
 	if (nr) {
 		if (Page_Uptodate(page))
 			BUG();

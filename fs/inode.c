@@ -818,31 +818,6 @@ void __init inode_init(void)
 	max_inodes = max;
 }
 
-/* This belongs in file_table.c, not here... */
-int fs_may_remount_ro(struct super_block *sb)
-{
-	struct file *file;
-
-	/* Check that no files are currently opened for writing. */
-	for (file = inuse_filps; file; file = file->f_next) {
-		struct inode *inode;
-		if (!file->f_dentry)
-			continue;
-		inode = file->f_dentry->d_inode;
-		if (!inode || inode->i_sb != sb)
-			continue;
-
-		/* File with pending delete? */
-		if (inode->i_nlink == 0)
-			return 0;
-
-		/* Writable file? */
-		if (S_ISREG(inode->i_mode) && (file->f_mode & FMODE_WRITE))
-			return 0;
-	}
-	return 1; /* Tis' cool bro. */
-}
-
 void update_atime (struct inode *inode)
 {
     if ( IS_NOATIME (inode) ) return;

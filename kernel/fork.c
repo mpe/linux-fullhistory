@@ -304,7 +304,7 @@ struct mm_struct * mm_alloc(void)
 		mm->map_count = 0;
 		mm->def_flags = 0;
 		init_MUTEX_LOCKED(&mm->mmap_sem);
-		mm->page_table_lock = RW_LOCK_UNLOCKED;
+		mm->page_table_lock = SPIN_LOCK_UNLOCKED;
 		/*
 		 * Leave mm->pgd set to the parent's pgd
 		 * so that pgd_offset() is always valid.
@@ -315,7 +315,6 @@ struct mm_struct * mm_alloc(void)
 		 * cache or tlb.
 		 */
 		mm->cpu_vm_mask = 0;
-		mm->swappable = 0;
 	}
 	return mm;
 }
@@ -378,6 +377,9 @@ static inline int copy_mm(int nr, unsigned long clone_flags, struct task_struct 
 		goto fail_nomem;
 
 	tsk->mm = mm;
+	tsk->min_flt = tsk->maj_flt = 0;
+	tsk->cmin_flt = tsk->cmaj_flt = 0;
+	tsk->nswap = tsk->cnswap = 0;
 	copy_segments(nr, tsk, mm);
 	retval = new_page_tables(tsk);
 	if (retval)
@@ -575,6 +577,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 		__MOD_INC_USE_COUNT(p->binfmt->module);
 
 	p->did_exec = 0;
+	p->swappable = 0;
 	p->state = TASK_UNINTERRUPTIBLE;
 
 	copy_flags(clone_flags, p);
@@ -639,7 +642,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->semundo = NULL;
 
 	/* ok, now we should be set up.. */
-	p->mm->swappable = 1;
+	p->swappable = 1;
 	p->exit_signal = clone_flags & CSIGNAL;
 	p->pdeath_signal = 0;
 
