@@ -1386,7 +1386,9 @@ static int ds_ioctl(struct inode * inode, struct file * file,
 			buf->config.Function, &buf->config);
 	break;
     case DS_GET_FIRST_TUPLE:
+	down(&s->parent->skt_sem);
 	pcmcia_validate_mem(s->parent);
+	up(&s->parent->skt_sem);
 	ret = pccard_get_first_tuple(s->parent, BIND_FN_ALL, &buf->tuple);
 	break;
     case DS_GET_NEXT_TUPLE:
@@ -1412,7 +1414,9 @@ static int ds_ioctl(struct inode * inode, struct file * file,
 	ret = pccard_get_status(s->parent, buf->status.Function, &buf->status);
 	break;
     case DS_VALIDATE_CIS:
+	down(&s->parent->skt_sem);
 	pcmcia_validate_mem(s->parent);
+	up(&s->parent->skt_sem);
 	ret = pccard_validate_cis(s->parent, BIND_FN_ALL, &buf->cisinfo);
 	break;
     case DS_SUSPEND_CARD:
