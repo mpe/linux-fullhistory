@@ -220,6 +220,36 @@ static long __pmac g5_mpic_enable(struct device_node* node, long param, long val
 	return 0;
 }
 
+static long __pmac g5_eth_phy_reset(struct device_node* node, long param, long value)
+{
+	struct macio_chip* macio = &macio_chips[0];
+	struct device_node *phy;
+	int need_reset;
+
+	/*
+	 * We must not reset the combo PHYs, only the BCM5221 found in
+	 * the iMac G5.
+	 */
+	phy = of_get_next_child(node, NULL);
+	if (!phy)
+		return -ENODEV;
+	need_reset = device_is_compatible(phy, "B5221");
+	of_node_put(phy);
+	if (!need_reset)
+		return 0;
+
+	/* PHY reset is GPIO 29, not in device-tree unfortunately */
+	MACIO_OUT8(K2_GPIO_EXTINT_0 + 29,
+		   KEYLARGO_GPIO_OUTPUT_ENABLE | KEYLARGO_GPIO_OUTOUT_DATA);
+	/* Thankfully, this is now always called at a time when we can
+	 * schedule by sungem.
+	 */
+	msleep(10);
+	MACIO_OUT8(K2_GPIO_EXTINT_0 + 29, 0);
+
+	return 0;
+}
+
 #ifdef CONFIG_SMP
 static long __pmac g5_reset_cpu(struct device_node* node, long param, long value)
 {
@@ -306,6 +336,7 @@ static struct feature_table_entry g5_features[]  __pmacdata = {
 	{ PMAC_FTR_ENABLE_MPIC,		g5_mpic_enable },
 	{ PMAC_FTR_READ_GPIO,		g5_read_gpio },
 	{ PMAC_FTR_WRITE_GPIO,		g5_write_gpio },
+	{ PMAC_FTR_GMAC_PHY_RESET,	g5_eth_phy_reset },
 #ifdef CONFIG_SMP
 	{ PMAC_FTR_RESET_CPU,		g5_reset_cpu },
 #endif /* CONFIG_SMP */
