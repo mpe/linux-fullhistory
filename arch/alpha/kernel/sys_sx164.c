@@ -24,6 +24,7 @@
 #include <asm/io.h>
 #include <asm/pgtable.h>
 #include <asm/core_cia.h>
+#include <asm/hwrpb.h>
 
 #include "proto.h"
 #include "irq_impl.h"
@@ -114,6 +115,36 @@ sx164_init_pci(void)
 	SMC669_Init(0);
 }
 
+static void __init
+sx164_init_arch(void)
+{
+	/*
+	 * OSF palcode v1.23 forgets to enable PCA56 Motion Video
+	 * Instructions. Let's enable it.
+	 * We have to check palcode revision because CSERVE interface
+	 * is subject to change without notice. For example, it
+	 * has been changed completely since v1.16 (found in MILO
+	 * distribution). -ink
+	 */
+	struct percpu_struct *cpu = (struct percpu_struct*)
+		((char*)hwrpb + hwrpb->processor_offset);
+
+	if (alpha_using_srm && (cpu->pal_revision & 0xffff) == 0x117) {
+		__asm__ __volatile__(
+		"lda	$16,8($31)\n"
+		"call_pal 9\n"		/* Allow PALRES insns in kernel mode */
+		".long  0x64000118\n\n"	/* hw_mfpr $0,icsr */
+		"ldah	$16,(1<<(19-16))($31)\n"
+		"or	$0,$16,$0\n"	/* set MVE bit */
+		".long  0x74000118\n"	/* hw_mtpr $0,icsr */
+		"lda	$16,9($31)\n"
+		"call_pal 9"		/* Disable PALRES insns */
+		: : : "$0", "$16");
+		printk("PCA56 MVI set enabled\n");
+	}
+
+	pyxis_init_arch();
+}
 
 /*
  * The System Vector
@@ -133,7 +164,7 @@ struct alpha_machine_vector sx164_mv __initmv = {
 	nr_irqs:		48,
 	device_interrupt:	pyxis_device_interrupt,
 
-	init_arch:		pyxis_init_arch,
+	init_arch:		sx164_init_arch,
 	init_irq:		sx164_init_irq,
 	init_rtc:		common_init_rtc,
 	init_pci:		sx164_init_pci,

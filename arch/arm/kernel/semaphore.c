@@ -8,7 +8,6 @@
  * Modified for ARM by Russell King
  */
 #include <linux/sched.h>
-#include <linux/errno.h>
 
 #include <asm/semaphore.h>
 

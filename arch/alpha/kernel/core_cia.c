@@ -19,6 +19,7 @@
 
 #include <asm/system.h>
 #include <asm/ptrace.h>
+#include <asm/hwrpb.h>
 
 #define __EXTERN_INLINE inline
 #include <asm/io.h>
@@ -712,6 +713,25 @@ cia_init_arch(void)
 void __init
 pyxis_init_arch(void)
 {
+	/* On pyxis machines we can precisely calculate the
+	   CPU clock frequency using pyxis real time counter.
+	   It's especially useful for SX164 with broken RTC.
+
+	   Both CPU and chipset are driven by the single 16.666M
+	   or 16.667M crystal oscillator. PYXIS_RT_COUNT clock is
+	   66.66 MHz. -ink */
+
+	unsigned int cc0, cc1;
+	unsigned long pyxis_cc;
+
+	__asm__ __volatile__ ("rpcc %0" : "=r"(cc0));
+	pyxis_cc = *(vulp)PYXIS_RT_COUNT;
+	do { } while(*(vulp)PYXIS_RT_COUNT - pyxis_cc < 4096);
+	__asm__ __volatile__ ("rpcc %0" : "=r"(cc1));
+	cc1 -= cc0;
+	hwrpb->cycle_freq = ((cc1 >> 11) * 100000000UL) / 3;
+	hwrpb_update_checksum(hwrpb);
+
 	do_init_arch(1);
 }
 

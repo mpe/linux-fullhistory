@@ -410,9 +410,24 @@ void __init pagetable_init(struct meminfo *mi)
 	flush_cache_all();
 }
 
-/*
- * The mem_map array can get very big.  Free the unused area of the memory map.
- */
+static inline void free_memmap(unsigned long start, unsigned long end)
+{
+	unsigned long pg, pgend;
+
+	start = __phys_to_virt(start);
+	end   = __phys_to_virt(end);
+
+	pg    = PAGE_ALIGN((unsigned long)(mem_map + MAP_NR(start)));
+	pgend = ((unsigned long)(mem_map + MAP_NR(end))) & PAGE_MASK;
+
+	start = __virt_to_phys(pg);
+	end   = __virt_to_phys(pgend);
+	/*
+	 * The mem_map is always stored in node 0
+	 */
+	free_bootmem_node(0, start, end - start);
+}
+
 static inline void free_unused_memmap_node(int node, struct meminfo *mi)
 {
 	unsigned long bank_start, prev_bank_end = 0;
@@ -434,14 +449,17 @@ static inline void free_unused_memmap_node(int node, struct meminfo *mi)
 		 * between the current bank and the previous, free it.
 		 */
 		if (prev_bank_end && prev_bank_end != bank_start)
-			free_bootmem_node(node, prev_bank_end,
-					  bank_start - prev_bank_end);
+			free_memmap(prev_bank_end, bank_start);
 
 		prev_bank_end = PAGE_ALIGN(mi->bank[i].start +
 					   mi->bank[i].size);
 	}
 }
 
+/*
+ * The mem_map array can get very big.  Free
+ * the unused area of the memory map.
+ */
 void __init create_memmap_holes(struct meminfo *mi)
 {
 	int node;

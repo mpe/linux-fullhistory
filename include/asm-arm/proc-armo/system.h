@@ -7,20 +7,16 @@
 #ifndef __ASM_PROC_SYSTEM_H
 #define __ASM_PROC_SYSTEM_H
 
-extern const char xchg_str[];
-
-#include <linux/config.h>
 #include <asm/proc-fns.h>
 
 extern __inline__ unsigned long __xchg(unsigned long x, volatile void *ptr, int size)
 {
-	extern void arm_invalidptr(const char *, int);
+	extern void __bad_xchg(volatile void *, int);
 
 	switch (size) {
 		case 1:	return cpu_xchg_1(x, ptr);
-		case 2:	return cpu_xchg_2(x, ptr);
 		case 4:	return cpu_xchg_4(x, ptr);
-		default: arm_invalidptr(xchg_str, size);
+		default: __bad_xchg(ptr, size);
 	}
 	return 0;
 }
@@ -107,23 +103,5 @@ extern __inline__ unsigned long __xchg(unsigned long x, volatile void *ptr, int 
 	  : "r" (x)					\
 	  : "memory");					\
 	} while (0)
-
-/* For spinlocks etc */
-#define local_irq_save(x)	__save_flags_cli(x)
-#define local_irq_restore(x)	__restore_flags(x)
-#define local_irq_disable()	__cli()
-#define local_irq_enable()	__sti()
-
-#ifdef CONFIG_SMP
-#error SMP not supported
-#else
-
-#define cli() __cli()
-#define sti() __sti()
-#define save_flags(x)		__save_flags(x)
-#define restore_flags(x)	__restore_flags(x)
-#define save_flags_cli(x)	__save_flags_cli(x)
-
-#endif
 
 #endif

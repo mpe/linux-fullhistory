@@ -17,7 +17,6 @@
  */
 #include <linux/config.h>
 #include <linux/ptrace.h>
-#include <linux/errno.h>
 #include <linux/kernel_stat.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -26,7 +25,6 @@
 #include <linux/malloc.h>
 #include <linux/random.h>
 #include <linux/smp.h>
-#include <linux/smp_lock.h>
 #include <linux/init.h>
 
 #include <asm/hardware.h>

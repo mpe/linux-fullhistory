@@ -593,7 +593,6 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	/*
 	 * set up enough so that it can read an inode
 	 */
-	sb->s_dev = dev;
 	sb->s_op = &ext2_sops;
 	sb->s_root = d_alloc_root(iget(sb, EXT2_ROOT_INO));
 	if (!sb->s_root) {

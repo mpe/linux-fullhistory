@@ -286,7 +286,6 @@ SYMBOL_NAME(arm2_processor_functions):
 		.word	_arm2_proc_fin
 		.word	_arm2_set_pgd
 		.word	_arm2_xchg_1
-		.word	SYMBOL_NAME(abort)
 		.word	_arm2_xchg_4
 
 cpu_arm2_info:
@@ -300,7 +299,6 @@ SYMBOL_NAME(arm250_processor_functions):
 		.word	_arm2_proc_fin
 		.word	_arm2_set_pgd
 		.word	_arm3_xchg_1
-		.word	SYMBOL_NAME(abort)
 		.word	_arm3_xchg_4
 
 cpu_arm250_info:
@@ -314,7 +312,6 @@ SYMBOL_NAME(arm3_processor_functions):
 		.word	_arm3_proc_fin
 		.word	_arm3_set_pgd
 		.word	_arm3_xchg_1
-		.word	SYMBOL_NAME(abort)
 		.word	_arm3_xchg_4
 
 cpu_arm3_info:

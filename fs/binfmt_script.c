@@ -29,6 +29,7 @@ static int load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 	 */
 
 	bprm->sh_bang++;
+	allow_write_access(bprm->file);
 	fput(bprm->file);
 	bprm->file = NULL;
 

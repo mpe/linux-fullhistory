@@ -36,36 +36,36 @@ static __inline__ void atomic_add(int i, volatile atomic_t *v)
 {
 	unsigned long flags;
 
-	save_flags_cli (flags);
+	__save_flags_cli(flags);
 	v->counter += i;
-	restore_flags (flags);
+	__restore_flags(flags);
 }
 
 static __inline__ void atomic_sub(int i, volatile atomic_t *v)
 {
 	unsigned long flags;
 
-	save_flags_cli (flags);
+	__save_flags_cli(flags);
 	v->counter -= i;
-	restore_flags (flags);
+	__restore_flags(flags);
 }
 
 static __inline__ void atomic_inc(volatile atomic_t *v)
 {
 	unsigned long flags;
 
-	save_flags_cli (flags);
+	__save_flags_cli(flags);
 	v->counter += 1;
-	restore_flags (flags);
+	__restore_flags(flags);
 }
 
 static __inline__ void atomic_dec(volatile atomic_t *v)
 {
 	unsigned long flags;
 
-	save_flags_cli (flags);
+	__save_flags_cli(flags);
 	v->counter -= 1;
-	restore_flags (flags);
+	__restore_flags(flags);
 }
 
 static __inline__ int atomic_dec_and_test(volatile atomic_t *v)
@@ -73,10 +73,10 @@ static __inline__ int atomic_dec_and_test(volatile atomic_t *v)
 	unsigned long flags;
 	int result;
 
-	save_flags_cli (flags);
+	__save_flags_cli(flags);
 	v->counter -= 1;
 	result = (v->counter == 0);
-	restore_flags (flags);
+	__restore_flags(flags);
 
 	return result;
 }
@@ -86,10 +86,10 @@ extern __inline__ int atomic_add_negative(int i, volatile atomic_t *v)
 	unsigned long flags;
 	int result;
 
-	save_flags_cli(flags);
+	__save_flags_cli(flags);
 	v->counter += i;
 	result = (v->counter < 0);
-	restore_flags(flags);
+	__restore_flags(flags);
 
 	return result;
 }
@@ -98,9 +98,9 @@ static __inline__ void atomic_clear_mask(unsigned long mask, unsigned long *addr
 {
 	unsigned long flags;
 
-	save_flags_cli (flags);
+	__save_flags_cli(flags);
 	*addr &= ~mask;
-	restore_flags (flags);
+	__restore_flags(flags);
 }
 
 #endif

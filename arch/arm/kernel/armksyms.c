@@ -31,6 +31,8 @@ extern void outswb(unsigned int port, const void *to, int len);
 extern unsigned int local_bh_count[NR_CPUS];
 extern unsigned int local_irq_count[NR_CPUS];
 
+extern void __bad_xchg(volatile void *ptr, int size);
+
 /*
  * syscalls
  */
@@ -90,7 +92,6 @@ EXPORT_SYMBOL(kd_mksound);
 EXPORT_SYMBOL(dump_thread);
 EXPORT_SYMBOL(dump_fpu);
 EXPORT_SYMBOL(udelay);
-EXPORT_SYMBOL(xchg_str);
 EXPORT_SYMBOL(local_bh_count);
 EXPORT_SYMBOL(local_irq_count);
 #ifdef CONFIG_CPU_32
@@ -103,6 +104,7 @@ EXPORT_SYMBOL(system_serial_low);
 EXPORT_SYMBOL(system_serial_high);
 EXPORT_SYMBOL(mem_fclk_21285);
 EXPORT_SYMBOL(__bug);
+EXPORT_SYMBOL(__bad_xchg);
 EXPORT_SYMBOL(__readwrite_bug);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);

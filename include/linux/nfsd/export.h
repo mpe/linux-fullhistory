@@ -95,18 +95,6 @@ int			nfserrno(int errno);
 void			exp_nlmdetach(void);
 
 
-extern __inline__ int
-exp_checkaddr(struct svc_client *clp, struct in_addr addr)
-{
-	struct in_addr	*ap = clp->cl_addr;
-	int		i;
-
-	for (i = clp->cl_naddr; i--; ap++)
-		if (ap->s_addr == addr.s_addr)
-			return 1;
-	return 0;
-}
-
 #endif /* __KERNEL__ */
 
 #endif /* NFSD_EXPORT_H */

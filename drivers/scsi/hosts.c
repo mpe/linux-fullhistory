@@ -668,7 +668,7 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 /* Put I2O last so that host specific controllers always win */
 #ifdef CONFIG_I2O_SCSI
-	I2OSCSI
+	I2OSCSI,
 #endif
 /* "Removable host adapters" below this line (Parallel Port/USB/other) */
 #ifdef CONFIG_SCSI_PPA

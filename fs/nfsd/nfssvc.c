@@ -275,7 +275,6 @@ nfsd_dispatch(struct svc_rqst *rqstp, u32 *statp)
 	/* Encode result.
 	 * For NFSv2, additional info is never returned in case of an error.
 	 */
-#ifdef CONFIG_NFSD_V3
 	if (!(nfserr && rqstp->rq_vers == 2)) {
 		xdr = proc->pc_encode;
 		if (xdr && !xdr(rqstp, rqstp->rq_resbuf.buf, rqstp->rq_resp)) {
@@ -286,17 +285,6 @@ nfsd_dispatch(struct svc_rqst *rqstp, u32 *statp)
 			return 1;
 		}
 	}
-#else
-	xdr = proc->pc_encode;
-	if (!nfserr && xdr
-	 && !xdr(rqstp, rqstp->rq_resbuf.buf, rqstp->rq_resp)) {
-		/* Failed to encode result. Release cache entry */
-		dprintk("nfsd: failed to encode result!\n");
-		nfsd_cache_update(rqstp, RC_NOCACHE, NULL);
-		*statp = rpc_system_err;
-		return 1;
-	}
-#endif /* CONFIG_NFSD_V3 */
 
 	/* Store reply in cache. */
 	nfsd_cache_update(rqstp, proc->pc_cachetype, statp + 1);

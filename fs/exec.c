@@ -101,37 +101,54 @@ static inline void put_binfmt(struct linux_binfmt * fmt)
  */
 asmlinkage long sys_uselib(const char * library)
 {
-	int fd, retval;
 	struct file * file;
+	struct nameidata nd;
+	int error;
 
-	fd = sys_open(library, 0, 0);
-	if (fd < 0)
-		return fd;
-	file = fget(fd);
-	retval = -ENOEXEC;
-	if (file) {
-		if(file->f_op && file->f_op->read) {
-			struct linux_binfmt * fmt;
+	error = user_path_walk(library, &nd);
+	if (error)
+		goto out;
 
-			read_lock(&binfmt_lock);
-			for (fmt = formats ; fmt ; fmt = fmt->next) {
-				if (!fmt->load_shlib)
-					continue;
-				if (!try_inc_mod_count(fmt->module))
-					continue;
-				read_unlock(&binfmt_lock);
-				retval = fmt->load_shlib(file);
-				read_lock(&binfmt_lock);
-				put_binfmt(fmt);
-				if (retval != -ENOEXEC)
-					break;
-			}
+	error = -EINVAL;
+	if (!S_ISREG(nd.dentry->d_inode->i_mode))
+		goto exit;
+
+	error = permission(nd.dentry->d_inode, MAY_READ | MAY_EXEC);
+	if (error)
+		goto exit;
+
+	lock_kernel();
+	file = dentry_open(nd.dentry, nd.mnt, O_RDONLY);
+	unlock_kernel();
+	error = PTR_ERR(file);
+	if (IS_ERR(file))
+		goto out;
+
+	error = -ENOEXEC;
+	if(file->f_op && file->f_op->read) {
+		struct linux_binfmt * fmt;
+
+		read_lock(&binfmt_lock);
+		for (fmt = formats ; fmt ; fmt = fmt->next) {
+			if (!fmt->load_shlib)
+				continue;
+			if (!try_inc_mod_count(fmt->module))
+				continue;
 			read_unlock(&binfmt_lock);
+			error = fmt->load_shlib(file);
+			read_lock(&binfmt_lock);
+			put_binfmt(fmt);
+			if (error != -ENOEXEC)
+				break;
 		}
-		fput(file);
+		read_unlock(&binfmt_lock);
 	}
-	sys_close(fd);
-  	return retval;
+	fput(file);
+out:
+  	return error;
+exit:
+	path_release(&nd);
+	goto out;
 }
 
 /*
@@ -319,6 +336,7 @@ int setup_arg_pages(struct linux_binprm *bprm)
 struct file *open_exec(const char *name)
 {
 	struct nameidata nd;
+	struct inode *inode;
 	struct file *file;
 	int err = 0;
 
@@ -328,14 +346,22 @@ struct file *open_exec(const char *name)
 	unlock_kernel();
 	file = ERR_PTR(err);
 	if (!err) {
+		inode = nd.dentry->d_inode;
 		file = ERR_PTR(-EACCES);
-		if (S_ISREG(nd.dentry->d_inode->i_mode)) {
-			int err = permission(nd.dentry->d_inode, MAY_EXEC);
+		if (!IS_NOEXEC(inode) && S_ISREG(inode->i_mode)) {
+			int err = permission(inode, MAY_EXEC);
 			file = ERR_PTR(err);
 			if (!err) {
 				lock_kernel();
 				file = dentry_open(nd.dentry, nd.mnt, O_RDONLY);
 				unlock_kernel();
+				if (!IS_ERR(file)) {
+					err = deny_write_access(file);
+					if (err) {
+						fput(file);
+						file = ERR_PTR(err);
+					}
+				}
 out:
 				return file;
 			}
@@ -540,23 +566,13 @@ static inline int must_not_trace_exec(struct task_struct * p)
 int prepare_binprm(struct linux_binprm *bprm)
 {
 	int mode;
-	int retval,id_change,cap_raised;
+	int id_change,cap_raised;
 	struct inode * inode = bprm->file->f_dentry->d_inode;
 
 	mode = inode->i_mode;
-	if (!S_ISREG(mode))			/* must be regular file */
+	/* Huh? We had already checked for MAY_EXEC, WTF do we check this? */
+	if (!(mode & 0111))	/* with at least _one_ execute bit set */
 		return -EACCES;
-	if (!(mode & 0111))			/* with at least _one_ execute bit set */
-		return -EACCES;
-	if (IS_NOEXEC(inode))			/* FS mustn't be mounted noexec */
-		return -EACCES;
-	if (!inode->i_sb)
-		return -EACCES;
-	if ((retval = permission(inode, MAY_EXEC)) != 0)
-		return retval;
-	/* better not execute files which are being written to */
-	if (atomic_read(&inode->i_writecount) > 0)
-		return -ETXTBSY;
 
 	bprm->e_uid = current->euid;
 	bprm->e_gid = current->egid;
@@ -728,6 +744,7 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 		char * dynloader[] = { "/sbin/loader" };
 		struct file * file;
 
+		allow_write_access(bprm->file);
 		fput(bprm->file);
 		bprm->file = NULL;
 
@@ -761,6 +778,7 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 			retval = fn(bprm, regs);
 			if (retval >= 0) {
 				put_binfmt(fmt);
+				allow_write_access(bprm->file);
 				if (bprm->file)
 					fput(bprm->file);
 				bprm->file = NULL;
@@ -822,11 +840,13 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 	bprm.loader = 0;
 	bprm.exec = 0;
 	if ((bprm.argc = count(argv, bprm.p / sizeof(void *))) < 0) {
+		allow_write_access(file);
 		fput(file);
 		return bprm.argc;
 	}
 
 	if ((bprm.envc = count(envp, bprm.p / sizeof(void *))) < 0) {
+		allow_write_access(file);
 		fput(file);
 		return bprm.envc;
 	}
@@ -855,6 +875,7 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 
 out:
 	/* Something went wrong, return the inode and free the argument pages*/
+	allow_write_access(bprm.file);
 	if (bprm.file)
 		fput(bprm.file);
 

@@ -11,6 +11,10 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (06/25/2000) gkh
+ *	Fixed bug in visor_unthrottle that should help with the disconnect in PPP
+ *	bug that people have been reporting.
+ *
  * (06/23/2000) gkh
  *	Cleaned up debugging statements in a quest to find UHCI timeout bug.
  *
@@ -137,7 +141,7 @@ static void visor_unthrottle (struct usb_serial_port *port)
 {
 	dbg(__FUNCTION__ " - port %d", port->number);
 
-	if (usb_unlink_urb (port->read_urb))
+	if (usb_submit_urb (port->read_urb))
 		dbg(__FUNCTION__ " - usb_submit_urb(read bulk) failed");
 
 	return;

@@ -227,7 +227,6 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
 	len = PAGE_ALIGN(len);
 	retval = -EINVAL;
 
-	down(&current->mm->mmap_sem);
 	lock_kernel();
 
 	if (current->thread.flags & SPARC_FLAG_32BIT) {
@@ -241,11 +240,12 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
 			goto out_putf;
 	}
 
+	down(&current->mm->mmap_sem);
 	retval = do_mmap(file, addr, len, prot, flags, off);
+	up(&current->mm->mmap_sem);
 
 out_putf:
 	unlock_kernel();
-	up(&current->mm->mmap_sem);
 	if (file)
 		fput(file);
 out:

@@ -95,10 +95,8 @@ History:
 #include <asm/bitops.h>
 #include <asm/io.h>
 
-#ifdef MODULE
 #include <linux/module.h>
 #include <linux/version.h>
-#endif
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>

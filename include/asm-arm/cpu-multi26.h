@@ -20,7 +20,6 @@ extern struct processor {
 	void (*_set_pgd)(pgd_t *pgd);
 	/* XCHG */
 	unsigned long (*_xchg_1)(unsigned long x, volatile void *ptr);
-	unsigned long (*_xchg_2)(unsigned long x, volatile void *ptr);
 	unsigned long (*_xchg_4)(unsigned long x, volatile void *ptr);
 } processor;
 
@@ -34,7 +33,6 @@ extern const struct processor arm3_processor_functions;
 #define cpu_do_idle()				do { } while (0)
 #define cpu_switch_mm(pgd,tsk)			processor._set_pgd(pgd)
 #define cpu_xchg_1(x,ptr)			processor._xchg_1(x,ptr)
-#define cpu_xchg_2(x,ptr)			processor._xchg_2(x,ptr)
 #define cpu_xchg_4(x,ptr)			processor._xchg_4(x,ptr)
 
 extern void cpu_memc_update_all(pgd_t *pgd);

@@ -9092,7 +9092,7 @@ aic7xxx_load_seeprom(struct aic7xxx_host *p, unsigned char *sxfrctl1)
         p->flags |= AHC_TERM_ENB_SE_LOW | AHC_TERM_ENB_SE_HIGH;
       }
     }
-    p->sc = *sc;
+    memcpy(&p->sc, sc, sizeof(struct seeprom_config));
   }
 
   p->discenable = 0;

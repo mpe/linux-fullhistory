@@ -20,10 +20,11 @@ struct vm_struct {
 
 extern struct vm_struct * get_vm_area (unsigned long size, unsigned long flags);
 extern void vfree(void * addr);
-extern void * __vmalloc (unsigned long size, int gfp_mask);
+extern void * __vmalloc (unsigned long size, int gfp_mask, pgprot_t prot);
 extern long vread(char *buf, char *addr, unsigned long count);
 extern void vmfree_area_pages(unsigned long address, unsigned long size);
-extern int vmalloc_area_pages(unsigned long address, unsigned long size , int gfp_mask);
+extern int vmalloc_area_pages(unsigned long address, unsigned long size,
+                              int gfp_mask, pgprot_t prot);
 
 extern struct vm_struct * vmlist;
 
@@ -34,7 +35,7 @@ extern struct vm_struct * vmlist;
  
 static inline void * vmalloc (unsigned long size)
 {
-	return __vmalloc(size, GFP_KERNEL | __GFP_HIGHMEM);
+	return __vmalloc(size, GFP_KERNEL | __GFP_HIGHMEM, PAGE_KERNEL);
 }
 
 /*
@@ -43,7 +44,7 @@ static inline void * vmalloc (unsigned long size)
 
 static inline void * vmalloc_dma (unsigned long size)
 {
-	return __vmalloc(size, GFP_KERNEL|GFP_DMA);
+	return __vmalloc(size, GFP_KERNEL|GFP_DMA, PAGE_KERNEL);
 }
 
 /*
@@ -52,7 +53,7 @@ static inline void * vmalloc_dma (unsigned long size)
  
 static inline void * vmalloc_32(unsigned long size)
 {
-	return __vmalloc(size, GFP_KERNEL);
+	return __vmalloc(size, GFP_KERNEL, PAGE_KERNEL);
 }
 
 /*

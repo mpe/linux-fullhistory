@@ -666,9 +666,8 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 						    interpreter,
 						    &interp_load_addr);
 
-		lock_kernel();
+		allow_write_access(interpreter);
 		fput(interpreter);
-		unlock_kernel();
 		kfree(elf_interpreter);
 
 		if (elf_entry == ~0UL) {
@@ -755,9 +754,8 @@ out:
 
 	/* error cleanup */
 out_free_dentry:
-	lock_kernel();
+	allow_write_access(interpreter);
 	fput(interpreter);
-	unlock_kernel();
 out_free_interp:
 	if (elf_interpreter)
 		kfree(elf_interpreter);

@@ -1490,7 +1490,7 @@ static int shm_swap_core(struct shmid_kernel *shp, unsigned long idx, swp_entry_
 		return RETRY;
 	if (shp->id != zero_id) swap_attempts++;
 
-	if (--counter < 0) /* failed */
+	if (--*counter < 0) /* failed */
 		return FAILED;
 	if (page_count(page_map) != 1)
 		return RETRY;

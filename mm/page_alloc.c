@@ -93,6 +93,8 @@ void __free_pages_ok (struct page *page, unsigned long order)
 		BUG();
 	if (PageDecrAfter(page))
 		BUG();
+	if (PageDirty(page))
+		BUG();
 
 	zone = page->zone;
 

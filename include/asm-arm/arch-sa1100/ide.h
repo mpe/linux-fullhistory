@@ -17,7 +17,7 @@
  * This should follow whatever the default interface uses.
  */
 static __inline__ void
-ide_init_hwif_ports(hw_regs_t *hw, int data_port, int ctrl_port, int irq)
+ide_init_hwif_ports(hw_regs_t *hw, int data_port, int ctrl_port, int *irq)
 {
 	ide_ioreg_t reg;
 	int i;
@@ -37,7 +37,8 @@ ide_init_hwif_ports(hw_regs_t *hw, int data_port, int ctrl_port, int irq)
 		reg += (1 << IO_SHIFT);
 	}
 	hw->io_ports[IDE_CONTROL_OFFSET] = (ide_ioreg_t) (ctrl_port << IO_SHIFT);
-	hw->irq = irq;
+	if (irq)
+		*irq = 0;
 }
 
 /*
@@ -73,9 +74,11 @@ ide_init_default_hwifs(void)
 	/* MAC 23/4/1999, swap these round so that the left hand
 	   hard disk is hda when viewed from the front. This
 	   doesn't match the silkscreen however. */
-	ide_init_hwif_ports(&hw,0x10,0x1e,EMPEG_IRQ_IDE2);
+	ide_init_hwif_ports(&hw,0x10,0x1e,NULL);
+	hw.irq = EMPEG_IRQ_IDE2;
 	ide_register_hw(&hw, NULL);
-	ide_init_hwif_ports(&hw,0x00,0x0e,EMPEG_IRQ_IDE1);
+	ide_init_hwif_ports(&hw,0x00,0x0e,NULL);
+	hw.irq = EMPEG_IRQ_IDE1;
 	ide_register_hw(&hw, NULL);
 
 #elif defined( CONFIG_SA1100_VICTOR )
@@ -87,7 +90,8 @@ ide_init_default_hwifs(void)
 	/* set the pcmcia interface timing */
 	MECR = 0x00060006;
 
-	ide_init_hwif_ports(&hw, 0x1f0, 0x3f6, IRQ_GPIO7);
+	ide_init_hwif_ports(&hw, 0x1f0, 0x3f6, NULL);
+	hw.irq = IRQ_GPIO7;
 	ide_register_hw(&hw, NULL);
 #else
 #error Missing IDE interface definition in include/asm/arch/ide.h

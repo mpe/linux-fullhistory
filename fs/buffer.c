@@ -360,12 +360,7 @@ asmlinkage long sys_fsync(unsigned int fd)
 		goto out;
 
 	dentry = file->f_dentry;
-	if (!dentry)
-		goto out_putf;
-
 	inode = dentry->d_inode;
-	if (!inode)
-		goto out_putf;
 
 	err = -EINVAL;
 	if (!file->f_op || !file->f_op->fsync)
@@ -395,12 +390,7 @@ asmlinkage long sys_fdatasync(unsigned int fd)
 		goto out;
 
 	dentry = file->f_dentry;
-	if (!dentry)
-		goto out_putf;
-
 	inode = dentry->d_inode;
-	if (!inode)
-		goto out_putf;
 
 	err = -EINVAL;
 	if (!file->f_op || !file->f_op->fsync)
@@ -2101,6 +2091,7 @@ static int grow_buffers(int size)
 	spin_unlock(&free_list[isize].lock);
 
 	page->buffers = bh;
+	page->flags &= ~(1 << PG_referenced);
 	lru_cache_add(page);
 	atomic_inc(&buffermem_pages);
 	return 1;

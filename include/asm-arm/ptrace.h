@@ -17,6 +17,10 @@
 
 #ifdef __KERNEL__
 extern void show_regs(struct pt_regs *);
+
+#define predicate(x)	(x & 0xf0000000)
+#define PREDICATE_ALWAYS	0xe0000000
+
 #endif
 
 #endif /* __ASSEMBLY__ */

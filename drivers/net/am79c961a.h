@@ -73,7 +73,8 @@
 #define MODE_COLL	0x0010
 #define MODE_DRETRY	0x0020
 #define MODE_INTLOOP	0x0040
-#define MODE_PORT0	0x0080
+#define MODE_PORT_AUI	0x0000
+#define MODE_PORT_10BT	0x0080
 #define MODE_DRXPA	0x2000
 #define MODE_DRXBA	0x4000
 #define MODE_PROMISC	0x8000
@@ -105,6 +106,7 @@
 #define TST_LCAR	0x0800
 #define TST_LCOL	0x1000
 #define TST_UFLO	0x4000
+#define TST_BUFF	0x8000
 
 struct dev_priv {
     struct enet_statistics stats;

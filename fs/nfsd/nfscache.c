@@ -174,8 +174,9 @@ int
 nfsd_cache_lookup(struct svc_rqst *rqstp, int type)
 {
 	struct svc_cacherep	*rh, *rp;
-	struct svc_client	*clp = rqstp->rq_client;
 	u32			xid = rqstp->rq_xid,
+				proto =  rqstp->rq_prot,
+				vers = rqstp->rq_vers,
 				proc = rqstp->rq_proc;
 	unsigned long		age;
 
@@ -189,7 +190,9 @@ nfsd_cache_lookup(struct svc_rqst *rqstp, int type)
 	while ((rp = rp->c_hash_next) != rh) {
 		if (rp->c_state != RC_UNUSED &&
 		    xid == rp->c_xid && proc == rp->c_proc &&
-		    exp_checkaddr(clp, rp->c_client)) {
+		    proto == rp->c_prot && vers == rp->c_vers &&
+		    time_before(jiffies, rp->c_timestamp + 120*HZ) &&
+		    memcmp((char*)&rqstp->rq_addr, (char*)&rp->c_addr, rqstp->rq_addrlen)==0) {
 			nfsdstats.rchits++;
 			goto found_entry;
 		}
@@ -226,7 +229,11 @@ nfsd_cache_lookup(struct svc_rqst *rqstp, int type)
 	rp->c_state = RC_INPROG;
 	rp->c_xid = xid;
 	rp->c_proc = proc;
-	rp->c_client = rqstp->rq_addr.sin_addr;
+	rp->c_addr = rqstp->rq_addr;
+	rp->c_prot = proto;
+	rp->c_vers = vers;
+	rp->c_timestamp = jiffies;
+
 	hash_refile(rp);
 
 	/* release any buffer */

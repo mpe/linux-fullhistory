@@ -16,9 +16,7 @@
 static kmem_cache_t *filp_cache;
 
 /* sysctl tunables... */
-int nr_files;		/* read only */
-int nr_free_files;	/* read only */
-int max_files = NR_FILE;/* tunable */
+struct files_stat_struct files_stat = {0, 0, NR_FILE};
 
 /* Here the new files go */
 static LIST_HEAD(anon_list);
@@ -53,11 +51,11 @@ struct file * get_empty_filp(void)
 	struct file * f;
 
 	file_list_lock();
-	if (nr_free_files > NR_RESERVED_FILES) {
+	if (files_stat.nr_free_files > NR_RESERVED_FILES) {
 	used_one:
 		f = list_entry(free_list.next, struct file, f_list);
 		list_del(&f->f_list);
-		nr_free_files--;
+		files_stat.nr_free_files--;
 	new_one:
 		file_list_unlock();
 		memset(f, 0, sizeof(*f));
@@ -73,25 +71,25 @@ struct file * get_empty_filp(void)
 	/*
 	 * Use a reserved one if we're the superuser
 	 */
-	if (nr_free_files && !current->euid)
+	if (files_stat.nr_free_files && !current->euid)
 		goto used_one;
 	/*
 	 * Allocate a new one if we're below the limit.
 	 */
-	if (nr_files < max_files) {
+	if (files_stat.nr_files < files_stat.max_files) {
 		file_list_unlock();
 		f = kmem_cache_alloc(filp_cache, SLAB_KERNEL);
 		file_list_lock();
 		if (f) {
-			nr_files++;
+			files_stat.nr_files++;
 			goto new_one;
 		}
 		/* Big problems... */
 		printk("VFS: filp allocation failed\n");
 
-	} else if (max_files > old_max) {
-		printk("VFS: file-max limit %d reached\n", max_files);
-		old_max = max_files;
+	} else if (files_stat.max_files > old_max) {
+		printk("VFS: file-max limit %d reached\n", files_stat.max_files);
+		old_max = files_stat.max_files;
 	}
 	file_list_unlock();
 	return NULL;
@@ -148,7 +146,7 @@ void _fput(struct file *file)
 	file_list_lock();
 	list_del(&file->f_list);
 	list_add(&file->f_list, &free_list);
-	nr_free_files++;
+	files_stat.nr_free_files++;
 	file_list_unlock();
 }
 
@@ -160,7 +158,7 @@ void put_filp(struct file *file)
 		file_list_lock();
 		list_del(&file->f_list);
 		list_add(&file->f_list, &free_list);
-		nr_free_files++;
+		files_stat.nr_free_files++;
 		file_list_unlock();
 	}
 }

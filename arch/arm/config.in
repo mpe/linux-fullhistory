@@ -12,6 +12,7 @@ define_bool CONFIG_UID16 y
 mainmenu_option next_comment
 comment 'Code maturity level options'
 bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
+bool 'Prompt for obsolete code/drivers' CONFIG_OBSOLETE
 endmenu
 
 
@@ -45,8 +46,8 @@ if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
    if [ "$CONFIG_SA1100_ASSABET" = "y" ]; then
       bool '  Include support for Neponset' CONFIG_ASSABET_NEPONSET
    fi
-   bool '  Include support for Bitsy' CONFIG_SA1100_BITSY
    bool '  Include support for Brutus' CONFIG_SA1100_BRUTUS
+   bool '  Include support for Compaq iPAQ 3600 (Bitsy)' CONFIG_SA1100_BITSY
 #   bool '  Include support for Empeg' CONFIG_SA1100_EMPEG
 #   bool '  Include support for Itsy' CONFIG_SA1100_ITSY
    bool '  Include support for LART' CONFIG_SA1100_LART
@@ -342,7 +343,7 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    bool 'Kernel low-level debugging functions' CONFIG_DEBUG_LL
    if [ "$CONFIG_DEBUG_LL" = "y" ]; then
       if [ "$CONFIG_FOOTBRIDGE" = "y" ]; then
-         bool 'Kernel low-level debugging messages via DC21285 port' CONFIG_DEBUG_DC21285_PORT
+         bool 'Kernel low-level debugging messages via footbridge serial port' CONFIG_DEBUG_DC21285_PORT
       fi
    fi
 fi

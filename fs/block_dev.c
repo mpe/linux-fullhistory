@@ -597,6 +597,8 @@ int blkdev_get(struct block_device *bdev, mode_t mode, unsigned flags, int kind)
 				ret = bdev->bd_op->open(fake_inode, &fake_file);
 			if (!ret)
 				atomic_inc(&bdev->bd_openers);
+			else if (!atomic_read(&bdev->bd_openers))
+				bdev->bd_op = NULL;
 			iput(fake_inode);
 		}
 	}
@@ -617,6 +619,8 @@ int blkdev_open(struct inode * inode, struct file * filp)
 			ret = bdev->bd_op->open(inode,filp);
 		if (!ret)
 			atomic_inc(&bdev->bd_openers);
+		else if (!atomic_read(&bdev->bd_openers))
+			bdev->bd_op = NULL;
 	}	
 	up(&bdev->bd_sem);
 	return ret;

@@ -408,6 +408,7 @@ static int proc_pid_follow_link(struct dentry *dentry, struct nameidata *nd)
 		goto out;
 
 	error = inode->u.proc_i.op.proc_get_link(inode, &nd->dentry, &nd->mnt);
+	nd->last_type = LAST_BIND;
 out:
 #ifdef NULL_VFSMNT
 	mntput(dummy);

@@ -68,7 +68,6 @@ asmlinkage u32 sunos_mmap(u32 addr, u32 len, u32 prot, u32 flags, u32 fd, u32 of
 	struct file *file = NULL;
 	unsigned long retval, ret_type;
 
-	down(&current->mm->mmap_sem);
 	lock_kernel();
 	if(flags & MAP_NORESERVE) {
 		static int cnt;
@@ -102,10 +101,12 @@ asmlinkage u32 sunos_mmap(u32 addr, u32 len, u32 prot, u32 flags, u32 fd, u32 of
 	flags &= ~_MAP_NEW;
 
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
+	down(&current->mm->mmap_sem);
 	retval = do_mmap(file,
 			 (unsigned long) addr, (unsigned long) len,
 			 (unsigned long) prot, (unsigned long) flags,
 			 (unsigned long) off);
+	up(&current->mm->mmap_sem);
 	if(!ret_type)
 		retval = ((retval < 0xf0000000) ? 0 : retval);
 out_putf:
@@ -113,7 +114,6 @@ out_putf:
 		fput(file);
 out:
 	unlock_kernel();
-	up(&current->mm->mmap_sem);
 	return (u32) retval;
 }
 

@@ -195,6 +195,7 @@ repeat:
 			 * to it causing all sorts of fun problems ...
 			 */
 			remove_inode_page(page);
+			ClearPageDirty(page);
 
 			UnlockPage(page);
 			page_cache_release(page);
@@ -500,7 +501,7 @@ void add_to_page_cache_locked(struct page * page, struct address_space *mapping,
 
 /*
  * This adds a page to the page cache, starting out as locked,
- * owned by us, referenced, but not uptodate and with no errors.
+ * owned by us, but unreferenced, not uptodate and with no errors.
  */
 static inline void __add_to_page_cache(struct page * page,
 	struct address_space *mapping, unsigned long offset,
@@ -512,8 +513,8 @@ static inline void __add_to_page_cache(struct page * page,
 	if (PageLocked(page))
 		BUG();
 
-	flags = page->flags & ~((1 << PG_uptodate) | (1 << PG_error) | (1 << PG_dirty));
-	page->flags = flags | (1 << PG_locked) | (1 << PG_referenced);
+	flags = page->flags & ~((1 << PG_uptodate) | (1 << PG_error) | (1 << PG_dirty) | (1 << PG_referenced));
+	page->flags = flags | (1 << PG_locked);
 	page_cache_get(page);
 	page->index = offset;
 	add_page_to_inode_queue(mapping, page);

@@ -130,6 +130,7 @@ EXPORT_SYMBOL(highmem_start_page);
 /* filesystem internal functions */
 EXPORT_SYMBOL(def_blk_fops);
 EXPORT_SYMBOL(update_atime);
+EXPORT_SYMBOL(get_fs_type);
 EXPORT_SYMBOL(get_super);
 EXPORT_SYMBOL(get_empty_super);
 EXPORT_SYMBOL(getname);
@@ -500,7 +501,6 @@ EXPORT_SYMBOL(disk_name);	/* for md.c */
 
 /* binfmt_aout */
 EXPORT_SYMBOL(get_write_access);
-EXPORT_SYMBOL(put_write_access);
 
 /* dynamic registering of consoles */
 EXPORT_SYMBOL(register_console);

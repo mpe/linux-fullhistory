@@ -495,17 +495,15 @@ fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, int type, int access)
 
 	dprintk("nfsd: fh_verify(%s)\n", SVCFH_fmt(fhp));
 
-	if (!fhp->fh_dverified) {
+	if (!fhp->fh_dentry) {
 		kdev_t xdev;
 		ino_t xino;
 		__u32 *datap=NULL;
 		int data_left = fh->fh_size/4;
 		int nfsdev;
 		error = nfserr_stale;
-#if CONFIG_NFSD_V3		
 		if (rqstp->rq_vers == 3)
 			error = nfserr_badhandle;
-#endif
 		if (fh->fh_version == 1) {
 			
 			datap = fh->fh_auth;
@@ -562,10 +560,8 @@ fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, int type, int access)
 		 * Look up the dentry using the NFS file handle.
 		 */
 		error = nfserr_stale;
-#if CONFIG_NFSD_V3		
 		if (rqstp->rq_vers == 3)
 			error = nfserr_badhandle;
-#endif
 
 		if (fh->fh_version == 1) {
 			/* if fileid_type != 0, and super_operations provide fh_to_dentry lookup,
@@ -611,7 +607,6 @@ fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, int type, int access)
 
 		fhp->fh_dentry = dentry;
 		fhp->fh_export = exp;
-		fhp->fh_dverified = 1;
 		nfsd_nr_verified++;
 	} else {
 		/* just rechecking permissions
@@ -731,7 +726,7 @@ fh_compose(struct svc_fh *fhp, struct svc_export *exp, struct dentry *dentry)
 		parent->d_name.name, dentry->d_name.name,
 		(inode ? inode->i_ino : 0));
 
-	if (fhp->fh_dverified || fhp->fh_locked || fhp->fh_dentry) {
+	if (fhp->fh_locked || fhp->fh_dentry) {
 		printk(KERN_ERR "fh_compose: fh %s/%s not initialized!\n",
 			parent->d_name.name, dentry->d_name.name);
 	}
@@ -757,8 +752,6 @@ fh_compose(struct svc_fh *fhp, struct svc_export *exp, struct dentry *dentry)
 	fhp->fh_handle.fh_size = (datap-fhp->fh_handle.fh_auth+1)*4;
 
 
-	/* We stuck it there, we know it's good. */
-	fhp->fh_dverified = 1;
 	nfsd_nr_verified++;
 	if (fhp->fh_handle.fh_fileid_type == 255)
 		return nfserr_opnotsupp;
@@ -775,7 +768,7 @@ fh_update(struct svc_fh *fhp)
 	struct dentry *dentry;
 	__u32 *datap;
 	
-	if (!fhp->fh_dverified)
+	if (!fhp->fh_dentry)
 		goto out_bad;
 
 	dentry = fhp->fh_dentry;
@@ -811,10 +804,9 @@ void
 fh_put(struct svc_fh *fhp)
 {
 	struct dentry * dentry = fhp->fh_dentry;
-	if (fhp->fh_dverified) {
+	if (dentry) {
 		fh_unlock(fhp);
 		fhp->fh_dentry = NULL;
-		fhp->fh_dverified = 0;
 		dput(dentry);
 		nfsd_nr_put++;
 	}

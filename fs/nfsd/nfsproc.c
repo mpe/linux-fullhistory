@@ -239,7 +239,7 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 		 * whether the file exists or not. Time to bail ...
 		 */
 		nfserr = nfserr_acces;
-		if (!newfhp->fh_dverified) {
+		if (!newfhp->fh_dentry) {
 			printk(KERN_WARNING 
 				"nfsd_proc_create: file handle not verified\n");
 			goto out_unlock;
@@ -415,7 +415,7 @@ nfsd_proc_mkdir(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 
 	dprintk("nfsd: MKDIR    %s %s\n", SVCFH_fmt(&argp->fh), argp->name);
 
-	if (resp->fh.fh_dverified) {
+	if (resp->fh.fh_dentry) {
 		printk(KERN_WARNING
 			"nfsd_proc_mkdir: response already verified??\n");
 	}

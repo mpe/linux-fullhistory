@@ -26,7 +26,6 @@ struct vfsmount
 	atomic_t mnt_count;
 
   char *mnt_devname;			/* Name of device e.g. /dev/dsk/hda1 */
-  char *mnt_dirname;			/* Name of directory mounted on */
 	struct list_head mnt_list;
 	uid_t mnt_owner;
 };

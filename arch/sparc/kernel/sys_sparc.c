@@ -215,7 +215,6 @@ static unsigned long do_mmap2(unsigned long addr, unsigned long len,
 			goto out;
 	}
 
-	down(&current->mm->mmap_sem);
 	lock_kernel();
 	retval = -EINVAL;
 	len = PAGE_ALIGN(len);
@@ -230,11 +229,12 @@ static unsigned long do_mmap2(unsigned long addr, unsigned long len,
 		goto out_putf;
 
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
+	down(&current->mm->mmap_sem);
 	retval = do_mmap_pgoff(file, addr, len, prot, flags, pgoff);
+	up(&current->mm->mmap_sem);
 
 out_putf:
 	unlock_kernel();
-	up(&current->mm->mmap_sem);
 	if (file)
 		fput(file);
 out:

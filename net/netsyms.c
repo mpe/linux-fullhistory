@@ -196,7 +196,7 @@ EXPORT_SYMBOL(__scm_send);
 
 /* Needed by unix.o */
 EXPORT_SYMBOL(scm_fp_dup);
-EXPORT_SYMBOL(max_files);
+EXPORT_SYMBOL(files_stat);
 EXPORT_SYMBOL(memcpy_toiovec);
 EXPORT_SYMBOL(csum_partial);
 

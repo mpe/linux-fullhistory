@@ -158,8 +158,8 @@ Ldata_unknown:	@ Part of jumptable
 		mov	r0, r2
 		mov	r1, r4
 		mov	r2, r3
-		b	baddataabort
-
+		bl	baddataabort
+		b	ret_from_sys_call
 
 Ldata_lateldrpreconst:
 		tst	r4, #1 << 21			@ check writeback bit

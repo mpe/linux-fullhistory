@@ -33,6 +33,7 @@ obj-rpc		:= keyb_ps2.o
 obj-$(CONFIG_RPCMOUSE)		+= mouse_rpc.o
 obj-$(CONFIG_ATOMWIDE_SERIAL)	+= serial-atomwide.o
 obj-$(CONFIG_DUALSP_SERIAL)	+= serial-dualsp.o
+obj-$(CONFIG_ARCH_ACORN)	+= defkeymap-acorn.o
 
 # Do the i2c and rtc last
 obj-y		+= $(obj-$(MACHINE)) i2c.o pcf8583.o

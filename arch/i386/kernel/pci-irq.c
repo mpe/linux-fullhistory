@@ -464,7 +464,7 @@ void __init pcibios_fixup_irqs(void)
 	}
 }
 
-void __init pcibios_penalize_isa_irq(int irq)
+void pcibios_penalize_isa_irq(int irq)
 {
 	/*
 	 *  If any ISAPnP device reports an IRQ in its list of possible

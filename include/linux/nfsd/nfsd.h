@@ -80,19 +80,19 @@ int		nfsd_racache_init(int);
 void		nfsd_racache_shutdown(void);
 int		nfsd_lookup(struct svc_rqst *, struct svc_fh *,
 				const char *, int, struct svc_fh *);
-#ifdef CONFIG_NFSD_V3
-int		nfsd_access(struct svc_rqst *, struct svc_fh *, u32 *);
-#endif /* CONFIG_NFSD_V3 */
 int		nfsd_setattr(struct svc_rqst *, struct svc_fh *,
 				struct iattr *);
 int		nfsd_create(struct svc_rqst *, struct svc_fh *,
 				char *name, int len, struct iattr *attrs,
 				int type, dev_t rdev, struct svc_fh *res);
 #ifdef CONFIG_NFSD_V3
+int		nfsd_access(struct svc_rqst *, struct svc_fh *, u32 *);
 int		nfsd_create_v3(struct svc_rqst *, struct svc_fh *,
 				char *name, int len, struct iattr *attrs,
 				struct svc_fh *res, int createmode,
 				u32 *verifier);
+int		nfsd_commit(struct svc_rqst *, struct svc_fh *,
+				off_t, unsigned long);
 #endif /* CONFIG_NFSD_V3 */
 int		nfsd_open(struct svc_rqst *, struct svc_fh *, int,
 				int, struct file *);
@@ -122,10 +122,7 @@ int		nfsd_readdir(struct svc_rqst *, struct svc_fh *,
 				u32 *buffer, int *countp, u32 *verf);
 int		nfsd_statfs(struct svc_rqst *, struct svc_fh *,
 				struct statfs *);
-#ifdef CONFIG_NFSD_V3
-int		nfsd_commit(struct svc_rqst *, struct svc_fh *,
-				off_t, unsigned long);
-#endif /* CONFIG_NFSD_V3 */
+
 int		nfsd_notify_change(struct inode *, struct iattr *);
 int		nfsd_permission(struct svc_export *, struct dentry *, int);
 

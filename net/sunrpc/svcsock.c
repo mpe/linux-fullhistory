@@ -32,6 +32,7 @@
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
 #include <net/sock.h>
+#include <net/checksum.h>
 #include <net/ip.h>
 #include <asm/uaccess.h>
 
@@ -369,6 +370,16 @@ svc_udp_recvfrom(struct svc_rqst *rqstp)
 			return err;
 		/* possibly an icmp error */
 		dprintk("svc: recvfrom returned error %d\n", -err);
+	}
+
+	if (skb->ip_summed != CHECKSUM_UNNECESSARY) {
+		unsigned int csum = skb->csum;
+		csum = csum_partial(skb->h.raw, skb->len, csum);
+		if ((unsigned short)csum_fold(csum)) {
+			skb_free_datagram(svsk->sk_sk, skb);
+			svc_sock_received(svsk, 0);
+			return 0;
+		}
 	}
 
 	/* There may be more data */

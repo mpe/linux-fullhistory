@@ -14,16 +14,17 @@
  * We leave one page for the initial stack page, and one page for
  * the initial process structure. Also, the console eats 3 MB for
  * the initial bootloader (one of which we can reclaim later).
- * With a few other pages for various reasons, we'll use an initial
- * load address of PAGE_OFFSET+0x310000UL
  */
 #define BOOT_PCB	0x20000000
 #define BOOT_ADDR	0x20000000
 /* Remove when official MILO sources have ELF support: */
 #define BOOT_SIZE	(16*1024)
 
-
+#ifdef CONFIG_ALPHA_LEGACY_START_ADDRESS
+#define KERNEL_START_PHYS	0x300000 /* Old bootloaders hardcoded this.  */
+#else
 #define KERNEL_START_PHYS	0x800000 /* Wildfire has a huge console */
+#endif
 
 #define KERNEL_START	(PAGE_OFFSET+KERNEL_START_PHYS)
 #define SWAPPER_PGD	KERNEL_START

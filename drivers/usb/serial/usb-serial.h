@@ -51,6 +51,8 @@ struct usb_serial_port {
 
 	wait_queue_head_t	write_wait;
 
+	struct tq_struct	tqueue;		/* task queue for line discipline waking up */
+	
 	void *			private;	/* data private to the specific port */
 };
 
@@ -177,7 +179,6 @@ static inline int port_paranoia_check (struct usb_serial_port *port, const char 
 
 	return 0;
 }
-
 
 #endif	/* ifdef __LINUX_USB_SERIAL_H */
 

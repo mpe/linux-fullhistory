@@ -10,7 +10,7 @@
 
 NM := nm -B
 
-LINKFLAGS = -static -T arch/alpha/vmlinux.lds #-N -relax
+LINKFLAGS = -static -T arch/alpha/vmlinux.lds -N #-relax
 CFLAGS := $(CFLAGS) -pipe -mno-fp-regs -ffixed-8
 
 # Determine if we can use the BWX instructions with GAS.
@@ -90,7 +90,7 @@ endif
 
 LIBS := $(TOPDIR)/arch/alpha/lib/lib.a $(LIBS) $(TOPDIR)/arch/alpha/lib/lib.a
 
-MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
+MAKEBOOT = $(MAKE) -C arch/alpha/boot
 
 rawboot:
 	@$(MAKEBOOT) rawboot
@@ -109,13 +109,15 @@ srmboot:
 	@$(MAKEBOOT) srmboot
 
 archclean:
-	@$(MAKE) -C arch/$(ARCH)/kernel clean
+	@$(MAKE) -C arch/alpha/kernel clean
 	@$(MAKEBOOT) clean
+	rm -f arch/alpha/vmlinux.lds
 
 archmrproper:
 
 archdep:
 	@$(MAKEBOOT) dep
+	$(CPP) $(CPPFLAGS) -xc -P arch/alpha/vmlinux.lds.in -o arch/alpha/vmlinux.lds
 
 bootpfile:
 	@$(MAKEBOOT) bootpfile

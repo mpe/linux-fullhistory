@@ -51,10 +51,7 @@ struct pci_controler {
 #define PCIBIOS_MIN_IO		alpha_mv.min_io_address
 #define PCIBIOS_MIN_MEM		alpha_mv.min_mem_address
 
-extern inline void pcibios_set_master(struct pci_dev *dev)
-{
-	/* No special bus mastering setup handling */
-}
+extern void pcibios_set_master(struct pci_dev *dev);
 
 extern inline void pcibios_penalize_isa_irq(int irq)
 {

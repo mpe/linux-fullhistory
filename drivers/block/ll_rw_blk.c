@@ -345,8 +345,6 @@ static inline struct request *get_request(request_queue_t *q, int rw)
 	register struct request *rq = NULL;
 
 	if (!list_empty(&q->request_freelist)) {
-		elevator_t *e = &q->elevator;
-
 		if ((q->queue_requests > QUEUE_WRITES_MAX) && (rw == WRITE))
 			return NULL;
 
@@ -355,10 +353,6 @@ static inline struct request *get_request(request_queue_t *q, int rw)
 		rq->rq_status = RQ_ACTIVE;
 		rq->special = NULL;
 		rq->q = q;
-		if (rq->cmd == READ)
-			rq->elevator_sequence = e->read_latency;
-		else
-			rq->elevator_sequence = e->write_latency;
 		q->queue_requests++;
 	}
 	return rq;
@@ -657,6 +651,13 @@ static inline void __make_request(request_queue_t * q, int rw,
 		goto get_rq;
 	}
 
+	/*
+	 * skip first entry, for devices with active queue head
+	 */
+	head = &q->queue_head;
+	if (q->head_active && !q->plugged)
+		head = head->next;
+
 	el_ret = elevator->elevator_merge_fn(q, &req, bh, rw, &max_sectors, &max_segments);
 	switch (el_ret) {
 
@@ -709,11 +710,11 @@ get_rq:
 
 		req = __get_request_wait(q, rw);
 		spin_lock_irq(&io_request_lock);
+		
+		head = &q->queue_head;
+		if (q->head_active && !q->plugged)
+			head = head->next;
 	}
-
-	head = &q->queue_head;
-	if (q->head_active && !q->plugged)
-		head = head->next;
 
 /* fill up the request-info, and add it to the queue */
 	req->cmd = rw;

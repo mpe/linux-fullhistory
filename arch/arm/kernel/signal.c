@@ -10,18 +10,19 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/kernel.h>
-#include <linux/signal.h>
 #include <linux/errno.h>
+#include <linux/signal.h>
 #include <linux/wait.h>
 #include <linux/ptrace.h>
-#include <linux/unistd.h>
 #include <linux/stddef.h>
-#include <linux/binfmts.h>
+#include <linux/unistd.h>
 #include <linux/tty.h>
 
+#include <asm/pgalloc.h>
 #include <asm/ucontext.h>
 #include <asm/uaccess.h>
-#include <asm/pgalloc.h>
+
+#include "ptrace.h"
 
 #define _BLOCKABLE (~(sigmask(SIGKILL) | sigmask(SIGSTOP)))
 
@@ -31,8 +32,6 @@
 asmlinkage int sys_wait4(pid_t pid, unsigned long * stat_addr,
 			 int options, unsigned long *ru);
 asmlinkage int do_signal(sigset_t *oldset, struct pt_regs * regs, int syscall);
-extern int ptrace_cancel_bpt (struct task_struct *);
-extern int ptrace_set_bpt (struct task_struct *);
 
 int copy_siginfo_to_user(siginfo_t *to, siginfo_t *from)
 {
@@ -234,7 +233,7 @@ asmlinkage int sys_sigreturn(struct pt_regs *regs)
 		goto badframe;
 
 	/* Send SIGTRAP if we're single-stepping */
-	if (ptrace_cancel_bpt (current))
+	if (ptrace_cancel_bpt(current))
 		send_sig(SIGTRAP, current, 1);
 
 	return regs->ARM_r0;
@@ -274,7 +273,7 @@ asmlinkage int sys_rt_sigreturn(struct pt_regs *regs)
 		goto badframe;
 
 	/* Send SIGTRAP if we're single-stepping */
-	if (ptrace_cancel_bpt (current))
+	if (ptrace_cancel_bpt(current))
 		send_sig(SIGTRAP, current, 1);
 
 	return regs->ARM_r0;
@@ -500,7 +499,7 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs, int syscall)
 	if (!oldset)
 		oldset = &current->blocked;
 
-	single_stepping = ptrace_cancel_bpt (current);
+	single_stepping = ptrace_cancel_bpt(current);
 
 	for (;;) {
 		unsigned long signr;
@@ -518,7 +517,7 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs, int syscall)
 			current->state = TASK_STOPPED;
 			notify_parent(current, SIGCHLD);
 			schedule();
-			single_stepping |= ptrace_cancel_bpt (current);
+			single_stepping |= ptrace_cancel_bpt(current);
 
 			/* We're back.  Did the debugger cancel the sig?  */
 			if (!(signr = current->exit_code))
@@ -617,7 +616,7 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs, int syscall)
 		/* Whee!  Actually deliver the signal.  */
 		handle_signal(signr, ka, &info, oldset, regs);
 		if (single_stepping)
-		    	ptrace_set_bpt (current);
+		    	ptrace_set_bpt(current);
 		return 1;
 	}
 
@@ -629,6 +628,6 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs, int syscall)
 		regs->ARM_pc -= 4;
 	}
 	if (single_stepping)
-		ptrace_set_bpt (current);
+		ptrace_set_bpt(current);
 	return 0;
 }

@@ -331,7 +331,6 @@ source drivers/usb/Config.in
 mainmenu_option next_comment
 comment 'Kernel hacking'
 
-#bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Kernel FP software completion' CONFIG_MATHEMU
 else
@@ -339,4 +338,7 @@ else
 fi
 
 bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
+
+bool 'Legacy kernel start address' CONFIG_ALPHA_LEGACY_START_ADDRESS
+
 endmenu

@@ -369,6 +369,22 @@ pcibios_enable_device(struct pci_dev *dev)
 	return 0;
 }
 
+/*
+ *  If we set up a device for bus mastering, we need to check the latency
+ *  timer as certain firmware forgets to set it properly, as seen
+ *  on SX164 and LX164 with SRM.
+ */
+void
+pcibios_set_master(struct pci_dev *dev)
+{
+	u8 lat;
+	pci_read_config_byte(dev, PCI_LATENCY_TIMER, &lat);
+	if (lat >= 16) return;
+	printk("PCI: Setting latency timer of device %s to 64\n",
+							dev->slot_name);
+	pci_write_config_byte(dev, PCI_LATENCY_TIMER, 64);
+}
+
 #define ROUND_UP(x, a)		(((x) + (a) - 1) & ~((a) - 1))
 
 static void __init

@@ -1,10 +1,18 @@
+#include <linux/config.h>
+
 OUTPUT_FORMAT("elf64-alpha")
 ENTRY(__start)
+PHDRS { kernel PT_LOAD ; }
 SECTIONS
 {
+#ifdef CONFIG_ALPHA_LEGACY_START_ADDRESS
+  . = 0xfffffc0000310000;
+#else
   . = 0xfffffc0000810000;
+#endif
+
   _text = .;
-  .text : { *(.text) }
+  .text : { *(.text) } :kernel
   _etext = .;
 
   /* Exception table */

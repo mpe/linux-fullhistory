@@ -104,32 +104,37 @@ int unregister_exec_domain(struct exec_domain *it)
 
 void __set_personality(unsigned long personality)
 {
-	struct exec_domain *it;
+	struct exec_domain *it, *prev;
 
 	it = lookup_exec_domain(personality);
-	if (it) {
-		if (atomic_read(&current->fs->count) != 1) {
-			struct fs_struct *new = copy_fs_struct(current->fs);
-			struct fs_struct *old;
-			if (!new) {
-				put_exec_domain(it);
-				return;
-			}
-			task_lock(current);
-			old = current->fs;
-			current->fs = new;
-			task_unlock(current);
-			put_fs_struct(old);
-		}
-		/*
-		 * At that point we are guaranteed to be the sole owner of
-		 * current->fs.
-		 */
+	if (it == current->exec_domain) {
 		current->personality = personality;
-		current->exec_domain = it;
-		set_fs_altroot();
-		put_exec_domain(current->exec_domain);
+		return;
 	}
+	if (!it)
+		return;
+	if (atomic_read(&current->fs->count) != 1) {
+		struct fs_struct *new = copy_fs_struct(current->fs);
+		struct fs_struct *old;
+		if (!new) {
+			put_exec_domain(it);
+			return;
+		}
+		task_lock(current);
+		old = current->fs;
+		current->fs = new;
+		task_unlock(current);
+		put_fs_struct(old);
+	}
+	/*
+	 * At that point we are guaranteed to be the sole owner of
+	 * current->fs.
+	 */
+	current->personality = personality;
+	prev = current->exec_domain;
+	current->exec_domain = it;
+	set_fs_altroot();
+	put_exec_domain(prev);
 }
 
 asmlinkage long sys_personality(unsigned long personality)

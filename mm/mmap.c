@@ -166,6 +166,7 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr, unsigned lon
 {
 	struct mm_struct * mm = current->mm;
 	struct vm_area_struct * vma;
+	int correct_wcount = 0;
 	int error;
 
 	if (file && (!file->f_op || !file->f_op->mmap))
@@ -296,26 +297,15 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr, unsigned lon
 		goto free_vma;
 
 	if (file) {
-		int correct_wcount = 0;
 		if (vma->vm_flags & VM_DENYWRITE) {
-			if (atomic_read(&file->f_dentry->d_inode->i_writecount) > 0) {
-				error = -ETXTBSY;
+			error = deny_write_access(file);
+			if (error)
 				goto free_vma;
-			}
-	        	/* f_op->mmap might possibly sleep
-			 * (generic_file_mmap doesn't, but other code
-			 * might). In any case, this takes care of any
-			 * race that this might cause.
-			 */
-			atomic_dec(&file->f_dentry->d_inode->i_writecount);
 			correct_wcount = 1;
 		}
 		vma->vm_file = file;
 		get_file(file);
 		error = file->f_op->mmap(file, vma);
-		/* Fix up the count if necessary, then check for an error */
-		if (correct_wcount)
-			atomic_inc(&file->f_dentry->d_inode->i_writecount);
 		if (error)
 			goto unmap_and_free_vma;
 	} else if (flags & MAP_SHARED) {
@@ -332,6 +322,8 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr, unsigned lon
 	addr = vma->vm_start; /* can addr have changed?? */
 	vmlist_modify_lock(mm);
 	insert_vm_struct(mm, vma);
+	if (correct_wcount)
+		atomic_inc(&file->f_dentry->d_inode->i_writecount);
 	merge_segments(mm, vma->vm_start, vma->vm_end);
 	vmlist_modify_unlock(mm);
 	
@@ -343,6 +335,8 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr, unsigned lon
 	return addr;
 
 unmap_and_free_vma:
+	if (correct_wcount)
+		atomic_inc(&file->f_dentry->d_inode->i_writecount);
 	vma->vm_file = NULL;
 	fput(file);
 	/* Undo any partial mapping done by a device driver. */
@@ -694,9 +688,11 @@ int do_munmap(struct mm_struct *mm, unsigned long addr, size_t len)
 	 * so release them, and unmap the page range..
 	 * If the one of the segments is only being partially unmapped,
 	 * it will put new vm_area_struct(s) into the address space.
+	 * In that case we have to be careful with VM_DENYWRITE.
 	 */
 	while ((mpnt = free) != NULL) {
 		unsigned long st, end, size;
+		struct file *file = NULL;
 
 		free = free->vm_next;
 
@@ -708,6 +704,11 @@ int do_munmap(struct mm_struct *mm, unsigned long addr, size_t len)
 		if (mpnt->vm_ops && mpnt->vm_ops->unmap)
 			mpnt->vm_ops->unmap(mpnt, st, size);
 
+		if (mpnt->vm_flags & VM_DENYWRITE &&
+		    (st != mpnt->vm_start || end != mpnt->vm_end) &&
+		    (file = mpnt->vm_file) != NULL) {
+			atomic_dec(&file->f_dentry->d_inode->i_writecount);
+		}
 		remove_shared_vm_struct(mpnt);
 		mm->map_count--;
 
@@ -719,6 +720,8 @@ int do_munmap(struct mm_struct *mm, unsigned long addr, size_t len)
 		 * Fix the mapping, and free the old area if it wasn't reused.
 		 */
 		extra = unmap_fixup(mm, mpnt, st, size, extra);
+		if (file)
+			atomic_inc(&file->f_dentry->d_inode->i_writecount);
 	}
 
 	/* Release the extra vma struct if it wasn't used */

@@ -35,6 +35,7 @@ extern void paging_init(struct meminfo *);
 extern void bootmem_init(struct meminfo *);
 extern void reboot_setup(char *str);
 extern void disable_hlt(void);
+extern unsigned long memparse(char *ptr, char **retptr);
 extern int root_mountflags;
 extern int _stext, _text, _etext, _edata, _end;
 

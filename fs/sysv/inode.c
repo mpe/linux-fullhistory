@@ -496,7 +496,6 @@ static struct super_block *sysv_read_super(struct super_block *sb,
 	sb->s_blocksize = sb->sv_block_size;
 	sb->s_blocksize_bits = sb->sv_block_size_bits;
 	/* set up enough so that it can read an inode */
-	sb->s_dev = dev;
 	sb->s_op = &sysv_sops;
 	root_inode = iget(sb,SYSV_ROOT_INO);
 	sb->s_root = d_alloc_root(root_inode);

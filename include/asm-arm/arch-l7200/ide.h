@@ -13,7 +13,7 @@
  * This should follow whatever the default interface uses.
  */
 static __inline__ void
-ide_init_hwif_ports(hw_regs_t *hw, int data_port, int ctrl_port, int irq)
+ide_init_hwif_ports(hw_regs_t *hw, int data_port, int ctrl_port, int *irq)
 {
 }
 

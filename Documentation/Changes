@@ -41,7 +41,7 @@ Card) hardware, for example, you probably needn't concern yourself
 with pcmcia-cs.
 
 o  Gnu C                  2.7.2.3                 # gcc --version
-o  binutils               2.9.1.0.7               # ld -v
+o  binutils               2.9.1.0.22              # ld -v
 o  util-linux             2.10g                   # chsh -v
 o  modutils               2.3.10                  # insmod -V
 o  e2fsprogs              1.18                    # /sbin/tune2fs --version
@@ -78,7 +78,7 @@ release of binutils.
 
 If you can, upgrade to the latest 2.9.5 binutils release.  Older
 releases such as 2.8, 2.8.xx, and the FSF's 2.9.1 should be avoided if
-at all possible.  The later releases of 2.9.1.0.x (anything where x >= 7)
+at all possible.  The later releases of 2.9.1.0.x (anything where x >= 22)
 can and do compile the kernel properly, but there are many benefits
 to upgrading to 2.9.5 if you're up to it.
 
@@ -248,8 +248,8 @@ o  ftp://ftp.varesearch.com/pub/support/hjl/binutils/2.9.1/binutils-2.9.1.0.25.t
 
 2.9.5 series
 ------------
-o  ftp://ftp.varesearch.com/pub/support/hjl/binutils/binutils-2.9.5.0.29.tar.gz
-     <ftp://ftp.varesearch.com/pub/support/hjl/binutils/binutils-2.9.5.0.29.tar.bz2>
+o  ftp://ftp.varesearch.com/pub/support/hjl/binutils/binutils-2.9.5.0.46.tar.gz
+     <ftp://ftp.varesearch.com/pub/support/hjl/binutils/binutils-2.9.5.0.46.tar.bz2>
 
 System utilities
 ****************

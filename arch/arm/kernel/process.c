@@ -7,28 +7,22 @@
 
 #include <stdarg.h>
 
-#include <linux/errno.h>
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
-#include <linux/smp.h>
-#include <linux/smp_lock.h>
 #include <linux/stddef.h>
 #include <linux/unistd.h>
 #include <linux/ptrace.h>
 #include <linux/malloc.h>
-#include <linux/vmalloc.h>
 #include <linux/user.h>
-#include <linux/a.out.h>
-#include <linux/interrupt.h>
-#include <linux/config.h>
 #include <linux/delay.h>
 #include <linux/reboot.h>
 #include <linux/init.h>
 
-#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/io.h>
+#include <asm/uaccess.h>
 
 /*
  * Values for cpu_do_idle()

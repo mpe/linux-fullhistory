@@ -33,9 +33,7 @@
 #include <linux/interrupt.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
-#include <linux/errno.h>
 #include <linux/proc_fs.h>
-#include <linux/unistd.h>
 #include <linux/init.h>
 
 #include <asm/dma.h>
@@ -913,7 +911,6 @@ ecard_probe(int slot, card_type_t type)
 	ecard_t **ecp;
 	ecard_t *ec;
 	struct ex_ecid cid;
-	char buffer[200];
 	int i, rc = -ENOMEM;
 
 	ec = kmalloc(sizeof(ecard_t), GFP_KERNEL);
@@ -994,12 +991,9 @@ ecard_probe(int slot, card_type_t type)
 nodev:
 	if (rc && ec)
 		kfree(ec);
-	else {
+	else
 		slot_to_expcard[slot] = ec;
 
-		ecard_prints(buffer, ec);
-		printk("%s", buffer);
-	}
 	return rc;
 }
 
@@ -1075,7 +1069,7 @@ void __init ecard_init(void)
 	init_waitqueue_head(&ecard_done);
 #endif
 
-	printk("Probing expansion cards: (does not imply support)\n");
+	printk("Probing expansion cards\n");
 
 	for (slot = 0; slot < 8; slot ++) {
 		if (ecard_probe(slot, ECARD_EASI) == -ENODEV)

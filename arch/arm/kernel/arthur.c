@@ -3,8 +3,8 @@
  * Copyright (C) 1998-1999 Philip Blundell
  */
 
-#include <linux/personality.h>
 #include <linux/module.h>
+#include <linux/personality.h>
 #include <linux/stddef.h>
 #include <linux/signal.h>
 #include <linux/sched.h>

@@ -8,25 +8,25 @@
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/sched.h>
+#include <linux/ioport.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
-#include <linux/pci.h>
-#include <linux/ptrace.h>
-#include <linux/interrupt.h>
-#include <linux/ioport.h>
-#include <linux/smp.h>
-#include <linux/mm.h>
 #include <linux/init.h>
 
-#include <asm/dec21285.h>
 #include <asm/io.h>
-#include <asm/irq.h>
 #include <asm/leds.h>
 #include <asm/system.h>
 
 #define IRDA_IO_BASE		0x180
 #define GP1_IO_BASE		0x338
 #define GP2_IO_BASE		0x33a
+
+
+#ifdef CONFIG_LEDS
+#define DEFAULT_LEDS	0
+#else
+#define DEFAULT_LEDS	GPIO_GREEN_LED
+#endif
 
 /*
  * Netwinder stuff
@@ -396,9 +396,9 @@ static unsigned char rwa_unlock[] __initdata =
   0x3a, 0x9d, 0xce, 0xe7, 0x73, 0x39 };
 
 #ifndef DEBUG
-#define dprintk if (0) printk
+#define dprintk(x...)
 #else
-#define dprintk printk
+#define dprintk(x...) printk(x)
 #endif
 
 #define WRITE_RWA(r,v) do { outb((r), 0x279); udelay(10); outb((v), 0xa79); } while (0)
@@ -602,74 +602,13 @@ EXPORT_SYMBOL(gpio_modify_op);
 EXPORT_SYMBOL(gpio_modify_io);
 EXPORT_SYMBOL(cpld_modify);
 
-#endif
-
-#ifdef CONFIG_LEDS
-#define DEFAULT_LEDS	0
-#else
-#define DEFAULT_LEDS	GPIO_GREEN_LED
-#endif
-
-/*
- * CATS stuff
- */
-#ifdef CONFIG_ARCH_CATS
-
-#define CONFIG_PORT	0x370
-#define INDEX_PORT	(CONFIG_PORT)
-#define DATA_PORT	(CONFIG_PORT + 1)
-
-static void __init cats_hw_init(void)
-{
-	/* Set Aladdin to CONFIGURE mode */
-	outb(0x51, CONFIG_PORT);
-	outb(0x23, CONFIG_PORT);
-
-	/* Select logical device 3 */
-	outb(0x07, INDEX_PORT);
-	outb(0x03, DATA_PORT);
-
-	/* Set parallel port to DMA channel 3, ECP+EPP1.9, 
-	   enable EPP timeout */
-	outb(0x74, INDEX_PORT);
-	outb(0x03, DATA_PORT);
-	
-	outb(0xf0, INDEX_PORT);
-	outb(0x0f, DATA_PORT);
-
-	outb(0xf1, INDEX_PORT);
-	outb(0x07, DATA_PORT);
-
-	/* Select logical device 4 */
-	outb(0x07, INDEX_PORT);
-	outb(0x04, DATA_PORT);
-
-	/* UART1 high speed mode */
-	outb(0xf0, INDEX_PORT);
-	outb(0x02, DATA_PORT);
-
-	/* Select logical device 5 */
-	outb(0x07, INDEX_PORT);
-	outb(0x05, DATA_PORT);
-
-	/* UART2 high speed mode */
-	outb(0xf0, INDEX_PORT);
-	outb(0x02, DATA_PORT);
-
-	/* Set Aladdin to RUN mode */
-	outb(0xbb, CONFIG_PORT);
-}
-
-#endif
-
 /*
  * Initialise any other hardware after we've got the PCI bus
  * initialised.  We may need the PCI bus to talk to this other
  * hardware.
  */
-static int __init hw_init(void)
+static int __init nw_hw_init(void)
 {
-#ifdef CONFIG_ARCH_NETWINDER
 	/*
 	 * this ought to have a better home...
 	 * Since this calls the above routines, which are
@@ -688,12 +627,66 @@ static int __init hw_init(void)
 		gpio_modify_op(GPIO_RED_LED|GPIO_GREEN_LED, DEFAULT_LEDS);
 		spin_unlock_irqrestore(&gpio_lock, flags);
 	}
-#endif
-#ifdef CONFIG_ARCH_CATS
-	if (machine_is_cats())
-		cats_hw_init();
-#endif
 	return 0;
 }
 
-__initcall(hw_init);
+__initcall(nw_hw_init);
+#endif
+
+/*
+ * CATS stuff
+ */
+#ifdef CONFIG_ARCH_CATS
+
+#define CONFIG_PORT	0x370
+#define INDEX_PORT	(CONFIG_PORT)
+#define DATA_PORT	(CONFIG_PORT + 1)
+
+static int __init cats_hw_init(void)
+{
+	if (machine_is_cats()) {
+		/* Set Aladdin to CONFIGURE mode */
+		outb(0x51, CONFIG_PORT);
+		outb(0x23, CONFIG_PORT);
+
+		/* Select logical device 3 */
+		outb(0x07, INDEX_PORT);
+		outb(0x03, DATA_PORT);
+
+		/* Set parallel port to DMA channel 3, ECP+EPP1.9, 
+		   enable EPP timeout */
+		outb(0x74, INDEX_PORT);
+		outb(0x03, DATA_PORT);
+	
+		outb(0xf0, INDEX_PORT);
+		outb(0x0f, DATA_PORT);
+
+		outb(0xf1, INDEX_PORT);
+		outb(0x07, DATA_PORT);
+
+		/* Select logical device 4 */
+		outb(0x07, INDEX_PORT);
+		outb(0x04, DATA_PORT);
+
+		/* UART1 high speed mode */
+		outb(0xf0, INDEX_PORT);
+		outb(0x02, DATA_PORT);
+
+		/* Select logical device 5 */
+		outb(0x07, INDEX_PORT);
+		outb(0x05, DATA_PORT);
+
+		/* UART2 high speed mode */
+		outb(0xf0, INDEX_PORT);
+		outb(0x02, DATA_PORT);
+
+		/* Set Aladdin to RUN mode */
+		outb(0xbb, CONFIG_PORT);
+	}
+
+	return 0;
+}
+
+__initcall(cats_hw_init);
+#endif
+

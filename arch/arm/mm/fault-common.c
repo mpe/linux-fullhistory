@@ -187,6 +187,7 @@ static int do_page_fault(unsigned long addr, int mode, struct pt_regs *regs)
 		tsk->thread.error_code = mode;
 		tsk->thread.trap_no = 14;
 		si.si_signo = SIGSEGV;
+		si.si_errno = 0;
 		si.si_code = fault == -1 ? SEGV_ACCERR : SEGV_MAPERR;
 		si.si_addr = (void *)addr;
 		force_sig_info(SIGSEGV, &si, tsk);

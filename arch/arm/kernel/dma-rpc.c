@@ -15,6 +15,7 @@
 #include <asm/fiq.h>
 #include <asm/io.h>
 #include <asm/iomd.h>
+#include <asm/irq.h>
 #include <asm/hardware.h>
 #include <asm/uaccess.h>
 

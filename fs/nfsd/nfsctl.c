@@ -5,7 +5,6 @@
  *
  * Copyright (C) 1995, 1996 Olaf Kirch <okir@monad.swb.de>
  */
-#define NFS_GETFH_NEW
 
 #include <linux/config.h>
 #include <linux/module.h>

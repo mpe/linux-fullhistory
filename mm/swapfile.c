@@ -407,11 +407,11 @@ asmlinkage long sys_swapoff(const char * specialfile)
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
-	lock_kernel();
 	err = user_path_walk(specialfile, &nd);
 	if (err)
 		goto out;
 
+	lock_kernel();
 	prev = -1;
 	swap_list_lock();
 	for (type = swap_list.head; type >= 0; type = swap_info[type].next) {
@@ -478,9 +478,9 @@ asmlinkage long sys_swapoff(const char * specialfile)
 	err = 0;
 
 out_dput:
+	unlock_kernel();
 	path_release(&nd);
 out:
-	unlock_kernel();
 	return err;
 }
 
@@ -555,7 +555,6 @@ asmlinkage long sys_swapon(const char * specialfile, int swap_flags)
 	unsigned long maxpages;
 	int swapfilesize;
 	struct block_device *bdev = NULL;
-	char *name;
 	
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
@@ -586,14 +585,7 @@ asmlinkage long sys_swapon(const char * specialfile, int swap_flags)
 	} else {
 		p->prio = --least_priority;
 	}
-	name = getname(specialfile);
-	error = PTR_ERR(name);
-	if (IS_ERR(name))
-		goto bad_swap_2;
-	error = 0;
-	if (path_init(name, LOOKUP_FOLLOW|LOOKUP_POSITIVE, &nd))
-		error = path_walk(name, &nd);
-	putname(name);
+	error = user_path_walk(specialfile, &nd);
 	if (error)
 		goto bad_swap_2;
 

@@ -1566,11 +1566,9 @@ static struct console dz_sercons = {
 	NULL
 };
 
-long __init dz_serial_console_init(long kmem_start, long kmem_end)
+void __init dz_serial_console_init(l)
 {
 	register_console(&dz_sercons);
-
-	return kmem_start;
 }
 
 #endif /* ifdef CONFIG_SERIAL_CONSOLE */

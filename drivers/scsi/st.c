@@ -12,7 +12,7 @@
    Copyright 1992 - 2000 Kai Makisara
    email Kai.Makisara@metla.fi
 
-   Last modified: Sun Apr 23 23:41:32 2000 by makisara@kai.makisara.local
+   Last modified: Sat Jun 17 15:21:49 2000 by makisara@kai.makisara.local
    Some small formal changes - aeb, 950809
 
    Last modified: 18-JAN-1998 Richard Gooch <rgooch@atnf.csiro.au> Devfs support
@@ -65,10 +65,10 @@
 
 #include "constants.h"
 
-static int buffer_kbs = 0;
-static int write_threshold_kbs = 0;
+static int buffer_kbs;
+static int write_threshold_kbs;
 static int max_buffers = (-1);
-static int max_sg_segs = 0;
+static int max_sg_segs;
 
 MODULE_AUTHOR("Kai Makisara");
 MODULE_DESCRIPTION("SCSI Tape Driver");
@@ -138,7 +138,7 @@ static int st_max_sg_segs = ST_MAX_SG;
 
 static Scsi_Tape **scsi_tapes = NULL;
 
-static int modes_defined = FALSE;
+static int modes_defined;
 
 static ST_buffer *new_tape_buffer(int, int);
 static int enlarge_buffer(ST_buffer *, int, int);
@@ -870,7 +870,7 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
 static int scsi_tape_flush(struct file *filp)
 {
 	int result = 0, result2;
-	static unsigned char cmd[MAX_COMMAND_SIZE];
+	unsigned char cmd[MAX_COMMAND_SIZE];
 	Scsi_Request *SRpnt;
 	Scsi_Tape *STp;
 	ST_mode *STm;
@@ -1027,7 +1027,7 @@ static ssize_t
 	ssize_t retval = 0;
 	int write_threshold;
 	int doing_write = 0;
-	static unsigned char cmd[MAX_COMMAND_SIZE];
+	unsigned char cmd[MAX_COMMAND_SIZE];
 	const char *b_point;
 	Scsi_Request *SRpnt = NULL;
 	Scsi_Tape *STp;
@@ -1380,7 +1380,7 @@ static ssize_t
 static long read_tape(Scsi_Tape *STp, long count, Scsi_Request ** aSRpnt)
 {
 	int transfer, blks, bytes;
-	static unsigned char cmd[MAX_COMMAND_SIZE];
+	unsigned char cmd[MAX_COMMAND_SIZE];
 	Scsi_Request *SRpnt;
 	ST_mode *STm;
 	ST_partstat *STps;
@@ -2945,24 +2945,34 @@ static int st_ioctl(struct inode *inode, struct file *file,
 
 		if (mtc.mt_op == MTSETPART) {
 			if (!STp->can_partitions ||
-			    mtc.mt_count < 0 || mtc.mt_count >= ST_NBR_PARTITIONS)
-				return (-EINVAL);
+			    mtc.mt_count < 0 || mtc.mt_count >= ST_NBR_PARTITIONS) {
+				retval = (-EINVAL);
+				goto out;
+			}
 			if (mtc.mt_count >= STp->nbr_partitions &&
-			(STp->nbr_partitions = nbr_partitions(STp)) < 0)
-				return (-EIO);
-			if (mtc.mt_count >= STp->nbr_partitions)
-				return (-EINVAL);
+			    (STp->nbr_partitions = nbr_partitions(STp)) < 0) {
+				retval = (-EIO);
+				goto out;
+			}
+			if (mtc.mt_count >= STp->nbr_partitions) {
+				retval = (-EINVAL);
+				goto out;
+			}
 			STp->new_partition = mtc.mt_count;
 			retval = 0;
 			goto out;
 		}
 
 		if (mtc.mt_op == MTMKPART) {
-			if (!STp->can_partitions)
-				return (-EINVAL);
+			if (!STp->can_partitions) {
+				retval = (-EINVAL);
+				goto out;
+			}
 			if ((i = st_int_ioctl(STp, MTREW, 0)) < 0 ||
-			    (i = partition_tape(STp, mtc.mt_count)) < 0)
-				return i;
+			    (i = partition_tape(STp, mtc.mt_count)) < 0) {
+				retval = i;
+				goto out;
+			}
 			for (i = 0; i < ST_NBR_PARTITIONS; i++) {
 				STp->ps[i].rw = ST_IDLE;
 				STp->ps[i].at_sm = 0;

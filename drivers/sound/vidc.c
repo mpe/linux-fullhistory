@@ -22,6 +22,7 @@
 #include <asm/dma.h>
 #include <asm/io.h>
 #include <asm/iomd.h>
+#include <asm/irq.h>
 #include <asm/system.h>
 
 #include "sound_config.h"

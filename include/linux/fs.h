@@ -47,7 +47,12 @@ struct poll_table_struct;
 #define BLOCK_SIZE (1<<BLOCK_SIZE_BITS)
 
 /* And dynamically-tunable limits and defaults: */
-extern int max_files, nr_files, nr_free_files;
+struct files_stat_struct {
+	int nr_files;		/* read only */
+	int nr_free_files;	/* read only */
+	int max_files;		/* tunable */
+};
+extern struct files_stat_struct files_stat;
 extern int max_super_blocks, nr_super_blocks;
 
 #define NR_FILE  8192	/* this can well be larger on a larger system */
@@ -997,7 +1002,16 @@ extern int bmap(struct inode *, int);
 extern int notify_change(struct dentry *, struct iattr *);
 extern int permission(struct inode *, int);
 extern int get_write_access(struct inode *);
-extern void put_write_access(struct inode *);
+extern int deny_write_access(struct file *);
+static inline void put_write_access(struct inode * inode)
+{
+	atomic_dec(&inode->i_writecount);
+}
+static inline void allow_write_access(struct file *file)
+{
+	if (file)
+		atomic_inc(&file->f_dentry->d_inode->i_writecount);
+}
 extern int do_pipe(int *);
 
 extern int open_namei(const char *, int, int, struct nameidata *);
@@ -1037,7 +1051,7 @@ extern ino_t find_inode_number(struct dentry *, struct qstr *);
 /*
  * Type of the last component on LOOKUP_PARENT
  */
-enum {LAST_NORM, LAST_ROOT, LAST_DOT, LAST_DOTDOT };
+enum {LAST_NORM, LAST_ROOT, LAST_DOT, LAST_DOTDOT, LAST_BIND};
 
 /*
  * "descriptor" for what we're up to with a read for sendfile().
@@ -1148,6 +1162,7 @@ extern struct inode_operations page_symlink_inode_operations;
 extern int vfs_readdir(struct file *, filldir_t, void *);
 extern int dcache_readdir(struct file *, void *, filldir_t);
 
+extern struct file_system_type *get_fs_type(const char *name);
 extern struct super_block *get_super(kdev_t);
 struct super_block *get_empty_super(void);
 extern void put_super(kdev_t);
@@ -1184,20 +1199,6 @@ extern void inode_setattr(struct inode *, struct iattr *);
  * functions were in linux/fs/ C (VFS) files.
  *
  */
-
-/*
- * We need to do a check-parent every time
- * after we have locked the parent - to verify
- * that the parent is still our parent and
- * that we are still hashed onto it..
- *
- * This is required in case two processes race
- * on removing (or moving) the same entry: the
- * parent lock will serialize them, but the
- * other process will be too late..
- */
-#define check_parent(dir, dentry) \
-	((dir) == (dentry)->d_parent && !d_unhashed(dentry))
 
 /*
  * Locking the parent is needed to:

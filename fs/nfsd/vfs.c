@@ -165,6 +165,7 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 				dentry = mounts;
 			} else
 				dput(mounts);
+			mntput(mnt);
 		}
 	}
 	/*
@@ -253,8 +254,10 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 			goto out_nfserr;
 
 		err = locks_verify_truncate(inode, NULL, iap->ia_size);
-		if (err)
+		if (err) {
+			put_write_access(inode);
 			goto out_nfserr;
+		}
 		DQUOT_INIT(inode);
 	}
 
@@ -316,9 +319,6 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 	if (EX_ISSYNC(fhp->fh_export))
 		write_inode_now(inode);
 	err = 0;
-
-	/* Don't unlock inode; the nfssvc_release functions are supposed
-	 * to do this. */
 out:
 	return err;
 
@@ -413,7 +413,7 @@ nfsd_access(struct svc_rqst *rqstp, struct svc_fh *fhp, u32 *access)
  out:
 	return error;
 }
-#endif
+#endif /* CONFIG_NFSD_V3 */
 
 
 
@@ -598,7 +598,6 @@ nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	oldfs = get_fs(); set_fs(KERNEL_DS);
 	err = file.f_op->read(&file, buf, *count, &file.f_pos);
 	set_fs(oldfs);
-	nfsdstats.io_read += *count;
 
 	/* Write back readahead params */
 	if (ra != NULL) {
@@ -614,6 +613,7 @@ nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	}
 
 	if (err >= 0) {
+		nfsdstats.io_read += err;
 		*count = err;
 		err = 0;
 	} else 
@@ -665,19 +665,16 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	 * When gathered writes have been configured for this volume,
 	 * flushing the data to disk is handled separately below.
 	 */
-#ifdef CONFIG_NFSD_V3
+
 	if (file.f_op->fsync == 0) {/* COMMIT3 cannot work */
 	       stable = 2;
 	       *stablep = 2; /* FILE_SYNC */
 	}
+
 	if (!EX_ISSYNC(exp))
 		stable = 0;
 	if (stable && !EX_WGATHER(exp))
 		file.f_flags |= O_SYNC;
-#else
-	if ((stable || (stable = EX_ISSYNC(exp))) && !EX_WGATHER(exp))
-		file.f_flags |= O_SYNC;
-#endif /* CONFIG_NFSD_V3 */
 
 	file.f_pos = offset;		/* set write offset */
 
@@ -692,7 +689,8 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 #else
 	err = file.f_op->write(&file, buf, cnt, &file.f_pos);
 #endif
-	nfsdstats.io_write += cnt;
+	if (err >= 0)
+		nfsdstats.io_write += cnt;
 	set_fs(oldfs);
 
 	/* clear setuid/setgid flag after write */
@@ -734,7 +732,9 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 #else
 			dprintk("nfsd: write defer %d\n", current->pid);
 /* FIXME: Olaf commented this out [gam3] */
+			set_current_state(TASK_UNINTERRUPTIBLE);
 			schedule_timeout((HZ+99)/100);
+			current->state = TASK_RUNNING;
 			dprintk("nfsd: write resume %d\n", current->pid);
 #endif
 		}
@@ -743,7 +743,9 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 			dprintk("nfsd: write sync %d\n", current->pid);
 			nfsd_sync(&file);
 		}
+#if 0
 		wake_up(&inode->i_wait);
+#endif
 		last_ino = inode->i_ino;
 		last_dev = inode->i_dev;
 	}
@@ -762,11 +764,12 @@ out:
 
 #ifdef CONFIG_NFSD_V3
 /*
- * Commit all pendig writes to stable storage.
- * Strictly speaking, we could sync just indicated the file region here,
+ * Commit all pending writes to stable storage.
+ * Strictly speaking, we could sync just the indicated file region here,
  * but there's currently no way we can ask the VFS to do so.
  *
- * We lock the file to make sure we return full WCC data to the client.
+ * Unfortunately we cannot lock the file to make sure we return full WCC
+ * data to the client, as locking happens lower down in the filesystem.
  */
 int
 nfsd_commit(struct svc_rqst *rqstp, struct svc_fh *fhp,
@@ -828,7 +831,7 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	 * Check whether the response file handle has been verified yet.
 	 * If it has, the parent directory should already be locked.
 	 */
-	if (!resfhp->fh_dverified) {
+	if (!resfhp->fh_dentry) {
 		/* called from nfsd_proc_mkdir, or possibly nfsd3_proc_create */
 		fh_lock(fhp);
 		dchild = lookup_one(fname, dentry);
@@ -928,6 +931,8 @@ nfsd_create_v3(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	struct dentry	*dentry, *dchild;
 	struct inode	*dirp;
 	int		err;
+	__u32		v_mtime=0, v_atime=0;
+	int		v_mode=0;
 
 	err = nfserr_perm;
 	if (!flen)
@@ -963,6 +968,19 @@ nfsd_create_v3(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if (err)
 		goto out;
 
+	if (createmode == NFS3_CREATE_EXCLUSIVE) {
+		/* while the verifier would fit in mtime+atime,
+		 * solaris7 gets confused (bugid 4218508) if these have
+		 * the high bit set, so we use the mode as well
+		 */
+		v_mtime = verifier[0]&0x7fffffff;
+		v_atime = verifier[1]&0x7fffffff;
+		v_mode  = S_IFREG
+			| ((verifier[0]&0x80000000) >> (32-7)) /* u+x */
+			| ((verifier[1]&0x80000000) >> (32-9)) /* u+r */
+			;
+	}
+	
 	if (dchild->d_inode) {
 		err = 0;
 
@@ -976,10 +994,10 @@ nfsd_create_v3(struct svc_rqst *rqstp, struct svc_fh *fhp,
 			}
 			break;
 		case NFS3_CREATE_EXCLUSIVE:
-			if (   dchild->d_inode->i_mtime == verifier[0]
-			    && dchild->d_inode->i_atime == verifier[1]
-			    && dchild->d_inode->i_mode == S_IFREG
-			    && dchild->d_inode->i_size == 0 )
+			if (   dchild->d_inode->i_mtime == v_mtime
+			    && dchild->d_inode->i_atime == v_atime
+			    && dchild->d_inode->i_mode  == v_mode
+			    && dchild->d_inode->i_size  == 0 )
 				break;
 			 /* fallthru */
 		case NFS3_CREATE_GUARDED:
@@ -1005,19 +1023,23 @@ nfsd_create_v3(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		goto out;
 
 	if (createmode == NFS3_CREATE_EXCLUSIVE) {
-		/* Cram the verifier into atime/mtime */
-		iap->ia_valid = ATTR_MTIME|ATTR_ATIME|ATTR_MTIME_SET|ATTR_ATIME_SET;
-		iap->ia_mtime = verifier[0];
-		iap->ia_atime = verifier[1];
+		/* Cram the verifier into atime/mtime/mode */
+		iap->ia_valid = ATTR_MTIME|ATTR_ATIME
+			| ATTR_MTIME_SET|ATTR_ATIME_SET
+			| ATTR_MODE;
+		iap->ia_mtime = v_mtime;
+		iap->ia_atime = v_atime;
+		iap->ia_mode  = v_mode;
 	}
 
-	/* Set file attributes. Mode has already been set and
-	 * setting uid/gid works only for root. Irix appears to
-	 * send along the gid when it tries to implement setgid
-	 * directories via NFS. Clear out all that cruft.
+	/* Set file attributes.
+	 * Mode has already been set but we might need to reset it
+	 * for CREATE_EXCLUSIVE
+	 * Irix appears to send along the gid when it tries to
+	 * implement setgid directories via NFS. Clear out all that cruft.
 	 */
  set_attr:
-	if ((iap->ia_valid &= ~(ATTR_UID|ATTR_GID|ATTR_MODE)) != 0)
+	if ((iap->ia_valid &= ~(ATTR_UID|ATTR_GID)) != 0)
  		err = nfsd_setattr(rqstp, resfhp, iap);
 
  out:
@@ -1230,7 +1252,13 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 	if (!flen || isdotent(fname, flen) || !tlen || isdotent(tname, tlen))
 		goto out;
 
+	/* cannot use fh_lock as we need deadlock protective ordering
+	 * so do it by hand */
 	double_down(&tdir->i_sem, &fdir->i_sem);
+	ffhp->fh_locked = tfhp->fh_locked = 1;
+	fill_pre_wcc(ffhp);
+	fill_pre_wcc(tfhp);
+
 	odentry = lookup_one(fname, fdentry);
 	err = PTR_ERR(odentry);
 	if (IS_ERR(odentry))
@@ -1245,39 +1273,31 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 	if (IS_ERR(ndentry))
 		goto out_dput_old;
 
-#ifdef CONFIG_NFSD_V3
-	/* Fill in the pre-op attr for the wcc data for both 
-	 * tdir and fdir
-	 */ 
-	fill_pre_wcc(ffhp);
-	fill_pre_wcc(tfhp);
-#endif /* CONFIG_NFSD_V3 */
 
 	err = vfs_rename(fdir, odentry, tdir, ndentry);
 	if (!err && EX_ISSYNC(tfhp->fh_export)) {
 		nfsd_sync_dir(tdentry);
 		nfsd_sync_dir(fdentry);
 	}
-#ifdef CONFIG_NFSD_V3
-        /* Fill in the post-op attr for the wcc data for both 
-         * tdir and fdir
-         */
-	fill_post_wcc(ffhp);
-	fill_post_wcc(tfhp);
-#endif /* CONFIG_NFSD_V3 */
-	double_up(&tdir->i_sem, &fdir->i_sem);
 	dput(ndentry);
 
-out_dput_old:
+ out_dput_old:
 	dput(odentry);
+ out_nfserr:
 	if (err)
-		goto out_nfserr;
+		err = nfserrno(err);
+
+	/* we cannot reply on fh_unlock on the two filehandles,
+	 * as that would do the wrong thing if the two directories
+	 * were the same, so again we do it by hand
+	 */
+	fill_post_wcc(ffhp);
+	fill_post_wcc(tfhp);
+	double_up(&tdir->i_sem, &fdir->i_sem);
+	ffhp->fh_locked = tfhp->fh_locked = 0;
+	
 out:
 	return err;
-
-out_nfserr:
-	err = nfserrno(err);
-	goto out;
 }
 
 /*
@@ -1320,17 +1340,13 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 		err = vfs_rmdir(dirp, rdentry);
 	}
 
-	fh_unlock(fhp);
-
 	dput(rdentry);
 
 	if (err)
 		goto out_nfserr;
-	if (EX_ISSYNC(fhp->fh_export)) {
-		down(&dentry->d_inode->i_sem);
+	if (EX_ISSYNC(fhp->fh_export)) 
 		nfsd_sync_dir(dentry);
-		up(&dentry->d_inode->i_sem);
-	}
+
 out:
 	return err;
 
@@ -1353,13 +1369,11 @@ nfsd_readdir(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	struct file	file;
 	struct readdir_cd cd;
 
-	err = 0;
-	if (offset > ~(u32) 0)
-		goto out;
-
 	err = nfsd_open(rqstp, fhp, S_IFDIR, MAY_READ, &file);
 	if (err)
 		goto out;
+	if (offset > ~(u32) 0)
+		goto out_close;
 
 	err = nfserr_notdir;
 	if (!file.f_op->readdir)
@@ -1402,11 +1416,9 @@ nfsd_readdir(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	eof = !cd.eob;
 
 	if (cd.offset) {
-#ifdef CONFIG_NFSD_V3
 		if (rqstp->rq_vers == 3)
 			(void)xdr_encode_hyper(cd.offset, file.f_pos);
 		else
-#endif /* CONFIG_NFSD_V3 */
 			*cd.offset = htonl(file.f_pos);
 	}
 

@@ -90,7 +90,7 @@ struct nfs_fhbase_new {
 };
 
 struct knfsd_fh {
-	int		fh_size;	/* significant for NFSv3.
+	unsigned int	fh_size;	/* significant for NFSv3.
 					 * Points to the current size while building
 					 * a new file handle
 					 */
@@ -149,14 +149,13 @@ typedef struct svc_fh {
 	struct dentry *		fh_dentry;	/* validated dentry */
 	struct svc_export *	fh_export;	/* export pointer */
 	int			fh_maxsize;	/* max size for fh_handle */
+
+	unsigned char		fh_locked;	/* inode locked by us */
+
 #ifdef CONFIG_NFSD_V3
 	unsigned char		fh_post_saved;	/* post-op attrs saved */
 	unsigned char		fh_pre_saved;	/* pre-op attrs saved */
-#endif /* CONFIG_NFSD_V3 */
-	unsigned char		fh_locked;	/* inode locked by us */
-	unsigned char		fh_dverified;	/* dentry has been checked */
 
-#ifdef CONFIG_NFSD_V3
 	/* Pre-op attributes saved during fh_lock */
 	__u64			fh_pre_size;	/* size before operation */
 	time_t			fh_pre_mtime;	/* mtime before oper */
@@ -207,7 +206,7 @@ void	fh_put(struct svc_fh *);
 static __inline__ struct svc_fh *
 fh_copy(struct svc_fh *dst, struct svc_fh *src)
 {
-	if (src->fh_dverified || src->fh_locked) {
+	if (src->fh_dentry || src->fh_locked) {
 		struct dentry *dentry = src->fh_dentry;
 		printk(KERN_ERR "fh_copy: copying %s/%s, already verified!\n",
 			dentry->d_parent->d_name.name, dentry->d_name.name);
@@ -241,7 +240,6 @@ fill_pre_wcc(struct svc_fh *fhp)
 			fhp->fh_pre_size  = inode->i_size;
 			fhp->fh_pre_saved = 1;
 	}
-	fhp->fh_locked = 1;
 }
 
 /*
@@ -273,13 +271,18 @@ fill_post_wcc(struct svc_fh *fhp)
 	fhp->fh_post_mtime      = inode->i_mtime;
 	fhp->fh_post_ctime      = inode->i_ctime;
 	fhp->fh_post_saved      = 1;
-	fhp->fh_locked	  = 0;
 }
+#else
+#define	fill_pre_wcc(ignored)
+#define fill_post_wcc(notused)
 #endif /* CONFIG_NFSD_V3 */
 
 
 /*
  * Lock a file handle/inode
+ * NOTE: both fh_lock and fh_unlock are done "by hand" in
+ * vfs.c:nfsd_rename as it needs to grab 2 i_sem's at once
+ * so, any changes here should be reflected there.
  */
 static inline void
 fh_lock(struct svc_fh *fhp)
@@ -290,7 +293,7 @@ fh_lock(struct svc_fh *fhp)
 	dfprintk(FILEOP, "nfsd: fh_lock(%s) locked = %d\n",
 			SVCFH_fmt(fhp), fhp->fh_locked);
 
-	if (!fhp->fh_dverified) {
+	if (!fhp->fh_dentry) {
 		printk(KERN_ERR "fh_lock: fh not verified!\n");
 		return;
 	}
@@ -302,11 +305,8 @@ fh_lock(struct svc_fh *fhp)
 
 	inode = dentry->d_inode;
 	down(&inode->i_sem);
-#ifdef CONFIG_NFSD_V3
 	fill_pre_wcc(fhp);
-#else
 	fhp->fh_locked = 1;
-#endif /* CONFIG_NFSD_V3 */
 }
 
 /*
@@ -315,20 +315,13 @@ fh_lock(struct svc_fh *fhp)
 static inline void
 fh_unlock(struct svc_fh *fhp)
 {
-	if (!fhp->fh_dverified)
+	if (!fhp->fh_dentry)
 		printk(KERN_ERR "fh_unlock: fh not verified!\n");
 
 	if (fhp->fh_locked) {
-#ifdef CONFIG_NFSD_V3
 		fill_post_wcc(fhp);
 		up(&fhp->fh_dentry->d_inode->i_sem);
-#else
-		struct dentry *dentry = fhp->fh_dentry;
-		struct inode *inode = dentry->d_inode;
-
 		fhp->fh_locked = 0;
-		up(&inode->i_sem);
-#endif /* CONFIG_NFSD_V3 */
 	}
 }
 #endif /* __KERNEL__ */

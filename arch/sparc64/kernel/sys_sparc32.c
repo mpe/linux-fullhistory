@@ -3029,9 +3029,7 @@ do_execve32(char * filename, u32 * argv, u32 * envp, struct pt_regs * regs)
 	bprm.p = PAGE_SIZE*MAX_ARG_PAGES-sizeof(void *);
 	memset(bprm.page, 0, MAX_ARG_PAGES * sizeof(bprm.page[0]));
 
-	lock_kernel();
 	file = open_exec(filename);
-	unlock_kernel();
 
 	retval = PTR_ERR(file);
 	if (IS_ERR(file))
@@ -3043,10 +3041,12 @@ do_execve32(char * filename, u32 * argv, u32 * envp, struct pt_regs * regs)
 	bprm.loader = 0;
 	bprm.exec = 0;
 	if ((bprm.argc = count32(argv)) < 0) {
+		allow_write_access(file);
 		fput(file);
 		return bprm.argc;
 	}
 	if ((bprm.envc = count32(envp)) < 0) {
+		allow_write_access(file);
 		fput(file);
 		return bprm.envc;
 	}
@@ -3075,6 +3075,7 @@ do_execve32(char * filename, u32 * argv, u32 * envp, struct pt_regs * regs)
 
 out:
 	/* Something went wrong, return the inode and free the argument pages*/
+	allow_write_access(bprm.file);
 	if (bprm.file)
 		fput(bprm.file);
 

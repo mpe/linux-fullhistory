@@ -13,7 +13,6 @@
 
 #include <linux/stddef.h>
 #include <linux/types.h>
-#include <linux/linkage.h>
 #include <linux/fs.h>
 #include <linux/sysctl.h>
 #include <linux/init.h>

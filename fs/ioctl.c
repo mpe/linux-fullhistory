@@ -107,8 +107,8 @@ asmlinkage long sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			else if (filp->f_op && filp->f_op->ioctl)
 				error = filp->f_op->ioctl(filp->f_dentry->d_inode, filp, cmd, arg);
 	}
-	fput(filp);
 	unlock_kernel();
+	fput(filp);
 
 out:
 	return error;

@@ -445,7 +445,7 @@ static struct sock * unix_create1(struct socket *sock)
 {
 	struct sock *sk;
 
-	if (atomic_read(&unix_nr_socks) >= 2*max_files)
+	if (atomic_read(&unix_nr_socks) >= 2*files_stat.max_files)
 		return NULL;
 
 	MOD_INC_USE_COUNT;

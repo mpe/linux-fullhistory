@@ -56,9 +56,7 @@
 #include <asm/pgtable.h>
 #endif
 
-#ifdef MODULE
 #include <linux/module.h>
-#endif
 
 #include "fore200e.h"
 #include "suni.h"

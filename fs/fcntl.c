@@ -252,8 +252,8 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 				err = sock_fcntl (filp, cmd, arg);
 			break;
 	}
-	fput(filp);
 	unlock_kernel();
+	fput(filp);
 out:
 	return err;
 }

@@ -14,6 +14,10 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (06/25/2000) gkh
+ *	Changed generic_write_bulk_callback to not call wake_up_interruptible
+ *	directly, but to have port_softint do it at a safer time.
+ *
  * (06/23/2000) gkh
  *	Cleaned up debugging statements in a quest to find UHCI timeout bug.
  *
@@ -222,6 +226,8 @@
 #include <linux/tty.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
+#include <linux/list.h>
+#include <linux/smp_lock.h>
 
 #ifdef CONFIG_USB_SERIAL_DEBUG
 	#define DEBUG
@@ -803,36 +809,32 @@ static int generic_write (struct usb_serial_port *port, int from_user, const uns
 static int generic_write_room (struct usb_serial_port *port)
 {
 	struct usb_serial *serial = port->serial;
-	int room;
+	int room = 0;
 
 	dbg(__FUNCTION__ " - port %d", port->number);
 	
-	if (serial->num_bulk_out) {
-		if (port->write_urb->status == -EINPROGRESS)
-			room = 0;
-		else
+	if (serial->num_bulk_out)
+		if (port->write_urb->status != -EINPROGRESS)
 			room = port->bulk_out_size;
-		dbg(__FUNCTION__ " returns %d", room);
-		return (room);
-	}
 	
-	return (0);
+	dbg(__FUNCTION__ " - returns %d", room);
+	return (room);
 }
 
 
 static int generic_chars_in_buffer (struct usb_serial_port *port)
 {
 	struct usb_serial *serial = port->serial;
+	int chars = 0;
 
 	dbg(__FUNCTION__ " - port %d", port->number);
 	
-	if (serial->num_bulk_out) {
-		if (port->write_urb->status == -EINPROGRESS) {
-			return (port->bulk_out_size);
-		}
-	}
+	if (serial->num_bulk_out)
+		if (port->write_urb->status == -EINPROGRESS)
+			chars = port->write_urb->transfer_buffer_length;
 
-	return (0);
+	dbg (__FUNCTION__ " - returns %d", chars);
+	return (chars);
 }
 
 
@@ -844,9 +846,10 @@ static void generic_read_bulk_callback (struct urb *urb)
 	unsigned char *data = urb->transfer_buffer;
 	int i;
 
-	dbg (__FUNCTION__ " - enter");
+	dbg(__FUNCTION__ " - port %d", port->number);
 	
 	if (!serial) {
+		dbg(__FUNCTION__ " - bad serial pointer, exiting");
 		return;
 	}
 
@@ -877,8 +880,6 @@ static void generic_read_bulk_callback (struct urb *urb)
 	if (usb_submit_urb(urb))
 		dbg(__FUNCTION__ " - failed resubmitting read urb");
 
-	dbg (__FUNCTION__ " - exit");
-	
 	return;
 }
 
@@ -887,11 +888,11 @@ static void generic_write_bulk_callback (struct urb *urb)
 {
 	struct usb_serial_port *port = (struct usb_serial_port *)urb->context;
 	struct usb_serial *serial = get_usb_serial (port, __FUNCTION__);
-	struct tty_struct *tty;
 
-	dbg (__FUNCTION__ " - enter");
+	dbg(__FUNCTION__ " - port %d", port->number);
 	
 	if (!serial) {
+		dbg(__FUNCTION__ " - bad serial pointer, exiting");
 		return;
 	}
 
@@ -900,16 +901,34 @@ static void generic_write_bulk_callback (struct urb *urb)
 		return;
 	}
 
-	tty = port->tty;
-	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) && tty->ldisc.write_wakeup)
-		(tty->ldisc.write_wakeup)(tty);
-
-	wake_up_interruptible(&tty->write_wait);
-	
-	dbg (__FUNCTION__ " - exit");
+	queue_task(&port->tqueue, &tq_immediate);
+	mark_bh(IMMEDIATE_BH);
 	
 	return;
 }
+
+
+static void port_softint(void *private)
+{
+	struct usb_serial_port *port = (struct usb_serial_port *)private;
+	struct usb_serial *serial = get_usb_serial (port, __FUNCTION__);
+	struct tty_struct *tty;
+
+	dbg(__FUNCTION__ " - port %d", port->number);
+	
+	if (!serial) {
+		return;
+	}
+ 	
+	tty = port->tty;
+	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) && tty->ldisc.write_wakeup) {
+		dbg(__FUNCTION__ " - write wakeup call.");
+		(tty->ldisc.write_wakeup)(tty);
+	}
+
+	wake_up_interruptible(&tty->write_wait);
+}
+
 
 
 static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
@@ -1117,6 +1136,8 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 		port->number = i + serial->minor;
 		port->serial = serial;
 		port->magic = USB_SERIAL_PORT_MAGIC;
+		port->tqueue.routine = port_softint;
+		port->tqueue.data = port;
 	}
 	
 	/* initialize the devfs nodes for this device and let the user know what ports we are bound to */

@@ -7,20 +7,16 @@
 #ifndef __ASM_PROC_SYSTEM_H
 #define __ASM_PROC_SYSTEM_H
 
-#include <linux/config.h>
-
-extern const char xchg_str[];
-
 extern __inline__ unsigned long __xchg(unsigned long x, volatile void *ptr, int size)
 {
-	extern void arm_invalidptr(const char *, int);
+	extern void __bad_xchg(volatile void *, int);
 
 	switch (size) {
 		case 1:	__asm__ __volatile__ ("swpb %0, %1, [%2]" : "=r" (x) : "r" (x), "r" (ptr) : "memory");
 			break;
 		case 4:	__asm__ __volatile__ ("swp %0, %1, [%2]" : "=r" (x) : "r" (x), "r" (ptr) : "memory");
 			break;
-		default: arm_invalidptr(xchg_str, size);
+		default: __bad_xchg(ptr, size);
 	}
 	return x;
 }
@@ -101,23 +97,5 @@ extern unsigned long cr_alignment;	/* defined in entry-armv.S */
 	:							\
 	: "r" (x)						\
 	: "memory")
-
-/* For spinlocks etc */
-#define local_irq_save(x)	__save_flags_cli(x)
-#define local_irq_restore(x)	__restore_flags(x)
-#define local_irq_disable()	__cli()
-#define local_irq_enable()	__sti()
-
-#ifdef CONFIG_SMP
-#error SMP not supported
-#else
-
-#define cli() __cli()
-#define sti() __sti()
-#define save_flags(x)		__save_flags(x)
-#define restore_flags(x)	__restore_flags(x)
-#define save_flags_cli(x)	__save_flags_cli(x)
-
-#endif
 
 #endif

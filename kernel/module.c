@@ -326,10 +326,11 @@ sys_init_module(const char *name_user, struct module *mod_user)
 	/* Initialize the module.  */
 	mod->flags |= MOD_INITIALIZING;
 	atomic_set(&mod->uc.usecount,1);
-	if (mod->init && mod->init() != 0) {
+	if (mod->init && (error = mod->init()) != 0) {
 		atomic_set(&mod->uc.usecount,0);
 		mod->flags &= ~MOD_INITIALIZING;
-		error = -EBUSY;
+		if (error > 0)	/* Buggy module */
+			error = -EBUSY;
 		goto err0;
 	}
 	atomic_dec(&mod->uc.usecount);

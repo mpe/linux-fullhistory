@@ -10,7 +10,7 @@
 #ifndef __ASM_ARCH_HARDWARE_H
 #define __ASM_ARCH_HARDWARE_H
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 /*
  * Mapping areas

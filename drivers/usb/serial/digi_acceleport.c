@@ -14,6 +14,18 @@
 *  Peter Berger (pberger@brimson.com)
 *  Al Borchers (borchers@steinerpoint.com)
 *
+*  (6/22/2000) pberger and borchers
+*    -- Made cond_wait_... inline--apparently on SPARC the flags arg
+*       to spin_lock_irqsave cannot be passed to another function
+*       to call spin_unlock_irqrestore.  Thanks to Pauline Middelink.
+*    -- In digi_set_modem_signals the inner nested spin locks use just
+*       spin_lock() rather than spin_lock_irqsave().  The old code
+*       mistakenly left interrupts off.  Thanks to Pauline Middelink.
+*    -- copy_from_user (which can sleep) is no longer called while a
+*       spinlock is held.  We copy to a local buffer before getting
+*       the spinlock--don't like the extra copy but the code is simpler.
+*    -- Printk and dbg are no longer called while a spin lock is held.
+*
 *  (6/4/2000) pberger and borchers
 *    -- Replaced separate calls to spin_unlock_irqrestore and
 *       interruptible_sleep_on_interruptible with a new function
@@ -119,8 +131,10 @@
 *  - All sleeps use a timeout of DIGI_RETRY_TIMEOUT before looping to
 *    recheck the condition they are sleeping on.  This is defensive,
 *    in case a wake up is lost.
+*  - Following Documentation/DocBook/kernel-locking.pdf no spin locks
+*    are held when calling copy_to/from_user or printk.
 *    
-*  $Id: digi_acceleport.c,v 1.56 2000/06/07 22:47:30 root Exp root $
+*  $Id: digi_acceleport.c,v 1.60 2000/06/23 17:43:17 root Exp root $
 */
 
 #include <linux/config.h>
@@ -402,7 +416,7 @@ struct usb_serial_device_type digi_acceleport_device = {
 *  wake ups.  This is used to implement condition variables.
 */
 
-static long cond_wait_interruptible_timeout_irqrestore(
+static inline long cond_wait_interruptible_timeout_irqrestore(
 	wait_queue_head_t *q, long timeout,
 	spinlock_t *lock, unsigned long flags )
 {
@@ -515,16 +529,16 @@ dbg( "digi_write_oob_command: TOP: port=%d, count=%d", oob_port_num, count );
 		if( (ret=usb_submit_urb(oob_port->write_urb)) == 0 ) {
 			count -= len;
 			buf += len;
-		} else {
-			dbg(
-			"digi_write_oob_command: usb_submit_urb failed, ret=%d",
-			ret );
-			break;
 		}
 
 	}
 
 	spin_unlock_irqrestore( &oob_priv->dp_port_lock, flags );
+
+	if( ret ) {
+		dbg( "digi_write_oob_command: usb_submit_urb failed, ret=%d",
+		ret );
+	}
 
 	return( ret );
 
@@ -569,8 +583,8 @@ count );
 		}
 
 		/* len must be a multiple of 4 and small enough to */
-		/* guarantee the write will send all data (or none), */
-		/* so commands are not split */
+		/* guarantee the write will send buffered data first, */
+		/* so commands are in order with data and not split */
 		len = MIN( count, port->bulk_out_size-2-priv->dp_buf_len );
 		if( len > 4 )
 			len &= ~3;
@@ -588,34 +602,20 @@ count );
 			port->write_urb->transfer_buffer_length = len;
 		}
 
-#ifdef DEBUG_DATA
- {
-	int i;
-
-	printk( KERN_DEBUG __FILE__ ": digi_write: port=%d, length=%d, data=",
-		priv->dp_port_num, port->write_urb->transfer_buffer_length );
-	for( i=0; i<port->write_urb->transfer_buffer_length; ++i ) {
-		printk( "%.2x ",
-		((unsigned char *)port->write_urb->transfer_buffer)[i] );
-	}
-	printk( "\n" );
- }
-#endif
-
 		if( (ret=usb_submit_urb(port->write_urb)) == 0 ) {
 			priv->dp_buf_len = 0;
 			count -= len;
 			buf += len;
-		} else {
-			dbg(
-			"digi_write_inb_command: usb_submit_urb failed, ret=%d",
-			ret );
-			break;
 		}
 
 	}
 
 	spin_unlock_irqrestore( &priv->dp_port_lock, flags );
+
+	if( ret ) {
+		dbg( "digi_write_inb_command: usb_submit_urb failed, ret=%d",
+		ret );
+	}
 
 	return( ret );
 
@@ -647,10 +647,10 @@ dbg( "digi_set_modem_signals: TOP: port=%d, modem_signals=0x%x",
 port_priv->dp_port_num, modem_signals );
 
 	spin_lock_irqsave( &oob_priv->dp_port_lock, flags );
-	spin_lock_irqsave( &port_priv->dp_port_lock, flags );
+	spin_lock( &port_priv->dp_port_lock );
 
 	while( oob_port->write_urb->status == -EINPROGRESS ) {
-		spin_unlock_irqrestore( &port_priv->dp_port_lock, flags );
+		spin_unlock( &port_priv->dp_port_lock );
 		cond_wait_interruptible_timeout_irqrestore(
 			&oob_port->write_wait, DIGI_RETRY_TIMEOUT,
 			&oob_priv->dp_port_lock, flags );
@@ -658,7 +658,7 @@ port_priv->dp_port_num, modem_signals );
 			return( -EINTR );
 		}
 		spin_lock_irqsave( &oob_priv->dp_port_lock, flags );
-		spin_lock_irqsave( &port_priv->dp_port_lock, flags );
+		spin_lock( &port_priv->dp_port_lock );
 	}
 
 	data[0] = DIGI_CMD_SET_DTR_SIGNAL;
@@ -679,13 +679,15 @@ port_priv->dp_port_num, modem_signals );
 		port_priv->dp_modem_signals =
 			(port_priv->dp_modem_signals&~(TIOCM_DTR|TIOCM_RTS))
 			| (modem_signals&(TIOCM_DTR|TIOCM_RTS));
-	} else {
-		dbg( "digi_set_modem_signals: usb_submit_urb failed, ret=%d",
-			ret );
 	}
 
-	spin_unlock_irqrestore( &port_priv->dp_port_lock, flags );
+	spin_unlock( &port_priv->dp_port_lock );
 	spin_unlock_irqrestore( &oob_priv->dp_port_lock, flags );
+
+	if( ret ) {
+		dbg( "digi_set_modem_signals: usb_submit_urb failed, ret=%d",
+		ret );
+	}
 
 	return( ret );
 
@@ -1046,11 +1048,18 @@ static int digi_write( struct usb_serial_port *port, int from_user,
 	int ret,data_len,new_len;
 	digi_private_t *priv = (digi_private_t *)(port->private);
 	unsigned char *data = port->write_urb->transfer_buffer;
+	unsigned char user_buf[64];	/* 64 bytes is max USB bulk packet */
 	unsigned long flags = 0;
 
 
 dbg( "digi_write: TOP: port=%d, count=%d, from_user=%d, in_interrupt=%d",
 priv->dp_port_num, count, from_user, in_interrupt() );
+
+	/* copy user data (which can sleep) before getting spin lock */
+	count = MIN( 64, MIN( count, port->bulk_out_size-2 ) );
+	if( from_user && copy_from_user( user_buf, buf, count ) ) {
+		return( -EFAULT );
+	}
 
 	/* be sure only one write proceeds at a time */
 	/* there are races on the port private buffer */
@@ -1096,40 +1105,19 @@ priv->dp_port_num, count, from_user, in_interrupt() );
 	data += priv->dp_buf_len;
 
 	/* copy in new data */
-	if( from_user ) {
-		if( copy_from_user( data, buf, new_len ) ) {
-			spin_unlock_irqrestore( &priv->dp_port_lock, flags );
-			return( -EFAULT );
-		}
-	} else {
-		memcpy( data, buf, new_len );
-	}  
-
-#ifdef DEBUG_DATA
- {
-	int i;
-
-	printk( KERN_DEBUG __FILE__ ": digi_write: port=%d, length=%d, data=",
-		priv->dp_port_num, port->write_urb->transfer_buffer_length );
-	for( i=0; i<port->write_urb->transfer_buffer_length; ++i ) {
-		printk( "%.2x ",
-		((unsigned char *)port->write_urb->transfer_buffer)[i] );
-	}
-	printk( "\n" );
- }
-#endif
+	memcpy( data, from_user ? user_buf : buf, new_len );
 
 	if( (ret=usb_submit_urb(port->write_urb)) == 0 ) {
 		ret = new_len;
 		priv->dp_buf_len = 0;
-	} else {
-		dbg( "digi_write: usb_submit_urb failed, ret=%d",
-			ret );
 	}
 
 	/* return length of new data written, or error */
-dbg( "digi_write: returning %d", ret );
 	spin_unlock_irqrestore( &priv->dp_port_lock, flags );
+	if( ret < 0 ) {
+		dbg( "digi_write: usb_submit_urb failed, ret=%d", ret );
+	}
+dbg( "digi_write: returning %d", ret );
 	return( ret );
 
 } 
@@ -1175,24 +1163,8 @@ dbg( "digi_write_bulk_callback: TOP: port=%d", priv->dp_port_num );
 		memcpy( port->write_urb->transfer_buffer+2, priv->dp_buf,
 			priv->dp_buf_len );
 
-#ifdef DEBUG_DATA
- {
-	int i;
-
-	printk( KERN_DEBUG __FILE__ ": digi_write_bulk_callback: port=%d, length=%d, data=",
-		priv->dp_port_num, port->write_urb->transfer_buffer_length );
-	for( i=0; i<port->write_urb->transfer_buffer_length; ++i ) {
-		printk( "%.2x ",
-		((unsigned char *)port->write_urb->transfer_buffer)[i] );
-	}
-	printk( "\n" );
- }
-#endif
-
 		if( (ret=usb_submit_urb(port->write_urb)) == 0 ) {
 			priv->dp_buf_len = 0;
-		} else {
-			dbg( "digi_write_bulk_callback: usb_submit_urb failed, ret=%d", ret );
 		}
 
 	}
@@ -1201,6 +1173,11 @@ dbg( "digi_write_bulk_callback: TOP: port=%d", priv->dp_port_num );
 	digi_wakeup_write( port );
 
 	spin_unlock( &priv->dp_port_lock );
+
+	if( ret ) {
+		dbg( "digi_write_bulk_callback: usb_submit_urb failed, ret=%d",
+		ret );
+	}
 
 	/* also queue up a wakeup at scheduler time, in case we */
 	/* lost the race in write_chan(). */
@@ -1218,8 +1195,6 @@ static int digi_write_room( struct usb_serial_port *port )
 	digi_private_t *priv = (digi_private_t *)(port->private);
 	unsigned long flags = 0;
 
-
-dbg( "digi_write_room: TOP: port=%d", priv->dp_port_num );
 
 	spin_lock_irqsave( &priv->dp_port_lock, flags );
 
@@ -1241,8 +1216,6 @@ static int digi_chars_in_buffer( struct usb_serial_port *port )
 
 	digi_private_t *priv = (digi_private_t *)(port->private);
 
-
-dbg( "digi_chars_in_buffer: TOP: port=%d", priv->dp_port_num );
 
 	if( port->write_urb->status == -EINPROGRESS ) {
 dbg( "digi_chars_in_buffer: port=%d, chars=%d", priv->dp_port_num, port->bulk_out_size - 2 );
@@ -1455,13 +1428,14 @@ static int digi_startup_device( struct usb_serial *serial )
 	int i,ret = 0;
 
 
-	spin_lock( &startup_lock );
-
 	/* be sure this happens exactly once */
+	spin_lock( &startup_lock );
 	if( device_startup ) {
 		spin_unlock( &startup_lock );
 		return( 0 );
 	}
+	device_startup = 1;
+	spin_unlock( &startup_lock );
 
 	/* start reading from each bulk in endpoint for the device */
 	for( i=0; i<digi_acceleport_device.num_ports+1; i++ ) {
@@ -1473,10 +1447,6 @@ static int digi_startup_device( struct usb_serial *serial )
 		}
 
 	}
-
-	device_startup = 1;
-
-	spin_unlock( &startup_lock );
 
 	return( ret );
 
@@ -1594,17 +1564,6 @@ dbg( "digi_read_bulk_callback: TOP: port=%d", priv->dp_port_num );
 			return;
 		goto resubmit;
 	}
-
-#ifdef DEBUG_DATA
-if( urb->actual_length ) {
-	printk( KERN_DEBUG __FILE__ ": digi_read_bulk_callback: port=%d, length=%d, data=",
-		priv->dp_port_num, urb->actual_length );
-	for( i=0; i<urb->actual_length; ++i ) {
-		printk( "%.2x ", ((unsigned char *)urb->transfer_buffer)[i] );
-	}
-	printk( "\n" );
-}
-#endif
 
 	if( urb->actual_length != len + 2 )
      		err( KERN_INFO "digi_read_bulk_callback: INCOMPLETE PACKET, port=%d, opcode=%d, len=%d, actual_length=%d, status=%d", priv->dp_port_num, opcode, len, urb->actual_length, status );

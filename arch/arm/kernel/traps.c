@@ -17,16 +17,18 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/spinlock.h>
+#include <linux/ptrace.h>
 #include <linux/init.h>
 
+#include <asm/atomic.h>
+#include <asm/io.h>
+#include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
-#include <asm/io.h>
-#include <asm/atomic.h>
-#include <asm/pgtable.h>
+
+#include "ptrace.h"
 
 extern void c_backtrace (unsigned long fp, int pmode);
-extern int ptrace_cancel_bpt (struct task_struct *);
 
 char *processor_modes[]=
 { "USER_26", "FIQ_26" , "IRQ_26" , "SVC_26" , "UK4_26" , "UK5_26" , "UK6_26" , "UK7_26" ,
@@ -45,8 +47,6 @@ static inline void console_verbose(void)
 	extern int console_loglevel;
 	console_loglevel = 15;
 }
-
-int kstack_depth_to_print = 200;
 
 /*
  * Stack pointers should always be within the kernels view of
@@ -199,37 +199,48 @@ void die_if_kernel(const char *str, struct pt_regs *regs, int err)
     	die(str, regs, err);
 }
 
-void bad_user_access_alignment(const void *ptr)
-{
-	printk(KERN_ERR "bad user access alignment: ptr = %p, pc = %p\n", ptr, 
-		__builtin_return_address(0));
-	current->thread.error_code = 0;
-	current->thread.trap_no = 11;
-	force_sig(SIGBUS, current);
-/*	die_if_kernel("Oops - bad user access alignment", regs, mode);*/
-}
-
 asmlinkage void do_undefinstr(int address, struct pt_regs *regs, int mode)
 {
+	unsigned long addr = instruction_pointer(regs);
+	siginfo_t info;
+
 #ifdef CONFIG_DEBUG_USER
 	printk(KERN_INFO "%s (%d): undefined instruction: pc=%08lx\n",
-		current->comm, current->pid, instruction_pointer(regs));
+		current->comm, current->pid, addr);
 #endif
+
 	current->thread.error_code = 0;
 	current->thread.trap_no = 6;
-	force_sig(SIGILL, current);
+
+	info.si_signo = SIGILL;
+	info.si_errno = 0;
+	info.si_code  = ILL_ILLOPC;
+	info.si_addr  = (void *)addr;
+
+	force_sig_info(SIGILL, &info, current);
+
 	die_if_kernel("Oops - undefined instruction", regs, mode);
 }
 
 asmlinkage void do_excpt(int address, struct pt_regs *regs, int mode)
 {
+	siginfo_t info;
+
 #ifdef CONFIG_DEBUG_USER
 	printk(KERN_INFO "%s (%d): address exception: pc=%08lx\n",
 		current->comm, current->pid, instruction_pointer(regs));
 #endif
+
 	current->thread.error_code = 0;
 	current->thread.trap_no = 11;
-	force_sig(SIGBUS, current);
+
+	info.si_signo = SIGBUS;
+	info.si_errno = 0;
+	info.si_code  = BUS_ADRERR;
+	info.si_addr  = (void *)address;
+
+	force_sig_info(SIGBUS, &info, current);
+
 	die_if_kernel("Oops - address exception", regs, mode);
 }
 
@@ -269,32 +280,38 @@ asmlinkage void bad_mode(struct pt_regs *regs, int reason, int proc_mode)
 }
 
 /*
- * 'math_state_restore()' saves the current math information in the
- * old math state array, and gets the new ones from the current task.
- *
- * We no longer save/restore the math state on every context switch
- * any more.  We only do this now if it actually gets used.
- */
-asmlinkage void math_state_restore (void)
-{
-	current->used_math = 1;
-}
-
-/*
  * Handle some more esoteric system calls
  */
-asmlinkage int arm_syscall (int no, struct pt_regs *regs)
+asmlinkage int arm_syscall(int no, struct pt_regs *regs)
 {
+	siginfo_t info;
+
 	switch (no) {
 	case 0: /* branch through 0 */
-		force_sig(SIGSEGV, current);
+		info.si_signo = SIGSEGV;
+		info.si_errno = 0;
+		info.si_code  = SEGV_MAPERR;
+		info.si_addr  = NULL;
+
+		force_sig_info(SIGSEGV, &info, current);
+
 		die_if_kernel("branch through zero", regs, 0);
 		break;
 
-	case 1: /* SWI_BREAK_POINT */
-		regs->ARM_pc -= 4; /* Decrement PC by one instruction */
-		ptrace_cancel_bpt(current);
-		force_sig(SIGTRAP, current);
+	case 1: /* SWI BREAK_POINT */
+		/*
+		 * The PC is always left pointing at the next
+		 * instruction.  Fix this.
+		 */
+		regs->ARM_pc -= 4;
+		__ptrace_cancel_bpt(current);
+
+		info.si_signo = SIGTRAP;
+		info.si_errno = 0;
+		info.si_code  = TRAP_BRKPT;
+		info.si_addr  = (void *)instruction_pointer(regs);
+
+		force_sig_info(SIGTRAP, &info, current);
 		return regs->ARM_r0;
 
 	case 2:	/* sys_cacheflush */
@@ -350,29 +367,24 @@ asmlinkage void deferred(int n, struct pt_regs *regs)
 	die_if_kernel("Oops", regs, n);
 }
 
-asmlinkage void arm_malalignedptr(const char *str, void *pc, volatile void *ptr)
+void __bad_xchg(volatile void *ptr, int size)
 {
-	printk("Mal-aligned pointer in %s: %p (PC=%p)\n", str, ptr, pc);
-}
-
-asmlinkage void arm_invalidptr(const char *function, int size)
-{
-	printk("Invalid pointer size in %s (pc=%p) size %d\n",
-		function, __builtin_return_address(0), size);
+	printk("xchg: bad data size: pc 0x%p, ptr 0x%p, size %d\n",
+		__builtin_return_address(0), ptr, size);
+	BUG();
 }
 
 /*
- * A data abort trap was taken, but the instruction was not an instruction
- * which should cause the trap to be taken.  Try to abort it.  Note that
- * the while(1) is there because we cannot currently handle returning from
- * this function.
+ * A data abort trap was taken, but we did not handle the instruction.
+ * Try to abort the user program, or panic if it was the kernel.
  */
 asmlinkage void
 baddataabort(int code, unsigned long instr, struct pt_regs *regs)
 {
 	unsigned long addr = instruction_pointer(regs);
+	siginfo_t info;
 
-#ifdef CONFIG_DEBUG_ERRORS
+#ifdef CONFIG_DEBUG_USER
 	dump_instr(addr, 1);
 	{
 		pgd_t *pgd;
@@ -389,16 +401,22 @@ baddataabort(int code, unsigned long instr, struct pt_regs *regs)
 		printk ("\n");
 	}
 #endif
-	force_sig(SIGILL, current);
+
+	info.si_signo = SIGILL;
+	info.si_errno = 0;
+	info.si_code  = ILL_ILLOPC;
+	info.si_addr  = (void *)addr;
+
+	force_sig_info(SIGILL, &info, current);
 	die_if_kernel("unknown data abort code", regs, instr);
-	while (1);
 }
 
 void __bug(const char *file, int line, void *data)
 {
-	printk(KERN_CRIT"kernel BUG at %s:%d!\n", file, line);
+	printk(KERN_CRIT"kernel BUG at %s:%d!", file, line);
 	if (data)
-		printk(KERN_CRIT"extra data = %p\n", data);
+		printk(KERN_CRIT" - extra data = %p", data);
+	printk("\n");
 	BUG();
 }
 

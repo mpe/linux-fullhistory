@@ -15,6 +15,7 @@
  *   26-05-2000 JD	SA-1111 support added
  */
 #include <linux/config.h>
+#include <asm/irq.h>
 
 #define fixup_irq(x)	(x)
 
@@ -73,7 +74,7 @@ static int GPIO_11_27_spurious;		/* GPIOs that triggered when masked */
 static void sa1100_GPIO11_27_demux(int irq, void *dev_id, 
 				   struct pt_regs *regs)
 {
-	int i, irq, spurious;
+	int i, spurious;
 
 	while( (irq = (GEDR & 0xfffff800)) ){
 		/*

@@ -138,6 +138,8 @@ void elevator_linus(struct request *req, elevator_t *elevator,
 	struct list_head *entry = real_head;
 	struct request *tmp;
 
+	req->elevator_sequence = orig_latency;
+
 	if (list_empty(real_head)) {
 		list_add(&req->queue, real_head);
 		return;

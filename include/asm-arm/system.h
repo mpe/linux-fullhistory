@@ -381,7 +381,6 @@ extern unsigned int __machine_arch_type;
 
 #define tas(ptr) (xchg((ptr),1))
 
-extern void arm_malalignedptr(const char *, void *, volatile void *);
 extern asmlinkage void __backtrace(void);
 
 /*
@@ -408,6 +407,24 @@ extern struct task_struct *__switch_to(struct task_struct *prev, struct task_str
 		last = __switch_to(prev,next);	\
 		mb();				\
 	} while (0)
+
+#endif
+
+/* For spinlocks etc */
+#define local_irq_save(x)	__save_flags_cli(x)
+#define local_irq_restore(x)	__restore_flags(x)
+#define local_irq_disable()	__cli()
+#define local_irq_enable()	__sti()
+
+#ifdef CONFIG_SMP
+#error SMP not supported
+#else
+
+#define cli()			__cli()
+#define sti()			__sti()
+#define save_flags(x)		__save_flags(x)
+#define restore_flags(x)	__restore_flags(x)
+#define save_flags_cli(x)	__save_flags_cli(x)
 
 #endif
 
