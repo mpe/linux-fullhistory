@@ -23,16 +23,16 @@ obj-$(CONFIG_SYSCALL_DEBUG) += syscall_user.o
 obj-$(CONFIG_MODE_TT) += tt/
 obj-$(CONFIG_MODE_SKAS) += skas/
 
-user-objs-$(CONFIG_TTY_LOG) += tty_log.o
-
-USER_OBJS := $(filter %_user.o,$(obj-y))  $(user-objs-y) config.o helper.o \
-	main.o process.o tempfile.o time.o tty_log.o umid.o user_util.o frame.o
-USER_OBJS := $(foreach file,$(USER_OBJS),$(obj)/$(file))
-
+# This needs be compiled with frame pointers regardless of how the rest of the
+# kernel is built.
 CFLAGS_frame.o := -fno-omit-frame-pointer
 
-$(USER_OBJS) : %.o: %.c
-	$(CC) $(USER_CFLAGS) $(CFLAGS_$(notdir $@)) -c -o $@ $<
+user-objs-$(CONFIG_TTY_LOG) += tty_log.o
+
+USER_OBJS := $(user-objs-y) config.o helper.o main.o process.o tempfile.o \
+	time.o tty_log.o umid.o user_util.o frame.o
+
+include arch/um/scripts/Makefile.rules
 
 targets += config.c
 

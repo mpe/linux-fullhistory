@@ -34,8 +34,6 @@ typedef struct pbe {
 #define SWAP_FILENAME_MAXLENGTH	32
 
 
-#define SUSPEND_PD_PAGES(x)     (((x)*sizeof(struct pbe))/PAGE_SIZE+1)
-
 extern dev_t swsusp_resume_device;
    
 /* mm/vmscan.c */

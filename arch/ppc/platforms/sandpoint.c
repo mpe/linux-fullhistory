@@ -202,13 +202,6 @@ sandpoint_setup_winbond_83553(struct pci_controller *hose)
 				0x48, /* ISA-to-PCI Addr Decoder Control */
 				0xf0);
 
-	/* Enable RTC and Keyboard address locations.  */
-	early_write_config_byte(hose,
-				0,
-				devfn,
-				0x4d,	/* Chip Select Control Register */
-				0x00);
-
 	/* Enable Port 92.  */
 	early_write_config_byte(hose,
 				0,

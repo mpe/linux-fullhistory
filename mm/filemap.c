@@ -1167,7 +1167,8 @@ static int fastcall page_cache_read(struct file * file, unsigned long offset)
  * it in the page cache, and handles the special cases reasonably without
  * having a lot of duplicated code.
  */
-struct page * filemap_nopage(struct vm_area_struct * area, unsigned long address, int *type)
+struct page *filemap_nopage(struct vm_area_struct *area,
+				unsigned long address, int *type)
 {
 	int error;
 	struct file *file = area->vm_file;
@@ -1175,11 +1176,10 @@ struct page * filemap_nopage(struct vm_area_struct * area, unsigned long address
 	struct file_ra_state *ra = &file->f_ra;
 	struct inode *inode = mapping->host;
 	struct page *page;
-	unsigned long size, pgoff, endoff;
+	unsigned long size, pgoff;
 	int did_readaround = 0, majmin = VM_FAULT_MINOR;
 
-	pgoff = ((address - area->vm_start) >> PAGE_CACHE_SHIFT) + area->vm_pgoff;
-	endoff = ((area->vm_end - area->vm_start) >> PAGE_CACHE_SHIFT) + area->vm_pgoff;
+	pgoff = ((address-area->vm_start) >> PAGE_CACHE_SHIFT) + area->vm_pgoff;
 
 retry_all:
 	size = (i_size_read(inode) + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
@@ -1189,13 +1189,6 @@ retry_all:
 	/* If we don't want any read-ahead, don't bother */
 	if (VM_RandomReadHint(area))
 		goto no_cached_page;
-
-	/*
-	 * The "size" of the file, as far as mmap is concerned, isn't bigger
-	 * than the mapping
-	 */
-	if (size > endoff)
-		size = endoff;
 
 	/*
 	 * The readahead code wants to be told about each and every page

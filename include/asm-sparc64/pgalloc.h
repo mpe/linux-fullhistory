@@ -7,9 +7,7 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 
-#include <asm/page.h>
 #include <asm/spitfire.h>
-#include <asm/pgtable.h>
 #include <asm/cpudata.h>
 
 /* Page table allocation/freeing. */

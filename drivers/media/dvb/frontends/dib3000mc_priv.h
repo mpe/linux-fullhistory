@@ -320,7 +320,7 @@ static u16 dib3000mc_mobile_mode[][5] = {
  * pidfilter
  * it is not a hardware pidfilter but a filter which drops all pids
  * except the ones set. When connected to USB1.1 bandwidth this is important.
- * DiB3000-MC/P can filter up to 32 PIDs
+ * DiB3000P/M-C can filter up to 32 PIDs
  */
 #define DIB3000MC_REG_FIRST_PID			(   212)
 #define DIB3000MC_NUM_PIDS				(    32)

@@ -15,6 +15,8 @@
 #ifndef _DEBUGFS_H_
 #define _DEBUGFS_H_
 
+#include <linux/fs.h>
+
 #if defined(CONFIG_DEBUG_FS)
 struct dentry *debugfs_create_file(const char *name, mode_t mode,
 				   struct dentry *parent, void *data,

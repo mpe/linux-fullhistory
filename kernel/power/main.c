@@ -65,8 +65,10 @@ static int suspend_prepare(suspend_state_t state)
 			goto Thaw;
 	}
 
-	if ((error = device_suspend(PMSG_SUSPEND)))
+	if ((error = device_suspend(PMSG_SUSPEND))) {
+		printk(KERN_ERR "Some devices failed to suspend\n");
 		goto Finish;
+	}
 	return 0;
  Finish:
 	if (pm_ops->finish)
@@ -85,8 +87,10 @@ static int suspend_enter(suspend_state_t state)
 
 	local_irq_save(flags);
 
-	if ((error = device_power_down(PMSG_SUSPEND)))
+	if ((error = device_power_down(PMSG_SUSPEND))) {
+		printk(KERN_ERR "Some devices failed to power down\n");
 		goto Done;
+	}
 	error = pm_ops->enter(state);
 	device_power_up();
  Done:

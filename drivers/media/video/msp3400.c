@@ -734,6 +734,7 @@ static int msp34xx_sleep(struct msp3400c *msp, int timeout)
 {
 	DECLARE_WAITQUEUE(wait, current);
 
+again:
 	add_wait_queue(&msp->wq, &wait);
 	if (!kthread_should_stop()) {
 		if (timeout < 0) {
@@ -749,9 +750,12 @@ static int msp34xx_sleep(struct msp3400c *msp, int timeout)
 #endif
 		}
 	}
-	if (current->flags & PF_FREEZE)
-		refrigerator(PF_FREEZE);
+
 	remove_wait_queue(&msp->wq, &wait);
+
+	if (try_to_freeze(PF_FREEZE))
+		goto again;
+
 	return msp->restart;
 }
 

@@ -606,9 +606,11 @@ static inline void n_tty_receive_overrun(struct tty_struct *tty)
 	char buf[64];
 
 	tty->num_overrun++;
-	if (time_before(tty->overrun_time, jiffies - HZ)) {
-		printk(KERN_WARNING "%s: %d input overrun(s)\n", tty_name(tty, buf),
-		       tty->num_overrun);
+	if (time_before(tty->overrun_time, jiffies - HZ) ||
+			time_after(tty->overrun_time, jiffies)) {
+		printk(KERN_WARNING "%s: %d input overrun(s)\n",
+			tty_name(tty, buf),
+			tty->num_overrun);
 		tty->overrun_time = jiffies;
 		tty->num_overrun = 0;
 	}

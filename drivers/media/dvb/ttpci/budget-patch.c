@@ -406,7 +406,7 @@ static int grundig_29504_451_pll_set(struct dvb_frontend* fe, struct dvb_fronten
 	return 0;
 }
 
-struct tda8083_config grundig_29504_451_config = {
+static struct tda8083_config grundig_29504_451_config = {
 	.demod_address = 0x68,
 	.pll_set = grundig_29504_451_pll_set,
 };

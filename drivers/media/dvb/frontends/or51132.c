@@ -422,7 +422,7 @@ static int or51132_read_status(struct dvb_frontend* fe, fe_status_t* status)
 }
 
 /* log10-1 table at .5 increments from 1 to 100.5 */
-unsigned int i100x20log10[] = {
+static unsigned int i100x20log10[] = {
      0,  352,  602,  795,  954, 1088, 1204, 1306, 1397, 1480,
   1556, 1625, 1690, 1750, 1806, 1858, 1908, 1955, 2000, 2042,
   2082, 2121, 2158, 2193, 2227, 2260, 2292, 2322, 2352, 2380,
@@ -445,9 +445,9 @@ unsigned int i100x20log10[] = {
   3964, 3969, 3973, 3978, 3982, 3986, 3991, 3995, 4000, 4004,
 };
 
-unsigned int denom[] = {1,1,100,1000,10000,100000,1000000,10000000,100000000};
+static unsigned int denom[] = {1,1,100,1000,10000,100000,1000000,10000000,100000000};
 
-unsigned int i20Log10(unsigned short val)
+static unsigned int i20Log10(unsigned short val)
 {
 	unsigned int rntval = 100;
 	unsigned int tmp = val;

@@ -367,10 +367,26 @@ static inline int io_remap_page_range(struct vm_area_struct *vma,
 	phys_t phys_addr_high = fixup_bigphys_addr(paddr, size);
 	return remap_pfn_range(vma, vaddr, phys_addr_high >> PAGE_SHIFT, size, prot);
 }
+
+static inline int io_remap_pfn_range(struct vm_area_struct *vma,
+		unsigned long vaddr,
+		unsigned long pfn,
+		unsigned long size,
+		pgprot_t prot)
+{
+	phys_t phys_addr_high = fixup_bigphys_addr(pfn << PAGE_SHIFT, size);
+	return remap_pfn_range(vma, vaddr, pfn, size, prot);
+}
 #else
 #define io_remap_page_range(vma, vaddr, paddr, size, prot)		\
-	remap_pfn_range(vma, vaddr, (paddr) >> PAGE_SHIFT, size, prot)
+		remap_pfn_range(vma, vaddr, (paddr) >> PAGE_SHIFT, size, prot)
+#define io_remap_pfn_range(vma, vaddr, pfn, size, prot)		\
+		remap_pfn_range(vma, vaddr, pfn, size, prot)
 #endif
+
+#define MK_IOSPACE_PFN(space, pfn)	(pfn)
+#define GET_IOSPACE(pfn)		0
+#define GET_PFN(pfn)			(pfn)
 
 #include <asm-generic/pgtable.h>
 

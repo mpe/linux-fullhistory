@@ -57,7 +57,6 @@ static void parse_bootinfo(unsigned long r3,
 			   unsigned long r6, unsigned long r7);
 static void hdpu_set_l1pe(void);
 static void hdpu_cpustate_set(unsigned char new_state);
-static void hdpu_cpustate_set(unsigned char new_state);
 #ifdef CONFIG_SMP
 static spinlock_t timebase_lock = SPIN_LOCK_UNLOCKED;
 static unsigned int timebase_upper = 0, timebase_lower = 0;
@@ -252,8 +251,6 @@ static void __init hdpu_setup_bridge(void)
 		    MV64360_PCI_ACC_CNTL_RDSIZE_256_BYTES;
 #endif
 	}
-	hdpu_cpustate_set(CPUSTATE_KERNEL_MAJOR | CPUSTATE_KERNEL_INIT_PCI);
-
 
 	hdpu_cpustate_set(CPUSTATE_KERNEL_MAJOR | CPUSTATE_KERNEL_INIT_PCI);
 
@@ -262,7 +259,17 @@ static void __init hdpu_setup_bridge(void)
 	pci_dram_offset = 0;	/* System mem at same addr on PCI & cpu bus */
 	ppc_md.pci_swizzle = common_swizzle;
 	ppc_md.pci_map_irq = hdpu_map_irq;
-	hdpu_cpustate_set(CPUSTATE_KERNEL_MAJOR | CPUSTATE_KERNEL_INIT_REG);
+
+	mv64x60_set_bus(&bh, 0, 0);
+	bh.hose_a->first_busno = 0;
+	bh.hose_a->last_busno = 0xff;
+	bh.hose_a->last_busno = pciauto_bus_scan(bh.hose_a, 0);
+
+	bh.hose_b->first_busno = bh.hose_a->last_busno + 1;
+	mv64x60_set_bus(&bh, 1, bh.hose_b->first_busno);
+	bh.hose_b->last_busno = 0xff;
+	bh.hose_b->last_busno = pciauto_bus_scan(bh.hose_b,
+		bh.hose_b->first_busno);
 
 	ppc_md.pci_exclude_device = mv64x60_pci_exclude_device;
 
@@ -333,6 +340,10 @@ static void __init hdpu_fixup_mpsc_pdata(struct platform_device *pd)
 		pdata->default_baud = ppcboot_bd.bi_baudrate;
 	else
 		pdata->default_baud = HDPU_DEFAULT_BAUD;
+	pdata->brg_clk_src = HDPU_MPSC_CLK_SRC;
+	pdata->brg_clk_freq = HDPU_MPSC_CLK_FREQ;
+}
+
 #if defined(CONFIG_HDPU_FEATURES)
 static void __init hdpu_fixup_cpustate_pdata(struct platform_device *pd)
 {
@@ -342,10 +353,6 @@ static void __init hdpu_fixup_cpustate_pdata(struct platform_device *pd)
 }
 #endif
 
-	pdata->brg_clk_src = HDPU_MPSC_CLK_SRC;
-	pdata->brg_clk_freq = HDPU_MPSC_CLK_FREQ;
-}
-
 static int __init hdpu_platform_notify(struct device *dev)
 {
 	static struct {
@@ -354,13 +361,13 @@ static int __init hdpu_platform_notify(struct device *dev)
 	} dev_map[] = {
 		{
 		MPSC_CTLR_NAME ".0", hdpu_fixup_mpsc_pdata},
-#if defined(CONFIG_HDPU_FEATURES)
-		{
-		HDPU_CPUSTATE_NAME ".0", hdpu_fixup_cpustate_pdata},
-#endif
 #if defined(CONFIG_MV643XX_ETH)
 		{
 		MV643XX_ETH_NAME ".0", hdpu_fixup_eth_pdata},
+#endif
+#if defined(CONFIG_HDPU_FEATURES)
+		{
+		HDPU_CPUSTATE_NAME ".0", hdpu_fixup_cpustate_pdata},
 #endif
 	};
 	struct platform_device *pdev;
@@ -421,7 +428,6 @@ static void __init hdpu_setup_arch(void)
 #endif
 
 	printk("SKY HDPU Compute Blade \n");
-	hdpu_cpustate_set(CPUSTATE_KERNEL_MAJOR | CPUSTATE_KERNEL_OK);
 
 	if (ppc_md.progress)
 		ppc_md.progress("hdpu_setup_arch: exit", 0);
@@ -460,8 +466,6 @@ unsigned long __init hdpu_find_end_of_memory(void)
 	return mv64x60_get_mem_size(CONFIG_MV64X60_NEW_BASE,
 				    MV64x60_TYPE_MV64360);
 }
-	hdpu_cpustate_set(CPUSTATE_KERNEL_MAJOR | CPUSTATE_KERNEL_RESET);
-
 
 static void hdpu_reset_board(void)
 {
@@ -506,8 +510,6 @@ static void hdpu_restart(char *cmd)
 	hdpu_reset_board();
 
 	while (i-- > 0) ;
-	hdpu_cpustate_set(CPUSTATE_KERNEL_MAJOR | CPUSTATE_KERNEL_HALT);
-
 	panic("restart failed\n");
 }
 
@@ -776,8 +778,6 @@ smp_hdpu_message_pass(int target, int msg, unsigned long data, int wait)
 			mv64x60_write(&bh, MV64360_CPU1_DOORBELL, 1 << msg);
 		break;
 	}
-	hdpu_cpustate_set(CPUSTATE_KERNEL_MAJOR | CPUSTATE_KERNEL_CPU1_KICK);
-
 }
 
 static void smp_hdpu_kick_cpu(int nr)
@@ -842,9 +842,6 @@ static void smp_hdpu_setup_cpu(int cpu_nr)
 {
 	if (cpu_nr == 0) {
 		if (ppc_md.progress)
-		hdpu_cpustate_set(CPUSTATE_KERNEL_MAJOR |
-				  CPUSTATE_KERNEL_CPU1_OK);
-
 			ppc_md.progress("smp_hdpu_setup_cpu 0", 0);
 		mv64x60_write(&bh, MV64360_CPU0_DOORBELL_CLR, 0xff);
 		mv64x60_write(&bh, MV64360_CPU0_DOORBELL_MASK, 0xff);
@@ -959,13 +956,6 @@ platform_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	platform_notify = hdpu_platform_notify;
 #endif
 	return;
-static void hdpu_cpustate_set(unsigned char new_state)
-{
-	unsigned int state = (new_state << 21);
-	mv64x60_write(&bh, MV64x60_GPP_VALUE_CLR, (0xff << 21));
-	mv64x60_write(&bh, MV64x60_GPP_VALUE_CLR, state);
-}
-
 }
 
 #if defined(CONFIG_SERIAL_TEXT_DEBUG) && defined(CONFIG_SERIAL_MPSC_CONSOLE)
@@ -1006,6 +996,27 @@ static struct mtd_partition hdpu_partitions[] = {
 	 .mask_flags = 0,
 	 },{
 	 .name = "bootEnv",
+	 .size = 0x00040000,
+	 .offset = 0x03EC0000,
+	 .mask_flags = 0,
+	 },{
+	 .name = "bootROM",
+	 .size = 0x00100000,
+	 .offset = 0x03F00000,
+	 .mask_flags = 0,
+	 }
+};
+
+static int __init hdpu_setup_mtd(void)
+{
+
+	physmap_set_partitions(hdpu_partitions, 5);
+	return 0;
+}
+
+arch_initcall(hdpu_setup_mtd);
+#endif
+
 #ifdef CONFIG_HDPU_FEATURES
 
 static struct resource hdpu_cpustate_resources[] = {
@@ -1049,24 +1060,3 @@ static int __init hdpu_add_pds(void)
 
 arch_initcall(hdpu_add_pds);
 #endif
-	 .size = 0x00040000,
-	 .offset = 0x03EC0000,
-	 .mask_flags = 0,
-	 },{
-	 .name = "bootROM",
-	 .size = 0x00100000,
-	 .offset = 0x03F00000,
-	 .mask_flags = 0,
-	 }
-};
-
-static int __init hdpu_setup_mtd(void)
-{
-
-	physmap_set_partitions(hdpu_partitions, 5);
-	return 0;
-}
-
-arch_initcall(hdpu_setup_mtd);
-#endif
-

@@ -54,8 +54,8 @@ static int *bool_pending_values = NULL;
 extern void selnl_notify_setenforce(int val);
 
 /* Check whether a task is allowed to use a security operation. */
-int task_has_security(struct task_struct *tsk,
-		      u32 perms)
+static int task_has_security(struct task_struct *tsk,
+			     u32 perms)
 {
 	struct task_security_struct *tsec;
 

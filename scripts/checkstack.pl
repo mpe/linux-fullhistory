@@ -79,8 +79,8 @@ my (@stack, $re, $x, $xs);
 
 sub bysize($) {
 	my ($asize, $bsize);
-	($asize = $a) =~ s/.*	+(.*)$/$1/;
-	($bsize = $b) =~ s/.*	+(.*)$/$1/;
+	($asize = $a) =~ s/.*:	*(.*)$/$1/;
+	($bsize = $b) =~ s/.*:	*(.*)$/$1/;
 	$bsize <=> $asize
 }
 

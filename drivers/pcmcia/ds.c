@@ -91,8 +91,7 @@ struct pcmcia_bus_socket {
 	struct pcmcia_callback	callback;
 	int			state;
 	user_info_t		*user;
-	int			req_pending, req_result;
-	wait_queue_head_t	queue, request;
+	wait_queue_head_t	queue;
 	struct pcmcia_socket	*parent;
 
 	/* the PCMCIA devices connected to this socket (normally one, more
@@ -673,19 +672,6 @@ static void handle_event(struct pcmcia_bus_socket *s, event_t event)
     wake_up_interruptible(&s->queue);
 }
 
-static int handle_request(struct pcmcia_bus_socket *s, event_t event)
-{
-    if (s->req_pending != 0)
-	return CS_IN_USE;
-    if (s->state & DS_SOCKET_BUSY)
-	s->req_pending = 1;
-    handle_event(s, event);
-    if (wait_event_interruptible(s->request, s->req_pending <= 0))
-        return CS_IN_USE;
-    if (s->state & DS_SOCKET_BUSY)
-        return s->req_result;
-    return CS_SUCCESS;
-}
 
 /*======================================================================
 
@@ -767,9 +753,6 @@ static int ds_event(struct pcmcia_socket *skt, event_t event, int priority)
 		break;
 
 	case CS_EVENT_EJECTION_REQUEST:
-		ret = handle_request(s, event);
-		if (ret)
-			break;
 		ret = send_event(skt, event, priority);
 		break;
 
@@ -1216,8 +1199,6 @@ static int ds_release(struct inode *inode, struct file *file)
     /* Unlink user data structure */
     if ((file->f_flags & O_ACCMODE) != O_RDONLY) {
 	s->state &= ~DS_SOCKET_BUSY;
-	s->req_pending = 0;
-	wake_up_interruptible(&s->request);
     }
     file->private_data = NULL;
     for (link = &s->user; *link; link = &(*link)->next)
@@ -1266,33 +1247,14 @@ static ssize_t ds_read(struct file *file, char __user *buf,
 static ssize_t ds_write(struct file *file, const char __user *buf,
 			size_t count, loff_t *ppos)
 {
-    struct pcmcia_bus_socket *s;
-    user_info_t *user;
-
     ds_dbg(2, "ds_write(socket %d)\n", iminor(file->f_dentry->d_inode));
-    
+
     if (count != 4)
 	return -EINVAL;
     if ((file->f_flags & O_ACCMODE) == O_RDONLY)
 	return -EBADF;
 
-    user = file->private_data;
-    if (CHECK_USER(user))
-	return -EIO;
-
-    s = user->socket;
-    if (s->state & DS_SOCKET_DEAD)
-        return -EIO;
-
-    if (s->req_pending) {
-	s->req_pending--;
-	get_user(s->req_result, (int __user *)buf);
-	if ((s->req_result != 0) || (s->req_pending == 0))
-	    wake_up_interruptible(&s->request);
-    } else
-	return -EIO;
-
-    return 4;
+    return -EIO;
 } /* ds_write */
 
 /*====================================================================*/
@@ -1386,7 +1348,9 @@ static int ds_ioctl(struct inode * inode, struct file * file,
 			buf->config.Function, &buf->config);
 	break;
     case DS_GET_FIRST_TUPLE:
+	down(&s->parent->skt_sem);
 	pcmcia_validate_mem(s->parent);
+	up(&s->parent->skt_sem);
 	ret = pccard_get_first_tuple(s->parent, BIND_FN_ALL, &buf->tuple);
 	break;
     case DS_GET_NEXT_TUPLE:
@@ -1412,7 +1376,9 @@ static int ds_ioctl(struct inode * inode, struct file * file,
 	ret = pccard_get_status(s->parent, buf->status.Function, &buf->status);
 	break;
     case DS_VALIDATE_CIS:
+	down(&s->parent->skt_sem);
 	pcmcia_validate_mem(s->parent);
+	up(&s->parent->skt_sem);
 	ret = pccard_validate_cis(s->parent, BIND_FN_ALL, &buf->cisinfo);
 	break;
     case DS_SUSPEND_CARD:
@@ -1453,7 +1419,7 @@ static int ds_ioctl(struct inode * inode, struct file * file,
 			printed++;
 		}
 	}
-	ret = -EINVAL;
+	err = -EINVAL;
 	goto free_out;
 	break;
     case DS_GET_FIRST_WINDOW:
@@ -1562,7 +1528,6 @@ static int __devinit pcmcia_bus_add_socket(struct class_device *class_dev)
 	msleep(250);
 
 	init_waitqueue_head(&s->queue);
-	init_waitqueue_head(&s->request);
 	INIT_LIST_HEAD(&s->devices_list);
 
 	/* Set up hotline to Card Services */

@@ -581,7 +581,6 @@ config SANDPOINT
 
 config RADSTONE_PPC7D
 	bool "Radstone Technology PPC7D board"
-	select MV64360
 
 config ADIR
 	bool "SBS-Adirondack"
@@ -744,7 +743,7 @@ config PPC_GEN550
 	depends on SANDPOINT || MCPN765 || SPRUCE || PPLUS || PCORE || \
 		PRPMC750 || K2 || PRPMC800 || LOPEC || \
 		(EV64260 && !SERIAL_MPSC) || CHESTNUT || RADSTONE_PPC7D || \
-		MPC834x_SYS
+		83xx
 	default y
 
 config FORCE
@@ -757,15 +756,10 @@ config GT64260
 	depends on EV64260 || CPCI690
 	default y
 
-config MV64360
+config MV64360		# Really MV64360 & MV64460
 	bool
-	depends on KATANA || RADSTONE_PPC7D || HDPU
+	depends on CHESTNUT || KATANA || RADSTONE_PPC7D || HDPU
 	default y
-
-config MV64360
-	bool
-	depends on CHESTNUT
-  	default y
 
 config MV64X60
 	bool

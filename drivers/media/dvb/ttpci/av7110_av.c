@@ -1426,25 +1426,34 @@ void av7110_av_unregister(struct av7110 *av7110)
 
 int av7110_av_init(struct av7110 *av7110)
 {
+	void (*play[])(u8 *, int, void *) = { play_audio_cb, play_video_cb };
+	int i, ret;
+
 	av7110->vidmode = VIDEO_MODE_PAL;
 
-	av7110_ipack_init(&av7110->ipack[0], IPACKS, play_audio_cb);
-	av7110->ipack[0].data = (void *) av7110;
-	av7110_ipack_init(&av7110->ipack[1], IPACKS, play_video_cb);
-	av7110->ipack[1].data = (void *) av7110;
+	for (i = 0; i < 2; i++) {
+		struct ipack *ipack = av7110->ipack + i;
+
+		ret = av7110_ipack_init(ipack, IPACKS, play[i]);
+		if (ret < 0) {
+			if (i)
+				av7110_ipack_free(--ipack);
+			goto out;
+		}
+		ipack->data = av7110;
+	}
 
 	dvb_ringbuffer_init(&av7110->avout, av7110->iobuf, AVOUTLEN);
 	dvb_ringbuffer_init(&av7110->aout, av7110->iobuf + AVOUTLEN, AOUTLEN);
 
 	av7110->kbuf[0] = (u8 *)(av7110->iobuf + AVOUTLEN + AOUTLEN + BMPLEN);
 	av7110->kbuf[1] = av7110->kbuf[0] + 2 * IPACKS;
-
-	return 0;
+out:
+	return ret;
 }
 
-int av7110_av_exit(struct av7110 *av7110)
+void av7110_av_exit(struct av7110 *av7110)
 {
 	av7110_ipack_free(&av7110->ipack[0]);
 	av7110_ipack_free(&av7110->ipack[1]);
-	return 0;
 }

@@ -641,8 +641,7 @@ struct dvb_frontend* vp310_attach(const struct mt312_config* config,
 	return &state->frontend;
 
 error:
-	if (state)
-		kfree(state);
+	kfree(state);
 	return NULL;
 }
 

@@ -124,10 +124,10 @@ unsigned long *in_exception_stack(int cpu, unsigned long stack)
 	int k;
 	for (k = 0; k < N_EXCEPTION_STACKS; k++) {
 		struct tss_struct *tss = &per_cpu(init_tss, cpu);
-		unsigned long end = tss->ist[k] + EXCEPTION_STKSZ;
+		unsigned long start = tss->ist[k] - EXCEPTION_STKSZ;
 
-		if (stack >= tss->ist[k]  && stack <= end)
-			return (unsigned long *)end;
+		if (stack >= start && stack < tss->ist[k])
+			return (unsigned long *)tss->ist[k];
 	}
 	return NULL;
 } 
@@ -348,7 +348,6 @@ void oops_end(void)
 	die_owner = -1;
 	bust_spinlocks(0); 
 	spin_unlock(&die_lock); 
-	local_irq_enable();	/* make sure back scroll still works */
 	if (panic_on_oops)
 		panic("Oops"); 
 } 
@@ -617,15 +616,6 @@ asmlinkage void default_do_nmi(struct pt_regs *regs)
 		mem_parity_error(reason, regs);
 	if (reason & 0x40)
 		io_check_error(reason, regs);
-
-	/*
-	 * Reassert NMI in case it became active meanwhile
-	 * as it's edge-triggered.
-	 */
-	outb(0x8f, 0x70);
-	inb(0x71);		/* dummy */
-	outb(0x0f, 0x70);
-	inb(0x71);		/* dummy */
 }
 
 asmlinkage void do_int3(struct pt_regs * regs, long error_code)

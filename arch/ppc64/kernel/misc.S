@@ -680,10 +680,6 @@ _GLOBAL(kernel_thread)
 	ld	r30,-16(r1)
 	blr
 
-#ifdef CONFIG_PPC_RTAS /* hack hack hack */
-#define ppc_rtas	sys_ni_syscall
-#endif
-
 /* Why isn't this a) automatic, b) written in 'C'? */	
 	.balign 8
 _GLOBAL(sys_call_table32)

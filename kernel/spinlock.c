@@ -187,6 +187,7 @@ void __lockfunc _##op##_lock(locktype##_t *lock)			\
 			cpu_relax();					\
 		preempt_disable();					\
 	}								\
+	(lock)->break_lock = 0;						\
 }									\
 									\
 EXPORT_SYMBOL(_##op##_lock);						\
@@ -209,6 +210,7 @@ unsigned long __lockfunc _##op##_lock_irqsave(locktype##_t *lock)	\
 			cpu_relax();					\
 		preempt_disable();					\
 	}								\
+	(lock)->break_lock = 0;						\
 	return flags;							\
 }									\
 									\

@@ -788,12 +788,16 @@ alloc_page_vma(unsigned int __nocast gfp, struct vm_area_struct *vma, unsigned l
  *	Allocate a page from the kernel page pool.  When not in
  *	interrupt context and apply the current process NUMA policy.
  *	Returns NULL when no page can be allocated.
+ *
+ *	Don't call cpuset_update_current_mems_allowed() unless
+ *	1) it's ok to take cpuset_sem (can WAIT), and
+ *	2) allocating for current task (not interrupt).
  */
 struct page *alloc_pages_current(unsigned int __nocast gfp, unsigned order)
 {
 	struct mempolicy *pol = current->mempolicy;
 
-	if (!in_interrupt())
+	if ((gfp & __GFP_WAIT) && !in_interrupt())
 		cpuset_update_current_mems_allowed();
 	if (!pol || in_interrupt())
 		pol = &default_policy;

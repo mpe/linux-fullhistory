@@ -961,9 +961,11 @@ void arch_unmap_area(struct vm_area_struct *area)
 
 void update_mem_hiwater(struct task_struct *tsk)
 {
+	unsigned long rss = get_mm_counter(tsk->mm, rss);
+
 	if (likely(tsk->mm)) {
-		if (tsk->mm->hiwater_rss < tsk->mm->rss)
-			tsk->mm->hiwater_rss = tsk->mm->rss;
+		if (tsk->mm->hiwater_rss < rss)
+			tsk->mm->hiwater_rss = rss;
 		if (tsk->mm->hiwater_vm < tsk->mm->total_vm)
 			tsk->mm->hiwater_vm = tsk->mm->total_vm;
 	}

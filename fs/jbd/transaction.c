@@ -1031,7 +1031,12 @@ int journal_dirty_data(handle_t *handle, struct buffer_head *bh)
 			/* journal_clean_data_list() may have got there first */
 			if (jh->b_transaction != NULL) {
 				JBUFFER_TRACE(jh, "unfile from commit");
-				__journal_unfile_buffer(jh);
+				__journal_temp_unlink_buffer(jh);
+				/* It still points to the committing
+				 * transaction; move it to this one so
+				 * that the refile assert checks are
+				 * happy. */
+				jh->b_transaction = handle->h_transaction;
 			}
 			/* The buffer will be refiled below */
 
@@ -1045,7 +1050,8 @@ int journal_dirty_data(handle_t *handle, struct buffer_head *bh)
 		if (jh->b_jlist != BJ_SyncData && jh->b_jlist != BJ_Locked) {
 			JBUFFER_TRACE(jh, "not on correct data list: unfile");
 			J_ASSERT_JH(jh, jh->b_jlist != BJ_Shadow);
-			__journal_unfile_buffer(jh);
+			__journal_temp_unlink_buffer(jh);
+			jh->b_transaction = handle->h_transaction;
 			JBUFFER_TRACE(jh, "file as data");
 			__journal_file_buffer(jh, handle->h_transaction,
 						BJ_SyncData);
@@ -1225,7 +1231,6 @@ int journal_forget (handle_t *handle, struct buffer_head *bh)
 
 		JBUFFER_TRACE(jh, "belongs to current transaction: unfile");
 
-		__journal_unfile_buffer(jh);
 		drop_reserve = 1;
 
 		/* 
@@ -1241,8 +1246,10 @@ int journal_forget (handle_t *handle, struct buffer_head *bh)
 		 */
 
 		if (jh->b_cp_transaction) {
+			__journal_temp_unlink_buffer(jh);
 			__journal_file_buffer(jh, transaction, BJ_Forget);
 		} else {
+			__journal_unfile_buffer(jh);
 			journal_remove_journal_head(bh);
 			__brelse(bh);
 			if (!buffer_jbd(bh)) {
@@ -1468,7 +1475,7 @@ __blist_del_buffer(struct journal_head **list, struct journal_head *jh)
  *
  * Called under j_list_lock.  The journal may not be locked.
  */
-void __journal_unfile_buffer(struct journal_head *jh)
+void __journal_temp_unlink_buffer(struct journal_head *jh)
 {
 	struct journal_head **list = NULL;
 	transaction_t *transaction;
@@ -1485,7 +1492,7 @@ void __journal_unfile_buffer(struct journal_head *jh)
 
 	switch (jh->b_jlist) {
 	case BJ_None:
-		goto out;
+		return;
 	case BJ_SyncData:
 		list = &transaction->t_sync_datalist;
 		break;
@@ -1518,7 +1525,11 @@ void __journal_unfile_buffer(struct journal_head *jh)
 	jh->b_jlist = BJ_None;
 	if (test_clear_buffer_jbddirty(bh))
 		mark_buffer_dirty(bh);	/* Expose it to the VM */
-out:
+}
+
+void __journal_unfile_buffer(struct journal_head *jh)
+{
+	__journal_temp_unlink_buffer(jh);
 	jh->b_transaction = NULL;
 }
 
@@ -1774,10 +1785,10 @@ static int journal_unmap_buffer(journal_t *journal, struct buffer_head *bh)
 			JBUFFER_TRACE(jh, "checkpointed: add to BJ_Forget");
 			ret = __dispose_buffer(jh,
 					journal->j_running_transaction);
+			journal_put_journal_head(jh);
 			spin_unlock(&journal->j_list_lock);
 			jbd_unlock_bh_state(bh);
 			spin_unlock(&journal->j_state_lock);
-			journal_put_journal_head(jh);
 			return ret;
 		} else {
 			/* There is no currently-running transaction. So the
@@ -1788,10 +1799,10 @@ static int journal_unmap_buffer(journal_t *journal, struct buffer_head *bh)
 				JBUFFER_TRACE(jh, "give to committing trans");
 				ret = __dispose_buffer(jh,
 					journal->j_committing_transaction);
+				journal_put_journal_head(jh);
 				spin_unlock(&journal->j_list_lock);
 				jbd_unlock_bh_state(bh);
 				spin_unlock(&journal->j_state_lock);
-				journal_put_journal_head(jh);
 				return ret;
 			} else {
 				/* The orphan record's transaction has
@@ -1812,10 +1823,10 @@ static int journal_unmap_buffer(journal_t *journal, struct buffer_head *bh)
 					journal->j_running_transaction);
 			jh->b_next_transaction = NULL;
 		}
+		journal_put_journal_head(jh);
 		spin_unlock(&journal->j_list_lock);
 		jbd_unlock_bh_state(bh);
 		spin_unlock(&journal->j_state_lock);
-		journal_put_journal_head(jh);
 		return 0;
 	} else {
 		/* Good, the buffer belongs to the running transaction.
@@ -1928,7 +1939,7 @@ void __journal_file_buffer(struct journal_head *jh,
 	}
 
 	if (jh->b_transaction)
-		__journal_unfile_buffer(jh);
+		__journal_temp_unlink_buffer(jh);
 	jh->b_transaction = transaction;
 
 	switch (jlist) {
@@ -2011,7 +2022,7 @@ void __journal_refile_buffer(struct journal_head *jh)
 	 */
 
 	was_dirty = test_clear_buffer_jbddirty(bh);
-	__journal_unfile_buffer(jh);
+	__journal_temp_unlink_buffer(jh);
 	jh->b_transaction = jh->b_next_transaction;
 	jh->b_next_transaction = NULL;
 	__journal_file_buffer(jh, jh->b_transaction, BJ_Metadata);

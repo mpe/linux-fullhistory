@@ -204,19 +204,19 @@ static int set_rtc_mmss(unsigned long nowtime)
 {
 	int retval;
 
+	WARN_ON(irqs_disabled());
+
 	/* gets recalled with irq locally disabled */
-	spin_lock(&rtc_lock);
+	spin_lock_irq(&rtc_lock);
 	if (efi_enabled)
 		retval = efi_set_rtc_mmss(nowtime);
 	else
 		retval = mach_set_rtc_mmss(nowtime);
-	spin_unlock(&rtc_lock);
+	spin_unlock_irq(&rtc_lock);
 
 	return retval;
 }
 
-/* last time the cmos clock got updated */
-static long last_rtc_update;
 
 int timer_ack;
 
@@ -268,24 +268,6 @@ static inline void do_timer_interrupt(int irq, void *dev_id,
 
 	do_timer_interrupt_hook(regs);
 
-	/*
-	 * If we have an externally synchronized Linux clock, then update
-	 * CMOS clock accordingly every ~11 minutes. Set_rtc_mmss() has to be
-	 * called as close as possible to 500 ms before the new second starts.
-	 */
-	if ((time_status & STA_UNSYNC) == 0 &&
-	    xtime.tv_sec > last_rtc_update + 660 &&
-	    (xtime.tv_nsec / 1000)
-			>= USEC_AFTER - ((unsigned) TICK_SIZE) / 2 &&
-	    (xtime.tv_nsec / 1000)
-			<= USEC_BEFORE + ((unsigned) TICK_SIZE) / 2) {
-	        last_rtc_update = xtime.tv_sec;
-		if (efi_enabled) {
-		    if (efi_set_rtc_mmss(xtime.tv_sec))
-			last_rtc_update -= 600;
-		} else if (set_rtc_mmss(xtime.tv_sec))
-			last_rtc_update -= 600;
-	}
 
 	if (MCA_bus) {
 		/* The PS/2 uses level-triggered interrupts.  You can't
@@ -341,6 +323,55 @@ unsigned long get_cmos_time(void)
 	spin_unlock(&rtc_lock);
 
 	return retval;
+}
+static void sync_cmos_clock(unsigned long dummy);
+
+static struct timer_list sync_cmos_timer =
+                                      TIMER_INITIALIZER(sync_cmos_clock, 0, 0);
+
+static void sync_cmos_clock(unsigned long dummy)
+{
+	struct timeval now, next;
+	int fail = 1;
+
+	/*
+	 * If we have an externally synchronized Linux clock, then update
+	 * CMOS clock accordingly every ~11 minutes. Set_rtc_mmss() has to be
+	 * called as close as possible to 500 ms before the new second starts.
+	 * This code is run on a timer.  If the clock is set, that timer
+	 * may not expire at the correct time.  Thus, we adjust...
+	 */
+	if ((time_status & STA_UNSYNC) != 0)
+		/*
+		 * Not synced, exit, do not restart a timer (if one is
+		 * running, let it run out).
+		 */
+		return;
+
+	do_gettimeofday(&now);
+	if (now.tv_usec >= USEC_AFTER - ((unsigned) TICK_SIZE) / 2 &&
+	    now.tv_usec <= USEC_BEFORE + ((unsigned) TICK_SIZE) / 2)
+		fail = set_rtc_mmss(now.tv_sec);
+
+	next.tv_usec = USEC_AFTER - now.tv_usec;
+	if (next.tv_usec <= 0)
+		next.tv_usec += USEC_PER_SEC;
+
+	if (!fail)
+		next.tv_sec = 659;
+	else
+		next.tv_sec = 0;
+
+	if (next.tv_usec >= USEC_PER_SEC) {
+		next.tv_sec++;
+		next.tv_usec -= USEC_PER_SEC;
+	}
+	mod_timer(&sync_cmos_timer, jiffies + timeval_to_jiffies(&next));
+}
+
+void notify_arch_cmos_timer(void)
+{
+	mod_timer(&sync_cmos_timer, jiffies + 1);
 }
 
 static long clock_cmos_diff, sleep_start;

@@ -527,6 +527,8 @@ chrp_init(unsigned long r3, unsigned long r4, unsigned long r5,
 
 	ppc_md.init           = chrp_init2;
 
+	ppc_md.phys_mem_access_prot = pci_phys_mem_access_prot;
+
 	ppc_md.restart        = chrp_restart;
 	ppc_md.power_off      = chrp_power_off;
 	ppc_md.halt           = chrp_halt;

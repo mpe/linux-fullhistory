@@ -579,6 +579,16 @@ static int __devinit pci_xircom_init(struct pci_dev *dev)
 	return 0;
 }
 
+static int __devinit pci_netmos_init(struct pci_dev *dev)
+{
+	/* subdevice 0x00PS means <P> parallel, <S> serial */
+	unsigned int num_serial = dev->subsystem_device & 0xf;
+
+	if (num_serial == 0)
+		return -ENODEV;
+	return num_serial;
+}
+
 static int
 pci_default_setup(struct pci_dev *dev, struct pci_board *board,
 		  struct uart_port *port, int idx)
@@ -933,6 +943,17 @@ static struct pci_serial_quirk pci_serial_quirks[] = {
 		.subvendor	= PCI_ANY_ID,
 		.subdevice	= PCI_ANY_ID,
 		.init		= pci_xircom_init,
+		.setup		= pci_default_setup,
+	},
+	/*
+	 * Netmos cards
+	 */
+	{
+		.vendor		= PCI_VENDOR_ID_NETMOS,
+		.device		= PCI_ANY_ID,
+		.subvendor	= PCI_ANY_ID,
+		.subdevice	= PCI_ANY_ID,
+		.init		= pci_netmos_init,
 		.setup		= pci_default_setup,
 	},
 	/*

@@ -249,11 +249,6 @@ static int pccard_init(struct pcmcia_socket *sock)
 	return 0;
 }
 
-static int pccard_suspend(struct pcmcia_socket *sock)
-{
-	return -EINVAL;
-}
-
 static int pccard_get_status(struct pcmcia_socket *sock, u_int *value)
 {
 	unsigned int slot;
@@ -554,7 +549,6 @@ static int pccard_set_mem_map(struct pcmcia_socket *sock, struct pccard_mem_map 
 
 static struct pccard_operations vrc4171_pccard_operations = {
 	.init			= pccard_init,
-	.suspend		= pccard_suspend,
 	.get_status		= pccard_get_status,
 	.get_socket		= pccard_get_socket,
 	.set_socket		= pccard_set_socket,

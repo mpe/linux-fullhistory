@@ -80,11 +80,11 @@ static inline void tlb_finish_mmu(struct mmu_gather *mp, unsigned long start, un
 {
 	unsigned long freed = mp->freed;
 	struct mm_struct *mm = mp->mm;
-	unsigned long rss = mm->rss;
+	unsigned long rss = get_mm_counter(mm, rss);
 
 	if (rss < freed)
 		freed = rss;
-	mm->rss = rss - freed;
+	add_mm_counter(mm, rss, -freed);
 
 	tlb_flush_mmu(mp);
 

@@ -21,7 +21,6 @@
 #include <linux/threads.h>
 
 #include <asm/mmu_context.h>
-#include <asm/processor.h>
 
 /*
  * Very stupidly, we used to get new pgd's and pmd's, init their contents

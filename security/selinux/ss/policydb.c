@@ -110,7 +110,7 @@ static struct policydb_compat_info *policydb_lookup_compat(int version)
 /*
  * Initialize the role table.
  */
-int roles_init(struct policydb *p)
+static int roles_init(struct policydb *p)
 {
 	char *key = NULL;
 	int rc;
@@ -149,7 +149,7 @@ out_free_role:
 /*
  * Initialize a policy database structure.
  */
-int policydb_init(struct policydb *p)
+static int policydb_init(struct policydb *p)
 {
 	int i, rc;
 
@@ -321,7 +321,7 @@ static int (*index_f[SYM_NUM]) (void *key, void *datum, void *datap) =
  *
  * Caller must clean up upon failure.
  */
-int policydb_index_classes(struct policydb *p)
+static int policydb_index_classes(struct policydb *p)
 {
 	int rc;
 
@@ -378,7 +378,7 @@ static void symtab_hash_eval(struct symtab *s)
  *
  * Caller must clean up on failure.
  */
-int policydb_index_others(struct policydb *p)
+static int policydb_index_others(struct policydb *p)
 {
 	int i, rc = 0;
 
@@ -566,7 +566,7 @@ static int (*destroy_f[SYM_NUM]) (void *key, void *datum, void *datap) =
 	cat_destroy,
 };
 
-void ocontext_destroy(struct ocontext *c, int i)
+static void ocontext_destroy(struct ocontext *c, int i)
 {
 	context_destroy(&c->context[0]);
 	context_destroy(&c->context[1]);

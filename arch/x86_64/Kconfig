@@ -53,23 +53,6 @@ config EARLY_PRINTK
 	bool
 	default y
 
-config HPET_TIMER
-	bool
-	default y
-	help
-	  Use the IA-PC HPET (High Precision Event Timer) to manage
-	  time in preference to the PIT and RTC, if a HPET is
-	  present.  The HPET provides a stable time base on SMP
-	  systems, unlike the RTC, but it is more expensive to access,
-	  as it is off-chip.  You can find the HPET spec at
-	  <http://www.intel.com/labs/platcomp/hpet/hpetspec.htm>.
-
-	  If unsure, say Y.
-
-config HPET_EMULATE_RTC
-	bool "Provide RTC interrupt"
-	depends on HPET_TIMER && RTC=y
-
 config GENERIC_ISA_DMA
 	bool
 	default y
@@ -254,7 +237,7 @@ config PREEMPT_BKL
 config SCHED_SMT
 	bool "SMT (Hyperthreading) scheduler support"
 	depends on SMP
-	default off
+	default n
 	help
 	  SMT scheduler support improves the CPU scheduler's decision making
 	  when dealing with Intel Pentium 4 chips with HyperThreading at a
@@ -308,6 +291,21 @@ config NR_CPUS
 
 	  This is purely to save memory - each supported CPU requires
 	  memory in the static kernel configuration.
+
+config HPET_TIMER
+	bool
+	default y
+	help
+	  Use the IA-PC HPET (High Precision Event Timer) to manage
+	  time in preference to the PIT and RTC, if a HPET is
+	  present.  The HPET provides a stable time base on SMP
+	  systems, unlike the TSC, but it is more expensive to access,
+	  as it is off-chip.  You can find the HPET spec at
+	  <http://www.intel.com/labs/platcomp/hpet/hpetspec.htm>.
+
+config HPET_EMULATE_RTC
+	bool "Provide RTC interrupt"
+	depends on HPET_TIMER && RTC=y
 
 config GART_IOMMU
 	bool "IOMMU support"
@@ -416,6 +414,8 @@ config UNORDERED_IO
 	 work with this option, but it makes the drivers behave differently
 	 from i386. Requires that the driver writer used memory barriers
 	 properly.
+
+source "drivers/pci/pcie/Kconfig"
 
 source "drivers/pci/Kconfig"
 

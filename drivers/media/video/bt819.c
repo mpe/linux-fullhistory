@@ -236,7 +236,8 @@ bt819_init (struct i2c_client *client)
 	init[0x07 * 2 - 1] = timing->hactive & 0xff;
 	init[0x08 * 2 - 1] = timing->hscale >> 8;
 	init[0x09 * 2 - 1] = timing->hscale & 0xff;
-	init[0x19*2-1] = decoder->norm == 0 ? 115 : 93;	/* Chroma burst delay */
+	/* 0x15 in array is address 0x19 */
+	init[0x15 * 2 - 1] = (decoder->norm == 0) ? 115 : 93;	/* Chroma burst delay */
 	/* reset */
 	bt819_write(client, 0x1f, 0x00);
 	mdelay(1);

@@ -30,7 +30,3 @@ $(SYS_UTIL_DIR)/mk_thread: scripts_basic $(ARCH_SYMLINKS) $(GEN_HEADERS) FORCE
 	$(Q)$(MAKE) $(build)=$(SYS_UTIL_DIR) $@
 
 CLEAN_FILES += $(SYS_HEADERS)
-
-LIBC_DIR := /usr/lib64
-
-export LIBC_DIR
