@@ -3,6 +3,7 @@
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
  */
 
+#include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -20,6 +21,7 @@
 #include <linux/cache.h>
 #include <linux/jiffies.h>
 #include <linux/profile.h>
+#include <linux/bootmem.h>
 
 #include <asm/head.h>
 #include <asm/ptrace.h>
@@ -99,6 +101,16 @@ static volatile unsigned long callin_flag = 0;
 
 extern void inherit_locked_prom_mappings(int save_p);
 
+static inline void cpu_setup_percpu_base(unsigned long cpu_id)
+{
+	__asm__ __volatile__("mov	%0, %%g5\n\t"
+			     "stxa	%0, [%1] %2\n\t"
+			     "membar	#Sync"
+			     : /* no outputs */
+			     : "r" (__per_cpu_offset(cpu_id)),
+			       "r" (TSB_REG), "i" (ASI_IMMU));
+}
+
 void __init smp_callin(void)
 {
 	int cpuid = hard_smp_processor_id();
@@ -107,9 +119,7 @@ void __init smp_callin(void)
 
 	__flush_tlb_all();
 
-	__asm__ __volatile__("mov %0, %%g5\n\t"
-			     : /* no outputs */
-			     : "r" (__per_cpu_offset[cpuid]));
+	cpu_setup_percpu_base(cpuid);
 
 	smp_setup_percpu_timer();
 
@@ -1120,10 +1130,6 @@ void __devinit smp_prepare_boot_cpu(void)
 
 	current_thread_info()->cpu = hard_smp_processor_id();
 
-	__asm__ __volatile__("mov %0, %%g5\n\t"
-			     : /* no outputs */
-			     : "r" (__per_cpu_offset[smp_processor_id()]));
-
 	cpu_set(smp_processor_id(), cpu_online_map);
 	cpu_set(smp_processor_id(), phys_cpu_present_map);
 }
@@ -1184,3 +1190,43 @@ void smp_send_stop(void)
 {
 }
 
+unsigned long __per_cpu_base;
+unsigned long __per_cpu_shift;
+
+EXPORT_SYMBOL(__per_cpu_base);
+EXPORT_SYMBOL(__per_cpu_shift);
+
+void __init setup_per_cpu_areas(void)
+{
+	unsigned long goal, size, i;
+	char *ptr;
+	/* Created by linker magic */
+	extern char __per_cpu_start[], __per_cpu_end[];
+
+	/* Copy section for each CPU (we discard the original) */
+	goal = ALIGN(__per_cpu_end - __per_cpu_start, PAGE_SIZE);
+
+#ifdef CONFIG_MODULES
+	if (goal < PERCPU_ENOUGH_ROOM)
+		goal = PERCPU_ENOUGH_ROOM;
+#endif
+	__per_cpu_shift = 0;
+	for (size = 1UL; size < goal; size <<= 1UL)
+		__per_cpu_shift++;
+
+	ptr = alloc_bootmem_pages(size * NR_CPUS);
+
+	__per_cpu_base = ptr - __per_cpu_start;
+
+	for (i = 0; i < NR_CPUS; i++, ptr += size)
+		memcpy(ptr, __per_cpu_start, __per_cpu_end - __per_cpu_start);
+
+	/* Finally, load in the boot cpu's base value.
+	 * We abuse the IMMU TSB register for trap handler
+	 * entry and exit loading of %g5.  That is why it
+	 * has to be page aligned.
+	 */
+	BUG_ON((__per_cpu_shift < PAGE_SHIFT) ||
+	       (__per_cpu_base & ~PAGE_MASK));
+	cpu_setup_percpu_base(hard_smp_processor_id());
+}

@@ -657,6 +657,8 @@ setup_tba:	/* i0 = is_starfire */
 	mov	TSB_REG, %g1
 	stxa	%g0, [%g1] ASI_DMMU
 	membar	#Sync
+	stxa	%g0, [%g1] ASI_IMMU
+	membar	#Sync
 	mov	TLB_SFSR, %g1
 	sethi	%uhi(KERN_HIGHBITS), %g2
 	or	%g2, %ulo(KERN_HIGHBITS), %g2
