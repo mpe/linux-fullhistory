@@ -11,10 +11,10 @@ struct ip_nat_helper
 	/* Internal use */
 	struct list_head list;
 
-	/* Here's the protocol and dst we care about. */
-	u_int16_t protocol;
-	u_int16_t protocol_dst;
-
+	/* Mask of things we will help: vs. tuple from server */
+	struct ip_conntrack_tuple tuple;
+	struct ip_conntrack_tuple mask;
+	
 	/* Helper function: returns verdict */
 	unsigned int (*help)(struct ip_conntrack *ct,
 			     struct ip_nat_info *info,

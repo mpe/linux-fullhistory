@@ -199,38 +199,36 @@ static void ipq_destroy_queue(ipq_queue_t *q)
 
 static int ipq_mangle_ipv4(ipq_verdict_msg_t *v, ipq_queue_element_t *e)
 {
+	int diff;
 	struct iphdr *user_iph = (struct iphdr *)v->payload;
 
 	if (v->data_len < sizeof(*user_iph))
 		return 0;
-	if (e->skb->nh.iph->check != user_iph->check) {
-		int diff = v->data_len - e->skb->len;
-
-		if (diff < 0)
-			skb_trim(e->skb, v->data_len);
-		else if (diff > 0) {
-			if (v->data_len > 0xFFFF)
-				return -EINVAL;
-			if (diff > skb_tailroom(e->skb)) {
-				struct sk_buff *newskb;
-
-				newskb = skb_copy_expand(e->skb,
-				                         skb_headroom(e->skb),
-				                         diff,
-				                         GFP_ATOMIC);
-				if (newskb == NULL) {
-					printk(KERN_WARNING "ip_queue: OOM "
-					       "in mangle, dropping packet\n");
-					return -ENOMEM;
-				}
-				kfree_skb(e->skb);
-				e->skb = newskb;
+	diff = v->data_len - e->skb->len;
+	if (diff < 0)
+		skb_trim(e->skb, v->data_len);
+	else if (diff > 0) {
+		if (v->data_len > 0xFFFF)
+			return -EINVAL;
+		if (diff > skb_tailroom(e->skb)) {
+			struct sk_buff *newskb;
+			
+			newskb = skb_copy_expand(e->skb,
+			                         skb_headroom(e->skb),
+			                         diff,
+			                         GFP_ATOMIC);
+			if (newskb == NULL) {
+				printk(KERN_WARNING "ip_queue: OOM "
+				      "in mangle, dropping packet\n");
+				return -ENOMEM;
 			}
-			skb_put(e->skb, diff);
+			kfree_skb(e->skb);
+			e->skb = newskb;
 		}
-		memcpy(e->skb->data, v->payload, v->data_len);
-		e->skb->nfcache |= NFC_ALTERED;
+		skb_put(e->skb, diff);
 	}
+	memcpy(e->skb->data, v->payload, v->data_len);
+	e->skb->nfcache |= NFC_ALTERED;
 	return 0;
 }
 

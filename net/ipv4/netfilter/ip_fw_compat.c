@@ -70,8 +70,10 @@ confirm_connection(struct sk_buff *skb)
 	if (skb->nfct) {
 		struct ip_conntrack *ct
 			= (struct ip_conntrack *)skb->nfct->master;
+		/* ctinfo is the index of the nfct inside the conntrack */
+		enum ip_conntrack_info ctinfo = skb->nfct - ct->infos;
 
-		if (skb->nfct - ct->infos == IP_CT_NEW
+		if ((ctinfo == IP_CT_NEW || ctinfo == IP_CT_RELATED)
 		    && !(ct->status & IPS_CONFIRMED))
 			ip_conntrack_confirm(ct);
 	}

@@ -121,7 +121,7 @@ static int help(const struct iphdr *iph, size_t len,
 	u_int32_t array[6] = { 0 };
 	int dir = CTINFO2DIR(ctinfo);
 	unsigned int matchlen, matchoff;
-	struct ip_conntrack_tuple t;
+	struct ip_conntrack_tuple t, mask;
 	struct ip_ct_ftp *info = &ct->help.ct_ftp_info;
 
 	/* Until there's been traffic both ways, don't look in packets. */
@@ -221,22 +221,21 @@ static int help(const struct iphdr *iph, size_t len,
 			  | (array[2] << 8) | array[3]),
 		    { htons(array[4] << 8 | array[5]) },
 		    IPPROTO_TCP }});
-	ip_conntrack_expect_related(ct, &t);
+	mask = ((struct ip_conntrack_tuple)
+		{ { 0xFFFFFFFF, { 0 } },
+		  { 0xFFFFFFFF, { 0xFFFF }, 0xFFFF }});
+	/* Ignore failure; should only happen with NAT */
+	ip_conntrack_expect_related(ct, &t, &mask, NULL);
 	UNLOCK_BH(&ip_ftp_lock);
 
 	return NF_ACCEPT;
 }
 
-/* Returns TRUE if it wants to help this connection (tuple is the
-   tuple of REPLY packets from server). */
-static int ftp_will_help(const struct ip_conntrack_tuple *rtuple)
-{
-	return (rtuple->dst.protonum == IPPROTO_TCP
-		&& rtuple->src.u.tcp.port == __constant_htons(21));
-}
-
 static struct ip_conntrack_helper ftp = { { NULL, NULL },
-					  ftp_will_help,
+					  { { 0, { __constant_htons(21) } },
+					    { 0, { 0 }, IPPROTO_TCP } },
+					  { { 0, { 0xFFFF } },
+					    { 0, { 0 }, 0xFFFF } },
 					  help };
 
 static int __init init(void)
@@ -248,6 +247,9 @@ static void __exit fini(void)
 {
 	ip_conntrack_helper_unregister(&ftp);
 }
+
+EXPORT_SYMBOL(ip_ftp_lock);
+EXPORT_SYMBOL(ip_conntrack_ftp);
 
 module_init(init);
 module_exit(fini);

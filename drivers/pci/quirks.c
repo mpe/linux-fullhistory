@@ -9,7 +9,7 @@
  *
  *  The bridge optimization stuff has been removed. If you really
  *  have a silly BIOS which is unable to set your host bridge right,
- *  use the PowerTweak utility (see http://linux.powertweak.com/).
+ *  use the PowerTweak utility (see http://powertweak.sourceforge.net).
  */
 
 #include <linux/types.h>

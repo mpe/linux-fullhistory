@@ -1217,9 +1217,10 @@ S: Chapel Hill, North Carolina 27514-4818
 S: USA
 
 N: Dave Jones
+E: davej@suse.de
 E: dave@powertweak.com
 E: djones2@glam.ac.uk
-W: http://linux.powertweak.com
+W: http://powertweak.sourceforge.net
 D: Moved PCI bridge tuning to userspace (Powertweak).
 D: Centaur/IDT Winchip/Winchip 2 tweaks.
 D: AFFS fixes for 2.3.x

@@ -521,6 +521,7 @@ void nf_reinject(struct sk_buff *skb, struct nf_info *info,
 	case NF_QUEUE:
 		nf_queue(skb, elem, info->pf, info->hook, 
 			 info->indev, info->outdev, info->okfn);
+		break;
 
 	case NF_DROP:
 		kfree_skb(skb);

@@ -14,7 +14,7 @@ across nodes, and trying to house all the data structures that
 key components of the kernel need on memory on that node.
 
 Currently, all the numa support is to provide efficient handling
-of widely discontinuous physical memory, so architectures which 
+of widely discontiguous physical memory, so architectures which 
 are not NUMA but can have huge holes in the physical address space
 can use the same code. All this code is bracketed by CONFIG_DISCONTIGMEM.
 

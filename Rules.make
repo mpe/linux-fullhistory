@@ -32,8 +32,6 @@ unexport MX_OBJS
 unexport MIX_OBJS
 unexport SYMTAB_OBJS
 
-unexport MOD_LIST_NAME
-
 #
 # Get things started.
 #
@@ -132,37 +130,32 @@ ifneq "$(strip $(ALL_MOBJS))" ""
 PDWN=$(shell $(CONFIG_SHELL) $(TOPDIR)/scripts/pathdown.sh)
 endif
 
-ifdef MOD_SUB_DIRS
-$(patsubst %,_modsubdir_%,$(MOD_SUB_DIRS)) : dummy
+unexport MOD_DIRS
+MOD_DIRS := $(MOD_SUB_DIRS) $(MOD_IN_SUB_DIRS)
+ifneq "$(strip $(MOD_DIRS))" ""
+.PHONY: $(patsubst %,_modsubdir_%,$(MOD_DIRS))
+$(patsubst %,_modsubdir_%,$(MOD_DIRS)) : dummy
 	$(MAKE) -C $(patsubst _modsubdir_%,%,$@) modules
+
+.PHONY: $(patsubst %,_modinst_%,$(MOD_DIRS))
+$(patsubst %,_modinst_%,$(MOD_DIRS)) : dummy
+	$(MAKE) -C $(patsubst _modinst_%,%,$@) modules_install
 endif
 
-ifdef MOD_IN_SUB_DIRS
-$(patsubst %,_modinsubdir_%,$(MOD_IN_SUB_DIRS)) : dummy
-	$(MAKE) -C $(patsubst _modinsubdir_%,%,$@) modules
-endif
-
+.PHONY: modules
 modules: $(ALL_MOBJS) $(MIX_OBJS) $(MI_OBJS) dummy \
-	 $(patsubst %,_modsubdir_%,$(MOD_SUB_DIRS)) \
-	 $(patsubst %,_modinsubdir_%,$(MOD_IN_SUB_DIRS))
-ifneq "$(strip $(MOD_LIST_NAME))" ""
-	rm -f $$TOPDIR/modules/$(MOD_LIST_NAME)
-ifdef MOD_SUB_DIRS
-	for i in $(MOD_SUB_DIRS); do \
-	    echo `basename $$i`.o >> $$TOPDIR/modules/$(MOD_LIST_NAME); done
-endif
+	 $(patsubst %,_modsubdir_%,$(MOD_DIRS))
+
+.PHONY: _modinst__
+_modinst__: dummy
 ifneq "$(strip $(ALL_MOBJS))" ""
-	echo $(ALL_MOBJS) >> $$TOPDIR/modules/$(MOD_LIST_NAME)
+	mkdir -p $(MODLIB)/kernel/$(PDWN)
+	cp $(ALL_MOBJS) $(MODLIB)/kernel/$(PDWN)
 endif
-ifneq "$(strip $(MOD_TO_LIST))" ""
-	echo $(MOD_TO_LIST) >> $$TOPDIR/modules/$(MOD_LIST_NAME)
-endif
-endif
-ifneq "$(strip $(ALL_MOBJS))" ""
-	echo $(PDWN)
-	cd $$TOPDIR/modules; for i in $(ALL_MOBJS); do \
-	    ln -sf ../$(PDWN)/$$i $$i; done
-endif
+
+.PHONY: modules_install
+modules_install: _modinst__ \
+	 $(patsubst %,_modinst_%,$(MOD_DIRS))
 
 #
 # A rule to do nothing

@@ -35,6 +35,7 @@ OBJCOPY		= $(CROSS_COMPILE)objcopy
 OBJDUMP		= $(CROSS_COMPILE)objdump
 MAKEFILES	= $(TOPDIR)/.config
 GENKSYMS	= /sbin/genksyms
+DEPMOD		= /sbin/depmod
 MODFLAGS	= -DMODULE
 CFLAGS_KERNEL	=
 PERL		= perl
@@ -72,10 +73,13 @@ endif
 #export	INSTALL_PATH=/boot
 
 #
-# INSTALL_MOD_PATH specifies a prefix to MODLIB for module directory 
+# INSTALL_MOD_PATH specifies a prefix to MODLIB for module directory
 # relocations required by build roots.  This is not defined in the
 # makefile but the arguement can be passed to make if needed.
 #
+
+MODLIB	:= $(INSTALL_MOD_PATH)/lib/modules/$(KERNELRELEASE)
+export MODLIB
 
 #
 # standard CFLAGS
@@ -282,7 +286,7 @@ TAGS: dummy
 	find include -type d \( -name "asm-*" -o -name config \) -prune -o -name '*.h' -print | xargs etags -a
 	find $(SUBDIRS) init -name '*.c' | xargs etags -a
 
-# Exuberant ctags works better with -I 
+# Exuberant ctags works better with -I
 tags: dummy
 	CTAGSF=`ctags --version | grep -i exuberant >/dev/null && echo "-I __initdata,__initlocaldata,__exitdata,EXPORT_SYMBOL,EXPORT_SYMBOL_NOVERS"`; \
 	ctags $$CTAGSF `find include/asm-$(ARCH) -name '*.h'` && \
@@ -294,64 +298,49 @@ ifdef CONFIG_MODVERSIONS
 MODFLAGS += -DMODVERSIONS -include $(HPATH)/linux/modversions.h
 endif
 
+.PHONY: modules
 modules: $(patsubst %, _mod_%, $(SUBDIRS))
 
-modules/MARKER:
-	mkdir -p modules
-	touch modules/MARKER
-
-$(patsubst %, _mod_%, $(SUBDIRS)) : include/linux/version.h include/config/MARKER modules/MARKER
+.PHONY: $(patsubst %, _mod_%, $(SUBDIRS))
+$(patsubst %, _mod_%, $(SUBDIRS)) : include/linux/version.h include/config/MARKER
 	$(MAKE) -C $(patsubst _mod_%, %, $@) CFLAGS="$(CFLAGS) $(MODFLAGS)" MAKING_MODULES=1 modules
 
-modules_install:
-	@( \
-	MODLIB=$(INSTALL_MOD_PATH)/lib/modules/$(KERNELRELEASE); \
-	mkdir -p $$MODLIB; \
-	rm -f $$MODLIB/build; \
-	ln -s $$TOPDIR $$MODLIB/build; \
-	cd modules; \
-	MODULES=""; \
-	inst_mod() { These="`cat $$1`"; MODULES="$$MODULES $$These"; \
-		mkdir -p $$MODLIB/$$2; cp $$These $$MODLIB/$$2; \
-		echo Installing modules under $$MODLIB/$$2; \
-	}; \
-	\
-	if [ -f BLOCK_MODULES ]; then inst_mod BLOCK_MODULES block; fi; \
-	if [ -f NET_MODULES   ]; then inst_mod NET_MODULES   net;   fi; \
-	if [ -f IPV4_MODULES  ]; then inst_mod IPV4_MODULES  ipv4;  fi; \
-	if [ -f IPV6_MODULES  ]; then inst_mod IPV6_MODULES  ipv6;  fi; \
-	if [ -f ATM_MODULES   ]; then inst_mod ATM_MODULES   atm;   fi; \
-	if [ -f IDE_MODULES   ]; then inst_mod IDE_MODULES   ide;   fi; \
-	if [ -f SCSI_MODULES  ]; then inst_mod SCSI_MODULES  scsi;  fi; \
-	if [ -f FS_MODULES    ]; then inst_mod FS_MODULES    fs;    fi; \
-	if [ -f NLS_MODULES   ]; then inst_mod NLS_MODULES   fs;    fi; \
-	if [ -f CDROM_MODULES ]; then inst_mod CDROM_MODULES cdrom; fi; \
-	if [ -f HAM_MODULES   ]; then inst_mod HAM_MODULES   net;   fi; \
-	if [ -f SOUND_MODULES ]; then inst_mod SOUND_MODULES sound; fi; \
-	if [ -f VIDEO_MODULES ]; then inst_mod VIDEO_MODULES video; fi; \
-	if [ -f FC4_MODULES   ]; then inst_mod FC4_MODULES   fc4;   fi; \
-	if [ -f IRDA_MODULES  ]; then inst_mod IRDA_MODULES  net;   fi; \
-	if [ -f SK98LIN_MODULES ]; then inst_mod SK98LIN_MODULES  net;   fi; \
-	if [ -f SKFP_MODULES ]; then inst_mod SKFP_MODULES   net;   fi; \
-	if [ -f USB_MODULES   ]; then inst_mod USB_MODULES   usb;   fi; \
-	if [ -f USB_STORAGE_MODULES ]; then inst_mod USB_STORAGE_MODULES   usb;   fi; \
-	if [ -f USB_SERIAL_MODULES   ]; then inst_mod USB_SERIAL_MODULES   usb;   fi; \
-	if [ -f IEEE1394_MODULES ]; then inst_mod IEEE1394_MODULES ieee1394; fi; \
-	if [ -f MTD_MODULES ]; then inst_mod MTD_MODULES     mtd;   fi; \
-	if [ -f PCMCIA_MODULES ]; then inst_mod PCMCIA_MODULES pcmcia; fi; \
-	if [ -f PCMCIA_NET_MODULES ]; then inst_mod PCMCIA_NET_MODULES pcmcia; fi; \
-	if [ -f PCMCIA_CHAR_MODULES ]; then inst_mod PCMCIA_CHAR_MODULES pcmcia; fi; \
-	if [ -f PCMCIA_SCSI_MODULES ]; then inst_mod PCMCIA_SCSI_MODULES pcmcia; fi; \
-	\
-	ls -1 -U *.o | sort > $$MODLIB/.allmods; \
-	if [ -f $$MODLIB/net/3c59x.o ]; then \
-		mkdir -p $$MODLIB/pcmcia; \
-		ln -nfs ../net/3c59x.o $$MODLIB/pcmcia/3c575_cb.o; \
-		MODULES="$$MODULES 3c575_cb.o"; fi; \
-	echo $$MODULES | tr ' ' '\n' | sort | comm -23 $$MODLIB/.allmods - > $$MODLIB/.misc; \
-	if [ -s $$MODLIB/.misc ]; then inst_mod $$MODLIB/.misc misc; fi; \
-	rm -f $$MODLIB/.misc $$MODLIB/.allmods; \
-	)
+.PHONY: modules_install
+modules_install: _modinst_ $(patsubst %, _modinst_%, $(SUBDIRS)) _modinst_post
+
+.PHONY: _modinst_
+_modinst_:
+	@rm -rf $(MODLIB)/kernel
+	@rm -f $(MODLIB)/build
+	@mkdir -p $(MODLIB)/kernel
+	@ln -s $(TOPDIR) $(MODLIB)/build
+
+# If System.map exists, run depmod.  This deliberately does not have a
+# dependency on System.map since that would run the dependency tree on
+# vmlinux.  This depmod is only for convenience to give the initial
+# boot a modules.dep even before / is mounted read-write.  However the
+# boot script depmod is the master version.
+ifeq "$(strip $(INSTALL_MOD_PATH))" ""
+depmod_opts	:=
+else
+depmod_opts	:= -b $(INSTALL_MOD_PATH) -r
+endif
+.PHONY: _modinst_post
+_modinst_post: _modinst_post_pcmcia
+	if [ -r System.map ]; then $(DEPMOD) -ae -F System.map $(depmod_opts) $(KERNELRELEASE); fi
+
+# Backwards compatibilty symlinks for people still using old versions
+# of pcmcia-cs with hard coded pathnames on insmod.  Remove
+# _modinst_post_pcmcia for kernel 2.4.1.
+.PHONY: _modinst_post_pcmcia
+_modinst_post_pcmcia:
+	cd $(MODLIB); \
+	mkdir -p pcmcia; \
+	find kernel -path '*/pcmcia/*' -name '*.o' | xargs -i -r ln -sf ../{} pcmcia
+
+.PHONY: $(patsubst %, _modinst_%, $(SUBDIRS))
+$(patsubst %, _modinst_%, $(SUBDIRS)) :
+	$(MAKE) -C $(patsubst _modinst_%, %, $@) modules_install
 
 # modules disabled....
 

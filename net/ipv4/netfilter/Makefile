@@ -30,7 +30,7 @@ else
 endif
 
 ifeq ($(CONFIG_IP_NF_FTP),y)
-O_OBJS += ip_conntrack_ftp.o
+OX_OBJS += ip_conntrack_ftp.o
 else
   ifeq ($(CONFIG_IP_NF_FTP),m)
   MX_OBJS += ip_conntrack_ftp.o
@@ -38,7 +38,7 @@ else
 endif
 
 ifeq ($(CONFIG_IP_NF_IPTABLES),y)
-O_OBJS += ip_tables.o
+OX_OBJS += ip_tables.o
 else
   ifeq ($(CONFIG_IP_NF_IPTABLES),m)
   MX_OBJS += ip_tables.o

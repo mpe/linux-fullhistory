@@ -839,6 +839,7 @@ repeat:
 	out:
 		write_unlock(&hash_table_lock);
 		spin_unlock(&lru_list_lock);
+		touch_buffer(bh);
 		return bh;
 	}
 

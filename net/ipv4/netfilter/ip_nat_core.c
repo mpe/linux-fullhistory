@@ -359,10 +359,14 @@ find_best_ips_proto_fast(struct ip_conntrack_tuple *tuple,
 		if (HOOK2MANIP(hooknum) == IP_NAT_MANIP_SRC)
 			tuple->src.ip = mr->range[0].min_ip;
 		else {
-			tuple->dst.ip = mr->range[0].min_ip;
-			if (hooknum == NF_IP_LOCAL_OUT
-			    && !do_extra_mangle(tuple->dst.ip, &tuple->src.ip))
+			/* Only do extra mangle when required (breaks
+                           socket binding) */
+			if (tuple->dst.ip != mr->range[0].min_ip
+			    && hooknum == NF_IP_LOCAL_OUT
+			    && !do_extra_mangle(mr->range[0].min_ip,
+						&tuple->src.ip))
 				return NULL;
+			tuple->dst.ip = mr->range[0].min_ip;
 		}
 	}
 
@@ -456,11 +460,9 @@ get_unique_tuple(struct ip_conntrack_tuple *tuple,
 
 static inline int
 helper_cmp(const struct ip_nat_helper *helper,
-	   u_int16_t protocol,
-	   u_int16_t protocol_dst)
+	   const struct ip_conntrack_tuple *tuple)
 {
-	return (protocol == helper->protocol
-		&& protocol_dst == helper->protocol_dst);
+	return ip_ct_tuple_mask_cmp(tuple, &helper->tuple, &helper->mask);
 }
 
 /* Where to manip the reply packets (will be reverse manip). */
@@ -595,8 +597,7 @@ ip_nat_setup_info(struct ip_conntrack *conntrack,
 
 	/* If there's a helper, assign it; based on new tuple. */
 	info->helper = LIST_FIND(&helpers, helper_cmp, struct ip_nat_helper *,
-				 new_tuple.dst.protonum,
-				 new_tuple.dst.u.all);
+				 &reply);
 
 	/* It's done. */
 	info->initialized |= (1 << HOOK2MANIP(hooknum));
@@ -835,8 +836,7 @@ int ip_nat_helper_register(struct ip_nat_helper *me)
 	int ret = 0;
 
 	WRITE_LOCK(&ip_nat_lock);
-	if (LIST_FIND(&helpers, helper_cmp, struct ip_nat_helper *,
-		      me->protocol, me->protocol_dst))
+	if (LIST_FIND(&helpers, helper_cmp, struct ip_nat_helper *,&me->tuple))
 		ret = -EBUSY;
 	else {
 		list_prepend(&helpers, me);

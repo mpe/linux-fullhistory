@@ -4649,9 +4649,11 @@ CONFIG_PACKET_MMAP
 Kernel/User network link driver
 CONFIG_NETLINK
   This driver allows for two-way communication between the kernel and
-  user processes; the user processes communicate with the kernel by
-  reading from and writing to character special files in the /dev
-  directory having major mode 36.
+  user processes. It does so by creating a new socket family, PF_NETLINK.
+  Over this socket, the kernel can send and receive datagrams carrying
+  information. It is documented on many systems in netlink(7), a HOWTO is
+  provided as well, for example on
+  http://snafu.freedom.org/linux2.2/docs/netlink-HOWTO.html
 
   So far, the kernel uses this feature to publish some network related
   information if you say Y to "Routing messages", below. You also need
@@ -4665,16 +4667,19 @@ CONFIG_NETLINK
 
 Routing messages
 CONFIG_RTNETLINK
-  If you say Y here and create a character special file /dev/route
-  with major number 36 and minor number 0 using mknod ("man mknod"),
-  you (or some user space utility) can read some network related
-  routing information from that file. Everything you write to that
-  file will be discarded.
+  If you say Y here, userspace programs can receive some network
+  related routing information over the netlink. 'rtmon', supplied
+  with the iproute2 package (ftp://ftp.inr.ac.ru), can read and
+  interpret this data.  Information sent to the kernel over this link
+  is ignored.
 
 Netlink device emulation
 CONFIG_NETLINK_DEV
+  This option will be removed soon. Any programs that want to use
+  character special nodes like /dev/tap0 or /dev/route (all with major
+  number 36) need this option, and need to be rewritten soon to use
+  the real netlink socket.
   This is a backward compatibility option, choose Y for now.
-  This option will be removed soon.
 
 Asynchronous Transfer Mode (ATM)
 CONFIG_ATM

@@ -90,7 +90,8 @@ udp_manip_pkt(struct iphdr *iph, size_t len,
 		oldip = iph->daddr;
 		portptr = &hdr->dest;
 	}
-	hdr->check = ip_nat_cheat_check(~oldip, manip->ip,
+	if (hdr->check) /* 0 is a special case meaning no checksum */
+		hdr->check = ip_nat_cheat_check(~oldip, manip->ip,
 					ip_nat_cheat_check(*portptr ^ 0xFFFF,
 							   manip->u.udp.port,
 							   hdr->check));

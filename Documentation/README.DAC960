@@ -1,47 +1,52 @@
-	   Mylex DAC960/DAC1100 PCI RAID Controller Driver for Linux
+   Linux Driver for Mylex DAC960/AcceleRAID/eXtremeRAID PCI RAID Controllers
 
-			Version 2.2.4 for Linux 2.2.11
-			Version 2.0.4 for Linux 2.0.37
+			Version 2.2.7 for Linux 2.2.16
+			Version 2.4.7 for Linux 2.4.0
 
 			      PRODUCTION RELEASE
 
-				23 August 1999
+				 1 August 2000
 
 			       Leonard N. Zubkoff
 			       Dandelion Digital
 			       lnz@dandelion.com
 
-	 Copyright 1998-1999 by Leonard N. Zubkoff <lnz@dandelion.com>
+	 Copyright 1998-2000 by Leonard N. Zubkoff <lnz@dandelion.com>
 
 
 				 INTRODUCTION
 
 Mylex, Inc. designs and manufactures a variety of high performance PCI RAID
 controllers.  Mylex Corporation is located at 34551 Ardenwood Blvd., Fremont,
-California 94555, USA and can be reached at 510/796-6100 or on the World Wide
-Web at http://www.mylex.com.  Mylex RAID Technical Support can be reached by
-electronic mail at support@mylex.com (for eXtremeRAID 1100 and older DAC960
-models) or techsup@mylex.com (for AcceleRAID models), by voice at 510/608-2400,
-or by FAX at 510/745-7715.  Contact information for offices in Europe and Japan
-is available on the Web site.
+California 94555, USA and can be reached at 510.796.6100 or on the World Wide
+Web at http://www.mylex.com.  Mylex Technical Support can be reached by
+electronic mail at support@mylex.com, by voice at 510.608.2400, or by FAX at
+510.745.7715.  Contact information for offices in Europe and Japan is available
+on their Web site.
 
 The latest information on Linux support for DAC960 PCI RAID Controllers, as
 well as the most recent release of this driver, will always be available from
 my Linux Home Page at URL "http://www.dandelion.com/Linux/".  The Linux DAC960
-driver supports all current DAC960 PCI family controllers including the
-AcceleRAID models, as well as the eXtremeRAID 1100; see below for a complete
-list.  For simplicity, in most places this documentation refers to DAC960
-generically rather than explicitly listing all the models.
+driver supports all current Mylex PCI RAID controllers including the new
+eXtremeRAID 2000/3000 and AcceleRAID 352/170 models which have an entirely new
+firmware interface from the older eXtremeRAID 1100, AcceleRAID 150/200/250, and
+DAC960PJ/PG/PU/PD/PL.  See below for a complete controller list as well as
+minimum firmware version requirements.  For simplicity, in most places this
+documentation refers to DAC960 generically rather than explicitly listing all
+the supported models.
 
-Bug reports should be sent via electronic mail to "lnz@dandelion.com".  Please
-include with the bug report the complete configuration messages reported by the
-driver at startup, along with any subsequent system messages relevant to the
-controller's operation, and a detailed description of your system's hardware
-configuration.
+Driver bug reports should be sent via electronic mail to "lnz@dandelion.com".
+Please include with the bug report the complete configuration messages reported
+by the driver at startup, along with any subsequent system messages relevant to
+the controller's operation, and a detailed description of your system's
+hardware configuration.  Driver bugs are actually quite rare; if you encounter
+problems with disks being marked offline, for example, please contact Mylex
+Technical Support as the problem is related to the hardware configuration
+rather than the Linux driver.
 
-Please consult the DAC960 RAID controller documentation for detailed
-information regarding installation and configuration of the controllers.  This
-document primarily provides information specific to the Linux DAC960 support.
+Please consult the RAID controller documentation for detailed information
+regarding installation and configuration of the controllers.  This document
+primarily provides information specific to the Linux support.
 
 
 				DRIVER FEATURES
@@ -60,16 +65,18 @@ of the controller and adding new disk drives, most everything can be handled
 from Linux while the system is operational.
 
 The DAC960 driver is architected to support up to 8 controllers per system.
-Each DAC960 controller can support up to 15 disk drives per channel, for a
-maximum of 45 drives on a three channel controller.  The drives installed on a
-controller are divided into one or more "Drive Groups", and then each Drive
-Group is subdivided further into 1 to 32 "Logical Drives".  Each Logical Drive
-has a specific RAID Level and caching policy associated with it, and it appears
-to Linux as a single block device.  Logical Drives are further subdivided into
-up to 7 partitions through the normal Linux and PC disk partitioning schemes.
-Logical Drives are also known as "System Drives", and Drive Groups are also
-called "Packs".  Both terms are in use in the Mylex documentation; I have
-chosen to standardize on the more generic "Logical Drive" and "Drive Group".
+Each DAC960 parallel SCSI controller can support up to 15 disk drives per
+channel, for a maximum of 60 drives on a four channel controller; the fibre
+channel eXtremeRAID 3000 controller supports up to 125 disk drives per loop for
+a total of 250 drives.  The drives installed on a controller are divided into
+one or more "Drive Groups", and then each Drive Group is subdivided further
+into 1 to 32 "Logical Drives".  Each Logical Drive has a specific RAID Level
+and caching policy associated with it, and it appears to Linux as a single
+block device.  Logical Drives are further subdivided into up to 7 partitions
+through the normal Linux and PC disk partitioning schemes.  Logical Drives are
+also known as "System Drives", and Drive Groups are also called "Packs".  Both
+terms are in use in the Mylex documentation; I have chosen to standardize on
+the more generic "Logical Drive" and "Drive Group".
 
 DAC960 RAID disk devices are named in the style of the Device File System
 (DEVFS).  The device corresponding to Logical Drive D on Controller C is
@@ -82,17 +89,41 @@ controller.  The 8 bits of minor number are divided into 5 bits for the Logical
 Drive and 3 bits for the partition.
 
 
-		 SUPPORTED DAC960/DAC1100 PCI RAID CONTROLLERS
+	  SUPPORTED DAC960/AcceleRAID/eXtremeRAID PCI RAID CONTROLLERS
 
-The following list comprises the supported DAC960 and DAC1100 PCI RAID
-Controllers as of the date of this document.  It is recommended that anyone
-purchasing a Mylex PCI RAID Controller not in the following table contact the
-author beforehand to verify that it is or will be supported.
+The following list comprises the supported DAC960, AcceleRAID, and eXtremeRAID
+PCI RAID Controllers as of the date of this document.  It is recommended that
+anyone purchasing a Mylex PCI RAID Controller not in the following table
+contact the author beforehand to verify that it is or will be supported.
+
+eXtremeRAID 3000
+	    1 Wide Ultra-2/LVD SCSI channel
+	    2 External Fibre FC-AL channels
+	    233MHz StrongARM SA 110 Processor
+	    64 Bit 33MHz PCI (backward compatible with 32 Bit PCI slots)
+	    32MB/64MB ECC SDRAM Memory
+
+eXtremeRAID 2000
+	    4 Wide Ultra-160 LVD SCSI channels
+	    233MHz StrongARM SA 110 Processor
+	    64 Bit 33MHz PCI (backward compatible with 32 Bit PCI slots)
+	    32MB/64MB ECC SDRAM Memory
+
+AcceleRAID 352
+	    2 Wide Ultra-160 LVD SCSI channels
+	    100MHz Intel i960RN RISC Processor
+	    64 Bit 33MHz PCI (backward compatible with 32 Bit PCI slots)
+	    32MB/64MB ECC SDRAM Memory
+
+AcceleRAID 170
+	    1 Wide Ultra-160 LVD SCSI channel
+	    100MHz Intel i960RM RISC Processor
+	    16MB/32MB/64MB ECC SDRAM Memory
 
 eXtremeRAID 1100 (DAC1164P)
 	    3 Wide Ultra-2/LVD SCSI channels
 	    233MHz StrongARM SA 110 Processor
-	    64 Bit PCI (backward compatible with 32 Bit PCI slots)
+	    64 Bit 33MHz PCI (backward compatible with 32 Bit PCI slots)
 	    16MB/32MB/64MB Parity SDRAM Memory with Battery Backup
 
 AcceleRAID 250 (DAC960PTL1)
@@ -133,6 +164,9 @@ DAC960PL    1/2/3 Wide Fast SCSI-2 Channels
 	    Intel i960 RISC Processor
 	    2MB/4MB/8MB/16MB/32MB DRAM Memory
 
+For the eXtremeRAID 2000/3000 and AcceleRAID 352/170, firmware version 6.00-01
+or above is required.
+
 For the eXtremeRAID 1100, firmware version 5.06-0-52 or above is required.
 
 For the AcceleRAID 250, 200, and 150, firmware version 4.06-0-57 or above is
@@ -163,13 +197,13 @@ ftp://ftp.mylex.com/pub/dac960/diskcomp.html.
 
 			      DRIVER INSTALLATION
 
-This distribution was prepared for Linux kernel version 2.2.11 or 2.0.37.
+This distribution was prepared for Linux kernel version 2.2.16 or 2.4.0.
 
 To install the DAC960 RAID driver, you may use the following commands,
 replacing "/usr/src" with wherever you keep your Linux kernel source tree:
 
   cd /usr/src
-  tar -xvzf DAC960-2.2.4.tar.gz (or DAC960-2.0.4.tar.gz)
+  tar -xvzf DAC960-2.2.7.tar.gz (or DAC960-2.4.7.tar.gz)
   mv README.DAC960 linux/Documentation
   mv DAC960.[ch] linux/drivers/block
   patch -p0 < DAC960.patch
@@ -201,13 +235,13 @@ system, the controller must first be configured to provide one or more logical
 drives using the BIOS Configuration Utility or DACCF.  Please note that since
 there are only at most 6 usable partitions on each logical drive, systems
 requiring more partitions should subdivide a drive group into multiple logical
-drives, each of which can have up to 6 partitions.  Also, note that with large
-disk arrays it is advisable to enable the 8GB BIOS Geometry (255/63) rather
-than accepting the default 2GB BIOS Geometry (128/32); failing to so do will
-cause the logical drive geometry to have more than 65535 cylinders which will
-make it impossible for FDISK to be used properly.  The 8GB BIOS Geometry can be
-enabled by configuring the DAC960 BIOS, which is accessible via Alt-M during
-the BIOS initialization sequence.
+drives, each of which can have up to 6 usable partitions.  Also, note that with
+large disk arrays it is advisable to enable the 8GB BIOS Geometry (255/63)
+rather than accepting the default 2GB BIOS Geometry (128/32); failing to so do
+will cause the logical drive geometry to have more than 65535 cylinders which
+will make it impossible for FDISK to be used properly.  The 8GB BIOS Geometry
+can be enabled by configuring the DAC960 BIOS, which is accessible via Alt-M
+during the BIOS initialization sequence.
 
 For maximum performance and the most efficient E2FSCK performance, it is
 recommended that EXT2 file systems be built with a 4KB block size and 16 block

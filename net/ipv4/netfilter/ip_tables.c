@@ -1748,5 +1748,11 @@ static void __exit fini(void)
 #endif
 }
 
+EXPORT_SYMBOL(ipt_register_table);
+EXPORT_SYMBOL(ipt_unregister_table);
+EXPORT_SYMBOL(ipt_register_match);
+EXPORT_SYMBOL(ipt_unregister_match);
+EXPORT_SYMBOL(ipt_do_table);
+
 module_init(init);
 module_exit(fini);

@@ -394,7 +394,7 @@ static inline int unreplied(const struct ip_conntrack_tuple_hash *i)
 {
 	/* Unconfirmed connections either really fresh or transitory
            anyway */
-	if (!(i->ctrack->status & IPS_SEEN_REPLY)
+	if (!(i->ctrack->status & IPS_ASSURED)
 	    && (i->ctrack->status & IPS_CONFIRMED))
 		return 1;
 	return 0;
@@ -426,17 +426,14 @@ static int early_drop(struct list_head *chain)
 static inline int helper_cmp(const struct ip_conntrack_helper *i,
 			     const struct ip_conntrack_tuple *rtuple)
 {
-	return i->will_help(rtuple);
+	return ip_ct_tuple_mask_cmp(rtuple, &i->tuple, &i->mask);
 }
 
-/* Compare all but src per-proto part. */
-static int expect_cmp(const struct ip_conntrack_expect *i,
-		      const struct ip_conntrack_tuple *tuple)
+/* Compare parts depending on mask. */
+static inline int expect_cmp(const struct ip_conntrack_expect *i,
+			     const struct ip_conntrack_tuple *tuple)
 {
-	return (tuple->src.ip == i->tuple.src.ip
-		&& tuple->dst.ip == i->tuple.dst.ip
-		&& tuple->dst.u.all == i->tuple.dst.u.all
-		&& tuple->dst.protonum == i->tuple.dst.protonum);
+	return ip_ct_tuple_mask_cmp(tuple, &i->tuple, &i->mask);
 }
 
 /* Allocate a new conntrack; we set everything up, then grab write
@@ -542,6 +539,8 @@ init_conntrack(const struct ip_conntrack_tuple *tuple,
 
 	/* Update skb to refer to this connection */
 	skb->nfct = &conntrack->infos[ctinfo];
+	if (expected && expected->expectfn)
+		expected->expectfn(conntrack);
 
 	return 1;
 }
@@ -722,26 +721,63 @@ int invert_tuplepr(struct ip_conntrack_tuple *inverse,
 	return invert_tuple(inverse, orig, find_proto(orig->dst.protonum));
 }
 
+static void unexpect_related(struct ip_conntrack *related_to)
+{
+	MUST_BE_WRITE_LOCKED(&ip_conntrack_lock);
+	list_del(&related_to->expected.list);
+	related_to->expected.expectant = NULL;
+}
+
+/* Would two expected things clash? */
+static inline int expect_clash(const struct ip_conntrack_expect *i,
+			       const struct ip_conntrack_expect *new)
+{
+	/* Part covered by intersection of masks must be unequal,
+           otherwise they clash */
+	struct ip_conntrack_tuple intersect_mask
+		= { { i->mask.src.ip & new->mask.src.ip,
+		      { i->mask.src.u.all & new->mask.src.u.all } },
+		    { i->mask.dst.ip & new->mask.dst.ip,
+		      { i->mask.dst.u.all & new->mask.dst.u.all },
+		      i->mask.dst.protonum & new->mask.dst.protonum } };
+
+	return ip_ct_tuple_mask_cmp(&i->tuple, &new->tuple, &intersect_mask);
+}
+
 /* Add a related connection. */
 int ip_conntrack_expect_related(struct ip_conntrack *related_to,
-				const struct ip_conntrack_tuple *tuple)
+				const struct ip_conntrack_tuple *tuple,
+				const struct ip_conntrack_tuple *mask,
+				int (*expectfn)(struct ip_conntrack *))
 {
 	WRITE_LOCK(&ip_conntrack_lock);
-	related_to->expected.tuple = *tuple;
+	if (related_to->expected.expectant)
+		unexpect_related(related_to);
 
-	if (!related_to->expected.expectant) {
-		list_prepend(&expect_list, &related_to->expected);
-		related_to->expected.expectant = related_to;
-	} else {
-		IP_NF_ASSERT(list_inlist(&expect_list, &related_to->expected));
-		IP_NF_ASSERT(related_to->expected.expectant
-				    == related_to);
+	related_to->expected.tuple = *tuple;
+	related_to->expected.mask = *mask;
+	related_to->expected.expectfn = expectfn;
+
+	if (LIST_FIND(&expect_list, expect_clash,
+		      struct ip_conntrack_expect *, &related_to->expected)) {
+		WRITE_UNLOCK(&ip_conntrack_lock);
+		return -EBUSY;
 	}
+
+	list_prepend(&expect_list, &related_to->expected);
+	related_to->expected.expectant = related_to;
 	WRITE_UNLOCK(&ip_conntrack_lock);
 
 	return 0;
 }
 
+void ip_conntrack_unexpect_related(struct ip_conntrack *related_to)
+{
+	WRITE_LOCK(&ip_conntrack_lock);
+	unexpect_related(related_to);
+	WRITE_UNLOCK(&ip_conntrack_lock);
+}
+	
 /* Alter reply tuple (maybe alter helper).  If it's already taken,
    return 0 and don't do alteration. */
 int ip_conntrack_alter_reply(struct ip_conntrack *conntrack,

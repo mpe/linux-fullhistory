@@ -172,7 +172,8 @@ do_redirect(struct sk_buff *skb,
 		struct udphdr *udph = (struct udphdr *)((u_int32_t *)iph
 							+ iph->ihl);
 
-		udph->check = cheat_check(~iph->daddr, newdst,
+		if (udph->check) /* 0 is a special case meaning no checksum */
+			udph->check = cheat_check(~iph->daddr, newdst,
 					  cheat_check(udph->dest ^ 0xFFFF,
 						      redirpt,
 						      udph->check));

@@ -9,7 +9,8 @@
   "non-manipulatable" lines, for the benefit of the NAT code.
 */
 
-/* The protocol-specific manipulable parts of the tuple. */
+/* The protocol-specific manipulable parts of the tuple: always in
+   network order! */
 union ip_conntrack_manip_proto
 {
 	/* Add other protocols here. */
@@ -108,6 +109,18 @@ extern inline int ip_ct_tuple_equal(const struct ip_conntrack_tuple *t1,
 				    const struct ip_conntrack_tuple *t2)
 {
 	return ip_ct_tuple_src_equal(t1, t2) && ip_ct_tuple_dst_equal(t1, t2);
+}
+
+extern inline int ip_ct_tuple_mask_cmp(const struct ip_conntrack_tuple *t,
+				       const struct ip_conntrack_tuple *tuple,
+				       const struct ip_conntrack_tuple *mask)
+{
+	return !(((t->src.ip ^ tuple->src.ip) & mask->src.ip)
+		 || ((t->dst.ip ^ tuple->dst.ip) & mask->dst.ip)
+		 || ((t->src.u.all ^ tuple->src.u.all) & mask->src.u.all)
+		 || ((t->dst.u.all ^ tuple->dst.u.all) & mask->dst.u.all)
+		 || ((t->dst.protonum ^ tuple->dst.protonum)
+		     & mask->dst.protonum));
 }
 
 /* Connections have two entries in the hash table: one for each way */

@@ -57,8 +57,8 @@ IA-64 SPECIFICS
       table and only if that fails fall back on walking the page table
       tree.
 	  
-    o Discontinuous large memory support; memory above 4GB will be
-      discontinuous since the 4GB-64MB is reserved for firmware and I/O
+    o Discontiguous large memory support; memory above 4GB will be
+      discontiguous since the 4GB-64MB is reserved for firmware and I/O
       space.
  
     o Correct mapping for PAL runtime code; PAL code needs to be
