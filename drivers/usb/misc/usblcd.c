@@ -109,6 +109,7 @@ static ssize_t lcd_read(struct file *file, char __user * buffer, size_t count, l
 {
 	struct usb_lcd *dev;
 	int retval = 0;
+	int bytes_read;
 
 	dev = (struct usb_lcd *)file->private_data;
 
@@ -117,14 +118,14 @@ static ssize_t lcd_read(struct file *file, char __user * buffer, size_t count, l
 			      usb_rcvbulkpipe(dev->udev, dev->bulk_in_endpointAddr),
 			      dev->bulk_in_buffer,
 			      min(dev->bulk_in_size, count),
-			      &count, 10000);
+			      &bytes_read, 10000);
 
 	/* if the read was successful, copy the data to userspace */
 	if (!retval) {
-		if (copy_to_user(buffer, dev->bulk_in_buffer, count))
+		if (copy_to_user(buffer, dev->bulk_in_buffer, bytes_read))
 			retval = -EFAULT;
 		else
-			retval = count;
+			retval = bytes_read;
 	}
 
 	return retval;
