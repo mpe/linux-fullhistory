@@ -28,7 +28,6 @@
 #include <linux/stat.h>
 #include <linux/socket.h>
 #include <linux/fcntl.h>
-#include <linux/termios.h>
 #include <linux/net.h>
 #include <linux/ddi.h>
 

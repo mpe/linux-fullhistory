@@ -1,7 +1,8 @@
 /*---------------------------------------------------------------------------+
  |  fpu_system.h                                                             |
  |                                                                           |
- | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
+ | Copyright (C) 1992,1994                                                   |
+ |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -40,6 +41,23 @@
 #define cs_selector		(I387.soft.fcs)
 #define data_operand_offset	(I387.soft.foo)
 #define operand_selector	(I387.soft.fos)
+
+#define FPU_verify_area(x,y,z)  if ( verify_area(x,y,z) ) \
+                                math_abort(FPU_info,SIGSEGV)
+
+#undef FPU_IGNORE_CODE_SEGV
+#ifdef FPU_IGNORE_CODE_SEGV
+/* verify_area() is very expensive, and causes the emulator to run
+   about 20% slower if applied to the code. Anyway, errors due to bad
+   code addresses should be much rarer than errors due to bad data
+   addresses. */
+#define	FPU_code_verify_area(z)
+#else
+/* A simpler test than verify_area() can probably be done for
+   FPU_code_verify_area() because the only possible error is to step
+   past the upper boundary of a legal code area. */
+#define	FPU_code_verify_area(z) FPU_verify_area(VERIFY_READ,(void *)FPU_EIP,z)
+#endif
 
 /* ######## temporary and ugly ;-) */
 #define FPU_data_address        ((void *)(I387.soft.twd))

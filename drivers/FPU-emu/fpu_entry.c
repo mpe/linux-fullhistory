@@ -209,6 +209,7 @@ asmlinkage void math_emulate(long arg)
 do_another_FPU_instruction:
 
   RE_ENTRANT_CHECK_OFF;
+  FPU_code_verify_area(1);
   code = get_fs_word((unsigned short *) FPU_EIP);
   RE_ENTRANT_CHECK_ON;
 
@@ -301,6 +302,7 @@ do_another_FPU_instruction:
     {
       FPU_EIP++;
       RE_ENTRANT_CHECK_OFF;
+      FPU_code_verify_area(1);
       code = get_fs_word((unsigned short *) FPU_EIP);
       RE_ENTRANT_CHECK_ON;
     }
@@ -560,6 +562,7 @@ FPU_fwait_done:
       unsigned char next;
 
       RE_ENTRANT_CHECK_OFF;
+      FPU_code_verify_area(1);
       next = get_fs_byte((unsigned char *) FPU_EIP);
       RE_ENTRANT_CHECK_ON;
       if ( valid_prefix(next) )
@@ -591,8 +594,10 @@ static int valid_prefix(unsigned char byte)
 	case PREFIX_GS:
 
 	case OP_SIZE_PREFIX:  /* Used often by gcc, but has no effect. */
+	  FPU_EIP++;
 	  RE_ENTRANT_CHECK_OFF;
-	  byte = get_fs_byte((unsigned char *) (++FPU_EIP));
+	  FPU_code_verify_area(1);
+	  byte = get_fs_byte((unsigned char *) (FPU_EIP));
 	  RE_ENTRANT_CHECK_ON;
 	  break;
 	case FWAIT_OPCODE:

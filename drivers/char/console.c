@@ -967,7 +967,6 @@ void con_write(struct tty_struct * tty)
 	int c;
 	unsigned int currcons;
 
-	wake_up_interruptible(&tty->write_q.proc_list);
 	currcons = tty->line - 1;
 	if (currcons >= NR_CONSOLES) {
 		printk("con_write: illegal tty (%d)\n", currcons);
@@ -1279,6 +1278,8 @@ void con_write(struct tty_struct * tty)
 	if (vcmode != KD_GRAPHICS)
 		set_cursor(currcons);
 	enable_bh(KEYBOARD_BH);
+	if (LEFT(&tty->write_q) > WAKEUP_CHARS)
+		wake_up_interruptible(&tty->write_q.proc_list);
 }
 
 void do_keyboard_interrupt(void)

@@ -651,17 +651,8 @@ void do_wp_page(unsigned long error_code, unsigned long address,
 	*pg_table = 0;
 }
 
-int verify_area(int type, void * addr, unsigned long size)
+int __verify_write(unsigned long start, unsigned long size)
 {
-	unsigned long start;
-
-	start = (unsigned long) addr;
-	if (start >= TASK_SIZE)
-		return -EFAULT;
-	if (size > TASK_SIZE - start)
-		return -EFAULT;
-	if (wp_works_ok || type == VERIFY_READ || !size)
-		return 0;
 	size--;
 	size += start & ~PAGE_MASK;
 	size >>= PAGE_SHIFT;

@@ -7,7 +7,6 @@
 #include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
-#include <linux/tty.h>
 #include <linux/kernel.h>
 #include <linux/times.h>
 #include <linux/utsname.h>
@@ -510,7 +509,7 @@ asmlinkage int sys_getpgrp(void)
 
 asmlinkage int sys_setsid(void)
 {
-	if (current->leader && !suser())
+	if (current->leader)
 		return -EPERM;
 	current->leader = 1;
 	current->session = current->pgrp = current->pid;

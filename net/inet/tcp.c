@@ -583,64 +583,41 @@ tcp_check(struct tcphdr *th, int len,
 }
 
 
-void
-tcp_send_check(struct tcphdr *th, unsigned long saddr, 
-	       unsigned long daddr, int len, struct sock *sk)
+void tcp_send_check(struct tcphdr *th, unsigned long saddr, 
+		unsigned long daddr, int len, struct sock *sk)
 {
-  th->check = 0;
-  th->check = tcp_check(th, len, saddr, daddr);
-  return;
+	th->check = 0;
+	th->check = tcp_check(th, len, saddr, daddr);
+	return;
 }
 
-static struct sk_buff * dequeue_partial(struct sock * sk)
+static void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 {
-	struct sk_buff * skb;
-	unsigned long flags;
+	int size;
 
-	save_flags(flags);
-	cli();
-	skb = sk->send_tmp;
-	if (skb) {
-		sk->send_tmp = skb->next;
-		skb->next = NULL;
+	/* length of packet (not counting length of pre-tcp headers) */
+	size = skb->len - ((unsigned char *) skb->h.th - skb->data);
+
+	/* sanity check it.. */
+	if (size < sizeof(struct tcphdr) || size > skb->len) {
+		printk("tcp_send_skb: bad skb (skb = %p, data = %p, th = %p, len = %lu)\n",
+			skb, skb->data, skb->h.th, skb->len);
+		kfree_skb(skb, FREE_WRITE);
+		return;
 	}
-	restore_flags(flags);
-	return skb;
-}
 
-static void enqueue_partial(struct sk_buff * skb, struct sock * sk)
-{
-	unsigned long flags;
-
-	save_flags(flags);
-	cli();
-	skb->next = sk->send_tmp;
-	sk->send_tmp = skb;
-	restore_flags(flags);
-}
-
-static void tcp_send_partial(struct sock *sk)
-{
-  struct sk_buff *skb;
-
-  if (sk == NULL)
-  	return;
-  while ((skb = dequeue_partial(sk)) != NULL) {
-  
 	/* If we have queued a header size packet.. */
-	if(skb->len-(unsigned long)skb->h.th + (unsigned long)skb->data == sizeof(struct tcphdr)) {
+	if (size == sizeof(struct tcphdr)) {
 		/* If its got a syn or fin its notionally included in the size..*/
 		if(!skb->h.th->syn && !skb->h.th->fin) {
-			printk("tcp_send_partial: attempt to queue a bogon.\n");
+			printk("tcp_send_skb: attempt to queue a bogon.\n");
 			kfree_skb(skb,FREE_WRITE);
 			return;
 		}
 	}
   
 	/* We need to complete and send the packet. */
-	tcp_send_check(skb->h.th, sk->saddr, sk->daddr,
-			skb->len-(unsigned long)skb->h.th +
-			(unsigned long)skb->data, sk);
+	tcp_send_check(skb->h.th, sk->saddr, sk->daddr, size, sk);
 
 	skb->h.seq = sk->send_seq;
 	if (after(sk->send_seq , sk->window_seq) ||
@@ -664,9 +641,49 @@ static void tcp_send_partial(struct sock *sk)
 		  reset_timer(sk, TIME_PROBE0, 
 			      backoff(sk->backoff) * (2 * sk->mdev + sk->rtt));
 	} else {
-		sk->prot->queue_xmit(sk, skb->dev, skb,0);
+		sk->prot->queue_xmit(sk, skb->dev, skb, 0);
 	}
-  }
+}
+
+static struct sk_buff * dequeue_partial(struct sock * sk)
+{
+	struct sk_buff * skb;
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+	skb = sk->send_tmp;
+	if (skb) {
+		sk->send_tmp = skb->next;
+		skb->next = NULL;
+	}
+	restore_flags(flags);
+	return skb;
+}
+
+static void enqueue_partial(struct sk_buff * skb, struct sock * sk)
+{
+	struct sk_buff * tmp;
+	unsigned long flags;
+
+	skb->next = NULL;
+	save_flags(flags);
+	cli();
+	tmp = sk->send_tmp;
+	sk->send_tmp = skb;
+	restore_flags(flags);
+	if (tmp)
+		tcp_send_skb(sk, tmp);
+}
+
+static void tcp_send_partial(struct sock *sk)
+{
+	struct sk_buff *skb;
+
+	if (sk == NULL)
+		return;
+	while ((skb = dequeue_partial(sk)) != NULL)
+		tcp_send_skb(sk, skb);
 }
 
 
@@ -901,6 +918,7 @@ tcp_write(struct sock *sk, unsigned char *from,
 		continue;
 	}
 
+#if 0
 	/*
 	 * We also need to worry about the window.
 	 * If window < 1/4 offered window, don't use it.  That's
@@ -915,6 +933,10 @@ tcp_write(struct sock *sk, unsigned char *from,
 	  copy = sk->mtu;
 	copy = min(copy, sk->mtu);
 	copy = min(copy, len);
+#else
+	/* This also prevents silly windows by simply ignoring the offered window.. */
+	copy = min(sk->mtu, len);
+#endif
 
   /* We should really check the window here also. */
 	if (sk->packets_out && copy < sk->mtu && !(flags & MSG_OOB)) {
@@ -1011,34 +1033,7 @@ tcp_write(struct sock *sk, unsigned char *from,
 		enqueue_partial(send_tmp, sk);
 		continue;
 	}
-
-	tcp_send_check((struct tcphdr *)buff, sk->saddr, sk->daddr,
-		        copy + sizeof(struct tcphdr), sk);
-
-	skb->h.seq = sk->send_seq;
-	if (after(sk->send_seq , sk->window_seq) ||
-	          (sk->retransmits && sk->timeout == TIME_WRITE) ||
-		  sk->packets_out >= sk->cong_window) {
-		DPRINTF((DBG_TCP, "sk->cong_window = %d, sk->packets_out = %d\n",
-					sk->cong_window, sk->packets_out));
-		DPRINTF((DBG_TCP, "sk->send_seq = %d, sk->window_seq = %d\n",
-					sk->send_seq, sk->window_seq));
-		skb->next = NULL;
-		skb->magic = TCP_WRITE_QUEUE_MAGIC;
-		if (sk->wback == NULL) {
-			sk->wfront = skb;
-		} else {
-			sk->wback->next = skb;
-		}
-		sk->wback = skb;
-		if (before(sk->window_seq, sk->wfront->h.seq) &&
-		   sk->send_head == NULL &&
-		   sk->ack_backlog == 0)
-		        reset_timer(sk, TIME_PROBE0, 
-			    backoff(sk->backoff) * (2 * sk->mdev + sk->rtt));
-	} else {
-		prot->queue_xmit(sk, dev, skb,0);
-	}
+	tcp_send_skb(sk, skb);
   }
   sk->err = 0;
 
@@ -3604,7 +3599,7 @@ tcp_send_probe0(struct sock *sk)
   len = hlen + sizeof(struct tcphdr) + (data ? 1 : 0);
  	
   /* Allocate buffer. */
-  if ((skb2 = alloc_skb(sizeof(struct sk_buff) + len,GFP_KERNEL)) == NULL) {
+  if ((skb2 = alloc_skb(sizeof(struct sk_buff) + len, GFP_ATOMIC)) == NULL) {
 /*    printk("alloc failed raw %x th %x hlen %d data %d len %d\n",
 	   raw, skb->h.th, hlen, data, len); */
     reset_timer (sk, TIME_PROBE0, 10);  /* try again real soon */

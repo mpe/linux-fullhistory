@@ -9,7 +9,7 @@
 
 _register_chrdev
 _unregister_chrdev
-_verify_area
+___verify_write
 _wake_up_interruptible
 
 _current

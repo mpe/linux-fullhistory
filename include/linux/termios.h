@@ -51,6 +51,7 @@
 #define TIOCSLCKTRMIOS	0x5457
 
 /* Used for packet mode */
+#define TIOCPKT_DATA		 0
 #define TIOCPKT_FLUSHREAD	 1
 #define TIOCPKT_FLUSHWRITE	 2
 #define TIOCPKT_STOP		 4

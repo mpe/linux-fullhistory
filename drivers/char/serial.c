@@ -58,8 +58,6 @@
 
 #undef ISR_HACK
 
-#define WAKEUP_CHARS (3*TTY_BUF_SIZE/4)
-
 /*
  * rs_event		- Bitfield of serial lines that events pending
  * 				to be processed at the next clock tick.
@@ -418,7 +416,7 @@ static inline int check_modem_status(struct async_struct *info)
 	
 	status = serial_in(info, UART_MSR);
 		
-	if ((status & UART_MSR_DDCD) && !C_LOCAL(info->tty)) {
+	if ((status & UART_MSR_DDCD) && !C_CLOCAL(info->tty)) {
 #if (defined(SERIAL_DEBUG_OPEN) || defined(SERIAL_DEBUG_INTR))
 		printk("ttys%d CD now %s...", info->line,
 		       (status & UART_MSR_DCD) ? "on" : "off");
@@ -433,7 +431,7 @@ static inline int check_modem_status(struct async_struct *info)
 			rs_sched_event(info, RS_EVENT_HANGUP);
 		}
 	}
-	if (C_RTSCTS(info->tty)) {
+	if (C_CRTSCTS(info->tty)) {
 		if (info->tty->hw_stopped) {
 			if (status & UART_MSR_CTS) {
 #ifdef SERIAL_DEBUG_INTR
@@ -562,7 +560,7 @@ static inline void handle_rs_break(struct async_struct *info)
 	if (info->flags & ASYNC_SAK)
 		do_SAK(info->tty);
 		
-	if (I_BRKINT(info->tty)) {
+	if (!I_IGNBRK(info->tty) && I_BRKINT(info->tty)) {
 		flush_input(info->tty);
 		flush_output(info->tty);
 		if (info->tty->pgrp > 0)
@@ -1066,7 +1064,7 @@ static void rs_throttle(struct tty_struct * tty, int status)
 	switch (status) {
 	case TTY_THROTTLE_RQ_FULL:
 		info = rs_table + DEV_TO_SL(tty->line);
-		if (tty->termios->c_iflag & IXOFF) {
+		if (I_IXOFF(tty)) {
 			info->x_char = STOP_CHAR(tty);
 		} else {
 			mcr = serial_inp(info, UART_MCR);
@@ -1076,7 +1074,7 @@ static void rs_throttle(struct tty_struct * tty, int status)
 		break;
 	case TTY_THROTTLE_RQ_AVAIL:
 		info = rs_table + DEV_TO_SL(tty->line);
-		if (tty->termios->c_iflag & IXOFF) {
+		if (I_IXOFF(tty)) {
 			if (info->x_char)
 				info->x_char = 0;
 			else
@@ -1382,7 +1380,7 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 			error = verify_area(VERIFY_WRITE, (void *) arg,sizeof(long));
 			if (error)
 				return error;
-			put_fs_long(C_LOCAL(tty) ? 1 : 0,
+			put_fs_long(C_CLOCAL(tty) ? 1 : 0,
 				    (unsigned long *) arg);
 			return 0;
 		case TIOCSSOFTCAR:
@@ -1591,7 +1589,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 {
 	struct wait_queue wait = { current, NULL };
 	int		retval;
-	int		do_clocal = C_LOCAL(tty);
+	int		do_clocal = C_CLOCAL(tty);
 
 	/*
 	 * If the device is in the middle of being closed, then block

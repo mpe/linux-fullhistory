@@ -3,7 +3,7 @@
  |                                                                           |
  |  Computation of an approximation of the sin function by a polynomial      |
  |                                                                           |
- | Copyright (C) 1992,1993                                                   |
+ | Copyright (C) 1992,1993,1994                                              |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
@@ -128,20 +128,20 @@ void	poly_sine(FPU_REG const *arg, FPU_REG *result)
 	  )
 	{
 #ifdef DEBUGGING
-	  RE_ENTRANT_CHECK_OFF
+	  RE_ENTRANT_CHECK_OFF;
 	  printk("\nEXP=%d, MS=%08x, LS=%08x\n", result->exp,
 		 result->sigh, result->sigl);
-	  RE_ENTRANT_CHECK_ON
+	  RE_ENTRANT_CHECK_ON;
 #endif DEBUGGING
 	  EXCEPTION(EX_INTERNAL|0x103);
 	}
       
 #ifdef DEBUGGING
-      RE_ENTRANT_CHECK_OFF
+      RE_ENTRANT_CHECK_OFF;
       printk("\n***CORRECTING ILLEGAL RESULT*** in poly_sin() computation\n");
       printk("EXP=%d, MS=%08x, LS=%08x\n", result->exp,
 	     result->sigh, result->sigl);
-      RE_ENTRANT_CHECK_ON
+      RE_ENTRANT_CHECK_ON;
 #endif DEBUGGING
 
       result->sigl = 0;	/* Truncate the result to 1.00 */

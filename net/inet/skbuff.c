@@ -381,6 +381,12 @@ void kfree_skb(struct sk_buff *skb, int rw)
 		return;
 	}
 	IS_SKB(skb);
+	if(skb->lock)
+	{
+		skb->free=1;	/* Free when unlocked */
+		return;
+	}
+	
 	if(skb->free == 2)
 		printk("Warning: kfree_skb passed an skb that nobody set the free flag on!\n");
 	if(skb->list)
@@ -424,6 +430,7 @@ void kfree_skb(struct sk_buff *skb, int rw)
 		return NULL;
 	skb->free= 2;	/* Invalid so we pick up forgetful users */
 	skb->list= 0;	/* Not on a list */
+	skb->lock= 0;
 	skb->truesize=size;
 	skb->mem_len=size;
 	skb->mem_addr=skb;
@@ -452,3 +459,31 @@ void kfree_skbmem(void *mem,unsigned size)
 	}
 }
 
+/*
+ *	Skbuff device locking
+ */
+ 
+void skb_kept_by_device(struct sk_buff *skb)
+{
+	skb->lock++;
+}
+
+void skb_device_release(struct sk_buff *skb, int mode)
+{
+	unsigned long flags;
+	save_flags(flags);
+	skb->lock--;
+	if(skb->lock==0)
+	{
+		if(skb->free==1)
+			kfree_skb(skb,mode);
+	}
+	restore_flags(flags);
+}
+
+int skb_device_locked(struct sk_buff *skb)
+{
+	if(skb->lock)
+		return 1;
+	return 0;
+}

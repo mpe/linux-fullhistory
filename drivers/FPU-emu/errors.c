@@ -38,7 +38,8 @@ void Un_impl(void)
 {
   unsigned char byte1, FPU_modrm;
 
-  RE_ENTRANT_CHECK_OFF
+  RE_ENTRANT_CHECK_OFF;
+  /* No need to verify_area(), we have previously fetched these bytes. */
   byte1 = get_fs_byte((unsigned char *) FPU_ORIG_EIP);
   FPU_modrm = get_fs_byte(1 + (unsigned char *) FPU_ORIG_EIP);
 
@@ -49,7 +50,7 @@ void Un_impl(void)
     printk("%02x (%02x+%d)\n", FPU_modrm, FPU_modrm & 0xf8, FPU_modrm & 7);
   else
     printk("/%d\n", (FPU_modrm >> 3) & 7);
-  RE_ENTRANT_CHECK_ON
+  RE_ENTRANT_CHECK_ON;
 
   EXCEPTION(EX_Invalid);
 
@@ -65,7 +66,8 @@ void emu_printall()
                               "DeNorm", "Inf", "NaN", "Empty" };
   unsigned char byte1, FPU_modrm;
 
-  RE_ENTRANT_CHECK_OFF
+  RE_ENTRANT_CHECK_OFF;
+  /* No need to verify_area(), we have previously fetched these bytes. */
   byte1 = get_fs_byte((unsigned char *) FPU_ORIG_EIP);
   FPU_modrm = get_fs_byte(1 + (unsigned char *) FPU_ORIG_EIP);
   partial_status = status_word();
@@ -154,7 +156,7 @@ printk(" CW: ic=%d rc=%ld%ld pc=%ld%ld iem=%d     ef=%d%d%d%d%d%d\n",
 	 (long)(FPU_loaded_data.sigl & 0xFFFF),
 	 FPU_loaded_data.exp - EXP_BIAS + 1);
   printk("%s\n", tag_desc[(int) (unsigned) FPU_loaded_data.tag]);
-  RE_ENTRANT_CHECK_ON
+  RE_ENTRANT_CHECK_ON;
 
 }
 
@@ -261,7 +263,7 @@ void exception(int n)
 	}
     }
 
-  RE_ENTRANT_CHECK_OFF
+  RE_ENTRANT_CHECK_OFF;
   if ( (~control_word & n & CW_Exceptions) || (n == EX_INTERNAL) )
     {
 #ifdef PRINT_MESSAGES
@@ -303,7 +305,7 @@ void exception(int n)
        */
 /*      regs[0].tag |= TW_FPU_Interrupt; */
     }
-  RE_ENTRANT_CHECK_ON
+  RE_ENTRANT_CHECK_ON;
 
 #ifdef __DEBUG__
   math_abort(FPU_info,SIGFPE);

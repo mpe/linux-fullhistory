@@ -1,7 +1,7 @@
 /*---------------------------------------------------------------------------+
  |  fpu_emu.h                                                                |
  |                                                                           |
- | Copyright (C) 1992,1993                                                   |
+ | Copyright (C) 1992,1993,1994                                              |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
@@ -62,8 +62,8 @@
 
 #ifdef PARANOID
 extern char emulating;
-#  define RE_ENTRANT_CHECK_OFF emulating = 0;
-#  define RE_ENTRANT_CHECK_ON emulating = 1;
+#  define RE_ENTRANT_CHECK_OFF emulating = 0
+#  define RE_ENTRANT_CHECK_ON emulating = 1
 #else
 #  define RE_ENTRANT_CHECK_OFF
 #  define RE_ENTRANT_CHECK_ON

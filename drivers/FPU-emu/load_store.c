@@ -4,7 +4,7 @@
  | This file contains most of the code to interpret the FPU instructions     |
  | which load and store from user memory.                                    |
  |                                                                           |
- | Copyright (C) 1992,1993                                                   |
+ | Copyright (C) 1992,1993,1994                                              |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
@@ -168,6 +168,7 @@ switch ( type )
     break;
   case 024:     /* fldcw */
     RE_ENTRANT_CHECK_OFF;
+    FPU_verify_area(VERIFY_READ, FPU_data_address, 2);
     control_word = get_fs_word((unsigned short *) FPU_data_address);
     RE_ENTRANT_CHECK_ON;
     if ( partial_status & ~control_word & CW_Exceptions )
@@ -206,7 +207,7 @@ switch ( type )
     break;
   case 034:      /* fstcw m16int */
     RE_ENTRANT_CHECK_OFF;
-    verify_area(VERIFY_WRITE,FPU_data_address,2);
+    FPU_verify_area(VERIFY_WRITE,FPU_data_address,2);
     put_fs_word(control_word, (short *) FPU_data_address);
     RE_ENTRANT_CHECK_ON;
     NO_NET_DATA_EFFECT;
@@ -220,7 +221,7 @@ switch ( type )
     break;
   case 036:      /* fstsw m2byte */
     RE_ENTRANT_CHECK_OFF;
-    verify_area(VERIFY_WRITE,FPU_data_address,2);
+    FPU_verify_area(VERIFY_WRITE,FPU_data_address,2);
     put_fs_word(status_word(),(short *) FPU_data_address);
     RE_ENTRANT_CHECK_ON;
     NO_NET_DATA_EFFECT;

@@ -17,9 +17,12 @@
 #include <linux/tty.h>
 #include <linux/fcntl.h>
 #include <linux/interrupt.h>
+#include <linux/string.h>
 
 #include <asm/system.h>
 #include <asm/bitops.h>
+
+#define MIN(a,b)	((a) < (b) ? (a) : (b))
 
 static void pty_close(struct tty_struct * tty, struct file * filp)
 {
@@ -27,7 +30,7 @@ static void pty_close(struct tty_struct * tty, struct file * filp)
 		return;
 	if (IS_A_PTY_MASTER(tty->line)) {
 		if (tty->count > 1)
-			return;
+			printk("master pty_close: count = %d!!\n", tty->count);
 	} else {
 		if (tty->count > 2)
 			return;
@@ -40,32 +43,39 @@ static void pty_close(struct tty_struct * tty, struct file * filp)
 	wake_up_interruptible(&tty->link->secondary.proc_list);
 	wake_up_interruptible(&tty->link->read_q.proc_list);
 	wake_up_interruptible(&tty->link->write_q.proc_list);
-	if (IS_A_PTY_MASTER(tty->line)) {
+	if (IS_A_PTY_MASTER(tty->line))
 		tty_hangup(tty->link);
-		flush_input(tty);
-		flush_output(tty);
+	else {
+		start_tty(tty);
+		set_bit(TTY_SLAVE_CLOSED, &tty->link->flags);
 	}
 }
 
 static inline void pty_copy(struct tty_struct * from, struct tty_struct * to)
 {
-	int c;
+	unsigned long count, n;
+	struct tty_queue *fq, *tq;
 
-	while (!from->stopped && !EMPTY(&from->write_q)) {
-		if (FULL(&to->read_q)) {
-			TTY_READ_FLUSH(to);
-			if (FULL(&to->read_q))
-				break;
-			continue;
-		}
-		c = get_tty_queue(&from->write_q);
-		put_tty_queue(c, &to->read_q);
-		if (current->signal & ~current->blocked)
-			break;
+	if (from->stopped || EMPTY(&from->write_q))
+		return;
+	fq = &from->write_q;
+	/* Bypass the read_q if this is a pty master. */
+	tq = IS_A_PTY_MASTER(to->line) ? &to->secondary : &to->read_q;
+	count = MIN(CHARS(fq), LEFT(tq));
+	while (count) {
+		n = MIN(MIN(TTY_BUF_SIZE - fq->tail, TTY_BUF_SIZE - tq->head),
+			count);
+		memcpy(&tq->buf[tq->head], &fq->buf[fq->tail], n);
+		count -= n;
+		fq->tail = (fq->tail + n) & (TTY_BUF_SIZE - 1);
+		tq->head = (tq->head + n) & (TTY_BUF_SIZE - 1);
 	}
-	TTY_READ_FLUSH(to);
-	if (!FULL(&from->write_q))
-		wake_up_interruptible(&from->write_q.proc_list);
+	if (IS_A_PTY_MASTER(to->line))
+		wake_up_interruptible(&tq->proc_list);
+	else
+		TTY_READ_FLUSH(to);
+	if (LEFT(fq) > WAKEUP_CHARS)
+		wake_up_interruptible(&fq->proc_list);
 	if (from->write_data_cnt) {
 		set_bit(from->line, &tty_check_write);
 		mark_bh(TTY_BH);
@@ -87,10 +97,8 @@ int pty_open(struct tty_struct *tty, struct file * filp)
 {
 	if (!tty || !tty->link)
 		return -ENODEV;
-	if (IS_A_PTY_MASTER(tty->line))
-		clear_bit(TTY_SLAVE_OPENED, &tty->flags);
-	else
-		set_bit(TTY_SLAVE_OPENED, &tty->link->flags);
+	if (IS_A_PTY_SLAVE(tty->line))
+		clear_bit(TTY_SLAVE_CLOSED, &tty->link->flags);
 	tty->write = tty->link->write = pty_write;
 	tty->close = tty->link->close = pty_close;
 	wake_up_interruptible(&tty->read_q.proc_list);

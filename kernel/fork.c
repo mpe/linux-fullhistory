@@ -56,7 +56,8 @@ repeat:
 		}
 		if (task[i]->uid == current->uid)
 			this_user_tasks++;
-		if (task[i]->pid == last_pid || task[i]->pgrp == last_pid)
+		if (task[i]->pid == last_pid || task[i]->pgrp == last_pid ||
+		    task[i]->session == last_pid)
 			goto repeat;
 	}
 	if (tasks_free <= MIN_TASKS_LEFT_FOR_ROOT ||

@@ -1464,7 +1464,8 @@ ip_retransmit(struct sock *sk, int all)
 
 	/* If the interface is (still) up and running, kick it. */
 	if (dev->flags & IFF_UP) {
-		if (sk) dev->queue_xmit(skb, dev, sk->priority);
+		if (sk && !skb_device_locked(skb))
+			dev->queue_xmit(skb, dev, sk->priority);
 	/*	  else dev->queue_xmit(skb, dev, SOPRI_NORMAL ); CANNOT HAVE SK=NULL HERE */
 	}
 

@@ -126,6 +126,8 @@ static unsigned char handle_diacr(unsigned char);
 /* pt_regs - set by keyboard_interrupt(), used by show_ptregs() */
 static struct pt_regs * pt_regs;
 
+static int got_break = 0;
+
 static inline void kb_wait(void)
 {
 	int i;
@@ -343,7 +345,6 @@ static void put_queue(int ch)
 	if (LEFT(qp)) {
 		qp->buf[qp->head] = ch;
 		INC(qp->head);
-		wake_up_interruptible(&qp->proc_list);
 	}
 }
 
@@ -364,7 +365,6 @@ static void puts_queue(char *cp)
 			INC(qp->head);
 		}
 	}
-	wake_up_interruptible(&qp->proc_list);
 }
 
 static void applkey(int key, char mode)
@@ -419,13 +419,13 @@ static void hold(void)
 {
 	if (rep || !tty)
 		return;
-	if (vc_kbd_flag(kbd, VC_SCROLLOCK))
-		/* pressing srcoll lock 2nd time sends ^Q, ChN */
-		put_queue(START_CHAR(tty));
+	/* pressing scroll lock 1st time sends ^S, ChN */
+	/* pressing scroll lock 2nd time sends ^Q, ChN */
+	/* now done directly without regard to ISIG -- jlc */
+	if (!vc_kbd_flag(kbd, VC_SCROLLOCK))
+		stop_tty(tty);
 	else
-		/* pressing scroll lock 1st time sends ^S, ChN */
-		put_queue(STOP_CHAR(tty));
-	chg_vc_kbd_flag(kbd,VC_SCROLLOCK);
+		start_tty(tty);
 }
 
 static void num(void)
@@ -453,8 +453,7 @@ static void lastcons(void)
 
 static void send_intr(void)
 {
-	if (tty)
-		put_queue(INTR_CHAR(tty));
+	got_break = 1;
 }
 
 static void scrll_forw(void)
@@ -813,6 +812,26 @@ static void kbd_bh(void * unused)
 			change_console(want_console);
 		}
 		want_console = -1;
+	}
+	if (got_break) {
+		if (tty && !I_IGNBRK(tty)) {
+			if (I_BRKINT(tty)) {
+				flush_input(tty);
+				flush_output(tty);
+				if (tty->pgrp > 0)
+					kill_pg(tty->pgrp, SIGINT, 1);
+			} else {
+				cli();
+				if (LEFT(&tty->read_q) >= 2) {
+					set_bit(tty->read_q.head,
+						&tty->readq_flags);
+					put_queue(TTY_BREAK);
+					put_queue(0);
+				}
+				sti();
+			}
+		}
+		got_break = 0;
 	}
 	do_keyboard_interrupt();
 	cli();

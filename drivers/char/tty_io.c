@@ -32,6 +32,9 @@
  * Added functionality to the OPOST tty handling.  No delays, but all
  * other bits should be there.
  *	-- Nick Holloway <alfie@dcs.warwick.ac.uk>, 27th May 1993.
+ *
+ * Rewrote canonical mode and added more termios flags.
+ * 	-- julian@uhunix.uhcc.hawaii.edu (J. Cowley), 13Jan94
  */
 
 #include <linux/types.h>
@@ -98,7 +101,7 @@ int tty_register_ldisc(int disc, struct tty_ldisc *new_ldisc)
 	return 0;
 }
 
-void put_tty_queue(char c, struct tty_queue * queue)
+void put_tty_queue(unsigned char c, struct tty_queue * queue)
 {
 	int head;
 	unsigned long flags;
@@ -121,8 +124,8 @@ int get_tty_queue(struct tty_queue * queue)
 	save_flags(flags);
 	cli();
 	if (queue->tail != queue->head) {
-		result = 0xff & queue->buf[queue->tail];
-		queue->tail = (queue->tail + 1) & (TTY_BUF_SIZE-1);
+		result = queue->buf[queue->tail];
+		INC(queue->tail);
 	}
 	restore_flags(flags);
 	return result;
@@ -499,7 +502,220 @@ void wait_for_keypress(void)
 	sleep_on(&keypress_wait);
 }
 
-void copy_to_cooked(struct tty_struct * tty)
+void stop_tty(struct tty_struct *tty)
+{
+	if (tty->stopped)
+		return;
+	tty->stopped = 1;
+	if (tty->link && tty->link->packet) {
+		tty->ctrl_status &= ~TIOCPKT_START;
+		tty->ctrl_status |= TIOCPKT_STOP;
+		wake_up_interruptible(&tty->link->secondary.proc_list);
+	}
+	if (tty->stop)
+		(tty->stop)(tty);
+	if (IS_A_CONSOLE(tty->line)) {
+		set_vc_kbd_flag(kbd_table + fg_console, VC_SCROLLOCK);
+		set_leds();
+	}
+}
+
+void start_tty(struct tty_struct *tty)
+{
+	if (!tty->stopped)
+		return;
+	tty->stopped = 0;
+	if (tty->link && tty->link->packet) {
+		tty->ctrl_status &= ~TIOCPKT_STOP;
+		tty->ctrl_status |= TIOCPKT_START;
+		wake_up_interruptible(&tty->link->secondary.proc_list);
+	}
+	if (tty->start)
+		(tty->start)(tty);
+	if (IS_A_CONSOLE(tty->line)) {
+		clr_vc_kbd_flag(kbd_table + fg_console, VC_SCROLLOCK);
+		set_leds();
+	}
+	TTY_WRITE_FLUSH(tty);
+}
+
+/* Perform OPOST processing.  Returns -1 when the write_q becomes full
+   and the character must be retried. */
+
+static int opost(unsigned char c, struct tty_struct *tty)
+{
+	if (FULL(&tty->write_q))
+		return -1;
+	if (O_OPOST(tty)) {
+		switch (c) {
+		case '\n':
+			if (O_ONLRET(tty))
+				tty->column = 0;
+			if (O_ONLCR(tty)) {
+				if (LEFT(&tty->write_q) < 2)
+					return -1;
+				put_tty_queue('\r', &tty->write_q);
+				tty->column = 0;
+			}
+			tty->canon_column = tty->column;
+			break;
+		case '\r':
+			if (O_ONOCR(tty) && tty->column == 0)
+				return 0;
+			if (O_OCRNL(tty)) {
+				c = '\n';
+				if (O_ONLRET(tty))
+					tty->canon_column = tty->column = 0;
+				break;
+			}
+			tty->canon_column = tty->column = 0;
+			break;
+		case '\t':
+			if (O_TABDLY(tty) == XTABS) {
+				if (LEFT(&tty->write_q) < 8)
+					return -1;
+				do
+					put_tty_queue(' ', &tty->write_q);
+				while (++tty->column % 8);
+				return 0;
+			}
+			tty->column = (tty->column | 7) + 1;
+			break;
+		case '\b':
+			if (tty->column > 0)
+				tty->column--;
+			break;
+		default:
+			if (O_OLCUC(tty))
+				c = toupper(c);
+			if (!iscntrl(c))
+				tty->column++;
+			break;
+		}
+	}
+	put_tty_queue(c, &tty->write_q);
+	return 0;
+}
+
+/* Must be called only when L_ECHO(tty) is true. */
+
+static void echo_char(unsigned char c, struct tty_struct *tty)
+{
+	if (L_ECHOCTL(tty) && iscntrl(c) && c != '\t') {
+		opost('^', tty);
+		opost(c ^ 0100, tty);
+	} else
+		opost(c, tty);
+}
+
+static void eraser(unsigned char c, struct tty_struct *tty)
+{
+	enum { ERASE, WERASE, KILL } kill_type;
+	int seen_alnums;
+
+	if (tty->secondary.head == tty->canon_head) {
+		/* opost('\a', tty); */		/* what do you think? */
+		return;
+	}
+	if (c == ERASE_CHAR(tty))
+		kill_type = ERASE;
+	else if (c == WERASE_CHAR(tty))
+		kill_type = WERASE;
+	else {
+		if (!L_ECHO(tty)) {
+			tty->secondary.head = tty->canon_head;
+			return;
+		}
+		if (!L_ECHOK(tty) || !L_ECHOKE(tty)) {
+			tty->secondary.head = tty->canon_head;
+			if (tty->erasing) {
+				opost('/', tty);
+				tty->erasing = 0;
+			}
+			echo_char(KILL_CHAR(tty), tty);
+			/* Add a newline if ECHOK is on and ECHOKE is off. */
+			if (L_ECHOK(tty))
+				opost('\n', tty);
+			return;
+		}
+		kill_type = KILL;
+	}
+
+	seen_alnums = 0;
+	while (tty->secondary.head != tty->canon_head) {
+		c = LAST(&tty->secondary);
+		if (kill_type == WERASE) {
+			/* Equivalent to BSD's ALTWERASE. */
+			if (isalnum(c) || c == '_')
+				seen_alnums++;
+			else if (seen_alnums)
+				break;
+		}
+		DEC(tty->secondary.head);
+		if (L_ECHO(tty)) {
+			if (L_ECHOPRT(tty)) {
+				if (!tty->erasing) {
+					opost('\\', tty);
+					tty->erasing = 1;
+				}
+				echo_char(c, tty);
+			} else if (!L_ECHOE(tty)) {
+				echo_char(ERASE_CHAR(tty), tty);
+			} else if (c == '\t') {
+				unsigned int col = tty->canon_column;
+				unsigned long tail = tty->canon_head;
+
+				/* Find the column of the last char. */
+				while (tail != tty->secondary.head) {
+					c = tty->secondary.buf[tail];
+					if (c == '\t')
+						col = (col | 7) + 1;
+					else if (iscntrl(c)) {
+						if (L_ECHOCTL(tty))
+							col += 2;
+					} else
+						col++;
+					INC(tail);
+				}
+
+				/* Now backup to that column. */
+				while (tty->column > col) {
+					/* Can't use opost here. */
+					put_tty_queue('\b', &tty->write_q);
+					tty->column--;
+				}
+			} else {
+				if (iscntrl(c) && L_ECHOCTL(tty)) {
+					opost('\b', tty);
+					opost(' ', tty);
+					opost('\b', tty);
+				}
+				if (!iscntrl(c) || L_ECHOCTL(tty)) {
+					opost('\b', tty);
+					opost(' ', tty);
+					opost('\b', tty);
+				}
+			}
+		}
+		if (kill_type == ERASE)
+			break;
+	}
+	if (tty->erasing && tty->secondary.head == tty->canon_head) {
+		opost('/', tty);
+		tty->erasing = 0;
+	}
+}
+
+static void isig(int sig, struct tty_struct *tty)
+{
+	kill_pg(tty->pgrp, sig, 1);
+	if (!L_NOFLSH(tty)) {
+		flush_input(tty);
+		flush_output(tty);
+	}
+}
+
+static void copy_to_cooked(struct tty_struct * tty)
 {
 	int c, special_flag;
 	unsigned long flags;
@@ -525,25 +741,27 @@ void copy_to_cooked(struct tty_struct * tty)
 		if (c == 0)
 			break;
 		save_flags(flags); cli();
-		if (tty->read_q.tail != tty->read_q.head) {
-			c = 0xff & tty->read_q.buf[tty->read_q.tail];
+		if (!EMPTY(&tty->read_q)) {
+			c = tty->read_q.buf[tty->read_q.tail];
 			special_flag = clear_bit(tty->read_q.tail,
-						  &tty->readq_flags);
-			tty->read_q.tail = (tty->read_q.tail + 1) &
-				(TTY_BUF_SIZE-1);
+						 &tty->readq_flags);
+			INC(tty->read_q.tail);
 			restore_flags(flags);
 		} else {
 			restore_flags(flags);
 			break;
 		}
 		if (special_flag) {
-			tty->char_error = c & 7;
+			tty->char_error = c;
 			continue;
 		}
 		if (tty->char_error) {
 			if (tty->char_error == TTY_BREAK) {
 				tty->char_error = 0;
 				if (I_IGNBRK(tty))
+					continue;
+				/* A break is handled by the lower levels. */
+				if (I_BRKINT(tty))
 					continue;
 				if (I_PARMRK(tty)) {
 					put_tty_queue('\377', &tty->secondary);
@@ -570,157 +788,131 @@ void copy_to_cooked(struct tty_struct * tty)
 				put_tty_queue('\0', &tty->secondary);
 			continue;
 		}
-		if (I_STRP(tty))
+		if (I_ISTRIP(tty))
 			c &= 0x7f;
-		else if (I_PARMRK(tty) && (c == '\377'))
-			put_tty_queue('\377', &tty->secondary);
-		if (c==13) {
-			if (I_CRNL(tty))
-				c=10;
-			else if (I_NOCR(tty))
-				continue;
-		} else if (c==10 && I_NLCR(tty))
-			c=13;
-		if (I_UCLC(tty))
+		if (!tty->lnext) {
+			if (c == '\r') {
+				if (I_IGNCR(tty))
+					continue;
+				if (I_ICRNL(tty))
+					c = '\n';
+			} else if (c == '\n' && I_INLCR(tty))
+				c = '\r';
+		}
+		if (I_IUCLC(tty) && L_IEXTEN(tty))
 			c=tolower(c);
 		if (c == __DISABLED_CHAR)
 			tty->lnext = 1;
-		if (L_CANON(tty) && !tty->lnext) {
-			if (c == ERASE_CHAR(tty) || c == KILL_CHAR(tty) || c == WERASE_CHAR(tty)) {
-				int seen_alnums =
-				  (c == WERASE_CHAR(tty)) ? 0 : -1;
-				int cc;
-
-				/* deal with killing in the input line */
-				while(!(EMPTY(&tty->secondary) ||
-					(cc=LAST(&tty->secondary))==10 ||
-					((EOF_CHAR(tty) != __DISABLED_CHAR) &&
-					 (cc==EOF_CHAR(tty))))) {
-					/* if killing just a word, kill all
-					   non-alnum chars, then all alnum
-					   chars.  */
-					if (seen_alnums >= 0) {
-						if (isalnum(cc))
-							seen_alnums++;
-						else if (seen_alnums)
-							break;
+		if (L_ICANON(tty) && !tty->lnext) {
+			if (c == ERASE_CHAR(tty) || c == KILL_CHAR(tty) ||
+			    (c == WERASE_CHAR(tty) && L_IEXTEN(tty))) {
+				eraser(c, tty);
+				continue;
+			}
+			if (c == LNEXT_CHAR(tty) && L_IEXTEN(tty)) {
+				tty->lnext = 1;
+				if (L_ECHO(tty)) {
+					if (tty->erasing) {
+						opost('/', tty);
+						tty->erasing = 0;
 					}
-					if (L_ECHO(tty)) {
-					        int ct = 1;
-						if (cc < 32)
-						  ct = (L_ECHOCTL(tty) ? 2 : 0);
-						while(ct--) {
-							put_tty_queue('\b', &tty->write_q);
-							put_tty_queue(' ', &tty->write_q);
-							put_tty_queue('\b',&tty->write_q);
-						}
+					if (L_ECHOCTL(tty)) {
+						opost('^', tty);
+						opost('\b', tty);
 					}
-					DEC(tty->secondary.head);
-					if(c == ERASE_CHAR(tty))
-					        break;
 				}
 				continue;
 			}
-			if (c == LNEXT_CHAR(tty)) {
-				tty->lnext = 1;
-				if (L_ECHO(tty)) {
-					put_tty_queue('^',&tty->write_q);
-					put_tty_queue('\b',&tty->write_q);
+			if (c == REPRINT_CHAR(tty) && L_ECHO(tty) &&
+			    L_IEXTEN(tty)) {
+				unsigned long tail = tty->canon_head;
+
+				if (tty->erasing) {
+					opost('/', tty);
+					tty->erasing = 0;
+				}
+				echo_char(c, tty);
+				opost('\n', tty);
+				while (tail != tty->secondary.head) {
+					echo_char(tty->secondary.buf[tail],
+						  tty);
+					INC(tail);
 				}
 				continue;
 			}
 		}
 		if (I_IXON(tty) && !tty->lnext) {
-			if (c == STOP_CHAR(tty)) {
-				tty->ctrl_status &= ~(TIOCPKT_START);
-				tty->ctrl_status |= TIOCPKT_STOP;
-				if (tty->link)
-					wake_up_interruptible(&tty->link->except_q);
-				tty->stopped=1;
-				if (tty->stop)
-					(tty->stop)(tty);
-				if (IS_A_CONSOLE(tty->line)) {
-					set_vc_kbd_flag(kbd_table + fg_console, VC_SCROLLOCK);
-					set_leds();
-				}
+			if ((tty->stopped && I_IXANY(tty) && L_IEXTEN(tty)) ||
+			    c == START_CHAR(tty)) {
+				start_tty(tty);
 				continue;
 			}
-			if (((I_IXANY(tty)) && tty->stopped) ||
-			    (c == START_CHAR(tty))) {
-			    	tty->ctrl_status &= ~(TIOCPKT_STOP);
-				tty->ctrl_status |= TIOCPKT_START;
-				tty->stopped=0;
-				if (tty->link)
-					wake_up_interruptible(&tty->link->except_q);
-				if (tty->start)
-					(tty->start)(tty);
-				if (IS_A_CONSOLE(tty->line)) {
-					clr_vc_kbd_flag(kbd_table + fg_console, VC_SCROLLOCK);
-					set_leds();
-				}
+			if (c == STOP_CHAR(tty)) {
+				stop_tty(tty);
 				continue;
 			}
 		}
 		if (L_ISIG(tty) && !tty->lnext) {
 			if (c == INTR_CHAR(tty)) {
-				kill_pg(tty->pgrp, SIGINT, 1);
-				if (! _L_FLAG(tty, NOFLSH)) {
-				  flush_input(tty);
-				  flush_output(tty);
-				}
+				isig(SIGINT, tty);
 				continue;
 			}
 			if (c == QUIT_CHAR(tty)) {
-				kill_pg(tty->pgrp, SIGQUIT, 1);
-				if (! _L_FLAG(tty, NOFLSH)) {
-				  flush_input(tty);
-				  flush_output(tty);
-				}
+				isig(SIGQUIT, tty);
 				continue;
 			}
-			if (c == SUSPEND_CHAR(tty)) {
-				if (!is_orphaned_pgrp(tty->pgrp)) {
-					kill_pg(tty->pgrp, SIGTSTP, 1);
-					if (! _L_FLAG(tty, NOFLSH)) {
-					  flush_input(tty);
-					  flush_output(tty);
-					}
-				}
+			if (c == SUSP_CHAR(tty)) {
+				if (!is_orphaned_pgrp(tty->pgrp))
+					isig(SIGTSTP, tty);
 				continue;
 			}
 		}
-		if (c==10 || (EOF_CHAR(tty) != __DISABLED_CHAR &&
-		    c==EOF_CHAR(tty)))
-			tty->secondary.data++;
-		if ((c==10) && (L_ECHO(tty) || (L_CANON(tty) && L_ECHONL(tty)))) {
-			put_tty_queue('\n',&tty->write_q);
-			put_tty_queue('\r',&tty->write_q);
+
+		if (tty->erasing) {
+			opost('/', tty);
+			tty->erasing = 0;
+		}
+		if (c == '\n' && !tty->lnext) {
+			if (L_ECHO(tty) || (L_ICANON(tty) && L_ECHONL(tty)))
+				opost('\n', tty);
 		} else if (L_ECHO(tty)) {
-			if (c<32 && L_ECHOCTL(tty)) {
-				put_tty_queue('^',&tty->write_q);
-				put_tty_queue(c+'A'-1, &tty->write_q);
-				if (EOF_CHAR(tty) != __DISABLED_CHAR &&
-				    c==EOF_CHAR(tty) && !tty->lnext) {
-					put_tty_queue('\b',&tty->write_q);
-					put_tty_queue('\b',&tty->write_q);
-				}
-			} else
-				put_tty_queue(c, &tty->write_q);
+			/* Don't echo the EOF char in canonical mode.  Sun
+			   handles this differently by echoing the char and
+			   then backspacing, but that's a hack. */
+			if (c != EOF_CHAR(tty) || !L_ICANON(tty) ||
+			    tty->lnext) {
+				/* Record the column of first canon char. */
+				if (tty->canon_head == tty->secondary.head)
+					tty->canon_column = tty->column;
+				echo_char(c, tty);
+			}
 		}
+
+		if (I_PARMRK(tty) && c == (unsigned char) '\377' &&
+		    (c != EOF_CHAR(tty) || !L_ICANON(tty) || tty->lnext))
+			put_tty_queue(c, &tty->secondary);
+
+		if (L_ICANON(tty) && !tty->lnext &&
+		    (c == '\n' || c == EOF_CHAR(tty) || c == EOL_CHAR(tty) ||
+		     (c == EOL2_CHAR(tty) && L_IEXTEN(tty)))) {
+			if (c == EOF_CHAR(tty))
+				c = __DISABLED_CHAR;
+			set_bit(tty->secondary.head, &tty->secondary_flags);
+			put_tty_queue(c, &tty->secondary);
+			tty->canon_head = tty->secondary.head;
+			tty->canon_data++;
+		} else
+			put_tty_queue(c, &tty->secondary);
 		tty->lnext = 0;
-		put_tty_queue(c, &tty->secondary);
 	}
-	TTY_WRITE_FLUSH(tty);
-	if (!EMPTY(&tty->secondary))
+	if (!EMPTY(&tty->write_q))
+		TTY_WRITE_FLUSH(tty);
+	if (L_ICANON(tty) ? tty->canon_data : !EMPTY(&tty->secondary))
 		wake_up_interruptible(&tty->secondary.proc_list);
-	if (tty->write_q.proc_list && LEFT(&tty->write_q) > TTY_BUF_SIZE/2)
-		wake_up_interruptible(&tty->write_q.proc_list);
+
 	if (tty->throttle && (LEFT(&tty->read_q) >= RQ_THRESHOLD_HW)
 	    && clear_bit(TTY_RQ_THROTTLED, &tty->flags))
 		tty->throttle(tty, TTY_THROTTLE_RQ_AVAIL);
-	if (tty->throttle && (LEFT(&tty->secondary) >= SQ_THRESHOLD_HW)
-	    && clear_bit(TTY_SQ_THROTTLED, &tty->flags))
-		tty->throttle(tty, TTY_THROTTLE_SQ_AVAIL);
 }
 
 int is_ignored(int sig)
@@ -729,278 +921,205 @@ int is_ignored(int sig)
 	        (current->sigaction[sig-1].sa_handler == SIG_IGN));
 }
 
-static int available_canon_input(struct tty_struct *);
-static void __wait_for_canon_input(struct file * file, struct tty_struct *);
-
-static void wait_for_canon_input(struct file * file, struct tty_struct * tty)
+static inline int input_available_p(struct tty_struct *tty)
 {
-	if (!available_canon_input(tty)) {
-		if (current->signal & ~current->blocked)
-			return;
-		__wait_for_canon_input(file, tty);
-	}
+	/* Avoid calling TTY_READ_FLUSH unnecessarily. */
+	if (L_ICANON(tty)) {
+		if (tty->canon_data || FULL(&tty->read_q))
+			return 1;
+	} else if (!EMPTY(&tty->secondary))
+		return 1;
+
+	/* Shuffle any pending data down the queues. */
+	TTY_READ_FLUSH(tty);
+	if (tty->link)
+		TTY_WRITE_FLUSH(tty->link);
+
+	if (L_ICANON(tty)) {
+		if (tty->canon_data || FULL(&tty->read_q))
+			return 1;
+	} else if (!EMPTY(&tty->secondary))
+		return 1;
+	return 0;
 }
 
-static int read_chan(struct tty_struct * tty, struct file * file, char * buf, int nr)
+static int read_chan(struct tty_struct *tty, struct file *file,
+		     unsigned char *buf, unsigned int nr)
 {
 	struct wait_queue wait = { current, NULL };
 	int c;
-	char * b=buf;
-	int minimum,time;
+	unsigned char *b = buf;
+	int minimum, time;
+	int retval = 0;
 
-	if (L_CANON(tty))
-		minimum = time = current->timeout = 0;
-	else {
-		time = 10L*tty->termios->c_cc[VTIME];
-		minimum = tty->termios->c_cc[VMIN];
+	if (L_ICANON(tty)) {
+		minimum = time = 0;
+		current->timeout = (unsigned long) -1;
+	} else {
+		time = (HZ / 10) * TIME_CHAR(tty);
+		minimum = MIN_CHAR(tty);
 		if (minimum)
-			current->timeout = 0xffffffff;
+		  	current->timeout = (unsigned long) -1;
 		else {
-			if (time)
+			if (time) {
 				current->timeout = time + jiffies;
-			else
+				time = 0;
+			} else
 				current->timeout = 0;
-			time = 0;
 			minimum = 1;
 		}
 	}
-	if (file->f_flags & O_NONBLOCK) {
-		time = current->timeout = 0;
-		if (L_CANON(tty) && !available_canon_input(tty))
-				return -EAGAIN;
-	} else if (L_CANON(tty)) {
-		wait_for_canon_input(file, tty);
-		if (current->signal & ~current->blocked)
-			return -ERESTARTSYS;
-	}
-	if (minimum>nr)
-		minimum = nr;
-
-	/* deal with packet mode:  First test for status change */
-	if (tty->packet && tty->link && tty->link->ctrl_status) {
-		put_fs_byte (tty->link->ctrl_status, b);
-		tty->link->ctrl_status = 0;
-		return 1;
-	}
-	  
-	/* now bump the buffer up one. */
-	if (tty->packet) {
-		put_fs_byte (0,b++);
-		nr--;
-		/* this really shouldn't happen, but we need to 
-		put it here. */
-		if (nr == 0)
-			return 1;
-	}
-	add_wait_queue(&tty->secondary.proc_list, &wait);
-	while (nr>0) {
-		if (tty_hung_up_p(file)) {
-			file->f_flags &= ~O_NONBLOCK;
-			break;  /* force read() to return 0 */
-		}
-		TTY_READ_FLUSH(tty);
-		if (tty->link)
-			TTY_WRITE_FLUSH(tty->link);
-		while (nr > 0 && ((c = get_tty_queue(&tty->secondary)) >= 0)) {
-			if ((EOF_CHAR(tty) != __DISABLED_CHAR &&
-			     c==EOF_CHAR(tty)) || c==10)
-				tty->secondary.data--;
-			if ((EOF_CHAR(tty) != __DISABLED_CHAR &&
-			     c==EOF_CHAR(tty)) && L_CANON(tty))
-				break;
-			put_fs_byte(c,b++);
-			nr--;
-			if (time)
-				current->timeout = time+jiffies;
-			if (c==10 && L_CANON(tty))
-				break;
-		};
-		wake_up_interruptible(&tty->read_q.proc_list);
-		/*
-		 * If there is enough space in the secondary queue
-		 * now, let the low-level driver know.
-		 */
-		if (tty->throttle && (LEFT(&tty->secondary) >= SQ_THRESHOLD_HW)
-		    && clear_bit(TTY_SQ_THROTTLED, &tty->flags))
-			tty->throttle(tty, TTY_THROTTLE_SQ_AVAIL);
-		if (tty->link) {
-			if (IS_A_PTY_MASTER(tty->line)) {
-				if ((tty->flags & (1 << TTY_SLAVE_OPENED))
-				    && tty->link->count <= 1) {
-					file->f_flags &= ~O_NONBLOCK;
-					break;
-				}
-			} else if (!tty->link->count) {
-				file->f_flags &= ~O_NONBLOCK;
-				break;
-			}
-		}
-		if (b-buf >= minimum || !current->timeout)
-			break;
-		if (current->signal & ~current->blocked) 
-			break;
-		TTY_READ_FLUSH(tty);
-		if (tty->link)
-			TTY_WRITE_FLUSH(tty->link);
-		if (!EMPTY(&tty->secondary))
-			continue;
-		current->state = TASK_INTERRUPTIBLE;
-		if (EMPTY(&tty->secondary))
-			schedule();
-		current->state = TASK_RUNNING;
-	}
-	remove_wait_queue(&tty->secondary.proc_list, &wait);
-	TTY_READ_FLUSH(tty);
-	if (tty->link && tty->link->write)
-		TTY_WRITE_FLUSH(tty->link);
-	current->timeout = 0;
-
-	/* packet mode sticks in an extra 0.  If that's all we've got,
-	   we should count it a zero bytes. */
-	if (tty->packet) {
-		if ((b-buf) > 1)
-			return b-buf;
-	} else {
-		if (b-buf)
-			return b-buf;
-	}
-
-	if (current->signal & ~current->blocked)
-		return -ERESTARTSYS;
-	if (file->f_flags & O_NONBLOCK)
-		return -EAGAIN;
-	if (IS_A_PTY_MASTER(tty->line))
-		return -EIO;
-	return 0;
-}
-
-static void __wait_for_canon_input(struct file * file, struct tty_struct * tty)
-{
-	struct wait_queue wait = { current, NULL };
 
 	add_wait_queue(&tty->secondary.proc_list, &wait);
 	while (1) {
-		current->state = TASK_INTERRUPTIBLE;
-		if (available_canon_input(tty))
-			break;
-		if (current->signal & ~current->blocked)
-			break;
-		if (tty_hung_up_p(file))
-			break;
-		schedule();
-	}
-	current->state = TASK_RUNNING;
-	remove_wait_queue(&tty->secondary.proc_list, &wait);
-}
-
-static int available_canon_input(struct tty_struct * tty)
-{
-	TTY_READ_FLUSH(tty);
-	if (tty->link)
-		if (tty->link->count)
-			TTY_WRITE_FLUSH(tty->link);
-		else
-			return 1;
-	if (FULL(&tty->read_q))
-		return 1;
-	if (tty->secondary.data)
-		return 1;
-	return 0;
-}
-
-static int write_chan(struct tty_struct * tty, struct file * file, char * buf, int nr)
-{
-	struct wait_queue wait = { current, NULL };
-	char c, *b=buf;
-
-	if (nr < 0)
-		return -EINVAL;
-	if (!nr)
-		return 0;
-	add_wait_queue(&tty->write_q.proc_list, &wait);
-	while (nr>0) {
-		if (current->signal & ~current->blocked)
-			break;
-		if (tty_hung_up_p(file))
-			break;
-		if (tty->link && !tty->link->count) {
-			send_sig(SIGPIPE,current,0);
+		/* Job control check -- must be done at start and after
+		   every sleep (POSIX.1 7.1.1.4). */
+		/* don't stop on /dev/console */
+		if (file->f_inode->i_rdev != CONSOLE_DEV &&
+		    current->tty == tty->line) {
+			if (tty->pgrp <= 0)
+				printk("read_chan: tty->pgrp <= 0!\n");
+			else if (current->pgrp != tty->pgrp) {
+				if (is_ignored(SIGTTIN) ||
+				    is_orphaned_pgrp(current->pgrp)) {
+					retval = -EIO;
+					break;
+				}
+				kill_pg(current->pgrp, SIGTTIN, 1);
+				retval = -ERESTARTSYS;
+				break;
+			}
+		}
+		/* First test for status change. */
+		if (tty->packet && tty->link->ctrl_status) {
+			if (b != buf)
+				break;
+			put_fs_byte(tty->link->ctrl_status, b++);
+			tty->link->ctrl_status = 0;
 			break;
 		}
+		/* This statement must be first before checking for input
+		   so that any interrupt will set the state back to
+		   TASK_RUNNING. */
 		current->state = TASK_INTERRUPTIBLE;
-		if (FULL(&tty->write_q)) {
-			TTY_WRITE_FLUSH(tty);
-			if (FULL(&tty->write_q))
-				schedule();
-			current->state = TASK_RUNNING;
+		if (!input_available_p(tty)) {
+			if (tty->flags & (1 << TTY_SLAVE_CLOSED)) {
+				retval = -EIO;
+				break;
+			}
+			if (tty_hung_up_p(file))
+				break;
+			if (!current->timeout)
+				break;
+			if (file->f_flags & O_NONBLOCK) {
+				retval = -EAGAIN;
+				break;
+			}
+			if (current->signal & ~current->blocked) {
+				retval = -ERESTARTSYS;
+				break;
+			}
+			schedule();
 			continue;
 		}
 		current->state = TASK_RUNNING;
-		while (nr>0 && !FULL(&tty->write_q)) {
-			c=get_fs_byte(b);
-			if (O_POST(tty)) {
-				switch (c) {
-					case '\n':
-						if (O_NLRET(tty)) {
-							tty->column = 0;
-						}
-						if (O_NLCR(tty)) {
-							if (!set_bit(TTY_CR_PENDING,&tty->flags)) {
-								c = '\r';
-								tty->column = 0;
-								b--; nr++;
-							} else {
-								clear_bit(TTY_CR_PENDING,&tty->flags);
-							}
-						}
-						break;
-					case '\r':
-						if (O_NOCR(tty) && tty->column == 0) {
-							b++; nr--;
-							continue;
-						}
-						if (O_CRNL(tty)) {
-							c = '\n';
-							if (O_NLRET(tty))
-								tty->column = 0;
-							break;
-						}
-						tty->column = 0;
-						break;
-					case '\t':
-						if (O_TABDLY(tty) == XTABS) {
-							c = ' ';
-							tty->column++;
-							if (tty->column % 8 != 0) {
-								b--; nr++;
-							}
-						}
-						break;
-					case '\b':
-						tty->column--;
-						break;
-					default:
-						if (O_LCUC(tty))
-							c = toupper(c);
-						tty->column++;
-						break;
-				}
-			}
-			b++; nr--;
-			put_tty_queue(c,&tty->write_q);
+
+		/* Deal with packet mode. */
+		if (tty->packet && b == buf) {
+			put_fs_byte(TIOCPKT_DATA, b++);
+			nr--;
 		}
-		if (need_resched)
-			schedule();
+
+		while (nr > 0) {
+			int eol;
+
+			cli();
+			if (EMPTY(&tty->secondary)) {
+				sti();
+				break;
+			}
+			eol = clear_bit(tty->secondary.tail,
+					&tty->secondary_flags);
+			c = tty->secondary.buf[tty->secondary.tail];
+			INC(tty->secondary.tail);
+			sti();
+			if (eol) {
+				if (--tty->canon_data < 0) {
+					printk("read_chan: canon_data < 0!\n");
+					tty->canon_data = 0;
+				}
+				if (c == __DISABLED_CHAR)
+					break;
+				put_fs_byte(c, b++);
+				nr--;
+				break;
+			}
+			put_fs_byte(c, b++);
+			nr--;
+		}
+
+		/* If there is enough space in the secondary queue now, let the
+		   low-level driver know. */
+		if (tty->throttle && (LEFT(&tty->secondary) >= SQ_THRESHOLD_HW)
+		    && !clear_bit(TTY_SQ_THROTTLED, &tty->flags))
+			tty->throttle(tty, TTY_THROTTLE_SQ_AVAIL);
+
+		/* XXX packet mode's status byte is mistakenly counted */
+		if (b - buf >= minimum || !nr)
+			break;
+		if (time)
+			current->timeout = time + jiffies;
 	}
+	remove_wait_queue(&tty->secondary.proc_list, &wait);
+	current->state = TASK_RUNNING;
+	current->timeout = 0;
+	return (b - buf) ? b - buf : retval;
+}
+
+static int write_chan(struct tty_struct * tty, struct file * file,
+		      unsigned char * buf, unsigned int nr)
+{
+	struct wait_queue wait = { current, NULL };
+	int c;
+	unsigned char *b = buf;
+	int retval = 0;
+
+	/* Job control check -- must be done at start (POSIX.1 7.1.1.4). */
+	if (L_TOSTOP(tty) && file->f_inode->i_rdev != CONSOLE_DEV) {
+		retval = check_change(tty, tty->line);
+		if (retval)
+			return retval;
+	}
+
+	add_wait_queue(&tty->write_q.proc_list, &wait);
+	while (1) {
+		current->state = TASK_INTERRUPTIBLE;
+		if (current->signal & ~current->blocked) {
+			retval = -ERESTARTSYS;
+			break;
+		}
+		if (tty_hung_up_p(file) || (tty->link && !tty->link->count)) {
+			retval = -EIO;
+			break;
+		}
+		while (nr > 0) {
+			c = get_fs_byte(b);
+			/* Care is needed here: opost() can abort even
+			   if the write_q is not full. */
+			if (opost(c, tty) < 0)
+				break;
+			b++; nr--;
+		}
+		TTY_WRITE_FLUSH(tty);
+		if (!nr)
+			break;
+		if (EMPTY(&tty->write_q) && !need_resched)
+			continue;
+		schedule();
+	}
+	current->state = TASK_RUNNING;
 	remove_wait_queue(&tty->write_q.proc_list, &wait);
-	TTY_WRITE_FLUSH(tty);
-	if (b-buf)
-		return b-buf;
-	if (tty->link && !tty->link->count)
-		return -EPIPE;
-	if (current->signal & ~current->blocked)
-		return -ERESTARTSYS;
-	return 0;
+	return (b - buf) ? b - buf : retval;
 }
 
 static int tty_read(struct inode * inode, struct file * file, char * buf, int count)
@@ -1017,6 +1136,12 @@ static int tty_read(struct inode * inode, struct file * file, char * buf, int co
 	tty = TTY_TABLE(dev);
 	if (!tty || (tty->flags & (1 << TTY_IO_ERROR)))
 		return -EIO;
+
+	/* This check not only needs to be done before reading, but also
+	   whenever read_chan() gets woken up after sleeping, so I've
+	   moved it to there.  This should only be done for the N_TTY
+	   line discipline, anyway.  Same goes for write_chan(). -- jlc. */
+#if 0
 	if ((inode->i_rdev != CONSOLE_DEV) && /* don't stop on /dev/console */
 	    (tty->pgrp > 0) &&
 	    (current->tty == dev) &&
@@ -1027,8 +1152,10 @@ static int tty_read(struct inode * inode, struct file * file, char * buf, int co
 			(void) kill_pg(current->pgrp, SIGTTIN, 1);
 			return -ERESTARTSYS;
 		}
+#endif
 	if (ldiscs[tty->disc].read)
-		i = (ldiscs[tty->disc].read)(tty,file,buf,count);
+		/* XXX casts are for what kernel-wide prototypes should be. */
+		i = (ldiscs[tty->disc].read)(tty,file,(unsigned char *)buf,(unsigned int)count);
 	else
 		i = -EIO;
 	if (i > 0)
@@ -1054,6 +1181,7 @@ static int tty_write(struct inode * inode, struct file * file, char * buf, int c
 		tty = TTY_TABLE(dev);
 	if (!tty || !tty->write || (tty->flags & (1 << TTY_IO_ERROR)))
 		return -EIO;
+#if 0
 	if (!is_console && L_TOSTOP(tty) && (tty->pgrp > 0) &&
 	    (current->tty == dev) && (tty->pgrp != current->pgrp)) {
 		if (is_orphaned_pgrp(current->pgrp))
@@ -1063,8 +1191,10 @@ static int tty_write(struct inode * inode, struct file * file, char * buf, int c
 			return -ERESTARTSYS;
 		}
 	}
+#endif
 	if (ldiscs[tty->disc].write)
-		i = (ldiscs[tty->disc].write)(tty,file,buf,count);
+		/* XXX casts are for what kernel-wide prototypes should be. */
+		i = (ldiscs[tty->disc].write)(tty,file,(unsigned char *)buf,(unsigned int)count);
 	else
 		i = -EIO;
 	if (i > 0)
@@ -1349,6 +1479,7 @@ retry_open:
 	if (test_bit(TTY_EXCLUSIVE, &tty->flags) && !suser())
 		return -EBUSY;
 
+#if 0
 	/* clean up the packet stuff. */
 	/*
 	 *  Why is this not done in init_dev?  Right here, if another 
@@ -1358,9 +1489,12 @@ retry_open:
 	 *
 	 * Not to worry, a pty master can only be opened once.
 	 * And rlogind and telnetd both use packet mode.  -- jrs
+	 *
+	 * Not needed.  These are cleared in initialize_tty_struct. -- jlc
 	 */
 	tty->ctrl_status = 0;
 	tty->packet = 0;
+#endif
 
 	if (tty->open) {
 		retval = tty->open(tty, filp);
@@ -1441,48 +1575,22 @@ static int normal_select(struct tty_struct * tty, struct inode * inode,
 {
 	switch (sel_type) {
 		case SEL_IN:
-			if (L_CANON(tty)) {
-				if (available_canon_input(tty))
-					return 1;
-			} else if (!EMPTY(&tty->secondary))
+			if (input_available_p(tty))
 				return 1;
-			if (tty->link) {
-				if (IS_A_PTY_MASTER(tty->line)) {
-					if ((tty->flags & (1 << TTY_SLAVE_OPENED))
-					    && tty->link->count <= 1)
-						return 1;
-				} else {
-					if (!tty->link->count)
-						return 1;
-				}
-			}
-
-			/* see if the status byte can be read. */
-			if (tty->packet && tty->link && tty->link->ctrl_status)
+			/* fall through */
+		case SEL_EX:
+			if (tty->packet && tty->link->ctrl_status)
 				return 1;
-
+			if (tty->flags & (1 << TTY_SLAVE_CLOSED))
+				return 1;
+			if (tty_hung_up_p(file))
+				return 1;
 			select_wait(&tty->secondary.proc_list, wait);
 			return 0;
 		case SEL_OUT:
 			if (!FULL(&tty->write_q))
 				return 1;
 			select_wait(&tty->write_q.proc_list, wait);
-			return 0;
-		case SEL_EX:
-			if (tty->link) {
-				if (IS_A_PTY_MASTER(tty->line)) {
-					if ((tty->flags & (1 << TTY_SLAVE_OPENED))
-					    && tty->link->count <= 1)
-						return 1;
-					if (tty->packet
-					    && tty->link->ctrl_status)
-						return 1;
-				} else {
-					if (!tty->link->count)
-						return 1;
-				}
-			}
-			select_wait(&tty->except_q, wait);
 			return 0;
 	}
 	return 0;
@@ -1645,8 +1753,6 @@ static void initialize_tty_struct(int line, struct tty_struct *tty)
 	tty->line = line;
 	tty->disc = N_TTY;
 	tty->pgrp = -1;
-	tty->winsize.ws_row = 0;
-	tty->winsize.ws_col = 0;
 	if (IS_A_CONSOLE(line)) {
 		tty->open = con_open;
 		tty->winsize.ws_row = video_num_lines;
@@ -1656,31 +1762,26 @@ static void initialize_tty_struct(int line, struct tty_struct *tty)
 	} else if IS_A_PTY(line) {
 		tty->open = pty_open;
 	}
-	tty->except_q = NULL;
 }
 
 static void initialize_termios(int line, struct termios * tp)
 {
 	memset(tp, 0, sizeof(struct termios));
 	memcpy(tp->c_cc, INIT_C_CC, NCCS);
-	if (IS_A_CONSOLE(line)) {
+	if (IS_A_CONSOLE(line) || IS_A_PTY_SLAVE(line)) {
 		tp->c_iflag = ICRNL | IXON;
 		tp->c_oflag = OPOST | ONLCR;
 		tp->c_cflag = B38400 | CS8 | CREAD;
-		tp->c_lflag = ISIG | ICANON | ECHO |
-			ECHOCTL | ECHOKE;
+		tp->c_lflag = ISIG | ICANON | ECHO | ECHOE | ECHOK |
+			ECHOCTL | ECHOKE | IEXTEN;
 	} else if (IS_A_SERIAL(line)) {
-		tp->c_cflag = B9600 | CS8 | CREAD | HUPCL | CLOCAL;
-		tp->c_oflag = OPOST | ONLCR | XTABS;
-	} else if (IS_A_PTY_MASTER(line)) {
-		tp->c_cflag = B9600 | CS8 | CREAD;
-	} else if (IS_A_PTY_SLAVE(line)) {
 		tp->c_iflag = ICRNL | IXON;
-		tp->c_oflag = OPOST | ONLCR;
-		tp->c_cflag = B38400 | CS8 | CREAD;
-		tp->c_lflag = ISIG | ICANON | ECHO |
-			ECHOCTL | ECHOKE;
-	}
+		tp->c_oflag = OPOST | ONLCR | XTABS;
+		tp->c_cflag = B9600 | CS8 | CREAD | HUPCL | CLOCAL;
+		tp->c_lflag = ISIG | ICANON | ECHO | ECHOE | ECHOK |
+			ECHOCTL | ECHOKE | IEXTEN;
+	} else if (IS_A_PTY_MASTER(line))
+		tp->c_cflag = B9600 | CS8 | CREAD;
 }
 
 static struct tty_ldisc tty_ldisc_N_TTY = {

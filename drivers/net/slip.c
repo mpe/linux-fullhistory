@@ -31,13 +31,11 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/socket.h>
-#include <linux/termios.h>
 #include <linux/sockios.h>
 #include <linux/interrupt.h>
 #include <linux/tty.h>
 #include <linux/errno.h>
 #include <linux/stat.h>
-#include <linux/tty.h>
 #include <linux/in.h>
 #include "inet.h"
 #include "dev.h"

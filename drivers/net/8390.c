@@ -36,7 +36,6 @@ static char *version =
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
-#include <linux/tty.h>
 #include <linux/types.h>
 #include <linux/ptrace.h>
 #include <linux/string.h>

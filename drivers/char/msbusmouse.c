@@ -31,7 +31,6 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/busmouse.h>
-#include <linux/tty.h>
 #include <linux/signal.h>
 #include <linux/errno.h>
 

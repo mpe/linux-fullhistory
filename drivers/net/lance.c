@@ -563,8 +563,12 @@ lance_start_xmit(struct sk_buff *skb, struct device *dev)
 	if (skb->free)
 	    kfree_skb (skb, FREE_WRITE);
     } else
+    {
+    	/* Gimme!!! */
+    	if(skb->free==0)
+    		skb_kept_by_device(skb);
 	lp->tx_ring[entry].base = (int)(skb+1) | 0x83000000;
-
+    }
     lp->cur_tx++;
 
     /* Trigger an immediate send poll. */
@@ -648,6 +652,9 @@ lance_interrupt(int reg_ptr)
 		struct sk_buff *skb = ((struct sk_buff *)databuff) - 1;
 		if (skb->free)
 		    kfree_skb(skb, FREE_WRITE);
+		else
+		    skb_device_release(skb,FREE_WRITE);
+		/* Warning: skb may well vanish at the point you call device_release! */
 	    }
 	    dirty_tx++;
 	}

@@ -262,6 +262,8 @@ asmlinkage int sys_fchmod(unsigned int fd, mode_t mode)
 		return -EPERM;
 	if (IS_RDONLY(inode))
 		return -EROFS;
+	if (mode == (mode_t) -1)
+		mode = inode->i_mode;
 	inode->i_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
 	if (!suser() && !in_group_p(inode->i_gid))
 		inode->i_mode &= ~S_ISGID;
@@ -286,6 +288,8 @@ asmlinkage int sys_chmod(const char * filename, mode_t mode)
 		iput(inode);
 		return -EROFS;
 	}
+	if (mode == (mode_t) -1)
+		mode = inode->i_mode;
 	inode->i_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
 	if (!suser() && !in_group_p(inode->i_gid))
 		inode->i_mode &= ~S_ISGID;
