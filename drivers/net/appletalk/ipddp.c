@@ -242,7 +242,10 @@ static int ipddp_create(struct ipddp_route *new_rt)
         rt->next = NULL;
         rt->dev = atrtr_get_dev(&rt->at);
         if(rt->dev == NULL)
+        {
+        	kfree(rt);
                 return (-ENETUNREACH);
+        }
 
 	test = ipddp_find_route(rt);
 	if(test != NULL)

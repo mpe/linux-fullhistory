@@ -87,6 +87,8 @@ struct ctlr_info {
 	int	log_drives;
 	int	phys_drives;
 
+	unsigned char  pci_bus;     /* 0 if EISA */
+        unsigned char  pci_dev_fn;  /* 0 if EISA */
 	__u32	board_id;
 	char	*product_name;	
 

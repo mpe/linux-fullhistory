@@ -47,6 +47,7 @@ struct fsc_state {
 	Scsi_Cmnd *current_req;		/* req we're currently working on */
 	enum fsc_phase phase;		/* what we're currently trying to do */
 	struct dbdma_cmd *dma_cmds;	/* space for dbdma commands, aligned */
+	void	*dma_cmd_space;
 };
 
 static struct fsc_state *all_53c94s;
@@ -113,6 +114,7 @@ mac53c94_detect(Scsi_Host_Template *tp)
 			DBDMA_ALIGN(dma_cmd_space);
 		memset(state->dma_cmds, 0, (host->sg_tablesize + 1)
 		       * sizeof(struct dbdma_cmd));
+		state->dma_cmd_space = dma_cmd_space;
 
 		*prev_statep = state;
 		prev_statep = &state->next;
@@ -127,6 +129,22 @@ mac53c94_detect(Scsi_Host_Template *tp)
 		++nfscs;
 	}
 	return nfscs;
+}
+
+int
+mac53c94_release(struct Scsi_Host *host)
+{
+	struct fsc_state *fp = (struct fsc_state *) host->hostdata;
+
+	if (fp == 0)
+		return 0;
+	if (fp->regs)
+		iounmap((void *) fp->regs);
+	if (fp->dma)
+		iounmap((void *) fp->dma);
+	kfree(fp->dma_cmd_space);
+	free_irq(fp->intr, fp);
+	return 0;
 }
 
 int
@@ -537,3 +555,7 @@ data_goes_out(Scsi_Cmnd *cmd)
 		return 0;
 	}
 }
+
+static Scsi_Host_Template driver_template = SCSI_MAC53C94;
+
+#include "scsi_module.c"

@@ -108,6 +108,15 @@
 #define SPECIALIX_NORMAL_MAJOR 75
 #define SPECIALIX_CALLOUT_MAJOR 76
 
+#define COMPAQ_CISS_MAJOR 	104
+#define COMPAQ_CISS_MAJOR1	105
+#define COMPAQ_CISS_MAJOR2      106
+#define COMPAQ_CISS_MAJOR3      107
+#define COMPAQ_CISS_MAJOR4      108
+#define COMPAQ_CISS_MAJOR5      109
+#define COMPAQ_CISS_MAJOR6      110
+#define COMPAQ_CISS_MAJOR7      111
+
 #define DASD_MAJOR      94	/* Official assignations from Peter */
 
 #define MDISK_MAJOR     95	/* Official assignations from Peter */

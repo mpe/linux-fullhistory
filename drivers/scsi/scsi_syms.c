@@ -6,8 +6,6 @@
 #include <linux/config.h>
 #include <linux/module.h>
 
-#ifdef CONFIG_MODULES
-
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/string.h>
@@ -93,4 +91,3 @@ EXPORT_SYMBOL(scsi_hosts);
 EXPORT_SYMBOL(scsi_devicelist);
 EXPORT_SYMBOL(scsi_device_types);
 
-#endif				/* CONFIG_MODULES */

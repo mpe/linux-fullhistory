@@ -199,6 +199,14 @@
  *    - Fixed HP S20 ID's...again..sigh.  Thanks to Ruud
  *      Linders <rlinders@xs4all.nl>.
  *
+ * 0.4.4
+ *    - Added addtional Mustek ID's (BearPaw 1200, 600 CU, 1200 USB,
+ *      and 1200 UB.  Thanks to Henning Meier-Geinitz <henningmg@gmx.de>.
+ *    - Added the Vuego Scan Brisa 340U ID's.  Apparently this scanner is
+ *      marketed by Acer Peripherals as a cheap 300 dpi model. Thanks to
+ *      David Gundersen <gundersd@paradise.net.nz>.
+ *    - Added the Epson Expression1600 ID's. Thanks to Karl Heinz
+ *      Kremer <khk@khk.net>.
  *
  *  TODO
  *

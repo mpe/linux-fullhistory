@@ -26,8 +26,6 @@
 
 #define __NO_VERSION__
 #include <linux/module.h>
-
-#include <linux/config.h>
 #include <linux/blk.h>
 #include <linux/kernel.h>
 #include <linux/string.h>

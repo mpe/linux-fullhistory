@@ -4,19 +4,13 @@
 #define CODA_PSDEV_MAJOR 67
 #define MAX_CODADEVS  5	   /* how many do we allow */
 
-extern struct venus_comm coda_upc_comm;
-extern struct coda_sb_info coda_super_info;
 #define CODA_SUPER_MAGIC	0x73757245
 
 struct coda_sb_info
 {
-	struct inode *      sbi_psdev;     /* /dev/cfs? Venus/kernel device */
-	int                 sbi_refct;
 	struct venus_comm * sbi_vcomm;
-	struct inode *      sbi_root;
 	struct super_block *sbi_sb;
-	struct list_head    sbi_cchead;
-	struct list_head    sbi_volroothead;
+	struct list_head    sbi_cihead;
 };
 
 /* communication pending/processing queues */
@@ -26,6 +20,7 @@ struct venus_comm {
 	struct list_head    vc_pending;
 	struct list_head    vc_processing;
 	int                 vc_inuse;
+	struct super_block *vc_sb;
 };
 
 
@@ -33,11 +28,6 @@ static inline struct coda_sb_info *coda_sbp(struct super_block *sb)
 {
     return ((struct coda_sb_info *)((sb)->u.generic_sbp));
 }
-
-
-
-extern void coda_psdev_detach(int unit);
-extern int  init_coda_psdev(void);
 
 
 /* upcalls */
@@ -112,6 +102,7 @@ struct coda_upcallstats {
 } ;
 
 extern struct coda_upcallstats coda_callstats;
+extern struct venus_comm coda_comms[];
 
 static inline void clstats(int opcode)
 {

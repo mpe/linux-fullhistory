@@ -98,48 +98,35 @@ int init_private_file(struct file *filp, struct dentry *dentry, int mode)
 		return 0;
 }
 
-/*
- * Called when retiring the last use of a file pointer.
- */
-static void __fput(struct file *filp)
-{
-	struct dentry * dentry = filp->f_dentry;
-	struct vfsmount * mnt = filp->f_vfsmnt;
-	struct inode * inode = dentry->d_inode;
-
-	if (filp->f_op && filp->f_op->release)
-		filp->f_op->release(inode, filp);
-	fops_put(filp->f_op);
-	filp->f_dentry = NULL;
-	filp->f_vfsmnt = NULL;
-	if (filp->f_mode & FMODE_WRITE)
-		put_write_access(inode);
-	dput(dentry);
-	if (mnt)
-		mntput(mnt);
-}
-
-static void _fput(struct file *file)
-{
-	locks_remove_flock(file);
-	__fput(file);
-
-	file_list_lock();
-	list_del(&file->f_list);
-	list_add(&file->f_list, &free_list);
-	files_stat.nr_free_files++;
-	file_list_unlock();
-}
-
 void fput(struct file * file)
 {
-	if (atomic_dec_and_test(&file->f_count))
-		_fput(file);
+	struct dentry * dentry = file->f_dentry;
+	struct vfsmount * mnt = file->f_vfsmnt;
+	struct inode * inode = dentry->d_inode;
+
+	if (atomic_dec_and_test(&file->f_count)) {
+		locks_remove_flock(file);
+		if (file->f_op && file->f_op->release)
+			file->f_op->release(inode, file);
+		fops_put(file->f_op);
+		file->f_dentry = NULL;
+		file->f_vfsmnt = NULL;
+		if (file->f_mode & FMODE_WRITE)
+			put_write_access(inode);
+		dput(dentry);
+		if (mnt)
+			mntput(mnt);
+		file_list_lock();
+		list_del(&file->f_list);
+		list_add(&file->f_list, &free_list);
+		files_stat.nr_free_files++;
+		file_list_unlock();
+	}
 }
 
 struct file * fget(unsigned int fd)
 {
-	struct file * file = NULL;
+	struct file * file;
 	struct files_struct *files = current->files;
 
 	read_lock(&files->file_lock);

@@ -210,6 +210,20 @@ M:	jgarzik@mandrakesoft.com
 L:	linux-fbdev@vuser.vu.union.edu
 S:	Maintained
 
+COMPAQ SMART CISS RAID DRIVER 
+P:      Charles White
+M:      Charles White <arrays@compaq.com>
+L:      compaqandlinux@cpqlin.van-dijk.net
+W:	ftp.compaq.com/pub/products/drivers/linux	
+S:     	Supported 
+
+COMPAQ FIBRE CHANNEL 64-bit/66MHz PCI non-intelligent HBA
+P:      Amy Vanzant-Hodge 
+M:      Amy Vanzant-Hodge (fibrechannel@compaq.com)
+L:	compaqandlinux@cpqlin.van-dijk.net
+W:	ftp.compaq.com/pub/products/drivers/linux
+S:      Supported
+
 COMPAQ SMART2 RAID DRIVER
 P:	Charles White	
 M:	Charles White <arrays@compaq.com>
@@ -1221,7 +1235,8 @@ S:	Supported
 
 USB HUB
 P:	Johannes Erdfelt
-M:	jerdfelt@sventech.com
+M:	jerdfelt@valinux.com
+M:	johannes@erdfelt.com
 L:	linux-usb-users@lists.sourceforge.net
 L:	linux-usb-devel@lists.sourceforge.net
 S:	Maintained

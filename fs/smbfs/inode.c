@@ -33,6 +33,13 @@
 #include "smb_debug.h"
 #include "getopt.h"
 
+/* Always pick a default string */
+#ifdef CONFIG_SMB_NLS_REMOTE
+#define SMB_NLS_REMOTE CONFIG_SMB_NLS_REMOTE
+#else
+#define SMB_NLS_REMOTE ""
+#endif
+
 static void smb_delete_inode(struct inode *);
 static void smb_put_super(struct super_block *);
 static int  smb_statfs(struct super_block *, struct statfs *);
@@ -445,7 +452,7 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 	memset(mnt, 0, sizeof(struct smb_mount_data_kernel));
 	strncpy(mnt->codepage.local_name, CONFIG_NLS_DEFAULT,
 		SMB_NLS_MAXNAMELEN);
-	strncpy(mnt->codepage.remote_name, CONFIG_SMB_NLS_REMOTE,
+	strncpy(mnt->codepage.remote_name, SMB_NLS_REMOTE,
 		SMB_NLS_MAXNAMELEN);
 
 	if (ver == SMB_MOUNT_OLDVERSION) {

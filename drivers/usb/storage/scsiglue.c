@@ -1,7 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  * SCSI layer glue code
  *
- * $Id: scsiglue.c,v 1.10 2000/08/30 01:22:42 mdharm Exp $
+ * $Id: scsiglue.c,v 1.11 2000/09/12 01:18:08 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -124,9 +124,7 @@ static int release(struct Scsi_Host *psh)
 	wake_up(&(us->wqh));
 	down(&(us->notify));
 	
-	/* free the data structure we were using */
-	US_DEBUGP("-- freeing URB\n");
-	kfree(us->current_urb);
+	/* remove the pointer to the data structure we were using */
 	(struct us_data*)psh->hostdata[0] = NULL;
 
 	/* we always have a successful release */

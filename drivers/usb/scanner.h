@@ -106,6 +106,7 @@ static const struct scanner_device {
 	/* Acer */
 		{ 0x04a5, 0x2060 },	/* Prisa Acerscan 620U & 640U (!) */
 		{ 0x04a5, 0x2040 },	/* Prisa AcerScan 620U (!) */
+		{ 0x04a5, 0x2022 },	/* Vuego Scan Brisa 340U */
 	/* Agfa */
 		{ 0x06bd, 0x0001 },	/* SnapScan 1212U */
 		{ 0x06bd, 0x2061 },	/* Another SnapScan 1212U (?) */
@@ -120,6 +121,7 @@ static const struct scanner_device {
 		{ 0x03f0, 0x0105 },	/* 4200C */
 		{ 0x03f0, 0x0102 },	/* PhotoSmart S20 */
 		{ 0x03f0, 0x0401 },	/* 5200C */
+		{ 0x03f0, 0x0701 },	/* 5300C */
 		{ 0x03f0, 0x0201 },	/* 6200C */
 		{ 0x03f0, 0x0601 },	/* 6300C */
 	/* iVina */
@@ -134,6 +136,10 @@ static const struct scanner_device {
 		{ 0x05da, 0x80ac },	/* ScanMaker V6UL - SpicyU */
 	/* Mustek */
 		{ 0x055f, 0x0001 },	/* 1200 CU */
+		{ 0x0400, 0x1000 },	/* BearPaw 1200 */
+		{ 0x055f, 0x0002 },	/* 600 CU */
+		{ 0x055f, 0x0003 },	/* 1200 USB */
+		{ 0x055f, 0x0006 },	/* 1200 UB */
 	/* Primax/Colorado */
 		{ 0x0461, 0x0300 },	/* G2-300 #1 */
 		{ 0x0461, 0x0380 },	/* G2-600 #1 */
@@ -151,15 +157,19 @@ static const struct scanner_device {
 		{ 0x04b8, 0x0101 },	/* Perfection 636U and 636Photo */
 		{ 0x04b8, 0x0103 },	/* Perfection 610 */
 		{ 0x04b8, 0x0104 },	/* Perfection 1200U and 1200Photo */
+		{ 0x04b8, 0x0107 },     /* Expression 1600 */
 	/* Umax */
 		{ 0x1606, 0x0010 },	/* Astra 1220U */
 		{ 0x1606, 0x0002 },	/* Astra 1236U */
 		{ 0x1606, 0x0030 },	/* Astra 2000U */
 		{ 0x1606, 0x0230 },	/* Astra 2200U */
 	/* Visioneer */
-		{ 0x04a7, 0x0221 },	/* OneTouch 5300 */
-		{ 0x04a7, 0x0221 },	/* OneTouch 7600 duplicate ID (!) */
-		{ 0x04a7, 0x0231 },	/* 6100 */
+		{ 0x04a7, 0x0221 },	/* OneTouch 5300 USB */
+		{ 0x04a7, 0x0211 },	/* OneTouch 7600 USB */
+		{ 0x04a7, 0x0231 },	/* 6100 USB */
+		{ 0x04a7, 0x0311 },	/* 6200 EPP/USB */
+		{ 0x04a7, 0x0321 },	/* OneTouch 8100 EPP/USB */
+		{ 0x04a7, 0x0331 }, 	/* OneTouch 8600 EPP/USB */
 };
 
 /* Forward declarations */

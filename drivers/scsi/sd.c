@@ -721,13 +721,14 @@ static int sd_init_onedisk(int i)
 	sd_devname(i, nbuff);
 
 	/*
-	 * If the device is offline, don't try and read capacity or any of the other
-	 * nicities.
+	 * If the device is offline, don't try and read capacity or any
+	 * of the other niceties.
 	 */
-	if (rscsi_disks[i].device->online == FALSE) {
+	if (rscsi_disks[i].device->online == FALSE)
 		return i;
-	}
-	/* We need to retry the READ_CAPACITY because a UNIT_ATTENTION is
+
+	/*
+	 * We need to retry the READ_CAPACITY because a UNIT_ATTENTION is
 	 * considered a fatal error, and many devices report such an error
 	 * just after a scsi bus reset.
 	 */
@@ -808,7 +809,8 @@ static int sd_init_onedisk(int i)
 			} while(time1);
 			printk(".");
 		}
-	} while (the_result && spintime && time_after(spintime_value + 100 * HZ, jiffies));
+	} while (the_result && spintime &&
+		 time_after(spintime_value + 100 * HZ, jiffies));
 	if (spintime) {
 		if (the_result)
 			printk("not responding...\n");
@@ -837,15 +839,16 @@ static int sd_init_onedisk(int i)
 	/*
 	 * The SCSI standard says:
 	 * "READ CAPACITY is necessary for self configuring software"
-	 *  While not mandatory, support of READ CAPACITY is strongly encouraged.
+	 *  While not mandatory, support of READ CAPACITY is strongly
+	 *  encouraged.
 	 *  We used to die if we couldn't successfully do a READ CAPACITY.
 	 *  But, now we go on about our way.  The side effects of this are
 	 *
-	 *  1. We can't know block size with certainty. I have said "512 bytes
-	 *     is it" as this is most common.
+	 *  1. We can't know block size with certainty. I have said
+	 *     "512 bytes is it" as this is most common.
 	 *
-	 *  2. Recovery from when some one attempts to read past the end of the
-	 *     raw device will be slower.
+	 *  2. Recovery from when someone attempts to read past the
+	 *     end of the raw device will be slower.
 	 */
 
 	if (the_result) {
@@ -868,15 +871,15 @@ static int sd_init_onedisk(int i)
 		rscsi_disks[i].capacity = 0x1fffff;
 		sector_size = 512;
 
-		/* Set dirty bit for removable devices if not ready - sometimes drives
-		 * will not report this properly. */
+		/* Set dirty bit for removable devices if not ready -
+		 * sometimes drives will not report this properly. */
 		if (rscsi_disks[i].device->removable &&
 		    SRpnt->sr_sense_buffer[2] == NOT_READY)
 			rscsi_disks[i].device->changed = 1;
 
 	} else {
 		/*
-		 * FLOPTICAL , if read_capa is ok , drive is assumed to be ready
+		 * FLOPTICAL, if read_capa is ok, drive is assumed to be ready
 		 */
 		rscsi_disks[i].ready = 1;
 
@@ -890,7 +893,8 @@ static int sd_init_onedisk(int i)
 
 		if (sector_size == 0) {
 			sector_size = 512;
-			printk("%s : sector size 0 reported, assuming 512.\n", nbuff);
+			printk("%s : sector size 0 reported, assuming 512.\n",
+			       nbuff);
 		}
 		if (sector_size != 512 &&
 		    sector_size != 1024 &&
@@ -925,31 +929,30 @@ static int sd_init_onedisk(int i)
 			 * So I have created this table. See ll_rw_blk.c
 			 * Jacques Gelinas (Jacques@solucorp.qc.ca)
 			 */
-			int m, mb;
-			int sz_quot, sz_rem;
+			int m;
 			int hard_sector = sector_size;
+			int sz = rscsi_disks[i].capacity * (hard_sector/256);
+
 			/* There are 16 minors allocated for each major device */
 			for (m = i << 4; m < ((i + 1) << 4); m++) {
 				sd_hardsizes[m] = hard_sector;
 			}
-			mb = rscsi_disks[i].capacity / 1024 * hard_sector / 1024;
-			/* sz = div(m/100, 10);  this seems to not be in the libr */
-			m = (mb + 50) / 100;
-			sz_quot = m / 10;
-			sz_rem = m - (10 * sz_quot);
-			printk("SCSI device %s: hdwr sector= %d bytes."
-			       " Sectors= %d [%d MB] [%d.%1d GB]\n",
-			     nbuff, hard_sector, rscsi_disks[i].capacity,
-			       mb, sz_quot, sz_rem);
+
+			printk("SCSI device %s: "
+			       "%d %d-byte hdwr sectors (%d MB)\n",
+			       nbuff, rscsi_disks[i].capacity,
+			       hard_sector, (sz/2 - sz/1250 + 974)/1950);
 		}
+
+		/* Rescale capacity to 512-byte units */
 		if (sector_size == 4096)
 			rscsi_disks[i].capacity <<= 3;
 		if (sector_size == 2048)
-			rscsi_disks[i].capacity <<= 2;	/* Change into 512 byte sectors */
+			rscsi_disks[i].capacity <<= 2;
 		if (sector_size == 1024)
-			rscsi_disks[i].capacity <<= 1;	/* Change into 512 byte sectors */
+			rscsi_disks[i].capacity <<= 1;
 		if (sector_size == 256)
-			rscsi_disks[i].capacity >>= 1;	/* Change into 512 byte sectors */
+			rscsi_disks[i].capacity >>= 1;
 	}
 
 

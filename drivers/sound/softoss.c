@@ -1113,7 +1113,10 @@ static int softsyn_load_patch(int dev, int format, const char *addr,
 		return -ENOMEM;
 	}
 	if(copy_from_user(&((char *) patch)[offs], &(addr)[offs], sizeof_patch - offs))
+	{
+		vfree(patch);
 		return -EFAULT;
+	}
 
 	if (patch->mode & WAVE_ROM)
 	{

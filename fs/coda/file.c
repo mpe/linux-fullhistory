@@ -23,18 +23,21 @@
 #include <linux/coda_linux.h>
 #include <linux/coda_fs_i.h>
 #include <linux/coda_psdev.h>
-#include <linux/coda_cache.h>
 #include <linux/coda_proc.h>
 
 static ssize_t
 coda_file_write(struct file *file,const char *buf,size_t count,loff_t *ppos)
 {
 	struct inode *inode = file->f_dentry->d_inode;
+	struct inode *container = (struct inode*)inode->i_mapping->host;
 	ssize_t n;
 
-	n = generic_file_write(file, buf, count, ppos);
+        down(&container->i_sem);
 
-	inode->i_size = ((struct inode*)inode->i_mapping->host)->i_size;
+	n = generic_file_write(file, buf, count, ppos);
+	inode->i_size = container->i_size;
+
+        up(&container->i_sem);
 
 	return n;
 }
@@ -63,7 +66,7 @@ int coda_fsync(struct file *coda_file, struct dentry *coda_dentry, int datasync)
 	result = file_fsync(NULL, &cont_dentry, datasync);
 	up(&cont_dentry.d_inode->i_sem);
 
-	if ( result == 0 ) {
+	if ( result == 0 && datasync == 0 ) {
 		lock_kernel();
 		result = venus_fsync(inode->i_sb, coda_i2f(inode));
 		unlock_kernel();

@@ -1,6 +1,6 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: transport.c,v 1.23 2000/09/08 21:20:06 mdharm Exp $
+ * $Id: transport.c,v 1.25 2000/09/13 21:48:26 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -48,7 +48,6 @@
 #include "usb.h"
 #include "debug.h"
 
-#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/malloc.h>
@@ -870,8 +869,12 @@ int usb_stor_CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 		US_DEBUGP("CBI data stage result is 0x%x\n", srb->result);
 
 		/* if it was aborted, we need to indicate that */
-		if (srb->result == USB_STOR_TRANSPORT_ABORTED)
+		if (srb->result == USB_STOR_TRANSPORT_ABORTED) {
+			/* we need to reset the state of this semaphore */
+			down(&(us->ip_waitq));
+
 			return USB_STOR_TRANSPORT_ABORTED;
+		}
 	}
 
 	/* STATUS STAGE */
@@ -1147,8 +1150,9 @@ int usb_stor_Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 		return USB_STOR_TRANSPORT_FAILED;
 		
 	case US_BULK_STAT_PHASE:
-		/* phase error */
-		usb_stor_Bulk_reset(us);
+		/* phase error -- note that a transport reset will be
+		 * invoked by the invoke_transport() function
+		 */
 		return USB_STOR_TRANSPORT_ERROR;
 	}
 	
@@ -1177,11 +1181,15 @@ int usb_stor_CB_reset(struct us_data *us)
 				 USB_TYPE_CLASS | USB_RECIP_INTERFACE,
 				 0, us->ifnum, cmd, sizeof(cmd), HZ*5);
 
-	if (result < 0)
+	if (result < 0) {
 		US_DEBUGP("CB[I] soft reset failed %d\n", result);
+		return FAILED;
+	}
 
 	/* long wait for reset */
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout(HZ*6);
+	set_current_state(TASK_RUNNING);
 
 	US_DEBUGP("CB_reset: clearing endpoint halt\n");
 	clear_halt(us->pusb_dev, 
@@ -1191,7 +1199,7 @@ int usb_stor_CB_reset(struct us_data *us)
 
 	US_DEBUGP("CB_reset done\n");
 	/* return a result code based on the result of the control message */
-	return result < 0 ? FAILED : SUCCESS;
+	return SUCCESS;
 }
 
 /* This issues a Bulk-only Reset to the device in question, including
@@ -1209,17 +1217,20 @@ int usb_stor_Bulk_reset(struct us_data *us)
 				 USB_TYPE_CLASS | USB_RECIP_INTERFACE,
 				 0, us->ifnum, NULL, 0, HZ*5);
 
-	if (result < 0)
+	if (result < 0) {
 		US_DEBUGP("Bulk soft reset failed %d\n", result);
+		return FAILED;
+	}
 
 	/* long wait for reset */
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout(HZ*6);
+	set_current_state(TASK_RUNNING);
 
 	clear_halt(us->pusb_dev, 
 		   usb_rcvbulkpipe(us->pusb_dev, us->ep_in));
 	clear_halt(us->pusb_dev, 
 		   usb_sndbulkpipe(us->pusb_dev, us->ep_out));
-
-	/* return a result code based on the result of the control message */
-	return result < 0 ? FAILED : SUCCESS;
+	US_DEBUGP("Bulk soft reset completed\n");
+	return SUCCESS;
 }

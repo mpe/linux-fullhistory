@@ -42,6 +42,10 @@ USB_ST_URB_INVALID_ERROR
 
 -EMSGSIZE	endpoint message size is zero, do interface/alternate setting
 
+USB_ST_BANDWIDTH_ERROR
+-ENOSPC		The host controller's bandwidth is already consumed and
+		this request would push it past its allowed limit.
+
 
 **************************************************************************
 *                   Error codes returned by in urb->status               *

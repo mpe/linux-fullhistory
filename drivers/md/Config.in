@@ -1,0 +1,22 @@
+#
+# Block device driver configuration
+#
+mainmenu_option next_comment
+comment 'Multi-device support (RAID and LVM)'
+
+tristate 'Multiple devices driver support' CONFIG_BLK_DEV_MD
+dep_tristate '  Linear (append) mode' CONFIG_MD_LINEAR $CONFIG_BLK_DEV_MD
+dep_tristate '  RAID-0 (striping) mode' CONFIG_MD_RAID0 $CONFIG_BLK_DEV_MD
+dep_tristate '  RAID-1 (mirroring) mode' CONFIG_MD_RAID1 $CONFIG_BLK_DEV_MD
+dep_tristate '  RAID-4/RAID-5 mode' CONFIG_MD_RAID5 $CONFIG_BLK_DEV_MD
+if [ "$CONFIG_MD_LINEAR" = "y" -o "$CONFIG_MD_RAID0" = "y" -o "$CONFIG_MD_RAID1" = "y" -o "$CONFIG_MD_RAID5" = "y" ]; then
+        bool '  Boot support' CONFIG_MD_BOOT
+        bool '  Auto Detect support' CONFIG_AUTODETECT_RAID
+fi
+
+tristate 'Logical volume manager (LVM) support' CONFIG_BLK_DEV_LVM N
+if [ "$CONFIG_BLK_DEV_LVM" != "n" ]; then
+   bool '   LVM information in proc filesystem' CONFIG_LVM_PROC_FS Y
+fi
+
+endmenu

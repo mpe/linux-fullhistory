@@ -693,6 +693,10 @@ static int __init pci_scan_bridge(struct pci_bus *bus, struct pci_dev * dev, int
 		if (!is_cardbus) {
 			unsigned int cmax = pci_do_scan_bus(child);
 			if (cmax > max) max = cmax;
+		} else {
+			int i;
+			for (i = 0; i < 4; i++)
+				child->resource[i] = &dev->resource[PCI_BRIDGE_RESOURCES+i];
 		}
 	} else {
 		/*
@@ -718,12 +722,15 @@ static int __init pci_scan_bridge(struct pci_bus *bus, struct pci_dev * dev, int
 			/* Now we can scan all subordinate buses... */
 			max = pci_do_scan_bus(child);
 		} else {
+			int i;
 			/*
 			 * For CardBus bridges, we leave 4 bus numbers
 			 * as cards with a PCI-to-PCI bridge can be
 			 * inserted later.
 			 */
 			max += 3;
+			for (i = 0; i < 4; i++)
+				child->resource[i] = &dev->resource[PCI_BRIDGE_RESOURCES+i];
 		}
 		/*
 		 * Set the subordinate bus number to its real value.

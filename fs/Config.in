@@ -100,8 +100,11 @@ if [ "$CONFIG_NET" = "y" ]; then
 
    dep_tristate 'SMB file system support (to mount Windows shares etc.)' CONFIG_SMB_FS $CONFIG_INET
    if [ "$CONFIG_SMB_FS" != "n" ]; then
-      string 'Default Remote NLS Option' CONFIG_SMB_NLS_REMOTE ""
-   fi   
+      bool '   Use a default NLS' CONFIG_SMB_NLS_DEFAULT
+      if [ "$CONFIG_SMB_NLS_DEFAULT" = "y" ]; then
+         string '  Default Remote NLS Option' CONFIG_SMB_NLS_REMOTE "cp437"
+      fi
+   fi
    if [ "$CONFIG_IPX" != "n" -o "$CONFIG_INET" != "n" ]; then
       tristate 'NCP file system support (to mount NetWare volumes)' CONFIG_NCP_FS
       source fs/ncpfs/Config.in

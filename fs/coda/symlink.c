@@ -20,7 +20,6 @@
 #include <linux/coda_linux.h>
 #include <linux/coda_psdev.h>
 #include <linux/coda_fs_i.h>
-#include <linux/coda_cache.h>
 #include <linux/coda_proc.h>
 
 static int coda_symlink_filler(struct file *file, struct page *page)

@@ -345,7 +345,6 @@ typedef int (*usb_device_irq)(int, void *, int, void *);
  */
 #define USB_DISABLE_SPD         0x0001
 #define USB_ISO_ASAP            0x0002
-#define USB_URB_EARLY_COMPLETE  0x0004
 #define USB_ASYNC_UNLINK        0x0008
 #define USB_QUEUE_BULK          0x0010
 #define USB_NO_FSBR		0x0020

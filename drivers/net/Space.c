@@ -440,7 +440,7 @@ static int __init fddiif_probe(struct net_device *dev)
 #endif
 
 
-/* Pad device name to IFNAMSIZ=16. F.e. __PAD6 is tring of 9 zeros. */
+/* Pad device name to IFNAMSIZ=16. F.e. __PAD6 is string of 9 zeros. */
 #define __PAD6 "\0\0\0\0\0\0\0\0\0"
 #define __PAD5 __PAD6 "\0"
 #define __PAD4 __PAD5 "\0"

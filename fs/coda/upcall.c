@@ -543,7 +543,8 @@ int venus_pioctl(struct super_block *sb, struct ViceFid *fid,
 	        goto exit;
 	}
 
-        error = coda_upcall(coda_sbp(sb), insize, &outsize, inp);
+        error = coda_upcall(coda_sbp(sb), SIZE(ioctl) + data->vi.in_size,
+                            &outsize, inp);
         
         if (error) {
 	        printk("coda_pioctl: Venus returns: %d for %s\n", 
@@ -607,7 +608,8 @@ int venus_statfs(struct super_block *sb, struct statfs *sfs)
  * 
  */
 
-static inline unsigned long coda_waitfor_upcall(struct upc_req *vmp)
+static inline unsigned long coda_waitfor_upcall(struct upc_req *vmp,
+						struct venus_comm *vcommp)
 {
 	DECLARE_WAITQUEUE(wait, current);
  	struct timeval begin = { 0, 0 }, end = { 0, 0 };
@@ -625,7 +627,7 @@ static inline unsigned long coda_waitfor_upcall(struct upc_req *vmp)
 			set_current_state(TASK_UNINTERRUPTIBLE);
 
                 /* venus died */
-                if ( !coda_upc_comm.vc_inuse )
+                if ( !vcommp->vc_inuse )
                         break;
 
 		/* got a reply */
@@ -645,7 +647,7 @@ static inline unsigned long coda_waitfor_upcall(struct upc_req *vmp)
 		schedule();
 	}
 	remove_wait_queue(&vmp->uc_sleep, &wait);
-	current->state = TASK_RUNNING;
+	set_current_state(TASK_RUNNING);
 
 	if (coda_upcall_timestamping && begin.tv_sec != 0) {
 		do_gettimeofday(&end);
@@ -685,9 +687,9 @@ static int coda_upcall(struct coda_sb_info *sbi,
 	struct upc_req *req;
 	int error = 0;
 
-ENTRY;
+	ENTRY;
 
-	vcommp = &coda_upc_comm;
+	vcommp = sbi->sbi_vcomm;
 	if ( !vcommp->vc_inuse ) {
 		printk("No pseudo device in upcall comms at %p\n", vcommp);
                 return -ENXIO;
@@ -724,7 +726,7 @@ ENTRY;
 	 * ENODEV.  */
 
 	/* Go to sleep.  Wake up on signals only after the timeout. */
-	runtime = coda_waitfor_upcall(req);
+	runtime = coda_waitfor_upcall(req, vcommp);
 	coda_upcall_stats(((union inputArgs *)buffer)->ih.opcode, runtime);
 
 	CDEBUG(D_TIMING, "opc: %d time: %ld uniq: %d size: %d\n",
@@ -738,11 +740,6 @@ ENTRY;
 	    if (req->uc_flags & REQ_WRITE) {
 		out = (union outputArgs *)req->uc_data;
 		/* here we map positive Venus errors to kernel errors */
-		if ( out->oh.result < 0 ) {
-			printk("Tell Peter: Venus returns negative error %ld, for oc %ld!\n",
-			       out->oh.result, out->oh.opcode);
-			out->oh.result = EINTR;
-		}
 		error = -out->oh.result;
 		CDEBUG(D_UPCALL, 
 		       "upcall: (u,o,r) (%ld, %ld, %ld) out at %p\n", 
@@ -855,7 +852,7 @@ int coda_downcall(int opcode, union outputArgs * out, struct super_block *sb)
 	  case CODA_FLUSH : {
 	           clstats(CODA_FLUSH);
 		   CDEBUG(D_DOWNCALL, "CODA_FLUSH\n");
-		   coda_cache_clear_all(sb);
+		   coda_cache_clear_all(sb, NULL);
 		   shrink_dcache_sb(sb);
 		   coda_flag_inode(sb->s_root->d_inode, C_FLUSH);
 		   return(0);
@@ -869,7 +866,7 @@ int coda_downcall(int opcode, union outputArgs * out, struct super_block *sb)
 			   return 0;
 		   }
 		   clstats(CODA_PURGEUSER);
-		   coda_cache_clear_cred(sb, cred);
+		   coda_cache_clear_all(sb, cred);
 		   return(0);
 	  }
 

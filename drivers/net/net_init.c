@@ -96,7 +96,8 @@ static struct net_device *init_alloc_dev(int sizeof_priv)
  *	setup.
  */
 
-static struct net_device *init_netdev(struct net_device *dev, int sizeof_priv, char *mask, void (*setup)(struct net_device *))
+static struct net_device *init_netdev(struct net_device *dev, int sizeof_priv,
+				      char *mask, void (*setup)(struct net_device *))
 {
 	int new_device = 0;
 
@@ -117,16 +118,14 @@ static struct net_device *init_netdev(struct net_device *dev, int sizeof_priv, c
 	 
 	if (dev->name[0] == '\0' || dev->name[0] == ' ') {
 		strcpy(dev->name, mask);
-		if (!netdev_boot_setup_check(dev)) {
-			if (dev_alloc_name(dev, mask)<0) {
-				if (new_device)
-					kfree(dev);
-				return NULL;
-			}
+		if (dev_alloc_name(dev, mask)<0) {
+			if (new_device)
+				kfree(dev);
+			return NULL;
 		}
-	} else {
-		netdev_boot_setup_check(dev);
 	}
+
+	netdev_boot_setup_check(dev);
 	
 	/*
 	 *	Configure via the caller provided setup function then

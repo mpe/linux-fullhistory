@@ -46,21 +46,19 @@
 #include <linux/coda_linux.h>
 #include <linux/coda_fs_i.h>
 #include <linux/coda_psdev.h>
-#include <linux/coda_cache.h>
 #include <linux/coda_proc.h>
 
 /* 
  * Coda stuff
  */
 extern struct file_system_type coda_fs_type;
-extern int init_coda_fs(void);
 
 /* statistics */
 int           coda_hard    = 0;  /* allows signals during upcalls */
 unsigned long coda_timeout = 30; /* .. secs, then signals will dequeue */
 
-struct coda_sb_info coda_super_info;
-struct venus_comm coda_upc_comm;
+
+struct venus_comm coda_comms[MAX_CODADEVS];
 
 /*
  * Device operations
@@ -68,7 +66,7 @@ struct venus_comm coda_upc_comm;
 
 static unsigned int coda_psdev_poll(struct file *file, poll_table * wait)
 {
-        struct venus_comm *vcp = &coda_upc_comm;
+        struct venus_comm *vcp = (struct venus_comm *) file->private_data;
 	unsigned int mask = POLLOUT | POLLWRNORM;
 
 	poll_wait(file, &vcp->vc_waitq, wait);
@@ -101,7 +99,7 @@ static int coda_psdev_ioctl(struct inode * inode, struct file * filp,
 static ssize_t coda_psdev_write(struct file *file, const char *buf, 
 				size_t nbytes, loff_t *off)
 {
-        struct venus_comm *vcp = &coda_upc_comm;
+        struct venus_comm *vcp = (struct venus_comm *) file->private_data;
         struct upc_req *req = NULL;
         struct upc_req *tmp;
 	struct list_head *lh;
@@ -109,8 +107,6 @@ static ssize_t coda_psdev_write(struct file *file, const char *buf,
 	ssize_t retval = 0, count = 0;
 	int error;
 
-	if ( !coda_upc_comm.vc_inuse ) 
-		return -EIO;
         /* Peek at the opcode, uniquefier */
 	if (copy_from_user(&hdr, buf, 2 * sizeof(u_long)))
 	        return -EFAULT;
@@ -123,7 +119,7 @@ static ssize_t coda_psdev_write(struct file *file, const char *buf,
                 union outputArgs *dcbuf;
 		int size = sizeof(*dcbuf);
 
-		sb = coda_super_info.sbi_sb;
+		sb = vcp->vc_sb;
 		if ( !sb ) {
 			CDEBUG(D_PSDEV, "coda_psdev_write: downcall, no SB!\n");
                         count = nbytes;
@@ -221,7 +217,7 @@ static ssize_t coda_psdev_read(struct file * file, char * buf,
 			       size_t nbytes, loff_t *off)
 {
 	DECLARE_WAITQUEUE(wait, current);
-        struct venus_comm *vcp = &coda_upc_comm;
+        struct venus_comm *vcp = (struct venus_comm *) file->private_data;
         struct upc_req *req;
 	ssize_t retval = 0, count = 0;
 
@@ -245,7 +241,7 @@ static ssize_t coda_psdev_read(struct file * file, char * buf,
 		schedule();
 	}
 
-	current->state = TASK_RUNNING;
+	set_current_state(TASK_RUNNING);
 	remove_wait_queue(&vcp->vc_waitq, &wait);
 
 	if (retval)
@@ -285,21 +281,32 @@ out:
 	return (count ? count : retval);
 }
 
-
 static int coda_psdev_open(struct inode * inode, struct file * file)
 {
-        struct venus_comm *vcp = &coda_upc_comm;
+        struct venus_comm *vcp;
+	int idx;
         ENTRY;
-	
-	/* first opener, initialize */
-	lock_kernel();
-	if (!vcp->vc_inuse++) {
-            INIT_LIST_HEAD(&vcp->vc_pending);
-            INIT_LIST_HEAD(&vcp->vc_processing);
-            vcp->vc_seq = 0;
-	}
 
-	CDEBUG(D_PSDEV, "inuse: %d\n", vcp->vc_inuse);
+	lock_kernel();
+	idx = MINOR(inode->i_rdev);
+	if(idx >= MAX_CODADEVS)
+		return -ENODEV;
+
+	vcp = &coda_comms[idx];
+	if(vcp->vc_inuse)
+		return -EBUSY;
+	
+	if (!vcp->vc_inuse++) {
+		INIT_LIST_HEAD(&vcp->vc_pending);
+		INIT_LIST_HEAD(&vcp->vc_processing);
+		init_waitqueue_head(&vcp->vc_waitq);
+		vcp->vc_sb = 0;
+		vcp->vc_seq = 0;
+	}
+	
+	file->private_data = vcp;
+
+	CDEBUG(D_PSDEV, "device %i - inuse: %d\n", idx, vcp->vc_inuse);
 
 	EXIT;
 	unlock_kernel();
@@ -309,7 +316,7 @@ static int coda_psdev_open(struct inode * inode, struct file * file)
 
 static int coda_psdev_release(struct inode * inode, struct file * file)
 {
-        struct venus_comm *vcp = &coda_upc_comm;
+        struct venus_comm *vcp = (struct venus_comm *) file->private_data;
         struct upc_req *req;
 	struct list_head *lh, *next;
 	ENTRY;
@@ -369,29 +376,9 @@ static struct file_operations coda_psdev_fops = {
 	release:	coda_psdev_release,
 };
 
-
-
-int __init init_coda(void)
-{
-	int status;
-	printk(KERN_INFO "Coda Kernel/Venus communications, v4.6.0, braam@cs.cmu.edu\n");
-	
-	status = init_coda_psdev();
-	if ( status ) {
-		printk("Problem (%d) in init_coda_psdev\n", status);
-		return status;
-	}
-	
-	status = init_coda_fs();
-	if (status) {
-		printk("coda: failed in init_coda_fs!\n");
-	}
-	return status;
-}
-
 static devfs_handle_t devfs_handle = NULL;
 
-int init_coda_psdev(void)
+static int init_coda_psdev(void)
 {
 	if(devfs_register_chrdev(CODA_PSDEV_MAJOR,"coda_psdev",
 				 &coda_psdev_fops)) {
@@ -404,9 +391,6 @@ int init_coda_psdev(void)
 			       CODA_PSDEV_MAJOR, 0,
 			       S_IFCHR | S_IRUSR | S_IWUSR,
 			       &coda_psdev_fops, NULL);
-	memset(&coda_upc_comm, 0, sizeof(coda_upc_comm));
-	memset(&coda_super_info, 0, sizeof(coda_super_info));
-	init_waitqueue_head(&coda_upc_comm.vc_waitq);
 
 	coda_sysctl_init();
 
@@ -414,36 +398,35 @@ int init_coda_psdev(void)
 }
 
 
-#ifdef MODULE
-
 MODULE_AUTHOR("Peter J. Braam <braam@cs.cmu.edu>");
 
-int init_module(void)
+static int __init init_coda(void)
 {
 	int status;
-	printk(KERN_INFO "Coda Kernel/Venus communications (module), v5.0-pre1, braam@cs.cmu.edu.\n");
+	printk(KERN_INFO "Coda Kernel/Venus communications, v5.3.9, coda@cs.cmu.edu\n");
 
+	
 	status = init_coda_psdev();
 	if ( status ) {
 		printk("Problem (%d) in init_coda_psdev\n", status);
 		return status;
 	}
-
-	status = init_coda_fs();
+	
+	status = register_filesystem(&coda_fs_type);
 	if (status) {
 		printk("coda: failed in init_coda_fs!\n");
 	}
 	return status;
 }
 
-
-void cleanup_module(void)
+static void __exit exit_coda(void)
 {
         int err;
 
         ENTRY;
 
-        if ( (err = unregister_filesystem(&coda_fs_type)) != 0 ) {
+	err = unregister_filesystem(&coda_fs_type);
+        if ( err != 0 ) {
                 printk("coda: failed to unregister filesystem\n");
         }
 	devfs_unregister (devfs_handle);
@@ -451,5 +434,5 @@ void cleanup_module(void)
 	coda_sysctl_clean();
 }
 
-#endif
-
+module_init(init_coda);
+module_exit(exit_coda);

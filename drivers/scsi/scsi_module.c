@@ -40,7 +40,7 @@ static int __init init_this_scsi_driver(void)
 		return 0;
 
 	scsi_unregister_module(MODULE_SCSI_HA, &driver_template);
-	return -1;
+	return -ENODEV;
 }
 
 static void __exit exit_this_scsi_driver(void)

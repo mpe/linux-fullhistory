@@ -183,6 +183,9 @@ if (debug >= level) info("[" __PRETTY_FUNCTION__ ":%d] " fmt, __LINE__ , ## args
 // FIXME - these can vary between specific models
 #define OV7610_I2C_WRITE_ID 0x42
 #define OV7610_I2C_READ_ID  0x43
+#define OV6xx0_I2C_WRITE_ID 0xC0
+#define OV6xx0_I2C_READ_ID  0xC1
+
 #define OV511_I2C_CLOCK_PRESCALER 0x03
 
 /* Prototypes */
@@ -203,6 +206,7 @@ enum {
 	SEN_OV7610,
 	SEN_OV7620,
 	SEN_OV7620AE,
+	SEN_OV6620,
 };
 
 enum {
@@ -254,7 +258,7 @@ struct ov511_frame {
 	int hdrheight;		/* Height */
 
 	int sub_flag;		/* Sub-capture mode for this frame? */
-	int format;		/* Format for this frame */
+	unsigned int format;	/* Format for this frame */
 	int segsize;		/* How big is each segment from the camera? */
 
 	volatile int grabstate;	/* State of grabbing */
@@ -284,6 +288,10 @@ struct usb_ov511 {
 	int customid;
 	int desc;
 	unsigned char iface;
+
+	/* Determined by sensor type */
+	int maxwidth;
+	int maxheight;
 
 	int brightness;
 	int colour;
@@ -356,7 +364,6 @@ struct mode_list {
 	u8 lndv;		/* line divisor */
 	u8 m420;
 	u8 common_A;
-	u8 common_C;
 	u8 common_L;
 };
 

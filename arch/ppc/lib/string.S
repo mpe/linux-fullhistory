@@ -9,6 +9,7 @@
  * 2 of the License, or (at your option) any later version.
  */
 #include "../kernel/ppc_asm.tmpl"
+#include <linux/config.h>
 #include <asm/processor.h>
 #include <asm/errno.h>
 

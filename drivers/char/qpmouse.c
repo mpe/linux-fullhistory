@@ -344,9 +344,14 @@ int __init qpmouse_init(void)
 
 	printk(KERN_INFO "82C710 type pointing device detected -- driver installed.\n");
 /*	printk("82C710 address = %x (should be 0x310)\n", qp_data); */
+	queue = (struct qp_queue *) kmalloc(sizeof(*queue), GFP_KERNEL);
+	if(queue==NULL)
+	{
+		printk(KERN_ERR "qpmouse: no queue memory.\n");
+		return -ENOMEM;
+	}	
 	qp_present = 1;
 	misc_register(&qp_mouse);
-	queue = (struct qp_queue *) kmalloc(sizeof(*queue), GFP_KERNEL);
 	memset(queue, 0, sizeof(*queue));
 	queue->head = queue->tail = 0;
 	init_waitqueue_head(&queue->proc_list);

@@ -40,6 +40,8 @@ int coda_release(struct inode *i, struct file *f);
 int coda_permission(struct inode *inode, int mask);
 int coda_revalidate_inode(struct dentry *);
 int coda_notify_change(struct dentry *, struct iattr *);
+int coda_pioctl(struct inode * inode, struct file * filp, 
+                unsigned int cmd, unsigned long arg);
 
 /* global variables */
 extern int coda_debug;
@@ -103,20 +105,20 @@ void coda_sysctl_clean(void);
 
 #define CODA_ALLOC(ptr, cast, size)                                       \
 do {                                                                      \
-    if (size < 3000) {                                                    \
+    if (size < PAGE_SIZE) {                                               \
         ptr = (cast)kmalloc((unsigned long) size, GFP_KERNEL);            \
-                CDEBUG(D_MALLOC, "kmalloced: %lx at %p.\n", (long)size, ptr);\
-     }  else {                                                             \
+        CDEBUG(D_MALLOC, "kmalloced: %lx at %p.\n", (long)size, ptr);     \
+     }  else {                                                            \
         ptr = (cast)vmalloc((unsigned long) size);                        \
-	CDEBUG(D_MALLOC, "vmalloced: %lx at %p .\n", (long)size, ptr);}\
+	CDEBUG(D_MALLOC, "vmalloced: %lx at %p .\n", (long)size, ptr);}   \
     if (ptr == 0) {                                                       \
-        printk("kernel malloc returns 0 at %s:%d\n", __FILE__, __LINE__);  \
+        printk("kernel malloc returns 0 at %s:%d\n", __FILE__, __LINE__); \
     }                                                                     \
-    memset( ptr, 0, size );                                                   \
+    else memset( ptr, 0, size );                                          \
 } while (0)
 
 
-#define CODA_FREE(ptr,size) do {if (size < 3000) { kfree((ptr)); CDEBUG(D_MALLOC, "kfreed: %lx at %p.\n", (long) size, ptr); } else { vfree((ptr)); CDEBUG(D_MALLOC, "vfreed: %lx at %p.\n", (long) size, ptr);} } while (0)
+#define CODA_FREE(ptr,size) do {if (size < PAGE_SIZE) { kfree((ptr)); CDEBUG(D_MALLOC, "kfreed: %lx at %p.\n", (long) size, ptr); } else { vfree((ptr)); CDEBUG(D_MALLOC, "vfreed: %lx at %p.\n", (long) size, ptr);} } while (0)
 
 /* inode to cnode access functions */
 

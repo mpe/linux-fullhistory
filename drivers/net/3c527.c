@@ -146,7 +146,7 @@ struct mca_adapters_t {
 	char		*name;
 };
 
-const struct mca_adapters_t mc32_adapters[] = {
+static struct mca_adapters_t mc32_adapters[] __initdata = {
 	{ 0x0041, "3COM EtherLink MC/32" },
 	{ 0x8EF5, "IBM High Performance Lan Adapter" },
 	{ 0x0000, NULL }

@@ -1898,8 +1898,6 @@ int usb_new_device(struct usb_device *dev)
 {
 	int err;
 
-	info("USB new device connect, assigned device number %d", dev->devnum);
- 
 	/* USB v1.1 5.5.3 */
 	/* We read the first 8 bytes from the device descriptor to get to */
 	/*  the bMaxPacketSize0 field. Then we set the maximum packet size */

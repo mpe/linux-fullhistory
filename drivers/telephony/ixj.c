@@ -19,6 +19,7 @@
  *                  Mike Preston, <mpreston@quicknet.net>
  *    
  * Fixes:
+ *                  Marc Boucher, <marc@mbsi.ca>
  * 
  * More information about the hardware related to this driver can be found  
  * at our website:    http://www.quicknet.net
@@ -43,6 +44,7 @@ static char ixj_c_revision[] = "$Revision: 3.31 $";
 #define IXJDEBUG 0
 #define MAXRINGS 5
 
+#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/init.h>
@@ -602,7 +604,7 @@ static void ixj_timeout(unsigned long ptr)
 					j->flags.cringing = 0;
 					ixj_ring_off(board);
 				} else {
-					if (jiffies - j->ring_cadence_jif >= (.5 * hertz)) {
+					if (jiffies - j->ring_cadence_jif >= (hertz/2)) {
 						if (j->flags.cidring && !j->flags.cidsent) {
 							j->flags.cidsent = 1;
 							ixj_write_cid(board);
@@ -1245,7 +1247,7 @@ static int ixj_hookstate(int board)
 				if (!in_interrupt()) {
 					det = jiffies + (hertz / 50);
 					while (time_before(jiffies, det)) {
-						current->state = TASK_INTERRUPTIBLE;
+						set_current_state(TASK_INTERRUPTIBLE);
 						schedule_timeout(1);
 					}
 				}
@@ -1356,7 +1358,7 @@ static int ixj_ring(int board)
 				j->flags.ringing = 0;
 				return 1;
 			}
-			current->state = TASK_INTERRUPTIBLE;
+			set_current_state(TASK_INTERRUPTIBLE);
 			schedule_timeout(1);
 			if (signal_pending(current))
 				break;
@@ -1367,7 +1369,7 @@ static int ixj_ring(int board)
 			if (ixj_hookstate(board) & 1) {
 				det = jiffies + (hertz / 100);
 				while (time_before(jiffies, det)) {
-					current->state = TASK_INTERRUPTIBLE;
+					set_current_state(TASK_INTERRUPTIBLE);
 					schedule_timeout(1);
 					if (signal_pending(current))
 						break;
@@ -1377,7 +1379,7 @@ static int ixj_ring(int board)
 					return 1;
 				}
 			}
-			current->state = TASK_INTERRUPTIBLE;
+			set_current_state(TASK_INTERRUPTIBLE);
 			schedule_timeout(1);
 			if (signal_pending(current))
 				break;
@@ -1796,7 +1798,7 @@ ssize_t ixj_read(struct file * file_p, char *buf, size_t length, loff_t * ppos)
 	j->flags.inread = 1;
 
 	add_wait_queue(&j->read_q, &wait);
-	current->state = TASK_INTERRUPTIBLE;
+	set_current_state(TASK_INTERRUPTIBLE);
 	mb();
 
 	while (!j->read_buffer_ready || (j->dtmf_state && j->flags.dtmf_oob)) {
@@ -1806,20 +1808,20 @@ ssize_t ixj_read(struct file * file_p, char *buf, size_t length, loff_t * ppos)
 			return -EAGAIN;
 		}
 		if (file_p->f_flags & O_NONBLOCK) {
-			current->state = TASK_RUNNING;
+			set_current_state(TASK_RUNNING);
 			remove_wait_queue(&j->read_q, &wait);
 			j->flags.inread = 0;
 			return -EAGAIN;
 		}
 		if (!ixj_hookstate(NUM(file_p->f_dentry->d_inode->i_rdev))) {
-			current->state = TASK_RUNNING;
+			set_current_state(TASK_RUNNING);
 			remove_wait_queue(&j->read_q, &wait);
 			j->flags.inread = 0;
 			return 0;
 		}
 		interruptible_sleep_on(&j->read_q);
 		if (signal_pending(current)) {
-			current->state = TASK_RUNNING;
+			set_current_state(TASK_RUNNING);
 			remove_wait_queue(&j->read_q, &wait);
 			j->flags.inread = 0;
 			return -EINTR;
@@ -1827,7 +1829,7 @@ ssize_t ixj_read(struct file * file_p, char *buf, size_t length, loff_t * ppos)
 	}
 
 	remove_wait_queue(&j->read_q, &wait);
-	current->state = TASK_RUNNING;
+	set_current_state(TASK_RUNNING);
 	/* Don't ever copy more than the user asks */
 	i = copy_to_user(buf, j->read_buffer, min(length, j->read_buffer_size));
 	j->read_buffer_ready = 0;
@@ -1877,7 +1879,7 @@ ssize_t ixj_write(struct file *file_p, const char *buf, size_t count, loff_t * p
 	j->flags.inwrite = 1;
 
 	add_wait_queue(&j->write_q, &wait);
-	current->state = TASK_INTERRUPTIBLE;
+	set_current_state(TASK_INTERRUPTIBLE);
 	mb();
 
 
@@ -1888,26 +1890,26 @@ ssize_t ixj_write(struct file *file_p, const char *buf, size_t count, loff_t * p
 			return -EAGAIN;
 		}
 		if (file_p->f_flags & O_NONBLOCK) {
-			current->state = TASK_RUNNING;
+			set_current_state(TASK_RUNNING);
 			remove_wait_queue(&j->write_q, &wait);
 			j->flags.inwrite = 0;
 			return -EAGAIN;
 		}
 		if (!ixj_hookstate(NUM(file_p->f_dentry->d_inode->i_rdev))) {
-			current->state = TASK_RUNNING;
+			set_current_state(TASK_RUNNING);
 			remove_wait_queue(&j->write_q, &wait);
 			j->flags.inwrite = 0;
 			return 0;
 		}
 		interruptible_sleep_on(&j->write_q);
 		if (signal_pending(current)) {
-			current->state = TASK_RUNNING;
+			set_current_state(TASK_RUNNING);
 			remove_wait_queue(&j->write_q, &wait);
 			j->flags.inwrite = 0;
 			return -EINTR;
 		}
 	}
-	current->state = TASK_RUNNING;
+	set_current_state(TASK_RUNNING);
 	remove_wait_queue(&j->write_q, &wait);
 	if (j->write_buffer_wp + count >= j->write_buffer_end)
 		j->write_buffer_wp = j->write_buffer;
@@ -2305,7 +2307,7 @@ static void ixj_write_cidcw(int board)
 	ixj_play_tone(board, 23);
 
 	while(j->tone_state) {
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout(1);
 	}
 
@@ -2313,14 +2315,14 @@ static void ixj_write_cidcw(int board)
 	ixj_play_tone(board, 24);
 
 	while(j->tone_state) {
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout(1);
 	}
 
 	j->cidcw_wait = jiffies + (200 * hertz / 100000);
 
 	while(!j->flags.cidcw_ack && time_before(jiffies, j->cidcw_wait)) {
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout(1);
 	}
 
@@ -4454,14 +4456,21 @@ static int ixj_build_cadence(int board, IXJ_CADENCE * cp)
 	if (lcp == NULL)
 		return -ENOMEM;
 	if (copy_from_user(lcp, (char *) cp, sizeof(IXJ_CADENCE)))
+	{
+		kfree(lcp);
 		return -EFAULT;
+	}
 	lcep = kmalloc(sizeof(IXJ_CADENCE_ELEMENT) * lcp->elements_used, GFP_KERNEL);
 	if (lcep == NULL) {
 		kfree(lcp);
 		return -ENOMEM;
 	}
 	if (copy_from_user(lcep, lcp->ce, sizeof(IXJ_CADENCE_ELEMENT) * lcp->elements_used))
+	{
+		kfree(lcep);
+		kfree(lcp);
 		return -EFAULT;
+	}
 	if (j->cadence_t) {
 		kfree(j->cadence_t->ce);
 		kfree(j->cadence_t);
@@ -4674,7 +4683,7 @@ int ixj_ioctl(struct inode *inode, struct file *file_p, unsigned int cmd, unsign
 			copy_from_user(&j->cid_send, (char *)arg, sizeof(PHONE_CID));
 		}
 		else {
-			memcpy(&j->cid_send, 0, sizeof(PHONE_CID));
+			memset(&j->cid_send, 0, sizeof(PHONE_CID));
 		}
 		ixj_write_cidcw(board);
 		break;
@@ -4687,7 +4696,7 @@ int ixj_ioctl(struct inode *inode, struct file *file_p, unsigned int cmd, unsign
 			copy_from_user(&j->cid_send, (char *)arg, sizeof(PHONE_CID));
 		}
 		else {
-			memcpy(&j->cid_send, 0, sizeof(PHONE_CID));
+			memset(&j->cid_send, 0, sizeof(PHONE_CID));
 		}
 		ixj_ring_start(board);
 		break;
@@ -5128,7 +5137,7 @@ static int ixj_linetest(int board)
 			daa_set_mode(board, SOP_PU_CONVERSATION);
 			jifwait = jiffies + hertz;
 			while (time_before(jiffies, jifwait)) {
-				current->state = TASK_INTERRUPTIBLE;
+				set_current_state(TASK_INTERRUPTIBLE);
 				schedule_timeout(1);
 			}
 			daa_int_read(board);
@@ -5155,7 +5164,7 @@ static int ixj_linetest(int board)
 	daa_set_mode(board, SOP_PU_CONVERSATION);
 	jifwait = jiffies + hertz;
 	while (time_before(jiffies, jifwait)) {
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout(1);
 	}
 	daa_int_read(board);
@@ -5349,25 +5358,25 @@ static int ixj_selfprobe(int board)
 			LED_SetState(0x1, board);
 			jif = jiffies + (hertz / 10);
 			while (time_before(jiffies, jif)) {
-				current->state = TASK_INTERRUPTIBLE;
+				set_current_state(TASK_INTERRUPTIBLE);
 				schedule_timeout(1);
 			}
 			LED_SetState(0x2, board);
 			jif = jiffies + (hertz / 10);
 			while (time_before(jiffies, jif)) {
-				current->state = TASK_INTERRUPTIBLE;
+				set_current_state(TASK_INTERRUPTIBLE);
 				schedule_timeout(1);
 			}
 			LED_SetState(0x4, board);
 			jif = jiffies + (hertz / 10);
 			while (time_before(jiffies, jif)) {
-				current->state = TASK_INTERRUPTIBLE;
+				set_current_state(TASK_INTERRUPTIBLE);
 				schedule_timeout(1);
 			}
 			LED_SetState(0x8, board);
 			jif = jiffies + (hertz / 10);
 			while (time_before(jiffies, jif)) {
-				current->state = TASK_INTERRUPTIBLE;
+				set_current_state(TASK_INTERRUPTIBLE);
 				schedule_timeout(1);
 			}
 			LED_SetState(0x0, board);
@@ -5482,8 +5491,9 @@ static int ixj_selfprobe(int board)
 	return 0;
 }
 
-int ixj_read_proc(char *buf, char **start, off_t offset, int len, int unused)
+int ixj_get_status_proc(char *buf)
 {
+	int len;
 	int cnt;
 	IXJ *j;
 	len = 0;
@@ -5734,8 +5744,9 @@ int ixj_read_proc(char *buf, char **start, off_t offset, int len, int unused)
 	}
 	return len;
 }
-int ixj_read_proc_fsk(char *buf, char **start, off_t offset, int len, int unused)
+int ixj_get_status_proc_fsk(char *buf)
 {
+	int len;
 	len = 0;
 	if (ixj[2].fskdcnt) {
 		memcpy(buf, &ixj[2].fskdata, (ixj[2].fskdcnt) * 2);
@@ -5743,27 +5754,30 @@ int ixj_read_proc_fsk(char *buf, char **start, off_t offset, int len, int unused
 	}
 	return len;
 }
-static struct proc_dir_entry ixj_proc_entry =
-{
-	0,
-	3, "ixj",
-	S_IFREG | S_IRUGO,
-	1, 0, 0,
-	0,
-	NULL,
-	&ixj_read_proc
-};
 
-static struct proc_dir_entry ixjfsk_proc_entry =
+static int ixj_read_proc(char *page, char **start, off_t off,
+                              int count, int *eof, void *data)
 {
-	0,
-	6, "ixjfsk",
-	S_IFREG | S_IRUGO,
-	1, 0, 0,
-	0,
-	NULL,
-	&ixj_read_proc_fsk
-};
+        int len = ixj_get_status_proc(page);
+        if (len <= off+count) *eof = 1;
+        *start = page + off;
+        len -= off;
+        if (len>count) len = count;
+        if (len<0) len = 0;
+        return len;
+}
+
+static int ixj_read_proc_fsk(char *page, char **start, off_t off,
+                              int count, int *eof, void *data)
+{
+        int len = ixj_get_status_proc_fsk(page);
+        if (len <= off+count) *eof = 1;
+        *start = page + off;
+        len -= off;
+        if (len>count) len = count;
+        if (len<0) len = 0;
+        return len;
+}
 
 MODULE_DESCRIPTION("Internet Phone/Internet LineJack module - www.quicknet.net");
 MODULE_AUTHOR("Ed Okerson <eokerson@quicknet.net>");
@@ -6092,8 +6106,8 @@ static void cleanup(void)
 			ixj_detach(dev_list);
 #endif
 	}
-	proc_unregister(&proc_root, ixj_proc_entry.low_ino);
-	proc_unregister(&proc_root, ixjfsk_proc_entry.low_ino);
+	remove_proc_entry ("ixj", NULL);
+	remove_proc_entry ("ixjfsk", NULL);
 }
 
 // Typedefs
@@ -6315,6 +6329,8 @@ int __init ixj_init(void)
 			pci = pci_find_device(0x15E2, 0x0500, pci);
 			if (!pci)
 				break;
+			if (pci_enable_device(pci))
+				break;
 			{
 				ixj[cnt].DSPbase = pci_resource_start(pci, 0);
 				ixj[cnt].XILINXbase = ixj[cnt].DSPbase + 0x10;
@@ -6336,8 +6352,8 @@ int __init ixj_init(void)
 	}
 #endif
 	printk("%s\n", ixj_c_rcsid);
-	proc_register(&proc_root, &ixj_proc_entry);
-	proc_register(&proc_root, &ixjfsk_proc_entry);
+	create_proc_read_entry ("ixj", 0, NULL, ixj_read_proc, NULL);
+	create_proc_read_entry ("ixjfsk", 0, NULL, ixj_read_proc_fsk, NULL);
 	ixj_init_timer();
 	ixj_add_timer();
 	return probe;

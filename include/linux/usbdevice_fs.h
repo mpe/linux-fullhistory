@@ -80,6 +80,7 @@ struct usbdevfs_connectinfo {
 
 #define USBDEVFS_URB_DISABLE_SPD           1
 #define USBDEVFS_URB_ISO_ASAP              2
+#define USBDEVFS_URB_QUEUE_BULK            0x10
 
 #define USBDEVFS_URB_TYPE_ISO		   0
 #define USBDEVFS_URB_TYPE_INTERRUPT	   1

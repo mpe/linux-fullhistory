@@ -202,6 +202,7 @@ static int v4l_fbuffer_alloc(struct zoran *zr)
 				mem_map_reserve(virt_to_page(mem + off));
 			DEBUG(printk(BUZ_INFO ": V4L frame %d mem 0x%x (bus: 0x%x=%d)\n", i, mem, virt_to_bus(mem), virt_to_bus(mem)));
 		} else {
+			v4l_fbuffer_free(zr);
 			return -ENOBUFS;
 		}
 	}

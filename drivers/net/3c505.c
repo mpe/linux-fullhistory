@@ -130,15 +130,15 @@ static const char *invalid_pcb_msg =
 #define INVALID_PCB_MSG(len) \
 	printk(invalid_pcb_msg, (len),filename,__FUNCTION__,__LINE__)
 
-static const char *search_msg = "%s: Looking for 3c505 adapter at address %#x...";
+static char *search_msg __initdata = "%s: Looking for 3c505 adapter at address %#x...";
 
-static const char *stilllooking_msg = "still looking...";
+static char *stilllooking_msg __initdata = "still looking...";
 
-static const char *found_msg = "found.\n";
+static char *found_msg __initdata = "found.\n";
 
-static const char *notfound_msg = "not found (reason = %d)\n";
+static char *notfound_msg __initdata = "not found (reason = %d)\n";
 
-static const char *couldnot_msg = "%s: 3c505 not found\n";
+static char *couldnot_msg __initdata = "%s: 3c505 not found\n";
 
 /*********************************************************
  *
@@ -180,7 +180,7 @@ static const int elp_debug = 0;
  * Last element MUST BE 0!
  *****************************************************************/
 
-static const int addr_list[] __initdata = {0x300, 0x280, 0x310, 0};
+static int addr_list[] __initdata = {0x300, 0x280, 0x310, 0};
 
 /* Dma Memory related stuff */
 

@@ -739,7 +739,7 @@ static int proc_submiturb(struct dev_state *ps, void *arg)
 
 	if (copy_from_user(&uurb, arg, sizeof(uurb)))
 		return -EFAULT;
-	if (uurb.flags & ~(USBDEVFS_URB_ISO_ASAP|USBDEVFS_URB_DISABLE_SPD))
+	if (uurb.flags & ~(USBDEVFS_URB_ISO_ASAP|USBDEVFS_URB_DISABLE_SPD|USBDEVFS_URB_QUEUE_BULK))
 		return -EINVAL;
 	if (!uurb.buffer)
 		return -EINVAL;

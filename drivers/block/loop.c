@@ -584,6 +584,8 @@ static int loop_set_status(struct loop_device *lo, struct loop_info *arg)
 	type = info.lo_encrypt_type; 
 	if (type >= MAX_LO_CRYPT || xfer_funcs[type] == NULL)
 		return -EINVAL;
+	if (type == LO_CRYPT_XOR && info.lo_encrypt_key_size == 0)
+		return -EINVAL;
 	err = loop_release_xfer(lo);
 	if (!err) 
 		err = loop_init_xfer(lo, type, &info);
@@ -793,7 +795,6 @@ int __init loop_init(void)
 		max_loop = 8;
 	}
 
-	printk(KERN_INFO "loop: registered device at major %d\n", MAJOR_NR);
 	printk(KERN_INFO "loop: enabling %d loop devices\n", max_loop);
 
 	loop_dev = kmalloc (max_loop * sizeof(struct loop_device), GFP_KERNEL);

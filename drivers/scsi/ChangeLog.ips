@@ -1,7 +1,22 @@
 IBM ServeRAID driver Change Log
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        4.20.14  - Update patch files for kernel 2.4.0-test5
+
+        4.20.13  - Fix some failure cases / reset code
+                 - Hook into the reboot_notifier to flush the controller
+                   cache
+
+        4.20.03 - Rename version to coincide with new release schedules
+                - Performance fixes
+                - Fix truncation of /proc files with cat
+                - Merge in changes through kernel 2.4.0test1ac21
+
+        4.10.13 - Fix for dynamic unload and proc file system
+
+        4.10.00 - Add support for ServeRAID 4M/4L
+
         4.00.06 - Fix timeout with initial FFDC command
-	
+
         4.00.05 - Remove wish_block from init routine
                 - Use linux/spinlock.h instead of asm/spinlock.h for kernels
                   2.3.18 and later

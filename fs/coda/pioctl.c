@@ -23,13 +23,12 @@
 #include <linux/coda.h>
 #include <linux/coda_linux.h>
 #include <linux/coda_fs_i.h>
-#include <linux/coda_cache.h>
 #include <linux/coda_psdev.h>
 
 /* pioctl ops */
 static int coda_ioctl_permission(struct inode *inode, int mask);
 static int coda_pioctl(struct inode * inode, struct file * filp, 
-                       unsigned int cmd, unsigned long arg);
+                       unsigned int cmd, unsigned long user_data);
 
 /* exported from this file */
 struct inode_operations coda_ioctl_inode_operations =
@@ -52,7 +51,7 @@ static int coda_ioctl_permission(struct inode *inode, int mask)
 }
 
 static int coda_pioctl(struct inode * inode, struct file * filp, 
-		       unsigned int cmd, unsigned long user_data)
+                       unsigned int cmd, unsigned long user_data)
 {
 	struct nameidata nd;
         int error;

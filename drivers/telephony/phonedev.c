@@ -14,7 +14,6 @@
  *              phone_register_device now works with unit!=PHONE_UNIT_ANY
  */
 
-#include <linux/config.h>
 #include <linux/version.h>
 #include <linux/module.h>
 #include <linux/types.h>

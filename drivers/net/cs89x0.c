@@ -76,6 +76,7 @@ static char *version =
 
 /* Always include 'config.h' first in case the user wants to turn on
    or override something. */
+#include <linux/config.h>
 #ifdef MODULE
 #include <linux/module.h>
 #include <linux/version.h>

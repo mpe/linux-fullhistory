@@ -24,168 +24,60 @@
 #include <linux/coda_fs_i.h>
 #include <linux/coda_cache.h>
 
-/* create a new acl cache entry and enlist it */
-static struct coda_cache *coda_cache_create(struct inode *inode)
-{
-	struct coda_inode_info *cii = ITOC(inode);
-	struct coda_sb_info *sbi = coda_sbp(inode->i_sb);
-	struct coda_cache *cc = NULL;
-	ENTRY;
-
-	if ( !sbi || !cii ) {
-		printk("coda_cache_create: NULL sbi or cii!\n");
-		return NULL;
-	}
-
-	CODA_ALLOC(cc, struct coda_cache *, sizeof(*cc));
-
-	if ( !cc ) {
-		printk("Out of memory in coda_cache_create!\n");
-		return NULL;
-	}
-
-	coda_load_creds(&cc->cc_cred);
-	cc->cc_mask = 0;
-
-	INIT_LIST_HEAD(&cc->cc_cclist);
-	INIT_LIST_HEAD(&cc->cc_cnlist);
-	list_add(&cc->cc_cclist, &sbi->sbi_cchead);
-	list_add(&cc->cc_cnlist, &cii->c_cnhead);
-
-	return cc;
-}
-
-/* destroy an acl cache entry */
-static void coda_cache_destroy(struct coda_cache *el)
-{
-	ENTRY;
-        if (list_empty(&el->cc_cclist) || list_empty(&el->cc_cnlist)) {
-		printk("coda_cache_destroy: loose entry!");
-		return;
-	}
-	list_del(&el->cc_cclist);
-	list_del(&el->cc_cnlist);
-	CODA_FREE(el, sizeof(struct coda_cache));
-}
-
-/* see if there is a match for the current 
-   credentials already */
-static struct coda_cache * coda_cache_find(struct inode *inode)
-{
-	struct coda_inode_info *cii = ITOC(inode);
-	struct list_head *le;
-	struct coda_cache *cc = NULL;
-	
-	list_for_each(le, &cii->c_cnhead)
-	{
-		/* compare name and creds */
-		cc = list_entry(le, struct coda_cache, cc_cnlist);
-		if ( !coda_cred_ok(&cc->cc_cred) )
-			continue;
-		CDEBUG(D_CACHE, "HIT for ino %ld\n", inode->i_ino );
-		return cc; /* cache hit */
-	}
-	return NULL;
-}
-
-/* create or extend an acl cache hit */
+/* replace or extend an acl cache hit */
 void coda_cache_enter(struct inode *inode, int mask)
 {
-	struct coda_cache *cc;
+	struct coda_inode_info *cii = ITOC(inode);
+        ENTRY;
 
-	cc = coda_cache_find(inode);
-
-	if (!cc)
-		cc = coda_cache_create(inode);
-	if (cc)
-		cc->cc_mask |= mask;
+        if ( !coda_cred_ok(&cii->c_cached_cred) ) {
+                coda_load_creds(&cii->c_cached_cred);
+                cii->c_cached_perm = mask;
+        } else
+                cii->c_cached_perm |= mask;
 }
 
-/* remove all cached acl matches from an inode */
+/* remove cached acl from an inode */
 void coda_cache_clear_inode(struct inode *inode)
 {
-	struct list_head *le;
-	struct coda_inode_info *cii;
-	struct coda_cache *cc;
+	struct coda_inode_info *cii = ITOC(inode);
 	ENTRY;
-
-	if ( !inode ) {
-		CDEBUG(D_CACHE, "coda_cache_clear_inode: NULL inode\n");
-		return;
-	}
-	cii = ITOC(inode);
-	
-	le = cii->c_cnhead.next;
-	while ( le != &cii->c_cnhead ) {
-		cc = list_entry(le, struct coda_cache, cc_cnlist);
-		le = le->next;
-		coda_cache_destroy(cc);
-	}
+        cii->c_cached_perm = 0;
 }
 
-/* remove all acl caches */
-void coda_cache_clear_all(struct super_block *sb)
+/* remove all acl caches for a principal (or all principals when cred == NULL)*/
+void coda_cache_clear_all(struct super_block *sb, struct coda_cred *cred)
 {
-	struct list_head *le;
-	struct coda_cache *cc;
-	struct coda_sb_info *sbi = coda_sbp(sb);
+        struct coda_sb_info *sbi;
+        struct coda_inode_info *cii;
+        struct list_head *tmp;
 
-	if ( !sbi ) {
-		printk("coda_cache_clear_all: NULL sbi\n");
-		return;
-	}
-	
-	le = sbi->sbi_cchead.next;
-	while ( le != &sbi->sbi_cchead ) {
-		cc = list_entry(le, struct coda_cache, cc_cclist);
-		le = le->next;
-		coda_cache_destroy(cc);
-	}
-}
+        ENTRY;
+        sbi = coda_sbp(sb);
+        if (!sbi) BUG();
 
-/* remove all acl caches for a principal */
-void coda_cache_clear_cred(struct super_block *sb, struct coda_cred *cred)
-{
-	struct list_head *le;
-	struct coda_cache *cc;
-	struct coda_sb_info *sbi = coda_sbp(sb);
+        list_for_each(tmp, &sbi->sbi_cihead)
+        {
+		cii = list_entry(tmp, struct coda_inode_info, c_cilist);
+                if ( cii->c_magic != CODA_CNODE_MAGIC ) continue;
 
-	if ( !sbi ) {
-		printk("coda_cache_clear_all: NULL sbi\n");
-		return;
-	}
-	
-	le = sbi->sbi_cchead.next;
-	while ( le != &sbi->sbi_cchead ) {
-		cc = list_entry(le, struct coda_cache, cc_cclist);
-		le = le->next;
-		if ( coda_cred_eq(&cc->cc_cred, cred))
-			coda_cache_destroy(cc);
+                if (!cred || coda_cred_eq(cred, &cii->c_cached_cred))
+                        cii->c_cached_perm = 0;
 	}
 }
 
 
-/* check if the mask has been matched against the acl
-   already */
+/* check if the mask has been matched against the acl already */
 int coda_cache_check(struct inode *inode, int mask)
 {
 	struct coda_inode_info *cii = ITOC(inode);
-	struct list_head *le;
-	struct coda_cache *cc = NULL;
+        int hit;
 	
-	list_for_each(le, &cii->c_cnhead)
-	{
-		/* compare name and creds */
-		cc = list_entry(le, struct coda_cache, cc_cnlist);
-		if ( (cc->cc_mask & mask) != mask ) 
-			continue; 
-		if ( !coda_cred_ok(&cc->cc_cred) )
-			continue;
-		CDEBUG(D_CACHE, "HIT for ino %ld\n", inode->i_ino );
-		return 1; /* cache hit */
-	}
-	CDEBUG(D_CACHE, "MISS for ino %ld\n", inode->i_ino );
-	return 0;
+        hit = ((mask & cii->c_cached_perm) == mask) &&
+                coda_cred_ok(&cii->c_cached_cred);
+
+        CDEBUG(D_CACHE, "%s for ino %ld\n", hit ? "HIT" : "MISS", inode->i_ino);
+        return hit;
 }
 
 

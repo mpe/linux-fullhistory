@@ -6,14 +6,16 @@ Author: Mark McClelland
 Homepage: http://alpha.dyndns.org/ov511
 
 NEW IN THIS VERSION:
- o Sensor detection fixes
- o More efficient/reliable buffer allocation
- o Many minor fixes
+ o Stability improvements
+ o Support for hue control
+ o 160x120 mostly working
+ o OV6620 color problems fixed
+ o More WebCam 3 detection improvements
 
 INTRODUCTION:
 
 This is a driver for the OV511, a USB-only chip used in many "webcam" devices.
-Any camera using the OV511/OV511+ and the OV7610/20/20AE CCD should work.It 
+Any camera using the OV511/OV511+ and the OV7610/20/20AE CCD should work. It 
 supports streaming and capture of color or monochrome video via the Video4Linux
 API. Most V4L apps are compatible with it, but a few videoconferencing programs
 do not work yet. The following resolutions are supported: 640x480, 448x336,
@@ -195,20 +197,28 @@ MODULE PARAMETERS:
         both OV511 and OV511+ cameras, trial-and-error may be necessary for
         finding the optimum setting.
 
-  
+  NAME: retry_sync
+  TYPE: boolean
+  DEFAULT: 0
+  DESC: Prevent apps from timing out if frame is not done in time. This is
+        useful if you are having problems with Xawtv getting "stuck" on a frame
+        when your system is under heavy load.
+ 
 WORKING FEATURES:
- o Color streaming/capture at 640x480, 448x336, 384x288, 352x288, and 320x240
- o YUV420 and YUV422P color
+ o Color streaming/capture at 640x480, 448x336, 384x288, 352x288, 320x240, and
+   160x120
+ o RGB24, YUV420, YUV422, YUYV, and YUV422P color
  o Monochrome
- o Setting/getting of saturation, contrast and brightness (no hue yet; only
-   works with OV7610, not the OV7620 or OV7620AE)
+ o Setting/getting of saturation, contrast, brightness, and hue (only some of
+   them work the OV7620 and OV7620AE)
  o proc status reporting
 
 EXPERIMENTAL FEATURES:
  o fix_rgb_offset: Sometimes works, but other times causes errors with xawtv and
    corrupted frames. If you have a very fast CPU, you can try it.
  o Snapshot mode (only works with some read() based apps; see below for more)
- o read() support
+ o OV6620 sensor support
+ o GBR422 parsing
 
 TODO:
  o Fix the noise / grainy image problem.
@@ -216,25 +226,23 @@ TODO:
    frame rate quite a bit. OmniVision wouldn't tell me how the algorithm works,
    so we can't really work on that yet. Please kindly inform OmniVision that you
    would like them to release their specifications to the Linux community.
- o Get 160x120 working
- o YUV422 (and other color modes)
+ o YUV422
  o Get snapshot mode working with mmap().
  o Fix fixFrameRGBoffset(). It is not stable yet with streaming video.
- o Get hue (red/blue channel balance) adjustment working (in ov511_get_picture()
-   and ov511_set_picture())
  o Get autoadjust disable working
  o V4L2 support (Probably not until it goes into the kernel)
- o Fix I2C initialization. Some people are reporting problems with reading the
-   7610 registers. This could be due to timing differences, an excessive I2C
-   clock rate, or a problem with ov511_i2c_read().
+ o Creative WebCam III has problems initializing its sensor. This should be
+   fixed now, but if you still have problems let me know.
  o Get rid of the memory management functions (put them in videodev.c??)
- o Setting of contrast and brightness not working with 7620
+ o Setting of contrast and brightness not working with 7620/7620AE
  o Driver/camera state save/restore for when USB supports suspend/resume
  o Unstable on SMP systems
+ o OV7620/OV6620 experience frame corruption with moving objects
+ o OV6620 is too dark
 
 HOW TO CONTACT ME:
 
-You can email me at mmcclelland@delphi.com . Please prefix the subject line
+You can email me at mwm@i.am . Please prefix the subject line
 with "OV511: " so that I am certain to notice your message.
 
 CREDITS:

@@ -21,7 +21,7 @@ struct in_device;
 #endif
 
 /* Send RST reply */
-static void send_reset(struct sk_buff *oldskb)
+static void send_reset(struct sk_buff *oldskb, int local)
 {
 	struct sk_buff *nskb;
 	struct tcphdr *otcph, *tcph;
@@ -114,8 +114,9 @@ static void send_reset(struct sk_buff *oldskb)
 	nskb->nh.iph->check = ip_fast_csum((unsigned char *)nskb->nh.iph, 
 					   nskb->nh.iph->ihl);
 
-	/* Routing */
-	if (ip_route_output(&rt, nskb->nh.iph->daddr, nskb->nh.iph->saddr,
+	/* Routing: if not headed for us, route won't like source */
+	if (ip_route_output(&rt, nskb->nh.iph->daddr,
+			    local ? nskb->nh.iph->saddr : 0,
 			    RT_TOS(nskb->nh.iph->tos) | RTO_CONN,
 			    0) != 0)
 		goto free_nskb;
@@ -188,7 +189,7 @@ static unsigned int reject(struct sk_buff **pskb,
 	}
 	break;
 	case IPT_TCP_RESET:
-		send_reset(*pskb);
+		send_reset(*pskb, hooknum == NF_IP_LOCAL_IN);
 		break;
 	}
 

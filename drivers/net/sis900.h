@@ -165,7 +165,13 @@ enum mii_registers {
 /* mii registers specific to SiS 900 */
 enum sis_mii_registers {
 	MII_CONFIG1 = 0x0010, MII_CONFIG2 = 0x0011, MII_STSOUT = 0x0012,
-	MII_MASK    = 0x0013
+	MII_MASK    = 0x0013, MII_RESV    = 0x0014
+};
+
+/* mii registers specific to ICS 1893 */
+enum ics_mii_registers {
+	MII_EXTCTRL  = 0x0010, MII_QPDSTS = 0x0011, MII_10BTOP = 0x0012,
+	MII_EXTCTRL2 = 0x0013
 };
 
 /* mii registers specific to AMD 79C901 */
@@ -212,13 +218,19 @@ enum mii_stsout_register_bits {
 	MII_STSOUT_SPD       = 0x0080, MII_STSOUT_DPLX = 0x0040
 };
 
+enum mii_stsics_register_bits {
+	MII_STSICS_SPD  = 0x8000, MII_STSICS_DPLX = 0x4000,
+	MII_STSICS_LINKSTS = 0x0001
+};
+
 enum mii_stssum_register_bits {
 	MII_STSSUM_LINK = 0x0008, MII_STSSUM_DPLX = 0x0004,
 	MII_STSSUM_AUTO = 0x0002, MII_STSSUM_SPD  = 0x0001
 };
 
 enum sis630_revision_id {
-	SIS630E_REV = 0x81, SIS630EA1_REV = 0x83
+	SIS630E_REV = 0x81, SIS630EA1_REV = 0x83,
+	SIS630S_REV = 0x82
 };
 
 #define FDX_CAPABLE_DUPLEX_UNKNOWN      0

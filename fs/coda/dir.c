@@ -170,12 +170,13 @@ int coda_permission(struct inode *inode, int mask)
  
         ENTRY;
 	coda_vfs_stat.permission++;
-	coda_permission_stat.count++;
 
         if ( mask == 0 )
                 return 0;
 
-	if ( coda_access_cache == 1 ) {
+	if ( coda_access_cache ) {
+		coda_permission_stat.count++;
+
 		if ( coda_cache_check(inode, mask) ) {
 			coda_permission_stat.hit_count++;
 			return 0; 
@@ -472,6 +473,7 @@ static int coda_rename(struct inode *old_dir, struct dentry *old_dentry,
         const char *new_name = new_dentry->d_name.name;
 	int old_length = old_dentry->d_name.len;
 	int new_length = new_dentry->d_name.len;
+        int link_adjust = 0;
         int error;
 
 	ENTRY;
@@ -488,16 +490,16 @@ static int coda_rename(struct inode *old_dir, struct dentry *old_dentry,
 
         if ( !error ) {
 		if ( new_dentry->d_inode ) {
-			if ( S_ISDIR(new_dentry->d_inode->i_mode) ) {
-				old_dir->i_nlink--;
-				new_dir->i_nlink++;
-			}
-			coda_flag_inode(new_dentry->d_inode, C_VATTR);
-		}
+			if ( S_ISDIR(new_dentry->d_inode->i_mode) )
+                        	link_adjust = 1;
 
-		/* coda_flag_inode(old_dir, C_VATTR); */
-		/* coda_flag_inode(new_dir, C_VATTR); */
-		old_dir->i_mtime = new_dir->i_mtime = CURRENT_TIME;
+                        coda_dir_changed(old_dir, -link_adjust);
+                        coda_dir_changed(new_dir,  link_adjust);
+			coda_flag_inode(new_dentry->d_inode, C_VATTR);
+		} else {
+			coda_flag_inode(old_dir, C_VATTR);
+			coda_flag_inode(new_dir, C_VATTR);
+                }
 	}
 
 	CDEBUG(D_INODE, "result %d\n", error); 
@@ -578,6 +580,7 @@ int coda_open(struct inode *i, struct file *f)
         unsigned short flags = f->f_flags & (~O_EXCL);
 	unsigned short coda_flags = coda_flags_to_cflags(flags);
 	struct coda_cred *cred;
+        struct coda_inode_info *cii;
 
 	lock_kernel();
         ENTRY;
@@ -617,8 +620,11 @@ int coda_open(struct inode *i, struct file *f)
 	}
 	i->i_mapping = cont_inode->i_mapping;
 
-	CDEBUG(D_FILE, "result %d, coda i->i_count is %d for ino %ld\n", 
-	       error, atomic_read(&i->i_count), i->i_ino);
+        cii = ITOC(i);
+        cii->c_contcount++;
+
+	CDEBUG(D_FILE, "result %d, coda i->i_count is %d, cii->contcount is %d for ino %ld\n", 
+	       error, atomic_read(&i->i_count), cii->c_contcount, i->i_ino);
 	CDEBUG(D_FILE, "cache ino: %ld, count %d, ops %p\n", 
 	       cont_inode->i_ino, atomic_read(&cont_inode->i_count),
                cont_inode->i_op);
@@ -634,6 +640,7 @@ int coda_release(struct inode *i, struct file *f)
         unsigned short flags = (f->f_flags) & (~O_EXCL);
 	unsigned short cflags = coda_flags_to_cflags(flags);
 	struct coda_cred *cred;
+        struct coda_inode_info *cii;
 
 	lock_kernel();
         ENTRY;
@@ -644,10 +651,16 @@ int coda_release(struct inode *i, struct file *f)
 	if (i->i_mapping != &i->i_data)
 		container = (struct inode *)i->i_mapping->host;
 
-        CDEBUG(D_FILE, "RELEASE coda (ino %ld, ct %d) cache (ino %ld, ct %d)\n",
-		i->i_ino, atomic_read(&i->i_count),
+        cii = ITOC(i);
+        CDEBUG(D_FILE, "RELEASE coda (ino %ld, ct %d, cc %d) cache (ino %ld, ct %d)\n",
+		i->i_ino, atomic_read(&i->i_count), cii->c_contcount,
                 (container ? container->i_ino : 0),
 		(container ? atomic_read(&container->i_count) : -99));
+
+        if (--cii->c_contcount == 0 && container) {
+                i->i_mapping = &i->i_data;
+                iput(container);
+        }
 
 	error = venus_release(i->i_sb, coda_i2f(i), cflags, cred);
 

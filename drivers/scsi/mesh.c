@@ -149,6 +149,8 @@ struct mesh_state {
 	struct dbdma_cmd *dma_cmds;	/* space for dbdma commands, aligned */
 	int	clk_freq;
 	struct mesh_target tgts[8];
+	void	*dma_cmd_space;
+	struct device_node *ofnode;
 #ifndef MESH_NEW_STYLE_EH
 	Scsi_Cmnd *completed_q;
 	Scsi_Cmnd *completed_qtail;
@@ -262,6 +264,7 @@ mesh_detect(Scsi_Host_Template *tp)
 			panic("no mesh state");
 		memset(ms, 0, sizeof(*ms));
 		ms->host = mesh_host;
+		ms->ofnode = mesh;
 		ms->mesh = (volatile struct mesh_regs *)
 			ioremap(mesh->addrs[0].address, 0x1000);
 		ms->dma = (volatile struct dbdma_regs *)
@@ -278,6 +281,7 @@ mesh_detect(Scsi_Host_Template *tp)
 		ms->dma_cmds = (struct dbdma_cmd *) DBDMA_ALIGN(dma_cmd_space);
 		memset(ms->dma_cmds, 0, (mesh_host->sg_tablesize + 1)
 		       * sizeof(struct dbdma_cmd));
+		ms->dma_cmd_space = dma_cmd_space;
 
 		ms->current_req = 0;
 		for (tgt = 0; tgt < 8; ++tgt) {
@@ -321,6 +325,23 @@ mesh_detect(Scsi_Host_Template *tp)
 		register_reboot_notifier(&mesh_notifier);
 
 	return nmeshes;
+}
+
+int
+mesh_release(struct Scsi_Host *host)
+{
+	struct mesh_state *ms = (struct mesh_state *) host->hostdata;
+
+	if (ms == 0)
+		return 0;
+	if (ms->mesh)
+		iounmap((void *) ms->mesh);
+	if (ms->dma)
+		iounmap((void *) ms->dma);
+	kfree(ms->dma_cmd_space);
+	free_irq(ms->meshintr, ms);
+	feature_clear(ms->ofnode, FEATURE_MESH_enable);
+	return 0;
 }
 
 int
@@ -1910,3 +1931,7 @@ static void dumpslog(struct mesh_state *ms)
 	} while (i != ms->log_ix);
 }
 #endif /* MESH_DBG */
+
+static Scsi_Host_Template driver_template = SCSI_MESH;
+
+#include "scsi_module.c"

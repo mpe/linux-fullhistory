@@ -5,7 +5,6 @@
  *
  *  Bits taken from various places.
  */
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>
 #include <linux/init.h>

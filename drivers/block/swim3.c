@@ -16,6 +16,7 @@
  * handle GCR disks
  */
 
+#include <linux/config.h>
 #include <linux/stddef.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>

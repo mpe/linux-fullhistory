@@ -46,6 +46,12 @@
 
 #define DRIVER_NAME "Compaq SMART2 Driver (v 2.4.0)"
 #define DRIVER_VERSION SMART2_DRIVER_VERSION(2,4,0)
+
+/* Embedded module documentation macros - see modules.h */
+/* Original author Chris Frantz - Compaq Computer Corporation */
+MODULE_AUTHOR("Compaq Computer Corporation");
+MODULE_DESCRIPTION("Driver for Compaq Smart2 Array Controllers");
+
 #define MAJOR_NR COMPAQ_SMART2_MAJOR
 #include <linux/blk.h>
 #include <linux/blkdev.h>
@@ -615,6 +621,8 @@ static int cpqarray_pci_init(ctlr_info_t *c, unchar bus, unchar device_fn)
 
 	int i;
 
+	c->pci_bus = bus;
+	c->pci_dev_fn = device_fn;
 	pdev = pci_find_slot(bus, device_fn);
 	vendor_id = pdev->vendor;
 	device_id = pdev->device;
@@ -770,6 +778,8 @@ static int cpqarray_eisa_detect(void)
 		hba[nr_ctlr]->access = *(products[j].access);
 		hba[nr_ctlr]->ctlr = nr_ctlr;
 		hba[nr_ctlr]->board_id = board_id;
+		hba[nr_ctlr]->pci_bus = 0;  /* not PCI */
+		hba[nr_ctlr]->pci_dev_fn = 0; /* not PCI */
 
 DBGINFO(
 	printk("i = %d, j = %d\n", i, j);
@@ -899,7 +909,7 @@ static void do_ida_request(int ctlr)
 	if (ctlr != MAJOR(creq->rq_dev)-MAJOR_NR ||
 		ctlr > nr_ctlr || h == NULL) 
 	{
-		printk("doreq cmd for %d, %x at %p\n",
+		printk(KERN_WARNING "doreq cmd for %d, %x at %p\n",
 				ctlr, creq->rq_dev, creq);
 		complete_buffers(creq->bh, 0);
 		start_io(h);
@@ -1189,6 +1199,20 @@ static int ida_ioctl(struct inode *inode, struct file *filep, unsigned int cmd, 
 		if (!arg) return -EINVAL;
 		put_user(DRIVER_VERSION, (unsigned long*)arg);
 		return 0;
+	case IDAGETPCIINFO:
+	{
+		
+		ida_pci_info_struct pciinfo;
+
+		if (!arg) return -EINVAL;
+		pciinfo.bus = hba[ctlr]->pci_bus;
+		pciinfo.dev_fn = hba[ctlr]->pci_dev_fn;
+		pciinfo.board_id = hba[ctlr]->board_id;
+		if(copy_to_user((void *) arg, &pciinfo,  
+			sizeof( ida_pci_info_struct)))
+				return -EFAULT;
+		return(0);
+	}	
 
 	case BLKFLSBUF:
 	case BLKROSET:
@@ -1199,7 +1223,7 @@ static int ida_ioctl(struct inode *inode, struct file *filep, unsigned int cmd, 
 		return blk_ioctl(inode->i_rdev, cmd, arg);
 
 	default:
-		return -EBADRQC;
+		return -EINVAL;
 	}
 		
 }
@@ -1379,6 +1403,8 @@ static int sendcmd(
 	ctlr_info_t *info_p = hba[ctlr];
 
 	c = cmd_alloc(info_p);
+	if(!c)
+		return IO_ERROR;
 	c->ctlr = ctlr;
 	c->hdr.unit = log_unit;
 	c->hdr.prio = 0;

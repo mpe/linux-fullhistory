@@ -1,6 +1,6 @@
 /* Driver for SCM Microsystems USB-ATAPI cable
  *
- * $Id: shuttle_usbat.c,v 1.7 2000/09/04 02:08:42 groovyjava Exp $
+ * $Id: shuttle_usbat.c,v 1.8 2000/09/08 23:20:41 groovyjava Exp $
  *
  * SCM driver v0.2:
  *
@@ -64,7 +64,7 @@ extern int usb_stor_control_msg(struct us_data *us, unsigned int pipe,
 extern int usb_stor_bulk_msg(struct us_data *us, void *data, int pipe,
 	unsigned int len, unsigned int *act_len);
 
-#define short_pack(b1,b2) ( ((u16)(b1)) | ( ((u16)(b2))<<8 ) )
+#define short_pack(LSB,MSB) ( ((u16)(LSB)) | ( ((u16)(MSB))<<8 ) )
 #define LSB_of(s) ((s)&0xFF)
 #define MSB_of(s) ((s)>>8)
 
@@ -208,7 +208,8 @@ static int usbat_raw_bulk(struct us_data *us,
 		return US_BULK_TRANSFER_SHORT;
 	}
 
-	US_DEBUGP("Transfered %d of %d bytes\n", act_len, len);
+	US_DEBUGP("Transferred %s %d of %d bytes\n", 
+		direction==SCSI_DATA_READ ? "in" : "out", act_len, len);
 
 	return US_BULK_TRANSFER_GOOD;
 }
@@ -285,9 +286,9 @@ static int usbat_bulk_transport(struct us_data *us,
 	}
 */
 
-	US_DEBUGP("SCM data %s transfer %d sg buffers %d\n",
-		  ( direction==SCSI_DATA_READ ? "in" : "out"),
-		  len, use_sg);
+	//US_DEBUGP("SCM data %s transfer %d sg buffers %d\n",
+	//	  ( direction==SCSI_DATA_READ ? "in" : "out"),
+	//	  len, use_sg);
 
 	if (!use_sg)
 		result = usbat_raw_bulk(us, direction, data, len);
@@ -574,9 +575,9 @@ int usbat_rw_block_test(struct us_data *us,
 		}
 
 
-		US_DEBUGP("Transfer %s %d bytes, sg buffers %d\n",
-			direction == SCSI_DATA_WRITE ? "out" : "in",
-			len, use_sg);
+		//US_DEBUGP("Transfer %s %d bytes, sg buffers %d\n",
+		//	direction == SCSI_DATA_WRITE ? "out" : "in",
+		//	len, use_sg);
 
 		result = usbat_bulk_transport(us,
 			NULL, 0, direction, content, len, use_sg);
@@ -727,6 +728,126 @@ int usbat_write_user_io(struct us_data *us,
 		
 	// result = usbat_send_control(us, command, NULL, 0);
 
+	return result;
+}
+
+/*
+ * Squeeze a potentially huge (> 65535 byte) read10 command into
+ * a little ( <= 65535 byte) ATAPI pipe
+ */
+
+int usbat_handle_read10(struct us_data *us,
+		unsigned char *registers,
+		unsigned char *data,
+		Scsi_Cmnd *srb) {
+
+	int result = USB_STOR_TRANSPORT_GOOD;
+	unsigned char *buffer;
+	unsigned int len;
+	unsigned int sector;
+	unsigned int amount;
+	struct scatterlist *sg = NULL;
+	int sg_segment = 0;
+	int sg_offset = 0;
+
+	if (srb->request_bufflen < 0x10000) {
+
+		result = usbat_rw_block_test(us, USBAT_ATA, 
+			registers, data, 19,
+			0x10, 0x17, 0xFD, 0x30,
+			SCSI_DATA_READ,
+			srb->request_buffer, 
+			srb->request_bufflen, srb->use_sg);
+
+		return result;
+	}
+
+	/*
+	 * Since we're requesting more data than we can handle in
+	 * a single read command (max is 64k-1), we will perform
+	 * multiple reads, but each read must be in multiples of
+	 * a sector.  Luckily the sector size is in srb->transfersize
+	 * (see linux/drivers/scsi/sr.c).
+	 */
+
+	
+	len = (65535/srb->transfersize) * srb->transfersize;
+	US_DEBUGP("Max read is %d bytes\n", len);
+	buffer = kmalloc(len, GFP_KERNEL);
+	if (buffer == NULL) // bloody hell!
+		return USB_STOR_TRANSPORT_FAILED;
+	sector = short_pack(data[7+3], data[7+2]);
+	sector <<= 16;
+	sector |= short_pack(data[7+5], data[7+4]);
+	transferred = 0;
+
+	if (srb->use_sg) {
+		sg = (struct scatterlist *)srb->request_buffer;
+		sg_segment = 0; // for keeping track of where we are in
+		sg_offset = 0;  // the scatter/gather list
+	}
+
+	while (transferred != srb->request_bufflen) {
+		
+		if (len > srb->request_bufflen - transferred)
+			len = srb->request_bufflen - transferred;
+
+		data[3] = len&0xFF; 	  // (cylL) = expected length (L)
+		data[4] = (len>>8)&0xFF;  // (cylH) = expected length (H)
+
+		// Fix up the SCSI command sector and num sectors
+
+		data[7+2] = MSB_of(sector>>16); // SCSI command sector
+		data[7+3] = LSB_of(sector>>16);
+		data[7+4] = MSB_of(sector&0xFFFF);
+		data[7+5] = LSB_of(sector&0xFFFF);
+		data[7+7] = MSB_of(len / srb->transfersize); // SCSI command
+		data[7+8] = LSB_of(len / srb->transfersize); // num sectors
+		
+		result = usbat_rw_block_test(us, USBAT_ATA, 
+			registers, data, 19,
+			0x10, 0x17, 0xFD, 0x30,
+			SCSI_DATA_READ,
+			buffer,
+			len, 0);
+
+		if (result != USB_STOR_TRANSPORT_GOOD)
+			break;
+
+		// Transfer the received data into the srb buffer
+
+		if (!srb->use_sg) {
+			memcpy(srb->request_buffer+transferred, buffer, len);
+		} else {
+			amount = 0;
+			while (amount<len) {
+				if (len - amount >= 
+					  sg[sg_segment].length-sg_offset) {
+				  memcpy(sg[sg_segment].address + sg_offset,
+					buffer + amount,
+					sg[sg_segment].length - sg_offset);
+				  amount += 
+					  sg[sg_segment].length-sg_offset;
+				  sg_segment++;
+				  sg_offset=0;
+				} else {
+				  memcpy(sg[sg_segment].address + sg_offset,
+					buffer + amount,
+					len - amount);
+				  sg_offset += (len - amount);
+				  amount = len;
+				}
+			}
+		}
+
+		// Update the amount transferred and the sector number
+
+		transferred += len;
+		sector += len / srb->transfersize;
+
+	} // while transferred != srb->request_bufflen
+
+	kfree(buffer);
 	return result;
 }
 
@@ -915,6 +1036,7 @@ int hp8200e_transport(Scsi_Cmnd *srb, struct us_data *us)
 	unsigned int len;
 	int i;
 	char string[64];
+	// struct scatterlist *sg;
 
 	/* This table tells us:
 	   X = command not supported
@@ -1003,12 +1125,6 @@ int hp8200e_transport(Scsi_Cmnd *srb, struct us_data *us)
 		}
 	} */
 
-	if (len > 0xFFFF) {
-		US_DEBUGP("Error: len = %08X... what do I do now?\n",
-			len);
-		return USB_STOR_TRANSPORT_ERROR;
-	}
-
 	// US_DEBUGP("XXXXXXXXXXXXXXXX req_bufflen %d, len %d, bufflen %d\n", 
  	//	srb->request_bufflen, len, srb->bufflen);
 
@@ -1058,14 +1174,14 @@ int hp8200e_transport(Scsi_Cmnd *srb, struct us_data *us)
 
 	} else if (srb->cmnd[0] == READ_10) {
 
-		result = usbat_rw_block_test(us, USBAT_ATA, 
-			registers, data, 19,
-			0x10, 0x17, 0xFD, 0x30,
-			SCSI_DATA_READ,
-			srb->request_buffer, 
-			len, srb->use_sg);
+		return usbat_handle_read10(us, registers, data, srb);
 
-		return result;
+	}
+
+	if (len > 0xFFFF) {
+		US_DEBUGP("Error: len = %08X... what do I do now?\n",
+			len);
+		return USB_STOR_TRANSPORT_ERROR;
 	}
 
 	if ( (result = usbat_multiple_write(us, 

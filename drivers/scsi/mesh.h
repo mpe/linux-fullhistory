@@ -8,6 +8,7 @@
 #define _MESH_H
 
 int mesh_detect(Scsi_Host_Template *);
+int mesh_release(struct Scsi_Host *);
 int mesh_command(Scsi_Cmnd *);
 int mesh_queue(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int mesh_abort(Scsi_Cmnd *);
@@ -17,6 +18,7 @@ int mesh_reset(Scsi_Cmnd *, unsigned int);
 	proc_name:	"mesh",				\
 	name:		"MESH",				\
 	detect:		mesh_detect,			\
+	release:	mesh_release,			\
 	command:	mesh_command,			\
 	queuecommand:	mesh_queue,			\
 	abort:		mesh_abort,			\

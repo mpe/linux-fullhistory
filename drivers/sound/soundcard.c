@@ -267,6 +267,7 @@ static int sound_release(struct inode *inode, struct file *file)
 	DEB(printk("sound_release(dev=%d)\n", dev));
 	switch (dev & 0x0f) {
 	case SND_DEV_CTL:
+		dev >>= 4;
 		if (mixer_devs[dev]->owner)
 			__MOD_DEC_USE_COUNT (mixer_devs[dev]->owner);
 		break;

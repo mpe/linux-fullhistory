@@ -1,6 +1,6 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: usb.c,v 1.39 2000/09/08 21:20:06 mdharm Exp $
+ * $Id: usb.c,v 1.44 2000/09/14 22:56:36 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -43,7 +43,6 @@
  * 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <linux/config.h>
 #include "usb.h"
 #include "scsiglue.h"
 #include "transport.h"
@@ -63,6 +62,7 @@
 #include "freecom.h"
 #endif
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
@@ -331,6 +331,12 @@ static int usb_stor_control_thread(void * __us)
  */
 static struct us_unusual_dev us_unusual_dev_list[] = {
 
+	{ 0x03ee, 0x0000, 0x0000, 0x0245, 
+		"Mitsumi",
+		"CD-R/RW Drive",
+		US_SC_8020, US_PR_CBI, NULL, 
+		US_FL_SINGLE_LUN}, 
+
 	{ 0x03f0, 0x0107, 0x0200, 0x0200, 
 		"HP",
 		"CD-Writer+",
@@ -415,9 +421,9 @@ static struct us_unusual_dev us_unusual_dev_list[] = {
 		US_SC_8020, US_PR_CB, NULL, 
 		US_FL_SINGLE_LUN},
 
-	{ 0x054c, 0x0010, 0x0210, 0x0210, 
+	{ 0x054c, 0x0010, 0x0106, 0x0210, 
 		"Sony",
-		"DSC-S30/S70/505V", 
+		"DSC-S30/S70/505V/F505", 
 		US_SC_SCSI, US_PR_CB, NULL,
 		US_FL_SINGLE_LUN | US_FL_START_STOP | US_FL_MODE_XLATE },
 
@@ -507,7 +513,7 @@ static struct us_unusual_dev us_unusual_dev_list[] = {
         { 0x07ab, 0xfc01, 0x0921, 0x0921,
                 "Freecom",
                 "USB-IDE",
-                US_SC_8070, US_PR_FREECOM, freecom_init, US_FL_SINGLE_LUN },
+                US_SC_QIC, US_PR_FREECOM, freecom_init, US_FL_SINGLE_LUN },
 #endif
 
 	{ 0x07af, 0x0005, 0x0100, 0x0100, 
@@ -725,6 +731,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 	}
 
 	/* At this point, we're committed to using the device */
+	usb_inc_dev_use(dev);
 
 	/* clear the GUID and fetch the strings */
 	GUID_CLEAR(guid);
@@ -784,8 +791,14 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		if ((ss->protocol == US_PR_CBI) && usb_stor_allocate_irq(ss))
 			return NULL;
 
-                /* Re-Initialize the device if it needs it */
+		/* allocate the URB we're going to use */
+		ss->current_urb = usb_alloc_urb(0);
+		if (!ss->current_urb) {
+			kfree(ss);
+			return NULL;
+		}
 
+                /* Re-Initialize the device if it needs it */
 		if (unusual_dev && unusual_dev->initFunction)
 			(unusual_dev->initFunction)(ss);
 
@@ -1003,7 +1016,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		/* Just before we start our control thread, initialize
 		 * the device if it needs initialization */
 		if (unusual_dev && unusual_dev->initFunction)
-			(unusual_dev->initFunction)(ss);
+			unusual_dev->initFunction(ss);
 		
 		/* start up our control thread */
 		ss->pid = kernel_thread(usb_stor_control_thread, ss,
@@ -1060,18 +1073,26 @@ static void storage_disconnect(struct usb_device *dev, void *ptr)
 	/* release the IRQ, if we have one */
 	down(&(ss->irq_urb_sem));
 	if (ss->irq_urb) {
-		US_DEBUGP("-- releasing irq handle\n");
+		US_DEBUGP("-- releasing irq URB\n");
 		result = usb_unlink_urb(ss->irq_urb);
-		ss->irq_urb = NULL;
 		US_DEBUGP("-- usb_unlink_urb() returned %d\n", result);
 		usb_free_urb(ss->irq_urb);
+		ss->irq_urb = NULL;
 	}
 	up(&(ss->irq_urb_sem));
 
+	/* free up the main URB for this device */
+	US_DEBUGP("-- releasing main URB\n");
+	result = usb_unlink_urb(ss->current_urb);
+	US_DEBUGP("-- usb_unlink_urb() returned %d\n", result);
+	usb_free_urb(ss->current_urb);
+	ss->current_urb = NULL;
+
 	/* mark the device as gone */
+	usb_dec_dev_use(ss->pusb_dev);
 	ss->pusb_dev = NULL;
 
-	/* lock access to the device data structure */
+	/* unlock access to the device data structure */
 	up(&(ss->dev_semaphore));
 }
 
@@ -1132,8 +1153,7 @@ void __exit usb_stor_exit(void)
 
 		if (us_list->extra) {
 			if (us_list->extra_destructor)
-				(*us_list->extra_destructor)(
-					us_list->extra);
+				us_list->extra_destructor(us_list->extra);
 			kfree(us_list->extra);
 		}
                 kfree (us_list);
@@ -1146,5 +1166,5 @@ void __exit usb_stor_exit(void)
 	up(&us_list_semaphore);
 }
 
-module_init(usb_stor_init) ;
-module_exit(usb_stor_exit) ;
+module_init(usb_stor_init);
+module_exit(usb_stor_exit);

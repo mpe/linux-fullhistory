@@ -82,47 +82,32 @@ struct usb_hub_descriptor {
 	__u16 wHubCharacteristics;
 	__u8  bPwrOn2PwrGood;
 	__u8  bHubContrCurrent;
+
 	/* DeviceRemovable and PortPwrCtrlMask want to be variable-length 
 	   bitmaps that hold max 256 entries, but for now they're ignored */
+	__u8  bitmap[0];
 } __attribute__ ((packed));
 
 struct usb_device;
 
-typedef enum {
-	USB_PORT_UNPOWERED = 0,		/* Default state */
-	USB_PORT_POWERED,		/* When we've put power to it */
-	USB_PORT_ENABLED,		/* When it's been enabled */
-	USB_PORT_DISABLED,		/* If it's been disabled */
-	USB_PORT_ADMINDISABLED,		/* Forced down */
-} usb_hub_port_state;
-
-struct usb_hub_port {
-	usb_hub_port_state cstate;	/* Configuration state */
-
-	struct usb_device *child;	/* Device attached to this port */
-
-	struct usb_hub *parent;		/* Parent hub */
-};
-
 struct usb_hub {
-	/* Device structure */
 	struct usb_device *dev;
 
-	/* Interrupt polling pipe */
-	struct urb *urb;
+	struct urb *urb;		/* Interrupt polling pipe */
 
 	char buffer[USB_MAXCHILDREN / 8];
 
-	/* List of hubs */
+	int error;
+	int nerrors;
+
 	struct list_head hub_list;
 
-	/* Temporary event list */
 	struct list_head event_list;
 
 	/* Number of ports on the hub */
 	int nports;
 
-	struct usb_hub_port ports[0];	/* Dynamically allocated */
+	struct usb_hub_descriptor *descriptor;
 };
 
 #endif

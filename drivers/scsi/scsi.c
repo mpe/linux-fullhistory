@@ -1841,8 +1841,8 @@ static int scsi_register_host(Scsi_Host_Template * tpnt)
 				return 1;
 			}
 			/* 
-			 * The low-level driver failed to register a driver.  We
-			 *  can do this now.
+			 * The low-level driver failed to register a driver.
+			 * We can do this now.
 			 */
 			scsi_register(tpnt, 0);
 		}
@@ -1887,9 +1887,6 @@ static int scsi_register_host(Scsi_Host_Template * tpnt)
 				       shpnt->host_no, name);
 			}
 		}
-
-		printk("scsi : %d host%s.\n", next_scsi_host,
-		       (next_scsi_host == 1) ? "" : "s");
 
 		/* The next step is to call scan_scsis here.  This generates the
 		 * Scsi_Devices entries
@@ -1968,7 +1965,7 @@ static int scsi_register_host(Scsi_Host_Template * tpnt)
 static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 {
 	int online_status;
-	int pcount;
+	int pcount0, pcount;
 	Scsi_Cmnd *SCpnt;
 	Scsi_Device *SDpnt;
 	Scsi_Device *SDpnt1;
@@ -2108,6 +2105,7 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 	/* Next we go through and remove the instances of the individual hosts
 	 * that were detected */
 
+	pcount0 = next_scsi_host;
 	for (shpnt = scsi_hostlist; shpnt; shpnt = sh1) {
 		sh1 = shpnt->next;
 		if (shpnt->hostt != tpnt)
@@ -2143,8 +2141,9 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 	if (!scsi_hosts)
 		scsi_resize_dma_pool();
 
-	printk("scsi : %d host%s.\n", next_scsi_host,
-	       (next_scsi_host == 1) ? "" : "s");
+	if (pcount0 != next_scsi_host)
+		printk("scsi : %d host%s left.\n", next_scsi_host,
+		       (next_scsi_host == 1) ? "" : "s");
 
 #if defined(USE_STATIC_SCSI_MEMORY)
 	printk("SCSI memory: total %ldKb, used %ldKb, free %ldKb.\n",

@@ -6,7 +6,6 @@
  *  any additional architecture specific information
  *  is pulled from the params struct.
  */
-#include <linux/config.h>
 #include <linux/tty.h>
 #include <linux/delay.h>
 #include <linux/pm.h>

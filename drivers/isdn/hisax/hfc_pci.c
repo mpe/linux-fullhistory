@@ -1686,6 +1686,7 @@ __initfunc(int
 			printk(KERN_WARNING "HFC-PCI: No PCI card found\n");
 			return (0);
 		}
+#ifdef notdef
 		if (((int) cs->hw.hfcpci.pci_io & (PAGE_SIZE - 1))) {
 			printk(KERN_WARNING "HFC-PCI shared mem address will be corrected\n");
 			pcibios_write_config_word(cs->hw.hfcpci.pci_bus,
@@ -1719,6 +1720,7 @@ __initfunc(int
 			}
 			dev_hfcpci->resource[1].start = (int) cs->hw.hfcpci.pci_io;
 		}
+#endif
 		if (!cs->hw.hfcpci.pci_io) {
 			printk(KERN_WARNING "HFC-PCI: No IO-Mem for PCI card found\n");
 			return (0);

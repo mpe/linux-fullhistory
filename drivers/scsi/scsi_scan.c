@@ -133,6 +133,8 @@ static struct dev_info device_list[] =
 	{"EMULEX", "MD21/S2     ESDI", "*", BLIST_SINGLELUN},
 	{"CANON", "IPUBJD", "*", BLIST_SPARSELUN},
 	{"nCipher", "Fastness Crypto", "*", BLIST_FORCELUN},
+	{"DEC","HSG80","*", BLIST_FORCELUN},
+	{"COMPAQ","LOGICAL VOLUME","*", BLIST_FORCELUN},
 	{"NEC", "PD-1 ODX654P", "*", BLIST_FORCELUN | BLIST_SINGLELUN},
 	{"MATSHITA", "PD-1", "*", BLIST_FORCELUN | BLIST_SINGLELUN},
 	{"iomega", "jaz 1GB", "J.86", BLIST_NOTQ | BLIST_NOLUN},
@@ -142,6 +144,8 @@ static struct dev_info device_list[] =
 	{"DGC",  "DISK",      "*", BLIST_SPARSELUN}, // Dell PV 650F (no tgt @ LUN 0) 
 	{"DELL", "PV530F",    "*", BLIST_SPARSELUN}, // Dell PV 530F
 	{"SONY", "TSL",       "*", BLIST_FORCELUN},  // DDS3 & DDS4 autoloaders
+	{"DELL", "PERCRAID", "*", BLIST_FORCELUN},
+	{"HP", "NetRAID-4M", "*", BLIST_FORCELUN},
 
 	/*
 	 * Must be at end of list...

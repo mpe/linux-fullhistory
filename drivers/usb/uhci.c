@@ -493,8 +493,6 @@ struct urb_priv *uhci_alloc_urb_priv(struct urb *urb)
 
 	urb->hcpriv = urbp;
 
-	usb_inc_dev_use(urb->dev);
-
 	return urbp;
 }
 
@@ -555,8 +553,6 @@ static void uhci_destroy_urb_priv(struct urb *urb)
 
 	urb->hcpriv = NULL;
 	kmem_cache_free(uhci_up_cachep, urbp);
-
-	usb_dec_dev_use(urb->dev);
 
 unlock:
 	spin_unlock_irqrestore(&urb->lock, flags);
@@ -738,8 +734,6 @@ static int uhci_submit_control(struct urb *urb)
 	urbp->qh = qh;
 
 	uhci_add_urb_list(uhci, urb);
-
-	usb_inc_dev_use(urb->dev);
 
 	return -EINPROGRESS;
 }
@@ -1316,10 +1310,13 @@ static int uhci_submit_urb(struct urb *urb)
 	if (u && !(urb->transfer_flags & USB_QUEUE_BULK))
 		return -ENXIO;
 
+	usb_inc_dev_use(urb->dev);
 	spin_lock_irqsave(&urb->lock, flags);
 
 	if (!uhci_alloc_urb_priv(urb)) {
 		spin_unlock_irqrestore(&urb->lock, flags);
+		usb_dec_dev_use(urb->dev);
+
 		return -ENOMEM;
 	}
 
@@ -1329,17 +1326,16 @@ static int uhci_submit_urb(struct urb *urb)
 		break;
 	case PIPE_INTERRUPT:
 		if (urb->bandwidth == 0) {	/* not yet checked/allocated */
-			bustime = usb_check_bandwidth (urb->dev, urb);
+			bustime = usb_check_bandwidth(urb->dev, urb);
 			if (bustime < 0)
 				ret = bustime;
 			else {
 				ret = uhci_submit_interrupt(urb);
 				if (ret == -EINPROGRESS)
-					usb_claim_bandwidth (urb->dev, urb, bustime, 0);
+					usb_claim_bandwidth(urb->dev, urb, bustime, 0);
 			}
-		} else {	/* bandwidth is already set */
+		} else		/* bandwidth is already set */
 			ret = uhci_submit_interrupt(urb);
-		}
 		break;
 	case PIPE_BULK:
 		ret = uhci_submit_bulk(urb, u);
@@ -1350,7 +1346,7 @@ static int uhci_submit_urb(struct urb *urb)
 				ret = -EINVAL;
 				break;
 			}
-			bustime = usb_check_bandwidth (urb->dev, urb);
+			bustime = usb_check_bandwidth(urb->dev, urb);
 			if (bustime < 0) {
 				ret = bustime;
 				break;
@@ -1358,10 +1354,9 @@ static int uhci_submit_urb(struct urb *urb)
 
 			ret = uhci_submit_isochronous(urb);
 			if (ret == -EINPROGRESS)
-				usb_claim_bandwidth (urb->dev, urb, bustime, 1);
-		} else {	/* bandwidth is already set */
+				usb_claim_bandwidth(urb->dev, urb, bustime, 1);
+		} else		/* bandwidth is already set */
 			ret = uhci_submit_isochronous(urb);
-		}
 		break;
 	}
 
@@ -1371,8 +1366,10 @@ static int uhci_submit_urb(struct urb *urb)
 
 	if (ret == -EINPROGRESS)
 		ret = 0;
-	else
+	else {
 		uhci_unlink_generic(urb);
+		usb_dec_dev_use(urb->dev);
+	}
 
 	return ret;
 }
@@ -1384,6 +1381,7 @@ static int uhci_submit_urb(struct urb *urb)
  */
 static void uhci_transfer_result(struct urb *urb)
 {
+	struct usb_device *dev = urb->dev;
 	struct urb *turb;
 	int proceed = 0, is_ring = 0;
 	int ret = -EINVAL;
@@ -1420,22 +1418,23 @@ static void uhci_transfer_result(struct urb *urb)
 		/* Release bandwidth for Interrupt or Isoc. transfers */
 		/* Spinlock needed ? */
 		if (urb->bandwidth)
-			usb_release_bandwidth (urb->dev, urb, 1);
+			usb_release_bandwidth(urb->dev, urb, 1);
 		uhci_unlink_generic(urb);
 		break;
 	case PIPE_INTERRUPT:
 		/* Interrupts are an exception */
-		urb->complete(urb);
-		if (urb->interval)
+		if (urb->interval) {
+			urb->complete(urb);
 			uhci_reset_interrupt(urb);
-		else {
-			/* Release bandwidth for Interrupt or Isoc. transfers */
-			/* Spinlock needed ? */
-			if (urb->bandwidth)
-				usb_release_bandwidth (urb->dev, urb, 0);
-			uhci_unlink_generic(urb);
+			return;
 		}
-		return;		/* <-- Note the return */
+
+		/* Release bandwidth for Interrupt or Isoc. transfers */
+		/* Spinlock needed ? */
+		if (urb->bandwidth)
+			usb_release_bandwidth(urb->dev, urb, 0);
+		uhci_unlink_generic(urb);
+		break;
 	}
 
 	if (urb->next) {
@@ -1453,7 +1452,7 @@ static void uhci_transfer_result(struct urb *urb)
 			is_ring = 1;
 	}
 
-	if (urb->complete && (!proceed || (urb->transfer_flags & USB_URB_EARLY_COMPLETE))) {
+	if (urb->complete && !proceed) {
 		urb->complete(urb);
 		if (!proceed && is_ring)
 			uhci_submit_urb(urb);
@@ -1468,9 +1467,12 @@ static void uhci_transfer_result(struct urb *urb)
 			turb = turb->next;
 		} while (turb && turb != urb->next);
 
-		if (urb->complete && !(urb->transfer_flags & USB_URB_EARLY_COMPLETE))
+		if (urb->complete)
 			urb->complete(urb);
 	}
+
+	/* We decrement the usage count after we're done with everything */
+	usb_dec_dev_use(dev);
 }
 
 static int uhci_unlink_generic(struct urb *urb)
@@ -1493,6 +1495,8 @@ static int uhci_unlink_generic(struct urb *urb)
 		uhci_delete_queued_urb(uhci, urb);
 
 	uhci_destroy_urb_priv(urb);
+
+	urb->dev = NULL;
 
 	return 0;
 }
@@ -1520,10 +1524,10 @@ static int uhci_unlink_urb(struct urb *urb)
 	if (urb->bandwidth) {
 		switch (usb_pipetype(urb->pipe)) {
 		case PIPE_INTERRUPT:
-			usb_release_bandwidth (urb->dev, urb, 0);
+			usb_release_bandwidth(urb->dev, urb, 0);
 			break;
 		case PIPE_ISOCHRONOUS:
-			usb_release_bandwidth (urb->dev, urb, 1);
+			usb_release_bandwidth(urb->dev, urb, 1);
 			break;
 		default:
 			break;

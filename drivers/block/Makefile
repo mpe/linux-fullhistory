@@ -14,9 +14,7 @@ ALL_SUB_DIRS := $(SUB_DIRS) paride
 
 O_TARGET := block.o
 
-export-objs	:= ll_rw_blk.o blkpg.o loop.o DAC960.o md.o xor.o
-list-multi	:= lvm-mod.o
-lvm-mod-objs	:= lvm.o lvm-snap.o
+export-objs	:= ll_rw_blk.o blkpg.o loop.o DAC960.o
 
 obj-y	:= ll_rw_blk.o blkpg.o genhd.o elevator.o
 
@@ -33,14 +31,8 @@ obj-$(CONFIG_BLK_DEV_LOOP)	+= loop.o
 obj-$(CONFIG_BLK_DEV_PS2)	+= ps2esdi.o
 obj-$(CONFIG_BLK_DEV_XD)	+= xd.o
 obj-$(CONFIG_BLK_CPQ_DA)	+= cpqarray.o
+obj-$(CONFIG_BLK_CPQ_CISS_DA)	+= cciss.o
 obj-$(CONFIG_BLK_DEV_DAC960)	+= DAC960.o
-obj-$(CONFIG_BLK_DEV_LVM)	+= lvm-mod.o
-
-obj-$(CONFIG_BLK_DEV_MD)	+= md.o
-obj-$(CONFIG_MD_LINEAR)		+= linear.o
-obj-$(CONFIG_MD_RAID0)		+= raid0.o
-obj-$(CONFIG_MD_RAID1)		+= raid1.o
-obj-$(CONFIG_MD_RAID5)		+= raid5.o xor.o
 
 obj-$(CONFIG_BLK_DEV_NBD)	+= nbd.o
 
@@ -71,6 +63,3 @@ M_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-m)))
 MX_OBJS		:= $(sort $(filter	$(export-objs), $(obj-m)))
 
 include $(TOPDIR)/Rules.make
-
-lvm-mod.o: $(lvm-mod-objs)
-	$(LD) -r -o $@ $(lvm-mod-objs)

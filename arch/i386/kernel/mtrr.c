@@ -356,7 +356,8 @@ static void set_mtrr_prepare (struct set_mtrr_context *ctxt)
 	if (boot_cpu_data.x86 >= 6) break; /* Athlon and post-Athlon CPUs */
 	/* else fall through */
       case X86_VENDOR_CENTAUR:
-	return;
+	if(boot_cpu_data.x86 != 6)
+		return;
 	/*break;*/
     }
     /*  Save value of CR4 and clear Page Global Enable (bit 7)  */
@@ -380,6 +381,7 @@ static void set_mtrr_prepare (struct set_mtrr_context *ctxt)
     {
       case X86_VENDOR_AMD:
       case X86_VENDOR_INTEL:
+      case X86_VENDOR_CENTAUR:
 	/*  Disable MTRRs, and set the default type to uncached  */
 	rdmsr (MTRRdefType_MSR, ctxt->deftype_lo, ctxt->deftype_hi);
 	wrmsr (MTRRdefType_MSR, ctxt->deftype_lo & 0xf300UL, ctxt->deftype_hi);
@@ -403,8 +405,11 @@ static void set_mtrr_done (struct set_mtrr_context *ctxt)
 	if (boot_cpu_data.x86 >= 6) break; /* Athlon and post-Athlon CPUs */
 	/* else fall through */
       case X86_VENDOR_CENTAUR:
-	__restore_flags (ctxt->flags);
-	return;
+	if(boot_cpu_data.x86 != 6)
+	{
+		__restore_flags (ctxt->flags);
+		return;
+	}
 	/*break;*/
     }
     /*  Flush caches and TLBs  */
@@ -415,6 +420,7 @@ static void set_mtrr_done (struct set_mtrr_context *ctxt)
     {
       case X86_VENDOR_AMD:
       case X86_VENDOR_INTEL:
+      case X86_VENDOR_CENTAUR:
 	wrmsr (MTRRdefType_MSR, ctxt->deftype_lo, ctxt->deftype_hi);
 	break;
       case X86_VENDOR_CYRIX:
@@ -455,7 +461,14 @@ static unsigned int get_num_var_ranges (void)
 	/*  Cyrix have 8 ARRs  */
       case X86_VENDOR_CENTAUR:
         /*  and Centaur has 8 MCR's  */
-	return 8;
+	if(boot_cpu_data.x86==5)
+		return 8;
+	/*  the cyrix III has intel compatible MTRR */
+	if(boot_cpu_data.x86==6)
+	{
+		rdmsr (MTRRcap_MSR, config, dummy);
+		return (config & 0xff);
+	}
 	/*break;*/
     }
     return 0;
@@ -471,12 +484,15 @@ static int have_wrcomb (void)
       case X86_VENDOR_AMD:
 	if (boot_cpu_data.x86 < 6) return 1; /* pre-Athlon CPUs */
 	/* else fall through */
+      case X86_VENDOR_CENTAUR:
+        if (boot_cpu_data.x86 == 5)
+        	return 1;	/* C6 */
+        /* CyrixIII is Intel like */
       case X86_VENDOR_INTEL:
 	rdmsr (MTRRcap_MSR, config, dummy);
 	return (config & (1<<10));
 	/*break;*/
       case X86_VENDOR_CYRIX:
-      case X86_VENDOR_CENTAUR:
 	return 1;
 	/*break;*/
     }
@@ -1194,7 +1210,7 @@ int mtrr_add(unsigned long base, unsigned long size, unsigned int type, char inc
 	    printk ("mtrr: size: %lx  base: %lx\n", size, base);
 	    return -EINVAL;
 	}
-        if (boot_cpu_data.x86_vendor == X86_VENDOR_CENTAUR)
+        if (boot_cpu_data.x86_vendor == X86_VENDOR_CENTAUR && boot_cpu_data.x86 == 5)
 	{
 	    if (type != MTRR_TYPE_WRCOMB)
 	    {
@@ -1779,8 +1795,16 @@ static void __init mtrr_setup(void)
 	get_free_region = cyrix_get_free_region;
 	break;
      case X86_VENDOR_CENTAUR:
-        get_mtrr = centaur_get_mcr;
-        set_mtrr_up = centaur_set_mcr_up;
+        if(boot_cpu_data.x86 == 5)
+        {
+        	get_mtrr = centaur_get_mcr;
+	        set_mtrr_up = centaur_set_mcr_up;
+	}
+	if(boot_cpu_data.x86 == 6)
+	{
+		get_mtrr = intel_get_mtrr;
+		set_mtrr_up = intel_set_mtrr_up;
+	}
         break;
     }
 }   /*  End Function mtrr_setup  */
@@ -1804,8 +1828,11 @@ void __init mtrr_init_boot_cpu(void)
       case X86_VENDOR_CYRIX:
 	cyrix_arr_init ();
 	break;
-      case X86_VENDOR_CENTAUR:
-        centaur_mcr_init ();
+      case X86_VENDOR_CENTAUR:		/* C6 and Cyrix III have different ones */
+      	if(boot_cpu_data.x86 == 5)
+	        centaur_mcr_init ();
+	if(boot_cpu_data.x86 == 6)
+		get_mtrr_state(&smp_mtrr_state);
         break;
     }
 }   /*  End Function mtrr_init_boot_cpu  */
@@ -1877,7 +1904,8 @@ int __init mtrr_init(void)
 	cyrix_arr_init ();
 	break;
       case X86_VENDOR_CENTAUR:
-        centaur_mcr_init ();
+        if(boot_cpu_data.x86 == 5)
+        	centaur_mcr_init ();
         break;
     }
 #endif  /*  !CONFIG_SMP  */

@@ -33,7 +33,14 @@
 #define IDAGETCTLRSIG		0x29293030
 #define IDAREVALIDATEVOLS	0x30303131
 #define IDADRIVERVERSION	0x31313232
+#define IDAGETPCIINFO		0x32323333
 
+typedef struct _ida_pci_info_struct
+{
+	unsigned char 	bus;
+	unsigned char 	dev_fn;
+	__u32 		board_id;
+} ida_pci_info_struct;
 /*
  * Normally, the ioctl determines the logical unit for this command by
  * the major,minor number of the fd passed to ioctl.  If you need to send
@@ -60,7 +67,7 @@ typedef struct {
 
 	union ctlr_cmds {
 		drv_info_t		drv;
-		unsigned char		buf[512];
+		unsigned char		buf[1024];
 
 		id_ctlr_t		id_ctlr;
 		drv_param_t		drv_param;

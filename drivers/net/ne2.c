@@ -110,16 +110,16 @@ static const char *version = "ne2.c:v0.91 Nov 16 1998 Wim Dumon <wimpie@kotnet.o
 #define NESM_STOP_PG	0x80	/* Last page +1 of RX ring */
 
 /* From the .ADF file: */
-static unsigned int addresses[7]=
+static unsigned int addresses[7] __initdata =
 		{0x1000, 0x2020, 0x8020, 0xa0a0, 0xb0b0, 0xc0c0, 0xc3d0};
-static int irqs[4] = {3, 4, 5, 9};
+static int irqs[4] __initdata = {3, 4, 5, 9};
 
 struct ne2_adapters_t {
 	unsigned int	id;
 	char		*name;
 };
 
-const struct ne2_adapters_t ne2_adapters[] = {
+static struct ne2_adapters_t ne2_adapters[] __initdata = {
 	{ 0x6354, "Arco Ethernet Adapter AE/2" },
 	{ 0x70DE, "Compex ENET-16 MC/P" },
 	{ 0x7154, "Novell Ethernet Adapter NE/2" },

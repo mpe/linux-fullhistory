@@ -7,6 +7,8 @@
 #ifndef _PPC_PROM_H
 #define _PPC_PROM_H
 
+#include <linux/config.h>
+
 typedef void *phandle;
 typedef void *ihandle;
 

@@ -1,6 +1,6 @@
 /* sis900.c: A SiS 900/7016 PCI Fast Ethernet driver for Linux.
    Copyright 1999 Silicon Integrated System Corporation 
-   Revision:	1.07.01	Aug. 08 2000
+   Revision:	1.07.04	Sep. 6 2000
 
    Modified from the driver which is originally written by Donald Becker.
    
@@ -18,7 +18,9 @@
    preliminary Rev. 1.0 Jan. 18, 1998
    http://www.sis.com.tw/support/databook.htm
 
-   Rev 1.07.01 Aug. 08 2000 Ollie Lho minor update fro SiS 630E and SiS 630E A1
+   Rev 1.07.04 Sep.  6 2000 Lei-Chun Chang added ICS1893 PHY support
+   Rev 1.07.03 Aug. 24 2000 Lei-Chun Chang (lcchang@sis.com.tw) modified 630E eqaulizer workaroung rule
+   Rev 1.07.01 Aug. 08 2000 Ollie Lho minor update for SiS 630E and SiS 630E A1
    Rev 1.07 Mar. 07 2000 Ollie Lho bug fix in Rx buffer ring
    Rev 1.06.04 Feb. 11 2000 Jeff Garzik <jgarzik@mandrakesoft.com> softnet and init for kernel 2.4
    Rev 1.06.03 Dec. 23 1999 Ollie Lho Third release
@@ -54,7 +56,7 @@
 #include "sis900.h"
 
 static const char *version =
-"sis900.c: v1.07.01  08/08/2000\n";
+"sis900.c: v1.07.04  09/06/2000\n";
 
 static int max_interrupt_work = 20;
 static int multicast_filter_limit = 128;
@@ -88,6 +90,7 @@ MODULE_DEVICE_TABLE (pci, sis900_pci_tbl);
 
 static void sis900_read_mode(struct net_device *net_dev, int phy_addr, int *speed, int *duplex);
 static void amd79c901_read_mode(struct net_device *net_dev, int phy_addr, int *speed, int *duplex);
+static void ics1893_read_mode(struct net_device *net_dev, int phy_addr, int *speed, int *duplex);
 
 static struct mii_chip_info {
 	const char * name;
@@ -99,6 +102,7 @@ static struct mii_chip_info {
 	{"SiS 7014 Physical Layer Solution", 0x0016, 0xf830,sis900_read_mode},
 	{"AMD 79C901 10BASE-T PHY",  0x0000, 0x35b9, amd79c901_read_mode},
 	{"AMD 79C901 HomePNA PHY",   0x0000, 0x35c8, amd79c901_read_mode},
+	{"ICS 1893 Integrated PHYceiver"   , 0x0015, 0xf441,ics1893_read_mode},
 	{0,},
 };
 
@@ -166,6 +170,7 @@ static struct net_device_stats *sis900_get_stats(struct net_device *net_dev);
 static u16 sis900_compute_hashtable_index(u8 *addr);
 static void set_rx_mode(struct net_device *net_dev);
 static void sis900_reset(struct net_device *net_dev);
+static void sis630e_set_eq(struct net_device *net_dev);
 
 /* walk through every ethernet PCI devices to see if some of them are matched with our card list*/
 static int __init sis900_probe (struct pci_dev *pci_dev, const struct pci_device_id *pci_id)
@@ -242,29 +247,6 @@ static int sis630e_get_mac_addr(struct pci_dev * pci_dev, struct net_device *net
 	return 1;
 }
 
-/* SiS630E A1, The Mac address is hardcoded in the RFCR register so it is actually not necessary to
-   probe the MAC address */
-static int sis630ea1_get_mac_addr(struct pci_dev * pci_dev, struct net_device *net_dev)
-{
-	long ioaddr = pci_resource_start(pci_dev, 0);
-	u32 reg;
-	int i;
-
-	/* reload MAC address */
-	reg = inl(ioaddr + cr);
-	outl(reg | RELOAD, ioaddr + cr);
-
-	reg = inl(ioaddr + cr);
-	outl(reg & ~RELOAD, ioaddr + cr);
-
-	for (i = 0; i < 3; i++) {
-		outl((u32)(0x00000004+i) << RFADDR_shift, ioaddr + rfcr);
-		((u16 *)(net_dev->dev_addr))[i] = inl(ioaddr + rfdr);
-	}
-
-	return 1;
-}
-
 static struct net_device * __init sis900_mac_probe (struct pci_dev * pci_dev, char * card_name)
 {
 	struct sis900_private *sis_priv;
@@ -278,10 +260,10 @@ static struct net_device * __init sis900_mac_probe (struct pci_dev * pci_dev, ch
 		return NULL;
 
 	pci_read_config_byte(pci_dev, PCI_CLASS_REVISION, &revision);
-	if (revision == SIS630E_REV)
+	if (revision == SIS630E_REV || revision == SIS630EA1_REV)
 		ret = sis630e_get_mac_addr(pci_dev, net_dev);
-	else if (revision == SIS630EA1_REV)
-		ret = sis630ea1_get_mac_addr(pci_dev, net_dev);
+	else if (revision == SIS630S_REV)
+		ret = sis630e_get_mac_addr(pci_dev, net_dev);
 	else
 		ret = sis900_get_mac_addr(pci_dev, net_dev);
 
@@ -301,7 +283,7 @@ static struct net_device * __init sis900_mac_probe (struct pci_dev * pci_dev, ch
 		unregister_netdevice(net_dev);
 		return NULL;
 	}
-
+	
 	sis_priv = net_dev->priv;
 	memset(sis_priv, 0, sizeof(struct sis900_private));
 
@@ -311,7 +293,7 @@ static struct net_device * __init sis900_mac_probe (struct pci_dev * pci_dev, ch
 	net_dev->irq = irq;
 	sis_priv->pci_dev = pci_dev;
 	spin_lock_init(&sis_priv->lock);
-
+	
 	/* probe for mii transciver */
 	if (sis900_mii_probe(net_dev) == 0) {
 		unregister_netdev(net_dev);
@@ -366,7 +348,7 @@ static int __init sis900_mii_probe (struct net_device * net_dev)
 				printk(KERN_INFO
 				       "%s: %s transceiver found at address %d.\n",
 				       net_dev->name, mii_chip_table[i].name,
-				       phy_addr);;
+				       phy_addr);
 				if ((mii_phy = kmalloc(sizeof(struct mii_phy), GFP_KERNEL)) != NULL) {
 					mii_phy->chip_info = mii_chip_table+i;
 					mii_phy->phy_addr = phy_addr;
@@ -559,11 +541,17 @@ sis900_open(struct net_device *net_dev)
 {
 	struct sis900_private *sis_priv = (struct sis900_private *)net_dev->priv;
 	long ioaddr = net_dev->base_addr;
+	u8  revision;
 
 	MOD_INC_USE_COUNT;
 
 	/* Soft reset the chip. */
 	sis900_reset(net_dev);
+
+	/* Equalizer workaroung Rule */
+	pci_read_config_byte(sis_priv->pci_dev, PCI_CLASS_REVISION, &revision);
+	if (revision == SIS630E_REV || revision == SIS630EA1_REV)
+		sis630e_set_eq(net_dev);
 
 	if (request_irq(net_dev->irq, &sis900_interrupt, SA_SHIRQ, net_dev->name, net_dev)) {
 		MOD_DEC_USE_COUNT;
@@ -700,6 +688,64 @@ sis900_init_rx_ring(struct net_device *net_dev)
 		printk(KERN_INFO "%s: RX descriptor register loaded with: %8.8x\n",
 		       net_dev->name, inl(ioaddr + rxdp));
 }
+
+/* 630E equalizer workaroung rule(Cyrus Huang 08/15)
+   PHY register 14h(Test)
+   Bit 14: 0 -- Automatically dectect (default)
+           1 -- Manually set Equalizer filter
+   Bit 13: 0 -- (Default)
+           1 -- Speed up convergence of equalizer setting
+   Bit 9 : 0 -- (Default)
+           1 -- Disable Baseline Wander
+   Bit 3~7   -- Equalizer filter setting
+   
+   Link ON: Set Bit 9, 13 to 1, Bit 14 to 0
+            Then calculate equalizer value
+            Then set equalizer value, and set Bit 14 to 1, Bit 9 to 0
+   Link Off:Set Bit 13 to 1, Bit 14 to 0
+   
+   Calculate Equalizer value:
+    When Link is ON and Bit 14 is 0, SIS900PHY will auto-dectect proper equalizer value.
+    When the equalizer is stable, this value is not a fixed value. It will be within
+    a small range(eg. 7~9). Then we get a minimum and a maximum value(eg. min=7, max=9)
+    0 <= max <= 4  --> set equalizer to max
+    5 <= max <= 14 --> set equalizer to max+1 or
+                       set equalizer to max+2 if max == min
+    max >= 15      --> set equalizer to max+5 or
+                       set equalizer to max+6 if max == min
+*/
+static void sis630e_set_eq(struct net_device *net_dev)
+{
+	struct sis900_private *sis_priv = (struct sis900_private *)net_dev->priv;
+	u16 reg14h, eq_value, max_value=0, min_value=0;
+	int i, maxcount=10;
+
+	if (sis_priv->LinkOn == TRUE) {
+		reg14h=mdio_read(net_dev, sis_priv->cur_phy, MII_RESV);
+		mdio_write(net_dev, sis_priv->cur_phy, MII_RESV, (0x2200 | reg14h) & 0xBFFF);
+		for (i=0; i < maxcount; i++) {
+			eq_value=(0x00F8 & mdio_read(net_dev, sis_priv->cur_phy, MII_RESV)) >> 3;
+			max_value=(eq_value > max_value) ? eq_value : max_value;
+			min_value=(eq_value < min_value) ? eq_value : min_value;
+		} 
+		if (max_value < 5)
+			eq_value=max_value;
+		else if (max_value >= 5 && max_value < 15)
+			eq_value=(max_value == min_value) ? max_value+2 : max_value+1;
+		else if (max_value >= 15)
+			eq_value=(max_value == min_value) ? max_value+6 : max_value+5;
+		reg14h=mdio_read(net_dev, sis_priv->cur_phy, MII_RESV);
+		reg14h=(reg14h & 0xFF07) | ((eq_value << 3) & 0x00F8);
+		reg14h=(reg14h | 0x6000) & 0xFDFF;
+		mdio_write(net_dev, sis_priv->cur_phy, MII_RESV, reg14h);
+	}
+	else {
+		reg14h=mdio_read(net_dev, sis_priv->cur_phy, MII_RESV);
+		mdio_write(net_dev, sis_priv->cur_phy, MII_RESV, (reg14h | 0x2000) & 0xBFFF);
+	}
+	return;
+}
+
 /* on each timer ticks we check two things, Link Status (ON/OFF) and 
    Link Mode (10/100/Full/Half)
  */
@@ -710,6 +756,7 @@ static void sis900_timer(unsigned long data)
 	struct mii_phy *mii_phy = sis_priv->mii;
 	static int next_tick = 5*HZ;
 	u16 status;
+	u8 revision;
 
 	status = mdio_read(net_dev, sis_priv->cur_phy, MII_STATUS);
 	status = mdio_read(net_dev, sis_priv->cur_phy, MII_STATUS);
@@ -721,6 +768,12 @@ static void sis900_timer(unsigned long data)
 				/* link stat change from ON to OFF */
 				next_tick = HZ;
 				sis_priv->LinkOn = FALSE;
+
+				/* Equalizer workaroung Rule */
+				pci_read_config_byte(sis_priv->pci_dev, PCI_CLASS_REVISION, &revision);
+				if (revision == SIS630E_REV || revision == SIS630EA1_REV)
+					sis630e_set_eq(net_dev);
+
 				printk(KERN_INFO "%s: Media Link Off\n",
 				       net_dev->name);
 			}
@@ -736,6 +789,12 @@ static void sis900_timer(unsigned long data)
 		/* link stat change forn OFF to ON, read and report link mode */
 		sis_priv->LinkOn = TRUE;
 		next_tick = 5*HZ;
+
+		/* Equalizer workaroung Rule */
+		pci_read_config_byte(sis_priv->pci_dev, PCI_CLASS_REVISION, &revision);
+		if (revision == SIS630E_REV || revision == SIS630EA1_REV)
+			sis630e_set_eq(net_dev);
+
 		/* change what cur_phy means */
 		if (mii_phy->phy_addr != sis_priv->cur_phy) {
 			printk(KERN_INFO "%s: Changing transceiver to %s\n",
@@ -856,6 +915,37 @@ static void amd79c901_read_mode(struct net_device *net_dev, int phy_addr, int *s
 			printk(KERN_INFO "%s: Media Link Off\n", net_dev->name);
 	}
 }
+/* ICS1893 PHY use Quick Poll Detailed Status Register to get its status */
+static void ics1893_read_mode(struct net_device *net_dev, int phy_addr, int *speed, int *duplex)
+{
+	int i = 0;
+	u32 status;
+
+	/* MII_QPDSTS is Latched, read twice in succession will reflect the current state */
+	for (i = 0; i < 2; i++)
+		status = mdio_read(net_dev, phy_addr, MII_QPDSTS);
+
+	if (status & MII_STSICS_SPD)
+		*speed = HW_SPEED_100_MBPS;
+	else
+		*speed = HW_SPEED_10_MBPS;
+
+	if (status & MII_STSICS_DPLX)
+		*duplex = FDX_CAPABLE_FULL_SELECTED;
+	else
+		*duplex = FDX_CAPABLE_HALF_SELECTED;
+
+	if (status & MII_STSICS_LINKSTS)
+		printk(KERN_INFO "%s: Media Link On %s %s-duplex \n",
+		       net_dev->name,
+		       *speed == HW_SPEED_100_MBPS ?
+		       "100mbps" : "10mbps",
+		       *duplex == FDX_CAPABLE_FULL_SELECTED ?
+		       "full" : "half");
+	else
+		printk(KERN_INFO "%s: Media Link Off\n", net_dev->name);
+}
+
 static void sis900_tx_timeout(struct net_device *net_dev)
 {
 	struct sis900_private *sis_priv = (struct sis900_private *)net_dev->priv;

@@ -107,6 +107,7 @@
 
 #define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
 
+#include <linux/config.h>
 #ifdef MODULE
 #include <linux/module.h>
 #endif

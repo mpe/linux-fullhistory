@@ -284,7 +284,7 @@ struct coda_statfs {
  */
 
 #define CODA_ROOT	2
-#define CODA_SYNC	3
+#define CODA_OPEN_BY_FD	3
 #define CODA_OPEN	4
 #define CODA_CLOSE	5
 #define CODA_IOCTL	6
@@ -298,11 +298,9 @@ struct coda_statfs {
 #define CODA_RENAME	14
 #define CODA_MKDIR	15
 #define CODA_RMDIR	16
-#define CODA_READDIR	17
 #define CODA_SYMLINK	18
 #define CODA_READLINK	19
 #define CODA_FSYNC	20
-#define CODA_INACTIVE	21
 #define CODA_VGET	22
 #define CODA_SIGNAL	23
 #define CODA_REPLACE	 24 /* DOWNCALL */
@@ -315,12 +313,9 @@ struct coda_statfs {
 #define CODA_RESOLVE     32
 #define CODA_REINTEGRATE 33
 #define CODA_STATFS	 34
-#define CODA_MAKE_CINODE 35 /* DOWNCALL */
-#define CODA_NCALLS 36
+#define CODA_NCALLS 35
 
-#define DOWNCALL(opcode) \
-	((opcode >= CODA_REPLACE && opcode <= CODA_PURGEFID) || \
-	 opcode == CODA_MAKE_CINODE)
+#define DOWNCALL(opcode) (opcode >= CODA_REPLACE && opcode <= CODA_PURGEFID)
 
 #define VC_MAXDATASIZE	    8192
 #define VC_MAXMSGSIZE      sizeof(union inputArgs)+sizeof(union outputArgs) +\
@@ -328,7 +323,7 @@ struct coda_statfs {
 
 #define CIOC_KERNEL_VERSION _IOWR('c', 10, sizeof (int))
 
-#if	0
+#if 0
 #define CODA_KERNEL_VERSION 0 /* don't care about kernel version number */
 #define CODA_KERNEL_VERSION 1 /* The old venus 4.6 compatible interface */
 #endif
@@ -362,9 +357,6 @@ struct coda_root_out {
 struct coda_root_in {
     struct coda_in_hdr in;
 };
-
-/* coda_sync: */
-/* Nothing needed for coda_sync */
 
 /* coda_open: */
 struct coda_open_in {
@@ -542,20 +534,6 @@ struct coda_rmdir_out {
     struct coda_out_hdr out;
 };
 
-/* coda_readdir: */
-struct coda_readdir_in {
-    struct coda_in_hdr ih;
-    ViceFid	VFid;
-    int	count;
-    int	offset;
-};
-
-struct coda_readdir_out {
-    struct coda_out_hdr oh;
-    int	size;
-    caddr_t	data;		/* Place holder for data. */
-};
-
 /* coda_symlink: NO_OUT */
 struct coda_symlink_in {
     struct coda_in_hdr ih;
@@ -590,12 +568,6 @@ struct coda_fsync_in {
 
 struct coda_fsync_out {
     struct coda_out_hdr out;
-};
-
-/* coda_inactive: NO_OUT */
-struct coda_inactive_in {
-    struct coda_in_hdr ih;
-    ViceFid VFid;
 };
 
 /* coda_vget: */
@@ -651,38 +623,24 @@ struct coda_purgefid_out {
     ViceFid CodaFid;
 };
 
-struct coda_make_cinode_out {
-    struct coda_out_hdr oh;
-    ViceFid CodaFid;
-    struct coda_vattr attr;
-    int fd;
-};
-
-/* coda_rdwr: */
-struct coda_rdwr_in {
-    struct coda_in_hdr ih;
-    ViceFid	VFid;
-    int	rwflag;
-    int	count;
-    int	offset;
-    int	ioflag;
-    caddr_t	data;		/* Place holder for data. */	
-};
-
-struct coda_rdwr_out {
-    struct coda_out_hdr oh;
-    int	rwflag;
-    int	count;
-    caddr_t	data;	/* Place holder for data. */
-};
-
-
 /* coda_replace: */
 /* CODA_REPLACE is a venus->kernel call */	
 struct coda_replace_out { /* coda_replace is a venus->kernel call */
     struct coda_out_hdr oh;
     ViceFid NewFid;
     ViceFid OldFid;
+};
+
+/* coda_open_by_fd: */
+struct coda_open_by_fd_in {
+    struct coda_in_hdr ih;
+    ViceFid    VFid;
+    int        flags;
+};
+
+struct coda_open_by_fd_out {
+    struct coda_out_hdr oh;
+    int fd;
 };
 
 /* coda_open_by_path: */
@@ -729,13 +687,11 @@ union inputArgs {
     struct coda_rename_in coda_rename;
     struct coda_mkdir_in coda_mkdir;
     struct coda_rmdir_in coda_rmdir;
-    struct coda_readdir_in coda_readdir;
     struct coda_symlink_in coda_symlink;
     struct coda_readlink_in coda_readlink;
     struct coda_fsync_in coda_fsync;
-    struct coda_inactive_in coda_inactive;
     struct coda_vget_in coda_vget;
-    struct coda_rdwr_in coda_rdwr;
+    struct coda_open_by_fd_in coda_open_by_fd;
     struct coda_open_by_path_in coda_open_by_path;
     struct coda_statfs_in coda_statfs;
 };
@@ -749,7 +705,6 @@ union outputArgs {
     struct coda_lookup_out coda_lookup;
     struct coda_create_out coda_create;
     struct coda_mkdir_out coda_mkdir;
-    struct coda_readdir_out coda_readdir;
     struct coda_readlink_out coda_readlink;
     struct coda_vget_out coda_vget;
     struct coda_purgeuser_out coda_purgeuser;
@@ -757,9 +712,8 @@ union outputArgs {
     struct coda_zapdir_out coda_zapdir;
     struct coda_zapvnode_out coda_zapvnode;
     struct coda_purgefid_out coda_purgefid;
-    struct coda_rdwr_out coda_rdwr;
     struct coda_replace_out coda_replace;
-    struct coda_make_cinode_out coda_make_cinode;
+    struct coda_open_by_fd_out coda_open_by_fd;
     struct coda_open_by_path_out coda_open_by_path;
     struct coda_statfs_out coda_statfs;
 };    
@@ -805,5 +759,15 @@ struct PioctlData {
 #define	IS_CTL_FID(fidp)	((fidp)->Volume == CTL_VOL &&\
 				 (fidp)->Vnode == CTL_VNO &&\
 				 (fidp)->Unique == CTL_UNI)
+
+/* Data passed to mount */
+
+#define CODA_MOUNT_VERSION 1
+
+struct coda_mount_data {
+	int		version;
+	int		fd;       /* Opened device */
+};
+
 #endif 
 

@@ -23,7 +23,6 @@
 #include <linux/coda_linux.h>
 #include <linux/coda_psdev.h>
 #include <linux/coda_fs_i.h>
-#include <linux/coda_cache.h>
 
 /* initialize the debugging variables */
 int coda_debug = 0;
@@ -71,12 +70,6 @@ int coda_isroot(struct inode *i)
     }
 }
 
-/* is this a volume root FID */
-int coda_fid_is_volroot(struct ViceFid *fid)
-{
-	return ( (fid->Vnode == 1) && (fid->Unique == 1 ) );
-}
-  
 int coda_fid_is_weird(struct ViceFid *fid)
 {
         /* volume roots */

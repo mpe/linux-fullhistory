@@ -59,7 +59,6 @@ struct inode * coda_iget(struct super_block * sb, ViceFid * fid,
 			 struct coda_vattr * attr)
 {
 	struct inode *inode;
-	struct coda_sb_info *sbi= coda_sbp(sb);
 	struct coda_inode_info *cii;
 	ino_t ino = attr->va_fileid;
 
@@ -73,48 +72,25 @@ struct inode * coda_iget(struct super_block * sb, ViceFid * fid,
 	cii = ITOC(inode);
 	if (cii->c_magic == CODA_CNODE_MAGIC) {
 		/* see if it is the right one (might have an inode collision) */
-		if  ( !coda_fideq(fid, &cii->c_fid) ) {
+		if ( !coda_fideq(fid, &cii->c_fid) ) {
 			printk("coda_iget: initialized inode old %s new %s!\n",
 					coda_f2s(&cii->c_fid), coda_f2s2(fid));
 			iput(inode);
 			return ERR_PTR(-ENOENT);
 		}
-		/* replace the attributes, type might have changed */
-		coda_fill_inode(inode, attr);
+		/* we will still replace the attributes, type might have changed */
 		goto out;
 	}
 
 	/* new, empty inode found... initializing */
 
 	/* Initialize the Coda inode info structure */
-	memset(cii, 0, (int) sizeof(struct coda_inode_info));
 	cii->c_magic = CODA_CNODE_MAGIC;
 	cii->c_fid   = *fid;
-	cii->c_flags = 0;
 	cii->c_vnode = inode;
-	INIT_LIST_HEAD(&(cii->c_cnhead));
-	INIT_LIST_HEAD(&(cii->c_volrootlist));
 
-	coda_fill_inode(inode, attr);
-
-	/* check if it is a weird fid (hashed fid != ino), f.i mountpoints
-	   repair object, expanded local-global conflict trees, etc.
-	 */
-	if ( coda_f2i(fid) == ino )
-		goto out;
-
-	/* check if we expected this weird fid */
-	if ( !coda_fid_is_weird(fid) ) {
-		printk("Coda: unknown weird fid: ino %ld, fid %s."
-		       "Tell Peter.\n", (long)ino, coda_f2s(&cii->c_fid));
-		goto out;
-	}
-
-	/* add the inode to a global list so we can find it back later */
-	list_add(&cii->c_volrootlist, &sbi->sbi_volroothead);
-	CDEBUG(D_CNODE, "Added %ld, %s to volroothead\n",
-		(long)ino, coda_f2s(&cii->c_fid));
 out:
+	coda_fill_inode(inode, attr);
 	return inode;
 }
 
@@ -161,22 +137,14 @@ int coda_cnode_make(struct inode **inode, ViceFid *fid, struct super_block *sb)
 void coda_replace_fid(struct inode *inode, struct ViceFid *oldfid, 
 		      struct ViceFid *newfid)
 {
-	struct coda_inode_info *cnp;
-	struct coda_sb_info *sbi= coda_sbp(inode->i_sb);
+	struct coda_inode_info *cii;
 	
-	cnp = ITOC(inode);
+	cii = ITOC(inode);
 
-	if ( ! coda_fideq(&cnp->c_fid, oldfid) )
-		printk("What? oldfid != cnp->c_fid. Call 911.\n");
+	if ( ! coda_fideq(&cii->c_fid, oldfid) )
+		printk("What? oldfid != cii->c_fid. Call 911.\n");
 
-	cnp->c_fid = *newfid;
-
-	list_del(&cnp->c_volrootlist);
-	INIT_LIST_HEAD(&cnp->c_volrootlist);
-	if ( coda_fid_is_weird(newfid) ) 
-		list_add(&cnp->c_volrootlist, &sbi->sbi_volroothead);
-
-	return;
+	cii->c_fid = *newfid;
 }
 
 
@@ -204,17 +172,15 @@ struct inode *coda_fid_to_inode(ViceFid *fid, struct super_block *sb)
 	CDEBUG(D_INODE, "%s\n", coda_f2s(fid));
 
 
+        /* weird fids cannot be hashed, have to look for them the hard way */
 	if ( coda_fid_is_weird(fid) ) {
-		struct list_head *lh, *le;
 		struct coda_sb_info *sbi = coda_sbp(sb);
-		le = lh = &sbi->sbi_volroothead;
+		struct list_head *le;
 
-		while ( (le = le->next) != lh ) {
-			cii = list_entry(le, struct coda_inode_info, 
-					 c_volrootlist);
-			/* paranoia check, should never trigger */
-			if ( cii->c_magic != CODA_CNODE_MAGIC )
-				printk("coda_fid_to_inode: Bad magic in inode %x.\n", cii->c_magic);
+                list_for_each(le, &sbi->sbi_cihead)
+                {
+			cii = list_entry(le, struct coda_inode_info, c_cilist);
+			if ( cii->c_magic != CODA_CNODE_MAGIC ) continue;
 
 			CDEBUG(D_DOWNCALL, "iterating, now doing %s, ino %ld\n",
 			       coda_f2s(&cii->c_fid), cii->c_vnode->i_ino);
@@ -240,26 +206,19 @@ struct inode *coda_fid_to_inode(ViceFid *fid, struct super_block *sb)
 
 	/* check if this inode is linked to a cnode */
 	cii = ITOC(inode);
-	if ( cii->c_magic != CODA_CNODE_MAGIC ) {
-		CDEBUG(D_INODE, "uninitialized inode. Return.\n");
-		goto bad_inode;
-	}
 
-	/* make sure fid is the one we want */
-	if ( !coda_fideq(fid, &(cii->c_fid)) ) {
+	/* make sure this is the one we want */
+	if ( cii->c_magic == CODA_CNODE_MAGIC && coda_fideq(fid, &cii->c_fid) ) {
+                CDEBUG(D_INODE, "found %ld\n", inode->i_ino);
+                return inode;
+        }
+
 #if 0
-		printk("coda_fid2inode: bad cnode (ino %ld, fid %s)", nr,
-				coda_f2s(fid));
+        printk("coda_fid2inode: bad cnode (ino %ld, fid %s)", nr, coda_f2s(fid));
 #endif
-		goto bad_inode;
-	}
+        iput(inode);
+        return NULL;
 
-	CDEBUG(D_INODE, "found %ld\n", inode->i_ino);
-	return inode;
-
-bad_inode:
-	iput(inode);
-	return NULL;
 }
 
 /* the CONTROL inode is made without asking attributes from Venus */
@@ -271,7 +230,7 @@ int coda_cnode_makectl(struct inode **inode, struct super_block *sb)
     if ( *inode ) {
 	(*inode)->i_op = &coda_ioctl_inode_operations;
 	(*inode)->i_fop = &coda_ioctl_operations;
-	(*inode)->i_mode = 00444;
+	(*inode)->i_mode = 0444;
 	error = 0;
     } else { 
 	error = -ENOMEM;

@@ -12,7 +12,7 @@ MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS) pci sgi ide scsi sbus cdrom isdn pnp i2o \
 				ieee1394 macintosh video dio zorro fc4 \
 				usb nubus tc atm pcmcia i2c telephony \
-				acpi mtd input
+				acpi mtd input md
 
 ifdef CONFIG_DIO
 SUB_DIRS += dio
@@ -128,6 +128,15 @@ MOD_SUB_DIRS += scsi
 else
   ifeq ($(CONFIG_SCSI),m)
   MOD_SUB_DIRS += scsi
+  endif
+endif
+
+ifeq ($(CONFIG_BLK_DEV_MD),y)
+SUB_DIRS += md
+MOD_SUB_DIRS += md
+else
+  ifeq ($(CONFIG_BLK_DEV_MD),m)
+  MOD_SUB_DIRS += md
   endif
 endif
 
