@@ -706,6 +706,13 @@ UNUSUAL_DEV( 0x07c4, 0xa001, 0x0000, 0xffff,
 		US_SC_SCSI, US_PR_DATAFAB, NULL,
 		0 ),
 
+/* Reported by Josef Reisinger <josef.reisinger@netcologne.de> */
+UNUSUAL_DEV( 0x07c4, 0xa002, 0x0000, 0xffff,
+		"Datafab/Unknown",
+		"MD2/MD3 Disk enclosure",
+		US_SC_SCSI, US_PR_DATAFAB, NULL,
+		US_FL_SINGLE_LUN ),
+
 UNUSUAL_DEV( 0x07c4, 0xa003, 0x0000, 0xffff,
 		"Datafab/Unknown",
 		"Datafab-based Reader",
