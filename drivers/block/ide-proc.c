@@ -75,22 +75,22 @@
 
 #ifdef CONFIG_BLK_DEV_ALI15X3
 extern byte ali_proc;
-int (*ali_display_info)(char *, char **, off_t, int, int) = NULL;
+int (*ali_display_info)(char *, char **, off_t, int) = NULL;
 #endif /* CONFIG_BLK_DEV_ALI15X3 */
 
 #ifdef CONFIG_BLK_DEV_PIIX
 extern byte piix_proc;
-int (*piix_display_info)(char *, char **, off_t, int, int) = NULL;
+int (*piix_display_info)(char *, char **, off_t, int) = NULL;
 #endif /* CONFIG_BLK_DEV_PIIX */
 
 #ifdef CONFIG_BLK_DEV_SIS5513
 extern byte sis_proc;
-int (*sis_display_info)(char *, char **, off_t, int, int) = NULL;
+int (*sis_display_info)(char *, char **, off_t, int) = NULL;
 #endif /* CONFIG_BLK_DEV_SIS5513 */
 
 #ifdef CONFIG_BLK_DEV_VIA82CXXX
 extern byte via_proc;
-int (*via_display_info)(char *, char **, off_t, int, int) = NULL;
+int (*via_display_info)(char *, char **, off_t, int) = NULL;
 #endif /* CONFIG_BLK_DEV_VIA82CXXX */
 
 static int ide_getxdigit(char c)
@@ -668,17 +668,12 @@ void ide_remove_proc_entries(struct proc_dir_entry *dir, ide_proc_entry_t *p)
 	}
 }
 
-static int proc_ide_readlink(struct proc_dir_entry *de, char *page)
-{
-	int n = (de->name[2] - 'a') / 2;
-	return sprintf(page, "ide%d/%s", n, de->name);
-}
-
 static void create_proc_ide_drives(ide_hwif_t *hwif)
 {
 	int	d;
 	struct proc_dir_entry *ent;
 	struct proc_dir_entry *parent = hwif->proc;
+	char name[64];
 
 	for (d = 0; d < MAX_DRIVES; d++) {
 		ide_drive_t *drive = &hwif->drives[d];
@@ -697,11 +692,9 @@ static void create_proc_ide_drives(ide_hwif_t *hwif)
 				ide_add_proc_entries(drive->proc, driver->proc, drive);
 			}
 		}
-		ent = create_proc_entry(drive->name, S_IFLNK | S_IRUGO | S_IWUGO | S_IXUGO, proc_ide_root);
+		sprintf(name,"ide%d/%s", (drive->name[2]-'a')/2, drive->name);
+		ent = proc_symlink(drive->name, proc_ide_root, name);
 		if (!ent) return;
-		ent->data = drive;
-		ent->readlink_proc = proc_ide_readlink;
-		ent->nlink = 1;
 	}
 }
 

@@ -1055,7 +1055,7 @@ void aarp_device_down(struct net_device *dev)
 /*
  * Called from proc fs
  */
-int aarp_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+static int aarp_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	/* we should dump all our AARP entries */
 	struct aarp_entry	*entry;

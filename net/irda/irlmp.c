@@ -63,7 +63,7 @@ char *lmp_reasons[] = {
 
 __u8 *irlmp_hint_to_service(__u8 *hint);
 #ifdef CONFIG_PROC_FS
-int irlmp_proc_read(char *buf, char **start, off_t offst, int len, int unused);
+int irlmp_proc_read(char *buf, char **start, off_t offst, int len);
 #endif
 
 /*
@@ -1431,13 +1431,12 @@ __u32 irlmp_get_daddr(struct lsap_cb *self)
 
 #ifdef CONFIG_PROC_FS
 /*
- * Function irlmp_proc_read (buf, start, offset, len, unused)
+ * Function irlmp_proc_read (buf, start, offset, len)
  *
  *    Give some info to the /proc file system
  *
  */
-int irlmp_proc_read(char *buf, char **start, off_t offset, int len, 
-		    int unused)
+int irlmp_proc_read(char *buf, char **start, off_t offset, int len)
 {
 	struct lsap_cb *self;
 	struct lap_cb *lap;

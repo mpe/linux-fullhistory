@@ -883,7 +883,7 @@ static char *ias_value_types[] = {
 	"IAS_STRING"
 };
 
-int irias_proc_read(char *buf, char **start, off_t offset, int len, int unused)
+int irias_proc_read(char *buf, char **start, off_t offset, int len)
 {
 	struct ias_object *obj;
 	struct ias_attrib *attrib;

@@ -968,8 +968,7 @@ int rose_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 	return 1;
 }
 
-int rose_nodes_get_info(char *buffer, char **start, off_t offset,
-		      int length, int dummy)
+int rose_nodes_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	struct rose_node *rose_node;
 	int len     = 0;
@@ -1020,8 +1019,7 @@ int rose_nodes_get_info(char *buffer, char **start, off_t offset,
 	return len;
 } 
 
-int rose_neigh_get_info(char *buffer, char **start, off_t offset,
-		      int length, int dummy)
+int rose_neigh_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	struct rose_neigh *rose_neigh;
 	int len     = 0;
@@ -1075,8 +1073,7 @@ int rose_neigh_get_info(char *buffer, char **start, off_t offset,
 	return len;
 } 
 
-int rose_routes_get_info(char *buffer, char **start, off_t offset,
-		      int length, int dummy)
+int rose_routes_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	struct rose_route *rose_route;
 	int len     = 0;

@@ -214,7 +214,7 @@ extern inline void atalk_destroy_socket(struct sock *sk)
 /*
  * Called from proc fs
  */
-int atalk_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+static int atalk_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	struct sock *s;
 	int len=0;
@@ -1038,7 +1038,7 @@ static int atrtr_ioctl(unsigned int cmd, void *arg)
 
 /* Called from proc fs - just make it print the ifaces neatly */
 
-int atalk_if_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+static int atalk_if_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	struct atalk_iface *iface;
 	int len=0;
@@ -1071,7 +1071,7 @@ int atalk_if_get_info(char *buffer, char **start, off_t offset, int length, int 
 
 /* Called from proc fs - just make it print the routes neatly */
 
-int atalk_rt_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+static int atalk_rt_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	struct atalk_route *rt;
 	int len=0;

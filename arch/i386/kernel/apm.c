@@ -1193,7 +1193,7 @@ static int do_open(struct inode * inode, struct file * filp)
 	return 0;
 }
 
-int apm_get_info(char *buf, char **start, off_t fpos, int length, int dummy)
+static int apm_get_info(char *buf, char **start, off_t fpos, int length)
 {
 	char *		p;
 	unsigned short	bx;

@@ -26,8 +26,8 @@
 #include <asm/uaccess.h>
 #include <asm/byteorder.h>
 
-int
-get_nubus_dev_info(char *buf, char **start, off_t pos, int count, int wr)
+static int
+get_nubus_dev_info(char *buf, char **start, off_t pos, int count)
 {
 	struct nubus_dev *dev = nubus_devices;
 	off_t at = 0;

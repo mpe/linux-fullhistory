@@ -514,7 +514,7 @@ static inline int page_is_ram (unsigned long pagenr)
 	int i;
 
 	for (i = 0; i < e820.nr_map; i++) {
-		unsigned long addr, size;
+		unsigned long addr, end;
 
 		if (e820.map[i].type != E820_RAM)	/* not usable memory */
 			continue;
@@ -524,8 +524,8 @@ static inline int page_is_ram (unsigned long pagenr)
 		 *	check here.
 		 */
 		addr = (e820.map[i].addr+PAGE_SIZE-1) >> PAGE_SHIFT;
-		size = e820.map[i].size >> PAGE_SHIFT;
-		if  ((pagenr >= addr) && (pagenr < addr+size))
+		end = (e820.map[i].addr+e820.map[i].size) >> PAGE_SHIFT;
+		if  ((pagenr >= addr) && (pagenr < end))
 			return 1;
 	}
 	return 0;

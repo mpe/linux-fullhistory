@@ -759,7 +759,7 @@ static int dn_proc_action_list(struct dn_fib_walker_t *fwt, struct dn_fib_node *
 	return 0;
 }
 
-static int decnet_rt_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+static int decnet_rt_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	struct dn_fib_procfs pinfo;
 	int i;

@@ -782,7 +782,7 @@ int register_pio_HBA(long base, struct get_conf *gc, Scsi_Host_Template * tpnt)
     SD(sh)->devflags=1<<gc->scsi_id[3];
     SD(sh)->moresupport=gc->MORE_support;
     sh->unique_id = base;
-    sh->base = (char *) base;
+    sh->base = base;
     sh->io_port = base;
     sh->n_io_port = 8;
     sh->irq = gc->IRQ;

@@ -159,13 +159,13 @@ do_udf_readdir(struct inode * dir, struct file *filp, filldir_t filldir, void *d
 	struct FileIdentDesc *fi=NULL;
 	struct FileIdentDesc cfi;
 	int block, iblock;
-	int nf_pos = filp->f_pos;
+	loff_t nf_pos = filp->f_pos;
 	int flen;
 	char fname[255];
 	char *nameptr;
 	Uint16 liu;
 	Uint8 lfi;
-	int size = (UDF_I_EXT0OFFS(dir) + dir->i_size) >> 2;
+	loff_t size = (UDF_I_EXT0OFFS(dir) + dir->i_size) >> 2;
 	struct buffer_head * bh = NULL;
 	lb_addr bloc, eloc;
 	Uint32 extoffset, elen, offset;

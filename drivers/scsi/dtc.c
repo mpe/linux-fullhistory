@@ -147,7 +147,7 @@ static struct override {
 #define NO_OVERRIDES (sizeof(overrides) / sizeof(struct override))
 
 static struct base {
-   unsigned int address;
+   unsigned long address;
    int noauto;
 } bases[] __initdata = {{0xcc000, 0}, {0xc8000, 0}, {0xdc000, 0}, {0xd8000, 0}};
 
@@ -241,7 +241,7 @@ int __init dtc_detect(Scsi_Host_Template * tpnt){
 	 break;
 
       instance = scsi_register (tpnt, sizeof(struct NCR5380_hostdata));
-      instance->base = (void *)base;
+      instance->base = base;
 
       NCR5380_init(instance, 0);
 
@@ -360,7 +360,7 @@ static inline int NCR5380_pread (struct Scsi_Host *instance,
       while (NCR5380_read(DTC_CONTROL_REG) & CSR_HOST_BUF_NOT_RDY)
 	 ++i;
       rtrc(3);
-      memcpy_fromio(d, base + DTC_DATA_BUF, 128);
+      isa_memcpy_fromio(d, base + DTC_DATA_BUF, 128);
       d += 128;
       len -= 128;
       rtrc(7);	/*** with int's on, it sometimes hangs after here.
@@ -410,7 +410,7 @@ static inline int NCR5380_pwrite (struct Scsi_Host *instance,
       while (NCR5380_read(DTC_CONTROL_REG) & CSR_HOST_BUF_NOT_RDY)
 	 ++i;
       rtrc(3);
-      memcpy_toio(base + DTC_DATA_BUF, src, 128);
+      isa_memcpy_toio(base + DTC_DATA_BUF, src, 128);
       src += 128;
       len -= 128;
    }

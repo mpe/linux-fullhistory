@@ -106,7 +106,8 @@ enum
  	KERN_RANDOM=40,		/* Random driver */
  	KERN_SHMALL=41,		/* int: Maximum size of shared memory */
  	KERN_MSGMNI=42,		/* int: msg queue identifiers */
- 	KERN_SEM=43		/* int: sysv semaphore limits */
+ 	KERN_SEM=43,		/* int: sysv semaphore limits */
+ 	KERN_SPARC_STOP_A=44	/* int: Sparc Stop-A enable */
 };
 
 

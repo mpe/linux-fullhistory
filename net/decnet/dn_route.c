@@ -915,7 +915,7 @@ done:
 
 #ifdef CONFIG_PROC_FS
 
-static int decnet_cache_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+static int decnet_cache_get_info(char *buffer, char **start, off_t offset, int length)
 {
         int len = 0;
         off_t pos = 0;

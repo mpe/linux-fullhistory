@@ -397,7 +397,7 @@ int i91u_detect(Scsi_Host_Template * tpnt)
 		hreg->max_lun = 32;	/* 10/21/97                     */
 		hreg->irq = pHCB->HCS_Intr;
 		hreg->this_id = pHCB->HCS_SCSI_ID;	/* Assign HCS index           */
-		hreg->base = (UCHAR *) pHCB;
+		hreg->base = (unsigned long)pHCB;
 		hreg->sg_tablesize = TOTAL_SG_ENTRY;	/* Maximun support is 32 */
 
 		/* Initial tulip chip           */

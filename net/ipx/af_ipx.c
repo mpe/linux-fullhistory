@@ -1505,7 +1505,7 @@ static const char *ipx_device_name(ipx_interface *intrfc)
 
 /* Called from proc fs */
 static int ipx_interface_get_info(char *buffer, char **start, off_t offset,
-				  int length, int dummy)
+				  int length)
 {
 	ipx_interface *i;
 	off_t begin = 0, pos = 0;
@@ -1548,8 +1548,7 @@ static int ipx_interface_get_info(char *buffer, char **start, off_t offset,
 	return (len);
 }
 
-static int ipx_get_info(char *buffer, char **start, off_t offset,
-			int length, int dummy)
+static int ipx_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	struct sock *s;
 	ipx_interface *i;
@@ -1630,8 +1629,7 @@ static int ipx_get_info(char *buffer, char **start, off_t offset,
 	return (len);
 }
 
-static int ipx_rt_get_info(char *buffer, char **start, off_t offset,
-			   int length, int dummy)
+static int ipx_rt_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	ipx_route *rt;
 	off_t begin = 0, pos = 0;

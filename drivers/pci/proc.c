@@ -234,8 +234,8 @@ static struct inode_operations proc_bus_pci_inode_operations = {
 #define LONG_FORMAT "\t%16lx"
 #endif
 
-int
-get_pci_dev_info(char *buf, char **start, off_t pos, int count, int wr)
+static int
+get_pci_dev_info(char *buf, char **start, off_t pos, int count)
 {
 	struct pci_dev *dev = pci_devices;
 	off_t at = 0;

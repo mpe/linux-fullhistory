@@ -491,7 +491,7 @@ static int ezusb_bulk(struct usb_device *usbdev, unsigned int ep, unsigned int l
 			}
 		}
 	}
-	ret = usbdev->bus->op->bulk_msg(usbdev, pipe, tbuf, length, &len2, timeout);
+	ret = usb_bulk_msg(usbdev, pipe, tbuf, length, &len2, timeout);
 	if (ret < 0) {
 		if (length > 0)
 			free_page((unsigned long)tbuf);

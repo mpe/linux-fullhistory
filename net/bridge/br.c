@@ -806,7 +806,7 @@ static void hold_timer_expiry(int port_no)	  /* (4.7.8)	 */
 
 /* Vova Oksman: Write the buffer (contents of the Bridge table) */
 /* to a PROCfs file                                             */
-int br_tree_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+static int br_tree_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	int size;
 	int len=0;

@@ -209,8 +209,7 @@ __u32 irlmp_find_device(hashbin_t *cachelog, char *name, __u32 *saddr)
  *    Print discovery information in /proc file system
  *
  */
-int discovery_proc_read(char *buf, char **start, off_t offset, int len, 
-			int unused)
+int discovery_proc_read(char *buf, char **start, off_t offset, int len)
 {
 	discovery_t *discovery;
 	unsigned long flags;

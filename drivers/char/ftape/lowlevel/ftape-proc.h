@@ -29,8 +29,6 @@
 
 #include <linux/proc_fs.h>
 
-extern struct proc_dir_entry proc_ftape;
-
 extern int  ftape_proc_init(void);
 extern void ftape_proc_destroy(void);
 

@@ -1164,7 +1164,7 @@ static char *dn_type2asc(char type)
 	return "?";
 }
 
-static int decnet_dev_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+static int decnet_dev_get_info(char *buffer, char **start, off_t offset, int length)
 {
         struct dn_dev *dn_db;
 	struct net_device *dev;

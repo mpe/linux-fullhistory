@@ -1017,7 +1017,7 @@ void __init ip_init(void)
 	ip_rt_init();
 
 #ifdef CONFIG_IP_MULTICAST
-	proc_net_create("igmp", S_IFREG | S_IRUGO, ip_mc_procinfo);
+	proc_net_create("igmp", 0, ip_mc_procinfo);
 #endif
 }
 

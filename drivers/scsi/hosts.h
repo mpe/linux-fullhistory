@@ -350,7 +350,7 @@ struct Scsi_Host
     unsigned wish_block:1;
 
     /* These parameters should be set by the detect routine */
-    unsigned char *base;
+    unsigned long base;
     unsigned long io_port;
     unsigned char n_io_port;
     unsigned char dma_channel;
@@ -486,11 +486,7 @@ extern void scsi_unregister_module(int, void *);
  * Even bigger hack for SparcSTORAGE arrays. Those are at least 6 disks, but
  * usually up to 30 disks, so everyone would need to change this. -jj
  */
-#ifdef CONFIG_SCSI_PLUTO_MODULE
 #define SD_EXTRA_DEVS 40
-#else
-#define SD_EXTRA_DEVS 4
-#endif
 #define ST_EXTRA_DEVS 2
 #define SR_EXTRA_DEVS 2
 #define SG_EXTRA_DEVS (SD_EXTRA_DEVS + SR_EXTRA_DEVS + ST_EXTRA_DEVS)

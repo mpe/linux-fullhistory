@@ -35,8 +35,8 @@
 #include <linux/stat.h>
 #include <linux/proc_fs.h>
 
-static int ali_get_info(char *buffer, char **addr, off_t offset, int count, int dummy);
-extern int (*ali_display_info)(char *, char **, off_t, int, int);  /* ide-proc.c */
+static int ali_get_info(char *buffer, char **addr, off_t offset, int count);
+extern int (*ali_display_info)(char *, char **, off_t, int);  /* ide-proc.c */
 struct pci_dev *bmide_dev;
 
 char *fifo[4] = {
@@ -67,7 +67,7 @@ char *channel_status[8] = {
 	"error DRQ busy"
 };
 
-static int ali_get_info(char *buffer, char **addr, off_t offset, int count, int dummy)
+static int ali_get_info(char *buffer, char **addr, off_t offset, int count)
 {
 	byte reg53h, reg5xh, reg5yh, reg5xh1, reg5yh1;
 	unsigned int bibma;

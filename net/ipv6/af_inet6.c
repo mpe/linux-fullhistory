@@ -73,11 +73,11 @@ extern struct proto_ops inet6_dgram_ops;
 /* IPv6 procfs goodies... */
 
 #ifdef CONFIG_PROC_FS
-extern int raw6_get_info(char *, char **, off_t, int, int);
-extern int tcp6_get_info(char *, char **, off_t, int, int);
-extern int udp6_get_info(char *, char **, off_t, int, int);
-extern int afinet6_get_info(char *, char **, off_t, int, int);
-extern int afinet6_get_snmp(char *, char **, off_t, int, int);
+extern int raw6_get_info(char *, char **, off_t, int);
+extern int tcp6_get_info(char *, char **, off_t, int);
+extern int udp6_get_info(char *, char **, off_t, int);
+extern int afinet6_get_info(char *, char **, off_t, int);
+extern int afinet6_get_snmp(char *, char **, off_t, int);
 #endif
 
 #ifdef CONFIG_SYSCTL

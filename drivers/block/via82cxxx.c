@@ -119,8 +119,8 @@ static char *control3_str[] = {
 	"192"
 };
 
-static int via_get_info(char *, char **, off_t, int, int);
-extern int (*via_display_info)(char *, char **, off_t, int, int); /* ide-proc.c */
+static int via_get_info(char *, char **, off_t, int);
+extern int (*via_display_info)(char *, char **, off_t, int); /* ide-proc.c */
 static struct pci_dev *bmide_dev;
 
 static char * print_apollo_drive_config (char *buf, struct pci_dev *dev)
@@ -304,7 +304,7 @@ static char * print_apollo_chipset_control3 (char *buf, struct pci_dev *dev,
 	return (char *)p;
 }
 
-static int via_get_info (char *buffer, char **addr, off_t offset, int count, int dummy)
+static int via_get_info (char *buffer, char **addr, off_t offset, int count)
 {
 	/*
 	 * print what /proc/via displays,

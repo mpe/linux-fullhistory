@@ -399,7 +399,7 @@ int inia100_detect(Scsi_Host_Template * tpnt)
  */
 		hreg->irq = pHCB->HCS_Intr;
 		hreg->this_id = pHCB->HCS_SCSI_ID;	/* Assign HCS index           */
-		hreg->base = (UCHAR *) pHCB;
+		hreg->base = (unsigned long)pHCB;
 
 #if 1
 		hreg->sg_tablesize = TOTAL_SG_ENTRY;	/* Maximun support is 32 */

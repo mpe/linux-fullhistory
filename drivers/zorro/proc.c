@@ -99,8 +99,8 @@ static struct inode_operations proc_bus_zorro_inode_operations = {
 	NULL			/* revalidate */
 };
 
-int
-get_zorro_dev_info(char *buf, char **start, off_t pos, int count, int wr)
+static int
+get_zorro_dev_info(char *buf, char **start, off_t pos, int count)
 {
 	u_int slot;
 	off_t at = 0;

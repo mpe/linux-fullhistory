@@ -1228,7 +1228,7 @@ static int sprintf_stats(char *buffer, struct net_device *dev)
  *	to create /proc/net/dev
  */
  
-int dev_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+static int dev_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	int len=0;
 	off_t begin=0;
@@ -1346,8 +1346,8 @@ static int sprintf_wireless_stats(char *buffer, struct net_device *dev)
  * Print info for /proc/net/wireless (print all entries)
  * This is a clone of /proc/net/dev (just above)
  */
-int dev_get_wireless_info(char * buffer, char **start, off_t offset,
-			  int length, int dummy)
+static int dev_get_wireless_info(char * buffer, char **start, off_t offset,
+			  int length)
 {
 	int		len = 0;
 	off_t		begin = 0;

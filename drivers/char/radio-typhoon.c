@@ -72,8 +72,7 @@ static int typhoon_ioctl(struct video_device *dev, unsigned int cmd, void *arg);
 static int typhoon_open(struct video_device *dev, int flags);
 static void typhoon_close(struct video_device *dev);
 #ifdef CONFIG_RADIO_TYPHOON_PROC_FS
-static int typhoon_get_info(char *buf, char **start, off_t offset, int len,
-	                    int unused);
+static int typhoon_get_info(char *buf, char **start, off_t offset, int len);
 #endif
 
 static void typhoon_setvol_generic(struct typhoon_device *dev, int vol)
@@ -299,8 +298,7 @@ static struct video_device typhoon_radio =
 
 #ifdef CONFIG_RADIO_TYPHOON_PROC_FS
 
-static int typhoon_get_info(char *buf, char **start, off_t offset, int len,
-	              	    int unused)
+static int typhoon_get_info(char *buf, char **start, off_t offset, int len)
 {
 	#ifdef MODULE
 	    #define MODULEPROCSTRING "Driver loaded as a module"

@@ -1258,10 +1258,6 @@ typedef struct DAC960_Controller
   DAC960_StatusMailbox_T *FirstStatusMailbox;
   DAC960_StatusMailbox_T *LastStatusMailbox;
   DAC960_StatusMailbox_T *NextStatusMailbox;
-  PROC_DirectoryEntry_T ControllerProcEntry;
-  PROC_DirectoryEntry_T InitialStatusProcEntry;
-  PROC_DirectoryEntry_T CurrentStatusProcEntry;
-  PROC_DirectoryEntry_T UserCommandProcEntry;
   WaitQueue_T CommandWaitQueue;
   DAC960_DCDB_T MonitoringDCDB;
   DAC960_Enquiry_T Enquiry[2];

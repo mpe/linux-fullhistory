@@ -3483,36 +3483,20 @@ static void DAC960_CreateProcEntries(void)
        ControllerNumber++)
     {
       DAC960_Controller_T *Controller = DAC960_Controllers[ControllerNumber];
-      PROC_DirectoryEntry_T *ControllerProcEntry, *InitialStatusProcEntry;
-      PROC_DirectoryEntry_T *CurrentStatusProcEntry, *UserCommandProcEntry;
+      PROC_DirectoryEntry_T *ControllerProcEntry;
+      PROC_DirectoryEntry_T *UserCommandProcEntry;
       if (Controller == NULL) continue;
-      ControllerProcEntry = &Controller->ControllerProcEntry;
-      ControllerProcEntry->name = Controller->ControllerName;
-      ControllerProcEntry->namelen = strlen(ControllerProcEntry->name);
-      ControllerProcEntry->mode = S_IFDIR | S_IRUGO | S_IXUGO;
-      proc_register(DAC960_ProcDirectoryEntry, ControllerProcEntry);
-      InitialStatusProcEntry = &Controller->InitialStatusProcEntry;
-      InitialStatusProcEntry->name = "initial_status";
-      InitialStatusProcEntry->namelen = strlen(InitialStatusProcEntry->name);
-      InitialStatusProcEntry->mode = S_IFREG | S_IRUGO;
-      InitialStatusProcEntry->data = Controller;
-      InitialStatusProcEntry->read_proc = DAC960_ProcReadInitialStatus;
-      proc_register(ControllerProcEntry, InitialStatusProcEntry);
-      CurrentStatusProcEntry = &Controller->CurrentStatusProcEntry;
-      CurrentStatusProcEntry->name = "current_status";
-      CurrentStatusProcEntry->namelen = strlen(CurrentStatusProcEntry->name);
-      CurrentStatusProcEntry->mode = S_IFREG | S_IRUGO;
-      CurrentStatusProcEntry->data = Controller;
-      CurrentStatusProcEntry->read_proc = DAC960_ProcReadCurrentStatus;
-      proc_register(ControllerProcEntry, CurrentStatusProcEntry);
-      UserCommandProcEntry = &Controller->UserCommandProcEntry;
-      UserCommandProcEntry->name = "user_command";
-      UserCommandProcEntry->namelen = strlen(UserCommandProcEntry->name);
-      UserCommandProcEntry->mode = S_IFREG | S_IWUSR | S_IRUSR;
-      UserCommandProcEntry->data = Controller;
-      UserCommandProcEntry->read_proc = DAC960_ProcReadUserCommand;
+      ControllerProcEntry = proc_mkdir(Controller->ControllerName,
+					DAC960_ProcDirectoryEntry);
+      create_proc_read_entry("initial_status",0,ControllerProcEntry,
+			     DAC960_ProcReadInitialStatus, Controller);
+      create_proc_read_entry("current_status",0,ControllerProcEntry,
+			     DAC960_ProcReadCurrentStatus, Controller);
+      UserCommandProcEntry =
+		create_proc_read_entry("user_command", S_IWUSR|S_IRUSR,
+					ControllerProcEntry,
+					DAC960_ProcReadUserCommand, Controller);
       UserCommandProcEntry->write_proc = DAC960_ProcWriteUserCommand;
-      proc_register(ControllerProcEntry, UserCommandProcEntry);
     }
 }
 
@@ -3524,6 +3508,7 @@ static void DAC960_CreateProcEntries(void)
 
 static void DAC960_DestroyProcEntries(void)
 {
+  /* FIXME */
   remove_proc_entry("driver/rd", NULL);
 }
 

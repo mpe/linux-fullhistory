@@ -668,7 +668,7 @@ void esp_initialize(struct NCR_ESP *esp)
 	       ccf, (int) esp->neg_defp);
 
 	/* Fill in ehost data */
-	esp->ehost->base = (unsigned char *) eregs;
+	esp->ehost->base = (unsigned long)eregs;
 	esp->ehost->this_id = esp->scsi_id;
 	esp->ehost->irq = esp->irq;
 

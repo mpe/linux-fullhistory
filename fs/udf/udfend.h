@@ -3,6 +3,8 @@
 
 #ifndef __KERNEL__ 
 
+#include <sys/types.h>
+
 #if __BYTE_ORDER == 0
 
 #error "__BYTE_ORDER must be defined"
@@ -44,8 +46,11 @@
 
 #endif /* __BYTE_ORDER == 0 */
 
+#include <string.h>
+
 #else /* __KERNEL__ */
 
+#include <asm/byteorder.h>
 #include <linux/string.h>
 
 #endif /* ! __KERNEL__ */

@@ -280,10 +280,6 @@
 #  define FALSE 0
 #endif
 
-#ifndef KERNEL_VERSION
-#  define KERNEL_VERSION(x,y,z) (((x)<<16)+((y)<<8)+(z))
-#endif
-
 /*
  * We need the bios32.h file if we are kernel version 2.1.92 or less.  The
  * full set of pci_* changes wasn't in place until 2.1.93
@@ -7919,7 +7915,7 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
   host->this_id = p->scsi_id;
   host->io_port = p->base;
   host->n_io_port = 0xFF;
-  host->base = (unsigned char *) p->mbase;
+  host->base = p->mbase;
   host->irq = p->irq;
   if (p->features & AHC_WIDE)
   {
@@ -8043,7 +8039,7 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
     {
       unsigned char devconfig;
 
-#if LINUX_KERNEL_VERSION > KERNEL_VERSION(2,1,92)
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,1,92)
       pci_read_config_byte(p->pdev, DEVCONFIG, &devconfig);
 #else
       pcibios_read_config_byte(p->pci_bus, p->pci_device_fn,
@@ -8061,7 +8057,7 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
         if (aic7xxx_verbose & VERBOSE_PROBE2)
           printk("(scsi%d) Force clearing STPWLEV bit\n", p->host_no);
       }
-#if LINUX_KERNEL_VERSION > KERNEL_VERSION(2,1,92)
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,1,92)
       pci_write_config_byte(p->pdev, DEVCONFIG, devconfig);
 #else
       pcibios_write_config_byte(p->pci_bus, p->pci_device_fn,
@@ -9680,7 +9676,7 @@ aic7xxx_detect(Scsi_Host_Template *template)
           devconfig |= 0x80000040;
           pcibios_write_config_dword(pci_bus, pci_devfn, DEVCONFIG, devconfig);
 #endif /* AIC7XXX_STRICT_PCI_SETUP */
-#endif /* LINUIX_VERSION_CODE > KERNEL_VERSION(2,1,92) */
+#endif /* LINUX_VERSION_CODE > KERNEL_VERSION(2,1,92) */
 
           temp_p->unpause = INTEN;
           temp_p->pause = temp_p->unpause | PAUSE;

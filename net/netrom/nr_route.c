@@ -751,8 +751,7 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 	return (nr_neigh->ax25 != NULL);
 }
 
-int nr_nodes_get_info(char *buffer, char **start, off_t offset,
-		      int length, int dummy)
+int nr_nodes_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	struct nr_node *nr_node;
 	int len     = 0;
@@ -801,8 +800,7 @@ int nr_nodes_get_info(char *buffer, char **start, off_t offset,
 	return len;
 } 
 
-int nr_neigh_get_info(char *buffer, char **start, off_t offset,
-		      int length, int dummy)
+int nr_neigh_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	struct nr_neigh *nr_neigh;
 	int len     = 0;

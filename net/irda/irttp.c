@@ -1477,11 +1477,11 @@ static void irttp_start_todo_timer(struct tsap_cb *self, int timeout)
 
 #ifdef CONFIG_PROC_FS
 /*
- * Function irttp_proc_read (buf, start, offset, len, unused)
+ * Function irttp_proc_read (buf, start, offset, len)
  *
  *    Give some info to the /proc file system
  */
-int irttp_proc_read(char *buf, char **start, off_t offset, int len, int unused)
+int irttp_proc_read(char *buf, char **start, off_t offset, int len)
 {
 	struct tsap_cb *self;
 	unsigned long flags;

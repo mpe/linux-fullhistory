@@ -53,7 +53,7 @@
 /*
  *	Report socket allocation statistics [mea@utu.fi]
  */
-int afinet_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+int afinet_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	/* From  net/socket.c  */
 	extern int socket_get_info(char *, char **, off_t, int);
@@ -85,7 +85,7 @@ int afinet_get_info(char *buffer, char **start, off_t offset, int length, int du
  *	Called from the PROCfs module. This outputs /proc/net/snmp.
  */
  
-int snmp_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+int snmp_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	extern struct tcp_mib tcp_statistics;
 	extern struct udp_mib udp_statistics;
@@ -164,7 +164,7 @@ int snmp_get_info(char *buffer, char **start, off_t offset, int length, int dumm
  *	Output /proc/net/netstat
  */
  
-int netstat_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+int netstat_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	extern struct linux_mib net_statistics;
 	int len;

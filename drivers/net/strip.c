@@ -1251,7 +1251,7 @@ sprintf_status_info(char *buffer, struct strip *strip_info)
  * the /proc file system.
  */
 
-static int get_status_info(char *buffer, char **start, off_t req_offset, int req_len, int dummy)
+static int get_status_info(char *buffer, char **start, off_t req_offset, int req_len)
 {
     int           total = 0, slop = 0;
     struct strip *strip_info = struct_strip_list;

@@ -383,7 +383,7 @@ static struct buffer_head * inode_getblk(struct inode * inode, long block,
 
 		pextoffset = cextoffset;
 		cextoffset = nextoffset;
-	
+
 		if ((etype = udf_next_aext(inode, &cbloc, &nextoffset, &eloc, &elen, &cbh, 1)) == -1)
 			break;
 
@@ -701,14 +701,31 @@ static void udf_merge_extents(struct inode *inode,
 				(((laarr[i].extLength & UDF_EXTENT_LENGTH_MASK) +
 				inode->i_sb->s_blocksize - 1) >> inode->i_sb->s_blocksize_bits)))
 			{
-				laarr[i].extLength = laarr[i+1].extLength +
-					(((laarr[i].extLength & UDF_EXTENT_LENGTH_MASK) +
-					inode->i_sb->s_blocksize - 1) & ~(inode->i_sb->s_blocksize-1));
-				if (*endnum > (i+2))
-					memmove(&laarr[i+1], &laarr[i+2],
-						sizeof(long_ad) * (*endnum - (i+2)));
-				i --;
-				(*endnum) --;
+				if (((laarr[i].extLength & UDF_EXTENT_LENGTH_MASK) +
+					(laarr[i+1].extLength & UDF_EXTENT_LENGTH_MASK) +
+					inode->i_sb->s_blocksize - 1) & ~UDF_EXTENT_LENGTH_MASK)
+				{
+					laarr[i+1].extLength = (laarr[i+1].extLength -
+						(laarr[i].extLength & UDF_EXTENT_LENGTH_MASK) +
+						UDF_EXTENT_LENGTH_MASK) & ~(inode->i_sb->s_blocksize-1);
+					laarr[i].extLength = (UDF_EXTENT_LENGTH_MASK + 1) -
+						inode->i_sb->s_blocksize;
+					laarr[i+1].extLocation.logicalBlockNum =
+						laarr[i].extLocation.logicalBlockNum +
+						((laarr[i].extLength & UDF_EXTENT_LENGTH_MASK) >>
+							inode->i_sb->s_blocksize_bits);
+				}
+				else
+				{
+					laarr[i].extLength = laarr[i+1].extLength +
+						(((laarr[i].extLength & UDF_EXTENT_LENGTH_MASK) +
+						inode->i_sb->s_blocksize - 1) & ~(inode->i_sb->s_blocksize-1));
+					if (*endnum > (i+2))
+						memmove(&laarr[i+1], &laarr[i+2],
+							sizeof(long_ad) * (*endnum - (i+2)));
+					i --;
+					(*endnum) --;
+				}
 			}
 		}
 	}

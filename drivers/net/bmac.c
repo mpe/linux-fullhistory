@@ -166,7 +166,7 @@ static void bmac_txdma_intr(int irq, void *dev_id, struct pt_regs *regs);
 static void bmac_rxdma_intr(int irq, void *dev_id, struct pt_regs *regs);
 static void bmac_set_timeout(struct net_device *dev);
 static void bmac_tx_timeout(unsigned long data);
-static int bmac_proc_info ( char *buffer, char **start, off_t offset, int length, int dummy);
+static int bmac_proc_info ( char *buffer, char **start, off_t offset, int length);
 static int bmac_output(struct sk_buff *skb, struct net_device *dev);
 static void bmac_start(struct net_device *dev);
 
@@ -1560,7 +1560,7 @@ static void dump_dbdma(volatile struct dbdma_cmd *cp,int count)
 #endif
 
 static int
-bmac_proc_info(char *buffer, char **start, off_t offset, int length, int dummy)
+bmac_proc_info(char *buffer, char **start, off_t offset, int length)
 {
 	int len = 0;
 	off_t pos   = 0;

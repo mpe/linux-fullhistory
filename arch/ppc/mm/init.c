@@ -422,7 +422,7 @@ __ioremap(unsigned long addr, unsigned long size, unsigned long flags)
 	
 	if (mem_init_done) {
 		struct vm_struct *area;
-		area = get_vm_area(size, VM_IOREMAP);
+		area = get_vm_area(size, VM_ALLOC);
 		if (area == 0)
 			return NULL;
 		v = VMALLOC_VMADDR(area->addr);
@@ -779,11 +779,9 @@ static void __init coalesce_mem_pieces(struct mem_pieces *mp)
 	mp->n_regions = d;
 }
 
-#if defined(CONFIG_PMAC) || defined(CONFIG_CHRP) || defined(CONFIG_ALL_PPC)
 /*
  * Read in a property describing some pieces of memory.
  */
-
 static void __init get_mem_prop(char *name, struct mem_pieces *mp)
 {
 	struct reg_property *rp;
@@ -802,7 +800,6 @@ static void __init get_mem_prop(char *name, struct mem_pieces *mp)
 	sort_mem_pieces(mp);
 	coalesce_mem_pieces(mp);
 }
-#endif /* CONFIG_PMAC || CONFIG_CHRP || CONFIG_ALL_PPC */
 
 /*
  * Set up one of the I/D BAT (block address translation) register pairs.
@@ -1215,6 +1212,18 @@ void __init paging_init(void)
 	 */
 	empty_bad_page = alloc_bootmem_pages(PAGE_SIZE);
 	empty_bad_page_table = alloc_bootmem_pages(PAGE_SIZE);
+	{
+		unsigned int zones_size[2];
+		/*
+		 * All pages are DMA-able so this is wrong - the zone code is assuming
+		 * both regions have a value so this is necessary for now.
+		 * -- Cort
+		 */
+		zones_size[0] = virt_to_phys(end_of_DRAM-(1<<20)) >> PAGE_SHIFT;
+		zones_size[1] = (1<<20) >> PAGE_SHIFT;
+
+		free_area_init(zones_size);
+	}
 }
 
 void __init mem_init(void)
@@ -1239,6 +1248,12 @@ void __init mem_init(void)
 			clear_bit(PG_reserved, &mem_map[MAP_NR(addr)].flags);
 	}
 #endif /* CONFIG_BLK_DEV_INITRD */
+
+	/* mark the RTAS pages as reserved */
+	if ( rtas_data )
+		for (addr = (rtas_data+PAGE_OFFSET); addr < PAGE_ALIGN(PAGE_OFFSET+rtas_data+rtas_size) ;
+		     rtas_data += PAGE_SIZE)
+			SetPageReserved(mem_map + MAP_NR(addr));
 	
 	for (addr = PAGE_OFFSET; addr < (unsigned long)end_of_DRAM;
 	     addr += PAGE_SIZE) {

@@ -128,7 +128,7 @@ write_scanner(struct file * file, const char * buffer,
 				return bytes_written ? bytes_written : -EINTR;
 			}
 
-			result = hps->hpscan_dev->bus->op->bulk_msg(hps->hpscan_dev,usb_sndbulkpipe(hps->hpscan_dev, 2), obuf, thistime, &partial, HZ*10);
+			result = usb_bulk_msg(hps->hpscan_dev,usb_sndbulkpipe(hps->hpscan_dev, 2), obuf, thistime, &partial, HZ*10);
 			
 			//printk(KERN_DEBUG "write stats: result:%d thistime:%lu partial:%lu\n", result, thistime, partial);
 
@@ -186,7 +186,7 @@ read_scanner(struct file * file, char * buffer,
 			return -ENODEV;
 		this_read = (count > IBUF_SIZE) ? IBUF_SIZE : count;
 		
-		result = hps->hpscan_dev->bus->op->bulk_msg(hps->hpscan_dev, usb_rcvbulkpipe(hps->hpscan_dev, 1), ibuf, this_read, &partial, HZ*10);
+		result = usb_bulk_msg(hps->hpscan_dev, usb_rcvbulkpipe(hps->hpscan_dev, 1), ibuf, this_read, &partial, HZ*10);
 
 		printk(KERN_DEBUG "read stats: result:%d this_read:%u partial:%lu\n", result, this_read, partial);
 		

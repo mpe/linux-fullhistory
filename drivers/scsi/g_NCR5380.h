@@ -140,8 +140,8 @@ int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int leng
 #define NCR5380_region_size 0x3a00
 
 
-#define NCR5380_read(reg) (*(NCR5380_map_name + NCR53C400_mem_base + (reg)))
-#define NCR5380_write(reg, value) (*(NCR5380_map_name + NCR53C400_mem_base + (reg)) = value)
+#define NCR5380_read(reg) isa_readb(NCR5380_map_name + NCR53C400_mem_base + (reg))
+#define NCR5380_write(reg, value) isa_writeb(NCR5380_map_name + NCR53C400_mem_base + (reg), value)
 
 #endif
 

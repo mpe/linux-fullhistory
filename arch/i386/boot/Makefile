@@ -54,7 +54,7 @@ bootsect.s: bootsect.S Makefile $(BOOT_INCL)
 bbootsect: bbootsect.o bbootsect_kludge.o
 	$(LD) -Ttext 0x0 -R bbootsect_kludge.o -s -oformat binary $< -o $@
 
-bbootsect_kludge.o:	bbootsect.o bsetup.o
+bbootsect_kludge.o: bbootsect.o bsetup.o
 	$(LD) -r $^ -o $@
 
 bbootsect.o: bbootsect.s

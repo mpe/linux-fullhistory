@@ -159,10 +159,13 @@ struct cpia_frame {
 	int hdrwidth;		/* Width the frame actually is */
 	int hdrheight;		/* Height */
 
-	int grabstate;		/* State of grabbing */
+	volatile int grabstate;	/* State of grabbing */
 	int scanstate;		/* State of scanning */
 
 	int curline;		/* Line of frame we're working on */
+
+	long scanlength;	/* uncompressed, raw data length of frame */
+	long bytes_read;	/* amount of scanlength that has been read from *data */
 
 	wait_queue_head_t wq;	/* Processes waiting */
 };
@@ -175,6 +178,9 @@ struct usb_cpia {
 
 	/* Device structure */
 	struct usb_device *dev;
+
+	struct semaphore lock;
+	int user;		/* user count for exclusive use */
 
 	int streaming;		/* Are we streaming Isochronous? */
 	int grabbing;		/* Are we grabbing? */
@@ -195,4 +201,3 @@ struct usb_cpia {
 };
 
 #endif
-

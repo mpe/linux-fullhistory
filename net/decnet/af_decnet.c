@@ -1980,7 +1980,7 @@ static struct packet_type dn_dix_packet_type =
 	NULL,
 };
 
-static int dn_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+static int dn_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	struct sock *sk;
 	struct dn_scp *scp;
@@ -2036,7 +2036,7 @@ static int dn_get_info(char *buffer, char **start, off_t offset, int length, int
 
 #ifdef CONFIG_DECNET_RAW
 
-extern int dn_raw_get_info(char *, char **, off_t, int, int);
+extern int dn_raw_get_info(char *, char **, off_t, int);
 
 #endif /* CONFIG_DECNET_RAW */
 static struct net_proto_family	dn_family_ops = {

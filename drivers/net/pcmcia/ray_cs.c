@@ -2527,8 +2527,7 @@ static char *nettype[] = {"Adhoc", "Infra "};
 static char *framing[] = {"Encapsulation", "Translation"}
 ;
 /*===========================================================================*/
-static int ray_cs_proc_read(char *buf, char **start, off_t offset, 
-                     int len, int unused)
+static int ray_cs_proc_read(char *buf, char **start, off_t offset, int len)
 {
 /* Print current values which are not available via other means
  * eg ifconfig 

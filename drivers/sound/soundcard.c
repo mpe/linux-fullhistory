@@ -152,7 +152,7 @@ static int get_mixer_levels(caddr_t arg)
 	return 0;
 }
 
-static int sound_proc_get_info(char *buffer, char **start, off_t offset, int length, int inout)
+static int sound_proc_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	int len, i, drv;
         off_t pos = 0;
@@ -325,7 +325,7 @@ static ssize_t sndstat_file_read(struct file * file, char * buf, size_t nbytes, 
                 count = MIN(PROC_BLOCK_SIZE, nbytes);
 
                 start = NULL;
-		n = sound_proc_get_info(page, &start, *ppos, count, 0);
+		n = sound_proc_get_info(page, &start, *ppos, count);
 		if (n < count)
 			eof = 1;
                         

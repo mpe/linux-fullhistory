@@ -5474,7 +5474,7 @@ printk(KERN_INFO NAME53C "%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%d\n
 	instance->max_id	= np->maxwide ? 16 : 8;
 	instance->max_lun	= MAX_LUN;
 #ifndef NCR_IOMAPPED
-	instance->base		= (char *) np->reg;
+	instance->base		= np->reg;
 #endif
 	instance->irq		= np->irq;
 	instance->unique_id	= np->base_io;

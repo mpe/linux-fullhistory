@@ -38,6 +38,20 @@ struct serial_struct {
 #define ASYNC_CLOSING_WAIT_NONE	65535
 
 /*
+ * The size of the serial xmit buffer is 1 page, or 4096 bytes
+ */
+#define SERIAL_XMIT_SIZE 4096
+
+/*
+ * Counters of the input lines (CTS, DSR, RI, CD) interrupts
+ */
+struct async_icount {
+	__u32	cts, dsr, rng, dcd, tx, rx;
+	__u32	frame, parity, overrun, brk;
+	__u32	buf_overrun;
+};
+
+/*
  * These are the supported serial types.
  */
 #define PORT_UNKNOWN	0

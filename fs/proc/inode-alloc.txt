@@ -5,7 +5,6 @@ Current inode allocations in the proc-fs (hex-numbers):
        001		root-ino
 
   00001000-00001fff	dynamic entries
-  00002000-00002fff	openprom entries
   0001xxxx-7fffxxxx	pid-dir entries for pid 1-7fff
   80000000-ffffffff	unused
 

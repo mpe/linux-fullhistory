@@ -2076,7 +2076,7 @@ static void get_timewait_sock(struct tcp_tw_bucket *tw, char *tmpbuf, int i)
 		atomic_read(&tw->refcnt), tw);
 }
 
-int tcp_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+int tcp_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	int len = 0, num = 0, i;
 	off_t begin, pos = 0;

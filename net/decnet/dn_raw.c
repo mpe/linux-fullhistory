@@ -264,7 +264,7 @@ struct proto_ops dn_raw_proto_ops = {
 };
 
 #ifdef CONFIG_PROC_FS
-int dn_raw_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+int dn_raw_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	int len = 0;
 	off_t pos = 0;

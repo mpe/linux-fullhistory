@@ -757,7 +757,7 @@ int ip_check_mc(struct in_device *in_dev, u32 mc_addr)
 
 #ifdef CONFIG_IP_MULTICAST
  
-int ip_mc_procinfo(char *buffer, char **start, off_t offset, int length, int dummy)
+int ip_mc_procinfo(char *buffer, char **start, off_t offset, int length)
 {
 	off_t pos=0, begin=0;
 	struct ip_mc_list *im;

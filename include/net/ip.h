@@ -78,7 +78,7 @@ extern rwlock_t ip_ra_lock;
 
 extern void		ip_mc_dropsocket(struct sock *);
 extern void		ip_mc_dropdevice(struct net_device *dev);
-extern int		ip_mc_procinfo(char *, char **, off_t, int, int);
+extern int		ip_mc_procinfo(char *, char **, off_t, int);
 
 /*
  *	Functions provided by ip.c

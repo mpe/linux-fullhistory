@@ -1,9 +1,6 @@
 #ifndef __LINUX_UDF_SB_H
 #define __LINUX_UDF_SB_H
 
-#include <linux/udf_167.h>
-#include <linux/udf_udf.h>
-
 /* Since UDF 1.50 is ISO 13346 based... */
 #define UDF_SUPER_MAGIC	0x15013346
 

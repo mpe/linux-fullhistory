@@ -96,8 +96,7 @@ static int __irlan_insert_param(struct sk_buff *skb, char *param, int type,
 void irlan_close_tsaps(struct irlan_cb *self);
 
 #ifdef CONFIG_PROC_FS
-static int irlan_proc_read(char *buf, char **start, off_t offset, int len, 
-			   int unused);
+static int irlan_proc_read(char *buf, char **start, off_t offset, int len);
 
 extern struct proc_dir_entry *proc_irda;
 #endif /* CONFIG_PROC_FS */
@@ -1155,8 +1154,7 @@ int irlan_extract_param(__u8 *buf, char *name, char *value, __u16 *len)
  *
  *    Give some info to the /proc file system
  */
-static int irlan_proc_read(char *buf, char **start, off_t offset, int len, 
-			   int unused)
+static int irlan_proc_read(char *buf, char **start, off_t offset, int len)
 {
  	struct irlan_cb *self;
 	unsigned long flags;

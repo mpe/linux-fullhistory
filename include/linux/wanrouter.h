@@ -363,7 +363,7 @@ typedef struct wan_device
 	struct wan_device* next;	/* -> next device */
 	struct net_device* dev;		/* list of network interfaces */
 	unsigned ndev;			/* number of interfaces */
-	struct proc_dir_entry dent;	/* proc filesystem entry */
+	struct proc_dir_entry *dent;	/* proc filesystem entry */
 } wan_device_t;
 
 /* Public functions available for device drivers */

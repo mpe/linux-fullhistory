@@ -192,7 +192,7 @@ extern struct net_device *x25_get_route(x25_address *);
 extern struct net_device *x25_dev_get(char *);
 extern void x25_route_device_down(struct net_device *);
 extern int  x25_route_ioctl(unsigned int, void *);
-extern int  x25_routes_get_info(char *, char **, off_t, int, int);
+extern int  x25_routes_get_info(char *, char **, off_t, int);
 extern void x25_route_free(void);
 
 /* x25_subr.c */

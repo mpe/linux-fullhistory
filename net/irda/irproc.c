@@ -33,16 +33,11 @@
 #include <net/irda/irlap.h>
 #include <net/irda/irlmp.h>
 
-extern int irlap_proc_read(char *buf, char **start, off_t offset, int len, 
-			   int unused);
-extern int irlmp_proc_read(char *buf, char **start, off_t offset, int len, 
-			   int unused);
-extern int irttp_proc_read(char *buf, char **start, off_t offset, int len, 
-			   int unused);
-extern int irias_proc_read(char *buf, char **start, off_t offset, int len,
-			   int unused);
-extern int discovery_proc_read(char *buf, char **start, off_t offset, int len, 
-			       int unused);
+extern int irlap_proc_read(char *buf, char **start, off_t offset, int len);
+extern int irlmp_proc_read(char *buf, char **start, off_t offset, int len);
+extern int irttp_proc_read(char *buf, char **start, off_t offset, int len);
+extern int irias_proc_read(char *buf, char **start, off_t offset, int len);
+extern int discovery_proc_read(char *buf, char **start, off_t offset, int len);
 
 struct irda_entry {
 	char *name;

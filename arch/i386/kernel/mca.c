@@ -744,11 +744,13 @@ static int mca_read_proc(char *page, char **start, off_t off,
 void __init mca_do_proc_init(void)
 {
 	int i;
+	struct proc_dir_entry *proc_mca;
 	struct proc_dir_entry* node = NULL;
 	struct MCA_adapter *p;
 
 	if(mca_info == NULL) return;	/* Should never happen */
 
+	proc_mca = proc_mkdir("mca", &proc_root);
 	create_proc_read_entry("pos",0,proc_mca,get_mca_info,NULL);
 	create_proc_read_entry("machine",0,proc_mca,get_mca_machine_info,NULL);
 

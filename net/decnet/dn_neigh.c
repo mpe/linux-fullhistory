@@ -589,7 +589,7 @@ int dn_neigh_elist(struct net_device *dev, unsigned char *ptr, int n)
 
 
 #ifdef CONFIG_PROC_FS
-int dn_neigh_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+static int dn_neigh_get_info(char *buffer, char **start, off_t offset, int length)
 {
         int len     = 0;
         off_t pos   = 0;

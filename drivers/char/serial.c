@@ -154,13 +154,12 @@ static char *serial_revdate = "1999-11-17";
 #ifdef MODVERSIONS
 #include <linux/modversions.h>
 #endif
-#include <linux/module.h>
 #else /* !NEW_MODULES */
 #ifdef MODVERSIONS
 #define MODULE
 #endif
-#include <linux/module.h>
 #endif /* NEW_MODULES */
+#include <linux/module.h>
 
 #include <linux/types.h>
 #ifdef LOCAL_HEADERS

@@ -207,9 +207,9 @@ extern struct rose_neigh *rose_get_neigh(rose_address *, unsigned char *, unsign
 extern int  rose_rt_ioctl(unsigned int, void *);
 extern void rose_link_failed(ax25_cb *, int);
 extern int  rose_route_frame(struct sk_buff *, ax25_cb *);
-extern int  rose_nodes_get_info(char *, char **, off_t, int, int);
-extern int  rose_neigh_get_info(char *, char **, off_t, int, int);
-extern int  rose_routes_get_info(char *, char **, off_t, int, int);
+extern int  rose_nodes_get_info(char *, char **, off_t, int);
+extern int  rose_neigh_get_info(char *, char **, off_t, int);
+extern int  rose_routes_get_info(char *, char **, off_t, int);
 extern void rose_rt_free(void);
 
 /* rose_subr.c */

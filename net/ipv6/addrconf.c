@@ -1540,7 +1540,7 @@ static void addrconf_dad_completed(struct inet6_ifaddr *ifp)
 
 #ifdef CONFIG_PROC_FS
 static int iface_proc_info(char *buffer, char **start, off_t offset,
-			   int length, int dummy)
+			   int length)
 {
 	struct inet6_ifaddr *ifp;
 	int i;

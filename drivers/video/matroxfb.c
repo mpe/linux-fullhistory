@@ -587,7 +587,6 @@ struct matrox_fb_info {
 		int		text_type_aux;
 		int		video64bits;
 		unsigned int	vgastep;
-		unsigned int	vgastepdisp;
 		unsigned int	textmode;
 		unsigned int	textstep;
 		unsigned int	textvram;	/* character cells */
@@ -5490,10 +5489,11 @@ static struct video_board vbG400 __initdata	   = {0x2000000, 0x1000000, FB_ACCEL
 #define DEVF_DMA	0x80
 #define DEVF_SUPPORT32MB	0x100
 #define DEVF_ANY_VXRES		0x200
+#define DEVF_TEXT16B		0x400
 
 #define DEVF_G100	(DEVF_VIDEO64BIT | DEVF_SWAPS | DEVF_CROSS4MB | DEVF_DDC_8_2) /* no doc, no vxres... */
 #define DEVF_G200	(DEVF_VIDEO64BIT | DEVF_SWAPS | DEVF_CROSS4MB | DEVF_DDC_8_2 | DEVF_ANY_VXRES)
-#define DEVF_G400	(DEVF_VIDEO64BIT | DEVF_SWAPS | DEVF_CROSS4MB | DEVF_DDC_8_2 | DEVF_ANY_VXRES | DEVF_SUPPORT32MB)
+#define DEVF_G400	(DEVF_VIDEO64BIT | DEVF_SWAPS | DEVF_CROSS4MB | DEVF_DDC_8_2 | DEVF_ANY_VXRES | DEVF_SUPPORT32MB | DEVF_TEXT16B)
 
 static struct board {
 	unsigned short vendor, device, rev, svid, sid;
@@ -5666,12 +5666,14 @@ static int __init initMatrox2(WPMINFO struct display* d, struct board* b){
 	if (b->flags & DEVF_TEXT4B) {
 		ACCESS_FBINFO(devflags.vgastep) = 4;
 		ACCESS_FBINFO(devflags.textmode) = 4;
-		ACCESS_FBINFO(devflags.vgastepdisp) = 16;
+		ACCESS_FBINFO(devflags.text_type_aux) = FB_AUX_TEXT_MGA_STEP16;
+	} else if (b->flags & DEVF_TEXT16B) {
+		ACCESS_FBINFO(devflags.vgastep) = 16;
+		ACCESS_FBINFO(devflags.textmode) = 1;
 		ACCESS_FBINFO(devflags.text_type_aux) = FB_AUX_TEXT_MGA_STEP16;
 	} else {
 		ACCESS_FBINFO(devflags.vgastep) = 8;
 		ACCESS_FBINFO(devflags.textmode) = 1;
-		ACCESS_FBINFO(devflags.vgastepdisp) = 64;
 		ACCESS_FBINFO(devflags.text_type_aux) = FB_AUX_TEXT_MGA_STEP8;
 	}
 #ifdef CONFIG_FB_MATROX_32MB

@@ -944,9 +944,8 @@ static int openpromfs_create (struct inode *dir, struct dentry *dentry, int mode
 	strncpy (p, dentry->d_name.name, dentry->d_name.len);
 	p [dentry->d_name.len] = 0;
 	alias_names [aliases_nodes++] = p;
-	inode = proc_get_inode (dir->i_sb,
-				NODEP2INO(NODE(dir->i_ino).first_prop)
-				+ aliases_nodes, 0);
+	inode = iget (dir->i_sb,
+			NODEP2INO(NODE(dir->i_ino).first_prop) + aliases_nodes);
 	if (!inode)
 		return -EINVAL;
 	inode->i_mode = S_IFREG | S_IRUGO | S_IWUSR;

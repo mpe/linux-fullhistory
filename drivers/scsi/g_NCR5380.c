@@ -490,7 +490,7 @@ static inline int NCR5380_pread (struct Scsi_Host *instance, unsigned char *dst,
 	    dst[start+i] = NCR5380_read(C400_HOST_BUFFER);
 #else
 	/* implies CONFIG_SCSI_G_NCR5380_MEM */
-	memcpy(dst+start,NCR53C400_host_buffer+NCR5380_map_name,128);
+	isa_memcpy_fromio(dst+start,NCR53C400_host_buffer+NCR5380_map_name,128);
 #endif
 	start+=128;
 	blocks--;
@@ -511,7 +511,7 @@ static inline int NCR5380_pread (struct Scsi_Host *instance, unsigned char *dst,
 	    dst[start+i] = NCR5380_read(C400_HOST_BUFFER);
 #else
 	/* implies CONFIG_SCSI_G_NCR5380_MEM */
-	memcpy(dst+start,NCR53C400_host_buffer+NCR5380_map_name,128);
+	isa_memcpy_fromio(dst+start,NCR53C400_host_buffer+NCR5380_map_name,128);
 #endif
 	start+=128;
 	blocks--;
@@ -598,7 +598,7 @@ static inline int NCR5380_pwrite (struct Scsi_Host *instance, unsigned char *src
 	    NCR5380_write(C400_HOST_BUFFER, src[start+i]);
 #else
 	/* implies CONFIG_SCSI_G_NCR5380_MEM */
-	memcpy(NCR53C400_host_buffer+NCR5380_map_name,src+start,128);
+	isa_memcpy_toio(NCR53C400_host_buffer+NCR5380_map_name,src+start,128);
 #endif
 	start+=128;
 	blocks--;
@@ -618,7 +618,7 @@ static inline int NCR5380_pwrite (struct Scsi_Host *instance, unsigned char *src
 	    NCR5380_write(C400_HOST_BUFFER, src[start+i]);
 #else
 	/* implies CONFIG_SCSI_G_NCR5380_MEM */
-	memcpy(NCR53C400_host_buffer+NCR5380_map_name,src+start,128);
+	isa_memcpy_toio(NCR53C400_host_buffer+NCR5380_map_name,src+start,128);
 #endif
 	start+=128;
 	blocks--;

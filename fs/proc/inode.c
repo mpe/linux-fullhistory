@@ -13,7 +13,6 @@
 #include <linux/file.h>
 #include <linux/locks.h>
 #include <linux/limits.h>
-#include <linux/config.h>
 #define __NO_VERSION__
 #include <linux/module.h>
 
@@ -91,6 +90,30 @@ static void proc_put_super(struct super_block *sb)
 	*p = (struct super_block *)(*p)->u.generic_sbp;
 }
 
+static void proc_write_inode(struct inode * inode)
+{
+}
+
+static void proc_read_inode(struct inode * inode)
+{
+	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
+}
+
+static int proc_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
+{
+	struct statfs tmp;
+
+	tmp.f_type = PROC_SUPER_MAGIC;
+	tmp.f_bsize = PAGE_SIZE/sizeof(long);
+	tmp.f_blocks = 0;
+	tmp.f_bfree = 0;
+	tmp.f_bavail = 0;
+	tmp.f_files = 0;
+	tmp.f_ffree = 0;
+	tmp.f_namelen = NAME_MAX;
+	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
+}
+
 static struct super_operations proc_sops = { 
 	proc_read_inode,
 	proc_write_inode,
@@ -161,26 +184,16 @@ printk("proc_iget: using deleted entry %s, count=%d\n", de->name, de->count);
 		}
 		if (de->size)
 			inode->i_size = de->size;
-		if (de->ops)
-			inode->i_op = de->ops;
 		if (de->nlink)
 			inode->i_nlink = de->nlink;
 		if (de->owner)
 			__MOD_INC_USE_COUNT(de->owner);
+		if (S_ISBLK(de->mode)||S_ISCHR(de->mode)||S_ISFIFO(de->mode))
+			init_special_inode(inode,de->mode,kdev_t_to_nr(de->rdev));
+		else if (de->ops)
+			inode->i_op = de->ops;
 	}
-	/*
-	 * Fixup the root inode's nlink value
-	 */
-	if (inode->i_ino == PROC_ROOT_INO) {
-		struct task_struct *p;
 
-		read_lock(&tasklist_lock);
-		for_each_task(p) {
-			if (p->pid)
-				inode->i_nlink++;
-		}
-		read_unlock(&tasklist_lock);
-	}
 out:
 	return inode;
 
@@ -193,6 +206,7 @@ struct super_block *proc_read_super(struct super_block *s,void *data,
 				    int silent)
 {
 	struct inode * root_inode;
+	struct task_struct *p;
 
 	lock_super(s);
 	s->s_blocksize = 1024;
@@ -202,6 +216,12 @@ struct super_block *proc_read_super(struct super_block *s,void *data,
 	root_inode = proc_get_inode(s, PROC_ROOT_INO, &proc_root);
 	if (!root_inode)
 		goto out_no_root;
+	/*
+	 * Fixup the root inode's nlink value
+	 */
+	read_lock(&tasklist_lock);
+	for_each_task(p) if (p->pid) root_inode->i_nlink++;
+	read_unlock(&tasklist_lock);
 	s->s_root = d_alloc_root(root_inode);
 	if (!s->s_root)
 		goto out_no_root;
@@ -217,28 +237,4 @@ out_no_root:
 	s->s_dev = 0;
 	unlock_super(s);
 	return NULL;
-}
-
-int proc_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
-{
-	struct statfs tmp;
-
-	tmp.f_type = PROC_SUPER_MAGIC;
-	tmp.f_bsize = PAGE_SIZE/sizeof(long);
-	tmp.f_blocks = 0;
-	tmp.f_bfree = 0;
-	tmp.f_bavail = 0;
-	tmp.f_files = 0;
-	tmp.f_ffree = 0;
-	tmp.f_namelen = NAME_MAX;
-	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
-}
-
-void proc_read_inode(struct inode * inode)
-{
-	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
-}
-
-void proc_write_inode(struct inode * inode)
-{
 }

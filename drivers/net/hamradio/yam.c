@@ -781,7 +781,7 @@ static void yam_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	}
 }
 
-static int yam_net_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+static int yam_net_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	int len = 0;
 	int i;

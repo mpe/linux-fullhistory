@@ -1051,7 +1051,7 @@ static void get_udp_sock(struct sock *sp, char *tmpbuf, int i)
 		atomic_read(&sp->refcnt), sp);
 }
 
-int udp_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+int udp_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	int len = 0, num = 0, i;
 	off_t pos = 0;

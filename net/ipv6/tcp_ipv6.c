@@ -1988,7 +1988,7 @@ static void get_timewait6_sock(struct tcp_tw_bucket *tw, char *tmpbuf, int i)
 #define LINE_LEN 190
 #define LINE_FMT "%-190s\n"
 
-int tcp6_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+int tcp6_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	int len = 0, num = 0, i;
 	off_t begin, pos = 0;

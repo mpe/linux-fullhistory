@@ -5351,7 +5351,7 @@ advansys_detect(Scsi_Host_Template *tpnt)
 
             /* BIOS start address. */
             if (ASC_NARROW_BOARD(boardp)) {
-                shp->base = (char *) ((ulong) AscGetChipBiosAddress(
+                shp->base = ((ulong) AscGetChipBiosAddress(
                                                 asc_dvc_varp->iop_base,
                                                 asc_dvc_varp->bus_type));
             } else {
@@ -5385,7 +5385,7 @@ advansys_detect(Scsi_Host_Template *tpnt)
                      * Convert x86 realmode code segment to a linear
                      * address by shifting left 4.
                      */
-                    shp->base = (uchar *) (boardp->bios_codeseg << 4);
+                    shp->base = (boardp->bios_codeseg << 4);
                 } else {
                     shp->base = 0;
                 }

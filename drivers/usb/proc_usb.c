@@ -2,6 +2,7 @@
  * drivers/usb/proc_usb.c
  * (C) Copyright 1999 Randy Dunlap.
  * (C) Copyright 1999 Thomas Sailer <sailer@ife.ee.ethz.ch>. (proc file per device)
+ * (C) Copyright 1999 Deti Fliegl (new USB architecture)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -591,7 +592,7 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 				free_page((unsigned long)tbuf);
 				return -EINVAL;
 			}
-			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2, (ctrl.timeout * HZ + 500) / 1000);
+			i = usb_bulk_msg(dev, pipe, tbuf, len1, &len2, (ctrl.timeout * HZ + 500) / 1000);
 			if (!i && len2) {
 				copy_to_user_ret(bulk.data, tbuf, len2, -EFAULT);
 			}
@@ -599,7 +600,7 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 			if (len1) {
 				copy_from_user_ret(tbuf, bulk.data, len1, -EFAULT);
 			}
-			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2, (ctrl.timeout * HZ + 500) / 1000);
+			i = usb_bulk_msg(dev, pipe, tbuf, len1, &len2, (ctrl.timeout * HZ + 500) / 1000);
 		}
 		free_page((unsigned long)tbuf);
 		if (i) {
@@ -670,7 +671,7 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 				free_page((unsigned long)tbuf);
 				return -EINVAL;
 			}
-			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2, HZ*5);
+			i = usb_bulk_msg(dev, pipe, tbuf, len1, &len2, HZ*5);
 			if (!i && len2) {
 				copy_to_user_ret(obulk.data, tbuf, len2, -EFAULT);
 			}
@@ -678,7 +679,7 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 			if (len1) {
 				copy_from_user_ret(tbuf, obulk.data, len1, -EFAULT);
 			}
-			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2, HZ*5);
+			i = usb_bulk_msg(dev, pipe, tbuf, len1, &len2, HZ*5);
 		}
 		free_page((unsigned long)tbuf);
 		if (i) {
@@ -804,7 +805,7 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 				free_page((unsigned long)tbuf);
 				return -EINVAL;
 			}
-			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2, (bulk.timeout * HZ + 500) / 1000);
+			i = usb_bulk_msg(dev, pipe, tbuf, len1, &len2, (bulk.timeout * HZ + 500) / 1000);
 			if (!i && len2) {
 				copy_to_user_ret(bulk.data, tbuf, len2, -EFAULT);
 			}
@@ -812,7 +813,7 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 			if (len1) {
 				copy_from_user_ret(tbuf, bulk.data, len1, -EFAULT);
 			}
-			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2, (bulk.timeout * HZ + 500) / 1000);
+			i = usb_bulk_msg(dev, pipe, tbuf, len1, &len2, (bulk.timeout * HZ + 500) / 1000);
 		}
 		free_page((unsigned long)tbuf);
 		if (i) {
@@ -877,7 +878,7 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 				free_page((unsigned long)tbuf);
 				return -EINVAL;
 			}
-			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2, HZ*5);
+			i = usb_bulk_msg(dev, pipe, tbuf, len1, &len2, HZ*5);
 			if (!i && len2) {
 				copy_to_user_ret(obulk.data, tbuf, len2, -EFAULT);
 			}
@@ -885,7 +886,7 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 			if (len1) {
 				copy_from_user_ret(tbuf, obulk.data, len1, -EFAULT);
 			}
-			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2, HZ*5);
+			i = usb_bulk_msg(dev, pipe, tbuf, len1, &len2, HZ*5);
 		}
 		free_page((unsigned long)tbuf);
 		if (i) {

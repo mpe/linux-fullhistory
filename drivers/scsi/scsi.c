@@ -59,6 +59,7 @@
 #include <asm/system.h>
 #include <asm/irq.h>
 #include <asm/dma.h>
+#include <asm/uaccess.h>
 
 #include "scsi.h"
 #include "hosts.h"
@@ -73,8 +74,7 @@
 struct proc_dir_entry *proc_scsi = NULL;
 
 #ifdef CONFIG_PROC_FS
-static int scsi_proc_info(char *buffer, char **start, off_t offset,
-			  int length, int inout);
+static int scsi_proc_info(char *buffer, char **start, off_t offset, int length);
 static void scsi_dump_status(int level);
 #endif
 
@@ -1972,6 +1972,9 @@ void scsi_build_commandblocks(Scsi_Device * SDpnt)
 		SDpnt->has_cmdblocks = 1;
 }
 
+static ssize_t proc_scsi_gen_write(struct file * file, const char * buf,
+                              unsigned long length, void *data);
+
 #ifndef MODULE			/* { */
 /*
  * scsi_dev_init() is our initialization routine, which in turn calls host
@@ -1983,6 +1986,7 @@ int __init scsi_dev_init(void)
 	Scsi_Device *SDpnt;
 	struct Scsi_Host *shpnt;
 	struct Scsi_Device_Template *sdtpnt;
+	struct proc_dir_entry *generic;
 #ifdef FOO_ON_YOU
 	return;
 #endif
@@ -1999,7 +2003,13 @@ int __init scsi_dev_init(void)
 		return -ENOMEM;
 	}
 	
-	create_proc_info_entry ("scsi/scsi", 0, 0, scsi_proc_info);
+	generic = create_proc_info_entry ("scsi/scsi", 0, 0, scsi_proc_info);
+	if (!generic) {
+		printk (KERN_ERR "cannot init /proc/scsi/scsi\n");
+		remove_proc_entry("scsi", 0);
+		return -ENOMEM;
+	}
+	generic->write_proc = proc_scsi_gen_write;
 #endif
 
 	/* Init a few things so we can "malloc" memory. */
@@ -2108,10 +2118,57 @@ static void print_inquiry(unsigned char *data)
 		printk("\n");
 }
 
-
 #ifdef CONFIG_PROC_FS
-static int scsi_proc_info(char *buffer, char **start, off_t offset,
-			  int length, int inout)
+static int scsi_proc_info(char *buffer, char **start, off_t offset, int length)
+{
+	Scsi_Device *scd;
+	struct Scsi_Host *HBA_ptr;
+	int size, len = 0;
+	off_t begin = 0;
+	off_t pos = 0;
+
+	/*
+	 * First, see if there are any attached devices or not.
+	 */
+	for (HBA_ptr = scsi_hostlist; HBA_ptr; HBA_ptr = HBA_ptr->next) {
+		if (HBA_ptr->host_queue != NULL) {
+			break;
+		}
+	}
+	size = sprintf(buffer + len, "Attached devices: %s\n", (HBA_ptr) ? "" : "none");
+	len += size;
+	pos = begin + len;
+	for (HBA_ptr = scsi_hostlist; HBA_ptr; HBA_ptr = HBA_ptr->next) {
+#if 0
+		size += sprintf(buffer + len, "scsi%2d: %s\n", (int) HBA_ptr->host_no,
+				HBA_ptr->hostt->procname);
+		len += size;
+		pos = begin + len;
+#endif
+		for (scd = HBA_ptr->host_queue; scd; scd = scd->next) {
+			proc_print_scsidevice(scd, buffer, &size, len);
+			len += size;
+			pos = begin + len;
+
+			if (pos < offset) {
+				len = 0;
+				begin = pos;
+			}
+			if (pos > offset + length)
+				goto stop_output;
+		}
+	}
+
+stop_output:
+	*start = buffer + (offset - begin);	/* Start of wanted data */
+	len -= (offset - begin);	/* Start slop */
+	if (len > length)
+		len = length;	/* Ending slop */
+	return (len);
+}
+
+static ssize_t proc_scsi_gen_write(struct file * file, const char * buf,
+                              unsigned long length, void *data)
 {
 	Scsi_Cmnd *SCpnt;
 	struct Scsi_Device_Template *SDTpnt;
@@ -2119,52 +2176,19 @@ static int scsi_proc_info(char *buffer, char **start, off_t offset,
 	struct Scsi_Host *HBA_ptr;
 	char *p;
 	int host, channel, id, lun;
-	int size, len = 0;
-	off_t begin = 0;
-	off_t pos = 0;
+	char * buffer;
+	int err;
 
-	if (inout == 0) {
-		/*
-		 * First, see if there are any attached devices or not.
-		 */
-		for (HBA_ptr = scsi_hostlist; HBA_ptr; HBA_ptr = HBA_ptr->next) {
-			if (HBA_ptr->host_queue != NULL) {
-				break;
-			}
-		}
-		size = sprintf(buffer + len, "Attached devices: %s\n", (HBA_ptr) ? "" : "none");
-		len += size;
-		pos = begin + len;
-		for (HBA_ptr = scsi_hostlist; HBA_ptr; HBA_ptr = HBA_ptr->next) {
-#if 0
-			size += sprintf(buffer + len, "scsi%2d: %s\n", (int) HBA_ptr->host_no,
-					HBA_ptr->hostt->procname);
-			len += size;
-			pos = begin + len;
-#endif
-			for (scd = HBA_ptr->host_queue; scd; scd = scd->next) {
-				proc_print_scsidevice(scd, buffer, &size, len);
-				len += size;
-				pos = begin + len;
+	if (!buf || length>PAGE_SIZE)
+		return -EINVAL;
 
-				if (pos < offset) {
-					len = 0;
-					begin = pos;
-				}
-				if (pos > offset + length)
-					goto stop_output;
-			}
-		}
+	if (!(buffer = (char *) __get_free_page(GFP_KERNEL)))
+		return -ENOMEM;
+	copy_from_user(buffer, buf, length);
 
-	stop_output:
-		*start = buffer + (offset - begin);	/* Start of wanted data */
-		len -= (offset - begin);	/* Start slop */
-		if (len > length)
-			len = length;	/* Ending slop */
-		return (len);
-	}
-	if (!buffer || length < 11 || strncmp("scsi", buffer, 4))
-		return (-EINVAL);
+	err = -EINVAL;
+	if (length < 11 || strncmp("scsi", buffer, 4))
+		goto out;
 
 	/*
 	 * Usage: echo "scsi dump #N" > /proc/scsi/scsi
@@ -2177,7 +2201,7 @@ static int scsi_proc_info(char *buffer, char **start, off_t offset,
 		p = buffer + 10;
 
 		if (*p == '\0')
-			return (-EINVAL);
+			goto out;
 
 		level = simple_strtoul(p, NULL, 0);
 		scsi_dump_status(level);
@@ -2211,7 +2235,7 @@ static int scsi_proc_info(char *buffer, char **start, off_t offset,
 				 */
 				scsi_logging_level = 0;
 			} else {
-				return (-EINVAL);
+				goto out;
 			}
 		} else {
 			*p++ = '\0';
@@ -2242,7 +2266,7 @@ static int scsi_proc_info(char *buffer, char **start, off_t offset,
 			} else if (strcmp(token, "ioctl") == 0) {
 				SCSI_SET_IOCTL_LOGGING(level);
 			} else {
-				return (-EINVAL);
+				goto out;
 			}
 		}
 
@@ -2277,8 +2301,9 @@ static int scsi_proc_info(char *buffer, char **start, off_t offset,
 				break;
 			}
 		}
+		err = -ENXIO;
 		if (!HBA_ptr)
-			return (-ENXIO);
+			goto out;
 
 		for (scd = HBA_ptr->host_queue; scd; scd = scd->next) {
 			if ((scd->channel == channel
@@ -2288,8 +2313,9 @@ static int scsi_proc_info(char *buffer, char **start, off_t offset,
 			}
 		}
 
+		err = -ENOSYS;
 		if (scd)
-			return (-ENOSYS);	/* We do not yet support unplugging */
+			goto out;	/* We do not yet support unplugging */
 
 		scan_scsis(HBA_ptr, 1, channel, id, lun);
 
@@ -2299,8 +2325,8 @@ static int scsi_proc_info(char *buffer, char **start, off_t offset,
 		if (HBA_ptr->select_queue_depths != NULL)
 			(HBA_ptr->select_queue_depths) (HBA_ptr, HBA_ptr->host_queue);
 
-		return (length);
-
+		err = length;
+		goto out;
 	}
 	/*
 	 * Usage: echo "scsi remove-single-device 0 1 2 3" >/proc/scsi/scsi
@@ -2327,8 +2353,9 @@ static int scsi_proc_info(char *buffer, char **start, off_t offset,
 				break;
 			}
 		}
+		err = -ENODEV;
 		if (!HBA_ptr)
-			return (-ENODEV);
+			goto out;
 
 		for (scd = HBA_ptr->host_queue; scd; scd = scd->next) {
 			if ((scd->channel == channel
@@ -2339,10 +2366,11 @@ static int scsi_proc_info(char *buffer, char **start, off_t offset,
 		}
 
 		if (scd == NULL)
-			return (-ENODEV);	/* there is no such device attached */
+			goto out;	/* there is no such device attached */
 
+		err = -EBUSY;
 		if (scd->access_count)
-			return (-EBUSY);
+			goto out;
 
 		SDTpnt = scsi_devicelist;
 		while (SDTpnt != NULL) {
@@ -2372,11 +2400,14 @@ static int scsi_proc_info(char *buffer, char **start, off_t offset,
 			}
 			scsi_init_free((char *) scd, sizeof(Scsi_Device));
 		} else {
-			return (-EBUSY);
+			goto out;
 		}
-		return (0);
+		err = 0;
 	}
-	return (-EINVAL);
+out:
+	
+	free_page((unsigned long) buffer);
+	return err;
 }
 #endif
 
@@ -3246,6 +3277,7 @@ int init_module(void)
 {
 	unsigned long size;
 	int has_space = 0;
+	struct proc_dir_entry *generic;
 
 	/*
 	 * This makes /proc/scsi and /proc/scsi/scsi visible.
@@ -3256,7 +3288,13 @@ int init_module(void)
 		printk (KERN_ERR "cannot init /proc/scsi\n");
 		return -ENOMEM;
 	}
-	create_proc_info_entry ("scsi/scsi", 0, 0, scsi_proc_info);
+	generic = create_proc_info_entry ("scsi/scsi", 0, 0, scsi_proc_info);
+	if (!generic) {
+		printk (KERN_ERR "cannot init /proc/scsi/scsi\n");
+		remove_proc_entry("scsi", 0);
+		return -ENOMEM;
+	}
+	generic->write_proc = proc_scsi_gen_write;
 #endif
 
 	scsi_loadable_module_flag = 1;

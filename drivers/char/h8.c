@@ -58,9 +58,10 @@ int          h8_display_unblank(void);
 static void  h8_intr(int irq, void *dev_id, struct pt_regs *regs);
 
 #ifdef CONFIG_PROC_FS
-static int   h8_get_info(char *, char **, off_t, int, int);
+static int   h8_get_info(char *, char **, off_t, int);
 #else
-static int   h8_get_info(char *, char **, off_t, int, int) {}
+static int   h8_get_info(char *, char **, off_t, int) {}
+#error "Somebody needs to learn C. Badly."
 #endif
 
 /*
@@ -402,7 +403,7 @@ void h8_hw_init(void)
 }
 
 #ifdef CONFIG_PROC_FS
-int h8_get_info(char *buf, char **start, off_t fpos, int length, int dummy)
+static int h8_get_info(char *buf, char **start, off_t fpos, int length)
 {
         char *p;
 

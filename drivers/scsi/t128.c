@@ -122,14 +122,14 @@
 #include <linux/init.h>
 
 static struct override {
-    unsigned char *address;
+    unsigned long address;
     int irq;
 } overrides 
 #ifdef T128_OVERRIDE
     [] __initdata = T128_OVERRIDE;
 #else
-    [4] __initdata = {{NULL,IRQ_AUTO}, {NULL,IRQ_AUTO}, 
-        {NULL,IRQ_AUTO}, {NULL,IRQ_AUTO}};
+    [4] __initdata = {{0, IRQ_AUTO}, {0, IRQ_AUTO}, 
+        {0 ,IRQ_AUTO}, {0, IRQ_AUTO}};
 #endif
 
 #define NO_OVERRIDES (sizeof(overrides) / sizeof(struct override))
@@ -169,7 +169,7 @@ void __init t128_setup(char *str, int *ints){
 	printk("t128_setup : usage t128=address,irq\n");
     else 
 	if (commandline_current < NO_OVERRIDES) {
-	    overrides[commandline_current].address = (unsigned char *) ints[1];
+	    overrides[commandline_current].address = ints[1];
 	    overrides[commandline_current].irq = ints[2];
 	    for (i = 0; i < NO_BASES; ++i)
 		if (bases[i].address == ints[1]) {
@@ -196,14 +196,14 @@ void __init t128_setup(char *str, int *ints){
 int __init t128_detect(Scsi_Host_Template * tpnt){
     static int current_override = 0, current_base = 0;
     struct Scsi_Host *instance;
-    unsigned char *base;
+    unsigned long base;
     int sig, count;
 
     tpnt->proc_name = "t128";
     tpnt->proc_info = &t128_proc_info;
 
     for (count = 0; current_override < NO_OVERRIDES; ++current_override) {
-	base = NULL;
+	base = 0;
 
 	if (overrides[current_override].address)
 	    base = overrides[current_override].address;
@@ -218,7 +218,7 @@ int __init t128_detect(Scsi_Host_Template * tpnt){
 					signatures[sig].offset,
 					signatures[sig].string,
 					strlen(signatures[sig].string))) {
-			base = (unsigned char *) bases[current_base].address;
+			base = bases[current_base].address;
 #if (TDEBUG & TDEBUG_INIT)
 			printk("scsi-t128 : detected board.\n");
 #endif
@@ -234,7 +234,7 @@ int __init t128_detect(Scsi_Host_Template * tpnt){
 	    break;
 
 	instance = scsi_register (tpnt, sizeof(struct NCR5380_hostdata));
-	instance->base = phys_to_virt((unsigned int)base);
+	instance->base = base;
 
 	NCR5380_init(instance, 0);
 
@@ -259,8 +259,7 @@ int __init t128_detect(Scsi_Host_Template * tpnt){
 	printk("scsi%d : irq = %d\n", instance->host_no, instance->irq);
 #endif
 
-	printk("scsi%d : at 0x%08x", instance->host_no, (int) 
-	    instance->base);
+	printk("scsi%d : at 0x%08lx", instance->host_no, instance->base);
 	if (instance->irq == IRQ_NONE)
 	    printk (" interrupts disabled");
 	else 
@@ -320,28 +319,28 @@ int t128_biosparam(Disk * disk, kdev_t dev, int * ip)
 
 static inline int NCR5380_pread (struct Scsi_Host *instance, unsigned char *dst,
     int len) {
-    register unsigned char *reg = (unsigned char *) (instance->base + 
-	T_DATA_REG_OFFSET), *d = dst;
+    unsigned long reg = instance->base + T_DATA_REG_OFFSET;
+    unsigned char *d = dst;
     register int i = len;
 
 
 #if 0
     for (; i; --i) {
-	while (!(instance->base[T_STATUS_REG_OFFSET]) & T_ST_RDY) barrier();
+	while (!(isa_readb(instance->base+T_STATUS_REG_OFFSET) & T_ST_RDY)) barrier();
 #else
-    while (!(instance->base[T_STATUS_REG_OFFSET]) & T_ST_RDY) barrier();
+    while (!(isa_readb(instance->base+T_STATUS_REG_OFFSET) & T_ST_RDY)) barrier();
     for (; i; --i) {
 #endif
-	*d++ = *reg;
+	*d++ = isa_readb(reg);
     }
 
-    if (*(instance->base + T_STATUS_REG_OFFSET) & T_ST_TIM) {
+    if (isa_readb(instance->base + T_STATUS_REG_OFFSET) & T_ST_TIM) {
 	unsigned char tmp;
-	volatile unsigned char *foo;
+	unsigned long foo;
 	foo = instance->base + T_CONTROL_REG_OFFSET;
-	tmp = *foo;
-	*foo = tmp | T_CR_CT;
-	*foo = tmp;
+	tmp = isa_readb(foo);
+	isa_writeb(tmp | T_CR_CT, foo);
+	isa_writeb(tmp, foo);
 	printk("scsi%d : watchdog timer fired in NCR5380_pread()\n",
 	    instance->host_no);
 	return -1;
@@ -364,27 +363,27 @@ static inline int NCR5380_pread (struct Scsi_Host *instance, unsigned char *dst,
 
 static inline int NCR5380_pwrite (struct Scsi_Host *instance, unsigned char *src,
     int len) {
-    register unsigned char *reg = (unsigned char *) (instance->base + 
-	T_DATA_REG_OFFSET), *s = src;
+    unsigned long reg = instance->base + T_DATA_REG_OFFSET;
+    unsigned char *s = src;
     register int i = len;
 
 #if 0
     for (; i; --i) {
-	while (!(instance->base[T_STATUS_REG_OFFSET]) & T_ST_RDY) barrier();
+	while (!(isa_readb(instance->base+T_STATUS_REG_OFFSET) & T_ST_RDY)) barrier();
 #else
-    while (!(instance->base[T_STATUS_REG_OFFSET]) & T_ST_RDY) barrier();
+    while (!(isa_readb(instance->base+T_STATUS_REG_OFFSET) & T_ST_RDY)) barrier();
     for (; i; --i) {
 #endif
-	*reg = *s++;
+	isa_writeb(*s++, reg);
     }
 
-    if (*(instance->base + T_STATUS_REG_OFFSET) & T_ST_TIM) {
+    if (isa_readb(instance->base + T_STATUS_REG_OFFSET) & T_ST_TIM) {
 	unsigned char tmp;
-	volatile unsigned char *foo;
+	unsigned long foo;
 	foo = instance->base + T_CONTROL_REG_OFFSET;
-	tmp = *foo;
-	*foo = tmp | T_CR_CT;
-	*foo = tmp;
+	tmp = isa_readb(foo);
+	isa_writeb(tmp | T_CR_CT, foo);
+	isa_writeb(tmp, foo);
 	printk("scsi%d : watchdog timer fired in NCR5380_pwrite()\n",
 	    instance->host_no);
 	return -1;

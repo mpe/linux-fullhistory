@@ -1110,7 +1110,7 @@ int ndisc_rcv(struct sk_buff *skb, unsigned long len)
 
 #ifdef CONFIG_PROC_FS
 #ifndef CONFIG_RTNETLINK
-int ndisc_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+static int ndisc_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	int len=0;
 	off_t pos=0;

@@ -695,7 +695,7 @@ static int __init  AM53C974_init(Scsi_Host_Template * tpnt, struct pci_dev *pdev
 
 	instance = scsi_register(tpnt, sizeof(struct AM53C974_hostdata));
 	hostdata = (struct AM53C974_hostdata *) instance->hostdata;
-	instance->base = NULL;
+	instance->base = 0;
 	instance->io_port = pdev->resource[0].start;
 	instance->irq = pdev->irq;
 	instance->dma_channel = -1;

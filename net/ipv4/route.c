@@ -202,9 +202,9 @@ static __inline__ unsigned rt_hash_code(u32 daddr, u32 saddr, u8 tos)
 }
 
 #ifndef CONFIG_PROC_FS
-static int rt_cache_get_info(char *buffer, char **start, off_t offset, int length, int dummy) { return 0; }
+static int rt_cache_get_info(char *buffer, char **start, off_t offset, int length) { return 0; }
 #else
-static int rt_cache_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+static int rt_cache_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	int len=0;
 	off_t pos=0;

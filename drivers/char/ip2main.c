@@ -71,7 +71,7 @@
 
 #include <linux/proc_fs.h>
 
-int ip2_read_procmem(char *, char **, off_t, int, int );
+static int ip2_read_procmem(char *, char **, off_t, int);
 int ip2_read_proc(char *, char **, off_t, int, int *, void * );
 
 /********************/
@@ -3003,8 +3003,8 @@ ip2_ipl_open( struct inode *pInode, struct file *pFile )
 
 #define LIMIT  (PAGE_SIZE - 120)
 
-int
-ip2_read_procmem(char *buf, char **start, off_t offset, int len, int unused)
+static int
+ip2_read_procmem(char *buf, char **start, off_t offset, int len)
 {
 	i2eBordStrPtr  pB;
 	i2ChanStrPtr  pCh;

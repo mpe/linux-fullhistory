@@ -34,6 +34,56 @@
 #include "udf_i.h"
 #include "udf_sb.h"
 
+#define udf_clear_bit(nr,addr) ext2_clear_bit(nr,addr)
+#define udf_set_bit(nr,addr) ext2_set_bit(nr,addr)
+#define udf_test_bit(nr, addr) ext2_test_bit(nr, addr)
+#define udf_find_first_one_bit(addr, size) find_first_one_bit(addr, size)
+#define udf_find_next_one_bit(addr, size, offset) find_next_one_bit(addr, size, offset)
+
+#define leBPL_to_cpup(x) leNUM_to_cpup(BITS_PER_LONG, x)
+#define leNUM_to_cpup(x,y) xleNUM_to_cpup(x,y)
+#define xleNUM_to_cpup(x,y) (le ## x ## _to_cpup(y))
+
+extern inline int find_next_one_bit (void * addr, int size, int offset)
+{
+	unsigned long * p = ((unsigned long *) addr) + (offset / BITS_PER_LONG);
+	unsigned long result = offset & ~(BITS_PER_LONG-1);
+	unsigned long tmp;
+
+	if (offset >= size)
+		return size;
+	size -= result;
+	offset &= (BITS_PER_LONG-1);
+	if (offset)
+	{
+		tmp = leBPL_to_cpup(p++);
+		tmp &= ~0UL << offset;
+		if (size < BITS_PER_LONG)
+			goto found_first;
+		if (tmp)
+			goto found_middle;
+		size -= BITS_PER_LONG;
+		result += BITS_PER_LONG;
+	}
+	while (size & ~(BITS_PER_LONG-1))
+	{
+		if ((tmp = leBPL_to_cpup(p++)))
+			goto found_middle;
+		result += BITS_PER_LONG;
+		size -= BITS_PER_LONG;
+	}
+	if (!size)
+		return result;
+	tmp = leBPL_to_cpup(p);
+found_first:
+	tmp &= ~0UL >> (BITS_PER_LONG-size);
+found_middle:
+	return result + ffz(~tmp);
+}
+
+#define find_first_one_bit(addr, size)\
+	find_next_one_bit((addr), (size), 0)
+
 static int read_block_bitmap(struct super_block * sb, unsigned int block,
 	unsigned long bitmap_nr)
 {

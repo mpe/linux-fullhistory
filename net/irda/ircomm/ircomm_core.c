@@ -52,8 +52,7 @@ static void ircomm_control_indication(struct ircomm_cb *self,
 				      struct sk_buff *skb, int clen);
 
 #ifdef CONFIG_PROC_FS
-static int ircomm_proc_read(char *buf, char **start, off_t offset, int len, 
-			    int unused);
+static int ircomm_proc_read(char *buf, char **start, off_t offset, int len);
 
 extern struct proc_dir_entry *proc_irda;
 #endif /* CONFIG_PROC_FS */
@@ -69,7 +68,7 @@ int __init ircomm_init(void)
 	}
 	
 #ifdef CONFIG_PROC_FS
-	create_proc_entry("ircomm", 0, proc_irda)->get_info = ircomm_proc_read;
+	create_proc_info_entry("ircomm", 0, proc_irda, ircomm_proc_read);
 #endif /* CONFIG_PROC_FS */
 	
 	MESSAGE("IrCOMM protocol (Dag Brattli)\n");
@@ -463,13 +462,12 @@ void ircomm_flow_request(struct ircomm_cb *self, LOCAL_FLOW flow)
 
 #ifdef CONFIG_PROC_FS
 /*
- * Function ircomm_proc_read (buf, start, offset, len, unused)
+ * Function ircomm_proc_read (buf, start, offset, len)
  *
  *    
  *
  */
-int ircomm_proc_read(char *buf, char **start, off_t offset, int len, 
-		     int unused)
+int ircomm_proc_read(char *buf, char **start, off_t offset, int len)
 { 	
 	struct ircomm_cb *self;
 	unsigned long flags;

@@ -1628,7 +1628,7 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	return 0;
 }
 
-static int ax25_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+static int ax25_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	ax25_cb *ax25;
 	int k;

@@ -107,7 +107,7 @@ void fib_flush(void)
  */
  
 static int
-fib_get_procinfo(char *buffer, char **start, off_t offset, int length, int dummy)
+fib_get_procinfo(char *buffer, char **start, off_t offset, int length)
 {
 	int first = offset/128;
 	char *ptr = buffer;

@@ -119,12 +119,12 @@ struct linux_mib net_statistics;
 
 atomic_t inet_sock_nr;
 
-extern int raw_get_info(char *, char **, off_t, int, int);
-extern int snmp_get_info(char *, char **, off_t, int, int);
-extern int netstat_get_info(char *, char **, off_t, int, int);
-extern int afinet_get_info(char *, char **, off_t, int, int);
-extern int tcp_get_info(char *, char **, off_t, int, int);
-extern int udp_get_info(char *, char **, off_t, int, int);
+extern int raw_get_info(char *, char **, off_t, int);
+extern int snmp_get_info(char *, char **, off_t, int);
+extern int netstat_get_info(char *, char **, off_t, int);
+extern int afinet_get_info(char *, char **, off_t, int);
+extern int tcp_get_info(char *, char **, off_t, int);
+extern int udp_get_info(char *, char **, off_t, int);
 extern void ip_mc_drop_socket(struct sock *sk);
 
 #ifdef CONFIG_DLCI

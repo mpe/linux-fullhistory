@@ -1171,7 +1171,7 @@ static int x25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	return 0;
 }
 
-static int x25_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+static int x25_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	struct sock *s;
 	struct net_device *dev;

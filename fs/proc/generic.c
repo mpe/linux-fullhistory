@@ -16,8 +16,6 @@
 #include <linux/stat.h>
 #include <asm/bitops.h>
 
-extern struct inode_operations proc_dyna_dir_inode_operations;
-
 static ssize_t proc_file_read(struct file * file, char * buf,
 			      size_t nbytes, loff_t *ppos);
 static ssize_t proc_file_write(struct file * file, const char * buffer,
@@ -37,37 +35,10 @@ static struct file_operations proc_file_operations = {
     proc_file_lseek,	/* lseek   */
     proc_file_read,	/* read	   */
     proc_file_write,	/* write   */
-    NULL,		/* readdir */
-    NULL,		/* poll    */
-    NULL,		/* ioctl   */
-    NULL,		/* mmap	   */
-    NULL,		/* no special open code	   */
-    NULL,		/* flush */
-    NULL,		/* no special release code */
-    NULL		/* can't fsync */
 };
 
-struct inode_operations proc_file_inode_operations = {
+static struct inode_operations proc_file_inode_operations = {
 	&proc_file_operations,  /* default proc file-ops */
-	NULL,		/* create	*/
-	NULL,		/* lookup	*/
-	NULL,		/* link		*/
-	NULL,		/* unlink	*/
-	NULL,		/* symlink	*/
-	NULL,		/* mkdir	*/
-	NULL,		/* rmdir	*/
-	NULL,		/* mknod	*/
-	NULL,		/* rename	*/
-	NULL,		/* readlink	*/
-	NULL,		/* follow_link 	*/
-	NULL,		/* get_block 	*/
-	NULL,		/* readpage 	*/
-	NULL,		/* writepage 	*/
-	NULL,		/* flushpage 	*/
-	NULL,		/* truncate 	*/
-	NULL,		/* permission 	*/
-	NULL,		/* smap 	*/
-	NULL		/* revalidate 	*/
 };
 
 #ifndef MIN
@@ -101,12 +72,8 @@ proc_file_read(struct file * file, char * buf, size_t nbytes, loff_t *ppos)
 			/*
 			 * Handle backwards compatibility with the old net
 			 * routines.
-			 * 
-			 * XXX What gives with the file->f_flags & O_ACCMODE
-			 * test?  Seems stupid to me....
 			 */
-			n = dp->get_info(page, &start, *ppos, count,
-				 (file->f_flags & O_ACCMODE) == O_RDWR);
+			n = dp->get_info(page, &start, *ppos, count);
 			if (n < count)
 				eof = 1;
 		} else if (dp->read_proc) {
@@ -114,7 +81,7 @@ proc_file_read(struct file * file, char * buf, size_t nbytes, loff_t *ppos)
 					  count, &eof, dp->data);
 		} else
 			break;
-			
+
 		if (!start) {
 			/*
 			 * For proc files that are less than 4k
@@ -221,6 +188,340 @@ static int xlate_proc_name(const char *name,
 	return 0;
 }
 
+static unsigned char proc_alloc_map[PROC_NDYNAMIC / 8] = {0};
+
+static int make_inode_number(void)
+{
+	int i = find_first_zero_bit((void *) proc_alloc_map, PROC_NDYNAMIC);
+	if (i<0 || i>=PROC_NDYNAMIC) 
+		return -1;
+	set_bit(i, (void *) proc_alloc_map);
+	return PROC_DYNAMIC_FIRST + i;
+}
+
+static int proc_readlink(struct dentry * dentry, char * buffer, int buflen)
+{
+	struct inode *inode = dentry->d_inode;
+	struct proc_dir_entry * de;
+	int len;
+	de = (struct proc_dir_entry *) inode->u.generic_ip;
+	len = de->size+1;
+	if (len > buflen)
+		len = buflen;
+	copy_to_user(buffer, de->data, len);
+	return len;
+}
+
+struct dentry * proc_follow_link(struct dentry * dentry, struct dentry *base, unsigned int follow)
+{
+	struct inode *inode = dentry->d_inode;
+	struct proc_dir_entry * de;
+	de = (struct proc_dir_entry *) inode->u.generic_ip;
+	return lookup_dentry(de->data, base, follow);
+}
+
+static struct inode_operations proc_link_inode_operations = {
+	NULL,			/* no file-ops */
+	NULL,			/* create */
+	NULL,			/* lookup */
+	NULL,			/* link */
+	NULL,			/* unlink */
+	NULL,			/* symlink */
+	NULL,			/* mkdir */
+	NULL,			/* rmdir */
+	NULL,			/* mknod */
+	NULL,			/* rename */
+	proc_readlink,		/* readlink */
+	proc_follow_link,	/* follow_link */
+};
+
+/*
+ * As some entries in /proc are volatile, we want to 
+ * get rid of unused dentries.  This could be made 
+ * smarter: we could keep a "volatile" flag in the 
+ * inode to indicate which ones to keep.
+ */
+static void
+proc_delete_dentry(struct dentry * dentry)
+{
+	d_drop(dentry);
+}
+
+static struct dentry_operations proc_dentry_operations =
+{
+	NULL,			/* revalidate */
+	NULL,			/* d_hash */
+	NULL,			/* d_compare */
+	proc_delete_dentry	/* d_delete(struct dentry *) */
+};
+
+/*
+ * Don't create negative dentries here, return -ENOENT by hand
+ * instead.
+ */
+struct dentry *proc_lookup(struct inode * dir, struct dentry *dentry)
+{
+	struct inode *inode;
+	struct proc_dir_entry * de;
+	int error;
+
+	error = -ENOENT;
+	inode = NULL;
+	de = (struct proc_dir_entry *) dir->u.generic_ip;
+	if (de) {
+		for (de = de->subdir; de ; de = de->next) {
+			if (!de || !de->low_ino)
+				continue;
+			if (de->namelen != dentry->d_name.len)
+				continue;
+			if (!memcmp(dentry->d_name.name, de->name, de->namelen)) {
+				int ino = de->low_ino;
+				error = -EINVAL;
+				inode = proc_get_inode(dir->i_sb, ino, de);
+				break;
+			}
+		}
+	}
+
+	if (inode) {
+		dentry->d_op = &proc_dentry_operations;
+		d_add(dentry, inode);
+		return NULL;
+	}
+	return ERR_PTR(error);
+}
+
+/*
+ * This returns non-zero if at EOF, so that the /proc
+ * root directory can use this and check if it should
+ * continue with the <pid> entries..
+ *
+ * Note that the VFS-layer doesn't care about the return
+ * value of the readdir() call, as long as it's non-negative
+ * for success..
+ */
+int proc_readdir(struct file * filp,
+	void * dirent, filldir_t filldir)
+{
+	struct proc_dir_entry * de;
+	unsigned int ino;
+	int i;
+	struct inode *inode = filp->f_dentry->d_inode;
+
+	ino = inode->i_ino;
+	de = (struct proc_dir_entry *) inode->u.generic_ip;
+	if (!de)
+		return -EINVAL;
+	i = filp->f_pos;
+	switch (i) {
+		case 0:
+			if (filldir(dirent, ".", 1, i, ino) < 0)
+				return 0;
+			i++;
+			filp->f_pos++;
+			/* fall through */
+		case 1:
+			if (filldir(dirent, "..", 2, i,
+				    filp->f_dentry->d_parent->d_inode->i_ino
+				   ) < 0)
+				return 0;
+			i++;
+			filp->f_pos++;
+			/* fall through */
+		default:
+			de = de->subdir;
+			i -= 2;
+			for (;;) {
+				if (!de)
+					return 1;
+				if (!i)
+					break;
+				de = de->next;
+				i--;
+			}
+
+			do {
+				if (filldir(dirent, de->name, de->namelen, filp->f_pos, de->low_ino) < 0)
+					return 0;
+				filp->f_pos++;
+				de = de->next;
+			} while (de);
+	}
+	return 1;
+}
+
+/*
+ * These are the generic /proc directory operations. They
+ * use the in-memory "struct proc_dir_entry" tree to parse
+ * the /proc directory.
+ */
+static struct file_operations proc_dir_operations = {
+	NULL,			/* lseek - default */
+	NULL,			/* read - bad */
+	NULL,			/* write - bad */
+	proc_readdir,		/* readdir */
+};
+
+/*
+ * proc directories can do almost nothing..
+ */
+struct inode_operations proc_dir_inode_operations = {
+	&proc_dir_operations,	/* default net directory file-ops */
+	NULL,			/* create */
+	proc_lookup,		/* lookup */
+};
+
+int proc_register(struct proc_dir_entry * dir, struct proc_dir_entry * dp)
+{
+	int	i;
+	
+	i = make_inode_number();
+	if (i < 0)
+		return -EAGAIN;
+	dp->low_ino = i;
+	dp->next = dir->subdir;
+	dp->parent = dir;
+	dir->subdir = dp;
+	if (S_ISDIR(dp->mode)) {
+		if (dp->ops == NULL)
+			dp->ops = &proc_dir_inode_operations;
+		dir->nlink++;
+	} else if (S_ISLNK(dp->mode)) {
+		if (dp->ops == NULL)
+			dp->ops = &proc_link_inode_operations;
+	} else if (S_ISREG(dp->mode)) {
+		if (dp->ops == NULL)
+			dp->ops = &proc_file_inode_operations;
+	}
+	return 0;
+}
+
+/*
+ * Kill an inode that got unregistered..
+ */
+static void proc_kill_inodes(struct proc_dir_entry *de)
+{
+	struct list_head *p;
+	struct super_block *sb;
+
+	/*
+	 * Actually it's a partial revoke(). We have to go through all
+	 * copies of procfs. proc_super_blocks is protected by the big
+	 * lock for the time being.
+	 */
+	for (sb = proc_super_blocks;
+	     sb;
+	     sb = (struct super_block*)sb->u.generic_sbp) {
+		file_list_lock();
+		for (p = sb->s_files.next; p != &sb->s_files; p = p->next) {
+			struct file * filp = list_entry(p, struct file, f_list);
+			struct dentry * dentry;
+			struct inode * inode;
+
+			dentry = filp->f_dentry;
+			if (!dentry)
+				continue;
+			if (dentry->d_op != &proc_dentry_operations)
+				continue;
+			inode = dentry->d_inode;
+			if (!inode)
+				continue;
+			if (inode->u.generic_ip != de)
+				continue;
+			filp->f_op = NULL;
+		}
+		file_list_unlock();
+	}
+}
+
+struct proc_dir_entry *proc_symlink(const char *name,
+		struct proc_dir_entry *parent, char *dest)
+{
+	struct proc_dir_entry *ent = NULL;
+	const char *fn = name;
+	int len;
+
+	if (!parent && xlate_proc_name(name, &parent, &fn) != 0)
+		goto out;
+	len = strlen(fn);
+
+	ent = kmalloc(sizeof(struct proc_dir_entry) + len + 1, GFP_KERNEL);
+	if (!ent)
+		goto out;
+	memset(ent, 0, sizeof(struct proc_dir_entry));
+	memcpy(((char *) ent) + sizeof(*ent), fn, len + 1);
+	ent->name = ((char *) ent) + sizeof(*ent);
+	ent->namelen = len;
+	ent->nlink = 1;
+	ent->mode = S_IFLNK|S_IRUGO|S_IWUGO|S_IXUGO;
+	ent->data = kmalloc((ent->size=strlen(dest))+1, GFP_KERNEL);
+	if (!ent->data) {
+		kfree(ent);
+		goto out;
+	}
+	strcpy((char*)ent->data,dest);
+
+	proc_register(parent, ent);
+	
+out:
+	return ent;
+}
+
+struct proc_dir_entry *proc_mknod(const char *name, mode_t mode,
+		struct proc_dir_entry *parent, kdev_t rdev)
+{
+	struct proc_dir_entry *ent = NULL;
+	const char *fn = name;
+	int len;
+
+	if (!parent && xlate_proc_name(name, &parent, &fn) != 0)
+		goto out;
+	len = strlen(fn);
+
+	ent = kmalloc(sizeof(struct proc_dir_entry) + len + 1, GFP_KERNEL);
+	if (!ent)
+		goto out;
+	memset(ent, 0, sizeof(struct proc_dir_entry));
+	memcpy(((char *) ent) + sizeof(*ent), fn, len + 1);
+	ent->name = ((char *) ent) + sizeof(*ent);
+	ent->namelen = len;
+	ent->nlink = 1;
+	ent->mode = mode;
+	ent->rdev = rdev;
+
+	proc_register(parent, ent);
+	
+out:
+	return ent;
+}
+
+struct proc_dir_entry *proc_mkdir(const char *name, struct proc_dir_entry *parent)
+{
+	struct proc_dir_entry *ent = NULL;
+	const char *fn = name;
+	int len;
+
+	if (!parent && xlate_proc_name(name, &parent, &fn) != 0)
+		goto out;
+	len = strlen(fn);
+
+	ent = kmalloc(sizeof(struct proc_dir_entry) + len + 1, GFP_KERNEL);
+	if (!ent)
+		goto out;
+	memset(ent, 0, sizeof(struct proc_dir_entry));
+	memcpy(((char *) ent) + sizeof(*ent), fn, len + 1);
+	ent->name = ((char *) ent) + sizeof(*ent);
+	ent->namelen = len;
+	ent->ops = &proc_dir_inode_operations;
+	ent->nlink = 2;
+	ent->mode = S_IFDIR | S_IRUGO | S_IXUGO;
+
+	proc_register(parent, ent);
+	
+out:
+	return ent;
+}
+
 struct proc_dir_entry *create_proc_entry(const char *name, mode_t mode,
 					 struct proc_dir_entry *parent)
 {
@@ -243,7 +544,7 @@ struct proc_dir_entry *create_proc_entry(const char *name, mode_t mode,
 	if (S_ISDIR(mode)) {
 		if ((mode & S_IALLUGO) == 0)
 		mode |= S_IRUGO | S_IXUGO;
-		ent->ops = &proc_dyna_dir_inode_operations;
+		ent->ops = &proc_dir_inode_operations;
 		ent->nlink = 2;
 	} else {
 		if ((mode & S_IFMT) == 0)
@@ -260,14 +561,16 @@ out:
 	return ent;
 }
 
-extern void free_proc_entry(struct proc_dir_entry *);
 void free_proc_entry(struct proc_dir_entry *de)
 {
 	int ino = de->low_ino;
 
-	if (ino >= PROC_DYNAMIC_FIRST &&
-	    ino < PROC_DYNAMIC_FIRST+PROC_NDYNAMIC)
-		kfree(de);
+	if (ino < PROC_DYNAMIC_FIRST &&
+	    ino >= PROC_DYNAMIC_FIRST+PROC_NDYNAMIC)
+		return;
+	if (S_ISLNK(de->mode) && de->data)
+		kfree(de->data);
+	kfree(de);
 }
 
 /*
@@ -276,6 +579,7 @@ void free_proc_entry(struct proc_dir_entry *de)
  */
 void remove_proc_entry(const char *name, struct proc_dir_entry *parent)
 {
+	struct proc_dir_entry **p;
 	struct proc_dir_entry *de;
 	const char *fn = name;
 	int len;
@@ -283,14 +587,17 @@ void remove_proc_entry(const char *name, struct proc_dir_entry *parent)
 	if (!parent && xlate_proc_name(name, &parent, &fn) != 0)
 		goto out;
 	len = strlen(fn);
-
-	for (de = parent->subdir; de ; de = de->next) {
-		if (proc_match(len, fn, de))
-			break;
-	}
-
-	if (de) {
-		proc_unregister(parent, de->low_ino);
+	for (p = &parent->subdir; *p; p=&(*p)->next ) {
+		if (!proc_match(len, fn, *p))
+			continue;
+		de = *p;
+		*p = de->next;
+		de->next = NULL;
+		if (S_ISDIR(de->mode))
+			parent->nlink--;
+		clear_bit(de->low_ino-PROC_DYNAMIC_FIRST,
+				(void *) proc_alloc_map);
+		proc_kill_inodes(de);
 		de->nlink = 0;
 		de->deleted = 1;
 		if (!de->count)
@@ -299,6 +606,7 @@ void remove_proc_entry(const char *name, struct proc_dir_entry *parent)
 			printk("remove_proc_entry: %s/%s busy, count=%d\n",
 				parent->name, de->name, de->count);
 		}
+		break;
 	}
 out:
 	return;

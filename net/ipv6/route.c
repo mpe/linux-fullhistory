@@ -1809,8 +1809,7 @@ static int rt6_info_route(struct rt6_info *rt, void *p_arg)
 	return 0;
 }
 
-static int rt6_proc_info(char *buffer, char **start, off_t offset, int length,
-			 int dummy)
+static int rt6_proc_info(char *buffer, char **start, off_t offset, int length)
 {
 	struct rt6_proc_arg arg;
 	arg.buffer = buffer;
@@ -1839,8 +1838,7 @@ static int rt6_proc_info(char *buffer, char **start, off_t offset, int length,
 
 extern struct rt6_statistics rt6_stats;
 
-static int rt6_proc_stats(char *buffer, char **start, off_t offset, int length,
-			  int dummy)
+static int rt6_proc_stats(char *buffer, char **start, off_t offset, int length)
 {
 	int len;
 

@@ -161,10 +161,9 @@ void proc_tty_unregister_driver(struct tty_driver *driver)
 	if (!ent)
 		return;
 		
-	proc_unregister(proc_tty_driver, ent->low_ino);
+	remove_proc_entry(driver->driver_name, proc_tty_driver);
 	
 	driver->proc_entry = 0;
-	kfree(ent);
 }
 
 /*

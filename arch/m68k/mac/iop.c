@@ -51,6 +51,9 @@
  *   IOP hasn't died.
  * o Some of the IOP manager routines need better error checking and
  *   return codes. Nothing major, just prettying up.
+ *
+ * + share the stuff you were smoking when you wrote the iop_get_proc_info()
+ *   for case when CONFIG_PROC_FS is undefined.
  */
 
 /*
@@ -125,9 +128,10 @@
 int iop_scc_present,iop_ism_present;
 
 #ifdef CONFIG_PROC_FS
-static int iop_get_proc_info(char *, char **, off_t, int, int);
+static int iop_get_proc_info(char *, char **, off_t, int);
 #else
-static int iop_get_proc_info(char *, char **, off_t, int, int) {}
+/* What the bloody hell is THAT ??? */
+static int iop_get_proc_info(char *, char **, off_t, int) {}
 #endif /* CONFIG_PROC_FS */
 
 /* structure for tracking channel listeners */
@@ -670,7 +674,7 @@ int iop_dump_one_iop(char *buf, int iop_num, char *iop_name)
 	return len;
 }
  
-int iop_get_proc_info(char *buf, char **start, off_t pos, int count, int wr)
+static int iop_get_proc_info(char *buf, char **start, off_t pos, int count)
 {
 	int len, cnt;
 

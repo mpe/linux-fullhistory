@@ -236,7 +236,7 @@ int ax25_rt_ioctl(unsigned int cmd, void *arg)
 	return 0;
 }
 
-int ax25_rt_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+int ax25_rt_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	ax25_route *ax25_rt;
 	int len     = 0;

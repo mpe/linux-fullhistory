@@ -17,7 +17,6 @@
  */
 
 #include "udfdecl.h"
-#include "udf_sb.h"
 
 #if defined(__linux__) && defined(__KERNEL__)
 

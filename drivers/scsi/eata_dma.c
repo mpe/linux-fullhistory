@@ -1281,7 +1281,7 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
     hd->channel = gc->MAX_CHAN;	    
     sh->max_channel = gc->MAX_CHAN; 
     sh->unique_id = base;
-    sh->base = (char *) base;
+    sh->base = base;
     sh->io_port = base;
     sh->n_io_port = 9;
     sh->irq = gc->IRQ;

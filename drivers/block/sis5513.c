@@ -106,8 +106,8 @@ static __inline__ char * find_udma_mode (byte cycle_time)
 #include <linux/stat.h>
 #include <linux/proc_fs.h>
 
-static int sis_get_info(char *, char **, off_t, int, int);
-extern int (*sis_display_info)(char *, char **, off_t, int, int); /* ide-proc.c */
+static int sis_get_info(char *, char **, off_t, int);
+extern int (*sis_display_info)(char *, char **, off_t, int); /* ide-proc.c */
 struct pci_dev *bmide_dev;
 
 static char *cable_type[] = {
@@ -140,7 +140,7 @@ static char *active_time [] = {
 	"6 PCICLK", "12 PCICLK"
 };
 
-static int sis_get_info (char *buffer, char **addr, off_t offset, int count, int dummy)
+static int sis_get_info (char *buffer, char **addr, off_t offset, int count)
 {
 	int rc;
 	char *p = buffer;

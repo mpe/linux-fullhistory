@@ -129,7 +129,7 @@ int ax25_uid_ioctl(int cmd, struct sockaddr_ax25 *sax)
 	return -EINVAL;	/*NOTREACHED */
 }
 
-int ax25_uid_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+int ax25_uid_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	ax25_uid_assoc *pt;
 	int len     = 0;

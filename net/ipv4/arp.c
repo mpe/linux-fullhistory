@@ -1003,11 +1003,11 @@ out:
  *	Write the contents of the ARP cache to a PROCfs file.
  */
 #ifndef CONFIG_PROC_FS
-static int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy) { return 0; }
+static int arp_get_info(char *buffer, char **start, off_t offset, int length) { return 0; }
 #else
 #define HBUFFERLEN 30
 
-static int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+static int arp_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	int len=0;
 	off_t pos=0;

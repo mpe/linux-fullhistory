@@ -26,7 +26,7 @@
 #include <net/transp_v6.h>
 #include <net/ipv6.h>
 
-int afinet6_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+int afinet6_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	int len = 0;
 	len += sprintf(buffer+len, "TCP6: inuse %d highest %d\n",
@@ -122,8 +122,7 @@ struct snmp6_item
 };
 
 
-int afinet6_get_snmp(char *buffer, char **start, off_t offset, int length,
-		     int dummy)
+int afinet6_get_snmp(char *buffer, char **start, off_t offset, int length)
 {
 	int len = 0;
 	int i;

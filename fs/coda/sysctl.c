@@ -285,7 +285,7 @@ int do_reset_coda_cache_inv_stats( ctl_table * table, int write,
 }
 
 int coda_vfs_stats_get_info( char * buffer, char ** start, off_t offset,
-			     int length, int dummy )
+			     int length)
 {
 	int len=0;
 	off_t begin;
@@ -352,7 +352,7 @@ int coda_vfs_stats_get_info( char * buffer, char ** start, off_t offset,
 }
 
 int coda_upcall_stats_get_info( char * buffer, char ** start, off_t offset,
-				int length, int dummy )
+				int length)
 {
 	int len=0;
 	int i;
@@ -399,7 +399,7 @@ int coda_upcall_stats_get_info( char * buffer, char ** start, off_t offset,
 }
 
 int coda_permission_stats_get_info( char * buffer, char ** start, off_t offset,
-				    int length, int dummy )
+				    int length)
 {
 	int len=0;
 	off_t begin;
@@ -428,7 +428,7 @@ int coda_permission_stats_get_info( char * buffer, char ** start, off_t offset,
 }
 
 int coda_cache_inv_stats_get_info( char * buffer, char ** start, off_t offset,
-				   int length, int dummy )
+				   int length)
 {
 	int len=0;
 	off_t begin;

@@ -38,8 +38,7 @@ static void extent_trunc(struct inode * inode, lb_addr bloc, int *extoffset,
 	lb_addr neloc = { 0, 0 };
 	int nelen = 0;
 	int blocks = inode->i_sb->s_blocksize / 512;
-	int last_block = (elen + inode->i_sb->s_blocksize - 1) / inode->i_sb->s_blocksize;
-
+	int last_block = (elen + inode->i_sb->s_blocksize - 1) >> inode->i_sb->s_blocksize_bits;
 
 	if (offset)
 	{

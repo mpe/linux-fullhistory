@@ -584,13 +584,12 @@ static void unregister_proc_table(ctl_table * table, struct proc_dir_entry *root
 				continue;
 		}
 
-		/* Don't unregoster proc entries that are still being used.. */
+		/* Don't unregister proc entries that are still being used.. */
 		if (de->count)
 			continue;
 
-		proc_unregister(root, de->low_ino);
 		table->de = NULL;
-		kfree(de);
+		remove_proc_entry(table->procname, root);
 	}
 }
 

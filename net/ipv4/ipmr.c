@@ -1576,7 +1576,7 @@ int ipmr_get_route(struct sk_buff *skb, struct rtmsg *rtm, int nowait)
  *	The /proc interfaces to multicast routing /proc/ip_mr_cache /proc/ip_mr_vif
  */
  
-int ipmr_vif_info(char *buffer, char **start, off_t offset, int length, int dummy)
+static int ipmr_vif_info(char *buffer, char **start, off_t offset, int length)
 {
 	struct vif_device *vif;
 	int len=0;
@@ -1622,7 +1622,7 @@ int ipmr_vif_info(char *buffer, char **start, off_t offset, int length, int dumm
   	return len;
 }
 
-int ipmr_mfc_info(char *buffer, char **start, off_t offset, int length, int dummy)
+static int ipmr_mfc_info(char *buffer, char **start, off_t offset, int length)
 {
 	struct mfc_cache *mfc;
 	int len=0;

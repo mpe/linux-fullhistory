@@ -58,11 +58,10 @@
  *
  */
 
-#define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
-
 #include <linux/config.h>
 #include <linux/module.h>
 
+#include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/string.h>
@@ -74,9 +73,9 @@
 #include <linux/mca.h>
 #include <asm/dma.h>
 #include <asm/system.h>
-#if LINUX_VERSION_CODE >= LinuxVersionCode(2,3,17)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,17)
 #include <linux/spinlock.h>
-#elif LINUX_VERSION_CODE >= LinuxVersionCode(2,1,93)
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,93)
 #include <asm/spinlock.h>
 #endif
 #include <asm/io.h>
@@ -291,8 +290,9 @@ static __inline__ void run_process_issue_queue(struct sim710_hostdata *);
 static void process_issue_queue (struct sim710_hostdata *, unsigned long flags);
 static int full_reset(struct Scsi_Host * host);
 
+
 /*
- * Function: void sim710_setup(char *str, int *ints)
+ * Function: int param_setup(char *str)
  */
 
 #ifdef MODULE
@@ -301,8 +301,8 @@ static int full_reset(struct Scsi_Host * host);
 #define ARG_SEP ','
 #endif
 
-void
-sim710_setup(char *str, int *ints)
+static int
+param_setup(char *str)
 {
     char *cur = str;
     char *pc, *pv;
@@ -340,7 +340,7 @@ sim710_setup(char *str, int *ints)
 	    opt_noneg = val;
 	else if	(!strncmp(cur, "disabled:", 5)) {
 	    no_of_boards = -1;
-	    return;
+	    return 1;
 	}
 #ifdef DEBUG
 	else if (!strncmp(cur, "debug:", 6)) {
@@ -348,18 +348,27 @@ sim710_setup(char *str, int *ints)
 	}
 #endif
 	else
-	    printk("sim710_setup: unexpected boot option '%.*s' ignored\n", (int)(pc-cur+1), cur);
+	    printk("sim710: unexpected boot option '%.*s' ignored\n", (int)(pc-cur+1), cur);
 
 	if ((cur = strchr(cur, ARG_SEP)) != NULL)
 	    ++cur;
     }
+    return 1;
 }
 
-#if LINUX_VERSION_CODE >= LinuxVersionCode(2,3,13)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,13)
 #ifndef MODULE
-__setup("sim710=", sim710_setup);
+__setup("sim710=", param_setup);
 #endif
+#else
+/* Old boot param syntax support */
+void
+sim710_setup(char *str, int *ints)
+{
+    param_setup(str);
+}
 #endif
+
 
 /*
  * Function: static const char *sbcl_to_phase (int sbcl)
@@ -1324,7 +1333,7 @@ sim710_detect(Scsi_Host_Template * tpnt)
 
 #ifdef MODULE
     if (sim710)
-	sim710_setup(sim710, (int *)0);
+	param_setup(sim710);
 #endif
 
     if (no_of_boards < 0) {
@@ -1462,7 +1471,7 @@ sim710_detect(Scsi_Host_Template * tpnt)
 	host->irq = irq_vector;
 	host->this_id = scsi_id;
 	host->unique_id = base_addr;
-	host->base = (char *)base_addr;
+	host->base = base_addr;
 
 	ncr_halt(host);
 

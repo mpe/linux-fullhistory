@@ -217,7 +217,7 @@ int x25_route_ioctl(unsigned int cmd, void *arg)
 	return 0;
 }
 
-int x25_routes_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+int x25_routes_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	struct x25_route *x25_route;
 	int len     = 0;

@@ -865,7 +865,7 @@ static int ecard_prints(char *buffer, ecard_t *ec)
 	return buffer - start;
 }
 
-int get_ecard_dev_info(char *buf, char **start, off_t pos, int count, int wr)
+static int get_ecard_dev_info(char *buf, char **start, off_t pos, int count)
 {
 	ecard_t *ec = cards;
 	off_t at = 0;

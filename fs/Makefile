@@ -265,14 +265,6 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_BINFMT_ELF),y)
-BINFMTS += binfmt_elf.o
-else
-  ifeq ($(CONFIG_BINFMT_ELF),m)
-  M_OBJS += binfmt_elf.o
-  endif
-endif
-
 ifeq ($(CONFIG_BINFMT_AOUT),y)
 BINFMTS += binfmt_aout.o
 else
@@ -289,7 +281,6 @@ else
   endif
 endif
 
-
 ifeq ($(CONFIG_BINFMT_MISC),y)
 BINFMTS += binfmt_misc.o
 else
@@ -300,5 +291,13 @@ endif
 
 # binfmt_script is always there
 BINFMTS += binfmt_script.o
+
+ifeq ($(CONFIG_BINFMT_ELF),y)
+BINFMTS += binfmt_elf.o
+else
+  ifeq ($(CONFIG_BINFMT_ELF),m)
+  M_OBJS += binfmt_elf.o
+  endif
+endif
 
 include $(TOPDIR)/Rules.make

@@ -451,7 +451,7 @@ static char * bpq_print_ethaddr(unsigned char *e)
 	return buf;
 }
 
-int bpq_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+static int bpq_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	struct bpqdev *bpqdev;
 	int len     = 0;

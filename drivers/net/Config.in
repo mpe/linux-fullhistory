@@ -153,9 +153,9 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       fi
       tristate '    PCI NE2000 support' CONFIG_NE2K_PCI
       # tristate '    Sundance Alta support' CONFIG_ALTA
+      tristate '    SiS 900/7016 PCI Fast Ethernet Adapter support' CONFIG_SIS900
       tristate '    TI ThunderLAN support' CONFIG_TLAN
       tristate '    VIA Rhine support' CONFIG_VIA_RHINE
-      tristate '    SiS 900/7016 PCI Fast Ethernet Adapter support' CONFIG_SIS900
       if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 	 tristate '    Racal-Interlan EISA ES3210 support (EXPERIMENTAL)' CONFIG_ES3210
 	 tristate '    SMC EtherPower II (EXPERIMENTAL)' CONFIG_EPIC100
