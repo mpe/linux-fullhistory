@@ -771,6 +771,7 @@ start_up:
 	old_inode = iget(old_dir->i_dev, old_de->inode);
 	if (!old_inode)
 		goto end_rename;
+	retval = -EPERM;
 	if ((old_dir->i_mode & S_ISVTX) && 
 	    current->euid != old_inode->i_uid &&
 	    current->euid != old_dir->i_uid && !suser())
@@ -787,7 +788,7 @@ start_up:
 		retval = 0;
 		goto end_rename;
 	}
-	if (S_ISDIR(new_inode->i_mode)) {
+	if (new_inode && S_ISDIR(new_inode->i_mode)) {
 		retval = -EEXIST;
 		goto end_rename;
 	}

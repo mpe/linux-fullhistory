@@ -58,7 +58,7 @@ void coprocessor_error(void);
 void reserved(void);
 void alignment_check(void);
 
-static void die_if_kernel(char * str,long esp_ptr,long nr)
+/*static*/ void die_if_kernel(char * str,long esp_ptr,long nr)
 {
 	long * esp = (long *) esp_ptr;
 	int i;

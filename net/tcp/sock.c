@@ -651,6 +651,16 @@ ip_proto_listen(struct socket *sock, int backlog)
 	printk ("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return (0);
      }
+
+  /* we may need to bind the socket. */
+  if (sk->num == 0)
+    {
+      sk->num = get_new_socknum (sk->prot, 0);
+      if (sk->num == 0) return (-EAGAIN);
+      put_sock (sk->num, sk);
+      sk->dummy_th.source = net16(sk->num);
+    }
+
   sk->state = TCP_LISTEN;
   return (0);
 }
@@ -706,7 +716,7 @@ ip_proto_create (struct socket *sock, int protocol)
     {
     case SOCK_STREAM:
     case SOCK_SEQPACKET:
-       if (protocol && protocol != IP_TCP)
+       if (protocol && protocol != IPPROTO_TCP)
 	 {
 	    free_s ((void *)sk, sizeof (*sk));
 	    return (-EPROTONOSUPPORT);
@@ -716,7 +726,7 @@ ip_proto_create (struct socket *sock, int protocol)
        break;
 
     case SOCK_DGRAM:
-       if (protocol && protocol != IP_UDP)
+       if (protocol && protocol != IPPROTO_UDP)
 	 {
 	    free_s ((void *)sk, sizeof (*sk));
 	    return (-EPROTONOSUPPORT);
@@ -845,22 +855,17 @@ ip_proto_create (struct socket *sock, int protocol)
   sk->dummy_th.ack = 0;
   sk->dummy_th.urg = 0;
   sk->dummy_th.dest = 0;
+
   if (sk->num)
     {
-       put_sock (sk->num, sk);
+      /* it assumes that any protocol which allows
+	 the user to assign a number at socket
+	 creation time automatically
+	 shares. */
+      put_sock (sk->num, sk);
+      sk->dummy_th.source = net16(sk->num);
     }
-  else
-    {
-       sk->num = get_new_socknum(sk->prot, 0);
-    }
-  /* make sure there was a free socket. */
-  if (sk->num == 0)
-    {
-      destroy_sock(sk);
-      return (-EAGAIN);
-    }
-  put_sock(sk->num, sk);
-  sk->dummy_th.source = net16(sk->num);
+
   if (sk->prot->init)
     {
        err = sk->prot->init(sk);
@@ -922,6 +927,10 @@ ip_proto_release(struct socket *sock, struct socket *peer)
 }
 
 
+/* this needs to be changed to dissallow
+   the rebinding of sockets.   What error
+   should it return? */
+
 static int
 ip_proto_bind (struct socket *sock, struct sockaddr *uaddr,
 	       int addr_len)
@@ -929,6 +938,7 @@ ip_proto_bind (struct socket *sock, struct sockaddr *uaddr,
   struct sockaddr_in addr;
   volatile struct sock *sk, *sk2;
   unsigned short snum;
+
   sk = sock->data;
    if (sk == NULL)
      {
@@ -937,10 +947,13 @@ ip_proto_bind (struct socket *sock, struct sockaddr *uaddr,
      }
   /* check this error. */
   if (sk->state != TCP_CLOSE) return (-EIO);
+  if (sk->num != 0) return (-EINVAL);
+
   verify_area (uaddr, addr_len);
   memcpy_fromfs (&addr, uaddr, min (sizeof (addr), addr_len));
   if (addr.sin_family && addr.sin_family != AF_INET)
-    return (-EIO); /* this needs to be changed. */
+    return (-EINVAL); /* this needs to be changed. */
+
   snum = net16(addr.sin_port);
   PRINTK ("bind sk =%X to port = %d\n", sk, snum);
   print_sk (sk);
@@ -957,10 +970,11 @@ ip_proto_bind (struct socket *sock, struct sockaddr *uaddr,
     }
 
   if (snum <= PROT_SOCK && !suser())
-    return (-EPERM);
+    return (-EACCES);
 
   if (my_ip_addr(addr.sin_addr.s_addr) || addr.sin_addr.s_addr == 0)
     sk->saddr = addr.sin_addr.s_addr;
+
   PRINTK ("sock_array[%d] = %X:\n", snum & (SOCK_ARRAY_SIZE -1),
 	  sk->prot->sock_array[snum & (SOCK_ARRAY_SIZE -1)]);
   print_sk (sk->prot->sock_array[snum & (SOCK_ARRAY_SIZE -1)]);
@@ -996,6 +1010,16 @@ ip_proto_connect (struct socket *sock, struct sockaddr * uaddr,
 	printk ("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return (0);
      }
+
+  /* we may need to bind the socket. */
+  if (sk->num == 0)
+    {
+      sk->num = get_new_socknum (sk->prot, 0);
+      if (sk->num == 0) return (-EAGAIN);
+      put_sock (sk->num, sk);
+      sk->dummy_th.source = net16(sk->num);
+    }
+
   if (sk->prot->connect == NULL)
     return (-EOPNOTSUPP);
 
@@ -1059,7 +1083,11 @@ ip_proto_accept (struct socket *sock, struct socket *newsock, int flags)
     {
       sk2 = sk1->prot->accept (sk1,flags);
       if (sk2 == NULL)
-	return (-sk1->err);
+	{
+	  if (sk1->err <= 0)
+	    printk ("Warning sock.c:sk1->err <= 0.  Returning non-error.\n");
+	  return (-sk1->err);
+	}
     }
   newsock->data = (void *)sk2;
   sk2->sleep = (void *)newsock->wait;
@@ -1082,7 +1110,7 @@ ip_proto_accept (struct socket *sock, struct socket *newsock, int flags)
     }
   sti();
 
-  if (sk2->state != TCP_ESTABLISHED && sk2->err)
+  if (sk2->state != TCP_ESTABLISHED && sk2->err > 0)
     {
       int err;
       err = -sk2->err;
@@ -1143,6 +1171,16 @@ ip_proto_read (struct socket *sock, char *ubuf, int size, int noblock)
      }
   if (sk->shutdown & RCV_SHUTDOWN)
     return (-EIO);
+
+  /* we may need to bind the socket. */
+  if (sk->num == 0)
+    {
+      sk->num = get_new_socknum (sk->prot, 0);
+      if (sk->num == 0) return (-EAGAIN);
+      put_sock (sk->num, sk);
+      sk->dummy_th.source = net16(sk->num);
+    }
+
   return (sk->prot->read (sk, ubuf, size, noblock,0));
 }
 
@@ -1159,6 +1197,16 @@ ip_proto_recv (struct socket *sock, void *ubuf, int size, int noblock,
      }
   if (sk->shutdown & RCV_SHUTDOWN)
     return (-EIO);
+
+  /* we may need to bind the socket. */
+  if (sk->num == 0)
+    {
+      sk->num = get_new_socknum (sk->prot, 0);
+      if (sk->num == 0) return (-EAGAIN);
+      put_sock (sk->num, sk);
+      sk->dummy_th.source = net16(sk->num);
+    }
+
   return (sk->prot->read (sk, ubuf, size, noblock, flags));
 }
 
@@ -1174,6 +1222,16 @@ ip_proto_write (struct socket *sock, char *ubuf, int size, int noblock)
      }
   if (sk->shutdown & SEND_SHUTDOWN)
     return (-EIO);
+
+  /* we may need to bind the socket. */
+  if (sk->num == 0)
+    {
+      sk->num = get_new_socknum (sk->prot, 0);
+      if (sk->num == 0) return (-EAGAIN);
+      put_sock (sk->num, sk);
+      sk->dummy_th.source = net16(sk->num);
+    }
+
   return (sk->prot->write (sk, ubuf, size, noblock, 0));
 }
 
@@ -1191,6 +1249,16 @@ ip_proto_send (struct socket *sock, void *ubuf, int size, int noblock,
      }
   if (sk->shutdown & SEND_SHUTDOWN)
     return (-EIO);
+
+  /* we may need to bind the socket. */
+  if (sk->num == 0)
+    {
+      sk->num = get_new_socknum (sk->prot, 0);
+      if (sk->num == 0) return (-EAGAIN);
+      put_sock (sk->num, sk);
+      sk->dummy_th.source = net16(sk->num);
+    }
+
   return (sk->prot->write (sk, ubuf, size, noblock, flags));
 }
 
@@ -1209,6 +1277,16 @@ ip_proto_sendto (struct socket *sock, void *ubuf, int size, int noblock,
   if (sk->shutdown & SEND_SHUTDOWN)
     return (-EIO);
   if (sk->prot->sendto == NULL) return (-EOPNOTSUPP);
+
+  /* we may need to bind the socket. */
+  if (sk->num == 0)
+    {
+      sk->num = get_new_socknum (sk->prot, 0);
+      if (sk->num == 0) return (-EAGAIN);
+      put_sock (sk->num, sk);
+      sk->dummy_th.source = net16(sk->num);
+    }
+
   return (sk->prot->sendto (sk, ubuf, size, noblock, flags, 
 			    (struct sockaddr_in *)sin, addr_len));
 }
@@ -1227,6 +1305,16 @@ ip_proto_recvfrom (struct socket *sock, void *ubuf, int size, int noblock,
   if (sk->shutdown & RCV_SHUTDOWN)
     return (-EIO);
   if (sk->prot->recvfrom == NULL) return (-EOPNOTSUPP);
+
+  /* we may need to bind the socket. */
+  if (sk->num == 0)
+    {
+      sk->num = get_new_socknum (sk->prot, 0);
+      if (sk->num == 0) return (-EAGAIN);
+      put_sock (sk->num, sk);
+      sk->dummy_th.source = net16(sk->num);
+    }
+
   return (sk->prot->recvfrom (sk, ubuf, size, noblock, flags,
 			      (struct sockaddr_in*)sin, addr_len));
 }
@@ -1292,11 +1380,24 @@ ip_proto_ioctl (struct socket *sock, unsigned int cmd,
        if (!suser())
 	 return (-EPERM);
        return (ip_set_dev((struct ip_config *)arg));
-#if 0
-    case IP_ADD_ROUTE:
-      ip_add_route ((struct rtable *) arg);
-      return (0);
-#endif
+
+     case FIOSETOWN:
+     case SIOCSPGRP:
+        {
+	 long user;
+	 user = get_fs_long ((void *) arg);
+	 sk->proc = user;
+	 return (0);
+       }
+
+     case FIOGETOWN:
+     case SIOCGPGRP:
+       {
+	 verify_area ((void *)arg, sizeof (long));
+	 put_fs_long (sk->proc, (void *)arg);
+	 return (0);
+       }
+
     default:
        if (!sk->prot->ioctl)
 	 return (-EINVAL);

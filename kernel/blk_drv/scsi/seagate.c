@@ -364,10 +364,7 @@ static int internal_command(unsigned char target, const void *cmnd,
 	
 
 	if (target > 6)
-		{
-		if (reselect == RECONNECT_NOW)
 		return DID_BAD_TARGET;
-		}
 
 /*
  *	We work it differently depending on if this is is "the first time,"

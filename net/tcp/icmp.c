@@ -102,7 +102,7 @@ icmp_reply (struct sk_buff *skb_in,  int type, int code, struct device *dev)
 
    /* Build Layer 2-3 headers for message back to source */
    offset = ip_build_header( skb, iph->daddr, iph->saddr,
-			    &dev, IP_ICMP, NULL, len );
+			    &dev, IPPROTO_ICMP, NULL, len );
 
    if (offset < 0)
      {
@@ -235,7 +235,7 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 	skb->mem_len = size;
 
 	/* Build Layer 2-3 headers for message back to source */
-	offset = ip_build_header( skb, daddr, saddr, &dev, IP_ICMP, opt, len );
+	offset = ip_build_header( skb, daddr, saddr, &dev, IPPROTO_ICMP, opt, len );
 	if (offset < 0)
 	  {
 	     /* Problems building header */

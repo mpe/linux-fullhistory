@@ -28,7 +28,6 @@ typedef struct
 	unsigned 	ten:1;			/* support ten byte commands		*/
 	unsigned 	remap:1;		/* support remapping			*/
 	unsigned 	use:1;			/* is this device still supportable	*/
-	unsigned 	changed:1;		/* disk changed flag			*/
 	} Scsi_CD;
 	
 extern Scsi_CD scsi_CDs[MAX_SR];

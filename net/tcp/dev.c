@@ -188,8 +188,11 @@ dev_rint(unsigned char *buff, unsigned long len, int flags,
    if (len > 0 && buff != NULL)
      {
 	skb = malloc (sizeof (*skb) + len);
-	skb->mem_len = sizeof (*skb) + len;
-	skb->mem_addr = skb;
+	if (skb != NULL)
+	  {
+	    skb->mem_len = sizeof (*skb) + len;
+	    skb->mem_addr = skb;
+	  }
      }
 
    /* firs we copy the packet into a buffer, and save it for later. */

@@ -147,6 +147,29 @@ static void check_partition(struct gendisk *hd, unsigned int dev)
 	brelse(bh);
 }
 
+/* This function is used to re-read partition tables for removable disks.
+   Much of the cleanup from the old partition tables should have already been
+   done */
+
+/* This function will re-read the partition tables for a given device,
+and set things back up again.  There are some important caveats,
+however.  You must ensure that no one is using the device, and no one
+can start using the device while this function is being executed. */
+
+void resetup_one_dev(struct gendisk *dev, int drive)
+{
+	int i;
+	int start = drive<<dev->minor_shift;
+	int j = start + dev->max_p;
+	int major = dev->major << 8;
+
+	current_minor = 1+(drive<<dev->minor_shift);
+	check_partition(dev, major+(drive<<dev->minor_shift));
+
+	for (i=start ; i < j ; i++)
+		dev->sizes[i] = dev->part[i].nr_sects >> (BLOCK_SIZE_BITS - 9);
+}
+
 static void setup_dev(struct gendisk *dev)
 {
 	int i;

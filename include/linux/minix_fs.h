@@ -44,8 +44,6 @@ struct minix_dir_entry {
 	char name[MINIX_NAME_LEN];
 };
 
-extern int minix_open(struct inode * inode, struct file * filp);
-extern void minix_release(struct inode * inode, struct file * filp);
 extern int minix_lookup(struct inode * dir,const char * name, int len,
 	struct inode ** result);
 extern int minix_create(struct inode * dir,const char * name, int len, int mode,
@@ -78,11 +76,6 @@ extern void minix_read_inode(struct inode *);
 extern void minix_write_inode(struct inode *);
 extern void minix_put_inode(struct inode *);
 extern void minix_statfs(struct super_block *, struct statfs *);
-
-extern int minix_lseek(struct inode *, struct file *, off_t, int);
-extern int minix_read(struct inode *, struct file *, char *, int);
-extern int minix_write(struct inode *, struct file *, char *, int);
-extern int minix_file_read(struct inode *, struct file *, char *, int);
 
 extern struct inode_operations minix_file_inode_operations;
 extern struct inode_operations minix_dir_inode_operations;

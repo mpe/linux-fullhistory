@@ -173,6 +173,7 @@ struct file_operations read_pipe_fops = {
 	pipe_readdir,
 	pipe_select,
 	pipe_ioctl,
+	NULL,		/* no mmap on pipes.. surprise */
 	NULL,		/* no special open code */
 	pipe_read_release
 };
@@ -184,6 +185,7 @@ struct file_operations write_pipe_fops = {
 	pipe_readdir,
 	pipe_select,
 	pipe_ioctl,
+	NULL,		/* mmap */
 	NULL,		/* no special open code */
 	pipe_write_release
 };
@@ -195,6 +197,7 @@ struct file_operations rdwr_pipe_fops = {
 	pipe_readdir,
 	pipe_select,
 	pipe_ioctl,
+	NULL,		/* mmap */
 	NULL,		/* no special open code */
 	pipe_rdwr_release
 };

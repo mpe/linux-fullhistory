@@ -124,13 +124,20 @@ int core_dump(long signr, struct pt_regs * regs)
 	dump.u_ar0 = (struct pt_regs *)(((int)(&dump.regs)) -((int)(&dump)));
 	dump.signal = signr;
 	dump.regs = *regs;
-/* Flag indicating the math stuff is valid. */
-	if (dump.u_fpvalid = current->used_math) {
-		if (last_task_used_math == current)
-			__asm__("clts ; fnsave %0"::"m" (dump.i387));
-		else
-			memcpy(&dump.i387,&current->tss.i387,sizeof(dump.i387));
-	};
+/* Flag indicating the math stuff is valid. We don't support this for the
+   soft-float routines yet */
+	if (hard_math) {
+		if (dump.u_fpvalid = current->used_math) {
+			if (last_task_used_math == current)
+				__asm__("clts ; fnsave %0"::"m" (dump.i387));
+			else
+				memcpy(&dump.i387,&current->tss.i387.hard,sizeof(dump.i387));
+		}
+	} else {
+		/* we should dump the emulator state here, but we need to
+		   convert it into standard 387 format first.. */
+		dump.u_fpvalid = 0;
+	}
 	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x10));
 	DUMP_WRITE(&dump,sizeof(dump));
 	DUMP_SEEK(sizeof(dump));

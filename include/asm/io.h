@@ -15,7 +15,7 @@
 #ifdef SLOW_IO_BY_JUMPING
 #define __SLOW_DOWN_IO __asm__ __volatile__("jmp 1f\n1:\tjmp 1f\n1:")
 #else
-#define __SLOW_DOWN_IO __asm__ __volatile__("inb $0x61,%%al":::"ax")
+#define __SLOW_DOWN_IO __asm__ __volatile__("outb %al,$0x80")
 #endif
 
 #ifdef REALLY_SLOW_IO

@@ -36,6 +36,15 @@ struct sockaddr {
 #define MSG_OOB		1
 #define MSG_PEEK	2
 
+/* ioctl's */
+#define FIOSETOWN 	0x8901	 /* the 89 is for uniqueness.
+				    This should be somewhere else. */
+#define SIOCSPGRP	0x8902
+#define FIOGETOWN	0x8903   /* this too. */
+#define SIOCGPGRP	0x8904
+#define SIOCATMARK	0x8905
+
+
 /* for setsockoptions */
 #define SO_DEBUG	1
 #define SO_REUSEADDR	2

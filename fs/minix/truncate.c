@@ -183,13 +183,3 @@ void minix_truncate(struct inode * inode)
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 	inode->i_dirt = 1;
 }
-
-/*
- * Called when a inode is released. Note that this is different
- * from minix_open: open gets called at every open, but release
- * gets called only when /all/ the files are closed.
- */
-void minix_release(struct inode * inode, struct file * filp)
-{
-	printk("minix_release not implemented\n");
-}

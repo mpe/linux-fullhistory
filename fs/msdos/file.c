@@ -32,6 +32,7 @@ static struct file_operations msdos_file_operations = {
 	NULL,			/* readdir - bad */
 	NULL,			/* select - default */
 	NULL,			/* ioctl - default */
+	NULL,			/* mmap */
 	NULL,			/* no special open is needed */
 	NULL			/* release */
 };

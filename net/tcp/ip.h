@@ -24,7 +24,8 @@
 
 #include "dev.h"
 #include <linux/sock_ioctl.h>
-#include <netinet/protocols.h>
+/* #include <netinet/protocols.h>*/
+#include <netinet/in.h>
 
 struct rtable
 {

@@ -83,7 +83,7 @@ enum {
 			  checksum . */
 
 void print_th (struct tcp_header *);
-#define HEADER_SIZE 64
+#define HEADER_SIZE 100
 
 
  /* this next routines deal with comparing 32 bit unsigned ints and

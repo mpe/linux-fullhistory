@@ -19,7 +19,7 @@
 
 
 LOWLEVELCSRC = aha1542.c fdomain.c seagate.c ultrastor.c 7000fasst.c
-LOWLEVELHSRC = aha1542.h fdomain.h seagate.h ultrastor.h 7000fasst.o
+LOWLEVELHSRC = aha1542.h fdomain.h seagate.h ultrastor.h 7000fasst.h
  
 CSRC = hosts.c sd.c sd_ioctl.c st.c st_ioctl.c sr.c sr_ioctl.c scsi.c scsi_ioctl.c $(LOWLEVELCSRC)
 HSRC = hosts.h sd.h st.h sr.h sr_ioctl.h scsi.h scsi_ioctl.h $(LOWLEVELHSRC)
@@ -109,7 +109,8 @@ sd.o : sd.c /usr/include/linux/config.h /usr/include/linux/config.dist.h /usr/in
   /usr/include/linux/kernel.h /usr/include/linux/sched.h /usr/include/linux/head.h \
   /usr/include/linux/mm.h /usr/include/linux/signal.h /usr/include/linux/time.h \
   /usr/include/linux/param.h /usr/include/linux/resource.h /usr/include/linux/vm86.h \
-  /usr/include/linux/string.h scsi.h sd.h /usr/include/linux/genhd.h ../blk.h 
+  /usr/include/linux/string.h /usr/include/linux/errno.h /usr/include/asm/system.h \
+  scsi.h sd.h /usr/include/linux/genhd.h scsi_ioctl.h ../blk.h 
 sd_ioctl.o : sd_ioctl.c /usr/include/linux/config.h /usr/include/linux/config.dist.h \
   /usr/include/linux/kernel.h /usr/include/linux/sched.h /usr/include/linux/head.h \
   /usr/include/linux/fs.h /usr/include/linux/limits.h /usr/include/linux/wait.h \
@@ -120,15 +121,15 @@ sd_ioctl.o : sd_ioctl.c /usr/include/linux/config.h /usr/include/linux/config.di
   /usr/include/linux/time.h /usr/include/linux/param.h /usr/include/linux/resource.h \
   /usr/include/linux/vm86.h scsi.h sd.h /usr/include/linux/genhd.h 
 seagate.o : seagate.c /usr/include/linux/config.h /usr/include/linux/config.dist.h \
-  /usr/include/asm/io.h /usr/include/asm/system.h /usr/include/linux/sched.h /usr/include/linux/head.h \
-  /usr/include/linux/fs.h /usr/include/linux/limits.h /usr/include/linux/wait.h \
-  /usr/include/linux/types.h /usr/include/linux/dirent.h /usr/include/linux/vfs.h \
-  /usr/include/linux/pipe_fs_i.h /usr/include/linux/minix_fs_i.h /usr/include/linux/ext_fs_i.h \
-  /usr/include/linux/msdos_fs_i.h /usr/include/linux/minix_fs_sb.h /usr/include/linux/ext_fs_sb.h \
-  /usr/include/linux/msdos_fs_sb.h /usr/include/linux/mm.h /usr/include/linux/kernel.h \
-  /usr/include/linux/signal.h /usr/include/linux/time.h /usr/include/linux/param.h \
-  /usr/include/linux/resource.h /usr/include/linux/vm86.h seagate.h scsi.h hosts.h \
-  max_hosts.h 
+  /usr/include/asm/io.h /usr/include/asm/system.h /usr/include/linux/signal.h \
+  /usr/include/linux/sched.h /usr/include/linux/head.h /usr/include/linux/fs.h \
+  /usr/include/linux/limits.h /usr/include/linux/wait.h /usr/include/linux/types.h \
+  /usr/include/linux/dirent.h /usr/include/linux/vfs.h /usr/include/linux/pipe_fs_i.h \
+  /usr/include/linux/minix_fs_i.h /usr/include/linux/ext_fs_i.h /usr/include/linux/msdos_fs_i.h \
+  /usr/include/linux/minix_fs_sb.h /usr/include/linux/ext_fs_sb.h /usr/include/linux/msdos_fs_sb.h \
+  /usr/include/linux/mm.h /usr/include/linux/kernel.h /usr/include/linux/time.h \
+  /usr/include/linux/param.h /usr/include/linux/resource.h /usr/include/linux/vm86.h \
+  seagate.h scsi.h hosts.h max_hosts.h 
 sr.o : sr.c /usr/include/linux/config.h /usr/include/linux/config.dist.h /usr/include/linux/fs.h \
   /usr/include/linux/limits.h /usr/include/linux/wait.h /usr/include/linux/types.h \
   /usr/include/linux/dirent.h /usr/include/linux/vfs.h /usr/include/linux/pipe_fs_i.h \
@@ -137,7 +138,7 @@ sr.o : sr.c /usr/include/linux/config.h /usr/include/linux/config.dist.h /usr/in
   /usr/include/linux/kernel.h /usr/include/linux/sched.h /usr/include/linux/head.h \
   /usr/include/linux/mm.h /usr/include/linux/signal.h /usr/include/linux/time.h \
   /usr/include/linux/param.h /usr/include/linux/resource.h /usr/include/linux/vm86.h \
-  /usr/include/linux/string.h scsi.h sr.h ../blk.h 
+  /usr/include/linux/string.h scsi.h sr.h scsi_ioctl.h ../blk.h 
 sr_ioctl.o : sr_ioctl.c /usr/include/linux/config.h /usr/include/linux/config.dist.h \
   /usr/include/linux/kernel.h /usr/include/linux/sched.h /usr/include/linux/head.h \
   /usr/include/linux/fs.h /usr/include/linux/limits.h /usr/include/linux/wait.h \
@@ -147,7 +148,7 @@ sr_ioctl.o : sr_ioctl.c /usr/include/linux/config.h /usr/include/linux/config.di
   /usr/include/linux/msdos_fs_sb.h /usr/include/linux/mm.h /usr/include/linux/signal.h \
   /usr/include/linux/time.h /usr/include/linux/param.h /usr/include/linux/resource.h \
   /usr/include/linux/vm86.h /usr/include/asm/segment.h /usr/include/linux/errno.h \
-  ../blk.h scsi.h sr.h /usr/include/linux/cdrom.h 
+  ../blk.h scsi.h sr.h scsi_ioctl.h /usr/include/linux/cdrom.h 
 st.o : st.c /usr/include/linux/config.h /usr/include/linux/config.dist.h scsi.h \
   st.h /usr/include/linux/fs.h /usr/include/linux/limits.h /usr/include/linux/wait.h \
   /usr/include/linux/types.h /usr/include/linux/dirent.h /usr/include/linux/vfs.h \

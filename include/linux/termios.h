@@ -38,6 +38,9 @@
 #define TIOCPKT		0x5420
 #define FIONBIO		0x5421
 #define TIOCNOTTY	0x5422
+#define FIONCLEX	0x5450  /* these numbers need to be adjusted. */
+#define FIOCLEX		0x5451
+#define FIOASYNC	0x5452
 
 /* Used for packet mode */
 #define TIOCPKT_FLUSHREAD	 1
@@ -174,7 +177,8 @@ struct termios {
 #define HUPCL	0002000
 #define CLOCAL	0004000
 #define CIBAUD	03600000		/* input baud rate (not used) */
-#define CRTSCTS	020000000000		/* flow control */
+#define CNORTSCTS 010000000000		/* no flow control */
+#define CRTSCTS	  020000000000		/* flow control */
 
 /* c_lflag bits */
 #define ISIG	0000001

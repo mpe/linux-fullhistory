@@ -401,10 +401,12 @@ fake_volatile:
 
 		if (current->tty >= 0) {
 			tty = TTY_TABLE(current->tty);
-			if (tty->pgrp > 0)
-				kill_pg(tty->pgrp, SIGHUP, 1);
-			tty->pgrp = -1;
-			tty->session = 0;
+			if (tty) {
+				if (tty->pgrp > 0)
+					kill_pg(tty->pgrp, SIGHUP, 1);
+				tty->pgrp = -1;
+				tty->session = 0;
+			}
 		}
 	 	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p)
 			if (*p && (*p)->session == current->session)

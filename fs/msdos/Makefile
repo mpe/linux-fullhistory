@@ -62,7 +62,8 @@ inode.o : inode.c /usr/include/linux/msdos_fs.h /usr/include/linux/fs.h /usr/inc
   /usr/include/linux/sched.h /usr/include/linux/head.h /usr/include/linux/mm.h \
   /usr/include/linux/signal.h /usr/include/linux/time.h /usr/include/linux/param.h \
   /usr/include/linux/resource.h /usr/include/linux/vm86.h /usr/include/linux/errno.h \
-  /usr/include/linux/string.h /usr/include/linux/stat.h /usr/include/asm/segment.h 
+  /usr/include/linux/string.h /usr/include/linux/ctype.h /usr/include/linux/stat.h \
+  /usr/include/asm/segment.h 
 misc.o : misc.c /usr/include/linux/msdos_fs.h /usr/include/linux/fs.h /usr/include/linux/limits.h \
   /usr/include/linux/wait.h /usr/include/linux/types.h /usr/include/linux/dirent.h \
   /usr/include/linux/vfs.h /usr/include/linux/pipe_fs_i.h /usr/include/linux/minix_fs_i.h \

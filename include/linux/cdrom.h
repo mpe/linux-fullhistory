@@ -17,14 +17,6 @@
  */
 
 /*
- * These are flags for the SCMD_DOORLOCK command.  They really should be defined
- * somewhere more standard.
- */
-
-#define	SR_REMOVAL_PREVENT	1
-#define	SR_REMOVAL_ALLOW	0
-
-/*
  * CD-ROM-specific SCSI command opcodes
  */
 
@@ -344,12 +336,5 @@ struct cdrom_read
 
 #define	CDROMREADMODE1		0x530d		/* (struct cdrom_read)		*/
                                                 /* read type-1 data 		*/
-
-/*
- * Linux-specific CD-ROM ioctls for convenience and ISO-9660 support
- */
-
-#define CDROMDOORLOCK		0x5380		/* lock the eject mechanism	*/
-#define CDROMDOORUNLOCK		0x5381		/* unlock the mechanism		*/
 
 #endif  _LINUX_CDROM_H

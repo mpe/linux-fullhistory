@@ -46,7 +46,8 @@ mmap.o : mmap.c /usr/include/linux/stat.h /usr/include/linux/sched.h /usr/includ
   /usr/include/linux/msdos_fs_sb.h /usr/include/linux/mm.h /usr/include/linux/kernel.h \
   /usr/include/linux/signal.h /usr/include/linux/time.h /usr/include/linux/param.h \
   /usr/include/linux/resource.h /usr/include/linux/vm86.h /usr/include/linux/errno.h \
-  /usr/include/linux/mman.h /usr/include/asm/segment.h /usr/include/asm/system.h 
+  /usr/include/linux/mman.h /usr/include/linux/string.h /usr/include/asm/segment.h \
+  /usr/include/asm/system.h 
 swap.o : swap.c /usr/include/linux/mm.h /usr/include/linux/fs.h /usr/include/linux/limits.h \
   /usr/include/linux/wait.h /usr/include/linux/types.h /usr/include/linux/dirent.h \
   /usr/include/linux/vfs.h /usr/include/linux/pipe_fs_i.h /usr/include/linux/minix_fs_i.h \

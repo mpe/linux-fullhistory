@@ -37,6 +37,7 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 /* #include <signal.h>*/
+#include <linux/termios.h> /* for ioctl's */
 #include "../kern_sock.h" /* for PRINTK */
 
 #define tmax(a,b) (before ((a),(b)) ? (b) : (a))
@@ -223,27 +224,60 @@ tcp_ioctl (volatile struct sock *sk, int cmd, unsigned long arg)
      {
        default:
 	return (-EINVAL);
-#if 0
+
+      case TIOCINQ:
+/*      case FIONREAD:*/
+	{
+	  unsigned long amount;
+	  struct sk_buff *skb;
+
+	  if (sk->state == TCP_LISTEN)
+	    return (-EINVAL);
+
+	  amount = 0;
+	  if (sk->rqueue != NULL)
+	    {
+	      skb = sk->rqueue->next;
+	      /* go until a push or until we are out of data. */
+	      do {
+		amount += skb -> len;
+		if (skb->h.th->psh) break;
+		skb = skb->next;
+	      } while (skb != sk->rqueue->next);
+	    }
+
+	  verify_area ((void *)arg, sizeof (unsigned long));
+	  put_fs_long (amount, (unsigned long *)arg);
+	  return (0);
+	}
+
        case SIOCATMARK:
-	/* try to figure out if we need to read some urgent data. */
-	if (sk->rqueue && sk->rqueue->next->th.urg)
-	  {
-	     int offset;
-	     struct sk_buff *skb;
-	     skb = sk->rqueue->next;
-	     offset = sk->copied_seq +1 - skb->th.seq - skb->th.syn;
-	     /* now we know we are at the urgent data. */
-	     if (offset >= skb->len)
-	       {
-		  verify_area ((void *)arg, sizeof (int));
-		  put_fs_long(1, (unsigned long *)arg);
-		  return (0);
-	       }
-	  }
-	verify_area ((void *)arg, sizeof (int));
-	put_fs_long(0, (unsigned long *)arg);
-	return (0);
-#endif
+	{
+	  struct sk_buff *skb;
+	  int answ=0;
+	  /* try to figure out if we need to read some urgent data. */
+	  if (sk->rqueue != NULL)
+	    {
+	      skb = sk->rqueue->next;
+	      if (sk->copied_seq+1 == skb->h.th->seq && skb->h.th->urg)
+		answ = 1;
+	    }
+	  verify_area ((void *) arg, sizeof (unsigned long));
+	  put_fs_long (answ, (void *) arg);
+	  return (0);
+	}
+       
+      case TIOCOUTQ:
+	{
+	  unsigned long amount;
+	  if (sk->state == TCP_LISTEN)
+	    return (-EINVAL);
+	  amount = sk->prot->wspace(sk)/2;
+	  verify_area ((void *)arg, sizeof (unsigned long));
+	  put_fs_long (amount, (unsigned long *)arg);
+	  return (0);
+	}
+
      }
 }
 
@@ -261,7 +295,7 @@ tcp_check (struct tcp_header *th, int len, unsigned long saddr,
 	   "\t adcl %%edx,%%ebx\n"
 	   "\t adcl $0, %%ebx\n"
 	   : "=b" (sum)
-	   : "0" (daddr), "c" (saddr), "d" ((net16(len) << 16) + IP_TCP*256)
+	   : "0" (daddr), "c" (saddr), "d" ((net16(len) << 16) + IPPROTO_TCP*256)
 	   : "cx","bx","dx" );
    
    if (len > 3)
@@ -363,7 +397,7 @@ tcp_send_check (struct tcp_header *th, unsigned long saddr,
    t1 = (struct tcp_header *)(buff + 1);
    /* put in the ip_header and routing stuff. */
    tmp = sk->prot->build_header (buff, sk->saddr, daddr, &dev,
-				 IP_TCP, sk->opt, MAX_ACK_SIZE);
+				 IPPROTO_TCP, sk->opt, MAX_ACK_SIZE);
    if (tmp < 0)
      {
        sk->prot->wfree(sk, buff->mem_addr, buff->mem_len);
@@ -499,8 +533,11 @@ tcp_write(volatile struct sock *sk, unsigned char *from,
       /* we also need to worry about the window.  The smallest we
 	 will send is about 200 bytes. */
 
+
       copy = min (sk->mtu, diff(sk->window_seq, sk->send_seq));
-      if (copy < 200) copy = sk->mtu;
+
+      /* redundent check here. */
+      if (copy < 200 || copy > sk->mtu) copy = sk->mtu;
       copy = min (copy, len);
 
       skb=prot->wmalloc (sk, copy + prot->max_header+sizeof (*skb),0);
@@ -540,7 +577,7 @@ tcp_write(volatile struct sock *sk, unsigned char *from,
 	  would be good. */
 
       tmp = prot->build_header (skb, sk->saddr, sk->daddr, &dev,
-				IP_TCP, sk->opt, skb->mem_len);
+				IPPROTO_TCP, sk->opt, skb->mem_len);
       if (tmp < 0 )
 	{
 	  prot->wfree (sk, skb->mem_addr, skb->mem_len);
@@ -639,7 +676,7 @@ tcp_read_wakeup(volatile struct sock *sk)
 
   /* put in the ip_header and routing stuff. */
   tmp = sk->prot->build_header (buff, sk->saddr, sk->daddr, &dev,
-				IP_TCP, sk->opt, MAX_ACK_SIZE);
+				IPPROTO_TCP, sk->opt, MAX_ACK_SIZE);
   if (tmp < 0)
     {
       sk->prot->wfree(sk, buff->mem_addr, buff->mem_len);
@@ -800,6 +837,15 @@ tcp_read(volatile struct sock *sk, unsigned char *to,
     /* this error should be checked. */
     if (sk->state == TCP_LISTEN) return (-ENOTCONN);
 
+    /* will catch some errors. */
+    if (sk->err)
+      {
+	int err;
+	err = -sk->err;
+	sk->err = 0;
+	return (err);
+      }
+
     /* urgent data needs to be handled specially. */
     if ((flags & MSG_OOB))
       return (tcp_read_urg (sk, to, len, flags));
@@ -826,13 +872,6 @@ tcp_read(volatile struct sock *sk, unsigned char *to,
 
 	       cleanup_rbuf(sk);
 
-		if (nonblock || ((flags & MSG_PEEK) && copied))
-		  {
-		     release_sock (sk);
-		     if (copied) return (copied);
-		     return (-EAGAIN);
-		  }
-
 		release_sock (sk); /* now we may have some data waiting. */
 
 
@@ -852,6 +891,15 @@ tcp_read(volatile struct sock *sk, unsigned char *to,
 		     return (-ENOTCONN);
 		  }
 			
+
+		if (nonblock || ((flags & MSG_PEEK) && copied))
+		  {
+		    sti();
+		    release_sock (sk);
+		    if (copied) return (copied);
+		    return (-EAGAIN);
+		  }
+
 		if ( sk->rqueue == NULL ||
 		    before (sk->copied_seq+1, sk->rqueue->next->h.th->seq))
 		  {
@@ -966,7 +1014,7 @@ tcp_reset(unsigned long saddr, unsigned long daddr, struct tcp_header *th,
 
   t1=(struct tcp_header *)(buff + 1);
   /* put in the ip_header and routing stuff. */
-  tmp = prot->build_header (buff, saddr, daddr, &dev, IP_TCP, opt,
+  tmp = prot->build_header (buff, saddr, daddr, &dev, IPPROTO_TCP, opt,
 			    sizeof(struct tcp_header));
   if (tmp < 0)
     {
@@ -1100,7 +1148,7 @@ tcp_conn_request(volatile struct sock *sk, struct sk_buff *skb,
 
   if (skb->h.th->doff == 5)
     {
-      newsk->mtu=dev->mtu-HEADER_SIZE;
+      newsk->mtu=576-HEADER_SIZE;
     }
   else
     {
@@ -1136,7 +1184,7 @@ tcp_conn_request(volatile struct sock *sk, struct sk_buff *skb,
   /* put in the ip_header and routing stuff. */
 
   tmp = sk->prot->build_header (buff, newsk->saddr, newsk->daddr, &dev,
-				IP_TCP, NULL, MAX_SYN_SIZE);
+				IPPROTO_TCP, NULL, MAX_SYN_SIZE);
 
   /* something went wrong. */
   if (tmp < 0)
@@ -1145,6 +1193,7 @@ tcp_conn_request(volatile struct sock *sk, struct sk_buff *skb,
        sk->prot->wfree(newsk, buff->mem_addr, buff->mem_len);
        newsk->dead = 1;
        release_sock (newsk);
+       skb->sk = sk;
        free_skb (skb, FREE_READ);
        return;
     }
@@ -1294,7 +1343,7 @@ tcp_close (volatile struct sock *sk, int timeout)
       t1=(struct tcp_header *)(buff + 1);
       /* put in the ip_header and routing stuff. */
       tmp = prot->build_header (buff,sk->saddr, sk->daddr, &dev,
-				IP_TCP, sk->opt,
+				IPPROTO_TCP, sk->opt,
 				sizeof(struct tcp_header));
       if (tmp < 0)
 	{
@@ -1791,7 +1840,7 @@ tcp_fin (volatile struct sock *sk, struct tcp_header *th,
   t1 = (struct tcp_header *)(buff + 1);
   /* put in the ip_header and routing stuff. */
   tmp = sk->prot->build_header (buff, sk->saddr, sk->daddr, &dev,
-				IP_TCP,  sk->opt, MAX_ACK_SIZE);
+				IPPROTO_TCP,  sk->opt, MAX_ACK_SIZE);
   if (tmp < 0)
     {
       sk->prot->wfree(sk, buff->mem_addr, buff->mem_len);
@@ -1939,7 +1988,7 @@ tcp_connect (volatile struct sock *sk, struct sockaddr_in *usin, int addr_len)
   /* We need to build the routing stuff fromt the things saved
      in skb. */
   tmp = sk->prot->build_header (buff, sk->saddr, sk->daddr, &dev,
-				IP_TCP, NULL, MAX_SYN_SIZE);
+				IPPROTO_TCP, NULL, MAX_SYN_SIZE);
   if (tmp < 0)
     {
       sk->prot->wfree(sk, buff->mem_addr, buff->mem_len);
@@ -2457,7 +2506,7 @@ tcp_write_wakeup(volatile struct sock *sk)
 
   /* put in the ip_header and routing stuff. */
   tmp = sk->prot->build_header (buff, sk->saddr, sk->daddr, &dev,
-				IP_TCP, sk->opt, MAX_ACK_SIZE);
+				IPPROTO_TCP, sk->opt, MAX_ACK_SIZE);
   if (tmp < 0)
     {
       sk->prot->wfree(sk, buff->mem_addr, buff->mem_len);

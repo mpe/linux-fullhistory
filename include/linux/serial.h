@@ -45,8 +45,20 @@ struct async_struct {
 	int			timeout;
 	int			xmit_fifo_size;
 	int			custom_divisor;
+	int			x_char;	/* xon/xoff characater */
+	int			event;
 	int			line;
 };
+
+/*
+ * Events are used to schedule things to happen at timer-interrupt
+ * time, instead of at rs interrupt time.
+ */
+#define RS_EVENT_READ_PROCESS	0
+#define RS_EVENT_WRITE_WAKEUP	1
+#define RS_EVENT_HUP_PGRP	2
+#define RS_EVENT_BREAK_INT	3
+#define RS_EVENT_DO_SAK		4
 
 /*
  * These are the UART port assignments, expressed as offsets from the base
@@ -113,7 +125,7 @@ struct async_struct {
 /*
  * These are the definitions for the Interrupt Indentification Register
  */
-#define UART_IIR_PEND	0x01	/* Interrupt pending */
+#define UART_IIR_NO_INT	0x01	/* No interrupts pending */
 #define UART_IIR_ID	0x06	/* Mask for the interrupt ID */
 
 #define UART_IIR_MSI	0x00	/* Modem status interrupt */
@@ -149,3 +161,4 @@ struct async_struct {
 #define UART_MSR_TERI	0x04	/* Trailing edge ring indicator */
 #define UART_MSR_DDSR	0x02	/* Delta DSR */
 #define UART_MSR_DCTS	0x01	/* Delta CTS */
+#define UART_MSR_ANY_DELTA 0x0F	/* Any of the delta bits! */

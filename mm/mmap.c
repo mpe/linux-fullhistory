@@ -9,6 +9,7 @@
 #include <linux/mm.h>
 #include <linux/errno.h>
 #include <linux/mman.h>
+#include <linux/string.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>

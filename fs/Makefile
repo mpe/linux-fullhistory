@@ -110,7 +110,8 @@ ioctl.o : ioctl.c /usr/include/asm/segment.h /usr/include/linux/sched.h /usr/inc
   /usr/include/linux/msdos_fs_sb.h /usr/include/linux/mm.h /usr/include/linux/kernel.h \
   /usr/include/linux/signal.h /usr/include/linux/time.h /usr/include/linux/param.h \
   /usr/include/linux/resource.h /usr/include/linux/vm86.h /usr/include/linux/errno.h \
-  /usr/include/linux/string.h /usr/include/linux/stat.h /usr/include/linux/termios.h 
+  /usr/include/linux/string.h /usr/include/linux/stat.h /usr/include/linux/termios.h \
+  /usr/include/linux/fcntl.h 
 locks.o : locks.c /usr/include/asm/segment.h /usr/include/linux/sched.h /usr/include/linux/head.h \
   /usr/include/linux/fs.h /usr/include/linux/limits.h /usr/include/linux/wait.h \
   /usr/include/linux/types.h /usr/include/linux/dirent.h /usr/include/linux/vfs.h \

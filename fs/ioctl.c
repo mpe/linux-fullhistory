@@ -11,6 +11,7 @@
 #include <linux/string.h>
 #include <linux/stat.h>
 #include <linux/termios.h>
+#include <linux/fcntl.h> /* for f_flags values */
 
 static int file_ioctl(struct file *filp,unsigned int cmd,unsigned long arg)
 {
@@ -48,12 +49,43 @@ static int file_ioctl(struct file *filp,unsigned int cmd,unsigned long arg)
 int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {	
 	struct file * filp;
+	int on;
 
 	if (fd >= NR_OPEN || !(filp = current->filp[fd]))
 		return -EBADF;
-	if (filp->f_inode && S_ISREG(filp->f_inode->i_mode))
-		return file_ioctl(filp,cmd,arg);
-	if (filp->f_op && filp->f_op->ioctl)
-		return filp->f_op->ioctl(filp->f_inode, filp, cmd,arg);
-	return -EINVAL;
+	switch (cmd) {
+		case FIOCLEX:
+			current->close_on_exec |= (1 << fd);
+			return 0;
+
+		case FIONCLEX:
+			current->close_on_exec &= ~(1 << fd);
+			return 0;
+
+		case FIONBIO:
+			on = get_fs_long((unsigned long *) arg);
+			if (on)
+				filp->f_flags |= O_NONBLOCK;
+			else
+				filp->f_flags &= ~O_NONBLOCK;
+			return 0;
+
+		case FIOASYNC: /* O_SYNC is not yet implemented,
+				  but it's here for completeness. */
+			on = get_fs_long ((unsigned long *) arg);
+			if (on)
+				filp->f_flags |= O_SYNC;
+			else
+				filp->f_flags &= ~O_SYNC;
+			return 0;
+
+		default:
+			if (filp->f_inode && S_ISREG(filp->f_inode->i_mode))
+				return file_ioctl(filp,cmd,arg);
+
+			if (filp->f_op && filp->f_op->ioctl)
+				return filp->f_op->ioctl(filp->f_inode, filp, cmd,arg);
+
+			return -EINVAL;
+	}
 }

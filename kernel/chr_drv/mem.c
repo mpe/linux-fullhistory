@@ -27,6 +27,7 @@ static int write_ram(struct inode * inode, struct file * file,char * buf, int co
 static int read_mem(struct inode * inode, struct file * file,char * buf, int count)
 {
 	unsigned long p = file->f_pos;
+	int read;
 
 	if (count < 0)
 		return -EINVAL;
@@ -34,14 +35,24 @@ static int read_mem(struct inode * inode, struct file * file,char * buf, int cou
 		return 0;
 	if (count > high_memory - p)
 		count = high_memory - p;
+	read = 0;
+	while (p < 4096 && count > 0) {
+		put_fs_byte(0,buf);
+		buf++;
+		p++;
+		count--;
+		read++;
+	}
 	memcpy_tofs(buf,(void *) p,count);
-	file->f_pos += count;
-	return count;
+	read += count;
+	file->f_pos += read;
+	return read;
 }
 
 static int write_mem(struct inode * inode, struct file * file,char * buf, int count)
 {
 	unsigned long p = file->f_pos;
+	int written;
 
 	if (count < 0)
 		return -EINVAL;
@@ -49,8 +60,17 @@ static int write_mem(struct inode * inode, struct file * file,char * buf, int co
 		return 0;
 	if (count > high_memory - p)
 		count = high_memory - p;
+	written = 0;
+	while (p < 4096 && count > 0) {
+		/* Hmm. Do something? */
+		buf++;
+		p++;
+		count--;
+		written++;
+	}
 	memcpy_fromfs((void *) p,buf,count);
-	file->f_pos += count;
+	written += count;
+	file->f_pos += written;
 	return count;
 }
 
@@ -82,7 +102,17 @@ static int write_port(struct inode * inode,struct file * file,char * buf, int co
 	return tmp-buf;
 }
 
-static int read_zero(struct inode *node,struct file *file,char *buf,int count)
+static int read_null(struct inode * node,struct file * file,char * buf,int count)
+{
+	return 0;
+}
+
+static int write_null(struct inode * inode,struct file * file,char * buf, int count)
+{
+	return count;
+}
+
+static int read_zero(struct inode * node,struct file * file,char * buf,int count)
 {
 	int left;
 
@@ -90,6 +120,11 @@ static int read_zero(struct inode *node,struct file *file,char *buf,int count)
 		put_fs_byte(0,buf);
 		buf++;
 	}
+	return count;
+}
+
+static int write_zero(struct inode * inode,struct file * file,char * buf, int count)
+{
 	return count;
 }
 
@@ -101,7 +136,7 @@ static int read_zero(struct inode *node,struct file *file,char *buf,int count)
  * also note that seeking relative to the "end of file" isn't supported:
  * it has no meaning, so it returns -EINVAL.
  */
-static int mem_lseek(struct inode * inode, struct file * file, off_t offset, int orig)
+static int memory_lseek(struct inode * inode, struct file * file, off_t offset, int orig)
 {
 	switch (orig) {
 		case 0:
@@ -121,60 +156,122 @@ static int mem_lseek(struct inode * inode, struct file * file, off_t offset, int
 #define read_kmem read_mem
 #define write_kmem write_mem
 
-static int mem_read(struct inode * inode, struct file * file, char * buf, int count)
-{
-	switch (MINOR(inode->i_rdev)) {
-		case 0:
-			return read_ram(inode,file,buf,count);
-		case 1:
-			return read_mem(inode,file,buf,count);
-		case 2:
-			return read_kmem(inode,file,buf,count);
-		case 3:
-			return 0;	/* /dev/null */
-		case 4:
-			return read_port(inode,file,buf,count);
-		case 5:
-			return read_zero(inode,file,buf,count);
-		default:
-			return -ENODEV;
-	}
-}
-
-static int mem_write(struct inode * inode, struct file * file, char * buf, int count)
-{
-	switch (MINOR(inode->i_rdev)) {
-		case 0:
-			return write_ram(inode,file,buf,count);
-		case 1:
-			return write_mem(inode,file,buf,count);
-		case 2:
-			return write_kmem(inode,file,buf,count);
-		case 3:
-			return count;	/* /dev/null */
-		case 4:
-			return write_port(inode,file,buf,count);
-		case 5:
-			return count; /* /dev/zero */
-		default:
-			return -ENODEV;
-	}
-}
-
-static struct file_operations mem_fops = {
-	mem_lseek,
-	mem_read,
-	mem_write,
-	NULL,		/* mem_readdir */
-	NULL,		/* mem_select */
-	NULL,		/* mem_ioctl */
+static struct file_operations ram_fops = {
+	memory_lseek,
+	read_ram,
+	write_ram,
+	NULL,		/* ram_readdir */
+	NULL,		/* ram_select */
+	NULL,		/* ram_ioctl */
+	NULL,		/* ram_mmap */
 	NULL,		/* no special open code */
 	NULL		/* no special release code */
 };
 
+static struct file_operations mem_fops = {
+	memory_lseek,
+	read_mem,
+	write_mem,
+	NULL,		/* mem_readdir */
+	NULL,		/* mem_select */
+	NULL,		/* mem_ioctl */
+	NULL,		/* mem_mmap */
+	NULL,		/* no special open code */
+	NULL		/* no special release code */
+};
+
+static struct file_operations kmem_fops = {
+	memory_lseek,
+	read_kmem,
+	write_kmem,
+	NULL,		/* kmem_readdir */
+	NULL,		/* kmem_select */
+	NULL,		/* kmem_ioctl */
+	NULL,		/* kmem_mmap */
+	NULL,		/* no special open code */
+	NULL		/* no special release code */
+};
+
+static struct file_operations null_fops = {
+	memory_lseek,
+	read_null,
+	write_null,
+	NULL,		/* null_readdir */
+	NULL,		/* null_select */
+	NULL,		/* null_ioctl */
+	NULL,		/* null_mmap */
+	NULL,		/* no special open code */
+	NULL		/* no special release code */
+};
+
+static struct file_operations port_fops = {
+	memory_lseek,
+	read_port,
+	write_port,
+	NULL,		/* port_readdir */
+	NULL,		/* port_select */
+	NULL,		/* port_ioctl */
+	NULL,		/* port_mmap */
+	NULL,		/* no special open code */
+	NULL		/* no special release code */
+};
+
+static struct file_operations zero_fops = {
+	memory_lseek,
+	read_zero,
+	write_zero,
+	NULL,		/* zero_readdir */
+	NULL,		/* zero_select */
+	NULL,		/* zero_ioctl */
+	NULL,		/* zero_mmap */
+	NULL,		/* no special open code */
+	NULL		/* no special release code */
+};
+
+static int memory_open(struct inode * inode, struct file * filp)
+{
+	switch (MINOR(inode->i_rdev)) {
+		case 0:
+			filp->f_op = &ram_fops;
+			break;
+		case 1:
+			filp->f_op = &mem_fops;
+			break;
+		case 2:
+			filp->f_op = &kmem_fops;
+			break;
+		case 3:
+			filp->f_op = &null_fops;
+			break;
+		case 4:
+			filp->f_op = &port_fops;
+			break;
+		case 5:
+			filp->f_op = &zero_fops;
+			break;
+		default:
+			return -ENODEV;
+	}
+	if (filp->f_op && filp->f_op->open)
+		return filp->f_op->open(inode,filp);
+	return 0;
+}
+
+static struct file_operations memory_fops = {
+	NULL,		/* lseek */
+	NULL,		/* read */
+	NULL,		/* write */
+	NULL,		/* readdir */
+	NULL,		/* select */
+	NULL,		/* ioctl */
+	NULL,		/* mmap */
+	memory_open,	/* just a selector for the real open */
+	NULL		/* release */
+};
+
 long chr_dev_init(long mem_start, long mem_end)
 {
-	chrdev_fops[1] = &mem_fops;
+	chrdev_fops[1] = &memory_fops;
 	mem_start = tty_init(mem_start);
 	mem_start = lp_init(mem_start);
 	mem_start = mouse_init(mem_start);

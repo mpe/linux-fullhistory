@@ -28,6 +28,7 @@
 #include <asm/segment.h>
 
 int need_resched = 0;
+int hard_math = 0;		/* set by boot/head.S */
 
 unsigned long * prof_buffer = NULL;
 unsigned long prof_len = 0;
@@ -206,7 +207,8 @@ void wake_up(struct wait_queue **q)
 
 	if (!q || !(next = *q))
 		return;
-	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
+	save_flags(flags);
+	cli();
 	do {
 		tmp = next;
 		next = tmp->next;
@@ -221,7 +223,7 @@ void wake_up(struct wait_queue **q)
 		}
 		tmp->next = NULL;
 	} while (next && next != *q);
-	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+	restore_flags(flags);
 }
 
 static inline void __sleep_on(struct wait_queue **p, int state)
@@ -234,13 +236,14 @@ static inline void __sleep_on(struct wait_queue **p, int state)
 		panic("task[0] trying to sleep");
 	if (current->wait.next)
 		printk("__sleep_on: wait->next exists\n");
-	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
+	save_flags(flags);
+	cli();
 	current->state = state;
 	add_wait_queue(p,&current->wait);
 	sti();
 	schedule();
 	remove_wait_queue(p,&current->wait);
-	__asm__("pushl %0 ; popfl"::"r" (flags));
+	restore_flags(flags);
 }
 
 void interruptible_sleep_on(struct wait_queue **p)

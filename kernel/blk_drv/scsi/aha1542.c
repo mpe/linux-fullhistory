@@ -251,7 +251,9 @@ void aha1542_intr_handle(void)
     mb[1].status = 0;
 
     if (ccb.tarstat == 2) {
+#ifdef DEBUG
 	int i;
+#endif
 	DEB(printk("aha1542_intr_handle: sense:"));
 #ifdef DEBUG
 	for (i = 0; i < 12; i++)
@@ -431,8 +433,8 @@ int aha1542_detect(int hostnum)
 	return 0;
     }
  
-#if MAX_MEGABYTES > 16
-  printk("Adaptec 1542 disabled for kernels for which MAX_MEGABYTES > 16.\n");
+#ifndef MAX_16M
+  printk("Adaptec 1542 disabled for kernels without memory limiting to 16MB.\n");
   return 0;
 #endif
 

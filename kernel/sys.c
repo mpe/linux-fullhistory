@@ -253,16 +253,16 @@ void ctrl_alt_del(void)
  * 100% compatible with BSD.  A program which uses just setgid() will be
  * 100% compatible with POSIX w/ Saved ID's. 
  */
-int sys_setregid(int rgid, int egid)
+int sys_setregid(gid_t rgid, gid_t egid)
 {
-	if (rgid >= 0) {
+	if (rgid != (gid_t) -1) {
 		if ((current->gid == rgid) || 
 		    suser())
 			current->gid = rgid;
 		else
 			return(-EPERM);
 	}
-	if (egid >= 0) {
+	if (egid != (gid_t) -1) {
 		if ((current->gid == egid) ||
 		    (current->egid == egid) ||
 		    suser()) {
@@ -277,7 +277,7 @@ int sys_setregid(int rgid, int egid)
 /*
  * setgid() is implemeneted like SysV w/ SAVED_IDS 
  */
-int sys_setgid(int gid)
+int sys_setgid(gid_t gid)
 {
 	if (suser())
 		current->gid = current->egid = current->sgid = gid;
@@ -338,11 +338,11 @@ int sys_time(long * tloc)
  * 100% compatible with BSD.  A program which uses just setuid() will be
  * 100% compatible with POSIX w/ Saved ID's. 
  */
-int sys_setreuid(int ruid, int euid)
+int sys_setreuid(uid_t ruid, uid_t euid)
 {
 	int old_ruid = current->uid;
 	
-	if (ruid >= 0) {
+	if (ruid != (uid_t) -1) {
 		if ((current->euid==ruid) ||
 		    (old_ruid == ruid) ||
 		    suser())
@@ -350,7 +350,7 @@ int sys_setreuid(int ruid, int euid)
 		else
 			return(-EPERM);
 	}
-	if (euid >= 0) {
+	if (euid != (uid_t) -1) {
 		if ((old_ruid == euid) ||
 		    (current->euid == euid) ||
 		    suser()) {
@@ -375,7 +375,7 @@ int sys_setreuid(int ruid, int euid)
  * will allow a root program to temporarily drop privileges and be able to
  * regain them by swapping the real and effective uid.  
  */
-int sys_setuid(int uid)
+int sys_setuid(uid_t uid)
 {
 	if (suser())
 		current->uid = current->euid = current->suid = uid;
@@ -424,7 +424,7 @@ int sys_brk(unsigned long end_data_seg)
  * only important on a multi-user system anyway, to make sure one user
  * can't send a signal to a process owned by another.  -TYT, 12/12/91
  */
-int sys_setpgid(int pid, int pgid)
+int sys_setpgid(pid_t pid, pid_t pgid)
 {
 	int i; 
 

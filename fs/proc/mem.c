@@ -135,6 +135,7 @@ static struct file_operations proc_mem_operations = {
 	NULL,		/* mem_readdir */
 	NULL,		/* mem_select */
 	NULL,		/* mem_ioctl */
+	NULL,		/* mmap */
 	NULL,		/* no special open code */
 	NULL		/* no special release code */
 };

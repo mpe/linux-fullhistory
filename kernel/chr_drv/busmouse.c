@@ -137,11 +137,12 @@ struct file_operations bus_mouse_fops = {
 	NULL, 		/* mouse_readdir */
 	mouse_select, 	/* mouse_select */
 	NULL, 		/* mouse_ioctl */
+	NULL,		/* mouse_mmap */
 	open_mouse,
 	release_mouse,
 };
 
-long bus_mouse_init(long kmem_start)
+unsigned long bus_mouse_init(unsigned long kmem_start)
 {
 	int i;
 
@@ -150,7 +151,6 @@ long bus_mouse_init(long kmem_start)
 	for (i = 0; i < 100000; i++)
 		/* busy loop */;
 	if (inb(MSE_SIGNATURE_PORT) != MSE_SIGNATURE_BYTE) {
-		printk("No Logitech bus mouse detected.\n");
 		mouse.present = 0;
 		return kmem_start;
 	}
@@ -162,6 +162,7 @@ long bus_mouse_init(long kmem_start)
 	mouse.buttons = mouse.latch_buttons = 0x80;
 	mouse.dx = 0;
 	mouse.dy = 0;
+	mouse.wait = NULL;
 	printk("Logitech Bus mouse detected and installed.\n");
 	return kmem_start;
 }

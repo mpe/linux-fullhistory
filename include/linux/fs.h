@@ -78,6 +78,7 @@ extern void buffer_init(void);
 
 #define BLKROSET 4701 /* set device read-only (0 = read-write) */
 #define BLKROGET 4702 /* get read-only status (0 = read_write) */
+#define BLKRRPART 4703 /* re-read partition table */
 
 #define BMAP_IOCTL 1	/* obsolete - kept for compatibility */
 #define FIBMAP	   1	/* bmap access */
@@ -125,7 +126,8 @@ struct inode {
 	struct inode_operations * i_op;
 	struct super_block * i_sb;
 	struct wait_queue * i_wait;
-	struct file_lock *i_flock;
+	struct file_lock * i_flock;
+	struct vm_area_struct * i_mmap;
 	unsigned short i_count;
 	unsigned short i_flags;
 	unsigned char i_lock;
@@ -194,6 +196,7 @@ struct file_operations {
 	int (*readdir) (struct inode *, struct file *, struct dirent *, int count);
 	int (*select) (struct inode *, struct file *, int, select_table *);
 	int (*ioctl) (struct inode *, struct file *, unsigned int, unsigned int);
+	int (*mmap) (void);
 	int (*open) (struct inode *, struct file *);
 	void (*release) (struct inode *, struct file *);
 };
@@ -246,6 +249,7 @@ extern int nr_buffer_heads;
 
 extern void check_disk_change(int dev);
 extern void invalidate_inodes(int dev);
+extern void invalidate_buffers(int dev);
 extern int floppy_change(struct buffer_head * first_block);
 extern int ticks_to_floppy_on(unsigned int dev);
 extern void floppy_on(unsigned int dev);

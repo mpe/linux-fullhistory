@@ -39,6 +39,7 @@ static struct file_operations def_chr_fops = {
 	NULL,		/* readdir */
 	NULL,		/* select */
 	NULL,		/* ioctl */
+	NULL,		/* mmap */
 	chrdev_open,	/* open */
 	NULL,		/* release */
 };

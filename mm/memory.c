@@ -789,11 +789,13 @@ void do_page_fault(unsigned long *esp, unsigned long error_code)
 {
 	unsigned long address;
 	unsigned long user_esp = 0;
+	extern void die_if_kernel();
 
 	/* get the address */
 	__asm__("movl %%cr2,%0":"=r" (address));
 	if (address >= TASK_SIZE) {
 		printk("Unable to handle kernel paging request at address %08x\n",address);
+		die_if_kernel("Oops",esp,error_code);
 		do_exit(SIGSEGV);
 	}
 	if (esp[2] & VM_MASK) {
@@ -809,6 +811,45 @@ void do_page_fault(unsigned long *esp, unsigned long error_code)
 		do_no_page(error_code, address, current, user_esp);
 	else
 		do_wp_page(error_code, address, current, user_esp);
+}
+
+/*
+ * paging_init() sets up the page tables - note that the first 4MB are
+ * already mapped by head.S.
+ *
+ * This routines also unmaps the page at virtual kernel address 0, so
+ * that we can trap those pesky NULL-reference errors in the kernel.
+ */
+unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
+{
+	unsigned long * pg_dir;
+	unsigned long * pg_table;
+	unsigned long tmp;
+	unsigned long address;
+
+	start_mem += 4095;
+	start_mem &= 0xfffff000;
+	address = 0;
+	pg_dir = swapper_pg_dir + 768;		/* at virtual addr 0xC0000000 */
+	while (address < end_mem) {
+		tmp = *pg_dir;
+		if (!tmp) {
+			tmp = start_mem;
+			*pg_dir = tmp | 7;
+			start_mem += 4096;
+		}
+		pg_dir++;
+		pg_table = (unsigned long *) (tmp & 0xfffff000);
+		for (tmp = 0 ; tmp < 1024 ; tmp++,pg_table++) {
+			if (address && address < end_mem)
+				*pg_table = 7 + address;
+			else
+				*pg_table = 0;
+			address += 4096;
+		}
+	}
+	invalidate();
+	return start_mem;
 }
 
 void mem_init(unsigned long start_low_mem,

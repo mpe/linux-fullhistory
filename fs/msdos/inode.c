@@ -55,18 +55,27 @@ static struct super_operations msdos_sops = {
 };
 
 
-static unsigned long simple_strtoul(const char *cp,char **endp)
+static unsigned long simple_strtoul(const char *cp,char **endp,unsigned int base)
 {
-	int base = 10;
-	unsigned long result = 0;
+	unsigned long result = 0,value;
 
-	if (*cp == '0') {
-		base = 8;
+	if (!base) {
+		base = 10;
+		if (*cp == '0') {
+			base = 8;
+			cp++;
+			if ((*cp == 'x') && isxdigit(cp[1])) {
+				cp++;
+				base = 16;
+			}
+		}
+	}
+	while (isxdigit(*cp) && (value = isdigit(*cp) ? *cp-'0' : (islower(*cp)
+	    ? toupper(*cp) : *cp)-'A'+10) < base) {
+		result = result*base + value;
 		cp++;
 	}
-	while (isdigit(*cp) && (*cp - '0') < base)
-		result = result*base + *cp++ - '0';
-	if (*endp)
+	if (endp)
 		*endp = (char *)cp;
 	return result;
 }
@@ -103,21 +112,21 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid, 
 		else if (!strcmp(this,"uid")) {
 			if (!value || !*value)
 				return 0;
-			*uid = simple_strtoul(value,&value);
+			*uid = simple_strtoul(value,&value,0);
 			if (*value)
 				return 0;
 		}
 		else if (!strcmp(this,"gid")) {
 			if (!value || !*value)
 				return 0;
-			*gid = simple_strtoul(value,&value);
+			*gid = simple_strtoul(value,&value,0);
 			if (*value)
 				return 0;
 		}
 		else if (!strcmp(this,"umask")) {
 			if (!value || !*value)
 				return 0;
-			*umask = simple_strtoul(value,&value);
+			*umask = simple_strtoul(value,&value,8);
 			if (*value)
 				return 0;
 		}

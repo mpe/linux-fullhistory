@@ -50,7 +50,7 @@ arp.o : arp.c /usr/include/linux/types.h /usr/include/linux/string.h /usr/includ
   /usr/include/linux/resource.h /usr/include/linux/vm86.h /usr/include/linux/socket.h \
   /usr/include/netinet/in.h /usr/include/features.h /usr/include/sys/socket.h \
   /usr/include/traditional.h /usr/include/asm/system.h timer.h ip.h dev.h /usr/include/linux/sock_ioctl.h \
-  /usr/include/netinet/protocols.h eth.h tcp.h sock.h arp.h 
+  eth.h tcp.h sock.h arp.h 
 dev.o : dev.c /usr/include/asm/segment.h /usr/include/asm/system.h /usr/include/linux/types.h \
   /usr/include/linux/kernel.h /usr/include/linux/sched.h /usr/include/linux/head.h \
   /usr/include/linux/fs.h /usr/include/linux/limits.h /usr/include/linux/wait.h \
@@ -62,7 +62,7 @@ dev.o : dev.c /usr/include/asm/segment.h /usr/include/asm/system.h /usr/include/
   /usr/include/linux/string.h /usr/include/linux/socket.h /usr/include/netinet/in.h \
   /usr/include/features.h /usr/include/sys/socket.h /usr/include/traditional.h \
   /usr/include/asm/memory.h dev.h eth.h timer.h ip.h /usr/include/linux/sock_ioctl.h \
-  /usr/include/netinet/protocols.h tcp.h sock.h /usr/include/linux/errno.h arp.h 
+  tcp.h sock.h /usr/include/linux/errno.h arp.h 
 eth.o : eth.c /usr/include/asm/segment.h /usr/include/asm/system.h /usr/include/linux/types.h \
   /usr/include/linux/kernel.h /usr/include/linux/sched.h /usr/include/linux/head.h \
   /usr/include/linux/fs.h /usr/include/linux/limits.h /usr/include/linux/wait.h \
@@ -74,7 +74,7 @@ eth.o : eth.c /usr/include/asm/segment.h /usr/include/asm/system.h /usr/include/
   /usr/include/linux/string.h /usr/include/linux/socket.h /usr/include/netinet/in.h \
   /usr/include/features.h /usr/include/sys/socket.h /usr/include/traditional.h \
   /usr/include/asm/memory.h dev.h eth.h timer.h ip.h /usr/include/linux/sock_ioctl.h \
-  /usr/include/netinet/protocols.h tcp.h sock.h /usr/include/linux/errno.h arp.h 
+  tcp.h sock.h /usr/include/linux/errno.h arp.h 
 icmp.o : icmp.c /usr/include/linux/types.h /usr/include/linux/sched.h /usr/include/linux/head.h \
   /usr/include/linux/fs.h /usr/include/linux/limits.h /usr/include/linux/wait.h \
   /usr/include/linux/dirent.h /usr/include/linux/vfs.h /usr/include/linux/pipe_fs_i.h \
@@ -85,9 +85,8 @@ icmp.o : icmp.c /usr/include/linux/types.h /usr/include/linux/sched.h /usr/inclu
   /usr/include/linux/vm86.h /usr/include/linux/fcntl.h /usr/include/linux/socket.h \
   /usr/include/netinet/in.h /usr/include/features.h /usr/include/sys/socket.h \
   /usr/include/traditional.h timer.h ip.h dev.h /usr/include/linux/sock_ioctl.h \
-  /usr/include/netinet/protocols.h eth.h tcp.h sock.h /usr/include/linux/errno.h \
-  /usr/include/linux/timer.h /usr/include/asm/system.h /usr/include/asm/segment.h \
-  ../kern_sock.h icmp.h 
+  eth.h tcp.h sock.h /usr/include/linux/errno.h /usr/include/linux/timer.h /usr/include/asm/system.h \
+  /usr/include/asm/segment.h ../kern_sock.h icmp.h 
 ip.o : ip.c /usr/include/asm/segment.h /usr/include/asm/system.h /usr/include/linux/types.h \
   /usr/include/linux/kernel.h /usr/include/linux/sched.h /usr/include/linux/head.h \
   /usr/include/linux/fs.h /usr/include/linux/limits.h /usr/include/linux/wait.h \
@@ -98,8 +97,8 @@ ip.o : ip.c /usr/include/asm/segment.h /usr/include/asm/system.h /usr/include/li
   /usr/include/linux/param.h /usr/include/linux/resource.h /usr/include/linux/vm86.h \
   /usr/include/linux/string.h /usr/include/linux/socket.h /usr/include/netinet/in.h \
   /usr/include/features.h /usr/include/sys/socket.h /usr/include/traditional.h \
-  timer.h ip.h dev.h /usr/include/linux/sock_ioctl.h /usr/include/netinet/protocols.h \
-  eth.h tcp.h sock.h /usr/include/linux/errno.h arp.h icmp.h 
+  timer.h ip.h dev.h /usr/include/linux/sock_ioctl.h eth.h tcp.h sock.h /usr/include/linux/errno.h \
+  arp.h icmp.h 
 loopback.o : loopback.c /usr/include/linux/config.h /usr/include/linux/config.dist.h \
   /usr/include/linux/kernel.h /usr/include/linux/sched.h /usr/include/linux/head.h \
   /usr/include/linux/fs.h /usr/include/linux/limits.h /usr/include/linux/wait.h \
@@ -113,8 +112,8 @@ loopback.o : loopback.c /usr/include/linux/config.h /usr/include/linux/config.di
   /usr/include/asm/io.h /usr/include/asm/memory.h /usr/include/errno.h /usr/include/traditional.h \
   /usr/include/linux/errno.h /usr/include/linux/fcntl.h /usr/include/netinet/in.h \
   /usr/include/features.h /usr/include/sys/socket.h /usr/include/linux/socket.h \
-  dev.h eth.h timer.h ip.h /usr/include/linux/sock_ioctl.h /usr/include/netinet/protocols.h \
-  tcp.h sock.h arp.h ../kern_sock.h 
+  dev.h eth.h timer.h ip.h /usr/include/linux/sock_ioctl.h tcp.h sock.h arp.h \
+  ../kern_sock.h 
 pack_type.o : pack_type.c /usr/include/linux/stddef.h dev.h eth.h 
 packet.o : packet.c /usr/include/linux/types.h /usr/include/linux/sched.h /usr/include/linux/head.h \
   /usr/include/linux/fs.h /usr/include/linux/limits.h /usr/include/linux/wait.h \
@@ -126,9 +125,8 @@ packet.o : packet.c /usr/include/linux/types.h /usr/include/linux/sched.h /usr/i
   /usr/include/linux/vm86.h /usr/include/linux/fcntl.h /usr/include/linux/socket.h \
   /usr/include/netinet/in.h /usr/include/features.h /usr/include/sys/socket.h \
   /usr/include/traditional.h timer.h ip.h dev.h /usr/include/linux/sock_ioctl.h \
-  /usr/include/netinet/protocols.h eth.h tcp.h sock.h /usr/include/linux/errno.h \
-  /usr/include/linux/timer.h /usr/include/asm/system.h /usr/include/asm/segment.h \
-  ../kern_sock.h 
+  eth.h tcp.h sock.h /usr/include/linux/errno.h /usr/include/linux/timer.h /usr/include/asm/system.h \
+  /usr/include/asm/segment.h ../kern_sock.h 
 protocols.o : protocols.c /usr/include/asm/segment.h /usr/include/asm/system.h \
   /usr/include/linux/types.h /usr/include/linux/kernel.h /usr/include/linux/sched.h \
   /usr/include/linux/head.h /usr/include/linux/fs.h /usr/include/linux/limits.h \
@@ -140,7 +138,7 @@ protocols.o : protocols.c /usr/include/asm/segment.h /usr/include/asm/system.h \
   /usr/include/linux/vm86.h /usr/include/linux/string.h /usr/include/linux/socket.h \
   /usr/include/netinet/in.h /usr/include/features.h /usr/include/sys/socket.h \
   /usr/include/traditional.h timer.h ip.h dev.h /usr/include/linux/sock_ioctl.h \
-  /usr/include/netinet/protocols.h eth.h tcp.h sock.h icmp.h 
+  eth.h tcp.h sock.h icmp.h 
 raw.o : raw.c /usr/include/linux/types.h /usr/include/linux/sched.h /usr/include/linux/head.h \
   /usr/include/linux/fs.h /usr/include/linux/limits.h /usr/include/linux/wait.h \
   /usr/include/linux/dirent.h /usr/include/linux/vfs.h /usr/include/linux/pipe_fs_i.h \
@@ -151,9 +149,8 @@ raw.o : raw.c /usr/include/linux/types.h /usr/include/linux/sched.h /usr/include
   /usr/include/linux/vm86.h /usr/include/linux/fcntl.h /usr/include/linux/socket.h \
   /usr/include/netinet/in.h /usr/include/features.h /usr/include/sys/socket.h \
   /usr/include/traditional.h timer.h ip.h dev.h /usr/include/linux/sock_ioctl.h \
-  /usr/include/netinet/protocols.h eth.h tcp.h sock.h /usr/include/linux/errno.h \
-  /usr/include/linux/timer.h /usr/include/asm/system.h /usr/include/asm/segment.h \
-  ../kern_sock.h 
+  eth.h tcp.h sock.h /usr/include/linux/errno.h /usr/include/linux/timer.h /usr/include/asm/system.h \
+  /usr/include/asm/segment.h ../kern_sock.h 
 sock.o : sock.c /usr/include/linux/errno.h /usr/include/linux/types.h /usr/include/linux/socket.h \
   /usr/include/netinet/in.h /usr/include/features.h /usr/include/sys/socket.h \
   /usr/include/traditional.h /usr/include/linux/kernel.h /usr/include/linux/sched.h \
@@ -164,9 +161,8 @@ sock.o : sock.c /usr/include/linux/errno.h /usr/include/linux/types.h /usr/inclu
   /usr/include/linux/msdos_fs_sb.h /usr/include/linux/mm.h /usr/include/linux/signal.h \
   /usr/include/linux/time.h /usr/include/linux/param.h /usr/include/linux/resource.h \
   /usr/include/linux/vm86.h /usr/include/linux/timer.h /usr/include/linux/sock_ioctl.h \
-  /usr/include/asm/memory.h ../kern_sock.h timer.h ip.h dev.h /usr/include/netinet/protocols.h \
-  eth.h tcp.h udp.h sock.h /usr/include/asm/segment.h /usr/include/asm/system.h \
-  /usr/include/linux/fcntl.h 
+  /usr/include/asm/memory.h ../kern_sock.h timer.h ip.h dev.h eth.h tcp.h udp.h \
+  sock.h /usr/include/asm/segment.h /usr/include/asm/system.h /usr/include/linux/fcntl.h 
 tcp.o : tcp.c /usr/include/linux/types.h /usr/include/linux/sched.h /usr/include/linux/head.h \
   /usr/include/linux/fs.h /usr/include/linux/limits.h /usr/include/linux/wait.h \
   /usr/include/linux/dirent.h /usr/include/linux/vfs.h /usr/include/linux/pipe_fs_i.h \
@@ -177,8 +173,8 @@ tcp.o : tcp.c /usr/include/linux/types.h /usr/include/linux/sched.h /usr/include
   /usr/include/linux/vm86.h /usr/include/asm/memory.h /usr/include/linux/socket.h \
   /usr/include/netinet/in.h /usr/include/features.h /usr/include/sys/socket.h \
   /usr/include/traditional.h /usr/include/linux/fcntl.h timer.h ip.h dev.h /usr/include/linux/sock_ioctl.h \
-  /usr/include/netinet/protocols.h eth.h icmp.h tcp.h sock.h /usr/include/linux/errno.h \
-  /usr/include/linux/timer.h /usr/include/asm/system.h /usr/include/asm/segment.h \
+  eth.h icmp.h tcp.h sock.h /usr/include/linux/errno.h /usr/include/linux/timer.h \
+  /usr/include/asm/system.h /usr/include/asm/segment.h /usr/include/linux/termios.h \
   ../kern_sock.h 
 timer.o : timer.c /usr/include/linux/types.h /usr/include/linux/errno.h /usr/include/linux/socket.h \
   /usr/include/netinet/in.h /usr/include/features.h /usr/include/sys/socket.h \
@@ -190,8 +186,8 @@ timer.o : timer.c /usr/include/linux/types.h /usr/include/linux/errno.h /usr/inc
   /usr/include/linux/msdos_fs_sb.h /usr/include/linux/mm.h /usr/include/linux/signal.h \
   /usr/include/linux/time.h /usr/include/linux/param.h /usr/include/linux/resource.h \
   /usr/include/linux/vm86.h /usr/include/linux/timer.h /usr/include/asm/system.h \
-  timer.h ip.h dev.h /usr/include/linux/sock_ioctl.h /usr/include/netinet/protocols.h \
-  eth.h tcp.h sock.h arp.h ../kern_sock.h 
+  timer.h ip.h dev.h /usr/include/linux/sock_ioctl.h eth.h tcp.h sock.h arp.h \
+  ../kern_sock.h 
 udp.o : udp.c /usr/include/linux/types.h /usr/include/linux/sched.h /usr/include/linux/head.h \
   /usr/include/linux/fs.h /usr/include/linux/limits.h /usr/include/linux/wait.h \
   /usr/include/linux/dirent.h /usr/include/linux/vfs.h /usr/include/linux/pipe_fs_i.h \
@@ -202,9 +198,8 @@ udp.o : udp.c /usr/include/linux/types.h /usr/include/linux/sched.h /usr/include
   /usr/include/linux/vm86.h /usr/include/linux/fcntl.h /usr/include/linux/socket.h \
   /usr/include/netinet/in.h /usr/include/features.h /usr/include/sys/socket.h \
   /usr/include/traditional.h timer.h ip.h dev.h /usr/include/linux/sock_ioctl.h \
-  /usr/include/netinet/protocols.h eth.h tcp.h sock.h /usr/include/linux/errno.h \
-  /usr/include/linux/timer.h /usr/include/asm/system.h /usr/include/asm/segment.h \
-  ../kern_sock.h udp.h icmp.h 
+  eth.h tcp.h sock.h /usr/include/linux/errno.h /usr/include/linux/timer.h /usr/include/linux/termios.h \
+  /usr/include/asm/system.h /usr/include/asm/segment.h ../kern_sock.h udp.h icmp.h 
 we.o : we.c /usr/include/linux/config.h /usr/include/linux/config.dist.h /usr/include/linux/kernel.h \
   /usr/include/linux/sched.h /usr/include/linux/head.h /usr/include/linux/fs.h \
   /usr/include/linux/limits.h /usr/include/linux/wait.h /usr/include/linux/types.h \
@@ -218,5 +213,4 @@ we.o : we.c /usr/include/linux/config.h /usr/include/linux/config.dist.h /usr/in
   /usr/include/asm/memory.h /usr/include/errno.h /usr/include/traditional.h /usr/include/linux/errno.h \
   /usr/include/linux/fcntl.h /usr/include/netinet/in.h /usr/include/features.h \
   /usr/include/sys/socket.h /usr/include/linux/socket.h dev.h eth.h timer.h ip.h \
-  /usr/include/linux/sock_ioctl.h /usr/include/netinet/protocols.h tcp.h sock.h \
-  arp.h wereg.h 
+  /usr/include/linux/sock_ioctl.h tcp.h sock.h arp.h wereg.h 

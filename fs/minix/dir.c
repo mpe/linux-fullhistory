@@ -13,15 +13,21 @@
 #include <linux/minix_fs.h>
 #include <linux/stat.h>
 
+static int minix_dir_read(struct inode * inode, struct file * filp, char * buf, int count)
+{
+	return -EISDIR;
+}
+
 static int minix_readdir(struct inode *, struct file *, struct dirent *, int);
 
 static struct file_operations minix_dir_operations = {
 	NULL,			/* lseek - default */
-	minix_file_read,	/* read */
+	minix_dir_read,		/* read */
 	NULL,			/* write - bad */
 	minix_readdir,		/* readdir */
 	NULL,			/* select - default */
 	NULL,			/* ioctl - default */
+	NULL,			/* mmap */
 	NULL,			/* no special open code */
 	NULL			/* no special release code */
 };

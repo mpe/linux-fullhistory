@@ -32,7 +32,7 @@ static inline void wait_on_buffer(struct buffer_head * bh)
 	sti();
 }
 
-int minix_file_read(struct inode *, struct file *, char *, int);
+static int minix_file_read(struct inode *, struct file *, char *, int);
 static int minix_file_write(struct inode *, struct file *, char *, int);
 
 /*
@@ -46,6 +46,7 @@ static struct file_operations minix_file_operations = {
 	NULL,			/* readdir - bad */
 	NULL,			/* select - default */
 	NULL,			/* ioctl - default */
+	NULL,			/* mmap */
 	NULL,			/* no special open is needed */
 	NULL			/* release */
 };
@@ -67,13 +68,7 @@ struct inode_operations minix_file_inode_operations = {
 	minix_truncate		/* truncate */
 };
 
-/*
- * minix_file_read() is also needed by the directory read-routine,
- * so it's not static. NOTE! reading directories directly is a bad idea,
- * but has to be supported for now for compatability reasons with older
- * versions.
- */
-int minix_file_read(struct inode * inode, struct file * filp, char * buf, int count)
+static int minix_file_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
 	int read,left,chars;
 	int block, blocks, offset;

@@ -1147,7 +1147,7 @@ unsigned int handle_diacr(unsigned int ch)
 	}
 }
 
-#if defined KBD_FR || defined KBD_US || defined KBD_UK
+#if defined KBD_FR || defined KBD_US || defined KBD_UK || defined KBD_FR_LATIN1
 static unsigned char num_table[] = "789-456+1230.";
 #else
 static unsigned char num_table[] = "789-456+1230,";
@@ -1351,12 +1351,16 @@ long no_idt[2] = {0, 0};
 void hard_reset_now(void)
 {
 	int i;
+	unsigned long * pg_dir;
 
 	sti();
+/* rebooting needs to touch the page at absolute addr 0 */
+	pg_dir = (unsigned long *) current->tss.cr3;
+	pg_dir[768] = 7;			/* 0xC0000000 */
 	for (;;) {
 		for (i=0; i<100; i++) {
 			kb_wait();
-			*((unsigned short *)0x472)=0x1234;
+			*((unsigned short *)0x472) = 0x1234;
 			outb(0xfe,0x64);	 /* pulse reset low */
 		}
 		__asm__("\tlidt _no_idt"::);

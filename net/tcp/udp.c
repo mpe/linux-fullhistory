@@ -31,6 +31,7 @@
 #include "sock.h"
 #include <linux/errno.h>
 #include <linux/timer.h>
+#include <linux/termios.h> /* for ioctl's */
 #include <asm/system.h>
 #include <asm/segment.h>
 #include "../kern_sock.h" /* for PRINTK */
@@ -123,7 +124,7 @@ udp_check (struct udp_header *uh, int len,
 	  "\t adcl %%edx,%%ebx\n"
 	  "\t adcl $0, %%ebx\n"
 	  : "=b" (sum)
-	  : "0" (daddr), "c" (saddr), "d" ((net16(len) << 16) + IP_UDP*256)
+	  : "0" (daddr), "c" (saddr), "d" ((net16(len) << 16) + IPPROTO_UDP*256)
 	  : "cx","bx","dx" );
 
   if (len > 3)
@@ -337,7 +338,7 @@ udp_sendto (volatile struct sock *sk, unsigned char *from, int len,
 		  buff = (unsigned char *)(skb+1);
 		  tmp = sk->prot->build_header (skb, saddr,
 						sin.sin_addr.s_addr, &dev,
-						IP_UDP, sk->opt, skb->mem_len);
+						IPPROTO_UDP, sk->opt, skb->mem_len);
 		  if (tmp < 0 )
 		    {
 			    sk->prot->wfree (sk, skb->mem_addr, skb->mem_len);
@@ -386,6 +387,50 @@ udp_write (volatile struct sock *sk, unsigned char *buff, int len, int noblock,
 	return (udp_sendto (sk, buff, len, noblock, flags, NULL, 0));
 }
 
+
+static int
+udp_ioctl (volatile struct sock *sk, int cmd, unsigned long arg)
+{
+  switch (cmd)
+    {
+    default:
+      return (-EINVAL);
+
+      case TIOCOUTQ:
+	{
+	  unsigned long amount;
+	  if (sk->state == TCP_LISTEN)
+	    return (-EINVAL);
+	  amount = sk->prot->wspace(sk)/2;
+	  verify_area ((void *)arg, sizeof (unsigned long));
+	  put_fs_long (amount, (unsigned long *)arg);
+	  return (0);
+	}
+
+
+      case TIOCINQ:
+/*      case FIONREAD:*/
+	{
+	  struct sk_buff *skb;
+	  unsigned long amount;
+	  if (sk->state == TCP_LISTEN)
+	    return (-EINVAL);
+	  amount = 0;
+	  skb = sk->rqueue;
+	  if (skb != NULL)
+	    {
+	      /* we will only return the amount of this packet since that is all
+		 that will be read. */
+	      amount = skb->len;
+	    }
+
+	  verify_area ((void *)arg, sizeof (unsigned long));
+	  put_fs_long (amount, (unsigned long *)arg);
+	  return (0);
+	}
+    }
+}
+
 int
 udp_recvfrom (volatile struct sock *sk, unsigned char *to, int len,
 	      int noblock,
@@ -397,6 +442,17 @@ udp_recvfrom (volatile struct sock *sk, unsigned char *to, int len,
 	struct sk_buff *skb;
 	if (len == 0) return (0);
 	if (len < 0) return (-EINVAL);
+
+	/* this will pick up errors that occured
+	   while the program was doing something
+	   else. */
+	if (sk->err)
+	  {
+	    int err;
+	    err = -sk->err;
+	    sk->err = 0;
+	    return (err);
+	  }
 	if (addr_len)
 	  {
 		  verify_area (addr_len, sizeof(*addr_len));
@@ -626,7 +682,7 @@ struct proto udp_prot =
   NULL,
   udp_rcv,
   udp_select,
-  NULL,
+  udp_ioctl,
   NULL,
   128,
   0,

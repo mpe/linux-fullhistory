@@ -80,15 +80,28 @@ extern void panic(const char * str);
 
 typedef int (*fn_ptr)();
 
-struct i387_struct {
-	long	cwd;
-	long	swd;
-	long	twd;
-	long	fip;
-	long	fcs;
-	long	foo;
-	long	fos;
-	long	st_space[20];	/* 8*10 bytes for each FP-reg = 80 bytes */
+union i387_union {
+	struct i387_hard_struct {
+		long	cwd;
+		long	swd;
+		long	twd;
+		long	fip;
+		long	fcs;
+		long	foo;
+		long	fos;
+		long	st_space[20];	/* 8*10 bytes for each FP-reg = 80 bytes */
+	} hard;
+	struct i387_soft_struct {
+		long	cwd;
+		long	swd;
+		long	twd;
+		long	fip;
+		long	fcs;
+		long	foo;
+		long	fos;
+		long    top;
+		long	regs_space[32];	/* 8*16 bytes for each FP-reg = 112 bytes */
+	} soft;
 };
 
 struct tss_struct {
@@ -116,7 +129,7 @@ struct tss_struct {
 	unsigned long	ldt;		/* 16 high bits zero */
 	unsigned long	trace_bitmap;	/* bits: trace 0, bitmap 16-31 */
 	unsigned long	io_bitmap[IO_BITMAP_SIZE];
-	struct i387_struct i387;
+	union i387_union i387;
 };
 
 struct task_struct {
@@ -168,6 +181,7 @@ struct task_struct {
 	struct inode * pwd;
 	struct inode * root;
 	struct inode * executable;
+	struct vm_area_struct * mmap;
 	struct {
 		struct inode * library;
 		unsigned long start;
@@ -213,7 +227,7 @@ struct task_struct {
 /* rss */	2, \
 /* comm */	"swapper", \
 /* vm86_info */	NULL, 0, \
-/* fs info */	0,-1,0022,NULL,NULL,NULL, \
+/* fs info */	0,-1,0022,NULL,NULL,NULL,NULL, \
 /* libraries */	{ { NULL, 0, 0}, }, 0, \
 /* filp */	{NULL,}, 0, \
 		{ \
@@ -225,7 +239,7 @@ struct task_struct {
 	 0,0,0,0,0,0,0,0, \
 	 0,0,0x17,0x17,0x17,0x17,0x17,0x17, \
 	 _LDT(0),0x80000000,{0xffffffff}, \
-		{} \
+		{ { 0, } } \
 	}, \
 }
 
@@ -236,6 +250,7 @@ extern unsigned long volatile jiffies;
 extern unsigned long startup_time;
 extern int jiffies_offset;
 extern int need_resched;
+extern int hard_math;
 
 #define CURRENT_TIME (startup_time+(jiffies+jiffies_offset)/HZ)
 

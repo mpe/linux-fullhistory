@@ -11,6 +11,9 @@
 ! system to read them from there before the area is overwritten
 ! for buffer-blocks.
 !
+! Move PS/2 aux init code to psaux.c
+! (troyer@saifr00.cfsat.Honeywell.COM) 03Oct92
+!
 
 ! NOTE! These had better be the same as in bootsect.s!
 #include <linux/config.h>
@@ -134,29 +137,6 @@ is_disk1:
 	int	0x11		! int 0x11: equipment determination
 	test	al,#0x04	! check if pointing device installed
 	jz	no_psmouse
-	mov	ax,#0xc201	! reset pointing device
-	int	0x15
-	jc	no_psmouse
-	mov	bh,#0x03	! 3 bytes/packet
-	mov	ax,#0xc205	! initialize pointing device
-	int	0x15
-	jc	no_psmouse
-	mov	ax,#0xc203	! set resolution
-	mov	bh,#0x03	! 8 counts/mm
-	int	0x15
-	jc	no_psmouse
-	mov	ax,#0xc206	! set scaling
-	mov	bh,0x02		! 2:1 scaling
-	int	0x15
-	jc	no_psmouse
-	mov	ax,#0xc202	! set sample rate
-	mov	bh,#0x05	! 100 reports per second
-	int	0x15
-	jc	no_psmouse
-	mov	bh,#0x01
-	mov	ax,#0xc200	! enable pointing device
-	int	0x15
-	jc	no_psmouse
 	mov	[0x1ff],#0xaa	! device present
 no_psmouse:
 

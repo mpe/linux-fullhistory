@@ -41,7 +41,7 @@ static struct ip_protocol tcp_protocol =
    tcp_rcv,
    tcp_err,
    NULL,
-   IP_TCP,
+   IPPROTO_TCP,
    0, /* copy */
    NULL
 };
@@ -51,7 +51,7 @@ static struct ip_protocol udp_protocol =
    udp_rcv,
    udp_err,
    &tcp_protocol,
-   IP_UDP,
+   IPPROTO_UDP,
    0, /* copy */
    NULL
 };
@@ -61,7 +61,7 @@ static struct ip_protocol icmp_protocol =
    icmp_rcv,
    NULL,
    &udp_protocol,
-   IP_ICMP,
+   IPPROTO_ICMP,
    0, /* copy */
    NULL
 };

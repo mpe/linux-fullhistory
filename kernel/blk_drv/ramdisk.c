@@ -56,6 +56,7 @@ static struct file_operations rd_fops = {
 	NULL,			/* readdir - bad */
 	NULL,			/* select */
 	NULL,			/* ioctl */
+	NULL,			/* mmap */
 	NULL,			/* no special open code */
 	NULL			/* no special release code */
 };

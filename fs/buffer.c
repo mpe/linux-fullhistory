@@ -28,8 +28,14 @@
 #include <asm/system.h>
 #include <asm/io.h>
 
-#if defined(CONFIG_BLK_DEV_SR) && defined(CONFIG_SCSI)
+#ifdef CONFIG_SCSI
+#ifdef CONFIG_BLK_DEV_SR
 extern int check_cdrom_media_change(int, int);
+#endif
+#ifdef CONFIG_BLK_DEV_SD
+extern int check_scsidisk_media_change(int, int);
+extern int revalidate_scsidisk(int, int);
+#endif
 #endif
 
 static struct buffer_head * hash_table[NR_HASH];
@@ -91,7 +97,7 @@ int sync_dev(int dev)
 	return 0;
 }
 
-void inline invalidate_buffers(int dev)
+void invalidate_buffers(int dev)
 {
 	int i;
 	struct buffer_head * bh;
@@ -133,6 +139,13 @@ void check_disk_change(int dev)
 		brelse(bh);
 		break;
 
+#if defined(CONFIG_BLK_DEV_SD) && defined(CONFIG_SCSI)
+         case 8: /* Removable scsi disk */
+		i = check_scsidisk_media_change(dev, 0);
+		if (i) printk("Flushing buffers and inodes for SCSI disk\n");
+		break;
+#endif
+
 #if defined(CONFIG_BLK_DEV_SR) && defined(CONFIG_SCSI)
          case 11: /* CDROM */
 		i = check_cdrom_media_change(dev, 0);
@@ -151,6 +164,13 @@ void check_disk_change(int dev)
 			put_super(super_block[i].s_dev);
 	invalidate_inodes(dev);
 	invalidate_buffers(dev);
+
+#if defined(CONFIG_BLK_DEV_SD) && defined(CONFIG_SCSI)
+/* This is trickier for a removable hardisk, because we have to invalidate
+   all of the partitions that lie on the disk. */
+	if (MAJOR(dev) == 8)
+		revalidate_scsidisk(dev, 0);
+#endif
 }
 
 #define _hashfn(dev,block) (((unsigned)(dev^block))%NR_HASH)

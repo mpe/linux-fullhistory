@@ -20,15 +20,21 @@
 #include <linux/ext_fs.h>
 #include <linux/stat.h>
 
+static int ext_dir_read(struct inode * inode, struct file * filp, char * buf, int count)
+{
+	return -EISDIR;
+}
+
 static int ext_readdir(struct inode *, struct file *, struct dirent *, int);
 
 static struct file_operations ext_dir_operations = {
 	NULL,			/* lseek - default */
-	NULL,			/* read */
+	ext_dir_read,		/* read */
 	NULL,			/* write - bad */
 	ext_readdir,		/* readdir */
 	NULL,			/* select - default */
 	NULL,			/* ioctl - default */
+	NULL,			/* mmap */
 	NULL,			/* no special open code */
 	NULL			/* no special release code */
 };

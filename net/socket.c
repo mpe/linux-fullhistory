@@ -62,8 +62,9 @@ static struct file_operations socket_file_ops = {
 	sock_read,
 	sock_write,
 	sock_readdir,
-	sock_select,	/* not in vfs yet */
+	sock_select,
 	sock_ioctl,
+	NULL,		/* mmap */
 	NULL,		/* no special open code... */
 	sock_close
 };

@@ -1174,6 +1174,7 @@ static int floppy_open(struct inode * inode, struct file * filp)
 			return -EBUSY;
 	fd_ref[drive]++;
 	fd_device[drive] = inode->i_rdev;
+	buffer_drive = buffer_track = -1;
 	if (old_dev && old_dev != inode->i_rdev)
 		invalidate_buffers(old_dev);
 	if (filp && filp->f_mode)
@@ -1197,6 +1198,7 @@ static struct file_operations floppy_fops = {
 	NULL,			/* readdir - bad */
 	NULL,			/* select */
 	fd_ioctl,		/* ioctl */
+	NULL,			/* mmap */
 	floppy_open,		/* open */
 	floppy_release		/* release */
 };

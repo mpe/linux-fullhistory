@@ -146,11 +146,12 @@ struct file_operations atixl_busmouse_fops = {
 	NULL, 		/* mouse_readdir */
 	mouse_select, 	/* mouse_select */
 	NULL, 		/* mouse_ioctl */
+	NULL,		/* mouse_mmap */
 	open_mouse,
 	release_mouse,
 };
 
-long atixl_busmouse_init(long kmem_start)
+unsigned long atixl_busmouse_init(unsigned long kmem_start)
 {
 	unsigned char a,b,c;
 
@@ -160,7 +161,6 @@ long atixl_busmouse_init(long kmem_start)
 	if (( a != b ) && ( a == c ))
 		printk("\nATI Inport ");
 	else{
-		printk("No ATI bus mouse detected\n");
 		mouse.present = 0;
 		return kmem_start;
 	}
@@ -172,6 +172,7 @@ long atixl_busmouse_init(long kmem_start)
 	mouse.ready = 0;
 	mouse.buttons = mouse.latch_buttons = 0;
 	mouse.dx = mouse.dy = 0;
+	mouse.wait = NULL;
 	printk("Bus mouse detected and installed.\n");
 	return kmem_start;
 }

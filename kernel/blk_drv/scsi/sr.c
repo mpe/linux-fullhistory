@@ -20,6 +20,7 @@
 
 #include "scsi.h"
 #include "sr.h"
+#include "scsi_ioctl.h"   /* For the door lock/unlock commands */
 
 #define MAJOR_NR 11
 
@@ -43,8 +44,6 @@ struct block_buffer
 
 static struct block_buffer bb[MAX_SR];
 
-static int sr_result;
-
 static int sr_open(struct inode *, struct file *);
 
 extern int sr_ioctl(struct inode *, struct file *, unsigned int, unsigned int);
@@ -52,6 +51,8 @@ extern int sr_ioctl(struct inode *, struct file *, unsigned int, unsigned int);
 static void sr_release(struct inode * inode, struct file * file)
 {
 	sync_dev(inode->i_rdev);
+	if(! --scsi_CDs[MINOR(inode->i_rdev)].device->access_count)
+	  sr_ioctl(inode, NULL, SCSI_IOCTL_DOORUNLOCK, 0);
 }
 
 static struct file_operations sr_fops = 
@@ -62,14 +63,53 @@ static struct file_operations sr_fops =
 	NULL,			/* readdir - bad */
 	NULL,			/* select */
 	sr_ioctl,		/* ioctl */
+	NULL,			/* mmap */
 	sr_open,       		/* no special open code */
 	sr_release		/* release */
 };
 
 /*
- * The sense_buffer is where we put data for all mode sense commands performed.
+ * This function checks to see if the media has been changed in the
+ * CDROM drive.  It is possible that we have already sensed a change,
+ * or the drive may have sensed one and not yet reported it.  We must
+ * be ready for either case. This function always reports the current
+ * value of the changed bit.  If flag is 0, then the changed bit is reset.
+ * This function could be done as an ioctl, but we would need to have
+ * an inode for that to work, and we do not always have one.
  */
 
+int check_cdrom_media_change(int full_dev, int flag){
+	int retval, target;
+	struct inode inode;
+
+	target =  MINOR(full_dev);
+
+	if (target >= NR_SR) {
+		printk("CD-ROM request error: invalid device.\n");
+		return 0;
+	};
+
+	inode.i_rdev = full_dev;  /* This is all we really need here */
+	retval = sr_ioctl(&inode, NULL, SCSI_IOCTL_TEST_UNIT_READY, 0);
+
+	if(retval){ /* Unable to test, unit probably not ready.  This usually
+		     means there is no disc in the drive.  Mark as changed,
+		     and we will figure it out later once the drive is
+		     available again.  */
+
+	  scsi_CDs[target].device->changed = 1;
+	  return 1; /* This will force a flush, if called from
+		       check_disk_change */
+	};
+
+	retval = scsi_CDs[target].device->changed;
+	if(!flag) scsi_CDs[target].device->changed = 0;
+	return retval;
+}
+
+/*
+ * The sense_buffer is where we put data for all mode sense commands performed.
+ */
 static unsigned char sense_buffer[255];
 
 /*
@@ -129,8 +169,9 @@ static void rw_intr (int host, int result)
 				/* detected disc change.  set a bit and quietly refuse	*/
 				/* further access.					*/
 		    
-				scsi_CDs[DEVICE_NR(CURRENT->dev)].changed = 1;
+				scsi_CDs[DEVICE_NR(CURRENT->dev)].device->changed = 1;
 				end_request(0);
+			        do_sr_request();
 				return;
 			}
 		}
@@ -143,7 +184,7 @@ static void rw_intr (int host, int result)
 				result = 0;
 				return;
 			} else {
-				end_request(0);
+			printk("CD-ROM error: Drive reports %d.\n", sense_buffer[2]);				end_request(0);
 				do_sr_request(); /* Do next request */
 				return;
 			}
@@ -181,6 +222,9 @@ static int sr_open(struct inode * inode, struct file * filp)
 {
 	if (filp->f_mode)
 		check_disk_change(inode->i_rdev);
+
+	if(!scsi_CDs[MINOR(inode->i_rdev)].device->access_count++)
+	  sr_ioctl(inode, NULL, SCSI_IOCTL_DOORLOCK, 0);
 	return 0;
 }
 
@@ -220,7 +264,7 @@ void do_sr_request (void)
 		goto repeat;
 		}
 
-	if (scsi_CDs[dev].changed)
+	if (scsi_CDs[dev].device->changed)
 	        {
 /* 
  * quietly refuse to do anything to a changed disc until the changed bit has been reset
@@ -337,7 +381,6 @@ void sr_init(void)
 		scsi_CDs[i].use = 1;
 		scsi_CDs[i].ten = 1;
 		scsi_CDs[i].remap = 1;
-		scsi_CDs[i].changed = 0;
 		sr_sizes[i] = scsi_CDs[i].capacity;
 
 		bb[i].block = -1;

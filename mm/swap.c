@@ -40,6 +40,7 @@ extern unsigned long free_page_list;
 
 /*
  * The following are used to make sure we don't thrash too much...
+ * NOTE!! NR_LAST_FREE_PAGES must be a power of 2...
  */
 #define NR_LAST_FREE_PAGES 32
 static unsigned long last_free_pages[NR_LAST_FREE_PAGES] = {0,};
@@ -350,110 +351,114 @@ static inline void add_mem_queue(unsigned long addr, unsigned long * queue)
 	*queue = addr;
 }
 
+/*
+ * Free_page() adds the page to the free lists. This is optimized for
+ * fast normal cases (no error jumps taken normally).
+ *
+ * The way to optimize jumps for gcc-2.2.2 is to:
+ *  - select the "normal" case and put it inside the if () { XXX }
+ *  - no else-statements if you can avoid them
+ *
+ * With the above two rules, you get a straight-line execution path
+ * for the normal case, giving better asm-code.
+ */
 void free_page(unsigned long addr)
 {
-	unsigned long i;
-	unsigned long flag;
+	if (addr < high_memory) {
+		unsigned short * map = mem_map + MAP_NR(addr);
 
-	if (addr >= high_memory) {
-		printk("Trying to free nonexistent page %08x\n",addr);
-		return;
-	}
-	i = MAP_NR(addr);
-	if (mem_map[i] & MAP_PAGE_RESERVED)
-		return;
-	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flag));
-	if (!mem_map[i])
-		goto bad_free_page;
-	if (!--mem_map[i])
-		if (nr_secondary_pages < MAX_SECONDARY_PAGES) {
-			add_mem_queue(addr,&secondary_page_list);
-			nr_secondary_pages++;
-		} else {
-			add_mem_queue(addr,&free_page_list);
-			nr_free_pages++;
+		if (*map) {
+			if (!(*map & MAP_PAGE_RESERVED)) {
+				unsigned long flag;
+
+				save_flags(flag);
+				cli();
+				if (!--*map) {
+					if (nr_secondary_pages < MAX_SECONDARY_PAGES) {
+						add_mem_queue(addr,&secondary_page_list);
+						nr_secondary_pages++;
+						restore_flags(flag);
+						return;
+					}
+					add_mem_queue(addr,&free_page_list);
+					nr_free_pages++;
+				}
+				restore_flags(flag);
+			}
+			return;
 		}
-	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flag));
+		printk("Trying to free free memory (%08x): memory probabably corrupted\n",addr);
+		return;
+	}
+	printk("Trying to free nonexistent page %08x\n",addr);
 	return;
-bad_free_page:
-	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flag));
-	printk("Trying to free free memory (%08x): memory probabably corrupted\n");
 }
 
-static unsigned long remove_from_mem_queue(unsigned long * queue)
-{
-	unsigned long result;
-	static unsigned long index = 0;
-
-	cli();
-	result = *queue;
-	if (!result) {
-		sti();
-		return 0;
-	}
-	if ((result & 0xfff) || result >= high_memory) {
-		*queue = 0;
-		printk("Result = %08x - memory map destroyed\n");
-		sti();
-		panic("mm error");
-	}
-	*queue = *(unsigned long *) result;
-	sti();
-	if (mem_map[MAP_NR(result)]) {
-		printk("Free page %08x has mem_map = %d\n",
-			result,mem_map[MAP_NR(result)]);
-		return 0;
-	}
-	mem_map[MAP_NR(result)] = 1;
-	cli();
-	if (index >= NR_LAST_FREE_PAGES)
-		index = 0;
-	last_free_pages[index] = result;
-	index++;
-	sti();
-	__asm__ __volatile__("cld ; rep ; stosl"
-		::"a" (0),"c" (1024),"D" (result)
-		:"di","cx");
-	return result;
-}
+/*
+ * This is one ugly macro, but it simplifies checking, and makes
+ * this speed-critical place reasonably fast, especially as we have
+ * to do things with the interrupt flag etc.
+ *
+ * Note that this #define is heavily optimized to give fast code
+ * for the normal case - the if-statements are ordered so that gcc-2.2.2
+ * will make *no* jumps for the normal code. Don't touch unless you
+ * know what you are doing.
+ */
+#define REMOVE_FROM_MEM_QUEUE(queue,nr) \
+	cli(); \
+	if (result = queue) { \
+		if (!(result & 0xfff) && result < high_memory) { \
+			queue = *(unsigned long *) result; \
+			if (!mem_map[MAP_NR(result)]) { \
+				mem_map[MAP_NR(result)] = 1; \
+				nr--; \
+last_free_pages[index = (index + 1) & (NR_LAST_FREE_PAGES - 1)] = result; \
+				restore_flags(flag); \
+				__asm__ __volatile__("cld ; rep ; stosl" \
+					::"a" (0),"c" (1024),"D" (result) \
+					:"di","cx"); \
+				return result; \
+			} \
+			printk("Free page %08x has mem_map = %d\n", \
+				result,mem_map[MAP_NR(result)]); \
+		} else \
+			printk("Result = 0x%08x - memory map destroyed\n", result); \
+		queue = 0; \
+		nr = 0; \
+	} else if (nr) { \
+		printk(#nr " is %d, but " #queue " is empty\n",nr); \
+		nr = 0; \
+	} \
+	restore_flags(flag)
 
 /*
  * Get physical address of first (actually last :-) free page, and mark it
  * used. If no free pages left, return 0.
+ *
+ * Note that this is one of the most heavily called functions in the kernel,
+ * so it's a bit timing-critical (especially as we have to disable interrupts
+ * in it). See the above macro which does most of the work, and which is
+ * optimized for a fast normal path of execution.
  */
 unsigned long get_free_page(int priority)
 {
-	unsigned long result;
+	unsigned long result, flag;
+	static unsigned long index = 0;
 
 	/* this routine can be called at interrupt time via
 	   malloc.  We want to make sure that the critical
 	   sections of code have interrupts disabled. -RAB
 	   Is this code reentrant? */
 
+	save_flags(flag);
 repeat:
-	result = remove_from_mem_queue(&free_page_list);
-	if (result) {
-		nr_free_pages--;
-		return result;
-	}
-	if (nr_free_pages) {
-		printk("nr_free_pages is %d, but no free memory found\n",nr_free_pages);
-		nr_free_pages = 0;
-	}
+	REMOVE_FROM_MEM_QUEUE(free_page_list,nr_free_pages);
 	if (priority == GFP_BUFFER)
 		return 0;
 	if (priority != GFP_ATOMIC)
 		if (try_to_free_page())
 			goto repeat;
-	result = remove_from_mem_queue(&secondary_page_list);
-	if (result) {
-		nr_secondary_pages--;
-		return result;
-	}
-	if (nr_secondary_pages) {
-		printk("nr_secondary_pages is %d, but no free memory found\n",nr_secondary_pages);
-		nr_secondary_pages = 0;
-	}
+	REMOVE_FROM_MEM_QUEUE(secondary_page_list,nr_secondary_pages);
 	return 0;
 }
 

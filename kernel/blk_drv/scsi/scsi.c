@@ -172,17 +172,23 @@ static void scan_scsis (void)
 
 					while (the_result < 0);
 
-                                        if (!the_result)
+					if (!the_result)
 						{
-                                                scsi_devices[NR_SCSI_DEVICES].
+						scsi_devices[NR_SCSI_DEVICES].
 							host_no = host_nr;
-                                                scsi_devices[NR_SCSI_DEVICES].
+						scsi_devices[NR_SCSI_DEVICES].
 							id = dev;
-                                                scsi_devices[NR_SCSI_DEVICES].
+						scsi_devices[NR_SCSI_DEVICES].
 							lun = lun;
-                                                scsi_devices[NR_SCSI_DEVICES].
+						scsi_devices[NR_SCSI_DEVICES].
 							removable = (0x80 & 
 							scsi_result[1]) >> 7;
+						scsi_devices[NR_SCSI_DEVICES].
+						        changed = 0;
+						scsi_devices[NR_SCSI_DEVICES].
+						        access_count = 0;
+						scsi_devices[NR_SCSI_DEVICES].
+						        busy = 0;
 /* 
  *	Currently, all sequential devices are assumed to be tapes,
  *	all random devices disk, with the appropriate read only 
@@ -606,9 +612,10 @@ static int check_sense (int host)
 
 		case ABORTED_COMMAND:
 		case NOT_READY:
-		case UNIT_ATTENTION:	
 			return SUGGEST_RETRY;	
-	
+		case UNIT_ATTENTION:
+			return SUGGEST_ABORT;
+
 		/* these three are not supported */	
 		case COPY_ABORTED:
 		case VOLUME_OVERFLOW:

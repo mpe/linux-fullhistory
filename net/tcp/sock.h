@@ -64,10 +64,10 @@ struct sock
   unsigned short urg;
   unsigned short shutdown;
   short rtt;
+  short err;
   unsigned char protocol;
   unsigned char state;
   unsigned char ack_backlog;
-  unsigned char err;
   unsigned char max_ack_backlog;
   unsigned char priority;
   struct tcp_header dummy_th; /* I may be able to get rid of this. */

@@ -17,6 +17,12 @@ __asm__ __volatile__ ("movl %%esp,%%eax\n\t" \
 #define cli() __asm__ __volatile__ ("cli"::)
 #define nop() __asm__ __volatile__ ("nop"::)
 
+#define save_flags(x) \
+__asm__ __volatile__("pushfl ; popl %0":"=r" (x))
+
+#define restore_flags(x) \
+__asm__ __volatile__("pushl %0 ; popfl"::"r" (x))
+
 #define iret() __asm__ __volatile__ ("iret"::)
 
 #define _set_gate(gate_addr,type,dpl,addr) \

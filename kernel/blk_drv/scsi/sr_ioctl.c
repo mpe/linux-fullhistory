@@ -9,6 +9,7 @@
 #include "../blk.h"
 #include "scsi.h"
 #include "sr.h"
+#include "scsi_ioctl.h"
 
 #include <linux/cdrom.h>
 
@@ -26,7 +27,7 @@ static u_char 	sr_lock = 0;   /* To make sure that only one person is doing
 				  an ioctl at one time */
 static int 	target;
 
-extern int scsi_ioctl (int dev, int cmd, void *arg);
+extern int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
 
 static void lock_sr_ioctl( void )
 {
@@ -69,7 +70,7 @@ retry:
 
 	if(driver_byte(the_result) != 0 && 
 	   (sense_buffer[2] & 0xf) == UNIT_ATTENTION) {
-	  scsi_CDs[target].changed = 1;
+	  scsi_CDs[target].device->changed = 1;
 	  printk("Disc change detected.\n");
 	};
 
@@ -83,7 +84,7 @@ retry:
 	if(driver_byte(the_result) != 0)
 	  switch(sense_buffer[2] & 0xf) {
 	  case UNIT_ATTENTION:
-	    scsi_CDs[target].changed = 1;
+	    scsi_CDs[target].device->changed = 1;
 	    printk("Disc change detected.\n");
 	    break;
 	  case NOT_READY: /* This happens if there is no disc in drive */
@@ -106,53 +107,6 @@ retry:
 	};
       	return the_result;
 }
-	
-/*
- * This function checks to see if the media has been changed in the
- * CDROM drive.  It is possible that we have already sensed a change,
- * or the drive may have sensed one and not yet reported it.  We must
- * be ready for either case. This function always reports the current
- * value of the changed bit.  If flag is 0, then the changed bit is reset.
- * This function could be done as an ioctl, but we would need to have
- * an inode for that to work, and we do not always have one.
- */
-
-int check_cdrom_media_change(int full_dev, int flag){
-	int retval;
-
-	lock_sr_ioctl();
-
-	target =  MINOR(full_dev);
-
-	if (target >= NR_SR) {
-		printk("CD-ROM request error: invalid device.\n");
-		unlock_sr_ioctl();
-		return 0;
-	};
-
-	sr_cmd[0] = TEST_UNIT_READY;
-	sr_cmd[1] = (scsi_CDs[target].device->lun << 5) & 0xe0;
-	sr_cmd[2] = sr_cmd[3] = sr_cmd[4] = sr_cmd[5] = 0;
-
-	retval = do_ioctl();
-
-	if(retval){ /* Unable to test, unit probably not ready.  This usually
-		     means there is no disc in the drive.  Mark as changed,
-		     and we will figure it out later once the drive is
-		     available again.  */
-
-	  scsi_CDs[target].changed = 1;
-	  unlock_sr_ioctl();
-	  return 1; /* This will force a flush, if called from
-		       check_disk_change */
-	};
-
-	retval = scsi_CDs[target].changed;
-	if(!flag) scsi_CDs[target].changed = 0;
-	unlock_sr_ioctl();
-
-	return retval;
-}
 
 int sr_ioctl(struct inode * inode, struct file * file, unsigned long cmd, unsigned long arg)
 {
@@ -163,33 +117,6 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned long cmd, unsign
 
 	switch (cmd) 
 		{
-		/* linux-specific */
-		case CDROMDOORUNLOCK:
-		        lock_sr_ioctl();
-
-		        sr_cmd[0] = ALLOW_MEDIUM_REMOVAL;
-			sr_cmd[1] = scsi_CDs[target].device->lun << 5;
-			sr_cmd[2] = sr_cmd[3] = sr_cmd[5] = 0;
-			sr_cmd[4] = SR_REMOVAL_ALLOW;
-
-			result = do_ioctl();
-
-			unlock_sr_ioctl();
-			return result;
-
-		case CDROMDOORLOCK:
-		        lock_sr_ioctl();
-
-		        sr_cmd[0] = ALLOW_MEDIUM_REMOVAL;
-			sr_cmd[1] = scsi_CDs[target].device->lun << 5;
-			sr_cmd[2] = sr_cmd[3] = sr_cmd[5] = 0;
-			sr_cmd[4] = SR_REMOVAL_PREVENT;
-
-			result = do_ioctl();
-
-			unlock_sr_ioctl();
-			return result;
-
 		/* Sun-compatible */
 		case CDROMPAUSE:
 			lock_sr_ioctl();

@@ -23,6 +23,7 @@ static struct file_operations proc_root_operations = {
 	proc_readroot,		/* readdir */
 	NULL,			/* select - default */
 	NULL,			/* ioctl - default */
+	NULL,			/* mmap */
 	NULL,			/* no special open code */
 	NULL			/* no special release code */
 };

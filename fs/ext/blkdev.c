@@ -45,6 +45,7 @@ static struct file_operations def_blk_fops = {
 	NULL,		/* readdir */
 	NULL,		/* select */
 	NULL,		/* ioctl */
+	NULL,		/* mmap */
 	blkdev_open,	/* open */
 	NULL,		/* release */
 };

@@ -38,6 +38,9 @@
 #define MAJOR_NR 3
 #include "blk.h"
 
+extern void resetup_one_dev(struct gendisk *, unsigned int);
+static int revalidate_hddisk(int, int);
+
 static inline unsigned char CMOS_READ(unsigned char addr)
 {
 	outb_p(0x80|addr,0x70);
@@ -54,6 +57,9 @@ static void recal_intr(void);
 static void bad_rw_intr(void);
 
 static char recalibrate[ MAX_HD ] = { 0, };
+static int access_count[MAX_HD] = {0, };
+static char busy[MAX_HD] = {0, };
+static struct wait_queue * busy_wait = NULL;
 
 static int reset = 0;
 
@@ -456,13 +462,14 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 	struct hd_geometry *loc = (void *) arg;
 	int dev;
 
-	if (!loc || !inode)
+	if (!inode)
 		return -EINVAL;
 	dev = MINOR(inode->i_rdev) >> 6;
 	if (dev >= NR_HD)
 		return -EINVAL;
 	switch (cmd) {
 		case HDIO_REQ:
+			if (!loc)  return -EINVAL;
 			verify_area(loc, sizeof(*loc));
 			put_fs_byte(hd_info[dev].head,
 				(char *) &loc->heads);
@@ -473,10 +480,23 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 			put_fs_long(hd[MINOR(inode->i_rdev)].start_sect,
 				(long *) &loc->start);
 			return 0;
+		case BLKRRPART: /* Re-read partition tables */
+			return revalidate_hddisk(inode->i_rdev, 1);
 		RO_IOCTLS(inode->i_rdev,arg);
 		default:
 			return -EINVAL;
 	}
+}
+
+static int hd_open(struct inode * inode, struct file * filp)
+{
+	int target;
+	target =  DEVICE_NR(MINOR(inode->i_rdev));
+
+	while (busy[target])
+		sleep_on(&busy_wait);
+	access_count[target]++;
+	return 0;
 }
 
 /*
@@ -485,7 +505,12 @@ static int hd_ioctl(struct inode * inode, struct file * file,
  */
 static void hd_release(struct inode * inode, struct file * file)
 {
+        int target;
 	sync_dev(inode->i_rdev);
+
+	target =  DEVICE_NR(MINOR(inode->i_rdev));
+	access_count[target]--;
+
 }
 
 static void hd_geninit();
@@ -504,6 +529,34 @@ static struct gendisk hd_gendisk = {
 	NULL		/* next */
 };
 	
+static void hd_interrupt(int unused)
+{
+	void (*handler)(void) = DEVICE_INTR;
+
+	DEVICE_INTR = NULL;
+	timer_active &= ~(1<<HD_TIMER);
+	if (!handler)
+		handler = unexpected_hd_interrupt;
+	handler();
+	sti();
+}
+
+/*
+ * This is the harddisk IRQ description. The SA_INTERRUPT in sa_flags
+ * means we run the IRQ-handler with interrupts disabled: this is bad for
+ * interrupt latency, but anything else has led to problems on some
+ * machines...
+ *
+ * We enable interrupts in some of the routines after making sure it's
+ * safe.
+ */
+static struct sigaction hd_sigaction = {
+	hd_interrupt,
+	0,
+	SA_INTERRUPT,
+	NULL
+};
+
 static void hd_geninit(void)
 {
 	int drive, i;
@@ -551,8 +604,13 @@ static void hd_geninit(void)
 			NR_HD = 1;
 	else
 		NR_HD = 0;
+	if (NR_HD) {
+		if (irqaction(HD_IRQ,&hd_sigaction)) {
+			printk("Unable to get IRQ%d for the harddisk driver\n",HD_IRQ);
+			NR_HD = 0;
+		}
+	}
 #endif
-
 	for (i = 0 ; i < NR_HD ; i++)
 		hd[i<<6].nr_sects = hd_info[i].head*
 				hd_info[i].sect*hd_info[i].cyl;
@@ -567,36 +625,9 @@ static struct file_operations hd_fops = {
 	NULL,			/* readdir - bad */
 	NULL,			/* select */
 	hd_ioctl,		/* ioctl */
-	NULL,			/* no special open code */
+	NULL,			/* mmap */
+	hd_open,		/* open */
 	hd_release		/* release */
-};
-
-static void hd_interrupt(int unused)
-{
-	void (*handler)(void) = DEVICE_INTR;
-
-	DEVICE_INTR = NULL;
-	timer_active &= ~(1<<HD_TIMER);
-	if (!handler)
-		handler = unexpected_hd_interrupt;
-	handler();
-	sti();
-}
-
-/*
- * This is the harddisk IRQ description. The SA_INTERRUPT in sa_flags
- * means we run the IRQ-handler with interrupts disabled: this is bad for
- * interrupt latency, but anything else has led to problems on some
- * machines...
- *
- * We enable interrupts in some of the routines after making sure it's
- * safe.
- */
-static struct sigaction hd_sigaction = {
-	hd_interrupt,
-	0,
-	SA_INTERRUPT,
-	NULL
 };
 
 unsigned long hd_init(unsigned long mem_start, unsigned long mem_end)
@@ -605,10 +636,67 @@ unsigned long hd_init(unsigned long mem_start, unsigned long mem_end)
 	blkdev_fops[MAJOR_NR] = &hd_fops;
 	hd_gendisk.next = gendisk_head;
 	gendisk_head = &hd_gendisk;
-	if (irqaction(HD_IRQ,&hd_sigaction))
-		printk("Unable to get IRQ%d for the harddisk driver\n",HD_IRQ);
 	timer_table[HD_TIMER].fn = hd_times_out;
 	return mem_start;
+}
+
+#define DEVICE_BUSY busy[target]
+#define USAGE access_count[target]
+#define CAPACITY (hd_info[target].head*hd_info[target].sect*hd_info[target].cyl)
+/* We assume that the the bios parameters do not change, so the disk capacity
+   will not change */
+#undef MAYBE_REINIT
+#define GENDISK_STRUCT hd_gendisk
+
+/*
+ * This routine is called to flush all partitions and partition tables
+ * for a changed scsi disk, and then re-read the new partition table.
+ * If we are revalidating a disk because of a media change, then we
+ * enter with usage == 0.  If we are using an ioctl, we automatically have
+ * usage == 1 (we need an open channel to use an ioctl :-), so this
+ * is our limit.
+ */
+static int revalidate_hddisk(int dev, int maxusage)
+{
+	int target, major;
+	struct gendisk * gdev;
+	int max_p;
+	int start;
+	int i;
+
+	target =  DEVICE_NR(MINOR(dev));
+	gdev = &GENDISK_STRUCT;
+
+	cli();
+	if (DEVICE_BUSY || USAGE > maxusage) {
+		sti();
+		return -EBUSY;
+	};
+	DEVICE_BUSY = 1;
+	sti();
+
+	max_p = gdev->max_p;
+	start = target << gdev->minor_shift;
+	major = MAJOR_NR << 8;
+
+	for (i=max_p - 1; i >=0 ; i--) {
+		sync_dev(major | start | i);
+		invalidate_inodes(major | start | i);
+		invalidate_buffers(major | start | i);
+		gdev->part[i].start_sect = 0;
+		gdev->part[i].nr_sects = 0;
+	};
+
+#ifdef MAYBE_REINIT
+	MAYBE_REINIT;
+#endif
+
+	gdev->part[start].nr_sects = CAPACITY;
+	resetup_one_dev(gdev, target);
+
+	DEVICE_BUSY = 0;
+	wake_up(&busy_wait);
+	return 0;
 }
 
 #endif

@@ -36,6 +36,10 @@ the FPU if it finds one, even with MATH_EMULATION defined.  The kernel
 will be slightly bigger.  It is probably not worth it to recompile the
 kernel just to get rid of the emulation.
 
+[ Linus' note: the new math-emulator in 0.98.2 is much better than my
+  old one, but it also takes up more memory.  You may want to remove it
+  if you are short on memory and long on math-coprocessors ]
+
 2.  Create the symlinks:
 
 	ln -fs /usr/src/linux/include/linux /usr/include/linux 

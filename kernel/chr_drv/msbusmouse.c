@@ -142,13 +142,14 @@ struct file_operations ms_bus_mouse_fops = {
 	NULL, 		/* mouse_readdir */
 	mouse_select, 	/* mouse_select */
 	NULL, 		/* mouse_ioctl */
+	NULL,		/* mouse_mmap */
 	open_mouse,
 	release_mouse,
 };
 
 #define MS_DELAY 100000
 
-long ms_bus_mouse_init(long kmem_start)
+unsigned long ms_bus_mouse_init(unsigned long kmem_start)
 {
 	register int mse_byte;
 	int i, delay_val, msfound = 1;
@@ -157,6 +158,7 @@ long ms_bus_mouse_init(long kmem_start)
 	mouse.active = mouse.ready = 0;
 	mouse.buttons = mouse.latch_buttons = 0x80;
 	mouse.dx = mouse.dy = 0;
+	mouse.wait = NULL;
 	if (inb(MS_MSE_SIGNATURE_PORT) == 0xde) {
 		for (delay_val=0; delay_val<MS_DELAY;)
 			delay_val++;
@@ -180,7 +182,6 @@ long ms_bus_mouse_init(long kmem_start)
 		}
 	}
 	if (msfound == 1) {
-		printk("No Microsoft bus mouse detected.\n");
 		return kmem_start;
 	}
 	MS_MSE_INT_OFF();

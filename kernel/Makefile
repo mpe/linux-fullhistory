@@ -16,7 +16,7 @@
 .c.o:
 	$(CC) $(CFLAGS) -c $<
 
-SUBDIRS	= chr_drv blk_drv math
+SUBDIRS	= chr_drv blk_drv FPU-emu
 
 OBJS  = sched.o sys_call.o traps.o irq.o fork.o \
 	panic.o printk.o vsprintf.o sys.o exit.o \

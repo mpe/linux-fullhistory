@@ -213,10 +213,13 @@
 
 typedef struct scsi_device {
 	unsigned char host_no, id, lun;
+	int access_count;	/* Count of open channels/mounts */
 	unsigned writeable:1;
 	unsigned removable:1; 
 	unsigned random:1;
-	} Scsi_Device;
+	unsigned changed:1;	/* Data invalid due to media change */
+	unsigned busy:1;	/* Used to prevent races */
+} Scsi_Device;
 /*
 	Use these to separate status msg and our bytes
 */

@@ -117,6 +117,7 @@ static struct file_operations lp_fops = {
 	NULL,		/* lp_readdir */
 	NULL,		/* lp_select */
 	NULL,		/* lp_ioctl */
+	NULL,		/* lp_mmap */
 	lp_open,
 	lp_release
 };

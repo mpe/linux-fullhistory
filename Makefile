@@ -4,7 +4,7 @@
 # default of FLOPPY is used by 'build'.
 #
 
-ROOT_DEV =# /dev/hdb1
+ROOT_DEV = /dev/hdb1
 
 #
 # uncomment this if you want kernel profiling: the profile_shift is the
@@ -30,9 +30,9 @@ PROFILING =# -DPROFILE_SHIFT=2
 # 0x08 - tilde (~)
 # 0x10 - dieresis (umlaut)
 
-# KEYBOARD = -DKBD_FINNISH -DKBDFLAGS=0
+KEYBOARD = -DKBD_FINNISH -DKBDFLAGS=0
 # KEYBOARD = -DKBD_FINNISH_LATIN1 -DKBDFLAGS=0x9F
-KEYBOARD = -DKBD_US -DKBDFLAGS=0
+# KEYBOARD = -DKBD_US -DKBDFLAGS=0
 # KEYBOARD = -DKBD_GR -DKBDFLAGS=0
 # KEYBOARD = -DKBD_GR_LATIN1 -DKBDFLAGS=0x9F
 # KEYBOARD = -DKBD_FR -DKBDFLAGS=0
@@ -54,23 +54,31 @@ KEYBOARD = -DKBD_US -DKBDFLAGS=0
 MATH_EMULATION = -DKERNEL_MATH_EMULATION
 
 #
-# Maximum memory used by the kernel. This is normally 16MB - some of the
-# SCSI drivers may have problems with anything else due to DMA limits. The
-# drivers should check, but they don't. The ONLY valid values for
-# MAX_MEGABYTES are 16 and 32 - anything else needs kernel diffs.
+# Comment out this line if you don't want the 16MB kernel limit - but
+# note that some of the SCSI drivers may have problems with anything
+# else due to DMA limits.  The drivers should check, but they don't.
 #
 # EVEN IF YOU HAVE > 16MB, YOU SHOULD EDIT THIS ONLY IF YOU ARE 100%
 # SURE YOU AREN'T USING ANY DEVICE THAT DOES UNCHECKED DMA!!  THE
 # FLOPPY DRIVER IS OK, BUT OTHERS MIGHT HAVE PROBLEMS.
 #
 
-MAX_MEGABYTES = 16
+LIMIT_MEMORY = -DMAX_16M
+
+#
+# If you want to preset the SVGA mode, uncomment the next line and
+# set SVGA_MODE to whatever number you want.
+# Set it to -DSVGA_MODE=NORMAL_VGA if you just want the EGA/VGA mode.
+# The number is the same as you would ordinarily press at bootup.
+#
+
+SVGA_MODE=	-DSVGA_MODE=1
 
 #
 # standard CFLAGS
 #
 
-CFLAGS =-Wall -O6 -fomit-frame-pointer -DMAX_MEGABYTES=$(MAX_MEGABYTES)
+CFLAGS =-Wall -O6 -fomit-frame-pointer $(LIMIT_MEMORY)
 
 #
 # if you want the ram-disk device, define this to be the
@@ -82,27 +90,19 @@ CFLAGS =-Wall -O6 -fomit-frame-pointer -DMAX_MEGABYTES=$(MAX_MEGABYTES)
 AS86	=as86 -0 -a
 LD86	=ld86 -0
 
-#
-# If you want to preset the SVGA mode, uncomment the next line and
-# set SVGA_MODE to whatever number you want.
-# Set it to -DSVGA_MODE=NORMAL_VGA if you just want the EGA/VGA mode.
-# The number is the same as you would ordinarily press at bootup.
-#
-SVGA_MODE=#	-DSVGA_MODE=1
-
 AS	=as
 LD	=ld
 HOSTCC	=gcc -static
 CC	=gcc -DKERNEL
 MAKE	=make
-CPP	=$(CC) -E -DMAX_MEGABYTES=$(MAX_MEGABYTES)
+CPP	=$(CC) -E $(LIMIT_MEMORY)
 AR	=ar
 
 ARCHIVES	=kernel/kernel.o mm/mm.o fs/fs.o net/net.o
 FILESYSTEMS	=fs/minix/minix.o fs/ext/ext.o fs/msdos/msdos.o fs/proc/proc.o
 DRIVERS		=kernel/blk_drv/blk_drv.a kernel/chr_drv/chr_drv.a \
 		 kernel/blk_drv/scsi/scsi.a
-MATH		=kernel/math/math.a
+MATH		=kernel/FPU-emu/math.a
 LIBS		=lib/lib.a
 SUBDIRS		=kernel mm fs net lib
 
@@ -120,14 +120,14 @@ all:	Version Image
 lilo: Image
 	if [ -f /vmlinux ]; then mv /vmlinux /vmlinux.old; fi
 	dd if=Image of=/vmlinux
-	/etc/lilo/lilo -b /dev/hda /vmlinux
+	/etc/lilo/lilo -c -b /dev/hda /vmlinux
 
 linuxsubdirs: dummy
 	@for i in $(SUBDIRS); do (cd $$i && echo $$i && $(MAKE)) || exit; done
 
 Version:
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.98.pl1-`cat .version`\" > tools/version.h
+	@echo \#define UTS_RELEASE \"0.98.pl2-`cat .version`\" > tools/version.h
 	@echo \#define UTS_VERSION \"`date +%D`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h
