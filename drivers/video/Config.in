@@ -53,7 +53,7 @@ if [ "$CONFIG_FB" = "y" ]; then
   if [ "$ARCH" = "i386" -o "$ARCH" = "alpha" -o "$ARCH" = "ppc" -o \
        "$CONFIG_ARM" = "y" ]; then
     if [ "$CONFIG_ARM" != "y" -o "$CONFIG_ARCH_ACORN" != "y" ] ; then
-      tristate 'VGA chipset support (text only)' CONFIG_FB_VGA
+      tristate 'Deprecated almost-VGA support (text only - use normal VGA console instead)' CONFIG_FB_VGA
     fi
   fi
   if [ "$ARCH" = "alpha" ]; then
