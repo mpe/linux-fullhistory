@@ -36,6 +36,7 @@
 #include <linux/pm.h>
 #include <linux/agp_backend.h>
 #include <linux/vmalloc.h>
+#include <linux/dma-mapping.h>
 #include <linux/mm.h>
 #include <asm/io.h>
 #include <asm/cacheflush.h>
