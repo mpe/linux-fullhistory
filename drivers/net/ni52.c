@@ -240,7 +240,7 @@ struct priv
  */
 static int ni52_close(struct device *dev)
 {
-	free_irq(dev->irq, NULL);
+	free_irq(dev->irq, dev);
 
 	ni_reset586(); /* the hard way to stop the receiver */
 

@@ -388,7 +388,7 @@ static int eexp_close(struct device *dev)
 	lp->started = 0;
 	scb_command(dev, SCB_CUsuspend|SCB_RUsuspend);
 	outb(0,ioaddr+SIGNAL_CA);
-	free_irq(irq,NULL);
+	free_irq(irq,dev);
 	outb(i586_RST,ioaddr+EEPROM_Ctrl);
 	release_region(ioaddr,16);
 

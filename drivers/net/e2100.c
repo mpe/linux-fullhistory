@@ -352,7 +352,7 @@ e21_close(struct device *dev)
 	if (ei_debug > 1)
 		printk("%s: Shutting down ethercard.\n", dev->name);
 
-	free_irq(dev->irq, NULL);
+	free_irq(dev->irq, dev);
 	dev->irq = ei_status.saved_irq;
 
 	/* Shut off the interrupt line and secondary interface. */

@@ -322,7 +322,7 @@ net_open(struct device *dev)
 	 * and clean up on failure.
 	 */
 	if (request_dma(dev->dma, cardname)) {
-		free_irq(dev->irq, NULL);
+		free_irq(dev->irq, dev);
 		return -EAGAIN;
 	}
 
@@ -497,7 +497,7 @@ net_close(struct device *dev)
 	/* If not IRQ or DMA jumpered, free up the line. */
 	outw(0x00, ioaddr+0);	/* Release the physical interrupt line. */
 
-	free_irq(dev->irq, NULL);
+	free_irq(dev->irq, dev);
 	free_dma(dev->dma);
 
 	/* Update the statistics here. */
@@ -604,7 +604,7 @@ cleanup_module(void)
 	 * allocate them in net_probe1().
 	 */
 	/*
-	   free_irq(this_device.irq, NULL);
+	   free_irq(this_device.irq, dev);
 	   free_dma(this_device.dma);
 	*/
 	release_region(this_device.base_addr, NETCARD_IO_EXTENT);

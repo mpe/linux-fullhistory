@@ -1667,10 +1667,10 @@ CONFIG_BLK_DEV_SR
 Enable vendor-specific extensions (for SCSI CDROM)
 CONFIG_BLK_DEV_SR_VENDOR
   This enables the usage of vendor specific SCSI commands. This is
-  required for some stuff which is newer than the SCSI-II standard:
-  MultiSession CD support and some ioctls for reading Mode 2 Form 2
-  sectors. You'll probably want to say Y here, unless you have a
-  _really old_ CD-ROM drive.
+  required to support multisession CD's on with old NEC/TOSHIBA
+  cdrom drives (and HP Writers). If you have such a drive and get
+  the first session only, try to turn this on. Most drives should
+  work fine without this.
 
 SCSI generic support
 CONFIG_CHR_DEV_SG

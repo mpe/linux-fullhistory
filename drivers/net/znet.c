@@ -601,7 +601,7 @@ static int znet_close(struct device *dev)
 	disable_dma(zn.rx_dma);
 	disable_dma(zn.tx_dma);
 
-	free_irq(dev->irq, NULL);
+	free_irq(dev->irq, dev);
 
 	if (znet_debug > 1)
 		printk(KERN_DEBUG "%s: Shutting down ethercard.\n", dev->name);

@@ -1129,7 +1129,7 @@ lance_close(struct device *dev)
 	if (dev->dma != 4)
 		disable_dma(dev->dma);
 
-	free_irq(dev->irq, NULL);
+	free_irq(dev->irq, dev);
 
 	return 0;
 }

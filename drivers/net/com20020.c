@@ -354,7 +354,7 @@ __initfunc(int arc20020_found(struct device *dev,int ioaddr,int airq))
   dev->priv = kmalloc(sizeof(struct arcnet_local), GFP_KERNEL);
   if (dev->priv == NULL)
     {
-      free_irq(airq,NULL);
+      free_irq(airq,dev);
       release_region(ioaddr,ARCNET_TOTAL_SIZE);
       return -ENOMEM;
     }
@@ -1024,7 +1024,7 @@ void cleanup_module(void)
 
   if (dev->irq)
     {
-      free_irq(dev->irq,NULL);
+      free_irq(dev->irq,dev);
     }
 
   if (dev->base_addr) release_region(dev->base_addr,ARCNET_TOTAL_SIZE);

@@ -1148,7 +1148,7 @@ ewrk3_close(struct device *dev)
   while (inb(EWRK3_RQ));
 
   if (!lp->hard_strapped) {
-    free_irq(dev->irq, NULL);
+    free_irq(dev->irq, dev);
   }
 
   MOD_DEC_USE_COUNT;

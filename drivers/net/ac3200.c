@@ -173,7 +173,7 @@ __initfunc(static int ac_probe1(int ioaddr, struct device *dev))
 	/* Allocate dev->priv and fill in 8390 specific dev fields. */
 	if (ethdev_init(dev)) {
 		printk (" unable to allocate memory for dev->priv.\n");
-		free_irq(dev->irq, NULL);
+		free_irq(dev->irq, dev);
 		return -ENOMEM;
 	}
 
@@ -303,7 +303,7 @@ static int ac_close_card(struct device *dev)
 #ifdef notyet
 	/* We should someday disable shared memory and interrupts. */
 	outb(0x00, ioaddr + 6);	/* Disable interrupts. */
-	free_irq(dev->irq, NULL);
+	free_irq(dev->irq, dev);
 #endif
 
 	ei_close(dev);
@@ -369,7 +369,7 @@ cleanup_module(void)
 			kfree(dev->priv);
 			dev->priv = NULL;
 			/* Someday free_irq may be in ac_close_card() */
-			free_irq(dev->irq, NULL);
+			free_irq(dev->irq, dev);
 			release_region(dev->base_addr, AC_IO_EXTENT);
 			unregister_netdev(dev);
 		}

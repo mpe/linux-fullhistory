@@ -52,7 +52,7 @@ int ppa_abort(Scsi_Cmnd *);
 int ppa_reset(Scsi_Cmnd *, unsigned int);
 int ppa_proc_info(char *, char **, off_t, int, int, int);
 int ppa_biosparam(Disk *, kdev_t, int*);
-static int ppa_release(struct Scsi_Host *);
+int ppa_release(struct Scsi_Host *);
 
 #ifndef	MODULE
 #ifdef	PPA_CODE

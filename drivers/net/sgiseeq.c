@@ -468,7 +468,7 @@ static int sgiseeq_close(struct device *dev)
 	/* Shutdown the Seeq. */
 	reset_hpc3_and_seeq(sp->hregs, sregs);
 
-	free_irq(dev->irq, NULL);
+	free_irq(dev->irq, dev);
 
 	return 0;
 }

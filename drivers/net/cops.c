@@ -1005,7 +1005,7 @@ void cleanup_module(void)
 {
         /* No need to check MOD_IN_USE, as sys_delete_module() checks. */
 
-        free_irq(dev_cops.irq, NULL);
+        free_irq(dev_cops.irq, &dev_cops);
         release_region(dev_cops.base_addr, COPS_IO_EXTENT);
 	unregister_netdev(&dev_cops);
 

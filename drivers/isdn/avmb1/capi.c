@@ -45,11 +45,10 @@
 #include <linux/timer.h>
 #include <linux/wait.h>
 #include <linux/skbuff.h>
-#if (LINUX_VERSION_CODE >= 0x020117)
-#include <asm/poll.h>
-#endif
 #include <linux/capi.h>
 #include <linux/kernelcapi.h>
+
+#include <asm/poll.h>
 
 #include "compat.h"
 #include "capiutil.h"
@@ -96,29 +95,16 @@ static void capi_signal(__u16 applid, __u32 minor)
 
 /* -------- file_operations ----------------------------------------- */
 
-#if LINUX_VERSION_CODE < 0x020100
-static int capi_lseek(struct inode *inode, struct file *file,
-		      off_t offset, int origin)
+static loff_t capi_llseek(struct file *file, loff_t offset, int origin)
 {
 	return -ESPIPE;
 }
-#else
-static long long capi_llseek(struct inode *inode, struct file *file,
-			     long long offset, int origin)
-{
-	return -ESPIPE;
-}
-#endif
 
-#if LINUX_VERSION_CODE < 0x020100
-static int capi_read(struct inode *inode, struct file *file,
-		     char *buf, int count)
-#else
-static long capi_read(struct inode *inode, struct file *file,
-		      char *buf, unsigned long count)
-#endif
+static ssize_t capi_read(struct file *file,
+		      char *buf, size_t count,
+		      loff_t *off)
 {
-	unsigned int minor = MINOR(inode->i_rdev);
+	unsigned int minor = MINOR(file->f_dentry->d_inode->i_rdev);
 	struct capidev *cdev;
 	struct sk_buff *skb;
 	int retval;
@@ -164,15 +150,11 @@ static long capi_read(struct inode *inode, struct file *file,
 	return copied;
 }
 
-#if LINUX_VERSION_CODE < 0x020100
-static int capi_write(struct inode *inode, struct file *file,
-		      const char *buf, int count)
-#else
-static long capi_write(struct inode *inode, struct file *file,
-		       const char *buf, unsigned long count)
-#endif
+static ssize_t capi_write(struct file *file,
+		       const char *buf, size_t count,
+		       loff_t *off)
 {
-	unsigned int minor = MINOR(inode->i_rdev);
+	unsigned int minor = MINOR(file->f_dentry->d_inode->i_rdev);
 	struct capidev *cdev;
 	struct sk_buff *skb;
 	int retval;
@@ -215,40 +197,6 @@ static long capi_write(struct inode *inode, struct file *file,
 	return count;
 }
 
-#if (LINUX_VERSION_CODE < 0x020117)
-static int capi_select(struct inode *inode, struct file *file,
-		       int sel_type, select_table * wait)
-{
-	unsigned int minor = MINOR(inode->i_rdev);
-	struct capidev *cdev;
-
-	if (!minor || minor > CAPI_MAXMINOR || !capidevs[minor].is_registered)
-		return -ENODEV;
-
-	cdev = &capidevs[minor];
-
-	switch (sel_type) {
-	case SEL_IN:
-		if (!skb_queue_empty(&cdev->recv_queue))
-			return 1;
-		/* fall througth */
-	case SEL_EX:
-		/* error conditions ? */
-
-		select_wait(&cdev->recv_wait, wait);
-		return 0;
-	case SEL_OUT:
-		/* 
-		   if (!queue_full())
-		   return 1;
-		   select_wait(&cdev->send_wait, wait);
-		   return 0;
-		 */
-		return 1;
-	}
-	return 1;
-}
-#else
 static unsigned int
 capi_poll(struct file *file, poll_table * wait)
 {
@@ -266,7 +214,6 @@ capi_poll(struct file *file, poll_table * wait)
 		mask |= POLLIN | POLLRDNORM;
 	return mask;
 }
-#endif
 
 static int capi_ioctl(struct inode *inode, struct file *file,
 		      unsigned int cmd, unsigned long arg)
@@ -480,19 +427,11 @@ capi_release(struct inode *inode, struct file *file)
 
 static struct file_operations capi_fops =
 {
-#if LINUX_VERSION_CODE < 0x020100
-	capi_lseek,
-#else
 	capi_llseek,
-#endif
 	capi_read,
 	capi_write,
 	NULL,			/* capi_readdir */
-#if (LINUX_VERSION_CODE < 0x020117)
-	capi_select,
-#else
 	capi_poll,
-#endif
 	capi_ioctl,
 	NULL,			/* capi_mmap */
 	capi_open,

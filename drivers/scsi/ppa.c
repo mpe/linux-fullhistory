@@ -225,7 +225,7 @@ static void ppa_wakeup(void *ref)
 	return;
 }
 
-static int ppa_release(struct Scsi_Host *host)
+int ppa_release(struct Scsi_Host *host)
 {
 	int host_no = host->unique_id;
 

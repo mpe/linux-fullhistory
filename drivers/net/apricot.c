@@ -547,7 +547,7 @@ i596_open(struct device *dev)
 
     if (i < 4)
     {
-        free_irq(dev->irq, NULL);
+        free_irq(dev->irq, dev);
         return -EAGAIN;
     }
 
@@ -930,7 +930,7 @@ i596_close(struct device *dev)
 		   dev->name, lp->scb.status, lp->scb.command);
 	    break;
     	}
-    free_irq(dev->irq, NULL);
+    free_irq(dev->irq, dev);
     remove_rx_bufs(dev);
     MOD_DEC_USE_COUNT;
 

@@ -45,6 +45,8 @@
 #include <scsi/scsi_ioctl.h>   /* For the door lock/unlock commands */
 #include "constants.h"
 
+MODULE_PARM(xa_test,"i"); /* see sr_ioctl.c */
+
 #define MAX_RETRIES 3
 #define SR_TIMEOUT (30 * HZ)
 
@@ -67,12 +69,15 @@ static int * sr_hardsizes = NULL;              /* Hardware sector size */
 
 static int sr_open(struct cdrom_device_info*, int);
 void get_sectorsize(int);
+void get_capabilities(int);
 
 void requeue_sr_request (Scsi_Cmnd * SCpnt);
 static int sr_media_change(struct cdrom_device_info*, int);
 
 static void sr_release(struct cdrom_device_info *cdi)
 {
+	if (scsi_CDs[MINOR(cdi->dev)].sector_size > 2048)
+		sr_set_blocklength(MINOR(cdi->dev),2048);
 	sync_dev(cdi->dev);
 	scsi_CDs[MINOR(cdi->dev)].device->access_count--;
 	if (scsi_CDs[MINOR(cdi->dev)].device->host->hostt->module)
@@ -89,14 +94,14 @@ static struct cdrom_device_ops sr_dops = {
         sr_media_change,              /* media changed */
         sr_tray_move,                 /* tray move */
         sr_lock_door,                 /* lock door */
-        NULL,                         /* select speed */
+        sr_select_speed,              /* select speed */
         NULL,                         /* select disc */
         sr_get_last_session,          /* get last session */
         sr_get_mcn,                   /* get universal product code */
         sr_reset,                     /* hard reset */
         sr_audio_ioctl,               /* audio ioctl */
         sr_dev_ioctl,                 /* device-specific ioctl */
-        CDC_CLOSE_TRAY | CDC_OPEN_TRAY| CDC_LOCK |
+        CDC_CLOSE_TRAY | CDC_OPEN_TRAY| CDC_LOCK | CDC_SELECT_SPEED |
         CDC_MULTI_SESSION | CDC_MCN | CDC_MEDIA_CHANGED | CDC_PLAY_AUDIO,
         0
 };
@@ -139,10 +144,9 @@ int sr_media_change(struct cdrom_device_info *cdi, int slot){
         /* If the disk changed, the capacity will now be different,
          * so we force a re-read of this information */
         if (retval) {
-#ifdef CONFIG_BLK_DEV_SR_VENDOR
+		/* check multisession offset etc */
                 sr_cd_check(cdi);
-#endif
-
+		
                  /* 
                   * If the disk changed, the capacity will now be different,
                   * so we force a re-read of this information 
@@ -311,7 +315,8 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 		}
 
 		if (SCpnt->sense_buffer[2] == ILLEGAL_REQUEST) {
-			printk("CD-ROM error: ");
+			printk("sr%d: CD-ROM error: ",
+                               DEVICE_NR(SCpnt->request.rq_dev));
 			print_sense("sr", SCpnt);
 			printk("command was: ");
 			print_command(SCpnt->cmnd);
@@ -329,7 +334,8 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 		}
 
 		if (SCpnt->sense_buffer[2] == NOT_READY) {
-			printk(KERN_INFO "CD-ROM not ready.  Make sure you have a disc in the drive.\n");
+			printk(KERN_INFO "sr%d: CD-ROM not ready.  Make sure you have a disc in the drive.\n",
+                               DEVICE_NR(SCpnt->request.rq_dev));
 			SCpnt = end_scsi_request(SCpnt, 0, this_count);
 			requeue_sr_request(SCpnt); /* Do next request */
 			return;
@@ -358,7 +364,7 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 		    requeue_sr_request(SCpnt);
 		    return;
 		}
-    }
+        }
 
 	/* We only get this far if we have an error we have not recognized */
 	if(result) {
@@ -441,6 +447,17 @@ static void do_sr_request (void)
 		scsi_ioctl(SDev, SCSI_IOCTL_DOORLOCK, 0);
  	    }
  	    SDev->was_reset = 0;
+	}
+
+	/* we do lazy blocksize switching (when reading XA sectors,
+	 * see CDROMREADMODE2 ioctl) */
+	if (scsi_CDs[DEVICE_NR(CURRENT->rq_dev)].sector_size > 2048) {
+	    if (!in_interrupt())
+		sr_set_blocklength(DEVICE_NR(CURRENT->rq_dev),2048);
+#if 1
+            else
+                printk("sr: can't switch blocksize: in interrupt\n");
+#endif
 	}
 
 	if (flag++ == 0)
@@ -649,7 +666,7 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 		     * ensure that all scsi operations are able to do at least a non-scatter/gather
 		     * operation */
 		    if(sgpnt[count].address == NULL){ /* Out of dma memory */
-			printk("Warning: Running low on SCSI DMA buffers");
+			printk("Warning: Running low on SCSI DMA buffers\n");
 			/* Try switching back to a non scatter-gather operation. */
 			while(--count >= 0){
 			    if(sgpnt[count].alt_address)
@@ -805,17 +822,7 @@ static int sr_attach(Scsi_Device * SDp){
     SDp->scsi_request_fn = do_sr_request;
     scsi_CDs[i].device = SDp;
 
-    scsi_CDs[i].cdi.ops        = &sr_dops;
-    scsi_CDs[i].cdi.handle     = &scsi_CDs[i];
-    scsi_CDs[i].cdi.dev        = MKDEV(MAJOR_NR,i);
-    scsi_CDs[i].cdi.mask       = 0;
-    scsi_CDs[i].cdi.speed      = 1;
-    scsi_CDs[i].cdi.capacity   = 1;
-    register_cdrom(&scsi_CDs[i].cdi, "sr");
-
-#ifdef CONFIG_BLK_DEV_SR_VENDOR
     sr_vendor_init(i);
-#endif
 
     sr_template.nr_dev++;
     if(sr_template.nr_dev > sr_template.dev_max)
@@ -902,7 +909,7 @@ void get_sectorsize(int i){
 		case 512:
 			break;
 		default:
-			printk ("scd%d : unsupported sector size %d.\n",
+			printk ("sr%d: unsupported sector size %d.\n",
 				i, scsi_CDs[i].sector_size);
 			scsi_CDs[i].capacity = 0;
 			scsi_CDs[i].needs_sector_size = 1;
@@ -916,6 +923,58 @@ void get_sectorsize(int i){
 	scsi_CDs[i].needs_sector_size = 0;
 	sr_sizes[i] = scsi_CDs[i].capacity >> (BLOCK_SIZE_BITS - 9);
     };
+    scsi_free(buffer, 512);
+}
+
+void get_capabilities(int i){
+    unsigned char cmd[6];
+    unsigned char *buffer;
+    int           rc,n;
+
+    static char *loadmech[] = {
+        "caddy",
+        "tray",
+        "pop-up",
+        "",
+        "changer",
+        "changer",
+        "",
+        ""
+    };          
+
+    buffer = (unsigned char *) scsi_malloc(512);
+    cmd[0] = MODE_SENSE;
+    cmd[1] = (scsi_CDs[i].device->lun << 5) & 0xe0;
+    cmd[2] = 0x2a;
+    cmd[4] = 128;
+    cmd[3] = cmd[5] = 0;
+    rc = sr_do_ioctl(i, cmd, buffer, 128, 1);
+    
+    if (-EINVAL == rc) {
+        /* failed, drive has'nt this mode page */
+        scsi_CDs[i].cdi.speed      = 1;
+        scsi_CDs[i].cdi.capacity   = 1;
+        /* disable speed select, drive probably can't do this either */
+        scsi_CDs[i].cdi.mask      |= CDC_SELECT_SPEED;
+    } else {
+        n = buffer[3]+4;
+        scsi_CDs[i].cdi.speed    = ((buffer[n+8] << 8) + buffer[n+9])/176;
+        scsi_CDs[i].cdi.capacity = 1;
+      	scsi_CDs[i].readcd_known = 1;
+        scsi_CDs[i].readcd_cdda  = buffer[n+5] & 0x01;
+        /* print some capability bits */
+        printk("sr%i: scsi3-mmc drive: %dx/%dx %s%s%s%s%s\n",i,
+               ((buffer[n+14] << 8) + buffer[n+15])/176,
+               scsi_CDs[i].cdi.speed,
+               buffer[n+3]&0x01 ? "writer " : "",   /* CD Writer */
+               buffer[n+2]&0x02 ? "cd/rw " : "",    /* can read rewriteable */
+               buffer[n+4]&0x20 ? "xa/form2 " : "", /* can read xa/from2 */
+               buffer[n+5]&0x01 ? "cdda " : "",     /* can read audio data */
+               loadmech[buffer[n+6]>>5]);
+	if ((buffer[n+6] >> 5) == 0)
+		/* caddy drives can't close tray... */
+        	scsi_CDs[i].cdi.mask |= CDC_CLOSE_TRAY;
+    }
     scsi_free(buffer, 512);
 }
 
@@ -984,7 +1043,16 @@ void sr_finish()
 	scsi_CDs[i].use = 1;
 	scsi_CDs[i].ten = 1;
 	scsi_CDs[i].remap = 1;
+      	scsi_CDs[i].readcd_known = 0;
+      	scsi_CDs[i].readcd_cdda  = 0;
 	sr_sizes[i] = scsi_CDs[i].capacity >> (BLOCK_SIZE_BITS - 9);
+
+	scsi_CDs[i].cdi.ops        = &sr_dops;
+	scsi_CDs[i].cdi.handle     = &scsi_CDs[i];
+	scsi_CDs[i].cdi.dev        = MKDEV(MAJOR_NR,i);
+	scsi_CDs[i].cdi.mask       = 0;
+	get_capabilities(i);
+	register_cdrom(&scsi_CDs[i].cdi, "sr");
     }
 
 

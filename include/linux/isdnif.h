@@ -390,9 +390,9 @@ static inline unsigned long copy_to_user(void *to, const void *from, unsigned lo
 #include <asm/uaccess.h>
 #define GET_USER get_user
 #define PUT_USER put_user
-#define RWTYPE long
+#define RWTYPE ssize_t
 #define LSTYPE long long
-#define RWARG unsigned long
+#define RWARG size_t
 #define LSARG long long
 #endif
 

@@ -220,7 +220,7 @@ __initfunc(int arcrimi_found(struct device *dev,int node,int airq, u_long shmem)
   dev->priv = kmalloc(sizeof(struct arcnet_local), GFP_KERNEL);
   if (dev->priv == NULL)
     {
-      free_irq(airq,NULL);
+      free_irq(airq,dev);
       return -ENOMEM;
     }
   memset(dev->priv,0,sizeof(struct arcnet_local));
@@ -790,7 +790,7 @@ void cleanup_module(void)
 
   if (dev->irq)
     {
-      free_irq(dev->irq,NULL);
+      free_irq(dev->irq,dev);
     }
 
   unregister_netdev(dev);

@@ -405,7 +405,7 @@ ultra_close_card(struct device *dev)
 		printk("%s: Shutting down ethercard.\n", dev->name);
 
 	outb(0x00, ioaddr + 6);		/* Disable interrupts. */
-	free_irq(dev->irq, NULL);
+	free_irq(dev->irq, dev);
 
 	NS8390_init(dev, 0);
 

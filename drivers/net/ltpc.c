@@ -1023,9 +1023,9 @@ __initfunc(int ltpc_probe(struct device *dev))
 
 	cli();
  
-	if (!probe3) free_irq(3,NULL);
-	if (!probe4) free_irq(4,NULL);
-	if (!probe9) free_irq(9,NULL);
+	if (!probe3) free_irq(3,dev);
+	if (!probe4) free_irq(4,dev);
+	if (!probe9) free_irq(9,dev);
 
 	sti();
  
@@ -1248,7 +1248,7 @@ void cleanup_module(void)
 	if(debug&DEBUG_VERBOSE) printk("freeing irq\n");
 
 	if(dev_ltpc.irq) {
-		free_irq(dev_ltpc.irq,NULL);
+		free_irq(dev_ltpc.irq,&dev_ltpc);
 		dev_ltpc.irq = 0;
 	}
 

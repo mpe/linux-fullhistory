@@ -887,7 +887,7 @@ elsa_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	struct IsdnCardState *sp;
 	u_char val;
 
-	sp = (struct IsdnCardState *) irq2dev_map[intno];
+	sp = (struct IsdnCardState *) dev_id;
 
 	if (!sp) {
 		printk(KERN_WARNING "Elsa: Spurious interrupt!\n");
@@ -1219,8 +1219,7 @@ initelsa(struct IsdnCardState *sp)
 			       "Elsa: IRQ(%d) getting no interrupts during init %d\n",
 			       sp->irq, 4 - cnt);
 			if (cnt == 1) {
-				irq2dev_map[sp->irq] = NULL;
-				free_irq(sp->irq, NULL);
+				free_irq(sp->irq, sp);
 				return (0);
 			} else {
 				reset_elsa(sp);

@@ -288,7 +288,7 @@ hpp_close(struct device *dev)
 	int ioaddr = dev->base_addr - NIC_OFFSET;
 	int option_reg = inw(ioaddr + HPP_OPTION);
 
-	free_irq(dev->irq, NULL);
+	free_irq(dev->irq, dev);
 	ei_close(dev);
 	outw((option_reg & ~EnableIRQ) | MemDisable | NICReset | ChipReset,
 		 ioaddr + HPP_OPTION);

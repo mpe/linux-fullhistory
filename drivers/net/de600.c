@@ -366,7 +366,7 @@ de600_close(struct device *dev)
 	select_prn();
 
 	if (dev->start) {
-		free_irq(DE600_IRQ, NULL);
+		free_irq(DE600_IRQ, dev);
 		dev->start = 0;
 		MOD_DEC_USE_COUNT;
 	}

@@ -1216,7 +1216,7 @@ static int elp_close(struct device *dev)
 	/*
 	 * release the IRQ
 	 */
-	free_irq(dev->irq, NULL);
+	free_irq(dev->irq, dev);
 
 	free_dma(dev->dma);
 	free_pages((unsigned long) adapter->dma_buffer, __get_order(DMA_BUFFER_SIZE));

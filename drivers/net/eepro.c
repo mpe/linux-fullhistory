@@ -819,7 +819,7 @@ eepro_close(struct device *dev)
 	outb(RESET_CMD, ioaddr);
 
 	/* release the interrupt */
-	free_irq(dev->irq, NULL);
+	free_irq(dev->irq, dev);
 
 	/* Update the statistics here. What statistics? */
 

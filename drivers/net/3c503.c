@@ -369,7 +369,7 @@ el2_open(struct device *dev)
 static int
 el2_close(struct device *dev)
 {
-    free_irq(dev->irq, NULL);
+    free_irq(dev->irq, dev);
     dev->irq = ei_status.saved_irq;
     outb(EGACFR_IRQOFF, E33G_GACFR);	/* disable interrupts. */
 

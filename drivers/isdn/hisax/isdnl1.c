@@ -766,13 +766,12 @@ get_irq(int cardnr, void *routine)
 	save_flags(flags);
 	cli();
 	if (request_irq(card->sp->irq, routine,
-			I4L_IRQ_FLAG, "HiSax", NULL)) {
+			I4L_IRQ_FLAG, "HiSax", card->sp)) {
 		printk(KERN_WARNING "HiSax: couldn't get interrupt %d\n",
 		       card->sp->irq);
 		restore_flags(flags);
 		return (0);
 	}
-	irq2dev_map[card->sp->irq] = (void *) card->sp;
 	restore_flags(flags);
 	return (1);
 }
@@ -782,8 +781,7 @@ release_irq(int cardnr)
 {
 	struct IsdnCard *card = cards + cardnr;
 
-	irq2dev_map[card->sp->irq] = NULL;
-	free_irq(card->sp->irq, NULL);
+	free_irq(card->sp->irq, card->sp);
 }
 
 void

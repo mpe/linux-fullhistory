@@ -1694,6 +1694,6 @@ void cleanup_module(void)
 	if (sdla0.priv)
 		kfree(sdla0.priv);
 	if (sdla0.irq)
-		free_irq(sdla0.irq, NULL);
+		free_irq(sdla0.irq, &sdla0);
 }
 #endif /* MODULE */

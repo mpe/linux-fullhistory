@@ -3922,7 +3922,7 @@ wavelan_open(device *	dev)
     }
   else
     {
-      free_irq(dev->irq, NULL);
+      free_irq(dev->irq, dev);
 #ifdef DEBUG_CONFIG_ERRORS
       printk(KERN_INFO "%s: wavelan_open(): impossible to start the card\n",
 	     dev->name);
@@ -3970,7 +3970,7 @@ wavelan_close(device *	dev)
    */
   wv_82586_stop(dev);
 
-  free_irq(dev->irq, NULL);
+  free_irq(dev->irq, dev);
 
   MOD_DEC_USE_COUNT;
 

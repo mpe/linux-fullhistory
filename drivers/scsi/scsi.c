@@ -3293,6 +3293,7 @@ static int scsi_register_device_module(struct Scsi_Device_Template * tpnt)
      * This does any final handling that is required.
      */
     if(tpnt->finish && tpnt->nr_dev)  (*tpnt->finish)();
+    resize_dma_pool();
     MOD_INC_USE_COUNT;
     return 0;
 }

@@ -866,7 +866,7 @@ cleanup_module(void)
 		if (dev->priv != NULL) {
 			kfree_s(dev->priv,sizeof(struct el3_private));
 			dev->priv = NULL;
-			free_irq(dev->irq, NULL);
+			free_irq(dev->irq, dev);
 			release_region(dev->base_addr, EL3_IO_EXTENT);
 			unregister_netdev(dev);
 		}

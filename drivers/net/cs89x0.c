@@ -655,7 +655,7 @@ net_open(struct device *dev)
                 printk("%s: EEPROM is configured for unavailable media\n", dev->name);
         release_irq:
                 writereg(dev, PP_LineCTL, readreg(dev, PP_LineCTL) & ~(SERIAL_TX_ON | SERIAL_RX_ON));
-                free_irq(dev->irq, NULL);
+                free_irq(dev->irq, dev);
 		return -EAGAIN;
 	}
 
@@ -918,7 +918,7 @@ net_close(struct device *dev)
 
 	dev->start = 0;
 
-	free_irq(dev->irq, NULL);
+	free_irq(dev->irq, dev);
 
 	/* Update the statistics here. */
 

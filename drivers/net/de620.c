@@ -463,7 +463,7 @@ de620_close(struct device *dev)
 	/* disable recv */
 	de620_set_register(dev, W_TCR, RXOFF);
 
-	free_irq(dev->irq, NULL);
+	free_irq(dev->irq, dev);
 
 	dev->start = 0;
 	MOD_DEC_USE_COUNT;

@@ -573,7 +573,7 @@ seeq8005_close(struct device *dev)
 	/* Flush the Tx and disable Rx here. */
 	outw( SEEQCMD_SET_ALL_OFF, SEEQ_CMD);
 
-	free_irq(dev->irq, NULL);
+	free_irq(dev->irq, dev);
 
 	/* Update the statistics here. */
 

@@ -1577,7 +1577,7 @@ void cleanup_module(void)
         for (i = 0; i < IBMTR_MAX_ADAPTERS; i++)
 	        if (dev_ibmtr[i]) {
 			 unregister_trdev(dev_ibmtr[i]);
-			 free_irq(dev_ibmtr[i]->irq, NULL);
+			 free_irq(dev_ibmtr[i]->irq, dev_ibmtr[i]);
 			 release_region(dev_ibmtr[i]->base_addr, IBMTR_IO_EXTENT);
 			 kfree_s(dev_ibmtr[i]->priv, sizeof(struct tok_info));
 			 kfree_s(dev_ibmtr[i], sizeof(struct device));

@@ -654,7 +654,7 @@ cleanup_module(void)
 	dev_at1700.priv = NULL;
 
 	/* If we don't do this, we can't re-insmod it later. */
-	free_irq(dev_at1700.irq, NULL);
+	free_irq(dev_at1700.irq, &dev_at1700);
 	release_region(dev_at1700.base_addr, AT1700_IO_EXTENT);
 }
 #endif /* MODULE */

@@ -59,7 +59,7 @@
 */
 
 /* The list of used and available "eth" slots (for "eth0", "eth1", etc.) */
-#define MAX_ETH_CARDS 16 /* same as the number if irq's in irq2dev[] */
+#define MAX_ETH_CARDS 16
 static struct device *ethdev_index[MAX_ETH_CARDS];
 
 
@@ -439,7 +439,7 @@ void unregister_netdev(struct device *dev)
 
 #ifdef CONFIG_TR
 /* The list of used and available "tr" slots */
-#define MAX_TR_CARDS 16 /* same as the number of irq's in irq2dev[] */
+#define MAX_TR_CARDS 16
 static struct device *trdev_index[MAX_TR_CARDS];
 
 struct device *init_trdev(struct device *dev, int sizeof_priv)

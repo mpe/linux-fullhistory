@@ -1630,7 +1630,7 @@ static int SK_close(struct device *dev)
 
     SK_write_reg(CSR0, CSR0_STOP); /* STOP the LANCE */
 
-    free_irq(dev->irq, NULL);      /* Free IRQ */
+    free_irq(dev->irq, dev);      /* Free IRQ */
 
     return 0; /* always succeed */
     

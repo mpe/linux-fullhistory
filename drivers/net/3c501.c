@@ -758,7 +758,7 @@ static int el1_close(struct device *dev)
 	 *	Free and disable the IRQ.
 	 */
 
-	free_irq(dev->irq, NULL);
+	free_irq(dev->irq, dev);
 	outb(AX_RESET, AX_CMD);		/* Reset the chip */
 
 	MOD_DEC_USE_COUNT;

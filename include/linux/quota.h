@@ -132,7 +132,7 @@ struct dqblk {
 #define	dq_btime	dq_dqb.dqb_btime
 #define	dq_itime	dq_dqb.dqb_itime
 
-#define dqoff(UID)      ((off_t)((UID) * sizeof (struct dqblk)))
+#define dqoff(UID)      ((loff_t)((UID) * sizeof (struct dqblk)))
 
 struct dqstats {
    __u32 lookups;

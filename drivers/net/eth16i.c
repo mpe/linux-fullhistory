@@ -1225,7 +1225,7 @@ int init_module(void)
 void cleanup_module(void)
 {
 	unregister_netdev( &dev_eth16i );
-	free_irq( dev_eth16i.irq, NULL );
+	free_irq( dev_eth16i.irq, &dev_eth16i );
 	release_region( dev_eth16i.base_addr, ETH16I_IO_EXTENT );
 }
 

@@ -262,7 +262,7 @@ __initfunc(int wd_probe1(struct device *dev, int ioaddr))
 	/* Allocate dev->priv and fill in 8390 specific dev fields. */
 	if (ethdev_init(dev)) {
 		printk (" unable to get memory for dev->priv.\n");
-		free_irq(dev->irq, NULL);
+		free_irq(dev->irq, dev);
 		return -ENOMEM;
 	}
 
@@ -499,7 +499,7 @@ cleanup_module(void)
 			int ioaddr = dev->base_addr - WD_NIC_OFFSET;
 			kfree(dev->priv);
 			dev->priv = NULL;
-			free_irq(dev->irq, NULL);
+			free_irq(dev->irq, dev);
 			release_region(ioaddr, WD_IO_EXTENT);
 			unregister_netdev(dev);
 		}

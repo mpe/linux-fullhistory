@@ -1439,7 +1439,7 @@ static int pi_open(struct device *dev)
     if (dev->base_addr & 2) {	/* if A channel */
 	if (first_time) {
 	    if (request_dma(dev->dma,"pi2")) {
-		free_irq(dev->irq, NULL);
+		free_irq(dev->irq, dev);
 		return -EAGAIN;
 	    }
 	}
@@ -1669,7 +1669,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-    free_irq(pi0a.irq, NULL);	/* IRQs and IO Ports are shared */
+    free_irq(pi0a.irq, &pi0a);	/* IRQs and IO Ports are shared */
     release_region(pi0a.base_addr & 0x3f0, PI_TOTAL_SIZE);
 
     kfree(pi0a.priv);

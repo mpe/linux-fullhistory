@@ -46,8 +46,11 @@ void autoirq_setup(int waittime)
 	irqs = probe_irq_on();
 }
 
+#define BUSY_LOOP_UNTIL(j) while ((long)(jiffies-(j)) < 0) ;
 int autoirq_report(int waittime)
 {
+	unsigned long delay = jiffies + waittime;
+	BUSY_LOOP_UNTIL(delay)
 	return probe_irq_off(irqs);
 }
 

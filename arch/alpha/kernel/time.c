@@ -12,6 +12,10 @@
  *      precision CMOS clock update
  * 1997-01-09    Adrian Sun
  *      use interval timer if CONFIG_RTC=y
+ * 1997-10-29    John Bowman (bowman@math.ualberta.ca)
+ *      fixed tick loss calculation in timer_interrupt
+ *      (round system clock to nearest tick instead of truncating)
+ *      fixed algorithm in time_init for getting time from CMOS clock
  */
 #include <linux/errno.h>
 #include <linux/sched.h>
@@ -23,6 +27,7 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 #include <asm/hwrpb.h>
+#include <asm/delay.h>
 
 #include <linux/mc146818rtc.h>
 #include <linux/timex.h>
@@ -45,10 +50,11 @@ static int set_rtc_mmss(unsigned long);
  */
 #define FIX_SHIFT	48
 
+static unsigned long round_ticks;
+
 /* lump static variables together for more efficient access: */
 static struct {
 	__u32		last_time;		/* cycle counter last time it got invoked */
-	__u32		max_cycles_per_tick;	/* more makes us think we lost an interrupt */
 	unsigned long	scaled_ticks_per_cycle;	/* ticks/cycle * 2^48 */
 	long		last_rtc_update;	/* last time the cmos clock got updated */
 } state;
@@ -70,19 +76,15 @@ static inline __u32 rpcc(void)
 void timer_interrupt(int irq, void *dev, struct pt_regs * regs)
 {
 	__u32 delta, now;
+	int i, nticks;
 
 	now = rpcc();
 	delta = now - state.last_time;
 	state.last_time = now;
-	if (delta > state.max_cycles_per_tick) {
-		int i, missed_ticks;
-
-		missed_ticks = ((delta * state.scaled_ticks_per_cycle) >> FIX_SHIFT) - 1;
-		for (i = 0; i < missed_ticks; ++i) {
-			do_timer(regs);
-		}
+	nticks = ((delta * state.scaled_ticks_per_cycle+round_ticks) >> FIX_SHIFT);
+	for (i = 0; i < nticks; ++i) {
+		do_timer(regs);
 	}
-	do_timer(regs);
 
 	/*
 	 * If we have an externally synchronized Linux clock, then update
@@ -136,7 +138,6 @@ void time_init(void)
 #endif
         void (*irq_handler)(int, void *, struct pt_regs *);
 	unsigned int year, mon, day, hour, min, sec;
-	int i;
 
 	/* The Linux interpretation of the CMOS clock register contents:
 	 * When the Update-In-Progress (UIP) flag goes from 1 to 0, the
@@ -144,20 +145,23 @@ void time_init(void)
 	 * Let's hope other operating systems interpret the RTC the same way.
 	 */
 	/* read RTC exactly on falling edge of update flag */
-	for (i = 0 ; i < 1000000 ; i++)	/* may take up to 1 second... */
-		if (CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP)
-			break;
-	for (i = 0 ; i < 1000000 ; i++)	/* must try at least 2.228 ms */
-		if (!(CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP))
-			break;
-	do { /* Isn't this overkill ? UIP above should guarantee consistency */
-		sec = CMOS_READ(RTC_SECONDS);
-		min = CMOS_READ(RTC_MINUTES);
-		hour = CMOS_READ(RTC_HOURS);
-		day = CMOS_READ(RTC_DAY_OF_MONTH);
-		mon = CMOS_READ(RTC_MONTH);
-		year = CMOS_READ(RTC_YEAR);
-	} while (sec != CMOS_READ(RTC_SECONDS));
+	/* Wait for rise.... (may take up to 1 second) */
+	
+	while(!(CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP));
+	
+    /* Wait for fall.... */
+	
+	while(CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP);
+	
+    __delay(1000000);
+	  
+	sec = CMOS_READ(RTC_SECONDS);
+	min = CMOS_READ(RTC_MINUTES);
+	hour = CMOS_READ(RTC_HOURS);
+	day = CMOS_READ(RTC_DAY_OF_MONTH);
+	mon = CMOS_READ(RTC_MONTH);
+	year = CMOS_READ(RTC_YEAR);
+
 	if (!(CMOS_READ(RTC_CONTROL) & RTC_DM_BINARY) || RTC_ALWAYS_BCD)
 	  {
 	    BCD_TO_BIN(sec);
@@ -186,7 +190,7 @@ void time_init(void)
 	}
 	state.last_time = rpcc();
 	state.scaled_ticks_per_cycle = ((unsigned long) HZ << FIX_SHIFT) / hwrpb->cycle_freq;
-	state.max_cycles_per_tick = (2 * hwrpb->cycle_freq) / HZ;
+	round_ticks=(unsigned long) 1 << (FIX_SHIFT-1);
 	state.last_rtc_update = 0;
 
 #ifdef CONFIG_RTC 

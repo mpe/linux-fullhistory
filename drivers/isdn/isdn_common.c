@@ -849,9 +849,9 @@ isdn_info_update(void)
 }
 
 static RWTYPE
-isdn_read(struct inode *inode, struct file *file, char *buf, RWARG count)
+isdn_read(struct file *file, char *buf, RWARG count, loff_t *off)
 {
-	uint minor = MINOR(inode->i_rdev);
+	uint minor = MINOR(file->f_dentry->d_inode->i_rdev);
 	int len = 0;
 	ulong flags;
 	int drvidx;
@@ -869,7 +869,7 @@ isdn_read(struct inode *inode, struct file *file, char *buf, RWARG count)
 		if ((len = strlen(p)) <= count) {
 			if (copy_to_user(buf, p, len))
 				return -EFAULT;
-			file->f_pos += len;
+			*off += len;
 			return len;
 		}
 		return 0;
@@ -886,7 +886,7 @@ isdn_read(struct inode *inode, struct file *file, char *buf, RWARG count)
 		save_flags(flags);
 		cli();
 		len = isdn_readbchan(drvidx, chidx, buf, 0, count, 1);
-		file->f_pos += len;
+		*off += len;
 		restore_flags(flags);
 		return len;
 	}
@@ -912,7 +912,7 @@ isdn_read(struct inode *inode, struct file *file, char *buf, RWARG count)
 		else
 			dev->drv[drvidx]->stavail = 0;
 		restore_flags(flags);
-		file->f_pos += len;
+		*off += len;
 		return len;
 	}
 #ifdef CONFIG_ISDN_PPP
@@ -928,9 +928,9 @@ static LSTYPE isdn_lseek(struct file *file, LSARG offset, int orig)
 }
 
 static RWTYPE
-isdn_write(struct inode *inode, struct file *file, const char *buf, RWARG count)
+isdn_write(struct file *file, const char *buf, RWARG count, loff_t * off)
 {
-	uint minor = MINOR(inode->i_rdev);
+	uint minor = MINOR(file->f_dentry->d_inode->i_rdev);
 	int drvidx;
 	int chidx;
 

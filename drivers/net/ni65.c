@@ -285,7 +285,7 @@ static int ni65_open(struct device *dev)
 	}
 	else
 	{
-		free_irq(dev->irq,NULL);
+		free_irq(dev->irq,dev);
 		dev->start = 0;
 		return -EAGAIN;
 	}
@@ -312,7 +312,7 @@ static int ni65_close(struct device *dev)
 		}
 	}
 #endif
-	free_irq(dev->irq,NULL);
+	free_irq(dev->irq,dev);
 	dev->tbusy = 1;
 	dev->start = 0;
 	MOD_DEC_USE_COUNT;

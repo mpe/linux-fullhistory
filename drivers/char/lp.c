@@ -272,9 +272,9 @@ static inline int lp_write_buf(unsigned int minor, const char *buf, int count)
 	return total_bytes_written;
 }
 
-static long lp_write(struct inode * inode, struct file * file,
-	const char * buf, unsigned long count)
+static ssize_t lp_write(struct file * file, const char * buf, size_t count, loff_t *ppos)
 {
+	struct inode *inode = file->f_dentry->d_inode;
 	unsigned int minor = MINOR(inode->i_rdev);
 	int retv;
 
@@ -315,9 +315,9 @@ static void lp_select_in_high(int minor) {
 }
 
 /* Status readback confirming to ieee1284 */
-static long lp_read(struct inode * inode, struct file * file, 
-		   char * buf, unsigned long count)
+static ssize_t lp_read(struct file * file, char * buf, size_t count, loff_t *ppos)
 {
+	struct inode *inode = file->f_dentry->d_inode;
 	unsigned char z=0, Byte=0, status;
 	char *temp;
 	int retval;

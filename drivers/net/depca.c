@@ -1057,7 +1057,7 @@ depca_close(struct device *dev)
   /*
   ** Free the associated irq
   */
-  free_irq(dev->irq, NULL);
+  free_irq(dev->irq, dev);
 
   MOD_DEC_USE_COUNT;
 

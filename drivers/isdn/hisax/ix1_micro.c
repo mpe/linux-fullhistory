@@ -644,7 +644,7 @@ ix1micro_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	struct IsdnCardState *sp;
 	u_char val, stat = 0;
 
-	sp = (struct IsdnCardState *) irq2dev_map[intno];
+	sp = (struct IsdnCardState *) dev_id;
 
 	if (!sp) {
 		printk(KERN_WARNING "Teles: Spurious interrupt!\n");
@@ -867,8 +867,7 @@ initix1micro(struct IsdnCardState *sp)
 			printk(KERN_WARNING
 			       "ix1-Micro: IRQ(%d) getting no interrupts during init\n",
 			       sp->irq);
-			irq2dev_map[sp->irq] = NULL;
-			free_irq(sp->irq, NULL);
+			free_irq(sp->irq, sp);
 			return (0);
 		}
 	}

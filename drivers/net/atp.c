@@ -727,7 +727,7 @@ net_close(struct device *dev)
 
 	/* Free the IRQ line. */
 	outb(0x00, ioaddr + PAR_CONTROL);
-	free_irq(dev->irq, NULL);
+	free_irq(dev->irq, dev);
 
 	/* Leave the hardware in a reset state. */
     write_reg_high(ioaddr, CMR1, CMR1h_RESET);

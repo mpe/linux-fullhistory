@@ -896,7 +896,7 @@ static int pt_open(struct device *dev)
         {
             if (request_dma(dev->dma, "pt"))
             {
-                free_irq(dev->irq, NULL);
+                free_irq(dev->irq, dev);
                 return -EAGAIN;
             }
         }
@@ -1769,7 +1769,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	free_irq(pt0a.irq, NULL);	/* IRQs and IO Ports are shared */
+	free_irq(pt0a.irq, &pt0a);	/* IRQs and IO Ports are shared */
 	release_region(pt0a.base_addr & 0x3f0, PT_TOTAL_SIZE);
 
 	kfree(pt0a.priv);

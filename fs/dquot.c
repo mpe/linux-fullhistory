@@ -223,25 +223,17 @@ static void write_dquot(struct dquot *dquot)
 	short type = dquot->dq_type;
 	struct file *filp = dquot->dq_mnt->mnt_quotas[type];
 	unsigned long fs;
+	loff_t offset;
 
 	if (!(dquot->dq_flags & DQ_MOD) || (filp == (struct file *)NULL))
 		return;
 	lock_dquot(dquot);
 	down(&dquot->dq_mnt->mnt_sem);
-	if (filp->f_op->llseek) {
-		if (filp->f_op->llseek(filp->f_dentry->d_inode, filp,
-		    dqoff(dquot->dq_id), 0) != dqoff(dquot->dq_id)) {
-			up(&dquot->dq_mnt->mnt_sem);
-			unlock_dquot(dquot);
-			return;
-		}
-	} else
-		filp->f_pos = dqoff(dquot->dq_id);
+	offset = dqoff(dquot->dq_id);
 	fs = get_fs();
 	set_fs(KERNEL_DS);
 
-	if (filp->f_op->write(filp->f_dentry->d_inode, filp,
-	   (char *)&dquot->dq_dqb, sizeof(struct dqblk)) == sizeof(struct dqblk))
+	if (filp->f_op->write(filp, (char *)&dquot->dq_dqb, sizeof(struct dqblk), &offset) == sizeof(struct dqblk))
 		dquot->dq_flags &= ~DQ_MOD;
 
 	up(&dquot->dq_mnt->mnt_sem);
@@ -255,23 +247,16 @@ static void read_dquot(struct dquot *dquot)
 	short type = dquot->dq_type;
 	struct file *filp = dquot->dq_mnt->mnt_quotas[type];
 	unsigned long fs;
+	loff_t offset;
 
 	if (filp == (struct file *)NULL)
 		return;
 	lock_dquot(dquot);
 	down(&dquot->dq_mnt->mnt_sem);
-	if (filp->f_op->llseek) {
-		if (filp->f_op->llseek(filp->f_dentry->d_inode, filp,
-		    dqoff(dquot->dq_id), 0) != dqoff(dquot->dq_id)) {
-			up(&dquot->dq_mnt->mnt_sem);
-			unlock_dquot(dquot);
-			return;
-		}
-	} else
-		filp->f_pos = dqoff(dquot->dq_id);
+	offset = dqoff(dquot->dq_id);
 	fs = get_fs();
 	set_fs(KERNEL_DS);
-	filp->f_op->read(filp->f_dentry->d_inode, filp, (char *)&dquot->dq_dqb, sizeof(struct dqblk));
+	filp->f_op->read(filp, (char *)&dquot->dq_dqb, sizeof(struct dqblk), &offset);
 	up(&dquot->dq_mnt->mnt_sem);
 	set_fs(fs);
 	if (dquot->dq_bhardlimit == 0 && dquot->dq_bsoftlimit == 0 &&

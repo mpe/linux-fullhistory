@@ -641,7 +641,7 @@ cleanup_module(void)
 	dev_fmv18x.priv = NULL;
 
 	/* If we don't do this, we can't re-insmod it later. */
-	free_irq(dev_fmv18x.irq, NULL);
+	free_irq(dev_fmv18x.irq, &dev_fmv18x);
 	release_region(dev_fmv18x.base_addr, FMV18X_IO_EXTENT);
 }
 #endif /* MODULE */

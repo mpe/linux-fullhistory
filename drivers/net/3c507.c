@@ -890,7 +890,7 @@ cleanup_module(void)
 	dev_3c507.priv = NULL;
 
 	/* If we don't do this, we can't re-insmod it later. */
-	free_irq(dev_3c507.irq, NULL);
+	free_irq(dev_3c507.irq, &dev_3c507);
 	release_region(dev_3c507.base_addr, EL16_IO_EXTENT);
 }
 #endif /* MODULE */
