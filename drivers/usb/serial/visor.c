@@ -243,6 +243,8 @@ static struct usb_device_id id_table [] = {
 		.driver_info = (kernel_ulong_t)&palm_os_4_probe },
 	{ USB_DEVICE(KYOCERA_VENDOR_ID, KYOCERA_7135_ID),
 		.driver_info = (kernel_ulong_t)&palm_os_4_probe },
+	{ USB_DEVICE(FOSSIL_VENDOR_ID, FOSSIL_ABACUS_ID),
+		.driver_info = (kernel_ulong_t)&palm_os_4_probe },
 	{ },					/* optional parameter entry */
 	{ }					/* Terminating entry */
 };
@@ -287,6 +289,7 @@ static struct usb_device_id id_table_combined [] = {
 	{ USB_DEVICE(GARMIN_VENDOR_ID, GARMIN_IQUE_3600_ID) },
 	{ USB_DEVICE(ACEECA_VENDOR_ID, ACEECA_MEZ1000_ID) },
 	{ USB_DEVICE(KYOCERA_VENDOR_ID, KYOCERA_7135_ID) },
+	{ USB_DEVICE(FOSSIL_VENDOR_ID, FOSSIL_ABACUS_ID) },
 	{ },					/* optional parameter entry */
 	{ }					/* Terminating entry */
 };
