@@ -252,9 +252,11 @@ do_fpdis:
 	faddd		%f0, %f2, %f4
 	fmuld		%f0, %f2, %f6
 	ldxa		[%g3] ASI_DMMU, %g5
-	add		%g6, TI_FPREGS + 0xc0, %g2
-	stxa		%g0, [%g3] ASI_DMMU
+cplus_fpdis_insn_1:
+	sethi		%hi(0), %g2
+	stxa		%g2, [%g3] ASI_DMMU
 	membar		#Sync
+	add		%g6, TI_FPREGS + 0xc0, %g2
 	faddd		%f0, %f2, %f8
 	fmuld		%f0, %f2, %f10
 	ldda		[%g1] ASI_BLK_S, %f32	! grrr, where is ASI_BLK_NUCLEUS 8-(
@@ -322,6 +324,24 @@ fpdis_exit2:
 	wrpr		%g3, %tstate
 	wr		%g0, FPRS_FEF, %fprs	! clean DU/DL bits
 	retry
+
+cplus_fpdis_1:
+	sethi		%hi(CTX_CHEETAH_PLUS_CTX0), %g2
+
+	.globl		cheetah_plus_patch_fpdis
+cheetah_plus_patch_fpdis:
+	/* We configure the dTLB512_0 for 4MB pages and the
+	 * dTLB512_1 for 8K pages when in context zero.
+	 */
+	sethi			%hi(cplus_fpdis_1), %o0
+	sethi			%hi(cplus_fpdis_insn_1), %o2
+	lduw			[%o0 + %lo(cplus_fpdis_1)], %o1
+	or			%o2, %lo(cplus_fpdis_insn_1), %o2
+	stw			%o1, [%o2]
+	flush			%o2
+
+	retl
+	 nop
 
 	.align		32
 fp_other_bounce:

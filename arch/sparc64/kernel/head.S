@@ -534,6 +534,8 @@ cheetah_tlb_fixup:
 	 nop
 	call	cheetah_plus_patch_rtrap
 	 nop
+	call	cheetah_plus_patch_fpdis
+	 nop
 	call	cheetah_plus_patch_winfixup
 	 nop
 	
