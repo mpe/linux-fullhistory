@@ -700,11 +700,7 @@ static int __init acpi_init_piix4(struct pci_dev *dev)
 	if (!(pmregmisc & ACPI_PIIX4_PMIOSE))
 		return -ENODEV;
 	
-	pci_read_config_dword(dev, 0x40, &base);
-	if (!(base & PCI_BASE_ADDRESS_SPACE_IO))
-		return -ENODEV;
-	
-	base &= PCI_BASE_ADDRESS_IO_MASK;
+	base = dev->resource[PCI_BRIDGE_RESOURCES].start & PCI_BASE_ADDRESS_IO_MASK;
 	if (!base)
 		return -ENODEV;
 
@@ -757,16 +753,13 @@ static int __init acpi_init_via(struct pci_dev *dev)
 	if (!(tmp & 0x80))
 		return -ENODEV;
 
-	pci_read_config_byte(dev, PCI_CLASS_REVISION, &tmp);
-	tmp = (tmp & 0x10 ? 0x48 : 0x20);
-
-	pci_read_config_dword(dev, tmp, &base);
-	if (!(base & PCI_BASE_ADDRESS_SPACE_IO))
-		return -ENODEV;
-
+	base = pci_resource_start(dev, PCI_BRIDGE_RESOURCES);
+	if (!base) {
+		base = pci_resource_start(dev, PCI_BASE_ADDRESS_4);
+		if (!base)
+			return -ENODEV;
+	}
 	base &= PCI_BASE_ADDRESS_IO_MASK;
-	if (!base)
-		return -ENODEV;
 
 	pci_read_config_byte(dev, 0x42, &irq);
 

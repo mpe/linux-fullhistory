@@ -164,6 +164,23 @@ static void __init quirk_piix4acpi(struct pci_dev *dev)
 }
 
 /*
+ * VIA ACPI: One IO region pointed to by longword at
+ *	0x48 or 0x20 (256 bytes of ACPI registers)
+ */
+static void __init quirk_via_acpi(struct pci_dev *dev)
+{
+	u8 rev;
+	u32 region;
+
+	pci_read_config_byte(dev, PCI_CLASS_REVISION, &rev);
+	if (rev & 0x10) {
+		pci_read_config_dword(dev, 0x48, &region);
+		region &= PCI_BASE_ADDRESS_IO_MASK;
+		quirk_io_region(dev, region, 256, PCI_BRIDGE_RESOURCES);
+	}
+}
+
+/*
  *  The main table of quirks.
  */
 
@@ -192,6 +209,8 @@ static struct pci_fixup pci_fixups[] __initdata = {
 	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_INTEL, 	PCI_DEVICE_ID_INTEL_82443BX_2, 	quirk_natoma },
 	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_5597,		quirk_nopcipci },
 	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_496,		quirk_nopcipci },
+	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C586_3,	quirk_via_acpi },
+	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C686_4,	quirk_via_acpi },
 	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82371AB_3,	quirk_piix4acpi },
 	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_AL,	PCI_DEVICE_ID_AL_M7101,		quirk_ali7101 },
 	{ 0 }

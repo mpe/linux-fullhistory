@@ -24,8 +24,12 @@
 
 unsigned long highmem_mapnr;
 
+/*
+ * Take one locked page, return another low-memory locked page.
+ */
 struct page * prepare_highmem_swapout(struct page * page)
 {
+	struct page *new_page;
 	unsigned long regular_page;
 	unsigned long vaddr;
 	/*
@@ -36,6 +40,14 @@ struct page * prepare_highmem_swapout(struct page * page)
 	if (!PageHighMem(page))
 		return page;
 
+	/*
+	 * Here we break the page lock, and we split the
+	 * dirty page into two. We can unlock the old page,
+	 * and we'll now have two of them. Too bad, it would
+	 * have been nice to continue to potentially share
+	 * across a fork().
+	 */
+	UnlockPage(page);
 	regular_page = __get_free_page(GFP_ATOMIC);
 	if (!regular_page)
 		return NULL;
@@ -49,8 +61,9 @@ struct page * prepare_highmem_swapout(struct page * page)
 	 * we stored its data into the new regular_page.
 	 */
 	__free_page(page);
-
-	return mem_map + MAP_NR(regular_page);
+	new_page = mem_map + MAP_NR(regular_page);
+	LockPage(new_page);
+	return new_page;
 }
 
 struct page * replace_with_highmem(struct page * page)

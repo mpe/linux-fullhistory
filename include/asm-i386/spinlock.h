@@ -12,7 +12,7 @@ extern int printk(const char * fmt, ...)
  * initialize their spinlocks properly, tsk tsk.
  * Remember to turn this off in 2.4. -ben
  */
-#define SPINLOCK_DEBUG	1
+#define SPINLOCK_DEBUG	0
 
 /*
  * Your basic SMP spinlocks, allowing only a single CPU anywhere

@@ -46,7 +46,7 @@ unsigned int page_hash_bits;
 struct page **page_hash_table;
 struct list_head lru_cache;
 
-spinlock_t pagecache_lock = SPIN_LOCK_UNLOCKED;
+static spinlock_t pagecache_lock = SPIN_LOCK_UNLOCKED;
 /*
  * NOTE: to avoid deadlocking you must never acquire the pagecache_lock with
  *       the pagemap_lru_lock held.
@@ -483,6 +483,26 @@ int generic_buffer_fdatasync(struct inode *inode, unsigned long start_idx, unsig
 	retval = do_buffer_fdatasync(inode, start_idx, end_idx, writeout_one_page);
 	retval |= do_buffer_fdatasync(inode, start_idx, end_idx, waitfor_one_page);
 	return retval;
+}
+
+/*
+ * Add a page to the inode page cache.
+ *
+ * The caller must have locked the page and 
+ * set all the page flags correctly..
+ */
+void add_to_page_cache_locked(struct page * page, struct address_space *mapping, unsigned long index)
+{
+	if (!PageLocked(page))
+		BUG();
+
+	get_page(page);
+	spin_lock(&pagecache_lock);
+	page->index = index;
+	add_page_to_inode_queue(mapping, page);
+	__add_page_to_hash_queue(page, page_hash(mapping, index));
+	lru_cache_add(page);
+	spin_unlock(&pagecache_lock);
 }
 
 /*
@@ -1514,12 +1534,8 @@ static int filemap_write_page(struct file *file,
 			      struct page * page,
 			      int wait)
 {
-	int result;
-	struct dentry * dentry;
-	struct inode * inode;
-
-	dentry = file->f_dentry;
-	inode = dentry->d_inode;
+	struct dentry * dentry = file->f_dentry;
+	struct inode * inode = dentry->d_inode;
 
 	/*
 	 * If a task terminates while we're swapping the page, the vma and
@@ -1527,10 +1543,7 @@ static int filemap_write_page(struct file *file,
 	 * vma/file is guaranteed to exist in the unmap/sync cases because
 	 * mmap_sem is held.
 	 */
-	lock_page(page);
-	result = inode->i_mapping->a_ops->writepage(file, dentry, page);
-	UnlockPage(page);
-	return result;
+	return inode->i_mapping->a_ops->writepage(file, dentry, page);
 }
 
 
@@ -1588,7 +1601,9 @@ static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 		printk("weirdness: pgoff=%lu index=%lu address=%lu vm_start=%lu vm_pgoff=%lu\n",
 			pgoff, page->index, address, vma->vm_start, vma->vm_pgoff);
 	}
+	lock_page(page);
 	error = filemap_write_page(vma->vm_file, pgoff, page, 1);
+	UnlockPage(page);
 	page_cache_free(page);
 	return error;
 }

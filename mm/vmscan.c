@@ -60,8 +60,7 @@ static int try_to_swap_out(struct mm_struct * mm, struct vm_area_struct* vma, un
 		goto out_failed;
 	}
 
-#error Do not let this one slip through..
-	if (PageLocked(page))
+	if (TryLockPage(page))
 		goto out_failed;
 
 	/*
@@ -77,6 +76,7 @@ static int try_to_swap_out(struct mm_struct * mm, struct vm_area_struct* vma, un
 		swap_duplicate(entry);
 		set_pte(page_table, swp_entry_to_pte(entry));
 drop_pte:
+		UnlockPage(page);
 		vma->vm_mm->rss--;
 		flush_tlb_page(vma, address);
 		__free_page(page);
@@ -108,7 +108,7 @@ drop_pte:
 	 * locks etc.
 	 */
 	if (!(gfp_mask & __GFP_IO))
-		goto out_failed;
+		goto out_unlock;
 
 	/*
 	 * Ok, it's really dirty. That means that
@@ -139,6 +139,7 @@ drop_pte:
 		flush_tlb_page(vma, address);
 		vmlist_access_unlock(vma->vm_mm);
 		error = swapout(page, file);
+		UnlockPage(page);
 		if (file) fput(file);
 		if (!error)
 			goto out_free_success;
@@ -154,15 +155,16 @@ drop_pte:
 	 */
 	entry = get_swap_page();
 	if (!entry.val)
-		goto out_failed; /* No swap space left */
-		
+		goto out_unlock; /* No swap space left */
+
 	if (!(page = prepare_highmem_swapout(page)))
 		goto out_swap_free;
 
 	swap_duplicate(entry);	/* One for the process, one for the swap cache */
 
-	/* This will also lock the page */
+	/* Add it to the swap cache */
 	add_to_swap_cache(page, entry);
+
 	/* Put the swap entry into the pte after the page is in swapcache */
 	vma->vm_mm->rss--;
 	set_pte(page_table, swp_entry_to_pte(entry));
@@ -179,7 +181,9 @@ out_swap_free:
 	swap_free(entry);
 out_failed:
 	return 0;
-
+out_unlock:
+	UnlockPage(page);
+	return 0;
 }
 
 /*
@@ -528,15 +532,15 @@ int kswapd(void *unused)
 		pgdat = pgdat_list;
 		while (pgdat) {
 			for (i = 0; i < MAX_NR_ZONES; i++) {
-			    int count = SWAP_CLUSTER_MAX;
-			    zone = pgdat->node_zones + i;
-			    do {
-				if (tsk->need_resched)
-					schedule();
+				int count = SWAP_CLUSTER_MAX;
+				zone = pgdat->node_zones + i;
 				if ((!zone->size) || (!zone->zone_wake_kswapd))
 					continue;
-				do_try_to_free_pages(GFP_KSWAPD, zone);
-			   } while (zone->free_pages < zone->pages_low &&
+				do {
+					if (tsk->need_resched)
+						schedule();
+					do_try_to_free_pages(GFP_KSWAPD, zone);
+		 		} while (zone->free_pages < zone->pages_low &&
 					   --count);
 			}
 			pgdat = pgdat->node_next;

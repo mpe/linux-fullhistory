@@ -4,9 +4,11 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *
  *  super.c contains code to handle: - mount structures
- *                                   - super-block tables.
+ *                                   - super-block tables
+ *                                   - filesystem drivers list
  *                                   - mount system call
  *                                   - umount system call
+ *                                   - ustat system call
  *
  *  Added options to /proc/mounts
  *  Torbjörn Lindh (torbjorn.lindh@gopta.se), April 14, 1996.
@@ -288,7 +290,7 @@ static struct vfsmount *add_vfsmnt(struct super_block *sb,
 	struct vfsmount *mnt;
 	char *name;
 
-	mnt = (struct vfsmount *)kmalloc(sizeof(struct vfsmount), GFP_KERNEL);
+	mnt = kmalloc(sizeof(struct vfsmount), GFP_KERNEL);
 	if (!mnt)
 		goto out;
 	memset(mnt, 0, sizeof(struct vfsmount));
@@ -302,18 +304,16 @@ static struct vfsmount *add_vfsmnt(struct super_block *sb,
 
 	/* N.B. Is it really OK to have a vfsmount without names? */
 	if (dev_name) {
-		name = (char *) kmalloc(strlen(dev_name)+1, GFP_KERNEL);
+		name = kmalloc(strlen(dev_name)+1, GFP_KERNEL);
 		if (name) {
 			strcpy(name, dev_name);
 			mnt->mnt_devname = name;
 		}
 	}
-	if (dir_name) {
-		name = (char *) kmalloc(strlen(dir_name)+1, GFP_KERNEL);
-		if (name) {
-			strcpy(name, dir_name);
-			mnt->mnt_dirname = name;
-		}
+	name = kmalloc(strlen(dir_name)+1, GFP_KERNEL);
+	if (name) {
+		strcpy(name, dir_name);
+		mnt->mnt_dirname = name;
 	}
 
 	list_add(&mnt->mnt_instances, &sb->s_mounts);
@@ -336,12 +336,12 @@ static void move_vfsmnt(struct vfsmount *mnt,
 	char *new_devname = NULL, *new_dirname = NULL;
 
 	if (dev_name) {
-		new_devname = (char *) kmalloc(strlen(dev_name)+1, GFP_KERNEL);
+		new_devname = kmalloc(strlen(dev_name)+1, GFP_KERNEL);
 		if (new_devname)
 			strcpy(new_devname, dev_name);
 	}
 	if (dir_name) {
-		new_dirname = (char *) kmalloc(strlen(dir_name)+1, GFP_KERNEL);
+		new_dirname = kmalloc(strlen(dir_name)+1, GFP_KERNEL);
 		if (new_dirname)
 			strcpy(new_dirname, dir_name);
 	}

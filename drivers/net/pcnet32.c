@@ -15,7 +15,6 @@
 
 static const char *version = "pcnet32.c:v1.25kf 26.9.1999 tsbogend@alpha.franken.de\n";
 
-#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/kernel.h>

@@ -1455,6 +1455,7 @@ static int shm_swap_core(struct shmid_kernel *shp, unsigned long idx, swp_entry_
 	   reading a not yet uptodate block from disk.
 	   NOTE: we just accounted the swap space reference for this
 	   swap cache page at __get_swap_page() time. */
+	lock_page(page_map);
 	add_to_swap_cache(*outpage = page_map, swap_entry);
 	return OKAY;
 }

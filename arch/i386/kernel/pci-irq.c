@@ -433,7 +433,6 @@ void __init pcibios_fixup_irqs(void)
 					dev->irq = irq;
 				}
 			}
-			pirq_table = NULL;	/* Avoid automatic IRQ assignment */
 		}
 #endif
 		/*

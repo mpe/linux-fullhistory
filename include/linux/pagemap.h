@@ -80,6 +80,7 @@ extern void lock_page(struct page *page);
 extern void __add_page_to_hash_queue(struct page * page, struct page **p);
 
 extern void add_to_page_cache(struct page * page, struct address_space *mapping, unsigned long index);
+extern void add_to_page_cache_locked(struct page * page, struct address_space *mapping, unsigned long index);
 
 extern inline void add_page_to_hash_queue(struct page * page, struct inode * inode, unsigned long index)
 {

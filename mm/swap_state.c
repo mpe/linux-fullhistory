@@ -47,14 +47,20 @@ void show_swap_cache_info(void)
 
 void add_to_swap_cache(struct page *page, swp_entry_t entry)
 {
+	unsigned long flags;
+
 #ifdef SWAP_CACHE_INFO
 	swap_cache_add_total++;
 #endif
+	if (!PageLocked(page))
+		BUG();
 	if (PageTestandSetSwapCache(page))
 		BUG();
 	if (page->mapping)
 		BUG();
-	add_to_page_cache(page, &swapper_space, entry.val);
+	flags = page->flags & ~((1 << PG_error) | (1 << PG_dirty));
+	page->flags = flags | (1 << PG_referenced) | (1 << PG_uptodate);
+	add_to_page_cache_locked(page, &swapper_space, entry.val);
 }
 
 static inline void remove_from_swap_cache(struct page *page)
@@ -225,6 +231,7 @@ struct page * read_swap_cache_async(swp_entry_t entry, int wait)
 	/* 
 	 * Add it to the swap cache and read its contents.
 	 */
+	lock_page(new_page);
 	add_to_swap_cache(new_page, entry);
 	rw_swap_page(READ, new_page, wait);
 	return new_page;
