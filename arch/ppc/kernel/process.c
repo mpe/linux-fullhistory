@@ -168,7 +168,7 @@ release_thread(struct task_struct *t)
 /*
  * Copy a thread..
  */
-void copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
+int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	struct task_struct * p, struct pt_regs * regs)
 {
 	int i;
@@ -218,6 +218,8 @@ void copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 		childregs->gpr[1] = usp;
 	}
 	p->tss.fp_used = 0;
+
+	return 0;
 }
 
 /*

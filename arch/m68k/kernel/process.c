@@ -106,7 +106,7 @@ void release_thread(struct task_struct *dead_task)
 {
 }
 
-void copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
+int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 		 struct task_struct * p, struct pt_regs * regs)
 {
 	struct pt_regs * childregs;
@@ -145,6 +145,8 @@ void copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 			: "memory");
 	/* Restore the state in case the fpu was busy */
 	asm volatile ("frestore %0" : : "m" (p->tss.fpstate[0]));
+
+	return 0;
 }
 
 /* Fill in the fpu structure for a core dump.  */

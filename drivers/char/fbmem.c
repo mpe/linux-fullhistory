@@ -17,8 +17,8 @@
 #include <linux/mman.h>
 #include <linux/tty.h>
 
+#include <asm/setup.h>
 #include <asm/uaccess.h>
-#include <asm/bootinfo.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
 
@@ -55,8 +55,8 @@ static inline int PROC_CONSOLE(void)
 	return MINOR(current->tty->device) - 1;
 }
 
-static int 
-fb_read(struct inode *inode, struct file *file, char *buf, int count)
+static long 
+fb_read(struct inode *inode, struct file *file, char *buf, unsigned long count)
 {
 	unsigned long p = file->f_pos;
 	struct fb_ops *fb = registered_fb[GET_FB_IDX(inode->i_rdev)];
@@ -66,8 +66,6 @@ fb_read(struct inode *inode, struct file *file, char *buf, int count)
 
 	if (! fb)
 		return -ENODEV;
-	if (count < 0)
-		return -EINVAL;
 
 	fb->fb_get_fix(&fix,PROC_CONSOLE());
 	base_addr=(char *) fix.smem_start;
@@ -77,8 +75,9 @@ fb_read(struct inode *inode, struct file *file, char *buf, int count)
 	return copy_size;
 }
 
-static int 
-fb_write(struct inode *inode, struct file *file, const char *buf, int count)
+static long
+fb_write(struct inode *inode, struct file *file, const char *buf,
+	 unsigned long count)
 {
 	unsigned long p = file->f_pos;
 	struct fb_ops *fb = registered_fb[GET_FB_IDX(inode->i_rdev)];
@@ -88,8 +87,6 @@ fb_write(struct inode *inode, struct file *file, const char *buf, int count)
 
 	if (! fb)
 		return -ENODEV;
-	if (count < 0)
-		return -EINVAL;
 	fb->fb_get_fix(&fix, PROC_CONSOLE());
 	base_addr=(char *) fix.smem_start;
 	copy_size=(count + p <= fix.smem_len ? count : fix.smem_len - p);
@@ -212,13 +209,13 @@ fb_mmap(struct inode *inode, struct file *file, struct vm_area_struct * vma)
 	fb->fb_get_fix(&fix, PROC_CONSOLE());
 	if ((vma->vm_end - vma->vm_start + vma->vm_offset) > fix.smem_len)
 		return -EINVAL;
-	vma->vm_offset += fix.smem_start;
+	vma->vm_offset += __pa(fix.smem_start);
 	if (vma->vm_offset & ~PAGE_MASK)
 		return -ENXIO;
-	if (m68k_is040or060) {
+	if (CPU_IS_040_OR_060) {
 		pgprot_val(vma->vm_page_prot) &= _CACHEMASK040;
 		/* Use write-through cache mode */
-		pgprot_val(vma->vm_page_prot) |= _PAGE_CACHE040W;
+		pgprot_val(vma->vm_page_prot) |= _PAGE_NOCACHE_S;
 	}
 	if (remap_page_range(vma->vm_start, vma->vm_offset,
 			     vma->vm_end - vma->vm_start, vma->vm_page_prot))

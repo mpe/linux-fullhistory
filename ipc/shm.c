@@ -180,7 +180,7 @@ static void killseg (int id)
 	numpages = shp->shm_npages;
 	for (i = 0; i < numpages ; i++) {
 		pte_t pte;
-		pte_val(pte) = shp->shm_pages[i];
+		pte = __pte(shp->shm_pages[i]);
 		if (pte_none(pte))
 			continue;
 		if (pte_present(pte)) {
@@ -649,21 +649,21 @@ static pte_t shm_swap_in(struct vm_area_struct * shmd, unsigned long offset, uns
 		return BAD_PAGE;
 	}
 
-	pte_val(pte) = shp->shm_pages[idx];
+	pte = __pte(shp->shm_pages[idx]);
 	if (!pte_present(pte)) {
 		unsigned long page = get_free_page(GFP_KERNEL);
 		if (!page) {
 			oom(current);
 			return BAD_PAGE;
 		}
-		pte_val(pte) = shp->shm_pages[idx];
+		pte = __pte(shp->shm_pages[idx]);
 		if (pte_present(pte)) {
 			free_page (page); /* doesn't sleep */
 			goto done;
 		}
 		if (!pte_none(pte)) {
 			read_swap_page(pte_val(pte), (char *) page);
-			pte_val(pte) = shp->shm_pages[idx];
+			pte = __pte(shp->shm_pages[idx]);
 			if (pte_present(pte))  {
 				free_page (page); /* doesn't sleep */
 				goto done;
@@ -723,7 +723,7 @@ int shm_swap (int prio, int dma)
 	if (idx >= shp->shm_npages)
 		goto next_id;
 
-	pte_val(page) = shp->shm_pages[idx];
+	page = __pte(shp->shm_pages[idx]);
 	if (!pte_present(page))
 		goto check_table;
 	if (dma && !PageDMA(&mem_map[MAP_NR(pte_page(page))]))
@@ -774,7 +774,8 @@ int shm_swap (int prio, int dma)
 			continue;
 		}
 		if (pte_page(pte) != pte_page(page))
-			printk("shm_swap_out: page and pte mismatch\n");
+			printk("shm_swap_out: page and pte mismatch %lx %lx\n",
+			       pte_page(pte),pte_page(page));
 		flush_cache_page(shmd, tmp);
 		set_pte(page_table,
 		  __pte(shmd->vm_pte + SWP_ENTRY(0, idx << SHM_IDX_SHIFT)));

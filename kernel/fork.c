@@ -274,7 +274,9 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 		goto bad_fork_cleanup_fs;
 	if (copy_mm(clone_flags, p))
 		goto bad_fork_cleanup_sighand;
-	copy_thread(nr, clone_flags, usp, p, regs);
+	error = copy_thread(nr, clone_flags, usp, p, regs);
+	if (error)
+		goto bad_fork_cleanup_sighand;
 	p->semundo = NULL;
 
 	/* ok, now we should be set up.. */

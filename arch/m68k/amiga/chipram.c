@@ -8,7 +8,6 @@
 
 #include <linux/types.h>
 #include <linux/kernel.h>
-#include <asm/setup.h>
 #include <asm/amigahw.h>
 
 struct chip_desc {
@@ -21,7 +20,7 @@ struct chip_desc {
 
 #define DP(ptr) ((struct chip_desc *)(ptr))
 
-static unsigned long chipsize;
+u_long amiga_chip_size;
 static unsigned long chipavail; /*MILAN*/
 
 /*MILAN*/
@@ -41,22 +40,20 @@ void amiga_chip_init (void)
   if (!AMIGAHW_PRESENT(CHIP_RAM))
     return;
 
-  chipsize = boot_info.bi_amiga.chip_size;
-
   /* initialize start boundary */
 
   dp = DP(chipaddr);
   dp->first = 1;
 
   dp->alloced = 0;
-  dp->length = chipsize - 2*sizeof(*dp);
+  dp->length = amiga_chip_size - 2*sizeof(*dp);
 
   /* initialize end boundary */
-  dp = DP(chipaddr + chipsize) - 1;
+  dp = DP(chipaddr + amiga_chip_size) - 1;
   dp->last = 1;
   
   dp->alloced = 0;
-  dp->length = chipsize - 2*sizeof(*dp);
+  dp->length = amiga_chip_size - 2*sizeof(*dp);
   chipavail = dp->length;  /*MILAN*/
 
 #ifdef DEBUG
@@ -82,7 +79,7 @@ void *amiga_chip_alloc (long size)
 	 * get pointer to descriptor for last chunk by 
 	 * going backwards from end chunk
 	 */
-	dp = DP(chipaddr + chipsize) - 1;
+	dp = DP(chipaddr + amiga_chip_size) - 1;
 	dp = DP((unsigned long)dp - dp->length) - 1;
 	
 	while ((dp->alloced || dp->length < size)

@@ -1,9 +1,9 @@
 /*
  * This file define a set of standard wireless extensions
  *
- * Version :	2	30.10.96
+ * Version :	3	18.12.96
  *
- * Authors :	Jean II - HPLB - MCD <jt@hplb.hpl.hp.com>
+ * Authors :	Jean Tourrilhes - HPLB - <jt@hplb.hpl.hp.com>
  */
 
 #ifndef _LINUX_WIRELESS_H
@@ -63,7 +63,17 @@
  * (there is some stuff that will be added in the future...)
  * I just plan to increment with each new version.
  */
-#define WIRELESS_EXT	2
+#define WIRELESS_EXT	3
+
+/*
+ * Changes :
+ *
+ * V2 to V3
+ * --------
+ *	Alan Cox start some imcompatibles changes. I've integrated a bit more.
+ *	- Encryption renamed to Encode to avoid US regulation problems
+ *	- Frequency changed from float to struct to avoid problems on old 386
+ */
 
 /* -------------------------- IOCTL LIST -------------------------- */
 
@@ -134,21 +144,22 @@
 /****************************** TYPES ******************************/
 
 /* --------------------------- SUBTYPES --------------------------- */
-
 /*
  *	A frequency
+ *	For numbers lower than 10^9, we encode the number in 'mant' and
+ *	set 'exp' to 0
+ *	For number greater than 10^9, we divide it by a power of 10.
+ *	The power of 10 is in 'exp', the result is in 'mant'.
  */
- 
-typedef struct 
+struct	iw_freq
 {
-	__u32	value;
-	__u16	scale;
-} wireless_freq_t;
+	__u32		m;		/* Mantissa */
+	__u16		e;		/* Exponent */
+};
 
 /*
  *	Quality of the link
  */
-
 struct	iw_quality
 {
 	__u8		qual;		/* link quality (SNR or better...) */
@@ -161,11 +172,10 @@ struct	iw_quality
  *	Packet discarded in the wireless adapter due to
  *	"wireless" specific problems...
  */
- 
 struct	iw_discarded
 {
 	__u32		nwid;		/* Wrong nwid */
-	__u32		codec;		/* Unable to core/decode */
+	__u32		code;		/* Unable to code/decode */
 	__u32		misc;		/* Others cases */
 };
 
@@ -173,7 +183,6 @@ struct	iw_discarded
 /*
  * Wireless statistics (used for /proc/net/wireless)
  */
-
 struct	iw_statistics
 {
 	__u8		status;		/* Status
@@ -215,15 +224,15 @@ struct	iwreq
 			__u8	on;		/* active/unactive nwid */
 		}	nwid;
 
-		wireless_freq_t	freq;	/* frequency or channel :
+		struct iw_freq	freq;	/* frequency or channel :
 					 * 0-1000 = channel
 					 * > 1000 = frequency in Hz */
-					 
+
 		struct		/* Encoding stuff */
 		{
 			__u8	method;		/* Algorithm number / off */
-			__u64	data;		/* Data used for algorithm */
-		}	encoder;
+			__u64	code;		/* Data used for algorithm */
+		}	encoding;
 
 		struct		/* For all data bigger than 16 octets */
 		{
@@ -235,8 +244,7 @@ struct	iwreq
 	}	u;
 };
 
-/*	-------------------------- IOCTL DATA --------------------------	*/
-
+/* -------------------------- IOCTL DATA -------------------------- */
 /*
  *	For those ioctl which want to exchange mode data that what could
  *	fit in the above structure...
@@ -258,7 +266,7 @@ struct	iw_range
 	/* Frequency */
 	__u16		num_channels;	/* Number of channels [0; num - 1] */
 	__u8		num_frequency;	/* Number of entry in the list */
-	wireless_freq_t	freq[IW_MAX_FREQUENCIES];	/* list */
+	struct iw_freq	freq[IW_MAX_FREQUENCIES];	/* list */
 
 	/* Note : this frequency list doesn't need to fit channel numbers */
 

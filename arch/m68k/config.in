@@ -51,7 +51,6 @@ bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
 tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
-bool 'Compile kernel as ELF - if your GCC is ELF-GCC' CONFIG_KERNEL_ELF
 if [ "$CONFIG_AMIGA" = "y" ]; then
   bool 'Amiga AutoConfig Identification' CONFIG_ZORRO
   bool 'Amiga OCS chipset support' CONFIG_AMIFB_OCS
@@ -79,6 +78,7 @@ if [ "$CONFIG_BLK_DEV_IDE" != "n" ]; then
   dep_tristate '   Include IDE/ATAPI CDROM support' CONFIG_BLK_DEV_IDECD $CONFIG_BLK_DEV_IDE
   dep_tristate '   Include IDE/ATAPI TAPE support' CONFIG_BLK_DEV_IDETAPE $CONFIG_BLK_DEV_IDE
   dep_tristate '   Include IDE/ATAPI FLOPPY support' CONFIG_BLK_DEV_IDEFLOPPY $CONFIG_BLK_DEV_IDE
+  dep_tristate '   SCSI emulation support' CONFIG_BLK_DEV_IDESCSI $CONFIG_BLK_DEV_IDE
 fi
 if [ "$CONFIG_AMIGA" = "y" ]; then
 tristate 'Amiga Zorro II ramdisk support' CONFIG_AMIGA_Z2RAM
@@ -122,6 +122,9 @@ comment 'SCSI support type (disk, tape, CD-ROM)'
 dep_tristate 'SCSI disk support' CONFIG_BLK_DEV_SD $CONFIG_SCSI
 dep_tristate 'SCSI tape support' CONFIG_CHR_DEV_ST $CONFIG_SCSI
 dep_tristate 'SCSI CD-ROM support' CONFIG_BLK_DEV_SR $CONFIG_SCSI
+if [ "$CONFIG_BLK_DEV_SR" != "n" ]; then
+  bool '  Enable vendor-specific extentions (for SCSI CDROM)' CONFIG_BLK_DEV_SR_VENDOR
+fi
 dep_tristate 'SCSI generic support' CONFIG_CHR_DEV_SG $CONFIG_SCSI
 
 comment 'Some SCSI devices (e.g. CD jukebox) support multiple LUNs'

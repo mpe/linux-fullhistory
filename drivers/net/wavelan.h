@@ -19,16 +19,16 @@
 #ifndef _WAVELAN_H
 #define	_WAVELAN_H
 
-/* The detection of the wavelan card is made by reading the MAC address
- * from the card and checking it. If you have a non AT&T product (OEM,
- * like DEC RoamAbout, or Digital Ocean, Epson, ...), you must modify this
- * part to accomodate your hardware...
+/* The detection of the wavelan card is made by reading the MAC
+ * address from the card and checking it. If you have a non AT&T
+ * product (OEM, like DEC RoamAbout, or Digital Ocean, Epson, ...),
+ * you might need to modify this part to accomodate your hardware...
  */
 const char	MAC_ADDRESSES[][3] =
 {
-  { 0x08, 0x00, 0x0E },		/* AT&T Wavelan (standard) */
+  { 0x08, 0x00, 0x0E },		/* AT&T Wavelan (standard) & DEC RoamAbout */
   { 0x08, 0x00, 0x6A },		/* AT&T Wavelan (alternate) */
-  /* Add your card here */
+  /* Add your card here and send me the patch ! */
 };
 
 #define WAVELAN_ADDR_SIZE	6	/* Size of a MAC address */

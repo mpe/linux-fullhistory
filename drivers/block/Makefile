@@ -30,6 +30,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_AMIGA_Z2RAM),y)
+L_OBJS += z2ram.o
+else
+  ifeq ($(CONFIG_AMIGA_Z2RAM),m)
+  M_OBJS += z2ram.o
+  endif
+endif
+
 ifeq ($(CONFIG_BLK_DEV_RAM),y)
 L_OBJS += rd.o
 else
@@ -142,6 +150,14 @@ L_OBJS += xd.o
 else
   ifeq ($(CONFIG_BLK_DEV_XD),m)
   M_OBJS += xd.o
+  endif
+endif
+
+ifeq ($(CONFIG_BLK_DEV_EZ),y)
+L_OBJS += ez.o
+else
+  ifeq ($(CONFIG_BLK_DEV_EZ),m)
+  M_OBJS += ez.o
   endif
 endif
 

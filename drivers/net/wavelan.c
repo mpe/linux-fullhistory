@@ -1518,6 +1518,8 @@ wavelan_set_mac_address(device *	dev,
   return 0;
 }
 
+#ifdef WIRELESS_EXT	/* If wireless extension exist in the kernel */
+
 /*------------------------------------------------------------------*/
 /*
  * Frequency setting (for hardware able of it)
@@ -1526,27 +1528,12 @@ wavelan_set_mac_address(device *	dev,
  */
 static inline int
 wv_set_frequency(u_short	ioaddr,	/* i/o port of the card */
-		 float		frequency)
+		 iw_freq *	frequency)
 {
-  u_short	table[10];	/* Authorized frequency table */
   const int	BAND_NUM = 10;	/* Number of bands */
   long		freq = 0L;	/* offset to 2.4 GHz in .5 MHz */
 #ifdef DEBUG_IOCTL_INFO
   int		i;
-#endif
-
-  /* Read the frequency table */
-  fee_read(ioaddr, 0x71 /* frequency table */,
-	   table, 10);
-
-#ifdef DEBUG_IOCTL_INFO
-  printk(KERN_DEBUG "Frequency table :");
-  for(i = 0; i < 10; i++)
-    {
-      printk(" %04X",
-	     table[i]);
-    }
-  printk("\n");
 #endif
 
   /* Setting by frequency */
@@ -1554,33 +1541,51 @@ wv_set_frequency(u_short	ioaddr,	/* i/o port of the card */
    * the two limits with a 0.5 MHz precision. In practice,
    * I don't want you to have trouble with local
    * regulations... */
-  if((frequency >= 2.412e9) && (frequency <= 2.487e9))
+  if((frequency->e == 1) &&
+     (frequency->m >= (int) 2.412e8) && (frequency->m <= (int) 2.487e8))
     {
-      /* Warning : rounding problems... */
-      freq = (((long) ((frequency / 1e5) + .4)) - 24000L) / 5;
-
-      /* Look in the table if the frequency is allowed */
-      if(!(table[9 - ((freq - 24) / 16)] &
-	   (1 << ((freq - 24) % 16))))
-	return -EINVAL;		/* not allowed */
+      freq = ((frequency->m / 10000) - 24000L) / 5;
     }
 
   /* Setting by channel (same as wfreqsel) */
   /* Warning : each channel is 22MHz wide, so some of the channels
    * will interfere... */
-  if((frequency >= 0.0) && (frequency < (float) BAND_NUM))
+  if((frequency->e == 0) &&
+     (frequency->m >= 0) && (frequency->m < BAND_NUM))
     {
       /* frequency in 1/4 of MHz (as read in the offset register) */
       short	bands[] = { 0x30, 0x58, 0x64, 0x7A, 0x80, 0xA8, 0xD0, 0xF0, 0xF8, 0x150 };
 
       /* Get frequency offset */
-      freq = bands[((int) frequency)] >> 1;
+      freq = bands[frequency->m] >> 1;
+    }
+
+  /* Verify if the frequency is allowed */
+  if(freq != 0L)
+    {
+      u_short	table[10];	/* Authorized frequency table */
+
+      /* Read the frequency table */
+      fee_read(ioaddr, 0x71 /* frequency table */,
+	       table, 10);
+
+#ifdef DEBUG_IOCTL_INFO
+      printk(KERN_DEBUG "Frequency table :");
+      for(i = 0; i < 10; i++)
+	{
+	  printk(" %04X",
+		 table[i]);
+	}
+      printk("\n");
+#endif
 
       /* Look in the table if the frequency is allowed */
       if(!(table[9 - ((freq - 24) / 16)] &
 	   (1 << ((freq - 24) % 16))))
 	return -EINVAL;		/* not allowed */
     }
+  else
+    return -EINVAL;
 
   /* If we get a usable frequency */
   if(freq != 0L)
@@ -1717,17 +1722,13 @@ wv_set_frequency(u_short	ioaddr,	/* i/o port of the card */
     return -EINVAL;		/* Bah, never get there... */
 }
 
-#ifdef WIRELESS_EXT	/* If wireless extension exist in the kernel */
-
 /*------------------------------------------------------------------*/
 /*
- * Frequency setting (for hardware able of it)
- * It's a bit complicated and you don't really want to look into it...
- * (called in wavelan_ioctl)
+ * Give the list of available frequencies
  */
 static inline int
 wv_frequency_list(u_short	ioaddr,	/* i/o port of the card */
-		  float *	list,	/* List of frequency to fill */
+		  iw_freq *	list,	/* List of frequency to fill */
 		  int		max)	/* Maximum number of frequencies */
 {
   u_short	table[10];	/* Authorized frequency table */
@@ -1745,7 +1746,8 @@ wv_frequency_list(u_short	ioaddr,	/* i/o port of the card */
     if(table[9 - (freq / 16)] & (1 << (freq % 16)))
       {
 	/* put in the list */
-	list[i++] = (((freq + 24) * 5) + 24000L) * 1e5;
+	list[i].m = (((freq + 24) * 5) + 24000L) * 10000;
+	list[i++].e = 1;
 
 	/* Check number */
 	if(i >= max)
@@ -1893,7 +1895,7 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
       /* Attempt to recognise 2.00 cards (2.4 GHz frequency selectable) */
       if(!(mmc_in(ioaddr, mmroff(0, mmr_fee_status)) &
 	   (MMR_FEE_STATUS_DWLD | MMR_FEE_STATUS_BUSY)))
-	ret = wv_set_frequency(ioaddr, wrq->u.freq);
+	ret = wv_set_frequency(ioaddr, &(wrq->u.freq));
       else
 	ret = -EOPNOTSUPP;
       break;
@@ -1909,17 +1911,21 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
 	  /* Ask the EEprom to read the frequency from the first area */
 	  fee_read(ioaddr, 0x00 /* 1st area - frequency... */,
 		   &freq, 1);
-	  wrq->u.freq = ((freq >> 5) * 5 + 24000L) * 1e5;
+	  wrq->u.freq.m = ((freq >> 5) * 5 + 24000L) * 10000;
+	  wrq->u.freq.e = 1;
 	}
       else
 	{
-	  float	bands[] = { 915e6, 2.425e9, 2.46e9, 2.484e9, 2.4305e9 };
+	  int	bands[] = { 915e6, 2.425e8, 2.46e8, 2.484e8, 2.4305e8 };
 
 	  psa_read(ioaddr, lp->hacr, (char *)&psa.psa_subband - (char *)&psa,
 		   (unsigned char *)&psa.psa_subband, 1);
 
 	  if(psa.psa_subband <= 4)
-	    wrq->u.freq = bands[psa.psa_subband];
+	    {
+	      wrq->u.freq.m = bands[psa.psa_subband];
+	      wrq->u.freq.e = (psa.psa_subband != 0);
+	    }
 	  else
 	    ret = -EOPNOTSUPP;
 	}
@@ -2233,7 +2239,7 @@ wavelan_get_wireless_stats(device *	dev)
 			  ((m.mmr_signal_lvl & MMR_SIGNAL_LVL_VALID) >> 6) |
 			  ((m.mmr_silence_lvl & MMR_SILENCE_LVL_VALID) >> 5));
   wstats->discard.nwid += (m.mmr_wrong_nwid_h << 8) | m.mmr_wrong_nwid_l;
-  wstats->discard.crypt = 0L;
+  wstats->discard.code = 0L;
   wstats->discard.misc = 0L;
 
   /* ReEnable interrupts & restore flags */
@@ -2791,6 +2797,9 @@ wv_mmc_init(device *	dev)
 	psa.psa_thr_pre_set = 0x04;
       psa.psa_quality_thr = 0x03;
 
+      /* It is configured */
+      psa.psa_conf_status |= 1;
+
 #ifdef USE_PSA_CONFIG
       /* Write the psa */
       psa_write(ioaddr, lp->hacr, (char *)psa.psa_nwid - (char *)&psa,
@@ -2799,6 +2808,8 @@ wv_mmc_init(device *	dev)
 		(unsigned char *)&psa.psa_thr_pre_set, 1);
       psa_write(ioaddr, lp->hacr, (char *)&psa.psa_quality_thr - (char *)&psa,
 		(unsigned char *)&psa.psa_quality_thr, 1);
+      psa_write(ioaddr, lp->hacr, (char *)&psa.psa_conf_status - (char *)&psa,
+		(unsigned char *)&psa.psa_conf_status, 1);
 #endif
     }
 

@@ -24,13 +24,17 @@
  *  - works but I think it's inefficient. (look in redo_fd_request)
  *    But the changes were very efficient. (only three and a half lines)
  *
- *  january 1995 added special ioctl for tracking down read/write problems
+ *  january 1996 added special ioctl for tracking down read/write problems
  *  - usage ioctl(d, RAW_TRACK, ptr); the raw track buffer (MFM-encoded data
  *    is copied to area. (area should be large enough since no checking is
  *    done - 30K is currently sufficient). return the actual size of the
  *    trackbuffer
  *  - replaced udelays() by a timer (CIAA timer B) for the waits 
  *    needed for the disk mechanic.
+ *
+ *  february 1996 fixed error recovery and multiple disk access
+ *  - both got broken the first time I tampered with the driver :-(
+ *  - still not safe, but better than before
  *
  *  revised Marts 3rd, 1996 by Jes Sorensen for use in the 1.3.28 kernel.
  *  - Minor changes to accept the kdev_t.
@@ -43,6 +47,9 @@
  *    that when we start using 16 (24?) bit minors.
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
 #include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/fcntl.h>
@@ -55,13 +62,13 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 
+#include <asm/setup.h>
+#include <asm/uaccess.h>
 #include <asm/amifdreg.h>
 #include <asm/amifd.h>
 #include <asm/amigahw.h>
 #include <asm/amigaints.h>
 #include <asm/irq.h>
-#include <asm/bootinfo.h>
-#include <asm/amigatypes.h>
 
 #define MAJOR_NR FLOPPY_MAJOR
 #include <linux/blk.h>
@@ -126,15 +133,15 @@ static int fd_def_df0 = 0;     /* default for df0 if it doesn't identify */
 static struct fd_drive_type drive_types[] = {
 /*  code	name	   tr he   rdsz   wrsz sm pc1 pc2 sd  st st*/
 /*  warning: times are now in milliseconds (ms)                    */
- { FD_DD_3,	"DD 3.5", 160, 2, 14716, 13630, 1, 80,161, 3, 18, 1},
- { FD_HD_3,	"HD 3.5", 160, 2, 28344, 27258, 2, 80,161, 3, 18, 1},
- { FD_DD_5,	"DD 5.25", 80, 2, 14716, 13630, 1, 40, 81, 6, 30, 2},
+ { FD_DD_3,	"DD 3.5",  80, 2, 14716, 13630, 1, 80,161, 3, 18, 1},
+ { FD_HD_3,	"HD 3.5",  80, 2, 28344, 27258, 2, 80,161, 3, 18, 1},
+ { FD_DD_5,	"DD 5.25", 40, 2, 14716, 13630, 1, 40, 81, 6, 30, 2},
  { FD_NODRIVE, "No Drive", 0, 0,     0,     0, 0,  0,  0,  0,  0, 0}
 };
 static int num_dr_types = sizeof(drive_types) / sizeof(drive_types[0]);
 
 /* defaults for 3 1/2" HD-Disks */
-static int floppy_sizes[256]={880,880,880,880,720,720,720,};
+static int floppy_sizes[256]={880,880,880,880,720,720,720,720,};
 static int floppy_blocksizes[256]={0,};
 /* hardsector size assumed to be 512 */
 
@@ -142,7 +149,6 @@ static struct fd_data_type data_types[] = {
   { "Amiga", 11 , amiga_read, amiga_write},
   { "MS-Dos", 9, dos_read, dos_write}
 };
-static int num_da_types = sizeof(data_types) / sizeof(data_types[0]);
 
 /* current info on each unit */
 static struct amiga_floppy_struct unit[FD_MAX_UNITS];
@@ -168,13 +174,20 @@ static char *raw_buf;
  * information to interrupts. They are the data used for the current
  * request.
  */
-static char block_flag = 0;
-static int selected = 0;
+static volatile char block_flag = 0;
+static volatile int selected = 0;
 static struct wait_queue *wait_fd_block = NULL;
 
-/* Synchronization of FDC access. */
-static volatile int fdc_busy = 0;
+/* Synchronization of FDC access */
+/* request loop (trackbuffer) */
+static volatile int fdc_busy = -1;
+static volatile int fdc_nested = 0;
 static struct wait_queue *fdc_wait = NULL;
+/* hardware */
+static volatile int hw_busy = -1;
+static volatile int hw_nested = 0;
+static struct wait_queue *hw_wait = NULL;
+ 
 static struct wait_queue *motor_wait = NULL;
 
 /* MS-Dos MFM Coding tables (should go quick and easy) */
@@ -185,28 +198,117 @@ static unsigned char mfmencode[16]={
 static unsigned char mfmdecode[128];
 
 /* floppy internal millisecond timer stuff */
-static struct semaphore ms_sem = MUTEX;
+static volatile int ms_busy = -1;
 static struct wait_queue *ms_wait = NULL;
 #define MS_TICKS ((amiga_eclock+50)/1000)
 
-static void ms_isr(int irq, struct pt_regs *fp, void *dummy)
+/*
+ * Note that MAX_ERRORS=X doesn't imply that we retry every bad read
+ * max X times - some types of errors increase the errorcount by 2 or
+ * even 3, so we might actually retry only X/2 times before giving up.
+ */
+#define MAX_ERRORS 12
+
+/*
+ * The driver is trying to determine the correct media format
+ * while probing is set. rw_interrupt() clears it after a
+ * successful access.
+ */
+static int probing = 0;
+
+/* Prevent "aliased" accesses. */
+static fd_ref[4] = { 0,0,0,0 };
+static fd_device[4] = { 0,0,0,0 };
+
+/*
+ * Current device number. Taken either from the block header or from the
+ * format request descriptor.
+ */
+#define CURRENT_DEVICE (CURRENT->rq_dev)
+
+/* Current error count. */
+#define CURRENT_ERRORS (CURRENT->errors)
+
+static void get_fdc(int drive)
 {
+unsigned long flags;
+
+       drive &= 3;
+       save_flags(flags);
+       cli();
+       if (fdc_busy != drive)
+         while (!(fdc_busy < 0))
+           sleep_on(&fdc_wait);
+       fdc_busy = drive;
+       fdc_nested++;
+       restore_flags(flags);
+}
+
+static inline void rel_fdc(void)
+{
+#ifdef DEBUG
+       if (fdc_nested == 0)
+         printk("fd: unmatched rel_fdc\n");
+#endif
+       fdc_nested--;
+       if (fdc_nested == 0) {
+         fdc_busy = -1;
+         wake_up(&fdc_wait);
+       }
+}
+
+static void get_hw(int drive)
+{
+unsigned long flags;
+
+       drive &= 3;
+       save_flags(flags);
+       cli();
+       if (hw_busy != drive)
+         while (!(hw_busy < 0))
+           sleep_on(&hw_wait);
+       hw_busy = drive;
+       hw_nested++;
+       restore_flags(flags);
+}
+
+static inline void rel_hw(void)
+{
+#ifdef DEBUG
+       if (hw_nested == 0)
+         printk("fd: unmatched hw_rel\n");
+#endif
+       hw_nested--;
+       if (hw_nested == 0) {
+         hw_busy = -1;
+         wake_up(&hw_wait);
+       }
+}
+
+static void ms_isr(int irq, void *dummy, struct pt_regs *fp)
+{
+ms_busy = -1;
 wake_up(&ms_wait);
 }
 
-/* with the semaphore waits are queued up 
+/* all waits are queued up 
    A more generic routine would do a schedule a la timer.device */
 static void ms_delay(int ms)
 {
+  unsigned long flags;
   int ticks;
   if (ms > 0) {
-    down(&ms_sem);
-    ticks=MS_TICKS*ms-1;
+    save_flags(flags);
+    cli();
+    while (ms_busy == 0)
+      sleep_on(&ms_wait);
+    ms_busy = 0;
+    restore_flags(flags);
+    ticks = MS_TICKS*ms-1;
     ciaa.tblo=ticks%256;
     ciaa.tbhi=ticks/256;
-    ciaa.crb=0x19; /* count clock, force load, one-shot, start */
+    ciaa.crb=0x19; /*count eclock, force load, one-shoot, start */
     sleep_on(&ms_wait);
-    up(&ms_sem);
   }
 }
 
@@ -223,6 +325,7 @@ static void fd_motor_off(unsigned long drive)
 	unsigned char prb = ~0;
 
 	drive&=3;
+	get_hw(drive);
 	save_flags(flags);
 	cli();
 
@@ -238,6 +341,15 @@ static void fd_motor_off(unsigned long drive)
 	selected = -1;
 	unit[drive].motor = 0;
 
+	rel_hw();
+#ifdef MODULE
+/*
+this is the last interrupt for any drive access, happens after
+release. So we have to wait until now to decrease the use count.
+*/
+       if (fd_ref[drive] == 0)
+         MOD_DEC_USE_COUNT;
+#endif
 	restore_flags(flags);
 }
 
@@ -260,6 +372,7 @@ static int motor_on(int nr)
 	unsigned char prb = ~0;
 
 	nr &= 3;
+	get_hw(nr);
 	save_flags (flags);
 	cli();
 	del_timer(motor_off_timer + nr);
@@ -284,12 +397,17 @@ static int motor_on(int nr)
 		while (!unit[nr].motor)
 			sleep_on (&motor_wait);
 	}
+	rel_hw();
 	restore_flags(flags);
 
 	if (on_attempts == 0) {
-		printk ("motor_on failed, turning motor off\n");
+#if 0
+		printk (KERN_ERR "motor_on failed, turning motor off\n");
 		fd_motor_off (nr);
 		return 0;
+#else
+		printk (KERN_WARNING "DSKRDY not set after 1.5 seconds - assuming drive is spinning notwithstanding\n");
+#endif
 	}
 
 	return 1;
@@ -310,6 +428,7 @@ static void fd_select (int drive)
 	drive&=3;
 	if (drive == selected)
 		return;
+	get_hw(drive);
 	selected = drive;
 
 	if (unit[drive].track % 2 != 0)
@@ -320,6 +439,7 @@ static void fd_select (int drive)
 	ciab.prb = prb;
 	prb &= ~SELMASK(drive);
 	ciab.prb = prb;
+	rel_hw();
 }
 
 static void fd_deselect (int drive)
@@ -331,6 +451,7 @@ static void fd_deselect (int drive)
 	if (drive != selected)
 		return;
 
+	get_hw(drive);
 	save_flags (flags);
 	sti();
 
@@ -341,6 +462,7 @@ static void fd_deselect (int drive)
 	ciab.prb = prb;
 
 	restore_flags (flags);
+	rel_hw();
 
 }
 
@@ -355,6 +477,7 @@ static int fd_calibrate(int drive)
 	int n;
 
 	drive &= 3;
+	get_hw(drive);
 	if (!motor_on (drive))
 		return 0;
 	fd_select (drive);
@@ -362,38 +485,40 @@ static int fd_calibrate(int drive)
 	prb |= DSKSIDE;
 	prb &= ~DSKDIREC;
 	ciab.prb = prb;
-	for (n = unit[drive].type->tracks/4; n != 0; --n) {
+	for (n = unit[drive].type->tracks/2; n != 0; --n) {
 		if (ciaa.pra & DSKTRACK0)
 			break;
 		prb &= ~DSKSTEP;
 		ciab.prb = prb;
 		prb |= DSKSTEP;
-		ms_delay (2);
+		udelay (2);
 		ciab.prb = prb;
 		ms_delay(unit[drive].type->step_delay);
 	}
 	ms_delay (unit[drive].type->settle_time);
 	prb |= DSKDIREC;
-	n = unit[drive].type->tracks/2 + 20;
+	n = unit[drive].type->tracks + 20;
 	for (;;) {
 		prb &= ~DSKSTEP;
 		ciab.prb = prb;
 		prb |= DSKSTEP;
-		ms_delay (2);
+		udelay (2);
 		ciab.prb = prb;
 		ms_delay(unit[drive].type->step_delay + 1);
 		if ((ciaa.pra & DSKTRACK0) == 0)
 			break;
 		if (--n == 0) {
-			printk ("calibrate failed, turning motor off\n");
+			printk (KERN_ERR "calibrate failed, turning motor off\n");
 			fd_motor_off (drive);
 			unit[drive].track = -1;
+			rel_hw();
 			return 0;
 		}
 	}
 	unit[drive].track = 0;
 	ms_delay(unit[drive].type->settle_time);
 
+	rel_hw();
 	return 1;
 }
 
@@ -408,13 +533,20 @@ static int fd_seek(int drive, int track)
 	int cnt;
 
 	drive &= 3;
-	if (unit[drive].track == track)
+	get_hw(drive);
+	if (unit[drive].track == track) {
+		rel_hw();
 		return 1;
-	if (!motor_on(drive))
+	}
+	if (!motor_on(drive)) {
+		rel_hw();
 		return 0;
+	}
 	fd_select (drive);
-	if (unit[drive].track < 0 && !fd_calibrate(drive))
+	if (unit[drive].track < 0 && !fd_calibrate(drive)) {
+		rel_hw();
 		return 0;
+	}
 
 	cnt = unit[drive].track/2 - track/2;
 	prb = ciab.prb;
@@ -429,18 +561,21 @@ static int fd_seek(int drive, int track)
 	if (track % 2 != unit[drive].track % 2)
 		ms_delay (unit[drive].type->side_time);
 	unit[drive].track = track;
-	if (cnt == 0)
+	if (cnt == 0) {
+		rel_hw();
 		return 1;
+	}
 	do {
 		prb &= ~DSKSTEP;
 		ciab.prb = prb;
 		prb |= DSKSTEP;
-		ms_delay (1);
+		udelay (1);
 		ciab.prb = prb;
 		ms_delay (unit[drive].type->step_delay);
 	} while (--cnt != 0);
 	ms_delay (unit[drive].type->settle_time);
 
+	rel_hw();
 	return 1;
 }
 
@@ -503,9 +638,6 @@ static unsigned long *putsec(int disk, unsigned long *raw, int track, int cnt,
 {
 	struct header hdr;
 	int i;
-
-	if (!AMIGAHW_PRESENT(AMI_FLOPPY))
-	    return 0;
 
 	disk&=3;
 	*raw = (raw[-1]&1) ? 0x2AAAAAAA : 0xAAAAAAAA;
@@ -618,7 +750,7 @@ static int amiga_read(int drive, unsigned char *track_data,
 
 	for (scnt = 0;scnt < unit[drive].sects; scnt++) {
 		if (!(raw = scan_sync(raw, end))) {
-			printk ("can't find sync for sector %d\n", scnt);
+			printk (KERN_INFO "can't find sync for sector %d\n", scnt);
 			return MFM_NOSYNC;
 		}
 
@@ -638,13 +770,13 @@ static int amiga_read(int drive, unsigned char *track_data,
 #endif
 
 		if (hdr.hdrchk != csum) {
-			printk("MFM_HEADER: %08lx,%08lx\n", hdr.hdrchk, csum);
+			printk(KERN_INFO "MFM_HEADER: %08lx,%08lx\n", hdr.hdrchk, csum);
 			return MFM_HEADER;
 		}
 
 		/* verify track */
 		if (hdr.track != track) {
-			printk("MFM_TRACK: %d, %d\n", hdr.track, track);
+			printk(KERN_INFO "MFM_TRACK: %d, %d\n", hdr.track, track);
 			return MFM_TRACK;
 		}
 
@@ -653,10 +785,10 @@ static int amiga_read(int drive, unsigned char *track_data,
 		csum = checksum((ulong *)(track_data + hdr.sect*512), 512);
 
 		if (hdr.datachk != csum) {
-			printk("MFM_DATA: (%x:%d:%d:%d) sc=%d %lx, %lx\n",
+			printk(KERN_INFO "MFM_DATA: (%x:%d:%d:%d) sc=%d %lx, %lx\n",
 			       hdr.magic, hdr.track, hdr.sect, hdr.ord, scnt,
 			       hdr.datachk, csum);
-			printk ("data=(%lx,%lx,%lx,%lx)\n",
+			printk (KERN_INFO "data=(%lx,%lx,%lx,%lx)\n",
 				((ulong *)(track_data+hdr.sect*512))[0],
 				((ulong *)(track_data+hdr.sect*512))[1],
 				((ulong *)(track_data+hdr.sect*512))[2],
@@ -852,7 +984,7 @@ static int dos_read(int drive, unsigned char *track_data,
   for (scnt=0;scnt<unit[drive].sects;scnt++) {
   do { /* search for the right sync of each sec-hdr */
     if (!(raw = scan_sync (raw, end))) {
-      printk("dos_read: no hdr sync on track %d, unit %d for sector %d\n",
+      printk(KERN_INFO "dos_read: no hdr sync on track %d, unit %d for sector %d\n",
         track,drive,scnt);
       return MFM_NOSYNC;
     }
@@ -870,30 +1002,30 @@ static int dos_read(int drive, unsigned char *track_data,
 #endif
 
   if (crc != hdr.crc) {
-    printk("dos_read: MFM_HEADER %04x,%04x\n", hdr.crc, crc);
+    printk(KERN_INFO "dos_read: MFM_HEADER %04x,%04x\n", hdr.crc, crc);
     return MFM_HEADER;
   }
   if (hdr.track != track/unit[drive].type->heads) {
-    printk("dos_read: MFM_TRACK %d, %d\n", hdr.track,
+    printk(KERN_INFO "dos_read: MFM_TRACK %d, %d\n", hdr.track,
       track/unit[drive].type->heads);
     return MFM_TRACK;
   }
 
   if (hdr.side != track%unit[drive].type->heads) {
-    printk("dos_read: MFM_SIDE %d, %d\n", hdr.side,
+    printk(KERN_INFO "dos_read: MFM_SIDE %d, %d\n", hdr.side,
       track%unit[drive].type->heads);
     return MFM_TRACK;
   }
 
   if (hdr.len_desc != 2) {
-    printk("dos_read: unknown sector len descriptor %d\n", hdr.len_desc);
+    printk(KERN_INFO "dos_read: unknown sector len descriptor %d\n", hdr.len_desc);
     return MFM_DATA;
   }
 #ifdef DEBUG
   printk("hdr accepted\n");
 #endif
   if (!(raw = scan_sync (raw, end))) {
-    printk("dos_read: no data sync on track %d, unit %d for sector%d, disk sector %d\n",
+    printk(KERN_INFO "dos_read: no data sync on track %d, unit %d for sector%d, disk sector %d\n",
       track, drive, scnt, hdr.sec);
     return MFM_NOSYNC;
   }
@@ -902,7 +1034,7 @@ static int dos_read(int drive, unsigned char *track_data,
 #endif
 
   if (*((ushort *)raw)!=0x5545) {
-    printk("dos_read: no data mark after sync (%d,%d,%d,%d) sc=%d\n",
+    printk(KERN_INFO "dos_read: no data mark after sync (%d,%d,%d,%d) sc=%d\n",
       hdr.track,hdr.side,hdr.sec,hdr.len_desc,scnt);
     return MFM_NOSYNC;
   }
@@ -913,10 +1045,10 @@ static int dos_read(int drive, unsigned char *track_data,
   crc = dos_data_crc(track_data + (hdr.sec - 1) * 512);
 
   if (crc != data_crc[0]) {
-    printk("dos_read: MFM_DATA (%d,%d,%d,%d) sc=%d, %x %x\n",
+    printk(KERN_INFO "dos_read: MFM_DATA (%d,%d,%d,%d) sc=%d, %x %x\n",
       hdr.track, hdr.side, hdr.sec, hdr.len_desc,
       scnt,data_crc[0], crc);
-    printk("data=(%lx,%lx,%lx,%lx,...)\n",
+    printk(KERN_INFO "data=(%lx,%lx,%lx,%lx,...)\n",
       ((ulong *)(track_data+(hdr.sec-1)*512))[0],
       ((ulong *)(track_data+(hdr.sec-1)*512))[1],
       ((ulong *)(track_data+(hdr.sec-1)*512))[2],
@@ -1039,33 +1171,6 @@ for(cnt=0;cnt<unit[disk].sects;cnt++)
 *(ushort *)ptr = 0xaaa8; /* MFM word before is always 0x9254 */
 }
 
-/*
- * Note that MAX_ERRORS=X doesn't imply that we retry every bad read
- * max X times - some types of errors increase the errorcount by 2 or
- * even 3, so we might actually retry only X/2 times before giving up.
- */
-#define MAX_ERRORS 12
-
-/*
- * The driver is trying to determine the correct media format
- * while probing is set. rw_interrupt() clears it after a
- * successful access.
- */
-static int probing = 0;
-
-/* Prevent "aliased" accesses. */
-static fd_ref[4] = { 0,0,0,0 };
-static fd_device[4] = { 0,0,0,0 };
-
-/*
- * Current device number. Taken either from the block header or from the
- * format request descriptor.
- */
-#define CURRENT_DEVICE (CURRENT->rq_dev)
-
-/* Current error count. */
-#define CURRENT_ERRORS (CURRENT->errors)
-
 static void request_done(int uptodate)
 {
   timer_active &= ~(1 << FLOPPY_TIMER);
@@ -1082,15 +1187,22 @@ static int amiga_floppy_change(kdev_t dev)
 {
 	int drive = dev & 3;
 	int changed;
+	static int first_time = 1;
 
 	if (MAJOR(dev) != MAJOR_NR) {
-		printk("floppy_change: not a floppy\n");
+		printk(KERN_CRIT "floppy_change: not a floppy\n");
 		return 0;
 	}
 
-	fd_select (drive);
-	changed = !(ciaa.pra & DSKCHANGE);
-	fd_deselect (drive);
+	if (first_time)
+		changed = first_time--;
+	else {
+		get_hw(drive);
+		fd_select (drive);
+		changed = !(ciaa.pra & DSKCHANGE);
+		fd_deselect (drive);
+		rel_hw();
+	}
 
 	if (changed) {
 		fd_probe(dev);
@@ -1119,6 +1231,7 @@ static __inline__ void copy_buffer(void *from, void *to)
 static void raw_read(int drive, int track, char *ptrack, int len)
 {
 	drive&=3;
+	get_hw(drive);
 	/* setup adkcon bits correctly */
 	custom.adkcon = ADK_MSBSYNC;
 	custom.adkcon = ADK_SETCLR|ADK_WORDSYNC|ADK_FAST;
@@ -1139,6 +1252,7 @@ static void raw_read(int drive, int track, char *ptrack, int len)
 		sleep_on (&wait_fd_block);
 
 	custom.dsklen = 0;
+	rel_hw();
 }
 
 static int raw_write(int drive, int track, char *ptrack, int len)
@@ -1149,6 +1263,7 @@ static int raw_write(int drive, int track, char *ptrack, int len)
 	if ((ciaa.pra & DSKPROT) == 0)
 		return 0;
 
+	get_hw(drive); /* corresponds to rel_hw() in post_write() */
 	/* clear adkcon bits */
 	custom.adkcon = ADK_PRECOMP1|ADK_PRECOMP0|ADK_WORDSYNC|ADK_MSBSYNC;
 	/* set appropriate adkcon bits */
@@ -1176,30 +1291,45 @@ static void post_write (unsigned long dummy)
   custom.dsklen = 0;
   writepending = 0;
   writefromint = 0;
+  rel_hw(); /* corresponds to get_hw() in raw_write */
 }
 
 static int get_track(int drive, int track)
 {
-	int error;
+	int error, errors;
 
 	drive&=3;
-	if ((lastdrive == drive) && (savedtrack == track))
-		return 0;
-
-	lastdrive = drive;
-	raw_read(drive, track, raw_buf, unit[drive].type->read_size);
-	savedtrack = -1;
-	error = (*unit[drive].dtype->read_fkt)(drive, trackdata, (unsigned long)raw_buf, track);
-	switch (error) {
-	    case 0:
-		savedtrack = track;
-		return 0;
-	    case MFM_TRACK:
-		unit[drive].track = -1;
-		/* fall through */
-	    default:
-		return -1;
+        get_hw(drive);
+        if (!motor_on(drive)) {
+          rel_hw();
+          return -1;
+        }
+        fd_select(drive);
+        errors = 0;
+        while (errors < MAX_ERRORS) {
+          if (!fd_seek(drive, track)) {
+            rel_hw();
+            return -1; /* we can not calibrate - no chance */
+          }
+          if ((lastdrive == drive) && (savedtrack == track)) {
+            rel_hw();
+            return 0;
+          }
+          lastdrive = drive;
+          raw_read(drive, track, raw_buf, unit[drive].type->read_size);
+          savedtrack = -1;
+          error = (*unit[drive].dtype->read_fkt)(drive, trackdata, (unsigned long)raw_buf, track);
+          if (error == 0) {
+            savedtrack = track;
+            rel_hw();
+            return 0;
+          }
+          if (error == MFM_TRACK)
+            unit[drive].track = -1;
+          errors++;
 	}
+	rel_hw();
+	return -1;
 }
 
 static void flush_track_callback(unsigned long nr)
@@ -1208,7 +1338,7 @@ static void flush_track_callback(unsigned long nr)
   writefromint = 1;
   (*unit[nr].dtype->write_fkt)(nr, (unsigned long)raw_buf, trackdata, savedtrack);
   if (!raw_write(nr, savedtrack, raw_buf, unit[nr].type->write_size)) {
-    printk ("floppy disk write protected\n");
+    printk (KERN_NOTICE "floppy disk write protected\n");
     writefromint = 0;
     writepending = 0;
   }
@@ -1227,7 +1357,7 @@ unsigned long flags;
     restore_flags(flags);
     (*unit[nr].dtype->write_fkt)(nr, (unsigned long)raw_buf, trackdata, savedtrack);
     if (!raw_write(nr, savedtrack, raw_buf, unit[nr].type->write_size)) {
-      printk ("floppy disk write protected in write!\n");
+      printk (KERN_NOTICE "floppy disk write protected in write!\n");
       writepending = 0;
       return 0;
     }
@@ -1255,10 +1385,9 @@ static void redo_fd_request(void)
 
     repeat:
 	if (!CURRENT) {
-		if (!fdc_busy)
-			printk("FDC access conflict!");
-		fdc_busy = 0;
-		wake_up(&fdc_wait);
+		if (fdc_busy < 0)
+			printk(KERN_CRIT "FDC access conflict!");
+		rel_fdc();
 		CLEAR_INTR;
 		return;
 	}
@@ -1324,15 +1453,6 @@ static void redo_fd_request(void)
 
 		switch (CURRENT->cmd) {
 		    case READ:
-			if (!motor_on (drive)) {
-				end_request(0);
-				goto repeat;
-			}
-			fd_select (drive);
-			if (!fd_seek(drive, track)) {
-				end_request(0);
-				goto repeat;
-			}
 			if (get_track(drive, track) == -1) {
 				end_request(0);
 				goto repeat;
@@ -1341,15 +1461,6 @@ static void redo_fd_request(void)
 			break;
 
 		    case WRITE:
-			if (!motor_on (drive)) {
-				end_request(0);
-				goto repeat;
-			}
-			fd_select (drive);
-			if (!fd_seek(drive, track)) {
-				end_request(0);
-				goto repeat;
-			}
 			if (get_track(drive, track) == -1) {
 				end_request(0);
 				goto repeat;
@@ -1374,7 +1485,7 @@ static void redo_fd_request(void)
 			break;
 
 		    default:
-			printk("do_fd_request: unknown command\n");
+			printk(KERN_WARNING "do_fd_request: unknown command\n");
 			request_done(0);
 			goto repeat;
 		}
@@ -1388,13 +1499,7 @@ static void redo_fd_request(void)
 
 static void do_fd_request(void)
 {
-unsigned long flags;
-
-	save_flags(flags);
-	cli();
-	while (fdc_busy) sleep_on(&fdc_wait);
-	fdc_busy = 1;
-	restore_flags(flags); /* sti(); */
+	get_fdc(CURRENT_DEVICE & 3);
 	redo_fd_request();
 }
 
@@ -1404,22 +1509,33 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 	int drive = inode->i_rdev & 3;
 	static struct floppy_struct getprm;
 	int error;
+	unsigned long flags;
 
 	switch(cmd)
 	 {
 	  case FDFMTBEG:
-	    if (fd_ref[drive] > 1)
+	  get_hw(drive);
+	    if (fd_ref[drive] > 1) {
+	      rel_hw();
 	      return -EBUSY;
+	    }
 	    fsync_dev(inode->i_rdev);
-	    if (motor_on(drive) == 0)
+	    if (motor_on(drive) == 0) {
+	      rel_hw();
 	      return -ENODEV;
-	    if (fd_calibrate(drive) == 0)
+	    }
+	    if (fd_calibrate(drive) == 0) {
+	      rel_hw();
 	      return -ENXIO;
+	    }
 	    floppy_off(drive);
+	    rel_hw();
 	    break;
 	  case FDFMTTRK:
-	    if (param < unit[drive].type->tracks)
+	    if (param < unit[drive].type->tracks * unit[drive].type->heads)
 	     {
+	      get_fdc(drive);
+	      get_hw(drive);
 	      fd_select(drive);
 	      if (fd_seek(drive,param)!=0)
 	       {
@@ -1428,6 +1544,8 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 	        non_int_flush_track(drive);
 	       }
 	      floppy_off(drive);
+	      rel_hw();
+	      rel_fdc();
 	     }
 	    else
 	      return -EINVAL;
@@ -1443,27 +1561,29 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 	    if (error)
 	      return error;
 	    memset((void *)&getprm, 0, sizeof (getprm));
-	    getprm.track=unit[drive].type->tracks/unit[drive].type->heads;
+	    getprm.track=unit[drive].type->tracks;
 	    getprm.head=unit[drive].type->heads;
 	    getprm.sect=unit[drive].sects;
 	    getprm.size=unit[drive].blocks;
 	    copy_to_user((void *)param,(void *)&getprm,sizeof(struct floppy_struct));
 	    break;
 	  case BLKGETSIZE:
-            error = verify_area(VERIFY_WRITE, (void *)param,
-            			sizeof(long));
-            if (error)
-              return error;
-            put_fs_long(unit[drive].blocks,(long *)param);
+	    if (put_user(unit[drive].blocks,(long *)param))
+		    return -EFAULT;
             break;
           case FDSETPRM:
           case FDDEFPRM:
             return -EINVAL;
           case FDFLUSH:
+	    save_flags(flags);
+	    cli();
             if ((drive == selected) && (writepending)) {
               del_timer (&flush_track_timer);
+              restore_flags(flags);
               non_int_flush_track(selected);
             }
+            else
+              restore_flags(flags);
             break;
 #ifdef RAW_IOCTL
 	  case IOCTL_RAW_TRACK:
@@ -1475,7 +1595,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 	    return unit[drive].type->read_size;
 #endif
 	  default:
-	    printk("fd_ioctl: unknown cmd %d for drive %d.",cmd,drive);
+	    printk(KERN_DEBUG "fd_ioctl: unknown cmd %d for drive %d.",cmd,drive);
 	    return -ENOSYS;
          }
 	return 0;
@@ -1486,10 +1606,12 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 ======================================================================*/
 static unsigned long get_drive_id(int drive)
 {
+	static int called = 0;
 	int i;
 	ulong id = 0;
 
   	drive&=3;
+  	get_hw(drive);
 	/* set up for ID */
 	MOTOR_ON;
 	udelay(2);
@@ -1517,6 +1639,7 @@ static unsigned long get_drive_id(int drive)
 	}
 
 	selected = -1;
+	rel_hw();
 
         /*
          * RB: At least A500/A2000's df0: don't identify themselves.
@@ -1527,7 +1650,10 @@ static unsigned long get_drive_id(int drive)
         if(drive == 0 && id == FD_NODRIVE)
          {
                 id = fd_def_df0;
-                printk("fd: drive 0 didn't identify, setting default %08lx\n",(ulong)fd_def_df0);
+                printk("%sfd: drive 0 didn't identify, setting default %08lx\n",
+			(called == 0)? KERN_NOTICE:"", (ulong)fd_def_df0);
+		if (called == 0)
+			called++;
          }
 	/* return the ID value */
 	return (id);
@@ -1550,7 +1676,7 @@ static void fd_probe(int dev)
 			break;
 
 	if (type >= num_dr_types) {
-		printk("fd_probe: unsupported drive type %08lx found\n",
+		printk(KERN_WARNING "fd_probe: unsupported drive type %08lx found\n",
 		       code);
 		return;
 	}
@@ -1578,7 +1704,7 @@ static void probe_drives(void)
 {
 	int drive,found;
 
-	printk("FD: probing units\nfound ");
+	printk(KERN_INFO "FD: probing units\n" KERN_INFO "found ");
 	found=0;
 	for(drive=0;drive<FD_MAX_UNITS;drive++) {
 	  fd_probe(drive);
@@ -1600,6 +1726,7 @@ static int floppy_open(struct inode *inode, struct file *filp)
   int drive;
   int old_dev;
   int system;
+  unsigned long flags;
 
   drive = inode->i_rdev & 3;
   old_dev = fd_device[drive];
@@ -1611,8 +1738,28 @@ static int floppy_open(struct inode *inode, struct file *filp)
   if (unit[drive].type->code == FD_NODRIVE)
     return -ENODEV;
 
+  if (filp && (filp->f_flags & (O_WRONLY|O_RDWR))) {
+	  int wrprot;
+
+	  get_hw(drive);
+	  fd_select (drive);
+	  wrprot = !(ciaa.pra & DSKPROT);
+	  fd_deselect (drive);
+	  rel_hw();
+
+	  if (wrprot)
+		  return -EROFS;
+  }
+
+  save_flags(flags);
+  cli();
   fd_ref[drive]++;
   fd_device[drive] = inode->i_rdev;
+#ifdef MODULE
+  if (unit[drive].motor == 0)
+    MOD_INC_USE_COUNT;
+#endif
+  restore_flags(flags);
 
   if (old_dev && old_dev != inode->i_rdev)
     invalidate_buffers(old_dev);
@@ -1620,24 +1767,13 @@ static int floppy_open(struct inode *inode, struct file *filp)
   if (filp && filp->f_mode)
     check_disk_change(inode->i_rdev);
 
-  if (filp && (filp->f_flags & (O_WRONLY|O_RDWR))) {
-	  int wrprot;
-
-	  fd_select (drive);
-	  wrprot = !(ciaa.pra & DSKPROT);
-	  fd_deselect (drive);
-
-	  if (wrprot)
-		  return -EROFS;
-  }
-
   system=(inode->i_rdev & 4)>>2;
   unit[drive].dtype=&data_types[system];
   unit[drive].sects=data_types[system].sects*unit[drive].type->sect_mult;
   unit[drive].blocks=unit[drive].type->heads*unit[drive].type->tracks*
         unit[drive].sects;
 
-printk("fd%d: accessing %s-disk with %s-layout\n",drive,unit[drive].type->name,
+printk(KERN_INFO "fd%d: accessing %s-disk with %s-layout\n",drive,unit[drive].type->name,
   data_types[system].name);
 
   return 0;
@@ -1660,9 +1796,13 @@ static void floppy_release(struct inode * inode, struct file * filp)
     restore_flags (flags);
   
   if (!fd_ref[inode->i_rdev & 3]--) {
-    printk("floppy_release with fd_ref == 0");
+    printk(KERN_CRIT "floppy_release with fd_ref == 0");
     fd_ref[inode->i_rdev & 3] = 0;
   }
+#ifdef MODULE
+/* the mod_use counter is handled this way */
+  floppy_off (inode->i_rdev & 3);
+#endif
 }
 
 void amiga_floppy_setup (char *str, int *ints)
@@ -1687,7 +1827,7 @@ static struct file_operations floppy_fops = {
 	NULL,			/* revalidate */
 };
 
-static void fd_block_done(int irq, struct pt_regs *fp, void *dummy)
+static void fd_block_done(int irq, void *dummy, struct pt_regs *fp)
 {
   if (block_flag)
     custom.dsklen = 0x4000;
@@ -1755,13 +1895,18 @@ int amiga_floppy_init(void)
   timer_table[FLOPPY_TIMER].fn = NULL;
   timer_active &= ~(1 << FLOPPY_TIMER);
 
+  #if 0 /* Doesn't seem to be correct */
   if (fd_def_df0==0) {
-    if ((boot_info.bi_amiga.model == AMI_3000) ||
-        (boot_info.bi_amiga.model == AMI_4000))
+    if ((amiga.model == AMI_3000) || (amiga.model == AMI_3000T) ||
+        (amiga.model == AMI_3000PLUS) || (amiga.model == AMI_4000))
       fd_def_df0=FD_HD_3;
     else
       fd_def_df0=FD_DD_3;
   }
+  #else
+  /* Now we hope that every HD drive will identify itself correctly */
+  fd_def_df0 = FD_DD_3;
+  #endif
 
   probe_drives();
 
@@ -1775,8 +1920,35 @@ int amiga_floppy_init(void)
   /* make sure that disk DMA is enabled */
   custom.dmacon = DMAF_SETCLR | DMAF_DISK;
 
-  add_isr(IRQ_FLOPPY, fd_block_done, 0, NULL, "floppy_dma");
-  add_isr(IRQ_AMIGA_CIAA_TB, ms_isr, 0, NULL, "floppy_timer");
+  /* init ms timer */
+  ciaa.crb = 8; /* one-shot, stop */
+
+  request_irq(IRQ_FLOPPY, fd_block_done, 0, "floppy_dma", NULL);
+  request_irq(IRQ_AMIGA_CIAA_TB, ms_isr, 0, "floppy_timer", NULL);
 
   return 0;
 }
+
+#ifdef MODULE
+#include <linux/version.h>
+
+int init_module(void)
+{
+  if (!MACH_IS_AMIGA)
+    return -ENXIO;
+  return amiga_floppy_init();
+}
+
+void cleanup_module(void)
+{
+free_irq(IRQ_AMIGA_CIAA_TB, NULL);
+free_irq(IRQ_FLOPPY, NULL);
+custom.dmacon = DMAF_DISK; /* disable DMA */
+amiga_chip_free(raw_buf);
+timer_active &= ~(1 << FLOPPY_TIMER);
+blk_size[MAJOR_NR] = NULL;
+blksize_size[MAJOR_NR] = NULL;
+blk_dev[MAJOR_NR].request_fn = NULL;
+unregister_blkdev(MAJOR_NR, "fd");
+}
+#endif

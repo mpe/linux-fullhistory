@@ -127,26 +127,26 @@ asmlinkage int do_sigreturn(unsigned long __unused)
 	    /* Verify the frame format.  */
 	    if (!CPU_IS_060 && (context.sc_fpstate[0] != fpu_version))
 	      goto badframe;
-	    if (boot_info.cputype & FPU_68881)
+	    if (m68k_fputype & FPU_68881)
 	      {
 		if (context.sc_fpstate[1] != 0x18
 		    && context.sc_fpstate[1] != 0xb4)
 		  goto badframe;
 	      }
-	    else if (boot_info.cputype & FPU_68882)
+	    else if (m68k_fputype & FPU_68882)
 	      {
 		if (context.sc_fpstate[1] != 0x38
 		    && context.sc_fpstate[1] != 0xd4)
 		  goto badframe;
 	      }
-	    else if (boot_info.cputype & FPU_68040)
+	    else if (m68k_fputype & FPU_68040)
 	      {
 		if (!(context.sc_fpstate[1] == 0x00 ||
                       context.sc_fpstate[1] == 0x28 ||
                       context.sc_fpstate[1] == 0x60))
 		  goto badframe;
 	      }
-	    else if (boot_info.cputype & FPU_68060)
+	    else if (m68k_fputype & FPU_68060)
 	      {
 		if (!(context.sc_fpstate[3] == 0x00 ||
                       context.sc_fpstate[3] == 0x60 ||
@@ -261,8 +261,8 @@ badframe:
 
 #define UFRAME_SIZE(fs) (sizeof(struct sigcontext)/4 + 6 + fs/4)
 
-static void setup_frame (struct sigaction * sa, struct pt_regs *regs,
-			 int signr, unsigned long oldmask)
+static inline void setup_frame (struct sigaction * sa, struct pt_regs *regs,
+				int signr, unsigned long oldmask)
 {
 	struct sigcontext context;
 	unsigned long *frame, *tframe;
@@ -361,8 +361,8 @@ static void setup_frame (struct sigaction * sa, struct pt_regs *regs,
 /*
  * OK, we're invoking a handler
  */	
-static void handle_signal(unsigned long signr, struct sigaction *sa,
-			  unsigned long oldmask, struct pt_regs *regs)
+static inline void handle_signal(unsigned long signr, struct sigaction *sa,
+				 unsigned long oldmask, struct pt_regs *regs)
 {
 	/* are we from a system call? */
 	if (regs->orig_d0 >= 0) {

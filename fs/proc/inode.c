@@ -12,12 +12,19 @@
 #include <linux/stat.h>
 #include <linux/locks.h>
 #include <linux/limits.h>
+#include <linux/config.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
 
 static void proc_put_inode(struct inode *inode)
 {
+#ifdef CONFIG_SUN_OPENPROMFS_MODULE
+	if ((inode->i_ino >= PROC_OPENPROM_FIRST)
+	    && (inode->i_ino < PROC_OPENPROM_FIRST + PROC_NOPENPROM)
+	    && proc_openprom_use)
+		(*proc_openprom_use)(inode, 0);
+#endif	
 	if (inode->i_nlink)
 		return;
 	inode->i_size = 0;
@@ -74,6 +81,13 @@ static int parse_options(char *options,uid_t *uid,gid_t *gid)
 struct inode * proc_get_inode(struct super_block * s, int ino, struct proc_dir_entry * de)
 {
 	struct inode * inode = iget(s, ino);
+	
+#ifdef CONFIG_SUN_OPENPROMFS_MODULE
+	if ((inode->i_ino >= PROC_OPENPROM_FIRST)
+	    && (inode->i_ino < PROC_OPENPROM_FIRST + PROC_NOPENPROM)
+	    && proc_openprom_use)
+		(*proc_openprom_use)(inode, 1);
+#endif	
 	if (inode && inode->i_sb == s) {
 		inode->u.generic_ip = (void *) de;
 		if (de) {
@@ -135,16 +149,18 @@ void proc_read_inode(struct inode * inode)
 	struct task_struct * p;
 	int i;
 	
+	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
+	inode->i_blocks = 0;
+	inode->i_blksize = 1024;
+	ino = inode->i_ino;
+	if (ino >= PROC_OPENPROM_FIRST && ino < PROC_OPENPROM_FIRST + PROC_NOPENPROM)
+		return;
 	inode->i_op = NULL;
 	inode->i_mode = 0;
 	inode->i_uid = 0;
 	inode->i_gid = 0;
 	inode->i_nlink = 1;
 	inode->i_size = 0;
-	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
-	inode->i_blocks = 0;
-	inode->i_blksize = 1024;
-	ino = inode->i_ino;
 	pid = ino >> 16;
 	p = task[0];
 	for (i = 0; i < NR_TASKS ; i++)

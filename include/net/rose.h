@@ -82,6 +82,7 @@ struct rose_neigh {
 struct rose_node {
 	struct rose_node  *next;
 	rose_address      address;
+	unsigned short    mask;
 	unsigned char     which;
 	unsigned char     count;
 	struct rose_neigh *neighbour[3];
@@ -121,6 +122,7 @@ extern int  sysctl_rose_no_activity_timeout;
 extern int  sysctl_rose_ack_hold_back_timeout;
 extern int  sysctl_rose_routing_control;
 extern int  rosecmp(rose_address *, rose_address *);
+extern int  rosecmpm(rose_address *, rose_address *, unsigned short);
 extern char *rose2asc(rose_address *);
 extern struct sock *rose_find_socket(unsigned int, struct device *);
 extern unsigned int rose_new_lci(struct device *);

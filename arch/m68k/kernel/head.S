@@ -67,6 +67,7 @@
 
 #include <linux/config.h>
 #include <linux/linkage.h>
+#include <asm/bootinfo.h>
 #include <asm/setup.h>
 #include <asm/pgtable.h>
 
@@ -178,21 +179,29 @@ ENTRY(_start)
 	lea	%pc@(SYMBOL_NAME(_stext):w),%sp
 
 /*
- * Copy bootinfo from position after BSS to final resting place
- */
-	lea	%pc@(SYMBOL_NAME(_end)),%a0
-	lea	%pc@(SYMBOL_NAME(boot_info)),%a1
-	movel	%pc@(SYMBOL_NAME(bisize)),%d0
-	subql	#1,%d0
-1:	moveb	%a0@+,%a1@+
-	dbra	%d0,1b
-
-/*
  * Record the CPU and machine type.
  */
-	lea	%pc@(SYMBOL_NAME(boot_info)),%a0
-	movel	%a0@(BI_machtype),%d4
-	movel	%a0@(BI_cputype),%d0
+
+	movew	#BI_MACHTYPE,%d0
+	jbsr	Lget_bi_record
+	movel	%a0@,%d4
+	lea	%pc@(SYMBOL_NAME(m68k_machtype)),%a0
+	movel	%d4,%a0@
+	movew	#BI_FPUTYPE,%d0
+	jbsr	Lget_bi_record
+	movel	%a0@,%d0
+	lea	%pc@(SYMBOL_NAME(m68k_fputype)),%a0
+	movel	%d0,%a0@
+	movew	#BI_MMUTYPE,%d0
+	jbsr	Lget_bi_record
+	movel	%a0@,%d0
+	lea	%pc@(SYMBOL_NAME(m68k_mmutype)),%a0
+	movel	%d0,%a0@
+	movew	#BI_CPUTYPE,%d0
+	jbsr	Lget_bi_record
+	movel	%a0@,%d0
+	lea	%pc@(SYMBOL_NAME(m68k_cputype)),%a0
+	movel	%d0,%a0@
 
 	btst	#CPUB_68060,%d0
 	jeq	1f
@@ -234,10 +243,10 @@ ENTRY(_start)
 	putc('A')
 
 /*
- * Get address at end of kernel code/data/bss and
- * mask off at a page boundary.
+ * Get address at end of bootinfo and mask off at a page boundary.
  */
-	lea	%pc@(SYMBOL_NAME(_end)),%a0
+	moveq	#0,%d0
+	jbsr	Lget_bi_record
 	addw	#PAGESIZE-1,%a0
 	movel	%a0,%d0
 	andl	#-PAGESIZE,%d0
@@ -250,10 +259,6 @@ ENTRY(_start)
  */
 	lea	%pc@(SYMBOL_NAME(_stext)-PAGESIZE:w),%a0
 	movel	%a0,%d5
-#ifdef HACKER_KERNEL
-	lea	%pc@(Lkernel_start),%a0
-	movel	%d5,%a0@
-#endif
 
 /*
  * initialize the kernel root table.
@@ -637,45 +642,47 @@ Lmapphys:
 	/* no limit, 4byte descriptors */
 	movel	#0x80000002,%a3@
 	movel	%a5,%a3@(4)
-	.long	0xf0134800	/* pmove %a3@,%srp */
-	.long	0xf0134c00	/* pmove %a3@,%crp */
-	.long	0xf0002400	/* pflusha */
+	pmove	%a3@,%srp
+	pmove	%a3@,%crp
+	pflusha
 	/*
 	 * enable,super root enable,4096 byte pages,7 bit root index,
 	 * 7 bit pointer index, 6 bit page table index.
 	 */
 	movel	#0x82c07760,%a3@
-	.long	0xf0134000	/* pmove %a3@,%tc (enable the MMU) */
+	pmove	%a3@,%tc	/* enable the MMU */
 	tstl	%d0
 	jne	1f
 	jmp	%pc@(2f+0x80000000)
 1:	jmp	2f:w
 2:	movel	%d2,%a5@(%d0:w)
-	.long	0xf0002400	/* pflusha */
+	pflusha
 	jmp	LdoneMMUenable:w
 
 Lamimmu68040:
 
+	.chip	68040
 	lea	2f:w,%a0
 	movel	%d5,%d0
 	andl	#0xff000000,%d0
 	jne	1f
 	lea	%pc@(2f+0x80000000),%a0
 1:	orw	#TTR_ENABLE+TTR_KERNELMODE+_PAGE_NOCACHE_S,%d0
-	.long	0x4e7b0004	/* movec %d0,%itt0 */
-	.long	0x4e7bd806	/* movec %a5,%urp */
-	.long	0x4e7bd807	/* movec %a5,%srp */
-	.word	0xf518		/* pflusha */
+	movec	%d0,%itt0
+	movec	%a5,%urp
+	movec	%a5,%srp
+	pflusha
 	movel	#TC_ENABLE+TC_PAGE4K,%d0
 	/*
 	 * this value is also ok for the 68060, we don`t use the cache
 	 * mode/protection defaults
 	 */
-	.long	0x4e7b0003	/* movec %d0,%tc (enable the MMU) */
+	movec	%d0,%tc		/* enable the MMU */
 	jmp	%a0@
 2:	moveq	#0,%d0
-	.long	0x4e7b0004	/* movec %d0,%itt0 */
+	movec	%d0,%itt0
 	jmp	LdoneMMUenable:w
+	.chip	68k
 
 Lmapphysnotamiga:
 #endif
@@ -696,6 +703,7 @@ Lmapphysnotamiga:
 
 	is_040_or_060(Latarimmu68040)
 
+	.chip	68030
 	lea	%pc@(Lmmu),%a3
 	movel	%d5,%d0
 	jne	1f
@@ -706,7 +714,7 @@ Lmapphysnotamiga:
 	jeq	2f
 	orw	#TTR_ENABLE+TTR_CI+TTR_RWM+TTR_FCB2+TTR_FCM1+TTR_FCM0,%d0
 	movel	%d0,%a3@
-	.long	0xf0130800	/* pmove %a3@,%tt0 */
+	pmove	%a3@,%tt0
 	jra	3f
 	/* tt0 doesn't work if physical and virtual address of kernel is in
 	 * the same 16M area (Falcon with Magnum/FX, kernel in alternate ram)
@@ -729,23 +737,25 @@ Lmapphysnotamiga:
 	/* no limit, 4byte descriptors */
 3:	movel	#0x80000002,%a3@
 	movel	%a5,%a3@(4)
-	.long	0xf0134800	/* pmove %a3@,%srp */
-	.long	0xf0134c00	/* pmove %a3@,%crp */
-	.long	0xf0002400	/* pflusha */
+	pmove	%a3@,%srp
+	pmove	%a3@,%crp
+	pflusha
 	/*
 	 * enable,super root enable,4096 byte pages,7 bit root index,
 	 * 7 bit pointer index, 6 bit page table index.
 	 */
 	movel	#0x82c07760,%a3@
-	.long	0xf0134000	/* pmove %a3@,%tc (enable the MMU) */
+	pmove	%a3@,%tc	/* enable the MMU */
 	jmp	%a0@
 4:	clrl	%a3@
-	.long	0xf0130800	/* pmove %a3@,%tt0 */
+	pmove	%a3@,%tt0
 	jra	LdoneMMUenable
 5:	movel	%d2,%a1@
 	jra	LdoneMMUenable
+	.chip	68k
 
 Latarimmu68040:
+	.chip	68040
 	movel	%d5,%d0
 	jne	1f
 	lea	LdoneMMUenable:w,%a0
@@ -753,22 +763,22 @@ Latarimmu68040:
 1:	lea	3f:w,%a0
 	andl	#0xff000000,%d0 /* logical address base */
 	orw	#TTR_ENABLE+TTR_KERNELMODE+_PAGE_NOCACHE_S,%d0
-	.long	0x4e7b0004	/* movec %d0,%itt0 */
+	movec	%d0,%itt0
 2:	nop
-	.word	0xf518		/* pflusha */
-	.long	0x4e7bd807	/* movec %a5,%srp */
-	.long	0x4e7bd806	/* movec %a5,%urp */
+	pflusha
+	movec	%a5,%srp
+	movec	%a5,%urp
 	movel	#TC_ENABLE+TC_PAGE4K,%d0
 	/*
 	 * this value is also ok for the 68060, we don`t use the cache
 	 * mode/protection defaults
 	 */
-	.long	0x4e7b0003	/* movec %d0,%tc (enable the MMU) */
+	movec	%d0,%tc		/* enable the MMU */
 	jmp	%a0@
 3:	moveq	#0,%d0
-	.long	0x4e7b0004	/* movec %d0,%itt0 */
-	tstl	%a1
+	movec	%d0,%itt0
 	jra	LdoneMMUenable
+	.chip	68k
 
 Lmapphysnotatari:
 #endif
@@ -830,7 +840,9 @@ LdoneMMUenable:
 	jra	1f
 
 Lcache680460:
-	.word	0xf4f8		/* cpusha %bc */
+	.chip	68040
+	cpusha	%bc
+	.chip	68k
 
 	is_060(Lcache68060)
 
@@ -840,12 +852,14 @@ Lcache680460:
 	jra	1f
 
 Lcache68060:
+	.chip	68060
 	movel	#CC6_ENABLE_D+CC6_ENABLE_I+CC6_ENABLE_SB+CC6_PUSH_DPI+CC6_ENABLE_B+CC6_CLRA_B,%d0
 	/* MMU stuff works in copyback mode now, so enable the cache */
 	movec	%d0,%cacr
 	/* enable superscalar dispatch in PCR */
 	moveq	#1,%d0
-	.long	0x4e7b0808	/* movec d0,pcr */
+	movec	%d0,%pcr
+	.chip	68k
 1:
 
 /*
@@ -859,43 +873,26 @@ Lcache68060:
 	jbsr	SYMBOL_NAME(start_kernel)
 
 /*
- * switch off mmu and exit
+ * Find a tag record in the bootinfo structure
+ * The bootinfo structure is located right after the kernel bss
+ * Returns: d0: size (-1 if not found)
+ *          a0: data pointer (end-of-records if not found)
  */
-
-#ifdef HACKER_KERNEL
-ENTRY(kernel_exit)
-	lea	2f:w,%a0
-	movel	%pc@(Lkernel_start),%a0
-	lea	%a0@(2f:w),%a1
-	movel	%a1,%d0
-	andl	#0xff000000,%d0
-	jne	1f
-	jmp	%a0@(1f+0x80000000)
-1:	orw	#TTR_ENABLE+TTR_KERNELMODE+_PAGE_NOCACHE_S,%d0
-	.long	0x4e7b0004	/* movec %d0,%itt0 */
-	jmp	%a1@
+Lget_bi_record:
+	lea	%pc@(SYMBOL_NAME(_end)),%a0
+1:	tstw	%a0@(BIR_tag)
+	jeq	3f
+	cmpw	%a0@(BIR_tag),%d0
+	jeq	2f
+	addw	%a0@(BIR_size),%a0
+	jra	1b
 2:	moveq	#0,%d0
-	.long	0x4e7b0003	/* movec %d0,%tc (disable the MMU) */
-	.word	0xf518		/* pflusha */
-	.long	0x4e7b0004	/* movec %d0,%itt0 */
-	movec	%d0,%cacr
-	.word	0xf4f8		/* cpusha %bc */
-
-	lea	%pc@(SYMBOL_NAME(boot_info)),%a0
-	jmp	%a0@(BI_amiga_exit_func:w)@(0:w)
-#endif
-
-/*
- * Serial port output support.
- */
-LSERPER      = 0xdff032
-LSERDAT      = 0xdff030
-LSERDATR     = 0xdff018
-LNTSC_PERIOD = 371
-LPAL_PERIOD  = 368
-LNTSC_ECLOCK = 7159090
-LSERIAL_CNTRL = 0xbfd000
-LSERIAL_DTR   = 7
+	movew	%a0@(BIR_size),%d0
+	lea	%a0@(BIR_data),%a0
+	rts
+3:	moveq	#-1,%d0
+	lea	%a0@(BIR_size),%a0
+	rts
 
 /*
  * Debug output support
@@ -953,8 +950,18 @@ LMFP_UDR     = 0xfffa2f
 #endif
 
 /*
+ * Serial port output support.
+ */
+LSERPER		= 0xdff032
+LSERDAT		= 0xdff030
+LSERDATR	= 0xdff018
+LSERIAL_CNTRL	= 0xbfd000
+LSERIAL_DTR	= 7
+
+/*
  * Initialize serial port hardware for 9600/8/1
  * a0 thrashed
+ * Amiga d0 trashed
  * Atari d0 trashed (a1 in case of SCC)
  */
 	.even
@@ -962,12 +969,10 @@ Lserial_init:
 #ifdef CONFIG_AMIGA
 	cmpil	#MACH_AMIGA,%d4
 	jne	1f
-	lea	%pc@(SYMBOL_NAME(boot_info)),%a0
 	bclr	#LSERIAL_DTR,LSERIAL_CNTRL
-	movew	#LNTSC_PERIOD,LSERPER
-	cmpl	#LNTSC_ECLOCK,%a0@(BI_amiga_eclock)
-	jeq	9f
-	movew	#LPAL_PERIOD,LSERPER
+	movew	#BI_AMIGA_SERPER,%d0
+	jbsr	Lget_bi_record
+	movew	%a0@,LSERPER
 	jra	9f
 1:
 #endif
@@ -1073,8 +1078,6 @@ Lserial_puts:
 
 /*
  * Output number in d7 in hex notation on serial port.
- * d0-d2 trashed.
- * d7 trashed.
  */
 
 Lserial_putnum:
@@ -1103,7 +1106,7 @@ Lshowtest:
 	putc('=')
 	putn(%a1)
 
-	.long	0xf0119f15		| ptestr	#5,%a1@,#7,%a0
+	ptestr	#5,%a1@,#7,%a0
 
 	putc('D')
 	putc('A')
@@ -1117,7 +1120,7 @@ Lshowtest:
 	putc('S')
 	putc('=')
 	lea	%pc@(Lmmu),%a0
-	.long	0xf0106200		| pmove		%psr,%a0@
+	pmove	%psr,%a0@
 	clrl	%d7
 	movew	%a0@,%d7
 	jbsr	Lserial_putnum
@@ -1128,10 +1131,6 @@ Lshowtest:
 
 	.data
 	.even
-#ifdef HACKER_KERNEL
-Lkernel_start:
-	.long 0
-#endif
 Lcustom:
 Liobase:
 	.long 0

@@ -20,6 +20,9 @@
 #define PORT_16550	3
 #define PORT_16550A	4
 #define PORT_CIRRUS     5
+#define PORT_16650V2	7
+#define PORT_16750	8
+
 #define SER_SCC_NORM	100	/* standard SCC channel */
 #define	SER_SCC_DMA	101	/* SCC channel with DMA support */
 #define	SER_MFP_CTRL	102	/* standard MFP port with modem control signals */
@@ -130,7 +133,7 @@ typedef struct {
 #define ASYNC_SAK	0x0004	/* Secure Attention Key (Orange book) */
 #define ASYNC_SPLIT_TERMIOS 0x0008 /* Separate termios for dialin/callout */
 
-#define ASYNC_SPD_MASK	0x0030
+#define ASYNC_SPD_MASK	0x1030
 #define ASYNC_SPD_HI	0x0010	/* Use 56000 instead of 38400 bps */
 
 #define ASYNC_SPD_VHI	0x0020  /* Use 115200 instead of 38400 bps */
@@ -142,8 +145,13 @@ typedef struct {
 #define ASYNC_PGRP_LOCKOUT    0x0200 /* Lock out cua opens based on pgrp */
 #define ASYNC_CALLOUT_NOHUP   0x0400 /* Don't do hangups for cua device */
 
-#define ASYNC_FLAGS	0x0FFF	/* Possible legal async flags */
-#define ASYNC_USR_MASK 0x0430	/* Legal flags that non-privileged
+#define ASYNC_HARDPPS_CD	0x0800	/* Call hardpps when CD goes high  */
+
+#define ASYNC_SPD_SHI	0x1000	/* Use 230400 instead of 38400 bps */
+#define ASYNC_SPD_WARP	0x1010	/* Use 460800 instead of 38400 bps */
+
+#define ASYNC_FLAGS	0x1FFF	/* Possible legal async flags */
+#define ASYNC_USR_MASK 0x1430	/* Legal flags that non-privileged
 				 * users can set or reset */
 
 /* Internal flags used only by drivers/char/m68kserial.c */
@@ -154,6 +162,8 @@ typedef struct {
 #define ASYNC_CLOSING		0x08000000 /* Serial port is closing */
 #define ASYNC_CTS_FLOW		0x04000000 /* Do CTS flow control */
 #define ASYNC_CHECK_CD		0x02000000 /* i.e., CLOCAL */
+
+#define ASYNC_INTERNAL_FLAGS	0xFF000000 /* Internal flags */
 
 /*
  * Serial input interrupt line counters -- external structure

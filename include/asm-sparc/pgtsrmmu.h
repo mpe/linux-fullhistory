@@ -1,4 +1,4 @@
-/* $Id: pgtsrmmu.h,v 1.24 1996/10/07 03:03:06 davem Exp $
+/* $Id: pgtsrmmu.h,v 1.25 1996/12/18 06:56:07 tridge Exp $
  * pgtsrmmu.h:  SRMMU page table defines and code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -7,12 +7,7 @@
 #ifndef _SPARC_PGTSRMMU_H
 #define _SPARC_PGTSRMMU_H
 
-#include <linux/config.h>
 #include <asm/page.h>
-
-#if CONFIG_AP1000
-#include <asm/ap1000/apreg.h>
-#endif
 
 /* PMD_SHIFT determines the size of the area a second-level page table can map */
 #define SRMMU_PMD_SHIFT         18
@@ -92,20 +87,6 @@
 #define SRMMU_FAULT_STATUS       0x00000300
 #define SRMMU_FAULT_ADDR         0x00000400
 
-/*
- * "normal" sun systems have their memory on bus 0. This means the top
- * 4 bits of 36 bit physical addresses are 0. We use this define to
- * determine if a piece of memory might be normal memory, or if its
- * definately some sort of device memory.  
- *
- * On the AP+ normal memory is on bus 8. Why? Ask Fujitsu :-)
-*/
-#if CONFIG_AP1000
-#define MEM_BUS_SPACE 8
-#else
-#define MEM_BUS_SPACE 0
-#endif
-
 /* Accessing the MMU control register. */
 extern __inline__ unsigned int srmmu_get_mmureg(void)
 {
@@ -126,9 +107,6 @@ extern __inline__ void srmmu_set_mmureg(unsigned long regval)
 extern __inline__ void srmmu_set_ctable_ptr(unsigned long paddr)
 {
 	paddr = ((paddr >> 4) & SRMMU_CTX_PMASK);
-#if MEM_BUS_SPACE
-        paddr |= (MEM_BUS_SPACE<<28);
-#endif
 	__asm__ __volatile__("sta %0, [%1] %2\n\t" : :
 			     "r" (paddr), "r" (SRMMU_CTXTBL_PTR),
 			     "i" (ASI_M_MMUREGS) :
@@ -151,11 +129,6 @@ extern __inline__ void srmmu_set_context(int context)
 	__asm__ __volatile__("sta %0, [%1] %2\n\t" : :
 			     "r" (context), "r" (SRMMU_CTX_REG),
 			     "i" (ASI_M_MMUREGS) : "memory");
-#if CONFIG_AP1000
-	/* The AP1000+ message controller also needs to know
-	   the current task's context. */
-	MSC_OUT(MSC_PID, context);
-#endif
 }
 
 extern __inline__ int srmmu_get_context(void)
@@ -191,10 +164,6 @@ extern __inline__ unsigned int srmmu_get_faddr(void)
 /* This is guaranteed on all SRMMU's. */
 extern __inline__ void srmmu_flush_whole_tlb(void)
 {
-#if CONFIG_AP1000
-	extern void mc_tlb_flush_all(void);
-	mc_tlb_flush_all();
-#endif
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t": :
 			     "r" (0x400),        /* Flush entire TLB!! */
 			     "i" (ASI_M_FLUSH_PROBE) : "memory");
@@ -204,9 +173,6 @@ extern __inline__ void srmmu_flush_whole_tlb(void)
 /* These flush types are not available on all chips... */
 extern __inline__ void srmmu_flush_tlb_ctx(void)
 {
-#if CONFIG_AP1000
-	mc_tlb_flush_ctx();
-#endif
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t": :
 			     "r" (0x300),        /* Flush TLB ctx.. */
 			     "i" (ASI_M_FLUSH_PROBE) : "memory");
@@ -215,9 +181,6 @@ extern __inline__ void srmmu_flush_tlb_ctx(void)
 
 extern __inline__ void srmmu_flush_tlb_region(unsigned long addr)
 {
-#if CONFIG_AP1000
-	mc_tlb_flush_region();
-#endif
 	addr &= SRMMU_PGDIR_MASK;
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t": :
 			     "r" (addr | 0x200), /* Flush TLB region.. */
@@ -228,9 +191,6 @@ extern __inline__ void srmmu_flush_tlb_region(unsigned long addr)
 
 extern __inline__ void srmmu_flush_tlb_segment(unsigned long addr)
 {
-#if CONFIG_AP1000
-	mc_tlb_flush_segment();
-#endif
 	addr &= SRMMU_PMD_MASK;
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t": :
 			     "r" (addr | 0x100), /* Flush TLB segment.. */
@@ -240,9 +200,6 @@ extern __inline__ void srmmu_flush_tlb_segment(unsigned long addr)
 
 extern __inline__ void srmmu_flush_tlb_page(unsigned long page)
 {
-#if CONFIG_AP1000
-	mc_tlb_flush_page(page);
-#endif
 	page &= PAGE_MASK;
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t": :
 			     "r" (page),        /* Flush TLB page.. */

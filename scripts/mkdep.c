@@ -235,6 +235,10 @@ static void do_depend(void)
 		return;
 	}
 	fstat(fd, &st);
+	if (st.st_size == 0) {
+		fprintf(stderr,"%s is empty\n",filename);
+		return;
+	}
 	mapsize = st.st_size + 2*sizeof(unsigned long);
 	mapsize = (mapsize+pagesizem1) & ~pagesizem1;
 	map = mmap(NULL, mapsize, PROT_READ, MAP_PRIVATE, fd, 0);

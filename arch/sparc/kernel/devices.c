@@ -29,12 +29,6 @@ device_scan(unsigned long mem_start))
 	int cpu_nds[NCPUS];  /* One node for each cpu */
 	int cpu_ctr = 0;
 
-#if CONFIG_AP1000
-        printk("Not scanning device list for CPUs\n");
-	linux_num_cpus = 1;
-	return mem_start;
-#endif
-
 	prom_getstring(prom_root_node, "device_type", node_str, sizeof(node_str));
 
 	if(strcmp(node_str, "cpu") == 0) {

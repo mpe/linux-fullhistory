@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.54 1996/12/03 08:44:37 jj Exp $
+/* $Id: systbls.S,v 1.55 1996/12/18 06:33:47 tridge Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -134,7 +134,7 @@ C_LABEL(sys_call_table):
 /*250*/	.long C_LABEL(sys_mremap)
 	.long C_LABEL(sys_sysctl)
 	.long C_LABEL(sys_getsid), C_LABEL(sys_fdatasync), C_LABEL(sys_nis_syscall)
-	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
+	.long C_LABEL(sys_aplib), C_LABEL(sys_nis_syscall)
 
 	/* Now the SunOS syscall table. */
 
@@ -227,7 +227,7 @@ C_LABEL(sunos_sys_table):
 	.long C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
 	.long C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
 /*250*/	.long C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.long C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
+	.long C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sys_aplib)
 
 #if 0
 /* Not used yet - {net, open}bsd is a TODO */

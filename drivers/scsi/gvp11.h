@@ -12,6 +12,7 @@
 #include <linux/types.h>
 
 int gvp11_detect(Scsi_Host_Template *);
+int gvp11_release(struct Scsi_Host *);
 const char *wd33c93_info(void);
 int wd33c93_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int wd33c93_abort(Scsi_Cmnd *);
@@ -39,7 +40,7 @@ extern struct proc_dir_entry proc_scsi_gvp11;
 		      /* proc_info */           NULL,            \
 		      /* name */                "GVP Series II SCSI", \
 		      /* detect */              gvp11_detect,    \
-		      /* release */             NULL,            \
+		      /* release */             gvp11_release,   \
 		      /* info */                NULL,	         \
 		      /* command */             NULL,            \
 		      /* queuecommand */        wd33c93_queuecommand, \

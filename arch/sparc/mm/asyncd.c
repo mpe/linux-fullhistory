@@ -1,4 +1,4 @@
-/*  $Id: asyncd.c,v 1.8 1996/09/21 04:30:12 davem Exp $
+/*  $Id: asyncd.c,v 1.9 1996/12/18 06:43:22 tridge Exp $
  *  The asyncd kernel daemon. This handles paging on behalf of 
  *  processes that receive page faults due to remote (async) memory
  *  accesses. 
@@ -19,12 +19,23 @@
 #include <linux/stat.h>
 #include <linux/swap.h>
 #include <linux/fs.h>
+#include <linux/config.h>
+#include <linux/interrupt.h>
 
 #include <asm/dma.h>
 #include <asm/system.h> /* for cli()/sti() */
 #include <asm/segment.h> /* for memcpy_to/fromfs */
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
+
+#define DEBUG 0
+
+#define WRITE_LIMIT 100
+#define LOOP_LIMIT 200
+
+static struct {
+	int faults, read, write, success, failure, errors;
+} stats;
 
 /* 
  * The wait queue for waking up the async daemon:
@@ -51,8 +62,16 @@ static void add_to_async_queue(int taskid,
 {
 	struct async_job *a = kmalloc(sizeof(*a),GFP_ATOMIC);
 
-	if (!a)
-		panic("out of memory in asyncd\n");
+	if (!a) {
+		printk("ERROR: out of memory in asyncd\n");
+		a->callback(taskid,address,write,1);
+		return;
+	}
+
+	if (write)
+		stats.write++;
+	else
+		stats.read++;
 
 	a->next = NULL;
 	a->taskid = taskid;
@@ -76,17 +95,23 @@ void async_fault(unsigned long address, int write, int taskid,
 	struct task_struct *tsk = task[taskid];
 	struct mm_struct *mm = tsk->mm;
 
+	stats.faults++;
+
 #if 0
 	printk("paging in %x for task=%d\n",address,taskid);
 #endif
+
 	add_to_async_queue(taskid, mm, address, write, callback);
 	wake_up(&asyncd_wait);  
+	mark_bh(TQUEUE_BH);
 }
 
 static int fault_in_page(int taskid,
 			 struct vm_area_struct *vma,
 			 unsigned address,int write)
 {
+	static unsigned last_address;
+	static int last_task, loop_counter;
 	struct task_struct *tsk = task[taskid];
 	pgd_t *pgd;
 	pmd_t *pmd;
@@ -99,7 +124,27 @@ static int fault_in_page(int taskid,
 	  goto bad_area;
 	if (vma->vm_start > address)
 	  goto bad_area;
-	
+
+	if (address == last_address && taskid == last_task) {
+		loop_counter++;
+	} else {
+		loop_counter = 0;
+		last_address = address; 
+		last_task = taskid;
+	}
+
+	if (loop_counter == WRITE_LIMIT && !write) {
+		printk("MSC bug? setting write request\n");
+		stats.errors++;
+		write = 1;
+	}
+
+	if (loop_counter == LOOP_LIMIT) {
+		printk("MSC bug? failing request\n");
+		stats.errors++;
+		return 1;
+	}
+
 	pgd = pgd_offset(vma->vm_mm, address);
 	pmd = pmd_alloc(pgd,address);
 	if(!pmd)
@@ -124,19 +169,23 @@ static int fault_in_page(int taskid,
 
 	/* Fall through for do_wp_page */
 finish_up:
+	stats.success++;
 	update_mmu_cache(vma, address, *pte);
 	return 0;
 
 no_memory:
+	stats.failure++;
 	oom(tsk);
 	return 1;
 	
 bad_area:	  
+	stats.failure++;
 	tsk->tss.sig_address = address;
 	tsk->tss.sig_desc = SUBSIG_NOMAPPING;
 	send_sig(SIGSEGV, tsk, 1);
 	return 1;
 }
+
 
 /* Note the semaphore operations must be done here, and _not_
  * in async_fault().
@@ -144,14 +193,27 @@ bad_area:
 static void run_async_queue(void)
 {
 	int ret;
+	unsigned flags;
+
 	while (async_queue) {
-		volatile struct async_job *a = async_queue;
-		struct mm_struct *mm = a->mm;
+		volatile struct async_job *a;
+		struct mm_struct *mm;
 		struct vm_area_struct *vma;
+
+		save_flags(flags); cli();
+		a = async_queue;
 		async_queue = async_queue->next;
+		restore_flags(flags);
+
+		mm = a->mm;
+
 		down(&mm->mmap_sem);
 		vma = find_vma(mm, a->address);
 		ret = fault_in_page(a->taskid,vma,a->address,a->write);
+#if DEBUG
+		printk("fault_in_page(task=%d addr=%x write=%d) = %d\n",
+		       a->taskid,a->address,a->write,ret);
+#endif
 		a->callback(a->taskid,a->address,a->write,ret);
 		up(&mm->mmap_sem);
 		kfree_s((void *)a,sizeof(*a));
@@ -159,6 +221,14 @@ static void run_async_queue(void)
 }
 
 
+#if CONFIG_AP1000
+static void asyncd_info(void)
+{
+	printk("CID(%d) faults: total=%d  read=%d  write=%d  success=%d fail=%d err=%d\n",
+	       mpp_cid(),stats.faults, stats.read, stats.write, stats.success,
+	       stats.failure, stats.errors);
+}
+#endif
 
 
 /*
@@ -172,17 +242,30 @@ int asyncd(void *unused)
 	sprintf(current->comm, "asyncd");
 	current->blocked = ~0UL; /* block all signals */
   
-	/* Give kswapd a realtime priority. */
+	/* Give asyncd a realtime priority. */
 	current->policy = SCHED_FIFO;
 	current->priority = 32;  /* Fixme --- we need to standardise our
 				    namings for POSIX.4 realtime scheduling
 				    priorities.  */
   
 	printk("Started asyncd\n");
-  
+
+#if CONFIG_AP1000
+	bif_add_debug_key('a',asyncd_info,"stats on asyncd");
+#endif
+
 	while (1) {
-		current->signal = 0;
-		interruptible_sleep_on(&asyncd_wait);
+		unsigned flags;
+
+		save_flags(flags); cli();
+
+		while (!async_queue) {
+			current->signal = 0;
+			interruptible_sleep_on(&asyncd_wait);
+		}
+
+		restore_flags(flags);
+
 		run_async_queue();
 	}
 }

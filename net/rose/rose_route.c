@@ -14,6 +14,8 @@
  *
  *	History
  *	Rose 001	Jonathan(G4KLX)	Cloned from nr_route.c.
+ *			Terry(VK2KTJ)	Added support for variable length
+ *					address masks.
  */
  
 #include <linux/config.h>
@@ -60,13 +62,13 @@ static void rose_remove_neigh(struct rose_neigh *);
  */
 static int rose_add_node(struct rose_route_struct *rose_route, struct device *dev)
 {
-	struct rose_node  *rose_node;
+	struct rose_node  *rose_node, *rose_tmpn, *rose_tmpp;
 	struct rose_neigh *rose_neigh;
 	unsigned long flags;
 	int i;
 
 	for (rose_node = rose_node_list; rose_node != NULL; rose_node = rose_node->next)
-		if (rosecmp(&rose_route->address, &rose_node->address) == 0)
+		if ((rose_node->mask == rose_route->mask) && (rosecmpm(&rose_route->address, &rose_node->address, rose_route->mask) == 0))
 			break;
 
 	for (rose_neigh = rose_neigh_list; rose_neigh != NULL; rose_neigh = rose_neigh->next)
@@ -104,19 +106,56 @@ static int rose_add_node(struct rose_route_struct *rose_route, struct device *de
 		restore_flags(flags);
 	}
 
+	/*
+	 * This is a new node to be inserted into the list. Find where it needs
+	 * to be inserted into the list, and insert it. We want to be sure
+	 * to order the list in descending order of mask size to ensure that
+	 * later when we are searching this list the first match will be the
+	 * best match.
+	 */
 	if (rose_node == NULL) {
+
+		rose_tmpn = rose_node_list;
+		rose_tmpp = NULL;
+		while(rose_tmpn != NULL) {
+			if (rose_tmpn->mask > rose_route->mask) {
+				rose_tmpp = rose_tmpn;
+				rose_tmpn = rose_tmpn->next;
+			} else {
+				break;
+			}
+		}
+
+		/* create new node */
 		if ((rose_node = (struct rose_node *)kmalloc(sizeof(*rose_node), GFP_ATOMIC)) == NULL)
 			return -ENOMEM;
 
 		rose_node->address = rose_route->address;
+		rose_node->mask    = rose_route->mask;
 		rose_node->which   = 0;
 		rose_node->count   = 1;
-
 		rose_node->neighbour[0] = rose_neigh;
-			
+
 		save_flags(flags); cli();
-		rose_node->next = rose_node_list;
-		rose_node_list  = rose_node;
+
+		if (rose_tmpn == NULL) {
+			if (rose_tmpp == NULL) {	/* Empty list */
+				rose_node_list  = rose_node;
+				rose_node->next = NULL;
+			} else {
+				rose_tmpp->next = rose_node;
+				rose_node->next = NULL;
+			}
+		} else {
+			if (rose_tmpp == NULL) {	/* 1st node */
+				rose_node->next = rose_node_list;
+				rose_node_list  = rose_node;
+			} else {
+				rose_tmpp->next = rose_node;
+				rose_node->next = rose_tmpn;
+			}
+		}
+
 		restore_flags(flags);
 		
 		rose_neigh->count++;
@@ -246,7 +285,7 @@ static int rose_del_node(struct rose_route_struct *rose_route, struct device *de
 	int i;
 	
 	for (rose_node = rose_node_list; rose_node != NULL; rose_node = rose_node->next)
-		if (rosecmp(&rose_route->address, &rose_node->address) == 0)
+		if ((rose_node->mask == rose_route->mask) && (rosecmpm(&rose_route->address, &rose_node->address, rose_route->mask) == 0))
 			break;
 
 	if (rose_node == NULL) return -EINVAL;
@@ -397,11 +436,11 @@ struct device *rose_dev_get(rose_address *addr)
 struct rose_neigh *rose_get_neigh(rose_address *addr)
 {
 	struct rose_node *node;
-	
+
 	for (node = rose_node_list; node != NULL; node = node->next)
-		if (rosecmp(&node->address, addr) == 0)
+		if (rosecmpm(addr, &node->address, node->mask) == 0)
 			break;
-			
+
 	if (node == NULL) return NULL;
 	
 	if (node->which >= node->count) return NULL;
@@ -428,6 +467,9 @@ int rose_rt_ioctl(unsigned int cmd, void *arg)
 				return -EINVAL;
 			if (rose_dev_get(&rose_route.address) != NULL)	/* Can't add routes to ourself */
 				return -EINVAL;
+			if (rose_route.mask > 10) /* Mask can't be more than 10 digits */
+				return -EINVAL;
+
 			return rose_add_node(&rose_route, dev);
 
 		case SIOCDELRT:
@@ -604,7 +646,7 @@ int rose_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 	 *	Create a new route entry, if we can.
 	 */
 	for (rose_node = rose_node_list; rose_node != NULL; rose_node = rose_node->next)
-		if (rosecmp(&rose_node->address, dest_addr) == 0)
+		if (rosecmpm(dest_addr, &rose_node->address, rose_node->mask) == 0)
 			break;
 	/*
 	 *	Its an unknown node, or is unreachable.
@@ -651,11 +693,12 @@ int rose_nodes_get_info(char *buffer, char **start, off_t offset,
 
 	cli();
 
-	len += sprintf(buffer, "address    w n neigh neigh neigh\n");
+	len += sprintf(buffer, "address    mask w n neigh neigh neigh\n");
 
 	for (rose_node = rose_node_list; rose_node != NULL; rose_node = rose_node->next) {
-		len += sprintf(buffer + len, "%-10s %d %d",
+		len += sprintf(buffer + len, "%-10s %04d %d %d",
 			rose2asc(&rose_node->address),
+			rose_node->mask,
 			rose_node->which + 1,
 			rose_node->count);			
 

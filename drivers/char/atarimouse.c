@@ -20,10 +20,10 @@
 #include <linux/mm.h>
 #include <linux/random.h>
 
+#include <asm/setup.h>
 #include <asm/atarikb.h>
 #include <asm/atari_mouse.h>
 #include <asm/uaccess.h>
-#include <asm/bootinfo.h>
 
 static struct mouse_status mouse;
 static int atari_mouse_x_threshold = 2, atari_mouse_y_threshold = 2;
@@ -87,12 +87,14 @@ static int open_mouse(struct inode *inode, struct file *file)
     return 0;
 }
 
-static int write_mouse(struct inode *inode, struct file *file, const char *buffer, int count)
+static long write_mouse(struct inode *inode, struct file *file,
+			const char *buffer, unsigned long count)
 {
     return -EINVAL;
 }
 
-static int read_mouse(struct inode *inode, struct file *file, char *buffer, int count)
+static long read_mouse(struct inode *inode, struct file *file,
+		       char *buffer, unsigned long count)
 {
     int dx, dy, buttons;
     int r;
@@ -199,7 +201,7 @@ void atari_mouse_setup( char *str, int *ints )
 }
 
 #ifdef MODULE
-#include <asm/bootinfo.h>
+#include <asm/setup.h>
 
 int init_module(void)
 {

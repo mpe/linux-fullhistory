@@ -22,6 +22,7 @@
 	Changed 29/10/95, Alan Cox to pass sockaddr's around for mac addresses.
 	
 	14/06/96 - Paul Gortmaker:	Add generic eth_change_mtu() function. 
+	24/09/96 - Paul Norton: Add token-ring variants of the netdev functions. 
 */
 
 #include <linux/config.h>
@@ -213,38 +214,6 @@ void ether_setup(struct device *dev)
 	dev->pa_alen	= 4;
 }
 
-#ifdef CONFIG_TR
-
-void tr_setup(struct device *dev)
-{
-	int i;
-	/* Fill in the fields of the device structure with ethernet-generic values.
-	   This should be in a common file instead of per-driver.  */
-	for (i = 0; i < DEV_NUMBUFFS; i++)
-		skb_queue_head_init(&dev->buffs[i]);
-
-	dev->hard_header	= tr_header;
-	dev->rebuild_header 	= tr_rebuild_header;
-
-	dev->type		= ARPHRD_IEEE802;
-	dev->hard_header_len 	= TR_HLEN;
-	dev->mtu		= 2000; /* bug in fragmenter...*/
-	dev->addr_len		= TR_ALEN;
-	dev->tx_queue_len	= 100;	/* Long queues on tr */
-	
-	memset(dev->broadcast,0xFF, TR_ALEN);
-
-	/* New-style flags. */
-	dev->flags		= IFF_BROADCAST;
-	dev->family		= AF_INET;
-	dev->pa_addr	= 0;
-	dev->pa_brdaddr = 0;
-	dev->pa_mask	= 0;
-	dev->pa_alen	= 4;
-}
-
-#endif
-
 #ifdef CONFIG_FDDI
 
 void fddi_setup(struct device *dev)
@@ -423,6 +392,221 @@ void unregister_netdev(struct device *dev)
 	 
 	dev_close(dev);
 }
+
+#ifdef CONFIG_TR
+/* The list of used and available "tr" slots */
+#define MAX_TR_CARDS 16 /* same as the number of irq's in irq2dev[] */
+static struct device *trdev_index[MAX_TR_CARDS];
+
+struct device *
+init_trdev(struct device *dev, int sizeof_priv)
+{
+	int new_device = 0;
+	int i;
+
+	/* Use an existing correctly named device in Space.c:dev_base. */
+	if (dev == NULL) {
+		int alloc_size = sizeof(struct device) + sizeof("tr%d  ")
+			+ sizeof_priv + 3;
+		struct device *cur_dev;
+		char pname[8];		/* Putative name for the device.  */
+
+		for (i = 0; i < MAX_TR_CARDS; ++i)
+			if (trdev_index[i] == NULL) {
+				sprintf(pname, "tr%d", i);
+				for (cur_dev = dev_base; cur_dev; cur_dev = cur_dev->next)
+					if (strcmp(pname, cur_dev->name) == 0) {
+						dev = cur_dev;
+						dev->init = NULL;
+						sizeof_priv = (sizeof_priv + 3) & ~3;
+						dev->priv = sizeof_priv
+							  ? kmalloc(sizeof_priv, GFP_KERNEL)
+							  :	NULL;
+						if (dev->priv) memset(dev->priv, 0, sizeof_priv);
+						goto trfound;
+					}
+			}
+
+		alloc_size &= ~3;		/* Round to dword boundary. */
+		dev = (struct device *)kmalloc(alloc_size, GFP_KERNEL);
+		memset(dev, 0, alloc_size);
+		if (sizeof_priv)
+			dev->priv = (void *) (dev + 1);
+		dev->name = sizeof_priv + (char *)(dev + 1);
+		new_device = 1;
+	}
+
+	trfound:						/* From the double loop above. */
+
+	for (i = 0; i < MAX_TR_CARDS; ++i)
+		if (trdev_index[i] == NULL) {
+			sprintf(dev->name, "tr%d", i);
+			trdev_index[i] = dev;
+			break;
+		}
+
+	if (new_device) {
+		/* Append the device to the device queue. */
+		struct device **old_devp = &dev_base;
+
+		while ((*old_devp)->next)
+			old_devp = & (*old_devp)->next;
+		(*old_devp)->next = dev;
+		dev->next = 0;
+	}
+
+	dev->hard_header	 = tr_header;
+	dev->rebuild_header  = tr_rebuild_header;
+
+	dev->type		     = ARPHRD_IEEE802;
+	dev->hard_header_len = TR_HLEN;
+	dev->mtu		     = 2000; /* bug in fragmenter...*/
+	dev->addr_len		 = TR_ALEN;
+	dev->tx_queue_len	 = 100;	/* Long queues on tr */
+	
+	memset(dev->broadcast,0xFF, TR_ALEN);
+
+	/* New-style flags. */
+	dev->flags		= IFF_BROADCAST;
+	dev->family		= AF_INET;
+	dev->pa_addr	= 0;
+	dev->pa_brdaddr = 0;
+	dev->pa_mask	= 0;
+	dev->pa_alen	= 4;
+
+	return dev;
+}
+
+void tr_setup(struct device *dev)
+{
+	int i;
+
+	/* register boot-defined "tr" devices */
+	if (dev->name && (strncmp(dev->name, "tr", 2) == 0)) {
+		i = simple_strtoul(dev->name + 2, NULL, 0);
+		if (trdev_index[i] == NULL) {
+			trdev_index[i] = dev;
+		}
+		else if (dev != trdev_index[i]) {
+			/* Really shouldn't happen! */
+			printk("tr_setup: Ouch! Someone else took %s\n",
+				dev->name);
+		}
+	}
+}
+
+void tr_freedev(struct device *dev)
+{
+	int i;
+	for (i = 0; i < MAX_TR_CARDS; ++i) 
+	{
+		if (trdev_index[i] == dev) 
+		{
+			trdev_index[i] = NULL;
+			break;
+		}
+	}
+}
+
+int register_trdev(struct device *dev)
+{
+	unsigned long flags;
+	int i;
+	
+	for (i = 0; i < DEV_NUMBUFFS; i++)
+		skb_queue_head_init(&dev->buffs[i]);
+
+	save_flags(flags);
+
+	if (dev && dev->init) {
+		sti();	/* device probes assume interrupts enabled */
+		if (dev->init(dev) != 0) {
+		    unregister_trdev(dev);
+			restore_flags(flags);
+			return -EIO;
+		}
+		cli();
+
+	}
+	restore_flags(flags);
+	return 0;
+}
+
+void unregister_trdev(struct device *dev)
+{
+	struct device *d = dev_base;
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+
+	if (dev == NULL) 
+	{
+		printk("was NULL\n");
+		restore_flags(flags);
+		return;
+	}
+	/* else */
+	if (dev->start)
+		printk("ERROR '%s' busy and not MOD_IN_USE.\n", dev->name);
+
+	/*
+	 * 	must jump over main_device+aliases
+	 * 	avoid alias devices unregistration so that only
+	 * 	net_alias module manages them
+	 */
+#ifdef CONFIG_NET_ALIAS		
+	if (dev_base == dev)
+		dev_base = net_alias_nextdev(dev);
+	else
+	{
+		while(d && (net_alias_nextdev(d) != dev)) /* skip aliases */
+			d = net_alias_nextdev(d);
+	  
+		if (d && (net_alias_nextdev(d) == dev))
+		{
+			/*
+			 * 	Critical: Bypass by consider devices as blocks (maindev+aliases)
+			 */
+			net_alias_nextdev_set(d, net_alias_nextdev(dev)); 
+		}
+#else
+	if (dev_base == dev)
+		dev_base = dev->next;
+	else 
+	{
+		while (d && (d->next != dev))
+			d = d->next;
+		
+		if (d && (d->next == dev)) 
+		{
+			d->next = dev->next;
+		}
+#endif
+		else 
+		{
+			printk("unregister_trdev: '%s' not found\n", dev->name);
+			restore_flags(flags);
+			return;
+		}
+	}
+
+	tr_freedev(dev);
+
+	restore_flags(flags);
+
+	/*
+	 *	You can i.e use a interfaces in a route though it is not up.
+	 *	We call close_dev (which is changed: it will down a device even if
+	 *	dev->flags==0 (but it will not call dev->stop if IFF_UP
+	 *	is not set).
+	 *	This will call notifier_call_chain(&netdev_chain, NETDEV_DOWN, dev),
+	 *	dev_mc_discard(dev), ....
+	 */
+	 
+	dev_close(dev);
+}
+#endif
 
 
 /*

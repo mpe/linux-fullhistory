@@ -19,13 +19,21 @@
  */
 
 #define le16_to_cpu(__val) __swab16(__val)
-#define le32_to_cpu(__val) __swab32(__val)
-#define cpu_to_le32(__val) __swab32(__val)
 #define cpu_to_le16(__val) __swab16(__val)
+#define le32_to_cpu(x) \
+(__builtin_constant_p(x) ? __constant_swab32(x) : __swab32(x))
+#define cpu_to_le32(x) \
+(__builtin_constant_p(x) ? __constant_swab32(x) : __swab32(x))
 
 extern __inline__ __u16 __swab16 (__u16 val)
 {
 	return (val << 8) | (val >> 8);
+}
+
+extern __inline__ __u32 __constant_swab32 (__u32 val)
+{
+	return (val << 24) | ((val << 8) & 0xff0000) |
+	       ((val >> 8) & 0xff00) | (val >> 24);
 }
 
 extern __inline__ __u32 __swab32 (__u32 val)

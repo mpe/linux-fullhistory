@@ -32,7 +32,6 @@
 #include <linux/types.h>
 #include <linux/genhd.h>
 #include <linux/sched.h>
-#include <asm/setup.h>
 #include <asm/atari_stdma.h>
 #include <asm/atariints.h>
 #include <asm/atarihw.h>

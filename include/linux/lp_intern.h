@@ -16,7 +16,7 @@
 #include <linux/types.h>
 #include <linux/lp_m68k.h>
 
-int lp_internal_init(struct lp_struct *, int, int, int);
+int lp_internal_init(void);
 
 #endif
 

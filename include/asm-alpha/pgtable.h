@@ -347,6 +347,9 @@ extern inline void SET_PAGE_DIR(struct task_struct * tsk, pgd_t * pgdir)
 
 #define PAGE_DIR_OFFSET(tsk,address) pgd_offset((tsk),(address))
 
+/* to find an entry in a kernel page-table-directory */
+#define pgd_offset_k(address) pgd_offset(&init_mm, address)
+
 /* to find an entry in a page-table-directory. */
 extern inline pgd_t * pgd_offset(struct mm_struct * mm, unsigned long address)
 {

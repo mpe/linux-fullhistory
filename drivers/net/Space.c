@@ -77,6 +77,9 @@ extern int tc59x_probe(struct device *);
 extern int dgrs_probe(struct device *);
 extern int smc_init( struct device * );
 extern int sparc_lance_probe(struct device *);
+extern int happy_meal_probe(struct device *);
+extern int qec_probe(struct device *);
+extern int myri_sbus_probe(struct device *);
 extern int atarilance_probe(struct device *);
 extern int a2065_probe(struct device *);
 extern int ariadne_probe(struct device *);
@@ -225,11 +228,23 @@ ethif_probe(struct device *dev)
 #ifdef CONFIG_SUNLANCE
 	&& sparc_lance_probe(dev)
 #endif
+#ifdef CONFIG_HAPPYMEAL
+        && happy_meal_probe(dev)
+#endif
+#ifdef CONFIG_SUNQE
+	&& qec_probe(dev)
+#endif
+#ifdef CONFIG_MYRI_SBUS
+	&& myri_sbus_probe(dev)
+#endif
 	&& 1 ) {
 	return 1;	/* -ENODEV or -EAGAIN would be more accurate. */
     }
     return 0;
 }
+
+
+
 
 #ifdef CONFIG_SDLA
     extern int sdla_init(struct device *);
@@ -378,41 +393,43 @@ struct device eql_dev = {
 #   define      NEXT_DEV        (&eql_dev)
 #endif
 
-#ifdef CONFIG_IBMTR 
+#ifdef CONFIG_TR
+/* Token-ring device probe */
+extern int ibmtr_probe(struct device *);
 
-    extern int tok_probe(struct device *dev);
-    static struct device ibmtr_dev1 = {
-	"tr1",			/* IBM Token Ring (Non-DMA) Interface */
-	0x0,			/* recv memory end			*/
-	0x0,			/* recv memory start			*/
-	0x0,			/* memory end				*/
-	0x0,			/* memory start				*/
-	0xa24,			/* base I/O address			*/
-	0,			/* IRQ					*/
-	0, 0, 0,		/* flags				*/
-	NEXT_DEV,		/* next device				*/
-	tok_probe		/* ??? Token_init should set up the rest	*/
-    };
-#   undef	NEXT_DEV
-#   define	NEXT_DEV	(&ibmtr_dev1)
-
-
-    static struct device ibmtr_dev0 = {
-	"tr0",			/* IBM Token Ring (Non-DMA) Interface */
-	0x0,			/* recv memory end			*/
-	0x0,			/* recv memory start			*/
-	0x0,			/* memory end				*/
-	0x0,			/* memory start				*/
-	0xa20,			/* base I/O address			*/
-	0,			/* IRQ					*/
-	0, 0, 0,		/* flags				*/
-	NEXT_DEV,		/* next device				*/
-	tok_probe		/* ??? Token_init should set up the rest	*/
-    };
-#   undef	NEXT_DEV
-#   define	NEXT_DEV	(&ibmtr_dev0)
+static int
+trif_probe(struct device *dev)
+{
+    if (1
+#ifdef CONFIG_IBMTR
+	&& ibmtr_probe(dev)
+#endif
+	&& 1 ) {
+	return 1;	/* -ENODEV or -EAGAIN would be more accurate. */
+    }
+    return 0;
+}
+static struct device tr7_dev = {
+    "tr7",0,0,0,0,0,0,0,0,0, NEXT_DEV, trif_probe };
+static struct device tr6_dev = {
+    "tr6",0,0,0,0,0,0,0,0,0, &tr7_dev, trif_probe };
+static struct device tr5_dev = {
+    "tr5",0,0,0,0,0,0,0,0,0, &tr6_dev, trif_probe };
+static struct device tr4_dev = {
+    "tr4",0,0,0,0,0,0,0,0,0, &tr5_dev, trif_probe };
+static struct device tr3_dev = {
+    "tr3",0,0,0,0,0,0,0,0,0, &tr4_dev, trif_probe };
+static struct device tr2_dev = {
+    "tr2",0,0,0,0,0,0,0,0,0, &tr3_dev, trif_probe };
+static struct device tr1_dev = {
+    "tr1",0,0,0,0,0,0,0,0,0, &tr2_dev, trif_probe };
+static struct device tr0_dev = {
+    "tr0",0,0,0,0,0,0,0,0,0, &tr1_dev, trif_probe };
+#   undef       NEXT_DEV
+#   define      NEXT_DEV        (&tr0_dev)
 
 #endif 
+
 #ifdef CONFIG_NET_IPIP
 	extern int tunnel_init(struct device *);
 	

@@ -2,7 +2,7 @@
 
 	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		    Last revised: December 7, 1996
+		   Last revised: December 20, 1996
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he got busy with other things in 1993.  It
@@ -841,11 +841,16 @@ reply.
 		<jth@prosig.demon.co.uk> for information.
 
  66 char	YARC PowerPC PCI coprocessor card
-		  0 = /dev/yppcpci00	First YARC card
-		  1 = /dev/yppcpci01	Second YARC card
+		  0 = /dev/yppcpci0	First YARC card
+		  1 = /dev/yppcpci1	Second YARC card
 		      ...
 
- 67-119		UNALLOCATED
+ 67 char	Coda network file system
+		  0 = /dev/cfs0		Coda cache manager
+
+		See http://www.coda.cs.cmu.edu for information about Coda.
+
+ 68-119		UNALLOCATED
 
 120-127		LOCAL/EXPERIMENTAL USE
 

@@ -11,7 +11,6 @@
 #include <linux/sched.h>
 #include <linux/timer.h>
 
-#include <asm/amigatypes.h>
 #include <asm/system.h>
 #include <asm/amigahw.h>
 

@@ -107,6 +107,12 @@ M:	faith@cs.unc.edu, Stephen.Rothwell@canb.auug.org.au
 L:	linux-laptop@vger.rutgers.edu
 S:	Maintained
 
+TOKEN-RING NETWORK DRIVER
+P:	Paul Norton
+M:	pnorton@cts.com
+L:	linux-net@vger.rutgers.edu
+S:	Maintained
+
 APPLETALK NETWORK LAYER
 P:	Alan Cox & University Of Michigan
 M:	net-patches@lxorguk.ukuu.org.uk

@@ -11,6 +11,7 @@
 #include <linux/types.h>
 
 int a2091_detect(Scsi_Host_Template *);
+int a2091_release(struct Scsi_Host *);
 const char *wd33c93_info(void);
 int wd33c93_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int wd33c93_abort(Scsi_Cmnd *);
@@ -38,7 +39,7 @@ extern struct proc_dir_entry proc_scsi_a2091;
 		      /* proc_info */           NULL,            \
 		      /* name */                "Commodore A2091/A590 SCSI", \
 		      /* detect */              a2091_detect,    \
-		      /* release */             NULL,            \
+		      /* release */             a2091_release,   \
 		      /* info */                NULL,	         \
 		      /* command */             NULL,            \
 		      /* queuecommand */        wd33c93_queuecommand, \

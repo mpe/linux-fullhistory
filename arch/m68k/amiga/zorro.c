@@ -614,10 +614,12 @@ END
 
 
    /*
-    *    Configured Expansion Devices
+    *    Expansion Devices
     */
 
-static u_long BoardPartFlags[NUM_AUTO] = { 0, };
+int zorro_num_autocon;
+struct ConfigDev zorro_autocon[ZORRO_NUM_AUTO];
+static u_long BoardPartFlags[ZORRO_NUM_AUTO] = { 0, };
 
    
    /*
@@ -657,14 +659,14 @@ int zorro_find(int manuf, int prod, int part, int index)
       return(0);
    }
 
-   for (key = index + 1; key <= boot_info.bi_amiga.num_autocon; key++) {
-      cd = &boot_info.bi_amiga.autocon[key-1];
+   for (key = index + 1; key <= zorro_num_autocon; key++) {
+      cd = &zorro_autocon[key-1];
       if ((cd->cd_Rom.er_Manufacturer == manuf) &&
           (cd->cd_Rom.er_Product == prod) &&
           !(BoardPartFlags[key-1] & (1<<part)))
          break;
    }
-   return(key <= boot_info.bi_amiga.num_autocon ? key : 0);
+   return(key <= zorro_num_autocon ? key : 0);
 }
 
 
@@ -676,10 +678,10 @@ struct ConfigDev *zorro_get_board(int key)
 {
    struct ConfigDev *cd = NULL;
 
-   if ((key < 1) || (key > boot_info.bi_amiga.num_autocon))
+   if ((key < 1) || (key > zorro_num_autocon))
       printk("zorro_get_board: bad key %d\n", key);
    else
-      cd = &boot_info.bi_amiga.autocon[key-1];
+      cd = &zorro_autocon[key-1];
 
    return(cd);
 }
@@ -691,7 +693,7 @@ struct ConfigDev *zorro_get_board(int key)
 
 void zorro_config_board(int key, int part)
 {
-   if ((key < 1) || (key > boot_info.bi_amiga.num_autocon))
+   if ((key < 1) || (key > zorro_num_autocon))
       printk("zorro_config_board: bad key %d\n", key);
    else if ((part < 0) || (part > 31))
       printk("zorro_config_board: bad part %d\n", part);
@@ -708,7 +710,7 @@ void zorro_config_board(int key, int part)
 
 void zorro_unconfig_board(int key, int part)
 {
-   if ((key < 1) || (key > boot_info.bi_amiga.num_autocon))
+   if ((key < 1) || (key > zorro_num_autocon))
       printk("zorro_unconfig_board: bad key %d\n", key);
    else if ((part < 0) || (part > 31))
       printk("zorro_unconfig_board: bad part %d\n", part);
@@ -738,7 +740,7 @@ static int identify(int devnum, char *buf)
    int i, j, k, len = 0;
    enum GVP_ident epc;
 
-   cd = &boot_info.bi_amiga.autocon[devnum];
+   cd = &zorro_autocon[devnum];
    manuf = cd->cd_Rom.er_Manufacturer;
    prod = cd->cd_Rom.er_Product;
    addr = (u_long)cd->cd_BoardAddr;
@@ -820,11 +822,11 @@ void zorro_identify(void)
       return;
 
    printk("Probing AutoConfig expansion device(s):\n");
-   for (i = 0; i < boot_info.bi_amiga.num_autocon; i++) {
+   for (i = 0; i < zorro_num_autocon; i++) {
       identify(i, tmp);
       printk(tmp);
    }
-   if (!boot_info.bi_amiga.num_autocon)
+   if (!zorro_num_autocon)
       printk("No AutoConfig expansion devices present.\n");
 }
 
@@ -840,7 +842,7 @@ int zorro_get_list(char *buffer)
 
    if (MACH_IS_AMIGA && AMIGAHW_PRESENT(ZORRO)) {
       len = sprintf(buffer, "AutoConfig expansion devices:\n");
-      for (i = 0; i < boot_info.bi_amiga.num_autocon; i++) {
+      for (i = 0; i < zorro_num_autocon; i++) {
          j = identify(i, tmp);
          if (len+j >= 4075) {
             len += sprintf(buffer+len, "4K limit reached!\n");
@@ -911,12 +913,12 @@ void zorro_init(void)
       return;
 
    /* Mark all available Zorro II memory */
-   for (i = 0; i < boot_info.bi_amiga.num_autocon; i++) {
-      cd = &boot_info.bi_amiga.autocon[i];
+   for (i = 0; i < zorro_num_autocon; i++) {
+      cd = &zorro_autocon[i];
       if (cd->cd_Rom.er_Type & ERTF_MEMLIST)
          mark_region((u_long)cd->cd_BoardAddr, cd->cd_BoardSize, 1);
    }
    /* Unmark all used Zorro II memory */
-   for (i = 0; i < boot_info.num_memory; i++)
-      mark_region(boot_info.memory[i].addr, boot_info.memory[i].size, 0);
+   for (i = 0; i < m68k_num_memory; i++)
+      mark_region(m68k_memory[i].addr, m68k_memory[i].size, 0);
 }

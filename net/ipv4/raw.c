@@ -125,7 +125,7 @@ int raw_rcv(struct sock *sk, struct sk_buff *skb)
 
 struct rawfakehdr 
 {
-	const char *from;
+	const unsigned char *from;
 	u32	saddr;
 };
 
@@ -139,8 +139,8 @@ struct rawfakehdr
   
 static int raw_getfrag(const void *p, char *to, unsigned int offset, unsigned int fraglen)
 {
-	struct rawfakehdr *rfh = (struct rawfakehdr*)p;
-	return copy_from_user(to, (const unsigned char *)rfh->from+offset, fraglen);
+	struct rawfakehdr *rfh = (struct rawfakehdr *) p;
+	return copy_from_user(to, rfh->from + offset, fraglen);
 }
 
 /*
@@ -149,11 +149,10 @@ static int raw_getfrag(const void *p, char *to, unsigned int offset, unsigned in
  
 static int raw_getrawfrag(const void *p, char *to, unsigned int offset, unsigned int fraglen)
 {
-	struct rawfakehdr *rfh = (struct rawfakehdr*)p;
-	int err; 
-	err = copy_from_user(to, (const unsigned char *)p+offset, fraglen);
-	if (err)
-		return err; 
+	struct rawfakehdr *rfh = (struct rawfakehdr *) p;
+
+	if (copy_from_user(to, rfh->from + offset, fraglen))
+		return -EFAULT;
 	if (offset==0) {
 		struct iphdr *iph = (struct iphdr *)to;
 		if (!iph->saddr)

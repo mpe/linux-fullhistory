@@ -104,6 +104,17 @@ unsigned long * create_elf_tables(char *p, int argc, int envc,
 	 * Force 16 byte alignment here for generality.
 	 */
 	sp = (unsigned long *) (~15UL & (unsigned long) p);
+#ifdef __sparc__
+{
+	unsigned long *csp;
+	csp = sp;
+	csp -= exec ? DLINFO_ITEMS*2 : 2;
+	csp -= envc+1;
+	csp -= argc+1;
+	if (!(((unsigned long) csp) & 4))
+		sp--;
+}
+#endif
 
 	/*
 	 * Put the ELF interpreter info on the stack

@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.132 1996/12/10 06:06:27 davem Exp $
+/* $Id: sun4c.c,v 1.133 1996/12/18 06:43:28 tridge Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -1723,7 +1723,7 @@ static int sun4c_pte_present(pte_t pte)
 {
 	return ((pte_val(pte) & (_SUN4C_PAGE_PRESENT | _SUN4C_PAGE_PRIV)) != 0);
 }
-static void sun4c_pte_clear(pte_t *ptep)	{ pte_val(*ptep) = 0; }
+static void sun4c_pte_clear(pte_t *ptep)	{ *ptep = __pte(0); }
 
 static int sun4c_pmd_none(pmd_t pmd)		{ return !pmd_val(pmd); }
 static int sun4c_pmd_bad(pmd_t pmd)
@@ -1736,7 +1736,7 @@ static int sun4c_pmd_present(pmd_t pmd)
 {
 	return ((pmd_val(pmd) & PGD_PRESENT) != 0);
 }
-static void sun4c_pmd_clear(pmd_t *pmdp)	{ pmd_val(*pmdp) = 0; }
+static void sun4c_pmd_clear(pmd_t *pmdp)	{ *pmdp = __pmd(0); }
 
 static int sun4c_pgd_none(pgd_t pgd)		{ return 0; }
 static int sun4c_pgd_bad(pgd_t pgd)		{ return 0; }
@@ -1764,43 +1764,40 @@ static int sun4c_pte_young(pte_t pte)
 
 static pte_t sun4c_pte_wrprotect(pte_t pte)
 {
-	pte_val(pte) &= ~(_SUN4C_PAGE_WRITE | _SUN4C_PAGE_SILENT_WRITE);
-	return pte;
+	return __pte(pte_val(pte) & ~(_SUN4C_PAGE_WRITE | _SUN4C_PAGE_SILENT_WRITE));
 }
 
 static pte_t sun4c_pte_mkclean(pte_t pte)
 {
-	pte_val(pte) &= ~(_SUN4C_PAGE_MODIFIED | _SUN4C_PAGE_SILENT_WRITE);
-	return pte;
+	return __pte(pte_val(pte) & ~(_SUN4C_PAGE_MODIFIED | _SUN4C_PAGE_SILENT_WRITE));
 }
 
 static pte_t sun4c_pte_mkold(pte_t pte)
 {
-	pte_val(pte) &= ~(_SUN4C_PAGE_ACCESSED | _SUN4C_PAGE_SILENT_READ);
-	return pte;
+	return __pte(pte_val(pte) & ~(_SUN4C_PAGE_ACCESSED | _SUN4C_PAGE_SILENT_READ));
 }
 
 static pte_t sun4c_pte_mkwrite(pte_t pte)
 {
-	pte_val(pte) |= _SUN4C_PAGE_WRITE;
+	pte = __pte(pte_val(pte) | _SUN4C_PAGE_WRITE);
 	if (pte_val(pte) & _SUN4C_PAGE_MODIFIED)
-		pte_val(pte) |= _SUN4C_PAGE_SILENT_WRITE;
+		pte = __pte(pte_val(pte) | _SUN4C_PAGE_SILENT_WRITE);
 	return pte;
 }
 
 static pte_t sun4c_pte_mkdirty(pte_t pte)
 {
-	pte_val(pte) |= _SUN4C_PAGE_MODIFIED;
+	pte = __pte(pte_val(pte) | _SUN4C_PAGE_MODIFIED);
 	if (pte_val(pte) & _SUN4C_PAGE_WRITE)
-		pte_val(pte) |= _SUN4C_PAGE_SILENT_WRITE;
+		pte = __pte(pte_val(pte) | _SUN4C_PAGE_SILENT_WRITE);
 	return pte;
 }
 
 static pte_t sun4c_pte_mkyoung(pte_t pte)
 {
-	pte_val(pte) |= _SUN4C_PAGE_ACCESSED;
+	pte = __pte(pte_val(pte) | _SUN4C_PAGE_ACCESSED);
 	if (pte_val(pte) & _SUN4C_PAGE_READ)
-		pte_val(pte) |= _SUN4C_PAGE_SILENT_READ;
+		pte = __pte(pte_val(pte) | _SUN4C_PAGE_SILENT_READ);
 	return pte;
 }
 
@@ -1825,9 +1822,8 @@ static pte_t sun4c_mk_pte_io(unsigned long page, pgprot_t pgprot, int space)
 
 static pte_t sun4c_pte_modify(pte_t pte, pgprot_t newprot)
 {
-	pte_val(pte) = (pte_val(pte) & _SUN4C_PAGE_CHG_MASK) |
-			pgprot_val(newprot);
-	return pte;
+	return __pte((pte_val(pte) & _SUN4C_PAGE_CHG_MASK) |
+		     pgprot_val(newprot));
 }
 
 static unsigned long sun4c_pte_page(pte_t pte)
@@ -1903,17 +1899,17 @@ static pte_t *sun4c_pte_alloc_kernel(pmd_t *pmd, unsigned long address)
 			if (page) {
 				/* See above comment. */
 				page = (pte_t *) sun4c_lockarea((char *)page, PAGE_SIZE);
-				pmd_val(*pmd) = PGD_TABLE | (unsigned long) page;
+				*pmd = __pmd(PGD_TABLE | (unsigned long) page);
 				return page + address;
 			}
-			pmd_val(*pmd) = PGD_TABLE | (unsigned long) BAD_PAGETABLE;
+			*pmd = __pmd(PGD_TABLE | (unsigned long) BAD_PAGETABLE);
 			return NULL;
 		}
 		free_page((unsigned long) page);
 	}
 	if (sun4c_pmd_bad(*pmd)) {
 		printk("Bad pmd in pte_alloc_kernel: %08lx\n", pmd_val(*pmd));
-		pmd_val(*pmd) = PGD_TABLE | (unsigned long) BAD_PAGETABLE;
+		*pmd = __pmd(PGD_TABLE | (unsigned long) BAD_PAGETABLE);
 		return NULL;
 	}
 	return (pte_t *) sun4c_pmd_page(*pmd) + address;
@@ -1925,7 +1921,7 @@ static pte_t *sun4c_pte_alloc_kernel(pmd_t *pmd, unsigned long address)
  */
 static void sun4c_pmd_free_kernel(pmd_t *pmd)
 {
-	pmd_val(*pmd) = 0;
+	*pmd = __pmd(0);
 }
 
 static pmd_t *sun4c_pmd_alloc_kernel(pgd_t *pgd, unsigned long address)
@@ -1945,17 +1941,17 @@ static pte_t *sun4c_pte_alloc(pmd_t * pmd, unsigned long address)
 		pte_t *page = (pte_t *) get_free_page(GFP_KERNEL);
 		if (sun4c_pmd_none(*pmd)) {
 			if (page) {
-				pmd_val(*pmd) = PGD_TABLE | (unsigned long) page;
+				*pmd = __pmd(PGD_TABLE | (unsigned long) page);
 				return page + address;
 			}
-			pmd_val(*pmd) = PGD_TABLE | (unsigned long) BAD_PAGETABLE;
+			*pmd = __pmd(PGD_TABLE | (unsigned long) BAD_PAGETABLE);
 			return NULL;
 		}
 		free_page((unsigned long) page);
 	}
 	if (sun4c_pmd_bad(*pmd)) {
 		printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
-		pmd_val(*pmd) = PGD_TABLE | (unsigned long) BAD_PAGETABLE;
+		*pmd = __pmd(PGD_TABLE | (unsigned long) BAD_PAGETABLE);
 		return NULL;
 	}
 	return (pte_t *) sun4c_pmd_page(*pmd) + address;
@@ -1967,7 +1963,7 @@ static pte_t *sun4c_pte_alloc(pmd_t * pmd, unsigned long address)
  */
 static void sun4c_pmd_free(pmd_t * pmd)
 {
-	pmd_val(*pmd) = 0;
+	*pmd = __pmd(0);
 }
 
 static pmd_t *sun4c_pmd_alloc(pgd_t * pgd, unsigned long address)
@@ -2043,8 +2039,8 @@ void sun4c_update_mmu_cache(struct vm_area_struct *vma, unsigned long address, p
 						       vmaring->vm_mm->context, start);
 #endif
 						sun4c_flush_cache_page(vmaring, start);
-						pte_val(*ptep) = (pte_val(*ptep) |
-								  _SUN4C_PAGE_NOCACHE);
+						*ptep = __pte(pte_val(*ptep) |
+							      _SUN4C_PAGE_NOCACHE);
 						sun4c_flush_tlb_page(vmaring, start);
 					}
 				next:
@@ -2056,7 +2052,7 @@ void sun4c_update_mmu_cache(struct vm_area_struct *vma, unsigned long address, p
 		if(alias_found && !(pte_val(pte) & _SUN4C_PAGE_NOCACHE)) {
 			pgdp = sun4c_pgd_offset(vma->vm_mm, address);
 			ptep = sun4c_pte_offset((pmd_t *) pgdp, address);
-			pte_val(*ptep) = (pte_val(*ptep) | _SUN4C_PAGE_NOCACHE);
+			*ptep = __pte(pte_val(*ptep) | _SUN4C_PAGE_NOCACHE);
 			pte = pte_val(*ptep);
 		}
 	}
@@ -2098,8 +2094,7 @@ __initfunc(unsigned long sun4c_paging_init(unsigned long start_mem, unsigned lon
 	memset(swapper_pg_dir, 0, PAGE_SIZE);
 	memset(pg0, 0, PAGE_SIZE);
 	/* Save work later. */
-	pgd_val(swapper_pg_dir[SUN4C_VMALLOC_START>>SUN4C_PGDIR_SHIFT]) =
-		PGD_TABLE | (unsigned long) pg0;
+	swapper_pg_dir[SUN4C_VMALLOC_START>>SUN4C_PGDIR_SHIFT] = __pgd(PGD_TABLE | (unsigned long) pg0);
 	sun4c_init_ss2_cache_bug();
 	start_mem = PAGE_ALIGN(start_mem);
 	start_mem = sparc_context_init(start_mem, num_contexts);

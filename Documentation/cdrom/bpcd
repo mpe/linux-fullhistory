@@ -1,0 +1,74 @@
+linux/Documentation/cdrom/bpcd	(c) 1996  Grant R. Guenther <grant@torque.net>
+
+This file documents the bpcd driver for the MicroSolutions backpack CDrom,
+an external parallel port device.  
+
+There are apparently two versions of the backpack protocol.  This 
+driver knows about the version 2 protocol - as is used in the 4x 
+and 6x products.  There is no support for the sound hardware that
+is included in some models.  It should not be difficult to add 
+support for the ATAPI audio play functions and the corresponding 
+ioctls.
+
+The driver was developed by reverse engineering the protocol
+and testing it on the backpack model 164550.  This model
+is actually a stock ATAPI drive packaged with a custom 
+ASIC that implements the IDE over parallel protocol.
+I tested with a backpack that happened to contain a Goldstar
+drive, but I've seen reports of Sony and Mitsumi drives as well.
+
+Before attempting to use the driver, you will need to
+create a new device special file.  The following commands will
+do that for you:
+
+		mknod /dev/bpcd b 41 0
+		chown root:disk /dev/bpcd
+		chmod 660 /dev/bpcd
+
+Afterward, you can mount a disk in the usual way:
+
+		mount -t iso9660 /dev/bpcd /cdrom
+
+(assuming you have made a directory /cdrom to use as a mount point).
+
+The driver will attempt to detect which parallel port your
+backpack is connected to.  If this fails for any reason, you
+can override it by specifying a port on the LILO command line
+(for built in drivers) or the insmod command (for drivers built
+as modules).   If your drive is on the port at 0x3bc, you would
+use one of these commands:
+
+		LILO:	   bpcd=0x3bc
+
+		insmod:    insmod bpcd bp_base=0x3bc
+
+The driver can detect if the parallel port supports 8-bit
+transfers.  If so, it will use them.  You can force it to use
+4-bit (nybble) mode by setting the variable bp_nybble to 1 on
+an insmod command, or using the following LILO parameters:
+
+		bpcd=0x3bc,1
+
+(you must specify the correct port address if you use this method.)
+
+There is currently no support for EPP or ECP modes.  Also,
+as far as I can tell, the MicroSolutions protocol does not
+support interrupts in the 4-bit and 8-bit modes.
+
+MicroSolutions' protocol allows for several drives to be
+chained together off the same parallel port.  Currently, this
+driver will recognise only one of them.  If you do have more
+than one drive, it will choose the one with the lowest id number,
+where the id number is the last two digits of the product's
+serial number.
+
+It is not currently possible to connect a printer to the chained
+port on the BackPack and expect Linux to use both devices at once.
+If you need to use this driver together with a printer on the
+same port, build both the bpcd and lp drivers as modules.
+
+Keep an eye on http://www.torque.net/bpcd.html for news and
+other information about the driver.  If you have any problems
+with this driver, please send me, grant@torque.net, some mail 
+directly before posting into the newsgroups or mailing lists.
+

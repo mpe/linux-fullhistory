@@ -1,0 +1,241 @@
+
+		Linux/m68k Amiga Bootstrap version 5.1
+		--------------------------------------
+
+
+0. Introduction
+---------------
+
+Amiboot is used to boot Linux/m68k on Amiga from the CLI/Shell.
+
+Before you try to boot Linux/m68k for the first time, please read the FAQ
+
+    http://www-agrw.informatik.uni-kl.de/~jmayer/linux68k/linux68k-faq
+
+and the Installation Guide
+
+    http://www.informatik.uni-oldenburg.de/~amigo/inst.html
+
+first. Although the Installation Guide is getting a bit outdated, it's still a
+good starting point.
+
+Amiboot 5.1 is meant for Linux/m68k 2.0.x, 2.1.x or higher (kernel bootinfo
+interface versions 1.x and 2.x). Please use an older version for older kernels.
+
+
+1. Running Amiboot
+------------------
+
+The Amiboot invocation syntax looks like
+
+    amiboot [options] [kernel command line]
+
+Valid options are:
+
+    --help           Display the usage information
+
+    --kernel file    Use kernel image `file' (default is `vmlinux')
+
+    --ramdisk file   Use ramdisk image `file'.
+
+    --debug          Enable debug mode
+
+    --baud           Set the serial port speed (default is 9600)
+
+    --memfile file   Use memory file `file'
+
+    --keep-video     Don't reset the video mode
+
+    --model id       Set the Amiga model to `id'.
+
+The kernel command line contains the options you want to pass to the kernel and
+to init, the process that's started first by Linux. Please read
+linux/Documentation/m68k/kernel-options.txt for more information.
+
+Normally you only use the --kernel option to specify the file that contains the
+Linux/m68k kernel image, and --ramdisk if you want to boot from a ramdisk file,
+i.e. a file containing a complete file system, instead of from a hard disk
+partition.
+
+Example:
+
+    amiboot -k vmlinux-2.1.13 root=/dev/hda3 video=font:PEARL8x8
+
+Amiboot will boot the kernel image `vmlinux-2.1.13' and will pass
+`root=/dev/hda3 video=font:PEARL8x8' to the kernel.
+
+
+The other options are more specialized. Don't use them unless you really have
+to and you know what you're doing.
+
+The --baud option allows you to specify the serial port speed for initial boot
+information and initial kernel messages. Note: this option does not work with
+kernels with bootinfo interface versions prior to 2.0.
+
+The --memfile option is used to specify the blocks of memory that will be used
+by Linux.
+
+The --keep-video option is necessary if you want to retain the current graphics
+mode (on a graphics board) under Linux. Currently this is only useful if you
+have a CyberVision 64 graphics board.
+
+Finally, --model allows you to specify your Amiga model, and --debug is for
+debugging purposes.
+
+
+2. The memory file
+------------------
+
+If you have some non-AutoConfig memory you want to use under Linux, or if you
+want to disable some parts of your memory (e.g. Zorro II RAM on '040 based
+systems), you have to use a memory file and the --memfile option. This file
+contains information about the memory chunks you want to use under Linux. The
+format for the file is:
+
+    chipramsize
+    [0xfastchunkaddr fastchunksize]
+    [0xfastchunkaddr fastchunksize]
+    ...
+
+For example, if you don't want Linux to use your 2nd meg of chipram, you would
+create a file that looks contains only:
+
+    1048576
+
+If you had 1M of chip ram, 2M of 16 bit FAST ram at address 0x200000 and 16M of
+32 bit FAST ram at address 0x80000000, and you didn't want Linux to use the
+slow 16 bit FAST ram, you'd create a file that looks like:
+
+    1048576
+    0x80000000 16777216
+
+The memory file can also be used to specify in which block of memory the kernel
+will be put. Normally Amiboot will put the kernel in the first block of Fast
+RAM it will find. If you use a memory file, it will put the kernel in the first
+block of fast RAM you specify.
+
+
+3. Amiga models
+---------------
+
+If Amiboot incorrectly detects the model of your Amiga, you can force it to
+detect any model you want using the --model option. `id' must be one of the
+numbers as defined in linux/include/asm-m68k/amigahw.h (AMI_*). Currently the
+following models are known:
+
+    Model	    ID
+    -----	    --
+    Amiga 500	     1
+    Amiga 500+	     2
+    Amiga 600	     3
+    Amiga 1000	     4
+    Amiga 1200	     5
+    Amiga 2000	     6
+    Amiga 2500	     7
+    Amiga 3000	     8
+    Amiga 3000T	     9
+    Amiga 3000+	    10
+    Amiga 4000	    11
+    Amiga 4000T	    12
+    CDTV	    13
+    CD32	    14
+    Draco	    15
+
+Note that Amiboot can't distinguish among Amiga models that are very similar to
+each other (e.g. A500/A1000/A2000/A2500 and A3000/A3000T). Of course this is
+harmless and there's no real need to use --model in that case.
+
+Please send me the output of amiboot used with the --debug option if your Amiga
+model is detected incorrectly.
+
+
+4. Abbreviations
+----------------
+
+All options also have a shorthand:
+
+    --help 	    -h
+    --kernel	    -k
+    --ramdisk	    -r
+    --debug	    -d
+    --baud	    -b
+    --memfile	    -m
+    --keep-video    -v
+    --model	    -t
+
+
+5. Miscellaneous
+----------------
+
+Some expansion boards keep on generating interrupts once they were initialized
+under AmigaOS. This can cause an interrupt deadlock while booting Linux. The
+following boards are recognized and disabled:
+
+    o Helfrich Rainbow 3 Graphics Board
+    o Helfrich Piccolo Graphics Board
+    o Helfrich SD64 Graphics Board
+    o Village Tronic Ariadne Ethernet Board
+    o Hydra Systems Amiganet Ethernet Board
+
+The following boards are known to cause problems but we don't have a disable
+routine for them yet:
+
+    o Commodore A2060 Arcnet Card
+    o Ameristar A560 Arcnet Card
+
+If you write a routine to disable an expansion board, please let me know.
+
+
+6. Troubleshooting
+------------------
+
+  - Amiboot says
+
+	This bootstrap is too old/new for this kernel
+
+    This means that you're using a version of Amiboot that's not compatible
+    with the kernel you want to boot.
+
+    Solution: use the correct Amiboot, or use another kernel.
+
+  - Amiboot says
+
+	Warning: too many AutoConfig devices. Ignoring device at 0x????????
+
+    or
+
+	Warning: too many memory blocks. Ignoring block of ???K at 0x????????
+
+    This means that you have more AutoConfig devices or memory chunks than
+    Amiboot supports. Note that you can still boot Linux/m68k, but that the
+    additional devices or memory blocks can't be used.
+
+    Solution: increase the ZORRO_NUM_AUTO (for AutoConfig devices) or
+    NUM_MEMINFO (for memory chunks) values in the kernel sources
+    (linux/include/asm-m68k/zorro.h and linux/include/asm-m68k/setup.h) and
+    recompile both Amiboot and the kernel.
+
+  - If all you get is a grey screen, or if Linux/m68k suddenly locks up during
+    booting, try the following things:
+
+      o Boot with the Startup-Sequence disabled, run SetPatch and try again.
+
+      o If that doesn't work, remove any expansion devices and retry.
+
+      o Look at the characters that are dumped to the serial port during
+	booting.
+
+
+7. Amiga-Lilo
+-------------
+
+Once you have a stable Linux/m68k installation, you may want to try Amiga-Lilo.
+Amiga-Lilo allows you to boot Linux/m68k without the overhead of booting
+AmigaOS first, and it provides you with a boot menu.
+
+
+8. Credits
+----------
+
+This readme was written by Geert Uytterhoeven. A lot of information was taken
+from the ANNOUNCE-* files by Hamish Macdonald.

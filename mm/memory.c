@@ -51,6 +51,7 @@
 #include <asm/string.h>
 
 unsigned long max_mapnr = 0;
+unsigned long num_physpages = 0;
 void * high_memory = NULL;
 
 /*

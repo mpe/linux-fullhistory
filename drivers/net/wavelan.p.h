@@ -203,8 +203,8 @@
 /*
  * I proudly present :
  *
- * Changes mades in first release :
- * ------------------------------
+ * Changes mades in first pre-release :
+ * ----------------------------------
  *	- Reorganisation of the code, function name change
  *	- Creation of private header (wavelan.p.h)
  *	- Reorganised debug messages
@@ -231,31 +231,37 @@
  *	- man page
  *	- Lot of others minor details & cleanups
  *
- * Changes made in second release :
- * ------------------------------
+ * Changes made in second pre-release :
+ * ----------------------------------
  *	- Cleanup init code (probe & module init)
  *	- Better multi device support (module)
  *	- name assignement (module)
  *
- * Changes made in third release :
- * -----------------------------
+ * Changes made in third pre-release :
+ * ---------------------------------
  *	- Be more conservative on timers
  *	- Preliminary support for multicast (I still lack some details...)
  *
- * Changes made in fourth release :
- * ----------------------------
+ * Changes made in fourth pre-release :
+ * ----------------------------------
  *	- multicast (revisited and finished)
  *	- Avoid reset in set_multicast_list (a really big hack)
  *	  if somebody could apply this code for other i82586 based driver...
  *	- Share on board memory 75% RU / 25% CU (instead of 50/50)
  *
- * Changes made in this release :
- * ----------------------------
+ * Changes made for release in 2.1.15 :
+ * ----------------------------------
  *	- Change the detection code for multi manufacturer code support
+ *
+ * Changes made for release in 2.1.17 :
+ * ----------------------------------
+ *	- Update to wireless extensions changes
+ *	- Silly bug in card initial configuration (psa_conf_status)
  *
  * Wishes & dreams :
  * ---------------
- *	- encryption stuff
+ *	- Encryption stuff
+ *	- Roaming
  */
 
 /***************************** INCLUDES *****************************/
@@ -285,7 +291,7 @@
 #include	<linux/malloc.h>
 #include	<linux/timer.h>
 
-/*#include <linux/wireless.h>*/		/* Wireless extensions */
+#include <linux/wireless.h>		/* Wireless extensions */
 
 /* Wavelan declarations */
 #include	"i82586.h"
@@ -364,6 +370,7 @@ typedef struct device		device;
 typedef struct enet_statistics	en_stats;
 typedef struct iw_statistics	iw_stats;
 typedef struct iw_quality	iw_qual;
+typedef struct iw_freq		iw_freq;
 typedef struct net_local	net_local;
 typedef struct timer_list	timer_list;
 

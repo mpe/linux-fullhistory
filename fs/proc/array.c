@@ -46,6 +46,7 @@
 #include <linux/mm.h>
 #include <linux/pagemap.h>
 #include <linux/swap.h>
+#include <linux/smp.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -67,7 +68,7 @@ static long read_core(struct inode * inode, struct file * file,
 	int count1;
 	char * pnt;
 	struct user dump;
-#ifdef __i386__
+#if defined (__i386__) || defined (__mc68000__)
 #	define FIRST_MAPPED	PAGE_SIZE	/* we don't have page 0 mapped on x86.. */
 #else
 #	define FIRST_MAPPED	0
@@ -142,7 +143,7 @@ static long read_profile(struct inode *inode, struct file *file,
 		count = (prof_len+1)*sizeof(unsigned int) - p;
 	read = 0;
 
-	while (p < sizeof(unsigned int) && count > 0) {
+	while (p < sizeof(unsigned long) && count > 0) {
 		put_user(*((char *)(&sample_step)+p),buf);
 		buf++; p++; count--; read++;
 	}
@@ -194,7 +195,9 @@ static int get_kstat(char * buffer)
 	int i, len;
 	unsigned sum = 0;
 	extern unsigned long total_forks;
+	unsigned long ticks;
 
+	ticks = jiffies * smp_num_cpus;
 	for (i = 0 ; i < NR_IRQS ; i++)
 		sum += kstat.interrupts[i];
 	len = sprintf(buffer,
@@ -210,7 +213,7 @@ static int get_kstat(char * buffer)
 		kstat.cpu_user,
 		kstat.cpu_nice,
 		kstat.cpu_system,
-		jiffies - (kstat.cpu_user + kstat.cpu_nice + kstat.cpu_system),
+		ticks - (kstat.cpu_user + kstat.cpu_nice + kstat.cpu_system),
 		kstat.dk_drive[0], kstat.dk_drive[1],
 		kstat.dk_drive[2], kstat.dk_drive[3],
 		kstat.dk_drive_rio[0], kstat.dk_drive_rio[1],
@@ -453,6 +456,30 @@ static unsigned long get_wchan(struct task_struct *p)
 	    }
 	    return pc;
 	}
+#elif defined(__mc68000__)
+	{
+	    unsigned long fp, pc;
+	    unsigned long stack_page;
+	    int count = 0;
+	    extern int sys_pause (void);
+
+	    stack_page = p->kernel_stack_page;
+	    if (!stack_page)
+		    return 0;
+	    fp = ((struct switch_stack *)p->tss.ksp)->a6;
+	    do {
+		    if (fp < stack_page || fp >= 4088+stack_page)
+			    return 0;
+		    pc = ((unsigned long *)fp)[1];
+		/* FIXME: This depends on the order of these functions. */
+		    if ((pc < (unsigned long) __down
+		         || pc >= (unsigned long) add_timer)
+		        && (pc < (unsigned long) schedule
+			    || pc >= (unsigned long) sys_pause))
+		      return pc;
+		    fp = *(unsigned long *) fp;
+	    } while (count++ < 16);
+	}
 #endif
 	return 0;
 }
@@ -468,11 +495,18 @@ static unsigned long get_wchan(struct task_struct *p)
 				 + (long)&((struct pt_regs *)0)->reg)
 # define KSTK_EIP(tsk)	(*(unsigned long *)(tsk->kernel_stack_page + PT_REG(pc)))
 # define KSTK_ESP(tsk)	((tsk) == current ? rdusp() : (tsk)->tss.usp)
+#elif defined(__mc68000__)
+#define	KSTK_EIP(tsk)	\
+    ({			\
+	unsigned long eip = 0;	 \
+ 	if ((tsk)->tss.esp0 > PAGE_SIZE && \
+	    MAP_NR((tsk)->tss.esp0) < max_mapnr) \
+	      eip = ((struct pt_regs *) (tsk)->tss.esp0)->pc;	 \
+        eip; })
+#define	KSTK_ESP(tsk)	((tsk) == current ? rdusp() : (tsk)->tss.usp)
 #elif defined(__sparc__)
-# define PT_REG(reg)            (PAGE_SIZE - sizeof(struct pt_regs)     \
-                                 + (long)&((struct pt_regs *)0)->reg)
-# define KSTK_EIP(tsk)  (*(unsigned long *)(tsk->kernel_stack_page + PT_REG(pc)))
-# define KSTK_ESP(tsk)  (*(unsigned long *)(tsk->kernel_stack_page + PT_REG(u_regs[UREG_FP])))
+# define KSTK_EIP(tsk)  ((tsk)->tss.kregs->pc)
+# define KSTK_ESP(tsk)  ((tsk)->tss.kregs->u_regs[UREG_FP])
 #endif
 
 /* Gcc optimizes away "strlen(x)" for constant x */
@@ -979,6 +1013,9 @@ extern int get_locks_status (char *);
 #ifdef __SMP_PROF__
 extern int get_smp_prof_list(char *);
 #endif
+#ifdef CONFIG_ZORRO
+extern int zorro_get_list(char *);
+#endif
 
 static long get_root_array(char * page, int type, char **start,
 	off_t offset, unsigned long length)
@@ -1053,6 +1090,10 @@ static long get_root_array(char * page, int type, char **start,
 #endif
 		case PROC_LOCKS:
 			return get_locks_status(page);
+#ifdef CONFIG_ZORRO
+		case PROC_ZORRO:
+			return zorro_get_list(page);
+#endif
 	}
 	return -EBADF;
 }

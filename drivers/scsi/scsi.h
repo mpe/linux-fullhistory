@@ -178,6 +178,7 @@ typedef struct scsi_device {
     unsigned disconnect:1;          /* can disconnect */
     unsigned soft_reset:1;          /* Uses soft reset option */
     unsigned sync:1;                /* Negotiate for sync transfers */
+    unsigned wide:1;                /* Negotiate for WIDE transfers */
     unsigned single_lun:1;          /* Indicates we should only allow I/O to
                                      * one of the luns for the device at a 
                                      * time. */

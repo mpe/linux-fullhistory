@@ -5,7 +5,6 @@
 # for more details.
 
 .S.o:
-#	$(AS) -o $*.o $<
 	$(CC) -D__ASSEMBLY__ -traditional -c -o $*.o $<
 
 OS_TARGET := ifpsp.o

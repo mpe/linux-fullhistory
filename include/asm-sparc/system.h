@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.43 1996/12/10 06:06:37 davem Exp $ */
+/* $Id: system.h,v 1.44 1996/12/18 06:56:08 tridge Exp $ */
 #ifndef __SPARC_SYSTEM_H
 #define __SPARC_SYSTEM_H
 
@@ -28,6 +28,7 @@ enum sparc_cpu {
   sun4e       = 0x04,
   sun4u       = 0x05, /* V8 ploos ploos */
   sun_unknown = 0x06,
+  ap1000      = 0x07, /* almost a sun4m */
 };
 
 extern enum sparc_cpu sparc_cpu_model;

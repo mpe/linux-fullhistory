@@ -9,14 +9,16 @@ There is also a companion management tool, called "xrightswitch".
 The management tool lets you watch the performance graphically,
 as well as set the SNMP agent IP and IPX addresses, IEEE Spanning
 Tree, and Aging time.  These can also be set from the command line
-when the driver is loaded.  The command line options are:
+when the driver is loaded.  The driver command line options are:
 
-	 debug=NNN		Debug printing level
-	 dma=0/1		Disable/Enable DMA on PCI card
-	 spantree=0/1		Disable/Enable IEEE spanning tree
-	 hashexpire=NNN		Change address aging time (default 300 seconds)
-	 ipaddr=A,B,C,D		Set SNMP agent IP address i.e. 199,86,8,221
-	 ipxnet=NNN		Set SNMP agent IPX network number
+	debug=NNN		Debug printing level
+	dma=0/1			Disable/Enable DMA on PCI card
+	spantree=0/1		Disable/Enable IEEE spanning tree
+	hashexpire=NNN		Change address aging time (default 300 seconds)
+	ipaddr=A,B,C,D		Set SNMP agent IP address i.e. 199,86,8,221
+	iptrap=A,B,C,D		Set SNMP agent IP trap address i.e. 199,86,8,221
+	ipxnet=NNN		Set SNMP agent IPX network number
+	nicmode=0/1		Disable/Enable multiple NIC mode
 
 There is also a tool for setting up input and output packet filters
 on each port, called "dgrsfilt".
@@ -25,6 +27,11 @@ Both the management tool and the filtering tool are available
 separately from the following FTP site:
 
 	ftp://ftp.dgii.com/drivers/rightswitch/linux/
+
+When nicmode=1, the board and driver operate as 4 or 6 individual
+NIC ports (eth0...eth5) instead of as a switch.  All switching
+functions are disabled.  In the future, the board firmware may include
+a routing cache when in this mode.
 
 Copyright 1995-1996 Digi International Inc.
 

@@ -61,7 +61,8 @@ static long read_mem(struct inode * inode, struct file * file,
 	if (count > end_mem - p)
 		count = end_mem - p;
 	read = 0;
-#if defined(__sparc__) /* we don't have page 0 mapped on sparc.. */
+#if defined(__sparc__) || defined(__mc68000__)
+	/* we don't have page 0 mapped on sparc and m68k.. */
 	while (p < PAGE_SIZE && count > 0) {
 		put_user(0,buf);
 		buf++;
@@ -91,7 +92,8 @@ static long write_mem(struct inode * inode, struct file * file,
 	if (count > end_mem - p)
 		count = end_mem - p;
 	written = 0;
-#if defined(__sparc__) /* we don't have page 0 mapped on sparc.. */
+#if defined(__sparc__) || defined(__mc68000__)
+	/* we don't have page 0 mapped on sparc and m68k.. */
 	while (p < PAGE_SIZE && count > 0) {
 		/* Hmm. Do something? */
 		buf++;
@@ -453,6 +455,7 @@ int chr_dev_init(void)
 #if defined (CONFIG_BUSMOUSE) || defined(CONFIG_UMISC) || \
     defined (CONFIG_PSMOUSE) || defined (CONFIG_MS_BUSMOUSE) || \
     defined (CONFIG_ATIXL_BUSMOUSE) || defined(CONFIG_SOFT_WATCHDOG) || \
+    defined (CONFIG_AMIGAMOUSE) || defined (CONFIG_ATARIMOUSE) || \
     defined (CONFIG_PCWATCHDOG) || \
     defined (CONFIG_APM) || defined (CONFIG_RTC) || defined (CONFIG_SUN_MOUSE)
 	misc_init();

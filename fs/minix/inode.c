@@ -5,6 +5,8 @@
  *
  *  Copyright (C) 1996  Gertjan van Wingerde    (gertjan@cs.vu.nl)
  *	Minix V2 fs support.
+ *
+ *  Modified for 680x0 by Andreas Schwab
  */
 
 #include <linux/module.h>
@@ -263,8 +265,8 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
-	set_bit(0,s->u.minix_sb.s_imap[0]->b_data);
-	set_bit(0,s->u.minix_sb.s_zmap[0]->b_data);
+	minix_set_bit(0,s->u.minix_sb.s_imap[0]->b_data);
+	minix_set_bit(0,s->u.minix_sb.s_zmap[0]->b_data);
 	unlock_super(s);
 	/* set up enough so that it can read an inode */
 	s->s_dev = dev;

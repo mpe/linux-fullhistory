@@ -970,7 +970,7 @@ static void respond_string(const char * p, struct tty_struct * tty)
 	tty_schedule_flip(tty);
 }
 
-static void cursor_report(int currcons, struct tty_struct * tty)
+static inline void cursor_report(int currcons, struct tty_struct * tty)
 {
 	char buf[40];
 
@@ -1242,7 +1242,7 @@ static void setterm_command(int currcons)
 	}
 }
 
-static void insert_char(int currcons)
+static inline void insert_char(int currcons)
 {
 	int i;
 	unsigned short *p = pos;

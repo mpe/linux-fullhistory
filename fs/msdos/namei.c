@@ -5,6 +5,8 @@
  *  Hidden files 1995 by Albert Cahalan <albert@ccs.neu.edu> <adc@coe.neu.edu>
  */
 
+#include <linux/config.h>
+
 #define __NO_VERSION__
 #include <linux/module.h>
 
@@ -25,17 +27,23 @@
 /* MS-DOS "device special files" */
 
 static const char *reserved_names[] = {
+#ifndef CONFIG_ATARI /* GEMDOS is less stupid */
     "CON     ","PRN     ","NUL     ","AUX     ",
     "LPT1    ","LPT2    ","LPT3    ","LPT4    ",
     "COM1    ","COM2    ","COM3    ","COM4    ",
+#endif
     NULL };
 
 
 /* Characters that are undesirable in an MS-DOS file name */
   
 static char bad_chars[] = "*?<>|\"";
+#ifdef CONFIG_ATARI
+/* GEMDOS is less restrictive */
+static char bad_if_strict[] = " ";
+#else
 static char bad_if_strict[] = "+=,; ";
-
+#endif
 
 void msdos_put_super(struct super_block *sb)
 {
@@ -96,7 +104,11 @@ static int msdos_format_name(char conv,const char *name,int len,
 		/* Get rid of dot - test for it elsewhere */
 		name++; len--;
 	}
+#ifndef CONFIG_ATARI
 	space = 1; /* disallow names that _really_ start with a dot */
+#else
+	space = 0; /* GEMDOS does not care */
+#endif
 	c = 0;
 	for (walk = res; len && walk-res < 8; walk++) {
 	    	c = *name++;
@@ -129,8 +141,13 @@ static int msdos_format_name(char conv,const char *name,int len,
 			if (conv != 'r' && strchr(bad_chars,c)) return -EINVAL;
 			if (conv == 's' && strchr(bad_if_strict,c))
 				return -EINVAL;
-			if (c < ' ' || c == ':' || c == '\\' || c == '.')
+			if (c < ' ' || c == ':' || c == '\\')
 				return -EINVAL;
+			if (c == '.') {
+				if (conv == 's')
+					return -EINVAL;
+				break;
+			}
 			if (c >= 'A' && c <= 'Z' && conv == 's') return -EINVAL;
 			space = c == ' ';
 			*walk++ = c >= 'a' && c <= 'z' ? c-32 : c;

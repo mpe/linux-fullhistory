@@ -213,6 +213,9 @@ extern void (*pgd_set)(pgd_t *, pmd_t *);
 
 extern pte_t (*pte_modify)(pte_t, pgprot_t);
 
+/* to find an entry in a kernel page-table-directory */
+#define pgd_offset_k(address) pgd_offset(&init_mm, address)
+
 /* to find an entry in a page-table-directory */
 extern pgd_t * (*pgd_offset)(struct mm_struct *, unsigned long);
 

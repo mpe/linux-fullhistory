@@ -1907,7 +1907,7 @@ void buffer_init(void)
 {
 	int i;
 	int isize = BUFSIZE_INDEX(BLOCK_SIZE);
-	long memsize = max_mapnr << PAGE_SHIFT;
+	long memsize = num_physpages << PAGE_SHIFT;
 
 	if (memsize >= 64*1024*1024)
 		nr_hash = 65521;

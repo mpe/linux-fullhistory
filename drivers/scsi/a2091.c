@@ -1,11 +1,12 @@
 #include <linux/types.h>
 #include <linux/mm.h>
 #include <linux/blk.h>
+#include <linux/sched.h>
 #include <linux/version.h>
 
+#include <asm/setup.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
-#include <asm/bootinfo.h>
 #include <asm/amigaints.h>
 #include <asm/amigahw.h>
 #include <asm/zorro.h>
@@ -29,7 +30,7 @@ struct proc_dir_entry proc_scsi_a2091 = {
 static struct Scsi_Host *first_instance = NULL;
 static Scsi_Host_Template *a2091_template;
 
-static void a2091_intr (int irq, struct pt_regs *fp, void *dummy)
+static void a2091_intr (int irq, void *dummy, struct pt_regs *fp)
 {
     unsigned int status;
     struct Scsi_Host *instance;
@@ -187,44 +188,68 @@ static void dma_stop (struct Scsi_Host *instance, Scsi_Cmnd *SCpnt,
     }
 }
 
+static int num_a2091 = 0;
+
 int a2091_detect(Scsi_Host_Template *tpnt)
 {
     static unsigned char called = 0;
     struct Scsi_Host *instance;
-    int i, manuf, product, num_a2091 = 0;
     caddr_t address;
+    int key;
+    struct ConfigDev *cd;
 
     if (!MACH_IS_AMIGA || called)
 	return 0;
     called = 1;
 
     tpnt->proc_dir = &proc_scsi_a2091;
+    tpnt->proc_info = &wd33c93_proc_info;
 
-    for (i = 0; i < boot_info.bi_amiga.num_autocon; i++)
-    {
-	manuf = boot_info.bi_amiga.autocon[i].cd_Rom.er_Manufacturer;
-	product = boot_info.bi_amiga.autocon[i].cd_Rom.er_Product;
-	if (manuf == MANUF_COMMODORE && (product == PROD_A2091 ||
-					 product == PROD_A590)) {
-	    address = boot_info.bi_amiga.autocon[i].cd_BoardAddr;
-	    instance = scsi_register (tpnt,
-				      sizeof (struct WD33C93_hostdata));
-	    instance->base = (unsigned char *)ZTWO_VADDR(address);
-	    DMA(instance)->DAWR = DAWR_A2091;
-	    wd33c93_init(instance, (wd33c93_regs *)&(DMA(instance)->SASR),
-			 dma_setup, dma_stop, WD33C93_FS_8_10);
-	    if (num_a2091++ == 0) {
-		first_instance = instance;
-		a2091_template = instance->hostt;
-		add_isr(IRQ_AMIGA_PORTS, a2091_intr, 0, NULL, "A2091 SCSI");
-	    }
-	    DMA(instance)->CNTR = CNTR_PDMD | CNTR_INTEN;
-
-#if 0 /* The Zorro stuff is not totally integrated yet ! */
-	    boot_info.bi_amiga.autocon_configured |= 1<<i;
-#endif
-	  }
+    while ((key = zorro_find(MANUF_COMMODORE, PROD_A2091, 0, 0)) ||
+	   (key = zorro_find(MANUF_COMMODORE, PROD_A590, 0, 0))) {
+	cd = zorro_get_board(key);
+	address = cd->cd_BoardAddr;
+	instance = scsi_register (tpnt, sizeof (struct WD33C93_hostdata));
+	instance->base = (unsigned char *)ZTWO_VADDR(address);
+	instance->irq = IRQ_AMIGA_PORTS & ~IRQ_MACHSPEC;
+	instance->unique_id = key;
+	DMA(instance)->DAWR = DAWR_A2091;
+	wd33c93_init(instance, (wd33c93_regs *)&(DMA(instance)->SASR),
+		     dma_setup, dma_stop, WD33C93_FS_8_10);
+	if (num_a2091++ == 0) {
+	    first_instance = instance;
+	    a2091_template = instance->hostt;
+	    request_irq(IRQ_AMIGA_PORTS, a2091_intr, 0, "A2091 SCSI", a2091_intr);
+	}
+	DMA(instance)->CNTR = CNTR_PDMD | CNTR_INTEN;
+	zorro_config_board(key, 0);
     }
 
     return num_a2091;
 }
+
+#ifdef MODULE
+
+#define HOSTS_C
+
+#include "a2091.h"
+
+Scsi_Host_Template driver_template = A2091_SCSI;
+
+#include "scsi_module.c"
+
+#endif
+
+int a2091_release(struct Scsi_Host *instance)
+{
+#ifdef MODULE
+DMA(instance)->CNTR = 0;
+zorro_unconfig_board(instance->unique_id, 0);
+if (--num_a2091 == 0)
+  free_irq(IRQ_AMIGA_PORTS, a2091_intr);
+wd33c93_release();
+#endif
+return 1;
+}
+
+

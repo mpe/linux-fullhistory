@@ -1,6 +1,7 @@
 #ifndef _LINUX_PROC_FS_H
 #define _LINUX_PROC_FS_H
 
+#include <linux/config.h>
 #include <linux/fs.h>
 #include <linux/malloc.h>
 
@@ -44,7 +45,8 @@ enum root_directory_inos {
 	PROC_MTAB,
 	PROC_MD,
 	PROC_RTC,
-	PROC_LOCKS
+	PROC_LOCKS,
+	PROC_ZORRO
 };
 
 enum pid_directory_inos {
@@ -59,7 +61,10 @@ enum pid_directory_inos {
 	PROC_PID_CMDLINE,
 	PROC_PID_STAT,
 	PROC_PID_STATM,
-	PROC_PID_MAPS
+	PROC_PID_MAPS,
+#if CONFIG_AP1000
+	PROC_PID_RINGBUF,
+#endif
 };
 
 enum pid_subdirectory_inos {
@@ -178,6 +183,11 @@ enum mca_directory_inos {
 
 #define PROC_DYNAMIC_FIRST 4096
 #define PROC_NDYNAMIC      4096
+#define PROC_OPENPROM_FIRST (PROC_DYNAMIC_FIRST+PROC_NDYNAMIC)
+#define PROC_OPENPROM	   PROC_OPENPROM_FIRST
+#define PROC_NOPENPROM	   4096
+#define PROC_OPENPROMD_FIRST (PROC_OPENPROM_FIRST+PROC_NOPENPROM)
+#define PROC_NOPENPROMD	   4096
 
 #define PROC_SUPER_MAGIC 0x9fa0
 
@@ -219,6 +229,7 @@ extern struct proc_dir_entry proc_root;
 extern struct proc_dir_entry proc_net;
 extern struct proc_dir_entry proc_scsi;
 extern struct proc_dir_entry proc_sys;
+extern struct proc_dir_entry proc_openprom;
 extern struct proc_dir_entry proc_pid;
 extern struct proc_dir_entry proc_pid_fd;
 extern struct proc_dir_entry proc_mca;
@@ -294,10 +305,29 @@ extern int proc_match(int, const char *, struct proc_dir_entry *);
 extern int proc_readdir(struct inode *, struct file *, void *, filldir_t);
 extern int proc_lookup(struct inode *, const char *, int, struct inode **);
 
+struct openpromfs_dev {
+ 	struct openpromfs_dev *next;
+ 	u32 node;
+ 	ino_t inode;
+ 	kdev_t rdev;
+ 	mode_t mode;
+ 	char name[32];
+};
+extern struct inode_operations *
+proc_openprom_register(int (*readdir)(struct inode *, struct file *, void *, filldir_t),
+		       int (*lookup)(struct inode *, const char *, int, struct inode **),
+		       void (*use)(struct inode *, int),
+		       struct openpromfs_dev ***);
+extern void proc_openprom_deregister(void);
+extern void (*proc_openprom_use)(struct inode *,int);
+extern int proc_openprom_regdev(struct openpromfs_dev *);
+extern int proc_openprom_unregdev(struct openpromfs_dev *);
+  
 extern struct inode_operations proc_dir_inode_operations;
 extern struct inode_operations proc_net_inode_operations;
 extern struct inode_operations proc_netdir_inode_operations;
 extern struct inode_operations proc_scsi_inode_operations;
+extern struct inode_operations proc_openprom_inode_operations;
 extern struct inode_operations proc_mem_inode_operations;
 extern struct inode_operations proc_sys_inode_operations;
 extern struct inode_operations proc_array_inode_operations;
@@ -307,5 +337,7 @@ extern struct inode_operations proc_profile_inode_operations;
 extern struct inode_operations proc_kmsg_inode_operations;
 extern struct inode_operations proc_link_inode_operations;
 extern struct inode_operations proc_fd_inode_operations;
-
+#if CONFIG_AP1000
+extern struct inode_operations proc_ringbuf_inode_operations;
+#endif
 #endif

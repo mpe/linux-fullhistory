@@ -47,8 +47,8 @@
  *    inside the execution of NCR5380_intr(), leading to recursive
  *    calls.
  *
- *  - I've added a function merge_consecutive_buffers() that tries to
- *    merge scatter-gather buffers that are located at consecutive
+ *  - I've added a function merge_contiguous_buffers() that tries to
+ *    merge scatter-gather buffers that are located at contiguous
  *    physical addresses and can be processed with the same DMA setup.
  *    Since most scatter-gather operations work on a page (4K) of
  *    4 buffers (1K), in more than 90% of all cases three interrupts and
@@ -432,7 +432,6 @@ static void cmd_free_tag( Scsi_Cmnd *cmd )
 }
 
 
-#if 1
 static void free_all_tags( void )
 {
     int target, lun;
@@ -449,58 +448,48 @@ static void free_all_tags( void )
 	}
     }
 }
-#endif
 
 #endif /* SUPPORT_TAGS */
 
 
 /*
- * Function: void merge_consecutive_buffers( Scsi_Cmnd *cmd )
+ * Function: void merge_contiguous_buffers( Scsi_Cmnd *cmd )
  *
  * Purpose: Try to merge several scatter-gather requests into one DMA
  *    transfer. This is possible if the scatter buffers lie on
- *    physical consecutive addresses.
+ *    physical contiguous addresses.
  *
  * Parameters: Scsi_Cmnd *cmd
  *    The command to work on. The first scatter buffer's data are
  *    assumed to be already transfered into ptr/this_residual.
  */
 
-/* A special issue is when the buffer is exactly at the end of the
- * last physical memory chunk: VTOP would have to calculate the
- * physical address just 1 byte behind the end of physical memory. But
- * it will panic if given this address :-( So we need to avoid calling
- * VTOP on addresses that don't exist. This is done by keeping
- * 'endadr' to be the real end address of the buffer, not one byte
- * more (which would be easier).
- */
-
-static void merge_consecutive_buffers( Scsi_Cmnd *cmd )
+static void merge_contiguous_buffers( Scsi_Cmnd *cmd )
 {
-    unsigned long endadr;
+    unsigned long endaddr;
 #if (NDEBUG & NDEBUG_MERGING)
     unsigned long oldlen = cmd->SCp.this_residual;
     int		  cnt = 1;
 #endif
 
-    for( endadr = VTOP(cmd->SCp.ptr + cmd->SCp.this_residual - 1);
+    for (endaddr = VTOP(cmd->SCp.ptr + cmd->SCp.this_residual - 1) + 1;
 	 cmd->SCp.buffers_residual &&
-	 VTOP( (cmd->SCp.buffer+1)->address ) == endadr + 1; ) {
+	 VTOP(cmd->SCp.buffer[1].address) == endaddr; ) {
 	
-	MER_PRINTK( "%08lx == %08lx -> merging\n",
-		    VTOP( (cmd->SCp.buffer+1)->address ), endadr );
+	MER_PRINTK("VTOP(%p) == %08lx -> merging\n",
+		   cmd->SCp.buffer[1].address, endaddr);
 #if (NDEBUG & NDEBUG_MERGING)
 	++cnt;
 #endif
 	++cmd->SCp.buffer;
 	--cmd->SCp.buffers_residual;
 	cmd->SCp.this_residual += cmd->SCp.buffer->length;
-	endadr += cmd->SCp.buffer->length;
+	endaddr += cmd->SCp.buffer->length;
     }
 #if (NDEBUG & NDEBUG_MERGING)
     if (oldlen != cmd->SCp.this_residual)
-	MER_PRINTK( "merged %d buffers from %08lx, new length %08lx\n",
-		    cnt, (long)(cmd->SCp.ptr), cmd->SCp.this_residual );
+	MER_PRINTK("merged %d buffers from %p, new length %08x\n",
+		   cnt, cmd->SCp.ptr, cmd->SCp.this_residual);
 #endif
 }
 
@@ -526,9 +515,9 @@ static __inline__ void initialize_SCp(Scsi_Cmnd *cmd)
 	cmd->SCp.ptr = (char *) cmd->SCp.buffer->address;
 	cmd->SCp.this_residual = cmd->SCp.buffer->length;
 	/* ++roman: Try to merge some scatter-buffers if they are at
-	 * consecutive physical addresses.
+	 * contiguous physical addresses.
 	 */
-	merge_consecutive_buffers( cmd );
+	merge_contiguous_buffers( cmd );
     } else {
 	cmd->SCp.buffer = NULL;
 	cmd->SCp.buffers_residual = 0;
@@ -668,7 +657,7 @@ static __inline__ void queue_main(void)
 	   queue it on the 'immediate' task queue, to be processed
 	   immediately after the current interrupt processing has
 	   finished. */
-	queue_task_irq(&NCR5380_tqueue, &tq_immediate);
+	queue_task(&NCR5380_tqueue, &tq_immediate);
 	mark_bh(IMMEDIATE_BH);
     }
     /* else: nothing to do: the running NCR5380_main() will pick up
@@ -725,16 +714,22 @@ static void NCR5380_print_options (struct Scsi_Host *instance)
 
 static void NCR5380_print_status (struct Scsi_Host *instance)
 {
-    char pr_bfr[256];
+    char *pr_bfr;
     char *start;
     int len;
 
     NCR_PRINT(NDEBUG_ANY);
     NCR_PRINT_PHASE(NDEBUG_ANY);
 
-    len = NCR5380_proc_info(pr_bfr, &start, 0, sizeof(pr_bfr), HOSTNO, 0);
+    pr_bfr = (char *) __get_free_page(GFP_ATOMIC);
+    if (!pr_bfr) {
+	printk("NCR5380_print_status: no memory for print buffer\n");
+	return;
+    }
+    len = NCR5380_proc_info(pr_bfr, &start, 0, PAGE_SIZE, HOSTNO, 0);
     pr_bfr[len] = 0;
     printk("\n%s\n", pr_bfr);
+    free_page((unsigned long) pr_bfr);
 }
 
 
@@ -753,7 +748,9 @@ static void NCR5380_print_status (struct Scsi_Host *instance)
 */
 
 #undef SPRINTF
-#define SPRINTF(args...) do { if(pos < buffer + length) pos += sprintf(pos, ## args); } while(0)
+#define SPRINTF(fmt,args...) \
+  do { if (pos + strlen(fmt) + 20 /* slop */ < buffer + length) \
+	 pos += sprintf(pos, fmt , ## args); } while(0)
 static
 char *lprint_Scsi_Cmnd (Scsi_Cmnd *cmd, char *pos, char *buffer, int length);
 static
@@ -885,7 +882,7 @@ static void NCR5380_init (struct Scsi_Host *instance, int flags)
 	
 
 #ifndef AUTOSENSE
-    if ((instance->cmd_per_lun > 1) || instance->can_queue > 1)) 
+    if ((instance->cmd_per_lun > 1) || (instance->can_queue > 1))
 	 printk("scsi%d: WARNING : support for multiple outstanding commands enabled\n"
 	        "        without AUTOSENSE option, contingent allegiance conditions may\n"
 	        "        be incorrectly cleared.\n", HOSTNO);
@@ -925,7 +922,7 @@ int NCR5380_queue_command (Scsi_Cmnd *cmd, void (*done)(Scsi_Cmnd *))
     Scsi_Cmnd *tmp;
     int oldto;
     unsigned long flags;
-    extern int scsi_update_timeout(Scsi_Cmnd * SCset, int timeout);
+    extern int update_timeout(Scsi_Cmnd * SCset, int timeout);
 
 #if (NDEBUG & NDEBUG_NO_WRITE)
     switch (cmd->cmnd[0]) {
@@ -1002,9 +999,9 @@ int NCR5380_queue_command (Scsi_Cmnd *cmd, void (*done)(Scsi_Cmnd *))
      * alter queues and touch the lock.
      */
     if (!IS_A_TT()) {
-	oldto = scsi_update_timeout(cmd, 0);
+	oldto = update_timeout(cmd, 0);
 	falcon_get_lock();
-	scsi_update_timeout(cmd, oldto);
+	update_timeout(cmd, oldto);
     }
     if (!(hostdata->issue_queue) || (cmd->cmnd[0] == REQUEST_SENSE)) {
 	LIST(cmd, hostdata->issue_queue);
@@ -1029,7 +1026,7 @@ int NCR5380_queue_command (Scsi_Cmnd *cmd, void (*done)(Scsi_Cmnd *))
      * If we're not in an interrupt, we can call NCR5380_main()
      * unconditionally, because it cannot be already running.
      */
-    if (intr_count > 0)
+    if (intr_count > 0 || ((flags >> 8) & 7) >= 6)
 	queue_main();
     else
 	NCR5380_main();
@@ -1077,6 +1074,8 @@ static void NCR5380_main (void)
        'main_running' is set here, and queues/executes main via the
        task queue, it doesn't do any harm, just this instance of main
        won't find any work left to do. */
+    if (main_running)
+    	return;
     main_running = 1;
 
     save_flags(flags);
@@ -1135,10 +1134,9 @@ static void NCR5380_main (void)
 		     * On failure, we must add the command back to the
 		     *   issue queue so we can keep trying.	
 		     */
-		    DPRINTK(NDEBUG_MAIN | NDEBUG_QUEUES,
-			    "scsi%d: main(): command for target %d lun %d "
-			    "removed from issue_queue\n",
-			    HOSTNO, tmp->target, tmp->lun);
+		    MAIN_PRINTK("scsi%d: main(): command for target %d "
+				"lun %d removed from issue_queue\n",
+				HOSTNO, tmp->target, tmp->lun);
 		    /* 
 		     * REQUEST SENSE commands are issued without tagged
 		     * queueing, even on SCSI-II devices because the 
@@ -1169,9 +1167,8 @@ static void NCR5380_main (void)
 #endif
 			falcon_dont_release--;
 			restore_flags(flags);
-			DPRINTK(NDEBUG_MAIN | NDEBUG_QUEUES,
-				"scsi%d: main(): select() failed, "
-				"returned to issue_queue\n", HOSTNO);
+			MAIN_PRINTK("scsi%d: main(): select() failed, "
+				    "returned to issue_queue\n", HOSTNO);
 			if (hostdata->connected)
 			    break;
 		    }
@@ -2068,9 +2065,9 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance)
 		    cmd->SCp.this_residual = cmd->SCp.buffer->length;
 		    cmd->SCp.ptr = cmd->SCp.buffer->address;
 		    /* ++roman: Try to merge some scatter-buffers if
-		     * they are at consecutive physical addresses.
+		     * they are at contiguous physical addresses.
 		     */
-		    merge_consecutive_buffers( cmd );
+		    merge_contiguous_buffers( cmd );
 		    INF_PRINTK("scsi%d: %d bytes and %d buffers left\n",
 			       HOSTNO, cmd->SCp.this_residual,
 			       cmd->SCp.buffers_residual);
@@ -2201,13 +2198,15 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance)
 			      "completed\n", HOSTNO, cmd->target, cmd->lun);
 #ifdef SUPPORT_TAGS
 		    cmd_free_tag( cmd );
-		    if (cmd->SCp.Status == QUEUE_FULL) {
+		    if (status_byte(cmd->SCp.Status) == QUEUE_FULL) {
 			/* Turn a QUEUE FULL status into BUSY, I think the
 			 * mid level cannot handle QUEUE FULL :-( (The
 			 * command is retried after BUSY). Also update our
 			 * queue size to the number of currently issued
 			 * commands now.
 			 */
+			/* ++Andreas: the mid level code knows about
+			   QUEUE_FULL now. */
 			TAG_ALLOC *ta = &TagAlloc[cmd->target][cmd->lun];
 			TAG_PRINTK("scsi%d: target %d lun %d returned "
 				   "QUEUE_FULL after %d commands\n",
@@ -2215,7 +2214,6 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance)
 				   ta->nr_allocated);
 			if (ta->queue_size > ta->nr_allocated)
 			    ta->nr_allocated = ta->queue_size;
-			cmd->SCp.Status = BUSY;
 		    }
 #else
 		    hostdata->busy[cmd->target] &= ~(1 << cmd->lun);
@@ -2241,12 +2239,12 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance)
 
 		    if (cmd->cmnd[0] != REQUEST_SENSE) 
 			cmd->result = cmd->SCp.Status | (cmd->SCp.Message << 8); 
-		    else if (cmd->SCp.Status != GOOD)
+		    else if (status_byte(cmd->SCp.Status) != GOOD)
 			cmd->result = (cmd->result & 0x00ffff) | (DID_ERROR << 16);
 		    
 #ifdef AUTOSENSE
 		    if ((cmd->cmnd[0] != REQUEST_SENSE) && 
-			(cmd->SCp.Status == CHECK_CONDITION)) {
+			(status_byte(cmd->SCp.Status) == CHECK_CONDITION)) {
 			ASEN_PRINTK("scsi%d: performing request sense\n",
 				    HOSTNO);
 			cmd->cmnd[0] = REQUEST_SENSE;
@@ -2255,11 +2253,15 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance)
 			cmd->cmnd[3] = 0;
 			cmd->cmnd[4] = sizeof(cmd->sense_buffer);
 			cmd->cmnd[5] = 0;
+			cmd->cmd_len = COMMAND_SIZE(cmd->cmnd[0]);
 
+			cmd->use_sg = 0;
+			/* this is initialized from initialize_SCp 
 			cmd->SCp.buffer = NULL;
 			cmd->SCp.buffers_residual = 0;
-			cmd->SCp.ptr = (char *) cmd->sense_buffer;
-			cmd->SCp.this_residual = sizeof(cmd->sense_buffer);
+			*/
+			cmd->request_buffer = (char *) cmd->sense_buffer;
+			cmd->request_bufflen = sizeof(cmd->sense_buffer);
 
 			save_flags(flags);
 			cli();
@@ -2617,7 +2619,7 @@ static void NCR5380_reselect (struct Scsi_Host *instance)
 #ifdef SUPPORT_TAGS
 		"tag %d "
 #endif
-		"not in disconnect_queue.\n",
+		"not in disconnected_queue.\n",
 		HOSTNO, target_mask, lun
 #ifdef SUPPORT_TAGS
 		, tag
@@ -2692,10 +2694,8 @@ int NCR5380_abort (Scsi_Cmnd *cmd)
  */
 
     if (hostdata->connected == cmd) {
-	int rv;
 
 	ABRT_PRINTK("scsi%d: aborting connected command\n", HOSTNO);
-	hostdata->aborted = 1;
 /*
  * We should perform BSY checking, and make sure we haven't slipped
  * into BUS FREE.
@@ -2709,31 +2709,29 @@ int NCR5380_abort (Scsi_Cmnd *cmd)
  */
 
 /* 
- * MSch: use the do_abort function instead ... unless there is need to wait
- * a longer period for the target to go into MSGOUT.
- */
-	rv = do_abort(instance);
-
-	save_flags(flags);
-	cli();
-
-	cmd->result = DID_ABORT << 16; 
-#ifdef SUPPORT_TAGS
-	cmd_free_tag( cmd );
-#else
-	hostdata->busy[cmd->target] &= ~(1 << cmd->lun);
-#endif
-	restore_flags(flags);
-	cmd->done(cmd);
-	falcon_release_lock_if_possible( hostdata );
-
-/* 
  * Return control to the executing NCR drive so we can clear the
  * aborted flag and get back into our main loop.
  */ 
- 
-	return rv ? SCSI_ABORT_SUCCESS : SCSI_ABORT_ERROR;
-    }
+
+	if (do_abort(instance) == 0) {
+	  hostdata->aborted = 1;
+	  hostdata->connected = NULL;
+	  cmd->result = DID_ABORT << 16;
+#ifdef SUPPORT_TAGS
+	  cmd_free_tag( cmd );
+#else
+	  hostdata->busy[cmd->target] &= ~(1 << cmd->lun);
+#endif
+	  restore_flags(flags);
+	  cmd->scsi_done(cmd);
+	  falcon_release_lock_if_possible( hostdata );
+	  return SCSI_ABORT_SUCCESS;
+	} else {
+/*	  restore_flags(flags); */
+	  printk("scsi%d: abort of connected command failed!\n", HOSTNO);
+	  return SCSI_ABORT_ERROR;
+	} 
+   }
 #endif
 
 /* 
@@ -2753,7 +2751,7 @@ int NCR5380_abort (Scsi_Cmnd *cmd)
 			HOSTNO);
 	    /* Tagged queuing note: no tag to free here, hasn't been assigned
 	     * yet... */
-	    tmp->done(tmp);
+	    tmp->scsi_done(tmp);
 	    falcon_release_lock_if_possible( hostdata );
 	    return SCSI_ABORT_SUCCESS;
 	}
@@ -2833,7 +2831,7 @@ int NCR5380_abort (Scsi_Cmnd *cmd)
 		    hostdata->busy[cmd->target] &= ~(1 << cmd->lun);
 #endif
 		    restore_flags(flags);
-		    tmp->done(tmp);
+		    tmp->scsi_done(tmp);
 		    falcon_release_lock_if_possible( hostdata );
 		    return SCSI_ABORT_SUCCESS;
 		}
@@ -2877,7 +2875,9 @@ static int NCR5380_reset( Scsi_Cmnd *cmd, unsigned int reset_flags)
     SETUP_HOSTDATA(cmd->host);
     int           i;
     unsigned long flags;
+#if 1
     Scsi_Cmnd *connected, *disconnected_queue;
+#endif
 
     if (!IS_A_TT() && !falcon_got_lock)
 	printk(KERN_ERR "scsi%d: !!BINGO!! Falcon has no lock in NCR5380_reset\n",
@@ -2900,7 +2900,10 @@ static int NCR5380_reset( Scsi_Cmnd *cmd, unsigned int reset_flags)
      * through anymore ... */
     (void)NCR5380_read( RESET_PARITY_INTERRUPT_REG );
 
-#if 1 /* XXX Should now be done by midlevel code, bug isn't XXX */
+#if 1 /* XXX Should now be done by midlevel code, but it's broken XXX */
+      /* XXX see below                                            XXX */
+
+    /* MSch: old-style reset: actually abort all command processing here */
 
     /* After the reset, there are no more connected or disconnected commands
      * and no busy units; to avoid problems with re-inserting the commands
@@ -2922,6 +2925,11 @@ static int NCR5380_reset( Scsi_Cmnd *cmd, unsigned int reset_flags)
     hostdata->dma_len = 0;
 #endif
     restore_flags(flags);
+
+    /* In order to tell the mid-level code which commands were aborted, 
+     * set the command status to DID_RESET and call scsi_done() !!!
+     * This ultimately aborts processing of these commands in the mid-level.
+     */
 
     if ((cmd = connected)) {
 	ABRT_PRINTK("scsi%d: reset aborted a connected command\n", H_NO(cmd));
@@ -2945,9 +2953,61 @@ static int NCR5380_reset( Scsi_Cmnd *cmd, unsigned int reset_flags)
  */
 /*    falcon_release_lock_if_possible( hostdata );*/
 
-#endif /* 1 */
+    /* since all commands have been explicitly terminated, we need to tell
+     * the midlevel code that the reset was SUCCESSFUL, and there is no 
+     * need to 'wake up' the commands by a request_sense
+     */
+    return SCSI_RESET_SUCCESS | SCSI_RESET_BUS_RESET;
+#else /* 1 */
 
-    return SCSI_RESET_WAKEUP;
+    /* MSch: new-style reset handling: let the mid-level do what it can */
+
+    /* ++guenther: MID-LEVEL IS STILL BROKEN.
+     * Mid-level is supposed to requeue all commands that were active on the
+     * various low-level queues. In fact it does this, but that's not enough
+     * because all these commands are subject to timeout. And if a timeout
+     * happens for any removed command, *_abort() is called but all queues
+     * are now empty. Abort then gives up the falcon lock, which is fatal,
+     * since the mid-level will queue more commands and must have the lock
+     * (it's all happening inside timer interrupt handler!!).
+     * Even worse, abort will return NOT_RUNNING for all those commands not
+     * on any queue, so they won't be retried ...
+     *
+     * Conclusion: either scsi.c disables timeout for all resetted commands
+     * immediately, or we loose!  As of linux-2.0.20 it doesn't.
+     */
+
+    /* After the reset, there are no more connected or disconnected commands
+     * and no busy units; so clear the low-level status here to avoid 
+     * conflicts when the mid-level code tries to wake up the affected 
+     * commands!
+     */
+
+    if (hostdata->issue_queue)
+	ABRT_PRINTK("scsi%d: reset aborted issued command(s)\n", H_NO(cmd));
+    if (hostdata->connected) 
+	ABRT_PRINTK("scsi%d: reset aborted a connected command\n", H_NO(cmd));
+    if (hostdata->disconnected_queue)
+	ABRT_PRINTK("scsi%d: reset aborted disconnected command(s)\n", H_NO(cmd));
+
+    save_flags(flags);
+    cli();
+    hostdata->issue_queue = NULL;
+    hostdata->connected = NULL;
+    hostdata->disconnected_queue = NULL;
+#ifdef SUPPORT_TAGS
+    free_all_tags();
+#endif
+    for( i = 0; i < 8; ++i )
+	hostdata->busy[i] = 0;
+#ifdef REAL_DMA
+    hostdata->dma_len = 0;
+#endif
+    restore_flags(flags);
+
+    /* we did no complete reset of all commands, so a wakeup is required */
+    return SCSI_RESET_WAKEUP | SCSI_RESET_BUS_RESET;
+#endif /* 1 */
 }
 
 /* Local Variables: */

@@ -26,8 +26,8 @@ void
 atari_stram_init (void)
 {
   struct stram_desc *dp;
-  stramaddr = boot_info.bi_atari.stram_start;
-  stramsize = boot_info.bi_atari.stram_size;
+  stramaddr = atari_stram_start;
+  stramsize = atari_stram_size;
 
   /* initialize start boundary */
   dp = DP (stramaddr);
@@ -194,11 +194,11 @@ void atari_stram_init( void )
 
 {	int		i;
 
-	for( i = 0; i < boot_info.num_memory; ++i ) {
-		if (boot_info.memory[i].addr == 0) {
+	for( i = 0; i < m68k_num_memory; ++i ) {
+		if (m68k_memory[i].addr == 0) {
 			rsvd_stram_beg = PTOV( 0x800 ); /* skip super-only first 2 KB! */
 			rsvd_stram_end = rsvd_stram_beg;
-			stram_end = rsvd_stram_beg - 0x800 + boot_info.memory[i].size;
+			stram_end = rsvd_stram_beg - 0x800 + m68k_memory[i].size;
 			return;
 		}
 	}

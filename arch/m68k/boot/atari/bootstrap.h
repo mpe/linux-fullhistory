@@ -4,7 +4,11 @@
 ** Copyright 1993 by Arjan Knor
 **
 ** Modified by Andreas Schwab
-** - clear transparent translation registers
+**     - clear transparent translation registers
+** Modified 18-Aug-96 by Geert Uytterhoeven
+**     - Updated for the new boot information structure (untested!)
+** Modified 1996-11-12 by Andreas Schwab
+**     - Fixed and tested previous change
 **
 ** This file is subject to the terms and conditions of the GNU General Public
 ** License.  See the file COPYING in the main directory of this archive
@@ -14,6 +18,26 @@
 
 #ifndef BOOTSTRAP_H
 #define BOOTSTRAP_H
+
+     /*
+     *  Atari Bootinfo Definitions
+     *
+     *  All limits herein are `soft' limits, i.e. they don't put constraints
+     *  on the actual parameters in the kernel.
+     */
+
+struct atari_bootinfo {
+    unsigned long machtype;		    /* machine type */
+    unsigned long cputype;		    /* system CPU */
+    unsigned long fputype;		    /* system FPU */
+    unsigned long mmutype;		    /* system MMU */
+    int num_memory;			    /* # of memory blocks found */
+    struct mem_info memory[NUM_MEMINFO];    /* memory description */
+    struct mem_info ramdisk;		    /* ramdisk description */
+    char command_line[CL_SIZE];		    /* kernel command line parameters */
+    unsigned long mch_cookie;		    /* _MCH cookie from TOS */
+};
+
 
 /* _MCH cookie values */
 #define MACH_ST  0
@@ -74,7 +98,7 @@ static __inline void disable_interrupts (void)
   __asm__ volatile ("orw #0x700,sr":);
 }
 
-extern struct bootinfo bi;
+extern struct atari_bootinfo bi;
 static __inline void disable_cache (void)
 {
     __asm__ volatile ("movec %0,cacr" :: "d" (0));

@@ -8,7 +8,11 @@
 ** for more details.
 **
 ** History:
-**  10 Dec 1995 BOOTP/TFTP support (Roman)
+**	27 Nov 1996 Compatibility with bootinfo interface version 1.0 (Geert)
+**	12 Nov 1996 Fixed and tested previous change (Andreas)
+**	18 Aug 1996 Updated for the new boot information structure (untested!)
+**		    (Geert)
+**	10 Dec 1995 BOOTP/TFTP support (Roman)
 **	03 Oct 1995 Allow kernel to be loaded to TT ram again (Andreas)
 **	11 Jul 1995 Add support for ELF format kernel (Andreas)
 **	16 Jun 1995 Adapted to Linux 1.2: kernel always loaded into ST ram
@@ -25,6 +29,9 @@
 **      19 Feb 1994 Changed everything so that it works? (rdv)
 **      14 Mar 1994 New mini-copy routine used (rdv)
 */
+
+
+#define BOOTINFO_COMPAT_1_0	/* bootinfo interface version 1.0 compatible */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,6 +50,7 @@
 #include <asm/page.h>
 
 #define _LINUX_TYPES_H		/* Hack to prevent including <linux/types.h> */
+#include <asm/bootinfo.h>
 #include <asm/setup.h>
 
 /* Atari bootstrap include file */
@@ -54,10 +62,29 @@
 extern char *optarg;
 extern int optind;
 static void get_default_args( int *argc, char ***argv );
+static int create_bootinfo(void);
+#ifdef BOOTINFO_COMPAT_1_0
+static int create_compat_bootinfo(void);
+#endif /* BOOTINFO_COMPAT_1_0 */
+static int add_bi_record(u_short tag, u_short size, const void *data);
+static int add_bi_string(u_short tag, const u_char *s);
 /* This is missing in <unistd.h> */
 extern int sync (void);
 
-struct bootinfo bi;
+/* Bootinfo */
+static struct atari_bootinfo bi;
+
+#ifdef BOOTINFO_COMPAT_1_0
+static struct compat_bootinfo compat_bootinfo;
+#endif /* BOOTINFO_COMPAT_1_0 */
+
+#define MAX_BI_SIZE     (4096)
+static u_long bi_size;
+static union {
+struct bi_record record;
+    u_char fake[MAX_BI_SIZE];
+} bi_union;
+
 u_long *cookiejar;
 u_long userstk;
 
@@ -303,16 +330,27 @@ static int check_bootinfo_version(char *memptr)
     printf("Kernel's bootinfo version   : %d.%d\n",
 	   kernel_major, kernel_minor);
     
-    if (kernel_major != boots_major) {
-	printf("\nThis bootstrap is too %s for this kernel!\n",
-	       boots_major < kernel_major ? "old" : "new");
-	return 0;
+    switch (kernel_major) {
+	case BI_VERSION_MAJOR(ATARI_BOOTI_VERSION):
+	    if (kernel_minor > boots_minor) {
+		printf("Warning: Bootinfo version of bootstrap and kernel "
+		       "differ!\n");
+		printf("         Certain features may not work.\n");
+	    }
+	    break;
+
+#ifdef BOOTINFO_COMPAT_1_0
+	case BI_VERSION_MAJOR(COMPAT_ATARI_BOOTI_VERSION):
+	    printf("(using backwards compatibility mode)\n");
+	    break;
+#endif /* BOOTINFO_COMPAT_1_0 */
+
+	default:
+	    printf("\nThis bootstrap is too %s for this kernel!\n",
+		   boots_major < kernel_major ? "old" : "new");
+	    return 0;
     }
-    if (kernel_minor > boots_minor) {
-	printf("Warning: Bootinfo version of bootstrap and kernel differ!\n");
-	printf("         Certain features may not work.\n");
-    }
-    return 1;
+    return kernel_major;
 }
 
 
@@ -350,12 +388,13 @@ int main(int argc, char *argv[])
 #ifdef USE_BOOTP
     int prefer_bootp = 1, kname_set = 0;
 #endif
+    void *bi_ptr;
 
     ramdisk_name = NULL;
     kernel_name = "vmlinux";
 
     /* print the startup message */
-    puts("\fLinux/68k Atari Bootstrap version 1.8"
+    puts("\fLinux/68k Atari Bootstrap version 2.0"
 #ifdef USE_BOOTP
 	 " (with BOOTP)"
 #endif
@@ -447,10 +486,10 @@ int main(int argc, char *argv[])
     switch(cpu_type) {
       case  0:
       case 10: break;
-      case 20: bi.cputype = CPU_68020; break;
-      case 30: bi.cputype = CPU_68030; break;
-      case 40: bi.cputype = CPU_68040; break;
-      case 60: bi.cputype = CPU_68060; break;
+      case 20: bi.cputype = CPU_68020; bi.mmutype = MMU_68851; break;
+      case 30: bi.cputype = CPU_68030; bi.mmutype = MMU_68030; break;
+      case 40: bi.cputype = CPU_68040; bi.mmutype = MMU_68040; break;
+      case 60: bi.cputype = CPU_68060; bi.mmutype = MMU_68060; break;
       default:
 	fprintf(stderr, "Error: Unknown CPU type. Aborting...\n");
 	boot_exit(EXIT_FAILURE);
@@ -463,11 +502,11 @@ int main(int argc, char *argv[])
     /* check for FPU; in case of a '040 or '060, don't look at _FPU itself,
      * some software may set it to wrong values (68882 or the like) */
 	if (cpu_type == 40) {
-		bi.cputype |= FPU_68040;
+		bi.fputype = FPU_68040;
 		puts( "68040\n" );
 	}
 	else if (cpu_type == 60) {
-		bi.cputype |= FPU_68060;
+		bi.fputype = FPU_68060;
 		puts( "68060\n" );
 	}
 	else {
@@ -484,12 +523,12 @@ int main(int argc, char *argv[])
 				goto m68882;
 			/* fall through */
 		  case 4:
-			bi.cputype |= FPU_68881;
+			bi.fputype = FPU_68881;
 			puts("68881\n");
 			break;
 		  case 6:
 		  m68882:
-			bi.cputype |= FPU_68882;
+			bi.fputype = FPU_68882;
 			puts("68882\n");
 			break;
 		  default:
@@ -499,14 +538,12 @@ int main(int argc, char *argv[])
 	}
 	/* ++roman: If an FPU was announced in the cookie, test
 	   whether it is a real hardware FPU or a software emulator!  */
-	if (bi.cputype & FPU_MASK) {
+	if (bi.fputype) {
 		if (test_software_fpu()) {
-			bi.cputype &= ~FPU_MASK;
+			bi.fputype = 0;
 			puts("FPU: software emulated. Assuming no FPU.");
 		}
 	}
-
-    memset(&bi.bi_atari.hw_present, 0, sizeof(bi.bi_atari.hw_present));
 
     /* Get the amounts of ST- and TT-RAM. */
     /* The size must be a multiple of 1MB. */
@@ -678,7 +715,7 @@ int main(int argc, char *argv[])
 #endif
 	
     /* Pass contents of the _MCH cookie to the kernel */
-    bi.bi_atari.mch_cookie = mch_type;
+    bi.mch_cookie = mch_type;
     
     /*
      * Copy command line options into the kernel command line.
@@ -806,19 +843,23 @@ int main(int argc, char *argv[])
 		    ramdisk_name);
 	    boot_exit(EXIT_FAILURE);
 	}
-	bi.ramdisk_size = (lseek(rfd, 0, SEEK_END) + 1023) / 1024;
+	bi.ramdisk.size = lseek(rfd, 0, SEEK_END);
     }
     else
-	bi.ramdisk_size = 0;
+	bi.ramdisk.size = 0;
 
-    rd_size = bi.ramdisk_size << 10;
+    rd_size = bi.ramdisk.size;
     if (mem_size - rd_size < MB && bi.num_memory > 1)
       /* If running low on ST ram load ramdisk into alternate ram.  */
-      bi.ramdisk_addr = (u_long) bi.memory[1].addr + bi.memory[1].size - rd_size;
+      bi.ramdisk.addr = (u_long) bi.memory[1].addr + bi.memory[1].size - rd_size;
     else
       /* Else hopefully there is enough ST ram. */
-      bi.ramdisk_addr = (u_long)start_mem + mem_size - rd_size;
+      bi.ramdisk.addr = (u_long)start_mem + mem_size - rd_size;
 
+    /* create the bootinfo structure */
+    if (!create_bootinfo())
+	boot_exit (EXIT_FAILURE);
+ 
     /* calculate the total required amount of memory */
     if (elf_kernel)
       {
@@ -844,7 +885,11 @@ int main(int argc, char *argv[])
       }
     else
       kernel_size = kexec.a_text + kexec.a_data + kexec.a_bss;
-    memreq = kernel_size + sizeof (bi);
+    memreq = kernel_size + bi_size;
+#ifdef BOOTINFO_COMPAT_1_0
+    if (sizeof(compat_bootinfo) > bi_size)
+	memreq = kernel_size+sizeof(compat_bootinfo);
+#endif /* BOOTINFO_COMPAT_1_0 */
     /* align load address of ramdisk image, read() is sloooow on odd addr. */
     memreq = ((memreq + 3) & ~3) + rd_size;
 	
@@ -905,14 +950,29 @@ int main(int argc, char *argv[])
     kclose (kfd);
 
     /* Check kernel's bootinfo version */
-    if (!check_bootinfo_version(memptr)) {
-	Mfree ((void *)memptr);
-	boot_exit (EXIT_FAILURE);
+    switch (check_bootinfo_version(memptr)) {
+	case BI_VERSION_MAJOR(ATARI_BOOTI_VERSION):
+	    bi_ptr = &bi_union.record;
+	    break;
+
+#ifdef BOOTINFO_COMPAT_1_0
+	case BI_VERSION_MAJOR(COMPAT_ATARI_BOOTI_VERSION):
+	    if (!create_compat_bootinfo()) {
+		Mfree ((void *)memptr);
+		boot_exit (EXIT_FAILURE);
+	    }
+	    bi_ptr = &compat_bootinfo;
+	    bi_size = sizeof(compat_bootinfo);
+	    break;
+#endif /* BOOTINFO_COMPAT_1_0 */
+
+	default:
+	    Mfree ((void *)memptr);
+	    boot_exit (EXIT_FAILURE);
     }
-    
+
     /* copy the boot_info struct to the end of the kernel image */
-    memcpy ((void *)(memptr + kernel_size),
-	    &bi, sizeof(bi));
+    memcpy ((void *)(memptr + kernel_size), bi_ptr, bi_size);
 
     /* read the ramdisk image */
     if (rfd != -1)
@@ -936,10 +996,10 @@ int main(int argc, char *argv[])
     /* for those who want to debug */
     if (debugflag)
     {
-	if (bi.ramdisk_size)
+	if (bi.ramdisk.size)
 	    printf ("RAM disk at %#lx, size is %ldK\n",
 		    (u_long)(memptr + memreq - rd_size),
-		    bi.ramdisk_size);
+		    bi.ramdisk.size);
 
 	if (elf_kernel)
 	  {
@@ -963,7 +1023,7 @@ int main(int argc, char *argv[])
 		start_mem + kernel_size);
 	printf ("\nKernel entry is %#lx\n",
 		elf_kernel ? kexec_elf.e_entry : kexec.a_entry);
-	printf ("ramdisk dest top is %#lx\n", bi.ramdisk_addr + rd_size);
+	printf ("ramdisk dest top is %#lx\n", bi.ramdisk.addr + rd_size);
 	printf ("ramdisk lower limit is %#lx\n",
 		(u_long)(memptr + memreq - rd_size));
 	printf ("ramdisk src top is %#lx\n", (u_long)(memptr + memreq));
@@ -1013,9 +1073,8 @@ int main(int argc, char *argv[])
      */
 
     jump_to_mover((char *) start_mem, memptr,
-		  (char *) bi.ramdisk_addr + rd_size, memptr + memreq,
-		  kernel_size + sizeof (bi),
-		  rd_size,
+		  (char *) bi.ramdisk.addr + rd_size, memptr + memreq,
+		  kernel_size + bi_size, rd_size,
 		  (void *) 0x400);
 
     for (;;);
@@ -1081,3 +1140,141 @@ static void get_default_args( int *argc, char ***argv )
 	nargv[*argc] = 0;
 }    
 
+
+    /*
+     *  Create the Bootinfo Structure
+     */
+
+static int create_bootinfo(void)
+{
+    int i;
+    struct bi_record *record;
+
+    /* Initialization */
+    bi_size = 0;
+
+    /* Generic tags */
+    if (!add_bi_record(BI_MACHTYPE, sizeof(bi.machtype), &bi.machtype))
+	return(0);
+    if (!add_bi_record(BI_CPUTYPE, sizeof(bi.cputype), &bi.cputype))
+	return(0);
+    if (!add_bi_record(BI_FPUTYPE, sizeof(bi.fputype), &bi.fputype))
+	return(0);
+    if (!add_bi_record(BI_MMUTYPE, sizeof(bi.mmutype), &bi.mmutype))
+	return(0);
+    for (i = 0; i < bi.num_memory; i++)
+	if (!add_bi_record(BI_MEMCHUNK, sizeof(bi.memory[i]), &bi.memory[i]))
+	    return(0);
+    if (bi.ramdisk.size)
+	if (!add_bi_record(BI_RAMDISK, sizeof(bi.ramdisk), &bi.ramdisk))
+	    return(0);
+    if (!add_bi_string(BI_COMMAND_LINE, bi.command_line))
+	return(0);
+
+    /* Atari tags */
+    if (!add_bi_record(BI_ATARI_MCH_COOKIE, sizeof(bi.mch_cookie),
+		       &bi.mch_cookie))
+	return(0);
+
+    /* Trailer */
+    record = (struct bi_record *)((u_long)&bi_union.record+bi_size);
+    record->tag = BI_LAST;
+    bi_size += sizeof(bi_union.record.tag);
+
+    return(1);
+}
+
+
+    /*
+     *  Add a Record to the Bootinfo Structure
+     */
+
+static int add_bi_record(u_short tag, u_short size, const void *data)
+{
+    struct bi_record *record;
+    u_int size2;
+
+    size2 = (sizeof(struct bi_record)+size+3)&-4;
+    if (bi_size+size2+sizeof(bi_union.record.tag) > MAX_BI_SIZE) {
+	fprintf (stderr, "Can't add bootinfo record. Ask a wizard to enlarge me.\n");
+	return(0);
+    }
+    record = (struct bi_record *)((u_long)&bi_union.record+bi_size);
+    record->tag = tag;
+    record->size = size2;
+    memcpy(record->data, data, size);
+    bi_size += size2;
+    return(1);
+}
+
+
+    /*
+     *  Add a String Record to the Bootinfo Structure
+     */
+
+static int add_bi_string(u_short tag, const u_char *s)
+{
+    return add_bi_record(tag, strlen(s)+1, (void *)s);
+}
+
+
+#ifdef BOOTINFO_COMPAT_1_0
+
+    /*
+     *  Create the Bootinfo structure for backwards compatibility mode
+     */
+
+static int create_compat_bootinfo(void)
+{
+    u_int i;
+
+    compat_bootinfo.machtype = bi.machtype;
+    if (bi.cputype & CPU_68020)
+	compat_bootinfo.cputype = COMPAT_CPU_68020;
+    else if (bi.cputype & CPU_68030)
+	compat_bootinfo.cputype = COMPAT_CPU_68030;
+    else if (bi.cputype & CPU_68040)
+	compat_bootinfo.cputype = COMPAT_CPU_68040;
+    else if (bi.cputype & CPU_68060)
+	compat_bootinfo.cputype = COMPAT_CPU_68060;
+    else {
+	Printf("CPU type 0x%08lx not supported by kernel\n", bi.cputype);
+	return(0);
+    }
+    if (bi.fputype & FPU_68881)
+	compat_bootinfo.cputype |= COMPAT_FPU_68881;
+    else if (bi.fputype & FPU_68882)
+	compat_bootinfo.cputype |= COMPAT_FPU_68882;
+    else if (bi.fputype & FPU_68040)
+	compat_bootinfo.cputype |= COMPAT_FPU_68040;
+    else if (bi.fputype & FPU_68060)
+	compat_bootinfo.cputype |= COMPAT_FPU_68060;
+    else {
+	Printf("FPU type 0x%08lx not supported by kernel\n", bi.fputype);
+	return(0);
+    }
+    compat_bootinfo.num_memory = bi.num_memory;
+    if (compat_bootinfo.num_memory > COMPAT_NUM_MEMINFO) {
+	Printf("Warning: using only %d blocks of memory\n",
+	       COMPAT_NUM_MEMINFO);
+	compat_bootinfo.num_memory = COMPAT_NUM_MEMINFO;
+    }
+    for (i = 0; i < compat_bootinfo.num_memory; i++) {
+	compat_bootinfo.memory[i].addr = bi.memory[i].addr;
+	compat_bootinfo.memory[i].size = bi.memory[i].size;
+    }
+    if (bi.ramdisk.size) {
+	compat_bootinfo.ramdisk_size = (bi.ramdisk.size+1023)/1024;
+	compat_bootinfo.ramdisk_addr = bi.ramdisk.addr;
+    } else {
+	compat_bootinfo.ramdisk_size = 0;
+	compat_bootinfo.ramdisk_addr = 0;
+    }
+    strncpy(compat_bootinfo.command_line, bi.command_line, COMPAT_CL_SIZE);
+    compat_bootinfo.command_line[COMPAT_CL_SIZE-1] = '\0';
+
+    compat_bootinfo.bi_atari.hw_present = 0;
+    compat_bootinfo.bi_atari.mch_cookie = bi.mch_cookie;
+    return(1);
+}
+#endif /* BOOTINFO_COMPAT_1_0 */

@@ -298,7 +298,7 @@ void release_thread(struct task_struct *dead_task)
 {
 }
 
-void copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
+int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	struct task_struct * p, struct pt_regs * regs)
 {
 	int i;
@@ -338,6 +338,7 @@ void copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 		p->tss.io_bitmap[i] = ~0;
 	if (last_task_used_math == current)
 		__asm__("clts ; fnsave %0 ; frstor %0":"=m" (p->tss.i387));
+	return 0;
 }
 
 /*

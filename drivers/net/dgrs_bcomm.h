@@ -13,14 +13,17 @@
  *	Variable	Set to:		Gets default of:
  *	bc_hashexpire	-1		300	(5 minutes)
  *	bc_spantree	-1		1	(spanning tree on)
- *	bc_ipaddr	FF:FF:FF:FF	0	(no IP address)
- *	bc_ipxnet	FF:FF:FF:FF	0	(no IPX net)
+ *	bc_ipaddr	FF:FF:FF:FF	0	(no SNMP IP address)
+ *	bc_ipxnet	FF:FF:FF:FF	0	(no SNMP IPX net)
+ *	bc_iptrap	FF:FF:FF:FF	0	(no SNMP IP trap address)
  *
  * Some variables MUST have their value set after the firmware
  * is loaded onto the board, but before the processor is released.
  * These are:
  *	bc_host		0 means no host "port", run as standalone switch.
- *			1 means there is a host "port" (normal).
+ *			1 means run as a switch, with a host port. (normal)
+ *			2 means run as multiple NICs, not as a switch.
+ *			-1 means run in diagnostics mode.
  *	bc_nowait
  *	bc_hostarea_len
  *	bc_filter_len
@@ -109,7 +112,10 @@ BEGIN_STRUCT(bios_comm)
 	S4(ulong, bc_filter_port)	/* RW: Port # for filter 0..6 */
 	S4(ulong, bc_filter_num)	/* RW: Filter #, 0=input, 1=output */
 
-	S4A(long, bc_spare, 3) /* spares */
+	/* more SNMP agent addresses */
+	S1A(uchar, bc_iptrap, 4) /* IP address for SNMP */
+
+	S4A(long, bc_spare, 2)	/* spares */
 END_STRUCT(bios_comm)
 
 #define	bc	VMO(struct bios_comm, 0xa3000100)
@@ -119,6 +125,14 @@ END_STRUCT(bios_comm)
  */
 #define	BC_INIT	0
 #define	BC_RUN	100
+
+/*
+ *	bc_host values
+ */
+#define	BC_DIAGS	-1
+#define BC_SASWITCH	0
+#define	BC_SWITCH	1
+#define	BC_MULTINIC	2
 
 /*
  *	Values for spew (debugging)

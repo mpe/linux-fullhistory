@@ -84,6 +84,8 @@ static struct symbol_table net_syms = {
 	X(memcpy_fromiovec),
 	X(sock_setsockopt),
 	X(sock_getsockopt),
+	X(sock_sendmsg),
+	X(sock_recvmsg),
 	X(sk_alloc),
 	X(sk_free),
 	X(sock_wake_async),
@@ -97,7 +99,7 @@ static struct symbol_table net_syms = {
 	X(skb_realloc_headroom),
 	X(datagram_select),
 
-	/* ?? needed by smbfs.o */
+	/* Needed by smbfs.o */
 	X(__scm_destroy),
 	X(__scm_send),
 
@@ -125,9 +127,6 @@ static struct symbol_table net_syms = {
 	X(ip_fragment),
 	X(ip_dev_find_tunnel),
 	X(inet_family_ops),
-
-	X(__scm_send),
-	X(__scm_destroy),
 
 #ifdef CONFIG_IP_FORWARD
 	X(ip_forward),
@@ -223,6 +222,9 @@ static struct symbol_table net_syms = {
 #ifdef CONFIG_TR
 	X(tr_setup),
 	X(tr_type_trans),
+	X(register_trdev),
+	X(unregister_trdev),
+	X(init_trdev),
 #endif
                           
 #ifdef CONFIG_NET_ALIAS

@@ -15,6 +15,8 @@
  *	History
  *	Rose 001	Jonathan(G4KLX)	Cloned from af_netrom.c.
  *			Alan(GW4PTS)	Hacked up for newer API stuff
+ *			Terry (VK2KTJ)	Added support for variable length
+ * 					address masks.
  */
   
 #include <linux/config.h>
@@ -97,6 +99,31 @@ int rosecmp(rose_address *addr1, rose_address *addr2)
 		if (addr1->rose_addr[i] != addr2->rose_addr[i])
 			return 1;
 			
+	return 0;
+}
+
+/*
+ *	Compare two Rose addresses for only mask digits, 0 == equal.
+ */
+int rosecmpm(rose_address *addr1, rose_address *addr2, unsigned short mask)
+{
+	int i, j;
+
+	if (mask > 10)
+		return 1;
+
+	for (i = 0, j = 0; i < mask; i++) {
+		j = i / 2;
+
+		if ((i % 2) != 0) {	/* odd place */
+			if ((addr1->rose_addr[j] & 0xF0) != (addr2->rose_addr[j] & 0xF0))
+				return 1;
+		} else {		/* even place */
+			if ((addr1->rose_addr[j] & 0x0F) != (addr2->rose_addr[j] & 0x0F))
+				return 1;
+		}
+	}
+
 	return 0;
 }
 

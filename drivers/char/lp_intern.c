@@ -14,39 +14,44 @@
  * Copyright (C) 1993 by Nigel Gamble (added interrupt code)
  */
 
+#include <linux/module.h>
 #include <linux/config.h>
-#include <linux/lp_intern.h>
 #include <linux/kernel.h>
+#include <linux/types.h>
+#include <linux/sched.h>
+#include <asm/irq.h>
+#include <asm/setup.h>
 #ifdef CONFIG_AMIGA
 #include <asm/amigahw.h>
+#include <asm/amigaints.h>
 #endif
 #ifdef CONFIG_ATARI
 #include <linux/delay.h>
 #include <linux/sched.h>
-#include <linux/interrupt.h>
 #include <asm/atarihw.h>
+#include <asm/atariints.h>
 #endif
+#include <linux/lp_intern.h>
 
+static int my_inter = 0;
+static int minor = -1;
 
 static void lp_int_out(int, int);
 static int lp_int_busy(int);
 static int lp_int_pout(int);
 static int lp_int_online(int);
-static int lp_int_interrupt(int);
-
-int lp_internal_init(struct lp_struct *, int, int, int);
 
 
 static void
 lp_int_out (int c, int dev)
 {
-  switch (boot_info.machtype)
+  switch (m68k_machtype)
     {
 #ifdef CONFIG_AMIGA
     case MACH_AMIGA:
        {
 	int wait = 0;
-	while (wait != lp_table[dev].wait) wait++;
+	while (wait != lp_table[dev]->wait) wait++;
 	ciaa.prb = c;
        }
       break;
@@ -58,7 +63,7 @@ lp_int_out (int c, int dev)
 	 sound_ym.rd_data_reg_sel = 15;
 	 sound_ym.wd_data = c;
 	 sound_ym.rd_data_reg_sel = 14;
-	 while (wait != lp_table[dev].wait) wait++;
+	 while (wait != lp_table[dev]->wait) wait++;
 	 sound_ym.wd_data = sound_ym.rd_data_reg_sel & ~(1 << 5);
 	 while (wait) wait--;
 	 sound_ym.wd_data = sound_ym.rd_data_reg_sel | (1 << 5);
@@ -71,7 +76,7 @@ lp_int_out (int c, int dev)
 static int
 lp_int_busy (int dev)
 {
-  switch (boot_info.machtype)
+  switch (m68k_machtype)
     {
 #ifdef CONFIG_AMIGA
     case MACH_AMIGA:
@@ -89,7 +94,7 @@ lp_int_busy (int dev)
 static int
 lp_int_pout (int dev)
 {
-  switch (boot_info.machtype)
+  switch (m68k_machtype)
     {
 #ifdef CONFIG_AMIGA
     case MACH_AMIGA:
@@ -106,7 +111,7 @@ lp_int_pout (int dev)
 static int
 lp_int_online (int dev)
 {
-  switch (boot_info.machtype)
+  switch (m68k_machtype)
     {
 #ifdef CONFIG_AMIGA
     case MACH_AMIGA:
@@ -121,21 +126,59 @@ lp_int_online (int dev)
     }
 }
 
-static int lp_int_interrupt(int dev)
+static int lp_int_my_interrupt(int dev)
 {
-  return 1;
+  return my_inter;
 }
 
-int lp_internal_init(struct lp_struct *lp_table, int entry,
-		     int max_lp, int irq)
+static void lp_int_interrupt(int irq, void *data, struct pt_regs *fp)
 {
-  if (max_lp-entry < 1)
-    return 0;
+  my_inter = 1;
+  lp_interrupt(irq, data, fp);
+  my_inter = 0;
+}
+
+static void lp_int_open(void)
+{
+  MOD_INC_USE_COUNT;
+}
+
+static void lp_int_release(void)
+{
+  MOD_DEC_USE_COUNT;
+}
+
+static struct lp_struct tab = {
+	"Builtin parallel port",	/* name */
+	0,				/* irq */
+	lp_int_out,
+	lp_int_busy,
+	lp_int_pout,
+	lp_int_online,
+	lp_int_my_interrupt,
+	NULL,				/* ioctl */
+	lp_int_open,
+	lp_int_release,
+	LP_EXIST,
+	LP_INIT_CHAR,
+	LP_INIT_TIME,
+	LP_INIT_WAIT,
+	NULL,
+	NULL,
+};
+
+int lp_internal_init(void)
+{
 #ifdef CONFIG_AMIGA
-  if (MACH_IS_AMIGA)
+  if (MACH_IS_AMIGA && AMIGAHW_PRESENT(AMI_PARALLEL))
     {
       ciaa.ddrb = 0xff;
       ciab.ddra &= 0xf8;
+      if (lp_irq)
+        tab.irq = request_irq(IRQ_AMIGA_CIAA_FLG, lp_int_interrupt,
+          0, "builtin printer port", lp_int_interrupt);
+      tab.base = (void *) &ciaa.prb; /* dummy, not used */
+      tab.type = LP_AMIGA;
     }
 #endif
 #ifdef CONFIG_ATARI
@@ -148,22 +191,50 @@ int lp_internal_init(struct lp_struct *lp_table, int entry,
       sound_ym.rd_data_reg_sel = 7;
       sound_ym.wd_data = (sound_ym.rd_data_reg_sel & 0x3f) | 0xc0;
       restore_flags(flags);
+      if (lp_irq)
+        tab.irq = request_irq(IRQ_MFP_BUSY, lp_int_interrupt,
+          IRQ_TYPE_SLOW, "builtin printer port", lp_int_interrupt);
+      tab.base = (void *) &sound_ym.wd_data; /* dummy, not used */
+      tab.type = LP_ATARI;
     }
 #endif
-  lp_table[entry].name = "Builtin LP";
-  lp_table[entry].lp_out = lp_int_out;
-  lp_table[entry].lp_is_busy = lp_int_busy;
-  lp_table[entry].lp_has_pout = lp_int_pout;
-  lp_table[entry].lp_is_online = lp_int_online;
-  lp_table[entry].lp_my_interrupt = lp_int_interrupt;
-  lp_table[entry].flags = LP_EXIST;
-  lp_table[entry].chars = LP_INIT_CHAR;
-  lp_table[entry].time = LP_INIT_TIME;
-  lp_table[entry].wait = LP_INIT_WAIT;
-  lp_table[entry].lp_wait_q = NULL;
 
-  printk("lp%d: internal port\n", entry);
-
-  return 1;
+  if ((minor = register_parallel(&tab, minor)) < 0) {
+    printk("builtin lp init: cant get a minor\n");
+    if (lp_irq) {
+#ifdef CONFIG_AMIGA
+      if (MACH_IS_AMIGA)
+	free_irq(IRQ_AMIGA_CIAA_FLG, lp_int_interrupt);
+#endif
+#ifdef CONFIG_ATARI
+      if (MACH_IS_ATARI)
+	free_irq(IRQ_MFP_BUSY, lp_int_interrupt);
+#endif
+    }
+    return -ENODEV;
+  }
+  
+  return 0;
 }
 
+#ifdef MODULE
+int init_module(void)
+{
+return lp_internal_init();
+}
+
+void cleanup_module(void)
+{
+if (lp_irq) {
+#ifdef CONFIG_AMIGA
+  if (MACH_IS_AMIGA)
+    free_irq(IRQ_AMIGA_CIAA_FLG, lp_int_interrupt);
+#endif
+#ifdef CONFIG_ATARI
+  if (MACH_IS_ATARI)
+    free_irq(IRQ_MFP_BUSY, lp_int_interrupt);
+#endif
+}
+unregister_parallel(minor);
+}
+#endif

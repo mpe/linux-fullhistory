@@ -210,11 +210,11 @@ And on the MV300 it's difficult to read out the hardware palette. So we
 just keep track of the set colors in our own array here, and use that!
 */
 
-struct { unsigned char red,green,blue,pad; } MV300_color[256];
+static struct { unsigned char red,green,blue,pad; } MV300_color[256];
 #endif /* ATAFB_EXT */
 
 
-int inverse=0;
+static int inverse=0;
 
 extern int fontheight_8x8;
 extern int fontwidth_8x8;
@@ -332,7 +332,7 @@ static char *user6_names[] = {"user6", NULL};
 static char *user7_names[] = {"user7", NULL};
 static char *dummy_names[] = {"dummy", NULL};
 
-char **fb_var_names[] = {
+static char **fb_var_names[] = {
 	/* Writing the name arrays directly in this array (via "(char *[]){...}")
 	 * crashes gcc 2.5.8 (sigsegv) if the inner array
 	 * contains more than two items. I've also seen that all elements
@@ -365,7 +365,7 @@ char **fb_var_names[] = {
 	/* ,NULL */ /* this causes a sigsegv on my gcc-2.5.8 */
 };
 
-struct fb_var_screeninfo atari_fb_predefined[] = {
+static struct fb_var_screeninfo atari_fb_predefined[] = {
  	/*
  	 * yres_virtual==0 means use hw-scrolling if possible, else yres
  	 */
@@ -467,7 +467,7 @@ struct fb_var_screeninfo atari_fb_predefined[] = {
 	  0, 0, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
-int num_atari_fb_predefined=arraysize(atari_fb_predefined);
+static int num_atari_fb_predefined=arraysize(atari_fb_predefined);
 
 
 static int
@@ -2348,7 +2348,7 @@ static int pan_display( struct fb_var_screeninfo *var,
 
 
 #ifdef ATAFB_TT
-struct fb_hwswitch tt_switch = {
+static struct fb_hwswitch tt_switch = {
 	tt_detect, tt_encode_fix, tt_decode_var, tt_encode_var,
 	tt_get_par, tt_set_par, tt_getcolreg, tt_setcolreg,
 	set_screen_base, NULL, pan_display
@@ -2356,7 +2356,7 @@ struct fb_hwswitch tt_switch = {
 #endif
 
 #ifdef ATAFB_FALCON
-struct fb_hwswitch falcon_switch = {
+static struct fb_hwswitch falcon_switch = {
 	falcon_detect, falcon_encode_fix, falcon_decode_var, falcon_encode_var,
 	falcon_get_par, falcon_set_par, falcon_getcolreg,
 	falcon_setcolreg, set_screen_base, falcon_blank, falcon_pan_display
@@ -2364,7 +2364,7 @@ struct fb_hwswitch falcon_switch = {
 #endif
 
 #ifdef ATAFB_STE
-struct fb_hwswitch st_switch = {
+static struct fb_hwswitch st_switch = {
 	stste_detect, stste_encode_fix, stste_decode_var, stste_encode_var,
 	stste_get_par, stste_set_par, stste_getcolreg, stste_setcolreg,
 	stste_set_screen_base, NULL, pan_display
@@ -2372,7 +2372,7 @@ struct fb_hwswitch st_switch = {
 #endif
 
 #ifdef ATAFB_EXT
-struct fb_hwswitch ext_switch = {
+static struct fb_hwswitch ext_switch = {
 	ext_detect, ext_encode_fix, ext_decode_var, ext_encode_var,
 	ext_get_par, ext_set_par, ext_getcolreg, ext_setcolreg, NULL, NULL, NULL
 };
@@ -2463,9 +2463,15 @@ static short green2[]=
 static short blue2[]=
 	{ 0x0000,0xffff};
 
-struct fb_cmap default_16_colors = { 0, 16, red16, green16, blue16, NULL };
-struct fb_cmap default_4_colors = { 0, 4, red4, green4, blue4, NULL };
-struct fb_cmap default_2_colors = { 0, 2, red2, green2, blue2, NULL };
+static struct fb_cmap default_16_colors = {
+    0, 16, red16, green16, blue16, NULL
+};
+static struct fb_cmap default_4_colors = {
+    0, 4, red4, green4, blue4, NULL
+};
+static struct fb_cmap default_2_colors = {
+    0, 2, red2, green2, blue2, NULL
+};
 
 static struct fb_cmap *
 get_default_colormap(int bpp)

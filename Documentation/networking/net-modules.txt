@@ -213,8 +213,10 @@ hp100.c:
 	 in increments of 0x020)
 
 ibmtr.c:
-	io = 0xA20
-	(Probes ports: 0xA20, 0xA24 -- Ok, 0x220, 0x224, but IBM style..)
+	io = 0xa20, 0xa24 (autoprobed by default)
+	irq = 0 (driver cannot select irq - read from hardware)
+	mem = 0 (shared memory base set at 0xd0000 and not yet 
+	         able to override thru mem= parameter.)
 
 lance.c: *Not modularized*
 	(PCI, and ISA probing; "CONFIG_PCI" needed for PCI support)

@@ -148,37 +148,18 @@ ENTRY(reschedule)
 	pea	SYMBOL_NAME(ret_from_exception)
 	jmp	SYMBOL_NAME(schedule)
 
-ENTRY(system_call)
-	SAVE_ALL
-	movel	#-LENOSYS,LD0(%sp)	| default return value in d0
-					| original D0 is in orig_d0
-	movel	%d0,%d2
-
-	| save top of frame
-	pea	%sp@
-	jbsr	SYMBOL_NAME(set_esp0)
-	addql	#4,%sp
-
-	cmpl	#NR_syscalls,%d2
-	jcc	SYMBOL_NAME(ret_from_exception)
-	lea	SYMBOL_NAME(sys_call_table),%a0
-	movel	%a0@(%d2:l:4),%d3
-	jeq	SYMBOL_NAME(ret_from_exception)
-	movel	SYMBOL_NAME(current_set),%a0
-	btst	#5,%a0@(LTASK_FLAGS+3)	| PF_TRACESYS
-	bnes	1f
-	movel	%d3,%a0
-	jbsr	%a0@
-	movel	%d0,%sp@(LD0)		| save the return value
+badsys:
+	movel	#-LENOSYS,LD0(%sp)
 	jra	SYMBOL_NAME(ret_from_exception)
-1:
+
+do_trace:
+	movel	#-LENOSYS,LD0(%sp)	| needed for strace
 	subql	#4,%sp
 	SAVE_SWITCH_STACK
 	jbsr	SYMBOL_NAME(syscall_trace)
 	RESTORE_SWITCH_STACK
 	addql	#4,%sp
-	movel	%d3,%a0
-	jbsr	%a0@
+	jbsr	@(SYMBOL_NAME(sys_call_table),%d2:l:4)@(0)
 	movel	%d0,%sp@(LD0)		| save the return value
 	subql	#4,%sp			| dummy return address
 	SAVE_SWITCH_STACK
@@ -187,6 +168,24 @@ ENTRY(system_call)
 SYMBOL_NAME_LABEL(ret_from_signal)
 	RESTORE_SWITCH_STACK
 	addql	#4,%sp
+	jra	SYMBOL_NAME(ret_from_exception)
+
+ENTRY(system_call)
+	SAVE_ALL
+	movel	%d0,%d2
+
+	| save top of frame
+	pea	%sp@
+	jbsr	SYMBOL_NAME(set_esp0)
+	addql	#4,%sp
+
+	cmpl	#NR_syscalls,%d2
+	jcc	badsys
+	movel	SYMBOL_NAME(current_set),%a0
+	btst	#5,%a0@(LTASK_FLAGS+3)	| PF_TRACESYS
+	jne	do_trace
+	jbsr	@(SYMBOL_NAME(sys_call_table),%d2:l:4)@(0)
+	movel	%d0,%sp@(LD0)		| save the return value
 
 SYMBOL_NAME_LABEL(ret_from_exception)
 	btst	#5,%sp@(LSR)		| check if returning to kernel
@@ -197,17 +196,8 @@ SYMBOL_NAME_LABEL(ret_from_exception)
 	cmpl	#SYMBOL_NAME(task),%a0	| task[0] cannot have signals
 	jeq	2f
 	bclr	#5,%a0@(LTASK_FLAGS+1)	| check for delayed trace
-	jeq	1f
-	bclr	#7,%sp@(LSR)		| clear trace bit in SR
-	pea	1			| send SIGTRAP
-	movel	%a0,%sp@-
-	pea	5
-	jbsr	SYMBOL_NAME(send_sig)
-	addql	#8,%sp
-	addql	#4,%sp
-	movel	SYMBOL_NAME(current_set),%a0
-
-1:
+	jne	do_delayed_trace
+5:
 	tstl	%a0@(LTASK_STATE)	| state
 	jne	SYMBOL_NAME(reschedule)
 	tstl	%a0@(LTASK_COUNTER)	| counter
@@ -233,6 +223,17 @@ Lsignal_return:
 	RESTORE_SWITCH_STACK
 	addql	#4,%sp
 	RESTORE_ALL
+
+do_delayed_trace:
+	bclr	#7,%sp@(LSR)		| clear trace bit in SR
+	pea	1			| send SIGTRAP
+	movel	%a0,%sp@-
+	pea	5
+	jbsr	SYMBOL_NAME(send_sig)
+	addql	#8,%sp
+	addql	#4,%sp
+	movel	SYMBOL_NAME(current_set),%a0
+	jra	5b
 
 /*
 ** This is the main interrupt handler, responsible for calling process_int()
@@ -361,7 +362,7 @@ SYMBOL_NAME_LABEL(resume)
 
 #if defined(CONFIG_M68060)
 #if !defined(CONFIG_M68060_ONLY)
-	btst	#3,SYMBOL_NAME(boot_info)+BI_cputype+3
+	btst	#3,SYMBOL_NAME(m68k_cputype)+3
 	beqs	1f
 #endif
 	/* The 060 FPU keeps status in bits 15-8 of the first longword */
@@ -414,23 +415,25 @@ SYMBOL_NAME_LABEL(resume)
 	/*
 	 * switch address space
 	 */
+	.chip	68040
 
 	/* flush address translation cache (user entries) */
-	.word	0xf510			/* pflushan */
+	pflushan
 
 	/* switch the root pointer */
 	movel	%a1@(LTSS_CRP+4),%d0
-	.long	0x4e7b0806		/* movec d0,urp */
+	movec	%d0,%urp
 
 #if defined (CONFIG_M68060)
 	/* is it a '060 ? */
-	btst	#3,SYMBOL_NAME(boot_info)+BI_cputype+3
+	btst	#3,SYMBOL_NAME(m68k_cputype)+3
 	beqs	2f
 	/* clear user entries in the branch cache */
 	movec	%cacr,%d0
 	orl	#0x00200000,%d0
 	movec	%d0,%cacr
 #endif /* CONFIG_M68060 */
+	.chip	68k
 #endif /* CONFIG_M68040_OR_M68060 */
 2:
 4:
@@ -438,7 +441,7 @@ SYMBOL_NAME_LABEL(resume)
 
 #if defined(CONFIG_M68060)
 #if !defined(CONFIG_M68060_ONLY)
-	btst	#3,SYMBOL_NAME(boot_info)+BI_cputype+3
+	btst	#3,SYMBOL_NAME(m68k_cputype)+3
 	beqs	1f
 #endif
 	/* The 060 FPU keeps status in bits 15-8 of the first longword */
@@ -592,7 +595,7 @@ SYMBOL_NAME_LABEL(sys_call_table)
 	.long SYMBOL_NAME(sys_ni_syscall)	/* iopl for i386 */ /* 110 */
 	.long SYMBOL_NAME(sys_vhangup)
 	.long SYMBOL_NAME(sys_idle)
-	.long SYMBOL_NAME(sys_ni_syscall)	/* vm86 for i386 */
+	.long SYMBOL_NAME(sys_ni_syscall)	/* vm86old for i386 */
 	.long SYMBOL_NAME(sys_wait4)
 	.long SYMBOL_NAME(sys_swapoff)		/* 115 */
 	.long SYMBOL_NAME(sys_sysinfo)
@@ -645,4 +648,7 @@ SYMBOL_NAME_LABEL(sys_call_table)
 	.long SYMBOL_NAME(sys_mremap)
 	.long SYMBOL_NAME(sys_setresuid)
 	.long SYMBOL_NAME(sys_getresuid)
-	.space (NR_syscalls-165)*4
+	.long SYMBOL_NAME(sys_ni_syscall)	/* for vm86 */
+	.rept NR_syscalls-(.-SYMBOL_NAME(sys_call_table))/4
+		.long SYMBOL_NAME(sys_ni_syscall)
+	.endr

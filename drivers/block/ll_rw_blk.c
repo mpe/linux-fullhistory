@@ -383,6 +383,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	     case FLOPPY_MAJOR:
 	     case IDE2_MAJOR:
 	     case IDE3_MAJOR:
+	     case ACSI_MAJOR:
 		/*
 		 * The scsi disk and cdrom drivers completely remove the request
 		 * from the queue when they start processing an entry.  For this
@@ -622,6 +623,13 @@ void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
 	}
 }
 
+#ifdef CONFIG_BLK_DEV_EZ
+extern void ez_init( void );
+#endif
+#ifdef CONFIG_BPCD
+extern void bpcd_init( void );
+#endif
+
 int blk_dev_init(void)
 {
 	struct request * req;
@@ -644,6 +652,9 @@ int blk_dev_init(void)
 		req->next = NULL;
 	}
 	memset(ro_bits,0,sizeof(ro_bits));
+#ifdef CONFIG_AMIGA_Z2RAM
+	z2_init();
+#endif
 #ifdef CONFIG_BLK_DEV_RAM
 	rd_init();
 #endif
@@ -665,14 +676,22 @@ int blk_dev_init(void)
 #ifdef CONFIG_BLK_DEV_XD
 	xd_init();
 #endif
+#ifdef CONFIG_BLK_DEV_EZ
+	ez_init();
+#endif
 #ifdef CONFIG_BLK_DEV_FD
 	floppy_init();
 #else
+#if !defined (__mc68000__)
 	outb_p(0xc, 0x3f2);
+#endif
 #endif
 #ifdef CONFIG_CDU31A
 	cdu31a_init();
 #endif CONFIG_CDU31A
+#ifdef CONFIG_ATARI_ACSI
+	acsi_init();
+#endif CONFIG_ATARI_ACSI
 #ifdef CONFIG_MCD
 	mcd_init();
 #endif CONFIG_MCD
@@ -691,6 +710,9 @@ int blk_dev_init(void)
 #ifdef CONFIG_GSCD
 	gscd_init();
 #endif CONFIG_GSCD
+#ifdef CONFIG_BPCD
+	bpcd_init();
+#endif CONFIG_BPCD
 #ifdef CONFIG_CM206
 	cm206_init();
 #endif

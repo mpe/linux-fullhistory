@@ -9,7 +9,6 @@
 
 .S.o:
 	$(CC) -D__ASSEMBLY__ -traditional -c -o $*.o $<
-#	$(AS) -o $*.o $<
 
 OS_TARGET := fpsp.o
 

@@ -1,4 +1,5 @@
 #include <linux/module.h>
+#include <linux/config.h>
 #include <linux/fs.h>
 #include <linux/proc_fs.h>
 
@@ -18,6 +19,7 @@ static struct symbol_table procfs_syms = {
 	X(proc_register_dynamic),
 	X(proc_unregister),
 	X(proc_root),
+	X(proc_get_inode),
 	X(in_group_p),
 	X(generate_cluster),
 	X(proc_net_inode_operations),
@@ -30,6 +32,11 @@ static struct symbol_table procfs_syms = {
 	X(proc_scsi),
 	X(proc_scsi_inode_operations),
 	X(dispatch_scsi_info_ptr),
+	
+#if defined(CONFIG_SUN_OPENPROMFS_MODULE)
+	X(proc_openprom_register),
+	X(proc_openprom_deregister),
+#endif	
 #include <linux/symtab_end.h>
 };
 

@@ -89,19 +89,9 @@ feel free to upgrade if you want the gcc bug fixes).
 Networking Changes
 ==================
 
-   The network code now assumes less about your setup, which can cause
-routing problems due to init scripts expecting the old behavior.
-
-   Lines like:
-
-   `/sbin/ifconfig lo 127.0.0.1 /sbin/route add -net 127.0.0.0'
-
-   need to be changed to something like:
-
-   `/sbin/ifconfig lo 127.0.0.1 /sbin/route add -net 127.0.0.0 netmask
-255.0.0.0 dev lo'
-
-   for routing to be set up correctly.
+    Please read Documentation/networking/routing.txt. People wanting to use
+all the new routing table features such as OSPF classes should also read
+Documentation/networking/policy-routing.txt.
 
 SysVinit
 ========

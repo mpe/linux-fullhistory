@@ -421,7 +421,7 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 	case 3:
 	    __copy_from_user_big(to, from, n,
 				 /* fixup */
-				 "1: addql #2,%2"
+				 "1: addql #2,%2\n"
 				 "2: addql #1,%2",
 				 /* copy */
 				 "3: movesw (%1)+,%%d0\n"
@@ -660,7 +660,7 @@ __constant_copy_to_user(void *to, const void *from, unsigned long n)
 	case 3:
 	    __copy_to_user_big(to, from, n,
 			       /* fixup */
-			       "1: addql #2,%2"
+			       "1: addql #2,%2\n"
 			       "2: addql #1,%2",
 			       /* copy */
 			       "   movew (%1)+,%%d0\n"
@@ -729,13 +729,12 @@ strncpy_from_user(char *dst, const char *src, long count)
  */
 static inline long strlen_user(const char * src)
 {
-    long res = (long) src;
+    long res = -(long) src;
     __asm__ __volatile__
 	("1: movesb (%1)+,%%d0\n"
 	 "12:tstb %%d0\n"
 	 "   jne 1b\n"
-	 "   subl %1,%0\n"
-	 "   negl %0\n"
+	 "   addl %1,%0\n"
 	 "2:\n"
 	 ".section .fixup,\"ax\"\n"
 	 "   .even\n"
@@ -748,7 +747,7 @@ static inline long strlen_user(const char * src)
 	 ".text"
 	 : "=d"(res), "=a"(src)
 	 : "i"(0), "0"(res), "1"(src)
-	 : "d0", "memory");
+	 : "d0");
     return res;
 }
 

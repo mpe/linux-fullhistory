@@ -140,7 +140,7 @@ printk("free cluster: %d\n",nr);
 		return -ENOSPC;
 	}
 	fat_access(sb,nr,MSDOS_SB(sb)->fat_bits == 12 ?
-	    0xff8 : 0xfff8);
+	    EOF_FAT12 : EOF_FAT16);
 	if (MSDOS_SB(sb)->free_clusters != -1)
 		MSDOS_SB(sb)->free_clusters--;
 	unlock_fat(sb);

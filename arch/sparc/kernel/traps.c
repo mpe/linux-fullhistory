@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.48 1996/11/13 05:09:42 davem Exp $
+/* $Id: traps.c,v 1.49 1996/12/18 06:33:49 tridge Exp $
  * arch/sparc/kernel/traps.c
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -85,9 +85,6 @@ void die_if_kernel(char *str, struct pt_regs *regs)
 
 	printk("%s(%d): %s\n", current->comm, current->pid, str);
 	show_regs(regs);
-#if CONFIG_AP1000
-	ap_panic();
-#endif
 	printk("Instruction DUMP:");
 	instruction_dump ((unsigned long *) regs->pc);
 	if(regs->psr & PSR_PS)

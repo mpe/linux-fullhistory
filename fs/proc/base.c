@@ -8,6 +8,7 @@
 
 #include <asm/uaccess.h>
 
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/proc_fs.h>
@@ -146,8 +147,21 @@ static struct proc_dir_entry proc_pid_maps = {
 	0, &proc_arraylong_inode_operations,
 	NULL, proc_pid_fill_inode,
 };
+
+#if CONFIG_AP1000
+static struct proc_dir_entry proc_pid_ringbuf = {
+	PROC_PID_RINGBUF, 7, "ringbuf",
+	S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
+	0, &proc_ringbuf_inode_operations,
+	NULL, proc_pid_fill_inode,
+};
+#endif
+
 void proc_base_init(void)
 {
+#if CONFIG_AP1000
+	proc_register(&proc_pid, &proc_pid_ringbuf);
+#endif
 	proc_register(&proc_pid, &proc_pid_status);
 	proc_register(&proc_pid, &proc_pid_mem);
 	proc_register(&proc_pid, &proc_pid_cwd);

@@ -87,9 +87,10 @@
 #include <linux/delay.h>
 #include <linux/mm.h>
 #include <linux/blk.h>
+#include <linux/sched.h>
 #include <linux/interrupt.h>
 
-#include <asm/bootinfo.h>
+#include <asm/setup.h>
 #include <asm/atarihw.h>
 #include <asm/atariints.h>
 #include <asm/page.h>
@@ -197,8 +198,8 @@ static int falcon_classify_cmd( Scsi_Cmnd *cmd );
 static unsigned long atari_dma_xfer_len( unsigned long wanted_len,
                                          Scsi_Cmnd *cmd, int write_flag );
 #endif
-static void scsi_tt_intr( int irq, struct pt_regs *fp, void *dummy);
-static void scsi_falcon_intr( int irq, struct pt_regs *fp, void *dummy);
+static void scsi_tt_intr( int irq, void *dummy, struct pt_regs *fp);
+static void scsi_falcon_intr( int irq, void *dummy, struct pt_regs *fp);
 static void falcon_release_lock_if_possible( struct NCR5380_hostdata *
                                              hostdata );
 static void falcon_get_lock( void );
@@ -261,9 +262,9 @@ static int scsi_dma_is_ignored_buserr( unsigned char dma_stat )
 		 * Check for this case:
 		 */
 		
-		for( i = 0; i < boot_info.num_memory; ++i ) {
-			end_addr = boot_info.memory[i].addr +
-				boot_info.memory[i].size;
+		for( i = 0; i < m68k_num_memory; ++i ) {
+			end_addr = m68k_memory[i].addr +
+				m68k_memory[i].size;
 			if (end_addr <= addr && addr <= end_addr + 4)
 				return( 1 );
 		}
@@ -277,7 +278,7 @@ static int scsi_dma_is_ignored_buserr( unsigned char dma_stat )
  * end-of-DMA, both SCSI ints are triggered simultaneously, so the NCR int has
  * to clear the DMA int pending bit before it allows other level 6 interrupts.
  */
-static void scsi_dma_buserr (int irq, struct pt_regs *fp, void *dummy)
+static void scsi_dma_buserr (int irq, void *dummy, struct pt_regs *fp)
 {
 	unsigned char	dma_stat = tt_scsi_dma.dma_ctrl;
 
@@ -306,7 +307,7 @@ static void scsi_dma_buserr (int irq, struct pt_regs *fp, void *dummy)
 #endif
 
 
-static void scsi_tt_intr (int irq, struct pt_regs *fp, void *dummy)
+static void scsi_tt_intr (int irq, void *dummy, struct pt_regs *fp)
 {
 #ifdef REAL_DMA
 	int dma_stat;
@@ -397,7 +398,7 @@ static void scsi_tt_intr (int irq, struct pt_regs *fp, void *dummy)
 }
 
 
-static void scsi_falcon_intr (int irq, struct pt_regs *fp, void *dummy)
+static void scsi_falcon_intr (int irq, void *dummy, struct pt_regs *fp)
 {
 #ifdef REAL_DMA
 	int dma_stat;
@@ -666,7 +667,7 @@ int atari_scsi_detect (Scsi_Host_Template *host)
 	 * Ram.
 	 */
 	if (MACH_IS_ATARI && ATARIHW_PRESENT(ST_SCSI) &&
-	    !ATARIHW_PRESENT(EXTD_DMA) && boot_info.num_memory > 1) {
+	    !ATARIHW_PRESENT(EXTD_DMA) && m68k_num_memory > 1) {
 		atari_dma_buffer = scsi_init_malloc(STRAM_BUFFER_SIZE,
 						    GFP_ATOMIC | GFP_DMA);
 		atari_dma_phys_buffer = VTOP( atari_dma_buffer );
@@ -685,8 +686,8 @@ int atari_scsi_detect (Scsi_Host_Template *host)
 		/* This int is actually "pseudo-slow", i.e. it acts like a slow
 		 * interrupt after having cleared the pending flag for the DMA
 		 * interrupt. */
-		add_isr(IRQ_TT_MFP_SCSI, scsi_tt_intr, IRQ_TYPE_SLOW,
-			NULL, "SCSI NCR5380");
+		request_irq(IRQ_TT_MFP_SCSI, scsi_tt_intr, IRQ_TYPE_SLOW,
+		            "SCSI NCR5380", scsi_tt_intr);
 		tt_mfp.active_edge |= 0x80;		/* SCSI int on L->H */
 #ifdef REAL_DMA
 		tt_scsi_dma.dma_ctrl = 0;
@@ -747,7 +748,7 @@ int atari_scsi_detect (Scsi_Host_Template *host)
 int atari_scsi_release (struct Scsi_Host *sh)
 {
 	if (IS_A_TT())
-		remove_isr (IRQ_TT_MFP_SCSI, scsi_tt_intr, NULL);
+		free_irq(IRQ_TT_MFP_SCSI, scsi_tt_intr);
 	if (atari_dma_buffer)
 		scsi_init_free (atari_dma_buffer, STRAM_BUFFER_SIZE);
 	return 1;
@@ -851,7 +852,8 @@ int atari_scsi_reset( Scsi_Cmnd *cmd, unsigned int reset_flags)
 	else {
 		atari_turnon_irq( IRQ_MFP_FSCSI );
 	}
-	falcon_release_lock_if_possible(hostdata);
+	if ((rv & SCSI_RESET_ACTION) == SCSI_RESET_SUCCESS)
+		falcon_release_lock_if_possible(hostdata);
 
 	return( rv );
 }
@@ -1085,8 +1087,9 @@ static unsigned long atari_dma_xfer_len( unsigned long wanted_len,
 	if (possible_len > limit)
 		possible_len = limit;
 
-	DMA_PRINTK("Sorry, must cut DMA transfer size to %ld bytes instead "
-		   "of %ld\n", possible_len, wanted_len);
+	if (possible_len != wanted_len)
+		DMA_PRINTK("Sorry, must cut DMA transfer size to %ld bytes "
+			   "instead of %ld\n", possible_len, wanted_len);
 
 	return( possible_len );
 }

@@ -218,7 +218,7 @@ static inline void access_error060 (struct frame *fp)
 #endif /* CONFIG_M68060 */
 
 #if defined (CONFIG_M68040)
-static unsigned long probe040 (int iswrite, int fc, unsigned long addr)
+static inline unsigned long probe040 (int iswrite, int fc, unsigned long addr)
 {
 	unsigned long mmusr;
 	unsigned long fs = get_fs();
@@ -227,28 +227,26 @@ static unsigned long probe040 (int iswrite, int fc, unsigned long addr)
 
 	if (iswrite)
 		/* write */
-		asm volatile ("movel %1,%/a0\n\t"
-			      ".word 0xf548\n\t"	/* ptestw (a0) */
-			      ".long 0x4e7a8805\n\t"	/* movec mmusr,a0 */
-			      "movel %/a0,%0"
-			      : "=g" (mmusr)
-			      : "g" (addr)
-			      : "a0");
+		asm volatile (".chip 68040\n\t"
+			      "ptestw (%1)\n\t"
+			      "movec %%mmusr,%0\n\t"
+			      ".chip 68k"
+			      : "=r" (mmusr)
+			      : "a" (addr));
 	else
-		asm volatile ("movel %1,%/a0\n\t"
-			      ".word 0xf568\n\t"	/* ptestr (a0) */
-			      ".long 0x4e7a8805\n\t"	/* movec mmusr,a0 */
-			      "movel %/a0,%0"
-			      : "=g" (mmusr)
-			      : "g" (addr)
-			      : "a0");
+		asm volatile (".chip 68040\n\t"
+			      "ptestr (%1)\n\t"
+			      "movec %%mmusr,%0\n\t"
+			      ".chip 68k"
+			      : "=r" (mmusr)
+			      : "a" (addr));
 
 	set_fs (fs);
 
 	return mmusr;
 }
 
-static void do_040writeback (unsigned short ssw,
+static inline void do_040writeback (unsigned short ssw,
 			     unsigned short wbs,
 			     unsigned long wba,
 			     unsigned long wbd,
@@ -313,11 +311,9 @@ static inline void access_error040 (struct frame *fp)
 
 		/* MMU error, get the MMUSR info for this access */
 		mmusr = probe040 (!(ssw & RW_040), ssw & TM_040, addr);
-		/*
 #ifdef DEBUG
 		printk("mmusr = %lx\n", mmusr);
 #endif
-*/
 		errorcode = ((mmusr & MMU_R_040) ? 1 : 0) |
 			((ssw & RW_040) ? 0 : 2);
 		do_page_fault (&fp->ptregs, addr, errorcode);
@@ -605,7 +601,7 @@ static inline void bus_error030 (struct frame *fp)
 		      
 		printk ("level 0 mmusr is %#x\n", mmusr);
 #ifdef DEBUG
-		if (boot_info.cputype & CPU_68030) {
+		if (m68k_cputype & CPU_68030) {
 			asm volatile ("pmove %/tt0,%0@"
 				      : /* no outputs */
 				      : "a" (&tlong));
@@ -869,12 +865,16 @@ asmlinkage void trap_c(struct frame *fp)
 		{
 		  unsigned char fstate[216];
 
-		  __asm__ __volatile__ ("fsave %0@" : : "a" (fstate) : "memory");
+		  __asm__ __volatile__ (".chip 68k/68881\n\t"
+		  			"fsave %0@\n\t"
+		  			".chip 68k" : : "a" (fstate) : "memory");
 		  /* Set the exception pending bit in the 68882 idle frame */
 		  if (*(unsigned short *) fstate == 0x1f38)
 		    {
 		      fstate[fstate[1]] |= 1 << 3;
-		      __asm__ __volatile__ ("frestore %0@" : : "a" (fstate));
+		      __asm__ __volatile__ (".chip 68k/68881\n\t"
+		      			    "frestore %0@\n\t"
+					    ".chip 68k" : : "a" (fstate));
 		    }
 		}
 		/* fall through */

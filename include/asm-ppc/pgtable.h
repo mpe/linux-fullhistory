@@ -226,6 +226,9 @@ extern inline unsigned long pmd_page(pmd_t pmd)
 { return pmd_val(pmd) & PAGE_MASK; }
 
 
+/* to find an entry in a kernel page-table-directory */
+#define pgd_offset_k(address) pgd_offset(&init_mm, address)
+
 /* to find an entry in a page-table-directory */
 extern inline pgd_t * pgd_offset(struct mm_struct * mm, unsigned long address)
 {

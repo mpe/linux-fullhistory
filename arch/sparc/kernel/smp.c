@@ -89,6 +89,11 @@ static volatile int smp_commenced = 0;
 
 static char smp_buf[512];
 
+/* Not supported on Sparc yet. */
+void smp_setup(char *str, int *ints)
+{
+}
+
 char *smp_info(void)
 {
 	sprintf(smp_buf,

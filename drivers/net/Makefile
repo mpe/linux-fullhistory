@@ -282,6 +282,30 @@ ifeq ($(CONFIG_SUNLANCE),y)
 L_OBJS += sunlance.o
 endif
 
+ifeq ($(CONFIG_HAPPYMEAL),y)
+L_OBJS += sunhme.o
+else
+  ifeq ($(CONFIG_HAPPYMEAL),m)
+  M_OBJS += sunhme.o
+  endif
+endif
+
+ifeq ($(CONFIG_SUNQE),y)
+L_OBJS += sunqe.o
+else
+  ifeq ($(CONFIG_SUNQE),m)
+  M_OBJS += sunqe.o
+  endif
+endif
+
+ifeq ($(CONFIG_MYRI_SBUS),y)
+L_OBJS += myri_sbus.o
+else
+  ifeq ($(CONFIG_MYRI_SBUS),m)
+  M_OBJS += myri_sbus.o
+  endif
+endif
+
 ifeq ($(CONFIG_AT1700),y)
 L_OBJS += at1700.o
 else
@@ -535,6 +559,22 @@ L_OBJS += atarilance.o
 else
   ifeq ($(CONFIG_ATARILANCE),m)
   M_OBJS += atarilance.o
+  endif
+endif
+
+ifeq ($(CONFIG_ATARI_BIONET),y)
+L_OBJS += atari_bionet.o
+else
+  ifeq ($(CONFIG_ATARI_BIONET),m)
+  M_OBJS += atari_bionet.o
+  endif
+endif
+
+ifeq ($(CONFIG_ATARI_PAMSNET),y)
+L_OBJS += atari_pamsnet.o
+else
+  ifeq ($(CONFIG_ATARI_PAMSNET),m)
+  M_OBJS += atari_pamsnet.o
   endif
 endif
 

@@ -32,7 +32,6 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 
-#include <asm/bootinfo.h>
 #include <asm/amigaints.h>
 #include <asm/amigahw.h>
 #include <asm/zorro.h>
@@ -92,7 +91,7 @@ struct hydra_private
 
 static int hydra_open(struct device *dev);
 static int hydra_start_xmit(struct sk_buff *skb, struct device *dev);
-static void hydra_interrupt(int irq, struct pt_regs *fp, void *data);
+static void hydra_interrupt(int irq, void *data, struct pt_regs *fp);
 static void __inline__ hydra_rx(struct device *dev, struct hydra_private *priv, volatile u_char *nicbase);
 static int hydra_close(struct device *dev);
 static struct enet_statistics *hydra_get_stats(struct device *dev);
@@ -272,7 +271,7 @@ static int hydra_open(struct device *dev)
     dev->interrupt = 0;
     dev->start = 1;
     
-    if(!add_isr(IRQ_AMIGA_PORTS, hydra_interrupt, 0, dev, "Hydra Ethernet"))
+    if(request_irq(IRQ_AMIGA_PORTS, hydra_interrupt, 0, "Hydra Ethernet", dev))
       return(-EAGAIN);
 
     MOD_INC_USE_COUNT;
@@ -300,7 +299,7 @@ static int hydra_close(struct device *dev)
   /* wait for NIC to stop (what a nice timeout..) */
   while(((READ_REG(NIC_ISR) & ISR_RST) == 0) && --n);
     
-  remove_isr(IRQ_AMIGA_PORTS, hydra_interrupt, dev);
+  free_irq(IRQ_AMIGA_PORTS, dev);
 
   MOD_DEC_USE_COUNT;
 
@@ -308,7 +307,7 @@ static int hydra_close(struct device *dev)
 }
 
 
-static void hydra_interrupt(int irq, struct pt_regs *fp, void *data)
+static void hydra_interrupt(int irq, void *data, struct pt_regs *fp)
     {
     volatile u_char *nicbase;
   

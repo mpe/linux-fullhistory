@@ -13,8 +13,11 @@
  * Interrupt support added 1993 Nigel Gamble
  */
 
-#include <linux/autoconf.h>
-#include <asm/bootinfo.h>
+/*
+ *  many many printers are we going to support? currently, this is the
+ *  hardcoded limit
+ */
+#define MAX_LP 5
 
 /*
  * Per POSIX guidelines, this module reserves the LP and lp prefixes
@@ -84,6 +87,17 @@
 
 #define LP_BUFFER_SIZE 1024 /*256*/
 
+enum lp_type  {
+LP_UNKNOWN = 0,
+LP_AMIGA = 1,
+LP_ATARI = 2,
+LP_MFC = 3
+};
+
+/*
+ * warning: this structure is in kernel space and has to fit in one page,
+ * i.e. must not be larger than 4k
+ */
 struct lp_struct {
 	char *name;
 	unsigned int irq;
@@ -92,18 +106,27 @@ struct lp_struct {
 	int (*lp_has_pout)(int);
 	int (*lp_is_online)(int);
 	int (*lp_my_interrupt)(int);
+	int (*lp_ioctl)(int, unsigned int, unsigned long);
+	void (*lp_open)(void);		/* for module use counter */
+	void (*lp_release)(void);	/* for module use counter */
 	int flags;		/*for BUSY... */
 	unsigned int chars;	/*busy timeout */
 	unsigned int time;	/*wait time */
 	unsigned int wait;
 	struct wait_queue *lp_wait_q; /*strobe wait */
+	void *base;			/* hardware drivers internal use*/
+	enum lp_type type;
 	char lp_buffer[LP_BUFFER_SIZE];
 	int do_print;
 	unsigned long copy_size,bytes_written;
 };
 
-extern struct lp_struct lp_table[];
+extern struct lp_struct *lp_table[MAX_LP];
+extern unsigned int lp_irq;
 
-extern int lp_init(void);
+void lp_interrupt(int, void *, struct pt_regs *);
+int lp_init(void);
+int register_parallel(struct lp_struct *, int);
+void unregister_parallel(int);
 
 #endif

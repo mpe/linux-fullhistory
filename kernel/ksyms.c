@@ -128,6 +128,7 @@ struct symbol_table symbol_table = {
  	X(mem_map),
  	X(remap_page_range),
 	X(max_mapnr),
+	X(num_physpages),
 	X(high_memory),
 	X(update_vm_cache),
 

@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.33 1996/12/03 08:44:55 jj Exp $
+/* $Id: page.h,v 1.35 1996/12/19 08:08:22 davem Exp $
  * page.h:  Various defines and such for MMU operations on the Sparc for
  *          the Linux kernel.
  *
@@ -8,6 +8,7 @@
 #ifndef _SPARC_PAGE_H
 #define _SPARC_PAGE_H
 
+#include <linux/config.h>
 #include <asm/head.h>       /* for KERNBASE */
 
 #define PAGE_SHIFT   12
@@ -28,8 +29,8 @@ extern unsigned long page_offset;
 extern unsigned long (*mmu_v2p)(unsigned long);
 extern unsigned long (*mmu_p2v)(unsigned long);
 
-#define __pa(x)    mmu_v2p(x)
-#define __va(x)    mmu_p2v(x)
+#define __pa(x)    mmu_v2p((unsigned long)(x))
+#define __va(x)    mmu_p2v((unsigned long)(x))
 
 /* The following structure is used to hold the physical
  * memory configuration of the machine.  This is filled in
@@ -87,6 +88,132 @@ typedef struct { unsigned long iopgprot; } iopgprot_t;
 #define __ctxd(x)	((ctxd_t) { (x) } )
 #define __pgprot(x)	((pgprot_t) { (x) } )
 #define __iopgprot(x)	((iopgprot_t) { (x) } )
+
+#elif CONFIG_AP1000_DEBUG
+
+typedef struct { unsigned long pte; } pte_t;
+typedef struct { unsigned long iopte; } iopte_t;
+typedef struct { unsigned long pmd; } pmd_t;
+typedef struct { unsigned long pgd; } pgd_t;
+typedef struct { unsigned long ctxd; } ctxd_t;
+typedef struct { unsigned long pgprot; } pgprot_t;
+typedef struct { unsigned long iopgprot; } iopgprot_t;
+
+static inline unsigned long __get_val(unsigned long x)
+{
+	if ((x & 0xF0000000) == (8<<28))
+		return x & 0x0FFFFFFF;
+	return x;
+}
+
+static inline unsigned long __set_val(unsigned long x)
+{
+	if ((x & 0xF0000000) == (0<<28))
+		return x | 0x80000000;
+	return x;
+}
+
+#define __pte_val(x)	((x).pte)
+#define __iopte_val(x)	((x).iopte)
+#define __pmd_val(x)      ((x).pmd)
+#define __pgd_val(x)	((x).pgd)
+#define __ctxd_val(x)	((x).ctxd)
+#define __pgprot_val(x)	((x).pgprot)
+#define __iopgprot_val(x)	((x).iopgprot)
+
+#define ___pte(x)	((pte_t) { (x) } )
+#define ___iopte(x)	((iopte_t) { (x) } )
+#define ___pmd(x)        ((pmd_t) { (x) } )
+#define ___pgd(x)	((pgd_t) { (x) } )
+#define ___ctxd(x)	((ctxd_t) { (x) } )
+#define ___pgprot(x)	((pgprot_t) { (x) } )
+#define ___iopgprot(x)	((iopgprot_t) { (x) } )
+
+
+#define pte_val(x) __get_val(__pte_val(x))
+#define iopte_val(x) __get_val(__iopte_val(x))
+#define pmd_val(x) __get_val(__pmd_val(x))
+#define pgd_val(x) __get_val(__pgd_val(x))
+#define ctxd_val(x) __get_val(__ctxd_val(x))
+#define pgprot_val(x) __get_val(__pgprot_val(x))
+#define iopgprot_val(x) __get_val(__iopgprot_val(x))
+
+#define __pte(x) ___pte(__set_val(x))
+#define __iopte(x) ___iopte(__set_val(x))
+#define __pmd(x) ___pmd(__set_val(x))
+#define __pgd(x) ___pgd(__set_val(x))
+#define __ctxd(x) ___ctxd(__set_val(x))
+#define __pgprot(x) ___pgprot(x)
+#define __iopgprot(x) ___iopgprot(__set_val(x))
+
+#elif CONFIG_AP1000
+
+typedef unsigned long pte_t;
+typedef unsigned long iopte_t;
+typedef unsigned long pmd_t;
+typedef unsigned long pgd_t;
+typedef unsigned long ctxd_t;
+typedef unsigned long pgprot_t;
+typedef unsigned long iopgprot_t;
+
+static inline unsigned long __get_val(unsigned long x)
+{
+#if 0
+	extern void ap_panic(char *fmt,...);
+	if (x && (x & 0xF0000000) == 0) {
+		ap_panic("get_val got 0x%x\n",x);
+	}
+#endif
+	if ((x & 0xF0000000) == (8<<28))
+		return x & 0x0FFFFFFF;
+	return x;
+}
+
+static inline unsigned long __set_val(unsigned long x)
+{
+#if 0
+	extern void ap_panic(char *fmt,...);
+	if ((x & 0xF0000000) == (8<<28)) {
+		ap_panic("set_val got 0x%x\n",x);
+	}
+#endif
+	if ((x & 0xF0000000) == (0<<28))
+		return x | 0x80000000;
+	return x;
+}
+
+#define __pte_val(x)	(x)
+#define __iopte_val(x)	(x)
+#define __pmd_val(x)      (x)
+#define __pgd_val(x)	(x)
+#define __ctxd_val(x)	(x)
+#define __pgprot_val(x)	(x)
+#define __iopgprot_val(x)	(x)
+
+#define ___pte(x)	((pte_t) { (x) } )
+#define ___iopte(x)	((iopte_t) { (x) } )
+#define ___pmd(x)        ((pmd_t) { (x) } )
+#define ___pgd(x)	((pgd_t) { (x) } )
+#define ___ctxd(x)	((ctxd_t) { (x) } )
+#define ___pgprot(x)	((pgprot_t) { (x) } )
+#define ___iopgprot(x)	((iopgprot_t) { (x) } )
+
+
+#define pte_val(x) __get_val(__pte_val(x))
+#define iopte_val(x) __get_val(__iopte_val(x))
+#define pmd_val(x) __get_val(__pmd_val(x))
+#define pgd_val(x) __get_val(__pgd_val(x))
+#define ctxd_val(x) __get_val(__ctxd_val(x))
+#define pgprot_val(x) __get_val(__pgprot_val(x))
+#define iopgprot_val(x) __get_val(__iopgprot_val(x))
+
+#define __pte(x) ___pte(__set_val(x))
+#define __iopte(x) ___iopte(__set_val(x))
+#define __pmd(x) ___pmd(__set_val(x))
+#define __pgd(x) ___pgd(__set_val(x))
+#define __ctxd(x) ___ctxd(__set_val(x))
+#define __pgprot(x) ___pgprot(x)
+#define __iopgprot(x) ___iopgprot(__set_val(x))
 
 #else
 /*

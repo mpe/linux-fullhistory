@@ -537,7 +537,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		return;
 	}
 
-	if(request == PTRACE_SUNATTACH) {
+	if(request == PTRACE_SUNATTACH || request == PTRACE_ATTACH) {
 		if(child == current) {
 			/* Try this under SunOS/Solaris, bwa haha
 			 * You'll never be able to kill the process. ;-)
@@ -568,7 +568,8 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		pt_succ_return(regs, 0);
 		return;
 	}
-	if(!(child->flags & PF_PTRACED)) {
+	if(!(child->flags & PF_PTRACED) && (request!=PTRACE_SUNATTACH) &&
+	   (request!=PTRACE_ATTACH)) {
 		pt_error_return(regs, ESRCH);
 		return;
 	}

@@ -18,18 +18,10 @@ COMPILE_ARCH = $(shell uname -m)
 
 # override top level makefile
 AS += -m68020
-ifdef CONFIG_KERNEL_ELF
 LD += -m m68kelf
 ifneq ($(COMPILE_ARCH),$(ARCH))
 	# prefix for cross-compiling binaries
 	CROSS_COMPILE = m68k-linux-
-endif
-else
-LD += -m m68klinux
-ifneq ($(COMPILE_ARCH),$(ARCH))
-	# prefix for cross-compiling binaries
-	CROSS_COMPILE = m68k-linuxaout-
-endif
 endif
 
 #
@@ -42,11 +34,7 @@ endif
 # -qmagic (we need to remove the 32 byte header for bootup purposes)
 #
 
-ifdef CONFIG_KERNEL_ELF
 LINKFLAGS = -Ttext 0x1000
-else
-LINKFLAGS = -qmagic -Ttext 0xFE0
-endif
 
 CFLAGS := $(CFLAGS) -pipe
 
@@ -55,7 +43,7 @@ CFLAGS := $(CFLAGS) -m68040
 endif
 
 ifdef CONFIG_OPTIMIZE_060
-CFLAGS := $(CFLAGS) -m68020-40 -Wa,-m68060
+CFLAGS := $(CFLAGS) -m68020-40
 endif
 
 HEAD := arch/m68k/kernel/head.o

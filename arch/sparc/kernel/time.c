@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.20 1996/11/13 05:09:40 davem Exp $
+/* $Id: time.c,v 1.22 1996/12/19 08:06:32 davem Exp $
  * linux/arch/sparc/kernel/time.c
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -24,11 +24,6 @@
 #include <asm/system.h>
 #include <asm/irq.h>
 #include <asm/io.h>
-
-#ifdef CONFIG_AP1000
-#include <asm/ap1000/apservice.h>
-#endif
-
 
 enum sparc_clock_type sp_clock_typ;
 struct mostek48t02 *mstk48t02_regs = 0;
@@ -162,6 +157,8 @@ __initfunc(static void clock_probe(void))
 	char model[128];
 	register int node, cpuunit, bootbus;
 
+	cpuunit = bootbus = 0;
+
 	/* Determine the correct starting PROM node for the probe. */
 	node = prom_getchild(prom_root_node);
 	switch (sparc_cpu_model) {
@@ -244,11 +241,7 @@ __initfunc(void time_init(void))
 
 #if CONFIG_AP1000
 	init_timers(timer_interrupt);
-	{
-	  extern struct cap_init cap_init;
-	  xtime.tv_sec = cap_init.init_time;
-	  xtime.tv_usec = 0;
-	}
+	ap_init_time(&xtime);
         return;
 #endif
 
@@ -273,7 +266,6 @@ __initfunc(void time_init(void))
 	return;
 }
 
-#if !CONFIG_AP1000
 static __inline__ unsigned long do_gettimeoffset(void)
 {
 	unsigned long offset = 0;
@@ -286,7 +278,6 @@ static __inline__ unsigned long do_gettimeoffset(void)
 
 	return offset + count;
 }
-#endif
 
 void do_gettimeofday(struct timeval *tv)
 {

@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.21 1996/11/13 05:09:12 davem Exp $
+# $Id: Makefile,v 1.22 1996/12/18 06:17:39 tridge Exp $
 # sparc/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -34,9 +34,10 @@ INITOBJ = $(TOPDIR)/arch/sparc/kernel/initobj.o
 FINITOBJ = $(TOPDIR)/arch/sparc/kernel/finitobj.o
 
 ifdef CONFIG_AP1000
-SUBDIRS := $(SUBDIRS) arch/sparc/ap1000
-ARCHIVES := $(TOPDIR)/arch/sparc/ap1000/ap1000lib.o $(ARCHIVES) 
+SUBDIRS := $(SUBDIRS) arch/sparc/ap1000 mpp
+ARCHIVES := $(TOPDIR)/arch/sparc/ap1000/ap1000lib.o $(TOPDIR)/mpp/mpplib.o $(ARCHIVES) 
 DRIVERS := $(DRIVERS) drivers/ap1000/ap1000.a
+CFLAGS := $(CFLAGS) -D__MPP__=1
 endif
 
 archclean:

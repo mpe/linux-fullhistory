@@ -20,8 +20,6 @@
 **
 */
 
-#include <asm/amigatypes.h>
-
 
 struct MsgPort {
     u_char fill1[15];

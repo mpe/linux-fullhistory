@@ -35,11 +35,12 @@ struct sockaddr_rose {
 };
 
 struct rose_route_struct {
-	rose_address  address;
-	ax25_address  neighbour;
-	char          device[16];
-	unsigned char ndigis;
-	ax25_address  digipeaters[AX25_MAX_DIGIS];
+	rose_address	address;
+	unsigned short	mask;
+	ax25_address	neighbour;
+	char		device[16];
+	unsigned char	ndigis;
+	ax25_address	digipeaters[AX25_MAX_DIGIS];
 };
 
 struct rose_ctl_struct {

@@ -133,7 +133,7 @@ extern void ret_from_sys_call(void);
  * Use the passed "regs" pointer to determine how much space we need
  * for a kernel fork().
  */
-void copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
+int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	struct task_struct * p, struct pt_regs * regs)
 {
 	struct pt_regs * childregs;
@@ -159,6 +159,8 @@ void copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	p->tss.pal_flags = 1;	/* set FEN, clear everything else */
 	p->tss.flags = current->tss.flags;
 	p->mm->context = 0;
+
+	return 0;
 }
 
 /*

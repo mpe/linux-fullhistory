@@ -6,7 +6,7 @@
 /*		board.  Everything that says "es4h" should really be	*/
 /*		"se4".  But we'll keep the old name for now.		*/
 /*									*/
-/*	$Id: es4h.h,v 1.9 1996/04/18 02:58:25 rick Exp $		*/
+/*	$Id: es4h.h,v 1.10 1996/08/22 17:16:53 rick Exp $		*/
 /*									*/
 /************************************************************************/
 
@@ -43,9 +43,9 @@
 #define	ES4H_IS		0x07		/* Interrupt, addr select */
 #	define ES4H_IS_INTMASK		0x07	/* WO, interrupt select */
 #	define ES4H_IS_INTOFF		0x00		/* No IRQ */
-#	define ES4H_IS_INT3		0x01		/* IRQ 3 */
+#	define ES4H_IS_INT3		0x03		/* IRQ 3 */
 #	define ES4H_IS_INT5		0x02		/* IRQ 5 */
-#	define ES4H_IS_INT7		0x03		/* IRQ 7 */
+#	define ES4H_IS_INT7		0x01		/* IRQ 7 */
 #	define ES4H_IS_INT10		0x04		/* IRQ 10 */
 #	define ES4H_IS_INT11		0x05		/* IRQ 11 */
 #	define ES4H_IS_INT12		0x06		/* IRQ 12 */
@@ -131,6 +131,7 @@
 #	define SE6_GPP_EED		0x0001	/* RW, EEPROM data bit */
 #	define SE6_GPP_EECS		0x0002	/* RW, EEPROM chip select */
 #	define SE6_GPP_EECK		0x0004	/* RW, EEPROM clock */
+#	define SE6_GPP_LINK		0x00fc	/* R, Link status LEDs */
 
 #define	ES4H_INTVEC		0xA2060000	/* RO: Interrupt Vector */
 #	define ES4H_IV_DMA0		0x01	/* Chan 0 DMA interrupt */
@@ -170,7 +171,7 @@
 /*
  *	Because there are differences between the SE-4 and the SE-6,
  *	we assume that the following globals will be set up at init
- *	time in main.c to contain the appropriate constants from above
+ *	time in main.c to containt the appropriate constants from above
  */
 extern ushort	Gpp;		/* Softcopy of GPP register */
 extern ushort	EEck;		/* Clock bit */

@@ -115,7 +115,7 @@ void release_thread(struct task_struct *dead_task)
 	 */
 }
   
-void copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
+int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
                  struct task_struct * p, struct pt_regs * regs)
 {
 	struct pt_regs * childregs;
@@ -145,6 +145,8 @@ void copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	p->tss.cp0_status = read_32bit_cp0_register(CP0_STATUS) &
                             ~(ST0_CU3|ST0_CU2|ST0_CU1|ST0_KSU|ST0_ERL|ST0_EXL);
 	childregs->cp0_status &= ~(ST0_CU3|ST0_CU2|ST0_CU1);
+
+	return 0;
 }
 
 /*

@@ -354,6 +354,15 @@ CONFIG_BLK_DEV_XD
   Documentation/modules.txt. It's pretty unlikely that you have one of
   these: say N.
 
+SyQuest EZ parallel port disk support
+CONFIG_BLK_DEV_EZ
+  If you have a parallel port version of SyQuest's EZ135 or EZ230 removable
+  media devices you can use this driver.  Answer Y to build the driver into
+  the kernel, or M if you would like to build it as a loadable module.
+  Read the file linux/Documentation/ez.txt.  If you have several different
+  devices that will share a common parallel port you should build them all
+  as modules.
+
 Multiple devices driver support
 CONFIG_BLK_DEV_MD
   This driver lets you combine several harddisk partitions into one
@@ -2065,14 +2074,12 @@ CONFIG_BAYCOM
   This is an experimental driver for Baycom style simple amateur radio
   modems that connect to either a serial interface or a parallel
   interface. The driver supports the ser12 and par96 designs. To
-  configure the driver, use the sethdlc utility available in the
-  standard ax25 utilities package. For information on the modems, see
-  http://www.baycom.de and drivers/net/README.baycom.  If you want to
-  use this, you need to say Y to "Amateur Radio AX.25 Level 2" support
-  as well.  If you want to compile this driver as a module ( = code
-  which can be inserted in and removed from the running kernel
-  whenever you want), say M here and read
-  Documentation/modules.txt. This is recommended.
+  configure the driver, use the sethdlc utility available
+  in the standard ax25 utilities package. For information on the modems,
+  see http://www.baycom.de and drivers/net/README.baycom.
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. This is recommended.
 
 Soundcard modem driver for AX.25
 CONFIG_SOUNDMODEM
@@ -2082,12 +2089,57 @@ CONFIG_SOUNDMODEM
   utilities available in the standard ax25 utilities package. For
   informations on how to key the transmitter, see
   http://www.ife.ee.ethz.ch/~sailer/pcf/ptt_circ/ptt.html and
-  drivers/net/README.soundmodem. To use this driver, you also need to
-  say Y to "Amateur Radio AX.25 Level 2" support. If you want to
-  compile this driver as a module ( = code which can be inserted in
-  and removed from the running kernel whenever you want), say M here
-  and read Documentation/modules.txt. This is recommended. Note that
-  this driver and the sound driver cannot both work at the same time.
+  drivers/net/README.soundmodem. If you want to compile this as a
+  module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt. This is recommended.
+
+Soundcard modem support for SoundBlaster and compatible cards
+CONFIG_SOUNDMODEM_SBC
+  This option enables the soundmodem driver to use SoundBlaster
+  and compatible cards. Dual mode cards (i.e. WSS cards with a
+  SoundBlaster emulation) should be used in WSS mode because
+  this results in usually better performance.
+
+Soundcard modem support for WSS and Crystal cards
+CONFIG_SOUNDMODEM_WSS
+  This option enables the soundmodem driver to use WindowsSoundSystem
+  compatible cards. These cards feature a codec chip from either
+  Analog Devices (such as AD1848, AD1845, AD1812) or Crystal Semiconductors
+  (such as CS4248, CS423x). This option also supports the WSS full duplex
+  operation which currently works with Crystal CS423x chips. If you don't
+  need full duplex operation, do not enable it to save performance.
+
+Soundcard modem support for 1200 baud AFSK modulation
+CONFIG_SOUNDMODEM_AFSK1200
+  This option enables the soundmodem driver 1200 baud AFSK modem, 
+  compatible to popular modems using TCM3105 or AM7911. The demodulator
+  requires about 12% of the CPU power of a Pentium 75 CPU per channel.
+
+Soundcard modem support for 1200 baud AFSK modulation
+CONFIG_SOUNDMODEM_AFSK1200_FP
+  This option enables floating point calculations to be used for the
+  AFSK1200 baud modem. The Intel Pentium is a perverted chip because
+  integer multiplications are, altough easier to implement in silicon,
+  an order of a magnitude slower than floating point calculations.
+  Enabling this option uses a highly optimized assembler routine for
+  correlations, modelled after the one published by Phil Karn, KA9Q.
+  This reduces the computing power needed on Intel Pentium chips to about
+  50%. On the other hand, Pentium clones with faster integer multiply and
+  slower floating point multiply will probably take longer with this
+  option turned on. As a rule of thumb, enable it for Intel Pentium and
+  Pentium Pro processors, and disable it for anything else.
+  I (sailer@ife.ee.ethz.ch) am very interested in figures. If you are
+  willing to give me a feedback, please compile the driver once with this
+  option enabled and once with it disabled, and send me the cycle counter
+  numbers obtained with both compilations, and your exact chip. The cycle
+  counter numbers can be optained by a recent sethdlc utility.
+
+Soundcard modem support for 9600 baud FSK G3RUH modulation
+CONFIG_SOUNDMODEM_FSK9600
+  This option enables the soundmodem driver 9600 baud FSK modem,
+  compatible to the G3RUH standard. The demodulator requires about 4%
+  of the CPU power of a Pentium 75 CPU per channel.
 
 Serial port KISS driver for AX.25
 CONFIG_MKISS
@@ -2879,21 +2931,9 @@ CONFIG_IBMTR
 
 Traffic Shaper (EXPERIMENTAL)
 CONFIG_SHAPER
-  A traffic shaper is a special device (typically called /dev/shaper0)
-  that attaches to some other network device (such as your first
-  ethernet card /dev/eth0) and limits the outgoing bandwidth on that
-  device to a configurable upper bound, for example 64000 bits per
-  second. It works like this: you can send all the traffic that would
-  normally go to /dev/eth0 to /dev/shaper0 instead; the traffic will
-  be slowed down a bit and then forwarded to /dev/eth0. This could be
-  useful for something, but I don't know for what. To set up and
-  configure shaper devices, you need the shapecfg program, available
-  via ftp (user: anonymous) from shadow.cabi.net/pub/Linux in the
-  shaper package. Please read Documentation/networking/shaper.txt.
-  This driver is also available as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you
-  want). If you want to compile it as a module, say M here and read
-  Documentation/modules.txt. If unsure, say N.
+  The traffic shaper is a virtual network device that allows you to limit
+  the rate of data flow over another device. See
+  Documentation/networking/shaper.txt for more information.
 
 FDDI driver support
 CONFIG_FDDI
@@ -3017,6 +3057,15 @@ CONFIG_GSCD
   As described in linux/Documentation/cdrom/gscd, you might have to
   change a setting in the file include/linux/gscd.h before compiling
   the kernel.
+
+MicroSolutions backpack CDROM support
+CONFIG_BPCD
+  MicroSolutions backpack CDROM is an external drive that connects to
+  the parallel port.  The bpcd driver supports model 164550 (and perhaps
+  other models).  Say Y if you have one of these, and read the
+  file linux/Documentation/cdrom/bpcd.  If you have several different
+  devices that will share a common parallel port, say M and build them
+  as modules.
 
 Philips/LMS CM206 CDROM support
 CONFIG_CM206
@@ -3867,6 +3916,11 @@ CONFIG_SOUND
   that are at
   sunsite.unc.edu:/pub/Linux/kernel/patches/console/pcsndrv-X.X.tar.gz,
   to be extracted with "tar xzvf filename".
+  This driver is also available as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want) on the
+  Motorola 680x0 architecture. If you are compiling a kernel for
+  Linux/m68k and want to compile this driver as a module, say M here
+  and read Documentation/modules.txt.
 
 ProAudioSpectrum 16 support
 CONFIG_PAS
@@ -4112,6 +4166,407 @@ CONFIG_AP1000
   called an AP1000+. For details on our efforts to port Linux to this
   machine see http://cap.anu.edu.au/cap/projects/linux or mail to
   hackers@cafe.anu.edu.au
+
+Sparc ESP SCSI support
+CONFIG_SCSI_SUNESP
+  This is the driver for the Sun ESP SCSI host adapter. The ESP
+  chipset is present in most SPARC-based computers.
+
+Sparc /dev/openprom compatibility driver
+CONFIG_SUN_OPENPROMIO
+  This driver provides user programs with an interface to the Sparc
+  PROM device tree. The driver implements a SunOS-compatible
+  interface and a NetBSD-compatible interface. If you want to
+  compile this as a module ( = code which can be inserted in and
+  removed from the running kernel whenever you want), say M and read
+  Documentation/modules.txt. If unsure, say Y.
+
+# m68k-specific kernel options
+# Documented by Chris Lawrence <quango@themall.net> et al.
+
+Amiga support
+CONFIG_AMIGA
+  This option enables support for the Amiga series of computers.  If
+  you plan to use this kernel on an Amiga, say Y here; otherwise say N.
+
+Atari support
+CONFIG_ATARI
+  This option enables support for the 68000-based Atari series of
+  computers (including the TT, Falcon and Medusa).  If you plan to use
+  this kernel on an Atari, say Y here; otherwise say N.
+
+Macintosh support
+CONFIG_MAC
+  This option would enable support for the Apple Macintosh if there was
+  any for it.  Say N unless you've coded all the necessary support. ;)
+
+# CONFIG_APOLLO, etc. coming soon (?)
+
+68020 support
+CONFIG_M68020
+  If you anticipate running this kernel on a computer with a MC68020 processor,
+  say Y.  Otherwise, say N.  Note that the 68020 requires a 68851 MMU 
+  (= memory management unit) to run Linux/m68k.
+
+68030 support
+CONFIG_M68030
+  If you anticipate running this kernel on a computer with a MC68030 processor,
+  say Y.  Otherwise, say N.  Note that a MC68EC030 will not work, as it does
+  not include an MMU (= memory management unit).
+
+68040 support
+CONFIG_M68040
+  If you anticipate running this kernel on a computer with a MC68LC040 or
+  MC68040 processor, say Y.  Otherwise, say N.  Note that an MC68EC040 will
+  not work, as it does not include an MMU (= memory management unit).
+
+Use -m68040 flag for 68040 specific optimizations
+CONFIG_OPTIMIZE_040
+  If you will only be running this kernel on a 68040-series processor,
+  this will make the kernel run somewhat faster.  However, it will no longer
+  run on a 68020 or 68030, no matter whether you included 68020 and 68030
+  support or not.  Say N unless the only processor you are compiling support
+  for is the 68040 (or 68LC040).
+
+68060 support
+CONFIG_M68060
+  If you anticipate running this kernel on a computer with a MC68060
+  processor, say Y.  Otherwise, say N.
+
+Use -m68060 flag for 68060 specific optimizations
+CONFIG_OPTIMIZE_060
+  If you will only be running this kernel on a 68060-series processor,
+  this will make the kernel run somewhat faster.  However, it will no longer
+  run on a 68020, 68030 or 68040, no matter whether you included support
+  for those processors or not.  Say N unless the only processor you are
+  compiling support for is the 68060.
+
+Advanced processor options
+CONFIG_ADVANCED_CPU
+  This gives you access to some advanced options for the CPU.  The
+  defaults should be fine for most users, but these options may make
+  it possible for you to improve performance somewhat if you know what
+  you are doing.  Most users should say N to this question.
+
+Use read-modify-write instructions
+CONFIG_RMW_INSNS
+  This allows to use certain instructions that work with indivisible
+  read-modify-write bus cycles. While this is faster than the
+  workaround of disabling interrupts, it can conflict with DMA (=
+  direct memory access) on many Amiga systems, and it is also said to
+  destabilize other machines. It is very likely that this will cause
+  serious problems on any Amiga or Atari Medusa if set. The only
+  configuration where it should work are 68030-based Ataris, where it
+  apparently improves performance. But you've been warned! Unless you
+  really know what you are doing, say N. Try Y only if you're
+  quite adventurous.
+
+Amiga AutoConfig Identification
+CONFIG_ZORRO
+  This enables support for automatic identification of Amiga expansion
+  cards that obey the AutoConfig(tm) specification.  You should say Y
+  to this question unless you have no expansion cards and no intention
+  of getting any.
+
+Amiga OCS chipset support
+CONFIG_AMIFB_OCS
+  This enables support for the original Agnus and Denise video chips,
+  found in the Amiga 1000 and most A500's and A2000's.  If you intend
+  to run Linux on any of these systems, say Y; otherwise say N.
+
+Amiga ECS chipset support
+CONFIG_AMIFB_ECS
+  This enables support for the Enhanced Chip Set, found in later A500's,
+  later A2000's, the A600, the A3000, the A3000T and CDTV.  If you intend to
+  run Linux on any of these systems, say Y; otherwise say N.
+
+Amiga AGA chipset support
+CONFIG_AMIFB_AGA
+  This enables support for the Advanced Graphics Architecture (also
+  known as the AGA or AA) Chip Set, found in the A1200, A4000, A4000T
+  and CD32.  If you intend to run Linux on any of these systems, say Y;
+  otherwise say N.
+
+Amiga Cybervision support
+CONFIG_FB_CYBER
+  This enables support for the Cybervision 64 graphics card from Phase5.
+  Please note that its use is not all that intuitive (i.e. if you have
+  any questions, be sure to ask!).  Say N unless you have a Cybervision
+  64 or plan to get one before you next recompile the kernel.
+
+Amiga GSP (TMS340x0) support
+CONFIG_AMIGA_GSP
+  Include support for Amiga graphics cards that use the Texas Instruments
+  TMS340x0 GSP (= graphics signal processor) chips.  Say Y if you want
+  to use a DMI Resolver or Commodore A2410 (Lowell) graphics card on
+  an Amiga; otherwise, say N.
+
+DMI Resolver support
+CONFIG_GSP_RESOLVER
+  Include support in the kernel for the DMI Resolver graphics card.  If
+  you have one, say Y; otherwise, say N.
+
+A2410 support
+CONFIG_GSP_A2410
+  Include support in the kernel for the Commodore/University of Lowell
+  A2410 graphics card.  If you have one, say Y; otherwise, say N.
+
+Amiga Zorro II ramdisk support
+CONFIG_AMIGA_Z2RAM
+  This enables support for using Chip RAM and Zorro II RAM as a ramdisk
+  or as a swap partition.  Say Y if you want to include this driver in
+  the kernel.
+  This driver is also available as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want). If you
+  want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+Atari ACSI support
+CONFIG_ATARI_ACSI
+  This enables support for the Atari ACSI interface. This driver is
+  also available as a module ( = code which can be inserted in and
+  removed from the running kernel whenever you want). The driver
+  supports hard disks and CD-ROMs, which have 512-byte sectors, or can
+  be switched to that mode. Due to the ACSI command format, only disks
+  up to 1 GB are supported. Special support for certain ACSI to SCSI
+  adapters, which could relax that, isn't included yet. The ACSI
+  driver is also the basis for certain other drivers for devices
+  attached to the ACSI bus: Atari SLM laser printer, BioNet-100
+  Ethernet, and PAMsNet Ethernet. If you want to use one of these
+  devices, you need ACSI support, too.
+
+Probe all LUNs on each ACSI device
+CONFIG_ACSI_MULTI_LUN
+  If you have a ACSI device that supports more than one LUN (Logical
+  Unit Number), e.g. a CD jukebox, you should say Y here so that all
+  will be found by the ACSI driver. An ACSI device with multiple LUNs
+  acts logically like multiple ACSI devices. The vast majority of ACSI
+  devices have only one LUN, and so most people can say N here and
+  should in fact do so, because it is safer.
+
+Atari SLM laser printer support
+CONFIG_ATARI_SLM
+  If you have an Atari SLM laser printer, say Y to include support for
+  it in the kernel. Otherwise, say N. This driver is also available as
+  a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want).
+  Be warned: the driver needs much ST-RAM and can cause problems due
+  to that fact!
+
+A3000 WD33C93A support
+CONFIG_A3000_SCSI
+  If you have an Amiga 3000 and have SCSI devices connected to the built-in
+  SCSI controller, say Y.  Otherwise, say N.
+  This driver is also available as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want). If you
+  want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+A2091 WD33C93A support
+CONFIG_A2091_SCSI
+  If you have a Commodore A2091 SCSI controller, say Y.  Otherwise, say N.
+  This driver is also available as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want). If you
+  want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+GVP Series II WD33C93A support
+CONFIG_GVP11_SCSI
+  If you have a Great Valley Products Series II SCSI controller, say Y.
+  Also say Y if you have a later model of GVP SCSI controller (such as
+  the GVP A4008 or a Combo board).  Otherwise, say N.
+  This driver does NOT work for the T-Rex series of accelerators from
+  TekMagic and GVP-M.
+  This driver is also available as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want). If you
+  want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+Cyberstorm SCSI support
+CONFIG_CYBERSTORM_SCSI
+  If you have an Amiga with an original (MkI) Phase5 Cyberstorm accelerator
+  board and the optional Cyberstorm SCSI controller, say Y.  Otherwise,
+  say N.
+
+Cyberstorm II SCSI support
+CONFIG_CYBERSTORMII_SCSI
+  If you have an Amiga with a Phase5 Cyberstorm MkII accelerator board
+  and the optional Cyberstorm SCSI controller, say Y.  Otherwise, say N.
+
+Blizzard 2060 SCSI support
+CONFIG_BLZ2060_SCSI
+  If you have an Amiga with a Phase5 Blizzard 2060 accelerator board and
+  want to use the onboard SCSI controller, say Y.  Otherwise, say N.
+
+Blizzard 1230IV/1260 SCSI support
+CONFIG_BLZ1230_SCSI
+  If you have an Amiga 1200 with a Phase5 Blizzard 1230IV or Blizzard 1260
+  accelerator, and the optional SCSI module, say Y.  Otherwise, say N.
+
+Atari native SCSI support
+CONFIG_ATARI_SCSI
+  If you have an Atari with built-in NCR5380 SCSI controller (TT,
+  Falcon, ...) say Y to get it supported. Of course also, if you have
+  an compatible SCSI controller (e.g. for Medusa). This driver is also
+  available as a module ( = code which can be inserted in and removed
+  from the running kernel whenever you want). If you want to compile
+  it as a module, say M here and read Documentation/modules.txt.
+  This driver supports both styles of NCR integration into the system:
+  the TT style (separate DMA), and the Falcon style (via ST-DMA,
+  replacing ACSI). It does NOT support other schemes, like in the
+  Hades (without DMA).
+
+Long delays for Toshiba CD-ROMs
+CONFIG_ATARI_SCSI_TOSHIBA_DELAY
+  This option increases the delay after a SCSI arbitration to
+  accomodate some flakey Toshiba CD-ROM drives. Say Y if you intend to
+  use a Toshiba CD-ROM drive; otherwise, the option is not needed and
+  would impact performance a bit, so say N.
+
+Ariadne support
+CONFIG_ARIADNE
+  If you have a VillageTronics Ariadne Ethernet adapter, say Y.  Otherwise,
+  say N.
+  This driver is also available as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want). If you
+  want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+A2065 support
+CONFIG_A2065
+  If you have a Commodore A2065 Ethernet adapter, say Y.  Otherwise, say N.
+  This driver is also available as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want). If you
+  want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+Hydra support
+CONFIG_HYDRA
+  If you have a Hydra Ethernet adapter, say Y.  Otherwise, say N.
+  This driver is also available as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want). If you
+  want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+Atari Lance support
+CONFIG_ATARILANCE
+  Say Y to include support for several Atari Ethernet adapters based
+  on the AMD Lance chipset: RieblCard (with or without battery), or
+  PAMCard VME (also the version by Rhotron, with different addresses).
+
+BioNet-100 support
+CONFIG_ATARI_BIONET
+  Say Y to include support for BioData's BioNet-100 Ethernet adapter
+  for the ACSI port. The driver works (has to work...) with a polled
+  I/O scheme, so it's rather slow :-(
+
+PAMsNet support
+CONFIG_ATARI_PAMSNET
+  Say Y to include support for the PAMsNet Ethernet adapter for the
+  ACSI port ("ACSI node"). The driver works (has to work...) with a
+  polled I/O scheme, so it's rather slow :-(
+
+Multiface Card III parallel support
+CONFIG_MULTIFACE_III_LP
+  If you have a Multiface III card for your Amiga, and want to use its
+  parallel port in Linux, say Y.  Otherwise, say N.
+  This driver is also available as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want). If you
+  want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+Amiga mouse support
+CONFIG_AMIGAMOUSE
+  If you want to be able to use an Amiga mouse in Linux, say Y.
+  This driver is also available as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want). If you
+  want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+Amiga Copper Console
+CONFIG_COPCON
+  This configures the console to use the Amiga's graphics coprocessor for
+  scrolling, instead of using the CPU.  This option markedly improves
+  response times in the high color modes (5 bitplanes and up).  If you
+  would like to use this, say Y; otherwise, say N.
+
+Atari mouse support
+CONFIG_ATARIMOUSE
+  If you want to be able to use an Atari mouse in Linux, say Y.
+  This driver is also available as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want). If you
+  want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+Atari MFP serial support
+CONFIG_ATARI_MFPSER
+  If you like to use the MFP serial ports ("Modem1", "Serial1") under
+  Linux, say Y. The driver equally supports all kinds of MFP serial
+  ports and automatically detects whether Serial1 is available. This
+  driver is also available as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want). If you
+  want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+  Note for Falcon users: You also have an MFP port, it's just not
+  wired to the outside... But you could use the port under Linux.
+
+Atari SCC serial support
+CONFIG_ATARI_SCC
+  If you have serial ports based on a Zilog SCC chip (Modem2, Serial2,
+  LAN) and like to use them under Linux, say Y. All built-in SCC's are
+  supported (TT, MegaSTE, Falcon), and also the ST-ESCC. If you have
+  two connectors for channel A (Serial2 and LAN), they are visible as
+  two separate devices. This driver is also available as a module ( =
+  code which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read Documentation/modules.txt.
+
+Atari MIDI serial support
+CONFIG_ATARI_MIDI
+  If you want to use your Atari's MIDI port in Linux, say Y.
+  This driver is also available as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want). If you
+  want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+Amiga builtin serial support
+CONFIG_AMIGA_BUILTIN_SERIAL
+  If you want to use your Amiga's built-in serial port in Linux, say Y.
+  This driver is also available as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want). If you
+  want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+GVP IO-Extender support
+CONFIG_GVPIOEXT
+  If you want to use a GVP IO-Extender serial card in Linux, say Y.
+  Otherwise, say N.
+
+Multiface Card III serial support
+CONFIG_MULTIFACE_III_TTY
+  If you want to use a Multiface III card's serial port in Linux, say Y.
+  This driver is also available as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want). If you
+  want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+Amiga or Atari DMA sound support
+CONFIG_DMASOUND
+  If you want to use the internal audio of your Atari or Amiga in Linux,
+  answer Y to this question.  This will provide a Sun-like /dev/audio,
+  compatible with the Linux/i386 sound system.  Otherwise, say N.
+  This driver is also available as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want). If you
+  want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+MSDOS partition support
+CONFIG_MSDOS_PARTITION
+  This option enables support for using hard disks that were
+  partitioned on an MS-DOS system.  This may be useful if you are
+  sharing a hard disk between i386 and m68k Linux boxes, for example.
+  Say Y if you need this feature; users who are only using their
+  system-native partitioning scheme can say N here.
 
 # need an empty line after last entry, for sed script in Configure.
 

@@ -351,6 +351,9 @@ extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 #define pgd_offset(mm, address) \
 ((mm)->pgd + ((address) >> PGDIR_SHIFT))
 
+/* to find an entry in a kernel page-table-directory */
+#define pgd_offset_k(address) pgd_offset(&init_mm, address)
+
 /* Find an entry in the second-level page table.. */
 extern inline pmd_t * pmd_offset(pgd_t * dir, unsigned long address)
 {

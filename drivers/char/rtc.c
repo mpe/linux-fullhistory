@@ -57,10 +57,10 @@
 
 /*
  *	We sponge a minor off of the misc major. No need slurping
- *	up another valuable major dev number for this.
+ *	up another valuable major dev number for this. If you add
+ *	an ioctl, make sure you don't conflict with SPARC's RTC
+ *	ioctls.
  */
-
-#define RTC_MINOR	135
 
 static struct wait_queue *rtc_wait;
 

@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.11 1996/10/12 13:12:58 davem Exp $
+/* $Id: misc.c,v 1.12 1996/12/18 06:46:55 tridge Exp $
  * misc.c:  Miscellaneous prom functions that don't belong
  *          anywhere else.
  *
@@ -107,10 +107,6 @@ typedef void (*sfunc_t)(void);
 void
 prom_setsync(sfunc_t funcp)
 {
-#ifdef CONFIG_AP1000
-	printk("not doing setsync\n");
-	return;
-#endif
 	if(!funcp) return;
 	*romvec->pv_synchook = funcp;
 }

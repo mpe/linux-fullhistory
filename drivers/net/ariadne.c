@@ -54,7 +54,6 @@
 #include <asm/amigaints.h>
 #include <asm/amigahw.h>
 #include <asm/zorro.h>
-#include <asm/bootinfo.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 
@@ -127,7 +126,7 @@ static int ariadne_open(struct device *dev);
 static void ariadne_init_ring(struct device *dev);
 static int ariadne_start_xmit(struct sk_buff *skb, struct device *dev);
 static int ariadne_rx(struct device *dev);
-static void ariadne_interrupt(int irq, struct pt_regs *fp, void *data);
+static void ariadne_interrupt(int irq, void *data, struct pt_regs *fp);
 static int ariadne_close(struct device *dev);
 static struct enet_statistics *ariadne_get_stats(struct device *dev);
 #ifdef HAVE_MULTICAST
@@ -291,8 +290,8 @@ static int ariadne_open(struct device *dev)
     dev->interrupt = 0;
     dev->start = 1;
 
-    if (!add_isr(IRQ_AMIGA_PORTS, ariadne_interrupt, 0, dev,
-    		 "Ariadne Ethernet"))
+    if (request_irq(IRQ_AMIGA_PORTS, ariadne_interrupt, 0,
+                    "Ariadne Ethernet", dev))
 	return(-EAGAIN);
 
     board->Lance.RAP = CSR0;	/* PCnet-ISA Controller Status */
@@ -373,7 +372,7 @@ static int ariadne_close(struct device *dev)
     /* We stop the LANCE here -- it occasionally polls memory if we don't. */
     board->Lance.RDP = STOP;
 
-    remove_isr(IRQ_AMIGA_PORTS, ariadne_interrupt, dev);
+    free_irq(IRQ_AMIGA_PORTS, dev);
 
     MOD_DEC_USE_COUNT;
 
@@ -381,7 +380,7 @@ static int ariadne_close(struct device *dev)
 }
 
 
-static void ariadne_interrupt(int irq, struct pt_regs *fp, void *data)
+static void ariadne_interrupt(int irq, void *data, struct pt_regs *fp)
 {
     struct device *dev = (struct device *)data;
     struct ariadne_private *priv;

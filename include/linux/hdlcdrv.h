@@ -1,5 +1,5 @@
 /*
- *	hdlcdrv.h  -- HDLC packet radio network driver.
+ * hdlcdrv.h  -- HDLC packet radio network driver.
  * The Linux soundcard driver for 1200 baud and 9600 baud packet radio
  * (C) 1996 by Thomas Sailer, HB9JNX/AE4WA
  */

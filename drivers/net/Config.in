@@ -113,22 +113,31 @@ fi
 
 bool 'Radio network interfaces' CONFIG_NET_RADIO
 if [ "$CONFIG_NET_RADIO" != "n" ]; then
-  tristate 'STRIP (Metricom starmode radio IP)' CONFIG_STRIP
-  tristate 'WaveLAN support' CONFIG_WAVELAN
-  tristate 'WIC Radio IP bridge' CONFIG_WIC
-fi
-
-bool 'AX.25 network interfaces' CONFIG_NET_HAM
-if [ "$CONFIG_NET_HAM" != "n" ]; then
-  tristate 'Serial port KISS driver' CONFIG_MKISS
-  tristate 'BPQ Ethernet driver' CONFIG_BPQETHER
-  tristate 'Gracilis PackeTwin driver' CONFIG_PT
-  tristate 'Ottawa PI and PI2 driver' CONFIG_PI
-  tristate 'Z8530 SCC driver' CONFIG_SCC
-  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    tristate 'BAYCOM ser12 and par96 driver' CONFIG_BAYCOM
-    tristate 'Soundcard modem driver' CONFIG_SOUNDMODEM
+  if [ "$CONFIG_AX25" != "n" ]; then
+    tristate 'Serial port KISS driver for AX.25' CONFIG_MKISS
+    tristate 'BPQ Ethernet driver for AX.25' CONFIG_BPQETHER
+    tristate 'Gracilis PackeTwin driver for AX.25' CONFIG_PT
+    tristate 'Ottawa PI and PI2 driver for AX.25' CONFIG_PI
+    tristate 'Z8530 SCC driver for AX.25' CONFIG_SCC
   fi
+  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+    tristate 'BAYCOM ser12 and par96 driver for AX.25' CONFIG_BAYCOM
+    tristate 'Soundcard modem driver for AX.25' CONFIG_SOUNDMODEM
+    if [ "$CONFIG_SOUNDMODEM" != "n" ]; then
+      bool 'Soundmodem support for Soundblaster and compatible cards' CONFIG_SOUNDMODEM_SBC
+      bool 'Soundmodem support for WSS and Crystal cards' CONFIG_SOUNDMODEM_WSS
+      bool 'Soundmodem support for 1200 baud AFSK modulation' CONFIG_SOUNDMODEM_AFSK1200
+      if [ "$CONFIG_M586" = "y" -o "$CONFIG_M686" = "y" ]; then
+        if [ "$CONFIG_SOUNDMODEM_AFSK1200" != "n" ]; then
+          bool 'Soundmodem 1200 baud AFSK using floating point' CONFIG_SOUNDMODEM_AFSK1200_FP
+        fi
+      fi
+      bool 'Soundmodem support for 9600 baud FSK G3RUH modulation' CONFIG_SOUNDMODEM_FSK9600
+    fi
+  fi
+  tristate 'STRIP (Metricom starmode radio IP)' CONFIG_STRIP
+  tristate 'AT&T WaveLAN & DEC RoamAbout DS support' CONFIG_WAVELAN
+  tristate 'WIC Radio IP bridge' CONFIG_WIC
 fi
 
 tristate 'SLIP (serial line) support' CONFIG_SLIP

@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.65 1996/12/10 07:08:09 tridge Exp $
+/* $Id: sys_sunos.c,v 1.68 1996/12/19 05:25:43 davem Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -111,6 +111,11 @@ asmlinkage unsigned long sunos_mmap(unsigned long addr, unsigned long len,
 	/* See asm-sparc/uaccess.h */
 	if((len > (TASK_SIZE - PAGE_SIZE)) || (addr > (TASK_SIZE-len-PAGE_SIZE)))
 		return -EINVAL;
+
+	if(sparc_cpu_model == sun4c) {
+		if(((addr >= 0x20000000) && (addr < 0xe0000000)))
+			return current->mm->brk;
+	}
 
 	retval = do_mmap(file, addr, len, prot, flags, off);
 	if(ret_type)
@@ -825,12 +830,8 @@ asmlinkage int sunos_audit(void)
 
 extern asmlinkage unsigned long sunos_gethostid(void)
 {
-#if CONFIG_AP1000
-	return mpp_cid();
-#else
 	return ((unsigned long)idprom->id_machtype << 24) |
 	       (unsigned long)idprom->id_sernum;
-#endif
 }
 
 extern asmlinkage long sunos_sysconf (int name)
@@ -1161,7 +1162,7 @@ asmlinkage int sunos_sigaction(int signum, const struct sigaction *action,
 	struct sigaction tmp_sa, *tmp_sap;
 	const  int sigaction_size = sizeof (struct sigaction) - sizeof (void *);
 	int err;
-	int old_fs;
+	int old_fs = USER_DS;
 
 	current->personality |= PER_BSD;
 
@@ -1182,7 +1183,7 @@ asmlinkage int sunos_sigaction(int signum, const struct sigaction *action,
 		set_fs (get_ds ());
 		tmp_sap = &tmp_sa;
 	} else {
-		tmp_sap = action;
+		tmp_sap = (struct sigaction *) action;
 	}
 
 	err = sys_sigaction (signum, tmp_sap, oldaction);

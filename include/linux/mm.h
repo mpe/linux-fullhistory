@@ -10,6 +10,7 @@
 #include <linux/string.h>
 
 extern unsigned long max_mapnr;
+extern unsigned long num_physpages;
 extern void * high_memory;
 
 #include <asm/page.h>

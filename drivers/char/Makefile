@@ -159,8 +159,36 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_AMIGAMOUSE),y)
+M = y
+L_OBJS += amigamouse.o
+else
+  ifeq ($(CONFIG_AMIGAMOUSE),m)
+    M_OBJS += amigamouse.o
+    MM = m
+  endif
+endif
+
+ifeq ($(CONFIG_ATARIMOUSE),y)
+M = y
+L_OBJS += atarimouse.o
+else
+  ifeq ($(CONFIG_ATARIMOUSE),m)
+    M_OBJS += atarimouse.o
+    MM = m
+  endif
+endif
+
 ifdef CONFIG_SUN_MOUSE
 M = y
+endif
+
+ifeq ($(CONFIG_SUN_OPENPROMIO),y)
+M = y
+else
+  ifeq ($(CONFIG_SUN_OPENPROMIO),m)
+  MM = m
+  endif
 endif
 
 ifeq ($(CONFIG_WDT),y)

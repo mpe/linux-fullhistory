@@ -14,6 +14,9 @@
 #include <linux/stat.h>
 #include <linux/config.h>
 #include <asm/bitops.h>
+#ifdef CONFIG_KERNELD
+#include <linux/kerneld.h>
+#endif
 
 /*
  * Offset of the first process in the /proc root directory..
@@ -158,6 +161,144 @@ struct proc_dir_entry proc_sys_root = {
 	NULL, NULL				/* parent, subdir */
 };
 
+#if defined(CONFIG_SUN_OPENPROMFS) || defined(CONFIG_SUN_OPENPROMFS_MODULE)
+
+static int (*proc_openprom_defreaddir_ptr)(struct inode *, struct file *, void *, filldir_t);
+static int (*proc_openprom_deflookup_ptr)(struct inode *, const char *, int, struct inode **);
+void (*proc_openprom_use)(struct inode *, int) = 0;
+static struct openpromfs_dev *proc_openprom_devices = NULL;
+static ino_t proc_openpromdev_ino = PROC_OPENPROMD_FIRST;
+
+struct inode_operations *
+proc_openprom_register(int (*readdir)(struct inode *, struct file *, void *, filldir_t),
+		       int (*lookup)(struct inode *, const char *, int, struct inode **),
+		       void (*use)(struct inode *, int),
+		       struct openpromfs_dev ***devices)
+{
+	proc_openprom_defreaddir_ptr = (proc_openprom_inode_operations.default_file_ops)->readdir;
+	proc_openprom_deflookup_ptr = proc_openprom_inode_operations.lookup;
+	(proc_openprom_inode_operations.default_file_ops)->readdir = readdir;
+	proc_openprom_inode_operations.lookup = lookup;
+	proc_openprom_use = use;
+	*devices = &proc_openprom_devices;
+	return &proc_openprom_inode_operations;
+}
+
+int proc_openprom_regdev(struct openpromfs_dev *d)
+{
+	if (proc_openpromdev_ino == PROC_OPENPROMD_FIRST + PROC_NOPENPROMD) return -1;
+	d->next = proc_openprom_devices;
+	d->inode = proc_openpromdev_ino++;
+	proc_openprom_devices = d;
+	return 0;
+}
+
+int proc_openprom_unregdev(struct openpromfs_dev *d)
+{
+	if (d == proc_openprom_devices) {
+		proc_openprom_devices = d->next;
+	} else if (!proc_openprom_devices)
+		return -1;
+	else {
+		struct openpromfs_dev *p;
+		
+		for (p = proc_openprom_devices; p->next != d && p->next; p = p->next);
+		if (!p->next) return -1;
+		p->next = d->next;
+	}
+	return 0;
+}
+
+#ifdef CONFIG_SUN_OPENPROMFS_MODULE
+void
+proc_openprom_deregister(void)
+{
+	(proc_openprom_inode_operations.default_file_ops)->readdir = proc_openprom_defreaddir_ptr;
+	proc_openprom_inode_operations.lookup = proc_openprom_deflookup_ptr;
+	proc_openprom_use = 0;
+}		      
+#endif
+
+#if defined(CONFIG_SUN_OPENPROMFS_MODULE) && defined(CONFIG_KERNELD)
+static int 
+proc_openprom_defreaddir(struct inode * inode, struct file * filp,
+			 void * dirent, filldir_t filldir)
+{
+	request_module("openpromfs");
+	if ((proc_openprom_inode_operations.default_file_ops)->readdir !=
+	    proc_openprom_defreaddir)
+		return (proc_openprom_inode_operations.default_file_ops)->readdir 
+				(inode, filp, dirent, filldir);
+	return -EINVAL;
+}
+
+static int 
+proc_openprom_deflookup(struct inode * dir,const char * name, int len,
+			struct inode ** result)
+{
+	request_module("openpromfs");
+	if (proc_openprom_inode_operations.lookup !=
+	    proc_openprom_deflookup)
+		return proc_openprom_inode_operations.lookup 
+				(dir, name, len, result);
+	iput(dir);
+	return -ENOENT;
+}
+#endif
+
+static struct file_operations proc_openprom_operations = {
+	NULL,			/* lseek - default */
+	NULL,			/* read - bad */
+	NULL,			/* write - bad */
+#if defined(CONFIG_SUN_OPENPROMFS_MODULE) && defined(CONFIG_KERNELD)
+	proc_openprom_defreaddir,/* readdir */
+#else
+	NULL,			/* readdir */
+#endif	
+	NULL,			/* select - default */
+	NULL,			/* ioctl - default */
+	NULL,			/* mmap */
+	NULL,			/* no special open code */
+	NULL,			/* no special release code */
+	NULL			/* can't fsync */
+};
+
+struct inode_operations proc_openprom_inode_operations = {
+	&proc_openprom_operations,/* default net directory file-ops */
+	NULL,			/* create */
+#if defined(CONFIG_SUN_OPENPROMFS_MODULE) && defined(CONFIG_KERNELD)
+	proc_openprom_deflookup,/* lookup */
+#else
+	NULL,			/* lookup */
+#endif	
+	NULL,			/* link */
+	NULL,			/* unlink */
+	NULL,			/* symlink */
+	NULL,			/* mkdir */
+	NULL,			/* rmdir */
+	NULL,			/* mknod */
+	NULL,			/* rename */
+	NULL,			/* readlink */
+	NULL,			/* follow_link */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
+	NULL,			/* bmap */
+	NULL,			/* truncate */
+	NULL			/* permission */
+};
+
+struct proc_dir_entry proc_openprom = {
+	PROC_OPENPROM, 8, "openprom",
+	S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
+	0, &proc_openprom_inode_operations,
+	NULL, NULL,
+	NULL,
+	&proc_root, NULL
+};
+
+extern void openpromfs_init (void);
+#endif /* CONFIG_SUN_OPENPROMFS */
+
 int proc_register(struct proc_dir_entry * dir, struct proc_dir_entry * dp)
 {
 	dp->next = dir->subdir;
@@ -286,6 +427,12 @@ static struct proc_dir_entry proc_root_pci = {
 	S_IFREG | S_IRUGO, 1, 0, 0,
 };
 #endif
+#ifdef CONFIG_ZORRO
+static struct proc_dir_entry proc_root_zorro = {
+	PROC_ZORRO, 5, "zorro",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
+#endif
 static struct proc_dir_entry proc_root_cpuinfo = {
 	PROC_CPUINFO, 7, "cpuinfo",
 	S_IFREG | S_IRUGO, 1, 0, 0,
@@ -384,6 +531,9 @@ void proc_root_init(void)
 #ifdef CONFIG_PCI
 	proc_register(&proc_root, &proc_root_pci);
 #endif
+#ifdef CONFIG_ZORRO
+	proc_register(&proc_root, &proc_root_zorro);
+#endif
 	proc_register(&proc_root, &proc_root_cpuinfo);
 	proc_register(&proc_root, &proc_root_self);
 	proc_register(&proc_root, &proc_net);
@@ -418,6 +568,13 @@ void proc_root_init(void)
 	proc_register(&proc_root, &proc_root_locks);
 
 	proc_register(&proc_root, &proc_root_mounts);
+
+#if defined(CONFIG_SUN_OPENPROMFS) || defined(CONFIG_SUN_OPENPROMFS_MODULE)
+#ifdef CONFIG_SUN_OPENPROMFS
+	openpromfs_init ();
+#endif
+	proc_register(&proc_root, &proc_openprom);
+#endif
 		   
 	if (prof_shift) {
 		proc_register(&proc_root, &proc_root_profile);

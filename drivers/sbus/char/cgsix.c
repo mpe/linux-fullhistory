@@ -1,4 +1,4 @@
-/* $Id: cgsix.c,v 1.18 1996/11/13 05:10:19 davem Exp $
+/* $Id: cgsix.c,v 1.19 1996/12/19 08:07:35 davem Exp $
  * cgsix.c: cgsix frame buffer driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -219,7 +219,10 @@ cg6_restore_palette (fbinfo_t *fbinfo)
 static void cg6_blitc(unsigned short, int, int);
 static void cg6_setw(int, int, unsigned short, int);
 static void cg6_cpyw(int, int, unsigned short *, int);
+
+#if 0
 static void cg6_fill(int, int, int *);
+#endif
 
 /* Ugh: X wants to mmap a bunch of cute stuff at the same time :-( */
 /* So, we just mmap the things that are being asked for */
@@ -616,6 +619,7 @@ static void cg6_cpyw(int xoff, int yoff, unsigned short *p, int count)
 #define GX_FILL_END \
 	}
 	
+#if 0
 static void cg6_fill(int attrib, int count, int *boxes)
 {
 	register int r;
@@ -634,3 +638,4 @@ static void cg6_fill(int attrib, int count, int *boxes)
 	}
 	GX_FILL_END
 }
+#endif

@@ -9,9 +9,11 @@
 
 extern void atari_microwire_cmd( int cmd );
 
-static struct symbol_table mach_atari_symbol_table = {
+static struct symbol_table atari_symbol_table = {
 #include <linux/symtab_begin.h>
 
+	X(atari_mch_cookie),
+	X(atari_hw_present),
 	X(is_medusa),
 	X(atari_register_vme_int),
 	X(atari_unregister_vme_int),
@@ -23,6 +25,7 @@ static struct symbol_table mach_atari_symbol_table = {
 	X(atari_mouse_buttons),
 	X(atari_mouse_interrupt_hook),
 	X(atari_MIDI_interrupt_hook),
+	X(atari_mch_cookie),
 	X(ikbd_write),
 	X(ikbd_mouse_y0_top),
 	X(ikbd_mouse_thresh),
@@ -34,7 +37,7 @@ static struct symbol_table mach_atari_symbol_table = {
 #include <linux/symtab_end.h>
 };
 
-void mach_atari_syms_export(void)
+void atari_syms_export(void)
 {
-	register_symtab(&mach_atari_symbol_table);
+	register_symtab(&atari_symbol_table);
 }

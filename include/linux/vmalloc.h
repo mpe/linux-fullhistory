@@ -20,6 +20,7 @@ int vread(char *buf, char *addr, int count);
 
 extern inline void set_pgdir(unsigned long address, pgd_t entry)
 {
+#ifndef __mc68000__
 	struct task_struct * p;
 
 	for_each_task(p) {
@@ -27,6 +28,7 @@ extern inline void set_pgdir(unsigned long address, pgd_t entry)
 			continue;
 		*pgd_offset(p->mm,address) = entry;
 	}
+#endif
 }
 
 #endif

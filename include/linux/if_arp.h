@@ -50,11 +50,12 @@
 
 #define ARPHRD_TUNNEL	768		/* IPIP tunnel			*/
 #define ARPHRD_TUNNEL6	769		/* IPIP6 tunnel			*/
-#define ARPHRD_FRAD	770		/* Frame Relay Access Device	*/
+#define ARPHRD_FRAD	770             /* Frame Relay Access Device    */
 #define ARPHRD_SKIP	771		/* SKIP vif			*/
 #define ARPHRD_LOOPBACK	772		/* Loopback device		*/
 #define ARPHRD_LOCALTLK 773		/* Localtalk device		*/
-#define ARPHRD_FDDI	774		/* FDDI interfaces		*/
+#define ARPHRD_FDDI	774		/* Fiber Distributed Data Interface */
+#define ARPHRD_BIF      775             /* AP1000 BIF                   */
 #define ARPHRD_SIT	776		/* sit0 device - IPv6-in-IPv4	*/
 
 /* ARP protocol opcodes. */

@@ -21,7 +21,6 @@ for more details.
 #include <linux/errno.h>
 #include <linux/mm.h>
 
-#include <asm/setup.h>
 #include <asm/atarihw.h>
 #include <asm/system.h>
 #include <asm/irq.h>

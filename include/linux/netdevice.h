@@ -339,12 +339,15 @@ static __inline__ __u8 dev_hash_mc_name(char *name)
 extern void		ether_setup(struct device *dev);
 extern void		fddi_setup(struct device *dev);
 extern void		tr_setup(struct device *dev);
+extern void		tr_freedev(struct device *dev);
 extern int		ether_config(struct device *dev, struct ifmap *map);
 /* Support for loadable net-drivers */
 extern int		register_netdev(struct device *dev);
 extern void		unregister_netdev(struct device *dev);
 extern int 		register_netdevice_notifier(struct notifier_block *nb);
 extern int		unregister_netdevice_notifier(struct notifier_block *nb);
+extern int		register_trdev(struct device *dev);
+extern void		unregister_trdev(struct device *dev);
 /* Functions used for multicast support */
 extern void		dev_mc_upload(struct device *dev);
 extern void 		dev_mc_delete(struct device *dev, void *addr, int alen, int all);

@@ -96,7 +96,8 @@ good_area:
 	 * Until I found it, this one cures the problem and makes
 	 * 1.2 run on the 68040 (Martin Apel).
 	 */
-	flush_tlb_page(vma, address);
+	if (CPU_IS_040_OR_060)
+		flush_tlb_page(vma, address);
 	return 0;
 
 /*
@@ -113,7 +114,7 @@ bad_area:
 		fault_pc = regs->pc;
 	if ((fixup = search_exception_table(fault_pc)) != 0) {
 		struct pt_regs *tregs;
-		printk("Exception at [<%lx>] (%lx)\n", fault_pc, fixup);
+		printk(KERN_DEBUG "Exception at [<%lx>] (%lx)\n", fault_pc, fixup);
 		/* Create a new four word stack frame, discarding the old
 		   one.  */
 		regs->stkadj = frame_extra_sizes[regs->format];

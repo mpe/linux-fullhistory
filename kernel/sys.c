@@ -179,6 +179,9 @@ asmlinkage int sys_prof(void)
 #endif
 
 extern void hard_reset_now(void);
+#ifdef __sparc__
+extern void halt_now(void);
+#endif
 extern asmlinkage sys_kill(int, int);
 
 /*
@@ -193,7 +196,8 @@ asmlinkage int sys_reboot(int magic, int magic_too, int flag)
 {
 	if (!suser())
 		return -EPERM;
-	if (magic != 0xfee1dead || magic_too != 672274793)
+	if (magic != 0xfee1dead || 
+	    (magic_too != 672274793 && magic_too != 85072278))
 		return -EINVAL;
 	if (flag == 0x01234567)
 	{
@@ -206,6 +210,9 @@ asmlinkage int sys_reboot(int magic, int magic_too, int flag)
 		C_A_D = 0;
 	else if (flag == 0xCDEF0123) {
 		printk(KERN_EMERG "System halted\n");
+#ifdef __sparc__
+		halt_now();
+#endif	
 		sys_kill(-1, SIGKILL);
 #if defined(CONFIG_APM) && defined(CONFIG_APM_POWER_OFF)
 		apm_set_power_state(APM_STATE_OFF);

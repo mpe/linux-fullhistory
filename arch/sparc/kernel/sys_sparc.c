@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.28 1996/12/12 09:39:25 jj Exp $
+/* $Id: sys_sparc.c,v 1.32 1996/12/19 05:25:46 davem Exp $
  * linux/arch/sparc/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -9,6 +9,7 @@
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/sched.h>
+#include <linux/config.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/sem.h>
@@ -18,6 +19,7 @@
 #include <linux/mman.h>
 
 #include <asm/uaccess.h>
+#include <asm/ipc.h>
 
 /* XXX Make this per-binary type, this way we can detect the type of
  * XXX a binary.  Every Sparc executable calls this very early on.
@@ -61,23 +63,6 @@ asmlinkage int sparc_pipe(struct pt_regs *regs)
  *
  * This is really horribly ugly.
  */
-
-struct ipc_kludge {
-    struct msgbuf *msgp;
-    long msgtyp;
-};
-
-#define SEMOP	 	1
-#define SEMGET 		2
-#define SEMCTL 		3
-#define MSGSND 		11
-#define MSGRCV 		12
-#define MSGGET 		13
-#define MSGCTL 		14
-#define SHMAT 		21
-#define SHMDT 		22
-#define SHMGET 		23
-#define SHMCTL 		24
 
 asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, long fifth)
 {
@@ -184,6 +169,11 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
 	if((len > (TASK_SIZE - PAGE_SIZE)) || (addr > (TASK_SIZE-len-PAGE_SIZE)))
 		return -EINVAL;
 
+	if(sparc_cpu_model == sun4c) {
+		if(((addr >= 0x20000000) && (addr < 0xe0000000)))
+			return current->mm->brk;
+	}
+
 	retval = do_mmap(file, addr, len, prot, flags, off);
 	return retval;
 }
@@ -224,3 +214,11 @@ sparc_sigaction (int signum, const struct sigaction *action, struct sigaction *o
 	return sys_sigaction (-signum, action, oldaction);
     }
 }
+
+#ifndef CONFIG_AP1000
+/* only AP+ systems have sys_aplib */
+asmlinkage int sys_aplib(void)
+{
+	return -ENOSYS;
+}
+#endif

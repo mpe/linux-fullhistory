@@ -13,8 +13,101 @@
 ** Created: 9/24/92 by Greg Harp
 */
 
-#ifndef _ASMm68k_AMIGAHW_H_
-#define _ASMm68k_AMIGAHW_H_
+#ifndef _M68K_AMIGAHW_H
+#define _M68K_AMIGAHW_H
+
+    /*
+     *  Different Amiga models
+     */
+
+extern u_long amiga_model;
+
+#define AMI_UNKNOWN	(0)
+#define AMI_500		(1)
+#define AMI_500PLUS	(2)
+#define AMI_600		(3)
+#define AMI_1000	(4)
+#define AMI_1200	(5)
+#define AMI_2000	(6)
+#define AMI_2500	(7)
+#define AMI_3000	(8)
+#define AMI_3000T	(9)
+#define AMI_3000PLUS	(10)
+#define AMI_4000	(11)
+#define AMI_4000T	(12)
+#define AMI_CDTV	(13)
+#define AMI_CD32	(14)
+#define AMI_DRACO	(15)
+
+
+    /*
+     *  Chipsets
+     */
+
+extern u_long amiga_chipset;
+
+#define CS_STONEAGE	(0)
+#define CS_OCS		(1)
+#define CS_ECS		(2)
+#define CS_AGA		(3)
+
+
+    /*
+     *  Miscellaneous
+     */
+
+extern u_long amiga_eclock;		/* 700 kHz E Peripheral Clock */
+extern u_long amiga_masterclock;	/* 28 MHz Master Clock */
+extern u_long amiga_colorclock;		/* 3.5 MHz Color Clock */
+extern u_long amiga_chip_size;		/* Chip RAM Size (bytes) */
+extern u_char amiga_vblank;		/* VBLANK Frequency */
+extern u_char amiga_psfreq;		/* Power Supply Frequency */
+
+
+#define AMIGAHW_DECLARE(name)	unsigned name : 1
+#define AMIGAHW_SET(name)	(amiga_hw_present.name = 1)
+#define AMIGAHW_PRESENT(name)	(amiga_hw_present.name)
+
+struct amiga_hw_present {
+    /* video hardware */
+    AMIGAHW_DECLARE(AMI_VIDEO);		/* Amiga Video */
+    AMIGAHW_DECLARE(AMI_BLITTER);	/* Amiga Blitter */
+    AMIGAHW_DECLARE(AMBER_FF);		/* Amber Flicker Fixer */
+    /* sound hardware */
+    AMIGAHW_DECLARE(AMI_AUDIO);		/* Amiga Audio */
+    /* disk storage interfaces */
+    AMIGAHW_DECLARE(AMI_FLOPPY);	/* Amiga Floppy */
+    AMIGAHW_DECLARE(A3000_SCSI);	/* SCSI (wd33c93, A3000 alike) */
+    AMIGAHW_DECLARE(A4000_SCSI);	/* SCSI (ncr53c710, A4000T alike) */
+    AMIGAHW_DECLARE(A1200_IDE);		/* IDE (A1200 alike) */
+    AMIGAHW_DECLARE(A4000_IDE);		/* IDE (A4000 alike) */
+    AMIGAHW_DECLARE(CD_ROM);		/* CD ROM drive */
+    /* other I/O hardware */
+    AMIGAHW_DECLARE(AMI_KEYBOARD);	/* Amiga Keyboard */
+    AMIGAHW_DECLARE(AMI_MOUSE);		/* Amiga Mouse */
+    AMIGAHW_DECLARE(AMI_SERIAL);	/* Amiga Serial */
+    AMIGAHW_DECLARE(AMI_PARALLEL);	/* Amiga Parallel */
+    /* real time clocks */
+    AMIGAHW_DECLARE(A2000_CLK);		/* Hardware Clock (A2000 alike) */
+    AMIGAHW_DECLARE(A3000_CLK);		/* Hardware Clock (A3000 alike) */
+    /* supporting hardware */
+    AMIGAHW_DECLARE(CHIP_RAM);		/* Chip RAM */
+    AMIGAHW_DECLARE(PAULA);		/* Paula (8364) */
+    AMIGAHW_DECLARE(DENISE);		/* Denise (8362) */
+    AMIGAHW_DECLARE(DENISE_HR);		/* Denise (8373) */
+    AMIGAHW_DECLARE(LISA);		/* Lisa (8375) */
+    AMIGAHW_DECLARE(AGNUS_PAL);		/* Normal/Fat PAL Agnus (8367/8371) */
+    AMIGAHW_DECLARE(AGNUS_NTSC);	/* Normal/Fat NTSC Agnus (8361/8370) */
+    AMIGAHW_DECLARE(AGNUS_HR_PAL);	/* Fat Hires PAL Agnus (8372) */
+    AMIGAHW_DECLARE(AGNUS_HR_NTSC);	/* Fat Hires NTSC Agnus (8372) */
+    AMIGAHW_DECLARE(ALICE_PAL);		/* PAL Alice (8374) */
+    AMIGAHW_DECLARE(ALICE_NTSC);	/* NTSC Alice (8374) */
+    AMIGAHW_DECLARE(MAGIC_REKICK);	/* A3000 Magic Hard Rekick */
+    AMIGAHW_DECLARE(ZORRO);		/* Zorro AutoConfig */
+    AMIGAHW_DECLARE(ZORRO3);		/* Zorro III */
+};
+
+extern struct amiga_hw_present amiga_hw_present;
 
 struct CUSTOM {
     u_short bltddat;
@@ -172,15 +265,9 @@ struct CIA {
     u_char crb; 		char pade[0xff];
 };
 
-#if 1
 #define zTwoBase (0x80000000)
 #define ZTWO_PADDR(x) (((unsigned long)(x))-zTwoBase)
 #define ZTWO_VADDR(x) (((unsigned long)(x))+zTwoBase)
-#else
-#define zTwoBase 0
-#define ZTWO_PADDR(x) (x)
-#define ZTWO_VADDR(x) (x)
-#endif
 
 #define CUSTOM_PHYSADDR     (0xdff000)
 #define custom ((*(volatile struct CUSTOM *)(zTwoBase+CUSTOM_PHYSADDR)))
@@ -244,4 +331,4 @@ struct tod2000 {
 #define TOD2000_HOUR1_PM	(1<<2)
 #define TOD_2000 ((struct tod2000 *)(zTwoBase+0xDC0000))
 
-#endif /* asm-m68k/amigahw.h */
+#endif /* __ASMm68k_AMIGAHW_H */

@@ -59,7 +59,7 @@ if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then
   bool '   Initial RAM disk (initrd) support' CONFIG_BLK_DEV_INITRD
 fi
 tristate 'XT harddisk support' CONFIG_BLK_DEV_XD
-
+tristate 'SyQuest EZ parallel port disk support' CONFIG_BLK_DEV_EZ
 
 if [ "$CONFIG_BLK_DEV_HD_IDE" = "y" -o "$CONFIG_BLK_DEV_HD_ONLY" = "y" ]; then
   define_bool CONFIG_BLK_DEV_HD y

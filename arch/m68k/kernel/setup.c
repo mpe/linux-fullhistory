@@ -19,19 +19,26 @@
 #include <linux/errno.h>
 #include <linux/string.h>
 
+#include <asm/bootinfo.h>
 #include <asm/setup.h>
 #include <asm/irq.h>
 #include <asm/machdep.h>
-#include <asm/amigatypes.h>
+#ifdef CONFIG_AMIGA
 #include <asm/amigahw.h>
+#endif
+#ifdef CONFIG_ATARI
+#include <asm/atarihw.h>
+#endif
 
 #ifdef CONFIG_BLK_DEV_INITRD
 #include <linux/blk.h>
 #include <asm/pgtable.h>
 #endif
 
-struct bootinfo boot_info = {0,};
-int bisize = sizeof boot_info;
+u_long m68k_machtype;
+u_long m68k_cputype;
+u_long m68k_fputype;
+u_long m68k_mmutype;
 
 int m68k_is040or060 = 0;
 
@@ -40,6 +47,12 @@ char m68k_debug_device[6] = "";
 extern int end;
 extern unsigned long availmem;
 
+int m68k_num_memory = 0;
+struct mem_info m68k_memory[NUM_MEMINFO];
+
+static struct mem_info m68k_ramdisk = { 0, 0 };
+
+static char m68k_command_line[CL_SIZE];
 char saved_command_line[CL_SIZE];
 
 /* setup some dummy routines */
@@ -60,6 +73,8 @@ int (*mach_request_irq) (unsigned int, void (*)(int, void *, struct pt_regs *),
 int (*mach_free_irq) (unsigned int, void *);
 void (*mach_enable_irq) (unsigned int) = NULL;
 void (*mach_disable_irq) (unsigned int) = NULL;
+void (*mach_get_model) (char *model) = NULL;
+int (*mach_get_hardware_list) (char *buffer) = NULL;
 int (*mach_get_irq_list) (char *) = NULL;
 void (*mach_process_int) (int, struct pt_regs *) = NULL;
 /* machine dependent timer functions */
@@ -79,40 +94,87 @@ int (*mach_floppy_init) (void) = NULL;
 void (*mach_floppy_setup) (char *, int *) = NULL;
 void (*mach_floppy_eject) (void) = NULL;
 #endif
+void (*mach_syms_export)(void) = NULL;
+
+extern int amiga_parse_bootinfo(const struct bi_record *);
+extern int atari_parse_bootinfo(const struct bi_record *);
 
 extern void config_amiga(void);
 extern void config_atari(void);
 extern void config_mac(void);
 extern void config_sun3(void);
+extern void config_apollo(void);
 
 extern void register_console(void (*proc)(const char *));
-extern void ami_serial_print (const char *str);
-extern void ata_serial_print (const char *str);
-
-extern void (*kd_mksound)(unsigned int, unsigned int);
-
-extern void amiga_get_model(char *model);
-extern void atari_get_model(char *model);
-extern void mac_get_model(char *model);
-extern int amiga_get_hardware_list(char *buffer);
-extern int atari_get_hardware_list(char *buffer);
-extern int mac_get_hardware_list(char *buffer);
+extern void ami_serial_print(const char *str);
+extern void ata_serial_print(const char *str);
 
 #define MASK_256K 0xfffc0000
 
-void setup_arch(char **cmdline_p,
-		unsigned long * memory_start_p, unsigned long * memory_end_p)
+
+static void m68k_parse_bootinfo(const struct bi_record *record)
+{
+    while (record->tag != BI_LAST) {
+	int unknown = 0;
+	const u_long *data = record->data;
+	switch (record->tag) {
+	    case BI_MACHTYPE:
+	    case BI_CPUTYPE:
+	    case BI_FPUTYPE:
+	    case BI_MMUTYPE:
+		/* Already set up by head.S */
+		break;
+
+	    case BI_MEMCHUNK:
+		if (m68k_num_memory < NUM_MEMINFO) {
+		    m68k_memory[m68k_num_memory].addr = data[0];
+		    m68k_memory[m68k_num_memory].size = data[1];
+		    m68k_num_memory++;
+		} else
+		    printk("m68k_parse_bootinfo: too many memory chunks\n");
+		break;
+
+	    case BI_RAMDISK:
+		m68k_ramdisk.addr = data[0];
+		m68k_ramdisk.size = data[1];
+		break;
+
+	    case BI_COMMAND_LINE:
+		strncpy(m68k_command_line, (const char *)data, CL_SIZE);
+		m68k_command_line[CL_SIZE-1] = '\0';
+		break;
+
+	    default:
+		if (MACH_IS_AMIGA)
+		    unknown = amiga_parse_bootinfo(record);
+		else if (MACH_IS_ATARI)
+		    unknown = atari_parse_bootinfo(record);
+		else
+		    unknown = 1;
+	}
+	if (unknown)
+	    printk("m68k_parse_bootinfo: unknown tag 0x%04x ignored\n",
+		   record->tag);
+	record = (struct bi_record *)((u_long)record+record->size);
+    }
+}
+
+void setup_arch(char **cmdline_p, unsigned long * memory_start_p,
+		unsigned long * memory_end_p)
 {
 	unsigned long memory_start, memory_end;
 	extern int _etext, _edata, _end;
 	int i;
 	char *p, *q;
 
+	/* machtype is set up by head.S, thus we know our gender */
 	if (MACH_IS_AMIGA)
 		register_console(ami_serial_print);
-
 	if (MACH_IS_ATARI)
 		register_console(ata_serial_print);
+
+	/* The bootinfo is located right after the kernel bss */
+	m68k_parse_bootinfo((const struct bi_record *)&_end);
 
 	if (CPU_IS_040)
 		m68k_is040or060 = 4;
@@ -120,7 +182,7 @@ void setup_arch(char **cmdline_p,
 		m68k_is040or060 = 6;
 
 	/* clear the fpu if we have one */
-	if (boot_info.cputype & (FPU_68881|FPU_68882|FPU_68040|FPU_68060)) {
+	if (m68k_fputype & (FPU_68881|FPU_68882|FPU_68040|FPU_68060)) {
 		volatile int zero = 0;
 		asm __volatile__ ("frestore %0" : : "m" (zero));
 	}
@@ -128,15 +190,15 @@ void setup_arch(char **cmdline_p,
 	memory_start = availmem;
 	memory_end = 0;
 
-	for (i = 0; i < boot_info.num_memory; i++)
-		memory_end += boot_info.memory[i].size & MASK_256K;
+	for (i = 0; i < m68k_num_memory; i++)
+		memory_end += m68k_memory[i].size & MASK_256K;
 
 	init_task.mm->start_code = 0;
 	init_task.mm->end_code = (unsigned long) &_etext;
 	init_task.mm->end_data = (unsigned long) &_edata;
 	init_task.mm->brk = (unsigned long) &_end;
 
-	*cmdline_p = boot_info.command_line;
+	*cmdline_p = m68k_command_line;
 	memcpy(saved_command_line, *cmdline_p, CL_SIZE);
 
 	/* Parse the command line for arch-specific options.
@@ -166,7 +228,7 @@ void setup_arch(char **cmdline_p,
 	*memory_start_p = memory_start;
 	*memory_end_p = memory_end;
 
-	switch (boot_info.machtype) {
+	switch (m68k_machtype) {
 #ifdef CONFIG_AMIGA
 	    case MACH_AMIGA:
 		config_amiga();
@@ -187,21 +249,26 @@ void setup_arch(char **cmdline_p,
 	    	config_sun3();
 	    	break;
 #endif
+#ifdef CONFIG_APOLLO
+	    case MACH_APOLLO:
+	    	config_apollo();
+	    	break;
+#endif
 	    default:
 		panic ("No configuration setup");
 	}
 
 #ifdef CONFIG_BLK_DEV_INITRD
-	if (boot_info.ramdisk_size) {
-		initrd_start = PTOV (boot_info.ramdisk_addr);
-		initrd_end = initrd_start + boot_info.ramdisk_size * 1024;
+	if (m68k_ramdisk.size) {
+		initrd_start = PTOV (m68k_ramdisk.addr);
+		initrd_end = initrd_start + m68k_ramdisk.size;
 	}
 #endif
 }
 
 int get_cpuinfo(char * buffer)
 {
-    char *cpu, *mmu, *fpu;
+    const char *cpu, *mmu, *fpu;
     u_long clockfreq, clockfactor;
 
 #define LOOP_CYCLES_68020	(8)
@@ -211,32 +278,48 @@ int get_cpuinfo(char * buffer)
 
     if (CPU_IS_020) {
 	cpu = "68020";
-	mmu = "68851";
 	clockfactor = LOOP_CYCLES_68020;
     } else if (CPU_IS_030) {
-	cpu = mmu = "68030";
+	cpu = "68030";
 	clockfactor = LOOP_CYCLES_68030;
     } else if (CPU_IS_040) {
-	cpu = mmu = "68040";
+	cpu = "68040";
 	clockfactor = LOOP_CYCLES_68040;
     } else if (CPU_IS_060) {
-	cpu = mmu = "68060";
+	cpu = "68060";
 	clockfactor = LOOP_CYCLES_68060;
     } else {
-	cpu = mmu = "680x0";
+	cpu = "680x0";
 	clockfactor = 0;
     }
 
-    if (boot_info.cputype & FPU_68881)
+    if (m68k_fputype & FPU_68881)
 	fpu = "68881";
-    else if (boot_info.cputype & FPU_68882)
+    else if (m68k_fputype & FPU_68882)
 	fpu = "68882";
-    else if (boot_info.cputype & FPU_68040)
+    else if (m68k_fputype & FPU_68040)
 	fpu = "68040";
-    else if (boot_info.cputype & FPU_68060)
+    else if (m68k_fputype & FPU_68060)
 	fpu = "68060";
+    else if (m68k_fputype & FPU_SUNFPA)
+	fpu = "Sun FPA";
     else
 	fpu = "none";
+
+    if (m68k_mmutype & MMU_68851)
+	mmu = "68851";
+    else if (m68k_mmutype & MMU_68030)
+	mmu = "68030";
+    else if (m68k_mmutype & MMU_68040)
+	mmu = "68040";
+    else if (m68k_mmutype & MMU_68060)
+	mmu = "68060";
+    else if (m68k_mmutype & MMU_SUN3)
+	mmu = "Sun-3";
+    else if (m68k_mmutype & MMU_APOLLO)
+	mmu = "Apollo";
+    else
+	mmu = "unknown";
 
     clockfreq = loops_per_sec*clockfactor;
 
@@ -260,48 +343,19 @@ int get_hardware_list(char *buffer)
     u_long mem;
     int i;
 
-    switch (boot_info.machtype) {
-#ifdef CONFIG_AMIGA
-	case MACH_AMIGA:
-	    amiga_get_model(model);
-	    break;
-#endif
-#ifdef CONFIG_ATARI
-	case MACH_ATARI:
-	    atari_get_model(model);
-	    break;
-#endif
-#ifdef CONFIG_MAC
-	case MACH_MAC:
-	    mac_get_model(model);
-	    break;
-#endif
-	default:
-	    strcpy(model, "Unknown m68k");
-    } /* boot_info.machtype */
+    if (mach_get_model)
+	mach_get_model(model);
+    else
+	strcpy(model, "Unknown m68k");
 
     len += sprintf(buffer+len, "Model:\t\t%s\n", model);
     len += get_cpuinfo(buffer+len);
-    for (mem = 0, i = 0; i < boot_info.num_memory; i++)
-	mem += boot_info.memory[i].size;
+    for (mem = 0, i = 0; i < m68k_num_memory; i++)
+	mem += m68k_memory[i].size;
     len += sprintf(buffer+len, "System Memory:\t%ldK\n", mem>>10);
 
-    switch (boot_info.machtype) {
-#ifdef CONFIG_AMIGA
-	case MACH_AMIGA:
-	    len += amiga_get_hardware_list(buffer+len);
-	    break;
-#endif
-#ifdef CONFIG_ATARI
-	case MACH_ATARI:
-	    len += atari_get_hardware_list(buffer+len);
-	    break;
-#endif
-#ifdef CONFIG_MAC
-	case MACH_MAC:
-	    break;
-#endif
-    } /* boot_info.machtype */
+    if (mach_get_hardware_list)
+	len += mach_get_hardware_list(buffer+len);
 
     return(len);
 }

@@ -56,7 +56,6 @@ extern struct notifier_block *netdev_chain;
  *	Determine a default network mask, based on the IP address. 
  */
 
-static
 unsigned long ip_get_mask(unsigned long addr)
 {
   	unsigned long dst;

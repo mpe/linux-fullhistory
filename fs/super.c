@@ -560,10 +560,9 @@ kdev_t get_unnamed_dev(void)
 
 void put_unnamed_dev(kdev_t dev)
 {
-	if (!dev)
+	if (!dev || MAJOR(dev) != UNNAMED_MAJOR)
 		return;
-	if (MAJOR(dev) == UNNAMED_MAJOR &&
-	    clear_bit(MINOR(dev), unnamed_dev_in_use))
+	if (clear_bit(MINOR(dev), unnamed_dev_in_use))
 		return;
 	printk("VFS: put_unnamed_dev: freeing unused device %s\n",
 			kdevname(dev));
@@ -673,8 +672,7 @@ asmlinkage int sys_umount(char * name)
 		fsync_dev(dev);
 		if (dev != ROOT_DEV) {
 			blkdev_release (inode);
-			if (MAJOR(dev) == UNNAMED_MAJOR)
-				put_unnamed_dev(dev);
+			put_unnamed_dev(dev);
 		}
 	}
 	if (inode != &dummy_inode)
@@ -906,14 +904,17 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 		flags = new_flags & ~MS_MGC_MSK;
 		retval = copy_mount_options(data, &page);
 		if (retval < 0) {
+			put_unnamed_dev(dev);
 			iput(inode);
 			return retval;
 		}
 	}
 	retval = do_mount(dev,dev_name,dir_name,t,flags,(void *) page);
 	free_page(page);
-	if (retval && fops && fops->release)
+	if (retval && fops && fops->release) {
 		fops->release(inode, NULL);
+		put_unnamed_dev(dev);
+	}
 	iput(inode);
 	return retval;
 }

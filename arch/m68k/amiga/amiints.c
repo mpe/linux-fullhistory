@@ -97,7 +97,7 @@ void amiga_init_IRQ(void)
 	cia_init_IRQ(&ciab_base);
 }
 
-void amiga_insert_irq(irq_node_t **list, irq_node_t *node)
+static inline void amiga_insert_irq(irq_node_t **list, irq_node_t *node)
 {
 	unsigned long flags;
 	irq_node_t *cur;
@@ -135,7 +135,7 @@ void amiga_insert_irq(irq_node_t **list, irq_node_t *node)
 	restore_flags(flags);
 }
 
-void amiga_delete_irq(irq_node_t **list, void *dev_id)
+static inline void amiga_delete_irq(irq_node_t **list, void *dev_id)
 {
 	unsigned long flags;
 	irq_node_t *node;

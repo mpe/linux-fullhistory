@@ -34,22 +34,22 @@
  *
  */
 
+#include <linux/module.h>
 #include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/major.h>
 #include <linux/sched.h>
+#include <linux/string.h>
 #include <asm/irq.h>
+#ifdef CONFIG_KERNELD
+#include <linux/kerneld.h>
+#endif
 
 #ifdef CONFIG_AMIGA
-#include <asm/amigaints.h>
 #ifdef CONFIG_MULTIFACE_III_LP
 #include <linux/lp_mfc.h>
 #endif
-#endif
-#ifdef CONFIG_ATARI
-#include <asm/atarihw.h>
-#include <asm/atariints.h>
 #endif
 
 #include <linux/lp_m68k.h>
@@ -68,13 +68,16 @@
  */
 #define FORCE_POLLING	 0
 #define FORCE_INTERRUPT	 1
+/*
+ *  PREFER_INTERRUPT doesn't make much sense on m68k.
+ *  it is preserved here in case of joining with the i386 driver
+ *
 #define PREFER_INTERRUPT 2
+ */
 
 #define WHICH_DRIVER	FORCE_INTERRUPT
 
-#define MAX_LP 3 /* the maximum number of devices */
-
-struct lp_struct lp_table[MAX_LP] = {{0,},};
+struct lp_struct *lp_table[MAX_LP] = {NULL,};
 
 static int max_lp; /* the real number of devices */
 
@@ -100,9 +103,9 @@ static int lp_char_polled(char lpchar, int dev)
 		count ++;
 		if(need_resched)
 			schedule();
-	} while (lp_table[dev].lp_is_busy(dev) && count < lp_table[dev].chars);
+	} while (lp_table[dev]->lp_is_busy(dev) && count < lp_table[dev]->chars);
 
-	if (count == lp_table[dev].chars) {
+	if (count == lp_table[dev]->chars) {
 		return 0;
 		/* we timed out, and the character was /not/ printed */
 	}
@@ -112,7 +115,7 @@ static int lp_char_polled(char lpchar, int dev)
 		lp_max_count = count;
 	}
 #endif
-	lp_table[dev].lp_out(lpchar, dev);
+	lp_table[dev]->lp_out(lpchar, dev);
 	return 1;
 }
 #endif
@@ -127,8 +130,8 @@ unsigned int lp_last_call = 0;
 #if WHICH_DRIVER != FORCE_POLLING
 static __inline__ int lp_char_interrupt(char lpchar, int dev)
 {
-	if (!lp_table[dev].lp_is_busy(dev)) {
-		lp_table[dev].lp_out(lpchar,dev);
+	if (!lp_table[dev]->lp_is_busy(dev)) {
+		lp_table[dev]->lp_out(lpchar,dev);
 		return 1;
 	}
 	return 0;
@@ -136,37 +139,37 @@ static __inline__ int lp_char_interrupt(char lpchar, int dev)
 
 static int lp_error;
 
-static void lp_interrupt(int irq, struct pt_regs *fp, void *dummy)
+void lp_interrupt(int irq, void *dummy, struct pt_regs *fp)
 {
     unsigned long flags;
     int dev;
 
-    for (dev = 0; dev < max_lp; dev++) {
-	if (lp_table[dev].lp_my_interrupt(dev) != 0)
-	  if (lp_table[dev].do_print)
+    for (dev = 0; dev < MAX_LP; dev++) {
+	if ((lp_table[dev] != NULL) && (lp_table[dev]->lp_my_interrupt(dev) != 0))
+	  if (lp_table[dev]->do_print)
 	  {
-		  if (lp_table[dev].copy_size)
+		  if (lp_table[dev]->copy_size)
 		  {
 			  save_flags(flags);
 			  cli();
-			  if (lp_char_interrupt(lp_table[dev].lp_buffer[lp_table[dev].bytes_written], dev)) {
-				  --lp_table[dev].copy_size;
-				  ++lp_table[dev].bytes_written;
+			  if (lp_char_interrupt(lp_table[dev]->lp_buffer[lp_table[dev]->bytes_written], dev)) {
+				  --lp_table[dev]->copy_size;
+				  ++lp_table[dev]->bytes_written;
 				  restore_flags(flags);
 			  }
 			  else
 			  {
-				  lp_table[dev].do_print = 0;
+				  lp_table[dev]->do_print = 0;
 				  restore_flags(flags);
 				  lp_error = 1;
-				  wake_up_interruptible(&lp_table[dev].lp_wait_q);
+				  wake_up_interruptible(&lp_table[dev]->lp_wait_q);
 			  }
 		  }
 		  else
 		  {
-			  lp_table[dev].do_print = 0;
+			  lp_table[dev]->do_print = 0;
 			  lp_error = 0;
-			  wake_up_interruptible(&lp_table[dev].lp_wait_q);
+			  wake_up_interruptible(&lp_table[dev]->lp_wait_q);
 		  }
 
 	  }
@@ -174,11 +177,11 @@ static void lp_interrupt(int irq, struct pt_regs *fp, void *dummy)
 }
 
 #if WHICH_DRIVER == FORCE_INTERRUPT
-static int lp_write(struct inode *inode, struct file *file,
-		    const char *buf, int count)
+static long lp_write(struct inode *inode, struct file *file,
+		    const char *buf, unsigned long count)
 #else
-static int lp_write_interrupt(struct inode *inode, struct file *file,
-			      const char *buf, int count)
+static long lp_write_interrupt(struct inode *inode, struct file *file,
+			      const char *buf, unsigned long count)
 #endif
 {
   unsigned long total_bytes_written = 0;
@@ -187,21 +190,21 @@ static int lp_write_interrupt(struct inode *inode, struct file *file,
   int dev = MINOR(inode->i_rdev);
 
   do {
-    lp_table[dev].do_print = 0;		/* disable lp_interrupt()   */
-    lp_table[dev].bytes_written = 0;	/* init buffer read-pointer */
+    lp_table[dev]->do_print = 0;		/* disable lp_interrupt()   */
+    lp_table[dev]->bytes_written = 0;	/* init buffer read-pointer */
     lp_error = 0;
-    lp_table[dev].copy_size = (count <= LP_BUFFER_SIZE ? count : LP_BUFFER_SIZE);
-    copy_from_user(lp_table[dev].lp_buffer, buf, lp_table[dev].copy_size);
-    while (lp_table[dev].copy_size) {
+    lp_table[dev]->copy_size = (count <= LP_BUFFER_SIZE ? count : LP_BUFFER_SIZE);
+    copy_from_user(lp_table[dev]->lp_buffer, buf, lp_table[dev]->copy_size);
+    while (lp_table[dev]->copy_size) {
       save_flags(flags);
       cli();				/* no interrupts now */
-      lp_table[dev].do_print = 1;	/* enable lp_interrupt() */
-      if (lp_char_interrupt(lp_table[dev].lp_buffer[lp_table[dev].bytes_written], dev)) {
-	++lp_table[dev].bytes_written;
-	--lp_table[dev].copy_size;
+      lp_table[dev]->do_print = 1;	/* enable lp_interrupt() */
+      if (lp_char_interrupt(lp_table[dev]->lp_buffer[lp_table[dev]->bytes_written], dev)) {
+	++lp_table[dev]->bytes_written;
+	--lp_table[dev]->copy_size;
 	lp_error = 0;
       } else {				/* something went wrong   */
-	lp_table[dev].do_print = 0;	/* disable lp_interrupt() */
+	lp_table[dev]->do_print = 0;	/* disable lp_interrupt() */
 	lp_error = 1;			/* printer caused error   */
       }
       if (lp_error) {
@@ -214,14 +217,14 @@ static int lp_write_interrupt(struct inode *inode, struct file *file,
 	  current->timeout = jiffies + LP_TIMEOUT_INTERRUPT;
       }
   
-      interruptible_sleep_on(&lp_table[dev].lp_wait_q);
+      interruptible_sleep_on(&lp_table[dev]->lp_wait_q);
       restore_flags(flags);
   
       /* we're up again and running. we first disable lp_interrupt(), then
 	 check what happened meanwhile */
 
-      lp_table[dev].do_print = 0;
-      rc = total_bytes_written + lp_table[dev].bytes_written;
+      lp_table[dev]->do_print = 0;
+      rc = total_bytes_written + lp_table[dev]->bytes_written;
 
       if (current->signal & ~current->blocked) {
 	if (rc)
@@ -235,17 +238,17 @@ static int lp_write_interrupt(struct inode *inode, struct file *file,
 	   figure out the type of error, exit on request or if nothing has 
 	   been printed at all. */
 	
-	if (lp_table[dev].lp_has_pout(dev)) {
+	if (lp_table[dev]->lp_has_pout(dev)) {
 	  printk(KERN_NOTICE "lp%d: paper-out\n",dev);
 	  if (!rc) rc = -ENOSPC;
-	} else if (!lp_table[dev].lp_is_online(dev)) {
+	} else if (!lp_table[dev]->lp_is_online(dev)) {
 	  printk(KERN_NOTICE "lp%d: off-line\n",dev);
 	  if (!rc) rc = -EIO;
-	} else if (lp_table[dev].lp_is_busy(dev)) {
+	} else if (lp_table[dev]->lp_is_busy(dev)) {
 	  printk(KERN_NOTICE "lp%d: on fire\n",dev);
 	  if (!rc) rc = -EIO;
 	}
-	if (lp_table[dev].flags & LP_ABORT)
+	if (lp_table[dev]->flags & LP_ABORT)
 	  return rc;
       }
       /* check if our buffer was completely printed, if not, most likely
@@ -253,31 +256,33 @@ static int lp_write_interrupt(struct inode *inode, struct file *file,
 	 against, we start all over again. Else we set the read-pointer
 	 of the buffer and count the printed characters */
       
-      if (!lp_table[dev].copy_size) {
-	total_bytes_written += lp_table[dev].bytes_written;
-	buf += lp_table[dev].bytes_written;
-	count -= lp_table[dev].bytes_written;
+      if (!lp_table[dev]->copy_size) {
+	total_bytes_written += lp_table[dev]->bytes_written;
+	buf += lp_table[dev]->bytes_written;
+	count -= lp_table[dev]->bytes_written;
       }
     }
   } while (count > 0);
   return total_bytes_written;
 }
+#else
+void (*lp_interrupt)() = NULL;
 #endif
 
 #if WHICH_DRIVER != FORCE_INTERRUPT
 #if WHICH_DRIVER == FORCE_POLLING
-static int lp_write(struct inode *inode, struct file *file,
-		    const char *buf, int count)
+static long lp_write(struct inode *inode, struct file *file,
+		    const char *buf, unsigned long count)
 #else
-static int lp_write_polled(struct inode *inode, struct file *file,
-			   const char *buf, int count)
+static long lp_write_polled(struct inode *inode, struct file *file,
+			   const char *buf, unsigned long count)
 #endif
 {
 	char *temp = buf;
 	int dev = MINOR(inode->i_rdev);
 
 #ifdef LP_DEBUG
-	if (jiffies-lp_last_call > lp_table[dev].time) {
+	if (jiffies-lp_last_call > lp_table[dev]->time) {
 		lp_total_chars = 0;
 		lp_max_count = 1;
 	}
@@ -293,25 +298,25 @@ static int lp_write_polled(struct inode *inode, struct file *file,
 			lp_total_chars++;
 #endif
 		} else { /* if printer timed out */
-			if (lp_table[dev].lp_has_pout(dev)) {
+			if (lp_table[dev]->lp_has_pout(dev)) {
 				printk(KERN_NOTICE "lp%d: out of paper\n",dev);
-				if (lp_table[dev].flags & LP_ABORT)
+				if (lp_table[dev]->flags & LP_ABORT)
 					return temp - buf ? temp-buf : -ENOSPC;
 				current->state = TASK_INTERRUPTIBLE;
 				current->timeout = jiffies + LP_TIMEOUT_POLLED;
 				schedule();
-			} else if (!lp_table[dev].lp_is_online(dev)) {
+			} else if (!lp_table[dev]->lp_is_online(dev)) {
 				printk(KERN_NOTICE "lp%d: off-line\n",dev);
-				if (lp_table[dev].flags & LP_ABORT)
+				if (lp_table[dev]->flags & LP_ABORT)
 					return temp - buf ? temp-buf : -EIO;
 				current->state = TASK_INTERRUPTIBLE;
 				current->timeout = jiffies + LP_TIMEOUT_POLLED;
 				schedule();
 			} else
 	                /* not offline or out of paper. on fire? */
-			if (lp_table[dev].lp_is_busy(dev)) {
+			if (lp_table[dev]->lp_is_busy(dev)) {
 				printk(KERN_NOTICE "lp%d: on fire\n",dev);
-				if (lp_table[dev].flags & LP_ABORT)
+				if (lp_table[dev]->flags & LP_ABORT)
 					return temp - buf ? temp-buf : -EFAULT;
 				current->state = TASK_INTERRUPTIBLE;
 				current->timeout = jiffies + LP_TIMEOUT_POLLED;
@@ -327,11 +332,11 @@ static int lp_write_polled(struct inode *inode, struct file *file,
 			}
 #ifdef LP_DEBUG
 			printk("lp sleeping at %d characters for %d jiffies\n",
-				lp_total_chars, lp_table[dev].time);
+				lp_total_chars, lp_table[dev]->time);
 			lp_total_chars = 0;
 #endif
 			current->state = TASK_INTERRUPTIBLE;
-			current->timeout = jiffies + lp_table[dev].time;
+			current->timeout = jiffies + lp_table[dev]->time;
 			schedule();
 		}
 	}
@@ -339,11 +344,11 @@ static int lp_write_polled(struct inode *inode, struct file *file,
 }
 #endif
 
-static unsigned int lp_irq = 0;
+unsigned int lp_irq = 0;
 
 #if WHICH_DRIVER == PREFER_INTERRUPT
-static int lp_write(struct inode *inode, struct file *file,
-		    const char *buf, int count)
+static long lp_write(struct inode *inode, struct file *file,
+		    const char *buf, unsigned long count)
 {
 	if (lp_irq)
 		return lp_write_interrupt(inode, file, buf, count);
@@ -352,8 +357,8 @@ static int lp_write(struct inode *inode, struct file *file,
 }
 #endif
 
-static int lp_lseek(struct inode *inode, struct file *file,
-		    off_t offset, int origin)
+static long long lp_lseek(struct inode * inode, struct file * file,
+			  long long offset, int origin)
 {
 	return -ESPIPE;
 }
@@ -362,21 +367,38 @@ static int lp_open(struct inode *inode, struct file *file)
 {
 	int dev = MINOR(inode->i_rdev);
 
-	if (dev >= max_lp)
+	if (dev >= MAX_LP)
 		return -ENODEV;
-	if (!(lp_table[dev].flags & LP_EXIST))
+#ifdef CONFIG_KERNELD
+	if (!lp_table[dev]) {
+		char modname[30];
+
+		sprintf(modname, "char-major-%d-%d", LP_MAJOR, dev);
+		request_module(modname);
+	}
+#endif
+	if (!lp_table[dev])
 		return -ENODEV;
-	if (lp_table[dev].flags & LP_BUSY)
+	if (!(lp_table[dev]->flags & LP_EXIST))
+		return -ENODEV;
+	if (lp_table[dev]->flags & LP_BUSY)
 		return -EBUSY;
 
-	lp_table[dev].flags |= LP_BUSY;
+	lp_table[dev]->flags |= LP_BUSY;
+
+	MOD_INC_USE_COUNT;
+	lp_table[dev]->lp_open();
 
 	return 0;
 }
 
 static void lp_release(struct inode *inode, struct file *file)
 {
-	lp_table[MINOR(inode->i_rdev)].flags &= ~LP_BUSY;
+	int dev =MINOR(inode->i_rdev);
+
+	lp_table[dev]->flags &= ~LP_BUSY;
+	lp_table[dev]->lp_release();
+	MOD_DEC_USE_COUNT;
 }
 
 
@@ -391,30 +413,33 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 #endif
 	if (minor >= max_lp)
 		return -ENODEV;
-	if (!(lp_table[minor].flags & LP_EXIST))
+	if (!(lp_table[minor]->flags & LP_EXIST))
 		return -ENODEV;
 	switch (cmd) {
 	case LPTIME:
-		lp_table[minor].time = arg;
+		lp_table[minor]->time = arg;
 		break;
 	case LPCHAR:
-		lp_table[minor].chars = arg;
+		lp_table[minor]->chars = arg;
 		break;
 	case LPABORT:
 		if (arg)
-			lp_table[minor].flags |= LP_ABORT;
+			lp_table[minor]->flags |= LP_ABORT;
 		else
-			lp_table[minor].flags &= ~LP_ABORT;
+			lp_table[minor]->flags &= ~LP_ABORT;
 		break;
 	case LPWAIT:
-		lp_table[minor].wait = arg;
+		lp_table[minor]->wait = arg;
 		break;
 	case LPSETIRQ:
 	case LPGETIRQ:
 	        retval = lp_irq;
 		break;
 	default:
-		retval = -EINVAL;
+		if (lp_table[minor]->lp_ioctl)
+			retval = lp_table[minor]->lp_ioctl(minor, cmd, arg);
+		else
+			retval = -EINVAL;
 	}
 	return retval;
 }
@@ -432,6 +457,18 @@ static struct file_operations lp_fops = {
 	lp_release
 };
 
+#ifdef CONFIG_MODULES
+static struct symbol_table parallel_syms = {
+#include <linux/symtab_begin.h>
+	X(lp_table),
+	X(lp_irq),
+	X(lp_interrupt),
+	X(lp_init),
+	X(register_parallel),
+	X(unregister_parallel),
+#include <linux/symtab_end.h>
+};
+#endif
 
 int lp_init(void)
 {
@@ -441,44 +478,31 @@ int lp_init(void)
 		return -EBUSY;
 
 	if (register_chrdev(LP_MAJOR,"lp", &lp_fops)) {
-		printk("unable to get major %d for line printer\n", LP_MAJOR);
-		return -EBUSY;
+		printk(KERN_ERR "unable to get major %d for line printer\n", LP_MAJOR);
+		return -ENXIO;
 	}
+
+#ifdef CONFIG_MODULES
+	if (register_symtab(&parallel_syms)) {
+		unregister_chrdev(LP_MAJOR, "lp");
+		printk(KERN_CRIT "unable to register parallel symtab\n");
+		return -ENXIO;
+	}
+#endif
 
 #if WHICH_DRIVER == FORCE_POLLING
 	lp_irq = 0;
 	printk(KERN_INFO "lp_init: lp using polling driver\n");
 #else
 
-#ifdef CONFIG_AMIGA
-	if (MACH_IS_AMIGA && AMIGAHW_PRESENT(AMI_PARALLEL))
-		lp_irq = add_isr(IRQ_AMIGA_CIAA_FLG, lp_interrupt, 0,
-				 NULL, "printer");
-#endif
-#ifdef CONFIG_ATARI
-	if (MACH_IS_ATARI)
-		lp_irq = add_isr(IRQ_MFP_BUSY, lp_interrupt, IRQ_TYPE_SLOW,
-				 NULL, "printer");
+	lp_irq = 1;
+	printk(KERN_INFO "lp_init: lp using interrupt driver\n");
 #endif
 
-	if (lp_irq)
-		printk(KERN_INFO "lp_init: lp using interrupt\n");
-	else
-
-#if WHICH_DRIVER == PREFER_INTERRUPT
-		printk(KERN_INFO "lp_init: lp using polling driver\n");
-#else
-		printk(KERN_WARNING "lp_init: can't get interrupt, and polling driver not configured\n");
-#endif
-#endif
-
-	max_lp = 0;
-	max_lp += lp_internal_init(lp_table, max_lp, MAX_LP, WHICH_DRIVER);
+#ifndef MODULE
+	lp_internal_init();
 #ifdef CONFIG_MULTIFACE_III_LP
-	max_lp += lp_mfc_init(lp_table, max_lp, MAX_LP, WHICH_DRIVER);
-#if WHICH_DRIVER != FORCE_POLLING
-	add_isr(IRQ_AMIGA_PORTS, lp_interrupt, 0, NULL,
-		"Multiface III printer");
+	lp_mfc_init();
 #endif
 #endif
 	return 0;
@@ -490,3 +514,47 @@ int lp_init(void)
 void	lp_setup(char *str, int *ints)
 {	
 }
+
+#ifdef MODULE
+int init_module(void)
+{
+return lp_init();
+}
+
+void cleanup_module(void)
+{
+unregister_chrdev(LP_MAJOR, "lp");
+}
+#endif
+
+/*
+ * (un-)register for hardware drivers
+ * tab is an inititalised lp_struct, dev the desired minor
+ * if dev < 0, let the driver choose the first free minor
+ * if sucessful return the minor, else -1
+ */
+int register_parallel(struct lp_struct *tab, int dev)
+{
+if (dev < 0) {
+	dev = 0;
+	while ((dev < MAX_LP) && (lp_table[dev] != NULL))
+		dev++;
+}
+if (dev > MAX_LP)
+	return -1;
+if (lp_table[dev] != NULL)
+	return -1;
+lp_table[dev] = tab;
+printk(KERN_INFO "lp%d: %s at 0x%08lx\n", dev, tab->name, (long)tab->base);
+return dev;
+}
+
+#ifdef CONFIG_MODULES
+void unregister_parallel(int dev)
+{
+if ((dev < 0) || (dev > MAX_LP) || (lp_table[dev] == NULL))
+	printk(KERN_ERR "WARNING: unregister_parallel for non-existant device ignored!\n");
+else
+	lp_table[dev] = NULL;
+}
+#endif

@@ -8,14 +8,10 @@
  * for more details.
  */
 
-#ifndef _ASM_M68K_ZORRO_H_
-#define _ASM_M68K_ZORRO_H_
+#ifndef _M68K_ZORRO_H
+#define _M68K_ZORRO_H
 
 #ifndef __ASSEMBLY__
-
-#include <linux/config.h>
-#include <asm/amigatypes.h>
-
 
 /*
  * Defined Board Manufacturers
@@ -531,6 +527,14 @@ CD_sizeof	= CD_Unused+(4*4)
 
 #ifndef __ASSEMBLY__
 
+#define ZORRO_NUM_AUTO		16
+
+#ifdef __KERNEL__
+
+extern int zorro_num_autocon;		/* # of autoconfig devices found */
+extern struct ConfigDev zorro_autocon[ZORRO_NUM_AUTO];
+
+
 /*
  * Zorro Functions
  */
@@ -564,11 +568,10 @@ extern u_long zorro_unused_z2ram[4];
  * Verbose Board Identification
  */
 
-#ifdef CONFIG_ZORRO
 extern void zorro_identify(void);
 extern int zorro_get_list(char *buffer);
-#endif CONFIG_ZORRO
 
-#endif	/* __ASSEMBLY__ */
+#endif	/* !__ASSEMBLY__ */
+#endif	/* __KERNEL__ */
 
-#endif /* _ASM_M68K_ZORRO_H_ */
+#endif /* __ASMm68K_ZORRO_H */

@@ -56,12 +56,12 @@ static char *version = "atarilance.c: v1.3 04/04/96 "
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 
+#include <asm/setup.h>
 #include <asm/irq.h>
 #include <asm/atarihw.h>
 #include <asm/atariints.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
-#include <asm/bootinfo.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -257,6 +257,8 @@ struct lance_addr {
 									   (highest byte stripped) */
 	{ 0xffcf0000, 0xffcffff0, 0 },	/* PAMCard VME in TT and MSTE
 									   (highest byte stripped) */
+	{ 0xfecf0000, 0xfecffff0, 0 },	/* Rhotron's PAMCard VME in TT and MSTE
+									   (highest byte stripped) */
 };
 
 #define	N_LANCE_ADDR	(sizeof(lance_addr_list)/sizeof(*lance_addr_list))
@@ -340,8 +342,7 @@ static unsigned long lance_probe1( struct device *dev, struct lance_addr
 static int lance_open( struct device *dev );
 static void lance_init_ring( struct device *dev );
 static int lance_start_xmit( struct sk_buff *skb, struct device *dev );
-static void lance_interrupt( int irq, struct pt_regs *fp, struct device
-                             *dev );
+static void lance_interrupt( int irq, void *dev_id, struct pt_regs *fp );
 static int lance_rx( struct device *dev );
 static int lance_close( struct device *dev );
 static struct enet_statistics *lance_get_stats( struct device *dev );
@@ -533,8 +534,8 @@ static unsigned long lance_probe1( struct device *dev,
 	if (lp->cardtype == PAM_CARD ||
 		memaddr == (unsigned short *)0xffe00000) {
 		/* PAMs card and Riebl on ST use level 5 autovector */
-		add_isr( IRQ_AUTO_5, (isrfunc)lance_interrupt, IRQ_TYPE_PRIO, dev,
-				 "PAM/Riebl-ST Ethernet" );
+		request_irq(IRQ_AUTO_5, lance_interrupt, IRQ_TYPE_PRIO,
+		            "PAM/Riebl-ST Ethernet", dev);
 		dev->irq = (unsigned short)IRQ_AUTO_5;
 	}
 	else {
@@ -547,8 +548,8 @@ static unsigned long lance_probe1( struct device *dev,
 			printk( "Lance: request for VME interrupt failed\n" );
 			return( 0 );
 		}
-		add_isr( irq, (isrfunc)lance_interrupt, IRQ_TYPE_PRIO, dev,
-				 "Riebl-VME Ethernet" );
+		request_irq(irq, lance_interrupt, IRQ_TYPE_PRIO,
+		            "Riebl-VME Ethernet", dev);
 		dev->irq = irq;
 	}
 
@@ -846,9 +847,10 @@ static int lance_start_xmit( struct sk_buff *skb, struct device *dev )
 
 /* The LANCE interrupt handler. */
 
-static void lance_interrupt( int irq, struct pt_regs *fp, struct device *dev )
-
-{	struct lance_private *lp;
+static void lance_interrupt( int irq, void *dev_id, struct pt_regs *fp)
+{
+	struct device *dev = dev_id;
+	struct lance_private *lp;
 	struct lance_ioreg	 *IO;
 	int csr0, boguscnt = 10;
 

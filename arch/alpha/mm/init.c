@@ -145,7 +145,7 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	unsigned long tmp;
 
 	end_mem &= PAGE_MASK;
-	max_mapnr = MAP_NR(end_mem);
+	max_mapnr = num_physpages = MAP_NR(end_mem);
 	high_memory = (void *) end_mem;
 	start_mem = PAGE_ALIGN(start_mem);
 

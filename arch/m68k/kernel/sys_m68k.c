@@ -192,15 +192,14 @@ asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on)
    in VALID whether the virtual address is actually mapped.  */
 #define virt_to_phys_040(vaddr, paddr, valid)				\
 {									\
-  register unsigned long _tmp1 __asm__ ("a0") = (vaddr);		\
-  register unsigned long _tmp2 __asm__ ("d0");				\
   unsigned long _mmusr;							\
 									\
-  __asm__ __volatile__ (".word 0xf568 /* ptestr (%1) */\n\t"		\
-			".long 0x4e7a0805 /* movec %%mmusr,%0 */"	\
-			: "=d" (_tmp2)					\
-			: "a" (_tmp1));					\
-  _mmusr = _tmp2;							\
+  __asm__ __volatile__ (".chip 68040\n\t"				\
+			"ptestr (%1)\n\t"				\
+			"movec %%mmusr,%0\n\t"				\
+			".chip 68k"					\
+			: "=r" (_mmusr)					\
+			: "a" (vaddr));					\
   if (!(_mmusr & MMU_R_040))						\
     (valid) = 0;							\
   else									\
@@ -224,16 +223,22 @@ cache_flush_040 (unsigned long addr, int scope, int cache, unsigned long len)
 	case FLUSH_CACHE_DATA:
 	  /* This nop is needed for some broken versions of the 68040.  */
 	  __asm__ __volatile__ ("nop\n\t"
-				".word 0xf478 /* cpusha %%dc */");
+				".chip 68040\n\t"
+				"cpusha %dc\n\t"
+				".chip 68k");
 	  break;
 	case FLUSH_CACHE_INSN:
 	  __asm__ __volatile__ ("nop\n\t"
-				".word 0xf4b8 /* cpusha %%ic */");
+				".chip 68040\n\t"
+				"cpusha %ic\n\t"
+				".chip 68k");
 	  break;
 	default:
 	case FLUSH_CACHE_BOTH:
 	  __asm__ __volatile__ ("nop\n\t"
-				".word 0xf4f8 /* cpusha %%bc */");
+				".chip 68040\n\t"
+				"cpusha %bc\n\t"
+				".chip 68k");
 	  break;
 	}
       break;
@@ -254,23 +259,28 @@ cache_flush_040 (unsigned long addr, int scope, int cache, unsigned long len)
 	}
       while (len--)
 	{
-	  register unsigned long tmp __asm__ ("a0") = paddr;
 	  switch (cache)
 	    {
 	    case FLUSH_CACHE_DATA:
 	      __asm__ __volatile__ ("nop\n\t"
-				    ".word 0xf468 /* cpushl %%dc,(%0) */"
-				    : : "a" (tmp));
+				    ".chip 68040\n\t"
+				    "cpushl %%dc,(%0)\n\t"
+				    ".chip 68k"
+				    : : "a" (paddr));
 	      break;
 	    case FLUSH_CACHE_INSN:
 	      __asm__ __volatile__ ("nop\n\t"
-				    ".word 0xf4a8 /* cpushl %%ic,(%0) */"
-				    : : "a" (tmp));
+				    ".chip 68040\n\t"
+				    "cpushl %%ic,(%0)\n\t"
+				    ".chip 68k"
+				    : : "a" (paddr));
 	      break;
 	    default:
 	    case FLUSH_CACHE_BOTH:
 	      __asm__ __volatile__ ("nop\n\t"
-				    ".word 0xf4e8 /* cpushl %%bc,(%0) */"
+				    ".chip 68040\n\t"
+				    "cpushl %%bc,(%0)\n\t"
+				    ".chip 68k"
 				    : : "a" (paddr));
 	      break;
 	    }
@@ -302,28 +312,32 @@ cache_flush_040 (unsigned long addr, int scope, int cache, unsigned long len)
     case FLUSH_SCOPE_PAGE:
       for (len >>= PAGE_SHIFT; len--; addr += PAGE_SIZE)
 	{
-	  register unsigned long tmp __asm__ ("a0");
 	  virt_to_phys_040 (addr, paddr, valid);
 	  if (!valid)
 	    continue;
-	  tmp = paddr;
 	  switch (cache)
 	    {
 	    case FLUSH_CACHE_DATA:
 	      __asm__ __volatile__ ("nop\n\t"
-				    ".word 0xf470 /* cpushp %%dc,(%0) */"
-				    : : "a" (tmp));
+				    ".chip 68040\n\t"
+				    "cpushp %%dc,(%0)\n\t"
+				    ".chip 68k"
+				    : : "a" (paddr));
 	      break;
 	    case FLUSH_CACHE_INSN:
 	      __asm__ __volatile__ ("nop\n\t"
-				    ".word 0xf4b0 /* cpushp %%ic,(%0) */"
-				    : : "a" (tmp));
+				    ".chip 68040\n\t"
+				    "cpushp %%ic,(%0)\n\t"
+				    ".chip 68k"
+				    : : "a" (paddr));
 	      break;
 	    default:
 	    case FLUSH_CACHE_BOTH:
 	      __asm__ __volatile__ ("nop\n\t"
-				    ".word 0xf4f0 /* cpushp %%bc,(%0) */"
-				    : : "a" (tmp));
+				    ".chip 68040\n\t"
+				    "cpushp %%bc,(%0)\n\t"
+				    ".chip 68k"
+				    : : "a" (paddr));
 	      break;
 	    }
 	}
@@ -334,13 +348,12 @@ cache_flush_040 (unsigned long addr, int scope, int cache, unsigned long len)
 
 #define virt_to_phys_060(vaddr, paddr, valid)		\
 {							\
-  register unsigned long _tmp __asm__ ("a0") = (vaddr);	\
-							\
-  __asm__ __volatile__ (".word 0xf5c8 /* plpar (%1) */"	\
-			: "=a" (_tmp)			\
-			: "0" (_tmp));			\
+  __asm__ __volatile__ (".chip 68060\n\t"		\
+			"plpar (%0)\n\t"		\
+			".chip 68k"			\
+			: "=a" (paddr)			\
+			: "0" (vaddr));			\
   (valid) = 1; /* XXX */				\
-  (paddr) = _tmp;					\
 }
 
 static inline int
@@ -355,17 +368,23 @@ cache_flush_060 (unsigned long addr, int scope, int cache, unsigned long len)
       switch (cache)
 	{
 	case FLUSH_CACHE_DATA:
-	  __asm__ __volatile__ (".word 0xf478 /* cpusha %%dc */\n\t"
-				".word 0xf458 /* cinva %%dc */");
+	  __asm__ __volatile__ (".chip 68060\n\t"
+				"cpusha %dc\n\t"
+				"cinva %dc\n\t"
+				".chip 68k");
 	  break;
 	case FLUSH_CACHE_INSN:
-	  __asm__ __volatile__ (".word 0xf4b8 /* cpusha %%ic */\n\t"
-				".word 0xf498 /* cinva %%ic */");
+	  __asm__ __volatile__ (".chip 68060\n\t"
+				"cpusha %ic\n\t"
+				"cinva %ic\n\t"
+				".chip 68k");
 	  break;
 	default:
 	case FLUSH_CACHE_BOTH:
-	  __asm__ __volatile__ (".word 0xf4f8 /* cpusha %%bc */\n\t"
-				".word 0xf4d8 /* cinva %%bc */");
+	  __asm__ __volatile__ (".chip 68060\n\t"
+				"cpusha %bc\n\t"
+				"cinva %bc\n\t"
+				".chip 68k");
 	  break;
 	}
       break;
@@ -386,23 +405,28 @@ cache_flush_060 (unsigned long addr, int scope, int cache, unsigned long len)
 	}
       while (len--)
 	{
-	  register unsigned long tmp __asm__ ("a0") = paddr;
 	  switch (cache)
 	    {
 	    case FLUSH_CACHE_DATA:
-	      __asm__ __volatile__ (".word 0xf468 /* cpushl %%dc,(%0) */\n\t"
-				    ".word 0xf448 /* cinv %%dc,(%0) */"
-				    : : "a" (tmp));
+	      __asm__ __volatile__ (".chip 68060\n\t"
+				    "cpushl %%dc,(%0)\n\t"
+				    "cinvl %%dc,(%0)\n\t"
+				    ".chip 68k"
+				    : : "a" (paddr));
 	      break;
 	    case FLUSH_CACHE_INSN:
-	      __asm__ __volatile__ (".word 0xf4a8 /* cpushl %%ic,(%0) */\n\t"
-				    ".word 0xf488 /* cinv %%ic,(%0) */"
-				    : : "a" (tmp));
+	      __asm__ __volatile__ (".chip 68060\n\t"
+				    "cpushl %%ic,(%0)\n\t"
+				    "cinvl %%ic,(%0)\n\t"
+				    ".chip 68k"
+				    : : "a" (paddr));
 	      break;
 	    default:
 	    case FLUSH_CACHE_BOTH:
-	      __asm__ __volatile__ (".word 0xf4e8 /* cpushl %%bc,(%0) */\n\t"
-				    ".word 0xf4c8 /* cinv %%bc,(%0) */"
+	      __asm__ __volatile__ (".chip 68060\n\t"
+				    "cpushl %%bc,(%0)\n\t"
+				    "cinvl %%bc,(%0)\n\t"
+				    ".chip 68k"
 				    : : "a" (paddr));
 	      break;
 	    }
@@ -434,28 +458,32 @@ cache_flush_060 (unsigned long addr, int scope, int cache, unsigned long len)
     case FLUSH_SCOPE_PAGE:
       for (len >>= PAGE_SHIFT; len--; addr += PAGE_SIZE)
 	{
-	  register unsigned long tmp __asm__ ("a0");
 	  virt_to_phys_060 (addr, paddr, valid);
 	  if (!valid)
 	    continue;
-	  tmp = paddr;
 	  switch (cache)
 	    {
 	    case FLUSH_CACHE_DATA:
-	      __asm__ __volatile__ (".word 0xf470 /* cpushp %%dc,(%0) */\n\t"
-				    ".word 0xf450 /* cinv %%dc,(%0) */"
-				    : : "a" (tmp));
+	      __asm__ __volatile__ (".chip 68060\n\t"
+				    "cpushp %%dc,(%0)\n\t"
+				    "cinvp %%dc,(%0)\n\t"
+				    ".chip 68k"
+				    : : "a" (paddr));
 	      break;
 	    case FLUSH_CACHE_INSN:
-	      __asm__ __volatile__ (".word 0xf4b0 /* cpushp %%ic,(%0) */\n\t"
-				    ".word 0xf490 /* cinv %%ic,(%0) */"
-				    : : "a" (tmp));
+	      __asm__ __volatile__ (".chip 68060\n\t"
+				    "cpushp %%ic,(%0)\n\t"
+				    "cinvp %%ic,(%0)\n\t"
+				    ".chip 68k"
+				    : : "a" (paddr));
 	      break;
 	    default:
 	    case FLUSH_CACHE_BOTH:
-	      __asm__ __volatile__ (".word 0xf4f0 /* cpushp %%bc,(%0) */\n\t"
-				    ".word 0xf4d0 /* cinv %%bc,(%0) */"
-				    : : "a" (tmp));
+	      __asm__ __volatile__ (".chip 68060\n\t"
+				    "cpushp %%bc,(%0)\n\t"
+				    "cinvp %%bc,(%0)\n\t"
+				    ".chip 68k"
+				    : : "a" (paddr));
 	      break;
 	    }
 	}
@@ -490,16 +518,35 @@ sys_cacheflush (unsigned long addr, int scope, int cache, unsigned long len)
     }
 
   if (CPU_IS_020_OR_030) {
-    /* Always flush the whole cache, everything else would not be
-       worth the hassle.  */
-    __asm__ __volatile__
-	("movec %%cacr, %%d0\n\t"
-	 "or %0, %%d0\n\t"
-	 "movec %%d0, %%cacr"
-	 : /* no outputs */
-	 : "di" ((cache & FLUSH_CACHE_INSN ? 8 : 0)
-		 | (cache & FLUSH_CACHE_DATA ? 0x800 : 0))
-	 : "d0");
+    if (scope == FLUSH_SCOPE_LINE)
+      {
+	unsigned long cacr;
+	__asm__ ("movec %%cacr, %0" : "=r" (cacr));
+	if (cache & FLUSH_CACHE_INSN)
+	  cacr |= 4;
+	if (cache & FLUSH_CACHE_DATA)
+	  cacr |= 0x400;
+	len >>= 4;
+	while (len--)
+	  {
+	    __asm__ __volatile__ ("movec %1, %%caar\n\t"
+				  "movec %0, %%cacr"
+				  : /* no outputs */
+				  : "r" (cacr), "r" (addr));
+	    addr += 16;
+	  }
+      }
+    else
+      {
+	/* Flush the whole cache, even if page granularity is requested.  */
+	unsigned long cacr;
+	__asm__ ("movec %%cacr, %0" : "=r" (cacr));
+	if (cache & FLUSH_CACHE_INSN)
+	  cacr |= 8;
+	if (cache & FLUSH_CACHE_DATA)
+	  cacr |= 0x800;
+	__asm__ __volatile__ ("movec %0, %%cacr" : : "r" (cacr));
+      }
     return 0;
   } else if (CPU_IS_040)
     return cache_flush_040 (addr, scope, cache, len);

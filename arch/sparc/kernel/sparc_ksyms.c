@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.30 1996/12/03 08:44:44 jj Exp $
+/* $Id: sparc_ksyms.c,v 1.32 1996/12/18 06:33:45 tridge Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -107,8 +107,9 @@ static struct symbol_table arch_symbol_table = {
 	X(sparc_dvma_malloc),
 	X(sun4c_unmapioaddr),
 	X(srmmu_unmapioaddr),
+#if CONFIG_SBUS
 	X(SBus_chain),
-
+#endif
 	/* Solaris/SunOS binary compatibility */
 	X(svr4_setcontext),
 	X(svr4_getcontext),
@@ -137,6 +138,7 @@ static struct symbol_table arch_symbol_table = {
 	X(prom_feval),
 	X(prom_getstring),
 	X(prom_apply_sbus_ranges),
+	X(prom_getint),
 	X(prom_getintdefault),
 	X(romvec),
 
@@ -198,7 +200,4 @@ static struct symbol_table arch_symbol_table = {
 void arch_syms_export(void)
 {
 	register_symtab(&arch_symbol_table);
-#if CONFIG_AP1000
-	ap_register_ksyms();
-#endif
 }

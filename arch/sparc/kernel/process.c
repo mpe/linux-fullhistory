@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.83 1996/12/10 07:38:39 davem Exp $
+/*  $Id: process.c,v 1.85 1996/12/18 06:33:42 tridge Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -215,6 +215,9 @@ void show_stackframe(struct sparc_stackf *sf)
 
 void show_regs(struct pt_regs * regs)
 {
+#if __MPP__
+	printk("CID: %d\n",mpp_cid());
+#endif
         printk("PSR: %08lx PC: %08lx NPC: %08lx Y: %08lx\n", regs->psr,
 	       regs->pc, regs->npc, regs->y);
 	printk("g0: %08lx g1: %08lx g2: %08lx g3: %08lx\n",
@@ -305,7 +308,7 @@ void flush_thread(void)
 	current->tss.sstk_info.cur_status = 0;
 	current->tss.sstk_info.the_stack = 0;
 
-	/* No new signal delivey by default */
+	/* No new signal delivery by default */
 	current->tss.new_signal = 0;
 #ifndef __SMP__
 	if(last_task_used_math == current) {
@@ -406,7 +409,7 @@ clone_stackframe(struct sparc_stackf *dst, struct sparc_stackf *src)
  *       allocate the task_struct and kernel stack in
  *       do_fork().
  */
-extern void ret_sys_call(void);
+extern void ret_from_syscall(void);
 
 int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 		struct task_struct *p, struct pt_regs *regs)
@@ -439,7 +442,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 	copy_regwin(new_stack, (((struct reg_window *) regs) - 1));
 
 	p->tss.ksp = p->saved_kernel_stack = (unsigned long) new_stack;
-	p->tss.kpc = (((unsigned long) ret_sys_call) - 0x8);
+	p->tss.kpc = (((unsigned long) ret_from_syscall) - 0x8);
 	p->tss.kpsr = current->tss.fork_kpsr;
 	p->tss.kwim = current->tss.fork_kwim;
 	p->tss.kregs = childregs;

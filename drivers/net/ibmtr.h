@@ -13,10 +13,9 @@
 #define NOTOK 0
 #define TOKDEBUG 1
 
-#ifndef IBMTR_SHARED_RAM_BASE
-#define IBMTR_SHARED_RAM_BASE 0xD0
-#define IBMTR_SHARED_RAM_SIZE 0x10
-#endif
+#define IBMTR_SHARED_RAM_SIZE 0x10000
+#define IBMTR_IO_EXTENT 4
+#define IBMTR_MAX_ADAPTERS 2
 
 #define CHANNEL_ID      0X1F30
 #define AIP             0X1F00
@@ -40,8 +39,6 @@
 
 #define MMIOStartLocP   0x0a20  /* Primary adapter's starting MMIO area */
 #define MMIOStartLocA   0x0a24  /* Alternate adapter's starting MMIO area */
-
-#define TR_IO_EXTENT	4	/* size of used IO range */
 
 #define GLOBAL_INT_ENABLE 0x02f0
 
@@ -207,6 +204,7 @@ struct tok_info {
 	unsigned char auto_ringspeedsave;
 	open_state open_status;
 	unsigned char readlog_pending;
+	unsigned short adapter_int_enable; /* Adapter-specific int enable */
 };
 
 /* token ring adapter commands */

@@ -15,9 +15,10 @@
  */
 
 struct sm_debug_data {
-	unsigned long debug1;
-	unsigned long debug2;
-	long debug3;
+	unsigned int int_rate;
+	unsigned int mod_cycles;
+	unsigned int demod_cycles;
+	unsigned int dma_residue;
 };
 
 struct sm_diag_data {
@@ -54,26 +55,12 @@ struct sm_ioctl {
 /* -------------------------------------------------------------------- */
 
 /*
- * config: hardware
- */
-#define SM_HARDWARE_INVALID   -1
-#define SM_HARDWARE_SBC       0
-#define SM_HARDWARE_WSS       1
-#define SM_HARDWARE_WSSFDX    2  /* currently does not work! */
-
-/*
- * config: mode
- */
-#define SM_MODE_INVALID       -1
-#define SM_MODE_AFSK1200      0
-#define SM_MODE_FSK9600       1
-
-/*
  * diagnose modes
  */
-#define SM_DIAGMODE_OFF        0
-#define SM_DIAGMODE_INPUT      1
-#define SM_DIAGMODE_DEMOD      2
+#define SM_DIAGMODE_OFF            0
+#define SM_DIAGMODE_INPUT          1
+#define SM_DIAGMODE_DEMOD          2
+#define SM_DIAGMODE_CONSTELLATION  3
 
 /*
  * diagnose flags
@@ -86,6 +73,7 @@ struct sm_ioctl {
  */
 #define SM_MIXER_INVALID       0
 #define SM_MIXER_AD1848        0x10
+#define SM_MIXER_CRYSTAL       0x11
 #define SM_MIXER_CT1335        0x20
 #define SM_MIXER_CT1345        0x21
 #define SM_MIXER_CT1745        0x22
@@ -93,8 +81,6 @@ struct sm_ioctl {
 /*
  * ioctl values
  */
-#define SMCTL_GETMODEMTYPE     0x80
-#define SMCTL_SETMODEMTYPE     0x81
 #define SMCTL_DIAGNOSE         0x82
 #define SMCTL_GETMIXER         0x83
 #define SMCTL_SETMIXER         0x84

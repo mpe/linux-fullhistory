@@ -73,7 +73,7 @@ static void free_area_pages(unsigned long address, unsigned long size)
 	pgd_t * dir;
 	unsigned long end = address + size;
 
-	dir = pgd_offset(&init_mm, address);
+	dir = pgd_offset_k(address);
 	flush_cache_all();
 	while (address < end) {
 		free_area_pmd(dir, address, end - address);
@@ -130,7 +130,7 @@ static int alloc_area_pages(unsigned long address, unsigned long size)
 	pgd_t * dir;
 	unsigned long end = address + size;
 
-	dir = pgd_offset(&init_mm, address);
+	dir = pgd_offset_k(address);
 	flush_cache_all();
 	while (address < end) {
 		pmd_t *pmd = pmd_alloc_kernel(dir, address);

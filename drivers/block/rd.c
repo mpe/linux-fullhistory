@@ -564,7 +564,7 @@ static uch *window;
 static unsigned insize = 0;  /* valid bytes in inbuf */
 static unsigned inptr = 0;   /* index of next byte to be processed in inbuf */
 static unsigned outcnt = 0;  /* bytes in output buffer */
-static exit_code = 0;
+static int exit_code = 0;
 static long bytes_out = 0;
 static struct file *crd_infp, *crd_outfp;
 

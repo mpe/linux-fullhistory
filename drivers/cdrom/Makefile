@@ -114,6 +114,14 @@ else
   endif
 endif #CONFIG_SJCD
 
+ifeq ($(CONFIG_BPCD),y)
+L_OBJS += bpcd.o
+else
+  ifeq ($(CONFIG_BPCD),m)
+  M_OBJS += bpcd.o
+  endif
+endif #CONFIG_BPCD
+
 ifeq ($(CONFIG_CDI_INIT),y)
 L_OBJS += cdi.o
 endif #CONFIG_CDI_INIT

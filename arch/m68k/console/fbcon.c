@@ -160,8 +160,8 @@ extern int console_blanked;
 #endif
 
 
-struct fb_info *fb_info;
-struct display *disp;
+static struct fb_info *fb_info;
+static struct display *disp;
 
 
 /* ++Geert: Sorry, no hardware cursor support at the moment;
@@ -455,56 +455,56 @@ struct display_switch {
 
 
 #ifdef CONFIG_FBCON_MONO
-struct display_switch dispsw_mono = {
+static struct display_switch dispsw_mono = {
    bmove_mono, clear_mono, putc_mono, putcs_mono, rev_char_mono
 };
 #endif /* CONFIG_FBCON_MONO */
 
 #ifdef CONFIG_FBCON_ILBM
-struct display_switch dispsw_ilbm = {
+static struct display_switch dispsw_ilbm = {
    bmove_ilbm, clear_ilbm, putc_ilbm, putcs_ilbm, rev_char_ilbm
 };
 #endif /* CONFIG_FBCON_ILBM */
 
 #ifdef CONFIG_FBCON_PLANES
-struct display_switch dispsw_plan = {
+static struct display_switch dispsw_plan = {
    bmove_plan, clear_plan, putc_plan, putcs_plan, rev_char_plan
 };
 #endif /* CONFIG_FBCON_PLANES */
 
 #ifdef CONFIG_FBCON_2PLANE
-struct display_switch dispsw_2_plane = {
+static struct display_switch dispsw_2_plane = {
    bmove_2_plane, clear_2_plane, putc_2_plane, putcs_2_plane, rev_char_2_plane
 };
 #endif /* CONFIG_FBCON_2PLANE */
 
 #ifdef CONFIG_FBCON_4PLANE
-struct display_switch dispsw_4_plane = {
+static struct display_switch dispsw_4_plane = {
    bmove_4_plane, clear_4_plane, putc_4_plane, putcs_4_plane, rev_char_4_plane
 };
 #endif /* CONFIG_FBCON_4PLANE */
 
 #ifdef CONFIG_FBCON_8PLANE
-struct display_switch dispsw_8_plane = {
+static struct display_switch dispsw_8_plane = {
    bmove_8_plane, clear_8_plane, putc_8_plane, putcs_8_plane, rev_char_8_plane
 };
 #endif /* CONFIG_FBCON_8PLANE */
 
 #ifdef CONFIG_FBCON_8PACKED
-struct display_switch dispsw_8_packed = {
+static struct display_switch dispsw_8_packed = {
    bmove_8_packed, clear_8_packed, putc_8_packed, putcs_8_packed, rev_char_8_packed
 };
 #endif /* CONFIG_FBCON_8PACKED */
 
 #ifdef CONFIG_FBCON_16PACKED
-struct display_switch dispsw_16_packed = {
+static struct display_switch dispsw_16_packed = {
    bmove_16_packed, clear_16_packed, putc_16_packed, putcs_16_packed,
    rev_char_16_packed
 };
 #endif /* CONFIG_FBCON_16PACKED */
 
 #ifdef CONFIG_FBCON_CYBER
-struct display_switch dispsw_cyber = {
+static struct display_switch dispsw_cyber = {
    bmove_cyber, clear_cyber, putc_cyber, putcs_cyber, rev_char_cyber
 };
 #endif /* CONFIG_FBCON_CYBER */

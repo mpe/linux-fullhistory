@@ -105,12 +105,14 @@ extern __inline__ struct cmsghdr * cmsg_nxthdr(struct msghdr *mhdr,
 
 struct ucred
 {
-	pid_t	pid;
-	uid_t	uid;
-	gid_t	gid;
+	/* Should we be using __kernel_*_t here ?? */
+	__kernel_pid_t	pid;
+	__kernel_uid_t	uid;
+	__kernel_gid_t	gid;
 };
 
 /* Socket types. */
+
 #define SOCK_STREAM	1		/* stream (connection) socket	*/
 #define SOCK_DGRAM	2		/* datagram (conn.less) socket	*/
 #define SOCK_RAW	3		/* raw socket			*/

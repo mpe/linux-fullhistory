@@ -1,11 +1,12 @@
 #include <linux/types.h>
 #include <linux/mm.h>
 #include <linux/blk.h>
+#include <linux/sched.h>
 #include <linux/version.h>
 
+#include <asm/setup.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
-#include <asm/bootinfo.h>
 #include <asm/amigaints.h>
 #include <asm/amigahw.h>
 #include <asm/irq.h>
@@ -27,7 +28,7 @@ struct proc_dir_entry proc_scsi_a3000 = {
 
 static struct Scsi_Host *a3000_host = NULL;
 
-static void a3000_intr (int irq, struct pt_regs *fp, void *dummy)
+static void a3000_intr (int irq, void *dummy, struct pt_regs *fp)
 {
     unsigned int status = DMA(a3000_host)->ISTR;
 
@@ -96,26 +97,12 @@ static int dma_setup (Scsi_Cmnd *cmd, int dir_in)
     /* setup DMA *physical* address */
     DMA(a3000_host)->ACR = addr;
 
-
     if (dir_in)
-      {
   	/* invalidate any cache */
-        /*
-         * On the 68040 it's not ok to use cache_clear, as it just invalidates
-         * cache-lines, and thereby trashing them. We need to use cache_push
-         * to avoid problems/crashes.
-         * This was a real bitch to catch :-( -Jes
-         */
-
-        if (boot_info.cputype & CPU_68040)
-	  cache_push (addr, cmd->SCp.this_residual);
-	else
-	  cache_clear (addr, cmd->SCp.this_residual);
-      }
+	cache_clear (addr, cmd->SCp.this_residual);
     else
-      /* push any dirty cache */
-      cache_push (addr, cmd->SCp.this_residual);
-      
+	/* push any dirty cache */
+	cache_push (addr, cmd->SCp.this_residual);
 
     /* start DMA */
     DMA(a3000_host)->ST_DMA = 1;
@@ -190,15 +177,39 @@ int a3000_detect(Scsi_Host_Template *tpnt)
 	return 0;
 
     tpnt->proc_dir = &proc_scsi_a3000;
+    tpnt->proc_info = &wd33c93_proc_info;
 
     a3000_host = scsi_register (tpnt, sizeof(struct WD33C93_hostdata));
     a3000_host->base = (unsigned char *)ZTWO_VADDR(0xDD0000);
+    a3000_host->irq = IRQ_AMIGA_PORTS & ~IRQ_MACHSPEC;
     DMA(a3000_host)->DAWR = DAWR_A3000;
     wd33c93_init(a3000_host, (wd33c93_regs *)&(DMA(a3000_host)->SASR),
 		 dma_setup, dma_stop, WD33C93_FS_12_15);
-    add_isr(IRQ_AMIGA_PORTS, a3000_intr, 0, NULL, "A3000 SCSI");
+    request_irq(IRQ_AMIGA_PORTS, a3000_intr, 0, "A3000 SCSI", a3000_intr);
     DMA(a3000_host)->CNTR = CNTR_PDMD | CNTR_INTEN;
     called = 1;
 
+    return 1;
+}
+
+#ifdef MODULE
+
+#define HOSTS_C
+
+#include "a3000.h"
+
+Scsi_Host_Template driver_template = A3000_SCSI;
+
+#include "scsi_module.c"
+
+#endif
+
+int a3000_release(struct Scsi_Host *instance)
+{
+#ifdef MODULE
+    wd33c93_release();
+    DMA(instance)->CNTR = 0;
+    free_irq(IRQ_AMIGA_PORTS, a3000_intr);
+#endif
     return 1;
 }

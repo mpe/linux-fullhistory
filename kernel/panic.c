@@ -13,6 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/delay.h>
+#include <linux/smp.h>
 
 asmlinkage void sys_sync(void);	/* it's really int */
 extern void hard_reset_now(void);
@@ -44,6 +45,9 @@ NORET_TYPE void panic(const char * fmt, ...)
 
 	do_unblank_screen();
 
+#ifdef __SMP__
+	smp_message_pass(MSG_ALL_BUT_SELF, MSG_STOP_CPU, 0, 0);
+#endif
 	if (panic_timeout > 0)
 	{
 		/*
@@ -60,6 +64,10 @@ NORET_TYPE void panic(const char * fmt, ...)
 		 */
 		hard_reset_now();
 	}
+#ifdef __sparc__
+	printk("Press L1-A to return to the boot prom\n");
+#endif
+	sti();
 	for(;;);
 }
 

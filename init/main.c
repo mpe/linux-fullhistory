@@ -67,9 +67,7 @@ extern long console_init(long, long);
 extern long kmalloc_init(long,long);
 extern void sock_init(void);
 extern unsigned long pci_init(unsigned long, unsigned long);
-#ifdef CONFIG_MCA
 extern long mca_init(long, long);
-#endif
 extern void sysctl_init(void);
 
 extern void smp_setup(char *str, int *ints);
@@ -82,6 +80,9 @@ extern void msmouse_setup(char *str, int *ints);
 extern void lp_setup(char *str, int *ints);
 extern void eth_setup(char *str, int *ints);
 extern void xd_setup(char *str, int *ints);
+#ifdef CONFIG_BLK_DEV_EZ
+extern void ez_setup(char *str, int *ints);
+#endif
 extern void floppy_setup(char *str, int *ints);
 extern void st_setup(char *str, int *ints);
 extern void st0x_setup(char *str, int *ints);
@@ -99,9 +100,7 @@ extern void BusLogic_Setup(char *str, int *ints);
 extern void eata2x_setup(char *str, int *ints);
 extern void u14_34f_setup(char *str, int *ints);
 extern void fdomain_setup(char *str, int *ints);
-#ifdef CONFIG_SCSI_IBMMCA
 extern void ibmmca_scsi_setup(char *str, int *ints);
-#endif
 extern void in2000_setup(char *str, int *ints);
 extern void NCR53c406a_setup(char *str, int *ints);
 extern void wd7000_setup(char *str, int *ints);
@@ -109,6 +108,7 @@ extern void ppa_setup(char *str, int *ints);
 extern void scsi_luns_setup(char *str, int *ints);
 extern void sound_setup(char *str, int *ints);
 extern void reboot_setup(char *str, int *ints);
+extern void video_setup(char *str, int *ints);
 #ifdef CONFIG_CDU31A
 extern void cdu31a_setup(char *str, int *ints);
 #endif CONFIG_CDU31A
@@ -134,6 +134,9 @@ extern void sonycd535_setup(char *str, int *ints);
 #ifdef CONFIG_GSCD
 extern void gscd_setup(char *str, int *ints);
 #endif CONFIG_GSCD
+#ifdef CONFIG_BPCD
+extern void bpcd_setup(char *str, int *ints);
+#endif CONFIG_BPCD
 #ifdef CONFIG_CM206
 extern void cm206_setup(char *str, int *ints);
 #endif CONFIG_CM206
@@ -280,6 +283,9 @@ struct {
 	{ "noinitrd", no_initrd },
 #endif
 #endif
+#if defined (CONFIG_AMIGA) || defined (CONFIG_ATARI)
+	{ "video=", video_setup },
+#endif
 	{ "swap=", swap_setup },
 	{ "buff=", buff_setup },
 	{ "panic=", panic_setup },
@@ -369,12 +375,15 @@ struct {
 #ifdef CONFIG_BLK_DEV_XD
 	{ "xd=", xd_setup },
 #endif
+#ifdef CONFIG_BLK_DEV_EZ
+	{ "ez=", ez_setup },
+#endif
 #ifdef CONFIG_BLK_DEV_FD
 	{ "floppy=", floppy_setup },
 #endif
 #ifdef CONFIG_BLK_DEV_PS2
 	{ "ed=", ed_setup },
-	{ "tp720", tp720_setup },
+	{ "tp720=", tp720_setup },
 #endif
 #ifdef CONFIG_CDU31A
 	{ "cdu31a=", cdu31a_setup },
@@ -397,6 +406,9 @@ struct {
 #ifdef CONFIG_GSCD
 	{ "gscd=", gscd_setup },
 #endif CONFIG_GSCD
+#ifdef CONFIG_BPCD
+	{ "bpcd=", bpcd_setup },
+#endif CONFIG_BPCD
 #ifdef CONFIG_CM206
 	{ "cm206=", cm206_setup },
 #endif CONFIG_CM206
@@ -571,6 +583,11 @@ static void parse_root_dev(char * line)
 		{ "sdc",     0x0820 },
 		{ "sdd",     0x0830 },
 		{ "sde",     0x0840 },
+		{ "ada",     0x1c00 },
+		{ "adb",     0x1c10 },
+		{ "adc",     0x1c20 },
+		{ "add",     0x1c30 },
+		{ "ade",     0x1c40 },
 		{ "fd",      0x0200 },
 		{ "xda",     0x0d00 },
 		{ "xdb",     0x0d40 },
@@ -583,6 +600,8 @@ static void parse_root_dev(char * line)
 		{ "gscd",    0x1000 },
 		{ "sbpcd",   0x1900 },
 		{ "sonycd",  0x1800 },
+		{ "eza",     0x2800 },
+		{ "bpcd",    0x2900 },
 		{ NULL, 0 }
 	};
 

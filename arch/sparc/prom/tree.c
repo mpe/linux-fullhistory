@@ -1,4 +1,4 @@
-/* $Id: tree.c,v 1.12 1996/10/12 12:37:40 davem Exp $
+/* $Id: tree.c,v 1.13 1996/12/18 06:46:56 tridge Exp $
  * tree.c: Basic device tree traversal/scanning for the Linux
  *         prom library.
  *
@@ -27,11 +27,6 @@ prom_getchild(int node)
 
 	save_flags(flags); cli();
 
-#if CONFIG_AP1000
-        printk("prom_getchild -> 0\n");
-	restore_flags(flags);
-        return 0;
-#else
 	if(node == -1) {
 		ret = 0;
 	} else {
@@ -46,7 +41,6 @@ prom_getchild(int node)
 			     "memory");
 	restore_flags(flags);
 	return ret;
-#endif
 }
 
 /* Return the next sibling of node 'node' or zero if no more siblings
@@ -60,11 +54,6 @@ prom_getsibling(int node)
 
 	save_flags(flags); cli();
 
-#if CONFIG_AP1000
-        printk("prom_getsibling -> 0\n");
-	restore_flags(flags);
-        return 0;
-#else
 	if(node == -1) {
 		ret = 0;
 	} else {
@@ -79,7 +68,6 @@ prom_getsibling(int node)
 			     "memory");
 	restore_flags(flags);
 	return ret;
-#endif
 }
 
 /* Return the length in bytes of property 'prop' at node 'node'.
@@ -93,11 +81,6 @@ prom_getproplen(int node, char *prop)
 
 	save_flags(flags); cli();
 
-#if CONFIG_AP1000
-        printk("prom_getproplen(%s) -> -1\n",prop);
-	restore_flags(flags);
-        return -1;
-#endif
 	if((!node) || (!prop))
 		ret = -1;
 	else
@@ -121,11 +104,6 @@ prom_getproperty(int node, char *prop, char *buffer, int bufsize)
 
 	save_flags(flags); cli();
 
-#if CONFIG_AP1000
-        printk("prom_getproperty(%s) -> -1\n",prop);
-	restore_flags(flags);
-	return -1;
-#endif
 	plen = prom_getproplen(node, prop);
 	if((plen > bufsize) || (plen == 0) || (plen == -1))
 		ret = -1;
@@ -148,10 +126,6 @@ prom_getint(int node, char *prop)
 {
 	static int intprop;
 
-#if CONFIG_AP1000
-        printk("prom_getint(%s) -> -1\n",prop);
-        return -1;
-#endif
 	if(prom_getproperty(node, prop, (char *) &intprop, sizeof(int)) != -1)
 		return intprop;
 
@@ -167,10 +141,6 @@ prom_getintdefault(int node, char *property, int deflt)
 {
 	int retval;
 
-#if CONFIG_AP1000
-        printk("prom_getintdefault(%s) -> 0\n",property);
-        return 0;
-#endif
 	retval = prom_getint(node, property);
 	if(retval == -1) return deflt;
 
@@ -183,10 +153,6 @@ prom_getbool(int node, char *prop)
 {
 	int retval;
 
-#if CONFIG_AP1000
-        printk("prom_getbool(%s) -> 0\n",prop);
-        return 0;
-#endif
 	retval = prom_getproplen(node, prop);
 	if(retval == -1) return 0;
 	return 1;
@@ -201,10 +167,6 @@ prom_getstring(int node, char *prop, char *user_buf, int ubuf_size)
 {
 	int len;
 
-#if CONFIG_AP1000
-        printk("prom_getstring(%s) -> .\n",prop);
-        return;
-#endif
 	len = prom_getproperty(node, prop, user_buf, ubuf_size);
 	if(len != -1) return;
 	user_buf[0] = 0;

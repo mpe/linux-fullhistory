@@ -1,4 +1,4 @@
-/* $Id: console.c,v 1.9 1996/09/19 20:27:17 davem Exp $
+/* $Id: console.c,v 1.10 1996/12/18 06:46:54 tridge Exp $
  * console.c: Routines that deal with sending and receiving IO
  *            to/from the current console device using the PROM.
  *
@@ -80,8 +80,6 @@ prom_nbputchar(char c)
 		  ap_putchar(c);
 		  i = 0;
 		}
-#else
-                i = -1;
 #endif
 	
 		break;

@@ -1,25 +1,67 @@
-#ifdef ENABLE_AFSK1200
-static const char tx_lo_i[] = {  127,   89,    0,  -89, -127,  -89,    0,   89 };
+/*****************************************************************************/
 
-static const char tx_lo_q[] = {    0,   89,  127,   89,    0,  -89, -127,  -89 };
+/*
+ *	sm_fsk9600.h  --  soundcard radio modem driver, 
+ *                        9600 baud G3RUH compatible FSK modem
+ *
+ *	Copyright (C) 1996  Thomas Sailer (sailer@ife.ee.ethz.ch)
+ *
+ *	This program is free software; you can redistribute it and/or modify
+ *	it under the terms of the GNU General Public License as published by
+ *	the Free Software Foundation; either version 2 of the License, or
+ *	(at your option) any later version.
+ *
+ *	This program is distributed in the hope that it will be useful,
+ *	but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *	GNU General Public License for more details.
+ *
+ *	You should have received a copy of the GNU General Public License
+ *	along with this program; if not, write to the Free Software
+ *	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ *  Please note that the GPL allows you to use the driver, NOT the radio.
+ *  In order to use the radio, you need a license from the communications
+ *  authority of your country.
+ *
+ */
 
-static const char tx_hi_i[] = {  127,   16, -122,  -48,  109,   77,  -89, -100 };
+/* --------------------------------------------------------------------- */
 
-static const char tx_hi_q[] = {    0,  125,   32, -117,  -63,  100,   89,  -77 };
-
-static const char sinetab[] = {
-	 128,  140,  152,  164,  176,  187,  198,  208,
-	 217,  226,  233,  240,  245,  249,  252,  254,
-	 255,  254,  252,  249,  245,  240,  233,  226,
-	 217,  208,  198,  187,  176,  164,  152,  140,
-	 128,  116,  104,   92,   80,   69,   58,   48,
-	  39,   30,   23,   16,   11,    7,    4,    2,
-	   1,    2,    4,    7,   11,   16,   23,   30,
-	  39,   48,   58,   69,   80,   92,  104,  116
+struct demod_state_fsk96 {
+	unsigned int shreg;
+	unsigned long descram;
+	unsigned int bit_pll;
+	unsigned char last_sample;
+	unsigned int dcd_shreg;
+	int dcd_sum0, dcd_sum1, dcd_sum2;
+	unsigned int dcd_time;
 };
-#endif ENABLE_AFSK1200
-#ifdef ENABLE_FSK9600
-#ifdef ENABLE_SBC
+
+struct mod_state_fsk96 {
+	unsigned int shreg;
+	unsigned long scram;
+	unsigned char tx_bit;
+};
+
+#define DEMOD_STATE ((struct demod_state_fsk96 *)(&sm->d))
+#define MOD_STATE ((struct mod_state_fsk96 *)(&sm->m))
+
+/* --------------------------------------------------------------------- */
+
+#define DESCRAM_TAP1 0x20000
+#define DESCRAM_TAP2 0x01000
+#define DESCRAM_TAP3 0x00001
+
+#define DESCRAM_TAPSH1 17
+#define DESCRAM_TAPSH2 12
+#define DESCRAM_TAPSH3 0
+
+#define SCRAM_TAP1 0x20000 /* X^17 */
+#define SCRAM_TAPN 0x00021 /* X^0+X^5 */
+
+/* --------------------------------------------------------------------- */
+
 static unsigned char tx_filter_9k6_4[] = {
 	  65,  66,  63,  63,  76,  76,  73,  73,
 	  54,  54,  51,  51,  64,  65,  61,  62,
@@ -151,8 +193,6 @@ static unsigned char tx_filter_9k6_4[] = {
 	 210, 209, 218, 217, 182, 182, 190, 190
 };
 
-#endif /* ENABLE_SBC */
-#if defined(ENABLE_WSS) || defined(ENABLE_WSSFDX)
 static unsigned char tx_filter_9k6_5[] = {
 	  78,  78,  75,  76,  85,  85,  82,  83,
 	  71,  72,  69,  69,  78,  78,  76,  76,
@@ -316,5 +356,197 @@ static unsigned char tx_filter_9k6_5[] = {
 	 191, 189, 198, 197, 171, 170, 179, 177
 };
 
-#endif /* defined(ENABLE_WSS) || defined(ENABLE_WSSFDX) */
-#endif /* ENABLE_FSK9600 */
+/* --------------------------------------------------------------------- */
+
+static void modulator_9600_4(struct sm_state *sm, unsigned char *buf, int buflen)
+{
+	int j;
+	const unsigned char *cp;
+
+	for (; buflen >= 4; buflen -= 4) {
+		if (MOD_STATE->shreg <= 1)
+			MOD_STATE->shreg = hdlcdrv_getbits(&sm->hdrv) | 0x10000;
+		MOD_STATE->scram = ((MOD_STATE->scram << 1) |
+				     (MOD_STATE->scram & 1));
+		MOD_STATE->scram ^= (!(MOD_STATE->shreg & 1));
+		MOD_STATE->shreg >>= 1;
+		if (MOD_STATE->scram & (SCRAM_TAP1 << 1))
+			MOD_STATE->scram ^= (SCRAM_TAPN << 1);
+		MOD_STATE->tx_bit = (MOD_STATE->tx_bit << 1) | 
+			(!!(MOD_STATE->scram & (SCRAM_TAP1 << 2)));
+		cp = tx_filter_9k6_4 + (MOD_STATE->tx_bit & 0xff);
+		for (j = 0; j < 4; j++) {
+			*buf++ = *cp;
+			cp += 0x100;
+		}
+	}
+}
+
+/* --------------------------------------------------------------------- */
+
+static void demodulator_9600_4(struct sm_state *sm, unsigned char *buf, int buflen)
+{
+	static const int pll_corr[2] = { -0x1000, 0x1000 };
+	unsigned char curbit;
+	unsigned int descx;
+
+	for (; buflen > 0; buflen--, buf++) {
+		DEMOD_STATE->dcd_shreg <<= 1;
+		DEMOD_STATE->bit_pll += 0x4000;
+		curbit = (*buf >= 0x80);
+		if (DEMOD_STATE->last_sample ^ curbit) {
+			DEMOD_STATE->dcd_shreg |= 1;
+			DEMOD_STATE->bit_pll += pll_corr
+				[DEMOD_STATE->bit_pll < 0xa000];
+			DEMOD_STATE->dcd_sum0 += 8 * 
+				hweight8(DEMOD_STATE->dcd_shreg & 0x0c) - 
+				!!(DEMOD_STATE->dcd_shreg & 0x10);
+		}
+		DEMOD_STATE->last_sample = curbit;
+		hdlcdrv_channelbit(&sm->hdrv, DEMOD_STATE->last_sample);
+		if ((--DEMOD_STATE->dcd_time) <= 0) {
+			hdlcdrv_setdcd(&sm->hdrv, (DEMOD_STATE->dcd_sum0 + 
+						   DEMOD_STATE->dcd_sum1 + 
+						   DEMOD_STATE->dcd_sum2) < 0);
+			DEMOD_STATE->dcd_sum2 = DEMOD_STATE->dcd_sum1;
+			DEMOD_STATE->dcd_sum1 = DEMOD_STATE->dcd_sum0;
+			DEMOD_STATE->dcd_sum0 = 2; /* slight bias */
+			DEMOD_STATE->dcd_time = 240;
+		}
+		if (DEMOD_STATE->bit_pll >= 0x10000) {
+			DEMOD_STATE->bit_pll &= 0xffff;
+			DEMOD_STATE->descram = (DEMOD_STATE->descram << 1) | curbit;
+			descx = DEMOD_STATE->descram ^ (DEMOD_STATE->descram >> 1);
+			descx ^= ((descx >> DESCRAM_TAPSH1) ^
+				  (descx >> DESCRAM_TAPSH2));
+			DEMOD_STATE->shreg >>= 1;
+			DEMOD_STATE->shreg |= (!(descx & 1)) << 16;
+			if (DEMOD_STATE->shreg & 1) {
+				hdlcdrv_putbits(&sm->hdrv, DEMOD_STATE->shreg >> 1);
+				DEMOD_STATE->shreg = 0x10000;
+			}
+			diag_trigger(sm);
+		}
+		diag_add_one(sm, ((short)(*buf - 0x80)) << 8);
+	}
+}
+
+/* --------------------------------------------------------------------- */
+
+static void modulator_9600_5(struct sm_state *sm, unsigned char *buf, int buflen)
+{
+	int j;
+	const unsigned char *cp;
+
+	for (; buflen >= 5; buflen -= 5) {
+		if (MOD_STATE->shreg <= 1)
+			MOD_STATE->shreg = hdlcdrv_getbits(&sm->hdrv) | 0x10000;
+		MOD_STATE->scram = ((MOD_STATE->scram << 1) |
+				     (MOD_STATE->scram & 1));
+		MOD_STATE->scram ^= (!(MOD_STATE->shreg & 1));
+		MOD_STATE->shreg >>= 1;
+		if (MOD_STATE->scram & (SCRAM_TAP1 << 1))
+			MOD_STATE->scram ^= (SCRAM_TAPN << 1);
+		MOD_STATE->tx_bit = (MOD_STATE->tx_bit << 1) | 
+			(!!(MOD_STATE->scram & (SCRAM_TAP1 << 2)));
+		cp = tx_filter_9k6_5 + (MOD_STATE->tx_bit & 0xff);
+		for (j = 0; j < 5; j++) {
+			*buf++ = *cp;
+			cp += 0x100;
+		}
+	}
+}
+
+/* --------------------------------------------------------------------- */
+
+static void demodulator_9600_5(struct sm_state *sm, unsigned char *buf, int buflen)
+{
+	static const int pll_corr[2] = { -0x1000, 0x1000 };
+	unsigned char curbit;
+	unsigned int descx;
+
+	for (; buflen > 0; buflen--, buf++) {
+		DEMOD_STATE->dcd_shreg <<= 1;
+		DEMOD_STATE->bit_pll += 0x3333;
+		curbit = (*buf >= 0x80);
+		if (DEMOD_STATE->last_sample ^ curbit) {
+			DEMOD_STATE->dcd_shreg |= 1;
+			DEMOD_STATE->bit_pll += pll_corr
+				[DEMOD_STATE->bit_pll < 0x9999];
+			DEMOD_STATE->dcd_sum0 += 16 * 
+				hweight8(DEMOD_STATE->dcd_shreg & 0x0c) - 
+				hweight8(DEMOD_STATE->dcd_shreg & 0x70);
+		}
+		DEMOD_STATE->last_sample = curbit;
+		hdlcdrv_channelbit(&sm->hdrv, DEMOD_STATE->last_sample);
+		if ((--DEMOD_STATE->dcd_time) <= 0) {
+			hdlcdrv_setdcd(&sm->hdrv, (DEMOD_STATE->dcd_sum0 + 
+						   DEMOD_STATE->dcd_sum1 + 
+						   DEMOD_STATE->dcd_sum2) < 0);
+			DEMOD_STATE->dcd_sum2 = DEMOD_STATE->dcd_sum1;
+			DEMOD_STATE->dcd_sum1 = DEMOD_STATE->dcd_sum0;
+			DEMOD_STATE->dcd_sum0 = 2; /* slight bias */
+			DEMOD_STATE->dcd_time = 240;
+		}
+		if (DEMOD_STATE->bit_pll >= 0x10000) {
+			DEMOD_STATE->bit_pll &= 0xffff;
+			DEMOD_STATE->descram = (DEMOD_STATE->descram << 1) | curbit;
+			descx = DEMOD_STATE->descram ^ (DEMOD_STATE->descram >> 1);
+			descx ^= ((descx >> DESCRAM_TAPSH1) ^
+				  (descx >> DESCRAM_TAPSH2));
+			DEMOD_STATE->shreg >>= 1;
+			DEMOD_STATE->shreg |= (!(descx & 1)) << 16;
+			if (DEMOD_STATE->shreg & 1) {
+				hdlcdrv_putbits(&sm->hdrv, DEMOD_STATE->shreg >> 1);
+				DEMOD_STATE->shreg = 0x10000;
+			}
+			diag_trigger(sm);
+		}
+		diag_add_one(sm, ((short)(*buf - 0x80)) << 8);
+	}
+}
+
+/* --------------------------------------------------------------------- */
+
+static void demod_init_9600(struct sm_state *sm)
+{
+	DEMOD_STATE->dcd_time = 240;
+	DEMOD_STATE->dcd_sum0 = 2;	
+}
+
+/* --------------------------------------------------------------------- */
+
+static const struct modem_tx_info fsk9600_4_tx = {
+	NEXT_TX_INFO, "fsk9600", sizeof(struct mod_state_fsk96), 38400, 9600, 4,
+	modulator_9600_4, NULL
+};
+#undef NEXT_TX_INFO
+#define NEXT_TX_INFO (&fsk9600_4_tx)
+
+static const struct modem_rx_info fsk9600_4_rx = {
+	NEXT_RX_INFO, "fsk9600", sizeof(struct demod_state_fsk96), 38400, 9600, 4, 4,
+	demodulator_9600_4, demod_init_9600
+};
+#undef NEXT_RX_INFO
+#define NEXT_RX_INFO (&fsk9600_4_rx)
+
+/* --------------------------------------------------------------------- */
+
+static const struct modem_tx_info fsk9600_5_tx = {
+	NEXT_TX_INFO, "fsk9600", sizeof(struct mod_state_fsk96), 48000, 9600, 5, 
+	modulator_9600_5, NULL
+};
+#undef NEXT_TX_INFO
+#define NEXT_TX_INFO (&fsk9600_5_tx)
+
+static const struct modem_rx_info fsk9600_5_rx = {
+	NEXT_RX_INFO, "fsk9600", sizeof(struct demod_state_fsk96), 48000, 9600, 5, 5, 
+	demodulator_9600_5, demod_init_9600
+};
+#undef NEXT_RX_INFO
+#define NEXT_RX_INFO (&fsk9600_5_rx)
+
+/* --------------------------------------------------------------------- */
+
+#undef DEMOD_STATE
+#undef MOD_STATE

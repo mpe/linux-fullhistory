@@ -110,4 +110,35 @@ ip_compute_csum(unsigned char * buff, int len)
 	return csum_fold (csum_partial(buff, len, 0));
 }
 
+#define _HAVE_ARCH_IPV6_CSUM
+static __inline__ unsigned short int
+csum_ipv6_magic(struct in6_addr *saddr, struct in6_addr *daddr,
+		__u16 len, unsigned short proto, unsigned int sum) 
+{
+	register unsigned long tmp;
+	__asm__("addl %2@,%0\n\t"
+		"movel %2@(4),%1\n\t"
+		"addxl %1,%0\n\t"
+		"movel %2@(8),%1\n\t"
+		"addxl %1,%0\n\t"
+		"movel %2@(12),%1\n\t"
+		"addxl %1,%0\n\t"
+		"movel %3@,%1\n\t"
+		"addxl %1,%0\n\t"
+		"movel %3@(4),%1\n\t"
+		"addxl %1,%0\n\t"
+		"movel %3@(8),%1\n\t"
+		"addxl %1,%0\n\t"
+		"movel %3@(12),%1\n\t"
+		"addxl %1,%0\n\t"
+		"addxl %4,%0\n\t"
+		"clrl %1\n\t"
+		"addxl %1,%0"
+		: "=&d" (sum), "=&d" (tmp)
+		: "a" (saddr), "a" (daddr), "d" ((__u32) len + proto),
+		  "0" (sum));
+
+	return csum_fold(sum);
+}
+
 #endif /* _M68K_CHECKSUM_H */

@@ -59,6 +59,7 @@ CONFIG_BLK_DEV_RZ1000=y
 # CONFIG_BLK_DEV_MD is not set
 # CONFIG_BLK_DEV_RAM is not set
 # CONFIG_BLK_DEV_XD is not set
+# CONFIG_BLK_DEV_EZ is not set
 # CONFIG_BLK_DEV_HD is not set
 
 #
@@ -116,7 +117,6 @@ CONFIG_EL3=y
 # CONFIG_PLIP is not set
 # CONFIG_PPP is not set
 # CONFIG_NET_RADIO is not set
-# CONFIG_NET_HAM is not set
 # CONFIG_SLIP is not set
 # CONFIG_TR is not set
 

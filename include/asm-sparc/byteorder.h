@@ -1,17 +1,17 @@
-/* $Id: byteorder.h,v 1.11 1996/11/19 11:26:13 davem Exp $ */
+/* $Id: byteorder.h,v 1.12 1996/12/19 08:08:20 davem Exp $ */
 #ifndef _SPARC_BYTEORDER_H
 #define _SPARC_BYTEORDER_H
 
-#define ntohl(x) x
-#define ntohs(x) x
-#define htonl(x) x
-#define htons(x) x
+#define ntohl(x) (x)
+#define ntohs(x) (x)
+#define htonl(x) (x)
+#define htons(x) (x)
 
 /* Some programs depend upon these being around. */
-#define __constant_ntohl(x) x
-#define __constant_ntohs(x) x
-#define __constant_htonl(x) x
-#define __constant_htons(x) x
+#define __constant_ntohl(x) (x)
+#define __constant_ntohs(x) (x)
+#define __constant_htonl(x) (x)
+#define __constant_htons(x) (x)
 
 #ifndef __BIG_ENDIAN
 #define __BIG_ENDIAN 4321

@@ -11,6 +11,7 @@
 #include <linux/types.h>
 
 int a3000_detect(Scsi_Host_Template *);
+int a3000_release(struct Scsi_Host *);
 const char *wd33c93_info(void);
 int wd33c93_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int wd33c93_abort(Scsi_Cmnd *);
@@ -38,7 +39,7 @@ extern struct proc_dir_entry proc_scsi_a3000;
 		      /* proc_info */           NULL,            \
 		      /* name */                "Amiga 3000 built-in SCSI", \
 		      /* detect */              a3000_detect,    \
-		      /* release */             NULL,            \
+		      /* release */             a3000_release,   \
 		      /* info */                NULL,	         \
 		      /* command */             NULL,            \
 		      /* queuecommand */        wd33c93_queuecommand, \
@@ -52,7 +53,7 @@ extern struct proc_dir_entry proc_scsi_a3000;
 		      /* cmd_per_lun */	        CMD_PER_LUN,     \
 		      /* present */             0,               \
 		      /* unchecked_isa_dma */   0,               \
-		      /* use_clustering */      DISABLE_CLUSTERING }
+		      /* use_clustering */      ENABLE_CLUSTERING }
 #else
 
 /*

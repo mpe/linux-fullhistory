@@ -326,7 +326,9 @@ extern inline void * __memset_page(void * s,int c,size_t count)
 	  *((unsigned long *)(s))++ = data;
 
 	  __asm__ __volatile__("1:\t"
+			       ".chip 68040\n\t"
 			       "move16 %2@+,%0@+\n\t"
+			       ".chip 68k\n\t"
 			       "subqw  #8,%2\n\t"
 			       "subqw  #8,%2\n\t"
 			       "dbra   %1,1b\n\t"
@@ -390,8 +392,10 @@ extern inline void * __memcpy_page(void * to, const void * from, size_t count)
 	  return memcpy(to, from, count);
 
   __asm__ __volatile__("1:\t"
+		       ".chip 68040\n\t"
 		       "move16 %1@+,%0@+\n\t"
 		       "move16 %1@+,%0@+\n\t"
+		       ".chip 68k\n\t"
 		       "dbra  %2,1b\n\t"
 		       : "=a" (to), "=a" (from), "=d" (tmp)
 		       : "0" (to), "1" (from) , "2" (count / 32 - 1)

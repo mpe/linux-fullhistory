@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.76 1996/11/13 05:09:32 davem Exp $
+/*  $Id: setup.c,v 1.78 1996/12/19 08:06:30 davem Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -111,8 +111,10 @@ unsigned int boot_flags;
 #define BOOTME_SINGLE 0x2
 #define BOOTME_KGDB   0x4
 
+#ifdef CONFIG_SUN_CONSOLE
 extern char *console_fb_path;
 static int console_fb = 0;
+#endif
 
 void kernel_enter_debugger(void)
 {
@@ -200,6 +202,7 @@ __initfunc(static void boot_flags_init(char *commands))
 			}
 			commands += 9;
 		} else {
+#if CONFIG_SUN_CONSOLE
 			if (!strncmp(commands, "console=", 8)) {
 				commands += 8;
 				if (!strncmp (commands, "ttya", 4)) {
@@ -213,6 +216,7 @@ __initfunc(static void boot_flags_init(char *commands))
 					console_fb_path = commands;
 				}
 			}
+#endif
 			while (*commands && *commands != ' ')
 				commands++;
 		}
@@ -244,6 +248,8 @@ extern unsigned ramdisk_size;
 
 extern int root_mountflags;
 
+extern void register_console(void (*proc)(char *));
+
 char saved_command_line[256];
 char reboot_command[256];
 enum sparc_cpu sparc_cpu_model;
@@ -256,11 +262,6 @@ __initfunc(void setup_arch(char **cmdline_p,
 	unsigned long * memory_start_p, unsigned long * memory_end_p))
 {
 	int total, i, packed;
-
-#if CONFIG_AP1000
-        register_console(prom_printf);
-	((char *)(&cputypval))[4] = 'm'; /* ugly :-( */
-#endif
 
 	sparc_ttable = (struct tt_entry *) &start;
 
@@ -276,6 +277,10 @@ __initfunc(void setup_arch(char **cmdline_p,
 	if(!strcmp(&cputypval,"sun4d")) { sparc_cpu_model=sun4d; }
 	if(!strcmp(&cputypval,"sun4e")) { sparc_cpu_model=sun4e; }
 	if(!strcmp(&cputypval,"sun4u")) { sparc_cpu_model=sun4u; }
+#if CONFIG_AP1000
+	sparc_cpu_model=ap1000;
+	strcpy(&cputypval, "ap+");
+#endif
 	printk("ARCH: ");
 	packed = 0;
 	switch(sparc_cpu_model) {
@@ -303,6 +308,11 @@ __initfunc(void setup_arch(char **cmdline_p,
 		break;
 	case sun4u:
 		printk("SUN4U\n");
+		break;
+	case ap1000:
+		register_console(prom_printf);
+		printk("AP1000\n");
+		packed = 1;
 		break;
 	default:
 		printk("UNKNOWN!\n");
@@ -348,7 +358,8 @@ __initfunc(void setup_arch(char **cmdline_p,
 		*memory_end_p = 0xfd000000;
 	} else {
 		if((sparc_cpu_model == sun4m) ||
-		   (sparc_cpu_model == sun4d))
+		   (sparc_cpu_model == sun4d) ||
+		   (sparc_cpu_model == ap1000))
 			*memory_end_p = srmmu_endmem_fixup(*memory_end_p);
 	}
 not_relevant:
@@ -385,7 +396,9 @@ not_relevant:
 	init_task.mm->mmap->vm_end = *memory_end_p;
 	init_task.tss.kregs = &fake_swapper_regs;
 
+#ifdef CONFIG_SUN_SERIAL
 	*memory_start_p = sun_serial_setup(*memory_start_p); /* set this up ASAP */
+#endif
 	{
 		extern int serial_console;  /* in console.c, of course */
 #if !CONFIG_SUN_SERIAL
@@ -456,11 +469,7 @@ int get_cpuinfo(char *buffer)
 	    ,
             sparc_cpu_type[cpuid],
             sparc_fpu_type[cpuid],
-#if CONFIG_AP1000
-            0, 0, 0, 0
-#else
             romvec->pv_romvers, prom_rev, romvec->pv_printrev >> 16, (short)romvec->pv_printrev,
-#endif
             &cputypval,
 	    linux_num_cpus, smp_num_cpus,
 #ifndef __SMP__

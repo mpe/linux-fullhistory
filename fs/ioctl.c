@@ -47,6 +47,7 @@ static int file_ioctl(struct file *filp,unsigned int cmd,unsigned long arg)
 asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {	
 	struct file * filp;
+	unsigned int flag;
 	int on, error;
 
 	if (fd >= NR_OPEN || !(filp = current->files->fd[fd]))
@@ -63,10 +64,16 @@ asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 		case FIONBIO:
 			if ((error = get_user(on, (int *)arg)) != 0)
 				return error;
+			flag = O_NONBLOCK;
+#ifdef __sparc__
+			/* SunOS compatability item. */
+			if(O_NONBLOCK != O_NDELAY)
+				flag |= O_NDELAY;
+#endif
 			if (on)
-				filp->f_flags |= O_NONBLOCK;
+				filp->f_flags |= flag;
 			else
-				filp->f_flags &= ~O_NONBLOCK;
+				filp->f_flags &= ~flag;
 			return 0;
 
 		case FIOASYNC: /* O_SYNC is not yet implemented,

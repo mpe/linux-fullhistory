@@ -21,6 +21,8 @@ extern int (*mach_request_irq) (unsigned int irq, void (*handler)(int, void *, s
 extern int (*mach_free_irq) (unsigned int irq, void *dev_id);
 extern void (*mach_enable_irq) (unsigned int irq);
 extern void (*mach_disable_irq) (unsigned int irq);
+extern void (*mach_get_model) (char *model);
+extern int (*mach_get_hardware_list) (char *buffer);
 extern int (*mach_get_irq_list) (char *buf);
 extern void (*mach_process_int) (int irq, struct pt_regs *fp);
 /* machine dependent timer functions */
@@ -41,5 +43,6 @@ extern void (*mach_debug_init)(void);
 extern void (*mach_video_setup)(char *, int *);
 extern void (*mach_floppy_setup)(char *, int *);
 extern void (*mach_floppy_eject)(void);
+extern void (*mach_syms_export)(void);
 
 #endif /* _M68K_MACHDEP_H */

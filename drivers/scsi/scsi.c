@@ -64,7 +64,7 @@
 #undef USE_STATIC_SCSI_MEMORY
 
 /*
-static const char RCSid[] = "$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/scsi.c,v 1.5 1993/09/24 12:45:18 drew Exp drew $";
+static const char RCSid[] = "$Header: /vger/u4/cvs/linux/drivers/scsi/scsi.c,v 1.34 1996/11/19 11:25:50 davem Exp $";
 */
 
 
@@ -89,7 +89,7 @@ const unsigned char scsi_command_size[8] = { 6, 10, 10, 12, 12, 12, 10, 10 };
 #endif
 
 static void scsi_done (Scsi_Cmnd *SCpnt);
-static int update_timeout (Scsi_Cmnd *, int);
+int update_timeout (Scsi_Cmnd *, int);
 static void print_inquiry(unsigned char *data);
 static void scsi_times_out (Scsi_Cmnd * SCpnt);
 static int scan_scsis_single (int channel,int dev,int lun,int * max_scsi_dev ,
@@ -270,6 +270,7 @@ static struct dev_info device_list[] =
 {"HP", "C1750A", "3226", BLIST_NOLUN},          /* scanjet iic */
 {"HP", "C1790A", "", BLIST_NOLUN},              /* scanjet iip */
 {"HP", "C2500A", "", BLIST_NOLUN},              /* scanjet iicx */
+{"YAMAHA", "CDR102", "1.00", BLIST_NOLUN},	/* extra reset */
 
 /*
  * Other types of devices that have special flags.
@@ -2280,7 +2281,7 @@ static void scsi_main_timeout(void)
  * set the timer, we want to take this value into account.
  */
 
-static int update_timeout(Scsi_Cmnd * SCset, int timeout)
+int update_timeout(Scsi_Cmnd * SCset, int timeout)
 {
     unsigned int least, used;
     unsigned int oldto;

@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.84 1996/12/10 06:06:23 davem Exp $
+/* $Id: fault.c,v 1.85 1996/12/18 06:43:23 tridge Exp $
  * fault.c:  Page fault handlers for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -285,10 +285,10 @@ asmlinkage void do_sun4c_fault(struct pt_regs *regs, int text_fault, int write,
 		if ((pte_val(*ptep) & (_SUN4C_PAGE_WRITE|_SUN4C_PAGE_PRESENT))
 				   == (_SUN4C_PAGE_WRITE|_SUN4C_PAGE_PRESENT)) {
 
-			pte_val(*ptep) |= (_SUN4C_PAGE_ACCESSED |
-					   _SUN4C_PAGE_MODIFIED |
-					   _SUN4C_PAGE_VALID |
-					   _SUN4C_PAGE_DIRTY);
+			*ptep = __pte(pte_val(*ptep) | _SUN4C_PAGE_ACCESSED |
+				      _SUN4C_PAGE_MODIFIED |
+				      _SUN4C_PAGE_VALID |
+				      _SUN4C_PAGE_DIRTY);
 
 			if (sun4c_get_segmap(address) != invalid_segment) {
 				sun4c_put_pte(address, pte_val(*ptep));
@@ -299,8 +299,8 @@ asmlinkage void do_sun4c_fault(struct pt_regs *regs, int text_fault, int write,
 		if ((pte_val(*ptep) & (_SUN4C_PAGE_READ|_SUN4C_PAGE_PRESENT))
 				   == (_SUN4C_PAGE_READ|_SUN4C_PAGE_PRESENT)) {
 
-			pte_val(*ptep) |= (_SUN4C_PAGE_ACCESSED |
-					   _SUN4C_PAGE_VALID);
+			*ptep = __pte(pte_val(*ptep) | _SUN4C_PAGE_ACCESSED |
+				      _SUN4C_PAGE_VALID);
 
 			if (sun4c_get_segmap(address) != invalid_segment) {
 				sun4c_put_pte(address, pte_val(*ptep));

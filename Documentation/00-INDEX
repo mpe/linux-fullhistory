@@ -28,6 +28,8 @@ digiboard.txt
 	- info on the Digiboard PC/X{i,e,eve} multiport boards.
 exception.txt
 	- how linux v2.1 handles exceptions without verify_area etc.
+ez.txt
+	- documentation for the SyQuest parallel port EZ drive support.
 filesystems/
 	- directory with info on the various filesystems that Linux supports.
 ide.txt

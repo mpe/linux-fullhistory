@@ -58,7 +58,7 @@ static inline int vm_enough_memory(long pages)
 	freepages >>= 1;
 	freepages += nr_free_pages;
 	freepages += nr_swap_pages;
-	freepages -= max_mapnr >> 4;
+	freepages -= num_physpages >> 4;
 	return freepages > pages;
 }
 

@@ -424,6 +424,7 @@ static int Cyber_encode_fix(struct fb_fix_screeninfo *fix,
    fix->xpanstep = 0;
    fix->ypanstep = 0;
    fix->ywrapstep = 0;
+   fix->line_length = 0;
 
    for (i = 0; i < arraysize(fix->reserved); i++)
       fix->reserved[i] = 0;
@@ -896,10 +897,10 @@ static void memcpy_fs(int fsfromto, void *to, void *from, int len)
          memcpy(to, from, len);
          return;
       case 1:
-         memcpy_fromfs(to, from, len);
+         copy_from_user(to, from, len);
          return;
       case 2:
-         memcpy_tofs(to, from, len);
+         copy_to_user(to, from, len);
          return;
    }
 }

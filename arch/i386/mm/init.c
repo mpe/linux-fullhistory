@@ -211,7 +211,7 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 
 	end_mem &= PAGE_MASK;
 	high_memory = (void *) end_mem;
-	max_mapnr = MAP_NR(end_mem);
+	max_mapnr = num_physpages = MAP_NR(end_mem);
 
 	/* clear the zero-page */
 	memset(empty_zero_page, 0, PAGE_SIZE);

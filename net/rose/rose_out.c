@@ -155,7 +155,9 @@ void rose_kick(struct sock *sk)
 
 		} while (!last && (skb = skb_dequeue(&sk->write_queue)) != NULL);
 
-		sk->protinfo.rose->vl = sk->protinfo.rose->vr;
+		sk->protinfo.rose->vl         = sk->protinfo.rose->vr;
+		sk->protinfo.rose->condition &= ~ACK_PENDING_CONDITION;
+		sk->protinfo.rose->timer      = 0;
 	}
 
 	rose_set_timer(sk);
@@ -174,7 +176,9 @@ void rose_enquiry_response(struct sock *sk)
 		rose_write_internal(sk, ROSE_RR);
 	}
 
-	sk->protinfo.rose->vl = sk->protinfo.rose->vr;
+	sk->protinfo.rose->vl         = sk->protinfo.rose->vr;
+	sk->protinfo.rose->condition &= ~ACK_PENDING_CONDITION;
+	sk->protinfo.rose->timer      = 0;
 }
 
 void rose_check_iframes_acked(struct sock *sk, unsigned short nr)

@@ -54,11 +54,7 @@
  	- restructured the READ.LOG logic to prevent the transmit SRB
 	  from being rudely overwritten before the transmit cycle is
 	  complete. (August 15 1996)
-
-   Warnings !!!!!!!!!!!!!!
-      This driver is only partially sanitized for support of multiple
-      adapters.  It will almost definitely fail if more than one
-      active adapter is identified.
+        - completed multiple adapter support. (November 20 1996)
 */
 	
 #ifdef PCMCIA
@@ -85,11 +81,13 @@
 /* some 95 OS send many non UI frame; this allow removing the warning */
 #define TR_FILTERNONUI	1
 
+/* use memcpy to read/write frame data instead of for-loop */
+#define USE_MEMCPY 1
+
 /* version and credits */
-static const char *version = 
-"ibmtr.c: v1.3.57 8/7/94 Peter De Schrijver and Mark Swanson\n"
-"  modified 10/3/94 DW Morris, modified at VIA, ECP, France\n"
-"  (3/9/95 F Farid and P Andre, 9/7/95 PA and 2/20/95 ML/PA/YD)\n";
+static char *version = 
+"ibmtr.c: v1.3.57  8/ 7/94 Peter De Schrijver and Mark Swanson\n"
+"         v2.1.10 11/20/96 Paul Norton <pnorton@cts.com>\n";
  
 static char pcchannelid[]={0x05, 0x00, 0x04, 0x09,
 			   0x04, 0x03, 0x04, 0x0f,
@@ -137,9 +135,11 @@ const char *channel_def[] = { "ISA", "MCA", "ISA P&P" };
 char *adapter_def(char type)
 {
 	switch (type) {
-	      case 0xF : return "Adapter/A";
-	      case 0xE : return "16/4 Adapter/II";
-	      default : return "adapter";
+	      case 0xF : return "PC Adapter | PC Adapter II | Adapter/A";
+	      case 0xE : return "16/4 Adapter | 16/4 Adapter/A (long)";
+	      case 0xD : return "16/4 Adapter/A (short) | 16/4 ISA-16 Adapter";
+	      case 0xC : return "Auto 16/4 Adapter";
+	      default  : return "adapter (unknown type)";
 	};
 };
 #endif
@@ -153,11 +153,8 @@ unsigned char ibmtr_debug_trace=0;
 #define TRC_INIT 0x01              /*  Trace initialization & PROBEs */
 #define TRC_INITV 0x02             /*  verbose init trace points     */
 
-/* addresses to scan */
-static short TokBaseAddrs[] = { MMIOStartLocP, MMIOStartLocA };
-
-
-int tok_probe(struct device *dev);
+int ibmtr_probe(struct device *dev);
+static int ibmtr_probe1(struct device *dev, int ioaddr);
 unsigned char get_sram_size(struct tok_info *adapt_info);
 
 static int tok_init_card(struct device *dev);
@@ -178,6 +175,8 @@ static struct enet_statistics * tok_get_stats(struct device *dev);
 void tr_readlog(struct device *dev);
 
 static struct timer_list tr_timer={NULL,NULL,0,0L,tok_open_adapter};
+static unsigned int ibmtr_portlist[] = {0xa20, 0xa24, 0};
+static __u32 ibmtr_mem_base = 0xd0000;
 
 #if 0
 int DummyCallCount=0;
@@ -204,138 +203,122 @@ static void HWPrtChanID (__u32 pcid, short stride)
 	printk("\n");
 }
 
-/* tok_probe():  Routine specified in the network device structure
+/* ibmtr_probe():  Routine specified in the network device structure
           to probe for an IBM Token Ring Adapter.  Routine outline:
           I.  Interrogate hardware to determine if an adapter exists
               and what the speeds and feeds are
          II.  Setup data structures to control execution based upon
               adapter characteristics.
          III. Initialize adapter operation
-     We expect tok_probe to be called once for each device entry
+     We expect ibmtr_probe to be called once for each device entry
      which references it.
  */
+int ibmtr_probe(struct device *dev)
+{
+        int i;
+        int base_addr = dev ? dev->base_addr : 0;
 
-int tok_probe(struct device *dev)
+        if (base_addr > 0x1ff) {    /* check a single specified location. */
+	        if (ibmtr_probe1(dev, base_addr)) {
+#ifndef MODULE
+		       tr_freedev(dev);
+#endif
+		       return -ENODEV;
+		} else {
+		       return 0;
+	        }
+	}
+        else if (base_addr != 0)   /* Don't probe at all. */
+	        return -ENXIO;
+
+	for (i = 0; ibmtr_portlist[i]; i++) {
+	        int ioaddr = ibmtr_portlist[i];
+		if (check_region(ioaddr, IBMTR_IO_EXTENT))
+		        continue;
+                if (ibmtr_probe1(dev, ioaddr)) {
+#ifndef MODULE
+		        tr_freedev(dev);
+#endif
+		} else {
+			return 0;
+		}
+        }
+
+        return -ENODEV;
+}
+
+static int ibmtr_probe1(struct device *dev, int PIOaddr)
 {
 	unsigned char segment=0, intr=0, irq=0, i=0, j=0, cardpresent=NOTOK,temp=0;
 	__u32 t_mmio=0;
-	short PIOaddr=0, iAddr;
 	struct tok_info *ti=0;
-	static struct tok_info *badti=0;  /* if fail after kmalloc, reuse */
-	
-	static unsigned char Shared_Ram_Base = IBMTR_SHARED_RAM_BASE;
-	
-	/* this is the major adapter probe loop.  For each call to tok_probe,
-	   we try each remaining entry in TokBaseAddrs[] as a possible
-	   adapter.  Once an entry is rejected or assigned, we zero it to
-	   avoid duplicate use or worthless trial for the tok probe call*/
-	
-	for (iAddr=0;
-	     iAddr < (sizeof(TokBaseAddrs)/sizeof(short))&&PIOaddr==0; iAddr++) { 
-		
-		__u32 cd_chanid;
-		unsigned char *tchanid, ctemp;
-		
-		PIOaddr=TokBaseAddrs[iAddr];  /* address to try           */
-		TokBaseAddrs[iAddr] = 0;      /* (and marked already used */
-		if (PIOaddr == 0) continue;   /* already tried this addr */
-		
-		/* Make sure PIO address not already assigned
-		   elsewhere before we muck with IO address */
-		if (check_region(PIOaddr,TR_IO_EXTENT)) {
-			if (ibmtr_debug_trace & TRC_INIT)
-				DPRINTK("check_region(%4hx,%d) failed.\n", PIOaddr, TR_IO_EXTENT);
-			PIOaddr = 0; 
-			continue; /* clear to flag fail and try next */
-		}
-		/* Query the adapter PIO base port which will return
-		   indication of where MMIO was placed (per tech ref
-		   this assignment is done by BIOS - what is rational for
-		   where it is?).  We also have a coded interrupt address. */
-		
-		segment = inb(PIOaddr);
-		/* out of range values so we'll assume non-existent IO device */
-		if (segment < 0x40 || segment > 0xe0) { 
-			PIOaddr = 0; 
-			continue; /* clear to flag fail and try next */
-		}
-		
-		/* Compute the linear base address of the MMIO area
-		   as LINUX doesn't care about segments          */
-		t_mmio=(((__u32)(segment & 0xfc) << 11) + 0x80000);
-		intr = segment & 0x03;   /* low bits is coded interrupt # */
-		if (ibmtr_debug_trace & TRC_INIT)
-			DPRINTK("PIOaddr: %4hx seg/intr: %2x mmio base: %08X intr: %d\n", PIOaddr, (int)segment, t_mmio, (int)intr);
-		
-		/* Now we will compare expected 'channelid' strings with
-		   what we is there to learn of ISA/MCA or not TR card */
-		/* !!!WARNING:!!!! It seems pretty silly to blunder ahead
-		   w/o verification that the mmio address we have found
-		   is valid storage -- perhaps this is tolerable for current
-		   hardware state??? */
-		
-		cd_chanid = (CHANNEL_ID + t_mmio);  /* for efficiency */
-		tchanid=pcchannelid; 
-		cardpresent=TR_ISA;  /* try ISA */
+	__u32 cd_chanid;
+	unsigned char *tchanid, ctemp;
 
-		/* suboptimize knowing first byte different */
-		ctemp = readb(cd_chanid) & 0x0f;
-		if (ctemp != *tchanid) { /* NOT ISA card, try MCA */
-			tchanid=mcchannelid; 
-			cardpresent=TR_MCA;
-			if (ctemp != *tchanid)  /* Neither ISA nor MCA */
-				cardpresent=NOTOK;
-		}
+#ifndef MODULE 		
+	dev = init_trdev(dev,0);
+#endif
+
+	/* Query the adapter PIO base port which will return
+	indication of where MMIO was placed. We also have a 
+	coded interrupt number. */
 		
-		if (cardpresent != NOTOK) { /* know presumed type, try rest of ID */
-			for (i=2,j=1; i<=46; i=i+2,j++) {
-				if ((readb(cd_chanid+i) & 0x0f) != tchanid[j]) {
-					cardpresent=NOTOK;   /* match failed, not TR card */
-					break;
-				}
+       	segment = inb(PIOaddr);
+	/* out of range values so we'll assume non-existent IO device */
+	if (segment < 0x40 || segment > 0xe0)
+                return -ENODEV; 
+		
+	/* Compute the linear base address of the MMIO area
+	   as LINUX doesn't care about segments          */
+	t_mmio=(((__u32)(segment & 0xfc) << 11) + 0x80000);
+	intr = segment & 0x03;   /* low bits is coded interrupt # */
+	if (ibmtr_debug_trace & TRC_INIT)
+		DPRINTK("PIOaddr: %4hx seg/intr: %2x mmio base: %08X intr: %d\n",
+                         PIOaddr, (int)segment, t_mmio, (int)intr);
+		
+	/* Now we will compare expected 'channelid' strings with
+	   what we is there to learn of ISA/MCA or not TR card */
+	cd_chanid = (CHANNEL_ID + t_mmio);  /* for efficiency */
+	tchanid=pcchannelid; 
+	cardpresent=TR_ISA;  /* try ISA */
+
+	/* suboptimize knowing first byte different */
+	ctemp = readb(cd_chanid) & 0x0f;
+	if (ctemp != *tchanid) { /* NOT ISA card, try MCA */
+		tchanid=mcchannelid; 
+		cardpresent=TR_MCA;
+		if (ctemp != *tchanid)  /* Neither ISA nor MCA */
+			cardpresent=NOTOK;
+	}
+		
+	if (cardpresent != NOTOK) { /* know presumed type, try rest of ID */
+		for (i=2,j=1; i<=46; i=i+2,j++) {
+			if ((readb(cd_chanid+i) & 0x0f) != tchanid[j]) {
+				cardpresent=NOTOK;   /* match failed, not TR card */
+				break;
 			}
 		}
+	}
 		
-		/* If we have an ISA board check for the ISA P&P version,
-		   as it has different IRQ settings */
-		if (cardpresent == TR_ISA && (readb(AIPFID + t_mmio)==0x0e))
-			cardpresent=TR_ISAPNP;
+	/* If we have an ISA board check for the ISA P&P version,
+	   as it has different IRQ settings */
+	if (cardpresent == TR_ISA && (readb(AIPFID + t_mmio)==0x0e))
+	        cardpresent=TR_ISAPNP;
 		
-		if (cardpresent == NOTOK) { /* "channel_id" did not match, report */
-			if (ibmtr_debug_trace & TRC_INIT) {
-				DPRINTK("Channel ID string not found for PIOaddr: %4hx\n", PIOaddr);
-				DPRINTK("Expected for ISA: ");  PrtChanID(pcchannelid,1);
-				DPRINTK("           found: ");  HWPrtChanID(cd_chanid,2);
-				DPRINTK("Expected for MCA: ");  PrtChanID(mcchannelid,1);
-			}
-			PIOaddr = 0;  /* all to know not found yet */
-			continue;
+	if (cardpresent == NOTOK) { /* "channel_id" did not match, report */
+		if (ibmtr_debug_trace & TRC_INIT) {
+			DPRINTK("Channel ID string not found for PIOaddr: %4hx\n", PIOaddr);
+			DPRINTK("Expected for ISA: ");  PrtChanID(pcchannelid,1);
+			DPRINTK("           found: ");  HWPrtChanID(cd_chanid,2);
+			DPRINTK("Expected for MCA: ");  PrtChanID(mcchannelid,1);
 		}
-		
-	/* !!!! we could tighten validation by checking the HW Address
-	   against the 1-s complement..  Move the get HW logic to here */
-		
+                return -ENODEV;
 	}
-	
-	/* The search loop has either completed with a presumed TR adapter
-	   or none found.  Check situation ... march on if possible */
-	
-	if (PIOaddr == 0) { /* failed to find a valid TR adapter */
-		if (ibmtr_debug_trace & TRC_INIT)
-			DPRINTK("Unable to assign adapter to device.\n");
-		return ENODEV;
-	}
-	
-	/*?? Now, allocate some of the pl0 buffers for this driver.. */
-	
-	if (!badti) {
-		ti = (struct tok_info *)kmalloc(sizeof(struct tok_info), GFP_KERNEL);
-		if (ti == NULL) return -ENOMEM;
-	} else {
-		ti = badti; 
-		badti = NULL;
-	} /*?? dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL); */
-	
+		
+	/* Now, allocate some of the pl0 buffers for this driver.. */
+	ti = (struct tok_info *)kmalloc(sizeof(struct tok_info), GFP_KERNEL);
+	if (ti == NULL) return -ENOMEM;
+		
 	memset(ti, 0, sizeof(struct tok_info));
 
 	ti->mmio= t_mmio;
@@ -354,6 +337,7 @@ int tok_probe(struct device *dev)
 		if (intr==2) irq=6;
 		if (intr==3) irq=7;
 		ti->global_int_enable=GLOBAL_INT_ENABLE+((irq==9) ? 2 : irq);
+		ti->adapter_int_enable=PIOaddr+ADAPTINTREL;
 		ti->sram=0;
 #if !TR_NEWFORMAT
 		DPRINTK("ti->global_int_enable: %04X\n",ti->global_int_enable);
@@ -365,6 +349,7 @@ int tok_probe(struct device *dev)
 		if (intr==2) irq=10;
 		if (intr==3) irq=11;
 		ti->global_int_enable=0;
+		ti->adapter_int_enable=0;
 		ti->sram=((__u32)(inb(PIOaddr+ADAPTRESETREL) & 0xfe) << 12);
 		break;
 	      case TR_ISAPNP:
@@ -375,6 +360,7 @@ int tok_probe(struct device *dev)
 		while(!readb(ti->mmio + ACA_OFFSET + ACA_RW + RRR_EVEN));
 		ti->sram=((__u32)readb(ti->mmio + ACA_OFFSET + ACA_RW + RRR_EVEN)<<12);
 		ti->global_int_enable=PIOaddr+ADAPTINTREL;
+		ti->adapter_int_enable=PIOaddr+ADAPTINTREL;
 		break;
       
 	}
@@ -425,7 +411,7 @@ int tok_probe(struct device *dev)
 	/* Support paging?  What sizes?:  F=no, E=16k, D=32k, C=16 & 32k */
 	ti->shared_ram_paging = readb(ti->mmio + AIPSHRAMPAGE);
 
-  /* Available DHB  4Mb size:   F=2048, E=4096, D=4464 */
+        /* Available DHB  4Mb size:   F=2048, E=4096, D=4464 */
 	ti->dhb_size4mb = readb(ti->mmio + AIP4MBDHB);
 
 	/* Available DHB 16Mb size:  F=2048, E=4096, D=8192, C=16384, B=17960 */
@@ -446,7 +432,7 @@ int tok_probe(struct device *dev)
 	   paging), then only one adapter can be supported.  */
 	
 	/* determine how much of total RAM is mapped into PC space */
-	ti->mapped_ram_size=1<<(((readb(ti->mmio+ ACA_OFFSET + ACA_RW + RRR_ODD)) >>2) +4);
+	ti->mapped_ram_size=1<<((((readb(ti->mmio+ ACA_OFFSET + ACA_RW + RRR_ODD)) >>2) & 0x03) + 4);
 	ti->page_mask=0;
 	if (ti->shared_ram_paging == 0xf) { /* No paging in adapter */
 		ti->mapped_ram_size = ti->avail_shared_ram;
@@ -478,11 +464,13 @@ int tok_probe(struct device *dev)
 		   R/O and I can't find how to select which page size
 		   Also, the above conditional statement sequence is invalid
 		   as page_mask will always be set by the second stmt */
-		badti=ti;
+		kfree_s(ti, sizeof(struct tok_info));
+		return -ENODEV;
 		break;
 	      default:
 		DPRINTK("Unknown shared ram paging info %01X\n",ti->shared_ram_paging);
-		badti=ti;    /* bail out if bad code */
+		kfree_s(ti, sizeof(struct tok_info));
+		return -ENODEV;
 		break;
 	}
 	if (ti->page_mask) {
@@ -500,58 +488,59 @@ int tok_probe(struct device *dev)
 
 	/* finish figuring the shared RAM address */
 	if (cardpresent==TR_ISA) {
-		static unsigned char ram_bndry_mask[]={0xfe, 0xfc, 0xf8, 0xf0};
-		unsigned char new_base, rrr_32, chk_base, rbm;
-		rrr_32 = (readb(ti->mmio+ ACA_OFFSET + ACA_RW + RRR_ODD))>>2;
+		static __u32 ram_bndry_mask[]={0xffffe000, 0xffffc000, 0xffff8000, 0xffff0000};
+		__u32 new_base, rrr_32, chk_base, rbm;
+
+		rrr_32 = ((readb(ti->mmio+ ACA_OFFSET + ACA_RW + RRR_ODD))>>2) & 0x00000003;
 		rbm = ram_bndry_mask[rrr_32];
-		new_base = (Shared_Ram_Base + (~rbm)) & rbm; /* up to boundary */
-		chk_base = new_base + (ti->mapped_ram_size>>3);
-		if (chk_base > (IBMTR_SHARED_RAM_BASE+IBMTR_SHARED_RAM_SIZE)) {
+		new_base = (ibmtr_mem_base + (~rbm)) & rbm; /* up to boundary */
+		chk_base = new_base + (ti->mapped_ram_size<<9);
+		if (chk_base > (ibmtr_mem_base + IBMTR_SHARED_RAM_SIZE)) {
 			DPRINTK("Shared RAM for this adapter (%05x) exceeds driver"
 				" limit (%05x), adapter not started.\n",
-				chk_base<<12, (IBMTR_SHARED_RAM_BASE+
-					       IBMTR_SHARED_RAM_SIZE)<<12);
-			badti=ti;
+				chk_base, ibmtr_mem_base + IBMTR_SHARED_RAM_SIZE);
+			kfree_s(ti, sizeof(struct tok_info));
+                        return -ENODEV;
 		} else {  /* seems cool, record what we have figured out */
-			ti->sram_base = new_base;
-			Shared_Ram_Base = new_base;
+			ti->sram_base = new_base >> 12;
+			ibmtr_mem_base = chk_base;
 		}
 	}
 
-	/* dwm: irq and other final setup moved here so if we find other
-           unrecognized values OR shared ram conflicts, we can still
-           bail out in a rather benign fashion.    */
-
-	if (badti) return ENODEV;
 #if !TR_NEWFORMAT
 	DPRINTK("Using %dK shared RAM\n",ti->mapped_ram_size/2);
 #endif
 
-	if (request_irq (dev->irq = irq, &tok_interrupt,0,"IBM TR", NULL) != 0) {
+	if (request_irq (dev->irq = irq, &tok_interrupt,0,"ibmtr", NULL) != 0) {
 		DPRINTK("Could not grab irq %d.  Halting Token Ring driver.\n",irq);
-		badti = ti;    /*  keep track of unused tok_info */
-		return ENODEV;
+		kfree_s(ti, sizeof(struct tok_info));
+		return -ENODEV;
 	}
 	irq2dev_map[irq]=dev;
 
  /*?? Now, allocate some of the PIO PORTs for this driver.. */
-	request_region(PIOaddr,TR_IO_EXTENT,"ibmtr");  /* record PIOaddr range
+	request_region(PIOaddr,IBMTR_IO_EXTENT,"ibmtr");  /* record PIOaddr range
 								  as busy */
 #if !TR_NEWFORMAT
 	DPRINTK("%s",version); /* As we have passed card identification,
                                   let the world know we're here! */
 #else
-	printk("%s",version);
-	DPRINTK("%s %s found using irq %d, PIOaddr %4hx, %dK shared RAM.\n",
-		channel_def[cardpresent-1], adapter_def(ti->adapter_type), irq,
-		PIOaddr, ti->mapped_ram_size/2);
+
+	if (version) {
+	        printk("%s",version);
+                version = NULL;
+        }
+	DPRINTK("%s %s found\n",
+		channel_def[cardpresent-1], adapter_def(ti->adapter_type));
+	DPRINTK("using irq %d, PIOaddr %hx, %dK shared RAM.\n",
+	        irq, PIOaddr, ti->mapped_ram_size/2);
 	DPRINTK("Hardware address : %02X:%02X:%02X:%02X:%02X:%02X\n",
 		dev->dev_addr[0], dev->dev_addr[1], dev->dev_addr[2],
 		dev->dev_addr[3], dev->dev_addr[4], dev->dev_addr[5]);
 #endif
 
 	dev->base_addr=PIOaddr; /* set the value for device */
-	
+
 	trdev_init(dev);
 	tok_init_card(dev);
 	
@@ -593,7 +582,11 @@ int trdev_init(struct device *dev)
   dev->get_stats = NULL;
   dev->get_stats = tok_get_stats;
   dev->set_multicast_list = NULL;
+
+#ifndef MODULE
   tr_setup(dev);
+#endif 
+
 
   return 0;
 }
@@ -638,6 +631,8 @@ static int tok_close(struct device *dev)
 		DPRINTK("close adapter failed: %02X\n",
 			(int)readb(ti->srb + offsetof(struct srb_close_adapter, ret_code)));
 		
+        dev->start = 0;
+	DPRINTK("Adapter closed.\n");
 	MOD_DEC_USE_COUNT;
 	
 	return 0;
@@ -647,14 +642,25 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 {
 	unsigned char status;
 	struct tok_info *ti;
-	struct device *dev = (struct device *)(irq2dev_map[irq]);
+	struct device *dev;
 	
 #if TR_VERBOSE
 	DPRINTK("Int from tok_driver, dev : %p\n",dev);
 #endif
+	dev = (struct device *)(irq2dev_map[irq]);
+	ti  = (struct tok_info *) dev->priv;
 	
-	ti=(struct tok_info *) dev->priv;
-	
+      	/* Disable interrupts till processing is finished */
+	dev->interrupt=1;
+	writeb((~INT_ENABLE), ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_EVEN);
+
+	/* Reset interrupt for ISA boards */
+        if (ti->adapter_int_enable)
+                outb(0,ti->adapter_int_enable);
+	else
+		outb(0,ti->global_int_enable);
+		
+
 	switch (ti->do_tok_int) {
 		
 	      case NOT_FIRST:
@@ -662,15 +668,6 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 		/*  Begin the regular interrupt handler HERE inline to avoid
 		    the extra levels of logic and call depth for the
 		    original solution.   */
-		
-		dev->interrupt=1;
-		
-		/* Disable interrupts till processing is finished */
-		writeb((~INT_ENABLE), ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_EVEN);
-
-		/* Reset interrupt for ISA boards */
-		if (ti->global_int_enable)
-			outb(0, ti->global_int_enable);
 		
 		status=readb(ti->mmio + ACA_OFFSET + ACA_RW + ISRP_ODD);
 		#ifdef PCMCIA
@@ -1022,19 +1019,13 @@ static void initial_tok_int(struct device *dev)
 	
 	ti=(struct tok_info *) dev->priv;
 	
-	writeb(~INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_EVEN);
-	
-	/* Reset interrupt for ISA boards */
-	if (ti->global_int_enable) outb(0,ti->global_int_enable);
-	
 	ti->do_tok_int=NOT_FIRST;
 	
 #ifndef TR_NEWFORMAT
 	DPRINTK("Initial tok int received\n");
 #endif
 
-	/* we assign the address for ISA devices; set RRR even to D000 for 
-	   shared RAM address */
+	/* we assign the shared-ram address for ISA devices */
 	if(!ti->sram) {
 		writeb(ti->sram_base, ti->mmio + ACA_OFFSET + ACA_RW + RRR_EVEN);
 		ti->sram=((__u32)ti->sram_base << 12);
@@ -1042,6 +1033,9 @@ static void initial_tok_int(struct device *dev)
 	ti->init_srb=ti->sram
 		+ntohs((unsigned short)readw(ti->mmio+ ACA_OFFSET + WRBR_EVEN));
 	SET_PAGE(ntohs((unsigned short)readw(ti->mmio+ACA_OFFSET + WRBR_EVEN)));
+
+	dev->mem_start = ti->sram;
+	dev->mem_end = ti->sram + (ti->mapped_ram_size<<9) - 1;
 	
 #if TR_VERBOSE
 	{
@@ -1067,7 +1061,7 @@ static void initial_tok_int(struct device *dev)
 	DPRINTK("encoded addr (%04X,%04X,%08X): ", hw_encoded_addr, 
 		ntohs(hw_encoded_addr), encoded_addr);
 #else
-	DPRINTK("Initial interrupt : shared RAM located at %08X.\n", encoded_addr);
+	DPRINTK("Initial interrupt : shared RAM located at %08x.\n", ti->sram);
 #endif	
 	
 	ti->auto_ringspeedsave=readb(ti->init_srb
@@ -1258,17 +1252,27 @@ static void tr_tx(struct device *dev)
 	
 	/* header length including rif is computed above, now move the data
 	   and set fields appropriately. */
+#if USE_MEMCPY
+	memcpy_toio(dhb, ti->current_skb->data, hdr_len);
+#else
 	for (i=0; i<hdr_len; i++)
 		writeb(*(unsigned char *)(ti->current_skb->data +i), dhb++);
+#endif
 	
 	writeb(hdr_len, ti->asb + offsetof(struct asb_xmit_resp, hdr_length));
 	writew(htons(ti->current_skb->len-sizeof(struct trh_hdr)+hdr_len),
 	       ti->asb + offsetof(struct asb_xmit_resp, frame_length));
 	
 	/*  now copy the actual packet data next to hdr */
+#if USE_MEMCPY
+	memcpy_toio(dhb + hdr_len,
+		    ti->current_skb->data + sizeof(struct trh_hdr), 
+		    ti->current_skb->len - sizeof(struct trh_hdr));
+#else
 	for (i=0; i<ti->current_skb->len-sizeof(struct trh_hdr); i++)
 		writeb(*(unsigned char *)(ti->current_skb->data +sizeof(struct trh_hdr)+i),
 		       dhb+i);
+#endif
 	
 	writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 	dev->tbusy=0;
@@ -1386,9 +1390,12 @@ static void tr_rx(struct device *dev)
 		skb->dev=dev;
 		
 		data=skb->data;
+#if USE_MEMCPY
+		memcpy_fromio(data, rbuffer + offsetof(struct rec_buf, data), lan_hdr_len);
+#else
 		for (i=0; i<lan_hdr_len; i++) 
 			data[i]=readb(rbuffer + offsetof(struct rec_buf, data)+i);
-		
+#endif		
 		if (lan_hdr_len<sizeof(struct trh_hdr))
 			memset(data+lan_hdr_len, 0, sizeof(struct trh_hdr)-lan_hdr_len);
 		
@@ -1405,9 +1412,12 @@ static void tr_rx(struct device *dev)
 #if TR_VERBOSE
 		DPRINTK("rbuffer_len: %d, data: %p\n", rbuffer_len, data);
 #endif
-		
+#if USE_MEMCPY
+		memcpy_fromio(data, rbuffer + offsetof(struct rec_buf, data) + lan_hdr_len, rbuffer_len);
+#else
 		for (i=0; i<rbuffer_len; i++)
 			data[i]=readb(rbuffer+ offsetof(struct rec_buf, data)+lan_hdr_len+i);
+#endif
 		data+=rbuffer_len;
 		
 		while (readw(rbuffer + offsetof(struct rec_buf, buf_ptr))) {
@@ -1446,12 +1456,7 @@ static int tok_send_packet(struct sk_buff *skb, struct device *dev)
 		ticks_waited=jiffies - dev->trans_start;
 		if (ticks_waited<TR_BUSY_INTERVAL) return 1;
 		
-		DPRINTK("Arrg. Transmitter busy for more than 50 msec. "
-			"Donald resets adapter, but resetting\n"
-			"the IBM tokenring adapter takes a long time."
-			" It might not even help when the\n"
-			"ring is very busy, so we just wait a little longer "
-			"and hope for the best.\n");		
+		DPRINTK("Arrg. Transmitter busy.\n");
 		dev->trans_start+=5; /* we fake the transmission start time... */
 		return 1;
 	}
@@ -1502,42 +1507,55 @@ static struct enet_statistics * tok_get_stats(struct device *dev) {
 
 #ifdef MODULE
 
-
-static char devicename[9] = { 0, };
-static struct device dev_ibmtr = {
-	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
-	0, 0, 0, 0,
-	0, 0,
-	0, 0, 0, NULL, tok_probe };
-
-static int io = 0xa20;
-static char *device = NULL;
+/* 3COM 3C619C supports 8 interrupts, 32 I/O ports */
+static struct device* dev_ibmtr[IBMTR_MAX_ADAPTERS];
+static int io[IBMTR_MAX_ADAPTERS] = {0xa20,0xa24};
+static int irq[IBMTR_MAX_ADAPTERS] = {0,0};
+static int mem[IBMTR_MAX_ADAPTERS] = {0,0};
 
 int init_module(void)
 {
-	if (device)
-		strcpy(dev_ibmtr.name,device);
-	else if (!dev_ibmtr.name[0]) strcpy(dev_ibmtr.name,"tr0");
+        int i;
+        for (i = 0; io[i] && (i<IBMTR_MAX_ADAPTERS); i++) {
+	        irq[i] = 0;
+		mem[i] = 0;
+		dev_ibmtr[i] = NULL;
+                dev_ibmtr[i] = init_trdev(dev_ibmtr[i], 0);
+                if (dev_ibmtr[i] == NULL)
+                        return -ENOMEM;
 
-	if (io == 0) 
-		printk("ibmtr: You should not use auto-probing with insmod!\n");
-	dev_ibmtr.base_addr = io;
-	dev_ibmtr.irq       = 0;
+	        dev_ibmtr[i]->base_addr = io[i];
+	        dev_ibmtr[i]->irq       = irq[i];
+		dev_ibmtr[i]->mem_start = mem[i];
+		dev_ibmtr[i]->init      = &ibmtr_probe;
 	
-	if (register_netdev(&dev_ibmtr) != 0) {
-		printk("ibmtr: No adapters were found.\n");
-		return -EIO;
+	        if (register_trdev(dev_ibmtr[i]) != 0) {
+			kfree_s(dev_ibmtr[i], sizeof(struct dev));
+			dev_ibmtr[i] = NULL;
+		        if (i == 0) {
+			        printk("ibmtr: register_trdev() returned non-zero.\n");
+		                return -EIO;
+			} else {
+			        return 0;
+			}
+	        }
 	}
 	return 0;
 }
 
 void cleanup_module(void)
 {
-	unregister_netdev(&dev_ibmtr);
-	
-	/* If we don't do this, we can't re-insmod it later. */
-	free_irq(dev_ibmtr.irq, NULL);
-	irq2dev_map[dev_ibmtr.irq] = NULL;
-	release_region(dev_ibmtr.base_addr, TR_IO_EXTENT);
+        int i;
+
+        for (i = 0; i < IBMTR_MAX_ADAPTERS; i++)
+	        if (dev_ibmtr[i]) {
+			 unregister_trdev(dev_ibmtr[i]);
+			 free_irq(dev_ibmtr[i]->irq, NULL);
+			 irq2dev_map[dev_ibmtr[i]->irq] = NULL;
+			 release_region(dev_ibmtr[i]->base_addr, IBMTR_IO_EXTENT);
+			 kfree_s(dev_ibmtr[i]->priv, sizeof(struct tok_info)); 
+			 kfree_s(dev_ibmtr[i], sizeof(struct dev));
+			 dev_ibmtr[i] = NULL;
+                }
 }
 #endif /* MODULE */

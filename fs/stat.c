@@ -14,7 +14,7 @@
 
 #include <asm/uaccess.h>
 
-#ifndef __alpha__
+#if !defined(__alpha__) && !defined(__sparc__)
 
 /*
  * For backward compatibility?  Maybe this should be moved
@@ -102,7 +102,7 @@ static void cp_new_stat(struct inode * inode, struct stat * statbuf)
 	copy_to_user(statbuf,&tmp,sizeof(tmp));
 }
 
-#ifndef __alpha__
+#if !defined(__alpha__) && !defined(__sparc__)
 /*
  * For backward compatibility?  Maybe this should be moved
  * into arch/i386 instead?
@@ -140,7 +140,7 @@ asmlinkage int sys_newstat(char * filename, struct stat * statbuf)
 	return 0;
 }
 
-#ifndef __alpha__
+#if !defined(__alpha__) && !defined(__sparc__)
 
 /*
  * For backward compatibility?  Maybe this should be moved
@@ -180,7 +180,7 @@ asmlinkage int sys_newlstat(char * filename, struct stat * statbuf)
 	return 0;
 }
 
-#ifndef __alpha__
+#if !defined(__alpha__) && !defined(__sparc__)
 
 /*
  * For backward compatibility?  Maybe this should be moved

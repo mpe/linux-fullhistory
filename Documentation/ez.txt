@@ -1,0 +1,85 @@
+linux/Documentation/ez.txt (c) 1996  Grant R. Guenther <grant@torque.net>
+
+This file documents the ez driver for the parallel port versions of 
+SyQuest's EZ135 and EZ230 removable media disk drives.  
+        
+Special thanks go to Pedro Soria-Rodriguez for his help testing 
+the EZFlyer 230 support.
+
+The drive is actually SyQuest's IDE product with a ShuttleTech 
+IDE <-> parallel converter chip built in.
+
+Before attempting to access the new driver, you will need to
+create some device special files.  The following commands will
+do that for you:
+
+                mknod /dev/eza  b 40 0
+                mknod /dev/eza1 b 40 1
+                mknod /dev/eza2 b 40 2
+                mknod /dev/eza3 b 40 3
+                mknod /dev/eza4 b 40 4
+                chown root:disk /dev/ez*
+                chmod 660 /dev/ez*
+
+You can make devices for more partitions (up to 15) if you need to.
+
+You can alter certain driver parameters on the LILO or LOADLIN 
+command line.  The general syntax is
+
+		ez=base[,irq]
+
+where base is the base address of the parallel port you want to use 
+and irq is the interrupt number for that port.   By default, the 
+driver uses the ports at 0x378 and irq 7.  You can disable the 
+interrupt by specifying it as 0.  For example, to run the driver 
+on port 0x3bc without an interrupt, you would append the following 
+to the LILO command line:
+
+		ez=0x3bc,0
+
+If you have configured the driver as a loadable module, you can 
+adjust these parameters on the insmod command line using the 
+variables ez_base and ez_irq.  For example:
+
+                insmod ez ez_base=0x3bc
+
+The driver can detect if the parallel port supports 8-bit
+transfers.  If so, it will use them.
+
+The driver can be used with or without interrupts.  If an IRQ
+is specified the driver will use it - if it can. If the irq 
+number is set to 0, an alternative, polling-based, strategy 
+will be used.  Polling consumes more CPU time, but may be more 
+stable on some systems.
+
+If you experience timeout errors while using this driver - and
+you have enabled interrupts - try disabling the interrupt.  I
+have heard reports of some parallel ports having exceptionally
+unreliable interrupts.  This could happen on misconfigured 
+systems in which an inactive sound card shares the same IRQ with 
+the parallel port. (Remember that most people do not use the
+parallel port interrupt for printing.)
+
+It would be advantageous to use multiple mode transfers,
+but ShuttleTech's driver does not appear to use them, so I'm not
+sure that the converter can handle it.
+
+It is not currently possible to connect a printer to the chained
+port on an EZ drive and expect Linux to use both devices at once.
+If you need to do this, build both the ez and lp drivers as modules
+and load one or the other as required.
+
+When the EZ230 powers on, the "standby timer" is set to about 6
+minutes:  if the drive is idle for that length of time, it will
+put itself into a low power standby mode.  It takes a couple of
+seconds for the drive to come out of standby mode.  So, if you
+load this driver while it is in standby mode, you will notice
+a "freeze" of a second or two as the driver waits for the EZ230
+to come back to life.  Once loaded, this driver disables the
+standby timer (until you next power up the EZ230 ...)
+
+Keep an eye on http://www.torque.net/ez135.html for news and
+other information about the driver.  If you have any problems
+with this driver, please send me, grant@torque.net, some mail 
+directly before posting into the newsgroups or mailing lists.
+

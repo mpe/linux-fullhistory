@@ -21,5 +21,11 @@
 #define SO_LINGER	13
 #define SO_BSDCOMPAT	14
 /* To add :#define SO_REUSEPORT 15 */
+#define SO_PASSCRED	16
+#define SO_PEERCRED	17
+#define SO_RCVLOWAT	18
+#define SO_SNDLOWAT	19
+#define SO_RCVTIMEO	20
+#define SO_SNDTIMEO	21
 
 #endif /* _ASM_SOCKET_H */

@@ -627,7 +627,7 @@ static int unix_dgram_connect(struct socket *sock, struct sockaddr *addr,
 			      int alen, int flags)
 {
 	struct sock *sk = sock->sk;
-	struct sockaddr_un *sun=(struct sockaddr_un*)addr;
+	struct sockaddr_un *sunaddr=(struct sockaddr_un*)addr;
 	struct sock *other;
 	unsigned hash;
 	int err;
@@ -647,11 +647,11 @@ static int unix_dgram_connect(struct socket *sock, struct sockaddr *addr,
 		return 0;
 	}
 		
-	alen = unix_mkname(sun, alen, &hash);
+	alen = unix_mkname(sunaddr, alen, &hash);
 	if (alen < 0)
 		return alen;
 
-	other=unix_find_other(sun, alen, sock->type, hash, &err);
+	other=unix_find_other(sunaddr, alen, sock->type, hash, &err);
 	if (!other)
 		return err;
 	if (!unix_may_send(sk, other))

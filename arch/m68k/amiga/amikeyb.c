@@ -23,8 +23,6 @@
 #include <linux/random.h>
 #include <linux/kernel.h>
 
-#include <asm/setup.h>
-#include <asm/amigatypes.h>
 #include <asm/amigaints.h>
 #include <asm/amigahw.h>
 #include <asm/irq.h>

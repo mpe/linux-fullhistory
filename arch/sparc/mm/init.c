@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.45 1996/12/11 10:23:06 davem Exp $
+/*  $Id: init.c,v 1.46 1996/12/18 06:43:24 tridge Exp $
  *  linux/arch/sparc/mm/init.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -132,6 +132,14 @@ paging_init(unsigned long start_mem, unsigned long end_mem))
 		start_mem = srmmu_paging_init(start_mem, end_mem);
 		sparc_unmapped_base = 0x50000000;
 		break;
+
+	case ap1000:
+#if CONFIG_AP1000
+		start_mem = apmmu_paging_init(start_mem, end_mem);
+		sparc_unmapped_base = 0x50000000;
+		break;
+#endif
+
 	default:
 		prom_printf("paging_init: Cannot init paging on this Sparc\n");
 		prom_printf("paging_init: sparc_cpu_model = %d\n", sparc_cpu_model);

@@ -40,7 +40,6 @@
 #include <linux/ptrace.h>
 #include <linux/kernel_stat.h>
 
-#include <asm/setup.h>
 #include <asm/system.h>
 #include <asm/traps.h>
 

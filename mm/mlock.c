@@ -203,7 +203,7 @@ asmlinkage int sys_mlock(unsigned long start, size_t len)
 
 	/* we may lock at most half of physical memory... */
 	/* (this check is pretty bogus, but doesn't hurt) */
-	if (locked > max_mapnr/2)
+	if (locked > num_physpages/2)
 		return -ENOMEM;
 
 	return do_mlock(start, len, 1);
@@ -260,7 +260,7 @@ asmlinkage int sys_mlockall(int flags)
 
 	/* we may lock at most half of physical memory... */
 	/* (this check is pretty bogus, but doesn't hurt) */
-	if (current->mm->total_vm > max_mapnr/2)
+	if (current->mm->total_vm > num_physpages/2)
 		return -ENOMEM;
 
 	return do_mlockall(flags);

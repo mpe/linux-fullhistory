@@ -129,7 +129,7 @@ int shrink_mmap(int priority, int dma)
 {
 	static unsigned long clock = 0;
 	struct page * page;
-	unsigned long limit = max_mapnr;
+	unsigned long limit = num_physpages;
 	struct buffer_head *tmp, *bh;
 	int count_max, count_min;
 

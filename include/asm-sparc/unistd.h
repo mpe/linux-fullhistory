@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.24 1996/08/29 09:49:06 davem Exp $ */
+/* $Id: unistd.h,v 1.25 1996/12/18 06:56:10 tridge Exp $ */
 #ifndef _SPARC_UNISTD_H
 #define _SPARC_UNISTD_H
 
@@ -271,6 +271,7 @@
 #define __NR_getsid             252
 #define __NR_fdatasync          253
 #define __NR_nfsctl             254
+#define __NR_aplib              255
 
 #define _syscall0(type,name) \
 type name(void) \

@@ -13,6 +13,7 @@ if [ "$CONFIG_SBPCD" = "y" ]; then
     fi
   fi
 fi
+tristate 'MicroSolutions backpack CDROM support' CONFIG_BPCD
 tristate 'Mitsumi (standard) [no XA/Multisession] CDROM support' CONFIG_MCD
 tristate 'Mitsumi [XA/MultiSession] CDROM support' CONFIG_MCDX
 tristate 'Optics Storage DOLPHIN 8000AT CDROM support' CONFIG_OPTCD

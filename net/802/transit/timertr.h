@@ -1,5 +1,5 @@
 
-/* this file was generated on Mon Dec 16 22:26:17 GMT 1996  */
+/* this file was generated on Wed Dec 18 23:01:37 GMT 1996  */
 
 
 /* size of transition table is 898 bytes */

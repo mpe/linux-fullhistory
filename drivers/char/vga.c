@@ -134,7 +134,7 @@ hide_cursor(void)
   /* This is inefficient, we could just put the cursor at 0xffff,
      but perhaps the delays due to the inefficiency are useful for
      some hardware... */
-	write_vga(14, (video_mem_term - video_mem_base + 1)>>1);
+	write_vga(14, (video_mem_term - video_mem_base - 1)>>1);
 }
 
 void

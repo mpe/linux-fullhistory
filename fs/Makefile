@@ -75,6 +75,10 @@ endif
 
 ifdef CONFIG_PROC_FS
 SUB_DIRS += proc
+ifeq ($(CONFIG_SUN_OPENPROMFS),m)
+MOD_IN_SUB_DIRS += proc
+MOD_TO_LIST += openpromfs.o
+endif
 endif
 
 ifeq ($(CONFIG_ISO9660_FS),y)

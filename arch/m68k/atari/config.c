@@ -33,6 +33,7 @@
 #include <linux/console.h>
 #include <linux/interrupt.h>
 
+#include <asm/bootinfo.h>
 #include <asm/setup.h>
 #include <asm/atarihw.h>
 #include <asm/atarihdreg.h>
@@ -44,7 +45,10 @@
 #include <asm/pgtable.h>
 #include <asm/machdep.h>
 
-extern void atari_sched_init(void (*)(int, void *, struct pt_regs *));
+u_long atari_mch_cookie;
+struct atari_hw_present atari_hw_present;
+
+static void atari_sched_init(void (*)(int, void *, struct pt_regs *));
 /* atari specific keyboard functions */
 extern int atari_keyb_init(void);
 extern int atari_kbdrate (struct kbd_repeat *);
@@ -57,25 +61,28 @@ extern int atari_free_irq (unsigned int irq, void *dev_id);
 extern void atari_enable_irq (unsigned int);
 extern void atari_disable_irq (unsigned int);
 extern int atari_get_irq_list (char *buf);
+static void atari_get_model(char *model);
+static int atari_get_hardware_list(char *buffer);
 /* atari specific timer functions */
-extern unsigned long atari_gettimeoffset (void);
-extern void atari_mste_gettod (int *, int *, int *, int *, int *, int *);
-extern void atari_gettod (int *, int *, int *, int *, int *, int *);
-extern int atari_mste_hwclk (int, struct hwclk_time *);
-extern int atari_hwclk (int, struct hwclk_time *);
-extern int atari_mste_set_clock_mmss (unsigned long);
-extern int atari_set_clock_mmss (unsigned long);
+static unsigned long atari_gettimeoffset (void);
+static void atari_mste_gettod (int *, int *, int *, int *, int *, int *);
+static void atari_gettod (int *, int *, int *, int *, int *, int *);
+static int atari_mste_hwclk (int, struct hwclk_time *);
+static int atari_hwclk (int, struct hwclk_time *);
+static int atari_mste_set_clock_mmss (unsigned long);
+static int atari_set_clock_mmss (unsigned long);
 extern void atari_mksound( unsigned int count, unsigned int ticks );
-extern void atari_reset( void );
+static void atari_reset( void );
 #ifdef CONFIG_BLK_DEV_FD
 extern int atari_floppy_init (void);
 extern void atari_floppy_setup(char *, int *);
 #endif
-extern void atari_waitbut (void);
+static void atari_waitbut (void);
 extern struct consw fb_con;
 extern struct fb_info *atari_fb_init(long *);
-extern void atari_debug_init (void);
+static void atari_debug_init (void);
 extern void atari_video_setup(char *, int *);
+extern void atari_syms_export(void);
 
 extern void (*kd_mksound)(unsigned int, unsigned int);
 
@@ -205,8 +212,34 @@ static int scc_test( volatile char *ctla )
 	return( 1 );
 }
 
+
+    /*
+     *  Parse an Atari-specific record in the bootinfo
+     */
+
+int atari_parse_bootinfo(const struct bi_record *record)
+{
+    int unknown = 0;
+    const u_long *data = record->data;
+
+    switch (record->tag) {
+	case BI_ATARI_MCH_COOKIE:
+	    atari_mch_cookie = *data;
+	    break;
+	default:
+	    unknown = 1;
+    }
+    return(unknown);
+}
+
+    /*
+     *  Setup the Atari configuration info
+     */
+
 void config_atari(void)
 {
+    memset(&atari_hw_present, 0, sizeof(atari_hw_present));
+
     mach_sched_init      = atari_sched_init;
     mach_keyb_init       = atari_keyb_init;
     mach_kbdrate         = atari_kbdrate;
@@ -216,6 +249,8 @@ void config_atari(void)
     mach_free_irq        = atari_free_irq;
     mach_enable_irq      = atari_enable_irq;
     mach_disable_irq     = atari_disable_irq;
+    mach_get_model	 = atari_get_model;
+    mach_get_hardware_list = atari_get_hardware_list;
     mach_get_irq_list	 = atari_get_irq_list;
     mach_gettimeoffset   = atari_gettimeoffset;
     mach_mksound         = atari_mksound;
@@ -230,6 +265,7 @@ void config_atari(void)
     mach_max_dma_address = 0xffffff;
     mach_debug_init	 = atari_debug_init;
     mach_video_setup	 = atari_video_setup;
+    mach_syms_export     = atari_syms_export;
     kd_mksound		 = atari_mksound;
 
     /* ++bjoern: 
@@ -432,7 +468,7 @@ void config_atari(void)
     }
 }
 
-void atari_sched_init(void (*timer_routine)(int, void *, struct pt_regs *))
+static void atari_sched_init(void (*timer_routine)(int, void *, struct pt_regs *))
 {
     /* set Timer C data Register */
     mfp.tim_dt_c = INT_TICKS;
@@ -448,7 +484,7 @@ void atari_sched_init(void (*timer_routine)(int, void *, struct pt_regs *))
 #define TICK_SIZE 10000
   
 /* This is always executed with interrupts disabled.  */
-unsigned long atari_gettimeoffset (void)
+static unsigned long atari_gettimeoffset (void)
 {
   unsigned long ticks, offset = 0;
 
@@ -511,8 +547,8 @@ mste_write(struct MSTE_RTC *val)
 	} while(0)
 
 
-void atari_mste_gettod (int *yearp, int *monp, int *dayp,
-			int *hourp, int *minp, int *secp)
+static void atari_mste_gettod (int *yearp, int *monp, int *dayp,
+			       int *hourp, int *minp, int *secp)
 {
     int hr24=0, hour;
     struct MSTE_RTC val;
@@ -538,8 +574,8 @@ void atari_mste_gettod (int *yearp, int *monp, int *dayp,
 }
 
   
-void atari_gettod (int *yearp, int *monp, int *dayp,
-		   int *hourp, int *minp, int *secp)
+static void atari_gettod (int *yearp, int *monp, int *dayp,
+			  int *hourp, int *minp, int *secp)
 {
     unsigned char	ctrl;
     unsigned short tos_version;
@@ -591,7 +627,7 @@ void atari_gettod (int *yearp, int *monp, int *dayp,
 
 #define HWCLK_POLL_INTERVAL	5
 
-int atari_mste_hwclk( int op, struct hwclk_time *t )
+static int atari_mste_hwclk( int op, struct hwclk_time *t )
 {
     int hour, year;
     int hr24=0;
@@ -650,7 +686,7 @@ int atari_mste_hwclk( int op, struct hwclk_time *t )
     return 0;
 }
 
-int atari_hwclk( int op, struct hwclk_time *t )
+static int atari_hwclk( int op, struct hwclk_time *t )
 {
     int sec=0, min=0, hour=0, day=0, mon=0, year=0, wday=0; 
     unsigned long 	flags;
@@ -777,7 +813,7 @@ int atari_hwclk( int op, struct hwclk_time *t )
 }
 
 
-int atari_mste_set_clock_mmss (unsigned long nowtime)
+static int atari_mste_set_clock_mmss (unsigned long nowtime)
 {
     short real_seconds = nowtime % 60, real_minutes = (nowtime / 60) % 60;
     struct MSTE_RTC val;
@@ -800,7 +836,7 @@ int atari_mste_set_clock_mmss (unsigned long nowtime)
     return 0;
 }
 
-int atari_set_clock_mmss (unsigned long nowtime)
+static int atari_set_clock_mmss (unsigned long nowtime)
 {
     int retval = 0;
     short real_seconds = nowtime % 60, real_minutes = (nowtime / 60) % 60;
@@ -840,7 +876,7 @@ int atari_set_clock_mmss (unsigned long nowtime)
 }
 
 
-void atari_waitbut (void)
+static void atari_waitbut (void)
 {
     /* sorry, no-op */
 }
@@ -922,7 +958,7 @@ void ata_par_print (const char *str)
 }
 
 
-void atari_debug_init( void )
+static void atari_debug_init( void )
 {
     extern void (*debug_print_proc)(const char *);
     extern char m68k_debug_device[];
@@ -930,7 +966,7 @@ void atari_debug_init( void )
     if (!strcmp( m68k_debug_device, "ser" )) {
 	/* defaults to ser2 for a Falcon and ser1 otherwise */
 	strcpy( m68k_debug_device, 
-		((boot_info.bi_atari.mch_cookie >> 16) == ATARI_MCH_FALCON) ?
+		((atari_mch_cookie >> 16) == ATARI_MCH_FALCON) ?
 		"ser2" : "ser1" );
 
     }
@@ -1036,7 +1072,7 @@ void ata_serial_print (const char *str)
   
 /* ++andreas: no need for complicated code, just depend on prefetch */
 
-void atari_reset (void)
+static void atari_reset (void)
 {
     long tc_val = 0;
     long reset_addr;
@@ -1062,7 +1098,9 @@ void atari_reset (void)
 	    /* 68060: clear PCR to turn off superscalar operation */
 	    __asm__ __volatile__
 		("moveq	#0,%/d0\n\t"
-		 ".long	0x4e7b0808"	/* movec d0,pcr */
+		 ".chip 68060\n\t"
+		 "movec %%d0,%%pcr\n\t"
+		 ".chip 68k"
 		 : : : "d0" );
 	}
 	    
@@ -1070,8 +1108,10 @@ void atari_reset (void)
             ("movel    %0,%/d0\n\t"
              "andl     #0xff000000,%/d0\n\t"
              "orw      #0xe020,%/d0\n\t"   /* map 16 MB, enable, cacheable */
-             ".long    0x4e7b0004\n\t"   /* movec d0,itt0 */
-             ".long    0x4e7b0006\n\t"   /* movec d0,dtt0 */
+             ".chip 68040\n\t"
+	     "movec    %%d0,%%itt0\n\t"
+             "movec    %%d0,%%dtt0\n\t"
+	     ".chip 68k\n\t"
              "jmp   %0@\n\t"
              : /* no outputs */
              : "a" (jmp_addr040)
@@ -1080,9 +1120,11 @@ void atari_reset (void)
         __asm__ __volatile__
           ("moveq #0,%/d0\n\t"
 	   "nop\n\t"
-	   ".word 0xf4d8\n\t"		/* cinva i/d */
-	   ".word 0xf518\n\t"		/* pflusha */
-           ".long 0x4e7b0003\n\t"	/* movec d0,tc */
+	   ".chip 68040\n\t"
+	   "cinva %%bc\n\t"
+	   "pflusha\n\t"
+	   "movec %%d0,%%tc\n\t"
+	   ".chip 68k\n\t"
            "jmp %0@"
            : /* no outputs */
            : "a" (reset_addr)
@@ -1097,10 +1139,10 @@ void atari_reset (void)
 }
 
 
-void atari_get_model(char *model)
+static void atari_get_model(char *model)
 {
     strcpy(model, "Atari ");
-    switch (boot_info.bi_atari.mch_cookie >> 16) {
+    switch (atari_mch_cookie >> 16) {
 	case ATARI_MCH_ST:
 	    if (ATARIHW_PRESENT(MSTE_CLK))
 		strcat (model, "Mega ST");
@@ -1108,7 +1150,7 @@ void atari_get_model(char *model)
 		strcat (model, "ST");
 	    break;
 	case ATARI_MCH_STE:
-	    if ((boot_info.bi_atari.mch_cookie & 0xffff) == 0x10)
+	    if ((atari_mch_cookie & 0xffff) == 0x10)
 		strcat (model, "Mega STE");
 	    else
 		strcat (model, "STE");
@@ -1125,21 +1167,20 @@ void atari_get_model(char *model)
 	    break;
 	default:
 	    sprintf (model + strlen (model), "(unknown mach cookie 0x%lx)",
-		     boot_info.bi_atari.mch_cookie);
+		     atari_mch_cookie);
 	    break;
     }
 }
 
 
-int atari_get_hardware_list(char *buffer)
+static int atari_get_hardware_list(char *buffer)
 {
     int len = 0, i;
 
-    for (i = 0; i < boot_info.num_memory; i++)
+    for (i = 0; i < m68k_num_memory; i++)
 	len += sprintf (buffer+len, "\t%3ld MB at 0x%08lx (%s)\n",
-			boot_info.memory[i].size >> 20,
-			boot_info.memory[i].addr,
-			(boot_info.memory[i].addr & 0xff000000 ?
+			m68k_memory[i].size >> 20, m68k_memory[i].addr,
+			(m68k_memory[i].addr & 0xff000000 ?
 			 "alternate RAM" : "ST-RAM"));
 
 #define ATARIHW_ANNOUNCE(name,str)				\

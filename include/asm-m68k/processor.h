@@ -61,7 +61,9 @@ static inline void start_thread(struct pt_regs * regs, unsigned long pc,
 	unsigned long nilstate = 0;
 
 	/* clear floating point state */
-	__asm__ __volatile__ ("frestore %0@" : : "a" (&nilstate));
+	__asm__ __volatile__ (".chip 68k/68881\n\t"
+			      "frestore %0@\n\t"
+			      ".chip 68k" : : "a" (&nilstate));
 
 	/* reads from user space */
 	set_fs(USER_DS);
@@ -76,7 +78,15 @@ static inline void start_thread(struct pt_regs * regs, unsigned long pc,
  */
 extern inline unsigned long thread_saved_pc(struct thread_struct *t)
 {
-	return ((unsigned long *)((struct switch_stack *)t->ksp)->a6)[1];
+	extern int sys_pause(void);
+	extern void schedule(void);
+	struct switch_stack *sw = (struct switch_stack *)t->ksp;
+	/* Check whether the thread is blocked in resume() */
+	if (sw->retpc >= (unsigned long)schedule &&
+	    sw->retpc < (unsigned long)sys_pause)
+		return ((unsigned long *)sw->a6)[1];
+	else
+		return sw->retpc;
 }
 
 #endif

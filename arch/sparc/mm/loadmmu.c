@@ -1,4 +1,4 @@
-/* $Id: loadmmu.c,v 1.42 1996/12/03 08:44:47 jj Exp $
+/* $Id: loadmmu.c,v 1.43 1996/12/18 06:43:24 tridge Exp $
  * loadmmu.c:  This code loads up all the mm function pointers once the
  *             machine type has been determined.  It also sets the static
  *             mmu values such as PAGE_NONE, etc.
@@ -9,6 +9,7 @@
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/init.h>
+#include <linux/config.h>
 
 #include <asm/system.h>
 #include <asm/page.h>
@@ -162,6 +163,11 @@ __initfunc(void load_mmu(void))
 	case sun4d:
 		ld_mmu_srmmu();
 		break;
+	case ap1000:
+#if CONFIG_AP1000
+		ld_mmu_apmmu();
+		break;
+#endif
 	default:
 		printk("load_mmu:MMU support not available for this architecture\n");
 		printk("load_mmu:sparc_cpu_model = %d\n", (int) sparc_cpu_model);

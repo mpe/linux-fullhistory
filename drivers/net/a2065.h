@@ -38,149 +38,132 @@
  *		Am7990 Local Area Network Controller for Ethernet (LANCE)
  */
 
-struct Am7990 {
-	volatile u_short RDP;		/* Register Data Port */
-	volatile u_short RAP;		/* Register Address Port */
+struct lance_regs {
+	unsigned short rdp;		/* Register Data Port */
+	unsigned short rap;		/* Register Address Port */
 };
 
+
+#define CRC_POLYNOMIAL_BE 0x04c11db7UL  /* Ethernet CRC, big endian */
+#define CRC_POLYNOMIAL_LE 0xedb88320UL  /* Ethernet CRC, little endian */
 
 /*
  *		Am7990 Control and Status Registers
  */
 
-#define CSR0		0x0000		/* LANCE Controller Status */
-#define CSR1		0x0001		/* IADR[15:0] */
-#define CSR2		0x0002		/* IADR[23:16] */
-#define CSR3		0x0003		/* Misc */
+#define LE_CSR0		0x0000		/* LANCE Controller Status */
+#define LE_CSR1		0x0001		/* IADR[15:0] */
+#define LE_CSR2		0x0002		/* IADR[23:16] */
+#define LE_CSR3		0x0003		/* Misc */
 
 
 /*
  *		Bit definitions for CSR0 (LANCE Controller Status)
  */
 
-#define ERR		0x8000		/* Error */
-#define BABL		0x4000		/* Babble: Transmitted too many bits */
-#define CERR		0x2000		/* No Heartbeat (10BASE-T) */
-#define MISS		0x1000		/* Missed Frame */
-#define MERR		0x0800		/* Memory Error */
-#define RINT		0x0400		/* Receive Interrupt */
-#define TINT		0x0200		/* Transmit Interrupt */
-#define IDON		0x0100		/* Initialization Done */
-#define INTR		0x0080		/* Interrupt Flag */
-#define INEA		0x0040		/* Interrupt Enable */
-#define RXON		0x0020		/* Receive On */
-#define TXON		0x0010		/* Transmit On */
-#define TDMD		0x0008		/* Transmit Demand */
-#define STOP		0x0004		/* Stop */
-#define STRT		0x0002		/* Start */
-#define INIT		0x0001		/* Initialize */
+#define LE_C0_ERR	0x8000		/* Error */
+#define LE_C0_BABL	0x4000		/* Babble: Transmitted too many bits */
+#define LE_C0_CERR	0x2000		/* No Heartbeat (10BASE-T) */
+#define LE_C0_MISS	0x1000		/* Missed Frame */
+#define LE_C0_MERR	0x0800		/* Memory Error */
+#define LE_C0_RINT	0x0400		/* Receive Interrupt */
+#define LE_C0_TINT	0x0200		/* Transmit Interrupt */
+#define LE_C0_IDON	0x0100		/* Initialization Done */
+#define LE_C0_INTR	0x0080		/* Interrupt Flag */
+#define LE_C0_INEA	0x0040		/* Interrupt Enable */
+#define LE_C0_RXON	0x0020		/* Receive On */
+#define LE_C0_TXON	0x0010		/* Transmit On */
+#define LE_C0_TDMD	0x0008		/* Transmit Demand */
+#define LE_C0_STOP	0x0004		/* Stop */
+#define LE_C0_STRT	0x0002		/* Start */
+#define LE_C0_INIT	0x0001		/* Initialize */
 
 
 /*
  *		Bit definitions for CSR3
  */
 
-#define BSWP		0x0004		/* Byte Swap
+#define LE_C3_BSWP	0x0004		/* Byte Swap
 					   (on for big endian byte order) */
-#define ACON		0x0002		/* ALE Control
+#define LE_C3_ACON	0x0002		/* ALE Control
 					   (on for active low ALE) */
-#define BCON		0x0001		/* Byte Control */
-
-
-/*
- *		Initialization Block
- */
-
-struct InitBlock {
-	u_short Mode;			/* Mode */
-	u_char PADR[6];			/* Physical Address */
-	u_long LADRF[2];		/* Logical Address Filter */
-	u_short RDRA;			/* Receive Descriptor Ring Address */
-	u_short RLEN;			/* Receive Descriptor Ring Length */
-	u_short TDRA;			/* Transmit Descriptor Ring Address */
-	u_short TLEN;			/* Transmit Descriptor Ring Length */
-};
+#define LE_C3_BCON	0x0001		/* Byte Control */
 
 
 /*
  *		Mode Flags
  */
 
-#define PROM		0x8000		/* Promiscuous Mode */
-#define INTL		0x0040		/* Internal Loopback */
-#define DRTY		0x0020		/* Disable Retry */
-#define FCOLL		0x0010		/* Force Collision */
-#define DXMTFCS		0x0008		/* Disable Transmit CRC */
-#define LOOP		0x0004		/* Loopback Enable */
-#define DTX		0x0002		/* Disable Transmitter */
-#define DRX		0x0001		/* Disable Receiver */
+#define LE_MO_PROM	0x8000		/* Promiscuous Mode */
+#define LE_MO_INTL	0x0040		/* Internal Loopback */
+#define LE_MO_DRTY	0x0020		/* Disable Retry */
+#define LE_MO_FCOLL	0x0010		/* Force Collision */
+#define LE_MO_DXMTFCS	0x0008		/* Disable Transmit CRC */
+#define LE_MO_LOOP	0x0004		/* Loopback Enable */
+#define LE_MO_DTX	0x0002		/* Disable Transmitter */
+#define LE_MO_DRX	0x0001		/* Disable Receiver */
 
 
-/*
- *		Receive Descriptor Ring Entry
- */
-
-struct RDRE {
-	volatile u_short RMD0;		/* LADR[15:0] */
-	volatile u_short RMD1;		/* HADR[23:16] | Receive Flags */
-	volatile u_short RMD2;		/* Buffer Byte Count
-					   (two's complement) */
-	volatile u_short RMD3;		/* Message Byte Count */
+struct lance_rx_desc {
+	unsigned short rmd0;        /* low address of packet */
+	unsigned char  rmd1_bits;   /* descriptor bits */
+	unsigned char  rmd1_hadr;   /* high address of packet */
+	short    length;    	    /* This length is 2s complement (negative)!
+				     * Buffer length
+				     */
+	unsigned short mblength;    /* Aactual number of bytes received */
 };
-
-
-/*
- *		Transmit Descriptor Ring Entry
- */
-
-struct TDRE {
-	volatile u_short TMD0;		/* LADR[15:0] */
-	volatile u_short TMD1;		/* HADR[23:16] | Transmit Flags */
-	volatile u_short TMD2;		/* Buffer Byte Count
-					   (two's complement) */
-	volatile u_short TMD3;		/* Error Flags */
+ 
+struct lance_tx_desc {
+	unsigned short tmd0;        /* low address of packet */
+	unsigned char  tmd1_bits;   /* descriptor bits */
+	unsigned char  tmd1_hadr;   /* high address of packet */
+	short    length;       	    /* Length is 2s complement (negative)! */
+	unsigned short misc;
 };
-
+		
 
 /*
  *		Receive Flags
  */
 
-#define RF_OWN		0x8000		/* LANCE owns the descriptor */
-#define RF_ERR		0x4000		/* Error */
-#define RF_FRAM		0x2000		/* Framing Error */
-#define RF_OFLO		0x1000		/* Overflow Error */
-#define RF_CRC		0x0800		/* CRC Error */
-#define RF_BUFF		0x0400		/* Buffer Error */
-#define RF_STP		0x0200		/* Start of Packet */
-#define RF_ENP		0x0100		/* End of Packet */
+#define LE_R1_OWN	0x80		/* LANCE owns the descriptor */
+#define LE_R1_ERR	0x40		/* Error */
+#define LE_R1_FRA	0x20		/* Framing Error */
+#define LE_R1_OFL	0x10		/* Overflow Error */
+#define LE_R1_CRC	0x08		/* CRC Error */
+#define LE_R1_BUF	0x04		/* Buffer Error */
+#define LE_R1_SOP	0x02		/* Start of Packet */
+#define LE_R1_EOP	0x01		/* End of Packet */
+#define LE_R1_POK       0x03		/* Packet is complete: SOP + EOP */
 
 
 /*
  *		Transmit Flags
  */
 
-#define TF_OWN		0x8000		/* LANCE owns the descriptor */
-#define TF_ERR		0x4000		/* Error */
-#define TF_RES		0x2000		/* Reserved,
+#define LE_T1_OWN	0x80		/* LANCE owns the descriptor */
+#define LE_T1_ERR	0x40		/* Error */
+#define LE_T1_RES	0x20		/* Reserved,
 					   LANCE writes this with a zero */
-#define TF_MORE		0x1000		/* More than one retry needed */
-#define TF_ONE		0x0800		/* One retry needed */
-#define TF_DEF		0x0400		/* Deferred */
-#define TF_STP		0x0200		/* Start of Packet */
-#define TF_ENP		0x0100		/* End of Packet */
+#define LE_T1_EMORE	0x10		/* More than one retry needed */
+#define LE_T1_EONE	0x08		/* One retry needed */
+#define LE_T1_EDEF	0x04		/* Deferred */
+#define LE_T1_SOP	0x02		/* Start of Packet */
+#define LE_T1_EOP	0x01		/* End of Packet */
+#define LE_T1_POK	0x03		/* Packet is complete: SOP + EOP */
 
 
 /*
  *		Error Flags
  */
 
-#define EF_BUFF 	0x8000		/* Buffer Error */
-#define EF_UFLO 	0x4000		/* Underflow Error */
-#define EF_LCOL 	0x1000		/* Late Collision */
-#define EF_LCAR 	0x0800		/* Loss of Carrier */
-#define EF_RTRY 	0x0400		/* Retry Error */
-#define EF_TDR		0x003f		/* Time Domain Reflectometry */
+#define LE_T3_BUF 	0x8000		/* Buffer Error */
+#define LE_T3_UFL 	0x4000		/* Underflow Error */
+#define LE_T3_LCOL 	0x1000		/* Late Collision */
+#define LE_T3_CLOS 	0x0800		/* Loss of Carrier */
+#define LE_T3_RTY 	0x0400		/* Retry Error */
+#define LE_T3_TDR	0x03ff		/* Time Domain Reflectometry */
 
 
 /*
@@ -189,7 +172,7 @@ struct TDRE {
 
 struct A2065Board {
 	u_char Pad1[0x4000];
-	struct Am7990 Lance;
+	volatile struct lance_regs Lance;
 	u_char Pad2[0x3ffc];
 	volatile u_char RAM[0x8000];
 };

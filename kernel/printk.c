@@ -153,7 +153,7 @@ asmlinkage int printk(const char *fmt, ...)
 	va_list args;
 	int i;
 	char *msg, *p, *buf_end;
-	static char msg_level = -1;
+	static signed char msg_level = -1;
 	long flags;
 
 	save_flags(flags);
@@ -216,7 +216,7 @@ void register_console(void (*proc)(const char *))
 	int	i,j;
 	int	p = log_start;
 	char	buf[16];
-	char	msg_level = -1;
+	signed char msg_level = -1;
 	char	*q;
 
 	console_print_proc = proc;

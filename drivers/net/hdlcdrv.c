@@ -28,8 +28,9 @@
  *
  *  History:
  *   0.1  21.09.96  Started
- *        18.10.96  Changed to new user space access routines (copy_{to,from}_user)
- *	  13.12.96  Fixed for Linux networking changes. (JSN)
+ *        18.10.96  Changed to new user space access routines 
+ *                  (copy_{to,from}_user)
+ *   0.2  21.11.96  various small changes
  */
 
 /*****************************************************************************/
@@ -169,7 +170,7 @@ static int calc_crc_ccitt(const unsigned char *buf, int cnt)
 
 /* ---------------------------------------------------------------------- */
 
-#define tenms_to_2flags(s,tenms) ((tenms * s->ops->bitrate) / 100 / 16)
+#define tenms_to_2flags(s,tenms) ((tenms * s->par.bitrate) / 100 / 16)
 
 /* ---------------------------------------------------------------------- */
 /*
@@ -624,8 +625,8 @@ static int hdlcdrv_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 	s = (struct hdlcdrv_state *)dev->priv;
 
 	if (cmd != SIOCDEVPRIVATE) {
-		if (s->ops->ioctl)
-			return s->ops->ioctl(dev, ifr, cmd);
+		if (s->ops && s->ops->ioctl)
+			return s->ops->ioctl(dev, ifr, &bi, cmd);
 		return -ENOIOCTLCMD;
 	}
 	if (copy_from_user(&bi, ifr->ifr_data, sizeof(bi)))
@@ -633,8 +634,8 @@ static int hdlcdrv_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 
 	switch (bi.cmd) {
 	default:
-		if (s->ops->ioctl)
-			return s->ops->ioctl(dev, ifr, cmd);
+		if (s->ops && s->ops->ioctl)
+			return s->ops->ioctl(dev, ifr, &bi, cmd);
 		return -ENOIOCTLCMD;
 
 	case HDLCDRVCTL_GETCHANNELPAR:
@@ -660,6 +661,7 @@ static int hdlcdrv_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 		bi.data.mp.iobase = dev->base_addr;
 		bi.data.mp.irq = dev->irq;
 		bi.data.mp.dma = dev->dma;
+		bi.data.mp.dma2 = s->ptt_out.dma2;
 		bi.data.mp.seriobase = s->ptt_out.seriobase;
 		bi.data.mp.pariobase = s->ptt_out.pariobase;
 		bi.data.mp.midiiobase = s->ptt_out.midiiobase;
@@ -671,6 +673,7 @@ static int hdlcdrv_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 		dev->base_addr = bi.data.mp.iobase;
 		dev->irq = bi.data.mp.irq;
 		dev->dma = bi.data.mp.dma;
+		s->ptt_out.dma2 = bi.data.mp.dma2;
 		s->ptt_out.seriobase = bi.data.mp.seriobase;
 		s->ptt_out.pariobase = bi.data.mp.pariobase;
 		s->ptt_out.midiiobase = bi.data.mp.midiiobase;
@@ -684,7 +687,7 @@ static int hdlcdrv_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 		break;		
 
 	case HDLCDRVCTL_CALIBRATE:
-		s->hdlctx.calibrate = bi.data.calibrate * s->ops->bitrate / 16;
+		s->hdlctx.calibrate = bi.data.calibrate * s->par.bitrate / 16;
 		return 0;
 
 	case HDLCDRVCTL_GETSAMPLES:
@@ -713,36 +716,21 @@ static int hdlcdrv_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 		break;		
 #endif /* HDLCDRV_DEBUG */
 
+	case HDLCDRVCTL_DRIVERNAME:
+		if (s->ops && s->ops->drvname) {
+			strncpy(bi.data.drivername, s->ops->drvname, 
+				sizeof(bi.data.drivername));
+			break;
+		}
+		bi.data.drivername[0] = '\0';
+		break;
+		
 	}
 	if (copy_to_user(ifr->ifr_data, &bi, sizeof(bi)))
 		return -EFAULT;
 	return 0;
 
 }
-
-/* --------------------------------------------------------------------- */
-/*
- * Fill in the MAC-level header 
- */
-
-#ifdef CONFIG_AX25
-static int hdlcdrv_header(struct sk_buff *skb, struct device *dev, 
-			 unsigned short type, void *daddr, void *saddr, 
-			 unsigned len)
-{
-        return ax25_encapsulate(skb, dev, type, daddr, saddr, len);
-}
-
-/* --------------------------------------------------------------------- */
-/*
- * Rebuild the MAC-level header
- */
-
-static int hdlcdrv_rebuild_header(struct sk_buff *skb)
-{
-        return ax25_rebuild_header(skb);
-}
-#endif /* CONFIG_AX25 */
 
 /* --------------------------------------------------------------------- */
 
@@ -808,8 +796,8 @@ static int hdlcdrv_probe(struct device *dev)
 	skb_queue_head_init(&s->send_queue);
 	
 #ifdef CONFIG_AX25
-	dev->hard_header = hdlcdrv_header;
-	dev->rebuild_header = hdlcdrv_rebuild_header;
+	dev->hard_header = ax25_encapsulate;
+	dev->rebuild_header = ax25_rebuild_header;
 #else /* CONFIG_AX25 */
 	dev->hard_header = NULL;
 	dev->rebuild_header = NULL;
@@ -916,9 +904,9 @@ static struct symbol_table hdlcdrv_syms = {
 
 int init_module(void)
 {
-	printk(KERN_INFO "hdlcdrv: v0.1 (C) 1996 Thomas Sailer HB9JNX/AE4WA\n");
-	printk(KERN_INFO "hdlcdrv: compiled %s %s\n", __TIME__, __DATE__);
-
+	printk(KERN_INFO "hdlcdrv: (C) 1996 Thomas Sailer HB9JNX/AE4WA\n");
+	printk(KERN_INFO "hdlcdrv: version 0.2 compiled %s %s\n", 
+	       __TIME__, __DATE__);
         register_symtab(&hdlcdrv_syms);
 	return 0;
 }

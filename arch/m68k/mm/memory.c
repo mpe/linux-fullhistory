@@ -250,31 +250,84 @@ void free_kpointer_table (pmd_t *pmdp)
 	}
 }
 
+static unsigned long transp_transl_matches( unsigned long regval,
+					    unsigned long vaddr )
+{
+    unsigned long base, mask;
+
+    /* enabled? */
+    if (!(regval & 0x8000))
+	return( 0 );
+
+    if (CPU_IS_030) {
+	/* function code match? */
+	base = (regval >> 4) & 7;
+	mask = ~(regval & 7);
+	if ((SUPER_DATA & mask) != (base & mask))
+	    return( 0 );
+    }
+    else {
+	/* must not be user-only */
+	if ((regval & 0x6000) == 0)
+	    return( 0 );
+    }
+
+    /* address match? */
+    base = regval & 0xff000000;
+    mask = ~((regval << 8) & 0xff000000);
+    return( (vaddr & mask) == (base & mask) );
+}
+
 /*
  * The following two routines map from a physical address to a kernel
  * virtual address and vice versa.
  */
 unsigned long mm_vtop (unsigned long vaddr)
 {
-	int i;
+	int i=0;
 	unsigned long voff = vaddr;
 	unsigned long offset = 0;
 
-	for (i = 0; i < boot_info.num_memory; i++)
-	{
-		if (voff < offset + boot_info.memory[i].size) {
+	do{
+		if (voff < offset + m68k_memory[i].size) {
 #ifdef DEBUGPV
 			printk ("VTOP(%lx)=%lx\n", vaddr,
-				boot_info.memory[i].addr + voff - offset);
+				m68k_memory[i].addr + voff - offset);
 #endif
-			return boot_info.memory[i].addr + voff - offset;
+			return m68k_memory[i].addr + voff - offset;
 		} else
-			offset += boot_info.memory[i].size;
+			offset += m68k_memory[i].size;
+		i++;
+	}while (i < m68k_num_memory);
+
+	/* not in one of the memory chunks; test for applying transparent
+	 * translation */
+
+	if (CPU_IS_030) {
+	    unsigned long ttreg;
+	    
+	    asm volatile( "pmove %/tt0,%0@" : : "a" (&ttreg) );
+	    if (transp_transl_matches( ttreg, vaddr ))
+		return vaddr;
+	    asm volatile( "pmove %/tt1,%0@" : : "a" (&ttreg) );
+	    if (transp_transl_matches( ttreg, vaddr ))
+		return vaddr;
+	}
+	else {
+	    register unsigned long ttreg __asm__( "d0" );
+	    
+	    asm volatile( ".long 0x4e7a0006" /* movec %dtt0,%d0 */
+			  : "=d" (ttreg) );
+	    if (transp_transl_matches( ttreg, vaddr ))
+		return vaddr;
+	    asm volatile( ".long 0x4e7a0007" /* movec %dtt1,%d0 */
+			  : "=d" (ttreg) );
+	    if (transp_transl_matches( ttreg, vaddr ))
+		return vaddr;
 	}
 
-	/* not in one of the memory chunks; get the actual
-	 * physical address from the MMU.
-	 */
+	/* no match, too, so get the actual physical address from the MMU. */
+
 	if (CPU_IS_060) {
 	  unsigned long fs = get_fs();
 	  unsigned long  paddr;
@@ -284,12 +337,11 @@ unsigned long mm_vtop (unsigned long vaddr)
 	  /* The PLPAR instruction causes an access error if the translation
 	   * is not possible. We don't catch that here, so a bad kernel trap
 	   * will be reported in this case. */
-	  asm volatile ("movel %1,%/a0\n\t"
-			".word 0xf5c8\n\t"	/* plpar (a0) */
-			"movel %/a0,%0"
-			: "=g" (paddr)
-			: "g" (vaddr)
-			: "a0" );
+	  asm volatile (".chip 68060\n\t"
+			"plpar (%0)\n\t"
+			".chip 68k"
+			: "=a" (paddr)
+			: "0" (vaddr));
 	  set_fs (fs);
 
 	  return paddr;
@@ -300,13 +352,12 @@ unsigned long mm_vtop (unsigned long vaddr)
 
 	  set_fs (SUPER_DATA);
 
-	  asm volatile ("movel %1,%/a0\n\t"
-			".word 0xf568\n\t"	/* ptestr (a0) */
-			".long 0x4e7a8805\n\t"	/* movec mmusr, a0 */
-			"movel %/a0,%0"
-			: "=g" (mmusr)
-			: "g" (vaddr)
-			: "a0", "d0");
+	  asm volatile (".chip 68040\n\t"
+			"ptestr (%1)\n\t"
+			"movec %%mmusr, %0\n\t"
+			".chip 68k"
+			: "=r" (mmusr)
+			: "a" (vaddr));
 	  set_fs (fs);
 
 	  if (mmusr & MMU_R_040)
@@ -347,22 +398,22 @@ unsigned long mm_vtop (unsigned long vaddr)
 
 unsigned long mm_ptov (unsigned long paddr)
 {
-	int i;
+	int i = 0;
 	unsigned long offset = 0;
 
-	for (i = 0; i < boot_info.num_memory; i++)
-	{
-		if (paddr >= boot_info.memory[i].addr &&
-		    paddr < (boot_info.memory[i].addr
-			     + boot_info.memory[i].size)) {
+	do{
+		if (paddr >= m68k_memory[i].addr &&
+		    paddr < (m68k_memory[i].addr
+			     + m68k_memory[i].size)) {
 #ifdef DEBUGPV
 			printk ("PTOV(%lx)=%lx\n", paddr,
-				(paddr - boot_info.memory[i].addr) + offset);
+				(paddr - m68k_memory[i].addr) + offset);
 #endif
-			return (paddr - boot_info.memory[i].addr) + offset;
+			return (paddr - m68k_memory[i].addr) + offset;
 		} else
-			offset += boot_info.memory[i].size;
-	}
+			offset += m68k_memory[i].size;
+		i++;
+	}while (i < m68k_num_memory);
 
 	/*
 	 * assume that the kernel virtual address is the same as the
@@ -389,62 +440,67 @@ unsigned long mm_ptov (unsigned long paddr)
 }
 
 /* invalidate page in both caches */
-#define	clear040(paddr) __asm__ __volatile__ ("movel %0,%/a0\n\t"\
-					      "nop\n\t"\
-					      ".word 0xf4d0"\
-					      /* CINVP I/D (a0) */\
-					      : : "g" ((paddr))\
-					      : "a0")
+#define	clear040(paddr)					\
+	__asm__ __volatile__ ("nop\n\t"			\
+			      ".chip 68040\n\t"		\
+			      "cinvp %%bc,(%0)\n\t"	\
+			      ".chip 68k"		\
+			      : : "a" (paddr))
 
 /* invalidate page in i-cache */
-#define	cleari040(paddr) __asm__ __volatile__ ("movel %0,%/a0\n\t"\
-					       /* CINVP I (a0) */\
-					       "nop\n\t"\
-					       ".word 0xf490"\
-					       : : "g" ((paddr))\
-					       : "a0")
+#define	cleari040(paddr)				\
+	__asm__ __volatile__ ("nop\n\t"			\
+			      ".chip 68040\n\t"		\
+			      "cinvp %%ic,(%0)\n\t"	\
+			      ".chip 68k"		\
+			      : : "a" (paddr))
 
 /* push page in both caches */
-#define	push040(paddr) __asm__ __volatile__ ("movel %0,%/a0\n\t"\
-					      "nop\n\t"\
-					     ".word 0xf4f0"\
-					     /* CPUSHP I/D (a0) */\
-					     : : "g" ((paddr))\
-					     : "a0")
+#define	push040(paddr)					\
+	__asm__ __volatile__ ("nop\n\t"			\
+			      ".chip 68040\n\t"		\
+			      "cpushp %%bc,(%0)\n\t"	\
+			      ".chip 68k"		\
+			      : : "a" (paddr))
 
 /* push and invalidate page in both caches */
-#define	pushcl040(paddr) do { push040((paddr));\
-			      if (CPU_IS_060) clear040((paddr));\
-			 } while(0)
+#define	pushcl040(paddr)			\
+	do { push040(paddr);			\
+	     if (CPU_IS_060) clear040(paddr);	\
+	} while(0)
 
 /* push page in both caches, invalidate in i-cache */
-#define	pushcli040(paddr) do { push040((paddr));\
-			       if (CPU_IS_060) cleari040((paddr));\
-			  } while(0)
+#define	pushcli040(paddr)			\
+	do { push040(paddr);			\
+	     if (CPU_IS_060) cleari040(paddr);	\
+	} while(0)
 
 /* push page defined by virtual address in both caches */
-#define	pushv040(vaddr) __asm__ __volatile__ ("movel %0,%/a0\n\t"\
-					      /* ptestr (a0) */\
-					      "nop\n\t"\
-					      ".word 0xf568\n\t"\
-					      /* movec mmusr,d0 */\
-					      ".long 0x4e7a0805\n\t"\
-					      "andw #0xf000,%/d0\n\t"\
-					      "movel %/d0,%/a0\n\t"\
-					      /* CPUSHP I/D (a0) */\
-					      "nop\n\t"\
-					      ".word 0xf4f0"\
-					      : : "g" ((vaddr))\
-					      : "a0", "d0")
+#define	pushv040(vaddr)						\
+	do { unsigned long _tmp1, _tmp2;			\
+	__asm__ __volatile__ ("nop\n\t"				\
+			      ".chip 68040\n\t"			\
+			      "ptestr (%2)\n\t"			\
+			      "movec %%mmusr,%0\n\t"		\
+			      "andw #0xf000,%0\n\t"		\
+			      "movel %0,%1\n\t"			\
+			      "nop\n\t"				\
+			      "cpushp %%bc,(%1)\n\t"		\
+			      ".chip 68k"			\
+			      : "=d" (_tmp1), "=a" (_tmp2)	\
+			      : "a" (vaddr));			\
+	} while (0)
 
 /* push page defined by virtual address in both caches */
-#define	pushv060(vaddr) __asm__ __volatile__ ("movel %0,%/a0\n\t"\
-					      /* plpar (a0) */\
-					      ".word 0xf5c8\n\t"\
-					      /* CPUSHP I/D (a0) */\
-					      ".word 0xf4f0"\
-					      : : "g" ((vaddr))\
-					      : "a0")
+#define	pushv060(vaddr)					\
+	do { unsigned long _tmp;			\
+	__asm__ __volatile__ (".chip 68060\n\t"		\
+			      "plpar (%0)\n\t"		\
+			      "cpushp %%bc,(%0)\n\t"	\
+			      ".chip 68k"		\
+			      : "=a" (_tmp)		\
+			      : "0" (vaddr));		\
+	} while (0)
 
 
 /*
@@ -633,9 +689,8 @@ int mm_end_of_chunk (unsigned long addr, int len)
 {
 	int i;
 
-	for (i = 0; i < boot_info.num_memory; i++)
-		if (boot_info.memory[i].addr + boot_info.memory[i].size
-		    == addr + len)
+	for (i = 0; i < m68k_num_memory; i++)
+		if (m68k_memory[i].addr + m68k_memory[i].size == addr + len)
 			return 1;
 	return 0;
 }

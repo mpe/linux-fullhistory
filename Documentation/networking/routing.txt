@@ -1,6 +1,4 @@
-The directory ip-routing contains:
-
-- patch to official linux-2.0 kernel tree
+The directory ftp.inr.ac.ru:/ip-routing contains:
 
 - iproute.c - "professional" routing table maintainance utility.
 

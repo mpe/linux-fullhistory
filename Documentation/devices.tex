@@ -42,7 +42,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@zytor.com$>$}
-\date{Last revised: December 16, 1996}
+\date{Last revised: December 20, 1996}
 \maketitle
 %
 \noindent
@@ -188,7 +188,8 @@ reply.
 \major{64}{}{char }{ENskip kernel encryption package}
 \major{65}{}{char }{Sundance ``plink'' Transputer boards}
 \major{66}{}{char }{YARC PowerPC PCI coprocessor card}
-\major{67}{--119}{}{Unallocated}
+\major{67}{}{char }{Coda network filesystem}
+\major{68}{--119}{}{Unallocated}
 \major{120}{--127}{}{Local/experimental use}
 \major{128}{--239}{}{Unallocated}
 \major{240}{--254}{}{Local/experimental use}
@@ -1198,13 +1199,21 @@ $<$jth@prosig.demon.co.uk$>$ for information.
 
 \begin{devicelist}
 \major{66}{}{char }{YARC PowerPC PCI coprocessor card}
-	\minor{0}{/dev/yppcpci00}{First YARC card}
-	\minor{1}{/dev/yppcpci01}{Second YARC card}
+	\minor{0}{/dev/yppcpci0}{First YARC card}
+	\minor{1}{/dev/yppcpci1}{Second YARC card}
 	\minordots
 \end{devicelist}
 
 \begin{devicelist}
-\major{67}{--119}{}{Unallocated}
+\major{67}{}{char }{Coda network filesystem}
+	\minor{0}{/dev/cfs0}{Coda cache manager}
+\end{devicelist}
+
+\noindent
+See {\em http://www.coda.cs.cmu.edu\/} for information about Coda.
+
+\begin{devicelist}
+\major{68}{--119}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}

@@ -102,8 +102,12 @@ pte_t *kernel_page_table (unsigned long *memavailp)
 {
 	pte_t *ptablep;
 
-	ptablep = (pte_t *)*memavailp;
-	*memavailp += PAGE_SIZE;
+	if (memavailp) {
+		ptablep = (pte_t *)*memavailp;
+		*memavailp += PAGE_SIZE;
+	}
+	else
+		ptablep = (pte_t *)__get_free_page(GFP_KERNEL);
 
 	nocache_page ((unsigned long)ptablep);
 
@@ -318,10 +322,9 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	 * tables and thus modify availmem.
 	 */
 
-	for (chunk = 0; chunk < boot_info.num_memory; chunk++) {
-		mem_avail = map_chunk (boot_info.memory[chunk].addr,
-				       boot_info.memory[chunk].size,
-				       &availmem);
+	for (chunk = 0; chunk < m68k_num_memory; chunk++) {
+		mem_avail = map_chunk (m68k_memory[chunk].addr,
+				       m68k_memory[chunk].size, &availmem);
 
 	}
 	flush_tlb_all();
@@ -374,17 +377,17 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 #endif
 
 	if (CPU_IS_040_OR_060)
-		asm __volatile__ ("movel %0,%/d0\n\t"
-				  ".long 0x4e7b0806" /* movec d0,urp */
+		asm __volatile__ (".chip 68040\n\t"
+				  "movec %0,%%urp\n\t"
+				  ".chip 68k"
 				  : /* no outputs */
-				  : "g" (task[0]->tss.crp[1])
-				  : "d0");
+				  : "r" (task[0]->tss.crp[1]));
 	else
-		asm __volatile__ ("movel %0,%/a0\n\t"
-				  ".long 0xf0104c00" /* pmove %/a0@,%/crp */
+		asm __volatile__ (".chip 68030\n\t"
+				  "pmove %0,%%crp\n\t"
+				  ".chip 68k"
 				  : /* no outputs */
-				  : "g" (task[0]->tss.crp)
-				  : "a0");
+				  : "m" (task[0]->tss.crp[0]));
 #ifdef DEBUG
 	printk ("set crp\n");
 #endif
@@ -410,7 +413,7 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 
 	end_mem &= PAGE_MASK;
 	high_memory = (void *) end_mem;
-	max_mapnr = MAP_NR(end_mem);
+	max_mapnr = num_physpages = MAP_NR(end_mem);
 
 	start_mem = PAGE_ALIGN(start_mem);
 	while (start_mem < end_mem) {

@@ -943,6 +943,7 @@ struct sk_buff *skb;
 struct device *dev = port_info[port_no].dev;
 int size;
 unsigned long flags;
+struct ethhdr *eth;
 	
 	if (port_info[port_no].state == Disabled) {
 		printk(KERN_DEBUG "send_config_bpdu: port %i not valid\n",port_no);
@@ -953,34 +954,34 @@ unsigned long flags;
 	/*
 	 * create and send the message
 	 */
-	size = sizeof(Config_bpdu) + dev->hard_header_len;
+	size = dev->hard_header_len + sizeof(Config_bpdu);
 	skb = alloc_skb(size, GFP_ATOMIC);
 	if (skb == NULL) {
 		printk(KERN_DEBUG "send_config_bpdu: no skb available\n");
 		return(-1);
 		}
 	skb->dev = dev;
-	skb->free = 1;
-	skb->h.eth = (struct ethhdr *)skb_put(skb, size);
-	memcpy(skb->h.eth->h_dest, bridge_ula, ETH_ALEN);
-	memcpy(skb->h.eth->h_source, dev->dev_addr, ETH_ALEN);
+	skb->mac.raw = skb->h.raw = skb_put(skb, size);
+	eth = skb->mac.ethernet;
+	memcpy(eth->h_dest, bridge_ula, ETH_ALEN);
+	memcpy(eth->h_source, dev->dev_addr, ETH_ALEN);
 	if (br_stats.flags & BR_DEBUG)
 		printk("port %i src %02x:%02x:%02x:%02x:%02x:%02x\
 			dest %02x:%02x:%02x:%02x:%02x:%02x\n", 
 			port_no,
-			skb->h.eth->h_source[0],
-			skb->h.eth->h_source[1],
-			skb->h.eth->h_source[2],
-			skb->h.eth->h_source[3],
-			skb->h.eth->h_source[4],
-			skb->h.eth->h_source[5],
-			skb->h.eth->h_dest[0],
-			skb->h.eth->h_dest[1],
-			skb->h.eth->h_dest[2],
-			skb->h.eth->h_dest[3],
-			skb->h.eth->h_dest[4],
-			skb->h.eth->h_dest[5]);
-	skb->h.eth->h_proto = htons(0x8038);
+			eth->h_source[0],
+			eth->h_source[1],
+			eth->h_source[2],
+			eth->h_source[3],
+			eth->h_source[4],
+			eth->h_source[5],
+			eth->h_dest[0],
+			eth->h_dest[1],
+			eth->h_dest[2],
+			eth->h_dest[3],
+			eth->h_dest[4],
+			eth->h_dest[5]);
+	eth->h_proto = htons(0x8038);
 
 	skb->h.raw += skb->dev->hard_header_len;
 	memcpy(skb->h.raw, config_bpdu, sizeof(Config_bpdu));
@@ -988,7 +989,6 @@ unsigned long flags;
 	/* won't get bridged again... */
 	skb->pkt_bridged = IS_BRIDGED;
 	skb->arp = 1;	/* do not resolve... */
-	skb->h.raw = skb->data + ETH_HLEN;
 	save_flags(flags);
 	cli();
 	skb_queue_tail(dev->buffs, skb);
@@ -1002,6 +1002,7 @@ struct sk_buff *skb;
 struct device *dev = port_info[port_no].dev;
 int size;
 unsigned long flags;
+struct ethhdr *eth;
 	
 	if (port_info[port_no].state == Disabled) {
 		printk(KERN_DEBUG "send_tcn_bpdu: port %i not valid\n",port_no);
@@ -1016,27 +1017,27 @@ unsigned long flags;
 		return(-1);
 		}
 	skb->dev = dev;
-	skb->free = 1;
-	skb->h.eth = (struct ethhdr *)skb_put(skb,size);
-	memcpy(skb->h.eth->h_dest, bridge_ula, ETH_ALEN);
-	memcpy(skb->h.eth->h_source, dev->dev_addr, ETH_ALEN);
+	skb->mac.raw = skb->h.raw = skb_put(skb,size);
+	eth = skb->mac.ethernet;
+	memcpy(eth->h_dest, bridge_ula, ETH_ALEN);
+	memcpy(eth->h_source, dev->dev_addr, ETH_ALEN);
 	if (br_stats.flags & BR_DEBUG)
 		printk("port %i src %02x:%02x:%02x:%02x:%02x:%02x\
 			dest %02x:%02x:%02x:%02x:%02x:%02x\n", 
 			port_no,
-			skb->h.eth->h_source[0],
-			skb->h.eth->h_source[1],
-			skb->h.eth->h_source[2],
-			skb->h.eth->h_source[3],
-			skb->h.eth->h_source[4],
-			skb->h.eth->h_source[5],
-			skb->h.eth->h_dest[0],
-			skb->h.eth->h_dest[1],
-			skb->h.eth->h_dest[2],
-			skb->h.eth->h_dest[3],
-			skb->h.eth->h_dest[4],
-			skb->h.eth->h_dest[5]);
-	skb->h.eth->h_proto = htons(0x8038);
+			eth->h_source[0],
+			eth->h_source[1],
+			eth->h_source[2],
+			eth->h_source[3],
+			eth->h_source[4],
+			eth->h_source[5],
+			eth->h_dest[0],
+			eth->h_dest[1],
+			eth->h_dest[2],
+			eth->h_dest[3],
+			eth->h_dest[4],
+			eth->h_dest[5]);
+	eth->h_proto = htons(0x8038);
 
 	skb->h.raw += skb->dev->hard_header_len;
 	memcpy(skb->h.raw, bpdu, sizeof(Tcn_bpdu));
@@ -1044,7 +1045,6 @@ unsigned long flags;
 	/* mark that we've been here... */
 	skb->pkt_bridged = IS_BRIDGED;
 	skb->arp = 1;	/* do not resolve... */
-	skb->h.raw = skb->data + ETH_HLEN;
 	save_flags(flags);
 	cli();
 	skb_queue_tail(dev->buffs, skb);
@@ -1120,6 +1120,7 @@ static int br_device_event(struct notifier_block *unused, unsigned long event, v
 int br_receive_frame(struct sk_buff *skb)	/* 3.5 */
 {
 	int port;
+	struct ethhdr *eth;
 	
 	if (br_stats.flags & BR_DEBUG)
 		printk("br_receive_frame: ");
@@ -1139,22 +1140,23 @@ int br_receive_frame(struct sk_buff *skb)	/* 3.5 */
 	
 	skb->arp = 1;		/* Received frame so it is resolved */
 	skb->h.raw = skb->mac.raw;
+	eth = skb->mac.ethernet;
 	if (br_stats.flags & BR_DEBUG)
 		printk("port %i src %02x:%02x:%02x:%02x:%02x:%02x\
 			dest %02x:%02x:%02x:%02x:%02x:%02x\n", 
 			port,
-			skb->h.eth->h_source[0],
-			skb->h.eth->h_source[1],
-			skb->h.eth->h_source[2],
-			skb->h.eth->h_source[3],
-			skb->h.eth->h_source[4],
-			skb->h.eth->h_source[5],
-			skb->h.eth->h_dest[0],
-			skb->h.eth->h_dest[1],
-			skb->h.eth->h_dest[2],
-			skb->h.eth->h_dest[3],
-			skb->h.eth->h_dest[4],
-			skb->h.eth->h_dest[5]);
+			eth->h_source[0],
+			eth->h_source[1],
+			eth->h_source[2],
+			eth->h_source[3],
+			eth->h_source[4],
+			eth->h_source[5],
+			eth->h_dest[0],
+			eth->h_dest[1],
+			eth->h_dest[2],
+			eth->h_dest[3],
+			eth->h_dest[4],
+			eth->h_dest[5]);
 
 	if (!port) {
 		if(br_stats.flags&BR_DEBUG)
@@ -1169,7 +1171,7 @@ int br_receive_frame(struct sk_buff *skb)	/* 3.5 */
 			/* fall through */
 		case Listening:
 			/* process BPDUs */
-			if (memcmp(skb->h.eth->h_dest, bridge_ula, 6) == 0) {
+			if (memcmp(eth->h_dest, bridge_ula, 6) == 0) {
 				br_bpdu(skb);
 				return(1); /* br_bpdu consumes skb */
 			}
@@ -1186,7 +1188,7 @@ int br_receive_frame(struct sk_buff *skb)	/* 3.5 */
 		case Forwarding:
 			(void) br_learn(skb, port);	/* 3.8 */
 			/* process BPDUs */
-			if (memcmp(skb->h.eth->h_dest, bridge_ula, 
+			if (memcmp(eth->h_dest, bridge_ula, 
 					ETH_ALEN) == 0) 
 			{
 				/*printk("frame bpdu processor for me!!!\n");*/
@@ -1194,7 +1196,7 @@ int br_receive_frame(struct sk_buff *skb)	/* 3.5 */
 				return(1); /* br_bpdu consumes skb */
 			}
 			/* is frame for me? */	
-			if (memcmp(skb->h.eth->h_dest, 
+			if (memcmp(eth->h_dest, 
 					port_info[port].dev->dev_addr, 
 					ETH_ALEN) == 0) 
 			{
@@ -1227,6 +1229,7 @@ int br_receive_frame(struct sk_buff *skb)	/* 3.5 */
 int br_tx_frame(struct sk_buff *skb)	/* 3.5 */
 {
 	int port;
+	struct ethhdr *eth;
 	
 	/* sanity */
 	if (!skb) 
@@ -1250,24 +1253,25 @@ int br_tx_frame(struct sk_buff *skb)	/* 3.5 */
 	if (! find_port(skb->dev))
 		return(0);
 
-	skb->h.raw = skb->data;
+	skb->mac.raw = skb->h.raw = skb->data;
+	eth = skb->mac.ethernet;
 	port = 0;	/* an impossible port */	
 	if (br_stats.flags & BR_DEBUG)
 		printk("br_tx_fr : port %i src %02x:%02x:%02x:%02x:%02x:%02x\
 	  		dest %02x:%02x:%02x:%02x:%02x:%02x\n", 
 			port,
-			skb->h.eth->h_source[0],
-			skb->h.eth->h_source[1],
-			skb->h.eth->h_source[2],
-			skb->h.eth->h_source[3],
-			skb->h.eth->h_source[4],
-			skb->h.eth->h_source[5],
-			skb->h.eth->h_dest[0],
-			skb->h.eth->h_dest[1],
-			skb->h.eth->h_dest[2],
-			skb->h.eth->h_dest[3],
-			skb->h.eth->h_dest[4],
-			skb->h.eth->h_dest[5]);
+			eth->h_source[0],
+			eth->h_source[1],
+			eth->h_source[2],
+			eth->h_source[3],
+			eth->h_source[4],
+			eth->h_source[5],
+			eth->h_dest[0],
+			eth->h_dest[1],
+			eth->h_dest[2],
+			eth->h_dest[3],
+			eth->h_dest[4],
+			eth->h_dest[5]);
 	return(br_forward(skb, port));
 }
 
@@ -1291,7 +1295,7 @@ int br_learn(struct sk_buff *skb, int port)	/* 3.8 */
 		case Learning:
 		case Forwarding:
 			/* don't keep group addresses in the tree */
-			if (skb->h.eth->h_source[0] & 0x01)
+			if (skb->mac.ethernet->h_source[0] & 0x01)
 				return(-1);
 			
 			f = (struct fdb *)kmalloc(sizeof(struct fdb), 
@@ -1302,7 +1306,7 @@ int br_learn(struct sk_buff *skb, int port)	/* 3.8 */
 				return(-1);
 			}
 			f->port = port;	/* source port */
-			memcpy(f->ula, skb->h.eth->h_source, 6);
+			memcpy(f->ula, skb->mac.ethernet->h_source, 6);
 			f->timer = CURRENT_TIME;
 			f->flags = FDB_ENT_VALID;
 			/*
@@ -1362,7 +1366,7 @@ int br_forward(struct sk_buff *skb, int port)	/* 3.7 */
 	 * Multicast frames will also need to be seen
 	 * by our upper layers.
 	 */	
-	if (skb->h.eth->h_dest[0] & 0x01) 
+	if (skb->mac.ethernet->h_dest[0] & 0x01) 
 	{
 		/* group address */
 		br_flood(skb, port);
@@ -1376,7 +1380,7 @@ int br_forward(struct sk_buff *skb, int port)	/* 3.7 */
 		return(0);
 	} else {
 		/* locate port to forward to */
-		f = br_avl_find_addr(skb->h.eth->h_dest);
+		f = br_avl_find_addr(skb->mac.ethernet->h_dest);
 		/*
 		 *	Send flood and drop.
 		 */
@@ -1416,7 +1420,8 @@ int br_forward(struct sk_buff *skb, int port)	/* 3.7 */
 			/*
 			 *	We send this still locked
 			 */
-			dev_queue_xmit(skb, skb->dev,1);
+			skb->priority = 1;
+			dev_queue_xmit(skb);
 			return(1);	/* skb has been consumed */
 		} else {
 			/*
@@ -1457,7 +1462,8 @@ int br_flood(struct sk_buff *skb, int port)
 			
 /*			printk("Flood to port %d\n",i);*/
 			nskb->h.raw = nskb->data + ETH_HLEN;
-			dev_queue_xmit(nskb,nskb->dev,1);
+			nskb->priority = 1;
+			dev_queue_xmit(nskb);
 		}
 	}
 	return(0);

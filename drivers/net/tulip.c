@@ -12,13 +12,16 @@
 	The author may be reached as becker@CESDIS.gsfc.nasa.gov, or C/O
 	Center of Excellence in Space Data and Information Sciences
 	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
+
+	Subscribe to linux-tulip@cesdis.gsfc.nasa.gov and linux-tulip-bugs@cesdis.gsfc.nasa.gov
+	for late breaking news and exciting develovements.
 */
 
 static char *version =
 "tulip.c:v0.10 8/11/95 becker@cesdis.gsfc.nasa.gov\n"
 "        +0.72 4/17/96 "
 "http://www.dsl.tutics.tut.ac.jp/~linux/tulip\n"
-"        +0.01 10/24/96 mjacob@feral.com (2.1.7)\n";
+"        +0.02 12/15/96 mjacob@feral.com (2.0.27)\n";
 
 /* A few user-configurable values. */
 
@@ -402,6 +405,8 @@ static struct {
 		 0x0000f400, PCI_DEVICE_ID_DEC_TULIP_FAST, "LA100PCI", 0},
 	{cogent21140_select, generic21140_fail,
 		 0x00009200, PCI_DEVICE_ID_DEC_TULIP_FAST, "cogent_em110", 0},
+	{generic21040_select, generic21040_fail,
+		0x00009200, PCI_DEVICE_ID_DEC_TULIP, "cogent_em96x", 1},
 	{generic21140_select, generic21140_fail,
 		 0x0000f800, PCI_DEVICE_ID_DEC_TULIP_FAST, "DE500", 0},
 	{generic21041_select, generic21041_fail,
@@ -681,6 +686,7 @@ tulip_open(struct device *dev)
 {
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	int ioaddr = dev->base_addr;
+	int i;
 
 	/* Reset the chip, holding bit 0 set at least 10 PCI cycles. */
 	tio_write(tio_read(CSR0)|TBMOD_RESET, CSR0);
@@ -717,7 +723,7 @@ tulip_open(struct device *dev)
 		tp->tx_ring[0].buffer1 = virt_to_bus(tp->setup_frame);
 		tp->tx_ring[0].buffer2 = 0;
 		tp->tx_ring[0].status = TRING_OWN;
-
+		barrier();
 		tp->cur_tx++, tp->dirty_tx++;
 	}
 
@@ -727,16 +733,38 @@ tulip_open(struct device *dev)
 	dev->tbusy = 0;
 	dev->interrupt = 0;
 	dev->start = 1;
-
-	if (tp->port_select) tp->port_select(dev);
-
+	/*
+	 * process setup frame completely prior to fiddling with media.
+	 */
+	tio_write((tio_read(CSR6) & ~TCMOD_PROMISC) | TCMOD_TxSTART, CSR6);
+	tio_write(TPOLL_TRIGGER, CSR1);
+	sti();
+	for (i = 0; i < 1000; i++) {
+		if (tp->tx_ring[0].status >= 0) {
+			break;
+		}
+		udelay(1000);
+	}
+	if (i == 500) {
+		printk("%s: initial setup frame didn't complete.\n", dev->name);
+		dev->start = 0;
+		dev->tbusy = 1;
+		tio_write(TINTR_DISABLE, CSR7);
+		tio_write(tio_read(CSR6) & ~(TCMOD_TRxSTART), CSR6);
+		tio_write(TSIAC_CONFIG, CSR13);
+		tio_write(0, CSR13);
+		free_irq(dev->irq, dev);
+		return (-EIO);
+	}
+	/*
+	 * Whack the chip to stop it and *then* do initial media setup.
+	 */
+	tio_write((tio_read(CSR6) & ~(TCMOD_PROMISC|TCMOD_TxSTART)), CSR6);
+	if (tp->port_select)
+		tp->port_select(dev);
 	/* Start the chip's Tx and Rx processes. */
 	tio_write(tio_read(CSR6) | TCMOD_TRxSTART
 			  | (tp->full_duplex ? TCMOD_FULLDUPLEX:0), CSR6);
-
-	/* Trigger an immediate transmit demand to process the setup frame. */
-	tio_write(TPOLL_TRIGGER, CSR1);
-
 	/* Enable interrupts by setting the interrupt mask. */
 	tio_write(TINTR_ENABLE, CSR7);
 
@@ -777,7 +805,8 @@ tulip_start_xmit(struct sk_buff *skb, struct device *dev)
 {
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	int ioaddr = dev->base_addr;
-	int entry;
+	int entry, len;
+	unsigned long daddr;
 
 	/* Transmitter timeout, serious problems. */
 	if (dev->tbusy || (tp->port_fail && tp->port_fail(dev))) {
@@ -820,7 +849,7 @@ tulip_start_xmit(struct sk_buff *skb, struct device *dev)
 		return(0);
 	}
 
-	if (skb == NULL || skb->len <= 0) {
+	if (skb == NULL || (skb != (struct sk_buff *) -1 && skb->len <= 0)) {
 		printk("%s: Obsolete driver layer request made: skbuff==NULL.\n",
 			   dev->name);
 		dev_tint(dev);
@@ -842,12 +871,24 @@ tulip_start_xmit(struct sk_buff *skb, struct device *dev)
 	entry = tp->cur_tx % TX_RING_SIZE;
 
 	tp->tx_full = 1;
+	/*
+	 * If skb is == -1, then this is a funky setup_frame redo.
+	 */
+	if (skb == (struct sk_buff *) -1) {
+		daddr = virt_to_bus((char *)tp->setup_frame);
+		len = 192;
+		skb = NULL;
+	} else {
+		daddr = virt_to_bus(skb->data);
+		len = skb->len;
+	}
 	tp->tx_skbuff[entry] = skb;
-	tp->tx_ring[entry].length = skb->len |
+	tp->tx_ring[entry].length = len |
 		(entry == TX_RING_SIZE-1 ? 0xe2000000 : 0xe0000000);
-	tp->tx_ring[entry].buffer1 = virt_to_bus(skb->data);
+	tp->tx_ring[entry].buffer1 = daddr;
 	tp->tx_ring[entry].buffer2 = 0;
 	tp->tx_ring[entry].status = TRING_OWN;	/* Pass ownership to the chip. */
+	barrier();
 
 	tp->cur_tx++;
 
@@ -920,7 +961,8 @@ static void tulip_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 				}
 
 				/* Free the original skb. */
-				dev_kfree_skb(lp->tx_skbuff[entry], FREE_WRITE);
+				if (lp->tx_skbuff[entry] != NULL)
+					dev_kfree_skb(lp->tx_skbuff[entry], FREE_WRITE);
 				dirty_tx++;
 			}
 
@@ -1138,28 +1180,8 @@ static void set_multicast_list(struct device *dev)
 			*setup_frm++ = eaddrs[2];
 		} while (++i < 15);
 
-#ifndef	__alpha__
 		/* Now add this frame to the Tx list. */
-		{
-			unsigned long flags;
-			unsigned int entry;
-			
-			save_flags(flags); cli();
-			entry = tp->cur_tx++ % TX_RING_SIZE;
-			tp->dirty_tx++;
-			restore_flags(flags);
-
-			tp->tx_skbuff[entry] = 0;
-			/* Put the setup frame on the Tx list. */
-			tp->tx_ring[entry].length = 192 |
-			      (entry == TX_RING_SIZE-1 ? 0x0a000000 : 0x08000000);
-			tp->tx_ring[entry].buffer1 = virt_to_bus((char *)tp->setup_frame);
-			tp->tx_ring[entry].buffer2 = 0;
-			tp->tx_ring[entry].status = TRING_OWN;
-			/* Trigger an immediate transmit demand. */
-			tio_write(TPOLL_TRIGGER, CSR1);
-		}
-#endif
+		tulip_start_xmit((struct sk_buff *) -1, dev);
 	}
 }
 
@@ -1299,7 +1321,7 @@ int tulip_probe(struct device *dev)
 	static struct device *tulip_head=NULL;
 	u_char pci_bus, pci_device_fn, pci_latency, pci_irq;
 	u_int pci_ioaddr;
-	u_short pci_command;
+	u_short pci_command, vendor_id, device_id;
 	u_int pci_chips[] = {
 		PCI_DEVICE_ID_DEC_TULIP,
 		PCI_DEVICE_ID_DEC_TULIP_FAST,
@@ -1307,67 +1329,83 @@ int tulip_probe(struct device *dev)
 		PCI_DEVICE_ID_NONE
 	};
 	int num=0, cno;
-	int pci_index;
+	static int pci_index = 0;
 
     if (!pcibios_present()) return(-ENODEV);
 
-	for (pci_index = 0; pci_index < 0xff; pci_index++) {
-		/* Search for the PCI_DEVICE_ID_DEV_TULIP* chips */
-		for (cno = 0; pci_chips[cno] != PCI_DEVICE_ID_NONE; cno++) {
-			if (pcibios_find_device(PCI_VENDOR_ID_DEC,
-									pci_chips[cno],
-									pci_index, &pci_bus,
-									&pci_device_fn) == 0) {
+	for (; pci_index < 0xff; pci_index++) {
+		if (pcibios_find_class(PCI_CLASS_NETWORK_ETHERNET << 8, pci_index,
+							   &pci_bus, &pci_device_fn) != PCIBIOS_SUCCESSFUL)
+				break;
 
-				/* get IO address */
-				pcibios_read_config_dword(pci_bus, pci_device_fn,
-										  PCI_BASE_ADDRESS_0,
-										  &pci_ioaddr);
-				/* Remove I/O space marker in bit 0. */
-				pci_ioaddr &= ~3;
-				/* get IRQ */
-				pcibios_read_config_byte(pci_bus, pci_device_fn, PCI_INTERRUPT_LINE, &pci_irq);
-				dev = init_etherdev(NULL, 
-					ROUND_UP(sizeof(struct device) +
-						sizeof (struct tulip_private) +
-						ETHNAMSIZ, 8));
+		/* get vendor id */
+		pcibios_read_config_word(pci_bus, pci_device_fn, PCI_VENDOR_ID,
+								 &vendor_id);
+		/* get IRQ */
+		pcibios_read_config_byte(pci_bus, pci_device_fn, PCI_INTERRUPT_LINE,
+								 &pci_irq);
 
-				if (dev == NULL) break;
-				if (!tulip_head) {
-					printk(version);
-					tulip_head = dev;
-				}
+		/* get device id */
+		pcibios_read_config_word(pci_bus, pci_device_fn, PCI_DEVICE_ID,
+								 &device_id);
 
-				/* Get and check the bus-master and latency values. */
-				pcibios_read_config_word(pci_bus, pci_device_fn,
-										 PCI_COMMAND, &pci_command);
-				if ( ! (pci_command & PCI_COMMAND_MASTER)) {
-					printk("  PCI Master Bit has not been set!"
-						   " Setting...\n");
-					pci_command |= PCI_COMMAND_MASTER;
-					pcibios_write_config_word(pci_bus, pci_device_fn,
-											  PCI_COMMAND, pci_command);
-				}
-				pcibios_read_config_byte(pci_bus, pci_device_fn,
-										 PCI_LATENCY_TIMER,
-										 &pci_latency);
-				if (pci_latency < 10) {
-					printk("  PCI latency timer (CFLT) is"
-						   " unreasonably low at %d."
-						   "  Setting to 100 clocks.\n", pci_latency);
-					pcibios_write_config_byte(pci_bus, pci_device_fn,
-											  PCI_LATENCY_TIMER, 100);
-				}
-				if (tulip_hwinit(dev, pci_ioaddr, pci_irq,
-								 pci_chips[cno]) < 0) {
-					continue;
-				}
-				num++;
-#ifdef	TULIP_MAX_CARDS
-				if (num >= TULIP_MAX_CARDS) return(0);
-#endif
+		/* get IO address */
+		pcibios_read_config_dword(pci_bus, pci_device_fn, PCI_BASE_ADDRESS_0,
+								  &pci_ioaddr);
+
+		/* Remove I/O space marker in bit 0. */
+		pci_ioaddr &= ~3;
+		if (vendor_id != PCI_VENDOR_ID_DEC)
+				continue;
+
+		for (cno = 0; pci_chips[cno] != PCI_DEVICE_ID_NONE; cno++)
+				if (device_id == pci_chips[cno])
+						break;
+		if (pci_chips[cno] == PCI_DEVICE_ID_NONE) {
+			printk("Unknown Digital PCI ethernet chip type %4.4x detected:"
+				   " not configured.\n", device_id);
+			continue;
 		}
-	}
+		dev = init_etherdev(NULL, ROUND_UP(sizeof(struct device) +
+										   sizeof (struct tulip_private) +
+										   ETHNAMSIZ, 8));
+		if (dev == NULL)
+				break;
+
+		if (!tulip_head) {
+			printk(version);
+			tulip_head = dev;
+		}
+
+		/* Get and check the bus-master and latency values. */
+		pcibios_read_config_word(pci_bus, pci_device_fn, PCI_COMMAND,
+								 &pci_command);
+		if ((pci_command & PCI_COMMAND_MASTER) == 0) {
+			printk("  PCI Master Bit has not been set!"
+				   " Setting...\n");
+			pci_command |= PCI_COMMAND_MASTER;
+			pcibios_write_config_word(pci_bus, pci_device_fn, PCI_COMMAND,
+									  pci_command);
+		}
+
+		pcibios_read_config_byte(pci_bus, pci_device_fn, PCI_LATENCY_TIMER,
+								 &pci_latency);
+		
+		if (pci_latency < 10) {
+			printk("  PCI latency timer (CFLT) is"
+				   " unreasonably low at %d."
+				   "  Setting to 100 clocks.\n", pci_latency);
+			pcibios_write_config_byte(pci_bus, pci_device_fn,
+									  PCI_LATENCY_TIMER, 100);
+		}
+
+		if (tulip_hwinit(dev, pci_ioaddr, pci_irq, pci_chips[cno]) < 0) {
+			continue;
+		}
+		num++;
+#ifdef	TULIP_MAX_CARDS
+		if (num >= TULIP_MAX_CARDS) return(0);
+#endif
 	}
 	return(num > 0 ? 0: -ENODEV);
 }

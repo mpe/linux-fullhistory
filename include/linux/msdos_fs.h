@@ -7,6 +7,7 @@
 #include <linux/fs.h>
 #include <linux/stat.h>
 #include <linux/fd.h>
+#include <linux/config.h>
 
 #define MSDOS_ROOT_INO  1 /* == MINIX_ROOT_INO */
 #define SECTOR_SIZE     512 /* sector size (bytes) */
@@ -68,6 +69,14 @@
 #define MSDOS_DOTDOT "..         " /* "..", padded to MSDOS_NAME chars */
 
 #define MSDOS_FAT12 4078 /* maximum number of clusters in a 12 bit FAT */
+
+#ifdef CONFIG_ATARI
+#define EOF_FAT12 0xFFF		/* Atari GEMDOS fs uses a different EOF */
+#define EOF_FAT16 0xFFFF
+#else
+#define EOF_FAT12 0xFF8		/* standard EOF */
+#define EOF_FAT16 0xFFF8
+#endif
 
 /*
  * Inode flags

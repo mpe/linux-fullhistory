@@ -21,6 +21,8 @@
 ** Modified 9-Sep-96 by Geert Uytterhoeven
 **     - Rewritten option parsing
 **     - New parameter passing to linuxboot() (linuxboot_args)
+** Modified 6-Oct-96 by Geert Uytterhoeven
+**     - Updated for the new boot information structure
 **
 ** This file is subject to the terms and conditions of the GNU General Public
 ** License.  See the file COPYING in the main directory of this archive
@@ -40,7 +42,7 @@
 /* required Linux/m68k include files */
 #include <linux/a.out.h>
 #include <linux/elf.h>
-#include <asm/setup.h>
+#include <asm/amigahw.h>
 #include <asm/page.h>
 
 /* Amiga bootstrap include files */
@@ -78,7 +80,7 @@ static int Read(int fd, char *buf, int count);
 static void Close(int fd);
 static int FileSize(const char *path);
 static void Sleep(u_long micros);
-static int ModifyBootinfo(struct bootinfo *bi);
+static int ModifyBootinfo(struct amiga_bootinfo *bi);
 
 
 static void Usage(void)
@@ -91,6 +93,7 @@ static void Usage(void)
 	    "    -k, --kernel file    Use kernel image `file' (default is `vmlinux')\n"
 	    "    -r, --ramdisk file   Use ramdisk image `file'\n"
 	    "    -d, --debug          Enable debug mode\n"
+	    "    -b, --baud speed     Set the serial port speed (default is 9600)\n"
 	    "    -m, --memfile file   Use memory file `file'\n"
 	    "    -v, --keep-video     Don't reset the video mode\n"
 	    "    -t, --model id       Set the Amiga model to `id'\n\n",
@@ -103,6 +106,7 @@ int main(int argc, char *argv[])
 {
     int i;
     int debugflag = 0, keep_video = 0;
+    u_int baud = 0;
     const char *kernel_name = NULL;
     const char *ramdisk_name = NULL;
     char commandline[CL_SIZE] = "";
@@ -126,6 +130,12 @@ int main(int argc, char *argv[])
                 Usage();
 	else if (!strcmp(argv[0], "-d") || !strcmp(argv[0], "--debug"))
 	    debugflag = 1;
+	else if (!strcmp(argv[0], "-b") || !strcmp(argv[0], "--baud"))
+	    if (--argc && !baud) {
+		baud = atoi(argv[1]);
+		argv++;
+	    } else
+		Usage();
 	else if (!strcmp(argv[0], "-m") || !strcmp(argv[0], "--memfile"))
             if (--argc && !memfile_name) {
                 memfile_name = argv[1];
@@ -183,6 +193,7 @@ int main(int argc, char *argv[])
     args.debugflag = debugflag;
     args.keep_video = keep_video;
     args.reset_boards = 1;
+    args.baud = baud;
     args.puts = Puts;
     args.getchar = GetChar;
     args.putchar = PutChar;
@@ -290,7 +301,7 @@ static void Sleep(u_long micros)
 }
 
 
-static int ModifyBootinfo(struct bootinfo *bi)
+static int ModifyBootinfo(struct amiga_bootinfo *bi)
 {
    /*
     * if we have a memory file, read the memory information from it
@@ -305,7 +316,7 @@ static int ModifyBootinfo(struct bootinfo *bi)
          return(FALSE);
       }
 
-      if (fscanf(fp, "%lu", &bi->bi_amiga.chip_size) != 1) {
+      if (fscanf(fp, "%lu", &bi->chip_size) != 1) {
          fprintf(stderr, "memory file does not contain chip memory size\n");
          fclose(fp);
          return(FALSE);
@@ -327,7 +338,7 @@ static int ModifyBootinfo(struct bootinfo *bi)
     * change the Amiga model, if necessary
     */
    if (model != AMI_UNKNOWN)
-      bi->bi_amiga.model = model;
+      bi->model = model;
 
    return(TRUE);
 }

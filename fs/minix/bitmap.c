@@ -4,6 +4,11 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
+/*
+ * Modified for 680x0 by Hamish Macdonald
+ * Fixed for 680x0 by Andreas Schwab
+ */
+
 /* bitmap.c contains the code that handles the inode and block bitmaps */
 
 #include <linux/sched.h>
@@ -57,7 +62,7 @@ void minix_free_block(struct super_block * sb, int block)
 		printk("minix_free_block: nonexistent bitmap buffer\n");
 		return;
 	}
-	if (!clear_bit(bit,bh->b_data))
+	if (!minix_clear_bit(bit,bh->b_data))
 		printk("free_block (%s:%d): bit already cleared\n",
 		       kdevname(sb->s_dev), block);
 	mark_buffer_dirty(bh, 1);
@@ -77,11 +82,11 @@ repeat:
 	j = 8192;
 	for (i=0 ; i<64 ; i++)
 		if ((bh=sb->u.minix_sb.s_zmap[i]) != NULL)
-			if ((j=find_first_zero_bit(bh->b_data, 8192)) < 8192)
+			if ((j=minix_find_first_zero_bit(bh->b_data, 8192)) < 8192)
 				break;
 	if (i>=64 || !bh || j>=8192)
 		return 0;
-	if (set_bit(j,bh->b_data)) {
+	if (minix_set_bit(j,bh->b_data)) {
 		printk("new_block: bit already set");
 		goto repeat;
 	}
@@ -209,7 +214,7 @@ void minix_free_inode(struct inode * inode)
 	}
 	minix_clear_inode(inode);
 	clear_inode(inode);
-	if (!clear_bit(ino & 8191, bh->b_data))
+	if (!minix_clear_bit(ino & 8191, bh->b_data))
 		printk("free_inode: bit %lu already cleared.\n",ino);
 	mark_buffer_dirty(bh, 1);
 }
@@ -229,13 +234,13 @@ struct inode * minix_new_inode(const struct inode * dir)
 	j = 8192;
 	for (i=0 ; i<8 ; i++)
 		if ((bh = inode->i_sb->u.minix_sb.s_imap[i]) != NULL)
-			if ((j=find_first_zero_bit(bh->b_data, 8192)) < 8192)
+			if ((j=minix_find_first_zero_bit(bh->b_data, 8192)) < 8192)
 				break;
 	if (!bh || j >= 8192) {
 		iput(inode);
 		return NULL;
 	}
-	if (set_bit(j,bh->b_data)) {	/* shouldn't happen */
+	if (minix_set_bit(j,bh->b_data)) {	/* shouldn't happen */
 		printk("new_inode: bit already set");
 		iput(inode);
 		return NULL;

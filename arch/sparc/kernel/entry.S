@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.126 1996/12/10 06:06:12 davem Exp $
+/* $Id: entry.S,v 1.128 1996/12/18 06:33:39 tridge Exp $
  * arch/sparc/kernel/entry.S:  Sparc trap low-level entry points.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -29,7 +29,7 @@
 
 #define curptr      g6
 
-#define NR_SYSCALLS 255      /* Each OS is different... */
+#define NR_SYSCALLS 256      /* Each OS is different... */
 
 /* First, KGDB low level things.  This is a rewrite
  * of the routines found in the sparc-stub.c asm() statement
@@ -1326,21 +1326,47 @@ flush_patch_three:
 	call	C_LABEL(do_fork)
 	 mov	%l5, %o7
 
+        .align  4
+linux_sparc_ni_syscall:
+	sethi   %hi(C_LABEL(sys_ni_syscall)), %l7
+	b       syscall_is_too_hard
+	 or     %l7, %lo(C_LABEL(sys_ni_syscall)), %l7
+
+linux_fast_syscall:
+	andn	%l7, 3, %l7
+	mov	%i0, %o0
+	mov	%i1, %o1
+	mov 	%i2, %o2
+	jmpl	%l7 + %g0, %g0
+	 mov	%i3, %o3
+
+linux_syscall_trace:
+	call	C_LABEL(syscall_trace)
+	 nop
+	mov	%i0, %o0
+	mov	%i1, %o1
+	mov	%i2, %o2
+	mov	%i3, %o3
+	b	2f
+	 mov	%i4, %o4
+
+	.globl	C_LABEL(ret_from_syscall)
+C_LABEL(ret_from_syscall):
+	b	C_LABEL(ret_sys_call)
+	 ld	[%sp + REGWIN_SZ + PT_I0], %o0
+
 	/* Linux native and SunOS system calls enter here... */
 	.align	4
 	.globl	linux_sparc_syscall
 linux_sparc_syscall:
 	/* Direct access to user regs, must faster. */
 	cmp	%g1, NR_SYSCALLS
-	blu,a	1f
+	bgeu	linux_sparc_ni_syscall
 	 sll	%g1, 2, %l4
-
-	sethi	%hi(C_LABEL(sys_ni_syscall)), %l7
-	b	syscall_is_too_hard
-	 or	%l7, %lo(C_LABEL(sys_ni_syscall)), %l7
-
-1:
 	ld	[%l7 + %l4], %l7
+	andcc	%l7, 1, %g0
+	bne	linux_fast_syscall
+	 /* Just do first insn from SAVE_ALL in the delay slot */
 
 	.globl	syscall_is_too_hard
 syscall_is_too_hard:
@@ -1349,23 +1375,17 @@ syscall_is_too_hard:
 	ENTER_SYSCALL
 
 	wr	%l0, PSR_ET, %psr
-	WRITE_PAUSE
-
-	ld	[%curptr + 0x14], %l5
-	andcc	%l5, 0x20, %g0
-	be,a	2f
-	 mov	%i0, %o0
-
-	call	C_LABEL(syscall_trace)
-	 nop
-
 	mov	%i0, %o0
-2:
 	mov	%i1, %o1
 	mov	%i2, %o2
-	mov	%i0, %l5
+
+	ld	[%curptr + 0x14], %l5
 	mov	%i3, %o3
+	andcc	%l5, 0x20, %g0
 	mov	%i4, %o4
+	bne	linux_syscall_trace
+	 mov	%i0, %l5
+2:
 	call	%l7
 	 mov	%i5, %o5
 
@@ -1373,18 +1393,23 @@ syscall_is_too_hard:
 
 	.globl	C_LABEL(ret_sys_call)
 C_LABEL(ret_sys_call):
-	ld	[%sp + REGWIN_SZ + PT_I0], %o0
-	set	PSR_C, %g2
+	ld	[%curptr + 0x14], %l6
 	cmp	%o0, -ENOIOCTLCMD
+	ld	[%sp + REGWIN_SZ + PT_PSR], %g3
+	set	PSR_C, %g2
 	bgeu	1f
-	 ld	[%sp + REGWIN_SZ + PT_PSR], %g3
+	 andcc	%l6, 0x20, %l6	
 
 	/* System call success, clear Carry condition code. */
 	andn	%g3, %g2, %g3
 	clr	%l6
-	b	2f
-	 st	%g3, [%sp + REGWIN_SZ + PT_PSR]	
-
+	st	%g3, [%sp + REGWIN_SZ + PT_PSR]	
+	bne	linux_syscall_trace2
+	 ld	[%sp + REGWIN_SZ + PT_NPC], %l1 /* pc = npc */
+	add	%l1, 0x4, %l2			/* npc = npc+4 */
+	st	%l1, [%sp + REGWIN_SZ + PT_PC]
+	b	ret_trap_entry
+	 st	%l2, [%sp + REGWIN_SZ + PT_NPC]
 1:
 	/* System call failure, set Carry condition code.
 	 * Also, get abs(errno) to return to the process.
@@ -1394,23 +1419,20 @@ C_LABEL(ret_sys_call):
 	st	%o0, [%sp + REGWIN_SZ + PT_I0]
 	mov	1, %l6
 	st	%g3, [%sp + REGWIN_SZ + PT_PSR]
-
-2:
-	ld	[%curptr + 0x14], %g2
-	andcc	%g2, 0x20, %g0
-	be,a	3f
+	bne	linux_syscall_trace2
 	 ld	[%sp + REGWIN_SZ + PT_NPC], %l1 /* pc = npc */
-
-	call	C_LABEL(syscall_trace)
-	 nop
-
-	/* Advance the pc and npc over the trap instruction. */
-	ld	[%sp + REGWIN_SZ + PT_NPC], %l1 /* pc = npc */
-3:
 	add	%l1, 0x4, %l2			/* npc = npc+4 */
 	st	%l1, [%sp + REGWIN_SZ + PT_PC]
 	b	ret_trap_entry
 	 st	%l2, [%sp + REGWIN_SZ + PT_NPC]
+
+linux_syscall_trace2:
+	call	C_LABEL(syscall_trace)
+	 add	%l1, 0x4, %l2			/* npc = npc+4 */
+	st	%l1, [%sp + REGWIN_SZ + PT_PC]
+	b	ret_trap_entry
+	 st	%l2, [%sp + REGWIN_SZ + PT_NPC]
+
 
 	/*
 	 * Solaris system calls and indirect system calls enter here.
@@ -1443,16 +1465,9 @@ solaris_syscall:
 	ENTER_SYSCALL
 
 	wr	%l0, PSR_ET, %psr
-	WRITE_PAUSE
-
-2:
-	mov	%i0, %o0
-	mov	%i1, %o1
-	mov	%i2, %o2
+	nop
+	nop
 	mov	%i0, %l5
-	mov	%i3, %o3
-	mov	%i4, %o4
-	mov	%i5, %o5
 
 	call	C_LABEL(do_solaris_syscall)
 	 add	%sp, REGWIN_SZ, %o0
