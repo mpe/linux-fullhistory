@@ -24,9 +24,11 @@ static int scan      = 0;
 static int verbose   = 0;
 static int i2c_debug = 0;
 
+#if LINUX_VERSION_CODE >= 0x020117
 MODULE_PARM(scan,"i");
 MODULE_PARM(verbose,"i");
 MODULE_PARM(i2c_debug,"i");
+#endif
 
 /* ----------------------------------------------------------------------- */
 
@@ -34,8 +36,10 @@ static struct i2c_bus    *busses[I2C_BUS_MAX];
 static struct i2c_driver *drivers[I2C_DRIVER_MAX];
 static int bus_count = 0, driver_count = 0;
 
+#ifdef CONFIG_VIDEO_BT848
 extern int i2c_tuner_init(void);
 extern int msp3400c_init(void);
+#endif
 
 int i2c_init(void)
 {
@@ -53,10 +57,10 @@ int i2c_init(void)
 
 static void i2c_attach_device(struct i2c_bus *bus, struct i2c_driver *driver)
 {
-	unsigned long flags;
 	struct i2c_device *device;
 	int i,j,ack=1;
 	unsigned char addr;
+	LOCK_FLAGS;
     
 	/* probe for device */
 	LOCK_I2C_BUS(bus);
@@ -148,8 +152,8 @@ static void i2c_detach_device(struct i2c_device *device)
 
 int i2c_register_bus(struct i2c_bus *bus)
 {
-	unsigned long flags;
 	int i,ack;
+	LOCK_FLAGS;
 
 	memset(bus->devices,0,sizeof(bus->devices));
 	bus->devcount = 0;
@@ -410,6 +414,7 @@ int i2c_write(struct i2c_bus *bus, unsigned char addr,
 
 #ifdef MODULE
 
+#if LINUX_VERSION_CODE >= 0x020100
 EXPORT_SYMBOL(i2c_register_bus);
 EXPORT_SYMBOL(i2c_unregister_bus);
 EXPORT_SYMBOL(i2c_register_driver);
@@ -424,7 +429,7 @@ EXPORT_SYMBOL(i2c_sendbyte);
 EXPORT_SYMBOL(i2c_readbyte);
 EXPORT_SYMBOL(i2c_read);
 EXPORT_SYMBOL(i2c_write);
-
+#endif
 
 int init_module(void)
 {

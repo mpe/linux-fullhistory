@@ -141,6 +141,7 @@ struct hd_geometry {
 #define HDIO_SET_PIO_MODE	0x0327	/* reconfig interface to new speed */
 #define HDIO_SCAN_HWIF		0x0328	/* register and (re)scan interface */
 #define HDIO_SET_NICE		0x0329	/* set nice flags */
+#define HDIO_UNREGISTER_HWIF	0x032a  /* unregister interface */
 
 /* structure returned by HDIO_GET_IDENTITY, as per ANSI ATA2 rev.2f spec */
 struct hd_driveid {

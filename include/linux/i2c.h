@@ -6,7 +6,7 @@
  * There are:
  *
  *     i2c          the basic control module        (like scsi_mod)
- *     bus driver   a driver with a i2c bus         (host adapter driver)
+ *     bus driver   a driver with a i2c bus         (hostadapter driver)
  *     chip driver  a driver for a chip connected
  *                  to a i2c bus                    (cdrom/hd driver)
  *
@@ -87,8 +87,21 @@ struct i2c_driver
 
 /* needed: unsigned long flags */
 
-#define LOCK_I2C_BUS(bus)    spin_lock_irqsave(&(bus->bus_lock),flags);
-#define UNLOCK_I2C_BUS(bus)  spin_unlock_irqrestore(&(bus->bus_lock),flags);
+#if LINUX_VERSION_CODE >= 0x020100
+# if 0
+#  define LOCK_FLAGS unsigned long flags;
+#  define LOCK_I2C_BUS(bus)    spin_lock_irqsave(&(bus->bus_lock),flags);
+#  define UNLOCK_I2C_BUS(bus)  spin_unlock_irqrestore(&(bus->bus_lock),flags);
+# else
+#  define LOCK_FLAGS
+#  define LOCK_I2C_BUS(bus)    spin_lock(&(bus->bus_lock));
+#  define UNLOCK_I2C_BUS(bus)  spin_unlock(&(bus->bus_lock));
+# endif
+#else
+# define LOCK_FLAGS unsigned long flags;
+# define LOCK_I2C_BUS(bus)    { save_flags(flags); cli(); }
+# define UNLOCK_I2C_BUS(bus)  { restore_flags(flags);     }
+#endif
 
 struct i2c_bus 
 {
@@ -96,7 +109,9 @@ struct i2c_bus
 	int   id;
 	void  *data;            /* free for use by the bus driver */
 
+#if LINUX_VERSION_CODE >= 0x020100
 	spinlock_t bus_lock;
+#endif
 
 	/* attach/detach inform callbacks */
 	void    (*attach_inform)(struct i2c_bus *bus, int id);
@@ -163,5 +178,5 @@ int     i2c_read(struct i2c_bus *bus, unsigned char addr);
 int     i2c_write(struct i2c_bus *bus, unsigned char addr,
 		  unsigned char b1, unsigned char b2, int both);
 
-int 	i2c_init(void);
+int	i2c_init(void);
 #endif /* I2C_H */

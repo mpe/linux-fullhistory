@@ -208,6 +208,7 @@ do { \
 
 #define copy_segments(nr, tsk, mm)	do { } while (0)
 #define release_segments(mm)		do { } while (0)
+#define forget_segments()		do { } while (0)
 
 #ifdef __KERNEL__
 /* Allocation and freeing of task_struct and kernel stack. */

@@ -543,6 +543,7 @@ struct matrox_fb_info {
 		const int*	vxres;
 		int		cross4MB;
 		int		text;
+		int		plnwt;
 			      } capable;
 	struct {
 		unsigned int	size;
@@ -1099,7 +1100,8 @@ static void matrox_cfbX_init(WPMINFO struct display* p) {
 	mga_fifo(8);
 	mga_outl(M_PITCH, mpitch);
 	mga_outl(M_YDSTORG, curr_ydstorg(MINFO));
-	mga_outl(M_PLNWT, -1);
+	if (ACCESS_FBINFO(capable.plnwt))
+		mga_outl(M_PLNWT, -1);
 	mga_outl(M_OPMODE, mopmode);
 	mga_outl(M_CXBNDRY, 0xFFFF0000);
 	mga_outl(M_YTOP, 0);
@@ -2433,10 +2435,7 @@ static void initMatrox(WPMINFO struct display* p) {
 			}
 		}
 		dprintk(KERN_INFO "matroxfb: acceleration disabled\n");
-		p->dispsw = swtmp;
-		return;
-	}
-	if (p->type == FB_TYPE_TEXT) {
+	} else if (p->type == FB_TYPE_TEXT) {
 		swtmp = &matroxfb_text;
 	} else {
 		switch (p->var.bits_per_pixel) {
@@ -2473,7 +2472,6 @@ static void initMatrox(WPMINFO struct display* p) {
 			return;
 		}
 	}
-	dprintk(KERN_INFO "matroxfb: now accelerated\n");
 	memcpy(&ACCESS_FBINFO(dispsw), swtmp, sizeof(ACCESS_FBINFO(dispsw)));
 	p->dispsw = &ACCESS_FBINFO(dispsw);
 	if ((p->type != FB_TYPE_TEXT) && ACCESS_FBINFO(devflags.hwcursor)) {
@@ -3959,11 +3957,21 @@ __initfunc(static int MGAG100_preinit(WPMINFO struct matrox_hw_state* hw)) {
 
 	DBG("MGAG100_preinit")
 	
+	/* there are some instabilities if in_div > 19 && vco < 61000 */
+	ACCESS_FBINFO(features.pll.vco_freq_min) = 62000;
+	ACCESS_FBINFO(features.pll.ref_freq)     = 27000;
+	ACCESS_FBINFO(features.pll.feed_div_min) = 7;
+	ACCESS_FBINFO(features.pll.feed_div_max) = 127;
+	ACCESS_FBINFO(features.pll.in_div_min)   = 1;
+	ACCESS_FBINFO(features.pll.in_div_max)   = 31;
+	ACCESS_FBINFO(features.pll.post_shift_max) = 3;
+	ACCESS_FBINFO(features.DAC1064.xvrefctrl) = DAC1064_XVREFCTRL_G100_DEFAULT;
 	/* ACCESS_FBINFO(capable.cfb4) = 0; ... preinitialized by 0 */
 	ACCESS_FBINFO(capable.text) = 1;
 	ACCESS_FBINFO(capable.vxres) = vxres_g100;
 	ACCESS_FBINFO(features.accel.has_cacheflush) = 1;
 	ACCESS_FBINFO(cursor.timer.function) = matroxfb_DAC1064_flashcursor;
+	ACCESS_FBINFO(capable.plnwt) = ACCESS_FBINFO(devflags.accelerator) != FB_ACCEL_MATROX_MGAG100;
 
 	if (ACCESS_FBINFO(devflags.noinit))
 		return 0;
@@ -3979,10 +3987,13 @@ __initfunc(static int MGAG100_preinit(WPMINFO struct matrox_hw_state* hw)) {
 	pci_read_config_dword(ACCESS_FBINFO(pcidev), 0x50, &reg50);
 	reg50 &= ~0x3000;
 	pci_write_config_dword(ACCESS_FBINFO(pcidev), 0x50, reg50);
+
+	DAC1064_setmclk(PMINFO hw, DAC1064_OPT_MDIV2 | DAC1064_OPT_GDIV3 | DAC1064_OPT_SCLK_PCI, 133333);
+
 	if (ACCESS_FBINFO(devflags.accelerator) == FB_ACCEL_MATROX_MGAG100) {
-		hw->MXoptionReg |= 0x5080;
+		hw->MXoptionReg |= 0x1080;
 		pci_write_config_dword(ACCESS_FBINFO(pcidev), PCI_OPTION_REG, hw->MXoptionReg);
-		mga_outl(M_CTLWTST, 0x01032521);
+		mga_outl(M_CTLWTST, 0x00000300);
 		/* mga_outl(M_CTLWTST, 0x03258A31); */ 
 		udelay(100);
 		mga_outb(0x1C05, 0x00);
@@ -4002,9 +4013,11 @@ __initfunc(static int MGAG100_preinit(WPMINFO struct matrox_hw_state* hw)) {
 		mga_writeb(ACCESS_FBINFO(video.vbase), 0x0000, 0xAA);
 		mga_writeb(ACCESS_FBINFO(video.vbase), 0x0800, 0x55);
 		mga_writeb(ACCESS_FBINFO(video.vbase), 0x4000, 0x55);
+#if 0
 		if (mga_readb(ACCESS_FBINFO(video.vbase), 0x0000) != 0xAA) {
 			hw->MXoptionReg &= ~0x1000;
 		}
+#endif
 	} else {
 		hw->MXoptionReg |= 0x00000C00;
 		if (ACCESS_FBINFO(devflags.sgram))
@@ -4028,15 +4041,6 @@ __initfunc(static void MGAG100_reset(WPMINFO struct matrox_hw_state* hw)) {
 
 	DBG("MGAG100_reset")
 
-	/* there are some instabilities if in_div > 19 && vco < 61000 */
-	ACCESS_FBINFO(features.pll.vco_freq_min) = 62000;
-	ACCESS_FBINFO(features.pll.ref_freq)     = 27000;
-	ACCESS_FBINFO(features.pll.feed_div_min) = 7;
-	ACCESS_FBINFO(features.pll.feed_div_max) = 127;
-	ACCESS_FBINFO(features.pll.in_div_min)   = 1;
-	ACCESS_FBINFO(features.pll.in_div_max)   = 31;
-	ACCESS_FBINFO(features.pll.post_shift_max) = 3;
-	ACCESS_FBINFO(features.DAC1064.xvrefctrl) = DAC1064_XVREFCTRL_G100_DEFAULT;
 	ACCESS_FBINFO(features.DAC1064.cursorimage) = ACCESS_FBINFO(video.len_usable) - 1024;
 	if (ACCESS_FBINFO(devflags.hwcursor)) 
 		ACCESS_FBINFO(video.len_usable) -= 1024;
@@ -4851,7 +4855,7 @@ static int nopan = 0;			/* "matrox:nopan" */
 static int no_pci_retry = 0;		/* "matrox:nopciretry" */
 static int novga = 0;			/* "matrox:novga" */
 static int nobios = 0;			/* "matrox:nobios" */
-static int noinit = 1;			/* "matrox:noinit" */
+static int noinit = 1;			/* "matrox:init" */
 static int inverse = 0;			/* "matrox:inverse" */
 static int hwcursor = 1;		/* "matrox:nohwcursor" */
 static int blink = 1;			/* "matrox:noblink" */
@@ -5320,6 +5324,7 @@ __initfunc(static int initMatrox2(WPMINFO struct display* d, struct board* b)) {
 	ACCESS_FBINFO(max_pixel_clock) = b->maxclk;
 
 	printk(KERN_INFO "matroxfb: Matrox %s detected\n", b->name);
+	ACCESS_FBINFO(capable.plnwt) = 1;
 	ACCESS_FBINFO(devflags.video64bits) = b->flags & DEVF_VIDEO64BIT;
 	if (b->flags & DEVF_TEXT4B) {
 		ACCESS_FBINFO(devflags.vgastep) = 4;

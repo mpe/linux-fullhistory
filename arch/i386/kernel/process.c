@@ -475,22 +475,25 @@ void free_task_struct(struct task_struct *p)
 
 void release_segments(struct mm_struct *mm)
 {
+	if (mm->segments) {
+		void * ldt = mm->segments;
+		mm->segments = NULL;
+		vfree(ldt);
+	}
+}
+
+void forget_segments(void)
+{
 	/* forget local segments */
 	__asm__ __volatile__("movl %w0,%%fs ; movl %w0,%%gs"
 		: /* no outputs */
 		: "r" (0));
-	if (mm->segments) {
-		void * ldt = mm->segments;
 
-		/*
-		 * Get the LDT entry from init_task.
-		 */
-		current->tss.ldt = _LDT(0);
-		load_ldt(0);
-
-		mm->segments = NULL;
-		vfree(ldt);
-	}
+	/*
+	 * Get the LDT entry from init_task.
+	 */
+	current->tss.ldt = _LDT(0);
+	load_ldt(0);
 }
 
 /*
@@ -778,21 +781,7 @@ asmlinkage int sys_clone(struct pt_regs regs)
 	newsp = regs.ecx;
 	if (!newsp)
 		newsp = regs.esp;
-	return do_fork(clone_flags & ~CLONE_VFORK, newsp, &regs);
-}
-
-asmlinkage int sys_vfork(struct pt_regs regs)
-{
-	int child;
-	struct semaphore sem = MUTEX_LOCKED;
-
-	current->vfork_sem = &sem;
-	child = do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, regs.esp, &regs);
-
-	if (child > 0)
-		down(&sem);
-
-	return child;
+	return do_fork(clone_flags, newsp, &regs);
 }
 
 /*

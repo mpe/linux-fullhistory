@@ -369,7 +369,11 @@ int ide_release_dma (ide_hwif_t *hwif)
 	return 1;
 }
 
-__initfunc(void ide_setup_dma (ide_hwif_t *hwif, unsigned long dma_base, unsigned int num_ports))
+/*
+ *	This can be called for a dynamically installed interface. Don't initfunc it
+ */
+ 
+void ide_setup_dma (ide_hwif_t *hwif, unsigned long dma_base, unsigned int num_ports)
 {
 	static unsigned long dmatable = 0;
 	static unsigned leftover = 0;

@@ -4,7 +4,7 @@
  *  Al Longyear <longyear@netcom.com>
  *  Extensively rewritten by Paul Mackerras <paulus@cs.anu.edu.au>
  *
- *  ==FILEVERSION 981004==
+ *  ==FILEVERSION 990114==
  *
  *  NOTE TO MAINTAINERS:
  *     If you modify this file at all, please set the number above to the
@@ -1216,6 +1216,7 @@ typedef struct ppp_proto_struct {
 } ppp_proto_type;
 
 static int rcv_proto_ip		(struct ppp *, struct sk_buff *);
+static int rcv_proto_ipv6	(struct ppp *, struct sk_buff *);
 static int rcv_proto_ipx	(struct ppp *, struct sk_buff *);
 static int rcv_proto_at		(struct ppp *, struct sk_buff *);
 static int rcv_proto_vjc_comp	(struct ppp *, struct sk_buff *);
@@ -1226,6 +1227,7 @@ static int rcv_proto_unknown	(struct ppp *, struct sk_buff *);
 static
 ppp_proto_type proto_list[] = {
 	{ PPP_IP,	  rcv_proto_ip	       },
+	{ PPP_IPV6,	  rcv_proto_ipv6       },
 	{ PPP_IPX,	  rcv_proto_ipx	       },
 	{ PPP_AT,	  rcv_proto_at	       },
 	{ PPP_VJC_COMP,	  rcv_proto_vjc_comp   },
@@ -2003,6 +2005,19 @@ rcv_proto_ip(struct ppp *ppp, struct sk_buff *skb)
 }
 
 /*
+ * Process the receipt of an IPv6 frame
+ */
+static int
+rcv_proto_ipv6(struct ppp *ppp, struct sk_buff *skb)
+{
+	CHECK_PPP(0);
+	if ((ppp2dev(ppp)->flags & IFF_UP) && (skb->len > 0)
+	    && ppp->sc_npmode[NP_IPV6] == NPMODE_PASS)
+		return ppp_rcv_rx(ppp, ETH_P_IPV6, skb);
+	return 0;
+}
+
+/*
  * Process the receipt of an IPX frame
  */
 static int
@@ -2382,6 +2397,10 @@ ppp_dev_xmit(struct sk_buff *skb, struct device *dev)
 	case ETH_P_IP:
 		proto = PPP_IP;
 		npmode = ppp->sc_npmode[NP_IP];
+		break;
+	case ETH_P_IPV6:
+		proto = PPP_IPV6;
+		npmode = ppp->sc_npmode[NP_IPV6];
 		break;
 	case ETH_P_IPX:
 		proto = PPP_IPX;

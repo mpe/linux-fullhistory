@@ -175,7 +175,7 @@ int d_invalidate(struct dentry * dentry)
 	}
 
 	/*
-	 * Somebody still using it?
+	 * Somebody else still using it?
 	 *
 	 * If it's a directory, we can't drop it
 	 * for fear of somebody re-populating it
@@ -184,7 +184,7 @@ int d_invalidate(struct dentry * dentry)
 	 * we might still populate it if it was a
 	 * working directory or similar).
 	 */
-	if (dentry->d_count) {
+	if (dentry->d_count > 1) {
 		if (dentry->d_inode && S_ISDIR(dentry->d_inode->i_mode))
 			return -EBUSY;
 	}
@@ -677,12 +677,11 @@ void d_delete(struct dentry * dentry)
 	d_drop(dentry);
 }
 
-void d_add(struct dentry * entry, struct inode * inode)
+void d_rehash(struct dentry * entry)
 {
 	struct dentry * parent = entry->d_parent;
 
 	list_add(&entry->d_hash, d_hash(parent, entry->d_name.hash));
-	d_instantiate(entry, inode);
 }
 
 #define do_switch(x,y) do { \

@@ -8,7 +8,7 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
- * Version:	$Id: af_unix.c,v 1.72 1998/11/21 06:50:00 davem Exp $
+ * Version:	$Id: af_unix.c,v 1.73 1999/01/15 06:55:48 davem Exp $
  *
  * Fixes:
  *		Linus Torvalds	:	Assorted bug cures.
@@ -584,7 +584,7 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	sk->protinfo.af_unix.addr = addr;
 	
 
-	dentry = do_mknod(sunaddr->sun_path, S_IFSOCK|S_IRWXUGO, 0);
+	dentry = do_mknod(sunaddr->sun_path, S_IFSOCK|sock->inode->i_mode, 0);
 	if (IS_ERR(dentry))
 	{
 		err = PTR_ERR(dentry);

@@ -24,12 +24,12 @@
 #include <linux/errno.h>
 #include <linux/videodev.h>
 
+#if LINUX_VERSION_CODE >= 0x020100
 #include <asm/uaccess.h>
+#endif
 #include <asm/system.h>
 
-#ifdef CONFIG_KMOD
 #include <linux/kmod.h>
-#endif
 
 
 #define VIDEO_NUM_DEVICES	256 
@@ -103,17 +103,17 @@ static struct video_init video_init_list[]={
 #endif	
 #ifdef CONFIG_RADIO_SF16FMI
 	{"SF16FMI", fmi_init}, 
-#endif
+#endif	
 #ifdef CONFIG_RADIO_MIROPCM20
 	{"PCM20", pcm20_init}, 
-#endif	
+#endif
 #ifdef CONFIG_RADIO_GEMTEK
-	{"GemTek", gemtek_init}, 
-#endif	
+	{"GemTek", gemtek_init},
+#endif
 	{"end", NULL}
 };
 
-
+#if LINUX_VERSION_CODE >= 0x020100
 /*
  *	Read will do some smarts later on. Buffer pin etc.
  */
@@ -127,6 +127,7 @@ static ssize_t video_read(struct file *file,
 	else
 		return -EINVAL;
 }
+
 
 
 /*
@@ -144,7 +145,6 @@ static ssize_t video_write(struct file *file, const char *buf,
 		return 0;
 }
 
-
 /*
  *	Poll to see if we're readable, can probably be used for timing on incoming
  *  frames, etc..
@@ -158,6 +158,32 @@ static unsigned int video_poll(struct file *file, poll_table * wait)
 	else
 		return 0;
 }
+
+
+#else
+static int video_read(struct inode *ino,struct file *file,
+			  char *buf, int count)
+{
+         int err;
+	 struct video_device *vfl=video_device[MINOR(ino->i_rdev)];
+	 if (vfl->read)
+	   return vfl->read(vfl, buf, count, file->f_flags&O_NONBLOCK);
+	 else
+	   return -EINVAL;
+}
+
+static int video_write(struct inode *ino,struct file *file, const char *buf, 
+			int count)
+{
+	int err;
+	struct video_device *vfl=video_device[MINOR(ino->i_rdev)];
+	if (vfl->write)
+	  return vfl->write(vfl, buf, count, file->f_flags&O_NONBLOCK);
+	else
+	  return 0;
+}
+
+#endif
 
 /*
  *	Open a video device.
@@ -174,14 +200,12 @@ static int video_open(struct inode *inode, struct file *file)
 		
 	vfl=video_device[minor];
 	if(vfl==NULL) {
-#ifdef CONFIG_KMOD
 		char modname[20];
 
 		sprintf (modname, "char-major-%d-%d", VIDEO_MAJOR, minor);
 		request_module(modname);
 		vfl=video_device[minor];
 		if (vfl==NULL)
-#endif
 			return -ENODEV;
 	}
 	if(vfl->busy)
@@ -218,11 +242,19 @@ static int video_release(struct inode *inode, struct file *file)
  *	image ?
  */
  
+#if LINUX_VERSION_CODE >= 0x020100
 static long long video_lseek(struct file * file,
 			  long long offset, int origin)
 {
 	return -ESPIPE;
 }
+#else
+static long long video_lseek(struct inode *inode, struct file * file,
+			     long long offset, int origin)
+{
+	return -ESPIPE;
+}
+#endif
 
 
 static int video_ioctl(struct inode *inode, struct file *file,
@@ -246,9 +278,16 @@ static int video_ioctl(struct inode *inode, struct file *file,
  */
  
  
+#if LINUX_VERSION_CODE >= 0x020100
 int video_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct video_device *vfl=video_device[MINOR(file->f_dentry->d_inode->i_rdev)];
+#else
+static int video_mmap(struct inode * ino, struct file * file,
+		      struct vm_area_struct * vma)
+{
+	struct video_device *vfl=video_device[MINOR(ino->i_rdev)];
+#endif
 	if(vfl->mmap)
 		return vfl->mmap(vfl, (char *)vma->vm_start, 
 				(unsigned long)(vma->vm_end-vma->vm_start));
@@ -332,11 +371,17 @@ static struct file_operations video_fops=
 	video_read,
 	video_write,
 	NULL,	/* readdir */
+#if LINUX_VERSION_CODE >= 0x020100
 	video_poll,	/* poll */
+#else
+	NULL,
+#endif
 	video_ioctl,
 	video_mmap,
 	video_open,
+#if LINUX_VERSION_CODE >= 0x020100
 	NULL,		/* flush */
+#endif
 	video_release
 };
 
@@ -380,5 +425,7 @@ void cleanup_module(void)
 
 #endif
 
+#if LINUX_VERSION_CODE >= 0x020100
 EXPORT_SYMBOL(video_register_device);
 EXPORT_SYMBOL(video_unregister_device);
+#endif

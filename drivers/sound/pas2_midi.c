@@ -21,7 +21,7 @@
 static int      midi_busy = 0, input_opened = 0;
 static int      my_dev;
 
-int pas2_mididev;
+int pas2_mididev=-1;
 
 static unsigned char tmp_queue[256];
 static volatile int qlen;

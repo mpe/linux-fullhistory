@@ -922,10 +922,10 @@ do_it_again:
 		}
 	}
 
-	add_wait_queue(&tty->read_wait, &wait);
-
 	if (down_interruptible(&tty->atomic_read))
 		return -ERESTARTSYS;
+
+	add_wait_queue(&tty->read_wait, &wait);
 	set_bit(TTY_DONT_FLIP, &tty->flags);
 	while (nr) {
 		/* First test for status change. */

@@ -41,28 +41,35 @@
 
 static void free_wait(poll_table * p)
 {
-	struct poll_table_entry * entry = p->entry + p->nr;
+	struct poll_table_entry * entry;
+	poll_table *old;
 
-	while (p->nr > 0) {
-		p->nr--;
-		entry--;
-		remove_wait_queue(entry->wait_address,&entry->wait);
-		fput(entry->filp);
+	while (p) {
+		entry = p->entry + p->nr;
+		while (p->nr > 0) {
+			p->nr--;
+			entry--;
+			remove_wait_queue(entry->wait_address,&entry->wait);
+			fput(entry->filp);
+		}
+		old = p;
+		p = p->next;
+		free_page((unsigned long) old);
 	}
 }
 
-#define __IN(in)	(in)
-#define __OUT(in)	(in + sizeof(kernel_fd_set)/sizeof(unsigned long))
-#define __EX(in)	(in + 2*sizeof(kernel_fd_set)/sizeof(unsigned long))
-#define __RES_IN(in)	(in + 3*sizeof(kernel_fd_set)/sizeof(unsigned long))
-#define __RES_OUT(in)	(in + 4*sizeof(kernel_fd_set)/sizeof(unsigned long))
-#define __RES_EX(in)	(in + 5*sizeof(kernel_fd_set)/sizeof(unsigned long))
+#define __IN(fds, n)		(fds->in + n)
+#define __OUT(fds, n)		(fds->out + n)
+#define __EX(fds, n)		(fds->ex + n)
+#define __RES_IN(fds, n)	(fds->res_in + n)
+#define __RES_OUT(fds, n)	(fds->res_out + n)
+#define __RES_EX(fds, n)	(fds->res_ex + n)
 
-#define BITS(in)	(*__IN(in)|*__OUT(in)|*__EX(in))
+#define BITS(fds, n)		(*__IN(fds, n)|*__OUT(fds, n)|*__EX(fds, n))
 
-static int max_select_fd(unsigned long n, fd_set_buffer *fds)
+static int max_select_fd(unsigned long n, fd_set_bits *fds)
 {
-	unsigned long *open_fds, *in;
+	unsigned long *open_fds;
 	unsigned long set;
 	int max;
 
@@ -70,10 +77,9 @@ static int max_select_fd(unsigned long n, fd_set_buffer *fds)
 	set = ~(~0UL << (n & (__NFDBITS-1)));
 	n /= __NFDBITS;
 	open_fds = current->files->open_fds.fds_bits+n;
-	in = fds->in+n;
 	max = 0;
 	if (set) {
-		set &= BITS(in);
+		set &= BITS(fds, n);
 		if (set) {
 			if (!(set & ~*open_fds))
 				goto get_max;
@@ -81,10 +87,9 @@ static int max_select_fd(unsigned long n, fd_set_buffer *fds)
 		}
 	}
 	while (n) {
-		in--;
 		open_fds--;
 		n--;
-		set = BITS(in);
+		set = BITS(fds, n);
 		if (!set)
 			continue;
 		if (set & ~*open_fds)
@@ -111,21 +116,22 @@ get_max:
 #define POLLOUT_SET (POLLWRBAND | POLLWRNORM | POLLOUT | POLLERR)
 #define POLLEX_SET (POLLPRI)
 
-int do_select(int n, fd_set_buffer *fds, long *timeout)
+int do_select(int n, fd_set_bits *fds, long *timeout)
 {
-	poll_table wait_table, *wait;
-	int retval, i;
+	poll_table *wait_table, *wait;
+	int retval, i, off;
 	long __timeout = *timeout;
 
-	wait = NULL;
+	wait = wait_table = NULL;
 	if (__timeout) {
-		struct poll_table_entry *entry = (struct poll_table_entry *) __get_free_page(GFP_KERNEL);
-		if (!entry)
+		wait_table = (poll_table *) __get_free_page(GFP_KERNEL);
+		if (!wait_table)
 			return -ENOMEM;
 
-		wait_table.nr = 0;
-		wait_table.entry = entry;
-		wait = &wait_table;
+		wait_table->nr = 0;
+		wait_table->entry = (struct poll_table_entry *)(wait_table + 1);
+		wait_table->next = NULL;
+		wait = wait_table;
 	}
 
 	lock_kernel();
@@ -139,11 +145,11 @@ int do_select(int n, fd_set_buffer *fds, long *timeout)
 		current->state = TASK_INTERRUPTIBLE;
 		for (i = 0 ; i < n; i++) {
 			unsigned long bit = BIT(i);
-			unsigned long *in = MEM(i,fds->in);
 			unsigned long mask;
 			struct file *file;
 
-			if (!(bit & BITS(in)))
+			off = i / __NFDBITS;
+			if (!(bit & BITS(fds, off)))
 				continue;
 			/*
 			 * The poll_wait routine will increment f_count if
@@ -157,18 +163,18 @@ int do_select(int n, fd_set_buffer *fds, long *timeout)
 				if (file->f_op && file->f_op->poll)
 					mask = file->f_op->poll(file, wait);
 			}
-			if ((mask & POLLIN_SET) && ISSET(bit, __IN(in))) {
-				SET(bit, __RES_IN(in));
+			if ((mask & POLLIN_SET) && ISSET(bit, __IN(fds,off))) {
+				SET(bit, __RES_IN(fds,off));
 				retval++;
 				wait = NULL;
 			}
-			if ((mask & POLLOUT_SET) && ISSET(bit, __OUT(in))) {
-				SET(bit, __RES_OUT(in));
+			if ((mask & POLLOUT_SET) && ISSET(bit, __OUT(fds,off))) {
+				SET(bit, __RES_OUT(fds,off));
 				retval++;
 				wait = NULL;
 			}
-			if ((mask & POLLEX_SET) && ISSET(bit, __EX(in))) {
-				SET(bit, __RES_EX(in));
+			if ((mask & POLLEX_SET) && ISSET(bit, __EX(fds,off))) {
+				SET(bit, __RES_EX(fds,off));
 				retval++;
 				wait = NULL;
 			}
@@ -181,10 +187,8 @@ int do_select(int n, fd_set_buffer *fds, long *timeout)
 	current->state = TASK_RUNNING;
 
 out:
-	if (*timeout) {
-		free_wait(&wait_table);
-		free_page((unsigned long) wait_table.entry);
-	}
+	if (*timeout)
+		free_wait(wait_table);
 
 	/*
 	 * Up-to-date the caller timeout.
@@ -208,9 +212,10 @@ out:
 asmlinkage int
 sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 {
-	fd_set_buffer *fds;
+	fd_set_bits fds;
+	char *bits;
 	long timeout;
-	int ret;
+	int ret, size;
 
 	timeout = MAX_SCHEDULE_TIMEOUT;
 	if (tvp) {
@@ -231,24 +236,35 @@ sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 		}
 	}
 
-	ret = -ENOMEM;
-	fds = (fd_set_buffer *) __get_free_page(GFP_KERNEL);
-	if (!fds)
-		goto out_nofds;
 	ret = -EINVAL;
-	if (n < 0)
-		goto out;
-	if (n > KFDS_NR)
-		n = KFDS_NR;
-	if ((ret = get_fd_set(n, inp, fds->in)) ||
-	    (ret = get_fd_set(n, outp, fds->out)) ||
-	    (ret = get_fd_set(n, exp, fds->ex)))
-		goto out;
-	zero_fd_set(n, fds->res_in);
-	zero_fd_set(n, fds->res_out);
-	zero_fd_set(n, fds->res_ex);
+	if (n < 0 || n > KFDS_NR)
+		goto out_nofds;
+	/*
+	 * We need 6 bitmaps (in/out/ex for both incoming and outgoing),
+	 * since we used fdset we need to allocate memory in units of
+	 * long-words. 
+	 */
+	ret = -ENOMEM;
+	size = FDS_BYTES(n);
+	bits = kmalloc(6 * size, GFP_KERNEL);
+	if (!bits)
+		goto out_nofds;
+	fds.in      = (unsigned long *)  bits;
+	fds.out     = (unsigned long *) (bits +   size);
+	fds.ex      = (unsigned long *) (bits + 2*size);
+	fds.res_in  = (unsigned long *) (bits + 3*size);
+	fds.res_out = (unsigned long *) (bits + 4*size);
+	fds.res_ex  = (unsigned long *) (bits + 5*size);
 
-	ret = do_select(n, fds, &timeout);
+	if ((ret = get_fd_set(n, inp, fds.in)) ||
+	    (ret = get_fd_set(n, outp, fds.out)) ||
+	    (ret = get_fd_set(n, exp, fds.ex)))
+		goto out;
+	zero_fd_set(n, fds.res_in);
+	zero_fd_set(n, fds.res_out);
+	zero_fd_set(n, fds.res_ex);
+
+	ret = do_select(n, &fds, &timeout);
 
 	if (tvp && !(current->personality & STICKY_TIMEOUTS)) {
 		time_t sec = 0, usec = 0;
@@ -270,12 +286,12 @@ sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 		ret = 0;
 	}
 
-	set_fd_set(n, inp, fds->res_in);
-	set_fd_set(n, outp, fds->res_out);
-	set_fd_set(n, exp, fds->res_ex);
+	set_fd_set(n, inp, fds.res_in);
+	set_fd_set(n, outp, fds.res_out);
+	set_fd_set(n, exp, fds.res_ex);
 
 out:
-	free_page((unsigned long) fds);
+	kfree(bits);
 out_nofds:
 	return ret;
 }
@@ -327,7 +343,7 @@ asmlinkage int sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
 {
 	int i, fdcount, err, size;
 	struct pollfd * fds, *fds1;
-	poll_table wait_table, *wait = NULL;
+	poll_table *wait_table = NULL, *wait = NULL;
 
 	lock_kernel();
 	/* Do a sanity check on nfds ... */
@@ -338,20 +354,20 @@ asmlinkage int sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
 	if (timeout) {
 		/* Carefula about overflow in the intermediate values */
 		if ((unsigned long) timeout < MAX_SCHEDULE_TIMEOUT / HZ)
-			timeout = (timeout*HZ+999)/1000+1;
+			timeout = (unsigned long)(timeout*HZ+999)/1000+1;
 		else /* Negative or overflow */
 			timeout = MAX_SCHEDULE_TIMEOUT;
 	}
 
 	err = -ENOMEM;
 	if (timeout) {
-		struct poll_table_entry *entry;
-		entry = (struct poll_table_entry *) __get_free_page(GFP_KERNEL);
-		if (!entry)
+		wait_table = (poll_table *) __get_free_page(GFP_KERNEL);
+		if (!wait_table)
 			goto out;
-		wait_table.nr = 0;
-		wait_table.entry = entry;
-		wait = &wait_table;
+		wait_table->nr = 0;
+		wait_table->entry = (struct poll_table_entry *)(wait_table + 1);
+		wait_table->next = NULL;
+		wait = wait_table;
 	}
 
 	size = nfds * sizeof(struct pollfd);
@@ -378,10 +394,8 @@ asmlinkage int sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
 out_fds:
 	kfree(fds);
 out:
-	if (wait) {
-		free_wait(&wait_table);
-		free_page((unsigned long) wait->entry);
-	}
+	if (wait)
+		free_wait(wait_table);
 	unlock_kernel();
 	return err;
 }

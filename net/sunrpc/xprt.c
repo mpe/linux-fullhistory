@@ -35,6 +35,8 @@
  *
  *  TCP callback races fixes (C) 1998 Red Hat Software <alan@redhat.com>
  *  TCP send fixes (C) 1998 Red Hat Software <alan@redhat.com>
+ *  TCP NFS related read + write fixes
+ *   (C) 1999 Dave Airlie, University of Limerick, Ireland <airlied@linux.ie>
  */
 
 #define __KERNEL_SYSCALLS__
@@ -272,9 +274,6 @@ xprt_recvmsg(struct rpc_xprt *xprt, struct iovec *iov, int nr, int len)
 	set_fs(oldfs);
 #endif
 
-	if (!result && len)
-		result = -EAGAIN;
-
 	dprintk("RPC:      xprt_recvmsg(iov %p, len %d) = %d\n",
 						iov, len, result);
 	return result;
@@ -365,7 +364,7 @@ xprt_close(struct rpc_xprt *xprt)
 	 *	TCP doesnt require the rpciod now - other things may
 	 *	but rpciod handles that not us.
 	 */
-	if(xprt->stream)
+	if(xprt->stream && !xprt->connecting)
 		rpciod_down();
 }
 
@@ -639,6 +638,11 @@ tcp_input_record(struct rpc_xprt *xprt)
 		riov.iov_base = xprt->tcp_recm.data + offset;
 		riov.iov_len  = want;
 		result = xprt_recvmsg(xprt, &riov, 1, want);
+		if (!result)
+		{
+			dprintk("RPC: empty TCP record.\n");
+			return -ENOTCONN;
+		}
 		if (result < 0)
 			goto done;
 		offset += result;
@@ -684,6 +688,8 @@ tcp_input_record(struct rpc_xprt *xprt)
 		dprintk("RPC: %4d TCP receiving %d bytes\n",
 					req->rq_task->tk_pid, want);
 		result = xprt_recvmsg(xprt, xprt->tcp_iovec, req->rq_rnr, want);
+		if (!result && want)
+			result = -EAGAIN;
 		if (result < 0)
 			goto done;
 		xprt->tcp_copied += result;
@@ -715,6 +721,8 @@ tcp_input_record(struct rpc_xprt *xprt)
 		riov.iov_len  = want;
 		dprintk("RPC:      TCP skipping %d bytes\n", want);
 		result = xprt_recvmsg(xprt, &riov, 1, want);
+		if (!result && want)
+			result=-EAGAIN;
 		if (result < 0)
 			goto done;
 		offset += result;
@@ -871,14 +879,14 @@ tcp_write_space(struct sock *sk)
 	if (!(xprt = xprt_from_sock(sk)))
 		return;
 	if(xprt->snd_sent && xprt->snd_task)
-		printk("write space\n");
+		dprintk("RPC: write space\n");
 	if(xprt->write_space == 0)
 	{
 		xprt->write_space = 1;
 		if (xprt->snd_task && !RPC_IS_RUNNING(xprt->snd_task))
 		{
 			if(xprt->snd_sent)
-				printk("Write wakeup snd_sent =%d\n",
+				dprintk("RPC: Write wakeup snd_sent =%d\n",
 					xprt->snd_sent);
 			rpc_wake_up_task(xprt->snd_task);			
 		}
@@ -945,8 +953,6 @@ xprt_transmit(struct rpc_task *task)
 	struct rpc_xprt	*xprt = req->rq_xprt;
 	int status;
 
-	/*DEBUG*/int ac_debug=xprt->snd_sent;
-	
 	dprintk("RPC: %4d xprt_transmit(%x)\n", task->tk_pid, 
 				*(u32 *)(req->rq_svec[0].iov_base));
 
@@ -994,7 +1000,6 @@ xprt_transmit(struct rpc_task *task)
 		xprt->snd_buf  = req->rq_snd_buf;
 		xprt->snd_task = task;
 		xprt->snd_sent = 0;
-		/*DEBUG*/ac_debug = 0;
 	}
 
 	/* For fast networks/servers we have to put the request on
@@ -1022,12 +1027,10 @@ xprt_transmit(struct rpc_task *task)
 		if (xprt_transmit_some(xprt, task) != -EAGAIN) {
 			dprintk("RPC: %4d xmit complete\n", task->tk_pid);
 			xprt->snd_task = NULL;
-			if(ac_debug)
-				printk("Partial xmit finished\n");
 			return;
 		}
 
-		/*d*/printk("RPC: %4d xmit incomplete (%d left of %d)\n",
+		/*d*/dprintk("RPC: %4d xmit incomplete (%d left of %d)\n",
 				task->tk_pid, xprt->snd_buf.io_len,
 				req->rq_slen);
 		task->tk_status = 0;

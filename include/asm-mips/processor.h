@@ -139,8 +139,8 @@ struct thread_struct {
 
 #endif /* !defined (_LANGUAGE_ASSEMBLY) */
 
-#define INIT_MMAP { &init_mm, KSEG0, KSEG1, PAGE_SHARED, \
-                    VM_READ | VM_WRITE | VM_EXEC, NULL, &init_mm.mmap }
+#define INIT_MMAP { &init_mm, KSEG0, KSEG1, NULL, PAGE_SHARED, \
+                    VM_READ | VM_WRITE | VM_EXEC, 1, NULL, NULL }
 
 #define INIT_TSS  { \
         /* \
@@ -178,6 +178,7 @@ extern void release_thread(struct task_struct *);
 /* Copy and release all segment info associated with a VM */
 #define copy_segments(nr, p, mm) do { } while(0)
 #define release_segments(mm) do { } while(0)
+#define forget_segments()		do { } while (0)
 
 /*
  * Return saved PC of a blocked thread.

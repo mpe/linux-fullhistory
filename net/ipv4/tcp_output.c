@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.98 1998/12/12 06:43:35 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.100 1999/01/16 08:31:06 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -49,7 +49,7 @@ static __inline__ void clear_delayed_acks(struct sock * sk)
 
 	tp->delayed_acks = 0;
 	if(tcp_in_quickack_mode(tp))
-		tp->ato = ((HZ/100)*2);
+		tcp_exit_quickack_mode(tp);
 	tcp_clear_xmit_timer(sk, TIME_DACK);
 }
 
@@ -99,7 +99,7 @@ void tcp_transmit_skb(struct sock *sk, struct sk_buff *skb)
 			}
 			if(sysctl_tcp_sack) {
 				sysctl_flags |= SYSCTL_FLAG_SACK;
-				if(!sysctl_tcp_timestamps)
+				if(!(sysctl_flags & SYSCTL_FLAG_TSTAMPS))
 					tcp_header_size += TCPOLEN_SACKPERM_ALIGNED;
 			}
 		} else if(tp->sack_ok && tp->num_sacks) {
@@ -997,7 +997,13 @@ void tcp_send_ack(struct sock *sk)
 			 * (ACK is unreliable) but it's much better use of
 			 * bandwidth on slow links to send a spare ack than
 			 * resend packets.
+			 *
+			 * This is the one possible way that we can delay an
+			 * ACK and have tp->ato indicate that we are in
+			 * quick ack mode, so clear it.
 			 */
+			if(tcp_in_quickack_mode(tp))
+				tcp_exit_quickack_mode(tp);
 			tcp_send_delayed_ack(tp, HZ/2);
 			return;
 		}

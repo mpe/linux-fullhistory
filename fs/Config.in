@@ -112,4 +112,6 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 fi
 endmenu
 
+source fs/nls/Config.in
+
 endmenu

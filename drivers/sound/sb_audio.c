@@ -29,7 +29,9 @@
 #include "sb_mixer.h"
 #include "sb.h"
 
-static int sb_audio_open(int dev, int mode)
+#include "sb_ess.h"
+
+int sb_audio_open(int dev, int mode)
 {
 	sb_devc *devc = audio_devs[dev]->devc;
 	unsigned long flags;
@@ -93,7 +95,7 @@ static int sb_audio_open(int dev, int mode)
 	return 0;
 }
 
-static void sb_audio_close(int dev)
+void sb_audio_close(int dev)
 {
 	sb_devc *devc = audio_devs[dev]->devc;
 
@@ -600,250 +602,21 @@ static int jazz16_audio_set_speed(int dev, int speed)
 }
 
 /*
- * ESS specific routines
- */
-
-static int ess_audio_set_speed(int dev, int speed)
-{
-	sb_devc *devc = audio_devs[dev]->devc;
-	int divider;
-
-	if (speed > 0)
-	{
-		if (speed < 5000)
-			speed = 5000;
-		if (speed > 48000)
-			speed = 48000;
-
-		if (speed > 22000)
-		{
-			divider = (795500 + speed / 2) / speed;
-			speed = (795500 + divider / 2) / divider;
-		}
-		else
-		{
-			divider = (397700 + speed / 2) / speed;
-			speed = (397700 + divider / 2) / divider;
-		}
-		devc->speed = speed;
-	}
-	return devc->speed;
-}
-
-static void ess_speed(sb_devc * devc)
-{
-	int divider;
-	unsigned char bits = 0;
-	int speed = devc->speed;
-
-	if (speed < 4000)
-		speed = 4000;
-	else if (speed > 48000)
-		speed = 48000;
-	
-	if (speed > 22000)
-	{
-		bits = 0x80;
-		divider = 256 - (795500 + speed / 2) / speed;
-	}
-	else
-	{
-		divider = 128 - (397700 + speed / 2) / speed;
-	}
-
-	bits |= (unsigned char) divider;
-	ess_write(devc, 0xa1, bits);
-
-	/*
-	 * Set filter divider register
-	 */
-
-	speed = (speed * 9) / 20;	/* Set filter roll-off to 90% of speed/2 */
-	divider = 256 - 7160000 / (speed * 82);
-	ess_write(devc, 0xa2, divider);
-	return;
-}
-
-static void ess_change
-	(sb_devc *devc, unsigned int reg, unsigned int mask, unsigned int val)
-{
-	int value;
-
-	value = ess_read(devc, reg);
-	value = (value & ~mask) | (val & mask);
-	ess_write(devc, reg, value);
-}
-
-struct ess_command {int cmd; int data;};
-
-static void ess_exec_commands
-	(sb_devc *devc, struct ess_command *cmdtab[])
-{
-	struct ess_command *cmd;
-
-	cmd = cmdtab [ ((devc->channels != 1) << 1) + (devc->bits != AFMT_U8) ];
-
-	while (cmd->cmd != -1) {
-		ess_write (devc, cmd->cmd, cmd->data);
-		cmd++;
-	}
-}
-
-static struct ess_command ess_i08m[] =		/* input 8 bit mono */
-	{ {0xb7, 0x51}, {0xb7, 0xd0}, {-1, 0} };
-static struct ess_command ess_i16m[] =		/* input 16 bit mono */
-	{ {0xb7, 0x71}, {0xb7, 0xf4}, {-1, 0} };
-static struct ess_command ess_i08s[] =		/* input 8 bit stereo */
-	{ {0xb7, 0x51}, {0xb7, 0x98}, {-1, 0} };
-static struct ess_command ess_i16s[] =		/* input 16 bit stereo */
-	{ {0xb7, 0x71}, {0xb7, 0xbc}, {-1, 0} };
-
-static struct ess_command *ess_inp_cmds[] =
-	{ ess_i08m, ess_i16m, ess_i08s, ess_i16s };
-
-static int ess_audio_prepare_for_input(int dev, int bsize, int bcount)
-{
-	sb_devc *devc = audio_devs[dev]->devc;
-	ess_speed(devc);
-	sb_dsp_command(devc, DSP_CMD_SPKOFF);
-
-	ess_write(devc, 0xb8, 0x0e);	/* Auto init DMA mode */
-	ess_change (devc, 0xa8, 0x03, 3 - devc->channels);	/* Mono/stereo */
-	ess_write(devc, 0xb9, 2);	/* Demand mode (4 bytes/DMA request) */
-
-	ess_exec_commands (devc, ess_inp_cmds);
-
-	ess_change (devc, 0xb1, 0xf0, 0x50);
-	ess_change (devc, 0xb2, 0xf0, 0x50);
-
-	devc->trigger_bits = 0;
-	return 0;
-}
-
-static struct ess_command ess_o08m[] =          /* output 8 bit mono */
-        { {0xb6, 0x80}, {0xb7, 0x51}, {0xb7, 0xd0}, {-1, 0} };
-static struct ess_command ess_o16m[] =          /* output 16 bit mono */
-        { {0xb6, 0x00}, {0xb7, 0x71}, {0xb7, 0xf4}, {-1, 0} };
-static struct ess_command ess_o08s[] =          /* output 8 bit stereo */
-        { {0xb6, 0x80}, {0xb7, 0x51}, {0xb7, 0x98}, {-1, 0} };
-static struct ess_command ess_o16s[] =          /* output 16 bit stereo */
-        { {0xb6, 0x00}, {0xb7, 0x71}, {0xb7, 0xbc}, {-1, 0} };
-
-
-static struct ess_command *ess_out_cmds[] =
-        { ess_o08m, ess_o16m, ess_o08s, ess_o16s };
-
-static int ess_audio_prepare_for_output(int dev, int bsize, int bcount)
-{
-	sb_devc *devc = audio_devs[dev]->devc;
-
-	sb_dsp_reset(devc);
-	ess_speed(devc);
-
-	ess_write(devc, 0xb8, 4);	/* Auto init DMA mode */
-	ess_change (devc, 0xa8, 0x03, 3 - devc->channels);	/* Mono/stereo */
-	ess_write(devc, 0xb9, 2);	/* Demand mode (4 bytes/request) */
-
-	ess_exec_commands (devc, ess_out_cmds);
-
-	ess_change (devc, 0xb1, 0xf0, 0x50);
-	ess_change (devc, 0xb2, 0xf0, 0x50);
-
-	sb_dsp_command(devc, DSP_CMD_SPKON);
-
-	devc->trigger_bits = 0;
-	return 0;
-}
-
-static void ess_audio_output_block(int dev, unsigned long buf, int nr_bytes,
-			int intrflag)
-{
-	int count = nr_bytes;
-	sb_devc *devc = audio_devs[dev]->devc;
-	short c = -nr_bytes;
-
-	/* DMAbuf_start_dma (dev, buf, count, DMA_MODE_WRITE); */
-
-	if (audio_devs[dev]->dmap_out->dma > 3)
-		count >>= 1;
-	count--;
-
-	devc->irq_mode = IMODE_OUTPUT;
-
-	ess_write(devc, 0xa4, (unsigned char) ((unsigned short) c & 0xff));
-	ess_write(devc, 0xa5, (unsigned char) (((unsigned short) c >> 8) & 0xff));
-
-	ess_change (devc, 0xb8, 0x05, 0x05);	/* Go */
-	devc->intr_active = 1;
-}
-
-static void ess_audio_start_input(int dev, unsigned long buf, int nr_bytes, int intrflag)
-{
-	int count = nr_bytes;
-	sb_devc *devc = audio_devs[dev]->devc;
-	short c = -nr_bytes;
-
-	/*
-	 * Start a DMA input to the buffer pointed by dmaqtail
-	 */
-
-	/* DMAbuf_start_dma (dev, buf, count, DMA_MODE_READ); */
-
-	if (audio_devs[dev]->dmap_out->dma > 3)
-		count >>= 1;
-	count--;
-
-	devc->irq_mode = IMODE_INPUT;
-
-	ess_write(devc, 0xa4, (unsigned char) ((unsigned short) c & 0xff));
-	ess_write(devc, 0xa5, (unsigned char) (((unsigned short) c >> 8) & 0xff));
- 
-	ess_change (devc, 0xb8, 0x0f, 0x0f);	/* Go */
-	devc->intr_active = 1;
-}
-
-static void ess_audio_trigger(int dev, int bits)
-{
-	sb_devc *devc = audio_devs[dev]->devc;
-
-	bits &= devc->irq_mode;
-
-	if (!bits)
-		sb_dsp_command(devc, 0xd0);	/* Halt DMA */
-	else
-	{
-		switch (devc->irq_mode)
-		{
-			case IMODE_INPUT:
-				ess_audio_start_input(dev, devc->trg_buf, devc->trg_bytes,
-						  devc->trg_intrflag);
-				break;
-
-			case IMODE_OUTPUT:
-				ess_audio_output_block(dev, devc->trg_buf, devc->trg_bytes,
-					devc->trg_intrflag);
-				break;
-		}
-	}
-
-	devc->trigger_bits = bits;
-}
-
-/*
  * SB16 specific routines
  */
 
 static int sb16_audio_set_speed(int dev, int speed)
 {
 	sb_devc *devc = audio_devs[dev]->devc;
+	int	max_speed = devc->submodel == SUBMDL_ALS100 ? 48000 : 44100;
 
 	if (speed > 0)
 	{
-		if (speed < 5000)
-			speed = 4000;
+		if (speed < 5000)	/* which of these */
+			speed = 4000;	/* is correct ??? */
 
-		if (speed > 44100)
-			speed = 44100;
+		if (speed > max_speed)
+			speed = max_speed;
 
 		devc->speed = speed;
 	}
@@ -1276,26 +1049,6 @@ static struct audio_driver sb16_audio_driver =	/* SB16 */
 	sb16_audio_mmap
 };
 
-static struct audio_driver ess_audio_driver =	/* ESS ES688/1688 */
-{
-	sb_audio_open,
-	sb_audio_close,
-	sb_set_output_parms,
-	sb_set_input_parms,
-	NULL,
-	ess_audio_prepare_for_input,
-	ess_audio_prepare_for_output,
-	sb1_audio_halt_xfer,
-	NULL,			/* local_qlen */
-	NULL,			/* copy_from_user */
-	NULL,
-	NULL,
-	ess_audio_trigger,
-	ess_audio_set_speed,
-	sb16_audio_set_bits,
-	sbpro_audio_set_channels
-};
-
 void sb_audio_init(sb_devc * devc, char *name)
 {
 	int audio_flags = 0;
@@ -1332,9 +1085,7 @@ void sb_audio_init(sb_devc * devc, char *name)
 
 		case MDL_ESS:
 			DDB(printk("Will use ESS ES688/1688 driver\n"));
-			audio_flags = DMA_AUTOMODE;
-			format_mask |= AFMT_S16_LE;
-			driver = &ess_audio_driver;
+			driver = ess_audio_init (devc, &audio_flags, &format_mask);
 			break;
 
 		case MDL_SB16:
@@ -1355,17 +1106,17 @@ void sb_audio_init(sb_devc * devc, char *name)
 			driver = &sbpro_audio_driver;
 	}
 
-	if ((devc->my_dev = sound_install_audiodrv(AUDIO_DRIVER_VERSION,
+	if ((devc->dev = sound_install_audiodrv(AUDIO_DRIVER_VERSION,
 				name,driver, sizeof(struct audio_driver),
 				audio_flags, format_mask, devc,
 				devc->dma8,
-				devc->duplex ? devc->dma16 : devc->dma8) < 0))
+				devc->duplex ? devc->dma16 : devc->dma8)) < 0)
 	{
 		  printk(KERN_ERR "Sound Blaster:  unable to install audio.\n");
 		  return;
 	}
-	audio_devs[devc->my_dev]->mixer_dev = devc->my_mixerdev;
-	audio_devs[devc->my_dev]->min_fragment = 5;
+	audio_devs[devc->dev]->mixer_dev = devc->my_mixerdev;
+	audio_devs[devc->dev]->min_fragment = 5;
 }
 
 #endif

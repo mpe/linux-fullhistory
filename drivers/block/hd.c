@@ -783,6 +783,7 @@ static struct file_operations hd_fops = {
 	hd_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	hd_open,		/* open */
+	NULL,			/* flush */
 	hd_release,		/* release */
 	block_fsync		/* fsync */
 };

@@ -1,5 +1,5 @@
 /*
- *  linux/ufs/ufs/inode.c
+ *  linux/fs/ufs/inode.c
  *
  * Copyright (C) 1998
  * Daniel Pirkl <daniel.pirkl@email.cz>
@@ -254,7 +254,7 @@ repeat:
 			SWAB32(*p), required +  (blockoff - lastblockoff), err);
 	}
 	/*
-	 * We will allocated new block before last allocat block
+	 * We will allocate new block before last allocated block
 	 */
 	else /* (lastblock > block) */ {
 		if (lastblock && (tmp = SWAB32(inode->u.ufs_i.i_u1.i_data[lastblock-1])))

@@ -1,3 +1,16 @@
+# FILE: header.tk
+# This file is boilerplate TCL/TK function definitions for 'make xconfig'.
+#
+# CHANGES
+# =======
+#
+# 8 January 1998, Michael Elizabeth Chastain, <mec@shout.net>
+# Remove unused do_cmd function (part of the 2.0 sound support).
+# Arrange buttons in three columns for better screen fitting.
+# Add CONSTANT_Y, CONSTANT_M, CONSTANT_N for commands like:
+#   dep_tristate 'foo' CONFIG_FOO m
+#
+
 #
 # This is a handy replacement for ".widget cget" that requires neither tk4
 # nor additional source code uglification.
@@ -20,9 +33,17 @@ proc vfix { var } {
 }
 
 #
+# Constant values used by certain dep_tristate commands.
+#
+set CONSTANT_Y 1
+set CONSTANT_M 2
+set CONSTANT_N 0
+
+#
 # Create a "reference" object to steal colors from.
 #
 button .ref
+
 #
 # On monochrome displays, -disabledforeground is blank by default; that's
 # bad.  Fill it with -foreground instead.
@@ -35,50 +56,23 @@ if { [cget .ref -disabledforeground] == "" } {
 #
 # Define some macros we will need to parse the config.in file.
 #
+
 proc mainmenu_name { text } {
-	message .header.message -width 400 -text "$text"
-	pack .header.message -side left -padx 15
 	wm title . "$text"
 }
 
 proc menu_option { w menu_num text } {
-	button .f0.x$menu_num -text "$text" -width 50 -command "$w .$w \"$text\""
-	pack .f0.x$menu_num -pady 0 -expand on
-}
-
-#
-# Not used at the moment, but this runs a command in a subprocess and
-# displays the result in a window with a scrollbar.
-#
-proc do_cmd { w command } {
-	catch {destroy $w}
-	toplevel $w -class Dialog
-	frame $w.tb
-	text $w.tb.text -relief raised -bd 2 -yscrollcommand "$w.tb.scroll set"
-	scrollbar $w.tb.scroll -command "$w.tb.text yview"
-	pack $w.tb.scroll -side right -fill y
-	pack $w.tb.text -side left
-
-	set oldFocus [focus]
-	frame $w.back
-	button $w.back.ok -text "OK" -width 20 \
-		-command "destroy $w; focus $oldFocus" -state disabled
-	button $w.back.ccl -text "Cancel" -width 20 \
-		-command "destroy $w; focus $oldFocus"
-	pack $w.tb -side top
-	pack $w.back.ok $w.back.ccl -side left
-	pack $w.back -side bottom -pady 10
-
-	focus $w
-	wm geometry $w +30+35
-
-	$w.tb.text delete 1.0 end
-	set f [open |$command]
-	while {![eof $f]} {
-		$w.tb.text insert end [read $f 256]
-	}
-	close $f
-	$w.back.ok configure -state normal
+	global menus_per_column
+	if { $menu_num <= $menus_per_column } then {
+	    set myframe left
+	} elseif { $menu_num <= [expr 2 * $menus_per_column] } then {
+	    set myframe middle
+	} else {
+	    set myframe right
+	} 
+	button .f0.x$menu_num -anchor w -text "$text" \
+	    -command "$w .$w \"$text\""
+	pack .f0.x$menu_num -pady 0 -side top -fill x -in .f0.$myframe
 }
 
 proc load_configfile { w title func } {
@@ -306,6 +300,10 @@ proc toggle_switch3 {w mnum line text variable} {
 		
 	option_name $w $mnum $line $text $variable
 		
+	global CONFIG_MODULES
+	if {($CONFIG_MODULES == 0)} then {
+		$w.x$line.m configure -state disabled
+	}
 	pack $w.x$line.n $w.x$line.m $w.x$line.y -side right -fill y
 }
 
@@ -453,7 +451,9 @@ proc wrapup {w }  {
 # Next set up the particulars for the top level menu, and define a few
 # buttons which we will stick down at the bottom.
 #
-frame .header
 
 frame .f0 
+frame .f0.left
+frame .f0.middle
+frame .f0.right
 

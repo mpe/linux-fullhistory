@@ -148,6 +148,7 @@ extern __inline__ void start_thread(struct pt_regs * regs, unsigned long pc,
 
 #define copy_segments(nr, tsk, mm)	do { } while (0)
 #define release_segments(mm)		do { } while (0)
+#define forget_segments()		do { } while (0)
 
 #ifdef __KERNEL__
 

@@ -371,6 +371,99 @@ unsigned long get_unmapped_area(unsigned long addr, unsigned long len)
 	}
 }
 
+#define vm_avl_empty	(struct vm_area_struct *) NULL
+
+#include "mmap_avl.c"
+
+/* Look up the first VMA which satisfies  addr < vm_end,  NULL if none. */
+struct vm_area_struct * find_vma(struct mm_struct * mm, unsigned long addr)
+{
+	struct vm_area_struct *vma = NULL;
+
+	if (mm) {
+		/* Check the cache first. */
+		/* (Cache hit rate is typically around 35%.) */
+		vma = mm->mmap_cache;
+		if (!(vma && vma->vm_end > addr && vma->vm_start <= addr)) {
+			if (!mm->mmap_avl) {
+				/* Go through the linear list. */
+				vma = mm->mmap;
+				while (vma && vma->vm_end <= addr)
+					vma = vma->vm_next;
+			} else {
+				/* Then go through the AVL tree quickly. */
+				struct vm_area_struct * tree = mm->mmap_avl;
+				for (;;) {
+					if (tree == vm_avl_empty)
+						break;
+					if (tree->vm_end > addr) {
+						vma = tree;
+						if (tree->vm_start <= addr)
+							break;
+						tree = tree->vm_avl_left;
+					} else
+						tree = tree->vm_avl_right;
+				}
+			}
+			if (vma)
+				mm->mmap_cache = vma;
+		}
+	}
+	return vma;
+}
+
+/* Same as find_vma, but also return a pointer to the previous VMA in *pprev. */
+struct vm_area_struct * find_vma_prev(struct mm_struct * mm, unsigned long addr,
+				      struct vm_area_struct **pprev)
+{
+	if (mm) {
+		if (!mm->mmap_avl) {
+			/* Go through the linear list. */
+			struct vm_area_struct * prev = NULL;
+			struct vm_area_struct * vma = mm->mmap;
+			while (vma && vma->vm_end <= addr) {
+				prev = vma;
+				vma = vma->vm_next;
+			}
+			*pprev = prev;
+			return vma;
+		} else {
+			/* Go through the AVL tree quickly. */
+			struct vm_area_struct * vma = NULL;
+			struct vm_area_struct * last_turn_right = NULL;
+			struct vm_area_struct * prev = NULL;
+			struct vm_area_struct * tree = mm->mmap_avl;
+			for (;;) {
+				if (tree == vm_avl_empty)
+					break;
+				if (tree->vm_end > addr) {
+					vma = tree;
+					prev = last_turn_right;
+					if (tree->vm_start <= addr)
+						break;
+					tree = tree->vm_avl_left;
+				} else {
+					last_turn_right = tree;
+					tree = tree->vm_avl_right;
+				}
+			}
+			if (vma) {
+				if (vma->vm_avl_left != vm_avl_empty) {
+					prev = vma->vm_avl_left;
+					while (prev->vm_avl_right != vm_avl_empty)
+						prev = prev->vm_avl_right;
+				}
+				if ((prev ? prev->vm_next : mm->mmap) != vma)
+					printk("find_vma_prev: tree inconsistent with list\n");
+				*pprev = prev;
+				return vma;
+			}
+		}
+	}
+	*pprev = NULL;
+	return NULL;
+}
+
 /* Normal function to fix up a mapping
  * This function is the default for when an area has no specific
  * function.  This may be used as part of a more specific routine.
@@ -446,6 +539,57 @@ static int unmap_fixup(struct vm_area_struct *area, unsigned long addr,
 	return 1;
 }
 
+/*
+ * Try to free as many page directory entries as we can,
+ * without having to work very hard at actually scanning
+ * the page tables themselves.
+ *
+ * Right now we try to free page tables if we have a nice
+ * PGDIR-aligned area that got free'd up. We could be more
+ * granular if we want to, but this is fast and simple,
+ * and covers the bad cases.
+ *
+ * "prev", if it exists, points to a vma before the one
+ * we just free'd - but there's no telling how much before.
+ */
+static void free_pgtables(struct mm_struct * mm, struct vm_area_struct *prev,
+	unsigned long start, unsigned long end)
+{
+	unsigned long first = start & PGDIR_MASK;
+	unsigned long last = (end & PGDIR_MASK) + PGDIR_SIZE;
+
+	if (!prev) {
+		prev = mm->mmap;
+		if (!prev)
+			goto no_mmaps;
+		if (prev->vm_end > start) {
+			if (last > prev->vm_end)
+				last = prev->vm_end;
+			goto no_mmaps;
+		}
+	}
+	for (;;) {
+		struct vm_area_struct *next = prev->vm_next;
+
+		if (next) {
+			if (next->vm_start < start) {
+				prev = next;
+				continue;
+			}
+			if (last > next->vm_start)
+				last = next->vm_start;
+		}
+		if (prev->vm_end > first)
+			first = prev->vm_end + PGDIR_SIZE - 1;
+		break;
+	}
+no_mmaps:
+	first = first >> PGDIR_SHIFT;
+	last = last >> PGDIR_SHIFT;
+	if (last > first)
+		clear_page_tables(mm, first, last-first);
+}
+
 /* Munmap is split into 2 main parts -- this part which finds
  * what needs doing, and the areas themselves, which do the
  * work.  This now handles partial unmappings.
@@ -454,8 +598,7 @@ static int unmap_fixup(struct vm_area_struct *area, unsigned long addr,
 int do_munmap(unsigned long addr, size_t len)
 {
 	struct mm_struct * mm;
-	struct vm_area_struct *mpnt, *free, *extra;
-	int freed;
+	struct vm_area_struct *mpnt, *prev, **npp, *free, *extra;
 
 	if ((addr & ~PAGE_MASK) || addr > TASK_SIZE || len > TASK_SIZE-addr)
 		return -EINVAL;
@@ -469,15 +612,17 @@ int do_munmap(unsigned long addr, size_t len)
 	 * on the list.  If nothing is put on, nothing is affected.
 	 */
 	mm = current->mm;
-	mpnt = mm->mmap;
-	while(mpnt && mpnt->vm_end <= addr)
-		mpnt = mpnt->vm_next;
+	mpnt = find_vma_prev(mm, addr, &prev);
 	if (!mpnt)
+		return 0;
+	/* we have  addr < mpnt->vm_end  */
+
+	if (mpnt->vm_start >= addr+len)
 		return 0;
 
 	/* If we'll make "hole", check the vm areas limit */
-	if ((mpnt->vm_start < addr && mpnt->vm_end > addr+len) &&
-	    mm->map_count > MAX_MAP_COUNT)
+	if ((mpnt->vm_start < addr && mpnt->vm_end > addr+len)
+	    && mm->map_count >= MAX_MAP_COUNT)
 		return -ENOMEM;
 
 	/*
@@ -488,18 +633,14 @@ int do_munmap(unsigned long addr, size_t len)
 	if (!extra)
 		return -ENOMEM;
 
-	/* we have addr < mpnt->vm_end */
+	npp = (prev ? &prev->vm_next : &mm->mmap);
 	free = NULL;
-	for ( ; mpnt && mpnt->vm_start < addr+len; ) {
-		struct vm_area_struct *next = mpnt->vm_next;
-
-		if(mpnt->vm_next)
-			mpnt->vm_next->vm_pprev = mpnt->vm_pprev;
-		*mpnt->vm_pprev = mpnt->vm_next;
-
+	for ( ; mpnt && mpnt->vm_start < addr+len; mpnt = *npp) {
+		*npp = mpnt->vm_next;
 		mpnt->vm_next = free;
 		free = mpnt;
-		mpnt = next;
+		if (mm->mmap_avl)
+			avl_remove(mpnt, &mm->mmap_avl);
 	}
 
 	/* Ok - we have the memory areas we should free on the 'free' list,
@@ -507,15 +648,10 @@ int do_munmap(unsigned long addr, size_t len)
 	 * If the one of the segments is only being partially unmapped,
 	 * it will put new vm_area_struct(s) into the address space.
 	 */
-	freed = 0;
 	while ((mpnt = free) != NULL) {
 		unsigned long st, end, size;
 
 		free = free->vm_next;
-		freed = 1;
-
-		mm->map_count--;
-		remove_shared_vm_struct(mpnt);
 
 		st = addr < mpnt->vm_start ? mpnt->vm_start : addr;
 		end = addr+len;
@@ -524,6 +660,9 @@ int do_munmap(unsigned long addr, size_t len)
 
 		if (mpnt->vm_ops && mpnt->vm_ops->unmap)
 			mpnt->vm_ops->unmap(mpnt, st, size);
+
+		remove_shared_vm_struct(mpnt);
+		mm->map_count--;
 
 		flush_cache_range(mm, st, end);
 		zap_page_range(mm, st, size);
@@ -540,8 +679,9 @@ int do_munmap(unsigned long addr, size_t len)
 	if (extra)
 		kmem_cache_free(vm_area_cachep, extra);
 
-	if (freed)
-		mm->mmap_cache = NULL;	/* Kill the cache. */
+	free_pgtables(mm, prev, addr, addr+len);
+
+	mm->mmap_cache = NULL;	/* Kill the cache. */
 	return 0;
 }
 
@@ -557,13 +697,23 @@ asmlinkage int sys_munmap(unsigned long addr, size_t len)
 	return ret;
 }
 
+/* Build the AVL tree corresponding to the VMA list. */
+void build_mmap_avl(struct mm_struct * mm)
+{
+	struct vm_area_struct * vma;
+
+	mm->mmap_avl = NULL;
+	for (vma = mm->mmap; vma; vma = vma->vm_next)
+		avl_insert(vma, &mm->mmap_avl);
+}
+
 /* Release all mmaps. */
 void exit_mmap(struct mm_struct * mm)
 {
 	struct vm_area_struct * mpnt;
 
 	mpnt = mm->mmap;
-	mm->mmap = mm->mmap_cache = NULL;
+	mm->mmap = mm->mmap_avl = mm->mmap_cache = NULL;
 	mm->rss = 0;
 	mm->total_vm = 0;
 	mm->locked_vm = 0;
@@ -591,6 +741,8 @@ void exit_mmap(struct mm_struct * mm)
 	/* This is just debugging */
 	if (mm->map_count)
 		printk("exit_mmap: map count is %d\n", mm->map_count);
+
+	clear_page_tables(mm, 0, USER_PTRS_PER_PGD);
 }
 
 /* Insert vm structure into process list sorted by address
@@ -598,20 +750,26 @@ void exit_mmap(struct mm_struct * mm)
  */
 void insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vmp)
 {
-	struct vm_area_struct **pprev = &mm->mmap;
+	struct vm_area_struct **pprev;
 	struct file * file;
 
-	mm->map_count++;
-
-	/* Find where to link it in. */
-	while(*pprev && (*pprev)->vm_start <= vmp->vm_start)
-		pprev = &(*pprev)->vm_next;
-
-	/* Insert it. */
-	if((vmp->vm_next = *pprev) != NULL)
-		(*pprev)->vm_pprev = &vmp->vm_next;
+	if (!mm->mmap_avl) {
+		pprev = &mm->mmap;
+		while (*pprev && (*pprev)->vm_start <= vmp->vm_start)
+			pprev = &(*pprev)->vm_next;
+	} else {
+		struct vm_area_struct *prev, *next;
+		avl_insert_neighbours(vmp, &mm->mmap_avl, &prev, &next);
+		pprev = (prev ? &prev->vm_next : &mm->mmap);
+		if (*pprev != next)
+			printk("insert_vm_struct: tree inconsistent with list\n");
+	}
+	vmp->vm_next = *pprev;
 	*pprev = vmp;
-	vmp->vm_pprev = pprev;
+
+	mm->map_count++;
+	if (mm->map_count >= AVL_MIN_MAP_COUNT && !mm->mmap_avl)
+		build_mmap_avl(mm);
 
 	file = vmp->vm_file;
 	if (file) {
@@ -637,23 +795,17 @@ void insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vmp)
  */
 void merge_segments (struct mm_struct * mm, unsigned long start_addr, unsigned long end_addr)
 {
-	struct vm_area_struct *prev, *mpnt, *next;
+	struct vm_area_struct *prev, *mpnt, *next, *prev1;
 
-	prev = NULL;
-	mpnt = mm->mmap;
-	while(mpnt && mpnt->vm_end <= start_addr) {
-		prev = mpnt;
-		mpnt = mpnt->vm_next;
-	}
+	mpnt = find_vma_prev(mm, start_addr, &prev1);
 	if (!mpnt)
 		return;
 
-	next = mpnt->vm_next;
-
-	/* we have prev->vm_next == mpnt && mpnt->vm_next = next */
-	if (!prev) {
+	if (prev1) {
+		prev = prev1;
+	} else {
 		prev = mpnt;
-		mpnt = next;
+		mpnt = mpnt->vm_next;
 	}
 
 	/* prev and mpnt cycle through the list, as long as
@@ -684,11 +836,10 @@ void merge_segments (struct mm_struct * mm, unsigned long start_addr, unsigned l
 		 * big segment can possibly merge with the next one.
 		 * The old unused mpnt is freed.
 		 */
-		if(mpnt->vm_next)
-			mpnt->vm_next->vm_pprev = mpnt->vm_pprev;
-		*mpnt->vm_pprev = mpnt->vm_next;
-
+		if (mm->mmap_avl)
+			avl_remove(mpnt, &mm->mmap_avl);
 		prev->vm_end = mpnt->vm_end;
+		prev->vm_next = mpnt->vm_next;
 		if (mpnt->vm_ops && mpnt->vm_ops->close) {
 			mpnt->vm_offset += mpnt->vm_end - mpnt->vm_start;
 			mpnt->vm_start = mpnt->vm_end;

@@ -656,10 +656,10 @@ static void internal_done(Scsi_Cmnd *SCpnt) {
 static void wait_intr() {
     int i = jiffies + WATCHDOG;
     
-    while(i>jiffies && !(inb(STAT_REG)&0xe0)) /* wait for a pseudo-interrupt */
+    while(time_after(i,jiffies) && !(inb(STAT_REG)&0xe0)) /* wait for a pseudo-interrupt */
         barrier();
     
-    if (i <= jiffies) {		/* Timed out */
+    if (time_before_eq(i,jiffies)) {		/* Timed out */
         rtrc(0);
         current_SC->result = DID_TIME_OUT << 16;
         current_SC->SCp.phase = idle;
@@ -983,9 +983,9 @@ static int irq_probe()
     
     /* Wait for the interrupt to occur */
     i = jiffies + WATCHDOG;
-    while(i > jiffies && !(inb(STAT_REG) & 0x80))
+    while(time_after(i, jiffies) && !(inb(STAT_REG) & 0x80))
         barrier();
-    if (i <= jiffies) {		/* Timed out, must be hardware trouble */
+    if (time_before_eq(i, jiffies)) {		/* Timed out, must be hardware trouble */
         probe_irq_off(irqs);
         return -1;
     }

@@ -9,7 +9,7 @@
  *	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
  *
- *	Version: $Id: ipmr.c,v 1.37 1998/10/03 09:37:39 davem Exp $
+ *	Version: $Id: ipmr.c,v 1.38 1999/01/12 14:34:40 davem Exp $
  *
  *	Fixes:
  *	Michael Chastain	:	Incorrect size of copying.
@@ -267,7 +267,6 @@ static void ipmr_update_threshoulds(struct mfc_cache *cache, unsigned char *ttls
 				cache->mfc_minvif = vifi;
 			if (cache->mfc_maxvif <= vifi)
 				cache->mfc_maxvif = vifi + 1;
-			vifi++;
 		}
 	}
 	end_bh_atomic();

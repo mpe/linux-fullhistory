@@ -1681,7 +1681,7 @@ static int set_serial_info(struct async_struct * info,
 	new_serial.irq = irq_cannonicalize(new_serial.irq);
 
 	if ((new_serial.irq >= NR_IRQS) || (new_serial.port > 0xffff) ||
-	    (new_serial.baud_base == 0) || (new_serial.type < PORT_UNKNOWN) ||
+	    (new_serial.baud_base < 9600)|| (new_serial.type < PORT_UNKNOWN) ||
 	    (new_serial.type > PORT_MAX) || (new_serial.type == PORT_CIRRUS) ||
 	    (new_serial.type == PORT_STARTECH)) {
 		return -EINVAL;

@@ -1055,7 +1055,7 @@ fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, int type, int access)
 	/*
 	 * Look up the dentry using the NFS file handle.
 	 */
-	error = nfserr_stale;
+	error = nfserr_noent;
 	dentry = find_fh_dentry(fh);
 	if (!dentry)
 		goto out;

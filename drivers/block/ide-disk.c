@@ -742,8 +742,8 @@ static void idedisk_setup (ide_drive_t *drive)
 	 * if possible, give fdisk access to more of the drive,
 	 * by correcting bios_cyls:
 	 */
-	if ((capacity >= (id->cyls * id->heads * id->sectors)) &&
-	    (!drive->forced_geom)) {
+	if ((capacity >= (drive->bios_cyl * drive->bios_sect * drive->bios_head)) &&
+	    (!drive->forced_geom) && drive->bios_sect && drive->bios_head) {
 		drive->bios_cyl = (capacity / drive->bios_sect) / drive->bios_head;
 #ifdef DEBUG
 		printk("Fixing Geometry :: CHS=%d/%d/%d to CHS=%d/%d/%d\n",

@@ -43,7 +43,7 @@ static inline void wake_one_more(struct semaphore * sem)
 	atomic_inc(&sem->waking);
 }
 
-static inline int waking_non_zero(struct semaphore *sem)
+static inline int waking_non_zero(struct semaphore *sem, struct task_struct *tsk)
 {
 	int ret, tmp;
 

@@ -32,6 +32,8 @@
 #include "sb_mixer.h"
 #include "sb.h"
 
+#include "sb_ess.h"
+
 static sb_devc *detected_devc = NULL;	/* For communication from probe to init */
 static sb_devc *last_devc = NULL;	/* For MPU401 initialization */
 
@@ -91,7 +93,7 @@ int sb_dsp_command(sb_devc * devc, unsigned char val)
 	return 0;
 }
 
-static int sb_dsp_get_byte(sb_devc * devc)
+int sb_dsp_get_byte(sb_devc * devc)
 {
 	int i;
 
@@ -103,50 +105,18 @@ static int sb_dsp_get_byte(sb_devc * devc)
 	return 0xffff;
 }
 
-inline void ess_extended (sb_devc * devc)
-{
-	/* Enable extended mode */
-
-	sb_dsp_command(devc, 0xc6);
-}
-
-int ess_write(sb_devc * devc, unsigned char reg, unsigned char data)
-{
-	/* Write a byte to an extended mode register of ES1688 */
-
-	if (!sb_dsp_command(devc, reg))
-		return 0;
-
-	return sb_dsp_command(devc, data);
-}
-
-int ess_read(sb_devc * devc, unsigned char reg)
-{
-/* Read a byte from an extended mode register of ES1688 */
-	if (!sb_dsp_command(devc, 0xc0))	/* Read register command */
-		return -1;
-
-	if (!sb_dsp_command(devc, reg))
-		return -1;
-
-	return sb_dsp_get_byte(devc);
-}
-
-static void sbintr(int irq, void *dev_id, struct pt_regs *dummy)
+static void sb_intr (sb_devc *devc)
 {
 	int status;
 	unsigned char   src = 0xff;
 
-	sb_devc *devc = dev_id;
-
-	devc->irq_ok = 1;
 	if (devc->model == MDL_SB16)
 	{
 		src = sb_getmixer(devc, IRQ_STAT);	/* Interrupt source register */
 
 #if defined(CONFIG_MIDI)&& defined(CONFIG_UART401)
-		if (src & 4)
-			uart401intr(devc->irq, devc->midi_irq_cookie, NULL);	/* MPU401 interrupt */
+		if (src & 4)						/* MPU401 interrupt */
+			uart401intr(devc->irq, devc->midi_irq_cookie, NULL);
 #endif
 
 		if (!(src & 3))
@@ -209,6 +179,21 @@ static void sbintr(int irq, void *dev_id, struct pt_regs *dummy)
 		status = inb(DSP_DATA_AVL16);
 }
 
+static void sbintr(int irq, void *dev_id, struct pt_regs *dummy)
+{
+    sb_devc *devc = dev_id;
+
+	devc->irq_ok = 1;
+
+	switch (devc->model) {
+	case MDL_ESS:
+		ess_intr (devc);
+		break;
+	default:
+		sb_intr (devc);
+		break;
+	}
+}
 
 int sb_dsp_reset(sb_devc * devc)
 {
@@ -216,10 +201,11 @@ int sb_dsp_reset(sb_devc * devc)
 
 	DEB(printk("Entered sb_dsp_reset()\n"));
 
-	if (devc->model == MDL_ESS)
-		outb(3, DSP_RESET);	/* Reset FIFO too */
-	else
-		outb(1, DSP_RESET);
+	if (devc->model == MDL_ESS) return ess_dsp_reset (devc);
+
+	/* This is only for non-ESS chips */
+
+	outb(1, DSP_RESET);
 
 	udelay(10);
 	outb(0, DSP_RESET);
@@ -232,9 +218,9 @@ int sb_dsp_reset(sb_devc * devc)
 		DDB(printk("sb: No response to RESET\n"));
 		return 0;	/* Sorry */
 	}
-	if (devc->model == MDL_ESS) ess_extended (devc);
 
 	DEB(printk("sb_dsp_reset() OK\n"));
+
 	return 1;
 }
 
@@ -492,206 +478,6 @@ static void relocate_ess1688(sb_devc * devc)
 #endif
 }
 
-/*
- * ESS technology describes a detection scheme in their docs. It involves
- * fiddling with the bits in certain mixer registers. ess_probe is supposed
- * to help.
- */
-static unsigned int ess_identify (sb_devc * devc);
-
-static int ess_probe (sb_devc * devc, int reg, int xorval)
-{
-	int  val1, val2, val3;
-
-	val1 = sb_getmixer (devc, reg);
-	val2 = val1 ^ xorval;
-	sb_setmixer (devc, reg, val2);
-	val3 = sb_getmixer (devc, reg); 
-	sb_setmixer (devc, reg, val1);
-
-	return (val2 == val3);
-}
-
-static int ess_init(sb_devc * devc, struct address_info *hw_config)
-{
-	unsigned char cfg, irq_bits = 0, dma_bits = 0;
-	int ess_major = 0, ess_minor = 0;
-	int i;
-	static char name[100];
-
-	/*
-	 * Try to detect ESS chips.
-	 */
-
-	sb_dsp_command(devc, 0xe7);	/* Return identification */
-
-	for (i = 1000; i; i--)
-	{
-		if (inb(DSP_DATA_AVAIL) & 0x80)
-		{
-			if (ess_major == 0)
-				ess_major = inb(DSP_READ);
-			else
-			{
-				ess_minor = inb(DSP_READ);
-				break;
-			}
-		}
-	}
-
-	if (ess_major == 0)
-		return 0;
-
-	if (ess_major == 0x48 && (ess_minor & 0xf0) == 0x80)
-	{
-		sprintf(name, "ESS ES488 AudioDrive (rev %d)",
-			  ess_minor & 0x0f);
-		hw_config->name = name;
-		devc->model = MDL_SBPRO;
-		return 1;
-	}
-
-	/*
-	 * This the detection heuristic of ESS technology, though somewhat
-	 * changed to actually make it work.
-	 * This results in the following detection steps:
-	 * - distinct between ES688 and ES1688+ (as always done in this driver)
-	 *   if ES688 we're ready
-	 * - try to detect ES1868, ES1869 or ES1878 (ess_identify)
-	 *   if successful we're ready
-	 * - try to detect ES1888, ES1887 or ES1788 (aim: detect ES1887)
-	 *   if successful we're ready
-	 * - Dunno. Must be 1688. Will do in general
-	 *
-	 * This is the most BETA part of the software: Will the detection
-         * always work?
-	 */
-	devc->model = MDL_ESS;
-	devc->submodel = ess_minor & 0x0f;
-
-	if (ess_major == 0x68 && (ess_minor & 0xf0) == 0x80)
-	{
-		char *chip    = NULL;
-
-		if ((ess_minor & 0x0f) < 8) {
-			chip = "ES688";
-		};
-		if (chip == NULL) {
-			int type;
-
-			type = ess_identify (devc);
-
-			switch (type) {
-			case 0x1868:
-				chip = "ES1868";
-				devc->submodel = SUBMDL_ES1868;
-				break;
-			case 0x1869:
-				chip = "ES1869";
-				devc->submodel = SUBMDL_ES1869;
-				break;
-			case 0x1878:
-				chip = "ES1878";
-				devc->submodel = SUBMDL_ES1878;
-				break;
-			};
-		};
-		if (chip == NULL && !ess_probe(devc, 0x64, (1 << 3))) {
-			if (ess_probe (devc, 0x70, 0x7f)) {
-				if (ess_probe (devc, 0x64, (1 << 5))) {
-					chip = "ES1887";
-				} else {
-					chip = "ES1888";
-				}
-				devc->submodel = SUBMDL_ES188X;
-			} else {
-				chip = "ES1788";
-				devc->submodel = SUBMDL_ES1788;
-			}
-		};
-		if (chip == NULL) {
-			chip = "ES1688";
-		};
-
-		sprintf(name,"ESS %s AudioDrive (rev %d)",
-			chip, ess_minor & 0x0f);
-	}
-	else
-		strcpy(name, "Jazz16");
-
-	hw_config->name = name;
-	sb_dsp_reset(devc);	/* Turn on extended mode */
-
-	/*
-	 *    Set IRQ configuration register
-	 */
-
-	cfg = 0x50;		/* Enable only DMA counter interrupt */
-
-	switch (devc->irq)
-	{
-		case 2:
-		case 9:
-			irq_bits = 0;
-			break;
-
-		case 5:
-			irq_bits = 1;
-			break;
-
-		case 7:
-			irq_bits = 2;
-			break;
-
-		case 10:
-			irq_bits = 3;
-			break;
-
-		default:
-			irq_bits = 0;
-			cfg = 0x10;	/* Disable all interrupts */
-			printk(KERN_ERR "ESS1688: Invalid IRQ %d\n", devc->irq);
-			return 0;
-	}
-
-	if (!ess_write(devc, 0xb1, cfg | (irq_bits << 2)))
-		printk(KERN_ERR "ESS1688: Failed to write to IRQ config register\n");
-
-	/*
-	 *    Set DMA configuration register
-	 */
-
-	cfg = 0x50;		/* Extended mode DMA enable */
-
-	if (devc->dma8 > 3 || devc->dma8 < 0 || devc->dma8 == 2)
-	{
-		dma_bits = 0;
-		cfg = 0x00;	/* Disable all DMA */
-		printk(KERN_ERR "ESS1688: Invalid DMA %d\n", devc->dma8);
-	}
-	else
-	{
-		if (devc->dma8 == 3)
-			dma_bits = 3;
-		else
-			dma_bits = devc->dma8 + 1;
-	}
-
-	if (!ess_write(devc, 0xb2, cfg | (dma_bits << 2)))
-		printk(KERN_ERR "ESS1688: Failed to write to DMA config register\n");
-
-	/*
-	 *	Enable joystick and OPL3
-	 */
-
-	cfg = sb_getmixer(devc, 0x40);
-	sb_setmixer(devc, 0x40, cfg | 0x03);
-	if (devc->submodel >= 8)	/* ES1688 */
-		devc->caps |= SB_NO_MIDI;	/* ES1688 uses MPU401 MIDI mode */
-	sb_dsp_reset(devc);
-	return 1;
-}
-
 int sb_dsp_detect(struct address_info *hw_config)
 {
 	sb_devc sb_info;
@@ -700,7 +486,7 @@ int sb_dsp_detect(struct address_info *hw_config)
 	memset((char *) &sb_info, 0, sizeof(sb_info));	/* Zero everything */
 	sb_info.my_mididev = -1;
 	sb_info.my_mixerdev = -1;
-	sb_info.my_dev = -1;
+	sb_info.dev = -1;
 
 	/*
 	 * Initialize variables 
@@ -905,11 +691,18 @@ int sb_dsp_init(struct address_info *hw_config)
 			break;
 
 		case 3:		/* SB Pro and most clones */
-			if (devc->model == 0)
-			{
+			switch (devc->model) {
+			case 0:
 				devc->model = hw_config->card_subtype = MDL_SBPRO;
 				if (hw_config->name == NULL)
 					hw_config->name = "Sound Blaster Pro (8 BIT ONLY)";
+				break;
+			case MDL_ESS:
+				if (!ess_dsp_init(devc, hw_config)) {
+					release_region (hw_config->io_base, 16);
+					return 0;
+				}
+				break;
 			}
 			break;
 
@@ -931,6 +724,7 @@ int sb_dsp_init(struct address_info *hw_config)
 				/* Register 0x22 & 0xf0 on ALS100 == 0xf0; on ALS007 it == 0x10.     */
 				if ((sb_getmixer(devc,0x30) != 0xff) || ((sb_getmixer(devc,0x22) & 0xf0) != 0x10)) 
 				{
+					devc->submodel = SUBMDL_ALS100;
 					if (hw_config->name == NULL)
 						hw_config->name = "Sound Blaster 16 (ALS-100)";
         			}
@@ -1068,7 +862,7 @@ void sb_dsp_unload(struct address_info *hw_config, int sbmpu)
 			/* But we have to do it, if UART401 is not detected */
 			if (!sbmpu)
 				sound_unload_mididev(devc->my_mididev);
-			sound_unload_audiodev(devc->my_dev);
+			sound_unload_audiodev(devc->dev);
 		}
 		kfree(devc);
 	}
@@ -1089,20 +883,16 @@ void sb_setmixer(sb_devc * devc, unsigned int port, unsigned int value)
 {
 	unsigned long flags;
 
-	/* MDB(printk("ESS: write port %x: %x\n", port, value)); */
+	if (devc->model == MDL_ESS) return ess_setmixer (devc, port, value);
 
 	save_flags(flags);
 	cli();
-	if (devc->model == MDL_ESS && port >= 0xa0) {
-		/* ess_extended (devc); */
-		ess_write (devc, port, value);
-	} else {
-		outb(((unsigned char) (port & 0xff)), MIXER_ADDR);
 
-		udelay(20);
-		outb(((unsigned char) (value & 0xff)), MIXER_DATA);
-		udelay(20);
-	};
+	outb(((unsigned char) (port & 0xff)), MIXER_ADDR);
+	udelay(20);
+	outb(((unsigned char) (value & 0xff)), MIXER_DATA);
+	udelay(20);
+
 	restore_flags(flags);
 }
 
@@ -1111,38 +901,29 @@ unsigned int sb_getmixer(sb_devc * devc, unsigned int port)
 	unsigned int val;
 	unsigned long flags;
 
+	if (devc->model == MDL_ESS) return ess_getmixer (devc, port);
+
 	save_flags(flags);
 	cli();
-	outb(((unsigned char) (port & 0xff)), MIXER_ADDR);
 
+	outb(((unsigned char) (port & 0xff)), MIXER_ADDR);
 	udelay(20);
 	val = inb(MIXER_DATA);
 	udelay(20);
+
 	restore_flags(flags);
 
 	return val;
 }
-/*
- * Some PnP chips can be identified by repeatedly reading mixer register 0x40.
- * This is done by ess_identify
- */
-static unsigned int ess_identify (sb_devc * devc)
+
+void sb_chgmixer
+	(sb_devc * devc, unsigned int reg, unsigned int mask, unsigned int val)
 {
-	unsigned int val;
-	unsigned long flags;
+	int value;
 
-	save_flags(flags);
-	cli();
-	outb(((unsigned char) (0x40 & 0xff)), MIXER_ADDR);
-
-	udelay(20);
-	val  = inb(MIXER_DATA) << 8;
-	udelay(20);
-	val |= inb(MIXER_DATA);
-	udelay(20);
-	restore_flags(flags);
-
-	return val;
+	value = sb_getmixer(devc, reg);
+	value = (value & ~mask) | (val & mask);
+	sb_setmixer(devc, reg, value);
 }
 
 #ifdef CONFIG_MIDI
@@ -1285,53 +1066,6 @@ static int smw_midi_init(sb_devc * devc, struct address_info *hw_config)
 #endif
 	outb((control | 0x03), mpu_base + 7);	/* xxxxxx11 restarts */
 	hw_config->name = "SoundMan Wave";
-	return 1;
-}
-
-static int ess_midi_init(sb_devc * devc, struct address_info *hw_config)
-{
-	unsigned char   cfg, tmp;
-
-	cfg = sb_getmixer(devc, 0x40) & 0x03;
-
-	if (devc->submodel < 8)
-	{
-		sb_setmixer(devc, 0x40, cfg | 0x03);	/* Enable OPL3 & joystick */
-		return 0;	/* ES688 doesn't support MPU401 mode */
-	}
-	tmp = (hw_config->io_base & 0x0f0) >> 4;
-
-	if (tmp > 3)
-	{
-		sb_setmixer(devc, 0x40, cfg);
-		return 0;
-	}
-	cfg |= tmp << 3;
-
-	tmp = 1;		/* MPU enabled without interrupts */
-
-	/* May be shared: if so the value is -ve */
-	
-	switch(abs(hw_config->irq))
-	{
-		case 9:
-			tmp = 0x4;
-			break;
-		case 5:
-			tmp = 0x5;
-			break;
-		case 7:
-			tmp = 0x6;
-			break;
-		case 10:
-			tmp = 0x7;
-			break;
-		default:
-			return 0;
-	}
-
-	cfg |= tmp << 5;
-	sb_setmixer(devc, 0x40, cfg | 0x03);
 	return 1;
 }
 

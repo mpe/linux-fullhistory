@@ -61,6 +61,7 @@
 #include <asm/bitops.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
+#include <linux/version.h>
 #include "sm.h"
 
 /* --------------------------------------------------------------------- */

@@ -163,6 +163,7 @@ static int config_pas_hw(struct address_info *hw_config)
 	if (pas_irq < 0 || pas_irq > 15)
 	{
 		printk(KERN_ERR "PAS16: Invalid IRQ %d", pas_irq);
+		hw_config->irq=-1;
 		ok = 0;
 	}
 	else
@@ -173,18 +174,23 @@ static int config_pas_hw(struct address_info *hw_config)
 		if (!irq_bits[pas_irq])
 		{
 			printk(KERN_ERR "PAS16: Invalid IRQ %d", pas_irq);
+			hw_config->irq=-1;
 			ok = 0;
 		}
 		else
 		{
-			if (request_irq(pas_irq, pasintr, 0, "PAS16",NULL) < 0)
+			if (request_irq(pas_irq, pasintr, 0, "PAS16",hw_config) < 0) {
+				printk(KERN_ERR "PAS16: Cannot allocate IRQ %d\n",pas_irq);
+				hw_config->irq=-1;
 				ok = 0;
+			}
 		}
 	}
 
 	if (hw_config->dma < 0 || hw_config->dma > 7)
 	{
 		printk(KERN_ERR "PAS16: Invalid DMA selection %d", hw_config->dma);
+		hw_config->dma=-1;
 		ok = 0;
 	}
 	else
@@ -193,6 +199,7 @@ static int config_pas_hw(struct address_info *hw_config)
 		if (!dma_bits[hw_config->dma])
 		{
 			printk(KERN_ERR "PAS16: Invalid DMA selection %d", hw_config->dma);
+			hw_config->dma=-1;
 			ok = 0;
 		}
 		else
@@ -200,6 +207,7 @@ static int config_pas_hw(struct address_info *hw_config)
 			if (sound_alloc_dma(hw_config->dma, "PAS16"))
 			{
 				printk(KERN_ERR "pas2_card.c: Can't allocate DMA channel\n");
+				hw_config->dma=-1;
 				ok = 0;
 			}
 		}
@@ -370,14 +378,16 @@ void unload_pas(struct address_info *hw_config)
 	extern int pas_audiodev;
 	extern int pas2_mididev;
 
-	sound_free_dma(hw_config->dma);
-	free_irq(hw_config->irq, NULL);
+	if (hw_config->dma>0)
+		sound_free_dma(hw_config->dma);
+	if (hw_config->irq>0)
+		free_irq(hw_config->irq, hw_config);
 
 	if(pas_audiodev!=-1)
 		sound_unload_mixerdev(audio_devs[pas_audiodev]->mixer_dev);
 	if(pas2_mididev!=-1)
 	        sound_unload_mididev(pas2_mididev);
-	if(pas_audiodev)
+	if(pas_audiodev!=-1)
 		sound_unload_audiodev(pas_audiodev);
 }
 

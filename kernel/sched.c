@@ -883,7 +883,7 @@ void __up(struct semaphore *sem)
 	 * who gets to gate through and who has to wait some more.	 \
 	 */								 \
 	for (;;) {							 \
-		if (waking_non_zero(sem))	/* are we waking up?  */ \
+		if (waking_non_zero(sem, tsk))	/* are we waking up?  */ \
 			break;			/* yes, exit loop */
 
 #define DOWN_TAIL(task_state)			\
@@ -1551,7 +1551,7 @@ asmlinkage int sys_nice(int increment)
 	 * do a "normalization" of the priority (traditionally
 	 * Unix nice values are -20 to 20; Linux doesn't really
 	 * use that kind of thing, but uses the length of the
-	 * timeslice instead (default 150 ms). The rounding is
+	 * timeslice instead (default 210 ms). The rounding is
 	 * why we want to avoid negative values.
 	 */
 	newprio = (newprio * DEF_PRIORITY + 10) / 20;

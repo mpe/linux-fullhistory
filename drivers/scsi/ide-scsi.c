@@ -23,6 +23,8 @@
  * Ver 0.6   Jan 27 98   Allow disabling of SCSI command translation layer
  *                        for access through /dev/sg.
  *                       Fix MODE_SENSE_6/MODE_SELECT_6/INQUIRY translation.
+ * Ver 0.7   Dev 04 98   Ignore commands where lun != 0 to avoid multiple
+ *                        detection of devices with CONFIG_SCSI_MULTI_LUN
  */
 
 #define IDESCSI_VERSION "0.6"
@@ -726,6 +728,9 @@ int idescsi_queue (Scsi_Cmnd *cmd, void (*done)(Scsi_Cmnd *))
 
 	if (!drive) {
 		printk (KERN_ERR "ide-scsi: drive id %d not present\n", cmd->target);
+		goto abort;
+	}
+	if (cmd->lun != 0) {		/* Only respond to LUN 0. Drop others */
 		goto abort;
 	}
 	scsi = drive->driver_data;

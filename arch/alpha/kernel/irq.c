@@ -335,9 +335,12 @@ int get_irq_list(char *buf)
 #ifndef __SMP__
 		p += sprintf(p, "%10u ", kstat_irqs(i));
 #else
-		for (j = 0; j < smp_num_cpus; j++)
-			p += sprintf(p, "%10u ",
-				     kstat.irqs[cpu_logical_map(j)][i]);
+		{
+		  int j;
+		  for (j = 0; j < smp_num_cpus; j++)
+			  p += sprintf(p, "%10u ",
+				       kstat.irqs[cpu_logical_map(j)][i]);
+		}
 #endif
 		p += sprintf(p, "  %c%s",
 			     (action->flags & SA_INTERRUPT)?'+':' ',

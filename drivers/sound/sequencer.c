@@ -16,9 +16,7 @@
  */
 #include <linux/config.h>
 
-#ifdef CONFIG_KMOD
 #include <linux/kmod.h>
-#endif
 
 
 #define SEQUENCER_C
@@ -998,10 +996,8 @@ int sequencer_open(int dev, struct file *file)
 	if (dev)		/* Patch manager device (obsolete) */
 		return -ENXIO;
 
-#ifdef CONFIG_KMOD
 	if(synth_devs[dev] == NULL)
 		request_module("synth0");
-#endif
 
 	if (mode == OPEN_READ)
 	{

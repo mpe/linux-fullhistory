@@ -261,20 +261,15 @@ int alpha_clone(unsigned long clone_flags, unsigned long usp,
 {
 	if (!usp)
 		usp = rdusp();
-	return do_fork(clone_flags & ~CLONE_VFORK, usp, (struct pt_regs *) (swstack+1));
+	return do_fork(clone_flags, usp, (struct pt_regs *) (swstack+1));
 }
 
 int alpha_vfork(struct switch_stack * swstack)
 {
 	int child;
-	struct semaphore sem = MUTEX_LOCKED;
 
-	current->vfork_sem = &sem;
 	child = do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, rdusp(),
 			(struct pt_regs *) (swstack+1));
-
-	if (child > 0)
-		down(&sem);
 
 	return child;
 }

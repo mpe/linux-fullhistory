@@ -16,6 +16,13 @@ D: One of assisting postmasters for vger.rutgers.edu's lists
 S: (ask for current address)
 S: Finland
 
+N: Dave Airlie
+E: airlied@linux.ie
+W: http://www.csn.ul.ie/~airlied
+D: NFS over TCP patches
+S: University of Limerick
+S: Ireland
+
 N: Werner Almesberger
 E: werner.almesberger@lrc.di.epfl.ch
 D: dosfs, LILO, some fd features, various other hacks here and there
@@ -1720,11 +1727,11 @@ S: Beaverton, Oregon 97008
 S: USA
 
 N: Mike Shaver
-E: shaver@netscape.com
-W: http://people.netscape.com/shaver/
+E: shaver@hungry.org
+W: http://www.hungry.org/~shaver/
 D: MIPS work, /proc/sys/net, misc net hacking
 S: 149 Union St.
-S: Ottawa, Ontario
+S: Kingston, Ontario
 S: Canada K7L 2P4
 
 N: John Shifflett

@@ -276,7 +276,7 @@ struct socket *sock_alloc(void)
 
 	sock = socki_lookup(inode);
 
-	inode->i_mode = S_IFSOCK;
+	inode->i_mode = S_IFSOCK|S_IRWXUGO;
 	inode->i_sock = 1;
 	inode->i_uid = current->uid;
 	inode->i_gid = current->gid;

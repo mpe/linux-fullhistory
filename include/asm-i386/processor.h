@@ -238,7 +238,7 @@ struct thread_struct {
 };
 
 #define INIT_MMAP \
-{ &init_mm, 0, 0, PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC, NULL, &init_mm.mmap }
+{ &init_mm, 0, 0, NULL, PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC, 1, NULL, NULL }
 
 #define INIT_TSS  {						\
 	0,0, /* back_link, __blh */				\
@@ -281,6 +281,7 @@ extern int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags);
 /* Copy and release all segment info associated with a VM */
 extern void copy_segments(int nr, struct task_struct *p, struct mm_struct * mm);
 extern void release_segments(struct mm_struct * mm);
+extern void forget_segments(void);
 
 /*
  * FPU lazy state save handling..

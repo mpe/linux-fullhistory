@@ -2132,6 +2132,12 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 				return -EIO;
 			return 0;
 		}
+	        case HDIO_UNREGISTER_HWIF:
+			if (!capable(CAP_SYS_ADMIN)) return -EACCES;
+			/* should I check here for arg > MAX_HWIFS, or
+			   just let ide_unregister fail silently? -- shaver */
+			ide_unregister(arg);
+			return 0;
 		case HDIO_SET_NICE:
 			if (!capable(CAP_SYS_ADMIN)) return -EACCES;
 			if (drive->driver == NULL)

@@ -30,7 +30,7 @@ do {				\
 	restore_flags(flags);	\
 } while(0)
 
-#define waking_non_zero(sem)	\
+#define waking_non_zero(sem,tsk)\
 ({	unsigned long flags;	\
 	int ret = 0;		\
 	save_and_cli(flags);	\

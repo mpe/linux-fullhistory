@@ -1,3 +1,260 @@
+Introduction
+------------
+
+This file is a collection of all the old Readme files distributed with
+OSS/Lite by Hannu Savolainen. Since the new Linux sound driver is founded
+on it I think these information may still be interesting for users that
+have to configure their sound system.
+
+Be warned: Alan Cox is the current maintainer of the Linux sound driver so if
+you have problems with it, please contact him or the current device-specific
+driver maintainer (e.g. for aedsp16 specific problems contact me). If you have
+patches, contributions or suggestions send them to Alan: I'm sure they are
+welcome.
+
+In this document you will find a lot of references about OSS/Lite or ossfree:
+they are gone forever. Keeping this in mind and with a grain of salt this
+document can be still interesting and very helpful.
+
+[ File edited 17.01.1999 - Riccardo Facchetti ]
+
+OSS/Free version 3.8 release notes
+----------------------------------
+
+Please read the SOUND-HOWTO (available from sunsite.unc.edu and other Linux FTP 
+sites). It gives instructions about using sound with Linux. It's bit out of
+date but still very useful. Information about bug fixes and such things
+is available from the web page (see above).
+
+Please check http://www.opensound.com/pguide for more info about programming
+with OSS API.
+
+   ====================================================
+-  THIS VERSION ____REQUIRES____ Linux 2.1.57 OR LATER.
+   ====================================================
+
+Packages "snd-util-3.8.tar.gz" and "snd-data-0.1.tar.Z"
+contain useful utilities to be used with this driver.
+See http://www.opensound.com/ossfree/getting.html for
+download instructions.
+
+If you are looking for the installation instructions, please
+look forward into this document.
+
+Supported sound cards
+---------------------
+
+See below.
+
+Contributors
+------------
+
+This driver contains code by several contributors. In addition several other
+persons have given useful suggestions. The following is a list of major
+contributors. (I could have forgotten some names.)
+
+	Craig Metz	1/2 of the PAS16 Mixer and PCM support
+	Rob Hooft	Volume computation algorithm for the FM synth.
+	Mika Liljeberg	uLaw encoding and decoding routines
+	Jeff Tranter	Linux SOUND HOWTO document
+	Greg Lee	Volume computation algorithm for the GUS and
+			lot's of valuable suggestions.
+	Andy Warner	ISC port
+	Jim Lowe,
+	Amancio Hasty Jr	FreeBSD/NetBSD port
+	Anders Baekgaard 	Bug hunting and valuable suggestions.
+	Joerg Schubert	SB16 DSP support (initial version).
+	Andrew Robinson Improvements to the GUS driver
+	Megens SA	MIDI recording for SB and SB Pro (initial version).
+	Mikael Nordqvist  Linear volume support for GUS and
+			  nonblocking /dev/sequencer.
+	Ian Hartas		SVR4.2 port
+	Markus Aroharju	and
+	Risto Kankkunen		Major contributions to the mixer support
+				of GUS v3.7.
+	Hunyue Yau	Mixer support for SG NX Pro.
+	Marc Hoffman	PSS support (initial version).
+	Rainer Vranken	Initialization for Jazz16 (initial version).
+	Peter Trattler	Initial version of loadable module support for Linux.
+	JRA Gibson	16 bit mode for Jazz16 (initial version)
+	Davor Jadrijevic MAD16 support (initial version)
+	Gregor Hoffleit	Mozart support (initial version)
+	Riccardo Facchetti Audio Excel DSP 16 (aedsp16) support
+	James Hightower Spotting a tiny but important bug in CS423x support.
+	Denis Sablic	OPTi 82C924 spesific enhancements (non PnP mode)
+	Tim MacKenzie	Full duplex support for OPTi 82C930.
+	
+	Please look at lowlevel/README for more contributors.
+
+There are probably many other names missing. If you have sent me some
+patches and your name is not in the above list, please inform me.
+
+Sending your contributions or patches
+-------------------------------------
+
+First of all it's highly recommended to contact me before sending anything
+or before even starting to do any work. Tell me what you suggest to be
+changed or what you have planned to do. Also ensure you are using the
+very latest (development) version of OSS/Free since the change may already be
+implemented there. In general it's major waste of time to try to improve
+several months old version. Information about the latest version can be found
+from http://www.opensound.com/ossfree. In general there is no point in
+sending me patches relative to production kernels.
+
+Sponsors etc.
+-------------
+
+The following companies have greatly helped development of this driver 
+in form of a free copy of their product:
+
+Novell, Inc.		UnixWare personal edition + SDK
+The Santa Cruz Operation, Inc. 	A SCO OpenServer + SDK
+Ensoniq Corp,		a SoundScape card and extensive amount of assistance
+MediaTrix Peripherals Inc, a AudioTrix Pro card + SDK
+Acer, Inc.		a pair of AcerMagic S23 cards.
+
+In addition the following companies have provided me sufficient amount
+of technical information at least some of their products (free or $$$):
+
+Advanced Gravis Computer Technology Ltd.
+Media Vision Inc.
+Analog Devices Inc.
+Logitech Inc.
+Aztech Labs Inc.
+Crystal Semiconductor Corporation,
+Integrated Circuit Systems Inc.
+OAK Technology
+OPTi
+Turtle Beach
+miro
+Ad Lib Inc. ($$)
+Music Quest Inc. ($$)
+Creative Labs ($$$)
+
+If you have some problems
+=========================
+
+Read the sound HOWTO (sunsite.unc.edu:/pub/Linux/docs/...?).
+Also look at the home page (http://www.opensound.com/ossfree). It may
+contain info about some recent bug fixes.
+
+It's likely that you have some problems when trying to use the sound driver
+first time. Sound cards don't have standard configuration so there are no
+good default configuration to use. Please try to use same I/O, DMA and IRQ
+values for the sound card than with DOS.
+
+If you get an error message when trying to use the driver, please look
+at /var/adm/messages for more verbose error message.
+
+
+In general the easiest way to diagnose problems is to do "cat /dev/sndstat".
+
+If you get an error message, there are some problems with the driver setup:
+
+	- "No such file or directory" tells that the device files for
+	the sound driver are missing. Use the script at the end of
+	linux/drivers/sound/Readme.linux to create them.
+
+	- "No such device" tells that the sound driver is not in the kernel.
+	You have to reconfigure and recompile the kernel to have the sound
+	driver. Compiling the driver doesn't help alone. You have to boot
+	with the newly compiled one before the driver becomes active.
+	The Linux-HOWTO should help in this step.
+
+The following errors are likely with /dev/dsp and /dev/audio.
+
+	- "No such device or address". This error message should not happen
+	with /dev/sndstat but it's possible with the other sound devices.
+	This error indicates that there are no suitable hardware for the
+	device file or the sound driver has been compiled without support for
+	this particular device. For example /dev/audio and /dev/dsp will not
+	work if "digitized voice support" was not enabled during "make config".
+	
+	- "Device or resource busy". Probably the IRQ (or DMA) channel 
+	required by the sound card is in use by some other device/driver.
+
+	- "I/O error". Almost certainly (99%) it's an IRQ or DMA conflict.
+	Look at the kernel messages in /var/adm/notice for more info.
+
+	- "Invalid argument". The application is calling ioctl()
+	with impossible parameters. Check that the application is
+	for sound driver version 2.X or later.
+
+In general the printout of /dev/sndstat should tell what is the problem.
+It's possible that there are bugs in the sound driver but 99% of the problems
+reported to me are caused by somehow incorrect setup during "make config".
+
+Linux installation
+==================
+
+IMPORTANT!	Read this if you are installing a separately
+		distributed version of this driver.
+
+		Check that your kernel version works with this
+		release of the driver (see Readme). Also verify
+		that your current kernel version doesn't have more
+		recent sound driver version than this one. IT'S HIGHLY
+		RECOMMENDED THAT YOU USE THE SOUND DRIVER VERSION THAT
+		IS DISTRIBUTED WITH KERNEL SOURCES.
+
+- When installing separately distributed sound driver you should first
+  read the above notice. Then try to find proper directory where and how
+  to install the driver sources. You should not try to install a separately
+  distributed driver version if you are not able to find the proper way
+  yourself (in this case use the version that is distributed with kernel
+  sources). Remove old version of linux/drivers/sound directory before
+  installing new files.
+
+- To build the device files you need to run the enclosed shell script 
+  (see below). You need to do this only when installing sound driver
+  first time or when upgrading to much recent version than the earlier
+  one.
+
+- Configure and compile Linux as normally (remember to include the
+  sound support during "make config"). Please refer to kernel documentation
+  for instructions about configuring and compiling kernel. File Readme.cards
+  contains card specific instructions for configuring this driver for
+  use with various sound cards.
+
+Boot time configuration (using lilo and insmod) 
+-----------------------------------------------
+
+This information has been removed. Too many users didn't believe
+that it's really not necessary to use this method. Please look at
+Readme of sound driver version 3.0.1 if you still want to use this method.
+
+Problems
+--------
+
+If you have any kind of problems, there is a debugging feature which
+could help you to solve the problem. To use it, just execute the
+command:
+
+	cat /dev/sndstat 
+
+and look at the output. It should display some useful info about the
+driver configuration. If there is no /dev/sndstat 
+(/dev/sndstat: No such file or directory), ensure that you have executed the
+soundinstall script (at the end of this file).
+
+Common error messages:
+
+- /dev/???????: No such file or directory.
+Run the script at the end of this file.
+
+- /dev/???????: No such device.
+You are not running kernel which contains the sound driver. When using
+modularized sound driver this error means that the sound driver is not
+loaded.
+
+- /dev/????: No such device or address.
+Sound driver didn't detect suitable card when initializing. Please look at
+Readme.cards for info about configuring the driver with your card. Also
+check for possible boot (insmod) time error messages in /var/adm/messages.
+
+- Other messages or problems
+Please check http://www.opensound.com/ossfree for more info.
+
 Configuring version 3.8 (for Linux) with some common sound cards
 ================================================================
 

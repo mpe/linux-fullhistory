@@ -52,9 +52,12 @@
 #define SUBMDL_ES1868	0x11	/* Subtype ES1868 for specific handling */
 #define SUBMDL_ES1869	0x12	/* Subtype ES1869 for specific handling */
 #define SUBMDL_ES1878	0x13	/* Subtype ES1878 for specific handling */
-#define SUBMDL_ES188X	0x14	/* Subtype ES1887 for specific handling */
+#define SUBMDL_ES1887	0x14	/* Subtype ES1887 for specific handling */
+#define SUBMDL_ES1888	0x14	/* Subtype ES1888 for specific handling */
 #define SUBMDL_ALS007	42	/* ALS-007 differs from SB16 only in mixer */
 				/* register assignment */
+#define SUBMDL_ALS100	43	/* ALS-100 allows sampling rates of up */
+				/* to 48kHz */
 /*
  * Config flags
  */
@@ -123,7 +126,6 @@ typedef struct sb_devc {
 	   int      trg_restart_16;
 
 	   unsigned char tconst;
-	   int my_dev;
 	
 	/* MIDI fields */
 	   int my_mididev;
@@ -134,6 +136,7 @@ typedef struct sb_devc {
 	} sb_devc;
 
 int sb_dsp_command (sb_devc *devc, unsigned char val);
+int sb_dsp_get_byte(sb_devc * devc);
 int sb_dsp_reset (sb_devc *devc);
 void sb_setmixer (sb_devc *devc, unsigned int port, unsigned int value);
 unsigned int sb_getmixer (sb_devc *devc, unsigned int port);
@@ -146,9 +149,11 @@ void smw_mixer_init(sb_devc *devc);
 void sb_dsp_midi_init (sb_devc *devc);
 void sb_audio_init (sb_devc *devc, char *name);
 void sb_midi_interrupt (sb_devc *devc);
-int ess_write (sb_devc *devc, unsigned char reg, unsigned char data);
-int ess_read (sb_devc *devc, unsigned char reg);
-void ess_mixer_reload (sb_devc * devc, int dev);
+void sb_chgmixer (sb_devc * devc, unsigned int reg, unsigned int mask, unsigned int val);
+int sb_common_mixer_set(sb_devc * devc, int dev, int left, int right);
+
+int sb_audio_open(int dev, int mode);
+void sb_audio_close(int dev);
 
 extern int acer;
 extern sb_devc *last_sb;

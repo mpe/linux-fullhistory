@@ -48,7 +48,7 @@ static inline void wake_one_more(struct semaphore * sem)
 	restore_flags(flags);
 }
 
-static inline int waking_non_zero(struct semaphore *sem)
+static inline int waking_non_zero(struct semaphore *sem, struct task_struct *tsk)
 {
 	unsigned long flags;
 	int ret = 0;

@@ -1,4 +1,3 @@
-
 /*
  * sound/sb_mixer.c
  *
@@ -12,84 +11,8 @@
  * for more info.
  *
  *
- * Thomas Sailer		: ioctl code reworked (vmalloc/vfree removed)
- * Rolf Fokkens (Dec 20 1998)	: ES188x recording level support on a per
- *				  input basis.
- *              (Dec 24 1998)	: Recognition of ES1788, ES1887, ES1888,
- *				  ES1868, ES1869 and ES1878. Could be used for
- *				  specific handling in the future. All except
- *				  ES1887 and ES1888 and ES688 are handled like
- *				  ES1688.
- *              (Dec 27 1998)	: RECLEV for all (?) ES1688+ chips. ES188x now
- *				  have the "Dec 20" support + RECLEV
- */
-
-/*
- * About the documentation
- *
- * I don't know if the chips all are OK, but the documentation is buggy. 'cause
- * I don't have all the cips myself, there's a lot I cannot verify. I'll try to
- * keep track of my latest insights about his here. If you have additional info,
- * please enlighten me (fokkensr@vertis.nl)!
- *
- * I had the impression that ES1688 also has 6 bit master volume control. The
- * documentation about ES1888 (rev C, october '95) claims that ES1888 has
- * the following features ES1688 doesn't have:
- * - 6 bit master volume
- * - Full Duplex
- * So ES1688 apparently doesn't have 6 bit master volume control, but the
- * ES1688 does have RECLEV control. Makes me wonder: does ES688 have it too?
- * Without RECLEV ES688 won't be much fun I guess.
- *
- * From the ES1888 (rev C, october '95) documentation I got the impression
- * that registers 0x68 to 0x6e don't exist which means: no recording volume
- * controls. To my surprise the ES888 documentation (1/14/96) claims that
- * ES888 does have these record mixer registers, but that ES1888 doesn't have
- * 0x69 and 0x6b. So the rest should be there.
- * 
- */
-
-/*
- * About recognition of ESS chips
- *
- * The distinction of ES688, ES1688, ES1788, ES1887 and ES1888 is described in
- * a (preliminary ??) datasheet on ES1887. It's aim is to identify ES1887, but
- * during detection the text claims that "this chip may be ..." when a step
- * fails. This scheme is used to distinct between the above chips.
- * It appears however that some PnP chips like ES1868 are recognized as ES1788
- * by the ES1887 detection scheme. These PnP chips can be detected in another
- * way however: ES1868, ES1869 and ES1878 can be recognized (full proof I think)
- * by repeatedly reading mixer register 0x40. This is done by ess_identify in
- * sb_common.c.
- * This results in the following detection steps:
- * - distinct between ES688 and ES1688+ (as always done in this driver)
- *   if ES688 we're ready
- * - try to detect ES1868, ES1869 or ES1878
- *   if successful we're ready
- * - try to detect ES1888, ES1887 or ES1788
- *   if successful we're ready
- * - Dunno. Must be 1688. Will do in general
- *
- * About RECLEV support:
- *
- * The existing ES1688 support didn't take care of the ES1688+ recording
- * levels very well. Whenever a device was selected (recmask) for recording
- * it's recording level was loud, and it couldn't be changed. The fact that
- * internal register 0xb4 could take care of RECLEV, didn't work meaning until
- * it's value was restored every time the chip was reset; this reset the
- * value of 0xb4 too. I guess that's what 4front also had (have?) trouble with.
- *
- * About ES188x support:
- *
- * The ES188x has separate registers to control the recording levels, for all
- * inputs. The ES188x specific software makes these levels the same as their
- * corresponding playback levels, unless recmask says they aren't recorded. In
- * the latter case the recording volumes are 0.
- * Now recording levels of inputs can be controlled, by changing the playback
- * levels. Futhermore several devices can be recorded together (which is not
- * possible with the ES1688.
- * Besides the separate recording level control for each input, the common
- * recordig level can also be controlled by RECLEV as described above.
+ * Thomas Sailer				: ioctl code reworked (vmalloc/vfree removed)
+ * Rolf Fokkens (Dec 20 1998)	: Moved ESS stuff into sb_ess.[ch]
  */
 
 #include <linux/config.h>
@@ -100,6 +23,8 @@
 
 #include "sb.h"
 #include "sb_mixer.h"
+
+#include "sb_ess.h"
 
 #define SBPRO_RECORDING_DEVICES	(SOUND_MASK_LINE | SOUND_MASK_MIC | SOUND_MASK_CD)
 
@@ -123,16 +48,6 @@
 #define SB16_OUTFILTER_DEVICES		(SOUND_MASK_LINE | SOUND_MASK_MIC | \
 					 SOUND_MASK_CD)
 
-#define ES688_RECORDING_DEVICES SBPRO_RECORDING_DEVICES
-#define ES688_MIXER_DEVICES (SBPRO_MIXER_DEVICES|SOUND_MASK_LINE2|SOUND_MASK_SPEAKER)
-
-#define ES1688_RECORDING_DEVICES ES688_RECORDING_DEVICES
-#define ES1688_MIXER_DEVICES (ES688_MIXER_DEVICES|SOUND_MASK_RECLEV)
-
-#define ES188X_RECORDING_DEVICES	(ES1688_RECORDING_DEVICES | SOUND_MASK_LINE2 \
-					 |SOUND_MASK_SYNTH)
-#define ES188X_MIXER_DEVICES (ES1688_MIXER_DEVICES)
-
 #define SB16_MIXER_DEVICES		(SOUND_MASK_SYNTH | SOUND_MASK_PCM | SOUND_MASK_SPEAKER | SOUND_MASK_LINE | SOUND_MASK_MIC | \
 					 SOUND_MASK_CD | \
 					 SOUND_MASK_IGAIN | SOUND_MASK_OGAIN | \
@@ -147,31 +62,6 @@
 				 SOUND_MASK_CD | \
 				 SOUND_MASK_VOLUME)
 
-/*
- * Mixer registers of ES188x
- *
- * These registers specifically take care of recording levels. To make the
- * mapping from playback devices to recording devices every recording
- * devices = playback device + ES188X_MIXER_RECDIFF
- */
-#define ES188X_MIXER_RECBASE	(SOUND_MIXER_LINE3 + 1)
-#define ES188X_MIXER_RECDIFF	(ES188X_MIXER_RECBASE - SOUND_MIXER_SYNTH)
-
-#define ES188X_MIXER_RECSYNTH	(SOUND_MIXER_SYNTH	+ ES188X_MIXER_RECDIFF)
-#define ES188X_MIXER_RECPCM	(SOUND_MIXER_PCM	+ ES188X_MIXER_RECDIFF)
-#define ES188X_MIXER_RECSPEAKER	(SOUND_MIXER_SPEAKER	+ ES188X_MIXER_RECDIFF)
-#define ES188X_MIXER_RECLINE	(SOUND_MIXER_LINE	+ ES188X_MIXER_RECDIFF)
-#define ES188X_MIXER_RECMIC	(SOUND_MIXER_MIC	+ ES188X_MIXER_RECDIFF)
-#define ES188X_MIXER_RECCD	(SOUND_MIXER_CD		+ ES188X_MIXER_RECDIFF)
-#define ES188X_MIXER_RECIMIX	(SOUND_MIXER_IMIX	+ ES188X_MIXER_RECDIFF)
-#define ES188X_MIXER_RECALTPCM	(SOUND_MIXER_ALTPCM	+ ES188X_MIXER_RECDIFF)
-#define ES188X_MIXER_RECRECLEV	(SOUND_MIXER_RECLEV	+ ES188X_MIXER_RECDIFF)
-#define ES188X_MIXER_RECIGAIN	(SOUND_MIXER_IGAIN	+ ES188X_MIXER_RECDIFF)
-#define ES188X_MIXER_RECOGAIN	(SOUND_MIXER_OGAIN	+ ES188X_MIXER_RECDIFF)
-#define ES188X_MIXER_RECLINE1	(SOUND_MIXER_LINE1	+ ES188X_MIXER_RECDIFF)
-#define ES188X_MIXER_RECLINE2	(SOUND_MIXER_LINE2	+ ES188X_MIXER_RECDIFF)
-#define ES188X_MIXER_RECLINE3	(SOUND_MIXER_LINE3	+ ES188X_MIXER_RECDIFF)
-
 static mixer_tab sbpro_mix = {
 MIX_ENT(SOUND_MIXER_VOLUME,	0x22, 7, 4, 0x22, 3, 4),
 MIX_ENT(SOUND_MIXER_BASS,	0x00, 0, 0, 0x00, 0, 0),
@@ -185,115 +75,6 @@ MIX_ENT(SOUND_MIXER_CD,		0x28, 7, 4, 0x28, 3, 4),
 MIX_ENT(SOUND_MIXER_IMIX,	0x00, 0, 0, 0x00, 0, 0),
 MIX_ENT(SOUND_MIXER_ALTPCM,	0x00, 0, 0, 0x00, 0, 0),
 MIX_ENT(SOUND_MIXER_RECLEV,	0x00, 0, 0, 0x00, 0, 0)
-};
-
-static mixer_tab es688_mix = {
-MIX_ENT(SOUND_MIXER_VOLUME,	0x32, 7, 4, 0x32, 3, 4),
-MIX_ENT(SOUND_MIXER_BASS,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_TREBLE,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_SYNTH,	0x36, 7, 4, 0x36, 3, 4),
-MIX_ENT(SOUND_MIXER_PCM,	0x14, 7, 4, 0x14, 3, 4),
-MIX_ENT(SOUND_MIXER_SPEAKER,	0x3c, 2, 3, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_LINE,	0x3e, 7, 4, 0x3e, 3, 4),
-MIX_ENT(SOUND_MIXER_MIC,	0x1a, 7, 4, 0x1a, 3, 4),
-MIX_ENT(SOUND_MIXER_CD,		0x38, 7, 4, 0x38, 3, 4),
-MIX_ENT(SOUND_MIXER_IMIX,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_ALTPCM,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_RECLEV,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_IGAIN,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_OGAIN,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_LINE1,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_LINE2,	0x3a, 7, 4, 0x3a, 3, 4),
-MIX_ENT(SOUND_MIXER_LINE3,	0x00, 0, 0, 0x00, 0, 0)
-};
-
-/*
- * The ES1688 specifics... hopefully correct...
- * - 6 bit master volume
- *   I was wrong, ES1888 docs say ES1688 didn't have it.
- * - RECLEV control
- * These may apply to ES688 too. I have no idea.
- */
-static mixer_tab es1688_mix = {
-MIX_ENT(SOUND_MIXER_VOLUME,	0x32, 7, 4, 0x32, 3, 4),
-MIX_ENT(SOUND_MIXER_BASS,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_TREBLE,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_SYNTH,	0x36, 7, 4, 0x36, 3, 4),
-MIX_ENT(SOUND_MIXER_PCM,	0x14, 7, 4, 0x14, 3, 4),
-MIX_ENT(SOUND_MIXER_SPEAKER,	0x3c, 2, 3, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_LINE,	0x3e, 7, 4, 0x3e, 3, 4),
-MIX_ENT(SOUND_MIXER_MIC,	0x1a, 7, 4, 0x1a, 3, 4),
-MIX_ENT(SOUND_MIXER_CD,		0x38, 7, 4, 0x38, 3, 4),
-MIX_ENT(SOUND_MIXER_IMIX,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_ALTPCM,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_RECLEV,	0xb4, 7, 4, 0xb4, 3, 4),
-MIX_ENT(SOUND_MIXER_IGAIN,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_OGAIN,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_LINE1,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_LINE2,	0x3a, 7, 4, 0x3a, 3, 4),
-MIX_ENT(SOUND_MIXER_LINE3,	0x00, 0, 0, 0x00, 0, 0)
-};
-
-static mixer_tab es1688later_mix = {
-MIX_ENT(SOUND_MIXER_VOLUME,     0x60, 5, 6, 0x62, 5, 6),
-MIX_ENT(SOUND_MIXER_BASS,       0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_TREBLE,     0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_SYNTH,      0x36, 7, 4, 0x36, 3, 4),
-MIX_ENT(SOUND_MIXER_PCM,        0x14, 7, 4, 0x14, 3, 4),
-MIX_ENT(SOUND_MIXER_SPEAKER,    0x3c, 2, 3, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_LINE,       0x3e, 7, 4, 0x3e, 3, 4),
-MIX_ENT(SOUND_MIXER_MIC,        0x1a, 7, 4, 0x1a, 3, 4),
-MIX_ENT(SOUND_MIXER_CD,         0x38, 7, 4, 0x38, 3, 4),
-MIX_ENT(SOUND_MIXER_IMIX,       0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_ALTPCM,     0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_RECLEV,     0xb4, 7, 4, 0xb4, 3, 4),
-MIX_ENT(SOUND_MIXER_IGAIN,      0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_OGAIN,      0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_LINE1,      0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_LINE2,      0x3a, 7, 4, 0x3a, 3, 4),
-MIX_ENT(SOUND_MIXER_LINE3,      0x00, 0, 0, 0x00, 0, 0)
-};
-
-/*
- * The ES188x specifics.
- * Note that de master volume unlike ES688 is now controlled by two 6 bit
- * registers. These seem to work OK on 1868 too.
- * Also Note that the recording levels (ES188X_MIXER_REC...) have own 
- * entries as if they were playback devices. They are used internally in the
- * driver only!
- */
-static mixer_tab es188x_mix = {
-MIX_ENT(SOUND_MIXER_VOLUME,	0x60, 5, 6, 0x62, 5, 6),
-MIX_ENT(SOUND_MIXER_BASS,       0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_TREBLE,     0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_SYNTH,      0x36, 7, 4, 0x36, 3, 4),
-MIX_ENT(SOUND_MIXER_PCM,        0x14, 7, 4, 0x14, 3, 4),
-MIX_ENT(SOUND_MIXER_SPEAKER,    0x3c, 2, 3, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_LINE,       0x3e, 7, 4, 0x3e, 3, 4),
-MIX_ENT(SOUND_MIXER_MIC,        0x1a, 7, 4, 0x1a, 3, 4),
-MIX_ENT(SOUND_MIXER_CD,         0x38, 7, 4, 0x38, 3, 4),
-MIX_ENT(SOUND_MIXER_IMIX,       0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_ALTPCM,     0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_RECLEV,	0xb4, 7, 4, 0xb4, 3, 4),
-MIX_ENT(SOUND_MIXER_IGAIN,      0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_OGAIN,      0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_LINE1,      0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_LINE2,      0x3a, 7, 4, 0x3a, 3, 4),
-MIX_ENT(SOUND_MIXER_LINE3,      0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(ES188X_MIXER_RECSYNTH,	0x6b, 7, 4, 0x6b, 3, 4),
-MIX_ENT(ES188X_MIXER_RECPCM,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(ES188X_MIXER_RECSPEAKER,0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(ES188X_MIXER_RECLINE,	0x6e, 7, 4, 0x6e, 3, 4),
-MIX_ENT(ES188X_MIXER_RECMIC,	0x68, 7, 4, 0x68, 3, 4),
-MIX_ENT(ES188X_MIXER_RECCD,	0x6a, 7, 4, 0x6a, 3, 4),
-MIX_ENT(ES188X_MIXER_RECIMIX,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(ES188X_MIXER_RECALTPCM,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(ES188X_MIXER_RECRECLEV,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(ES188X_MIXER_RECIGAIN,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(ES188X_MIXER_RECOGAIN,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(ES188X_MIXER_RECLINE1,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(ES188X_MIXER_RECLINE2,	0x6c, 7, 4, 0x6c, 3, 4),
-MIX_ENT(ES188X_MIXER_RECLINE3,	0x00, 0, 0, 0x00, 0, 0)
 };
 
 #ifdef	__SGNXPRO__
@@ -460,20 +241,9 @@ static int      sbmixnum = 1;
 
 static void     sb_mixer_reset(sb_devc * devc);
 
-inline void sb_mixer_bits
-	(sb_devc * devc, unsigned int reg, unsigned int mask, unsigned int val)
-{
-	int value;
-
-	value = sb_getmixer(devc, reg);
-	value = (value & ~mask) | (val & mask);
-	sb_setmixer(devc, reg, value);
-}
-
-
 void sb_mixer_set_stereo(sb_devc * devc, int mode)
 {
-	sb_mixer_bits(devc, OUT_FILTER, STEREO_DAC, (mode ? STEREO_DAC : MONO_DAC));
+	sb_chgmixer(devc, OUT_FILTER, STEREO_DAC, (mode ? STEREO_DAC : MONO_DAC));
 }
 
 static int detect_mixer(sb_devc * devc)
@@ -520,7 +290,7 @@ void smw_mixer_init(sb_devc * devc)
 	sb_mixer_reset(devc);
 }
 
-static int common_mixer_set(sb_devc * devc, int dev, int left, int right)
+int sb_common_mixer_set(sb_devc * devc, int dev, int left, int right)
 {
 	int regoffs;
 	unsigned char val;
@@ -556,34 +326,6 @@ static int common_mixer_set(sb_devc * devc, int dev, int left, int right)
 	sb_setmixer(devc, regoffs, val);
 
 	return left | (right << 8);
-}
-
-/*
- * After a sb_dsp_reset extended register 0xb4 (RECLEV) is reset too. After
- * sb_dsp_reset RECLEV has to be restored. This is where ess_mixer_reload
- * helps.
- */
-void ess_mixer_reload (sb_devc * devc, int dev)
-{
-	int left, right, value;
-
-	value = devc->levels[dev];
-	left  = value & 0x000000ff;
-    	right = (value & 0x0000ff00) >> 8;
-
-	common_mixer_set(devc, dev, left, right);
-}
-
-/*
- * Changing playback levels at ES188x means having to take care of recording
- * levels of recorded inputs (devc->recmask) too!
- */
-static int es188x_mixer_set(sb_devc * devc, int dev, int left, int right)
-{
-	if (devc->recmask & (1 << dev)) {
-		common_mixer_set(devc, dev + ES188X_MIXER_RECDIFF, left, right);
-	}
-	return common_mixer_set(devc, dev, left, right);
 }
 
 static int smw_mixer_set(sb_devc * devc, int dev, int left, int right)
@@ -649,14 +391,10 @@ static int sb_mixer_set(sb_devc * devc, int dev, int value)
 		retval = smw_mixer_set(devc, dev, left, right);
 		break;
 	case MDL_ESS:
-		if (devc->submodel == SUBMDL_ES188X) {
-			retval = es188x_mixer_set(devc, dev, left, right);
-		} else {
-			retval = common_mixer_set(devc, dev, left, right);
-		}
+		retval = ess_mixer_set(devc, dev, left, right);
 		break;
 	default:
-		retval = common_mixer_set(devc, dev, left, right);
+		retval = sb_common_mixer_set(devc, dev, left, right);
 	}
 	if (retval >= 0) devc->levels[dev] = retval;
 
@@ -669,37 +407,6 @@ static int sb_mixer_set(sb_devc * devc, int dev, int value)
 static void set_recsrc(sb_devc * devc, int src)
 {
 	sb_setmixer(devc, RECORD_SRC, (sb_getmixer(devc, RECORD_SRC) & ~7) | (src & 0x7));
-}
-
-/*
- * Changing the recmask on a ES188x means:
- * (1) Find the differences
- * (2) For "turned-on"  inputs: make the recording level the playback level
- * (3) For "turned-off" inputs: make the recording level zero
- */
-static int es188x_set_recmask(sb_devc * devc, int mask)
-{
-	int i, i_mask, cur_mask, diff_mask;
-	int value, left, right;
-
-	cur_mask  = devc->recmask;
-	diff_mask = (cur_mask ^ mask);
-
-	for (i = 0; i < 32; i++) {
-		i_mask = (1 << i);
-		if (diff_mask & i_mask) {	/* Difference? (1)	*/
-			if (mask & i_mask) {	/* Turn it on  (2)	*/
-				value = devc->levels[i];
-				left  = value & 0x000000ff;
-    				right = (value & 0x0000ff00) >> 8;
-			} else {		/* Turn it off (3)	*/
-				left  = 0;
-				right = 0;
-			}
-			common_mixer_set(devc, i + ES188X_MIXER_RECDIFF, left, right);
-		}
-	}
-	return mask;
 }
 
 static int set_recmask(sb_devc * devc, int mask)
@@ -715,15 +422,10 @@ static int set_recmask(sb_devc * devc, int mask)
 		case MDL_ESS:
 		case MDL_JAZZ:
 		case MDL_SMW:
-			if (devc->model == MDL_ESS &&
-				devc->submodel == SUBMDL_ES188X) {
-				/*
-				 * ES188x needs a separate approach
-				 */
-				devmask = es188x_set_recmask(devc, devmask);
+			if (devc->model == MDL_ESS && ess_set_recmask (devc, &devmask)) {
 				break;
 			};
-
+printk (KERN_INFO "FKS: set_recmask not handled by ess_set_recmask\n");
 			if (devmask != SOUND_MASK_MIC &&
 				devmask != SOUND_MASK_LINE &&
 				devmask != SOUND_MASK_CD)
@@ -952,20 +654,9 @@ static void sb_mixer_reset(sb_devc * devc)
 	for (i = 0; i < SOUND_MIXER_NRDEVICES; i++)
 		sb_mixer_set(devc, i, devc->levels[i]);
 
-	/*
-	 * Separate actions for ES188x:
-	 * Change registers 7a and 1c to make the record mixer the
-	 * actual recording source.
-	 * Then call set_recmask twice to do extra ES188x initializations
-	 */
-	if (devc->model == MDL_ESS && devc->submodel == SUBMDL_ES188X) {
-		sb_mixer_bits(devc, 0x7a, 0x18, 0x08);
-		sb_mixer_bits(devc, 0x1c, 0x07, 0x07);
-
-		set_recmask(devc, ES188X_RECORDING_DEVICES);
-		set_recmask(devc, 0);
-	}
-	set_recmask(devc, SOUND_MASK_MIC);
+	if (devc->model != MDL_ESS || !ess_mixer_reset (devc)) {
+		set_recmask(devc, SOUND_MASK_MIC);
+	};
 }
 
 int sb_mixer_init(sb_devc * devc)
@@ -993,43 +684,7 @@ int sb_mixer_init(sb_devc * devc)
 			break;
 
 		case MDL_ESS:
-			devc->mixer_caps = SOUND_CAP_EXCL_INPUT;
-
-			/*
-			 * Take care of ES188x specifics...
-			 */
-			switch (devc->submodel) {
-			case SUBMDL_ES188X:
-				devc->supported_devices
-					= ES188X_MIXER_DEVICES;
-				devc->supported_rec_devices
-					= ES188X_RECORDING_DEVICES;
-				devc->iomap = &es188x_mix;
-				break;
-			default:
-				if (devc->submodel < 8) {
-					devc->supported_devices
-						= ES688_MIXER_DEVICES;
-					devc->supported_rec_devices
-						= ES688_RECORDING_DEVICES;
-					devc->iomap = &es688_mix;
-				} else {
-					/*
-					 * es1688 has 4 bits master vol.
-					 * later chips have 6 bits (?)
-					 */
-					devc->supported_devices
-						= ES1688_MIXER_DEVICES;
-					devc->supported_rec_devices
-						= ES1688_RECORDING_DEVICES;
-					if (devc->submodel < 0x10) {
-						devc->iomap = &es1688_mix;
-					} else {
-						devc->iomap = &es1688later_mix;
-					}
-				}
-			}
-
+			ess_mixer_init (devc);
 			break;
 
 		case MDL_SMW:

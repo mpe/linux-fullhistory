@@ -32,6 +32,7 @@
  * Sep 1998, Version 1.6
  * Nov 1998, Version 1.7
  * Jan 1999, Version 1.8
+ * Jan 1999, Version 1.9
  *
  * History:
  *    0.6b: first version in official kernel, Linux 1.3.46
@@ -77,6 +78,17 @@
  *         Richard Gooch <rgooch@atnf.csiro.au>
  *         change APM_NOINTS to CONFIG_APM_ALLOW_INTS
  *         remove dependency on CONFIG_PROC_FS
+ *         Stephen Rothwell
+ *    1.9: Fix small typo.  <laslo@ilo.opole.pl>
+ *         Try to cope with BIOS's that need to have all display
+ *         devices blanked and not just the first one.
+ *         Ross Paterson <ross@soi.city.ac.uk>
+ *         Fix segment limit setting it has always been wrong as
+ *         the segments needed to have byte granularity.
+ *         Mark a few things __init.
+ *         Add hack to allow power off of SMP systems by popular request.
+ *         Use CONFIG_SMP instead of __SMP__
+ *         Ignore BOUNCES for three seconds.
  *         Stephen Rothwell
  *
  * APM 1.1 Reference:
@@ -213,7 +225,7 @@ extern unsigned long get_cmos_time(void);
 #define APM_ZERO_SEGS
 
 /*
- * Define to make all set_limit calls use 64k limits.  The APM 1.1 BIOS is
+ * Define to make all _set_limit calls use 64k limits.  The APM 1.1 BIOS is
  * supposed to provide limit information that it recognizes.  Many machines
  * do this correctly, but many others do not restrict themselves to their
  * claimed limit.  When this happens, they will cause a segmentation
@@ -240,6 +252,12 @@ extern unsigned long get_cmos_time(void);
  * Need to poll the APM BIOS every second
  */
 #define APM_CHECK_TIMEOUT	(HZ)
+
+/*
+ * If CONFIG_APM_IGNORE_SUSPEND_BOUNCE is defined then
+ * ignore suspend events for this amount of time
+ */
+#define BOUNCE_INTERVAL		(3 * HZ)
 
 /*
  * Save a segment register away
@@ -276,6 +294,7 @@ static asmlinkage struct {
 	unsigned short	segment;
 }				apm_bios_entry;
 static int			apm_enabled = 0;
+static int			smp_hack = 0;
 #ifdef CONFIG_APM_CPU_IDLE
 static int			clock_slowed = 0;
 #endif
@@ -300,7 +319,7 @@ static struct apm_bios_struct *	user_list = NULL;
 
 static struct timer_list	apm_timer;
 
-static char			driver_version[] = "1.8";	/* no spaces */
+static char			driver_version[] = "1.9";	/* no spaces */
 
 #ifdef APM_DEBUG
 static char *	apm_event_name[] = {
@@ -526,7 +545,15 @@ static int apm_set_power_state(u_short state)
 
 void apm_power_off(void)
 {
-	if (apm_enabled)
+	/*
+	 * smp_hack == 2 means that we would have enabled APM support
+	 * except there is more than one processor and so most of
+	 * the APM stuff is unsafe.  We will still try power down
+	 * because is is useful to some people and they know what
+	 * they are doing because they booted with the smp-power-off
+	 * kernel option.
+	 */
+	if (apm_enabled || (smp_hack == 2))
 		(void) apm_set_power_state(APM_STATE_OFF);
 }
 
@@ -534,12 +561,19 @@ void apm_power_off(void)
 /* Called by apm_display_blank and apm_display_unblank when apm_enabled. */
 static int apm_set_display_power_state(u_short state)
 {
-	return set_power_state(0x0100, state);
+	int	error;
+
+	/* Blank the first display device */
+	error = set_power_state(0x0100, state);
+	if (error == APM_BAD_DEVICE)
+		/* try to blank them all instead */
+		error = set_power_state(0x01ff, state);
+	return error;
 }
 #endif
 
 #ifdef CONFIG_APM_DO_ENABLE
-static int apm_enable_power_management(void)
+static int __init apm_enable_power_management(void)
 {
 	u32	eax;
 
@@ -568,12 +602,9 @@ static int apm_get_power_status(u_short *status, u_short *bat, u_short *life)
 	return APM_SUCCESS;
 }
 
-#if 0
-/* not used anywhere */
-static int apm_get_battery_status(u_short which, 
+static int apm_get_battery_status(u_short which, u_short *status,
 				  u_short *bat, u_short *life, u_short *nbat)
 {
-	u_short status;
 	u32	eax;
 	u32	ebx;
 	u32	ecx;
@@ -585,20 +616,20 @@ static int apm_get_battery_status(u_short which,
 		if (which != 1)
 			return APM_BAD_DEVICE;
 		*nbat = 1;
-		return apm_get_power_status(&status, bat, life);
+		return apm_get_power_status(status, bat, life);
 	}
 
 	if (apm_bios_call(0x530a, (0x8000 | (which)), 0, &eax,
 			&ebx, &ecx, &edx, &esi))
 		return (eax >> 8) & 0xff;
+	*status = ebx;
 	*bat = ecx;
 	*life = edx;
 	*nbat = esi;
 	return APM_SUCCESS;
 }
-#endif
 
-static int apm_engage_power_management(u_short device)
+static int __init apm_engage_power_management(u_short device)
 {
 	u32	eax;
 
@@ -842,7 +873,8 @@ static void check_events(void)
 			       "event 0x%02x\n", event);
 #endif
 #ifdef CONFIG_APM_IGNORE_SUSPEND_BOUNCE
-		if (ignore_bounce && ((jiffies - last_resume) > HZ))
+		if (ignore_bounce
+		    && ((jiffies - last_resume) > BOUNCE_INTERVAL))
 			ignore_bounce = 0;
 #endif
 		switch (event) {
@@ -1152,6 +1184,7 @@ int apm_get_info(char *buf, char **start, off_t fpos, int length, int dummy)
 	unsigned short	bx;
 	unsigned short	cx;
 	unsigned short	dx;
+	unsigned short	nbat;
 	unsigned short	error;
 	unsigned short  ac_line_status = 0xff;
 	unsigned short  battery_status = 0xff;
@@ -1173,13 +1206,8 @@ int apm_get_info(char *buf, char **start, off_t fpos, int length, int dummy)
 		if (apm_bios_info.version > 0x100) {
 			battery_flag = (cx >> 8) & 0xff;
 			if (dx != 0xffff) {
-				if ((dx & 0x8000) == 0x8000) {
-					units = "min";
-					time_units = dx & 0x7ffe;
-				} else {
-					units = "sec";
-					time_units = dx & 0x7fff;
-				}
+				units = (dx & 0x8000) ? "min" : "sec";
+				time_units = dx & 0x7fff;
 			}
 		}
 	}
@@ -1249,6 +1277,8 @@ void __init apm_setup(char *str, int *dummy)
 			str += 3;
 		if (strncmp(str, "debug", 5) == 0)
 			debug = !invert;
+		if (strncmp(str, "smp-power-off", 13) == 0)
+			smp_hack = !invert;
 		str = strchr(str, ',');
 		if (str != NULL)
 			str += strspn(str, ", \t");
@@ -1289,17 +1319,18 @@ void __init apm_bios_init(void)
 
 	/* BIOS < 1.2 doesn't set cseg_16_len */
 	if (apm_bios_info.version < 0x102)
-		apm_bios_info.cseg_16_len = 0xFFFF; /* 64k */
+		apm_bios_info.cseg_16_len = 0; /* 64k */
 
 	if (debug) {
 		printk(KERN_INFO "apm: entry %x:%lx cseg16 %x dseg %x",
 			apm_bios_info.cseg, apm_bios_info.offset,
 			apm_bios_info.cseg_16, apm_bios_info.dseg);
 		if (apm_bios_info.version > 0x100)
-			printk(" cseg len %x, cseg16 len %x, dseg len %x",
+			printk(" cseg len %x, dseg len %x",
 				apm_bios_info.cseg_len,
-				apm_bios_info.cseg_16_len,
 				apm_bios_info.dseg_len);
+		if (apm_bios_info.version > 0x101)
+			printk(" cseg16 len %x", apm_bios_info.cseg_16_len);
 		printk("\n");
 	}
 
@@ -1307,12 +1338,6 @@ void __init apm_bios_init(void)
 		printk(KERN_NOTICE "apm: disabled on user request.\n");
 		return;
 	}
-#ifdef __SMP__
-	if (smp_num_cpus > 1) {
-		printk(KERN_NOTICE "apm: disabled - APM is not SMP safe.\n");
-		return;
-	}
-#endif
 
 	/*
 	 * Set up a segment that references the real mode segment 0x40
@@ -1322,7 +1347,7 @@ void __init apm_bios_init(void)
 	 */
 	set_base(gdt[APM_40 >> 3],
 		 __va((unsigned long)0x40 << 4));
-	set_limit(gdt[APM_40 >> 3], 4096 - (0x40 << 4));
+	_set_limit((char *)&gdt[APM_40 >> 3], 4095 - (0x40 << 4));
 
 	apm_bios_entry.offset = apm_bios_info.offset;
 	apm_bios_entry.segment = APM_CS;
@@ -1332,23 +1357,36 @@ void __init apm_bios_init(void)
 		 __va((unsigned long)apm_bios_info.cseg_16 << 4));
 	set_base(gdt[APM_DS >> 3],
 		 __va((unsigned long)apm_bios_info.dseg << 4));
-	if (apm_bios_info.version == 0x100) {
-		set_limit(gdt[APM_CS >> 3], 64 * 1024);
-		set_limit(gdt[APM_CS_16 >> 3], 64 * 1024);
-		set_limit(gdt[APM_DS >> 3], 64 * 1024);
-	} else {
-#ifdef APM_RELAX_SEGMENTS
-		/* For ASUS motherboard, Award BIOS rev 110 (and others?) */
-		set_limit(gdt[APM_CS >> 3], 64 * 1024);
-		/* For some unknown machine. */
-		set_limit(gdt[APM_CS_16 >> 3], 64 * 1024);
-		/* For the DEC Hinote Ultra CT475 (and others?) */
-		set_limit(gdt[APM_DS >> 3], 64 * 1024);
-#else
-		set_limit(gdt[APM_CS >> 3], apm_bios_info.cseg_len);
-		set_limit(gdt[APM_CS_16 >> 3], apm_bios_info.cseg_16_len);
-		set_limit(gdt[APM_DS >> 3], apm_bios_info.dseg_len);
+#ifndef APM_RELAX_SEGMENTS
+	if (apm_bios_info.version == 0x100)
 #endif
+	{
+		/* For ASUS motherboard, Award BIOS rev 110 (and others?) */
+		_set_limit((char *)&gdt[APM_CS >> 3], 64 * 1024 - 1);
+		/* For some unknown machine. */
+		_set_limit((char *)&gdt[APM_CS_16 >> 3], 64 * 1024 - 1);
+		/* For the DEC Hinote Ultra CT475 (and others?) */
+		_set_limit((char *)&gdt[APM_DS >> 3], 64 * 1024 - 1);
+	}
+#ifndef APM_RELAX_SEGMENTS
+	else {
+		_set_limit((char *)&gdt[APM_CS >> 3],
+			(apm_bios_info.cseg_len - 1) & 0xffff);
+		_set_limit((char *)&gdt[APM_CS_16 >> 3],
+			(apm_bios_info.cseg_16_len - 1) & 0xffff);
+		_set_limit((char *)&gdt[APM_DS >> 3],
+			(apm_bios_info.dseg_len - 1) & 0xffff);
+	}
+#endif
+#ifdef CONFIG_SMP
+	if (smp_num_cpus > 1) {
+		printk(KERN_NOTICE "apm: disabled - APM is not SMP safe.\n");
+		if (smp_hack)
+			smp_hack = 2;
+		return;
+	}
+#endif
+	if (apm_bios_info.version > 0x100) {
 		/*
 		 * We only support BIOSs up to version 1.2
 		 */
@@ -1360,7 +1398,7 @@ void __init apm_bios_init(void)
 		}
 	}
 	if (debug) {
-		printk(KERN_INFO "apm: onnection version %d.%d\n",
+		printk(KERN_INFO "apm: Connection version %d.%d\n",
 			(apm_bios_info.version >> 8) & 0xff,
 			apm_bios_info.version & 0xff );
 
@@ -1381,23 +1419,23 @@ void __init apm_bios_init(void)
 			case 3: bat_stat = "charging"; break;
 			default: bat_stat = "unknown"; break;
 			}
-			printk(KERN_INFO "apm: AC %s, battery status %s, battery life ",
+			printk(KERN_INFO
+			       "apm: AC %s, battery status %s, battery life ",
 			       power_stat, bat_stat);
 			if ((cx & 0xff) == 0xff)
 				printk("unknown\n");
 			else
 				printk("%d%%\n", cx & 0xff);
 			if (apm_bios_info.version > 0x100) {
-				printk("apm: battery flag 0x%02x, battery life ",
+				printk(KERN_INFO
+				       "apm: battery flag 0x%02x, battery life ",
 				       (cx >> 8) & 0xff);
 				if (dx == 0xffff)
 					printk("unknown\n");
-				else {
-					if ((dx & 0x8000))
-						printk("%d minutes\n", dx & 0x7ffe );
-					else
-						printk("%d seconds\n", dx & 0x7fff );
-				}
+				else
+					printk("%d %s\n", dx & 0x7fff,
+						(dx & 0x8000) ?
+						"minutes" : "seconds");
 			}
 		}
 	}

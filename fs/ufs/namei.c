@@ -58,8 +58,7 @@
 /*
  * NOTE! unlike strncmp, ufs_match returns 1 for success, 0 for failure.
  *
- * len <= UFS_MAXNAMLEN' is guaranteed by caller.
- * de != NULL' is guaranteed by caller.
+ * len <= UFS_MAXNAMLEN and de != NULL are guaranteed by caller.
  */
 static inline int ufs_match (int len, const char * const name,
 	struct ufs_dir_entry * de, unsigned flags, unsigned swab)
@@ -144,7 +143,7 @@ static struct buffer_head * ufs_find_entry (struct inode * dir,
 		dlimit = bh->b_data + sb->s_blocksize;
 		while ((char *) de < dlimit && offset < dir->i_size) {
 			/* this code is executed quadratically often */
-			/* do minimal checking by hand' */
+			/* do minimal checking by hand */
 			int de_len;
 
 			if ((char *) de + namelen <= dlimit &&

@@ -74,6 +74,14 @@
  * - Call clear_globalflags when writing out update_mainmenu.
  *   This fixes the missing global/vfix lines for ARCH=alpha on 2.2.0-pre4.
  *
+ * 8 January 1999, Michael Elizabeth Chastain <mec@shout.net>
+ * - Emit menus_per_column
+ *
+ * 1999 01 04
+ * Michael Elizabeth Chastain <mec@shout.net>
+ * - Call clear_globalflags when writing out update_mainmenu.
+ *   This fixes the missing global/vfix lines for ARCH=alpha on 2.2.0-pre4.
+ *
  * TO DO:
  *   - clean up - there are useless ifdef's everywhere.
  *   - better comments throughout - C code generating tcl is really cryptic.
@@ -751,8 +759,13 @@ void dump_tk_script(struct kconfig *scfg)
 
   /*
    * Record this so we can set up the prev/next buttons correctly.
+   * Menus per column computation has extra button space as follows:
+   *   4 for the save/quit/load/store buttons,
+   *   1 for the blank space above save/quit/load/store
+   *   2 to make the rounding work
    */
   tot_menu_num = menu_num;
+  printf( "set menus_per_column %d\n\n", (tot_menu_num + 4 + 1 + 2) / 3 );
 
   /*
    * Now start generating the actual wish script that we will use.

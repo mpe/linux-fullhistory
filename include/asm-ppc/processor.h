@@ -286,8 +286,9 @@ struct thread_struct {
  * Note: the vm_start and vm_end fields here should *not*
  * be in kernel space.  (Could vm_end == vm_start perhaps?)
  */
-#define INIT_MMAP { &init_mm, 0, 0x1000, \
-		      PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC }
+#define INIT_MMAP { &init_mm, 0, 0x1000, NULL, \
+		    PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC, \
+		    1, NULL, NULL }
 
 /*
  * Return saved PC of a blocked thread. For now, this is the "user" PC
@@ -299,6 +300,7 @@ static inline unsigned long thread_saved_pc(struct thread_struct *t)
 
 #define copy_segments(nr, tsk, mm)	do { } while (0)
 #define release_segments(mm)		do { } while (0)
+#define forget_segments()		do { } while (0)
 
 /*
  * NOTE! The task struct and the stack go together

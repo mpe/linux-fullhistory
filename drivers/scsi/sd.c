@@ -1482,12 +1482,11 @@ static int sd_init()
     if (!rscsi_disks)
         sd_template.dev_max = sd_template.dev_noticed + SD_EXTRA_DEVS;
 
-    /* 128 disks is our current limit (8 majors, 16 disks per major) */
-    if(sd_template.dev_max > 128)
-   	sd_template.dev_max = 128;
+    if(sd_template.dev_max > N_SD_MAJORS * SCSI_DISKS_PER_MAJOR )
+	sd_template.dev_max = N_SD_MAJORS * SCSI_DISKS_PER_MAJOR;
 
     if(!sd_registered) {
-	for (i=0; i <= sd_template.dev_max / SCSI_DISKS_PER_MAJOR; i++) {
+	for (i=0; i <= (sd_template.dev_max - 1) / SCSI_DISKS_PER_MAJOR; i++) {
 	    if (register_blkdev(SD_MAJOR(i),"sd",&sd_fops)) {
 		printk("Unable to get major %d for SCSI disk\n", SD_MAJOR(i));
 		return 1;
@@ -1540,8 +1539,9 @@ static int sd_init()
 	sd_gendisks[i].real_devices =
 		 (void *) (rscsi_disks + i * SCSI_DISKS_PER_MAJOR);
     }
+    
     LAST_SD_GENDISK.max_nr =
-    	sd_template.dev_max % SCSI_DISKS_PER_MAJOR;
+    	(sd_template.dev_max -1 ) % SCSI_DISKS_PER_MAJOR + 1;
     LAST_SD_GENDISK.next = NULL;
     return 0;
 }
@@ -1559,7 +1559,7 @@ static void sd_finish()
     struct gendisk *gendisk;
     int i;
 
-    for (i=0; i <= sd_template.dev_max / SCSI_DISKS_PER_MAJOR; i++) {
+    for (i=0; i <= (sd_template.dev_max - 1) / SCSI_DISKS_PER_MAJOR; i++) {
         /* FIXME: After 2.2 we should implement multiple sd queues */
         blk_dev[SD_MAJOR(i)].request_fn = DEVICE_REQUEST;
         if (i) blk_dev[SD_MAJOR(i)].queue = sd_get_queue;
@@ -1765,7 +1765,7 @@ void cleanup_module( void)
 
     scsi_unregister_module(MODULE_SCSI_DEV, &sd_template);
 
-    for (i=0; i <= sd_template.dev_max / SCSI_DISKS_PER_MAJOR; i++) 
+    for (i=0; i <= (sd_template.dev_max - 1) / SCSI_DISKS_PER_MAJOR; i++) 
 	unregister_blkdev(SD_MAJOR(i),"sd");
     
     sd_registered--;
@@ -1794,11 +1794,11 @@ void cleanup_module( void)
 
 	if (removed != N_USED_SD_MAJORS)
 	    printk("%s %d sd_gendisks in disk chain",
-		removed > N_USED_SD_MAJORS ? "total" : "just", removed);
+	    	removed > N_USED_SD_MAJORS ? "total" : "just", removed);
 	
     }
 
-    for (i=0; i <= sd_template.dev_max / SCSI_DISKS_PER_MAJOR; i++) {
+    for (i=0; i <= (sd_template.dev_max - 1) / SCSI_DISKS_PER_MAJOR; i++) {
         blk_dev[SD_MAJOR(i)].request_fn = NULL;
         blk_size[SD_MAJOR(i)] = NULL;
         hardsect_size[SD_MAJOR(i)] = NULL;

@@ -452,6 +452,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #ifdef CONFIG_SCSI_AIC7XXX
     AIC7XXX,
 #endif
+#ifdef CONFIG_FD_MCS
+   FD_MCS,
+#endif
 #ifdef CONFIG_SCSI_FUTURE_DOMAIN
     FDOMAIN_16X0,
 #endif

@@ -86,7 +86,7 @@ failed:
 }
 
 /*
- * Remove cylinder group from cache, does'n release memory
+ * Remove cylinder group from cache, doesn't release memory
  * allocated for cylinder group (this is done at ufs_put_super only).
  */
 void ufs_put_cylinder (struct super_block * sb, unsigned bitmap_nr)
@@ -132,7 +132,7 @@ void ufs_put_cylinder (struct super_block * sb, unsigned bitmap_nr)
  * Find cylinder group in cache and return it as pointer.
  * If cylinder group is not in cache, we will load it from disk.
  *
- * The cache is managed by LRU alghoritm. 
+ * The cache is managed by LRU algorithm. 
  */
 struct ufs_cg_private_info * ufs_load_cylinder (
 	struct super_block * sb, unsigned cgno)
@@ -161,7 +161,7 @@ struct ufs_cg_private_info * ufs_load_cylinder (
 	if (uspi->s_ncg <= UFS_MAX_GROUP_LOADED) {
 		if (sb->u.ufs_sb.s_cgno[cgno] != UFS_CGNO_EMPTY) {
 			if (sb->u.ufs_sb.s_cgno[cgno] != cgno) {
-				ufs_panic (sb, "ufs_load_cylinder", "internal error, wrog number of cg in cache");
+				ufs_panic (sb, "ufs_load_cylinder", "internal error, wrong number of cg in cache");
 				UFSD(("EXIT (FAILED)\n"))
 				return NULL;
 			}
@@ -191,7 +191,7 @@ struct ufs_cg_private_info * ufs_load_cylinder (
 		sb->u.ufs_sb.s_ucpi[0] = ucpi;
 	/*
 	 * Cylinder group number cg is not in cache, we will read it from disk
-	 * and put it to the first possition
+	 * and put it to the first position
 	 */
 	} else {
 		if (sb->u.ufs_sb.s_cg_loaded < UFS_MAX_GROUP_LOADED)

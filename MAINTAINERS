@@ -170,6 +170,12 @@ L:	linux-scsi@vger.rutgers.edu
 W:	http://www.dandelion.com/Linux/
 S:	Maintained
 
+CONFIGURE, MENUCONFIG, XCONFIG
+P:	Michael Elizabeth Chastain
+M:	mec@shout.net
+L:	linux-kbuild@torque.net
+S:	Maintained
+
 CONFIGURE.HELP
 P:	Axel Boldt
 M:	boldt@math.ucsb.edu
@@ -343,6 +349,12 @@ P:	Jaroslav Kysela
 M:	perex@jcu.cz
 S:	Maintained
 
+IBM MCA SCSI SUBSYSTEM DRIVER
+P:	Michael Lang
+M:	langa2@kph.uni-mainz.de
+W:	http://www.uni-mainz.de/~langm000/linux.html
+S:	Maintained
+
 IDE DRIVER [GENERAL]
 P:	Andre Hedrick
 M:	hedrick@astro.dyer.vanderbilt.edu
@@ -352,8 +364,6 @@ S:	Maintained
 IDE/ATAPI CDROM DRIVER 
 P:	Jens Axboe
 M:	axboe@image.dk
-P:	Chris Zwilling
-M:	chris@cloudnet.com
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
@@ -444,12 +454,6 @@ M68K ON HP9000/300
 P:	Philip Blundell
 M:	philb@gnu.org
 W:	http://www.tazenda.demon.co.uk/phil/linux-hp
-S:	Maintained
-
-MENUCONFIG
-P:	Michael Elizabeth Chastain
-M:	mec@shout.net
-L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
 MIPS
@@ -731,8 +735,6 @@ S:	Maintained
 UNIFORM CDROM DRIVER 
 P:	Jens Axboe
 M:	axboe@image.dk
-P:	Chris Zwilling
-M:	chris@cloudnet.com
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 

@@ -121,7 +121,8 @@ EXPORT_SYMBOL(sys_close);
 EXPORT_SYMBOL(d_alloc_root);
 EXPORT_SYMBOL(d_delete);
 EXPORT_SYMBOL(d_validate);
-EXPORT_SYMBOL(d_add);
+EXPORT_SYMBOL(d_rehash);
+EXPORT_SYMBOL(d_invalidate);	/* May be it will be better in dcache.h? */
 EXPORT_SYMBOL(d_move);
 EXPORT_SYMBOL(d_instantiate);
 EXPORT_SYMBOL(d_alloc);

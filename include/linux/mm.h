@@ -35,10 +35,17 @@ struct vm_area_struct {
 	struct mm_struct * vm_mm;	/* VM area parameters */
 	unsigned long vm_start;
 	unsigned long vm_end;
+
+	/* linked list of VM areas per task, sorted by address */
+	struct vm_area_struct *vm_next;
+
 	pgprot_t vm_page_prot;
 	unsigned short vm_flags;
-	struct vm_area_struct *vm_next;
-	struct vm_area_struct **vm_pprev;
+
+	/* AVL tree of VM areas per task, sorted by address */
+	short vm_avl_height;
+	struct vm_area_struct * vm_avl_left;
+	struct vm_area_struct * vm_avl_right;
 
 	/* For areas with inode, the list inode->i_mmap, for shm areas,
 	 * the list of attaches, otherwise unused.
@@ -98,7 +105,7 @@ struct vm_operations_struct {
 	unsigned long (*nopage)(struct vm_area_struct * area, unsigned long address, int write_access);
 	unsigned long (*wppage)(struct vm_area_struct * area, unsigned long address,
 		unsigned long page);
-	int (*swapout)(struct vm_area_struct *,  unsigned long, pte_t *);
+	int (*swapout)(struct vm_area_struct *, struct page *);
 	pte_t (*swapin)(struct vm_area_struct *, unsigned long, unsigned long);
 };
 
@@ -268,7 +275,7 @@ extern unsigned long put_dirty_page(struct task_struct * tsk,unsigned long page,
 	unsigned long address);
 
 extern void free_page_tables(struct mm_struct * mm);
-extern void clear_page_tables(struct task_struct * tsk);
+extern void clear_page_tables(struct mm_struct *, unsigned long, int);
 extern int new_page_tables(struct task_struct * tsk);
 
 extern void zap_page_range(struct mm_struct *mm, unsigned long address, unsigned long size);
@@ -293,6 +300,7 @@ extern void si_meminfo(struct sysinfo * val);
 extern void vma_init(void);
 extern void merge_segments(struct mm_struct *, unsigned long, unsigned long);
 extern void insert_vm_struct(struct mm_struct *, struct vm_area_struct *);
+extern void build_mmap_avl(struct mm_struct *);
 extern void exit_mmap(struct mm_struct *);
 extern unsigned long get_unmapped_area(unsigned long, unsigned long);
 
@@ -316,6 +324,7 @@ extern void put_cached_page(unsigned long);
 #define __GFP_MED	0x04
 #define __GFP_HIGH	0x08
 #define __GFP_IO	0x10
+#define __GFP_SWAP	0x20
 
 #define __GFP_DMA	0x80
 
@@ -324,7 +333,7 @@ extern void put_cached_page(unsigned long);
 #define GFP_USER	(__GFP_LOW | __GFP_WAIT | __GFP_IO)
 #define GFP_KERNEL	(__GFP_MED | __GFP_WAIT | __GFP_IO)
 #define GFP_NFS		(__GFP_HIGH | __GFP_WAIT | __GFP_IO)
-#define GFP_KSWAPD	(__GFP_IO)
+#define GFP_KSWAPD	(__GFP_IO | __GFP_SWAP)
 
 /* Flag - indicates that the buffer will be suitable for DMA.  Ignored on some
    platforms, used as appropriate on others */
@@ -358,22 +367,7 @@ static inline int expand_stack(struct vm_area_struct * vma, unsigned long addres
 }
 
 /* Look up the first VMA which satisfies  addr < vm_end,  NULL if none. */
-static inline struct vm_area_struct * find_vma(struct mm_struct * mm, unsigned long addr)
-{
-	struct vm_area_struct *vma = NULL;
-
-	if (mm) {
-		/* Check the cache first. */
-		vma = mm->mmap_cache;
-		if(!vma || (vma->vm_end <= addr) || (vma->vm_start > addr)) {
-			vma = mm->mmap;
-			while(vma && vma->vm_end <= addr)
-				vma = vma->vm_next;
-			mm->mmap_cache = vma;
-		}
-	}
-	return vma;
-}
+extern struct vm_area_struct * find_vma(struct mm_struct * mm, unsigned long addr);
 
 /* Look up the first VMA which intersects the interval start_addr..end_addr-1,
    NULL if none.  Assume start_addr < end_addr. */

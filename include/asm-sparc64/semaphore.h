@@ -24,7 +24,7 @@ extern void __up(struct semaphore * sem);
 
 #define wake_one_more(sem)      atomic_inc(&sem->waking);
 
-static __inline__ int waking_non_zero(struct semaphore *sem)
+static __inline__ int waking_non_zero(struct semaphore *sem, struct task_struct *tsk)
 {
 	int ret;
 

@@ -70,6 +70,7 @@
 #include <linux/malloc.h>
 #include <linux/string.h>
 #include <linux/init.h>
+#include <linux/version.h>
 
 #ifndef MODULE
 #include <linux/ctype.h> /* We only need it for parsing the "digi="-line */

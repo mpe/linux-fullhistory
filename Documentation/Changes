@@ -85,14 +85,15 @@ against 2.1 headers for complete functionality.  Fdutils binaries
 compiled under 2.0 or earlier kernels should be replaced with ones
 compiled under 2.1, for example.
 
-   As of 2.1.115, Unix98 pty support was added as an option, and
-support for the deprecated major 4 /dev/ttyp* devices was removed.  If
-necessary (eg, you get "out of pty" error messages when you obviously
-are not out of pty's), create major 3 /dev/tty* and major 2 /dev/pty*
-devices (see Documentation/devices.txt for more information).  If you
-want to use the Unix98 ptys, you should be running at least
-glibc-2.0.9x, and you must switch completely to Unix98 pty's.  The
-general procedure for configuring Unix98 pty support is:
+   As of 2.1.115, support for the deprecated major 4 /dev/ttyp* devices 
+was removed.  If necessary (eg, you get "out of pty" error messages when 
+you obviously are not out of pty's), create major 3 /dev/tty* and major 2 
+/dev/pty* devices (see Documentation/devices.txt for more information).  
+
+   Optional support for Unix98 pty devices has also been added. If you
+want to use the Unix98 ptys, you should be running at least glibc-2.0.9x, 
+and you must switch completely to Unix98 pty's.  The general procedure 
+for configuring Unix98 pty support is:
 
 - Compile your kernel with CONFIG_UNIX98_PTYS and CONFIG_DEVPTS_FS.
 - mknod /dev/ptmx c 5 2

@@ -58,10 +58,10 @@ struct kconfig
   struct kconfig 	* next;
   int 			  flags;
   enum 			  token tok;
-  char   		  menu_number;
-  char   		  menu_line;
-  char   		  submenu_start;
-  char   		  submenu_end;
+  int   		  menu_number;
+  int   		  menu_line;
+  int   		  submenu_start;
+  int   		  submenu_end;
   char 			* optionname;
   char 			* label;
   char 			* value;

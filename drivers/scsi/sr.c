@@ -63,7 +63,6 @@ Scsi_CD * scsi_CDs = NULL;
 static int * sr_sizes = NULL;
 
 static int * sr_blocksizes = NULL;
-static int * sr_hardsizes = NULL;              /* Hardware sector size */
 
 static int sr_open(struct cdrom_device_info*, int);
 void get_sectorsize(int);
@@ -154,8 +153,7 @@ int sr_media_change(struct cdrom_device_info *cdi, int slot){
                   */
                 scsi_CDs[MINOR(cdi->dev)].needs_sector_size = 1;
 
-                scsi_CDs[MINOR(cdi->dev)].sector_size = 
-                  sr_hardsizes[MINOR(cdi->dev)] = 2048;
+                scsi_CDs[MINOR(cdi->dev)].sector_size = 2048;
         }
 	return retval;
 }
@@ -955,7 +953,6 @@ void get_sectorsize(int i){
          * Add this so that we have the ability to correctly gauge
          * what the device is capable of.
          */
-        sr_hardsizes[i] = scsi_CDs[i].sector_size;
 	scsi_CDs[i].needs_sector_size = 0;
 	sr_sizes[i] = scsi_CDs[i].capacity >> (BLOCK_SIZE_BITS - 9);
     };
@@ -1040,16 +1037,12 @@ static int sr_init()
 
     sr_blocksizes = (int *) scsi_init_malloc(sr_template.dev_max *
 					 sizeof(int), GFP_ATOMIC);
-    sr_hardsizes =  (int *) scsi_init_malloc(sr_template.dev_max * 
-                                         sizeof(int), GFP_ATOMIC);
 
     /*
      * These are good guesses for the time being.
      */
     for(i=0;i<sr_template.dev_max;i++) sr_blocksizes[i] = 2048;
-    for(i=0;i<sr_template.dev_max;i++) sr_hardsizes[i] = 2048;
     blksize_size[MAJOR_NR] = sr_blocksizes;
-    hardsect_size[MAJOR_NR] = sr_hardsizes;
     return 0;
 }
 
@@ -1163,9 +1156,6 @@ void cleanup_module( void)
 
 	scsi_init_free((char *) sr_blocksizes, sr_template.dev_max * sizeof(int));
         sr_blocksizes = NULL;
-
-	scsi_init_free((char *) sr_hardsizes,  sr_template.dev_max * sizeof(int));
-        sr_hardsizes = NULL;
     }
 
     blksize_size[MAJOR_NR] = NULL;

@@ -2298,7 +2298,8 @@ int probe_ms_sound(struct address_info *hw_config)
 		hw_config->card_subtype = 1;
 		return 1;
 	}
-	if ((hw_config->irq != 7)  &&
+	if ((hw_config->irq != 5)  &&
+	    (hw_config->irq != 7)  &&
 	    (hw_config->irq != 9)  &&
 	    (hw_config->irq != 10) &&
 	    (hw_config->irq != 11))
@@ -2332,7 +2333,7 @@ void attach_ms_sound(struct address_info *hw_config)
 {
 	static char     interrupt_bits[12] =
 	{
-		-1, -1, -1, -1, -1, -1, -1, 0x08, -1, 0x10, 0x18, 0x20
+		-1, -1, -1, -1, -1, 0x00, -1, 0x08, -1, 0x10, 0x18, 0x20
 	};
 	char            bits, dma2_bit = 0;
 

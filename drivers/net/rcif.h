@@ -8,7 +8,7 @@
 **  RedCreek InterFace include file.
 **
 **  ---------------------------------------------------------------------
-**  ---     Copyright (c) 1998, RedCreek Communications Inc.          ---
+**  ---     Copyright (c) 1998-1999, RedCreek Communications Inc.     ---
 **  ---                   All rights reserved.                        ---
 **  ---------------------------------------------------------------------
 **
@@ -38,7 +38,7 @@
 
 /* The following protocol revision # should be incremented every time
    a new protocol or new structures are used in this file. */
-int USER_PROTOCOL_REV = 1;     /* used to track different protocol revisions */
+int USER_PROTOCOL_REV = 2;     /* used to track different protocol revisions */
 
 /* define a single TCB & buffer */
 typedef struct                  /* a single buffer */
@@ -124,6 +124,31 @@ struct RC_user_tag
             U32 LinkSpeedCode;
         } RCgetspeed;                   /* <---- RCgetspeed */
   
+        /* SETSPEED structure */
+        struct RCsetspeed_tag {
+            U16 LinkSpeedCode;
+        } RCsetspeed;                   /* <---- RCsetspeed */
+
+        /* GETPROM structure */
+        struct  RCgetprom_tag {
+            U32 PromMode;
+        } RCgetprom;                   /* <---- RCgetprom */
+  
+        /* SETPROM structure */
+        struct RCsetprom_tag {
+            U16 PromMode;
+        } RCsetprom;                   /* <---- RCsetprom */
+
+        /* GETBROADCAST structure */
+        struct  RCgetbroadcast_tag {
+            U32 BroadcastMode;
+        } RCgetbroadcast;                   /* <---- RCgetbroadcast */
+  
+        /* SETBROADCAST structure */
+        struct RCsetbroadcast_tag {
+            U16 BroadcastMode;
+        } RCsetbroadcast;                   /* <---- RCsetbroadcast */
+
         /* GETFIRMWAREVER structure */
         #define FirmStringLen 80
         struct RCgetfwver_tag {
@@ -136,11 +161,22 @@ struct RC_user_tag
             U32 NetMask;
         } RCgetipandmask;               /* <---- RCgetipandmask */
 
+        /* SETIPANDMASK structure */
+        struct RCsetipnmask_tag {
+            U32 IpAddr;
+            U32 NetMask;
+        } RCsetipandmask;               /* <---- RCsetipandmask */
+
         /* GETMAC structure */
         #define MAC_SIZE 10
         struct RCgetmac_tag {
             U8 mac[MAC_SIZE];
         } RCgetmac;                     /* <---- RCgetmac */
+
+        /* SETMAC structure */
+        struct RCsetmac_tag {
+            U8 mac[MAC_SIZE];
+        } RCsetmac;                     /* <---- RCsetmac */
 
         /* GETLINKSTATUS structure */
         struct RCgetlnkstatus_tag {
@@ -166,35 +202,56 @@ struct RC_user_tag
 union RC_user_data_tag {        /* structure tags used are taken from RC_user_tag structure above */
     struct RCgetinfo_tag      *getinfo;
     struct RCgetspeed_tag     *getspeed;
+    struct RCgetprom_tag *getprom;
+    struct RCgetbroadcast_tag   *getbroadcast;
     struct RCgetfwver_tag     *getfwver;
     struct RCgetipnmask_tag   *getipandmask;
     struct RCgetmac_tag       *getmac;
     struct RCgetlnkstatus_tag *getlinkstatus;
     struct RCgetlinkstats_tag *getlinkstatistics;
     struct RCdefault_tag      *rcdefault;
+    struct RCsetspeed_tag     *setspeed;
+    struct RCsetprom_tag     *setprom;
+    struct RCsetbroadcast_tag     *setbroadcast;
+    struct RCsetipnmask_tag   *setipandmask;
+    struct RCsetmac_tag       *setmac;
 } _RC_user_data;  /* declare as a global, so the defines below will work */
 
 /* 3) Structure short-cut entry */
 /* define structure short-cuts */   /* structure names are taken from RC_user_tag structure above */
 #define RCUS_GETINFO           data.RCgetinfo;
 #define RCUS_GETSPEED          data.RCgetspeed;
+#define RCUS_GETPROM           data.RCgetprom;
+#define RCUS_GETBROADCAST      data.RCgetbroadcast;
 #define RCUS_GETFWVER          data.RCgetfwver;
 #define RCUS_GETIPANDMASK      data.RCgetipandmask;
 #define RCUS_GETMAC            data.RCgetmac;
 #define RCUS_GETLINKSTATUS     data.RCgetlnkstatus;
 #define RCUS_GETLINKSTATISTICS data.RCgetlinkstats;
 #define RCUS_DEFAULT           data.RCdefault;
+#define RCUS_SETSPEED          data.RCsetspeed;
+#define RCUS_SETPROM           data.RCsetprom;
+#define RCUS_SETBROADCAST      data.RCsetbroadcast;
+#define RCUS_SETIPANDMASK      data.RCsetipandmask;
+#define RCUS_SETMAC            data.RCsetmac;
 
 /* 4) Data short-cut entry */
 /* define data short-cuts */    /* pointer names are from RC_user_data_tag union (just below RC_user_tag) */
 #define RCUD_GETINFO           _RC_user_data.getinfo
 #define RCUD_GETSPEED          _RC_user_data.getspeed
+#define RCUD_GETPROM           _RC_user_data.getprom
+#define RCUD_GETBROADCAST      _RC_user_data.getbroadcast
 #define RCUD_GETFWVER          _RC_user_data.getfwver
 #define RCUD_GETIPANDMASK      _RC_user_data.getipandmask
 #define RCUD_GETMAC            _RC_user_data.getmac
 #define RCUD_GETLINKSTATUS     _RC_user_data.getlinkstatus
 #define RCUD_GETLINKSTATISTICS _RC_user_data.getlinkstatistics
 #define RCUD_DEFAULT           _RC_user_data.rcdefault
+#define RCUD_SETSPEED          _RC_user_data.setspeed
+#define RCUD_SETPROM           _RC_user_data.setprom
+#define RCUD_SETBROADCAST      _RC_user_data.setbroadcast
+#define RCUD_SETIPANDMASK      _RC_user_data.setipandmask
+#define RCUD_SETMAC            _RC_user_data.setmac
 
 /* 5) Command identifier entry */
 /* define command identifiers */
@@ -205,7 +262,14 @@ union RC_user_data_tag {        /* structure tags used are taken from RC_user_ta
 #define RCUC_GETMAC             0x05
 #define RCUC_GETLINKSTATUS      0x06
 #define RCUC_GETLINKSTATISTICS  0x07
+#define RCUC_GETPROM            0x14
+#define RCUC_GETBROADCAST       0x15
 #define RCUC_DEFAULT            0xff
+#define RCUC_SETSPEED           0x08
+#define RCUC_SETIPANDMASK       0x09
+#define RCUC_SETMAC             0x0a
+#define RCUC_SETPROM            0x16
+#define RCUC_SETBROADCAST       0x17
 
 /* define ioctl commands to use, when talking to RC 45/PCI driver */
 #define RCU_PROTOCOL_REV         SIOCDEVPRIVATE

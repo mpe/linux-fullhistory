@@ -126,10 +126,14 @@ drop_pte:
 	 *
 	 * That would get rid of a lot of problems.
 	 */
+	flush_cache_page(vma, address);
 	if (vma->vm_ops && vma->vm_ops->swapout) {
 		pid_t pid = tsk->pid;
+		pte_clear(page_table);
+		flush_tlb_page(vma, address);
 		vma->vm_mm->rss--;
-		if (vma->vm_ops->swapout(vma, address - vma->vm_start + vma->vm_offset, page_table))
+		
+		if (vma->vm_ops->swapout(vma, page_map))
 			kill_proc(pid, SIGBUS, 1);
 		__free_page(page_map);
 		return 1;
@@ -147,7 +151,6 @@ drop_pte:
 		
 	vma->vm_mm->rss--;
 	tsk->nswap++;
-	flush_cache_page(vma, address);
 	set_pte(page_table, __pte(entry));
 	flush_tlb_page(vma, address);
 	swap_duplicate(entry);	/* One for the process, one for the swap cache */

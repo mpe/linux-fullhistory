@@ -51,6 +51,8 @@ extern unsigned char aux_device_present;
 #define KBD_CCMD_KBD_TEST	0xAB	/* Keyboard interface test */
 #define KBD_CCMD_KBD_DISABLE	0xAD	/* Keyboard interface disable */
 #define KBD_CCMD_KBD_ENABLE	0xAE	/* Keyboard interface enable */
+#define KBD_CCMD_WRITE_AUX_OBUF	0xD3    /* Write to output buffer as if
+					   initiated by the auxiliary device */
 #define KBD_CCMD_WRITE_MOUSE	0xD4	/* Write the following byte to the mouse */
 
 /*

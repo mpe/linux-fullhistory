@@ -1,7 +1,7 @@
 /* linux/drivers/cdrom/cdrom.c. 
    Copyright (c) 1996, 1997 David A. van Leeuwen.
    Copyright (c) 1997, 1998 Erik Andersen <andersee@debian.org>
-   Copyright (c) 1998 Jens Axboe and Chris Zwilling
+   Copyright (c) 1998, 1999 Jens Axboe
 
    May be copied or modified under the terms of the GNU General Public
    License.  See linux/COPYING for more information.
@@ -96,11 +96,18 @@
   -- Check if drive is capable of doing what we ask before blindly changing
   cdi->options in various ioctl.
   -- Added version to proc entry.
+  
+  2.52 Jan 16, 1998 - Jens Axboe <axboe@image.dk>
+  -- Fixed an error in open_for_data where we would sometimes not return
+  the correct error value. Thanks Huba Gaspar <huba@softcell.hu>.
+  -- Fixed module usage count - usage was based on /proc/sys/dev
+  instead of /proc/sys/dev/cdrom. This could lead to an oops when other
+  modules had entries in dev.
 
 -------------------------------------------------------------------------*/
 
-#define REVISION "Revision: 2.51"
-#define VERSION "Id: cdrom.c 2.51 1998/12/20"
+#define REVISION "Revision: 2.52"
+#define VERSION "Id: cdrom.c 2.52 1999/01/16"
 
 /* I use an error-log mask to give fine grain control over the type of
    messages dumped to the system logs.  The available masks include: */
@@ -363,7 +370,7 @@ int open_for_data(struct cdrom_device_info * cdi)
 					goto clean_up_and_return;
 				}
 			} else {
-				cdinfo(CD_OPEN, "bummer. this driver can't close the tray.\n"); 
+				cdinfo(CD_OPEN, "bummer. this drive can't close the tray.\n"); 
 				ret=-ENOMEDIUM;
 				goto clean_up_and_return;
 			}
@@ -371,6 +378,7 @@ int open_for_data(struct cdrom_device_info * cdi)
 			ret = cdo->drive_status(cdi, CDSL_CURRENT);
 			if ((ret == CDS_NO_DISC) || (ret==CDS_TRAY_OPEN)) {
 				cdinfo(CD_OPEN, "bummer. the tray is still not closed.\n"); 
+				cdinfo(CD_OPEN, "tray might not contain a medium.\n");
 				ret=-ENOMEDIUM;
 				goto clean_up_and_return;
 			}
@@ -997,8 +1005,13 @@ static char cdrom_drive_info[CDROM_STR_SIZE]="info\n";
 int cdrom_sysctl_info(ctl_table *ctl, int write, struct file * filp,
                            void *buffer, size_t *lenp)
 {
-        int retv,pos;
+        int pos;
 	struct cdrom_device_info *cdi;
+	
+	if (!*lenp || (filp->f_pos && !write)) {
+		*lenp = 0;
+		return 0;
+	}
 
 	pos = sprintf(cdrom_drive_info, "CD-ROM information, " VERSION "\n");
 	
@@ -1061,18 +1074,14 @@ int cdrom_sysctl_info(ctl_table *ctl, int write, struct file * filp,
 
         strcpy(cdrom_drive_info+pos,"\n\n");
 	*lenp=pos+3;
-        if (!write) {
-        	retv = proc_dostring(ctl, write, filp, buffer, lenp);
-        }
-        else
-        	retv = proc_dostring(ctl, write, filp, buffer, lenp);
-        return retv;
+
+        return proc_dostring(ctl, write, filp, buffer, lenp);
 }
 
 /* Place files in /proc/sys/dev/cdrom */
 ctl_table cdrom_table[] = {
 	{DEV_CDROM_INFO, "info", &cdrom_drive_info, 
-		CDROM_STR_SIZE*sizeof(char), 0444, NULL, &cdrom_sysctl_info},
+		CDROM_STR_SIZE, 0444, NULL, &cdrom_sysctl_info},
 	{0}
 	};
 
@@ -1099,20 +1108,23 @@ static struct ctl_table_header *cdrom_sysctl_header;
  */
 static void cdrom_procfs_modcount(struct inode *inode, int fill)
 {
-       if (fill)
-               MOD_INC_USE_COUNT;
-       else
-               MOD_DEC_USE_COUNT;
+	if (fill) {
+		MOD_INC_USE_COUNT;
+	} else {
+		MOD_DEC_USE_COUNT;
+	}
 }
 
 static void cdrom_sysctl_register(void)
 {
 	static int initialized = 0;
 
-	if ( initialized == 1 )
+	if (initialized == 1)
 		return;
-	cdrom_sysctl_header = register_sysctl_table(cdrom_root_table, 0);
+
+	cdrom_sysctl_header = register_sysctl_table(cdrom_root_table, 1);
 	cdrom_root_table->de->fill_inode = &cdrom_procfs_modcount;
+
 	initialized = 1;
 }
 

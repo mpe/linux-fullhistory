@@ -1,5 +1,5 @@
 /*
- *  $Id: ipconfig.c,v 1.18 1999/01/04 20:14:10 davem Exp $
+ *  $Id: ipconfig.c,v 1.19 1999/01/15 06:54:00 davem Exp $
  *
  *  Automatic Configuration of IP -- use BOOTP or RARP or user-supplied
  *  information to configure own IP address and routes.
@@ -73,7 +73,14 @@ u8 root_server_path[256] __initdata = { 0, };		/* Path to mount as root */
 
 #define CONFIG_IP_PNP_DYNAMIC
 
-static int ic_proto_enabled __initdata = IC_BOOTP | IC_RARP;	/* Protocols enabled */
+static int ic_proto_enabled __initdata = 0			/* Protocols enabled */
+#ifdef CONFIG_IP_PNP_BOOTP
+			| IC_BOOTP
+#endif
+#ifdef CONFIG_IP_PNP_RARP
+			| IC_RARP
+#endif
+			;
 static int ic_got_reply __initdata = 0;				/* Protocol(s) we got reply from */
 
 #else
@@ -506,10 +513,9 @@ static void __init ic_bootp_send_if(struct ic_device *d, u32 jiffies)
 	h->ihl = 5;
 	h->tot_len = htons(sizeof(struct bootp_pkt));
 	h->frag_off = htons(IP_DF);
-	h->ttl = 1;
+	h->ttl = 64;
 	h->protocol = IPPROTO_UDP;
 	h->daddr = INADDR_BROADCAST;
-	h->check = 0;
 	h->check = ip_fast_csum((unsigned char *) h, h->ihl);
 
 	/* Construct UDP header */

@@ -460,7 +460,7 @@ static int saa5249_ioctl(struct video_device *vd, unsigned int cmd, void *arg)
 
 				if (!(infobits[8] & 0x10) && !(infobits[7] & 0xf0) &&	/* check FOUND-bit */
 					(memcmp(infobits, t->vdau[req.pgbuf].laststat, sizeof(infobits)) || 
-					jiffies >= t->vdau[req.pgbuf].expire))
+					time_after_eq(jiffies, t->vdau[req.pgbuf].expire)))
 				{		/* check if new page arrived */
 					if (i2c_senddata(t, CCTWR, 8, 0, 0, 0, -1) ||
 						i2c_getdata(t, CCTRD, VTX_PAGESIZE, t->vdau[req.pgbuf].pgbuf, FALSE))

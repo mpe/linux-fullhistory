@@ -17,7 +17,18 @@
  * and build the actual wish script.
  *
  * This file contains the code to do the first parse of config.in.
+ *
+ * Change History
+ *
+ * 7 January 1999, Michael Elizabeth Chastain, <mailto:mec@shout.net>
+ * Teach dep_tristate about a few literals, such as:
+ *   dep_tristate 'foo' CONFIG_FOO m
+ * Also have it print an error message and exit on some parse failures.
+ *
+ * 14 January 1999, Michael Elizabeth Chastain, <mailto:mec@shout.net>
+ * Don't fclose stdin.  Thanks to Tony Hoyle for nailing this one.
  */
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -467,8 +478,20 @@ void parse(char * pnt) {
       pnt = get_qstring(pnt, &kcfg->label);
       pnt = get_string(pnt, &kcfg->optionname);
       pnt = skip_whitespace(pnt);
-      if( *pnt == '$') pnt++;
-      pnt = get_string(pnt, &kcfg->depend.str);
+
+      if ( ( pnt[0] == 'y'  || pnt[0] == 'm' || pnt[0] == 'n'  )
+      &&   ( pnt[1] == '\0' || pnt[1] == ' ' || pnt[1] == '\t' ) ) {
+	if      ( pnt[0] == 'y' ) kcfg->depend.str = strdup( "CONSTANT_Y" );
+	else if ( pnt[0] == 'm' ) kcfg->depend.str = strdup( "CONSTANT_M" );
+	else                      kcfg->depend.str = strdup( "CONSTANT_N" );
+	pnt++;
+      } else if ( *pnt == '$' ) {
+	pnt++;
+	pnt = get_string(pnt, &kcfg->depend.str);
+      } else {
+	fprintf( stderr, "Can't handle dep_tristate condition\n" );
+	exit( 1 );
+      }
 
       /*
        * Create a conditional for this object's dependency.
@@ -629,8 +652,8 @@ static int do_source(char * filename)
 	  offset = 0;
 	}
     }
-  fclose(infile);
   if( infile != stdin ) {
+    fclose(infile);
     current_file = old_file;
   }
   lineno = old_lineno;

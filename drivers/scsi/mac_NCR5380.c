@@ -1458,9 +1458,9 @@ static int NCR5380_select (struct Scsi_Host *instance, Scsi_Cmnd *cmd, int tag)
       unsigned long timeout = jiffies + 2*NCR_TIMEOUT;
 
       while (!(NCR5380_read(INITIATOR_COMMAND_REG) & ICR_ARBITRATION_PROGRESS)
-	   && jiffies < timeout && !hostdata->connected)
+	   && time_before(jiffies, timeout) && !hostdata->connected)
 	;
-      if (jiffies >= timeout)
+      if (time_after_eq(jiffies, timeout))
       {
 	printk("scsi : arbitration timeout at %d\n", __LINE__);
 	NCR5380_write(MODE_REG, MR_BASE);
@@ -1615,7 +1615,7 @@ static int NCR5380_select (struct Scsi_Host *instance, Scsi_Cmnd *cmd, int tag)
      * only wait for BSY... (Famous german words: Der Klügere gibt nach :-)
      */
 
-    while ((jiffies < timeout) && !(NCR5380_read(STATUS_REG) & 
+    while (time_before(jiffies, timeout) && !(NCR5380_read(STATUS_REG) & 
 	(SR_BSY | SR_IO)));
 
     if ((NCR5380_read(STATUS_REG) & (SR_SEL | SR_IO)) == 
@@ -1628,7 +1628,7 @@ static int NCR5380_select (struct Scsi_Host *instance, Scsi_Cmnd *cmd, int tag)
 	    return -1;
     }
 #else
-    while ((jiffies < timeout) && !(NCR5380_read(STATUS_REG) & SR_BSY));
+    while (time_before(jiffies, timeout) && !(NCR5380_read(STATUS_REG) & SR_BSY));
 #endif
 
     /* 

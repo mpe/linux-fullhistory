@@ -161,6 +161,7 @@ isofs_find_entry(struct inode *dir, struct dentry *dentry, unsigned long *ino)
 
 		if (dir->i_sb->u.isofs_sb.s_rock ||
 		    dir->i_sb->u.isofs_sb.s_joliet_level || 
+		    dir->i_sb->u.isofs_sb.s_mapping == 'n' ||
 		    dir->i_sb->u.isofs_sb.s_mapping == 'a') {
 			if (! page) {
 				page = (unsigned char *)
@@ -190,12 +191,13 @@ isofs_find_entry(struct inode *dir, struct dentry *dentry, unsigned long *ino)
 					break;
 				}
 				if (c == ';') c = '.';
-				dpnt[i] = c;
+				page[i] = c;
 			}
 			/* This allows us to match with and without
 			 * a trailing period. */
-			if(dpnt[dlen-1] == '.' && dentry->d_name.len == dlen-1)
+			if(page[dlen-1] == '.' && dentry->d_name.len == dlen-1)
 				dlen--;
+			dpnt = page;
 		}
 		/*
 		 * Skip hidden or associated files unless unhide is set 

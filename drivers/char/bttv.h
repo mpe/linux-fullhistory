@@ -21,7 +21,7 @@
 #ifndef _BTTV_H_
 #define _BTTV_H_
 
-#define TEST_VBI
+#define BTTV_VERSION_CODE 0x000520
 
 #include <linux/types.h>
 #include <linux/wait.h>
@@ -31,8 +31,14 @@
 #include "bt848.h"
 #include <linux/videodev.h>
 
+#ifndef O_NONCAP  
+#define O_NONCAP	O_TRUNC
+#endif
+
 #define MAX_GBUFFERS	2
 #define RISCMEM_LEN	(32744*2)
+#define VBI_MAXLINES    19
+#define VBIBUF_SIZE     (2048*VBI_MAXLINES*2)
 
 /* maximum needed buffer size for extended VBI frame mode capturing */
 #define BTTV_MAX_FBUF	0x190000
@@ -56,11 +62,20 @@ struct bttv_window
 };
 
 struct bttv_pll_info {
-	unsigned int pll_ifreq;		/* PLL input frequency    */
-	unsigned int pll_ofreq;		/* PLL output frequency   */
-	unsigned int pll_crystal;	/* Crystal used for input */
-	unsigned int pll_current;	/* Current programmed ofrq*/
+	unsigned int pll_ifreq;	   /* PLL input frequency 	 */
+	unsigned int pll_ofreq;	   /* PLL output frequency       */
+	unsigned int pll_crystal;  /* Crystal used for input     */
+	unsigned int pll_current;  /* Currently programmed ofreq */
 };
+
+/*  Per-open data for handling multiple opens on one device */
+struct device_open
+{
+	int	     isopen;
+	int	     noncapturing;
+	struct bttv  *dev;
+};
+#define MAX_OPENS 3
 
 struct bttv 
 {
@@ -70,6 +85,10 @@ struct bttv
 	struct video_picture picture;		/* Current picture params */
 	struct video_audio audio_dev;		/* Current audio params */
 
+	int user;
+	int capuser;
+	struct device_open open_data[MAX_OPENS];
+	
 	struct i2c_bus i2c;
 	int have_msp3400;
 	int have_tuner;
@@ -78,9 +97,12 @@ struct bttv
         
         unsigned int nr;
 	unsigned short id;
+#if LINUX_VERSION_CODE < 0x020100
 	unsigned char bus;          /* PCI bus the Bt848 is on */
 	unsigned char devfn;
+#else
 	struct pci_dev *dev;
+#endif
 	unsigned char irq;          /* IRQ used by Bt848 card */
 	unsigned char revision;
 	unsigned int bt848_adr;      /* bus address of IO mem returned by PCI BIOS */
@@ -92,7 +114,6 @@ struct bttv
 	struct bttv_window win;
 	int type;            /* card type  */
 	int audio;           /* audio mode */
-	int user;
 	int audio_chip;
 	int radio;
 
@@ -115,7 +136,7 @@ struct bttv
 	struct gbuffer *ogbuffers;
 	struct gbuffer *egbuffers;
 	u16 gwidth, gheight, gfmt;
-        u16 gwidth_next, gheight_next, gfmt_next;
+	u16 gwidth_next, gheight_next, gfmt_next;
 	u32 *grisc;
 	
 	unsigned long gro;
@@ -143,7 +164,6 @@ struct bttv
 	int i2c_command;
 	int triton1;
 };
-
 #endif
 
 /*The following should be done in more portable way. It depends on define
@@ -165,12 +185,11 @@ struct bttv
 
 #define BTTV_READEE		_IOW('v',  BASE_VIDIOCPRIVATE+0, char [256])
 #define BTTV_WRITEE		_IOR('v',  BASE_VIDIOCPRIVATE+1, char [256])
-#define BTTV_GRAB		_IOR('v' , BASE_VIDIOCPRIVATE+2, struct gbuf)
 #define BTTV_FIELDNR		_IOR('v' , BASE_VIDIOCPRIVATE+2, unsigned int)
 #define BTTV_PLLSET		_IOW('v' , BASE_VIDIOCPRIVATE+3, struct bttv_pll_info)
-#define BTTV_BURST_ON		_IOR('v' , BASE_VIDIOCPRIVATE+4, int)
-#define BTTV_BURST_OFF		_IOR('v' , BASE_VIDIOCPRIVATE+5, int)
-#define BTTV_NAGRAVERSION	_IOR('v' , BASE_VIDIOCPRIVATE+6, int)
+#define BTTV_BURST_ON      	_IOR('v' , BASE_VIDIOCPRIVATE+4, int)
+#define BTTV_BURST_OFF     	_IOR('v' , BASE_VIDIOCPRIVATE+5, int)
+#define BTTV_VERSION  	        _IOR('v' , BASE_VIDIOCPRIVATE+6, int)
 #define BTTV_PICNR		_IOR('v' , BASE_VIDIOCPRIVATE+7, int)
 
 
@@ -187,6 +206,7 @@ struct bttv
 #define BTTV_HAUPPAUGE878  0x0a
 #define BTTV_MIROPRO       0x0b
 #define BTTV_ADSTECH_TV    0x0c
+#define BTTV_AVERMEDIA98   0x0d
 
 #define AUDIO_TUNER        0x00
 #define AUDIO_RADIO        0x01
@@ -199,12 +219,19 @@ struct bttv
 
 #define TDA9850            0x01
 #define TDA8425            0x02
+#define TDA9840            0x03
 
 #define I2C_TSA5522        0xc2
+#define I2C_TDA9840	   0x84
 #define I2C_TDA9850        0xb6
 #define I2C_TDA8425        0x82
 #define I2C_HAUPEE         0xa0
 #define I2C_STBEE          0xae
+
+#define TDA9840_SW	   0x00
+#define TDA9840_LVADJ	   0x02
+#define TDA9840_STADJ	   0x03
+#define TDA9840_TEST	   0x04
 
 #define TDA9850_CON1       0x04
 #define TDA9850_CON2       0x05

@@ -6,19 +6,31 @@
 #include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/malloc.h>
+#include <linux/version.h>
 
 #include <linux/i2c.h>
 #include <linux/videodev.h>
 
 #include "tuner.h"
 
-static int debug = 0; /* insmod parameter */
-static int type  = 0; /* tuner type */
+static int debug =  0; /* insmod parameter */
+static int type  = -1; /* tuner type */
 
 #define dprintk     if (debug) printk
 
+#if LINUX_VERSION_CODE > 0x020100
 MODULE_PARM(debug,"i");
 MODULE_PARM(type,"i");
+#endif
+
+#if LINUX_VERSION_CODE < 0x02017f
+void schedule_timeout(int j)
+{
+	current->state   = TASK_INTERRUPTIBLE;
+	current->timeout = jiffies + j;
+	schedule();
+}
+#endif
 
 struct tuner 
 {
@@ -69,9 +81,10 @@ static struct tunertype tuners[] = {
 	{"Temic NTSC", TEMIC, NTSC,
 	        16*157.25,16*463.25,0x02,0x04,0x01,0x8e,0xc2,732},
 	{"TEMIC PAL_I", TEMIC, PAL_I,
-	        16*170.00,16*450.00,0xa0,0x90,0x30,0x8e,0xc2,623},
+	      //  16*170.00,16*450.00,0xa0,0x90,0x30,0x8e,0xc2,623},
+	        16*170.00,16*450.00,0x02,0x04,0x01,0x8e,0xc2,623},
 	{"Temic 4036 FY5 NTSC", TEMIC, NTSC,
-		16*157.25,16*463.25,0xa0,0x90,0x30,0x8e,0xc2,732},	       
+		16*157.25,16*463.25,0xa0,0x90,0x30,0x8e,0xc2,732},
 };
 
 /* ---------------------------------------------------------------------- */
@@ -98,11 +111,17 @@ static int tuner_afcstatus (struct tuner *t)
 
 static void set_tv_freq(struct tuner *t, int freq)
 {
-        unsigned long flags;
 	u8 config;
 	u16 div;
-	struct tunertype *tun=&tuners[t->type];
+	struct tunertype *tun;
+	LOCK_FLAGS;
 
+	if (t->type == -1) {
+		printk("tuner: tuner type not set\n");
+		return;
+	}
+
+	tun=&tuners[t->type];
 	if (freq < tun->thresh1) 
 		config = tun->VHF_L;
 	else if (freq < tun->thresh2) 
@@ -125,11 +144,17 @@ static void set_tv_freq(struct tuner *t, int freq)
 
 static void set_radio_freq(struct tuner *t, int freq)
 {
-        unsigned long flags;
 	u8 config;
 	u16 div;
-	struct tunertype *tun=&tuners[type];
+	struct tunertype *tun;
+        LOCK_FLAGS;
 
+	if (t->type == -1) {
+		printk("tuner: tuner type not set\n");
+		return;
+	}
+
+	tun=&tuners[t->type];
 	config = 0xa5;
 	div=freq + (int)(16*10.7);
   	div&=0x7fff;
@@ -143,7 +168,7 @@ static void set_radio_freq(struct tuner *t, int freq)
 	}
 	if (debug) {
 		UNLOCK_I2C_BUS(t->bus);
-		current->state = TASK_INTERRUPTIBLE;
+		current->state   = TASK_INTERRUPTIBLE;
 		schedule_timeout(HZ/10);
 		LOCK_I2C_BUS(t->bus);
 		
@@ -181,7 +206,8 @@ static int tuner_attach(struct i2c_device *device)
 	t->bus  = device->bus;
 	t->addr = device->addr;
 	t->type = type;
-	dprintk("tuner: type is %d (%s)\n",t->type,tuners[t->type].name);
+	dprintk("tuner: type is %d (%s)\n",t->type,
+		(t->type == -1 ) ? "autodetect" : tuners[t->type].name);
 	
 	MOD_INC_USE_COUNT;
 	return 0;
@@ -204,6 +230,8 @@ static int tuner_command(struct i2c_device *device,
 	switch (cmd) 
 	{
 		case TUNER_SET_TYPE:
+			if (t->type != -1)
+				return 0;
 			t->type = *iarg;
 			dprintk("tuner: type set to %d (%s)\n",
 			t->type,tuners[t->type].name);

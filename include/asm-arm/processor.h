@@ -53,11 +53,9 @@ struct mm_struct;
 extern void release_thread(struct task_struct *);
 
 /* Copy and release all segment info associated with a VM */
-extern void copy_segments(int nr, struct task_struct *p, struct mm_struct * mm);
-extern void release_segments(struct mm_struct * mm);
-
 #define copy_segments(nr, tsk, mm)	do { } while (0)
 #define release_segments(mm)		do { } while (0)
+#define forget_segments()		do { } while (0)
 
 #define init_task	(init_task_union.task)
 #define init_stack	(init_task_union.stack)

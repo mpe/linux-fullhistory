@@ -35,6 +35,7 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <linux/init.h>
+#include <linux/version.h>
 
 #include <linux/inet.h>
 #include <linux/netdevice.h>

@@ -1085,22 +1085,6 @@ static int filemap_write_page(struct vm_area_struct * vma,
 	struct file * file;
 	struct dentry * dentry;
 	struct inode * inode;
-	struct buffer_head * bh;
-
-	bh = mem_map[MAP_NR(page)].buffers;
-	if (bh) {
-		/* whee.. just mark the buffer heads dirty */
-		struct buffer_head * tmp = bh;
-		do {
-			/*
-			 * WSH: There's a race here: mark_buffer_dirty()
-			 * could block, and the buffers aren't pinned down.
-			 */
-			mark_buffer_dirty(tmp, 0);
-			tmp = tmp->b_this_page;
-		} while (tmp != bh);
-		return 0;
-	}
 
 	file = vma->vm_file;
 	dentry = file->f_dentry;
@@ -1122,49 +1106,14 @@ static int filemap_write_page(struct vm_area_struct * vma,
 
 
 /*
- * Swapping to a shared file: while we're busy writing out the page
- * (and the page still exists in memory), we save the page information
- * in the page table, so that "filemap_swapin()" can re-use the page
- * immediately if it is called while we're busy swapping it out..
- *
- * Once we've written it all out, we mark the page entry "empty", which
- * will result in a normal page-in (instead of a swap-in) from the now
- * up-to-date disk file.
+ * The page cache takes care of races between somebody
+ * trying to swap something out and swap something in
+ * at the same time..
  */
-int filemap_swapout(struct vm_area_struct * vma,
-	unsigned long offset,
-	pte_t *page_table)
+int filemap_swapout(struct vm_area_struct * vma, struct page * page)
 {
-	int error;
-	unsigned long page = pte_page(*page_table);
-	unsigned long entry = SWP_ENTRY(SHM_SWP_TYPE, MAP_NR(page));
-
-	flush_cache_page(vma, (offset + vma->vm_start - vma->vm_offset));
-	set_pte(page_table, __pte(entry));
-	flush_tlb_page(vma, (offset + vma->vm_start - vma->vm_offset));
-	error = filemap_write_page(vma, offset, page);
-	if (pte_val(*page_table) == entry)
-		pte_clear(page_table);
-	return error;
+	return filemap_write_page(vma, page->offset, page_address(page));
 }
-
-/*
- * filemap_swapin() is called only if we have something in the page
- * tables that is non-zero (but not present), which we know to be the
- * page index of a page that is busy being swapped out (see above).
- * So we just use it directly..
- */
-static pte_t filemap_swapin(struct vm_area_struct * vma,
-	unsigned long offset,
-	unsigned long entry)
-{
-	unsigned long page = SWP_OFFSET(entry);
-
-	atomic_inc(&mem_map[page].count);
-	page = (page << PAGE_SHIFT) + PAGE_OFFSET;
-	return mk_pte(page,vma->vm_page_prot);
-}
-
 
 static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 	unsigned long address, unsigned int flags)
@@ -1306,7 +1255,7 @@ static struct vm_operations_struct file_shared_mmap = {
 	filemap_nopage,		/* nopage */
 	NULL,			/* wppage */
 	filemap_swapout,	/* swapout */
-	filemap_swapin,		/* swapin */
+	NULL,			/* swapin */
 };
 
 /*

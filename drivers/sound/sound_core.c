@@ -43,6 +43,7 @@
 #include <linux/fs.h>
 #include <linux/sound.h>
 #include <linux/major.h>
+#include <linux/kmod.h>
  
  
 struct sound_unit
@@ -317,7 +318,6 @@ int soundcore_open(struct inode *inode, struct file *file)
 	
 	spin_lock(&sound_loader_lock);
 	s = __look_for_unit(chain, unit);
-#ifdef CONFIG_KMOD
 	if (s == NULL) {
 		char mod[32];
 	
@@ -336,7 +336,6 @@ int soundcore_open(struct inode *inode, struct file *file)
 		spin_lock(&sound_loader_lock);
 		s = __look_for_unit(chain, unit);
 	}
-#endif
 	if (s) {
 		file->f_op=s->unit_fops;
 		spin_unlock(&sound_loader_lock);

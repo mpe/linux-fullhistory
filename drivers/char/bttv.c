@@ -17,65 +17,86 @@
     You should have received a copy of the GNU General Public License
     along with this program; if not, write to the Free Software
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
-    
-    Modified to put the RISC code writer in the kernel and to fit a
-    common (and I hope safe) kernel interface. When we have an X extension
-    all will now be really sweet.
- 
-    TODO:  
-   
-    * move norm from tuner to channel struct!?
-      composite source from a satellite tuner can deliver different norms
-      depending on tuned channel
-    * mmap VBI data?
-    * fix RAW Composite grabbing for NTSC 
-    * fix VBI reading double frames when grabbing is active
-    * allow for different VDELAYs
-    * handle tda8425 properly
 */
 
 #include <linux/module.h>
+#include <linux/version.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/major.h>
 #include <linux/malloc.h>
-#include <linux/vmalloc.h>
 #include <linux/mm.h>
+#if LINUX_VERSION_CODE >= 0x020100
+#include <linux/poll.h>
+#endif
 #include <linux/pci.h>
 #include <linux/signal.h>
 #include <asm/io.h>
+#include <linux/ioport.h>
 #include <asm/pgtable.h>
 #include <asm/page.h>
 #include <linux/sched.h>
 #include <asm/segment.h>
 #include <linux/types.h>
 #include <linux/wrapper.h>
+#include <linux/interrupt.h>
+#include <linux/version.h>
+
+#if LINUX_VERSION_CODE >= 0x020100
+#include <asm/uaccess.h>
+#include <linux/vmalloc.h>
+#else
+#include <linux/bios32.h>
+#define mdelay(x) udelay((x)*1000)
+#define signal_pending(current)  (current->signal & ~current->blocked)
+#define sigfillset(set)
+
+static inline int time_before(unsigned long a, unsigned long b)
+{
+	return((long)((a) - (b)) < 0L);
+}
+
+static inline unsigned long
+copy_to_user(void *to, const void *from, unsigned long n)
+{
+        memcpy_tofs(to,from,n);
+	return 0;
+}
+
+static inline unsigned long
+copy_from_user(void *to, const void *from, unsigned long n)
+{
+        memcpy_fromfs(to,from,n);
+	return 0;
+}
+#define ioremap vremap 
+#define iounmap vfree
+#endif
 
 #include <linux/videodev.h>
-#include <linux/version.h>
-#include <asm/uaccess.h>
-
 #include <linux/i2c.h>
 #include "bttv.h"
 #include "tuner.h"
 
-#define DEBUG(x)		/* Debug driver */	
+#define DEBUG(x) 		/* Debug driver */	
 #define IDEBUG(x) 		/* Debug interrupt handler */
 
+#if LINUX_VERSION_CODE >= 0x020117
 MODULE_PARM(vidmem,"i");
 MODULE_PARM(triton1,"i");
 MODULE_PARM(remap,"1-4i");
 MODULE_PARM(radio,"1-4i");
 MODULE_PARM(card,"1-4i");
 MODULE_PARM(pll,"1-4i");
-
-static int find_vga(void);
-static void bt848_set_risc_jmps(struct bttv *btv);
+#endif
 
 /* Anybody who uses more than four? */
 #define BTTV_MAX 4
+
+static int find_vga(void);
+static void bt848_set_risc_jmps(struct bttv *btv);
 
 static unsigned int vidmem=0;   /* manually set video mem address */
 static int triton1=0;
@@ -98,14 +119,15 @@ static int bttv_num;			/* number of Bt848s in use */
 static struct bttv bttvs[BTTV_MAX];
 
 #define I2C_TIMING (0x7<<4)
-#define I2C_DELAY   50		/* Was 10 - some reports that more is needed
-				   regardless of what the spec says */
+#define I2C_DELAY   10
 #define I2C_SET(CTRL,DATA) \
     { btwrite((CTRL<<1)|(DATA), BT848_I2C); udelay(I2C_DELAY); }
 #define I2C_GET()   (btread(BT848_I2C)&1)
 
-#define EEPROM_WRITE_DELAY 20000
+#define EEPROM_WRITE_DELAY    20000
 #define BURSTOFFSET 76
+
+
 
 /*******************************/
 /* Memory management functions */
@@ -190,6 +212,8 @@ static void rvfree(void * mem, unsigned long size)
 		vfree(mem);
 	}
 }
+
+
 
 /*
  *	Create the giant waste of buffer space we need for now
@@ -388,7 +412,9 @@ static struct i2c_bus bttv_i2c_bus_template =
         I2C_BUSID_BT848,
 	NULL,
 
+#if LINUX_VERSION_CODE >= 0x020100
 	SPIN_LOCK_UNLOCKED,
+#endif
 
 	attach_inform,
 	detach_inform,
@@ -399,6 +425,70 @@ static struct i2c_bus bttv_i2c_bus_template =
 	I2CWrite,
 };
  
+/* ----------------------------------------------------------------------- */
+/* some hauppauge specific stuff                                           */
+
+static unsigned char eeprom_data[256];
+static struct HAUPPAUGE_TUNER 
+{
+        int  id;
+        char *name;
+} 
+hauppauge_tuner[] = 
+{
+        { TUNER_ABSENT,        "" },
+        { TUNER_ABSENT,        "External" },
+        { TUNER_ABSENT,        "Unspecified" },
+        { TUNER_ABSENT,        "Philips FI1216" },
+        { TUNER_ABSENT,        "Philips FI1216MF" },
+        { TUNER_PHILIPS_NTSC,  "Philips FI1236" },
+        { TUNER_ABSENT,        "Philips FI1246" },
+        { TUNER_ABSENT,        "Philips FI1256" },
+        { TUNER_PHILIPS_PAL,   "Philips FI1216 MK2" },
+        { TUNER_PHILIPS_SECAM, "Philips FI1216MF MK2" },
+        { TUNER_PHILIPS_NTSC,  "Philips FI1236 MK2" },
+        { TUNER_PHILIPS_PAL_I, "Philips FI1246 MK2" },
+        { TUNER_ABSENT,        "Philips FI1256 MK2" },
+        { TUNER_ABSENT,        "Temic 4032FY5" },
+        { TUNER_TEMIC_PAL,     "Temic 4002FH5" },
+        { TUNER_TEMIC_PAL_I,   "Temic 4062FY5" },
+        { TUNER_ABSENT,        "Philips FR1216 MK2" },
+        { TUNER_PHILIPS_SECAM, "Philips FR1216MF MK2" },
+        { TUNER_PHILIPS_NTSC,  "Philips FR1236 MK2" },
+        { TUNER_PHILIPS_PAL_I, "Philips FR1246 MK2" },
+        { TUNER_ABSENT,        "Philips FR1256 MK2" },
+        { TUNER_PHILIPS_PAL,   "Philips FM1216" },
+        { TUNER_ABSENT,        "Philips FM1216MF" },
+        { TUNER_PHILIPS_NTSC,  "Philips FM1236" },
+};
+
+static void
+hauppauge_eeprom(struct i2c_bus *bus)
+{
+        struct bttv *btv = (struct bttv*)bus->data;
+        
+        readee(bus, eeprom_data);
+        if (eeprom_data[9] < sizeof(hauppauge_tuner)/sizeof(struct HAUPPAUGE_TUNER)) 
+        {
+                btv->tuner_type = hauppauge_tuner[eeprom_data[9]].id;
+                printk("bttv%d: Hauppauge eeprom: tuner=%s (%d)\n",btv->nr,
+                       hauppauge_tuner[eeprom_data[9]].name,btv->tuner_type);
+        }
+}
+
+static void
+hauppauge_msp_reset(struct bttv *btv)
+{
+        /* Reset the MSP on some Hauppauge cards */
+        /* Thanks to Kyösti Mälkki (kmalkki@cc.hut.fi)! */
+        /* Can this hurt cards without one? What about Miros with MSP? */
+        btaor(32, ~32, BT848_GPIO_OUT_EN);
+        btaor(0, ~32, BT848_GPIO_DATA);
+        udelay(2500);
+        btaor(32, ~32, BT848_GPIO_DATA);
+        /* btaor(0, ~32, BT848_GPIO_OUT_EN); */
+}
+
 /* ----------------------------------------------------------------------- */
 
 
@@ -437,25 +527,17 @@ static struct tvcard tvcards[] =
         {0, 0xc00, 0x800, 0x400, 0xc00, 0}},
         /* TurboTV */
         { 3, 1, 0, 2, 3, { 2, 3, 1, 1}, { 1, 1, 2, 3, 0}},
-	/* Newer Hauppauge (bt878) */
+        /* Newer Hauppauge (bt878) */
 	{ 3, 1, 0, 2, 7, { 2, 0, 1, 1}, { 0, 1, 2, 3, 4}},
-	/* MIRO PCTV pro */
-	{ 3, 1, 0, 2, 65551, { 2, 3, 1, 1}, {1,65537, 0, 0,10}},
+        /* MIRO PCTV pro */
+        { 3, 1, 0, 2, 65551, { 2, 3, 1, 1}, {1,65537, 0, 0,10}},
 	/* ADS Technologies Channel Surfer TV (and maybe TV+FM) */
-	{
-	 3, 4, 0, 2, 0x0F,
-	 { 0x02, 0x03, 0x01, 0x01},
-	 { 0x0D, 0x0E, 0x0B, 0x07, 0x00, 0x00},
-	 0x00
-	},
+	{ 3, 4, 0, 2, 15, { 2, 3, 1, 1}, { 13, 14, 11, 7, 0, 0}, 0},
+        /* AVerMedia TVCapture 98 */
+	{ 3, 4, 0, 2, 15, { 2, 3, 1, 1}, { 13, 14, 11, 7, 0, 0}, 0},
 };
 #define TVCARDS (sizeof(tvcards)/sizeof(tvcard))
 
-
-/*
- *	Tuner, Radio, internal, external and mute 
- */
- 
 static void audio(struct bttv *btv, int mode)
 {
 	btaor(tvcards[btv->type].gpiomask, ~tvcards[btv->type].gpiomask,
@@ -543,16 +625,16 @@ static void set_pll_freq(struct bttv *btv, unsigned int fin, unsigned int fout)
         fout*=12;
         fi=fout/fin;
 
-        fout=(fout-fin*fi)*256;
+        fout=(fout%fin)*256;
         fh=fout/fin;
 
-        fout=(fout-fin*fh)*256;
+        fout=(fout%fin)*256;
         fl=fout/fin;
 
         /*printk("0x%02x 0x%02x 0x%02x\n", fi, fh, fl);*/
-        btwrite(fl,BT848_PLL_F_LO);
-        btwrite(fh,BT848_PLL_F_HI);
-        btwrite(fi|BT848_PLL_X,BT848_PLL_XCI);
+        btwrite(fl, BT848_PLL_F_LO);
+        btwrite(fh, BT848_PLL_F_HI);
+        btwrite(fi|BT848_PLL_X, BT848_PLL_XCI);
 }
 
 static int set_pll(struct bttv *btv)
@@ -594,7 +676,7 @@ static int set_pll(struct bttv *btv)
 	}
 	while(time_before(jiffies,tv));
 
-        for (i=0; i<100; i++) 
+        for (i=0; i<10; i++) 
         {
                 if ((btread(BT848_DSTATUS)&BT848_DSTATUS_PLOCK))
                         btwrite(0,BT848_DSTATUS);
@@ -615,13 +697,14 @@ static int set_pll(struct bttv *btv)
 static void bt848_muxsel(struct bttv *btv, unsigned int input)
 {
 	btaor(tvcards[btv->type].gpiomask2,~tvcards[btv->type].gpiomask2,
-        	BT848_GPIO_OUT_EN);
+              BT848_GPIO_OUT_EN);
 
 	/* This seems to get rid of some synchronization problems */
 	btand(~(3<<5), BT848_IFORM);
 	mdelay(10); 
-
-       	input %= tvcards[btv->type].video_inputs;
+        
+        
+	input %= tvcards[btv->type].video_inputs;
 	if (input==tvcards[btv->type].svhs) 
 	{
 		btor(BT848_CONTROL_COMP, BT848_E_CONTROL);
@@ -639,13 +722,83 @@ static void bt848_muxsel(struct bttv *btv, unsigned int input)
 		~tvcards[btv->type].gpiomask2, BT848_GPIO_DATA);
 }
 
+/*
+ *	Set the registers for the size we have specified. Don't bother
+ *	trying to understand this without the BT848 manual in front of
+ *	you [AC]. 
+ *
+ *	PS: The manual is free for download in .pdf format from 
+ *	www.brooktree.com - nicely done those folks.
+ */
+ 
+struct tvnorm 
+{
+        u32 Fsc;
+        u16 swidth, sheight; /* scaled standard width, height */
+	u16 totalwidth;
+	u8 adelay, bdelay, iform;
+	u32 scaledtwidth;
+	u16 hdelayx1, hactivex1;
+	u16 vdelay;
+        u8 vbipack;
+};
 
-#define VBIBUF_SIZE 65536
-
-/* Maximum sample number per VBI line is 2044, NTSC delivers 1600
-   Note that we write 2048-aligned to keep alignment to memory pages 
-   VBI_RISC is written so that it applies to either 2044 or 1600
+static struct tvnorm tvnorms[] = {
+	/* PAL-BDGHI */
+        /* max. active video is actually 922, but 924 is divisible by 4 and 3! */
+ 	/* actually, max active PAL with HSCALE=0 is 948, NTSC is 768 - nil */
+#ifdef VIDEODAT
+        { 35468950,
+          924, 576, 1135, 0x7f, 0x72, (BT848_IFORM_PAL_BDGHI|BT848_IFORM_XT1),
+          1135, 186, 924, 0x20, 255},
+#else
+        { 35468950,
+          924, 576, 1135, 0x7f, 0x72, (BT848_IFORM_PAL_BDGHI|BT848_IFORM_XT1),
+          1135, 186, 924, 0x20, 255},
+#endif
+/*
+        { 35468950, 
+          768, 576, 1135, 0x7f, 0x72, (BT848_IFORM_PAL_BDGHI|BT848_IFORM_XT1),
+	  944, 186, 922, 0x20, 255},
 */
+	/* NTSC */
+	{ 28636363,
+          768, 480,  910, 0x68, 0x5d, (BT848_IFORM_NTSC|BT848_IFORM_XT0),
+          910, 128, 754, 0x1a, 144},
+/*
+	{ 28636363,
+          640, 480,  910, 0x68, 0x5d, (BT848_IFORM_NTSC|BT848_IFORM_XT0),
+          780, 122, 754, 0x1a, 144},
+*/
+#if 0
+	/* SECAM EAST */
+	{ 35468950, 
+          768, 576, 1135, 0x7f, 0xb0, (BT848_IFORM_SECAM|BT848_IFORM_XT1),
+	  944, 186, 922, 0x20, 255},
+#else
+	/* SECAM L */
+        { 35468950,
+          924, 576, 1135, 0x7f, 0xb0, (BT848_IFORM_SECAM|BT848_IFORM_XT1),
+          1135, 186, 922, 0x20, 255},
+#endif
+        /* PAL-NC */
+        { 28636363,
+          640, 576,  910, 0x68, 0x5d, (BT848_IFORM_PAL_NC|BT848_IFORM_XT0),
+          780, 130, 734, 0x1a, 144},
+	/* PAL-M */
+	{ 28636363, 
+          640, 480, 910, 0x68, 0x5d, (BT848_IFORM_PAL_M|BT848_IFORM_XT0),
+	  780, 135, 754, 0x1a, 144},
+	/* PAL-N */
+	{ 35468950, 
+          768, 576, 1135, 0x7f, 0x72, (BT848_IFORM_PAL_N|BT848_IFORM_XT1),
+	  944, 186, 922, 0x20, 144},
+	/* NTSC-Japan */
+	{ 28636363,
+          640, 480,  910, 0x68, 0x5d, (BT848_IFORM_NTSC_J|BT848_IFORM_XT0),
+	  780, 135, 754, 0x16, 144},
+};
+#define TVNORMS (sizeof(tvnorms)/sizeof(tvnorm))
 #define VBI_SPL 2044
 
 /* RISC command to write one VBI data line */
@@ -661,7 +814,11 @@ static void make_vbitab(struct bttv *btv)
 	DEBUG(printk(KERN_DEBUG "vbievn: 0x%08x\n",(int)btv->vbi_even));
 	DEBUG(printk(KERN_DEBUG "po: 0x%08x\n",(int)po));
 	DEBUG(printk(KERN_DEBUG "pe: 0x%08x\n",(int)pe));
-
+        
+	/* setup proper VBI capture length for given video mode */
+	btwrite(tvnorms[btv->win.norm].vbipack, BT848_VBI_PACK_SIZE);
+	btwrite(1, BT848_VBI_PACK_DEL);
+        
 	*(po++)=BT848_RISC_SYNC|BT848_FIFO_STATUS_FM1; *(po++)=0;
 	for (i=0; i<16; i++) 
 	{
@@ -697,10 +854,12 @@ int palette2fmt[] = {
        BT848_COLOR_FMT_RGB15,
        BT848_COLOR_FMT_YUY2,
        BT848_COLOR_FMT_BtYUV,
-       0,
-       0,
-       0,
+       -1,
+       -1,
+       -1,
        BT848_COLOR_FMT_RAW,
+       BT848_COLOR_FMT_YCrCb422,
+       BT848_COLOR_FMT_YCrCb411,
        BT848_COLOR_FMT_YCrCb422,
        BT848_COLOR_FMT_YCrCb411,
 };
@@ -738,10 +897,119 @@ static int make_rawrisctab(struct bttv *btv, unsigned int *ro,
 }
 
 
-static int  make_vrisctab(struct bttv *btv, unsigned int *ro,
+static int  make_prisctab(struct bttv *btv, unsigned int *ro,
                           unsigned int *re, 
                           unsigned int *vbuf, unsigned short width,
                           unsigned short height, unsigned short fmt)
+{
+        unsigned long line, lmask;
+	unsigned long bl, blcr, blcb, rcmd;
+	unsigned long todo;
+	unsigned int **rp;
+	int inter;
+	unsigned long cbadr, cradr;
+	unsigned long vadr=(unsigned long) vbuf;
+	int shift, csize;	
+
+
+	switch(fmt)
+	{
+        case VIDEO_PALETTE_YUV422P:
+                csize=(width*height)>>1;
+                shift=1;
+                lmask=0;
+                break;
+                
+        case VIDEO_PALETTE_YUV411P:
+                csize=(width*height)>>2;
+                shift=2;
+                lmask=0;
+                break;
+	 				
+	 case VIDEO_PALETTE_YUV420P:
+                csize=(width*height)>>2;
+                shift=1;
+                lmask=1;
+                break;
+                
+	 case VIDEO_PALETTE_YUV410P:
+                csize=(width*height)>>4;
+                shift=2;
+                lmask=3;
+                break;
+                
+        default:
+                return -1;
+	}
+	cbadr=vadr+(width*height);
+	cradr=cbadr+csize;
+	inter = (height>btv->win.cropheight/2) ? 1 : 0;
+	
+	*(ro++)=BT848_RISC_SYNC|BT848_FIFO_STATUS_FM3; *(ro++)=0;
+	*(re++)=BT848_RISC_SYNC|BT848_FIFO_STATUS_FM3; *(re++)=0;
+  
+	for (line=0; line < (height<<(1^inter)); line++)
+	{
+		if(line==height)
+		{
+			vadr+=csize<<1;
+			cbadr=vadr+(width*height);
+			cradr=cbadr+csize;
+		}
+	        if (inter) 
+		        rp= (line&1) ? &re : &ro;
+		else 
+	                rp= (line>=height) ? &re : &ro; 
+	                
+
+	        if(line&lmask)
+	        	rcmd=BT848_RISC_WRITE1S23|BT848_RISC_SOL;
+	        else
+	        	rcmd=BT848_RISC_WRITE123|BT848_RISC_SOL;
+
+	        todo=width;
+		while(todo)
+		{
+                 bl=PAGE_SIZE-((PAGE_SIZE-1)&vadr);
+                 blcr=(PAGE_SIZE-((PAGE_SIZE-1)&cradr))<<shift;
+		 blcb=(PAGE_SIZE-((PAGE_SIZE-1)&cbadr))<<shift;
+		 bl=(blcr<bl) ? blcr : bl;
+		 bl=(blcb<bl) ? blcb : bl;
+		 bl=(bl>todo) ? todo : bl;
+		 blcr=bl>>shift;
+		 blcb=blcr;
+		 /* bl now containts the longest row that can be written */
+		 todo-=bl;
+		 if(!todo) rcmd|=BT848_RISC_EOL; /* if this is the last EOL */
+		 
+		 *((*rp)++)=rcmd|bl;
+		 *((*rp)++)=blcb|(blcr<<16);
+		 *((*rp)++)=kvirt_to_bus(vadr);
+		 vadr+=bl;
+		 if((rcmd&(15<<28))==BT848_RISC_WRITE123)
+		 {
+		 	*((*rp)++)=kvirt_to_bus(cbadr);
+		 	cbadr+=blcb;
+		 	*((*rp)++)=kvirt_to_bus(cradr);
+		 	cradr+=blcr;
+		 }
+		 
+		 rcmd&=~BT848_RISC_SOL; /* only the first has SOL */
+		}
+	}
+	
+	*(ro++)=BT848_RISC_JUMP;
+	*(ro++)=btv->bus_vbi_even;
+	*(re++)=BT848_RISC_JUMP|BT848_RISC_IRQ|(2<<16);
+	*(re++)=btv->bus_vbi_odd;
+	
+	return 0;
+}
+ 
+static int  make_vrisctab(struct bttv *btv, unsigned int *ro,
+                          unsigned int *re, 
+                          unsigned int *vbuf, unsigned short width,
+                          unsigned short height, unsigned short palette)
 {
         unsigned long line;
 	unsigned long bpl;  /* bytes per line */
@@ -751,11 +1019,14 @@ static int  make_vrisctab(struct bttv *btv, unsigned int *ro,
 	int inter;
 	unsigned long vadr=(unsigned long) vbuf;
 
-        if (btv->gfmt==BT848_COLOR_FMT_RAW) 
+        if (palette==VIDEO_PALETTE_RAW) 
                 return make_rawrisctab(btv, ro, re, vbuf);
+        if (palette>=VIDEO_PALETTE_PLANAR)
+                return make_prisctab(btv, ro, re, vbuf, width, height, palette);
+        
         
 	inter = (height>btv->win.cropheight/2) ? 1 : 0;
-	bpl=width*fmtbppx2[fmt&0xf]/2;
+	bpl=width*fmtbppx2[palette2fmt[palette]&0xf]/2;
 	
 	*(ro++)=BT848_RISC_SYNC|BT848_FIFO_STATUS_FM1; *(ro++)=0;
 	*(re++)=BT848_RISC_SYNC|BT848_FIFO_STATUS_FM1; *(re++)=0;
@@ -765,7 +1036,7 @@ static int  make_vrisctab(struct bttv *btv, unsigned int *ro,
 	        if (inter) 
 		        rp= (line&1) ? &re : &ro;
 		else 
-	                rp= (line>height) ? &re : &ro; 
+	                rp= (line>=height) ? &re : &ro; 
 
 		bl=PAGE_SIZE-((PAGE_SIZE-1)&vadr);
 		if (bpl<=bl)
@@ -803,16 +1074,62 @@ static int  make_vrisctab(struct bttv *btv, unsigned int *ro,
 	return 0;
 }
 
+static unsigned char lmaskt[8] = 
+{ 0xff, 0xfe, 0xfc, 0xf8, 0xf0, 0xe0, 0xc0, 0x80};
+static unsigned char rmaskt[8] = 
+{ 0x01, 0x03, 0x07, 0x0f, 0x1f, 0x3f, 0x7f, 0xff};
+
 static void clip_draw_rectangle(unsigned char *clipmap, int x, int y, int w, int h)
 {
-	int i, j;
+        unsigned char lmask, rmask, *p;
+        int W, l, r;
+	int i;
 	/* bitmap is fixed width, 128 bytes (1024 pixels represented) */
-	if (x < 0 || y < 0 || w < 0 || h < 0)	/* catch bad clips */
+        if (x<0)
+        {
+                w+=x;
+                x=0;
+        }
+        if (y<0)
+        {
+                h+=y;
+                y=0;
+        }
+	if (w < 0 || h < 0)	/* catch bad clips */
 		return;
 	/* out of range data should just fall through */
-	for (i = y; i < y + h && i < 625; i++)
-		for (j = x; j < x + w && j < 1024; j++)
-			clipmap[(i<<7)+(j>>3)] |= (1<<(j&7));
+        if (y+h>=625)
+                h=625-y;
+        if (x+w>=1024)
+                w=1024-x;
+
+        l=x>>3;
+        r=(x+w)>>3;
+        W=r-l-1;
+        lmask=lmaskt[x&7];
+        rmask=rmaskt[(x+w)&7];
+        p=clipmap+128*y+l;
+        
+        if (W>0) 
+        {
+                for (i=0; i<h; i++, p+=128) 
+                {
+                        *p|=lmask;
+                        memset(p+1, 0xff, W);
+                        p[W+1]|=rmask;
+                }
+        } else if (!W) {
+                for (i=0; i<h; i++, p+=128) 
+                {
+                        p[0]|=lmask;
+                        p[1]|=rmask;
+                }
+        } else {
+                for (i=0; i<h; i++, p+=128) 
+                        p[0]|=lmask&rmask;
+        }
+               
+
 }
 
 static void make_clip_tab(struct bttv *btv, struct video_clip *cr, int ncr)
@@ -904,73 +1221,6 @@ static void make_clip_tab(struct bttv *btv, struct video_clip *cr, int ncr)
 	*(re++)=btv->bus_vbi_odd;
 }
 
-
-/*
- *	Set the registers for the size we have specified. Don't bother
- *	trying to understand this without the BT848 manual in front of
- *	you [AC]. 
- *
- *	PS: The manual is free for download in .pdf format from 
- *	www.brooktree.com - nicely done those folks.
- */
- 
-struct tvnorm 
-{
-        u32 Fsc;
-        u16 swidth, sheight; /* scaled standard width, height */
-	u16 totalwidth;
-	u8 adelay, bdelay, iform;
-	u32 scaledtwidth;
-	u16 hdelayx1, hactivex1;
-	u16 vdelay;
-	u8 vbipack;
-};
-
-static struct tvnorm tvnorms[] = {
-	/* PAL-BDGHI */
-        /* max pal/secam is actually 922, but 924 is divisible by 4 and 3! */
-	/* actually, max active PAL with HSCALE=0 is 948, NTSC is 768 - nil */
-        { 35468950,
-          924, 576, 1135, 0x7f, 0x72, (BT848_IFORM_PAL_BDGHI|BT848_IFORM_XT1),
-          1135, 178, 924, 0x20, 255},
-/*
-        { 35468950, 
-          768, 576, 1135, 0x7f, 0x72, (BT848_IFORM_PAL_BDGHI|BT848_IFORM_XT1),
-	  944, 178, 922, 0x20, 255},
-*/
-	/* NTSC */
-	{ 28636363,
-          768, 480,  910, 0x68, 0x5d, (BT848_IFORM_NTSC|BT848_IFORM_XT0),
-          910, 128, 754, 0x1a, 144},
-/*
-	{ 28636363,
-          640, 480,  910, 0x68, 0x5d, (BT848_IFORM_NTSC|BT848_IFORM_XT0),
-          780, 122, 754, 0x1a, 144},
-*/
-	/* SECAM - phase means nothing in SECAM, bdelay is useless */
-	{ 35468950, 
-          924, 576,1135, 0x7f, 0xb0, (BT848_IFORM_SECAM|BT848_IFORM_XT1),
-	  1135, 178, 924, 0x20, 255},
-	/* PAL-M */
-	{ 28636363, 
-          640, 480, 910, 0x68, 0x5d, (BT848_IFORM_PAL_M|BT848_IFORM_XT0),
-	  780, 122, 754, 0x1a, 144},
-	/* PAL-N */
-	{ 35468950, 
-          768, 576, 1135, 0x7f, 0x72, (BT848_IFORM_PAL_N|BT848_IFORM_XT1),
-	  944, 178, 922, 0x20, 255},
-	/* PAL-NC */
-	{ 35468950, 
-          768, 576, 1135, 0x7f, 0x72, (BT848_IFORM_PAL_NC|BT848_IFORM_XT0),
-	  944, 178, 922, 0x20, 255},
-	/* NTSC-Japan */
-	{ 28636363,
-          640, 480,  910, 0x68, 0x5d, (BT848_IFORM_NTSC_J|BT848_IFORM_XT0),
-	  780, 122, 754, 0x1a, 144},
-};
-#define TVNORMS (sizeof(tvnorms)/sizeof(tvnorm))
-
-
 /* set geometry for even/odd frames 
    just if you are wondering:
    handling of even and odd frames will be separated, e.g. for grabbing
@@ -1031,10 +1281,9 @@ static void bt848_set_geo(struct bttv *btv, u16 width, u16 height, u16 fmt)
 	btwrite(tvn->adelay, BT848_ADELAY);
 	btwrite(tvn->bdelay, BT848_BDELAY);
 	btaor(tvn->iform,~(BT848_IFORM_NORM|BT848_IFORM_XTBOTH), BT848_IFORM);
-	btwrite(1, BT848_VBI_PACK_DEL);
-	btwrite(tvn->vbipack, BT848_VBI_PACK_SIZE);
-	
-	set_pll(btv);
+
+        btv->pll.pll_ofreq = tvn->Fsc;
+        set_pll(btv);
 
 	btwrite(fmt, BT848_COLOR_FMT);
 	hactive=width;
@@ -1065,7 +1314,6 @@ static void bt848_set_geo(struct bttv *btv, u16 width, u16 height, u16 fmt)
 			hdelay, vdelay, crop);
 	bt848_set_eogeo(btv, 1, vtc, hscale, vscale, hactive, vactive,
 			hdelay, vdelay, crop);
-	
 }
 
 
@@ -1105,35 +1353,34 @@ static void set_freq(struct bttv *btv, unsigned short freq)
 {
 	int fixme = freq; /* XXX */
 	
-	if (btv->radio) 
-	{
-		if (btv->have_tuner)
+        /* mute */
+        if (btv->have_msp3400)
+                i2c_control_device(&(btv->i2c),I2C_DRIVERID_MSP3400,
+                                   MSP_SWITCH_MUTE,0);
+
+        /* switch channel */
+        if (btv->have_tuner) {
+                if (btv->radio) {
 			i2c_control_device(&(btv->i2c), I2C_DRIVERID_TUNER,
 					   TUNER_SET_RADIOFREQ,&fixme);
-	
-		if (btv->have_msp3400) {
-			i2c_control_device(&(btv->i2c),I2C_DRIVERID_MSP3400,
-					   MSP_SET_RADIO,0);
-			i2c_control_device(&(btv->i2c),I2C_DRIVERID_MSP3400,
-					   MSP_NEWCHANNEL,0);
-		}
-	}
-	else
-	{
-		if (btv->have_tuner)
+                } else {
 			i2c_control_device(&(btv->i2c), I2C_DRIVERID_TUNER,
 					   TUNER_SET_TVFREQ,&fixme);
+                }
+        }
 
-		if (btv->have_msp3400) {
+        if (btv->have_msp3400) {
+                if (btv->radio) {
+			i2c_control_device(&(btv->i2c),I2C_DRIVERID_MSP3400,
+					   MSP_SET_RADIO,0);
+                } else {
 			i2c_control_device(&(btv->i2c),I2C_DRIVERID_MSP3400,
 					   MSP_SET_TVNORM,&(btv->win.norm));
 			i2c_control_device(&(btv->i2c),I2C_DRIVERID_MSP3400,
 					   MSP_NEWCHANNEL,0);
-		}
-	}
-
+                }
+        }
 }
-      
 
 /*
  *	Grab into virtual memory.
@@ -1172,12 +1419,12 @@ static int vgrab(struct bttv *btv, struct video_mmap *mp)
 */
 	if (mp->format >= PALETTEFMT_MAX)
 		return -EINVAL;
- 	if (mp->height*mp->width*fmtbppx2[palette2fmt[mp->format]&0x0f]/2
-		> BTTV_MAX_FBUF)
+	if (mp->height*mp->width*fmtbppx2[palette2fmt[mp->format]&0x0f]/2
+	    > BTTV_MAX_FBUF)
 		return -EINVAL;
-	if (!palette2fmt[mp->format])
+	if(-1 == palette2fmt[mp->format])
 		return -EINVAL;
- 
+
 	/*
 	 *	FIXME: Check the format of the grab here. This is probably
 	 *	also less restrictive than the normal overlay grabs. Stuff
@@ -1193,7 +1440,7 @@ static int vgrab(struct bttv *btv, struct video_mmap *mp)
                 return -EAGAIN;*/
 	ro=btv->grisc+(((btv->grabcount++)&1) ? 4096 :0);
 	re=ro+2048;
-	make_vrisctab(btv, ro, re, vbuf, mp->width, mp->height, palette2fmt[mp->format]);
+        make_vrisctab(btv, ro, re, vbuf, mp->width, mp->height, mp->format);
 	/* bt848_set_risc_jmps(btv); */
         btv->frame_stat[mp->frame] = GBUFFER_GRABBING;
         if (btv->grabbing) {
@@ -1211,8 +1458,13 @@ static int vgrab(struct bttv *btv, struct video_mmap *mp)
 		btv->gre=virt_to_bus(re);
                 btv->grf=mp->frame;
         }
-	if (!(btv->grabbing++)) 
+	if (!(btv->grabbing++)) {
+		if(mp->format>=VIDEO_PALETTE_COMPONENT) {
+			btor(BT848_VSCALE_COMB, BT848_E_VSCALE_HI);
+			btor(BT848_VSCALE_COMB, BT848_O_VSCALE_HI);
+		}
 		btv->risc_jmp[12]=BT848_RISC_JUMP|(0x8<<16)|BT848_RISC_IRQ;
+        }
 	btor(3, BT848_CAP_CTL);
 	btor(3, BT848_GPIO_DMA_CTL);
 	/* interruptible_sleep_on(&btv->capq); */
@@ -1228,7 +1480,7 @@ static long bttv_read(struct video_device *v, char *buf, unsigned long count, in
 {
 	struct bttv *btv= (struct bttv *)v;
 	int q,todo;
-
+	/* BROKEN: RETURNS VBI WHEN IT SHOULD RETURN GRABBED VIDEO FRAME */
 	todo=count;
 	while (todo && todo>(q=VBIBUF_SIZE-btv->vbip)) 
 	{
@@ -1276,36 +1528,27 @@ static int bttv_open(struct video_device *dev, int flags)
 	struct bttv *btv = (struct bttv *)dev;
 	int users, i;
 
-	switch (flags)
-	{
-		case 0:
-			if (btv->user)
-				return -EBUSY;
-			btv->user++;
-			audio(btv, AUDIO_UNMUTE);
-			for (i=users=0; i<bttv_num; i++)
-				users+=bttvs[i].user;
-			if (users==1)
-				find_vga();
-			btv->fbuffer=NULL;
-			if (!btv->fbuffer)
-				btv->fbuffer=(unsigned char *) rvmalloc(2*BTTV_MAX_FBUF);
-			if (!btv->fbuffer)
-                        { 
-				btv->user--;
-				return -EINVAL;
-			}
-                        btv->grabbing = 0;
-                        btv->grab = 0;
-                        btv->lastgrab = 0;
-                        for (i = 0; i < MAX_GBUFFERS; i++)
-				btv->frame_stat[i] = GBUFFER_UNUSED;
-                        break;
-		case 1:
-			break;
-	}
-	MOD_INC_USE_COUNT;
-	return 0;   
+        if (btv->user)
+                return -EBUSY;
+        audio(btv, AUDIO_UNMUTE);
+        for (i=users=0; i<bttv_num; i++)
+                users+=bttvs[i].user;
+        if (users==1)
+                find_vga();
+        btv->fbuffer=NULL;
+        if (!btv->fbuffer)
+                btv->fbuffer=(unsigned char *) rvmalloc(2*BTTV_MAX_FBUF);
+        if (!btv->fbuffer)
+                return -EINVAL;
+        btv->grabbing = 0;
+        btv->grab = 0;
+        btv->lastgrab = 0;
+        for (i = 0; i < MAX_GBUFFERS; i++)
+                btv->frame_stat[i] = GBUFFER_UNUSED;
+
+        btv->user++;
+        MOD_INC_USE_COUNT;
+        return 0;   
 }
 
 static void bttv_close(struct video_device *dev)
@@ -1394,8 +1637,8 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				VID_TYPE_SCALES;
 			b.channels = tvcards[btv->type].video_inputs;
 			b.audios = tvcards[btv->type].audio_inputs;
-			b.maxwidth = 768;
-			b.maxheight = 576;
+			b.maxwidth = tvnorms[btv->win.norm].swidth;
+			b.maxheight = tvnorms[btv->win.norm].sheight;
 			b.minwidth = 32;
 			b.minheight = 32;
 			if(copy_to_user(arg,&b,sizeof(b)))
@@ -1421,7 +1664,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
                                 v.tuners=1;
                         } 
                         else if(v.channel==tvcards[btv->type].svhs) 
-                                strcpy(v.name,"SVHS");
+                                strcpy(v.name,"S-Video");
                         else
                                 sprintf(v.name,"Composite%d",v.channel);
 
@@ -1438,14 +1681,14 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			if(copy_from_user(&v, arg,sizeof(v)))
 				return -EFAULT;
                         
-                        if (v.channel>=tvcards[btv->type].video_inputs)
+                        if (v.channel>tvcards[btv->type].video_inputs)
                                 return -EINVAL;
 			bt848_muxsel(btv, v.channel);
 			if(v.norm!=VIDEO_MODE_PAL&&v.norm!=VIDEO_MODE_NTSC
 			   &&v.norm!=VIDEO_MODE_SECAM)
 				return -EOPNOTSUPP;
 			btv->win.norm = v.norm;
-			make_vbitab(btv);
+                        make_vbitab(btv);
 			bt848_set_winsize(btv);
 			btv->channel=v.channel;
 			return 0;
@@ -1461,6 +1704,11 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			v.rangelow=0;
 			v.rangehigh=0xFFFFFFFF;
 			v.flags=VIDEO_TUNER_PAL|VIDEO_TUNER_NTSC|VIDEO_TUNER_SECAM;
+			if (btv->audio_chip == TDA9840) {
+				v.flags |= VIDEO_AUDIO_VOLUME;
+				v.mode = VIDEO_SOUND_MONO|VIDEO_SOUND_STEREO;
+				v.mode |= VIDEO_SOUND_LANG1|VIDEO_SOUND_LANG2;
+			}
 			if (btv->audio_chip == TDA9850) {
 				unsigned char ALR1;
 				ALR1 = I2CRead(&(btv->i2c), I2C_TDA9850|1);
@@ -1479,7 +1727,6 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			struct video_tuner v;
 			if(copy_from_user(&v, arg, sizeof(v)))
 				return -EFAULT;
-
 			/* Only one channel has a tuner */
                         if(v.tuner!=tvcards[btv->type].tuner)
  				return -EINVAL;
@@ -1543,13 +1790,17 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			if(copy_from_user(&vw,arg,sizeof(vw)))
 				return -EFAULT;
 				
-			if(vw.flags || vw.width < 16 || vw.height < 16) {
-				bt848_cap(btv,0);
+ 			if(vw.flags || vw.width < 16 || vw.height < 16) 
+                        {
+ 			        bt848_cap(btv,0);
 				return -EINVAL;
-			}
-			if (btv->win.bpp < 4) {	/* adjust and align writes */
+                        }		
+			if (btv->win.bpp < 4) 
+                        {	/* 32-bit align start and adjust width */
+				int i = vw.x;
 				vw.x = (vw.x + 3) & ~3;
-				vw.width = (vw.width - 3) & ~3;
+				i = vw.x - i;
+				vw.width -= i;
 			}
 			btv->win.x=vw.x;
 			btv->win.y=vw.y;
@@ -1591,7 +1842,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			make_clip_tab(btv, vcp, vw.clipcount);
 			if (vw.clipcount != 0)
 				vfree(vcp);
-			if(on && btv->win.vidadr != 0)
+			if(on && btv->win.vidadr!=0)
 				bt848_cap(btv,1);
 			return 0;
 		}
@@ -1645,7 +1896,11 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 		case VIDIOCSFBUF:
 		{
 			struct video_buffer v;
+#if LINUX_VERSION_CODE >= 0x020100
 			if(!capable(CAP_SYS_ADMIN))
+#else
+			if(!suser())
+#endif
 				return -EPERM;
 			if(copy_from_user(&v, arg,sizeof(v)))
 				return -EFAULT;
@@ -1653,7 +1908,13 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				v.depth!=24 && v.depth!=32 && v.width > 16 &&
 				v.height > 16 && v.bytesperline > 16)
 				return -EINVAL;
-	                btv->win.vidadr=(unsigned long)v.base;
+                        if (v.base)
+                        {
+                                if ((unsigned long)v.base&1)
+                                        btv->win.vidadr=(unsigned long)(PAGE_OFFSET|uvirt_to_bus((unsigned long)v.base));
+                                else
+                                        btv->win.vidadr=(unsigned long)v.base;
+                        }
 			btv->win.sheight=v.height;
 			btv->win.swidth=v.width;
 			btv->win.bpp=((v.depth+7)&0x38)/8;
@@ -1696,15 +1957,13 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			strcpy(v.name,"TV");
 			if (btv->audio_chip == TDA9850) {
 				unsigned char ALR1;
-				v.flags|=VIDEO_AUDIO_VOLUME;
 				ALR1 = I2CRead(&(btv->i2c), I2C_TDA9850|1);
 				v.mode = VIDEO_SOUND_MONO;
 				v.mode |= (ALR1 & 32) ? VIDEO_SOUND_STEREO:0;
-				v.mode |= (ALR1 & 32) ? VIDEO_SOUND_LANG1:0;
-				v.volume = 32768;       /* fixme */
-				v.step = 4096;
+				v.mode |= (ALR1 & 64) ? VIDEO_SOUND_LANG1:0;
 			}
-			else if (btv->have_msp3400) {
+			if (btv->have_msp3400) 
+			{
                                 v.flags|=VIDEO_AUDIO_VOLUME |
                                 	VIDEO_AUDIO_BASS |
                                 	VIDEO_AUDIO_TREBLE;
@@ -1735,9 +1994,8 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				audio(btv, AUDIO_MUTE);
  			/* One audio source per tuner */
  			/* if(v.audio!=0) */
- 			/* Nope... I have three on my ADSTech TV card. The*/
- 			/* ADSTech TV+FM prolly has 4 <rriggs@tesser.com> */
- 			if(v.audio<0 || v.audio >= tvcards[btv->type].audio_inputs)
+			/* ADSTech TV card has more than one */
+			if(v.audio<0 || v.audio >= tvcards[btv->type].audio_inputs)
 				return -EINVAL;
 			bt848_muxsel(btv,v.audio);
 			if(!(v.flags&VIDEO_AUDIO_MUTE))
@@ -1750,12 +2008,9 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 					con3 = 0x40;	/* stereo */
 				I2CWrite(&(btv->i2c), I2C_TDA9850,
 					TDA9850_CON3, con3, 1);
-				if (v.flags & VIDEO_AUDIO_VOLUME)
-					I2CWrite(&(btv->i2c), I2C_TDA9850,
-						TDA9850_CON4,
-						(v.volume>>12) & 15, 1);
 			}
-			else if (btv->have_msp3400) {
+			if (btv->have_msp3400) 
+			{
                                 i2c_control_device(&(btv->i2c),
                                                 I2C_DRIVERID_MSP3400,
                                                 MSP_SET_VOLUME,&(v.volume));
@@ -1776,13 +2031,18 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 	        case VIDIOCSYNC:
 			if(copy_from_user((void *)&i,arg,sizeof(int)))
 				return -EFAULT;
-			if (i>1 || i<0)
-				return -EINVAL;
+/*                        if(i>1 || i<0)
+                                return -EINVAL;
+*/
                         switch (btv->frame_stat[i]) {
                         case GBUFFER_UNUSED:
                                 return -EINVAL;
                         case GBUFFER_GRABBING:
- 			        interruptible_sleep_on(&btv->capq);
+                        	while(btv->frame_stat[i]==GBUFFER_GRABBING) {
+ 			        	interruptible_sleep_on(&btv->capq);
+ 			        	if(signal_pending(current))
+ 			        		return -EINTR;
+ 			        }
                                 /* fall */
                         case GBUFFER_DONE:
                                 btv->frame_stat[i] = GBUFFER_UNUSED;
@@ -1791,7 +2051,11 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
                         return 0;
 
 		case BTTV_WRITEE:
+#if LINUX_VERSION_CODE >= 0x020100
 			if(!capable(CAP_SYS_ADMIN))
+#else
+			if(!suser())
+#endif
 				return -EPERM;
 			if(copy_from_user((void *) eedata, (void *) arg, 256))
 				return -EFAULT;
@@ -1799,32 +2063,39 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			return 0;
 
 		case BTTV_READEE:
+#if LINUX_VERSION_CODE >= 0x020100
 			if(!capable(CAP_SYS_ADMIN))
+#else
+			if(!suser())
+#endif
 				return -EPERM;
 			readee(&(btv->i2c), eedata);
 			if(copy_to_user((void *) arg, (void *) eedata, 256))
 				return -EFAULT;
 			break;
 
-		case BTTV_FIELDNR:
+                case BTTV_FIELDNR: 
 			if(copy_to_user((void *) arg, (void *) &btv->last_field, 
                                         sizeof(btv->last_field)))
 				return -EFAULT;
                         break;
-
-		case BTTV_PLLSET:
-		{
-			struct bttv_pll_info p;
+      
+                case BTTV_PLLSET: {
+                        struct bttv_pll_info p;
+#if LINUX_VERSION_CODE >= 0x020100
 			if(!capable(CAP_SYS_ADMIN))
-				return -EPERM;
-			if(copy_from_user(&p , (void *) arg, sizeof(btv->pll)))
+#else
+			if(!suser())
+#endif
+                                return -EPERM;
+                        if(copy_from_user(&p , (void *) arg, sizeof(btv->pll)))
 				return -EFAULT;
-			btv->pll.pll_ifreq = p.pll_ifreq;
-			btv->pll.pll_ofreq = p.pll_ofreq;
-			btv->pll.pll_crystal = p.pll_crystal;
-			break;
-		}
+                        btv->pll.pll_ifreq = p.pll_ifreq;
+                        btv->pll.pll_ofreq = p.pll_ofreq;
+                        btv->pll.pll_crystal = p.pll_crystal;
 
+			break;
+                }						
 	        case VIDIOCMCAPTURE:
 		{
                         struct video_mmap vm;
@@ -1868,7 +2139,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				return -EFAULT;
 			return 0;
 		}
-
+		
 	        case BTTV_BURST_ON:
 		{
 			tvnorms[0].scaledtwidth=1135-BURSTOFFSET-2;
@@ -1883,9 +2154,14 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			return 0;
 		}
 
+		case BTTV_VERSION:
+		{
+			return BTTV_VERSION_CODE;
+		}
+                        
 		case BTTV_PICNR:
 		{
-			/* return picture */
+			/* return picture;*/
 			return  0;
 		}
                         
@@ -1944,7 +2220,9 @@ static struct video_device bttv_template=
 	bttv_close,
 	bttv_read,
 	bttv_write,
+#if LINUX_VERSION_CODE >= 0x020100
 	NULL,			/* poll */
+#endif
 	bttv_ioctl,
 	bttv_mmap,
 	bttv_init_done,
@@ -1998,6 +2276,7 @@ static long vbi_read(struct video_device *v, char *buf, unsigned long count,
 	return count;
 }
 
+#if LINUX_VERSION_CODE >= 0x020100
 static unsigned int vbi_poll(struct video_device *dev, struct file *file,
 	poll_table *wait)
 {
@@ -2011,6 +2290,7 @@ static unsigned int vbi_poll(struct video_device *dev, struct file *file,
 
 	return mask;
 }
+#endif
 
 static int vbi_open(struct video_device *dev, int flags)
 {
@@ -2049,7 +2329,9 @@ static struct video_device vbi_template=
 	vbi_close,
 	vbi_read,
 	bttv_write,
+#if LINUX_VERSION_CODE >= 0x020100
 	vbi_poll,
+#endif
 	vbi_ioctl,
 	NULL,	/* no mmap yet */
 	bttv_init_done,
@@ -2159,7 +2441,9 @@ static struct video_device radio_template=
 	radio_close,
 	radio_read,          /* just returns -EINVAL */
 	bttv_write,          /* just returns -EINVAL */
+#if LINUX_VERSION_CODE >= 0x020100
 	NULL,                /* no poll */
+#endif
 	radio_ioctl,
 	NULL,	             /* no mmap */
 	bttv_init_done,      /* just returns 0 */
@@ -2177,14 +2461,14 @@ struct vidbases
 };
 
 static struct vidbases vbs[] = {
-	{ PCI_VENDOR_ID_ALLIANCE, PCI_DEVICE_ID_ALLIANCE_AT3D,
-		"Alliance AT3D", PCI_BASE_ADDRESS_0},
+        { PCI_VENDOR_ID_ALLIANCE, PCI_DEVICE_ID_ALLIANCE_AT3D,
+                "Alliance AT3D", PCI_BASE_ADDRESS_0},
 	{ PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_215CT222,
                 "ATI MACH64 CT", PCI_BASE_ADDRESS_0},
 	{ PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_210888GX,
 		"ATI MACH64 Winturbo", PCI_BASE_ADDRESS_0},
  	{ PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_215GT,
- 		"ATI MACH64 GT", PCI_BASE_ADDRESS_0},
+                "ATI MACH64 GT", PCI_BASE_ADDRESS_0},
 	{ PCI_VENDOR_ID_CIRRUS, 0, "Cirrus Logic", PCI_BASE_ADDRESS_0},
 	{ PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_TGA,
 		"DEC DC21030", PCI_BASE_ADDRESS_0},
@@ -2195,6 +2479,7 @@ static struct vidbases vbs[] = {
 	{ PCI_VENDOR_ID_MATROX, PCI_DEVICE_ID_MATROX_MIL_2_AGP,
 		"Matrox Millennium II AGP", PCI_BASE_ADDRESS_0},
 	{ PCI_VENDOR_ID_MATROX, 0x051a, "Matrox Mystique", PCI_BASE_ADDRESS_1},
+	{ PCI_VENDOR_ID_MATROX, 0x0521, "Matrox G200", PCI_BASE_ADDRESS_0},
 	{ PCI_VENDOR_ID_N9, PCI_DEVICE_ID_N9_I128, 
 		"Number Nine Imagine 128", PCI_BASE_ADDRESS_0},
 	{ PCI_VENDOR_ID_N9, PCI_DEVICE_ID_N9_I128_2, 
@@ -2219,6 +2504,8 @@ static uint dec_offsets[4] = {
 
 /* Scan for PCI display adapter
    if more than one card is present the last one is used for now */
+
+#if LINUX_VERSION_CODE >= 0x020100
 
 static int find_vga(void)
 {
@@ -2299,6 +2586,99 @@ static int find_vga(void)
 	return found;
 }
 
+#else
+static int find_vga(void)
+{
+	unsigned int devfn, class, vendev;
+	unsigned short vendor, device, badr;
+	int found=0, bus=0, i, tga_type;
+	unsigned int vidadr=0;
+
+
+	for (devfn = 0; devfn < 0xff; devfn++) 
+	{
+		if (PCI_FUNC(devfn) != 0)
+			continue;
+		pcibios_read_config_dword(bus, devfn, PCI_VENDOR_ID, &vendev);
+		if (vendev == 0xffffffff || vendev == 0x00000000) 
+			continue;
+		pcibios_read_config_word(bus, devfn, PCI_VENDOR_ID, &vendor);
+		pcibios_read_config_word(bus, devfn, PCI_DEVICE_ID, &device);
+		pcibios_read_config_dword(bus, devfn, PCI_CLASS_REVISION, &class);
+		class = class >> 16;
+/*		if (class == PCI_CLASS_DISPLAY_VGA) {*/
+		if ((class>>8) == PCI_BASE_CLASS_DISPLAY ||
+			/* Number 9 GXE64Pro needs this */
+			class == PCI_CLASS_NOT_DEFINED_VGA) 
+		{
+			badr=0;
+			printk(KERN_INFO "bttv: PCI display adapter: ");
+			for (i=0; i<NR_CARDS; i++) 
+			{
+				if (vendor==vbs[i].vendor) 
+				{
+					if (vbs[i].device) 
+						if (vbs[i].device!=device)
+							continue;
+					printk("%s.\n", vbs[i].name);
+					badr=vbs[i].badr;
+					break;
+				}
+			}
+                        if (NR_CARDS == i)
+                            printk("UNKNOWN.\n");
+			if (!badr) 
+			{
+				printk(KERN_ERR "bttv: Unknown video memory base address.\n");
+				continue;
+			}
+			pcibios_read_config_dword(bus, devfn, badr, &vidadr);
+			if (vidadr & PCI_BASE_ADDRESS_SPACE_IO) 
+			{
+				printk(KERN_ERR "bttv: Memory seems to be I/O memory.\n");
+				printk(KERN_ERR "bttv: Check entry for your card type in bttv.c vidbases struct.\n");
+				continue;
+			}
+			vidadr &= PCI_BASE_ADDRESS_MEM_MASK;
+			if (!vidadr) 
+			{
+				printk(KERN_ERR "bttv: Memory @ 0, must be something wrong!\n");
+				continue;
+			}
+      
+			if (vendor==PCI_VENDOR_ID_DEC)
+				if (device==PCI_DEVICE_ID_DEC_TGA) 
+			{
+				tga_type = (readl((unsigned long)vidadr) >> 12) & 0x0f;
+				if (tga_type != 0 && tga_type != 1 && tga_type != 3) 
+				{
+					printk(KERN_ERR "bttv: TGA type (0x%x) unrecognized!\n", tga_type);
+					found--;
+				}
+				vidadr+=dec_offsets[tga_type];
+			}
+
+			DEBUG(printk(KERN_DEBUG "bttv: memory @ 0x%08x, ", vidadr));
+			DEBUG(printk(KERN_DEBUG "devfn: 0x%04x.\n", devfn));
+			found++;
+		}
+	}
+  
+	if (vidmem)
+	{
+                if (vidmem < 0x1000)
+                        vidadr=vidmem<<20;
+                else
+                        vidadr=vidmem;
+		printk(KERN_INFO "bttv: Video memory override: 0x%08x\n", vidadr);
+		found=1;
+	}
+	for (i=0; i<BTTV_MAX; i++)
+		bttvs[i].win.vidadr=vidadr;
+
+	return found;
+}
+#endif
 
 
 #define  TRITON_PCON	           0x50 
@@ -2307,6 +2687,9 @@ static int find_vga(void)
 #define  TRITON_WRITE_BURST	  (1<<2)
 #define  TRITON_PEER_CONCURRENCY  (1<<3)
   
+
+#if LINUX_VERSION_CODE >= 0x020100
+
 static void handle_chipset(void)
 {
 	struct pci_dev *dev = NULL;
@@ -2370,6 +2753,78 @@ static void handle_chipset(void)
 #endif
 	}
 }
+#else
+static void handle_chipset(void)
+{
+	int index;
+  
+	for (index = 0; index < 8; index++)
+	{
+		unsigned char bus, devfn;
+		unsigned char b;
+    
+		/* Beware the SiS 85C496 my friend - rev 49 don't work with a bttv */
+		
+		if (!pcibios_find_device(PCI_VENDOR_ID_SI, 
+					 PCI_DEVICE_ID_SI_496, 
+					 index, &bus, &devfn))
+		{
+			printk(KERN_WARNING "BT848 and SIS 85C496 chipset don't always work together.\n");
+		}			
+
+		if (!pcibios_find_device(PCI_VENDOR_ID_INTEL, 
+					 PCI_DEVICE_ID_INTEL_82441,
+					 index, &bus, &devfn)) 
+		{
+			pcibios_read_config_byte(bus, devfn, 0x53, &b);
+			DEBUG(printk(KERN_INFO "bttv: Host bridge: 82441FX Natoma, "));
+			DEBUG(printk("bufcon=0x%02x\n",b));
+		}
+
+		if (!pcibios_find_device(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82437,
+			    index, &bus, &devfn)) 
+		{
+			printk(KERN_INFO "bttv: Host bridge 82437FX Triton PIIX\n");
+			triton1=BT848_INT_ETBF;
+			
+#if 0			
+			/* The ETBF bit SHOULD make all this unnecessary */
+			/* 430FX (Triton I) freezes with bus concurrency on -> switch it off */
+			{   
+			        unsigned char bo;
+
+				pcibios_read_config_byte(bus, devfn, TRITON_PCON, &b);
+				bo=b;
+				DEBUG(printk(KERN_DEBUG "bttv: 82437FX: PCON: 0x%x\n",b));
+
+				if(!(b & TRITON_BUS_CONCURRENCY)) 
+				{
+					printk(KERN_WARNING "bttv: 82437FX: disabling bus concurrency\n");
+					b |= TRITON_BUS_CONCURRENCY;
+				}
+
+				if(b & TRITON_PEER_CONCURRENCY) 
+				{
+					printk(KERN_WARNING "bttv: 82437FX: disabling peer concurrency\n");
+					b &= ~TRITON_PEER_CONCURRENCY;
+				}
+				if(!(b & TRITON_STREAMING)) 
+				{
+					printk(KERN_WARNING "bttv: 82437FX: disabling streaming\n");
+					b |=  TRITON_STREAMING;
+				}
+
+				if (b!=bo) 
+				{
+					pcibios_write_config_byte(bus, devfn, TRITON_PCON, b); 
+					printk(KERN_DEBUG "bttv: 82437FX: PCON changed to: 0x%x\n",b);
+				}
+			}
+#endif
+		}
+	}
+}
+#endif
 
 static void init_tda8425(struct i2c_bus *bus) 
 {
@@ -2377,9 +2832,13 @@ static void init_tda8425(struct i2c_bus *bus)
         I2CWrite(bus, I2C_TDA8425, TDA8425_VR, 0xFC, 1); /* volume right 0dB */
         I2CWrite(bus, I2C_TDA8425, TDA8425_BA, 0xF6, 1); /* bass 0dB         */
         I2CWrite(bus, I2C_TDA8425, TDA8425_TR, 0xF6, 1); /* treble 0dB       */
-	I2CWrite(bus, I2C_TDA8425, TDA8425_S1, 0xCE, 1); /* mute off         */
+        I2CWrite(bus, I2C_TDA8425, TDA8425_S1, 0xCE, 1); /* mute off         */
 }
 
+static void init_tda9840(struct i2c_bus *bus)
+{
+	I2CWrite(bus, I2C_TDA9840, TDA9840_SW, 0x2A, 1);	/* Sound mode switching */
+}
 
 static void init_tda9850(struct i2c_bus *bus)
 {
@@ -2400,7 +2859,6 @@ static void idcard(int i)
 {
         struct bttv *btv = &bttvs[i];
 
-	int tunertype;
 	btwrite(0, BT848_GPIO_OUT_EN);
 	DEBUG(printk(KERN_DEBUG "bttv%d: GPIO: 0x%08x\n", i, btread(BT848_GPIO_DATA)));
 
@@ -2413,99 +2871,115 @@ static void idcard(int i)
 	   */
 	if (btv->type == BTTV_UNKNOWN) 
 	{
-	        btv->type=BTTV_MIRO;
-    
-		if (I2CRead(&(btv->i2c), I2C_HAUPEE)>=0) {
+		if (I2CRead(&(btv->i2c), I2C_HAUPEE)>=0)
+		{
 			if(btv->id>849)
-			{
 				btv->type=BTTV_HAUPPAUGE878;
-				btv->pll.pll_ifreq = 28636363;
-				btv->pll.pll_crystal = BT848_IFORM_XT0;
-			}
 			else
-				btv->type=BTTV_HAUPPAUGE;
-		}
-		else
-		        if (I2CRead(&(btv->i2c), I2C_STBEE)>=0)
-			        btv->type=BTTV_STB;
+			        btv->type=BTTV_HAUPPAUGE;
 
-                if (btv->type == BTTV_MIRO || btv->type == BTTV_MIROPRO) {
-                        /* auto detect tuner for MIRO cards */
-                        btv->tuner_type=((btread(BT848_GPIO_DATA)>>10)-1)&7;
-                }
+		} else if (I2CRead(&(btv->i2c), I2C_STBEE)>=0) {
+			btv->type=BTTV_STB;
+
+		} else {
+			if (I2CRead(&(btv->i2c), 0x80)>=0) /* check for msp34xx */
+				btv->type = BTTV_MIROPRO;
+			else
+	 			btv->type=BTTV_MIRO;
+		}
 	}
 
+        /* board specific initialisations */
+        if (btv->type == BTTV_MIRO || btv->type == BTTV_MIROPRO) {
+                /* auto detect tuner for MIRO cards */
+                btv->tuner_type=((btread(BT848_GPIO_DATA)>>10)-1)&7;
+        }
+        if (btv->type == BTTV_HAUPPAUGE || btv->type == BTTV_HAUPPAUGE878) {
+                hauppauge_msp_reset(btv);
+                hauppauge_eeprom(&(btv->i2c));
+                if (btv->type == BTTV_HAUPPAUGE878) {
+			/* all bt878 hauppauge boards use this ... */
+			btv->pll.pll_ifreq=28636363;
+			btv->pll.pll_crystal=BT848_IFORM_XT0;
+		}
+        }
+        if(btv->type==BTTV_AVERMEDIA98)
+        {
+          btv->pll.pll_ifreq=28636363;
+          btv->pll.pll_crystal=BT848_IFORM_XT0;
+        }
+          
+	if (btv->have_tuner && btv->tuner_type != -1) 
+ 		i2c_control_device(&(btv->i2c), 
+                                   I2C_DRIVERID_TUNER,
+                                   TUNER_SET_TYPE,&btv->tuner_type);
+
+        
+        if (I2CRead(&(btv->i2c), I2C_TDA9840) >=0)
+        {
+        	btv->audio_chip = TDA9840;
+        	printk(KERN_INFO "bttv%d: audio chip: TDA9840\n", btv->nr);
+        }
+        
         if (I2CRead(&(btv->i2c), I2C_TDA9850) >=0)
         {
-        	btv->audio_chip = TDA9850;
-        	printk(KERN_INFO "bttv%d: audio chip: TDA9850\n", i);
+                btv->audio_chip = TDA9850;
+                printk(KERN_INFO "bttv%d: audio chip: TDA9850\n",btv->nr);
         }
 
         if (I2CRead(&(btv->i2c), I2C_TDA8425) >=0)
         {
-		btv->audio_chip = TDA8425;
-		printk("bttv%d: audio chip: TDA8425\n", i);
+                btv->audio_chip = TDA8425;
+                printk(KERN_INFO "bttv%d: audio chip: TDA8425\n",btv->nr);
         }
         
         switch(btv->audio_chip)
         {
                 case TDA9850:
                         init_tda9850(&(btv->i2c));
-                        break;
-		case TDA8425:
+                        break; 
+                case TDA8425:
                         init_tda8425(&(btv->i2c));
                         break;
         }
+        
+	printk(KERN_INFO "bttv%d: model: ",btv->nr);
 
-	/* How do I detect the tuner type for other cards but Miro ??? */
-	printk(KERN_INFO "bttv%d: model: ", btv->nr);
 	sprintf(btv->video_dev.name,"BT%d",btv->id);
 	switch (btv->type) 
 	{
-		case BTTV_MIRO:
-		case BTTV_MIROPRO:
-			printk("MIRO\n");
-			if (btv->have_tuner) 
-			{
-				tunertype=((btread(BT848_GPIO_DATA)>>10)-1)&7;
-				i2c_control_device(&(btv->i2c),
-						   I2C_DRIVERID_TUNER,
-						   TUNER_SET_TYPE,&tunertype);
-			}
-			strcat(btv->video_dev.name,"(Miro)");
+                case BTTV_MIRO:
+                case BTTV_MIROPRO:
+			strcat(btv->video_dev.name,
+			       (btv->type == BTTV_MIRO) ? "(Miro)" : "(Miro pro)");
 			break;
 		case BTTV_HAUPPAUGE:
+			strcat(btv->video_dev.name,"(Hauppauge old)");
+			break;
 		case BTTV_HAUPPAUGE878:
-			printk("HAUPPAUGE\n");
-			strcat(btv->video_dev.name,"(Hauppauge)");
+			strcat(btv->video_dev.name,"(Hauppauge new)");
 			break;
 		case BTTV_STB: 
-			printk("STB\n");
 			strcat(btv->video_dev.name,"(STB)");
 			break;
 		case BTTV_INTEL: 
-			printk("Intel\n");
 			strcat(btv->video_dev.name,"(Intel)");
 			break;
 		case BTTV_DIAMOND: 
-			printk("Diamond\n");
 			strcat(btv->video_dev.name,"(Diamond)");
 			break;
 		case BTTV_AVERMEDIA: 
-			printk("AVerMedia\n");
 			strcat(btv->video_dev.name,"(AVerMedia)");
 			break;
 		case BTTV_MATRIX_VISION: 
-			printk("MATRIX-Vision\n");
 			strcat(btv->video_dev.name,"(MATRIX-Vision)");
 			break;
-		case BTTV_ADSTECH_TV:
-			printk("ADSTech Channel Surfer TV\n");
-			strcat(btv->video_dev.name,"(ADSTech Channel Surfer TV)");
-			btv->tuner_type=8;
+		case BTTV_AVERMEDIA98: 
+			strcat(btv->video_dev.name,"(AVerMedia TVCapture 98)");
 			break;
 	}
-	audio(btv, AUDIO_INTERN);
+	printk("%s\n",btv->video_dev.name);
+	audio(btv, AUDIO_MUTE);
 }
 
 
@@ -2554,14 +3028,13 @@ static void bt848_set_risc_jmps(struct bttv *btv)
 	btv->risc_jmp[12]=BT848_RISC_JUMP;
 	btv->risc_jmp[13]=virt_to_bus(btv->risc_jmp);
 
-	/* enable capturing and DMA */
+	/* enable cpaturing and DMA */
 	btaor(flags, ~0x0f, BT848_CAP_CTL);
 	if (flags&0x0f)
 		bt848_dma(btv, 3);
 	else
 		bt848_dma(btv, 0);
 }
-
 
 static int init_bt848(int i)
 {
@@ -2573,19 +3046,7 @@ static int init_bt848(int i)
 	btwrite(0, BT848_SRESET);
 	DEBUG(printk(KERN_DEBUG "bttv%d: bt848_mem: 0x%08x\n",i,(unsigned int) btv->bt848_mem));
 
-#ifdef RESET_MSP_HAUPPAUGE
-        /* Reset the MSP on some Hauppauge cards */
-        /* Thanks to Kyösti Mälkki (kmalkki@cc.hut.fi)! */
-        /* Can this hurt cards without one? What about Miros with MSP? */
-        btaor(32, ~32, BT848_GPIO_OUT_EN);
-        btaor(0, ~32, BT848_GPIO_DATA);
-        udelay(2500);
-        btaor(32, ~32, BT848_GPIO_DATA);
-        btaor(0, ~32, BT848_GPIO_OUT_EN);
-#endif
-
 	/* default setup for max. PAL size in a 1024xXXX hicolor framebuffer */
-
 	btv->win.norm=0; /* change this to 1 for NTSC, 2 for SECAM */
 	btv->win.interlace=1;
 	btv->win.x=0;
@@ -2615,12 +3076,12 @@ static int init_bt848(int i)
 	btv->grab=0;
 	btv->lastgrab=0;
         btv->field=btv->last_field=0;
-        /* cevans - prevents panic if initialization bails due to memory
-         * alloc failures!
-         */
-        btv->video_dev.minor = -1;
-        btv->vbi_dev.minor = -1;
-        btv->radio_dev.minor = -1;
+	/* cevans - prevents panic if initialization bails due to memory
+	 * alloc failures!
+	 */
+	btv->video_dev.minor = -1;
+	btv->vbi_dev.minor = -1;
+	btv->radio_dev.minor = -1;
 
 	/* i2c */
 	memcpy(&(btv->i2c),&bttv_i2c_bus_template,sizeof(struct i2c_bus));
@@ -2648,6 +3109,7 @@ static int init_bt848(int i)
 
 	memset(btv->vbibuf, 0, VBIBUF_SIZE); /* We don't want to return random
 	                                        memory to the user */
+
 	btv->fbuffer=NULL;
 
 	bt848_muxsel(btv, 1);
@@ -2656,7 +3118,7 @@ static int init_bt848(int i)
 /*	btwrite(0, BT848_TDEC); */
 	btwrite(0x10, BT848_COLOR_CTL);
 	btwrite(0x00, BT848_CAP_CTL);
-	btwrite(0xfc, BT848_GPIO_DMA_CTL);
+	btwrite(0xac, BT848_GPIO_DMA_CTL);
 
         /* select direct input */
 	btwrite(0x00, BT848_GPIO_REG_INP);
@@ -2706,6 +3168,7 @@ static int init_bt848(int i)
 	memcpy(&btv->video_dev,&bttv_template, sizeof(bttv_template));
 	memcpy(&btv->vbi_dev,&vbi_template, sizeof(vbi_template));
 	memcpy(&btv->radio_dev,&radio_template,sizeof(radio_template));
+
 	idcard(i);
 
 	if(video_register_device(&btv->video_dev,VFL_TYPE_GRABBER)<0)
@@ -2765,7 +3228,7 @@ static void bttv_irq(int irq, void *dev_id, struct pt_regs * regs)
 		if (astat&BT848_INT_VSYNC) 
 		{
 			IDEBUG(printk ("bttv%d: IRQ_VSYNC\n", btv->nr));
-			btv->field++;
+                        btv->field++;
 		}
 		if (astat&BT848_INT_SCERR) {
 			IDEBUG(printk ("bttv%d: IRQ_SCERR\n", btv->nr));
@@ -2791,8 +3254,9 @@ static void bttv_irq(int irq, void *dev_id, struct pt_regs * regs)
 			/* captured full frame */
 			if (stat&(2<<28)) 
 			{
+				wake_up_interruptible(&btv->capq);
                                 btv->last_field=btv->field;
-                                btv->grab++;
+			        btv->grab++;
                                 btv->frame_stat[btv->grf] = GBUFFER_DONE;
 			        if ((--btv->grabbing))
 				{
@@ -2809,7 +3273,9 @@ static void bttv_irq(int irq, void *dev_id, struct pt_regs * regs)
 						      btv->gfmt);
 				} else {
 					bt848_set_risc_jmps(btv);
-					bt848_set_geo(btv, btv->win.width, 
+					btand(~BT848_VSCALE_COMB, BT848_E_VSCALE_HI);
+					btand(~BT848_VSCALE_COMB, BT848_O_VSCALE_HI);
+                                        bt848_set_geo(btv, btv->win.width, 
 						      btv->win.height,
 						      btv->win.color_fmt);
 				}
@@ -2855,12 +3321,10 @@ static void bttv_irq(int irq, void *dev_id, struct pt_regs * regs)
 		}
 		if (astat&BT848_INT_HLOCK) 
 		{
-#if 0
 			if ((dstat&BT848_DSTATUS_HLOC) || (btv->radio))
 				audio(btv, AUDIO_ON);
 			else
 				audio(btv, AUDIO_OFF);
-#endif
 		}
     
 		if (astat&BT848_INT_I2CDONE) 
@@ -2869,7 +3333,8 @@ static void bttv_irq(int irq, void *dev_id, struct pt_regs * regs)
     
 		count++;
 		if (count > 10)
-			printk (KERN_WARNING "bttv%d: irq loop %d\n", btv->nr, count);
+			printk (KERN_WARNING "bttv%d: irq loop %d\n",
+                                btv->nr,count);
 		if (count > 20) 
 		{
 			btwrite(0, BT848_INT_MASK);
@@ -2885,17 +3350,16 @@ static void bttv_irq(int irq, void *dev_id, struct pt_regs * regs)
  *	Scan for a Bt848 card, request the irq and map the io memory 
  */
 
+#if LINUX_VERSION_CODE >= 0x020100
 int configure_bt848(struct pci_dev *dev, int bttv_num)
 {
 	int result;
-	unsigned char bus, devfn, command;
+	unsigned char command;
 	struct bttv *btv;
 
         btv=&bttvs[bttv_num];
         btv->dev=dev;
         btv->nr = bttv_num;
-        btv->bus=bus=dev->bus->number;
-        btv->devfn=devfn=dev->devfn;
         btv->bt848_mem=NULL;
         btv->vbibuf=NULL;
         btv->risc_jmp=NULL;
@@ -2931,15 +3395,14 @@ int configure_bt848(struct pci_dev *dev, int bttv_num)
         pci_read_config_byte(dev, PCI_CLASS_REVISION, &btv->revision);
         printk(KERN_INFO "bttv%d: Brooktree Bt%d (rev %d) ",
                bttv_num,btv->id, btv->revision);
-        printk("bus: %d, devfn: %d, ",
-               btv->bus, btv->devfn);
+        printk("bus: %d, devfn: %d, ",dev->bus->number, dev->devfn);
         printk("irq: %d, ",btv->irq);
         printk("memory: 0x%08x.\n", btv->bt848_adr);
-        
-	btv->pll.pll_ifreq=0;
-	btv->pll.pll_ofreq=0;
-	btv->pll.pll_crystal=0;
-	btv->pll.pll_current=0;
+
+        btv->pll.pll_crystal = 0;
+        btv->pll.pll_ifreq   = 0;
+        btv->pll.pll_ofreq   = 0;
+        btv->pll.pll_current = 0;
         if (!(btv->id==848 && btv->revision==0x11)) {
                 switch (pll[btv->nr]) {
                 case 0:
@@ -2957,10 +3420,10 @@ int configure_bt848(struct pci_dev *dev, int bttv_num)
                         break;
                 }
         }
-
+        
         btv->bt848_mem=ioremap(btv->bt848_adr, 0x1000);
         
-	/* clear interrupt mask */
+        /* clear interrupt mask */
 	btwrite(0, BT848_INT_MASK);
 
         result = request_irq(btv->irq, bttv_irq,
@@ -3023,7 +3486,170 @@ static int find_bt848(void)
 		printk(KERN_INFO "bttv: %d Bt8xx card(s) found.\n", bttv_num);
 	return bttv_num;
 }
- 
+#else
+static int find_bt848(void)
+{
+	short pci_index;    
+	unsigned char command, latency;
+	int result;
+	unsigned char bus, devfn;
+	struct bttv *btv;
+
+	bttv_num=0;
+
+	if (!pcibios_present()) 
+	{
+		DEBUG(printk(KERN_DEBUG "bttv%d: PCI-BIOS not present or not accessable!\n",bttv_num));
+		return 0;
+	}
+
+	for (pci_index = 0;
+                !pcibios_find_device(PCI_VENDOR_ID_BROOKTREE, PCI_DEVICE_ID_BT849,
+                                     pci_index, &bus, &devfn)
+             ||!pcibios_find_device(PCI_VENDOR_ID_BROOKTREE, PCI_DEVICE_ID_BT848,
+                                    pci_index, &bus, &devfn)
+             ||!pcibios_find_device(PCI_VENDOR_ID_BROOKTREE, PCI_DEVICE_ID_BT878,
+                                    pci_index, &bus, &devfn)
+             ||!pcibios_find_device(PCI_VENDOR_ID_BROOKTREE, PCI_DEVICE_ID_BT879,
+                                    pci_index, &bus, &devfn);
+             ++pci_index) 
+	{
+		btv=&bttvs[bttv_num];
+                btv->nr = bttv_num;
+		btv->bus=bus;
+		btv->devfn=devfn;
+		btv->bt848_mem=NULL;
+		btv->vbibuf=NULL;
+		btv->risc_jmp=NULL;
+		btv->vbi_odd=NULL;
+		btv->vbi_even=NULL;
+		btv->vbiq=NULL;
+		btv->capq=NULL;
+		btv->capqo=NULL;
+		btv->capqe=NULL;
+
+		btv->vbip=VBIBUF_SIZE;
+
+		pcibios_read_config_word(btv->bus, btv->devfn, PCI_DEVICE_ID,
+					 &btv->id);
+		pcibios_read_config_byte(btv->bus, btv->devfn,
+			PCI_INTERRUPT_LINE, &btv->irq);
+		pcibios_read_config_dword(btv->bus, btv->devfn, PCI_BASE_ADDRESS_0,
+			&btv->bt848_adr);
+                if (btv->id >= 878)
+                        btv->i2c_command = 0x83;                   
+                else
+                        btv->i2c_command=
+                                (I2C_TIMING | BT848_I2C_SCL | BT848_I2C_SDA);
+
+		if (remap[bttv_num])
+		{
+                        if (remap[bttv_num] < 0x1000)
+                                remap[bttv_num]<<=20;
+			remap[bttv_num]&=PCI_BASE_ADDRESS_MEM_MASK;
+			printk(KERN_INFO "bttv%d: remapping to : 0x%08x.\n",
+                               bttv_num,remap[bttv_num]);
+			remap[bttv_num]|=btv->bt848_adr&(~PCI_BASE_ADDRESS_MEM_MASK);
+			pcibios_write_config_dword(btv->bus, btv->devfn, PCI_BASE_ADDRESS_0,
+				 remap[bttv_num]);
+			pcibios_read_config_dword(btv->bus, btv->devfn, PCI_BASE_ADDRESS_0,
+				&btv->bt848_adr);
+		}					
+                
+		btv->bt848_adr&=PCI_BASE_ADDRESS_MEM_MASK;
+		pcibios_read_config_byte(btv->bus, btv->devfn, PCI_CLASS_REVISION,
+			     &btv->revision);
+		printk(KERN_INFO "bttv%d: Brooktree Bt%d (rev %d) ",
+                       bttv_num,btv->id, btv->revision);
+                printk("bus: %d, devfn: %d, ",
+                       btv->bus, btv->devfn);
+		printk("irq: %d, ",btv->irq);
+		printk("memory: 0x%08x.\n", btv->bt848_adr);
+    
+                btv->pll.pll_crystal = 0;
+                btv->pll.pll_ifreq   = 0;
+                btv->pll.pll_ofreq   = 0;
+                btv->pll.pll_current = 0;
+                if (!(btv->id==848 && btv->revision==0x11)) {
+                        switch (pll[btv->nr]) {
+                        case 0:
+                                /* off */
+                                break;
+                        case 1:
+                                /* 28 MHz crystal installed */
+                                btv->pll.pll_ifreq=28636363;
+                                btv->pll.pll_crystal=BT848_IFORM_XT0;
+                                break;
+                        case 2:
+                                /* 35 MHz crystal installed */
+                                btv->pll.pll_ifreq=35468950;
+                                btv->pll.pll_crystal=BT848_IFORM_XT1;
+                                break;
+                        }
+                }
+                
+		btv->bt848_mem=ioremap(btv->bt848_adr, 0x1000);
+                
+		result = request_irq(btv->irq, bttv_irq,
+			SA_SHIRQ | SA_INTERRUPT,"bttv",(void *)btv);
+		if (result==-EINVAL) 
+		{
+			printk(KERN_ERR "bttv%d: Bad irq number or handler\n",
+                               bttv_num);
+			return -EINVAL;
+		}
+		if (result==-EBUSY)
+		{
+			printk(KERN_ERR "bttv%d: IRQ %d busy, change your PnP config in BIOS\n",bttv_num,btv->irq);
+			return result;
+		}
+		if (result < 0) 
+			return result;
+
+		/* Enable bus-mastering */
+		pcibios_read_config_byte(btv->bus, btv->devfn, PCI_COMMAND, &command);
+		command|=PCI_COMMAND_MASTER;
+		pcibios_write_config_byte(btv->bus, btv->devfn, PCI_COMMAND, command);
+		pcibios_read_config_byte(btv->bus, btv->devfn, PCI_COMMAND, &command);
+		if (!(command&PCI_COMMAND_MASTER)) 
+		{
+			printk(KERN_ERR "bttv%d: PCI bus-mastering could not be enabled\n",bttv_num);
+			return -1;
+		}
+		pcibios_read_config_byte(btv->bus, btv->devfn, PCI_LATENCY_TIMER,
+			&latency);
+		if (!latency) 
+		{
+			latency=32;
+			pcibios_write_config_byte(btv->bus, btv->devfn,
+						  PCI_LATENCY_TIMER, latency);
+		}
+		DEBUG(printk(KERN_DEBUG "bttv%d: latency: %02x\n",
+                             bttv_num, latency));
+
+                btv->triton1=triton1 ? BT848_INT_ETBF : 0;
+		if (triton1 && btv->id >= 878) 
+		{
+			triton1 = 0;
+			printk("bttv: Enabling 430FX compatibilty for bt878\n");
+			pcibios_read_config_byte(btv->bus, btv->devfn, BT878_DEVCTRL, &command);
+			command|=BT878_EN_TBFX;
+			pcibios_write_config_byte(btv->bus, btv->devfn, BT878_DEVCTRL, command);
+			pcibios_read_config_byte(btv->bus, btv->devfn, BT878_DEVCTRL, &command);
+			if (!(command&BT878_EN_TBFX)) 
+			{
+		   		printk("bttv: 430FX compatibility could not be enabled\n");
+	  	    		return -1;
+ 	 		}
+		}
+
+		bttv_num++;
+	}
+	if(bttv_num)
+		printk(KERN_INFO "bttv: %d Bt8xx card(s) found.\n", bttv_num);
+	return bttv_num;
+}
+#endif
 
 static void release_bttv(void)
 {
@@ -3048,10 +3674,17 @@ static void release_bttv(void)
 		i2c_unregister_bus((&btv->i2c));
 
 		/* disable PCI bus-mastering */
+#if LINUX_VERSION_CODE >= 0x020100
 		pci_read_config_byte(btv->dev, PCI_COMMAND, &command);
 		/* Should this be &=~ ?? */
- 		command|=PCI_COMMAND_MASTER;
+		command&=~PCI_COMMAND_MASTER;
 		pci_write_config_byte(btv->dev, PCI_COMMAND, command);
+#else
+		pcibios_read_config_byte(btv->bus, btv->devfn, PCI_COMMAND, &command);
+		command&=~PCI_COMMAND_MASTER;
+		pcibios_write_config_byte(btv->bus, btv->devfn, PCI_COMMAND, command);
+
+#endif
     
 		/* unmap and free memory */
 		if (btv->grisc)
@@ -3081,7 +3714,7 @@ static void release_bttv(void)
 			video_unregister_device(&btv->video_dev);
 		if(btv->vbi_dev.minor!=-1)
 			video_unregister_device(&btv->vbi_dev);
-		if (radio && btv->radio_dev.minor != -1)
+		if (radio[btv->nr] && btv->radio_dev.minor != -1)
 			video_unregister_device(&btv->radio_dev);
 	}
 }
@@ -3109,6 +3742,7 @@ int init_bttv_cards(struct video_init *unused)
 			return -EIO;
 		} 
 	}
+
 	return 0;
 }
 

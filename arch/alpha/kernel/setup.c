@@ -94,66 +94,46 @@ struct screen_info screen_info = {
  * Declare all of the machine vectors.
  */
 
-extern struct alpha_machine_vector alcor_mv;
-extern struct alpha_machine_vector alphabook1_mv;
-extern struct alpha_machine_vector avanti_mv;
-extern struct alpha_machine_vector cabriolet_mv;
-extern struct alpha_machine_vector dp264_mv;
-extern struct alpha_machine_vector eb164_mv;
-extern struct alpha_machine_vector eb64p_mv;
-extern struct alpha_machine_vector eb66_mv;
-extern struct alpha_machine_vector eb66p_mv;
-extern struct alpha_machine_vector jensen_mv;
-extern struct alpha_machine_vector lx164_mv;
-extern struct alpha_machine_vector miata_mv;
-extern struct alpha_machine_vector mikasa_mv;
-extern struct alpha_machine_vector mikasa_primo_mv;
-extern struct alpha_machine_vector monet_mv;
-extern struct alpha_machine_vector webbrick_mv;
-extern struct alpha_machine_vector noname_mv;
-extern struct alpha_machine_vector noritake_mv;
-extern struct alpha_machine_vector noritake_primo_mv;
-extern struct alpha_machine_vector p2k_mv;
-extern struct alpha_machine_vector pc164_mv;
-extern struct alpha_machine_vector rawhide_mv;
-extern struct alpha_machine_vector ruffian_mv;
-extern struct alpha_machine_vector rx164_mv;
-extern struct alpha_machine_vector sable_mv;
-extern struct alpha_machine_vector sable_gamma_mv;
-extern struct alpha_machine_vector sx164_mv;
-extern struct alpha_machine_vector takara_mv;
-extern struct alpha_machine_vector xl_mv;
-extern struct alpha_machine_vector xlt_mv;
-#pragma weak alcor_mv
-#pragma weak alphabook1_mv
-#pragma weak avanti_mv
-#pragma weak cabriolet_mv
-#pragma weak dp264_mv
-#pragma weak eb164_mv
-#pragma weak eb64p_mv
-#pragma weak eb66_mv
-#pragma weak eb66p_mv
-#pragma weak jensen_mv
-#pragma weak lx164_mv
-#pragma weak miata_mv
-#pragma weak mikasa_mv
-#pragma weak mikasa_primo_mv
-#pragma weak monet_mv
-#pragma weak webbrick_mv
-#pragma weak noname_mv
-#pragma weak noritake_mv
-#pragma weak noritake_primo_mv
-#pragma weak p2k_mv
-#pragma weak pc164_mv
-#pragma weak rawhide_mv
-#pragma weak ruffian_mv
-#pragma weak rx164_mv
-#pragma weak sable_mv
-#pragma weak sable_gamma_mv
-#pragma weak sx164_mv
-#pragma weak takara_mv
-#pragma weak xl_mv
-#pragma weak xlt_mv
+/* GCC 2.7.2 (on alpha at least) is lame.  It does not support either 
+   __attribute__((weak)) or #pragma weak.  Bypass it and talk directly
+   to the assembler.  */
+
+#define WEAK(X) \
+	extern struct alpha_machine_vector X; \
+	asm(".weak "#X)
+
+WEAK(alcor_mv);
+WEAK(alphabook1_mv);
+WEAK(avanti_mv);
+WEAK(cabriolet_mv);
+WEAK(dp264_mv);
+WEAK(eb164_mv);
+WEAK(eb64p_mv);
+WEAK(eb66_mv);
+WEAK(eb66p_mv);
+WEAK(jensen_mv);
+WEAK(lx164_mv);
+WEAK(miata_mv);
+WEAK(mikasa_mv);
+WEAK(mikasa_primo_mv);
+WEAK(monet_mv);
+WEAK(noname_mv);
+WEAK(noritake_mv);
+WEAK(noritake_primo_mv);
+WEAK(p2k_mv);
+WEAK(pc164_mv);
+WEAK(rawhide_mv);
+WEAK(ruffian_mv);
+WEAK(rx164_mv);
+WEAK(sable_mv);
+WEAK(sable_gamma_mv);
+WEAK(sx164_mv);
+WEAK(takara_mv);
+WEAK(webbrick_mv);
+WEAK(xl_mv);
+WEAK(xlt_mv);
+
+#undef WEAK
 
 
 void __init

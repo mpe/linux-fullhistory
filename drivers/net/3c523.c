@@ -184,7 +184,7 @@ static void set_multicast_list(struct device *dev);
 
 /* helper-functions */
 static int init586(struct device *dev);
-static int check586(struct device *dev, char *where, unsigned size);
+static int check586(struct device *dev, unsigned long where, unsigned size);
 static void alloc586(struct device *dev);
 static void startrecv586(struct device *dev);
 static void *alloc_rfa(struct device *dev, void *ptr);
@@ -311,19 +311,19 @@ static int elmc_open(struct device *dev)
  * Check to see if there's an 82586 out there.
  */
 
-__initfunc(static int check586(struct device *dev, char *where, unsigned size))
+__initfunc(static int check586(struct device *dev, unsigned long where, unsigned size))
 {
 	struct priv *p = (struct priv *) dev->priv;
 	char *iscp_addrs[2];
 	int i = 0;
 
-	p->base = (unsigned long) where + size - 0x01000000;
-	p->memtop = where + size;
-	p->scp = (struct scp_struct *) (p->base + SCP_DEFAULT_ADDRESS);
+	p->base = where + size - 0x01000000;
+	p->memtop = phys_to_virt(where) + size;
+	p->scp = (struct scp_struct *)phys_to_virt(p->base + SCP_DEFAULT_ADDRESS);
 	memset((char *) p->scp, 0, sizeof(struct scp_struct));
 	p->scp->sysbus = SYSBUSVAL;	/* 1 = 8Bit-Bus, 0 = 16 Bit */
 
-	iscp_addrs[0] = where;
+	iscp_addrs[0] = phys_to_virt(where);
 	iscp_addrs[1] = (char *) p->scp - sizeof(struct iscp_struct);
 
 	for (i = 0; i < 2; i++) {
@@ -358,7 +358,7 @@ void alloc586(struct device *dev)
 	elmc_id_reset586();
 	DELAY(2);
 
-	p->scp = (struct scp_struct *) (p->base + SCP_DEFAULT_ADDRESS);
+	p->scp = (struct scp_struct *) phys_to_virt(p->base + SCP_DEFAULT_ADDRESS);
 	p->scb = (struct scb_struct *) phys_to_virt(dev->mem_start);
 	p->iscp = (struct iscp_struct *) ((char *) p->scp - sizeof(struct iscp_struct));
 
@@ -531,7 +531,7 @@ __initfunc(int elmc_probe(struct device *dev))
 	elmc_id_reset586();	/* seems like a good idea before checking it... */
 
 	size = 0x4000;		/* check for 16K mem */
-	if (!check586(dev, (char *) phys_to_virt(dev->mem_start), size)) {
+	if (!check586(dev, dev->mem_start, size)) {
 		printk("%s: memprobe, Can't find memory at 0x%lx!\n", dev->name,
 		       dev->mem_start);
 		release_region(dev->base_addr, ELMC_IO_EXTENT);
@@ -539,7 +539,7 @@ __initfunc(int elmc_probe(struct device *dev))
 	}
 	dev->mem_end = dev->mem_start + size;	/* set mem_end showed by 'ifconfig' */
 
-	((struct priv *) (dev->priv))->base = (unsigned long)phys_to_virt(dev->mem_start + size - 0x01000000);
+	((struct priv *) (dev->priv))->base = dev->mem_start + size - 0x01000000;
 	alloc586(dev);
 
 	elmc_id_reset586();	/* make sure it doesn't generate spurious ints */
@@ -963,7 +963,7 @@ static void elmc_rcv_int(struct device *dev)
 				if (skb != NULL) {
 					skb->dev = dev;
 					skb_reserve(skb, 2);	/* 16 byte alignment */
-					memcpy(skb_put(skb, totlen), (char *) p->base + (unsigned long) rbd->buffer, totlen);
+					memcpy(skb_put(skb, totlen), (u8 *)phys_to_virt(p->base) + (unsigned long) rbd->buffer, totlen);
 					skb->protocol = eth_type_trans(skb, dev);
 					netif_rx(skb);
 					p->stats.rx_packets++;

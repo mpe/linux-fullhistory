@@ -380,17 +380,13 @@ static int exec_mmap(void)
 
 	if (atomic_read(&current->mm->count) == 1) {
 		flush_cache_mm(current->mm);
+		mm_release();
+		release_segments(current->mm);
 		exit_mmap(current->mm);
-		clear_page_tables(current);
 		flush_tlb_mm(current->mm);
 		return 0;
 	}
 
-	/*
-	 * The clear_page_tables done later on exec does the right thing
-	 * to the page directory when shared, except for graceful abort
-	 * (the oom is wrong there, too, IMHO)
-	 */
 	retval = -ENOMEM;
 	mm = mm_alloc();
 	if (!mm)
@@ -412,6 +408,7 @@ static int exec_mmap(void)
 		goto fail_restore;
 	activate_context(current);
 	up(&mm->mmap_sem);
+	mm_release();
 	mmput(old_mm);
 	return 0;
 

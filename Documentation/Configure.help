@@ -1343,8 +1343,8 @@ CONFIG_PCI
   boot time ("man dmesg"), please follow the instructions at the top
   of include/linux/pci.h.
 
-PCI BIOS support
-CONFIG_PCI_BIOS
+PCI access mode
+CONFIG_PCI_GOBIOS
   If you have enabled PCI bus support above, you probably want to
   allow Linux to use your PCI BIOS to detect the PCI devices and
   determine their configuration. Note: some old PCI motherboards have
@@ -1355,8 +1355,6 @@ CONFIG_PCI_BIOS
   Except for some special cases (embedded systems with no BIOS), you
   probably should say Y here.
 
-PCI direct access support
-CONFIG_PCI_DIRECT
   If you don't want to use the PCI BIOS (e.g., because you run some
   embedded system with no BIOS at all) or Linux says it cannot use
   your PCI BIOS, you can enable direct PCI hardware here. It might
@@ -1730,6 +1728,18 @@ CONFIG_FB_CLGEN
   Say N unless you have such a graphics board or plan to get one
   before you next recompile the kernel.
 
+Apollo support
+CONFIG_APOLLO
+  Say Y here if you want to run Linux on an MC680x0-based Apollo
+  Domain workstation such as the DN3500.
+
+Apollo 3c505 support
+CONFIG_APOLLO_ELPLUS
+  Say Y or M here if your Apollo has a 3Com 3c505 ISA Ethernet card.
+  If you don't have one made for Apollos, you can use one from a PC,
+  except that your Apollo won't be able to boot from it (because the
+  code in the ROM will be for a PC).
+
 Atari native chipset support
 CONFIG_FB_ATARI
   This is the frame buffer device driver for the builtin graphics
@@ -1799,7 +1809,7 @@ CONFIG_FB_COMPAT_XPMAC
 
 Matrox unified accelerated driver
 CONFIG_FB_MATROX
-  Say Y here  if you have  Matrox Millennium,  Matrox Milleinnium  II, 
+  Say Y here  if you have  Matrox Millennium,  Matrox Millennium  II, 
   Matrox Mystique, Matrox Mystique 220, Matrox Productiva G100, Matrox
   Mystique G200, Matrox Millennium G200  or Matrox Marvel G200 in your 
   box.  At this time, G100,  Mystique G200 and  Marvel G200 support is
@@ -1807,7 +1817,7 @@ CONFIG_FB_MATROX
   matroxfb.o will  be created.  You can pass parameters into driver if 
   it is compiled  into kernel by  specifying "video=matrox:XXX", where 
   meaning of XXX you can found at the end of main source file
-  (drivers/video/matroxfb.c)  at  boottime.  Same  parameters  can  be 
+  (drivers/video/matroxfb.c)  at  boot time.  Same  parameters  can  be 
   passed into insmod if driver is used as module.
 
 Matrox Millennium support
@@ -1826,9 +1836,10 @@ CONFIG_FB_MATROX_MYSTIQUE
   and  32 bpp  packed pixel.  You can  also use  font widths  different 
   from 8.
 
-Matrox G100 support
+Matrox G100/G200 support
 CONFIG_FB_MATROX_G100
-  Say Y  here if  you have  Matrox Productiva G100  in the box.  If you
+  Say Y  here if you have Matrox Productiva G100, Matrox Mystique G200,
+  Matrox  Marvel G200  or  Matrox  Millennium G200  in the box.  If you
   select  "Advanced lowlevel  driver options",  you should  check 8 bpp
   packed pixel,  16 bpp packed  pixel, 24 bpp  packed pixel  and 32 bpp
   packed pixel. You can also use font widths different from 8.
@@ -3588,11 +3599,12 @@ CONFIG_SCSI_ADVANSYS
 
 Adaptec AHA152X/2825 support
 CONFIG_SCSI_AHA152X
-  This is support for the AHA-1510, AHA-1520, AHA-1522, and AHA-2825
-  SCSI host adapters. It is explained in section 3.3 of the
-  SCSI-HOWTO, available via FTP (user: anonymous) at
-  ftp://metalab.unc.edu/pub/Linux/docs/HOWTO. You might also want to
-  read the comments at the top of drivers/scsi/aha152x.c.
+  This is support for the AVA-1505 (irq etc must be manually specified), 
+  AHA-1510, AHA-1520, AHA-1522, and AHA-2825 SCSI host adapters. It is 
+  explained in section 3.3 of the SCSI-HOWTO, available via FTP 
+  (user: anonymous) at ftp://metalab.unc.edu/pub/Linux/docs/HOWTO. You 
+  might also want to read the comments at the top of 
+  drivers/scsi/aha152x.c.
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -3799,7 +3811,7 @@ CONFIG_SCSI_U14_34F
 enable elevator sorting
 CONFIG_SCSI_U14_34F_LINKED_COMMANDS
   This option enables elevator sorting for all probed SCSI disks and 
-  CDROMs. It definetly reduces the average seek distance when doing
+  CDROMs. It definitely reduces the average seek distance when doing
   random seeks, but this does not necessarily results in a noticeable
   performance improvement: your mileage may vary...
   The safe answer is N.
@@ -4008,7 +4020,7 @@ CONFIG_SCSI_NCR53C8XX_MAX_TAGS
   that can be queued to any device, when tagged command queuing is
   possible. The default value is 32. Minimum is 2, maximum is 64.
   Modern hard disks are able to support 64 tags and even more, but 
-  donnot seem to be faster when more than 32 tags are being used.
+  do not seem to be faster when more than 32 tags are being used.
   
   So, the normal answer here is to go with the default value 32 unless
   you are using very large hard disks with large cache (>= 1 MB) that
@@ -4132,6 +4144,17 @@ CONFIG_SCSI_IN2000
   inserted in and removed from the running kernel whenever you want),
   say M here and read Documentation/modules.txt. The module will be
   called in2000.o.
+
+Initio 91XXU(W) SCSI support
+CONFIG_SCSI_INITIO
+  This is support for the Initio 91XXU(W) SCSI host adapter.
+  Please read the SCSI-HOWTO, available via FTP (user: anonymous) at
+  ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
+
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called initio.o
 
 Initio 91XXU(W) SCSI support
 CONFIG_SCSI_INITIO
@@ -4308,7 +4331,7 @@ enable elevator sorting
 CONFIG_SCSI_EATA_LINKED_COMMANDS
   This option enables elevator sorting for all probed SCSI disks and 
   CDROMs. It definetly reduces the average seek distance when doing
-  random seeks, but this does not necessarily results in a noticeable
+  random seeks, but this does not necessarily result in a noticeable
   performance improvement: your mileage may vary...
   The safe answer is N.
 
@@ -5173,27 +5196,6 @@ CONFIG_HOSTESS_SV11
   This is a network card for low speed synchronous serial links, at
   up to 256Kbits. It supports both PPP and Cisco HDLC
   At this point, the driver can only be compiled as a module.
-
-COSA/SRP sync serial boards support
-CONFIG_COSA
-  This is a driver for COSA and SRP synchronous serial boards.
-  These boards enable to connect synchronous serial devices (for
-  example base-band modems, or any other device with the X.21, V.24,
-  V.35 or V.36 interface) to your Linux box. The cards can work
-  as the character device, synchronous PPP network device, or the Cisco
-  HDLC network device.
-
-  To actually use the COSA or SRP board, you will need user-space
-  utilities for downloading the firmware to the cards and to set 
-  them up. Look at the http://www.fi.muni.cz/~kas/cosa/ for more
-  information about the cards (including the pointer to the user-space
-  utilities). You can also read the comment at the top of the
-  drivers/net/cosa.c for details about the cards and the driver itself.
-
-  The driver will be compiled as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want).
-  The module will be called cosa.o. For general information about
-  modules read Documentation/modules.txt.
 
 COSA/SRP sync serial boards support
 CONFIG_COSA
@@ -6275,16 +6277,6 @@ CONFIG_HIPPI
   under Linux, say Y here (you must also remember to enable the driver
   for your HIPPI card below). Most people will say N here.
   
-CERN HIPPI PCI adapter support
-CONFIG_CERN_HIPPI
-  Say Y here if this is your PCI HIPPI network card.
-
-  This driver is also available as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want).
-  The module will be called cern_hippi.o. If you want to compile it as
-  a module, say M here and read Documentation/modules.txt. If unsure,
-  say N.
-
 Essential RoadRunner HIPPI PCI adapter support
 CONFIG_ROADRUNNER
   Say Y here if this is your PCI HIPPI network card.
@@ -7024,7 +7016,7 @@ CONFIG_AUTOFS_FS
 
   To use the automounter you need the user-space tools from
   ftp://ftp.kernel.org/pub/linux/daemons/autofs; you also want to
-  answer Y to "NFS filesystem support", above.
+  answer Y to "NFS filesystem support", below.
 
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -7040,7 +7032,7 @@ CONFIG_UFS_FS
   OpenBSD and NeXTstep) use a filesystem called UFS. Some System V
   Unixes can create and mount hard disk partitions and diskettes using
   this filesystem as well. Saying Y here will allow you to read from
-  and write to these partitions and diskettes.
+  these partitions and diskettes.
 
   If you only intend to mount files from some other Unix over the
   network using NFS, you don't need the UFS filesystem support (but
@@ -7061,6 +7053,12 @@ CONFIG_UFS_FS
   The module will be called ufs.o. 
 
   If you haven't heard about all of this before, it's safe to say N.
+
+UFS filesystem write support
+CONFIG_UFS_FS_WRITE
+  You will be able to write to 4.4BSD (e.g. FreeBSD, NetBSD and
+  OpenBSD) and SunOS partitions and diskettes if you say Y to this
+  option in addition to "UFS filesystem support", above.
 
 BSD disklabel (FreeBSD partition tables) support
 CONFIG_BSD_DISKLABEL
@@ -8499,7 +8497,7 @@ Ignore multiple suspend/resume cycles
 CONFIG_APM_IGNORE_SUSPEND_BOUNCE
   This option is necessary on the Dell Inspiron 3200 and others, but
   should be safe for all other laptops. When enabled, a system suspend
-  event that occurs within one second of a resume is ignored. Without
+  event that occurs within three seconds of a resume is ignored. Without
   this the Inspiron will shut itself off a few seconds after you open
   the lid, requiring you to press the power button to resume it a
   second time.
@@ -9265,7 +9263,7 @@ Audio Excel DSP 16 (MPU401 emulation)
 CONFIG_AEDSP16_MPU401
   Answer Y if you want your audio card to emulate the MPU-401 midi
   interface. You should then say Y to "MPU-401 support".
-  You have to hote that the I/O base for MPU-401 support of aedsp16 is
+  You have to note that the I/O base for MPU-401 support of aedsp16 is
   the same you have selected for "MPU-401 support". If you are using
   this driver as a module you have to specify the MPU I/O base address
   with the parameter 'mpu_base=0xNNN'.
@@ -10542,7 +10540,7 @@ CONFIG_FRAME_POINTER
 
 Initial kernel command line
 CONFIG_CMDLINE
-  On some architectures (EBSA285, EBSA110 and Corel Netwinder), there is
+  On some architectures (EBSA285, EBSA110 and Corel NetWinder), there is
   currently no way for the boot loader to pass arguments to the kernel.
   For these architectures, you should supply some command-line options
   at build time by entering them here.  As a minimum, you should specify
@@ -10599,7 +10597,7 @@ CONFIG_IRDA_RECYCLE_RR
 IrLAP Compression support
 CONFIG_IRDA_COMPRESSION
   Compression is _not_ part of the IrDA(tm) protocol specification,
-  but its working great! Linux is the first to try out compresson
+  but it's working great! Linux is the first to try out compression
   support at the IrLAP layer. This means that you will only benefit
   from compression if you are running a Linux <-> Linux configuration
 

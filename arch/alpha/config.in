@@ -255,8 +255,6 @@ source drivers/char/Config.in
 
 source fs/Config.in
 
-source fs/nls/Config.in
-
 if [ "$CONFIG_VT" = "y" ]; then
   mainmenu_option next_comment
   comment 'Console drivers'

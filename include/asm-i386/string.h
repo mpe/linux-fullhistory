@@ -191,7 +191,7 @@ return __res;
 #define __HAVE_ARCH_STRSTR
 extern inline char * strstr(const char * cs,const char * ct)
 {
-int d0, d1, d2, d3;
+int d0, d1, d2, d3, d4;
 register char * __res;
 __asm__ __volatile__(
 	"cld\n\t" \
@@ -213,7 +213,7 @@ __asm__ __volatile__(
 	"jne 1b\n\t"
 	"xorl %%eax,%%eax\n\t"
 	"2:"
-	:"=a" (__res), "=&c" (d0), "=&S" (d1), "=&d" (d2), "=&D" (d3) : "0" (0),"1" (0xffffffff),"2" (cs),"g" (ct));
+	:"=a" (__res), "=&c" (d0), "=&S" (d1), "=&d" (d2), "=&D" (d3), "=&g" (d4) : "0" (0),"1" (0xffffffff),"2" (cs),"4" (ct));
 return __res;
 }
 

@@ -513,8 +513,8 @@ typedef struct
  * Make a define that will tell the driver not to use tagged queueing
  * by default.
  */
-#define DEFAULT_TAG_COMMANDS {0, 0, 0, 0, 0, 0, 0, 0,\
-                              0, 0, 0, 0, 0, 0, 0, 0}
+#define DEFAULT_TAG_COMMANDS {255, 255, 255, 255, 255, 255, 255, 255,\
+                              255, 255, 255, 255, 255, 255, 255, 255}
 
 /*
  * Modify this as you see fit for your system.  By setting tag_commands
@@ -9017,8 +9017,8 @@ aic7xxx_detect(Scsi_Host_Template *template)
           {
             printk("aic7xxx: <%s> at PCI %d/%d\n", 
               board_names[aic_pdevs[i].board_name_index],
-              PCI_SLOT(temp_p->pdev->devfn),
-              PCI_FUNC(temp_p->pdev->devfn));
+              PCI_SLOT(temp_p->pci_device_fn),
+              PCI_FUNC(temp_p->pci_device_fn));
             printk("aic7xxx: Controller disabled by BIOS, ignoring.\n");
             kfree(temp_p);
             temp_p = NULL;
@@ -9050,8 +9050,8 @@ aic7xxx_detect(Scsi_Host_Template *template)
                  */
                 printk(KERN_INFO "aic7xxx: <%s> at PCI %d/%d\n", 
                   board_names[aic_pdevs[i].board_name_index],
-                  PCI_SLOT(temp_p->pdev->devfn),
-                  PCI_FUNC(temp_p->pdev->devfn));
+                  PCI_SLOT(temp_p->pci_device_fn),
+                  PCI_FUNC(temp_p->pci_device_fn));
                 printk(KERN_INFO "aic7xxx: MMAPed I/O failed, reverting to "
                                  "Programmed I/O.\n");
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2,1,0)

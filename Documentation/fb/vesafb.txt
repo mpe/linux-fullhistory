@@ -1,16 +1,16 @@
 
-what is vesafb?
+What is vesafb?
 ===============
 
 This is a generic driver for a graphic framebuffer on intel boxes.
 
-Idea is simple:  Turn on graphics mode at boot time with the help of
-the BIOS, and use this as framebuffer device /dev/fb0, like the m68k
+The idea is simple:  Turn on graphics mode at boot time with the help
+of the BIOS, and use this as framebuffer device /dev/fb0, like the m68k
 (and other) ports do.
 
 This means we decide at boot time whenever we want to run in text or
 graphics mode.  Switching mode later on (in protected mode) is
-impossible, BIOS calls work in real mode only.  VESA BIOS Extentions
+impossible; BIOS calls work in real mode only.  VESA BIOS Extentions
 Version 2.0 are required, becauce we need a linear frame buffer.
 
 Advantages:
@@ -33,11 +33,12 @@ Switching modes is done using the vga=... boot parameter.  Read
 Documentation/svga.txt for details.
 
 You should compile in both vgacon (for text mode) and vesafb (for
-graphics mode).   Which of them takes over the console depends on
+graphics mode). Which of them takes over the console depends on
 whenever the specified mode is text or graphics.
 
 The graphic modes are NOT in the list which you get if you boot with
-vga=ask and hit return.  Here are some mode numbers:
+vga=ask and hit return. The mode you wish to use is derived from the
+VESA mode number. Here are those VESA mode numbers:
 
     | 640x480  800x600  1024x768 1280x1024
 ----+-------------------------------------
@@ -46,19 +47,35 @@ vga=ask and hit return.  Here are some mode numbers:
 64k |  0x111    0x114    0x117    0x11A   
 16M |  0x112    0x115    0x118    0x11B   
 
-This are the VESA mode numbers.  The video mode select code expects
-0x200 + VESA mode number.  Therefore you have to enter "305" at the
-"vga=ask" prompt to boot into 1024x768x8.
+The video mode number of the Linux kernel is the VESA mode number plus
+0x200.
+ 
+ Linux_kernel_mode_number = VESA_mode_number + 0x200
 
-If this does'nt work, this might be becauce your BIOS does not support
-linear framebuffers or becauce it does'nt support this mode at all.
-Even if your board does, it might be the BIOS does not.  VESA BIOS
-Extentions v2.0 are required, 1.2 is NOT sufficient.  You'll get a
+So the table for the Kernel mode numbers are:
+
+    | 640x480  800x600  1024x768 1280x1024
+----+-------------------------------------
+256 |  0x301    0x303    0x305    0x307   
+32k |  0x310    0x313    0x316    0x319   
+64k |  0x311    0x314    0x317    0x31A   
+16M |  0x312    0x315    0x318    0x31B   
+
+To enable one of those modes you have to specify "vga=ask" in the
+lilo.conf file and rerun LILO. Then you can type in the descired
+mode at the "vga=ask" prompt. For example if you like to use 
+1024x768x256 colors you have to say "305" at this prompt.
+
+If this does not work, this might be becauce your BIOS does not support
+linear framebuffers or becauce it does not support this mode at all.
+Even if your board does, it might be the BIOS which does not.  VESA BIOS
+Extentions v2.0 are required, 1.2 is NOT sufficient.  You will get a
 "bad mode number" message if something goes wrong.
 
-Note: LILO can't handle hex, for booting directly with "vga=mode-number"
-      you have to transform the numbers to decimal.
-
+1. Note: LILO cannot handle hex, for booting directly with 
+         "vga=mode-number" you have to transform the numbers to decimal.
+2. Note: Some newer versions of LILO appear to work with those hex values,
+         if you set the 0x infront of the numbers.
 
 X11
 ===
@@ -68,7 +85,7 @@ another (accelerated) X-Server like XF86_SVGA might or might not work.
 It depends on X-Server and graphics board.
 
 The X-Server must restore the video mode correctly, else you end up
-with a broken console (and vesafb can't do anything about this).
+with a broken console (and vesafb cannot do anything about this).
 
 
 Configuration
@@ -98,3 +115,6 @@ Have fun!
 
 --
 Gerd Knorr <kraxel@cs.tu-berlin.de>
+
+Minor (mostly typo) changes 
+by Nico Schmoigl <schmoigl@rumms.uni-mannheim.de>

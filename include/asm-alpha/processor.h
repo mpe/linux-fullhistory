@@ -65,7 +65,7 @@ struct thread_struct {
 };
 
 #define INIT_MMAP { &init_mm, PAGE_OFFSET,  PAGE_OFFSET+0x10000000, \
-	PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC, NULL, &init_mm.mmap }
+	NULL, PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC, 1, NULL, NULL }
 
 #define INIT_TSS  { \
 	0, 0, 0, \
@@ -113,6 +113,7 @@ extern void release_thread(struct task_struct *);
 
 #define copy_segments(nr, tsk, mm)	do { } while (0)
 #define release_segments(mm)		do { } while (0)
+#define forget_segments()		do { } while (0)
 
 /* NOTE: The task struct and the stack go together!  */
 #define alloc_task_struct() \

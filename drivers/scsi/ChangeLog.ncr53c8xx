@@ -1,3 +1,16 @@
+Sat Jan 16  17:30 1998 Gerard Roudier (groudier@club-internet.fr)
+	* revision 3.1f
+	- Some PCI fix-ups not needed any more for PPC (from Cort).
+	- Cache line size set to 16 DWORDS for Sparc   (from DSM).
+	- Waiting list look-up didn't work for the first command of the list.
+	- Remove 2 useless lines of code.
+
+Sun Dec 13  18:00 1998 Gerard Roudier (groudier@club-internet.fr)
+	* revision 3.1e
+	- Same work-around as for the 53c876 rev <= 0x15 for 53c896 rev 1:
+	  Disable overlapped arbitration. This will not make difference 
+	  since the chip has on-chip RAM.
+
 Thu Nov 26  22:00 1998 Gerard Roudier (groudier@club-internet.fr)
 	* revision 3.1d
 	- The SISL RAID change requires now remap_pci_mem() stuff to be 

@@ -128,7 +128,6 @@ extern int dfx_probe(struct device *dev);
 extern int apfddi_init(struct device *dev);
 
 /* HIPPI boards */
-extern int cern_hippi_probe(struct device *);
 extern int rr_hippi_probe(struct device *);
 
 struct devprobe
@@ -177,9 +176,6 @@ struct devprobe pci_probes[] __initdata = {
 #ifdef CONFIG_VORTEX
 	{tc59x_probe, 0},
 #endif
-#ifdef CONFIG_DEC_ELCP 
-	{tulip_probe, 0},
-#endif
 #ifdef CONFIG_NE2K_PCI
 	{ne2k_pci_probe, 0},
 #endif
@@ -188,6 +184,9 @@ struct devprobe pci_probes[] __initdata = {
 #endif	
 #ifdef CONFIG_EEXPRESS_PRO100	/* Intel EtherExpress Pro/100 */
 	{eepro100_probe, 0},
+#endif
+#ifdef CONFIG_DEC_ELCP 
+	{tulip_probe, 0},
 #endif
 #ifdef CONFIG_DE4X5             /* DEC DE425, DE434, DE435 adapters */
 	{de4x5_probe, 0},
@@ -541,9 +540,6 @@ static int hippi_probe(struct device *dev)
 		return 1;
 
 	if (1
-#ifdef CONFIG_CERN_HIPPI
-	    && cern_hippi_probe(dev)
-#endif
 #ifdef CONFIG_ROADRUNNER
 	    && rr_hippi_probe(dev)
 #endif

@@ -510,10 +510,10 @@ int Addi91u_into_Adapter_table(WORD wBIOS, WORD wBASE, BYTE bInterrupt,
 		if (i91u_adpt[i].ADPT_BIOS < wBIOS)
 			continue;
 		if (i91u_adpt[i].ADPT_BIOS == wBIOS) {
-			if (i91u_adpt[i].ADPT_BASE == wBASE)
+			if (i91u_adpt[i].ADPT_BASE == wBASE) {
 				if (i91u_adpt[i].ADPT_Bus != 0xFF)
 					return (FAILURE);
-				else if (i91u_adpt[i].ADPT_BASE < wBASE)
+			} else if (i91u_adpt[i].ADPT_BASE < wBASE)
 					continue;
 		}
 		for (j = MAX_SUPPORTED_ADAPTERS - 1; j > i; j--) {

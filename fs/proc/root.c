@@ -348,6 +348,32 @@ int proc_register(struct proc_dir_entry * dir, struct proc_dir_entry * dp)
 	return 0;
 }
 
+/*
+ * Kill an inode that got unregistered..
+ */
+static void proc_kill_inodes(int ino)
+{
+	struct file *filp;
+
+	/* inuse_filps is protected by the single kernel lock */
+	for (filp = inuse_filps; filp; filp = filp->f_next) {
+		struct dentry * dentry;
+		struct inode * inode;
+
+		dentry = filp->f_dentry;
+		if (!dentry)
+			continue;
+		if (dentry->d_op != &proc_dentry_operations)
+			continue;
+		inode = dentry->d_inode;
+		if (!inode)
+			continue;
+		if (inode->i_ino != ino)
+			continue;
+		filp->f_op = NULL;
+	}
+}
+
 int proc_unregister(struct proc_dir_entry * dir, int ino)
 {
 	struct proc_dir_entry **p = &dir->subdir, *dp;
@@ -362,6 +388,7 @@ int proc_unregister(struct proc_dir_entry * dir, int ino)
 			    ino < PROC_DYNAMIC_FIRST+PROC_NDYNAMIC)
 				clear_bit(ino-PROC_DYNAMIC_FIRST, 
 					  (void *) proc_alloc_map);
+			proc_kill_inodes(ino);
 			return 0;
 		}
 		p = &dp->next;

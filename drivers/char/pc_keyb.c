@@ -65,7 +65,7 @@ static volatile unsigned char acknowledge = 0;
 static volatile unsigned char resend = 0;
 
 
-#if defined(CONFIG_PSMOUSE)
+#if defined CONFIG_PSMOUSE
 /*
  *	PS/2 Auxiliary Device
  */
@@ -87,7 +87,7 @@ static int aux_count = 0;
 #endif /* CONFIG_PSMOUSE */
 
 /*
- * Wait for keyboard controller input buffer is empty.
+ * Wait for keyboard controller input buffer to drain.
  *
  * Don't use 'jiffies' so that we don't depend on
  * interrupts..
@@ -709,6 +709,52 @@ void __init pckbd_init_hw(void)
 }
 
 #if defined CONFIG_PSMOUSE
+
+/*
+ * Check if this is a dual port controller.
+ */
+static int __init detect_auxiliary_port(void)
+{
+	unsigned long flags;
+	unsigned char status;
+	unsigned char val;
+	int loops = 5;
+	int retval = 0;
+
+	spin_lock_irqsave(&kbd_controller_lock, flags);
+
+	/* Put the value 0x5A in the output buffer using the "Write
+	 * Auxiliary Device Output Buffer" command (0xD3). Poll the
+	 * Status Register for a while to see if the value really
+	 * turns up in the Data Register. If the KBD_STAT_MOUSE_OBF
+	 * bit is also set to 1 in the Status Register, we assume this
+	 * controller has an Auxiliary Port (a.k.a. Mouse Port).
+	 */
+	kb_wait();
+	outb(KBD_CCMD_WRITE_AUX_OBUF, KBD_CNTL_REG);
+
+	kb_wait();
+	outb(0x5a, KBD_DATA_REG); /* 0x5a is a random dummy value. */
+
+	status = inb(KBD_STATUS_REG);
+	while (!(status & KBD_STAT_OBF) && loops--) {
+		mdelay(1);
+		status = inb(KBD_STATUS_REG);
+	}
+
+	if (status & KBD_STAT_OBF) {
+		val = inb(KBD_DATA_REG);
+		if (val == 0x5a && (status & KBD_STAT_MOUSE_OBF)) {
+			printk(KERN_INFO "Detected PS/2 Mouse Port.\n");
+			retval = 1;
+		}
+	}
+
+	spin_unlock_irqrestore(&kbd_controller_lock, flags);
+
+	return retval;
+}
+
 /*
  * Send a byte to the mouse.
  */
@@ -894,18 +940,9 @@ static struct miscdevice psaux_mouse = {
 
 static int __init psaux_init(void)
 {
-#if 0
-	/*
-	 * Don't bother with the BIOS flag: even if we don't have
-	 * a mouse connected at bootup we may still want to connect
-	 * one later, and we don't want to just let the BIOS tell
-	 * us that it has no mouse..
-	 */
-	if (aux_device_present != 0xaa)
+	if (!detect_auxiliary_port())
 		return -EIO;
 
-	printk(KERN_INFO "PS/2 auxiliary pointing device detected -- driver installed.\n");
-#endif
 	misc_register(&psaux_mouse);
 	queue = (struct aux_queue *) kmalloc(sizeof(*queue), GFP_KERNEL);
 	memset(queue, 0, sizeof(*queue));

@@ -601,7 +601,7 @@ MODULE_PARM_DESC(dma, "dma number (>=4 for SB16/32/64/etc, <=3 for the rest)");
 MODULE_PARM(serio, "i");
 MODULE_PARM_DESC(serio, "address of serial port to output PTT");
 MODULE_PARM(pario, "i");
-MODULE_PARM_DESC(pario, "address of parial port to output PTT");
+MODULE_PARM_DESC(pario, "address of parallel port to output PTT");
 MODULE_PARM(midiio, "i");
 MODULE_PARM_DESC(midiio, "address of midi (MPU401) port to output PTT");
 

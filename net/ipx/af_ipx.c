@@ -1973,8 +1973,10 @@ static int ipx_connect(struct socket *sock, struct sockaddr *uaddr,
 		uaddr.sipx_network 	= 0;
 
 #ifdef CONFIG_IPX_INTERN
-		memcpy(uaddr.sipx_node, sk->protinfo.af_ipx.intrfc->if_node,
-		       IPX_NODE_LEN);
+		if(sk->protinfo.af_ipx.intrfc)
+			memcpy(uaddr.sipx_node, sk->protinfo.af_ipx.intrfc->if_node,IPX_NODE_LEN);
+		else
+			return -ENETDOWN;		/* Someone zonked the iface */
 #endif	/* CONFIG_IPX_INTERN */
 
 		ret = ipx_bind(sock, (struct sockaddr *)&uaddr,
@@ -2185,8 +2187,10 @@ static int ipx_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 		uaddr.sipx_network 	= 0;
 
 #ifdef CONFIG_IPX_INTERN
-		memcpy(uaddr.sipx_node, sk->protinfo.af_ipx.intrfc->if_node,
-		       IPX_NODE_LEN);
+		if(sk->protinfo.af_ipx.intrfc)
+			memcpy(uaddr.sipx_node, sk->protinfo.af_ipx.intrfc->if_node,IPX_NODE_LEN);
+		else
+			return -ENETDOWN;		/* Someone zonked the iface */
 #endif	/* CONFIG_IPX_INTERN */
 
 		ret = ipx_bind(sock, (struct sockaddr *)&uaddr,

@@ -208,8 +208,6 @@ struct buffer_head {
 	unsigned int b_list;		/* List that this buffer appears */
 	unsigned long b_flushtime;      /* Time when this (dirty) buffer
 					 * should be written */
-	unsigned long b_lru_time;       /* Time when this buffer was 
-					 * last used. */
 	struct wait_queue * b_wait;
 	struct buffer_head ** b_pprev;		/* doubly linked list of hash-queue */
 	struct buffer_head * b_prev_free;	/* doubly linked list of buffers */

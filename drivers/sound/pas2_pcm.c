@@ -42,7 +42,7 @@ static unsigned char pcm_mode = PCM_NON;
 static unsigned long pcm_count = 0;
 static unsigned short pcm_bitsok = 8;	/* mask of OK bits */
 static int      pcm_busy = 0;
-int             pas_audiodev = 0;
+int             pas_audiodev = -1;
 static int      open_mode = 0;
 
 static int pcm_set_speed(int arg)

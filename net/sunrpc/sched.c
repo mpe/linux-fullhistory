@@ -4,6 +4,9 @@
  * Scheduling for synchronous and asynchronous RPC requests.
  *
  * Copyright (C) 1996 Olaf Kirch, <okir@monad.swb.de>
+ * 
+ * TCP NFS related read + write fixes
+ * (C) 1999 Dave Airlie, University of Limerick, Ireland <airlied@linux.ie>
  */
 
 #include <linux/module.h>
@@ -271,8 +274,8 @@ __rpc_wake_up(struct rpc_task *task)
 	if (task->tk_rpcwait != &schedq)
 		rpc_remove_wait_queue(task);
 	if (!RPC_IS_RUNNING(task)) {
-		rpc_make_runnable(task);
 		task->tk_flags |= RPC_TASK_CALLBACK;
+		rpc_make_runnable(task);
 	}
 	dprintk("RPC:      __rpc_wake_up done\n");
 }
@@ -391,10 +394,21 @@ __rpc_execute(struct rpc_task *task)
 		 * Execute any pending callback.
 		 */
 		if (task->tk_flags & RPC_TASK_CALLBACK) {
+			/* Define a callback save pointer */
+			void (*save_callback)(struct rpc_task *);
+	
 			task->tk_flags &= ~RPC_TASK_CALLBACK;
+			/* 
+			 * If a callback exists, save it, reset it,
+			 * call it.
+			 * The save is needed to stop from resetting
+			 * another callback set within the callback handler
+			 * - Dave
+			 */
 			if (task->tk_callback) {
-				task->tk_callback(task);
-				task->tk_callback = NULL;
+				save_callback=task->tk_callback;
+				task->tk_callback=NULL;
+				save_callback(task);
 			}
 		}
 
@@ -828,11 +842,10 @@ rpciod(void *ptr)
 			rounds = 0;
 		}
 		save_flags(oldflags); cli();
+		dprintk("RPC: rpciod running checking dispatch\n");
+		rpciod_tcp_dispatcher();
+
 		if (!schedq.task) {
-			/* following two lines added by airlied@linux.ie
-				to make NFS over TCP work 5/1/99 */
-		        dprintk("RPC: rpciod running checking dispatch\n");
-		        rpciod_tcp_dispatcher();
 			dprintk("RPC: rpciod back to sleep\n");
 			interruptible_sleep_on(&rpciod_idle);
 			dprintk("RPC: switch to rpciod\n");

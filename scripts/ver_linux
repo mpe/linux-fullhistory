@@ -2,7 +2,7 @@
 # Before running this script please ensure that your PATH is
 # typical as you use for compilation/istallation. I use
 # /bin /sbin /usr/bin /usr/sbin /usr/local/bin, but it may
-# differs on your system.
+# differ on your system.
 #
 echo '-- Versions installed: (if some fields are empty or looks'
 echo '-- unusual then possibly you have very old versions)'
@@ -25,5 +25,8 @@ netstat --version | awk \
 'NR==1{if ($5 != "") { n=split($5,buf,"-"); ver=buf[n]; done=1 }}
  NR==2{if (done != 1) ver=$3 }
  END{print "Net-tools             ",ver}'
-loadkeys -h 2>&1 | awk 'NR==1{print "Kbd                   ",$3}'
+loadkeys -h 2>&1 | awk \
+'(NR==1 && $3) {ver=$3}
+ (NR==2 && $1 ~ /console-tools/) {print "Console-tools         ",$3; done=1}
+ END {if (!done) print "Kbd                   ",ver}'
 expr --v | awk '{print "Sh-utils              ", $NF}'

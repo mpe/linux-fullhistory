@@ -299,8 +299,8 @@ DST(	movl %ebx, 24(%edi)	)
 	adcl %edx, %eax
 DST(	movl %edx, 28(%edi)	)
 
-SRC(	lea 32(%esi), %esi	)
-DST(	lea 32(%edi), %edi	)
+	lea 32(%esi), %esi
+	lea 32(%edi), %edi
 	dec %ecx
 	jne 1b
 	adcl $0, %eax
@@ -312,8 +312,8 @@ DST(	lea 32(%edi), %edi	)
 SRC(3:	movl (%esi), %ebx	)
 	adcl %ebx, %eax
 DST(	movl %ebx, (%edi)	)
-SRC(	lea 4(%esi), %esi	)
-DST(	lea 4(%edi), %edi	)
+	lea 4(%esi), %esi
+	lea 4(%edi), %edi
 	dec %edx
 	jne 3b
 	adcl $0, %eax
@@ -322,9 +322,9 @@ DST(	lea 4(%edi), %edi	)
 	cmpl $2, %ecx
 	jb 5f
 SRC(	movw (%esi), %cx	)
-SRC(	leal 2(%esi), %esi	)
+	leal 2(%esi), %esi
 DST(	movw %cx, (%edi)	)
-DST(	leal 2(%edi), %edi	)
+	leal 2(%edi), %edi
 	je 6f
 	shll $16,%ecx
 SRC(5:	movb (%esi), %cl	)
@@ -337,8 +337,8 @@ DST(	movb %cl, (%edi)	)
 # Exception handler:
 .section .fixup, "ax"							
 
-6000:
-
+6001:
+	movl ARGBASE+20(%esp), %ebx	# src_err_ptr
 	movl $-EFAULT, (%ebx)
 
 	# zero the complete destination - computing the rest
@@ -350,13 +350,10 @@ DST(	movb %cl, (%edi)	)
 
 	jmp 5000b
 
-6001:
-	movl ARGBASE+20(%esp), %ebx	# src_err_ptr
-	jmp 6000b
-
 6002:
 	movl ARGBASE+24(%esp), %ebx	# dst_err_ptr
-	jmp 6000b
+	movl $-EFAULT,(%ebx)
+	jmp 5000b
 
 .previous
 
@@ -426,17 +423,17 @@ DST(	movb %dl, (%edi)         )
 	adcl $0, %eax
 7:
 .section .fixup, "ax"
-6000:	movl $-EFAULT, (%ebx)
+6001:	movl	ARGBASE+20(%esp), %ebx	# src_err_ptr	
+	movl $-EFAULT, (%ebx)
 	# zero the complete destination (computing the rest is too much work)
 	movl ARGBASE+8(%esp),%edi	# dst
 	movl ARGBASE+12(%esp),%ecx	# len
 	xorl %eax,%eax
 	rep; stosb
 	jmp 7b
-6001:	movl ARGBASE+20(%esp), %ebx	# src_err_ptr
-	jmp 6000b	
 6002:	movl ARGBASE+24(%esp), %ebx	# dst_err_ptr
-	jmp 6000b
+	movl $-EFAULT, (%ebx)
+	jmp  7b			
 .previous				
 
 	popl %esi

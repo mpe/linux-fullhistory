@@ -73,7 +73,7 @@
 */
 
 /*
-**	November 26 1998, version 3.1d
+**	January 16 1998, version 3.1f
 **
 **	Supported SCSI-II features:
 **	    Synchronous negotiation
@@ -1010,7 +1010,7 @@ typedef struct {
 #endif
 
 /*
-**	If the CPU and the NCR use same endian-ness adressing,
+**	If the CPU and the NCR use same endian-ness addressing,
 **	no byte reordering is needed for script patching.
 **	Macro cpu_to_scr() is to be used for script patching.
 **	Macro scr_to_cpu() is to be used for getting a DWORD 
@@ -1049,7 +1049,7 @@ typedef struct {
 */
 
 /*
-**	If the CPU and the NCR use same endian-ness adressing,
+**	If the CPU and the NCR use same endian-ness addressing,
 **	no byte reordering is needed for accessing chip io 
 **	registers. Functions suffixed by '_raw' are assumed 
 **	to access the chip over the PCI without doing byte 
@@ -6182,10 +6182,14 @@ void ncr_init (ncb_p np, int reset, char * msg, u_long code)
 	/*
 	**	DEL 441 - 53C876 Rev 5 - Part Number 609-0392787/2788 - ITEM 2.
 	**	Disable overlapped arbitration.
+	**	The 896 Rev 1 is also affected by this errata.
 	*/
 	if (np->device_id == PCI_DEVICE_ID_NCR_53C875 &&
 	    np->revision_id >= 0x10 && np->revision_id <= 0x15)
 		OUTB (nc_ctest0, (1<<5));
+	else if (np->device_id == PCI_DEVICE_ID_NCR_53C896 &&
+	         np->revision_id <= 0x1)
+		OUTB (nc_ccntl0, DPR);
 
 	/*
 	**	Fill in target structure.
@@ -6811,7 +6815,7 @@ static void ncr_timeout (ncb_p np)
 **		scntl3:	(see the manual)
 **
 **	current script command:
-**		dsp:	script adress (relative to start of script).
+**		dsp:	script address (relative to start of script).
 **		dbc:	first word of script command.
 **
 **	First 16 register of the chip:
@@ -9637,7 +9641,7 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	(void) pcibios_read_config_dword(bus, device_fn,
 					PCI_BASE_ADDRESS_2, &base_2);
 
-	/* Handle 64bit base adresses for 53C896. */
+	/* Handle 64bit base addresses for 53C896. */
 	if ((base & PCI_BASE_ADDRESS_MEM_TYPE_MASK) == PCI_BASE_ADDRESS_MEM_TYPE_64)
 		(void) pcibios_read_config_dword(bus, device_fn,
 						 PCI_BASE_ADDRESS_3, &base_2);
@@ -9738,7 +9742,9 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 			printk("succeeded.\n");
 		}
 	}
-	
+
+
+#if LINUX_VERSION_CODE < LinuxVersionCode(2,1,140)
 	if ( is_prep ) {
 		if (io_port >= 0x10000000) {
 			printk("ncr53c8xx: reallocating io_port (Wacky IBM)");
@@ -9756,6 +9762,7 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 			pcibios_write_config_dword(bus, device_fn, PCI_BASE_ADDRESS_2, base_2);
 		}
 	}
+#endif
 #endif	/* __powerpc__ */
 
 #ifdef __sparc__
@@ -9786,7 +9793,8 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	}
 
 	if ((chip->features & FE_CLSE) && !cache_line_size) {
-		cache_line_size = CACHE_LINE_SIZE;
+		/* PCI_CACHE_LINE_SIZE value is in 32-bit words. */
+		cache_line_size = 64 / sizeof(u_int32);
 		if (initverbose >= 2)
 			printk("ncr53c8xx: setting PCI_CACHE_LINE_SIZE to %d (fixup)\n", cache_line_size);
 		pcibios_write_config_byte(bus, device_fn,
@@ -9796,7 +9804,7 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	}
 
 	if (!latency_timer) {
-		latency_timer = 248;
+		latency_timer = 128;
 		if (initverbose >= 2)
 			printk("ncr53c8xx: setting PCI_LATENCY_TIMER to %d bus clocks (fixup)\n", latency_timer);
 		pcibios_write_config_byte(bus, device_fn,
@@ -10148,8 +10156,6 @@ printk("ncr53c8xx_queue_command\n");
 
      cmd->scsi_done     = done;
      cmd->host_scribble = NULL;
-     cmd->SCp.ptr       = NULL;
-     cmd->SCp.buffer    = NULL;
 
      NCR_LOCK_NCB(np, flags);
 
@@ -10384,13 +10390,12 @@ static void insert_into_waiting_list(ncb_p np, Scsi_Cmnd *cmd)
 
 static Scsi_Cmnd *retrieve_from_waiting_list(int to_remove, ncb_p np, Scsi_Cmnd *cmd)
 {
-	Scsi_Cmnd *wcmd;
+	Scsi_Cmnd **pcmd = &np->waiting_list;
 
-	if (!(wcmd = np->waiting_list)) return 0;
-	while (wcmd->next_wcmd) {
-		if (cmd == (Scsi_Cmnd *) wcmd->next_wcmd) {
+	while (*pcmd) {
+		if (cmd == *pcmd) {
 			if (to_remove) {
-				wcmd->next_wcmd = cmd->next_wcmd;
+				*pcmd = (Scsi_Cmnd *) cmd->next_wcmd;
 				cmd->next_wcmd = 0;
 			}
 #ifdef DEBUG_WAITING_LIST
@@ -10398,6 +10403,7 @@ static Scsi_Cmnd *retrieve_from_waiting_list(int to_remove, ncb_p np, Scsi_Cmnd 
 #endif
 			return cmd;
 		}
+		pcmd = (Scsi_Cmnd **) &(*pcmd)->next_wcmd;
 	}
 	return 0;
 }

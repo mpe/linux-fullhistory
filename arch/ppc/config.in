@@ -167,7 +167,6 @@ endmenu
 
 source drivers/char/Config.in
 source fs/Config.in
-source fs/nls/Config.in
 
 mainmenu_option next_comment
 comment 'Sound'

@@ -813,8 +813,9 @@ static __inline__ int tcp_snd_test(struct sock *sk, struct sk_buff *skb)
 /* This tells the input processing path that an ACK should go out
  * right now.
  */
-#define tcp_enter_quickack_mode(__tp)	((__tp)->ato = (HZ/100))
-#define tcp_in_quickack_mode(__tp)	((__tp)->ato == (HZ/100))
+#define tcp_enter_quickack_mode(__tp)	((__tp)->ato |= (1<<31))
+#define tcp_exit_quickack_mode(__tp)	((__tp)->ato &= ~(1<<31))
+#define tcp_in_quickack_mode(__tp)	(((__tp)->ato & (1 << 31)) != 0)
 
 /*
  * List all states of a TCP socket that can be viewed as a "connected"

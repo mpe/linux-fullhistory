@@ -16,6 +16,7 @@
 #include <linux/unistd.h>
 #include <linux/smp_lock.h>
 #include <linux/module.h>
+#include <linux/vmalloc.h>
 
 #include <asm/pgtable.h>
 #include <asm/mmu_context.h>
@@ -230,16 +231,16 @@ static inline int dup_mmap(struct mm_struct * mm)
 		 * Link in the new vma even if an error occurred,
 		 * so that exit_mmap() can clean up the mess.
 		 */
-		if((tmp->vm_next = *pprev) != NULL)
-			(*pprev)->vm_pprev = &tmp->vm_next;
+		tmp->vm_next = *pprev;
 		*pprev = tmp;
-		tmp->vm_pprev = pprev;
 
 		pprev = &tmp->vm_next;
 		if (retval)
 			goto fail_nomem;
 	}
 	retval = 0;
+	if (mm->map_count >= AVL_MIN_MAP_COUNT)
+		build_mmap_avl(mm);
 
 fail_nomem:
 	flush_tlb_mm(current->mm);
@@ -268,7 +269,7 @@ struct mm_struct * mm_alloc(void)
 		 * Leave mm->pgd set to the parent's pgd
 		 * so that pgd_offset() is always valid.
 		 */
-		mm->mmap = mm->mmap_cache = NULL;
+		mm->mmap = mm->mmap_avl = mm->mmap_cache = NULL;
 
 		/* It has not run yet, so cannot be present in anyone's
 		 * cache or tlb.
@@ -278,17 +279,35 @@ struct mm_struct * mm_alloc(void)
 	return mm;
 }
 
+/* Please note the differences between mmput and mm_release.
+ * mmput is called whenever we stop holding onto a mm_struct,
+ * error success whatever.
+ *
+ * mm_release is called after a mm_struct has been removed
+ * from the current process.
+ *
+ * This difference is important for error handling, when we
+ * only half set up a mm_struct for a new process and need to restore
+ * the old one.  Because we mmput the new mm_struct before
+ * restoring the old one. . .
+ * Eric Biederman 10 January 1998
+ */
+void mm_release(void)
+{
+	struct task_struct *tsk = current;
+	forget_segments();
+	/* notify parent sleeping on vfork() */
+	if (tsk->flags & PF_VFORK) {
+		tsk->flags &= ~PF_VFORK;
+		up(tsk->p_opptr->vfork_sem);
+	}
+}
+
 /*
  * Decrement the use count and release all resources for an mm.
  */
 void mmput(struct mm_struct *mm)
 {
-	/* notify parent sleeping on vfork() */
-	if (current->flags & PF_VFORK) {
-		current->flags &= ~PF_VFORK;
-		up(current->p_opptr->vfork_sem);
-	}
-
 	if (atomic_dec_and_test(&mm->count)) {
 		release_segments(mm);
 		exit_mmap(mm);
@@ -478,6 +497,9 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	int nr;
 	int retval = -ENOMEM;
 	struct task_struct *p;
+	struct semaphore sem = MUTEX_LOCKED;
+
+	current->vfork_sem = &sem;
 
 	p = alloc_task_struct();
 	if (!p)
@@ -611,9 +633,11 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	}
 	++total_forks;
 bad_fork:
-	up(&current->mm->mmap_sem);
 	unlock_kernel();
+	up(&current->mm->mmap_sem);
 fork_out:
+	if ((clone_flags & CLONE_VFORK) && (retval > 0)) 
+		down(&sem);
 	return retval;
 
 bad_fork_cleanup_sighand:

@@ -93,7 +93,7 @@ void mask_rtc_irq_bit(unsigned char bit);
 static inline unsigned char rtc_is_updating(void);
 
 /*
- *	Bits in rtc_status. (7 bits of room for future expansion)
+ *	Bits in rtc_status. (6 bits of room for future expansion)
  */
 
 #define RTC_IS_OPEN		0x01	/* means /dev/rtc is in use	*/

@@ -671,7 +671,7 @@ void scsi_old_done (Scsi_Cmnd * SCpnt)
 	    host_active = NULL;
 
 	    /* For block devices "wake_up" is done in end_scsi_request */
-	    if (!SCSI_BLK_MAJOR(SCpnt->request.rq_dev)) {
+	    if (!SCSI_BLK_MAJOR(MAJOR(SCpnt->request.rq_dev))) {
 		struct Scsi_Host * next;
 
 		for (next = host->block; next != host; next = next->block)

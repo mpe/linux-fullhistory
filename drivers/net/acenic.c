@@ -121,7 +121,6 @@
  * TODO:
  *
  * - Add multicast support.
- * - The Tigon II firmware fails to run in some PCs.
  * - NIC dump support.
  * - More tuning parameters.
  */
@@ -133,15 +132,16 @@ static int rx_coal_tick[8] = {0, };
 static int max_tx_desc[8] = {0, };
 static int max_rx_desc[8] = {0, };
 
-static const char *version = "acenic.c: v0.22 01/07/99  Jes Sorensen (Jes.Sorensen@cern.ch)\n";
+static const char *version = "acenic.c: v0.24 01/13/99  Jes Sorensen (Jes.Sorensen@cern.ch)\n";
 
 static struct device *root_dev = NULL;
 
 static int ace_load_firmware(struct device *dev);
 
+static int probed __initdata = 0;
+
 __initfunc(int acenic_probe (struct device *dev))
 {
-	static int i = 0;
 	int boards_found = 0;
 	int version_disp;
 	struct ace_private *ap;
@@ -153,6 +153,10 @@ __initfunc(int acenic_probe (struct device *dev))
 	u8 irq;
 #endif
 	struct pci_dev *pdev = NULL;
+
+	if (probed)
+		return -ENODEV;
+	probed ++;
 
 	if (!pci_present())		/* is PCI support present? */
 		return -ENODEV;
@@ -182,8 +186,6 @@ __initfunc(int acenic_probe (struct device *dev))
 		ap = dev->priv;
 		ap->pdev = pdev;
 		ap->vendor = pdev->vendor;
-
-		pci_set_master(pdev);
 
 		dev->irq = pdev->irq;
 #ifdef __SMP__
@@ -221,6 +223,8 @@ __initfunc(int acenic_probe (struct device *dev))
 					      pci_latency);
 		}
 
+		pci_set_master(pdev);
+
 		switch(ap->vendor){
 		case PCI_VENDOR_ID_ALTEON:
 			sprintf(ap->name, "AceNIC Gigabit Ethernet");
@@ -246,7 +250,8 @@ __initfunc(int acenic_probe (struct device *dev))
 						      0x4000);
 		if (!ap->regs){
 			printk(KERN_ERR "%s:  Unable to map I/O register, "
-			       "AceNIC %i will be disabled.\n", dev->name, i);
+			       "AceNIC %i will be disabled.\n",
+			       dev->name, boards_found);
 			break;
 		}
 
@@ -401,13 +406,6 @@ __initfunc(static int ace_init(struct device *dev, int board_idx))
 			  ((CLR_INT | WORD_SWAP) << 24));
 #endif
 
-#ifdef __LITTLE_ENDIAN
-	regs->ModeStat = ACE_BYTE_SWAP_DATA | ACE_WARN | ACE_FATAL
-			| ACE_WORD_SWAP;
-#else
-#error "this driver doesn't run on big-endian machines yet!"
-#endif
-
 	/*
 	 * Stop the NIC CPU and clear pending interrupts
 	 */
@@ -438,6 +436,20 @@ __initfunc(static int ace_init(struct device *dev, int board_idx))
 		       tig_ver);
 		return -ENODEV;
 	}
+
+	/*
+	 * ModeStat _must_ be set after the SRAM settings as this change
+	 * seems to corrupt the ModeStat and possible other registers.
+	 * The SRAM settings survive resets and setting it to the same
+	 * value a second time works as well. This is what caused the
+	 * `Firmware not running' problem on the Tigon II.
+	 */
+#ifdef __LITTLE_ENDIAN
+	regs->ModeStat = ACE_BYTE_SWAP_DATA | ACE_WARN | ACE_FATAL
+			| ACE_WORD_SWAP;
+#else
+#error "this driver doesn't run on big-endian machines yet!"
+#endif
 
 	mac1 = 0;
 	for(i = 0; i < 4; i++){

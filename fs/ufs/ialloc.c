@@ -150,7 +150,7 @@ void ufs_free_inode (struct inode * inode)
  * the groups with above-average free space, that group with the fewest
  * directories already is chosen.
  *
- * For other inodes, search forward from the parent directory\'s block
+ * For other inodes, search forward from the parent directory's block
  * group to find a free inode.
  */
 struct inode * ufs_new_inode (const struct inode * dir,	int mode, int * err )

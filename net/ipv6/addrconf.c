@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: addrconf.c,v 1.45 1998/08/26 12:04:41 davem Exp $
+ *	$Id: addrconf.c,v 1.46 1999/01/12 14:34:47 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -1119,7 +1119,7 @@ int addrconf_notify(struct notifier_block *this, unsigned long event,
 		if (dev->mtu >= IPV6_MIN_MTU) {
 			struct inet6_dev *idev;
 
-			if ((idev = ipv6_find_idev(dev)) == NULL)
+			if ((idev = ipv6_get_idev(dev)) == NULL)
 				break;
 			idev->cnf.mtu6 = dev->mtu;
 			rt6_mtu_change(dev, dev->mtu);

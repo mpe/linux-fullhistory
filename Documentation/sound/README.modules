@@ -2,7 +2,7 @@ Building a modular sound driver
 ================================
 
   The following information is current as of linux-2.1.85. Check the other
-readme files, especially Readme.cards, for information not specific to
+readme files, especially README.OSS, for information not specific to
 making sound modular.
 
   First, configure your kernel. This is an idea of what you should be

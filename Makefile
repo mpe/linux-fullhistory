@@ -1,7 +1,7 @@
 VERSION = 2
 PATCHLEVEL = 2
 SUBLEVEL = 0
-EXTRAVERSION =-pre7
+EXTRAVERSION =-pre8
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
@@ -277,7 +277,7 @@ include/linux/compile.h: $(CONFIGURATION) include/linux/version.h newversion
 	 else \
 	   echo \#define LINUX_COMPILE_DOMAIN ; \
 	 fi >> .ver
-	@echo \#define LINUX_COMPILER \"`$(CC) -v 2>&1 | tail -1`\" >> .ver
+	@echo \#define LINUX_COMPILER \"`$(CC) $(CFLAGS) -v 2>&1 | tail -1`\" >> .ver
 	@mv -f .ver $@
 
 include/linux/version.h: ./Makefile

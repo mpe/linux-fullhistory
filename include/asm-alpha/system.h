@@ -107,6 +107,9 @@ extern void alpha_switch_to(unsigned long pctxp);
 #define mb() \
 __asm__ __volatile__("mb": : :"memory")
 
+#define rmb() \
+__asm__ __volatile__("mb": : :"memory")
+
 #define wmb() \
 __asm__ __volatile__("wmb": : :"memory")
 

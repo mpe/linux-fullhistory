@@ -4,7 +4,7 @@
  *  linux/drivers/block/ide_modes.h
  *
  *  Copyright (C) 1996  Erik Andersen
- *  Copyright (C) 1998  Jens Axboe and Chris Zwilling
+ *  Copyright (C) 1998, 1999 Jens Axboe
  */
 
 #include <asm/byteorder.h>
@@ -298,7 +298,7 @@ struct atapi_capabilities_page {
 	/* Drive supports reading CD-R discs with addressing method 2 */
 	__u8 method2             : 1; /* reserved in 1.2 */
 	/* Drive can read from CD-R/W (CD-E) discs (orange book, part III) */
-	__u8 cd_rw_read           : 1; /* reserved in 1.2 */
+	__u8 cd_rw_read		 : 1; /* reserved in 1.2 */
 	/* Drive supports read from CD-R discs (orange book, part II) */
 	__u8 cd_r_read           : 1; /* reserved in 1.2 */
 #elif defined(__LITTLE_ENDIAN_BITFIELD)
@@ -307,8 +307,7 @@ struct atapi_capabilities_page {
 	/* Drive can read from CD-R/W (CD-E) discs (orange book, part III) */
         __u8 cd_rw_read          : 1; /* reserved in 1.2 */
 	/* Drive supports reading CD-R discs with addressing method 2 */
-	__u8 method2             : 1; /* reserved in 1.2 */
-	__u8 reserved2           : 5;
+	__u8 reserved2		 : 5;
 #else
 #error "Please fix <asm/byteorder.h>"
 #endif
@@ -316,7 +315,7 @@ struct atapi_capabilities_page {
 #if defined(__BIG_ENDIAN_BITFIELD)
 	__u8 reserved3           : 6;
 	/* Drive can write to CD-R/W (CD-E) discs (orange book, part III) */
-	__u8 cd_rw_write          : 1; /* reserved in 1.2 */
+	__u8 cd_rw_write	 : 1; /* reserved in 1.2 */
 	/* Drive supports write to CD-R discs (orange book, part II) */
 	__u8 cd_r_write          : 1; /* reserved in 1.2 */
 #elif defined(__LITTLE_ENDIAN_BITFIELD)
@@ -324,14 +323,14 @@ struct atapi_capabilities_page {
 	/* Drive can write to CD-R discs (orange book, part II) */
         __u8 cd_r_write          : 1; /* reserved in 1.2 */
 	/* Drive can write to CD-R/W (CD-E) discs (orange book, part III) */
-        __u8 cd_rw_write          : 1; /* reserved in 1.2 */
+        __u8 cd_rw_write	 : 1; /* reserved in 1.2 */
 	__u8 reserved3           : 6;
 #else
 #error "Please fix <asm/byteorder.h>"
 #endif
 
 #if defined(__BIG_ENDIAN_BITFIELD)
-	__u8 reserved4           : 1;
+	__u8 reserved4           : 4;
 	/* Drive can read multisession discs. */
 	__u8 multisession        : 1;
 	/* Drive can read mode 2, form 2 data. */
@@ -404,7 +403,7 @@ struct atapi_capabilities_page {
 
 #if defined(__BIG_ENDIAN_BITFIELD)
 	/* Drive mechanism types. */
-	mechtype_t mechtype          : 3;
+	mechtype_t mechtype	 : 3;
 	__u8 reserved6           : 1;
 	/* Drive can eject a disc or changer cartridge. */
 	__u8 eject               : 1;
@@ -426,7 +425,7 @@ struct atapi_capabilities_page {
 	__u8 eject               : 1;
 	__u8 reserved6           : 1;
 	/* Drive mechanism types. */
-	mechtype_t mechtype          : 3;
+	mechtype_t mechtype	 : 3;
 #else
 #error "Please fix <asm/byteorder.h>"
 #endif
@@ -745,7 +744,7 @@ const struct {
 
 	{ 0x6300, "End of user area encountered on this track" },
 
-	{ 0x6400, "Illegal mode for this track" },
+	{ 0x6400, "Illegal mode for this track or incompatible medium" },
 
 	{ 0xb900, "Play operation oborted (sic)" },
 

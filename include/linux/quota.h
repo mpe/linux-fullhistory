@@ -86,7 +86,7 @@ extern int max_dquots;
 extern int dquot_root_squash;
 
 #define NR_DQHASH 43            /* Just an arbitrary number */
-#define NR_DQUOTS 256           /* Maximum number of quotas active at one time (Configurable from /proc/sys/fs) */
+#define NR_DQUOTS 1024          /* Maximum number of quotas active at one time (Configurable from /proc/sys/fs) */
 
 /*
  * Command definitions for the 'quotactl' system call.

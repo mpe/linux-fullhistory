@@ -192,8 +192,6 @@ source drivers/char/Config.in
 
 source fs/Config.in
 
-source fs/nls/Config.in
-
 comment 'Console drivers'
 source drivers/video/Config.in
 

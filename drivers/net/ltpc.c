@@ -1335,7 +1335,7 @@ void cleanup_module(void)
 		/* if it's in process, wait a bit for it to finish */
 		timeout = jiffies+HZ; 
 		add_timer(&ltpc_timer);
-		while(del_timer(&ltpc_timer) && (timeout > jiffies))
+		while(del_timer(&ltpc_timer) && time_after(timeout, jiffies))
 		{
 			add_timer(&ltpc_timer);
 			schedule();

@@ -97,6 +97,7 @@
 #define LOOPS_PER_SEC current_cpu_data.loops_per_sec
 #endif
  
+#define _MIDI_SYNTH_C_
 #define MIDI_SYNTH_NAME	"WaveFront MIDI"
 #define MIDI_SYNTH_CAPS	SYNTH_CAP_INPUT
 #include "midi_synth.h"

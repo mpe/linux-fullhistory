@@ -2,19 +2,20 @@
 ** *************************************************************************
 **
 **
-**     R C M T L . H             $Revision: 3 $
+**     R C L A N M T L . H             $Revision: 5 $
 **
 **
-**  RedCreek Message Transport Layer header file.
+**  RedCreek I2O LAN Message Transport Layer header file.
 **
 **  ---------------------------------------------------------------------
-**  ---     Copyright (c) 1997-1998, RedCreek Communications Inc.     ---
+**  ---     Copyright (c) 1997-1999, RedCreek Communications Inc.     ---
 **  ---                   All rights reserved.                        ---
 **  ---------------------------------------------------------------------
 **
 **  File Description:
 **
-**  Header file for host message transport layer API and data types.
+**  Header file for host I2O (Intelligent I/O) LAN message transport layer 
+**  API and data types.
 **
 **  This program is free software; you can redistribute it and/or modify
 **  it under the terms of the GNU General Public License as published by
@@ -33,8 +34,8 @@
 ** *************************************************************************
 */
 
-#ifndef RCMTL_H
-#define RCMTL_H
+#ifndef RCLANMTL_H
+#define RCLANMTL_H
 
 /* Linux specific includes */
 #define kprintf printk
@@ -51,7 +52,7 @@
 
  /* RedCreek API function return values */
 #define RC_RTN_NO_ERROR             0
-#define RC_RTN_NOT_INIT             1
+#define RC_RTN_I2O_NOT_INIT         1
 #define RC_RTN_FREE_Q_EMPTY         2
 #define RC_RTN_TCB_ERROR            3
 #define RC_RTN_TRANSACTION_ERROR    4
@@ -59,7 +60,7 @@
 #define RC_RTN_MALLOC_ERROR         6
 #define RC_RTN_ADPTR_NOT_REGISTERED 7
 #define RC_RTN_MSG_REPLY_TIMEOUT    8
-#define RC_RTN_NO_STATUS            9
+#define RC_RTN_NO_I2O_STATUS        9
 #define RC_RTN_NO_FIRM_VER         10
 #define RC_RTN_NO_LINK_SPEED       11
 
@@ -88,10 +89,10 @@ typedef void (*PFNWAITCALLBACK)(void);  /* void argument avoids compiler complai
  ** type PFNTXCALLBACK 
  **
  ** Pointer to user's transmit callback function.  This user function is
- ** called from RCProcMsgQ() when packet have been transmitted from buffers
- ** given in the RCSendPacket() function.  BufferContext is a pointer to
+ ** called from RCProcI2OMsgQ() when packet have been transmitted from buffers
+ ** given in the RCI2OSendPacket() function.  BufferContext is a pointer to
  ** an array of 32 bit context values.  These are the values the user assigned
- ** and passed in the TCB to the RCSendPacket() function.  PcktCount
+ ** and passed in the TCB to the RCI2OSendPacket() function.  PcktCount
  ** indicates the number of buffer context values in the BufferContext[] array.
  ** The User's TransmitCallbackFunction should recover (put back in free queue)
  ** the packet buffers associated with the buffer context values.
@@ -105,7 +106,7 @@ typedef void (*PFNTXCALLBACK)(U32  Status,
  ** type PFNRXCALLBACK 
  **
  ** Pointer to user's receive callback function.  This user function
- ** is called from RCProcMsgQ() when packets have been received into
+ ** is called from RCProcI2OMsgQ() when packets have been received into
  ** previously posted packet buffers throught the RCPostRecvBuffers() function.
  ** The received callback function should process the Packet Descriptor Block
  ** pointed to by PacketDescBlock. See Packet Decription Block below.
@@ -144,29 +145,29 @@ typedef void (*PFNCALLBACK)(U32  Status,
 ** Reply Status and Detailed Status of zero indicates No Errors.
 */
  /* reply message status defines */
-#define    RC_REPLY_STATUS_SUCCESS                    0x00
-#define    RC_REPLY_STATUS_ABORT_NO_DATA_TRANSFER     0x02
-#define    RC_REPLY_STATUS_TRANSACTION_ERROR          0x0A
+#define    I2O_REPLY_STATUS_SUCCESS                    0x00
+#define    I2O_REPLY_STATUS_ABORT_NO_DATA_TRANSFER     0x02
+#define    I2O_REPLY_STATUS_TRANSACTION_ERROR          0x0A
 
 
 /* DetailedStatusCode defines */
-#define    RC_DSC_SUCCESS                         0x0000
-#define    RC_DSC_DEVICE_FAILURE                  0x0001
-#define    RC_DSC_DESTINATION_NOT_FOUND           0x0002
-#define    RC_DSC_TRANSMIT_ERROR                  0x0003
-#define    RC_DSC_TRANSMIT_ABORTED                0x0004
-#define    RC_DSC_RECEIVE_ERROR                   0x0005
-#define    RC_DSC_RECEIVE_ABORTED                 0x0006
-#define    RC_DSC_DMA_ERROR                       0x0007
-#define    RC_DSC_BAD_PACKET_DETECTED             0x0008
-#define    RC_DSC_OUT_OF_MEMORY                   0x0009
-#define    RC_DSC_BUCKET_OVERRUN                  0x000A
-#define    RC_DSC_IOP_INTERNAL_ERROR              0x000B
-#define    RC_DSC_CANCELED                        0x000C
-#define    RC_DSC_INVALID_TRANSACTION_CONTEXT     0x000D
-#define    RC_DSC_DESTINATION_ADDRESS_DETECTED    0x000E
-#define    RC_DSC_DESTINATION_ADDRESS_OMITTED     0x000F
-#define    RC_DSC_PARTIAL_PACKET_RETURNED         0x0010
+#define    I2O_LAN_DSC_SUCCESS                         0x0000
+#define    I2O_LAN_DSC_DEVICE_FAILURE                  0x0001
+#define    I2O_LAN_DSC_DESTINATION_NOT_FOUND           0x0002
+#define    I2O_LAN_DSC_TRANSMIT_ERROR                  0x0003
+#define    I2O_LAN_DSC_TRANSMIT_ABORTED                0x0004
+#define    I2O_LAN_DSC_RECEIVE_ERROR                   0x0005
+#define    I2O_LAN_DSC_RECEIVE_ABORTED                 0x0006
+#define    I2O_LAN_DSC_DMA_ERROR                       0x0007
+#define    I2O_LAN_DSC_BAD_PACKET_DETECTED             0x0008
+#define    I2O_LAN_DSC_OUT_OF_MEMORY                   0x0009
+#define    I2O_LAN_DSC_BUCKET_OVERRUN                  0x000A
+#define    I2O_LAN_DSC_IOP_INTERNAL_ERROR              0x000B
+#define    I2O_LAN_DSC_CANCELED                        0x000C
+#define    I2O_LAN_DSC_INVALID_TRANSACTION_CONTEXT     0x000D
+#define    I2O_LAN_DSC_DESTINATION_ADDRESS_DETECTED    0x000E
+#define    I2O_LAN_DSC_DESTINATION_ADDRESS_OMITTED     0x000F
+#define    I2O_LAN_DSC_PARTIAL_PACKET_RETURNED         0x0010
 
 
 /*
@@ -211,7 +212,7 @@ typedef void (*PFNCALLBACK)(U32  Status,
 ** Transaction Control Block (TCB) structure
 **
 ** A structure like this is filled in by the user and passed by reference to 
-** RCSendPacket() and RCPostRecvBuffers() functions.  Minimum size is five
+** RCI2OSendPacket() and RCPostRecvBuffers() functions.  Minimum size is five
 ** 32-bit words for one buffer with one segment descriptor.  
 ** MAX_NMBR_POST_BUFFERS_PER_MSG defines the maximum single segment buffers
 ** that can be described in a given TCB.
@@ -282,17 +283,17 @@ typedef struct
 typedef PU32 PRCTCB;
 /*
 ** -------------------------------------------------------------------------
-** Exported functions comprising the API to the message transport layer
+** Exported functions comprising the API to the LAN I2O message transport layer
 ** -------------------------------------------------------------------------
 */
 
 
  /*
- ** InitRCApiMsgLayer()
+ ** InitRCI2OMsgLayer()
  ** 
- ** Called once prior to using the API message transport layer.  User 
+ ** Called once prior to using the I2O LAN message transport layer.  User 
  ** provides both the physical and virual address of a locked page buffer 
- ** that is used as a private buffer for the RedCreek API message
+ ** that is used as a private buffer for the RedCreek I2O message
  ** transport layer.  This buffer must be a contigous memory block of a 
  ** minimum of 16K bytes and long word aligned.  The user also must provide
  ** the base address of the RedCreek PCI adapter assigned by BIOS or operating
@@ -309,7 +310,7 @@ typedef PU32 PRCTCB;
  **          ReceiveCallbackFunction  - address of user's RX callback function
  **
  */
-RC_RETURN InitRCApiMsgLayer(U16 AdapterID, U32 pciBaseAddr, 
+RC_RETURN RCInitI2OMsgLayer(U16 AdapterID, U32 pciBaseAddr, 
                             PU8 p_msgbuf,  PU8 p_phymsgbuf,
                             PFNTXCALLBACK TransmitCallbackFunction,
                             PFNRXCALLBACK ReceiveCallbackFunction,
@@ -341,7 +342,7 @@ RCGetRavlinIPandMask(U16 AdapterID, PU32 pIpAddr, PU32 pNetMask,
                         PFNWAITCALLBACK WaitCallback);
 
  /* 
- ** RCProcMsgQ()
+ ** RCProcI2OMsgQ()
  ** 
  ** Called from user's polling loop or Interrupt Service Routine for a PCI 
  ** interrupt from the RedCreek PCI adapter.  User responsible for determining
@@ -349,19 +350,19 @@ RCGetRavlinIPandMask(U16 AdapterID, PU32 pIpAddr, PU32 pNetMask,
  ** callback functions, TransmitCallbackFunction or ReceiveCallbackFunction,
  ** if a TX or RX transaction has completed.
  */
-void RCProcMsgQ(U16 AdapterID);
+void RCProcI2OMsgQ(U16 AdapterID);
 
 
  /*
- ** Disable and Enable Adapter interrupts.  Adapter interrupts are enabled at 
- ** Init time but can be disabled and re-enabled through these two function calls.
- ** Packets will still be put into any posted received buffers and packets will
- ** be sent through RCSendPacket() functions.  Disabling Adapter interrupts
- ** will prevent hardware interrupt to host even though the outbound msg
+ ** Disable and Enable I2O interrupts.  I2O interrupts are enabled at Init time
+ ** but can be disabled and re-enabled through these two function calls.
+ ** Packets will still be put into any posted recieved buffers and packets will
+ ** be sent through RCI2OSendPacket() functions.  Disabling I2O interrupts
+ ** will prevent hardware interrupt to host even though the outbound I2O msg
  ** queue is not emtpy.
  */
-RC_RETURN RCEnableAdapterInterrupts(U16 adapterID);
-RC_RETURN RCDisableAdapterInterrupts(U16 AdapterID);
+RC_RETURN RCEnableI2OInterrupts(U16 adapterID);
+RC_RETURN RCDisableI2OInterrupts(U16 AdapterID);
 
 
  /* 
@@ -380,7 +381,7 @@ RC_RETURN RCPostRecvBuffers(U16 AdapterID, PRCTCB pTransactionCtrlBlock);
 #define MAX_NMBR_POST_BUFFERS_PER_MSG 32
 
  /*
- ** RCSendPacket()
+ ** RCI2OSendPacket()
  ** 
  ** Send user's ethernet packet from a locked page buffer.  
  ** Packet must have full MAC header, however without a CRC.  
@@ -389,7 +390,7 @@ RC_RETURN RCPostRecvBuffers(U16 AdapterID, PRCTCB pTransactionCtrlBlock);
  ** Transmit buffer are considered owned by the adapter until context's
  ** returned to user through the TransmitCallbackFunction.
  */
-RC_RETURN RCSendPacket(U16 AdapterID, 
+RC_RETURN RCI2OSendPacket(U16 AdapterID, 
                           U32 context, 
                           PRCTCB pTransactionCtrlBlock);
 
@@ -439,8 +440,8 @@ RC_RETURN RCGetLinkStatus(U16 AdapterID,
                           PFNWAITCALLBACK WaitCallback);
                                
  /* Link Status defines - value returned in pReturnStatus */
-#define LAN_LINK_STATUS_DOWN     0
-#define LAN_LINK_STATUS_UP       1
+#define RC_LAN_LINK_STATUS_DOWN     0
+#define RC_LAN_LINK_STATUS_UP       1
 
  /*
  ** RCGetMAC()
@@ -491,7 +492,63 @@ RC_RETURN RCSetLinkSpeed(U16 AdapterID, U16 LinkSpeedCode);
 
 RC_RETURN
 RCGetLinkSpeed(U16 AdapterID, PU32 pLinkSpeedCode, PFNWAITCALLBACK WaitCallback);
+/*
+** =========================================================================
+** RCSetPromiscuousMode(U16 AdapterID, U16 Mode)
+**
+** Defined values for Mode:
+**  0 - turn off promiscuous mode
+**  1 - turn on  promiscuous mode
+**
+** =========================================================================
+*/
+#define PROMISCUOUS_MODE_OFF 0
+#define PROMISCUOUS_MODE_ON  1
+RC_RETURN
+RCSetPromiscuousMode(U16 AdapterID, U16 Mode);
+/*
+** =========================================================================
+** RCGetPromiscuousMode(U16 AdapterID, PU32 pMode, PFNWAITCALLBACK WaitCallback)
+**
+** get promiscuous mode setting
+**
+** Possible return values placed in pMode:
+**  0 = promisuous mode not set
+**  1 = promisuous mode is set
+**
+** =========================================================================
+*/
+RC_RETURN
+RCGetPromiscuousMode(U16 AdapterID, PU32 pMode, PFNWAITCALLBACK WaitCallback);
 
+/*
+** =========================================================================
+** RCSetBroadcastMode(U16 AdapterID, U16 Mode)
+**
+** Defined values for Mode:
+**  0 - turn off promiscuous mode
+**  1 - turn on  promiscuous mode
+**
+** =========================================================================
+*/
+#define BROADCAST_MODE_OFF 0
+#define BROADCAST_MODE_ON  1
+RC_RETURN
+RCSetBroadcastMode(U16 AdapterID, U16 Mode);
+/*
+** =========================================================================
+** RCGetBroadcastMode(U16 AdapterID, PU32 pMode, PFNWAITCALLBACK WaitCallback)
+**
+** get broadcast mode setting
+**
+** Possible return values placed in pMode:
+**  0 = broadcast mode not set
+**  1 = broadcast mode is set
+**
+** =========================================================================
+*/
+RC_RETURN
+RCGetBroadcastMode(U16 AdapterID, PU32 pMode, PFNWAITCALLBACK WaitCallback);
 /*
 ** =========================================================================
 ** RCReportDriverCapability(U16 AdapterID, U32 capability)
@@ -529,13 +586,13 @@ RCGetFirmwareVer(U16 AdapterID, PU8 pFirmString, PFNWAITCALLBACK WaitCallback);
  ** Reset LAN card operation.  Causes a software reset of the ethernet
  ** controller and restarts the command and receive units. Depending on 
  ** the ResourceFlags given, the buffers are either returned to the
- ** host with reply status of RC_REPLY_STATUS_ABORT_NO_DATA_TRANSFER and
- ** detailed status of RC_DSC_CANCELED (new receive buffers must be
+ ** host with reply status of I2O_REPLY_STATUS_ABORT_NO_DATA_TRANSFER and
+ ** detailed status of I2O_LAN_DSC_CANCELED (new receive buffers must be
  ** posted after issuing this) OR the buffers are kept and reused by
  ** the ethernet controller. If CallbackFunction is not NULL, the function
  ** will be called when the reset is complete.  If the CallbackFunction is
  ** NULL,a 1 will be put into the ReturnAddr after waiting for the reset 
- ** to complete (please disable adapter interrupts during this method).
+ ** to complete (please disable I2O interrupts during this method).
  ** Any outstanding transmit or receive buffers that are complete will be
  ** returned via the normal reply messages before the requested resource
  ** buffers are returned.
@@ -552,13 +609,13 @@ RC_RETURN RCResetLANCard(U16 AdapterID, U16 ResourceFlags, PU32 ReturnAddr, PFNC
  ** Shutdown LAN card operation and put into an idle (suspended) state.
  ** The LAN card is restarted with RCResetLANCard() function.
  ** Depending on the ResourceFlags given, the buffers are either returned 
- ** to the host with reply status of RC_REPLY_STATUS_ABORT_NO_DATA_TRANSFER 
- ** and detailed status of RC_DSC_CANCELED (new receive buffers must be
+ ** to the host with reply status of I2O_REPLY_STATUS_ABORT_NO_DATA_TRANSFER 
+ ** and detailed status of I2O_LAN_DSC_CANCELED (new receive buffers must be
  ** posted after issuing this) OR the buffers are kept and reused by
  ** the ethernet controller. If CallbackFunction is not NULL, the function
  ** will be called when the reset is complete.  If the CallbackFunction is
  ** NULL,a 1 will be put into the ReturnAddr after waiting for the reset 
- ** to complete (please disable adapter interrupts during this method).
+ ** to complete (please disable I2O interrupts during this method).
  ** Any outstanding transmit or receive buffers that are complete will be
  ** returned via the normal reply messages before the requested resource
  ** buffers are returned.
@@ -568,13 +625,13 @@ RC_RETURN
 RCShutdownLANCard(U16 AdapterID, U16 ResourceFlags, PU32 ReturnAddr, PFNCALLBACK CallbackFunction);
 
  /*
- ** RCResetAdapter();
- **     Initializes ADAPTERState to ADAPTER_STATE_RESET.
+ ** RCResetIOP();
+ **     Initializes IOPState to I2O_IOP_STATE_RESET.
  **     Stops access to outbound message Q.
  **     Discards any outstanding transmit or posted receive buffers.
  **     Clears outbound message Q. 
  */
 RC_RETURN 
-RCResetAdapter(U16 AdapterID);
+RCResetIOP(U16 AdapterID);
 
-#endif /* RCMTL_H */
+#endif /* RCLANMTL_H */

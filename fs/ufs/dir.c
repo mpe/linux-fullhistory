@@ -14,6 +14,7 @@
  */
 
 #include <linux/fs.h>
+#include <linux/ufs_fs.h>
 
 #include "swab.h"
 #include "util.h"

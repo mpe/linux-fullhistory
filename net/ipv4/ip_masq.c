@@ -4,7 +4,7 @@
  *
  * 	Copyright (c) 1994 Pauline Middelink
  *
- *	$Id: ip_masq.c,v 1.32 1999/01/04 20:37:05 davem Exp $
+ *	$Id: ip_masq.c,v 1.33 1999/01/15 06:45:17 davem Exp $
  *
  *
  *	See ip_fw.c for original log
@@ -1678,7 +1678,8 @@ int ip_fw_demasq_icmp(struct sk_buff **skb_p)
 			return -1;
 		}
 		ciph = (struct iphdr *) (icmph + 1);
-
+		cicmph = (struct icmphdr *)((char *)ciph + 
+					    (ciph->ihl<<2));
 		/* Now we do real damage to this packet...! */
 		/* First change the dest IP address, and recalc checksum */
 		iph->daddr = ms->saddr;
@@ -1753,6 +1754,7 @@ int ip_fw_demasq_icmp(struct sk_buff **skb_p)
 		return -1;
 	}
 	ciph = (struct iphdr *) (icmph + 1);
+	pptr = (__u16 *)&(((char *)ciph)[ciph->ihl*4]);
 
 	/* Now we do real damage to this packet...! */
 	/* First change the dest IP address, and recalc checksum */

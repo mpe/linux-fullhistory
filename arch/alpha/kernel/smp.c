@@ -670,7 +670,7 @@ handle_ipi(struct pt_regs *regs)
 {
 	int this_cpu = smp_processor_id();
 	volatile int * pending_ipis = &ipi_bits[this_cpu];
-	unsigned long ops, which;
+	unsigned long ops;
 
 	DBGS(("handle_ipi: on CPU %d ops 0x%x PC 0x%lx\n",
 	      this_cpu, *pending_ipis, regs->pc));
@@ -716,7 +716,7 @@ handle_ipi(struct pt_regs *regs)
 			halt();
 		}
 		else {
-			printk(KERN_CRIT "unknown_ipi() on CPU %ld: %d\n",
+			printk(KERN_CRIT "unknown_ipi() on CPU %d: %lu\n",
 			       this_cpu, which);
 		}
 	  } while (ops);
@@ -894,7 +894,7 @@ spinlock_restore_ipl(long prev)
 
 #else
 
-#define spinlock_raise_ipl(LOCK)	((LOCK), 0)
+#define spinlock_raise_ipl(LOCK)	((void)(LOCK), 0)
 #define spinlock_restore_ipl(PREV)	((void)(PREV))
 
 #endif /* MANAGE_SPINLOCK_IPL */

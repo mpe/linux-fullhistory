@@ -1,9 +1,12 @@
+# FILE: tail.tk
+# This file is boilerplate TCL/TK function definitions for 'make xconfig'.
 #
-# Misc buttons to save/restore state and so forth.
-# 
-frame .f0_bot
-frame .f0_bot.r
-frame .f0_bot.l
+# CHANGES
+# =======
+#
+# 8 January 1998, Michael Elizabeth Chastain, <mec@shout.net>
+# Arrange buttons in three columns for better screen fitting.
+#
 
 #
 # Read the user's settings from .config.  These will override whatever is
@@ -28,53 +31,47 @@ if { [file readable .config] == 1} then {
 
 update_mainmenu .f0
 
-button .f0_bot.r.save -text "Save and Exit" -width 25 -command {
-	writeconfig .config include/linux/autoconf.h; wrapup .wrap }
+button .f0.right.save -anchor w -text "Save and Exit" \
+    -command { writeconfig .config include/linux/autoconf.h; wrapup .wrap }
 
-button .f0_bot.r.quit -text "Quit Without Saving" -width 25 \
-	-command { maybe_exit .maybe }
+button .f0.right.quit -anchor w -text "Quit Without Saving" \
+    -command { maybe_exit .maybe }
 
-button .f0_bot.l.store -text "Store Configuration to File" -width 25 -command {
-	load_configfile .load "Save Configuration in file" write_config_file
+button .f0.right.load -anchor w -text "Load Configuration from File" \
+    -command { load_configfile .load "Load Configuration from file" read_config_file
 }
 
-button .f0_bot.l.load -text "Load Configuration from File" -width 25 -command {
-	load_configfile .load "Load Configuration from file" read_config_file
-}
+button .f0.right.store -anchor w -text "Store Configuration to File" \
+    -command { load_configfile .load "Store Configuration to file" write_config_file }
 
 #
-# Now pack everything, important things first because of small screens.
+# Now pack everything.
 #
-pack  .f0_bot.r.save .f0_bot.r.quit -padx 25 -ipadx 10 -expand on
-pack  .f0_bot.l.load .f0_bot.l.store -padx 25 -ipadx 10 -expand on
 
-pack .f0_bot.r -side left -padx 15 -expand on -fill y
-pack .f0_bot.l -side right -padx 15 -expand on -fill y
-
-pack .f0_bot -side bottom -fill both -expand on -pady 4
-pack .f0 -side bottom -padx 15 -pady 0 -fill y -expand on
-pack .header -padx 10 -pady 7 -expand on
-
+pack .f0.right.store .f0.right.load .f0.right.quit .f0.right.save \
+    -padx 0 -pady 0 -side bottom -fill x
+pack .f0.left .f0.middle .f0.right -side left -padx 5 -pady 0 -fill y
+pack .f0 -padx 5 -pady 5
 
 #
 # If we cannot write our config files, disable the write button.
 #
 if { [file exists .config] == 1 } then {
 		if { [file writable .config] == 0 } then {
-			.f0_bot.r.save configure -state disabled
+			.f0.right.save configure -state disabled
 		}
 	} else {
 		if { [file writable .] == 0 } then {
-			.f0_bot.r.save configure -state disabled
+			.f0.right.save configure -state disabled
 		}
 	}
 
 if { [file exists include/linux/autoconf.h] == 1 } then {
 		if { [file writable include/linux/autoconf.h] == 0 } then {
-			.f0_bot.r.save configure -state disabled
+			.f0.right.save configure -state disabled
 		}
 	} else {
 		if { [file writable include/linux/] == 0 } then {
-			.f0_bot.r.save configure -state disabled
+			.f0.right.save configure -state disabled
 		}
 	}

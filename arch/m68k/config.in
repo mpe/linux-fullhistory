@@ -356,8 +356,6 @@ if [ "$CONFIG_VME" = "n" ]; then
   endmenu
 fi
 
-source fs/nls/Config.in
-
 mainmenu_option next_comment
 comment 'Kernel hacking'
 

@@ -97,6 +97,7 @@
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
+#include <asm/irq.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/init.h>

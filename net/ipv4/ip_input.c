@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) module.
  *
- * Version:	$Id: ip_input.c,v 1.34 1998/10/03 09:37:23 davem Exp $
+ * Version:	$Id: ip_input.c,v 1.35 1999/01/12 14:32:48 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -503,7 +503,9 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
         {
 		int fwres;
 		u16 rport;
+#ifdef  CONFIG_IP_ROUTE_TOS
 		u8  tos = iph->tos;
+#endif
 
 		if ((fwres=call_in_firewall(PF_INET, skb->dev, iph, &rport, &skb))<FW_ACCEPT) {
 			if (fwres==FW_REJECT)

@@ -1060,5 +1060,5 @@ clean:
 wanpipe.o: $(WANPIPE_OBJS)
 	ld -r -o $@ $(WANPIPE_OBJS)
 
-rcpci.o: rcpci45.o rcmtl.o
-	$(LD) -r -o rcpci.o rcpci45.o rcmtl.o
+rcpci.o: rcpci45.o rclanmtl.o
+	$(LD) -r -o rcpci.o rcpci45.o rclanmtl.o

@@ -209,7 +209,7 @@ struct autofs_dir_ent *autofs_hash_enum(const struct autofs_dirhash *dh,
 void autofs_hash_dputall(struct autofs_dirhash *dh)
 {
 	int i;
-	struct autofs_dir_ent *ent, *nent;
+	struct autofs_dir_ent *ent;
 
 	for ( i = 0 ; i < AUTOFS_HASH_SIZE ; i++ ) {
 		for ( ent = dh->h[i] ; ent ; ent = ent->next ) {

@@ -19,6 +19,10 @@ old_gas := $(shell if $(AS) --version 2>&1 | grep 'version 2.7' > /dev/null; the
 # Determine if GCC understands the -mcpu= option.
 have_mcpu := $(shell if $(CC) -mcpu=ev5 -S -o /dev/null -xc /dev/null > /dev/null 2>&1; then echo y; else echo n; fi)
 
+have_mcpu_pca56 := $(shell if $(CC) -mcpu=pca56 -S -o /dev/null -xc /dev/null > /dev/null 2>&1; then echo y; else echo n; fi)
+
+have_mcpu_ev6 := $(shell if $(CC) -mcpu=ev6 -S -o /dev/null -xc /dev/null > /dev/null 2>&1; then echo y; else echo n; fi)
+
 # Turn on the proper cpu optimizations.
 ifeq ($(have_mcpu),y)
   # If GENERIC, make sure to turn off any instruction set extensions that
@@ -34,8 +38,19 @@ ifeq ($(have_mcpu),y)
   ifeq ($(CONFIG_ALPHA_PYXIS),y)
     CFLAGS := $(CFLAGS) -mcpu=ev56
   endif
+  ifeq ($(CONFIG_ALPHA_POLARIS),y)
+    ifeq ($(have_mcpu_pca56),y)
+      CFLAGS := $(CFLAGS) -mcpu=pca56
+    else
+      CFLAGS := $(CFLAGS) -mcpu=ev56
+    endif
+  endif
   ifeq ($(CONFIG_ALPHA_EV6),y)
-    CFLAGS := $(CFLAGS) -mcpu=ev6
+    ifeq ($(have_mcpu_ev6),y)
+      CFLAGS := $(CFLAGS) -mcpu=ev6
+    else
+      CFLAGS := $(CFLAGS) -mcpu=pca56
+    endif
   endif
 endif
 
@@ -55,7 +70,7 @@ else
    CFLAGS := $(CFLAGS) -Wa,-m21164a -DBWIO_ENABLED
  endif
  ifeq ($(CONFIG_ALPHA_POLARIS),y)
-   CFLAGS := $(CFLAGS) -Wa,-m21164a
+   CFLAGS := $(CFLAGS) -Wa,-m21164pc
  endif
 endif
 

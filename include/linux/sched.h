@@ -33,7 +33,7 @@ extern unsigned long event;
 #define CLONE_SIGHAND	0x00000800	/* set if signal handlers shared */
 #define CLONE_PID	0x00001000	/* set if pid shared */
 #define CLONE_PTRACE	0x00002000	/* set if we want to let tracing continue on the child too */
-#define CLONE_VFORK	0x00004000	/* set if the parent wants the child to wake it up on mmput */
+#define CLONE_VFORK	0x00004000	/* set if the parent wants the child to wake it up on mm_release */
 
 /*
  * These are the constant used to fake the fixed-point load-average
@@ -156,11 +156,16 @@ struct fs_struct {
 /* Maximum number of active map areas.. This is a random (large) number */
 #define MAX_MAP_COUNT	(65536)
 
+/* Number of map areas at which the AVL tree is activated. This is arbitrary. */
+#define AVL_MIN_MAP_COUNT	32
+
 struct mm_struct {
-	struct vm_area_struct *mmap, *mmap_cache;
+	struct vm_area_struct *mmap;		/* list of VMAs */
+	struct vm_area_struct *mmap_avl;	/* tree of VMAs */
+	struct vm_area_struct *mmap_cache;	/* last find_vma result */
 	pgd_t * pgd;
 	atomic_t count;
-	int map_count;
+	int map_count;				/* number of VMAs */
 	struct semaphore mmap_sem;
 	unsigned long context;
 	unsigned long start_code, end_code, start_data, end_data;
@@ -177,7 +182,8 @@ struct mm_struct {
 };
 
 #define INIT_MM {					\
-		&init_mmap, NULL, swapper_pg_dir, 	\
+		&init_mmap, NULL, NULL,			\
+		swapper_pg_dir, 			\
 		ATOMIC_INIT(1), 1,			\
 		MUTEX,					\
 		0,					\
@@ -321,7 +327,7 @@ struct task_struct {
 #define PF_DUMPCORE	0x00000200	/* dumped core */
 #define PF_SIGNALED	0x00000400	/* killed by a signal */
 #define PF_MEMALLOC	0x00000800	/* Allocating memory */
-#define PF_VFORK	0x00001000	/* Wake up parent in mmput */
+#define PF_VFORK	0x00001000	/* Wake up parent in mm_release */
 
 #define PF_USEDFPU	0x00100000	/* task used FPU this quantum (SMP) */
 #define PF_DTRACE	0x00200000	/* delayed trace (used on m68k, i386) */
@@ -332,7 +338,7 @@ struct task_struct {
  */
 #define _STK_LIM	(8*1024*1024)
 
-#define DEF_PRIORITY	(20*HZ/100)	/* 200 ms time slices */
+#define DEF_PRIORITY	(20*HZ/100)	/* 210 ms time slices */
 
 /*
  *  INIT_TASK is used to set up the first task table, touch at
@@ -608,6 +614,8 @@ static inline void mmget(struct mm_struct * mm)
 	atomic_inc(&mm->count);
 }
 extern void mmput(struct mm_struct *);
+/* Remove the current tasks stale references to the old mm_struct */
+extern void mm_release(void);
 
 extern int  copy_thread(int, unsigned long, unsigned long, struct task_struct *, struct pt_regs *);
 extern void flush_thread(void);

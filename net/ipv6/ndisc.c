@@ -144,8 +144,9 @@ static u8 *ndisc_fill_option(u8 *opt, int type, void *data, int data_len)
 	opt[1] = space>>3;
 	memcpy(opt+2, data, data_len);
 	data_len += 2;
+	opt += data_len;
 	if ((space -= data_len) > 0)
-		memset(opt + data_len, 0, space);
+		memset(opt, 0, space);
 	return opt + space;
 }
 

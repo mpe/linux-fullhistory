@@ -534,10 +534,14 @@ ENTRY(gdt_table)
 	.quad 0x00cff2000000ffff	/* 0x2b user   4GB data at 0x00000000 */
 	.quad 0x0000000000000000	/* not used */
 	.quad 0x0000000000000000	/* not used */
-	.quad 0x00c0920000000000	/* 0x40 APM set up for bad BIOS's */
-	.quad 0x00c09a0000000000	/* 0x48 APM CS    code */
-	.quad 0x00809a0000000000	/* 0x50 APM CS 16 code (16 bit) */
-	.quad 0x00c0920000000000	/* 0x58 APM DS    data */
+	/*
+	 * The APM segments have byte granularity and their bases
+	 * and limits are set at run time.
+	 */
+	.quad 0x0040920000000000	/* 0x40 APM set up for bad BIOS's */
+	.quad 0x00409a0000000000	/* 0x48 APM CS    code */
+	.quad 0x00009a0000000000	/* 0x50 APM CS 16 code (16 bit) */
+	.quad 0x0040920000000000	/* 0x58 APM DS    data */
 	.fill 2*NR_TASKS,8,0		/* space for LDT's and TSS's etc */
 
 /*

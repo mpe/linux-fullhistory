@@ -1110,6 +1110,7 @@ static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 				/* Free the original skb. */
 				if (sp->tx_skbuff[entry]) {
 					sp->stats.tx_packets++;	/* Count only user packets. */
+					sp->stats.tx_bytes += sp->tx_skbuff[entry]->len; /* Count transmitted bytes */
 					dev_free_skb(sp->tx_skbuff[entry]);
 					sp->tx_skbuff[entry] = 0;
 				} else if ((sp->tx_ring[entry].status&0x70000) == CmdNOp << 16)
@@ -1228,6 +1229,7 @@ speedo_rx(struct device *dev)
 			skb->protocol = eth_type_trans(skb, dev);
 			netif_rx(skb);
 			sp->stats.rx_packets++;
+			sp->stats.rx_bytes += pkt_len; /* Count received bytes */
 		}
 		entry = (++sp->cur_rx) % RX_RING_SIZE;
 	}

@@ -45,7 +45,7 @@
 /*
 **	Name and revision of the driver
 */
-#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 3.1d"
+#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 3.1f"
 
 /*
 **	Check supported Linux versions
@@ -346,7 +346,7 @@ int ncr53c8xx_release(struct Scsi_Host *);
 #endif
 
 #ifdef	SCSI_NCR_BIG_ENDIAN
-#error	"The NCR in BIG ENDIAN adressing mode is not (yet) supported"
+#error	"The NCR in BIG ENDIAN addressing mode is not (yet) supported"
 #endif
 
 /*
@@ -768,7 +768,20 @@ struct ncr_reg {
 
 /*53*/	u_char    nc_53_;
 /*54*/  u_short   nc_sodl;	/* Lowlevel: data out to scsi data  */
-/*56*/  u_short   nc_56_;
+/*56*/	u_char    nc_ccntl0;	/* Chip Control 0 (896)             */
+	#define   ENPMJ  0x80	/* Enable Phase Mismatch Jump       */
+	#define   PMJCTL 0x40	/* Phase Mismatch Jump Control      */
+	#define   ENNDJ  0x20	/* Enable Non Data PM Jump          */
+	#define   DISFC  0x10	/* Disable Auto FIFO Clear          */
+	#define   DILS   0x02	/* Disable Internal Load/Store      */
+	#define   DPR    0x01	/* Disable Pipe Req                 */
+
+/*57*/	u_char    nc_ccntl1;	/* Chip Control 1 (896)             */
+	#define   ZMOD   0x80	/* High Impedance Mode              */
+	#define   DDAC   0x08	/* Disable Dual Address Cycle       */
+	#define   XTIMOD 0x04	/* 64-bit Table Ind. Indexing Mode  */
+	#define   EXTIBMV 0x02	/* Enable 64-bit Table Ind. BMOV    */
+	#define   EXDBMV 0x01	/* Enable 64-bit Direct BMOV        */
 /*58*/  u_short   nc_sbdl;	/* Lowlevel: data from scsi data    */
 /*5a*/  u_short   nc_5a_;
 /*5c*/  u_char    nc_scr0;	/* Working register B               */

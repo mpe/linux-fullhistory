@@ -83,6 +83,7 @@
 #include <linux/netdevice.h>
 #include <linux/hdlcdrv.h>
 #include <linux/baycom.h>
+#include <linux/version.h>
 
 /* --------------------------------------------------------------------- */
 

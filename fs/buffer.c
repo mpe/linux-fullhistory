@@ -597,21 +597,9 @@ struct buffer_head * find_buffer(kdev_t dev, int block, int size)
 struct buffer_head * get_hash_table(kdev_t dev, int block, int size)
 {
 	struct buffer_head * bh;
-	for (;;) {
-		bh = find_buffer(dev,block,size);
-		if (!bh)
-			break;
+	bh = find_buffer(dev,block,size);
+	if (bh)
 		bh->b_count++;
-		bh->b_lru_time = jiffies;
-		if (!buffer_locked(bh)) 
-			break;
-		__wait_on_buffer(bh);
-		if (bh->b_dev == dev		&&
-		    bh->b_blocknr == block	&&
-		    bh->b_size == size)
-			break;
-		bh->b_count--;
-	}
 	return bh;
 }
 
@@ -751,7 +739,6 @@ get_free:
 	 * and that it's unused (b_count=0), unlocked, and clean.
 	 */
 	init_buffer(bh, dev, block, end_buffer_io_sync, NULL);
-	bh->b_lru_time	= jiffies;
 	bh->b_state=0;
 	insert_into_queues(bh);
 	return bh;
@@ -838,8 +825,6 @@ void refile_buffer(struct buffer_head * buf)
  */
 void __brelse(struct buffer_head * buf)
 {
-	wait_on_buffer(buf);
-
 	/* If dirty, mark the time this buffer should be written back. */
 	set_writetime(buf, 0);
 	refile_buffer(buf);
@@ -858,7 +843,6 @@ void __brelse(struct buffer_head * buf)
  */
 void __bforget(struct buffer_head * buf)
 {
-	wait_on_buffer(buf);
 	mark_buffer_clean(buf);
 	clear_bit(BH_Protected, &buf->b_state);
 	remove_from_hash_queue(buf);

@@ -258,6 +258,7 @@ static inline void __exit_mm(struct task_struct * tsk)
 		tsk->mm = &init_mm;
 		tsk->swappable = 0;
 		SET_PAGE_DIR(tsk, swapper_pg_dir);
+		mm_release();
 		mmput(mm);
 	}
 }

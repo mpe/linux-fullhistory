@@ -681,6 +681,7 @@ wf_mpu_synth_close (int dev)
 	devc->mode = 0;
 }
 
+#define _MIDI_SYNTH_C_
 #define MIDI_SYNTH_NAME	"WaveFront (MIDI)"
 #define MIDI_SYNTH_CAPS	SYNTH_CAP_INPUT
 #include "midi_synth.h"

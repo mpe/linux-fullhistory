@@ -1,6 +1,6 @@
 /* pcnet32.c: An AMD PCnet32 ethernet driver for linux. */
 /*
- *      Copyright 1996,97,98 Thomas Bogendoerfer
+ *      Copyright 1996-1999 Thomas Bogendoerfer
  * 
  * 	Derived from the lance driver written 1993,1994,1995 by Donald Becker.
  * 
@@ -13,7 +13,7 @@
  * 	This driver is for PCnet32 and PCnetPCI based ethercards
  */
 
-static const char *version = "pcnet32.c:v1.02 3.9.98 tsbogend@alpha.franken.de\n";
+static const char *version = "pcnet32.c:v1.11 17.1.99 tsbogend@alpha.franken.de\n";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -50,6 +50,17 @@ static struct device *pcnet32_dev = NULL;
 
 static const int max_interrupt_work = 20;
 static const int rx_copybreak = 200;
+
+#define PORT_AUI      0x00
+#define PORT_10BT     0x01
+#define PORT_GPSI     0x02
+#define PORT_MII      0x03
+
+#define PORT_PORTSEL  0x03
+#define PORT_ASEL     0x04
+#define PORT_FD       0x80
+
+static int options = PORT_ASEL;  /* port selection */
 
 /*
  * 				Theory of Operation
@@ -101,6 +112,10 @@ static const int rx_copybreak = 200;
  * v1.01:  do ring dumps, only when debugging the driver
  *         increased the transmit timeout
  * v1.02:  fixed memory leak in pcnet32_init_ring()
+ * v1.10:  workaround for stopped transmitter
+ *         added port selection for modules
+ *         detect special T1/E1 WAN card and setup port selection
+ * v1.11:  fixed wrong checking of Tx errors
  */
 
 
@@ -176,8 +191,9 @@ struct pcnet32_private {
 	int dirty_rx, dirty_tx;		        /* The ring entries to be free()ed. */
 	struct net_device_stats stats;
 	char tx_full;
-	unsigned long lock;
-        char shared_irq;                         /* shared irq possible */
+        int  options;
+        int  shared_irq:1,                      /* shared irq possible */
+             full_duplex:1;                     /* full duplex possible */
 #ifdef MODULE
         struct device *next;
 #endif    
@@ -250,11 +266,13 @@ __initfunc(int pcnet32_probe (struct device *dev))
 	unsigned int ioaddr = *port;
 	
 	if ( check_region(ioaddr, PCNET32_TOTAL_SIZE) == 0) {
-	    if (pcnet32_probe1(dev, ioaddr, 0, 0) == 0)
+    	    /* check if there is really a pcnet chip on that ioaddr */
+    	    if ((inb(ioaddr + 14) == 0x57) &&
+		(inb(ioaddr + 15) == 0x57) &&
+	        (pcnet32_probe1(dev, ioaddr, 0, 0) == 0))
 	      return 0;
 	}
     }
-    
     return ENODEV;
 }
 
@@ -263,13 +281,9 @@ __initfunc(int pcnet32_probe (struct device *dev))
 __initfunc(static int pcnet32_probe1(struct device *dev, unsigned int ioaddr, unsigned char irq_line, int shared))
 {
     struct pcnet32_private *lp;
-    int i;
+    int i,full_duplex = 0;
     char *chipname;
 
-    /* check if there is really a pcnet chip on that ioaddr */
-    if ((inb(ioaddr + 14) != 0x57) || (inb(ioaddr + 15) != 0x57))
-      return ENODEV; 
-    
     inw(ioaddr+PCNET32_RESET); /* Reset the PCNET32 */
 
     outw(0x0000, ioaddr+PCNET32_ADDR); /* Switch to window 0 */
@@ -295,16 +309,22 @@ __initfunc(static int pcnet32_probe1(struct device *dev, unsigned int ioaddr, un
 	    chipname = "PCnet/PCI 79C970";
 	    break;
 	 case 0x2430:
-	    chipname = "PCnet32";
+	    if (shared)
+		chipname = "PCnet/PCI 79C970"; /* 970 gives the wrong chip id back */
+	    else
+		chipname = "PCnet/32 79C965";
 	    break;
 	 case 0x2621:
 	    chipname = "PCnet/PCI II 79C970A";
+	    full_duplex = 1;
 	    break;
 	 case 0x2623:
 	    chipname = "PCnet/FAST 79C971";
+	    full_duplex = 1;
 	    break;
 	 case 0x2624:
 	    chipname = "PCnet/FAST+ 79C972";
+	    full_duplex = 1;
 	    break;
 	 default:
 	    printk("pcnet32: PCnet version %#x, no PCnet32 chip.\n",chip_version);
@@ -332,8 +352,14 @@ __initfunc(static int pcnet32_probe1(struct device *dev, unsigned int ioaddr, un
     dev->priv = lp;
     lp->name = chipname;
     lp->shared_irq = shared;
+    lp->full_duplex = full_duplex;
+    lp->options = options;
+    
+    /* detect special T1/E1 WAN card by checking for MAC address */
+    if (dev->dev_addr[0] == 0x00 && dev->dev_addr[1] == 0xe0 && dev->dev_addr[2] == 0x75)
+	lp->options = PORT_FD | PORT_GPSI;
 
-    lp->init_block.mode = le16_to_cpu(0x0003);	/* Disable Rx and Tx. */
+    lp->init_block.mode = le16_to_cpu(0x0003); 	/* Disable Rx and Tx. */
     lp->init_block.tlen_rlen = le16_to_cpu(TX_RING_LEN_BITS | RX_RING_LEN_BITS); 
     for (i = 0; i < 6; i++)
       lp->init_block.phys_addr[i] = dev->dev_addr[i];
@@ -382,11 +408,6 @@ __initfunc(static int pcnet32_probe1(struct device *dev, unsigned int ioaddr, un
 	}
     }
 
-    outw(0x0002, ioaddr+PCNET32_ADDR);
-    /* only touch autoselect bit */
-    outw(inw(ioaddr+PCNET32_BUS_IF) | 0x0002, ioaddr+PCNET32_BUS_IF);
-
-
     if (pcnet32_debug > 0)
       printk(version);
     
@@ -413,6 +434,7 @@ pcnet32_open(struct device *dev)
 {
 	struct pcnet32_private *lp = (struct pcnet32_private *)dev->priv;
 	unsigned int ioaddr = dev->base_addr;
+        unsigned short val;
 	int i;
 
 	if (dev->irq == 0 ||
@@ -428,19 +450,40 @@ pcnet32_open(struct device *dev)
 	outw(0x0014, ioaddr+PCNET32_ADDR);
 	outw(0x0002, ioaddr+PCNET32_BUS_IF);
 
-	/* Turn on auto-select of media (AUI, BNC). */
-	outw(0x0002, ioaddr+PCNET32_ADDR);
-	/* only touch autoselect bit */
-	outw(inw(ioaddr+PCNET32_BUS_IF) | 0x0002, ioaddr+PCNET32_BUS_IF);
-
 	if (pcnet32_debug > 1)
 		printk("%s: pcnet32_open() irq %d tx/rx rings %#x/%#x init %#x.\n",
 			   dev->name, dev->irq,
 		           (u32) virt_to_bus(lp->tx_ring),
 		           (u32) virt_to_bus(lp->rx_ring),
 			   (u32) virt_to_bus(&lp->init_block));
+    
+        /* set/reset autoselect bit */
+    	outw(0x0002, ioaddr+PCNET32_ADDR);
+        val = inw(ioaddr+PCNET32_BUS_IF) & ~2;
+        if (lp->options & PORT_ASEL)
+	        val |= 2;
+        outw(val, ioaddr+PCNET32_BUS_IF);
 
-	lp->init_block.mode = 0x0000;
+        /* handle full duplex setting */
+        if (lp->full_duplex) {
+	    outw (0x0009, ioaddr+PCNET32_ADDR);
+	    val = inw(ioaddr+PCNET32_BUS_IF) & ~3;
+	    if (lp->options & PORT_FD) {
+		val |= 1;
+		if (lp->options == (PORT_FD | PORT_AUI))
+		    val |= 2;
+	    }
+	    outw(val, ioaddr+PCNET32_BUS_IF);
+	}
+    
+        /* set/reset GPSI bit in test register */
+        outw (0x007c, ioaddr+PCNET32_ADDR);
+        val = inw(ioaddr+PCNET32_DATA) & ~0x10;
+        if ((lp->options & PORT_PORTSEL) == PORT_GPSI)
+	        val |= 0x10;
+    	outw(val, ioaddr+PCNET32_DATA);
+	    
+	lp->init_block.mode = le16_to_cpu((lp->options & PORT_PORTSEL) << 7);
 	lp->init_block.filter[0] = 0x00000000;
 	lp->init_block.filter[1] = 0x00000000;
 	if (pcnet32_init_ring(dev))
@@ -515,7 +558,7 @@ pcnet32_init_ring(struct device *dev)
 	struct pcnet32_private *lp = (struct pcnet32_private *)dev->priv;
 	int i;
 
-	lp->lock = 0, lp->tx_full = 0;
+	lp->tx_full = 0;
 	lp->cur_rx = lp->cur_tx = 0;
 	lp->dirty_rx = lp->dirty_tx = 0;
 
@@ -613,7 +656,6 @@ pcnet32_start_xmit(struct sk_buff *skb, struct device *dev)
 		outw(0x0000, ioaddr+PCNET32_ADDR);
 		printk("%s: pcnet32_start_xmit() called, csr0 %4.4x.\n", dev->name,
 			   inw(ioaddr+PCNET32_DATA));
-		outw(0x0000, ioaddr+PCNET32_DATA);
 	}
 
 	/* Block a timer-based transmit from overlapping.  This could better be
@@ -623,12 +665,8 @@ pcnet32_start_xmit(struct sk_buff *skb, struct device *dev)
 		return 1;
 	}
 
-	if (test_and_set_bit(0, (void*)&lp->lock) != 0) {
-		if (pcnet32_debug > 0)
-			printk("%s: tx queue lock!.\n", dev->name);
-		/* don't clear dev->tbusy flag. */
-		return 1;
-	}
+	save_flags (flags);
+	cli ();
 
 	/* Fill in a Tx ring entry */
 
@@ -655,15 +693,11 @@ pcnet32_start_xmit(struct sk_buff *skb, struct device *dev)
 
 	dev->trans_start = jiffies;
 
-	save_flags(flags);
-	cli();
-	lp->lock = 0;
 	if (lp->tx_ring[(entry+1) & TX_RING_MOD_MASK].base == 0)
 		clear_bit (0, (void *)&dev->tbusy);
 	else
 		lp->tx_full = 1;
 	restore_flags(flags);
-
 	return 0;
 }
 
@@ -675,6 +709,7 @@ pcnet32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	struct pcnet32_private *lp;
 	unsigned int csr0, ioaddr;
 	int boguscnt =  max_interrupt_work;
+	int must_restart;
 
 	if (dev == NULL) {
 		printk ("pcnet32_interrupt(): irq %d for unknown device.\n", irq);
@@ -692,6 +727,8 @@ pcnet32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	while ((csr0 = inw(dev->base_addr + PCNET32_DATA)) & 0x8600 && --boguscnt >= 0) {
 		/* Acknowledge all of the current interrupt sources ASAP. */
 		outw(csr0 & ~0x004f, dev->base_addr + PCNET32_DATA);
+
+		must_restart = 0;
 
 		if (pcnet32_debug > 5)
 			printk("%s: interrupt  csr0=%#2.2x new csr=%#2.2x.\n",
@@ -714,7 +751,7 @@ pcnet32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
 				if (status & 0x4000) {
 					/* There was an major error, log it. */
-					int err_status = le16_to_cpu(lp->tx_ring[entry].misc);
+					int err_status = le32_to_cpu(lp->tx_ring[entry].misc);
 					lp->stats.tx_errors++;
 					if (err_status & 0x04000000) lp->stats.tx_aborted_errors++;
 					if (err_status & 0x08000000) lp->stats.tx_carrier_errors++;
@@ -725,10 +762,7 @@ pcnet32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 						/* Remove this verbosity later! */
 						printk("%s: Tx FIFO error! Status %4.4x.\n",
 							   dev->name, csr0);
-					        /* stop the chip to clear the error condition, then restart */
-					        outw(0x0000, dev->base_addr + PCNET32_ADDR);
-					        outw(0x0004, dev->base_addr + PCNET32_DATA);
-					        pcnet32_restart(dev, 0x0002);
+						must_restart = 1;
 					}
 				} else {
 					if (status & 0x1800)
@@ -781,6 +815,13 @@ pcnet32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 			printk("%s: Bus master arbitration failure, status %4.4x.\n",
 				   dev->name, csr0);
 		        /* unlike for the lance, there is no restart needed */
+		}
+
+		if (must_restart) {
+			/* stop the chip to clear the error condition, then restart */
+		        outw(0x0000, dev->base_addr + PCNET32_ADDR);
+		        outw(0x0004, dev->base_addr + PCNET32_DATA);
+		        pcnet32_restart(dev, 0x0002);
 		}
 	}
 
@@ -1014,9 +1055,9 @@ static void pcnet32_set_multicast_list(struct device *dev)
 	if (dev->flags&IFF_PROMISC) {
 		/* Log any net taps. */
 		printk("%s: Promiscuous mode enabled.\n", dev->name);
-	        lp->init_block.mode = le16_to_cpu(0x8000);
+	        lp->init_block.mode = le16_to_cpu(0x8000 | (lp->options & PORT_PORTSEL) << 7);
 	} else {
-	        lp->init_block.mode = 0x0000;
+	    	lp->init_block.mode = le16_to_cpu((lp->options & PORT_PORTSEL) << 7);
 	        pcnet32_load_multicast (dev);
 	}
     
@@ -1028,6 +1069,7 @@ static void pcnet32_set_multicast_list(struct device *dev)
 
 #ifdef MODULE
 MODULE_PARM(debug, "i");
+MODULE_PARM(options, "i");
 MODULE_PARM(max_interrupt_work, "i");
 MODULE_PARM(rx_copybreak, "i");
 

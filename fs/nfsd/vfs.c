@@ -282,7 +282,7 @@ printk("nfsd_setattr: size change??\n");
 
 	/* Change the attributes. */
 	if (iap->ia_valid) {
-		kernel_cap_t	saved_cap;
+		kernel_cap_t	saved_cap = 0;
 
 		iap->ia_valid |= ATTR_CTIME;
 		iap->ia_ctime = CURRENT_TIME;
@@ -1109,6 +1109,12 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	err = PTR_ERR(rdentry);
 	if (IS_ERR(rdentry))
 		goto out_nfserr;
+
+	if (!rdentry->d_inode) {
+		dput(rdentry);
+		err = nfserr_noent;
+		goto out;
+	}
 
 	if (type != S_IFDIR) {
 		/* It's UNLINK */

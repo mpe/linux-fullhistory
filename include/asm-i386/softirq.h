@@ -18,8 +18,9 @@ extern inline void init_bh(int nr, void (*routine)(void))
 
 extern inline void remove_bh(int nr)
 {
-	bh_base[nr] = NULL;
 	bh_mask &= ~(1 << nr);
+	mb();
+	bh_base[nr] = NULL;
 }
 
 extern inline void mark_bh(int nr)

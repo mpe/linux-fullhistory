@@ -49,9 +49,7 @@
 
 #include <linux/tty.h>
 #include <linux/selection.h>
-#ifdef CONFIG_KMOD
 #include <linux/kmod.h>
-#endif
 
 /*
  * Head entry for the doubly linked miscdevice list
@@ -108,7 +106,6 @@ static int misc_open(struct inode * inode, struct file * file)
 	while ((c != &misc_list) && (c->minor != minor))
 		c = c->next;
 	if (c == &misc_list) {
-#ifdef CONFIG_KMOD
 		char modname[20];
 		sprintf(modname, "char-major-%d-%d", MISC_MAJOR, minor);
 		request_module(modname);
@@ -116,7 +113,6 @@ static int misc_open(struct inode * inode, struct file * file)
 		while ((c != &misc_list) && (c->minor != minor))
 			c = c->next;
 		if (c == &misc_list)
-#endif
 			return -ENODEV;
 	}
 

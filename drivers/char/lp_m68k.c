@@ -43,9 +43,7 @@
 #include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/init.h>
-#ifdef CONFIG_KMOD
 #include <linux/kmod.h>
-#endif
 
 #ifdef CONFIG_AMIGA
 #ifdef CONFIG_MULTIFACE_III_LP
@@ -374,14 +372,12 @@ static int lp_open(struct inode *inode, struct file *file)
 	if (dev >= MAX_LP)
 		goto out_err;
 
-#ifdef CONFIG_KMOD
 	if (!lp_table[dev]) {
 		char modname[30];
 
 		sprintf(modname, "char-major-%d-%d", LP_MAJOR, dev);
 		request_module(modname);
 	}
-#endif
 	if (!lp_table[dev])
 		goto out_err;
 	if (!(lp_table[dev]->flags & LP_EXIST))

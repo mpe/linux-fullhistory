@@ -2,7 +2,7 @@
  * linux/drivers/block/ide-cd.c
  * Copyright (C) 1994, 1995, 1996  scott snyder  <snyder@fnald0.fnal.gov>
  * Copyright (C) 1996-1998  Erik Andersen <andersee@debian.org>
- * Copyright (C) 1998 Jens Axboe and Chris Zwilling
+ * Copyright (C) 1998, 1999 Jens Axboe
  *
  * May be copied or modified under the terms of the GNU General Public
  * License.  See linux/COPYING for more information.
@@ -17,7 +17,7 @@
  * ftp://fission.dt.wdc.com/pub/standards/SFF_atapi/spec/SFF8020-r2.6/PS/8020r26.ps
  *
  * Drives that deviate from the ATAPI standard will be accomodated as much
- * as possable via compile time or command-line options.  Since I only have
+ * as possible via compile time or command-line options.  Since I only have
  * a few drives, you generally need to send me patches...
  *
  * ----------------------------------
@@ -31,9 +31,8 @@
  *   use them (like trying to close the tray in drives that can't).
  * -Make it so that Pioneer CD DR-A24X and friends don't get screwed up on
  *   boot
- * -Handle older drives that can't report their speed. (i.e. check if they
- *   support a version of ATAPI where they can report their speed before
- *   checking their speed and believing what they return).
+ * -Integrate DVD-ROM support in driver. Thanks to Merete Gotsæd-Petersen
+ *   of Pioneer Denmark for providing me with a drive for testing.
  *
  *
  * ----------------------------------
@@ -2574,8 +2573,7 @@ int ide_cdrom_select_disc (struct cdrom_device_info *cdi, int slot)
 		curslot = CDROM_STATE_FLAGS (drive)->sanyo_slot;
 		if (curslot == 3)
 			curslot = 0;
-	}
-	else
+	} else
 #endif /* not STANDARD_ATAPI */
 	{
 		stat = cdrom_read_changer_info (drive);
@@ -2656,10 +2654,10 @@ int ide_cdrom_drive_status (struct cdrom_device_info *cdi, int slot_nr)
 			return CDS_DISC_OK;
 
 		if (my_reqbuf.sense_key == NOT_READY) {
-			/* With my NEC260, at least, we can't distinguish
-			   between tray open and tray closed but no disc
-			   inserted. */
-			return CDS_TRAY_OPEN; 
+			/* ATAPI doesn't have anything that can help
+			   us decide whether the drive is really
+			   emtpy or the tray is just open. irk. */
+			return CDS_TRAY_OPEN;
 		}
 
 		return CDS_DRIVE_NOT_READY;
@@ -2835,13 +2833,11 @@ static int ide_cdrom_register (ide_drive_t *drive, int nslots)
 static
 int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 {
-	int stat, nslots, attempts = 3;
+	int stat, nslots = 0, attempts = 3;
  	struct {
 		char pad[8];
 		struct atapi_capabilities_page cap;
 	} buf;
-
-	nslots = 0;
 
 	if (CDROM_CONFIG_FLAGS (drive)->nec260)
 		return nslots;

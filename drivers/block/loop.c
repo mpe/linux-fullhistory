@@ -225,6 +225,7 @@ repeat:
 					if (!create_missing_block(lo, block, blksize)) {
 						goto error_out_lock;
 					}
+					real_block = bmap(lo->lo_dentry->d_inode, block);
 				}
 
 			}

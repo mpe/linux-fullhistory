@@ -1,5 +1,5 @@
 /*
- *  linux/ufs/ufs/symlink.c
+ *  linux/fs/ufs/symlink.c
  *
  * Copyright (C) 1998
  * Daniel Pirkl <daniel.pirkl@emai.cz>
@@ -27,7 +27,7 @@
 
 #include <linux/errno.h>
 #include <linux/fs.h>
-#include <linux/ext2_fs.h>
+#include <linux/ufs_fs.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/stat.h>

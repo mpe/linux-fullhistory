@@ -402,7 +402,17 @@ static int nfs_lookup_revalidate(struct dentry * dentry)
 	struct nfs_fh fhandle;
 	struct nfs_fattr fattr;
 
-	if (inode && is_bad_inode(inode)) {
+	/*
+	 * If we don't have an inode, let's just assume
+	 * a 5-second "live" time for negative dentries.
+	 */
+	if (!inode) {
+		if (time < NFS_REVALIDATE_INTERVAL)
+			goto out_valid;
+		goto out_bad;
+	}
+
+	if (is_bad_inode(inode)) {
 #ifdef NFS_PARANOIA
 printk("nfs_lookup_validate: %s/%s has dud inode\n",
 parent->d_name.name, dentry->d_name.name);
@@ -410,16 +420,12 @@ parent->d_name.name, dentry->d_name.name);
 		goto out_bad;
 	}
 
-	if (time < NFS_REVALIDATE_INTERVAL)
+	if (time < NFS_ATTRTIMEO(inode))
 		goto out_valid;
-	/*
-	 * Don't bother looking up a negative dentry ...
-	 */
-	if (!inode)
-		goto out_bad;
 
 	if (IS_ROOT(dentry))
 		goto out_valid;
+
 	/*
 	 * Do a new lookup and check the dentry attributes.
 	 */
