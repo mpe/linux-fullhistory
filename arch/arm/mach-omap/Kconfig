@@ -66,6 +66,19 @@ config MACH_OMAP_PERSEUS2
 	  Support for TI OMAP 730 Perseus2 board. Say Y here if you have such
 	  a board.
 
+config MACH_VOICEBLUE
+	bool "Voiceblue"
+	depends on ARCH_OMAP1510
+	help
+	  Support for Voiceblue GSM/VoIP gateway. Say Y here if you have such
+	  board.
+
+config MACH_NETSTAR
+	bool "NetStar"
+	depends on ARCH_OMAP1510
+	help
+	  Support for NetStar PBX. Say Y here if you have such a board.
+
 config MACH_OMAP_GENERIC
 	bool "Generic OMAP board"
 	depends on ARCH_OMAP1510 || ARCH_OMAP16XX
