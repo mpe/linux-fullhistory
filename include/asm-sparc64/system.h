@@ -226,37 +226,41 @@ do {	if (test_thread_flag(TIF_PERFCTR)) {				\
 	}								\
 } while(0)
 
-static __inline__ unsigned long xchg32(__volatile__ unsigned int *m, unsigned int val)
+static inline unsigned long xchg32(__volatile__ unsigned int *m, unsigned int val)
 {
+	unsigned long tmp1, tmp2;
+
 	__asm__ __volatile__(
 "	membar		#StoreLoad | #LoadLoad\n"
-"	mov		%0, %%g5\n"
-"1:	lduw		[%2], %%g7\n"
-"	cas		[%2], %%g7, %0\n"
-"	cmp		%%g7, %0\n"
+"	mov		%0, %1\n"
+"1:	lduw		[%4], %2\n"
+"	cas		[%4], %2, %0\n"
+"	cmp		%2, %0\n"
 "	bne,a,pn	%%icc, 1b\n"
-"	 mov		%%g5, %0\n"
+"	 mov		%1, %0\n"
 "	membar		#StoreLoad | #StoreStore\n"
-	: "=&r" (val)
+	: "=&r" (val), "=&r" (tmp1), "=&r" (tmp2)
 	: "0" (val), "r" (m)
-	: "g5", "g7", "cc", "memory");
+	: "cc", "memory");
 	return val;
 }
 
-static __inline__ unsigned long xchg64(__volatile__ unsigned long *m, unsigned long val)
+static inline unsigned long xchg64(__volatile__ unsigned long *m, unsigned long val)
 {
+	unsigned long tmp1, tmp2;
+
 	__asm__ __volatile__(
 "	membar		#StoreLoad | #LoadLoad\n"
-"	mov		%0, %%g5\n"
-"1:	ldx		[%2], %%g7\n"
-"	casx		[%2], %%g7, %0\n"
-"	cmp		%%g7, %0\n"
+"	mov		%0, %1\n"
+"1:	ldx		[%4], %2\n"
+"	casx		[%4], %2, %0\n"
+"	cmp		%2, %0\n"
 "	bne,a,pn	%%xcc, 1b\n"
-"	 mov		%%g5, %0\n"
+"	 mov		%1, %0\n"
 "	membar		#StoreLoad | #StoreStore\n"
-	: "=&r" (val)
+	: "=&r" (val), "=&r" (tmp1), "=&r" (tmp2)
 	: "0" (val), "r" (m)
-	: "g5", "g7", "cc", "memory");
+	: "cc", "memory");
 	return val;
 }
 
