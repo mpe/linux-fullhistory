@@ -829,7 +829,9 @@ static int inode_doinit_with_dentry(struct inode *inode, struct dentry *opt_dent
 				       __FUNCTION__, context, -rc,
 				       inode->i_sb->s_id, inode->i_ino);
 				kfree(context);
-				goto out;
+				/* Leave with the unlabeled SID */
+				rc = 0;
+				break;
 			}
 		}
 		kfree(context);
