@@ -1,10 +1,14 @@
 /*
- * bluetooth.c   Version 0.1
+ * bluetooth.c   Version 0.2
  *
  * Copyright (c) 2000 Greg Kroah-Hartman	<greg@kroah.com>
  *
  * USB Bluetooth driver, based on the Bluetooth Spec version 1.0B
  *
+ *
+ * (07/11/2000) Version 0.2 gkh
+ *	Fixed a small bug found by Nils Faerber in the usb_bluetooth_probe 
+ *	function.
  *
  * (07/09/2000) Version 0.1 gkh
  *	Initial release. Has support for sending ACL data (which is really just
@@ -619,6 +623,7 @@ static void * usb_bluetooth_probe(struct usb_device *dev, unsigned int ifnum)
 	
 	memset(bluetooth, 0, sizeof(struct usb_bluetooth));
 	
+	bluetooth->magic = USB_BLUETOOTH_MAGIC;
 	bluetooth->dev = dev;
 	bluetooth->minor = minor;
 	bluetooth->tqueue.routine = bluetooth_softint;
@@ -675,6 +680,8 @@ static void * usb_bluetooth_probe(struct usb_device *dev, unsigned int ifnum)
 	/* initialize the devfs nodes for this device and let the user know what bluetooths we are bound to */
 	tty_register_devfs (&bluetooth_tty_driver, 0, minor);
 	info("Bluetooth converter now attached to ttyBLUE%d (or usb/ttblue/%d for devfs)", minor, minor);
+	
+	bluetooth_table[minor] = bluetooth;
 	
 	return bluetooth; /* success */
 

@@ -373,12 +373,12 @@ void zap_page_range(struct mm_struct *mm, unsigned long address, unsigned long s
 	spin_unlock(&mm->page_table_lock);
 	/*
 	 * Update rss for the mm_struct (not necessarily current->mm)
+	 * Notice that rss is an unsigned long.
 	 */
-	if (mm->rss > 0) {
+	if (mm->rss > freed)
 		mm->rss -= freed;
-		if (mm->rss < 0)
-			mm->rss = 0;
-	}
+	else
+		mm->rss = 0;
 }
 
 

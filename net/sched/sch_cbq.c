@@ -1751,11 +1751,12 @@ cbq_destroy(struct Qdisc* sch)
 
 static void cbq_put(struct Qdisc *sch, unsigned long arg)
 {
-	struct cbq_sched_data *q = (struct cbq_sched_data *)sch->data;
 	struct cbq_class *cl = (struct cbq_class*)arg;
 
 	if (--cl->refcnt == 0) {
 #ifdef CONFIG_NET_CLS_POLICE
+		struct cbq_sched_data *q = (struct cbq_sched_data *)sch->data;
+
 		spin_lock_bh(&sch->dev->queue_lock);
 		if (q->rx_class == cl)
 			q->rx_class = NULL;

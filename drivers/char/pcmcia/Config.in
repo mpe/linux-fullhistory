@@ -3,12 +3,12 @@
 #
 
 if [ "$CONFIG_SERIAL" = "n" ]; then
-   define_bool CONFIG_PCMCIA_SERIAL n
+   define_tristate CONFIG_PCMCIA_SERIAL n
 else
    if [ "$CONFIG_SERIAL" = "m" -o "$CONFIG_PCMCIA" = "m" ]; then
-      define_bool CONFIG_PCMCIA_SERIAL m
+      define_tristate CONFIG_PCMCIA_SERIAL m
    else
-      define_bool CONFIG_PCMCIA_SERIAL y
+      define_tristate CONFIG_PCMCIA_SERIAL y
    fi
 fi
 

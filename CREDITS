@@ -1387,6 +1387,7 @@ E: greg@kroah.com
 W: http://www.kroah.com/linux-usb/
 D: USB Serial Converter driver framework, USB Handspring Visor driver
 D: ConnectTech WHITEHeat USB driver, Generic USB Serial driver
+D: USB Bluetooth driver
 D: bits and pieces of USB core code.
 
 N: Russell Kroll

@@ -79,7 +79,7 @@ typedef struct {
 	} pr_un;
 } elf_xregset_t;
 
-#define elf_check_arch(x)	(((x) == EM_SPARC) || ((x) == EM_SPARC32PLUS))
+#define elf_check_arch(x)	(((x)->e_machine == EM_SPARC) || ((x)->e_machine == EM_SPARC32PLUS))
 
 #define ELF_ET_DYN_BASE         0x08000000
 

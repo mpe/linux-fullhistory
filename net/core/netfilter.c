@@ -512,7 +512,6 @@ void nf_reinject(struct sk_buff *skb, struct nf_info *info,
 				     info->indev, info->outdev, &elem,
 				     info->okfn);
 	}
-	br_read_unlock_bh(BR_NETPROTO_LOCK);
 
 	switch (verdict) {
 	case NF_ACCEPT:
@@ -527,6 +526,7 @@ void nf_reinject(struct sk_buff *skb, struct nf_info *info,
 		kfree_skb(skb);
 		break;
 	}
+	br_read_unlock_bh(BR_NETPROTO_LOCK);
 
 	/* Release those devices we held, or Alexey will kill me. */
 	if (info->indev) dev_put(info->indev);

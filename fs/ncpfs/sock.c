@@ -87,7 +87,6 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size,
 	int result;
 	char *start = server->packet;
 	poll_table wait_table;
-	struct poll_table_entry entry;
 	int init_timeout, max_timeout;
 	int timeout;
 	int retrans;
@@ -136,8 +135,7 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size,
 			break;
 		}
 	      re_select:
-		wait_table.nr = 0;
-		wait_table.entry = &entry;
+		poll_initwait(&wait_table);
 		/* mb() is not necessary because ->poll() will serialize
 		   instructions adding the wait_table waitqueues in the
 		   waitqueue-head before going to calculate the mask-retval. */
@@ -154,11 +152,14 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size,
 				timeout = max_timeout;
 			}
 			timed_out = !schedule_timeout(timeout);
-			remove_wait_queue(entry.wait_address, &entry.wait);
-			fput(file);
+			poll_freewait(&wait_table);
 			current->state = TASK_RUNNING;
 			if (signal_pending(current)) {
 				result = -ERESTARTSYS;
+				break;
+			}
+			if(wait_table.error) {
+				result = wait_table.error;
 				break;
 			}
 			if (timed_out) {
@@ -179,9 +180,8 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size,
 				major_timeout_seen = 1;
 				continue;
 			}
-		} else if (wait_table.nr) {
-			remove_wait_queue(entry.wait_address, &entry.wait);
-			fput(file);
+		} else {
+			poll_freewait(&wait_table);
 		}
 		current->state = TASK_RUNNING;
 
@@ -262,7 +262,6 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size,
 
 static int do_tcp_rcv(struct ncp_server *server, void *buffer, size_t len) {
 	poll_table wait_table;
-	struct poll_table_entry entry;
 	struct file *file;
 	struct socket *sock;
 	int init_timeout;
@@ -281,16 +280,14 @@ static int do_tcp_rcv(struct ncp_server *server, void *buffer, size_t len) {
 		init_timeout = 0x7FFF0000;
 
 	while (len) {
-		wait_table.nr = 0;
-		wait_table.entry = &entry;
+		poll_initwait(&wait_table);
 		/* mb() is not necessary because ->poll() will serialize
 		   instructions adding the wait_table waitqueues in the
 		   waitqueue-head before going to calculate the mask-retval. */
 		__set_current_state(TASK_INTERRUPTIBLE);
 		if (!(sock->ops->poll(file, sock, &wait_table) & POLLIN)) {
 			init_timeout = schedule_timeout(init_timeout);
-			remove_wait_queue(entry.wait_address, &entry.wait);
-			fput(file);
+			poll_freewait(&wait_table);
 			current->state = TASK_RUNNING;
 			if (signal_pending(current)) {
 				return -ERESTARTSYS;
@@ -298,9 +295,11 @@ static int do_tcp_rcv(struct ncp_server *server, void *buffer, size_t len) {
 			if (!init_timeout) {
 				return -EIO;
 			}
-		} else if (wait_table.nr) {
-			remove_wait_queue(entry.wait_address, &entry.wait);
-			fput(file);
+			if(wait_table.error) {
+				return wait_table.error;
+			}
+		} else {
+			poll_freewait(&wait_table);
 		}
 		current->state = TASK_RUNNING;
 

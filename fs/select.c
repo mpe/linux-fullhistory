@@ -31,14 +31,15 @@
  * understand what I'm doing here, then you understand how the linux
  * sleep/wakeup mechanism works.
  *
- * Two very simple procedures, poll_wait() and free_wait() make all the
+ * Two very simple procedures, poll_wait() and poll_freewait() make all the
  * work.  poll_wait() is an inline-function defined in <linux/poll.h>,
  * as all select/poll functions have to call it to add an entry to the
  * poll table.
  */
 
-static void free_wait(struct poll_table_page * p)
+void poll_freewait(poll_table* pt)
 {
+	struct poll_table_page * p = pt->table;
 	while (p) {
 		struct poll_table_entry * entry;
 		struct poll_table_page *old;
@@ -66,6 +67,7 @@ void __pollwait(struct file * filp, wait_queue_head_t * wait_address, poll_table
 		new_table = (struct poll_table_page *) __get_free_page(GFP_KERNEL);
 		if (!new_table) {
 			p->error = -ENOMEM;
+			__set_current_state(TASK_RUNNING);
 			return;
 		}
 		new_table->nr = 0;
@@ -160,8 +162,7 @@ int do_select(int n, fd_set_bits *fds, long *timeout)
 		return retval;
 	n = retval;
 
-	table.error = 0;
-	table.table = NULL;
+	poll_initwait(&table);
 	wait = &table;
 	retval = 0;
 	for (;;) {
@@ -201,11 +202,15 @@ int do_select(int n, fd_set_bits *fds, long *timeout)
 		wait = NULL;
 		if (retval || !__timeout || signal_pending(current))
 			break;
+		if(table.error) {
+			retval = table.error;
+			break;
+		}
 		__timeout = schedule_timeout(__timeout);
 	}
 	current->state = TASK_RUNNING;
 
-	free_wait(table.table);
+	poll_freewait(&table);
 
 	/*
 	 * Up-to-date the caller timeout.
@@ -354,18 +359,22 @@ static int do_poll(unsigned int nfds, unsigned int nchunks, unsigned int nleft,
 	struct pollfd *fds[], poll_table *wait, long timeout)
 {
 	int count = 0;
+	poll_table* pt = wait;
 
 	for (;;) {
 		unsigned int i;
 
 		set_current_state(TASK_INTERRUPTIBLE);
 		for (i=0; i < nchunks; i++)
-			do_pollfd(POLLFD_PER_PAGE, fds[i], &wait, &count);
+			do_pollfd(POLLFD_PER_PAGE, fds[i], &pt, &count);
 		if (nleft)
-			do_pollfd(nleft, fds[nchunks], &wait, &count);
-		wait = NULL;
+			do_pollfd(nleft, fds[nchunks], &pt, &count);
+		pt = NULL;
 		if (count || !timeout || signal_pending(current))
 			break;
+		if(wait->error) {
+			return wait->error;
+		}
 		timeout = schedule_timeout(timeout);
 	}
 	current->state = TASK_RUNNING;
@@ -391,8 +400,7 @@ asmlinkage long sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
 			timeout = MAX_SCHEDULE_TIMEOUT;
 	}
 
-	table.error = 0;
-	table.table = NULL;
+	poll_initwait(&table);
 	err = -ENOMEM;
 
 	fds = NULL;
@@ -452,6 +460,6 @@ out_fds:
 	if (nfds != 0)
 		kfree(fds);
 out:
-	free_wait(table.table);
+	poll_freewait(&table);
 	return err;
 }

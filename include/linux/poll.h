@@ -38,22 +38,13 @@ extern inline void poll_wait(struct file * filp, wait_queue_head_t * wait_addres
 		__pollwait(filp, wait_address, p);
 }
 
-/*
- * For the kernel fd_set we use a fixed set-size for allocation purposes.
- * This set-size doesn't necessarily bear any relation to the size the user
- * uses, but should preferably obviously be larger than any possible user
- * size (NR_OPEN bits).
- *
- * We need 6 bitmaps (in/out/ex for both incoming and outgoing), and we
- * allocate one page for all the bitmaps. Thus we have 8*PAGE_SIZE bits,
- * to be divided by 6. And we'd better make sure we round to a full
- * long-word (in fact, we'll round to 64 bytes).
- */
+static inline void poll_initwait(poll_table* pt)
+{
+	pt->error = 0;
+	pt->table = NULL;
+}
+extern void poll_freewait(poll_table* pt);
 
-
-#define KFDS_64BLOCK ((PAGE_SIZE/(6*64))*64)
-#define KFDS_NR (KFDS_64BLOCK*8 > NR_OPEN ? NR_OPEN : KFDS_64BLOCK*8)
-typedef unsigned long kernel_fd_set[KFDS_NR/__NFDBITS];
 
 /*
  * Scaleable version of the fd_set.

@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.100 2000/07/07 07:49:08 anton Exp $
+/* $Id: sparc_ksyms.c,v 1.101 2000/07/12 00:25:32 anton Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -19,6 +19,9 @@
 #include <linux/in6.h>
 #include <linux/spinlock.h>
 #include <linux/mm.h>
+#ifdef CONFIG_PCI
+#include <linux/pci.h>
+#endif
 
 #include <asm/oplib.h>
 #include <asm/delay.h>
@@ -41,9 +44,6 @@
 #ifdef CONFIG_SBUS
 #include <asm/sbus.h>
 #include <asm/dma.h>
-#endif
-#ifdef CONFIG_PCI
-#include <asm/pci.h>
 #endif
 #include <asm/a.out.h>
 #include <asm/io-unit.h>

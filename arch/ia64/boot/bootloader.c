@@ -157,7 +157,7 @@ _start (void)
 		cons_write("not an ELF executable\n");
 		return;
 	}
-	if (!elf_check_arch(elf->e_machine)) {
+	if (!elf_check_arch(elf)) {
 		cons_write("kernel not for this processor\n");
 		return;
 	}

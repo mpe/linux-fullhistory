@@ -1159,6 +1159,13 @@ M:	vojtech@suse.cz
 L:	linux-usb@suse.com
 S:	Supported
 
+USB BLUETOOTH DRIVER
+P:	Greg Kroah-Hartman
+M:	greg@kroah.com
+L:	linux-usb@suse.com
+S:	Maintained
+W:	http://www.kroah.com/linux-usb/
+
 USB HID/HIDBP/INPUT DRIVERS
 P:	Vojtech Pavlik
 M:	vojtech@suse.cz
