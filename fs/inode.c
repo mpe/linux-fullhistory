@@ -12,6 +12,8 @@
 #include <linux/mm.h>
 #include <asm/system.h>
 
+extern int *blk_size[];
+
 struct m_inode inode_table[NR_INODE]={{0,},};
 
 static void read_inode(struct m_inode * inode);
@@ -156,6 +158,7 @@ void iput(struct m_inode * inode)
 		panic("iput: trying to free free inode");
 	if (inode->i_pipe) {
 		wake_up(&inode->i_wait);
+		wake_up(&inode->i_wait2);
 		if (--inode->i_count)
 			return;
 		free_page(inode->i_size);
@@ -308,6 +311,13 @@ static void read_inode(struct m_inode * inode)
 		((struct d_inode *)bh->b_data)
 			[(inode->i_num-1)%INODES_PER_BLOCK];
 	brelse(bh);
+	if (S_ISBLK(inode->i_mode)) {
+		int i = inode->i_zone[0];
+		if (blk_size[MAJOR(i)])
+			inode->i_size = 1024*blk_size[MAJOR(i)][MINOR(i)];
+		else
+			inode->i_size = 0x7fffffff;
+	}
 	unlock_inode(inode);
 }
 

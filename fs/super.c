@@ -74,7 +74,6 @@ struct super_block * get_super(int dev)
 void put_super(int dev)
 {
 	struct super_block * sb;
-	struct m_inode * inode;
 	int i;
 
 	if (dev == ROOT_DEV) {

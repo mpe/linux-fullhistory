@@ -27,17 +27,26 @@ void show_task(int nr,struct task_struct * p)
 {
 	int i,j = 4096-sizeof(struct task_struct);
 
-	printk("%d: pid=%d, state=%d, ",nr,p->pid,p->state);
+	printk("%d: pid=%d, state=%d, father=%d, child=%d, ",nr,p->pid,
+		p->state, p->p_pptr->pid, p->p_cptr ? p->p_cptr->pid : -1);
 	i=0;
 	while (i<j && !((char *)(p+1))[i])
 		i++;
-	printk("%d (of %d) chars free in kernel stack\n\r",i,j);
+	printk("%d/%d chars free in kstack\n\r",i,j);
+	printk("   PC=%08X.", *(1019 + (unsigned long *) p));
+	if (p->p_ysptr || p->p_osptr) 
+		printk("   Younger sib=%d, older sib=%d\n\r", 
+			p->p_ysptr ? p->p_ysptr->pid : -1,
+			p->p_osptr ? p->p_osptr->pid : -1);
+	else
+		printk("\n\r");
 }
 
-void show_stat(void)
+void show_state(void)
 {
 	int i;
 
+	printk("\rTask-info:\n\r");
 	for (i=0;i<NR_TASKS;i++)
 		if (task[i])
 			show_task(i,task[i]);
@@ -57,8 +66,14 @@ union task_union {
 
 static union task_union init_task = {INIT_TASK,};
 
-long volatile jiffies=0;
-long startup_time=0;
+unsigned long volatile jiffies=0;
+unsigned long startup_time=0;
+int jiffies_offset = 0;		/* # clock ticks to add to get "true
+				   time".  Should always be less than
+				   1 second's worth.  For time fanatics
+				   who like to syncronize their machines
+				   to WWV :-) */
+
 struct task_struct *current = &(init_task.task);
 struct task_struct *last_task_used_math = NULL;
 
@@ -110,10 +125,15 @@ void schedule(void)
 
 	for(p = &LAST_TASK ; p > &FIRST_TASK ; --p)
 		if (*p) {
+			if ((*p)->timeout && (*p)->timeout < jiffies) {
+				(*p)->timeout = 0;
+				if ((*p)->state == TASK_INTERRUPTIBLE)
+					(*p)->state = TASK_RUNNING;
+			}
 			if ((*p)->alarm && (*p)->alarm < jiffies) {
-					(*p)->signal |= (1<<(SIGALRM-1));
-					(*p)->alarm = 0;
-				}
+				(*p)->signal |= (1<<(SIGALRM-1));
+				(*p)->alarm = 0;
+			}
 			if (((*p)->signal & ~(_BLOCKABLE & (*p)->blocked)) &&
 			(*p)->state==TASK_INTERRUPTIBLE)
 				(*p)->state=TASK_RUNNING;
@@ -148,7 +168,7 @@ int sys_pause(void)
 	return 0;
 }
 
-void sleep_on(struct task_struct **p)
+static inline void __sleep_on(struct task_struct **p, int state)
 {
 	struct task_struct *tmp;
 
@@ -158,38 +178,37 @@ void sleep_on(struct task_struct **p)
 		panic("task[0] trying to sleep");
 	tmp = *p;
 	*p = current;
-	current->state = TASK_UNINTERRUPTIBLE;
-	schedule();
-	if (tmp)
+	current->state = state;
+repeat:	schedule();
+	if (*p && *p != current) {
+		(**p).state = 0;
+		current->state = TASK_UNINTERRUPTIBLE;
+		goto repeat;
+	}
+	if (!*p)
+		printk("Warning: *P = NULL\n\r");
+	if (*p = tmp)
 		tmp->state=0;
 }
 
 void interruptible_sleep_on(struct task_struct **p)
 {
-	struct task_struct *tmp;
+	__sleep_on(p,TASK_INTERRUPTIBLE);
+}
 
-	if (!p)
-		return;
-	if (current == &(init_task.task))
-		panic("task[0] trying to sleep");
-	tmp=*p;
-	*p=current;
-repeat:	current->state = TASK_INTERRUPTIBLE;
-	schedule();
-	if (*p && *p != current) {
-		(**p).state=0;
-		goto repeat;
-	}
-	*p=NULL;
-	if (tmp)
-		tmp->state=0;
+void sleep_on(struct task_struct **p)
+{
+	__sleep_on(p,TASK_UNINTERRUPTIBLE);
 }
 
 void wake_up(struct task_struct **p)
 {
 	if (p && *p) {
+		if ((**p).state == TASK_STOPPED)
+			printk("wake_up: TASK_STOPPED");
+		if ((**p).state == TASK_ZOMBIE)
+			printk("wake_up: TASK_ZOMBIE");
 		(**p).state=0;
-		*p=NULL;
 	}
 }
 
@@ -304,8 +323,21 @@ void add_timer(long jiffies, void (*fn)(void))
 
 void do_timer(long cpl)
 {
-	extern int beepcount;
-	extern void sysbeepstop(void);
+	static int blanked = 0;
+
+	if (blankcount || !blankinterval) {
+		if (blanked)
+			unblank_screen();
+		if (blankcount)
+			blankcount--;
+		blanked = 0;
+	} else if (!blanked) {
+		blank_screen();
+		blanked = 1;
+	}
+	if (hd_timeout)
+		if (!--hd_timeout)
+			hd_times_out();
 
 	if (beepcount)
 		if (!--beepcount)
@@ -352,7 +384,7 @@ int sys_getpid(void)
 
 int sys_getppid(void)
 {
-	return current->father;
+	return current->p_pptr->pid;
 }
 
 int sys_getuid(void)

@@ -105,7 +105,8 @@ read_char:
 	cmpl tail(%ecx),%ebx
 	je 1f
 	movl %ebx,head(%ecx)
-1:	pushl %edx
+1:	addl $63,%edx
+	pushl %edx
 	call _do_tty_interrupt
 	addl $4,%esp
 	ret

@@ -49,7 +49,7 @@ int copy_mem(int nr,struct task_struct * p)
 		panic("We don't support separate I&D");
 	if (data_limit < code_limit)
 		panic("Bad data_limit");
-	new_data_base = new_code_base = nr * 0x4000000;
+	new_data_base = new_code_base = nr * TASK_SIZE;
 	p->start_code = new_code_base;
 	set_base(p->ldt[1],new_code_base);
 	set_base(p->ldt[2],new_data_base);
@@ -66,7 +66,7 @@ int copy_mem(int nr,struct task_struct * p)
  * also copies the data segment in it's entirety.
  */
 int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
-		long ebx,long ecx,long edx,
+		long ebx,long ecx,long edx, long orig_eax, 
 		long fs,long es,long ds,
 		long eip,long cs,long eflags,long esp,long ss)
 {
@@ -81,7 +81,6 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
 	*p = *current;	/* NOTE! this doesn't copy the supervisor stack */
 	p->state = TASK_UNINTERRUPTIBLE;
 	p->pid = last_pid;
-	p->father = current->pid;
 	p->counter = p->priority;
 	p->signal = 0;
 	p->alarm = 0;
@@ -111,7 +110,7 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
 	p->tss.ldt = _LDT(nr);
 	p->tss.trace_bitmap = 0x80000000;
 	if (last_task_used_math == current)
-		__asm__("clts ; fnsave %0"::"m" (p->tss.i387));
+		__asm__("clts ; fnsave %0 ; frstor %0"::"m" (p->tss.i387));
 	if (copy_mem(nr,p)) {
 		task[nr] = NULL;
 		free_page((long) p);
@@ -126,8 +125,17 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
 		current->root->i_count++;
 	if (current->executable)
 		current->executable->i_count++;
+	if (current->library)
+		current->library->i_count++;
 	set_tss_desc(gdt+(nr<<1)+FIRST_TSS_ENTRY,&(p->tss));
 	set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY,&(p->ldt));
+	p->p_pptr = current;
+	p->p_cptr = 0;
+	p->p_ysptr = 0;
+	p->p_osptr = current->p_cptr;
+	if (p->p_osptr)
+		p->p_osptr->p_ysptr = p;
+	current->p_cptr = p;
 	p->state = TASK_RUNNING;	/* do this last, just in case */
 	return last_pid;
 }
@@ -139,7 +147,9 @@ int find_empty_process(void)
 	repeat:
 		if ((++last_pid)<0) last_pid=1;
 		for(i=0 ; i<NR_TASKS ; i++)
-			if (task[i] && task[i]->pid == last_pid) goto repeat;
+			if (task[i] && ((task[i]->pid == last_pid) ||
+				        (task[i]->pgrp == last_pid)))
+				goto repeat;
 	for(i=1 ; i<NR_TASKS ; i++)
 		if (!task[i])
 			return i;

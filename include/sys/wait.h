@@ -10,10 +10,11 @@
 #define WNOHANG		1
 #define WUNTRACED	2
 
-#define WIFEXITED(s)	(!((s)&0xFF)
+#define WIFEXITED(s)	(!((s)&0xFF))
 #define WIFSTOPPED(s)	(((s)&0xFF)==0x7F)
 #define WEXITSTATUS(s)	(((s)>>8)&0xFF)
 #define WTERMSIG(s)	((s)&0x7F)
+#define WCOREDUMP(s)	((s)&0x80)
 #define WSTOPSIG(s)	(((s)>>8)&0xFF)
 #define WIFSIGNALED(s)	(((unsigned int)(s)-1 & 0xFFFF) < 0xFF)
 

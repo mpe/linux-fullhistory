@@ -7,8 +7,8 @@
 #define _POSIX_CHOWN_RESTRICTED	/* only root can do a chown (I think..) */
 #define _POSIX_NO_TRUNC		/* no pathname truncation (but see in kernel) */
 #define _POSIX_VDISABLE '\0'	/* character to disable things like ^C */
-/*#define _POSIX_SAVED_IDS */	/* we'll get to this yet */
-/*#define _POSIX_JOB_CONTROL */	/* we aren't there quite yet. Soon hopefully */
+#define _POSIX_JOB_CONTROL
+#define _POSIX_SAVED_IDS	/* Implemented, for whatever good it is */
 
 #define STDIN_FILENO	0
 #define STDOUT_FILENO	1
@@ -51,8 +51,10 @@
 #define _PC_CHOWN_RESTRICTED	9
 
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/times.h>
 #include <sys/utsname.h>
+#include <sys/resource.h>
 #include <utime.h>
 
 #ifdef __LIBRARY__
@@ -129,6 +131,21 @@
 #define __NR_ssetmask	69
 #define __NR_setreuid	70
 #define __NR_setregid	71
+#define __NR_sigsuspend	72
+#define __NR_sigpending 73
+#define __NR_sethostname 74
+#define __NR_setrlimit	75
+#define __NR_getrlimit	76
+#define __NR_getrusage	77
+#define __NR_gettimeofday 78
+#define __NR_settimeofday 79
+#define __NR_getgroups	80
+#define __NR_setgroups	81
+#define __NR_select	82
+#define __NR_symlink	83
+#define __NR_lstat	84
+#define __NR_readlink	85
+#define __NR_uselib	86
 
 #define _syscall0(type,name) \
 type name(void) \
@@ -249,5 +266,15 @@ int dup2(int oldfd, int newfd);
 int getppid(void);
 pid_t getpgrp(void);
 pid_t setsid(void);
+int sethostname(char *name, int len);
+int setrlimit(int resource, struct rlimit *rlp);
+int getrlimit(int resource, struct rlimit *rlp);
+int getrusage(int who, struct rusage *rusage);
+int gettimeofday(struct timeval *tv, struct timezone *tz);
+int settimeofday(struct timeval *tv, struct timezone *tz);
+int getgroups(int gidsetlen, gid_t *gidset);
+int setgroups(int gidsetlen, gid_t *gidset);
+int select(int width, fd_set * readfds, fd_set * writefds,
+	fd_set * exceptfds, struct timeval * timeout);
 
 #endif

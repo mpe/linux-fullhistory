@@ -41,7 +41,7 @@ void buffer_init(long buffer_end);
 #define SUPER_MAGIC 0x137F
 
 #define NR_OPEN 20
-#define NR_INODE 32
+#define NR_INODE 64
 #define NR_FILE 64
 #define NR_SUPER 8
 #define NR_HASH 307
@@ -55,13 +55,18 @@ void buffer_init(long buffer_end);
 #define INODES_PER_BLOCK ((BLOCK_SIZE)/(sizeof (struct d_inode)))
 #define DIR_ENTRIES_PER_BLOCK ((BLOCK_SIZE)/(sizeof (struct dir_entry)))
 
+#define PIPE_READ_WAIT(inode) ((inode).i_wait)
+#define PIPE_WRITE_WAIT(inode) ((inode).i_wait2)
 #define PIPE_HEAD(inode) ((inode).i_zone[0])
 #define PIPE_TAIL(inode) ((inode).i_zone[1])
 #define PIPE_SIZE(inode) ((PIPE_HEAD(inode)-PIPE_TAIL(inode))&(PAGE_SIZE-1))
 #define PIPE_EMPTY(inode) (PIPE_HEAD(inode)==PIPE_TAIL(inode))
 #define PIPE_FULL(inode) (PIPE_SIZE(inode)==(PAGE_SIZE-1))
-#define INC_PIPE(head) \
-__asm__("incl %0\n\tandl $4095,%0"::"m" (head))
+
+#define NIL_FILP	((struct file *)0)
+#define SEL_IN		1
+#define SEL_OUT		2
+#define SEL_EX		4
 
 typedef char buffer_block[BLOCK_SIZE];
 
@@ -100,6 +105,7 @@ struct m_inode {
 	unsigned short i_zone[9];
 /* these are in memory also */
 	struct task_struct * i_wait;
+	struct task_struct * i_wait2;	/* for pipes */
 	unsigned long i_atime;
 	unsigned long i_ctime;
 	unsigned short i_dev;
@@ -176,6 +182,7 @@ extern void wait_on(struct m_inode * inode);
 extern int bmap(struct m_inode * inode,int block);
 extern int create_block(struct m_inode * inode,int block);
 extern struct m_inode * namei(const char * pathname);
+extern struct m_inode * lnamei(const char * pathname);
 extern int open_namei(const char * pathname, int flag, int mode,
 	struct m_inode ** res_inode);
 extern void iput(struct m_inode * inode);
@@ -185,12 +192,13 @@ extern struct m_inode * get_pipe_inode(void);
 extern struct buffer_head * get_hash_table(int dev, int block);
 extern struct buffer_head * getblk(int dev, int block);
 extern void ll_rw_block(int rw, struct buffer_head * bh);
+extern void ll_rw_page(int rw, int dev, int nr, char * buffer);
 extern void brelse(struct buffer_head * buf);
 extern struct buffer_head * bread(int dev,int block);
 extern void bread_page(unsigned long addr,int dev,int b[4]);
 extern struct buffer_head * breada(int dev,int block,...);
 extern int new_block(int dev);
-extern void free_block(int dev, int block);
+extern int free_block(int dev, int block);
 extern struct m_inode * new_inode(int dev);
 extern void free_inode(struct m_inode * inode);
 extern int sync_dev(int dev);

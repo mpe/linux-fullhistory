@@ -3,9 +3,11 @@
 ! 0x3000 is 0x30000 bytes = 196kB, more than enough for current
 ! versions of linux
 !
-SYSSIZE = 0x3000
+#include <linux/config.h>
+SYSSIZE = DEF_SYSSIZE
 !
 !	bootsect.s		(C) 1991 Linus Torvalds
+!	modified by Drew Eckhardt
 !
 ! bootsect.s is loaded at 0x7c00 by the bios-startup routines, and moves
 ! iself out of the way to address 0x90000, and jumps there.
@@ -33,14 +35,14 @@ begbss:
 
 SETUPLEN = 4				! nr of setup-sectors
 BOOTSEG  = 0x07c0			! original address of boot-sector
-INITSEG  = 0x9000			! we move boot here - out of the way
-SETUPSEG = 0x9020			! setup starts here
-SYSSEG   = 0x1000			! system loaded at 0x10000 (65536).
+INITSEG  = DEF_INITSEG			! we move boot here - out of the way
+SETUPSEG = DEF_SETUPSEG			! setup starts here
+SYSSEG   = DEF_SYSSEG			! system loaded at 0x10000 (65536).
 ENDSEG   = SYSSEG + SYSSIZE		! where to stop loading
 
-! ROOT_DEV:	0x000 - same type of floppy as boot.
-!		0x301 - first partition on first drive etc
-ROOT_DEV = 0x306
+! ROOT_DEV & SWAP_DEV are now written by "build".
+ROOT_DEV = 0
+SWAP_DEV = 0
 
 entry start
 start:
@@ -54,25 +56,83 @@ start:
 	rep
 	movw
 	jmpi	go,INITSEG
-go:	mov	ax,cs
+
+go:	mov	ax,cs		
+	mov	dx,#0xfef4	! arbitrary value >>512 - disk parm size
+
 	mov	ds,ax
 	mov	es,ax
-! put stack at 0x9ff00.
-	mov	ss,ax
-	mov	sp,#0xFF00		! arbitrary value >>512
+	push	ax
+
+	mov	ss,ax		! put stack at 0x9ff00 - 12.
+	mov	sp,dx
+/*
+ *	Many BIOS's default disk parameter tables will not 
+ *	recognize multi-sector reads beyond the maximum sector number
+ *	specified in the default diskette parameter tables - this may
+ *	mean 7 sectors in some cases.
+ *
+ *	Since single sector reads are slow and out of the question,
+ *	we must take care of this by creating new parameter tables
+ *	(for the first disk) in RAM.  We will set the maximum sector
+ *	count to 18 - the most we will encounter on an HD 1.44.  
+ *
+ *	High doesn't hurt.  Low does.
+ *
+ *	Segments are as follows: ds=es=ss=cs - INITSEG,
+ *		fs = 0, gs = parameter table segment
+ */
+
+
+	push	#0
+	pop	fs
+	mov	bx,#0x78		! fs:bx is parameter table address
+	seg fs
+	lgs	si,(bx)			! gs:si is source
+
+	mov	di,dx			! es:di is destination
+	mov	cx,#6			! copy 12 bytes
+	cld
+
+	rep
+	seg gs
+	movw
+
+	mov	di,dx
+	movb	4(di),*18		! patch sector count
+
+	seg fs
+	mov	(bx),di
+	seg fs
+	mov	2(bx),es
+
+	pop	ax
+	mov	fs,ax
+	mov	gs,ax
+	
+	xor	ah,ah			! reset FDC 
+	xor	dl,dl
+	int 	0x13	
 
 ! load the setup-sectors directly after the bootblock.
 ! Note that 'es' is already set up.
 
 load_setup:
-	mov	dx,#0x0000		! drive 0, head 0
+	xor	dx, dx			! drive 0, head 0
 	mov	cx,#0x0002		! sector 2, track 0
 	mov	bx,#0x0200		! address = 512, in INITSEG
 	mov	ax,#0x0200+SETUPLEN	! service 2, nr of sectors
 	int	0x13			! read it
 	jnc	ok_load_setup		! ok - continue
-	mov	dx,#0x0000
-	mov	ax,#0x0000		! reset the diskette
+
+	push	ax			! dump error code
+	call	print_nl
+	mov	bp, sp
+	call	print_hex
+	pop	ax	
+	
+	xor	dl, dl			! reset FDC
+	xor	ah, ah
 	int	0x13
 	j	load_setup
 
@@ -80,10 +140,10 @@ ok_load_setup:
 
 ! Get disk drive parameters, specifically nr of sectors/track
 
-	mov	dl,#0x00
-	mov	ax,#0x0800		! AH=8 is get drive parameters
+	xor	dl,dl
+	mov	ah,#0x08		! AH=8 is get drive parameters
 	int	0x13
-	mov	ch,#0x00
+	xor	ch,ch
 	seg cs
 	mov	sectors,cx
 	mov	ax,#INITSEG
@@ -95,7 +155,7 @@ ok_load_setup:
 	xor	bh,bh
 	int	0x10
 	
-	mov	cx,#24
+	mov	cx,#9
 	mov	bx,#0x0007		! page 0, attribute 7 (normal)
 	mov	bp,#msg1
 	mov	ax,#0x1301		! write string, move cursor
@@ -108,6 +168,7 @@ ok_load_setup:
 	mov	es,ax		! segment of 0x010000
 	call	read_it
 	call	kill_motor
+	call	print_nl
 
 ! After that we check which root-device to use. If the device is
 ! defined (!= 0), nothing is done and the given device is used.
@@ -116,7 +177,7 @@ ok_load_setup:
 
 	seg cs
 	mov	ax,root_dev
-	cmp	ax,#0
+	or	ax,ax
 	jne	root_defined
 	seg cs
 	mov	bx,sectors
@@ -190,40 +251,121 @@ ok3_read:
 	add bx,cx
 	jnc rp_read
 	mov ax,es
-	add ax,#0x1000
+	add ah,#0x10
 	mov es,ax
 	xor bx,bx
 	jmp rp_read
 
 read_track:
-	push ax
-	push bx
-	push cx
-	push dx
+	pusha
+	pusha	
+	mov	ax, #0xe2e 	! loading... message 2e = .
+	mov	bx, #7
+ 	int	0x10
+	popa		
+
 	mov dx,track
 	mov cx,sread
 	inc cx
 	mov ch,dl
 	mov dx,head
 	mov dh,dl
-	mov dl,#0
 	and dx,#0x0100
 	mov ah,#2
+	
+	push	dx				! save for error dump
+	push	cx
+	push	bx
+	push	ax
+
 	int 0x13
 	jc bad_rt
-	pop dx
-	pop cx
-	pop bx
-	pop ax
+	add	sp, #8   	
+	popa
 	ret
-bad_rt:	mov ax,#0
-	mov dx,#0
+
+bad_rt:	push	ax				! save error code
+	call	print_all			! ah = error, al = read
+	
+	
+	xor ah,ah
+	xor dl,dl
 	int 0x13
-	pop dx
-	pop cx
-	pop bx
-	pop ax
+	
+
+	add	sp, #10
+	popa	
 	jmp read_track
+
+/*
+ *	print_all is for debugging purposes.  
+ *	It will print out all of the registers.  The assumption is that this is
+ *	called from a routine, with a stack frame like
+ *	dx 
+ *	cx
+ *	bx
+ *	ax
+ *	error
+ *	ret <- sp
+ *
+*/
+ 
+print_all:
+	mov	cx, #5		! error code + 4 registers
+	mov	bp, sp	
+
+print_loop:
+	push	cx		! save count left
+	call	print_nl	! nl for readability
+	jae	no_reg		! see if register name is needed
+	
+	mov	ax, #0xe05 + 0x41 - 1
+	sub	al, cl
+	int	0x10
+
+	mov	al, #0x58 	! X
+	int	0x10
+
+	mov	al, #0x3a 	! :
+	int	0x10
+
+no_reg:
+	add	bp, #2		! next register
+	call	print_hex	! print it
+	pop	cx
+	loop	print_loop
+	ret
+
+print_nl:
+	mov	ax, #0xe0d	! CR
+	int	0x10
+	mov	al, #0xa	! LF
+	int 	0x10
+	ret
+
+/*
+ *	print_hex is for debugging purposes, and prints the word
+ *	pointed to by ss:bp in hexadecmial.
+*/
+
+print_hex:
+	mov	cx, #4		! 4 hex digits
+	mov	dx, (bp)	! load word into dx
+print_digit:
+	rol	dx, #4		! rotate so that lowest 4 bits are used
+	mov	ah, #0xe	
+	mov	al, dl		! mask off so we have only next nibble
+	and	al, #0xf
+	add	al, #0x30	! convert to 0 based digit, '0'
+	cmp	al, #0x39	! check for overflow
+	jbe	good_digit
+	add	al, #0x41 - 0x30 - 0xa 	! 'A' - '0' - 0xa
+
+good_digit:
+	int	0x10
+	loop	print_digit
+	ret
+
 
 /*
  * This procedure turns off the floppy drive motor, so
@@ -233,7 +375,7 @@ bad_rt:	mov ax,#0
 kill_motor:
 	push dx
 	mov dx,#0x3f2
-	mov al,#0
+	xor al, al
 	outb
 	pop dx
 	ret
@@ -243,10 +385,11 @@ sectors:
 
 msg1:
 	.byte 13,10
-	.ascii "Loading system ..."
-	.byte 13,10,13,10
+	.ascii "Loading"
 
-.org 508
+.org 506
+swap_dev:
+	.word SWAP_DEV
 root_dev:
 	.word ROOT_DEV
 boot_flag:
@@ -258,3 +401,4 @@ endtext:
 enddata:
 .bss
 endbss:
+

@@ -35,6 +35,7 @@ typedef unsigned int sigset_t;		/* 32 bits */
 
 /* Ok, I haven't implemented sigactions, but trying to keep headers POSIX */
 #define SA_NOCLDSTOP	1
+#define SA_INTERRUPT	0x20000000
 #define SA_NOMASK	0x40000000
 #define SA_ONESHOT	0x80000000
 
@@ -44,6 +45,12 @@ typedef unsigned int sigset_t;		/* 32 bits */
 
 #define SIG_DFL		((void (*)(int))0)	/* default signal handling */
 #define SIG_IGN		((void (*)(int))1)	/* ignore signal */
+#define SIG_ERR		((void (*)(int))-1)	/* error return from signal */
+
+#ifdef notdef
+#define sigemptyset(mask) ((*(mask) = 0), 1)
+#define sigfillset(mask) ((*(mask) = ~0), 1)
+#endif
 
 struct sigaction {
 	void (*sa_handler)(int);

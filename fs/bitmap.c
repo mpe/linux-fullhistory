@@ -44,7 +44,7 @@ __asm__("cld\n" \
 	:"=c" (__res):"c" (0),"S" (addr):"ax","dx","si"); \
 __res;})
 
-void free_block(int dev, int block)
+int free_block(int dev, int block)
 {
 	struct super_block * sb;
 	struct buffer_head * bh;
@@ -55,21 +55,22 @@ void free_block(int dev, int block)
 		panic("trying to free block not in datazone");
 	bh = get_hash_table(dev,block);
 	if (bh) {
-		if (bh->b_count != 1) {
-			printk("trying to free block (%04x:%d), count=%d\n",
-				dev,block,bh->b_count);
-			return;
+		if (bh->b_count > 1) {
+			brelse(bh);
+			return 0;
 		}
 		bh->b_dirt=0;
 		bh->b_uptodate=0;
-		brelse(bh);
+		if (bh->b_count)
+			brelse(bh);
 	}
 	block -= sb->s_firstdatazone - 1 ;
 	if (clear_bit(block&8191,sb->s_zmap[block/8192]->b_data)) {
 		printk("block (%04x:%d) ",dev,block+sb->s_firstdatazone-1);
-		panic("free_block: bit already cleared");
+		printk("free_block: bit already cleared\n");
 	}
 	sb->s_zmap[block/8192]->b_dirt = 1;
+	return 1;
 }
 
 int new_block(int dev)

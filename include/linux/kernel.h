@@ -3,11 +3,22 @@
  */
 void verify_area(void * addr,int count);
 volatile void panic(const char * str);
+volatile void do_exit(long error_code);
 int printf(const char * fmt, ...);
 int printk(const char * fmt, ...);
+void console_print(const char * str);
 int tty_write(unsigned ch,char * buf,int count);
 void * malloc(unsigned int size);
 void free_s(void * obj, int size);
+extern void hd_times_out(void);
+extern void sysbeepstop(void);
+extern void blank_screen(void);
+extern void unblank_screen(void);
+
+extern int beepcount;
+extern int hd_timeout;
+extern int blankinterval;
+extern int blankcount;
 
 #define free(x) free_s((x), 0)
 

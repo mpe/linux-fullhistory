@@ -39,6 +39,15 @@ struct blk_dev_struct blk_dev[NR_BLK_DEV] = {
 	{ NULL, NULL }		/* dev lp */
 };
 
+/*
+ * blk_size contains the size of all block-devices:
+ *
+ * blk_size[MAJOR][MINOR]
+ *
+ * if (!blk_size[MAJOR]) then no minor size checking is done.
+ */
+int * blk_size[NR_BLK_DEV] = { NULL, NULL, };
+
 static inline void lock_buffer(struct buffer_head * bh)
 {
 	cli();
@@ -60,6 +69,9 @@ static inline void unlock_buffer(struct buffer_head * bh)
  * add-request adds a request to the linked list.
  * It disables interrupts so that it can muck with the
  * request-lists in peace.
+ *
+ * Note that swapping requests always go before other requests,
+ * and are done in the order they appear.
  */
 static void add_request(struct blk_dev_struct * dev, struct request * req)
 {
@@ -75,11 +87,17 @@ static void add_request(struct blk_dev_struct * dev, struct request * req)
 		(dev->request_fn)();
 		return;
 	}
-	for ( ; tmp->next ; tmp=tmp->next)
+	for ( ; tmp->next ; tmp=tmp->next) {
+		if (!req->bh)
+			if (tmp->next->bh)
+				break;
+			else
+				continue;
 		if ((IN_ORDER(tmp,req) ||
 		    !IN_ORDER(tmp,tmp->next)) &&
 		    IN_ORDER(req,tmp->next))
 			break;
+	}
 	req->next=tmp->next;
 	tmp->next=req;
 	sti();
@@ -141,6 +159,41 @@ repeat:
 	req->next = NULL;
 	add_request(major+blk_dev,req);
 }
+
+void ll_rw_page(int rw, int dev, int page, char * buffer)
+{
+	struct request * req;
+	unsigned int major = MAJOR(dev);
+
+	if (major >= NR_BLK_DEV || !(blk_dev[major].request_fn)) {
+		printk("Trying to read nonexistent block-device\n\r");
+		return;
+	}
+	if (rw!=READ && rw!=WRITE)
+		panic("Bad block dev command, must be R/W");
+repeat:
+	req = request+NR_REQUEST;
+	while (--req >= request)
+		if (req->dev<0)
+			break;
+	if (req < request) {
+		sleep_on(&wait_for_request);
+		goto repeat;
+	}
+/* fill up the request-info, and add it to the queue */
+	req->dev = dev;
+	req->cmd = rw;
+	req->errors = 0;
+	req->sector = page<<3;
+	req->nr_sectors = 8;
+	req->buffer = buffer;
+	req->waiting = current;
+	req->bh = NULL;
+	req->next = NULL;
+	current->state = TASK_UNINTERRUPTIBLE;
+	add_request(major+blk_dev,req);
+	schedule();
+}	
 
 void ll_rw_block(int rw, struct buffer_head * bh)
 {

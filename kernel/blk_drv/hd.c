@@ -36,8 +36,8 @@ inb_p(0x71); \
 
 static void recal_intr(void);
 
-static int recalibrate = 1;
-static int reset = 1;
+static int recalibrate = 0;
+static int reset = 0;
 
 /*
  *  This struct defines the HD's and their types.
@@ -57,6 +57,8 @@ static struct hd_struct {
 	long start_sect;
 	long nr_sects;
 } hd[5*MAX_HD]={{0,0},};
+
+static int hd_sizes[5*MAX_HD] = {0, };
 
 #define port_read(port,buf,nr) \
 __asm__("cld;rep;insw"::"d" (port),"D" (buf),"c" (nr):"cx","di")
@@ -151,16 +153,20 @@ int sys_setup(void * BIOS)
 		}
 		brelse(bh);
 	}
+	for (i=0 ; i<5*MAX_HD ; i++)
+		hd_sizes[i] = hd[i].nr_sects>>1 ;
+	blk_size[MAJOR_NR] = hd_sizes;
 	if (NR_HD)
 		printk("Partition table%s ok.\n\r",(NR_HD>1)?"s":"");
 	rd_load();
+	init_swapping();
 	mount_root();
 	return (0);
 }
 
 static int controller_ready(void)
 {
-	int retries=10000;
+	int retries = 100000;
 
 	while (--retries && (inb_p(HD_STATUS)&0xc0)!=0x40);
 	return (retries);
@@ -187,7 +193,7 @@ static void hd_out(unsigned int drive,unsigned int nsect,unsigned int sect,
 		panic("Trying to write bad sector");
 	if (!controller_ready())
 		panic("HD controller not ready");
-	do_hd = intr_addr;
+	SET_INTR(intr_addr);
 	outb_p(hd_info[drive].ctl,HD_CMD);
 	port=HD_DATA;
 	outb_p(hd_info[drive].wpcom>>2,++port);
@@ -202,14 +208,14 @@ static void hd_out(unsigned int drive,unsigned int nsect,unsigned int sect,
 static int drive_busy(void)
 {
 	unsigned int i;
+	unsigned char c;
 
-	for (i = 0; i < 10000; i++)
-		if (READY_STAT == (inb_p(HD_STATUS) & (BUSY_STAT|READY_STAT)))
-			break;
-	i = inb(HD_STATUS);
-	i &= BUSY_STAT | READY_STAT | SEEK_STAT;
-	if (i == READY_STAT | SEEK_STAT)
-		return(0);
+	for (i = 0; i < 50000; i++) {
+		c = inb_p(HD_STATUS);
+		c &= (BUSY_STAT | READY_STAT | SEEK_STAT);
+		if (c == (READY_STAT | SEEK_STAT))
+			return 0;
+	}
 	printk("HD controller times out\n\r");
 	return(1);
 }
@@ -219,7 +225,7 @@ static void reset_controller(void)
 	int	i;
 
 	outb(4,HD_CMD);
-	for(i = 0; i < 100; i++) nop();
+	for(i = 0; i < 1000; i++) nop();
 	outb(hd_info[0].ctl & 0x0f ,HD_CMD);
 	if (drive_busy())
 		printk("HD-controller still busy\n\r");
@@ -259,7 +265,7 @@ static void read_intr(void)
 	CURRENT->buffer += 512;
 	CURRENT->sector++;
 	if (--CURRENT->nr_sectors) {
-		do_hd = &read_intr;
+		SET_INTR(&read_intr);
 		return;
 	}
 	end_request(1);
@@ -276,7 +282,7 @@ static void write_intr(void)
 	if (--CURRENT->nr_sectors) {
 		CURRENT->sector++;
 		CURRENT->buffer += 512;
-		do_hd = &write_intr;
+		SET_INTR(&write_intr);
 		port_write(HD_DATA,CURRENT->buffer,256);
 		return;
 	}
@@ -288,6 +294,14 @@ static void recal_intr(void)
 {
 	if (win_result())
 		bad_rw_intr();
+	do_hd_request();
+}
+
+void hd_times_out(void)
+{
+	printk("HD timeout");
+	SET_INTR(NULL);
+	reset = 1;
 	do_hd_request();
 }
 
@@ -327,7 +341,7 @@ void do_hd_request(void)
 	}	
 	if (CURRENT->cmd == WRITE) {
 		hd_out(dev,nsect,sec,head,cyl,WIN_WRITE,&write_intr);
-		for(i=0 ; i<3000 && !(r=inb_p(HD_STATUS)&DRQ_STAT) ; i++)
+		for(i=0 ; i<10000 && !(r=inb_p(HD_STATUS)&DRQ_STAT) ; i++)
 			/* nothing */ ;
 		if (!r) {
 			bad_rw_intr();

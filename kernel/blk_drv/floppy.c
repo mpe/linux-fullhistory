@@ -92,6 +92,7 @@ static struct floppy_struct {
 	{ 1440, 9,2,80,0,0x23,0x01,0xDF },	/* 720kB in 1.2MB drive */
 	{ 2880,18,2,80,0,0x1B,0x00,0xCF },	/* 1.44MB diskette */
 };
+
 /*
  * Rate is 0 for 500kb/s, 2 for 300kbps, 1 for 250kbps
  * Spec1 is 0xSH, where S is stepping rate (F=1ms, E=2ms, D=3ms etc),
@@ -141,7 +142,7 @@ int floppy_change(unsigned int nr)
 repeat:
 	floppy_on(nr);
 	while ((current_DOR & 3) != nr && selected)
-		interruptible_sleep_on(&wait_on_floppy_select);
+		sleep_on(&wait_on_floppy_select);
 	if ((current_DOR & 3) != nr)
 		goto repeat;
 	if (inb(FD_DIR) & 0x80) {
@@ -454,8 +455,20 @@ void do_fd_request(void)
 	add_timer(ticks_to_floppy_on(current_drive),&floppy_on_interrupt);
 }
 
+static int floppy_sizes[] ={
+	   0,   0,   0,   0,
+	 360, 360 ,360, 360,
+	1200,1200,1200,1200,
+	 360, 360, 360, 360,
+	 720, 720, 720, 720,
+	 360, 360, 360, 360,
+	 720, 720, 720, 720,
+	1440,1440,1440,1440
+};
+
 void floppy_init(void)
 {
+	blk_size[MAJOR_NR] = floppy_sizes;
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 	set_trap_gate(0x26,&floppy_interrupt);
 	outb(inb_p(0x21)&~0x40,0x21);

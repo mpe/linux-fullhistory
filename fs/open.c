@@ -14,6 +14,7 @@
 #include <linux/sched.h>
 #include <linux/tty.h>
 #include <linux/kernel.h>
+
 #include <asm/segment.h>
 
 int sys_ustat(int dev, struct ustat * ubuf)
@@ -135,6 +136,38 @@ int sys_chown(const char * filename,int uid,int gid)
 	return 0;
 }
 
+static int check_char_dev(struct m_inode * inode, int dev, int flag)
+{
+	struct tty_struct *tty;
+	int min;
+
+	if (MAJOR(dev) == 4 || MAJOR(dev) == 5) {
+		if (MAJOR(dev) == 5)
+			min = current->tty;
+		else
+			min = MINOR(dev);
+		if (min < 0)
+			return -1;
+		if ((IS_A_PTY_MASTER(min)) && (inode->i_count>1))
+			return -1;
+		tty = TTY_TABLE(min);
+		if (!(flag & O_NOCTTY) &&
+		    current->leader &&
+		    current->tty<0 &&
+		    tty->session==0) {
+			current->tty = min;
+			tty->session= current->session;
+			tty->pgrp = current->pgrp;
+		}
+		if (flag & O_NONBLOCK) {
+			TTY_TABLE(min)->termios.c_cc[VMIN] =0;
+			TTY_TABLE(min)->termios.c_cc[VTIME] =0;
+			TTY_TABLE(min)->termios.c_lflag &= ~ICANON;
+		}
+	}
+	return 0;
+}
+
 int sys_open(const char * filename,int flag,int mode)
 {
 	struct m_inode * inode;
@@ -161,18 +194,12 @@ int sys_open(const char * filename,int flag,int mode)
 	}
 /* ttys are somewhat special (ttyxx major==4, tty major==5) */
 	if (S_ISCHR(inode->i_mode))
-		if (MAJOR(inode->i_zone[0])==4) {
-			if (current->leader && current->tty<0) {
-				current->tty = MINOR(inode->i_zone[0]);
-				tty_table[current->tty].pgrp = current->pgrp;
-			}
-		} else if (MAJOR(inode->i_zone[0])==5)
-			if (current->tty<0) {
-				iput(inode);
-				current->filp[fd]=NULL;
-				f->f_count=0;
-				return -EPERM;
-			}
+		if (check_char_dev(inode,inode->i_zone[0],flag)) {
+			iput(inode);
+			current->filp[fd]=NULL;
+			f->f_count=0;
+			return -EAGAIN;
+		}
 /* Likewise with block-devices: check for floppy_change */
 	if (S_ISBLK(inode->i_mode))
 		check_disk_change(inode->i_zone[0]);

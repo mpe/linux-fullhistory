@@ -39,8 +39,11 @@ static inline _syscall0(int,sync)
 
 #include <linux/fs.h>
 
+#include <string.h>
+
 static char printbuf[1024];
 
+extern char *strcpy();
 extern int vsprintf();
 extern void init(void);
 extern void blk_dev_init(void);
@@ -50,14 +53,27 @@ extern void floppy_init(void);
 extern void mem_init(long start, long end);
 extern long rd_init(long mem_start, int length);
 extern long kernel_mktime(struct tm * tm);
-extern long startup_time;
+
+static int sprintf(char * str, const char *fmt, ...)
+{
+	va_list args;
+	int i;
+
+	va_start(args, fmt);
+	i = vsprintf(str, fmt, args);
+	va_end(args);
+	return i;
+}
 
 /*
  * This is set up by the setup-routine at boot-time
  */
 #define EXT_MEM_K (*(unsigned short *)0x90002)
+#define CON_ROWS ((*(unsigned short *)0x9000e) & 0xff)
+#define CON_COLS (((*(unsigned short *)0x9000e) & 0xff00) >> 8)
 #define DRIVE_INFO (*(struct drive_info *)0x90080)
 #define ORIG_ROOT_DEV (*(unsigned short *)0x901FC)
+#define ORIG_SWAP_DEV (*(unsigned short *)0x901FA)
 
 /*
  * Yeah, yeah, it's ugly, but I cannot find how to do this correctly
@@ -98,6 +114,13 @@ static void time_init(void)
 static long memory_end = 0;
 static long buffer_memory_end = 0;
 static long main_memory_start = 0;
+static char term[32];
+
+static char * argv_rc[] = { "/bin/sh", NULL };
+static char * envp_rc[] = { "HOME=/", NULL ,NULL };
+
+static char * argv[] = { "-/bin/sh",NULL };
+static char * envp[] = { "HOME=/usr/root", NULL, NULL };
 
 struct drive_info { char dummy[32]; } drive_info;
 
@@ -108,6 +131,10 @@ void main(void)		/* This really IS void, no error here. */
  * enable them
  */
  	ROOT_DEV = ORIG_ROOT_DEV;
+ 	SWAP_DEV = ORIG_SWAP_DEV;
+	sprintf(term, "TERM=con%dx%d", CON_COLS, CON_ROWS);
+	envp[1] = term;	
+	envp_rc[1] = term;
  	drive_info = DRIVE_INFO;
 	memory_end = (1<<20) + (EXT_MEM_K<<10);
 	memory_end &= 0xfffff000;
@@ -145,7 +172,8 @@ void main(void)		/* This really IS void, no error here. */
  * can run). For task0 'pause()' just means we go check if some other
  * task can run, and if not we return here.
  */
-	for(;;) pause();
+	for(;;)
+		__asm__("int $0x80"::"a" (__NR_pause):"ax");
 }
 
 static int printf(const char *fmt, ...)
@@ -159,18 +187,12 @@ static int printf(const char *fmt, ...)
 	return i;
 }
 
-static char * argv_rc[] = { "/bin/sh", NULL };
-static char * envp_rc[] = { "HOME=/", NULL };
-
-static char * argv[] = { "-/bin/sh",NULL };
-static char * envp[] = { "HOME=/usr/root", NULL };
-
 void init(void)
 {
 	int pid,i;
 
 	setup((void *) &drive_info);
-	(void) open("/dev/tty0",O_RDWR,0);
+	(void) open("/dev/tty1",O_RDWR,0);
 	(void) dup(0);
 	(void) dup(0);
 	printf("%d buffers = %d bytes buffer space\n\r",NR_BUFFERS,
@@ -194,7 +216,7 @@ void init(void)
 		if (!pid) {
 			close(0);close(1);close(2);
 			setsid();
-			(void) open("/dev/tty0",O_RDWR,0);
+			(void) open("/dev/tty1",O_RDWR,0);
 			(void) dup(0);
 			(void) dup(0);
 			_exit(execve("/bin/sh",argv,envp));
