@@ -168,8 +168,10 @@ void scsi_device_dev_release(struct device *dev)
 	list_del(&sdev->starved_entry);
 	spin_unlock_irqrestore(sdev->host->host_lock, flags);
 
-	if (sdev->request_queue)
+	if (sdev->request_queue) {
+		sdev->request_queue->queuedata = NULL;
 		scsi_free_queue(sdev->request_queue);
+	}
 
 	scsi_target_reap(scsi_target(sdev));
 
