@@ -17,10 +17,6 @@
 
 #define IO_SPACE_LIMIT		0xffffffff
 #define __mem_pci(a)		(a)
-
-/*
- * Pick up VMALLOC_END
- */
 #define ___io(p)		((void __iomem *)((p)+IXP2000_PCI_IO_VIRT_BASE))
 
 /*
@@ -57,8 +53,8 @@
 /*
  * This is an ugly hack but the CS8900 on the 2x01's does not sit in any sort
  * of "I/O space" and is just direct mapped into a 32-bit-only addressable
- * bus. The address space for this bus is such that we can't really easilly
- * make it contigous to the PCI I/O address range, and it also does not
+ * bus. The address space for this bus is such that we can't really easily
+ * make it contiguous to the PCI I/O address range, and it also does not
  * need swapping like PCI addresses do (IXDP2x01 is a BE platform).
  * B/C of this we can't use the standard in/out functions and need to
  * runtime check if the incoming address is a PCI address or for

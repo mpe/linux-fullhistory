@@ -483,6 +483,8 @@ endmenu
 
 if (ARCH_SA1100 || ARCH_INTEGRATOR)
 
+menu "CPU Frequency scaling"
+
 source "drivers/cpufreq/Kconfig"
 
 config CPU_FREQ_SA1100
@@ -505,6 +507,8 @@ config CPU_FREQ_INTEGRATOR
 	  For details, take a look at <file:Documentation/cpu-freq>.
 
 	  If in doubt, say Y.
+
+endmenu
 
 endif
 
