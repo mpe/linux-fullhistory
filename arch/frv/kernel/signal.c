@@ -225,7 +225,6 @@ asmlinkage int sys_rt_sigreturn(void)
 {
 	struct rt_sigframe __user *frame = (struct rt_sigframe __user *) __frame->sp;
 	sigset_t set;
-	stack_t st;
 	int gr8;
 
 	if (!access_ok(VERIFY_READ, frame, sizeof(*frame)))
