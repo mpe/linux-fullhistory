@@ -41,7 +41,7 @@ extern int		eth_header_parse(struct sk_buff *skb,
 					 unsigned char *haddr);
 extern struct net_device	* init_etherdev(struct net_device *, int);
 
-#ifdef CONFIG_IP_ROUTER
+#if 1 /*def CONFIG_IP_ROUTER*/
 static __inline__ void eth_copy_and_sum (struct sk_buff *dest, unsigned char *src, int len, int base)
 {
     memcpy (dest->data, src, len);

@@ -8,7 +8,7 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
- * Version:	$Id: af_unix.c,v 1.87 1999/12/09 00:54:25 davem Exp $
+ * Version:	$Id: af_unix.c,v 1.88 2000/01/18 08:24:28 davem Exp $
  *
  * Fixes:
  *		Linus Torvalds	:	Assorted bug cures.
@@ -337,10 +337,7 @@ static int unix_release_sock (unix_socket *sk, int embrion)
 
 	/* Clear state */
 	unix_state_wlock(sk);
-	write_lock(&sk->callback_lock);
-	sk->dead = 1;
-	sk->socket = NULL;
-	write_unlock(&sk->callback_lock);
+	sock_orphan(sk);
 	sk->shutdown = SHUTDOWN_MASK;
 	dentry = sk->protinfo.af_unix.dentry;
 	sk->protinfo.af_unix.dentry=NULL;
@@ -348,8 +345,7 @@ static int unix_release_sock (unix_socket *sk, int embrion)
 	sk->state = TCP_CLOSE;
 	unix_state_wunlock(sk);
 
-	wake_up_interruptible(sk->sleep);
-	wake_up_interruptible(&sk->protinfo.af_unix.peer_wait);
+	wake_up_interruptible_all(&sk->protinfo.af_unix.peer_wait);
 
 	skpair=unix_peer(sk);
 
@@ -360,7 +356,8 @@ static int unix_release_sock (unix_socket *sk, int embrion)
 			if (!skb_queue_empty(&sk->receive_queue) || embrion)
 				skpair->err = ECONNRESET;
 			unix_state_wunlock(skpair);
-			sk->data_ready(skpair,0);
+			sk->state_change(skpair);
+			sock_wake_async(sk->socket,1,POLL_HUP);
 		}
 		sock_put(skpair); /* It may now die */
 		unix_peer(sk) = NULL;
@@ -418,7 +415,7 @@ static int unix_listen(struct socket *sock, int backlog)
 	if (sk->state != TCP_CLOSE && sk->state != TCP_LISTEN)
 		goto out_unlock;
 	if (backlog > sk->max_ack_backlog)
-		wake_up_interruptible(&sk->protinfo.af_unix.peer_wait);
+		wake_up_interruptible_all(&sk->protinfo.af_unix.peer_wait);
 	sk->max_ack_backlog=backlog;
 	sk->state=TCP_LISTEN;
 	sock->flags |= SO_ACCEPTCON;
@@ -740,26 +737,26 @@ out:
 	return err;
 }
 
-static void unix_wait_for_peer(unix_socket *other)
+static long unix_wait_for_peer(unix_socket *other, long timeo)
 {
 	int sched;
 	DECLARE_WAITQUEUE(wait, current);
 
-	__set_current_state(TASK_INTERRUPTIBLE);
-	add_wait_queue(&other->protinfo.af_unix.peer_wait, &wait);
+	__set_current_state(TASK_INTERRUPTIBLE|TASK_EXCLUSIVE);
+	add_wait_queue_exclusive(&other->protinfo.af_unix.peer_wait, &wait);
 
 	sched = (!other->dead &&
 		 !(other->shutdown&RCV_SHUTDOWN) &&
-		 !signal_pending(current) &&
-		 skb_queue_len(&other->receive_queue) >= other->max_ack_backlog);
+		 skb_queue_len(&other->receive_queue) > other->max_ack_backlog);
 
 	unix_state_runlock(other);
 
 	if (sched)
-		schedule();
+		timeo = schedule_timeout(timeo);
 
 	__set_current_state(TASK_RUNNING);
 	remove_wait_queue(&other->protinfo.af_unix.peer_wait, &wait);
+	return timeo;
 }
 
 static int unix_stream_connect(struct socket *sock, struct sockaddr *uaddr,
@@ -773,6 +770,7 @@ static int unix_stream_connect(struct socket *sock, struct sockaddr *uaddr,
 	unsigned hash;
 	int st;
 	int err;
+	long timeo;
 
 	err = unix_mkname(sunaddr, addr_len, &hash);
 	if (err < 0)
@@ -782,6 +780,8 @@ static int unix_stream_connect(struct socket *sock, struct sockaddr *uaddr,
 	if (sock->passcred && !sk->protinfo.af_unix.addr &&
 	    (err = unix_autobind(sock)) != 0)
 		goto out;
+
+	timeo = sock_sndtimeo(sk, flags & O_NONBLOCK);
 
 	/* First of all allocate resources.
 	   If we will make it after state is locked,
@@ -820,12 +820,12 @@ restart:
 	if (other->state != TCP_LISTEN)
 		goto out_unlock;
 
-	if (skb_queue_len(&other->receive_queue) >= other->max_ack_backlog) {
+	if (skb_queue_len(&other->receive_queue) > other->max_ack_backlog) {
 		err = -EAGAIN;
-		if (flags & O_NONBLOCK)
+		if (!timeo)
 			goto out_unlock;
 
-		unix_wait_for_peer(other);
+		timeo = unix_wait_for_peer(other, timeo);
 
 		err = -ERESTARTSYS;
 		if (signal_pending(current))
@@ -959,8 +959,8 @@ static int unix_accept(struct socket *sock, struct socket *newsock, int flags)
 	if (sk->state!=TCP_LISTEN)
 		goto out;
 
-	/* If socket state is TCP_LISTEN it cannot change,
-	   so that no locks are necessary.
+	/* If socket state is TCP_LISTEN it cannot change (for now...),
+	 * so that no locks are necessary.
 	 */
 
 	skb = skb_recv_datagram(sk, 0, flags&O_NONBLOCK, &err);
@@ -968,16 +968,13 @@ static int unix_accept(struct socket *sock, struct socket *newsock, int flags)
 		goto out;
 
 	tsk = skb->sk;
-	if (skb_queue_len(&sk->receive_queue) <= sk->max_ack_backlog/2)
-		wake_up_interruptible(&sk->protinfo.af_unix.peer_wait);
 	skb_free_datagram(sk, skb);
+	wake_up_interruptible(&sk->protinfo.af_unix.peer_wait);
 
 	/* attach accepted sock to socket */
 	unix_state_wlock(tsk);
 	newsock->state = SS_CONNECTED;
-	newsock->sk = tsk;
-	tsk->sleep = &newsock->wait;
-	tsk->socket = newsock;
+	sock_graft(tsk, newsock);
 	unix_state_wunlock(tsk);
 	return 0;
 
@@ -1069,13 +1066,10 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	int err;
 	unsigned hash;
 	struct sk_buff *skb;
+	long timeo;
 
 	err = -EOPNOTSUPP;
 	if (msg->msg_flags&MSG_OOB)
-		goto out;
-
-	err = -EINVAL;
-	if (msg->msg_flags&~(MSG_DONTWAIT|MSG_NOSIGNAL))
 		goto out;
 
 	if (msg->msg_namelen) {
@@ -1095,6 +1089,7 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	    (err = unix_autobind(sock)) != 0)
 		goto out;
 
+
 	skb = sock_alloc_send_skb(sk, len, 0, msg->msg_flags&MSG_DONTWAIT, &err);
 	if (skb==NULL)
 		goto out;
@@ -1107,6 +1102,8 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	err = memcpy_fromiovec(skb_put(skb,len), msg->msg_iov, len);
 	if (err)
 		goto out_free;
+
+	timeo = sock_sndtimeo(sk, msg->msg_flags & MSG_DONTWAIT);
 
 restart:
 	if (!other) {
@@ -1151,20 +1148,13 @@ restart:
 	if (other->shutdown&RCV_SHUTDOWN)
 		goto out_unlock;
 
-	if (0/*other->user_callback &&
-	    other->user_callback(other->user_data, skb) == 0*/) {
-		unix_state_runlock(other);
-		sock_put(other);
-		return len;
-	}
-
-	if (skb_queue_len(&other->receive_queue) >= other->max_ack_backlog) {
-		if (msg->msg_flags & MSG_DONTWAIT) {
+	if (skb_queue_len(&other->receive_queue) > other->max_ack_backlog) {
+		if (!timeo) {
 			err = -EAGAIN;
 			goto out_unlock;
 		}
 
-		unix_wait_for_peer(other);
+		timeo = unix_wait_for_peer(other, timeo);
 
 		err = -ERESTARTSYS;
 		if (signal_pending(current))
@@ -1203,10 +1193,6 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 
 	err = -EOPNOTSUPP;
 	if (msg->msg_flags&MSG_OOB)
-		goto out_err;
-
-	err = -EINVAL;
-	if (msg->msg_flags&~(MSG_DONTWAIT|MSG_NOSIGNAL))
 		goto out_err;
 
 	if (msg->msg_namelen) {
@@ -1329,8 +1315,7 @@ static int unix_dgram_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 	if (!skb)
 		goto out;
 
-	if (skb_queue_len(&sk->receive_queue) <= sk->max_ack_backlog/2)
-		wake_up_interruptible(&sk->protinfo.af_unix.peer_wait);
+	wake_up_interruptible(&sk->protinfo.af_unix.peer_wait);
 
 	if (msg->msg_name)
 		unix_copy_addr(msg, skb->sk);
@@ -1380,7 +1365,7 @@ out:
  *	Sleep until data has arrive. But check for races..
  */
  
-static void unix_stream_data_wait(unix_socket * sk)
+static long unix_stream_data_wait(unix_socket * sk, long timeo)
 {
 	DECLARE_WAITQUEUE(wait, current);
 
@@ -1394,12 +1379,13 @@ static void unix_stream_data_wait(unix_socket * sk)
 		if (skb_queue_len(&sk->receive_queue) ||
 		    sk->err ||
 		    (sk->shutdown & RCV_SHUTDOWN) ||
-		    signal_pending(current))
+		    signal_pending(current) ||
+		    !timeo)
 			break;
 
 		sk->socket->flags |= SO_WAITDATA;
 		unix_state_runlock(sk);
-		schedule();
+		timeo = schedule_timeout(timeo);
 		unix_state_rlock(sk);
 		sk->socket->flags &= ~SO_WAITDATA;
 	}
@@ -1407,6 +1393,7 @@ static void unix_stream_data_wait(unix_socket * sk)
 	__set_current_state(TASK_RUNNING);
 	remove_wait_queue(sk->sleep, &wait);
 	unix_state_runlock(sk);
+	return timeo;
 }
 
 
@@ -1415,12 +1402,12 @@ static int unix_stream_recvmsg(struct socket *sock, struct msghdr *msg, int size
 			       int flags, struct scm_cookie *scm)
 {
 	struct sock *sk = sock->sk;
-	int noblock = flags & MSG_DONTWAIT;
 	struct sockaddr_un *sunaddr=msg->msg_name;
 	int copied = 0;
 	int check_creds = 0;
-	int target = 1;
+	int target;
 	int err = 0;
+	long timeo;
 
 	err = -EINVAL;
 	if (sk->state != TCP_ESTABLISHED)
@@ -1430,9 +1417,8 @@ static int unix_stream_recvmsg(struct socket *sock, struct msghdr *msg, int size
 	if (flags&MSG_OOB)
 		goto out;
 
-	if (flags&MSG_WAITALL)
-		target = size;
-
+	target = sock_rcvlowat(sk, flags&MSG_WAITALL, size);
+	timeo = sock_rcvtimeo(sk, flags&MSG_DONTWAIT);
 
 	msg->msg_namelen = 0;
 
@@ -1462,11 +1448,11 @@ static int unix_stream_recvmsg(struct socket *sock, struct msghdr *msg, int size
 			if (sk->shutdown & RCV_SHUTDOWN)
 				break;
 			err = -EAGAIN;
-			if (noblock)
+			if (!timeo)
 				break;
 			up(&sk->protinfo.af_unix.readsem);
 
-			unix_stream_data_wait(sk);
+			timeo = unix_stream_data_wait(sk, timeo);
 
 			if (signal_pending(current)) {
 				err = -ERESTARTSYS;
@@ -1569,10 +1555,9 @@ static int unix_shutdown(struct socket *sock, int mode)
 			unix_state_wlock(other);
 			other->shutdown |= peer_mode;
 			unix_state_wunlock(other);
+			other->state_change(other);
 			if (peer_mode&RCV_SHUTDOWN)
-				other->data_ready(other,0);
-			else
-				other->state_change(other);
+				sock_wake_async(sk->socket,1,POLL_HUP);
 		}
 		if (other)
 			sock_put(other);
@@ -1589,14 +1574,11 @@ static int unix_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 
 	switch(cmd)
 	{
-	
-		case TIOCOUTQ:
-			amount = sk->sndbuf - atomic_read(&sk->wmem_alloc);
-			if(amount<0)
-				amount=0;
+		case SIOCOUTQ:
+			amount = atomic_read(&sk->wmem_alloc);
 			err = put_user(amount, (int *)arg);
 			break;
-		case TIOCINQ:
+		case SIOCINQ:
 		{
 			struct sk_buff *skb;
 			if (sk->state==TCP_LISTEN) {
@@ -1630,11 +1612,11 @@ static unsigned int unix_poll(struct file * file, struct socket *sock, poll_tabl
 	/* exceptional events? */
 	if (sk->err)
 		mask |= POLLERR;
-	if (sk->shutdown & RCV_SHUTDOWN)
+	if (sk->shutdown == SHUTDOWN_MASK)
 		mask |= POLLHUP;
 
 	/* readable? */
-	if (!skb_queue_empty(&sk->receive_queue))
+	if (!skb_queue_empty(&sk->receive_queue) || (sk->shutdown&RCV_SHUTDOWN))
 		mask |= POLLIN | POLLRDNORM;
 
 	/* Connection-based need to check for termination and startup */

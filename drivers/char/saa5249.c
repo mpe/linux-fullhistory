@@ -50,7 +50,7 @@
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <stdarg.h>
-#include <linux/i2c-old.h>
+#include <linux/i2c.h>
 #include <linux/videotext.h>
 #include <linux/videodev.h>
 
@@ -101,7 +101,7 @@ struct saa5249_device
 	int is_searching[NUM_DAUS];
 	int disp_mode;
 	int virtual_mode;
-	struct i2c_bus *bus;
+	struct i2c_client *client;
 };
 
 
@@ -109,7 +109,6 @@ struct saa5249_device
 #define CCTRD 35
 #define NOACK_REPEAT 10		/* Retry access this many times on failure */
 #define CLEAR_DELAY (HZ/20)	/* Time required to clear a page */
-#define I2C_TIMEOUT (3*HZ)	/* open/close/SDA-check timeout */
 #define READY_TIMEOUT (30*HZ/1000)	/* Time to wait for ready signal of I²C-bus interface */
 #define INIT_DELAY 500		/* Time in usec to wait at initialization of CEA interface */
 #define START_DELAY 10		/* Time in usec to wait before starting write-cycle (CEA) */
@@ -135,45 +134,60 @@ struct saa5249_device
 
 static struct video_device saa_template;	/* Declared near bottom */
 
-/*
- *	We do most of the hard work when we become a device on the i2c.
- */
- 
-static int saa5249_attach(struct i2c_device *device)
+/* Addresses to scan */
+static unsigned short normal_i2c[] = {34>>1,I2C_CLIENT_END};
+static unsigned short normal_i2c_range[] = {I2C_CLIENT_END};
+static unsigned short probe[2]        = { I2C_CLIENT_END, I2C_CLIENT_END };
+static unsigned short probe_range[2]  = { I2C_CLIENT_END, I2C_CLIENT_END };
+static unsigned short ignore[2]       = { I2C_CLIENT_END, I2C_CLIENT_END };
+static unsigned short ignore_range[2] = { I2C_CLIENT_END, I2C_CLIENT_END };
+static unsigned short force[2]        = { I2C_CLIENT_END, I2C_CLIENT_END };
+
+static struct i2c_client_address_data addr_data = {
+	normal_i2c, normal_i2c_range, 
+	probe, probe_range, 
+	ignore, ignore_range, 
+	force
+};
+
+static struct i2c_client client_template;
+
+static int saa5249_attach(struct i2c_adapter *adap, int addr, unsigned short flags, int kind)		
 {
 	int pgbuf;
 	int err;
+	struct i2c_client *client;
 	struct video_device *vd;
 	struct saa5249_device *t;
-	/* Only attach these chips to the BT848 bus for now */
-	
-	if(device->bus->id!=I2C_BUSID_BT848)
-		return -EINVAL;
-	
-	strcpy(device->name, IF_NAME);
+
+	printk(KERN_INFO "saa5249: teletext chip found.\n");
+	client=kmalloc(sizeof(*client), GFP_KERNEL);
+	if(client==NULL)
+		return -ENOMEM;
+        client_template.adapter = adap;
+        client_template.addr = addr;
+	memcpy(client, &client_template, sizeof(*client));
+	t = kmalloc(sizeof(*t), GFP_KERNEL);
+	if(t==NULL)
+	{
+		kfree(client);
+		return -ENOMEM;
+	}
+	memset(t, 0, sizeof(*t));
+	strcpy(client->name, IF_NAME);
 	
 	/*
 	 *	Now create a video4linux device
 	 */
 	 
-	vd=(struct video_device *)kmalloc(sizeof(struct video_device), GFP_KERNEL);
+	client->data = vd=(struct video_device *)kmalloc(sizeof(struct video_device), GFP_KERNEL);
 	if(vd==NULL)
-		return -ENOMEM;
-	
-	memcpy(vd, &saa_template, sizeof(*vd));
-	
-	/*
-	 *	Attach an saa5249 device
-	 */
-	
-	t=(struct saa5249_device *)kmalloc(sizeof(struct saa5249_device), GFP_KERNEL);
-	if(t==NULL)
 	{
-		kfree(vd);
+		kfree(t);
+		kfree(client);
 		return -ENOMEM;
 	}
-	
-	memset(t, 0, sizeof(*t));
+	memcpy(vd, &saa_template, sizeof(*vd));
 	
 	for (pgbuf = 0; pgbuf < NUM_DAUS; pgbuf++) 
 	{
@@ -186,7 +200,6 @@ static int saa5249_attach(struct i2c_device *device)
 		t->is_searching[pgbuf] = FALSE;
 	}
 	vd->priv=t;		 
-	device->data=vd;
 	
 	/*
 	 *	Register it
@@ -196,22 +209,43 @@ static int saa5249_attach(struct i2c_device *device)
 	{
 		kfree(t);
 		kfree(vd);
+		kfree(client);
 		return err;
 	}
-	t->bus = device->bus;
+	t->client = client;
+	i2c_attach_client(client);
+	MOD_INC_USE_COUNT;
 	return 0;
 }
 
-static int saa5249_detach(struct i2c_device *device)
+/*
+ *	We do most of the hard work when we become a device on the i2c.
+ */
+ 
+static int saa5249_probe(struct i2c_adapter *adap)
 {
-	struct video_device *vd=device->data;
+	/* Only attach these chips to the BT848 bus for now */
+	
+	if (adap->id == (I2C_ALGO_BIT | I2C_HW_B_BT848))
+	{
+		return i2c_probe(adap, &addr_data, saa5249_attach);
+	}
+	return 0;
+}
+
+static int saa5249_detach(struct i2c_client *client)
+{
+	struct video_device *vd=client->data;
+	i2c_detach_client(client);
 	video_unregister_device(vd);
 	kfree(vd->priv);
 	kfree(vd);
+	kfree(client);
+	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
-static int saa5249_command(struct i2c_device *device,
+static int saa5249_command(struct i2c_client *device,
 			     unsigned int cmd, void *arg)
 {
 	return -EINVAL;
@@ -223,10 +257,19 @@ static struct i2c_driver i2c_driver_videotext =
 {
 	IF_NAME,		/* name */
 	I2C_DRIVERID_VIDEOTEXT, /* in i2c.h */
-	34, 35,			/* Addr range */
-	saa5249_attach,
+	I2C_DF_NOTIFY,
+	saa5249_probe,
 	saa5249_detach,
 	saa5249_command
+};
+
+static struct i2c_client client_template = {
+	"(unset)",
+	-1,
+	0,
+	0,
+	NULL,
+	&i2c_driver_videotext
 };
 
 /*
@@ -252,78 +295,34 @@ static void jdelay(unsigned long delay)
 }
 
 
-/* Send arbitrary number of bytes to I²C-bus. Start & stop handshaking is done by this routine.
- * adr should be address of I²C-device, varargs-list of values to send must be terminated by -1
- * Returns -1 if I²C-device didn't send acknowledge, 0 otherwise
+/*
+ *	I2C interfaces
  */
-
-static int i2c_senddata(struct saa5249_device *t, int adr, ...) 
+ 
+static int i2c_sendbuf(struct saa5249_device *t, int reg, int count, u8 *data) 
 {
-	int val, loop;
+	char buf[64];
+	
+	buf[0] = reg;
+	memcpy(buf+1, data, count);
+	
+	if(i2c_master_send(t->client, buf, count+1)==count+1)
+		return 0;
+	return -1;
+}
+
+static int i2c_senddata(struct saa5249_device *t, ...)
+{
+	unsigned char buf[64];
+	int v;
+	int ct=0;
 	va_list argp;
-
-	for (loop = 0; loop <= NOACK_REPEAT; loop++) 
-	{
-		i2c_start(t->bus);
-		if (i2c_sendbyte(t->bus, adr, 0) != 0)
-			goto loopend;
-
-		va_start(argp, adr);
-		while ((val = va_arg(argp, int)) != -1) 
-		{
-			if (val < 0 || val > 255) 
-			{
-				printk(KERN_ERR "vtx: internal error in i2c_senddata\n");
-				break;
-			}
-			if (i2c_sendbyte(t->bus, val, 0) != 0)
-				goto loopend;
-		}
-		va_end(argp);
-		i2c_stop(t->bus);
-		return 0;
-loopend:
-		i2c_stop(t->bus);
-	}
-	va_end(argp);
-	return -1;
+	va_start(argp,t);
+	
+	while((v=va_arg(argp,int))!=-1)
+		buf[ct++]=v;
+	return i2c_sendbuf(t, buf[0], ct-1, buf+1);
 }
-
-
-/* Send count number of bytes from buffer buf to I²C-device adr. Start & stop handshaking is
- * done by this routine. If uaccess is TRUE, data is read from user-space with get_user.
- * Returns -1 if I²C-device didn't send acknowledge, 0 otherwise
- */
-
-static int i2c_sendbuf(struct saa5249_device *t, int adr, int reg, int count, u8 *buf, int uaccess) 
-{
-	int pos, loop;
-	u8 val;
-
-	for (loop = 0; loop <= NOACK_REPEAT; loop++) 
-	{
-		i2c_start(t->bus);
-		if (i2c_sendbyte(t->bus, adr, 0) != 0 || i2c_sendbyte(t->bus, reg, 0) != 0)
-			goto loopend;
-		for (pos = 0; pos < count; pos++) 
-		{
-			/* FIXME: FAULT WITH CLI/SPINLOCK ?? */
-			if (uaccess)
-				get_user(val, buf + pos);
-			else
-				val = buf[pos];
-			if (i2c_sendbyte(t->bus, val, 0) != 0)
-				goto loopend;
-			RESCHED;
-		}
-		i2c_stop(t->bus);
-		return 0;
-loopend:
-		i2c_stop(t->bus);
-	}
-	return -1;
-}
-
 
 /* Get count number of bytes from I²C-device at address adr, store them in buf. Start & stop
  * handshaking is done by this routine, ack will be sent after the last byte to inhibit further
@@ -331,30 +330,11 @@ loopend:
  * Returns -1 if I²C-device didn't send acknowledge, 0 otherwise
  */
 
-static int i2c_getdata(struct saa5249_device *t, int adr, int count, u8 *buf, int uaccess) 
+static int i2c_getdata(struct saa5249_device *t, int count, u8 *buf) 
 {
-	int pos, loop, val;
-
-	for (loop = 0; loop <= NOACK_REPEAT; loop++) 
-	{
-		i2c_start(t->bus);
-		if (i2c_sendbyte(t->bus, adr, 1) != 0)
-			goto loopend;
-		for (pos = 0; pos < count; pos++) 
-		{
-			val = i2c_readbyte(t->bus, (pos==count-1) ? 1 : 0);
-			if (uaccess) 
-				put_user(val, buf + pos);
-			else
-				buf[pos] = val;
-			RESCHED;
-		}
-		i2c_stop(t->bus);
-		return 0;
-loopend:
-		i2c_stop(t->bus);
-	}
-	return -1;
+	if(i2c_master_recv(t->client, buf, count)!=count)
+		return -1;
+	return 0;
 }
 
 
@@ -449,41 +429,41 @@ static int saa5249_ioctl(struct video_device *vd, unsigned int cmd, void *arg)
 				return -EINVAL;
 			if (!t->vdau[req.pgbuf].stopped) 
 			{
-				if (i2c_senddata(t, CCTWR, 2, 0, -1) ||
-					i2c_sendbuf(t, CCTWR, 3, sizeof(t->vdau[0].sregs), t->vdau[req.pgbuf].sregs, FALSE) ||
-					i2c_senddata(t, CCTWR, 8, 0, 25, 0, ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', -1) ||
-					i2c_senddata(t, CCTWR, 2, 0, t->vdau[req.pgbuf].sregs[0] | 8, -1) ||
-					i2c_senddata(t, CCTWR, 8, 0, 25, 0, -1))
+				if (i2c_senddata(t, 2, 0, -1) ||
+					i2c_sendbuf(t, 3, sizeof(t->vdau[0].sregs), t->vdau[req.pgbuf].sregs) ||
+					i2c_senddata(t, 8, 0, 25, 0, ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', -1) ||
+					i2c_senddata(t, 2, 0, t->vdau[req.pgbuf].sregs[0] | 8, -1) ||
+					i2c_senddata(t, 8, 0, 25, 0, -1))
 					return -EIO;
 				jdelay(PAGE_WAIT);
-				if (i2c_getdata(t, CCTRD, 10, infobits, FALSE))
+				if (i2c_getdata(t, 10, infobits))
 					return -EIO;
 
 				if (!(infobits[8] & 0x10) && !(infobits[7] & 0xf0) &&	/* check FOUND-bit */
 					(memcmp(infobits, t->vdau[req.pgbuf].laststat, sizeof(infobits)) || 
 					time_after_eq(jiffies, t->vdau[req.pgbuf].expire)))
 				{		/* check if new page arrived */
-					if (i2c_senddata(t, CCTWR, 8, 0, 0, 0, -1) ||
-						i2c_getdata(t, CCTRD, VTX_PAGESIZE, t->vdau[req.pgbuf].pgbuf, FALSE))
+					if (i2c_senddata(t, 8, 0, 0, 0, -1) ||
+						i2c_getdata(t, VTX_PAGESIZE, t->vdau[req.pgbuf].pgbuf))
 						return -EIO;
 					t->vdau[req.pgbuf].expire = jiffies + PGBUF_EXPIRE;
 					memset(t->vdau[req.pgbuf].pgbuf + VTX_PAGESIZE, ' ', VTX_VIRTUALSIZE - VTX_PAGESIZE);
 					if (t->virtual_mode) 
 					{
 						/* Packet X/24 */
-						if (i2c_senddata(t, CCTWR, 8, 0, 0x20, 0, -1) ||
-							i2c_getdata(t, CCTRD, 40, t->vdau[req.pgbuf].pgbuf + VTX_PAGESIZE + 20 * 40, FALSE))
+						if (i2c_senddata(t, 8, 0, 0x20, 0, -1) ||
+							i2c_getdata(t, 40, t->vdau[req.pgbuf].pgbuf + VTX_PAGESIZE + 20 * 40))
 							return -EIO;
 						/* Packet X/27/0 */
-						if (i2c_senddata(t, CCTWR, 8, 0, 0x21, 0, -1) ||
-							i2c_getdata(t, CCTRD, 40, t->vdau[req.pgbuf].pgbuf + VTX_PAGESIZE + 16 * 40, FALSE))
+						if (i2c_senddata(t, 8, 0, 0x21, 0, -1) ||
+							i2c_getdata(t, 40, t->vdau[req.pgbuf].pgbuf + VTX_PAGESIZE + 16 * 40))
 							return -EIO;
 						/* Packet 8/30/0...8/30/15
 						 * FIXME: AFAIK, the 5249 does hamming-decoding for some bytes in packet 8/30,
 						 *        so we should undo this here.
 						 */
-						if (i2c_senddata(t, CCTWR, 8, 0, 0x22, 0, -1) ||
-							i2c_getdata(t, CCTRD, 40, t->vdau[req.pgbuf].pgbuf + VTX_PAGESIZE + 23 * 40, FALSE))
+						if (i2c_senddata(t, 8, 0, 0x22, 0, -1) ||
+							i2c_getdata(t, 40, t->vdau[req.pgbuf].pgbuf + VTX_PAGESIZE + 23 * 40))
 							return -EIO;
 					}
 					t->vdau[req.pgbuf].clrfound = FALSE;
@@ -554,20 +534,30 @@ static int saa5249_ioctl(struct video_device *vd, unsigned int cmd, void *arg)
 			  
 			if (req.start <= 39 && req.end >= 32) 
 			{
+				int len;
+				char buf[16];  
 				start = MAX(req.start, 32);
 				end = MIN(req.end, 39);
-				if (i2c_senddata(t, CCTWR, 8, 0, 0, start, -1) ||
-					i2c_getdata(t, CCTRD, end - start + 1, req.buffer + start - req.start, TRUE))
+				len=end-start+1;
+				if (i2c_senddata(t, 8, 0, 0, start, -1) ||
+					i2c_getdata(t, len, buf))
 					return -EIO;
+				if(copy_to_user(req.buffer+start-req.start, buf, len))
+					return -EFAULT;
 			}
 			/* Insert the current header if DAU is still searching for a page */
 			if (req.start <= 31 && req.end >= 7 && t->is_searching[req.pgbuf]) 
 			{
+				char buf[32];
+				int len;
 				start = MAX(req.start, 7);
 				end = MIN(req.end, 31);
-				if (i2c_senddata(t, CCTWR, 8, 0, 0, start, -1) ||
-					i2c_getdata(t, CCTRD, end - start + 1, req.buffer + start - req.start, TRUE))
+				len=end-start+1;
+				if (i2c_senddata(t, 8, 0, 0, start, -1) ||
+					i2c_getdata(t, len, buf))
 					return -EIO;
+				if(copy_to_user(req.buffer+start-req.start, buf, len))
+					return -EFAULT;
 			}
 			return 0;
 		}
@@ -592,11 +582,11 @@ static int saa5249_ioctl(struct video_device *vd, unsigned int cmd, void *arg)
 			
 		case VTXIOCCLRCACHE: 
 		{
-			if (i2c_senddata(t ,CCTWR, 0, NUM_DAUS, 0, 8, -1) || i2c_senddata(t, CCTWR, 11,
+			if (i2c_senddata(t, 0, NUM_DAUS, 0, 8, -1) || i2c_senddata(t, 11,
 				' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',
 				' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ', -1))
 				return -EIO;
-			if (i2c_senddata(t, CCTWR, 3, 0x20, -1))
+			if (i2c_senddata(t, 3, 0x20, -1))
 				return -EIO;
 			jdelay(10 * CLEAR_DELAY);			/* I have no idea how long we have to wait here */
 			return 0;
@@ -618,14 +608,14 @@ static int saa5249_open(struct video_device *vd, int nb)
 	struct saa5249_device *t=vd->priv;
 	int pgbuf;
 
-	if (t->bus==NULL) 
+	if (t->client==NULL) 
 		return -ENODEV;
 
-	if (i2c_senddata(t, CCTWR, 0, 0, -1) ||		/* Select R11 */
+	if (i2c_senddata(t, 0, 0, -1) ||		/* Select R11 */
 						/* Turn off parity checks (we do this ourselves) */
-		i2c_senddata(t, CCTWR, 1, disp_modes[t->disp_mode][0], 0, -1) ||
+		i2c_senddata(t, 1, disp_modes[t->disp_mode][0], 0, -1) ||
 						/* Display TV-picture, no virtual rows */
-		i2c_senddata(t, CCTWR, 4, NUM_DAUS, disp_modes[t->disp_mode][1], disp_modes[t->disp_mode][2], 7, -1)) /* Set display to page 4 */
+		i2c_senddata(t, 4, NUM_DAUS, disp_modes[t->disp_mode][1], disp_modes[t->disp_mode][2], 7, -1)) /* Set display to page 4 */
 	
 	{
 		return -EIO;
@@ -651,8 +641,8 @@ static int saa5249_open(struct video_device *vd, int nb)
 static void saa5249_release(struct video_device *vd) 
 {
 	struct saa5249_device *t=vd->priv;
-	i2c_senddata(t, CCTWR, 1, 0x20, -1);		/* Turn off CCT */
-	i2c_senddata(t, CCTWR, 5, 3, 3, -1);		/* Turn off TV-display */
+	i2c_senddata(t, 1, 0x20, -1);		/* Turn off CCT */
+	i2c_senddata(t, 5, 3, 3, -1);		/* Turn off TV-display */
 	MOD_DEC_USE_COUNT;
 	return;
 }
@@ -666,12 +656,12 @@ static int __init init_saa_5249 (void)
 {
 	printk(KERN_INFO "SAA5249 driver (" IF_NAME " interface) for VideoText version %d.%d\n",
 			VTX_VER_MAJ, VTX_VER_MIN);
-	return i2c_register_driver(&i2c_driver_videotext);
+	return i2c_add_driver(&i2c_driver_videotext);
 }
 
 static void __exit cleanup_saa_5249 (void) 
 {
-	i2c_unregister_driver(&i2c_driver_videotext);
+	i2c_del_driver(&i2c_driver_videotext);
 }
 
 module_init(init_saa_5249);

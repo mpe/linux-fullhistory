@@ -9,15 +9,16 @@
 *		 o Logical connection management (switched virtual circuits)
 *		 o Protocol encapsulation/decapsulation
 *
-* Author:	Gene Kozin	<genek@compuserve.com>
+* Author:	Gideon Hack	
 *
-* Copyright:	(c) 1995-1997 Sangoma Technologies Inc.
+* Copyright:	(c) 1995-1999 Sangoma Technologies Inc.
 *
 *		This program is free software; you can redistribute it and/or
 *		modify it under the terms of the GNU General Public License
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* Oct 01, 1999  Gideon Hack     Update for s514 PCI card
 * Dec 27, 1996	Gene Kozin	Initial version (based on Sangoma's WANPIPE)
 * Jan 16, 1997	Gene Kozin	router_devlist made public
 * Jan 31, 1997  Alan Cox	Hacked it about a bit for 2.1
@@ -31,8 +32,10 @@
 *                               kernel memory and copy configuration data to
 *                               kernel space (for big firmwares)
 * May 19, 1999  Arnaldo Melo    __init in wanrouter_init
+* Jun 02, 1999  Gideon Hack	Updates for Linux 2.0.X and 2.2.X kernels.	
 *****************************************************************************/
 
+#include <linux/version.h>
 #include <linux/config.h>
 #include <linux/stddef.h>	/* offsetof(), etc. */
 #include <linux/errno.h>	/* return codes */
@@ -48,7 +51,11 @@
 #include <linux/wanrouter.h>	/* WAN router API definitions */
 #include <linux/init.h>		/* __init et al. */
 
-/****** Defines and Macros **************************************************/
+
+
+/*
+ * 	Defines and Macros 
+ */
 
 #ifndef	min
 #define min(a,b) (((a)<(b))?(a):(b))
@@ -57,48 +64,49 @@
 #define max(a,b) (((a)>(b))?(a):(b))
 #endif
 
-/****** Function Prototypes *************************************************/
-
 /*
- *	Kernel loadable module interface.
+ * 	Function Prototypes 
  */
 
+/* 
+ * 	Kernel loadable module interface.
+ */
 #ifdef MODULE
 int init_module (void);
 void cleanup_module (void);
 #endif
 
-/*
+/* 
  *	WAN device IOCTL handlers 
  */
 
-static int device_setup (wan_device_t* wandev, wandev_conf_t* u_conf);
-static int device_stat (wan_device_t* wandev, wandev_stat_t* u_stat);
-static int device_shutdown (wan_device_t* wandev);
-static int device_new_if (wan_device_t* wandev, wanif_conf_t* u_conf);
-static int device_del_if (wan_device_t* wandev, char* u_name);
-
-/*
+static int device_setup(wan_device_t *wandev, wandev_conf_t *u_conf);
+static int device_stat(wan_device_t *wandev, wandev_stat_t *u_stat);
+static int device_shutdown(wan_device_t *wandev);
+static int device_new_if(wan_device_t *wandev, wanif_conf_t *u_conf);
+static int device_del_if(wan_device_t *wandev, char *u_name);
+ 
+/* 
  *	Miscellaneous 
  */
 
-static wan_device_t* find_device (char* name);
-static int delete_interface (wan_device_t* wandev, char* name, int forse);
+static wan_device_t *find_device (char *name);
+static int delete_interface (wan_device_t *wandev, char *name, int force);
 
 /*
  *	Global Data
  */
 
 static char fullname[]		= "WAN Router";
-static char copyright[]		= "(c) 1995-1997 Sangoma Technologies Inc.";
+static char copyright[]		= "(c) 1995-1999 Sangoma Technologies Inc.";
 static char modname[]		= ROUTER_NAME;	/* short module name */
-wan_device_t * router_devlist	= NULL;	/* list of registered devices */
-static int devcnt		= 0;
+wan_device_t* router_devlist 	= NULL;	/* list of registered devices */
+static int devcnt 		= 0;
 
-/*
- *	Organizationally Unique Identifiers for encapsulation/decapsulation
+/* 
+ *	Organize Unique Identifiers for encapsulation/decapsulation 
  */
- 
+
 static unsigned char oui_ether[] = { 0x00, 0x00, 0x00 };
 #if 0
 static unsigned char oui_802_2[] = { 0x00, 0x80, 0xC2 };
@@ -115,8 +123,7 @@ int __init wanrouter_init(void)
 		fullname, ROUTER_VERSION, ROUTER_RELEASE, copyright);
 	err = wanrouter_proc_init();
 	if (err)
-		printk(KERN_ERR "%s: can't create entry in proc filesystem!\n",
-				modname);		
+		printk(KERN_ERR "%s: can't create entry in proc filesystem!\n",	modname);
 
 	/*
 	 *	Initialise compiled in boards
@@ -138,14 +145,14 @@ int __init wanrouter_init(void)
  */
 
 /*
- *	Module 'insert' entry point.
- *	o print announcement
- *	o initialize static data
- *	o create /proc/net/router directory and static entries
+ * 	Module 'insert' entry point.
+ * 	o print announcement
+ * 	o initialize static data
+ * 	o create /proc/net/router directory and static entries
  *
- *	Return:	0	Ok
+ * 	Return:	0	Ok
  *		< 0	error.
- *	Context:	process
+ * 	Context:	process
  */
 
 int init_module	(void)
@@ -161,10 +168,10 @@ int init_module	(void)
 }
 
 /*
- *	Module 'remove' entry point.
- *	o delete /proc/net/router directory and static entries.
+ * 	Module 'remove' entry point.
+ * 	o delete /proc/net/router directory and static entries.
  */
- 
+
 void cleanup_module (void)
 {
 	wanrouter_proc_cleanup();
@@ -173,33 +180,34 @@ void cleanup_module (void)
 #endif
 
 /*
- *	Kernel APIs
+ * 	Kernel APIs
  */
 
 /*
- *	Register WAN device.
- *	o verify device credentials
- *	o create an entry for the device in the /proc/net/router directory
- *	o initialize internally maintained fields of the wan_device structure
- *	o link device data space to a singly-linked list
- *	o if it's the first device, then start kernel 'thread'
- *	o increment module use count
+ * 	Register WAN device.
+ * 	o verify device credentials
+ * 	o create an entry for the device in the /proc/net/router directory
+ * 	o initialize internally maintained fields of the wan_device structure
+ * 	o link device data space to a singly-linked list
+ * 	o if it's the first device, then start kernel 'thread'
+ * 	o increment module use count
  *
- *	 Return:
- *		0	Ok
- *		< 0	error.
+ * 	Return:
+ *	0	Ok
+ *	< 0	error.
  *
- *	Context:	process
+ * 	Context:	process
  */
 
-int register_wan_device(wan_device_t* wandev)
+
+int register_wan_device(wan_device_t *wandev)
 {
 	int err, namelen;
 
 	if ((wandev == NULL) || (wandev->magic != ROUTER_MAGIC) ||
 	    (wandev->name == NULL))
 		return -EINVAL;
-		
+
 	namelen = strlen(wandev->name);
 	if (!namelen || (namelen > WAN_DRVNAME_SZ))
 		return -EINVAL;
@@ -215,12 +223,10 @@ int register_wan_device(wan_device_t* wandev)
 	 *	Register /proc directory entry 
 	 */
 	err = wanrouter_proc_add(wandev);
-	if (err)
-	{
+	if (err) {
 		printk(KERN_ERR
 			"%s: can't create /proc/net/router/%s entry!\n",
-			modname, wandev->name)
-		;
+			modname, wandev->name);
 		return err;
 	}
 
@@ -250,8 +256,8 @@ int register_wan_device(wan_device_t* wandev)
  *	Context:	process
  */
 
- 
-int unregister_wan_device(char* name)
+
+int unregister_wan_device(char *name)
 {
 	wan_device_t *wandev, *prev;
 
@@ -269,8 +275,7 @@ int unregister_wan_device(char* name)
 	printk(KERN_INFO "%s: unregistering WAN device %s\n", modname, name);
 #endif
 	
-	if (wandev->state != WAN_UNCONFIGURED)
-	{
+	if (wandev->state != WAN_UNCONFIGURED) {
 		while(wandev->dev)
 			delete_interface(wandev, wandev->dev->name, 1);
 		if (wandev->shutdown)	
@@ -359,7 +364,6 @@ unsigned short wanrouter_type_trans (struct sk_buff* skb, struct net_device* dev
 				"on interface %s!\n", modname,
 				skb->data[cnt+1], skb->data[cnt+2],
 				skb->data[cnt+3], dev->name);
-			;
 			return 0;
 		}	
 		ethertype = *((unsigned short*)&skb->data[cnt+4]);
@@ -371,8 +375,7 @@ unsigned short wanrouter_type_trans (struct sk_buff* skb, struct net_device* dev
 	default:
 		printk(KERN_INFO
 			"%s: unsupported NLPID 0x%02X on interface %s!\n",
-			modname, skb->data[cnt], dev->name)
-		;
+			modname, skb->data[cnt], dev->name);
 		return 0;
 	}
 	skb->protocol = ethertype;
@@ -382,18 +385,19 @@ unsigned short wanrouter_type_trans (struct sk_buff* skb, struct net_device* dev
 	return ethertype;
 }
 
+
 /*
  *	WAN device IOCTL.
  *	o find WAN device associated with this node
  *	o execute requested action or pass command to the device driver
  */
 
-int wanrouter_ioctl(struct inode* inode, struct file* file,
+int wanrouter_ioctl(struct inode *inode, struct file *file,
 		unsigned int cmd, unsigned long arg)
 {
 	int err = 0;
-	struct proc_dir_entry* dent;
-	wan_device_t* wandev;
+	struct proc_dir_entry *dent;
+	wan_device_t *wandev;
 
 	if (!capable(CAP_NET_ADMIN)){
 		return -EPERM;
@@ -410,8 +414,7 @@ int wanrouter_ioctl(struct inode* inode, struct file* file,
 	if (wandev->magic != ROUTER_MAGIC)
 		return -EINVAL;
 		
-	switch (cmd)
-	{
+	switch (cmd) {
 	case ROUTER_SETUP:
 		err = device_setup(wandev, (void*)arg);
 		break;
@@ -439,8 +442,7 @@ int wanrouter_ioctl(struct inode* inode, struct file* file,
 		if ((cmd >= ROUTER_USER) &&
 		    (cmd <= ROUTER_USER_MAX) &&
 		    wandev->ioctl)
-			err = wandev->ioctl(wandev, cmd, arg)
-		;
+			err = wandev->ioctl(wandev, cmd, arg);
 		else err = -EINVAL;
 	}
 	return err;
@@ -458,51 +460,52 @@ int wanrouter_ioctl(struct inode* inode, struct file* file,
  *	o call driver's setup() entry point
  */
 
-static int device_setup (wan_device_t* wandev, wandev_conf_t* u_conf)
+static int device_setup (wan_device_t *wandev, wandev_conf_t *u_conf)
 {
-	void* data;
+	void *data = NULL;
 	wandev_conf_t *conf;
-	int err= -EINVAL;
+	int err = -EINVAL;
 
 	if (wandev->setup == NULL)	/* Nothing to do ? */
 		return 0;
-	
+
 	conf = kmalloc(sizeof(wandev_conf_t), GFP_KERNEL);
 	if (conf == NULL)
 		return -ENOBUFS;
-		
-	if(copy_from_user(conf, u_conf, sizeof(wandev_conf_t)))
-	{
+
+	if(copy_from_user(conf, u_conf, sizeof(wandev_conf_t))) {
 		kfree(conf);
 		return -EFAULT;
 	}
 	
-	if (conf->magic != ROUTER_MAGIC)
-		goto bail;
+	if (conf->magic != ROUTER_MAGIC) {
+		kfree(conf);
+	        return -EINVAL; 
+	}
 
-	if (conf->data_size && conf->data)
-	{
-		if(conf->data_size > 128000 || conf->data_size < 0){
-			goto bail;
+	if (conf->data_size && conf->data) {
+		if(conf->data_size > 128000 || conf->data_size < 0) {
+			kfree(conf);
+		        return -EINVAL;;
 		}
+
 		data = vmalloc(conf->data_size);
-		if (data)
-		{
-			if(!copy_from_user(data, conf->data, conf->data_size))
-			{
+		if (data) {
+			if(!copy_from_user(data, conf->data, conf->data_size)){
 				conf->data=data;
 				err = wandev->setup(wandev,conf);
 			}
 			else 
 				err = -EFAULT;
 		}
-		else
+		else 
 			err = -ENOBUFS;
-			
+
 		if (data)
 			vfree(data);
+
 	}
-bail:
+
 	kfree(conf);
 	return err;
 }
@@ -537,7 +540,7 @@ static int device_shutdown (wan_device_t* wandev)
  *	Get WAN device status & statistics.
  */
 
-static int device_stat (wan_device_t* wandev, wandev_stat_t* u_stat)
+static int device_stat (wan_device_t *wandev, wandev_stat_t *u_stat)
 {
 	wandev_stat_t stat;
 
@@ -553,6 +556,7 @@ static int device_stat (wan_device_t* wandev, wandev_stat_t* u_stat)
 
 	if(copy_to_user(u_stat, &stat, sizeof(stat)))
 		return -EFAULT;
+
 	return 0;
 }
 
@@ -569,7 +573,7 @@ static int device_stat (wan_device_t* wandev, wandev_stat_t* u_stat)
 static int device_new_if (wan_device_t* wandev, wanif_conf_t* u_conf)
 {
 	wanif_conf_t conf;
-	struct net_device* dev;
+	struct net_device *dev;
 	int err;
 
 	if ((wandev->state == WAN_UNCONFIGURED) || (wandev->new_if == NULL))
@@ -587,8 +591,7 @@ static int device_new_if (wan_device_t* wandev, wanif_conf_t* u_conf)
 		
 	memset(dev, 0, sizeof(struct net_device));
 	err = wandev->new_if(wandev, dev, &conf);
-	if (!err)
-	{
+	if (!err) {
 		/* Register network interface. This will invoke init()
 		 * function supplied by the driver.  If device registered
 		 * successfully, add it to the interface list.
@@ -598,15 +601,13 @@ static int device_new_if (wan_device_t* wandev, wanif_conf_t* u_conf)
 			
 		else if (dev_get(dev->name))
 			err = -EEXIST;	/* name already exists */
-		else
-		{
+		else {
 #ifdef WANDEBUG		
 			printk(KERN_INFO "%s: registering interface %s...\n",
 				modname, dev->name);
 #endif				
 			err = register_netdev(dev);
-			if (!err)
-			{
+			if (!err) {
 				cli();	/***** critical section start *****/
 				dev->slave = wandev->dev;
 				wandev->dev = dev;
@@ -622,24 +623,27 @@ static int device_new_if (wan_device_t* wandev, wanif_conf_t* u_conf)
 	return err;
 }
 
+
 /*
  *	Delete WAN logical channel.
  *	 o verify user address space
  *	 o copy configuration data to kernel address space
  */
 
-static int device_del_if (wan_device_t* wandev, char* u_name)
+static int device_del_if (wan_device_t *wandev, char *u_name)
 {
 	char name[WAN_IFNAME_SZ + 1];
 
 	if (wandev->state == WAN_UNCONFIGURED)
 		return -ENODEV;
-		
+	
 	memset(name, 0, sizeof(name));
+
 	if(copy_from_user(name, u_name, WAN_IFNAME_SZ))
 		return -EFAULT;
 	return delete_interface(wandev, name, 0);
 }
+
 
 /*
  *	Miscellaneous Functions
@@ -650,9 +654,9 @@ static int device_del_if (wan_device_t* wandev, char* u_name)
  *	Return pointer to the WAN device data space or NULL if device not found.
  */
 
-static wan_device_t* find_device (char* name)
+static wan_device_t *find_device(char *name)
 {
-	wan_device_t* wandev;
+	wan_device_t *wandev;
 
 	for (wandev = router_devlist;wandev && strcmp(wandev->name, name);
 		wandev = wandev->next);
@@ -676,7 +680,7 @@ static wan_device_t* find_device (char* name)
  *	sure that opened interfaces are not removed!
  */
 
-static int delete_interface (wan_device_t* wandev, char* name, int force)
+static int delete_interface (wan_device_t *wandev, char *name, int force)
 {
 	struct net_device *dev, *prev;
 
@@ -687,16 +691,16 @@ static int delete_interface (wan_device_t* wandev, char* name, int force)
 	if (dev == NULL)
 		return -ENODEV;	/* interface not found */
 
-	if (dev->start)
-	{
-		if (force)
-		{
+	if (dev->start) {
+		if (force) {
 			printk(KERN_WARNING
-				"%s: deleting opened interface %s!\n",modname, name);
+				"%s: deleting opened interface %s!\n",
+				modname, name);
 		}
 		else
 			return -EBUSY;	/* interface in use */
 	}
+
 	if (wandev->del_if)
 		wandev->del_if(wandev, dev);
 
@@ -708,7 +712,7 @@ static int delete_interface (wan_device_t* wandev, char* name, int force)
 	--wandev->ndev;
 	sti();			/****** critical section end ******/
 
-	printk("Unregistering '%s'\n", dev->name);
+	printk("Unregistering '%s'\n", dev->name); 
 	unregister_netdev(dev);
 	kfree(dev);
 	return 0;
@@ -722,4 +726,3 @@ EXPORT_SYMBOL(wanrouter_type_trans);
 /*
  *	End
  */
-

@@ -48,6 +48,7 @@ extern int rcpci_probe(void);
 extern int rr_hippi_probe(void); 
 extern int rtl8139_probe(void); 
 extern int sdla_setup(void); 
+extern int sdla_c_setup(void); 
 extern int sis900_probe(void); 
 extern int skge_probe(void); 
 extern int sparc_lance_probe(void); 
@@ -94,7 +95,7 @@ struct net_probe pci_probes[] __initdata = {
 	{dlci_setup, 0},
 #endif
 #if defined(CONFIG_SDLA)
-	{sdla_setup, 0},
+	{sdla_c_setup, 0},
 #endif
 #if defined(CONFIG_LAPBETHER)
 	{lapbeth_init, 0},

@@ -213,8 +213,9 @@ udf_get_fileident(void * buffer, int bufsize, int * offset)
 #ifdef __KERNEL__
 		udf_debug("0x%x != TID_FILE_IDENT_DESC\n",
 			le16_to_cpu(fi->descTag.tagIdent));
-		udf_debug("offset: %u sizeof: %u bufsize: %u\n",
-			*offset, sizeof(struct FileIdentDesc), bufsize);
+		udf_debug("offset: %u sizeof: %lu bufsize: %u\n",
+			*offset, (unsigned long)sizeof(struct FileIdentDesc),
+			bufsize);
 #endif
 		return NULL;
 	}

@@ -854,12 +854,12 @@ S: Oakland, CA
 S: USA
 
 N: Jochen Hein
-E: jochen.hein@delphi.central.de
+E: jochen@jochen.org
 P: 1024/4A27F015 25 72 FB E3 85 9F DE 3B  CB 0A DA DA 40 77 05 6C
 D: National Language Support
 D: Linux Internationalization Project
 D: German Localization for Linux and GNU software
-S: Frankenstraﬂe
+S: Frankenstraﬂe 33
 S: 34131 Kassel
 S: Germany
 
@@ -937,7 +937,7 @@ S: CV5 8BZ
 S: United Kingdom
 
 N: Ron Holt
-E: ron@holt.org
+E: ron@sovereign.org
 W: http://www.holt.org/
 W: http://www.ronholt.com/
 D: Kernel development

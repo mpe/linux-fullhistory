@@ -1,4 +1,4 @@
-/* $Id: stat.h,v 1.10 1999/12/21 14:09:41 jj Exp $ */
+/* $Id: stat.h,v 1.11 2000/01/16 15:22:53 jj Exp $ */
 #ifndef _SPARC_STAT_H
 #define _SPARC_STAT_H
 
@@ -19,23 +19,23 @@ struct __old_kernel_stat {
 };
 
 struct stat {
-	dev_t   st_dev;
-	ino_t   st_ino;
-	mode_t  st_mode;
-	short   st_nlink;
-	uid_t   st_uid;
-	gid_t   st_gid;
-	dev_t   st_rdev;
-	off_t   st_size;
-	time_t  st_atime;
-	unsigned long  __unused1;
-	time_t  st_mtime;
-	unsigned long  __unused2;
-	time_t  st_ctime;
-	unsigned long  __unused3;
-	off_t   st_blksize;
-	off_t   st_blocks;
-	unsigned long  __unused4[2];
+	unsigned short	st_dev;
+	unsigned long	st_ino;
+	unsigned short	st_mode;
+	short		st_nlink;
+	unsigned short	st_uid;
+	unsigned short	st_gid;
+	unsigned short	st_rdev;
+	long		st_size;
+	long		st_atime;
+	unsigned long	__unused1;
+	long		st_mtime;
+	unsigned long	__unused2;
+	long		st_ctime;
+	unsigned long	__unused3;
+	long		st_blksize;
+	long		st_blocks;
+	unsigned long	__unused4[2];
 };
 
 struct stat64 {

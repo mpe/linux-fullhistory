@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.48 2000/01/09 02:19:53 davem Exp $
+ *	$Id: udp.c,v 1.50 2000/01/18 08:24:24 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -366,54 +366,19 @@ int udpv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
   		msg->msg_flags |= MSG_TRUNC;
   	}
 
-#ifndef CONFIG_UDP_DELAY_CSUM
-	err = skb_copy_datagram_iovec(skb, sizeof(struct udphdr), 
-				      msg->msg_iov, copied);
-#else
 	if (skb->ip_summed==CHECKSUM_UNNECESSARY) {
 		err = skb_copy_datagram_iovec(skb, sizeof(struct udphdr), msg->msg_iov,
 					      copied);
-	} else if (copied > msg->msg_iov[0].iov_len || (msg->msg_flags&MSG_TRUNC)) {
-		if ((unsigned short)csum_fold(csum_partial(skb->h.raw, skb->len, skb->csum))) {
-			/* Clear queue. */
-			if (flags&MSG_PEEK) {
-				int clear = 0;
-				spin_lock_irq(&sk->receive_queue.lock);
-				if (skb == skb_peek(&sk->receive_queue)) {
-					__skb_unlink(skb, &sk->receive_queue);
-					clear = 1;
-				}
-				spin_unlock_irq(&sk->receive_queue.lock);
-				if (clear)
-					kfree_skb(skb);
-			}
-
-			/* Error for blocking case is chosen to masquerade
-			   as some normal condition.
-			 */
-			err = (flags&MSG_DONTWAIT) ? -EAGAIN : -EHOSTUNREACH;
-			udp_stats_in6.UdpInErrors++;
-			goto out_free;
-		}
+	} else if (msg->msg_flags&MSG_TRUNC) {
+		if ((unsigned short)csum_fold(csum_partial(skb->h.raw, skb->len, skb->csum)))
+			goto csum_copy_err;
 		err = skb_copy_datagram_iovec(skb, sizeof(struct udphdr), msg->msg_iov,
 					      copied);
 	} else {
-		unsigned int csum = csum_partial(skb->h.raw, sizeof(struct udphdr), skb->csum);
-
-		err = 0;
-		csum = csum_and_copy_to_user((char*)&skb->h.uh[1], msg->msg_iov[0].iov_base, copied, csum, &err);
+		err = copy_and_csum_toiovec(msg->msg_iov, skb, sizeof(struct udphdr));
 		if (err)
-			goto out_free;
-		if ((unsigned short)csum_fold(csum)) {
-			/* Error for blocking case is chosen to masquerade
-			   as some normal condition.
-			 */
-			err = (flags&MSG_DONTWAIT) ? -EAGAIN : -EHOSTUNREACH;
-			udp_stats_in6.UdpInErrors++;
-			goto out_free;
-		}
+			goto csum_copy_err;
 	}
-#endif
 	if (err)
 		goto out_free;
 
@@ -447,6 +412,27 @@ out_free:
 	skb_free_datagram(sk, skb);
 out:
 	return err;
+
+csum_copy_err:
+	/* Clear queue. */
+	if (flags&MSG_PEEK) {
+		int clear = 0;
+		spin_lock_irq(&sk->receive_queue.lock);
+		if (skb == skb_peek(&sk->receive_queue)) {
+			__skb_unlink(skb, &sk->receive_queue);
+			clear = 1;
+		}
+		spin_unlock_irq(&sk->receive_queue.lock);
+		if (clear)
+			kfree_skb(skb);
+	}
+
+	/* Error for blocking case is chosen to masquerade
+	   as some normal condition.
+	 */
+	err = (flags&MSG_DONTWAIT) ? -EAGAIN : -EHOSTUNREACH;
+	UDP6_INC_STATS_USER(UdpInErrors);
+	goto out_free;
 }
 
 void udpv6_err(struct sk_buff *skb, struct ipv6hdr *hdr,
@@ -474,7 +460,7 @@ void udpv6_err(struct sk_buff *skb, struct ipv6hdr *hdr,
 	    !sk->net_pinfo.af_inet6.recverr)
 		goto out;
 
-	if (sk->bsdism && sk->state!=TCP_ESTABLISHED &&
+	if (sk->state!=TCP_ESTABLISHED &&
 	    !sk->net_pinfo.af_inet6.recverr)
 		goto out;
 
@@ -489,7 +475,7 @@ out:
 
 static inline int udpv6_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
 {
-#if defined(CONFIG_FILTER) && defined(CONFIG_UDP_DELAY_CSUM)
+#if defined(CONFIG_FILTER)
 	if (sk->filter && skb->ip_summed != CHECKSUM_UNNECESSARY) {
 		if ((unsigned short)csum_fold(csum_partial(skb->h.raw, skb->len, skb->csum))) {
 			UDP6_INC_STATS_BH(UdpInErrors);
@@ -621,24 +607,12 @@ int udpv6_rcv(struct sk_buff *skb, unsigned long len)
 
 	skb_trim(skb, ulen);
 
-#ifndef CONFIG_UDP_DELAY_CSUM
-	switch (skb->ip_summed) {
-	case CHECKSUM_NONE:
-		skb->csum = csum_partial((char*)uh, ulen, 0);
-	case CHECKSUM_HW:
-		if (csum_ipv6_magic(saddr, daddr, ulen, IPPROTO_UDP, skb->csum)) {
-			printk(KERN_DEBUG "IPv6: udp checksum error\n");
-			goto discard;
-		}
-	};
-#else
 	if (skb->ip_summed==CHECKSUM_HW) {
 		if (csum_ipv6_magic(saddr, daddr, ulen, IPPROTO_UDP, skb->csum))
 			goto discard;
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
 	} else if (skb->ip_summed != CHECKSUM_UNNECESSARY)
 		skb->csum = ~csum_ipv6_magic(saddr, daddr, ulen, IPPROTO_UDP, 0);
-#endif
 
 	len = ulen;
 
@@ -651,7 +625,7 @@ int udpv6_rcv(struct sk_buff *skb, unsigned long len)
 	}
 
 	/* Unicast */
-	
+
 	/* 
 	 * check socket cache ... must talk to Alan about his plans
 	 * for sock caches... i'll skip this for now.
@@ -660,22 +634,14 @@ int udpv6_rcv(struct sk_buff *skb, unsigned long len)
 	sk = udp_v6_lookup(saddr, uh->source, daddr, uh->dest, dev->ifindex);
 	
 	if (sk == NULL) {
-#ifdef CONFIG_UDP_DELAY_CSUM
 		if (skb->ip_summed != CHECKSUM_UNNECESSARY &&
 		    (unsigned short)csum_fold(csum_partial((char*)uh, len, skb->csum)))
 			goto discard;
-#endif
 		UDP6_INC_STATS_BH(UdpNoPorts);
 
 		icmpv6_send(skb, ICMPV6_DEST_UNREACH, ICMPV6_PORT_UNREACH, 0, dev);
 
 		kfree_skb(skb);
-		return(0);
-	}
-	if (0/*sk->user_callback &&
-	    sk->user_callback(sk->user_data, skb) == 0*/) {
-		UDP6_INC_STATS_BH(UdpInDatagrams);
-		sock_put(sk);
 		return(0);
 	}
 	
@@ -980,10 +946,6 @@ struct proto udpv6_prot = {
 	udpv6_connect,			/* connect */
 	udp_disconnect,			/* disconnect */
 	NULL,				/* accept */
-	NULL,				/* retransmit */
-	NULL,				/* write_wakeup */
-	NULL,				/* read_wakeup */
-	datagram_poll,			/* poll */
 	udp_ioctl,			/* ioctl */
 	NULL,				/* init */
 	inet6_destroy_sock,		/* destroy */
@@ -997,8 +959,6 @@ struct proto udpv6_prot = {
 	udp_v6_hash,			/* hash */
 	udp_v6_unhash,			/* unhash */
 	udp_v6_get_port,		/* get_port */
-	128,				/* max_header */
-	0,				/* retransmits */
 	"UDP",				/* name */
 };
 

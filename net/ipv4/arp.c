@@ -1,6 +1,6 @@
 /* linux/net/inet/arp.c
  *
- * Version:	$Id: arp.c,v 1.83 1999/12/15 22:39:03 davem Exp $
+ * Version:	$Id: arp.c,v 1.84 2000/01/18 08:24:14 davem Exp $
  *
  * Copyright (C) 1994 by Florian  La Roche
  *
@@ -487,7 +487,9 @@ void arp_send(int type, int ptype, u32 dest_ip,
 	/*
 	 *	Fill the device header for the ARP frame
 	 */
-	dev->hard_header(skb,dev,ptype,dest_hw,src_hw,skb->len);
+	if (dev->hard_header &&
+	    dev->hard_header(skb,dev,ptype,dest_hw,src_hw,skb->len) < 0)
+		goto out;
 
 	/*
 	 * Fill out the arp protocol part.
@@ -552,6 +554,10 @@ void arp_send(int type, int ptype, u32 dest_ip,
 	skb->dev = dev;
 
 	dev_queue_xmit(skb);
+	return;
+
+out:
+	kfree_skb(skb);
 }
 
 static void parp_redo(struct sk_buff *skb)

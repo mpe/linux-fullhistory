@@ -1,8 +1,8 @@
-/* $Id: traps.c,v 1.64 1999/12/19 23:53:13 davem Exp $
+/* $Id: traps.c,v 1.65 2000/01/21 11:39:01 jj Exp $
  * arch/sparc64/kernel/traps.c
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
- * Copyright (C) 1997,1999 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997,1999,2000 Jakub Jelinek (jakub@redhat.com)
  */
 
 /*
@@ -253,6 +253,8 @@ void rtrap_check(struct pt_regs *regs)
 
 void bad_trap (struct pt_regs *regs, long lvl)
 {
+	siginfo_t info;
+
 	lock_kernel ();
 	if (lvl < 0x100) {
 		char buffer[24];
@@ -262,9 +264,12 @@ void bad_trap (struct pt_regs *regs, long lvl)
 	}
 	if (regs->tstate & TSTATE_PRIV)
 		die_if_kernel ("Kernel bad trap", regs);
-        current->thread.sig_desc = SUBSIG_BADTRAP(lvl - 0x100);
-        current->thread.sig_address = regs->tpc;
-        force_sig(SIGILL, current);
+	info.si_signo = SIGILL;
+	info.si_errno = 0;
+	info.si_code = ILL_ILLTRP;
+	info.si_addr = (void *)regs->tpc;
+	info.si_trapno = lvl - 0x100;
+	force_sig_info(SIGILL, &info, current);
 	unlock_kernel ();
 }
 
@@ -281,6 +286,8 @@ void bad_trap_tl1 (struct pt_regs *regs, long lvl)
 void instruction_access_exception (struct pt_regs *regs,
 				   unsigned long sfsr, unsigned long sfar)
 {
+	siginfo_t info;
+
 	lock_kernel();
 	if (regs->tstate & TSTATE_PRIV) {
 #if 1
@@ -289,15 +296,20 @@ void instruction_access_exception (struct pt_regs *regs,
 #endif
 		die_if_kernel("Iax", regs);
 	}
-	current->thread.sig_desc = SUBSIG_ILLINST;
-	current->thread.sig_address = regs->tpc;
-	force_sig(SIGILL, current);
+	info.si_signo = SIGSEGV;
+	info.si_errno = 0;
+	info.si_code = SEGV_MAPERR;
+	info.si_addr = (void *)regs->tpc;
+	info.si_trapno = 0;
+	force_sig_info(SIGSEGV, &info, current);
 	unlock_kernel();
 }
 
 void data_access_exception (struct pt_regs *regs,
 			    unsigned long sfsr, unsigned long sfar)
 {
+	siginfo_t info;
+
 	if (regs->tstate & TSTATE_PRIV) {
 		/* Test if this comes from uaccess places. */
 		unsigned long fixup, g2;
@@ -326,8 +338,13 @@ void data_access_exception (struct pt_regs *regs,
 	else
 		rtrap_check(regs);
 #endif
+	info.si_signo = SIGSEGV;
+	info.si_errno = 0;
+	info.si_code = SEGV_MAPERR;
+	info.si_addr = (void *)sfar;
+	info.si_trapno = 0;
 	lock_kernel();
-	force_sig(SIGSEGV, current);
+	force_sig_info(SIGSEGV, &info, current);
 	unlock_kernel();
 }
 
@@ -361,6 +378,22 @@ static __inline__ void clean_and_reenable_l1_caches(void)
 			     : "memory");
 }
 
+void do_iae(struct pt_regs *regs)
+{
+	siginfo_t info;
+
+	clean_and_reenable_l1_caches();
+
+	info.si_signo = SIGBUS;
+	info.si_errno = 0;
+	info.si_code = BUS_OBJERR;
+	info.si_addr = (void *)0;
+	info.si_trapno = 0;
+	lock_kernel();
+	force_sig_info(SIGBUS, &info, current);
+	unlock_kernel();
+}
+
 void do_dae(struct pt_regs *regs)
 {
 #ifdef CONFIG_PCI
@@ -381,19 +414,7 @@ void do_dae(struct pt_regs *regs)
 		return;
 	}
 #endif
-	clean_and_reenable_l1_caches();
-	lock_kernel();
-	force_sig(SIGSEGV, current);
-	unlock_kernel();
-}
-
-void do_iae(struct pt_regs *regs)
-{
-	clean_and_reenable_l1_caches();
-
-	lock_kernel();
-	force_sig(SIGSEGV, current);
-	unlock_kernel();
+	do_iae(regs);
 }
 
 static char ecc_syndrome_table[] = {
@@ -521,22 +542,26 @@ void do_fpe_common(struct pt_regs *regs)
 		regs->tnpc += 4;
 	} else {
 		unsigned long fsr = current->thread.xfsr[0];
+		siginfo_t info;
 
-		current->thread.sig_address = regs->tpc;
-		current->thread.sig_desc = SUBSIG_FPERROR;
+		info.si_signo = SIGFPE;
+		info.si_errno = 0;
+		info.si_addr = (void *)regs->tpc;
+		info.si_trapno = 0;
+		info.si_code = __SI_FAULT;
 		if ((fsr & 0x1c000) == (1 << 14)) {
-			if (fsr & 0x01)
-				current->thread.sig_desc = SUBSIG_FPINEXACT;
-			else if (fsr & 0x02)
-				current->thread.sig_desc = SUBSIG_FPDIVZERO;
-			else if (fsr & 0x04)
-				current->thread.sig_desc = SUBSIG_FPUNFLOW;
+			if (fsr & 0x10)
+				info.si_code = FPE_FLTINV;
 			else if (fsr & 0x08)
-				current->thread.sig_desc = SUBSIG_FPOVFLOW;
-			else if (fsr & 0x10)
-				current->thread.sig_desc = SUBSIG_FPINTOVFL;
+				info.si_code = FPE_FLTOVF;
+			else if (fsr & 0x04)
+				info.si_code = FPE_FLTUND;
+			else if (fsr & 0x02)
+				info.si_code = FPE_FLTDIV;
+			else if (fsr & 0x01)
+				info.si_code = FPE_FLTRES;
 		}
-		send_sig(SIGFPE, current, 1);
+		send_sig_info(SIGFPE, &info, current);
 	}
 }
 
@@ -570,24 +595,34 @@ void do_fpother(struct pt_regs *regs)
 
 void do_tof(struct pt_regs *regs)
 {
+	siginfo_t info;
+
 	if(regs->tstate & TSTATE_PRIV)
 		die_if_kernel("Penguin overflow trap from kernel mode", regs);
-	current->thread.sig_address = regs->tpc;
-	current->thread.sig_desc = SUBSIG_TAG; /* as good as any */
-	send_sig(SIGEMT, current, 1);
+	info.si_signo = SIGEMT;
+	info.si_errno = 0;
+	info.si_code = EMT_TAGOVF;
+	info.si_addr = (void *)regs->tpc;
+	info.si_trapno = 0;
+	send_sig_info(SIGEMT, &info, current);
 }
 
 void do_div0(struct pt_regs *regs)
 {
-	current->thread.sig_address = regs->tpc;
-	current->thread.sig_desc = SUBSIG_IDIVZERO;
-	send_sig(SIGFPE, current, 1);
+	siginfo_t info;
+
+	info.si_signo = SIGFPE;
+	info.si_errno = 0;
+	info.si_code = FPE_INTDIV;
+	info.si_addr = (void *)regs->tpc;
+	info.si_trapno = 0;
+	send_sig_info(SIGFPE, &info, current);
 }
 
 void instruction_dump (unsigned int *pc)
 {
 	int i;
-	
+
 	if((((unsigned long) pc) & 3))
 		return;
 
@@ -671,6 +706,7 @@ void do_illegal_instruction(struct pt_regs *regs)
 	unsigned long pc = regs->tpc;
 	unsigned long tstate = regs->tstate;
 	u32 insn;
+	siginfo_t info;
 
 	if(tstate & TSTATE_PRIV)
 		die_if_kernel("Kernel illegal instruction", regs);
@@ -685,56 +721,48 @@ void do_illegal_instruction(struct pt_regs *regs)
 				return;
 		}
 	}
-	current->thread.sig_address = pc;
-	current->thread.sig_desc = SUBSIG_ILLINST;
-	send_sig(SIGILL, current, 1);
+	info.si_signo = SIGILL;
+	info.si_errno = 0;
+	info.si_code = ILL_ILLOPC;
+	info.si_addr = (void *)pc;
+	info.si_trapno = 0;
+	send_sig_info(SIGILL, &info, current);
 }
 
 void mem_address_unaligned(struct pt_regs *regs, unsigned long sfar, unsigned long sfsr)
 {
+	siginfo_t info;
+
 	if(regs->tstate & TSTATE_PRIV) {
 		extern void kernel_unaligned_trap(struct pt_regs *regs,
 						  unsigned int insn, 
 						  unsigned long sfar, unsigned long sfsr);
 
 		return kernel_unaligned_trap(regs, *((unsigned int *)regs->tpc), sfar, sfsr);
-	} else {
-		current->thread.sig_address = regs->tpc;
-		current->thread.sig_desc = SUBSIG_PRIVINST;
-		send_sig(SIGBUS, current, 1);
 	}
+	info.si_signo = SIGBUS;
+	info.si_errno = 0;
+	info.si_code = BUS_ADRALN;
+	info.si_addr = (void *)sfar;
+	info.si_trapno = 0;
+	send_sig_info(SIGBUS, &info, current);
 }
 
 void do_privop(struct pt_regs *regs)
 {
-	current->thread.sig_address = regs->tpc;
-	current->thread.sig_desc = SUBSIG_PRIVINST;
-	send_sig(SIGILL, current, 1);
+	siginfo_t info;
+
+	info.si_signo = SIGILL;
+	info.si_errno = 0;
+	info.si_code = ILL_PRVOPC;
+	info.si_addr = (void *)regs->tpc;
+	info.si_trapno = 0;
+	send_sig_info(SIGILL, &info, current);
 }
 
 void do_privact(struct pt_regs *regs)
 {
-	current->thread.sig_address = regs->tpc;
-	current->thread.sig_desc = SUBSIG_PRIVINST;
-	send_sig(SIGILL, current, 1);
-}
-
-void do_priv_instruction(struct pt_regs *regs, unsigned long pc, unsigned long npc,
-			 unsigned long tstate)
-{
-	if(tstate & TSTATE_PRIV)
-		die_if_kernel("Penguin instruction from Penguin mode??!?!", regs);
-	current->thread.sig_address = pc;
-	current->thread.sig_desc = SUBSIG_PRIVINST;
-	send_sig(SIGILL, current, 1);
-}
-
-void handle_hw_divzero(struct pt_regs *regs, unsigned long pc,
-		       unsigned long npc, unsigned long psr)
-{
-	current->thread.sig_address = regs->tpc;
-	current->thread.sig_desc = SUBSIG_IDIVZERO;
-	send_sig(SIGFPE, current, 1);
+	do_privop(regs);
 }
 
 /* Trap level 1 stuff or other traps we should never see... */

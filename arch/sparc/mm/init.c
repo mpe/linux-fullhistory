@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.73 2000/01/15 00:51:26 anton Exp $
+/*  $Id: init.c,v 1.76 2000/01/21 18:16:55 anton Exp $
  *  linux/arch/sparc/mm/init.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -45,9 +45,9 @@ unsigned long sparc_unmapped_base;
 struct pgtable_cache_struct pgt_quicklists;
 
 /* References to section boundaries */
-extern char __init_begin, __init_end, _start, _end, etext , edata;
+extern char __init_begin, __init_end, _start, end, etext , edata;
 
-static unsigned long totalram_pages = 0;
+unsigned long totalram_pages = 0;
 
 /*
  * BAD_PAGE is the page that is used for page faults when linux
@@ -165,7 +165,7 @@ unsigned long __init bootmem_init(void)
 	/* Start with page aligned address of last symbol in kernel
 	 * image.  
 	 */
-	start_pfn  = (unsigned long)__pa(PAGE_ALIGN((unsigned long) &_end));
+	start_pfn  = (unsigned long)__pa(PAGE_ALIGN((unsigned long) &end));
 
 	/* Adjust up to the physical address where the kernel begins. */
 	start_pfn += phys_base;
@@ -199,11 +199,11 @@ unsigned long __init bootmem_init(void)
 #ifdef DEBUG_BOOTMEM
 	prom_printf("reserve_bootmem: base[%lx] size[%lx]\n",
 		    phys_base,
-		    (((start_pfn << PAGE_SHIFT) +
-		      bootmap_size) - phys_base));
+		    (start_pfn << PAGE_SHIFT) +
+		      bootmap_size + PAGE_SIZE-1 - phys_base);
 #endif
-	reserve_bootmem(phys_base, (((start_pfn << PAGE_SHIFT) +
-				     bootmap_size) - phys_base));
+	reserve_bootmem(phys_base, (start_pfn << PAGE_SHIFT) +
+				     bootmap_size + PAGE_SIZE-1 - phys_base);
 
 #ifdef DEBUG_BOOTMEM
 	prom_printf("init_bootmem: return end_pfn[%lx]\n", end_pfn);
@@ -366,10 +366,12 @@ void __init mem_init(void)
 	int datapages = 0;
 	int initpages = 0; 
 	int i;
+#ifdef CONFIG_BLK_DEV_INITRD
 	unsigned long addr, last;
+#endif
 
 	/* Saves us work later. */
-	memset((void *) ZERO_PAGE(0), 0, PAGE_SIZE);
+	memset((void *)&empty_zero_page, 0, PAGE_SIZE);
 
 	i = last_valid_pfn >> (8 + 5);
 	i += 1;
@@ -386,7 +388,7 @@ void __init mem_init(void)
 	/* fix this */
 #ifdef CONFIG_BLK_DEV_INITRD
 	addr = __va(phys_base);
-	last = PAGE_ALIGN((unsigned long)&_end) + phys_base;
+	last = PAGE_ALIGN((unsigned long)&end) + phys_base;
 	while(addr < last) {
 		if (initrd_below_start_ok && addr >= initrd_start && addr < initrd_end)
 			mem_map[MAP_NR(addr)].flags &= ~(1<<PG_reserved);
@@ -455,6 +457,7 @@ void free_initmem (void)
 		totalram_pages++;
 		num_physpages++;
 	}
+	printk ("Freeing unused kernel memory: %dk freed\n", (&__init_end - &__init_begin) >> 10);
 }
 
 void si_meminfo(struct sysinfo *val)

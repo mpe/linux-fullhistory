@@ -176,7 +176,10 @@ static __inline__ void net_family_read_unlock(void)
  *	Statistics counters of the socket lists
  */
 
-static int sockets_in_use  = 0;
+static union {
+	int	counter;
+	char	__pad[SMP_CACHE_BYTES];
+} sockets_in_use[NR_CPUS] __cacheline_aligned = {{0}};
 
 /*
  *	Support routines. Move socket addresses back and forth across the kernel/user
@@ -261,22 +264,13 @@ static int sock_map_fd(struct socket *sock)
 			goto out;
 		}
 
-		lock_kernel();
 		file->f_dentry = d_alloc_root(sock->inode);
 		if (!file->f_dentry) {
-			unlock_kernel();
 			put_filp(file);
 			put_unused_fd(fd);
 			fd = -ENOMEM;
 			goto out;
 		}
-
-		/*
-		 * The socket maintains a reference to the inode, so we
-		 * have to increment the count.
-		 */
-		sock->inode->i_count++;
-		unlock_kernel();
 
 		file->f_op = &socket_file_ops;
 		file->f_mode = 3;
@@ -360,7 +354,7 @@ struct socket *sock_alloc(void)
 	sock->sk = NULL;
 	sock->file = NULL;
 
-	sockets_in_use++;
+	sockets_in_use[smp_processor_id()].counter++;
 	return sock;
 }
 
@@ -383,9 +377,8 @@ void sock_release(struct socket *sock)
 	if (sock->fasync_list)
 		printk(KERN_ERR "sock_release: fasync list not empty!\n");
 
-	--sockets_in_use;	/* Bookkeeping.. */
+	sockets_in_use[smp_processor_id()].counter--;
 	sock->file=NULL;
-	iput(sock->inode);
 }
 
 int sock_sendmsg(struct socket *sock, struct msghdr *msg, int size)
@@ -889,8 +882,6 @@ asmlinkage long sys_listen(int fd, int backlog)
 	int err;
 	
 	if ((sock = sockfd_lookup(fd, &err)) != NULL) {
-		if ((unsigned) backlog == 0)	/* BSDism */
-			backlog = 1;
 		if ((unsigned) backlog > SOMAXCONN)
 			backlog = SOMAXCONN;
 		err=sock->ops->listen(sock, backlog);
@@ -943,6 +934,9 @@ asmlinkage long sys_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_a
 			goto out_release;
 	}
 
+	/* File flags are inherited via accept(). It looks silly, but we
+	 * have to be compatible with another OSes.
+	 */
 	if ((err = sock_map_fd(newsock)) < 0)
 		goto out_release;
 
@@ -1119,7 +1113,7 @@ asmlinkage long sys_recvfrom(int fd, void * ubuf, size_t size, unsigned flags,
 		flags |= MSG_DONTWAIT;
 	err=sock_recvmsg(sock, &msg, size, flags);
 
-	if(err >= 0 && addr != NULL)
+	if(err >= 0 && addr != NULL && msg.msg_namelen)
 	{
 		err2=move_addr_to_user(address, msg.msg_namelen, addr, addr_len);
 		if(err2<0)
@@ -1341,7 +1335,7 @@ asmlinkage long sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 		goto out_freeiov;
 	len = err;
 
-	if (uaddr != NULL) {
+	if (uaddr != NULL && msg_sys.msg_namelen) {
 		err = move_addr_to_user(addr, msg_sys.msg_namelen, uaddr, uaddr_len);
 		if (err < 0)
 			goto out_freeiov;
@@ -1595,7 +1589,17 @@ void __init sock_init(void)
 
 int socket_get_info(char *buffer, char **start, off_t offset, int length)
 {
-	int len = sprintf(buffer, "sockets: used %d\n", sockets_in_use);
+	int len, cpu;
+	int counter = 0;
+
+	for (cpu=0; cpu<smp_num_cpus; cpu++)
+		counter += sockets_in_use[cpu].counter;
+
+	/* It can be negative, by the way. 8) */
+	if (counter < 0)
+		counter = 0;
+
+	len = sprintf(buffer, "sockets: used %d\n", counter);
 	if (offset >= len)
 	{
 		*start = buffer;
@@ -1605,5 +1609,7 @@ int socket_get_info(char *buffer, char **start, off_t offset, int length)
 	len -= offset;
 	if (len > length)
 		len = length;
+	if (len < 0)
+		len = 0;
 	return len;
 }

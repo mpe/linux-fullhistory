@@ -29,10 +29,13 @@ struct dst_entry
 	struct dst_entry        *next;
 	atomic_t		__refcnt;	/* client references	*/
 	int			__use;
-	struct net_device	        *dev;
+	struct net_device       *dev;
 	int			obsolete;
+	int			flags;
+#define DST_HOST		1
 	unsigned long		lastuse;
 	unsigned long		expires;
+
 	unsigned		mxlock;
 	unsigned		pmtu;
 	unsigned		window;
@@ -41,6 +44,7 @@ struct dst_entry
 	unsigned		ssthresh;
 	unsigned		cwnd;
 	unsigned		advmss;
+
 	unsigned long		rate_last;	/* rate limiting for ICMP */
 	unsigned long		rate_tokens;
 

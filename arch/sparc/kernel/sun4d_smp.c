@@ -18,6 +18,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/init.h>
 #include <linux/spinlock.h>
+#include <linux/mm.h>
 
 #include <asm/ptrace.h>
 #include <asm/atomic.h>
@@ -57,12 +58,14 @@ extern struct cpuinfo_sparc cpu_data[NR_CPUS];
 extern unsigned long cpu_offset[NR_CPUS];
 extern unsigned char boot_cpu_id;
 extern int smp_activated;
-extern volatile int cpu_number_map[NR_CPUS];
+extern volatile int __cpu_number_map[NR_CPUS];
 extern volatile int __cpu_logical_map[NR_CPUS];
 extern volatile unsigned long ipi_count;
 extern volatile int smp_process_available;
 extern volatile int smp_commenced;
 extern int __smp4d_processor_id(void);
+
+extern unsigned long totalram_pages;
 
 /* #define SMP_DEBUG */
 
@@ -138,10 +141,10 @@ void __init smp4d_callin(void)
 	cpu_leds[cpuid] = 0x9;
 	show_leds(cpuid);
 	
-	current->mm->mmap->vm_page_prot = PAGE_SHARED;
-	current->mm->mmap->vm_start = PAGE_OFFSET;
-	current->mm->mmap->vm_end = init_mm.mmap->vm_end;
-	
+	/* Attach to the address space of init_task. */
+	atomic_inc(&init_mm.mm_count);
+	current->active_mm = &init_mm;
+
 	local_flush_cache_all();
 	local_flush_tlb_all();
 	
@@ -189,12 +192,12 @@ void __init smp4d_boot_cpus(void)
 		cpu_present_map |= (1<<linux_cpus[i].mid);
 	SMP_PRINTK(("cpu_present_map %08lx\n", cpu_present_map));
 	for(i=0; i < NR_CPUS; i++)
-		cpu_number_map[i] = -1;
+		__cpu_number_map[i] = -1;
 	for(i=0; i < NR_CPUS; i++)
 		__cpu_logical_map[i] = -1;
 	for(i=0; i < NR_CPUS; i++)
 		mid_xlate[i] = i;
-	cpu_number_map[boot_cpu_id] = 0;
+	__cpu_number_map[boot_cpu_id] = 0;
 	__cpu_logical_map[0] = boot_cpu_id;
 	current->processor = boot_cpu_id;
 	smp_store_cpu_info(boot_cpu_id);
@@ -218,12 +221,19 @@ void __init smp4d_boot_cpus(void)
 			/* Cook up an idler for this guy. */
 			kernel_thread(start_secondary, NULL, CLONE_PID);
 
-			p = task[++cpucount];
+			cpucount++;
+
+			p = init_task.prev_task;
+			init_tasks[i] = p;
 
 			p->processor = i;
 			p->has_cpu = 1; /* we schedule the first task manually */
+
 			current_set[i] = p;
-			
+
+			del_from_runqueue(p);
+			unhash_process(p);
+
 			for (no = 0; no < linux_num_cpus; no++)
 				if (linux_cpus[no].mid == i)
 					break;
@@ -254,7 +264,7 @@ void __init smp4d_boot_cpus(void)
 			
 			if(cpu_callin_map[i]) {
 				/* Another "Red Snapper". */
-				cpu_number_map[i] = cpucount;
+				__cpu_number_map[i] = cpucount;
 				__cpu_logical_map[cpucount] = i;
 			} else {
 				cpucount--;
@@ -263,7 +273,7 @@ void __init smp4d_boot_cpus(void)
 		}
 		if(!(cpu_callin_map[i])) {
 			cpu_present_map &= ~(1 << i);
-			cpu_number_map[i] = -1;
+			__cpu_number_map[i] = -1;
 		}
 	}
 	local_flush_cache_all();
@@ -289,13 +299,23 @@ void __init smp4d_boot_cpus(void)
 	}
 
 	/* Free unneeded trap tables */
-	
-	mem_map[MAP_NR((unsigned long)trapbase_cpu1)].flags &= ~(1 << PG_reserved);
+	ClearPageReserved(mem_map + MAP_NR(trapbase_cpu1));
+	set_page_count(mem_map + MAP_NR(trapbase_cpu1), 1);
 	free_page((unsigned long)trapbase_cpu1);
-	mem_map[MAP_NR((unsigned long)trapbase_cpu2)].flags &= ~(1 << PG_reserved);
+	totalram_pages++;
+	num_physpages++;
+
+	ClearPageReserved(mem_map + MAP_NR(trapbase_cpu2));
+	set_page_count(mem_map + MAP_NR(trapbase_cpu2), 1);
 	free_page((unsigned long)trapbase_cpu2);
-	mem_map[MAP_NR((unsigned long)trapbase_cpu3)].flags &= ~(1 << PG_reserved);
+	totalram_pages++;
+	num_physpages++;
+
+	ClearPageReserved(mem_map + MAP_NR(trapbase_cpu3));
+	set_page_count(mem_map + MAP_NR(trapbase_cpu3), 1);
 	free_page((unsigned long)trapbase_cpu3);
+	totalram_pages++;
+	num_physpages++;
 
 	/* Ok, they are spinning and ready to go. */
 	smp_processors_ready = 1;

@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.90 2000/01/11 17:33:20 jj Exp $
+/* $Id: systbls.S,v 1.91 2000/01/16 06:20:44 davem Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -33,15 +33,15 @@ sys_call_table:
 /*60*/	.long sys_umask, sys_chroot, sys_newfstat, sys_fstat64, sys_getpagesize
 /*65*/	.long sys_msync, sys_vfork, sys_pread, sys_pwrite, sys_geteuid
 /*70*/	.long sys_getegid, sys_mmap, sys_setreuid, sys_munmap, sys_mprotect
-/*75*/	.long sys_setregid, sys_vhangup, sys_truncate64, sys_getgroups, sys_getgroups16
+/*75*/	.long sys_nis_syscall, sys_vhangup, sys_truncate64, sys_nis_syscall, sys_getgroups16
 /*80*/	.long sys_setgroups16, sys_getpgrp, sys_setgroups, sys_setitimer, sys_ftruncate64
 /*85*/	.long sys_swapon, sys_getitimer, sys_setuid, sys_sethostname, sys_setgid
 /*90*/	.long sys_dup2, sys_setfsuid, sys_fcntl, sys_select, sys_setfsgid
 /*95*/	.long sys_fsync, sys_setpriority, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
 /*100*/	.long sys_getpriority, sys_rt_sigreturn, sys_rt_sigaction, sys_rt_sigprocmask, sys_rt_sigpending
 /*105*/	.long sys_rt_sigtimedwait, sys_rt_sigqueueinfo, sys_rt_sigsuspend, sys_setresuid, sys_getresuid
-/*110*/	.long sys_setresgid, sys_getresgid, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
-/*115*/	.long sys_nis_syscall, sys_gettimeofday, sys_getrusage, sys_nis_syscall, sys_getcwd
+/*110*/	.long sys_setresgid, sys_getresgid, sys_setregid, sys_nis_syscall, sys_nis_syscall
+/*115*/	.long sys_getgroups, sys_gettimeofday, sys_getrusage, sys_nis_syscall, sys_getcwd
 /*120*/	.long sys_readv, sys_writev, sys_settimeofday, sys_fchown16, sys_fchmod
 /*125*/	.long sys_nis_syscall, sys_setreuid16, sys_setregid16, sys_rename, sys_truncate
 /*130*/	.long sys_ftruncate, sys_flock, sys_lstat64, sys_nis_syscall, sys_nis_syscall

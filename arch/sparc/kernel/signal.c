@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.99 1999/12/27 06:08:32 anton Exp $
+/*  $Id: signal.c,v 1.101 2000/01/21 11:38:38 jj Exp $
  *  linux/arch/sparc/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -424,12 +424,15 @@ static inline void *get_sigframe(struct sigaction *sa, struct pt_regs *regs, uns
 }
 
 static inline void
-setup_frame(struct sigaction *sa, unsigned long pc, unsigned long npc,
-	    struct pt_regs *regs, int signr, sigset_t *oldset)
+setup_frame(struct sigaction *sa, struct pt_regs *regs, int signr, sigset_t *oldset, siginfo_t *info)
 {
 	struct signal_sframe *sframep;
 	struct sigcontext *sc;
 	int window = 0, err;
+	unsigned long pc = regs->pc;
+	unsigned long npc = regs->npc;
+	void *sig_address;
+	int sig_code;
 
 	synchronize_user_stack();
 	sframep = (struct signal_sframe *)get_sigframe(sa, regs, SF_ALIGNEDSZ);
@@ -474,18 +477,63 @@ setup_frame(struct sigaction *sa, unsigned long pc, unsigned long npc,
 				      sizeof(struct reg_window));
 
 	current->thread.w_saved = 0; /* So process is allowed to execute. */
+
 	err |= __put_user(signr, &sframep->sig_num);
-	if(signr == SIGSEGV ||
-	   signr == SIGILL ||
-	   signr == SIGFPE ||
-	   signr == SIGBUS ||
-	   signr == SIGEMT) {
-		err |= __put_user(current->thread.sig_desc, &sframep->sig_code);
-		err |= __put_user(current->thread.sig_address, &sframep->sig_address);
-	} else {
-		err |= __put_user(0, &sframep->sig_code);
-		err |= __put_user(0, &sframep->sig_address);
+	sig_address = NULL;
+	sig_code = 0;
+	if (SI_FROMKERNEL (info) && (info->si_code & __SI_MASK) == __SI_FAULT) {
+		sig_address = info->si_addr;
+		switch (signr) {
+		case SIGSEGV:
+			switch (info->si_code) {
+			case SEGV_MAPERR: sig_code = SUBSIG_NOMAPPING; break;
+			default: sig_code = SUBSIG_PROTECTION; break;
+			}
+			break;
+		case SIGILL:
+			switch (info->si_code) {
+			case ILL_ILLOPC: sig_code = SUBSIG_ILLINST; break;
+			case ILL_PRVOPC: sig_code = SUBSIG_PRIVINST; break;
+			case ILL_ILLTRP: sig_code = SUBSIG_BADTRAP (info->si_trapno); break;
+			default: sig_code = SUBSIG_STACK; break;
+			}
+			break;
+		case SIGFPE:
+			switch (info->si_code) {
+			case FPE_INTDIV: sig_code = SUBSIG_IDIVZERO; break;
+			case FPE_INTOVF: sig_code = SUBSIG_FPINTOVFL; break;
+			case FPE_FLTDIV: sig_code = SUBSIG_FPDIVZERO; break;
+			case FPE_FLTOVF: sig_code = SUBSIG_FPOVFLOW; break;
+			case FPE_FLTUND: sig_code = SUBSIG_FPUNFLOW; break;
+			case FPE_FLTRES: sig_code = SUBSIG_FPINEXACT; break;
+			case FPE_FLTINV: sig_code = SUBSIG_FPOPERROR; break;
+			default: sig_code = SUBSIG_FPERROR; break;
+			}
+			break;
+		case SIGBUS:
+			switch (info->si_code) {
+			case BUS_ADRALN: sig_code = SUBSIG_ALIGNMENT; break;
+			case BUS_ADRERR: sig_code = SUBSIG_MISCERROR; break;
+			default: sig_code = SUBSIG_BUSTIMEOUT; break;
+			}
+			break;
+		case SIGEMT:
+			switch (info->si_code) {
+			case EMT_TAGOVF: sig_code = SUBSIG_TAG; break;
+			}
+			break;
+		case SIGSYS:
+			if (info->si_code == (__SI_FAULT|0x100)) {
+				/* See sys_sunos.c */
+				sig_code = info->si_trapno;
+				break;
+			}
+		default:
+			sig_address = NULL;
+		}
 	}
+	err |= __put_user((long)sig_address, &sframep->sig_address);
+	err |= __put_user(sig_code, &sframep->sig_code);
 	err |= __put_user(sc, &sframep->sig_scptr);
 	if (err)
 		goto sigsegv;
@@ -791,8 +839,7 @@ setup_svr4_frame(struct sigaction *sa, unsigned long pc, unsigned long npc,
 
 	/* Setup the signal information.  Solaris expects a bunch of
 	 * information to be passed to the signal handler, we don't provide
-	 * that much currently, should use those that David already
-	 * is providing with thread.sig_desc
+	 * that much currently, should use siginfo.
 	 */
 	err |= __put_user(signr, &si->siginfo.signo);
 	err |= __put_user(SVR4_SINOINFO, &si->siginfo.code);
@@ -977,7 +1024,7 @@ handle_signal(unsigned long signr, struct k_sigaction *ka,
 		else if (current->thread.new_signal)
 			new_setup_frame (ka, regs, signr, oldset);
 		else
-			setup_frame(&ka->sa, regs->pc, regs->npc, regs, signr, oldset);
+			setup_frame(&ka->sa, regs, signr, oldset, info);
 	}
 	if(ka->sa.sa_flags & SA_ONESHOT)
 		ka->sa.sa_handler = SIG_DFL;
@@ -1074,7 +1121,16 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs * regs,
 	struct k_sigaction *ka;
 	siginfo_t info;
 
+	/*
+	 * XXX Disable svr4 signal handling until solaris emulation works.
+	 * It is buggy - Anton
+	 */
+#define SVR4_SIGNAL_BROKEN 1
+#ifdef SVR4_SIGNAL_BROKEN
+	int svr4_signal = 0;
+#else
 	int svr4_signal = current->personality == PER_SVR4;
+#endif
 
 	if (!oldset)
 		oldset = &current->blocked;

@@ -2847,6 +2847,7 @@ EXPORT_SYMBOL(default_blu);
 EXPORT_SYMBOL(video_font_height);
 EXPORT_SYMBOL(video_scan_lines);
 EXPORT_SYMBOL(vc_resize);
+EXPORT_SYMBOL(fg_console);
 
 #ifndef VT_SINGLE_DRIVER
 EXPORT_SYMBOL(take_over_console);

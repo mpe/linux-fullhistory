@@ -13,6 +13,8 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* 2000/01/21	acme		rename cyclomx_open to cyclomx_mod_inc_use_count
+*				and cyclomx_close to cyclomx_mod_dec_use_count
 * 2000/01/08	acme		cleanup
 * 1999/11/06	acme		cycx_down back to life (it needs to be
 *				called to iounmap the dpmbase)
@@ -49,7 +51,7 @@ MODULE_DESCRIPTION("Cyclom 2X Sync Card Driver.");
 /* Defines & Macros */
 
 #define	DRV_VERSION	0		/* version number */
-#define	DRV_RELEASE	5		/* release (minor version) number */
+#define	DRV_RELEASE	6		/* release (minor version) number */
 #define	MAX_CARDS	1		/* max number of adapters */
 
 #ifndef	CONFIG_CYCLOMX_CARDS		/* configurable option */
@@ -132,9 +134,9 @@ int __init cyclomx_init (void)
 		err = register_wan_device(wandev);
 
 		if (err) {
-			printk(KERN_ERR
-				"%s: %s registration failed with error %d!\n",
-				drvname, card->devname, err);
+			printk(KERN_ERR "%s: %s registration failed with "
+					"error %d!\n",
+					drvname, card->devname, err);
 			break;
 		}
 	}
@@ -338,7 +340,7 @@ static void cycx_isr (int irq, void *dev_id, struct pt_regs *regs)
  * have to call MOD_INC_USE_COUNT, but cannot include 'module.h' where it's
  * defined more than once into the same kernel module.
  */
-void cyclomx_open (cycx_t *card)
+void cyclomx_mod_inc_use_count (cycx_t *card)
 {
 	++card->open_cnt;
 	MOD_INC_USE_COUNT;
@@ -350,7 +352,7 @@ void cyclomx_open (cycx_t *card)
  * have to call MOD_DEC_USE_COUNT, but cannot include 'module.h' where it's
  * defined more than once into the same kernel module.
  */
-void cyclomx_close (cycx_t *card)
+void cyclomx_mod_dec_use_count (cycx_t *card)
 {
 	--card->open_cnt;
 	MOD_DEC_USE_COUNT;

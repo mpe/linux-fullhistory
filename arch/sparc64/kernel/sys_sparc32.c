@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.130 2000/01/14 09:40:07 jj Exp $
+/* $Id: sys_sparc32.c,v 1.131 2000/01/21 11:38:54 jj Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -2082,7 +2082,7 @@ sys32_rt_sigtimedwait(sigset_t32 *uthese, siginfo_t32 *uinfo,
 	sigset_t s;
 	sigset_t32 s32;
 	struct timespec t;
-	int ret, err, i;
+	int ret;
 	mm_segment_t old_fs = get_fs();
 	siginfo_t info;
 		
@@ -2104,42 +2104,8 @@ sys32_rt_sigtimedwait(sigset_t32 *uthese, siginfo_t32 *uinfo,
 	ret = sys_rt_sigtimedwait(&s, &info, &t, sigsetsize);
 	set_fs (old_fs);
 	if (ret >= 0 && uinfo) {
-		err = put_user (info.si_signo, &uinfo->si_signo);
-		err |= __put_user (info.si_errno, &uinfo->si_errno);
-		err |= __put_user (info.si_code, &uinfo->si_code);
-		if (info.si_code < 0)
-			err |= __copy_to_user (uinfo->_sifields._pad, info._sifields._pad, SI_PAD_SIZE);
-		else {
-			i = info.si_signo;
-			if (info.si_code == SI_USER)
-				i = SIGRTMIN;
-			switch (i) {
-			case SIGPOLL:
-				err |= __put_user (info.si_band, &uinfo->si_band);
-				err |= __put_user (info.si_fd, &uinfo->si_fd);
-				break;
-			case SIGCHLD:
-				err |= __put_user (info.si_pid, &uinfo->si_pid);
-				err |= __put_user (info.si_uid, &uinfo->si_uid);
-				err |= __put_user (info.si_status, &uinfo->si_status);
-				err |= __put_user (info.si_utime, &uinfo->si_utime);
-				err |= __put_user (info.si_stime, &uinfo->si_stime);
-				break;
-			case SIGSEGV:
-			case SIGILL:
-			case SIGFPE:
-			case SIGBUS:
-			case SIGEMT:
-				err |= __put_user ((long)info.si_addr, &uinfo->si_addr);
-				err |= __put_user (info.si_trapno, &uinfo->si_trapno);
-				break;
-			default:
-				err |= __put_user (info.si_pid, &uinfo->si_pid);
-				err |= __put_user (info.si_uid, &uinfo->si_uid);
-				break;
-			}
-		}
-		if (err)
+		extern int copy_siginfo_to_user32(siginfo_t32 *, siginfo_t *);
+		if (copy_siginfo_to_user32(uinfo, &info))
 			ret = -EFAULT;
 	}
 	return ret;

@@ -5,7 +5,7 @@
  *
  *		RAW - implementation of IP "raw" sockets.
  *
- * Version:	$Id: raw.c,v 1.46 2000/01/09 02:19:30 davem Exp $
+ * Version:	$Id: raw.c,v 1.48 2000/01/18 08:24:15 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -648,10 +648,6 @@ struct proto raw_prot = {
 	udp_connect,			/* connect */
 	udp_disconnect,			/* disconnect */
 	NULL,				/* accept */
-	NULL,				/* retransmit */
-	NULL,				/* write_wakeup */
-	NULL,				/* read_wakeup */
-	datagram_poll,			/* poll */
 #ifdef CONFIG_IP_MROUTE
 	ipmr_ioctl,			/* ioctl */
 #else
@@ -669,7 +665,5 @@ struct proto raw_prot = {
 	raw_v4_hash,			/* hash */
 	raw_v4_unhash,			/* unhash */
 	NULL,				/* get_port */
-	128,				/* max_header */
-	0,				/* retransmits */
 	"RAW",				/* name */
 };

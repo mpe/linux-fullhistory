@@ -48,15 +48,15 @@ int sun_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector, in
 	unsigned long spc;
 
 	if(!(bh = bread(dev, 0, get_ptable_blocksize(dev)))) {
-		printk("Dev %s: unable to read partition table\n",
+		printk(KERN_WARNING "Dev %s: unable to read partition table\n",
 		       kdevname(dev));
 		return -1;
 	}
 	label = (struct sun_disklabel *) bh->b_data;
 	p = label->partitions;
 	if (be16_to_cpu(label->magic) != SUN_LABEL_MAGIC) {
-		printk("Dev %s Sun disklabel: bad magic %04x\n",
-		       kdevname(dev), be16_to_cpu(label->magic));
+/*		printk(KERN_INFO "Dev %s Sun disklabel: bad magic %04x\n",
+		       kdevname(dev), be16_to_cpu(label->magic)); */
 		brelse(bh);
 		return 0;
 	}

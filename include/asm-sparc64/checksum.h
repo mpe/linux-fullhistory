@@ -1,4 +1,4 @@
-/* $Id: checksum.h,v 1.14 2000/01/05 21:27:42 davem Exp $ */
+/* $Id: checksum.h,v 1.15 2000/01/19 04:06:09 davem Exp $ */
 #ifndef __SPARC64_CHECKSUM_H
 #define __SPARC64_CHECKSUM_H
 
@@ -37,12 +37,6 @@ extern unsigned int csum_partial(const unsigned char * buff, int len, unsigned i
  * here even more important to align src and dst on a 32-bit (or even
  * better 64-bit) boundary
  */
-/* FIXME: Remove these macros ASAP */
-#define csum_partial_copy(src, dst, len, sum) \
-			csum_partial_copy_nocheck(src,dst,len,sum)
-#define csum_partial_copy_fromuser(s, d, l, w)  \
-			csum_partial_copy_from_user((char *) (s), (d), (l), (w), NULL)
-
 extern unsigned int csum_partial_copy_sparc64(const char *src, char *dst, int len, unsigned int sum);
 			
 extern __inline__ unsigned int 
@@ -66,15 +60,19 @@ csum_partial_copy_from_user(const char *src, char *dst, int len,
 	return csum_partial_copy_sparc64(src, dst, len, sum);
 }
 
-#if 0
-/* XXX should implement this now... -DaveM */
+/* 
+ *	Copy and checksum to user
+ */
+#define HAVE_CSUM_COPY_USER
+extern unsigned int csum_partial_copy_user_sparc64(const char *src, char *dst, int len, unsigned int sum);
 extern __inline__ unsigned int 
-csum_partial_copy_to_user(const char *src, char *dst, int len, 
-			  unsigned int sum, int *err)
+csum_and_copy_to_user(const char *src, char *dst, int len, 
+		      unsigned int sum, int *err)
 {
-	return 0;
+	__asm__ __volatile__ ("stx	%0, [%%sp + 0x7ff + 128]"
+			      : : "r" (err));
+	return csum_partial_copy_user_sparc64(src, dst, len, sum);
 }
-#endif
   
 /* ihl is always 5 or greater, almost always is 5, and iph is word aligned
  * the majority of the time.

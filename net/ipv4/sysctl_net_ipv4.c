@@ -1,7 +1,7 @@
 /*
  * sysctl_net_ipv4.c: sysctl interface to net IPV4 subsystem.
  *
- * $Id: sysctl_net_ipv4.c,v 1.42 2000/01/09 02:19:37 davem Exp $
+ * $Id: sysctl_net_ipv4.c,v 1.43 2000/01/16 05:11:27 davem Exp $
  *
  * Begun April 1, 1996, Mike Shaver.
  * Added /proc/sys/net/ipv4 directory entry (empty =) ). [MS]
@@ -40,26 +40,6 @@ extern int sysctl_ipfrag_time;
 
 /* From ip_output.c */
 extern int sysctl_ip_dynaddr;
-
-/* From ip_masq.c */
-extern int sysctl_ip_masq_debug;
-
-extern int sysctl_tcp_timestamps;
-extern int sysctl_tcp_window_scaling;
-extern int sysctl_tcp_sack;
-extern int sysctl_tcp_retrans_collapse;
-extern int sysctl_tcp_keepalive_time;
-extern int sysctl_tcp_keepalive_probes;
-extern int sysctl_tcp_retries1;
-extern int sysctl_tcp_retries2;
-extern int sysctl_tcp_fin_timeout;
-extern int sysctl_tcp_syncookies;
-extern int sysctl_tcp_syn_retries;
-extern int sysctl_tcp_stdurg;
-extern int sysctl_tcp_rfc1337;
-extern int sysctl_tcp_syn_taildrop; 
-extern int sysctl_max_syn_backlog; 
-extern int sysctl_tcp_tw_recycle;
 
 /* From icmp.c */
 extern int sysctl_icmp_destunreach_time;
@@ -142,6 +122,12 @@ ctl_table ipv4_table[] = {
          &proc_dointvec},
 	{NET_IPV4_TCP_SYN_RETRIES, "tcp_syn_retries",
 	 &sysctl_tcp_syn_retries, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_TCP_SYNACK_RETRIES, "tcp_synack_retries",
+	 &sysctl_tcp_synack_retries, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_TCP_MAX_ORPHANS, "tcp_max_orphans",
+	 &sysctl_tcp_max_orphans, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_TCP_MAX_TW_BUCKETS, "tcp_max_tw_buckets",
+	 &sysctl_tcp_max_tw_buckets, sizeof(int), 0644, NULL, &proc_dointvec},
 	{NET_IPV4_IPFRAG_HIGH_THRESH, "ipfrag_high_thresh",
 	 &sysctl_ipfrag_high_thresh, sizeof(int), 0644, NULL, &proc_dointvec},
 	{NET_IPV4_IPFRAG_LOW_THRESH, "ipfrag_low_thresh",
@@ -172,10 +158,10 @@ ctl_table ipv4_table[] = {
 	{NET_TCP_SYNCOOKIES, "tcp_syncookies",
 	 &sysctl_tcp_syncookies, sizeof(int), 0644, NULL, &proc_dointvec},
 #endif
-#ifdef CONFIG_TCP_TW_RECYCLE
 	{NET_TCP_TW_RECYCLE, "tcp_tw_recycle",
 	 &sysctl_tcp_tw_recycle, sizeof(int), 0644, NULL, &proc_dointvec},
-#endif
+	{NET_TCP_ABORT_ON_OVERFLOW, "tcp_abort_on_overflow",
+	 &sysctl_tcp_abort_on_overflow, sizeof(int), 0644, NULL, &proc_dointvec},
 	{NET_TCP_STDURG, "tcp_stdurg", &sysctl_tcp_stdurg,
 	 sizeof(int), 0644, NULL, &proc_dointvec},
 	{NET_TCP_RFC1337, "tcp_rfc1337", &sysctl_tcp_rfc1337,
@@ -221,6 +207,8 @@ ctl_table ipv4_table[] = {
 	{NET_IPV4_INET_PEER_GC_MAXTIME, "inet_peer_gc_maxtime",
 	 &inet_peer_gc_maxtime, sizeof(int), 0644, NULL,
 	 &proc_dointvec_jiffies, &sysctl_jiffies},
+	{NET_TCP_ORPHAN_RETRIES, "tcp_orphan_retries",
+	 &sysctl_tcp_orphan_retries, sizeof(int), 0644, NULL, &proc_dointvec},
 	{0}
 };
 

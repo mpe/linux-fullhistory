@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_fib.c,v 1.19 1999/08/31 07:04:00 davem Exp $
+ *	$Id: ip6_fib.c,v 1.20 2000/01/16 05:11:37 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -926,8 +926,8 @@ int fib6_del(struct rt6_info *rt)
 
 #if RT6_DEBUG >= 2
 	if (rt->u.dst.obsolete>0) {
-		BUG_TRAP(rt->u.dst.obsolete<=0);
-		return -EFAULT;
+		BUG_TRAP(fn==NULL || rt->u.dst.obsolete<=0);
+		return -ENOENT;
 	}
 #endif
 	if (fn == NULL || rt == &ip6_null_entry)

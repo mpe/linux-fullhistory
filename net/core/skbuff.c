@@ -4,7 +4,7 @@
  *	Authors:	Alan Cox <iiitac@pyr.swan.ac.uk>
  *			Florian La Roche <rzsfl@rz.uni-sb.de>
  *
- *	Version:	$Id: skbuff.c,v 1.63 2000/01/02 09:15:17 davem Exp $
+ *	Version:	$Id: skbuff.c,v 1.64 2000/01/16 05:11:03 davem Exp $
  *
  *	Fixes:	
  *		Alan Cox	:	Fixed the worst of the load balancer bugs.
@@ -60,10 +60,6 @@
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
-
-#ifdef CONFIG_ATM
-#include <linux/atmdev.h>
-#endif
 
 /*
  *	Resource tracking variables
@@ -165,10 +161,6 @@ struct sk_buff *alloc_skb(unsigned int size,int gfp_mask)
 	skb->is_clone = 0;
 	skb->cloned = 0;
 
-#ifdef CONFIG_ATM
-	ATM_SKB(skb)->iovcnt = 0;
-#endif
-
 	atomic_set(&skb->users, 1); 
 	atomic_set(skb_datarefp(skb), 1);
 	return skb;
@@ -205,6 +197,9 @@ static inline void skb_headerinit(void *p, kmem_cache_t *cache,
 #ifdef CONFIG_NETFILTER_DEBUG
 	skb->nf_debug = 0;
 #endif
+#endif
+#ifdef CONFIG_NET_SCHED
+	skb->tc_index = 0;
 #endif
 	memset(skb->cb, 0, sizeof(skb->cb));
 	skb->priority = 0;
@@ -307,6 +302,9 @@ static void copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
 #ifdef CONFIG_NETFILTER_DEBUG
 	new->nf_debug=old->nf_debug;
 #endif
+#endif
+#ifdef CONFIG_NET_SCHED
+	new->tc_index = old->tc_index;
 #endif
 }
 

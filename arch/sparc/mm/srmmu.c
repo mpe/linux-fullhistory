@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.203 2000/01/15 00:51:28 anton Exp $
+/* $Id: srmmu.c,v 1.205 2000/01/21 17:59:46 anton Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -1204,8 +1204,12 @@ static inline void map_kernel(void)
 {
 	int i;
 
+	if (phys_base > 0) {
+		do_large_mapping(PAGE_OFFSET, phys_base);
+	}
+
 	for (i = 0; sp_banks[i].num_bytes != 0; i++) {
-		map_spbank(__va(sp_banks[i].base_addr), i);
+		map_spbank((unsigned long)__va(sp_banks[i].base_addr), i);
 	}
 
 	init_mm.mmap->vm_start = PAGE_OFFSET;
@@ -1255,7 +1259,7 @@ void __init srmmu_paging_init(void)
 
 	last_valid_pfn = end_pfn = bootmem_init();
 
-	srmmu_allocate_ptable_skeleton(KERNBASE, __va(end_of_phys_memory));
+	srmmu_allocate_ptable_skeleton(KERNBASE, (unsigned long)__va(end_of_phys_memory));
 #if CONFIG_SUN_IO
 	srmmu_allocate_ptable_skeleton(sparc_iomap.start, IOBASE_END);
 	srmmu_allocate_ptable_skeleton(DVMA_VADDR, DVMA_END);

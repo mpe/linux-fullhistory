@@ -9,7 +9,7 @@
  *      as published by the Free Software Foundation; either version
  *      2 of the License, or (at your option) any later version.
  * 
- *  $Id: syncookies.c,v 1.10 2000/01/09 02:19:35 davem Exp $
+ *  $Id: syncookies.c,v 1.11 2000/01/16 05:11:27 davem Exp $
  *
  *  Missing: IPv6 support. 
  */
@@ -102,23 +102,16 @@ static inline struct sock *
 get_cookie_sock(struct sock *sk, struct sk_buff *skb, struct open_request *req,
 		struct dst_entry *dst)
 {
-	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
+	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+	struct sock *child;
 
-	/* Oops! It was missing, syn_recv_sock decreases it. */
-	tp->syn_backlog++;
+	child = tp->af_specific->syn_recv_sock(sk, skb, req, dst);
+	if (child)
+		tcp_acceptq_queue(sk, req, child);
+	else
+		tcp_openreq_free(req);
 
-	sk = tp->af_specific->syn_recv_sock(sk, skb, req, dst);
-	if (sk) {
-		req->sk = sk; 
-
-		/* Queue up for accept() */
-		tcp_synq_queue(tp, req);
-	} else {
-		tp->syn_backlog--;
-		req->class->destructor(req);
-		tcp_openreq_free(req); 
-	}
-	return sk; 
+	return child;
 }
 
 struct sock *
@@ -171,9 +164,9 @@ cookie_v4_check(struct sock *sk, struct sk_buff *skb, struct ip_options *opt)
 			}
 		}
 	}
-	
+
 	req->snd_wscale = req->rcv_wscale = req->tstamp_ok = 0;
-	req->wscale_ok = 0; 
+	req->wscale_ok = req->sack_ok = 0; 
 	req->expires = 0UL; 
 	req->retrans = 0; 
 	
@@ -189,8 +182,8 @@ cookie_v4_check(struct sock *sk, struct sk_buff *skb, struct ip_options *opt)
 			    req->af.v4_req.loc_addr,
 			    sk->protinfo.af_inet.tos | RTO_CONN,
 			    0)) { 
-	    tcp_openreq_free(req);
-	    return NULL; 
+		tcp_openreq_free(req);
+		return NULL; 
 	}
 
 	/* Try to redo what tcp_v4_send_synack did. */
@@ -198,6 +191,7 @@ cookie_v4_check(struct sock *sk, struct sk_buff *skb, struct ip_options *opt)
 	tcp_select_initial_window(tcp_full_space(sk),req->mss,
 				  &req->rcv_wnd, &req->window_clamp, 
 				  0, &rcv_wscale);
+	/* BTW win scale with syncookies is 0 by definition */
 	req->rcv_wscale = rcv_wscale; 
 
 	return get_cookie_sock(sk, skb, req, &rt->u.dst);

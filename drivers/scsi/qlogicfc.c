@@ -751,7 +751,7 @@ int isp2x00_detect(Scsi_Host_Template * tmpt)
 			hostdata->control_block.firm_opts = 0x0108;
 			hostdata->control_block.max_frame_len = 2048;
 			hostdata->control_block.max_iocb = 256;
-			hostdata->control_block.exec_throttle = 8;
+			hostdata->control_block.exec_throttle = QLOGICFC_CMD_PER_LUN;
 			hostdata->control_block.retry_delay = 5;
 			hostdata->control_block.retry_cnt = 1;
 			hostdata->control_block.node_name[0] = 0x0020;
@@ -1280,8 +1280,9 @@ int isp2x00_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 		/* scsi.c expects sense info in a different buffer */
 		cmd->dataseg[0].d_base = virt_to_bus_low32(Cmnd->sense_buffer);
 #if BITS_PER_LONG > 32
-		cmd->dataseg[0].d_base_hi = virt_to_bus_high32(Cmnd->request_buffer);
+		cmd->dataseg[0].d_base_hi = virt_to_bus_high32(Cmnd->sense_buffer);
 #endif
+		cmd->dataseg[0].d_count = sizeof(Cmnd->sense_buffer);
 		cmd->segment_cnt = 1;
 		cmd->control_flags = CFLAG_READ;
 		break;
@@ -1848,7 +1849,7 @@ static int isp2x00_get_nvram_defaults(struct Scsi_Host *host, struct init_cb *co
 
 static int isp2x00_init(struct Scsi_Host *sh)
 {
-	u_int io_base;
+	u_long io_base;
 	struct isp2x00_hostdata *hostdata;
 	u_char revision;
 	u_int irq;

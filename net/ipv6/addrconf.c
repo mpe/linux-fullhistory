@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *	Alexey Kuznetsov	<kuznet@ms2.inr.ac.ru>
  *
- *	$Id: addrconf.c,v 1.55 1999/12/15 22:39:40 davem Exp $
+ *	$Id: addrconf.c,v 1.57 2000/01/18 08:24:21 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -682,6 +682,23 @@ static int ipv6_generate_eui64(u8 *eui, struct net_device *dev)
 	}
 	return -1;
 }
+
+static int ipv6_inherit_eui64(u8 *eui, struct inet6_dev *idev)
+{
+	int err = -1;
+	struct inet6_ifaddr *ifp;
+
+	read_lock_bh(&idev->lock);
+	for (ifp=idev->addr_list; ifp; ifp=ifp->if_next) {
+		if (ifp->scope == IFA_LINK && !(ifp->flags&IFA_F_TENTATIVE)) {
+			memcpy(eui, ifp->addr.s6_addr+8, 8);
+			err = 0;
+			break;
+		}
+	}
+	read_unlock_bh(&idev->lock);
+	return err;
+}
 #endif
 
 /*
@@ -859,7 +876,8 @@ void addrconf_prefix_rcv(struct net_device *dev, u8 *opt, int len)
 #ifdef CONFIG_IPV6_EUI64
 		if (pinfo->prefix_len == 64) {
 			memcpy(&addr, &pinfo->prefix, 8);
-			if (ipv6_generate_eui64(addr.s6_addr + 8, dev)) {
+			if (ipv6_generate_eui64(addr.s6_addr + 8, dev) &&
+			    ipv6_inherit_eui64(addr.s6_addr + 8, in6_dev)) {
 				in6_dev_put(in6_dev);
 				return;
 			}
@@ -1519,7 +1537,7 @@ static void addrconf_dad_completed(struct inet6_ifaddr *ifp)
 	 */
 
 	if (ifp->idev->cnf.forwarding == 0 &&
-	    (dev->flags&(IFF_NOARP|IFF_LOOPBACK)) == 0 &&
+	    (dev->flags&IFF_LOOPBACK) == 0 &&
 	    (ipv6_addr_type(&ifp->addr) & IPV6_ADDR_LINKLOCAL)) {
 		struct in6_addr all_routers;
 

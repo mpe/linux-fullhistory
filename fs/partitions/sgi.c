@@ -44,15 +44,15 @@ int sgi_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector, in
 	struct sgi_partition *p;
 
 	if(!(bh = bread(dev, 0, get_ptable_blocksize(dev)))) {
-		printk("Dev %s: unable to read partition table\n", kdevname(dev));
+		printk(KERN_WARNING "Dev %s: unable to read partition table\n", kdevname(dev));
 		return -1;
 	}
 	label = (struct sgi_disklabel *) bh->b_data;
 	p = &label->partitions[0];
 	magic = label->magic_mushroom;
 	if(be32_to_cpu(magic) != SGI_LABEL_MAGIC) {
-		printk("Dev %s SGI disklabel: bad magic %08x\n",
-		       kdevname(dev), magic);
+		/*printk("Dev %s SGI disklabel: bad magic %08x\n",
+		       kdevname(dev), magic);*/
 		brelse(bh);
 		return 0;
 	}
@@ -62,7 +62,7 @@ int sgi_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector, in
 		csum += be32_to_cpu(cs);
 	}
 	if(csum) {
-		printk("Dev %s SGI disklabel: csum bad, label corrupted\n",
+		printk(KERN_WARNING "Dev %s SGI disklabel: csum bad, label corrupted\n",
 		       kdevname(dev));
 		brelse(bh);
 		return 0;

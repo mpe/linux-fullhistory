@@ -345,18 +345,20 @@ static inline void ext2_set_de_type(struct super_block *sb,
 				umode_t mode) {
 	if (!EXT2_HAS_INCOMPAT_FEATURE(sb, EXT2_FEATURE_INCOMPAT_FILETYPE))
 		return;
-	if (S_ISCHR(mode))
+	if (S_ISREG(mode))
+		de->file_type = EXT2_FT_REG_FILE;
+	else if (S_ISDIR(mode))
+		de->file_type = EXT2_FT_DIR;
+	else if (S_ISLNK(mode))
+		de->file_type = EXT2_FT_SYMLINK;
+	else if (S_ISSOCK(mode))
+		de->file_type = EXT2_FT_SOCK;
+	else if (S_ISFIFO(mode))
+		de->file_type = EXT2_FT_FIFO;
+	else if (S_ISCHR(mode))
 		de->file_type = EXT2_FT_CHRDEV;
 	else if (S_ISBLK(mode))
 		de->file_type = EXT2_FT_BLKDEV;
-	else if (S_ISFIFO(mode))  
-		de->file_type = EXT2_FT_FIFO;
-	else if (S_ISLNK(mode))
-		de->file_type = EXT2_FT_SYMLINK;
-	else if (S_ISREG(mode))
-		de->file_type = EXT2_FT_REG_FILE;
-	else if (S_ISDIR(mode))  
-		de->file_type = EXT2_FT_DIR;
 }
 
 /*

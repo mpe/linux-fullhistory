@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.80 1999/12/06 03:14:48 davem Exp $
+/* $Id: irq.c,v 1.81 2000/01/21 06:33:59 davem Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997  David S. Miller  (davem@caip.rutgers.edu)
@@ -756,7 +756,7 @@ void handler_irq(int irq, struct pt_regs *regs)
 	 * of our buddy.
 	 */
 	if(should_forward != 0) {
-		buddy = cpu_number_map[cpu] + 1;
+		buddy = cpu_number_map(cpu) + 1;
 		if (buddy >= NR_CPUS ||
 		    (buddy = cpu_logical_map(buddy)) == -1)
 			buddy = cpu_logical_map(0);

@@ -5,7 +5,7 @@
  *
  *		PACKET - implements raw packet sockets.
  *
- * Version:	$Id: af_packet.c,v 1.26 1999/12/20 05:20:02 davem Exp $
+ * Version:	$Id: af_packet.c,v 1.27 2000/01/18 08:24:27 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -789,13 +789,8 @@ static int packet_release(struct socket *sock)
 	 *	Now the socket is dead. No more input will appear.
 	 */
 
-	write_lock_irq(&sk->callback_lock);
+	sock_orphan(sk);
 	sock->sk = NULL;
-	sk->socket = NULL;
-	sk->dead = 1;
-	sk->sleep = NULL;
-	write_unlock_irq(&sk->callback_lock);
-
 
 	/* Purge queues */
 

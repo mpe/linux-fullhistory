@@ -124,5 +124,6 @@ enum {
 #define TCP_SYNCNT		7	/* Number of SYN retransmits */
 #define TCP_LINGER2		8	/* Life time of orphaned FIN-WAIT-2 state */
 #define TCP_DEFER_ACCEPT	9	/* Wake up listener only when data arrive */
+#define TCP_WINDOW_CLAMP	10	/* Bound advertised window */
 
 #endif	/* _LINUX_TCP_H */

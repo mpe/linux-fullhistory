@@ -48,9 +48,9 @@
 
 struct netlink_opt
 {
-	pid_t			pid;
+	u32			pid;
 	unsigned		groups;
-	pid_t			dst_pid;
+	u32			dst_pid;
 	unsigned		dst_groups;
 	unsigned long		state;
 	int			(*handler)(int unit, struct sk_buff *skb);
@@ -95,6 +95,12 @@ static void netlink_sock_destruct(struct sock *sk)
 #endif
 }
 
+/* This lock without TASK_EXCLUSIVE is good on UP and it is _very_ bad on SMP.
+ * Look, when several writers sleep and reader wakes them up, all but one
+ * immediately hit write lock and grab all the cpus. Exclusive sleep solves
+ * this, _but_ remember, it adds useless work on UP machines.
+ */
+
 static void netlink_table_grab(void)
 {
 	write_lock_bh(&nl_table_lock);
@@ -102,9 +108,9 @@ static void netlink_table_grab(void)
 	if (atomic_read(&nl_table_users)) {
 		DECLARE_WAITQUEUE(wait, current);
 
-		add_wait_queue(&nl_table_wait, &wait);
+		add_wait_queue_exclusive(&nl_table_wait, &wait);
 		for(;;) {
-			set_current_state(TASK_UNINTERRUPTIBLE);
+			set_current_state(TASK_UNINTERRUPTIBLE|TASK_EXCLUSIVE);
 			if (atomic_read(&nl_table_users) == 0)
 				break;
 			write_unlock_bh(&nl_table_lock);
@@ -120,6 +126,7 @@ static void netlink_table_grab(void)
 static __inline__ void netlink_table_ungrab(void)
 {
 	write_unlock_bh(&nl_table_lock);
+	wake_up(&nl_table_wait);
 }
 
 static __inline__ void
@@ -254,14 +261,9 @@ static int netlink_release(struct socket *sock)
 	/* OK. Socket is unlinked, and, therefore,
 	   no new packets will arrive */
 
-	write_lock_irq(&sk->callback_lock);
-	sk->dead = 1;
-	sk->socket = NULL;
+	sock_orphan(sk);
 	sock->sk = NULL;
-	wake_up_interruptible(sk->sleep);
-	sk->sleep = NULL;
-	wake_up_interruptible(&sk->protinfo.af_netlink->wait);
-	write_unlock_irq(&sk->callback_lock);
+	wake_up_interruptible_all(&sk->protinfo.af_netlink->wait);
 
 	skb_queue_purge(&sk->write_queue);
 
@@ -391,7 +393,10 @@ int netlink_unicast(struct sock *ssk, struct sk_buff *skb, u32 pid, int nonblock
 	struct sock *sk;
 	int len = skb->len;
 	int protocol = ssk->protocol;
+	long timeo;
         DECLARE_WAITQUEUE(wait, current);
+
+	timeo = sock_sndtimeo(ssk, nonblock);
 
 retry:
 	sk = netlink_lookup(protocol, pid);
@@ -409,7 +414,7 @@ retry:
 
 	if (atomic_read(&sk->rmem_alloc) > sk->rcvbuf ||
 	    test_bit(0, &sk->protinfo.af_netlink->state)) {
-		if (nonblock) {
+		if (!timeo) {
 			if (ssk->protinfo.af_netlink->pid == 0)
 				netlink_overrun(sk);
 			sock_put(sk);
@@ -422,9 +427,8 @@ retry:
 
 		if ((atomic_read(&sk->rmem_alloc) > sk->rcvbuf ||
 		    test_bit(0, &sk->protinfo.af_netlink->state)) &&
-		    !signal_pending(current) &&
 		    !sk->dead)
-			schedule();
+			timeo = schedule_timeout(timeo);
 
 		__set_current_state(TASK_RUNNING);
 		remove_wait_queue(&sk->protinfo.af_netlink->wait, &wait);
@@ -553,9 +557,6 @@ static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 
 	if (msg->msg_flags&MSG_OOB)
 		return -EOPNOTSUPP;
-
-	if (msg->msg_flags&~(MSG_DONTWAIT|MSG_NOSIGNAL|MSG_ERRQUEUE))
-		return -EINVAL;
 
 	if (msg->msg_namelen) {
 		if (addr->nl_family != AF_NETLINK)

@@ -207,7 +207,7 @@ unsigned short eth_type_trans(struct sk_buff *skb, struct net_device *dev)
 	 *	seems to set IFF_PROMISC.
 	 */
 	 
-	else if(dev->flags&(IFF_PROMISC/*|IFF_ALLMULTI*/))
+	else if(1 /*dev->flags&IFF_PROMISC*/)
 	{
 		if(memcmp(eth->h_dest,dev->dev_addr, ETH_ALEN))
 			skb->pkt_type=PACKET_OTHERHOST;
@@ -265,7 +265,8 @@ void eth_header_cache_update(struct hh_cache *hh, struct net_device *dev, unsign
 	memcpy(((u8*)hh->hh_data) + 2, haddr, dev->addr_len);
 }
 
-#ifndef CONFIG_IP_ROUTER
+#if 0 /*ndef CONFIG_IP_ROUTER*/
+/* This one is only slowdown with checksumming in user process context. --ANK */
 
 /*
  *	Copy from an ethernet device memory space to an sk_buff while checksumming if IP
@@ -298,7 +299,7 @@ void eth_copy_and_sum(struct sk_buff *dest, unsigned char *src, int length, int 
 	if ((ip_length <= length) && (ip_length > 7))
 		length=ip_length;
 
-	dest->csum=csum_partial_copy(src+sizeof(struct iphdr)+ETH_HLEN,dest->data+sizeof(struct iphdr)+ETH_HLEN,length,base);
+	dest->csum=csum_partial_copy_nocheck(src+sizeof(struct iphdr)+ETH_HLEN,dest->data+sizeof(struct iphdr)+ETH_HLEN,length,base);
 	dest->ip_summed=1;
 }
 

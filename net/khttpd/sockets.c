@@ -68,9 +68,10 @@ int StartListening(const int Port)
 		(void)printk(KERN_ERR "        daemon is (or was a short time ago) using port %i.\n",Port);
 		return 0;	
 	}
-	
+
+	/* Grrr... setsockopt() does this. */
 	sock->sk->reuse   = 1;
-	sock->sk->nonagle = 0;
+	/* Wow!!! */
 	sock->sk->linger  = 1;
 
 	/* Now, start listening on the socket */

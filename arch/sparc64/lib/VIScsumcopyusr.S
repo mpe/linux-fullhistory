@@ -1,8 +1,9 @@
-/* $Id: VIScsumcopy.S,v 1.7 2000/01/19 04:06:03 davem Exp $
- * VIScsumcopy.S: High bandwidth IP checksumming with simultaneous
- *            copying utilizing the UltraSparc Visual Instruction Set.
+/* $Id: VIScsumcopyusr.S,v 1.1 2000/01/19 04:06:04 davem Exp $
+ * VIScsumcopyusr.S: High bandwidth IP checksumming with simultaneous
+ *                   copying utilizing the UltraSparc Visual Instruction Set.
  *
  * Copyright (C) 1997, 1999 Jakub Jelinek (jj@ultra.linux.cz)
+ * Copyright (C) 2000 David S. Miller (davem@redhat.com)
  *
  * Based on older sparc32/sparc64 checksum.S, which is:
  *
@@ -63,13 +64,27 @@
  */
 
 #define LDBLK(O0)										\
-	ldda		[%src] %asi, %O0 	/*  Load	Group			*/
+	ldda		[%src] ASI_BLK_P, %O0 	/*  Load	Group			*/
 
 #define STBLK											\
-	stda		%f48, [%dst] ASI_BLK_P	/*  Store				*/
+	stda		%f48, [%dst] %asi	/*  Store				*/
+
+#ifdef __KERNEL__
+#define STBLK_XORASI(tmpreg1,tmpreg2)								\
+	stda		%f48, [%dst] %asi	/*  Store				*/;	\
+	rd		%asi, %tmpreg1;								\
+	srl		%tmpreg1, 3, %tmpreg2;							\
+	xor		%tmpreg1, ASI_BLK_XOR1, %tmpreg1;					\
+	wr		%tmpreg1, %tmpreg2, %asi;
+#else
+#define STBLK_XORASI(tmpreg1,tmpreg2)								\
+	stda		%f48, [%dst] %asi	/*  Store				*/;	\
+	rd		%asi, %tmpreg1;								\
+	wr		%tmpreg1, ASI_BLK_XOR, %asi;
+#endif
 
 #define ST(fx,off)										\
-	std		%fx, [%dst + off]	/*  Store				*/
+	stda		%fx, [%dst + off] %asi	/*  Store				*/
 
 #define SYNC											\
 	membar		#Sync
@@ -245,11 +260,11 @@
 33:						/*  That's it				*/;
 
 	.text
-	.globl		csum_partial_copy_vis
+	.globl		csum_partial_copy_user_vis
 	.align		32
 /* %asi should be either ASI_P or ASI_AIUS for csum_partial_copy resp. csum_partial_copy_from_user */
 /* This assumes that !((%src^%dst)&3) && !((%src|%dst)&1) && %len >= 256 */
-csum_partial_copy_vis:
+csum_partial_copy_user_vis:
 	andcc		%dst, 7, %g0		/*  IEU1	Group			*/
 	be,pt		%icc, 4f		/*  CTI					*/
 	 and		%dst, 0x38, %o4		/*  IEU0				*/
@@ -257,18 +272,18 @@ csum_partial_copy_vis:
 	andcc		%dst, 2, %g0		/*  IEU1				*/
 	be,pt		%icc, 1f		/*  CTI					*/
 	 and		%dst, 4, %g7		/*  IEU0	Group			*/
-	lduha		[%src] %asi, %g2	/*  Load				*/
+	lduh		[%src], %g2		/*  Load				*/
 	sub		%len, 2, %len		/*  IEU0	Group			*/
 	add		%dst, 2, %dst		/*  IEU1				*/
 	andcc		%dst, 4, %g7		/*  IEU1	Group			*/
 	sll		%g5, 16, %g5		/*  IEU0				*/
-	sth		%g2, [%dst - 2]		/*  Store	Group			*/
+	stha		%g2, [%dst - 2]	%asi	/*  Store	Group			*/
 	sll		%g2, 16, %g2		/*  IEU0	 			*/
 	add		%src, 2, %src		/*  IEU1				*/
 	addcc		%g2, %sum, %sum		/*  IEU1	Group			*/
 	bcs,a,pn	%icc, 1f		/*  CTI					*/
 	 add		%sum, %g5, %sum		/*  IEU0				*/
-1:	lduwa		[%src] %asi, %g2	/*  Load				*/
+1:	lduw		[%src], %g2		/*  Load				*/
 	brz,a,pn	%g7, 4f			/*  CTI+IEU1	Group			*/
 	 and		%dst, 0x38, %o4		/*  IEU0				*/
 	add		%dst, 4, %dst		/*  IEU0	Group			*/
@@ -277,7 +292,7 @@ csum_partial_copy_vis:
 	bcs,a,pn	%icc, 1f		/*  CTI					*/
 	 add		%sum, 1, %sum		/*  IEU0				*/
 1:	and		%dst, 0x38, %o4		/*  IEU0	Group			*/
-	stw		%g2, [%dst - 4]		/*  Store				*/
+	stwa		%g2, [%dst - 4] %asi	/*  Store				*/
 	add		%src, 4, %src		/*  IEU1				*/
 4:
 #ifdef __KERNEL__
@@ -289,7 +304,7 @@ csum_partial_copy_vis:
 	subcc		%g7, %src, %g7		/*  IEU1	Group			*/
 	be,pt		%xcc, 1f		/*  CTI					*/
 	 mov		0x40, %g1		/*  IEU0				*/
-	lduwa		[%src] %asi, %g2	/*  Load	Group			*/
+	lduw		[%src], %g2		/*  Load	Group			*/
 	subcc		%sum, %g2, %sum		/*  IEU1	Group+load stall	*/
 	bcs,a,pn	%icc, 1f		/*  CTI					*/
 	 sub		%sum, 1, %sum		/*  IEU0				*/
@@ -297,11 +312,11 @@ csum_partial_copy_vis:
 	clr		%g5			/*  IEU1				*/
 	brz,pn		%o4, 3f			/*  CTI+IEU1	Group			*/
 	 sub		%g1, %o4, %g1		/*  IEU0				*/
-	ldda		[%src] %asi, %f0	/*  Load				*/
+	ldd		[%src], %f0		/*  Load				*/
 	clr		%o4			/*  IEU0	Group			*/
 	andcc		%dst, 8, %g0		/*  IEU1				*/
 	be,pn		%icc, 1f		/*  CTI					*/
-	 ldda		[%src + 8] %asi, %f2	/*  Load	Group			*/
+	 ldd		[%src + 8], %f2		/*  Load	Group			*/
 	add		%src, 8, %src		/*  IEU0				*/
 	sub		%len, 8, %len		/*  IEU1				*/
 	fpadd32		%f0, %f48, %f50		/*  FPA					*/
@@ -309,47 +324,47 @@ csum_partial_copy_vis:
 	faligndata	%f0, %f2, %f16		/*  FPA					*/
 	fcmpgt32	%f48, %f50, %o4		/*  FPM		Group			*/
 	fmovd		%f2, %f0		/*  FPA		Group			*/
-	ldda		[%src + 8] %asi, %f2	/*  Load				*/
-	std		%f16, [%dst - 8]	/*  Store				*/
+	ldd		[%src + 8], %f2		/*  Load				*/
+	stda		%f16, [%dst - 8] %asi	/*  Store				*/
 	fmovd		%f50, %f48		/*  FPA					*/
 1:	andcc		%g1, 0x10, %g0		/*  IEU1	Group			*/
 	be,pn		%icc, 1f		/*  CTI					*/
 	 and		%g1, 0x20, %g1		/*  IEU0				*/
 	fpadd32		%f0, %f48, %f50		/*  FPA					*/
-	ldda		[%src + 16] %asi, %f4	/*  Load	Group			*/
+	ldd		[%src + 16], %f4	/*  Load	Group			*/
 	add		%src, 16, %src		/*  IEU0				*/
 	add		%dst, 16, %dst		/*  IEU1				*/
 	faligndata	%f0, %f2, %f16		/*  FPA					*/
 	fcmpgt32	%f48, %f50, %g5		/*  FPM		Group			*/
 	sub		%len, 16, %len		/*  IEU0				*/
 	inc		%o4			/*  IEU1				*/
-	std		%f16, [%dst - 16]	/*  Store	Group			*/
+	stda		%f16, [%dst - 16] %asi	/*  Store	Group			*/
 	fpadd32		%f2, %f50, %f48		/*  FPA					*/
 	srl		%o4, 1, %o5		/*  IEU0				*/
 	faligndata	%f2, %f4, %f18		/*  FPA		Group			*/
-	std		%f18, [%dst - 8]	/*  Store				*/
+	stda		%f18, [%dst - 8] %asi	/*  Store				*/
 	fcmpgt32	%f50, %f48, %o4		/*  FPM		Group			*/
 	add		%o5, %sum, %sum		/*  IEU0				*/
-	ldda		[%src + 8] %asi, %f2	/*  Load				*/
+	ldd		[%src + 8], %f2		/*  Load				*/
 	fmovd		%f4, %f0		/*  FPA					*/
 1:	brz,a,pn	%g1, 4f			/*  CTI+IEU1	Group			*/
 	 rd		%asi, %g2		/*  LSU		Group + 4 bubbles	*/
 	inc		%g5			/*  IEU0				*/
 	fpadd32		%f0, %f48, %f50		/*  FPA					*/
-	ldda		[%src + 16] %asi, %f4	/*  Load	Group			*/
+	ldd		[%src + 16], %f4	/*  Load	Group			*/
 	srl		%g5, 1, %g5		/*  IEU0				*/
 	add		%dst, 32, %dst		/*  IEU1				*/
 	faligndata	%f0, %f2, %f16		/*  FPA					*/
 	fcmpgt32	%f48, %f50, %o5		/*  FPM		Group			*/
 	inc		%o4			/*  IEU0				*/
-	ldda		[%src + 24] %asi, %f6	/*  Load				*/
+	ldd		[%src + 24], %f6	/*  Load				*/
 	srl		%o4, 1, %o4		/*  IEU0	Group			*/
 	add		%g5, %sum, %sum		/*  IEU1				*/
-	ldda		[%src + 32] %asi, %f8	/*  Load				*/
+	ldd		[%src + 32], %f8	/*  Load				*/
 	fpadd32		%f2, %f50, %f48		/*  FPA					*/
 	faligndata	%f2, %f4, %f18		/*  FPA		Group			*/
 	sub		%len, 32, %len		/*  IEU0				*/
-	std		%f16, [%dst - 32]	/*  Store				*/
+	stda		%f16, [%dst - 32] %asi	/*  Store				*/
 	fcmpgt32	%f50, %f48, %g3		/*  FPM		Group			*/
 	inc		%o5			/*  IEU0				*/
 	add		%o4, %sum, %sum		/*  IEU1				*/
@@ -358,15 +373,15 @@ csum_partial_copy_vis:
 	srl		%o5, 1, %o5		/*  IEU0				*/
 	fcmpgt32	%f48, %f50, %g5		/*  FPM		Group			*/
 	add		%o5, %sum, %sum		/*  IEU0				*/
-	std		%f18, [%dst - 24]	/*  Store				*/
+	stda		%f18, [%dst - 24] %asi	/*  Store				*/
 	fpadd32		%f6, %f50, %f48		/*  FPA					*/
 	inc		%g3			/*  IEU0	Group			*/
-	std		%f20, [%dst - 16]	/*  Store				*/
+	stda		%f20, [%dst - 16] %asi	/*  Store				*/
 	add		%src, 32, %src		/*  IEU1				*/
 	faligndata	%f6, %f8, %f22		/*  FPA					*/
 	fcmpgt32	%f50, %f48, %o4		/*  FPM		Group			*/
 	srl		%g3, 1, %g3		/*  IEU0				*/
-	std		%f22, [%dst - 8]	/*  Store				*/	
+	stda		%f22, [%dst - 8] %asi	/*  Store				*/	
 	add		%g3, %sum, %sum		/*  IEU0	Group			*/
 3:	rd		%asi, %g2		/*  LSU		Group + 4 bubbles	*/
 #ifdef __KERNEL__
@@ -395,9 +410,10 @@ csum_partial_copy_vis:
 
 	.align		2048
 vis0s:	wr		%g2, ASI_BLK_XOR, %asi	/*  LSU		Group			*/
-	add		%src, 128, %src		/*  IEU0	Group			*/
-	ldda		[%src-128] %asi, %f0	/*  Load	Group			*/
-	ldda		[%src-64] %asi, %f16	/*  Load	Group			*/
+	ldda		[%src] ASI_BLK_P, %f0	/*  Load	Group			*/
+	add		%src, 64, %src		/*  IEU0	Group			*/
+	ldda		[%src] ASI_BLK_P, %f16	/*  Load	Group			*/
+	add		%src, 64, %src		/*  IEU0	Group			*/
 	fmovd		%f48, %f62		/*  FPA		Group	f0 available	*/
 	faligndata	%f0, %f2, %f48		/*  FPA		Group	f2 available	*/
 	fcmpgt32	%f32, %f2, %x1		/*  FPM		Group	f4 available	*/
@@ -441,21 +457,23 @@ vis0:	DO_THE_TRICK(	f0,f2,f4,f6,f8,f10,f12,f14,f16,f18,f20,f22,f24,f26,f28,f30,
 			,bcc,pt %icc, vis0)
 vis0e3:	DO_THE_TRICK(	f0,f2,f4,f6,f8,f10,f12,f14,f16,f18,f20,f22,f24,f26,f28,f30,	
 			,f48,f50,f52,f54,f56,f58,f60,f62,f32,
-			,SYNC,		STBLK,ST(f48,64),ST(f50,8),ST(f52,16),ST(f54,24),ST(f56,32),ST(f58,40),ST(f60,48),
+			,SYNC,		STBLK_XORASI(x1,x2),ST(f48,64),ST(f50,8),ST(f52,16),ST(f54,24),ST(f56,32),ST(f58,40),ST(f60,48),
 			,add %dst, 56, %dst; add %len, 192 - 8*8, %len; ba,pt %icc, e2)
 vis0e1:	DO_THE_TRICK(	f16,f18,f20,f22,f24,f26,f28,f30,f32,f34,f36,f38,f40,f42,f44,f46,
 			,f48,f50,f52,f54,f56,f58,f60,f62,f0,
-			,SYNC,		STBLK,ST(f48,64),ST(f50,8),ST(f52,16),ST(f54,24),ST(f56,32),ST(f58,40),ST(f60,48),
+			,SYNC,		STBLK_XORASI(x1,x2),ST(f48,64),ST(f50,8),ST(f52,16),ST(f54,24),ST(f56,32),ST(f58,40),ST(f60,48),
 			,add %dst, 56, %dst; add %len, 192 - 8*8, %len; ba,pt %icc, e3)
 vis0e2:	DO_THE_TRICK(	f32,f34,f36,f38,f40,f42,f44,f46,f0,f2,f4,f6,f8,f10,f12,f14,	
 			,f48,f50,f52,f54,f56,f58,f60,f62,f16,
-			,SYNC,		STBLK,ST(f48,64),ST(f50,8),ST(f52,16),ST(f54,24),ST(f56,32),ST(f58,40),ST(f60,48),
+			,SYNC,		STBLK_XORASI(x1,x2),ST(f48,64),ST(f50,8),ST(f52,16),ST(f54,24),ST(f56,32),ST(f58,40),ST(f60,48),
 			,add %dst, 56, %dst; add %len, 192 - 8*8, %len; ba,pt %icc, e1)
 	.align		2048
 vis1s:	wr		%g2, ASI_BLK_XOR, %asi	/*  LSU		Group			*/
-	add		%src, 128 - 8, %src	/*  IEU0	Group			*/
-	ldda		[%src-128] %asi, %f0	/*  Load	Group			*/
-	ldda		[%src-64] %asi, %f16	/*  Load	Group			*/
+	sub		%src, 8, %src		/*  IEU0	Group			*/
+	ldda		[%src] ASI_BLK_P, %f0	/*  Load	Group			*/
+	add		%src, 64, %src		/*  IEU0	Group			*/
+	ldda		[%src] ASI_BLK_P, %f16	/*  Load	Group			*/
+	add		%src, 64, %src		/*  IEU0	Group			*/
 	fmovd		%f0, %f58		/*  FPA		Group			*/
 	fmovd		%f48, %f0		/*  FPA		Group			*/
 	fcmpgt32	%f32, %f2, %x2		/*  FPM		Group			*/
@@ -494,21 +512,23 @@ vis1:	DO_THE_TRICK(	f0,f2,f4,f6,f8,f10,f12,f14,f16,f18,f20,f22,f24,f26,f28,f30,
 			,bcc,pt %icc, vis1)
 vis1e3:	DO_THE_TRICK(	f0,f2,f4,f6,f8,f10,f12,f14,f16,f18,f20,f22,f24,f26,f28,f30,	
 			,f62,f48,f50,f52,f54,f56,f58,f60,f32,
-			,SYNC,		,STBLK,ST(f48,0),ST(f50,8),ST(f52,16),ST(f54,24),ST(f56,32),ST(f58,40),
+			,SYNC,		,STBLK_XORASI(x1,x2),ST(f48,0),ST(f50,8),ST(f52,16),ST(f54,24),ST(f56,32),ST(f58,40),
 			,add %dst, 48, %dst; add %len, 192 - 7*8, %len; ba,pt %icc, e2)
 vis1e1:	DO_THE_TRICK(	f16,f18,f20,f22,f24,f26,f28,f30,f32,f34,f36,f38,f40,f42,f44,f46,
 			,f62,f48,f50,f52,f54,f56,f58,f60,f0,
-			,SYNC,		,STBLK,ST(f48,0),ST(f50,8),ST(f52,16),ST(f54,24),ST(f56,32),ST(f58,40),
+			,SYNC,		,STBLK_XORASI(x1,x2),ST(f48,0),ST(f50,8),ST(f52,16),ST(f54,24),ST(f56,32),ST(f58,40),
 			,add %dst, 48, %dst; add %len, 192 - 7*8, %len; ba,pt %icc, e3)
 vis1e2:	DO_THE_TRICK(	f32,f34,f36,f38,f40,f42,f44,f46,f0,f2,f4,f6,f8,f10,f12,f14,	
 			,f62,f48,f50,f52,f54,f56,f58,f60,f16,
-			,SYNC,		,STBLK,ST(f48,0),ST(f50,8),ST(f52,16),ST(f54,24),ST(f56,32),ST(f58,40),
+			,SYNC,		,STBLK_XORASI(x1,x2),ST(f48,0),ST(f50,8),ST(f52,16),ST(f54,24),ST(f56,32),ST(f58,40),
 			,add %dst, 48, %dst; add %len, 192 - 7*8, %len; ba,pt %icc, e1)
 	.align		2048
 vis2s:	wr		%g2, ASI_BLK_XOR, %asi	/*  LSU		Group			*/
-	add		%src, 128 - 16, %src	/*  IEU0	Group			*/
-	ldda		[%src-128] %asi, %f0	/*  Load	Group			*/
-	ldda		[%src-64] %asi, %f16	/*  Load	Group			*/
+	sub		%src, 16, %src		/*  IEU0	Group			*/
+	ldda		[%src] ASI_BLK_P, %f0	/*  Load	Group			*/
+	add		%src, 64, %src		/*  IEU0	Group			*/
+	ldda		[%src] ASI_BLK_P, %f16	/*  Load	Group			*/
+	add		%src, 64, %src		/*  IEU0	Group			*/
 	fmovd		%f0, %f56		/*  FPA		Group			*/
 	fmovd		%f48, %f0		/*  FPA		Group			*/	
 	sub		%dst, 64, %dst		/*  IEU0				*/
@@ -544,21 +564,23 @@ vis2:	DO_THE_TRICK(	f0,f2,f4,f6,f8,f10,f12,f14,f16,f18,f20,f22,f24,f26,f28,f30,
 			,bcc,pt %icc, vis2)
 vis2e3:	DO_THE_TRICK(	f0,f2,f4,f6,f8,f10,f12,f14,f16,f18,f20,f22,f24,f26,f28,f30,	
 			,f60,f62,f48,f50,f52,f54,f56,f58,f32,
-			,SYNC,		,,STBLK,ST(f48,64),ST(f50,72),ST(f52,80),ST(f54,88),ST(f56,96),
+			,SYNC,		,,STBLK_XORASI(x2,x3),ST(f48,64),ST(f50,72),ST(f52,80),ST(f54,88),ST(f56,96),
 			,add %dst, 104, %dst; add %len, 192 - 6*8, %len; ba,pt %icc, e2)
 vis2e1:	DO_THE_TRICK(	f16,f18,f20,f22,f24,f26,f28,f30,f32,f34,f36,f38,f40,f42,f44,f46,
 			,f60,f62,f48,f50,f52,f54,f56,f58,f0,
-			,SYNC,		,,STBLK,ST(f48,64),ST(f50,72),ST(f52,80),ST(f54,88),ST(f56,96),
+			,SYNC,		,,STBLK_XORASI(x2,x3),ST(f48,64),ST(f50,72),ST(f52,80),ST(f54,88),ST(f56,96),
 			,add %dst, 104, %dst; add %len, 192 - 6*8, %len; ba,pt %icc, e3)
 vis2e2:	DO_THE_TRICK(	f32,f34,f36,f38,f40,f42,f44,f46,f0,f2,f4,f6,f8,f10,f12,f14,	
 			,f60,f62,f48,f50,f52,f54,f56,f58,f16,
-			,SYNC,		,,STBLK,ST(f48,64),ST(f50,72),ST(f52,80),ST(f54,88),ST(f56,96),
+			,SYNC,		,,STBLK_XORASI(x2,x3),ST(f48,64),ST(f50,72),ST(f52,80),ST(f54,88),ST(f56,96),
 			,add %dst, 104, %dst; add %len, 192 - 6*8, %len; ba,pt %icc, e1)
 	.align		2048
 vis3s:	wr		%g2, ASI_BLK_XOR, %asi	/*  LSU		Group			*/
-	add		%src, 128 - 24, %src	/*  IEU0	Group			*/
-	ldda		[%src-128] %asi, %f0	/*  Load	Group			*/
-	ldda		[%src-64] %asi, %f16	/*  Load	Group			*/
+	sub		%src, 24, %src		/*  IEU0	Group			*/
+	ldda		[%src] ASI_BLK_P, %f0	/*  Load	Group			*/
+	add		%src, 64, %src		/*  IEU0	Group			*/
+	ldda		[%src] ASI_BLK_P, %f16	/*  Load	Group			*/
+	add		%src, 64, %src		/*  IEU0	Group			*/
 	fmovd		%f0, %f54		/*  FPA		Group			*/
 	fmovd		%f48, %f0		/*  FPA		Group			*/
 	sub		%dst, 64, %dst		/*  IEU0				*/
@@ -590,21 +612,23 @@ vis3:	DO_THE_TRICK(	f0,f2,f4,f6,f8,f10,f12,f14,f16,f18,f20,f22,f24,f26,f28,f30,
 			,bcc,pt %icc, vis3)
 vis3e3:	DO_THE_TRICK(	f0,f2,f4,f6,f8,f10,f12,f14,f16,f18,f20,f22,f24,f26,f28,f30,	
 			,f58,f60,f62,f48,f50,f52,f54,f56,f32,
-			,SYNC,		,,,STBLK,ST(f48,64),ST(f50,72),ST(f52,80),ST(f54,88),
+			,SYNC,		,,,STBLK_XORASI(x3,x4),ST(f48,64),ST(f50,72),ST(f52,80),ST(f54,88),
 			,add %dst, 96, %dst; add %len, 192 - 5*8, %len; ba,pt %icc, e2)
 vis3e1:	DO_THE_TRICK(	f16,f18,f20,f22,f24,f26,f28,f30,f32,f34,f36,f38,f40,f42,f44,f46,
 			,f58,f60,f62,f48,f50,f52,f54,f56,f0,
-			,SYNC,		,,,STBLK,ST(f48,64),ST(f50,72),ST(f52,80),ST(f54,88),
+			,SYNC,		,,,STBLK_XORASI(x3,x4),ST(f48,64),ST(f50,72),ST(f52,80),ST(f54,88),
 			,add %dst, 96, %dst; add %len, 192 - 5*8, %len; ba,pt %icc, e3)
 vis3e2:	DO_THE_TRICK(	f32,f34,f36,f38,f40,f42,f44,f46,f0,f2,f4,f6,f8,f10,f12,f14,	
 			,f58,f60,f62,f48,f50,f52,f54,f56,f16,
-			,SYNC,		,,,STBLK,ST(f48,64),ST(f50,72),ST(f52,80),ST(f54,88),
+			,SYNC,		,,,STBLK_XORASI(x3,x4),ST(f48,64),ST(f50,72),ST(f52,80),ST(f54,88),
 			,add %dst, 96, %dst; add %len, 192 - 5*8, %len; ba,pt %icc, e1)
 	.align		2048
 vis4s:	wr		%g2, ASI_BLK_XOR, %asi	/*  LSU		Group			*/
-	add		%src, 128 - 32, %src	/*  IEU0	Group			*/
-	ldda		[%src-128] %asi, %f0	/*  Load	Group			*/
-	ldda		[%src-64] %asi, %f16	/*  Load	Group			*/
+	sub		%src, 32, %src		/*  IEU0	Group			*/
+	ldda		[%src] ASI_BLK_P, %f0	/*  Load	Group			*/
+	add		%src, 64, %src		/*  IEU0	Group			*/
+	ldda		[%src] ASI_BLK_P, %f16	/*  Load	Group			*/
+	add		%src, 64, %src		/*  IEU0	Group			*/
 	fmovd		%f0, %f52		/*  FPA		Group			*/
 	fmovd		%f48, %f0		/*  FPA		Group			*/
 	sub		%dst, 64, %dst		/*  IEU0				*/
@@ -634,23 +658,24 @@ vis4:	DO_THE_TRICK(	f0,f2,f4,f6,f8,f10,f12,f14,f16,f18,f20,f22,f24,f26,f28,f30,
 			,bcc,pt %icc, vis4)
 vis4e3:	DO_THE_TRICK(	f0,f2,f4,f6,f8,f10,f12,f14,f16,f18,f20,f22,f24,f26,f28,f30,	
 			,f56,f58,f60,f62,f48,f50,f52,f54,f32,
-			,SYNC,		,,,,STBLK,ST(f48,64),ST(f50,72),ST(f52,80),
+			,SYNC,		,,,,STBLK_XORASI(x4,x5),ST(f48,64),ST(f50,72),ST(f52,80),
 			,add %dst, 88, %dst; add %len, 192 - 4*8, %len; ba,pt %icc, e2)
 vis4e1:	DO_THE_TRICK(	f16,f18,f20,f22,f24,f26,f28,f30,f32,f34,f36,f38,f40,f42,f44,f46,
 			,f56,f58,f60,f62,f48,f50,f52,f54,f0,
-			,SYNC,		,,,,STBLK,ST(f48,64),ST(f50,72),ST(f52,80),
+			,SYNC,		,,,,STBLK_XORASI(x4,x5),ST(f48,64),ST(f50,72),ST(f52,80),
 			,add %dst, 88, %dst; add %len, 192 - 4*8, %len; ba,pt %icc, e3)
 vis4e2:	DO_THE_TRICK(	f32,f34,f36,f38,f40,f42,f44,f46,f0,f2,f4,f6,f8,f10,f12,f14,	
 			,f56,f58,f60,f62,f48,f50,f52,f54,f16,
-			,SYNC,		,,,,STBLK,ST(f48,64),ST(f50,72),ST(f52,80),
+			,SYNC,		,,,,STBLK_XORASI(x4,x5),ST(f48,64),ST(f50,72),ST(f52,80),
 			,add %dst, 88, %dst; add %len, 192 - 4*8, %len; ba,pt %icc, e1)
 	.align		2048
-vis5s:	add		%src, 128 - 40, %src	/*  IEU0	Group			*/
-	ldda		[%src-88] %asi, %f10	/*  Load	Group			*/
-	ldda		[%src-80] %asi, %f12	/*  Load	Group			*/
-	ldda		[%src-72] %asi, %f14	/*  Load	Group			*/
+vis5s:	ldd		[%src+0], %f10		/*  Load	Group			*/
+	ldd		[%src+8], %f12		/*  Load	Group			*/
+	ldd		[%src+16], %f14		/*  Load	Group			*/
+	add		%src, 24, %src		/*  IEU0	Group			*/
 	wr		%g2, ASI_BLK_XOR, %asi	/*  LSU		Group			*/
-	ldda		[%src-64] %asi, %f16	/*  Load	Group			*/
+	ldda		[%src] ASI_BLK_P, %f16	/*  Load	Group			*/
+	add		%src, 64, %src		/*  IEU0	Group			*/
 	fmovd		%f48, %f0		/*  FPA		Group			*/
 	fmuld		%f32, %f32, %f2		/*  FPM					*/
 	clr		%x4			/*  IEU0				*/
@@ -679,22 +704,23 @@ vis5:	DO_THE_TRICK(	f0,f2,f4,f6,f8,f10,f12,f14,f16,f18,f20,f22,f24,f26,f28,f30,
 			,bcc,pt %icc, vis5)
 vis5e3:	DO_THE_TRICK(	f0,f2,f4,f6,f8,f10,f12,f14,f16,f18,f20,f22,f24,f26,f28,f30,	
 			,f54,f56,f58,f60,f62,f48,f50,f52,f32,
-			,SYNC,		,,,,,STBLK,ST(f48,64),ST(f50,72),
+			,SYNC,		,,,,,STBLK_XORASI(x5,x6),ST(f48,64),ST(f50,72),
 			,add %dst, 80, %dst; add %len, 192 - 3*8, %len; ba,pt %icc, e2)
 vis5e1:	DO_THE_TRICK(	f16,f18,f20,f22,f24,f26,f28,f30,f32,f34,f36,f38,f40,f42,f44,f46,
 			,f54,f56,f58,f60,f62,f48,f50,f52,f0,
-			,SYNC,		,,,,,STBLK,ST(f48,64),ST(f50,72),
+			,SYNC,		,,,,,STBLK_XORASI(x5,x6),ST(f48,64),ST(f50,72),
 			,add %dst, 80, %dst; add %len, 192 - 3*8, %len; ba,pt %icc, e3)
 vis5e2:	DO_THE_TRICK(	f32,f34,f36,f38,f40,f42,f44,f46,f0,f2,f4,f6,f8,f10,f12,f14,	
 			,f54,f56,f58,f60,f62,f48,f50,f52,f16,
-			,SYNC,		,,,,,STBLK,ST(f48,64),ST(f50,72),
+			,SYNC,		,,,,,STBLK_XORASI(x5,x6),ST(f48,64),ST(f50,72),
 			,add %dst, 80, %dst; add %len, 192 - 3*8, %len; ba,pt %icc, e1)
 	.align		2048
-vis6s:	add		%src, 128 - 48, %src	/*  IEU0	Group			*/
-	ldda		[%src-80] %asi, %f12	/*  Load	Group			*/
-	ldda		[%src-72] %asi, %f14	/*  Load	Group			*/
+vis6s:	ldd		[%src+0], %f12		/*  Load	Group			*/
+	ldd		[%src+8], %f14		/*  Load	Group			*/
+	add		%src, 16, %src		/*  IEU0	Group			*/
 	wr		%g2, ASI_BLK_XOR, %asi	/*  LSU		Group			*/
-	ldda		[%src-64] %asi, %f16	/*  Load	Group			*/
+	ldda		[%src] ASI_BLK_P, %f16	/*  Load	Group			*/
+	add		%src, 64, %src		/*  IEU0	Group			*/
 	fmovd		%f48, %f0		/*  FPA		Group			*/
 	fmuld		%f32, %f32, %f2		/*  FPM					*/
 	clr		%x4			/*  IEU0				*/
@@ -723,21 +749,22 @@ vis6:	DO_THE_TRICK(	f0,f2,f4,f6,f8,f10,f12,f14,f16,f18,f20,f22,f24,f26,f28,f30,
 			,bcc,pt %icc, vis6)
 vis6e3:	DO_THE_TRICK(	f0,f2,f4,f6,f8,f10,f12,f14,f16,f18,f20,f22,f24,f26,f28,f30,	
 			,f52,f54,f56,f58,f60,f62,f48,f50,f32,
-			,SYNC,		,,,,,,STBLK,ST(f48,64),
+			,SYNC,		,,,,,,STBLK_XORASI(x6,x7),ST(f48,64),
 			,add %dst, 72, %dst; add %len, 192 - 2*8, %len; ba,pt %icc, e2)
 vis6e1:	DO_THE_TRICK(	f16,f18,f20,f22,f24,f26,f28,f30,f32,f34,f36,f38,f40,f42,f44,f46,
 			,f52,f54,f56,f58,f60,f62,f48,f50,f0,
-			,SYNC,		,,,,,,STBLK,ST(f48,64),
+			,SYNC,		,,,,,,STBLK_XORASI(x6,x7),ST(f48,64),
 			,add %dst, 72, %dst; add %len, 192 - 2*8, %len; ba,pt %icc, e3)
 vis6e2:	DO_THE_TRICK(	f32,f34,f36,f38,f40,f42,f44,f46,f0,f2,f4,f6,f8,f10,f12,f14,	
 			,f52,f54,f56,f58,f60,f62,f48,f50,f16,
-			,SYNC,		,,,,,,STBLK,ST(f48,64),
+			,SYNC,		,,,,,,STBLK_XORASI(x6,x7),ST(f48,64),
 			,add %dst, 72, %dst; add %len, 192 - 2*8, %len; ba,pt %icc, e1)
 	.align		2048
-vis7s:	add		%src, 128 - 56, %src	/*  IEU0	Group			*/
-	ldda		[%src-72] %asi, %f14	/*  Load	Group			*/
+vis7s:	ldd		[%src+0], %f14		/*  Load	Group			*/
+	add		%src, 8, %src		/*  IEU0	Group			*/
 	wr		%g2, ASI_BLK_XOR, %asi	/*  LSU		Group			*/
-	ldda		[%src-64] %asi, %f16	/*  Load	Group			*/
+	ldda		[%src] ASI_BLK_P, %f16	/*  Load	Group			*/
+	add		%src, 64, %src		/*  IEU0	Group			*/
 	fmovd		%f48, %f0		/*  FPA		Group			*/
 	fmuld		%f32, %f32, %f2		/*  FPM					*/
 	clr		%x4			/*  IEU0				*/
@@ -766,44 +793,36 @@ vis7:	DO_THE_TRICK(	f0,f2,f4,f6,f8,f10,f12,f14,f16,f18,f20,f22,f24,f26,f28,f30,
 			,bcc,pt %icc, vis7)
 vis7e3:	DO_THE_TRICK(	f0,f2,f4,f6,f8,f10,f12,f14,f16,f18,f20,f22,f24,f26,f28,f30,	
 			,f50,f52,f54,f56,f58,f60,f62,f48,f32,
-			,SYNC,		,,,,,,,STBLK,
+			,SYNC,		,,,,,,,STBLK_XORASI(x7,x8),
 			,add %dst, 64, %dst; add %len, 192 - 1*8, %len; ba,pt %icc, e2)
 vis7e1:	DO_THE_TRICK(	f16,f18,f20,f22,f24,f26,f28,f30,f32,f34,f36,f38,f40,f42,f44,f46,
 			,f50,f52,f54,f56,f58,f60,f62,f48,f0,
-			,SYNC,		,,,,,,,STBLK,
+			,SYNC,		,,,,,,,STBLK_XORASI(x7,x8),
 			,add %dst, 64, %dst; add %len, 192 - 1*8, %len; ba,pt %icc, e3)
 vis7e2:	DO_THE_TRICK(	f32,f34,f36,f38,f40,f42,f44,f46,f0,f2,f4,f6,f8,f10,f12,f14,	
 			,f50,f52,f54,f56,f58,f60,f62,f48,f16,
-			,SYNC,		,,,,,,,STBLK,
+			,SYNC,		,,,,,,,STBLK_XORASI(x7,x8),
 			,add %dst, 64, %dst; add %len, 192 - 1*8, %len; ba,pt %icc, e1)
 e1:	END_THE_TRICK1(	f0,f2,f4,f6,f8,f10,f12,f14,f16,f6)
 e2:	END_THE_TRICK1(	f16,f18,f20,f22,f24,f26,f28,f30,f32,f6)
 e3:	END_THE_TRICK1(	f32,f34,f36,f38,f40,f42,f44,f46,f0,f6)
-ett:	rd		%asi, %x4		/*  LSU		Group+4bubbles		*/
-	rd		%gsr, %x3		/*  LSU		Group+4bubbles		*/
-#ifdef __KERNEL__
-	srl		%x4, 3, %x5		/*  IEU0	Group			*/
-	xor		%x4, ASI_BLK_XOR1, %x4	/*  IEU1				*/
-	wr		%x4, %x5, %asi		/*  LSU		Group+4bubbles		*/
-#else
-	wr		%x4, ASI_BLK_XOR, %asi	/*  LSU		Group+4bubbles		*/
-#endif
+ett:	rd		%gsr, %x3		/*  LSU		Group+4bubbles		*/
 	andcc		%x3, 7, %x3		/*  IEU1	Group			*/
 	add		%dst, 8, %dst		/*  IEU0				*/
 	bne,pn		%icc, 1f		/*  CTI					*/
 	 fzero		%f10			/*  FPA					*/
 	brz,a,pn	%len, 2f		/*  CTI+IEU1	Group			*/
-	 std		%f6, [%dst - 8]		/*  Store				*/
+	 stda		%f6, [%dst - 8] %asi	/*  Store				*/
 1:	cmp		%len, 8			/*  IEU1				*/
 	blu,pn		%icc, 3f		/*  CTI					*/
 	 sub		%src, 64, %src		/*  IEU0	Group			*/
-1:	ldda		[%src] %asi, %f2	/*  Load	Group			*/
+1:	ldd		[%src], %f2		/*  Load	Group			*/
 	fpadd32		%f10, %f2, %f12		/*  FPA		Group+load stall	*/
 	add		%src, 8, %src		/*  IEU0				*/
 	add		%dst, 8, %dst		/*  IEU1				*/
 	faligndata	%f6, %f2, %f14		/*  FPA		Group			*/
 	fcmpgt32	%f10, %f12, %x5		/*  FPM		Group			*/
-	std		%f14, [%dst - 16]	/*  Store				*/
+	stda		%f14, [%dst - 16] %asi	/*  Store				*/
 	fmovd		%f2, %f6		/*  FPA					*/
 	fmovd		%f12, %f10		/*  FPA		Group			*/
 	sub		%len, 8, %len		/*  IEU1				*/
@@ -815,8 +834,8 @@ ett:	rd		%asi, %x4		/*  LSU		Group+4bubbles		*/
 	bgeu,pt		%icc, 1b		/*  CTI					*/
 	 add		%x5, %sum, %sum		/*  IEU0	Group			*/
 3:	brz,a,pt	%x3, 2f			/*  CTI+IEU1				*/
-	 std		%f6, [%dst - 8]		/*  Store	Group			*/
-	st		%f7, [%dst - 8]		/*  Store	Group			*/
+	 stda		%f6, [%dst - 8] %asi	/*  Store	Group			*/
+	sta		%f7, [%dst - 8]	%asi	/*  Store	Group			*/
 	sub		%dst, 4, %dst		/*  IEU0				*/
 	add		%len, 4, %len		/*  IEU1				*/
 2:
@@ -845,39 +864,39 @@ ett:	rd		%asi, %x4		/*  LSU		Group+4bubbles		*/
 #endif
 26:	andcc		%len, 8, %g0		/*  IEU1	Group			*/
 	be,pn		%icc, 1f		/*  CTI					*/
-	 lduwa		[%src] %asi, %o4	/*  Load				*/
-	lduwa		[%src+4] %asi, %g2	/*  Load	Group			*/
+	 lduw		[%src], %o4		/*  Load				*/
+	lduw		[%src+4], %g2		/*  Load	Group			*/
 	add		%src, 8, %src		/*  IEU0				*/
 	add		%dst, 8, %dst		/*  IEU1				*/
 	sllx		%o4, 32, %g5		/*  IEU0	Group			*/
-	stw		%o4, [%dst - 8]		/*  Store				*/
+	stwa		%o4, [%dst - 8] %asi	/*  Store				*/
 	or		%g5, %g2, %g5		/*  IEU0	Group			*/
-	stw		%g2, [%dst - 4]		/*  Store				*/
+	stwa		%g2, [%dst - 4]	%asi	/*  Store				*/
 	addcc		%g5, %sum, %sum		/*  IEU1	Group			*/
 	bcs,a,pn	%xcc, 1f		/*  CTI					*/
 	 add		%sum, 1, %sum		/*  IEU0				*/
 1:	andcc		%len, 4, %g0		/*  IEU1	Group			*/
 	be,a,pn		%icc, 1f		/*  CTI					*/
 	 clr		%g2			/*  IEU0				*/
-	lduwa		[%src] %asi, %g7	/*  Load				*/
+	lduw		[%src], %g7		/*  Load				*/
 	add		%src, 4, %src		/*  IEU0	Group			*/
 	add		%dst, 4, %dst		/*  IEU1				*/
 	sllx		%g7, 32, %g2		/*  IEU0	Group			*/
-	stw		%g7, [%dst - 4]		/*  Store				*/
+	stwa		%g7, [%dst - 4] %asi	/*  Store				*/
 1:	andcc		%len, 2, %g0		/*  IEU1				*/
 	be,a,pn		%icc, 1f		/*  CTI					*/
 	 clr		%g3			/*  IEU0	Group			*/
-	lduha		[%src] %asi, %g7	/*  Load				*/
+	lduh		[%src], %g7		/*  Load				*/
 	add		%src, 2, %src		/*  IEU1				*/
 	add		%dst, 2, %dst		/*  IEU0	Group			*/
 	sll		%g7, 16, %g3		/*  IEU0	Group			*/
-	sth		%g7, [%dst - 2]		/*  Store				*/
+	stha		%g7, [%dst - 2] %asi	/*  Store				*/
 1:	andcc		%len, 1, %g0		/*  IEU1				*/
 	be,a,pn		%icc, 1f		/*  CTI					*/
 	 clr		%o5			/*  IEU0	Group			*/
-	lduba		[%src] %asi, %g7	/*  Load				*/
+	ldub		[%src], %g7		/*  Load				*/
 	sll		%g7, 8, %o5		/*  IEU0	Group			*/
-	stb		%g7, [%dst]		/*  Store				*/
+	stba		%g7, [%dst] %asi		/*  Store				*/
 1:	or		%g2, %g3, %g3		/*  IEU1				*/
 	or		%o5, %g3, %g3		/*  IEU0	Group (regdep)		*/
 	addcc		%g3, %sum, %sum		/*  IEU1	Group (regdep)		*/
@@ -891,5 +910,5 @@ end:
 
 	.section	__ex_table
 	.align		4
-	.word		csum_partial_copy_vis, 0, end, cpc_handler
+	.word		csum_partial_copy_user_vis, 0, end, cpc_handler
 #endif

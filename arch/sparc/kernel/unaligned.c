@@ -1,4 +1,4 @@
-/* $Id: unaligned.c,v 1.19 1999/08/14 03:51:33 anton Exp $
+/* $Id: unaligned.c,v 1.20 2000/01/21 11:38:42 jj Exp $
  * unaligned.c: Unaligned load/store trap handling with special
  *              cases for the kernel to do them more quickly.
  *
@@ -422,9 +422,14 @@ void user_mna_trap_fault(struct pt_regs *regs, unsigned int insn) __asm__ ("user
 
 void user_mna_trap_fault(struct pt_regs *regs, unsigned int insn)
 {
-	current->thread.sig_address = regs->pc;
-	current->thread.sig_desc = SUBSIG_PRIVINST;
-	send_sig(SIGBUS, current, 1);
+	siginfo_t info;
+
+	info.si_signo = SIGBUS;
+	info.si_errno = 0;
+	info.si_code = BUS_ADRALN;
+	info.si_addr = (void *)compute_effective_address(regs, insn);
+	info.si_trapno = 0;
+	send_sig_info(SIGBUS, &info, current);
 }
 
 asmlinkage void user_unaligned_trap(struct pt_regs *regs, unsigned int insn)
@@ -487,9 +492,7 @@ asmlinkage void user_unaligned_trap(struct pt_regs *regs, unsigned int insn)
 	}
 
 kill_user:
-	current->thread.sig_address = regs->pc;
-	current->thread.sig_desc = SUBSIG_PRIVINST;
-	send_sig(SIGBUS, current, 1);
+	user_mna_trap_fault(regs, insn);
 out:
 	unlock_kernel();
 }

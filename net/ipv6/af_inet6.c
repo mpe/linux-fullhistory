@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.49 1999/12/15 22:39:43 davem Exp $
+ *	$Id: af_inet6.c,v 1.52 2000/01/18 08:24:21 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -85,13 +85,17 @@ extern void ipv6_sysctl_register(void);
 extern void ipv6_sysctl_unregister(void);
 #endif
 
+#ifdef INET_REFCNT_DEBUG
 atomic_t inet6_sock_nr;
+#endif
 
 static void inet6_sock_destruct(struct sock *sk)
 {
 	inet_sock_destruct(sk);
 
+#ifdef INET_REFCNT_DEBUG
 	atomic_dec(&inet6_sock_nr);
+#endif
 	MOD_DEC_USE_COUNT;
 }
 
@@ -140,9 +144,6 @@ static int inet6_create(struct socket *sock, int protocol)
 	sk->prot		= prot;
 	sk->backlog_rcv		= prot->backlog_rcv;
 
-	sk->timer.data		= (unsigned long)sk;
-	sk->timer.function	= &tcp_keepalive_timer;
-
 	sk->net_pinfo.af_inet6.hop_limit  = -1;
 	sk->net_pinfo.af_inet6.mcast_hops = -1;
 	sk->net_pinfo.af_inet6.mc_loop	  = 1;
@@ -158,8 +159,16 @@ static int inet6_create(struct socket *sock, int protocol)
 	sk->protinfo.af_inet.mc_index	= 0;
 	sk->protinfo.af_inet.mc_list	= NULL;
 
+	if (ipv4_config.no_pmtu_disc)
+		sk->protinfo.af_inet.pmtudisc = IP_PMTUDISC_DONT;
+	else
+		sk->protinfo.af_inet.pmtudisc = IP_PMTUDISC_WANT;
+
+
+#ifdef INET_REFCNT_DEBUG
 	atomic_inc(&inet6_sock_nr);
 	atomic_inc(&inet_sock_nr);
+#endif
 	MOD_INC_USE_COUNT;
 
 	if (sk->type==SOCK_RAW && protocol==IPPROTO_RAW)
@@ -421,7 +430,7 @@ struct proto_ops inet6_stream_ops = {
 	sock_no_socketpair,		/* a do nothing	*/
 	inet_accept,			/* ok		*/
 	inet6_getname, 
-	inet_poll,			/* ok		*/
+	tcp_poll,			/* ok		*/
 	inet6_ioctl,			/* must change  */
 	inet_listen,			/* ok		*/
 	inet_shutdown,			/* ok		*/

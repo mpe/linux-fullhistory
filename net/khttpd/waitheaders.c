@@ -256,7 +256,7 @@ static int DecodeHeader(const int CPUNR, struct http_request *Request)
 		}
 		else   /* Normal Case */
 		{
-			Request->sock->sk->nonagle = 2; /* this is TCP_CORK */
+			Request->sock->sk->tp_pinfo.af_tcp.nonagle = 2; /* this is TCP_CORK */
 			if (Request->HTTPVER!=9)  /* HTTP/0.9 doesn't allow a header */
 				SendHTTPHeader(Request);
 		}

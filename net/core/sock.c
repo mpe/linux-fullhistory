@@ -7,7 +7,7 @@
  *		handler for protocols to use and generic option handler.
  *
  *
- * Version:	$Id: sock.c,v 1.87 1999/11/23 08:56:59 davem Exp $
+ * Version:	$Id: sock.c,v 1.89 2000/01/18 08:24:13 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -140,6 +140,23 @@ __u32 sysctl_rmem_default = SK_RMEM_MAX;
 /* Maximal space eaten by iovec or ancilliary data plus some space */
 int sysctl_optmem_max = sizeof(unsigned long)*(2*UIO_MAXIOV + 512);
 
+static int sock_set_timeout(long *timeo_p, char *optval, int optlen)
+{
+	struct timeval tv;
+
+	if (optlen < sizeof(tv))
+		return -EINVAL;
+	if (copy_from_user(&tv, optval, sizeof(tv)))
+		return -EFAULT;
+
+	*timeo_p = MAX_SCHEDULE_TIMEOUT;
+	if (tv.tv_sec == 0 && tv.tv_usec == 0)
+		return 0;
+	if (tv.tv_sec < (MAX_SCHEDULE_TIMEOUT/HZ - 1))
+		*timeo_p = tv.tv_sec*HZ + (tv.tv_usec+(1000000/HZ-1))/(1000000/HZ);
+	return 0;
+}
+
 /*
  *	This is meant for all protocols to use and covers goings on
  *	at the socket level. Everything here is generic.
@@ -214,7 +231,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			if (val > sysctl_wmem_max)
 				val = sysctl_wmem_max;
 
-			sk->sndbuf = max(val*2,2048);
+			sk->sndbuf = max(val*2,SOCK_MIN_SNDBUF);
 
 			/*
 			 *	Wake up sending tasks if we
@@ -233,7 +250,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 				val = sysctl_rmem_max;
 
 			/* FIXME: is this lower bound the right one? */
-			sk->rcvbuf = max(val*2,256);
+			sk->rcvbuf = max(val*2,SOCK_MIN_RCVBUF);
 			break;
 
 		case SO_KEEPALIVE:
@@ -266,16 +283,19 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 				ret = -EINVAL;	/* 1003.1g */
 				break;
 			}
-			if (copy_from_user(&ling,optval,sizeof(ling)))
-			{
+			if (copy_from_user(&ling,optval,sizeof(ling))) {
 				ret = -EFAULT;
 				break;
 			}
-			if(ling.l_onoff==0)
+			if(ling.l_onoff==0) {
 				sk->linger=0;
-			else
-			{
-				sk->lingertime=ling.l_linger;
+			} else {
+#if (BITS_PER_LONG == 32)
+				if (ling.l_linger >= MAX_SCHEDULE_TIMEOUT/HZ)
+					sk->lingertime=MAX_SCHEDULE_TIMEOUT;
+				else
+#endif
+					sk->lingertime=ling.l_linger*HZ;
 				sk->linger=1;
 			}
 			break;
@@ -287,8 +307,21 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 		case SO_PASSCRED:
 			sock->passcred = valbool;
 			break;
-			
-			
+
+		case SO_RCVLOWAT:
+			if (val < 0)
+				val = INT_MAX;
+			sk->rcvlowat = val ? : 1;
+			break;
+
+		case SO_RCVTIMEO:
+			ret = sock_set_timeout(&sk->rcvtimeo, optval, optlen);
+			break;
+
+		case SO_SNDTIMEO:
+			ret = sock_set_timeout(&sk->sndtimeo, optval, optlen);
+			break;
+
 #ifdef CONFIG_NETDEVICES
 		case SO_BINDTODEVICE:
 		{
@@ -446,7 +479,7 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 		case SO_LINGER:	
 			lv=sizeof(v.ling);
 			v.ling.l_onoff=sk->linger;
- 			v.ling.l_linger=sk->lingertime;
+ 			v.ling.l_linger=sk->lingertime/HZ;
 			break;
 					
 		case SO_BSDCOMPAT:
@@ -454,13 +487,31 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 			break;
 			
 		case SO_RCVTIMEO:
+			lv=sizeof(struct timeval);
+			if (sk->rcvtimeo == MAX_SCHEDULE_TIMEOUT) {
+				v.tm.tv_sec = 0;
+				v.tm.tv_usec = 0;
+			} else {
+				v.tm.tv_sec = sk->rcvtimeo/HZ;
+				v.tm.tv_usec = ((sk->rcvtimeo%HZ)*1000)/HZ;
+			}
+			break;
+
 		case SO_SNDTIMEO:
 			lv=sizeof(struct timeval);
-			v.tm.tv_sec=0;
-			v.tm.tv_usec=0;
+			if (sk->sndtimeo == MAX_SCHEDULE_TIMEOUT) {
+				v.tm.tv_sec = 0;
+				v.tm.tv_usec = 0;
+			} else {
+				v.tm.tv_sec = sk->sndtimeo/HZ;
+				v.tm.tv_usec = ((sk->sndtimeo%HZ)*1000)/HZ;
+			}
 			break;
 
 		case SO_RCVLOWAT:
+			v.val = sk->rcvlowat;
+			break;
+
 		case SO_SNDLOWAT:
 			v.val=1;
 			break; 
@@ -663,7 +714,7 @@ unsigned long sock_rspace(struct sock *sk)
 /* It is almost wait_for_tcp_memory minus release_sock/lock_sock.
    I think, these locks should be removed for datagram sockets.
  */
-static void sock_wait_for_wmem(struct sock * sk)
+static long sock_wait_for_wmem(struct sock * sk, long timeo)
 {
 	DECLARE_WAITQUEUE(wait, current);
 
@@ -679,10 +730,11 @@ static void sock_wait_for_wmem(struct sock * sk)
 			break;
 		if (sk->err)
 			break;
-		schedule();
+		timeo = schedule_timeout(timeo);
 	}
 	__set_current_state(TASK_RUNNING);
 	remove_wait_queue(sk->sleep, &wait);
+	return timeo;
 }
 
 
@@ -695,6 +747,9 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size,
 {
 	int err;
 	struct sk_buff *skb;
+	long timeo;
+
+	timeo = sock_sndtimeo(sk, noblock);
 
 	while (1) {
 		unsigned long try_size = size;
@@ -736,12 +791,12 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size,
 
 		sk->socket->flags |= SO_NOSPACE;
 		err = -EAGAIN;
-		if (noblock)
+		if (!timeo)
 			goto failure;
 		err = -ERESTARTSYS;
 		if (signal_pending(current))
 			goto failure;
-		sock_wait_for_wmem(sk);
+		timeo = sock_wait_for_wmem(sk, timeo);
 	}
 
 	return skb;
@@ -771,13 +826,21 @@ void __lock_sock(struct sock *sk)
 void __release_sock(struct sock *sk)
 {
 	struct sk_buff *skb = sk->backlog.head;
+
 	do {
-		struct sk_buff *next = skb->next;
-		skb->next = NULL;
-		sk->backlog_rcv(sk, skb);
-		skb = next;
-	} while(skb != NULL);
-	sk->backlog.head = sk->backlog.tail = NULL;
+		sk->backlog.head = sk->backlog.tail = NULL;
+		bh_unlock_sock(sk);
+
+		do {
+			struct sk_buff *next = skb->next;
+
+			skb->next = NULL;
+			sk->backlog_rcv(sk, skb);
+			skb = next;
+		} while (skb != NULL);
+
+		bh_lock_sock(sk);
+	} while((skb = sk->backlog.head) != NULL);
 }
 
 /*
@@ -1004,7 +1067,7 @@ void sock_def_wakeup(struct sock *sk)
 {
 	read_lock(&sk->callback_lock);
 	if(!sk->dead)
-		wake_up_interruptible(sk->sleep);
+		wake_up_interruptible_all(sk->sleep);
 	read_unlock(&sk->callback_lock);
 }
 
@@ -1087,6 +1150,9 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 	sk->peercred.pid 	=	0;
 	sk->peercred.uid	=	-1;
 	sk->peercred.gid	=	-1;
+	sk->rcvlowat		=	1;
+	sk->rcvtimeo		=	MAX_SCHEDULE_TIMEOUT;
+	sk->sndtimeo		=	MAX_SCHEDULE_TIMEOUT;
 
 	atomic_set(&sk->refcnt, 1);
 }

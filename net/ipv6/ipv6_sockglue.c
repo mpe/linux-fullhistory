@@ -7,7 +7,7 @@
  *
  *	Based on linux/net/ipv4/ip_sockglue.c
  *
- *	$Id: ipv6_sockglue.c,v 1.30 2000/01/09 02:19:49 davem Exp $
+ *	$Id: ipv6_sockglue.c,v 1.31 2000/01/16 05:11:38 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -192,7 +192,9 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 				kfree_skb(pktopt);
 
 			sk->destruct = inet_sock_destruct;
+#ifdef INET_REFCNT_DEBUG
 			atomic_dec(&inet6_sock_nr);
+#endif
 			MOD_DEC_USE_COUNT;
 			retv = 0;
 			break;
@@ -271,7 +273,7 @@ update:
 		if (sk->type == SOCK_STREAM) {
 			if (opt) {
 				struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
-				if ((tcp_connected(sk->state) || sk->state == TCP_SYN_SENT)
+				if (!((1<<sk->state)&(TCPF_LISTEN|TCPF_CLOSE))
 				    && sk->daddr != LOOPBACK4_IPV6) {
 					tp->ext_header_len = opt->opt_flen + opt->opt_nflen;
 					tcp_sync_mss(sk, tp->pmtu_cookie);

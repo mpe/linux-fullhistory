@@ -182,7 +182,24 @@ struct linux_mib
 	unsigned long	OfoPruned;
 	unsigned long	OutOfWindowIcmps; 
 	unsigned long	LockDroppedIcmps; 
-	unsigned long	__pad[32-9];
+	unsigned long	TimeWaited; 
+	unsigned long	TimeWaitRecycled; 
+	unsigned long	TimeWaitKilled; 
+	unsigned long	PAWSPassiveRejected; 
+	unsigned long	PAWSActiveRejected; 
+	unsigned long	PAWSEstabRejected; 
+	unsigned long	DelayedACKs;
+	unsigned long	DelayedACKLocked;
+	unsigned long	DelayedACKLost;
+	unsigned long	ListenOverflows;
+	unsigned long	ListenDrops;
+	unsigned long	TCPPrequeued;
+	unsigned long	TCPDirectCopyFromBacklog;
+	unsigned long	TCPDirectCopyFromPrequeue;
+	unsigned long	TCPPrequeueDropped;
+	unsigned long	TCPHPHits;
+	unsigned long	TCPHPHitsToUser;
+	unsigned long	__pad[32-26];
 };
 
 #define SNMP_INC_STATS(mib, field) ((mib)[2*smp_processor_id()+!in_interrupt()].field++)

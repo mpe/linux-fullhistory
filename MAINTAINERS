@@ -631,7 +631,7 @@ M:	pavel@atrey.karlin.mff.cuni.cz
 S:	Maintained
 
 NETWORKING [GENERAL]
-P:	Networking Teak
+P:	Networking Team
 M:	netdev@oss.sgi.com
 L:	linux-net@vger.rutgers.edu
 W:	http://www.uk.linux.org/NetNews.html (2.0 only)

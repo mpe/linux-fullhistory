@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.73 2000/01/11 01:06:47 davem Exp $
+/* $Id: ioctl32.c,v 1.74 2000/01/15 04:47:48 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -39,6 +39,7 @@
 #include <linux/videodev.h>
 #include <linux/netdevice.h>
 #include <linux/raw.h>
+#include <linux/smb_fs.h>
 
 #include <scsi/scsi.h>
 /* Ugly hack. */
@@ -1734,6 +1735,24 @@ static int do_unimap_ioctl(struct file *file, int cmd, struct unimapdesc32 *user
 	return 0;
 }
 
+static int do_smb_getmountuid(unsigned int fd, unsigned int cmd, unsigned long arg)
+{
+	mm_segment_t old_fs = get_fs();
+	__kernel_uid_t kuid;
+	int err;
+
+	cmd = SMB_IOC_GETMOUNTUID;
+
+	set_fs(KERNEL_DS);
+	err = sys_ioctl(fd, cmd, (unsigned long)&kuid);
+	set_fs(old_fs);
+
+	if (err >= 0)
+		err = put_user(kuid, (__kernel_uid_t32 *)arg);
+
+	return err;
+}
+
 asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	struct file * filp;
@@ -1919,6 +1938,11 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case VIDIOCGFREQ32:
 	case VIDIOCSFREQ32:
 		error = do_video_ioctl(fd, cmd, arg);
+		goto out;
+
+	/* One SMB ioctl needs translations. */
+	case _IOR('u', 1, __kernel_uid_t32): /* SMB_IOC_GETMOUNTUID */
+		error = do_smb_getmountuid(fd, cmd, arg);
 		goto out;
 
 	/* List here exlicitly which ioctl's are known to have
@@ -2426,6 +2450,9 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	/* Raw devices */
 	case RAW_SETBIND:
 	case RAW_GETBIND:
+
+	/* SMB ioctls which do not need any translations */
+	case SMB_IOC_NEWCONN:
 
 		error = sys_ioctl (fd, cmd, arg);
 		goto out;

@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.86 2000/01/09 10:46:49 anton Exp $
+/* $Id: sparc_ksyms.c,v 1.87 2000/01/21 17:41:14 anton Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -16,6 +16,7 @@
 #include <linux/interrupt.h>
 #include <linux/in6.h>
 #include <linux/spinlock.h>
+#include <linux/mm.h>
 
 #include <asm/oplib.h>
 #include <asm/delay.h>

@@ -115,6 +115,7 @@ if [ "$CONFIG_WATCHDOG" != "n" ]; then
    tristate '  Software Watchdog' CONFIG_SOFT_WATCHDOG
    tristate '  Berkshire Products PC Watchdog' CONFIG_PCWATCHDOG
    tristate '  Acquire SBC Watchdog Timer' CONFIG_ACQUIRE_WDT
+   tristate '  Mixcom Watchdog' CONFIG_MIXCOMWD 
 fi
 endmenu
 

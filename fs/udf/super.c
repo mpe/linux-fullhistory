@@ -194,8 +194,8 @@ int __init init_udf_fs(void)
 		if ( size < sizeof(struct udf_sb_info) )
 		{
 			printk(KERN_ERR "udf: Danger! Kernel was compiled without enough room for udf_sb_info\n");
-			printk(KERN_ERR "udf: Kernel has room for %u bytes, udf needs %u\n",
-				size, sizeof(struct udf_sb_info));
+			printk(KERN_ERR "udf: Kernel has room for %u bytes, udf needs %lu\n",
+				size, (unsigned long)sizeof(struct udf_sb_info));
 			return 0;
 		}
 	}

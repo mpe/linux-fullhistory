@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.76 2000/01/09 09:13:38 anton Exp $
+/* $Id: processor.h,v 1.77 2000/01/21 11:39:17 jj Exp $
  * include/asm-sparc/processor.h
  *
  * Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
@@ -58,10 +58,6 @@ struct thread_struct {
 	unsigned long uwinmask __attribute__ ((aligned (8)));
 	struct pt_regs *kregs;
 
-	/* For signal handling */
-	unsigned long sig_address __attribute__ ((aligned (8)));
-	unsigned long sig_desc;
-
 	/* Context switch saved kernel state. */
 	unsigned long ksp __attribute__ ((aligned (8)));
 	unsigned long kpc;
@@ -99,8 +95,8 @@ struct thread_struct {
 		    NULL, __pgprot(0x0) , VM_READ | VM_WRITE | VM_EXEC, 1, NULL, NULL }
 
 #define INIT_THREAD  { \
-/* uwinmask, kregs, sig_address, sig_desc, ksp, kpc, kpsr, kwim */ \
-   0,        0,     0,           0,        0,   0,   0,    0, \
+/* uwinmask, kregs, ksp, kpc, kpsr, kwim */ \
+   0,        0,     0,   0,   0,    0, \
 /* fork_kpsr, fork_kwim */ \
    0,         0, \
 /* reg_window */  \

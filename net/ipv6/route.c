@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: route.c,v 1.44 2000/01/09 02:19:51 davem Exp $
+ *	$Id: route.c,v 1.45 2000/01/16 05:11:38 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -93,7 +93,7 @@ struct dst_ops ip6_dst_ops = {
 
 struct rt6_info ip6_null_entry = {
 	{{NULL, ATOMIC_INIT(1), 1, &loopback_dev,
-	  -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	  -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	  -ENETUNREACH, NULL, NULL,
 	  ip6_pkt_discard, ip6_pkt_discard,
 #ifdef CONFIG_NET_CLS_ROUTE
@@ -296,6 +296,7 @@ static struct rt6_info *rt6_cow(struct rt6_info *ort, struct in6_addr *daddr,
 
 		rt->rt6i_dst.plen = 128;
 		rt->rt6i_flags |= RTF_CACHE;
+		rt->u.dst.flags |= DST_HOST;
 
 #ifdef CONFIG_IPV6_SUBTREES
 		if (rt->rt6i_src.plen && saddr) {
@@ -687,6 +688,8 @@ int ip6_route_add(struct in6_rtmsg *rtmsg)
 
 	ipv6_addr_copy(&rt->rt6i_dst.addr, &rtmsg->rtmsg_dst);
 	rt->rt6i_dst.plen = rtmsg->rtmsg_dst_len;
+	if (rt->rt6i_dst.plen == 128)
+	       rt->u.dst.flags = DST_HOST;
 	ipv6_wash_prefix(&rt->rt6i_dst.addr, rt->rt6i_dst.plen);
 
 #ifdef CONFIG_IPV6_SUBTREES
@@ -940,6 +943,7 @@ source_ok:
 
 	ipv6_addr_copy(&nrt->rt6i_dst.addr, dest);
 	nrt->rt6i_dst.plen = 128;
+	nrt->u.dst.flags |= DST_HOST;
 
 	ipv6_addr_copy(&nrt->rt6i_gateway, (struct in6_addr*)neigh->primary_key);
 	nrt->rt6i_nexthop = neigh_clone(neigh);
@@ -1025,6 +1029,7 @@ void rt6_pmtu_discovery(struct in6_addr *daddr, struct in6_addr *saddr,
 			goto out;
 		ipv6_addr_copy(&nrt->rt6i_dst.addr, daddr);
 		nrt->rt6i_dst.plen = 128;
+		nrt->u.dst.flags |= DST_HOST;
 		nrt->rt6i_nexthop = neigh_clone(rt->rt6i_nexthop);
 		dst_set_expires(&rt->u.dst, ip6_rt_mtu_expires);
 		nrt->rt6i_flags |= RTF_DYNAMIC|RTF_CACHE|RTF_EXPIRES;
@@ -1045,7 +1050,7 @@ static struct rt6_info * ip6_rt_copy(struct rt6_info *ort)
 	struct rt6_info *rt;
 
 	rt = dst_alloc(&ip6_dst_ops);
-	
+
 	if (rt) {
 		rt->u.dst.input = ort->u.dst.input;
 		rt->u.dst.output = ort->u.dst.output;
@@ -1193,7 +1198,8 @@ int ip6_rt_addr_add(struct in6_addr *addr, struct net_device *dev)
 	rt = dst_alloc(&ip6_dst_ops);
 	if (rt == NULL)
 		return -ENOMEM;
-	
+
+	rt->u.dst.flags = DST_HOST;
 	rt->u.dst.input = ip6_input;
 	rt->u.dst.output = ip6_output;
 	rt->rt6i_dev = dev_get_by_name("lo");

@@ -1,4 +1,4 @@
-/*  $Id: signal32.c,v 1.58 2000/01/14 09:40:08 jj Exp $
+/*  $Id: signal32.c,v 1.59 2000/01/21 11:38:52 jj Exp $
  *  arch/sparc64/kernel/signal32.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -100,6 +100,44 @@ struct rt_signal_frame32 {
 #define SF_ALIGNEDSZ  (((sizeof(struct signal_sframe32) + 7) & (~7)))
 #define NF_ALIGNEDSZ  (((sizeof(struct new_signal_frame32) + 7) & (~7)))
 #define RT_ALIGNEDSZ  (((sizeof(struct rt_signal_frame32) + 7) & (~7)))
+
+int copy_siginfo_to_user32(siginfo_t32 *to, siginfo_t *from)
+{
+	int err;
+
+	if (!access_ok (VERIFY_WRITE, to, sizeof(siginfo_t32)))
+		return -EFAULT;
+
+	err = __put_user(from->si_signo, &to->si_signo);
+	err |= __put_user(from->si_errno, &to->si_errno);
+	err |= __put_user(from->si_code, &to->si_code);
+	if (from->si_code < 0)
+		err |= __copy_to_user(&to->_sifields._pad, &from->_sifields._pad, SI_PAD_SIZE);
+	else {
+		int signo = from->si_signo;
+		if (from->si_code == SI_USER || from->si_code == SI_KERNEL)
+			signo = SIGRTMIN;
+		switch (signo) {
+		case SIGCHLD:
+			err |= __put_user(from->si_utime, &to->si_utime);
+			err |= __put_user(from->si_stime, &to->si_stime);
+			err |= __put_user(from->si_status, &to->si_status);
+		default:
+			err |= __put_user(from->si_pid, &to->si_pid);
+			err |= __put_user(from->si_uid, &to->si_uid);
+			break;
+		case SIGSEGV:
+		case SIGILL:
+		case SIGFPE:
+		case SIGBUS:
+		case SIGEMT:
+			err |= __put_user(from->si_trapno, &to->si_trapno);
+			err |= __put_user((long)from->si_addr, &to->si_addr);
+			break;
+		}
+	}
+	return err;
+}
 
 /*
  * atomically swap in the new signal mask, and wait for a signal.
@@ -436,13 +474,16 @@ static inline void *get_sigframe(struct sigaction *sa, struct pt_regs *regs, uns
 }
 
 static void
-setup_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
-	      struct pt_regs *regs, int signr, sigset_t *oldset)
+setup_frame32(struct sigaction *sa, struct pt_regs *regs, int signr, sigset_t *oldset, siginfo_t *info)
 {
 	struct signal_sframe32 *sframep;
 	struct sigcontext32 *sc;
 	unsigned seta[_NSIG_WORDS32];
 	int err = 0;
+	void *sig_address;
+	int sig_code;
+	unsigned long pc = regs->tpc;
+	unsigned long npc = regs->tnpc;
 	
 #if 0	
 	int window = 0;
@@ -513,17 +554,61 @@ setup_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 		       
 	current->thread.w_saved = 0; /* So process is allowed to execute. */
 	err |= __put_user(signr, &sframep->sig_num);
-	if(signr == SIGSEGV ||
-	   signr == SIGILL ||
-	   signr == SIGFPE ||
-	   signr == SIGBUS ||
-	   signr == SIGEMT) {
-		err |= __put_user(current->thread.sig_desc, &sframep->sig_code);
-		err |= __put_user(current->thread.sig_address, &sframep->sig_address);
-	} else {
-		err |= __put_user(0, &sframep->sig_code);
-		err |= __put_user(0, &sframep->sig_address);
+	sig_address = NULL;
+	sig_code = 0;
+	if (SI_FROMKERNEL (info) && (info->si_code & __SI_MASK) == __SI_FAULT) {
+		sig_address = info->si_addr;
+		switch (signr) {
+		case SIGSEGV:
+			switch (info->si_code) {
+			case SEGV_MAPERR: sig_code = SUBSIG_NOMAPPING; break;
+			default: sig_code = SUBSIG_PROTECTION; break;
+			}
+			break;
+		case SIGILL:
+			switch (info->si_code) {
+			case ILL_ILLOPC: sig_code = SUBSIG_ILLINST; break;
+			case ILL_PRVOPC: sig_code = SUBSIG_PRIVINST; break;
+			case ILL_ILLTRP: sig_code = SUBSIG_BADTRAP (info->si_trapno); break;
+			default: sig_code = SUBSIG_STACK; break;
+			}
+			break;
+		case SIGFPE:
+			switch (info->si_code) {
+			case FPE_INTDIV: sig_code = SUBSIG_IDIVZERO; break;
+			case FPE_INTOVF: sig_code = SUBSIG_FPINTOVFL; break;
+			case FPE_FLTDIV: sig_code = SUBSIG_FPDIVZERO; break;
+			case FPE_FLTOVF: sig_code = SUBSIG_FPOVFLOW; break;
+			case FPE_FLTUND: sig_code = SUBSIG_FPUNFLOW; break;
+			case FPE_FLTRES: sig_code = SUBSIG_FPINEXACT; break;
+			case FPE_FLTINV: sig_code = SUBSIG_FPOPERROR; break;
+			default: sig_code = SUBSIG_FPERROR; break;
+			}
+			break;
+		case SIGBUS:
+			switch (info->si_code) {
+			case BUS_ADRALN: sig_code = SUBSIG_ALIGNMENT; break;
+			case BUS_ADRERR: sig_code = SUBSIG_MISCERROR; break;
+			default: sig_code = SUBSIG_BUSTIMEOUT; break;
+			}
+			break;
+		case SIGEMT:
+			switch (info->si_code) {
+			case EMT_TAGOVF: sig_code = SUBSIG_TAG; break;
+			}
+			break;
+		case SIGSYS:
+			if (info->si_code == (__SI_FAULT|0x100)) {
+				/* See sys_sunos32.c */
+				sig_code = info->si_trapno;
+				break;
+			}
+		default:
+			sig_address = NULL;
+		}
 	}
+	err |= __put_user((long)sig_address, &sframep->sig_address);
+	err |= __put_user(sig_code, &sframep->sig_code);
 	err |= __put_user((u64)sc, &sframep->sig_scptr);
 	if (err)
 		goto sigsegv;
@@ -790,8 +875,7 @@ setup_svr4_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 
 	/* Setup the signal information.  Solaris expects a bunch of
 	 * information to be passed to the signal handler, we don't provide
-	 * that much currently, should use those that David already
-	 * is providing with thread.sig_desc
+	 * that much currently, should use siginfo.
 	 */
 	err |= __put_user(signr, &si->siginfo.signo);
 	err |= __put_user(SVR4_SINOINFO, &si->siginfo.code);
@@ -1034,61 +1118,8 @@ static inline void setup_rt_frame32(struct k_sigaction *ka, struct pt_regs *regs
 		err |= __put_user(0, &sf->fpu_save);
 	}
 
-	/* Update the siginfo structure.  Is this good?  */
-	if (info->si_code == 0) {
-		info->si_signo = signr;
-		info->si_errno = 0;
-
-		switch (signr) {
-		case SIGSEGV:
-		case SIGILL:
-		case SIGFPE:
-		case SIGBUS:
-		case SIGEMT:
-			info->si_code = current->thread.sig_desc;
-			info->si_addr = (void *)current->thread.sig_address;
-			info->si_trapno = 0;
-			break;
-		default:
-			break;
-		}
-	}
-
-	err = __put_user (info->si_signo, &sf->info.si_signo);
-	err |= __put_user (info->si_errno, &sf->info.si_errno);
-	err |= __put_user (info->si_code, &sf->info.si_code);
-	if (info->si_code < 0)
-		err |= __copy_to_user (sf->info._sifields._pad, info->_sifields._pad, SI_PAD_SIZE);
-	else {
-		i = info->si_signo;
-		if (info->si_code == SI_USER)
-			i = SIGRTMIN;
-		switch (i) {
-		case SIGPOLL:
-			err |= __put_user (info->si_band, &sf->info.si_band);
-			err |= __put_user (info->si_fd, &sf->info.si_fd);
-			break;
-		case SIGCHLD:
-			err |= __put_user (info->si_pid, &sf->info.si_pid);
-			err |= __put_user (info->si_uid, &sf->info.si_uid);
-			err |= __put_user (info->si_status, &sf->info.si_status);
-			err |= __put_user (info->si_utime, &sf->info.si_utime);
-			err |= __put_user (info->si_stime, &sf->info.si_stime);
-			break;
-		case SIGSEGV:
-		case SIGILL:
-		case SIGFPE:
-		case SIGBUS:
-		case SIGEMT:
-			err |= __put_user ((long)info->si_addr, &sf->info.si_addr);
-			err |= __put_user (info->si_trapno, &sf->info.si_trapno);
-			break;
-		default:
-			err |= __put_user (info->si_pid, &sf->info.si_pid);
-			err |= __put_user (info->si_uid, &sf->info.si_uid);
-			break;
-		}
-	}
+	/* Update the siginfo structure.  */
+	err |= copy_siginfo_to_user32(&sf->info, info);
 	
 	/* Setup sigaltstack */
 	err |= __put_user(current->sas_ss_sp, &sf->stack.ss_sp);
@@ -1174,7 +1205,7 @@ static inline void handle_signal32(unsigned long signr, struct k_sigaction *ka,
 		else if (current->thread.flags & SPARC_FLAG_NEWSIGNALS)
 			new_setup_frame32(ka, regs, signr, oldset);
 		else
-			setup_frame32(&ka->sa, regs->tpc, regs->tnpc, regs, signr, oldset);
+			setup_frame32(&ka->sa, regs, signr, oldset, info);
 	}
 	if(ka->sa.sa_flags & SA_ONESHOT)
 		ka->sa.sa_handler = SIG_DFL;

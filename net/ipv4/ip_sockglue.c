@@ -5,7 +5,7 @@
  *
  *		The IP to API glue.
  *		
- * Version:	$Id: ip_sockglue.c,v 1.46 2000/01/09 02:19:32 davem Exp $
+ * Version:	$Id: ip_sockglue.c,v 1.47 2000/01/16 05:11:23 davem Exp $
  *
  * Authors:	see ip.c
  *
@@ -415,7 +415,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 				struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 #if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
 				if (sk->family == PF_INET ||
-				    ((tcp_connected(sk->state) || sk->state == TCP_SYN_SENT)
+				    (!((1<<sk->state)&(TCPF_LISTEN|TCPF_CLOSE))
 				     && sk->daddr != LOOPBACK4_IPV6)) {
 #endif
 					if (opt)

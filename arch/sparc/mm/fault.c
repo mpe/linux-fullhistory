@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.111 1999/10/24 13:45:59 anton Exp $
+/* $Id: fault.c,v 1.113 2000/01/21 11:38:47 jj Exp $
  * fault.c:  Page fault handlers for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -197,8 +197,10 @@ asmlinkage void do_sparc_fault(struct pt_regs *regs, int text_fault, int write,
 	struct mm_struct *mm = tsk->mm;
 	unsigned int fixup;
 	unsigned long g2;
+	siginfo_t info;
 	int from_user = !(regs->psr & PSR_PS);
 
+	info.si_code = SEGV_MAPERR;
 	if(text_fault)
 		address = regs->pc;
 
@@ -207,10 +209,12 @@ asmlinkage void do_sparc_fault(struct pt_regs *regs, int text_fault, int write,
 	 * context, we must not take the fault..
 	 */
         if (in_interrupt() || !mm)
-                goto do_kernel_fault;
+                goto no_context;
 
 	down(&mm->mmap_sem);
-	/* The kernel referencing a bad kernel pointer can lock up
+
+	/*
+	 * The kernel referencing a bad kernel pointer can lock up
 	 * a sun4c machine completely, so we must attempt recovery.
 	 */
 	if(!from_user && address >= PAGE_OFFSET)
@@ -230,6 +234,7 @@ asmlinkage void do_sparc_fault(struct pt_regs *regs, int text_fault, int write,
 	 * we can handle it..
 	 */
 good_area:
+	info.si_code = SEGV_ACCERR;
 	if(write) {
 		if(!(vma->vm_flags & VM_WRITE))
 			goto bad_area;
@@ -238,18 +243,47 @@ good_area:
 		if(!(vma->vm_flags & (VM_READ | VM_EXEC)))
 			goto bad_area;
 	}
-	if (!handle_mm_fault(current, vma, address, write))
-		goto do_sigbus;
+
+	/*
+	 * If for any reason at all we couldn't handle the fault,
+	 * make sure we exit gracefully rather than endlessly redo
+	 * the fault.
+	 */
+	{
+		int fault = handle_mm_fault(tsk, vma, address, write);
+		if (fault < 0)
+			goto out_of_memory;
+		if (!fault)
+			goto do_sigbus;
+	}
 	up(&mm->mmap_sem);
 	return;
+
 	/*
 	 * Something tried to access memory that isn't in our memory map..
 	 * Fix it, but check if it's kernel or user first..
 	 */
 bad_area:
 	up(&mm->mmap_sem);
+
+	/* User mode accesses just cause a SIGSEGV */
+	if(from_user) {
+#if 0
+		printk("Fault whee %s [%d]: segfaults at %08lx pc=%08lx\n",
+		       tsk->comm, tsk->pid, address, regs->pc);
+#endif
+		info.si_signo = SIGSEGV;
+		info.si_errno = 0;
+		/* info.si_code set above to make clear whether
+		   this was a SEGV_MAPERR or SEGV_ACCERR fault.  */
+		info.si_addr = (void *)address;
+		info.si_trapno = 0;
+		force_sig_info (SIGSEGV, &info, tsk);
+		return;
+	}
+
 	/* Is this in ex_table? */
-do_kernel_fault:
+no_context:
 	g2 = regs->u_regs[UREG_G2];
 	if (!from_user && (fixup = search_exception_table (regs->pc, &g2))) {
 		if (fixup > 10) { /* Values below are reserved for other things */
@@ -276,26 +310,31 @@ do_kernel_fault:
 			return;
 		}
 	}
-	if(from_user) {
-#if 0
-		printk("Fault whee %s [%d]: segfaults at %08lx pc=%08lx\n",
-		       tsk->comm, tsk->pid, address, regs->pc);
-#endif
-		tsk->thread.sig_address = address;
-		tsk->thread.sig_desc = SUBSIG_NOMAPPING;
-		force_sig(SIGSEGV, tsk);
-		return;
-	}
+	
 	unhandled_fault (address, tsk, regs);
-	return;
+	do_exit(SIGKILL);
+
+/*
+ * We ran out of memory, or some other thing happened to us that made
+ * us unable to handle the page fault gracefully.
+ */
+out_of_memory:
+	up(&mm->mmap_sem);
+	printk("VM: killing process %s\n", tsk->comm);
+	if (from_user)
+		do_exit(SIGKILL);
+	goto no_context;
 
 do_sigbus:
 	up(&mm->mmap_sem);
-	tsk->thread.sig_address = address;
-	tsk->thread.sig_desc = SUBSIG_MISCERROR;
-	force_sig(SIGBUS, tsk);
-	if (! from_user)
-		goto do_kernel_fault;
+	info.si_signo = SIGBUS;
+	info.si_errno = 0;
+	info.si_code = BUS_ADRERR;
+	info.si_addr = (void *)address;
+	info.si_trapno = 0;
+	force_sig_info (SIGBUS, &info, tsk);
+	if (!from_user)
+		goto no_context;
 }
 
 asmlinkage void do_sun4c_fault(struct pt_regs *regs, int text_fault, int write,
@@ -385,6 +424,9 @@ inline void force_user_fault(unsigned long address, int write)
 	struct vm_area_struct *vma;
 	struct task_struct *tsk = current;
 	struct mm_struct *mm = tsk->mm;
+	siginfo_t info;
+
+	info.si_code = SEGV_MAPERR;
 
 #if 0
 	printk("wf<pid=%d,wr=%d,addr=%08lx>\n",
@@ -401,6 +443,7 @@ inline void force_user_fault(unsigned long address, int write)
 	if(expand_stack(vma, address))
 		goto bad_area;
 good_area:
+	info.si_code = SEGV_ACCERR;
 	if(write) {
 		if(!(vma->vm_flags & VM_WRITE))
 			goto bad_area;
@@ -418,16 +461,23 @@ bad_area:
 	printk("Window whee %s [%d]: segfaults at %08lx\n",
 	       tsk->comm, tsk->pid, address);
 #endif
-	tsk->thread.sig_address = address;
-	tsk->thread.sig_desc = SUBSIG_NOMAPPING;
-	send_sig(SIGSEGV, tsk, 1);
+	info.si_signo = SIGSEGV;
+	info.si_errno = 0;
+	/* info.si_code set above to make clear whether
+	   this was a SEGV_MAPERR or SEGV_ACCERR fault.  */
+	info.si_addr = (void *)address;
+	info.si_trapno = 0;
+	force_sig_info (SIGSEGV, &info, tsk);
 	return;
 
 do_sigbus:
 	up(&mm->mmap_sem);
-	tsk->thread.sig_address = address;
-	tsk->thread.sig_desc = SUBSIG_MISCERROR;
-	force_sig(SIGBUS, tsk);
+	info.si_signo = SIGBUS;
+	info.si_errno = 0;
+	info.si_code = BUS_ADRERR;
+	info.si_addr = (void *)address;
+	info.si_trapno = 0;
+	force_sig_info (SIGBUS, &info, tsk);
 }
 
 void window_overflow_fault(void)

@@ -92,13 +92,17 @@ extern __inline__ void xc5(smpfunc_t func, unsigned long arg1, unsigned long arg
 			   unsigned long arg3, unsigned long arg4, unsigned long arg5)
 { smp_cross_call(func, arg1, arg2, arg3, arg4, arg5); }
 
-extern __volatile__ int cpu_number_map[NR_CPUS];
+extern __volatile__ int __cpu_number_map[NR_CPUS];
 extern __volatile__ int __cpu_logical_map[NR_CPUS];
 extern unsigned long smp_proc_in_lock[NR_CPUS];
 
 extern __inline__ int cpu_logical_map(int cpu)
 {
 	return __cpu_logical_map[cpu];
+}
+extern __inline__ int cpu_number_map(int cpu)
+{
+	return __cpu_number_map[cpu];
 }
 
 extern __inline__ int hard_smp4m_processor_id(void)

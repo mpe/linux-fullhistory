@@ -237,52 +237,18 @@ static void mega_Convert8ldTo40ld(  mega_RAIDINQ  *inquiry,
                                     megaRaidProductInfo *productInfo );
 
 
+#include <linux/spinlock.h>
+#include <linux/smp.h>
 
 
-
-#if LINUX_VERSION_CODE > 0x020100
-#  include <asm/spinlock.h>
-#  include <linux/smp.h>
-#  define cpuid smp_processor_id()
-#  if LINUX_VERSION_CODE < 0x020195
-#    define DRIVER_LOCK_T unsigned long cpu_flags = 0;
-#    define DRIVER_LOCK_INIT(p) \
-       spin_lock_init(&p->mega_lock);
-#    define DRIVER_LOCK(p) \
-       if(!p->cpu_lock_count[cpuid]) { \
-         spin_lock_irqsave(&p->mega_lock, cpu_flags); \
-         p->cpu_lock_count[cpuid]++; \
-       } else { \
-         p->cpu_lock_count[cpuid]++; \
-       }
-#    define DRIVER_UNLOCK(p) \
-       if(--p->cpu_lock_count[cpuid] == 0) \
-         spin_unlock_irqrestore(&p->mega_lock, cpu_flags);
-#    define IO_LOCK(p)   spin_lock_irqsave(&io_request_lock,cpu_flags);
-#    define IO_UNLOCK(p) spin_unlock_irqrestore(&io_request_lock,cpu_flags);
-#  else
-#    define DRIVER_LOCK_T
-#    define DRIVER_LOCK_INIT(p)
-#    define DRIVER_LOCK(p)
-#    define DRIVER_UNLOCK(p)
-#    define IO_LOCK_T unsigned long io_flags = 0;
-#    define IO_LOCK spin_lock_irqsave(&io_request_lock,io_flags);
-#    define IO_UNLOCK spin_unlock_irqrestore(&io_request_lock,io_flags);
-#  endif
-#else
-#  define cpuid 0
-#  define DRIVER_LOCK_T long cpu_flags;
-#  define DRIVER_LOCK_INIT(p)
-#  define DRIVER_LOCK(p) \
-       save_flags(cpu_flags); \
-       cli();
-#  define DRIVER_UNLOCK(p) \
-       restore_flags(cpu_flags);
-#  define IO_LOCK(p)   DRIVER_LOCK(p)
-#  define IO_UNLOCK(p) DRIVER_UNLOCK(p)
-#  define le32_to_cpu(x) (x)
-#  define cpu_to_le32(x) (x)
-#endif
+#define cpuid smp_processor_id()
+#define DRIVER_LOCK_T
+#define DRIVER_LOCK_INIT(p)
+#define DRIVER_LOCK(p)
+#define DRIVER_UNLOCK(p)
+#define IO_LOCK_T unsigned long io_flags = 0;
+#define IO_LOCK spin_lock_irqsave(&io_request_lock,io_flags);
+#define IO_UNLOCK spin_unlock_irqrestore(&io_request_lock,io_flags);
 
 /* set SERDEBUG to 1 to enable serial debugging */
 #define SERDEBUG 0

@@ -1,4 +1,4 @@
-/* $Id: siginfo.h,v 1.5 1999/07/29 12:56:57 jj Exp $
+/* $Id: siginfo.h,v 1.6 2000/01/21 11:39:17 jj Exp $
  * siginfo.c:
  */
 
@@ -81,6 +81,11 @@ typedef struct siginfo {
 #define si_band		_sifields._sigpoll._band
 #define si_fd		_sifields._sigpoll._fd
 
+#ifdef __KERNEL__
+#define __SI_MASK	0
+#define __SI_FAULT	0
+#endif
+
 /*
  * si_code values
  * Digital reserves positive values for kernel-generated signals.
@@ -127,7 +132,7 @@ typedef struct siginfo {
  * SIGSEGV si_codes
  */
 #define SEGV_MAPERR	1	/* address not mapped to object */
-#define SRGV_ACCERR	2	/* invalid permissions for mapped object */
+#define SEGV_ACCERR	2	/* invalid permissions for mapped object */
 #define NSIGSEGV	2
 
 /*

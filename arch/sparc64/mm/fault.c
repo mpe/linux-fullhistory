@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.40 1999/12/01 10:44:53 davem Exp $
+/* $Id: fault.c,v 1.42 2000/01/21 11:39:13 jj Exp $
  * arch/sparc64/mm/fault.c: Page fault handlers for the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -149,10 +149,13 @@ asmlinkage void do_sparc64_fault(struct pt_regs *regs, unsigned long address, in
 	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma;
 	unsigned int insn = 0;
+	siginfo_t info;
 #ifdef DEBUG_LOCKUPS
 	static unsigned long lastaddr, lastpc;
 	static int lastwrite, lockcnt;
 #endif
+
+	info.si_code = SEGV_MAPERR;
 	/*
 	 * If we're in an interrupt or have no user
 	 * context, we must not take the fault..
@@ -233,6 +236,7 @@ asmlinkage void do_sparc64_fault(struct pt_regs *regs, unsigned long address, in
 	 * we can handle it..
 	 */
 good_area:
+	info.si_code = SEGV_ACCERR;
 	if(write) {
 		if(!(vma->vm_flags & VM_WRITE))
 			goto bad_area;
@@ -242,8 +246,14 @@ good_area:
 			goto bad_area;
 	}
 	current->mm->segments = (void *) (address & PAGE_SIZE);
-	if (!handle_mm_fault(current, vma, address, write))
-		goto do_sigbus;
+	{
+		int fault = handle_mm_fault(current, vma, address, write);
+
+		if (fault < 0)
+			goto out_of_memory;
+		if (!fault)
+			goto do_sigbus;
+	}
 	up(&mm->mmap_sem);
 	return;
 	/*
@@ -324,20 +334,45 @@ do_kernel_fault:
 			while(1)
 				barrier();
 #endif
-			current->thread.sig_address = address;
-			current->thread.sig_desc = SUBSIG_NOMAPPING;
-			force_sig(SIGSEGV, current);
+			info.si_signo = SIGSEGV;
+			info.si_errno = 0;
+			/* info.si_code set above to make clear whether
+			   this was a SEGV_MAPERR or SEGV_ACCERR fault.  */
+			info.si_addr = (void *)address;
+			info.si_trapno = 0;
+			force_sig_info (SIGSEGV, &info, current);
 			return;
 		}
 		unhandled_fault (address, current, regs);
 	}
 	return;
 
+/*
+ * We ran out of memory, or some other thing happened to us that made
+ * us unable to handle the page fault gracefully.
+ */
+out_of_memory:
+	up(&mm->mmap_sem);
+	printk("VM: killing process %s\n", current->comm);
+	if (!(regs->tstate & TSTATE_PRIV))
+		do_exit(SIGKILL);
+	goto do_kernel_fault;
+
 do_sigbus:
 	up(&mm->mmap_sem);
-	current->thread.sig_address = address;
-	current->thread.sig_desc = SUBSIG_MISCERROR;
-	force_sig(SIGBUS, current);
+
+	/*
+	 * Send a sigbus, regardless of whether we were in kernel
+	 * or user mode.
+	 */
+	info.si_signo = SIGBUS;
+	info.si_errno = 0;
+	info.si_code = BUS_ADRERR;
+	info.si_addr = (void *)address;
+	info.si_trapno = 0;
+	force_sig_info (SIGBUS, &info, current);
+
+	/* Kernel mode? Handle exceptions or die */
 	if (regs->tstate & TSTATE_PRIV)
 		goto do_kernel_fault;
 }

@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.101 2000/01/09 02:19:38 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.104 2000/01/18 08:24:14 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -117,7 +117,9 @@
 
 struct linux_mib net_statistics[NR_CPUS*2];
 
+#ifdef INET_REFCNT_DEBUG
 atomic_t inet_sock_nr;
+#endif
 
 extern int raw_get_info(char *, char **, off_t, int);
 extern int snmp_get_info(char *, char **, off_t, int);
@@ -159,8 +161,8 @@ void inet_sock_destruct(struct sock *sk)
 	if (sk->protinfo.af_inet.opt)
 		kfree(sk->protinfo.af_inet.opt);
 	dst_release(sk->dst_cache);
-	atomic_dec(&inet_sock_nr);
 #ifdef INET_REFCNT_DEBUG
+	atomic_dec(&inet_sock_nr);
 	printk(KERN_DEBUG "INET socket %p released, %d are still alive\n", sk, atomic_read(&inet_sock_nr));
 #endif
 }
@@ -171,32 +173,28 @@ void inet_sock_release(struct sock *sk)
 		sk->prot->destroy(sk);
 
 	/* Observation: when inet_sock_release is called, processes have
-	   no access to socket. But net still has.
-	   Step one, detach it from networking:
-
-	   A. Remove from hash tables.
+	 * no access to socket. But net still has.
+	 * Step one, detach it from networking:
+	 *
+	 * A. Remove from hash tables.
 	 */
 
 	sk->prot->unhash(sk);
 
 	/* In this point socket cannot receive new packets,
-	   but it is possible that some packets are in flight
-	   because some CPU runs receiver and did hash table lookup
-	   before we unhashed socket. They will achieve receive queue
-	   and will be purged by socket destructor.
-
-	   Also we still have packets pending on receive
-	   queue and probably, our own packets waiting in device queues.
-	   sock_destroy will drain receive queue, but transmitted
-	   packets will delay socket destruction until the last reference
-	   will be released.
+	 * but it is possible that some packets are in flight
+	 * because some CPU runs receiver and did hash table lookup
+	 * before we unhashed socket. They will achieve receive queue
+	 * and will be purged by socket destructor.
+	 *
+	 * Also we still have packets pending on receive
+	 * queue and probably, our own packets waiting in device queues.
+	 * sock_destroy will drain receive queue, but transmitted
+	 * packets will delay socket destruction until the last reference
+	 * will be released.
 	 */
 
-	write_lock_irq(&sk->callback_lock);
-	sk->dead=1;
-	sk->socket = NULL;
-	sk->sleep = NULL;
-	write_unlock_irq(&sk->callback_lock);
+	sock_orphan(sk);
 
 #ifdef INET_REFCNT_DEBUG
 	if (atomic_read(&sk->refcnt) != 1) {
@@ -222,8 +220,7 @@ int inet_setsockopt(struct socket *sock, int level, int optname,
 		    char *optval, int optlen)
 {
 	struct sock *sk=sock->sk;
-	if (sk->prot->setsockopt==NULL)
-		return -EOPNOTSUPP;
+
 	return sk->prot->setsockopt(sk,level,optname,optval,optlen);
 }
 
@@ -239,8 +236,7 @@ int inet_getsockopt(struct socket *sock, int level, int optname,
 		    char *optval, int *optlen)
 {
 	struct sock *sk=sock->sk;
-	if (sk->prot->getsockopt==NULL)
-		return -EOPNOTSUPP;
+
 	return sk->prot->getsockopt(sk,level,optname,optval,optlen);
 }
 
@@ -264,14 +260,6 @@ static int inet_autobind(struct sock *sk)
 	return 0;
 }
 
-/* Listening INET sockets never sleep to wait for memory, so
- * it is completely silly to wake them up on queue space
- * available events.  So we hook them up to this dummy callback.
- */
-static void inet_listen_write_space(struct sock *sk)
-{
-}
-
 /*
  *	Move a socket into listening state.
  */
@@ -282,12 +270,13 @@ int inet_listen(struct socket *sock, int backlog)
 	unsigned char old_state;
 	int err;
 
-	if (sock->state != SS_UNCONNECTED || sock->type != SOCK_STREAM)
-		return -EINVAL;
-
 	lock_sock(sk);
-	old_state = sk->state;
+
 	err = -EINVAL;
+	if (sock->state != SS_UNCONNECTED || sock->type != SOCK_STREAM)
+		goto out;
+
+	old_state = sk->state;
 	if (!((1<<old_state)&(TCPF_CLOSE|TCPF_LISTEN)))
 		goto out;
 
@@ -295,25 +284,9 @@ int inet_listen(struct socket *sock, int backlog)
 	 * we can only allow the backlog to be adjusted.
 	 */
 	if (old_state != TCP_LISTEN) {
-		sk->state = TCP_LISTEN;
-		sk->ack_backlog = 0;
-		if (sk->num == 0) {
-			if (sk->prot->get_port(sk, 0) != 0) {
-				sk->state = old_state;
-				err = -EAGAIN;
-				goto out;
-			}
-			sk->sport = htons(sk->num);
-		} else {
-			/* Not nice, but the simplest solution however */
-			if (sk->prev)
-				((struct tcp_bind_bucket*)sk->prev)->fastreuse = 0;
-		}
-
-		sk_dst_reset(sk);
-		sk->prot->hash(sk);
-		sk->socket->flags |= SO_ACCEPTCON;
-		sk->write_space = inet_listen_write_space;
+		err = tcp_listen_start(sk);
+		if (err)
+			goto out;
 	}
 	sk->max_ack_backlog = backlog;
 	err = 0;
@@ -345,10 +318,6 @@ static int inet_create(struct socket *sock, int protocol)
 		if (protocol && protocol != IPPROTO_TCP)
 			goto free_and_noproto;
 		protocol = IPPROTO_TCP;
-		if (ipv4_config.no_pmtu_disc)
-			sk->protinfo.af_inet.pmtudisc = IP_PMTUDISC_DONT;
-		else
-			sk->protinfo.af_inet.pmtudisc = IP_PMTUDISC_WANT;
 		prot = &tcp_prot;
 		sock->ops = &inet_stream_ops;
 		break;
@@ -359,7 +328,6 @@ static int inet_create(struct socket *sock, int protocol)
 			goto free_and_noproto;
 		protocol = IPPROTO_UDP;
 		sk->no_check = UDP_CSUM_DEFAULT;
-		sk->protinfo.af_inet.pmtudisc = IP_PMTUDISC_DONT;
 		prot=&udp_prot;
 		sock->ops = &inet_dgram_ops;
 		break;
@@ -370,7 +338,6 @@ static int inet_create(struct socket *sock, int protocol)
 			goto free_and_noproto;
 		prot = &raw_prot;
 		sk->reuse = 1;
-		sk->protinfo.af_inet.pmtudisc = IP_PMTUDISC_DONT;
 		sk->num = protocol;
 		sock->ops = &inet_dgram_ops;
 		if (protocol == IPPROTO_RAW)
@@ -380,22 +347,21 @@ static int inet_create(struct socket *sock, int protocol)
 		goto free_and_badtype;
 	}
 
+	if (ipv4_config.no_pmtu_disc)
+		sk->protinfo.af_inet.pmtudisc = IP_PMTUDISC_DONT;
+	else
+		sk->protinfo.af_inet.pmtudisc = IP_PMTUDISC_WANT;
+
 	sock_init_data(sock,sk);
 
 	sk->destruct = inet_sock_destruct;
 
-	sk->zapped=0;
-#ifdef CONFIG_TCP_NAGLE_OFF
-	sk->nonagle = 1;
-#endif  
+	sk->zapped = 0;
 	sk->family = PF_INET;
 	sk->protocol = protocol;
 
 	sk->prot = prot;
 	sk->backlog_rcv = prot->backlog_rcv;
-
-	sk->timer.data = (unsigned long)sk;
-	sk->timer.function = &tcp_keepalive_timer;
 
 	sk->protinfo.af_inet.ttl=sysctl_ip_default_ttl;
 
@@ -404,7 +370,9 @@ static int inet_create(struct socket *sock, int protocol)
 	sk->protinfo.af_inet.mc_index=0;
 	sk->protinfo.af_inet.mc_list=NULL;
 
+#ifdef INET_REFCNT_DEBUG
 	atomic_inc(&inet_sock_nr);
+#endif
 
 	if (sk->num) {
 		/* It assumes that any protocol which allows
@@ -469,11 +437,8 @@ int inet_release(struct socket *sock)
 		 * linger..
 		 */
 		timeout = 0;
-		if (sk->linger && !(current->flags & PF_EXITING)) {
-			timeout = HZ * sk->lingertime;
-			if (!timeout)
-				timeout = MAX_SCHEDULE_TIMEOUT;
-		}
+		if (sk->linger && !(current->flags & PF_EXITING))
+			timeout = sk->lingertime;
 		sock->sk = NULL;
 		sk->prot->close(sk, timeout);
 	}
@@ -496,10 +461,6 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 		return -EINVAL;
 		
 	chk_addr_ret = inet_addr_type(addr->sin_addr.s_addr);
-	if (addr->sin_addr.s_addr != 0 && chk_addr_ret != RTN_LOCAL &&
-	    chk_addr_ret != RTN_MULTICAST && chk_addr_ret != RTN_BROADCAST) {
-		return -EADDRNOTAVAIL;	/* Source address MUST be ours! */
-	}
 
 	snum = ntohs(addr->sin_port);
 	if (snum && snum < PROT_SOCK && !capable(CAP_NET_BIND_SERVICE))
@@ -555,25 +516,29 @@ int inet_dgram_connect(struct socket *sock, struct sockaddr * uaddr,
 	return sk->prot->connect(sk, (struct sockaddr *)uaddr, addr_len);
 }
 
-static void inet_wait_for_connect(struct sock *sk)
+static long inet_wait_for_connect(struct sock *sk, long timeo)
 {
 	DECLARE_WAITQUEUE(wait, current);
 
 	__set_current_state(TASK_INTERRUPTIBLE);
 	add_wait_queue(sk->sleep, &wait);
 
+	/* Basic assumption: if someone sets sk->err, he _must_
+	 * change state of the socket from TCP_SYN_*.
+	 * Connect() does not allow to get error notifications
+	 * without closing the socket.
+	 */
 	while ((1<<sk->state)&(TCPF_SYN_SENT|TCPF_SYN_RECV)) {
-		if (signal_pending(current))
-			break;
-		if (sk->err)
-			break;
 		release_sock(sk);
-		schedule();
+		timeo = schedule_timeout(timeo);
 		lock_sock(sk);
+		if (signal_pending(current) || !timeo)
+			break;
 		set_current_state(TASK_INTERRUPTIBLE);
 	}
 	__set_current_state(TASK_RUNNING);
 	remove_wait_queue(sk->sleep, &wait);
+	return timeo;
 }
 
 /*
@@ -586,16 +551,16 @@ int inet_stream_connect(struct socket *sock, struct sockaddr * uaddr,
 {
 	struct sock *sk=sock->sk;
 	int err;
-
-	if (uaddr->sa_family == AF_UNSPEC) {
-		lock_sock(sk);
-		err = sk->prot->disconnect(sk, flags);
-		sock->state = err ? SS_DISCONNECTING : SS_UNCONNECTED;
-		release_sock(sk);
-		return err;
-	}
+	long timeo;
 
 	lock_sock(sk);
+
+	if (uaddr->sa_family == AF_UNSPEC) {
+		err = sk->prot->disconnect(sk, flags);
+		sock->state = err ? SS_DISCONNECTING : SS_UNCONNECTED;
+		goto out;
+	}
+
 	switch (sock->state) {
 	default:
 		err = -EINVAL;
@@ -604,40 +569,58 @@ int inet_stream_connect(struct socket *sock, struct sockaddr * uaddr,
 		err = -EISCONN;
 		goto out;
 	case SS_CONNECTING:
-		if (tcp_established(sk->state)) {
-			sock->state = SS_CONNECTED;
-			err = 0;
-			goto out;
-		}
-		if (sk->err)
-			goto sock_error;
 		err = -EALREADY;
-		if (flags & O_NONBLOCK)
-			goto out;
+		/* Fall out of switch with err, set for this state */
 		break;
 	case SS_UNCONNECTED:
+		err = -EISCONN;
+		if (sk->state != TCP_CLOSE) 
+			goto out;
+
+		err = -EAGAIN;
+		if (sk->num == 0) {
+			if (sk->prot->get_port(sk, 0) != 0)
+				goto out;
+			sk->sport = htons(sk->num);
+		}
+
 		err = sk->prot->connect(sk, uaddr, addr_len);
 		if (err < 0)
 			goto out;
+
   		sock->state = SS_CONNECTING;
+
+		/* Just entered SS_CONNECTING state; the only
+		 * difference is that return value in non-blocking
+		 * case is EINPROGRESS, rather than EALREADY.
+		 */
+		err = -EINPROGRESS;
+		break;
 	}
 
-	if (sk->state > TCP_FIN_WAIT2)
-		goto sock_error;
-
-	err = -EINPROGRESS;
-	if (!tcp_established(sk->state) && (flags & O_NONBLOCK))
-		goto out;
+	timeo = sock_sndtimeo(sk, flags&O_NONBLOCK);
 
 	if ((1<<sk->state)&(TCPF_SYN_SENT|TCPF_SYN_RECV)) {
-		inet_wait_for_connect(sk);
+		/* Error code is set above */
+		if (!timeo || !inet_wait_for_connect(sk, timeo))
+			goto out;
+
 		err = -ERESTARTSYS;
 		if (signal_pending(current))
 			goto out;
 	}
 
-	if (sk->err && !tcp_established(sk->state))
-		goto sock_error; 
+	/* Connection was closed by RST, timeout, ICMP error
+	 * or another process disconnected us.
+	 */
+	if (sk->state == TCP_CLOSE)
+		goto sock_error;
+
+	/* sk->err may be not zero now, if RECVERR was ordered by user
+	 * and error was received after socket entered established state.
+	 * Hence, it is handled normally after connect() return successfully.
+	 */
+
 	sock->state = SS_CONNECTED;
 	err = 0;
 out:
@@ -647,11 +630,9 @@ out:
 sock_error:
 	err = sock_error(sk) ? : -ECONNABORTED;
 	sock->state = SS_UNCONNECTED;
-	if (sk->prot->disconnect(sk, O_NONBLOCK))
+	if (sk->prot->disconnect(sk, flags))
 		sock->state = SS_DISCONNECTING;
-	release_sock(sk);
-
-	return err;
+	goto out;
 }
 
 /*
@@ -671,11 +652,7 @@ int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 
 	BUG_TRAP((1<<sk2->state)&(TCPF_ESTABLISHED|TCPF_CLOSE_WAIT|TCPF_CLOSE));
 
-	write_lock_irq(&sk2->callback_lock);
-	sk2->sleep = &newsock->wait;
-	newsock->sk = sk2;
-	sk2->socket = newsock;
-	write_unlock_irq(&sk2->callback_lock);
+	sock_graft(sk2, newsock);
 
 	newsock->state = SS_CONNECTED;
 	release_sock(sk2);
@@ -749,7 +726,7 @@ int inet_sendmsg(struct socket *sock, struct msghdr *msg, int size,
 int inet_shutdown(struct socket *sock, int how)
 {
 	struct sock *sk = sock->sk;
-	int err;
+	int err = 0;
 
 	/* This should really check to make sure
 	 * the socket is a TCP socket. (WHY AC...)
@@ -759,33 +736,43 @@ int inet_shutdown(struct socket *sock, int how)
 		       2->3 */
 	if ((how & ~SHUTDOWN_MASK) || how==0)	/* MAXINT->0 */
 		return -EINVAL;
-	if (!sk)
-		return -ENOTCONN;
 
 	lock_sock(sk);
-	if (sock->state == SS_CONNECTING && tcp_established(sk->state))
-		sock->state = SS_CONNECTED;
-	err = -ENOTCONN;
-	if (!tcp_connected(sk->state))
-		goto out;
-	sk->shutdown |= how;
-	if (sk->prot->shutdown)
-		sk->prot->shutdown(sk, how);
+	if (sock->state == SS_CONNECTING) {
+		if ((1<<sk->state)&(TCPF_SYN_SENT|TCPF_SYN_RECV|TCPF_CLOSE))
+			sock->state = SS_DISCONNECTING;
+		else
+			sock->state = SS_CONNECTED;
+	}
+
+	switch (sk->state) {
+	default:	
+		sk->shutdown |= how;
+		if (sk->prot->shutdown)
+			sk->prot->shutdown(sk, how);
+		break;
+	case TCP_CLOSE:
+		err = -ENOTCONN;
+		break;
+
+	/* Remaining two branches are temporary solution for missing
+	 * close() in multithreaded environment. It is _not_ a good idea,
+	 * but we have no choice until close() is repaired at VFS level.
+	 */
+	case TCP_LISTEN:
+		if (!(how & RCV_SHUTDOWN))
+			break;
+		/* Fall through */
+	case TCP_SYN_SENT:
+		err = sk->prot->disconnect(sk, O_NONBLOCK);
+		sock->state = err ? SS_DISCONNECTING : SS_UNCONNECTED;
+		break;
+	}
+
 	/* Wake up anyone sleeping in poll. */
 	sk->state_change(sk);
-	err = 0;
-out:
 	release_sock(sk);
 	return err;
-}
-
-unsigned int inet_poll(struct file * file, struct socket *sock, poll_table *wait)
-{
-	struct sock *sk = sock->sk;
-
-	if (sk->prot->poll == NULL)
-		return(0);
-	return sk->prot->poll(file, sock, wait);
 }
 
 /*
@@ -909,7 +896,7 @@ struct proto_ops inet_stream_ops = {
 	sock_no_socketpair,
 	inet_accept,
 	inet_getname, 
-	inet_poll,
+	tcp_poll,
 	inet_ioctl,
 	inet_listen,
 	inet_shutdown,

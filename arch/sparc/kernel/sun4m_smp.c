@@ -14,6 +14,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/init.h>
 #include <linux/spinlock.h>
+#include <linux/mm.h>
 
 #include <asm/ptrace.h>
 #include <asm/atomic.h>
@@ -52,12 +53,14 @@ extern struct cpuinfo_sparc cpu_data[NR_CPUS];
 extern unsigned long cpu_offset[NR_CPUS];
 extern unsigned char boot_cpu_id;
 extern int smp_activated;
-extern volatile int cpu_number_map[NR_CPUS];
+extern volatile int __cpu_number_map[NR_CPUS];
 extern volatile int __cpu_logical_map[NR_CPUS];
 extern volatile unsigned long ipi_count;
 extern volatile int smp_process_available;
 extern volatile int smp_commenced;
 extern int __smp4m_processor_id(void);
+
+extern unsigned long totalram_pages;
 
 /*#define SMP_DEBUG*/
 
@@ -84,6 +87,7 @@ void __init smp4m_callin(void)
 
 	local_flush_cache_all();
 	local_flush_tlb_all();
+
 	set_irq_udt(mid_xlate[boot_cpu_id]);
 
 	/* Get our local ticker going. */
@@ -91,6 +95,7 @@ void __init smp4m_callin(void)
 
 	calibrate_delay();
 	smp_store_cpu_info(cpuid);
+
 	local_flush_cache_all();
 	local_flush_tlb_all();
 
@@ -104,22 +109,21 @@ void __init smp4m_callin(void)
 
 	/* Allow master to continue. */
 	swap((unsigned long *)&cpu_callin_map[cpuid], 1);
+
 	local_flush_cache_all();
 	local_flush_tlb_all();
 	
 	cpu_probe();
 
-	while(!task[cpuid] || current_set[cpuid] != task[cpuid])
-		barrier();
-
 	/* Fix idle thread fields. */
 	__asm__ __volatile__("ld [%0], %%g6\n\t"
 			     : : "r" (&current_set[cpuid])
 			     : "memory" /* paranoid */);
-	current->mm->mmap->vm_page_prot = PAGE_SHARED;
-	current->mm->mmap->vm_start = PAGE_OFFSET;
-	current->mm->mmap->vm_end = init_mm.mmap->vm_end;
-	
+
+	/* Attach to the address space of init_task. */
+	atomic_inc(&init_mm.mm_count);
+	current->active_mm = &init_mm;
+
 	while(!smp_commenced)
 		barrier();
 
@@ -152,21 +156,23 @@ void __init smp4m_boot_cpus(void)
 
 	printk("Entering SMP Mode...\n");
 
-	for (i = 0; i < NR_CPUS; i++)
-		cpu_offset[i] = (char *)&cpu_data[i] - (char *)&cpu_data;
-
 	__sti();
 	cpu_present_map = 0;
+
 	for(i=0; i < linux_num_cpus; i++)
 		cpu_present_map |= (1<<i);
-	for(i=0; i < NR_CPUS; i++)
-		cpu_number_map[i] = -1;
-	for(i=0; i < NR_CPUS; i++)
+
+	for(i=0; i < NR_CPUS; i++) {
+		cpu_offset[i] = (char *)&cpu_data[i] - (char *)&cpu_data;
+		__cpu_number_map[i] = -1;
 		__cpu_logical_map[i] = -1;
+	}
+
 	mid_xlate[boot_cpu_id] = (linux_cpus[boot_cpu_id].mid & ~8);
-	cpu_number_map[boot_cpu_id] = 0;
+	__cpu_number_map[boot_cpu_id] = 0;
 	__cpu_logical_map[0] = boot_cpu_id;
 	current->processor = boot_cpu_id;
+
 	smp_store_cpu_info(boot_cpu_id);
 	set_irq_udt(mid_xlate[boot_cpu_id]);
 	smp_setup_percpu_timer();
@@ -187,11 +193,18 @@ void __init smp4m_boot_cpus(void)
 			/* Cook up an idler for this guy. */
 			kernel_thread(start_secondary, NULL, CLONE_PID);
 
-			p = task[++cpucount];
+			cpucount++;
+
+			p = init_task.prev_task;
+			init_tasks[i] = p;
 
 			p->processor = i;
 			p->has_cpu = 1; /* we schedule the first task manually */
+
 			current_set[i] = p;
+
+			del_from_runqueue(p);
+			unhash_process(p);
 
 			/* See trampoline.S for details... */
 			entry += ((i-1) * 3);
@@ -220,7 +233,7 @@ void __init smp4m_boot_cpus(void)
 			}
 			if(cpu_callin_map[i]) {
 				/* Another "Red Snapper". */
-				cpu_number_map[i] = i;
+				__cpu_number_map[i] = i;
 				__cpu_logical_map[i] = i;
 			} else {
 				cpucount--;
@@ -229,7 +242,7 @@ void __init smp4m_boot_cpus(void)
 		}
 		if(!(cpu_callin_map[i])) {
 			cpu_present_map &= ~(1 << i);
-			cpu_number_map[i] = -1;
+			__cpu_number_map[i] = -1;
 		}
 	}
 	local_flush_cache_all();
@@ -265,18 +278,26 @@ void __init smp4m_boot_cpus(void)
 	cpu_data[prev].next = first;
 	
 	/* Free unneeded trap tables */
-	
 	if (!(cpu_present_map & (1 << 1))) {
-		mem_map[MAP_NR((unsigned long)trapbase_cpu1)].flags &= ~(1 << PG_reserved);
+		ClearPageReserved(mem_map + MAP_NR(trapbase_cpu1));
+		set_page_count(mem_map + MAP_NR(trapbase_cpu1), 1);
 		free_page((unsigned long)trapbase_cpu1);
+		totalram_pages++;
+		num_physpages++;
 	}
 	if (!(cpu_present_map & (1 << 2))) {
-		mem_map[MAP_NR((unsigned long)trapbase_cpu2)].flags &= ~(1 << PG_reserved);
+		ClearPageReserved(mem_map + MAP_NR(trapbase_cpu2));
+		set_page_count(mem_map + MAP_NR(trapbase_cpu2), 1);
 		free_page((unsigned long)trapbase_cpu2);
+		totalram_pages++;
+		num_physpages++;
 	}
 	if (!(cpu_present_map & (1 << 3))) {
-		mem_map[MAP_NR((unsigned long)trapbase_cpu3)].flags &= ~(1 << PG_reserved);
+		ClearPageReserved(mem_map + MAP_NR(trapbase_cpu3));
+		set_page_count(mem_map + MAP_NR(trapbase_cpu3), 1);
 		free_page((unsigned long)trapbase_cpu3);
+		totalram_pages++;
+		num_physpages++;
 	}
 
 	/* Ok, they are spinning and ready to go. */

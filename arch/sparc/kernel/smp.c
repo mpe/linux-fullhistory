@@ -15,6 +15,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/init.h>
 #include <linux/spinlock.h>
+#include <linux/mm.h>
 
 #include <asm/ptrace.h>
 #include <asm/atomic.h>
@@ -51,7 +52,7 @@ unsigned long cpu_offset[NR_CPUS];
 unsigned char boot_cpu_id = 0;
 unsigned char boot_cpu_id4 = 0; /* boot_cpu_id << 2 */
 int smp_activated = 0;
-volatile int cpu_number_map[NR_CPUS];
+volatile int __cpu_number_map[NR_CPUS];
 volatile int __cpu_logical_map[NR_CPUS];
 cycles_t cacheflush_time = 0; /* XXX */
 

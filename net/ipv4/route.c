@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.78 2000/01/13 00:06:58 davem Exp $
+ * Version:	$Id: route.c,v 1.80 2000/01/21 06:37:27 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1178,6 +1178,7 @@ ip_route_input_mc(struct sk_buff *skb, u32 daddr, u32 saddr,
 	rth->u.dst.output= ip_rt_bug;
 
 	atomic_set(&rth->u.dst.__refcnt, 1);
+	rth->u.dst.flags= DST_HOST;
 	rth->key.dst	= daddr;
 	rth->rt_dst	= daddr;
 	rth->key.tos	= tos;
@@ -1385,6 +1386,7 @@ int ip_route_input_slow(struct sk_buff *skb, u32 daddr, u32 saddr,
 		goto e_nobufs;
 
 	atomic_set(&rth->u.dst.__refcnt, 1);
+	rth->u.dst.flags= DST_HOST;
 	rth->key.dst	= daddr;
 	rth->rt_dst	= daddr;
 	rth->key.tos	= tos;
@@ -1462,6 +1464,7 @@ local_input:
 	rth->u.dst.output= ip_rt_bug;
 
 	atomic_set(&rth->u.dst.__refcnt, 1);
+	rth->u.dst.flags= DST_HOST;
 	rth->key.dst	= daddr;
 	rth->rt_dst	= daddr;
 	rth->key.tos	= tos;
@@ -1815,6 +1818,7 @@ make_route:
 		goto e_nobufs;
 
 	atomic_set(&rth->u.dst.__refcnt, 1);
+	rth->u.dst.flags= DST_HOST;
 	rth->key.dst	= daddr;
 	rth->key.tos	= tos;
 	rth->key.src	= saddr;
@@ -2208,8 +2212,7 @@ ctl_table ipv4_route_table[] = {
 #endif
 
 #ifdef CONFIG_NET_CLS_ROUTE
-struct ip_rt_acct ip_rt_acct[256];
-rwlock_t ip_rt_acct_lock = RW_LOCK_UNLOCKED;
+struct ip_rt_acct *ip_rt_acct;
 
 #ifdef CONFIG_PROC_FS
 static int ip_rt_acct_read(char *buffer, char **start, off_t offset,
@@ -2217,14 +2220,34 @@ static int ip_rt_acct_read(char *buffer, char **start, off_t offset,
 {
 	*start=buffer;
 
-	if (offset + length > sizeof(ip_rt_acct)) {
-		length = sizeof(ip_rt_acct) - offset;
+	if ((offset&3) || (length&3))
+		return -EIO;
+
+	if (offset + length >= sizeof(struct ip_rt_acct)*256) {
+		length = sizeof(struct ip_rt_acct)*256 - offset;
 		*eof = 1;
 	}
 	if (length > 0) {
-		read_lock_bh(&ip_rt_acct_lock);
-		memcpy(buffer, ((u8*)&ip_rt_acct)+offset, length);
-		read_unlock_bh(&ip_rt_acct_lock);
+		u32 *dst = (u32*)buffer;
+		u32 *src = (u32*)(((u8*)ip_rt_acct) + offset);
+
+		memcpy(dst, src, length);
+
+#ifdef __SMP__
+		if (smp_num_cpus > 1) {
+			int i;
+			int cnt = length/4;
+
+			for (i=1; i<smp_num_cpus; i++) {
+				int k;
+
+				src += (256/4)*sizeof(struct ip_rt_acct);
+
+				for (k=0; k<cnt; k++)
+					dst[k] += src[k];
+			}
+		}
+#endif
 		return length;
 	}
 	return 0;
@@ -2235,6 +2258,16 @@ static int ip_rt_acct_read(char *buffer, char **start, off_t offset,
 void __init ip_rt_init(void)
 {
 	int i, order, goal;
+
+#ifdef CONFIG_NET_CLS_ROUTE
+	for (order=0;
+	     (PAGE_SIZE<<order) < 256*sizeof(ip_rt_acct)*smp_num_cpus; order++)
+		/* NOTHING */;
+	ip_rt_acct = (struct ip_rt_acct *)__get_free_pages(GFP_KERNEL, order);
+	if (!ip_rt_acct)
+		panic("IP: failed to allocate ip_rt_acct\n");
+	memset(ip_rt_acct, 0, PAGE_SIZE<<order);
+#endif
 
 	ipv4_dst_ops.kmem_cachep = kmem_cache_create("ip_dst_cache",
 						     sizeof(struct rtable),

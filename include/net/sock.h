@@ -96,7 +96,6 @@ struct atm_vcc;
 #include <asm/atomic.h>
 #include <net/dst.h>
 
-#define MIN_WRITE_SPACE	2048
 
 /* The AF_UNIX specific socket options */
 struct unix_opt {
@@ -229,41 +228,66 @@ struct tcp_opt {
  	__u32	snd_nxt;	/* Next sequence we send		*/
 
  	__u32	snd_una;	/* First byte we want an ack for	*/
-	__u32	rcv_tstamp;	/* timestamp of last received packet	*/
-	__u32	lrcvtime;	/* timestamp of last received data packet*/
-	__u32	srtt;		/* smothed round trip time << 3		*/
+ 	__u32	snd_sml;	/* Last byte of the most recently transmitted small packet */
+	__u32	rcv_tstamp;	/* timestamp of last received ACK (for keepalives) */
+	__u32	lsndtime;	/* timestamp of last sent data packet (for restart window) */
 
-	__u32	ato;		/* delayed ack timeout			*/
+	/* Delayed ACK control data */
+	struct {
+		__u8	pending;	/* ACK is pending */
+		__u8	quick;		/* Scheduled number of quick acks	*/
+		__u8	pingpong;	/* The session is interactive		*/
+		__u8	blocked;	/* Delayed ACK was blocked by socket lock*/
+		__u32	ato;		/* Predicted tick of soft clock		*/
+		__u32	lrcvtime;	/* timestamp of last received data packet*/
+		__u16	last_seg_size;	/* Size of last incoming segment */
+		__u16	rcv_mss;	/* MSS used for delayed ACK decisions */ 
+	} ack;
+
+	/* Data for direct copy to user */
+	struct {
+		struct sk_buff_head	prequeue;
+		int			memory;
+		struct task_struct	*task;
+		struct iovec		*iov;
+		int			len;
+	} ucopy;
+
 	__u32	snd_wl1;	/* Sequence for window update		*/
-
 	__u32	snd_wl2;	/* Ack sequence for update		*/
 	__u32	snd_wnd;	/* The window we expect to receive	*/
-	__u32	max_window;
+	__u32	max_window;	/* Maximal window ever seen from peer	*/
 	__u32	pmtu_cookie;	/* Last pmtu seen by socket		*/
 	__u16	mss_cache;	/* Cached effective mss, not including SACKS */
 	__u16	mss_clamp;	/* Maximal mss, negotiated at connection setup */
-	__u16	ext_header_len;	/* Dave, do you allow mw to use this hole? 8) --ANK */
-	__u8	pending;	/* pending events			*/
+	__u16	ext_header_len;	/* Network protocol overhead (IP/IPv6 options) */
+	__u8	dup_acks;	/* Consequetive duplicate acks seen from other end */
 	__u8	retransmits;
-	__u32	last_ack_sent;	/* last ack we sent			*/
 
-	__u32	backoff;	/* backoff				*/
+	__u16	__empty1;
+	__u8	defer_accept;
+
+/* RTT measurement */
+	__u8	backoff;	/* backoff				*/
+	__u32	srtt;		/* smothed round trip time << 3		*/
 	__u32	mdev;		/* medium deviation			*/
- 	__u32	snd_cwnd;	/* Sending congestion window		*/
 	__u32	rto;		/* retransmit timeout			*/
 
 	__u32	packets_out;	/* Packets which are "in flight"	*/
 	__u32	fackets_out;	/* Non-retrans SACK'd packets		*/
 	__u32	retrans_out;	/* Fast-retransmitted packets out	*/
 	__u32	high_seq;	/* snd_nxt at onset of congestion	*/
+
 /*
  *	Slow start and congestion control (see also Nagle, and Karn & Partridge)
  */
  	__u32	snd_ssthresh;	/* Slow start size threshold		*/
+ 	__u32	snd_cwnd;	/* Sending congestion window		*/
  	__u16	snd_cwnd_cnt;	/* Linear increase counter		*/
 	__u16	snd_cwnd_clamp; /* Do not allow snd_cwnd to grow above this */
-	__u8	dup_acks;	/* Consequetive duplicate acks seen from other end */
-	__u8	delayed_acks;
+
+	__u8	nonagle;	/* Disable Nagle algorithm?             */
+	__u8	syn_retries;	/* num of allowed syn retries */
 	__u16	user_mss;  	/* mss requested by user in ioctl */
 
 	/* Two commonly used timers in both sender and receiver paths. */
@@ -294,34 +318,49 @@ struct tcp_opt {
         __u8	snd_wscale;	/* Window scaling received from sender	*/
         __u8	rcv_wscale;	/* Window scaling to send to receiver	*/
 	__u8	rexmt_done;	/* Retransmitted up to send head?	*/
+	__u8	keepalive_probes; /* num of allowed keep alive probes	*/
+
+/*	PAWS/RTTM data	*/
         __u32	rcv_tsval;	/* Time stamp value             	*/
         __u32	rcv_tsecr;	/* Time stamp echo reply        	*/
         __u32	ts_recent;	/* Time stamp to echo next		*/
         long	ts_recent_stamp;/* Time we stored ts_recent (for aging) */
-	int	num_sacks;	/* Number of SACK blocks		*/
+	__u32	last_ack_sent;	/* last ack we sent (RTTM/PAWS)		*/
+
+/*	SACKs data	*/
 	struct tcp_sack_block selective_acks[4]; /* The SACKS themselves*/
 
  	struct timer_list	probe_timer;		/* Probes	*/
-	__u32	window_clamp;	/* XXX Document this... -DaveM		*/
-	__u32	probes_out;	/* unanswered 0 window probes		*/
+	__u32	window_clamp;	/* Maximal window to advertise		*/
+	__u8	probes_out;	/* unanswered 0 window probes		*/
+	__u8	num_sacks;	/* Number of SACK blocks		*/
+	__u16	advmss;		/* Advertised MSS			*/
+
+	__u32	syn_stamp;
 	__u32	syn_seq;
 	__u32	fin_seq;
 	__u32	urg_seq;
 	__u32	urg_data;
 
-	__u32	last_seg_size;	/* Size of last incoming segment */
-	__u32	rcv_mss;	/* MSS used for delayed ACK decisions */ 
+	/* The syn_wait_lock is necessary only to avoid tcp_get_info having
+	 * to grab the main lock sock while browsing the listening hash
+	 * (otherwise it's deadlock prone).
+	 * This lock is acquired in read mode only from tcp_get_info() and
+	 * it's acquired in write mode _only_ from code that is actively
+	 * changing the syn_wait_queue. All readers that are holding
+	 * the master sock lock don't need to grab this lock in read mode
+	 * too as the syn_wait_queue writes are always protected from
+	 * the main sock lock.
+	 */
+	rwlock_t		syn_wait_lock;
+	struct tcp_listen_opt	*listen_opt;
+	struct open_request	*accept_queue; /* Established children */
 
-	struct open_request	*syn_wait_queue;
-	struct open_request	**syn_wait_last;
+	int write_pending;	/* A write to socket waits to start. */
 
-	int syn_backlog;	/* Backlog of received SYNs */
-	int write_pending;
-	
 	unsigned int		keepalive_time;	  /* time before keep alive takes place */
 	unsigned int		keepalive_intvl;  /* time interval between keep alive probes */
-	unsigned char  		keepalive_probes; /* num of allowed keep alive probes */
-	unsigned char		syn_retries;	  /* num of allowed syn retries */
+	int			linger2;
 };
 
  	
@@ -411,7 +450,7 @@ struct sock {
 
 	unsigned short		family;		/* Address family			*/
 	unsigned char		reuse,		/* SO_REUSEADDR setting			*/
-				nonagle;	/* Disable Nagle algorithm?		*/
+				__unused;
 	atomic_t		refcnt;		/* Reference count			*/
 
 	socket_lock_t		lock;		/* Synchronizer...			*/
@@ -498,6 +537,9 @@ struct sock {
 	unsigned char		localroute;	/* Route locally only */
 	unsigned char		protocol;
 	struct ucred		peercred;
+	int			rcvlowat;
+	long			rcvtimeo;
+	long			sndtimeo;
 
 #ifdef CONFIG_FILTER
 	/* Socket Filtering Instructions */
@@ -557,7 +599,7 @@ struct sock {
 	struct timer_list	timer;		/* This is the sock cleanup timer. */
 	struct timeval		stamp;
 
-	/* Identd */
+	/* Identd and reporting IO signals */
 	struct socket		*socket;
 
 	/* RPC layer private data */
@@ -599,12 +641,6 @@ struct proto {
 	int			(*disconnect)(struct sock *sk, int flags);
 
 	struct sock *		(*accept) (struct sock *sk, int flags, int *err);
-	void			(*retransmit)(struct sock *sk, int all);
-	void			(*write_wakeup)(struct sock *sk);
-	void			(*read_wakeup)(struct sock *sk);
-
-	unsigned int		(*poll)(struct file * file, struct socket *sock,
-					struct poll_table_struct *wait);
 
 	int			(*ioctl)(struct sock *sk, int cmd,
 					 unsigned long arg);
@@ -632,8 +668,6 @@ struct proto {
 	void			(*unhash)(struct sock *sk);
 	int			(*get_port)(struct sock *sk, unsigned short snum);
 
-	unsigned short		max_header;
-	unsigned long		retransmits;
 	char			name[32];
 
 	struct {
@@ -672,6 +706,9 @@ static void __inline__ sock_prot_dec_use(struct proto *prot)
  * While locked, BH processing will add new packets to
  * the backlog queue.  This queue is processed by the
  * owner of the socket lock right before it is released.
+ *
+ * Since ~2.3.5 it is also exclusive sleep lock serializing
+ * accesses from user process context.
  */
 extern void __lock_sock(struct sock *sk);
 extern void __release_sock(struct sock *sk);
@@ -682,11 +719,12 @@ do {	spin_lock_bh(&((__sk)->lock.slock)); \
 	(__sk)->lock.users = 1; \
 	spin_unlock_bh(&((__sk)->lock.slock)); \
 } while(0)
+
 #define release_sock(__sk) \
 do {	spin_lock_bh(&((__sk)->lock.slock)); \
-	(__sk)->lock.users = 0; \
 	if ((__sk)->backlog.tail != NULL) \
 		__release_sock(__sk); \
+	(__sk)->lock.users = 0; \
 	wake_up(&((__sk)->lock.wq)); \
 	spin_unlock_bh(&((__sk)->lock.slock)); \
 } while(0)
@@ -788,9 +826,6 @@ extern int			sock_no_mmap(struct file *file,
  *	Default socket callbacks and setup code
  */
  
-extern void sock_def_callback1(struct sock *);
-extern void sock_def_callback2(struct sock *, int);
-extern void sock_def_callback3(struct sock *);
 extern void sock_def_destruct(struct sock *);
 
 /* Initialise core socket variables */
@@ -887,6 +922,34 @@ extern __inline__ void sock_put(struct sock *sk)
 	if (atomic_dec_and_test(&sk->refcnt))
 		sk_free(sk);
 }
+
+/* Detach socket from process context.
+ * Announce socket dead, detach it from wait queue and inode.
+ * Note that parent inode held reference count on this struct sock,
+ * we do not release it in this function, because protocol
+ * probably wants some additional cleanups or even continuing
+ * to work with this socket (TCP).
+ *
+ * NOTE: When softnet goes in replace _irq with _bh!
+ */
+extern __inline__ void sock_orphan(struct sock *sk)
+{
+	write_lock_irq(&sk->callback_lock);
+	sk->dead = 1;
+	sk->socket = NULL;
+	sk->sleep = NULL;
+	write_unlock_irq(&sk->callback_lock);
+}
+
+extern __inline__ void sock_graft(struct sock *sk, struct socket *parent)
+{
+	write_lock_irq(&sk->callback_lock);
+	sk->sleep = &parent->wait;
+	parent->sk = sk;
+	sk->socket = parent;
+	write_unlock_irq(&sk->callback_lock);
+}
+
 
 extern __inline__ struct dst_entry *
 __sk_dst_get(struct sock *sk)
@@ -1071,13 +1134,18 @@ extern __inline__ unsigned long sock_wspace(struct sock *sk)
 	return amt;
 }
 
+#define SOCK_MIN_SNDBUF 2048
+#define SOCK_MIN_RCVBUF 128
+/* Must be less or equal SOCK_MIN_SNDBUF */
+#define SOCK_MIN_WRITE_SPACE	SOCK_MIN_SNDBUF
+
 /*
  *	Default write policy as shown to user space via poll/select/SIGIO
  *	Kernel internally doesn't use the MIN_WRITE_SPACE threshold.
  */
 extern __inline__ int sock_writeable(struct sock *sk) 
 {
-	return sock_wspace(sk) >= MIN_WRITE_SPACE;
+	return sock_wspace(sk) >= SOCK_MIN_WRITE_SPACE;
 }
 
 extern __inline__ int gfp_any(void)
@@ -1085,6 +1153,20 @@ extern __inline__ int gfp_any(void)
 	return in_interrupt() ? GFP_ATOMIC : GFP_KERNEL;
 }
 
+extern __inline__ long sock_rcvtimeo(struct sock *sk, int noblock)
+{
+	return noblock ? 0 : sk->rcvtimeo;
+}
+
+extern __inline__ long sock_sndtimeo(struct sock *sk, int noblock)
+{
+	return noblock ? 0 : sk->sndtimeo;
+}
+
+extern __inline__ int sock_rcvlowat(struct sock *sk, int waitall, int len)
+{
+	return waitall ? len : min(sk->rcvlowat, len);
+}
 
 /* 
  *	Enable debug/info messages 
@@ -1116,5 +1198,8 @@ extern __inline__ int gfp_any(void)
 				remove_wait_queue((sk)->sleep, &wait); \
 				lock_sock(sk); \
 				}
+
+extern __u32 sysctl_wmem_max;
+extern __u32 sysctl_rmem_max;
 
 #endif	/* _SOCK_H */

@@ -202,16 +202,25 @@ extern __inline__ int skb_queue_empty(struct sk_buff_head *list)
 	return (list->next == (struct sk_buff *) list);
 }
 
+extern __inline__ struct sk_buff *skb_get(struct sk_buff *skb)
+{
+	atomic_inc(&skb->users);
+	return skb;
+}
+
+/* If users==1, we are the only owner and are can avoid redundant
+ * atomic change.
+ */
 extern __inline__ void kfree_skb(struct sk_buff *skb)
 {
-	if (atomic_dec_and_test(&skb->users))
+	if (atomic_read(&skb->users) == 1 || atomic_dec_and_test(&skb->users))
 		__kfree_skb(skb);
 }
 
 /* Use this if you didn't touch the skb state [for fast switching] */
 extern __inline__ void kfree_skb_fast(struct sk_buff *skb)
 {
-	if (atomic_dec_and_test(&skb->users))
+	if (atomic_read(&skb->users) == 1 || atomic_dec_and_test(&skb->users))
 		kfree_skbmem(skb);	
 }
 

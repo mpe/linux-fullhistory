@@ -92,8 +92,7 @@ struct ip_rt_acct
 	__u32 	i_packets;
 };
 
-extern struct ip_rt_acct ip_rt_acct[256];
-extern rwlock_t ip_rt_acct_lock;
+extern struct ip_rt_acct *ip_rt_acct;
 
 extern void		ip_rt_init(void);
 extern void		ip_rt_redirect(u32 old_gw, u32 dst, u32 new_gw,

@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.56 2000/01/04 11:01:26 jj Exp $
+/* $Id: sys_sparc.c,v 1.57 2000/01/21 11:38:42 jj Exp $
  * linux/arch/sparc/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -260,11 +260,19 @@ c_sys_nis_syscall (struct pt_regs *regs)
 asmlinkage void
 sparc_breakpoint (struct pt_regs *regs)
 {
+	siginfo_t info;
+
 	lock_kernel();
 #ifdef DEBUG_SPARC_BREAKPOINT
         printk ("TRAP: Entering kernel PC=%x, nPC=%x\n", regs->pc, regs->npc);
 #endif
-	force_sig(SIGTRAP, current);
+	info.si_signo = SIGTRAP;
+	info.si_errno = 0;
+	info.si_code = TRAP_BRKPT;
+	info.si_addr = (void *)regs->pc;
+	info.si_trapno = 0;
+	force_sig_info(SIGTRAP, &info, current);
+
 #ifdef DEBUG_SPARC_BREAKPOINT
 	printk ("TRAP: Returning to space: PC=%x nPC=%x\n", regs->pc, regs->npc);
 #endif

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: icmp.c,v 1.25 2000/01/09 02:19:54 davem Exp $
+ *	$Id: icmp.c,v 1.26 2000/01/19 04:06:19 davem Exp $
  *
  *	Based on net/ipv4/icmp.c
  *
@@ -146,19 +146,19 @@ static int icmpv6_getfrag(const void *data, struct in6_addr *saddr,
 	 */
 
 	if (offset) {
-		csum = csum_partial_copy((void *) msg->data +
-					 offset - sizeof(struct icmp6hdr), 
-					 buff, len, msg->csum);
+		csum = csum_partial_copy_nocheck((void *) msg->data +
+						 offset - sizeof(struct icmp6hdr), 
+						 buff, len, msg->csum);
 		msg->csum = csum;
 		return 0;
 	}
 
-	csum = csum_partial_copy((void *) &msg->icmph, buff,
-				 sizeof(struct icmp6hdr), msg->csum);
+	csum = csum_partial_copy_nocheck((void *) &msg->icmph, buff,
+					 sizeof(struct icmp6hdr), msg->csum);
 
-	csum = csum_partial_copy((void *) msg->data, 
-				 buff + sizeof(struct icmp6hdr),
-				 len - sizeof(struct icmp6hdr), csum);
+	csum = csum_partial_copy_nocheck((void *) msg->data, 
+					 buff + sizeof(struct icmp6hdr),
+					 len - sizeof(struct icmp6hdr), csum);
 
 	icmph = (struct icmp6hdr *) buff;
 

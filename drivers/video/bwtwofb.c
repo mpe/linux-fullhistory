@@ -1,4 +1,4 @@
-/* $Id: bwtwofb.c,v 1.11 1999/11/19 09:56:54 davem Exp $
+/* $Id: bwtwofb.c,v 1.12 2000/01/21 03:57:05 anton Exp $
  * bwtwofb.c: BWtwo frame buffer driver
  *
  * Copyright (C) 1998 Jakub Jelinek   (jj@ultra.linux.cz)
@@ -172,7 +172,7 @@ char __init *bwtwofb_init(struct fb_info_sbusfb *fb)
 #ifdef CONFIG_SUN4
 	res.start = phys;
 	res.end = res.start + BWTWO_REGISTER_OFFSET + sizeof(struct bw2_regs) - 1;
-	res.flags = IORESOURE_IO | (fb->iospace & 0xff);
+	res.flags = IORESOURCE_IO | (fb->iospace & 0xff);
 	resp = &res;
 #else
 	resp = &fb->sbdp->resource[0];

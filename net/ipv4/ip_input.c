@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) module.
  *
- * Version:	$Id: ip_input.c,v 1.44 2000/01/09 02:19:30 davem Exp $
+ * Version:	$Id: ip_input.c,v 1.45 2000/01/16 05:11:22 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -317,13 +317,12 @@ static inline int ip_rcv_finish(struct sk_buff *skb)
 
 #ifdef CONFIG_NET_CLS_ROUTE
 	if (skb->dst->tclassid) {
+		struct ip_rt_acct *st = ip_rt_acct + 256*smp_processor_id();
 		u32 idx = skb->dst->tclassid;
-		write_lock(&ip_rt_acct_lock);
-		ip_rt_acct[idx&0xFF].o_packets++;
-		ip_rt_acct[idx&0xFF].o_bytes+=skb->len;
-		ip_rt_acct[(idx>>16)&0xFF].i_packets++;
-		ip_rt_acct[(idx>>16)&0xFF].i_bytes+=skb->len;
-		write_unlock(&ip_rt_acct_lock);
+		st[idx&0xFF].o_packets++;
+		st[idx&0xFF].o_bytes+=skb->len;
+		st[(idx>>16)&0xFF].i_packets++;
+		st[(idx>>16)&0xFF].i_bytes+=skb->len;
 	}
 #endif
 

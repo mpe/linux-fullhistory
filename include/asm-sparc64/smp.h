@@ -68,12 +68,16 @@ extern void smp_callin(void);
 extern void smp_boot_cpus(void);
 extern void smp_store_cpu_info(int id);
 
-extern __volatile__ int cpu_number_map[NR_CPUS];
+extern __volatile__ int __cpu_number_map[NR_CPUS];
 extern __volatile__ int __cpu_logical_map[NR_CPUS];
 
 extern __inline__ int cpu_logical_map(int cpu)
 {
 	return __cpu_logical_map[cpu];
+}
+extern __inline__ int cpu_number_map(int cpu)
+{
+	return __cpu_number_map[cpu];
 }
 
 extern __inline__ int hard_smp_processor_id(void)

@@ -8,7 +8,7 @@
  *
  * Pad space is left for:
  * - 64-bit time_t to solve y2038 problem
- * - 2 miscellaneous 64-bit values
+ * - 2 miscellaneous 32-bit values
  */
 
 struct semid64_ds {

@@ -1,4 +1,4 @@
-/* $Id: sys_sunos32.c,v 1.35 2000/01/06 23:51:50 davem Exp $
+/* $Id: sys_sunos32.c,v 1.37 2000/01/21 11:39:03 jj Exp $
  * sys_sunos32.c: SunOS binary compatability layer on sparc64.
  *
  * Copyright (C) 1995, 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -323,6 +323,7 @@ asmlinkage u32 sunos_sigblock(u32 blk_mask)
 	spin_lock_irq(&current->sigmask_lock);
 	old = (u32) current->blocked.sig[0];
 	current->blocked.sig[0] |= (blk_mask & _BLOCKABLE);
+	recalc_sigpending(current);
 	spin_unlock_irq(&current->sigmask_lock);
 	return old;
 }
@@ -334,6 +335,7 @@ asmlinkage u32 sunos_sigsetmask(u32 newmask)
 	spin_lock_irq(&current->sigmask_lock);
 	retval = (u32) current->blocked.sig[0];
 	current->blocked.sig[0] = (newmask & _BLOCKABLE);
+	recalc_sigpending(current);
 	spin_unlock_irq(&current->sigmask_lock);
 	return retval;
 }
@@ -555,15 +557,22 @@ asmlinkage int sunos_uname(struct sunos_utsname *name)
 asmlinkage int sunos_nosys(void)
 {
 	struct pt_regs *regs;
+	siginfo_t info;
+	static int cnt;
 
 	lock_kernel();
 	regs = current->thread.kregs;
-	current->thread.sig_address = regs->tpc;
-	current->thread.sig_desc = regs->u_regs[UREG_G1];
-	send_sig(SIGSYS, current, 1);
-	printk("Process makes ni_syscall number %d, register dump:\n",
-	       (int) regs->u_regs[UREG_G1]);
-	show_regs(regs);
+	info.si_signo = SIGSYS;
+	info.si_errno = 0;
+	info.si_code = __SI_FAULT|0x100;
+	info.si_addr = (void *)regs->tpc;
+	info.si_trapno = regs->u_regs[UREG_G1];
+	send_sig_info(SIGSYS, &info, current);
+	if (cnt++ < 4) {
+		printk("Process makes ni_syscall number %d, register dump:\n",
+		       (int) regs->u_regs[UREG_G1]);
+		show_regs(regs);
+	}
 	unlock_kernel();
 	return -ENOSYS;
 }

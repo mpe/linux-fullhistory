@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/raw.c
  *
- *	$Id: raw.c,v 1.31 2000/01/09 02:19:50 davem Exp $
+ *	$Id: raw.c,v 1.33 2000/01/18 08:24:22 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -763,10 +763,6 @@ struct proto rawv6_prot = {
 	udpv6_connect,			/* connect */
 	udp_disconnect,			/* disconnect */
 	NULL,				/* accept */
-	NULL,				/* retransmit */
-	NULL,				/* write_wakeup */
-	NULL,				/* read_wakeup */
-	datagram_poll,			/* poll */
 	NULL,				/* ioctl */
 	rawv6_init_sk,			/* init */
 	inet6_destroy_sock,		/* destroy */
@@ -780,7 +776,5 @@ struct proto rawv6_prot = {
 	raw_v6_hash,			/* hash */
 	raw_v6_unhash,			/* unhash */
 	NULL,				/* get_port */
-	128,				/* max_header */
-	0,				/* retransmits */
 	"RAW",				/* name */
 };

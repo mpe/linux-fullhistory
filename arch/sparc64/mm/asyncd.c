@@ -1,4 +1,4 @@
-/*  $Id: asyncd.c,v 1.11 2000/01/08 20:22:19 davem Exp $
+/*  $Id: asyncd.c,v 1.12 2000/01/21 11:39:13 jj Exp $
  *  The asyncd kernel daemon. This handles paging on behalf of 
  *  processes that receive page faults due to remote (async) memory
  *  accesses. 
@@ -20,6 +20,7 @@
 #include <linux/fs.h>
 #include <linux/config.h>
 #include <linux/interrupt.h>
+#include <linux/signal.h>
 
 #include <asm/dma.h>
 #include <asm/system.h> /* for cli()/sti() */
@@ -113,6 +114,7 @@ static int fault_in_page(int taskid,
 {
 	static unsigned last_address;
 	static int last_task, loop_counter;
+	siginfo_t info;
 #warning Need some fixing here... -DaveM
 	struct task_struct *tsk = current /* XXX task[taskid] */;
 	pgd_t *pgd;
@@ -181,9 +183,12 @@ no_memory:
 	
 bad_area:	  
 	stats.failure++;
-	tsk->thread.sig_address = address;
-	tsk->thread.sig_desc = SUBSIG_NOMAPPING;
-	send_sig(SIGSEGV, tsk, 1);
+	info.si_signo = SIGSEGV;
+	info.si_errno = 0;
+	info.si_code = SEGV_MAPERR;
+	info.si_addr = (void *)address;
+	info.si_trapno = 0;
+	send_sig_info(SIGSEGV, &info, tsk);
 	return 1;
 }
 

@@ -63,7 +63,7 @@ int AcceptConnections(const int CPUNR, struct socket *Socket)
 	   the allocation of a new socket. (Which doesn't seem to be 
 	   used anyway)
 	*/
-   	if (Socket->sk->tp_pinfo.af_tcp.syn_wait_queue==NULL)
+   	if (Socket->sk->tp_pinfo.af_tcp.accept_queue==NULL)
 	{
 		return 0;
 	}

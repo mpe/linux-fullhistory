@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.49 1999/11/17 07:34:07 zaitcev Exp $
+/* $Id: time.c,v 1.50 2000/01/21 04:35:53 anton Exp $
  * linux/arch/sparc/kernel/time.c
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -229,7 +229,7 @@ static __inline__ void sun4_clock_probe(void)
 		sp_clock_typ = INTERSIL;
 		r.start = sun4_clock_physaddr;
 		intersil_clock = (struct intersil *) 
-		    sparc_ioremap(&r, 0, sizeof(*intersil_clock), "intersil");
+		    sbus_ioremap(&r, 0, sizeof(*intersil_clock), "intersil");
 		mstk48t02_regs = 0;  /* just be sure */
 		mstk48t08_regs = 0;  /* ditto */
 		/* initialise the clock */

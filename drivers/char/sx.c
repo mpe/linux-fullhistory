@@ -2457,20 +2457,20 @@ void fix_sx_pci (PDEV, struct sx_board *board)
 {
 	unsigned int hwbase;
 	unsigned long rebase;
-	int t;
+	unsigned int t;
 
-#define CNTRL_REG_OFFSET        0x14
+#define CNTRL_REG_OFFSET        0x50
+#define CNTRL_REG_GOODVALUE     0x00260000
 
 	pci_read_config_dword(pdev, PCI_BASE_ADDRESS_0, &hwbase);
 	hwbase &= PCI_BASE_ADDRESS_MEM_MASK;
 	rebase = (ulong) ioremap(hwbase, 0x80);
-	t = readb (rebase + CNTRL_REG_OFFSET*4 + 2);
-	if (t != 0x06) {
-		printk (KERN_DEBUG "sx: performing cntrl reg fix: %02x -> 06\n", t); 
-		writeb (0x06, rebase + CNTRL_REG_OFFSET*4+2);
+	t = readl (rebase + CNTRL_REG_OFFSET);
+	if (t != CNTRL_REG_GOODVALUE) {
+		printk (KERN_DEBUG "sx: performing cntrl reg fix: %08x -> %08x\n", t, CNTRL_REG_GOODVALUE); 
+		writel (CNTRL_REG_GOODVALUE, rebase + CNTRL_REG_OFFSET);
 	}
 	my_iounmap (hwbase, rebase);
-
 }
 #endif
 

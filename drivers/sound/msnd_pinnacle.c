@@ -46,6 +46,7 @@
 #  include <linux/init.h>
 #endif
 #include <asm/irq.h>
+#include <asm/io.h>
 #include "sound_config.h"
 #include "sound_firmware.h"
 #ifdef MSND_CLASSIC

@@ -5,7 +5,7 @@
  *
  *		The User Datagram Protocol (UDP).
  *
- * Version:	$Id: udp.c,v 1.77 2000/01/09 02:19:44 davem Exp $
+ * Version:	$Id: udp.c,v 1.79 2000/01/18 08:24:20 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -369,30 +369,15 @@ void udp_err(struct sk_buff *skb, unsigned char *dp, int len)
 	}
 
 	/*
-	 *	Various people wanted BSD UDP semantics. Well they've come 
-	 *	back out because they slow down response to stuff like dead
-	 *	or unreachable name servers and they screw term users something
-	 *	chronic. Oh and it violates RFC1122. So basically fix your 
-	 *	client code people.
-	 */
-	 
-	/*
 	 *      RFC1122: OK.  Passes ICMP errors back to application, as per 
-	 *	4.1.3.3. After the comment above, that should be no surprise. 
+	 *	4.1.3.3.
 	 */
-
-	if (!harderr && !sk->protinfo.af_inet.recverr)
-		goto out;
-
-	/*
-	 *	4.x BSD compatibility item. Break RFC1122 to
-	 *	get BSD socket semantics.
-	 */
-	if(sk->bsdism && sk->state!=TCP_ESTABLISHED && !sk->protinfo.af_inet.recverr)
-		goto out;
-
-	if (sk->protinfo.af_inet.recverr)
+	if (!sk->protinfo.af_inet.recverr) {
+		if (!harderr || sk->state != TCP_ESTABLISHED)
+			goto out;
+	} else {
 		ip_icmp_error(sk, skb, err, uh->dest, info, (u8*)(uh+1));
+	}
 	sk->err = err;
 	sk->error_report(sk);
 out:
@@ -629,15 +614,13 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 {
 	switch(cmd) 
 	{
-		case TIOCOUTQ:
+		case SIOCOUTQ:
 		{
-			unsigned long amount;
-
-			amount = sock_wspace(sk);
+			int amount = atomic_read(&sk->wmem_alloc);
 			return put_user(amount, (int *)arg);
 		}
 
-		case TIOCINQ:
+		case SIOCINQ:
 		{
 			struct sk_buff *skb;
 			unsigned long amount;
@@ -661,6 +644,17 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 			return -ENOIOCTLCMD;
 	}
 	return(0);
+}
+
+static __inline__ int __udp_checksum_complete(struct sk_buff *skb)
+{
+	return (unsigned short)csum_fold(csum_partial(skb->h.raw, skb->len, skb->csum));
+}
+
+static __inline__ int udp_checksum_complete(struct sk_buff *skb)
+{
+	return skb->ip_summed != CHECKSUM_UNNECESSARY &&
+		__udp_checksum_complete(skb);
 }
 
 /*
@@ -699,31 +693,21 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 		msg->msg_flags |= MSG_TRUNC;
 	}
 
-#ifndef CONFIG_UDP_DELAY_CSUM
-	err = skb_copy_datagram_iovec(skb, sizeof(struct udphdr), msg->msg_iov,
-					copied);
-#else
 	if (skb->ip_summed==CHECKSUM_UNNECESSARY) {
 		err = skb_copy_datagram_iovec(skb, sizeof(struct udphdr), msg->msg_iov,
 					      copied);
-	} else if (copied > msg->msg_iov[0].iov_len || (msg->msg_flags&MSG_TRUNC)) {
-		if ((unsigned short)csum_fold(csum_partial(skb->h.raw, skb->len, skb->csum))) 
+	} else if (msg->msg_flags&MSG_TRUNC) {
+		if (__udp_checksum_complete(skb))
 			goto csum_copy_err;
 		err = skb_copy_datagram_iovec(skb, sizeof(struct udphdr), msg->msg_iov,
 					      copied);
 	} else {
-		unsigned int csum;
+		err = copy_and_csum_toiovec(msg->msg_iov, skb, sizeof(struct udphdr));
 
-		err = 0;
-		csum = csum_partial(skb->h.raw, sizeof(struct udphdr), skb->csum);
-		csum = csum_and_copy_to_user((char*)&skb->h.uh[1], msg->msg_iov[0].iov_base, 
-					     copied, csum, &err);
 		if (err)
-			goto out_free;
-		if ((unsigned short)csum_fold(csum)) 
 			goto csum_copy_err;
 	}
-#endif
+
 	if (err)
 		goto out_free;
 	sk->stamp=skb->stamp;
@@ -744,7 +728,6 @@ out_free:
 out:
   	return err;
 
-#ifdef CONFIG_UDP_DELAY_CSUM
 csum_copy_err:
 	UDP_INC_STATS_BH(UdpInErrors);
 
@@ -768,7 +751,6 @@ csum_copy_err:
    	 * as some normal condition.
 	 */
 	return (flags&MSG_DONTWAIT) ? -EAGAIN : -EHOSTUNREACH;	
-#endif
 }
 
 int udp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
@@ -831,9 +813,9 @@ static int udp_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
 	 *	Charge it to the socket, dropping if the queue is full.
 	 */
 
-#if defined(CONFIG_FILTER) && defined(CONFIG_UDP_DELAY_CSUM)
+#if defined(CONFIG_FILTER)
 	if (sk->filter && skb->ip_summed != CHECKSUM_UNNECESSARY) {
-		if ((unsigned short)csum_fold(csum_partial(skb->h.raw, skb->len, skb->csum))) {
+		if (__udp_checksum_complete(skb)) {
 			UDP_INC_STATS_BH(UdpInErrors);
 			IP_INC_STATS_BH(IpInDiscards);
 			ip_statistics[smp_processor_id()*2].IpInDelivers--;
@@ -853,12 +835,6 @@ static int udp_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
 	}
 	UDP_INC_STATS_BH(UdpInDatagrams);
 	return 0;
-}
-
-
-static inline void udp_deliver(struct sock *sk, struct sk_buff *skb)
-{
-	udp_queue_rcv_skb(sk, skb);
 }
 
 /*
@@ -889,7 +865,7 @@ static int udp_v4_mcast_deliver(struct sk_buff *skb, struct udphdr *uh,
 				skb1 = skb_clone(skb, GFP_ATOMIC);
 
 			if(skb1)
-				udp_deliver(sk, skb1);
+				udp_queue_rcv_skb(sk, skb1);
 			sk = sknext;
 		} while(sknext);
 	} else
@@ -898,30 +874,25 @@ static int udp_v4_mcast_deliver(struct sk_buff *skb, struct udphdr *uh,
 	return 0;
 }
 
-static int udp_checksum_verify(struct sk_buff *skb, struct udphdr *uh,
-			       unsigned short ulen, u32 saddr, u32 daddr,
-			       int full_csum_deferred)
+/* Initialize UDP checksum. If exited with zero value (success),
+ * CHECKSUM_UNNECESSARY means, that no more checks are required.
+ * Otherwise, csum completion requires chacksumming packet body,
+ * including udp header and folding it to skb->csum.
+ */
+static int udp_checksum_init(struct sk_buff *skb, struct udphdr *uh,
+			     unsigned short ulen, u32 saddr, u32 daddr)
 {
-	if (!full_csum_deferred) {
-		if (uh->check) {
-			if (skb->ip_summed == CHECKSUM_HW &&
-			    udp_check(uh, ulen, saddr, daddr, skb->csum))
-				return -1;
-			if (skb->ip_summed == CHECKSUM_NONE &&
-			    udp_check(uh, ulen, saddr, daddr,
-				      csum_partial((char *)uh, ulen, 0)))
-				return -1;
-		}
-	} else {
-		if (uh->check == 0)
-			skb->ip_summed = CHECKSUM_UNNECESSARY;
-		else if (skb->ip_summed == CHECKSUM_HW) {
-			if (udp_check(uh, ulen, saddr, daddr, skb->csum))
-				return -1;
-			skb->ip_summed = CHECKSUM_UNNECESSARY;
-		} else if (skb->ip_summed != CHECKSUM_UNNECESSARY)
-			skb->csum = csum_tcpudp_nofold(saddr, daddr, ulen, IPPROTO_UDP, 0);
-	}
+	if (uh->check == 0) {
+		skb->ip_summed = CHECKSUM_UNNECESSARY;
+	} else if (skb->ip_summed == CHECKSUM_HW) {
+		if (udp_check(uh, ulen, saddr, daddr, skb->csum))
+			return -1;
+		skb->ip_summed = CHECKSUM_UNNECESSARY;
+	} else if (skb->ip_summed != CHECKSUM_UNNECESSARY)
+		skb->csum = csum_tcpudp_nofold(saddr, daddr, ulen, IPPROTO_UDP, 0);
+	/* Probably, we should checksum udp header (it should be in cache
+	 * in any case) and data in tiny packets (< rx copybreak).
+	 */
 	return 0;
 }
 
@@ -961,50 +932,33 @@ int udp_rcv(struct sk_buff *skb, unsigned short len)
 	}
 	skb_trim(skb, ulen);
 
-	if(rt->rt_flags & (RTCF_BROADCAST|RTCF_MULTICAST)) {
-		int defer;
+	if (udp_checksum_init(skb, uh, ulen, saddr, daddr) < 0)
+		goto csum_error;
 
-#ifdef CONFIG_UDP_DELAY_CSUM
-		defer = 1;
-#else
-		defer = 0;
-#endif
-		if (udp_checksum_verify(skb, uh, ulen, saddr, daddr, defer))
-			goto csum_error;
+	if(rt->rt_flags & (RTCF_BROADCAST|RTCF_MULTICAST))
 		return udp_v4_mcast_deliver(skb, uh, saddr, daddr);
-	}
 
 	sk = udp_v4_lookup(saddr, uh->source, daddr, uh->dest, skb->dev->ifindex);
-	
-	if (sk == NULL) {
-		/* No socket. Drop packet silently, if checksum is wrong */
-		if (udp_checksum_verify(skb, uh, ulen, saddr, daddr, 0))
-			goto csum_error;
 
-		UDP_INC_STATS_BH(UdpNoPorts);
-		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0);
-
-		/*
-		 * Hmm.  We got an UDP packet to a port to which we
-		 * don't wanna listen.  Ignore it.
-		 */
-		kfree_skb(skb);
-		return(0);
-  	}
-	if (udp_checksum_verify(skb, uh, ulen, saddr, daddr,
-#ifdef CONFIG_UDP_DELAY_CSUM
-				1
-#else
-				(sk->no_check & UDP_CSUM_NORCV) != 0
-#endif
-		)) {
+	if (sk != NULL) {
+		udp_queue_rcv_skb(sk, skb);
 		sock_put(sk);
-		goto csum_error;
+		return 0;
 	}
 
-	udp_deliver(sk, skb);
-	__sock_put(sk);
-	return 0;
+	/* No socket. Drop packet silently, if checksum is wrong */
+	if (udp_checksum_complete(skb))
+		goto csum_error;
+
+	UDP_INC_STATS_BH(UdpNoPorts);
+	icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0);
+
+	/*
+	 * Hmm.  We got an UDP packet to a port to which we
+	 * don't wanna listen.  Ignore it.
+	 */
+	kfree_skb(skb);
+	return(0);
 
 csum_error:
 	/* 
@@ -1090,10 +1044,6 @@ struct proto udp_prot = {
 	udp_connect,			/* connect */
 	udp_disconnect,			/* disconnect */
 	NULL,				/* accept */
-	NULL,				/* retransmit */
-	NULL,				/* write_wakeup */
-	NULL,				/* read_wakeup */
-	datagram_poll,			/* poll */
 	udp_ioctl,			/* ioctl */
 	NULL,				/* init */
 	NULL,				/* destroy */
@@ -1107,7 +1057,5 @@ struct proto udp_prot = {
 	udp_v4_hash,			/* hash */
 	udp_v4_unhash,			/* unhash */
 	udp_v4_get_port,		/* good_socknum */
-	128,				/* max_header */
-	0,				/* retransmits */
  	"UDP",				/* name */
 };

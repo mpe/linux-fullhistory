@@ -70,6 +70,7 @@
 * 1998/12/26	acme		Minimal debug code cleanup
 * 1998/08/08	acme		Initial version.
 */
+
 #define CYCLOMX_X25_DEBUG 1
 
 #include <linux/version.h>
@@ -188,7 +189,6 @@ static void x25_dump_devs(wan_device_t *wandev);
  *
  * This routine is called by the main Cyclom 2X module during setup.  At this
  * point adapter is completely initialized and X.25 firmware is running.
- *  o read firmware version (to make sure it's alive)
  *  o configure adapter
  *  o initialize protocol-specific fields of the adapter data space.
  *
@@ -336,7 +336,8 @@ static int update (wan_device_t *wandev)
  *
  * Return:	0	o.k.
  *		< 0	failure (channel will not be created) */
-static int new_if (wan_device_t *wandev, struct net_device *dev, wanif_conf_t *conf)
+static int new_if (wan_device_t *wandev, struct net_device *dev,
+		   wanif_conf_t *conf)
 {
 	cycx_t *card = wandev->private;
 	x25_channel_t *chan;
@@ -507,7 +508,7 @@ static int if_open (struct net_device *dev)
 	dev->interrupt = 0;
 	dev->tbusy = 0;
 	dev->start = 1;
-	cyclomx_open(card);
+	cyclomx_mod_inc_use_count(card);
 
 	return 0;
 }
@@ -525,7 +526,7 @@ static int if_close (struct net_device *dev)
 	if (chan->state == WAN_CONNECTED || chan->state == WAN_CONNECTING)
 		chan_disconnect(dev);
 		
-	cyclomx_close(card);
+	cyclomx_mod_dec_use_count(card);
 
 	return 0;
 }

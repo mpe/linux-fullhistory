@@ -60,14 +60,14 @@ static inline int connection_based(struct sock *sk)
  * Wait for a packet..
  */
 
-static int wait_for_packet(struct sock * sk, int *err)
+static int wait_for_packet(struct sock * sk, int *err, long *timeo_p)
 {
 	int error;
 
 	DECLARE_WAITQUEUE(wait, current);
 
-	__set_current_state(TASK_INTERRUPTIBLE);
-	add_wait_queue(sk->sleep, &wait);
+	__set_current_state(TASK_INTERRUPTIBLE|TASK_EXCLUSIVE);
+	add_wait_queue_exclusive(sk->sleep, &wait);
 
 	/* Socket errors? */
 	error = sock_error(sk);
@@ -91,7 +91,7 @@ static int wait_for_packet(struct sock * sk, int *err)
 	if (signal_pending(current))
 		goto out;
 
-	schedule();
+	*timeo_p = schedule_timeout(*timeo_p);
 
 ready:
 	current->state = TASK_RUNNING;
@@ -132,11 +132,14 @@ struct sk_buff *skb_recv_datagram(struct sock *sk, unsigned flags, int noblock, 
 {
 	int error;
 	struct sk_buff *skb;
+	long timeo;
 
 	/* Caller is allowed not to check sk->err before skb_recv_datagram() */
 	error = sock_error(sk);
 	if (error)
 		goto no_packet;
+
+	timeo = sock_rcvtimeo(sk, noblock);
 
 	do {
 		/* Again only user level code calls this function, so nothing interrupt level
@@ -162,10 +165,10 @@ struct sk_buff *skb_recv_datagram(struct sock *sk, unsigned flags, int noblock, 
 
 		/* User doesn't want to wait */
 		error = -EAGAIN;
-		if (noblock)
+		if (!timeo)
 			goto no_packet;
 
-	} while (wait_for_packet(sk, err) == 0);
+	} while (wait_for_packet(sk, err, &timeo) == 0);
 
 	return NULL;
 
@@ -225,11 +228,11 @@ unsigned int datagram_poll(struct file * file, struct socket *sock, poll_table *
 	/* exceptional events? */
 	if (sk->err || !skb_queue_empty(&sk->error_queue))
 		mask |= POLLERR;
-	if (sk->shutdown & RCV_SHUTDOWN)
+	if (sk->shutdown == SHUTDOWN_MASK)
 		mask |= POLLHUP;
 
 	/* readable? */
-	if (!skb_queue_empty(&sk->receive_queue))
+	if (!skb_queue_empty(&sk->receive_queue) || (sk->shutdown&RCV_SHUTDOWN))
 		mask |= POLLIN | POLLRDNORM;
 
 	/* Connection-based need to check for termination and startup */

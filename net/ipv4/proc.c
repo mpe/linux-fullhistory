@@ -7,7 +7,7 @@
  *		PROC file system.  It is mainly used for debugging and
  *		statistics.
  *
- * Version:	$Id: proc.c,v 1.38 2000/01/09 02:19:30 davem Exp $
+ * Version:	$Id: proc.c,v 1.41 2000/01/21 23:45:57 davem Exp $
  *
  * Authors:	Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Gerald J. Heim, <heim@peanuts.informatik.uni-tuebingen.de>
@@ -71,8 +71,9 @@ int afinet_get_info(char *buffer, char **start, off_t offset, int length)
 
 	int len  = socket_get_info(buffer,start,offset,length);
 
-	len += sprintf(buffer+len,"TCP: inuse %d\n",
-		       fold_prot_inuse(&tcp_prot));
+	len += sprintf(buffer+len,"TCP: inuse %d orphan %d tw %d\n",
+		       fold_prot_inuse(&tcp_prot),
+		       atomic_read(&tcp_orphan_count), tcp_tw_count);
 	len += sprintf(buffer+len,"UDP: inuse %d\n",
 		       fold_prot_inuse(&udp_prot));
 	len += sprintf(buffer+len,"RAW: inuse %d\n",
@@ -163,7 +164,14 @@ int netstat_get_info(char *buffer, char **start, off_t offset, int length)
 	len = sprintf(buffer,
 		      "TcpExt: SyncookiesSent SyncookiesRecv SyncookiesFailed"
 		      " EmbryonicRsts PruneCalled RcvPruned OfoPruned"
-		      " OutOfWindowIcmps LockDroppedIcmps\n" 	
+		      " OutOfWindowIcmps LockDroppedIcmps"
+		      " TW TWRecycled TWKilled"
+		      " PAWSPassive PAWSActive PAWSEstab"
+		      " DelayedACKs DelayedACKLocked DelayedACKLost"
+		      " ListenOverflows ListenDrops"
+		      " TCPPrequeued TCPDirectCopyFromBacklog"
+		      " TCPDirectCopyFromPrequeue TCPPrequeueDropped"
+		      " TCPHPHits TCPHPHitsToUser\n"
 		      "TcpExt:");
 	for (i=0; i<offsetof(struct linux_mib, __pad)/sizeof(unsigned long); i++)
 		len += sprintf(buffer+len, " %lu", fold_field((unsigned long*)net_statistics, sizeof(struct linux_mib), i));

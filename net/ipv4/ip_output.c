@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.77 2000/01/09 02:19:31 davem Exp $
+ * Version:	$Id: ip_output.c,v 1.78 2000/01/16 05:11:22 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -149,8 +149,8 @@ output_maybe_reroute(struct sk_buff *skb)
 /* 
  *		Add an ip header to a skbuff and send it out.
  */
-void ip_build_and_send_pkt(struct sk_buff *skb, struct sock *sk,
-			   u32 saddr, u32 daddr, struct ip_options *opt)
+int ip_build_and_send_pkt(struct sk_buff *skb, struct sock *sk,
+			  u32 saddr, u32 daddr, struct ip_options *opt)
 {
 	struct rtable *rt = (struct rtable *)skb->dst;
 	struct iphdr *iph;
@@ -182,8 +182,8 @@ void ip_build_and_send_pkt(struct sk_buff *skb, struct sock *sk,
 	ip_send_check(iph);
 
 	/* Send it out. */
-	NF_HOOK(PF_INET, NF_IP_LOCAL_OUT, skb, NULL, rt->u.dst.dev,
-		output_maybe_reroute);
+	return NF_HOOK(PF_INET, NF_IP_LOCAL_OUT, skb, NULL, rt->u.dst.dev,
+		       output_maybe_reroute);
 }
 
 static inline int ip_finish_output2(struct sk_buff *skb)
@@ -257,7 +257,7 @@ int ip_mc_output(struct sk_buff *skb)
 		{
 			struct sk_buff *newskb = skb_clone(skb, GFP_ATOMIC);
 			if (newskb)
-				NF_HOOK(PF_INET, NF_IP_LOCAL_OUT, newskb, NULL,
+				NF_HOOK(PF_INET, NF_IP_POST_ROUTING, newskb, NULL,
 					newskb->dev, 
 					ip_dev_loopback_xmit);
 		}

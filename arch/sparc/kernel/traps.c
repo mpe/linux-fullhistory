@@ -1,7 +1,8 @@
-/* $Id: traps.c,v 1.60 1999/08/14 03:51:31 anton Exp $
+/* $Id: traps.c,v 1.61 2000/01/21 11:38:41 jj Exp $
  * arch/sparc/kernel/traps.c
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright 2000 Jakub Jelinek (jakub@redhat.com)
  */
 
 /*
@@ -128,6 +129,8 @@ void die_if_kernel(char *str, struct pt_regs *regs)
 
 void do_hw_interrupt(unsigned long type, unsigned long psr, unsigned long pc)
 {
+	siginfo_t info;
+
 	lock_kernel();
 	if(type < 0x80) {
 		/* Sun OS's puke from bad traps, Linux survives! */
@@ -135,22 +138,23 @@ void do_hw_interrupt(unsigned long type, unsigned long psr, unsigned long pc)
 		die_if_kernel("Whee... Hello Mr. Penguin", current->thread.kregs);
 	}	
 
-	if(type == SP_TRAP_SBPT) {
-		send_sig(SIGTRAP, current, 1);
-	} else {
-		if(psr & PSR_PS)
-			die_if_kernel("Kernel bad trap", current->thread.kregs);
+	if(psr & PSR_PS)
+		die_if_kernel("Kernel bad trap", current->thread.kregs);
 
-		current->thread.sig_desc = SUBSIG_BADTRAP(type - 0x80);
-		current->thread.sig_address = pc;
-		send_sig(SIGILL, current, 1);
-	}
+	info.si_signo = SIGILL;
+	info.si_errno = 0;
+	info.si_code = ILL_ILLTRP;
+	info.si_addr = (void *)pc;
+	info.si_trapno = type - 0x80;
+	force_sig_info(SIGILL, &info, current);
 	unlock_kernel();
 }
 
 void do_illegal_instruction(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 			    unsigned long psr)
 {
+	siginfo_t info;
+
 	lock_kernel();
 	if(psr & PSR_PS)
 		die_if_kernel("Kernel illegal instruction", regs);
@@ -163,9 +167,12 @@ void do_illegal_instruction(struct pt_regs *regs, unsigned long pc, unsigned lon
 		if (!do_user_muldiv (regs, pc))
 			goto out;
 	}
-	current->thread.sig_address = pc;
-	current->thread.sig_desc = SUBSIG_ILLINST;
-	send_sig(SIGILL, current, 1);
+	info.si_signo = SIGILL;
+	info.si_errno = 0;
+	info.si_code = ILL_ILLOPC;
+	info.si_addr = (void *)pc;
+	info.si_trapno = 0;
+	send_sig_info(SIGILL, &info, current);
 out:
 	unlock_kernel();
 }
@@ -173,12 +180,17 @@ out:
 void do_priv_instruction(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 			 unsigned long psr)
 {
+	siginfo_t info;
+
 	lock_kernel();
 	if(psr & PSR_PS)
 		die_if_kernel("Penguin instruction from Penguin mode??!?!", regs);
-	current->thread.sig_address = pc;
-	current->thread.sig_desc = SUBSIG_PRIVINST;
-	send_sig(SIGILL, current, 1);
+	info.si_signo = SIGILL;
+	info.si_errno = 0;
+	info.si_code = ILL_PRVOPC;
+	info.si_addr = (void *)pc;
+	info.si_trapno = 0;
+	send_sig_info(SIGILL, &info, current);
 	unlock_kernel();
 }
 
@@ -187,6 +199,8 @@ void do_priv_instruction(struct pt_regs *regs, unsigned long pc, unsigned long n
 void do_memaccess_unaligned(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 			    unsigned long psr)
 {
+	siginfo_t info;
+
 	lock_kernel();
 	if(regs->psr & PSR_PS) {
 		printk("KERNEL MNA at pc %08lx npc %08lx called by %08lx\n", pc, npc,
@@ -194,14 +208,17 @@ void do_memaccess_unaligned(struct pt_regs *regs, unsigned long pc, unsigned lon
 		die_if_kernel("BOGUS", regs);
 		/* die_if_kernel("Kernel MNA access", regs); */
 	}
-	current->thread.sig_address = pc;
-	current->thread.sig_desc = SUBSIG_PRIVINST;
 #if 0
 	show_regs (regs);
 	instruction_dump ((unsigned long *) regs->pc);
 	printk ("do_MNA!\n");
 #endif
-	send_sig(SIGBUS, current, 1);
+	info.si_signo = SIGBUS;
+	info.si_errno = 0;
+	info.si_code = BUS_ADRALN;
+	info.si_addr = /* FIXME: Should dig out mna address */ (void *)0;
+	info.si_trapno = 0;
+	send_sig_info(SIGBUS, &info, current);
 	unlock_kernel();
 }
 
@@ -269,6 +286,8 @@ void do_fpe_trap(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 		 unsigned long psr)
 {
 	static int calls = 0;
+	siginfo_t info;
+	unsigned long fsr;
 	int ret = 0;
 #ifndef __SMP__
 	struct task_struct *fpt = last_task_used_math;
@@ -326,8 +345,6 @@ void do_fpe_trap(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 	}
 	/* nope, better SIGFPE the offending process... */
 	       
-	fpt->thread.sig_address = pc;
-	fpt->thread.sig_desc = SUBSIG_FPERROR; /* as good as any */
 #ifdef __SMP__
 	fpt->flags &= ~PF_USEDFPU;
 #endif
@@ -345,7 +362,26 @@ void do_fpe_trap(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 				      regs);
 		goto out;
 	}
-	send_sig(SIGFPE, fpt, 1);
+
+	fsr = fpt->thread.fsr;
+	info.si_signo = SIGFPE;
+	info.si_errno = 0;
+	info.si_addr = (void *)pc;
+	info.si_trapno = 0;
+	info.si_code = __SI_FAULT;
+	if ((fsr & 0x1c000) == (1 << 14)) {
+		if (fsr & 0x10)
+			info.si_code = FPE_FLTINV;
+		else if (fsr & 0x08)
+			info.si_code = FPE_FLTOVF;
+		else if (fsr & 0x04)
+			info.si_code = FPE_FLTUND;
+		else if (fsr & 0x02)
+			info.si_code = FPE_FLTDIV;
+		else if (fsr & 0x01)
+			info.si_code = FPE_FLTRES;
+	}
+	send_sig_info(SIGFPE, &info, fpt);
 #ifndef __SMP__
 	last_task_used_math = NULL;
 #endif
@@ -359,12 +395,17 @@ out:
 void handle_tag_overflow(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 			 unsigned long psr)
 {
+	siginfo_t info;
+
 	lock_kernel();
 	if(psr & PSR_PS)
 		die_if_kernel("Penguin overflow trap from kernel mode", regs);
-	current->thread.sig_address = pc;
-	current->thread.sig_desc = SUBSIG_TAG; /* as good as any */
-	send_sig(SIGEMT, current, 1);
+	info.si_signo = SIGEMT;
+	info.si_errno = 0;
+	info.si_code = EMT_TAGOVF;
+	info.si_addr = (void *)pc;
+	info.si_trapno = 0;
+	send_sig_info(SIGEMT, &info, current);
 	unlock_kernel();
 }
 
@@ -385,40 +426,69 @@ void handle_watchpoint(struct pt_regs *regs, unsigned long pc, unsigned long npc
 void handle_reg_access(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 		       unsigned long psr)
 {
+	siginfo_t info;
+
 	lock_kernel();
 #ifdef TRAP_DEBUG
 	printk("Register Access Exception at PC %08lx NPC %08lx PSR %08lx\n",
 	       pc, npc, psr);
 #endif
-	send_sig(SIGILL, current, 1);
+	info.si_signo = SIGBUS;
+	info.si_errno = 0;
+	info.si_code = BUS_OBJERR;
+	info.si_addr = (void *)pc;
+	info.si_trapno = 0;
+	force_sig_info(SIGBUS, &info, current);
 	unlock_kernel();
 }
 
 void handle_cp_disabled(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 			unsigned long psr)
 {
+	siginfo_t info;
+
 	lock_kernel();
-	send_sig(SIGILL, current, 1);
+	info.si_signo = SIGILL;
+	info.si_errno = 0;
+	info.si_code = ILL_COPROC;
+	info.si_addr = (void *)pc;
+	info.si_trapno = 0;
+	send_sig_info(SIGILL, &info, current);
 	unlock_kernel();
 }
 
 void handle_cp_exception(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 			 unsigned long psr)
 {
+	siginfo_t info;
+
 	lock_kernel();
 #ifdef TRAP_DEBUG
 	printk("Co-Processor Exception at PC %08lx NPC %08lx PSR %08lx\n",
 	       pc, npc, psr);
 #endif
-	send_sig(SIGILL, current, 1);
+	info.si_signo = SIGILL;
+	info.si_errno = 0;
+	info.si_code = ILL_COPROC;
+	info.si_addr = (void *)pc;
+	info.si_trapno = 0;
+	send_sig_info(SIGILL, &info, current);
 	unlock_kernel();
 }
 
 void handle_hw_divzero(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 		       unsigned long psr)
 {
+	siginfo_t info;
+
 	lock_kernel();
-	send_sig(SIGILL, current, 1);
+	info.si_signo = SIGFPE;
+	info.si_errno = 0;
+	info.si_code = FPE_INTDIV;
+	info.si_addr = (void *)pc;
+	info.si_trapno = 0;
+	send_sig_info(SIGFPE, &info, current);
+
 	unlock_kernel();
 }
 

@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.143 2000/01/09 09:13:28 anton Exp $
+/*  $Id: process.c,v 1.144 2000/01/21 11:38:39 jj Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -293,7 +293,6 @@ void show_thread(struct thread_struct *thread)
 
 	printk("uwinmask:          0x%08lx  kregs:             0x%08lx\n", thread->uwinmask, (unsigned long)thread->kregs);
 	show_regs(thread->kregs);
-	printk("sig_address:       0x%08lx  sig_desc:          0x%08lx\n", thread->sig_address, thread->sig_desc);
 	printk("ksp:               0x%08lx  kpc:               0x%08lx\n", thread->ksp, thread->kpc);
 	printk("kpsr:              0x%08lx  kwim:              0x%08lx\n", thread->kpsr, thread->kwim);
 	printk("fork_kpsr:         0x%08lx  fork_kwim:         0x%08lx\n", thread->fork_kpsr, thread->fork_kwim);
@@ -595,7 +594,7 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 	dump->fpu.fpstatus.fpq_count = current->thread.fpqdepth;
 	memcpy(&dump->fpu.fpstatus.fpq[0], &current->thread.fpqueue[0],
 	       ((sizeof(unsigned long) * 2) * 16));
-	dump->sigcode = current->thread.sig_desc;
+	dump->sigcode = 0;
 }
 
 /*

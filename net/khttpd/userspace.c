@@ -181,8 +181,7 @@ static struct or_calltable Dummy =
 static int AddSocketToAcceptQueue(struct socket *sock,const int Port)
 {
 	struct open_request *req;
-	struct sock *sk;
-	struct tcp_opt *tp;
+	struct sock *sk, *nsk;
 	
 	EnterFunction("AddSocketToAcceptQueue");
 
@@ -196,8 +195,7 @@ static int AddSocketToAcceptQueue(struct socket *sock,const int Port)
 	
 	lock_sock(sk);
 
-	if (sk->state != TCP_LISTEN || 
-	    sk->ack_backlog > sk->max_ack_backlog) /* To many pending requests */
+	if (sk->state != TCP_LISTEN || tcp_acceptq_is_full(sk))
 	{
 		release_sock(sk);
 		sock_put(sk);
@@ -213,20 +211,17 @@ static int AddSocketToAcceptQueue(struct socket *sock,const int Port)
 		return -1;
 	}
 	
-	req->sk		= sock->sk;
+	nsk = sock->sk;
 	sock->sk = NULL;
 	sock->state = SS_UNCONNECTED;
 
 	req->class	= &Dummy;
-	write_lock_irq(&req->sk->callback_lock);
-	req->sk->socket = NULL;
-	req->sk->sleep  = NULL;
-	write_unlock_irq(&req->sk->callback_lock);
+	write_lock_irq(&nsk->callback_lock);
+	nsk->socket = NULL;
+        nsk->sleep  = NULL;
+	write_unlock_irq(&nsk->callback_lock);
 
-	tp =&(sk->tp_pinfo.af_tcp);
-	sk->ack_backlog++;
-
-	tcp_synq_queue(tp,req);	
+	tcp_acceptq_queue(sk, req, nsk);	
 
 	sk->data_ready(sk, 0);
 

@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.102 1999/12/15 22:24:49 davem Exp $
+/*  $Id: process.c,v 1.103 2000/01/21 11:38:53 jj Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -364,8 +364,6 @@ void show_thread(struct thread_struct *thread)
 	printk("kregs:             0x%016lx\n", (unsigned long)thread->kregs);
 	show_regs(thread->kregs);
 #endif	
-	printk("sig_address:       0x%016lx\n", thread->sig_address);
-	printk("sig_desc:          0x%016lx\n", thread->sig_desc);
 	printk("ksp:               0x%016lx\n", thread->ksp);
 
 	if (thread->w_saved) {
@@ -701,7 +699,6 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 	memcpy(&dump->fpu.fpstatus.fregs.regs[0], &current->thread.float_regs[0], (sizeof(unsigned long) * 32));
 	dump->fpu.fpstatus.fsr = current->thread.fsr;
 	dump->fpu.fpstatus.flags = dump->fpu.fpstatus.extra = 0;
-	dump->sigcode = current->thread.sig_desc;
 #endif	
 }
 

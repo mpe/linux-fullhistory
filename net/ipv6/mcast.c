@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: mcast.c,v 1.28 2000/01/09 02:19:50 davem Exp $
+ *	$Id: mcast.c,v 1.29 2000/01/18 08:24:21 davem Exp $
  *
  *	Based on linux/ipv4/igmp.c and linux/ipv4/ip_sockglue.c 
  *
@@ -500,7 +500,8 @@ void igmp6_send(struct in6_addr *addr, struct net_device *dev, int type)
 	if (dev->hard_header) {
 		unsigned char ha[MAX_ADDR_LEN];
 		ndisc_mc_map(snd_addr, ha, dev, 1);
-		dev->hard_header(skb, dev, ETH_P_IPV6, ha, NULL, full_len);
+		if (dev->hard_header(skb, dev, ETH_P_IPV6, ha, NULL, full_len) < 0)
+			goto out;
 	}
 
 	if (ipv6_get_lladdr(dev, &addr_buf)) {
@@ -508,7 +509,7 @@ void igmp6_send(struct in6_addr *addr, struct net_device *dev, int type)
 		printk(KERN_DEBUG "igmp6: %s no linklocal address\n",
 		       dev->name);
 #endif
-		return;
+		goto out;
 	}
 
 	ip6_nd_hdr(sk, skb, dev, &addr_buf, snd_addr, NEXTHDR_HOP, payload_len);
@@ -532,6 +533,10 @@ void igmp6_send(struct in6_addr *addr, struct net_device *dev, int type)
 	else
 		ICMP6_INC_STATS(Icmp6OutGroupMembResponses);
 	ICMP6_INC_STATS(Icmp6OutMsgs);
+	return;
+
+out:
+	kfree_skb(skb);
 }
 
 static void igmp6_join_group(struct ifmcaddr6 *ma)

@@ -38,7 +38,7 @@ extern unsigned prom_cpu_nodes[];
 
 struct cpuinfo_sparc cpu_data[NR_CPUS]  __attribute__ ((aligned (64)));
 
-volatile int cpu_number_map[NR_CPUS]    __attribute__ ((aligned (64)));
+volatile int __cpu_number_map[NR_CPUS]  __attribute__ ((aligned (64)));
 volatile int __cpu_logical_map[NR_CPUS] __attribute__ ((aligned (64)));
 
 /* Please don't make this stuff initdata!!!  --DaveM */
@@ -243,7 +243,7 @@ void __init smp_boot_cpus(void)
 				udelay(100);
 			}
 			if(callin_flag) {
-				cpu_number_map[i] = cpucount;
+				__cpu_number_map[i] = cpucount;
 				__cpu_logical_map[cpucount] = i;
 				prom_cpu_nodes[i] = linux_cpus[no].prom_node;
 				prom_printf("OK\n");
@@ -255,7 +255,7 @@ void __init smp_boot_cpus(void)
 		}
 		if(!callin_flag) {
 			cpu_present_map &= ~(1UL << i);
-			cpu_number_map[i] = -1;
+			__cpu_number_map[i] = -1;
 		}
 	}
 	cpu_new_task = NULL;
@@ -697,10 +697,10 @@ void __init smp_tick_init(void)
 	for(i = 0; i < linux_num_cpus; i++)
 		cpu_present_map |= (1UL << linux_cpus[i].mid);
 	for(i = 0; i < NR_CPUS; i++) {
-		cpu_number_map[i] = -1;
+		__cpu_number_map[i] = -1;
 		__cpu_logical_map[i] = -1;
 	}
-	cpu_number_map[boot_cpu_id] = 0;
+	__cpu_number_map[boot_cpu_id] = 0;
 	prom_cpu_nodes[boot_cpu_id] = linux_cpus[0].prom_node;
 	__cpu_logical_map[0] = boot_cpu_id;
 	current->processor = boot_cpu_id;

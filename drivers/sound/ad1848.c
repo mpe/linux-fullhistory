@@ -71,7 +71,8 @@ typedef struct
 #define MD_4232		5
 #define MD_C930		6
 #define MD_IWAVE	7
-#define MD_4235         8 /* Crystal Audio CS4235 */
+#define MD_4235         8 /* Crystal Audio CS4235  */
+#define MD_1845_SSCAPE  9 /* Ensoniq Soundscape PNP*/
 
 	/* Mixer parameters */
 	int             recmask;
@@ -100,6 +101,7 @@ ad1848_port_info;
 
 static int nr_ad1848_devs = 0;
 int deskpro_xl = 0;
+int deskpro_m = 0;
 #ifdef CONFIG_SOUND_SPRO
 int soundpro = 1;
 #else
@@ -117,7 +119,7 @@ static int timer_installed = -1;
 
 #endif
 
-static int ad_format_mask[9 /*devc->model */ ] =
+static int ad_format_mask[10 /*devc->model */ ] =
 {
 	0,
 	AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW,
@@ -127,7 +129,8 @@ static int ad_format_mask[9 /*devc->model */ ] =
 	AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW | AFMT_S16_BE | AFMT_IMA_ADPCM,
 	AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW | AFMT_S16_BE | AFMT_IMA_ADPCM,
 	AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW | AFMT_S16_BE | AFMT_IMA_ADPCM,
-	AFMT_U8 | AFMT_S16_LE /* CS4235 */
+	AFMT_U8 | AFMT_S16_LE /* CS4235 */,
+	AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW	/* Ensoniq Soundscape*/
 };
 
 static ad1848_info adev_info[MAX_AUDIO_DEV];
@@ -140,7 +143,7 @@ static ad1848_info adev_info[MAX_AUDIO_DEV];
 static struct {
      unsigned char flags;
 #define CAP_F_TIMER 0x01     
-} capabilities [9 /*devc->model */ ] = {
+} capabilities [10 /*devc->model */ ] = {
      {0}
     ,{0}           /* MD_1848  */
     ,{CAP_F_TIMER} /* MD_4231  */
@@ -149,7 +152,8 @@ static struct {
     ,{CAP_F_TIMER} /* MD_4232  */
     ,{0}           /* MD_C930  */
     ,{CAP_F_TIMER} /* MD_IWAVE */
-    ,{0}           /* MD_4235 */
+    ,{0}           /* MD_4235  */
+    ,{CAP_F_TIMER} /* MD_1845_SSCAPE */
 };
 
 static int      ad1848_open(int dev, int mode);
@@ -231,7 +235,7 @@ static void wait_for_calibration(ad1848_info * devc)
 	while (timeout > 0 && (ad_read(devc, 11) & 0x20))
 		timeout--;
 	if (ad_read(devc, 11) & 0x20)
-		if (devc->model != MD_1845)
+		if ( (devc->model != MD_1845) || (devc->model != MD_1845_SSCAPE))
 			printk(KERN_WARNING "ad1848: Auto calibration timed out(3).\n");
 }
 
@@ -555,6 +559,7 @@ static void ad1848_mixer_reset(ad1848_info * devc)
 		case MD_4231:
 		case MD_4231A:
 		case MD_1845:
+		case MD_1845_SSCAPE:
 			devc->supported_devices = MODE2_MIXER_DEVICES;
 			break;
 
@@ -751,7 +756,7 @@ static int ad1848_set_speed(int dev, int arg)
 	if (arg <= 0)
 		return portc->speed;
 
-	if (devc->model == MD_1845)	/* AD1845 has different timer than others */
+	if (devc->model == MD_1845 || devc->model == MD_1845_SSCAPE)	/* AD1845 has different timer than others */
 	{
 		if (arg < 4000)
 			arg = 4000;
@@ -1087,7 +1092,7 @@ static int ad1848_prepare_for_output(int dev, int bsize, int bcount)
 
 	ad_enter_MCE(devc);	/* Enables changes to the format select reg */
 
-	if (devc->model == MD_1845)	/* Use alternate speed select registers */
+	if (devc->model == MD_1845 || devc->model == MD_1845_SSCAPE) /* Use alternate speed select registers */
 	{
 		fs &= 0xf0;	/* Mask off the rate select bits */
 
@@ -1157,7 +1162,7 @@ static int ad1848_prepare_for_input(int dev, int bsize, int bcount)
 
 	ad_enter_MCE(devc);	/* Enables changes to the format select reg */
 
-	if (devc->model == MD_1845)	/* Use alternate speed select registers */
+	if ((devc->model == MD_1845) || (devc->model == MD_1845_SSCAPE))	/* Use alternate speed select registers */
 	{
 		fs &= 0xf0;	/* Mask off the rate select bits */
 
@@ -1193,7 +1198,7 @@ static int ad1848_prepare_for_input(int dev, int bsize, int bcount)
 		while (timeout < 10000 && inb(devc->base) == 0x80)
 			timeout++;
 
-		if (devc->model != MD_1848 && devc->model != MD_1845)
+		if (devc->model != MD_1848 && devc->model != MD_1845 && devc->model != MD_1845_SSCAPE)
 		{
 			/*
 			 * CS4231 compatible devices don't have separate sampling rate selection
@@ -1405,13 +1410,17 @@ static void ad1848_init_hw(ad1848_info * devc)
 
 	if (devc->model > MD_1848)
 	{
-		ad_write(devc, 12, ad_read(devc, 12) | 0x40);		/* Mode2 = enabled */
+		if (devc->model == MD_1845_SSCAPE)
+			ad_write(devc, 12, ad_read(devc, 12) | 0x50);
+		else 
+			ad_write(devc, 12, ad_read(devc, 12) | 0x40);		/* Mode2 = enabled */
 
 		if (devc->model == MD_IWAVE)
 			ad_write(devc, 12, 0x6c);	/* Select codec mode 3 */
 
-		for (i = 16; i < 32; i++)
-			ad_write(devc, i, init_values[i]);
+		if (devc-> model != MD_1845_SSCAPE)
+			for (i = 16; i < 32; i++)
+				ad_write(devc, i, init_values[i]);
 
 		if (devc->model == MD_IWAVE)
 			ad_write(devc, 16, 0x30);	/* Playback and capture counters enabled */
@@ -1423,7 +1432,7 @@ static void ad1848_init_hw(ad1848_info * devc)
 		else
 			ad_write(devc, 9, ad_read(devc, 9) | 0x04);	/* Single DMA mode */
 
-		if (devc->model == MD_1845)
+		if (devc->model == MD_1845 || devc->model == MD_1845_SSCAPE)
 			ad_write(devc, 27, ad_read(devc, 27) | 0x08);		/* Alternate freq select enabled */
 
 		if (devc->model == MD_IWAVE)
@@ -1462,6 +1471,7 @@ int ad1848_detect(int io_base, int *ad_flags, int *osp)
 	int interwave = 0;
 	int ad1847_flag = 0;
 	int cs4248_flag = 0;
+	int sscape_flag = 0;
 
 	int i;
 
@@ -1474,6 +1484,13 @@ int ad1848_detect(int io_base, int *ad_flags, int *osp)
 			interwave = 1;
 			*ad_flags = 0;
 		}
+		
+		if (*ad_flags == 0x87654321)
+		{
+			sscape_flag = 1;
+			*ad_flags = 0;
+		}
+		
 		if (*ad_flags == 0x12345677)
 		{
 		    cs4248_flag = 1;
@@ -1821,6 +1838,9 @@ int ad1848_detect(int io_base, int *ad_flags, int *osp)
 		devc->chip_name = "AD1847";
 
 
+	if (sscape_flag == 1)
+		devc->model = MD_1845_SSCAPE;
+
 	return 1;
 }
 
@@ -1979,7 +1999,7 @@ int ad1848_control(int cmd, int arg)
 	switch (cmd)
 	{
 		case AD1848_SET_XTAL:	/* Change clock frequency of AD1845 (only ) */
-			if (devc->model != MD_1845)
+			if (devc->model != MD_1845 || devc->model != MD_1845_SSCAPE)
 				return -EINVAL;
 			ad_enter_MCE(devc);
 			ad_write(devc, 29, (ad_read(devc, 29) & 0x1f) | (arg << 5));
@@ -2142,6 +2162,34 @@ interrupt_again:		/* Jump back here if int status doesn't reset */
 	{
 		  goto interrupt_again;
 	}
+}
+
+/*
+ *	Experimental initialization sequence for the integrated sound system
+ *	of the Compaq Deskpro M.
+ */
+
+static int init_deskpro_m(struct address_info *hw_config)
+{
+	unsigned char   tmp;
+
+	if ((tmp = inb(0xc44)) == 0xff)
+	{
+		DDB(printk("init_deskpro_m: Dead port 0xc44\n"));
+		return 0;
+	}
+
+	outb(0x10, 0xc44);
+	outb(0x40, 0xc45);
+	outb(0x00, 0xc46);
+	outb(0xe8, 0xc47);
+	outb(0x14, 0xc44);
+	outb(0x40, 0xc45);
+	outb(0x00, 0xc46);
+	outb(0xe8, 0xc47);
+	outb(0x10, 0xc44);
+
+	return 1;
 }
 
 /*
@@ -2370,6 +2418,12 @@ int probe_ms_sound(struct address_info *hw_config)
 			return 0;
 	}
 
+	if (deskpro_m)	/* Compaq Deskpro M */
+	{
+		if (!init_deskpro_m(hw_config))
+			return 0;
+	}
+
 	/*
 	   * Check if the IO port returns valid signature. The original MS Sound
 	   * system returns 0x04 while some cards (AudioTrix Pro for example)
@@ -2558,7 +2612,7 @@ static unsigned int ad1848_tmr_start(int dev, unsigned int usecs)
 	 * the timer divider.
 	 */
 
-	if (devc->model == MD_1845)
+	if (devc->model == MD_1845 || devc->model == MD_1845_SSCAPE)
 		xtal_nsecs = 10050;
 	else if (ad_read(devc, 8) & 0x01)
 		xtal_nsecs = 9920;
@@ -2659,6 +2713,7 @@ MODULE_PARM(dma, "i");			/* First DMA channel */
 MODULE_PARM(dma2, "i");			/* Second DMA channel */
 MODULE_PARM(type, "i");			/* Card type */
 MODULE_PARM(deskpro_xl, "i");		/* Special magic for Deskpro XL boxen */
+MODULE_PARM(deskpro_m, "i");		/* Special magic for Deskpro M box */
 MODULE_PARM(soundpro, "i");		/* More special magic for SoundPro chips */
 
 int io = -1;

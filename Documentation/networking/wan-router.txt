@@ -1,19 +1,26 @@
 ------------------------------------------------------------------------------
 WAN Router for Linux Operating System
 ------------------------------------------------------------------------------
+Version 2.1.1 - Nov 08, 1999
+Version 2.0.8 - Nov 02, 1999
+Version 2.0.7 - Aug 26, 1999
+Version 2.0.6 - Aug 17, 1999
+Version 2.0.5 - Aug 12, 1999
+Version 2.0.4 - Nov 26, 1998
+Version 2.0.3 - Aug 25, 1998
+Version 2.0.2 - Dec 09, 1997
 Version 2.0.1 - Nov 28, 1997
 Version 2.0.0 - Nov 06, 1997
 Version 1.0.3 - June 3, 1997
 Version 1.0.1 - January 30, 1997
-Author: Jaspreet Singh <jaspreet@sangoma.com>
-	Gene Kozin <genek@compuserve.com>
-Copyright (c) 1995-1997 Sangoma Technologies Inc.
+Author: Nenad Corbic <ncorbic@sangoma.com>
+Copyright (c) 1995-1999 Sangoma Technologies Inc.
 ------------------------------------------------------------------------------
 
 
 WARNING:  This Version of WANPIPE supports only the S508 and S508/FT1 cards.  
 IF YOU OWN A S502E OR A S508 CARD THEN PLEASE CONTACT SANGOMA TECHNOLOGIES FOR 
-AN UPGRADE.
+AN UPGRADE.  ONLY THE BiSYNC STREAMING CODE IS SUPPORTED ON S502E/S503 cards. 
 
 INTRODUCTION
 
@@ -129,11 +136,55 @@ product.
 
 REVISION HISTORY
 
+2.1.1   Nov 09, 1999 		- New code for S514PCI card
+                                - Completely redesigned drivers
+                                  fully tested and optimized.
+
+2.0.8   Nov 02, 1999            - Fixed up the X25API code.
+                                - Clear call bug fixed.i
+                                - Eanbled driver for multi-card
+                                  operation.                                
+
+2.0.7   Aug 26, 1999		- Merged X25API code into WANPIPE.
+				- Fixed a memeory leak for X25API
+				- Updated the X25API code for 2.2.X kernels.
+				- Improved NEM handling.
+
+2.0.6   Aug 17, 1999            - Kernel patch works for both 2.2.10 and 2.2.11 kernels
+                                - Fixed up 2.0.5 installation bugs
+                                - No functional difference between 2.0.6 and 2.0.5         
+
+2.0.5   Aug 12, 1999            - NEW PPP, interrupt drive code
+				- NEW X25 Xpipmon debugger
+				- Comments added to setup scripts
+				- Numerous bug fixes
+
+2.0.4	Nov 26, 1998		- NEW Cisco Dual Port support. 
+				- NEW support for BiSync Streaming API.
+				- NEW support for HDLC (LAPB) API.
+				- WANPIPE provides an API for application 
+				  development using the BSD socket interface.
+
+2.0.3 	Aug 25, 1998		- NEW support for Cisco HDLC, with cpipemon 
+				  utility for monitoring
+				- CIR support for Frame-relay
+				- Support for PAP and CHAP for ppp has been 
+				  implemented
+				- Dynamic IP assignment for PPP
+				- Multiple channel IPX support for Frame-relay 
+				  and X25
+				- Inverse Arp support for Frame-relay
+				- FT1 Configuration utility for linux
+				- Man Pages for router.conf, router, sdladump,
+				  cfgft1, fpipemon, ppipemon and cpipemon
+
+2.0.2	Dev 09, 1997	      - Implemented PAP and CHAP for ppp.
+
 2.0.1	Nov 28, 1997	      -	Protection of "enable_irq()" while
                                 "disable_irq()" has been enabled from any other
                                 routine (for Frame Relay, PPP and X25).
-			      - Added additional Stats for Fpipemon and Ppipemon                              - Improved Load Sharing for multiple boards.
-
+			      - Added additional Stats for Fpipemon and Ppipemon
+                              - Improved Load Sharing for multiple boards.
 
 2.0.0   Nov 07, 1997          - Implemented protection of RACE conditions by
                                 critical flags for FRAME RELAY and PPP.
@@ -173,7 +224,7 @@ REVISION HISTORY
 1.0.1	January 30, 1997
 
 			      -	Implemented user-readable status and statistics
-				via /proc file system
+				via /proc filesystem
 
 1.0.0	December 31, 1996
 

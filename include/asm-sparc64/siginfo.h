@@ -141,6 +141,11 @@ typedef struct siginfo32 {
 #define si_band		_sifields._sigpoll._band
 #define si_fd		_sifields._sigpoll._fd
 
+#ifdef __KERNEL__
+#define __SI_MASK	0
+#define __SI_FAULT	0
+#endif
+
 /*
  * si_code values
  * Digital reserves positive values for kernel-generated signals.
@@ -187,7 +192,7 @@ typedef struct siginfo32 {
  * SIGSEGV si_codes
  */
 #define SEGV_MAPERR	1	/* address not mapped to object */
-#define SRGV_ACCERR	2	/* invalid permissions for mapped object */
+#define SEGV_ACCERR	2	/* invalid permissions for mapped object */
 #define NSIGSEGV	2
 
 /*

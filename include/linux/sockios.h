@@ -20,6 +20,10 @@
 
 #include <asm/sockios.h>
 
+/* Linux-specific socket ioctls */
+#define SIOCINQ		FIONREAD
+#define SIOCOUTQ	TIOCOUTQ
+
 /* Routing table calls. */
 #define SIOCADDRT	0x890B		/* add routing table entry	*/
 #define SIOCDELRT	0x890C		/* delete routing table entry	*/
