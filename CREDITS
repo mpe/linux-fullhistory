@@ -1615,14 +1615,12 @@ S: Beaverton, Oregon 97008
 S: USA
 
 N: Mike Shaver
-E: shaver@ingenia.com
-W: http://neon.ingenia.com/~shaver/
-D: Network hacking, /proc/sys/net
-S: c/o Ingenia Communications Corporation
-S: Suite 4200, CTTC Building
-S: 1125 Colonel By Drive
+E: shaver@netscape.com
+W: http://people.netscape.com/shaver/
+D: MIPS work, /proc/sys/net, misc net hacking
+S: 149 Union St.
 S: Ottawa, Ontario
-S: Canada K1S 5R1
+S: Canada K7L 2P4
 
 N: John Shifflett
 E: john@geolog.com

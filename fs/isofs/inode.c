@@ -320,7 +320,7 @@ static int parse_options(char *options, struct iso9660_options * popt)
 			*value++ = 0;
 
 #ifdef CONFIG_JOLIET
-		if (!strcmp(this_char,"iocharset")) {
+		if (!strcmp(this_char,"iocharset") && value) {
 			popt->iocharset = value;
 			while (*value && *value != ',')
 				value++;

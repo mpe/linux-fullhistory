@@ -699,7 +699,7 @@ void enable_irq(unsigned int irq)
 	 * install a handler for this interrupt (make irq autodetection
 	 * work by just looking at the status field for the irq)
 	 */
-	irq_desc[irq].status = 0;
+	irq_desc[irq].status &= ~(IRQ_DISABLED | IRQ_INPROGRESS);
 	irq_desc[irq].handler->enable(irq);
 	spin_unlock_irqrestore(&irq_controller_lock, flags);
 }
@@ -785,7 +785,6 @@ int setup_x86_irq(unsigned int irq, struct irqaction * new)
 	*p = new;
 
 	if (!shared) {
-		irq_desc[irq].status = 0;
 #ifdef __SMP__
 		if (IO_APIC_IRQ(irq)) {
 			/*
@@ -796,10 +795,11 @@ int setup_x86_irq(unsigned int irq, struct irqaction * new)
 			if (irq < 16) {
 				disable_8259A_irq(irq);
 				if (i8259A_irq_pending(irq))
-					irq_desc[irq].status = IRQ_PENDING;
+					irq_desc[irq].status |= IRQ_PENDING;
 			}
 		}
 #endif
+		irq_desc[irq].status &= ~(IRQ_DISABLED | IRQ_INPROGRESS);
 		irq_desc[irq].handler->enable(irq);
 	}
 	spin_unlock_irqrestore(&irq_controller_lock,flags);

@@ -117,6 +117,14 @@
     19980611   Richard Gooch <rgooch@atnf.csiro.au>
 	       Always define <main_lock>.
   v1.22
+    19980901   Richard Gooch <rgooch@atnf.csiro.au>
+	       Removed module support in order to tidy up code.
+	       Added sanity check for <mtrr_add>/<mtrr_del> before <mtrr_init>.
+	       Created addition queue for prior to SMP commence.
+  v1.23
+    19980910   Richard Gooch <rgooch@atnf.csiro.au>
+	       Removed sanity checks and addition queue: Linus prefers an OOPS.
+  v1.24
 */
 #include <linux/types.h>
 #include <linux/errno.h>
@@ -149,7 +157,7 @@
 #include <asm/bitops.h>
 #include <asm/atomic.h>
 
-#define MTRR_VERSION            "1.22 (19980611)"
+#define MTRR_VERSION            "1.24 (19980910)"
 
 #define TRUE  1
 #define FALSE 0
@@ -658,13 +666,8 @@ static void set_mtrr_smp (unsigned int reg, unsigned long base,
 }   /*  End Function set_mtrr_smp  */
 
 
-/* A warning that is common to the module and non-module cases. */
 /* Some BIOS's are fucked and don't set all MTRRs the same! */
-#ifdef MODULE
-static void mtrr_state_warn (unsigned long mask)
-#else
 __initfunc(static void mtrr_state_warn (unsigned long mask))
-#endif
 {
     if (!mask) return;
     if (mask & MTRR_CHANGE_MASK_FIXED)
@@ -676,37 +679,6 @@ __initfunc(static void mtrr_state_warn (unsigned long mask))
     printk ("mtrr: probably your BIOS does not setup all CPUs\n");
 }   /*  End Function mtrr_state_warn  */
 
-#ifdef MODULE
-/* As a module, copy the MTRR state using an IPI handler. */
-
-static volatile unsigned long smp_changes_mask = 0;
-
-static void copy_mtrr_state_handler (struct set_mtrr_context *ctxt, void *info)
-{
-    unsigned long mask, count;
-    struct mtrr_state *smp_mtrr_state = info;
-
-    mask = set_mtrr_state (smp_mtrr_state, ctxt);
-    /*  Use the atomic bitops to update the global mask  */
-    for (count = 0; count < sizeof mask * 8; ++count)
-    {
-	if (mask & 0x01) set_bit (count, &smp_changes_mask);
-	mask >>= 1;
-    }
-}   /*  End Function copy_mtrr_state_handler  */
-
-/* Copies the entire MTRR state of this CPU to all the others. */
-static void copy_mtrr_state (void)
-{
-    struct mtrr_state ms;
- 
-    get_mtrr_state (&ms);
-    do_all_cpus (copy_mtrr_state_handler, &ms, FALSE);
-    finalize_mtrr_state (&ms);
-    mtrr_state_warn (smp_changes_mask);
-}   /*  End Function copy_mtrr_state  */
-
-#endif /* MODULE */
 #endif  /*  __SMP__  */
 
 static char *attrib_to_str (int x)
@@ -1163,7 +1135,7 @@ static void compute_ascii (void)
 EXPORT_SYMBOL(mtrr_add);
 EXPORT_SYMBOL(mtrr_del);
 
-#if defined(__SMP__) && !defined(MODULE)
+#ifdef __SMP__
 
 static volatile unsigned long smp_changes_mask __initdata = 0;
 static struct mtrr_state smp_mtrr_state __initdata = {0, 0};
@@ -1196,26 +1168,18 @@ __initfunc(void mtrr_init_secondary_cpu (void))
     }
 }   /*  End Function mtrr_init_secondary_cpu  */
 
-#endif
+#endif  /*  __SMP__  */
 
-#ifdef MODULE
-int init_module (void)
-#else
 __initfunc(int mtrr_init(void))
-#endif
 {
     if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) ) return 0;
-#  if !defined(__SMP__) || defined(MODULE) 
+#  ifndef __SMP__
     printk("mtrr: v%s Richard Gooch (rgooch@atnf.csiro.au)\n", MTRR_VERSION);
 #  endif
 
 #  ifdef __SMP__
-#    ifdef MODULE
-    copy_mtrr_state ();
-#    else /* MODULE */
     finalize_mtrr_state (&smp_mtrr_state);
     mtrr_state_warn (smp_changes_mask);
-#    endif /* MODULE */
 #  endif /* __SMP__ */
 
 #  ifdef CONFIG_PROC_FS
@@ -1224,17 +1188,4 @@ __initfunc(int mtrr_init(void))
 
     init_table ();
     return 0;
-}
-
-#ifdef	MODULE
-void cleanup_module (void)
-{
-    if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) ) return;
-#  ifdef CONFIG_PROC_FS
-    proc_unregister (&proc_root, PROC_MTRR);
-#  endif
-#    ifdef __SMP__
-    mtrr_hook = NULL;
-#    endif
-}
-#endif
+}   /*  End Function mtrr_init  */
