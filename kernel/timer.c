@@ -162,7 +162,19 @@ static inline void internal_add_timer(struct timer_list *timer)
 
 /* Initialize both explicitly - let's try to have them in the same cache line */
 spinlock_t timerlist_lock = SPIN_LOCK_UNLOCKED;
-volatile struct timer_list *running_timer = NULL;
+volatile struct timer_list * volatile running_timer = NULL;
+
+#ifdef CONFIG_SMP
+#define timer_enter(t) do { running_timer = t; mb(); } while (0)
+#define timer_exit() do { running_timer = NULL; } while (0)
+#define timer_is_running(t) (running_timer == t)
+#define timer_synchronize(t) while (timer_is_running(t)) barrier()
+#else
+#define timer_enter(t)		do { } while (0)
+#define timer_exit()		do { } while (0)
+#define timer_is_running(t)	(0)
+#define timer_synchronize(t)	do { (void)(t); barrier(); } while(0)
+#endif
 
 void add_timer(struct timer_list *timer)
 {
@@ -216,6 +228,11 @@ int del_timer(struct timer_list * timer)
 }
 
 #ifdef CONFIG_SMP
+void sync_timers(void)
+{
+	spin_unlock_wait(&global_bh_lock);
+}
+
 /*
  * SMP specific function to delete periodic timer.
  * Caller must disable by some means restarting the timer

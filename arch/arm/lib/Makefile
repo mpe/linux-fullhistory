@@ -14,8 +14,7 @@ L_OBJS   := changebit.o csumipv6.o csumpartial.o csumpartialcopy.o \
 O_TARGET := lib.o
 O_OBJS   := backtrace.o delay.o
 
-L_OBJS_arc		:= io-acorn.o
-L_OBJS_a5k		:= io-acorn.o floppydma.o
+L_OBJS_arc		:= io-acorn.o floppydma.o
 L_OBJS_rpc		:= io-acorn.o floppydma.o
 L_OBJS_clps7500		:= io-acorn.o
 L_OBJS_ebsa110		:= io-ebsa110.o

@@ -38,7 +38,10 @@ obj-y	 += tty_io.o n_tty.o tty_ioctl.o mem.o raw.o pty.o misc.o random.o
 
 export-objs     :=	busmouse.o console.o i2c-old.o keyboard.o sysrq.o \
 			misc.o pty.o random.o selection.o serial.o videodev.o \
-			tty_io.o bttv.o cpia.o
+			tty_io.o bttv-if.o cpia.o
+
+list-multi	:=	bttv.o
+bttv-objs	:=	bttv-driver.o bttv-cards.o bttv-if.o
 
 KEYMAP   =defkeymap.o
 KEYBD    =pc_keyb.o
@@ -62,9 +65,11 @@ ifeq ($(ARCH),m68k)
 endif
 
 ifeq ($(ARCH),arm)
+# we actually need to be able to select various different keymaps
+# and keyboards dependent on which actual machine we're going to
+# run on.
   KEYMAP   =
   KEYBD    =
-  CONSOLE  =
 endif
 
 ifeq ($(ARCH),sh)
@@ -371,6 +376,8 @@ O_OBJS          := $(filter-out $(export-objs), $(obj-y))
 OX_OBJS         := $(filter     $(export-objs), $(obj-y))
 M_OBJS          := $(sort $(filter-out $(export-objs), $(obj-m)))
 MX_OBJS         := $(sort $(filter     $(export-objs), $(obj-m)))
+MI_OBJS		:= $(sort $(filter-out $(export-objs), $(int-m)))
+MIX_OBJS	:= $(sort $(filter     $(export-objs), $(int-m)))
 
 include $(TOPDIR)/Rules.make
 
@@ -389,3 +396,7 @@ defkeymap.c: defkeymap.map
 
 zoran.o: zr36120.o zr36120_i2c.o zr36120_mem.o
 	$(LD) $(LD_RFLAG) -r -o $@ zr36120.o zr36120_i2c.o zr36120_mem.o
+
+bttv.o: $(bttv-objs)
+	$(LD) $(LD_RFLAG) -r -o $@ $(bttv-objs)
+

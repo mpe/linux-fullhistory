@@ -21,7 +21,7 @@
 #ifndef _BTTV_H_
 #define _BTTV_H_
 
-#define BTTV_VERSION_CODE KERNEL_VERSION(0,7,31)
+#define BTTV_VERSION_CODE KERNEL_VERSION(0,7,37)
 
 #ifndef PCI_GET_DRIVER_DATA
 # define PCI_GET_DRIVER_DATA(pdev)         ((pdev)->driver_data)
@@ -36,6 +36,110 @@
 
 #include "audiochip.h"
 #include "bt848.h"
+
+#ifdef __KERNEL__
+
+/* fwd decl */
+struct bttv;
+
+
+/* ---------------------------------------------------------- */
+/* exported by bttv-cards.c                                   */
+
+#define BTTV_UNKNOWN       0x00
+#define BTTV_MIRO          0x01
+#define BTTV_HAUPPAUGE     0x02
+#define BTTV_STB           0x03
+#define BTTV_INTEL         0x04
+#define BTTV_DIAMOND       0x05 
+#define BTTV_AVERMEDIA     0x06 
+#define BTTV_MATRIX_VISION 0x07 
+#define BTTV_FLYVIDEO      0x08
+#define BTTV_TURBOTV       0x09
+#define BTTV_HAUPPAUGE878  0x0a
+#define BTTV_MIROPRO       0x0b
+#define BTTV_ADSTECH_TV    0x0c
+#define BTTV_AVERMEDIA98   0x0d
+#define BTTV_VHX           0x0e
+#define BTTV_ZOLTRIX       0x0f
+#define BTTV_PIXVIEWPLAYTV 0x10
+#define BTTV_WINVIEW_601   0x11
+#define BTTV_AVEC_INTERCAP 0x12
+#define BTTV_LIFE_FLYKIT   0x13
+#define BTTV_CEI_RAFFLES   0x14
+#define BTTV_CONFERENCETV  0x15
+#define BTTV_PHOEBE_TVMAS  0x16
+#define BTTV_MODTEC_205    0x17
+#define BTTV_MAGICTVIEW061 0x18
+#define BTTV_VOBIS_BOOSTAR 0x19
+#define BTTV_HAUPPAUG_WCAM 0x1a
+#define BTTV_MAXI          0x1b
+#define BTTV_TERRATV       0x1c
+#define BTTV_PXC200        0x1d
+#define BTTV_FLYVIDEO_98   0x1e
+#define BTTV_IPROTV        0x1f
+#define BTTV_INTEL_C_S_PCI 0x20
+#define BTTV_TERRATVALUE   0x21
+#define BTTV_WINFAST2000   0x22
+#define BTTV_CHRONOS_VS2   0x23
+#define BTTV_TYPHOON_TVIEW 0x24
+#define BTTV_PXELVWPLTVPRO 0x25
+#define BTTV_MAGICTVIEW063 0x26
+#define BTTV_PINNACLERAVE  0x27
+#define BTTV_STB2          0x28
+#define BTTV_AVPHONE98     0x29
+#define BTTV_PV951         0x2a
+#define BTTV_ONAIR_TV      0x2b
+#define BTTV_SIGMA_TVII_FM 0x2c
+#define BTTV_MATRIX_VISION2 0x2d
+#define BTTV_ZOLTRIX_GENIE 0x2e
+#define BTTV_TERRATVRADIO  0x2f
+#define BTTV_DYNALINK      0x30
+
+struct tvcard
+{
+        char *name;
+        int video_inputs;
+        int audio_inputs;
+        int tuner;
+        int svhs;
+        u32 gpiomask;
+        u32 muxsel[8];
+        u32 audiomux[6]; /* Tuner, Radio, external, internal, mute, stereo */
+        u32 gpiomask2;   /* GPIO MUX mask */
+
+	/* look for these i2c audio chips */
+	int msp34xx:1;
+	int tda8425:1;
+	int tda9840:1;
+	int tda985x:1;
+	int tea63xx:1;
+	int tea64xx:1;
+	int tda7432:1;
+	int tda9875:1;
+
+	/* other settings */
+	int pll;
+#define PLL_NONE 0
+#define PLL_28   1
+#define PLL_35   2
+
+	int tuner_type;
+};
+
+extern struct tvcard bttv_tvcards[];
+extern const int bttv_num_tvcards;
+
+/* identification / initialization of the card */
+extern void bttv_idcard(struct bttv *btv);
+
+/* card-specific funtions */
+extern void tea5757_set_freq(struct bttv *btv, unsigned short freq);
+extern void winview_setvol(struct bttv *btv, struct video_audio *v);
+
+/* ---------------------------------------------------------- */
+/* exported by bttv-if.c                                      */
+/* interface for gpio access by other modules                 */
 
 /* returns card type + card ID (for bt878-based ones)
    for possible values see lines below beginning with #define BTTV_UNKNOWN
@@ -62,8 +166,8 @@ extern int bttv_read_gpio(unsigned int card, unsigned long *data);
   (data & mask) | (current_GPDATA_value & ~mask)
   returns negative value if error ocurred 
 */
-extern int bttv_write_gpio(unsigned int card, 
-			    unsigned long mask, unsigned long data);
+extern int bttv_write_gpio(unsigned int card,
+			   unsigned long mask, unsigned long data);
 
 /* returns pointer to task queue which can be used as parameter to 
    interruptible_sleep_on
@@ -75,6 +179,31 @@ extern int bttv_write_gpio(unsigned int card,
    process data ASAP
 */
 extern wait_queue_head_t* bttv_get_gpio_queue(unsigned int card);
+
+/* i2c */
+struct i2c_algo_bit_data bttv_i2c_algo_template;
+struct i2c_adapter bttv_i2c_adap_template;
+struct i2c_client bttv_i2c_client_template;
+void bttv_bit_setscl(void *data, int state);
+void bttv_bit_setsda(void *data, int state);
+void bttv_call_i2c_clients(struct bttv *btv, unsigned int cmd, void *arg);
+int bttv_I2CRead(struct bttv *btv, unsigned char addr, char *probe_for);
+int bttv_I2CWrite(struct bttv *btv, unsigned char addr, unsigned char b1,
+	     unsigned char b2, int both);
+void bttv_readee(struct bttv *btv, unsigned char *eedata, int addr);
+
+
+/* ---------------------------------------------------------- */
+/* bttv-driver.c                                              */
+
+/* insmod options */
+extern unsigned int bttv_verbose;
+extern unsigned int bttv_debug;
+
+/* Anybody who uses more than four? */
+#define BTTV_MAX 4
+extern int bttv_num;			/* number of Bt848s in use */
+extern struct bttv bttvs[BTTV_MAX];
 
 
 #ifndef O_NONCAP  
@@ -88,8 +217,6 @@ extern wait_queue_head_t* bttv_get_gpio_queue(unsigned int card);
 
 #define BTTV_MAX_FBUF	0x208000
 #define I2C_CLIENTS_MAX 8
-
-#ifdef __KERNEL__
 
 struct bttv_window 
 {
@@ -238,56 +365,6 @@ extern __inline__ void io_st_le32(volatile unsigned *addr, unsigned val)
 #define BTTV_PICNR		_IOR('v' , BASE_VIDIOCPRIVATE+7, int)
 #define BTTV_VBISIZE            _IOR('v' , BASE_VIDIOCPRIVATE+8, int)
 
-#define BTTV_UNKNOWN       0x00
-#define BTTV_MIRO          0x01
-#define BTTV_HAUPPAUGE     0x02
-#define BTTV_STB           0x03
-#define BTTV_INTEL         0x04
-#define BTTV_DIAMOND       0x05 
-#define BTTV_AVERMEDIA     0x06 
-#define BTTV_MATRIX_VISION 0x07 
-#define BTTV_FLYVIDEO      0x08
-#define BTTV_TURBOTV       0x09
-#define BTTV_HAUPPAUGE878  0x0a
-#define BTTV_MIROPRO       0x0b
-#define BTTV_ADSTECH_TV    0x0c
-#define BTTV_AVERMEDIA98   0x0d
-#define BTTV_VHX           0x0e
-#define BTTV_ZOLTRIX       0x0f
-#define BTTV_PIXVIEWPLAYTV 0x10
-#define BTTV_WINVIEW_601   0x11
-#define BTTV_AVEC_INTERCAP 0x12
-#define BTTV_LIFE_FLYKIT   0x13
-#define BTTV_CEI_RAFFLES   0x14
-#define BTTV_CONFERENCETV  0x15
-#define BTTV_PHOEBE_TVMAS  0x16
-#define BTTV_MODTEC_205    0x17
-#define BTTV_MAGICTVIEW061 0x18
-#define BTTV_VOBIS_BOOSTAR 0x19
-#define BTTV_HAUPPAUG_WCAM 0x1a
-#define BTTV_MAXI          0x1b
-#define BTTV_TERRATV       0x1c
-#define BTTV_PXC200        0x1d
-#define BTTV_FLYVIDEO_98   0x1e
-#define BTTV_IPROTV        0x1f
-#define BTTV_INTEL_C_S_PCI 0x20
-#define BTTV_TERRATVALUE   0x21
-#define BTTV_WINFAST2000   0x22
-#define BTTV_CHRONOS_VS2   0x23
-#define BTTV_TYPHOON_TVIEW 0x24
-#define BTTV_PXELVWPLTVPRO 0x25
-#define BTTV_MAGICTVIEW063 0x26
-#define BTTV_PINNACLERAVE  0x27
-#define BTTV_STB2          0x28
-#define BTTV_AVPHONE98     0x29
-#define BTTV_PV951         0x2a
-#define BTTV_ONAIR_TV      0x2b
-#define BTTV_SIGMA_TVII_FM 0x2c
-
-#define PLL_NONE 0
-#define PLL_28   1
-#define PLL_35   2
-
 #define AUDIO_TUNER        0x00
 #define AUDIO_RADIO        0x01
 #define AUDIO_EXTERN       0x02
@@ -306,7 +383,7 @@ extern __inline__ void io_st_le32(volatile unsigned *addr, unsigned val)
 #define I2C_TDA7432        0x8a
 #define I2C_TDA8425        0x82
 #define I2C_TDA9840        0x84
-#define I2C_TDA9850        0xb6
+#define I2C_TDA9850        0xb6 /* also used by 9855,9873 */
 #define I2C_TDA9875        0xb0
 #define I2C_HAUPEE         0xa0
 #define I2C_STBEE          0xae
@@ -315,10 +392,12 @@ extern __inline__ void io_st_le32(volatile unsigned *addr, unsigned val)
 #define I2C_TEA6300        0x80
 #define I2C_DPL3518	   0x84
 
+#ifndef HAVE_TVAUDIO
 #define TDA9840_SW         0x00
 #define TDA9840_LVADJ      0x02
 #define TDA9840_STADJ      0x03
 #define TDA9840_TEST       0x04
+#endif
 
 #define PT2254_L_CHANEL 0x10
 #define PT2254_R_CHANEL 0x08
@@ -327,6 +406,15 @@ extern __inline__ void io_st_le32(volatile unsigned *addr, unsigned val)
 #define WINVIEW_PT2254_CLK  0x40
 #define WINVIEW_PT2254_DATA 0x20
 #define WINVIEW_PT2254_STROBE 0x80
+
+struct bttv_just_hacking {
+	int             height,width;     /* size */
+	unsigned        int format;       /* should be VIDEO_PALETTE_* */
+	long            buf;
+	int             len;
+};
+
+#define BTTV_JUST_HACKING       _IOR('v' , BASE_VIDIOCPRIVATE+31,struct bttv_just_hacking)
 
 #endif
 

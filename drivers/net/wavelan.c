@@ -4221,7 +4221,7 @@ int init_module(void)
 			if (register_netdev(dev) != 0) {
 				/* Deallocate everything. */
 				/* Note: if dev->priv is mallocated, there is no way to fail. */
-				kfree_s(dev, sizeof(struct net_device));
+				kfree(dev);
 			} else {
 				/* If at least one device OK, we do not fail */
 				ret = 0;
@@ -4271,8 +4271,8 @@ void cleanup_module(void)
 		wavelan_list = wavelan_list->next;
 
 		/* Free pieces. */
-		kfree_s(dev->priv, sizeof(struct net_local));
-		kfree_s(dev, sizeof(struct net_device));
+		kfree(dev->priv);
+		kfree(dev);
 	}
 
 #ifdef DEBUG_MODULE_TRACE

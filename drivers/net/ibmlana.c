@@ -1252,7 +1252,7 @@ void cleanup_module(void)
 #endif
 			mca_set_adapter_name(priv->slot, "");
 			mca_set_adapter_procfn(priv->slot, NULL, NULL);
-			kfree_s(dev->priv, sizeof(ibmlana_priv));
+			kfree(dev->priv);
 			dev->priv = NULL;
 		}
 	}

@@ -172,7 +172,7 @@ COMPILING the kernel:
  - Do a "make bzImage" to create a compressed kernel image.  If you want
    to make a boot disk (without root filesystem or LILO), insert a floppy
    in your A: drive, and do a "make bzdisk".  It is also possible to do
-   "make bzlilo" if you have lilo installed to suit the kernel makefiles,
+   "make install" if you have lilo installed to suit the kernel makefiles,
    but you may want to check your particular lilo setup first. 
 
  - In the unlikely event that your system cannot boot bzImage kernels you

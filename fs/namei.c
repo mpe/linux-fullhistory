@@ -305,7 +305,7 @@ static struct dentry * real_lookup(struct dentry * parent, struct qstr * name, i
 static inline int do_follow_link(struct dentry *dentry, struct nameidata *nd)
 {
 	int err;
-	if (current->link_count >= 32)
+	if (current->link_count >= 8)
 		goto loop;
 	current->link_count++;
 	UPDATE_ATIME(dentry->d_inode);

@@ -28,8 +28,7 @@ mainmenu_option next_comment
 comment 'System Type'
 
 choice 'ARM system type'	\
-	"Archimedes		CONFIG_ARCH_ARC \
-	 A5000			CONFIG_ARCH_A5K \
+	"Archimedes/A5000	CONFIG_ARCH_ARCA5K \
 	 Co-EBSA285		CONFIG_ARCH_CO285 \
 	 EBSA-110		CONFIG_ARCH_EBSA110 \
 	 FootBridge		CONFIG_ARCH_FOOTBRIDGE \
@@ -40,6 +39,14 @@ choice 'ARM system type'	\
 #	 Cirrus CL-PS7500FE	CONFIG_ARCH_CLPS7500 \
 #	 LinkUp-L7200		CONFIG_ARCH_L7200
 
+if [ "$CONFIG_ARCH_ARCA5K" = "y" ]; then
+   # These architectures will be combined.  However, until this
+   # is complete...  Note that the ARC will take precidence over
+   # A5K
+   comment 'Archimedes/A5000 Implementations (select only ONE)'
+   bool '  Archimedes support' CONFIG_ARCH_ARC
+   bool '  A5000 support' CONFIG_ARCH_A5K
+fi
 if [ "$CONFIG_ARCH_FOOTBRIDGE" = "y" ]; then
    comment 'Footbridge Implementations'
    bool '  CATS support' CONFIG_ARCH_CATS
@@ -55,7 +62,7 @@ if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
       bool '  Include support for Neponset' CONFIG_ASSABET_NEPONSET
    fi
    bool '  Include support for Brutus' CONFIG_SA1100_BRUTUS
-   bool '  Include support for Compaq iPAQ 3600 (Bitsy)' CONFIG_SA1100_BITSY
+   bool '  Include support for Compaq iPAQ H3600 (Bitsy)' CONFIG_SA1100_BITSY
 #   bool '  Include support for Empeg' CONFIG_SA1100_EMPEG
 #   bool '  Include support for Itsy' CONFIG_SA1100_ITSY
    bool '  Include support for LART' CONFIG_SA1100_LART
@@ -68,8 +75,7 @@ if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
 fi
 
 # Figure out whether this system uses 26-bit or 32-bit CPUs.
-if [ "$CONFIG_ARCH_ARC" = "y" -o \
-     "$CONFIG_ARCH_A5K" = "y" ]; then
+if [ "$CONFIG_ARCH_ARCA5K" = "y" ]; then
    define_bool CONFIG_CPU_32 n
    define_bool CONFIG_CPU_26 y
    bool '2MB physical memory' CONFIG_PAGESIZE_16
@@ -94,7 +100,7 @@ if [ "$CONFIG_ARCH_EBSA110" = "y" -o \
    define_bool CONFIG_CPU_SA110 y
 fi
 if [ "$CONFIG_ARCH_CLPS7500" = "y" ]; then
-   define_bool CONFIG_CPU_32v4 y
+   define_bool CONFIG_CPU_32v3 y
    define_bool CONFIG_CPU_ARM7 y
 fi
 if [ "$CONFIG_ARCH_L7200" = "y" ]; then
@@ -107,8 +113,7 @@ if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
 fi
 
 # Select various configuration options depending on the machine type
-if [ "$CONFIG_ARCH_ARC" = "y" -o \
-     "$CONFIG_ARCH_A5K" = "y" -o \
+if [ "$CONFIG_ARCH_ARCA5K" = "y" -o \
      "$CONFIG_ARCH_RPC" = "y" ]; then
    define_bool CONFIG_ARCH_ACORN y
 else
@@ -154,9 +159,8 @@ else
    define_bool CONFIG_PCI n
 fi
 
-if [ "$CONFIG_ARCH_CATS" = "y" -o \
-     "$CONFIG_ARCH_SHARK" = "y" -o \
-     "$CONFIG_ARCH_NETWINDER" = "y" ]; then
+if [ "$CONFIG_FOOTBRIDGE_HOST" = "y" -o \
+     "$CONFIG_ARCH_SHARK" = "y" ]; then
    define_bool CONFIG_ISA y
    define_bool CONFIG_ISA_DMA y
 else
@@ -185,6 +189,11 @@ choice 'Kernel core (/proc/kcore) format' \
 tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
+
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+   bool 'Power Management support' CONFIG_PM
+fi
+
 if [ "$CONFIG_CPU_32" = "y" ]; then
    tristate 'RISC OS personality' CONFIG_ARTHUR
 fi
@@ -219,9 +228,8 @@ fi
 endmenu
 
 source drivers/parport/Config.in
-
+source drivers/mtd/Config.in
 source drivers/pnp/Config.in
-
 source drivers/block/Config.in
 
 if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
@@ -267,8 +275,6 @@ if [ "$CONFIG_SCSI" != "n" ]; then
    source drivers/scsi/Config.in
 fi
 endmenu
-
-source drivers/mtd/Config.in
 
 source drivers/ieee1394/Config.in
 
@@ -328,7 +334,10 @@ source drivers/usb/Config.in
 mainmenu_option next_comment
 comment 'Kernel hacking'
 
-bool 'Compile kernel with frame pointer (for useful debugging)' CONFIG_FRAME_POINTER
+# Always compile kernel with framepointer (until 2.4 real comes out)
+# Bug reports aren't much use without this.
+#bool 'Compile kernel with frame pointer (for useful debugging)' CONFIG_FRAME_POINTER
+define_bool CONFIG_FRAME_POINTER y
 bool 'Verbose kernel error messages' CONFIG_DEBUG_ERRORS
 bool 'Verbose user fault messages' CONFIG_DEBUG_USER
 bool 'Include debugging information in kernel binary' CONFIG_DEBUG_INFO

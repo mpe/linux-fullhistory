@@ -151,7 +151,7 @@ probe_loop:
 	cbtw				# extend to word
 	movw	%ax, sectors
 	cmpw	$disksizes+4, %si
-	jae	got_sectors		# if all else fails, try 9
+	jae	got_sectors		# If all else fails, try 9
 	
 	xchgw	%cx, %ax		# cx = track and sector
 	xorw	%dx, %dx		# drive 0, head 0

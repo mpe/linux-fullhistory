@@ -62,9 +62,6 @@ LIST_HEAD(videodev_proc_list);
 #endif /* CONFIG_PROC_FS && CONFIG_VIDEO_PROC_FS */
 
 
-#ifdef CONFIG_VIDEO_BT848
-extern int i2c_tuner_init(struct video_init *);
-#endif
 #ifdef CONFIG_VIDEO_BWQCAM
 extern int init_bw_qcams(struct video_init *);
 #endif
@@ -79,9 +76,6 @@ extern int init_zoran_cards(struct video_init *);
 #endif
 
 static struct video_init video_init_list[]={
-#ifdef CONFIG_VIDEO_BT848
-        {"i2c-tuner", i2c_tuner_init},
-#endif 
 #ifdef CONFIG_VIDEO_BWQCAM
 	{"bw-qcam", init_bw_qcams},
 #endif	

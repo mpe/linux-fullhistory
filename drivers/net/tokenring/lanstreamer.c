@@ -1764,7 +1764,7 @@ int init_module(void)
 		dev_streamer[i]->init = &streamer_probe;
 
 		if (register_trdev(dev_streamer[i]) != 0) {
-			kfree_s(dev_streamer[i], sizeof(struct net_device));
+			kfree(dev_streamer[i]);
 			dev_streamer[i] = NULL;
 			if (i == 0) 
 			{
@@ -1790,12 +1790,10 @@ void cleanup_module(void)
 			unregister_trdev(dev_streamer[i]);
 			release_region(dev_streamer[i]->base_addr, STREAMER_IO_SPACE);
 			streamer_priv=(struct streamer_private *)dev_streamer[i]->priv;
-			kfree_s(streamer_priv->streamer_rx_ring,
-				sizeof(struct streamer_rx_desc)*STREAMER_RX_RING_SIZE);
-			kfree_s(streamer_priv->streamer_tx_ring,
-				sizeof(struct streamer_tx_desc)*STREAMER_TX_RING_SIZE);
-			kfree_s(dev_streamer[i]->priv, sizeof(struct streamer_private));
-			kfree_s(dev_streamer[i], sizeof(struct net_device));
+			kfree(streamer_priv->streamer_rx_ring);
+			kfree(streamer_priv->streamer_tx_ring);
+			kfree(dev_streamer[i]->priv);
+			kfree(dev_streamer[i]);
 			dev_streamer[i] = NULL;
 		}
 #if STREAMER_NETWORK_MONITOR

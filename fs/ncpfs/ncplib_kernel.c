@@ -916,73 +916,73 @@ ncp__io2vol(struct ncp_server *server, unsigned char *vname, unsigned int *vlen,
 {
 	struct nls_table *in = server->nls_io;
 	struct nls_table *out = server->nls_vol;
-	struct nls_unicode uc;
-	unsigned char nc, *up;
-	int i, k, maxlen = *vlen - 1;
-	__u16 ec;
+	unsigned char *vname_start;
+	unsigned char *vname_end;
+	const unsigned char *iname_end;
 
-	*vlen = 0;
+	iname_end = iname + ilen;
+	vname_start = vname;
+	vname_end = vname + *vlen - 1;
 
-	for (i = 0; i < ilen;) {
-		if (*vlen == maxlen)
-			return -ENAMETOOLONG;
+	while (iname < iname_end) {
+		int chl;
+		wchar_t ec;
 
 		if (NCP_IS_FLAG(server, NCP_FLAG_UTF8)) {
-			k = utf8_mbtowc(&ec, iname, ilen - i);
-			if (k == -1)
+			int k;
+
+			k = utf8_mbtowc(&ec, iname, iname_end - iname);
+			if (k < 0)
 				return -EINVAL;
-			uc.uni1 = ec & 0xFF;
-			uc.uni2 = ec >> 8;
 			iname += k;
-			i += k;
 		} else {
 			if (*iname == NCP_ESC) {
-				if (i > ilen - 5)
-					return -EINVAL;
+				int k;
+
+				if (iname_end - iname < 5)
+					goto nospec;
 
 				ec = 0;
 				for (k = 1; k < 5; k++) {
-					nc = iname[k];
-					ec <<= 4;
-					if (nc >= '0' && nc <= '9') {
-						ec |= nc - '0';
-						continue;
+					unsigned char nc;
+
+					nc = iname[k] - '0';
+					if (nc >= 10) {
+						nc -= 'A' - '0' - 10;
+						if ((nc < 10) || (nc > 15)) {
+							goto nospec;
+						}
 					}
-					if (nc >= 'a' && nc <= 'f') {
-						ec |= nc - ('a' - 10);
-						continue;
-					}
-					if (nc >= 'A' && nc <= 'F') {
-						ec |= nc - ('A' - 10);
-						continue;
-					}
-					return -EINVAL;
+					ec = (ec << 4) | nc;
 				}
-				uc.uni1 = ec & 0xFF;
-				uc.uni2 = ec >> 8;
 				iname += 5;
-				i += 5;
 			} else {
-				uc = in->charset2uni[*iname];
-				iname++;
-				i++;
+nospec:;			
+				if ( (chl = in->char2uni(iname, iname_end - iname, &ec)) < 0)
+					return chl;
+				iname += chl;
 			}
 		}
 
-		up = out->page_uni2charset[uc.uni2];
-		if (!up)
-			return -EINVAL;
+		/* unitoupper should be here! */
 
-		nc = up[uc.uni1];
-		if (!nc)
-			return -EINVAL;
+		chl = out->uni2char(ec, vname, vname_end - vname);
+		if (chl < 0)
+			return chl;
 
-		*vname = cc ? ncp_toupper(out, nc) : nc;
-		vname++;
-		*vlen += 1;
+		/* this is wrong... */
+		if (cc) {
+			int chi;
+
+			for (chi = 0; chi < chl; chi++){
+				vname[chi] = ncp_toupper(out, vname[chi]);
+			}
+		}
+		vname += chl;
 	}
 
 	*vname = 0;
+	*vlen = vname - vname_start;
 	return 0;
 }
 
@@ -992,57 +992,82 @@ ncp__vol2io(struct ncp_server *server, unsigned char *iname, unsigned int *ilen,
 {
 	struct nls_table *in = server->nls_vol;
 	struct nls_table *out = server->nls_io;
-	struct nls_unicode uc;
-	unsigned char nc, *up;
-	int i, k, maxlen = *ilen - 1;
-	__u16 ec;
+	const unsigned char *vname_end;
+	unsigned char *iname_start;
+	unsigned char *iname_end;
+	unsigned char *vname_cc;
+	int err;
 
-	*ilen = 0;
+	vname_cc = NULL;
 
-	for (i = 0; i < vlen; i++) {
-		if (*ilen == maxlen)
-			return -ENAMETOOLONG;
+	if (cc) {
+		int i;
 
-		uc = in->charset2uni[cc ? ncp_tolower(in, *vname) : *vname];
+		/* this is wrong! */
+		vname_cc = kmalloc(vlen, GFP_KERNEL);
+		for (i = 0; i < vlen; i++)
+			vname_cc[i] = ncp_tolower(in, vname[i]);
+		vname = vname_cc;
+	}
+
+	iname_start = iname;
+	iname_end = iname + *ilen - 1;
+	vname_end = vname + vlen;
+
+	while (vname < vname_end) {
+		wchar_t ec;
+		int chl;
+
+		if ( (chl = in->char2uni(vname, vname_end - vname, &ec)) < 0) {
+			err = chl;
+			goto quit;
+		}
+		vname += chl;
+
+		/* unitolower should be here! */
 
 		if (NCP_IS_FLAG(server, NCP_FLAG_UTF8)) {
-			k = utf8_wctomb(iname, (uc.uni2 << 8) + uc.uni1,
-								maxlen - *ilen);
-			if (k == -1)
-				return -ENAMETOOLONG;
-			iname += k;
-			*ilen += k;
-		} else {
-			up = out->page_uni2charset[uc.uni2];
-			if (up)
-				nc = up[uc.uni1];
-			else
-				nc = 0;
+			int k;
 
-			if (nc) {
-				*iname = nc;
-				iname++;
-				*ilen += 1;
+			k = utf8_wctomb(iname, ec, iname_end - iname);
+			if (k < 0) {
+				err = -ENAMETOOLONG;
+				goto quit;
+			}
+			iname += k;
+		} else {
+			if ( (chl = out->uni2char(ec, iname, iname_end - iname)) >= 0) {
+				iname += chl;
 			} else {
-				if (*ilen > maxlen - 5)
-					return -ENAMETOOLONG;
-				ec = (uc.uni2 << 8) + uc.uni1;
+				int k;
+
+				if (iname_end - iname < 5) {
+					err = -ENAMETOOLONG;
+					goto quit;
+				}
 				*iname = NCP_ESC;
 				for (k = 4; k > 0; k--) {
-					nc = ec & 0xF;
-					iname[k] = nc > 9 ? nc + ('a' - 10)
-							  : nc + '0';
+					unsigned char v;
+					
+					v = (ec & 0xF) + '0';
+					if (v > '9') {
+						v += 'A' - '9' - 1;
+					}
+					iname[k] = v;
 					ec >>= 4;
 				}
 				iname += 5;
-				*ilen += 5;
 			}
 		}
-		vname++;
 	}
 
 	*iname = 0;
-	return 0;
+	*ilen = iname - iname_start;
+	err = 0;
+quit:;
+	if (cc)
+		kfree(vname_cc);
+	return err;
 }
 
 #else

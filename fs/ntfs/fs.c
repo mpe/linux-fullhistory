@@ -362,8 +362,11 @@ static int parse_options(ntfs_volume* vol,char *opt)
 	if((vol->nct & (nct_uni_xlate | nct_map | nct_utf8))==0)
 		/* default to UTF-8 */
 		vol->nct=nct_utf8;
-	if(!vol->nls_map)
+	if(!vol->nls_map){
 		vol->nls_map=load_nls_default();
+		if (vol->nls_map)
+			vol->nct=nct_map | (vol->nct&nct_uni_xlate);
+	}
 	return 1;
 
  needs_arg:

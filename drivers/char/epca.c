@@ -1599,7 +1599,7 @@ void cleanup_module()
 			{
 				if (ch->tty)
 					tty_hangup(ch->tty);
-				kfree_s(ch->tmp_buf, ch->txbufsize);
+				kfree(ch->tmp_buf);
 			}
 
 		} /* End for each port */

@@ -12,7 +12,13 @@
 
 #define IO_SPACE_LIMIT 0xffffffff
 
+/*
+ * We don't actually have real ISA nor PCI buses, but there is so many 
+ * drivers out there that might just work if we fake them...
+ */
 #define __io_pci(a)		(PCIO_BASE + (a))
+#define __mem_pci(a)		((unsigned long)(a))
+#define __mem_isa(a)		((unsigned long)(a))
 
 #define __ioaddr(p)		__io_pci(p)
 
@@ -48,5 +54,7 @@ extern __inline__ void __arch_putw(unsigned int value, unsigned long a)
 #define outb(v,p)		__arch_putb(v,__io_pci(p))
 #define outw(v,p)		__arch_putw(v,__io_pci(p))
 #define outl(v,p)		__arch_putl(v,__io_pci(p))
+
+#define __arch_ioremap		__ioremap
 
 #endif

@@ -4554,7 +4554,7 @@ int i = 0;
 		dev_fc[i]->priv = fc[i];
 		fc[i]->dev = dev_fc[i];
 		if (register_fcdev(dev_fc[i]) != 0) {
-			kfree_s(dev_fc[i], sizeof(struct net_device));
+			kfree(dev_fc[i]);
 			dev_fc[i] = NULL;
 			if (i == 0) {
 				printk("iph5526.c: IP registeration failed!!!\n");

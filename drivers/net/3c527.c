@@ -1510,7 +1510,7 @@ void cleanup_module(void)
 		slot = lp->slot;
 		mca_mark_as_unused(slot);
 		mca_set_adapter_name(slot, NULL);
-		kfree_s(this_device.priv, sizeof(struct mc32_local));
+		kfree(this_device.priv);
 	}
 	free_irq(this_device.irq, &this_device);
 }

@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.46 2000/03/21 06:12:26 davem Exp $
+# $Id: Makefile,v 1.47 2000/07/15 00:04:27 davem Exp $
 # sparc/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -56,8 +56,9 @@ archclean:
 	-$(MAKE) -C arch/sparc/boot clean
 
 archmrproper:
+	rm -f $(TOPDIR)/include/asm-sparc/asm_offsets.h
 
-archdep:
+archdep: check_asm
 
 check_asm:
 	$(MAKE) -C arch/sparc/kernel check_asm

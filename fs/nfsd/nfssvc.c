@@ -129,7 +129,8 @@ update_thread_usage(int busy_threads)
 	decile = busy_threads*10/nfsdstats.th_cnt;
 	if (decile>0 && decile <= 10) {
 		diff = nfsd_last_call - prev_call;
-		nfsdstats.th_usage[decile-1] += diff;
+		if ( (nfsdstats.th_usage[decile-1] += diff) >= NFSD_USAGE_WRAP)
+			nfsdstats.th_usage[decile-1] -= NFSD_USAGE_WRAP;
 		if (decile == 10)
 			nfsdstats.th_fullcnt++;
 	}

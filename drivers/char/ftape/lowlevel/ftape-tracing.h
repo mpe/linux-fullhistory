@@ -149,7 +149,7 @@ extern void ftape_trace_log (const char *file, const char *name);
  */
 #define TRACE_ABORT(res, i...)			\
 {						\
- 	TRACE(##i);				\
+ 	TRACE(i);				\
 	TRACE_EXIT res;				\
 }
 

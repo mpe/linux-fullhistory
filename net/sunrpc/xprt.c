@@ -238,7 +238,6 @@ xprt_sendmsg(struct rpc_xprt *xprt, struct rpc_rqst *req)
 		break;
 	default:
 		printk(KERN_NOTICE "RPC: sendmsg returned error %d\n", -result);
-		result = 0;
 	}
 	return result;
 }
@@ -1049,14 +1048,14 @@ tcp_write_space(struct sock *sk)
 
 	if (xprt->snd_task && xprt->snd_task->tk_rpcwait == &xprt->sending)
 		rpc_wake_up_task(xprt->snd_task);
+ out_unlock:
+	spin_unlock_bh(&xprt_sock_lock);
 	if (test_bit(SOCK_NOSPACE, &sock->flags)) {
 		if (sk->sleep && waitqueue_active(sk->sleep)) {
 			clear_bit(SOCK_NOSPACE, &sock->flags);
 			wake_up_interruptible(sk->sleep);
 		}
 	}
- out_unlock:
-	spin_unlock_bh(&xprt_sock_lock);
 }
 
 static void

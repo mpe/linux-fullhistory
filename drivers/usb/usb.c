@@ -428,7 +428,7 @@ int usb_interface_claimed(struct usb_interface *iface)
 void usb_driver_release_interface(struct usb_driver *driver, struct usb_interface *iface)
 {
 	/* this should never happen, don't release something that's not ours */
-	if (iface->driver != driver || !iface)
+	if (!iface || iface->driver != driver)
 		return;
 
 	iface->driver = NULL;

@@ -8,13 +8,14 @@
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/in6.h>
+#include <linux/interrupt.h>
+#include <linux/pm.h>
 #include <linux/vt_kern.h>
 
 #include <asm/byteorder.h>
 #include <asm/elf.h>
 #include <asm/io.h>
 #include <asm/irq.h>
-#include <asm/dma.h>
 #include <asm/pgalloc.h>
 #include <asm/proc-fns.h>
 #include <asm/processor.h>
@@ -27,9 +28,6 @@ extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(struct pt_regs *, struct user_fp_struct *);
 extern void inswb(unsigned int port, void *to, int len);
 extern void outswb(unsigned int port, const void *to, int len);
-
-extern unsigned int local_bh_count[NR_CPUS];
-extern unsigned int local_irq_count[NR_CPUS];
 
 extern void __bad_xchg(volatile void *ptr, int size);
 
@@ -68,6 +66,7 @@ extern void __umodsi3(void);
 extern void ret_from_exception(void);
 extern void fpundefinstr(void);
 extern void fp_enter(void);
+
 #define EXPORT_SYMBOL_ALIAS(sym,orig) \
  const char __kstrtab_##sym##[] __attribute__((section(".kstrtab"))) = \
     __MODULE_STRING(##sym##); \
@@ -108,6 +107,8 @@ EXPORT_SYMBOL(__bad_xchg);
 EXPORT_SYMBOL(__readwrite_bug);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
+EXPORT_SYMBOL(pm_idle);
+EXPORT_SYMBOL(pm_power_off);
 
 	/* processor dependencies */
 #ifdef MULTI_CPU

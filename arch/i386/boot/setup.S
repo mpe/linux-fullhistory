@@ -81,7 +81,7 @@ start_sys_seg:	.word	SYSSEG
 
 type_of_loader:	.byte	0		# = 0, old one (LILO, Loadlin,
 					#      Bootlin, SYSLX, bootsect...)
-					# else it is set by the loader:
+					# Else it is set by the loader:
 					# 0xTV: T=0 for LILO
 					#	T=1 for Loadlin
 					#	T=2 for bootsect-loader
@@ -91,8 +91,8 @@ type_of_loader:	.byte	0		# = 0, old one (LILO, Loadlin,
 
 # flags, unused bits must be zero (RFU) bit within loadflags
 loadflags:
-LOADED_HIGH	= 1			# if set, the kernel is loaded high
-CAN_USE_HEAP	= 0x80			# if set, the loader also has set
+LOADED_HIGH	= 1			# If set, the kernel is loaded high
+CAN_USE_HEAP	= 0x80			# If set, the loader also has set
 					# heap_end_ptr to tell how much
 					# space behind setup.S can be used for
 					# heap purposes.

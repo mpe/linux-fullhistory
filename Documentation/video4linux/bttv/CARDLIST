@@ -44,6 +44,10 @@ bttv.o
   card=42 - ProVideo PV951
   card=43 - Little OnAir TV
   card=44 - Sigma TVII-FM
+  card=45 - MATRIX-Vision MV-Delta 2
+  card=46 - Zoltrix Genie TV
+  card=47 - Terratec TV/Radio+
+  card=48 - Dynalink Magic TView 
 
 tuner.o
   type=0 - Temic PAL

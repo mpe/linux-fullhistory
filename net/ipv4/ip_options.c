@@ -509,7 +509,7 @@ int ip_options_get(struct ip_options **optp, unsigned char *data, int optlen, in
 	opt->is_data = 1;
 	opt->is_setbyuser = 1;
 	if (optlen && ip_options_compile(opt, NULL)) {
-		kfree_s(opt, sizeof(struct ip_options) + optlen);
+		kfree(opt);
 		return -EINVAL;
 	}
 	*optp = opt;

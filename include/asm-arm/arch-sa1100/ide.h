@@ -21,24 +21,46 @@ ide_init_hwif_ports(hw_regs_t *hw, int data_port, int ctrl_port, int *irq)
 {
 	ide_ioreg_t reg;
 	int i;
+	int ioshift = 0;
+
+	/* The Empeg board has the first two address lines unused */
+	if (machine_is_empeg())
+		ioshift = 2;
+	
+	memset(hw, 0, sizeof(*hw));
+
+	reg = (ide_ioreg_t) (data_port << ioshift);
+	for (i = IDE_DATA_OFFSET; i <= IDE_STATUS_OFFSET; i++) {
+		hw->io_ports[i] = reg;
+		reg += (1 << ioshift);
+	}
+	
+	hw->io_ports[IDE_CONTROL_OFFSET] = 
+		(ide_ioreg_t) (ctrl_port << ioshift);
+	
+	if (irq)
+		*irq = 0;
+}
+
+/*
+ * Special case for the empeg board which has the first two 
+ * address lines unused 
+ */
+static __inline__ void
+empeg_ide_init_hwif_ports(hw_regs_t *hw, int data_port, int ctrl_port)
+{
+	ide_ioreg_t reg;
+	int i;
 
 	memset(hw, 0, sizeof(*hw));
 
-#ifdef CONFIG_SA1100_EMPEG
-/* The Empeg board has the first two address lines unused */
-#define IO_SHIFT 2
-#else
-#define IO_SHIFT 0
-#endif
-
-	reg = (ide_ioreg_t) (data_port << IO_SHIFT);
+	reg = (ide_ioreg_t) (0xe0000000 + (data_port << 2));
 	for (i = IDE_DATA_OFFSET; i <= IDE_STATUS_OFFSET; i++) {
 		hw->io_ports[i] = reg;
-		reg += (1 << IO_SHIFT);
+		reg += (1 << 2);
 	}
-	hw->io_ports[IDE_CONTROL_OFFSET] = (ide_ioreg_t) (ctrl_port << IO_SHIFT);
-	if (irq)
-		*irq = 0;
+	hw->io_ports[IDE_CONTROL_OFFSET] = 
+		(ide_ioreg_t) (0xe0000000 + (ctrl_port << 2));
 }
 
 /*
@@ -48,9 +70,10 @@ ide_init_hwif_ports(hw_regs_t *hw, int data_port, int ctrl_port, int *irq)
 static __inline__ void
 ide_init_default_hwifs(void)
 {
+    if( machine_is_empeg() ){
+#ifdef CONFIG_SA1100_EMPEG
 	hw_regs_t hw;
 
-#if defined( CONFIG_SA1100_EMPEG )
 	/* First, do the SA1100 setup */
 
 	/* PCMCIA IO space */
@@ -61,41 +84,40 @@ ide_init_default_hwifs(void)
 
 	/* Interrupts on rising edge: lines are inverted before they get to
            the SA */
-	GRER&=~(EMPEG_IDE1IRQ|EMPEG_IDE2IRQ);
-	GFER|=(EMPEG_IDE1IRQ|EMPEG_IDE2IRQ);
+	set_GPIO_IRQ_edge( (EMPEG_IDE1IRQ|EMPEG_IDE2IRQ), GPIO_FALLING_EDGE );
 
 	/* Take hard drives out of reset */
 	GPSR=(EMPEG_IDERESET);
-
-	/* Clear GEDR */
-	GEDR=0xffffffff;
 
 	/* Sonja and her successors have two IDE ports. */
 	/* MAC 23/4/1999, swap these round so that the left hand
 	   hard disk is hda when viewed from the front. This
 	   doesn't match the silkscreen however. */
-	ide_init_hwif_ports(&hw,0x10,0x1e,NULL);
+	empeg_ide_init_hwif_ports(&hw,0x10,0x1e);
 	hw.irq = EMPEG_IRQ_IDE2;
 	ide_register_hw(&hw, NULL);
-	ide_init_hwif_ports(&hw,0x00,0x0e,NULL);
-	hw.irq = EMPEG_IRQ_IDE1;
+	empeg_ide_init_hwif_ports(&hw,0x00,0x0e);
+	hw.irq = ,EMPEG_IRQ_IDE1;
 	ide_register_hw(&hw, NULL);
+#endif
+    }
 
-#elif defined( CONFIG_SA1100_VICTOR )
+    else if( machine_is_victor() ){
+#ifdef CONFIG_SA1100_VICTOR
+	hw_regs_t hw;
+
 	/* Enable appropriate GPIOs as interrupt lines */
 	GPDR &= ~GPIO_GPIO7;
-	GRER |= GPIO_GPIO7;
-	GFER &= ~GPIO_GPIO7;
-	GEDR = GPIO_GPIO7;
+	set_GPIO_IRQ_edge( GPIO_GPIO7, GPIO_RISING_EDGE );
+
 	/* set the pcmcia interface timing */
 	MECR = 0x00060006;
 
-	ide_init_hwif_ports(&hw, 0x1f0, 0x3f6, NULL);
+	ide_init_hwif_ports(&hw, 0xe00001f0, 0xe00003f6, NULL);
 	hw.irq = IRQ_GPIO7;
 	ide_register_hw(&hw, NULL);
-#else
-#error Missing IDE interface definition in include/asm/arch/ide.h
 #endif
+    }
 }
 
 #endif

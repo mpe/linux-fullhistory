@@ -1218,7 +1218,7 @@ static int packet_mc_drop(struct sock *sk, struct packet_mreq *mreq)
 					packet_dev_mc(dev, ml, -1);
 					dev_put(dev);
 				}
-				kfree_s(ml, sizeof(*ml));
+				kfree(ml);
 			}
 			rtnl_unlock();
 			return 0;
@@ -1243,7 +1243,7 @@ static void packet_flush_mclist(struct sock *sk)
 			packet_dev_mc(dev, ml, -1);
 			dev_put(dev);
 		}
-		kfree_s(ml, sizeof(*ml));
+		kfree(ml);
 	}
 	rtnl_unlock();
 }

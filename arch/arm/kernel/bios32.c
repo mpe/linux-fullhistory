@@ -365,7 +365,7 @@ static u8 __init no_swizzle(struct pci_dev *dev, u8 *pin)
 /* ebsa285 host-specific stuff */
 
 #ifdef CONFIG_ARCH_EBSA285
-static int irqmap_ebsa285[] __initdata = { IRQ_IN1, IRQ_IN0, IRQ_PCI, IRQ_IN3 };
+static int irqmap_ebsa285[] __initdata = { IRQ_IN3, IRQ_IN1, IRQ_IN0, IRQ_PCI };
 
 static u8 __init ebsa285_swizzle(struct pci_dev *dev, u8 *pin)
 {

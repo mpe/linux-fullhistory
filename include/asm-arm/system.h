@@ -34,9 +34,9 @@ extern unsigned int __machine_arch_type;
 #define MACH_TYPE_SHARK			15
 #define MACH_TYPE_BRUTUS		16
 #define MACH_TYPE_PERSONAL_SERVER	17
-#define MACH_TYPE_SA1100		18	/* unused/too general */
+#define MACH_TYPE_ITSY			18
 #define MACH_TYPE_L7200			19
-#define MACH_TYPE_SA1110		20	/* unused/too general */
+/* 20 is free - contact rmk@arm.linux.org.uk directly if you wish to use this number */
 #define MACH_TYPE_INTEGRATOR		21
 #define MACH_TYPE_BITSY			22
 #define MACH_TYPE_IXP1200		23
@@ -209,6 +209,18 @@ extern unsigned int __machine_arch_type;
 # define machine_is_personal_server()	(0)
 #endif
 
+#ifdef CONFIG_SA1100_ITSY
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_ITSY
+# endif
+# define machine_is_itsy()	(machine_arch_type == MACH_TYPE_ITSY)
+#else
+# define machine_is_itsy()	(0)
+#endif
+
 #ifdef CONFIG_ARCH_L7200
 # ifdef machine_arch_type
 #  undef machine_arch_type
@@ -310,18 +322,6 @@ extern unsigned int __machine_arch_type;
 /*
  * The following are currently unregistered
  */
-#ifdef CONFIG_SA1100_ITSY
-# ifdef machine_arch_type
-#  undef machine_arch_type
-#  define machine_arch_type	__machine_arch_type
-# else
-#  define machine_arch_type	MACH_TYPE_ITSY
-# endif
-# define machine_is_itsy()	(machine_arch_type == MACH_TYPE_ITSY)
-#else
-# define machine_is_itsy()	(0)
-#endif
-
 #ifdef CONFIG_SA1100_EMPEG
 # ifdef machine_arch_type
 #  undef machine_arch_type

@@ -143,7 +143,9 @@ static void sa1111_IRQ_demux( int irq, void *dev_id, struct pt_regs *regs )
 	int i;
 	unsigned long stat0, stat1;
 
-	while( (stat0 = INTSTATCLR0) && (stat1 = INTSTATCLR1) ){
+	for(;;) {
+		stat0 = INTSTATCLR0, stat1 = INTSTATCLR1;
+		if( !stat0 && !stat1 ) break;
 		if( stat0 )
 			for( i = 0; i < 32; i++ )
 				if( stat0 & (1<<i) )

@@ -434,7 +434,7 @@ static void rif_check_expire(unsigned long dummy)
 			if((now-entry->last_used) > sysctl_tr_rif_timeout) 
 			{
 				*pentry=entry->next;
-				kfree_s(entry,sizeof(struct rif_cache_s));
+				kfree(entry);
 			}
 			else
 				pentry=&entry->next;

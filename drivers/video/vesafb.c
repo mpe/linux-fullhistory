@@ -47,14 +47,14 @@ int   video_size;
 char *video_vbase;        /* mapped */
 
 /* mode */
-int  video_bpp;
-int  video_width;
-int  video_height;
-int  video_height_virtual;
-int  video_type = FB_TYPE_PACKED_PIXELS;
-int  video_visual;
-int  video_linelength;
-int  video_cmap_len;
+static int  video_bpp;
+static int  video_width;
+static int  video_height;
+static int  video_height_virtual;
+static int  video_type = FB_TYPE_PACKED_PIXELS;
+static int  video_visual;
+static int  video_linelength;
+static int  video_cmap_len;
 
 /* --------------------------------------------------------------------- */
 

@@ -1620,9 +1620,9 @@ int cont_prepare_write(struct page *page, unsigned offset, unsigned to, get_bloc
 						PAGE_CACHE_SIZE, get_block);
 		if (status)
 			goto out_unmap;
-		kaddr = (char*)page_address(page);
+		kaddr = (char*)page_address(new_page);
 		memset(kaddr+zerofrom, 0, PAGE_CACHE_SIZE-zerofrom);
-		__block_commit_write(inode, new_page, zerofrom, to);
+		__block_commit_write(inode, new_page, zerofrom, PAGE_CACHE_SIZE);
 		kunmap(new_page);
 		UnlockPage(new_page);
 		page_cache_release(new_page);

@@ -48,7 +48,7 @@ ZRELADDR	 = 0x40008000
 endif
 
 ifeq ($(CONFIG_ARCH_SA1100),y)
-OBJS		+= head-sa1100.o
+OBJS		+= head-sa1100.o setup-sa1100.o
 ZTEXTADDR	 = 0xc0008000
 ZRELADDR	 = 0xc0008000
 ifeq ($(CONFIG_SA1100_VICTOR),y)

@@ -440,7 +440,7 @@ static inline int memory_pressure(void)
 }
 
 /*
- * Check if there recently has been memory pressure (zone_wake_kswapd)
+ * Check if all zones have recently had memory_pressure (zone_wake_kswapd)
  */
 static inline int keep_kswapd_awake(void)
 {
@@ -451,13 +451,13 @@ static inline int keep_kswapd_awake(void)
 		for(i = 0; i < MAX_NR_ZONES; i++) {
 			zone_t *zone = pgdat->node_zones+ i;
 			if (zone->size &&
-			    zone->zone_wake_kswapd)
-				return 1;
+			    !zone->zone_wake_kswapd)
+				return 0;
 		}
 		pgdat = pgdat->node_next;
 	} while (pgdat);
 
-	return 0;
+	return 1;
 }
 
 /*
@@ -496,9 +496,7 @@ static int do_try_to_free_pages(unsigned int gfp_mask)
 				goto done;
 		}
 
-		/* not (been) low on memory - it is
-		 * pointless to try to swap out.
-		 */
+		/* check if mission completed */
 		if (!keep_kswapd_awake())
 			goto done;
 
@@ -596,10 +594,7 @@ int kswapd(void *unused)
 
 	for (;;) {
 		if (!keep_kswapd_awake()) {
-			/* wake up regulary to do an early attempt too free
-			 * pages - pages will not actually be freed.
-			 */
-			interruptible_sleep_on_timeout(&kswapd_wait, HZ);
+			interruptible_sleep_on(&kswapd_wait);
 		}
 
 		do_try_to_free_pages(GFP_KSWAPD);
@@ -631,18 +626,18 @@ int try_to_free_pages(unsigned int gfp_mask)
 		retval = do_try_to_free_pages(gfp_mask);
 		current->flags &= ~PF_MEMALLOC;
 	}
-	else {
-		/* make sure kswapd runs */
-		if (waitqueue_active(&kswapd_wait))
-			wake_up_interruptible(&kswapd_wait);
-	}
+
+	/* someone needed memory that kswapd had not provided
+	 * make sure kswapd runs, should not happen often */
+	if (waitqueue_active(&kswapd_wait))
+		wake_up_interruptible(&kswapd_wait);
 
 	return retval;
 }
 
 static int __init kswapd_init(void)
 {
-	printk("Starting kswapd v1.6\n");
+	printk("Starting kswapd v1.7\n");
 	swap_setup();
 	kernel_thread(kswapd, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 	return 0;

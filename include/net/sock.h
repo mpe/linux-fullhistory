@@ -914,7 +914,7 @@ extern __inline__ void sk_filter_release(struct sock *sk, struct sk_filter *fp)
 	atomic_sub(size, &sk->omem_alloc);
 
 	if (atomic_dec_and_test(&fp->refcnt))
-		kfree_s(fp, size);
+		kfree(fp);
 }
 
 extern __inline__ void sk_filter_charge(struct sock *sk, struct sk_filter *fp)

@@ -217,8 +217,8 @@ esc2uni(char c)
 int ntfs_dupuni2map(ntfs_volume *vol, ntfs_u16 *in, int in_len, char **out,
   int *out_len)
 {
-	int i,o,val;
-	char *result,*buf;
+	int i,o,val,chl, chi;
+	char *result,*buf,charbuf[NLS_MAX_CHARSET_SIZE];
 	struct nls_table* nls=vol->nls_map;
 
 	result=ntfs_malloc(in_len+1);
@@ -227,8 +227,7 @@ int ntfs_dupuni2map(ntfs_volume *vol, ntfs_u16 *in, int in_len, char **out,
 	result[in_len]='\0';
 	for(i=o=0;i<in_len;i++){
 		int cl,ch;
-		unsigned char* uni_page;
-		/* FIXME: byte order */
+		/* FIXME: byte order? */
 		cl=in[i] & 0xFF;
 		ch=(in[i] >> 8) & 0xFF;
 		if(!nls){
@@ -237,11 +236,23 @@ int ntfs_dupuni2map(ntfs_volume *vol, ntfs_u16 *in, int in_len, char **out,
 				continue;
 			}
 		}else{
-			uni_page=nls->page_uni2charset[ch];
-			if(uni_page && uni_page[cl]){
-				result[o++]=uni_page[cl];
-				continue;
-			}
+			/* FIXME: byte order? */
+			wchar_t uni = in[i];
+			if ( (chl = nls->uni2char(uni, charbuf, NLS_MAX_CHARSET_SIZE)) > 0){
+				/* adjust result buffer */
+				if (chl > 1){
+					buf=ntfs_malloc(*out_len + chl - 1);
+					memcpy(buf, result, o);
+					ntfs_free(result);
+					result=buf;
+					*out_len+=(chl-1);
+				}
+				for (chi=0;chi<chl;chi++)
+					result[o++] = charbuf[chi];
+			} else
+				result[o++] = '?';
+			continue;
+
 		}
 		if(!(vol->nct & nct_uni_xlate))goto inval;
 		/* realloc */
@@ -291,10 +302,15 @@ int ntfs_dupmap2uni(ntfs_volume *vol, char* in, int in_len, ntfs_u16 **out,
 	if(!result)return ENOMEM;
 	*out_len=in_len;
 	for(i=o=0;i<in_len;i++,o++){
-		unsigned short cl,ch;
+		wchar_t uni;
 		if(in[i]!=':' || (vol->nct & nct_uni_xlate)==0){
-			cl=nls->charset2uni[(unsigned char)in[i]].uni1;
-			ch=nls->charset2uni[(unsigned char)in[i]].uni2;
+			int charlen;
+			/* FIXME: is this error handling ok? */
+			charlen = nls->char2uni(&in[i], in_len-i, &uni);
+			if (charlen < 0)
+				return charlen;
+			*out_len -= (charlen-1);
+			i += (charlen-1);
 		}else{
 			unsigned char c1,c2,c3;
 			*out_len-=3;
@@ -302,17 +318,17 @@ int ntfs_dupmap2uni(ntfs_volume *vol, char* in, int in_len, ntfs_u16 **out,
 			c2=esc2uni(in[++i]);
 			c3=esc2uni(in[++i]);
 			if(c1==255 || c2==255 || c3==255)
-				cl=ch=0;
+				uni = 0;
 			else if(vol->nct & nct_uni_xlate_vfat){
-				cl = (c1 << 4) + (c2 >> 2);
-				ch = ((c2 & 0x3) << 6) + c3;
+				uni = (((c2 & 0x3) << 6) + c3) << 8 |
+					((c1 << 4) + (c2 >> 2));
 			}else{
-				ch=(c3 << 4) + (c2 >> 2);
-				cl=((c2 & 0x3) << 6) + c1;
+				uni = ((c3 << 4) + (c2 >> 2)) << 8 |
+					(((c2 & 0x3) << 6) + c1);
 			}
-		}			
-		/* FIXME: byte order */
-		result[o] = (ch<<8) | cl;
+		}
+		/* FIXME: byte order? */
+		result[o] = uni;
 		if(!result[o]){
 			ntfs_free(result);
 			return EILSEQ;

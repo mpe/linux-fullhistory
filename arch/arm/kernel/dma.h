@@ -1,13 +1,26 @@
 /*
- * arch/arm/kernel/dma.h
+ * linux/arch/arm/kernel/dma.h
  *
- * Copyright (C) 1998 Russell King
+ * Copyright (C) 1998-2000 Russell King
  *
  * This header file describes the interface between the generic DMA handler
  * (dma.c) and the architecture-specific DMA backends (dma-*.c)
  */
 
-typedef struct {
+struct dma_struct;
+typedef struct dma_struct dma_t;
+
+struct dma_ops {
+	int	(*request)(dmach_t, dma_t *);		/* optional */
+	void	(*free)(dmach_t, dma_t *);		/* optional */
+	void	(*enable)(dmach_t, dma_t *);		/* mandatory */
+	void 	(*disable)(dmach_t, dma_t *);		/* mandatory */
+	int	(*residue)(dmach_t, dma_t *);		/* optional */
+	int	(*setspeed)(dmach_t, dma_t *, int);	/* optional */
+	char	*type;
+};
+
+struct dma_struct {
 	dmasg_t		buf;		/* single DMA			*/
 	int		sgcount;	/* number of DMA SG		*/
 	dmasg_t		*sg;		/* DMA Scatter-Gather List	*/
@@ -24,54 +37,9 @@ typedef struct {
 	int		dma_irq;	/* Controller IRQ		*/
 	int		state;		/* Controller state		*/
 	dmasg_t		cur_sg;		/* Current controller buffer	*/
-} dma_t;
 
-/* Prototype: int arch_request_dma(channel, dma, dev_id)
- * Purpose  : Perform architecture specific claiming of a DMA channel
- * Params   : channel - DMA channel number
- *          : dma     - DMA structure (above) for channel
- *          : dev_id  - device ID string passed with request
- * Returns  : 0 on success, E????? number on error
- */ 
-int arch_request_dma(dmach_t channel, dma_t *dma, const char *dev_id);
-
-/* Prototype: int arch_free_dma(channel, dma)
- * Purpose  : Perform architecture specific freeing of a DMA channel
- * Params   : channel - DMA channel number
- *          : dma     - DMA structure for channel
- */
-void arch_free_dma(dmach_t channel, dma_t *dma);
-
-/* Prototype: void arch_enable_dma(channel, dma)
- * Purpose  : Enable a claimed DMA channel
- * Params   : channel - DMA channel number
- *          : dma     - DMA structure for channel
- */
-void arch_enable_dma(dmach_t channel, dma_t *dma);
-
-/* Prototype: void arch_disable_dma(channel, dma)
- * Purpose  : Disable a claimed DMA channel
- * Params   : channel - DMA channel number
- *          : dma     - DMA structure for channel
- */
-void arch_disable_dma(dmach_t channel, dma_t *dma);
-
-/* Prototype: int arch_get_dma_residue(channel, dma)
- * Purpose  : Return number of bytes left to DMA
- * Params   : channel - DMA channel number
- *          : dma     - DMA structure for channel
- * Returns  : Number of bytes left to DMA
- */
-int arch_get_dma_residue(dmach_t channel, dma_t *dma);
-
-/* Prototype: int arch_set_dma_speed(channel, dma, cycle)
- * Purpose  : Convert a cycle time to a register setting
- * Params   : channel - DMA channel number
- *          : dma     - DMA structure for channel
- *          : cycle   - cycle time in NS
- * Returns  : setting for 'dma->speed'
- */
-int arch_set_dma_speed(dmach_t channel, dma_t *dma, int cycle);
+	struct dma_ops	*d_ops;
+};
 
 /* Prototype: void arch_dma_init(dma)
  * Purpose  : Initialise architecture specific DMA

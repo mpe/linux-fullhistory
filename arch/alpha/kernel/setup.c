@@ -752,7 +752,7 @@ get_sysvec(long type, long variation, long cpu)
 	{
 		&eb64p_mv,
 		&cabriolet_mv,
-		NULL		/* AlphaPCI64 */
+		&cabriolet_mv		/* AlphaPCI64 */
 	};
 
 	static struct alpha_machine_vector *eb66_vecs[] __initlocaldata =

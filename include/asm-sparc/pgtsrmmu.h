@@ -1,4 +1,4 @@
-/* $Id: pgtsrmmu.h,v 1.30 2000/06/05 06:08:46 anton Exp $
+/* $Id: pgtsrmmu.h,v 1.31 2000/07/16 21:48:52 anton Exp $
  * pgtsrmmu.h:  SRMMU page table defines and code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -84,6 +84,17 @@
 #define SRMMU_CTX_REG            0x00000200
 #define SRMMU_FAULT_STATUS       0x00000300
 #define SRMMU_FAULT_ADDR         0x00000400
+
+#define WINDOW_FLUSH(tmp1, tmp2)					\
+	mov	0, tmp1;						\
+98:	ld	[%g6 + AOFF_task_thread + AOFF_thread_uwinmask], tmp2;	\
+	orcc	%g0, tmp2, %g0;						\
+	add	tmp1, 1, tmp1;						\
+	bne	98b;							\
+	 save	%sp, -64, %sp;						\
+99:	subcc	tmp1, 1, tmp1;						\
+	bne	99b;							\
+	 restore %g0, %g0, %g0;
 
 #ifndef __ASSEMBLY__
 

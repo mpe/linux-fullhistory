@@ -337,7 +337,7 @@ void cleanup_module(void) {
 
     /* Free memory */
     first = info->next;
-    kfree_s(info, sizeof(struct scc_info));
+    kfree(info);
   }
 }
 
@@ -545,7 +545,7 @@ int __init setup_adapter(int card_base, int type, int n) {
   if (irq <= 0) {
     printk("dmascc: could not find irq of %s at %#3x (irq=%d)\n",
 	   hw[type].name, card_base, irq);
-    kfree_s(info, sizeof(struct scc_info));
+    kfree(info);
     return -1;
   }
 

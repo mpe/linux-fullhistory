@@ -1566,6 +1566,7 @@ static void floppy_release(struct inode *inode, struct file *filp)
 
 static struct block_device_operations floppy_fops =
 {
+	owner:			THIS_MODULE,
 	open:			floppy_open,
 	release:		floppy_release,
 	ioctl:			fd_ioctl,
@@ -1577,6 +1578,9 @@ static struct block_device_operations floppy_fops =
 int fd1772_init(void)
 {
 	int i;
+
+	if (!machine_is_arc())
+		return 0;
 
 	if (register_blkdev(MAJOR_NR, "fd", &floppy_fops)) {
 		printk("Unable to get major %d for floppy\n", MAJOR_NR);

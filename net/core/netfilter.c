@@ -436,7 +436,7 @@ static void nf_queue(struct sk_buff *skb,
 		/* James M doesn't say fuck enough. */
 		if (indev) dev_put(indev);
 		if (outdev) dev_put(outdev);
-		kfree_s(info, sizeof(*info));
+		kfree(info);
 		kfree_skb(skb);
 		return;
 	}
@@ -532,7 +532,7 @@ void nf_reinject(struct sk_buff *skb, struct nf_info *info,
 	if (info->indev) dev_put(info->indev);
 	if (info->outdev) dev_put(info->outdev);
 	
-	kfree_s(info, sizeof(*info));
+	kfree(info);
 	return;
 }
 

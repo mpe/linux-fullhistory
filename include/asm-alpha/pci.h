@@ -154,5 +154,7 @@ extern int pci_dma_supported(struct pci_dev *hwdev, dma_addr_t mask);
 #define IOBASE_DENSE_MEM	2
 #define IOBASE_SPARSE_IO	3
 #define IOBASE_DENSE_IO		4
+#define IOBASE_ROOT_BUS		5
+#define IOBASE_FROM_HOSE	0x10000
 
 #endif /* __ALPHA_PCI_H */

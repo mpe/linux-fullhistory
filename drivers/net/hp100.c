@@ -3040,7 +3040,7 @@ int init_module( void )
 	{
 	  /* DeAllocate everything */
 	  /* Note: if dev->priv is mallocated, there is no way to fail */
-	  kfree_s(hp100_devlist[i], sizeof(struct net_device));
+	  kfree(hp100_devlist[i]);
 	  hp100_devlist[i] = (struct net_device *) NULL;
 	}
        else
@@ -3061,12 +3061,12 @@ void cleanup_module( void )
 	unregister_netdev( hp100_devlist[i] );
 	release_region( hp100_devlist[i]->base_addr, HP100_REGION_SIZE );
 	if( ((struct hp100_private *)hp100_devlist[i]->priv)->mode==1 ) /* busmaster */
-	  kfree_s( ((struct hp100_private *)hp100_devlist[i]->priv)->page_vaddr, MAX_RINGSIZE+0x0f); 
+	  kfree( ((struct hp100_private *)hp100_devlist[i]->priv)->page_vaddr ); 
 	if ( ((struct hp100_private *)hp100_devlist[i]->priv) -> mem_ptr_virt )
 	  iounmap( ((struct hp100_private *)hp100_devlist[i]->priv) -> mem_ptr_virt );
-	kfree_s( hp100_devlist[i]->priv, sizeof( struct hp100_private ) );
+	kfree( hp100_devlist[i]->priv );
 	hp100_devlist[i]->priv = NULL;
-	kfree_s(hp100_devlist[i], sizeof(struct net_device));
+	kfree(hp100_devlist[i]);
 	hp100_devlist[i] = (struct net_device *) NULL;
       }
 }

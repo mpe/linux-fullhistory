@@ -186,10 +186,10 @@ unsigned long rom_base;
 unsigned long rom_vbase;
 
 /* mode */
-int video_type = FB_TYPE_PACKED_PIXELS;
-int video_linelength;
-int video_cmap_len;
-int sisfb_off = 0;
+static int video_type = FB_TYPE_PACKED_PIXELS;
+static int video_linelength;
+static int video_cmap_len;
+static int sisfb_off = 0;
 
 static struct fb_var_screeninfo default_var = {
 	0, 0, 0, 0, 0, 0, 0, 0,

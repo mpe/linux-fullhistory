@@ -1113,7 +1113,7 @@ static int __init pm2pci_detect(struct pm2fb_info* p) {
 	}
 	else {
 		p->regions.rg_base = pci_resource_start(pci->dev, 0);
-		p->regions.fb_base = pci_resource_start(pci->dev, 0);
+		p->regions.fb_base = pci_resource_start(pci->dev, 1);
 	}
 #endif
 #ifdef PM2FB_BE_APERTURE
@@ -1281,7 +1281,16 @@ static void pm2fb_clear_margins8(struct vc_data* conp, struct display* p,
 }
 
 static struct display_switch pm2_cfb8 = {
-	fbcon_cfb8_setup, pm2fb_pp_bmove, pm2fb_clear8,
+	fbcon_cfb8_setup, pm2fb_pp_bmove,
+#ifdef __alpha__
+	/* Not sure why, but this works and the other does not. */
+	/* Also, perhaps we need a separate routine to wait for the
+	   blitter to stop before doing this? */
+	/* In addition, maybe we need to do this for 16 and 32 bit depths? */
+	fbcon_cfb8_clear,
+#else
+	pm2fb_clear8,
+#endif
 	fbcon_cfb8_putc, fbcon_cfb8_putcs, fbcon_cfb8_revc,
 	pm2fb_cursor, pm2fb_set_font,
 	pm2fb_clear_margins8,

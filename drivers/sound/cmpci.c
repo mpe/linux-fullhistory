@@ -2478,7 +2478,7 @@ int __init init_cmpci(void)
 			release_region(s->iomidi, CM_EXTENT_MIDI);
 		release_region(s->iobase, CM_EXTENT_CODEC);
 	err_region5:
-		kfree_s(s, sizeof(struct cm_state));
+		kfree(s);
 	}
 	if (!devs) {
 		if (wavetable_mem)
@@ -2522,7 +2522,7 @@ void cleanup_module(void)
 		}
 		unregister_sound_dsp(s->dev_audio);
 		unregister_sound_mixer(s->dev_mixer);
-		kfree_s(s, sizeof(struct cm_state));
+		kfree(s);
 	}
 	if (wavetable_mem)
 		free_pages(wavetable_mem, 20-PAGE_SHIFT);

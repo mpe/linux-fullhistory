@@ -107,8 +107,7 @@ void ext2_put_super (struct super_block * sb)
 	for (i = 0; i < db_count; i++)
 		if (sb->u.ext2_sb.s_group_desc[i])
 			brelse (sb->u.ext2_sb.s_group_desc[i]);
-	kfree_s (sb->u.ext2_sb.s_group_desc,
-		 db_count * sizeof (struct buffer_head *));
+	kfree(sb->u.ext2_sb.s_group_desc);
 	for (i = 0; i < EXT2_MAX_GROUP_LOADED; i++)
 		if (sb->u.ext2_sb.s_inode_bitmap[i])
 			brelse (sb->u.ext2_sb.s_inode_bitmap[i]);
@@ -567,8 +566,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		if (!sb->u.ext2_sb.s_group_desc[i]) {
 			for (j = 0; j < i; j++)
 				brelse (sb->u.ext2_sb.s_group_desc[j]);
-			kfree_s (sb->u.ext2_sb.s_group_desc,
-				 db_count * sizeof (struct buffer_head *));
+			kfree(sb->u.ext2_sb.s_group_desc);
 			printk ("EXT2-fs: unable to read group descriptors\n");
 			goto failed_mount;
 		}
@@ -576,8 +574,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	if (!ext2_check_descriptors (sb)) {
 		for (j = 0; j < db_count; j++)
 			brelse (sb->u.ext2_sb.s_group_desc[j]);
-		kfree_s (sb->u.ext2_sb.s_group_desc,
-			 db_count * sizeof (struct buffer_head *));
+		kfree(sb->u.ext2_sb.s_group_desc);
 		printk ("EXT2-fs: group descriptors corrupted !\n");
 		goto failed_mount;
 	}
@@ -599,8 +596,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		for (i = 0; i < db_count; i++)
 			if (sb->u.ext2_sb.s_group_desc[i])
 				brelse (sb->u.ext2_sb.s_group_desc[i]);
-		kfree_s (sb->u.ext2_sb.s_group_desc,
-			 db_count * sizeof (struct buffer_head *));
+		kfree(sb->u.ext2_sb.s_group_desc);
 		brelse (bh);
 		printk ("EXT2-fs: get root inode failed\n");
 		return NULL;

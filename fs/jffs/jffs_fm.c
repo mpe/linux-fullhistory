@@ -17,6 +17,7 @@
  *
  */
 #define __NO_VERSION__
+#include <linux/config.h>
 #include <linux/malloc.h>
 #include <linux/blkdev.h>
 #include <linux/jffs.h>

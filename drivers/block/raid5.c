@@ -264,7 +264,7 @@ static int grow_raid5_buffers(struct stripe_head *sh, int num, int b_size, int p
 		}
 		bh->b_size = b_size;
 		atomic_set(&bh->b_count, 0);
-		set_bh_page(bh, page, 0);
+		bh->b_page = page;
 		put_free_buffer(sh, bh);
 	}
 	return 0;
@@ -1263,7 +1263,7 @@ static void handle_stripe_sync (mddev_t *mddev , raid5_conf_t *conf,
 			bh->b_dev = bh->b_rdev = conf->disks[i].dev;
 			q = blk_get_queue(bh->b_rdev);
 			generic_make_request(q, READ, bh);
-			drive_stat_acct(bh->b_rdev, READ, -bh->b_size/512, 0);
+			md_sync_acct(bh->b_rdev, bh->b_size/512);
 			atomic_dec(&sh->bh_old[i]->b_count);
 		}
 		PRINTK("handle_stripe_sync() %lu, phase READ_OLD, pending %d buffers\n", sh->sector, md_atomic_read(&sh->nr_pending));
@@ -1293,7 +1293,7 @@ static void handle_stripe_sync (mddev_t *mddev , raid5_conf_t *conf,
 				bh->b_dev = bh->b_rdev = conf->spare->dev;
 				q = blk_get_queue(bh->b_rdev);
 				generic_make_request(q, WRITERAW, bh);
-				drive_stat_acct(bh->b_rdev, WRITE, -bh->b_size/512, 0);
+				md_sync_acct(bh->b_rdev, bh->b_size/512);
 				atomic_dec(&bh->b_count);
 		PRINTK("handle_stripe_sync() %lu, phase WRITE, pending %d buffers\n", sh->sector, md_atomic_read(&sh->nr_pending));
 			}
@@ -1320,7 +1320,7 @@ static void handle_stripe_sync (mddev_t *mddev , raid5_conf_t *conf,
 		bh->b_dev = bh->b_rdev = conf->disks[pd_idx].dev;
 		q = blk_get_queue(bh->b_rdev);
 		generic_make_request(q, WRITERAW, bh);
-		drive_stat_acct(bh->b_rdev, WRITE, -bh->b_size/512, 0);
+		md_sync_acct(bh->b_rdev, bh->b_size/512);
 		atomic_dec(&bh->b_count);
 		PRINTK("handle_stripe_sync() %lu phase WRITE, pending %d buffers\n",
 			sh->sector, md_atomic_read(&sh->nr_pending));

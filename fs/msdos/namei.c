@@ -85,7 +85,7 @@ static int msdos_format_name(const char *name,int len,
 		if((res==walk) && (c==0xE5)) c=0x05;
 		if (c == '.') break;
 		space = (c == ' ');
-		*walk = (c >= 'a' && c <= 'z') ? c-32 : c;
+		*walk = (!opts->nocase && c >= 'a' && c <= 'z') ? c-32 : c;
 	}
 	if (space) return -EINVAL;
 	if (opts->conversion == 's' && len && c != '.') {
@@ -114,7 +114,7 @@ static int msdos_format_name(const char *name,int len,
 			if (c >= 'A' && c <= 'Z' && opts->conversion == 's')
 				return -EINVAL;
 			space = c == ' ';
-			*walk++ = c >= 'a' && c <= 'z' ? c-32 : c;
+			*walk++ = (!opts->nocase && c >= 'a' && c <= 'z') ? c-32 : c;
 		}
 		if (space) return -EINVAL;
 		if (opts->conversion == 's' && len) return -EINVAL;

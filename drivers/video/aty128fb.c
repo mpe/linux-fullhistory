@@ -209,9 +209,6 @@ static int  noaccel __initdata = 0;
 #ifndef MODULE
 static const char *mode_option __initdata = NULL;
 #endif
-#if !defined(CONFIG_PPC) && !defined(__sparc__)
-static void *bios_seg = NULL;
-#endif
 
 #ifdef CONFIG_PPC
 #ifdef CONFIG_NVRAM_NOT_DEFINED
@@ -277,7 +274,6 @@ struct fb_info_aty128 {
     void *regbase;                      /* remapped mmio       */
     u32 frame_buffer_phys;              /* physical fb memory  */
     u32 frame_buffer;                   /* remaped framebuffer */
-    u32 io_base;                        /* unmapped io         */
     u32 vram_size;                      /* onboard video ram   */
     int chip_gen;
     const struct aty128_meminfo *mem;   /* onboard mem info    */
@@ -367,8 +363,9 @@ static int aty128_pci_register(struct pci_dev *pdev,
 static struct fb_info_aty128 *aty128_board_list_add(struct fb_info_aty128
 				*board_list, struct fb_info_aty128 *new_node);
 #if !defined(CONFIG_PPC) && !defined(__sparc__)
-static void aty128_get_pllinfo(struct fb_info_aty128 *info);
-static int aty128find_ROM(struct fb_info_aty128 *info);
+static void __init aty128_get_pllinfo(struct fb_info_aty128 *info,
+			char *bios_seg);
+static char __init *aty128find_ROM(struct fb_info_aty128 *info);
 #endif
 static void aty128_timings(struct fb_info_aty128 *info);
 static void aty128_init_engine(const struct aty128fb_par *par, 
@@ -1842,221 +1839,210 @@ static int __init
 aty128_pci_register(struct pci_dev *pdev,
                                const struct aty128_chip_info *aci)
 {
-    struct fb_info_aty128 *info = NULL;
-    u32 fb_addr, reg_addr, io_addr = 0;
-    int err;
+	struct fb_info_aty128 *info = NULL;
+	u32 fb_addr, reg_addr;
+	int err;
+#if !defined(CONFIG_PPC) && !defined(__sparc__)
+	char *bios_seg = NULL;
+#endif
 
-    fb_addr = pci_resource_start(pdev, 0);
-    if (!request_mem_region(fb_addr, pci_resource_len(pdev, 0),
-                            "aty128fb FB")) {
-        printk(KERN_ERR "aty128fb: cannot reserve frame buffer memory\n");
-        goto err_free_fb;
-    }
+	/* Enable device in PCI config */
+	if ((err = pci_enable_device(pdev))) {
+		printk(KERN_ERR "aty128fb: Cannot enable PCI device: %d\n",
+				err);
+		goto err_out;
+	}
 
-    reg_addr = pci_resource_start(pdev, 2);
-    if (!request_mem_region(reg_addr, pci_resource_len(pdev, 2),
-                            "aty128fb MMIO")) {
-        printk(KERN_ERR "aty128fb: cannot reserve MMIO region\n");
-        goto err_free_mmio;
-    }
+	fb_addr = pci_resource_start(pdev, 0);
+	if (!request_mem_region(fb_addr, pci_resource_len(pdev, 0),
+				"aty128fb FB")) {
+		printk(KERN_ERR "aty128fb: cannot reserve frame "
+				"buffer memory\n");
+		goto err_free_fb;
+	}
 
-    /* We have the resources. Now virtualize them */
-    info = kmalloc(sizeof(struct fb_info_aty128), GFP_ATOMIC);
-    if(!info) {
-        printk(KERN_ERR "aty128fb: can't alloc fb_info_aty128\n");
-	goto err_unmap_out;
-    }
-    memset(info, 0, sizeof(struct fb_info_aty128));
+	reg_addr = pci_resource_start(pdev, 2);
+	if (!request_mem_region(reg_addr, pci_resource_len(pdev, 2),
+				"aty128fb MMIO")) {
+		printk(KERN_ERR "aty128fb: cannot reserve MMIO region\n");
+		goto err_free_mmio;
+	}
 
-    /* Copy PCI device info into info->pdev */
-    info->pdev = pdev;
+	/* We have the resources. Now virtualize them */
+	if (!(info = kmalloc(sizeof(struct fb_info_aty128), GFP_ATOMIC))) {
+		printk(KERN_ERR "aty128fb: can't alloc fb_info_aty128\n");
+		goto err_unmap_out;
+	}
+	memset(info, 0, sizeof(struct fb_info_aty128));
 
-    info->currcon = -1;
+	/* Copy PCI device info into info->pdev */
+	info->pdev = pdev;
 
-    /* Virtualize mmio region */
-    info->regbase_phys = reg_addr;
-    info->regbase = ioremap(reg_addr, 0x1FFF);
+	info->currcon = -1;
 
-    if (!info->regbase)
-        goto err_free_info;
+	/* Virtualize mmio region */
+	info->regbase_phys = reg_addr;
+	info->regbase = ioremap(reg_addr, 0x1FFF);
 
-    /* Store io_base */
-    info->io_base = io_addr;
+	if (!info->regbase)
+		goto err_free_info;
 
-    /* Grab memory size from the card */
-    info->vram_size = aty_ld_le32(CONFIG_MEMSIZE) & 0x03FFFFFF;
+	/* Grab memory size from the card */
+	info->vram_size = aty_ld_le32(CONFIG_MEMSIZE) & 0x03FFFFFF;
 
-    /* Virtualize the framebuffer */
-    info->frame_buffer_phys = fb_addr;
-    info->frame_buffer = (u32)ioremap(fb_addr, info->vram_size);
+	/* Virtualize the framebuffer */
+	info->frame_buffer_phys = fb_addr;
+	info->frame_buffer = (u32)ioremap(fb_addr, info->vram_size);
 
-    if (!info->frame_buffer) {
-        iounmap((void *)info->regbase);
-        goto err_free_info;
-    }
+	if (!info->frame_buffer) {
+		iounmap((void *)info->regbase);
+		goto err_free_info;
+	}
 
-    /* Enable device in PCI config */
-    err = pci_enable_device(pdev);
-    if (err) {
-        printk(KERN_ERR "aty128fb: Cannot enable PCI device: %d\n", err);
-        goto err_out;
-    }
-
-    /* If we can't test scratch registers, something is seriously wrong */
-    if (!register_test(info)) {
-        printk(KERN_ERR "aty128fb: Can't write to video register!\n");
-        goto err_out;
-    }
+	/* If we can't test scratch registers, something is seriously wrong */
+	if (!register_test(info)) {
+		printk(KERN_ERR "aty128fb: Can't write to video register!\n");
+		goto err_out;
+	}
 
 #if !defined(CONFIG_PPC) && !defined(__sparc__)
-    if (!aty128find_ROM(info))
-        printk(KERN_INFO "aty128fb: Rage128 BIOS not located. Guessing...\n");
-    else
-        aty128_get_pllinfo(info);
+	if (!(bios_seg = aty128find_ROM(info)))
+		printk(KERN_INFO "aty128fb: Rage128 BIOS not located. "
+					"Guessing...\n");
+	else {
+		printk(KERN_INFO "aty128fb: Rage128 BIOS located at "
+				"segment %4.4X\n", (unsigned int)bios_seg);
+		aty128_get_pllinfo(info, bios_seg);
+	}
 #endif
-    aty128_timings(info);
+	aty128_timings(info);
 
-    if (!aty128_init(info, "PCI"))
-        goto err_out;
+	if (!aty128_init(info, "PCI"))
+		goto err_out;
 
 #ifdef CONFIG_MTRR
-    if (mtrr) {
-        info->mtrr.vram = mtrr_add(info->frame_buffer_phys, info->vram_size,
-                                   MTRR_TYPE_WRCOMB, 1);
-        info->mtrr.vram_valid = 1;
-        /* let there be speed */
-        printk(KERN_INFO "aty128fb: Rage128 MTRR set to ON\n");
-    }
+	if (mtrr) {
+		info->mtrr.vram = mtrr_add(info->frame_buffer_phys,
+				info->vram_size, MTRR_TYPE_WRCOMB, 1);
+		info->mtrr.vram_valid = 1;
+		/* let there be speed */
+		printk(KERN_INFO "aty128fb: Rage128 MTRR set to ON\n");
+	}
 #endif /* CONFIG_MTRR */
 
-    return 0;
+	return 0;
 
 err_out:
-    iounmap((void *)info->frame_buffer);
-    iounmap((void *)info->regbase);
+	iounmap((void *)info->frame_buffer);
+	iounmap((void *)info->regbase);
 err_free_info:
-    kfree(info);
+	kfree(info);
 err_unmap_out:
-    release_mem_region(pci_resource_start(pdev, 2),
+	release_mem_region(pci_resource_start(pdev, 2),
 			pci_resource_len(pdev, 2));
 err_free_mmio:
-    release_mem_region(pci_resource_start(pdev, 0),
+	release_mem_region(pci_resource_start(pdev, 0),
 			pci_resource_len(pdev, 0));
 err_free_fb:
-    release_mem_region(pci_resource_start(pdev, 1),
+	release_mem_region(pci_resource_start(pdev, 1),
 			pci_resource_len(pdev, 1));
-    return -ENODEV;
+	return -ENODEV;
 }
 #endif /* CONFIG_PCI */
 
 
 /* PPC and Sparc cannot read video ROM */
 #if !defined(CONFIG_PPC) && !defined(__sparc__)
-static int __init
-aty128find_ROM(struct fb_info_aty128 *info)
+static char __init
+*aty128find_ROM(struct fb_info_aty128 *info)
 {
-    int  flag = 0;
-    u32  segstart;
-    char *rom_base;
-    char *rom;
-    int  stage;
-    int  i;
-    char aty_rom_sig[] = "761295520";   /* ATI ROM Signature      */
-    char R128_sig[] = "R128";           /* Rage128 ROM identifier */
+	u32  segstart;
+	char *rom_base;
+	char *rom;
+	int  stage;
+	int  i;
+	char aty_rom_sig[] = "761295520";   /* ATI ROM Signature      */
+	char R128_sig[] = "R128";           /* Rage128 ROM identifier */
 
-    for (segstart=0x000c0000; segstart<0x000f0000; segstart+=0x00001000) {
-        stage = 1;
+	for (segstart=0x000c0000; segstart<0x000f0000; segstart+=0x00001000) {
+        	stage = 1;
 
-        rom_base = (char *) ioremap(segstart, 0x1000);
+		rom_base = (char *)ioremap(segstart, 0x1000);
 
-        if ((*rom_base == 0x55) && (((*(rom_base + 1)) & 0xff) == 0xaa))
-            stage = 2;
+		if ((*rom_base == 0x55) && (((*(rom_base + 1)) & 0xff) == 0xaa))
+			stage = 2;
 
-        if (stage != 2) {
-            iounmap(rom_base);
-            continue;
-        }
-        rom = rom_base;
+		if (stage != 2) {
+			iounmap(rom_base);
+			continue;
+		}
+		rom = rom_base;
 
-        for (i = 0; (i < 128 - strlen(aty_rom_sig)) && (stage != 3); i++) {
-            if (aty_rom_sig[0] == *rom) {
-                if (strncmp(aty_rom_sig, rom, strlen(aty_rom_sig)) == 0) {
-                    stage = 3;
-                }
-            }
-            rom++;
-        }
-        if (stage != 3) {
-            iounmap(rom_base);
-            continue;
-        }
-        rom = rom_base;
+		for (i = 0; (i < 128 - strlen(aty_rom_sig)) && (stage != 3); i++) {
+			if (aty_rom_sig[0] == *rom)
+				if (strncmp(aty_rom_sig, rom,
+						strlen(aty_rom_sig)) == 0)
+					stage = 3;
+			rom++;
+		}
+		if (stage != 3) {
+			iounmap(rom_base);
+			continue;
+		}
+		rom = rom_base;
 
-        /* ATI signature found.  Let's see if it's a Rage128 */
-        for (i = 0; (i < 512) && (stage != 4); i++) {
-            if (R128_sig[0] == *rom) {
-                if (strncmp(R128_sig, rom, strlen(R128_sig)) == 0) {
-                    stage = 4;
-                }
-            }
-            rom++;
-        }
-        if (stage != 4) {
-            iounmap(rom_base);
-            continue;
-        }
+		/* ATI signature found.  Let's see if it's a Rage128 */
+		for (i = 0; (i < 512) && (stage != 4); i++) {
+			if (R128_sig[0] == *rom)
+				if (strncmp(R128_sig, rom, 
+						strlen(R128_sig)) == 0)
+					stage = 4;
+			rom++;
+		}
+		if (stage != 4) {
+			iounmap(rom_base);
+			continue;
+		}
 
-        bios_seg = rom_base;
-        printk(KERN_INFO "aty128fb: Rage128 BIOS located at segment %4.4X\n",
-                         (unsigned int)rom_base);
-        flag = 1;
-        break;
-    }
-    return (flag);
+		return rom_base;
+	}
+
+	return NULL;
 }
 
 
 static void __init
-aty128_get_pllinfo(struct fb_info_aty128 *info)
-{   
-    void *bios_header;
-    void *header_ptr;
-    u16 bios_header_offset, pll_info_offset;
-    PLL_BLOCK pll;
+aty128_get_pllinfo(struct fb_info_aty128 *info, char *bios_seg)
+{
+	void *bios_header;
+	void *header_ptr;
+	u16 bios_header_offset, pll_info_offset;
+	PLL_BLOCK pll;
 
-    bios_header = bios_seg + 0x48L;
-    header_ptr  = bios_header;
+	bios_header = bios_seg + 0x48L;
+	header_ptr  = bios_header;
 
-    bios_header_offset = readw(header_ptr);
-    bios_header = bios_seg + bios_header_offset;
-    bios_header += 0x30;
+	bios_header_offset = readw(header_ptr);
+	bios_header = bios_seg + bios_header_offset;
+	bios_header += 0x30;
 
-    header_ptr = bios_header;
-    pll_info_offset = readw(header_ptr);
-    header_ptr = bios_seg + pll_info_offset;
+	header_ptr = bios_header;
+	pll_info_offset = readw(header_ptr);
+	header_ptr = bios_seg + pll_info_offset;
 
-    memcpy_fromio(&pll, header_ptr, 50);
+	memcpy_fromio(&pll, header_ptr, 50);
 
-    info->constants.ppll_max = pll.PCLK_max_freq;
-    info->constants.ppll_min = pll.PCLK_min_freq;
-    info->constants.xclk = (u32)pll.XCLK;
-    info->constants.ref_divider = (u32)pll.PCLK_ref_divider;
-    info->constants.dotclock = (u32)pll.PCLK_ref_freq;
+	info->constants.ppll_max = pll.PCLK_max_freq;
+	info->constants.ppll_min = pll.PCLK_min_freq;
+	info->constants.xclk = (u32)pll.XCLK;
+	info->constants.ref_divider = (u32)pll.PCLK_ref_divider;
+	info->constants.dotclock = (u32)pll.PCLK_ref_freq;
 
-    /* free up to be un-used resources. bios_seg is mapped by
-     * aty128find_ROM() and used by aty128_get_pllinfo()
-     *
-     * TODO: make more elegant. doesn't need to be global */
-    if (bios_seg)
-        iounmap(bios_seg);
-
-    DBG("ppll_max %d ppll_min %d xclk %d "
-			"ref_divider %d dotclock %d\n",
+	DBG("ppll_max %d ppll_min %d xclk %d ref_divider %d dotclock %d\n",
 			info->constants.ppll_max, info->constants.ppll_min,
 			info->constants.xclk, info->constants.ref_divider,
 			info->constants.dotclock);
 
-    return;
 }           
 #endif /* !CONFIG_PPC */
 

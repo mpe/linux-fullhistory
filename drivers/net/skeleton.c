@@ -703,7 +703,7 @@ cleanup_module(void)
 	release_region(this_device.base_addr, NETCARD_IO_EXTENT);
 
 	if (this_device.priv)
-		kfree_s(this_device.priv, sizeof(struct net_local));
+		kfree(this_device.priv);
 }
 
 #endif /* MODULE */

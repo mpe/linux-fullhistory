@@ -27,8 +27,6 @@ typedef struct {
 	unsigned long length;
 } dmasg_t;
 
-extern const char dma_str[];
-
 extern spinlock_t  dma_spin_lock;
 
 extern __inline__ unsigned long claim_dma_lock(void)
@@ -45,9 +43,6 @@ extern __inline__ void release_dma_lock(unsigned long flags)
 
 /* Clear the 'DMA Pointer Flip Flop'.
  * Write 0 for LSB/MSB, 1 for MSB/LSB access.
- *
- * NOTE: This is an architecture specific function, and should
- *       be hidden from the drivers.
  */
 #define clear_dma_ff(channel)
 
@@ -56,10 +51,7 @@ extern __inline__ void release_dma_lock(unsigned long flags)
  * NOTE: This is an architecture specific function, and should
  *       be hidden from the drivers
  */
-extern __inline__ void set_dma_page(dmach_t channel, char pagenr)
-{
-	printk(dma_str, "set_dma_page", channel);
-}
+extern void set_dma_page(dmach_t channel, char pagenr);
 
 /* Request a DMA channel
  *

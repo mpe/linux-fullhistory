@@ -58,11 +58,6 @@
 
 #include "audiochip.h"
 
-/* sound mixer stuff */ 
-#if 0 /* defined(CONFIG_SOUND) || defined(CONFIG_SOUND_MODULE) */
-# define REGISTER_MIXER 1
-#endif
-
 /* Addresses to scan */
 static unsigned short normal_i2c[] = {I2C_CLIENT_END};
 static unsigned short normal_i2c_range[] = {0x40,0x40,I2C_CLIENT_END};
@@ -85,9 +80,6 @@ static int amsound = 0;    /* hard-wire AM sound at 6.5 Hz (france),
 			      the autoscan seems work well only with FM... */
 static int simple  = -1;   /* use short programming (>= msp3410 only) */
 static int dolby   = 0;
-#ifdef REGISTER_MIXER
-static int mixer   = -1;
-#endif
 
 struct msp3400c {
 	int simple;
@@ -110,10 +102,6 @@ struct msp3400c {
 
 	int                  watch_stereo;
 	struct timer_list    wake_stereo;
-
-	/* mixer */
-	int    mixer_modcnt;
-	int    mixer_num;
 };
 
 #define MSP3400_MAX 4
@@ -130,7 +118,6 @@ MODULE_PARM(debug,"i");
 MODULE_PARM(simple,"i");
 MODULE_PARM(amsound,"i");
 MODULE_PARM(dolby,"i");
-MODULE_PARM(mixer,"i");
 
 /* ---------------------------------------------------------------------- */
 
@@ -680,10 +667,7 @@ static int msp3400c_thread(void *data)
 	lock_kernel();
 #endif
     
-	exit_mm(current);
-	exit_fs(current);
-	current->session = 1;
-	current->pgrp = 1;
+	daemonize();
 	sigfillset(&current->blocked);
 	strcpy(current->comm,"msp3400");
 
@@ -932,10 +916,7 @@ static int msp3410d_thread(void *data)
 	lock_kernel();
 #endif
     
-	exit_mm(current);
-	exit_fs(current);
-	current->session = 1;
-	current->pgrp = 1;
+	daemonize();
 	sigfillset(&current->blocked);
 	strcpy(current->comm,"msp3410 [auto]");
 
@@ -1102,191 +1083,6 @@ done:
 		up(msp->notify);
 	return 0;
 }
-
-/* ----------------------------------------------------------------------- */
-/* mixer stuff -- with the modular sound driver in 2.1.x we can easily     */
-/* register the msp3400 as mixer device                                    */
-
-#ifdef REGISTER_MIXER 
-
-#include <linux/sound.h>
-#include <linux/soundcard.h>
-#include <asm/uaccess.h>
-
-static int mix_to_v4l(int i)
-{
-	int r;
-
-	r = ((i & 0xff) * 65536 + 50) / 100;
-	if (r > 65535) r = 65535;
-	if (r <     0) r =     0;
-	return r;
-}
-
-static int v4l_to_mix(int i)
-{
-	int r;
-
-	r = (i * 100 + 32768) / 65536;
-	if (r > 100) r = 100;
-	if (r <   0) r =   0;
-	return r | (r << 8);
-}
-
-static int v4l_to_mix2(int l, int r)
-{
-	r = (r * 100 + 32768) / 65536;
-	if (r > 100) r = 100;
-	if (r <   0) r =   0;
-	l = (l * 100 + 32768) / 65536;
-	if (l > 100) l = 100;
-	if (l <   0) l =   0;
-	return (r << 8) | l;
-}
-
-static int
-msp3400c_mixer_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
-{
-	struct i2c_client *client;
-	struct msp3400c *msp;
-	int ret,val = 0;
-
-	client = file->private_data;
-	if (!client)
-		return -ENODEV;
-	msp = client->data;
-	if (!msp)
-		return -ENODEV;
-	
-        if (cmd == SOUND_MIXER_INFO) {
-                mixer_info info;
-                strncpy(info.id, "MSP3400", sizeof(info.id));
-                strncpy(info.name, "MSP 3400", sizeof(info.name));
-                info.modify_counter = msp->mixer_modcnt;
-                if (copy_to_user((void *)arg, &info, sizeof(info)))
-                        return -EFAULT;
-                return 0;
-        }
-        if (cmd == SOUND_OLD_MIXER_INFO) {
-                _old_mixer_info info;
-                strncpy(info.id, "MSP3400", sizeof(info.id));
-                strncpy(info.name, "MSP 3400", sizeof(info.name));
-                if (copy_to_user((void *)arg, &info, sizeof(info)))
-                        return -EFAULT;
-                return 0;
-        }
-        if (cmd == OSS_GETVERSION)
-                return put_user(SOUND_VERSION, (int *)arg);
-
-	if (_SIOC_DIR(cmd) & _SIOC_WRITE)
-		if (get_user(val, (int *)arg))
-			return -EFAULT;
-    
-	switch (cmd) {
-	case MIXER_READ(SOUND_MIXER_RECMASK):
-	case MIXER_READ(SOUND_MIXER_CAPS):
-	case MIXER_READ(SOUND_MIXER_RECSRC):
-	case MIXER_WRITE(SOUND_MIXER_RECSRC):
-		ret = 0;
-		break;
-
-	case MIXER_READ(SOUND_MIXER_STEREODEVS):
-		ret = SOUND_MASK_VOLUME;
-		break;
-	case MIXER_READ(SOUND_MIXER_DEVMASK):
-		ret = SOUND_MASK_VOLUME | SOUND_MASK_BASS | SOUND_MASK_TREBLE;
-		break;
-
-	case MIXER_WRITE(SOUND_MIXER_VOLUME):
-		msp->left  = mix_to_v4l(val);
-		msp->right = mix_to_v4l(val >> 8);
-		msp3400c_setvolume(client,msp->left,msp->right);
-		msp->mixer_modcnt++;
-		/* fall */
-	case MIXER_READ(SOUND_MIXER_VOLUME):
-		ret = v4l_to_mix2(msp->left, msp->right);
-		break;
-
-	case MIXER_WRITE(SOUND_MIXER_BASS):
-		msp->bass = mix_to_v4l(val);
-		msp3400c_setbass(client,msp->bass);
-		msp->mixer_modcnt++;
-		/* fall */
-	case MIXER_READ(SOUND_MIXER_BASS):
-		ret = v4l_to_mix(msp->bass);
-		break;
-
-	case MIXER_WRITE(SOUND_MIXER_TREBLE):
-		msp->treble = mix_to_v4l(val);
-		msp3400c_settreble(client,msp->treble);
-		msp->mixer_modcnt++;
-		/* fall */
-	case MIXER_READ(SOUND_MIXER_TREBLE):
-		ret = v4l_to_mix(msp->treble);
-		break;
-
-	default:
-		return -EINVAL;
-	}
-	if (put_user(ret, (int *)arg))
-		return -EFAULT;
-	return 0;
-}
-
-static int
-msp3400c_mixer_open(struct inode *inode, struct file *file)
-{
-        int minor = MINOR(inode->i_rdev);
-	struct i2c_client *client;
-	struct msp3400c *msp;
-	int i;
-
-	/* search for the right one... */
-	for (i = 0; i < MSP3400_MAX; i++) {
-		msp = msps[i]->data;
-		if (msp->mixer_num == minor) {
-			client = msps[i];
-			file->private_data = client;
-			break;
-		}
-	}
-	if (MSP3400_MAX == i)
-		return -ENODEV;
-
-	/* lock bttv in memory while the mixer is in use  */
-	if (client->adapter->inc_use)
-		client->adapter->inc_use(client->adapter);
-	
-        return 0;
-}
-
-static int
-msp3400c_mixer_release(struct inode *inode, struct file *file)
-{
-	struct i2c_client *client = file->private_data;
-
-	lock_kernel();
-	if (client->adapter->dec_use) 
-		client->adapter->dec_use(client->adapter);
-	unlock_kernel();
-        return 0;
-}
-
-static loff_t
-msp3400c_mixer_llseek(struct file *file, loff_t offset, int origin)
-{
-        return -ESPIPE;
-}
-
-static struct file_operations msp3400c_mixer_fops = {
-	owner:		THIS_MODULE,
-	llseek:         msp3400c_mixer_llseek,
-	ioctl:          msp3400c_mixer_ioctl,
-	open:           msp3400c_mixer_open,
-	release:        msp3400c_mixer_release,
-};
-
-#endif
 
 /* ----------------------------------------------------------------------- */
 

@@ -54,10 +54,8 @@
 #define IOEB_PSCLR		0x800d4016
 #define IOEB_MONTYPE		0x800d401c
 #endif
-#ifdef CONFIG_ARCH_ARC
 #define LATCHAADDR		0x80094010
 #define LATCHBADDR		0x80094006
-#endif
 #define IOC_BASE		0x80080000
 
 #define IO_EC_IOC4_BASE		0x8009c000

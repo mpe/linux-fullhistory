@@ -707,7 +707,7 @@ void *sock_kmalloc(struct sock *sk, int size, int priority)
  */
 void sock_kfree_s(struct sock *sk, void *mem, int size)
 {
-	kfree_s(mem, size); 
+	kfree(mem);
 	atomic_sub(size, &sk->omem_alloc);
 }
 

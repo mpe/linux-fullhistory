@@ -13,7 +13,7 @@
  *	io <bytes-read> <bytes-writtten>
  *			statistics for IO throughput
  *	th <threads> <fullcnt> <10%-20%> <20%-30%> ... <90%-100%> <100%> 
- *			time (milliseconds) when nfsd thread usage above thresholds
+ *			time (seconds) when nfsd thread usage above thresholds
  *			and number of times that all threads were in use
  *	ra cache-size  <10%  <20%  <30% ... <100% not-found
  *			number of times that read-ahead entry was found that deep in
@@ -58,8 +58,11 @@ nfsd_proc_read(char *buffer, char **start, off_t offset, int count,
 		      nfsdstats.io_write);
 	/* thread usage: */
 	len += sprintf(buffer+len, "th %u %u", nfsdstats.th_cnt, nfsdstats.th_fullcnt);
-	for (i=0; i<10; i++)
-		len += sprintf(buffer+len, " %u", nfsdstats.th_usage[i]);
+	for (i=0; i<10; i++) {
+		unsigned int jifs = nfsdstats.th_usage[i];
+		unsigned int sec = jifs / HZ, msec = (jifs % HZ)*1000/HZ;
+		len += sprintf(buffer+len, " %u.%03u", sec, msec);
+	}
 
 	/* newline and ra-cache */
 	len += sprintf(buffer+len, "\nra %u", nfsdstats.ra_size);

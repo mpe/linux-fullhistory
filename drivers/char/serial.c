@@ -3076,7 +3076,7 @@ static int get_async_struct(int line, struct async_struct **ret_info)
 	info->tqueue.data = info;
 	info->state = sstate;
 	if (sstate->info) {
-		kfree_s(info, sizeof(struct async_struct));
+		kfree(info);
 		*ret_info = sstate->info;
 		return 0;
 	}
@@ -5295,7 +5295,7 @@ static void __exit rs_fini(void)
 	for (i = 0; i < NR_PORTS; i++) {
 		if ((info = rs_table[i].info)) {
 			rs_table[i].info = NULL;
-			kfree_s(info, sizeof(struct async_struct));
+			kfree(info);
 		}
 		if ((rs_table[i].type != PORT_UNKNOWN) && rs_table[i].port) {
 #ifdef CONFIG_SERIAL_RSA

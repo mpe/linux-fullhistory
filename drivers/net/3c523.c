@@ -1269,7 +1269,7 @@ void cleanup_module(void)
 			mca_set_adapter_procfn(((struct priv *) (dev->priv))->slot,
 			       NULL, NULL);
 
-			kfree_s(dev->priv, sizeof(struct priv));
+			kfree(dev->priv);
 			dev->priv = NULL;
 		}
 	}

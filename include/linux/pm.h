@@ -59,6 +59,7 @@ enum
 	PM_USB_DEV,	    /* USB device */
 	PM_SCSI_DEV,	    /* SCSI device */
 	PM_ISA_DEV,	    /* ISA device */
+	PM_MTD_DEV,	    /* Memory Technology Device */
 };
 
 typedef int pm_dev_t;

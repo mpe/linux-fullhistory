@@ -1628,7 +1628,7 @@ int init_module(void)
 		dev_olympic[i]->init      = &olympic_probe;
 
 	        if (register_trdev(dev_olympic[i]) != 0) {
-			kfree_s(dev_olympic[i], sizeof(struct net_device));
+			kfree(dev_olympic[i]);
 			dev_olympic[i] = NULL;
 		        if (i == 0) {
 			        printk("Olympic: No IBM PCI Token Ring cards found in system.\n");
@@ -1651,8 +1651,8 @@ void cleanup_module(void)
 	        if (dev_olympic[i]) {
 			 unregister_trdev(dev_olympic[i]);
 			 release_region(dev_olympic[i]->base_addr, OLYMPIC_IO_SPACE);
-			 kfree_s(dev_olympic[i]->priv, sizeof(struct olympic_private));
-			 kfree_s(dev_olympic[i], sizeof(struct net_device));
+			 kfree(dev_olympic[i]->priv);
+			 kfree(dev_olympic[i]);
 			 dev_olympic[i] = NULL;
                 }
 

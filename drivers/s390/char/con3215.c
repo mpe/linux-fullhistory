@@ -839,7 +839,7 @@ static int tty3215_open(struct tty_struct *tty, struct file * filp)
 		memset(raw, 0, sizeof(raw3215_info));
 		raw->buffer = (char *) kmalloc(RAW3215_BUFFER_SIZE, GFP_KERNEL);
 		if (raw->buffer == NULL) {
-			kfree_s(raw, sizeof(raw3215_info));
+			kfree(raw);
 			return -ENOMEM;
 		}
 		raw->tqueue.routine = raw3215_softint;

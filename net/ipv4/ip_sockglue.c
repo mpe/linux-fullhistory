@@ -429,7 +429,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			}
 			opt = xchg(&sk->protinfo.af_inet.opt, opt);
 			if (opt)
-				kfree_s(opt, sizeof(struct ip_options) + opt->optlen);
+				kfree(opt);
 			break;
 		}
 		case IP_PKTINFO:

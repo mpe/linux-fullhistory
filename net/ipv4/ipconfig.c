@@ -175,7 +175,7 @@ static void __init ic_close_devs(void)
 			DBG(("IP-Config: Downing %s\n", dev->name));
 			dev_change_flags(dev, d->flags);
 		}
-		kfree_s(d, sizeof(struct ic_device));
+		kfree(d);
 	}
 	rtnl_shunlock();
 }

@@ -159,7 +159,7 @@ cookie_v4_check(struct sock *sk, struct sk_buff *skb, struct ip_options *opt)
 		req->af.v4_req.opt = kmalloc(opt_size, GFP_ATOMIC);
 		if (req->af.v4_req.opt) {
 			if (ip_options_echo(req->af.v4_req.opt, skb)) {
-				kfree_s(req->af.v4_req.opt, opt_size);
+				kfree(req->af.v4_req.opt);
 				req->af.v4_req.opt = NULL;
 			}
 		}

@@ -387,7 +387,7 @@ static struct dn_ifaddr *dn_dev_alloc_ifa(void)
 
 static __inline__ void dn_dev_free_ifa(struct dn_ifaddr *ifa)
 {
-	kfree_s(ifa, sizeof(*ifa));
+	kfree(ifa);
 }
 
 static void dn_dev_del_ifa(struct dn_dev *dn_db, struct dn_ifaddr **ifap, int destroy)

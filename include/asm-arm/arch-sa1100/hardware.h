@@ -81,6 +81,10 @@ extern void set_GPIO_IRQ_edge( int gpio_mask, int edge_mask );
 #include "empeg.h"
 #endif
 
+#ifdef CONFIG_SA1100_BITSY
+#include "bitsy.h"
+#endif
+
 #if defined(CONFIG_SA1100_GRAPHICSCLIENT) || defined(CONFIG_SA1100_THINCLIENT)
 #include "thinclient.h"
 #endif

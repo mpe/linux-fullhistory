@@ -36,7 +36,7 @@
 BUILD_COMMON_IRQ()
 
 #define BI(x,y) \
-	BUILD_IRQ(##x##y)
+	BUILD_IRQ(x##y)
 
 #define BUILD_16_IRQS(x) \
 	BI(x,0) BI(x,1) BI(x,2) BI(x,3) \

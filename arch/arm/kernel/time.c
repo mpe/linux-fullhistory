@@ -30,7 +30,7 @@
 extern int setup_arm_irq(int, struct irqaction *);
 extern void setup_timer(void);
 extern rwlock_t xtime_lock;
-extern volatile unsigned long lost_ticks;
+extern unsigned long wall_jiffies;
 
 /* change this if you have some constant time drift */
 #define USECS_PER_JIFFY	(1000000/HZ)
@@ -189,7 +189,7 @@ void do_gettimeofday(struct timeval *tv)
 	read_lock_irqsave(&xtime_lock, flags);
 	usec = gettimeoffset();
 	{
-		unsigned long lost = lost_ticks;
+		unsigned long lost = jiffies - wall_jiffies;
 
 		if (lost)
 			usec += lost * USECS_PER_JIFFY;
@@ -218,7 +218,7 @@ void do_settimeofday(struct timeval *tv)
 	 * would have done, and then undo it!
 	 */
 	tv->tv_usec -= gettimeoffset();
-	tv->tv_usec -= lost_ticks * USECS_PER_JIFFY;
+	tv->tv_usec -= (jiffies - wall_jiffies) * USECS_PER_JIFFY;
 
 	while (tv->tv_usec < 0) {
 		tv->tv_usec += 1000000;

@@ -1691,10 +1691,10 @@ sony535_exit(void)
 
 	release_region(sony535_cd_base_io, 4);
 	for (i = 0; i < sony_buffer_sectors; i++)
-		kfree_s(sony_buffer[i], CDU535_BLOCK_SIZE);
-	kfree_s(sony_buffer, 4 * sony_buffer_sectors);
-	kfree_s(last_sony_subcode, sizeof *last_sony_subcode);
-	kfree_s(sony_toc, sizeof *sony_toc);
+		kfree(sony_buffer[i]);
+	kfree(sony_buffer);
+	kfree(last_sony_subcode);
+	kfree(sony_toc);
 	devfs_unregister(devfs_find_handle(NULL, CDU535_HANDLE, 0, 0,
 					   DEVFS_SPECIAL_BLK, 0));
 	if (devfs_unregister_blkdev(MAJOR_NR, CDU535_HANDLE) == -EINVAL)

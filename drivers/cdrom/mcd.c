@@ -206,37 +206,21 @@ int mcd_drive_status(struct cdrom_device_info * cdi, int slot_nr);
 static struct timer_list mcd_timer;
 
 static struct cdrom_device_ops mcd_dops = {
-  mcd_open,                   /* open */
-  mcd_release,                /* release */
-  mcd_drive_status,           /* drive status */
-  //NULL,           /* drive status */
-  mcd_media_changed,          /* media changed */
-  mcd_tray_move,              /* tray move */
-  NULL,                       /* lock door */
-  NULL,                       /* select speed */
-  NULL,                       /* select disc */
-  NULL,                       /* get last session */
-  NULL,                       /* get universal product code */
-  NULL,                       /* hard reset */
-  mcd_audio_ioctl,            /* audio ioctl */
-  NULL,                  /* device-specific ioctl */
-  CDC_OPEN_TRAY | CDC_MEDIA_CHANGED | CDC_PLAY_AUDIO
-  | CDC_DRIVE_STATUS, /* capability */
-  0,                            /* number of minor devices */
+	open:			mcd_open,
+	release:		mcd_release,
+	drive_status:		mcd_drive_status,
+	media_changed:		mcd_media_changed,
+	tray_move:		mcd_tray_move,
+	audio_ioctl:		mcd_audio_ioctl,
+	capability:		CDC_OPEN_TRAY | CDC_MEDIA_CHANGED |
+				CDC_PLAY_AUDIO | CDC_DRIVE_STATUS,
 };
 
 static struct cdrom_device_info mcd_info = {
-  &mcd_dops,                    /* device operations */
-  NULL,                         /* link */
-  NULL,                         /* handle */
-  0,		                /* dev */
-  0,                            /* mask */
-  2,                            /* maximum speed */
-  1,                            /* number of discs */
-  0,                            /* options, not owned */
-  0,                            /* mc_flags, not owned */
-  0,                            /* use count, not owned */
-  "mcd",                         /* name of the device type */
+	ops:			&mcd_dops,
+	speed:			2,
+	capacity:		1,
+	name:			"mcd",
 };
 
 #ifndef MODULE

@@ -19,13 +19,10 @@ obj-$(CONFIG_OSF_PARTITION) += osf.o
 obj-$(CONFIG_SGI_PARTITION) += sgi.o
 obj-$(CONFIG_SUN_PARTITION) += sun.o
 obj-$(CONFIG_ULTRIX_PARTITION) += ultrix.o
+obj-$(CONFIG_IBM_PARTITION) += ibm.o
 
 O_OBJS += $(obj-y)
 M_OBJS += $(obj-m)
-ifeq ($(CONFIG_IBM_PARTITION),y)
-O_OBJS += ibm.o
-endif
-
 
 include $(TOPDIR)/Rules.make
 

@@ -13,6 +13,7 @@ fi
 if [ "$CONFIG_NLS" = "y" ]; then
   mainmenu_option next_comment
   comment 'Native Language Support'
+  string 'Default NLS Option' CONFIG_NLS_DEFAULT "iso8859-1"
   tristate 'Codepage 437 (United States, Canada)'  CONFIG_NLS_CODEPAGE_437
   tristate 'Codepage 737 (Greek)'                  CONFIG_NLS_CODEPAGE_737
   tristate 'Codepage 775 (Baltic Rim)'             CONFIG_NLS_CODEPAGE_775
@@ -29,6 +30,10 @@ if [ "$CONFIG_NLS" = "y" ]; then
   tristate 'Codepage 866 (Cyrillic/Russian)'       CONFIG_NLS_CODEPAGE_866
   tristate 'Codepage 869 (Greek)'                  CONFIG_NLS_CODEPAGE_869
   tristate 'Codepage 874 (Thai)'                   CONFIG_NLS_CODEPAGE_874
+  tristate 'Codepage 932 (Shift-JIS, EUC-JP)'      CONFIG_NLS_CODEPAGE_932
+  tristate 'Codepage 936 (GBK)'                    CONFIG_NLS_CODEPAGE_936
+  tristate 'Codepage 949 (UnifiedHangul)'          CONFIG_NLS_CODEPAGE_949
+  tristate 'Codepage 950 (Big5)'                   CONFIG_NLS_CODEPAGE_950
   tristate 'NLS ISO 8859-1  (Latin 1; Western European Languages)' CONFIG_NLS_ISO8859_1
   tristate 'NLS ISO 8859-2  (Latin 2; Slavic/Central European Languages)' CONFIG_NLS_ISO8859_2
   tristate 'NLS ISO 8859-3  (Latin 3; Esperanto, Galician, Maltese, Turkish)' CONFIG_NLS_ISO8859_3
@@ -41,5 +46,6 @@ if [ "$CONFIG_NLS" = "y" ]; then
   tristate 'NLS ISO 8859-14 (Latin 8; Celtic)'      CONFIG_NLS_ISO8859_14
   tristate 'NLS ISO 8859-15 (Latin 9; Western European Languages with Euro)' CONFIG_NLS_ISO8859_15
   tristate 'NLS KOI8-R (Russian)'                   CONFIG_NLS_KOI8_R
+  tristate 'NLS UTF8'                               CONFIG_NLS_UTF8
   endmenu
 fi

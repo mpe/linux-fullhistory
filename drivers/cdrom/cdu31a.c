@@ -3222,37 +3222,31 @@ scd_release(struct cdrom_device_info *cdi)
 }
 
 static struct cdrom_device_ops scd_dops = {
-  scd_open,                   /* open */
-  scd_release,                /* release */
-  scd_drive_status,           /* drive status */
-  scd_media_changed,          /* media changed */
-  scd_tray_move,              /* tray move */
-  scd_lock_door,              /* lock door */
-  scd_select_speed,           /* select speed */
-  NULL,                       /* select disc */
-  scd_get_last_session,       /* get last session */
-  scd_get_mcn,                /* get universal product code */
-  scd_reset,                  /* hard reset */
-  scd_audio_ioctl,            /* audio ioctl */
-  scd_dev_ioctl,              /* device-specific ioctl */
-  CDC_OPEN_TRAY | CDC_CLOSE_TRAY | CDC_LOCK | CDC_SELECT_SPEED | CDC_MULTI_SESSION | 
-  CDC_MULTI_SESSION | CDC_MCN | CDC_MEDIA_CHANGED | CDC_PLAY_AUDIO |
-  CDC_RESET | CDC_IOCTLS | CDC_DRIVE_STATUS, /* capability */
-  1,                            /* number of minor devices */
+	open:			scd_open,
+	release:		scd_release,
+	drive_status:		scd_drive_status,
+	media_changed:		scd_media_changed,
+	tray_move:		scd_tray_move,
+	lock_door:		scd_lock_door,
+	select_speed:		scd_select_speed,
+	get_last_session:	scd_get_last_session,
+	get_mcn:		scd_get_mcn,
+	reset:			scd_reset,
+	audio_ioctl:		scd_audio_ioctl,
+	dev_ioctl:		scd_dev_ioctl,
+	capability:		CDC_OPEN_TRAY | CDC_CLOSE_TRAY | CDC_LOCK |
+				CDC_SELECT_SPEED | CDC_MULTI_SESSION | 
+				CDC_MULTI_SESSION | CDC_MCN |
+				CDC_MEDIA_CHANGED | CDC_PLAY_AUDIO |
+				CDC_RESET | CDC_IOCTLS | CDC_DRIVE_STATUS,
+	n_minors:		1,
 };
 
 static struct cdrom_device_info scd_info = {
-  &scd_dops,                  /* device operations */
-  NULL,                       /* link */
-  NULL,                       /* handle */
-  0,			      /* devfs */
-  0,			      /* dev */
-  0,                          /* mask */
-  2,                          /* maximum speed */
-  1,                          /* number of discs */
-  0,                          /* options, not owned */
-  0,                          /* mc_flags, not owned */
-  0                           /* use count, not owned */
+	ops:		&scd_dops,
+	speed:		2,
+	capacity:	1,
+	name:		"cdu31a"
 };
 
 /* The different types of disc loading mechanisms supported */

@@ -7,7 +7,7 @@
 #include <asm/iomd.h>
 #include <asm/io.h>
 
-extern __inline__ void arch_idle(void)
+static void arch_idle(void)
 {
 	unsigned long start_idle;
 
@@ -28,8 +28,6 @@ extern __inline__ void arch_idle(void)
 	cpu_do_idle(IDLE_CLOCK_FAST);
 slow_out:
 }
-
-#define arch_power_off()	do { } while (0)
 
 extern __inline__ void arch_reset(char mode)
 {

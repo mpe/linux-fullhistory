@@ -878,7 +878,7 @@ static void dn_fib_del_tree(int n)
         write_unlock(&dn_fib_tables_lock);
 
         if (t) {
-                kfree_s(t, sizeof(struct dn_fib_table));
+                kfree(t);
         }
 }
 

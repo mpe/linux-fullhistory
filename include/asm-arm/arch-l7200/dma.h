@@ -1,3 +1,6 @@
+/*
+ * linux/include/asm-arm/arch-l7200/dma.h
+ */
 #ifndef __ASM_ARCH_DMA_H
 #define __ASM_ARCH_DMA_H
 

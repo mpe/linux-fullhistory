@@ -67,6 +67,12 @@ __setup("nohlt", nohlt_setup);
 __setup("hlt", hlt_setup);
 
 /*
+ * The following aren't currently used.
+ */
+void (*pm_idle)(void);
+void (*pm_power_off)(void);
+
+/*
  * The idle thread.  We try to conserve power, while trying to keep
  * overall latency low.  The architecture specific idle is passed
  * a value to indicate the level of "idleness" of the system.
@@ -79,7 +85,11 @@ void cpu_idle(void)
 	current->counter = -100;
 
 	while (1) {
-		arch_idle();
+		void (*idle)(void) = pm_idle;
+		if (!idle)
+			idle = arch_idle;
+		while (!current->need_resched)
+			idle();
 		schedule();
 #ifndef CONFIG_NO_PGT_CACHE
 		check_pgt_cache();
@@ -96,6 +106,16 @@ int __init reboot_setup(char *str)
 }
 
 __setup("reboot=", reboot_setup);
+
+void machine_halt(void)
+{
+}
+
+void machine_power_off(void)
+{
+	if (pm_power_off)
+		pm_power_off();
+}
 
 void machine_restart(char * __unused)
 {
@@ -123,15 +143,6 @@ void machine_restart(char * __unused)
 	mdelay(1000);
 	printk("Reboot failed -- System halted\n");
 	while (1);
-}
-
-void machine_halt(void)
-{
-}
-
-void machine_power_off(void)
-{
-	arch_power_off();
 }
 
 void show_regs(struct pt_regs * regs)

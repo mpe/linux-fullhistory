@@ -360,6 +360,15 @@ void cdrom_analyze_sense_data(ide_drive_t *drive,
 		return;
 	}
 
+	/*
+	 * If a read toc is executed for a CD-R or CD-RW medium where
+	 * the first toc has not been recorded yet, it will fail with
+	 * 05/24/00 (which is a confusing error)
+	 */
+	if (failed_command && failed_command->c[0] == GPCMD_READ_TOC_PMA_ATIP)
+		if (sense->sense_key == 0x05 && sense->asc == 0x24)
+			return;
+
 #if VERBOSE_IDE_CD_ERRORS
 	{
 		int i;
@@ -2145,29 +2154,27 @@ void ide_cdrom_release_real (struct cdrom_device_info *cdi)
 /****************************************************************************
  * Device initialization.
  */
-
-static
-struct cdrom_device_ops ide_cdrom_dops = {
-	ide_cdrom_open_real,    /* open */
-	ide_cdrom_release_real, /* release */
-	ide_cdrom_drive_status, /* drive_status */
-	ide_cdrom_check_media_change_real, /* media_changed */
-	ide_cdrom_tray_move,    /* tray_move */
-	ide_cdrom_lock_door,    /* lock_door */
-	ide_cdrom_select_speed, /* select_speed */
-	NULL,			/* select_disc */
-	ide_cdrom_get_last_session, /* get_last_session */
-	ide_cdrom_get_mcn, /* get_mcn */
-	ide_cdrom_reset, /* reset */
-	ide_cdrom_audio_ioctl, /* audio_ioctl */
-	ide_cdrom_dev_ioctl,   /* dev_ioctl */
-	CDC_CLOSE_TRAY | CDC_OPEN_TRAY | CDC_LOCK | CDC_SELECT_SPEED
-	| CDC_SELECT_DISC | CDC_MULTI_SESSION | CDC_MCN
-	| CDC_MEDIA_CHANGED | CDC_PLAY_AUDIO | CDC_RESET | CDC_IOCTLS
-	| CDC_DRIVE_STATUS | CDC_CD_R | CDC_CD_RW | CDC_DVD
-	| CDC_DVD_R| CDC_DVD_RAM | CDC_GENERIC_PACKET, /* capability */
-	0, /* n_minors */
-	ide_cdrom_packet
+static struct cdrom_device_ops ide_cdrom_dops = {
+	open:			ide_cdrom_open_real,
+	release:		ide_cdrom_release_real,
+	drive_status:		ide_cdrom_drive_status,
+	media_changed:		ide_cdrom_check_media_change_real,
+	tray_move:		ide_cdrom_tray_move,
+	lock_door:		ide_cdrom_lock_door,
+	select_speed:		ide_cdrom_select_speed,
+	get_last_session:	ide_cdrom_get_last_session,
+	get_mcn:		ide_cdrom_get_mcn,
+	reset:			ide_cdrom_reset,
+	audio_ioctl:		ide_cdrom_audio_ioctl,
+	dev_ioctl:		ide_cdrom_dev_ioctl,
+	capability:		CDC_CLOSE_TRAY | CDC_OPEN_TRAY | CDC_LOCK |
+				CDC_SELECT_SPEED | CDC_SELECT_DISC |
+				CDC_MULTI_SESSION | CDC_MCN |
+				CDC_MEDIA_CHANGED | CDC_PLAY_AUDIO | CDC_RESET |
+				CDC_IOCTLS | CDC_DRIVE_STATUS | CDC_CD_R |
+				CDC_CD_RW | CDC_DVD | CDC_DVD_R| CDC_DVD_RAM |
+				CDC_GENERIC_PACKET,
+	generic_packet:		ide_cdrom_packet,
 };
 
 static int ide_cdrom_register (ide_drive_t *drive, int nslots)
@@ -2275,9 +2282,9 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 	if (cap.dvd_ram_read || cap.dvd_r_read || cap.dvd_rom)
 		CDROM_CONFIG_FLAGS (drive)->dvd = 1;
 	if (cap.dvd_ram_write)
-		CDROM_CONFIG_FLAGS (drive)->dvd_r = 1;
-	if (cap.dvd_r_write)
 		CDROM_CONFIG_FLAGS (drive)->dvd_ram = 1;
+	if (cap.dvd_r_write)
+		CDROM_CONFIG_FLAGS (drive)->dvd_r = 1;
 	if (cap.audio_play)
 		CDROM_CONFIG_FLAGS (drive)->audio_play = 1;
 	if (cap.mechtype == 0)
@@ -2510,8 +2517,7 @@ int ide_cdrom_open (struct inode *ip, struct file *fp, ide_drive_t *drive)
 	MOD_INC_USE_COUNT;
 	if (info->buffer == NULL)
 		info->buffer = (char *) kmalloc(SECTOR_BUFFER_SIZE, GFP_KERNEL);
-	rc = cdrom_fops.open (ip, fp);
-	if (rc) {
+	if ((rc = cdrom_fops.open(ip, fp))) {
 		drive->usage--;
 		MOD_DEC_USE_COUNT;
 	}
@@ -2560,8 +2566,10 @@ unsigned long ide_cdrom_capacity (ide_drive_t *drive)
 {
 	unsigned capacity;
 
-	return cdrom_read_capacity(drive, &capacity, NULL)
-		? 0 : capacity * SECTORS_PER_FRAME;
+	if (cdrom_read_capacity(drive, &capacity, NULL))
+		return 0;
+
+	return capacity * SECTORS_PER_FRAME;
 }
 
 static
@@ -2586,24 +2594,19 @@ int ide_cdrom_cleanup(ide_drive_t *drive)
 }
 
 static ide_driver_t ide_cdrom_driver = {
-	"ide-cdrom",			/* name */
-	IDECD_VERSION,			/* version */
-	ide_cdrom,			/* media */
-	0,				/* busy */
-	1,				/* supports_dma */
-	1,				/* supports_dsc_overlap */
-	ide_cdrom_cleanup,		/* cleanup */
-	ide_do_rw_cdrom,		/* do_request */
-	NULL,				/* ??? or perhaps cdrom_end_request? */
-	ide_cdrom_ioctl,		/* ioctl */
-	ide_cdrom_open,			/* open */
-	ide_cdrom_release,		/* release */
-	ide_cdrom_check_media_change,	/* media_change */
-	ide_cdrom_revalidate,		/* revalidate */
-	NULL,				/* pre_reset */
-	ide_cdrom_capacity,		/* capacity */
-	NULL,				/* special */
-	NULL				/* proc */
+	name:			"ide-cdrom",
+	version:		IDECD_VERSION,
+	media:			ide_cdrom,
+	supports_dma:		1,
+	supports_dsc_overlap:	1,
+	cleanup:		ide_cdrom_cleanup,
+	do_request:		ide_do_rw_cdrom,
+	ioctl:			ide_cdrom_ioctl,
+	open:			ide_cdrom_open,
+	release:		ide_cdrom_release,
+	media_change:		ide_cdrom_check_media_change,
+	revalidate:		ide_cdrom_revalidate,
+	capacity:		ide_cdrom_capacity,
 };
 
 int ide_cdrom_init(void);

@@ -1,4 +1,4 @@
-/* $Id: blockops.S,v 1.25 2000/04/13 04:45:58 davem Exp $
+/* $Id: blockops.S,v 1.27 2000/07/14 01:12:49 davem Exp $
  * blockops.S: UltraSparc block zero optimized routines.
  *
  * Copyright (C) 1996, 1998, 1999, 2000 David S. Miller (davem@redhat.com)
@@ -83,21 +83,29 @@ copy_user_page: /* %o0=dest, %o1=src, %o2=vaddr */
 	or		%g2, %g3, %g2
 	add		%o0, %o3, %o0
 	add		%o0, %o1, %o1
-	sethi		%hi(TLBTEMP_ENT1), %o3
+	mov		TLBTEMP_ENT1, %o3
 	rdpr		%pstate, %g3
 	wrpr		%g3, PSTATE_IE, %pstate
+
+	/* Do this now, before loading the fixed TLB entries for copying,
+	 * so we do not risk a multiple TLB match condition later when
+	 * restoring those entries.
+	 */
+	ldub		[%g6 + AOFF_task_thread + AOFF_thread_use_blkcommit], %g3
 
 	/* Spitfire Errata #32 workaround */
 	mov		0x8, %o4
 	stxa		%g0, [%o4] ASI_DMMU
-	flush		%g6
+	sethi		%hi(empty_zero_page), %o4
+	flush		%o4
 
 	ldxa		[%o3] ASI_DTLB_TAG_READ, %o4
 
 	/* Spitfire Errata #32 workaround */
 	mov		0x8, %o5
 	stxa		%g0, [%o5] ASI_DMMU
-	flush		%g6
+	sethi		%hi(empty_zero_page), %o5
+	flush		%o5
 
 	ldxa		[%o3] ASI_DTLB_DATA_ACCESS, %o5
 	stxa		%o0, [%o2] ASI_DMMU
@@ -108,22 +116,23 @@ copy_user_page: /* %o0=dest, %o1=src, %o2=vaddr */
 	/* Spitfire Errata #32 workaround */
 	mov		0x8, %g5
 	stxa		%g0, [%g5] ASI_DMMU
-	flush		%g6
+	sethi		%hi(empty_zero_page), %g5
+	flush		%g5
 
 	ldxa		[%o3] ASI_DTLB_TAG_READ, %g5
 
 	/* Spitfire Errata #32 workaround */
 	mov		0x8, %g7
 	stxa		%g0, [%g7] ASI_DMMU
-	flush		%g6
+	sethi		%hi(empty_zero_page), %g7
+	flush		%g7
 
 	ldxa		[%o3] ASI_DTLB_DATA_ACCESS, %g7
 	stxa		%o1, [%o2] ASI_DMMU
 	stxa		%g2, [%o3] ASI_DTLB_DATA_ACCESS
 	membar		#Sync
 
-	ldub		[%g6 + AOFF_task_thread + AOFF_thread_use_blkcommit], %g2
-	cmp		%g2, 0
+	cmp		%g3, 0
 	bne,pn		%xcc, copy_page_using_blkcommit
 	 nop
 
@@ -168,8 +177,9 @@ copy_user_page_continue:
 	stxa		%o4, [%o2] ASI_DMMU
 	stxa		%o5, [%o3] ASI_DTLB_DATA_ACCESS
 	membar		#Sync
+	rdpr		%pstate, %g3
 	jmpl		%o7 + 0x8, %g0
-	 wrpr		%g3, 0x0, %pstate
+	 wrpr		%g3, PSTATE_IE, %pstate
 
 copy_page_using_blkcommit:
 	membar		#LoadStore | #StoreStore | #StoreLoad
@@ -227,21 +237,23 @@ clear_user_page:	/* %o0=dest, %o1=vaddr */
 	or		%g3, (_PAGE_CP | _PAGE_CV | _PAGE_P | _PAGE_L | _PAGE_W), %g3
 	or		%g1, %g3, %g1
 	add		%o0, %o3, %o0
-	sethi		%hi(TLBTEMP_ENT2), %o3
+	mov		TLBTEMP_ENT2, %o3
 	rdpr		%pstate, %g3
 	wrpr		%g3, PSTATE_IE, %pstate
 
 	/* Spitfire Errata #32 workaround */
 	mov		0x8, %g5
 	stxa		%g0, [%g5] ASI_DMMU
-	flush		%g6
+	sethi		%hi(empty_zero_page), %g5
+	flush		%g5
 
 	ldxa		[%o3] ASI_DTLB_TAG_READ, %g5
 
 	/* Spitfire Errata #32 workaround */
 	mov		0x8, %g7
 	stxa		%g0, [%g7] ASI_DMMU
-	flush		%g6
+	sethi		%hi(empty_zero_page), %g7
+	flush		%g7
 
 	ldxa		[%o3] ASI_DTLB_DATA_ACCESS, %g7
 	stxa		%o0, [%o2] ASI_DMMU

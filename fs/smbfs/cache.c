@@ -6,6 +6,8 @@
  * Routines to support directory cacheing using the page cache.
  * Right now this only works for smbfs, but will be generalized
  * for use with other filesystems.
+ *
+ * Please add a note about your changes to smbfs in the ChangeLog file.
  */
 
 #include <linux/sched.h>
@@ -18,25 +20,8 @@
 
 #include <asm/page.h>
 
-#define SMBFS_PARANOIA 1
-/* #define SMBFS_DEBUG_VERBOSE 1 */
+#include "smb_debug.h"
 
-#ifdef SMBFS_DEBUG_VERBOSE
-/*
- * Print a cache_dirent->name, max 80 chars
- * You can't just printk non-null terminated strings ...
- */
-printk_name(const char *name, int len)
-{
-	char buf[81];
-
-	if(len > 80)
-		len = 80;
-	strncpy(buf, name, len);
-	buf[len] = 0;
-	printk("%s", buf);
-}
-#endif
 
 static inline struct address_space * 
 get_cache_inode(struct cache_head *cachep)
@@ -101,9 +86,7 @@ smb_free_cache_blocks(struct cache_head * cachep)
 	struct page * page;
 	int i;
 
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_free_cache_blocks: freeing %d blocks\n", cachep->pages);
-#endif
+	VERBOSE("freeing %d blocks\n", cachep->pages);
 	for (i = 0; i < cachep->pages; i++, index++) {
 		if (!index->block)
 			continue;
@@ -122,9 +105,7 @@ void
 smb_free_dircache(struct cache_head * cachep)
 {
 	struct page *page;
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_free_dircache: freeing cache\n");
-#endif
+	VERBOSE("freeing cache\n");
 	smb_free_cache_blocks(cachep);
 	page = page_cache_entry((unsigned long) cachep);
 	kunmap(page);
@@ -139,9 +120,7 @@ printk("smb_free_dircache: freeing cache\n");
 void
 smb_init_dircache(struct cache_head * cachep)
 {
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_init_dircache: initializing cache, %d blocks\n", cachep->pages);
-#endif
+	VERBOSE("initializing cache, %d blocks\n", cachep->pages);
 	smb_free_cache_blocks(cachep);
 	memset(cachep, 0, sizeof(struct cache_head));
 }
@@ -162,12 +141,9 @@ smb_add_to_cache(struct cache_head * cachep, struct cache_dirent *entry,
 	unsigned int nent, offset, len = entry->len;
 	unsigned int needed = len + sizeof(struct cache_entry);
 
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_add_to_cache: cache %p, status %d, adding ", 
-       mapping, cachep->status);
-printk_name(entry->name, entry->len);
-printk(" at %ld\n", fpos);
-#endif
+	VERBOSE("cache %p, status %d, adding %.*s at %ld\n",
+		mapping, cachep->status, entry->len, entry->name, fpos);
+
 	/*
 	 * Don't do anything if we've had an error ...
 	 */
@@ -192,12 +168,9 @@ printk(" at %ld\n", fpos);
 		block->cb_data.table[nent].offset = offset;
 		block->cb_data.table[nent].ino = entry->ino;
 		cachep->entries++;
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_add_to_cache: added entry ");
-printk_name(entry->name, entry->len);
-printk(", len=%d, pos=%ld, entries=%d\n",
-len, fpos, cachep->entries);
-#endif
+
+		VERBOSE("added entry %.*s, len=%d, pos=%ld, entries=%d\n",
+			entry->len, entry->name, len, fpos, cachep->entries);
 		return;
 	}
 	/*
@@ -238,9 +211,8 @@ smb_find_in_cache(struct cache_head * cachep, off_t pos,
 	unsigned int i, nent, offset = 0;
 	off_t next_pos = 2;
 
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_find_in_cache: cache %p, looking for pos=%ld\n", cachep, pos);
-#endif
+	VERBOSE("smb_find_in_cache: cache %p, looking for pos=%ld\n",
+		cachep, pos);
 	for (i = 0; i < cachep->pages; i++, index++)
 	{
 		if (pos < next_pos)
@@ -258,11 +230,9 @@ printk("smb_find_in_cache: cache %p, looking for pos=%ld\n", cachep, pos);
 		entry->len = block->cb_data.table[nent].namelen;
 		offset = block->cb_data.table[nent].offset;
 		entry->name = &block->cb_data.names[offset];
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_find_in_cache: found ");
-printk_name(entry->name, entry->len);
-printk(", len=%d, pos=%ld\n", entry->len, pos);
-#endif
+
+		VERBOSE("found %.*s, len=%d, pos=%ld\n",
+			entry->len, entry->name, entry->len, pos);
 		break;
 	}
 	return offset;
@@ -274,10 +244,8 @@ smb_refill_dircache(struct cache_head * cachep, struct dentry *dentry)
 	struct inode * inode = dentry->d_inode;
 	int result;
 
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_refill_dircache: cache %s/%s, blocks=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, cachep->pages);
-#endif
+	VERBOSE("smb_refill_dircache: cache %s/%s, blocks=%d\n",
+		DENTRY_PATH(dentry), cachep->pages);
 	/*
 	 * Fill the cache, starting at position 2.
 	 */
@@ -286,9 +254,7 @@ retry:
 	result = smb_proc_readdir(dentry, 2, cachep);
 	if (result < 0)
 	{
-#ifdef SMBFS_PARANOIA
-printk("smb_refill_dircache: readdir failed, result=%d\n", result);
-#endif
+		PARANOIA("readdir failed, result=%d\n", result);
 		goto out;
 	}
 
@@ -298,9 +264,7 @@ printk("smb_refill_dircache: readdir failed, result=%d\n", result);
 	 */
 	if (!(inode->u.smbfs_i.cache_valid & SMB_F_CACHEVALID))
 	{
-#ifdef SMBFS_PARANOIA
-printk("smb_refill_dircache: cache invalidated, retrying\n");
-#endif
+		PARANOIA("cache invalidated, retrying\n");
 		goto retry;
 	}
 
@@ -309,12 +273,8 @@ printk("smb_refill_dircache: cache invalidated, retrying\n");
 	{
 		cachep->valid = 1;
 	}
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_refill_cache: cache %s/%s status=%d, entries=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name,
-cachep->status, cachep->entries);
-#endif
-
+	VERBOSE("cache %s/%s status=%d, entries=%d\n",
+		DENTRY_PATH(dentry), cachep->status, cachep->entries);
 out:
 	return result;
 }

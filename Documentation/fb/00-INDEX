@@ -9,6 +9,15 @@ framebuffer.txt
 	- introduction to frame buffer devices
 internals.txt
 	- quick overview of frame buffer device internals
+modedb.txt
+	- info on the video mode database
+aty128fb.txt
+	- info on the ATI Rage128 frame buffer driver
+clgenfb.txt
+	- info on the Cirrus Logic frame buffer driver
+matroxfb.txt
+	- info on the Matrox frame buffer driver
+tgafb.txt
+	- info on the TGA (DECChip 21030) frame buffer driver
 vesafb.txt
 	- info on the VESA frame buffer device
-

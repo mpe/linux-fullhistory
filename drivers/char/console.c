@@ -659,7 +659,7 @@ int vc_allocate(unsigned int currcons)	/* return 0 on success */
 		con_set_default_unimap(currcons);
 	    q = (long)kmalloc(screenbuf_size, GFP_KERNEL);
 	    if (!q) {
-		kfree_s((char *) p, structsize);
+		kfree((char *) p);
 		vc_cons[currcons].d = NULL;
 		vt_cons[currcons] = NULL;
 		return -ENOMEM;
@@ -703,7 +703,7 @@ int vc_resize(unsigned int lines, unsigned int cols,
 			if (!p) {
 				for (i = first; i < currcons; i++)
 					if (newscreens[i])
-						kfree_s(newscreens[i], ss);
+						kfree(newscreens[i]);
 				return -ENOMEM;
 			}
 			newscreens[currcons] = p;
@@ -749,7 +749,7 @@ int vc_resize(unsigned int lines, unsigned int cols,
 		if (nlend > nl)
 			scr_memsetw((void *) nl, video_erase_char, nlend - nl);
 		if (kmalloced)
-			kfree_s(screenbuf, oss);
+			kfree(screenbuf);
 		screenbuf = newscreens[currcons];
 		kmalloced = 1;
 		screenbuf_size = ss;
@@ -785,9 +785,9 @@ void vc_disallocate(unsigned int currcons)
 	if (vc_cons_allocated(currcons)) {
 	    sw->con_deinit(vc_cons[currcons].d);
 	    if (kmalloced)
-		kfree_s(screenbuf, screenbuf_size);
+		kfree(screenbuf);
 	    if (currcons >= MIN_NR_CONSOLES)
-		kfree_s(vc_cons[currcons].d, structsize);
+		kfree(vc_cons[currcons].d);
 	    vc_cons[currcons].d = NULL;
 	}
 }
@@ -2860,7 +2860,7 @@ int con_font_op(int currcons, struct console_font_op *op)
 			rc = -EFAULT;
 	}
 quit:	if (temp)
-		kfree_s(temp, size);
+		kfree(temp);
 	return rc;
 }
 

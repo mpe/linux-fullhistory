@@ -29,6 +29,9 @@ struct nfsd_stats {
 					 * in the cache (10percentiles). [10] = not found */
 };
 
+/* thread usage wraps very million seconds (approx one fortnight) */
+#define	NFSD_USAGE_WRAP	(HZ*1000000)
+
 #ifdef __KERNEL__
 
 extern struct nfsd_stats	nfsdstats;

@@ -75,7 +75,7 @@ static struct buffer_head *raid1_alloc_bh(raid1_conf_t *conf, int cnt)
 		md_spin_unlock_irq(&conf->device_lock);
 		if (cnt == 0)
 			break;
-		t = (struct buffer_head *)kmalloc(sizeof(struct buffer_head), GFP_KERNEL);
+		t = (struct buffer_head *)kmalloc(sizeof(struct buffer_head), GFP_BUFFER);
 		if (t) {
 			memset(t, 0, sizeof(*t));
 			t->b_next = bh;
@@ -165,7 +165,7 @@ static struct raid1_bh *raid1_alloc_r1bh(raid1_conf_t *conf)
 		if (r1_bh)
 			return r1_bh;
 		r1_bh = (struct raid1_bh *) kmalloc(sizeof(struct raid1_bh),
-					GFP_KERNEL);
+					GFP_BUFFER);
 		if (r1_bh) {
 			memset(r1_bh, 0, sizeof(*r1_bh));
 			return r1_bh;
@@ -1207,7 +1207,7 @@ static void raid1d (void *data)
 					mbh = mbh->b_next;
 					q = blk_get_queue(bh1->b_rdev);
 					generic_make_request(q, WRITE, bh1);
-					drive_stat_acct(bh1->b_rdev, WRITE, -bh1->b_size/512, 0);
+					md_sync_acct(bh1->b_rdev, bh1->b_size/512);
 				}
 			} else {
 				dev = bh->b_dev;
@@ -1436,7 +1436,7 @@ static int raid1_sync_request (mddev_t *mddev, unsigned long block_nr)
 
 	q = blk_get_queue(bh->b_rdev);
 	generic_make_request(q, READ, bh);
-	drive_stat_acct(bh->b_rdev, READ, -bh->b_size/512, 0);
+	md_sync_acct(bh->b_rdev, bh->b_size/512);
 
 	return (bsize >> 10);
 

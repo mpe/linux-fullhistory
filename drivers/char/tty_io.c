@@ -149,9 +149,7 @@ extern int rs_8xx_init(void);
 extern void hwc_console_init(void);
 extern void con3215_init(void);
 extern void rs285_console_init(void);
-extern void rs285_init(void);
 extern void sa1100_rs_console_init(void);
-extern void sa1100_rs_init(void);
 extern void sgi_serial_console_init(void);
 
 #ifndef MIN
@@ -988,13 +986,13 @@ end_init:
 	/* Release locally allocated memory ... nothing placed in slots */
 free_mem_out:
 	if (o_tp)
-		kfree_s(o_tp, sizeof(struct termios));
+		kfree(o_tp);
 	if (o_tty)
 		free_tty_struct(o_tty);
 	if (ltp)
-		kfree_s(ltp, sizeof(struct termios));
+		kfree(ltp);
 	if (tp)
-		kfree_s(tp, sizeof(struct termios));
+		kfree(tp);
 	free_tty_struct(tty);
 
 fail_no_mem:
@@ -1022,7 +1020,7 @@ static void release_mem(struct tty_struct *tty, int idx)
 		if (o_tty->driver.flags & TTY_DRIVER_RESET_TERMIOS) {
 			tp = o_tty->driver.termios[idx];
 			o_tty->driver.termios[idx] = NULL;
-			kfree_s(tp, sizeof(struct termios));
+			kfree(tp);
 		}
 		o_tty->magic = 0;
 		(*o_tty->driver.refcount)--;
@@ -1033,7 +1031,7 @@ static void release_mem(struct tty_struct *tty, int idx)
 	if (tty->driver.flags & TTY_DRIVER_RESET_TERMIOS) {
 		tp = tty->driver.termios[idx];
 		tty->driver.termios[idx] = NULL;
-		kfree_s(tp, sizeof(struct termios));
+		kfree(tp);
 	}
 	tty->magic = 0;
 	(*tty->driver.refcount)--;
@@ -2123,12 +2121,12 @@ int tty_unregister_driver(struct tty_driver *driver)
 		tp = driver->termios[i];
 		if (tp) {
 			driver->termios[i] = NULL;
-			kfree_s(tp, sizeof(struct termios));
+			kfree(tp);
 		}
 		tp = driver->termios_locked[i];
 		if (tp) {
 			driver->termios_locked[i] = NULL;
-			kfree_s(tp, sizeof(struct termios));
+			kfree(tp);
 		}
 		tty_unregister_devfs(driver, driver->minor_start + i);
 	}
@@ -2189,6 +2187,12 @@ void __init console_init(void)
 #endif
 #ifdef CONFIG_HWC
         hwc_console_init();
+#endif
+#ifdef CONFIG_SERIAL_21285_CONSOLE
+	rs285_console_init();
+#endif
+#ifdef CONFIG_SERIAL_SA1100_CONSOLE
+	sa1100_rs_console_init();
 #endif
 }
 
@@ -2319,7 +2323,7 @@ void __init tty_init(void)
 	rio_init();
 #endif
 #if (defined(CONFIG_8xx) || defined(CONFIG_8260))
-        rs_8xx_init();
+	rs_8xx_init();
 #endif /* CONFIG_8xx */
 	pty_init();
 #ifdef CONFIG_MOXA_SMARTIO

@@ -27,7 +27,6 @@ obj-		:=
 export-objs	:= mouse_rpc.o
 
 obj-arc		:= keyb_arc.o
-obj-a5k		:= keyb_arc.o
 obj-rpc		:= keyb_ps2.o
 
 obj-$(CONFIG_RPCMOUSE)		+= mouse_rpc.o

@@ -24,14 +24,23 @@ struct timer_list {
 	void (*function)(unsigned long);
 };
 
-extern volatile struct timer_list *running_timer;
 extern void add_timer(struct timer_list * timer);
 extern int del_timer(struct timer_list * timer);
+
+#ifdef CONFIG_SMP
+extern int del_timer_sync(struct timer_list * timer);
+extern void sync_timers(void);
+#else
+#define del_timer_sync(t)	del_timer(t)
+#define sync_timers()		do { } while (0)
+#endif
 
 /*
  * mod_timer is a more efficient way to update the expire field of an
  * active timer (if the timer is inactive it will be activated)
- * mod_timer(a,b) is equivalent to del_timer(a); a->expires = b; add_timer(a)
+ * mod_timer(a,b) is equivalent to del_timer(a); a->expires = b; add_timer(a).
+ * If the timer is known to be not pending (ie, in the handler), mod_timer
+ * is less efficient than a->expires = b; add_timer(a).
  */
 int mod_timer(struct timer_list *timer, unsigned long expires);
 
@@ -46,20 +55,6 @@ static inline int timer_pending (const struct timer_list * timer)
 {
 	return timer->list.next != NULL;
 }
-
-#ifdef CONFIG_SMP
-#define timer_enter(t) do { running_timer = t; mb(); } while (0)
-#define timer_exit() do { running_timer = NULL; } while (0)
-#define timer_is_running(t) (running_timer == t)
-#define timer_synchronize(t) while (timer_is_running(t)) barrier()
-extern int del_timer_sync(struct timer_list * timer);
-#else
-#define timer_enter(t)		do { } while (0)
-#define timer_exit()		do { } while (0)
-#define timer_is_running(t)	(0)
-#define timer_synchronize(t)	do { (void)(t); barrier(); } while(0)
-#define del_timer_sync(t)	del_timer(t)
-#endif
 
 /*
  *	These inlines deal with timer wrapping correctly. You are 

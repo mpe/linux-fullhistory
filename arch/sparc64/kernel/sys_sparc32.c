@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.155 2000/07/10 20:57:35 davem Exp $
+/* $Id: sys_sparc32.c,v 1.156 2000/07/13 10:59:13 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -4176,4 +4176,13 @@ out_sem:
 	up(&current->mm->mmap_sem);
 out:
 	return ret;       
+}
+
+extern asmlinkage long sys_setpriority(int which, int who, int niceval);
+
+asmlinkage int sys_setpriority32(u32 which, u32 who, u32 niceval)
+{
+	return sys_setpriority((int) which,
+			       (int) who,
+			       (int) niceval);
 }

@@ -73,7 +73,6 @@ extern int max_super_blocks, nr_super_blocks;
 
 #define WRITERAW 5	/* raw write - don't play with buffer lists */
 
-#define NIL_FILP	((struct file *)0)
 #define SEL_IN		1
 #define SEL_OUT		2
 #define SEL_EX		4

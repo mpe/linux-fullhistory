@@ -2609,7 +2609,7 @@ static int __devinit sv_probe(struct pci_dev *pcidev, const struct pci_device_id
  err_region4:
 	release_region(s->ioenh, SV_EXTENT_ENH);
  err_region5:
-	kfree_s(s, sizeof(struct sv_state));
+	kfree(s);
 	return -1;
 }
 
@@ -2636,7 +2636,7 @@ static void __devinit sv_remove(struct pci_dev *dev)
        unregister_sound_mixer(s->dev_mixer);
        unregister_sound_midi(s->dev_midi);
        unregister_sound_special(s->dev_dmfm);
-       kfree_s(s, sizeof(struct sv_state));
+       kfree(s);
        dev->driver_data = NULL;
 }
 

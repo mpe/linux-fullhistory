@@ -323,7 +323,9 @@ struct alpha_machine_vector cabriolet_mv __initmv = {
 	pci_map_irq:		cabriolet_map_irq,
 	pci_swizzle:		common_swizzle,
 };
+#ifndef CONFIG_ALPHA_EB64P
 ALIAS_MV(cabriolet)
+#endif
 #endif
 
 #if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_EB164)

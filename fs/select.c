@@ -221,6 +221,16 @@ int do_select(int n, fd_set_bits *fds, long *timeout)
 	return retval;
 }
 
+static void *select_bits_alloc(int size)
+{
+	return kmalloc(6 * size, GFP_KERNEL);
+}
+
+static void select_bits_free(void *bits, int size)
+{
+	kfree(bits);
+}
+
 /*
  * We can actually return ERESTARTSYS instead of EINTR, but I'd
  * like to be certain this leads to no problems. So I return
@@ -273,7 +283,7 @@ sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 	 */
 	ret = -ENOMEM;
 	size = FDS_BYTES(n);
-	bits = kmalloc(6 * size, GFP_KERNEL);
+	bits = select_bits_alloc(size);
 	if (!bits)
 		goto out_nofds;
 	fds.in      = (unsigned long *)  bits;
@@ -318,7 +328,7 @@ sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 	set_fd_set(n, exp, fds.res_ex);
 
 out:
-	kfree(bits);
+	select_bits_free(bits, size);
 out_nofds:
 	return ret;
 }

@@ -35,9 +35,9 @@
 #include "../zftape/zftape-ctl.h"
 
 #if LINUX_VERSION_CODE >= KERNEL_VER(2,1,18)
-# define FT_KSYM(sym) EXPORT_SYMBOL(##sym);
+# define FT_KSYM(sym) EXPORT_SYMBOL(sym);
 #else
-# define FT_KSYM(sym) X(##sym),
+# define FT_KSYM(sym) X(sym),
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VER(2,1,18)

@@ -58,7 +58,6 @@ extern void kmem_cache_free(kmem_cache_t *, void *);
 
 extern void *kmalloc(size_t, int);
 extern void kfree(const void *);
-#define kfree_s(objp,s)		kfree(objp)
 
 extern void kmem_cache_reap(int);
 extern int slabinfo_read_proc(char *page, char **start, off_t off,

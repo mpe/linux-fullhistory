@@ -3,10 +3,12 @@
  * 
  * Copyright (C) 1999 Nicolas Pitre <nico@cam.org>
  * 
- * SA1100 specific tweaks.  This is merged with head.S by the linker.
+ * SA1100 specific tweaks.  This is merged into head.S by the linker.
+ *
  */
 
 #include <linux/config.h>
+#include <linux/linkage.h>
 
 #ifndef CONFIG_ARCH_SA1100
 #error What am I doing here...
@@ -36,6 +38,9 @@ __SA1100_start:
 #endif
 
 #ifdef CONFIG_SA1100_VICTOR
+		teq	r9, #26			@ MACH_TYPE_VICTOR
+		bne	10f
+
 		@ Copy cmdline to 0xc0000000
 		mov	r1, #0xc0000000
 		cmp	r0, #0
@@ -44,6 +49,7 @@ __SA1100_start:
 		cmpne	r2, #0
 		strb	r2, [r1], #1
 		bne	1b
+10:
 #endif
 
 		@ Data cache might be active.
@@ -64,73 +70,13 @@ __SA1100_start:
 		bic	r0, r0, #0x0d		@ clear WB, DC, MMU
 		bic	r0, r0, #0x1000		@ clear Icache
 		mcr	p15, 0, r0, c1, c0, 0
-
-#if	defined( CONFIG_SA1100_ASSABET ) || \
-	defined( CONFIG_SA1100_BRUTUS )
-		@ Initialize UART1 for early serial communication
-		@ since UART3 is used by angelboot.  It is routed to
-		@ alternate GPIO functions on Brutus.
-		b	1f
-
-#ifdef CONFIG_SA1100_BRUTUS
-#define ALT_UART
-#endif
-
-GPIO_BASE:	.long	0x90040000
-#define GPDR	0x04
-#define GAFR	0x1c
-
-PPC_BASE:	.long	0x90060000
-#define PPAR	0x08
-
-UART1_BASE:	.long	0x80010000
-#define UTCR0           0x00
-#define UTCR1           0x04
-#define UTCR2           0x08
-#define UTCR3           0x0c
-#define UTSR0           0x1c
-#define UTSR1           0x20
-
-#define BAUD_DIV_230400	0x000
-#define BAUD_DIV_115200	0x001
-#define BAUD_DIV_57600	0x003
-#define BAUD_DIV_38400	0x005
-#define BAUD_DIV_19200	0x00b
-#define BAUD_DIV_9600	0x017
-#define BAUD_DIV	BAUD_DIV_9600
-
-1:		
-#ifdef ALT_UART
-		ldr	r0, GPIO_BASE
-		ldr	r1, [r0, #GPDR]
-		bic	r1, r1, #1<<15
-		orr	r1, r1, #1<<14
-		str	r1, [r0, #GPDR]
-		ldr	r1, [r0, #GAFR]
-		orr	r1, r1, #(1<<15)|(1<<14)
-		str	r1, [r0, #GAFR]
-		ldr	r0, PPC_BASE
-		ldr	r1, [r0, #PPAR]
-		orr	r1, r1, #1<<12
-		str	r1, [r0, #PPAR]
-#endif
-		ldr	r0, UART1_BASE
-1:		ldr	r1, [r0, #UTSR1]
-		tst	r1, #1<<0	@ TBY
+/*
+ * Pause for a short time so that we give enough time
+ * for the host to start a terminal up.
+ */
+		mov	r0, #0x02000000
+1:		subs	r0, r0, #1
 		bne	1b
-		mov	r1, #0
-		str	r1, [r0, #UTCR3]
-		mov	r1, #0x08	@ 8N1
-		str	r1, [r0, #UTCR0]
-		mov	r1, #BAUD_DIV
-		str	r1, [r0, #UTCR2]
-		mov	r1, r1, lsr #8
-		str	r1, [r0, #UTCR1]
-		mov	r1, #0x03	@ RXE + TXE
-		str	r1, [r0, #UTCR3]
-		mov	r1, #0xff	@ flush status reg
-		str	r1, [r0, #UTSR0]
-#endif
 
 		@ Restore initial r0/r1
 		mov	r0, r8

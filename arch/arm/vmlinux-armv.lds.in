@@ -29,8 +29,9 @@ SECTIONS
 	}
 
 	/DISCARD/ : {			/* Exit code and data		*/
-			*(.text.exit)
-			*(.data.exit)
+		*(.text.exit)
+		*(.data.exit)
+		*(.exitcall.exit)
 	}
 
 	.text : {			/* Real text segment		*/

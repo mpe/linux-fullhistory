@@ -111,7 +111,7 @@ static void __aarp_expire(struct aarp_entry *a)
 	while ((skb=skb_dequeue(&a->packet_queue)) != NULL)
 		kfree_skb(skb);
 
-	kfree_s(a, sizeof(*a));
+	kfree(a);
 }
 
 /*

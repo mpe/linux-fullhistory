@@ -3,7 +3,7 @@
 #
 
 .S.o:
-	$(CC) $(AFLAGS) -traditional -c $< -o $*.o
+	$(CC) $(AFLAGS) -c $< -o $*.o
 
 L_TARGET = lib.a
 L_OBJS  = checksum.o old-checksum.o delay.o \

@@ -52,27 +52,24 @@ struct file_operations fat_dir_operations = {
  * Ahem... Stack smashing in ring 0 isn't fun. Fixed.
  */
 static int
-uni16_to_x8(unsigned char *ascii, unsigned char *uni, int uni_xlate,
+uni16_to_x8(unsigned char *ascii, wchar_t *uni, int uni_xlate,
 	    struct nls_table *nls)
 {
-	unsigned char *ip, *op, *uni_page, ch, cl, nc;
-	unsigned int ec;
+	wchar_t *ip, ec;
+	unsigned char *op, nc;
+	int charlen;
 	int k;
 
 	ip = uni;
 	op = ascii;
 
-	while (*ip || ip[1]) {
-		cl = *ip++;
-		ch = *ip++;
-
-		uni_page = nls->page_uni2charset[ch];
-		if (uni_page && uni_page[cl]) {
-			*op++ = uni_page[cl];
+	while (*ip) {
+		ec = *ip++;
+		if ( (charlen = nls->uni2char(ec, op, 3)) > 0) {
+			op += charlen;
 		} else {
 			if (uni_xlate == 1) {
 				*op = ':';
-				ec = (ch << 8) + cl;
 				for (k = 4; k > 0; k--) {
 					nc = ec & 0xF;
 					op[k] = nc > 9	? nc + ('a' - 10)
@@ -116,12 +113,19 @@ fat_tolower(struct nls_table *t, unsigned char c)
 	return nc ? nc : c;
 }
 
-static inline struct nls_unicode
-fat_short2lower_uni(struct nls_table *t, unsigned char c)
+static inline int
+fat_short2lower_uni(struct nls_table *t, unsigned char c, wchar_t *uni)
 {
+	int charlen;
 	unsigned char nc = t->charset2lower[c];
+	
+	if (!nc)
+		nc = c;
 
-	return nc ? t->charset2uni[nc] : t->charset2uni[c];
+	if ( (charlen = t->char2uni(&nc, 1, uni)) < 0) {
+		*uni = 0x003f;	/* a question mark */
+	}
+	return charlen;
 }
 
 static int
@@ -147,7 +151,7 @@ int fat_search_long(struct inode *inode, const char *name, int name_len,
 	struct msdos_dir_entry *de;
 	struct nls_table *nls_io = MSDOS_SB(sb)->nls_io;
 	struct nls_table *nls_disk = MSDOS_SB(sb)->nls_disk;
-	struct nls_unicode bufuname[14];
+	wchar_t bufuname[14];
 	unsigned char xlate_len, long_slots, *unicode = NULL;
 	char c, bufname[260];	/* 256 + 4 */
 	int uni_xlate = MSDOS_SB(sb)->options.unicode_xlate;
@@ -236,26 +240,25 @@ parse_long:
 		for (i = 0, last = 0; i < 8;) {
 			if (!(c = de->name[i])) break;
 			if (c == 0x05) c = 0xE5;
-			bufuname[i++] = fat_short2lower_uni(nls_disk, c);
+			fat_short2lower_uni(nls_disk, c, &bufuname[i++]);
 			if (c != ' ')
 				last = i;
 		}
 		i = last;
-		bufuname[i++] = fat_short2lower_uni(nls_disk, '.');
+		fat_short2lower_uni(nls_disk, '.', &bufuname[i++]);
 		for (i2 = 0; i2 < 3; i2++) {
 			if (!(c = de->ext[i2])) break;
-			bufuname[i++] = fat_short2lower_uni(nls_disk, c);
+			fat_short2lower_uni(nls_disk, c, &bufuname[i++]);
 			if (c != ' ')
 				last = i;
 		}
 		if (!last)
 			continue;
 
-		memset(&bufuname[last], 0, sizeof(struct nls_unicode));
+		memset(&bufuname[last], 0, sizeof(wchar_t));
 		xlate_len = utf8
-			?utf8_wcstombs(bufname, (__u16 *) &bufuname, 260)
-			:uni16_to_x8(bufname, (unsigned char *) &bufuname,
-							uni_xlate, nls_io);
+			?utf8_wcstombs(bufname, bufuname, 260)
+			:uni16_to_x8(bufname, bufuname, uni_xlate, nls_io);
 		if (xlate_len == name_len)
 			if ((!anycase && !memcmp(name, bufname, xlate_len)) ||
 			    (anycase && !fat_strnicmp(nls_io, name, bufname,
@@ -264,8 +267,8 @@ parse_long:
 
 		if (long_slots) {
 			xlate_len = utf8
-				?utf8_wcstombs(bufname, (__u16 *) unicode, 260)
-				:uni16_to_x8(bufname, unicode, uni_xlate, nls_io);
+				?utf8_wcstombs(bufname, (wchar_t *) unicode, 260)
+				:uni16_to_x8(bufname, (wchar_t *) unicode, uni_xlate, nls_io);
 			if (xlate_len != name_len)
 				continue;
 			if ((!anycase && !memcmp(name, bufname, xlate_len)) ||
@@ -295,13 +298,14 @@ static int fat_readdirx(struct inode *inode, struct file *filp, void *dirent,
 	struct msdos_dir_entry *de;
 	struct nls_table *nls_io = MSDOS_SB(sb)->nls_io;
 	struct nls_table *nls_disk = MSDOS_SB(sb)->nls_disk;
-	struct nls_unicode bufuname[14], *ptuname = &bufuname[0];
+	wchar_t bufuname[14], *ptuname = &bufuname[0];
 	unsigned char long_slots, *unicode = NULL;
 	char c, bufname[56], *ptname = bufname;
 	unsigned long lpos, dummy, *furrfu = &lpos;
 	int uni_xlate = MSDOS_SB(sb)->options.unicode_xlate;
 	int isvfat = MSDOS_SB(sb)->options.isvfat;
 	int utf8 = MSDOS_SB(sb)->options.utf8;
+	int nocase = MSDOS_SB(sb)->options.nocase;
 	int ino,inum,i,i2,last, dotoffset = 0;
 	loff_t cpos;
 
@@ -410,7 +414,7 @@ ParseLong:
 	}
 
 	if ((de->attr & ATTR_HIDDEN) && MSDOS_SB(sb)->options.dotsOK) {
-		*ptuname = fat_short2lower_uni(nls_disk, '.');
+		fat_short2lower_uni(nls_disk, '.', ptuname);
 		*ptname++ = '.';
 		dotoffset = 1;
 	}
@@ -418,18 +422,18 @@ ParseLong:
 		if (!(c = de->name[i])) break;
 		/* see namei.c, msdos_format_name */
 		if (c == 0x05) c = 0xE5;
-		ptuname[i] = fat_short2lower_uni(nls_disk, c);
-		ptname[i++] = (c>='A' && c<='Z') ? c+32 : c;
+		fat_short2lower_uni(nls_disk, c, &ptuname[i]);
+		ptname[i++] = (!nocase && c>='A' && c<='Z') ? c+32 : c;
 		if (c != ' ')
 			last = i;
 	}
 	i = last;
-	ptuname[i] = fat_short2lower_uni(nls_disk, '.');
+	fat_short2lower_uni(nls_disk, '.', &ptuname[i]);
 	ptname[i++] = '.';
 	for (i2 = 0; i2 < 3; i2++) {
 		if (!(c = de->ext[i2])) break;
-		ptuname[i] = fat_short2lower_uni(nls_disk, c);
-		ptname[i++] = (c>='A' && c<='Z') ? c+32 : c;
+		fat_short2lower_uni(nls_disk, c, &ptuname[i]);
+		ptname[i++] = (!nocase && c>='A' && c<='Z') ? c+32 : c;
 		if (c != ' ')
 			last = i;
 	}
@@ -454,10 +458,9 @@ ParseLong:
 	}
 
 	if (isvfat) {
-		memset(&bufuname[i], 0, sizeof(struct nls_unicode));
-		i = utf8 ? utf8_wcstombs(bufname, (__u16 *) &bufuname, 56)
-			 : uni16_to_x8(bufname, (unsigned char *) &bufuname,
-							uni_xlate, nls_io);
+		memset(&bufuname[i], 0, sizeof(wchar_t));
+		i = utf8 ? utf8_wcstombs(bufname, bufuname, 56)
+			 : uni16_to_x8(bufname, bufuname, uni_xlate, nls_io);
 	}
 
 	if (!long_slots||shortnames) {
@@ -468,8 +471,9 @@ ParseLong:
 	} else {
 		char longname[275];
 		unsigned char long_len = utf8
-			? utf8_wcstombs(longname, (__u16 *) unicode, 275)
-			: uni16_to_x8(longname, unicode, uni_xlate, nls_io);
+			? utf8_wcstombs(longname, (wchar_t *) unicode, 275)
+			: uni16_to_x8(longname, (wchar_t *) unicode, uni_xlate,
+				      nls_io);
 		if (both) {
 			memcpy(&longname[long_len+1], bufname, i);
 			long_len += i;

@@ -47,8 +47,8 @@ ConnectTech WhiteHEAT 4 port converter
 Current status:
   The device's firmware is downloaded on connection, the new firmware 
   runs properly and all four ports are successfuly recognized and connected.
-  Now data flow needs to be implemented properly.
-  This driver is not fully operational.
+  Data can be sent and received through the device on all ports.
+  Hardware flow control needs to be implemented.
 
 
 HandSpring Visor USB docking station
@@ -99,6 +99,25 @@ Current status:
    HW flow control
    not all of the standard USB descriptors are handled: Get_Status, Set_Feature
    O_NONBLOCK, select()
+
+
+Keyspan USA-series Serial Adapters
+
+  Single and Dual port adapters - driver uses Keyspan supplied 
+  firmware and is being developed with their support.
+  
+  Driver isn't as far advanced as Keyspan PDA driver mentioned above.
+  
+Current status:
+ Things that work:
+   Firmware upload for USA-18X, USA-28, USA-28X, USA-19 and USA-19W 
+   Simple character I/O fixed at 9600 baud on USA-19 only
+   
+ Things that don't:
+   Everything else. (for now...)
+   
+ Big Things on the todo list:
+   Driver is in infancy, much functionality remains to be added
 
 
 FTDI Single Port Serial Driver

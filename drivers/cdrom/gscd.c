@@ -995,8 +995,7 @@ long err;
 
 void __exit exit_gscd(void)
 {
-
-   del_timer_async(&gscd_timer);
+   CLEAR_TIMER;
 
    devfs_unregister(devfs_find_handle(NULL, "gscd", 0, 0, DEVFS_SPECIAL_BLK,
 				      0));

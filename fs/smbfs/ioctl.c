@@ -4,6 +4,7 @@
  *  Copyright (C) 1995, 1996 by Volker Lendecke
  *  Copyright (C) 1997 by Volker Lendecke
  *
+ *  Please add a note about your changes to smbfs in the ChangeLog file.
  */
 
 #include <linux/errno.h>
@@ -23,39 +24,29 @@ smb_ioctl(struct inode *inode, struct file *filp,
 	  unsigned int cmd, unsigned long arg)
 {
 	struct smb_sb_info *server = SMB_SERVER(inode);
+	struct smb_conn_opt opt;
 	int result = -EINVAL;
 
-	switch (cmd)
-	{
+	switch (cmd) {
 	case SMB_IOC_GETMOUNTUID:
-		result = put_user(NEW_TO_OLD_UID(server->mnt->mounted_uid), (uid16_t *) arg);
+		result = put_user(NEW_TO_OLD_UID(server->mnt->mounted_uid),
+				  (uid16_t *) arg);
 		break;
 	case SMB_IOC_GETMOUNTUID32:
 		result = put_user(server->mnt->mounted_uid, (uid_t *) arg);
 		break;
 
 	case SMB_IOC_NEWCONN:
-	{
-		struct smb_conn_opt opt;
+		/* require an argument == the mount data, else it is EINVAL */
+		if (!arg)
+			break;
 
-		if (arg)
-		{
-			result = -EFAULT;
-			if (!copy_from_user(&opt, (void *)arg, sizeof(opt)))
-				result = smb_newconn(server, &opt);
-		}
-		else
-		{
-#if 0
-			/* obsolete option ... print a warning */
-			printk("SMBFS: ioctl deprecated, please upgrade "
-				"smbfs package\n");
-#endif
-			result = 0;
-		}
+		result = -EFAULT;
+		if (!copy_from_user(&opt, (void *)arg, sizeof(opt)))
+			result = smb_newconn(server, &opt);
 		break;
-	}
 	default:
 	}
+
 	return result;
 }

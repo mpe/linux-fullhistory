@@ -1059,8 +1059,6 @@ static int __init timer_irq_works(void)
 	return 0;
 }
 
-extern atomic_t nmi_counter[NR_CPUS];
-
 static int __init nmi_irq_works(void)
 {
 	irq_cpustat_t tmp[NR_CPUS];
@@ -1072,7 +1070,7 @@ static int __init nmi_irq_works(void)
 
 	for (j = 0; j < smp_num_cpus; j++) {
 		cpu = cpu_logical_map(j);
-		if (atomic_read(&nmi_counter(cpu)) - atomic_read(&tmp[cpu].__nmi_counter) <= 3) {
+		if (nmi_counter(cpu) - tmp[cpu].__nmi_counter <= 3) {
 			printk(KERN_WARNING "CPU#%d NMI appears to be stuck.\n", cpu);
 			return 0;
 		}

@@ -10,7 +10,7 @@
  * This machine must never stop it MCLK.  However, if we are
  * idle for a long time, slow the processor clock to MCLK.
  */
-extern __inline__ void arch_idle(void)
+static void arch_idle(void)
 {
 	unsigned long start_idle;
 
@@ -31,7 +31,6 @@ extern __inline__ void arch_idle(void)
 slow_out:
 }
 
-#define arch_power_off()	do { } while (0)
 #define arch_reset(mode)	cpu_reset(0x80000000)
 
 #endif

@@ -812,7 +812,7 @@ void cleanup_module()
 			"errno=%d\n", -i);
 
 	if (stl_tmpwritebuf != (char *) NULL)
-		kfree_s(stl_tmpwritebuf, STL_TXBUFSIZE);
+		kfree(stl_tmpwritebuf);
 
 	for (i = 0; (i < stl_nrbrds); i++) {
 		if ((brdp = stl_brds[i]) == (stlbrd_t *) NULL)
@@ -828,17 +828,17 @@ void cleanup_module()
 				if (portp->tty != (struct tty_struct *) NULL)
 					stl_hangup(portp->tty);
 				if (portp->tx.buf != (char *) NULL)
-					kfree_s(portp->tx.buf, STL_TXBUFSIZE);
-				kfree_s(portp, sizeof(stlport_t));
+					kfree(portp->tx.buf);
+				kfree(portp);
 			}
-			kfree_s(panelp, sizeof(stlpanel_t));
+			kfree(panelp);
 		}
 
 		release_region(brdp->ioaddr1, brdp->iosize1);
 		if (brdp->iosize2 > 0)
 			release_region(brdp->ioaddr2, brdp->iosize2);
 
-		kfree_s(brdp, sizeof(stlbrd_t));
+		kfree(brdp);
 		stl_brds[i] = (stlbrd_t *) NULL;
 	}
 
@@ -1241,7 +1241,7 @@ static void stl_close(struct tty_struct *tty, struct file *filp)
 	stl_flushbuffer(tty);
 	portp->istate = 0;
 	if (portp->tx.buf != (char *) NULL) {
-		kfree_s(portp->tx.buf, STL_TXBUFSIZE);
+		kfree(portp->tx.buf);
 		portp->tx.buf = (char *) NULL;
 		portp->tx.head = (char *) NULL;
 		portp->tx.tail = (char *) NULL;
@@ -1830,7 +1830,7 @@ static void stl_hangup(struct tty_struct *tty)
 	portp->istate = 0;
 	set_bit(TTY_IO_ERROR, &tty->flags);
 	if (portp->tx.buf != (char *) NULL) {
-		kfree_s(portp->tx.buf, STL_TXBUFSIZE);
+		kfree(portp->tx.buf);
 		portp->tx.buf = (char *) NULL;
 		portp->tx.head = (char *) NULL;
 		portp->tx.tail = (char *) NULL;

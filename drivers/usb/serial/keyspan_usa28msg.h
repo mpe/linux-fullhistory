@@ -94,9 +94,9 @@
 #ifndef	__USA28MSG__
 #define	__USA28MSG__
 
-#ifndef STUBS
+/*#ifndef STUBS
 #include "datadefs.h"
-#endif
+#endif*/
 
 typedef struct txAckMessage
 {

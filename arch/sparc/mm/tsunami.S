@@ -1,4 +1,4 @@
-/* $Id: tsunami.S,v 1.5 2000/06/04 06:23:53 anton Exp $
+/* $Id: tsunami.S,v 1.6 2000/07/16 21:48:52 anton Exp $
  * tsunami.S: High speed MicroSparc-I mmu/cache operations.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -10,17 +10,6 @@
 #include <asm/asi.h>
 #include <asm/page.h>
 #include <asm/pgtsrmmu.h>
-
-#define WINDOW_FLUSH(tmp1, tmp2)					\
-	mov	0, tmp1;						\
-98:	ld	[%g6 + AOFF_task_thread + AOFF_thread_uwinmask], tmp2;	\
-	orcc	%g0, tmp2, %g0;						\
-	add	tmp1, 1, tmp1;						\
-	bne	98b;							\
-	 save	%sp, -64, %sp;						\
-99:	subcc	tmp1, 1, tmp1;						\
-	bne	99b;							\
-	 restore %g0, %g0, %g0;
 
 	.text
 	.align	4

@@ -757,7 +757,7 @@ static int sock_fasync(int fd, struct file *filp, int on)
 			fa->fa_fd=fd;
 			write_unlock_bh(&sk->callback_lock);
 
-			kfree_s(fna,sizeof(struct fasync_struct));
+			kfree(fna);
 			goto out;
 		}
 		fna->fa_file=filp;
@@ -775,7 +775,7 @@ static int sock_fasync(int fd, struct file *filp, int on)
 			write_lock_bh(&sk->callback_lock);
 			*prev=fa->fa_next;
 			write_unlock_bh(&sk->callback_lock);
-			kfree_s(fa,sizeof(struct fasync_struct));
+			kfree(fa);
 		}
 	}
 

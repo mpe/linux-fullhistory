@@ -14,7 +14,7 @@
 typedef struct {
 	unsigned int __local_irq_count;
 	unsigned int __local_bh_count;
-	atomic_t __nmi_counter;
+	unsigned int __nmi_counter;
 # if NR_CPUS > 1
 	unsigned int __pad[13];		/* this assumes 64-byte cache-lines... */
 # endif

@@ -176,6 +176,26 @@ MODULE PARAMETERS:
         programs that expect RGB data (e.g. gqcam) to work with this driver. If
         your colors look VERY wrong, you may want to change this.
 
+  NAME: buf_timeout
+  TYPE: integer
+  DEFAULT: 5 (seconds)
+  DESC: Number of seconds before unused frame buffers are deallocated.
+        Previously, memory was allocated upon open() and deallocated upon
+        close(). Deallocation now occurs only if the driver is closed and this
+        timeout is reached. If you are capturing frames less frequently than
+        the default timeout, increase this. This will not make any difference
+        with programs that capture multiple frames during an open/close cycle.
+
+  NAME: cams
+  TYPE: integer (1-4 for OV511, 1-31 for OV511+)
+  DEFAULT: 1
+  DESC: Number of cameras allowed to stream simultaneously on a single bus.
+        Values higher than 1 reduce the data rate of each camera, allowing two
+        or more to be used at once. If you have a complicated setup involving
+        both OV511 and OV511+ cameras, trial-and-error may be necessary for
+        finding the optimum setting.
+
+  
 WORKING FEATURES:
  o Color streaming/capture at 640x480, 448x336, 384x288, 352x288, and 320x240
  o YUV420 and YUV422P color
@@ -210,7 +230,6 @@ TODO:
  o Get rid of the memory management functions (put them in videodev.c??)
  o Setting of contrast and brightness not working with 7620
  o Driver/camera state save/restore for when USB supports suspend/resume
- o Multiple cameras reportedly do not work simultaneously
  o Unstable on SMP systems
 
 HOW TO CONTACT ME:

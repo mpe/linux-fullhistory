@@ -8,7 +8,7 @@
 typedef struct {
 	unsigned int __local_irq_count;
 	unsigned int __local_bh_count;
-	atomic_t __nmi_counter;
+	unsigned int __nmi_counter;
 	unsigned int __pad[5];
 } ____cacheline_aligned irq_cpustat_t;
 

@@ -61,7 +61,7 @@ extern inline void *hfs_malloc(unsigned int size) {
 }
 
 extern inline void hfs_free(void *ptr, unsigned int size) {
-	kfree_s(ptr, size);
+	kfree(ptr);
 #if defined(DEBUG_ALL) || defined(DEBUG_MEM)
 	hfs_warn("%ld bytes allocation at %s:%u\n",
 		  (hfs_alloc -= ptr ? size : 0), __FILE__, __LINE__);

@@ -2,6 +2,7 @@
  * This is a module which is used for rejecting packets.
  * Added support for customized reject packets (Jozsef Kadlecsik).
  */
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/skbuff.h>
 #include <linux/ip.h>
@@ -23,13 +24,33 @@ struct in_device;
 static void send_reset(struct sk_buff *oldskb)
 {
 	struct sk_buff *nskb;
-	struct tcphdr *tcph;
+	struct tcphdr *otcph, *tcph;
 	struct rtable *rt;
-	unsigned int tcplen;
+	unsigned int otcplen;
 	int needs_ack;
 
-	/* Clone skb (skb is about to be dropped, so we don't care) */
-	nskb = skb_clone(oldskb, GFP_ATOMIC);
+	/* IP header checks: fragment, too short. */
+	if (oldskb->nh.iph->frag_off & htons(IP_OFFSET)
+	    || oldskb->len < (oldskb->nh.iph->ihl<<2) + sizeof(struct tcphdr))
+		return;
+
+	otcph = (struct tcphdr *)((u_int32_t*)oldskb->nh.iph + oldskb->nh.iph->ihl);
+	otcplen = oldskb->len - oldskb->nh.iph->ihl*4;
+
+	/* No RST for RST. */
+	if (otcph->rst)
+		return;
+
+	/* Check checksum. */
+	if (tcp_v4_check(otcph, otcplen, oldskb->nh.iph->saddr,
+			 oldskb->nh.iph->daddr,
+			 csum_partial((char *)otcph, otcplen, 0)) != 0)
+		return;
+
+	/* Copy skb (even if skb is about to be dropped, we can't just
+           clone it because there may be other things, such as tcpdump,
+           interested in it) */
+	nskb = skb_copy(oldskb, GFP_ATOMIC);
 	if (!nskb)
 		return;
 
@@ -41,23 +62,7 @@ static void send_reset(struct sk_buff *oldskb)
 	nskb->nf_debug = 0;
 #endif
 
-	/* IP header checks: fragment, too short. */
-	if (nskb->nh.iph->frag_off & htons(IP_OFFSET)
-	    || nskb->len < (nskb->nh.iph->ihl<<2) + sizeof(struct tcphdr))
-		goto free_nskb;
-
 	tcph = (struct tcphdr *)((u_int32_t*)nskb->nh.iph + nskb->nh.iph->ihl);
-	tcplen = nskb->len - nskb->nh.iph->ihl*4;
-
-	/* Check checksum. */
-	if (tcp_v4_check(tcph, tcplen, nskb->nh.iph->saddr,
-			 nskb->nh.iph->daddr,
-			 csum_partial((char *)tcph, tcplen, 0)) != 0)
-		goto free_nskb;
-
-	/* No RST for RST. */
-	if (tcph->rst)
-		goto free_nskb;
 
 	nskb->nh.iph->daddr = xchg(&nskb->nh.iph->saddr, nskb->nh.iph->daddr);
 	tcph->source = xchg(&tcph->dest, tcph->source);
@@ -65,23 +70,23 @@ static void send_reset(struct sk_buff *oldskb)
 	/* Truncate to length (no data) */
 	tcph->doff = sizeof(struct tcphdr)/4;
 	skb_trim(nskb, nskb->nh.iph->ihl*4 + sizeof(struct tcphdr));
+	nskb->nh.iph->tot_len = htons(nskb->len);
 
 	if (tcph->ack) {
 		needs_ack = 0;
-		tcph->seq = tcph->ack_seq;
+		tcph->seq = otcph->ack_seq;
 		tcph->ack_seq = 0;
 	} else {
 		needs_ack = 1;
+		tcph->ack_seq = htonl(ntohl(otcph->seq) + otcph->syn + otcph->fin
+				      + otcplen - (otcph->doff<<2));
 		tcph->seq = 0;
-		tcph->ack_seq = htonl(ntohl(tcph->seq) + tcph->syn + tcph->fin
-				      + tcplen - (tcph->doff<<2));
 	}
 
 	/* Reset flags */
 	((u_int8_t *)tcph)[13] = 0;
 	tcph->rst = 1;
-	if (needs_ack)
-		tcph->ack = 1;
+	tcph->ack = needs_ack;
 
 	tcph->window = 0;
 	tcph->urg_ptr = 0;

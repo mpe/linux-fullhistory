@@ -456,7 +456,7 @@ static int __init ibmtr_probe1(struct net_device *dev, int PIOaddr)
 			while(!isa_readb(ti->mmio + ACA_OFFSET + ACA_RW + RRR_EVEN))
 				if (time_after(jiffies, timeout)) {
 					DPRINTK("Hardware timeout during initialization.\n");
-					kfree_s(ti, sizeof(struct tok_info));
+					kfree(ti);
 					return -ENODEV;
 			        }
 
@@ -607,7 +607,7 @@ static int __init ibmtr_probe1(struct net_device *dev, int PIOaddr)
 			break;
 		default:
 			DPRINTK("Unknown shared ram paging info %01X\n",ti->shared_ram_paging);
-			kfree_s(ti, sizeof(struct tok_info));
+			kfree(ti);
 			return -ENODEV;
 			break;
 	}
@@ -642,7 +642,7 @@ static int __init ibmtr_probe1(struct net_device *dev, int PIOaddr)
 			DPRINTK("Shared RAM for this adapter (%05x) exceeds driver"
 				" limit (%05x), adapter not started.\n",
 				chk_base, ibmtr_mem_base + IBMTR_SHARED_RAM_SIZE);
-			kfree_s(ti, sizeof(struct tok_info));
+			kfree(ti);
                         return -ENODEV;
 		} else {  /* seems cool, record what we have figured out */
 			ti->sram_base = new_base >> 12;
@@ -660,7 +660,7 @@ static int __init ibmtr_probe1(struct net_device *dev, int PIOaddr)
 #ifndef PCMCIA
 	if (request_irq (dev->irq = irq, &tok_interrupt,0,"ibmtr", dev) != 0) {
 		DPRINTK("Could not grab irq %d.  Halting Token Ring driver.\n",irq);
-		kfree_s(ti, sizeof(struct tok_info));
+		kfree(ti);
 		return -ENODEV;
 	}
  
@@ -1885,7 +1885,7 @@ int init_module(void)
 		dev_ibmtr[i]->init      = &ibmtr_probe;
 
 	        if (register_trdev(dev_ibmtr[i]) != 0) {
-			kfree_s(dev_ibmtr[i], sizeof(struct net_device));
+			kfree(dev_ibmtr[i]);
 			dev_ibmtr[i] = NULL;
 		        if (i == 0) {
 			        printk("ibmtr: register_trdev() returned non-zero.\n");
@@ -1907,8 +1907,8 @@ void cleanup_module(void)
 			 unregister_trdev(dev_ibmtr[i]);
 			 free_irq(dev_ibmtr[i]->irq, dev_ibmtr[i]);
 			 release_region(dev_ibmtr[i]->base_addr, IBMTR_IO_EXTENT);
-			 kfree_s(dev_ibmtr[i]->priv, sizeof(struct tok_info));
-			 kfree_s(dev_ibmtr[i], sizeof(struct net_device));
+			 kfree(dev_ibmtr[i]->priv);
+			 kfree(dev_ibmtr[i]);
 			 dev_ibmtr[i] = NULL;
                 }
 }

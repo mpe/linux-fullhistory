@@ -468,11 +468,11 @@ static void ray_detach(dev_link_t *link)
     if (link->priv) {
         dev = link->priv;
         if (dev->priv)
-            kfree_s(dev->priv, sizeof(ray_dev_t));
+            kfree(dev->priv);
 
-        kfree_s(link->priv, sizeof(struct net_device));
+        kfree(link->priv);
     }
-    kfree_s(link, sizeof(struct dev_link_t));
+    kfree(link);
     DEBUG(2,"ray_cs ray_detach ending\n");
 } /* ray_detach */
 /*=============================================================================

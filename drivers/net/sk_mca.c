@@ -1290,7 +1290,7 @@ void cleanup_module(void)
 			mca_mark_as_unused(priv->slot);
 #endif
 			mca_set_adapter_procfn(priv->slot, NULL, NULL);
-			kfree_s(dev->priv, sizeof(skmca_priv));
+			kfree(dev->priv);
 			dev->priv = NULL;
 		}
 	}

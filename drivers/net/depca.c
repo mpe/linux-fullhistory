@@ -717,7 +717,7 @@ depca_hw_init(struct net_device *dev, u_long ioaddr, int mca_slot)
       ether_setup(dev);
     } else {                           /* Incorrectly initialised hardware */
       if (dev->priv) {
-	kfree_s(dev->priv, sizeof(struct depca_private));
+	kfree(dev->priv);
 	dev->priv = NULL;
       }
     }

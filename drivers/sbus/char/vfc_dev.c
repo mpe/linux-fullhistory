@@ -238,7 +238,7 @@ static int vfc_debug(struct vfc_dev *dev, int cmd, unsigned long arg)
 
 		if(copy_from_user(buffer, inout.buffer, 
 				  inout.len*sizeof(char))) {
-			kfree_s(buffer, inout.len * sizeof(char));
+			kfree(buffer);
 			return -EFAULT;
 		}
 		
@@ -249,7 +249,7 @@ static int vfc_debug(struct vfc_dev *dev, int cmd, unsigned long arg)
 					inout.buffer,inout.len);
 
 		if (copy_to_user((void *)arg,&inout,sizeof(inout))) {
-			kfree_s(buffer, inout.len);
+			kfree(buffer);
 			return -EFAULT;
 		}
 		vfc_unlock_device(dev);
@@ -271,14 +271,14 @@ static int vfc_debug(struct vfc_dev *dev, int cmd, unsigned long arg)
 		vfc_unlock_device(dev);
 		
 		if (copy_to_user(inout.buffer, buffer, inout.len)) {
-			kfree_s(buffer,inout.len);
+			kfree(buffer);
 			return -EFAULT;
 		}
 		if (copy_to_user((void *)arg,&inout,sizeof(inout))) {
-			kfree_s(buffer,inout.len);
+			kfree(buffer);
 			return -EFAULT;
 		}
-		kfree_s(buffer,inout.len);
+		kfree(buffer);
 		break;
 	default:
 		return -EINVAL;

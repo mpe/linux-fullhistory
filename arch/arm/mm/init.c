@@ -623,17 +623,31 @@ void free_initmem(void)
 }
 
 #ifdef CONFIG_BLK_DEV_INITRD
+
+static int keep_initrd;
+
 void free_initrd_mem(unsigned long start, unsigned long end)
 {
 	unsigned long addr;
-	for (addr = start; addr < end; addr += PAGE_SIZE) {
-		ClearPageReserved(mem_map + MAP_NR(addr));
-		set_page_count(mem_map+MAP_NR(addr), 1);
-		free_page(addr);
-		totalram_pages++;
+
+	if (!keep_initrd) {
+		for (addr = start; addr < end; addr += PAGE_SIZE) {
+			ClearPageReserved(mem_map + MAP_NR(addr));
+			set_page_count(mem_map+MAP_NR(addr), 1);
+			free_page(addr);
+			totalram_pages++;
+		}
+		printk ("Freeing initrd memory: %ldk freed\n", (end - start) >> 10);
 	}
-	printk ("Freeing initrd memory: %ldk freed\n", (end - start) >> 10);
 }
+
+static int __init keepinitrd_setup(char *__unused)
+{
+	keep_initrd = 1;
+	return 1;
+}
+
+__setup("keepinitrd", keepinitrd_setup);
 #endif
 
 void si_meminfo(struct sysinfo *val)

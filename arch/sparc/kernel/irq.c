@@ -187,7 +187,7 @@ void free_irq(unsigned int irq, void *dev_id)
 	else
 		*(cpu_irq + irq_action) = action->next;
 
-	kfree_s(action, sizeof(struct irqaction));
+	kfree(action);
 
 	if (!(*(cpu_irq + irq_action)))
 		disable_irq(irq);

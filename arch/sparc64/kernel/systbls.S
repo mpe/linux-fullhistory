@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.73 2000/05/10 14:23:39 jj Exp $
+/* $Id: systbls.S,v 1.74 2000/07/13 10:59:13 davem Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -38,7 +38,7 @@ sys_call_table32:
 /*80*/	.word sys32_setgroups16, sys_getpgrp, sys_setgroups, sys32_setitimer, sys32_ftruncate64
 	.word sys_swapon, sys32_getitimer, sys_setuid, sys_sethostname, sys_setgid
 /*90*/	.word sys_dup2, sys_setfsuid, sys32_fcntl, sys32_select, sys_setfsgid
-	.word sys_fsync, sys_setpriority, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+	.word sys_fsync, sys_setpriority32, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
 /*100*/ .word sys_getpriority, sys32_rt_sigreturn, sys32_rt_sigaction, sys32_rt_sigprocmask, sys32_rt_sigpending
 	.word sys32_rt_sigtimedwait, sys32_rt_sigqueueinfo, sys32_rt_sigsuspend, sys_setresuid, sys_getresuid
 /*110*/	.word sys_setresgid, sys_getresgid, sys_setregid, sys_nis_syscall, sys_nis_syscall
@@ -170,7 +170,7 @@ sunos_sys_table:
 	.word sys32_getitimer, sys_gethostname, sys_sethostname
 	.word sunos_getdtablesize, sys_dup2, sunos_nop
 	.word sys32_fcntl, sunos_select, sunos_nop
-	.word sys_fsync, sys_setpriority, sunos_socket
+	.word sys_fsync, sys_setpriority32, sunos_socket
 	.word sys_connect, sunos_accept
 /*100*/	.word sys_getpriority, sunos_send, sunos_recv
 	.word sunos_nosys, sys_bind, sunos_setsockopt

@@ -206,7 +206,7 @@ void *hpfs_map_4sectors(struct super_block *s, unsigned secno, struct quad_buffe
  bail1:
 	brelse(qbh->bh[0]);
  bail0:
-	kfree_s(data, 2048);
+	kfree(data);
 	printk("HPFS: hpfs_map_4sectors: read error\n");
  bail:
 	return NULL;
@@ -251,7 +251,7 @@ void hpfs_brelse4(struct quad_buffer_head *qbh)
 	brelse(qbh->bh[2]);
 	brelse(qbh->bh[1]);
 	brelse(qbh->bh[0]);
-	kfree_s(qbh->data, 2048);
+	kfree(qbh->data);
 }	
 
 void hpfs_mark_4buffers_dirty(struct quad_buffer_head *qbh)

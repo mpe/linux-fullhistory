@@ -99,7 +99,7 @@ static __inline__ void inet_free_ifa(struct in_ifaddr *ifa)
 {
 	if (ifa->ifa_dev)
 		__in_dev_put(ifa->ifa_dev);
-	kfree_s(ifa, sizeof(*ifa));
+	kfree(ifa);
 	inet_ifa_count--;
 }
 
@@ -118,7 +118,7 @@ void in_dev_finish_destroy(struct in_device *idev)
 		return;
 	}
 	inet_dev_count--;
-	kfree_s(idev, sizeof(*idev));
+	kfree(idev);
 }
 
 struct in_device *inetdev_init(struct net_device *dev)

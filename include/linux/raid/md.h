@@ -76,6 +76,7 @@ extern void md_interrupt_thread (mdk_thread_t *thread);
 extern int md_update_sb (mddev_t *mddev);
 extern int md_do_sync(mddev_t *mddev, mdp_disk_t *spare);
 extern void md_done_sync(mddev_t *mddev, int blocks, int ok);
+extern void md_sync_acct(kdev_t dev, unsigned long nr_sectors);
 extern void md_recover_arrays (void);
 extern int md_check_ordering (mddev_t *mddev);
 extern struct gendisk * find_gendisk (kdev_t dev);
@@ -83,9 +84,7 @@ extern int md_notify_reboot(struct notifier_block *this,
 					unsigned long code, void *x);
 extern int md_error (kdev_t mddev, kdev_t rdev);
 
-#if CONFIG_BLK_DEV_MD
-extern void raid_setup(char *str,int *ints) md__init;
-#endif
+extern void raid_setup(char *str) md__init;
 
 extern void md_print_devices (void);
 

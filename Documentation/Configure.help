@@ -11297,6 +11297,20 @@ CONFIG_NCPFS_EXTRAS
   To use the new attributes, it is recommended to use the flags
   '-f 600 -d 755' on the ncpmount command line.
 
+nls default codepage
+CONFIG_NLS_DEFAULT
+  The default NLS used when mounting filesystem. Currently, the valid
+  values are:
+  big5, cp437, cp737, cp775, cp850, cp852, cp855, cp857, cp860, cp861,
+  cp862, cp863, cp864, cp865, cp866, cp869, cp874, cp932, cp936,
+  cp949, cp950, euc-jp, euc-kr, gb2312, iso8859-1, iso8859-2, iso8859-3,
+  iso8859-4, iso8859-5, iso8859-6, iso8859-7, iso8859-8, iso8859-9,
+  iso8859-14, iso8859-15, koi8-r, sjis
+  If you specify a wrong value, it will use the built-in NLS; compatible
+  with iso8859-1.
+
+  If unsure, specify it as "iso8859-1".
+
 nls codepage 437
 CONFIG_NLS_CODEPAGE_437
   The Microsoft FAT file system family can deal with filenames in
@@ -11471,6 +11485,50 @@ CONFIG_NLS_CODEPAGE_874
   DOS/Windows partitions correctly. This does apply to the filenames
   only, not to the file contents. You can include several codepages;
   say Y here if you want to include the DOS codepage for Thai.
+
+nls codepage 932
+CONFIG_NLS_CODEPAGE_932
+  The Microsoft fat filesystem family can deal with filenames in
+  native language character sets. These character sets are stored in
+  so-called DOS codepages. You need to include the appropriate
+  codepage if you want to be able to read/write these filenames on
+  DOS/Windows partitions correctly. This does apply to the filenames
+  only, not to the file contents. You can include several codepages;
+  say Y here if you want to include the DOS codepage for Shift-JIS
+  or EUC-JP. To use EUC-JP, you can use 'euc-jp' as mount option or
+  NLS Default value during kernel configuration , instead of 'cp932'
+
+nls codepage 936
+CONFIG_NLS_CODEPAGE_936
+  The Microsoft fat filesystem family can deal with filenames in
+  native language character sets. These character sets are stored in
+  so-called DOS codepages. You need to include the appropriate
+  codepage if you want to be able to read/write these filenames on
+  DOS/Windows partitions correctly. This does apply to the filenames
+  only, not to the file contents. You can include several codepages;
+  say Y here if you want to include the DOS codepage for Simplified
+  Chinese(GBK).
+
+nls codepage 949
+CONFIG_NLS_CODEPAGE_949
+  The Microsoft fat filesystem family can deal with filenames in
+  native language character sets. These character sets are stored in
+  so-called DOS codepages. You need to include the appropriate
+  codepage if you want to be able to read/write these filenames on
+  DOS/Windows partitions correctly. This does apply to the filenames
+  only, not to the file contents. You can include several codepages;
+  say Y here if you want to include the DOS codepage for UHC.
+
+nls codepage 950
+CONFIG_NLS_CODEPAGE_950
+  The Microsoft fat filesystem family can deal with filenames in
+  native language character sets. These character sets are stored in
+  so-called DOS codepages. You need to include the appropriate
+  codepage if you want to be able to read/write these filenames on
+  DOS/Windows partitions correctly. This does apply to the filenames
+  only, not to the file contents. You can include several codepages;
+  say Y here if you want to include the DOS codepage for Traditional
+  Chinese(Big5).
 
 nls iso8859-1
 CONFIG_NLS_ISO8859_1
@@ -15707,14 +15765,50 @@ CONFIG_SA1100_ASSABET
   Say Y here if you are using the Intel(R) StrongARM(R) SA-1110
   Microprocessor Development Board (also known as the Assabet).
 
-Include support for the Compaq iPAQ 3600
+Include support for Neponset
+CONFIG_ASSABET_NEPONSET
+  Say Y here if you are using the Intel(R) StrongARM(R) SA-1110
+  Microprocessor Development Board (Assabet)  with the SA-1111
+  Development Board (Nepon).
+
+Include support for the Compaq iPAQ H3600 (Bitsy)
 CONFIG_SA1100_BITSY
-  Say Y here if you intend to run this kernel on the Compaq iPAQ 3600
-  handheld computer.  Information about this machine and the Linux
-  port to this machine can be found at:
+  Say Y here if you intend to run this kernel on the Compaq iPAQ 
+  H3600 handheld computer.  Information about this machine and the
+  Linux port to this machine can be found at:
 
   http://www.handhelds.org/Compaq/index.html#iPAQ_H3600
   http://www.compaq.com/products/handhelds/pocketpc/
+
+Include support for Brutus
+CONFIG_SA1100_BRUTUS
+  Say Y here if you are using the Intel(R) StrongARM(R) SA-1100
+  Microprocessor Development Board (also known as the Brutus).
+
+Include support for LART
+CONFIG_SA1100_LART
+  Say Y here if you are using the Linux Advanced Radio Terminal
+  (also known as the LART).  See http://www.lart.tudelft.nl/ for
+  information on the LART.
+
+Include support for ThinClient
+CONFIG_SA1100_THINCLIENT
+  Say Y here if you are using an Applied Data Systems Intel(R)
+  StrongARM(R) SA-1100 based Thin Client SBC.  See
+  http://www.flatpanels.com/ for information on this system.
+
+Include support for GraphicsClient
+CONFIG_SA1100_GRAPHICSCLIENT
+  Say Y here if you are using an Applied Data Systems Intel(R)
+  StrongARM(R) SA-1100 based Graphics Client SBC.  See
+  http://www.flatpanels.com/ for information on this system.
+
+Include support for Victor
+CONFIG_SA1100_VICTOR
+  Say Y here if you are using a Visu Aide Intel(R) StrongARM(R)
+  SA-1100 based Victor Digital Talking Book Reader.  See
+  http://www.visuaide.com/pagevictor.en.html for information on
+  this system.
 
 Math emulation
 CONFIG_NWFPE

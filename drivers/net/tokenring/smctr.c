@@ -3719,7 +3719,7 @@ static int __init smctr_probe1(struct net_device *dev, int ioaddr)
 		err = smctr_chk_mca(dev);
 		if(err < 0)
 		{
-                	kfree_s(tp, sizeof(struct net_local));
+                	kfree(tp);
                 	return (-ENODEV);
 		}
         }
@@ -5830,7 +5830,7 @@ int init_module(void)
 
                 if(register_trdev(dev_smctr[i]) != 0)
                 {
-                        kfree_s(dev_smctr[i], sizeof(struct net_device));
+                        kfree(dev_smctr[i]);
                         dev_smctr[i] = NULL;
                         if(i == 0)
                         {
@@ -5866,9 +5866,8 @@ void cleanup_module(void)
                         if(dev_smctr[i]->irq)
                                 free_irq(dev_smctr[i]->irq, dev_smctr[i]);
                         if(dev_smctr[i]->priv)
-                                kfree_s(dev_smctr[i]->priv,
-                                        sizeof(struct net_local));
-                        kfree_s(dev_smctr[i], sizeof(struct net_device));
+                                kfree(dev_smctr[i]->priv);
+                        kfree(dev_smctr[i]);
                         dev_smctr[i] = NULL;
                 }
         }

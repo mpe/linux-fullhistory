@@ -333,10 +333,10 @@ static void com20020_detach(dev_link_t *link)
 	    kfree(dev);
 	}
 	DEBUG(1,"kfree2...\n");
-	kfree_s(info, sizeof(struct com20020_dev_t));
+	kfree(info);
     }
     DEBUG(1,"kfree3...\n");
-    kfree_s(link, sizeof(struct dev_link_t));
+    kfree(link);
 
 } /* com20020_detach */
 

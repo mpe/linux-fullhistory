@@ -1076,7 +1076,7 @@ osf_select(int n, fd_set *inp, fd_set *outp, fd_set *exp,
 	}
 
 	ret = -EINVAL;
-	if (n < 0 || n > KFDS_NR)
+	if (n < 0 || n > current->files->max_fdset)
 		goto out_nofds;
 
 	/*

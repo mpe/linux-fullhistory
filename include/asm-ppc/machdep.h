@@ -92,9 +92,12 @@ extern void setup_pci_ptrs(void);
  * Power macintoshes have either a CUDA or a PMU controlling
  * system reset, power, NVRAM, RTC.
  */
-enum sys_ctrler_kind {
+typedef enum sys_ctrler_kind {
+	SYS_CTRLER_UNKNOWN = 0,
 	SYS_CTRLER_CUDA = 1,
 	SYS_CTRLER_PMU = 2,
-} sys_ctrler;
+} sys_ctrler_t;
+
+extern sys_ctrler_t sys_ctrler;
 
 #endif /* _PPC_MACHDEP_H */

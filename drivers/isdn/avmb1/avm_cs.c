@@ -233,9 +233,9 @@ static void avmcs_detach(dev_link_t *link)
     /* Unlink device structure, free pieces */
     *linkp = link->next;
     if (link->priv) {
-	kfree_s(link->priv, sizeof(local_info_t));
+	kfree(link->priv);
     }
-    kfree_s(link, sizeof(struct dev_link_t));
+    kfree(link);
     
 } /* avmcs_detach */
 

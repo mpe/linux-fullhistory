@@ -172,8 +172,7 @@ static void set_tv_freq(struct i2c_client *c, int freq)
 		config = tun->UHF;
 
 #if 1   // Fix colorstandard mode change
-	if (t->type == TUNER_PHILIPS_SECAM 
-	    /*&& t->std == V4L2_STANDARD_DDD*/ )
+	if (t->type == TUNER_PHILIPS_SECAM && t->mode)
 		config |= tun->mode;
 	else
 		config &= ~tun->mode;

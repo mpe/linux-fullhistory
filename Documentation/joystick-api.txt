@@ -1,7 +1,7 @@
 		      Joystick API Documentation                -*-Text-*-
 
-		       Ragnar Hojland Espinosa
-		     <ragnar@lightside.dhis.org>
+		        Ragnar Hojland Espinosa
+		          <ragnar@macula.net>
 
 			      7 Aug 1998
 

@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.56 2000/07/06 01:41:29 davem Exp $
+# $Id: Makefile,v 1.60 2000/07/16 18:21:24 ecd Exp $
 # Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -68,42 +68,41 @@ else
 endif
 
 check_asm: dummy
+	@if [ ! -r $(HPATH)/asm/asm_offsets.h ] ; then \
+	  touch $(HPATH)/asm/asm_offsets.h ; \
+	fi
 	@echo "/* Automatically generated. Do not edit. */" > asm_offsets.h
 	@echo "#ifndef __ASM_OFFSETS_H__" >> asm_offsets.h
 	@echo -e "#define __ASM_OFFSETS_H__\n" >> asm_offsets.h
 	@echo -e "#include <linux/config.h>\n" >> asm_offsets.h
-	@echo '#if defined(__KERNEL__) && !defined(__ASSEMBLY__)' >> asm_offsets.h
-	@if $(CC) -c -m64 -mcmodel=medlow -o /dev/null /dev/null >/dev/null 2>&1; then \
-		echo '# if !((__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8))' >> asm_offsets.h; \
-	 else \
-		echo '# if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8)' >> asm_offsets.h; \
-	 fi
-	@echo -e "#  error Please issue 'make check_asm' in linux top-level directory first\n# endif\n#endif\n" >> asm_offsets.h
 	@echo -e "#ifndef CONFIG_SMP\n" >> asm_offsets.h
 	@echo "#include <linux/config.h>" > tmp.c
 	@echo "#undef CONFIG_SMP" >> tmp.c
 	@echo "#include <linux/sched.h>" >> tmp.c
 	$(CPP) $(CPPFLAGS) tmp.c -o tmp.i
+	@echo "/* Automatically generated. Do not edit. */" > check_asm_data.c
+	@echo "#include <linux/config.h>" >> check_asm_data.c
+	@echo "#undef CONFIG_SMP" >> check_asm_data.c
+	@echo "#include <linux/sched.h>" >> check_asm_data.c
+	@echo 'unsigned int check_asm_data[] = {' >> check_asm_data.c
+	$(SH) ./check_asm.sh -data task tmp.i check_asm_data.c
+	$(SH) ./check_asm.sh -data mm tmp.i check_asm_data.c
+	$(SH) ./check_asm.sh -data thread tmp.i check_asm_data.c
+	@echo '};' >> check_asm_data.c
+	$(CC) $(CPPFLAGS) $(CMODEL_CFLAG) -ffixed-g4 -S -o check_asm_data.s check_asm_data.c
 	@echo "/* Automatically generated. Do not edit. */" > check_asm.c
-	@echo "#include <linux/config.h>" >> check_asm.c
-	@echo "#undef CONFIG_SMP" >> check_asm.c
-	@echo "#include <linux/sched.h>" >> check_asm.c
-	@echo 'struct task_struct _task;' >> check_asm.c
-	@echo 'struct mm_struct _mm;' >> check_asm.c
-	@echo 'struct thread_struct _thread;' >> check_asm.c
 	@echo 'extern int printf(const char *fmt, ...);' >>check_asm.c
+	@echo 'unsigned int check_asm_data[] = {' >> check_asm.c
+	$(SH) ./check_asm.sh -ints check_asm_data.s check_asm.c
+	@echo '};' >> check_asm.c
 	@echo 'int main(void) {' >> check_asm.c
-	$(SH) ./check_asm.sh task tmp.i check_asm.c
-	$(SH) ./check_asm.sh mm tmp.i check_asm.c
-	$(SH) ./check_asm.sh thread tmp.i check_asm.c
+	@echo 'int i = 0;' >> check_asm.c
+	$(SH) ./check_asm.sh -printf task tmp.i check_asm.c
+	$(SH) ./check_asm.sh -printf mm tmp.i check_asm.c
+	$(SH) ./check_asm.sh -printf thread tmp.i check_asm.c
 	@echo 'return 0; }' >> check_asm.c
-	@rm -f tmp.[ci]
-	#$(CC) -o check_asm check_asm.c
-	# <hack> Until we can do this natively, a hack has to take place
-	$(CC) $(CPPFLAGS) $(CMODEL_CFLAG) -ffixed-g4 -S -o check_asm.s check_asm.c
-	$(HOSTCC) -Wa,-Av9a -o check_asm check_asm.s
-	@rm -f check_asm.s
-	# </hack>
+	@rm -f tmp.[ci] check_asm_data.[cs]
+	$(HOSTCC) -o check_asm check_asm.c
 	./check_asm >> asm_offsets.h
 	@rm -f check_asm check_asm.c
 	@echo -e "\n#else /* CONFIG_SMP */\n" >> asm_offsets.h
@@ -113,53 +112,59 @@ check_asm: dummy
 	@echo "#define CONFIG_SMP 1" >> tmp.c
 	@echo "#include <linux/sched.h>" >> tmp.c
 	$(CPP) $(CPPFLAGS) tmp.c -o tmp.i
+	@echo "/* Automatically generated. Do not edit. */" > check_asm_data.c
+	@echo "#include <linux/config.h>" >> check_asm_data.c
+	@echo "#undef CONFIG_SMP" >> check_asm_data.c
+	@echo "#define CONFIG_SMP 1" >> check_asm_data.c
+	@echo "#include <linux/sched.h>" >> check_asm_data.c
+	@echo 'unsigned int check_asm_data[] = {' >> check_asm_data.c
+	$(SH) ./check_asm.sh -data task tmp.i check_asm_data.c
+	$(SH) ./check_asm.sh -data mm tmp.i check_asm_data.c
+	$(SH) ./check_asm.sh -data thread tmp.i check_asm_data.c
+	@echo '};' >> check_asm_data.c
+	$(CC) $(CPPFLAGS) $(CMODEL_CFLAG) -ffixed-g4 -S -o check_asm_data.s check_asm_data.c
 	@echo "/* Automatically generated. Do not edit. */" > check_asm.c
-	@echo "#include <linux/config.h>" >> check_asm.c
-	@echo "#undef CONFIG_SMP" >> check_asm.c
-	@echo "#define CONFIG_SMP 1" >> check_asm.c
-	@echo "#include <linux/sched.h>" >> check_asm.c
-	@echo 'struct task_struct _task;' >> check_asm.c
-	@echo 'struct mm_struct _mm;' >> check_asm.c
-	@echo 'struct thread_struct _thread;' >> check_asm.c
 	@echo 'extern int printf(const char *fmt, ...);' >>check_asm.c
+	@echo 'unsigned int check_asm_data[] = {' >> check_asm.c
+	$(SH) ./check_asm.sh -ints check_asm_data.s check_asm.c
+	@echo '};' >> check_asm.c
 	@echo 'int main(void) {' >> check_asm.c
-	$(SH) ./check_asm.sh task tmp.i check_asm.c
-	$(SH) ./check_asm.sh mm tmp.i check_asm.c
-	$(SH) ./check_asm.sh thread tmp.i check_asm.c
+	@echo 'int i = 0;' >> check_asm.c
+	$(SH) ./check_asm.sh -printf task tmp.i check_asm.c
+	$(SH) ./check_asm.sh -printf mm tmp.i check_asm.c
+	$(SH) ./check_asm.sh -printf thread tmp.i check_asm.c
 	@echo 'return 0; }' >> check_asm.c
-	@rm -f tmp.[ci]
-	#$(CC) -o check_asm check_asm.c
-	# <hack> Until we can do this natively, a hack has to take place
-	$(CC) $(CPPFLAGS) $(CMODEL_CFLAG) -ffixed-g4 -S -o check_asm.s check_asm.c
-	$(HOSTCC) -Wa,-Av9a -o check_asm check_asm.s
-	@rm -f check_asm.s
-	# </hack>
+	@rm -f tmp.[ci] check_asm_data.[cs]
+	$(HOSTCC) -o check_asm check_asm.c
 	./check_asm >> asm_offsets.h
 	@rm -f check_asm check_asm.c
 	@echo -e "\n#else /* SPIN_LOCK_DEBUG */\n" >> asm_offsets.h
 	@echo "#include <linux/sched.h>" > tmp.c
 	$(CPP) $(CPPFLAGS) -DSPIN_LOCK_DEBUG tmp.c -o tmp.i
+	@echo "/* Automatically generated. Do not edit. */" > check_asm_data.c
+	@echo "#include <linux/config.h>" >> check_asm_data.c
+	@echo "#undef CONFIG_SMP" >> check_asm_data.c
+	@echo "#define CONFIG_SMP 1" >> check_asm_data.c
+	@echo "#include <linux/sched.h>" >> check_asm_data.c
+	@echo 'unsigned int check_asm_data[] = {' >> check_asm_data.c
+	$(SH) ./check_asm.sh -data task tmp.i check_asm_data.c
+	$(SH) ./check_asm.sh -data mm tmp.i check_asm_data.c
+	$(SH) ./check_asm.sh -data thread tmp.i check_asm_data.c
+	@echo '};' >> check_asm_data.c
+	$(CC) $(CPPFLAGS) -DSPIN_LOCK_DEBUG $(CMODEL_CFLAG) -ffixed-g4 -S -o check_asm_data.s check_asm_data.c
 	@echo "/* Automatically generated. Do not edit. */" > check_asm.c
-	@echo "#include <linux/config.h>" >> check_asm.c
-	@echo "#undef CONFIG_SMP" >> check_asm.c
-	@echo "#define CONFIG_SMP 1" >> check_asm.c
-	@echo "#include <linux/sched.h>" >> check_asm.c
-	@echo 'struct task_struct _task;' >> check_asm.c
-	@echo 'struct mm_struct _mm;' >> check_asm.c
-	@echo 'struct thread_struct _thread;' >> check_asm.c
 	@echo 'extern int printf(const char *fmt, ...);' >>check_asm.c
+	@echo 'unsigned int check_asm_data[] = {' >> check_asm.c
+	$(SH) ./check_asm.sh -ints check_asm_data.s check_asm.c
+	@echo '};' >> check_asm.c
 	@echo 'int main(void) {' >> check_asm.c
-	$(SH) ./check_asm.sh task tmp.i check_asm.c
-	$(SH) ./check_asm.sh mm tmp.i check_asm.c
-	$(SH) ./check_asm.sh thread tmp.i check_asm.c
+	@echo 'int i = 0;' >> check_asm.c
+	$(SH) ./check_asm.sh -printf task tmp.i check_asm.c
+	$(SH) ./check_asm.sh -printf mm tmp.i check_asm.c
+	$(SH) ./check_asm.sh -printf thread tmp.i check_asm.c
 	@echo 'return 0; }' >> check_asm.c
-	@rm -f tmp.[ci]
-	#$(CC) -DSPIN_LOCK_DEBUG -o check_asm check_asm.c
-	# <hack> Until we can do this natively, a hack has to take place
-	$(CC) $(CPPFLAGS) -DSPIN_LOCK_DEBUG $(CMODEL_CFLAG) -ffixed-g4 -S -o check_asm.s check_asm.c
-	$(HOSTCC) -Wa,-Av9a -o check_asm check_asm.s
-	@rm -f check_asm.s
-	# </hack>
+	@rm -f tmp.[ci] check_asm_data.[cs]
+	$(HOSTCC) -o check_asm check_asm.c
 	./check_asm >> asm_offsets.h
 	@rm -f check_asm check_asm.c
 	@echo -e "#endif /* SPIN_LOCK_DEBUG */\n" >> asm_offsets.h
@@ -175,6 +180,5 @@ check_asm: dummy
 	else \
 	  mv -f asm_offsets.h $(HPATH)/asm/asm_offsets.h; \
 	fi
-
 
 include $(TOPDIR)/Rules.make

@@ -11,8 +11,6 @@
  *  01-07-1998	RMK	Added new ide_ioregspec_t
  *  29-07-1998	RMK	Major re-work of IDE architecture specific code
  */
-
-#include <linux/config.h>
 #include <asm/irq.h>
 
 /*
@@ -40,13 +38,13 @@ ide_init_hwif_ports(hw_regs_t *hw, int data_port, int ctrl_port, int *irq)
  */
 static __inline__ void ide_init_default_hwifs(void)
 {
-#ifdef CONFIG_ARCH_A5K
-	hw_regs_t hw;
+	if (machine_is_a5k()) {
+		hw_regs_t hw;
 
-        memset(&hw, 0, sizeof(hw));
+	        memset(&hw, 0, sizeof(hw));
 
-	ide_init_hwif_ports(&hw, 0x1f0, 0x3f6, NULL);
-	hw.irq = IRQ_HARDDISK;
-	ide_register_hw(&hw, NULL);
-#endif
+		ide_init_hwif_ports(&hw, 0x1f0, 0x3f6, NULL);
+		hw.irq = IRQ_HARDDISK;
+		ide_register_hw(&hw, NULL);
+	}
 }

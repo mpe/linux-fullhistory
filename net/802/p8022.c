@@ -130,7 +130,7 @@ void unregister_8022_client(unsigned char type)
 	{
 		if (tmp->type[0] == type) {
 			*clients = tmp->next;
-			kfree_s(tmp, sizeof(struct datalink_proto));
+			kfree(tmp);
 			break;
 		} else {
 			clients = &tmp->next;

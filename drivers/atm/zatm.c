@@ -441,8 +441,8 @@ static void zatm_clock_sync(unsigned long dummy)
 			    "shldl $" SX(TIMER_SHIFT) ",%1,%%edx\n\t"
 			    "shl $" SX(TIMER_SHIFT) ",%1\n\t"
 			    "divl %%ebx\n\t"
-			    : "=eax" (zatm_dev->factor)
-			    : "eax" (interval-diff),"g" (ticks),
+			    : "=a" (zatm_dev->factor)
+			    : "0" (interval-diff),"g" (ticks),
 			      "g" (zatm_dev->last_clk)
 			    : "ebx","edx","cc");
 #undef S

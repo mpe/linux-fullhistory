@@ -217,6 +217,7 @@ static int parse_options(char *options,int *fat, int *blksize, int *debug,
 	opts->fs_umask = current->fs->umask;
 	opts->quiet = opts->sys_immutable = opts->dotsOK = opts->showexec = 0;
 	opts->codepage = 0;
+	opts->nocase = 0;
 	opts->utf8 = 0;
 	opts->iocharset = NULL;
 	*debug = *fat = 0;
@@ -256,6 +257,9 @@ static int parse_options(char *options,int *fat, int *blksize, int *debug,
 		}
 		else if (!strcmp(this_char,"dots")) {
 			opts->dotsOK = 1;
+		}
+		else if (!strcmp(this_char,"nocase")) {
+			opts->nocase = 1;
 		}
 		else if (!strcmp(this_char,"nodots")) {
 			opts->dotsOK = 0;
@@ -643,7 +647,7 @@ fat_read_super(struct super_block *sb, void *data, int silent,
 
 	sbi->nls_io = NULL;
 	if (sbi->options.isvfat && !opts.utf8) {
-		p = opts.iocharset ? opts.iocharset : "iso8859-1";
+		p = opts.iocharset ? opts.iocharset : CONFIG_NLS_DEFAULT;
 		sbi->nls_io = load_nls(p);
 		if (! sbi->nls_io)
 			/* Fail only if explicit charset specified */

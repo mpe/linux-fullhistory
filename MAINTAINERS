@@ -73,7 +73,7 @@ S: Status, one of the following:
 P:	Alan Cox
 M:	alan@the.3c501.cabal.tm
 L:	linux-net@vger.rutgers.edu
-S:	Maintained
+S:	Maintained for 2.2 only
 
 3C505 NETWORK DRIVER
 P:	Philip Blundell
@@ -181,6 +181,13 @@ P:	Tigran A. Aivazian
 M:	tigran@veritas.com
 L:	linux-kernel@vger.rutgers.edu
 W:	http://www.ocston.org/~tigran/patches/bfs
+S:	Maintained
+
+BTTV VIDEO4LINUX DRIVER
+P:	Gerd Knorr
+M:	kraxel@goldbach.in-berlin.de
+L:	video4linux-list@redhat.com
+W:	http://me.in-berlin.de/~kraxel/bttv.html
 S:	Maintained
 
 BUSLOGIC SCSI DRIVER
@@ -988,8 +995,8 @@ L:	linux-net@vger.rutgers.edu
 S:	Supported
 
 SMB FILESYSTEM
-P:	Andrew Tridgell
-M:	tridge@samba.org
+P:	Urban Widmark
+M:	urban@svenskatest.se
 W:	http://samba.org/
 L:	samba@samba.org
 S:	Maintained
@@ -1014,7 +1021,7 @@ S:	Maintained
 SOUND
 P:	Alan Cox
 M:	alan@redhat.com
-S:	Supported
+S:	Maintained for 2.2 only
 
 SPARC:
 P:	David S. Miller
@@ -1220,6 +1227,14 @@ L:	linux-usb-users@lists.sourceforge.net
 L:	linux-usb-devel@lists.sourceforge.net
 S:	Supported
 
+USB SERIAL KEYSPAN DRIVER
+P:	Hugh Blemings
+M:	hugh@linuxcare.com
+L:	linux-usb-users@lists.sourceforge.net
+L:	linux-usb-devel@lists.sourceforge.net
+S:	Maintained
+W:	http://www.linuxcare.com.au/hugh/keyspan.html
+
 USB SERIAL DRIVER
 P:	Greg Kroah-Hartman
 M:	greg@kroah.com
@@ -1268,7 +1283,7 @@ VIDEO FOR LINUX
 P:	Alan Cox
 M:	Alan.Cox@linux.org
 W:	http://roadrunner.swansea.linux.org.uk/v4l.shtml
-S:	Maintained
+S:	Maintained for 2.2 only
 
 WAN ROUTER & SANGOMA WANPIPE DRIVERS & API (X.25, FRAME RELAY, PPP, CISCO HDLC)
 P:     Jaspreet Singh
@@ -1299,7 +1314,7 @@ Z85230 SYNCHRONOUS DRIVER
 P:	Alan Cox
 M:	alan@redhat.com
 W:	http://roadrunner.swansea.linux.org.uk/synchronous.shtml
-S:	Maintained
+S:	Maintained for 2.2 only
 
 Z8530 DRIVER FOR AX.25
 P:	Joerg Reuter

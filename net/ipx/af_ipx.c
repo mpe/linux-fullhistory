@@ -356,7 +356,7 @@ static void ipxitf_down(ipx_interface *intrfc)
 	if(intrfc == ipx_internal_net)
 		ipx_internal_net = NULL;
 
-	kfree_s(intrfc, sizeof(*intrfc));
+	kfree(intrfc);
 	MOD_DEC_USE_COUNT;
 
 	return;
@@ -1235,7 +1235,7 @@ static void ipxrtr_del_routes(ipx_interface *intrfc)
 		if(tmp->ir_intrfc == intrfc)
 		{
 			*r = tmp->ir_next;
-			kfree_s(tmp, sizeof(ipx_route));
+			kfree(tmp);
 		}
 		else
 			r = &(tmp->ir_next);
@@ -1268,7 +1268,7 @@ static int ipxrtr_delete(long net)
 				return (-EPERM);
 
 			*r = tmp->ir_next;
-			kfree_s(tmp, sizeof(ipx_route));
+			kfree(tmp);
 			return (0);
 		}
 

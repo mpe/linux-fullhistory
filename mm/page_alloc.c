@@ -217,7 +217,7 @@ static struct page * rmqueue(zone_t *zone, unsigned long order)
  */
 struct page * __alloc_pages(zonelist_t *zonelist, unsigned long order)
 {
-	zone_t **zone = zonelist->zones;
+	zone_t **zone;
 	extern wait_queue_head_t kswapd_wait;
 
 	/*
@@ -227,21 +227,6 @@ struct page * __alloc_pages(zonelist_t *zonelist, unsigned long order)
 	 * We are falling back to lower-level zones if allocation
 	 * in a higher zone fails.
 	 */
-
-	for (;;) {
-		zone_t *z = *(zone++);
-		if (!z)
-			break;
-		if (!z->size)
-			BUG();
-
-		/* If there are zones with a lot of free memory allocate from them */
-		if (z->free_pages > z->pages_high) {
-			struct page *page = rmqueue(z, order);
-			if (page)
-				return page;
-		}
-	}
 
 	zone = zonelist->zones;
 	for (;;) {
@@ -263,6 +248,21 @@ struct page * __alloc_pages(zonelist_t *zonelist, unsigned long order)
 				return page;
 		}
 	}
+
+	/* Three possibilities to get here
+	 * - Previous alloc_pages resulted in last zone set to have
+	 *   zone_wake_kswapd and start it. kswapd has not been able
+	 *   to release enough pages so that one zone does not have
+	 *   zone_wake_kswapd set.
+	 * - Different sets of zones (zonelist)
+	 *   previous did not have all zones with zone_wake_kswapd but
+	 *   this one has... should kswapd be woken up? it will run once.
+	 * - SMP race, kswapd went to sleep slightly after it as running
+	 *   in 'if (waitqueue_active(...))' above.
+	 * + anyway the test is very cheap to do...
+	 */
+	if (waitqueue_active(&kswapd_wait))
+		wake_up_interruptible(&kswapd_wait);
 
 	/*
 	 * Ok, we don't have any zones that don't need some

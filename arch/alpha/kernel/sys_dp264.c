@@ -545,6 +545,16 @@ monet_init_pci(void)
 	es1888_init();
 }
 
+static void __init
+webbrick_init_arch(void)
+{
+	tsunami_init_arch();
+
+	/* Tsunami caches 4 PTEs at a time; DS10 has only 1 hose. */
+	hose_head->sg_isa->align_entry = 4;
+	hose_head->sg_pci->align_entry = 4;
+}
+
 
 /*
  * The System Vectors
@@ -611,7 +621,7 @@ struct alpha_machine_vector webbrick_mv __initmv = {
 	nr_irqs:		64,
 	device_interrupt:	dp264_device_interrupt,
 
-	init_arch:		tsunami_init_arch,
+	init_arch:		webbrick_init_arch,
 	init_irq:		dp264_init_irq,
 	init_rtc:		common_init_rtc,
 	init_pci:		common_init_pci,

@@ -61,7 +61,7 @@ smb_vfree(void *obj)
 #else /* DEBUG_SMB_MALLOC */
 
 #define smb_kmalloc(s,p) kmalloc(s,p)
-#define smb_kfree_s(o,s) kfree_s(o,s)
+#define smb_kfree_s(o,s) kfree(o)
 #define smb_vmalloc(s)   vmalloc(s)
 #define smb_vfree(o)     vfree(o)
 

@@ -151,18 +151,18 @@ static struct usb_driver mts_usb_driver = {
 #define MTS_NAME	"microtek usb (rev " MTS_VERSION "): "
 
 #define MTS_WARNING(x...) \
-	printk( KERN_WARNING MTS_NAME ## x )
+	printk( KERN_WARNING MTS_NAME x )
 #define MTS_ERROR(x...) \
-	printk( KERN_ERR MTS_NAME ## x )
+	printk( KERN_ERR MTS_NAME x )
 #define MTS_INT_ERROR(x...) \
-	MTS_ERROR( ## x )
+	MTS_ERROR(x)
 #define MTS_MESSAGE(x...) \
-	printk( KERN_INFO MTS_NAME ## x )
+	printk( KERN_INFO MTS_NAME x )
 
 #if defined MTS_DO_DEBUG
 
 #define MTS_DEBUG(x...) \
-	printk( KERN_DEBUG MTS_NAME ## x )
+	printk( KERN_DEBUG MTS_NAME x )
 
 #define MTS_DEBUG_GOT_HERE() \
 	MTS_DEBUG("got to %s:%d (%s)\n", __FILE__, (int)__LINE__, __PRETTY_FUNCTION__ )

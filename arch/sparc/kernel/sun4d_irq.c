@@ -173,7 +173,7 @@ void sun4d_free_irq(unsigned int irq, void *dev_id)
 	else
 		*actionp = action->next;
 
-	kfree_s(action, sizeof(struct irqaction));
+	kfree(action);
 
 	if (!(*actionp))
 		disable_irq(irq);

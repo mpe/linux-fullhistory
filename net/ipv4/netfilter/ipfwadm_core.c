@@ -684,7 +684,7 @@ static void free_fw_chain(struct ip_fw *volatile* chainptr)
 		struct ip_fw *ftmp;
 		ftmp = *chainptr;
 		*chainptr = ftmp->fw_next;
-		kfree_s(ftmp,sizeof(*ftmp));
+		kfree(ftmp);
 	}
 	restore_flags(flags);
 }
@@ -834,13 +834,13 @@ static int del_from_chain(struct ip_fw *volatile*chainptr, struct ip_fw *frwl)
 			if (ltmp)
 			{
 				ltmp->fw_next=ftmp->fw_next;
-				kfree_s(ftmp,sizeof(*ftmp));
+				kfree(ftmp);
 				ftmp=ltmp->fw_next;
         		}
       			else
       			{
       				*chainptr=ftmp->fw_next;
-	 			kfree_s(ftmp,sizeof(*ftmp));
+	 			kfree(ftmp);
 				ftmp=*chainptr;
 			}
 		}

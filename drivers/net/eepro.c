@@ -1798,7 +1798,7 @@ cleanup_module(void)
 		struct net_device *d = &dev_eepro[i];
 		unregister_netdev(d);
 
-		kfree_s(d->priv,sizeof(struct eepro_local));
+		kfree(d->priv);
 		d->priv=NULL;
 
 		/* If we don't do this, we can't re-insmod it later. */

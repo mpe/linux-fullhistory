@@ -586,7 +586,6 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs, int syscall)
 				/* FALLTHRU */
 
 			default:
-				lock_kernel();
 				sigaddset(&current->signal, signr);
 				recalc_sigpending(current);
 				current->flags |= PF_SIGNALED;

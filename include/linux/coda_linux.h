@@ -116,7 +116,7 @@ do {                                                                      \
 } while (0)
 
 
-#define CODA_FREE(ptr,size) do {if (size < 3000) { kfree_s((ptr), (size)); CDEBUG(D_MALLOC, "kfreed: %lx at %p.\n", (long) size, ptr); } else { vfree((ptr)); CDEBUG(D_MALLOC, "vfreed: %lx at %p.\n", (long) size, ptr);} } while (0)
+#define CODA_FREE(ptr,size) do {if (size < 3000) { kfree((ptr)); CDEBUG(D_MALLOC, "kfreed: %lx at %p.\n", (long) size, ptr); } else { vfree((ptr)); CDEBUG(D_MALLOC, "vfreed: %lx at %p.\n", (long) size, ptr);} } while (0)
 
 /* inode to cnode access functions */
 

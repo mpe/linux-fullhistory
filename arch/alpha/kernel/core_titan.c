@@ -284,6 +284,17 @@ titan_init_one_pachip_port(titan_pachip_port *port, int index)
 	hose->io_space = alloc_resource();
 	hose->mem_space = alloc_resource();
 
+	/* This is for userland consumption.  For some reason, the 40-bit
+	   PIO bias that we use in the kernel through KSEG didn't work for
+	   the page table based user mappings.  So make sure we get the
+	   43-bit PIO bias.  */
+	hose->sparse_mem_base = 0;
+	hose->sparse_io_base = 0;
+	hose->dense_mem_base
+	  = (TITAN_MEM(index) & 0xffffffffff) | 0x80000000000;
+	hose->dense_io_base
+	  = (TITAN_IO(index) & 0xffffffffff) | 0x80000000000;
+
 	hose->config_space_base = TITAN_CONF(index);
 	hose->index = index;
 

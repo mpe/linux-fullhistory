@@ -2595,7 +2595,7 @@ static int __devinit es1370_probe(struct pci_dev *pcidev, const struct pci_devic
  err_irq:
 	release_region(s->io, ES1370_EXTENT);
  err_region:
-	kfree_s(s, sizeof(struct es1370_state));
+	kfree(s);
 	return -1;
 }
 
@@ -2615,7 +2615,7 @@ static void __devinit es1370_remove(struct pci_dev *dev)
        unregister_sound_mixer(s->dev_mixer);
        unregister_sound_dsp(s->dev_dac);
        unregister_sound_midi(s->dev_midi);
-       kfree_s(s, sizeof(struct es1370_state));
+       kfree(s);
        dev->driver_data = NULL;
 }
 

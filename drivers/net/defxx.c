@@ -216,7 +216,6 @@
 #include <asm/bitops.h>
 #include <asm/io.h>
 
-#include <linux/netdevice.h>
 #include <linux/fddidevice.h>
 #include <linux/skbuff.h>
 

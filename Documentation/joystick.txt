@@ -565,7 +565,7 @@ to the joystick driver development:
 	Benji York		<benji@cookeville.com>
 	Leslie F. Donaldson	<donaldlf@cs.rose-hulman.edu>
 	Eng-Jon Ong		<ongej@dcs.qmw.ac.uk>
-	Ragnar Hojland Espinosa	<ragnar@lightside.ddns.org>
+	Ragnar Hojland Espinosa	<ragnar@macula.net>
 	Brian Gerst		<bgerst@quark.vpplus.com>
 	Andree Borrmann		<a.borrmann@tu-bs.de>
 	Martin Giguere		<zefrench@hotmail.com>

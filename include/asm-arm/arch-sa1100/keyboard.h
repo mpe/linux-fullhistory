@@ -39,10 +39,10 @@ extern unsigned char Brutus_kbd_sysrq_xlate[128];
 #define kbd_getkeycode(x...)	(-ENOSYS)
 #define kbd_translate(x...)	(0)
 #define kbd_unexpected_up(x...)	(1)
-#define kbd_leds(x...)		(0)
-#define kbd_init_hw(x...)	(0)
-#define kbd_enable_irq(x...)	(0)
-#define kbd_disable_irq(x...)	(0)
+#define kbd_leds(x...)		do { } while (0)
+#define kbd_init_hw(x...)	do { } while (0)
+#define kbd_enable_irq(x...)	do { } while (0)
+#define kbd_disable_irq(x...)	do { } while (0)
 
 #endif
 

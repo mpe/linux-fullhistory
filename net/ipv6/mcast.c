@@ -200,7 +200,7 @@ static void ma_put(struct ifmcaddr6 *mc)
 {
 	if (atomic_dec_and_test(&mc->mca_refcnt)) {
 		in6_dev_put(mc->idev);
-		kfree_s(mc, sizeof(*mc));
+		kfree(mc);
 	}
 }
 

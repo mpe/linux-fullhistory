@@ -3,46 +3,112 @@
 
 #include <linux/types.h>
 
-#define get_unaligned(ptr) \
-	((__typeof__(*(ptr)))__get_unaligned_size((ptr), sizeof(*(ptr))))
-
-#define put_unaligned(val, ptr) \
-	__put_unaligned_size((unsigned long)(val), (ptr), sizeof(*(ptr)))
+extern int __bug_unaligned_x(void *ptr);
 
 /*
- * We use a similar method to the uaccess.h badness detection.
+ * What is the most efficient way of loading/storing an unaligned value?
  *
- * These are actually never defined anywhere, and therefore
- * catch errors at compile/link time.  Don't be tempted to
- * provide a declaration for them; doing so will mask the
- * errors.
+ * That is the subject of this file.  Efficiency here is defined as
+ * minimum code size with minimum register usage for the common cases.
+ * It is currently not believed that long longs are common, so we
+ * trade efficiency for the chars, shorts and longs against the long
+ * longs.
+ *
+ * Current stats with gcc 2.7.2.2 for these functions:
+ *
+ *	ptrsize	get:	code	regs	put:	code	regs
+ *	1		1	1		1	2
+ *	2		3	2		3	2
+ *	4		7	3		7	3
+ *	8		20	6		16	6
+ *
+ * gcc 2.95.1 seems to code differently:
+ *
+ *	ptrsize	get:	code	regs	put:	code	regs
+ *	1		1	1		1	2
+ *	2		3	2		3	2
+ *	4		7	4		7	4
+ *	8		19	8		15	6
+ *
+ * which may or may not be more efficient (depending upon whether
+ * you can afford the extra registers).  Hopefully the gcc 2.95
+ * is inteligent enough to decide if it is better to use the
+ * extra register, but evidence so far seems to suggest otherwise.
+ *
+ * Unfortunately, gcc is not able to optimise the high word
+ * out of long long >> 32, or the low word from long long << 32
  */
-extern unsigned long __get_unaligned_bad(void);
-extern void __put_unaligned_bad(void);
 
-extern __inline__ unsigned long __get_unaligned_size(const void *ptr, size_t size)
+#define __get_unaligned_2(__p)					\
+	(__p[0] | __p[1] << 8)
+
+#define __get_unaligned_4(__p)					\
+	(__p[0] | __p[1] << 8 | __p[2] << 16 | __p[3] << 24)
+
+#define get_unaligned(ptr)					\
+	({							\
+		__typeof__(*(ptr)) __v;				\
+		__u8 *__p = (__u8 *)(ptr);			\
+		switch (sizeof(*(ptr))) {			\
+		case 1:	__v = *(ptr);			break;	\
+		case 2: __v = __get_unaligned_2(__p);	break;	\
+		case 4: __v = __get_unaligned_4(__p);	break;	\
+		case 8: {					\
+				unsigned int __v1, __v2;	\
+				__v2 = __get_unaligned_4((__p+4)); \
+				__v1 = __get_unaligned_4(__p);	\
+				__v = ((unsigned long long)__v2 << 32 | __v1);	\
+			}					\
+			break;					\
+		default: __v = __bug_unaligned_x(__p);	break;	\
+		}						\
+		__v;						\
+	})
+
+
+static inline void __put_unaligned_2(__u32 __v, register __u8 *__p)
 {
-	const unsigned char *p = (const unsigned char *)ptr;
-	unsigned long val = 0;
-
-	switch (size) {
-	case 4:		val  = p[2] << 16 | p[3] << 24;
-	case 2:		val |= p[1] << 8;
-	case 1:		val |= p[0];				break;
-	default:	val = __get_unaligned_bad();		break;
-	}
-	return val;
+	*__p++ = __v;
+	*__p++ = __v >> 8;
 }
 
-extern __inline__ void __put_unaligned_size(unsigned long val, void *ptr, size_t size)
+static inline void __put_unaligned_4(__u32 __v, register __u8 *__p)
 {
-	switch (size) {
-	case 4:		((unsigned char *)ptr)[3] = val >> 24;
-			((unsigned char *)ptr)[2] = val >> 16;
-	case 2:		((unsigned char *)ptr)[1] = val >> 8;
-	case 1:		((unsigned char *)ptr)[0] = val;	break;
-	default:	__put_unaligned_bad();			break;
-	}
+	__put_unaligned_2(__v >> 16, __p + 2);
+	__put_unaligned_2(__v, __p);
 }
+
+static inline void __put_unaligned_8(const unsigned long long __v, register __u8 *__p)
+{
+	/*
+	 * tradeoff: 8 bytes of stack for all unaligned puts (2
+	 * instructions), or an extra register in the long long
+	 * case - go for the extra register.
+	 */
+	__put_unaligned_4(__v >> 32, __p+4);
+	__put_unaligned_4(__v, __p);
+}
+
+/*
+ * Try to store an unaligned value as efficiently as possible.
+ */
+#define put_unaligned(val,ptr)					\
+	({							\
+		switch (sizeof(*(ptr))) {			\
+		case 1:						\
+			*(ptr) = (val);				\
+			break;					\
+		case 2: __put_unaligned_2((val),(__u8 *)(ptr));	\
+			break;					\
+		case 4:	__put_unaligned_4((val),(__u8 *)(ptr));	\
+			break;					\
+		case 8:	__put_unaligned_8((val),(__u8 *)(ptr)); \
+			break;					\
+		default: __bug_unaligned_x(ptr);		\
+			break;					\
+		}						\
+		(void) 0;					\
+	})
+
 
 #endif

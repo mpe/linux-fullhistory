@@ -37,9 +37,6 @@ char *processor_modes[]=
   "UK8_32" , "UK9_32" , "UK10_32", "UND_32" , "UK12_32", "UK13_32", "UK14_32", "SYS_32"
 };
 
-/* proc/system.h */
-const char xchg_str[] = "xchg";
-
 static const char *handler[]= { "prefetch abort", "data abort", "address exception", "interrupt" };
 
 static inline void console_verbose(void)

@@ -1042,20 +1042,50 @@ static void cyber2000fb_blank(int blank, struct fb_info *info)
 	struct cfb_info *cfb = (struct cfb_info *)info;
 	int i;
 
-	if (blank) {
-		for (i = 0; i < NR_PALETTE; i++) {
+	/*
+	 *  Blank the screen if blank_mode != 0, else unblank. If
+	 *  blank == NULL then the caller blanks by setting the CLUT
+	 *  (Color Look Up Table) to all black. Return 0 if blanking
+	 *  succeeded, != 0 if un-/blanking failed due to e.g. a
+	 *  video mode which doesn't support it. Implements VESA
+	 *  suspend and powerdown modes on hardware that supports
+	 *  disabling hsync/vsync:
+	 *    blank_mode == 2: suspend vsync
+	 *    blank_mode == 3: suspend hsync
+	 *    blank_mode == 4: powerdown
+	 *
+	 *  wms...Enable VESA DMPS compatible powerdown mode
+	 *  run "setterm -powersave powerdown" to take advantage
+	 */
+     
+	switch (blank) {
+	case 4:	/* powerdown - both sync lines down */
+    		cyber2000_grphw(0x16, 0x05);
+		break;	
+	case 3:	/* hsync off */
+    		cyber2000_grphw(0x16, 0x01);
+		break;	
+	case 2:	/* vsync off */
+    		cyber2000_grphw(0x16, 0x04);
+		break;	
+	case 1:	/* just software blanking of screen */
+		cyber2000_grphw(0x16, 0x00);
+		for (i = 0; i < 256; i++) {
 			cyber2000_outb(i, 0x3c8);
 			cyber2000_outb(0, 0x3c9);
 			cyber2000_outb(0, 0x3c9);
 			cyber2000_outb(0, 0x3c9);
 		}
-	} else {
-		for (i = 0; i < NR_PALETTE; i++) {
+		break;
+	default: /* case 0, or anything else: unblank */
+		cyber2000_grphw(0x16, 0x00);
+		for (i = 0; i < 256; i++) {
 			cyber2000_outb(i, 0x3c8);
 			cyber2000_outb(cfb->palette[i].red, 0x3c9);
 			cyber2000_outb(cfb->palette[i].green, 0x3c9);
 			cyber2000_outb(cfb->palette[i].blue, 0x3c9);
 		}
+		break;
 	}
 }
 
@@ -1196,6 +1226,7 @@ int __init cyber2000fb_setup(char *options)
 
 static char igs_regs[] __devinitdata = {
 					0x12, 0x00,	0x13, 0x00,
+					0x16, 0x00,
 			0x31, 0x00,	0x32, 0x00,
 	0x50, 0x00,	0x51, 0x00,	0x52, 0x00,	0x53, 0x00,
 	0x54, 0x00,	0x55, 0x00,	0x56, 0x00,	0x57, 0x01,

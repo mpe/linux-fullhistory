@@ -2321,7 +2321,7 @@ static int __devinit solo1_probe(struct pci_dev *pcidev, const struct pci_device
  err_region2:
 	release_region(s->mpubase, MPUBASE_EXTENT);
  err_region1:
-	kfree_s(s, sizeof(struct solo1_state));
+	kfree(s);
 	return -1;
 }
 
@@ -2347,7 +2347,7 @@ static void __devinit solo1_remove(struct pci_dev *dev)
 	unregister_sound_mixer(s->dev_mixer);
 	unregister_sound_midi(s->dev_midi);
 	unregister_sound_special(s->dev_dmfm);
-	kfree_s(s, sizeof(struct solo1_state));
+	kfree(s);
 	dev->driver_data = NULL;
 }
 

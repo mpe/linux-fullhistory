@@ -1048,7 +1048,7 @@ void cleanup_module(void)
         /* No need to check MOD_IN_USE, as sys_delete_module() checks. */
 	unregister_netdev(&cops0_dev);
 	if(cops0_dev.priv)
-                kfree_s(cops0_dev.priv, sizeof(struct cops_local));
+                kfree(cops0_dev.priv);
 	if(cops0_dev.irq)
 		free_irq(cops0_dev.irq, &cops0_dev);
         release_region(cops0_dev.base_addr, COPS_IO_EXTENT);

@@ -557,7 +557,9 @@ static int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	memcpy(SDpnt->rev, scsi_result + 32, 4);
 
 	SDpnt->removable = (0x80 & scsi_result[1]) >> 7;
-	SDpnt->online = TRUE;
+	/* Use the peripheral qualifier field to determine online/offline */
+	if (((scsi_result[0] >> 5) & 7) == 1) 	SDpnt->online = FALSE;
+	else SDpnt->online = TRUE;
 	SDpnt->lockable = SDpnt->removable;
 	SDpnt->changed = 0;
 	SDpnt->access_count = 0;

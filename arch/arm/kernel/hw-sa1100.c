@@ -81,6 +81,24 @@ void __init get_assabet_scr(void)
 
 #endif  /* CONFIG_SA1100_ASSABET */
 
+/*
+ * Bitsy has extended, write-only memory-mapped GPIO's
+ */
+#if defined(CONFIG_SA1100_BITSY)
+static int bitsy_egpio = EGPIO_BITSY_RS232_ON;
+void clr_bitsy_egpio(unsigned long x) 
+{
+  bitsy_egpio &= ~x;
+  *(volatile int *)0xdc000000 = bitsy_egpio;
+}
+void set_bitsy_egpio(unsigned long x) 
+{
+  bitsy_egpio |= x;
+  *(volatile int *)0xdc000000 = bitsy_egpio;
+}
+EXPORT_SYMBOL(clr_bitsy_egpio);
+EXPORT_SYMBOL(set_bitsy_egpio);
+#endif
 
 #ifdef CONFIG_SA1111
 

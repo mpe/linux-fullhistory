@@ -1295,7 +1295,7 @@ static int do_release(struct inode * inode, struct file * filp)
 			as1->next = as->next;
 	}
 	unlock_kernel();
-	kfree_s(as, sizeof(*as));
+	kfree(as);
 	return 0;
 }
 

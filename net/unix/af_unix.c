@@ -1670,7 +1670,7 @@ static int unix_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		}
 
 		default:
-			err = -EINVAL;
+			err = dev_ioctl(cmd, (void *)arg);
 			break;
 	}
 	return err;

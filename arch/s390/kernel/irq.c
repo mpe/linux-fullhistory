@@ -45,8 +45,6 @@ int           s390_request_irq( unsigned int irq,
                      const char    *devname,
                      void          *dev_id);
 
-atomic_t nmi_counter;
-
 #if 0
 /*
  * The following vectors are part of the Linux architecture, there
@@ -105,7 +103,7 @@ int get_irq_list(char *buf)
 	
 	} /* endfor */
 
-	p += sprintf(p, "NMI: %10u\n", atomic_read(&nmi_counter));
+	p += sprintf(p, "NMI: %10u\n", nmi_counter);
 #ifdef CONFIG_SMP
 	p += sprintf(p, "IPI: %10u\n", atomic_read(&ipi_count));
 #endif

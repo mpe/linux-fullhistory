@@ -535,6 +535,12 @@ sys_pciconfig_iobase(long which, unsigned long bus, unsigned long dfn)
 	struct pci_controler *hose;
 	struct pci_dev *dev;
 
+	/* from hose or from bus.devfn */
+	if (which & IOBASE_FROM_HOSE) {
+		for(hose = hose_head; hose; hose = hose->next) 
+			if (hose->index == bus) break;
+		if (!hose) return -ENODEV;
+	} else {
 	/* Special hook for ISA access.  */
 	if (bus == 0 && dfn == 0) {
 		hose = pci_isa_hose;
@@ -544,8 +550,9 @@ sys_pciconfig_iobase(long which, unsigned long bus, unsigned long dfn)
 			return -ENODEV;
 		hose = dev->sysdata;
 	}
+	}
 
-	switch (which) {
+	switch (which & ~IOBASE_FROM_HOSE) {
 	case IOBASE_HOSE:
 		return hose->index;
 	case IOBASE_SPARSE_MEM:
@@ -556,6 +563,8 @@ sys_pciconfig_iobase(long which, unsigned long bus, unsigned long dfn)
 		return hose->sparse_io_base;
 	case IOBASE_DENSE_IO:
 		return hose->dense_io_base;
+	case IOBASE_ROOT_BUS:
+		return hose->bus->number;
 	}
 
 	return -EOPNOTSUPP;

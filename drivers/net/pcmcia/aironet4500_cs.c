@@ -321,11 +321,11 @@ static void awc_detach(dev_link_t *link)
 	if (link->priv) {
 		//struct net_device *dev = link->priv;
 		// dam dam damn mif (dev->priv)
-		//	kfree_s(dev->priv, sizeof(struct awc_private));
-		kfree_s(link->priv, sizeof(struct net_device));
+		//	kfree(dev->priv);
+		kfree(link->priv);
 	}
-	kfree_s(link->dev, sizeof(struct dev_node_t));
-	kfree_s(link, sizeof(struct dev_link_t));
+	kfree(link->dev);
+	kfree(link);
 
 } /* awc_detach */
 

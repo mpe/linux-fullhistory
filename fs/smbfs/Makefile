@@ -11,8 +11,13 @@ O_TARGET := smbfs.o
 O_OBJS   := proc.o dir.o cache.o sock.o inode.o file.o ioctl.o 
 M_OBJS   := $(O_TARGET)
 
-# If you want debugging output, please uncomment the following line
+# If you want debugging output, you may add these flags to the EXTRA_CFLAGS
+# SMBFS_PARANOIA should normally be enabled.
 
-# EXTRA_CFLAGS += -DDEBUG -DDEBUG_SMB_MALLOC=1
+EXTRA_CFLAGS += -DSMBFS_PARANOIA
+#EXTRA_CFLAGS += -DSMBFS_DEBUG
+#EXTRA_CFLAGS += -DSMBFS_DEBUG_VERBOSE
+#EXTRA_CFLAGS += -DDEBUG_SMB_MALLOC
+#EXTRA_CFLAGS += -DDEBUG_SMB_TIMESTAMP
 
 include $(TOPDIR)/Rules.make

@@ -415,19 +415,10 @@ static unsigned int isofs_get_last_session(struct super_block *sb,s32 session )
 	struct cdrom_multisession ms_info;
 	unsigned int vol_desc_start;
 	struct block_device *bdev = sb->s_bdev;
-	kdev_t dev = sb->s_dev;
 	int i;
 
 	vol_desc_start=0;
 	ms_info.addr_format=CDROM_LBA;
-	/* If a minor device was explicitly opened, set session to the
-	 * minor number. For instance, if /dev/hdc1 is mounted, session
-	 * 1 on the CD-ROM is selected. CD_PART_MAX gives access to
-	 * a max of 64 sessions on IDE. SCSI drives must still use
-	 * the session option to mount.
-	 */
-	if ((MINOR(dev) % CD_PART_MAX) && (MAJOR(dev) != SCSI_CDROM_MAJOR))
-		session = MINOR(dev) % CD_PART_MAX;
 	if(session >= 0 && session <= 99) {
 		struct cdrom_tocentry Te;
 		Te.cdte_track=session;
@@ -1420,7 +1411,7 @@ void * leak_check_malloc(unsigned int size){
 
 void leak_check_free_s(void * obj, int size){
   check_malloc--;
-  return kfree_s(obj, size);
+  return kfree(obj);
 }
 
 struct buffer_head * leak_check_bread(int dev, int block, int size){

@@ -600,7 +600,7 @@ static int openprom_open(struct inode * inode, struct file * file)
 
 static int openprom_release(struct inode * inode, struct file * file)
 {
-	kfree_s(file->private_data, sizeof(DATA));
+	kfree(file->private_data);
 	return 0;
 }
 

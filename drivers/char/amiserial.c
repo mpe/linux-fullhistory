@@ -1876,7 +1876,7 @@ static int get_async_struct(int line, struct async_struct **ret_info)
 	info->tqueue.data = info;
 	info->state = sstate;
 	if (sstate->info) {
-		kfree_s(info, sizeof(struct async_struct));
+		kfree(info);
 		*ret_info = sstate->info;
 		return 0;
 	}
@@ -2254,7 +2254,7 @@ void cleanup_module(void)
 	info = rs_table[0].info;
 	if (info) {
 	  rs_table[0].info = NULL;
-	  kfree_s(info, sizeof(struct async_struct));
+	  kfree(info);
 	}
 
 	if (tmp_buf) {

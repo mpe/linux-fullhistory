@@ -509,7 +509,7 @@ static int create_entropy_store(int size, struct entropy_store **ret_bucket)
 
 	r->pool = kmalloc(poolwords*4, GFP_KERNEL);
 	if (!r->pool) {
-		kfree_s(r, sizeof(struct entropy_store));
+		kfree(r);
 		return -ENOMEM;
 	}
 	memset(r->pool, 0, poolwords*4);
@@ -531,7 +531,7 @@ static void free_entropy_store(struct entropy_store *r)
 {
 	if (r->pool)
 		kfree(r->pool);
-	kfree_s(r, sizeof(struct entropy_store));
+	kfree(r);
 }
 
 /*

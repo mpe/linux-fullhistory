@@ -114,12 +114,7 @@ LIBGCC		:= $(shell $(CC) $(CFLAGS) --print-libgcc-file-name)
 
 export	LIBGCC MACHINE PROCESSOR TEXTADDR GZFLAGS
 
-ifeq ($(CONFIG_ARCH_A5K),y)
-MACHINE		 = a5k
-ARCHDIR		 = arc
-endif
-
-ifeq ($(CONFIG_ARCH_ARC),y)
+ifeq ($(CONFIG_ARCH_ARCA5K),y)
 MACHINE		 = arc
 ARCHDIR		 = arc
 endif
@@ -197,7 +192,8 @@ MAKEBOOT	 = $(MAKE) -C arch/$(ARCH)/boot
 
 # The following is a hack to get 'constants.h' up
 # to date before starting compilation
-CONSTANTS	:= constants
+
+$(patsubst %, _dir_%, $(SUBDIRS)) : constants
 
 constants: $(TOPDIR)/include/asm-arm/proc-fns.h dummy
 	@$(MAKE) -C arch/arm/lib constants.h

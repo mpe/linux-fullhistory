@@ -96,6 +96,61 @@ static unsigned long acpi_enter_lvl3_lat = ACPI_INFINITE_LAT;
 static unsigned long acpi_p_lvl2_lat = ACPI_INFINITE_LAT;
 static unsigned long acpi_p_lvl3_lat = ACPI_INFINITE_LAT;
 
+/* Statistics.. */
+struct Cx_stat_struct {
+	unsigned long time;
+	unsigned long min;
+	unsigned long max;
+	unsigned long avg;
+} Cx_stat[3];
+
+static int acpi_do_stat(ctl_table *ctl,
+			 int write,
+			 struct file *file,
+			 void *buffer,
+			 size_t *len)
+{
+	int size;
+	char str[4*10];
+	struct Cx_stat_struct *stat = (struct Cx_stat_struct *)ctl->data;
+
+	if (write) {
+		stat->time = 0;
+		stat->min = 0;
+		stat->max = 0;
+		stat->avg = 0;
+		return 0;
+	}
+
+	if (file->f_pos) {
+		*len = 0;
+		return 0;
+	}
+	size = sprintf(str, "%9lu %9lu %9lu %9lu",
+		stat->time,
+		stat->min,
+		stat->max,
+		stat->avg);
+	if (*len < size) {
+		*len = 0;
+		return 0;
+	}
+	copy_to_user(buffer, str, size);
+	return 0;
+}
+
+static void cx_statistics(unsigned int x, unsigned long time)
+{
+	struct Cx_stat_struct *stat = Cx_stat + (x-1);
+
+	stat->time += time;
+	if (time <= stat->min-1)
+		stat->min = time;
+	if (time > stat->max)
+		stat->max = time;
+	stat->avg = time + (stat->avg >> 1);
+}
+
 static unsigned long acpi_p_blk = 0;
 
 static int acpi_p_lvl2_tested = 0;
@@ -229,6 +284,18 @@ static struct ctl_table acpi_table[] =
 	{ACPI_ENTER_LVL3_LAT, "enter_lvl3_lat",
 	 &acpi_enter_lvl3_lat, sizeof(acpi_enter_lvl3_lat),
 	 0644, NULL, &acpi_do_ulong},
+
+	{ACPI_C1_TIME, "c1_time",
+	 Cx_stat+0, sizeof(struct Cx_stat_struct),
+	 0644, NULL, &acpi_do_stat},
+
+	{ACPI_C2_TIME, "c2_time",
+	 Cx_stat+1, sizeof(struct Cx_stat_struct),
+	 0644, NULL, &acpi_do_stat},
+
+	{ACPI_C3_TIME, "c3_time",
+	 Cx_stat+2, sizeof(struct Cx_stat_struct),
+	 0644, NULL, &acpi_do_stat},
 
 	{ACPI_S0_SLP_TYP, "s0_slp_typ",
 	 &acpi_slp_typ[ACPI_S0], sizeof(acpi_slp_typ[ACPI_S0]),
@@ -1023,6 +1090,7 @@ sleep3:
 		time = TIME_END(pm_tmr, time);
 
 		__sti();
+		cx_statistics(3, time);
 		if (time < acpi_p_lvl3_lat)
 			goto sleep2;
 	}
@@ -1049,6 +1117,7 @@ sleep3_with_arbiter:
 		outb(arbiter, pm2_cntr);			/* Enable arbiter again.. */
 
 		__sti();
+		cx_statistics(3, time);
 		if (time < acpi_p_lvl3_lat)
 			goto sleep2;
 	}
@@ -1074,6 +1143,7 @@ sleep2:
 		time = TIME_END(pm_tmr, time);
 
 		__sti();
+		cx_statistics(2, time);
 		if (time < acpi_p_lvl2_lat)
 			goto sleep1;
 		if (bm_activity(facp)) {
@@ -1097,6 +1167,7 @@ sleep1:
 		time = TIME_BEGIN(pm_tmr);
 		__asm__ __volatile__("sti ; hlt": : :"memory");
 		time = TIME_END(pm_tmr, time);
+		cx_statistics(1, time);
 		if (time > acpi_enter_lvl2_lat)
 			goto sleep2;
 	}

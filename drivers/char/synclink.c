@@ -4006,7 +4006,7 @@ int mgsl_alloc_buffer_list_memory( struct mgsl_struct *info )
 void mgsl_free_buffer_list_memory( struct mgsl_struct *info )
 {
 	if ( info->buffer_list && info->bus_type != MGSL_BUS_TYPE_PCI )
-		kfree_s(info->buffer_list, BUFFERLISTSIZE);
+		kfree(info->buffer_list);
 		
 	info->buffer_list = NULL;
 	info->rx_buffer_list = NULL;
@@ -4080,7 +4080,7 @@ void mgsl_free_frame_memory(struct mgsl_struct *info, DMABUFFERENTRY *BufferList
 		for ( i = 0 ; i < Buffercount ; i++ ) {
 			if ( BufferList[i].virt_addr ) {
 				if ( info->bus_type != MGSL_BUS_TYPE_PCI )
-					kfree_s(BufferList[i].virt_addr, DMABUFFERSIZE);
+					kfree(BufferList[i].virt_addr);
 				BufferList[i].virt_addr = NULL;
 			}
 		}
@@ -4139,7 +4139,7 @@ int mgsl_alloc_intermediate_rxbuffer_memory(struct mgsl_struct *info)
 void mgsl_free_intermediate_rxbuffer_memory(struct mgsl_struct *info)
 {
 	if ( info->intermediate_rxbuffer )
-		kfree_s( info->intermediate_rxbuffer, info->max_frame_size);
+		kfree( info->intermediate_rxbuffer );
 
 	info->intermediate_rxbuffer = NULL;
 
@@ -4695,13 +4695,13 @@ void cleanup_module(void)
 	}
 	
 	if (serial_table)
-		kfree_s(serial_table,sizeof(struct tty_struct*)*mgsl_device_count);
+		kfree(serial_table);
 		
 	if (serial_termios)
-		kfree_s(serial_termios,sizeof(struct termios*)*mgsl_device_count);
+		kfree(serial_termios);
 		
 	if (serial_termios_locked)
-		kfree_s(serial_termios_locked,sizeof(struct termios*)*mgsl_device_count);
+		kfree(serial_termios_locked);
 	
 }	/* end of cleanup_module() */
 

@@ -141,7 +141,7 @@ void unregister_snap_client(unsigned char *desc)
 		if (memcmp(tmp->type,desc,5) == 0)
 		{
 			*clients = tmp->next;
-			kfree_s(tmp, sizeof(struct datalink_proto));
+			kfree(tmp);
 			break;
 		}
 		else

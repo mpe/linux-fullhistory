@@ -1235,40 +1235,31 @@ int cm206_select_speed(struct cdrom_device_info * cdi, int speed)
 }
 
 static struct cdrom_device_ops cm206_dops = {
-  cm206_open,			/* open */
-  cm206_release,		/* release */
-  cm206_drive_status,		/* drive status */
-  cm206_media_changed,		/* media changed */
-  cm206_tray_move,		/* tray move */
-  cm206_lock_door,		/* lock door */
-  cm206_select_speed,		/* select speed */
-  NULL,				/* select disc */
-  cm206_get_last_session,	/* get last session */
-  cm206_get_upc,		/* get universal product code */
-  cm206_reset,			/* hard reset */
-  cm206_audio_ioctl,		/* audio ioctl */
-  cm206_ioctl,			/* device-specific ioctl */
-  CDC_CLOSE_TRAY | CDC_OPEN_TRAY | CDC_LOCK | CDC_MULTI_SESSION |
-    CDC_MEDIA_CHANGED | CDC_MCN | CDC_PLAY_AUDIO | CDC_SELECT_SPEED |
-    CDC_IOCTLS | CDC_DRIVE_STATUS, 
-    /* capability */
-  1,				/* number of minor devices */
+	open:			cm206_open,
+	release:		cm206_release,
+	drive_status:		cm206_drive_status,
+	media_changed:		cm206_media_changed,
+	tray_move:		cm206_tray_move,
+	lock_door:		cm206_lock_door,
+	select_speed:		cm206_select_speed,
+	get_last_session:	cm206_get_last_session,
+	get_mcn:		cm206_get_upc,
+	reset:			cm206_reset,
+	audio_ioctl:		cm206_audio_ioctl,
+	dev_ioctl:		cm206_ioctl,
+	capability:		CDC_CLOSE_TRAY | CDC_OPEN_TRAY | CDC_LOCK |
+				CDC_MULTI_SESSION | CDC_MEDIA_CHANGED |
+				CDC_MCN | CDC_PLAY_AUDIO | CDC_SELECT_SPEED |
+				CDC_IOCTLS | CDC_DRIVE_STATUS, 
+	n_minors:		1,
 };
 
 
 static struct cdrom_device_info cm206_info = {
-  &cm206_dops,                  /* device operations */
-  NULL,				/* link */
-  NULL,				/* handle (not used by cm206) */
-  0,				/* devfs handle */
-  0,				/* dev */
-  0,				/* mask */
-  2,				/* maximum speed */
-  1,				/* number of discs */
-  0,				/* options, not owned */
-  0,				/* mc_flags, not owned */
-  0,				/* use count, not owned */
-  "cm206"			/* name of the device type */
+	ops:		&cm206_dops,
+	speed:		2,
+	capacity:	1,
+	name:		"cm206",
 };
 
 /* This routine gets called during initialization if things go wrong,

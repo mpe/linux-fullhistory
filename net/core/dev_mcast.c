@@ -129,7 +129,7 @@ int dev_mc_delete(struct net_device *dev, void *addr, int alen, int glbl)
 			dev->mc_count--;
 			write_unlock_bh(&dev_mc_lock);
 
-			kfree_s(dmi, sizeof(*dmi));
+			kfree(dmi);
 
 			/*
 			 *	We have altered the list, so the card
@@ -205,7 +205,7 @@ void dev_mc_discard(struct net_device *dev)
 		dev->mc_list = tmp->next;
 		if (tmp->dmi_users > tmp->dmi_gusers)
 			printk("dev_mc_discard: multicast leakage! dmi_users=%d\n", tmp->dmi_users);
-		kfree_s(tmp, sizeof(*tmp));
+		kfree(tmp);
 	}
 	dev->mc_count = 0;
 	write_unlock_bh(&dev_mc_lock);

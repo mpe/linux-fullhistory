@@ -275,39 +275,22 @@ static struct s_drive_stuff* mcdx_irq_map[16] =
 MODULE_PARM(mcdx, "1-4i");
 
 static struct cdrom_device_ops mcdx_dops = {
-  mcdx_open,                   /* open */
-  mcdx_close,                  /* release */
-  NULL,           /* drive status */
-  mcdx_media_changed,         /* media changed */
-  mcdx_tray_move,             /* tray move */
-  mcdx_lockdoor,              /* lock door */
-  NULL,                       /* select speed */
-  NULL,                       /* select disc */
-  NULL,                       /* get last session */
-  NULL,                       /* get universal product code */
-  NULL,                       /* hard reset */
-  mcdx_audio_ioctl,            /* audio ioctl */
-  NULL,                  /* device-specific ioctl */
-  CDC_OPEN_TRAY | CDC_LOCK | CDC_MEDIA_CHANGED | CDC_PLAY_AUDIO
-  | CDC_DRIVE_STATUS, /* capability */
-  0,                            /* number of minor devices */
+		open:			mcdx_open,
+		release:		mcdx_close,
+		media_changed:	mcdx_media_changed,
+		tray_move:		mcdx_tray_move,
+		lock_door:		mcdx_lockdoor,
+		audio_ioctl:	mcdx_audio_ioctl,
+		capability:		CDC_OPEN_TRAY | CDC_LOCK | CDC_MEDIA_CHANGED |
+						CDC_PLAY_AUDIO | CDC_DRIVE_STATUS,
 };
 
 static struct cdrom_device_info mcdx_info = {
-  &mcdx_dops,                    /* device operations */
-  NULL,                         /* link */
-  NULL,                         /* handle */
-  0,				/* de, devfs */
-  0,		                /* dev */
-  0,                            /* mask */
-  2,                            /* maximum speed */
-  1,                            /* number of discs */
-  0,                            /* options, not owned */
-  0,                            /* mc_flags, not owned */
-  0,                            /* use count, not owned */
-  "mcdx",                         /* name of the device type */
+	ops:				&mcdx_dops,
+	speed:				2,
+	capacity:			1,
+	name:				"mcdx",
 };
-
 
 
 /* KERNEL INTERFACE FUNCTIONS **************************************/

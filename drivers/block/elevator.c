@@ -22,111 +22,6 @@
 #include <linux/blk.h>
 #include <asm/uaccess.h>
 
-void elevator_default(struct request *req, elevator_t * elevator,
-		      struct list_head * real_head,
-		      struct list_head * head, int orig_latency)
-{
-	struct list_head * entry = real_head, * point = NULL;
-	struct request * tmp;
-	int sequence = elevator->sequence;
-	int latency = orig_latency -= elevator->nr_segments, pass = 0;
-	int point_latency = 0xbeefbeef;
-
-	if (list_empty(real_head)) {
-		req->elevator_sequence = elevator_sequence(elevator, orig_latency);
-		list_add(&req->queue, real_head);
-		return;
-	}
-
-	while ((entry = entry->prev) != head) {
-		if (!point && latency >= 0) {
-			point = entry;
-			point_latency = latency;
-		}
-		tmp = blkdev_entry_to_request(entry);
-		if (elevator_sequence_before(tmp->elevator_sequence, sequence) || !tmp->q)
-			break;
-		if (latency >= 0) {
-			if (IN_ORDER(tmp, req) ||
-			    (pass && !IN_ORDER(tmp, blkdev_next_request(tmp))))
-				goto link;
-		}
-		latency += tmp->nr_segments;
-		pass = 1;
-	}
-
-	if (point) {
-		entry = point;
-		latency = point_latency;
-	}
-
- link:
-	list_add(&req->queue, entry);
-	req->elevator_sequence = elevator_sequence(elevator, latency);
-}
-
-int elevator_default_merge(request_queue_t *q, struct request **req,
-			   struct buffer_head *bh, int rw,
-			   int *max_sectors, int *max_segments)
-{
-	struct list_head *entry, *head = &q->queue_head;
-	unsigned int count = bh->b_size >> 9;
-	elevator_t *elevator = &q->elevator;
-	int orig_latency, latency, sequence, action, starving = 0;
-
-	/*
-	 * Avoid write-bombs as not to hurt interactiveness of reads
-	 */
-	if (rw == WRITE)
-		*max_segments = elevator->max_bomb_segments;
-
-	latency = orig_latency = elevator_request_latency(elevator, rw);
-	sequence = elevator->sequence;
-	
-	entry = head;
-	if (q->head_active && !q->plugged)
-		head = head->next;
-
-	while ((entry = entry->prev) != head && !starving) {
-		struct request *__rq = *req = blkdev_entry_to_request(entry);
-		latency += __rq->nr_segments;
-		if (elevator_sequence_before(__rq->elevator_sequence, sequence))
-			starving = 1;
-		if (latency < 0)
-			continue;
-		if (__rq->sem)
-			continue;
-		if (__rq->cmd != rw)
-			continue;
-		if (__rq->nr_sectors + count > *max_sectors)
-			continue;
-		if (__rq->rq_dev != bh->b_rdev)
-			continue;
-		if (__rq->sector + __rq->nr_sectors == bh->b_rsector) {
-			if (latency - __rq->nr_segments < 0)
-				break;
-			action = ELEVATOR_BACK_MERGE;
-		} else if (__rq->sector - count == bh->b_rsector) {
-			if (starving)
-				break;
-			action = ELEVATOR_FRONT_MERGE;
-		} else {
-			continue;
-		}
-		q->elevator.sequence++;
-		return action;
-	}
-	return ELEVATOR_NO_MERGE;
-}
-
-inline void elevator_default_dequeue(struct request *req)
-{
-	if (req->cmd == READ)
-		req->e->read_pendings--;
-
-	req->e->nr_segments -= req->nr_segments;
-}
-
 /*
  * Order ascending, but only allow a request to be skipped a certain
  * number of times
@@ -140,16 +35,11 @@ void elevator_linus(struct request *req, elevator_t *elevator,
 
 	req->elevator_sequence = orig_latency;
 
-	if (list_empty(real_head)) {
-		list_add(&req->queue, real_head);
-		return;
-	}
-
 	while ((entry = entry->prev) != head) {
 		tmp = blkdev_entry_to_request(entry);
-		if (!tmp->elevator_sequence)
-			break;
 		if (IN_ORDER(tmp, req))
+			break;
+		if (!tmp->elevator_sequence)
 			break;
 		tmp->elevator_sequence--;
 	}
@@ -169,8 +59,6 @@ int elevator_linus_merge(request_queue_t *q, struct request **req,
 
 	while ((entry = entry->prev) != head) {
 		struct request *__rq = *req = blkdev_entry_to_request(entry);
-		if (!__rq->elevator_sequence)
-			break;
 		if (__rq->sem)
 			continue;
 		if (__rq->cmd != rw)
@@ -183,7 +71,10 @@ int elevator_linus_merge(request_queue_t *q, struct request **req,
 			ret = ELEVATOR_BACK_MERGE;
 			break;
 		}
+		if (!__rq->elevator_sequence)
+			break;
 		if (__rq->sector - count == bh->b_rsector) {
+			__rq->elevator_sequence--;
 			ret = ELEVATOR_FRONT_MERGE;
 			break;
 		}
@@ -248,57 +139,6 @@ int elevator_noop_merge(request_queue_t *q, struct request **req,
  * The noop "elevator" does not do any accounting
  */
 void elevator_noop_dequeue(struct request *req) {}
-
-#ifdef ELEVATOR_DEBUG
-void elevator_default_debug(request_queue_t * q, kdev_t dev)
-{
-	int read_pendings = 0, nr_segments = 0;
-	elevator_t * elevator = &q->elevator;
-	struct list_head * entry = &q->queue_head;
-	static int counter;
-
-	if (elevator->elevator_fn != elevator_default)
-		return;
-
-	if (counter++ % 100)
-		return;
-
-	while ((entry = entry->prev) != &q->queue_head) {
-		struct request * req;
-
-		req = blkdev_entry_to_request(entry);
-		if (req->cmd != READ && req->cmd != WRITE && (req->q || req->nr_segments))
-			printk(KERN_WARNING
-			       "%s: elevator req->cmd %d req->nr_segments %u req->q %p\n",
-			       kdevname(dev), req->cmd, req->nr_segments, req->q);
-		if (!req->q) {
-			if (req->nr_segments)
-				printk(KERN_WARNING
-				       "%s: elevator req->q NULL req->nr_segments %u\n",
-				       kdevname(dev), req->nr_segments);
-			continue;
-		}
-		if (req->cmd == READ)
-			read_pendings++;
-		nr_segments += req->nr_segments;
-	}
-
-	if (read_pendings != elevator->read_pendings) {
-		printk(KERN_WARNING
-		       "%s: elevator read_pendings %d should be %d\n",
-		       kdevname(dev), elevator->read_pendings,
-		       read_pendings);
-		elevator->read_pendings = read_pendings;
-	}
-	if (nr_segments != elevator->nr_segments) {
-		printk(KERN_WARNING
-		       "%s: elevator nr_segments %d should be %d\n",
-		       kdevname(dev), elevator->nr_segments,
-		       nr_segments);
-		elevator->nr_segments = nr_segments;
-	}
-}
-#endif
 
 int blkelvget_ioctl(elevator_t * elevator, blkelv_ioctl_arg_t * arg)
 {

@@ -120,6 +120,8 @@ static void init_uninorth(void);
 void pmac_progress(char *s, unsigned short hex);
 #endif
 
+sys_ctrler_t sys_ctrler = SYS_CTRLER_UNKNOWN;
+
 __pmac
 int
 pmac_get_cpuinfo(char *buffer)

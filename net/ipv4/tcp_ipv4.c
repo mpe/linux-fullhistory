@@ -1232,7 +1232,7 @@ out:
 static void tcp_v4_or_free(struct open_request *req)
 {
 	if (req->af.v4_req.opt)
-		kfree_s(req->af.v4_req.opt, optlength(req->af.v4_req.opt));
+		kfree(req->af.v4_req.opt);
 }
 
 static inline void syn_flood_warning(struct sk_buff *skb)
@@ -1261,7 +1261,7 @@ tcp_v4_save_options(struct sock *sk, struct sk_buff *skb)
 		dopt = kmalloc(opt_size, GFP_ATOMIC);
 		if (dopt) {
 			if (ip_options_echo(dopt, skb)) {
-				kfree_s(dopt, opt_size);
+				kfree(dopt);
 				dopt = NULL;
 			}
 		}

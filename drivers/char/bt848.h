@@ -336,7 +336,7 @@
 
 
 
-/* Bt848A and Bt849 only !! */
+/* Bt848A and higher only !! */
 #define BT848_TGLB             0x080
 #define BT848_TGCTRL           0x084
 #define BT848_FCAP             0x0E8

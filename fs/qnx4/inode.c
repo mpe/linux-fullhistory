@@ -411,7 +411,7 @@ static struct super_block *qnx4_read_super(struct super_block *s,
 
 static void qnx4_put_super(struct super_block *sb)
 {
-	kfree_s( sb->u.qnx4_sb.BitMap, sizeof( struct qnx4_inode_entry ) );
+	kfree( sb->u.qnx4_sb.BitMap );
 	return;
 }
 

@@ -4,7 +4,6 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/config.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/string.h>

@@ -845,15 +845,15 @@ sa1100fb_activate_var(struct fb_var_screeninfo *var)
 			LCCR0_LDM + LCCR0_BAM + LCCR0_ERM + LCCR0_Act +
 			LCCR0_LtlEnd + LCCR0_DMADel(0);
 		lcd_shadow.lccr1 = 
-			LCCR1_DisWdth(var->xres) + LCCR1_HorSnchWdth(4) + 
-			LCCR1_BegLnDel(30) + LCCR1_EndLnDel(30);
+			LCCR1_DisWdth(var->xres) + LCCR1_HorSnchWdth(6) + 
+			LCCR1_BegLnDel(61) + LCCR1_EndLnDel(9);
 		lcd_shadow.lccr2 = 
-			LCCR2_DisHght(var->yres) + LCCR2_VrtSnchWdth(1) + 
-			LCCR2_BegFrmDel(0) + LCCR2_EndFrmDel(0);
+			LCCR2_DisHght(var->yres) + LCCR2_VrtSnchWdth(2) + 
+			LCCR2_BegFrmDel(3) + LCCR2_EndFrmDel(0);
 		lcd_shadow.lccr3 = 
 			LCCR3_OutEnH + LCCR3_PixFlEdg + LCCR3_VrtSnchH + 
 			LCCR3_HorSnchH + LCCR3_ACBsCntOff + 
-			LCCR3_ACBsDiv(2) + LCCR3_PixClkDiv(28);
+			LCCR3_ACBsDiv(2) + LCCR3_PixClkDiv(38);
 
 		/* Set board control register to handle new color depth */
 		sa1100fb_assabet_set_truecolor(var->bits_per_pixel >= 16);
@@ -1117,6 +1117,7 @@ sa1100fb_blank(int blank, struct fb_info *info)
 
   	DPRINTK("blank=%d info->modename=%s\n", blank, info->modename);
 	if (blank) {
+                if (current_par.visual != FB_VISUAL_TRUECOLOR)
 		for (i = 0; i < current_par.palette_size; i++)
 			sa1100fb_palette_write(i, sa1100fb_palette_encode(i, 0, 0, 0, 0));
 		sa1100fb_disable_lcd_controller();
@@ -1155,24 +1156,29 @@ sa1100fb_switch(int con, struct fb_info *info)
 	fb_display[con].var.activate = FB_ACTIVATE_NOW;
 	DPRINTK("fb_display[%d].var.activate=%x\n", con, fb_display[con].var.activate);
 	sa1100fb_set_var(&fb_display[con].var, con, info);
+	current_par.v_palette_base[0] = (current_par.v_palette_base[0] &
+		0xcfff) | SA1100_PALETTE_MODE_VAL(current_par.bits_per_pixel);
+
 	return 0;
 }
 
 
-void __init sa1100fb_init(void)
+int __init sa1100fb_init(void)
 {
+	int ret;
+
 	sa1100fb_init_fbinfo();
 
 	/* Initialize video memory */
-	if (sa1100fb_map_video_memory())
-		return;
+	if ((ret = sa1100fb_map_video_memory()) != 0)
+		return ret;
 
 	if (current_par.montype < 0 || current_par.montype > NR_MONTYPES)
 		current_par.montype = 1;
 
 	if (request_irq(IRQ_LCD, sa1100fb_inter_handler, SA_INTERRUPT, "SA1100 LCD", NULL) != 0) {
 		printk("sa1100fb: failed in request_irq\n");
-		return;
+		return -EBUSY;
 	}
 	DPRINTK("sa1100fb: request_irq succeeded\n");
 	disable_irq(IRQ_LCD);
@@ -1202,14 +1208,13 @@ void __init sa1100fb_init(void)
 
 	/* This driver cannot be unloaded at the moment */
 	MOD_INC_USE_COUNT;
+
+	return 0;
 }
 
-void __init sa1100fb_setup(char *options)
+int __init sa1100fb_setup(char *options)
 {
-	if (!options || !*options)
-		return;
-
-	return; 
+	return 0;
 }
 
 

@@ -180,7 +180,7 @@ process_mcheck_info(unsigned long vector, unsigned long la_ptr,
 	case 0x202: reason = "system detected hard error"; break;
 	case 0x203: reason = "system detected uncorrectable ECC error"; break;
 	case 0x204: reason = "SIO SERR occurred on PCI bus"; break;
-	case 0x205: reason = "parity error detected by CIA"; break;
+	case 0x205: reason = "parity error detected by core logic"; break;
 	case 0x206: reason = "SIO IOCHK occurred on ISA bus"; break;
 	case 0x207: reason = "non-existent memory error"; break;
 	case 0x208: reason = "MCHK_K_DCSR"; break;

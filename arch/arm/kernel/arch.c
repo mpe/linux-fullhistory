@@ -8,6 +8,8 @@
  */
 #include <linux/config.h>
 #include <linux/tty.h>
+#include <linux/delay.h>
+#include <linux/pm.h>
 #include <linux/init.h>
 
 #include <asm/dec21285.h>
@@ -134,8 +136,10 @@ fixup_netwinder(struct machine_desc *desc, struct param_struct *params,
 	isapnp_disable = 1;
 #endif
 
-	if (params->u1.s.nr_pages != 0x2000 &&
-	    params->u1.s.nr_pages != 0x4000) {
+	if (params->u1.s.nr_pages != 0x02000 &&
+	    params->u1.s.nr_pages != 0x04000 &&
+	    params->u1.s.nr_pages != 0x08000 &&
+	    params->u1.s.nr_pages != 0x10000) {
 		printk(KERN_WARNING "Warning: bad NeTTrom parameters "
 		       "detected, using defaults\n");
 
@@ -207,6 +211,14 @@ MACHINE_END
 
 #ifdef CONFIG_ARCH_SA1100
 
+static void victor_power_off(void)
+{
+	/* switch off power supply */
+	mdelay(2000);
+	GPCR = GPIO_GPIO23;
+	while (1);
+}
+
 extern void select_sa1100_io_desc(void);
 #define SET_BANK(__nr,__start,__size) \
 	mi->bank[__nr].start = (__start), \
@@ -219,8 +231,30 @@ fixup_sa1100(struct machine_desc *desc, struct param_struct *params,
 	select_sa1100_io_desc();
 
 	if (machine_is_assabet()) {
+		/* 
+		 * On Assabet, we must probe for the Neponset board *before*
+		 * paging_init() has occured to actually determine the amount
+		 * of RAM available.
+		 */
+		extern void map_sa1100_gpio_regs(void);
+		extern void get_assabet_scr(void);
+		map_sa1100_gpio_regs();
+		get_assabet_scr();
+
 		SET_BANK( 0, 0xc0000000, 32*1024*1024 );
 		mi->nr_banks = 1;
+
+		if (machine_has_neponset()) {
+			printk("Neponset expansion board detected\n");
+			/* 
+			 * Note that Neponset RAM is slower...
+			 * and still untested. 
+			 * This would be a candidate for
+			 * _real_ NUMA support. 
+			 */
+			//SET_BANK( 1, 0xd0000000, 32*1024*1024 );
+			//mi->nr_banks = 2;
+		}
 
 		ROOT_DEV = MKDEV(RAMDISK_MAJOR,0);
 		setup_ramdisk( 1, 0, 0, 8192 );
@@ -297,6 +331,8 @@ fixup_sa1100(struct machine_desc *desc, struct param_struct *params,
 
 		/* power off if any problem */
 		strcat( *cmdline, " panic=1" );
+
+		pm_power_off = victor_power_off;
 	}
 
 }

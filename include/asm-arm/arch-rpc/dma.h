@@ -1,3 +1,6 @@
+/*
+ * linux/include/asm-arm/arch-rpc/dma.h
+ */
 #ifndef __ASM_ARCH_DMA_H
 #define __ASM_ARCH_DMA_H
 

@@ -868,9 +868,9 @@ void cleanup_module()
 		printk("STALLION: failed to un-register serial memory device, "
 			"errno=%d\n", -i);
 	if (stli_tmpwritebuf != (char *) NULL)
-		kfree_s(stli_tmpwritebuf, STLI_TXBUFSIZE);
+		kfree(stli_tmpwritebuf);
 	if (stli_txcookbuf != (char *) NULL)
-		kfree_s(stli_txcookbuf, STLI_TXBUFSIZE);
+		kfree(stli_txcookbuf);
 
 	for (i = 0; (i < stli_nrbrds); i++) {
 		if ((brdp = stli_brds[i]) == (stlibrd_t *) NULL)
@@ -880,14 +880,14 @@ void cleanup_module()
 			if (portp != (stliport_t *) NULL) {
 				if (portp->tty != (struct tty_struct *) NULL)
 					tty_hangup(portp->tty);
-				kfree_s(portp, sizeof(stliport_t));
+				kfree(portp);
 			}
 		}
 
 		iounmap(brdp->membase);
 		if (brdp->iosize > 0)
 			release_region(brdp->iobase, brdp->iosize);
-		kfree_s(brdp, sizeof(stlibrd_t));
+		kfree(brdp);
 		stli_brds[i] = (stlibrd_t *) NULL;
 	}
 

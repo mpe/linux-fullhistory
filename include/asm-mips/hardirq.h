@@ -26,7 +26,6 @@ extern irq_cpustat_t irq_stat [NR_CPUS];
  */
 #define local_irq_count(cpu) (irq_stat[(cpu)].__local_irq_count)
 #define local_bh_count(cpu) (irq_stat[(cpu)].__local_bh_count)
-#define nmi_counter(cpu) (irq_stat[(cpu)].__nmi_counter)
 
 /*
  * Are we in an interrupt context? Either doing bottom half

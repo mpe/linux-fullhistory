@@ -2942,7 +2942,7 @@ isdn_tty_check_esc(const u_char * p, u_char plus, int count, int *pluscount,
 				if ((jiffies - *lastplus) < PLUSWAIT2)
 					*pluscount = 0;
 			}
-			if ((*pluscount == 3) && (count = 1))
+			if ((*pluscount == 3) && (count == 1))
 				isdn_timer_ctrl(ISDN_TIMER_MODEMPLUS, 1);
 			if (*pluscount > 3)
 				*pluscount = 1;

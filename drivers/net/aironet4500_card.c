@@ -244,8 +244,8 @@ static void awc_pci_release(void) {
 
 		unregister_netdev(aironet4500_devices[i]);
 		free_irq(aironet4500_devices[i]->irq,aironet4500_devices[i]);
-		kfree_s(aironet4500_devices[i]->priv, sizeof(struct awc_private));
-		kfree_s(aironet4500_devices[i], sizeof(struct net_device));
+		kfree(aironet4500_devices[i]->priv);
+		kfree(aironet4500_devices[i]);
 
 		aironet4500_devices[i]=0;
 
@@ -457,8 +457,8 @@ static void awc_pnp_release(void) {
 
 		unregister_netdev(aironet4500_devices[i]);
 		free_irq(aironet4500_devices[i]->irq,aironet4500_devices[i]);
-		kfree_s(aironet4500_devices[i]->priv, sizeof(struct awc_private));
-		kfree_s(aironet4500_devices[i], sizeof(struct net_device));
+		kfree(aironet4500_devices[i]->priv);
+		kfree(aironet4500_devices[i]);
 
 		aironet4500_devices[i]=0;
 
@@ -595,8 +595,8 @@ static void awc_isa_release(void) {
 
 		unregister_netdev(aironet4500_devices[i]);
 		free_irq(aironet4500_devices[i]->irq,aironet4500_devices[i]);
-		kfree_s(aironet4500_devices[i]->priv, sizeof(struct awc_private));
-		kfree_s(aironet4500_devices[i], sizeof(struct net_device));
+		kfree(aironet4500_devices[i]->priv);
+		kfree(aironet4500_devices[i]);
 
 		aironet4500_devices[i]=0;
 
@@ -865,8 +865,8 @@ static void awc_i365_release(void) {
 
 		unregister_netdev(aironet4500_devices[i]);
 
-		//kfree_s(aironet4500_devices[i]->priv, sizeof(struct awc_private));
-		kfree_s(aironet4500_devices[i], sizeof(struct net_device));
+		//kfree(aironet4500_devices[i]->priv);
+		kfree(aironet4500_devices[i]);
 
 		aironet4500_devices[i]=0;
 

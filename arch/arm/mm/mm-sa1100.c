@@ -20,6 +20,7 @@
 #include <linux/init.h>
 #include <linux/bootmem.h>
 
+#include <asm/hardware.h>
 #include <asm/pgtable.h>
 #include <asm/page.h>
 
@@ -55,6 +56,7 @@ static struct map_desc assabet_io_desc[] __initdata = {
 static struct map_desc bitsy_io_desc[] __initdata = {
 #ifdef CONFIG_SA1100_BITSY
   { 0xd0000000, 0x00000000, 0x02000000, DOMAIN_IO, 1, 1, 0, 0 }, /* Flash bank 0 */
+  { 0xdc000000, 0x49000000, 0x02000000, DOMAIN_IO, 1, 1, 0, 0 }, /* EGPIO 0 */
   SA1100_STD_IO_MAPPING
 #endif
 };
@@ -144,6 +146,7 @@ void __init select_sa1100_io_desc(void)
 	}
 }
 
+
 #ifdef CONFIG_DISCONTIGMEM
 
 /*
@@ -160,4 +163,21 @@ pg_data_t sa1100_node_data[4] =
   { bdata: &node_bootmem_data[3] } };
 
 #endif
+
+  
+/*
+ * On Assabet, we must probe for the Neponset board *before* paging_init() 
+ * has occured to actually determine the amount of RAM available.  To do so, 
+ * we map the appropriate IO section in the page table here in order to 
+ * access GPIO registers.
+ */
+void __init map_sa1100_gpio_regs( void )
+{
+	unsigned long phys = _GPLR & PMD_MASK;
+	unsigned long virt = io_p2v(phys);
+	int prot = PMD_TYPE_SECT | PMD_SECT_AP_WRITE | PMD_DOMAIN(DOMAIN_IO);
+	pmd_t pmd;
+	pmd_val(pmd) = phys | prot;
+	set_pmd(pmd_offset(pgd_offset_k(virt), virt), pmd);
+}
 

@@ -779,8 +779,16 @@ cia_machine_check(unsigned long vector, unsigned long la_ptr,
 		cia = (void *)(la_ptr + com->sys_offset);
 
 		if (com->code == 0x202) {
-			printk(KERN_CRIT "CIA PCI machine check: err0=%08x "
-			       "err1=%08x err2=%08x\n",
+			printk(KERN_CRIT "CIA PCI machine check: code=%x\n"
+			       "  cpu_err0=%08x cpu_err1=%08x cia_err=%08x\n"
+			       "  cia_stat=%08x err_mask=%08x cia_syn=%08x\n"
+			       "  mem_err0=%08x mem_err1=%08x\n"
+			       "  pci_err0=%08x pci_err1=%08x pci_err2=%08x\n",
+			       (int) com->code,
+			       (int) cia->cpu_err0, (int) cia->cpu_err1,
+			       (int) cia->cia_err,  (int) cia->cia_stat,
+			       (int) cia->err_mask, (int) cia->cia_syn,
+			       (int) cia->mem_err0, (int) cia->mem_err1,
 			       (int) cia->pci_err0, (int) cia->pci_err1,
 			       (int) cia->pci_err2);
 			expected = 1;

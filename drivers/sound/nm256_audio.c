@@ -1066,7 +1066,7 @@ nm256_install(struct pci_dev *pcidev, enum nm256rev rev, char *verstr)
     /* Yuck.  But we have to map in port 2 so we can check how much RAM the
        card has.  */
     if (nm256_remap_ports (card)) {
-	kfree_s (card, sizeof (struct nm256_info));
+	kfree (card);
 	return 0;
     }
 
@@ -1092,7 +1092,7 @@ nm256_install(struct pci_dev *pcidev, enum nm256rev rev, char *verstr)
 		printk (KERN_ERR "       IRQ and/or DMA for the sound card, this is *not* the correct\n");
 		printk (KERN_ERR "       driver to use.)\n");
 		nm256_release_ports (card);
-		kfree_s (card, sizeof (struct nm256_info));
+		kfree (card);
 		return 0;
 	    }
 	    else {
@@ -1130,7 +1130,7 @@ nm256_install(struct pci_dev *pcidev, enum nm256rev rev, char *verstr)
 	    card->port[0].start_offset, card->port[0].end_offset);
 
     if (nm256_remap_ports (card)) {
-	kfree_s (card, sizeof (struct nm256_info));
+	kfree (card);
 	return 0;
     }
 
@@ -1141,7 +1141,7 @@ nm256_install(struct pci_dev *pcidev, enum nm256rev rev, char *verstr)
 
     if (nm256_grabInterrupt (card) != 0) {
 	nm256_release_ports (card);
-	kfree_s (card, sizeof (struct nm256_info));
+	kfree (card);
 	return 0;
     }
 
@@ -1194,7 +1194,7 @@ nm256_install(struct pci_dev *pcidev, enum nm256rev rev, char *verstr)
 	else {
 	    printk(KERN_ERR "NM256: Too many PCM devices available\n");
 	    nm256_release_ports (card);
-	    kfree_s (card, sizeof (struct nm256_info));
+	    kfree (card);
 	    return 0;
 	}
     }
@@ -1680,7 +1680,7 @@ static void __exit cleanup_nm256 (void)
 	    sound_unload_audiodev (card->dev[0]);
 	    sound_unload_audiodev (card->dev[1]);
 	    next_card = card->next_card;
-	    kfree_s (card, sizeof (struct nm256_info));
+	    kfree (card);
 	}
 	nmcard_list = NULL;
     }

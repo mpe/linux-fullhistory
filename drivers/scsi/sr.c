@@ -109,26 +109,26 @@ static void sr_release(struct cdrom_device_info *cdi)
 
 static struct cdrom_device_ops sr_dops =
 {
-	sr_open,		/* open */
-	sr_release,		/* release */
-	sr_drive_status,	/* drive status */
-	sr_media_change,	/* media changed */
-	sr_tray_move,		/* tray move */
-	sr_lock_door,		/* lock door */
-	sr_select_speed,	/* select speed */
-	NULL,			/* select disc */
-	sr_get_last_session,	/* get last session */
-	sr_get_mcn,		/* get universal product code */
-	sr_reset,		/* hard reset */
-	sr_audio_ioctl,		/* audio ioctl */
-	sr_dev_ioctl,		/* device-specific ioctl */
-	CDC_CLOSE_TRAY | CDC_OPEN_TRAY | CDC_LOCK | CDC_SELECT_SPEED |
-      CDC_SELECT_DISC | CDC_MULTI_SESSION | CDC_MCN | CDC_MEDIA_CHANGED |
-	CDC_PLAY_AUDIO | CDC_RESET | CDC_IOCTLS | CDC_DRIVE_STATUS |
-	CDC_CD_R | CDC_CD_RW | CDC_DVD | CDC_DVD_R | CDC_DVD_RAM |
-	CDC_GENERIC_PACKET,
-	0,
-	sr_packet
+	open:			sr_open,
+	release:		sr_release,
+	drive_status:		sr_drive_status,
+	media_changed:		sr_media_change,
+	tray_move:		sr_tray_move,
+	lock_door:		sr_lock_door,
+	select_speed:		sr_select_speed,
+	get_last_session:	sr_get_last_session,
+	get_mcn:		sr_get_mcn,
+	reset:			sr_reset,
+	audio_ioctl:		sr_audio_ioctl,
+	dev_ioctl:		sr_dev_ioctl,
+	capability:		CDC_CLOSE_TRAY | CDC_OPEN_TRAY | CDC_LOCK |
+				CDC_SELECT_SPEED | CDC_SELECT_DISC |
+				CDC_MULTI_SESSION | CDC_MCN |
+				CDC_MEDIA_CHANGED | CDC_PLAY_AUDIO |
+				CDC_RESET | CDC_IOCTLS | CDC_DRIVE_STATUS |
+				CDC_CD_R | CDC_CD_RW | CDC_DVD | CDC_DVD_R |
+				CDC_DVD_RAM | CDC_GENERIC_PACKET,
+	generic_packet:		sr_packet,
 };
 
 /*

@@ -30,7 +30,7 @@
  * Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-static const char version[] = "1.19";
+static const char version[] = "1.20";
 
 #define __NO_VERSION__
 
@@ -101,6 +101,12 @@ static int force_rgb = 0;
 /* Number of seconds before inactive buffers are deallocated */
 static int buf_timeout = 5;
 
+/* Number of cameras to stream from simultaneously */
+static int cams = 1;
+
+/* Prevent apps from timing out if frame is not done in time */
+static int retry_sync = 0;
+
 MODULE_PARM(autoadjust, "i");
 MODULE_PARM(debug, "i");
 MODULE_PARM(fix_rgb_offset, "i");
@@ -110,6 +116,8 @@ MODULE_PARM(i2c_detect_tries, "i");
 MODULE_PARM(aperture, "i");
 MODULE_PARM(force_rgb, "i");
 MODULE_PARM(buf_timeout, "i");
+MODULE_PARM(cams, "i");
+MODULE_PARM(retry_sync, "i");
 
 MODULE_AUTHOR("Mark McClelland <mmcclelland@delphi.com> & Bret Wallach & Orion Sky Lawlor <olawlor@acm.org> & Kevin Moore & Charl P. Botha <cpbotha@ieee.org> & Claudio Matsuoka <claudio@conectiva.com>");
 MODULE_DESCRIPTION("OV511 USB Camera Driver");
@@ -1676,7 +1684,7 @@ static void ov511_isoc_irq(struct urb *urb)
 static int ov511_init_isoc(struct usb_ov511 *ov511)
 {
 	urb_t *urb;
-	int fx, err, n;
+	int fx, err, n, size;
 
 	PDEBUG(3, "*** Initializing capture ***");
 
@@ -1686,11 +1694,29 @@ static int ov511_init_isoc(struct usb_ov511 *ov511)
 	ov511->scratchlen = 0;
 
 	if (ov511->bridge == BRG_OV511)
-		ov511_set_packet_size(ov511, 993);
+		if (cams == 1)			 size = 993;
+		else if (cams == 2)		 size = 513;
+		else if (cams == 3 || cams == 4) size = 257;
+		else {
+			err("\"cams\" parameter too high!");
+			return -1;
+		}
 	else if (ov511->bridge == BRG_OV511PLUS)
-		ov511_set_packet_size(ov511, 961);
-	else
+		if (cams == 1)                      size = 961;
+		else if (cams == 2)                 size = 513;
+		else if (cams == 3 || cams == 4) size = 257;
+		else if (cams >= 5 && cams <= 8)    size = 129;
+		else if (cams >= 9 && cams <= 31)   size = 33;
+		else {
+			err("\"cams\" parameter too high!");
+			return -1;
+		}
+	else {
 		err("invalid bridge type");
+		return -1;
+	}
+
+	ov511_set_packet_size(ov511, size);
 
 	for (n = 0; n < OV511_NUMSBUF; n++) {
 		urb = usb_alloc_urb(FRAMES_PER_DESC);
@@ -2085,10 +2111,14 @@ static int ov511_ioctl(struct video_device *vdev, unsigned int cmd, void *arg)
 		if (copy_from_user(&p, arg, sizeof(p)))
 			return -EFAULT;
 
+		if (p.palette != VIDEO_PALETTE_GREY &&
+		    p.palette != VIDEO_PALETTE_RGB24 &&
+		    p.palette != VIDEO_PALETTE_YUV422 &&
+		    p.palette != VIDEO_PALETTE_YUV422P)
+			return -EINVAL;
+			
 		if (ov7610_set_picture(ov511, &p))
 			return -EIO;
-
-		/* FIXME: check validity */
 
 		PDEBUG(4, "Setting depth=%d, palette=%d", p.depth, p.palette);
 		for (i = 0; i < OV511_NUMFRAMES; i++) {
@@ -2294,8 +2324,23 @@ redo:
 				init_waitqueue_head(&ov511->frame[frame].wq);
 #endif
 				interruptible_sleep_on(&ov511->frame[frame].wq);
-				if (signal_pending(current))
-					return -EINTR;
+				if (signal_pending(current)) {
+					if (retry_sync) {
+						PDEBUG(3, "***retry sync***");
+
+						/* Polling apps will destroy frames with that! */
+						ov511_new_frame(ov511, frame);
+						ov511->curframe = -1;
+
+						/* This will request another frame. */
+						if (waitqueue_active(&ov511->frame[frame].wq))
+							wake_up_interruptible(&ov511->frame[frame].wq);
+
+						return 0;
+ 					} else {
+						return -EINTR;
+					}
+				}
 			} while (ov511->frame[frame].grabstate == FRAME_GRABBING);
 
 			if (ov511->frame[frame].grabstate == FRAME_ERROR) {

@@ -6,13 +6,12 @@
 #ifndef __ASM_ARCH_SYSTEM_H
 #define __ASM_ARCH_SYSTEM_H
 
-extern __inline__ void arch_idle(void)
+static void arch_idle(void)
 {
 	while (!current->need_resched && !hlt_counter)
 		cpu_do_idle(IDLE_WAIT_SLOW);
 }
 
 #define arch_reset(mode)	do { } while (0)
-#define arch_power_off()	do { } while (0)
 
 #endif

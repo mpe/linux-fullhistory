@@ -270,7 +270,7 @@ static int ipddp_delete(struct ipddp_route *rt)
                         && tmp->at.s_node == rt->at.s_node)
                 {
                         *r = tmp->next;
-                        kfree_s(tmp, sizeof(struct ipddp_route));
+                        kfree(tmp);
                         return 0;
                 }
                 r = &tmp->next;

@@ -250,7 +250,7 @@ asmlinkage long sys_getpriority(int which, int who)
 		unsigned niceval;
 		if (!proc_sel(p, which, who))
 			continue;
-		niceval = p->nice + 20;
+		niceval = 20 - p->nice;
 		if (niceval < (unsigned)retval)
 			retval = niceval;
 	}

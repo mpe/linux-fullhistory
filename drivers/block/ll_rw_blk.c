@@ -150,7 +150,7 @@ request_queue_t *blk_get_queue(kdev_t dev)
 	return ret;
 }
 
-static int __block_cleanup_queue(struct list_head *head)
+static int __blk_cleanup_queue(struct list_head *head)
 {
 	struct list_head *entry;
 	struct request *rq;
@@ -172,15 +172,15 @@ static int __block_cleanup_queue(struct list_head *head)
 }
 
 /*
- * Hopefully the low level driver has finished any out standing requests
+ * Hopefully the low level driver has finished any outstanding requests
  * first...
  */
 void blk_cleanup_queue(request_queue_t * q)
 {
 	int count = QUEUE_NR_REQUESTS;
 
-	count -= __block_cleanup_queue(&q->request_freelist[READ]);
-	count -= __block_cleanup_queue(&q->request_freelist[WRITE]);
+	count -= __blk_cleanup_queue(&q->request_freelist[READ]);
+	count -= __blk_cleanup_queue(&q->request_freelist[WRITE]);
 
 	if (count)
 		printk("blk_cleanup_queue: leaked requests (%d)\n", count);
@@ -482,7 +482,7 @@ static inline void add_request(request_queue_t * q, struct request * req,
 	int major;
 
 	drive_stat_acct(req->rq_dev, req->cmd, req->nr_sectors, 1);
-	elevator_account_request(req);
+
 	/*
 	 * let selected elevator insert the request
 	 */
@@ -543,7 +543,6 @@ static void attempt_merge(request_queue_t * q,
 	if(!(q->merge_requests_fn)(q, req, next, max_segments))
 		return;
 
-	elevator_merge_requests(req, next);
 	req->bhtail->b_reqnext = next->bh;
 	req->bhtail = next->bhtail;
 	req->nr_sectors = req->hard_nr_sectors += next->hard_nr_sectors;
@@ -582,7 +581,7 @@ static inline void __make_request(request_queue_t * q, int rw,
 	int max_segments = MAX_SEGMENTS;
 	struct request * req = NULL;
 	int rw_ahead, max_sectors, el_ret;
-	struct list_head *head;
+	struct list_head *head = &q->queue_head;
 	int latency;
 	elevator_t *elevator = &q->elevator;
 
@@ -643,12 +642,10 @@ static inline void __make_request(request_queue_t * q, int rw,
 	 * not to schedule or do something nonatomic
 	 */
 	spin_lock_irq(&io_request_lock);
-	elevator_default_debug(q, bh->b_rdev);
 
 	/*
 	 * skip first entry, for devices with active queue head
 	 */
-	head = &q->queue_head;
 	if (q->head_active && !q->plugged)
 		head = head->next;
 
@@ -710,9 +707,11 @@ get_rq:
 		req = __get_request_wait(q, rw);
 		spin_lock_irq(&io_request_lock);
 		
-		head = &q->queue_head;
-		if (q->head_active && !q->plugged)
-			head = head->next;
+		if (q->head_active) {
+			head = &q->queue_head;
+			if (!q->plugged)
+				head = head->next;
+		}
 	}
 
 /* fill up the request-info, and add it to the queue */

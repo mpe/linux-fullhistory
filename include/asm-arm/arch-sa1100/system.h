@@ -5,7 +5,7 @@
  */
 #include <linux/config.h>
 
-extern __inline__ void arch_idle(void)
+static void arch_idle(void)
 {
 	while (!current->need_resched && !hlt_counter) {
 		cpu_do_idle(IDLE_CLOCK_SLOW);
@@ -16,16 +16,8 @@ extern __inline__ void arch_idle(void)
 
 #ifdef CONFIG_SA1100_VICTOR
 
-extern inline void arch_power_off(void)
-{
-	/* switch off power supply */
-	mdelay(2000);
-	GPCR = GPIO_GPIO23;
-	while(1);
-}
-
 /* power off unconditionally */
-#define arch_reset(x) arch_power_off()
+#define arch_reset(x) machine_power_off()
 
 #else
 

@@ -224,7 +224,6 @@
 #include <linux/string.h>
 #include <linux/ctype.h>
 #include <linux/ioport.h>
-#include <linux/sched.h>
 #include <linux/delay.h>
 #include <linux/sound.h>
 #include <linux/malloc.h>

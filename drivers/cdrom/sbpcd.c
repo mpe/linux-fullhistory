@@ -5409,36 +5409,31 @@ static void sbpcd_release(struct cdrom_device_info * cdi)
  */
 static int sbpcd_media_changed( struct cdrom_device_info *cdi, int disc_nr);
 static struct cdrom_device_ops sbpcd_dops = {
-  sbpcd_open,                   /* open */
-  sbpcd_release,                /* release */
-  sbpcd_drive_status,           /* drive status */
-  sbpcd_media_changed,          /* media changed */
-  sbpcd_tray_move,              /* tray move */
-  sbpcd_lock_door,              /* lock door */
-  sbpcd_select_speed,           /* select speed */
-  NULL,                         /* select disc */
-  sbpcd_get_last_session,       /* get last session */
-  sbpcd_get_mcn,                /* get universal product code */
-  sbpcd_reset,                  /* hard reset */
-  sbpcd_audio_ioctl,            /* audio ioctl */
-  sbpcd_dev_ioctl,              /* device-specific ioctl */
-  CDC_CLOSE_TRAY | CDC_OPEN_TRAY | CDC_LOCK | CDC_MULTI_SESSION |
-    CDC_MEDIA_CHANGED | CDC_MCN | CDC_PLAY_AUDIO | CDC_IOCTLS, /* capability */
-  1,                            /* number of minor devices */
+	open:			sbpcd_open,
+	release:		sbpcd_release,
+	drive_status:		sbpcd_drive_status,
+	media_changed:		sbpcd_media_changed,
+	tray_move:		sbpcd_tray_move,
+	lock_door:		sbpcd_lock_door,
+	select_speed:		sbpcd_select_speed,
+	get_last_session:	sbpcd_get_last_session,
+	get_mcn:		sbpcd_get_mcn,
+	reset:			sbpcd_reset,
+	audio_ioctl:		sbpcd_audio_ioctl,
+	dev_ioctl:		sbpcd_dev_ioctl,
+	capability:		CDC_CLOSE_TRAY | CDC_OPEN_TRAY | CDC_LOCK |
+				CDC_MULTI_SESSION | CDC_MEDIA_CHANGED |
+				CDC_MCN | CDC_PLAY_AUDIO | CDC_IOCTLS,
+	n_minors:		1,
 };
 
 static struct cdrom_device_info sbpcd_info = {
-  &sbpcd_dops,                /* device operations */
-  NULL,                       /* link */
-  NULL,                       /* handle */
-  0,		              /* dev */
-  0,                          /* mask */
-  2,                          /* maximum speed */
-  1,                          /* number of discs */
-  0,                          /* options, not owned */
-  0,                          /* mc_flags, not owned */
-  0                           /* use count, not owned */
+	ops:			&sbpcd_dops,
+	speed:			2,
+	capacity:		1,
+	name:			"sbpcd",
 };
+
 /*==========================================================================*/
 /*
  * accept "kernel command line" parameters 

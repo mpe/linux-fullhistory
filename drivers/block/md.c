@@ -2080,10 +2080,10 @@ void md_setup_drive(void) md__init;
  */
 #ifdef CONFIG_AUTODETECT_RAID
 static int detected_devices[128] md__initdata;
-static int dev_cnt md__initdata=0;
-void md__init md_autodetect_dev(kdev_t dev)
+static int dev_cnt=0;
+void md_autodetect_dev(kdev_t dev)
 {
-	if (dev_cnt < 127)
+	if (dev_cnt >= 0 && dev_cnt < 127)
 		detected_devices[dev_cnt++] = dev;
 }
 #endif
@@ -2094,36 +2094,39 @@ void md__init md_run_setup(void)
 	mdk_rdev_t *rdev;
 	int i;
 
-	if (raid_setup_args.noautodetect) {
+	if (raid_setup_args.noautodetect)
 		printk(KERN_INFO "skipping autodetection of RAID arrays\n");
-		return;
+	else {
+
+		printk(KERN_INFO "autodetecting RAID arrays\n");
+
+		for (i=0; i<dev_cnt; i++) {
+			kdev_t dev = detected_devices[i];
+
+			if (md_import_device(dev,1)) {
+				printk(KERN_ALERT "could not import %s!\n",
+				       partition_name(dev));
+				continue;
+			}
+			/*
+			 * Sanity checks:
+			 */
+			rdev = find_rdev_all(dev);
+			if (!rdev) {
+				MD_BUG();
+				continue;
+			}
+			if (rdev->faulty) {
+				MD_BUG();
+				continue;
+			}
+			md_list_add(&rdev->pending, &pending_raid_disks);
+		}
+
+		autorun_devices();
 	}
-	printk(KERN_INFO "autodetecting RAID arrays\n");
 
-	for (i=0; i<dev_cnt; i++) {
-		kdev_t dev = detected_devices[i];
-
-		if (md_import_device(dev,1)) {
-			printk(KERN_ALERT "could not import %s!\n",
-			       partition_name(dev));
-			continue;
-		}
-		/*
-		 * Sanity checks:
-		 */
-		rdev = find_rdev_all(dev);
-		if (!rdev) {
-			MD_BUG();
-			continue;
-		}
-		if (rdev->faulty) {
-			MD_BUG();
-			continue;
-		}
-		md_list_add(&rdev->pending, &pending_raid_disks);
-	}
-
-	autorun_devices();
+	dev_cnt = -1; /* make sure further calls to md_autodetect_dev are ignored */
 #endif
 #ifdef CONFIG_MD_BOOT
 	md_setup_drive();
@@ -2731,11 +2734,9 @@ static int md_ioctl (struct inode *inode, struct file *file,
 			goto done_unlock;
 
 		case STOP_ARRAY:
-			err = do_md_stop (mddev, 0);
-			if (err)
-				goto done_unlock;
-			else
-				goto done;
+			if (!(err = do_md_stop (mddev, 0)))
+				mddev = NULL;
+			goto done_unlock;
 
 		case STOP_ARRAY_RO:
 			err = do_md_stop (mddev, 1);
@@ -2837,7 +2838,8 @@ static int md_ioctl (struct inode *inode, struct file *file,
 			 */
 			if (err) {
 				mddev->sb_dirty = 0;
-				do_md_stop (mddev, 0);
+				if (!do_md_stop (mddev, 0))
+					mddev = NULL;
 			}
 			goto done_unlock;
 		}
@@ -2852,8 +2854,6 @@ done_unlock:
 abort_unlock:
 	if (mddev)
 		unlock_mddev(mddev);
-	else
-		printk("huh11?\n");
 
 	return err;
 done:
@@ -3248,6 +3248,19 @@ static mdp_disk_t *get_spare(mddev_t *mddev)
 	return NULL;
 }
 
+static unsigned int sync_io[DK_MAX_MAJOR][DK_MAX_DISK];
+void md_sync_acct(kdev_t dev, unsigned long nr_sectors)
+{
+	unsigned int major = MAJOR(dev);
+	unsigned int index;
+
+	index = disk_index(dev);
+	if ((index >= DK_MAX_DISK) || (major >= DK_MAX_MAJOR))
+		return;
+
+	sync_io[major][index] += nr_sectors;
+}
+
 static int is_mddev_idle (mddev_t *mddev)
 {
 	mdk_rdev_t * rdev;
@@ -3260,8 +3273,12 @@ static int is_mddev_idle (mddev_t *mddev)
 		int major = MAJOR(rdev->dev);
 		int idx = disk_index(rdev->dev);
 
+		if ((idx >= DK_MAX_DISK) || (major >= DK_MAX_MAJOR))
+			continue;
+
 		curr_events = kstat.dk_drive_rblk[major][idx] +
 						kstat.dk_drive_wblk[major][idx] ;
+		curr_events -= sync_io[major][idx];
 //		printk("events(major: %d, idx: %d): %ld\n", major, idx, curr_events);
 		if (curr_events != rdev->last_events) {
 //			printk("!I(%ld)", curr_events - rdev->last_events);
@@ -3561,32 +3578,28 @@ struct notifier_block md_notifier = {
 	0
 };
 
-void md__init raid_setup(char *str, int *ints)
+void md__init raid_setup(char *str)
 {
-	char tmpline[100];
-	int len, pos, nr, i;
+	int len, pos;
 
 	len = strlen(str) + 1;
-	nr = 0;
 	pos = 0;
 
-	for (i = 0; i < len; i++) {
-		char c = str[i];
+	while (pos < len) {
+		char *comma = strchr(str+pos, ',');
+		int wlen;
+		if (comma)
+			wlen = (comma-str)-pos;
+		else	wlen = (len-1)-pos;
 
-		if (c == ',' || !c) {
-			tmpline[pos] = 0;
-			if (!strcmp(tmpline,"noautodetect"))
-				raid_setup_args.noautodetect = 1;
-			nr++;
-			pos = 0;
-			continue;
-		}
-		tmpline[pos] = c;
-		pos++;
+		if (strncmp(str, "noautodetect", wlen) == 0)
+			raid_setup_args.noautodetect = 1;
+		pos += wlen+1;
 	}
 	raid_setup_args.set = 1;
 	return;
 }
+__setup("raid=", raid_setup);
 
 static void md_geninit (void)
 {
@@ -3842,6 +3855,7 @@ MD_EXPORT_SYMBOL(unregister_md_personality);
 MD_EXPORT_SYMBOL(partition_name);
 MD_EXPORT_SYMBOL(md_error);
 MD_EXPORT_SYMBOL(md_do_sync);
+MD_EXPORT_SYMBOL(md_sync_acct);
 MD_EXPORT_SYMBOL(md_done_sync);
 MD_EXPORT_SYMBOL(md_recover_arrays);
 MD_EXPORT_SYMBOL(md_register_thread);

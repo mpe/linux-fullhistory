@@ -114,6 +114,10 @@ typedef int acpi_dstate_t;
 #define ACPI_TMR_VAL_EXT  0x00000100
 #define ACPI_DCK_CAP	  0x00000200
 
+/* FACP BOOT_ARCH flags */
+#define FACP_BOOT_ARCH_LEGACY_DEVICES	0x0001
+#define FACP_BOOT_ARCH_KBD_CONTROLLER	0x0002
+
 /* FACS flags */
 #define ACPI_S4BIOS	  0x00000001
 
@@ -184,8 +188,7 @@ struct acpi_facp {
 	__u8 day_alarm;
 	__u8 mon_alarm;
 	__u8 century;
-	__u8 reserved4;
-	__u8 reserved5;
+	__u16 boot_arch;
 	__u8 reserved6;
 	__u32 flags;
 } __attribute__ ((packed));
@@ -221,6 +224,9 @@ enum
 	ACPI_ENTER_LVL3_LAT,
 	ACPI_P_LVL2_LAT,
 	ACPI_P_LVL3_LAT,
+	ACPI_C1_TIME,
+	ACPI_C2_TIME,
+	ACPI_C3_TIME,
 	ACPI_S0_SLP_TYP,
 	ACPI_S1_SLP_TYP,
 	ACPI_S5_SLP_TYP,

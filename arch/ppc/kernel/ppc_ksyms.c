@@ -36,6 +36,7 @@
 #include <asm/machdep.h>
 #include <asm/hw_irq.h>
 #include <asm/nvram.h>
+#include <asm/mmu_context.h>
 #ifdef CONFIG_SMP
 #include <asm/smplock.h>
 #endif /* CONFIG_SMP */
@@ -83,9 +84,9 @@ EXPORT_SYMBOL(kernel_flag);
 #endif /* CONFIG_SMP */
 
 #if !defined(CONFIG_4xx) && !defined(CONFIG_8xx)
-EXPORT_SYMBOL(isa_io_base);
-EXPORT_SYMBOL(isa_mem_base);
-EXPORT_SYMBOL(pci_dram_offset);
+EXPORT_SYMBOL_NOVERS(isa_io_base);
+EXPORT_SYMBOL_NOVERS(isa_mem_base);
+EXPORT_SYMBOL_NOVERS(pci_dram_offset);
 #endif
 EXPORT_SYMBOL(ISA_DMA_THRESHOLD);
 EXPORT_SYMBOL(DMA_MODE_READ);
@@ -223,6 +224,7 @@ EXPORT_SYMBOL(pmu_unregister_sleep_notifier);
 EXPORT_SYMBOL(pmu_enable_irled);
 #endif CONFIG_PMAC_PBOOK
 #if defined(CONFIG_ALL_PPC)
+EXPORT_SYMBOL_NOVERS(sys_ctrler);
 EXPORT_SYMBOL(find_devices);
 EXPORT_SYMBOL(find_type_devices);
 EXPORT_SYMBOL(find_compatible_devices);
@@ -306,3 +308,6 @@ EXPORT_SYMBOL(debugger_fault_handler);
 
 EXPORT_SYMBOL(ret_to_user_hook);
 EXPORT_SYMBOL(do_softirq);
+EXPORT_SYMBOL(next_mmu_context);
+EXPORT_SYMBOL(set_context);
+EXPORT_SYMBOL(mmu_context_overflow);

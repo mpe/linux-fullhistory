@@ -1632,7 +1632,7 @@ void cleanup_module(void)
 	release_region(devSMC9194.base_addr, SMC_IO_EXTENT);
 
 	if (devSMC9194.priv)
-		kfree_s(devSMC9194.priv, sizeof(struct smc_local));
+		kfree(devSMC9194.priv);
 }
 
 #endif /* MODULE */

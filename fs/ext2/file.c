@@ -90,7 +90,8 @@ static int ext2_release_file (struct inode * inode, struct file * filp)
  */
 static int ext2_open_file (struct inode * inode, struct file * filp)
 {
-	if (inode->u.ext2_i.i_high_size && !(filp->f_flags & O_LARGEFILE))
+	if (!(filp->f_flags & O_LARGEFILE) &&
+	    inode->i_size > 0x7FFFFFFFLL)
 		return -EFBIG;
 	return 0;
 }

@@ -201,8 +201,8 @@ static void matroxfb_remove(WPMINFO int dummy) {
 	release_mem_region(ACCESS_FBINFO(video.base), ACCESS_FBINFO(video.len_maximum));
 	release_mem_region(ACCESS_FBINFO(mmio.base), 16384);
 #ifdef CONFIG_FB_MATROX_MULTIHEAD
-	kfree_s(ACCESS_FBINFO(fbcon.disp), sizeof(struct display));
-	kfree_s(minfo, sizeof(struct matrox_fb_info));
+	kfree(ACCESS_FBINFO(fbcon.disp));
+	kfree(minfo);
 #endif
 }
 

@@ -2339,6 +2339,13 @@ static void rw_interrupt(void)
 {
 	int nr_sectors, ssize, eoc, heads;
 
+	if (R_HEAD >= 2) {
+	    /* some Toshiba floppy controllers occasionnally seem to
+	     * return bogus interrupts after read/write operations, which
+	     * can be recognized by a bad head number (>= 2) */
+	     return;
+	}  
+
 	if (!DRS->first_read_date)
 		DRS->first_read_date = jiffies;
 

@@ -44,12 +44,6 @@
 #include <asm/pgalloc.h>
 #include <asm/mmu_context.h>
 
-#ifdef CONFIG_ARCH_ARC
-#include <asm/arch/oldlatches.h>
-#else
-#define oldlatch_init()
-#endif
-
 #ifndef CONFIG_ARCH_RPC
 #define HAVE_EXPMASK
 #endif
@@ -378,7 +372,8 @@ ecard_call(struct ecard_request *req)
 		ecard_task_reset(req);
 	} else {
 		if (ecard_pid <= 0)
-			ecard_pid = kernel_thread(ecard_task, NULL, 0);
+			ecard_pid = kernel_thread(ecard_task, NULL,
+					CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 
 		ecard_req = req;
 
@@ -1061,8 +1056,6 @@ static void __init ecard_free_all(void)
 void __init ecard_init(void)
 {
 	int slot;
-
-	oldlatch_init();
 
 #ifdef CONFIG_CPU_32
 	init_waitqueue_head(&ecard_wait);
