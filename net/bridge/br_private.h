@@ -216,6 +216,12 @@ extern void br_stp_timer_init(struct net_bridge *br);
 extern void br_stp_port_timer_init(struct net_bridge_port *p);
 extern unsigned long br_timer_value(const struct timer_list *timer);
 
+/* br.c */
+extern struct net_bridge_fdb_entry *(*br_fdb_get_hook)(struct net_bridge *br,
+						       unsigned char *addr);
+extern void (*br_fdb_put_hook)(struct net_bridge_fdb_entry *ent);
+
+
 #ifdef CONFIG_SYSFS
 /* br_sysfs_if.c */
 extern int br_sysfs_addif(struct net_bridge_port *p);
