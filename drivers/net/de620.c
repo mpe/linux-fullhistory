@@ -121,7 +121,7 @@ static char *version =
 
 #ifdef MODULE
 #include <linux/module.h>
-#include "../../tools/version.h"
+#include <linux/version.h>
 #endif
 
 /* Constant definitions for the DE-620 registers, commands and bits */

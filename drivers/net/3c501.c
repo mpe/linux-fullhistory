@@ -45,7 +45,7 @@ static char *version =
 
 #ifdef MODULE
 #include <linux/module.h>
-#include "../../tools/version.h"
+#include <linux/version.h>
 #endif
 
 extern struct device *init_etherdev(struct device *dev, int sizeof_private,

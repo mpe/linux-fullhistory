@@ -76,6 +76,7 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 
 #ifdef CONFIG_PCI
 	/* PCI BIOS support */
+	X(pcibios_present),
 	X(pcibios_find_class),
 	X(pcibios_find_device),
 	X(pcibios_read_config_byte),
@@ -235,6 +236,7 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(ftape_big_buffer),
 	X(do_floppy),
 #endif
+	X(floppy_track_buffer),
 #ifdef CONFIG_INET
 	/* support for loadable net drivers */
 	X(register_netdev),
@@ -244,6 +246,7 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(kfree_skb),
 	X(dev_kfree_skb),
 	X(snarf_region),
+	X(release_region),
 	X(netif_rx),
 	X(dev_rint),
 	X(dev_tint),

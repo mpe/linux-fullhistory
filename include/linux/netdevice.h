@@ -180,6 +180,7 @@ struct packet_type {
 
 extern volatile char in_bh;
 
+extern struct device	loopback_dev;
 extern struct device	*dev_base;
 extern struct packet_type *ptype_base;
 

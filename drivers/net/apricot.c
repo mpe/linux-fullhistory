@@ -3,6 +3,8 @@
     Apricot
     	Written 1994 by Mark Evans.
 	This driver is for the Apricot 82596 bus-master interface
+
+        Modularised 12/94 Mark Evans
     
     Driver skeleton 
 	Written 1993 by Donald Becker.
@@ -17,7 +19,7 @@
 
 */
 
-static char *version = "apricot.c:v0.02 19/05/94\n";
+static char *version = "apricot.c:v0.2 05/12/94\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -36,6 +38,11 @@ static char *version = "apricot.c:v0.02 19/05/94\n";
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #ifndef HAVE_PORTRESERVE
 #define check_region(addr, size)	0
 #define snarf_region(addr, size)	do ; while(0)
@@ -46,9 +53,6 @@ static char *version = "apricot.c:v0.02 19/05/94\n";
 #define kfree_skbmem(buff, size) kfree_s(buff,size)
 #endif
 
-struct device *init_etherdev(struct device *dev, int sizeof_private,
-			     unsigned long *mem_start);
-
 #define APRICOT_DEBUG 1
 
 #ifdef APRICOT_DEBUG
@@ -58,6 +62,8 @@ int i596_debug = 1;
 #endif
 
 #define APRICOT_TOTAL_SIZE 17
+
+#define I596_NULL -1
 
 #define CMD_EOL		0x8000	/* The last command of the list, stop. */
 #define CMD_SUSP	0x4000	/* Suspend after doing cmd. */
@@ -116,7 +122,7 @@ struct i596_rfd {
     char data[1532];
 };
 
-#define RX_RING_SIZE 16
+#define RX_RING_SIZE 8
 
 struct i596_scb {
     unsigned short status;
@@ -154,7 +160,6 @@ struct i596_private {
     char i596_config[16];
     struct i596_cmd tdr;
     unsigned long stat;
-    struct i596_rfd rx[RX_RING_SIZE];
     int last_restart;
     struct i596_rfd *rx_tail;
     struct i596_cmd *cmd_tail;
@@ -180,8 +185,6 @@ char init_setup[] = {
 	0x00,
 	0x7f	/*  *multi IA */ };
 
-char adds[] = {0x00, 0x00, 0x49, 0x20, 0x54, 0xDA, 0x80, 0x00, 0x4e, 0x02, 0xb7, 0xb8};
-
 static int i596_open(struct device *dev);
 static int i596_start_xmit(struct sk_buff *skb, struct device *dev);
 static void i596_interrupt(int reg_ptr);
@@ -194,52 +197,59 @@ static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
 #endif
 
 
-static inline void
-init_rx_bufs(struct device *dev)
+static inline int
+init_rx_bufs(struct device *dev, int num)
 {
     struct i596_private *lp = (struct i596_private *)dev->priv;
     int i;
-    int boguscnt = 100;
-    short ioaddr = dev->base_addr;
+    struct i596_rfd *rfd;
 
-    if (i596_debug > 1) printk ("%s: init_rx_bufs.\n", dev->name);
+    lp->scb.rfd = (struct i596_rfd *)I596_NULL;
 
-    for (i = 0; i < RX_RING_SIZE; i++)
+    if (i596_debug > 1) printk ("%s: init_rx_bufs %d.\n", dev->name, num);
+
+    for (i = 0; i < num; i++)
     {
-	if (i == 0)
-	{
-	    lp->scb.rfd = &lp->rx[0];
-	}
-	if (i == (RX_RING_SIZE - 1))
-	{
-	    lp->rx_tail = &(lp->rx[i]);
-	    lp->rx[i].next = &lp->rx[0];
-	    lp->rx[i].cmd = CMD_EOL;
-	}
-	else
-	{
-	    lp->rx[i].next = &lp->rx[i+1];
-	    lp->rx[i].cmd = 0x0000;
-	}
-	lp->rx[i].stat = 0x0000;
-	lp->rx[i].rbd = 0xffffffff;
-	lp->rx[i].count = 0;
-	lp->rx[i].size = 1532;
+	if (!(rfd = (struct i596_rfd *)kmalloc(sizeof(struct i596_rfd), GFP_KERNEL)))
+            break;
+
+	rfd->stat = 0x0000;
+	rfd->rbd = I596_NULL;
+	rfd->count = 0;
+	rfd->size = 1532;
+        if (i == 0)
+        {
+	    rfd->cmd = CMD_EOL;
+            lp->rx_tail = rfd;
+        }
+        else
+	    rfd->cmd = 0x0000;
+
+        rfd->next = lp->scb.rfd;
+        lp->scb.rfd = rfd;
     }
 
-    while (lp->scb.status, lp->scb.command)
-	if (--boguscnt == 0)
-	{
-	    printk("%s: init_rx_bufs timed out with status %4.4x, cmd %4.4x.\n",
-		   dev->name, lp->scb.status, lp->scb.command);
-	    break;
-    	}
+    if (i != 0)
+      lp->rx_tail->next = lp->scb.rfd;
 
-    lp->scb.command = RX_START;
-    outw(0, ioaddr+4);
+    return (i);
+}
 
-    return;
+static inline void
+remove_rx_bufs(struct device *dev)
+{
+    struct i596_private *lp = (struct i596_private *)dev->priv;
+    struct i596_rfd *rfd = lp->scb.rfd;
 
+    lp->rx_tail->next = (struct i596_rfd *)I596_NULL;
+
+    do
+    {
+        lp->scb.rfd = rfd->next;
+        kfree_s(rfd, sizeof(struct i596_rfd));
+        rfd = lp->scb.rfd;
+    }
+    while (rfd != lp->rx_tail);
 }
 
 static inline void
@@ -256,7 +266,7 @@ init_i596_mem(struct device *dev)
     outw(((((int)&lp->scp) & 0xffff) | 2), ioaddr);
     outw((((int)&lp->scp)>>16) & 0xffff, ioaddr);
 
-    lp->last_cmd=jiffies;
+    lp->last_cmd = jiffies;
 
     lp->scp.sysbus = 0x00440000;
     lp->scp.iscp = &(lp->iscp);
@@ -264,7 +274,7 @@ init_i596_mem(struct device *dev)
     lp->iscp.stat = 0x0001;
     lp->cmd_backlog = 0;
 
-    lp->cmd_head = lp->scb.cmd = (struct i596_cmd *) -1;
+    lp->cmd_head = lp->scb.cmd = (struct i596_cmd *) I596_NULL;
 
     if (i596_debug > 2) printk("%s: starting i82596.\n", dev->name);
 
@@ -280,6 +290,8 @@ init_i596_mem(struct device *dev)
 	    break;
     	}
 
+    lp->scb.command = 0;
+
     memcpy (lp->i596_config, init_setup, 14);
     lp->set_conf.command = CmdConfigure;
     i596_add_cmd(dev, &lp->set_conf);
@@ -291,9 +303,19 @@ init_i596_mem(struct device *dev)
     lp->tdr.command = CmdTDR;
     i596_add_cmd(dev, &lp->tdr);
 
-    init_rx_bufs(dev);
+    boguscnt = 200;
+    while (lp->scb.status, lp->scb.command)
+	if (--boguscnt == 0)
+	{
+	    printk("%s: recieve unit start timed out with status %4.4x, cmd %4.4x.\n",
+		   dev->name, lp->scb.status, lp->scb.command);
+	    break;
+    	}
 
-    boguscnt=200;
+    lp->scb.command = RX_START;
+    outw(0, ioaddr+4);
+
+    boguscnt = 200;
     while (lp->scb.status, lp->scb.command)
         if (--boguscnt == 0)
 	{
@@ -309,7 +331,7 @@ static inline int
 i596_rx(struct device *dev)
 {
     struct i596_private *lp = (struct i596_private *)dev->priv;
-    int frames=0;
+    int frames = 0;
 
     if (i596_debug > 3) printk ("i596_rx()\n");
 
@@ -333,7 +355,7 @@ i596_rx(struct device *dev)
 	    }
 
 	    skb->len = pkt_len;
-  	    skb->dev=dev;		
+  	    skb->dev = dev;		
 	    memcpy(skb->data, lp->scb.rfd->data, pkt_len);
 
 	    netif_rx(skb);
@@ -353,12 +375,12 @@ i596_rx(struct device *dev)
 	    if ((lp->scb.rfd->stat) & 0x1000) lp->stats.rx_length_errors++;
 	}
 
-	lp->scb.rfd->stat=0;
-	lp->rx_tail->cmd=0;
-	lp->rx_tail=lp->scb.rfd;
-	lp->scb.rfd=lp->scb.rfd->next;
-	lp->rx_tail->count=0;
-	lp->rx_tail->cmd=CMD_EOL;
+	lp->scb.rfd->stat = 0;
+	lp->rx_tail->cmd = 0;
+	lp->rx_tail = lp->scb.rfd;
+	lp->scb.rfd = lp->scb.rfd->next;
+	lp->rx_tail->count = 0;
+	lp->rx_tail->cmd = CMD_EOL;
 
     }
 
@@ -375,7 +397,7 @@ i596_cleanup_cmd(struct i596_private *lp)
 
     if (i596_debug > 4) printk ("i596_cleanup_cmd\n");
 
-    while (lp->cmd_head != (struct i596_cmd *) -1)
+    while (lp->cmd_head != (struct i596_cmd *) I596_NULL)
     {
 	ptr = lp->cmd_head;
 
@@ -394,7 +416,7 @@ i596_cleanup_cmd(struct i596_private *lp)
 		lp->stats.tx_errors++;
 		lp->stats.tx_aborted_errors++;
 
-		ptr->next = (struct i596_cmd * ) -1;
+		ptr->next = (struct i596_cmd * ) I596_NULL;
 		kfree_s((unsigned char *)tx_cmd, (sizeof (struct tx_cmd) + sizeof (struct i596_tbd)));
 		break;
 	    }
@@ -402,12 +424,12 @@ i596_cleanup_cmd(struct i596_private *lp)
 	    {
 		unsigned short count = *((unsigned short *) (ptr + 1));
 
-		ptr->next = (struct i596_cmd * ) -1;
+		ptr->next = (struct i596_cmd * ) I596_NULL;
 		kfree_s((unsigned char *)ptr, (sizeof (struct i596_cmd) + count + 2));
 		break;
 	    }
 	    default:
-		ptr->next = (struct i596_cmd * ) -1;
+		ptr->next = (struct i596_cmd * ) I596_NULL;
 	}
     }
 
@@ -437,10 +459,10 @@ i596_reset(struct device *dev, struct i596_private *lp, int ioaddr)
 	    break;
 	}
 
-    dev->start=0;
-    dev->tbusy=1;
+    dev->start = 0;
+    dev->tbusy = 1;
 
-    lp->scb.command=CUC_ABORT|RX_ABORT;
+    lp->scb.command = CUC_ABORT|RX_ABORT;
     outw(0, ioaddr+4);
 
     /* wait for shutdown */
@@ -457,9 +479,9 @@ i596_reset(struct device *dev, struct i596_private *lp, int ioaddr)
     i596_cleanup_cmd(lp);
     i596_rx(dev);
 
-    dev->start=1;
-    dev->tbusy=0;
-    dev->interrupt=0;
+    dev->start = 1;
+    dev->tbusy = 0;
+    dev->interrupt = 0;
     init_i596_mem(dev);
 }
 
@@ -474,15 +496,15 @@ static void i596_add_cmd(struct device *dev, struct i596_cmd *cmd)
 
     cmd->status = 0;
     cmd->command |= (CMD_EOL|CMD_INTR);
-    cmd->next = (struct i596_cmd *) -1;
+    cmd->next = (struct i596_cmd *) I596_NULL;
 
     save_flags(flags);
     cli();
-    if (lp->cmd_head != (struct i596_cmd *) -1)
+    if (lp->cmd_head != (struct i596_cmd *) I596_NULL)
 	lp->cmd_tail->next = cmd;
     else 
     {
-	lp->cmd_head=cmd;
+	lp->cmd_head = cmd;
 	while (lp->scb.status, lp->scb.command)
 	    if (--boguscnt == 0)
 	    {
@@ -495,10 +517,10 @@ static void i596_add_cmd(struct device *dev, struct i596_cmd *cmd)
 	lp->scb.command = CUC_START;
         outw (0, ioaddr+4);
     }
-    lp->cmd_tail=cmd;
+    lp->cmd_tail = cmd;
     lp->cmd_backlog++;
 
-    lp->cmd_head=lp->scb.cmd;
+    lp->cmd_head = lp->scb.cmd;
     restore_flags(flags);
 
     if (lp->cmd_backlog > 16) 
@@ -516,19 +538,34 @@ static void i596_add_cmd(struct device *dev, struct i596_cmd *cmd)
 static int
 i596_open(struct device *dev)
 {
-    if (request_irq(dev->irq, &i596_interrupt, 0, "apricot")) {
+    int i;
+
+    if (i596_debug > 1)
+	printk("%s: i596_open() irq %d.\n", dev->name, dev->irq);
+
+    if (request_irq(dev->irq, &i596_interrupt, 0, "apricot"))
 	return -EAGAIN;
-    }
 
     irq2dev_map[dev->irq] = dev;
 
-    if (i596_debug > 1)
-	printk("%s: i596_open() irq %d.\n",
-	       dev->name, dev->irq);
+     i = init_rx_bufs(dev, RX_RING_SIZE);
+
+    if ((i = init_rx_bufs(dev, RX_RING_SIZE)) < RX_RING_SIZE)
+        printk("%s: only able to allocate %d receive buffers\n", dev->name, i);
+
+    if (i < 4)
+    {
+        free_irq(dev->irq);
+        irq2dev_map[dev->irq] = 0;
+        return -EAGAIN;
+    }
 
     dev->tbusy = 0;
     dev->interrupt = 0;
     dev->start = 1;
+#ifdef MODULE
+    MOD_INC_USE_COUNT;
+#endif
 
     /* Initialize the 82596 memory */
     init_i596_mem(dev);
@@ -563,7 +600,7 @@ i596_start_xmit(struct sk_buff *skb, struct device *dev)
 	    /* Issue a channel attention signal */
 	    if (i596_debug > 1) printk ("Kicking board.\n");
 
-	    lp->scb.command=CUC_START|RX_START;
+	    lp->scb.command = CUC_START|RX_START;
 	    outw(0, ioaddr+4);
 
 	    lp->last_restart = lp->stats.tx_packets;
@@ -592,7 +629,7 @@ i596_start_xmit(struct sk_buff *skb, struct device *dev)
     else
     {
 	short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
-	dev->trans_start=jiffies;
+	dev->trans_start = jiffies;
 
 	tx_cmd = (struct tx_cmd *) kmalloc ((sizeof (struct tx_cmd) + sizeof (struct i596_tbd)), GFP_ATOMIC);
 	if (tx_cmd == NULL)
@@ -605,7 +642,7 @@ i596_start_xmit(struct sk_buff *skb, struct device *dev)
 	else
 	{
 	    tx_cmd->tbd = (struct i596_tbd *) (tx_cmd + 1);
-	    tx_cmd->tbd->next = (struct i596_tbd *) -1;
+	    tx_cmd->tbd->next = (struct i596_tbd *) I596_NULL;
 
 	    tx_cmd->cmd.command = CMD_FLEX|CmdTx;
 
@@ -646,10 +683,10 @@ static void print_eth(char *add)
     printk ("type %2.2X%2.2X\n", (unsigned char)add[12], (unsigned char)add[13]);
 }
 
-unsigned long apricot_init(unsigned long mem_start, unsigned long mem_end)
+int apricot_probe(struct device *dev)
 {
-    struct device *dev;
     int i;
+    struct i596_private *lp;
     int checksum = 0;
     int ioaddr = 0x300;
     char eth_addr[6];
@@ -658,28 +695,30 @@ unsigned long apricot_init(unsigned long mem_start, unsigned long mem_end)
     /* first check nothing is already registered here */
 
     if (check_region(ioaddr, APRICOT_TOTAL_SIZE))
-	return mem_start;
+	return ENODEV;
 
     for (i = 0; i < 8; i++)
-	checksum += inb(ioaddr + 8 + i);
+    {
+    	eth_addr[i] = inb(ioaddr+8+i);
+	checksum += eth_addr[i];
+     }
 
     /* checksum is a multiple of 0x100, got this wrong first time
        some machines have 0x100, some 0x200. The DOS driver doesn't
        even bother with the checksum */
 
-    if (checksum % 0x100) return mem_start;
+    if (checksum % 0x100) return ENODEV;
 
-
-    for(i = 0; i < 6 ; i++)
-    	eth_addr[i] = inb(ioaddr +8 +i);
-    
     /* Some other boards trip the checksum.. but then appear as ether
        address 0. Trap these - AC */
        
-    if(memcmp(eth_addr,"\x00\x00\x00\x00\x00\x00",6)==0)
-    	return mem_start;
+    if(memcmp(eth_addr,"\x00\x00\x49",3)!= 0)
+    	return ENODEV;
 
-    dev = init_etherdev(0, (sizeof (struct i596_private) + 0xf), &mem_start);
+    snarf_region(ioaddr, APRICOT_TOTAL_SIZE);
+
+    dev->base_addr = ioaddr;
+    ether_setup(dev);
     printk("%s: Apricot 82596 at %#3x,", dev->name, ioaddr);
 
     for (i = 0; i < 6; i++)
@@ -689,10 +728,7 @@ unsigned long apricot_init(unsigned long mem_start, unsigned long mem_end)
     dev->irq = 10;
     printk(" IRQ %d.\n", dev->irq);
 
-    snarf_region(ioaddr, APRICOT_TOTAL_SIZE);
-
-    if (i596_debug > 0)
-	printk(version);
+    if (i596_debug > 0) printk(version);
 
     /* The APRICOT-specific entries in the device structure. */
     dev->open = &i596_open;
@@ -703,10 +739,16 @@ unsigned long apricot_init(unsigned long mem_start, unsigned long mem_end)
     dev->set_multicast_list = &set_multicast_list;
 #endif
 
+    dev->mem_start = (int)kmalloc(sizeof(struct i596_private)+ 0x0f, GFP_KERNEL);
     /* align for scp */
-    dev->priv = (void *)(((int) dev->priv + 0xf) & 0xfffffff0);
+    dev->priv = (void *)((dev->mem_start + 0xf) & 0xfffffff0);
 
-    return mem_start;
+    lp = (struct i596_private *)dev->priv;
+    lp->scb.command = 0;
+    lp->scb.cmd = (struct i596_cmd *) I596_NULL;
+    lp->scb.rfd = (struct i596_rfd *)I596_NULL;
+
+    return 0;
 }
 
 static void
@@ -717,7 +759,7 @@ i596_interrupt(int reg_ptr)
     struct i596_private *lp;
     short ioaddr;
     int boguscnt = 200;
-    unsigned short status, ack_cmd=0;
+    unsigned short status, ack_cmd = 0;
 
     if (dev == NULL) {
 	printk ("i596_interrupt(): irq %d for unknown device.\n", irq);
@@ -757,7 +799,7 @@ i596_interrupt(int reg_ptr)
 	if ((i596_debug > 4) && (status & 0x2000))
 	    printk("%s: i596 interrupt command unit inactive %x.\n", dev->name, status & 0x0700);
 
-	while ((lp->cmd_head != (struct i596_cmd *) -1) && (lp->cmd_head->status & STAT_C))
+	while ((lp->cmd_head != (struct i596_cmd *) I596_NULL) && (lp->cmd_head->status & STAT_C))
 	{
 	    ptr = lp->cmd_head;
 
@@ -788,7 +830,7 @@ i596_interrupt(int reg_ptr)
 		    }
 
 
-		    ptr->next = (struct i596_cmd * ) -1;
+		    ptr->next = (struct i596_cmd * ) I596_NULL;
 		    kfree_s((unsigned char *)tx_cmd, (sizeof (struct tx_cmd) + sizeof (struct i596_tbd)));
 		    break;
 		}
@@ -796,7 +838,7 @@ i596_interrupt(int reg_ptr)
 		{
 		    unsigned short count = *((unsigned short *) (ptr + 1));
 
-		    ptr->next = (struct i596_cmd * ) -1;
+		    ptr->next = (struct i596_cmd * ) I596_NULL;
 		    kfree_s((unsigned char *)ptr, (sizeof (struct i596_cmd) + count + 2));
 		    break;
 		}
@@ -822,20 +864,20 @@ i596_interrupt(int reg_ptr)
 		    }
 		}
 		default:
-		    ptr->next = (struct i596_cmd * ) -1;
+		    ptr->next = (struct i596_cmd * ) I596_NULL;
 
-		lp->last_cmd=jiffies;
+		lp->last_cmd = jiffies;
  	    }
 	}
 
 	ptr = lp->cmd_head;
-	while ((ptr != (struct i596_cmd *) -1) && (ptr != lp->cmd_tail))
+	while ((ptr != (struct i596_cmd *) I596_NULL) && (ptr != lp->cmd_tail))
 	{
 	    ptr->command &= 0x1fff;
 	    ptr = ptr->next;
 	}
 
-	if ((lp->cmd_head != (struct i596_cmd *) -1) && (dev->start)) ack_cmd |= CUC_START;
+	if ((lp->cmd_head != (struct i596_cmd *) I596_NULL) && (dev->start)) ack_cmd |= CUC_START;
 	lp->scb.cmd = lp->cmd_head;
     }
 
@@ -854,7 +896,7 @@ i596_interrupt(int reg_ptr)
     /* acknowledge the interrupt */
 
 /*
-    if ((lp->scb.cmd != (struct i596_cmd *) -1) && (dev->start)) ack_cmd |= CUC_START;
+    if ((lp->scb.cmd != (struct i596_cmd *) I596_NULL) && (dev->start)) ack_cmd | = CUC_START;
 */
     boguscnt = 100;
     while (lp->scb.status, lp->scb.command)
@@ -881,6 +923,7 @@ i596_close(struct device *dev)
 {
     int ioaddr = dev->base_addr;
     struct i596_private *lp = (struct i596_private *)dev->priv;
+    int boguscnt = 200;
 
     dev->start = 0;
     dev->tbusy = 1;
@@ -894,8 +937,20 @@ i596_close(struct device *dev)
 
     i596_cleanup_cmd(lp);
 
+    while (lp->scb.status, lp->scb.command)
+	if (--boguscnt == 0)
+	{
+	    printk("%s: close timed timed out with status %4.4x, cmd %4.4x.\n",
+		   dev->name, lp->scb.status, lp->scb.command);
+	    break;
+    	}
     free_irq(dev->irq);
     irq2dev_map[dev->irq] = 0;
+    remove_rx_bufs(dev);
+#ifdef MODULE
+    MOD_DEC_USE_COUNT;
+#endif
+
 
     return 0;
 }
@@ -940,7 +995,7 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 	    i596_add_cmd(dev, cmd);
     } else
     {
-	if (lp->set_conf.next != (struct i596_cmd * ) -1) return;
+	if (lp->set_conf.next != (struct i596_cmd * ) I596_NULL) return;
 	if (num_addrs == 0)
 	    lp->i596_config[8] &= ~0x01;
 	else
@@ -954,9 +1009,39 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 
 #ifdef HAVE_DEVLIST
 static unsigned int apricot_portlist[] = {0x300, 0};
-struct netdev_entry apricot_drv =
-{"apricot", apricot_init, APRICOT_TOTAL_SIZE, apricot_portlist};
+struct netdev_entry apricot_drv = 
+{"apricot", apricot_probe, APRICOT_TOTAL_SIZE, apricot_portlist};
 #endif
+
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+static struct device dev_apricot = {
+  "        ", /* device name inservted by /linux/drivers/net/net_init.c */
+  0, 0, 0, 0,
+  0x300, 10,
+  0, 0, 0, NULL, apricot_probe };
+
+int
+init_module(void)
+{
+  if (register_netdev(&dev_apricot) != 0)
+    return -EIO;
+  return 0;
+}
+
+void
+cleanup_module(void)
+{
+  if (MOD_IN_USE)
+    printk("%s: device busy, remove delayed\n", dev_apricot.name);
+  else
+  {
+    unregister_netdev(&dev_apricot);
+    kfree_s((void *)dev_apricot.mem_start, sizeof(struct i596_private) + 0xf);
+    dev_apricot.priv = NULL;
+  }
+}
+#endif /* MODULE */
 
 /*
  * Local variables:

@@ -262,7 +262,7 @@ static struct sk_buff *tcp_find_established(struct sock *s)
 			return p;
 		p=p->next;
 	}
-	while(p!=skb_peek(&s->receive_queue));
+	while(p!=(struct sk_buff *)&s->receive_queue);
 	return NULL;
 }
 
@@ -907,7 +907,7 @@ static void tcp_send_ack(unsigned long sequence, unsigned long ack,
  *	This routine builds a generic TCP header. 
  */
  
-extern __inline int tcp_build_header(struct tcphdr *th, struct sock *sk, int push)
+int tcp_build_header(struct tcphdr *th, struct sock *sk, int push)
 {
 
 	/* FIXME: want to get rid of this. */
@@ -4027,22 +4027,19 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 
 			if (th->rst) 
 			{
-				if(sk->state!=TCP_TIME_WAIT)	/* RFC 1337 recommendation re RST in time wait */
+				tcp_statistics.TcpEstabResets++;
+				sk->zapped=1;
+				/* This means the thing should really be closed. */
+				sk->err = ECONNRESET;
+				if (sk->state == TCP_CLOSE_WAIT) 
 				{
-					tcp_statistics.TcpEstabResets++;
-					sk->zapped=1;
-					/* This means the thing should really be closed. */
-					sk->err = ECONNRESET;
-					if (sk->state == TCP_CLOSE_WAIT) 
-					{
-						sk->err = EPIPE;
-					}
-					tcp_set_state(sk,TCP_CLOSE);
-					sk->shutdown = SHUTDOWN_MASK;
-					if (!sk->dead) 
-					{
-						sk->state_change(sk);
-					}
+					sk->err = EPIPE;
+				}
+				tcp_set_state(sk,TCP_CLOSE);
+				sk->shutdown = SHUTDOWN_MASK;
+				if (!sk->dead) 
+				{
+					sk->state_change(sk);
 				}
 				kfree_skb(skb, FREE_READ);
 				release_sock(sk);

@@ -17,7 +17,7 @@
 
 #ifdef MODULE
 	#include <linux/module.h>
-	#include "../../tools/version.h"
+	#include <linux/version.h>
 #endif
 
 #include <asm/segment.h>

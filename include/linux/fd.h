@@ -127,6 +127,7 @@ struct floppy_drive_params {
 #define FD_BROKEN_DCL 0x20
 #define FD_DEBUG 0x02
 #define FD_SILENT_DCL_CLEAR 0x4
+#define FD_INVERTED_DCL 0x80
 
   char read_track;		/* use readtrack during probing? */
 

@@ -450,10 +450,6 @@ static void free_fw_chain(struct ip_fw **chainptr)
 	restore_flags(flags);
 }
 
-#endif  /* CONFIG_IP_ACCT || CONFIG_IP_FIREWALL */
-
-#ifdef CONFIG_IP_FIREWALL
-
 static int add_to_chain(struct ip_fw **chainptr, struct ip_fw *frwl)
 {
 	struct ip_fw *ftmp;
@@ -706,7 +702,7 @@ static int del_from_chain(struct ip_fw **chainptr, struct ip_fw *frwl)
 		return(EINVAL);
 }
 
-#endif /* CONFIG_IP_FIREWALL */
+#endif  /* CONFIG_IP_ACCT || CONFIG_IP_FIREWALL */
 
 struct ip_fw *check_ipfw_struct(struct ip_fw *frwl, int len)
 {

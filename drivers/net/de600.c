@@ -110,7 +110,7 @@ unsigned int de600_debug = DE600_DEBUG;
 
 #ifdef MODULE
 #include <linux/module.h>
-#include "../../tools/version.h"
+#include <linux/version.h>
 #endif
 
 #ifdef FAKE_SMALL_MAX

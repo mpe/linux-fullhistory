@@ -15,7 +15,7 @@
 #ifndef _M68K_SYSTEM_H
 #define _M68K_SYSTEM_H
 
-#include <linux/autoconf.h> /* get configuration makros */
+#include <linux/autoconf.h> /* get configuration macros */
 
 #if defined(CONFIG_ATARI) && !defined(CONFIG_AMIGA) && !defined(CONFIG_MAC)
 /* block out HSYNC on the atari */

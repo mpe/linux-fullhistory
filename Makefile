@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 1
-SUBLEVEL = 71
+SUBLEVEL = 72
 
 ARCH = i386
 
@@ -102,7 +102,7 @@ endif
 	$(CC) $(CFLAGS) -c -o $*.o $<
 
 Version: dummy
-	rm -f tools/version.h
+	rm -f include/linux/version.h
 
 boot:
 	ln -sf arch/$(ARCH)/boot boot
@@ -127,25 +127,25 @@ config: symlinks config.in
 linuxsubdirs: dummy
 	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i; done
 
-tools/./version.h: tools/version.h
+$(TOPDIR)/include/linux/version.h: include/linux/version.h
 
-tools/version.h: $(CONFIGURE) Makefile
+include/linux/version.h: $(CONFIGURE) Makefile
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"$(VERSION).$(PATCHLEVEL).$(SUBLEVEL)\" > tools/version.h
+	@echo \#define UTS_RELEASE \"$(VERSION).$(PATCHLEVEL).$(SUBLEVEL)\" > include/linux/version.h
 	@if [ -f .name ]; then \
 	   echo \#define UTS_VERSION \"\#`cat .version`-`cat .name` `date`\"; \
 	 else \
 	   echo \#define UTS_VERSION \"\#`cat .version` `date`\";  \
-	 fi >> tools/version.h 
-	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
-	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h
-	@echo \#define LINUX_COMPILE_HOST \"`hostname`\" >> tools/version.h
+	 fi >> include/linux/version.h 
+	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> include/linux/version.h
+	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> include/linux/version.h
+	@echo \#define LINUX_COMPILE_HOST \"`hostname`\" >> include/linux/version.h
 	@if [ -x /bin/dnsdomainname ]; then \
 	   echo \#define LINUX_COMPILE_DOMAIN \"`dnsdomainname`\"; \
 	 else \
 	   echo \#define LINUX_COMPILE_DOMAIN \"`domainname`\"; \
-	 fi >> tools/version.h
-	@echo \#define LINUX_COMPILER \"`$(HOSTCC) -v 2>&1 | tail -1`\" >> tools/version.h
+	 fi >> include/linux/version.h
+	@echo \#define LINUX_COMPILER \"`$(HOSTCC) -v 2>&1 | tail -1`\" >> include/linux/version.h
 
 tools/build: tools/build.c $(CONFIGURE)
 	$(HOSTCC) $(CFLAGS) -o $@ $<
@@ -155,7 +155,7 @@ boot/head.o: $(CONFIGURE) boot/head.s
 boot/head.s: boot/head.S $(CONFIGURE) include/linux/tasks.h
 	$(CPP) -traditional $< -o $@
 
-tools/version.o: tools/version.c tools/version.h
+tools/version.o: tools/version.c include/linux/version.h
 
 init/main.o: $(CONFIGURE) init/main.c
 	$(CC) $(CFLAGS) $(PROFILING) -c -o $*.o $<
@@ -191,7 +191,7 @@ clean:	archclean
 	rm -f .tmp* drivers/sound/configure
 
 mrproper: clean
-	rm -f include/linux/autoconf.h tools/version.h
+	rm -f include/linux/autoconf.h include/linux/version.h
 	rm -f drivers/sound/local.h
 	rm -f .version .config* config.in config.old
 	rm -f boot include/asm kernel/entry.S
@@ -204,11 +204,11 @@ backup: mrproper
 	sync
 
 depend dep:
-	touch tools/version.h
+	touch include/linux/version.h
 	for i in init/*.c;do echo -n "init/";$(CPP) -M $$i;done > .tmpdepend
 	for i in tools/*.c;do echo -n "tools/";$(CPP) -M $$i;done >> .tmpdepend
 	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i dep; done
-	rm -f tools/version.h
+	rm -f include/linux/version.h
 	mv .tmpdepend .depend
 
 ifdef CONFIGURATION

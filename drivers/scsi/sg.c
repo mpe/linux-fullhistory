@@ -58,6 +58,7 @@ struct scsi_generic
  };
 
 static struct scsi_generic *scsi_generics=NULL;
+static void sg_free(char *buff,int size);
 
 static int sg_ioctl(struct inode * inode,struct file * file,
 	     unsigned int cmd_in, unsigned long arg)
@@ -109,7 +110,7 @@ static int sg_open(struct inode * inode, struct file * filp)
   if (!scsi_generics[dev].users && scsi_generics[dev].pending && scsi_generics[dev].complete)
    {
     if (scsi_generics[dev].buff != NULL)
-      scsi_free(scsi_generics[dev].buff,scsi_generics[dev].buff_len);
+      sg_free(scsi_generics[dev].buff,scsi_generics[dev].buff_len);
     scsi_generics[dev].buff=NULL;
     scsi_generics[dev].pending=0;
    }

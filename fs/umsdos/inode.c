@@ -19,7 +19,7 @@
 
 #ifdef MODULE
 	#include <linux/module.h>
-	#include "../../tools/version.h"
+	#include <linux/version.h>
 #endif
 
 struct inode *pseudo_root=NULL;		/* Useful to simulate the pseudo DOS */

@@ -224,6 +224,10 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 	 *	See if we need to look up the device.
 	 */
 
+#ifdef CONFIG_INET_MULTICAST	
+	if(MULTICAST(daddr) && *dev==NULL && skb->sk && *skb->sk->ip_mc_name)
+		*dev=dev_get(skb->sk->ip_mc_name);
+#endif
 	if (*dev == NULL)
 	{
 		if(skb->localroute)
@@ -316,6 +320,7 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 	iph->saddr    = saddr;
 	iph->protocol = type;
 	iph->ihl      = 5;
+	skb->ip_hdr   = iph;
 
 	/* Setup the IP options. */
 #ifdef Not_Yet_Avail
@@ -1591,7 +1596,28 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		kfree_skb(skb, FREE_WRITE);
 		return(0);
 	}
-
+	
+#ifdef CONFIG_IP_MULTICAST	
+	if(brd==IS_MULTICAST)
+	{
+		/*
+		 *	Check it is for one of our groups
+		 */
+		struct ip_mc_list *ip_mc=dev->ip_mc_list;
+		do
+		{
+			if(ip_mc==NULL)
+			{	
+				kfree_skb(skb, FREE_WRITE);
+				return 0;
+			}
+			if(ip_mc->multiaddr==iph->daddr)
+				break;
+			ip_mc=ip_mc->next;
+		}
+		while(1);
+	}
+#endif
 	/*
 	 *	Account for the packet
 	 */
@@ -1712,6 +1738,41 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	}
 
 	return(0);
+}
+
+/*
+ *	Loop a packet back to the sender.
+ */
+ 
+static void ip_loopback(struct device *old_dev, struct sk_buff *skb)
+{
+	struct device *dev=&loopback_dev;
+	int len=skb->len-old_dev->hard_header_len;
+	struct sk_buff *newskb=alloc_skb(len+dev->hard_header_len, GFP_ATOMIC);
+	
+	if(newskb==NULL)
+		return;
+		
+	newskb->link3=NULL;
+	newskb->sk=NULL;
+	newskb->dev=dev;
+	newskb->saddr=skb->saddr;
+	newskb->daddr=skb->daddr;
+	newskb->raddr=skb->raddr;
+	newskb->free=1;
+	newskb->lock=0;
+	newskb->users=0;
+	newskb->pkt_type=skb->pkt_type;
+	newskb->len=len+dev->hard_header_len;
+	
+	
+	newskb->ip_hdr=(struct iphdr *)(newskb->data+ip_send(newskb, skb->ip_hdr->daddr, len, dev, skb->ip_hdr->saddr));
+	memcpy(newskb->ip_hdr,skb->ip_hdr,len);
+
+	/* Recurse. The device check against IFF_LOOPBACK will stop infinite recursion */
+		
+	/*printk("Loopback output queued [%lX to %lX].\n", newskb->ip_hdr->saddr,newskb->ip_hdr->daddr);*/
+	ip_queue_xmit(NULL, dev, newskb, 1);
 }
 
 
@@ -1858,11 +1919,46 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	/*
 	 *	If the indicated interface is up and running, send the packet.
 	 */
+	 
 	ip_statistics.IpOutRequests++;
 #ifdef CONFIG_IP_ACCT
 	ip_acct_cnt(iph,ip_acct_chain,1);
 #endif	
+	
+#ifdef CONFIG_IP_MULTICAST	
 
+	/*
+	 *	Multicasts are looped back for other local users
+	 */
+	 
+	if (MULTICAST(skb->daddr) && !(dev->flags&IFF_LOOPBACK))
+	{
+		if(sk==NULL || sk->ip_mc_loop)
+		{
+			struct ip_mc_list *imc=dev->ip_mc_list;
+			while(imc!=NULL)
+			{
+				if(imc->multiaddr==skb->daddr)
+				{
+					ip_loopback(dev,skb);
+					break;
+				}
+				imc=imc->next;
+			}
+		}
+		
+		/* Multicasts with ttl 0 must not go beyond the host */
+		
+		if(skb->ip_hdr->ttl==0)
+		{
+			kfree_skb(skb, FREE_READ);
+			return;
+		}
+	}
+#endif
+	if((dev->flags&IFF_BROADCAST) && iph->daddr==dev->pa_brdaddr && !(dev->flags&IFF_LOOPBACK))
+		ip_loopback(dev,skb);
+		
 	if (dev->flags & IFF_UP)
 	{
 		/*

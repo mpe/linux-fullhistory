@@ -108,6 +108,26 @@ asmlinkage int check_bitmap(unsigned long *bitmap, short base, short extent)
 	return 0;
 }
 
+int get_ioport_list(char *buf)
+{       int len=0,num,from;
+        for(num=0;num<IO_BITMAP_SIZE*32;num++)
+         if(check_bitmap(ioport_registrar,num,1)) {
+	   from=num;
+	   while(check_bitmap(ioport_registrar,num+1,1) 
+			&& num+1<IO_BITMAP_SIZE*32 )
+		num++;
+	   if(from==num) 
+            len+=sprintf(buf+len,"%04x\n",num);
+	   else
+	    len+=sprintf(buf+len,"%04x-%04x\n",from,num);
+           if(len>4000) {
+                len+=sprintf((buf+len),"4k-Limit reached!\n");
+                return len;
+           }
+         }
+        return len;
+}
+
 /*
  * this changes the io permissions bitmap in the current task.
  */

@@ -54,7 +54,7 @@ static char *version =
 
 #ifdef MODULE
 #include <linux/module.h>
-#include "../../tools/version.h"
+#include <linux/version.h>
 #endif
 
 /* These are the operational function interfaces to board-specific

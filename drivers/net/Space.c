@@ -28,8 +28,6 @@
 #include <linux/netdevice.h>
 #include <linux/errno.h>
 
-#define LOOPBACK			/* always present, right?	*/
-
 #define	NEXT_DEV	NULL
 
 
@@ -49,6 +47,7 @@ extern int el3_probe(struct device *);
 extern int at1500_probe(struct device *);
 extern int at1700_probe(struct device *);
 extern int depca_probe(struct device *);
+extern int apricot_probe(struct device *);
 extern int ewrk3_probe(struct device *);
 extern int el1_probe(struct device *);
 extern int el16_probe(struct device *);
@@ -111,6 +110,9 @@ ethif_probe(struct device *dev)
 #endif
 #ifdef CONFIG_EWRK3             /* DEC EtherWORKS 3 */
         && ewrk3_probe(dev)
+#endif
+#ifdef CONFIG_APRICOT		/* Apricot I82596 */
+	&& apricot_probe(dev)
 #endif
 #ifdef CONFIG_EL1		/* 3c501 */
 	&& el1_probe(dev)
@@ -289,9 +291,8 @@ static struct device ppp0_dev = {
 #   define	NEXT_DEV	(&dummy_dev)
 #endif
 
-#ifdef LOOPBACK
-    extern int loopback_init(struct device *dev);
-    static struct device loopback_dev = {
+extern int loopback_init(struct device *dev);
+struct device loopback_dev = {
 	"lo",			/* Software Loopback interface		*/
 	0x0,			/* recv memory end			*/
 	0x0,			/* recv memory start			*/
@@ -302,10 +303,6 @@ static struct device ppp0_dev = {
 	0, 0, 0,		/* flags				*/
 	NEXT_DEV,		/* next device				*/
 	loopback_init		/* loopback_init should set up the rest	*/
-    };
-#   undef	NEXT_DEV
-#   define	NEXT_DEV	(&loopback_dev)
-#endif
+};
 
-
-struct device *dev_base = NEXT_DEV;
+struct device *dev_base = &loopback_dev;

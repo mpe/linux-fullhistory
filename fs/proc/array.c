@@ -29,6 +29,7 @@
 #include <linux/string.h>
 #include <linux/mman.h>
 #include <linux/proc_fs.h>
+#include <linux/ioport.h>
 
 #include <asm/segment.h>
 #include <asm/io.h>
@@ -529,6 +530,8 @@ static int get_root_array(char * page, int type)
 		case PROC_DMA:
 			return get_dma_list(page);
 
+		case PROC_IOPORTS:
+			return get_ioport_list(page);
 	}
 	return -EBADF;
 }

@@ -149,7 +149,7 @@ static char *version = "ewrk3.c:v0.30 11/1/94 davies@wanton.lkg.dec.com\n";
 
 #ifdef MODULE
 #include <linux/module.h>
-#include "/linux/tools/version.h"
+#include <linux/version.h>
 #endif /* MODULE */
 
 #include "ewrk3.h"

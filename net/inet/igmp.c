@@ -232,6 +232,7 @@ static void ip_mc_inc_group(struct device *dev, unsigned long addr)
 		return;
 	i->users=1;
 	i->interface=dev;
+	i->multiaddr=addr;
 	i->next=dev->ip_mc_list;
 	igmp_group_added(i);
 	dev->ip_mc_list=i;

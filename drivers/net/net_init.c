@@ -68,9 +68,6 @@ unsigned long net_dev_init (unsigned long mem_start, unsigned long mem_end)
 #if defined(CONFIG_PI)
 	mem_start = pi_init(mem_start, mem_end);
 #endif	
-#if defined(CONFIG_APRICOT)
-	mem_start = apricot_init(mem_start, mem_end);
-#endif	
 	return mem_start;
 }
 

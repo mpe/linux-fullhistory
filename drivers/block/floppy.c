@@ -82,8 +82,7 @@
  */
 
 #define CONFIG_FLOPPY_SANITY
-#undef  CONFIG_FLOPPY_23
-#undef  CONFIG_FLOPPY_2_FDC
+#define  CONFIG_FLOPPY_2_FDC
 #undef  CONFIG_FLOPPY_SILENT_DCL_CLEAR
 
 #define REALLY_SLOW_IO
@@ -99,16 +98,12 @@
  * motor of these drives causes system hangs on some PCI computers. drive
  * 0 is the low bit (0x1), and drive 7 is the high bit (0x80). Bits are on if
  * a drive is allowed. */
-#ifdef CONFIG_FLOPPY_23
-#define ALLOWED_DRIVE_MASK 0xff
-#else
-#define ALLOWED_DRIVE_MASK 0x33
-#endif
+static int ALLOWED_DRIVE_MASK=0x33;
 
 #define FLOPPY_IRQ 6
 #define FLOPPY_DMA 2
 #define FDC1 0x3f0
-#define FDC2 0x370
+static int FDC2=-1;
 #endif
 
 #define MODULE_AWARE_DRIVER
@@ -236,6 +231,7 @@ static int inr; /* size of reply buffer, when called from interrupt */
 #define R_SECTOR (reply_buffer[5])
 #define R_SIZECODE (reply_buffer[6])
 
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof( (x)[0] ))
 /*
  * this struct defines the different floppy drive types.
  */
@@ -1500,9 +1496,11 @@ void show_floppy(void)
 	printk("floppy driver state\n");
 	printk("-------------------\n");
 	for(i=0; i<N_FDC; i++){
-		printk("dor %d = %x\n", i, fdc_state[i].dor );
-		outb_p(fdc_state[i].address+2, fdc_state[i].dor);
-		udelay(1000); /* maybe we'll catch an interrupt... */
+		if(FDCS->address != -1){
+			printk("dor %d = %x\n", i, fdc_state[i].dor );
+			outb_p(fdc_state[i].address+2, fdc_state[i].dor);
+			udelay(1000); /* maybe we'll catch an interrupt... */
+		}
 	}
 	printk("status=%x\n", inb_p(FD_STATUS));
 	printk("fdc_busy=%d\n", fdc_busy);
@@ -3163,6 +3161,57 @@ static char get_fdc_version(void)
 	return FDC_82077;	/* Revised 82077AA passes all the tests */
 } /* get_fdc_version */
 
+#ifndef FD_MODULE
+/* lilo configuration */
+static void invert_dcl(int *ints)
+{
+	int i;
+	
+	for (i=0; i < ARRAY_SIZE(default_drive_params); i++)
+		default_drive_params[i].params.flags |= 0x80;
+	DPRINT("Configuring drives for inverted dcl\n");
+}
+
+static void allow_drives(int *ints)
+{
+	if (ints[1] >= 1 ){
+		ALLOWED_DRIVE_MASK=ints[1];
+		DPRINT1("setting allowed_drive_mask to 0x%x\n", ints[1]);
+	} else
+		DPRINT("allowed_drive_mask needs a parameter\n");
+}
+
+#ifdef  CONFIG_FLOPPY_2_FDC
+static void twofdc(int *ints)
+{
+	FDC2 = 0x370;
+	DPRINT("enabling second fdc at address 0x370\n");
+}
+#endif
+
+static struct param_table {
+	char *name;
+	void (*fn)(int *ints);
+} config_params[]={
+{ "allowed_drive_mask", allow_drives },
+#ifdef  CONFIG_FLOPPY_2_FDC
+{ "two_fdc", twofdc },
+#endif
+{ "thinkpad", invert_dcl } };
+
+void floppy_setup(char *str, int *ints)
+{
+	int i;
+	for(i=0; i< ARRAY_SIZE(config_params); i++){
+		if (strcmp(str,config_params[i].name) == 0 ){
+			config_params[i].fn(ints);
+			return;
+		}
+	}
+	printk("unknown floppy paramter %s\n", str);
+}
+#endif
+
 #ifdef FD_MODULE
 static
 #endif
@@ -3230,12 +3279,16 @@ int new_floppy_init(void)
 		if (FDCS->address == -1 )
 			continue;
 		FDCS->rawcmd = 2;
-		if(user_reset_fdc(-1,FD_RESET_IF_NEEDED,0))
+		if(user_reset_fdc(-1,FD_RESET_IF_NEEDED,0)){
+			FDCS->address = -1;
 			continue;
+		}
 		/* Try to determine the floppy controller type */
 		FDCS->version = get_fdc_version();
-		if (FDCS->version == FDC_NONE)
+		if (FDCS->version == FDC_NONE){
+			FDCS->address = -1;
 			continue;
+		}
 
 		have_no_fdc = 0;
 		/* Not all FDCs seem to be able to handle the version command
@@ -3272,10 +3325,12 @@ static int floppy_grab_irq_and_dma(void)
 #ifdef FD_MODULE
 	MOD_INC_USE_COUNT;
 #endif
-	for(i=0; i< N_FDC; i++){		
-		fdc = i;
-		reset_fdc_info(1);
-		outb_p(FDCS->dor, FD_DOR);
+	for(i=0; i< N_FDC; i++){
+		if(FDCS->address != -1){	
+			fdc = i;
+			reset_fdc_info(1);
+			outb_p(FDCS->dor, FD_DOR);
+		}
 	}
 	set_dor(0, ~0, 8);  /* avoid immediate interrupt */
 

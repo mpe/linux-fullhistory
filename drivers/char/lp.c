@@ -34,7 +34,7 @@ struct lp_struct lp_table[] = {
 
 #ifdef MODULE
 #include <linux/module.h>
-#include "../../tools/version.h"
+#include <linux/version.h>
 #endif
 
 /* 
@@ -467,7 +467,7 @@ long lp_init(long kmem_start)
 		if (testvalue == LP_DUMMY) {
 			LP_F(offset) |= LP_EXIST;
 			lp_reset(offset);
-			printk("lp_init: lp%d exists, ", offset);
+			printk("lp%d at 0x%04x, ", offset,LP_B(offset));
 			snarf_region(LP_B(offset), 3);
 			if (LP_IRQ(offset))
 				printk("using IRQ%d\n", LP_IRQ(offset));
@@ -505,7 +505,8 @@ int init_module(void)
 		if (testvalue == LP_DUMMY) {
 			LP_F(offset) |= LP_EXIST;
 			lp_reset(offset);
-			printk("lp_init: lp%d exists, ", offset);
+			printk("lp%d at 0x%04x, ", offset,LP_B(offset));
+			snarf_region(LP_B(offset),3);
 			if (LP_IRQ(offset))
 				printk("using IRQ%d\n", LP_IRQ(offset));
 			else
@@ -520,10 +521,14 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-       if(MOD_IN_USE)
+        int offset;
+	if(MOD_IN_USE)
                printk("lp: busy - remove delayed\n");
-       else
+        else
                unregister_chrdev(LP_MAJOR,"lp");
+	       for (offset = 0; offset < LP_NO; offset++) 
+			if(LP_F(offset) && LP_EXIST) 
+		 		release_region(LP_B(offset),3);
 }
 
 #endif

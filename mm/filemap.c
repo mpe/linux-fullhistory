@@ -213,8 +213,13 @@ int generic_mmap(struct inode * inode, struct file * file, struct vm_area_struct
 		return -ENOEXEC;
 	ops = &file_private_mmap;
 	if (vma->vm_flags & VM_SHARED) {
-		if (vma->vm_flags & (VM_WRITE | VM_MAYWRITE))
+		if (vma->vm_flags & (VM_WRITE | VM_MAYWRITE)) {
+			static int nr = 0;
 			ops = &file_shared_mmap;
+			if (nr++ < 5)
+				printk("%s tried to do a shared writeable mapping\n", current->comm);
+			return -EINVAL;
+		}
 	}
 	if (!IS_RDONLY(inode)) {
 		inode->i_atime = CURRENT_TIME;

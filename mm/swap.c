@@ -804,6 +804,7 @@ asmlinkage int sys_swapoff(const char * specialfile)
 	struct swap_info_struct * p;
 	struct inode * inode;
 	unsigned int type;
+	struct file filp;
 	int i;
 
 	if (!suser())
@@ -825,15 +826,32 @@ asmlinkage int sys_swapoff(const char * specialfile)
 				break;
 		}
 	}
-	iput(inode);
-	if (type >= nr_swapfiles)
+
+	if (type >= nr_swapfiles){
+		iput(inode);
 		return -EINVAL;
+	}
 	p->flags = SWP_USED;
 	i = try_to_unuse(type);
 	if (i) {
+		iput(inode);
 		p->flags = SWP_WRITEOK;
 		return i;
 	}
+
+	if(p->swap_device){
+		memset(&filp, 0, sizeof(filp));		
+		filp.f_inode = inode;
+		filp.f_mode = 3; /* read write */
+		/* open it again to get fops */
+		if( !blkdev_open(inode, &filp) &&
+		   filp.f_op && filp.f_op->release){
+			filp.f_op->release(inode,&filp);
+			filp.f_op->release(inode,&filp);
+		}
+	}
+	iput(inode);
+
 	nr_swap_pages -= p->pages;
 	iput(p->swap_file);
 	p->swap_file = NULL;
@@ -858,7 +876,9 @@ asmlinkage int sys_swapon(const char * specialfile)
 	unsigned int type;
 	int i,j;
 	int error;
+	struct file filp;
 
+	memset(&filp, 0, sizeof(filp));
 	if (!suser())
 		return -EPERM;
 	p = swap_info;
@@ -879,16 +899,23 @@ asmlinkage int sys_swapon(const char * specialfile)
 	p->max = 1;
 	error = namei(specialfile,&swap_inode);
 	if (error)
-		goto bad_swap;
+		goto bad_swap_2;
 	p->swap_file = swap_inode;
 	error = -EBUSY;
 	if (swap_inode->i_count != 1)
-		goto bad_swap;
+		goto bad_swap_2;
 	error = -EINVAL;
+
 	if (S_ISBLK(swap_inode->i_mode)) {
 		p->swap_device = swap_inode->i_rdev;
+
+		filp.f_inode = swap_inode;
+		filp.f_mode = 3; /* read write */
+		error = blkdev_open(swap_inode, &filp);
 		p->swap_file = NULL;
 		iput(swap_inode);
+		if(error)
+			goto bad_swap_2;
 		error = -ENODEV;
 		if (!p->swap_device)
 			goto bad_swap;
@@ -950,6 +977,9 @@ asmlinkage int sys_swapon(const char * specialfile)
 	printk("Adding Swap: %dk swap-space\n",j<<2);
 	return 0;
 bad_swap:
+	if(filp.f_op && filp.f_op->release)
+		filp.f_op->release(filp.f_inode,&filp);
+bad_swap_2:
 	free_page((long) p->swap_lockmap);
 	vfree(p->swap_map);
 	iput(p->swap_file);

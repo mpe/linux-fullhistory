@@ -29,7 +29,7 @@
 
 #ifndef CONFIG_BINFMT_ELF
 #include <linux/module.h>
-#include "../tools/version.h"
+#include <linux/version.h>
 #endif
 
 #include <linux/unistd.h>

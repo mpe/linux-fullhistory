@@ -92,7 +92,7 @@ make one yourself.  The wiring is:
 
 #ifdef MODULE
 #include <linux/module.h>
-#include "../../tools/version.h"
+#include <linux/version.h>
 #endif
 
 /* use 0 for production, 1 for verification, >2 for debug */

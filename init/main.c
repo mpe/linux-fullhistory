@@ -84,6 +84,7 @@ extern void hd_setup(char *str, int *ints);
 extern void bmouse_setup(char *str, int *ints);
 extern void eth_setup(char *str, int *ints);
 extern void xd_setup(char *str, int *ints);
+extern void floppy_setup(char *str, int *ints);
 extern void mcd_setup(char *str, int *ints);
 extern void st_setup(char *str, int *ints);
 extern void st0x_setup(char *str, int *ints);
@@ -220,6 +221,9 @@ struct {
 #endif
 #ifdef CONFIG_BLK_DEV_XD
 	{ "xd=", xd_setup },
+#endif
+#ifdef CONFIG_BLK_DEV_FD
+	{ "floppy=", floppy_setup },
 #endif
 #ifdef CONFIG_MCD
 	{ "mcd=", mcd_setup },
