@@ -16,9 +16,11 @@
  * Version 1.02		remove ", LBA" from drive identification msgs
  * Version 1.03		fix display of id->buf_size for big-endian
  * Version 1.04		add /proc configurable settings and S.M.A.R.T support
+ * Version 1.05		add capacity support for ATA3 >= 8GB
+ * Version 1.06		get boot-up messages to show full cyl count
  */
 
-#define IDEDISK_VERSION	"1.04"
+#define IDEDISK_VERSION	"1.06"
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
 
@@ -83,6 +85,11 @@ static int lba_capacity_is_ok (struct hd_driveid *id)
 	unsigned long chs_sects   = id->cyls * id->heads * id->sectors;
 	unsigned long _10_percent = chs_sects / 10;
 
+	/* very large drives (8GB+) may lie about the number of cylinders */
+	if (id->cyls == 16383 && id->heads == 16 && id->sectors == 63 && lba_sects > chs_sects) {
+		id->cyls = lba_sects / (16 * 63); /* correct cyls */
+		return 1;	/* lba_capacity is our only option */
+	}
 	/* perform a rough sanity check on lba_sects:  within 10% is "okay" */
 	if ((lba_sects - chs_sects) < _10_percent)
 		return 1;	/* lba_capacity is good */
@@ -439,6 +446,7 @@ static unsigned long idedisk_capacity (ide_drive_t  *drive)
 	/* Determine capacity, and use LBA if the drive properly supports it */
 	if (id != NULL && (id->capability & 2) && lba_capacity_is_ok(id)) {
 		if (id->lba_capacity >= capacity) {
+			drive->cyl = id->lba_capacity / (drive->head * drive->sect);
 			capacity = id->lba_capacity;
 			drive->select.b.lba = 1;
 		}
@@ -698,6 +706,10 @@ static void idedisk_setup (ide_drive_t *drive)
 		drive->head = id->heads;
 		drive->sect = id->sectors;
 	}
+
+	/* calculate drive capacity, and select LBA if possible */
+	(void) idedisk_capacity (drive);
+
 	/* Correct the number of cyls if the bios value is too small */
 	if (drive->sect == drive->bios_sect && drive->head == drive->bios_head) {
 		if (drive->cyl > drive->bios_cyl)
@@ -705,8 +717,6 @@ static void idedisk_setup (ide_drive_t *drive)
 	}
 	/* fix byte-ordering of buffer size field */
 	id->buf_size = le16_to_cpu(id->buf_size);
-
-	(void) idedisk_capacity (drive); /* initialize LBA selection */
 
 	printk (KERN_INFO "%s: %.40s, %ldMB w/%dkB Cache, CHS=%d/%d/%d",
 	 drive->name, id->model, idedisk_capacity(drive)/2048L, id->buf_size/2,

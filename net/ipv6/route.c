@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: route.c,v 1.19 1997/12/13 21:53:16 kuznet Exp $
+ *	$Id: route.c,v 1.24 1998/03/08 20:52:50 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -85,18 +85,18 @@ struct dst_ops ip6_dst_ops = {
 };
 
 struct rt6_info ip6_null_entry = {
-	{{NULL, ATOMIC_INIT(0), ATOMIC_INIT(0), NULL,
+	{{NULL, ATOMIC_INIT(1), ATOMIC_INIT(1), NULL,
 	  -1, 0, 0, 0, 0, 0, 0, 0, 0,
 	  -ENETUNREACH, NULL, NULL,
 	  ip6_pkt_discard, ip6_pkt_discard, &ip6_dst_ops}},
 	NULL, {{{0}}}, 256, RTF_REJECT|RTF_NONEXTHOP, ~0U,
-	0, 255, {NULL}, {{{{0}}}, 128}, {{{{0}}}, 128}
+	255, 0, {NULL}, {{{{0}}}, 0}, {{{{0}}}, 0}
 };
 
 struct fib6_node ip6_routing_table = {
 	NULL, NULL, NULL, NULL,
 	&ip6_null_entry,
-	0, RTN_ROOT|RTN_TL_ROOT, 0
+	0, RTN_ROOT|RTN_TL_ROOT|RTN_RTINFO, 0
 };
 
 #ifdef CONFIG_RT6_POLICY
@@ -716,7 +716,7 @@ struct rt6_info *ip6_route_add(struct in6_rtmsg *rtmsg, int *err)
 	rt->rt6i_expires = rtmsg->rtmsg_info;
 
 	addr_type = ipv6_addr_type(&rtmsg->rtmsg_dst);
-	
+
 	if (addr_type & IPV6_ADDR_MULTICAST) {
 		RDBG(("MCAST, "));
 		rt->u.dst.input = ip6_mc_input;
@@ -742,6 +742,21 @@ struct rt6_info *ip6_route_add(struct in6_rtmsg *rtmsg, int *err)
 	ipv6_addr_copy(&rt->rt6i_src.addr, &rtmsg->rtmsg_src);
 	rt->rt6i_src.plen = rtmsg->rtmsg_src_len;
 	ipv6_wash_prefix(&rt->rt6i_src.addr, rt->rt6i_src.plen);
+
+	/* We cannot add true routes via loopback here,
+	   they would result in kernel looping; promote them to reject routes
+	 */
+	if ((rtmsg->rtmsg_flags&RTF_REJECT) ||
+	    (dev && (dev->flags&IFF_LOOPBACK) && !(addr_type&IPV6_ADDR_LOOPBACK))) {
+		dev = dev_get("lo");
+		rt->u.dst.output = ip6_pkt_discard;
+		rt->u.dst.input = ip6_pkt_discard;
+		rt->u.dst.error = -EHOSTUNREACH;
+		rt->rt6i_flags = RTF_REJECT|RTF_NONEXTHOP;
+		rt->rt6i_metric = rtmsg->rtmsg_metric;
+		rt->rt6i_dev = dev;
+		goto install_route;
+	}
 
 	if (rtmsg->rtmsg_flags & RTF_GATEWAY) {
 		struct in6_addr *gw_addr;
@@ -805,6 +820,7 @@ struct rt6_info *ip6_route_add(struct in6_rtmsg *rtmsg, int *err)
 		rt->rt6i_hoplimit = ipv6_get_hoplimit(dev);
 	rt->rt6i_flags = rtmsg->rtmsg_flags;
 
+install_route:
 	RDBG(("rt6ins(%p) ", rt));
 
 	rt6_lock();
@@ -1421,6 +1437,7 @@ int ipv6_route_ioctl(unsigned int cmd, void *arg)
 int ip6_pkt_discard(struct sk_buff *skb)
 {	
 	ipv6_statistics.Ip6OutNoRoutes++;
+	icmpv6_send(skb, ICMPV6_DEST_UNREACH, ICMPV6_ADDR_UNREACH, 0, skb->dev);
 	kfree_skb(skb);
 	return 0;
 }
@@ -1754,7 +1771,12 @@ static int rt6_fill_node(struct sk_buff *skb, struct rt6_info *rt,
 	rtm->rtm_src_len = rt->rt6i_src.plen;
 	rtm->rtm_tos = 0;
 	rtm->rtm_table = RT_TABLE_MAIN;
-	rtm->rtm_type = RTN_UNICAST;
+	if (rt->rt6i_flags&RTF_REJECT)
+		rtm->rtm_type = RTN_UNREACHABLE;
+	else if (rt->rt6i_dev && (rt->rt6i_dev->flags&IFF_LOOPBACK))
+		rtm->rtm_type = RTN_LOCAL;
+	else
+		rtm->rtm_type = RTN_UNICAST;
 	rtm->rtm_flags = 0;
 	rtm->rtm_scope = RT_SCOPE_UNIVERSE;
 #ifdef CONFIG_RTNL_OLD_IFINFO
@@ -1795,6 +1817,8 @@ static int rt6_fill_node(struct sk_buff *skb, struct rt6_info *rt,
 	if (rt->u.dst.rtt)
 		RTA_PUT(skb, RTAX_RTT, sizeof(unsigned), &rt->u.dst.rtt);
 	mx->rta_len = skb->tail - (u8*)mx;
+	if (mx->rta_len == RTA_LENGTH(0))
+		skb_trim(skb, (u8*)mx - skb->data);
 #endif
 	if (rt->u.dst.neighbour)
 		RTA_PUT(skb, RTA_GATEWAY, 16, &rt->u.dst.neighbour->primary_key);

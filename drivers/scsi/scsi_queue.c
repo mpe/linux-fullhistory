@@ -38,10 +38,6 @@
 #include "hosts.h"
 #include "constants.h"
 
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
-#endif
-
 /*
  * TODO:
  *	1) Prevent multiple traversals of list to look for commands to

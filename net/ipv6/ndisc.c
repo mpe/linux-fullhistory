@@ -132,7 +132,7 @@ struct neigh_table nd_tbl =
 	pndisc_destructor,
 	pndisc_redo,
         { NULL, NULL, &nd_tbl, 0, NULL, NULL,
-		  30*HZ, 1*HZ, 60*HZ, 30*HZ, 5*HZ, 3, 3, 0, 3, 1*HZ, (8*HZ)/10, 0, 64 },
+		  30*HZ, 1*HZ, 60*HZ, 30*HZ, 5*HZ, 3, 3, 0, 3, 1*HZ, (8*HZ)/10, 64, 0 },
 	30*HZ, 128, 512, 1024,
 };
 

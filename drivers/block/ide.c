@@ -134,9 +134,9 @@
 #include "ide.h"
 #include "ide_modes.h"
 
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
-#endif /* CONFIG_KERNELD */
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
+#endif /* CONFIG_KMOD */
 
 static const byte	ide_hwif_to_major[] = {IDE0_MAJOR, IDE1_MAJOR, IDE2_MAJOR, IDE3_MAJOR};
 
@@ -1505,10 +1505,10 @@ static void ide_init_module (int type)
 		module = module->next;
 	}
 	revalidate_drives();
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 	if (!found && type == IDE_PROBE_MODULE)
 		(void) request_module("ide-probe");
-#endif /* CONFIG_KERNELD */
+#endif /* CONFIG_KMOD */
 }
 
 static int ide_open(struct inode * inode, struct file * filp)
@@ -1521,7 +1521,7 @@ static int ide_open(struct inode * inode, struct file * filp)
 	MOD_INC_USE_COUNT;
 	if (drive->driver == NULL)
 		ide_init_module(IDE_DRIVER_MODULE);
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 	if (drive->driver == NULL) {
 		if (drive->media == ide_disk)
 			(void) request_module("ide-disk");
@@ -1532,7 +1532,7 @@ static int ide_open(struct inode * inode, struct file * filp)
 		if (drive->media == ide_floppy)
 			(void) request_module("ide-floppy");
 	}
-#endif /* CONFIG_KERNELD */
+#endif /* CONFIG_KMOD */
 	while (drive->busy)
 		sleep_on(&drive->wqueue);
 	drive->usage++;

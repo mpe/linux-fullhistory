@@ -9,7 +9,7 @@
  *	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
  *
- *	Version: $Id: ipmr.c,v 1.29 1997/12/13 21:52:55 kuznet Exp $
+ *	Version: $Id: ipmr.c,v 1.33 1998/03/08 20:52:37 davem Exp $
  *
  *	Fixes:
  *	Michael Chastain	:	Incorrect size of copying.
@@ -1351,6 +1351,7 @@ ipmr_fill_mroute(struct sk_buff *skb, struct mfc_cache *c, struct rtmsg *rtm)
 	int ct;
 	struct rtnexthop *nhp;
 	struct device *dev = vif_table[c->mfc_parent].dev;
+	u8 *b = skb->tail;
 
 #ifdef CONFIG_RTNL_OLD_IFINFO
 	if (dev) {
@@ -1389,10 +1390,11 @@ ipmr_fill_mroute(struct sk_buff *skb, struct mfc_cache *c, struct rtmsg *rtm)
 	return 1;
 
 rtattr_failure:
+	skb_trim(skb, b - skb->data);
 	return -EMSGSIZE;
 }
 
-int ipmr_get_route(struct sk_buff *skb, struct rtmsg *rtm)
+int ipmr_get_route(struct sk_buff *skb, struct rtmsg *rtm, int nowait)
 {
 	struct mfc_cache *cache;
 	struct rtable *rt = (struct rtable*)skb->dst;
@@ -1400,10 +1402,16 @@ int ipmr_get_route(struct sk_buff *skb, struct rtmsg *rtm)
 	start_bh_atomic();
 	cache = ipmr_cache_find(rt->rt_src, rt->rt_dst);
 	if (cache==NULL || (cache->mfc_flags&MFC_QUEUED)) {
-		struct device *dev = skb->dev;
+		struct device *dev;
 		int vif;
 		int err;
 
+		if (nowait) {
+			end_bh_atomic();
+			return -EAGAIN;
+		}
+
+		dev = skb->dev;
 		if (dev == NULL || (vif = ipmr_find_vif(dev)) == ALL_VIFS) {
 			end_bh_atomic();
 			return -ENODEV;
@@ -1422,7 +1430,7 @@ int ipmr_get_route(struct sk_buff *skb, struct rtmsg *rtm)
 	 */
 	end_bh_atomic();
 
-	if (rtm->rtm_flags & RTM_F_NOTIFY)
+	if (!nowait && (rtm->rtm_flags&RTM_F_NOTIFY))
 		cache->mfc_flags |= MFC_NOTIFY;
 	return ipmr_fill_mroute(skb, cache, rtm);
 }

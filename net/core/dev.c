@@ -50,6 +50,7 @@
  *					is no device open function.
  *		Andi Kleen	:	Fix error reporting for SIOCGIFCONF
  *	    Michael Chastain	:	Fix signed/unsigned for SIOCGIFCONF
+ *		Cyrus Durgin	:	Cleaned for KMOD
  *
  */
 
@@ -81,7 +82,7 @@
 #include <net/pkt_sched.h>
 #include <net/profile.h>
 #include <linux/init.h>
-#include <linux/kerneld.h>
+#include <linux/kmod.h>
 #ifdef CONFIG_NET_RADIO
 #include <linux/wireless.h>
 #endif	/* CONFIG_NET_RADIO */
@@ -316,7 +317,7 @@ struct device *dev_alloc(const char *name, int *err)
  *	Find and possibly load an interface.
  */
  
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 
 void dev_load(const char *name)
 {
@@ -398,20 +399,24 @@ int dev_open(struct device *dev)
 }
 
 #ifdef CONFIG_NET_FASTROUTE
-void dev_clear_fastroute(struct device *dev)
-{
-	int i;
 
-	if (dev) {
+static __inline__ void dev_do_clear_fastroute(struct device *dev)
+{
+	if (dev->accept_fastpath) {
+		int i;
+
 		for (i=0; i<=NETDEV_FASTROUTE_HMASK; i++)
 			dst_release(xchg(dev->fastpath+i, NULL));
+	}
+}
+
+void dev_clear_fastroute(struct device *dev)
+{
+	if (dev) {
+		dev_do_clear_fastroute(dev);
 	} else {
-		for (dev = dev_base; dev; dev = dev->next) {
-			if (dev->accept_fastpath) {
-				for (i=0; i<=NETDEV_FASTROUTE_HMASK; i++)
-					dst_release(xchg(dev->fastpath+i, NULL));
-			}
-		}
+		for (dev = dev_base; dev; dev = dev->next)
+			dev_do_clear_fastroute(dev);
 	}
 }
 #endif
@@ -643,7 +648,7 @@ int netdev_register_fc(struct device *dev, void (*stimul)(struct device *dev))
 		set_bit(bit, &netdev_fc_mask);
 		clear_bit(bit, &netdev_fc_xoff);
 	}
-	sti();
+	restore_flags(flags);
 	return bit;
 }
 
@@ -659,7 +664,7 @@ void netdev_unregister_fc(int bit)
 		clear_bit(bit, &netdev_fc_mask);
 		clear_bit(bit, &netdev_fc_xoff);
 	}
-	sti();
+	restore_flags(flags);
 }
 
 static void netdev_wakeup(void)
@@ -978,39 +983,6 @@ int register_gifconf(unsigned int family, gifconf_func_t * gifconf)
 
 
 /*
-   This ioctl is wrong by design. It really existed in some
-   old SYSV systems, only was named SIOCGIFNUM.
-   In multiprotocol environment it is just useless.
-   Well, SIOCGIFCONF is wrong too, but we have to preserve
-   it by compatibility reasons.
-
-   If someone wants to achieve the same effect, please, use undocumented
-   feature of SIOCGIFCONF: it returns buffer length, if buffer
-   is not supplied.
-
-   Let's remove it, until someone started to use it. --ANK
-
-   In any case, if someone cannot live without it, it should
-   be renamed to SIOCGIFNUM.
- */
-
-
-/*
- *	Count the installed interfaces (SIOCGIFCOUNT)
- */
-
-static int dev_ifcount(unsigned int *arg)
-{
-	struct device *dev;
-	unsigned int count = 0;
-
-	for (dev = dev_base; dev != NULL; dev = dev->next) 
-		count++;
-
-	return put_user(count, arg); 
-}
-
-/*
  *	Map an interface index to its name (SIOCGIFNAME)
  */
 
@@ -1022,6 +994,11 @@ static int dev_ifcount(unsigned int *arg)
  *	Besides that, it is pretty silly to put "drawing" facility
  *	to kernel, it is useful only to print ifindices
  *	in readable form, is not it? --ANK
+ *
+ *	We need this ioctl for efficient implementation of the
+ *	if_indextoname() function required by the IPv6 API.  Without
+ *	it, we would have to search all the interfaces to find a
+ *	match.  --pb
  */
 
 static int dev_ifname(struct ifreq *arg)
@@ -1120,20 +1097,21 @@ static int sprintf_stats(char *buffer, struct device *dev)
 	int size;
 	
 	if (stats)
-		size = sprintf(buffer, "%6s:%8lu %7lu %4lu %4lu %4lu %4lu %8lu %8lu %4lu %4lu %4lu %5lu %4lu %4lu\n",
-		   dev->name,
+		size = sprintf(buffer, "%6s:%8lu %7lu %4lu %4lu %4lu %5lu %10lu %9lu %8lu %8lu %4lu %4lu %4lu %5lu %4lu %4lu\n",
+ 		   dev->name,
 		   stats->rx_bytes,
 		   stats->rx_packets, stats->rx_errors,
 		   stats->rx_dropped + stats->rx_missed_errors,
 		   stats->rx_fifo_errors,
 		   stats->rx_length_errors + stats->rx_over_errors
 		   + stats->rx_crc_errors + stats->rx_frame_errors,
+		   stats->rx_compressed, stats->multicast,
 		   stats->tx_bytes,
 		   stats->tx_packets, stats->tx_errors, stats->tx_dropped,
 		   stats->tx_fifo_errors, stats->collisions,
 		   stats->tx_carrier_errors + stats->tx_aborted_errors
 		   + stats->tx_window_errors + stats->tx_heartbeat_errors,
-		   stats->multicast);
+		   stats->tx_compressed);
 	else
 		size = sprintf(buffer, "%6s: No statistics available.\n", dev->name);
 
@@ -1156,8 +1134,8 @@ int dev_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 
 
 	size = sprintf(buffer, 
-		"Inter-|   Receive                           |  Transmit\n"
-		" face |bytes    packets errs drop fifo frame|bytes    packets errs drop fifo colls carrier multicast\n");
+		"Inter-|   Receive                                                |  Transmit\n"
+		" face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n");
 	
 	pos+=size;
 	len+=size;
@@ -1554,9 +1532,6 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		ret = dev_ifconf((char *) arg);
 		rtnl_shunlock();
 		return ret;
-	}
-	if (cmd == SIOCGIFCOUNT) {
-		return dev_ifcount((unsigned int*)arg);
 	}
 	if (cmd == SIOCGIFNAME) {
 		return dev_ifname((struct ifreq *)arg);

@@ -148,7 +148,7 @@ const char __module_author[] __attribute__((section(".modinfo"))) = 	   \
 const char __module_description[] __attribute__((section(".modinfo"))) =   \
 "description=" desc
 
-/* Could potentially be used by kerneld...  */
+/* Could potentially be used by kmod...  */
 
 #define MODULE_SUPPORTED_DEVICE(dev)					   \
 const char __module_device[] __attribute__((section(".modinfo"))) = 	   \

@@ -29,9 +29,6 @@
 #include <linux/mm.h>
 #define __NO_VERSION__
 #include <linux/module.h>
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
-#endif
 #include <linux/fcntl.h>
 
 #include <linux/zftape.h>

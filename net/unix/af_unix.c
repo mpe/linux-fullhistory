@@ -364,7 +364,7 @@ static int unix_create(struct socket *sock, int protocol)
 		default:
 			return -ESOCKTNOSUPPORT;
 	}
-	sk = sk_alloc(AF_UNIX, GFP_KERNEL);
+	sk = sk_alloc(AF_UNIX, GFP_KERNEL, 1);
 	if (!sk)
 		return -ENOMEM;
 

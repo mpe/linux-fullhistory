@@ -29,8 +29,8 @@
 #include <linux/major.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
 #endif
 #include <linux/lockd/bind.h>
 #include <linux/lockd/xdr.h>
@@ -187,12 +187,12 @@ asmlinkage sys_nfsservctl(int cmd, void *argp, void *resp)
 		ret = do_nfsservctl(cmd, argp, resp);
 		goto out;
 	}
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 	if (request_module ("nfsd") == 0) {
 		if (do_nfsservctl)
 			ret = do_nfsservctl(cmd, argp, resp);
 	}
-#endif /* CONFIG_KERNELD */
+#endif /* CONFIG_KMOD */
 out:
 	unlock_kernel();
 	return ret;

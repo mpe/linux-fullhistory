@@ -25,9 +25,6 @@
 #include <linux/fcntl.h>
 #include <linux/malloc.h>
 #include <linux/init.h>
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
-#endif
 
 #include <linux/ncp_fs.h>
 #include "ncplib_kernel.h"

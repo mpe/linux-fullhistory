@@ -5,7 +5,7 @@
  *
  *		IPv4 Forwarding Information Base: FIB frontend.
  *
- * Version:	$Id: fib_frontend.c,v 1.6 1997/12/13 21:52:48 kuznet Exp $
+ * Version:	$Id: fib_frontend.c,v 1.9 1998/03/08 20:52:36 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -151,7 +151,6 @@ struct device * ip_dev_find(u32 addr)
 
 	memset(&key, 0, sizeof(key));
 	key.dst = addr;
-	key.scope = RT_SCOPE_UNIVERSE;
 
 	if (!local_table || local_table->tb_lookup(local_table, &key, &res)
 	    || res.type != RTN_LOCAL)
@@ -344,6 +343,10 @@ int inet_dump_fib(struct sk_buff *skb, struct netlink_callback *cb)
 	int s_t;
 	struct fib_table *tb;
 
+	if (NLMSG_PAYLOAD(cb->nlh, 0) >= sizeof(struct rtmsg) &&
+	    ((struct rtmsg*)NLMSG_DATA(cb->nlh))->rtm_flags&RTM_F_CLONED)
+		return ip_rt_dump(skb, cb);
+
 	s_t = cb->args[0];
 	if (s_t == 0)
 		s_t = cb->args[0] = RT_TABLE_MIN;
@@ -423,8 +426,13 @@ static void fib_add_ifaddr(struct in_ifaddr *ifa)
 	u32 addr = ifa->ifa_local;
 	u32 prefix = ifa->ifa_address&mask;
 
-	if (ifa->ifa_flags&IFA_F_SECONDARY)
+	if (ifa->ifa_flags&IFA_F_SECONDARY) {
 		prim = inet_ifa_byprefix(in_dev, prefix, mask);
+		if (prim == NULL) {
+			printk(KERN_DEBUG "fib_add_ifaddr: bug: prim == NULL\n");
+			return;
+		}
+	}
 
 	fib_magic(RTM_NEWROUTE, RTN_LOCAL, addr, 32, prim);
 
@@ -435,7 +443,8 @@ static void fib_add_ifaddr(struct in_ifaddr *ifa)
 	if (ifa->ifa_broadcast && ifa->ifa_broadcast != 0xFFFFFFFF)
 		fib_magic(RTM_NEWROUTE, RTN_BROADCAST, ifa->ifa_broadcast, 32, prim);
 
-	if (!ZERONET(prefix) && !(ifa->ifa_flags&IFA_F_SECONDARY)) {
+	if (!ZERONET(prefix) && !(ifa->ifa_flags&IFA_F_SECONDARY) &&
+	    (prefix != addr || ifa->ifa_prefixlen < 32)) {
 		fib_magic(RTM_NEWROUTE, dev->flags&IFF_LOOPBACK ? RTN_LOCAL :
 			  RTN_UNICAST, prefix, ifa->ifa_prefixlen, prim);
 
@@ -464,8 +473,13 @@ static void fib_del_ifaddr(struct in_ifaddr *ifa)
 	if (!(ifa->ifa_flags&IFA_F_SECONDARY))
 		fib_magic(RTM_DELROUTE, dev->flags&IFF_LOOPBACK ? RTN_LOCAL :
 			  RTN_UNICAST, any, ifa->ifa_prefixlen, prim);
-	else 
+	else {
 		prim = inet_ifa_byprefix(in_dev, any, ifa->ifa_mask);
+		if (prim == NULL) {
+			printk(KERN_DEBUG "fib_del_ifaddr: bug: prim == NULL\n");
+			return;
+		}
+	}
 
 	/* Deletion is more complicated than add.
 	   We should take care of not to delete too much :-)

@@ -26,6 +26,9 @@
  *  Idea by Jacques Gelinas <jack@solucorp.qc.ca>,
  *  adapted by Bjorn Ekwall <bj0rn@blox.se>
  *  corrected by Alan Cox <alan@lxorguk.ukuu.org.uk>
+ *
+ * Changes for kmod (from kerneld):
+ 	Cyrus Durgin <cider@speakeasy.org>
  */
 
 #include <linux/config.h>
@@ -46,8 +49,8 @@
 
 #include <linux/tty.h>
 #include <linux/selection.h>
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
 #endif
 
 /*
@@ -107,7 +110,7 @@ static int misc_open(struct inode * inode, struct file * file)
 	while ((c != &misc_list) && (c->minor != minor))
 		c = c->next;
 	if (c == &misc_list) {
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 		char modname[20];
 		sprintf(modname, "char-major-%d-%d", MISC_MAJOR, minor);
 		request_module(modname);

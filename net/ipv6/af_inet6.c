@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.24 1997/12/13 21:53:08 kuznet Exp $
+ *	$Id: af_inet6.c,v 1.28 1998/03/08 05:56:49 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -71,7 +71,7 @@ static int inet6_create(struct socket *sock, int protocol)
 	struct sock *sk;
 	struct proto *prot;
 
-	sk = sk_alloc(AF_INET6, GFP_KERNEL);
+	sk = sk_alloc(AF_INET6, GFP_KERNEL, 1);
 	if (sk == NULL) 
 		goto do_oom;
 
@@ -139,8 +139,7 @@ static int inet6_create(struct socket *sock, int protocol)
 		 * creation time automatically shares.
 		 */
 		sk->dummy_th.source = ntohs(sk->num);
-		if(sk->prot->hash)
-			sk->prot->hash(sk);
+		sk->prot->hash(sk);
 		add_to_prot_sklist(sk);
 	}
 

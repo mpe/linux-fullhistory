@@ -5,7 +5,7 @@
  *
  *		The options processing module for ip.c
  *
- * Version:	$Id: ip_options.c,v 1.12 1997/10/10 22:41:08 davem Exp $
+ * Version:	$Id: ip_options.c,v 1.13 1998/02/12 07:43:12 davem Exp $
  *
  * Authors:	A.N.Kuznetsov
  *		

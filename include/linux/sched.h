@@ -86,6 +86,12 @@ extern int last_pid;
 #define SCHED_FIFO		1
 #define SCHED_RR		2
 
+/*
+ * This is an additional bit set when we want to
+ * yield the CPU for one re-schedule..
+ */
+#define SCHED_YIELD		0x10
+
 struct sched_param {
 	int sched_priority;
 };
@@ -113,19 +119,24 @@ extern void trap_init(void);
 
 asmlinkage void schedule(void);
 
-/* Open file table structure */
+
+/*
+ * Open file table structure
+ */
 struct files_struct {
 	int count;
+	int max_fds;
+	struct file ** fd;	/* current fd array */
 	fd_set close_on_exec;
 	fd_set open_fds;
-	struct file * fd[NR_OPEN];
 };
 
 #define INIT_FILES { \
 	1, \
+	NR_OPEN, \
+	&init_fd_array[0], \
 	{ { 0, } }, \
-	{ { 0, } }, \
-	{ NULL, } \
+	{ { 0, } } \
 }
 
 struct fs_struct {
@@ -571,19 +582,6 @@ extern void exit_sighand(struct task_struct *);
 extern int do_execve(char *, char **, char **, struct pt_regs *);
 extern int do_fork(unsigned long, unsigned long, struct pt_regs *);
 
-/* See if we have a valid user level fd.
- * If it makes sense, return the file structure it references.
- * Otherwise return NULL.
- */
-extern inline struct file *file_from_fd(const unsigned int fd)
-{
-
-	if (fd >= NR_OPEN)
-		return NULL;
-	/* either valid or null */
-	return current->files->fd[fd];
-}
-	
 /*
  * The wait-queues are circular lists, and you have to be *very* sure
  * to keep them correct. Use only these two functions to add/remove

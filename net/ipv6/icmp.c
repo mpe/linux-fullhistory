@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: icmp.c,v 1.12 1997/12/13 21:53:10 kuznet Exp $
+ *	$Id: icmp.c,v 1.13 1998/02/12 07:43:41 davem Exp $
  *
  *	Based on net/ipv4/icmp.c
  *

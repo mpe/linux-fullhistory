@@ -17,6 +17,10 @@ O_OBJS    = sched.o dma.o fork.o exec_domain.o panic.o printk.o sys.o \
 
 OX_OBJS  += signal.o
 
+ifeq ($(CONFIG_KMOD),y)
+O_OBJS += kmod.o
+endif
+
 ifeq ($(CONFIG_MODULES),y)
 OX_OBJS  += ksyms.o
 endif

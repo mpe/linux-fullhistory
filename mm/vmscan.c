@@ -542,11 +542,11 @@ int kswapd(void *unused)
 	while (1) {
 		int tries;
 
+		current->state = TASK_INTERRUPTIBLE;
 		kswapd_awake = 0;
 		flush_signals(current);
 		run_task_queue(&tq_disk);
 		schedule();
-		current->state = TASK_INTERRUPTIBLE;
 		kswapd_awake = 1;
 		swapstats.wakeups++;
 		/* Do the background pageout: 
@@ -583,14 +583,6 @@ int kswapd(void *unused)
 				run_task_queue(&tq_disk);
 
 		}
-#if 0
-	/*
-	 * Report failure if we couldn't even reach min_free_pages.
-	 */
-	if (nr_free_pages < min_free_pages)
-		printk("kswapd: failed, got %d of %d\n",
-			nr_free_pages, min_free_pages);
-#endif
 	}
 	/* As if we could ever get here - maybe we want to make this killable */
 	remove_wait_queue(&kswapd_wait, &wait);

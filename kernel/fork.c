@@ -375,44 +375,66 @@ static inline int copy_fdset(fd_set *dst, fd_set *src)
 	return __copy_fdset(dst->fds_bits, src->fds_bits);  
 }
 
-static inline int copy_files(unsigned long clone_flags, struct task_struct * tsk)
+static int copy_files(unsigned long clone_flags, struct task_struct * tsk)
 {
-	int i;  
 	struct files_struct *oldf, *newf;
 	struct file **old_fds, **new_fds;
+	int size, i, error = 0;
 
 	/*
 	 * A background process may not have any files ...
 	 */
 	oldf = current->files;
 	if (!oldf)
-		return 0;
+		goto out;
 
 	if (clone_flags & CLONE_FILES) {
 		oldf->count++;
-		return 0;
+		goto out;
 	}
 
+	tsk->files = NULL;
+	error = -ENOMEM;
 	newf = kmem_cache_alloc(files_cachep, SLAB_KERNEL);
-	tsk->files = newf;
 	if (!newf) 
-		return -1;
+		goto out;
+
+	/*
+	 * Allocate the fd array, using get_free_page() if possible.
+	 * Eventually we want to make the array size variable ...
+	 */
+	size = NR_OPEN * sizeof(struct file *);
+	if (size == PAGE_SIZE)
+		new_fds = (struct file **) __get_free_page(GFP_KERNEL);
+	else
+		new_fds = (struct file **) kmalloc(size, GFP_KERNEL);
+	if (!new_fds)
+		goto out_release;
+	memset((void *) new_fds, 0, size);
 
 	newf->count = 1;
+	newf->max_fds = NR_OPEN;
+	newf->fd = new_fds;
 	newf->close_on_exec = oldf->close_on_exec;
-	i = copy_fdset(&newf->open_fds,&oldf->open_fds);
+	i = copy_fdset(&newf->open_fds, &oldf->open_fds);
 
 	old_fds = oldf->fd;
-	new_fds = newf->fd;
 	for (; i != 0; i--) {
 		struct file * f = *old_fds;
 		old_fds++;
 		*new_fds = f;
-		new_fds++;
 		if (f)
 			f->f_count++;
+		new_fds++;
 	}
-	return 0;
+	tsk->files = newf;
+	error = 0;
+out:
+	return error;
+
+out_release:
+	kmem_cache_free(files_cachep, newf);
+	goto out;
 }
 
 static inline int copy_sighand(unsigned long clone_flags, struct task_struct * tsk)

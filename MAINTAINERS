@@ -604,6 +604,12 @@ P:	Jean Tourrilhes
 M:	jt@hplb.hpl.hp.com
 S:	Maintained
 
+WD7000 SCSI DRIVER
+P:	Miroslav Zagorac
+M:	zaga@fly.cc.fer.hr
+L:	linux-scsi@vger.rutgers.edu
+S:	Maintained
+
 Z8530 DRIVER FOR AX.25
 P:	Joerg Reuter
 M:	jreuter@poboxes.com

@@ -6,7 +6,7 @@
  *	license in recognition of the original copyright. 
  *				-- Alan Cox.
  *
- *	$Id: ip_fw.c,v 1.30 1997/12/19 12:06:27 freitag Exp $
+ *	$Id: ip_fw.c,v 1.32 1998/02/23 02:50:17 davem Exp $
  *
  *	Ported from BSD to Linux,
  *		Alan Cox 22/Nov/1994.

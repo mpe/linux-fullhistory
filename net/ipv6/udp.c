@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.21 1997/12/29 19:52:52 kuznet Exp $
+ *	$Id: udp.c,v 1.23 1998/03/08 05:56:59 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -448,32 +448,43 @@ static struct sock *udp_v6_mcast_next(struct sock *sk,
 	return NULL;
 }
 
+/*
+ * Note: called only from the BH handler context,
+ * so we don't need to lock the hashes.
+ */
 static void udpv6_mcast_deliver(struct udphdr *uh,
 				struct in6_addr *saddr, struct in6_addr *daddr,
 				struct sk_buff *skb)
 {
 	struct sock *sk, *sk2;
+	struct sk_buff *buff;
 
-	SOCKHASH_LOCK();
 	sk = udp_hash[ntohs(uh->dest) & (UDP_HTABLE_SIZE - 1)];
 	sk = udp_v6_mcast_next(sk, uh->dest, daddr, uh->source, saddr);
-	if(sk) {
-		sk2 = sk;
-		while((sk2 = udp_v6_mcast_next(sk2->next,
-					       uh->dest, saddr,
-					       uh->source, daddr))) {
-			struct sk_buff *buff = skb_clone(skb, GFP_ATOMIC);
-			if (buff && sock_queue_rcv_skb(sk2, buff) < 0) {
-				buff->sk = NULL;
-				kfree_skb(buff);
-			}
+	if (!sk)
+		goto free_skb;
+
+	buff = NULL;
+	sk2 = sk;
+	while((sk2 = udp_v6_mcast_next(sk2->next, uh->dest, saddr,
+						  uh->source, daddr))) {
+		if (!buff) {
+			buff = skb_clone(skb, GFP_ATOMIC);
+			if (!buff)
+				continue;
 		}
+		if (sock_queue_rcv_skb(sk2, buff) >= 0)
+			buff = NULL;
 	}
-	if(!sk || sock_queue_rcv_skb(sk, skb) < 0) {
+	if (buff) {
+		buff->sk = NULL;
+		kfree_skb(buff);
+	}
+	if (sock_queue_rcv_skb(sk, skb) < 0) {
+	free_skb:
 		skb->sk = NULL;
 		kfree_skb(skb);
 	}
-	SOCKHASH_UNLOCK();
 }
 
 int udpv6_rcv(struct sk_buff *skb, struct device *dev,

@@ -30,8 +30,8 @@
 #include <linux/signal.h>
 #include <linux/major.h>
 #include <linux/malloc.h>
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
 #endif
 #include <linux/fcntl.h>
 #include <linux/wrapper.h>
@@ -391,7 +391,7 @@ struct zft_cmpr_ops *zft_cmpr_unregister(void)
 int zft_cmpr_lock(int try_to_load)
 {
 	if (zft_cmpr_ops == NULL) {
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 		if (try_to_load) {
 			request_module("zft-compressor");
 			if (zft_cmpr_ops == NULL) {

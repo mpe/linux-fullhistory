@@ -1808,7 +1808,9 @@ next:
 	}
 
 	spin_lock_irq(&best_cachep->c_spinlock);
-	if (!best_cachep->c_growing && !(slabp = best_cachep->c_lastp)->s_inuse && slabp != kmem_slab_end(best_cachep)) {
+	while (!best_cachep->c_growing &&
+	       !(slabp = best_cachep->c_lastp)->s_inuse &&
+	       slabp != kmem_slab_end(best_cachep)) {
 		if (gfp_mask & GFP_DMA) {
 			do {
 				if (slabp->s_dma)
@@ -1832,7 +1834,7 @@ good_dma:
 		 */
 		spin_unlock_irq(&best_cachep->c_spinlock);
 		kmem_slab_destroy(best_cachep, slabp);
-		return;
+		spin_lock_irq(&best_cachep->c_spinlock);
 	}
 dma_fail:
 	spin_unlock_irq(&best_cachep->c_spinlock);

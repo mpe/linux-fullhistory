@@ -70,7 +70,9 @@ enum
 	KERN_PRINTK,            /* sturct: control printk logging parameters */
 	KERN_NAMETRANS,		/* Name translation */
 	KERN_STATINODE,
-	KERN_DENTRY		/* dentry statistics */
+	KERN_DENTRY,		/* dentry statistics */
+	KERN_MODPROBE,
+	KERN_KMOD_UNLOAD_DELAY
 };
 
 
@@ -118,6 +120,7 @@ enum
 	NET_CORE_FASTROUTE,
 	NET_CORE_MSG_COST,
 	NET_CORE_MSG_BURST,
+	NET_CORE_OPTMEM_MAX,
 };
 
 /* /proc/sys/net/ethernet */

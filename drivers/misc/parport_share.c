@@ -28,8 +28,8 @@
 
 #include <asm/spinlock.h>
 
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
 #endif
 
 #undef PARPORT_PARANOID
@@ -44,14 +44,14 @@ void (*parport_probe_hook)(struct parport *port) = NULL;
 /* Return a list of all the ports we know about. */
 struct parport *parport_enumerate(void)
 {
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 	if (portlist == NULL) {
 		request_module("parport_lowlevel");
 #ifdef CONFIG_PNP_PARPORT_MODULE
 		request_module("parport_probe");
 #endif /* CONFIG_PNP_PARPORT_MODULE */
 	}
-#endif /* CONFIG_KERNELD */
+#endif /* CONFIG_KMOD */
 	return portlist;
 }
 

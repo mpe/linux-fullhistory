@@ -11,7 +11,6 @@ int DMAbuf_start_output(int dev, int buff_no, int l);
 int DMAbuf_move_wrpointer(int dev, int l);
 /* int DMAbuf_ioctl(int dev, unsigned int cmd, caddr_t arg, int local); */
 void DMAbuf_init(int dev, int dma1, int dma2);
-void DMAbuf_deinit(int dev);
 int DMAbuf_start_dma (int dev, unsigned long physaddr, int count, int dma_mode);
 int DMAbuf_open_dma (int dev);
 void DMAbuf_close_dma (int dev);

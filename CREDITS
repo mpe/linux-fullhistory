@@ -62,9 +62,10 @@ S: USA
 
 N: Andrea Arcangeli
 E: arcangeli@mbox.queen.it
-W: http://www-linux.deis.unibo.it/~mirror/
+W: http://www.cs.unibo.it/~arcangel/
 P: 1024/CB4660B9 CC A0 71 81 F4 A0 63 AC  C0 4B 81 1D 8C 15 C8 E5
-D: parport sharing fix. Various other kernel hacks.
+D: Parport sharing hacker.
+D: Various other kernel hacks.
 S: Via Ciaclini 26
 S: Imola 40026
 S: Italy
@@ -394,6 +395,11 @@ S: Dean, Graduate School
 S: Virginia Tech
 S: Blacksburg, Virginia 24061
 S: USA
+
+N: Cyrus Durgin
+E: cider@speakeasy.org
+W: http://www.speakeasy.org/~cider/
+D: implemented kmod
 
 N: Torsten Duwe
 E: Torsten.Duwe@informatik.uni-erlangen.de
@@ -1337,6 +1343,7 @@ S: Russia
 N: Kirk Petersen
 E: kirk@speakeasy.org
 W: http://www.speakeasy.org/~kirk/
+D: implemented kmod
 D: modularized BSD Unix domain sockets
 
 N: Kai Petzke

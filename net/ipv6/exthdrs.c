@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: exthdrs.c,v 1.4 1997/03/18 18:24:29 davem Exp $
+ *	$Id: exthdrs.c,v 1.5 1998/02/12 07:43:39 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License

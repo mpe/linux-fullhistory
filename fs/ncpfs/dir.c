@@ -112,7 +112,7 @@ static int ncp_hash_dentry(struct dentry *, struct qstr *);
 static int ncp_compare_dentry (struct dentry *, struct qstr *, struct qstr *);
 static void ncp_delete_dentry(struct dentry *);
 
-static struct dentry_operations ncp_dentry_operations =
+struct dentry_operations ncp_dentry_operations =
 {
 	ncp_lookup_validate,	/* d_validate(struct dentry *) */
 	ncp_hash_dentry,	/* d_hash */

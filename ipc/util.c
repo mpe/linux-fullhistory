@@ -20,7 +20,7 @@
 
 #include <asm/uaccess.h>
 
-#if defined(CONFIG_SYSVIPC) || defined(CONFIG_KERNELD)
+#if defined(CONFIG_SYSVIPC)
 
 extern void sem_init (void), msg_init (void), shm_init (void);
 
@@ -123,7 +123,4 @@ asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 	return -ENOSYS;
 }
 
-void kerneld_exit(void)
-{
-}
 #endif /* CONFIG_SYSVIPC */

@@ -1,6 +1,6 @@
 /* linux/net/inet/arp.c
  *
- * Version:	$Id: arp.c,v 1.58 1997/12/13 21:52:46 kuznet Exp $
+ * Version:	$Id: arp.c,v 1.65 1998/03/08 20:52:34 davem Exp $
  *
  * Copyright (C) 1994 by Florian  La Roche
  *
@@ -189,7 +189,7 @@ struct neigh_table arp_tbl =
 	NULL,
 	parp_redo,
         { NULL, NULL, &arp_tbl, 0, NULL, NULL,
-		  30*HZ, 1*HZ, 60*HZ, 30*HZ, 5*HZ, 3, 3, 0, 3, 1*HZ, (8*HZ)/10, 1*HZ, 64 },
+		  30*HZ, 1*HZ, 60*HZ, 30*HZ, 5*HZ, 3, 3, 0, 3, 1*HZ, (8*HZ)/10, 64, 1*HZ },
 	30*HZ, 128, 512, 1024,
 };
 
@@ -953,6 +953,10 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 		for (n=arp_tbl.hash_buckets[i]; n; n=n->next) {
 			struct device *dev = n->dev;
 			int hatype = dev->type;
+
+			/* Do not confuse users "arp -a" with magic entries */
+			if (!(n->nud_state&~NUD_NOARP))
+				continue;
 
 			/* I'd get great pleasure deleting
 			   this ugly code. Let's output it in hexadecimal format.

@@ -37,13 +37,13 @@
 #include <asm/uaccess.h>
 #include <asm/bitops.h>
 
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
-#endif
- 
 #include <linux/nfs_fs.h>
 #include <linux/nfs_fs_sb.h>
 #include <linux/nfs_mount.h>
+
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
+#endif
 
 /*
  * We use a semaphore to synchronize all mount/umount
@@ -405,7 +405,7 @@ struct file_system_type *get_fs_type(const char *name)
 		return fs;
 	for (fs = file_systems; fs && strcmp(fs->name, name); fs = fs->next)
 		;
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 	if (!fs && (request_module(name) == 0)) {
 		for (fs = file_systems; fs && strcmp(fs->name, name); fs = fs->next)
 			;

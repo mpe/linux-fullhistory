@@ -98,7 +98,7 @@ static struct sock *nr_alloc_sock(void)
 	struct sock *sk;
 	nr_cb *nr;
 
-	if ((sk = sk_alloc(AF_NETROM, GFP_ATOMIC)) == NULL)
+	if ((sk = sk_alloc(AF_NETROM, GFP_ATOMIC, 1)) == NULL)
 		return NULL;
 
 	if ((nr = kmalloc(sizeof(*nr), GFP_ATOMIC)) == NULL) {

@@ -27,13 +27,13 @@
  * New scheme, half the table is for TIME_WAIT, the other half is
  * for the rest.  I'll experiment with dynamic table growth later.
  */
-#define TCP_HTABLE_SIZE		1024
+#define TCP_HTABLE_SIZE		512
 
 /* This is for listening sockets, thus all sockets which possess wildcards. */
 #define TCP_LHTABLE_SIZE	32	/* Yes, really, this is all you need. */
 
 /* This is for all sockets, to keep track of the local port allocations. */
-#define TCP_BHTABLE_SIZE	64
+#define TCP_BHTABLE_SIZE	512
 
 /* tcp_ipv4.c: These need to be shared by v4 and v6 because the lookup
  *             and hashing code needs to work with different AF's yet
@@ -41,7 +41,106 @@
  */
 extern struct sock *tcp_established_hash[TCP_HTABLE_SIZE];
 extern struct sock *tcp_listening_hash[TCP_LHTABLE_SIZE];
-extern struct sock *tcp_bound_hash[TCP_BHTABLE_SIZE];
+
+/* There are a few simple rules, which allow for local port reuse by
+ * an application.  In essence:
+ *
+ *	1) Sockets bound to different interfaces may share a local port.
+ *	   Failing that, goto test 2.
+ *	2) If all sockets have sk->reuse set, and none of them are in
+ *	   TCP_LISTEN state, the port may be shared.
+ *	   Failing that, goto test 3.
+ *	3) If all sockets are bound to a specific sk->rcv_saddr local
+ *	   address, and none of them are the same, the port may be
+ *	   shared.
+ *	   Failing this, the port cannot be shared.
+ *
+ * The interesting point, is test #2.  This is what an FTP server does
+ * all day.  To optimize this case we use a specific flag bit defined
+ * below.  As we add sockets to a bind bucket list, we perform a
+ * check of: (newsk->reuse && (newsk->state != TCP_LISTEN))
+ * As long as all sockets added to a bind bucket pass this test,
+ * the flag bit will be set.
+ * The resulting situation is that tcp_v[46]_verify_bind() can just check
+ * for this flag bit, if it is set and the socket trying to bind has
+ * sk->reuse set, we don't even have to walk the owners list at all,
+ * we return that it is ok to bind this socket to the requested local port.
+ *
+ * Sounds like a lot of work, but it is worth it.  In a more naive
+ * implementation (ie. current FreeBSD etc.) the entire list of ports
+ * must be walked for each data port opened by an ftp server.  Needless
+ * to say, this does not scale at all.  With a couple thousand FTP
+ * users logged onto your box, isn't it nice to know that new data
+ * ports are created in O(1) time?  I thought so. ;-)	-DaveM
+ */
+struct tcp_bind_bucket {
+	unsigned short		port;
+	unsigned short		flags;
+#define TCPB_FLAG_LOCKED	0x0001
+#define TCPB_FLAG_FASTREUSE	0x0002
+
+	struct tcp_bind_bucket	*next;
+	struct sock		*owners;
+	struct tcp_bind_bucket	**pprev;
+};
+
+extern struct tcp_bind_bucket *tcp_bound_hash[TCP_BHTABLE_SIZE];
+extern kmem_cache_t *tcp_bucket_cachep;
+extern struct tcp_bind_bucket *tcp_bucket_create(unsigned short snum);
+extern void tcp_bucket_unlock(struct sock *sk);
+extern int tcp_port_rover;
+
+/* Level-1 socket-demux cache. */
+#define TCP_NUM_REGS		32
+extern struct sock *tcp_regs[TCP_NUM_REGS];
+
+#define TCP_RHASH_FN(__fport) \
+	((((__fport) >> 7) ^ (__fport)) & (TCP_NUM_REGS - 1))
+#define TCP_RHASH(__fport)	tcp_regs[TCP_RHASH_FN((__fport))]
+#define TCP_SK_RHASH_FN(__sock)	TCP_RHASH_FN((__sock)->dummy_th.dest)
+#define TCP_SK_RHASH(__sock)	tcp_regs[TCP_SK_RHASH_FN((__sock))]
+
+static __inline__ void tcp_reg_zap(struct sock *sk)
+{
+	struct sock **rpp;
+
+	rpp = &(TCP_SK_RHASH(sk));
+	if(*rpp == sk)
+		*rpp = NULL;
+}
+
+/* These are AF independent. */
+static __inline__ int tcp_bhashfn(__u16 lport)
+{
+	return (lport & (TCP_BHTABLE_SIZE - 1));
+}
+
+static __inline__ void tcp_sk_bindify(struct sock *sk)
+{
+	struct tcp_bind_bucket *tb;
+	unsigned short snum = sk->num;
+
+	for(tb = tcp_bound_hash[tcp_bhashfn(snum)]; tb->port != snum; tb = tb->next)
+		;
+	/* Update bucket flags. */
+	if(tb->owners == NULL) {
+		/* We're the first. */
+		if(sk->reuse && sk->state != TCP_LISTEN)
+			tb->flags = TCPB_FLAG_FASTREUSE;
+		else
+			tb->flags = 0;
+	} else {
+		if((tb->flags & TCPB_FLAG_FASTREUSE) &&
+		   ((sk->reuse != 0) || (sk->state == TCP_LISTEN)))
+			tb->flags &= ~TCPB_FLAG_FASTREUSE;
+	}
+	if((sk->tp_pinfo.af_tcp.bind_next = tb->owners) != NULL)
+		tb->owners->tp_pinfo.af_tcp.bind_pprev =
+			&sk->tp_pinfo.af_tcp.bind_next;
+	tb->owners = sk;
+	sk->tp_pinfo.af_tcp.bind_pprev = &tb->owners;
+	sk->prev = (struct sock *) tb;
+}
 
 /* tcp_ipv4.c: These sysctl variables need to be shared between v4 and v6
  * because the v6 tcp code to intialize a connection needs to interoperate
@@ -54,34 +153,6 @@ extern int sysctl_tcp_sack;
 extern int sysctl_tcp_timestamps;
 extern int sysctl_tcp_window_scaling;
 
-/* These are AF independent. */
-static __inline__ int tcp_bhashfn(__u16 lport)
-{
-	return (lport ^ (lport >> 7)) & (TCP_BHTABLE_SIZE - 1);
-}
-
-/* Find the next port that hashes h that is larger than lport.
- * If you change the hash, change this function to match, or you will
- * break TCP port selection. This function must also NOT wrap around
- * when the next number exceeds the largest possible port (2^16-1).
- */
-static __inline__ int tcp_bhashnext(__u16 lport, __u16 h)
-{
-        __u32 s;	/* don't change this to a smaller type! */
-
-        s = (lport ^ (h ^ tcp_bhashfn(lport)));
-        if (s > lport)
-                return s;
-        s = lport + TCP_BHTABLE_SIZE;
-        return (s ^ (h ^ tcp_bhashfn(s)));
-}
-
-static __inline__ int tcp_sk_bhashfn(struct sock *sk)
-{
-	__u16 lport = sk->num;
-	return tcp_bhashfn(lport);
-}
-
 /* These can have wildcards, don't try too hard. */
 static __inline__ int tcp_lhashfn(unsigned short num)
 {
@@ -91,28 +162,6 @@ static __inline__ int tcp_lhashfn(unsigned short num)
 static __inline__ int tcp_sk_listen_hashfn(struct sock *sk)
 {
 	return tcp_lhashfn(sk->num);
-}
-
-/* Only those holding the sockhash lock call these two things here.
- * Note the slightly gross overloading of sk->prev, AF_UNIX is the
- * only other main benefactor of that member of SK, so who cares.
- */
-static __inline__ void tcp_sk_bindify(struct sock *sk)
-{
-	int hashent = tcp_sk_bhashfn(sk);
-	struct sock **htable = &tcp_bound_hash[hashent];
-
-	if((sk->bind_next = *htable) != NULL)
-		(*htable)->bind_pprev = &sk->bind_next;
-	*htable = sk;
-	sk->bind_pprev = htable;
-}
-
-static __inline__ void tcp_sk_unbindify(struct sock *sk)
-{
-	if(sk->bind_next)
-		sk->bind_next->bind_pprev = sk->bind_pprev;
-	*(sk->bind_pprev) = sk->bind_next;
 }
 
 #if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
@@ -185,6 +234,8 @@ static __inline__ void tcp_sk_unbindify(struct sock *sk)
 #define TCP_QUICK_TRIES		8  /* How often we try to retransmit, until
 				    * we tell the LL layer that it is something
 				    * wrong (e.g. that it can expire redirects) */
+
+#define TCP_BUCKETGC_PERIOD	(HZ)
 
 /*
  *	TCP option
@@ -427,6 +478,10 @@ extern int			tcp_v4_conn_request(struct sock *sk,
 						    struct sk_buff *skb,
 						    void *ptr, __u32 isn);
 
+extern struct sock *		tcp_create_openreq_child(struct sock *sk,
+							 struct open_request *req,
+							 struct sk_buff *skb);
+
 extern struct sock *		tcp_v4_syn_recv_sock(struct sock *sk,
 						     struct sk_buff *skb,
 						     struct open_request *req,
@@ -460,7 +515,7 @@ extern void tcp_send_fin(struct sock *sk);
 extern int  tcp_send_synack(struct sock *);
 extern void tcp_send_skb(struct sock *, struct sk_buff *);
 extern void tcp_send_ack(struct sock *sk);
-extern void tcp_send_delayed_ack(struct sock *sk, int max_timeout);
+extern void tcp_send_delayed_ack(struct tcp_opt *tp, int max_timeout);
 
 /* CONFIG_IP_TRANSPARENT_PROXY */
 extern int tcp_chkaddr(struct sk_buff *);
@@ -492,40 +547,56 @@ struct tcp_sl_timer {
 
 #define TCP_SLT_SYNACK		0
 #define TCP_SLT_KEEPALIVE	1
-#define TCP_SLT_MAX		2
+#define TCP_SLT_BUCKETGC	2
+#define TCP_SLT_MAX		3
 
 extern struct tcp_sl_timer tcp_slt_array[TCP_SLT_MAX];
  
-/*
- * FIXME: this method of choosing when to send a window update
- * does not seem correct to me. -- erics
- */
-static __inline__ unsigned short tcp_raise_window(struct sock *sk)
+/* Compute the actual receive window we are currently advertising. */
+static __inline__ u32 tcp_receive_window(struct tcp_opt *tp)
 {
-	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
-	long cur_win;
-	int res = 0;
-	
-	/* 
-         * compute the actual window i.e. 
-         * old_window - received_bytes_on_that_win
-	 */
-
-	cur_win = tp->rcv_wup - (tp->rcv_nxt - tp->rcv_wnd);
-
-
-	/*
-	 *	We need to send an ack right away if
-	 *	our rcv window is blocking the sender and 
-	 *	we have more free space to offer.
-	 */
-
-	if (cur_win < (sk->mss << 1))
-		res = 1;
-	return res;
+	return tp->rcv_wup - (tp->rcv_nxt - tp->rcv_wnd);
 }
 
-extern unsigned short	tcp_select_window(struct sock *sk);
+/* Choose a new window, without checks for shrinking, and without
+ * scaling applied to the result.  The caller does these things
+ * if necessary.  This is a "raw" window selection.
+ */
+extern u32	__tcp_select_window(struct sock *sk);
+
+/* Chose a new window to advertise, update state in tcp_opt for the
+ * socket, and return result with RFC1323 scaling applied.  The return
+ * value can be stuffed directly into th->window for an outgoing
+ * frame.
+ */
+extern __inline__ u16 tcp_select_window(struct sock *sk)
+{
+	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+	u32 new_win = __tcp_select_window(sk);
+	u32 cur_win = tcp_receive_window(tp);
+
+	/* Never shrink the offered window */
+	if(new_win < cur_win)
+		new_win = cur_win;
+	tp->rcv_wnd = new_win;
+	tp->rcv_wup = tp->rcv_nxt;
+
+	/* RFC1323 scaling applied */
+	return new_win >> tp->rcv_wscale;
+}
+
+/* See if we can advertise non-zero, and if so how much we
+ * can increase our advertisement.  If it becomes more than
+ * twice what we are talking about right now, return true.
+ */
+extern __inline__ int tcp_raise_window(struct sock *sk)
+{
+	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+	u32 new_win = __tcp_select_window(sk);
+	u32 cur_win = tcp_receive_window(tp);
+
+	return (new_win && (new_win > (cur_win << 1)));
+}
 
 /*
  * List all states of a TCP socket that can be viewed as a "connected"
@@ -581,11 +652,12 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
 	case TCP_CLOSE:
 		/* Should be about 2 rtt's */
 		net_reset_timer(sk, TIME_DONE, min(tp->srtt * 2, TCP_DONE_TIME));
+		sk->prot->unhash(sk);
 		/* fall through */
 	default:
 		if (oldstate==TCP_ESTABLISHED)
 			tcp_statistics.TcpCurrEstab--;
-		if (state == TCP_TIME_WAIT || state == TCP_CLOSE)
+		if (state == TCP_TIME_WAIT)
 			sk->prot->rehash(sk);
 	}
 }
@@ -624,7 +696,7 @@ static inline void tcp_build_header_data(struct tcphdr *th, struct sock *sk, int
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
 	memcpy(th,(void *) &(sk->dummy_th), sizeof(*th));
-	th->seq = htonl(sk->write_seq);
+	th->seq = htonl(tp->write_seq);
 	if (!push)
 		th->psh = 1;
 	tcp_build_options((__u32*)(th+1), tp);
@@ -635,7 +707,7 @@ static inline void tcp_build_header(struct tcphdr *th, struct sock *sk)
      	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
 	memcpy(th,(void *) &(sk->dummy_th), sizeof(*th));
-	th->seq = htonl(sk->write_seq);
+	th->seq = htonl(tp->write_seq);
 	th->ack_seq = htonl(tp->last_ack_sent = tp->rcv_nxt);
 	th->window = htons(tcp_select_window(sk));
 	tcp_build_options((__u32 *)(th+1), tp);
@@ -724,7 +796,7 @@ extern __inline__ void tcp_select_initial_window(__u32 space, __u16 mss,
 	(*window_clamp) = min(65535<<(*rcv_wscale),*window_clamp);
 }
 
-#define SYNQ_DEBUG 1
+/* #define SYNQ_DEBUG 1 */
 
 extern __inline__ void tcp_synq_unlink(struct tcp_opt *tp, struct open_request *req, struct open_request *prev)
 {
@@ -799,6 +871,18 @@ extern __inline__ void tcp_dec_slow_timer(int timer)
 	atomic_dec(&slt->count);
 }
 
+/* This needs to use a slow timer, so it is here. */
+static __inline__ void tcp_sk_unbindify(struct sock *sk)
+{
+	struct tcp_bind_bucket *tb = (struct tcp_bind_bucket *) sk->prev;
+	if(sk->tp_pinfo.af_tcp.bind_next)
+		sk->tp_pinfo.af_tcp.bind_next->tp_pinfo.af_tcp.bind_pprev =
+			sk->tp_pinfo.af_tcp.bind_pprev;
+	*(sk->tp_pinfo.af_tcp.bind_pprev) = sk->tp_pinfo.af_tcp.bind_next;
+	if(tb->owners == NULL)
+		tcp_inc_slow_timer(TCP_SLT_BUCKETGC);
+}
+
 extern const char timer_bug_msg[];
 
 static inline void tcp_clear_xmit_timer(struct sock *sk, int what)
@@ -820,7 +904,8 @@ static inline void tcp_clear_xmit_timer(struct sock *sk, int what)
 		printk(timer_bug_msg);
 		return;
 	};
-	del_timer(timer);
+	if(timer->prev != NULL)
+		del_timer(timer);
 }
 
 static inline int tcp_timer_is_set(struct sock *sk, int what)
@@ -829,13 +914,13 @@ static inline int tcp_timer_is_set(struct sock *sk, int what)
 
 	switch (what) {
 	case TIME_RETRANS:
-		return tp->retransmit_timer.next != NULL;
+		return tp->retransmit_timer.prev != NULL;
 		break;
 	case TIME_DACK:
-		return tp->delack_timer.next != NULL;
+		return tp->delack_timer.prev != NULL;
 		break;
 	case TIME_PROBE0:
-		return tp->probe_timer.next != NULL;
+		return tp->probe_timer.prev != NULL;
 		break;	
 	default:
 		printk(timer_bug_msg);

@@ -181,11 +181,13 @@ sl_alloc_bufs(struct slip *sl, int mtu)
 	sl->xleft    = 0;
 	rbuff = xchg(&sl->rbuff, rbuff);
 	xbuff = xchg(&sl->xbuff, xbuff);
-#ifdef CONFIG_SLIP_MODE_SLIP6
+#ifdef SL_INCLUDE_CSLIP
 	cbuff = xchg(&sl->cbuff, cbuff);
 	slcomp = xchg(&sl->slcomp, slcomp);
+#ifdef CONFIG_SLIP_MODE_SLIP6
 	sl->xdata    = 0;
 	sl->xbits    = 0;
+#endif
 #endif
 	end_bh_atomic();
 	err = 0;
@@ -1134,7 +1136,7 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 		   it breaks my old poor gcc on alpha --ANK
 		 */
 		tmp = strlen(sl->dev->name) + 1;
-		if (copy_to_user(arg, sl->dev->name, tmp) < 0)
+		if (copy_to_user(arg, sl->dev->name, tmp))
 			return -EFAULT;
 		return 0;
 

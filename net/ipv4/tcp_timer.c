@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_timer.c,v 1.33 1997/12/13 21:53:01 kuznet Exp $
+ * Version:	$Id: tcp_timer.c,v 1.38 1998/03/10 05:11:17 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -31,6 +31,7 @@ int sysctl_tcp_retries2 = TCP_RETR2;
 static void tcp_sltimer_handler(unsigned long);
 static void tcp_syn_recv_timer(unsigned long);
 static void tcp_keepalive(unsigned long data);
+static void tcp_bucketgc(unsigned long);
 
 struct timer_list	tcp_slow_timer = {
 	NULL, NULL,
@@ -41,7 +42,8 @@ struct timer_list	tcp_slow_timer = {
 
 struct tcp_sl_timer tcp_slt_array[TCP_SLT_MAX] = {
 	{ATOMIC_INIT(0), TCP_SYNACK_PERIOD, 0, tcp_syn_recv_timer},/* SYNACK	*/
-	{ATOMIC_INIT(0), TCP_KEEPALIVE_PERIOD, 0, tcp_keepalive}   /* KEEPALIVE	*/
+	{ATOMIC_INIT(0), TCP_KEEPALIVE_PERIOD, 0, tcp_keepalive},  /* KEEPALIVE	*/
+	{ATOMIC_INIT(0), TCP_BUCKETGC_PERIOD, 0, tcp_bucketgc}     /* BUCKETGC	*/
 };
 
 const char timer_bug_msg[] = KERN_DEBUG "tcpbug: unknown timer value\n";
@@ -118,9 +120,12 @@ void tcp_clear_xmit_timers(struct sock *sk)
 {	
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 
-	del_timer(&tp->retransmit_timer);
-	del_timer(&tp->delack_timer);
-	del_timer(&tp->probe_timer);
+	if(tp->retransmit_timer.prev)
+		del_timer(&tp->retransmit_timer);
+	if(tp->delack_timer.prev)
+		del_timer(&tp->delack_timer);
+	if(tp->probe_timer.prev)
+		del_timer(&tp->probe_timer);
 }
 
 static int tcp_write_err(struct sock *sk, int force)
@@ -131,7 +136,7 @@ static int tcp_write_err(struct sock *sk, int force)
 	tcp_clear_xmit_timers(sk);
 	
 	/* Time wait the socket. */
-	if (!force && (1<<sk->state) & (TCPF_FIN_WAIT1|TCPF_FIN_WAIT2|TCPF_CLOSING)) {
+	if (!force && ((1<<sk->state) & (TCPF_FIN_WAIT1|TCPF_FIN_WAIT2|TCPF_CLOSING))) {
 		tcp_set_state(sk,TCP_TIME_WAIT);
 		tcp_reset_msl_timer (sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
 	} else {
@@ -173,9 +178,8 @@ static int tcp_write_timeout(struct sock *sk)
 	return 1;
 }
 
-
-void tcp_delack_timer(unsigned long data) {
-
+void tcp_delack_timer(unsigned long data)
+{
 	struct sock *sk = (struct sock*)data;
 
 	if(sk->zapped)
@@ -185,8 +189,8 @@ void tcp_delack_timer(unsigned long data) {
 		tcp_read_wakeup(sk); 		
 }
 
-void tcp_probe_timer(unsigned long data) {
-
+void tcp_probe_timer(unsigned long data)
+{
 	struct sock *sk = (struct sock*)data;
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 
@@ -250,6 +254,35 @@ static __inline__ int tcp_keepopen_proc(struct sock *sk)
 		}
 	}
 	return res;
+}
+
+/* Garbage collect TCP bind buckets. */
+static void tcp_bucketgc(unsigned long __unused)
+{
+	int i;
+
+	for(i = 0; i < TCP_BHTABLE_SIZE; i++) {
+		struct tcp_bind_bucket *tb = tcp_bound_hash[i];
+
+		while(tb) {
+			struct tcp_bind_bucket *next = tb->next;
+
+			if((tb->owners == NULL) &&
+			   !(tb->flags & TCPB_FLAG_LOCKED)) {
+				/* Eat timer reference. */
+				tcp_dec_slow_timer(TCP_SLT_BUCKETGC);
+
+				/* Unlink bucket. */
+				if(tb->next)
+					tb->next->pprev = tb->pprev;
+				*tb->pprev = tb->next;
+
+				/* Finally, free it up. */
+				kmem_cache_free(tcp_bucket_cachep, tb);
+			}
+			tb = next;
+		}
+	}
 }
 
 /*

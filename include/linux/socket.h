@@ -149,6 +149,7 @@ struct ucred {
 #define AF_NETLINK	16
 #define AF_ROUTE	AF_NETLINK /* Alias to emulate 4.4BSD */
 #define AF_PACKET	17	/* Packet family		*/
+#define AF_ASH		18	/* Ash				*/
 #define AF_MAX		32	/* For now.. */
 
 /* Protocol families, same as address families. */
@@ -172,6 +173,7 @@ struct ucred {
 #define PF_NETLINK	AF_NETLINK
 #define PF_ROUTE	AF_ROUTE
 #define PF_PACKET	AF_PACKET
+#define PF_ASH		AF_ASH
 
 #define PF_MAX		AF_MAX
 

@@ -114,7 +114,7 @@ extern __inline__ void ip6_dst_store(struct sock *sk, struct dst_entry *dst)
 	struct rt6_info *rt;
 		
 	np = &sk->net_pinfo.af_inet6;
-	sk->dst_cache = dst;
+	dst_release(xchg(&sk->dst_cache,dst));
 	
 	rt = (struct rt6_info *) dst;
 	

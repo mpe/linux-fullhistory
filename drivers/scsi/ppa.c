@@ -50,8 +50,8 @@ NULL,		/* cur_cmd */	\
 #include  "ppa.h"
 #include <linux/parport.h>
 
-#ifdef CONFIG_KERNELD
-#include  <linux/kerneld.h>
+#ifdef CONFIG_KMOD
+#include  <linux/kmod.h>
 #ifndef PARPORT_MODULES
 #define PARPORT_MODULES "parport_pc"
 #endif
@@ -130,7 +130,7 @@ int ppa_detect(Scsi_Host_Template * host)
     nhosts = 0;
     try_again = 0;
 
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
     if (!pb) {
 	request_module(PARPORT_MODULES);
 	pb = parport_enumerate();

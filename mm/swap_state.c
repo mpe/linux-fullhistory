@@ -64,13 +64,13 @@ int add_to_swap_cache(struct page *page, unsigned long entry)
 #endif
 	if (PageTestandSetSwapCache(page)) {
 		printk("swap_cache: replacing non-empty entry %08lx "
-		       "on page %08lx",
+		       "on page %08lx\n",
 		       page->offset, page_address(page));
 		return 0;
 	}
 	if (page->inode) {
 		printk("swap_cache: replacing page-cached entry "
-		       "on page %08lx", page_address(page));
+		       "on page %08lx\n", page_address(page));
 		return 0;
 	}
 	atomic_inc(&page->count);
@@ -138,18 +138,18 @@ void remove_from_swap_cache(struct page *page)
 {
 	if (!page->inode) {
 		printk ("VM: Removing swap cache page with zero inode hash "
-			"on page %08lx", page_address(page));
+			"on page %08lx\n", page_address(page));
 		return;
 	}
 	if (page->inode != &swapper_inode) {
 		printk ("VM: Removing swap cache page with wrong inode hash "
-			"on page %08lx", page_address(page));
+			"on page %08lx\n", page_address(page));
 	}
 	/*
 	 * This will be a legal case once we have a more mature swap cache.
 	 */
 	if (atomic_read(&page->count) == 1) {
-		printk ("VM: Removing page cache on unshared page %08lx", 
+		printk ("VM: Removing page cache on unshared page %08lx\n", 
 			page_address(page));
 		return;
 	}

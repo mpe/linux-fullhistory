@@ -12,6 +12,8 @@
  *	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
  *
+ * Changes:
+ *		Cyrus Durgin:		fixed kerneld stuff for kmod.
  */
 
 #include <linux/config.h>
@@ -21,8 +23,8 @@
 #include <linux/errno.h>
 #include <net/ip_masq.h>
 #include <net/ip_masq_mod.h>
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
 #endif
 
 EXPORT_SYMBOL(register_ip_masq_mod);
@@ -290,7 +292,7 @@ struct ip_masq_mod * ip_masq_mod_getbyname(const char *mmod_name)
 int ip_masq_mod_ctl(int optname, struct ip_fw_masqctl *mctl, int optlen)
 {
 	struct ip_masq_mod * mmod;
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 	char kmod_name[IP_MASQ_MOD_NMAX+8];
 #endif
 	/* tappo */
@@ -299,7 +301,7 @@ int ip_masq_mod_ctl(int optname, struct ip_fw_masqctl *mctl, int optlen)
 	mmod = ip_masq_mod_getbyname(mctl->u.mod.name);
 	if (mmod)
 		return mmod->mmod_ctl(optname, mctl, optlen);
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 	sprintf(kmod_name,"ip_masq_%s", mctl->u.mod.name);
 
 	IP_MASQ_DEBUG(1, "About to request \"%s\" module\n", kmod_name);

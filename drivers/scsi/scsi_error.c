@@ -38,10 +38,6 @@
 
 #define SHUTDOWN_SIGS	(sigmask(SIGKILL)|sigmask(SIGINT)|sigmask(SIGTERM))
 
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
-#endif
-
 #ifdef DEBUG
     #define SENSE_TIMEOUT SCSI_TIMEOUT
     #define ABORT_TIMEOUT SCSI_TIMEOUT

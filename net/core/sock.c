@@ -137,6 +137,8 @@ __u32 sysctl_wmem_default = SK_WMEM_MAX;
 __u32 sysctl_rmem_default = SK_RMEM_MAX;
 
 int sysctl_core_destroy_delay = SOCK_DESTROY_TIME;
+/* Maximal space eaten by iovec (still not made (2.1.88)!) plus some space */
+int sysctl_optmem_max = sizeof(unsigned long)*(2*UIO_MAXIOV + 512);
 
 /*
  *	This is meant for all protocols to use and covers goings on
@@ -472,11 +474,11 @@ static kmem_cache_t *sk_cachep;
  *	usage.
  */
  
-struct sock *sk_alloc(int family, int priority)
+struct sock *sk_alloc(int family, int priority, int zero_it)
 {
 	struct sock *sk = kmem_cache_alloc(sk_cachep, priority);
 
-	if(sk) {
+	if(sk && zero_it) {
 		memset(sk, 0, sizeof(struct sock));
 		sk->family = family;
 	}
@@ -561,33 +563,21 @@ struct sk_buff *sock_rmalloc(struct sock *sk, unsigned long size, int force, int
 void *sock_kmalloc(struct sock *sk, int size, int priority)
 {
 	void *mem = NULL;
-	/* Always use wmem.. */
-	if (atomic_read(&sk->wmem_alloc)+size < sk->sndbuf) {
+	if (atomic_read(&sk->omem_alloc)+size < sysctl_optmem_max) {
 		/* First do the add, to avoid the race if kmalloc
  		 * might sleep.
 		 */
-		atomic_add(size, &sk->wmem_alloc);
+		atomic_add(size, &sk->omem_alloc);
 		mem = kmalloc(size, priority);
-		if (mem)
-			return mem; 
-		atomic_sub(size, &sk->wmem_alloc);
 	}
 	return mem;
 }
 
 void sock_kfree_s(struct sock *sk, void *mem, int size)
 {
-#if 1 /* Debug */
-	if (atomic_read(&sk->wmem_alloc) < size) {
-		printk(KERN_DEBUG "sock_kfree_s: mem not accounted.\n");
-		return;
-	}
-#endif
 	kfree_s(mem, size); 
-	atomic_sub(size, &sk->wmem_alloc);
-	sk->write_space(sk);
+	atomic_sub(size, &sk->omem_alloc);
 }
-
 
 /* FIXME: this is insane. We are trying suppose to be controlling how
  * how much space we have for data bytes, not packet headers.
@@ -633,6 +623,30 @@ unsigned long sock_wspace(struct sock *sk)
 	return(0);
 }
 
+/* It is almost wait_for_tcp_memory minus release_sock/lock_sock.
+   I think, these locks should be removed for datagram sockets.
+ */
+static void sock_wait_for_wmem(struct sock * sk)
+{
+	struct wait_queue wait = { current, NULL };
+
+	sk->socket->flags &= ~SO_NOSPACE;
+	add_wait_queue(sk->sleep, &wait);
+	for (;;) {
+		if (signal_pending(current))
+			break;
+		current->state = TASK_INTERRUPTIBLE;
+		if (atomic_read(&sk->wmem_alloc) < sk->sndbuf)
+			break;
+		if (sk->shutdown & SEND_SHUTDOWN)
+			break;
+		if (sk->err)
+			break;
+		schedule();
+	}
+	current->state = TASK_RUNNING;
+	remove_wait_queue(sk->sleep, &wait);
+}
 
 
 /*
@@ -641,94 +655,78 @@ unsigned long sock_wspace(struct sock *sk)
 
 struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigned long fallback, int noblock, int *errcode)
 {
+	int err;
 	struct sk_buff *skb;
 
-	do
-	{
-		if(sk->err!=0)
-		{
-			*errcode=xchg(&sk->err,0);
-			return NULL;
-		}
-		
-		if(sk->shutdown&SEND_SHUTDOWN)
-		{	
-			/*
-			 *	FIXME: Check 1003.1g should we deliver
-			 *	a signal here ???
-			 */
-			*errcode=-EPIPE;
-			return NULL;
-		}
-		
-		if(!fallback)
+	do {
+		if ((err = xchg(&sk->err,0)) != 0)
+			goto failure;
+
+		/*
+		 *	FIXME: Check 1003.1g should we deliver
+		 *	a signal here ???
+		 *
+		 *	Alan, could we solve this question once and forever?
+		 *
+		 *	I believe, datagram sockets should never
+		 *	generate SIGPIPE. Moreover, I DO think that
+		 *	TCP is allowed to generate it only on write()
+		 *	call, but never on send/sendto/sendmsg.
+		 *	(btw, Solaris generates it even on read() :-))
+		 *
+		 *	The reason is that SIGPIPE is global flag,
+		 *	so that library function using sockets (f.e. syslog()),
+		 *	must save/disable it on entry and restore on exit.
+		 *	As result, signal arriving for another thread will
+		 *	be lost. Generation it on write() is still necessary
+		 *	because a lot of stupid programs never check write()
+		 *	return value.
+		 *
+		 *	Seems, SIGPIPE is very bad idea, sort of gets().
+		 *	At least, we could have an option disabling
+		 *	this behaviour on per-socket and/or per-message base.
+		 *	BTW it is very easy - MSG_SIGPIPE flag, which
+		 *	always set by read/write and checked here.
+		 *						--ANK
+		 */
+
+		err = -EPIPE;
+		if (sk->shutdown&SEND_SHUTDOWN)
+			goto failure;
+
+		if (!fallback)
 			skb = sock_wmalloc(sk, size, 0, sk->allocation);
-		else
-		{
+		else {
 			/* The buffer get won't block, or use the atomic queue. It does
 			   produce annoying no free page messages still.... */
 			skb = sock_wmalloc(sk, size, 0 , GFP_BUFFER);
-			if(!skb)
+			if (!skb)
 				skb=sock_wmalloc(sk, fallback, 0, sk->allocation);
 		}
-		
+
 		/*
 		 *	This means we have too many buffers for this socket already.
 		 */
-		 
-		if(skb==NULL)
-		{
-			unsigned long tmp;
 
+		/* The following code is stolen "as is" from tcp.c */
+
+		if (skb==NULL) {
 			sk->socket->flags |= SO_NOSPACE;
-			if(noblock)
-			{
-				*errcode=-EAGAIN;
-				return NULL;
-			}
-			if(sk->shutdown&SEND_SHUTDOWN)
-			{
-				*errcode=-EPIPE;
-				return NULL;
-			}
-			tmp = atomic_read(&sk->wmem_alloc);
-			cli();
-			if(sk->shutdown&SEND_SHUTDOWN)
-			{
-				sti();
-				*errcode=-EPIPE;
-				return NULL;
-			}
-			
-#if 1
-			if( tmp <= atomic_read(&sk->wmem_alloc))
-#else
-			/* ANK: Line above seems either incorrect
-			 *	or useless. sk->wmem_alloc has a tiny chance to change
-			 *	between tmp = sk->w... and cli(),
-			 *	but it might(?) change earlier. In real life
-			 *	it does not (I never seen the message).
-			 *	In any case I'd delete this check at all, or
-			 *	change it to:
-			 */
-			if (atomic_read(&sk->wmem_alloc) >= sk->sndbuf) 
-#endif
-			{
-				sk->socket->flags &= ~SO_NOSPACE;
-				interruptible_sleep_on(sk->sleep);
-				if (signal_pending(current)) 
-				{
-					sti();
-					*errcode = -ERESTARTSYS;
-					return NULL;
-				}
-			}
-			sti();
+			err = -EAGAIN;
+			if (noblock)
+				goto failure;
+			err = -ERESTARTSYS;
+			if (signal_pending(current))
+				goto failure;
+			sock_wait_for_wmem(sk);
 		}
-	}
-	while(skb==NULL);
-		
+	} while (skb==NULL);
+
 	return skb;
+
+failure:
+	*errcode = err;
+	return NULL;
 }
 
 

@@ -76,8 +76,8 @@
 #include <linux/init.h>
 #include <linux/poll.h>
 
-#if defined(CONFIG_KERNELD) && defined(CONFIG_NET)
-#include <linux/kerneld.h>
+#if defined(CONFIG_KMOD) && defined(CONFIG_NET)
+#include <linux/kmod.h>
 #endif
 
 #include <asm/system.h>
@@ -577,7 +577,7 @@ int sock_create(int family, int type, int protocol, struct socket **res)
 	if(family<0||family>=NPROTO)
 		return -EINVAL;
 		
-#if defined(CONFIG_KERNELD) && defined(CONFIG_NET)
+#if defined(CONFIG_KMOD) && defined(CONFIG_NET)
 	/* Attempt to load a protocol module if the find failed. 
 	 * 
 	 * 12/09/1996 Marcin: But! this makes REALLY only sense, if the user 
@@ -814,7 +814,7 @@ restart:
 	newsock = socki_lookup(inode);
 
 	if ((err = get_fd(inode)) < 0) 
-		goto out_inval;
+		goto out_release;
 	newsock->file = current->files->fd[err];
 
 	if (upeer_sockaddr)
@@ -835,8 +835,6 @@ out:
 	unlock_kernel();
 	return err;
 
-out_inval:
-	err = -EINVAL;
 out_release:
 	sock_release(newsock);
 	goto out_put;

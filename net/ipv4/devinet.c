@@ -1,7 +1,7 @@
 /*
  *	NET3	IP device support routines.
  *
- *	Version: $Id: devinet.c,v 1.15 1997/12/13 21:52:47 kuznet Exp $
+ *	Version: $Id: devinet.c,v 1.19 1998/03/08 20:52:35 davem Exp $
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -19,6 +19,7 @@
  *
  *	Changes:
  *	        Alexey Kuznetsov:	pa_* fields are replaced with ifaddr lists.
+ 		Cyrus Durgin:		updated for kmod
  */
 
 #include <linux/config.h>
@@ -49,8 +50,8 @@
 #ifdef CONFIG_SYSCTL
 #include <linux/sysctl.h>
 #endif
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
 #endif
 
 #include <net/ip.h>
@@ -157,27 +158,31 @@ static void
 inet_del_ifa(struct in_device *in_dev, struct in_ifaddr **ifap, int destroy)
 {
 	struct in_ifaddr *ifa1 = *ifap;
-	struct in_ifaddr *ifa;
 
-	/* 1. Unlink it */
-
-	*ifap = ifa1->ifa_next;
-
-	/* 2. Deleting primary ifaddr forces deletion all secondaries */
+	/* 1. Deleting primary ifaddr forces deletion all secondaries */
 
 	if (!(ifa1->ifa_flags&IFA_F_SECONDARY)) {
-		while ((ifa=*ifap) != NULL) {
-			if (ifa1->ifa_mask != ifa->ifa_mask ||
+		struct in_ifaddr *ifa;
+		struct in_ifaddr **ifap1 = &ifa1->ifa_next;
+
+		while ((ifa=*ifap1) != NULL) {
+			if (!(ifa->ifa_flags&IFA_F_SECONDARY) ||
+			    ifa1->ifa_mask != ifa->ifa_mask ||
 			    !inet_ifa_match(ifa1->ifa_address, ifa)) {
-				ifap = &ifa->ifa_next;
+				ifap1 = &ifa->ifa_next;
 				continue;
 			}
-			*ifap = ifa->ifa_next;
+			*ifap1 = ifa->ifa_next;
 			rtmsg_ifa(RTM_DELADDR, ifa);
 			notifier_call_chain(&inetaddr_chain, NETDEV_DOWN, ifa);
 			inet_free_ifa(ifa);
 		}
 	}
+
+	/* 2. Unlink it */
+
+	*ifap = ifa1->ifa_next;
+
 
 	/* 3. Announce address deletion */
 
@@ -232,10 +237,9 @@ inet_insert_ifa(struct in_device *in_dev, struct in_ifaddr *ifa)
 		ifap = last_primary;
 	}
 
-	cli();
 	ifa->ifa_next = *ifap;
+	/* ATOMIC_SET */
 	*ifap = ifa;
-	sti();
 
 	/* Send message first, then call notifier.
 	   Notifier will trigger FIB update, so that
@@ -413,7 +417,7 @@ int devinet_ioctl(unsigned int cmd, void *arg)
 		*colon = 0;
 #endif
 
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 	dev_load(ifr.ifr_name);
 #endif
 
@@ -960,6 +964,8 @@ static void devinet_sysctl_register(struct in_device *in_dev, struct ipv4_devcon
 	t->sysctl_header = register_sysctl_table(t->devinet_root_dir, 0);
 	if (t->sysctl_header == NULL)
 		kfree(t);
+	else
+		p->sysctl = t;
 }
 
 static void devinet_sysctl_unregister(struct ipv4_devconf *p)

@@ -153,12 +153,14 @@ int neigh_ifdown(struct neigh_table *tbl, struct device *dev)
 static struct neighbour *neigh_alloc(struct neigh_table *tbl, int creat)
 {
 	struct neighbour *n;
+	unsigned long now = jiffies;
 
 	if (tbl->entries > tbl->gc_thresh1) {
 		if (creat < 0)
 			return NULL;
-		if (tbl->entries > tbl->gc_thresh2 ||
-		    jiffies - tbl->last_flush > 5*HZ) {
+		if (tbl->entries > tbl->gc_thresh3 ||
+		    (tbl->entries > tbl->gc_thresh2 &&
+		     now - tbl->last_flush > 5*HZ)) {
 			if (neigh_forced_gc(tbl) == 0 &&
 			    tbl->entries > tbl->gc_thresh3)
 				return NULL;
@@ -172,7 +174,7 @@ static struct neighbour *neigh_alloc(struct neigh_table *tbl, int creat)
 	memset(n, 0, tbl->entry_size);
 
 	skb_queue_head_init(&n->arp_queue);
-	n->updated = n->used = jiffies;
+	n->updated = n->used = now;
 	n->nud_state = NUD_NONE;
 	n->output = neigh_blackhole;
 	n->parms = &tbl->parms;
@@ -666,8 +668,18 @@ int neigh_update(struct neighbour *neigh, u8 *lladdr, u8 new, int override, int 
 		neigh_suspect(neigh);
 	if (!(old&NUD_VALID)) {
 		struct sk_buff *skb;
-		while ((skb=__skb_dequeue(&neigh->arp_queue)) != NULL)
-			neigh->output(skb);
+
+		/* Again: avoid dead loop if something went wrong */
+
+		while (neigh->nud_state&NUD_VALID &&
+		       (skb=__skb_dequeue(&neigh->arp_queue)) != NULL) {
+			struct neighbour *n1 = neigh;
+			/* On shaper/eql skb->dst->neighbour != neigh :( */
+			if (skb->dst && skb->dst->neighbour)
+				n1 = skb->dst->neighbour;
+			n1->output(skb);
+		}
+		skb_queue_purge(&neigh->arp_queue);
 	}
 	return 0;
 }

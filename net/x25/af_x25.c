@@ -423,7 +423,7 @@ static struct sock *x25_alloc_socket(void)
 	struct sock *sk;
 	x25_cb *x25;
 
-	if ((sk = sk_alloc(AF_X25, GFP_ATOMIC)) == NULL)
+	if ((sk = sk_alloc(AF_X25, GFP_ATOMIC, 1)) == NULL)
 		return NULL;
 
 	if ((x25 = kmalloc(sizeof(*x25), GFP_ATOMIC)) == NULL) {

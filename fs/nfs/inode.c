@@ -650,10 +650,31 @@ _nfs_revalidate_inode(struct nfs_server *server, struct dentry *dentry)
 		inode->i_ino);
 	status = nfs_proc_getattr(server, NFS_FH(dentry), &fattr);
 	if (status) {
+		int error;
+		u32 *fh;
+		struct nfs_fh fhandle;
 #ifdef NFS_PARANOIA
 printk("nfs_revalidate_inode: %s/%s getattr failed, ino=%ld, error=%d\n",
 dentry->d_parent->d_name.name, dentry->d_name.name, inode->i_ino, status);
 #endif
+		if (status != -ESTALE)
+			goto out;
+		/*
+		 * A "stale filehandle" error ... show the current fh
+		 * and find out what the filehandle should be.
+		 */
+		fh = (u32 *) NFS_FH(dentry);
+		printk("NFS: bad fh %08x%08x%08x%08x%08x%08x%08x%08x\n",
+			fh[0],fh[1],fh[2],fh[3],fh[4],fh[5],fh[6],fh[7]);
+		error = nfs_proc_lookup(server, NFS_FH(dentry->d_parent), 
+					dentry->d_name.name, &fhandle, &fattr);
+		if (error) {
+			printk("NFS: lookup failed, error=%d\n", error);
+			goto out;
+		}
+		fh = (u32 *) &fhandle;
+		printk("            %08x%08x%08x%08x%08x%08x%08x%08x\n",
+			fh[0],fh[1],fh[2],fh[3],fh[4],fh[5],fh[6],fh[7]);
 		goto out;
 	}
 

@@ -5,7 +5,7 @@
  *
  *		TIMER - implementation of software timers for IP.
  *
- * Version:	$Id: timer.c,v 1.7 1997/09/17 18:50:26 freitag Exp $
+ * Version:	$Id: timer.c,v 1.8 1998/03/06 00:09:24 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -58,7 +58,8 @@ void net_delete_timer (struct sock *t)
 	cli();
 
 	t->timeout = 0;
-	del_timer (&t->timer);
+	if(t->timer.prev)
+		del_timer (&t->timer);
 
 	restore_flags (flags);
 }

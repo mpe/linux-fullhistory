@@ -12,6 +12,9 @@
 
    RAID-1/RAID-5 extensions by:
         Ingo Molnar, Miguel de Icaza, Gadi Oxman
+
+   Changes for kmod by:
+   	Cyrus Durgin
    
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -43,8 +46,8 @@
 #include <linux/blkdev.h>
 #include <linux/genhd.h>
 #include <linux/smp_lock.h>
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
 #endif
 #include <linux/errno.h>
 #include <linux/init.h>
@@ -431,7 +434,7 @@ static int do_md_run (int minor, int repart)
   }
   if (!pers[pnum])
   {
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
     char module_name[80];
     sprintf (module_name, "md-personality-%d", pnum);
     request_module (module_name);

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: addrconf.c,v 1.32 1997/12/27 20:41:18 kuznet Exp $
+ *	$Id: addrconf.c,v 1.37 1998/03/08 20:52:46 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -1753,6 +1753,8 @@ static void addrconf_sysctl_register(struct inet6_dev *idev, struct ipv6_devconf
 	t->sysctl_header = register_sysctl_table(t->addrconf_root_dir, 0);
 	if (t->sysctl_header == NULL)
 		kfree(t);
+	else
+		p->sysctl = t;
 }
 
 static void addrconf_sysctl_unregister(struct ipv6_devconf *p)

@@ -125,6 +125,9 @@ struct net_device_stats
 	unsigned long	tx_heartbeat_errors;
 	unsigned long	tx_window_errors;
 	
+	/* for cslip etc */
+	unsigned long	rx_compressed;
+	unsigned long	tx_compressed;
 };
 
 #ifdef CONFIG_NET_FASTROUTE
@@ -352,6 +355,7 @@ extern __inline__ int unregister_gifconf(unsigned int family)
 #define HAVE_NETIF_RX 1
 extern void		netif_rx(struct sk_buff *skb);
 extern void		net_bh(void);
+extern void		dev_tint(struct device *dev);
 extern int		dev_get_info(char *buffer, char **start, off_t offset, int length, int dummy);
 extern int		dev_ioctl(unsigned int cmd, void *);
 extern int		dev_change_flags(struct device *, unsigned);
@@ -423,7 +427,7 @@ extern int		dev_mc_add(struct device *dev, void *addr, int alen, int newonly);
 extern void		dev_mc_discard(struct device *dev);
 extern void		dev_set_promiscuity(struct device *dev, int inc);
 extern void		dev_set_allmulti(struct device *dev, int inc);
-/* Load a device via the kerneld */
+/* Load a device via the kmod */
 extern void		dev_load(const char *name);
 extern void		dev_mcast_init(void);
 extern int		netdev_register_fc(struct device *dev, void (*stimul)(struct device *dev));

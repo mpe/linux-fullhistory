@@ -148,9 +148,6 @@ void sound_unload_drivers(void)
 		}
 	}
 
-        for (i=0;i<num_audiodevs;i++)
-		DMAbuf_deinit(i);
-
 	if (trace_init)
 		printk(KERN_DEBUG "Sound unload complete\n");
 }

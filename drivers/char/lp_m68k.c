@@ -43,8 +43,8 @@
 #include <linux/string.h>
 #include <linux/init.h>
 #include <asm/irq.h>
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
 #endif
 
 #ifdef CONFIG_AMIGA
@@ -365,7 +365,7 @@ static int lp_open(struct inode *inode, struct file *file)
 
 	if (dev >= MAX_LP)
 		return -ENODEV;
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 	if (!lp_table[dev]) {
 		char modname[30];
 

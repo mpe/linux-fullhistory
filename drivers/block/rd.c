@@ -35,6 +35,9 @@
  *
  * 4/25/96 : Made ramdisk size a parameter (default is now 4MB) 
  *		- Chad Page
+ *
+ * Add support for fs images split across >1 disk, Paul Gortmaker, Mar '98
+ *
  */
 
 #include <linux/config.h>
@@ -344,7 +347,6 @@ identify_ramdisk_image(kdev_t device, struct file *fp, int start_block))
 	struct ext2_super_block *ext2sb;
 	struct romfs_super_block *romfsb;
 	int nblocks = -1;
-	int max_blocks;
 	unsigned char *buf;
 
 	buf = kmalloc(size, GFP_KERNEL);
@@ -423,17 +425,6 @@ done:
 		fp->f_op->llseek(fp, start_block * BLOCK_SIZE, 0);
 	fp->f_pos = start_block * BLOCK_SIZE;	
 
-	if ((nblocks > 0) && blk_size[MAJOR(device)]) {
-		max_blocks = blk_size[MAJOR(device)][MINOR(device)];
-		max_blocks -= start_block;
-		if (nblocks > max_blocks) {
-			printk(KERN_NOTICE
-			       "RAMDISK: Restricting filesystem size "
-			       "from %d to %d blocks.\n",
-			       nblocks, max_blocks);
-			nblocks = max_blocks;
-		}
-	}
 	kfree(buf);
 	return nblocks;
 }
@@ -451,6 +442,7 @@ __initfunc(static void rd_load_image(kdev_t device,int offset))
 	int nblocks, i;
 	char *buf;
 	unsigned short rotate = 0;
+	unsigned short devblocks = 0;
 	char rotator[4] = { '|' , '/' , '-' , '\\' };
 
 	ram_device = MKDEV(MAJOR_NR, 0);
@@ -508,8 +500,31 @@ __initfunc(static void rd_load_image(kdev_t device,int offset))
 		goto done;
 	}
 
-	printk(KERN_NOTICE "RAMDISK: Loading %d blocks into ram disk... ", nblocks);
+	if (blk_size[MAJOR(device)])
+		devblocks = blk_size[MAJOR(device)][MINOR(device)];
+
+	if (devblocks == 0) {
+		printk(KERN_ERR "RAMDISK: could not determine device size\n");
+		goto done;
+	}
+
+	printk(KERN_NOTICE "RAMDISK: Loading %d blocks [%d disk(s)] into ram disk... ", nblocks, nblocks/devblocks+1);
 	for (i=0; i < nblocks; i++) {
+		if (i && (i % devblocks == 0)) {
+			printk("done.\n");
+			rotate = 0;
+			invalidate_buffers(device);
+			if (infile.f_op->release)
+				infile.f_op->release(&inode, &infile);
+			printk("Please insert disk #%d and press ENTER\n", i/devblocks+1);
+			wait_for_keypress();
+			if (blkdev_open(&inode, &infile) != 0)  {
+				printk("Error opening disk.\n");
+				return;
+			}
+			infile.f_pos = 0;
+			printk("Loading disk #%d... ", i/devblocks+1);
+		}
 		infile.f_op->read(&infile, buf, BLOCK_SIZE, &infile.f_pos);
 		outfile.f_op->write(&outfile, buf, BLOCK_SIZE, &outfile.f_pos);
 		if (!(i % 16)) {

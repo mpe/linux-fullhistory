@@ -23,6 +23,7 @@
  *  Added request_module("scsi_hostadapter") for kerneld:
  *  (Put an "alias scsi_hostadapter your_hostadapter" in /etc/conf.modules)
  *  Bjorn Ekwall  <bj0rn@blox.se>
+ *  (changed to kmod)
  *
  *  Major improvements to the timeout, abort, and reset processing,
  *  as well as performance modifications for large queue depths by
@@ -57,8 +58,8 @@
 #include "hosts.h"
 #include "constants.h"
 
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
 #endif
 
 #undef USE_STATIC_SCSI_MEMORY
@@ -3114,7 +3115,7 @@ int scsi_register_module(int module_type, void * ptr)
         
 	/* Load upper level device handler of some kind */
     case MODULE_SCSI_DEV:
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 	if (scsi_hosts == NULL)
             request_module("scsi_hostadapter");
 #endif

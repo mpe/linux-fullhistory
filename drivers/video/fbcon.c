@@ -74,8 +74,8 @@
 #include <linux/vt_kern.h>
 #include <linux/selection.h>
 #include <linux/init.h>
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
 #endif
 
 #include <asm/irq.h>
@@ -196,7 +196,7 @@ static void fbcon_bmove_rec(struct display *p, int sy, int sx, int dy, int dx,
 static struct display_switch *probe_list(struct display_switch *dispsw,
 					 struct display *disp);
 
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 static void request_driver(struct display *disp, int is_accel);
 #endif
 static struct display_switch *fbcon_get_driver(struct display *disp);
@@ -1368,7 +1368,7 @@ static struct display_switch *probe_list(struct display_switch *dispsw,
 }
 
 
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 static void request_driver(struct display *disp, int is_accel)
 {
     char modname[30];
@@ -1400,7 +1400,7 @@ static void request_driver(struct display *disp, int is_accel)
 	len += sprintf(modname+len, "-%d", disp->var.accel);
     request_module(modname);
 }
-#endif /* CONFIG_KERNELD */
+#endif /* CONFIG_KMOD */
 
 
 static struct display_switch *fbcon_get_driver(struct display *disp)
@@ -1410,7 +1410,7 @@ static struct display_switch *fbcon_get_driver(struct display *disp)
     if (disp->var.accel != FB_ACCEL_NONE) {
 	/* First try an accelerated driver */
 	dispsw = probe_list(accel_drivers, disp);
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 	if (!dispsw) {
 	    request_driver(disp, 1);
 	    dispsw = probe_list(accel_drivers, disp);
@@ -1422,7 +1422,7 @@ static struct display_switch *fbcon_get_driver(struct display *disp)
 
     /* Then try an unaccelerated driver */
     dispsw = probe_list(drivers, disp);
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
     if (!dispsw) {
 	request_driver(disp, 0);
 	dispsw = probe_list(drivers, disp);

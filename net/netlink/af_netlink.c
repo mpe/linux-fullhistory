@@ -147,7 +147,7 @@ static int netlink_create(struct socket *sock, int protocol)
 
 	sock->ops = &netlink_ops;
 
-	sk = sk_alloc(AF_NETLINK, GFP_KERNEL);
+	sk = sk_alloc(AF_NETLINK, GFP_KERNEL, 1);
 	if (!sk)
 		return -ENOMEM;
 

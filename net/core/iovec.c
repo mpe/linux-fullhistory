@@ -80,6 +80,8 @@ out_free:
 
 /*
  *	Copy kernel to iovec.
+ *
+ *	Note: this modifies the original iovec.
  */
  
 int memcpy_toiovec(struct iovec *iov, unsigned char *kdata, int len)
@@ -107,6 +109,8 @@ out:
 
 /*
  *	Copy iovec to kernel.
+ *
+ *	Note: this modifies the original iovec.
  */
  
 int memcpy_fromiovec(unsigned char *kdata, struct iovec *iov, int len)
@@ -187,9 +191,8 @@ out:
  *	call to this function will be unaligned also.
  */
 
-int csum_partial_copy_fromiovecend(unsigned char *kdata, 
-				   struct iovec *iov, int offset, 
-				   unsigned int len, int *csump)
+int csum_partial_copy_fromiovecend(unsigned char *kdata, struct iovec *iov,
+				 int offset, unsigned int len, int *csump)
 {
 	int partial_cnt = 0;
 	int err = 0;
@@ -246,9 +249,9 @@ int csum_partial_copy_fromiovecend(unsigned char *kdata,
 				if (copy_from_user(kdata, base, copy))
 					goto out_fault;
 				kdata += copy;
-				base += copy;
+				base  += copy;
 				partial_cnt += copy;
-				len -= copy;
+				len   -= copy;
 				iov++;
 				if (len)
 					continue;
@@ -260,9 +263,9 @@ int csum_partial_copy_fromiovecend(unsigned char *kdata,
 				goto out_fault;
 			csum = csum_partial(kdata - partial_cnt, 4, csum);
 			kdata += par_len;
-			base += par_len;
-			copy -= par_len;
-			len -= par_len;
+			base  += par_len;
+			copy  -= par_len;
+			len   -= par_len;
 			partial_cnt = 0;
 		}
 
@@ -278,16 +281,12 @@ int csum_partial_copy_fromiovecend(unsigned char *kdata,
 			}
 		}
 
-		/* Why do we want to break?? There may be more to copy ... */
-		if (copy == 0) {
-if (len > partial_cnt)
-printk("csum_iovec: early break? len=%d, partial=%d\n", len, partial_cnt);
-			break;
+		if (copy) {
+			csum = csum_and_copy_from_user(base, kdata, copy,
+							csum, &err);
+			if (err)
+				goto out;
 		}
-
-		csum = csum_and_copy_from_user(base, kdata, copy, csum, &err);
-		if (err)
-			goto out;
 		len   -= copy + partial_cnt;
 		kdata += copy + partial_cnt;
 		iov++;

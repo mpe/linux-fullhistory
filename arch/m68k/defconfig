@@ -12,7 +12,7 @@ CONFIG_EXPERIMENTAL=y
 #
 # CONFIG_MODULES is not set
 # CONFIG_MODVERSIONS is not set
-# CONFIG_KERNELD is not set
+# CONFIG_KMOD is not set
 
 #
 # Platform-dependent setup

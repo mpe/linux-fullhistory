@@ -1713,7 +1713,7 @@ static int ipx_getsockopt(struct socket *sock, int level, int optname,
 static int ipx_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;
-	sk=sk_alloc(AF_IPX, GFP_KERNEL);
+	sk=sk_alloc(AF_IPX, GFP_KERNEL, 1);
 	if(sk==NULL)
 		return(-ENOMEM);
 	switch(sock->type)

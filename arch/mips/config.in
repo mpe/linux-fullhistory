@@ -109,7 +109,7 @@ comment 'Loadable module support'
 bool 'Enable loadable module support' CONFIG_MODULES
 if [ "$CONFIG_MODULES" = "y" ]; then
   bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
-  bool 'Kernel daemon support (e.g. autoload of modules)' CONFIG_KERNELD
+  bool 'Kernel module loader' CONFIG_KMOD
 fi
 
 source drivers/block/Config.in

@@ -150,7 +150,7 @@ static int netbeui_listen(struct socket *sock, int backlog)
 static int netbeui_create(struct socket *sock, int protocol)
 {
 	netbeui_socket *sk;
-	sk=(netbeui_socket *)sk_alloc(GFP_KERNEL);
+	sk=(netbeui_socket *)sk_alloc(GFP_KERNEL, 1);
 	if(sk==NULL)
 		return(-ENOBUFS);
 	switch(sock->type)

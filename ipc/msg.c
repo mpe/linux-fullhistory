@@ -1,10 +1,6 @@
 /*
  * linux/ipc/msg.c
  * Copyright (C) 1992 Krishna Balasubramanian 
- *
- * Kerneld extensions by Bjorn Ekwall <bj0rn@blox.se> in May 1995, and May 1996
- *
- * See <linux/kerneld.h> for the (optional) new kerneld protocol
  */
 
 #include <linux/config.h>
@@ -13,7 +9,6 @@
 #include <linux/msg.h>
 #include <linux/stat.h>
 #include <linux/malloc.h>
-#include <linux/kerneld.h>
 #include <linux/interrupt.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
@@ -34,11 +29,6 @@ static unsigned short msg_seq = 0;
 static int used_queues = 0;
 static int max_msqid = 0;
 static struct wait_queue *msg_lock = NULL;
-static int kerneld_msqid = -1;
-
-#define MAX_KERNELDS 20
-static int kerneld_arr[MAX_KERNELDS];
-static int n_kernelds = 0;
 
 __initfunc(void msg_init (void))
 {
@@ -97,20 +87,12 @@ static int real_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg
 		return -EINVAL;
 	if (!msgp) 
 		return -EFAULT;
-	/*
-	 * Calls from kernel level (IPC_KERNELD set)
-	 * have the message somewhere in kernel space already!
-	 */
-	if ((msgflg & IPC_KERNELD))
-		mtype = msgp->mtype;
-	else {
-		err = verify_area (VERIFY_READ, msgp->mtext, msgsz);
-		if (err) 
-			return err;
-		get_user(mtype, &msgp->mtype);
-		if (mtype < 1)
-			return -EINVAL;
-	}
+	err = verify_area (VERIFY_READ, msgp->mtext, msgsz);
+	if (err) 
+		return err;
+	get_user(mtype, &msgp->mtype);
+	if (mtype < 1)
+		return -EINVAL;
 	id = (unsigned int) msqid % MSGMNI;
 	msq = msgque [id];
 	if (msq == IPC_UNUSED || msq == IPC_NOID)
@@ -120,29 +102,17 @@ static int real_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg
  slept:
 	if (msq->msg_perm.seq != (unsigned int) msqid / MSGMNI) 
 		return -EIDRM;
-	/*
-	 * Non-root kernel level processes may send to kerneld! 
-	 * i.e. no permission check if called from the kernel
-	 * otoh we don't want user level non-root snoopers...
-	 */
-	if ((msgflg & IPC_KERNELD) == 0)
-		if (ipcperms(ipcp, S_IWUGO)) 
-			return -EACCES;
+
+	if (ipcperms(ipcp, S_IWUGO)) 
+		return -EACCES;
 	
 	if (msgsz + msq->msg_cbytes > msq->msg_qbytes) { 
-		if ((kerneld_msqid != -1) && (kerneld_msqid == msqid))
-			flush_msg(msq); /* flush the kerneld channel only */
 		if (msgsz + msq->msg_cbytes > msq->msg_qbytes) { 
 			/* still no space in queue */
 			if (msgflg & IPC_NOWAIT)
 				return -EAGAIN;
 			if (signal_pending(current))
 				return -EINTR;
-			if (in_interrupt()) {
-				/* Very unlikely, but better safe than sorry */
-				printk(KERN_WARNING "Ouch, kerneld:msgsnd buffers full!\n");
-				return -EINTR;
-			}
 			interruptible_sleep_on (&msq->wwait);
 			goto slept;
 		}
@@ -154,22 +124,7 @@ static int real_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg
 		return -ENOMEM;
 	msgh->msg_spot = (char *) (msgh + 1);
 
-	/*
-	 * Calls from kernel level (IPC_KERNELD set)
-	 * have the message somewhere in kernel space already!
-	 */
-	if (msgflg & IPC_KERNELD) {
-		struct kerneld_msg *kdmp = (struct kerneld_msg *)msgp;
-
-		/*
-		 * Note that the kernel supplies a pointer
-		 * but the user-level kerneld uses a char array...
-		 */
-		memcpy(msgh->msg_spot, (char *)(&(kdmp->id)), KDHDR); 
-		memcpy(msgh->msg_spot + KDHDR, kdmp->text, msgsz - KDHDR); 
-	}
-	else
-		copy_from_user (msgh->msg_spot, msgp->mtext, msgsz); 
+	copy_from_user (msgh->msg_spot, msgp->mtext, msgsz); 
 	
 	if (msgque[id] == IPC_UNUSED || msgque[id] == IPC_NOID
 		|| msq->msg_perm.seq != (unsigned int) msqid / MSGMNI) {
@@ -201,42 +156,8 @@ static int real_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg
 	return 0;
 }
 
-/*
- * Take care of missing kerneld, especially in case of multiple daemons
- */
-#define KERNELD_TIMEOUT 1 * (HZ)
-#define DROP_TIMER del_timer(&kd_timer)
-/*#define DROP_TIMER if ((msgflg & IPC_KERNELD) && kd_timer.next && kd_timer.prev) del_timer(&kd_timer)*/
-
-static void kd_timeout(unsigned long msgid)
-{
-	struct msqid_ds *msq;
-	struct msg *tmsg;
-	unsigned long flags;
-
-	msq = msgque [ (unsigned int) kerneld_msqid % MSGMNI ];
-	if (msq == IPC_NOID || msq == IPC_UNUSED)
-		return;
-
-	save_flags(flags);
-	cli();
-	for (tmsg = msq->msg_first; tmsg; tmsg = tmsg->msg_next)
-		if (*(long *)(tmsg->msg_spot) == msgid)
-			break;
-	restore_flags(flags);
-	if (tmsg) { /* still there! */
-		struct kerneld_msg kmsp = { msgid, NULL_KDHDR, "" };
-
-		printk(KERN_ALERT "Ouch, no kerneld for message %ld\n", msgid);
-		kmsp.id = -ENODEV;
-		real_msgsnd(kerneld_msqid, (struct msgbuf *)&kmsp, KDHDR,
-			S_IRUSR | S_IWUSR | IPC_KERNELD | MSG_NOERROR);
-	}
-}
-
 static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgtyp, int msgflg)
 {
-	struct timer_list kd_timer = { NULL, NULL, 0, 0, 0};
 	struct msqid_ds *msq;
 	struct ipc_perm *ipcp;
 	struct msg *tmsg, *leastp = NULL;
@@ -248,31 +169,16 @@ static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgty
 		return -EINVAL;
 	if (!msgp || !msgp->mtext)
 	    return -EFAULT;
-	/*
-	 * Calls from kernel level (IPC_KERNELD set)
-	 * wants the message put in kernel space!
-	 */
-	if ((msgflg & IPC_KERNELD) == 0) {
-		err = verify_area (VERIFY_WRITE, msgp->mtext, msgsz);
-		if (err)
-			return err;
-	}
+
+	err = verify_area (VERIFY_WRITE, msgp->mtext, msgsz);
+	if (err)
+		return err;
 
 	id = (unsigned int) msqid % MSGMNI;
 	msq = msgque [id];
 	if (msq == IPC_NOID || msq == IPC_UNUSED)
 		return -EINVAL;
 	ipcp = &msq->msg_perm; 
-
-	/*
-	 * Start timer for missing kerneld
-	 */
-	if (msgflg & IPC_KERNELD) {
-		kd_timer.data = (unsigned long)msgtyp;
-		kd_timer.expires = jiffies + KERNELD_TIMEOUT;
-		kd_timer.function = kd_timeout;
-		add_timer(&kd_timer);
-	}
 
 	/* 
 	 *  find message of correct type.
@@ -282,19 +188,10 @@ static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgty
 	 */
 	while (!nmsg) {
 		if (msq->msg_perm.seq != (unsigned int) msqid / MSGMNI) {
-			DROP_TIMER;
 			return -EIDRM;
 		}
-		if ((msgflg & IPC_KERNELD) == 0) {
-			/*
-			 * All kernel level processes may receive from kerneld! 
-			 * i.e. no permission check if called from the kernel
-			 * otoh we don't want user level non-root snoopers...
-			 */
-			if (ipcperms (ipcp, S_IRUGO)) {
-				DROP_TIMER; /* Not needed, but doesn't hurt */
-				return -EACCES;
-			}
+		if (ipcperms (ipcp, S_IRUGO)) {
+			return -EACCES;
 		}
 
 		save_flags(flags);
@@ -326,7 +223,6 @@ static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgty
 		restore_flags(flags);
 		
 		if (nmsg) { /* done finding a message */
-			DROP_TIMER;
 			if ((msgsz < nmsg->msg_ts) && !(msgflg & MSG_NOERROR)) {
 				return -E2BIG;
 			}
@@ -354,43 +250,20 @@ static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgty
 			msq->msg_cbytes -= nmsg->msg_ts;
 			restore_flags(flags);
 			wake_up (&msq->wwait);
-			/*
-			 * Calls from kernel level (IPC_KERNELD set)
-			 * wants the message copied to kernel space!
-			 */
-			if (msgflg & IPC_KERNELD) {
-				struct kerneld_msg *kdmp = (struct kerneld_msg *) msgp;
-
-				memcpy((char *)(&(kdmp->id)),
-					nmsg->msg_spot, KDHDR); 
-				/*
-				 * Note that kdmp->text is a pointer
-				 * when called from kernel space!
-				 */
-				if ((msgsz > KDHDR) && kdmp->text)
-					memcpy(kdmp->text,
-						nmsg->msg_spot + KDHDR,
-						msgsz - KDHDR); 
-			}
-			else {
-				put_user (nmsg->msg_type, &msgp->mtype);
-				copy_to_user (msgp->mtext, nmsg->msg_spot, msgsz);
-			}
+			put_user (nmsg->msg_type, &msgp->mtype);
+			copy_to_user (msgp->mtext, nmsg->msg_spot, msgsz);
 			kfree(nmsg);
 			return msgsz;
 		} else {  /* did not find a message */
 			if (msgflg & IPC_NOWAIT) {
-				DROP_TIMER;
 				return -ENOMSG;
 			}
 			if (signal_pending(current)) {
-				DROP_TIMER;
 				return -EINTR; 
 			}
 			interruptible_sleep_on (&msq->rwait);
 		}
 	} /* end while */
-	DROP_TIMER;
 	return -1;
 }
 
@@ -398,9 +271,8 @@ asmlinkage int sys_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msg
 {
 	int ret;
 
-	/* IPC_KERNELD is used as a marker for kernel level calls */
 	lock_kernel();
-	ret = real_msgsnd(msqid, msgp, msgsz, msgflg & ~IPC_KERNELD);
+	ret = real_msgsnd(msqid, msgp, msgsz, msgflg);
 	unlock_kernel();
 	return ret;
 }
@@ -410,9 +282,8 @@ asmlinkage int sys_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz,
 {
 	int ret;
 
-	/* IPC_KERNELD is used as a marker for kernel level calls */
 	lock_kernel();
-	ret = real_msgrcv (msqid, msgp, msgsz, msgtyp, msgflg & ~IPC_KERNELD);
+	ret = real_msgrcv (msqid, msgp, msgsz, msgtyp, msgflg);
 	unlock_kernel();
 	return ret;
 }
@@ -479,36 +350,7 @@ asmlinkage int sys_msgget (key_t key, int msgflg)
 	int id, ret = -EPERM;
 	struct msqid_ds *msq;
 	
-	/*
-	 * If the IPC_KERNELD flag is set, the key is forced to IPC_PRIVATE,
-	 * and a designated kerneld message queue is created/referred to
-	 */
 	lock_kernel();
-	if ((msgflg & IPC_KERNELD)) {
-		int i;
-		if (!suser())
-			goto out;
-#ifdef NEW_KERNELD_PROTOCOL
-		if ((msgflg & IPC_KERNELD) == OLDIPC_KERNELD) {
-			printk(KERN_ALERT "Please recompile your kerneld daemons!\n");
-			goto out;
-		}
-#endif
-		ret = -ENOSPC;
-		if ((kerneld_msqid == -1) && (kerneld_msqid =
-				newque(IPC_PRIVATE, msgflg & S_IRWXU)) < 0)
-			goto out;
-		for (i = 0; i < MAX_KERNELDS; ++i) {
-			if (kerneld_arr[i] == 0) {
-				kerneld_arr[i] = current->pid;
-				++n_kernelds;
-				ret = kerneld_msqid;
-				goto out;
-			}
-		}
-		goto out;
-	}
-	/* else it is a "normal" request */
 	if (key == IPC_PRIVATE) 
 		ret = newque(key, msgflg);
 	else if ((id = findkey (key)) == -1) { /* key not used */
@@ -527,7 +369,6 @@ asmlinkage int sys_msgget (key_t key, int msgflg)
 		else
 			ret = (unsigned int) msq->msg_perm.seq * MSGMNI + id;
 	}
-out:
 	unlock_kernel();
 	return ret;
 } 
@@ -687,12 +528,7 @@ asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 		if (current->euid != ipcp->cuid && 
 		    current->euid != ipcp->uid && !suser())
 			goto out;
-		/*
-		 * There is only one kerneld message queue,
-		 * mark it as non-existent
-		 */
-		if ((kerneld_msqid >= 0) && (msqid == kerneld_msqid))
-			kerneld_msqid = -1;
+
 		freeque (id); 
 		err = 0;
 		goto out;
@@ -705,104 +541,3 @@ out:
 	return err;
 }
 
-/*
- * We do perhaps need a "flush" for waiting processes,
- * so that if they are terminated, a call from do_exit
- * will minimize the possibility of orphaned received
- * messages in the queue.  For now we just make sure
- * that the queue is shut down whenever all kernelds have died.
- */
-void kerneld_exit(void)
-{
-	int i;
-
-        if (kerneld_msqid == -1)
-		return;
-	for (i = 0; i < MAX_KERNELDS; ++i) {
-		if (kerneld_arr[i] == current->pid) {
-			kerneld_arr[i] = 0;
-			--n_kernelds;
-			if (n_kernelds == 0)
-				sys_msgctl(kerneld_msqid, IPC_RMID, NULL);
-			break;
-		}
-	}
-}
-
-/*
- * Kerneld internal message format/syntax:
- *
- * The message type from the kernel to kerneld is used to specify _what_
- * function we want kerneld to perform. 
- *
- * The "normal" message area is divided into a header, followed by a char array.
- * The header is used to hold the sequence number of the request, which will
- * be used as the return message type from kerneld back to the kernel.
- * In the return message, the header will be used to store the exit status
- * of the kerneld "job", or task.
- * The character array is used to pass parameters to kerneld and (optional)
- * return information from kerneld back to the kernel.
- * It is the responsibility of kerneld and the kernel level caller
- * to set usable sizes on the parameter/return value array, since
- * that information is _not_ included in the message format
- */
-
-/*
- * The basic kernel level entry point to kerneld.
- *	msgtype should correspond to a task type for (a) kerneld
- *	ret_size is the size of the (optional) return _value,
- *		OR-ed with KERNELD_WAIT if we want an answer
- *	msgsize is the size (in bytes) of the message, not including
- *		the header that is always sent first in a kerneld message
- *	text is the parameter for the kerneld specific task
- *	ret_val is NULL or the kernel address where an expected answer
- *		from kerneld should be placed.
- *
- * See <linux/kerneld.h> for usage (inline convenience functions)
- *
- */
-int kerneld_send(int msgtype, int ret_size, int msgsz,
-		const char *text, const char *ret_val)
-{
-	int status = -ENOSYS;
-#ifdef CONFIG_KERNELD
-	static int id = KERNELD_MINSEQ;
-	struct kerneld_msg kmsp = { msgtype, NULL_KDHDR, (char *)text };
-	int msgflg = S_IRUSR | S_IWUSR | IPC_KERNELD | MSG_NOERROR;
-	unsigned long flags;
-
-	if (kerneld_msqid == -1)
-		return -ENODEV;
-
-	/* Do not wait for an answer at interrupt-time! */
-	if (in_interrupt())
-		ret_size &= ~KERNELD_WAIT;
-#ifdef NEW_KERNELD_PROTOCOL
-	else
-		kmsp.pid = current->pid;
-#endif
-
-	msgsz += KDHDR;
-	if (ret_size & KERNELD_WAIT) {
-		save_flags(flags);
-		cli();
-		if (++id <= 0) /* overflow */
-			id = KERNELD_MINSEQ;
-		kmsp.id = id;
-		restore_flags(flags);
-	}
-
-	status = real_msgsnd(kerneld_msqid, (struct msgbuf *)&kmsp, msgsz, msgflg);
-	if ((status >= 0) && (ret_size & KERNELD_WAIT)) {
-		ret_size &= ~KERNELD_WAIT;
-		kmsp.text = (char *)ret_val;
-		status = real_msgrcv(kerneld_msqid, (struct msgbuf *)&kmsp,
-				KDHDR + ((ret_val)?ret_size:0),
-				kmsp.id, msgflg);
-		if (status > 0) /* a valid answer contains at least a long */
-			status = kmsp.id;
-	}
-
-#endif /* CONFIG_KERNELD */
-	return status;
-}

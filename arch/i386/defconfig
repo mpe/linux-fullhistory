@@ -21,7 +21,7 @@ CONFIG_M586=y
 #
 CONFIG_MODULES=y
 # CONFIG_MODVERSIONS is not set
-# CONFIG_KERNELD is not set
+# CONFIG_KMOD is not set
 
 #
 # General setup
@@ -30,7 +30,6 @@ CONFIG_NET=y
 CONFIG_PCI=y
 CONFIG_PCI_BIOS=y
 CONFIG_PCI_DIRECT=y
-# CONFIG_PCI_OPTIMIZE is not set
 CONFIG_PCI_OLD_PROC=y
 # CONFIG_MCA is not set
 CONFIG_SYSVIPC=y
@@ -94,7 +93,6 @@ CONFIG_INET=y
 # CONFIG_IP_ADVANCED_ROUTER is not set
 # CONFIG_IP_PNP is not set
 # CONFIG_IP_ACCT is not set
-# CONFIG_IP_MASQUERADE is not set
 # CONFIG_IP_ROUTER is not set
 # CONFIG_NET_IPIP is not set
 # CONFIG_NET_IPGRE is not set

@@ -87,8 +87,8 @@
 #include <linux/vt_kern.h>
 #include <linux/selection.h>
 
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
 #endif
 
 #define CONSOLE_DEV MKDEV(TTY_MAJOR,0)
@@ -216,8 +216,9 @@ static int tty_set_ldisc(struct tty_struct *tty, int ldisc)
 
 	if ((ldisc < N_TTY) || (ldisc >= NR_LDISCS))
 		return -EINVAL;
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 	/* Eduardo Blanco <ejbs@cs.cs.com.uy> */
+	/* Cyrus Durgin <cider@speakeasy.org> */
 	if (!(ldiscs[ldisc].flags & LDISC_FLAG_DEFINED)) {
 		char modname [20];
 		sprintf(modname, "tty-ldisc-%d", ldisc);

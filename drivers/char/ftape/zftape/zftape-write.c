@@ -27,9 +27,6 @@
 #include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/mm.h>
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
-#endif
 
 #include <linux/zftape.h>
 

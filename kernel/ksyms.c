@@ -61,8 +61,8 @@ extern unsigned char aux_device_present, kbd_read_mask;
 #if defined(CONFIG_PROC_FS)
 #include <linux/proc_fs.h>
 #endif
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
 #endif
 #include <asm/irq.h>
 #ifdef __SMP__
@@ -91,11 +91,12 @@ __attribute__((section("__ksymtab"))) = {
 #endif
 
 
+#ifdef CONFIG_KMOD
+EXPORT_SYMBOL(request_module);
+#endif
+
 #ifdef CONFIG_MODULES
 EXPORT_SYMBOL(get_module_symbol);
-#endif
-#ifdef CONFIG_KERNELD
-EXPORT_SYMBOL(kerneld_send);
 #endif
 EXPORT_SYMBOL(get_options);
 

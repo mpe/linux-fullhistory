@@ -5,7 +5,7 @@
  *
  *		AF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.58 1997/10/29 20:27:21 kuznet Exp $
+ * Version:	$Id: af_inet.c,v 1.63 1998/03/08 05:56:12 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -52,6 +52,7 @@
  *	Willy Konynenberg	:	Transparent proxying support.
  *		David S. Miller	:	New socket lookup architecture.
  *					Some other random speedups.
+ *		Cyrus Durgin	:	Cleaned up file for kmod hacks.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -107,8 +108,8 @@
 #ifdef CONFIG_BRIDGE
 #include <net/br.h>
 #endif
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
 #endif
 #ifdef CONFIG_NET_RADIO
 #include <linux/wireless.h>
@@ -327,7 +328,7 @@ static int inet_create(struct socket *sock, int protocol)
 		static int warned; 
 		if (net_families[AF_PACKET]==NULL)
 		{
-#if defined(CONFIG_KERNELD) && defined(CONFIG_PACKET_MODULE)
+#if defined(CONFIG_KMOD) && defined(CONFIG_PACKET_MODULE)
 			char module_name[30];
 			sprintf(module_name,"net-pf-%d", AF_PACKET);
 			request_module(module_name);
@@ -341,7 +342,7 @@ static int inet_create(struct socket *sock, int protocol)
 	}
 
 	sock->state = SS_UNCONNECTED;
-	sk = sk_alloc(AF_INET, GFP_KERNEL);
+	sk = sk_alloc(AF_INET, GFP_KERNEL, 1);
 	if (sk == NULL) 
 		goto do_oom;
 
@@ -894,7 +895,7 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCDRARP:
 		case SIOCGRARP:
 		case SIOCSRARP:
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 			if (rarp_ioctl_hook == NULL)
 				request_module("rarp");
 #endif
@@ -928,7 +929,7 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 
 #ifdef CONFIG_DLCI_MODULE
 
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 			if (dlci_ioctl_hook == NULL)
 				request_module("dlci");
 #endif

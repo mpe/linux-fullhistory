@@ -776,13 +776,13 @@ struct super_block * ntfs_read_super(struct super_block *sb,
 	struct buffer_head *bh;
 	int i;
 
-	/* When the driver is compiled as a module, kerneld must know when it
+	/* When the driver is compiled as a module, kmod must know when it
 	 * can safely remove it from memory. To do this, each module owns a
 	 * reference counter.
 	 */
 	MOD_INC_USE_COUNT;
 	/* Don't put ntfs_debug() before MOD_INC_USE_COUNT, printk() can block
-	 * so this could lead to a race condition with kerneld.
+	 * so this could lead to a race condition with kmod.
 	 */
 	ntfs_debug(DEBUG_OTHER, "ntfs_read_super\n");
 
@@ -939,7 +939,7 @@ __initfunc(int init_ntfs_fs(void))
 #ifdef MODULE
 /* A module is a piece of code which can be inserted in and removed
  * from the running kernel whenever you want using lsmod, or on demand using
- * kerneld
+ * kmod
  */
 
 /* No function of this module is needed by another module */
@@ -956,7 +956,7 @@ MODULE_PARM_DESC(ntdebug, "Debug level");
 
 /* When this code is compiled as a module, if you use mount -t ntfs when no
  * ntfs filesystem is registered (see /proc/filesystems), get_fs_type() in
- * fs/super.c asks kerneld to load the module named ntfs in memory.
+ * fs/super.c asks kmod to load the module named ntfs in memory.
  *
  * Therefore, this function is the main entry point in this case
  */
@@ -965,7 +965,7 @@ int init_module(void)
 	return init_ntfs_fs();
 }
 
-/* Called by kerneld just before the kernel removes the module from memory */
+/* Called by kmod just before the kernel removes the module from memory */
 void cleanup_module(void)
 {
 	SYSCTL(0);

@@ -990,7 +990,7 @@ static int atalk_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;
 
-	sk = sk_alloc(AF_APPLETALK, GFP_KERNEL);
+	sk = sk_alloc(AF_APPLETALK, GFP_KERNEL, 1);
 	if(sk == NULL)
 		return (-ENOMEM);
 

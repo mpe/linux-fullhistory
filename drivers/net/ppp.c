@@ -3,6 +3,7 @@
  *  Michael Callahan <callahan@maths.ox.ac.uk>
  *  Al Longyear <longyear@netcom.com>
  *  Paul Mackerras <Paul.Mackerras@cs.anu.edu.au>
+ *  Cyrus Durgin <cider@speakeasy.org> (changes for kmod)
  *
  *  Dynamic PPP devices by Jim Freeman <jfree@caldera.com>.
  *  ppp_tty_receive ``noisy-raise-bug'' fixed by Ove Ewerlid <ewerlid@syscon.uu.se>
@@ -94,8 +95,8 @@ typedef struct sk_buff	     sk_buff;
 #include <linux/if_pppvar.h>
 #include <linux/ppp-comp.h>
 
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
 #endif
 
 #ifndef PPP_IPX
@@ -2190,14 +2191,14 @@ ppp_set_compression (struct ppp *ppp, struct ppp_option_data *odp)
 	restore_flags(flags);
 
 	cp = find_compressor (ccp_option[0]);
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 	if (cp == NULL) {
 		char modname[32];
 		sprintf(modname, "ppp-compress-%d", ccp_option[0]);
 		request_module(modname);
 		cp = find_compressor(ccp_option[0]);
 	}
-#endif /* CONFIG_KERNELD */
+#endif /* CONFIG_KMOD */
 
 	if (cp == NULL)
 		goto out_no_comp;

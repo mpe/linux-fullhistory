@@ -201,14 +201,20 @@ static void process_timeout(unsigned long __data)
  */
 static inline int goodness(struct task_struct * p, struct task_struct * prev, int this_cpu)
 {
+	int policy = p->policy;
 	int weight;
+
+	if (policy & SCHED_YIELD) {
+		p->policy = policy & ~SCHED_YIELD;
+		return 0;
+	}
 
 	/*
 	 * Realtime process, select the first one on the
 	 * runqueue (taking priorities within processes
 	 * into account).
 	 */
-	if (p->policy != SCHED_OTHER)
+	if (policy != SCHED_OTHER)
 		return 1000 + p->rt_priority;
 
 	/*
@@ -228,9 +234,10 @@ static inline int goodness(struct task_struct * p, struct task_struct * prev, in
 			weight += PROC_CHANGE_PENALTY;
 #endif
 
-		/* .. and a slight advantage to the current process */
-		if (p == prev)
+		/* .. and a slight advantage to the current thread */
+		if (p->mm == prev->mm)
 			weight += 1;
+		weight += p->priority;
 	}
 
 	return weight;
@@ -1351,13 +1358,9 @@ asmlinkage int sys_sched_getparam(pid_t pid, struct sched_param *param)
 
 asmlinkage int sys_sched_yield(void)
 {
-	/*
-	 * This is not really right. We'd like to reschedule
-	 * just _once_ with this process having a zero count.
-	 */
-	current->counter = 0;
 	spin_lock(&scheduler_lock);
 	spin_lock_irq(&runqueue_lock);
+	current->policy |= SCHED_YIELD;
 	move_last_runqueue(current);
 	spin_unlock_irq(&runqueue_lock);
 	spin_unlock(&scheduler_lock);

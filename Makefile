@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 89
+SUBLEVEL = 90
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/)
 
@@ -9,7 +9,7 @@ ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/)
 # because it makes re-config very ugly and too many fundamental files depend
 # on "CONFIG_SMP"
 #
-# NOTE! SMP is experimental. See the file Documentation/SMP.txt
+# For UP operations COMMENT THIS OUT, simply setting SMP = 0 won't work
 #
 SMP = 1
 
@@ -262,6 +262,7 @@ include/linux/compile.h: $(CONFIGURATION) include/linux/version.h newversion
 include/linux/version.h: ./Makefile
 	@echo \#define UTS_RELEASE \"$(VERSION).$(PATCHLEVEL).$(SUBLEVEL)\" > .ver
 	@echo \#define LINUX_VERSION_CODE `expr $(VERSION) \\* 65536 + $(PATCHLEVEL) \\* 256 + $(SUBLEVEL)` >> .ver
+	@echo '#define KERNEL_VERSION(a,b,c) (((a) << 16) + ((b) << 8) + (c))' >>.ver
 	@mv -f .ver $@
 
 init/version.o: init/version.c include/linux/compile.h

@@ -22,6 +22,9 @@
 #include <linux/sunrpc/clnt.h>
 #include <linux/nfs_fs.h>
 
+/* Uncomment this to support servers requiring longword lengths */
+#define NFS_PAD_WRITES 1
+
 #define NFSDBG_FACILITY		NFSDBG_XDR
 /* #define NFS_PARANOIA 1 */
 
@@ -181,7 +184,7 @@ nfs_xdr_diropargs(struct rpc_rqst *req, u32 *p, struct nfs_diropargs *args)
 /*
  * Arguments to a READ call. Since we read data directly into the page
  * cache, we also set up the reply iovec here so that iov[1] points
- * exactly to the page wewant to fetch.
+ * exactly to the page we want to fetch.
  */
 static int
 nfs_xdr_readargs(struct rpc_rqst *req, u32 *p, struct nfs_readargs *args)
@@ -258,17 +261,37 @@ nfs_xdr_readres(struct rpc_rqst *req, u32 *p, struct nfs_readres *res)
 static int
 nfs_xdr_writeargs(struct rpc_rqst *req, u32 *p, struct nfs_writeargs *args)
 {
+	u32 count = args->count;
+
 	p = xdr_encode_fhandle(p, args->fh);
 	*p++ = htonl(args->offset);
 	*p++ = htonl(args->offset);
-	*p++ = htonl(args->count);
-	*p++ = htonl(args->count);
+	*p++ = htonl(count);
+	*p++ = htonl(count);
 	req->rq_slen = xdr_adjust_iovec(req->rq_svec, p);
 
 	req->rq_svec[1].iov_base = (void *) args->buffer;
-	req->rq_svec[1].iov_len = args->count;
-	req->rq_slen += args->count;
+	req->rq_svec[1].iov_len = count;
+	req->rq_slen += count;
 	req->rq_snr = 2;
+
+#ifdef NFS_PAD_WRITES
+	/*
+	 * Some old servers require that the message length
+	 * be a multiple of 4, so we pad it here if needed.
+	 */
+	count = ((count + 3) & ~3) - count;
+	if (count) {
+#if 0
+printk("nfs_writeargs: padding write, len=%d, slen=%d, pad=%d\n",
+req->rq_svec[1].iov_len, req->rq_slen, count);
+#endif
+		req->rq_svec[2].iov_base = (void *) "\0\0\0";
+		req->rq_svec[2].iov_len  = count;
+		req->rq_slen += count;
+		req->rq_snr = 3;
+	}
+#endif
 
 	return 0;
 }
@@ -334,12 +357,21 @@ nfs_xdr_symlinkargs(struct rpc_rqst *req, u32 *p, struct nfs_symlinkargs *args)
 static int
 nfs_xdr_readdirargs(struct rpc_rqst *req, u32 *p, struct nfs_readdirargs *args)
 {
-	struct rpc_auth	*auth = req->rq_task->tk_auth;
+	struct rpc_task	*task = req->rq_task;
+	struct rpc_auth	*auth = task->tk_auth;
+	u32		bufsiz = args->bufsiz;
 	int		replen;
+
+	/*
+	 * Some servers (e.g. HP OS 9.5) seem to expect the buffer size
+	 * to be in longwords ... check whether to convert the size.
+	 */
+	if (task->tk_client->cl_flags & NFS_CLNTF_BUFSIZE)
+		bufsiz = bufsiz >> 2;
 
 	p = xdr_encode_fhandle(p, args->fh);
 	*p++ = htonl(args->cookie);
-	*p++ = htonl(args->bufsiz);
+	*p++ = htonl(bufsiz); /* see above */
 	req->rq_slen = xdr_adjust_iovec(req->rq_svec, p);
 
 	/* set up reply iovec */
@@ -380,10 +412,9 @@ static int
 nfs_xdr_readdirres(struct rpc_rqst *req, u32 *p, struct nfs_readdirres *res)
 {
 	struct iovec		*iov = req->rq_rvec;
-	int			status, nr, len;
+	int			 status, nr;
 	char			*string, *start;
-	u32			*end;
-	__u32			fileid, cookie, *entry;
+	u32			*end, *entry, len, fileid, cookie;
 
 	if ((status = ntohl(*p++)))
 		return -nfs_stat_to_errno(status);
@@ -398,17 +429,25 @@ nfs_xdr_readdirres(struct rpc_rqst *req, u32 *p, struct nfs_readdirres *res)
 	end = (u32 *) ((u8 *) p + iov[1].iov_len);
 
 	/* Get start and end of dirent buffer */
-	entry  = (__u32 *) res->buffer;
+	entry  = (u32 *) res->buffer;
 	start  = (char *) res->buffer;
 	string = (char *) res->buffer + res->bufsiz;
 	for (nr = 0; *p++; nr++) {
 		fileid = ntohl(*p++);
 
 		len = ntohl(*p++);
+		/*
+		 * Check whether the server has exceeded our reply buffer,
+		 * and set a flag to convert the size to longwords.
+		 */
 		if ((p + QUADLEN(len) + 3) > end) {
-			printk(KERN_WARNING "NFS: short readdir reply! "
-				"nr=%d, slots=%d, len=%d\n",
+			struct rpc_clnt *clnt = req->rq_task->tk_client;
+			printk(KERN_WARNING
+				"NFS: server %s, readdir reply truncated\n",
+				clnt->cl_server);
+			printk(KERN_WARNING "NFS: nr=%d, slots=%d, len=%d\n",
 				nr, (end - p), len);
+			clnt->cl_flags |= NFS_CLNTF_BUFSIZE;
 			break;
 		}
 		if (len > NFS_MAXNAMLEN) {

@@ -6,6 +6,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *
  *  Added kerneld support: Jacques Gelinas and Bjorn Ekwall
+ *  (changed to kmod)
  */
 
 #include <linux/config.h>
@@ -16,12 +17,12 @@
 #include <linux/stat.h>
 #include <linux/fcntl.h>
 #include <linux/errno.h>
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
 
 #include <linux/tty.h>
 
-/* serial module kerneld load support */
+/* serial module kmod load support */
 struct tty_driver *get_tty_driver(kdev_t device);
 #define isa_tty_dev(ma)	(ma == TTY_MAJOR || ma == TTYAUX_MAJOR)
 #define need_serial(ma,mi) (get_tty_driver(MKDEV(ma,mi)) == NULL)
@@ -74,12 +75,12 @@ static struct file_operations * get_fops(
 	struct file_operations *ret = NULL;
 
 	if (major < maxdev){
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 		/*
 		 * I do get request for device 0. I have no idea why. It happen
 		 * at shutdown time for one. Without the following test, the
 		 * kernel will happily trigger a request_module() which will
-		 * trigger kerneld and modprobe for nothing (since there
+		 * trigger kmod and modprobe for nothing (since there
 		 * is no device with major number == 0. And furthermore
 		 * it locks the reboot process :-(
 		 *
@@ -87,7 +88,7 @@ static struct file_operations * get_fops(
 		 *
 		 * A. Haritsis <ah@doc.ic.ac.uk>: fix for serial module
 		 *  though we need the minor here to check if serial dev,
-		 *  we pass only the normal major char dev to kerneld 
+		 *  we pass only the normal major char dev to kmod 
 		 *  as there is no other loadable dev on these majors
 		 */
 		if ((isa_tty_dev(major) && need_serial(major,minor)) ||

@@ -828,7 +828,7 @@ int ax25_create(struct socket *sock, int protocol)
 			return -ESOCKTNOSUPPORT;
 	}
 
-	if ((sk = sk_alloc(AF_AX25, GFP_ATOMIC)) == NULL)
+	if ((sk = sk_alloc(AF_AX25, GFP_ATOMIC, 1)) == NULL)
 		return -ENOMEM;
 
 	if ((ax25 = ax25_create_cb()) == NULL) {
@@ -854,7 +854,7 @@ struct sock *ax25_make_new(struct sock *osk, struct ax25_dev *ax25_dev)
 	struct sock *sk;
 	ax25_cb *ax25;
 
-	if ((sk = sk_alloc(AF_AX25, GFP_ATOMIC)) == NULL)
+	if ((sk = sk_alloc(AF_AX25, GFP_ATOMIC, 1)) == NULL)
 		return NULL;
 
 	if ((ax25 = ax25_create_cb()) == NULL) {

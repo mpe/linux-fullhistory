@@ -7,7 +7,7 @@
  *		PROC file system.  It is mainly used for debugging and
  *		statistics.
  *
- * Version:	$Id: proc.c,v 1.23 1997/10/30 23:52:20 davem Exp $
+ * Version:	$Id: proc.c,v 1.24 1998/03/06 01:23:06 davem Exp $
  *
  * Authors:	Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Gerald J. Heim, <heim@peanuts.informatik.uni-tuebingen.de>
@@ -113,8 +113,8 @@ static inline void get__sock(struct sock *sp, char *tmpbuf, int i, int format)
 	sprintf(tmpbuf, "%4d: %08lX:%04X %08lX:%04X"
 		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %ld",
 		i, src, srcp, dest, destp, sp->state, 
-		format==0?sp->write_seq-tp->snd_una:atomic_read(&sp->wmem_alloc), 
-		format==0?tp->rcv_nxt-sp->copied_seq:atomic_read(&sp->rmem_alloc),
+		format==0?tp->write_seq-tp->snd_una:atomic_read(&sp->wmem_alloc), 
+		format==0?tp->rcv_nxt-tp->copied_seq:atomic_read(&sp->rmem_alloc),
 				timer_active, timer_expires-jiffies,
 		tp->retransmits,
 		sp->socket ? sp->socket->inode->i_uid:0,

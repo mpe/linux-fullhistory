@@ -278,7 +278,7 @@ extern void nfs_root_setup(char *str, int *ints);
 extern void ftape_setup(char *str, int *ints);
 #endif
 
-#if defined(CONFIG_SYSVIPC) || defined(CONFIG_KERNELD)
+#if defined(CONFIG_SYSVIPC)
 extern void ipc_init(void);
 #endif
 
@@ -1061,7 +1061,7 @@ __initfunc(asmlinkage void start_kernel(void))
 	inode_init();
 	file_table_init();
 	sock_init();
-#if defined(CONFIG_SYSVIPC) || defined(CONFIG_KERNELD)
+#if defined(CONFIG_SYSVIPC)
 	ipc_init();
 #endif
 	dquot_init();
@@ -1180,6 +1180,13 @@ static int init(void * unused)
 				printk(KERN_ERR "Change root to /initrd: "
 				    "error %d\n",error);
 		}
+	}
+#endif
+
+#ifdef CONFIG_KMOD
+	{
+		extern int kmod_init(void);
+		kmod_init();
 	}
 #endif
 

@@ -85,6 +85,9 @@ do { \
  */
 #define NFS_RPC_SWAPFLAGS		(RPC_TASK_SWAPPER|RPC_TASK_ROOTCREDS)
 
+/* Flags in the RPC client structure */
+#define NFS_CLNTF_BUFSIZE	0x0001	/* readdir buffer in longwords */
+
 #ifdef __KERNEL__
 
 /*

@@ -17,7 +17,6 @@
 #include <linux/kernel.h>
 #include <linux/malloc.h>
 #include <linux/init.h>
-#include <linux/kerneld.h>
 
 #ifndef MODULE
 static int io[PARPORT_MAX+1] __initdata = { [0 ... PARPORT_MAX] = 0 };

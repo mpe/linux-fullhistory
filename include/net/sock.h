@@ -191,36 +191,73 @@ struct raw_opt {
 
 struct tcp_opt
 {
+	/* TCP bind bucket hash linkage. */
+	struct sock		*bind_next;
+	struct sock		**bind_pprev;
+	int	tcp_header_len;	/* Bytes of tcp header to send		*/
+
+/*
+ *	Header prediction flags
+ *	0x5?10 << 16 + snd_wnd in net byte order
+ */
+	__u32	pred_flags;
+
 /*
  *	RFC793 variables by their proper names. This means you can
  *	read the code and the spec side by side (and laugh ...)
  *	See RFC793 and RFC1122. The RFC writes these in capitals.
  */
  	__u32	rcv_nxt;	/* What we want to receive next 	*/
- 	__u32	rcv_up;		/* The urgent point (may not be valid) 	*/
- 	__u32	rcv_wnd;	/* Current receiver window		*/
  	__u32	snd_nxt;	/* Next sequence we send		*/
+
  	__u32	snd_una;	/* First byte we want an ack for	*/
-	__u32	snd_up;		/* Outgoing urgent pointer		*/
-	__u32	snd_wl1;	/* Sequence for window update		*/
-	__u32	snd_wl2;	/* Ack sequence for update		*/
-
-	__u32	rcv_wup;	/* rcv_nxt on last window update sent	*/
-
-	__u32	fin_seq;	/* XXX This one should go, we don't need it. -DaveM */
-
+	__u32	rcv_tstamp;	/* timestamp of last received packet	*/
+	__u32	lrcvtime;	/* timestamp of last received data packet*/
 	__u32	srtt;		/* smothed round trip time << 3		*/
-	__u32	mdev;		/* medium deviation			*/
-	__u32	rto;		/* retransmit timeout			*/
+
+	__u32	ato;		/* delayed ack timeout */
+	__u32	snd_wl1;	/* Sequence for window update		*/
+
+	__u32	snd_wl2;	/* Ack sequence for update		*/
+	__u32	snd_wnd;	/* The window we expect to receive	*/
+	__u16	max_window;
+	__u8	pending;	/* pending events			*/
+	__u8	retransmits;
+	__u32	last_ack_sent;	/* last ack we sent			*/
+
 	__u32	backoff;	/* backoff				*/
+	__u32	mdev;		/* medium deviation			*/
+ 	__u32	snd_cwnd;	/* Sending congestion window		*/
+	__u32	rto;		/* retransmit timeout			*/
+
+	__u32	packets_out;	/* Packets which are "in flight" */
+	__u32	high_seq;	/* highest sequence number sent by onset of congestion */
 /*
  *	Slow start and congestion control (see also Nagle, and Karn & Partridge)
  */
- 	__u32	snd_cwnd;	/* Sending congestion window		*/
  	__u32	snd_ssthresh;	/* Slow start size threshold		*/
 	__u16	snd_cwnd_cnt;
-	__u16	max_window;
+	__u8	dup_acks;	/* Consequetive duplicate acks seen from other end */
+	__u8	delayed_acks;
 
+	/* Two commonly used timers in both sender and receiver paths. */
+ 	struct timer_list	retransmit_timer;	/* Resend (no ack)	*/
+ 	struct timer_list	delack_timer;		/* Ack delay 		*/
+
+	struct sk_buff_head	out_of_order_queue; /* Out of order segments go here */
+
+	struct tcp_func		*af_specific;	/* Operations which are AF_INET{4,6} specific	*/
+	struct sk_buff		*send_head;	/* Front of stuff to transmit			*/
+	struct sk_buff		*retrans_head;	/* retrans head can be 
+						 * different to the head of
+						 * write queue if we are doing
+						 * fast retransmit
+						 */
+
+ 	__u32	rcv_wnd;	/* Current receiver window		*/
+	__u32	rcv_wup;	/* rcv_nxt on last window update sent	*/
+	__u32	write_seq;
+	__u32	copied_seq;
 /*
  *      Options received (usually on last packet, some only on SYN packets).
  */
@@ -235,60 +272,23 @@ struct tcp_opt
         __u32	rcv_tsecr;	/* Time stamp echo reply        	*/
         __u32	ts_recent;	/* Time stamp to echo next		*/
         __u32	ts_recent_stamp;/* Time we stored ts_recent (for aging) */
-	__u32	last_ack_sent;	/* last ack we sent			*/
         int	sacks;		/* Number of SACK blocks if any		*/
         __u32	left_sack[4];	/* Left edges of blocks         	*/
         __u32	right_sack[4];	/* Right edges of blocks        	*/
-	int	tcp_header_len;      /* Bytes of tcp header to send 	*/
 
-/*
- *	Timers used by the TCP protocol layer
- */
- 	struct timer_list	delack_timer;		/* Ack delay 	*/
- 	struct timer_list	idle_timer;		/* Idle watch 	*/
- 	struct timer_list	completion_timer;	/* Up/Down timer */
  	struct timer_list	probe_timer;		/* Probes	*/
- 	struct timer_list	retransmit_timer;	/* Resend (no ack) */
-
-	__u32	basertt;	/* Vegas baseRTT */
-	__u32	packets_out;	/* Packets which are "in flight" */
-	__u32	window_clamp;	/* XXX Document this... -DaveM */
-
-	__u8	pending;	/* pending events */
-	__u8	delayed_acks;
-	__u8	dup_acks;	/* Consequetive duplicate acks seen from other end */
-	__u8	retransmits;
-
-	__u32	lrcvtime;	/* timestamp of last received data packet  */
-	__u32	rcv_tstamp;	/* timestamp of last received packet  */
-	__u32	iat_mdev;	/* interarrival time medium deviation */
-	__u32	iat;		/* interarrival time */
-	__u32	ato;		/* delayed ack timeout */
-	__u32	high_seq;	/* highest sequence number sent by onset of congestion */
-
-/*
- *	new send pointers
- */
-	struct sk_buff *	send_head;
-	struct sk_buff *	retrans_head;	/* retrans head can be 
-						 * different to the head of
-						 * write queue if we are doing
-						 * fast retransmit
-						 */
-/*
- *	Header prediction flags
- *	0x5?10 << 16 + snd_wnd in net byte order
- */
-	__u32	pred_flags;
-	__u32	snd_wnd;		/* The window we expect to receive */
-
-	__u32	probes_out;		/* unanswered 0 window probes	   */
+	__u32	basertt;	/* Vegas baseRTT			*/
+	__u32	window_clamp;	/* XXX Document this... -DaveM		*/
+	__u32	probes_out;	/* unanswered 0 window probes		*/
+	__u32	syn_seq;
+	__u32	fin_seq;
+	__u32	urg_seq;
+	__u32	urg_data;
 
 	struct open_request	*syn_wait_queue;
 	struct open_request	**syn_wait_last;
 	int syn_backlog;
 
-	struct tcp_func		*af_specific;
 };
 
  	
@@ -347,73 +347,69 @@ struct sock
 	struct sock		*sklist_next;
 	struct sock		*sklist_prev;
 
-	atomic_t		wmem_alloc;
-	atomic_t		rmem_alloc;
-	unsigned long		allocation;		/* Allocation mode */
+	/* Main hash linkage for various protocol lookup tables. */
+	struct sock		*next;
+	struct sock		**pprev;
 
-	/* The following stuff should probably move to the tcp private area */
-	__u32			write_seq;
-	__u32			copied_seq;
-	__u32			syn_seq;
-	__u32			urg_seq;
-	__u32			urg_data;
-	unsigned char		delayed_acks;
-	/* End of block to move */
+	/* Socket demultiplex comparisons on incoming packets. */
+	__u32			daddr;		/* Foreign IPv4 addr			*/
+	__u32			rcv_saddr;	/* Bound local IPv4 addr		*/
+	int			bound_dev_if;	/* Bound device index if != 0		*/
+	unsigned short		num;		/* Local port				*/
+	volatile unsigned char	state,		/* Connection state			*/
+				zapped;		/* In ax25 & ipx means not linked	*/
+	struct tcphdr		dummy_th;	/* TCP header template			*/
 
-	int			sock_readers;		/* user count */
+	int			sock_readers;	/* user count				*/
+	int			rcvbuf;
+
+	struct wait_queue	**sleep;
+	struct dst_entry	*dst_cache;	/* Destination cache			*/
+	atomic_t		rmem_alloc;	/* Receive queue bytes committed	*/
+	struct sk_buff_head	receive_queue;	/* Incoming packets			*/
+	atomic_t		wmem_alloc;	/* Transmit queue bytes committed	*/
+	struct sk_buff_head	write_queue;	/* Packet sending queue			*/
+	atomic_t		omem_alloc;	/* "o" is "option" or "other" */
+	__u32			saddr;		/* Sending source			*/
+	unsigned int		allocation;	/* Allocation mode			*/
+	int			sndbuf;
+	struct sock		*prev;
 
   /*
    *	Not all are volatile, but some are, so we
    * 	might as well say they all are.
    */
 	volatile char		dead,
-				urginline,
 				done,
+				urginline,
 				reuse,
 				keepopen,
 				linger,
 				destroy,
 				no_check,
-				zapped,	/* In ax25 & ipx means not linked */
 				broadcast,
 				nonagle,
 				bsdism;
-	int			bound_dev_if;
-	unsigned long	        lingertime;
+	unsigned char		debug;
 	int			proc;
+	unsigned long	        lingertime;
 
-	struct sock		*next;
-	struct sock		**pprev;
-	struct sock		*bind_next;
-	struct sock		**bind_pprev;
-	struct sock		*prev;
 	int			hashent;
 	struct sock		*pair;
 
-	struct sk_buff_head	back_log;
-
-	struct sk_buff_head	write_queue,
-				receive_queue,
-				out_of_order_queue,
+	/* Error and backlog packet queues, rarely used. */
+	struct sk_buff_head	back_log,
 	                        error_queue;
 
 	unsigned short		family;
 	struct proto		*prot;
-	struct wait_queue	**sleep;
 
-	__u32			daddr;
-	__u32			saddr;		/* Sending source */
-	__u32			rcv_saddr;	/* Bound address */
-
-	struct dst_entry	*dst_cache;
 /*
  *	mss is min(mtu, max_window) 
  */
 	unsigned short		mtu;       /* mss negotiated in the syn's */
 	unsigned short		mss;       /* current eff. mss - can change */
 	unsigned short		user_mss;  /* mss requested by user in ioctl */
-	unsigned short		num;
-
 	unsigned short		shutdown;
 
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
@@ -436,16 +432,12 @@ struct sock
 						   cause failure but are the cause
 						   of a persistent failure not just
 						   'timed out' */
-	unsigned char		protocol;
-	volatile unsigned char	state;
 	unsigned short		ack_backlog;
 	unsigned short		max_ack_backlog;
-	unsigned char		debug;
 	__u32			priority;
-	int			rcvbuf;
-	int			sndbuf;
 	unsigned short		type;
 	unsigned char		localroute;	/* Route locally only */
+	unsigned char		protocol;
 	struct ucred		peercred;
 
 #ifdef CONFIG_FILTER
@@ -471,11 +463,6 @@ struct sock
 #endif
 #if defined (CONFIG_PACKET) || defined(CONFIG_PACKET_MODULE)
 		struct packet_opt	*af_packet;
-#endif
-#ifdef CONFIG_INET
-#ifdef CONFIG_NUTCP		
-		struct tcp_opt		af_tcp;
-#endif		
 #endif
 #if defined(CONFIG_X25) || defined(CONFIG_X25_MODULE)
 		x25_cb			*x25;
@@ -503,7 +490,6 @@ struct sock
 	int			ip_ttl;			/* TTL setting */
 	int			ip_tos;			/* TOS */
 	unsigned	   	ip_cmsg_flags;
-	struct tcphdr		dummy_th;
 	struct ip_options	*opt;
 	unsigned char		ip_hdrincl;		/* Include headers ? */
 	__u8			ip_mc_ttl;		/* Multicasting TTL */
@@ -731,7 +717,7 @@ here:
 }
 
 /*
- *	This might not be the most apropriate place for this two	 
+ *	This might not be the most appropriate place for this two	 
  *	but since they are used by a lot of the net related code
  *	at least they get declared on a include that is common to all
  */
@@ -750,7 +736,7 @@ static __inline__ int max(unsigned int a, unsigned int b)
 	return a;
 }
 
-extern struct sock *		sk_alloc(int family, int priority);
+extern struct sock *		sk_alloc(int family, int priority, int zero_it);
 extern void			sk_free(struct sock *sk);
 extern void			destroy_sock(struct sock *sk);
 
@@ -884,7 +870,6 @@ extern __inline__ int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 	 */
 	if (atomic_read(&sk->rmem_alloc) + skb->truesize >= (unsigned)sk->rcvbuf)
                 return -ENOMEM;
-        skb_set_owner_r(skb, sk);
 
 #ifdef CONFIG_FILTER
 	if (sk->filter)
@@ -894,7 +879,8 @@ extern __inline__ int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 	}
 #endif /* CONFIG_FILTER */
 
-	skb_queue_tail(&sk->receive_queue,skb);
+	skb_set_owner_r(skb, sk);
+	skb_queue_tail(&sk->receive_queue, skb);
 	if (!sk->dead)
 		sk->data_ready(sk,skb->len);
 	return 0;

@@ -22,6 +22,7 @@ extern __u32 sysctl_wmem_default;
 extern __u32 sysctl_rmem_default;
 
 extern int sysctl_core_destroy_delay;
+extern int sysctl_optmem_max;
 
 ctl_table core_table[] = {
 	{NET_CORE_WMEM_MAX, "wmem_max",
@@ -53,6 +54,9 @@ ctl_table core_table[] = {
 	{NET_CORE_MSG_BURST, "message_burst",
 	 &net_msg_burst, sizeof(int), 0644, NULL,
 	 &proc_dointvec_jiffies},
+	{NET_CORE_OPTMEM_MAX, "optmem_max",
+	 &sysctl_optmem_max, sizeof(int), 0644, NULL,
+	 &proc_dointvec},
 	{ 0 }
 };
 #endif

@@ -14,8 +14,8 @@
 #include <linux/stat.h>
 #include <linux/config.h>
 #include <asm/bitops.h>
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
 #endif
 
 /*
@@ -234,7 +234,7 @@ proc_openprom_deregister(void)
 }		      
 #endif
 
-#if defined(CONFIG_SUN_OPENPROMFS_MODULE) && defined(CONFIG_KERNELD)
+#if defined(CONFIG_SUN_OPENPROMFS_MODULE) && defined(CONFIG_KMOD)
 static int 
 proc_openprom_defreaddir(struct inode * inode, struct file * filp,
 			 void * dirent, filldir_t filldir)

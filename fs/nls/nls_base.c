@@ -12,8 +12,8 @@
 #include <linux/config.h>
 #include <linux/nls.h>
 #include <linux/malloc.h>
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
 #endif
 #include <asm/byteorder.h>
 
@@ -205,7 +205,7 @@ struct nls_table *find_nls(char *charset)
 struct nls_table *load_nls(char *charset)
 {
 	struct nls_table *nls;
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 	char buf[40];
 	int ret;
 #endif
@@ -216,7 +216,7 @@ struct nls_table *load_nls(char *charset)
 		return nls;
 	}
 
-#ifndef CONFIG_KERNELD
+#ifndef CONFIG_KMOD
 	return NULL;
 #else
 	if (strlen(charset) > sizeof(buf) - sizeof("nls_")) {

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.51 1998/01/15 22:40:39 freitag Exp $
+ * Version:	$Id: tcp_output.c,v 1.56 1998/03/10 05:11:16 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -45,7 +45,6 @@ static __inline__ void clear_delayed_acks(struct sock * sk)
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
 	tp->delayed_acks = 0;
-	sk->ack_backlog = 0;
 	tcp_clear_xmit_timer(sk, TIME_DACK);
 }
 
@@ -437,128 +436,44 @@ void tcp_write_xmit(struct sock *sk)
  * taken by headers, and the remaining space will be available for TCP data.
  * This should be accounted for correctly instead.
  */
-unsigned short tcp_select_window(struct sock *sk)
+u32 __tcp_select_window(struct sock *sk)
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
-	int mss = sk->mss;
-	long free_space = sock_rspace(sk) / 2;
-	long window, cur_win;
+	unsigned int mss = sk->mss;
+	unsigned int free_space;
+	u32 window, cur_win;
 
+	free_space = (sk->rcvbuf - atomic_read(&sk->rmem_alloc)) / 2;
 	if (tp->window_clamp) {
 		free_space = min(tp->window_clamp, free_space);
 		mss = min(tp->window_clamp, mss);
-	} 
-#ifdef NO_ANK_FIX
-	/* I am tired of this message */
-	  else
-		printk(KERN_DEBUG "Clamp failure. Water leaking.\n");
-#endif
+	} else {
+		printk("tcp_select_window: tp->window_clamp == 0.\n");
+	}
 
 	if (mss < 1) {
 		mss = 1;
-		printk(KERN_DEBUG "tcp_select_window: mss fell to 0.\n");
+		printk("tcp_select_window: sk->mss fell to 0.\n");
 	}
 	
-	/* compute the actual window i.e.
-	 * old_window - received_bytes_on_that_win
-	 */
-	cur_win = tp->rcv_wnd - (tp->rcv_nxt - tp->rcv_wup);
-	window  = tp->rcv_wnd;
-
-	if (cur_win < 0) {
-		cur_win = 0;
-#ifdef NO_ANK_FIX
-	/* And this too. */
-		printk(KERN_DEBUG "TSW: win < 0 w=%d 1=%u 2=%u\n",
-		       tp->rcv_wnd, tp->rcv_nxt, tp->rcv_wup);
-#endif
-	}
-
-	if (free_space < sk->rcvbuf/4 && free_space < mss/2)
+	cur_win = tcp_receive_window(tp);
+	if (free_space < sk->rcvbuf/4 && free_space < mss/2) {
 		window = 0;
-
-	/* Get the largest window that is a nice multiple of mss.
-	 * Window clamp already applied above.
-	 * If our current window offering is within 1 mss of the
-	 * free space we just keep it. This prevents the divide
-	 * and multiply from happening most of the time.
-	 * We also don't do any window rounding when the free space
-	 * is too small.
-	 */
-	if (window < free_space - mss && free_space > mss)
-		window = (free_space/mss)*mss;
-
-	/* Never shrink the offered window */
-	if (window < cur_win)
-		window = cur_win;
-
-	tp->rcv_wnd = window;
-	tp->rcv_wup = tp->rcv_nxt;
-	return window >> tp->rcv_wscale;	/* RFC1323 scaling applied */
-}
-
-#if 0
-/* Old algorithm for window selection */
-unsigned short tcp_select_window(struct sock *sk)
-{
-	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
-	int mss = sk->mss;
-	long free_space = sock_rspace(sk);
-	long window, cur_win, usable;
-
-	if (tp->window_clamp) {
-		free_space = min(tp->window_clamp, free_space);
-		mss = min(tp->window_clamp, mss);
-	}
-	
-	/* compute the actual window i.e.
-	 * old_window - received_bytes_on_that_win
-	 */
-	cur_win = tp->rcv_wnd - (tp->rcv_nxt - tp->rcv_wup);
-	window  = tp->rcv_wnd;
-
-	if (cur_win < 0) {
-		cur_win = 0;
-		printk(KERN_DEBUG "TSW: win < 0 w=%d 1=%u 2=%u\n",
-		       tp->rcv_wnd, tp->rcv_nxt, tp->rcv_wup);
-	}
-
-	/* RFC 1122:
-	 * "the suggested [SWS] avoidance algoritm for the receiver is to keep
-	 *  RECV.NEXT + RCV.WIN fixed until:
-	 *  RCV.BUFF - RCV.USER - RCV.WINDOW >= min(1/2 RCV.BUFF, MSS)"
-	 *
-	 * i.e. don't raise the right edge of the window until you can raise
-	 * it at least MSS bytes.
-	 */
-
-	usable = free_space - cur_win;
-	if (usable < 0)
-		usable = 0;
-
-	if (window < usable) {
-		/*	Window is not blocking the sender
-		 *	and we have enough free space for it
-		 */
-		if (cur_win > (sk->mss << 1))
-			goto out;
-	}
-       	
-	if (window >= usable) {
-		/*	We are offering too much, cut it down... 
-		 *	but don't shrink the window
-		 */
-		window = max(usable, cur_win);
 	} else {
-		while ((usable - window) >= mss)
-			window += mss;
+		/* Get the largest window that is a nice multiple of mss.
+		 * Window clamp already applied above.
+		 * If our current window offering is within 1 mss of the
+		 * free space we just keep it. This prevents the divide
+		 * and multiply from happening most of the time.
+		 * We also don't do any window rounding when the free space
+		 * is too small.
+		 */
+		window = tp->rcv_wnd;
+		if ((window <= (free_space - mss)) || (window > free_space))
+			window = (free_space/mss)*mss;
 	}
-out:
-	tp->rcv_wnd = window;
-	tp->rcv_wup = tp->rcv_nxt;
 	return window;
 }
-#endif
 
 static int tcp_retrans_try_collapse(struct sock *sk, struct sk_buff *skb)
 {
@@ -760,7 +675,7 @@ void tcp_send_fin(struct sock *sk)
                  * put a FIN into the queue, otherwise it never gets queued.
   		 */
 		kfree_skb(buff);
-		sk->write_seq++;
+		tp->write_seq++;
 		t = del_timer(&sk->timer);
 		if (t)
 			add_timer(&sk->timer);
@@ -777,9 +692,9 @@ void tcp_send_fin(struct sock *sk)
 	tcp_build_options((__u32 *)(t1+1),tp);
 
 	memcpy(t1, th, sizeof(*t1));
-	buff->seq = sk->write_seq;
-	sk->write_seq++;
-	buff->end_seq = sk->write_seq;
+	buff->seq = tp->write_seq;
+	tp->write_seq++;
+	buff->end_seq = tp->write_seq;
 	t1->seq = htonl(buff->seq);
 	t1->ack_seq = htonl(tp->rcv_nxt);
 	t1->window = htons(tcp_select_window(sk));
@@ -796,7 +711,7 @@ void tcp_send_fin(struct sock *sk)
 		struct sk_buff *skb1;
 
 		tp->packets_out++;
-		tp->snd_nxt = sk->write_seq;
+		tp->snd_nxt = tp->write_seq;
 		buff->when = jiffies;
 
 		skb1 = skb_clone(buff, GFP_KERNEL);
@@ -880,28 +795,20 @@ int tcp_send_synack(struct sock *sk)
 }
 
 /*
- *	Set up the timers for sending a delayed ack..
- *
- *      rules for delaying an ack:
- *      - delay time <= 0.5 HZ
- *      - must send at least every 2 full sized packets
- *      - we don't have a window update to send
+ * Send out a delayed ack, the caller does the policy checking
+ * to see if we should even be here.  See tcp_input.c:tcp_ack_snd_check()
+ * for details.
  */
 
-void tcp_send_delayed_ack(struct sock * sk, int max_timeout)
+void tcp_send_delayed_ack(struct tcp_opt *tp, int max_timeout)
 {
-	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
-	unsigned long timeout, now;
+	unsigned long timeout;
 
-	/* Calculate new timeout. */
-	now = jiffies;
+	/* Stay within the limit we were given */
 	timeout = tp->ato;
-
-	if (timeout > max_timeout ||
-	    ((tp->rcv_nxt - tp->rcv_wup) > (sk->mss << 2)))
-		timeout = now;
-	else
-		timeout += now;
+	if (timeout > max_timeout)
+		timeout = max_timeout;
+	timeout += jiffies;
 
 	/* Use new timeout only if there wasn't a older one earlier. */
 	if (!del_timer(&tp->delack_timer) || timeout < tp->delack_timer.expires)
@@ -938,7 +845,7 @@ void tcp_send_ack(struct sock *sk)
 		 *	bandwidth on slow links to send a spare ack than
 		 *	resend packets.
 		 */
-		tcp_send_delayed_ack(sk, HZ/2);
+		tcp_send_delayed_ack(tp, HZ/2);
 		return;
 	}
 

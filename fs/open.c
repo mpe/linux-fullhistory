@@ -681,24 +681,37 @@ out:
 }
 
 /*
- * Find an empty file descriptor entry, and mark it busy
+ * Find an empty file descriptor entry, and mark it busy.
  */
 int get_unused_fd(void)
 {
-	int fd;
 	struct files_struct * files = current->files;
+	int fd, error;
 
+	error = -EMFILE;
 	fd = find_first_zero_bit(&files->open_fds, NR_OPEN);
 	/*
 	 * N.B. For clone tasks sharing a files structure, this test
 	 * will limit the total number of files that can be opened.
 	 */
-	if (fd < current->rlim[RLIMIT_NOFILE].rlim_cur) {
-		FD_SET(fd, &files->open_fds);
-		FD_CLR(fd, &files->close_on_exec);
-		return fd;
+	if (fd >= current->rlim[RLIMIT_NOFILE].rlim_cur)
+		goto out;
+
+	/* Check here for fd > files->max_fds to do dynamic expansion */
+
+	FD_SET(fd, &files->open_fds);
+	FD_CLR(fd, &files->close_on_exec);
+#if 1
+	/* Sanity check */
+	if (files->fd[fd] != NULL) {
+		printk("get_unused_fd: slot %d not NULL!\n", fd);
+		files->fd[fd] = NULL;
 	}
-	return -EMFILE;
+#endif
+	error = fd;
+
+out:
+	return error;
 }
 
 inline void put_unused_fd(unsigned int fd)
@@ -796,15 +809,15 @@ asmlinkage int sys_close(unsigned int fd)
 {
 	int error;
 	struct file * filp;
-	struct files_struct * files;
 
 	lock_kernel();
-	files = current->files;
 	error = -EBADF;
-	if (fd < NR_OPEN && (filp = files->fd[fd]) != NULL) {
+	filp = fcheck(fd);
+	if (filp) {
+		struct files_struct * files = current->files;
+		files->fd[fd] = NULL;
 		put_unused_fd(fd);
 		FD_CLR(fd, &files->close_on_exec);
-		files->fd[fd] = NULL;
 		error = close_fp(filp, files);
 	}
 	unlock_kernel();
