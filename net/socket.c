@@ -54,18 +54,9 @@
  *
  */
 
-#include <linux/config.h>
-#include <linux/signal.h>
-#include <linux/errno.h>
-#include <linux/sched.h>
 #include <linux/mm.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
-#include <linux/kernel.h>
-#include <linux/major.h>
-#include <linux/stat.h>
 #include <linux/socket.h>
-#include <linux/fcntl.h>
 #include <linux/file.h>
 #include <linux/net.h>
 #include <linux/interrupt.h>
@@ -80,17 +71,14 @@
 #include <linux/kmod.h>
 #endif
 
-#include <asm/system.h>
 #include <asm/uaccess.h>
 
 #include <linux/inet.h>
 #include <net/ip.h>
-#include <net/protocol.h>
+#include <net/sock.h>
 #include <net/rarp.h>
 #include <net/tcp.h>
 #include <net/udp.h>
-#include <linux/skbuff.h>
-#include <net/sock.h>
 #include <net/scm.h>
 
 static int sock_no_open(struct inode *irrelevant, struct file *dontcare);

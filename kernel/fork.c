@@ -11,13 +11,9 @@
  * management can be a bitch. See 'mm/mm.c': 'copy_page_tables()'
  */
 
-#include <linux/init.h>
-#include <linux/errno.h>
-#include <linux/sched.h>
-#include <linux/mm.h>
-#include <linux/slab.h>
-#include <linux/unistd.h>
 #include <linux/malloc.h>
+#include <linux/init.h>
+#include <linux/unistd.h>
 #include <linux/smp_lock.h>
 #include <linux/module.h>
 

@@ -5,27 +5,17 @@
  *  Swap reorganised 29.12.95, Stephen Tweedie
  */
 
-#include <linux/config.h>
 #include <linux/mm.h>
-#include <linux/sched.h>
-#include <linux/kernel.h>
 #include <linux/kernel_stat.h>
-#include <linux/errno.h>
-#include <linux/string.h>
-#include <linux/stat.h>
 #include <linux/swap.h>
-#include <linux/fs.h>
 #include <linux/swapctl.h>
 #include <linux/interrupt.h>
 #include <linux/init.h>
 #include <linux/pagemap.h>
 
 #include <asm/dma.h>
-#include <asm/system.h> /* for cli()/sti() */
 #include <asm/uaccess.h> /* for copy_to/from_user */
-#include <asm/bitops.h>
 #include <asm/pgtable.h>
-#include <asm/spinlock.h>
 
 int nr_swap_pages = 0;
 int nr_free_pages = 0;

@@ -1,9 +1,5 @@
-#include <linux/errno.h>
-#include <linux/sched.h>
-#include <linux/mm.h>		/* defines GFP_KERNEL */
-#include <linux/string.h>
+#include <linux/mm.h>
 #include <linux/module.h>
-#include <linux/config.h>
 #include <asm/uaccess.h>
 #include <linux/vmalloc.h>
 #include <linux/smp_lock.h>

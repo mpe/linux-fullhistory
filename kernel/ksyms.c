@@ -9,31 +9,23 @@
  *   by Bjorn Ekwall <bj0rn@blox.se>
  */
 
-#include <linux/config.h>
+#include <linux/malloc.h>
 #include <linux/module.h>
-#include <linux/sched.h>
 #include <linux/blkdev.h>
 #include <linux/cdrom.h>
 #include <linux/kernel_stat.h>
-#include <linux/mm.h>
-#include <linux/malloc.h>
-#include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/sys.h>
 #include <linux/utsname.h>
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
-#include <linux/termios.h>
-#include <linux/tqueue.h>
 #include <linux/serial.h>
 #include <linux/locks.h>
-#include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/minix_fs.h>
 #include <linux/ext2_fs.h>
 #include <linux/random.h>
 #include <linux/reboot.h>
-#include <linux/mount.h>
 #include <linux/pagemap.h>
 #include <linux/sysctl.h>
 #include <linux/hdreg.h>
@@ -50,7 +42,6 @@
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
 #endif
-#include <asm/irq.h>
 
 extern char *get_options(char *str, int *ints);
 extern void set_device_ro(kdev_t dev,int flag);

@@ -8,14 +8,8 @@
  *            Chris Evans, <chris@ferret.lmh.ox.ac.uk>
  */
 
-#include <linux/config.h>
-#include <linux/errno.h>
-#include <linux/sched.h>
 #include <linux/mm.h>
-#include <linux/sem.h>
-#include <linux/msg.h>
 #include <linux/shm.h>
-#include <linux/stat.h>
 #include <linux/init.h>
 
 #include <asm/uaccess.h>

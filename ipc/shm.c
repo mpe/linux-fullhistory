@@ -6,16 +6,9 @@
  * Fixed the shm swap deallocation (shm_unuse()), August 1998 Andrea Arcangeli.
  */
 
-#include <linux/errno.h>
-#include <linux/sched.h>
-#include <linux/mm.h>
-#include <linux/slab.h>
-#include <linux/ipc.h>
-#include <linux/shm.h>
-#include <linux/stat.h>
 #include <linux/malloc.h>
+#include <linux/shm.h>
 #include <linux/swap.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
 #include <linux/vmalloc.h>

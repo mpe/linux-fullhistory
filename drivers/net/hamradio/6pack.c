@@ -726,7 +726,7 @@ static int sp_open_dev(struct device *dev)
 #ifdef MODULE
 static int sixpack_init_ctrl_dev(void)
 #else	/* !MODULE */
-__initfunc sixpack_init_ctrl_dev(struct device *dummy)
+__initfunc(int sixpack_init_ctrl_dev(struct device *dummy))
 #endif	/* !MODULE */
 {
 	int status;

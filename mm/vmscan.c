@@ -10,22 +10,14 @@
  *  Version: $Id: vmscan.c,v 1.5 1998/02/23 22:14:28 sct Exp $
  */
 
-#include <linux/mm.h>
-#include <linux/sched.h>
-#include <linux/kernel.h>
+#include <linux/slab.h>
 #include <linux/kernel_stat.h>
-#include <linux/errno.h>
-#include <linux/string.h>
 #include <linux/swap.h>
 #include <linux/swapctl.h>
 #include <linux/smp_lock.h>
-#include <linux/slab.h>
-#include <linux/dcache.h>
-#include <linux/fs.h>
 #include <linux/pagemap.h>
 #include <linux/init.h>
 
-#include <asm/bitops.h>
 #include <asm/pgtable.h>
 
 /* 

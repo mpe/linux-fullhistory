@@ -617,7 +617,7 @@ static unsigned long get_wchan(struct task_struct *p)
  	if ((tsk)->tss.esp0 > PAGE_SIZE && \
 	    MAP_NR((tsk)->tss.esp0) < max_mapnr) \
 	      eip = ((struct pt_regs *) (tsk)->tss.esp0)->pc;	 \
-        eip; })
+	eip; })
 #define	KSTK_ESP(tsk)	((tsk) == current ? rdusp() : (tsk)->tss.usp)
 #elif defined(__powerpc__)
 #define KSTK_EIP(tsk)	((tsk)->tss.regs->nip)
@@ -701,16 +701,24 @@ static inline const char * get_task_state(struct task_struct *tsk)
 
 static inline char * task_state(struct task_struct *p, char *buffer)
 {
+	int g;
+
 	buffer += sprintf(buffer,
 		"State:\t%s\n"
 		"Pid:\t%d\n"
 		"PPid:\t%d\n"
 		"Uid:\t%d\t%d\t%d\t%d\n"
-		"Gid:\t%d\t%d\t%d\t%d\n",
+		"Gid:\t%d\t%d\t%d\t%d\n"
+		"Groups:\t",
 		get_task_state(p),
 		p->pid, p->p_pptr->pid,
 		p->uid, p->euid, p->suid, p->fsuid,
 		p->gid, p->egid, p->sgid, p->fsgid);
+
+	for (g = 0; g < p->ngroups; g++)
+		buffer += sprintf(buffer, "%d ", p->groups[g]);
+
+	buffer += sprintf(buffer, "\n");
 	return buffer;
 }
 

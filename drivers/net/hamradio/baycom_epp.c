@@ -1540,7 +1540,7 @@ __initfunc(void baycom_epp_setup(char *str, int *ints))
 		return;
 	}
 	baycom_ports[i].mode = str;
-	baycom_ports[i].irq = ints[1];
+	baycom_ports[i].iobase = ints[1];
 	if (i < NR_PORTS-1)
 		baycom_ports[i+1].mode = NULL;
 }

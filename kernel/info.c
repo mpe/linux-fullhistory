@@ -6,10 +6,8 @@
 
 /* This implements the sysinfo() system call */
 
-#include <linux/sched.h>
-#include <linux/string.h>
-#include <linux/unistd.h>
 #include <linux/mm.h>
+#include <linux/unistd.h>
 #include <linux/swap.h>
 #include <linux/smp_lock.h>
 

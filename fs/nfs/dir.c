@@ -474,26 +474,6 @@ inode->i_ino, inode->i_count, inode->i_nlink);
 }
 
 /*
- * Called to free the inode from the dentry. We must flush
- * any pending writes for this dentry before freeing the inode.
- */
-static void nfs_dentry_iput(struct dentry *dentry, struct inode *inode)
-{
-	dfprintk(VFS, "NFS: dentry_iput(%s/%s, cnt=%d, ino=%ld)\n",
-		dentry->d_parent->d_name.name, dentry->d_name.name,
-		dentry->d_count, inode->i_ino);
-
-	if (NFS_WRITEBACK(inode)) {
-#ifdef NFS_PARANOIA
-printk("nfs_dentry_iput: pending writes for %s/%s, i_count=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, inode->i_count);
-#endif
-		nfs_wbinval(inode);
-	}
-	iput(inode);
-}
-
-/*
  * Called when the dentry is being freed to release private memory.
  */
 static void nfs_dentry_release(struct dentry *dentry)
@@ -508,7 +488,7 @@ struct dentry_operations nfs_dentry_operations = {
 	NULL,			/* d_compare */
 	nfs_dentry_delete,	/* d_delete(struct dentry *) */
 	nfs_dentry_release,	/* d_release(struct dentry *) */
-	nfs_dentry_iput		/* d_iput(struct dentry *, struct inode *) */
+	NULL			/* d_iput */
 };
 
 #ifdef NFS_PARANOIA
@@ -932,18 +912,7 @@ static int nfs_safe_remove(struct dentry *dentry)
 
 	/* N.B. not needed now that d_delete is done in advance? */
 	error = -EBUSY;
-	if (inode) {
-		if (NFS_WRITEBACK(inode)) {
-			nfs_wbinval(inode);
-			if (NFS_WRITEBACK(inode)) {
-#ifdef NFS_PARANOIA
-printk("nfs_safe_remove: %s/%s writes pending, d_count=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
-#endif
-				goto out;
-			}
-		}
-	} else {
+	if (!inode) {
 #ifdef NFS_PARANOIA
 printk("nfs_safe_remove: %s/%s already negative??\n",
 dentry->d_parent->d_name.name, dentry->d_name.name);
@@ -1190,29 +1159,14 @@ new_dentry->d_parent->d_name.name,new_dentry->d_name.name,new_dentry->d_count);
 	if (new_dir == old_dir)
 		goto do_rename;
 	/*
-	 * Cross-directory move ... check whether it's a file.
+	 * Cross-directory move ...
+	 *
+	 * ... prune child dentries and writebacks if needed.
 	 */
-	if (S_ISREG(old_inode->i_mode)) {
-		if (NFS_WRITEBACK(old_inode)) {
-#ifdef NFS_PARANOIA
-printk("nfs_rename: %s/%s has pending writes\n",
-old_dentry->d_parent->d_name.name, old_dentry->d_name.name);
-#endif
-			nfs_wbinval(old_inode);
-			if (NFS_WRITEBACK(old_inode)) {
-#ifdef NFS_PARANOIA
-printk("nfs_rename: %s/%s has pending writes after flush\n",
-old_dentry->d_parent->d_name.name, old_dentry->d_name.name);
-#endif
-				goto out;
-			}
-		}
-	}
-	/*
-	 * Moving a directory ... prune child dentries if needed.
-	 */
-	else if (old_dentry->d_count > 1)
+	if (old_dentry->d_count > 1) {
+		nfs_wb_all(old_inode);
 		shrink_dcache_parent(old_dentry);
+	}
 
 	/*
 	 * Now check the use counts ... we can't safely do the

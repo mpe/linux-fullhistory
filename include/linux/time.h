@@ -13,17 +13,27 @@ struct timespec {
 #endif /* _STRUCT_TIMESPEC */
 
 /*
- * change timeval to jiffies, trying to avoid the
+ * Change timeval to jiffies, trying to avoid the
  * most obvious overflows..
+ *
+ * And some not so obvious.
+ *
+ * Note that we don't want to return MAX_LONG, because
+ * for various timeout reasons we often end up having
+ * to wait "jiffies+1" in order to guarantee that we wait
+ * at _least_ "jiffies" - so "jiffies+1" had better still
+ * be positive.
  */
+#define MAX_JIFFY_OFFSET ((~0UL >> 1)-1)
+
 static __inline__ unsigned long
 timespec_to_jiffies(struct timespec *value)
 {
 	unsigned long sec = value->tv_sec;
 	long nsec = value->tv_nsec;
 
-	if (sec > ((long)(~0UL >> 1) / HZ))
-		return ~0UL >> 1;
+	if (sec >= (MAX_JIFFY_OFFSET / HZ))
+		return MAX_JIFFY_OFFSET;
 	nsec += 1000000000L / HZ - 1;
 	nsec /= 1000000000L / HZ;
 	return HZ * sec + nsec;

@@ -128,7 +128,7 @@ extern struct lp_struct *lp_table[MAX_LP];
 extern unsigned int lp_irq;
 
 void lp_interrupt(int dev);
-int lp_init(void);
+int lp_m68k_init(void);
 int register_parallel(struct lp_struct *, int);
 void unregister_parallel(int);
 

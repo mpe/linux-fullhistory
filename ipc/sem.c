@@ -31,14 +31,7 @@
  *   what behavior is mandated.
  */
 
-#include <linux/errno.h>
-#include <linux/string.h>
-#include <linux/sched.h>
-#include <linux/sem.h>
-#include <linux/ipc.h>
-#include <linux/stat.h>
 #include <linux/malloc.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
 

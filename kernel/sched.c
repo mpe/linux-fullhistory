@@ -16,15 +16,11 @@
  * current-task
  */
 
-#include <linux/sched.h>
+#include <linux/mm.h>
 #include <linux/kernel_stat.h>
 #include <linux/fdreg.h>
-#include <linux/errno.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
-#include <linux/tqueue.h>
-#include <linux/resource.h>
-#include <linux/mm.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
 
@@ -32,7 +28,6 @@
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/mmu_context.h>
-#include <asm/spinlock.h>
 
 #include <linux/timex.h>
 

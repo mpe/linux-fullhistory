@@ -5,25 +5,16 @@
  *  Swap reorganised 29.12.95, Stephen Tweedie
  */
 
-#include <linux/mm.h>
-#include <linux/smp.h>
-#include <linux/smp_lock.h>
-#include <linux/sched.h>
-#include <linux/kernel.h>
-#include <linux/kernel_stat.h>
-#include <linux/errno.h>
-#include <linux/string.h>
-#include <linux/stat.h>
-#include <linux/swap.h>
-#include <linux/fs.h>
-#include <linux/swapctl.h>
 #include <linux/malloc.h>
+#include <linux/smp_lock.h>
+#include <linux/kernel_stat.h>
+#include <linux/swap.h>
+#include <linux/swapctl.h>
 #include <linux/blkdev.h> /* for blk_size */
 #include <linux/vmalloc.h>
 #include <linux/pagemap.h>
 #include <linux/shm.h>
 
-#include <asm/bitops.h>
 #include <asm/pgtable.h>
 
 unsigned int nr_swapfiles = 0;

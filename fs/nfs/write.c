@@ -210,27 +210,6 @@ find_write_request(struct inode *inode, struct page *page)
 }
 
 /*
- * Find any requests for the specified dentry.
- */
-int
-nfs_find_dentry_request(struct inode *inode, struct dentry *dentry)
-{
-	struct nfs_wreq	*head, *req;
-	int found = 0;
-
-	req = head = NFS_WRITEBACK(inode);
-	while (req != NULL) {
-		if (req->wb_dentry == dentry && !WB_CANCELLED(req)) {
-			found = 1;
-			break;
-		}
-		if ((req = WB_NEXT(req)) == head)
-			break;
-	}
-	return found;
-}
-
-/*
  * Find and release all failed requests for this inode.
  */
 int
@@ -477,9 +456,10 @@ nfs_updatepage(struct file *file, struct page *page, unsigned long offset, unsig
 
 	/*
 	 * Ok, there's another user of this page with the new request..
-	 * The IO completion will then free the page.
+	 * The IO completion will then free the page and the dentry.
 	 */
 	atomic_inc(&page->count);
+	dget(dentry);
 
 	/* Schedule request */
 	synchronous = schedule_write_request(req, sync);
@@ -767,6 +747,7 @@ nfs_wback_result(struct rpc_task *task)
 		clear_bit(PG_uptodate, &page->flags);
 
 	__free_page(page);
+	dput(req->wb_dentry);
 
 	wake_up(&req->wb_wait);
 	

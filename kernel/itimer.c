@@ -6,9 +6,6 @@
 
 /* These are all the functions necessary to implement itimers */
 
-#include <linux/sched.h>
-#include <linux/string.h>
-#include <linux/errno.h>
 #include <linux/mm.h>
 #include <linux/smp_lock.h>
 

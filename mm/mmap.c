@@ -3,24 +3,16 @@
  *
  * Written by obz.
  */
-#include <linux/stat.h>
-#include <linux/sched.h>
-#include <linux/kernel.h>
-#include <linux/mm.h>
 #include <linux/slab.h>
 #include <linux/shm.h>
-#include <linux/errno.h>
 #include <linux/mman.h>
-#include <linux/string.h>
 #include <linux/pagemap.h>
 #include <linux/swap.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
 #include <linux/file.h>
 
 #include <asm/uaccess.h>
-#include <asm/system.h>
 #include <asm/pgtable.h>
 
 /* description of effects of mapping type and prot in current implementation.
@@ -176,7 +168,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 {
 	struct mm_struct * mm = current->mm;
 	struct vm_area_struct * vma;
-	int correct_wcount = 0, error;
+	int error;
 
 	if ((len = PAGE_ALIGN(len)) == 0)
 		return addr;
@@ -300,30 +292,28 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	    !vm_enough_memory(len >> PAGE_SHIFT))
 		goto free_vma;
 
-	error = 0;
 	if (file) {
+		int correct_wcount = 0;
 		if (vma->vm_flags & VM_DENYWRITE) {
-			if (file->f_dentry->d_inode->i_writecount > 0)
+			if (file->f_dentry->d_inode->i_writecount > 0) {
 				error = -ETXTBSY;
-			else {
-	        		/* f_op->mmap might possibly sleep
-				 * (generic_file_mmap doesn't, but other code
-				 * might). In any case, this takes care of any
-				 * race that this might cause.
-				 */
-				file->f_dentry->d_inode->i_writecount--;
-				correct_wcount = 1;
+				goto free_vma;
 			}
+	        	/* f_op->mmap might possibly sleep
+			 * (generic_file_mmap doesn't, but other code
+			 * might). In any case, this takes care of any
+			 * race that this might cause.
+			 */
+			file->f_dentry->d_inode->i_writecount--;
+			correct_wcount = 1;
 		}
-		if (!error)
-			error = file->f_op->mmap(file, vma);
-	
+		error = file->f_op->mmap(file, vma);
+		/* Fix up the count if necessary, then check for an error */
+		if (correct_wcount)
+			file->f_dentry->d_inode->i_writecount++;
+		if (error)
+			goto unmap_and_free_vma;
 	}
-	/* Fix up the count if necessary, then check for an error */
-	if (correct_wcount)
-		file->f_dentry->d_inode->i_writecount++;
-	if (error)
-		goto free_vma;
 
 	/*
 	 * merge_segments may merge our vma, so we can't refer to it
@@ -341,6 +331,11 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	}
 	return addr;
 
+unmap_and_free_vma:
+	/* Undo any partial mapping done by a device driver. */
+	flush_cache_range(mm, vma->vm_start, vma->vm_end);
+	zap_page_range(mm, vma->vm_start, vma->vm_end - vma->vm_start);
+	flush_tlb_range(mm, vma->vm_start, vma->vm_end);
 free_vma:
 	kmem_cache_free(vm_area_cachep, vma);
 	return error;
@@ -432,6 +427,7 @@ static int unmap_fixup(struct vm_area_struct *area, unsigned long addr,
 		mpnt->vm_ops = area->vm_ops;
 		mpnt->vm_offset = area->vm_offset + (end - area->vm_start);
 		mpnt->vm_file = area->vm_file;
+		mpnt->vm_pte = area->vm_pte;
 		if (mpnt->vm_file)
 			mpnt->vm_file->f_count++;
 		if (mpnt->vm_ops && mpnt->vm_ops->open)

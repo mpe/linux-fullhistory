@@ -9,26 +9,17 @@
  * most "normal" filesystems (but you don't /have/ to use this:
  * the NFS filesystem used to do this differently, for example)
  */
-#include <linux/stat.h>
-#include <linux/sched.h>
-#include <linux/kernel.h>
-#include <linux/mm.h>
-#include <linux/shm.h>
-#include <linux/errno.h>
-#include <linux/mman.h>
-#include <linux/string.h>
 #include <linux/malloc.h>
-#include <linux/fs.h>
+#include <linux/shm.h>
+#include <linux/mman.h>
 #include <linux/locks.h>
 #include <linux/pagemap.h>
 #include <linux/swap.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/blkdev.h>
 #include <linux/file.h>
 #include <linux/swapctl.h>
 
-#include <asm/system.h>
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
 
@@ -167,15 +158,14 @@ static inline int shrink_one_page(struct page *page, int gfp_mask)
 	case 1:
 		/* is it a swap-cache or page-cache page? */
 		if (page->inode) {
-			/* Throw swap-cache pages away more aggressively */
-			if (PageSwapCache(page)) {
-				delete_from_swap_cache(page);
-				return 1;
-			}
 			if (test_and_clear_bit(PG_referenced, &page->flags))
 				break;
 			if (pgcache_under_min())
 				break;
+			if (PageSwapCache(page)) {
+				delete_from_swap_cache(page);
+				return 1;
+			}
 			remove_inode_page(page);
 			return 1;
 		}

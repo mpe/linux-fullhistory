@@ -554,17 +554,17 @@ static int sm_ioctl(struct device *dev, struct ifreq *ifr,
 		cp = hi->data.modename;
 		while (*hwp) {
 			if ((*hwp)->hw_name)
-				cp += sprintf("%s:,", (*hwp)->hw_name);
+				cp += sprintf(cp, "%s:,", (*hwp)->hw_name);
 			hwp++;
 		}
 		while (*mtp) {
 			if ((*mtp)->name)
-				cp += sprintf(">%s,", (*mtp)->name);
+				cp += sprintf(cp, ">%s,", (*mtp)->name);
 			mtp++;
 		}
 		while (*mrp) {
 			if ((*mrp)->name)
-				cp += sprintf("<%s,", (*mrp)->name);
+				cp += sprintf(cp, "<%s,", (*mrp)->name);
 			mrp++;
 		}
 		cp[-1] = '\0';

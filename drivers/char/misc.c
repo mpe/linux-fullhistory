@@ -77,6 +77,8 @@ extern void wdt_init(void);
 extern void acq_init(void);
 extern void pcwatchdog_init(void);
 extern int rtc_init(void);
+extern int rtc_DP8570A_init(void);
+extern int rtc_MK48T08_init(void);
 extern int dsp56k_init(void);
 extern int nvram_init(void);
 extern int radio_init(void);
@@ -244,6 +246,12 @@ int __init misc_init(void)
 #endif
 #ifdef CONFIG_H8
 	h8_init();
+#endif
+#ifdef CONFIG_MVME16x
+	rtc_MK48T08_init();
+#endif
+#ifdef CONFIG_BVME6000
+	rtc_DP8570A_init();
 #endif
 #if defined(CONFIG_RTC) || defined(CONFIG_SUN_MOSTEK_RTC)
 	rtc_init();

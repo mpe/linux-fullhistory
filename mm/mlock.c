@@ -3,20 +3,12 @@
  *
  *  (C) Copyright 1995 Linus Torvalds
  */
-#include <linux/stat.h>
-#include <linux/sched.h>
-#include <linux/kernel.h>
-#include <linux/mm.h>
 #include <linux/slab.h>
 #include <linux/shm.h>
-#include <linux/errno.h>
 #include <linux/mman.h>
-#include <linux/string.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
-#include <asm/system.h>
 #include <asm/pgtable.h>
 
 static inline int mlock_fixup_all(struct vm_area_struct * vma, int newflags)

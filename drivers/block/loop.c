@@ -17,6 +17,10 @@
  * Handle sparse backing files correctly - Kenn Humborg, Jun 28, 1998
  *
  * Loadable modules and other fixes by AK, 1998
+ *
+ * Make real block number available to downstream transfer functions, enables
+ * CBC (and relatives) mode encryption requiring unique IVs per data block. 
+ * Reed H. Petty, rhp@draper.net
  * 
  * Still To Fix:
  * - Advisory locking is ignored here. 
@@ -67,7 +71,7 @@ static int create_missing_block(struct loop_device *lo, int block, int blksize);
  * Transfer functions
  */
 static int transfer_none(struct loop_device *lo, int cmd, char *raw_buf,
-		  char *loop_buf, int size)
+		  char *loop_buf, int size, int real_block)
 {
 	if (cmd == READ)
 		memcpy(loop_buf, raw_buf, size);
@@ -77,7 +81,7 @@ static int transfer_none(struct loop_device *lo, int cmd, char *raw_buf,
 }
 
 static int transfer_xor(struct loop_device *lo, int cmd, char *raw_buf,
-		 char *loop_buf, int size)
+		 char *loop_buf, int size, int real_block)
 {
 	char	*in, *out, *key;
 	int	i, keysize;
@@ -245,7 +249,7 @@ repeat:
 			}
 
 			if ((lo->transfer)(lo, current_request->cmd, bh->b_data + offset,
-					dest_addr, size)) {
+					dest_addr, size, real_block)) {
 				printk(KERN_ERR "loop: transfer error block %d\n", block);
 				brelse(bh);
 				goto error_out_lock;

@@ -15,6 +15,7 @@
 #include <linux/in6.h>
 #include <linux/pci.h>
 #include <linux/tty.h>
+#include <linux/mm.h>
 
 #include <asm/io.h>
 #include <asm/hwrpb.h>
@@ -26,6 +27,7 @@
 #include <asm/fpu.h>
 #include <asm/irq.h>
 #include <asm/machvec.h>
+#include <asm/pgtable.h>
 
 #define __KERNEL_SYSCALLS__
 #include <asm/unistd.h>

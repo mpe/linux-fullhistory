@@ -26,6 +26,11 @@
 
 #include <linux/minix_fs.h>
 
+static void minix_read_inode(struct inode * inode);
+static void minix_write_inode(struct inode * inode);
+static int minix_statfs(struct super_block *sb, struct statfs *buf, int bufsiz);
+static int minix_remount (struct super_block * sb, int * flags, char * data);
+
 static void minix_delete_inode(struct inode *inode)
 {
 	inode->i_size = 0;

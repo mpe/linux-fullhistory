@@ -5,11 +5,7 @@
  * Integrated into 2.1.97+,  Andrew G. Morgan <morgan@transmeta.com>
  */ 
 
-#include <linux/errno.h>
-#include <linux/sched.h>
 #include <linux/mm.h>
-#include <linux/string.h>
-
 #include <asm/uaccess.h>
 
 /* Note: never hold tasklist_lock while spinning for this one */

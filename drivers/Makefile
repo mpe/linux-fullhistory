@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definitions are now in the main makefile.
 
 SUB_DIRS     := block char net misc sound
-MOD_SUB_DIRS := $(SUB_DIRS) sbus
+MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS) pci scsi sbus cdrom isdn pnp \
 				 macintosh video dio zorro fc4
 
@@ -23,6 +23,7 @@ endif
 
 ifdef CONFIG_SBUS
 SUB_DIRS += sbus
+MOD_SUB_DIRS += sbus
 endif
 
 ifdef CONFIG_ZORRO

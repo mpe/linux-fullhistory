@@ -14,22 +14,14 @@
  */
 
 #include <linux/mm.h>
-#include <linux/sched.h>
-#include <linux/kernel.h>
 #include <linux/kernel_stat.h>
-#include <linux/errno.h>
-#include <linux/string.h>
-#include <linux/stat.h>
 #include <linux/swap.h>
-#include <linux/fs.h>
 #include <linux/swapctl.h>
 #include <linux/pagemap.h>
 #include <linux/init.h>
 
 #include <asm/dma.h>
-#include <asm/system.h> /* for cli()/sti() */
 #include <asm/uaccess.h> /* for copy_to/from_user */
-#include <asm/bitops.h>
 #include <asm/pgtable.h>
 
 /*

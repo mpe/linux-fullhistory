@@ -4,15 +4,9 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#include <linux/errno.h>
-#include <linux/sched.h>
-#include <linux/utsname.h>
-#include <linux/resource.h>
-#include <linux/string.h>
-#include <linux/stat.h>
-#include <linux/mman.h>
 #include <linux/mm.h>
-#include <linux/fcntl.h>
+#include <linux/utsname.h>
+#include <linux/mman.h>
 #include <linux/smp_lock.h>
 #include <linux/notifier.h>
 #include <linux/reboot.h>

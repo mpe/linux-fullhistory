@@ -150,14 +150,14 @@ ENTRY(lcall7)
 	jmp ret_from_sys_call
 
 
-#ifdef __SMP__
 	ALIGN
-	.globl	ret_from_smpfork
-ret_from_smpfork:
+	.globl	ret_from_fork
+ret_from_fork:
 	GET_CURRENT(%ebx)
+#ifdef __SMP__
 	btrl	$0, SYMBOL_NAME(scheduler_lock)
-	jmp	ret_from_sys_call
 #endif /* __SMP__ */
+	jmp	ret_from_sys_call
 
 /*
  * Return to user mode is not as complex as all this looks,

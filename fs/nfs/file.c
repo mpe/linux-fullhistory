@@ -91,14 +91,13 @@ struct inode_operations nfs_file_inode_operations = {
 static int
 nfs_file_close(struct inode *inode, struct file *file)
 {
-	int	status, error;
+	int	status;
 
 	dfprintk(VFS, "nfs: close(%x/%ld)\n", inode->i_dev, inode->i_ino);
 
-	status = nfs_wbinval(inode);
-	error = nfs_write_error(inode);
+	status = nfs_wb_all(inode);
 	if (!status)
-		status = error;
+		status = nfs_write_error(inode);
 	return status;
 }
 
@@ -158,14 +157,13 @@ static int
 nfs_fsync(struct file *file, struct dentry *dentry)
 {
 	struct inode *inode = dentry->d_inode;
-	int status, error;
+	int status;
 
 	dfprintk(VFS, "nfs: fsync(%x/%ld)\n", inode->i_dev, inode->i_ino);
 
-	status = nfs_wbinval_pid(inode, current->pid);
-	error = nfs_write_error(inode);
+	status = nfs_wb_pid(inode, current->pid);
 	if (!status)
-		status = error;
+		status = nfs_write_error(inode);
 	return status;
 }
 

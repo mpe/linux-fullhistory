@@ -4,21 +4,13 @@
  *	(C) Copyright 1996 Linus Torvalds
  */
 
-#include <linux/stat.h>
-#include <linux/sched.h>
-#include <linux/kernel.h>
-#include <linux/mm.h>
-#include <linux/smp.h>
+#include <linux/slab.h>
 #include <linux/smp_lock.h>
 #include <linux/shm.h>
-#include <linux/errno.h>
 #include <linux/mman.h>
-#include <linux/string.h>
-#include <linux/slab.h>
 #include <linux/swap.h>
 
 #include <asm/uaccess.h>
-#include <asm/system.h>
 #include <asm/pgtable.h>
 
 extern int vm_enough_memory(long pages);
@@ -142,7 +134,6 @@ static inline unsigned long move_vma(struct vm_area_struct * vma,
 			new_vma->vm_start = new_addr;
 			new_vma->vm_end = new_addr+new_len;
 			new_vma->vm_offset = vma->vm_offset + (addr - vma->vm_start);
-			new_vma->vm_file = vma->vm_file;
 			if (new_vma->vm_file)
 				new_vma->vm_file->f_count++;
 			if (new_vma->vm_ops && new_vma->vm_ops->open)
@@ -151,6 +142,11 @@ static inline unsigned long move_vma(struct vm_area_struct * vma,
 			merge_segments(current->mm, new_vma->vm_start, new_vma->vm_end);
 			do_munmap(addr, old_len);
 			current->mm->total_vm += new_len >> PAGE_SHIFT;
+			if (new_vma->vm_flags & VM_LOCKED) {
+				current->mm->locked_vm += new_len >> PAGE_SHIFT;
+				make_pages_present(new_vma->vm_start,
+						   new_vma->vm_end);
+			}
 			return new_addr;
 		}
 		kmem_cache_free(vm_area_cachep, new_vma);
@@ -224,8 +220,11 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 			int pages = (new_len - old_len) >> PAGE_SHIFT;
 			vma->vm_end = addr + new_len;
 			current->mm->total_vm += pages;
-			if (vma->vm_flags & VM_LOCKED)
+			if (vma->vm_flags & VM_LOCKED) {
 				current->mm->locked_vm += pages;
+				make_pages_present(addr + old_len,
+						   addr + new_len);
+			}
 			ret = addr;
 			goto out;
 		}

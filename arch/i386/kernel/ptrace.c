@@ -476,7 +476,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			  if(addr == (long) &dummy->u_debugreg[4]) return -EIO;
 			  if(addr == (long) &dummy->u_debugreg[5]) return -EIO;
 			  if(addr < (long) &dummy->u_debugreg[4] &&
-			     ((unsigned long) data) >= 0xbffffffd) return -EIO;
+			     ((unsigned long) data) >= TASK_SIZE-3) return -EIO;
 			  
 			  ret = -EIO;
 			  if(addr == (long) &dummy->u_debugreg[7]) {

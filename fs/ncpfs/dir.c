@@ -298,7 +298,8 @@ leave_me:
 #ifdef CONFIG_NCPFS_STRONG
 static int
 ncp_force_rename(struct inode *old_dir, struct dentry* old_dentry, char *_old_name,
-                 struct inode *new_dir, struct dentry* new_dentry, char *_new_name)
+                 struct inode *new_dir, struct dentry* new_dentry, char *_new_name,
+                 int *done_flag)
 {
         int res=0x90,res2;
         struct iattr ia;
@@ -321,19 +322,34 @@ ncp_force_rename(struct inode *old_dir, struct dentry* old_dentry, char *_old_na
                                             old_dir, _old_name,
                                             new_dir, _new_name);
 
+        if (!res) {
+                ncp_invalid_dir_cache(old_dir);
+                ncp_invalid_dir_cache(new_dir);
+                d_move(old_dentry,new_dentry);
+                *done_flag=1;
+
+                if (!old_dentry->d_inode) {
+                        DPRINTK(KERN_INFO "ncpfs: no inode -- file remains rw\n");
+                        goto leave_me;
+                }
+                if ((res2=ncp_lookup_validate(old_dentry))) {
+                        DPRINTK(KERN_DEBUG "ncpfs: ncp_lookup_validate returned %d\n",res2);
+                }
+        }
+
         memset(&ia,0,sizeof(struct iattr));
         ia.ia_mode = old_dentry->d_inode->i_mode;
         ia.ia_mode &= ~(NCP_SERVER(old_dentry->d_inode)->m.file_mode & 0222);  /* clear write bits */
         ia.ia_valid = ATTR_MODE;
 
-	/* FIXME: uses only inode info, no dentry info... so it is safe to call */
-	/* it now with old dentry. If we use name (in future), we have to move */
-	/* it after dentry_move in caller */
+        DPRINTK(KERN_INFO "calling ncp_notify_change() with %s/%s\n",
+               old_dentry->d_parent->d_name.name,old_dentry->d_name.name);
+
         res2=ncp_notify_change(old_dentry, &ia);
         if (res2)
         {
                 printk(KERN_INFO "ncpfs: ncp_notify_change (2) failed: %08x\n",res2);
-                goto leave_me;
+                /* goto leave_me; */
         }
 
  leave_me:
@@ -755,7 +771,7 @@ static int ncp_lookup(struct inode *dir, struct dentry *dentry)
 	int len = dentry->d_name.len;      
 	struct ncpfs_inode_info finfo;
 	__u8 __name[dentry->d_name.len + 1];
-      
+
 	error =  -ENOENT;
 	if (!dir || !S_ISDIR(dir->i_mode)) {
 		printk(KERN_WARNING "ncp_lookup: inode is NULL or not a directory.\n");
@@ -1067,7 +1083,7 @@ static int ncp_rename(struct inode *old_dir, struct dentry *old_dentry,
 {
 	int old_len = old_dentry->d_name.len;
 	int new_len = new_dentry->d_name.len;
-	int error;
+	int error, done_flag=0;
 	char _old_name[old_dentry->d_name.len + 1];
 	char _new_name[new_dentry->d_name.len + 1];
 
@@ -1105,16 +1121,21 @@ static int ncp_rename(struct inode *old_dir, struct dentry *old_dentry,
 					    new_dir, _new_name);
 #ifdef CONFIG_NCPFS_STRONG
 	if (error == 0x90 && NCP_SERVER(old_dir)->m.flags & NCP_MOUNT_STRONG) {	/* RO */
-		error = ncp_force_rename(old_dir, old_dentry, _old_name, new_dir, new_dentry, _new_name);
+		error = ncp_force_rename(old_dir, old_dentry, _old_name,
+                                         new_dir, new_dentry, _new_name,
+                                         &done_flag);
 	}
 #endif
 	if (error == 0)
 	{
-		DPRINTK(KERN_DEBUG "ncp renamed %s -> %s.\n",
-			old_dentry->d_name.name,new_dentry->d_name.name);
-		ncp_invalid_dir_cache(old_dir);
-		ncp_invalid_dir_cache(new_dir);
-		d_move(old_dentry,new_dentry);
+                if (done_flag == 0)  /* if 1, the following already happened */
+                {                    /* in ncp_force_rename() */
+                        DPRINTK(KERN_DEBUG "ncp renamed %s -> %s.\n",
+                                old_dentry->d_name.name,new_dentry->d_name.name);
+                        ncp_invalid_dir_cache(old_dir);
+                        ncp_invalid_dir_cache(new_dir);
+                        d_move(old_dentry,new_dentry);
+                }
 	} else {
 		if (error == 0x9E)
 			error = -ENAMETOOLONG;

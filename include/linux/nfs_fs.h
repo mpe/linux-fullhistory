@@ -212,7 +212,6 @@ extern int nfs_lock(struct file *, int, struct file_lock *);
  * linux/fs/nfs/write.c
  */
 extern int  nfs_writepage(struct file *, struct page *);
-extern int  nfs_find_dentry_request(struct inode *, struct dentry *);
 extern int  nfs_check_failed_request(struct inode *);
 extern int  nfs_check_error(struct inode *);
 

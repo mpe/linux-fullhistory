@@ -950,7 +950,8 @@ static void NS8390_trigger_send(struct device *dev, unsigned int length,
 								int start_page)
 {
 	int e8390_base = dev->base_addr;
-    
+	struct ei_device *ei_local = (struct ei_device *) dev->priv;
+
 	outb_p(E8390_NODMA+E8390_PAGE0, e8390_base+E8390_CMD);
     
 	if (inb_p(e8390_base) & E8390_TRANS) 

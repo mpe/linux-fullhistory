@@ -2582,7 +2582,10 @@ static int init_bt848(int i)
 	btv->grabcount=0;
 	btv->grab=0;
 	btv->lastgrab=0;
-        btv->field=btv->last_field=0;
+	btv->field=btv->last_field=0;
+	btv->video_dev.minor = -1;
+	btv->vbi_dev.minor = -1;
+	btv->radio_dev.minor = -1;
 
 	/* i2c */
 	memcpy(&(btv->i2c),&bttv_i2c_bus_template,sizeof(struct i2c_bus));

@@ -1266,7 +1266,7 @@ struct packet_type sppp_packet_type=
 void sync_ppp_init(void)
 {
 	printk(KERN_INFO "Cronyx Ltd, Synchronous PPP and CISCO HDLC (c) 1994\n");
-	printk(KERN_INFO "Linux port (c) 1998 Building Number Three Ltd & Jan 'Yenya' Kasprzak.\n");
+	printk(KERN_INFO "Linux port (c) 1998 Building Number Three Ltd & Jan \"Yenya\" Kasprzak.\n");
 	sppp_packet_type.type=htons(ETH_P_WAN_PPP);	
 	dev_add_pack(&sppp_packet_type);
 }

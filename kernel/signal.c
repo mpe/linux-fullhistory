@@ -6,14 +6,10 @@
  *  1997-11-02  Modified for POSIX.1b signals by Richard Henderson
  */
 
-#include <linux/module.h>
-#include <linux/sched.h>
-#include <linux/errno.h>
-#include <linux/wait.h>
-#include <linux/unistd.h>
-#include <linux/mm.h>
-#include <linux/smp_lock.h>
 #include <linux/slab.h>
+#include <linux/module.h>
+#include <linux/unistd.h>
+#include <linux/smp_lock.h>
 #include <linux/init.h>
 
 #include <asm/uaccess.h>

@@ -12,6 +12,9 @@
  */
 
 #include <linux/config.h>
+#ifdef CONFIG_MCA
+#include <linux/mca.h>
+#endif
 #include <linux/module.h>
 
 #include "sound_config.h"
@@ -34,6 +37,67 @@ void attach_sb_card(struct address_info *hw_config)
 
 int probe_sb(struct address_info *hw_config)
 {
+#ifdef CONFIG_MCA
+	/* MCA code added by ZP Gu (zpg@castle.net) */
+	if (MCA_bus) {               /* no multiple REPLY card probing */
+		int slot;
+		u8 pos2, pos3, pos4;
+
+		slot = mca_find_adapter( 0x5138, 0 );
+		if( slot == MCA_NOTFOUND ) 
+		{
+			slot = mca_find_adapter( 0x5137, 0 );
+
+			if (slot != MCA_NOTFOUND)
+				mca_set_adapter_name( slot, "REPLY SB16 & SCSI Adapter" );
+		}
+		else
+		{
+			mca_set_adapter_name( slot, "REPLY SB16 Adapter" );
+		}
+
+		if (slot != MCA_NOTFOUND) 
+		{
+			mca_mark_as_used(slot);
+			pos2 = mca_read_stored_pos( slot, 2 );
+			pos3 = mca_read_stored_pos( slot, 3 );
+			pos4 = mca_read_stored_pos( slot, 4 );
+
+			if (pos2 & 0x4) 
+			{
+				/* enabled? */
+				static unsigned short irq[] = { 0, 5, 7, 10 };
+				/*
+				static unsigned short midiaddr[] = {0, 0x330, 0, 0x300 };
+       				*/
+
+				hw_config->io_base = 0x220 + 0x20 * (pos2 >> 6);
+				hw_config->irq = irq[(pos4 >> 5) & 0x3];
+				hw_config->dma = pos3 & 0xf;
+				/* Reply ADF wrong on High DMA, pos[1] should start w/ 00 */
+				hw_config->dma2 = (pos3 >> 4) & 0x3;
+				if (hw_config->dma2 == 0)
+					hw_config->dma2 = hw_config->dma;
+				else
+					hw_config->dma2 += 4;
+				/*
+					hw_config->driver_use_2 = midiaddr[(pos2 >> 3) & 0x3];
+				*/
+	
+				printk("SB: Reply MCA SB at slot=%d \
+iobase=0x%x irq=%d lo_dma=%d hi_dma=%d\n",
+						slot+1,
+				        	hw_config->io_base, hw_config->irq,
+	        				hw_config->dma, hw_config->dma2);
+			}
+			else
+			{
+				printk ("Reply SB Base I/O address disabled\n");
+			}
+		}
+	}
+#endif
+
 	if (check_region(hw_config->io_base, 16))
 	{
 		printk(KERN_ERR "sb_card: I/O port %x is already in use\n\n", hw_config->io_base);

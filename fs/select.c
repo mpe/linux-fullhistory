@@ -202,6 +202,9 @@ out:
  * Update: ERESTARTSYS breaks at least the xview clock binary, so
  * I'm trying ERESTARTNOHAND which restart only when you want to.
  */
+#define MAX_SELECT_SECONDS \
+	((unsigned long) (MAX_SCHEDULE_TIMEOUT / HZ)-1)
+
 asmlinkage int
 sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 {
@@ -218,8 +221,10 @@ sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 		    || (ret = __get_user(usec, &tvp->tv_usec)))
 			goto out_nofds;
 
-		timeout = ROUND_UP(usec, 1000000/HZ);
-		timeout += sec * (unsigned long) HZ;
+		if ((unsigned long) sec < MAX_SELECT_SECONDS) {
+			timeout = ROUND_UP(usec, 1000000/HZ);
+			timeout += sec * (unsigned long) HZ;
+		}
 	}
 
 	ret = -ENOMEM;

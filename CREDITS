@@ -1423,6 +1423,10 @@ W: http://www.speakeasy.org/~kirk/
 D: implemented kmod
 D: modularized BSD Unix domain sockets
 
+N: Reed H. Petty
+E: rhp@draper.net
+D: Loop device driver extensions
+
 N: Kai Petzke
 E: wpp@marie.physik.tu-berlin.de
 W: http://physik.tu-berlin.de/~wpp
@@ -2011,7 +2015,7 @@ S: 2612 XV Delft
 S: The Netherlands
 
 N: David Woodhouse
-E: Dave@mvhi.com
+E: David.Woodhouse@mvhi.com
 E: Dave@imladris.demon.co.uk
 D: Extensive ARCnet rewrite
 D: ARCnet COM20020, COM90xx IO-MAP drivers

@@ -14,6 +14,8 @@
 O_TARGET := sparcaudio.o
 O_OBJS   :=
 M_OBJS   :=
+M :=
+MM :=
 
 ifeq ($(CONFIG_SPARCAUDIO),y)
 M=y

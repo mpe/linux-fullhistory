@@ -4,18 +4,10 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#include <linux/config.h>
-#include <linux/wait.h>
-#include <linux/errno.h>
-#include <linux/sched.h>
-#include <linux/resource.h>
-#include <linux/mm.h>
 #include <linux/malloc.h>
-#include <linux/slab.h>
 #include <linux/interrupt.h>
 #include <linux/smp_lock.h>
 #include <linux/module.h>
-#include <linux/slab.h>
 #ifdef CONFIG_BSD_PROCESS_ACCT
 #include <linux/acct.h>
 #endif

@@ -27,7 +27,8 @@ struct loop_device {
 	int		lo_encrypt_key_size;
 	int		lo_flags;
 	int		(*transfer)(struct loop_device *, int cmd,
-				    char *raw_buf, char *loop_buf, int size);
+				    char *raw_buf, char *loop_buf, int size,
+				    int real_block);
 	char		lo_name[LO_NAME_SIZE];
 	char		lo_encrypt_key[LO_KEY_SIZE];
 	__u32           lo_init[2];
@@ -41,7 +42,8 @@ struct loop_device {
 };
 
 typedef	int (* transfer_proc_t)(struct loop_device *, int cmd,
-				char *raw_buf, char *loop_buf, int size);
+				char *raw_buf, char *loop_buf, int size,
+				int real_block);
 
 #endif /* __KERNEL__ */
 
@@ -101,7 +103,8 @@ struct loop_info {
 struct loop_func_table {
 	int number; 	/* filter type */ 
 	int (*transfer)(struct loop_device *lo, int cmd, 
-			char *raw_buf, char *loop_buf, int size);
+			char *raw_buf, char *loop_buf, int size,
+			int real_block);
 	int (*init)(struct loop_device *, struct loop_info *); 
 	/* release is called from loop_unregister_transfer or clr_fd */
 	int (*release)(struct loop_device *); 

@@ -12,10 +12,6 @@
  * Modified for sysctl support, 1/8/97, Chris Horn.
  */
 
-#include <stdarg.h>
-
-#include <linux/errno.h>
-#include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/tty_driver.h>
 #include <linux/smp_lock.h>

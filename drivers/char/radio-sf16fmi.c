@@ -77,13 +77,20 @@ static inline void fmi_unmute(int port)
 static inline int fmi_setfreq(struct fmi_device *dev, unsigned long freq)
 {
         int myport = dev->port;
-
+	int i;
+	
 	outbits(16, RSF16_ENCODE(freq), myport);
 	outbits(8, 0xC0, myport);
-	/* it is better than udelay(140000), isn't it? */
-	current->state = TASK_INTERRUPTIBLE;
+	for(i=0; i< 100; i++)
+	{
+		udelay(1400);
+		if(current->need_resched)
+			schedule();
+	}
+/* If this becomes allowed use it ... 	
+	current->state = TASK_UNINTERRUPTIBLE;
 	schedule_timeout(HZ/7);
-	/* ignore signals, we really should restore volume */
+*/	
 	if (dev->curvol) fmi_unmute(myport);
 	return 0;
 }
@@ -93,17 +100,21 @@ static inline int fmi_getsigstr(struct fmi_device *dev)
 	int val;
 	int res;
 	int myport = dev->port;
-
+	int i;
+	
 	val = dev->curvol ? 0x08 : 0x00;	/* unmute/mute */
 	outb(val, myport);
 	outb(val | 0x10, myport);
-	/* it is better than udelay(140000), isn't it? */
-	current->state = TASK_INTERRUPTIBLE;
+	for(i=0; i< 100; i++)
+	{
+		udelay(1400);
+		if(current->need_resched)
+			schedule();
+	}
+/* If this becomes allowed use it ... 	
+	current->state = TASK_UNINTERRUPTIBLE;
 	schedule_timeout(HZ/7);
-	/* do not do it..., 140ms is very looong time to get signal in real program 
-	if (signal_pending(current))
-	    return -EINTR;
-	*/
+*/	
 	res = (int)inb(myport+1);
 	outb(val, myport);
 	return (res & 2) ? 0 : 0xFFFF;

@@ -4,7 +4,7 @@
  *
  * 	Copyright (c) 1994 Pauline Middelink
  *
- *	$Id: ip_masq.c,v 1.27 1998/11/07 14:59:24 davem Exp $
+ *	$Id: ip_masq.c,v 1.28 1998/11/21 00:33:30 davem Exp $
  *
  *
  *	See ip_fw.c for original log
@@ -43,6 +43,7 @@
  *	Juan Jose Ciarlante	: 	u-space context => locks reworked
  *	Juan Jose Ciarlante	: 	fixed stupid SMP locking bug
  *	Juan Jose Ciarlante	: 	fixed "tap"ing in demasq path by copy-on-w
+ *	Juan Jose Ciarlante	: 	make masq_proto_doff() robust against fake sized/corrupted packets
  *	
  */
 
@@ -337,6 +338,9 @@ static spinlock_t masq_port_lock = SPIN_LOCK_UNLOCKED;
 #define PORT_MASQ_MUL 10
 #endif
 
+/*
+ *	At the moment, hardcore in sync with masq_proto_num
+ */
 atomic_t ip_masq_free_ports[3] = {
         ATOMIC_INIT((PORT_MASQ_END-PORT_MASQ_BEGIN) * PORT_MASQ_MUL),/* UDP */
         ATOMIC_INIT((PORT_MASQ_END-PORT_MASQ_BEGIN) * PORT_MASQ_MUL),/* TCP */
@@ -960,15 +964,40 @@ mport_nono:
         return NULL;
 }
 
-static __inline__ unsigned proto_doff(unsigned proto, char *th)
+/*
+ *	Get transport protocol data offset, check against size
+ */
+static __inline__ int proto_doff(unsigned proto, char *th, unsigned size)
 {
+	int ret = -1;
 	switch (proto) {
+		case IPPROTO_ICMP:
+			if (size >= sizeof(struct icmphdr))
+				ret = sizeof(struct icmphdr);
+			break;
 		case IPPROTO_UDP:
-			return sizeof(struct udphdr);
+			if (size >= sizeof(struct udphdr))
+				ret = sizeof(struct udphdr);
+			break;
 		case IPPROTO_TCP:
-			return ((struct tcphdr*)th)->doff << 2;
+			/*
+			*	Is this case, this check _also_ avoids
+			*	touching an invalid pointer if 
+			*	size is invalid
+			*/
+			if (size >= sizeof(struct tcphdr)) {
+				ret = ((struct tcphdr*)th)->doff << 2;
+				if (ret > size) {
+					ret = -1 ;
+				}
+			}
+
+			break;
 	}
-	return 0;
+	if (ret < 0)
+		IP_MASQ_DEBUG(0, "mess proto_doff for proto=%d, size =%d\n",
+			proto, size);
+	return ret;
 }
 
 int ip_fw_masquerade(struct sk_buff **skb_p, __u32 maddr)
@@ -980,19 +1009,26 @@ int ip_fw_masquerade(struct sk_buff **skb_p, __u32 maddr)
 	int		size;
 
 	/* 
-	 * 	Magic "doff" csum semantics
-	 *		!0: saved payload csum IS valid, doff is correct
-	 *		0: csum not valid
+	 * 	doff holds transport protocol data offset
+	 *	csum holds its checksum
+	 *	csum_ok says if csum is valid
 	 */
-	unsigned doff = 0;
+	int doff = 0;
 	int csum = 0;
+	int csum_ok = 0;
 
 	/*
 	 * We can only masquerade protocols with ports... and hack some ICMPs
 	 */
 
 	h.raw = (char*) iph + iph->ihl * 4;
+	size = ntohs(iph->tot_len) - (iph->ihl * 4);
 
+	doff = proto_doff(iph->protocol, h.raw, size);
+	if (doff < 0) {
+		IP_MASQ_DEBUG(0, "O-pkt invalid packet data size\n");
+		return -1;
+	}
 	switch (iph->protocol) {
 	case IPPROTO_ICMP:
 		return(ip_fw_masq_icmp(skb_p, maddr));
@@ -1002,22 +1038,21 @@ int ip_fw_masquerade(struct sk_buff **skb_p, __u32 maddr)
 			break;
 	case IPPROTO_TCP:
 		/* Make sure packet is in the masq range */
-		size = ntohs(iph->tot_len) - (iph->ihl * 4);
 		IP_MASQ_DEBUG(3, "O-pkt: %s size=%d\n",
 				masq_proto_name(iph->protocol),
 				size);
 
+#ifdef CONFIG_IP_MASQ_DEBUG
+		if (ip_masq_get_debug_level() > 3) {
+			skb->ip_summed = CHECKSUM_NONE;
+		}
+#endif
 		/* Check that the checksum is OK */
 		switch (skb->ip_summed)
 		{
 			case CHECKSUM_NONE:
 			{
-				int datasz;
-				doff = proto_doff(iph->protocol, h.raw);
-				datasz = size - doff; 
-				if (datasz < 0) 
-					return -1; 
-				csum = csum_partial(h.raw + doff, datasz, 0);
+				csum = csum_partial(h.raw + doff, size - doff, 0);
 				IP_MASQ_DEBUG(3, "O-pkt: %s I-datacsum=%d\n",
 						masq_proto_name(iph->protocol),
 						csum);
@@ -1138,7 +1173,7 @@ int ip_fw_masquerade(struct sk_buff **skb_p, __u32 maddr)
 	 */
 
 	if (ms->app) 
-		doff = 0;
+		csum_ok = 0;
 
  	/*
  	 *	Attempt ip_masq_app call.
@@ -1153,6 +1188,7 @@ int ip_fw_masquerade(struct sk_buff **skb_p, __u32 maddr)
                 iph = skb->nh.iph;
 		h.raw = (char*) iph + iph->ihl *4;
                 size = skb->len - (h.raw - skb->nh.raw);
+		/* doff should have not changed */
         }
 
  	/*
@@ -1163,8 +1199,7 @@ int ip_fw_masquerade(struct sk_buff **skb_p, __u32 maddr)
 	 *	Transport's payload partial csum
 	 */
 
-	if (!doff) {
-		doff = proto_doff(iph->protocol, h.raw);
+	if (!csum_ok) {
 		csum = csum_partial(h.raw + doff, size - doff, 0);
 	}
 	skb->csum = csum;
@@ -1715,8 +1750,9 @@ int ip_fw_demasquerade(struct sk_buff **skb_p)
 	union ip_masq_tphdr h;
 	struct ip_masq	*ms;
 	unsigned short size;
-	unsigned doff = 0;
+	int doff = 0;
 	int csum = 0;
+	int csum_ok = 0;
 	__u32 maddr;
 
 	/*
@@ -1732,9 +1768,20 @@ int ip_fw_demasquerade(struct sk_buff **skb_p)
 		return 0;
 	}
 
-	maddr = iph->daddr;
 	h.raw = (char*) iph + iph->ihl * 4;
 
+	/*
+	 *	IP payload size
+	 */
+	size = ntohs(iph->tot_len) - (iph->ihl * 4);
+
+	doff = proto_doff(iph->protocol, h.raw, size);
+	if (doff < 0) {
+		IP_MASQ_DEBUG(0, "I-pkt invalid packet data size\n");
+		return -1;
+	}
+
+	maddr = iph->daddr;
 	switch (iph->protocol) {
 	case IPPROTO_ICMP:
 		return(ip_fw_demasq_icmp(skb_p));
@@ -1754,16 +1801,20 @@ int ip_fw_demasquerade(struct sk_buff **skb_p)
 			return 0;
 
 		/* Check that the checksum is OK */
-		size = ntohs(iph->tot_len) - (iph->ihl * 4);
 		if ((iph->protocol == IPPROTO_UDP) && (h.uh->check == 0))
 			/* No UDP checksum */
 			break;
+#ifdef CONFIG_IP_MASQ_DEBUG
+		if (ip_masq_get_debug_level() > 3) {
+			skb->ip_summed = CHECKSUM_NONE;
+		}
+#endif
 
 		switch (skb->ip_summed)
 		{
 			case CHECKSUM_NONE:
-				doff = proto_doff(iph->protocol, h.raw);
 				csum = csum_partial(h.raw + doff, size - doff, 0);
+				csum_ok++;
 				skb->csum = csum_partial(h.raw , doff, csum);
 
 			case CHECKSUM_HW:
@@ -1851,7 +1902,7 @@ int ip_fw_demasquerade(struct sk_buff **skb_p)
 		 */
 
 		if (ms->app) 
-			doff = 0;
+			csum_ok = 0;
 
                 /*
                  *	Attempt ip_masq_app call.
@@ -1878,8 +1929,7 @@ int ip_fw_demasquerade(struct sk_buff **skb_p)
 		 *	Transport's payload partial csum
 		 */
 
-		if (!doff) {
-			doff = proto_doff(iph->protocol, h.raw);
+		if (!csum_ok) {
 			csum = csum_partial(h.raw + doff, size - doff, 0);
 		}
 		skb->csum = csum;

@@ -33,23 +33,13 @@
  * 		Idea by Alex Bligh (alex@cconcepts.co.uk)
  */
 
-#include <linux/signal.h>
-#include <linux/sched.h>
-#include <linux/kernel.h>
-#include <linux/errno.h>
-#include <linux/string.h>
-#include <linux/types.h>
-#include <linux/ptrace.h>
-#include <linux/mman.h>
 #include <linux/mm.h>
+#include <linux/mman.h>
 #include <linux/swap.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
 
-#include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
-#include <asm/string.h>
 
 unsigned long max_mapnr = 0;
 unsigned long num_physpages = 0;

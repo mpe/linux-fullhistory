@@ -1269,8 +1269,10 @@ retry_open:
 		filp->f_flags |= O_NONBLOCK; /* Don't let /dev/console block */
 		noctty = 1;
 	}
-#ifdef CONFIG_UNIX98_PTYS
+
 	if (device == PTMX_DEV) {
+#ifdef CONFIG_UNIX98_PTYS
+
 		/* find a free pty. */
 		int major, minor;
 		struct tty_driver *driver;
@@ -1293,9 +1295,14 @@ retry_open:
 		devpts_pty_new(driver->other->name_base + minor, MKDEV(driver->other->major, minor + driver->other->minor_start));
 		noctty = 1;
 		goto init_dev_done;
+
+#else   /* CONFIG_UNIX_98_PTYS */
+
+		return -ENODEV;
+
+#endif  /* CONFIG_UNIX_98_PTYS */
 	}
-#endif
-	
+
 	retval = init_dev(device, &tty);
 	if (retval)
 		return retval;

@@ -11,28 +11,17 @@
 
 #define __KERNEL_SYSCALLS__
 
-#include <linux/sched.h>
-#include <linux/fcntl.h>
-#include <linux/config.h>
-#include <linux/unistd.h>
-#include <linux/string.h>
 #include <linux/proc_fs.h>
+#include <linux/unistd.h>
 #include <linux/ctype.h>
 #include <linux/delay.h>
 #include <linux/utsname.h>
 #include <linux/ioport.h>
-#include <linux/hdreg.h>
-#include <linux/mm.h>
-#include <linux/slab.h>
-#include <linux/major.h>
-#include <linux/blk.h>
 #include <linux/init.h>
 #include <linux/smp_lock.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>
-
-#include <stdarg.h>
 
 #ifdef CONFIG_PCI
 #include <linux/pci.h>

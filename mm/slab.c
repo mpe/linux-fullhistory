@@ -100,16 +100,9 @@
  * is less than 512 (PAGE_SIZE<<3), but greater than 256.
  */
 
-#include	<linux/mm.h>
 #include	<linux/slab.h>
 #include	<linux/interrupt.h>
-#include	<linux/config.h>
 #include	<linux/init.h>
-#include	<linux/smp.h>
-
-#include	<asm/system.h>
-#include	<asm/atomic.h>
-#include	<asm/spinlock.h>
 
 /* If there is a different PAGE_SIZE around, and it works with this allocator,
  * then change the following.

@@ -113,14 +113,7 @@ extern struct buffer_head * minix_getblk(struct inode *, int, int);
 extern struct buffer_head * minix_bread(struct inode *, int, int);
 
 extern void minix_truncate(struct inode *);
-extern void minix_put_super(struct super_block *);
-extern struct super_block *minix_read_super(struct super_block *,void *,int);
 extern int init_minix_fs(void);
-extern void minix_write_super(struct super_block *);
-extern int minix_remount (struct super_block * sb, int * flags, char * data);
-extern void minix_read_inode(struct inode *);
-extern void minix_write_inode(struct inode *);
-extern int minix_statfs(struct super_block *, struct statfs *, int);
 extern int minix_sync_inode(struct inode *);
 extern int minix_sync_file(struct file *, struct dentry *);
 

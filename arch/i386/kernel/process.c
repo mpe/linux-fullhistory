@@ -50,11 +50,7 @@
 
 spinlock_t semaphore_wake_lock = SPIN_LOCK_UNLOCKED;
 
-#ifdef __SMP__
-asmlinkage void ret_from_fork(void) __asm__("ret_from_smpfork");
-#else
-asmlinkage void ret_from_fork(void) __asm__("ret_from_sys_call");
-#endif
+asmlinkage void ret_from_fork(void) __asm__("ret_from_fork");
 
 #ifdef CONFIG_APM
 extern int  apm_do_idle(void);
@@ -506,6 +502,31 @@ void release_segments(struct mm_struct *mm)
 		mm->segments = NULL;
 		vfree(ldt);
 	}
+}
+
+/*
+ * Create a kernel thread
+ */
+pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
+{
+	long retval;
+
+	__asm__ __volatile__(
+		"movl %%esp,%%esi\n\t"
+		"int $0x80\n\t"		/* Linux/i386 system call */
+		"cmpl %%esp,%%esi\n\t"	/* child or parent? */
+		"je 1f\n\t"		/* parent - jump */
+		"pushl %3\n\t"		/* push argument */
+		"call *%4\n\t"		/* call fn */
+		"movl %2,%0\n\t"	/* exit */
+		"int $0x80\n"
+		"1:\t"
+		:"=a" (retval)
+		:"0" (__NR_clone), "i" (__NR_exit),
+		 "r" (arg), "r" (fn),
+		 "b" (flags | CLONE_VM)
+		:"si");
+	return retval;
 }
 
 /*

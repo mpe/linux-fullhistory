@@ -10,13 +10,9 @@
  *
  */
 
-#include <linux/errno.h>
-#include <linux/sched.h>
-#include <linux/msg.h>
-#include <linux/stat.h>
 #include <linux/malloc.h>
+#include <linux/msg.h>
 #include <linux/interrupt.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
 

@@ -45,13 +45,8 @@
 #include <linux/kernel.h>
 
 #ifdef CONFIG_BSD_PROCESS_ACCT
-#include <linux/sched.h>
-#include <linux/vfs.h>
-#include <linux/fcntl.h>
-#include <linux/stat.h>
 #include <linux/mm.h>
 #include <linux/acct.h>
-#include <linux/major.h>
 #include <linux/smp_lock.h>
 #include <linux/file.h>
 

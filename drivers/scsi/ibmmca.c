@@ -822,6 +822,7 @@ static int scsi_id[IM_MAX_HOSTS] = { 7, 7, 7, 7, 7, 7, 7, 7 };
 #ifdef MODULE_PARM
 MODULE_PARM(io_port, "1-" __MODULE_STRING(IM_MAX_HOSTS) "i");
 MODULE_PARM(scsi_id, "1-" __MODULE_STRING(IM_MAX_HOSTS) "i"); 
+MODULE_PARM(display, "1i");
 #endif
 
 /*counter of concurrent disk read/writes, to turn on/off disk led */
@@ -856,7 +857,6 @@ static int ldn_access_load(struct Scsi_Host *shpnt, int ldn);
 static int ldn_access_total_read_write(struct Scsi_Host *shpnt);
 
 /*--------------------------------------------------------------------*/
-
 
 static void 
 do_interrupt_handler (int irq, void *dev_id, struct pt_regs *regs)
@@ -1520,8 +1520,9 @@ ibmmca_scsi_setup (char *str, int *ints)
    	use_display = 1;
    } else if( ints ) {
 	   int i;
-	   for (i = 0; i < IM_MAX_HOSTS && i < ints[0]; i++) {
-	      io_port[i] = ints[i+1];
+	   for (i = 0; i < IM_MAX_HOSTS && 2*i+2 < ints[0]; i++) {
+	      io_port[i] = ints[2*i+2];
+	      scsi_id[i] = ints[2*i+2];
 	   }
    }
 }
@@ -1558,13 +1559,23 @@ ibmmca_detect (Scsi_Host_Template * template)
       }
   if (found) return found;
 
+    /*
+     * Patched by ZP Gu to work with the 9556 as well; the 9556 has
+     * pos2 = 05, but it should be 00, as it should be interfaced
+     * via port = 0x3540.
+     */
+
   /* first look for the SCSI integrated on the motherboard */
   pos2 = mca_read_stored_pos(MCA_INTEGSCSI, 2);
-  if ((pos2 & 1) == 0)
-    {
-      pos3 = mca_read_stored_pos(MCA_INTEGSCSI, 3);
+  if (pos2 != 0xff) {
+    if ((pos2 & 1) == 0) {
       port = IM_IO_PORT + ((pos2 & 0x0e) << 2);
+    } else {
+      port = IM_IO_PORT;
+    }
+      pos3 = mca_read_stored_pos(MCA_INTEGSCSI, 3);
       id = (pos3 & 0xe0) >> 5;
+
       printk("IBM MCA SCSI: integrated SCSI found, io=0x%x, scsi id=%d.\n",
               port, id);
       if ((shpnt = ibmmca_register(template, port, id)))

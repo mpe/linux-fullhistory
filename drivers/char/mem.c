@@ -512,7 +512,7 @@ static int memory_open(struct inode * inode, struct file * filp)
 		case 3:
 			filp->f_op = &null_fops;
 			break;
-#ifndef CONFIG_PPC
+#if !defined(CONFIG_PPC) && !defined(__mc68000__)
 		case 4:
 			filp->f_op = &port_fops;
 			break;
@@ -568,6 +568,9 @@ __initfunc(int chr_dev_init(void))
 	tty_init();
 #ifdef CONFIG_PRINTER
 	lp_init();
+#endif
+#ifdef CONFIG_M68K_PRINTER
+	lp_m68k_init();
 #endif
 	misc_init();
 #ifdef CONFIG_SOUND

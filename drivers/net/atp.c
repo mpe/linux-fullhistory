@@ -556,7 +556,7 @@ net_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 			}
 			num_tx_since_rx++;
 		} else if (num_tx_since_rx > 8
-				   && jiffies > dev->last_rx + 100) {
+				   && jiffies - dev->last_rx > 100) {
 			if (net_debug > 2)
 				printk("%s: Missed packet? No Rx after %d Tx and %ld jiffies"
 					   " status %02x  CMR1 %02x.\n", dev->name,

@@ -8,17 +8,12 @@
  * bottom_half handler need not be re-entrant.
  */
 
-#include <linux/errno.h>
-#include <linux/sched.h>
+#include <linux/mm.h>
 #include <linux/kernel_stat.h>
 #include <linux/interrupt.h>
-#include <linux/mm.h>
 #include <linux/smp_lock.h>
 
 #include <asm/io.h>
-#include <asm/irq.h>
-#include <asm/bitops.h>
-#include <asm/atomic.h>
 
 /* intr_count died a painless death... -DaveM */
 
