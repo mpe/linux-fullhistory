@@ -140,7 +140,7 @@ static int irq = 0;		/* Default IRQ */
  *      N.B.
  *
  *      The Daystar Digital LT200 boards do not support interrupt-driven
- *      IO.  You must specify 'io=0xff' as a module parameter to invoke
+ *      IO.  You must specify 'irq=0xff' as a module parameter to invoke
  *      polled mode.  I also believe that the port probing logic is quite
  *      dangerous at best and certainly hopeless for a polled card.  Best to 
  *      specify both. - Steve H.

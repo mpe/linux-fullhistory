@@ -21,17 +21,6 @@
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 
-void checksignals(void)
-{
-	sigset_t *blocked = &current->blocked;
-	unsigned long mask = blocked->sig[0] | sigmask(SIGKILL) | sigmask(SIGINT) | sigmask(SIGQUIT);
-	mask &= blocked->sig[1];
-	if (~mask) {
-		printk("Bad signal mask\n");
-		__backtrace();
-	}
-}
-
 #define _BLOCKABLE (~(sigmask(SIGKILL) | sigmask(SIGSTOP)))
 
 #define SWI_SYS_SIGRETURN (0xef000000|(__NR_sigreturn))

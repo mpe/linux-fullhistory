@@ -1325,7 +1325,7 @@ int ip_fw_ctl(int cmd, void *m, int len)
 
 	case IP_FW_MASQ_TIMEOUTS: {
 #ifdef CONFIG_IP_MASQUERADE
-		return ip_fw_masq_timeouts(m, len);
+		ret = ip_fw_masq_timeouts(m, len);
 #else
 		ret = EINVAL;
 #endif

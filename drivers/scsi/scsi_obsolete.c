@@ -219,6 +219,8 @@ static void scsi_request_sense (Scsi_Cmnd * SCpnt)
 
     memcpy ((void *) SCpnt->cmnd , (void *) generic_sense,
 	    sizeof(generic_sense));
+    memset ((void *) SCpnt->sense_buffer, 0,
+            sizeof(SCpnt->sense_buffer));
 
     SCpnt->cmnd[1] = SCpnt->lun << 5;
     SCpnt->cmnd[4] = sizeof(SCpnt->sense_buffer);
@@ -227,6 +229,7 @@ static void scsi_request_sense (Scsi_Cmnd * SCpnt)
     SCpnt->request_bufflen = sizeof(SCpnt->sense_buffer);
     SCpnt->use_sg = 0;
     SCpnt->cmd_len = COMMAND_SIZE(SCpnt->cmnd[0]);
+    SCpnt->result = 0;
     internal_cmnd (SCpnt);
 }
 
@@ -375,7 +378,8 @@ void scsi_old_done (Scsi_Cmnd * SCpnt)
 		       SCpnt->host->host_no, SCpnt->channel, SCpnt->target,
 		       SCpnt->lun);
 		scsi_reset(SCpnt, SCSI_RESET_SYNCHRONOUS);
-		return;
+		status = REDO;
+                break;
 	    }
 	    else
 	    {
@@ -491,12 +495,8 @@ void scsi_old_done (Scsi_Cmnd * SCpnt)
 		printk("scsi%d, channel %d : RESERVATION CONFLICT performing"
 		       " reset.\n", SCpnt->host->host_no, SCpnt->channel);
 		scsi_reset(SCpnt, SCSI_RESET_SYNCHRONOUS);
-		return;
-#if 0
-		exit = DRIVER_SOFT | SUGGEST_ABORT;
-		status = MAYREDO;
+		status = REDO;
 		break;
-#endif
 	    default:
 		printk ("Internal error %s %d \n"
 			"status byte = %d \n", __FILE__,
@@ -634,10 +634,13 @@ void scsi_old_done (Scsi_Cmnd * SCpnt)
 	    memcpy ((void *) SCpnt->cmnd,
 		    (void*) SCpnt->data_cmnd,
 		    sizeof(SCpnt->data_cmnd));
+            memset ((void *) SCpnt->sense_buffer, 0,
+                    sizeof(SCpnt->sense_buffer));
 	    SCpnt->request_buffer = SCpnt->buffer;
 	    SCpnt->request_bufflen = SCpnt->bufflen;
 	    SCpnt->use_sg = SCpnt->old_use_sg;
 	    SCpnt->cmd_len = SCpnt->old_cmd_len;
+            SCpnt->result = 0;
 	    internal_cmnd (SCpnt);
 	}
 	break;

@@ -45,7 +45,7 @@
  * flag, can be configured by issuing an ioctl to the block device interface,
  * as any other ide device.
  *
- * Our own ide-tape ioctl's can can be issued to either the block device or
+ * Our own ide-tape ioctl's can be issued to either the block device or
  * the character device interface.
  *
  * Maximal throughput with minimal bus load will usually be achieved in the
@@ -276,7 +276,7 @@
  *		loop which checks if the pipeline is empty, and if it is, we
  *		increase the maximum number of stages as necessary until we
  *		reach the optimum value which just manages to keep the tape
- *		busy with with minimum allocated memory or until we reach
+ *		busy with minimum allocated memory or until we reach
  *		IDETAPE_MAX_PIPELINE_STAGES.
  *
  * Concerning (2):

@@ -106,6 +106,12 @@ struct sk_buff {
 	__u32		shapestamp;		/* Stamp for shaper    */
 	__u16		shapepend;		/* Pending */
 #endif
+
+#if defined(CONFIG_HIPPI)
+	union{
+		__u32	ifield;
+	} private;
+#endif
 };
 
 /* These are just the default values. This is run time configurable.

@@ -1144,7 +1144,7 @@ static void hp100_mmuinit( struct device *dev )
           
           /*
            * Each pdl is 508 bytes long. (63 frags * 4 bytes for address and
-           * 4 bytes for for header). We will leave NUM_RXPDLS * 508 (rounded
+           * 4 bytes for header). We will leave NUM_RXPDLS * 508 (rounded
            * to the next higher 1k boundary) bytes for the rx-pdl's
 	   * Note: For non-etr chips the transmit stop register must be
 	   * programmed on a 1k boundary, i.e. bits 9:0 must be zero. 

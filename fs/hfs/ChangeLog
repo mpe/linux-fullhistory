@@ -123,7 +123,7 @@ Sun Dec 14 01:12:58 1997  a sun  <asun@zoology.washington.edu>
 	* dir.c
 	changed mark_inodes_deleted to dget/d_delete/dput the dentry
 	instead of just dropping it. the bytes available should now
-	be updated updated properly upon deletion.
+	be updated properly upon deletion.
 
 Wed Dec 10 00:01:25 1997  a sun  <asun@zoology.washington.edu>
 
@@ -629,7 +629,7 @@ Tue Sep 10 12:05:47 1996  Paul H. Hargrove  <hargrove@sccm.stanford.edu>
 
 	* file.c, file_cap.c, hfs_fs.h:
 	Rename fix_perms() to hfs_file_fix_mode() and
-	move it from from file_cap.c to file.c.
+	move it from file_cap.c to file.c.
 
 	* README.sgml, super.c:
 	Make the default for the names mount option vary with the fork option.

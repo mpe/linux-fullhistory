@@ -528,6 +528,10 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( ADAPTEC,	ADAPTEC_7883,	"AIC-7883U"),
 	DEVICE( ADAPTEC,	ADAPTEC_7884,	"AIC-7884U"),
 	DEVICE( ADAPTEC,	ADAPTEC_1030,	"ABA-1030 DVB receiver"),
+  DEVICE( ADAPTEC2, ADAPTEC2_2940U2, "AHA-2940U2"),
+  DEVICE( ADAPTEC2, ADAPTEC2_7890, "AIC-7890/1"),
+  DEVICE( ADAPTEC2, ADAPTEC2_3940U2, "AHA-3940U2"),
+  DEVICE( ADAPTEC2, ADAPTEC2_7896, "AIC-7896/7"),
   	DEVICE( ATRONICS,	ATRONICS_2015,	"IDE-2015PL"),
 	DEVICE( TIGERJET,	TIGERJET_300,	"Tiger300 ISDN"),
 	DEVICE( ARK,		ARK_STING,	"Stingray"),
@@ -778,6 +782,7 @@ static const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_INTEL:		return "Intel";
 	      case PCI_VENDOR_ID_KTI:		return "KTI";
 	      case PCI_VENDOR_ID_ADAPTEC:	return "Adaptec";
+	      case PCI_VENDOR_ID_ADAPTEC2:	return "Adaptec";
 	      case PCI_VENDOR_ID_ATRONICS:	return "Atronics";
 	      case PCI_VENDOR_ID_TIGERJET:	return "TigerJet";
 	      case PCI_VENDOR_ID_ARK:		return "ARK Logic";

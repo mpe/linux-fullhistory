@@ -2950,8 +2950,8 @@ wv_mmc_init(device *	dev)
   /* Attempt to recognise 2.00 cards (2.4 GHz frequency selectable)
    * Does it work for everybody, especially old cards? */
   /* Note: WFREQSEL verifies that it is able to read a sensible
-   * frequency from from EEPROM (address 0x00) and that
-   * MMR_FEE_STATUS_ID is 0xA (Xilinx version) or 0xB (Ariadne version).
+   * frequency from EEPROM (address 0x00) and that MMR_FEE_STATUS_ID
+   * is 0xA (Xilinx version) or 0xB (Ariadne version).
    * My test is more crude but does work. */
   if(!(mmc_in(ioaddr, mmroff(0, mmr_fee_status)) &
        (MMR_FEE_STATUS_DWLD | MMR_FEE_STATUS_BUSY)))

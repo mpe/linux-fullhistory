@@ -194,7 +194,7 @@ __initfunc(int lne390_probe1(struct device *dev, int ioaddr))
 	}
 	printk(" IRQ %d,", dev->irq);
 
-	if (request_irq(dev->irq, ei_interrupt, 0, "lne390", NULL)) {
+	if (request_irq(dev->irq, ei_interrupt, 0, "lne390", dev)) {
 		printk (" unable to get IRQ %d.\n", dev->irq);
 		kfree(dev->priv);
 		dev->priv = NULL;
@@ -223,10 +223,10 @@ __initfunc(int lne390_probe1(struct device *dev, int ioaddr))
 	   the card mem within the region covered by `normal' RAM  !!!
 	*/
 	if (dev->mem_start > 1024*1024) {	/* phys addr > 1MB */
-		if (dev->mem_start < (unsigned long)high_memory) {
+		if (dev->mem_start < virt_to_bus(high_memory)) {
 			printk(KERN_CRIT "lne390.c: Card RAM overlaps with normal memory!!!\n");
 			printk(KERN_CRIT "lne390.c: Use EISA SCU to set card memory below 1MB,\n");
-			printk(KERN_CRIT "lne390.c: or to an address above %p.\n", high_memory);
+			printk(KERN_CRIT "lne390.c: or to an address above 0x%lx.\n", virt_to_bus(high_memory));
 			printk(KERN_CRIT "lne390.c: Driver NOT installed.\n");
 			free_irq(dev->irq, dev);
 			kfree(dev->priv);
@@ -243,6 +243,7 @@ __initfunc(int lne390_probe1(struct device *dev, int ioaddr))
 			dev->priv = NULL;
 			return EAGAIN;
 		}
+		ei_status.reg0 = 1;	/* Use as remap flag */
 		printk("lne390.c: remapped %dkB card memory to virtual address %#lx\n",
 				LNE390_STOP_PG/4, dev->mem_start);
 	}
@@ -427,6 +428,8 @@ void cleanup_module(void)
 			void *priv = dev->priv;
 			free_irq(dev->irq, dev);
 			release_region(dev->base_addr, LNE390_IO_EXTENT);
+			if (ei_status.reg0)
+				iounmap((void *)dev->mem_start);
 			dev->priv = NULL;
 			unregister_netdev(dev);
 			kfree(priv);

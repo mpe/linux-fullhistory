@@ -226,10 +226,7 @@ void machine_power_off(void)
 	case _MACH_prep:
 		machine_restart(NULL);
 	case _MACH_apus:
-#if defined(CONFIG_APM) && defined(CONFIG_APM_POWER_OFF)
-		apm_set_power_state(APM_STATE_OFF);
 		for (;;);
-#endif
 	}
 	for (;;);
 #else /* CONFIG_MBX */

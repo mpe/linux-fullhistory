@@ -34,6 +34,7 @@
 #include <linux/errno.h>
 #include <net/arp.h>
 #include <net/sock.h>
+#include <asm/uaccess.h>
 #include <asm/checksum.h>
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -80,16 +81,8 @@ int hippi_header(struct sk_buff *skb, struct device *dev,
 	hip->le.dest_addr_type	= 2;	/* 12 bit SC address */
 	hip->le.src_addr_type	= 2;	/* 12 bit SC address */
 
-#if 1
-	if (saddr)
-	{
-		printk("existing saddr - this should not happen, configure ARP please!\n");
-		memcpy(hip->le.src_switch_addr, saddr + 3, 3);
-	}else
-		memcpy(hip->le.src_switch_addr, dev->dev_addr + 3, 3);
-
+	memcpy(hip->le.src_switch_addr, dev->dev_addr + 3, 3);
 	memset(&hip->le.reserved, 0, 16);
-#endif
 
 	hip->snap.dsap		= HIPPI_EXTENDED_SAP;
 	hip->snap.ssap		= HIPPI_EXTENDED_SAP;
@@ -103,7 +96,7 @@ int hippi_header(struct sk_buff *skb, struct device *dev,
 	{
 		memcpy(hip->le.dest_switch_addr, daddr + 3, 3);
 		memcpy(&skb->private.ifield, daddr + 2, 4);
-		return(HIPPI_HLEN);
+		return HIPPI_HLEN;
 	}
 	return -HIPPI_HLEN;
 }

@@ -50,6 +50,7 @@ char *video_vbase;        /* mapped */
 int  video_bpp;
 int  video_width;
 int  video_height;
+int  video_height_virtual;
 int  video_type = FB_TYPE_PACKED_PIXELS;
 int  video_visual;
 int  video_linelength;
@@ -249,9 +250,38 @@ static void vesafb_set_disp(int con)
 }
 
 static int vesafb_set_var(struct fb_var_screeninfo *var, int con,
-			 struct fb_info *info)
+			  struct fb_info *info)
 {
-	memcpy(var, &vesafb_defined, sizeof(struct fb_var_screeninfo));
+
+	if (var->xres           != vesafb_defined.xres           ||
+	    var->yres           != vesafb_defined.yres           ||
+	    var->xres_virtual   != vesafb_defined.xres_virtual   ||
+	    var->yres_virtual   >  video_height_virtual          ||
+	    var->yres_virtual   <  video_height                  ||
+	    var->xoffset                                         ||
+	    var->bits_per_pixel != vesafb_defined.bits_per_pixel ||
+	    var->nonstd)
+		return -EINVAL;
+
+	if ((var->activate & FB_ACTIVATE_MASK) == FB_ACTIVATE_TEST)
+		return 0;
+
+	if (ypan || ywrap) {
+		if (vesafb_defined.yres_virtual != var->yres_virtual) {
+			vesafb_defined.yres_virtual = var->yres_virtual;
+			if (con != -1) {
+				fb_display[con].var = vesafb_defined;
+				info->changevar(con);
+			}
+		}
+
+		if (var->yoffset != vesafb_defined.yoffset)
+			return vesafb_pan_display(var,con,info);
+		return 0;
+	}
+
+	if (var->yoffset)
+		return -EINVAL;
 	return 0;
 }
 
@@ -550,6 +580,16 @@ __initfunc(void vesafb_init(void))
 		vesafb_defined.yres_virtual = video_height;
 		ypan = ywrap = 0;
 	}
+	video_height_virtual = vesafb_defined.yres_virtual;
+
+	/* some dummy values for timing to make fbset happy */
+	vesafb_defined.pixclock     = 10000000 / video_width * 1000 / video_height;
+	vesafb_defined.left_margin  = (video_width / 8) & 0xf8;
+	vesafb_defined.right_margin = 32;
+	vesafb_defined.upper_margin = 16;
+	vesafb_defined.lower_margin = 4;
+	vesafb_defined.hsync_len    = (video_width / 8) & 0xf8;
+	vesafb_defined.vsync_len    = 4;
 
 	if (video_bpp > 8) {
 		vesafb_defined.red.offset    = screen_info.red_pos;

@@ -251,9 +251,11 @@ int rose_decode(struct sk_buff *skb, int *ns, int *nr, int *q, int *d, int *m)
 	return ROSE_ILLEGAL;
 }
 
-static int rose_parse_national(unsigned char *p, struct rose_facilities *facilities, int len)
+static int rose_parse_national(unsigned char *p, struct rose_facilities_struct *facilities, int len)
 {
-	unsigned char l, n = 0;
+	unsigned char *pt;
+	unsigned char l, lg, n = 0;
+	int fac_national_digis_received = 0;
 
 	do {
 		switch (*p & 0xC0) {
@@ -280,12 +282,33 @@ static int rose_parse_national(unsigned char *p, struct rose_facilities *facilit
 			case 0xC0:
 				l = p[1];
 				if (*p == FAC_NATIONAL_DEST_DIGI) {
-					memcpy(&facilities->source_digi, p + 2, AX25_ADDR_LEN);
-					facilities->source_ndigis = 1;
+					if (!fac_national_digis_received) {
+						memcpy(&facilities->source_digis[0], p + 2, AX25_ADDR_LEN);
+						facilities->source_ndigis = 1;
+					}
 				}
-				if (*p == FAC_NATIONAL_SRC_DIGI) {
-					memcpy(&facilities->dest_digi,   p + 2, AX25_ADDR_LEN);
-					facilities->dest_ndigis = 1;
+				else if (*p == FAC_NATIONAL_SRC_DIGI) {
+					if (!fac_national_digis_received) {
+						memcpy(&facilities->dest_digis[0], p + 2, AX25_ADDR_LEN);
+						facilities->dest_ndigis = 1;
+					}
+				}
+				else if (*p == FAC_NATIONAL_FAIL_CALL) {
+					memcpy(&facilities->fail_call, p + 2, AX25_ADDR_LEN);
+				}
+				else if (*p == FAC_NATIONAL_FAIL_ADD) {
+					memcpy(&facilities->fail_addr, p + 3, ROSE_ADDR_LEN);
+				}
+				else if (*p == FAC_NATIONAL_DIGIS) {
+					fac_national_digis_received = 1;
+					facilities->source_ndigis = 0;
+					facilities->dest_ndigis   = 0;
+					for (pt = p + 2, lg = 0 ; lg < l ; pt += AX25_ADDR_LEN, lg += AX25_ADDR_LEN) {
+						if (pt[6] & AX25_HBIT)
+							memcpy(&facilities->dest_digis[facilities->dest_ndigis++], pt, AX25_ADDR_LEN);
+						else
+							memcpy(&facilities->source_digis[facilities->source_ndigis++], pt, AX25_ADDR_LEN);
+					}
 				}
 				p   += l + 2;
 				n   += l + 2;
@@ -297,7 +320,7 @@ static int rose_parse_national(unsigned char *p, struct rose_facilities *facilit
 	return n;
 }
 
-static int rose_parse_ccitt(unsigned char *p, struct rose_facilities *facilities, int len)
+static int rose_parse_ccitt(unsigned char *p, struct rose_facilities_struct *facilities, int len)
 {
 	unsigned char l, n = 0;
 	char callsign[11];
@@ -346,17 +369,9 @@ static int rose_parse_ccitt(unsigned char *p, struct rose_facilities *facilities
 	return n;
 }
 
-int rose_parse_facilities(struct sk_buff *skb, struct rose_facilities *facilities)
+int rose_parse_facilities(unsigned char *p, struct rose_facilities_struct *facilities)
 {
 	int facilities_len, len;
-	unsigned char *p;
-
-	memset(facilities, 0x00, sizeof(struct rose_facilities));
-
-	len  = (((skb->data[3] >> 4) & 0x0F) + 1) / 2;
-	len += (((skb->data[3] >> 0) & 0x0F) + 1) / 2;
-
-	p = skb->data + len + 4;
 
 	facilities_len = *p++;
 
@@ -388,6 +403,7 @@ int rose_parse_facilities(struct sk_buff *skb, struct rose_facilities *facilitie
 					break;
 			}
 		}
+		else break;	/* Error in facilities format */
 	}
 
 	return 1;
@@ -397,7 +413,7 @@ int rose_create_facilities(unsigned char *buffer, rose_cb *rose)
 {
 	unsigned char *p = buffer + 1;
 	char *callsign;
-	int len;
+	int len, nb;
 
 	/* National Facilities */
 	if (rose->rand != 0 || rose->source_ndigis == 1 || rose->dest_ndigis == 1) {
@@ -410,17 +426,40 @@ int rose_create_facilities(unsigned char *buffer, rose_cb *rose)
 			*p++ = (rose->rand >> 0) & 0xFF;
 		}
 
-		if (rose->source_ndigis == 1) {
+		/* Sent before older facilities */
+		if ((rose->source_ndigis > 0) || (rose->dest_ndigis > 0)) {
+			int maxdigi = 0;
+			*p++ = FAC_NATIONAL_DIGIS;
+			*p++ = AX25_ADDR_LEN * (rose->source_ndigis + rose->dest_ndigis);
+			for (nb = 0 ; nb < rose->source_ndigis ; nb++) {
+				if (++maxdigi >= ROSE_MAX_DIGIS)
+					break;
+				memcpy(p, &rose->source_digis[nb], AX25_ADDR_LEN);
+				p[6] |= AX25_HBIT;
+				p += AX25_ADDR_LEN;
+			}
+			for (nb = 0 ; nb < rose->dest_ndigis ; nb++) {
+				if (++maxdigi >= ROSE_MAX_DIGIS)
+					break;
+				memcpy(p, &rose->dest_digis[nb], AX25_ADDR_LEN);
+				p[6] &= ~AX25_HBIT;
+				p += AX25_ADDR_LEN;
+			}
+		}
+
+		/* For compatibility */
+		if (rose->source_ndigis > 0) {
 			*p++ = FAC_NATIONAL_SRC_DIGI;
 			*p++ = AX25_ADDR_LEN;
-			memcpy(p, &rose->source_digi, AX25_ADDR_LEN);
+			memcpy(p, &rose->source_digis[0], AX25_ADDR_LEN);
 			p   += AX25_ADDR_LEN;
 		}
 
-		if (rose->dest_ndigis == 1) {
+		/* For compatibility */
+		if (rose->dest_ndigis > 0) {
 			*p++ = FAC_NATIONAL_DEST_DIGI;
 			*p++ = AX25_ADDR_LEN;
-			memcpy(p, &rose->dest_digi, AX25_ADDR_LEN);
+			memcpy(p, &rose->dest_digis[0], AX25_ADDR_LEN);
 			p   += AX25_ADDR_LEN;
 		}
 	}

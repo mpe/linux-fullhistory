@@ -398,7 +398,7 @@ void machine_halt(void)
 void machine_power_off(void)
 {
 #if defined(CONFIG_APM) && defined(CONFIG_APM_POWER_OFF)
-	apm_set_power_state(APM_STATE_OFF);
+	apm_power_off();
 #endif
 }
 

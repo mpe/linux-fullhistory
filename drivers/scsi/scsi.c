@@ -1476,6 +1476,7 @@ SCSI_LOG_MLQUEUE(4,
 
     SCpnt->internal_timeout = NORMAL_TIMEOUT;
     SCpnt->abort_reason = 0;
+    SCpnt->result = 0;
     internal_cmnd (SCpnt);
 
     SCSI_LOG_MLQUEUE(3,printk ("Leaving scsi_do_cmd()\n"));
@@ -1704,6 +1705,8 @@ scsi_retry_command(Scsi_Cmnd * SCpnt)
   SCpnt->request_bufflen = SCpnt->bufflen;
   SCpnt->use_sg = SCpnt->old_use_sg;
   SCpnt->cmd_len = SCpnt->old_cmd_len;
+  SCpnt->result = 0;
+  memset ((void *) SCpnt->sense_buffer, 0, sizeof SCpnt->sense_buffer);
   return internal_cmnd (SCpnt);
 }
 

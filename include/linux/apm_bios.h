@@ -3,7 +3,7 @@
 
 /*
  * Include file for the interface to an APM BIOS
- * Copyright 1994, 1995 Stephen Rothwell (Stephen.Rothwell@pd.necisa.oz.au)
+ * Copyright 1994-1998 Stephen Rothwell (Stephen.Rothwell@canb.auug.org.au)
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -14,8 +14,6 @@
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
- *
- * $Id: apm_bios.h,v 0.9 1995/03/09 13:50:05 sfr Exp $
  */
 
 typedef unsigned short	apm_event_t;
@@ -83,7 +81,7 @@ extern void		apm_bios_init(void);
 extern int		apm_register_callback(int (*callback)(apm_event_t));
 extern void		apm_unregister_callback(int (*callback)(apm_event_t));
 
-extern int		apm_set_power_state(ushort state);
+extern void		apm_power_off(void);
 extern int		apm_display_blank(void);
 extern int		apm_display_unblank(void);
 

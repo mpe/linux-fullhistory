@@ -16,6 +16,8 @@
  *  Modified by Mike McLagan <mike.mclagan@linux.org>
  *        Recognise extended mode on AHA1542CP, different bit than 1542CF
  *        1-Jan-97
+ *  Modified by Bjorn L. Thordarson and Einar Thor Einarsson
+ *        Recognize that DMA0 is valid DMA channel -- 13-Jul-98
  */
 
 #include <linux/module.h>
@@ -97,13 +99,6 @@ static char *setup_str[MAXBOARDS] = {(char *)NULL,(char *)NULL};
  *		    Valid values: 5, 6, 7, 8, 10 (MB/s)
  *		    Factory default is 5 MB/s.
  */
-
-
-/* The DMA-Controller.  We need to fool with this because we want to 
-   be able to use the aha1542 without having to have the bios enabled */
-#define DMA_MODE_REG	0xd6
-#define DMA_MASK_REG	0xd4
-#define	CASCADE		0xc0
 
 #define BIOS_TRANSLATION_1632 0  /* Used by some old 1542A boards */
 #define BIOS_TRANSLATION_6432 1 /* Default case these days */
@@ -767,8 +762,8 @@ static int aha1542_getconfig(int base_io, unsigned char * irq_level, unsigned ch
     *dma_chan = 5;
     break;
   case 0x01:
-    printk("DMA priority 0 not available for Adaptec driver\n");
-    return -1;
+    *dma_chan = 0;
+    break;
   case 0:
     /* This means that the adapter, although Adaptec 1542 compatible, doesn't use a DMA channel.
        Currently only aware of the BusLogic BT-445S VL-Bus adapter which needs this. */
@@ -1038,9 +1033,9 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
 				    goto unregister;
 			    }
 			    
-			    if (dma_chan >= 5) {
-				    outb((dma_chan - 4) | CASCADE, DMA_MODE_REG);
-				    outb(dma_chan - 4, DMA_MASK_REG);
+			    if (dma_chan == 0 || dma_chan >= 5) {
+				    set_dma_mode(dma_chan, DMA_MODE_CASCADE);
+				    enable_dma(dma_chan);
 			    }
 		    }
 		    aha_host[irq_level - 9] = shpnt;

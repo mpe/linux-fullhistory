@@ -431,7 +431,7 @@ void arp_send(int type, int ptype, u32 dest_ip,
 	 *	No arp on this interface.
 	 */
 	
-	if (dev->flags&IFF_NOARP)
+	if (dev->flags&(IFF_NOARP|IFF_NODYNARP))
 		return;
 
 	/*
@@ -547,7 +547,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
  */  
 	if (in_dev == NULL ||
 	    arp->ar_hln != dev->addr_len    || 
-	    dev->flags & IFF_NOARP          ||
+	    dev->flags & (IFF_NOARP|IFF_NODYNARP) ||
 	    skb->pkt_type == PACKET_OTHERHOST ||
 	    skb->pkt_type == PACKET_LOOPBACK ||
 	    arp->ar_pln != 4)

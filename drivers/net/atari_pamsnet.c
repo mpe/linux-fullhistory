@@ -864,9 +864,10 @@ static struct net_device_stats *net_get_stats(struct device *dev)
 
 #ifdef MODULE
 
+static char devicename[9] = { 0, };
 static struct device pam_dev =
 	{
-		"        ",	/* filled in by register_netdev() */
+		devicename,	/* filled in by register_netdev() */
 		0, 0, 0, 0,	/* memory */
 		0, 0,		/* base, irq */
 		0, 0, 0, NULL, pamsnet_probe,

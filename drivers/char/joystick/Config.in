@@ -1,0 +1,19 @@
+#
+# Joystick lowlevel driver configuration
+#
+
+dep_tristate '   Classic PC analog joysticks' CONFIG_JOY_ANALOG $CONFIG_JOYSTICK
+dep_tristate '   FPGaming and MadCatz A3D controllers' CONFIG_JOY_ASSASIN $CONFIG_JOYSTICK
+dep_tristate '   Gravis GrIP gamepads' CONFIG_JOY_GRAVIS $CONFIG_JOYSTICK
+dep_tristate '   Logitech Digital joysticks' CONFIG_JOY_LOGITECH $CONFIG_JOYSTICK
+dep_tristate '   Microsoft SideWinder, Genius Digital joysticks' CONFIG_JOY_SIDEWINDER $CONFIG_JOYSTICK
+dep_tristate '   ThrustMaster DirectConnect (BSP) joysticks' CONFIG_JOY_THRUSTMASTER $CONFIG_JOYSTICK
+dep_tristate '   PDPI Lightning L4 gamecards' CONFIG_JOY_LIGHTNING $CONFIG_JOYSTICK
+if [ "$CONFIG_PARPORT" != "n" ]; then
+  dep_tristate '   NES, SNES, PSX, Multisystem gamepads' CONFIG_JOY_CONSOLE $CONFIG_JOYSTICK
+  dep_tristate '   Sega, Multisystem gamepads' CONFIG_JOY_DB9 $CONFIG_JOYSTICK
+  dep_tristate '   TurboGraFX Multisystem joystick interface' CONFIG_JOY_TURBOGRAFX $CONFIG_JOYSTICK
+fi  
+if [ "$CONFIG_AMIGA" = "y" ]; then
+  dep_tristate '   Amiga joysticks' CONFIG_JOY_AMIGA $CONFIG_JOYSTICK
+fi

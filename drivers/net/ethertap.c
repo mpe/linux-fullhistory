@@ -7,7 +7,7 @@
  *	on it will attempt to ARP the user space and reply to ARPS from the
  *	user space.
  *
- *	As this is an ethernet device you cau use it for appletalk, IPX etc
+ *	As this is an ethernet device you can use it for appletalk, IPX etc
  *	even for building bridging tunnels.
  */
  

@@ -56,7 +56,7 @@ enum {
 #define	ROSE_DEFAULT_ROUTING		1		/* Default routing flag */
 #define	ROSE_DEFAULT_FAIL_TIMEOUT	(120 * HZ)	/* Time until link considered usable */
 #define	ROSE_DEFAULT_MAXVC		50		/* Maximum number of VCs per neighbour */
-#define	ROSE_DEFAULT_WINDOW_SIZE	3		/* Default window size */
+#define	ROSE_DEFAULT_WINDOW_SIZE	7		/* Default window size */
 
 #define ROSE_MODULUS 			8
 #define	ROSE_MAX_PACKET_SIZE		251		/* Maximum packet size */
@@ -72,6 +72,9 @@ enum {
 #define	FAC_NATIONAL_FLAGS		0x3F
 #define	FAC_NATIONAL_DEST_DIGI		0xE9
 #define	FAC_NATIONAL_SRC_DIGI		0xEB
+#define	FAC_NATIONAL_FAIL_CALL		0xED
+#define	FAC_NATIONAL_FAIL_ADD		0xEE
+#define	FAC_NATIONAL_DIGIS			0xEF
 
 #define	FAC_CCITT_DEST_NSAP		0xC9
 #define	FAC_CCITT_SRC_NSAP		0xCB
@@ -111,19 +114,12 @@ struct rose_route {
 	unsigned int		rand;
 };
 
-struct rose_facilities {
-	rose_address		source_addr,   dest_addr;
-	ax25_address		source_call,   dest_call;
-	unsigned char		source_ndigis, dest_ndigis;
-	ax25_address		source_digi,   dest_digi;
-	unsigned int		rand;
-};
-
 typedef struct {
 	rose_address		source_addr,   dest_addr;
 	ax25_address		source_call,   dest_call;
 	unsigned char		source_ndigis, dest_ndigis;
-	ax25_address		source_digi,   dest_digi;
+	ax25_address		source_digis[ROSE_MAX_DIGIS];
+	ax25_address		dest_digis[ROSE_MAX_DIGIS];
 	struct rose_neigh	*neighbour;
 	struct device		*device;
 	unsigned int		lci, rand;
@@ -131,7 +127,12 @@ typedef struct {
 	unsigned char		cause, diagnostic;
 	unsigned short		vs, vr, va, vl;
 	unsigned long		t1, t2, t3, hb, idle;
+#ifdef M_BIT
+	unsigned short		fraglen;
+	struct sk_buff_head	frag_queue;
+#endif
 	struct sk_buff_head	ack_queue;
+	struct rose_facilities_struct facilities;
 	struct timer_list	timer;
 	struct timer_list	idletimer;
 	struct sock		*sk;		/* Backlink to socket */
@@ -218,7 +219,7 @@ extern void rose_requeue_frames(struct sock *);
 extern int  rose_validate_nr(struct sock *, unsigned short);
 extern void rose_write_internal(struct sock *, int);
 extern int  rose_decode(struct sk_buff *, int *, int *, int *, int *, int *);
-extern int  rose_parse_facilities(struct sk_buff *, struct rose_facilities *);
+extern int  rose_parse_facilities(unsigned char *, struct rose_facilities_struct *);
 extern int  rose_create_facilities(unsigned char *, rose_cb *);
 extern void rose_disconnect(struct sock *, int, int, int);
 

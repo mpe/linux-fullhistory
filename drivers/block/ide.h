@@ -611,9 +611,9 @@ typedef enum
  * This function issues a special IDE device request
  * onto the request queue.
  *
- * If action is ide_wait, then then rq is queued at the end of
- * the request queue, and the function sleeps until it has been
- * processed.  This is for use when invoked from an ioctl handler.
+ * If action is ide_wait, then the rq is queued at the end of the
+ * request queue, and the function sleeps until it has been processed.
+ * This is for use when invoked from an ioctl handler.
  *
  * If action is ide_preempt, then the rq is queued at the head of
  * the request queue, displacing the currently-being-processed

@@ -2196,7 +2196,7 @@ CONFIG_IP_TRANSPARENT_PROXY
   server".  This makes the local computers think they are talking to
   the remote end, while in fact they are connected to the local
   proxy. Redirection is activated by defining special input firewall
-  rules (using the ipfwadm utility) and/or by doing an appropriate
+  rules (using the ipchains utility) and/or by doing an appropriate
   bind() system call.
 
 IP: masquerading
@@ -2839,12 +2839,12 @@ CONFIG_ROSE
 
 Serial port KISS driver for AX.25
 CONFIG_MKISS
-  KISS is a protocol used to send IP traffic over AX.25 radio
-  connections, somewhat similar to SLIP for telephone lines. Say Y
-  here if you intend to send Internet traffic over amateur radio,
-  using some device connected to your machine's serial port. In that
-  case, you also have to say Y to "Amateur Radio AX.25 Level 2"
-  support.  
+  KISS is a protocol used for the exchange of data between a computer
+  and a Terminal Node Controller (a small embedded system commonly
+  used for networking over AX25 amateur radio connections).
+  Although KISS is less advanced than the 6pack protocol, it has
+  the advantage that it is already supported by most modern TNCs
+  without the need for a firmware upgrade.
 
   If you want to compile this driver as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -5563,6 +5563,19 @@ CONFIG_LNE390
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 
+Novell/Eagle/Microdyne NE3210 EISA support
+CONFIG_NE3210
+  If you have a network (Ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
+  ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. Note that this driver
+  will NOT WORK for NE3200 cards as they are completely different.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called ne3210.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt.
+
 Apricot Xen-II on board Ethernet
 CONFIG_APRICOT
   If you have a network (Ethernet) controller of this type, say Y and
@@ -5679,6 +5692,12 @@ CONFIG_EPIC100
   The module will be called epic100.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
+
+VIA Rhine support
+CONFIG_VIA_RHINE
+  If you have a VIA "rhine" based network card (Rhine-I (3043) or
+  Rhine-2 (VT86c100A)), say Y here. To build this driver as a module
+  say M.
 
 Zenith Z-Note support
 CONFIG_ZNET
@@ -8042,20 +8061,93 @@ CONFIG_NVRAM
   The module will be called nvram.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
-PC joystick support
+Joystick support
 CONFIG_JOYSTICK
-  If you have a PC compatible analog or digital joystick, you can say
-  Y here. If you then create a character special file under /dev with
-  major number 15 and minor number 0 or 1 (for the two joystick ports)
-  using mknod ("man mknod"), you can read the status of the buttons
-  and the x and y coordinates from that file. Please read the file
+  If you have a joystick, you can say Y here to enable generic
+  joystick support. You will also need to say Y or M to at least one
+  of the hardware specific joystick drivers. This will make the
+  joysticks available under /dev/jsX devices. Please read the file
   Documentation/joystick.txt which contains more information and the
-  location of the joystick package that you'll need.  
+  location of the joystick package that you'll need.
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
   The module will be called joystick.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
+
+Classic PC analog joysticks
+CONFIG_JOY_ANALOG
+  Say Y here if you have an analog joystick or gamepad that connects
+  to the PC gameport. This supports many different types, including
+  joysticks with throttle control, and with CHF / FCS / 6-button
+  extensions. For more information on how to use the driver please
+  read Documentation/joystick.txt
+
+FPGaming and MadCatz A3D controllers
+CONFIG_JOY_ASSASIN
+  Say Y here if you have an FPGaming Assasin 3D, MadCatz Panther or
+  MadCatz Panther XL. For more information on how to use the driver
+  please read Documentation/joystick.txt
+
+Gravis GrIP gamepads
+CONFIG_JOY_GRAVIS
+  Say Y here if you have a Gravis GamePad Pro. For more information
+  on how to use the driver please read Documentation/joystick.txt
+
+PDPI Lightning L4 gamecards
+CONFIG_JOY_LIGHTNING
+  Say Y here if you have a PDPI Lightning L4 gamecard and an analog
+  joystick or gamepad connected to it. For more information on how to
+  use the driver please read Documentation/joystick.txt
+
+Logitech Digital joysticks
+CONFIG_JOY_LOGITECH
+  Say Y here if you have a Logitech WingMan Extreme Digital,
+  Logitech ThunderPad Digital or Logitech CyberMan 2. For more
+  information on how to use the driver please read
+  Documentation/joystick.txt
+
+Microsoft SideWinder, Genius Digital joysticks
+CONFIG_JOY_SIDEWINDER
+  Say Y here if you have a Microsoft SideWinder 3d Pro, Microsoft
+  SideWinder Precision Pro, Microsoft SideWinder Force Feedback Pro,
+  Microsoft Sidewinder GamePad or Genius Flight2000 F-23 Digital. For
+  more information on how to use the driver please read
+  Documentation/joystick.txt
+
+ThrustMaster DirectConnect (BSP) joysticks
+CONFIG_JOY_THRUSTMASTER
+  Say Y here if you have a ThrustMaster Millenium 3D Inceptor, ThrustMaster
+  3D Rage Pad, or ThrustMaster WCS III. For more information on how to use the
+  driver please read Documentation/joystick.txt
+
+NES, SNES, PSX, Multisystem gamepads
+CONFIG_JOY_CONSOLE
+  Say Y here if you have a Nintendo Entertainment System gamepad,
+  Super Nintendo Entertainment System gamepad, Sony PlayStation
+  gamepad or a Multisystem - Atari, Amiga, Commodore, Amstrad CPC
+  joystick. For more information on how to use the driver please read
+  Documentation/joystick.txt
+
+Sega, Multisystem gamepads
+CONFIG_JOY_DB9
+  Say Y here if you have a Sega Master System gamepad, Sega Genesis
+  gamepad, Sega Saturn gamepad, or a Multisystem - Atari, Amiga,
+  Commodore, Amstrad CPC joystick. For more information on how to use
+  the driver please read Documentation/joystick.txt
+
+TurboGraFX Multisystem joystick interface
+CONFIG_JOY_TURBOGRAFX
+  Say Y here if you have the TurboGraFX interface by Steffen Schwenke, and
+  want to use it with Multiststem - Atari, Amiga, Commodore, Amstrad CPC
+  joystick. For more information on how to use the driver please read
+  Documentation/joystick-parport.txt
+
+Amiga joysticks
+CONFIG_JOY_AMIGA
+  Say Y here if you have an Amiga with a digital joystick connected
+  to it. For more information on how to use the driver please read
+  Documentation/joystick.txt
 
 Atomwide Serial Support
 CONFIG_ATOMWIDE_SERIAL

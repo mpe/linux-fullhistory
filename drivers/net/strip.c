@@ -14,7 +14,7 @@
  *		for kernel-based devices like TTY.  It interfaces between a
  *		raw TTY, and the kernel's INET protocol layers (via DDI).
  *
- * Version:	@(#)strip.c	1.2	February 1997
+ * Version:	@(#)strip.c	1.3	July 1997
  *
  * Author:	Stuart Cheshire <cheshire@cs.stanford.edu>
  *
@@ -60,12 +60,18 @@
  *
  *              v1.2 January 1997 (SC)
  *              Put portables list back in
+ *
+ *              v1.3 July 1997 (SC)
+ *              Made STRIP driver set the radio's baud rate automatically.
+ *              It is no longer necessarily to manually set the radio's
+ *              rate permanently to 115200 -- the driver handles setting
+ *              the rate automatically.
  */
 
 #ifdef MODULE
-static const char StripVersion[] = "1.2-STUART.CHESHIRE-MODULAR";
+static const char StripVersion[] = "1.3-STUART.CHESHIRE-MODULAR";
 #else
-static const char StripVersion[] = "1.2-STUART.CHESHIRE";
+static const char StripVersion[] = "1.3-STUART.CHESHIRE";
 #endif
 
 #define TICKLE_TIMERS 0
@@ -84,6 +90,7 @@ static const char StripVersion[] = "1.2-STUART.CHESHIRE";
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
+#include <asm/segment.h>
 #include <asm/bitops.h>
 
 /*
@@ -111,13 +118,12 @@ static const char StripVersion[] = "1.2-STUART.CHESHIRE";
 #include <linux/if_arp.h>
 #include <linux/if_strip.h>
 #include <linux/proc_fs.h>
+#include <linux/serial.h>
 #include <net/arp.h>
 
-#ifdef CONFIG_INET
 #include <linux/ip.h>
 #include <linux/tcp.h>
 #include <linux/time.h>
-#endif
 
 
 /************************************************************************/
@@ -285,6 +291,7 @@ struct strip
     int                working;			/* Is radio working correctly?	*/
     int                firmware_level;		/* Message structuring level	*/
     int                next_command;		/* Next periodic command	*/
+    unsigned int       user_baud;		/* The user-selected baud rate  */
     int                mtu;			/* Our mtu (to spot changes!)	*/
     long               watchdog_doprobe;	/* Next time to test the radio	*/
     long               watchdog_doreset;	/* Time to do next reset	*/
@@ -459,7 +466,7 @@ static struct strip *struct_strip_list = NULL;
 /* Macros								*/
 
 /* Returns TRUE if text T begins with prefix P */
-#define has_prefix(T,P) (!strncmp((T), (P), sizeof(P)-1))
+#define has_prefix(T,L,P) (((L) >= sizeof(P)-1) && !strncmp((T), (P), sizeof(P)-1))
 
 /* Returns TRUE if text T of length L is equal to string S */
 #define text_equal(T,L,S) (((L) == sizeof(S)-1) && !strncmp((T), (S), sizeof(S)-1))
@@ -496,6 +503,24 @@ extern __inline__ InterruptStatus DisableInterrupts(void)
 extern __inline__ void RestoreInterrupts(InterruptStatus x)
 {
     restore_flags(x);
+}
+
+static int arp_query(unsigned char *haddr, u32 paddr, struct device * dev)
+{
+    struct neighbour *neighbor_entry;
+
+    neighbor_entry = neigh_lookup(&arp_tbl, &paddr, dev);
+
+    if (neighbor_entry != NULL)
+    {
+	neighbor_entry->used = jiffies;
+	if (neighbor_entry->nud_state & NUD_VALID)
+	{
+	    memcpy(haddr, neighbor_entry->ha, dev->addr_len);
+	    return 1;
+	}
+    }
+    return 0;
 }
 
 static void DumpData(char *msg, struct strip *strip_info, __u8 *ptr, __u8 *end)
@@ -834,6 +859,41 @@ static __u8 *UnStuffData(__u8 *src, __u8 *end, __u8 *dst, __u32 dst_length)
 /* General routines for STRIP						*/
 
 /*
+ * get_baud returns the current baud rate, as one of the constants defined in
+ * termbits.h
+ * If the user has issued a baud rate override using the 'setserial' command
+ * and the logical current rate is set to 38.4, then the true baud rate
+ * currently in effect (57.6 or 115.2) is returned.
+ */
+static unsigned int get_baud(struct tty_struct *tty)
+    {
+    if (!tty || !tty->termios) return(0);
+    if ((tty->termios->c_cflag & CBAUD) == B38400 && tty->driver_data)
+        {
+        struct async_struct *info = (struct async_struct *)tty->driver_data;
+        if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_HI ) return(B57600);
+        if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_VHI) return(B115200);
+        }
+    return(tty->termios->c_cflag & CBAUD);
+    }
+
+/*
+ * set_baud sets the baud rate to the rate defined by baudcode
+ * Note: The rate B38400 should be avoided, because the user may have
+ * issued a 'setserial' speed override to map that to a different speed.
+ * We could achieve a true rate of 38400 if we needed to by cancelling
+ * any user speed override that is in place, but that might annoy the
+ * user, so it is simplest to just avoid using 38400.
+ */
+static void set_baud(struct tty_struct *tty, unsigned int baudcode)
+    {
+    struct termios old_termios = *(tty->termios);
+    tty->termios->c_cflag &= ~CBAUD; /* Clear the old baud setting */
+    tty->termios->c_cflag |= baudcode; /* Set the new baud setting */
+    tty->driver.set_termios(tty, &old_termios);
+    }
+
+/*
  * Convert a string to a Metricom Address.
  */
 
@@ -971,9 +1031,9 @@ static void strip_changedmtu(struct strip *strip_info)
 static void strip_unlock(struct strip *strip_info)
 {
     /*
-     * Set the time to go off in one second.
+     * Set the timer to go off in one second.
      */
-    strip_info->idle_timer.expires  = jiffies + 1*HZ;
+    strip_info->idle_timer.expires = jiffies + 1*HZ;
     add_timer(&strip_info->idle_timer);
     if (!test_and_clear_bit(0, (void *)&strip_info->dev.tbusy))
         printk(KERN_ERR "%s: trying to unlock already unlocked device!\n",
@@ -1229,13 +1289,16 @@ static struct proc_dir_entry proc_strip_get_status_info =
 /************************************************************************/
 /* Sending routines							*/
 
-#define InitString "ate0q1dt**starmode"
-
 static void ResetRadio(struct strip *strip_info)
 {
-    static const char s[] = "\r" InitString "\r**";
+    struct tty_struct *tty = strip_info->tty;
+    static const char init[] = "ate0q1dt**starmode\r**";
+    StringDescriptor s = { init, sizeof(init)-1 };
 
-    /* If the radio isn't working anymore, we should clear the old status information. */
+    /* 
+     * If the radio isn't working anymore,
+     * we should clear the old status information.
+     */
     if (strip_info->working)
     {
         printk(KERN_INFO "%s: No response: Resetting radio.\n", strip_info->dev.name);
@@ -1258,15 +1321,43 @@ static void ResetRadio(struct strip *strip_info)
 
     /* Mark radio address as unknown */
     *(MetricomAddress*)&strip_info->true_dev_addr = zero_address;
-    if (!strip_info->manual_dev_addr) *(MetricomAddress*)strip_info->dev.dev_addr = zero_address;
+    if (!strip_info->manual_dev_addr)
+        *(MetricomAddress*)strip_info->dev.dev_addr = zero_address;
     strip_info->working = FALSE;
     strip_info->firmware_level = NoStructure;
     strip_info->next_command   = CompatibilityCommand;
     strip_info->watchdog_doprobe = jiffies + 10 * HZ;
     strip_info->watchdog_doreset = jiffies + 1 * HZ;
-    strip_info->tty->driver.write(strip_info->tty, 0, (char *)s, sizeof(s)-1);
+
+    /* If the user has selected a baud rate above 38.4 see what magic we have to do */
+    if (strip_info->user_baud > B38400)
+        {
+        /*
+         * Subtle stuff: Pay attention :-)
+         * If the serial port is currently at the user's selected (>38.4) rate,
+         * then we temporarily switch to 19.2 and issue the ATS304 command
+         * to tell the radio to switch to the user's selected rate.
+         * If the serial port is not currently at that rate, that means we just
+         * issued the ATS304 command last time through, so this time we restore
+         * the user's selected rate and issue the normal starmode reset string.
+         */
+        if (strip_info->user_baud == get_baud(tty))
+	    {
+	    static const char b0[] = "ate0q1s304=57600\r";
+	    static const char b1[] = "ate0q1s304=115200\r";
+	    static const StringDescriptor baudstring[2] =
+                { { b0, sizeof(b0)-1 }, { b1, sizeof(b1)-1 } };
+	    set_baud(tty, B19200);
+	    if      (strip_info->user_baud == B57600 ) s = baudstring[0];
+	    else if (strip_info->user_baud == B115200) s = baudstring[1];
+	    else s = baudstring[1]; /* For now */
+	    }
+        else set_baud(tty, strip_info->user_baud);
+        }
+
+    tty->driver.write(tty, 0, s.string, s.length);
 #ifdef EXT_COUNTERS
-    strip_info->tx_ebytes += sizeof(s) - 1;
+    strip_info->tx_ebytes += s.length;
 #endif
 }
 
@@ -1356,25 +1447,37 @@ static unsigned char *strip_make_packet(unsigned char *buffer, struct strip *str
     }
 
     /*
+     * If we're sending to ourselves, discard the packet.
+     * (Metricom radios choke if they try to send a packet to their own address.)
+     */
+    if (!memcmp(haddr.c, strip_info->true_dev_addr.c, sizeof(haddr)))
+    {
+        printk(KERN_ERR "%s: Dropping packet addressed to self\n", strip_info->dev.name);
+        return(NULL);
+    }
+
+    /*
      * If this is a broadcast packet, send it to our designated Metricom
      * 'broadcast hub' radio (First byte of address being 0xFF means broadcast)
      */
     if (haddr.c[0] == 0xFF)
     {
-	    memcpy(haddr.c, strip_info->dev.broadcast, sizeof(haddr));
-	    if (haddr.c[0] == 0xFF)
-	    {
-		    strip_info->tx_dropped++;
-		    return(NULL);
-	    }
+ 	struct in_device *in_dev = strip_info->dev.ip_ptr;
+	/* arp_query returns 1 if it succeeds in looking up the address, 0 if it fails */
+        if (!arp_query(haddr.c, in_dev->ifa_list->ifa_broadcast, &strip_info->dev))
+        {
+            printk(KERN_ERR "%s: Unable to send packet (no broadcast hub configured)\n",
+                strip_info->dev.name);
+            return(NULL);
+        }
+	/*
+	 * If we are the broadcast hub, don't bother sending to ourselves.
+	 * (Metricom radios choke if they try to send a packet to their own address.)
+	 */
+        if (!memcmp(haddr.c, strip_info->true_dev_addr.c, sizeof(haddr))) return(NULL);
     }
 
-    /*
-     * If we're sending to ourselves, discard the packet.
-     * (Metricom radios choke if they try to send a packet to their own address.)
-     */
-    if (!memcmp(haddr.c, strip_info->true_dev_addr.c, sizeof(haddr)))
-    	return(NULL);
+    *ptr++ = 0x0D;
     *ptr++ = '*';
     *ptr++ = hextable[haddr.c[2] >> 4];
     *ptr++ = hextable[haddr.c[2] & 0xF];
@@ -1401,9 +1504,11 @@ static unsigned char *strip_make_packet(unsigned char *buffer, struct strip *str
 
 static void strip_send(struct strip *strip_info, struct sk_buff *skb)
 {
+    MetricomAddress haddr;
     unsigned char *ptr = strip_info->tx_buff;
     int doreset = (long)jiffies - strip_info->watchdog_doreset >= 0;
     int doprobe = (long)jiffies - strip_info->watchdog_doprobe >= 0 && !doreset;
+    struct in_device *in_dev = strip_info->dev.ip_ptr;
 
     /*
      * 1. If we have a packet, encapsulate it and put it in the buffer
@@ -1503,9 +1608,8 @@ static void strip_send(struct strip *strip_info, struct sk_buff *skb)
      */
     if (strip_info->working && (long)jiffies - strip_info->gratuitous_arp >= 0 &&
         memcmp(strip_info->dev.dev_addr, zero_address.c, sizeof(zero_address)) &&
-        *strip_info->dev.broadcast!=0xFF)
+        arp_query(haddr.c, in_dev->ifa_list->ifa_broadcast, &strip_info->dev))
     {
-	struct in_device *in_dev = strip_info->dev.ip_ptr;
         /*printk(KERN_INFO "%s: Sending gratuitous ARP with interval %ld\n",
             strip_info->dev.name, strip_info->arp_interval / HZ);*/
         strip_info->gratuitous_arp = jiffies + strip_info->arp_interval;
@@ -1513,13 +1617,14 @@ static void strip_send(struct strip *strip_info, struct sk_buff *skb)
         if (strip_info->arp_interval > MaxARPInterval)
             strip_info->arp_interval = MaxARPInterval;
 	if (in_dev && in_dev->ifa_list)
-        arp_send(ARPOP_REPLY, ETH_P_ARP,
-	    in_dev->ifa_list->ifa_address,/* Target address of ARP packet is our address */
-            &strip_info->dev,		/* Device to send packet on */
-            in_dev->ifa_list->ifa_address,/* Source IP address this ARP packet comes from */
-            NULL,			/* Destination HW address is NULL (broadcast it) */
-            strip_info->dev.dev_addr,	/* Source HW address is our HW address */
-            strip_info->dev.dev_addr);	/* Target HW address is our HW address (redundant) */
+	    arp_send(
+		ARPOP_REPLY, ETH_P_ARP,
+		in_dev->ifa_list->ifa_address, /* Target address of ARP packet is our address */
+		&strip_info->dev,	       /* Device to send packet on */
+		in_dev->ifa_list->ifa_address, /* Source IP address this ARP packet comes from */
+		NULL,			       /* Destination HW address is NULL (broadcast it) */
+		strip_info->dev.dev_addr,      /* Source HW address is our HW address */
+		strip_info->dev.dev_addr);     /* Target HW address is our HW address (redundant) */
     }
 
     /*
@@ -1631,7 +1736,7 @@ static int strip_header(struct sk_buff *skb, struct device *dev,
 static int strip_rebuild_header(struct sk_buff *skb)
 {
 #ifdef CONFIG_INET
-    STRIP_Header *header = (STRIP_Header *)skb->data;
+    STRIP_Header *header = (STRIP_Header *) skb->data;
 
     /* Arp find returns zero if if knows the address, */
     /* or if it doesn't know the address it sends an ARP packet and returns non-zero */
@@ -1775,28 +1880,28 @@ static void RecvErr(char *msg, struct strip *strip_info)
     strip_info->rx_errors++;
 }
 
-static void RecvErr_Message(struct strip *strip_info, __u8 *sendername, const __u8 *msg)
+static void RecvErr_Message(struct strip *strip_info, __u8 *sendername, const __u8 *msg, u_long len)
 {
-    if (has_prefix(msg, "001")) /* Not in StarMode! */
+    if (has_prefix(msg, len, "001")) /* Not in StarMode! */
     {
         RecvErr("Error Msg:", strip_info);
         printk(KERN_INFO "%s: Radio %s is not in StarMode\n",
             strip_info->dev.name, sendername);
     }
 
-    else if (has_prefix(msg, "002")) /* Remap handle */
+    else if (has_prefix(msg, len, "002")) /* Remap handle */
     {
 	/* We ignore "Remap handle" messages for now */
     }
 
-    else if (has_prefix(msg, "003")) /* Can't resolve name */
+    else if (has_prefix(msg, len, "003")) /* Can't resolve name */
     {
         RecvErr("Error Msg:", strip_info);
         printk(KERN_INFO "%s: Destination radio name is unknown\n",
             strip_info->dev.name);
     }
 
-    else if (has_prefix(msg, "004")) /* Name too small or missing */
+    else if (has_prefix(msg, len, "004")) /* Name too small or missing */
     {
         strip_info->watchdog_doreset = jiffies + LongTime;
 #if TICKLE_TIMERS
@@ -1825,45 +1930,50 @@ static void RecvErr_Message(struct strip *strip_info, __u8 *sendername, const __
         }
         if (strip_info->firmware_level >= StructuredMessages)
         {
+            /*
+             * If this message has a valid checksum on the end, then the call to verify_checksum
+             * will elevate the firmware_level to ChecksummedMessages for us. (The actual return
+             * code from verify_checksum is ignored here.)
+             */
             verify_checksum(strip_info);
             /*
-             * If the radio has structured messages but we don't yet have all our information about it, we should do
-             * probes without delay, until we have gathered all the information
+             * If the radio has structured messages but we don't yet have all our information about it,
+             * we should do probes without delay, until we have gathered all the information
              */
             if (!GOT_ALL_RADIO_INFO(strip_info)) strip_info->watchdog_doprobe = jiffies;
         }
     }
 
-    else if (has_prefix(msg, "005")) /* Bad count specification */
+    else if (has_prefix(msg, len, "005")) /* Bad count specification */
         RecvErr("Error Msg:", strip_info);
 
-    else if (has_prefix(msg, "006")) /* Header too big */
+    else if (has_prefix(msg, len, "006")) /* Header too big */
         RecvErr("Error Msg:", strip_info);
 
-    else if (has_prefix(msg, "007")) /* Body too big */
+    else if (has_prefix(msg, len, "007")) /* Body too big */
     {
         RecvErr("Error Msg:", strip_info);
         printk(KERN_ERR "%s: Error! Packet size too big for radio.\n",
             strip_info->dev.name);
     }
 
-    else if (has_prefix(msg, "008")) /* Bad character in name */
+    else if (has_prefix(msg, len, "008")) /* Bad character in name */
     {
         RecvErr("Error Msg:", strip_info);
         printk(KERN_ERR "%s: Radio name contains illegal character\n",
             strip_info->dev.name);
     }
 
-    else if (has_prefix(msg, "009")) /* No count or line terminator */
+    else if (has_prefix(msg, len, "009")) /* No count or line terminator */
         RecvErr("Error Msg:", strip_info);
 
-    else if (has_prefix(msg, "010")) /* Invalid checksum */
+    else if (has_prefix(msg, len, "010")) /* Invalid checksum */
         RecvErr("Error Msg:", strip_info);
 
-    else if (has_prefix(msg, "011")) /* Checksum didn't match */
+    else if (has_prefix(msg, len, "011")) /* Checksum didn't match */
         RecvErr("Error Msg:", strip_info);
 
-    else if (has_prefix(msg, "012")) /* Failed to transmit packet */
+    else if (has_prefix(msg, len, "012")) /* Failed to transmit packet */
         RecvErr("Error Msg:", strip_info);
 
     else
@@ -1872,9 +1982,11 @@ static void RecvErr_Message(struct strip *strip_info, __u8 *sendername, const __
 
 static void process_AT_response(struct strip *strip_info, __u8 *ptr, __u8 *end)
 {
+    u_long len;
     __u8 *p = ptr;
     while (p < end && p[-1] != 10) p++; /* Skip past first newline character */
     /* Now ptr points to the AT command, and p points to the text of the response. */
+    len = p-ptr;
 
 #if TICKLE_TIMERS
     {
@@ -1885,13 +1997,13 @@ static void process_AT_response(struct strip *strip_info, __u8 *ptr, __u8 *end)
     }
 #endif
 
-    if      (has_prefix(ptr, "ATS300?" )) get_radio_version(strip_info, p, end);
-    else if (has_prefix(ptr, "ATS305?" )) get_radio_address(strip_info, p);
-    else if (has_prefix(ptr, "ATS311?" )) get_radio_neighbours(&strip_info->poletops, p, end);
-    else if (has_prefix(ptr, "ATS319=7")) verify_checksum(strip_info);
-    else if (has_prefix(ptr, "ATS325?" )) get_radio_voltage(strip_info, p, end);
-    else if (has_prefix(ptr, "AT~LA"   )) get_radio_neighbours(&strip_info->portables, p, end);
-    else                                              RecvErr("Unknown AT Response:", strip_info);
+    if      (has_prefix(ptr, len, "ATS300?" )) get_radio_version(strip_info, p, end);
+    else if (has_prefix(ptr, len, "ATS305?" )) get_radio_address(strip_info, p);
+    else if (has_prefix(ptr, len, "ATS311?" )) get_radio_neighbours(&strip_info->poletops, p, end);
+    else if (has_prefix(ptr, len, "ATS319=7")) verify_checksum(strip_info);
+    else if (has_prefix(ptr, len, "ATS325?" )) get_radio_voltage(strip_info, p, end);
+    else if (has_prefix(ptr, len, "AT~LA"   )) get_radio_neighbours(&strip_info->portables, p, end);
+    else                                       RecvErr("Unknown AT Response:", strip_info);
 }
 
 static void process_ACK(struct strip *strip_info, __u8 *ptr, __u8 *end)
@@ -2072,11 +2184,11 @@ static void process_text_message(struct strip *strip_info)
 
     if (text_equal(msg, len, "OK"      )) return; /* Ignore 'OK' responses from prior commands */
     if (text_equal(msg, len, "ERROR"   )) return; /* Ignore 'ERROR' messages */
-    if (text_equal(msg, len, InitString)) return; /* Ignore character echo back from the radio */
+    if (has_prefix(msg, len, "ate0q1"  )) return; /* Ignore character echo back from the radio */
 
     /* Catch other error messages */
     /* (This is here for backwards compatibility with old firmware) */
-    if (has_prefix(msg, "ERR_")) { RecvErr_Message(strip_info, NULL, &msg[4]); return; }
+    if (has_prefix(msg, len, "ERR_")) { RecvErr_Message(strip_info, NULL, &msg[4], len-4); return; }
     
     RecvErr("No initial *", strip_info);
 }
@@ -2181,7 +2293,7 @@ static void process_message(struct strip *strip_info)
       process_Info(strip_info, ptr, end);
     } else if (key.l == ERR_Key.l) {
       strip_info->rx_ebytes += (end - ptr);
-      RecvErr_Message(strip_info, sendername, ptr);
+      RecvErr_Message(strip_info, sendername, ptr, end-ptr);
     } else RecvErr("Unrecognized protocol key", strip_info);
 #else
     if      (key.l == SIP0Key.l) process_IP_packet  (strip_info, &header, ptr, end);
@@ -2189,7 +2301,7 @@ static void process_message(struct strip *strip_info)
     else if (key.l == ATR_Key.l) process_AT_response(strip_info, ptr, end);
     else if (key.l == ACK_Key.l) process_ACK        (strip_info, ptr, end);
     else if (key.l == INF_Key.l) process_Info       (strip_info, ptr, end);
-    else if (key.l == ERR_Key.l) RecvErr_Message    (strip_info, sendername, ptr);
+    else if (key.l == ERR_Key.l) RecvErr_Message    (strip_info, sendername, ptr, end-ptr);
     else                         RecvErr("Unrecognized protocol key", strip_info);
 #endif
 }
@@ -2305,12 +2417,12 @@ static int dev_set_mac_address(struct device *dev, void *addr)
     return 0;
 }
 
-static struct net_device_stats *strip_get_stats(struct device *dev)
+static struct enet_statistics *strip_get_stats(struct device *dev)
 {
-    static struct net_device_stats stats;
+    static struct enet_statistics stats;
     struct strip *strip_info = (struct strip *)(dev->priv);
 
-    memset(&stats, 0, sizeof(struct net_device_stats));
+    memset(&stats, 0, sizeof(struct enet_statistics));
 
     stats.rx_packets     = strip_info->rx_packets;
     stats.tx_packets     = strip_info->tx_packets;
@@ -2353,6 +2465,7 @@ static struct net_device_stats *strip_get_stats(struct device *dev)
 static int strip_open_low(struct device *dev)
 {
     struct strip *strip_info = (struct strip *)(dev->priv);
+    struct in_device *in_dev = dev->ip_ptr;
 
     if (strip_info->tty == NULL)
         return(-ENODEV);
@@ -2360,19 +2473,27 @@ static int strip_open_low(struct device *dev)
     if (!allocate_buffers(strip_info))
         return(-ENOMEM);
 
+    strip_info->sx_count = 0;
+    strip_info->tx_left  = 0;
+
     strip_info->discard  = 0;
     strip_info->working  = FALSE;
     strip_info->firmware_level = NoStructure;
     strip_info->next_command   = CompatibilityCommand;
-    strip_info->sx_count = 0;
-    strip_info->tx_left  = 0;
+    strip_info->user_baud      = get_baud(strip_info->tty);
 
+    /*
+     * Needed because address '0' is special
+     */
+
+    if (in_dev->ifa_list->ifa_address == 0)
+        in_dev->ifa_list->ifa_address = ntohl(0xC0A80001);
     dev->tbusy  = 0;
     dev->start  = 1;
 
     printk(KERN_INFO "%s: Initializing Radio.\n", strip_info->dev.name);
     ResetRadio(strip_info);
-    strip_info->idle_timer.expires  = jiffies + 2 * HZ;
+    strip_info->idle_timer.expires = jiffies + 1*HZ;
     add_timer(&strip_info->idle_timer);
     return(0);
 }
@@ -2440,12 +2561,6 @@ static int strip_dev_init(struct device *dev)
     *(MetricomAddress*)&dev->broadcast = broadcast_address;
     dev->dev_addr[0]        = 0;
     dev->addr_len           = sizeof(MetricomAddress);
-
-    /*
-     * Pointer to the interface buffers.
-     */
-
-   dev_init_buffers(dev);
 
     /*
      * Pointers to interface service routines.
@@ -2628,6 +2743,7 @@ static void strip_close(struct tty_struct *tty)
     if (!strip_info || strip_info->magic != STRIP_MAGIC)
         return;
 
+    dev_close(&strip_info->dev);
     unregister_netdev(&strip_info->dev);
 
     tty->disc_data = 0;
@@ -2648,7 +2764,6 @@ static int strip_ioctl(struct tty_struct *tty, struct file *file,
     unsigned int cmd, unsigned long arg)
 {
     struct strip *strip_info = (struct strip *) tty->disc_data;
-    int err;
 
     /*
      * First make sure we're connected.
@@ -2660,21 +2775,18 @@ static int strip_ioctl(struct tty_struct *tty, struct file *file,
     switch(cmd)
     {
         case SIOCGIFNAME:
-            err = verify_area(VERIFY_WRITE, (void*)arg, 16);
-            if (err)
-                return -err;
-            return copy_to_user((void*)arg, strip_info->dev.name,
-                strlen(strip_info->dev.name) + 1)?-EFAULT:0;
-
+	    return copy_to_user((void*)arg, strip_info->dev.name,
+				strlen(strip_info->dev.name) + 1) ? 
+		-EFAULT : 0;
+	    break;
         case SIOCSIFHWADDR:
             {
             MetricomAddress addr;
             printk(KERN_INFO "%s: SIOCSIFHWADDR\n", strip_info->dev.name);
-            if(copy_from_user(&addr, (void*)arg, sizeof(MetricomAddress)))
-            	return -EFAULT;
-            return(set_mac_address(strip_info, &addr));
-            }
-
+	    return copy_from_user(&addr, (void*)arg, sizeof(MetricomAddress)) ?
+		-EFAULT : set_mac_address(strip_info, &addr);
+	    break;
+	    }
         /*
          * Allow stty to read, but not set, the serial port
          */
@@ -2683,9 +2795,10 @@ static int strip_ioctl(struct tty_struct *tty, struct file *file,
         case TCGETA:
             return n_tty_ioctl(tty, (struct file *) file, cmd,
                 (unsigned long) arg);
-
+	    break;
         default:
             return -ENOIOCTLCMD;
+	    break;
     }
 }
 

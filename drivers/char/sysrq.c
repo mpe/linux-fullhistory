@@ -85,7 +85,7 @@ void handle_sysrq(int key, struct pt_regs *pt_regs,
 #ifdef CONFIG_APM
 	case 'o':					    /* O -- power off */
 		printk("Power off\n");
-		apm_set_power_state(APM_STATE_OFF);
+		apm_power_off();
 		break;
 #endif
 	case 's':					    /* S -- emergency sync */

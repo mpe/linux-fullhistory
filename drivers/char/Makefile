@@ -11,7 +11,7 @@
 
 SUB_DIRS     := 
 MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) ftape
+ALL_SUB_DIRS := $(SUB_DIRS) ftape joystick
 
 #
 # This file contains the font map for the default (hardware) font
@@ -159,10 +159,12 @@ else
 endif
 
 ifeq ($(CONFIG_JOYSTICK),y)
-L_OBJS += joystick.o
+L_OBJS += joystick/js.o
+SUB_DIRS += joystick
+MOD_SUB_DIRS += joystick
 else
   ifeq ($(CONFIG_JOYSTICK),m)
-  M_OBJS += joystick.o
+  MOD_SUB_DIRS += joystick
   endif
 endif
 

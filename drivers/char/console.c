@@ -1954,11 +1954,17 @@ static void console_bh(void)
 	}
 }
 
+#ifdef CONFIG_VT_CONSOLE
+
 /*
  *	Console on virtual terminal
+ *
+ * NOTE NOTE NOTE! This code can do no global locking. In particular,
+ * we can't disable interrupts or bottom half handlers globally, because
+ * we can be called from contexts that hold critical spinlocks, and
+ * trying do get a global lock at this point will lead to deadlocks.
  */
 
-#ifdef CONFIG_VT_CONSOLE
 void vt_console_print(struct console *co, const char * b, unsigned count)
 {
 	int currcons = fg_console;
@@ -1992,7 +1998,6 @@ void vt_console_print(struct console *co, const char * b, unsigned count)
 
 	/* Contrived structure to try to emulate original need_wrap behaviour
 	 * Problems caused when we have need_wrap set on '\n' character */
-	disable_bh(CONSOLE_BH);	
 	while (count--) {
 		c = *b++;
 		if (c == 10 || c == 13 || c == 8 || need_wrap) {
@@ -2036,7 +2041,6 @@ void vt_console_print(struct console *co, const char * b, unsigned count)
 			need_wrap = 1;
 		}
 	}
-	enable_bh(CONSOLE_BH);
 	set_cursor(currcons);
 	poke_blanked_console();
 

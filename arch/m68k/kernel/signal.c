@@ -65,17 +65,6 @@ const int frame_extra_sizes[16] = {
   -1, /* sizeof(((struct frame *)0)->un.fmtf), */
 };
 
-void checksignals(void)
-{
-	sigset_t *blocked = &current->blocked;
-	unsigned long mask = blocked->sig[0] | sigmask(SIGKILL) | sigmask(SIGINT) | sigmask(SIGQUIT);
-	mask &= blocked->sig[1];
-	if (~mask) {
-		printk("Bad signal mask\n");
-		*(int *) 0 = 0;
-	}
-}
-
 /*
  * Atomically swap in the new signal mask, and wait for a signal.
  */

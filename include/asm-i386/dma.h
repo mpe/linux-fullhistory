@@ -9,6 +9,8 @@
 #define _ASM_DMA_H
 
 #include <asm/io.h>		/* need byte IO */
+#include <asm/spinlock.h>	/* And spinlocks */
+#include <linux/delay.h>
 
 
 #ifdef HAVE_REALLY_SLOW_DMA_CONTROLLER
@@ -129,6 +131,21 @@
 #define DMA_MODE_WRITE	0x48	/* memory to I/O, no autoinit, increment, single mode */
 #define DMA_MODE_CASCADE 0xC0   /* pass thru DREQ->HRQ, DACK<-HLDA only */
 
+
+extern spinlock_t  dma_spin_lock;
+
+static __inline__ unsigned long claim_dma_lock(void)
+{
+	unsigned long flags;
+	spin_lock_irqsave(&dma_spin_lock, flags);
+	return flags;
+}
+
+static __inline__ void release_dma_lock(unsigned long flags)
+{
+	spin_unlock_irqrestore(&dma_spin_lock, flags);
+}
+
 /* enable/disable a specific DMA channel */
 static __inline__ void enable_dma(unsigned int dmanr)
 {
@@ -144,6 +161,8 @@ static __inline__ void disable_dma(unsigned int dmanr)
 		dma_outb(dmanr | 4,  DMA1_MASK_REG);
 	else
 		dma_outb((dmanr & 3) | 4,  DMA2_MASK_REG);
+	/* I hate voodoo programming but .. */
+	udelay(20);
 }
 
 /* Clear the 'DMA Pointer Flip Flop'.
@@ -151,7 +170,7 @@ static __inline__ void disable_dma(unsigned int dmanr)
  * Use this once to initialize the FF to a known state.
  * After that, keep track of it. :-)
  * --- In order to do that, the DMA routines below should ---
- * --- only be used while interrupts are disabled! ---
+ * --- only be used while holding the DMA lock ! ---
  */
 static __inline__ void clear_dma_ff(unsigned int dmanr)
 {

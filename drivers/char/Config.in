@@ -124,8 +124,10 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
   fi
 fi
 tristate '/dev/nvram support' CONFIG_NVRAM
-tristate 'PC joystick support' CONFIG_JOYSTICK
-
+tristate 'Joystick support' CONFIG_JOYSTICK
+if [ "$CONFIG_JOYSTICK" != "n" ]; then
+  source drivers/char/joystick/Config.in
+fi
 mainmenu_option next_comment
 comment 'Ftape, the floppy tape device driver'
 tristate 'Ftape (QIC-80/Travan) support' CONFIG_FTAPE

@@ -1,7 +1,7 @@
 /*
  * Aic7xxx register and scratch ram definitions.
  *
- * Copyright (c) 1994-1997 Justin Gibbs.
+ * Copyright (c) 1994-1998 Justin Gibbs.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -161,6 +161,7 @@ register SCSIRATE {
 	access_mode RW
 	bit	WIDEXFER	0x80		/* Wide transfer control */
 	mask	SXFR		0x70		/* Sync transfer rate */
+	mask	SXFR_ULTRA2	0x7f		/* Sync transfer rate */
 	mask	SOFS		0x0f		/* Sync offset */
 }
 
@@ -174,6 +175,13 @@ register SCSIID	{
 	access_mode RW
 	mask	TID		0xf0		/* Target ID mask */
 	mask	OID		0x0f		/* Our ID mask */
+	/*
+	 * SCSI Maximum Offset (p. 4-61 aic7890/91 Data Book)
+	 * The aic7890/91 allow an offset of up to 127 transfers in both wide
+	 * and narrow mode.
+	 */
+	alias	SCSIOFFSET
+	mask	SOFS_ULTRA2	0x7f		/* Sync offset U2 chips */
 }
 
 /*
@@ -227,14 +235,15 @@ register CLRSINT0 {
 register SSTAT0	{
 	address			0x00b
 	access_mode RO
-	bit	TARGET		0x80		/* Board acting as target */
-	bit	SELDO		0x40		/* Selection Done */
-	bit	SELDI		0x20		/* Board has been selected */
-	bit	SELINGO		0x10		/* Selection In Progress */
-	bit	SWRAP		0x08		/* 24bit counter wrap */
-	bit	SDONE		0x04		/* STCNT = 0x000000 */
-	bit	SPIORDY		0x02		/* SCSI PIO Ready */
-	bit	DMADONE		0x01		/* DMA transfer completed */
+	bit	TARGET		0x80	/* Board acting as target */
+	bit	SELDO		0x40	/* Selection Done */
+	bit	SELDI		0x20	/* Board has been selected */
+	bit	SELINGO		0x10	/* Selection In Progress */
+	bit	SWRAP		0x08	/* 24bit counter wrap */
+	bit	IOERR		0x08	/* LVD Tranceiver mode changed */
+	bit	SDONE		0x04	/* STCNT = 0x000000 */
+	bit	SPIORDY		0x02	/* SCSI PIO Ready */
+	bit	DMADONE		0x01	/* DMA transfer completed */
 }
 
 /*
@@ -276,6 +285,7 @@ register SSTAT2 {
 	address			0x00d
 	access_mode RO
 	bit	OVERRUN		0x80
+	bit	EXP_ACTIVE	0x10	/* SCSI Expander Active */
 	mask	SFCNT		0x1f
 }
 
@@ -290,14 +300,13 @@ register SSTAT3 {
 }
 
 /*
- * SCSI Test Control (p. 3-27)
+ * SCSI ID for the aic7890/91 chips
  */
-register SCSITEST {
+register SCSIID_ULTRA2 {
 	address			0x00f
 	access_mode RW
-	bit	RQAKCNT		0x04
-	bit	CNTRTEST	0x02
-	bit	CMODE		0x01
+	mask	TID		0xf0		/* Target ID mask */
+	mask	OID		0x0f		/* Our ID mask */
 }
 
 /*
@@ -312,6 +321,7 @@ register SIMODE0 {
 	bit	ENSELDI		0x20
 	bit	ENSELINGO	0x10
 	bit	ENSWRAP		0x08
+	bit	ENIOERR		0x08	/* LVD Tranceiver mode changes */
 	bit	ENSDONE		0x04
 	bit	ENSPIORDY	0x02
 	bit	ENDMADONE	0x01
@@ -424,7 +434,10 @@ register SBLKCTL {
 	bit	DIAGLEDON	0x40	/* Aic78X0 only */
 	bit	AUTOFLUSHDIS	0x20
 	bit	SELBUSB		0x08
+	bit	ENAB40		0x08	/* LVD transceiver active */
+	bit	ENAB20		0x04	/* SE/HVD transceiver active */
 	bit	SELWIDE		0x02
+	bit	XCVR		0x01	/* External transceiver active */
 }
 
 /*
@@ -545,6 +558,19 @@ register BCTL {
 	access_mode RW
 	bit	ACE		0x08
 	bit	ENABLE		0x01
+}
+
+register DSCOMMAND0 {
+	address			0x084
+	access_mode RW
+	bit	CACHETHEN	0x80
+	bit	DPARCKEN	0x40
+	bit	MPARCKEN	0x20
+	bit	EXTREQLCK	0x10
+	bit	INTSCBRAMSEL	0x08
+	bit	RAMPS		0x04
+	bit	USCBSIZE32	0x02
+	bit	CIOPARCKEN	0x01
 }
 
 /*
@@ -676,6 +702,7 @@ register INTSTAT {
 register ERROR {
 	address			0x092
 	access_mode RO
+	bit	CIOPARERR	0x80	/* Ultra2 only */
 	bit	PCIERRSTAT	0x40	/* PCI only */
 	bit	MPARERR		0x20	/* PCI only */
 	bit	DPARERR		0x10	/* PCI only */
@@ -701,6 +728,7 @@ register CLRINT {
 register DFCNTRL {
 	address			0x093
 	access_mode RW
+	bit	PRELOADEN	0x80	/* aic7890 only */
 	bit	WIDEODD		0x40
 	bit	SCSIEN		0x20
 	bit	SDMAEN		0x10
@@ -715,6 +743,7 @@ register DFCNTRL {
 register DFSTATUS {
 	address			0x094
 	access_mode RO
+	bit	PRELOAD_AVAIL	0x80
 	bit	DWORDEMP	0x20
 	bit	MREQPEND	0x10
 	bit	HDONE		0x08
@@ -774,6 +803,14 @@ register QOUTFIFO {
 register QOUTCNT {
 	address			0x09e
 	access_mode RO
+}
+
+/*
+ * Special Function
+ */
+register SFUNCT {
+	address			0x09f
+	access_mode RW
 }
 
 /*
@@ -865,6 +902,109 @@ register STATUS_2840 {
 
 register DSPCISTATUS {
 	address			0x086
+	mask	DFTHRSH_100	0xc0
+}
+
+register CCHADDR {
+	address			0x0E0
+	size 8
+}
+
+register CCHCNT {
+	address			0x0E8
+}
+
+register CCSGRAM {
+	address			0x0E9
+}
+
+register CCSGADDR {
+	address			0x0EA
+}
+
+register CCSGCTL {
+	address			0x0EB
+	bit	CCSGDONE	0x80
+	bit	CCSGEN		0x08
+	bit	FLAG		0x02
+	bit	CCSGRESET	0x01
+}
+
+register CCSCBCNT {
+	address			0xEF
+}
+
+register CCSCBCTL {
+	address			0x0EE
+	bit	CCSCBDONE	0x80
+	bit	ARRDONE		0x40	/* SCB Array prefetch done */
+	bit	CCARREN		0x10
+	bit	CCSCBEN		0x08
+	bit	CCSCBDIR	0x04
+	bit	CCSCBRESET	0x01
+}
+
+register CCSCBADDR {
+	address			0x0ED
+}
+
+register CCSCBRAM {
+	address			0xEC
+}
+
+register CCSCBPTR {
+	address			0x0F1
+}
+
+register HNSCB_QOFF {
+	address			0x0F4
+}
+
+register SNSCB_QOFF {
+	address			0x0F6
+}
+
+register SDSCB_QOFF {
+	address			0x0F8
+}
+
+register QOFF_CTLSTA {
+	address			0x0FA
+	bit	SCB_AVAIL	0x40
+	bit	SNSCB_ROLLOVER	0x20
+	bit	SDSCB_ROLLOVER	0x10
+	mask	SCB_QSIZE	0x07
+	mask	SCB_QSIZE_256	0x06
+}
+
+register DFF_THRSH {
+	address			0x0FB
+	mask	WR_DFTHRSH	0x70
+	mask	RD_DFTHRSH	0x07
+	mask	RD_DFTHRSH_MIN	0x00
+	mask	RD_DFTHRSH_25	0x01
+	mask	RD_DFTHRSH_50	0x02
+	mask	RD_DFTHRSH_63	0x03
+	mask	RD_DFTHRSH_75	0x04
+	mask	RD_DFTHRSH_85	0x05
+	mask	RD_DFTHRSH_90	0x06
+	mask	RD_DFTHRSH_MAX	0x07
+	mask	WR_DFTHRSH_MIN	0x00
+	mask	WR_DFTHRSH_25	0x10
+	mask	WR_DFTHRSH_50	0x20
+	mask	WR_DFTHRSH_63	0x30
+	mask	WR_DFTHRSH_75	0x40
+	mask	WR_DFTHRSH_85	0x50
+	mask	WR_DFTHRSH_90	0x60
+	mask	WR_DFTHRSH_MAX	0x70
+}
+
+register SG_CACHEPTR {
+	access_mode RW
+	address			0x0fc
+	mask	SG_USER_DATA	0xfc
+	bit	LAST_SEG	0x02
+	bit	LAST_SEG_DONE	0x01
 }
 
 register BRDCTL	{
@@ -877,6 +1017,12 @@ register BRDCTL	{
 	bit	BRDRW		0x04
 	bit	BRDCTL1		0x02
 	bit	BRDCTL0		0x01
+	/* 7890 Definitions */
+	bit	BRDDAT4		0x10
+	bit	BRDDAT3		0x08
+	bit	BRDDAT2		0x04
+	bit	BRDRW_ULTRA2	0x02
+	bit	BRDSTB_ULTRA2	0x01
 }
 
 /*
@@ -935,7 +1081,7 @@ scratch_ram {
 	/*
 	 * 1 byte per target starting at this address for configuration values
 	 */
-	TARG_SCRATCH {
+	TARG_SCSIRATE {
 		size		16
 	}
 	/*
@@ -960,6 +1106,7 @@ scratch_ram {
 	/* Parameters for DMA Logic */
 	DMAPARAMS {
 		size		1
+		bit	PRELOADEN	0x80
 		bit	WIDEODD		0x40
 		bit	SCSIEN		0x20
 		bit	SDMAEN		0x10
@@ -1078,12 +1225,27 @@ scratch_ram {
 		mask	MSGOUT_PHASEMIS	0x10
 		alias	RETURN_1
 	}
+	ARG_2 {
+		size		1
+		alias	RETURN_2
+	}
+
 	/*
 	 * Snapshot of MSG_OUT taken after each message is sent.
 	 */
 	LAST_MSG {
 		size		1
 	}
+
+	/*
+	 * Number of times we have filled the CCSGRAM with prefetched
+	 * SG elements.
+	 */
+	PREFETCH_CNT {
+		size		1
+	}
+
+
 	/*
 	 * These are reserved registers in the card's scratch ram.  Some of
 	 * the values are specified in the AHA2742 technical reference manual
@@ -1108,9 +1270,19 @@ scratch_ram {
 		mask	BIOSDISABLED		0x30	
 		bit	CHANNEL_B_PRIMARY	0x08
 	}
+	/*
+	 * Per target SCSI offset values for Ultra2 controllers.
+	 */
+	TARG_OFFSET {
+		address		0x070
+		size		16
+	}
 }
 
 const SCB_LIST_NULL	0xff
+
+const CCSGADDR_MAX	0x80
+const CCSGRAM_MAXSEGS	16
 
 /* Offsets into the SCBID array where different data is stored */
 const UNTAGGEDSCB_OFFSET	0
@@ -1118,12 +1290,15 @@ const QOUTFIFO_OFFSET		1
 const QINFIFO_OFFSET		2
 
 /* WDTR Message values */
-const BUS_8_BIT		0x00
+const BUS_8_BIT			0x00
 const BUS_16_BIT		0x01
 const BUS_32_BIT		0x02
+
+/* Offset maximums */
 const MAX_OFFSET_8BIT		0x0f
-const MAX_OFFSET_16BIT	0x08
-const HOST_MSG		0xFF
+const MAX_OFFSET_16BIT		0x08
+const MAX_OFFSET_ULTRA2		0x7f
+const HOST_MSG			0xff
 
 /* Target mode command processing constants */
 const CMD_GROUP_CODE_SHIFT	0x05
@@ -1135,11 +1310,7 @@ const CMD_GROUP5_BYTE_DELTA	11
 /*
  * Downloaded (kernel inserted) constants
  */
-/*
- * Mask of bits to test against when looking at the Queue Count
- * registers.  Works around a bug on aic7850 chips. 
- */
-const QCNTMASK		download
+
 /*
  * Number of command descriptors in the command descriptor array.
  */

@@ -1255,8 +1255,9 @@ set_multicast_list(struct device *dev) {
 /*************************************************************************/
 
 #ifdef MODULE
+static char devicename[9] = { 0, };
 static struct device dev_elmc = {
-	"        " /*"3c523"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, elmc_probe };
+	devicename /*"3c523"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, elmc_probe };
 
 static int irq=0;
 static int io=0;

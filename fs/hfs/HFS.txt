@@ -273,7 +273,7 @@
         header files.  Their format is described briefly in the section
         ``A Guide to Special File Formats'' in this document.  They are
         documented in detail in ``AppleSingle/AppleDouble Formats:
-        Developer's Note (9/94)'', available from from Apple's Developer
+        Developer's Note (9/94)'', available from Apple's Developer
         Services Page <http://devworld.apple.com>.
 
         Note that the naming convention for the header file can cause

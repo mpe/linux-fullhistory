@@ -205,10 +205,10 @@ __initfunc(static int ac_probe1(int ioaddr, struct device *dev))
 	 *  the card mem within the region covered by `normal' RAM  !!!
 	 */
 	if (dev->mem_start > 1024*1024) {	/* phys addr > 1MB */
-		if (dev->mem_start < (unsigned long)high_memory) {
+		if (dev->mem_start < virt_to_bus(high_memory)) {
 			printk(KERN_CRIT "ac3200.c: Card RAM overlaps with normal memory!!!\n");
 			printk(KERN_CRIT "ac3200.c: Use EISA SCU to set card memory below 1MB,\n");
-			printk(KERN_CRIT "ac3200.c: or to an address above %p.\n", high_memory);
+			printk(KERN_CRIT "ac3200.c: or to an address above 0x%lx.\n", virt_to_bus(high_memory));
 			printk(KERN_CRIT "ac3200.c: Driver NOT installed.\n");
 			free_irq(dev->irq, dev);
 			kfree(dev->priv);
@@ -225,6 +225,7 @@ __initfunc(static int ac_probe1(int ioaddr, struct device *dev))
 			dev->priv = NULL;
 			return EAGAIN;
 		}
+		ei_status.reg0 = 1;	/* Use as remap flag */
 		printk("ac3200.c: remapped %dkB card memory to virtual address %#lx\n",
 				AC_STOP_PG/4, dev->mem_start);
 	}
@@ -404,6 +405,8 @@ cleanup_module(void)
 			/* Someday free_irq may be in ac_close_card() */
 			free_irq(dev->irq, dev);
 			release_region(dev->base_addr, AC_IO_EXTENT);
+			if (ei_status.reg0)
+				iounmap((void *)dev->mem_start);
 			dev->priv = NULL;
 			unregister_netdev(dev);
 			kfree(priv);

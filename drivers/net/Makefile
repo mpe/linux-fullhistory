@@ -279,6 +279,16 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_NE3210),y)
+L_OBJS += ne3210.o
+CONFIG_8390_BUILTIN = y
+else
+  ifeq ($(CONFIG_NE3210),m)
+  CONFIG_8390_MODULE = y
+  M_OBJS += ne3210.o
+  endif
+endif
+
 ifeq ($(CONFIG_PLIP),y)
 L_OBJS += plip.o
 else
@@ -523,6 +533,14 @@ L_OBJS += tlan.o
 else
   ifeq ($(CONFIG_TLAN),m)
   M_OBJS += tlan.o
+  endif
+endif
+
+ifeq ($(CONFIG_VIA_RHINE),y)
+L_OBJS += via-rhine.o
+else
+  ifeq ($(CONFIG_VIA_RHINE),m)
+  M_OBJS += via-rhine.o
   endif
 endif
 
@@ -963,6 +981,25 @@ L_OBJS += x25_asy.o
 else
   ifeq ($(CONFIG_X25_ASY),m)
   M_OBJS += x25_asy.o
+  endif
+endif
+
+#
+# HIPPI adapters
+#
+ifeq ($(CONFIG_CERN_HIPPI),y)
+L_OBJS += cern_hippi.o
+else
+  ifeq ($(CONFIG_CERN_HIPPI),m)
+  M_OBJS += cern_hippi.o
+  endif
+endif
+
+ifeq ($(CONFIG_ROADRUNNER),y)
+L_OBJS += rrunner.o
+else
+  ifeq ($(CONFIG_ROADRUNNER),m)
+  M_OBJS += rrunner.o
   endif
 endif
 

@@ -757,9 +757,9 @@ struct cyclades_port {
 /* Custom Registers */
 
 #define	CyPLX_VER	(0x3400)
-#define	PLX_9050	0x11
-#define	PLX_9060	0x12
-#define	PLX_9080	0x13
+#define	PLX_9050	0x0b
+#define	PLX_9060	0x0c
+#define	PLX_9080	0x0d
 
 /***************************************************************************/
 

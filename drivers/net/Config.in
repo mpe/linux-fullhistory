@@ -121,9 +121,11 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
     tristate 'EtherExpressPro/100 support' CONFIG_EEXPRESS_PRO100
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       tristate 'Mylex EISA LNE390A/B support (EXPERIMENTAL)' CONFIG_LNE390
+      tristate 'Novell/Eagle/Microdyne NE3210 EISA support (EXPERIMENTAL)' CONFIG_NE3210
     fi
     tristate 'PCI NE2000 support' CONFIG_NE2K_PCI
     tristate 'TI ThunderLAN support' CONFIG_TLAN
+    tristate 'VIA Rhine support' CONFIG_VIA_RHINE
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       tristate 'Racal-Interlan EISA ES3210 support (EXPERIMENTAL)' CONFIG_ES3210
       tristate 'SMC EtherPower II (EXPERIMENTAL)' CONFIG_EPIC100
@@ -141,6 +143,17 @@ fi
 bool 'FDDI driver support' CONFIG_FDDI
 if [ "$CONFIG_FDDI" = "y" ]; then
   bool 'Digital DEFEA and DEFPA adapter support' CONFIG_DEFXX
+fi
+
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  bool 'HIPPI driver support (EXPERIMENTAL)' CONFIG_HIPPI
+  if [ "$CONFIG_HIPPI" = "y" ]; then
+    bool 'CERN HIPPI PCI adapter support' CONFIG_CERN_HIPPI
+    bool 'Essential RoadRunner HIPPI PCI adapter support' CONFIG_ROADRUNNER
+    if [ "$CONFIG_ROADRUNNER" != "n" ]; then
+      bool '  Use large TX/RX rings' CONFIG_ROADRUNNER_LARGE_RINGS
+    fi
+  fi
 fi
 
 tristate 'Frame relay DLCI support' CONFIG_DLCI

@@ -72,6 +72,7 @@ extern int elplus_probe(struct device *);
 extern int ac3200_probe(struct device *);
 extern int es_probe(struct device *);
 extern int lne390_probe(struct device *);
+extern int ne3210_probe(struct device *);
 extern int e2100_probe(struct device *);
 extern int ni5010_probe(struct device *);
 extern int ni52_probe(struct device *);
@@ -122,6 +123,7 @@ extern int apfddi_init(struct device *dev);
 
 /* HIPPI boards */
 extern int cern_hippi_probe(struct device *);
+extern int rr_hippi_probe(struct device *);
 
 struct devprobe
 {
@@ -214,6 +216,9 @@ struct devprobe eisa_probes[] __initdata = {
 #endif
 #ifdef CONFIG_LNE390
 	{lne390_probe, 0},
+#endif
+#ifdef CONFIG_NE3210
+	{ne3210_probe, 0},
 #endif
 	{NULL, 0},
 };
@@ -515,6 +520,9 @@ static int hippi_probe(struct device *dev)
 #ifdef CONFIG_CERN_HIPPI
 	    && cern_hippi_probe(dev)
 #endif
+#ifdef CONFIG_ROADRUNNER
+	    && rr_hippi_probe(dev)
+#endif
 	    && 1 ) {
 		return 1; /* -ENODEV or -EAGAIN would be more accurate. */
 	}
@@ -735,11 +743,11 @@ static struct device tr0_dev = {
 
 #ifdef CONFIG_HIPPI
 	static struct device hip3_dev =
-		{"hip3", 0, 0, 0, 0, -1, 0, 0, 0, 0, NEXT_DEV, hippi_probe};
+		{"hip3", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, hippi_probe};
 	static struct device hip2_dev =
-		{"hip2", 0, 0, 0, 0, -1, 0, 0, 0, 0, &hip3_dev, hippi_probe};
+		{"hip2", 0, 0, 0, 0, 0, 0, 0, 0, 0, &hip3_dev, hippi_probe};
 	static struct device hip1_dev =
-		{"hip1", 0, 0, 0, 0, -1, 0, 0, 0, 0, &hip2_dev, hippi_probe};
+		{"hip1", 0, 0, 0, 0, 0, 0, 0, 0, 0, &hip2_dev, hippi_probe};
 	static struct device hip0_dev =
 		{"hip0", 0, 0, 0, 0, 0, 0, 0, 0, 0, &hip1_dev, hippi_probe};
 

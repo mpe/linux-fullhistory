@@ -1251,6 +1251,7 @@ static inline int fbcon_get_font(int unit, struct console_font_op *op)
 	    for (j = 0; j < fontheight(p); j++)
 		*data++ = *fontdata++;
 	    memset(data, 0, 32-j);
+	    data += 32 - j;
 	}
     }
 #ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
@@ -1262,6 +1263,7 @@ static inline int fbcon_get_font(int unit, struct console_font_op *op)
 		fontdata += sizeof(u16);
 	    }
 	    memset(data, 0, 2*(32-j));
+	    data += 2 * (32 - j);
 	}
     } else if (op->width <= 24) {
 	for (i = 0; i < op->charcount; i++) {
@@ -1272,6 +1274,7 @@ static inline int fbcon_get_font(int unit, struct console_font_op *op)
 		fontdata += sizeof(u32);
 	    }
 	    memset(data, 0, 3*(32-j));
+	    data += 3 * (32 - j);
 	}
     } else {
 	for (i = 0; i < op->charcount; i++) {
@@ -1283,6 +1286,7 @@ static inline int fbcon_get_font(int unit, struct console_font_op *op)
 		fontdata += sizeof(u32);
 	    }
 	    memset(data, 0, 4*(32-j));
+	    data += 4 * (32 - j);
 	}
     }
 #endif

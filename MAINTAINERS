@@ -141,8 +141,8 @@ W:	http://www.arm.uk.linux.org/~rmk/armlinux.html
 S:	Maintained
 
 AX.25 NETWORK LAYER
-P:	Jon Naylor
-M:	jsn@cs.nott.ac.uk
+P:	Matthias Welwarsky
+M:	dg2fef@afthd.tu-darmstadt.de
 L:	linux-hams@vger.rutgers.edu
 S:	Maintained
 
@@ -357,6 +357,12 @@ M:	hpa@zytor.com
 L:	autofs@linux.kernel.org
 S:	Maintained
 
+LAPB module
+P:	Henner Eisen
+M:	eis@baty.hanse.de
+L:	linux-x25@vger.rutgers.edu
+S:	Maintained
+
 LINUX FOR POWERPC (PREP)
 P:	Cort Dougan
 M:	cort@cs.nmt.edu
@@ -428,8 +434,8 @@ L:	linware@sh.cvut.cz
 S:	Maintained
 
 NETROM NETWORK LAYER
-P:	Jon Naylor
-M:	jsn@cs.nott.ac.uk
+P:	Tomi Manninen 
+M:	Tomi.Manninen@hut.fi
 L:	linux-hams@vger.rutgers.edu
 S:	Maintained
 
@@ -532,6 +538,12 @@ REAL TIME CLOCK DRIVER
 P:	Paul Gortmaker
 M	gpg109@rsphy1.anu.edu.au
 L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
+ROSE NETWORK LAYER
+P:	Frederic Rible
+M:	frible@teaser.fr
+L:	linux-hams@vger.rutgers.edu
 S:	Maintained
 
 RISCOM8 DRIVER:
@@ -682,6 +694,12 @@ WD7000 SCSI DRIVER
 P:	Miroslav Zagorac
 M:	zaga@fly.cc.fer.hr
 L:	linux-scsi@vger.rutgers.edu
+S:	Maintained
+
+X.25 NETWORK LAYER
+P:	Henner Eisen
+M:	eis@baty.hanse.de
+L:	linux-x25@vger.rutgers.edu
 S:	Maintained
 
 Z8530 DRIVER FOR AX.25

@@ -32,6 +32,8 @@
  */
 
 
+spinlock_t dma_spin_lock = SPIN_LOCK_UNLOCKED;
+
 
 /* Channel n is busy iff dma_chan_busy[n].lock != 0.
  * DMA0 used to be reserved for DRAM refresh, but apparently not any more...

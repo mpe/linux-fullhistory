@@ -67,6 +67,7 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <asm/bitops.h>
+#include <asm/hwtest.h>
 
 #include "mac_SCC.h"
 
@@ -1300,6 +1301,12 @@ static void probe_sccs(void)
 	/* testing: fix up broken 24 bit addresses (ClassicII) */
 	if ((mac_bi_data.sccbase & 0x00FFFFFF) == mac_bi_data.sccbase)
 		mac_bi_data.sccbase |= 0x50000000;
+		
+	if ( !hwreg_present((void *)mac_bi_data.sccbase))
+	{
+		printk(KERN_WARNING "z8530: Serial devices not accessible. Check serial switch.\n");
+		return;
+	}
 
 	for(n=0;n<2;n++)
 	{
@@ -1459,11 +1466,7 @@ int mac_SCC_init(void)
 	printk("Mac68K Z8530 serial driver version 1.01\n");
 
 	/* SCC present at all? */
-	if (MACH_IS_ATARI || MACH_IS_AMIGA 
-#if 0
-	    || !(MACHW_PRESENT(SCC) || MACHW_PRESENT(ST_ESCC))
-#endif
-	   )
+	if (!MACH_IS_MAC)
 		return( -ENODEV );
 
 	if (zs_chain == 0)

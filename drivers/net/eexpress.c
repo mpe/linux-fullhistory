@@ -8,6 +8,11 @@
  *
  * Many modifications, and currently maintained, by
  *  Philip Blundell <Philip.Blundell@pobox.com>
+ * Added the Compaq LTE  Alan Cox <alan@redhat.com>
+ *
+ * Note - this driver is experimental still - it has problems on faster
+ * machines. Someone needs to sit down and go through it line by line with
+ * a databook...
  */
 
 /* The EtherExpress 16 is a fairly simple card, based on a shared-memory
@@ -326,7 +331,7 @@ __initfunc(int express_probe(struct device *dev))
 		if (sum==0xbaba && !eexp_hw_probe(dev,*port))
 			return 0;
 	}
-	return ENODEV;
+	return -ENODEV;
 }
 
 /*
@@ -931,11 +936,13 @@ __initfunc(static int eexp_hw_probe(struct device *dev, unsigned short ioaddr))
 	hw_addr[1] = eexp_hw_readeeprom(ioaddr,3);
 	hw_addr[2] = eexp_hw_readeeprom(ioaddr,4);
 
-	if (hw_addr[2]!=0x00aa || ((hw_addr[1] & 0xff00)!=0x0000))
+	/* Standard Address or Compaq LTE Address */
+	if (!((hw_addr[2]==0x00aa && ((hw_addr[1] & 0xff00)==0x0000)) ||
+	      (hw_addr[2]==0x0080 && ((hw_addr[1] & 0xff00)==0x5F00)))) 
 	{
 		printk(" rejected: invalid address %04x%04x%04x\n",
 			hw_addr[2],hw_addr[1],hw_addr[0]);
-		return ENODEV;
+		return -ENODEV;
 	}
 
 	/* Calculate the EEPROM checksum.  Carry on anyway if it's bad,

@@ -2,6 +2,8 @@
  * APM BIOS driver for Linux
  * Copyright 1994-1998 Stephen Rothwell
  *                     (Stephen.Rothwell@canb.auug.org.au)
+ * Development of this driver was funded by NEC Australia P/L
+ *	and NEC Corporation
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -27,6 +29,7 @@
  * Feb 1998, Version 1.3
  * Feb 1998, Version 1.4
  * Aug 1998, Version 1.5
+ * Sep 1998, Version 1.6
  *
  * History:
  *    0.6b: first version in official kernel, Linux 1.3.46
@@ -51,7 +54,12 @@
  *         C. Scott Ananian <cananian@alumni.princeton.edu> Linux 2.1.87
  *    1.5: Fix segment register reloading (in case of bad segments saved
  *         across BIOS call).
- *         Stephen ROthwell
+ *         Stephen Rothwell
+ *    1.6: Cope with complier/assembler differences.
+ *         Only try to turn off the first display device.
+ *         Fix OOPS at power off with no APM BIOS by Jan Echternach
+ *                   <echter@informatik.uni-rostock.de>
+ *         Stephen Rothwell
  *
  * APM 1.1 Reference:
  *
@@ -214,7 +222,8 @@ extern unsigned long get_cmos_time(void);
 /*
  * Save a segment register away
  */
-#define savesegment(seg, where)	__asm__ __volatile__("movl %%" #seg ",%0" : "=m" (where))
+#define savesegment(seg, where) \
+		__asm__ __volatile__("movl %%" #seg ",%0" : "=m" (where))
 
 /*
  * Forward declarations
@@ -264,7 +273,7 @@ static struct apm_bios_struct *	user_list = NULL;
 
 static struct timer_list	apm_timer;
 
-static char			driver_version[] = "1.5";	/* no spaces */
+static char			driver_version[] = "1.6";	/* no spaces */
 
 #ifdef APM_DEBUG
 static char *	apm_event_name[] = {
@@ -350,105 +359,95 @@ static const lookup_t error_table[] = {
  * can be zeroed before the call. Unfortunately, we can't do anything
  * about the stack segment/pointer.  Also, we tell the compiler that
  * everything could change.
+ *
+ * Also, we KNOW that for the non error case of apm_bios_call, there
+ * is no useful data returned in the low order 8 bits of eax.
  */
+#ifdef APM_NOINTS
+#	define APM_DO_CLI	__cli()
+#else
+#	define APM_DO_CLI
+#endif
+#ifdef APM_ZERO_SEGS
+#	define APM_DO_SAVE_SEGS \
+		savesegment(fs, saved_fs); \
+		savesegment(gs, saved_gs)
+#	define APM_DO_ZERO_SEGS \
+		"pushl %%ds\n\t" \
+		"pushl %%es\n\t" \
+		"xorl %%edx, %%edx\n\t" \
+		"mov %%dx, %%ds\n\t" \
+		"mov %%dx, %%es\n\t" \
+		"mov %%dx, %%fs\n\t" \
+		"mov %%dx, %%gs\n\t"
+#	define APM_DO_POP_SEGS \
+		"popl %%es\n\t" \
+		"popl %%ds\n\t"
+#	define APM_DO_RESTORE_SEGS \
+		loadsegment(fs, saved_fs); \
+		loadsegment(gs, saved_gs)
+#else
+#	define APM_DO_SAVE_SEGS
+#	define APM_DO_ZERO_SEGS
+#	define APM_DO_POP_SEGS
+#	define APM_DO_RESTORE_SEGS
+#endif
 
-static inline int apm_bios_call(u32 eax_in, u32 ebx_in, u32 ecx_in,
+static inline u8 apm_bios_call(u32 eax_in, u32 ebx_in, u32 ecx_in,
 	u32 *eax, u32 *ebx, u32 *ecx, u32 *edx, u32 *esi)
 {
-	unsigned int old_fs, old_gs;
-	int	error;
+	unsigned int	saved_fs;
+	unsigned int	saved_gs;
+	unsigned long	flags;
 
-#ifdef APM_ZERO_SEGS
-	savesegment(fs, old_fs);
-	savesegment(gs, old_gs);
-#endif
-	__asm__ __volatile__(
-		"pushfl\n\t"
-#ifdef APM_NOINTS
-		"cli\n\t"
-#endif
-#ifdef APM_ZERO_SEGS
-		"pushl %%ds\n\t"
-		"pushl %%es\n\t"
-		"movl %w9,%%ds\n\t"
-		"movl %w9,%%es\n\t"
-		"movl %w9,%%fs\n\t"
-		"movl %w9,%%gs\n\t"
-#endif
+	__save_flags(flags);
+	APM_DO_CLI;
+	APM_DO_SAVE_SEGS;
+	__asm__ __volatile__(APM_DO_ZERO_SEGS
 		"lcall %%cs:" SYMBOL_NAME_STR(apm_bios_entry) "\n\t"
-		"movl $0, %%edi\n\t"
-		"jnc 1f\n\t"
-		"movl $1, %%edi\n"
-		"1:\tpopl %%es\n\t"
-		"popl %%ds\n\t"
-		"popfl\n\t"
+		"setc %%al\n\t"
+		APM_DO_POP_SEGS
 		:  "=a" (*eax), "=b" (*ebx), "=c" (*ecx), "=d" (*edx),
-		   "=S" (*esi), "=D" (error)
+		   "=S" (*esi)
 		: "a" (eax_in), "b" (ebx_in), "c" (ecx_in)
-#ifdef APM_ZERO_SEGS
-		  , "r" (0)
-#endif
-		: "ax", "bx", "cx", "dx", "si", "di", "bp", "memory");
-#ifdef APM_ZERO_SEGS
-	loadsegment(fs, old_fs);
-	loadsegment(gs, old_gs);
-#endif
-	return error;
+		: "ax", "bx", "cx", "dx", "si", "di", "bp", "memory", "cc");
+	APM_DO_RESTORE_SEGS;
+	__restore_flags(flags);
+	return *eax & 0xff;
 }
 
 /*
  * This version only returns one value (usually an error code)
  */
 
-static inline int apm_bios_call_simple(u32 eax_in, u32 ebx_in, u32 ecx_in, u32 *eax)
+static inline u8 apm_bios_call_simple(u32 eax_in, u32 ebx_in, u32 ecx_in,
+	u32 *eax)
 {
-	unsigned int old_fs, old_gs;
-	int	error;
+	u8		error;
+	unsigned int	saved_fs;
+	unsigned int	saved_gs;
+	unsigned long	flags;
 
-#ifdef APM_ZERO_SEGS
-	savesegment(fs, old_fs);
-	savesegment(gs, old_gs);
-#endif
-	__asm__ __volatile__(
-		"pushfl\n\t"
-#ifdef APM_NOINTS
-		"cli\n\t"
-#endif
-#ifdef APM_ZERO_SEGS
-		"pushl %%ds\n\t"
-		"pushl %%es\n\t"
-		"movl %w5,%%ds\n\t"
-		"movl %w5,%%es\n\t"
-		"movl %w5,%%fs\n\t"
-		"movl %w5,%%gs\n\t"
-#endif
+	__save_flags(flags);
+	APM_DO_CLI;
+	APM_DO_SAVE_SEGS;
+	__asm__ __volatile__(APM_DO_ZERO_SEGS
 		"lcall %%cs:" SYMBOL_NAME_STR(apm_bios_entry) "\n\t"
-		"movl $0, %%edi\n\t"
-		"jnc 1f\n\t"
-		"movl $1, %%edi\n"
-		"1:\tpopl %%es\n\t"
-		"popl %%ds\n\t"
-		"popfl\n\t"
-		: "=a" (*eax), "=D" (error)
+		"setc %%bl\n\t"
+		APM_DO_POP_SEGS
+		: "=a" (*eax), "=b" (error)
 		: "a" (eax_in), "b" (ebx_in), "c" (ecx_in)
-#ifdef APM_ZERO_SEGS
-		  , "r" (0)
-#endif
-		: "ax", "bx", "cx", "dx", "si", "di", "bp", "memory");
-#ifdef APM_ZERO_SEGS
-	loadsegment(fs, old_fs);
-	loadsegment(gs, old_gs);
-#endif
+		: "ax", "bx", "cx", "dx", "si", "di", "bp", "memory", "cc");
+	APM_DO_RESTORE_SEGS;
+	__restore_flags(flags);
 	return error;
 }
 
 static int apm_driver_version(u_short *val)
 {
-	int	error;
 	u32	eax;
 
-	error = apm_bios_call_simple(0x530e, 0, *val, &eax);
-	if (error)
+	if (apm_bios_call_simple(0x530e, 0, *val, &eax))
 		return (eax >> 8) & 0xff;
 	*val = eax;
 	return APM_SUCCESS;
@@ -456,14 +455,12 @@ static int apm_driver_version(u_short *val)
 
 static int apm_get_event(apm_event_t *event, apm_eventinfo_t *info)
 {
-	int	error;
 	u32	eax;
 	u32	ebx;
 	u32	ecx;
 	u32	dummy;
 
-	error = apm_bios_call(0x530b, 0, 0, &eax, &ebx, &ecx, &dummy, &dummy);
-	if (error)
+	if (apm_bios_call(0x530b, 0, 0, &eax, &ebx, &ecx, &dummy, &dummy))
 		return (eax >> 8) & 0xff;
 	*event = ebx;
 	if (apm_bios_info.version < 0x0102)
@@ -473,27 +470,31 @@ static int apm_get_event(apm_event_t *event, apm_eventinfo_t *info)
 	return APM_SUCCESS;
 }
 
-static int set_power_state(u_short what, u_short state)
+static inline int set_power_state(u_short what, u_short state)
 {
-	int	error;
 	u32	eax;
 
-	error = apm_bios_call_simple(0x5307, what, state, &eax);
-	if (error)
+	if (apm_bios_call_simple(0x5307, what, state, &eax))
 		return (eax >> 8) & 0xff;
 	return APM_SUCCESS;
 }
 
-int apm_set_power_state(u_short state)
+static int apm_set_power_state(u_short state)
 {
 	return set_power_state(0x0001, state);
+}
+
+void apm_power_off(void)
+{
+	if (apm_enabled)
+		(void) apm_set_power_state(APM_STATE_OFF);
 }
 
 #ifdef CONFIG_APM_DISPLAY_BLANK
 /* Called by apm_display_blank and apm_display_unblank when apm_enabled. */
 static int apm_set_display_power_state(u_short state)
 {
-	return set_power_state(0x01ff, state);
+	return set_power_state(0x0100, state);
 }
 #endif
 
@@ -501,12 +502,11 @@ static int apm_set_display_power_state(u_short state)
 /* Called by apm_setup if apm_enabled will be true. */
 static int apm_enable_power_management(void)
 {
-	int	error;
 	u32	eax;
 
-	error = apm_bios_call_simple(0x5308,
-			(apm_bios_info.version > 0x100) ? 0x0001 : 0xffff, 1, &eax);
-	if (error)
+	if (apm_bios_call_simple(0x5308,
+			(apm_bios_info.version > 0x100) ? 0x0001 : 0xffff,
+			1, &eax))
 		return (eax >> 8) & 0xff;
 	return APM_SUCCESS;
 }
@@ -514,15 +514,13 @@ static int apm_enable_power_management(void)
 
 static int apm_get_power_status(u_short *status, u_short *bat, u_short *life)
 {
-	int	error;
 	u32	eax;
 	u32	ebx;
 	u32	ecx;
 	u32	edx;
 	u32	dummy;
 
-	error = apm_bios_call(0x530a, 1, 0, &eax, &ebx, &ecx, &edx, &dummy);
-	if (error)
+	if (apm_bios_call(0x530a, 1, 0, &eax, &ebx, &ecx, &edx, &dummy))
 		return (eax >> 8) & 0xff;
 	*status = ebx;
 	*bat = ecx;
@@ -536,7 +534,6 @@ static int apm_get_battery_status(u_short which,
 				  u_short *bat, u_short *life, u_short *nbat)
 {
 	u_short status;
-	int	error;
 	u32	eax;
 	u32	ebx;
 	u32	ecx;
@@ -551,8 +548,8 @@ static int apm_get_battery_status(u_short which,
 		return apm_get_power_status(&status, bat, life);
 	}
 
-	error = apm_bios_call(0x530a, (0x8000 | (which)), 0, &eax, &ebx, &ecx, &edx, &esi);
-	if (error)
+	if (apm_bios_call(0x530a, (0x8000 | (which)), 0, &eax,
+			&ebx, &ecx, &edx, &esi))
 		return (eax >> 8) & 0xff;
 	*bat = ecx;
 	*life = edx;
@@ -563,11 +560,9 @@ static int apm_get_battery_status(u_short which,
 
 static int apm_engage_power_management(u_short device)
 {
-	int	error;
 	u32	eax;
 
-	error = apm_bios_call_simple(0x530f, device, 1, &eax);
-	if (error)
+	if (apm_bios_call_simple(0x530f, device, 1, &eax))
 		return (eax >> 8) & 0xff;
 	return APM_SUCCESS;
 }
@@ -875,14 +870,12 @@ static void do_apm_timer(unsigned long unused)
 int apm_do_idle(void)
 {
 #ifdef CONFIG_APM_CPU_IDLE
-	int	error;
 	u32	dummy;
 
 	if (!apm_enabled)
 		return 0;
 
-	error = apm_bios_call_simple(0x5305, 0, 0, &dummy);
-	if (error)
+	if (apm_bios_call_simple(0x5305, 0, 0, &dummy))
 		return 0;
 
 	clock_slowed = (apm_bios_info.flags & APM_IDLE_SLOWS_CLOCK) != 0;
