@@ -100,32 +100,32 @@ int sys_getpriority(int which, int who)
 	return(max_prio ? max_prio : -ESRCH);
 }
 
-int sys_profil()
+int sys_profil(void)
 {
 	return -ENOSYS;
 }
 
-int sys_ftime()
+int sys_ftime(void)
 {
 	return -ENOSYS;
 }
 
-int sys_break()
+int sys_break(void)
 {
 	return -ENOSYS;
 }
 
-int sys_stty()
+int sys_stty(void)
 {
 	return -ENOSYS;
 }
 
-int sys_gtty()
+int sys_gtty(void)
 {
 	return -ENOSYS;
 }
 
-int sys_prof()
+int sys_prof(void)
 {
 	return -ENOSYS;
 }
@@ -293,38 +293,40 @@ int sys_setgid(gid_t gid)
 	return 0;
 }
 
-int sys_acct()
+int sys_acct(void)
 {
 	return -ENOSYS;
 }
 
-int sys_phys()
+int sys_phys(void)
 {
 	return -ENOSYS;
 }
 
-int sys_lock()
+int sys_lock(void)
 {
 	return -ENOSYS;
 }
 
-int sys_mpx()
+int sys_mpx(void)
 {
 	return -ENOSYS;
 }
 
-int sys_ulimit()
+int sys_ulimit(void)
 {
 	return -ENOSYS;
 }
 
 int sys_time(long * tloc)
 {
-	int i;
+	int i, error;
 
 	i = CURRENT_TIME;
 	if (tloc) {
-		verify_area(tloc,4);
+		error = verify_area(VERIFY_WRITE, tloc, 4);
+		if (error)
+			return error;
 		put_fs_long(i,(unsigned long *)tloc);
 	}
 	return i;
@@ -403,7 +405,9 @@ int sys_stime(long * tptr)
 int sys_times(struct tms * tbuf)
 {
 	if (tbuf) {
-		verify_area(tbuf,sizeof *tbuf);
+		int error = verify_area(VERIFY_WRITE,tbuf,sizeof *tbuf);
+		if (error)
+			return error;
 		put_fs_long(current->utime,(unsigned long *)&tbuf->tms_utime);
 		put_fs_long(current->stime,(unsigned long *)&tbuf->tms_stime);
 		put_fs_long(current->cutime,(unsigned long *)&tbuf->tms_cutime);
@@ -412,17 +416,28 @@ int sys_times(struct tms * tbuf)
 	return jiffies;
 }
 
-int sys_brk(unsigned long end_data_seg)
+int sys_brk(unsigned long newbrk)
 {
 	unsigned long rlim;
+	unsigned long oldbrk;
 
+	oldbrk = current->brk;
 	rlim = current->rlim[RLIMIT_DATA].rlim_cur;
 	if (rlim >= RLIM_INFINITY)
 		rlim = 0xffffffff;
-	if (end_data_seg >= current->end_code &&
-	    end_data_seg-current->end_code <= rlim &&
-	    end_data_seg < current->start_stack - 16384)
-		current->brk = end_data_seg;
+	if (newbrk >= current->end_code &&
+	    newbrk - current->end_code <= rlim &&
+	    newbrk < current->start_stack - 16384) {
+		current->brk = newbrk;
+		newbrk += 0x00000fff;
+		newbrk &= 0xfffff000;
+		oldbrk += 0x00000fff;
+		oldbrk &= 0xfffff000;
+		if (newbrk < oldbrk)
+			unmap_page_range(newbrk, oldbrk-newbrk);
+		else
+			zeromap_page_range(oldbrk, newbrk-oldbrk, PAGE_COPY);
+	}
 	return current->brk;
 }
 
@@ -481,11 +496,13 @@ int sys_setsid(void)
  */
 int sys_getgroups(int gidsetsize, gid_t *grouplist)
 {
-	int	i;
+	int i;
 
-	if (gidsetsize)
-		verify_area(grouplist, sizeof(gid_t) * gidsetsize);
-
+	if (gidsetsize) {
+		i = verify_area(VERIFY_WRITE, grouplist, sizeof(gid_t) * gidsetsize);
+		if (i)
+			return i;
+	}
 	for (i = 0; (i < NGROUPS) && (current->groups[i] != NOGROUP);
 	     i++, grouplist++) {
 		if (gidsetsize) {
@@ -531,18 +548,24 @@ int in_group_p(gid_t grp)
 
 int sys_newuname(struct new_utsname * name)
 {
+	int error;
+
 	if (!name)
 		return -EFAULT;
-	verify_area(name, sizeof *name);
-	memcpy_tofs(name,&system_utsname,sizeof *name);
-	return 0;
+	error = verify_area(VERIFY_WRITE, name, sizeof *name);
+	if (!error)
+		memcpy_tofs(name,&system_utsname,sizeof *name);
+	return error;
 }
 
 int sys_uname(struct old_utsname * name)
 {
+	int error;
 	if (!name)
-		return -EINVAL;
-	verify_area(name,sizeof *name);
+		return -EFAULT;
+	error = verify_area(VERIFY_WRITE, name,sizeof *name);
+	if (error)
+		return error;
 	memcpy_tofs(&name->sysname,&system_utsname.sysname,__OLD_UTS_LEN);
 	put_fs_byte(0,name->sysname+__OLD_UTS_LEN);
 	memcpy_tofs(&name->nodename,&system_utsname.nodename,__OLD_UTS_LEN);
@@ -577,9 +600,13 @@ int sys_sethostname(char *name, int len)
 
 int sys_getrlimit(unsigned int resource, struct rlimit *rlim)
 {
+	int error;
+
 	if (resource >= RLIM_NLIMITS)
 		return -EINVAL;
-	verify_area(rlim,sizeof *rlim);
+	error = verify_area(VERIFY_WRITE,rlim,sizeof *rlim);
+	if (error)
+		return error;
 	put_fs_long(current->rlim[resource].rlim_cur, 
 		    (unsigned long *) rlim);
 	put_fs_long(current->rlim[resource].rlim_max, 
@@ -612,12 +639,15 @@ int sys_setrlimit(unsigned int resource, struct rlimit *rlim)
  * a lot simpler!  (Which we're not doing right now because we're not
  * measuring them yet).
  */
-void getrusage(struct task_struct *p, int who, struct rusage *ru)
+int getrusage(struct task_struct *p, int who, struct rusage *ru)
 {
+	int error;
 	struct rusage r;
 	unsigned long	*lp, *lpend, *dest;
 
-	verify_area(ru, sizeof *ru);
+	error = verify_area(VERIFY_WRITE, ru, sizeof *ru);
+	if (error)
+		return error;
 	memset((char *) &r, 0, sizeof(r));
 	switch (who) {
 		case RUSAGE_SELF:
@@ -650,28 +680,34 @@ void getrusage(struct task_struct *p, int who, struct rusage *ru)
 	dest = (unsigned long *) ru;
 	for (; lp < lpend; lp++, dest++) 
 		put_fs_long(*lp, dest);
+	return 0;
 }
 
 int sys_getrusage(int who, struct rusage *ru)
 {
 	if (who != RUSAGE_SELF && who != RUSAGE_CHILDREN)
 		return -EINVAL;
-	getrusage(current, who, ru);
-	return(0);
+	return getrusage(current, who, ru);
 }
 
 int sys_gettimeofday(struct timeval *tv, struct timezone *tz)
 {
+	int error;
+
 	if (tv) {
 		unsigned long nowtime = jiffies+jiffies_offset;
-		verify_area(tv, sizeof *tv);
+		error = verify_area(VERIFY_WRITE, tv, sizeof *tv);
+		if (error)
+			return error;
 		put_fs_long(startup_time + CT_TO_SECS(nowtime),
 			    (unsigned long *) tv);
 		put_fs_long(CT_TO_USECS(nowtime), 
 			    ((unsigned long *) tv)+1);
 	}
 	if (tz) {
-		verify_area(tz, sizeof *tz);
+		error = verify_area(VERIFY_WRITE, tz, sizeof *tz);
+		if (error)
+			return error;
 		put_fs_long(sys_tz.tz_minuteswest, (unsigned long *) tz);
 		put_fs_long(sys_tz.tz_dsttime, ((unsigned long *) tz)+1);
 	}
@@ -690,7 +726,7 @@ int sys_gettimeofday(struct timeval *tv, struct timezone *tz)
 int sys_settimeofday(struct timeval *tv, struct timezone *tz)
 {
 	static int	firsttime = 1;
-	void 		adjust_clock();
+	void 		adjust_clock(void);
 
 	if (!suser())
 		return -EPERM;
@@ -731,7 +767,7 @@ int sys_settimeofday(struct timeval *tv, struct timezone *tz)
  * clock at all, but get the time via NTP or timed if you're on a 
  * network....				- TYT, 1/1/92
  */
-void adjust_clock()
+void adjust_clock(void)
 {
 	startup_time += sys_tz.tz_minuteswest*60;
 }

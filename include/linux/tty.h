@@ -78,7 +78,9 @@ struct serial_struct {
 	int	xmit_fifo_size;
 	int	custom_divisor;
 	int	baud_base;
-	int	reserved[7];
+	char	close_delay;
+	char	reserved_char[3];
+	int	reserved[6];
 };
 
 /*
@@ -94,6 +96,7 @@ struct serial_struct {
 /*
  * Definitions for async_struct (and serial_struct) flags field
  */
+#define ASYNC_HUP_NOTIFY 0x0001 /* Notify blocked open on hangups */
 #define ASYNC_FOURPORT  0x0002	/* Set OU1, OUT2 per AST Fourport settings */
 #define ASYNC_SAK	0x0004	/* Secure Attention Key (Orange book) */
 
@@ -102,7 +105,7 @@ struct serial_struct {
 #define ASYNC_SPD_VHI	0x0020  /* Use 115200 instead of 38400 bps */
 #define ASYNC_SPD_CUST	0x0030  /* Use user-specified divisor */
 
-#define ASYNC_FLAGS	0x0036	/* Possible legal async flags */
+#define ASYNC_FLAGS	0x0037	/* Possible legal async flags */
 
 /* Internal flags used only by kernel/chr_drv/serial.c */
 #define ASYNC_INITIALIZED	0x80000000 /* Serial port was initialized */
@@ -143,6 +146,7 @@ extern int get_tty_queue(struct tty_queue * queue);
 #define _L_FLAG(tty,f)	((tty)->termios->c_lflag & f)
 #define _I_FLAG(tty,f)	((tty)->termios->c_iflag & f)
 #define _O_FLAG(tty,f)	((tty)->termios->c_oflag & f)
+#define _C_FLAG(tty,f)	((tty)->termios->c_cflag & f)
 
 #define L_CANON(tty)	_L_FLAG((tty),ICANON)
 #define L_ISIG(tty)	_L_FLAG((tty),ISIG)
@@ -154,6 +158,11 @@ extern int get_tty_queue(struct tty_queue * queue);
 #define L_ECHOKE(tty)	_L_FLAG((tty),ECHOKE)
 #define L_TOSTOP(tty)	_L_FLAG((tty),TOSTOP)
 
+#define I_IGNBRK(tty)	_I_FLAG((tty),IGNBRK)
+#define I_BRKINT(tty)	_I_FLAG((tty),BRKINT)
+#define I_IGNPAR(tty)	_I_FLAG((tty),IGNPAR)
+#define I_PARMRK(tty)	_I_FLAG((tty),PARMRK)
+#define I_INPCK(tty)	_I_FLAG((tty),INPCK)
 #define I_UCLC(tty)	_I_FLAG((tty),IUCLC)
 #define I_NLCR(tty)	_I_FLAG((tty),INLCR)
 #define I_CRNL(tty)	_I_FLAG((tty),ICRNL)
@@ -168,6 +177,8 @@ extern int get_tty_queue(struct tty_queue * queue);
 #define O_NLRET(tty)	_O_FLAG((tty),ONLRET)
 #define O_LCUC(tty)	_O_FLAG((tty),OLCUC)
 
+#define C_LOCAL(tty)	_C_FLAG((tty),CLOCAL)
+#define C_RTSCTS(tty)	_C_FLAG((tty),CRTSCTS)
 #define C_SPEED(tty)	((tty)->termios->c_cflag & CBAUD)
 #define C_HUP(tty)	(C_SPEED((tty)) == B0)
 
@@ -190,6 +201,7 @@ struct tty_struct {
 	int pgrp;
 	int session;
 	unsigned char stopped:1, status_changed:1, packet:1, lnext:1;
+	unsigned char char_error:2;
 	unsigned char ctrl_status;
 	short line;
 	int disc;
@@ -208,6 +220,7 @@ struct tty_struct {
 	int write_data_cnt;
 	void (*write_data_callback)(void * data);
 	void * write_data_arg;
+	int readq_flags[TTY_BUF_SIZE/32];
 	struct tty_queue read_q;
 	struct tty_queue write_q;
 	struct tty_queue secondary;
@@ -280,6 +293,15 @@ struct tty_ldisc {
 #define TTY_RQ_THROTTLED 4
 #define TTY_IO_ERROR 5
 
+/*
+ * When a break, frame error, or parity error happens, these codes are
+ * stuffed into the read queue, and the relevant bit in readq_flag bit
+ * array is set.
+ */
+#define TTY_BREAK	1
+#define TTY_FRAME	2
+#define TTY_PARITY	3
+
 #define TTY_WRITE_FLUSH(tty) tty_write_flush((tty))
 #define TTY_READ_FLUSH(tty) tty_read_flush((tty))
 
@@ -324,7 +346,9 @@ extern int tty_signal(int sig, struct tty_struct *tty);
 extern int kill_pg(int pgrp, int sig, int priv);
 extern int kill_sl(int sess, int sig, int priv);
 extern void tty_hangup(struct tty_struct * tty);
+extern void tty_vhangup(struct tty_struct * tty);
 extern void tty_unhangup(struct file *filp);
+extern int tty_hung_up_p(struct file * filp);
 extern void do_SAK(struct tty_struct *tty);
 
 /* tty write functions */

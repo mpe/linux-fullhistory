@@ -38,7 +38,6 @@
 #define F_EXLCK		4	/* or 3 */
 #define F_SHLCK		8	/* or 4 */
 
-/* Once again - not implemented, but ... */
 struct flock {
 	short l_type;
 	short l_whence;

@@ -11,6 +11,7 @@
 #include <linux/errno.h>
 #include <linux/socket.h>
 #include <linux/fcntl.h>
+#include <asm/segment.h>
 
 #include <netinet/in.h>
 
@@ -63,8 +64,8 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end)
 		printk("nfs_rpc_call: socki_lookup failed\n");
 		return -EBADF;
 	}
-	__asm__("mov %%fs,%0":"=r" (fs));
-	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x10));
+	fs = get_fs();
+	set_fs(get_ds());
 	for (n = 0, timeout = init_timeout; ; n++, timeout <<= 1) {
 		result = sock->ops->send(sock, (void *) start, len, 0, 0);
 		if (result < 0) {
@@ -123,8 +124,10 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end)
 			NULL, &addrlen);
 		if (result < 0) {
 			if (result == -EAGAIN) {
-				printk("nfs_rpc_call: bad select ready\n");
 				goto re_select;
+#if 0
+				printk("nfs_rpc_call: bad select ready\n");
+#endif
 			}
 			if (result != -ERESTARTSYS) {
 				printk("nfs_rpc_call: recv error = %d\n",
@@ -141,7 +144,7 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end)
 		printk("nfs_rpc_call: XID mismatch\n");
 #endif
 	}
-	__asm__("mov %0,%%fs"::"r" (fs));
+	set_fs(fs);
 	return result;
 }
 

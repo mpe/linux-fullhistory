@@ -45,7 +45,7 @@ static int isofs_match(int len,const char * name, char * compare, int dlen)
 	if (dlen != len)
 		return 0;
 	__asm__("cld\n\t"
-		"fs ; repe ; cmpsb\n\t"
+		"repe ; cmpsb\n\t"
 		"setz %%al"
 		:"=a" (same)
 		:"0" (0),"S" ((long) name),"D" ((long) compare),"c" (len)
@@ -241,8 +241,8 @@ int isofs_lookup(struct inode * dir,const char * name, int len,
 
 	/* We need this backlink for the .. entry */
 	
-	if (ino_back) (*result)->u.isofs_i.i_backlink = ino_back; 
-	
+	if (ino_back && !(*result)->i_pipe)
+		(*result)->u.isofs_i.i_backlink = ino_back; 
 	iput(dir);
 	return 0;
 }

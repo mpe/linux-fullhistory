@@ -15,9 +15,8 @@ static void cp_old_stat(struct inode * inode, struct old_stat * statbuf)
 {
 	struct old_stat tmp;
 
-	printk("Warning: %s using old stat() call. Recompile your binary.\n",
+	printk("VFS: Warning: %s using old stat() call. Recompile your binary.\n",
 		current->comm);
-	verify_area(statbuf,sizeof (*statbuf));
 	tmp.st_dev = inode->i_dev;
 	tmp.st_ino = inode->i_ino;
 	tmp.st_mode = inode->i_mode;
@@ -37,7 +36,6 @@ static void cp_new_stat(struct inode * inode, struct new_stat * statbuf)
 	struct new_stat tmp = {0, };
 	unsigned int blocks, indirect;
 
-	verify_area(statbuf,sizeof (*statbuf));
 	tmp.st_dev = inode->i_dev;
 	tmp.st_ino = inode->i_ino;
 	tmp.st_mode = inode->i_mode;
@@ -82,6 +80,9 @@ int sys_stat(char * filename, struct old_stat * statbuf)
 	struct inode * inode;
 	int error;
 
+	error = verify_area(VERIFY_WRITE,statbuf,sizeof (*statbuf));
+	if (error)
+		return error;
 	error = namei(filename,&inode);
 	if (error)
 		return error;
@@ -95,6 +96,9 @@ int sys_newstat(char * filename, struct new_stat * statbuf)
 	struct inode * inode;
 	int error;
 
+	error = verify_area(VERIFY_WRITE,statbuf,sizeof (*statbuf));
+	if (error)
+		return error;
 	error = namei(filename,&inode);
 	if (error)
 		return error;
@@ -108,6 +112,9 @@ int sys_lstat(char * filename, struct old_stat * statbuf)
 	struct inode * inode;
 	int error;
 
+	error = verify_area(VERIFY_WRITE,statbuf,sizeof (*statbuf));
+	if (error)
+		return error;
 	error = lnamei(filename,&inode);
 	if (error)
 		return error;
@@ -121,6 +128,9 @@ int sys_newlstat(char * filename, struct new_stat * statbuf)
 	struct inode * inode;
 	int error;
 
+	error = verify_area(VERIFY_WRITE,statbuf,sizeof (*statbuf));
+	if (error)
+		return error;
 	error = lnamei(filename,&inode);
 	if (error)
 		return error;
@@ -133,7 +143,11 @@ int sys_fstat(unsigned int fd, struct old_stat * statbuf)
 {
 	struct file * f;
 	struct inode * inode;
+	int error;
 
+	error = verify_area(VERIFY_WRITE,statbuf,sizeof (*statbuf));
+	if (error)
+		return error;
 	if (fd >= NR_OPEN || !(f=current->filp[fd]) || !(inode=f->f_inode))
 		return -EBADF;
 	cp_old_stat(inode,statbuf);
@@ -144,7 +158,11 @@ int sys_newfstat(unsigned int fd, struct new_stat * statbuf)
 {
 	struct file * f;
 	struct inode * inode;
+	int error;
 
+	error = verify_area(VERIFY_WRITE,statbuf,sizeof (*statbuf));
+	if (error)
+		return error;
 	if (fd >= NR_OPEN || !(f=current->filp[fd]) || !(inode=f->f_inode))
 		return -EBADF;
 	cp_new_stat(inode,statbuf);
@@ -158,7 +176,9 @@ int sys_readlink(const char * path, char * buf, int bufsiz)
 
 	if (bufsiz <= 0)
 		return -EINVAL;
-	verify_area(buf,bufsiz);
+	error = verify_area(VERIFY_WRITE,buf,bufsiz);
+	if (error)
+		return error;
 	error = lnamei(path,&inode);
 	if (error)
 		return error;

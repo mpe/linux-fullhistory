@@ -60,14 +60,17 @@
     if (offset >= 1024) block++; \
     offset &= 1023; \
     bh = bread(DEV, block, 1024); \
-    memcpy(buffer, bh->b_data, cont_size); \
-    brelse(bh); \
-    chr = buffer; \
-    len = cont_size; \
-    cont_extent = 0; \
-    cont_size = 0; \
-    cont_offset = 0; \
-    goto LABEL; \
+    if (bh) { \
+      memcpy(buffer, bh->b_data, cont_size); \
+      brelse(bh); \
+      chr = buffer; \
+      len = cont_size; \
+      cont_extent = 0; \
+      cont_size = 0; \
+      cont_offset = 0; \
+      goto LABEL; \
+    } \
+    printk("Unable to read rock-ridge descriptor block\n"); \
   }}
 
 

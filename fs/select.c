@@ -137,24 +137,33 @@ repeat:
 	return count;
 }
 
-static void __get_fd_set(int nr, unsigned long * fs_pointer, unsigned long * fdset)
+/*
+ * We do a VERIFY_WRITE here even though we are only reading this time:
+ * we'll write to it eventually..
+ */
+static int __get_fd_set(int nr, unsigned long * fs_pointer, unsigned long * fdset)
 {
+	int error;
+
 	FD_ZERO(fdset);
 	if (!fs_pointer)
-		return;
+		return 0;
+	error = verify_area(VERIFY_WRITE,fs_pointer,sizeof(fd_set));
+	if (error)
+		return error;
 	while (nr > 0) {
 		*fdset = get_fs_long(fs_pointer);
 		fdset++;
 		fs_pointer++;
 		nr -= 32;
 	}
+	return 0;
 }
 
 static void __set_fd_set(int nr, unsigned long * fs_pointer, unsigned long * fdset)
 {
 	if (!fs_pointer)
 		return;
-	verify_area(fs_pointer, sizeof(fd_set));
 	while (nr > 0) {
 		put_fs_long(*fdset, fs_pointer);
 		fdset++;
@@ -185,6 +194,9 @@ int sys_select( unsigned long *buffer )
 	struct timeval *tvp;
 	unsigned long timeout;
 
+	i = verify_area(VERIFY_READ, buffer, 20);
+	if (i)
+		return i;
 	n = get_fs_long(buffer++);
 	if (n < 0)
 		return -EINVAL;
@@ -194,11 +206,14 @@ int sys_select( unsigned long *buffer )
 	outp = (fd_set *) get_fs_long(buffer++);
 	exp = (fd_set *) get_fs_long(buffer++);
 	tvp = (struct timeval *) get_fs_long(buffer);
-	get_fd_set(n, inp, &in);
-	get_fd_set(n, outp, &out);
-	get_fd_set(n, exp, &ex);
+	if ((i = get_fd_set(n, inp, &in)) ||
+	    (i = get_fd_set(n, outp, &out)) ||
+	    (i = get_fd_set(n, exp, &ex))) return i;
 	timeout = 0xffffffff;
 	if (tvp) {
+		i = verify_area(VERIFY_WRITE, tvp, sizeof(*tvp));
+		if (i)
+			return i;
 		timeout = jiffies;
 		timeout += ROUND_UP(get_fs_long((unsigned long *)&tvp->tv_usec),(1000000/HZ));
 		timeout += get_fs_long((unsigned long *)&tvp->tv_sec) * HZ;
@@ -213,7 +228,6 @@ int sys_select( unsigned long *buffer )
 		timeout = 0;
 	current->timeout = 0;
 	if (tvp) {
-		verify_area(tvp, sizeof(*tvp));
 		put_fs_long(timeout/HZ, (unsigned long *) &tvp->tv_sec);
 		timeout %= HZ;
 		timeout *= (1000000/HZ);

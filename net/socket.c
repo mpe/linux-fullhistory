@@ -493,7 +493,7 @@ sock_socketpair(int family, int type, int protocol, int usockvec[2])
 	sock1->state = SS_CONNECTED;
 	sock2->state = SS_CONNECTED;
 
-	verify_area(usockvec, 2 * sizeof(int));
+	verify_area(VERIFY_WRITE,usockvec, 2 * sizeof(int));
 	put_fs_long(fd1, &usockvec[0]);
 	put_fs_long(fd2, &usockvec[1]);
 
@@ -835,62 +835,62 @@ sys_socketcall(int call, unsigned long *args)
 {
 	switch (call) {
 	case SYS_SOCKET:
-		verify_area(args, 3 * sizeof(long));
+		verify_area(VERIFY_WRITE,args, 3 * sizeof(long));
 		return sock_socket(get_fs_long(args+0),
 				   get_fs_long(args+1),
 				   get_fs_long(args+2));
 
 	case SYS_BIND:
-		verify_area(args, 3 * sizeof(long));
+		verify_area(VERIFY_WRITE,args, 3 * sizeof(long));
 		return sock_bind(get_fs_long(args+0),
 				 (struct sockaddr *)get_fs_long(args+1),
 				 get_fs_long(args+2));
 
 	case SYS_CONNECT:
-		verify_area(args, 3 * sizeof(long));
+		verify_area(VERIFY_WRITE,args, 3 * sizeof(long));
 		return sock_connect(get_fs_long(args+0),
 				    (struct sockaddr *)get_fs_long(args+1),
 				    get_fs_long(args+2));
 
 	case SYS_LISTEN:
-		verify_area(args, 2 * sizeof(long));
+		verify_area(VERIFY_WRITE,args, 2 * sizeof(long));
 		return sock_listen(get_fs_long(args+0),
 				   get_fs_long(args+1));
 
 	case SYS_ACCEPT:
-		verify_area(args, 3 * sizeof(long));
+		verify_area(VERIFY_WRITE,args, 3 * sizeof(long));
 		return sock_accept(get_fs_long(args+0),
 				   (struct sockaddr *)get_fs_long(args+1),
 				   (int *)get_fs_long(args+2));
 
 	case SYS_GETSOCKNAME:
-		verify_area(args, 3 * sizeof(long));
+		verify_area(VERIFY_WRITE,args, 3 * sizeof(long));
 		return sock_getsockname(get_fs_long(args+0),
 					(struct sockaddr *)get_fs_long(args+1),
 					(int *)get_fs_long(args+2));
 
 	case SYS_GETPEERNAME:
-		verify_area(args, 3 * sizeof(long));
+		verify_area(VERIFY_WRITE,args, 3 * sizeof(long));
 		return sock_getpeername(get_fs_long(args+0),
 					(struct sockaddr *)get_fs_long(args+1),
 					(int *)get_fs_long(args+2));
 
 	case SYS_SOCKETPAIR:
-		verify_area(args, 4 * sizeof(long));
+		verify_area(VERIFY_WRITE,args, 4 * sizeof(long));
 		return sock_socketpair(get_fs_long(args+0),
 				       get_fs_long(args+1),
 				       get_fs_long(args+2),
 				       (int *)get_fs_long(args+3));
 
       case SYS_SEND:
-	  verify_area(args, 4 * sizeof (unsigned long));
+	  verify_area(VERIFY_WRITE,args, 4 * sizeof (unsigned long));
 	  return ( sys_send (get_fs_long(args+0),
 			     (void *)get_fs_long(args+1),
 			     get_fs_long(args+2),
 			     get_fs_long(args+3)));
 			     
       case SYS_SENDTO:
-	  verify_area(args, 6 * sizeof (unsigned long));
+	  verify_area(VERIFY_WRITE,args, 6 * sizeof (unsigned long));
 	  return ( sys_sendto (get_fs_long(args+0),
 			     (void *)get_fs_long(args+1),
 			     get_fs_long(args+2),
@@ -900,14 +900,14 @@ sys_socketcall(int call, unsigned long *args)
 
     
       case SYS_RECV:
-	  verify_area(args, 4 * sizeof (unsigned long));
+	  verify_area(VERIFY_WRITE,args, 4 * sizeof (unsigned long));
 	  return ( sys_recv (get_fs_long(args+0),
 			     (void *)get_fs_long(args+1),
 			     get_fs_long(args+2),
 			     get_fs_long(args+3)));
 			     
       case SYS_RECVFROM:
-	  verify_area(args, 6 * sizeof (unsigned long));
+	  verify_area(VERIFY_WRITE,args, 6 * sizeof (unsigned long));
 	  return ( sys_recvfrom (get_fs_long(args+0),
 				 (void *)get_fs_long(args+1),
 				 get_fs_long(args+2),
@@ -916,12 +916,12 @@ sys_socketcall(int call, unsigned long *args)
 				 (int *)get_fs_long(args+5)));
 
       case SYS_SHUTDOWN:
-	  verify_area (args, 2* sizeof (unsigned long));
+	  verify_area(VERIFY_WRITE, args, 2* sizeof (unsigned long));
 	  return ( sys_shutdown (get_fs_long (args+0),
 				 get_fs_long (args+1)));
 
       case SYS_SETSOCKOPT:
-	  verify_area (args, 5*sizeof (unsigned long));
+	  verify_area(VERIFY_WRITE, args, 5*sizeof (unsigned long));
 	  return (sys_setsockopt (get_fs_long (args+0),
 				  get_fs_long (args+1),
 				  get_fs_long (args+2),
@@ -930,7 +930,7 @@ sys_socketcall(int call, unsigned long *args)
 
 
       case SYS_GETSOCKOPT:
-	  verify_area (args, 5*sizeof (unsigned long));
+	  verify_area(VERIFY_WRITE, args, 5*sizeof (unsigned long));
 	  return (sys_getsockopt (get_fs_long (args+0),
 				  get_fs_long (args+1),
 				  get_fs_long (args+2),

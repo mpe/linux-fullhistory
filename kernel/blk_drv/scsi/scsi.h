@@ -422,8 +422,8 @@ static void end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)
 	req = &SCpnt->request;
 	req->errors = 0;
 	if (!uptodate) {
-		printk(DEVICE_NAME " I/O error\n\r");
-		printk("dev %04x, sector %d\n\r",req->dev,req->sector);
+		printk(DEVICE_NAME " I/O error\n");
+		printk("dev %04x, sector %d\n",req->dev,req->sector);
 	}
 
 	do {

@@ -181,6 +181,12 @@ static int hung_up_tty_select(struct inode * inode, struct file * filp, int sel_
 	return 1;
 }
 
+static int hung_up_tty_ioctl(struct inode * inode, struct file * file,
+			     unsigned int cmd, unsigned int arg)
+{
+	return -EIO;
+}
+
 static int tty_lseek(struct inode * inode, struct file * file, off_t offset, int orig)
 {
 	return -ESPIPE;
@@ -210,7 +216,19 @@ static struct file_operations hung_up_tty_fops = {
 	tty_release
 };
 
-void tty_hangup(struct tty_struct * tty)
+static struct file_operations vhung_up_tty_fops = {
+	tty_lseek,
+	hung_up_tty_read,
+	hung_up_tty_write,
+	NULL,		/* hung_up_tty_readdir */
+	hung_up_tty_select,
+	hung_up_tty_ioctl,
+	NULL,		/* hung_up_tty_mmap */
+	tty_open,
+	tty_release
+};
+
+void do_tty_hangup(struct tty_struct * tty, struct file_operations *fops)
 {
 	struct file * filp;
 	struct task_struct **p;
@@ -227,7 +245,7 @@ void tty_hangup(struct tty_struct * tty)
 			continue;
 		if (filp->f_op != &tty_fops)
 			continue;
-		filp->f_op = &hung_up_tty_fops;
+		filp->f_op = fops;
 	}
 	wake_up_interruptible(&tty->secondary.proc_list);
 	wake_up_interruptible(&tty->read_q.proc_list);
@@ -242,14 +260,25 @@ void tty_hangup(struct tty_struct * tty)
 	}
 }
 
+void tty_hangup(struct tty_struct * tty)
+{
+	do_tty_hangup(tty, &hung_up_tty_fops);
+}
+
+void tty_vhangup(struct tty_struct * tty)
+{
+	do_tty_hangup(tty, &vhung_up_tty_fops);
+}
+
 void tty_unhangup(struct file *filp)
 {
 	filp->f_op = &tty_fops;
 }
 
-static inline int hung_up(struct file * filp)
+inline int tty_hung_up_p(struct file * filp)
 {
-	return filp->f_op == &hung_up_tty_fops;
+	return ((filp->f_op == &hung_up_tty_fops) ||
+		(filp->f_op == &vhung_up_tty_fops));
 }
 
 /*
@@ -434,7 +463,8 @@ void wait_for_keypress(void)
 
 void copy_to_cooked(struct tty_struct * tty)
 {
-	int c;
+	int c, special_flag;
+	unsigned long flags;
 
 	if (!tty) {
 		printk("copy_to_cooked: called with NULL tty\n");
@@ -456,11 +486,51 @@ void copy_to_cooked(struct tty_struct * tty)
 			tty->throttle(tty, TTY_THROTTLE_SQ_FULL);
 		if (c == 0)
 			break;
-		c = get_tty_queue(&tty->read_q);
-		if (c < 0)
+		save_flags(flags); cli();
+		if (tty->read_q.tail != tty->read_q.head) {
+			c = 0xff & tty->read_q.buf[tty->read_q.tail];
+			special_flag = !clear_bit(tty->read_q.tail,
+						  &tty->readq_flags);
+			tty->read_q.tail = (tty->read_q.tail + 1) &
+				(TTY_BUF_SIZE-1);
+			restore_flags(flags);
+		} else {
+			restore_flags(flags);
 			break;
+		}
+		if (special_flag) {
+			tty->char_error = c & 3;
+			continue;
+		}
+		if (tty->char_error) {
+			if (tty->char_error == TTY_BREAK) {
+				tty->char_error = 0;
+				if (I_IGNBRK(tty))
+					continue;
+				if (I_PARMRK(tty)) {
+					put_tty_queue(0377, &tty->secondary);
+					put_tty_queue(0, &tty->secondary);
+				}
+				put_tty_queue(0, &tty->secondary);
+				continue;
+			}
+			/* If not a break, then a parity or frame error */
+			tty->char_error = 0;
+			if (I_IGNPAR(tty)) {
+				continue;
+			}
+			if (I_PARMRK(tty)) {
+				put_tty_queue(0377, &tty->secondary);
+				put_tty_queue(0, &tty->secondary);
+				put_tty_queue(c, &tty->secondary);
+			} else
+				put_tty_queue(0, &tty->secondary);
+			continue;
+		}
 		if (I_STRP(tty))
 			c &= 0x7f;
+		else if (I_PARMRK(tty) && (c == 0377))
+			put_tty_queue(0377, &tty->secondary);
 		if (c==13) {
 			if (I_CRNL(tty))
 				c=10;
@@ -660,7 +730,7 @@ static int read_chan(struct tty_struct * tty, struct file * file, char * buf, in
 	}
 	add_wait_queue(&tty->secondary.proc_list, &wait);
 	while (nr>0) {
-		if (hung_up(file)) {
+		if (tty_hung_up_p(file)) {
 			file->f_flags &= ~O_NONBLOCK;
 			break;  /* force read() to return 0 */
 		}
@@ -739,7 +809,7 @@ static void __wait_for_canon_input(struct file * file, struct tty_struct * tty)
 			break;
 		if (current->signal & ~current->blocked)
 			break;
-		if (hung_up(file))
+		if (tty_hung_up_p(file))
 			break;
 		schedule();
 	}
@@ -775,7 +845,7 @@ static int write_chan(struct tty_struct * tty, struct file * file, char * buf, i
 	while (nr>0) {
 		if (current->signal & ~current->blocked)
 			break;
-		if (hung_up(file))
+		if (tty_hung_up_p(file))
 			break;
 		if (tty->link && !tty->link->count) {
 			send_sig(SIGPIPE,current,0);
@@ -1307,7 +1377,7 @@ int tty_write_data(struct tty_struct *tty, char *bufp, int buflen,
  * tty_check_write[8] is a bitstring which indicates which ttys
  * needs to be processed.
  */
-void tty_bh_routine()
+void tty_bh_routine(void * unused)
 {
 	int	i, j, line, mask;
 	int	head, tail, count;
@@ -1357,8 +1427,8 @@ static void initialize_tty_struct(int line, struct tty_struct *tty)
 	tty->line = line;
 	tty->disc = N_TTY;
 	tty->pgrp = -1;
-	tty->winsize.ws_row = 24;
-	tty->winsize.ws_col = 80;
+	tty->winsize.ws_row = 0;
+	tty->winsize.ws_col = 0;
 	if (IS_A_CONSOLE(line)) {
 		tty->open = con_open;
 		tty->winsize.ws_row = video_num_lines;

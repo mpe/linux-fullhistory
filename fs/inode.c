@@ -164,7 +164,8 @@ void invalidate_inodes(dev_t dev)
 		wait_on_inode(inode);
 		if (inode->i_dev == dev) {
 			if (inode->i_count) {
-				printk("inode in use on removed disk\n\r");
+				printk("VFS: inode busy on removed device %d/%d\n",
+							MAJOR(dev), MINOR(dev));
 				continue;
 			}
 			clear_inode(inode);
@@ -191,9 +192,10 @@ void iput(struct inode * inode)
 		return;
 	wait_on_inode(inode);
 	if (!inode->i_count) {
-		printk("iput: trying to free free inode\n");
-		printk("device %04x, inode %d, mode=%07o\n",inode->i_rdev,
-			inode->i_ino,inode->i_mode);
+		printk("VFS: iput: trying to free free inode\n");
+		printk("VFS: device %d/%d, inode %d, mode=0%07o\n",
+			MAJOR(inode->i_rdev), MINOR(inode->i_rdev),
+					inode->i_ino, inode->i_mode);
 		return;
 	}
 	if (inode->i_pipe) {
@@ -242,7 +244,7 @@ repeat:
 		}
 	}
 	if (!inode) {
-		printk("No free inodes - contact Linus\n");
+		printk("VFS: No free inodes - contact Linus\n");
 		sleep_on(&inode_wait);
 		goto repeat;
 	}
@@ -275,8 +277,13 @@ struct inode * get_pipe_inode(void)
 	inode->i_count = 2;	/* sum of readers/writers */
 	PIPE_READ_WAIT(*inode) = PIPE_WRITE_WAIT(*inode) = NULL;
 	PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
+	PIPE_RD_OPENERS(*inode) = PIPE_WR_OPENERS(*inode) = 0;
 	PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 1;
 	inode->i_pipe = 1;
+	inode->i_mode |= S_IFIFO;
+	inode->i_uid = current->euid;
+	inode->i_gid = current->egid;
+	inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 	return inode;
 }
 
@@ -285,7 +292,7 @@ struct inode * iget(struct super_block * sb,int nr)
 	struct inode * inode, * empty;
 
 	if (!sb)
-		panic("iget with sb==NULL");
+		panic("VFS: iget with sb==NULL");
 	empty = get_empty_inode();
 	inode = inode_table;
 	while (inode < NR_INODE+inode_table) {
@@ -306,21 +313,34 @@ struct inode * iget(struct super_block * sb,int nr)
 				if (super_block[i].s_covered==inode)
 					break;
 			if (i >= NR_SUPER) {
-				printk("Mounted inode hasn't got sb\n");
-				if (empty)
+				printk("VFS: Mounted inode hasn't got sb\n");
+				if (empty) {
+					if (last_inode > inode_table)
+						--last_inode;
+					else
+						last_inode
+						= inode_table + NR_INODE;
 					iput(empty);
+				}
 				return inode;
 			}
 			iput(inode);
 			if (!(inode = super_block[i].s_mounted))
-				printk("iget: mounted dev has no rootinode\n");
+				printk("VFS: Mounted device %d/%d has no rootinode\n",
+					MAJOR(inode->i_dev), MINOR(inode->i_dev));
 			else {
 				inode->i_count++;
 				wait_on_inode(inode);
 			}
 		}
-		if (empty)
+		if (empty) {
+			if (last_inode > inode_table)
+				--last_inode;
+			else
+				last_inode
+				= inode_table + NR_INODE;
 			iput(empty);
+		}
 		return inode;
 	}
 	if (!empty)

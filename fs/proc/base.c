@@ -79,7 +79,7 @@ int proc_match(int len,const char * name,struct proc_dir_entry * de)
 	if (de->namelen != len)
 		return 0;
 	__asm__("cld\n\t"
-		"fs ; repe ; cmpsb\n\t"
+		"repe ; cmpsb\n\t"
 		"setz %%al"
 		:"=a" (same)
 		:"0" (0),"S" ((long) name),"D" ((long) de->name),"c" (len)

@@ -280,6 +280,10 @@ struct {
 
 void decompress_kernel()
 {
+	if (SCREEN_INFO.orig_video_mode == 7)
+		vidmem = (char *) 0xb0000;
+	else
+		vidmem = (char *) 0xb8000;
 	vidp = 0;
 	vidmem[0] = '0';
 

@@ -117,7 +117,7 @@ static void aux_write_cmd(int val)
 }
 
 
-static unsigned int get_from_queue()
+static unsigned int get_from_queue(void)
 {
 	unsigned int result;
 	unsigned long flags;
@@ -130,7 +130,7 @@ static unsigned int get_from_queue()
 }
 
 
-static inline int queue_empty()
+static inline int queue_empty(void)
 {
 	return queue->head == queue->tail;
 }

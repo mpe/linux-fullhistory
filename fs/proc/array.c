@@ -19,8 +19,8 @@
 #define LOAD_INT(x) ((x) >> FSHIFT)
 #define LOAD_FRAC(x) LOAD_INT(((x) & (FIXED_1-1)) * 100)
 
-#define	KSTK_EIP(stack)	(((char *)stack)[1019])
-#define	KSTK_ESP(stack)	(((char *)stack)[1022])
+#define	KSTK_EIP(stack)	(((unsigned long *)stack)[1019])
+#define	KSTK_ESP(stack)	(((unsigned long *)stack)[1022])
 
 #define	_SSIZE(stack)	(TASK_SIZE - KSTK_ESP(stack))
 #define	SSIZE(stack)	(KSTK_ESP(stack) ? _SSIZE(stack) : 0)
@@ -161,7 +161,7 @@ static unsigned long get_wchan(struct task_struct *p)
 	unsigned long stack_page;
 	int count = 0;
 
-	if (!p || p == current)
+	if (!p || p == current || p->state == TASK_RUNNING)
 		return 0;
 	ebp = p->tss.ebp;
 	stack_page = p->kernel_stack_page;

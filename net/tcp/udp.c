@@ -286,7 +286,7 @@ udp_loopback (volatile struct sock *sk, unsigned short port,
 	uh -> source = sk->dummy_th.source;
 	uh -> dest = port;
 	uh -> len = len + sizeof (*uh);
-/*	verify_area (from , len); */
+/*	verify_area (VERIFY_WRITE, from , len); */
 	memcpy_fromfs(uh+1, from, len);
 	pair->inuse = 1;
 	if (pair->rqueue == NULL)
@@ -336,7 +336,7 @@ udp_sendto (volatile struct sock *sk, unsigned char *from, int len,
 	  {
 		  if (addr_len < sizeof (sin))
 		    return (-EINVAL);
-/*		  verify_area (usin, sizeof (sin));*/
+/*		  verify_area (VERIFY_WRITE, usin, sizeof (sin));*/
 		  memcpy_fromfs (&sin, usin, sizeof(sin));
 		  if (sin.sin_family &&
 		      sin.sin_family != AF_INET)
@@ -446,7 +446,7 @@ udp_sendto (volatile struct sock *sk, unsigned char *from, int len,
 		      return (copied);
 		    }
 
-/*		  verify_area (from, amt);*/
+/*		  verify_area (VERIFY_WRITE, from, amt);*/
 		  memcpy_fromfs( buff, from, amt);
 
 		  len -= amt;
@@ -483,7 +483,7 @@ udp_ioctl (volatile struct sock *sk, int cmd, unsigned long arg)
 	  if (sk->state == TCP_LISTEN)
 	    return (-EINVAL);
 	  amount = sk->prot->wspace(sk)/2;
-	  verify_area ((void *)arg, sizeof (unsigned long));
+	  verify_area (VERIFY_WRITE, (void *)arg, sizeof (unsigned long));
 	  put_fs_long (amount, (unsigned long *)arg);
 	  return (0);
 	}
@@ -505,7 +505,7 @@ udp_ioctl (volatile struct sock *sk, int cmd, unsigned long arg)
 	      amount = skb->len;
 	    }
 
-	  verify_area ((void *)arg, sizeof (unsigned long));
+	  verify_area (VERIFY_WRITE, (void *)arg, sizeof (unsigned long));
 	  put_fs_long (amount, (unsigned long *)arg);
 	  return (0);
 	}
@@ -536,7 +536,7 @@ udp_recvfrom (volatile struct sock *sk, unsigned char *to, int len,
 	  }
 	if (addr_len)
 	  {
-		  verify_area (addr_len, sizeof(*addr_len));
+		  verify_area (VERIFY_WRITE, addr_len, sizeof(*addr_len));
 		  put_fs_long (sizeof (*sin), addr_len);
 	  }
 	sk->inuse = 1;
@@ -581,7 +581,7 @@ udp_recvfrom (volatile struct sock *sk, unsigned char *to, int len,
 		    }
 	  }
 	copied = min (len, skb->len);
-	verify_area (to, copied);
+	verify_area (VERIFY_WRITE, to, copied);
 	memcpy_tofs (to, skb->h.raw + sizeof (struct udp_header), copied);
 	/* copy the address. */
 	if (sin)
@@ -590,7 +590,7 @@ udp_recvfrom (volatile struct sock *sk, unsigned char *to, int len,
 		  addr.sin_family = AF_INET;
 		  addr.sin_port = skb->h.uh->source;
 		  addr.sin_addr.s_addr = skb->daddr;
-		  verify_area (sin, sizeof (*sin));
+		  verify_area (VERIFY_WRITE, sin, sizeof (*sin));
 		  memcpy_tofs(sin, &addr, sizeof (*sin));
 	  }
 
@@ -616,7 +616,7 @@ udp_connect (volatile struct sock *sk, struct sockaddr_in *usin, int addr_len)
 {
 	struct sockaddr_in sin;
 	if (addr_len < sizeof (sin)) return (-EINVAL);
-/*	verify_area (usin, sizeof (sin)); */
+/*	verify_area (VERIFY_WRITE, usin, sizeof (sin)); */
 	memcpy_fromfs (&sin, usin, sizeof (sin));
 	if (sin.sin_family && sin.sin_family != AF_INET)
 	  return (-EAFNOSUPPORT);

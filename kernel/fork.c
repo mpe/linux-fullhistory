@@ -24,18 +24,25 @@
 
 long last_pid=0;
 
-void verify_area(void * addr,int size)
+int verify_area(int type, void * addr, unsigned long size)
 {
 	unsigned long start;
 
 	start = (unsigned long) addr;
+	if (start >= TASK_SIZE)
+		return -EFAULT;
+	if (size > TASK_SIZE - start)
+		return -EFAULT;
+	if (type == VERIFY_READ)
+		return 0;
 	size += start & 0xfff;
+	size >>= 12;
 	start &= 0xfffff000;
-	while (size>0) {
-		size -= 4096;
+	do {
 		write_verify(start);
 		start += 4096;
-	}
+	} while (size--);
+	return 0;
 }
 
 static int find_empty_process(void)
@@ -103,7 +110,6 @@ int sys_fork(long ebx,long ecx,long edx,
 	p->p_pptr = p->p_opptr = current;
 	p->p_cptr = NULL;
 	SET_LINKS(p);
-	p->counter = p->priority;
 	p->signal = 0;
 	p->it_real_value = p->it_virt_value = p->it_prof_value = 0;
 	p->it_real_incr = p->it_virt_incr = p->it_prof_incr = 0;

@@ -86,6 +86,7 @@ static int
 loopback_xmit(struct sk_buff *skb, struct device *dev)
 {
   int done;
+  if (!skb || !dev) return 0;
   PRINTK (("loopback_xmit (dev = %X)\n", dev));
   cli();
   if (dev->tbusy != 0)

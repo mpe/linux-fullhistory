@@ -1033,7 +1033,7 @@ void do_fd_request(void)
 static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
     unsigned int param)
 {
-	int drive,cnt,okay;
+	int i,drive,cnt,okay;
 	struct floppy_struct *this;
 
 	switch (cmd) {
@@ -1058,7 +1058,9 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 			if (drive > 3) this = &floppy_type[drive >> 2];
 			else if ((this = current_type[drive & 3]) == NULL)
 				    return -ENODEV;
-			verify_area((void *) param,sizeof(struct floppy_struct));
+			i = verify_area(VERIFY_WRITE,(void *) param,sizeof(struct floppy_struct));
+			if (i)
+				return i;
 			for (cnt = 0; cnt < sizeof(struct floppy_struct); cnt++)
 				put_fs_byte(((char *) this)[cnt],
 				    (char *) param+cnt);

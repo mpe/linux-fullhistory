@@ -129,13 +129,13 @@ void scsi_init(void)
 			
 			if ((scsi_hosts[i].detect) &&  (scsi_hosts[i].present = scsi_hosts[i].detect(i)))
 				{		
-				printk ("scsi%d : %s.\n\r",
+				printk ("scsi%d : %s.\n",
 				         count, scsi_hosts[i].name);
 				printk ("%s", scsi_hosts[i].info());
 				++count;
 				}
 			}
-		printk ("scsi : %d hosts. \n\r", count);
+		printk ("scsi : %d hosts.\n", count);
 		}
 
 	}

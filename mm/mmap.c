@@ -29,67 +29,17 @@
  *		w: (no) copy	w: (no) copy	w: (copy) copy	w: (no) no
  *		x: (no) no	x: (no) no	x: (no) no	x: (yes) no
  *
- * the permissions are encoded as cxwr (copy,exec,write,read)
  */
-#define MTYP(T) ((T) & MAP_TYPE)
-#define PREAD(T,P) (((P) & PROT_READ) ? 1 : 0)
-#define PWRITE(T,P) (((P) & PROT_WRITE) ? (MTYP(T) == MAP_SHARED ? 2 : 10) : 0)
-#define PEXEC(T,P) (((P) & PROT_EXEC) ? 4 : 0)
-#define PERMISS(T,P) (PREAD(T,P)|PWRITE(T,P)|PEXEC(T,P))
 
 #define CODE_SPACE(addr) ((((addr)+4095)&~4095) < \
 			  current->start_code + current->end_code)
 
-static caddr_t
-mmap_chr(unsigned long addr, size_t len, int prot, int flags,
-	 struct inode *inode, unsigned long off)
-{
-	int major, minor;
-
-	major = MAJOR(inode->i_rdev);
-	minor = MINOR(inode->i_rdev);
-
-	/*
-	 * for character devices, only /dev/[k]mem may be mapped. when the
-	 * swapping code is modified to allow arbitrary sources of pages,
-	 * then we can open it up to regular files.
-	 */
-
-	if (major != 1 || (minor != 1 && minor != 2))
-		return (caddr_t)-ENODEV;
-
-	/*
-	 * we only allow mappings from address 0 to high_memory, since thats
-	 * the range of our memory [actually this is a lie. the buffer cache
-	 * and ramdisk occupy higher memory, but the paging stuff won't
-	 * let us map to it anyway, so we break it here].
-	 *
-	 * this call is very dangerous! because of the lack of adequate
-	 * tagging of frames, it is possible to mmap over a frame belonging
-	 * to another (innocent) process. with MAP_SHARED|MAP_WRITE, this
-	 * rogue process can trample over the other's data! we ignore this :{
-	 * for now, we hope people will malloc the required amount of space,
-	 * then mmap over it. the mm needs serious work before this can be
-	 * truly useful.
-	 */
-
-	if (len > high_memory || off > high_memory - len) /* avoid overflow */
-		return (caddr_t)-ENXIO;
-
-	if (remap_page_range(addr, off, len, PERMISS(flags, prot)))
-		return (caddr_t)-EAGAIN;
-	
-	return (caddr_t)addr;
-}
-
-caddr_t
-sys_mmap(unsigned long *buffer)
+int sys_mmap(unsigned long *buffer)
 {
 	unsigned long base, addr;
 	unsigned long len, limit, off;
-	int prot, flags, fd;
+	int prot, flags, mask, fd, error;
 	struct file *file;
-	struct inode *inode;
 
 	addr = (unsigned long)	get_fs_long(buffer);	/* user address space*/
 	len = (size_t)		get_fs_long(buffer+1);	/* nbytes of mapping */
@@ -99,10 +49,9 @@ sys_mmap(unsigned long *buffer)
 	off = (unsigned long)	get_fs_long(buffer+5);	/* offset in object */
 
 	if (fd >= NR_OPEN || fd < 0 || !(file = current->filp[fd]))
-		return (caddr_t) -EBADF;
-	if (addr > TASK_SIZE || (addr+(unsigned long) len) > TASK_SIZE)
-		return (caddr_t) -EINVAL;
-	inode = file->f_inode;
+		return -EBADF;
+	if (addr > TASK_SIZE || len > TASK_SIZE || addr > TASK_SIZE-len)
+		return -EINVAL;
 
 	/*
 	 * do simple checking here so the lower-level routines won't have
@@ -113,15 +62,15 @@ sys_mmap(unsigned long *buffer)
 	switch (flags & MAP_TYPE) {
 	case MAP_SHARED:
 		if ((prot & PROT_WRITE) && !(file->f_mode & 2))
-			return (caddr_t)-EINVAL;
+			return -EINVAL;
 		/* fall through */
 	case MAP_PRIVATE:
 		if (!(file->f_mode & 1))
-			return (caddr_t)-EINVAL;
+			return -EINVAL;
 		break;
 
 	default:
-		return (caddr_t)-EINVAL;
+		return -EINVAL;
 	}
 
 	/*
@@ -144,9 +93,9 @@ sys_mmap(unsigned long *buffer)
 		 */
 		if ((addr & 0xfff) || addr > 0x7fffffff || addr == 0 ||
 		    (off & 0xfff))
-			return (caddr_t)-EINVAL;
+			return -EINVAL;
 		if (addr + len > limit)
-			return (caddr_t)-ENOMEM;
+			return -ENOMEM;
 	} else {
 		/*
 		 * we're given a hint as to where to put the address.
@@ -159,7 +108,7 @@ sys_mmap(unsigned long *buffer)
 		 * the stack will cause stack overflow. because of this
 		 * we don't allow nonspecified mappings...
 		 */
-		return (caddr_t)-ENOMEM;
+		return -ENOMEM;
 	}
 
 	/*
@@ -167,15 +116,23 @@ sys_mmap(unsigned long *buffer)
 	 * specific mapper. the address has already been validated, but
 	 * not unmapped
 	 */
-	if (S_ISCHR(inode->i_mode))
-		addr = (unsigned long)mmap_chr(base + addr, len, prot, flags,
-					       inode, off);
-	else
-		addr = (unsigned long)-ENODEV;
-	if ((long)addr > 0)
-		addr -= base;
-
-	return (caddr_t)addr;
+	if (!file->f_op || !file->f_op->mmap)
+		return -ENODEV;
+	mask = 0;
+	if (prot & (PROT_READ | PROT_EXEC))
+		mask |= PAGE_READONLY;
+	if (prot & PROT_WRITE)
+		mask |= PAGE_RW;
+	if (!mask)
+		return -EINVAL;
+	if ((flags & MAP_TYPE) == MAP_PRIVATE) {
+		mask |= PAGE_COW;
+		mask &= ~PAGE_RW;
+	}
+	error = file->f_op->mmap(file->f_inode, file, base + addr, len, mask, off);
+	if (error)
+		return error;
+	return addr;
 }
 
 int sys_munmap(unsigned long addr, size_t len)

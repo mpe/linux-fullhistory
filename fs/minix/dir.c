@@ -61,10 +61,12 @@ static int minix_readdir(struct inode * inode, struct file * filp,
 	char c;
 	struct buffer_head * bh;
 	struct minix_dir_entry * de;
+	struct minix_sb_info * info;
 
-	if (!inode || !S_ISDIR(inode->i_mode))
+	if (!inode || !inode->i_sb || !S_ISDIR(inode->i_mode))
 		return -EBADF;
-	if (filp->f_pos & (sizeof (struct minix_dir_entry) - 1))
+	info = &inode->i_sb->u.minix_sb;
+	if (filp->f_pos & (info->s_dirsize - 1))
 		return -EBADF;
 	while (filp->f_pos < inode->i_size) {
 		offset = filp->f_pos & 1023;
@@ -73,12 +75,12 @@ static int minix_readdir(struct inode * inode, struct file * filp,
 			filp->f_pos += 1024-offset;
 			continue;
 		}
-		de = (struct minix_dir_entry *) (offset + bh->b_data);
 		while (offset < 1024 && filp->f_pos < inode->i_size) {
-			offset += sizeof (struct minix_dir_entry);
-			filp->f_pos += sizeof (struct minix_dir_entry);
+			de = (struct minix_dir_entry *) (offset + bh->b_data);
+			offset += info->s_dirsize;
+			filp->f_pos += info->s_dirsize;
 			if (de->inode) {
-				for (i = 0; i < MINIX_NAME_LEN; i++)
+				for (i = 0; i < info->s_namelen; i++)
 					if ((c = de->name[i]) != 0)
 						put_fs_byte(c,i+dirent->d_name);
 					else
@@ -91,7 +93,6 @@ static int minix_readdir(struct inode * inode, struct file * filp,
 					return i;
 				}
 			}
-			de++;
 		}
 		brelse(bh);
 	}

@@ -65,15 +65,15 @@ void alignment_check(void);
 
 	if ((esp[2] & VM_MASK) || ((0xffff & esp[1]) == 0xf))
 		return;
-	printk("%s: %04x\n\r",str,nr&0xffff);
+	printk("%s: %04x\n",str,nr&0xffff);
 	printk("EIP:    %04x:%p\nEFLAGS: %p\n", 0xffff & esp[1],esp[0],esp[2]);
 	printk("fs: %04x\n",_fs());
 	printk("base: %p, limit: %p\n",get_base(current->ldt[1]),get_limit(0x17));
 	store_TR(i);
-	printk("Pid: %d, process nr: %d\n\r",current->pid,0xffff & i);
+	printk("Pid: %d, process nr: %d\n",current->pid,0xffff & i);
 	for(i=0;i<10;i++)
 		printk("%02x ",0xff & get_seg_byte(esp[1],(i+(char *)esp[0])));
-	printk("\n\r");
+	printk("\n");
 	do_exit(SIGSEGV);
 }
 

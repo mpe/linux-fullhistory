@@ -401,7 +401,7 @@ tcp_ioctl (volatile struct sock *sk, int cmd, unsigned long arg)
 	    }
 	  release_sock (sk);
 	  PRINTK (("returning %d\n", amount));
-	  verify_area ((void *)arg, sizeof (unsigned long));
+	  verify_area (VERIFY_WRITE, (void *)arg, sizeof (unsigned long));
 	  put_fs_long (amount, (unsigned long *)arg);
 	  return (0);
 	}
@@ -419,7 +419,7 @@ tcp_ioctl (volatile struct sock *sk, int cmd, unsigned long arg)
 		answ = 1;
 	    }
 	  release_sock (sk);
-	  verify_area ((void *) arg, sizeof (unsigned long));
+	  verify_area (VERIFY_WRITE, (void *) arg, sizeof (unsigned long));
 	  put_fs_long (answ, (void *) arg);
 	  return (0);
 	}
@@ -430,7 +430,7 @@ tcp_ioctl (volatile struct sock *sk, int cmd, unsigned long arg)
 	  if (sk->state == TCP_LISTEN)
 	    return (-EINVAL);
 	  amount = sk->prot->wspace(sk)/2;
-	  verify_area ((void *)arg, sizeof (unsigned long));
+	  verify_area (VERIFY_WRITE, (void *)arg, sizeof (unsigned long));
 	  put_fs_long (amount, (unsigned long *)arg);
 	  return (0);
 	}
@@ -1184,7 +1184,7 @@ tcp_read_urg(volatile struct sock * sk, int nonblock,
 			skb->h.th->urg_ptr = net16(skb->len);
 		      }
 		    amt = min(net16(skb->h.th->urg_ptr),len);
-		    verify_area (to, amt);
+		    verify_area (VERIFY_WRITE, to, amt);
 		    memcpy_tofs (to, (unsigned char *)(skb->h.th) +
 				 skb->h.th->doff*4, amt);
 		    
@@ -1377,7 +1377,7 @@ tcp_read (volatile struct sock *sk, unsigned char *to,
 		}
 	      used = min(skb->len - offset, len);
 
-	      verify_area (to, used);
+	      verify_area (VERIFY_WRITE, to, used);
 	      memcpy_tofs(to, ((unsigned char *)skb->h.th) +
 			  skb->h.th->doff*4 +
 			  offset,
@@ -1540,9 +1540,9 @@ tcp_recvfrom (volatile struct sock *sk, unsigned char *to,
   sin.sin_family = AF_INET;
   sin.sin_port = sk->dummy_th.dest;
   sin.sin_addr.s_addr = sk->daddr;
-  verify_area (addr, len);
+  verify_area (VERIFY_WRITE, addr, len);
   memcpy_tofs (addr, &sin, len);
-  verify_area (addr_len, sizeof (len));
+  verify_area (VERIFY_WRITE, addr_len, sizeof (len));
   put_fs_long (len, addr_len);
   return (result);
 }
@@ -1664,6 +1664,7 @@ tcp_conn_request(volatile struct sock *sk, struct sk_buff *skb,
   newsk->send_head = NULL;
   newsk->send_tail = NULL;
   newsk->back_log = NULL;
+  newsk->rtt = TCP_CONNECT_TIME;
   newsk->blog = 0;
   newsk->intr = 0;
   newsk->proc = 0;
@@ -2712,7 +2713,7 @@ tcp_connect (volatile struct sock *sk, struct sockaddr_in *usin, int addr_len)
   if (sk->state != TCP_CLOSE) return (-EISCONN);
   if (addr_len < 8) return (-EINVAL);
 
-/*  verify_area (usin, addr_len);*/
+/*  verify_area (VERIFY_WRITE, usin, addr_len);*/
   memcpy_fromfs (&sin,usin, min(sizeof (sin), addr_len));
 
   if (sin.sin_family && sin.sin_family != AF_INET) return (-EAFNOSUPPORT);
@@ -2803,10 +2804,10 @@ tcp_sequence (volatile struct sock *sk, struct tcp_header *th, short len,
 	  sk, th, len, opt, saddr));
 
   if (between(th->seq, sk->acked_seq, sk->acked_seq + sk->window)||
-      between(th->seq + len-sizeof (*th), sk->acked_seq, 
+      between(th->seq + len-(th->doff * 4), sk->acked_seq + 1, 
 	      sk->acked_seq + sk->window) ||
       (before (th->seq, sk->acked_seq) &&
-       after (th->seq + len - sizeof (*th), sk->acked_seq + sk->window)))
+       after (th->seq + len - (th->doff * 4), sk->acked_seq + sk->window)))
     {
        return (1);
     }
@@ -2822,7 +2823,7 @@ tcp_sequence (volatile struct sock *sk, struct tcp_header *th, short len,
     }
 
   /* in case it's just a late ack, let it through */
-  if (th->ack && len == th->doff*4 && after (th->seq, sk->acked_seq - 32767) &&
+  if (th->ack && len == (th->doff * 4) && after (th->seq, sk->acked_seq - 32767) &&
       !th->fin && !th->syn) return (1);
 
   if (!th->rst)

@@ -124,6 +124,18 @@ static int write_mem(struct inode * inode, struct file * file,char * buf, int co
 	return count;
 }
 
+static int mmap_mem(struct inode * inode, struct file * file,
+	unsigned long addr, size_t len, int prot, unsigned long off)
+{
+	if (len > high_memory || off > high_memory - len) /* avoid overflow */
+		return -ENXIO;
+
+	if (remap_page_range(addr, off, len, prot))
+		return -EAGAIN;
+	
+	return 0;
+}
+
 static int read_port(struct inode * inode,struct file * file,char * buf, int count)
 {
 	unsigned int i = file->f_pos;
@@ -178,6 +190,16 @@ static int write_zero(struct inode * inode,struct file * file,char * buf, int co
 	return count;
 }
 
+static int mmap_zero(struct inode * inode, struct file * file,
+	unsigned long addr, size_t len, int prot, unsigned long off)
+{
+	if (prot & PAGE_RW)
+		return -EINVAL;
+	if (zeromap_page_range(addr, len, prot))
+		return -EAGAIN;
+	return 0;
+}
+
 /*
  * The memory devices use the full 32 bits of the offset, and so we cannot
  * check against negative addresses: they are ok. The return value is weird,
@@ -205,6 +227,7 @@ static int memory_lseek(struct inode * inode, struct file * file, off_t offset, 
 
 #define read_kmem read_mem
 #define write_kmem write_mem
+#define mmap_kmem mmap_mem
 
 static struct file_operations ram_fops = {
 	memory_lseek,
@@ -225,7 +248,7 @@ static struct file_operations mem_fops = {
 	NULL,		/* mem_readdir */
 	NULL,		/* mem_select */
 	NULL,		/* mem_ioctl */
-	NULL,		/* mem_mmap */
+	mmap_mem,
 	NULL,		/* no special open code */
 	NULL		/* no special release code */
 };
@@ -237,7 +260,7 @@ static struct file_operations kmem_fops = {
 	NULL,		/* kmem_readdir */
 	NULL,		/* kmem_select */
 	NULL,		/* kmem_ioctl */
-	NULL,		/* kmem_mmap */
+	mmap_kmem,
 	NULL,		/* no special open code */
 	NULL		/* no special release code */
 };
@@ -273,7 +296,7 @@ static struct file_operations zero_fops = {
 	NULL,		/* zero_readdir */
 	NULL,		/* zero_select */
 	NULL,		/* zero_ioctl */
-	NULL,		/* zero_mmap */
+	mmap_zero,
 	NULL,		/* no special open code */
 	NULL		/* no special release code */
 };

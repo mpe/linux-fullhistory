@@ -104,8 +104,9 @@ static int do_get_ps_info(int arg)
 	char *c, *d;
 	int i, n = 0;
 	
-	verify_area((void *)arg, sizeof(struct tstruct));
-		
+	i = verify_area(VERIFY_WRITE, (void *)arg, sizeof(struct tstruct));
+	if (i)
+		return i;
 	for (p = &FIRST_TASK ; p <= &LAST_TASK ; p++, n++)
 		if (*p)
 		{
@@ -124,7 +125,9 @@ static int get_termios(struct tty_struct * tty, struct termios * termios)
 {
 	int i;
 
-	verify_area(termios, sizeof (*termios));
+	i = verify_area(VERIFY_WRITE, termios, sizeof (*termios));
+	if (i)
+		return i;
 	for (i=0 ; i< (sizeof (*termios)) ; i++)
 		put_fs_byte( ((char *)tty->termios)[i] , i+(char *)termios );
 	return 0;
@@ -175,7 +178,9 @@ static int get_termio(struct tty_struct * tty, struct termio * termio)
 	int i;
 	struct termio tmp_termio;
 
-	verify_area(termio, sizeof (*termio));
+	i = verify_area(VERIFY_WRITE, termio, sizeof (*termio));
+	if (i)
+		return i;
 	tmp_termio.c_iflag = tty->termios->c_iflag;
 	tmp_termio.c_oflag = tty->termios->c_oflag;
 	tmp_termio.c_cflag = tty->termios->c_cflag;
@@ -261,7 +266,9 @@ static int get_window_size(struct tty_struct * tty, struct winsize * ws)
 
 	if (!ws)
 		return -EINVAL;
-	verify_area(ws, sizeof (*ws));
+	i = verify_area(VERIFY_WRITE, ws, sizeof (*ws));
+	if (i)
+		return i;
 	tmp = (char *) ws;
 	for (i = 0; i < sizeof (struct winsize) ; i++,tmp++)
 		put_fs_byte(((char *) &tty->winsize)[i], tmp);
@@ -389,9 +396,10 @@ int tty_ioctl(struct inode * inode, struct file * file,
 			}
 			return -EPERM;
 		case TIOCGPGRP:
-			verify_area((void *) arg,4);
-			put_fs_long(termios_tty->pgrp,(unsigned long *) arg);
-			return 0;
+			retval = verify_area(VERIFY_WRITE, (void *) arg,4);
+			if (!retval)
+				put_fs_long(termios_tty->pgrp,(unsigned long *) arg);
+			return retval;
 		case TIOCSPGRP:
 			if ((current->tty < 0) ||
 			    (current->tty != termios_dev) ||
@@ -405,12 +413,15 @@ int tty_ioctl(struct inode * inode, struct file * file,
 			termios_tty->pgrp = pgrp;			
 			return 0;
 		case TIOCOUTQ:
-			verify_area((void *) arg,4);
-			put_fs_long(CHARS(&tty->write_q),
+			retval = verify_area(VERIFY_WRITE, (void *) arg,4);
+			if (!retval)
+				put_fs_long(CHARS(&tty->write_q),
 				    (unsigned long *) arg);
-			return 0;
+			return retval;
 		case TIOCINQ:
-			verify_area((void *) arg,4);
+			retval = verify_area(VERIFY_WRITE, (void *) arg,4);
+			if (retval)
+				return retval;
 			if (L_CANON(tty) && !tty->secondary.data)
 				put_fs_long(0, (unsigned long *) arg);
 			else
@@ -476,9 +487,10 @@ int tty_ioctl(struct inode * inode, struct file * file,
 			}
 			return 0;
 		case TIOCGETD:
-			verify_area((void *) arg,4);
-			put_fs_long(tty->disc, (unsigned long *) arg);
-			return 0;
+			retval = verify_area(VERIFY_WRITE, (void *) arg,4);
+			if (!retval)
+				put_fs_long(tty->disc, (unsigned long *) arg);
+			return retval;
 		case TIOCSETD:
 			arg = get_fs_long((unsigned long *) arg);
 			return tty_set_ldisc(tty, arg);
@@ -486,8 +498,10 @@ int tty_ioctl(struct inode * inode, struct file * file,
 			{
 			   int on;
 			   if (!IS_A_PTY_MASTER(dev))
-			     return (-EINVAL);
-			   verify_area ((unsigned long *)arg, sizeof (int));
+			     return -EINVAL;
+			   retval = verify_area(VERIFY_READ, (unsigned long *)arg, sizeof (int));
+			   if (retval)
+			   	return retval;
 			   on=get_fs_long ((unsigned long *)arg);
 			   if (on )
 			     tty->packet = 1;

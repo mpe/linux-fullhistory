@@ -16,6 +16,7 @@
 .globl _swapper_pg_dir,_pg0
 .globl _empty_bad_page
 .globl _empty_bad_page_table
+.globl _empty_zero_page
 .globl _tmp_floppy_area,_floppy_track_buffer
 
 #include <linux/tasks.h>
@@ -206,6 +207,9 @@ _empty_bad_page:
 _empty_bad_page_table:
 
 .org 0x5000
+_empty_zero_page:
+
+.org 0x6000
 /*
  * tmp_floppy_area is used by the floppy-driver when DMA cannot
  * reach to a buffer-block. It needs to be aligned, so that it isn't
@@ -224,7 +228,7 @@ _floppy_track_buffer:
 
 /* This is the default interrupt "handler" :-) */
 int_msg:
-	.asciz "Unknown interrupt\n\r"
+	.asciz "Unknown interrupt\n"
 .align 2
 ignore_int:
 	cld

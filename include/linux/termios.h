@@ -40,6 +40,7 @@
 #define TIOCNOTTY	0x5422
 #define TIOCSETD	0x5423
 #define TIOCGETD	0x5424
+#define TCSBRKP		0x5425	/* Needed for POSIX tcsendbreak() */
 #define FIONCLEX	0x5450  /* these numbers need to be adjusted. */
 #define FIOCLEX		0x5451
 #define FIOASYNC	0x5452
@@ -69,7 +70,7 @@ struct termio {
 	unsigned char c_cc[NCC];	/* control characters */
 };
 
-#define NCCS 17
+#define NCCS 19
 struct termios {
 	tcflag_t c_iflag;		/* input mode flags */
 	tcflag_t c_oflag;		/* output mode flags */

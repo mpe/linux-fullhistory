@@ -1435,7 +1435,9 @@ int do_screendump(int arg)
 	char *sptr, *buf = (char *)arg;
 	int currcons, l;
 
-	verify_area(buf,2+video_num_columns*video_num_lines);
+	l = verify_area(VERIFY_WRITE, buf,2+video_num_columns*video_num_lines);
+	if (l)
+		return l;
 	currcons = get_fs_byte(buf+1);
 	if ((currcons<0) || (currcons>=NR_CONSOLES))
 		return -EIO;

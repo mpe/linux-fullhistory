@@ -7,6 +7,8 @@ struct pipe_inode_info {
 	char * base;
 	unsigned int head;
 	unsigned int tail;
+	unsigned int rd_openers;
+	unsigned int wr_openers;
 	unsigned int readers;
 	unsigned int writers;
 };
@@ -16,6 +18,8 @@ struct pipe_inode_info {
 #define PIPE_BASE(inode)	((inode).u.pipe_i.base)
 #define PIPE_HEAD(inode)	((inode).u.pipe_i.head)
 #define PIPE_TAIL(inode)	((inode).u.pipe_i.tail)
+#define PIPE_RD_OPENERS(inode)	((inode).u.pipe_i.rd_openers)
+#define PIPE_WR_OPENERS(inode)	((inode).u.pipe_i.wr_openers)
 #define PIPE_READERS(inode)	((inode).u.pipe_i.readers)
 #define PIPE_WRITERS(inode)	((inode).u.pipe_i.writers)
 #define PIPE_SIZE(inode)	((PIPE_HEAD(inode)-PIPE_TAIL(inode))&(PAGE_SIZE-1))

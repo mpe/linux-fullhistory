@@ -245,7 +245,7 @@ raw_sendto (volatile struct sock *sk, unsigned char *from, int len,
      {
 	if (addr_len < sizeof (sin))
 	  return (-EINVAL);
-/*	verify_area (usin, sizeof (sin));*/
+/*	verify_area (VERIFY_WRITE, usin, sizeof (sin));*/
 	memcpy_fromfs (&sin, usin, sizeof(sin));
 	if (sin.sin_family &&
 	    sin.sin_family != AF_INET)
@@ -309,7 +309,7 @@ raw_sendto (volatile struct sock *sk, unsigned char *from, int len,
 	return (tmp);
      }
 
-/*   verify_area (from, len);*/
+/*   verify_area (VERIFY_WRITE, from, len);*/
    memcpy_fromfs ((unsigned char *)(skb+1)+tmp, from, len);
    skb->len = tmp + len;
    sk->prot->queue_xmit (sk, dev, skb, 1);
@@ -380,7 +380,7 @@ raw_recvfrom (volatile struct sock *sk, unsigned char *to, int len,
 	if (sk->shutdown & RCV_SHUTDOWN) return (0);
 	if (addr_len)
 	  {
-		  verify_area (addr_len, sizeof(*addr_len));
+		  verify_area (VERIFY_WRITE, addr_len, sizeof(*addr_len));
 		  put_fs_long (sizeof (*sin), addr_len);
 	  }
 	sk->inuse = 1;
@@ -422,7 +422,7 @@ raw_recvfrom (volatile struct sock *sk, unsigned char *to, int len,
 		    }
 	  }
 	copied = min (len, skb->len);
-	verify_area (to, copied);
+	verify_area (VERIFY_WRITE, to, copied);
 	memcpy_tofs (to, skb->h.raw,  copied);
 	/* copy the address. */
 	if (sin)
@@ -430,7 +430,7 @@ raw_recvfrom (volatile struct sock *sk, unsigned char *to, int len,
 		  struct sockaddr_in addr;
 		  addr.sin_family = AF_INET;
 		  addr.sin_addr.s_addr = skb->daddr;
-		  verify_area (sin, sizeof (*sin));
+		  verify_area (VERIFY_WRITE, sin, sizeof (*sin));
 		  memcpy_tofs(sin, &addr, sizeof (*sin));
 	  }
 

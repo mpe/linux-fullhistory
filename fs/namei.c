@@ -26,6 +26,52 @@
 /* #define NO_TRUNCATE */
 
 /*
+ * In order to reduce some races, while at the same time doing additional
+ * checking and hopefully speeding things up, we copy filenames to the
+ * kernel data space before using them..
+ *
+ * POSIX.1 2.4: an empty pathname is invalid (ENOENT).
+ */
+int getname(const char * filename, char **result)
+{
+	int error;
+	unsigned long i, page;
+	char * tmp, c;
+
+	i = (unsigned long) filename;
+	if (!i || i >= TASK_SIZE)
+		return -EFAULT;
+	i = TASK_SIZE - i;
+	error = -EFAULT;
+	if (i > PAGE_SIZE) {
+		i = PAGE_SIZE;
+		error = -ENAMETOOLONG;
+	}
+	c = get_fs_byte(filename++);
+	if (!c)
+		return -ENOENT;
+	page = __get_free_page(GFP_KERNEL);
+	if (!page)
+		return -ENOMEM;
+	*result = tmp = (char *) page;
+	while (--i) {
+		*(tmp++) = c;
+		c = get_fs_byte(filename++);
+		if (!c) {
+			*tmp = '\0';
+			return 0;
+		}
+	}
+	free_page(page);
+	return error;
+}
+
+void putname(char * name)
+{
+	free_page((unsigned long) name);
+}
+
+/*
  *	permission()
  *
  * is used to check for read/write/execute permissions on a file.
@@ -61,10 +107,11 @@ int lookup(struct inode * dir,const char * name, int len,
 	struct super_block * sb;
 
 	*result = NULL;
-	if (len==2 && get_fs_byte(name)=='.' && get_fs_byte(name+1)=='.') {
-		if (dir == current->root)
-			len = 1;
-		else if ((sb = dir->i_sb) && (dir == sb->s_mounted)) {
+	if (len==2 && name[0] == '.' && name[1] == '.') {
+		if (dir == current->root) {
+			*result = dir;
+			return 0;
+		} else if ((sb = dir->i_sb) && (dir == sb->s_mounted)) {
 			sb = dir->i_sb;
 			iput(dir);
 			dir = sb->s_covered;
@@ -125,7 +172,7 @@ static int dir_namei(const char * pathname, int * namelen, const char ** name,
 		base = current->pwd;
 		base->i_count++;
 	}
-	if ((c=get_fs_byte(pathname))=='/') {
+	if ((c = *pathname) == '/') {
 		iput(base);
 		base = current->root;
 		pathname++;
@@ -133,12 +180,14 @@ static int dir_namei(const char * pathname, int * namelen, const char ** name,
 	}
 	while (1) {
 		thisname = pathname;
-		for(len=0;(c=get_fs_byte(pathname++))&&(c!='/');len++)
+		for(len=0;(c = *(pathname++))&&(c != '/');len++)
 			/* nothing */ ;
 		if (!c)
 			break;
 		base->i_count++;
+		((char *) thisname)[len] = '\0';	/* fake string.. */
 		error = lookup(base,thisname,len,&inode);
+		((char *) thisname)[len] = c;
 		if (error) {
 			iput(base);
 			return error;
@@ -186,7 +235,15 @@ static int _namei(const char * pathname, struct inode * base,
 
 int lnamei(const char * pathname, struct inode ** res_inode)
 {
-	return _namei(pathname,NULL,0,res_inode);
+	int error;
+	char * tmp;
+
+	error = getname(pathname,&tmp);
+	if (!error) {
+		error = _namei(tmp,NULL,0,res_inode);
+		putname(tmp);
+	}
+	return error;
 }
 
 /*
@@ -198,7 +255,15 @@ int lnamei(const char * pathname, struct inode ** res_inode)
  */
 int namei(const char * pathname, struct inode ** res_inode)
 {
-	return _namei(pathname,NULL,1,res_inode);
+	int error;
+	char * tmp;
+
+	error = getname(pathname,&tmp);
+	if (!error) {
+		error = _namei(tmp,NULL,1,res_inode);
+		putname(tmp);
+	}
+	return error;
 }
 
 /*
@@ -247,7 +312,7 @@ int open_namei(const char * pathname, int flag, int mode,
 			iput(dir);
 			return error;
 		}
-		if (!permission(dir,MAY_WRITE)) {
+		if (!permission(dir,MAY_WRITE | MAY_EXEC)) {
 			iput(dir);
 			return -EACCES;
 		}
@@ -261,7 +326,7 @@ int open_namei(const char * pathname, int flag, int mode,
 		}
 		return dir->i_op->create(dir,basename,namelen,mode,res_inode);
 	}
-	if (flag & O_EXCL) {
+	if ((flag & (O_CREAT | O_EXCL)) == (O_CREAT | O_EXCL)) {
 		iput(dir);
 		iput(inode);
 		return -EEXIST;
@@ -312,6 +377,7 @@ int do_mknod(const char * filename, int mode, dev_t dev)
 	int namelen, error;
 	struct inode * dir;
 
+	mode &= ~current->umask;
 	error = dir_namei(filename,&namelen,&basename, NULL, &dir);
 	if (error)
 		return error;
@@ -323,7 +389,7 @@ int do_mknod(const char * filename, int mode, dev_t dev)
 		iput(dir);
 		return -EROFS;
 	}
-	if (!permission(dir,MAY_WRITE)) {
+	if (!permission(dir,MAY_WRITE | MAY_EXEC)) {
 		iput(dir);
 		return -EACCES;
 	}
@@ -336,12 +402,20 @@ int do_mknod(const char * filename, int mode, dev_t dev)
 
 int sys_mknod(const char * filename, int mode, dev_t dev)
 {
-	if (S_ISFIFO(mode) || suser())
-		return do_mknod(filename,mode,dev);
-	return -EPERM;
+	int error;
+	char * tmp;
+
+	if (S_ISDIR(mode)  || (!S_ISFIFO(mode) && !suser()))
+		return -EPERM;
+	error = getname(filename,&tmp);
+	if (!error) {
+		error = do_mknod(tmp,mode,dev);
+		putname(tmp);
+	}
+	return error;
 }
 
-int sys_mkdir(const char * pathname, int mode)
+static int do_mkdir(const char * pathname, int mode)
 {
 	const char * basename;
 	int namelen, error;
@@ -358,7 +432,7 @@ int sys_mkdir(const char * pathname, int mode)
 		iput(dir);
 		return -EROFS;
 	}
-	if (!permission(dir,MAY_WRITE)) {
+	if (!permission(dir,MAY_WRITE | MAY_EXEC)) {
 		iput(dir);
 		return -EACCES;
 	}
@@ -369,7 +443,20 @@ int sys_mkdir(const char * pathname, int mode)
 	return dir->i_op->mkdir(dir,basename,namelen,mode);
 }
 
-int sys_rmdir(const char * name)
+int sys_mkdir(const char * pathname, int mode)
+{
+	int error;
+	char * tmp;
+
+	error = getname(pathname,&tmp);
+	if (!error) {
+		error = do_mkdir(tmp,mode);
+		putname(tmp);
+	}
+	return error;
+}
+
+static int do_rmdir(const char * name)
 {
 	const char * basename;
 	int namelen, error;
@@ -397,7 +484,20 @@ int sys_rmdir(const char * name)
 	return dir->i_op->rmdir(dir,basename,namelen);
 }
 
-int sys_unlink(const char * name)
+int sys_rmdir(const char * pathname)
+{
+	int error;
+	char * tmp;
+
+	error = getname(pathname,&tmp);
+	if (!error) {
+		error = do_rmdir(tmp);
+		putname(tmp);
+	}
+	return error;
+}
+
+static int do_unlink(const char * name)
 {
 	const char * basename;
 	int namelen, error;
@@ -425,7 +525,20 @@ int sys_unlink(const char * name)
 	return dir->i_op->unlink(dir,basename,namelen);
 }
 
-int sys_symlink(const char * oldname, const char * newname)
+int sys_unlink(const char * pathname)
+{
+	int error;
+	char * tmp;
+
+	error = getname(pathname,&tmp);
+	if (!error) {
+		error = do_unlink(tmp);
+		putname(tmp);
+	}
+	return error;
+}
+
+static int do_symlink(const char * oldname, const char * newname)
 {
 	struct inode * dir;
 	const char * basename;
@@ -442,7 +555,7 @@ int sys_symlink(const char * oldname, const char * newname)
 		iput(dir);
 		return -EROFS;
 	}
-	if (!permission(dir,MAY_WRITE)) {
+	if (!permission(dir,MAY_WRITE | MAY_EXEC)) {
 		iput(dir);
 		return -EACCES;
 	}
@@ -453,15 +566,29 @@ int sys_symlink(const char * oldname, const char * newname)
 	return dir->i_op->symlink(dir,basename,namelen,oldname);
 }
 
-int sys_link(const char * oldname, const char * newname)
+int sys_symlink(const char * oldname, const char * newname)
 {
-	struct inode * oldinode, * dir;
+	int error;
+	char * old, * new;
+
+	error = getname(oldname,&old);
+	if (!error) {
+		error = getname(newname,&new);
+		if (!error) {
+			error = do_symlink(old,new);
+			putname(new);
+		}
+		putname(old);
+	}
+	return error;
+}
+
+static int do_link(struct inode * oldinode, const char * newname)
+{
+	struct inode * dir;
 	const char * basename;
 	int namelen, error;
 
-	error = namei(oldname, &oldinode);
-	if (error)
-		return error;
 	error = dir_namei(newname,&namelen,&basename,NULL,&dir);
 	if (error) {
 		iput(oldinode);
@@ -482,7 +609,7 @@ int sys_link(const char * oldname, const char * newname)
 		iput(oldinode);
 		return -EXDEV;
 	}
-	if (!permission(dir,MAY_WRITE)) {
+	if (!permission(dir,MAY_WRITE | MAY_EXEC)) {
 		iput(dir);
 		iput(oldinode);
 		return -EACCES;
@@ -495,7 +622,24 @@ int sys_link(const char * oldname, const char * newname)
 	return dir->i_op->link(oldinode, dir, basename, namelen);
 }
 
-int sys_rename(const char * oldname, const char * newname)
+int sys_link(const char * oldname, const char * newname)
+{
+	int error;
+	char * new;
+	struct inode * oldinode;
+
+	error = namei(oldname, &oldinode);
+	if (error)
+		return error;
+	error = getname(newname,&new);
+	if (!error) {
+		error = do_link(oldinode,new);
+		putname(new);
+	}
+	return error;
+}
+
+static int do_rename(const char * oldname, const char * newname)
 {
 	struct inode * old_dir, * new_dir;
 	const char * old_base, * new_base;
@@ -504,12 +648,12 @@ int sys_rename(const char * oldname, const char * newname)
 	error = dir_namei(oldname,&old_len,&old_base,NULL,&old_dir);
 	if (error)
 		return error;
-	if (!permission(old_dir,MAY_WRITE)) {
+	if (!permission(old_dir,MAY_WRITE | MAY_EXEC)) {
 		iput(old_dir);
 		return -EACCES;
 	}
-	if (!old_len || (get_fs_byte(old_base) == '.' &&
-	    (old_len == 1 || (get_fs_byte(old_base+1) == '.' &&
+	if (!old_len || (old_base[0] == '.' &&
+	    (old_len == 1 || (old_base[1] == '.' &&
 	     old_len == 2)))) {
 		iput(old_dir);
 		return -EPERM;
@@ -519,13 +663,13 @@ int sys_rename(const char * oldname, const char * newname)
 		iput(old_dir);
 		return error;
 	}
-	if (!permission(new_dir,MAY_WRITE)) {
+	if (!permission(new_dir,MAY_WRITE | MAY_EXEC)) {
 		iput(old_dir);
 		iput(new_dir);
 		return -EACCES;
 	}
-	if (!new_len || (get_fs_byte(new_base) == '.' &&
-	    (new_len == 1 || (get_fs_byte(new_base+1) == '.' &&
+	if (!new_len || (new_base[0] == '.' &&
+	    (new_len == 1 || (new_base[1] == '.' &&
 	     new_len == 2)))) {
 		iput(old_dir);
 		iput(new_dir);
@@ -548,4 +692,21 @@ int sys_rename(const char * oldname, const char * newname)
 	}
 	return old_dir->i_op->rename(old_dir, old_base, old_len, 
 		new_dir, new_base, new_len);
+}
+
+int sys_rename(const char * oldname, const char * newname)
+{
+	int error;
+	char * old, * new;
+
+	error = getname(oldname,&old);
+	if (!error) {
+		error = getname(newname,&new);
+		if (!error) {
+			error = do_rename(old,new);
+			putname(new);
+		}
+		putname(old);
+	}
+	return error;
 }

@@ -209,7 +209,7 @@ static int drive_busy(void)
 		if (c == (READY_STAT | SEEK_STAT))
 			return 0;
 	}
-	printk("HD controller times out, status = 0x%02x\n\r",c);
+	printk("HD controller times out, status = 0x%02x\n",c);
 	return 1;
 }
 
@@ -217,14 +217,14 @@ static void reset_controller(void)
 {
 	int	i;
 
-	printk("HD-controller reset\r\n");
+	printk("HD-controller reset\n");
 	outb(4,HD_CMD);
 	for(i = 0; i < 1000; i++) nop();
 	outb(hd_info[0].ctl & 0x0f ,HD_CMD);
 	if (drive_busy())
-		printk("HD-controller still busy\n\r");
+		printk("HD-controller still busy\n");
 	if ((hd_error = inb(HD_ERROR)) != 1)
-		printk("HD-controller reset failed: %02x\n\r",hd_error);
+		printk("HD-controller reset failed: %02x\n",hd_error);
 }
 
 static void reset_hd(void)
@@ -259,7 +259,7 @@ repeat:
 void unexpected_hd_interrupt(void)
 {
 	sti();
-	printk("Unexpected HD interrupt\n\r");
+	printk("Unexpected HD interrupt\n");
 	SET_TIMER;
 }
 
@@ -407,7 +407,7 @@ static void hd_times_out(void)
 	reset = 1;
 	if (!CURRENT)
 		return;
-	printk("HD timeout\n\r");
+	printk("HD timeout\n");
 	cli();
 	if (++CURRENT->errors >= MAX_ERRORS) {
 #ifdef DEBUG
@@ -506,7 +506,7 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 	unsigned int cmd, unsigned int arg)
 {
 	struct hd_geometry *loc = (void *) arg;
-	int dev;
+	int dev, err;
 
 	if (!inode)
 		return -EINVAL;
@@ -516,7 +516,9 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 	switch (cmd) {
 		case HDIO_GETGEO:
 			if (!loc)  return -EINVAL;
-			verify_area(loc, sizeof(*loc));
+			err = verify_area(VERIFY_WRITE, loc, sizeof(*loc));
+			if (err)
+				return err;
 			put_fs_byte(hd_info[dev].head,
 				(char *) &loc->heads);
 			put_fs_byte(hd_info[dev].sect,
@@ -528,7 +530,9 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 			return 0;
          	case BLKGETSIZE:   /* Return device size */
 			if (!arg)  return -EINVAL;
-			verify_area((long *) arg, sizeof(long));
+			err = verify_area(VERIFY_WRITE, (long *) arg, sizeof(long));
+			if (err)
+				return err;
 			put_fs_long(hd[MINOR(inode->i_rdev)].nr_sects,
 				(long *) arg);
 			return 0;
@@ -565,7 +569,7 @@ static void hd_release(struct inode * inode, struct file * file)
 
 }
 
-static void hd_geninit();
+static void hd_geninit(void);
 
 static struct gendisk hd_gendisk = {
 	MAJOR_NR,	/* Major number */	
@@ -657,16 +661,29 @@ static void hd_geninit(void)
 	else
 		NR_HD = 0;
 #endif
+	i = NR_HD;
+	while (i-- > 0) {
+		hd[i<<6].nr_sects = 0;
+		if (hd_info[i].head > 16) {
+			printk("hd.c: ST-506 interface disk with more than 16 heads detected,\n");
+			printk("  probably due to non-standard sector translation. Giving up.\n");
+			printk("  (disk %d: cyl=%d, sect=%d, head=%d)\n", i,
+				hd_info[i].cyl,
+				hd_info[i].sect,
+				hd_info[i].head);
+			if (i+1 == NR_HD)
+				NR_HD--;
+			continue;
+		}
+		hd[i<<6].nr_sects = hd_info[i].head*
+				hd_info[i].sect*hd_info[i].cyl;
+	}
 	if (NR_HD) {
 		if (irqaction(HD_IRQ,&hd_sigaction)) {
-			printk("Unable to get IRQ%d for the harddisk driver\n",HD_IRQ);
+			printk("hd.c: unable to get IRQ%d for the harddisk driver\n",HD_IRQ);
 			NR_HD = 0;
 		}
 	}
-	for (i = 0 ; i < NR_HD ; i++)
-		hd[i<<6].nr_sects = hd_info[i].head*
-				hd_info[i].sect*hd_info[i].cyl;
-
 	hd_gendisk.nr_real = NR_HD;
 }
 

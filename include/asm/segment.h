@@ -78,14 +78,14 @@ __asm__("cld\n\t"
  * [ nothing wrong here, Linus: I just changed the ax to be any reg ]
  */
 
-extern inline unsigned long get_fs() 
+extern inline unsigned long get_fs(void)
 {
 	unsigned short _v;
 	__asm__("mov %%fs,%0":"=r" (_v):);
 	return _v;
 }
 
-extern inline unsigned long get_ds() 
+extern inline unsigned long get_ds(void)
 {
 	unsigned short _v;
 	__asm__("mov %%ds,%0":"=r" (_v):);

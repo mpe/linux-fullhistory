@@ -140,7 +140,7 @@ void math_emulate(long arg)
 #ifdef PARANOID
   if ( emulating )
     {
-      printk("ERROR: wm-FPU-emu is not RE-ENTRANT!\r\n");
+      printk("ERROR: wm-FPU-emu is not RE-ENTRANT!\n");
     }
   RE_ENTRANT_CHECK_ON
 #endif PARANOID
@@ -162,7 +162,7 @@ void math_emulate(long arg)
   /* 0x000f means user code space */
   if (FPU_CS != 0x000f)
     {
-      printk("math_emulate: %04x:%08x\n\r",FPU_CS,FPU_EIP);
+      printk("math_emulate: %04x:%08x\n",FPU_CS,FPU_EIP);
       panic("Math emulation needed in kernel");
     }
 

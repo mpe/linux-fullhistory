@@ -381,7 +381,7 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 		        cmd[0] = READ_6;
 			break;
 		default : 
-			printk ("Unknown sr command %d\r\n", SCpnt->request.cmd);
+			printk ("Unknown sr command %d\n", SCpnt->request.cmd);
 			panic("");
 		}
 	

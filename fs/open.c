@@ -31,7 +31,9 @@ int sys_statfs(const char * path, struct statfs * buf)
 	struct inode * inode;
 	int error;
 
-	verify_area(buf, sizeof(struct statfs));
+	error = verify_area(VERIFY_WRITE, buf, sizeof(struct statfs));
+	if (error)
+		return error;
 	error = namei(path,&inode);
 	if (error)
 		return error;
@@ -48,8 +50,11 @@ int sys_fstatfs(unsigned int fd, struct statfs * buf)
 {
 	struct inode * inode;
 	struct file * file;
+	int error;
 
-	verify_area(buf, sizeof(struct statfs));
+	error = verify_area(VERIFY_WRITE, buf, sizeof(struct statfs));
+	if (error)
+		return error;
 	if (fd >= NR_OPEN || !(file = current->filp[fd]))
 		return -EBADF;
 	if (!(inode = file->f_inode))
@@ -129,17 +134,17 @@ int sys_utime(char * filename, struct utimbuf * times)
 		}
 		actime = get_fs_long((unsigned long *) &times->actime);
 		modtime = get_fs_long((unsigned long *) &times->modtime);
+		inode->i_ctime = CURRENT_TIME;
 	} else {
 		if ((current->euid != inode->i_uid) &&
 		    !permission(inode,MAY_WRITE)) {
 			iput(inode);
 			return -EACCES;
 		}
-		actime = modtime = CURRENT_TIME;
+		actime = modtime = inode->i_ctime = CURRENT_TIME;
 	}
 	inode->i_atime = actime;
 	inode->i_mtime = modtime;
-	inode->i_ctime = CURRENT_TIME;
 	inode->i_dirt = 1;
 	error = notify_change(NOTIFY_TIME, inode);
 	iput(inode);
@@ -147,34 +152,39 @@ int sys_utime(char * filename, struct utimbuf * times)
 }
 
 /*
- * XXX should we use the real or effective uid?  BSD uses the real uid,
- * so as to make this call useful to setuid programs.
+ * XXX we should use the real ids for checking _all_ components of the
+ * path.  Now we only use them for the final compenent of the path.
  */
 int sys_access(const char * filename,int mode)
 {
 	struct inode * inode;
 	int res, i_mode;
 
-	mode &= 0007;
+	if (mode != (mode & 0007))	/* where's F_OK, X_OK, W_OK, R_OK? */
+		return -EINVAL;
 	res = namei(filename,&inode);
 	if (res)
 		return res;
-	i_mode = res = inode->i_mode & 0777;
+	i_mode = inode->i_mode;
+	res = i_mode & 0777;
 	iput(inode);
 	if (current->uid == inode->i_uid)
 		res >>= 6;
 	else if (in_group_p(inode->i_gid))
 		res >>= 3;
-	if ((res & 0007 & mode) == mode)
+	if ((res & mode) == mode)
 		return 0;
 	/*
 	 * XXX we are doing this test last because we really should be
 	 * swapping the effective with the real user id (temporarily),
 	 * and then calling suser() routine.  If we do call the
 	 * suser() routine, it needs to be called last. 
+	 *
+	 * XXX nope.  suser() is inappropriate and swapping the ids while
+	 * decomposing the path would be racy.
 	 */
 	if ((!current->uid) &&
-	    (!(mode & 1) || (i_mode & 0111)))
+	    (S_ISDIR(i_mode) || !(mode & 1) || (i_mode & 0111)))
 		return 0;
 	return -EACCES;
 }
@@ -340,11 +350,12 @@ int sys_chown(const char * filename, uid_t user, gid_t group)
  * for the internal routines (ie open_namei()/follow_link() etc). 00 is
  * used by symlinks.
  */
-int sys_open(const char * filename,int flag,int mode)
+int sys_open(const char * filename,int flags,int mode)
 {
 	struct inode * inode;
 	struct file * f;
-	int i,fd;
+	char * tmp;
+	int flag,error,fd;
 
 	for(fd=0 ; fd<NR_OPEN ; fd++)
 		if (!current->filp[fd])
@@ -356,31 +367,32 @@ int sys_open(const char * filename,int flag,int mode)
 	if (!f)
 		return -ENFILE;
 	current->filp[fd] = f;
-	f->f_flags = flag;
+	f->f_flags = flag = flags;
 	f->f_mode = (flag+1) & O_ACCMODE;
 	if (f->f_mode)
 		flag++;
 	if (flag & (O_TRUNC | O_CREAT))
 		flag |= 2;
-	i = open_namei(filename,flag,mode,&inode,NULL);
-	if (i) {
+	error = getname(filename,&tmp);
+	if (!error) {
+		error = open_namei(tmp,flag,mode,&inode,NULL);
+		putname(tmp);
+	}
+	if (error) {
 		current->filp[fd]=NULL;
 		f->f_count--;
-		return i;
+		return error;
 	}
 	if (flag & O_TRUNC) {
 		inode->i_size = 0;
 		if (inode->i_op && inode->i_op->truncate)
 			inode->i_op->truncate(inode);
-		if ((i = notify_change(NOTIFY_SIZE, inode))) {
+		if ((error = notify_change(NOTIFY_SIZE, inode))) {
 			iput(inode);
 			current->filp[fd] = NULL;
 			f->f_count--;
-			return i;
+			return error;
 		}
-	}
-	if (!IS_RDONLY(inode)) {
-		inode->i_atime = CURRENT_TIME;
 		inode->i_dirt = 1;
 	}
 	f->f_inode = inode;
@@ -390,12 +402,12 @@ int sys_open(const char * filename,int flag,int mode)
 	if (inode->i_op)
 		f->f_op = inode->i_op->default_file_ops;
 	if (f->f_op && f->f_op->open) {
-		i = f->f_op->open(inode,f);
-		if (i) {
+		error = f->f_op->open(inode,f);
+		if (error) {
 			iput(inode);
 			f->f_count--;
 			current->filp[fd]=NULL;
-			return i;
+			return error;
 		}
 	}
 	f->f_flags &= ~(O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC);
@@ -412,7 +424,7 @@ int close_fp(struct file *filp)
 	struct inode *inode;
 
 	if (filp->f_count == 0) {
-		printk("Close: file count is 0\n");
+		printk("VFS: Close: file count is 0\n");
 		return 0;
 	}
 	inode = filp->f_inode;
@@ -435,10 +447,10 @@ int sys_close(unsigned int fd)
 	struct file * filp;
 
 	if (fd >= NR_OPEN)
-		return -EINVAL;
+		return -EBADF;
 	FD_CLR(fd, &current->close_on_exec);
 	if (!(filp = current->filp[fd]))
-		return -EINVAL;
+		return -EBADF;
 	current->filp[fd] = NULL;
 	return (close_fp (filp));
 }
@@ -457,6 +469,6 @@ int sys_vhangup(void)
 	if (current->tty < 0)
 		return 0;
 	tty = TTY_TABLE(MINOR(current->tty));
-	tty_hangup(tty);
+	tty_vhangup(tty);
 	return 0;
 }

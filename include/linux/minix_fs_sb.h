@@ -14,6 +14,8 @@ struct minix_sb_info {
 			unsigned long s_max_size;
 			struct buffer_head * s_imap[8];
 			struct buffer_head * s_zmap[8];
+			unsigned long s_dirsize;
+			unsigned long s_namelen;
 };
 
 #endif

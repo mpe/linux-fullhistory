@@ -116,8 +116,7 @@ void proc_read_inode(struct inode * inode)
 			return;
 		case 3:
 			inode->i_op = &proc_mem_inode_operations;
-			inode->i_mode = S_IFCHR | 0600;
-			inode->i_rdev = 0x0101;
+			inode->i_mode = S_IFREG | 0600;
 			return;
 		case 4:
 		case 5:

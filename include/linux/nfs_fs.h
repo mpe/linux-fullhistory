@@ -60,7 +60,7 @@ extern int nfs_proc_getattr(struct nfs_server *server, struct nfs_fh *fhandle,
 extern int nfs_proc_setattr(struct nfs_server *server, struct nfs_fh *fhandle,
 			    struct nfs_sattr *sattr, struct nfs_fattr *fattr);
 extern int nfs_proc_lookup(struct nfs_server *server, struct nfs_fh *dir,
-			   char *name, struct nfs_fh *fhandle,
+			   const char *name, struct nfs_fh *fhandle,
 			   struct nfs_fattr *fattr);
 extern int nfs_proc_readlink(struct nfs_server *server, struct nfs_fh *fhandle,
 			     char *res);
@@ -71,22 +71,22 @@ extern int nfs_proc_write(struct nfs_server *server, struct nfs_fh *fhandle,
 			  int offset, int count, char *data,
 			  struct nfs_fattr *fattr);
 extern int nfs_proc_create(struct nfs_server *server, struct nfs_fh *dir,
-			   char *name, struct nfs_sattr *sattr,
+			   const char *name, struct nfs_sattr *sattr,
 			   struct nfs_fh *fhandle, struct nfs_fattr *fattr);
 extern int nfs_proc_remove(struct nfs_server *server, struct nfs_fh *dir,
-			   char *name);
+			   const char *name);
 extern int nfs_proc_rename(struct nfs_server *server,
-			   struct nfs_fh *old_dir, char *old_name,
-			   struct nfs_fh *new_dir, char *new_name);
+			   struct nfs_fh *old_dir, const char *old_name,
+			   struct nfs_fh *new_dir, const char *new_name);
 extern int nfs_proc_link(struct nfs_server *server, struct nfs_fh *fhandle,
-			 struct nfs_fh *dir, char *name);
+			 struct nfs_fh *dir, const char *name);
 extern int nfs_proc_symlink(struct nfs_server *server, struct nfs_fh *dir,
-			    char *name, char *path, struct nfs_sattr *sattr);
+			    const char *name, const char *path, struct nfs_sattr *sattr);
 extern int nfs_proc_mkdir(struct nfs_server *server, struct nfs_fh *dir,
-			  char *name, struct nfs_sattr *sattr,
+			  const char *name, struct nfs_sattr *sattr,
 			  struct nfs_fh *fhandle, struct nfs_fattr *fattr);
 extern int nfs_proc_rmdir(struct nfs_server *server, struct nfs_fh *dir,
-			  char *name);
+			  const char *name);
 extern int nfs_proc_readdir(struct nfs_server *server, struct nfs_fh *fhandle,
 			    int cookie, int count, struct nfs_entry *entry);
 extern int nfs_proc_statfs(struct nfs_server *server, struct nfs_fh *fhandle,
@@ -114,17 +114,5 @@ extern struct inode_operations nfs_dir_inode_operations;
 /* linux/fs/nfs/symlink.c */
 
 extern struct inode_operations nfs_symlink_inode_operations;
-
-/* linux/fs/nfs/chrdev.c */
-
-extern struct inode_operations nfs_chrdev_inode_operations;
-
-/* linux/fs/nfs/blkdev.c */
-
-extern struct inode_operations nfs_blkdev_inode_operations;
-
-/* linux/fs/nfs/fifo.c */
-
-extern struct inode_operations nfs_fifo_inode_operations;
 
 #endif

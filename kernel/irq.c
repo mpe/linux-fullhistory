@@ -57,7 +57,7 @@ void do_bottom_half(int nr)
 	if (bh->routine != NULL)
 		bh->routine(bh->data);
 	else
-		printk ("irq.c:bad bottom half entry.\n");
+		printk ("irq.c:bad bottom half entry (%d).\n",nr);
 }
 
 /*

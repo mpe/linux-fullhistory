@@ -571,7 +571,7 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
 			printk("seagate_st0x_timeout : %d            \r",temp);
 	
 		}
-		printk("Done.                                             \n\r");
+		printk("Done.                                             \n");
 		printk("scsi%d : status = %02x, seagate_st0x_timeout = %d, aborted = %02x \n", 
 			hostno, status_read, temp, st0x_aborted);
 #else

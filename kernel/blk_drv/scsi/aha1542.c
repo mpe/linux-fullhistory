@@ -297,13 +297,14 @@ void aha1542_intr_handle(int foo)
 #endif
       
       SCtmp = SCint[mbo];
-      my_done = SCtmp->scsi_done;
-      if (SCtmp->host_scribble) scsi_free(SCtmp->host_scribble, 512);
-      
-      if (!my_done) {
+
+      if (!SCtmp || !SCtmp->scsi_done) {
 	printk("aha1542_intr_handle: Unexpected interrupt\n");
 	return;
       }
+      
+      my_done = SCtmp->scsi_done;
+      if (SCtmp->host_scribble) scsi_free(SCtmp->host_scribble, 512);
       
       /* Fetch the sense data, and tuck it away, in the required slot.  The
 	 Adaptec automatically fetches it, and there is no guarantee that

@@ -51,7 +51,7 @@ extern char emulating;
 #  define RE_ENTRANT_CHECK_ON
 #endif PARANOID
 
-typedef void (*FUNC)();
+typedef void (*FUNC)(void);
 typedef struct fpu_reg FPU_REG;
 
 #define	st(x)	( regs[((top+x) &7 )] )

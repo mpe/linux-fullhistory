@@ -16,7 +16,7 @@
 #include "reg_constant.h"
 
 
-static void fchs()
+static void fchs(void)
 {
   if ( NOT_EMPTY_0 )
     {
@@ -27,7 +27,7 @@ static void fchs()
     stack_underflow();
 }
 
-static void fabs()
+static void fabs(void)
 {
   if ( FPU_st0_tag ^ TW_Empty )
     {
@@ -39,7 +39,7 @@ static void fabs()
 }
 
 
-static void ftst_()
+static void ftst_(void)
 {
   switch (FPU_st0_tag)
     {
@@ -75,7 +75,7 @@ static void ftst_()
     }
 }
 
-static void fxam()
+static void fxam(void)
 {
   int c=0;
   switch (FPU_st0_tag)

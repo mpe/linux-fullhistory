@@ -477,8 +477,8 @@ int isofs_lookup_grandparent(struct inode * parent, int extent) {
 		
 		if (de->name_len[0] == 1 && de->name[0] == 1) 
 			{
-				brelse(bh);
 				parent_dir = find_rock_ridge_relocation(de, parent);
+				brelse(bh);
 				break;
 			};
 	}

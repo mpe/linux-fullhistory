@@ -56,7 +56,7 @@ static inline int *xdr_decode_fhandle(int *p, struct nfs_fh *fhandle)
 	return p;
 }
 
-static inline int *xdr_encode_string(int *p, char *string)
+static inline int *xdr_encode_string(int *p, const char *string)
 {
 	int len, quadlen;
 	
@@ -215,7 +215,7 @@ int nfs_proc_setattr(struct nfs_server *server, struct nfs_fh *fhandle,
 	return -nfs_stat_to_errno(status);
 }
 
-int nfs_proc_lookup(struct nfs_server *server, struct nfs_fh *dir, char *name,
+int nfs_proc_lookup(struct nfs_server *server, struct nfs_fh *dir, const char *name,
 		    struct nfs_fh *fhandle, struct nfs_fattr *fattr)
 {
 	int *p, *p0;
@@ -343,7 +343,7 @@ int nfs_proc_write(struct nfs_server *server, struct nfs_fh *fhandle,
 }
 
 int nfs_proc_create(struct nfs_server *server, struct nfs_fh *dir,
-		    char *name, struct nfs_sattr *sattr,
+		    const char *name, struct nfs_sattr *sattr,
 		    struct nfs_fh *fhandle, struct nfs_fattr *fattr)
 {
 	int *p, *p0;
@@ -372,7 +372,7 @@ int nfs_proc_create(struct nfs_server *server, struct nfs_fh *dir,
 	return -nfs_stat_to_errno(status);
 }
 
-int nfs_proc_remove(struct nfs_server *server, struct nfs_fh *dir, char *name)
+int nfs_proc_remove(struct nfs_server *server, struct nfs_fh *dir, const char *name)
 {
 	int *p, *p0;
 	int status;
@@ -398,8 +398,8 @@ int nfs_proc_remove(struct nfs_server *server, struct nfs_fh *dir, char *name)
 }
 
 int nfs_proc_rename(struct nfs_server *server,
-		    struct nfs_fh *old_dir, char *old_name,
-		    struct nfs_fh *new_dir, char *new_name)
+		    struct nfs_fh *old_dir, const char *old_name,
+		    struct nfs_fh *new_dir, const char *new_name)
 {
 	int *p, *p0;
 	int status;
@@ -427,7 +427,7 @@ int nfs_proc_rename(struct nfs_server *server,
 }
 
 int nfs_proc_link(struct nfs_server *server, struct nfs_fh *fhandle,
-		  struct nfs_fh *dir, char *name)
+		  struct nfs_fh *dir, const char *name)
 {
 	int *p, *p0;
 	int status;
@@ -454,7 +454,7 @@ int nfs_proc_link(struct nfs_server *server, struct nfs_fh *fhandle,
 }
 
 int nfs_proc_symlink(struct nfs_server *server, struct nfs_fh *dir,
-		     char *name, char *path, struct nfs_sattr *sattr)
+		     const char *name, const char *path, struct nfs_sattr *sattr)
 {
 	int *p, *p0;
 	int status;
@@ -482,7 +482,7 @@ int nfs_proc_symlink(struct nfs_server *server, struct nfs_fh *dir,
 }
 
 int nfs_proc_mkdir(struct nfs_server *server, struct nfs_fh *dir,
-		   char *name, struct nfs_sattr *sattr,
+		   const char *name, struct nfs_sattr *sattr,
 		   struct nfs_fh *fhandle, struct nfs_fattr *fattr)
 {
 	int *p, *p0;
@@ -511,7 +511,7 @@ int nfs_proc_mkdir(struct nfs_server *server, struct nfs_fh *dir,
 	return -nfs_stat_to_errno(status);
 }
 
-int nfs_proc_rmdir(struct nfs_server *server, struct nfs_fh *dir, char *name)
+int nfs_proc_rmdir(struct nfs_server *server, struct nfs_fh *dir, const char *name)
 {
 	int *p, *p0;
 	int status;

@@ -49,9 +49,11 @@ struct vm_operations_struct {
 
 extern unsigned long __bad_page(void);
 extern unsigned long __bad_pagetable(void);
+extern unsigned long __zero_page(void);
 
 #define BAD_PAGETABLE __bad_pagetable()
 #define BAD_PAGE __bad_page()
+#define ZERO_PAGE __zero_page()
 
 extern volatile short free_page_ptr; /* used by malloc and tcp/ip. */
 
@@ -62,27 +64,37 @@ extern unsigned long secondary_page_list;
 
 #define MAX_SECONDARY_PAGES 10
 
-extern void rw_swap_page(int rw, unsigned int nr, char * buf);
+/*
+ * This is timing-critical - most of the time in getting a new page
+ * goes to clearing the page. If you want a page without the clearing
+ * overhead, just use __get_free_page() directly..
+ */
+extern unsigned long __get_free_page(int priority);
+extern inline unsigned long get_free_page(int priority)
+{
+	unsigned long page;
 
-#define read_swap_page(nr,buf) \
-	rw_swap_page(READ,(nr),(buf))
-#define write_swap_page(nr,buf) \
-	rw_swap_page(WRITE,(nr),(buf))
+	page = __get_free_page(priority);
+	if (page)
+		__asm__ __volatile__("rep ; stosl"
+			::"a" (0),"c" (1024),"D" (page)
+			:"di","cx");
+	return page;
+}
 
 /* mmap.c */
 
 /* memory.c */
-	
-extern unsigned long get_free_page(int priority);
+
+extern void free_page(unsigned long addr);
 extern unsigned long put_dirty_page(struct task_struct * tsk,unsigned long page,
 	unsigned long address);
-extern void free_page(unsigned long addr);
 extern void free_page_tables(struct task_struct * tsk);
 extern void clear_page_tables(struct task_struct * tsk);
 extern int copy_page_tables(struct task_struct * new);
 extern int unmap_page_range(unsigned long from, unsigned long size);
-extern int remap_page_range(unsigned long from, unsigned long to, unsigned long size,
-	 int permiss);
+extern int remap_page_range(unsigned long from, unsigned long to, unsigned long size, int mask);
+extern int zeromap_page_range(unsigned long from, unsigned long size, int mask);
 extern void write_verify(unsigned long address);
 
 extern void do_wp_page(unsigned long error_code, unsigned long address,
@@ -100,10 +112,16 @@ extern void si_meminfo(struct sysinfo * val);
 
 /* swap.c */
 
-extern void swap_free(unsigned int page_nr);
-extern void swap_duplicate(unsigned int page_nr);
+extern void swap_free(unsigned long page_nr);
+extern unsigned long swap_duplicate(unsigned long page_nr);
 extern void swap_in(unsigned long *table_ptr);
 extern void si_swapinfo(struct sysinfo * val);
+extern void rw_swap_page(int rw, unsigned long nr, char * buf);
+
+#define read_swap_page(nr,buf) \
+	rw_swap_page(READ,(nr),(buf))
+#define write_swap_page(nr,buf) \
+	rw_swap_page(WRITE,(nr),(buf))
 
 #define invalidate() \
 __asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3":::"ax")
@@ -115,11 +133,20 @@ extern unsigned long high_memory;
 
 extern unsigned short * mem_map;
 
-#define PAGE_DIRTY	0x40
-#define PAGE_ACCESSED	0x20
-#define PAGE_USER	0x04
-#define PAGE_RW		0x02
-#define PAGE_PRESENT	0x01
+#define PAGE_PRESENT	0x001
+#define PAGE_RW		0x002
+#define PAGE_USER	0x004
+#define PAGE_PWT	0x008	/* 486 only - not used currently */
+#define PAGE_PCD	0x010	/* 486 only - not used currently */
+#define PAGE_ACCESSED	0x020
+#define PAGE_DIRTY	0x040
+#define PAGE_COW	0x200	/* implemented in software (one of the AVL bits) */
+
+#define PAGE_PRIVATE	(PAGE_PRESENT | PAGE_RW | PAGE_USER | PAGE_ACCESSED | PAGE_COW)
+#define PAGE_SHARED	(PAGE_PRESENT | PAGE_RW | PAGE_USER | PAGE_ACCESSED)
+#define PAGE_COPY	(PAGE_PRESENT | PAGE_USER | PAGE_ACCESSED | PAGE_COW)
+#define PAGE_READONLY	(PAGE_PRESENT | PAGE_USER | PAGE_ACCESSED)
+#define PAGE_TABLE	(PAGE_PRESENT | PAGE_RW | PAGE_USER | PAGE_ACCESSED)
 
 #define GFP_BUFFER	0x00
 #define GFP_ATOMIC	0x01

@@ -229,7 +229,7 @@ void ll_rw_page(int rw, int dev, int page, char * buffer)
 	if (rw!=READ && rw!=WRITE)
 		panic("Bad block dev command, must be R/W");
 	if (rw == WRITE && is_read_only(dev)) {
-		printk("Can't page to read-only device 0x%X\n\r",dev);
+		printk("Can't page to read-only device 0x%X\n",dev);
 		return;
 	}
 	cli();
@@ -297,7 +297,7 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 		return;
 	}
 	if ((rw == WRITE || rw == WRITEA) && is_read_only(bh[0]->b_dev)) {
-		printk("Can't write to read-only device 0x%X\n\r",bh[0]->b_dev);
+		printk("Can't write to read-only device 0x%X\n",bh[0]->b_dev);
 		for (i=0;i<nr; i++)
 		  if (bh[i]) bh[i]->b_dirt = bh[i]->b_uptodate = 0;
 		return;
@@ -333,7 +333,7 @@ void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buf)
 	unsigned int major = MAJOR(dev);
 
 	if (major >= MAX_BLKDEV || !(blk_dev[major].request_fn)) {
-		printk("ll_rw_swap_file: trying to swap nonexistent block-device\n\r");
+		printk("ll_rw_swap_file: trying to swap nonexistent block-device\n");
 		return;
 	}
 
@@ -342,7 +342,7 @@ void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buf)
 		return;
 	}
 	if (rw == WRITE && is_read_only(dev)) {
-		printk("Can't swap to read-only device 0x%X\n\r",dev);
+		printk("Can't swap to read-only device 0x%X\n",dev);
 		return;
 	}
 	

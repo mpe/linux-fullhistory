@@ -11,8 +11,14 @@
 #ifdef CONFIG_MINIX_FS
 #include <linux/minix_fs.h>
 #endif
+#ifdef CONFIG_XIA_FS
+#include <linux/xia_fs.h>
+#endif
 #ifdef CONFIG_PROC_FS
 #include <linux/proc_fs.h>
+#endif
+#ifdef CONFIG_EXT2_FS
+#include <linux/ext2_fs.h>
 #endif
 #ifdef CONFIG_EXT_FS
 #include <linux/ext_fs.h>
@@ -31,8 +37,14 @@ struct file_system_type file_systems[] = {
 #ifdef CONFIG_MINIX_FS
 	{minix_read_super,	"minix",	1},
 #endif
+#ifdef CONFIG_XIA_FS
+	{xiafs_read_super,	"xiafs",	1},
+#endif
 #ifdef CONFIG_EXT_FS
 	{ext_read_super,	"ext",		1},
+#endif
+#ifdef CONFIG_EXT2_FS
+	{ext2_read_super,	"ext2",		1},
 #endif
 #ifdef CONFIG_MSDOS_FS
 	{msdos_read_super,	"msdos",	1},

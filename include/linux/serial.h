@@ -23,11 +23,12 @@ struct async_struct {
 	int			flags; 		/* defined in tty.h */
 	int			type; 		/* UART type */
 	struct tty_struct 	*tty;
-	unsigned long 		timer;
+	int			read_status_mask;
 	int			timeout;
 	int			xmit_fifo_size;
 	int			custom_divisor;
 	int			x_char;	/* xon/xoff characater */
+	int			close_delay;
 	int			event;
 	int			line;
 	int			count;	    /* # of fd on device */
@@ -43,10 +44,9 @@ struct async_struct {
  */
 #define RS_EVENT_READ_PROCESS	0
 #define RS_EVENT_WRITE_WAKEUP	1
-#define RS_EVENT_HUP_PGRP	2
-#define RS_EVENT_BREAK_INT	3
-#define RS_EVENT_DO_SAK		4
-#define RS_EVENT_OPEN_WAKEUP	5
+#define RS_EVENT_HANGUP		2
+#define RS_EVENT_BREAK		3
+#define RS_EVENT_OPEN_WAKEUP	4
 
 /*
  * These are the UART port assignments, expressed as offsets from the base

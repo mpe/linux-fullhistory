@@ -333,7 +333,6 @@ unix_proto_bind(struct socket *sock, struct sockaddr *umyaddr,
 	struct unix_proto_data *upd = UN_DATA(sock);
 	char fname[sizeof(((struct sockaddr_un *)0)->sun_path) + 1];
 	int i;
-	unsigned long old_fs;
 
 	PRINTK(("unix_proto_bind: socket 0x%x, len=%d\n", sock,
 	       sockaddr_len));
@@ -346,7 +345,7 @@ unix_proto_bind(struct socket *sock, struct sockaddr *umyaddr,
 		printk("unix_proto_bind: already bound!\n");
 		return -EINVAL;
 	}
-	verify_area(umyaddr, sockaddr_len);
+	verify_area(VERIFY_WRITE,umyaddr, sockaddr_len);
 	memcpy_fromfs(&upd->sockaddr_un, umyaddr, sockaddr_len);
 	if (upd->sockaddr_un.sun_family != AF_UNIX) {
 		PRINTK(("unix_proto_bind: family is %d, not AF_UNIX (%d)\n",
@@ -356,12 +355,9 @@ unix_proto_bind(struct socket *sock, struct sockaddr *umyaddr,
 
 	memcpy(fname, upd->sockaddr_un.sun_path, sockaddr_len-UN_PATH_OFFSET);
 	fname[sockaddr_len-UN_PATH_OFFSET] = '\0';
-	old_fs = get_fs();
-	set_fs(get_ds());
 	i = do_mknod(fname, S_IFSOCK | 0777, 0);
 	if (i == 0)
 		i = open_namei(fname, 0, S_IFSOCK, &upd->inode, NULL);
-	set_fs(old_fs);
 	if (i < 0) {
 		printk("unix_proto_bind: can't open socket %s\n", fname);
 		return i;
@@ -388,7 +384,6 @@ unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
 	struct unix_proto_data *serv_upd;
 	struct sockaddr_un sockun;
 	char fname[sizeof(((struct sockaddr_un *)0)->sun_path) + 1];
-	unsigned long old_fs;
 	struct inode *inode;
 
 	PRINTK(("unix_proto_connect: socket 0x%x, servlen=%d\n", sock,
@@ -406,7 +401,7 @@ unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
 	if (sock->state == SS_CONNECTED)
 	  return (-EISCONN);
 
-	verify_area(uservaddr, sockaddr_len);
+	verify_area(VERIFY_WRITE,uservaddr, sockaddr_len);
 	memcpy_fromfs(&sockun, uservaddr, sockaddr_len);
 	if (sockun.sun_family != AF_UNIX) {
 		PRINTK(("unix_proto_connect: family is %d, not AF_UNIX (%d)\n",
@@ -422,10 +417,7 @@ unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
 	 */
 	memcpy(fname, sockun.sun_path, sockaddr_len-UN_PATH_OFFSET);
 	fname[sockaddr_len-UN_PATH_OFFSET] = '\0';
-	old_fs = get_fs();
-	set_fs(get_ds());
 	i = open_namei(fname, 0, S_IFSOCK, &inode, NULL);
-	set_fs(old_fs);
 	if (i < 0) {
 		PRINTK(("unix_proto_connect: can't open socket %s\n", fname));
 		return i;
@@ -530,13 +522,13 @@ unix_proto_getname(struct socket *sock, struct sockaddr *usockaddr,
 	}
 	else
 		upd = UN_DATA(sock);
-	verify_area(usockaddr_len, sizeof(*usockaddr_len));
+	verify_area(VERIFY_WRITE,usockaddr_len, sizeof(*usockaddr_len));
 	if ((len = get_fs_long(usockaddr_len)) <= 0)
 		return -EINVAL;
 	if (len > upd->sockaddr_len)
 		len = upd->sockaddr_len;
 	if (len) {
-		verify_area(usockaddr, len);
+		verify_area(VERIFY_WRITE,usockaddr, len);
 		memcpy_tofs(usockaddr, &upd->sockaddr_un, len);
 	}
 	put_fs_long(len, usockaddr_len);
@@ -593,7 +585,7 @@ unix_proto_read(struct socket *sock, char *ubuf, int size, int nonblock)
 			cando = part;
 		PRINTK(("unix_proto_read: avail=%d, todo=%d, cando=%d\n",
 		       avail, todo, cando));
-		verify_area(ubuf, cando);
+		verify_area(VERIFY_WRITE,ubuf, cando);
 		memcpy_tofs(ubuf, upd->buf + upd->bp_tail, cando);
 		upd->bp_tail = (upd->bp_tail + cando) & (BUF_SIZE-1);
 		ubuf += cando;
@@ -671,7 +663,7 @@ unix_proto_write(struct socket *sock, char *ubuf, int size, int nonblock)
 			cando = part;
 		PRINTK(("unix_proto_write: space=%d, todo=%d, cando=%d\n",
 		       space, todo, cando));
-		verify_area(ubuf, cando);
+		verify_area(VERIFY_WRITE,ubuf, cando);
 		memcpy_fromfs(pupd->buf + pupd->bp_head, ubuf, cando);
 		pupd->bp_head = (pupd->bp_head + cando) & (BUF_SIZE-1);
 		ubuf += cando;
@@ -749,7 +741,7 @@ unix_proto_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	case TIOCINQ:
 		if (sock->flags & SO_ACCEPTCON)
 			return -EINVAL;
-		verify_area((void *)arg, sizeof(unsigned long));
+		verify_area(VERIFY_WRITE,(void *)arg, sizeof(unsigned long));
 		if (UN_BUF_AVAIL(upd) || peerupd)
 			put_fs_long(UN_BUF_AVAIL(upd), (unsigned long *)arg);
 		else
@@ -759,7 +751,7 @@ unix_proto_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	case TIOCOUTQ:
 		if (sock->flags & SO_ACCEPTCON)
 			return -EINVAL;
-		verify_area((void *)arg, sizeof(unsigned long));
+		verify_area(VERIFY_WRITE,(void *)arg, sizeof(unsigned long));
 		if (peerupd)
 			put_fs_long(UN_BUF_SPACE(peerupd),
 				    (unsigned long *)arg);

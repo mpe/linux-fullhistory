@@ -93,7 +93,7 @@ static void single_arg_error(void)
 
 /*---------------------------------------------------------------------------*/
 
-static void f2xm1()
+static void f2xm1(void)
 {
   switch ( FPU_st0_tag )
     {
@@ -139,7 +139,7 @@ static void f2xm1()
     }
 }
 
-static void fptan()
+static void fptan(void)
 {
   FPU_REG *st_new_ptr;
   int q;
@@ -192,7 +192,7 @@ static void fptan()
 }
 
 
-static void fxtract()
+static void fxtract(void)
 {
   FPU_REG *st_new_ptr;
   register FPU_REG *st1_ptr = FPU_st0_ptr;  /* anticipate */
@@ -260,18 +260,18 @@ static void fxtract()
 }
 
 
-static void fdecstp()
+static void fdecstp(void)
 {
   top--;  /* FPU_st0_ptr will be fixed in math_emulate() before the next instr */
 }
 
-static void fincstp()
+static void fincstp(void)
 {
   top++;  /* FPU_st0_ptr will be fixed in math_emulate() before the next instr */
 }
 
 
-static void fsqrt_()
+static void fsqrt_(void)
 {
   if ( !(FPU_st0_tag ^ TW_Valid) )
     {
@@ -305,7 +305,7 @@ static void fsqrt_()
 }
 
 
-static void frndint_()
+static void frndint_(void)
 {
   if ( !(FPU_st0_tag ^ TW_Valid) )
     {
@@ -324,7 +324,7 @@ static void frndint_()
 }
 
 
-static void fsin()
+static void fsin(void)
 {
   if ( FPU_st0_tag == TW_Valid )
     {
@@ -428,13 +428,13 @@ static int f_cos(FPU_REG *arg)
 }
 
 
-static void fcos()
+static void fcos(void)
 {
   f_cos(FPU_st0_ptr);
 }
 
 
-static void fsincos()
+static void fsincos(void)
 {
   FPU_REG *st_new_ptr;
   FPU_REG arg;
@@ -543,7 +543,7 @@ static void fprem_kernel(int round)
 
 
 /* ST(1) <- ST(1) * log ST;  pop ST */
-static void fyl2x()
+static void fyl2x(void)
 {
   FPU_REG *st1_ptr = &st(1);
   char st1_tag = st1_ptr->tag;
@@ -652,7 +652,7 @@ static void fyl2x()
 }
 
 
-static void fpatan()
+static void fpatan(void)
 {
   FPU_REG *st1_ptr = &st(1);
   char st1_tag = st1_ptr->tag;
@@ -756,19 +756,19 @@ static void fpatan()
 }
 
 
-static void fprem()
+static void fprem(void)
 {
   fprem_kernel(RC_CHOP);
 }
 
 
-static void fprem1()
+static void fprem1(void)
 {
   fprem_kernel(RC_RND);
 }
 
 
-static void fyl2xp1()
+static void fyl2xp1(void)
 {
   FPU_REG *st1_ptr = &st(1);
   char st1_tag = st1_ptr->tag;
@@ -834,7 +834,7 @@ static void fyl2xp1()
 }
 
 
-static void fscale()
+static void fscale(void)
 {
   FPU_REG *st1_ptr = &st(1);
   char st1_tag = st1_ptr->tag;
@@ -940,7 +940,7 @@ static FUNC trig_table_a[] = {
   f2xm1, fyl2x, fptan, fpatan, fxtract, fprem1, fdecstp, fincstp
 };
 
-void trig_a()
+void trig_a(void)
 {
   (trig_table_a[FPU_rm])();
 }
@@ -951,7 +951,7 @@ static FUNC trig_table_b[] =
     fprem, fyl2xp1, fsqrt_, fsincos, frndint_, fscale, fsin, fcos
   };
 
-void trig_b()
+void trig_b(void)
 {
   (trig_table_b[FPU_rm])();
 }

@@ -94,7 +94,7 @@ struct hs_primary_descriptor {
 /* We use this to help us look up the parent inode numbers. */
 
 struct iso_path_table{
-	char  name_len[2];	/* 721 */
+	unsigned char  name_len[2];	/* 721 */
 	char extent[4];		/* 731 */
 	char  parent[2];	/* 721 */
 	char name[0];
@@ -113,7 +113,7 @@ struct iso_directory_record {
 	char file_unit_size		[ISODCL (27, 27)]; /* 711 */
 	char interleave			[ISODCL (28, 28)]; /* 711 */
 	char volume_sequence_number	[ISODCL (29, 32)]; /* 723 */
-	char name_len			[ISODCL (33, 33)]; /* 711 */
+	unsigned char name_len		[ISODCL (33, 33)]; /* 711 */
 	char name			[0];
 };
 

@@ -65,7 +65,7 @@ static int ext_match(int len,const char * name,struct ext_dir_entry * de)
 	if (len < EXT_NAME_LEN && len != de->name_len)
 		return 0;
 	__asm__("cld\n\t"
-		"fs ; repe ; cmpsb\n\t"
+		"repe ; cmpsb\n\t"
 		"setz %%al"
 		:"=a" (same)
 		:"0" (0),"S" ((long) name),"D" ((long) de->name),"c" (len)
@@ -291,7 +291,7 @@ printk ("ext_add_entry : creating next block\n");
 			dir->i_mtime = CURRENT_TIME;
 			de->name_len = namelen;
 			for (i=0; i < namelen ; i++)
-				de->name[i]=get_fs_byte(name+i);
+				de->name[i] = name[i];
 			bh->b_dirt = 1;
 			*res_dir = de;
 			return bh;
@@ -612,6 +612,8 @@ int ext_unlink(struct inode * dir, const char * name, int len)
 	inode->i_nlink--;
 	inode->i_dirt = 1;
 	inode->i_ctime = CURRENT_TIME;
+	dir->i_ctime = dir->i_mtime = CURRENT_TIME;
+	dir->i_dirt = 1;
 	retval = 0;
 end_unlink:
 	brelse(bh);
@@ -643,7 +645,7 @@ int ext_symlink(struct inode * dir, const char * name, int len, const char * sym
 		return -ENOSPC;
 	}
 	i = 0;
-	while (i < 1023 && (c=get_fs_byte(symname++)))
+	while (i < 1023 && (c = *(symname++)))
 		name_block->b_data[i++] = c;
 	name_block->b_data[i] = 0;
 	name_block->b_dirt = 1;
@@ -716,12 +718,9 @@ int ext_link(struct inode * oldinode, struct inode * dir, const char * name, int
 
 static int subdir(struct inode * new, struct inode * old)
 {
-	unsigned short fs;
 	int ino;
 	int result;
 
-	__asm__("mov %%fs,%0":"=r" (fs));
-	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x10));
 	new->i_count++;
 	result = 0;
 	for (;;) {
@@ -738,7 +737,6 @@ static int subdir(struct inode * new, struct inode * old)
 			break;
 	}
 	iput(new);
-	__asm__("mov %0,%%fs"::"r" (fs));
 	return result;
 }
 

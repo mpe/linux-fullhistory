@@ -18,7 +18,7 @@
 #include <asm/segment.h>
 
 int sys_close(int fd);
-void getrusage(struct task_struct *, int, struct rusage *);
+int getrusage(struct task_struct *, int, struct rusage *);
 
 int send_sig(long sig,struct task_struct * p,int priv)
 {
@@ -63,7 +63,7 @@ void release(struct task_struct * p)
 	if (!p)
 		return;
 	if (p == current) {
-		printk("task releasing itself\n\r");
+		printk("task releasing itself\n");
 		return;
 	}
 	for (i=1 ; i<NR_TASKS ; i++)
@@ -103,7 +103,7 @@ int bad_task_ptr(struct task_struct *p)
  * and checking it corresponds with the process tree defined by p_cptr and 
  * p_pptr;
  */
-void audit_ptree()
+void audit_ptree(void)
 {
 	int	i;
 
@@ -449,8 +449,11 @@ int sys_wait4(pid_t pid,unsigned long * stat_addr, int options, struct rusage * 
 	struct task_struct *p;
 	unsigned long oldblocked;
 
-	if (stat_addr)
-		verify_area(stat_addr,4);
+	if (stat_addr) {
+		flag = verify_area(VERIFY_WRITE, stat_addr, 4);
+		if (flag)
+			return flag;
+	}
 repeat:
 	current->signal &= ~(1<<(SIGCHLD-1));
 	flag=0;

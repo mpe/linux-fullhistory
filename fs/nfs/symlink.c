@@ -43,7 +43,6 @@ static int nfs_follow_link(struct inode *dir, struct inode *inode,
 			   int flag, int mode, struct inode **res_inode)
 {
 	int error;
-	unsigned short fs;
 	char *res;
 
 	*res_inode = NULL;
@@ -74,13 +73,10 @@ static int nfs_follow_link(struct inode *dir, struct inode *inode,
 		return error;
 	}
 	iput(inode);
-	__asm__("mov %%fs,%0":"=r" (fs));
-	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x10));
 	current->link_count++;
 	error = open_namei(res, flag, mode, res_inode, dir);
 	current->link_count--;
 	kfree_s(res, NFS_MAXPATHLEN + 1);
-	__asm__("mov %0,%%fs"::"r" (fs));
 	return error;
 }
 

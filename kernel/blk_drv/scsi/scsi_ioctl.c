@@ -137,7 +137,7 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd)
 static int ioctl_command(Scsi_Device *dev, void *buffer)
 {
 	char * buf;
-	char cmd[10];
+	char cmd[12];
 	char * cmd_in;
 	Scsi_Cmnd * SCpnt;
 	unsigned char opcode;
@@ -164,8 +164,9 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
 	  buf = NULL;
 
 	memcpy_fromfs ((void *) cmd,  cmd_in,  cmdlen = COMMAND_SIZE (opcode));
-	memcpy_fromfs ((void *) buf,  (void *) (cmd_in + cmdlen),  inlen);
+	memcpy_fromfs ((void *) buf,  (void *) (cmd_in + cmdlen), inlen > MAX_BUF ? MAX_BUF : inlen);
 	host = dev->host_no;
+	cmd[1] = ( cmd[1] & 0x1f ) | (dev->lun << 5);
 
 #ifndef DEBUG_NO_CMD
 	
@@ -181,7 +182,9 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
 	  while (SCpnt->request.dev != 0xfffe) schedule();
 	};
 
-	verify_area(cmd_in, (outlen > MAX_BUF) ? MAX_BUF  : outlen);
+	result = verify_area(VERIFY_WRITE, cmd_in, (outlen > MAX_BUF) ? MAX_BUF  : outlen);
+	if (result)
+		return result;
 	memcpy_tofs ((void *) cmd_in,  buf,  (outlen > MAX_BUF) ? MAX_BUF  : outlen);
 	result = SCpnt->result;
 	SCpnt->request.dev = -1;  /* Mark as not busy */
@@ -194,10 +197,10 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
 	printk("scsi_ioctl : device %d.  command = ", dev->id);
 	for (i = 0; i < 10; ++i)
 		printk("%02x ", cmd[i]);
-	printk("\r\nbuffer =");
+	printk("\nbuffer =");
 	for (i = 0; i < 20; ++i)
 		printk("%02x ", buf[i]);
-	printk("\r\n");
+	printk("\n");
 	printk("inlen = %d, outlen = %d, cmdlen = %d\n",
 		inlen, outlen, cmdlen);
 	printk("buffer = %d, cmd_in = %d\n", buffer, cmd_in);

@@ -382,7 +382,7 @@ ip_set_dev (struct ip_config *u_ipc)
 
 
 
-/*  verify_area (u_ipc, sizeof (ipc));*/
+/*  verify_area (VERIFY_WRITE, u_ipc, sizeof (ipc));*/
   memcpy_fromfs(&ipc, u_ipc, sizeof (ipc));
   ipc.name[MAX_IP_NAME-1] = 0;
   dev = get_dev (ipc.name);

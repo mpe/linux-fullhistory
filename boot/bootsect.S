@@ -35,7 +35,6 @@ BOOTSEG   = 0x07C0			! original address of boot-sector
 INITSEG   = DEF_INITSEG			! we move boot here - out of the way
 SETUPSEG  = DEF_SETUPSEG		! setup starts here
 SYSSEG    = DEF_SYSSEG			! system loaded at 0x10000 (65536).
-ENDSEG    = SYSSEG + SYSSIZE		! where to stop loading
 
 ! ROOT_DEV & SWAP_DEV are now written by "build".
 ROOT_DEV = 0
@@ -256,8 +255,9 @@ die:	jne die			! es must be at 64kB boundary
 	xor bx,bx		! bx is starting address within segment
 rp_read:
 	mov ax,es
-	cmp ax,#ENDSEG		! have we loaded all yet?
-	jb ok1_read
+	sub ax,#SYSSEG
+	cmp ax,syssize		! have we loaded all yet?
+	jbe ok1_read
 	ret
 ok1_read:
 	seg cs
@@ -429,7 +429,9 @@ msg1:
 	.byte 13,10
 	.ascii "Loading"
 
-.org 502
+.org 500
+syssize:
+	.word SYSSIZE
 swap_dev:
 	.word SWAP_DEV
 ram_size:

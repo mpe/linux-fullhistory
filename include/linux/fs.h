@@ -157,9 +157,11 @@ struct buffer_head {
 #include <linux/pipe_fs_i.h>
 #include <linux/minix_fs_i.h>
 #include <linux/ext_fs_i.h>
+#include <linux/ext2_fs_i.h>
 #include <linux/msdos_fs_i.h>
 #include <linux/iso_fs_i.h>
 #include <linux/nfs_fs_i.h>
+#include <linux/xia_fs_i.h>
 
 struct inode {
 	dev_t		i_dev;
@@ -195,9 +197,11 @@ struct inode {
 		struct pipe_inode_info pipe_i;
 		struct minix_inode_info minix_i;
 		struct ext_inode_info ext_i;
+		struct ext2_inode_info ext2_i;
 		struct msdos_inode_info msdos_i;
 		struct iso_inode_info isofs_i;
 		struct nfs_inode_info nfs_i;
+		struct xiafs_inode_info xiafs_i;
 	} u;
 };
 
@@ -224,9 +228,11 @@ struct file_lock {
 
 #include <linux/minix_fs_sb.h>
 #include <linux/ext_fs_sb.h>
+#include <linux/ext2_fs_sb.h>
 #include <linux/msdos_fs_sb.h>
 #include <linux/iso_fs_sb.h>
 #include <linux/nfs_fs_sb.h>
+#include <linux/xia_fs_sb.h>
 
 struct super_block {
 	dev_t s_dev;
@@ -244,9 +250,11 @@ struct super_block {
 	union {
 		struct minix_sb_info minix_sb;
 		struct ext_sb_info ext_sb;
+		struct ext2_sb_info ext2_sb;
 		struct msdos_sb_info msdos_sb;
 		struct isofs_sb_info isofs_sb;
 		struct nfs_sb_info nfs_sb;
+		struct xiafs_sb_info xiafs_sb;
 	} u;
 };
 
@@ -257,7 +265,7 @@ struct file_operations {
 	int (*readdir) (struct inode *, struct file *, struct dirent *, int);
 	int (*select) (struct inode *, struct file *, int, select_table *);
 	int (*ioctl) (struct inode *, struct file *, unsigned int, unsigned int);
-	int (*mmap) (void);
+	int (*mmap) (struct inode *, struct file *, unsigned long, size_t, int, unsigned long);
 	int (*open) (struct inode *, struct file *);
 	void (*release) (struct inode *, struct file *);
 	int (*fsync) (struct inode *, struct file *);
@@ -296,6 +304,9 @@ struct file_system_type {
 	char *name;
 	int requires_dev;
 };
+
+extern int getname(const char * filename, char **result);
+extern void putname(char * name);
 
 extern int register_blkdev(unsigned int, const char *, struct file_operations *);
 extern int blkdev_open(struct inode * inode, struct file * filp);
@@ -355,7 +366,7 @@ extern void ll_rw_page(int rw, int dev, int nr, char * buffer);
 extern void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buffer);
 extern void brelse(struct buffer_head * buf);
 extern struct buffer_head * bread(dev_t dev, int block, int size);
-extern void bread_page(unsigned long addr,dev_t dev,int b[4]);
+extern unsigned long bread_page(unsigned long addr,dev_t dev,int b[],int size,int prot);
 extern struct buffer_head * breada(dev_t dev,int block,...);
 extern void put_super(dev_t dev);
 extern dev_t ROOT_DEV;

@@ -485,7 +485,7 @@ int reg_store_extended(void)
       ms = 0x80000000;
     }
   RE_ENTRANT_CHECK_OFF
-  verify_area(d,10);
+  verify_area(VERIFY_WRITE,d,10);
   put_fs_long(ls, (unsigned long *) d);
   put_fs_long(ms, 1 + (unsigned long *) d);
   put_fs_word((unsigned short)e | sign, 4 + (short *) d);
@@ -620,7 +620,7 @@ int reg_store_double(void)
 	  /* Put out the QNaN indefinite */
 put_indefinite:
 	  RE_ENTRANT_CHECK_OFF
-	  verify_area((void *)dfloat,8);
+	  verify_area(VERIFY_WRITE,(void *)dfloat,8);
 	  put_fs_long(0, (unsigned long *) dfloat);
 	  put_fs_long(0xfff80000, 1 + (unsigned long *) dfloat);
 	  RE_ENTRANT_CHECK_ON
@@ -639,7 +639,7 @@ put_indefinite:
     l[1] |= 0x80000000;
 
   RE_ENTRANT_CHECK_OFF
-  verify_area((void *)dfloat,8);
+  verify_area(VERIFY_WRITE,(void *)dfloat,8);
   put_fs_long(l[0], (unsigned long *)dfloat);
   put_fs_long(l[1], 1 + (unsigned long *)dfloat);
   RE_ENTRANT_CHECK_ON
@@ -747,7 +747,7 @@ int reg_store_single(void)
 	  /* Put out the QNaN indefinite */
 put_indefinite:
 	  RE_ENTRANT_CHECK_OFF
-	  verify_area((void *)single,4);
+	  verify_area(VERIFY_WRITE,(void *)single,4);
 	  put_fs_long(0xffc00000, (unsigned long *) single);
 	  RE_ENTRANT_CHECK_ON
 	  return 1;
@@ -772,7 +772,7 @@ put_indefinite:
     templ |= 0x80000000;
 
   RE_ENTRANT_CHECK_OFF
-  verify_area((void *)single,4);
+  verify_area(VERIFY_WRITE,(void *)single,4);
   put_fs_long(templ,(unsigned long *) single);
   RE_ENTRANT_CHECK_ON
 
@@ -824,7 +824,7 @@ put_indefinite:
     tll = - tll;
 
   RE_ENTRANT_CHECK_OFF
-  verify_area((void *)d,8);
+  verify_area(VERIFY_WRITE,(void *)d,8);
   put_fs_long(((long *)&tll)[0],(unsigned long *) d);
   put_fs_long(((long *)&tll)[1],1 + (unsigned long *) d);
   RE_ENTRANT_CHECK_ON
@@ -848,7 +848,7 @@ int reg_store_int32(void)
 	  /* The masked response */
 	  /* Put out the QNaN indefinite */
 	  RE_ENTRANT_CHECK_OFF
-	  verify_area(d,4);
+	  verify_area(VERIFY_WRITE,d,4);
 	  put_fs_long(0x80000000, (unsigned long *) d);
 	  RE_ENTRANT_CHECK_ON
 	  return 1;
@@ -877,7 +877,7 @@ int reg_store_int32(void)
     t.sigl = -(long)t.sigl;
 
   RE_ENTRANT_CHECK_OFF
-  verify_area(d,4);
+  verify_area(VERIFY_WRITE,d,4);
   put_fs_long(t.sigl, (unsigned long *) d);
   RE_ENTRANT_CHECK_ON
 
@@ -901,7 +901,7 @@ int reg_store_int16(void)
 	  /* The masked response */
 	  /* Put out the QNaN indefinite */
 	  RE_ENTRANT_CHECK_OFF
-	  verify_area(d,2);
+	  verify_area(VERIFY_WRITE,d,2);
 	  put_fs_word(0x8000, (unsigned short *) d);
 	  RE_ENTRANT_CHECK_ON
 	  return 1;
@@ -930,7 +930,7 @@ int reg_store_int16(void)
     t.sigl = -t.sigl;
 
   RE_ENTRANT_CHECK_OFF
-  verify_area(d,2);
+  verify_area(VERIFY_WRITE,d,2);
   put_fs_word((short)t.sigl,(short *) d);
   RE_ENTRANT_CHECK_ON
 
@@ -977,7 +977,7 @@ int reg_store_bcd(void)
 put_indefinite:
 	  /* Produce "indefinite" */
 	  RE_ENTRANT_CHECK_OFF
-	  verify_area(d,10);
+	  verify_area(VERIFY_WRITE,d,10);
 	  put_fs_byte(0xff,(unsigned char *) d+7);
 	  put_fs_byte(0xff,(unsigned char *) d+8);
 	  put_fs_byte(0xff,(unsigned char *) d+9);
@@ -988,7 +988,7 @@ put_indefinite:
 	return 0;
     }
 
-  verify_area(d,10);
+  verify_area(VERIFY_WRITE,d,10);
   for ( i = 0; i < 9; i++)
     {
       b = div_small(&ll, 10);
@@ -1149,7 +1149,7 @@ char *fstenv(void)
   unsigned char tag;
   int i;
 
-  verify_area(d,28);
+  verify_area(VERIFY_WRITE,d,28);
 
   for ( i = 7; i >= 0; i-- )
     {
@@ -1195,7 +1195,7 @@ void fsave(void)
   short e;
 
   d = fstenv();
-  verify_area(d,80);
+  verify_area(VERIFY_WRITE,d,80);
   for ( i = 0; i < 8; i++ )
     {
       /* store each register */

@@ -274,18 +274,21 @@ int sys_ptrace(long request, long pid, long addr, long data)
 			res = read_long(child, addr, &tmp);
 			if (res < 0)
 				return res;
-			verify_area((void *) data, 4);
-			put_fs_long(tmp,(unsigned long *) data);
-			return 0;
+			res = verify_area(VERIFY_WRITE, (void *) data, 4);
+			if (!res)
+				put_fs_long(tmp,(unsigned long *) data);
+			return res;
 		}
 
 	/* read the word at location addr in the USER area. */
 		case PTRACE_PEEKUSR: {
-			int tmp;
+			int tmp, res;
 			addr = addr >> 2; /* temporary hack. */
 			if (addr < 0 || addr >= 17)
 				return -EIO;
-			verify_area((void *) data, 4);
+			res = verify_area(VERIFY_WRITE, (void *) data, 4);
+			if (res)
+				return res;
 			tmp = get_stack_long(child, 4*addr - MAGICNUMBER);
 			put_fs_long(tmp,(unsigned long *) data);
 			return 0;

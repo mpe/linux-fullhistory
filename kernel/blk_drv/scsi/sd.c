@@ -435,7 +435,7 @@ repeat:
 			cmd[0] = READ_6;
 			break;
 		default :
-			printk ("Unknown sd command %d\r\n", SCpnt->request.cmd);
+			printk ("Unknown sd command %d\n", SCpnt->request.cmd);
 			panic("");
 		      }
 

@@ -14,7 +14,8 @@ struct statfs {
 	long f_files;
 	long f_ffree;
 	fsid_t f_fsid;
-	long f_spare[7];
+	long f_namelen;
+	long f_spare[6];
 };
 
 #endif

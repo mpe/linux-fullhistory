@@ -85,6 +85,7 @@ void usage(void)
 int main(int argc, char ** argv)
 {
 	int i,c,id, sz;
+	unsigned long sys_size;
 	char buf[1024];
 	struct exec *ex = (struct exec *)buf;
 	char major_root, minor_root;
@@ -184,7 +185,8 @@ int main(int argc, char ** argv)
 		die("Non-GCC header of 'system'");
 	sz = N_SYMOFF(*ex) - GCC_HEADER + 4;
 	fprintf(stderr,"System is %d bytes.\n", sz);
-	if (sz > SYS_SIZE*16)
+	sys_size = (sz + 15) / 16;
+	if (sys_size > SYS_SIZE)
 		die("System is too big");
 	while (sz > 0) {
 		int l, n;
@@ -203,5 +205,10 @@ int main(int argc, char ** argv)
 		sz -= l;
 	}
 	close(id);
+	if (lseek(1,500,0) == 500) {
+		buf[0] = (sys_size & 0xff);
+		buf[1] = ((sys_size >> 8) & 0xff);
+		write(1, buf, 2);
+	}
 	return(0);
 }

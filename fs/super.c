@@ -103,13 +103,15 @@ void put_super(dev_t dev)
 	struct super_block * sb;
 
 	if (dev == ROOT_DEV) {
-		printk("root diskette changed: prepare for armageddon\n\r");
+		printk("VFS: Root device %d/%d: prepare for armageddon\n",
+							MAJOR(dev), MINOR(dev));
 		return;
 	}
 	if (!(sb = get_super(dev)))
 		return;
 	if (sb->s_covered) {
-		printk("Mounted disk changed - tssk, tssk\n\r");
+		printk("VFS: Mounted device %d/%d - tssk, tssk\n",
+						MAJOR(dev), MINOR(dev));
 		return;
 	}
 	if (sb->s_op && sb->s_op->put_super)
@@ -128,7 +130,8 @@ static struct super_block * read_super(dev_t dev,char *name,int flags,void *data
 	if (s)
 		return s;
 	if (!(type = get_fs_type(name))) {
-		printk("get fs type failed %s\n",name);
+		printk("VFS: on device %d/%d: get_fs_type(%s) failed\n",
+						MAJOR(dev), MINOR(dev), name);
 		return NULL;
 	}
 	for (s = 0+super_block ;; s++) {
@@ -181,7 +184,8 @@ static void put_unnamed_dev(dev_t dev)
 	if (!dev)
 		return;
 	if (!unnamed_dev_in_use[dev]) {
-		printk("put_unnamed_dev: trying to free unused device\n");
+		printk("VFS: put_unnamed_dev: freeing unused device %d/%d\n",
+							MAJOR(dev), MINOR(dev));
 		return;
 	}
 	unnamed_dev_in_use[dev] = 0;
@@ -196,7 +200,8 @@ static int do_umount(dev_t dev)
 	if (!(sb=get_super(dev)) || !(sb->s_covered))
 		return -ENOENT;
 	if (!sb->s_covered->i_mount)
-		printk("Mounted inode has i_mount=0\n");
+		printk("VFS: umount(%d/%d): mounted inode has i_mount=0\n",
+							MAJOR(dev), MINOR(dev));
 	if (!fs_may_umount(dev, sb->s_mounted))
 		return -EBUSY;
 	sb->s_covered->i_mount=0;
@@ -366,10 +371,9 @@ int sys_mount(char * dev_name, char * dir_name, char * type,
 
 	if (!suser())
 		return -EPERM;
-	if ((new_flags & (MS_MGC_MSK | MS_REMOUNT)) == (MS_MGC_VAL |
-	    MS_REMOUNT))
-		return do_remount(dir_name,new_flags & ~MS_MGC_MSK &
-		    ~MS_REMOUNT);
+	if ((new_flags & (MS_MGC_MSK | MS_REMOUNT)) == (MS_MGC_VAL | MS_REMOUNT)) {
+		return do_remount(dir_name,new_flags & ~MS_MGC_MSK & ~MS_REMOUNT);
+	}
 	if (type) {
 		for (i = 0 ; i < 100 ; i++)
 			if (!(tmp[i] = get_fs_byte(type++)))
@@ -397,8 +401,7 @@ int sys_mount(char * dev_name, char * dir_name, char * type,
 			iput(inode);
 			return -ENXIO;
 		}
-	}
-	else {
+	} else {
 		if (!(dev = get_unnamed_dev()))
 			return -EMFILE;
 		inode = NULL;
@@ -443,7 +446,7 @@ void mount_root(void)
 	memset(super_block, 0, sizeof(super_block));
 	fcntl_init_locks();
 	if (MAJOR(ROOT_DEV) == 2) {
-		printk("Insert root floppy and press ENTER");
+		printk("VFS: Insert root floppy and press ENTER");
 		wait_for_keypress();
 	}
 	for (fs_type = file_systems; fs_type->read_super; fs_type++) {
@@ -460,5 +463,5 @@ void mount_root(void)
 			return;
 		}
 	}
-	panic("Unable to mount root");
+	panic("VFS: Unable to mount root");
 }

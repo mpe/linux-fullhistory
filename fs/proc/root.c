@@ -90,7 +90,7 @@ static int proc_lookuproot(struct inode * dir,const char * name, int len,
 	} else {
 		pid = 0;
 		while (len-- > 0) {
-			c = get_fs_byte(name) - '0';
+			c = *name - '0';
 			name++;
 			if (c > 9) {
 				pid = 0;

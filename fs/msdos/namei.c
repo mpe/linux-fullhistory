@@ -36,9 +36,9 @@ static int msdos_format_name(char conv,const char *name,int len,char *res)
 	char c;
 	int space;
 
-	if (get_fs_byte(name) == DELETED_FLAG) return -EINVAL;
-	if (get_fs_byte(name) == '.' && (len == 1 || (len == 2 &&
-	    get_fs_byte(name+1) == '.'))) {
+	if (*(unsigned char *)name == DELETED_FLAG) return -EINVAL;
+	if (name[0] == '.' && (len == 1 || (len == 2 &&
+	    name[1] == '.'))) {
 		memset(res+1,' ',10);
 		while (len--) *res++ = '.';
 		return 0;
@@ -46,7 +46,7 @@ static int msdos_format_name(char conv,const char *name,int len,char *res)
 	space = 0; /* to make GCC happy */
 	c = 0;
 	for (walk = res; len && walk-res < 8; walk++) {
-	    	c = get_fs_byte(name++);
+	    	c = *(name++);
 		len--;
 		if (conv != 'r' && strchr(bad_chars,c)) return -EINVAL;
 		if (conv == 's' && strchr(bad_if_strict,c)) return -EINVAL;
@@ -61,16 +61,16 @@ static int msdos_format_name(char conv,const char *name,int len,char *res)
 	}
 	if (space) return -EINVAL;
 	if (conv == 's' && len && c != '.') {
-		c = get_fs_byte(name++);
+		c = *(name++);
 		len--;
 		if (c != '.') return -EINVAL;
 	}
-	while (c != '.' && len--) c = get_fs_byte(name++);
+	while (c != '.' && len--) c = *(name++);
 	if (walk == res) return -EINVAL;
 	if (c == '.') {
 		while (walk-res < 8) *walk++ = ' ';
 		while (len > 0 && walk-res < MSDOS_NAME) {
-			c = get_fs_byte(name++);
+			c = *(name++);
 			len--;
 			if (conv != 'r' && strchr(bad_chars,c)) return -EINVAL;
 			if (conv == 's' && strchr(bad_if_strict,c))
@@ -122,11 +122,11 @@ int msdos_lookup(struct inode *dir,const char *name,int len,
 		iput(dir);
 		return -ENOENT;
 	}
-	if (len == 1 && get_fs_byte(name) == '.') {
+	if (len == 1 && name[0] == '.') {
 		*result = dir;
 		return 0;
 	}
-	if (len == 2 && get_fs_byte(name) == '.' && get_fs_byte(name+1) == '.')
+	if (len == 2 && name[0] == '.' && name[1] == '.')
 	    {
 		ino = msdos_parent_ino(dir,0);
 		iput(dir);
@@ -139,7 +139,7 @@ int msdos_lookup(struct inode *dir,const char *name,int len,
 		return res;
 	}
 	if (bh) brelse(bh);
-/* printk("lookup: ino=%d\r\n",ino); */
+/* printk("lookup: ino=%d\n",ino); */
 	if (!(*result = iget(dir->i_sb,ino))) {
 		iput(dir);
 		return -EACCES;
@@ -305,8 +305,8 @@ int msdos_rmdir(struct inode *dir,const char *name,int len)
 	bh = NULL;
 	inode = NULL;
 	res = -EINVAL;
-	if (get_fs_byte(name) == '.' && (len == 1 || (len == 2 &&
-	    get_fs_byte(name+1) == '.'))) goto rmdir_done;
+	if (name[0] == '.' && (len == 1 || (len == 2 &&
+	    name[1] == '.'))) goto rmdir_done;
 	if ((res = msdos_find(dir,name,len,&bh,&de,&ino)) < 0) goto rmdir_done;
 	res = -ENOENT;
 	if (!(inode = iget(dir->i_sb,ino))) goto rmdir_done;

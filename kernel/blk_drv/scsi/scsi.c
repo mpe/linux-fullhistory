@@ -143,7 +143,7 @@ static void scan_scsis_done (Scsi_Cmnd * SCpnt)
 	{
 	
 #ifdef DEBUG
-	printk ("scan_scsis_done(%d, %06x)\n\r", SCpnt->host, SCpnt->result);
+	printk ("scan_scsis_done(%d, %06x)\n", SCpnt->host, SCpnt->result);
 #endif	
 	SCpnt->request.dev = 0xfffe;
 	}
@@ -379,19 +379,19 @@ static void scsi_times_out (Scsi_Cmnd * SCpnt)
 		{
 		case NORMAL_TIMEOUT:
 			if (!in_scan)
-			      printk("SCSI host %d timed out - aborting command \r\n",
+			      printk("SCSI host %d timed out - aborting command\n",
 				SCpnt->host);
 			
 			if (!scsi_abort	(SCpnt, DID_TIME_OUT))
 				return;				
 		case IN_ABORT:
-			printk("SCSI host %d abort() timed out - reseting \r\n",
+			printk("SCSI host %d abort() timed out - reseting\n",
 				SCpnt->host);
 			if (!scsi_reset (SCpnt)) 
 				return;
 		case IN_RESET:
 		case (IN_ABORT | IN_RESET):
-			printk("Unable to reset scsi host %d\r\n",SCpnt->host);
+			printk("Unable to reset scsi host %d\n",SCpnt->host);
 			panic("");
 		default:
 			INTERNAL_ERROR;
@@ -963,6 +963,16 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 	case DID_ABORT:
 		exit = (DRIVER_INVALID | SUGGEST_ABORT);
 		break;	
+        case DID_RESET:
+                if(msg_byte(result) == GOOD &&
+                      status_byte(result) == CHECK_CONDITION) {
+                              scsi_request_sense (SCpnt);
+                              status = PENDING;
+                              break;
+                              };
+                status=REDO;
+                exit = SUGGEST_RETRY;
+                break;
 	default : 		
 		exit = (DRIVER_ERROR | SUGGEST_DIE);
 	}
@@ -975,7 +985,7 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 		case MAYREDO:
 
 #ifdef DEBUG
-	printk("In MAYREDO, allowing %d retries, have %d\n\r",
+	printk("In MAYREDO, allowing %d retries, have %d\n",
 	       SCpnt->allowed, SCpnt->retries);
 #endif
 

@@ -66,37 +66,37 @@ static void fld_const(FPU_REG *c)
 }
 
 
-static void fld1()
+static void fld1(void)
 {
   fld_const(&CONST_1);
 }
 
-static void fldl2t()
+static void fldl2t(void)
 {
   fld_const(&CONST_L2T);
 }
 
-static void fldl2e()
+static void fldl2e(void)
 {
   fld_const(&CONST_L2E);
 }
 
-static void fldpi()
+static void fldpi(void)
 {
   fld_const(&CONST_PI);
 }
 
-static void fldlg2()
+static void fldlg2(void)
 {
   fld_const(&CONST_LG2);
 }
 
-static void fldln2()
+static void fldln2(void)
 {
   fld_const(&CONST_LN2);
 }
 
-static void fldz()
+static void fldz(void)
 {
   fld_const(&CONST_Z);
 }
@@ -105,7 +105,7 @@ static FUNC constants_table[] = {
   fld1, fldl2t, fldl2e, fldpi, fldlg2, fldln2, fldz, Un_impl
 };
 
-void fconst()
+void fconst(void)
 {
   (constants_table[FPU_rm])();
 }

@@ -102,12 +102,12 @@ typedef struct fd_set {
 			"=m" (*(fd_set *) (fdsetp)):"r" ((int) (fd)))
 
 #undef	__FD_ISSET
-#define __FD_ISSET(fd,fdsetp) ({ \
-		char __result; \
+#define __FD_ISSET(fd,fdsetp) (__extension__ ({ \
+		unsigned char __result; \
 		__asm__ __volatile__("btl %1,%2 ; setb %0" \
 			:"=q" (__result) :"r" ((int) (fd)), \
 			"m" (*(fd_set *) (fdsetp))); \
-		__result; })
+		__result; }))
 
 #undef	__FD_ZERO
 #define __FD_ZERO(fdsetp) \

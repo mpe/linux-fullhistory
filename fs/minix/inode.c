@@ -74,7 +74,13 @@ struct super_block *minix_read_super(struct super_block *s,void *data)
 	s->u.minix_sb.s_max_size = ms->s_max_size;
 	s->s_magic = ms->s_magic;
 	brelse(bh);
-	if (s->s_magic != MINIX_SUPER_MAGIC) {
+	if (s->s_magic == MINIX_SUPER_MAGIC) {
+		s->u.minix_sb.s_dirsize = 16;
+		s->u.minix_sb.s_namelen = 14;
+	} else if (s->s_magic == MINIX_SUPER_MAGIC2) {
+		s->u.minix_sb.s_dirsize = 32;
+		s->u.minix_sb.s_namelen = 30;
+	} else {
 		s->s_dev = 0;
 		unlock_super(s);
 		printk("MINIX-fs magic match failed\n");

@@ -45,7 +45,6 @@ static int isofs_follow_link(struct inode * dir, struct inode * inode,
 	int flag, int mode, struct inode ** res_inode)
 {
 	int error;
-	unsigned short fs;
 	char * pnt;
 
 	if (!dir) {
@@ -62,7 +61,6 @@ static int isofs_follow_link(struct inode * dir, struct inode * inode,
 		*res_inode = inode;
 		return 0;
 	}
-	__asm__("mov %%fs,%0":"=r" (fs));
 	if ((current->link_count > 5) ||
 	   !(pnt = get_rock_ridge_symlink(inode))) {
 		iput(dir);
@@ -71,11 +69,9 @@ static int isofs_follow_link(struct inode * dir, struct inode * inode,
 		return -ELOOP;
 	}
 	iput(inode);
-	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x10));
 	current->link_count++;
 	error = open_namei(pnt,flag,mode,res_inode,dir);
 	current->link_count--;
-	__asm__("mov %0,%%fs"::"r" (fs));
 	kfree(pnt);
 	return error;
 }

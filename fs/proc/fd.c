@@ -70,8 +70,8 @@ static int proc_lookupfd(struct inode * dir,const char * name, int len,
 		iput(dir);
 		return -ENOENT;
 	}
-	if (!len || (get_fs_byte(name) == '.' && (len == 1 ||
-	    (get_fs_byte(name+1) == '.' && len == 2)))) {
+	if (!len || (name[0] == '.' && (len == 1 ||
+	    (name[1] == '.' && len == 2)))) {
 		if (len < 2) {
 			*result = dir;
 			return 0;
@@ -86,7 +86,7 @@ static int proc_lookupfd(struct inode * dir,const char * name, int len,
 	iput(dir);
 	fd = 0;
 	while (len-- > 0) {
-		c = get_fs_byte(name) - '0';
+		c = *name - '0';
 		name++;
 		if (c > 9) {
 			fd = 0xfffff;

@@ -303,7 +303,7 @@ sk_inuse( struct proto *prot, int num)
   for (sk = prot->sock_array[num & (SOCK_ARRAY_SIZE -1 )];
        sk != NULL; sk=sk->next)
     {
-      if (sk->dummy_th.source == num) return (1);
+      if (sk->num == num) return (1);
     }
   return (0);
 }
@@ -719,7 +719,7 @@ ip_proto_setsockopt(struct socket *sock, int level, int optname,
      }
     if (optval == NULL) return (-EINVAL);
 
-/*    verify_area (optval, sizeof (int));*/
+/*    verify_area (VERIFY_WRITE, optval, sizeof (int));*/
     val = get_fs_long ((unsigned long *)optval);
     switch (optname)
       {
@@ -837,10 +837,10 @@ ip_proto_getsockopt(struct socket *sock, int level, int optname,
 	  val = sk->priority;
 	  break;
       }
-    verify_area (optlen, sizeof (int));
+    verify_area (VERIFY_WRITE, optlen, sizeof (int));
     put_fs_long (sizeof(int),(unsigned long *) optlen);
 
-    verify_area(optval, sizeof (int));
+    verify_area(VERIFY_WRITE, optval, sizeof (int));
     put_fs_long (val, (unsigned long *)optval);
     return (0);
 }
@@ -1019,7 +1019,6 @@ ip_proto_create (struct socket *sock, int protocol)
   sk->urginline = 0;
   sk->intr = 0;
   sk->linger = 0;
-  sk->rtt = 0;
   sk->destroy = 0;
   sk->reuse = 0;
   sk->priority = 1;
@@ -1177,7 +1176,7 @@ ip_proto_bind (struct socket *sock, struct sockaddr *uaddr,
   if (sk->state != TCP_CLOSE) return (-EIO);
   if (sk->num != 0) return (-EINVAL);
 
-/*  verify_area (uaddr, addr_len);*/
+/*  verify_area (VERIFY_WRITE, uaddr, addr_len);*/
   memcpy_fromfs (&addr, uaddr, min (sizeof (addr), addr_len));
 
 #if 0
@@ -1413,9 +1412,9 @@ ip_proto_getname(struct socket *sock, struct sockaddr *uaddr,
 	sin.sin_addr.s_addr = sk->saddr;
     }
   len = sizeof (sin);
-  verify_area (uaddr, len);
+  verify_area (VERIFY_WRITE, uaddr, len);
   memcpy_tofs(uaddr, &sin, sizeof (sin));
-  verify_area(uaddr_len, sizeof (len));
+  verify_area(VERIFY_WRITE, uaddr_len, sizeof (len));
   put_fs_long (len, uaddr_len);
   return (0);
 }
@@ -1677,7 +1676,7 @@ ip_proto_ioctl (struct socket *sock, unsigned int cmd,
      case FIOGETOWN:
      case SIOCGPGRP:
        {
-	 verify_area ((void *)arg, sizeof (long));
+	 verify_area (VERIFY_WRITE, (void *)arg, sizeof (long));
 	 put_fs_long (sk->proc, (void *)arg);
 	 return (0);
        }

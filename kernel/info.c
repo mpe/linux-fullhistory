@@ -16,10 +16,13 @@
 
 int sys_sysinfo(struct sysinfo *info)
 {
+	int error;
 	struct sysinfo val;
 	struct task_struct **p;
 
-	verify_area(info, sizeof(struct sysinfo));
+	error = verify_area(VERIFY_WRITE, info, sizeof(struct sysinfo));
+	if (error)
+		return error;
 	memset((char *)&val, 0, sizeof(struct sysinfo));
 
 	val.uptime = (jiffies + jiffies_offset) / HZ;

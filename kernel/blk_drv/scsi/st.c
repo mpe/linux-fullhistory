@@ -1109,7 +1109,9 @@ static int st_ioctl(struct inode * inode,struct file * file,
      if (((cmd_in & IOCSIZE_MASK) >> IOCSIZE_SHIFT) != sizeof(mtc))
        return (-EINVAL);
 
-     verify_area((void *)arg, sizeof(mtc));
+     i = verify_area(VERIFY_WRITE, (void *)arg, sizeof(mtc));
+     if (i)
+        return i;
 
      memcpy_fromfs((char *) &mtc, (char *)arg, sizeof(struct mtop));
 
@@ -1125,7 +1127,9 @@ static int st_ioctl(struct inode * inode,struct file * file,
 
      if (((cmd_in & IOCSIZE_MASK) >> IOCSIZE_SHIFT) != sizeof(struct mtget))
        return (-EINVAL);
-     verify_area((void *)arg, sizeof(struct mtget));
+     i = verify_area(VERIFY_WRITE, (void *)arg, sizeof(struct mtget));
+     if (i)
+       return i;
 
      memcpy_tofs((char *)arg, (char *)scsi_tapes[dev].buffer->mt_status,
 		 sizeof(struct mtget));
@@ -1142,7 +1146,9 @@ static int st_ioctl(struct inode * inode,struct file * file,
      if (i < 0)
        return i;
 
-     verify_area((void *)arg, sizeof(struct mtpos));
+     i = verify_area(VERIFY_WRITE, (void *)arg, sizeof(struct mtpos));
+     if (i)
+       return i;
 
      SCpnt = allocate_device(NULL, scsi_tapes[dev].device->index, 1);
 

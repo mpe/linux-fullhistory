@@ -36,7 +36,6 @@ unsigned long * prof_buffer = NULL;
 unsigned long prof_len = 0;
 
 #define _S(nr) (1<<((nr)-1))
-#define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
 
 #define LATCH (1193180/HZ)
 
@@ -71,7 +70,7 @@ struct {
  *  'math_state_restore()' saves the current math information in the
  * old math state array, and gets the new ones from the current task
  */
-void math_state_restore()
+void math_state_restore(void)
 {
 	if (last_task_used_math == current)
 		return;
@@ -139,18 +138,35 @@ void schedule(void)
 	switch_to(next);
 }
 
+/*
+ * This is a little tricky because POSIX pause (3.4.2.1) should only
+ * return for a caught signal or a signal that terminates the process.
+ * We just block ignored signals or "harmless" default signals.
+ * For suspending signals, we must return so that they are handled
+ * and then pause again.  -- jrs
+ */
+
 int sys_pause(void)
 {
 	unsigned long old_blocked;
 	unsigned long mask;
+	int sig;
 	struct sigaction * sa = current->sigaction;
 
 	old_blocked = current->blocked;
-	for (mask=1 ; mask ; sa++,mask += mask)
-		if (sa->sa_handler == SIG_IGN)
+	/* block everything we can that shouldn't interrupt pause */
+	for (mask = 1, sig = 1; mask; sa++, mask += mask, sig++)
+		if (sa->sa_handler == SIG_IGN || (sa->sa_handler == SIG_DFL
+		    && (sig == SIGCONT || sig == SIGCHLD || sig == SIGWINCH)))
 			current->blocked |= mask;
 	current->state = TASK_INTERRUPTIBLE;
 	schedule();
+	/* if a suspending signal interrupted us we must restart */
+	if (!(current->signal & ~current->blocked &
+		~(_S(SIGSTOP) | _S(SIGTSTP) | _S(SIGTTIN) | _S(SIGTTOU)))) {
+		current->blocked = old_blocked;
+		return -ERESTARTSYS;
+	}
 	current->blocked = old_blocked;
 	return -EINTR;
 }
@@ -308,7 +324,7 @@ void do_floppy_timer(void)
 
 static struct timer_list {
 	long jiffies;
-	void (*fn)();
+	void (*fn)(void);
 	struct timer_list * next;
 } timer_list[TIME_REQUESTS] = { { 0, NULL, NULL }, };
 
@@ -532,21 +548,21 @@ static void show_task(int nr,struct task_struct * p)
 	}
 	while (i<j && !*(stack++))
 		i++;
-	printk("%d/%d chars free in kstack\n\r",i,j);
+	printk("%d/%d chars free in kstack\n",i,j);
 	printk("   PC=%08X.", *(1019 + (unsigned long *) p));
 	if (p->p_ysptr || p->p_osptr) 
-		printk("   Younger sib=%d, older sib=%d\n\r", 
+		printk("   Younger sib=%d, older sib=%d\n", 
 			p->p_ysptr ? p->p_ysptr->pid : -1,
 			p->p_osptr ? p->p_osptr->pid : -1);
 	else
-		printk("\n\r");
+		printk("\n");
 }
 
 void show_state(void)
 {
 	int i;
 
-	printk("\rTask-info:\n\r");
+	printk("Task-info:\n");
 	for (i=0 ; i<NR_TASKS ; i++)
 		if (task[i])
 			show_task(i,task[i]);

@@ -9,7 +9,6 @@
 #include <linux/stat.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
-#include <linux/minix_fs.h>
 
 #include <asm/segment.h>
 
@@ -19,17 +18,20 @@
  */
 int sys_readdir(unsigned int fd, struct dirent * dirent, unsigned int count)
 {
+	int error;
 	struct file * file;
 	struct inode * inode;
 
 	if (fd >= NR_OPEN || !(file = current->filp[fd]) ||
 	    !(inode = file->f_inode))
 		return -EBADF;
+	error = -ENOTDIR;
 	if (file->f_op && file->f_op->readdir) {
-		verify_area(dirent, sizeof (*dirent));
-		return file->f_op->readdir(inode,file,dirent,count);
+		error = verify_area(VERIFY_WRITE, dirent, sizeof (*dirent));
+		if (!error)
+			error = file->f_op->readdir(inode,file,dirent,count);
 	}
-	return -ENOTDIR;
+	return error;
 }
 
 int sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
@@ -67,6 +69,7 @@ int sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
 
 int sys_read(unsigned int fd,char * buf,unsigned int count)
 {
+	int error;
 	struct file * file;
 	struct inode * inode;
 
@@ -78,12 +81,15 @@ int sys_read(unsigned int fd,char * buf,unsigned int count)
 		return -EINVAL;
 	if (!count)
 		return 0;
-	verify_area(buf,count);
+	error = verify_area(VERIFY_WRITE,buf,count);
+	if (error)
+		return error;
 	return file->f_op->read(inode,file,buf,count);
 }
 
 int sys_write(unsigned int fd,char * buf,unsigned int count)
 {
+	int error;
 	struct file * file;
 	struct inode * inode;
 	
@@ -95,5 +101,8 @@ int sys_write(unsigned int fd,char * buf,unsigned int count)
 		return -EINVAL;
 	if (!count)
 		return 0;
+	error = verify_area(VERIFY_READ,buf,count);
+	if (error)
+		return error;
 	return file->f_op->write(inode,file,buf,count);
 }

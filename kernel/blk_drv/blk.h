@@ -81,8 +81,8 @@ extern int ramdisk_size;
 #define RO_IOCTLS(dev,where) \
   case BLKROSET: if (!suser()) return -EPERM; \
 		 set_device_ro((dev),get_fs_long((long *) (where))); return 0; \
-  case BLKROGET: verify_area((void *) (where), sizeof(long)); \
-		 put_fs_long(is_read_only(dev),(long *) (where)); return 0;
+  case BLKROGET: { int __err = verify_area(VERIFY_WRITE, (void *) (where), sizeof(long)); \
+		   if (!__err) put_fs_long(is_read_only(dev),(long *) (where)); return __err; }
 		 
 #ifdef MAJOR_NR
 
@@ -205,8 +205,8 @@ static void end_request(int uptodate)
 	req = CURRENT;
 	req->errors = 0;
 	if (!uptodate) {
-		printk(DEVICE_NAME " I/O error\n\r");
-		printk("dev %04x, sector %d\n\r",req->dev,req->sector);
+		printk(DEVICE_NAME " I/O error\n");
+		printk("dev %04x, sector %d\n",req->dev,req->sector);
 		req->nr_sectors--;
 		req->nr_sectors &= ~SECTOR_MASK;
 		req->sector += (BLOCK_SIZE / 512);

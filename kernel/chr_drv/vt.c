@@ -137,9 +137,10 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		/*
 		 * this is naive.
 		 */
-		verify_area((void *) arg, sizeof(unsigned char));
-		put_fs_byte(KB_101, (unsigned char *) arg);
-		return 0;
+		i = verify_area(VERIFY_WRITE, (void *) arg, sizeof(unsigned char));
+		if (!i)
+			put_fs_byte(KB_101, (unsigned char *) arg);
+		return i;
 
 	case KDADDIO:
 	case KDDELIO:
@@ -190,9 +191,10 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		return 0;
 
 	case KDGETMODE:
-		verify_area((void *) arg, sizeof(unsigned long));
-		put_fs_long(vt_cons[console].vc_mode, (unsigned long *) arg);
-		return 0;
+		i = verify_area(VERIFY_WRITE, (void *) arg, sizeof(unsigned long));
+		if (!i)
+			put_fs_long(vt_cons[console].vc_mode, (unsigned long *) arg);
+		return i;
 
 	case KDMAPDISP:
 	case KDUNMAPDISP:
@@ -214,13 +216,17 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		return 0;
 
 	case KDGKBMODE:
-		verify_area((void *) arg, sizeof(unsigned long));
-		ucval = vc_kbd_flag(kbd, VC_RAW);
-		put_fs_long(ucval ? K_RAW : K_XLATE, (unsigned long *) arg);
-		return 0;
+		i = verify_area(VERIFY_WRITE, (void *) arg, sizeof(unsigned long));
+		if (!i) {
+			ucval = vc_kbd_flag(kbd, VC_RAW);
+			put_fs_long(ucval ? K_RAW : K_XLATE, (unsigned long *) arg);
+		}
+		return i;
 
 	case KDGETLED:
-		verify_area((void *) arg, sizeof(unsigned char));
+		i = verify_area(VERIFY_WRITE, (void *) arg, sizeof(unsigned char));
+		if (i)
+			return i;
 		ucval = 0;
 		if (vc_kbd_flag(kbd, VC_SCROLLOCK))
 			ucval |= LED_SCR;
@@ -254,7 +260,9 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		struct vt_mode *vtmode = (struct vt_mode *)arg;
 		char mode;
 
-		verify_area((void *)vtmode, sizeof(struct vt_mode));
+		i = verify_area(VERIFY_WRITE, (void *)vtmode, sizeof(struct vt_mode));
+		if (i)
+			return i;
 		mode = get_fs_byte(&vtmode->mode);
 		if (mode != VT_AUTO && mode != VT_PROCESS)
 			return -EINVAL;
@@ -273,7 +281,9 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	{
 		struct vt_mode *vtmode = (struct vt_mode *)arg;
 
-		verify_area((void *)arg, sizeof(struct vt_mode));
+		i = verify_area(VERIFY_WRITE, (void *)arg, sizeof(struct vt_mode));
+		if (i)
+			return i;
 		put_fs_byte(vt_cons[console].vt_mode.mode, &vtmode->mode);
 		put_fs_byte(vt_cons[console].vt_mode.waitv, &vtmode->waitv);
 		put_fs_word(vt_cons[console].vt_mode.relsig, &vtmode->relsig);
@@ -291,7 +301,9 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		struct vt_stat *vtstat = (struct vt_stat *)arg;
 		unsigned short state, mask;
 
-		verify_area((void *)vtstat, sizeof(struct vt_stat));
+		i = verify_area(VERIFY_WRITE,(void *)vtstat, sizeof(struct vt_stat));
+		if (i)
+			return i;
 		put_fs_word(fg_console + 1, &vtstat->v_active);
 		state = 1;	/* /dev/tty0 is always open */
 		for (i = 1, mask = 2; i <= NR_CONSOLES; ++i, mask <<= 1)
@@ -305,7 +317,9 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	 * Returns the first available (non-opened) console.
 	 */
 	case VT_OPENQRY:
-		verify_area((void *) arg, sizeof(long));
+		i = verify_area(VERIFY_WRITE, (void *) arg, sizeof(long));
+		if (i)
+			return i;
 		for (i = 1; i <= NR_CONSOLES; ++i)
 			if (!tty_table[i] || tty_table[i]->count == 0)
 				break;

@@ -48,6 +48,10 @@ Standard (minix) fs support
 CONFIG_MINIX_FS y/n y
 Extended fs support
 CONFIG_EXT_FS y/n n
+Second extended fs support
+CONFIG_EXT2_FS y/n n
+xiafs filesystem support
+CONFIG_XIA_FS y/n n
 msdos fs support
 CONFIG_MSDOS_FS y/n y
 /proc filesystem support
@@ -75,5 +79,5 @@ MicroSoft busmouse support
 CONFIG_MS_BUSMOUSE y/n n
 ATIXL busmouse support
 CONFIG_ATIXL_BUSMOUSE y/n n
-Soundcard support (not really there yet)
+Soundcard support (distributed separately)
 CONFIG_SOUND y/n n

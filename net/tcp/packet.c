@@ -147,7 +147,7 @@ packet_sendto (volatile struct sock *sk, unsigned char *from, int len,
      {
 	if (addr_len < sizeof (saddr))
 	  return (-EINVAL);
-/*	verify_area (usin, sizeof (saddr));*/
+/*	verify_area (VERIFY_WRITE, usin, sizeof (saddr));*/
 	memcpy_fromfs (&saddr, usin, sizeof(saddr));
      }
    else
@@ -173,7 +173,7 @@ packet_sendto (volatile struct sock *sk, unsigned char *from, int len,
 	sk->prot->wfree (sk, skb->mem_addr, skb->mem_len);
 	return (-ENXIO);
      }
-/*   verify_area (from, len);*/
+/*   verify_area (VERIFY_WRITE, from, len);*/
    memcpy_fromfs (skb+1, from, len);
    skb->len = len;
    skb->next = NULL;
@@ -240,7 +240,7 @@ packet_recvfrom (volatile struct sock *sk, unsigned char *to, int len,
 
 	if (addr_len)
 	  {
-		  verify_area (addr_len, sizeof(*addr_len));
+		  verify_area (VERIFY_WRITE, addr_len, sizeof(*addr_len));
 		  put_fs_long (sizeof (*saddr), addr_len);
 	  }
 
@@ -281,7 +281,7 @@ packet_recvfrom (volatile struct sock *sk, unsigned char *to, int len,
 		    }
 	  }
 	copied = min (len, skb->len);
-	verify_area (to, copied);
+	verify_area (VERIFY_WRITE, to, copied);
 	memcpy_tofs (to, skb+1,  copied);
 	/* copy the address. */
 	if (saddr)
@@ -289,7 +289,7 @@ packet_recvfrom (volatile struct sock *sk, unsigned char *to, int len,
 		  struct sockaddr addr;
 		  addr.sa_family = skb->dev->type;
 		  memcpy (addr.sa_data,skb->dev->name, 14);
-		  verify_area (saddr, sizeof (*saddr));
+		  verify_area (VERIFY_WRITE, saddr, sizeof (*saddr));
 		  memcpy_tofs(saddr, &addr, sizeof (*saddr));
 	  }
 

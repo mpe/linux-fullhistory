@@ -243,7 +243,7 @@ void exception(int n)
     {
 #ifdef PRINT_MESSAGES
       /* My message from the sponsor */
-      printk(FPU_VERSION" "__DATE__" (C) W. Metzenthen.\r\n");
+      printk(FPU_VERSION" "__DATE__" (C) W. Metzenthen.\n");
 #endif PRINT_MESSAGES
       
       /* Get a name string for error reporting */

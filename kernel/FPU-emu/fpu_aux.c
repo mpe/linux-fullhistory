@@ -16,7 +16,7 @@
 
 
 
-static void fclex()
+static void fclex(void)
 {
   status_word &= ~(SW_B|SW_ES|SW_SF|SW_PE|SW_UE|SW_OE|SW_ZE|SW_DE|SW_IE);
   FPU_entry_eip = ip_offset;               /* We want no net effect */
@@ -50,7 +50,7 @@ void finit_()
 }
 
 
-static void fstsw_ax()
+static void fstsw_ax(void)
 {
 
   status_word &= ~SW_TOP;
@@ -71,7 +71,7 @@ void fstsw_()
 
 
 
-static void fnop()
+static void fnop(void)
 {
 }
 

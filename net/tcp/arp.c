@@ -509,6 +509,10 @@ arp_find(unsigned char *haddr, unsigned long paddr, struct device *dev,
 	    memcpy (haddr, apt->hard, dev->addr_len);
 	    return (0);
 	 }
+	else
+	 {
+	    arp_destroy(paddr);
+	 }
     }
 
   /* this assume haddr are at least 4 bytes.

@@ -41,6 +41,19 @@ int sys_dup2(unsigned int oldfd, unsigned int newfd)
 		return -EBADF;
 	if (newfd == oldfd)
 		return newfd;
+	/*
+	 * errno's for dup2() are slightly different than for fcntl(F_DUPFD)
+	 * for historical reasons.
+	 */
+	if (newfd > NR_OPEN)	/* historical botch - should have been >= */
+		return -EBADF;	/* dupfd() would return -EINVAL */
+#if 1
+	if (newfd == NR_OPEN)
+		return -EBADF;	/* dupfd() does return -EINVAL and that may
+				 * even be the standard!  But that is too
+				 * weird for now.
+				 */
+#endif
 	sys_close(newfd);
 	return dupfd(oldfd,newfd);
 }

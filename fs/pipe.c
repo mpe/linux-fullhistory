@@ -110,11 +110,14 @@ static int bad_pipe_rw(struct inode * inode, struct file * filp, char * buf, int
 static int pipe_ioctl(struct inode *pino, struct file * filp,
 	unsigned int cmd, unsigned int arg)
 {
+	int error;
+
 	switch (cmd) {
 		case FIONREAD:
-			verify_area((void *) arg,4);
-			put_fs_long(PIPE_SIZE(*pino),(unsigned long *) arg);
-			return 0;
+			error = verify_area(VERIFY_WRITE, (void *) arg,4);
+			if (!error)
+				put_fs_long(PIPE_SIZE(*pino),(unsigned long *) arg);
+			return error;
 		default:
 			return -EINVAL;
 	}
@@ -216,7 +219,9 @@ int sys_pipe(unsigned long * fildes)
 	int fd[2];
 	int i,j;
 
-	verify_area(fildes,8);
+	j = verify_area(VERIFY_WRITE,fildes,8);
+	if (j)
+		return j;
 	for(j=0 ; j<2 ; j++)
 		if (!(f[j] = get_empty_filp()))
 			break;
@@ -246,9 +251,10 @@ int sys_pipe(unsigned long * fildes)
 	}
 	f[0]->f_inode = f[1]->f_inode = inode;
 	f[0]->f_pos = f[1]->f_pos = 0;
-	f[0]->f_flags = f[1]->f_flags = 0;
+	f[0]->f_flags = O_RDONLY;
 	f[0]->f_op = &read_pipe_fops;
 	f[0]->f_mode = 1;		/* read */
+	f[1]->f_flags = O_WRONLY;
 	f[1]->f_op = &write_pipe_fops;
 	f[1]->f_mode = 2;		/* write */
 	put_fs_long(fd[0],0+fildes);

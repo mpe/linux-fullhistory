@@ -29,8 +29,11 @@ static void pty_close(struct tty_struct * tty, struct file * filp)
 	if (!tty->link)
 		return;
 	wake_up_interruptible(&tty->link->write_q.proc_list);
-	if (IS_A_PTY_MASTER(tty->line))
+	if (IS_A_PTY_MASTER(tty->line)) {
 		tty_hangup(tty->link);
+		flush_input(tty);
+		flush_output(tty);
+	}
 }
 
 static inline void pty_copy(struct tty_struct * from, struct tty_struct * to)

@@ -52,7 +52,9 @@ int sys_syslog(int type, char * buf, int len)
 				return -EINVAL;
 			if (!len)
 				return 0;
-			verify_area(buf,len);
+			i = verify_area(VERIFY_WRITE, buf, len);
+			if (i)
+				return i;
 			while (!log_size) {
 				if (!log_page)
 					return -EIO;

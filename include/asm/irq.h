@@ -107,7 +107,7 @@
 	"movb _cache_A1,%al\n\t" \
 	"outb %al,$0xA1\n\t"
 
-#define IRQ_NAME2(nr) nr##_interrupt()
+#define IRQ_NAME2(nr) nr##_interrupt(void)
 #define IRQ_NAME(nr) IRQ_NAME2(IRQ##nr)
 #define FAST_IRQ_NAME(nr) IRQ_NAME2(fast_IRQ##nr)
 #define BAD_IRQ_NAME(nr) IRQ_NAME2(bad_IRQ##nr)

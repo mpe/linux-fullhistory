@@ -27,19 +27,28 @@ static int fifo_open(struct inode * inode,struct file * filp)
 	 *  opened, even when there is no process writing the FIFO.
 	 */
 		filp->f_op = &read_pipe_fops;
-		PIPE_READERS(*inode)++;
-		if (!(filp->f_flags & O_NONBLOCK))
+		if (!PIPE_READERS(*inode)++)
+			wake_up(&PIPE_WRITE_WAIT(*inode));
+		if (!(filp->f_flags & O_NONBLOCK) && !PIPE_WRITERS(*inode)) {
+			PIPE_RD_OPENERS(*inode)++;
 			while (!PIPE_WRITERS(*inode)) {
+#if 0
 				if (PIPE_HEAD(*inode) != PIPE_TAIL(*inode))
 					break;
+#endif
 				if (current->signal & ~current->blocked) {
 					retval = -ERESTARTSYS;
 					break;
 				}
 				interruptible_sleep_on(&PIPE_READ_WAIT(*inode));
 			}
-		if (retval)
-			PIPE_READERS(*inode)--;
+			if (!--PIPE_RD_OPENERS(*inode))
+				wake_up(&PIPE_WRITE_WAIT(*inode));
+		}
+		while (PIPE_WR_OPENERS(*inode))
+			interruptible_sleep_on(&PIPE_READ_WAIT(*inode));
+		if (retval && !--PIPE_READERS(*inode))
+			wake_up(&PIPE_WRITE_WAIT(*inode));
 		break;
 	
 	case 2:
@@ -53,16 +62,24 @@ static int fifo_open(struct inode * inode,struct file * filp)
 			break;
 		}
 		filp->f_op = &write_pipe_fops;
-		PIPE_WRITERS(*inode)++;
-		while (!PIPE_READERS(*inode)) {
-			if (current->signal & ~current->blocked) {
-				retval = -ERESTARTSYS;
-				break;
+		if (!PIPE_WRITERS(*inode)++)
+			wake_up(&PIPE_READ_WAIT(*inode));
+		if (!PIPE_READERS(*inode)) {
+			PIPE_WR_OPENERS(*inode)++;
+			while (!PIPE_READERS(*inode)) {
+				if (current->signal & ~current->blocked) {
+					retval = -ERESTARTSYS;
+					break;
+				}
+				interruptible_sleep_on(&PIPE_WRITE_WAIT(*inode));
 			}
-			interruptible_sleep_on(&PIPE_WRITE_WAIT(*inode));
+			if (!--PIPE_WR_OPENERS(*inode))
+				wake_up(&PIPE_READ_WAIT(*inode));
 		}
-		if (retval)
-			PIPE_WRITERS(*inode)--;
+		while (PIPE_RD_OPENERS(*inode))
+			interruptible_sleep_on(&PIPE_WRITE_WAIT(*inode));
+		if (retval && !--PIPE_WRITERS(*inode))
+			wake_up(&PIPE_READ_WAIT(*inode));
 		break;
 	
 	case 3:
@@ -73,17 +90,19 @@ static int fifo_open(struct inode * inode,struct file * filp)
 	 *  the process can at least talk to itself.
 	 */
 		filp->f_op = &rdwr_pipe_fops;
-		PIPE_WRITERS(*inode) += 1;
-		PIPE_READERS(*inode) += 1;
+		if (!PIPE_READERS(*inode)++)
+			wake_up(&PIPE_WRITE_WAIT(*inode));
+		while (PIPE_WR_OPENERS(*inode))
+			interruptible_sleep_on(&PIPE_READ_WAIT(*inode));
+		if (!PIPE_WRITERS(*inode)++)
+			wake_up(&PIPE_READ_WAIT(*inode));
+		while (PIPE_RD_OPENERS(*inode))
+			interruptible_sleep_on(&PIPE_WRITE_WAIT(*inode));
 		break;
 
 	default:
 		retval = -EINVAL;
 	}
-	if (PIPE_WRITERS(*inode))
-		wake_up(&PIPE_READ_WAIT(*inode));
-	if (PIPE_READERS(*inode))
-		wake_up(&PIPE_WRITE_WAIT(*inode));
 	if (retval || PIPE_BASE(*inode))
 		return retval;
 	page = get_free_page(GFP_KERNEL);

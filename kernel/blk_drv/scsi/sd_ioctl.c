@@ -17,14 +17,16 @@ extern int revalidate_scsidisk(int, int);
 int sd_ioctl(struct inode * inode, struct file * file, unsigned long cmd, unsigned long arg)
 {
 	int dev = inode->i_rdev;
-	int host;
+	int host, error;
 	int diskinfo[4];
 	struct hd_geometry *loc = (void *) arg;
 
 	switch (cmd) {
          	case HDIO_REQ:   /* Return BIOS disk parameters */
 			if (!loc)  return -EINVAL;
-			verify_area(loc, sizeof(*loc));
+			error = verify_area(VERIFY_WRITE, loc, sizeof(*loc));
+			if (error)
+				return error;
 			host = rscsi_disks[MINOR(dev) >> 4].device->host_no;
 			diskinfo[0] = 0;
 			diskinfo[1] = 0;
@@ -44,7 +46,9 @@ int sd_ioctl(struct inode * inode, struct file * file, unsigned long cmd, unsign
 			return 0;
          	case BLKGETSIZE:   /* Return device size */
 			if (!arg)  return -EINVAL;
-			verify_area((long *) arg, sizeof(long));
+			error = verify_area(VERIFY_WRITE, (long *) arg, sizeof(long));
+			if (error)
+				return error;
 			put_fs_long(sd[MINOR(inode->i_rdev)].nr_sects,
 				(long *) arg);
 			return 0;

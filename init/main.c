@@ -56,7 +56,7 @@ static inline pid_t wait(int * wait_stat)
 
 static char printbuf[1024];
 
-extern int vsprintf();
+extern int vsprintf(char *,const char *,va_list);
 extern void init(void);
 extern void init_IRQ(void);
 extern long blk_dev_init(long,long);
@@ -328,7 +328,7 @@ void init(void)
 			/* nothing */;
 	while (1) {
 		if ((pid = fork()) < 0) {
-			printf("Fork failed in init\r\n");
+			printf("Fork failed in init\n\r");
 			continue;
 		}
 		if (!pid) {

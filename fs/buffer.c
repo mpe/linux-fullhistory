@@ -78,6 +78,8 @@ static void sync_buffers(dev_t dev)
 
 	bh = free_list;
 	for (i = nr_buffers*2 ; i-- > 0 ; bh = bh->b_next_free) {
+		if (dev && bh->b_dev != dev)
+			continue;
 		if (bh->b_lock)
 			continue;
 		if (!bh->b_dirt)
@@ -145,14 +147,12 @@ void check_disk_change(dev_t dev)
 #if defined(CONFIG_BLK_DEV_SD) && defined(CONFIG_SCSI)
          case 8: /* Removable scsi disk */
 		i = check_scsidisk_media_change(dev, 0);
-		if (i) printk("Flushing buffers and inodes for SCSI disk\n");
 		break;
 #endif
 
 #if defined(CONFIG_BLK_DEV_SR) && defined(CONFIG_SCSI)
          case 11: /* CDROM */
 		i = check_cdrom_media_change(dev, 0);
-		if (i) printk("Flushing buffers and inodes for CDROM\n");
 		break;
 #endif
 
@@ -162,6 +162,8 @@ void check_disk_change(dev_t dev)
 
 	if (!i)	return;
 
+	printk("VFS: Disk change detected on device %d/%d\n",
+					MAJOR(dev), MINOR(dev));
 	for (i=0 ; i<NR_SUPER ; i++)
 		if (super_block[i].s_dev == dev)
 			put_super(super_block[i].s_dev);
@@ -193,7 +195,7 @@ static inline void remove_from_hash_queue(struct buffer_head * bh)
 static inline void remove_from_free_list(struct buffer_head * bh)
 {
 	if (!(bh->b_prev_free) || !(bh->b_next_free))
-		panic("Free block list corrupted");
+		panic("VFS: Free block list corrupted");
 	bh->b_prev_free->b_next_free = bh->b_next_free;
 	bh->b_next_free->b_prev_free = bh->b_prev_free;
 	if (free_list == bh)
@@ -263,7 +265,8 @@ static struct buffer_head * find_buffer(dev_t dev, int block, int size)
 			if (tmp->b_size == size)
 				return tmp;
 			else {
-				printk("wrong block-size on device %04x\n",dev);
+				printk("VFS: Wrong blocksize on device %d/%d\n",
+							MAJOR(dev), MINOR(dev));
 				return NULL;
 			}
 	return NULL;
@@ -328,6 +331,8 @@ repeat:
 	for (tmp = free_list; buffers-- > 0 ; tmp = tmp->b_next_free) {
 		if (tmp->b_count || tmp->b_size != size)
 			continue;
+		if (mem_map[MAP_NR((unsigned long) tmp->b_data)] != 1)
+			continue;
 		if (!bh || BADNESS(tmp)<BADNESS(bh)) {
 			bh = tmp;
 			if (!BADNESS(tmp))
@@ -383,7 +388,7 @@ void brelse(struct buffer_head * buf)
 		wake_up(&buffer_wait);
 		return;
 	}
-	printk("Trying to free free buffer\n");
+	printk("VFS: brelse: Trying to free free buffer\n");
 }
 
 /*
@@ -395,7 +400,8 @@ struct buffer_head * bread(dev_t dev, int block, int size)
 	struct buffer_head * bh;
 
 	if (!(bh = getblk(dev, block, size))) {
-		printk("bread: getblk returned NULL\n");
+		printk("VFS: bread: READ error on device %d/%d\n",
+						MAJOR(dev), MINOR(dev));
 		return NULL;
 	}
 	if (bh->b_uptodate)
@@ -406,46 +412,6 @@ struct buffer_head * bread(dev_t dev, int block, int size)
 		return bh;
 	brelse(bh);
 	return NULL;
-}
-
-#define COPYBLK(from,to) \
-__asm__("cld\n\t" \
-	"rep\n\t" \
-	"movsl\n\t" \
-	::"c" (BLOCK_SIZE/4),"S" (from),"D" (to) \
-	:"cx","di","si")
-
-/*
- * bread_page reads four buffers into memory at the desired address. It's
- * a function of its own, as there is some speed to be got by reading them
- * all at the same time, not waiting for one to be read, and then another
- * etc.
- */
-void bread_page(unsigned long address, dev_t dev, int b[4])
-{
-	struct buffer_head * bh[4];
-	struct buffer_head * bhr[4];
-	int bhnum = 0;
-	int i;
-
-	for (i=0 ; i<4 ; i++)
-		if (b[i]) {
-			bh[i] = getblk(dev, b[i], 1024);
-			if (bh[i] && !bh[i]->b_uptodate)
-				bhr[bhnum++] = bh[i];
-		} else
-			bh[i] = NULL;
-
-	if (bhnum)
-		ll_rw_block(READ, bhnum, bhr);
-
-	for (i=0 ; i<4 ; i++,address += BLOCK_SIZE)
-		if (bh[i]) {
-			wait_on_buffer(bh[i]);
-			if (bh[i]->b_uptodate)
-				COPYBLK((unsigned long) bh[i]->b_data,address);
-			brelse(bh[i]);
-		}
 }
 
 /*
@@ -460,7 +426,8 @@ struct buffer_head * breada(dev_t dev,int first, ...)
 
 	va_start(args,first);
 	if (!(bh = getblk(dev, first, 1024))) {
-		printk("breada: getblk returned NULL\n");
+		printk("VFS: breada: READ error on device %d/%d\n",
+						MAJOR(dev), MINOR(dev));
 		return NULL;
 	}
 	if (!bh->b_uptodate)
@@ -528,6 +495,58 @@ static struct buffer_head * get_unused_buffer_head(void)
 	return bh;
 }
 
+static inline unsigned long try_to_share_buffers(unsigned long address, dev_t dev, int b[], int size)
+{
+	return 0;
+}
+
+#define COPYBLK(from,to) \
+__asm__ __volatile__("rep ; movsl" \
+	::"c" (BLOCK_SIZE/4),"S" (from),"D" (to) \
+	:"cx","di","si")
+
+/*
+ * bread_page reads four buffers into memory at the desired address. It's
+ * a function of its own, as there is some speed to be got by reading them
+ * all at the same time, not waiting for one to be read, and then another
+ * etc. This also allows us to optimize memory usage by sharing code pages
+ * and filesystem buffers.. This is not yet implemented.
+ */
+unsigned long bread_page(unsigned long address, dev_t dev, int b[], int size, int prot)
+{
+	struct buffer_head * bh[4];
+	struct buffer_head * bhr[4];
+	unsigned long where;
+	int bhnum = 0;
+	int i;
+
+	if (!(prot & PAGE_RW)) {
+		where = try_to_share_buffers(address,dev,b,size);
+		if (where)
+			return where;
+	}
+	for (i=0 ; i<4 ; i++) {
+		bh[i] = NULL;
+		if (b[i]) {
+			bh[i] = getblk(dev, b[i], size);
+			if (bh[i] && !bh[i]->b_uptodate)
+				bhr[bhnum++] = bh[i];
+		}
+	}
+	if (bhnum)
+		ll_rw_block(READ, bhnum, bhr);
+	where = address;
+	for (i=0 ; i<4 ; i++,address += BLOCK_SIZE) {
+		if (bh[i]) {
+			wait_on_buffer(bh[i]);
+			if (bh[i]->b_uptodate)
+				COPYBLK((unsigned long) bh[i]->b_data,address);
+			brelse(bh[i]);
+		}
+	}
+	return where;
+}
+
 /*
  * Try to increase the number of buffers available: the size argument
  * is used to determine what kind of buffers we want. Currently only
@@ -541,7 +560,7 @@ void grow_buffers(int size)
 	struct buffer_head *bh, *tmp;
 
 	if ((size & 511) || (size > 4096)) {
-		printk("grow_buffers: size = %d\n",size);
+		printk("VFS: grow_buffers: size = %d\n",size);
 		return;
 	}
 	page = get_free_page(GFP_BUFFER);
@@ -601,6 +620,10 @@ static int try_to_free(struct buffer_head * bh)
 	unsigned long page;
 	struct buffer_head * tmp, * p;
 
+	page = (unsigned long) bh->b_data;
+	page &= 0xfffff000;
+	if (mem_map[MAP_NR(page)] != 1)
+		return 0;
 	tmp = bh;
 	do {
 		if (!tmp)
@@ -609,8 +632,6 @@ static int try_to_free(struct buffer_head * bh)
 			return 0;
 		tmp = tmp->b_this_page;
 	} while (tmp != bh);
-	page = (unsigned long) bh->b_data;
-	page &= 0xfffff000;
 	tmp = bh;
 	do {
 		p = tmp;
@@ -678,6 +699,6 @@ void buffer_init(void)
 	free_list = 0;
 	grow_buffers(BLOCK_SIZE);
 	if (!free_list)
-		panic("Unable to initialize buffer free list!");
+		panic("VFS: Unable to initialize buffer free list!");
 	return;
 }

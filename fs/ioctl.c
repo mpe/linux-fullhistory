@@ -15,6 +15,7 @@
 
 static int file_ioctl(struct file *filp,unsigned int cmd,unsigned long arg)
 {
+	int error;
 	int block;
 
 	switch (cmd) {
@@ -23,7 +24,9 @@ static int file_ioctl(struct file *filp,unsigned int cmd,unsigned long arg)
 				return -EBADF;
 		    	if (filp->f_inode->i_op->bmap == NULL)
 				return -EINVAL;
-			verify_area((void *) arg,4);
+			error = verify_area(VERIFY_WRITE,(void *) arg,4);
+			if (error)
+				return error;
 			block = get_fs_long((long *) arg);
 			block = filp->f_inode->i_op->bmap(filp->f_inode,block);
 			put_fs_long(block,(long *) arg);
@@ -31,12 +34,16 @@ static int file_ioctl(struct file *filp,unsigned int cmd,unsigned long arg)
 		case FIGETBSZ:
 			if (filp->f_inode->i_sb == NULL)
 				return -EBADF;
-			verify_area((void *) arg,4);
+			error = verify_area(VERIFY_WRITE,(void *) arg,4);
+			if (error)
+				return error;
 			put_fs_long(filp->f_inode->i_sb->s_blocksize,
 			    (long *) arg);
 			return 0;
 		case FIONREAD:
-			verify_area((void *) arg,4);
+			error = verify_area(VERIFY_WRITE,(void *) arg,4);
+			if (error)
+				return error;
 			put_fs_long(filp->f_inode->i_size - filp->f_pos,
 			    (long *) arg);
 			return 0;

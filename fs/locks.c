@@ -49,14 +49,17 @@ void fcntl_init_locks(void)
 }
 
 int fcntl_getlk(unsigned int fd, struct flock *l)
-{	
+{
+	int error;
 	struct flock flock;
 	struct file *filp;
 	struct file_lock *fl,file_lock;
 
 	if (fd >= NR_OPEN || !(filp = current->filp[fd]))
 		return -EBADF;
-	verify_area(l, sizeof(*l));
+	error = verify_area(VERIFY_WRITE,l, sizeof(*l));
+	if (error)
+		return error;
 	memcpy_fromfs(&flock, l, sizeof(flock));
 	if (flock.l_type == F_UNLCK)
 		return -EINVAL;
@@ -86,7 +89,8 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
  */
 
 int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
-{	
+{
+	int error;
 	struct file *filp;
 	struct file_lock *fl,file_lock;
 	struct flock flock;
@@ -97,7 +101,9 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 
 	if (fd >= NR_OPEN || !(filp = current->filp[fd]))
 		return -EBADF;
-	verify_area(l, sizeof(*l));
+	error = verify_area(VERIFY_WRITE, l, sizeof(*l));
+	if (error)
+		return error;
 	memcpy_fromfs(&flock, l, sizeof(flock));
 	if (!copy_flock(filp, &file_lock, &flock))
 		return -EINVAL;
@@ -145,7 +151,11 @@ repeat:
 		 * FIXME: We need to check for deadlocks here.
 		 */
 		if (cmd == F_SETLKW) {
+			if (current->signal & ~current->blocked)
+				return -ERESTARTSYS;
 			interruptible_sleep_on(&fl->fl_wait);
+			if (current->signal & ~current->blocked)
+				return -ERESTARTSYS;
 			goto repeat;
 		}
 		return -EAGAIN;
@@ -330,7 +340,7 @@ static int lock_it(struct file *filp, struct file_lock *caller)
 				fl->fl_end = caller->fl_start - 1;
 				/* must continue, may be more overlaps */
 			} else {
-				printk("lock_it: program bug: unanticipated overlap\n");
+				printk("VFS: lock_it: program bug: unanticipated overlap\n");
 				free_lock(filp, caller);
 				return -ENOLCK;
 			}
@@ -431,7 +441,7 @@ static struct file_lock *alloc_lock(struct file *filp, struct file_lock *templat
 	if (file_lock_free_list == NULL)
 		return NULL;			/* no available entry */
 	if (file_lock_free_list->fl_owner != NULL)
-		panic("alloc_lock: broken free list\n");
+		panic("VFS: alloc_lock: broken free list\n");
 
 	new = file_lock_free_list;		/* remove from free list */
 	file_lock_free_list = file_lock_free_list->fl_next;
@@ -457,7 +467,7 @@ static void free_lock(struct file *filp, struct file_lock *fl)
 	struct file_lock **fl_p;
 
 	if (fl->fl_owner == NULL)	/* sanity check */
-		panic("free_lock: broken lock list\n");
+		panic("VFS: free_lock: broken lock list\n");
 
 	/*
 	 * We only use a singly linked list to save some memory space
@@ -469,7 +479,7 @@ static void free_lock(struct file *filp, struct file_lock *fl)
 			break;
 	}
 	if (*fl_p == NULL) {
-		printk("free_lock: lock is not in file's lock list\n");
+		printk("VFS: free_lock: lock is not in file's lock list\n");
 	} else {
 		*fl_p = (*fl_p)->fl_next;
 	}

@@ -184,6 +184,7 @@ int sys_uselib(const char * library)
 	struct inode * inode;
 	struct buffer_head * bh;
 	struct exec ex;
+	unsigned long offset;
 	int error;
 
 	if (!library || get_limit(0x17) != TASK_SIZE)
@@ -211,18 +212,21 @@ int sys_uselib(const char * library)
 	}
 	ex = *(struct exec *) bh->b_data;
 	brelse(bh);
-	if (N_MAGIC(ex) != ZMAGIC || ex.a_trsize || ex.a_drsize ||
-		ex.a_text+ex.a_data+ex.a_bss>0x3000000 ||
+	if (N_MAGIC(ex) != ZMAGIC || ex.a_trsize ||
+		ex.a_drsize || ex.a_entry & 0xfff ||
 		inode->i_size < ex.a_text+ex.a_data+ex.a_syms+N_TXTOFF(ex)) {
 		iput(inode);
 		return -ENOEXEC;
 	}
 	current->libraries[libnum].library = inode;
 	current->libraries[libnum].start = ex.a_entry;
-	current->libraries[libnum].length = (ex.a_data+ex.a_text+0xfff) & 0xfffff000;
-	current->libraries[libnum].bss = (ex.a_bss+0xfff) & 0xfffff000;
+	offset = (ex.a_data + ex.a_text + 0xfff) & 0xfffff000;
+	current->libraries[libnum].length = offset;
+	current->libraries[libnum].bss = ex.a_bss;
+	offset += ex.a_entry;
+	zeromap_page_range(offset, ex.a_bss, PAGE_COPY);
 #if 0
-	printk("Loaded library %d at %08x, length %08x\n",
+	printk("VFS: Loaded library %d at %08x, length %08x\n",
 		libnum,
 		current->libraries[libnum].start,
 		current->libraries[libnum].length);
@@ -315,7 +319,7 @@ static unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 		if (from_kmem == 1)
 			set_fs(new_fs);
 		if (!(tmp = (char *)get_fs_long(((unsigned long *)argv)+argc)))
-			panic("argc is wrong");
+			panic("VFS: argc is wrong");
 		if (from_kmem == 1)
 			set_fs(old_fs);
 		len=0;		/* remember zero-padding */
@@ -432,7 +436,7 @@ int do_execve(unsigned long * eip,long tmp,char * filename,
 	int ch;
 
 	if ((0xffff & eip[1]) != 0x000f)
-		panic("execve called from supervisor mode");
+		panic("VFS: execve called from supervisor mode");
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)	/* clear page-table */
 		page[i]=0;
 	retval = namei(filename,&inode);	/* get executable inode */
@@ -551,24 +555,22 @@ restart_interp:
 		}
 		/*
 		 * OK, now restart the process with the interpreter's inode.
+		 * Note that we use open_namei() as the name is now in kernel
+		 * space, and we don't need to copy it.
 		 */
-		old_fs = get_fs();
-		set_fs(get_ds());
-		retval = namei(interp,&inode);
-		set_fs(old_fs);
+		retval = open_namei(interp,0,0,&inode,NULL);
 		if (retval)
 			goto exec_error1;
 		goto restart_interp;
 	}
 	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != OMAGIC) ||
 		ex.a_trsize || ex.a_drsize ||
-		ex.a_text+ex.a_data+ex.a_bss>0x3000000 ||
 		inode->i_size < ex.a_text+ex.a_data+ex.a_syms+N_TXTOFF(ex)) {
 		retval = -ENOEXEC;
 		goto exec_error2;
 	}
 	if (N_TXTOFF(ex) != BLOCK_SIZE && N_MAGIC(ex) != OMAGIC) {
-		printk("%s: N_TXTOFF != BLOCK_SIZE. See a.out.h.", filename);
+		printk("VFS: N_TXTOFF != BLOCK_SIZE. See a.out.h.");
 		retval = -ENOEXEC;
 		goto exec_error2;
 	}
@@ -635,6 +637,7 @@ restart_interp:
 		iput(inode);
 	} else
 		current->executable = inode;
+	zeromap_page_range((ex.a_text + ex.a_data + 0xfff) & 0xfffff000,ex.a_bss, PAGE_COPY);
 	eip[0] = ex.a_entry;		/* eip, magic happens :-) */
 	eip[3] = p;			/* stack pointer */
 	if (current->flags & PF_PTRACED)

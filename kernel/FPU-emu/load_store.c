@@ -174,7 +174,7 @@ switch ( type )
     break;
   case 034:      /* fstcw m16int */
     RE_ENTRANT_CHECK_OFF
-    verify_area(FPU_data_address,2);
+    verify_area(VERIFY_WRITE,FPU_data_address,2);
     put_fs_word(control_word, (short *) FPU_data_address);
     RE_ENTRANT_CHECK_ON
     FPU_data_address = (void *)data_operand_offset; /* We want no net effect */
@@ -189,7 +189,7 @@ switch ( type )
     status_word &= ~SW_TOP;
     status_word |= (top&7) << SW_TOPS;
     RE_ENTRANT_CHECK_OFF
-    verify_area(FPU_data_address,2);
+    verify_area(VERIFY_WRITE,FPU_data_address,2);
     put_fs_word(status_word,(short *) FPU_data_address);
     RE_ENTRANT_CHECK_ON
     FPU_data_address = (void *)data_operand_offset; /* We want no net effect */
