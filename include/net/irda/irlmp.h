@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 17 20:54:32 1997
- * Modified at:   Thu Jul  8 13:44:20 1999
+ * Modified at:   Tue Oct  5 15:20:56 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -78,13 +78,13 @@ typedef void (*DISCOVERY_CALLBACK1) (discovery_t *);
 typedef void (*DISCOVERY_CALLBACK2) (hashbin_t *);
 
 typedef struct {
-	QUEUE queue; /* Must be first */
+	queue_t queue; /* Must be first */
 
 	__u16 hints; /* Hint bits */
 } irlmp_service_t;
 
 typedef struct {
-	QUEUE queue; /* Must be first */
+	queue_t queue; /* Must be first */
 
 	__u16 hint_mask;
 
@@ -98,13 +98,11 @@ struct lap_cb; /* Forward decl. */
  *  Information about each logical LSAP connection
  */
 struct lsap_cb {
-	QUEUE   queue;      /* Must be first */
+	queue_t queue;      /* Must be first */
 	magic_t magic;
 
 	int   connected;
 	int   persistent;
-
-	struct irda_statistics stats;
 
 	__u8  slsap_sel;   /* Source (this) LSAP address */
 	__u8  dlsap_sel;   /* Destination LSAP address (if connected) */
@@ -124,7 +122,7 @@ struct lsap_cb {
  *  Information about each registred IrLAP layer
  */
 struct lap_cb {
-	QUEUE   queue;      /* Must be first */
+	queue_t queue;      /* Must be first */
 	magic_t magic;
 
 	int reason;    /* LAP disconnect reason */
@@ -248,7 +246,7 @@ static inline int irlmp_get_lap_tx_queue_len(struct lsap_cb *self)
 	ASSERT(self->lap != NULL, return 0;);
 	ASSERT(self->lap->irlap != NULL, return 0;);
 
-	return irlap_get_tx_queue_len(self->lap->irlap);
+	return IRLAP_GET_TX_QUEUE_LEN(self->lap->irlap);
 }
 
 #endif

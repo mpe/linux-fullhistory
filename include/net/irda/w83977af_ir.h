@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Paul VanderSpek
  * Created at:    Thu Nov 19 13:55:34 1998
- * Modified at:   Mon May  3 12:07:25 1999
+ * Modified at:   Fri Oct 15 16:06:46 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -170,12 +170,22 @@ struct w83977af_ir {
 	int tx_buff_offsets[10]; /* Offsets between frames in tx_buff */
 	int tx_len;          /* Number of frames in tx_buff */
 
-	struct irda_device idev;
+	struct net_device *netdev; /* Yes! we are some kind of netdevice */
+	struct net_device_stats stats;
+	
+	struct irlap_cb    *irlap; /* The link layer we are binded to */
+	
+	struct chipio_t io;        /* IrDA controller information */
+	struct iobuff_t tx_buff;   /* Transmit buffer */
+	struct iobuff_t rx_buff;   /* Receive buffer */
+	struct qos_info qos;       /* QoS capabilities for this device */
+	
+	__u32 flags;               /* Interface flags */
 };
 
 static inline void switch_bank( int iobase, int set)
 {
-	outb( set, iobase+SSR);
+	outb(set, iobase+SSR);
 }
 
 #endif

@@ -15,6 +15,7 @@
 #include <linux/spinlock.h>
 
 #include <asm/uaccess.h>
+#include <asm/byteorder.h>
 
 #include "usb.h"
 #include "hub.h"
@@ -51,16 +52,16 @@ static int usb_set_port_feature(struct usb_device *dev, int port, int feature)
 
 static int usb_get_hub_status(struct usb_device *dev, void *data)
 {
-	/* FIXME: Don't hardcode 4 */
 	return usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
-		USB_REQ_GET_STATUS, USB_DIR_IN | USB_RT_HUB, 0, 0, data, 4, HZ);
+		USB_REQ_GET_STATUS, USB_DIR_IN | USB_RT_HUB, 0, 0,
+		data, sizeof(struct usb_hub_status), HZ);
 }
 
 static int usb_get_port_status(struct usb_device *dev, int port, void *data)
 {
-	/* FIXME: Don't hardcode 4 */
 	return usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
-		USB_REQ_GET_STATUS, USB_DIR_IN | USB_RT_PORT, 0, port, data, 4, HZ);
+		USB_REQ_GET_STATUS, USB_DIR_IN | USB_RT_PORT, 0, port,
+		data, sizeof(struct usb_hub_status), HZ);
 }
 
 /*
@@ -101,6 +102,7 @@ static int usb_hub_configure(struct usb_hub *hub)
 	unsigned char buffer[4], *bitmap;
 	struct usb_hub_descriptor *descriptor;
 	struct usb_descriptor_header *header;
+	struct usb_hub_status *hubsts;
 	int i;
 
 	/* Set it to the first configuration */
@@ -121,7 +123,7 @@ static int usb_hub_configure(struct usb_hub *hub)
 	descriptor = (struct usb_hub_descriptor *)bitmap;
 
 	hub->nports = dev->maxchild = descriptor->bNbrPorts;
-	printk(KERN_INFO "hub: %d-port%s detected\n", hub->nports,
+	printk(KERN_INFO "hub: %d port%s detected\n", hub->nports,
 		(hub->nports == 1) ? "" : "s");
 
 	switch (descriptor->wHubCharacteristics & HUB_CHAR_LPSM) {
@@ -144,14 +146,14 @@ static int usb_hub_configure(struct usb_hub *hub)
 
 	switch (descriptor->wHubCharacteristics & HUB_CHAR_OCPM) {
 		case 0x00:
-			printk(KERN_INFO "hub: global over current protection\n");
+			printk(KERN_INFO "hub: global over-current protection\n");
 			break;
 		case 0x08:
-			printk(KERN_INFO "hub: individual port over current protection\n");
+			printk(KERN_INFO "hub: individual port over-current protection\n");
 			break;
 		case 0x10:
 		case 0x18:
-			printk(KERN_INFO "hub: no over current protection\n");
+			printk(KERN_INFO "hub: no over-current protection\n");
                         break;
 	}
 
@@ -171,11 +173,12 @@ static int usb_hub_configure(struct usb_hub *hub)
 	if (usb_get_hub_status(dev, buffer))
 		return -1;
 
+	hubsts = (struct usb_hub_status *)buffer;
 	printk(KERN_INFO "hub: local power source is %s\n",
-		(buffer[0] & 1) ? "lost (inactive)" : "good");
+		(le16_to_cpu(hubsts->wHubStatus) & HUB_STATUS_LOCAL_POWER) ? "lost (inactive)" : "good");
 
-	printk(KERN_INFO "hub: %sover current condition exists\n",
-		(buffer[0] & 2) ? "" : "no ");
+	printk(KERN_INFO "hub: %sover-current condition exists\n",
+		(le16_to_cpu(hubsts->wHubStatus) & HUB_STATUS_OVERCURRENT) ? "" : "no ");
 
 	/* Enable power to the ports */
 	printk(KERN_INFO "hub: enabling power on all ports\n");
@@ -292,7 +295,7 @@ static void hub_disconnect(struct usb_device *dev)
 static void usb_hub_port_connect_change(struct usb_device *hub, int port)
 {
 	struct usb_device *usb;
-	unsigned char buf[4];
+	struct usb_port_status portsts;
 	unsigned short portstatus, portchange;
 
 	/* Disconnect anything that may have been there */
@@ -304,13 +307,13 @@ static void usb_hub_port_connect_change(struct usb_device *hub, int port)
 	wait_ms(50);	/* FIXME: This is from the *BSD stack, thanks! :) */
 
 	/* Check status */
-	if (usb_get_port_status(hub, port + 1, buf)) {
+	if (usb_get_port_status(hub, port + 1, &portsts)) {
 		printk(KERN_ERR "get_port_status failed\n");
 		return;
 	}
 
-	portstatus = le16_to_cpup((unsigned short *)buf + 0);
-	portchange = le16_to_cpup((unsigned short *)buf + 1);
+	portstatus = le16_to_cpu(portsts.wPortStatus);
+	portchange = le16_to_cpu(portsts.wPortChange);
 
 	/* If it's not in CONNECT and ENABLE state, we're done */
 	if ((!(portstatus & USB_PORT_STAT_CONNECTION)) &&
@@ -373,16 +376,16 @@ static void usb_hub_events(void)
 		spin_unlock_irqrestore(&hub_event_lock, flags);
 
 		for (i = 0; i < hub->nports; i++) {
-			unsigned char buf[4];
+			struct usb_port_status portsts;
 			unsigned short portstatus, portchange;
 
-			if (usb_get_port_status(dev, i + 1, buf)) {
+			if (usb_get_port_status(dev, i + 1, &portsts)) {
 				printk(KERN_ERR "get_port_status failed\n");
 				continue;
 			}
 
-			portstatus = le16_to_cpup((unsigned short *)buf + 0);
-			portchange = le16_to_cpup((unsigned short *)buf + 1);
+			portstatus = le16_to_cpu(portsts.wPortStatus);
+			portchange = le16_to_cpu(portsts.wPortChange);
 
 			if (portchange & USB_PORT_STAT_C_CONNECTION) {
 				printk(KERN_INFO "hub: port %d connection change\n",
@@ -415,9 +418,8 @@ static void usb_hub_events(void)
 				usb_clear_port_feature(dev, i + 1,
 					USB_PORT_FEAT_C_RESET);
 			}
-
-		}
-        }
+		} /* end for i */
+        } /* end while (1) */
 
 he_unlock:
 	spin_unlock_irqrestore(&hub_event_lock, flags);

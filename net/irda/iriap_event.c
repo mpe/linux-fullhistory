@@ -95,9 +95,9 @@ void iriap_next_client_state( struct iriap_cb *self, IRIAP_STATE state)
 	ASSERT( self->magic == IAS_MAGIC, return;);
 
  	switch ( state) { 
- /* 	case S_DISCONNECT: DEBUG( 0, "IAP Client = S_DISCONNECT\n"); break;  */
-/*  	case S_CONNECTING: DEBUG( 0, "IAP Client = S_CONNECTING\n"); break;  */
-/*  	case S_CALL:       DEBUG( 0, "IAP Client = S_CALL\n");       break;  */
+ /* 	case S_DISCONNECT: IRDA_DEBUG( 0, "IAP Client = S_DISCONNECT\n"); break;  */
+/*  	case S_CONNECTING: IRDA_DEBUG( 0, "IAP Client = S_CONNECTING\n"); break;  */
+/*  	case S_CALL:       IRDA_DEBUG( 0, "IAP Client = S_CALL\n");       break;  */
  	default: 
  		break; 
  	} 
@@ -110,12 +110,12 @@ void iriap_next_call_state( struct iriap_cb *self, IRIAP_STATE state)
 	ASSERT( self->magic == IAS_MAGIC, return;);
 
 /* 	switch ( state) { */
-/* 	case S_MAKE_CALL:     DEBUG( 0, "IAP Call = S_MAKE_CALL\n"); break; */
-/* 	case S_CALLING:       DEBUG( 0, "IAP Call = S_CALLING\n"); break; */
-/* 	case S_OUTSTANDING:   DEBUG( 0, "IAP Call = S_OUTSTANDING\n");break; */
-/* 	case S_REPLYING:      DEBUG( 0, "IAP Call = S_REPLYING\n"); break; */
-/* 	case S_WAIT_FOR_CALL: DEBUG( 0, "IAP Call = S_WAIT_FOR_CALL\n"); break; */
-/* 	case S_WAIT_ACTIVE:   DEBUG( 0, "IAP Call = S_WAIT_ACTIVE\n"); break; */
+/* 	case S_MAKE_CALL:     IRDA_DEBUG( 0, "IAP Call = S_MAKE_CALL\n"); break; */
+/* 	case S_CALLING:       IRDA_DEBUG( 0, "IAP Call = S_CALLING\n"); break; */
+/* 	case S_OUTSTANDING:   IRDA_DEBUG( 0, "IAP Call = S_OUTSTANDING\n");break; */
+/* 	case S_REPLYING:      IRDA_DEBUG( 0, "IAP Call = S_REPLYING\n"); break; */
+/* 	case S_WAIT_FOR_CALL: IRDA_DEBUG( 0, "IAP Call = S_WAIT_FOR_CALL\n"); break; */
+/* 	case S_WAIT_ACTIVE:   IRDA_DEBUG( 0, "IAP Call = S_WAIT_ACTIVE\n"); break; */
 /* 	default: */
 /* 		break; */
 /* 	} */
@@ -200,7 +200,7 @@ static void state_s_disconnect( struct iriap_cb *self, IRIAP_EVENT event,
 	case IAP_LM_DISCONNECT_INDICATION:
 		break;
 	default:
-		DEBUG( 0, __FUNCTION__"(), Unknown event %d\n", event);
+		IRDA_DEBUG( 0, __FUNCTION__"(), Unknown event %d\n", event);
 		break;
 	}
 }
@@ -232,7 +232,7 @@ static void state_s_connecting( struct iriap_cb *self, IRIAP_EVENT event,
 		iriap_next_client_state( self, S_DISCONNECT);
 		break;
 	default:
-		DEBUG( 0, __FUNCTION__ "(), Unknown event %d\n", event);
+		IRDA_DEBUG( 0, __FUNCTION__ "(), Unknown event %d\n", event);
 		break;
 	}
 }
@@ -256,7 +256,7 @@ static void state_s_call( struct iriap_cb *self, IRIAP_EVENT event,
 		iriap_next_client_state( self, S_DISCONNECT);
 		break;
 	default:
-		DEBUG( 0, "state_s_call: Unknown event %d\n", event);
+		IRDA_DEBUG( 0, "state_s_call: Unknown event %d\n", event);
 		break;
 	}
 }
@@ -278,7 +278,7 @@ static void state_s_make_call( struct iriap_cb *self, IRIAP_EVENT event,
 		iriap_next_call_state( self, S_OUTSTANDING);
 		break;
 	default:
-		DEBUG( 0, "state_s_make_call: Unknown event %d\n", event);
+		IRDA_DEBUG( 0, "state_s_make_call: Unknown event %d\n", event);
 		break;
 	}
 	if ( skb) {
@@ -295,7 +295,7 @@ static void state_s_make_call( struct iriap_cb *self, IRIAP_EVENT event,
 static void state_s_calling( struct iriap_cb *self, IRIAP_EVENT event, 
 			     struct sk_buff *skb) 
 {
-	DEBUG( 0, __FUNCTION__ "(), Not implemented\n");
+	IRDA_DEBUG( 0, __FUNCTION__ "(), Not implemented\n");
 }
 
 /*
@@ -318,7 +318,7 @@ static void state_s_outstanding( struct iriap_cb *self, IRIAP_EVENT event,
 		iriap_next_call_state( self, S_WAIT_FOR_CALL);
 		break;
 	default:
-		DEBUG( 0, __FUNCTION__ "(), Unknown event %d\n", event);
+		IRDA_DEBUG( 0, __FUNCTION__ "(), Unknown event %d\n", event);
 		break;
 	}		
 }
@@ -331,7 +331,7 @@ static void state_s_outstanding( struct iriap_cb *self, IRIAP_EVENT event,
 static void state_s_replying( struct iriap_cb *self, IRIAP_EVENT event, 
 			      struct sk_buff *skb) 
 {
-	DEBUG( 0, __FUNCTION__ "(), Not implemented\n");
+	IRDA_DEBUG( 0, __FUNCTION__ "(), Not implemented\n");
 }
 
 /*
@@ -343,7 +343,7 @@ static void state_s_replying( struct iriap_cb *self, IRIAP_EVENT event,
 static void state_s_wait_for_call( struct iriap_cb *self, IRIAP_EVENT event, 
 				   struct sk_buff *skb) 
 {
-	DEBUG( 0, __FUNCTION__ "(), Not implemented\n");
+	IRDA_DEBUG( 0, __FUNCTION__ "(), Not implemented\n");
 }
 
 
@@ -356,7 +356,7 @@ static void state_s_wait_for_call( struct iriap_cb *self, IRIAP_EVENT event,
 static void state_s_wait_active( struct iriap_cb *self, IRIAP_EVENT event, 
 				 struct sk_buff *skb) 
 {
-	DEBUG( 0, __FUNCTION__ "(), Not implemented\n");
+	IRDA_DEBUG( 0, __FUNCTION__ "(), Not implemented\n");
 }
 
 /**************************************************************************
@@ -380,7 +380,7 @@ static void state_r_disconnect( struct iriap_cb *self, IRIAP_EVENT event,
 	case IAP_LM_CONNECT_INDICATION:
 		tx_skb = dev_alloc_skb( 64);
 		if ( tx_skb == NULL) {
-			DEBUG( 0,"state_r_disconnect: "
+			IRDA_DEBUG( 0,"state_r_disconnect: "
 			       "Could not allocate an sk_buff of length %d\n",
 			       64);
 			return;
@@ -405,7 +405,7 @@ static void state_r_disconnect( struct iriap_cb *self, IRIAP_EVENT event,
 		
 		break;
 	default:
-		DEBUG( 0, "state_r_disconnect: Unknown event %d\n", event);
+		IRDA_DEBUG( 0, "state_r_disconnect: Unknown event %d\n", event);
 		break;
 	}		
 }
@@ -419,7 +419,7 @@ static void state_r_disconnect( struct iriap_cb *self, IRIAP_EVENT event,
 static void state_r_call( struct iriap_cb *self, IRIAP_EVENT event, 
 			  struct sk_buff *skb) 
 {
-	DEBUG( 4, "state_r_call()\n");
+	IRDA_DEBUG( 4, "state_r_call()\n");
 
 	switch( event) {
 	case IAP_LM_DISCONNECT_INDICATION:
@@ -429,7 +429,7 @@ static void state_r_call( struct iriap_cb *self, IRIAP_EVENT event,
 		
 		break;
 	default:
-		DEBUG( 0, "state_r_call, unknown event!\n");
+		IRDA_DEBUG( 0, "state_r_call, unknown event!\n");
 		break;
 	}
 }
@@ -447,13 +447,13 @@ static void state_r_call( struct iriap_cb *self, IRIAP_EVENT event,
 static void state_r_waiting( struct iriap_cb *self, IRIAP_EVENT event, 
 			     struct sk_buff *skb) 
 {
-	DEBUG( 0, __FUNCTION__ "(), Not implemented\n");
+	IRDA_DEBUG( 0, __FUNCTION__ "(), Not implemented\n");
 }
 
 static void state_r_wait_active( struct iriap_cb *self, 
 				 IRIAP_EVENT event, struct sk_buff *skb) 
 {
-	DEBUG( 0, __FUNCTION__ "(), Not implemented\n");
+	IRDA_DEBUG( 0, __FUNCTION__ "(), Not implemented\n");
 }
 
 /*
@@ -465,7 +465,7 @@ static void state_r_wait_active( struct iriap_cb *self,
 static void state_r_receiving( struct iriap_cb *self, IRIAP_EVENT event, 
 			       struct sk_buff *skb) 
 {
-	DEBUG( 4, __FUNCTION__ "()\n");
+	IRDA_DEBUG( 4, __FUNCTION__ "()\n");
 
 	switch( event) {
 	case IAP_RECV_F_LST:
@@ -474,7 +474,7 @@ static void state_r_receiving( struct iriap_cb *self, IRIAP_EVENT event,
 		iriap_call_indication( self, skb);
 		break;
 	default:
-		DEBUG( 0, __FUNCTION__ "(), unknown event!\n");
+		IRDA_DEBUG( 0, __FUNCTION__ "(), unknown event!\n");
 		break;
 	}
 
@@ -489,12 +489,12 @@ static void state_r_receiving( struct iriap_cb *self, IRIAP_EVENT event,
 static void state_r_execute( struct iriap_cb *self, IRIAP_EVENT event, 
 			     struct sk_buff *skb) 
 {
-	DEBUG( 4, __FUNCTION__ "()\n");
+	IRDA_DEBUG( 4, __FUNCTION__ "()\n");
 
 	ASSERT( skb != NULL, return;);
 	
 	if ( !self || self->magic != IAS_MAGIC) {
-		DEBUG( 0, "state_r_execute: bad pointer self\n");
+		IRDA_DEBUG( 0, "state_r_execute: bad pointer self\n");
 		return;
 	}	
 
@@ -509,7 +509,7 @@ static void state_r_execute( struct iriap_cb *self, IRIAP_EVENT event,
 		irlmp_data_request( self->lsap, skb);
 		break;
 	default:
-		DEBUG( 0, __FUNCTION__ "(), unknown event!\n");
+		IRDA_DEBUG( 0, __FUNCTION__ "(), unknown event!\n");
 		break;
 	}
 }
@@ -517,7 +517,7 @@ static void state_r_execute( struct iriap_cb *self, IRIAP_EVENT event,
 static void state_r_returning( struct iriap_cb *self, IRIAP_EVENT event, 
 			       struct sk_buff *skb) 
 {
-	DEBUG( 0, __FUNCTION__ "(), event=%d\n", event);
+	IRDA_DEBUG( 0, __FUNCTION__ "(), event=%d\n", event);
 
 	switch( event) {
 	case IAP_RECV_F_LST:

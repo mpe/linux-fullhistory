@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Jun  6 21:00:56 1999
- * Modified at:   Tue Sep 21 11:46:59 1999
+ * Modified at:   Tue Oct 19 21:32:04 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       serial.c and previous IrCOMM work by Takahide Higuchi
  * 
@@ -408,7 +408,7 @@ static int ircomm_tty_open(struct tty_struct *tty, struct file *filp)
 		tty->termios->c_oflag = 0;
 
 		/* Insert into hash */
-		hashbin_insert(ircomm_tty, (QUEUE *) self, line, NULL);
+		hashbin_insert(ircomm_tty, (queue_t *) self, line, NULL);
 	}
 	self->open_count++;
 
@@ -796,7 +796,7 @@ static void ircomm_tty_wait_until_sent(struct tty_struct *tty, int timeout)
 	orig_jiffies = jiffies;
 
 	/* Set poll time to 200 ms */
-	poll_time = MIN(timeout, MSECS_TO_JIFFIES(200));
+	poll_time = IRDA_MIN(timeout, MSECS_TO_JIFFIES(200));
 
 	while (self->tx_skb && self->tx_skb->len) {
 		current->state = TASK_INTERRUPTIBLE;
@@ -939,8 +939,6 @@ static void ircomm_tty_hangup(struct tty_struct *tty)
  */
 static void ircomm_tty_send_xchar(struct tty_struct *tty, char ch)
 {
-	struct ircomm_tty_cb *self = (struct ircomm_tty_cb *) tty->driver_data;
-
 	DEBUG(0, __FUNCTION__"(), not impl\n");
 }
 
@@ -1082,7 +1080,7 @@ static int ircomm_tty_control_indication(void *instance, void *sap,
 
 	clen = skb->data[0];
 
-	irda_param_extract_all(self, skb->data+1, MIN(skb->len-1, clen), 
+	irda_param_extract_all(self, skb->data+1, IRDA_MIN(skb->len-1, clen), 
 			       &ircomm_param_info);
 	dev_kfree_skb(skb);
 

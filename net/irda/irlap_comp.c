@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Fri Oct  9 09:18:07 1998
- * Modified at:   Sun May  9 11:37:06 1999
+ * Modified at:   Tue Oct  5 11:34:52 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Modified at:   Fri May 28  3:11 CST 1999
  * Modified by:   Horst von Brand <vonbrand@sleipnir.valparaiso.cl>
@@ -45,11 +45,11 @@ int irda_register_compressor( struct compressor *cp)
 {
 	struct irda_compressor *new;
 
-	DEBUG( 4, __FUNCTION__ "()\n");
+	IRDA_DEBUG( 4, __FUNCTION__ "()\n");
 
 	/* Check if this compressor has been registred before */
 	if ( hashbin_find ( irlap_compressors, cp->compress_proto, NULL)) {
-		DEBUG( 0, __FUNCTION__ "(), Compressor already registered\n");
+		IRDA_DEBUG( 0, __FUNCTION__ "(), Compressor already registered\n");
                 return 0;
         }
 	
@@ -63,7 +63,7 @@ int irda_register_compressor( struct compressor *cp)
         new->cp = cp;
 
 	/* Insert IrDA compressor into hashbin */
-	hashbin_insert( irlap_compressors, (QUEUE *) new, cp->compress_proto,
+	hashbin_insert( irlap_compressors, (queue_t *) new, cp->compress_proto,
 			NULL);
 	
         return 0;
@@ -79,11 +79,11 @@ void irda_unregister_compressor ( struct compressor *cp)
 {
 	struct irda_compressor *node;
 
-	DEBUG( 4, __FUNCTION__ "()\n");
+	IRDA_DEBUG( 4, __FUNCTION__ "()\n");
 
 	node = hashbin_remove( irlap_compressors, cp->compress_proto, NULL);
 	if ( !node) {
-		DEBUG( 0, __FUNCTION__ "(), compressor not found!\n");
+		IRDA_DEBUG( 0, __FUNCTION__ "(), compressor not found!\n");
 		return;
 	}	
 	kfree( node);
@@ -102,7 +102,7 @@ int irda_set_compression( struct irlap_cb *self, int proto)
 
 	__u8 options[CILEN_DEFLATE];
 
-	DEBUG( 4, __FUNCTION__ "()\n");
+	IRDA_DEBUG( 4, __FUNCTION__ "()\n");
 
 	ASSERT( self != NULL, return -ENODEV;);
 	ASSERT( self->magic == LAP_MAGIC, return -EBADR;);
@@ -115,7 +115,7 @@ int irda_set_compression( struct irlap_cb *self, int proto)
 
 	comp = hashbin_find( irlap_compressors, proto, NULL);
 	if ( !comp) {
-		DEBUG( 0, __FUNCTION__ "(), Unable to find compressor\n");
+		IRDA_DEBUG( 0, __FUNCTION__ "(), Unable to find compressor\n");
 		return -1;
 	}
 
@@ -130,7 +130,7 @@ int irda_set_compression( struct irlap_cb *self, int proto)
 	self->compressor.cp = cp;
 	self->compressor.state = cp->comp_alloc( options, sizeof( options));
 	if ( self->compressor.state == NULL) {
-		DEBUG( 0, __FUNCTION__ "(), Failed!\n");
+		IRDA_DEBUG( 0, __FUNCTION__ "(), Failed!\n");
 		return -ENOBUFS;
 	}
 
@@ -145,7 +145,7 @@ int irda_set_compression( struct irlap_cb *self, int proto)
 	self->decompressor.cp = cp;
 	self->decompressor.state = cp->decomp_alloc( options, sizeof( options));
 	if ( self->decompressor.state == NULL) {
-		DEBUG( 0, __FUNCTION__ "(), Failed!\n");
+		IRDA_DEBUG( 0, __FUNCTION__ "(), Failed!\n");
 		return -ENOBUFS;
 	}
 	return 0;
@@ -159,7 +159,7 @@ int irda_set_compression( struct irlap_cb *self, int proto)
  */
 void irda_free_compression( struct irlap_cb *self)
 {
-	DEBUG( 4, __FUNCTION__ "()\n");
+	IRDA_DEBUG( 4, __FUNCTION__ "()\n");
 
 	if ( self->compressor.state) {
 		irda_comp_free( self->compressor.state);
@@ -183,7 +183,7 @@ void irlap_compressor_init( struct irlap_cb *self, int compress)
 	int debug = TRUE;
 	__u8 options[CILEN_DEFLATE];
 
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LAP_MAGIC, return;);
@@ -198,7 +198,7 @@ void irlap_compressor_init( struct irlap_cb *self, int compress)
 	 *  We're agreeing to send compressed packets.
 	 */
 	if ( self->compressor.state == NULL) {
-		DEBUG( 0, __FUNCTION__ "(), state == NULL\n");
+		IRDA_DEBUG( 0, __FUNCTION__ "(), state == NULL\n");
 		return;
 	}
 	
@@ -206,7 +206,7 @@ void irlap_compressor_init( struct irlap_cb *self, int compress)
 					       options, sizeof( options),
 					       0, 0, debug)) 
 	{
-		DEBUG( 0, __FUNCTION__ "(), Compressor running!\n");
+		IRDA_DEBUG( 0, __FUNCTION__ "(), Compressor running!\n");
 		/* ppp->flags |= SC_COMP_RUN; */
 	}
 	
@@ -214,7 +214,7 @@ void irlap_compressor_init( struct irlap_cb *self, int compress)
 	 *  Initialize decompressor
 	 */
 	if ( self->decompressor.state == NULL) {
-		DEBUG( 0, __FUNCTION__ "(), state == NULL\n");
+		IRDA_DEBUG( 0, __FUNCTION__ "(), state == NULL\n");
 		return;
 	}
 	
@@ -222,7 +222,7 @@ void irlap_compressor_init( struct irlap_cb *self, int compress)
 						   options, sizeof( options),
 						   0, 0, 0, debug)) 
 	{
-		DEBUG( 0, __FUNCTION__ "(), Decompressor running!\n");	
+		IRDA_DEBUG( 0, __FUNCTION__ "(), Decompressor running!\n");	
 		
 		/* ppp->flags |= SC_DECOMP_RUN; */
 		/* ppp->flags &= ~(SC_DC_ERROR | SC_DC_FERROR); */
@@ -243,7 +243,7 @@ struct sk_buff *irlap_compress_frame( struct irlap_cb *self,
 	
 	ASSERT( skb != NULL, return NULL;);
 	
-	DEBUG(4, __FUNCTION__ "() skb->len=%d, jiffies=%ld\n", (int) skb->len,
+	IRDA_DEBUG(4, __FUNCTION__ "() skb->len=%d, jiffies=%ld\n", (int) skb->len,
 	      jiffies);
 
 	ASSERT( self != NULL, return NULL;);
@@ -270,7 +270,7 @@ struct sk_buff *irlap_compress_frame( struct irlap_cb *self,
 						 skb->data, new_skb->data, 
 						 skb->len, new_skb->len);
 	if( count <= 0) {
-		DEBUG(4, __FUNCTION__ "(), Unable to compress frame!\n");
+		IRDA_DEBUG(4, __FUNCTION__ "(), Unable to compress frame!\n");
 		dev_kfree_skb( new_skb);
 
 		/* Tell peer that this frame is not compressed */
@@ -287,7 +287,7 @@ struct sk_buff *irlap_compress_frame( struct irlap_cb *self,
 
 	dev_kfree_skb( skb);
 	
-	DEBUG(4, __FUNCTION__ "() new_skb->len=%d\n, jiffies=%ld", 
+	IRDA_DEBUG(4, __FUNCTION__ "() new_skb->len=%d\n, jiffies=%ld", 
 	      (int) new_skb->len, jiffies);
 	
 	return new_skb;
@@ -305,7 +305,7 @@ struct sk_buff *irlap_decompress_frame( struct irlap_cb *self,
 	struct sk_buff *new_skb;
 	int count;
 
-	DEBUG( 4, __FUNCTION__ "() skb->len=%d\n", (int) skb->len);
+	IRDA_DEBUG( 4, __FUNCTION__ "() skb->len=%d\n", (int) skb->len);
 
 	ASSERT( self != NULL, return NULL;);
 	ASSERT( self->magic == LAP_MAGIC, return NULL;);
@@ -339,7 +339,7 @@ struct sk_buff *irlap_decompress_frame( struct irlap_cb *self,
 	count = irda_decompress( self->decompressor.state, skb->data, 
 				 skb->len, new_skb->data, new_skb->len);
 	if ( count <= 0) {
-		DEBUG( 4, __FUNCTION__ "(), Unable to decompress frame!\n");
+		IRDA_DEBUG( 4, __FUNCTION__ "(), Unable to decompress frame!\n");
 		
 		dev_kfree_skb( new_skb);
 		return skb;
@@ -347,7 +347,7 @@ struct sk_buff *irlap_decompress_frame( struct irlap_cb *self,
 
 	skb_trim( new_skb, count);
 	
-	DEBUG( 4, __FUNCTION__ "() new_skb->len=%d\n", (int) new_skb->len);
+	IRDA_DEBUG( 4, __FUNCTION__ "() new_skb->len=%d\n", (int) new_skb->len);
 
 	return new_skb;
 }

@@ -152,7 +152,6 @@ nfs_readpage_result(struct rpc_task *task)
 		fail++;
 		dprintk("NFS: %d successful reads, %d failures\n", succ, fail);
 	}
-	page->owner = current; // HACK, FIXME, will go away.
 	UnlockPage(page);
 	free_page(address);
 

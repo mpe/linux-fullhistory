@@ -56,7 +56,7 @@ int __init airport_init(void)
 {
 	int ret;
 
-	DEBUG(2, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 	ret = irda_device_register_dongle(&dongle);
 	if (ret < 0)
 		return ret;
@@ -65,17 +65,17 @@ int __init airport_init(void)
 
 void airport_cleanup(void)
 {
-	DEBUG(2, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 	irda_device_unregister_dongle(&dongle);
 }
 
 static void airport_open(struct irda_device *idev, int type)
 {
-	DEBUG(2, __FUNCTION__ "(,%d)\n", type);
+	IRDA_DEBUG(2, __FUNCTION__ "(,%d)\n", type);
 	if (strlen(idev->description) < sizeof(idev->description) - 13)
 	  strcat(idev->description, " <-> airport");
 	else
-	  DEBUG(0, __FUNCTION__ " description too long: %s\n", 
+	  IRDA_DEBUG(0, __FUNCTION__ " description too long: %s\n", 
 		idev->description);
 
         idev->io.dongle_id = type;
@@ -86,7 +86,7 @@ static void airport_open(struct irda_device *idev, int type)
 
 static void airport_close(struct irda_device *idev)
 {
-	DEBUG(2, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 	/* Power off dongle */
 	irda_device_set_dtr_rts(idev, FALSE, FALSE);
 
@@ -95,13 +95,13 @@ static void airport_close(struct irda_device *idev)
 
 static void airport_set_command_mode(struct irda_device *idev)
 {
-	DEBUG(2, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 	irda_device_set_dtr_rts(idev, FALSE, TRUE);
 }
 
 static void airport_set_normal_mode(struct irda_device *idev)
 {
-	DEBUG(2, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
     	irda_device_set_dtr_rts(idev, TRUE, TRUE);
 }
 
@@ -109,7 +109,7 @@ static void airport_set_normal_mode(struct irda_device *idev)
 void airport_write_char(struct irda_device *idev, unsigned char c)
 {
 	int actual;
-	DEBUG(2, __FUNCTION__ "(,0x%x)\n", c & 0xff);
+	IRDA_DEBUG(2, __FUNCTION__ "(,0x%x)\n", c & 0xff);
 	actual = idev->raw_write(idev, &c, 1);
 	ASSERT(actual == 1, return;);
 }
@@ -120,22 +120,22 @@ static int airport_waitfor_char(struct irda_device *idev, unsigned char c)
 {
 	int i, found = FALSE;
 	int before;
-	DEBUG(2, __FUNCTION__ "(,0x%x)\n", c);
+	IRDA_DEBUG(2, __FUNCTION__ "(,0x%x)\n", c);
 
 	/* Sleep approx. 10 ms */
 	before = jiffies;
 	current->state = TASK_INTERRUPTIBLE;
 	schedule_timeout(MSECS_TO_JIFFIES(20));
-	DEBUG(4, __FUNCTION__ " waited %ldms\n", 
+	IRDA_DEBUG(4, __FUNCTION__ " waited %ldms\n", 
 	      JIFFIES_TO_MSECS(jiffies - before));
 
 	for ( i = 0 ; !found && i < idev->rx_buff.len ; i++ ) {
-		/* DEBUG(6, __FUNCTION__ " 0x02x\n", idev->rx_buff.data[i]); */
+		/* IRDA_DEBUG(6, __FUNCTION__ " 0x02x\n", idev->rx_buff.data[i]); */
 		found = c == idev->rx_buff.data[i];
 	}
 	idev->rx_buff.len = 0;
 
-	DEBUG(2, __FUNCTION__ " returns %s\n", (found ? "true" : "false"));
+	IRDA_DEBUG(2, __FUNCTION__ " returns %s\n", (found ? "true" : "false"));
 	return found;
 }
 
@@ -144,7 +144,7 @@ static int airport_check_command_mode(struct irda_device *idev)
 	int i;
 	int found = FALSE;
   
-	DEBUG(2, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 	current->state = TASK_INTERRUPTIBLE;
 	schedule_timeout(MSECS_TO_JIFFIES(20));
 	airport_set_command_mode(idev);
@@ -160,9 +160,9 @@ static int airport_check_command_mode(struct irda_device *idev)
 	}
 
 	if (found) {
-		DEBUG(2, __FUNCTION__ " OK. (%d)\n", i);
+		IRDA_DEBUG(2, __FUNCTION__ " OK. (%d)\n", i);
 	} else {
-		DEBUG(0, __FUNCTION__ " FAILED!\n");
+		IRDA_DEBUG(0, __FUNCTION__ " FAILED!\n");
 	}
 	return found;
 }
@@ -173,7 +173,7 @@ static int airport_write_register(struct irda_device *idev, unsigned char reg)
 	int ok = FALSE;
 	int i;
 
-	DEBUG(4, __FUNCTION__ "(,0x%x)\n", reg);
+	IRDA_DEBUG(4, __FUNCTION__ "(,0x%x)\n", reg);
 	airport_check_command_mode(idev);
 
 	for ( i = 0 ; i < 6 ; i++ ) {
@@ -191,9 +191,9 @@ static int airport_write_register(struct irda_device *idev, unsigned char reg)
 
 	airport_set_normal_mode(idev);
 	if (ok) {
-		DEBUG(4, __FUNCTION__ "(,0x%x) returns OK\n", reg);
+		IRDA_DEBUG(4, __FUNCTION__ "(,0x%x) returns OK\n", reg);
 	} else {
-		DEBUG(0, __FUNCTION__ "(,0x%x) returns False!\n", reg);
+		IRDA_DEBUG(0, __FUNCTION__ "(,0x%x) returns False!\n", reg);
 	}
 	return ok;
 }
@@ -209,7 +209,7 @@ static void airport_change_speed(struct irda_device *idev, __u32 speed)
         __u32 current_baudrate;
         int baudcode;
 	
-	DEBUG(4, __FUNCTION__ "(,%d)\n", speed);
+	IRDA_DEBUG(4, __FUNCTION__ "(,%d)\n", speed);
 
 	ASSERT(idev != NULL, return;);
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
@@ -224,16 +224,16 @@ static void airport_change_speed(struct irda_device *idev, __u32 speed)
 	case 57600:	baudcode = 0x60;	break;
 	case 115200:	baudcode = 0x70;	break;
 	default:
-		DEBUG(0, __FUNCTION__ " bad baud rate: %d\n", speed);
+		IRDA_DEBUG(0, __FUNCTION__ " bad baud rate: %d\n", speed);
 		return;
 	}
 
 	current_baudrate = idev->qos.baud_rate.value;
-	DEBUG(4, __FUNCTION__ " current baudrate: %d\n", current_baudrate);
+	IRDA_DEBUG(4, __FUNCTION__ " current baudrate: %d\n", current_baudrate);
 
 	/* The dongle falls back to 9600 baud */
 	if (current_baudrate != 9600) {
-		DEBUG(4, __FUNCTION__ " resetting speed to 9600 baud\n");
+		IRDA_DEBUG(4, __FUNCTION__ " resetting speed to 9600 baud\n");
 		ASSERT(idev->change_speed , return;);
 		idev->change_speed(idev, 9600);
 		idev->qos.baud_rate.value = 9600;
@@ -247,11 +247,11 @@ static void airport_change_speed(struct irda_device *idev, __u32 speed)
 		if (airport_write_register(idev, baudcode|0x01)) {
 			/* ok */
 		} else {
-			DEBUG(0, __FUNCTION__ 
+			IRDA_DEBUG(0, __FUNCTION__ 
 			      " Cannot set new speed in second register\n");
 		}
 	} else {
-		DEBUG(0, __FUNCTION__ 
+		IRDA_DEBUG(0, __FUNCTION__ 
 		      " Cannot set new speed in first register\n");
 	}
 	
@@ -260,7 +260,7 @@ static void airport_change_speed(struct irda_device *idev, __u32 speed)
 
 	/* How do I signal an error in these functions? */
 
-	DEBUG(4, __FUNCTION__ " returning\n");
+	IRDA_DEBUG(4, __FUNCTION__ " returning\n");
 }
 
 
@@ -275,7 +275,7 @@ static void airport_reset(struct irda_device *idev)
 {
 	int ok;
 
-	DEBUG(2, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 	ASSERT(idev != NULL, return;);
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
 	ASSERT(idev->set_raw_mode /* The airport needs this */, return;);
@@ -286,10 +286,10 @@ static void airport_reset(struct irda_device *idev)
 	airport_set_normal_mode(idev);
 
 	/* Sleep 2000 ms */
-	DEBUG(2, __FUNCTION__ " waiting for powerup\n");
+	IRDA_DEBUG(2, __FUNCTION__ " waiting for powerup\n");
 	current->state = TASK_INTERRUPTIBLE;
 	schedule_timeout(MSECS_TO_JIFFIES(2000));
-	DEBUG(2, __FUNCTION__ " finished waiting for powerup\n");
+	IRDA_DEBUG(2, __FUNCTION__ " finished waiting for powerup\n");
 	
 	/* set dongle speed to 9600 */
 	ok = TRUE;
@@ -322,12 +322,12 @@ static void airport_reset(struct irda_device *idev)
 
 	current->state = TASK_INTERRUPTIBLE;
 	schedule_timeout(MSECS_TO_JIFFIES(20));
-	DEBUG(4, __FUNCTION__ " waited 20ms\n");
+	IRDA_DEBUG(4, __FUNCTION__ " waited 20ms\n");
 
 	idev->qos.baud_rate.value = 9600;
 	if (!ok)
 		MESSAGE(__FUNCTION__ "() failed.\n");
-	DEBUG(2, __FUNCTION__ " returning.\n");
+	IRDA_DEBUG(2, __FUNCTION__ " returning.\n");
 }
 
 /*

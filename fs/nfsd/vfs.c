@@ -234,6 +234,7 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 	int		ftype = 0;
 	int		imode;
 	int		err;
+	kernel_cap_t	saved_cap = 0;
 
 	if (iap->ia_valid & (ATTR_ATIME | ATTR_MTIME | ATTR_SIZE))
 		accmode |= MAY_WRITE;
@@ -242,7 +243,7 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 
 	/* Get inode */
 	err = fh_verify(rqstp, fhp, ftype, accmode);
-	if (err)
+	if (err || !iap->ia_valid)
 		goto out;
 
 	dentry = fhp->fh_dentry;
@@ -252,7 +253,7 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 	if (err)
 		goto out_nfserr;
 
-	/* The size case is special... */
+	/* The size case is special. It changes the file as well as the attributes.  */
 	if (iap->ia_valid & ATTR_SIZE) {
 if (!S_ISREG(inode->i_mode))
 printk("nfsd_setattr: size change??\n");
@@ -264,15 +265,14 @@ printk("nfsd_setattr: size change??\n");
 		err = get_write_access(inode);
 		if (err)
 			goto out_nfserr;
-		/* N.B. Should we update the inode cache here? */
-		inode->i_size = iap->ia_size;
-		if (inode->i_op && inode->i_op->truncate)
-			inode->i_op->truncate(inode);
-		mark_inode_dirty(inode);
-		put_write_access(inode);
-		iap->ia_valid &= ~ATTR_SIZE;
-		iap->ia_valid |= ATTR_MTIME;
-		iap->ia_mtime = CURRENT_TIME;
+
+		err = locks_verify_area(FLOCK_VERIFY_WRITE, inode, NULL,
+				  iap->ia_size<inode->i_size ? iap->ia_size : inode->i_size,
+				  abs(inode->i_size - iap->ia_size));
+
+		if (err)
+			goto out_nfserr;
+		DQUOT_INIT(inode);
 	}
 
 	imode = inode->i_mode;
@@ -294,23 +294,32 @@ printk("nfsd_setattr: size change??\n");
 	}
 
 	/* Change the attributes. */
-	if (iap->ia_valid) {
-		kernel_cap_t	saved_cap = 0;
 
-		iap->ia_valid |= ATTR_CTIME;
-		iap->ia_ctime = CURRENT_TIME;
-		if (current->fsuid != 0) {
-			saved_cap = current->cap_effective;
-			cap_clear(current->cap_effective);
-		}
-		err = notify_change(dentry, iap);
-		if (current->fsuid != 0)
-			current->cap_effective = saved_cap;
-		if (err)
-			goto out_nfserr;
-		if (EX_ISSYNC(fhp->fh_export))
-			write_inode_now(inode);
+
+	iap->ia_valid |= ATTR_CTIME;
+	if (current->fsuid != 0) {
+		saved_cap = current->cap_effective;
+		cap_clear(current->cap_effective);
 	}
+	if (iap->ia_valid & ATTR_SIZE) {
+		fh_lock(fhp);
+		err = notify_change(dentry, iap);
+		if (!err) {
+			vmtruncate(inode,iap->ia_size);		
+			if (inode->i_op && inode->i_op->truncate)
+				inode->i_op->truncate(inode);
+		}
+		fh_unlock(fhp);
+		put_write_access(inode);
+	}
+	else
+		err = notify_change(dentry, iap);
+	if (current->fsuid != 0)
+		current->cap_effective = saved_cap;
+	if (err)
+		goto out_nfserr;
+	if (EX_ISSYNC(fhp->fh_export))
+		write_inode_now(inode);
 	err = 0;
 out:
 	return err;
@@ -401,7 +410,6 @@ nfsd_close(struct file *filp)
 		filp->f_op->release(inode, filp);
 	if (filp->f_mode & FMODE_WRITE) {
 		put_write_access(inode);
-		DQUOT_DROP(inode);
 	}
 }
 
@@ -651,9 +659,13 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	err = nfserr_perm;
 	if (!flen)
 		goto out;
-	err = fh_verify(rqstp, fhp, S_IFDIR, MAY_CREATE);
-	if (err)
-		goto out;
+
+	/* from mkdir it won't be verified, from create it will	 */
+	if (!fhp->fh_dverified) {
+		err = fh_verify(rqstp, fhp, S_IFDIR, MAY_CREATE);
+		if (err)
+			goto out;
+	}
 
 	dentry = fhp->fh_dentry;
 	dirp = dentry->d_inode;
@@ -731,7 +743,6 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	 */
 	DQUOT_INIT(dirp);
 	err = opfunc(dirp, dchild, iap->ia_mode, rdev);
-	DQUOT_DROP(dirp);
 	if (err < 0)
 		goto out_nfserr;
 
@@ -786,6 +797,11 @@ nfsd_truncate(struct svc_rqst *rqstp, struct svc_fh *fhp, unsigned long size)
 	err = get_write_access(inode);
 	if (err)
 		goto out_nfserr;
+	err = locks_verify_area(FLOCK_VERIFY_WRITE, inode, NULL,
+				  size<inode->i_size ? size : inode->i_size,
+				  abs(inode->i_size - size));
+	if (err)
+		goto out_nfserr;
 
 	/* Things look sane, lock and do it. */
 	fh_lock(fhp);
@@ -797,15 +813,14 @@ nfsd_truncate(struct svc_rqst *rqstp, struct svc_fh *fhp, unsigned long size)
 		cap_clear(current->cap_effective);
 	}
 	err = notify_change(dentry, &newattrs);
-	if (current->fsuid != 0)
-		current->cap_effective = saved_cap;
 	if (!err) {
 		vmtruncate(inode, size);
 		if (inode->i_op && inode->i_op->truncate)
 			inode->i_op->truncate(inode);
 	}
+	if (current->fsuid != 0)
+		current->cap_effective = saved_cap;
 	put_write_access(inode);
-	DQUOT_DROP(inode);
 	fh_unlock(fhp);
 out_nfserr:
 	if (err)
@@ -902,7 +917,6 @@ nfsd_symlink(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if (!dnew->d_inode) {
 		DQUOT_INIT(dirp);
 		err = dirp->i_op->symlink(dirp, dnew, path);
-		DQUOT_DROP(dirp);
 		if (!err) {
 			if (EX_ISSYNC(fhp->fh_export))
 				write_inode_now(dirp);
@@ -981,7 +995,6 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 
 	DQUOT_INIT(dirp);
 	err = dirp->i_op->link(dold, dirp, dnew);
-	DQUOT_DROP(dirp);
 	if (!err) {
 		if (EX_ISSYNC(ffhp->fh_export)) {
 			write_inode_now(dirp);
@@ -1105,8 +1118,6 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 		}
 	} else
 		dprintk("nfsd: Caught race in nfsd_rename");
-	DQUOT_DROP(fdir);
-	DQUOT_DROP(tdir);
 
 	nfsd_double_up(&tdir->i_sem, &fdir->i_sem);
 	dput(ndentry);
@@ -1167,7 +1178,6 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 
 		err = vfs_unlink(dirp, rdentry);
 
-		DQUOT_DROP(dirp);
 		fh_unlock(fhp);
 
 		dput(rdentry);
@@ -1187,7 +1197,6 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 			err = vfs_rmdir(dirp, rdentry);
 
 		rdentry->d_count--;
-		DQUOT_DROP(dirp);
 		if (!fhp->fh_post_version)
 			fhp->fh_post_version = dirp->i_version;
 		fhp->fh_locked = 0;

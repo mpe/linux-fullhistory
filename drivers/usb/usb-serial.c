@@ -11,6 +11,9 @@
  * vendor and device ids for that device.
  *
  * 
+ * version 0.1.2 (10/25/99) gkh
+ *  Fixed bug in detecting device.
+ *
  * version 0.1.1 (10/05/99) gkh
  *  Changed the major number to not conflict with anything else.
  *
@@ -528,7 +531,7 @@ static int usb_serial_probe(struct usb_device *dev)
 			serial->interrupt_in_interval = endpoint->bInterval;
 			/* serial->interrupt_in_pipe = usb_rcvbulkpipe (dev, serial->bulk_in_endpoint); */
 			serial->interrupt_in_buffer = kmalloc (serial->bulk_in_size, GFP_KERNEL);
-			if (!serial->bulk_in_buffer) {
+			if (!serial->interrupt_in_buffer) {
 				printk("USB Serial: Couldn't allocate interrupt_in_buffer\n");
 				goto probe_error;
 			}

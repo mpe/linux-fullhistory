@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Thu Sep  9 11:39:43 1999
+ * Modified at:   Tue Oct  5 11:36:11 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997, 1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -296,7 +296,7 @@ struct irlan_cb *irlan_open(__u32 saddr, __u32 daddr, int netdev)
 	init_timer(&self->watchdog_timer);
 	init_timer(&self->client.kick_timer);
 
-	hashbin_insert(irlan, (QUEUE *) self, daddr, NULL);
+	hashbin_insert(irlan, (queue_t *) self, daddr, NULL);
 	
 	skb_queue_head_init(&self->client.txq);
 	

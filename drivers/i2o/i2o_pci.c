@@ -25,6 +25,10 @@
 #include <linux/malloc.h>
 #include <asm/io.h>
 
+#ifdef CONFIG_MTRR
+#include <asm/mtrr.h>
+#endif // CONFIG_MTRR
+
 #ifdef MODULE
 /*
  * Core function table
@@ -46,6 +50,11 @@ static void i2o_pci_dispose(struct i2o_controller *c)
 	if(c->bus.pci.irq > 0)
 		free_irq(c->bus.pci.irq, c);
 	iounmap(((u8 *)c->post_port)-0x40);
+
+#ifdef CONFIG_MTRR
+	if(c->bus.pci.mtrr_reg > 0)
+		mtrr_del(c->bus.pci.mtrr_reg, 0, 0);
+#endif
 }
 
 /*
@@ -66,6 +75,19 @@ static int i2o_pci_unbind(struct i2o_controller *c, struct i2o_device *dev)
 }
 
 /*
+ * Bus specific enable/disable functions
+ */
+static void i2o_pci_enable(struct i2o_controller *c)
+{
+	I2O_IRQ_WRITE32(c, 0);
+}
+
+static void i2o_pci_disable(struct i2o_controller *c)
+{
+	I2O_IRQ_WRITE32(c, 0xFFFFFFFF);
+}
+
+/*
  *	Bus specific interrupt handler
  */
  
@@ -81,8 +103,9 @@ static void i2o_pci_interrupt(int irq, void *dev_id, struct pt_regs *r)
 
 /*
  *	Install a PCI (or in theory AGP) i2o controller
+ *
+ * TODO: Add support for polled controllers
  */
- 
 int __init i2o_pci_install(struct pci_dev *dev)
 {
 	struct i2o_controller *c=kmalloc(sizeof(struct i2o_controller),
@@ -128,7 +151,7 @@ int __init i2o_pci_install(struct pci_dev *dev)
 		kfree(c);
 		return -EINVAL;
 	}
-	
+
 	c->bus.pci.irq = -1;
 
 	c->irq_mask = (volatile u32 *)(mem+0x34);
@@ -141,8 +164,18 @@ int __init i2o_pci_install(struct pci_dev *dev)
 	
 	c->bind = i2o_pci_bind;
 	c->unbind = i2o_pci_unbind;
+	c->bus_enable = i2o_pci_enable;
+	c->bus_disable = i2o_pci_disable;
 	
 	c->type = I2O_TYPE_PCI;
+
+	/* 
+	 * Enable Write Combining MTRR for IOP's memory region
+	 */
+#ifdef CONFIG_MTRR
+	c->bus.pci.mtrr_reg = 
+		mtrr_add(c->mem_phys, size, MTRR_TYPE_WRCOMB, 1);
+#endif
 
 	I2O_IRQ_WRITE32(c,0xFFFFFFFF);
 
@@ -180,6 +213,9 @@ int __init i2o_pci_install(struct pci_dev *dev)
 			return -EBUSY;
 		}
 	}
+
+	printk(KERN_INFO "Installed iop%d at IRQ%d\n", c->unit, dev->irq);
+	I2O_IRQ_WRITE32(c,0x0);
 	return 0;	
 }
 
@@ -211,102 +247,54 @@ int __init i2o_pci_scan(void)
 	return count?count:-ENODEV;
 }
 
-static void i2o_pci_unload(void)
+#ifdef I2O_HOTPLUG_SUPPORT
+/*
+ * Activate a newly found PCI I2O controller
+ * Not used now, but will be needed in future for
+ * hot plug PCI support
+ */
+static void i2o_pci_activate(i2o_controller * c)
 {
 	int i=0;
 	struct i2o_controller *c;
 	
-	for(i = 0; i < MAX_I2O_CONTROLLERS; i++)
+	if(c->type == I2O_TYPE_PCI)
 	{
+		I2O_IRQ_WRITE32(c,0);
 #ifdef MODULE
-		c=core->find(i);
+		if(core->activate(c))
 #else
-		c=i2o_find_controller(i);
+		if(i2o_activate_controller(c))
 #endif /* MODULE */
-
-		if(c==NULL)
-			continue;		
-
+		{
+			printk("I2O: Failed to initialize iop%d\n", c->unit);
 #ifdef MODULE
-		core->unlock(c);
-#else
-		i2o_unlock_controller(c);
-#endif /* MODULE */
-
-		if(c->type == I2O_TYPE_PCI)
-#ifdef MODULE
+			core->unlock(c);
 			core->delete(c);
 #else
+			i2o_unlock_controller(c);
 			i2o_delete_controller(c);
-#endif /* MODULE */
-	}
-}
-
-static void i2o_pci_activate(void)
-{
-	int i=0;
-	struct i2o_controller *c;
-	
-	for(i = 0; i < MAX_I2O_CONTROLLERS; i++)
-	{
-#ifdef MODULE
-		c=core->find(i);
-#else
-		c=i2o_find_controller(i);
-#endif /* MODULE */
-
-		if(c==NULL)
-			continue;		
-			
-		if(c->type == I2O_TYPE_PCI)
-		{
-#ifdef MODULE
-			if(core->activate(c))
-#else
-			if(i2o_activate_controller(c))
-#endif /* MODULE */
-			{
-				printk("I2O: Failed to initialize iop%d\n", c->unit);
-#ifdef MODULE
-				core->unlock(c);
-				core->delete(c);
-#else
-				i2o_unlock_controller(c);
-				i2o_delete_controller(c);
 #endif
-				continue;
-			}
-			I2O_IRQ_WRITE32(c,0);
+			continue;
 		}
-#ifdef MODULE
-		core->unlock(c);
-#else
-		i2o_unlock_controller(c);
-#endif
 	}
 }
-
+#endif // I2O_HOTPLUG_SUPPORT
 
 #ifdef MODULE
 
 int i2o_pci_core_attach(struct i2o_core_func_table *table)
 {
-	int i;
-
 	MOD_INC_USE_COUNT;
 
 	core = table;
- 
-	if((i = i2o_pci_scan())<0)
- 		return -ENODEV;
- 	i2o_pci_activate();
 
-	return i;
+	return i2o_pci_scan();
 }
 
 void i2o_pci_core_detach(void)
 {
-	i2o_pci_unload();
+	core = NULL;
 
 	MOD_DEC_USE_COUNT;
 }
@@ -314,16 +302,8 @@ void i2o_pci_core_detach(void)
 int init_module(void)
 {
 	printk(KERN_INFO "Linux I2O PCI support (c) 1999 Red Hat Software.\n");
-
-/*
- * Let the core call the scan function for module dependency
- * reasons.  See include/linux/i2o.h for the reason why this
- * is done.
- *
- *	if(i2o_pci_scan()<0)
- *		return -ENODEV;
- *	i2o_pci_activate();
- */
+	
+	core = NULL;
 
  	return 0;
  
@@ -343,9 +323,6 @@ MODULE_DESCRIPTION("I2O PCI Interface");
 void __init i2o_pci_init(void)
 {
 	printk(KERN_INFO "Linux I2O PCI support (c) 1999 Red Hat Software.\n");
-	if(i2o_pci_scan()>=0)
-	{
-		i2o_pci_activate();
-	}
+	i2o_pci_scan();
 }
 #endif

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Oct  1 22:50:04 1998
- * Modified at:   Mon Jun 21 16:11:13 1999
+ * Modified at:   Sat Oct  9 17:11:16 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -24,7 +24,6 @@
 
 #include <linux/string.h>
 #include <linux/socket.h>
-#include <linux/irda.h>
 
 #include <net/irda/irda.h>
 #include <net/irda/irmod.h>
@@ -71,12 +70,12 @@ struct ias_object *irias_new_object( char *name, int id)
 {
         struct ias_object *obj;
 	
-	DEBUG( 4, __FUNCTION__ "()\n");
+	IRDA_DEBUG( 4, __FUNCTION__ "()\n");
 
 	obj = (struct ias_object *) kmalloc( sizeof( struct ias_object), 
 					     GFP_ATOMIC);
 	if (obj == NULL) {
-		DEBUG(0, __FUNCTION__ "(), Unable to allocate object!\n");
+		IRDA_DEBUG(0, __FUNCTION__ "(), Unable to allocate object!\n");
 		return NULL;
 	}
 	memset(obj, 0, sizeof( struct ias_object));
@@ -156,12 +155,10 @@ int irias_delete_object(struct ias_object *obj)
  */
 void irias_insert_object(struct ias_object *obj)
 {
-	DEBUG(4, __FUNCTION__ "()\n");
-	
 	ASSERT(obj != NULL, return;);
 	ASSERT(obj->magic == IAS_OBJECT_MAGIC, return;);
 	
-	hashbin_insert(objects, (QUEUE *) obj, 0, obj->name);
+	hashbin_insert(objects, (queue_t *) obj, 0, obj->name);
 }
 
 /*
@@ -183,18 +180,16 @@ struct ias_object *irias_find_object(char *name)
  *    Find named attribute in object
  *
  */
-struct ias_attrib *irias_find_attrib( struct ias_object *obj, char *name)
+struct ias_attrib *irias_find_attrib(struct ias_object *obj, char *name)
 {
 	struct ias_attrib *attrib;
 
-	DEBUG( 4, __FUNCTION__ "()\n");
+	ASSERT(obj != NULL, return NULL;);
+	ASSERT(obj->magic == IAS_OBJECT_MAGIC, return NULL;);
+	ASSERT(name != NULL, return NULL;);
 
-	ASSERT( obj != NULL, return NULL;);
-	ASSERT( obj->magic == IAS_OBJECT_MAGIC, return NULL;);
-	ASSERT( name != NULL, return NULL;);
-
-	attrib = hashbin_find( obj->attribs, 0, name);
-	if ( attrib == NULL)
+	attrib = hashbin_find(obj->attribs, 0, name);
+	if (attrib == NULL)
 		return NULL;
 
 	return attrib;
@@ -208,15 +203,13 @@ struct ias_attrib *irias_find_attrib( struct ias_object *obj, char *name)
  */
 void irias_add_attrib( struct ias_object *obj, struct ias_attrib *attrib)
 {
-	DEBUG( 4, __FUNCTION__ "()\n");
+	ASSERT(obj != NULL, return;);
+	ASSERT(obj->magic == IAS_OBJECT_MAGIC, return;);
 	
-	ASSERT( obj != NULL, return;);
-	ASSERT( obj->magic == IAS_OBJECT_MAGIC, return;);
-	
-	ASSERT( attrib != NULL, return;);
-	ASSERT( attrib->magic == IAS_ATTRIB_MAGIC, return;);
+	ASSERT(attrib != NULL, return;);
+	ASSERT(attrib->magic == IAS_ATTRIB_MAGIC, return;);
 
-	hashbin_insert( obj->attribs, (QUEUE *) attrib, 0, attrib->name);
+	hashbin_insert(obj->attribs, (queue_t *) attrib, 0, attrib->name);
 }
 
 /*
@@ -225,36 +218,36 @@ void irias_add_attrib( struct ias_object *obj, struct ias_attrib *attrib)
  *    Change the value of an objects attribute.
  *
  */
-int irias_object_change_attribute( char *obj_name, char *attrib_name, 
-				   struct ias_value *new_value) 
+int irias_object_change_attribute(char *obj_name, char *attrib_name, 
+				  struct ias_value *new_value) 
 {
 	struct ias_object *obj;
 	struct ias_attrib *attrib;
 
 	/* Find object */
-	obj = hashbin_find( objects, 0, obj_name);
-	if ( obj == NULL) {
-		DEBUG( 0, __FUNCTION__ "(), Unable to find object: %s\n",
-		       obj_name);
+	obj = hashbin_find(objects, 0, obj_name);
+	if (obj == NULL) {
+		WARNING(__FUNCTION__ "(), Unable to find object: %s\n",
+			obj_name);
 		return -1;
 	}
 
 	/* Find attribute */
-	attrib = hashbin_find( obj->attribs, 0, attrib_name);
-	if ( attrib == NULL) {
-		DEBUG( 0, __FUNCTION__ "(), Unable to find attribute: %s\n",
-		       attrib_name);
+	attrib = hashbin_find(obj->attribs, 0, attrib_name);
+	if (attrib == NULL) {
+		WARNING(__FUNCTION__ "(), Unable to find attribute: %s\n",
+			attrib_name);
 		return -1;
 	}
-
+	
 	if ( attrib->value->type != new_value->type) {
-		DEBUG( 0, __FUNCTION__ 
+		IRDA_DEBUG( 0, __FUNCTION__ 
 		       "(), changing value type not allowed!\n");
 		return -1;
 	}
 
 	/* Delete old value */
-	irias_delete_value( attrib->value);
+	irias_delete_value(attrib->value);
 	
 	/* Insert new value */
 	attrib->value = new_value;
@@ -269,31 +262,29 @@ int irias_object_change_attribute( char *obj_name, char *attrib_name,
  *    Add an integer attribute to an LM-IAS object
  *
  */
-void irias_add_integer_attrib( struct ias_object *obj, char *name, int value)
+void irias_add_integer_attrib(struct ias_object *obj, char *name, int value)
 {
 	struct ias_attrib *attrib;
 
-	ASSERT( obj != NULL, return;);
-	ASSERT( obj->magic == IAS_OBJECT_MAGIC, return;);
-	ASSERT( name != NULL, return;);
+	ASSERT(obj != NULL, return;);
+	ASSERT(obj->magic == IAS_OBJECT_MAGIC, return;);
+	ASSERT(name != NULL, return;);
 	
-	attrib = (struct ias_attrib *) kmalloc( sizeof( struct ias_attrib), 
-						GFP_ATOMIC);
-	if ( attrib == NULL) {
-		DEBUG( 0, __FUNCTION__ 
-		       "(), Unable to allocate attribute!\n");
+	attrib = (struct ias_attrib *) kmalloc(sizeof(struct ias_attrib), 
+					       GFP_ATOMIC);
+	if (attrib == NULL) {
+		WARNING(__FUNCTION__ "(), Unable to allocate attribute!\n");
 		return;
 	}
-	memset( attrib, 0, sizeof( struct ias_attrib));
+	memset(attrib, 0, sizeof( struct ias_attrib));
 
 	attrib->magic = IAS_ATTRIB_MAGIC;
-	attrib->name = strdup( name);
-/* 	attrib->attr = NULL; */
+	attrib->name = strdup(name);
 
 	/* Insert value */
-	attrib->value = irias_new_integer_value( value);
+	attrib->value = irias_new_integer_value(value);
 	
-	irias_add_attrib( obj, attrib);
+	irias_add_attrib(obj, attrib);
 }
 
  /*
@@ -303,33 +294,32 @@ void irias_add_integer_attrib( struct ias_object *obj, char *name, int value)
  *
  */
 
-void irias_add_octseq_attrib( struct ias_object *obj, char *name, 
-			      __u8 *octets, int len)
+void irias_add_octseq_attrib(struct ias_object *obj, char *name, __u8 *octets,
+			     int len)
 {
 	struct ias_attrib *attrib;
 	
-	ASSERT( obj != NULL, return;);
-	ASSERT( obj->magic == IAS_OBJECT_MAGIC, return;);
+	ASSERT(obj != NULL, return;);
+	ASSERT(obj->magic == IAS_OBJECT_MAGIC, return;);
 	
-	ASSERT( name != NULL, return;);
-	ASSERT( octets != NULL, return;);
-	ASSERT( len < 55, return;);          /* FIXME: must be 1024, but... */
+	ASSERT(name != NULL, return;);
+	ASSERT(octets != NULL, return;);
 	
-	attrib = (struct ias_attrib *) kmalloc( sizeof( struct ias_attrib), 
-						GFP_ATOMIC);
-	if ( attrib == NULL) {
-		DEBUG( 0, __FUNCTION__ 
-		       "(), Unable to allocate attribute!\n");
+	attrib = (struct ias_attrib *) kmalloc(sizeof(struct ias_attrib), 
+					       GFP_ATOMIC);
+	if (attrib == NULL) {
+		WARNING(__FUNCTION__ 
+			"(), Unable to allocate attribute!\n");
 		return;
 	}
-	memset( attrib, 0, sizeof( struct ias_attrib));
+	memset(attrib, 0, sizeof( struct ias_attrib));
 	
 	attrib->magic = IAS_ATTRIB_MAGIC;
 	attrib->name = strdup( name);
 	
 	attrib->value = irias_new_octseq_value( octets, len);
 	
-	irias_add_attrib( obj, attrib);
+	irias_add_attrib(obj, attrib);
 }
 
 /*
@@ -338,31 +328,30 @@ void irias_add_octseq_attrib( struct ias_object *obj, char *name,
  *    Add a string attribute to an LM-IAS object
  *
  */
-void irias_add_string_attrib( struct ias_object *obj, char *name, char *value)
+void irias_add_string_attrib(struct ias_object *obj, char *name, char *value)
 {
 	struct ias_attrib *attrib;
 
-	ASSERT( obj != NULL, return;);
-	ASSERT( obj->magic == IAS_OBJECT_MAGIC, return;);
+	ASSERT(obj != NULL, return;);
+	ASSERT(obj->magic == IAS_OBJECT_MAGIC, return;);
 
-	ASSERT( name != NULL, return;);
-	ASSERT( value != NULL, return;);
+	ASSERT(name != NULL, return;);
+	ASSERT(value != NULL, return;);
 	
-	attrib = (struct ias_attrib *) kmalloc( sizeof( struct ias_attrib), 
-						GFP_ATOMIC);
-	if ( attrib == NULL) {
-		DEBUG( 0, __FUNCTION__ 
-		       "(), Unable to allocate attribute!\n");
+	attrib = (struct ias_attrib *) kmalloc(sizeof( struct ias_attrib), 
+					       GFP_ATOMIC);
+	if (attrib == NULL) {
+		WARNING(__FUNCTION__ "(), Unable to allocate attribute!\n");
 		return;
 	}
-	memset( attrib, 0, sizeof( struct ias_attrib));
+	memset(attrib, 0, sizeof( struct ias_attrib));
 
 	attrib->magic = IAS_ATTRIB_MAGIC;
-	attrib->name = strdup( name);
+	attrib->name = strdup(name);
 
-	attrib->value = irias_new_string_value( value);
+	attrib->value = irias_new_string_value(value);
 
-	irias_add_attrib( obj, attrib);
+	irias_add_attrib(obj, attrib);
 }
 
 /*
@@ -371,16 +360,16 @@ void irias_add_string_attrib( struct ias_object *obj, char *name, char *value)
  *    Create new IAS integer value
  *
  */
-struct ias_value *irias_new_integer_value( int integer)
+struct ias_value *irias_new_integer_value(int integer)
 {
 	struct ias_value *value;
 
-	value = kmalloc( sizeof( struct ias_value), GFP_ATOMIC);
-	if ( value == NULL) {
-		DEBUG( 0, __FUNCTION__ "(), Unable to kmalloc!\n");
+	value = kmalloc(sizeof( struct ias_value), GFP_ATOMIC);
+	if (value == NULL) {
+		WARNING(__FUNCTION__ "(), Unable to kmalloc!\n");
 		return NULL;
 	}
-	memset( value, 0, sizeof( struct ias_value));
+	memset(value, 0, sizeof(struct ias_value));
 
 	value->type = IAS_INTEGER;
 	value->len = 4;
@@ -395,21 +384,21 @@ struct ias_value *irias_new_integer_value( int integer)
  *    Create new IAS string value
  *
  */
-struct ias_value *irias_new_string_value( char *string)
+struct ias_value *irias_new_string_value(char *string)
 {
 	struct ias_value *value;
 
-	value = kmalloc( sizeof( struct ias_value), GFP_ATOMIC);
-	if ( value == NULL) {
-		DEBUG( 0, __FUNCTION__ "(), Unable to kmalloc!\n");
+	value = kmalloc(sizeof(struct ias_value), GFP_ATOMIC);
+	if (value == NULL) {
+		WARNING(__FUNCTION__ "(), Unable to kmalloc!\n");
 		return NULL;
 	}
 	memset( value, 0, sizeof( struct ias_value));
 
 	value->type = IAS_STRING;
 	value->charset = CS_ASCII;
-	value->len = strlen( string);
-	value->t.string = strdup( string);
+	value->len = strlen(string);
+	value->t.string = strdup(string);
 
 	return value;
 }
@@ -421,25 +410,23 @@ struct ias_value *irias_new_string_value( char *string)
  *    Create new IAS octet-sequence value
  *
  */
-struct ias_value *irias_new_octseq_value( __u8 *octseq , int len)
+struct ias_value *irias_new_octseq_value(__u8 *octseq , int len)
 {
 	struct ias_value *value;
 
-	ASSERT(len <= 55, return NULL;); /*FIXME: must be 1024, but.....*/
-
-	value = kmalloc( sizeof( struct ias_value), GFP_ATOMIC);
-	if ( value == NULL) {
-		DEBUG( 0, __FUNCTION__ "(), Unable to kmalloc!\n");
+	value = kmalloc(sizeof(struct ias_value), GFP_ATOMIC);
+	if (value == NULL) {
+		WARNING(__FUNCTION__ "(), Unable to kmalloc!\n");
 		return NULL;
 	}
-	memset( value, 0, sizeof( struct ias_value));
+	memset(value, 0, sizeof( struct ias_value));
 
 	value->type = IAS_OCT_SEQ;
 	value->len = len;
 
 	value->t.oct_seq = kmalloc(len, GFP_ATOMIC);
-	if( value->t.oct_seq == NULL){
-		DEBUG(0, __FUNCTION__"(), Unable to kmalloc!\n");
+	if (value->t.oct_seq == NULL){
+		WARNING(__FUNCTION__"(), Unable to kmalloc!\n");
 		return NULL;
 	}
 	memcpy(value->t.oct_seq, octseq , len);
@@ -452,32 +439,32 @@ struct ias_value *irias_new_octseq_value( __u8 *octseq , int len)
  *    Delete IAS value
  *
  */
-void irias_delete_value( struct ias_value *value)
+void irias_delete_value(struct ias_value *value)
 {
-	DEBUG( 4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
-	ASSERT( value != NULL, return;);
+	ASSERT(value != NULL, return;);
 
-	switch( value->type) {
+	switch (value->type) {
 	case IAS_INTEGER: /* Fallthrough */
 	case IAS_MISSING:
 		/* No need to deallocate */
 		break;
 	case IAS_STRING:
 		/* If string, deallocate string */
-		if ( value->t.string != NULL)
-			kfree( value->t.string);
+		if (value->t.string != NULL)
+			kfree(value->t.string);
 		break;
 	case IAS_OCT_SEQ:
 		/* If byte stream, deallocate byte stream */
-		 if ( value->t.oct_seq != NULL)
+		 if (value->t.oct_seq != NULL)
 			 kfree(value->t.oct_seq);
 		 break;
 	default:
-		DEBUG( 0, __FUNCTION__ "(), Unknown value type!\n");
+		IRDA_DEBUG(0, __FUNCTION__ "(), Unknown value type!\n");
 		break;
 	}
-	kfree( value);
+	kfree(value);
 }
 
 

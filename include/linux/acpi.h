@@ -24,9 +24,6 @@
 #include <linux/types.h>
 #include <linux/ioctl.h>
 
-/* /dev/acpi minor number */
-#define ACPI_MINOR_DEV 167
-
 /* RSDP location */
 #define ACPI_BIOS_ROM_BASE (0x0e0000)
 #define ACPI_BIOS_ROM_END  (0x100000)
@@ -40,7 +37,7 @@
 
 /* PM1_STS/EN flags */
 #define ACPI_TMR    0x0001
-#define ACPI_BM     0x0010
+#define ACPI_BM	    0x0010
 #define ACPI_GBL    0x0020
 #define ACPI_PWRBTN 0x0100
 #define ACPI_SLPBTN 0x0200
@@ -57,27 +54,33 @@
 #define ACPI_SLP_EN   0x2000
 
 /* PM_TMR masks */
-#define ACPI_TMR_MASK   0x00ffffff
+#define ACPI_TMR_MASK	0x00ffffff
 #define ACPI_TMR_HZ	3580000 /* 3.58 MHz */
 
 /* strangess to avoid integer overflow */
 #define ACPI_uS_TO_TMR_TICKS(val) \
   (((val) * (ACPI_TMR_HZ / 10000)) / 100)
 
+/* CPU cycles -> PM timer cycles, looks somewhat heuristic but
+   (ticks = 3/11 * CPU_MHz + 2) comes pretty close for my systems
+ */
+#define ACPI_CPU_TO_TMR_TICKS(cycles) \
+  ((cycles) / (3 * (loops_per_sec + 2500) / 500000 / 11 + 2))
+
 /* PM2_CNT flags */
 #define ACPI_ARB_DIS 0x01
 
 /* FACP flags */
-#define ACPI_WBINVD       0x00000001
+#define ACPI_WBINVD	  0x00000001
 #define ACPI_WBINVD_FLUSH 0x00000002
-#define ACPI_PROC_C1      0x00000004
-#define ACPI_P_LVL2_UP    0x00000008
-#define ACPI_PWR_BUTTON   0x00000010
-#define ACPI_SLP_BUTTON   0x00000020
-#define ACPI_FIX_RTC      0x00000040
-#define ACPI_RTC_64       0x00000080
+#define ACPI_PROC_C1	  0x00000004
+#define ACPI_P_LVL2_UP	  0x00000008
+#define ACPI_PWR_BUTTON	  0x00000010
+#define ACPI_SLP_BUTTON	  0x00000020
+#define ACPI_FIX_RTC	  0x00000040
+#define ACPI_RTC_64	  0x00000080
 #define ACPI_TMR_VAL_EXT  0x00000100
-#define ACPI_DCK_CAP      0x00000200
+#define ACPI_DCK_CAP	  0x00000200
 
 struct acpi_rsdp {
 	__u32 signature[2];
@@ -142,25 +145,65 @@ struct acpi_facp {
 	__u32 flags;
 };
 
-#define ACPI_FIND_TABLES	_IOR('A', 1, struct acpi_find_tables)
-#define ACPI_ENABLE_EVENT	_IOW('A', 2, struct acpi_enable_event)
-#define ACPI_WAIT_EVENT		_IOR('A', 3, struct acpi_wait_event)
+/*
+ * Sysctl declarations
+ */
 
-struct acpi_find_tables {
-	unsigned long facp; /* FACP physical address */
-	unsigned long dsdt; /* DSDT physical address */
+enum
+{
+	CTL_ACPI = 10
 };
 
-struct acpi_enable_event {
-        __u32 pm1_enable; /* fixed events */
-        __u32 gpe_enable; /* general-purpose events (GPEs) */
-        __u32 gpe_level;  /* level-triggered GPEs */
+enum
+{
+	ACPI_FACP = 1,
+	ACPI_DSDT,
+	ACPI_PM1_ENABLE,
+	ACPI_GPE_ENABLE,
+	ACPI_GPE_LEVEL,
+	ACPI_EVENT,
+	ACPI_P_LVL2,
+	ACPI_P_LVL3,
+	ACPI_P_LVL2_LAT,
+	ACPI_P_LVL3_LAT,
 };
 
-struct acpi_wait_event {
-        __u32 pm1_status; /* fixed events */
-        __u32 gpe_status; /* general-purpose events */
-};
+/*
+ * PIIX4-specific ACPI info (for systems with PIIX4 but no ACPI tables)
+ */
+
+#define ACPI_PIIX4_INT_MODEL	0x00
+#define ACPI_PIIX4_SCI_INT	0x0009
+
+#define ACPI_PIIX4_SMI_CMD	0x00b2
+#define ACPI_PIIX4_ACPI_ENABLE	0xf0
+#define ACPI_PIIX4_ACPI_DISABLE 0xf1
+#define ACPI_PIIX4_S4BIOS_REQ	0xf2
+
+#define ACPI_PIIX4_PM1_EVT	0x0000
+#define ACPI_PIIX4_PM1_CNT	0x0004
+#define	  ACPI_PIIX4_S0_MASK	(0x0005 << 10)
+#define	  ACPI_PIIX4_S1_MASK	(0x0004 << 10)
+#define	  ACPI_PIIX4_S2_MASK	(0x0003 << 10)
+#define	  ACPI_PIIX4_S3_MASK	(0x0002 << 10)
+#define	  ACPI_PIIX4_S4_MASK	(0x0001 << 10)
+#define	  ACPI_PIIX4_S5_MASK	(0x0000 << 10)
+#define ACPI_PIIX4_PM_TMR	0x0008
+#define ACPI_PIIX4_GPE0		0x000c
+#define ACPI_PIIX4_P_CNT	0x0010
+#define ACPI_PIIX4_P_LVL2	0x0014
+#define ACPI_PIIX4_P_LVL3	0x0015
+
+#define ACPI_PIIX4_PM1_EVT_LEN	0x04
+#define ACPI_PIIX4_PM1_CNT_LEN	0x02
+#define ACPI_PIIX4_PM_TM_LEN	0x04
+#define ACPI_PIIX4_GPE0_LEN	0x04
+
+#define ACPI_PIIX4_PM2_CNT	0x0022
+#define ACPI_PIIX4_PM2_CNT_LEN	0x01
+
+#define ACPI_PIIX4_PMREGMISC	0x80
+#define	  ACPI_PIIX4_PMIOSE	0x01
 
 #ifdef __KERNEL__
 

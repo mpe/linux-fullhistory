@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Apr  6 16:53:53 1999
- * Modified at:   Mon Aug 23 09:26:24 1999
+ * Modified at:   Tue Oct  5 10:05:10 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -45,7 +45,7 @@
  * The DISCOVERY structure is used for both discovery requests and responses
  */
 typedef struct {
-	QUEUE queue;             /* Must be first! */
+	queue_t q;               /* Must be first! */
 
 	__u32      saddr;        /* Which link the device was discovered */
 	__u32      daddr;        /* Remote device address */

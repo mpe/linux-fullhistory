@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Jun  5 17:42:00 1999
- * Modified at:   Wed Sep  8 11:54:27 1999
+ * Modified at:   Tue Oct 19 21:32:17 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -208,7 +208,6 @@ static void ircomm_tty_ias_register(struct ircomm_tty_cb *self)
 		irias_insert_object(self->obj);
 	} else {
 		hints = irlmp_service_to_hint(S_COMM);
-		hints |= irlmp_service_to_hint(S_TELEPHONY);
 
 		/* Register IrCOMM with LM-IAS */
 		self->obj = irias_new_object("IrDA:IrCOMM", IAS_IRCOMM_ID);
@@ -243,13 +242,24 @@ static int ircomm_tty_send_initial_parameters(struct ircomm_tty_cb *self)
 	if (self->service_type & IRCOMM_3_WIRE_RAW) 
 		return 0;
 
-	/* Set default values */
-	self->session.data_rate = 9600;
-	self->session.data_format = IRCOMM_WSIZE_8;  /* 8N1 */
-	self->session.flow_control = 0;              /* None */
+	/* 
+	 * Set default values, but only if the application for some reason 
+	 * haven't set them already
+	 */
+	DEBUG(2, __FUNCTION__ "(), data-rate = %d\n", self->session.data_rate);
+	if (!self->session.data_rate)
+		self->session.data_rate = 9600;
+	DEBUG(2, __FUNCTION__ "(), data-format = %d\n", 
+	      self->session.data_format);
+	if (!self->session.data_format)
+		self->session.data_format = IRCOMM_WSIZE_8;  /* 8N1 */
+
+	DEBUG(2, __FUNCTION__ "(), flow-control = %d\n", 
+	      self->session.flow_control);
+	/*self->session.flow_control = IRCOMM_RTS_CTS_IN|IRCOMM_RTS_CTS_OUT;*/
 
 	/* Do not set delta values for the initial parameters */
-	self->session.dte = (IRCOMM_DTR| IRCOMM_RTS);
+	self->session.dte = IRCOMM_DTR | IRCOMM_RTS;
 
 	ircomm_param_request(self, IRCOMM_SERVICE_TYPE, FALSE);
 	ircomm_param_request(self, IRCOMM_DATA_RATE, FALSE);
@@ -430,7 +440,8 @@ void ircomm_tty_connect_indication(void *instance, void *sap,
 
 	clen = skb->data[0];
 	if (clen)
-		irda_param_extract_all(self, skb->data+1, MIN(skb->len, clen), 
+		irda_param_extract_all(self, skb->data+1, 
+				       IRDA_MIN(skb->len, clen), 
 				       &ircomm_param_info);
 
 	ircomm_tty_do_event(self, IRCOMM_TTY_CONNECT_INDICATION, NULL, NULL);

@@ -33,7 +33,6 @@ EXPORT_SYMBOL(fat_fs_panic);
 EXPORT_SYMBOL(fat__get_entry);
 EXPORT_SYMBOL(fat_lock_creation);
 EXPORT_SYMBOL(fat_mark_buffer_dirty);
-EXPORT_SYMBOL(fat_mmap);
 EXPORT_SYMBOL(fat_notify_change);
 EXPORT_SYMBOL(fat_parent_ino);
 EXPORT_SYMBOL(fat_put_super);
@@ -54,7 +53,6 @@ EXPORT_SYMBOL(fat_get_cluster);
 EXPORT_SYMBOL(lock_fat);
 EXPORT_SYMBOL(unlock_fat);
 EXPORT_SYMBOL(fat_dir_ioctl);
-EXPORT_SYMBOL(fat_readpage);
 EXPORT_SYMBOL(fat_add_entries);
 EXPORT_SYMBOL(fat_dir_empty);
 

@@ -896,7 +896,7 @@ foreach $label (@label) {
 open (OUTPUT, ">$output") || die "$0 : can't open $output for writing\n";
 open (OUTPUTU, ">$outputu") || die "$0 : can't open $outputu for writing\n";
 
-print OUTPUT "u32 ".$prefix."SCRIPT[] = {\n";
+print OUTPUT "static u32 ".$prefix."SCRIPT[] = {\n";
 $instructions = 0;
 for ($i = 0; $i < $#code; ) {
     if ($list_in_array) {
@@ -935,7 +935,7 @@ foreach $i (@absolute) {
     }
     printf OUTPUTU "#undef A_$i\n";
 
-    printf OUTPUT "u32 A_".$i."_used\[\] = {\n";
+    printf OUTPUT "static u32 A_".$i."_used\[\] __attribute((unused)) = {\n";
 printf STDERR "$i is used $symbol_references{$i}\n" if ($debug);
     foreach $j (split (/\s+/,$symbol_references{$i})) {
 	$j =~ /(ABS|REL),(.*),(.*)/;
@@ -957,15 +957,15 @@ foreach $i (sort @entry) {
 # NCR assembler outputs label patches in the form of indices into 
 # the code.
 #
-printf OUTPUT "u32 ".$prefix."LABELPATCHES[] = {\n";
+printf OUTPUT "static u32 ".$prefix."LABELPATCHES[] __attribute((unused)) = {\n";
 for $patch (sort {$a <=> $b} @label_patches) {
     printf OUTPUT "\t0x%08x,\n", $patch;
 }
 printf OUTPUT "};\n\n";
 
 $num_external_patches = 0;
-printf OUTPUT "struct {\n\tu32\toffset;\n\tvoid\t\t*address;\n".
-    "} ".$prefix."EXTERNAL_PATCHES[] = {\n";
+printf OUTPUT "static struct {\n\tu32\toffset;\n\tvoid\t\t*address;\n".
+    "} ".$prefix."EXTERNAL_PATCHES[] __attribute((unused)) = {\n";
 while ($ident = pop(@external_patches)) {
     $off = pop(@external_patches);
     printf OUTPUT "\t{0x%08x, &%s},\n", $off, $ident;
@@ -973,11 +973,11 @@ while ($ident = pop(@external_patches)) {
 }
 printf OUTPUT "};\n\n";
 
-printf OUTPUT "u32 ".$prefix."INSTRUCTIONS\t= %d;\n", 
+printf OUTPUT "static u32 ".$prefix."INSTRUCTIONS __attribute((unused))\t= %d;\n", 
     $instructions;
-printf OUTPUT "u32 ".$prefix."PATCHES\t= %d;\n", 
+printf OUTPUT "static u32 ".$prefix."PATCHES __attribute((unused))\t= %d;\n", 
     $#label_patches+1;
-printf OUTPUT "u32 ".$prefix."EXTERNAL_PATCHES_LEN\t= %d;\n",
+printf OUTPUT "static u32 ".$prefix."EXTERNAL_PATCHES_LEN __attribute((unused))\t= %d;\n",
     $num_external_patches;
 close OUTPUT;
 close OUTPUTU;

@@ -120,7 +120,7 @@ struct vm_operations_struct {
 typedef struct page {
 	/* these must be first (free area handling) */
 	struct list_head list;
-	struct inode *inode;
+	struct address_space *mapping;
 	unsigned long offset;
 	struct page *next_hash;
 	atomic_t count;
@@ -129,17 +129,13 @@ typedef struct page {
 	wait_queue_head_t wait;
 	struct page **pprev_hash;
 	struct buffer_head * buffers;
-	void *owner; /* temporary debugging check */
 } mem_map_t;
 
-#define get_page(p) do { atomic_inc(&(p)->count); \
-						} while (0)
-#define put_page(p) __free_page(p)
-#define put_page_testzero(p) ({ int __ret = atomic_dec_and_test(&(p)->count);\
-				__ret; })
-#define page_count(p) atomic_read(&(p)->count)
-#define set_page_count(p,v) do { atomic_set(&(p)->count, v); \
-				} while (0)
+#define get_page(p)		atomic_inc(&(p)->count)
+#define put_page(p)		__free_page(p)
+#define put_page_testzero(p) 	atomic_dec_and_test(&(p)->count)
+#define page_count(p)		atomic_read(&(p)->count)
+#define set_page_count(p,v) 	atomic_set(&(p)->count, v)
 
 /* Page flag bit values */
 #define PG_locked		 0
@@ -158,54 +154,44 @@ typedef struct page {
 
 
 /* Make it prettier to test the above... */
-#define Page_Uptodate(page)	(test_bit(PG_uptodate, &(page)->flags))
-#define SetPageUptodate(page)	do { set_bit(PG_uptodate, &(page)->flags); \
-					} while (0)
-#define ClearPageUptodate(page)	do { clear_bit(PG_uptodate, &(page)->flags); \
-					} while (0)
-#define PageLocked(page)	(test_bit(PG_locked, &(page)->flags))
-#define LockPage(page)		\
-	do { int _ret = test_and_set_bit(PG_locked, &(page)->flags); \
-	if (_ret) PAGE_BUG(page); \
-	if (page->owner) PAGE_BUG(page); \
-	page->owner = current; } while (0)
-#define TryLockPage(page)	({ int _ret = test_and_set_bit(PG_locked, &(page)->flags); \
-				if (!_ret) page->owner = current; _ret; })
+#define Page_Uptodate(page)	test_bit(PG_uptodate, &(page)->flags)
+#define SetPageUptodate(page)	set_bit(PG_uptodate, &(page)->flags)
+#define ClearPageUptodate(page)	clear_bit(PG_uptodate, &(page)->flags)
+#define PageLocked(page)	test_bit(PG_locked, &(page)->flags)
+#define LockPage(page)		set_bit(PG_locked, &(page)->flags)
+#define TryLockPage(page)	test_and_set_bit(PG_locked, &(page)->flags)
 #define UnlockPage(page)	do { \
-					if (page->owner != current) { \
-BUG(); } page->owner = 0; \
-if (!test_and_clear_bit(PG_locked, &(page)->flags)) { \
-			PAGE_BUG(page); } wake_up(&page->wait); } while (0)
-#define PageError(page)		(test_bit(PG_error, &(page)->flags))
-#define SetPageError(page)	({ int _ret = test_and_set_bit(PG_error, &(page)->flags); _ret; })
-#define ClearPageError(page)	do { if (!test_and_clear_bit(PG_error, &(page)->flags)) BUG(); } while (0)
-#define PageReferenced(page)	(test_bit(PG_referenced, &(page)->flags))
-#define PageDecrAfter(page)	(test_bit(PG_decr_after, &(page)->flags))
-#define PageDMA(page)		(test_bit(PG_DMA, &(page)->flags))
-#define PageSlab(page)		(test_bit(PG_slab, &(page)->flags))
-#define PageSwapCache(page)	(test_bit(PG_swap_cache, &(page)->flags))
-#define PageReserved(page)	(test_bit(PG_reserved, &(page)->flags))
+					clear_bit(PG_locked, &(page)->flags); \
+					wake_up(&page->wait); \
+				} while (0)
+#define PageError(page)		test_bit(PG_error, &(page)->flags)
+#define SetPageError(page)	test_and_set_bit(PG_error, &(page)->flags)
+#define ClearPageError(page)	clear_bit(PG_error, &(page)->flags)
+#define PageReferenced(page)	test_bit(PG_referenced, &(page)->flags)
+#define PageDecrAfter(page)	test_bit(PG_decr_after, &(page)->flags)
+#define PageDMA(page)		test_bit(PG_DMA, &(page)->flags)
+#define PageSlab(page)		test_bit(PG_slab, &(page)->flags)
+#define PageSwapCache(page)	test_bit(PG_swap_cache, &(page)->flags)
+#define PageReserved(page)	test_bit(PG_reserved, &(page)->flags)
 
-#define PageSetSlab(page)	(set_bit(PG_slab, &(page)->flags))
-#define PageSetSwapCache(page)	(set_bit(PG_swap_cache, &(page)->flags))
+#define PageSetSlab(page)	set_bit(PG_slab, &(page)->flags)
+#define PageSetSwapCache(page)	set_bit(PG_swap_cache, &(page)->flags)
 
-#define PageTestandSetSwapCache(page)	\
-			(test_and_set_bit(PG_swap_cache, &(page)->flags))
+#define PageTestandSetSwapCache(page)	test_and_set_bit(PG_swap_cache, &(page)->flags)
 
-#define PageClearSlab(page)	(clear_bit(PG_slab, &(page)->flags))
-#define PageClearSwapCache(page)(clear_bit(PG_swap_cache, &(page)->flags))
+#define PageClearSlab(page)		clear_bit(PG_slab, &(page)->flags)
+#define PageClearSwapCache(page)	clear_bit(PG_swap_cache, &(page)->flags)
 
-#define PageTestandClearSwapCache(page)	\
-			(test_and_clear_bit(PG_swap_cache, &(page)->flags))
+#define PageTestandClearSwapCache(page)	test_and_clear_bit(PG_swap_cache, &(page)->flags)
+
 #ifdef CONFIG_HIGHMEM
-#define PageHighMem(page)	(test_bit(PG_highmem, &(page)->flags))
+#define PageHighMem(page)		test_bit(PG_highmem, &(page)->flags)
 #else
-#define PageHighMem(page) 0 /* needed to optimize away at compile time */
+#define PageHighMem(page)		0 /* needed to optimize away at compile time */
 #endif
 
-#define SetPageReserved(page)	do { set_bit(PG_reserved, &(page)->flags); \
-					} while (0)
-#define ClearPageReserved(page)	do { test_and_clear_bit(PG_reserved, &(page)->flags); } while (0)
+#define SetPageReserved(page)		set_bit(PG_reserved, &(page)->flags)
+#define ClearPageReserved(page)		clear_bit(PG_reserved, &(page)->flags)
 
 
 /*
@@ -359,7 +345,6 @@ extern void remove_inode_page(struct page *);
 extern unsigned long page_unuse(struct page *);
 extern int shrink_mmap(int, int);
 extern void truncate_inode_pages(struct inode *, unsigned long);
-extern unsigned long get_cached_page(struct inode *, unsigned long, int);
 extern void put_cached_page(unsigned long);
 
 /*

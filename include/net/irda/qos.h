@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Fri Sep 19 23:21:09 1997
- * Modified at:   Mon Aug 16 10:00:18 1999
+ * Modified at:   Tue Oct  5 11:51:37 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -69,7 +69,7 @@ typedef struct {
 } qos_value_t;
 
 struct qos_info {
-	int  magic;
+	magic_t magic;
 
 	qos_value_t baud_rate;       /* IR_11520O | ... */
 	qos_value_t max_turn_time;
@@ -96,9 +96,9 @@ void irda_init_max_qos_capabilies(struct qos_info *qos);
 void irda_qos_compute_intersection(struct qos_info *, struct qos_info *);
 
 int msb_index(__u16 byte);
-__u32 byte_value(__u8 byte, int *array);
-int value_index(__u32 value, int *array);
-__u32 index_value(int index, int *array);
+__u32 byte_value(__u8 byte, __u32 *array);
+int value_index(__u32 value, __u32 *array);
+__u32 index_value(int index, __u32 *array);
 
 void irda_qos_bits_to_value(struct qos_info *qos);
 

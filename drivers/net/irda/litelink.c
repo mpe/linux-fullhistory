@@ -6,7 +6,7 @@
  * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Fri May  7 12:50:33 1999
- * Modified at:   Sat Jun 26 17:01:05 1999
+ * Modified at:   Mon Oct 18 12:45:51 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -37,27 +37,25 @@
 #include <net/irda/irda.h>
 #include <net/irda/irmod.h>
 #include <net/irda/irda_device.h>
-#include <net/irda/dongle.h>
 
 #define MIN_DELAY 25      /* 15 us, but wait a little more to be sure */
 #define MAX_DELAY 10000   /* 1 ms */
 
-static void litelink_open(struct irda_device *idev, int type);
-static void litelink_close(struct irda_device *dev);
-static void litelink_change_speed(struct irda_device *dev, __u32);
-static void litelink_reset(struct irda_device *dev);
-static void litelink_init_qos(struct irda_device *idev, struct qos_info *qos);
+static void litelink_open(dongle_t *self, struct qos_info *qos);
+static void litelink_close(dongle_t *self);
+static int  litelink_change_speed(struct irda_task *task);
+static int  litelink_reset(struct irda_task *task);
 
 /* These are the baudrates supported */
 static __u32 baud_rates[] = { 115200, 57600, 38400, 19200, 9600 };
 
-static struct dongle dongle = {
-	LITELINK_DONGLE,
+static struct dongle_reg dongle = {
+	Q_NULL,
+	IRDA_LITELINK_DONGLE,
 	litelink_open,
 	litelink_close,
 	litelink_reset,
 	litelink_change_speed,
-	litelink_init_qos,
 };
 
 int __init litelink_init(void)
@@ -70,114 +68,102 @@ void litelink_cleanup(void)
 	irda_device_unregister_dongle(&dongle);
 }
 
-static void litelink_open(struct irda_device *idev, int type)
+static void litelink_open(dongle_t *self, struct qos_info *qos)
 {
-	strcat(idev->description, " <-> litelink");
-
-        idev->io.dongle_id = type;
-	idev->flags |= IFF_DONGLE;
+	qos->baud_rate.bits &= IR_9600|IR_19200|IR_38400|IR_57600|IR_115200;
+	qos->min_turn_time.bits &= 0x40; /* Needs 0.01 ms */
 
 	MOD_INC_USE_COUNT;
 }
 
-static void litelink_close(struct irda_device *idev)
+static void litelink_close(dongle_t *self)
 {
 	/* Power off dongle */
-	irda_device_set_dtr_rts(idev, FALSE, FALSE);
+	self->set_dtr_rts(self->dev, FALSE, FALSE);
 
 	MOD_DEC_USE_COUNT;
 }
 
 /*
- * Function litelink_change_speed (idev, speed)
+ * Function litelink_change_speed (task)
  *
  *    Change speed of the Litelink dongle. To cycle through the available 
  *    baud rates, pulse RTS low for a few ms.  
  */
-static void litelink_change_speed(struct irda_device *idev, __u32 speed)
+static int litelink_change_speed(struct irda_task *task)
 {
+	dongle_t *self = (dongle_t *) task->instance;
+	__u32 speed = (__u32) task->param;
         int i;
 	
-	ASSERT(idev != NULL, return;);
-	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
-	
 	/* Clear RTS to reset dongle */
-	irda_device_set_dtr_rts(idev, TRUE, FALSE);
+	self->set_dtr_rts(self->dev, TRUE, FALSE);
 
 	/* Sleep a minimum of 15 us */
 	udelay(MIN_DELAY);
 
 	/* Go back to normal mode */
-	irda_device_set_dtr_rts(idev, TRUE, TRUE);
+	self->set_dtr_rts(self->dev, TRUE, TRUE);
 	
 	/* Sleep a minimum of 15 us */
 	udelay(MIN_DELAY);
 	
 	/* Cycle through avaiable baudrates until we reach the correct one */
 	for (i=0; i<5 && baud_rates[i] != speed; i++) {
-
 		/* Set DTR, clear RTS */
-		irda_device_set_dtr_rts(idev, FALSE, TRUE);
+		self->set_dtr_rts(self->dev, FALSE, TRUE);
 		
 		/* Sleep a minimum of 15 us */
 		udelay(MIN_DELAY);
 		
 		/* Set DTR, Set RTS */
-		irda_device_set_dtr_rts(idev, TRUE, TRUE);
+		self->set_dtr_rts(self->dev, TRUE, TRUE);
 		
 		/* Sleep a minimum of 15 us */
 		udelay(MIN_DELAY);
         }
+
+	irda_task_next_state(task, IRDA_TASK_DONE);
+
+	return 0;
 }
 
 /*
- * Function litelink_reset (dev)
+ * Function litelink_reset (task)
  *
  *      Reset the Litelink type dongle. Warning, this function must only be
  *      called with a process context!
  *
  */
-static void litelink_reset(struct irda_device *idev)
+static int litelink_reset(struct irda_task *task)
 {
-	ASSERT(idev != NULL, return;);
-	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
-	
+	dongle_t *self = (dongle_t *) task->instance;
+
 	/* Power on dongle */
-	irda_device_set_dtr_rts(idev, TRUE, TRUE);
+	self->set_dtr_rts(self->dev, TRUE, TRUE);
 
 	/* Sleep a minimum of 15 us */
 	udelay(MIN_DELAY);
 
 	/* Clear RTS to reset dongle */
-	irda_device_set_dtr_rts(idev, TRUE, FALSE);
+	self->set_dtr_rts(self->dev, TRUE, FALSE);
 
 	/* Sleep a minimum of 15 us */
 	udelay(MIN_DELAY);
 
 	/* Go back to normal mode */
-	irda_device_set_dtr_rts(idev, TRUE, TRUE);
+	self->set_dtr_rts(self->dev, TRUE, TRUE);
 	
 	/* Sleep a minimum of 15 us */
 	udelay(MIN_DELAY);
 
 	/* This dongles speed defaults to 115200 bps */
-	idev->qos.baud_rate.value = 115200;
-}
+	self->speed = 115200;
 
-/*
- * Function litelink_init_qos (qos)
- *
- *    Initialize QoS capabilities
- *
- */
-static void litelink_init_qos(struct irda_device *idev, struct qos_info *qos)
-{
-	qos->baud_rate.bits &= IR_9600|IR_19200|IR_38400|IR_57600|IR_115200;
-	qos->min_turn_time.bits &= 0x40; /* Needs 0.01 ms */
+	return 0;
 }
 
 #ifdef MODULE
-
 MODULE_AUTHOR("Dag Brattli <dagb@cs.uit.no>");
 MODULE_DESCRIPTION("Parallax Litelink dongle driver");	
 		
@@ -202,5 +188,4 @@ void cleanup_module(void)
 {
 	litelink_cleanup();
 }
-
-#endif
+#endif /* MODULE */

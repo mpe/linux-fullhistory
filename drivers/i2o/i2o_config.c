@@ -317,14 +317,14 @@ static int ioctl_parms(unsigned long arg, unsigned int type)
 		return -ENOMEM;
 	}
 
-        len = i2o_issue_params(i2o_cmd, c, kcmd.tid, cfg_handler.context,
-        			ops, kcmd.oplen, res, 65536, &i2o_cfg_token);
+        len = i2o_issue_params(i2o_cmd, c, kcmd.tid,
+        			ops, kcmd.oplen, res, 65536);
         i2o_unlock_controller(c);
 	kfree(ops);
         
-	if (len < 0) {
+	if (len) {
 		kfree(res);
-		return len; /* -DetailedStatus */
+		return len; /* -DetailedStatus || -ETIMEDOUT */
 	}
 
 	put_user(len, kcmd.reslen);
@@ -413,8 +413,8 @@ int ioctl_html(unsigned long arg)
 		msg[8] = virt_to_phys(query);
 	}
 
-	token = i2o_post_wait(c, cmd->tid, msg, 9*4, &i2o_cfg_token, 10);
-	if(token != I2O_POST_WAIT_OK)
+	token = i2o_post_wait(c, msg, 9*4, 10);
+	if(token)
 	{
 		i2o_unlock_controller(c);
 		kfree(res);
@@ -531,8 +531,8 @@ int ioctl_swdl(unsigned long arg)
 		// Yes...that's one minute, but the spec states that
 		// transfers take a long time, and I've seen just how
 		// long they can take.
-		token = i2o_post_wait(c, ADAPTER_TID, msg, sizeof(msg), &i2o_cfg_token,60);
-		if (token != I2O_POST_WAIT_OK )	// Something very wrong
+		token = i2o_post_wait(c, msg, sizeof(msg), 60);
+		if (token)	// Something very wrong
 		{
 			i2o_unlock_controller(c);
 			printk("Timeout downloading software");
@@ -547,8 +547,8 @@ int ioctl_swdl(unsigned long arg)
 	msg[4] |= (u32)maxfrag;
 	msg[7] = (0xD0000000 | diff);
 	__copy_from_user(buffer, kxfer.buf, 8192);
-	token = i2o_post_wait(c, ADAPTER_TID, msg, sizeof(msg), &i2o_cfg_token,60);
-	if( token != I2O_POST_WAIT_OK )	// Something very wrong
+	token = i2o_post_wait(c, msg, sizeof(msg), 60);
+	if(token)	// Something very wrong
 	{
 		i2o_unlock_controller(c);
 		printk("Timeout downloading software");
@@ -588,10 +588,10 @@ int ioctl_validate(unsigned long arg)
         msg[2] = (u32)i2o_cfg_context;
         msg[3] = 0;
 
-        token = i2o_post_wait(c, ADAPTER_TID, msg, sizeof(msg),&i2o_cfg_token, 10);
+        token = i2o_post_wait(c, msg, sizeof(msg), 10);
         i2o_unlock_controller(c);
 
-        if (token != I2O_POST_WAIT_OK)
+        if (token)
         {
                 printk("Can't validate configuration, ErrorStatus = %d\n",
                 	token);

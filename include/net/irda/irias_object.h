@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Oct  1 22:49:50 1998
- * Modified at:   Thu Jul  1 11:37:15 1999
+ * Modified at:   Tue Oct  5 10:45:21 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -38,7 +38,7 @@
  *  LM-IAS Object
  */
 struct ias_object {
-	QUEUE   queue;     /* Must be first! */
+	queue_t q;     /* Must be first! */
 	magic_t magic;
 	
 	char  *name;
@@ -66,7 +66,7 @@ struct ias_value {
  *  Attributes used by LM-IAS objects
  */
 struct ias_attrib {
-	QUEUE queue; /* Must be first! */
+	queue_t q; /* Must be first! */
 	int magic;
 
         char *name;   	         /* Attribute name */

@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Fri Nov 13 14:37:40 1998
- * Modified at:   Mon Jan 25 23:10:25 1999
+ * Modified at:   Mon Oct 18 15:08:53 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>
+ *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>
  *     Copyright (c) 1998 Lichen Wang, <lwang@actisys.com>
  *     Copyright (c) 1998 Actisys Corp., www.actisys.com
  *     All Rights Reserved
@@ -183,12 +183,22 @@ struct pc87108 {
 	int tx_buff_offsets[10]; /* Offsets between frames in tx_buff */
 	int tx_len;          /* Number of frames in tx_buff */
 
-	struct irda_device idev;
+	struct net_device *netdev; /* Yes! we are some kind of netdevice */
+	struct net_device_stats stats;
+	
+	struct irlap_cb    *irlap; /* The link layer we are binded to */
+	
+	struct chipio_t io;        /* IrDA controller information */
+	struct iobuff_t tx_buff;   /* Transmit buffer */
+	struct iobuff_t rx_buff;   /* Receive buffer */
+	struct qos_info qos;       /* QoS capabilities for this device */
+	
+	__u32 flags;               /* Interface flags */
 };
 
-static inline void switch_bank( int iobase, int bank)
+static inline void switch_bank(int iobase, int bank)
 {
-		outb( bank, iobase+BSR);
+		outb(bank, iobase+BSR);
 }
 
 #endif

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Mon Sep 20 10:14:47 1999
+ * Modified at:   Thu Oct  7 23:06:36 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -67,6 +67,7 @@
 #define NS_INVALID     -1
 
 #ifdef CONFIG_IRDA_COMPRESSION
+
 /*  
  *  Just some shortcuts (may give you strange compiler errors if you change 
  *  them :-)
@@ -78,7 +79,7 @@
 #define irda_incomp      (*self->decompressor.cp->incomp)
 
 struct irda_compressor {
-	QUEUE queue;
+	queue_t q;
 
 	struct compressor *cp;
 	void *state; /* Not used by IrDA */
@@ -87,7 +88,7 @@ struct irda_compressor {
 
 /* Main structure of IrLAP */
 struct irlap_cb {
-	QUEUE   q;     /* Must be first */
+	queue_t q;     /* Must be first */
 	magic_t magic;
 
 	struct net_device  *netdev;
@@ -103,6 +104,10 @@ struct irlap_cb {
 	struct timer_list poll_timer;
 	struct timer_list wd_timer;
 	struct timer_list backoff_timer;
+
+	/* Media busy stuff */
+	struct timer_list media_busy_timer;
+	int media_busy;
 
 	/* Timeouts which will be different with different turn time */
 	int slot_timeout;
@@ -157,16 +162,15 @@ struct irlap_cb {
 	hashbin_t   *discovery_log;
  	discovery_t *discovery_cmd;
 
-	struct qos_info qos_tx;    /* QoS requested by peer */
-	struct qos_info qos_rx;    /* QoS requested by self */
+	struct qos_info  qos_tx;   /* QoS requested by peer */
+	struct qos_info  qos_rx;   /* QoS requested by self */
+	struct qos_info *qos_dev;  /* QoS supported by device */
 
 	notify_t notify; /* Callbacks to IrLMP */
 
 	int    mtt_required;  /* Minumum turnaround time required */
 	int    xbofs_delay;   /* Nr of XBOF's used to MTT */
 	int    bofs_count;    /* Negotiated extra BOFs */
-
- 	struct irda_statistics stats;
 
 #ifdef CONFIG_IRDA_COMPRESSION
 	struct irda_compressor compressor;
@@ -182,7 +186,7 @@ extern hashbin_t *irlap;
 int irlap_init(void);
 void irlap_cleanup(void);
 
-struct irlap_cb *irlap_open(struct net_device *dev);
+struct irlap_cb *irlap_open(struct net_device *dev, struct qos_info *qos);
 void irlap_close(struct irlap_cb *self);
 
 void irlap_connect_request(struct irlap_cb *self, __u32 daddr, 
@@ -191,10 +195,9 @@ void irlap_connect_response(struct irlap_cb *self, struct sk_buff *skb);
 void irlap_connect_indication(struct irlap_cb *self, struct sk_buff *skb);
 void irlap_connect_confirm(struct irlap_cb *, struct sk_buff *skb);
 
-inline void irlap_data_indication(struct irlap_cb *, struct sk_buff *);
-inline void irlap_unit_data_indication(struct irlap_cb *, struct sk_buff *);
-inline void irlap_data_request(struct irlap_cb *, struct sk_buff *, 
-			       int reliable);
+void irlap_data_indication(struct irlap_cb *, struct sk_buff *);
+void irlap_unit_data_indication(struct irlap_cb *, struct sk_buff *);
+void irlap_data_request(struct irlap_cb *, struct sk_buff *, int reliable);
 
 void irlap_disconnect_request(struct irlap_cb *);
 void irlap_disconnect_indication(struct irlap_cb *, LAP_REASON reason);
@@ -225,14 +228,7 @@ void irlap_apply_default_connection_parameters(struct irlap_cb *self);
 void irlap_apply_connection_parameters(struct irlap_cb *, struct qos_info *);
 void irlap_set_local_busy(struct irlap_cb *self, int status);
 
-extern inline __u8 irlap_get_header_size(struct irlap_cb *self)
-{
-	return 2;
-}
-
-extern inline int irlap_get_tx_queue_len(struct irlap_cb *self)
-{
-	return skb_queue_len(&self->tx_list);
-}
+#define IRLAP_GET_HEADER_SIZE(self) 2 /* Will be different when we get VFIR */
+#define IRLAP_GET_TX_QUEUE_LEN(self) skb_queue_len(&self->tx_list)
 
 #endif

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Jun  7 10:25:11 1999
- * Modified at:   Fri Sep  3 09:28:20 1999
+ * Modified at:   Mon Oct  4 09:36:53 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -236,7 +236,7 @@ static int ircomm_param_port_type(void *instance, param_t *param, int get)
 /*
  * Function ircomm_param_port_name (self, param)
  *
- *    
+ *    Exchange port name
  *
  */
 static int ircomm_param_port_name(void *instance, param_t *param, int get)
@@ -259,7 +259,7 @@ static int ircomm_param_port_name(void *instance, param_t *param, int get)
 /*
  * Function ircomm_param_data_rate (self, param)
  *
- *    
+ *    Exchange data rate to be used in this session
  *
  */
 static int ircomm_param_data_rate(void *instance, param_t *param, int get)
@@ -282,7 +282,7 @@ static int ircomm_param_data_rate(void *instance, param_t *param, int get)
 /*
  * Function ircomm_param_data_format (self, param)
  *
- *    
+ *    Exchange data format to be used in this session
  *
  */
 static int ircomm_param_data_format(void *instance, param_t *param, int get)
@@ -303,7 +303,7 @@ static int ircomm_param_data_format(void *instance, param_t *param, int get)
 /*
  * Function ircomm_param_flow_control (self, param)
  *
- *    
+ *    Exchange flow control settings to be used in this session
  *
  */
 static int ircomm_param_flow_control(void *instance, param_t *param, int get)
@@ -326,12 +326,26 @@ static int ircomm_param_flow_control(void *instance, param_t *param, int get)
 /*
  * Function ircomm_param_xon_xoff (self, param)
  *
- *    
+ *    Exchange XON/XOFF characters
  *
  */
 static int ircomm_param_xon_xoff(void *instance, param_t *param, int get)
 {
-	DEBUG(2, __FUNCTION__ "(), not impl.\n");
+	struct ircomm_tty_cb *self = (struct ircomm_tty_cb *) instance;
+
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == IRCOMM_TTY_MAGIC, return -1;);
+	
+	if (get) {
+		param->pv.s = self->session.xonxoff[0];
+		param->pv.s |= self->session.xonxoff[1] << 8;
+	} else {
+		self->session.xonxoff[0] = param->pv.s & 0xff;
+		self->session.xonxoff[1] = param->pv.s >> 8;
+	}
+
+	DEBUG(0, __FUNCTION__ "(), XON/XOFF = 0x%02x\n,0x%02x", 
+	      param->pv.s & 0xff, param->pv.s >> 8);
 
 	return 0;
 }
@@ -339,12 +353,26 @@ static int ircomm_param_xon_xoff(void *instance, param_t *param, int get)
 /*
  * Function ircomm_param_enq_ack (self, param)
  *
- *    
+ *    Exchange ENQ/ACK characters
  *
  */
 static int ircomm_param_enq_ack(void *instance, param_t *param, int get)
 {
-	DEBUG(2, __FUNCTION__ "(), not impl.\n");
+	struct ircomm_tty_cb *self = (struct ircomm_tty_cb *) instance;
+
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == IRCOMM_TTY_MAGIC, return -1;);
+	
+	if (get) {
+		param->pv.s = self->session.enqack[0];
+		param->pv.s |= self->session.enqack[1] << 8;
+	} else {
+		self->session.enqack[0] = param->pv.s & 0xff;
+		self->session.enqack[1] = param->pv.s >> 8;
+	}
+
+	DEBUG(0, __FUNCTION__ "(), ENQ/ACK = 0x%02x,0x%02x\n",
+	      param->pv.s & 0xff, param->pv.s >> 8);
 
 	return 0;
 }

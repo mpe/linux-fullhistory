@@ -28,6 +28,10 @@
  /*
   *  Bit simplified and optimized by Jan Hubicka
   *  Support of BIGMEM added by Gerhard Wichert, Siemens AG, July 1999.
+  *
+  *  isa_memset_io, isa_memcpy_fromio, isa_memcpy_toio added,
+  *  isa_read[wl] and isa_write[wl] fixed
+  *  - Arnaldo Carvalho de Melo <acme@conectiva.com.br>
   */
 
 #ifdef SLOW_IO_BY_JUMPING
@@ -192,11 +196,14 @@ extern void iounmap(void *addr);
 #define __ISA_IO_base ((char *)(PAGE_OFFSET))
 
 #define isa_readb(a) readb(__ISA_IO_base + (a))
-#define isa_readw(a) readb(__ISA_IO_base + (a))
-#define isa_readl(a) readb(__ISA_IO_base + (a))
+#define isa_readw(a) readw(__ISA_IO_base + (a))
+#define isa_readl(a) readl(__ISA_IO_base + (a))
 #define isa_writeb(b,a) writeb(b,__ISA_IO_base + (a))
-#define isa_writew(w,a) writeb(w,__ISA_IO_base + (a))
-#define isa_writel(l,a) writeb(l,__ISA_IO_base + (a))
+#define isa_writew(w,a) writew(w,__ISA_IO_base + (a))
+#define isa_writel(l,a) writel(l,__ISA_IO_base + (a))
+#define isa_memset_io(a,b,c)		memset_io(__ISA_IO_base + (a),(b),(c))
+#define isa_memcpy_fromio(a,b,c)	memcpy_fromio((a),__ISA_IO_base + (b),(c))
+#define isa_memcpy_toio(a,b,c)		memcpy_toio(__ISA_IO_base + (a),(b),(c))
 
 /*
  * Again, i386 does not require mem IO specific function.

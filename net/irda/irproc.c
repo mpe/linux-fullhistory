@@ -6,10 +6,11 @@
  * Status:        Experimental.
  * Author:        Thomas Davis, <ratbert@radiks.net>
  * Created at:    Sat Feb 21 21:33:24 1998
- * Modified at:   Fri Jun  4 09:39:49 1999
+ * Modified at:   Fri Oct  8 09:26:46 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
- * 
- *     Copyright (c) 1998-1999, Thomas Davis, <ratbert@radiks.net>, 
+ *
+ *     Copyright (c) 1998-1999, Dag Brattli <dagb@cs.uit.no>
+ *     Copyright (c) 1998, Thomas Davis, <ratbert@radiks.net>, 
  *     All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
@@ -30,8 +31,6 @@
 #include <net/irda/irlap.h>
 #include <net/irda/irlmp.h>
 
-extern int irda_device_proc_read(char *buf, char **start, off_t offset, 
-				 int len, int unused);
 extern int irlap_proc_read(char *buf, char **start, off_t offset, int len, 
 			   int unused);
 extern int irlmp_proc_read(char *buf, char **start, off_t offset, int len, 
@@ -43,16 +42,6 @@ extern int irias_proc_read(char *buf, char **start, off_t offset, int len,
 extern int discovery_proc_read(char *buf, char **start, off_t offset, int len, 
 			       int unused);
 
-/* enum irda_directory_inos { */
-/* 	PROC_IRDA_LAP = 1, */
-/* 	PROC_IRDA_LMP, */
-/* 	PROC_IRDA_TTP, */
-/* 	PROC_IRDA_LPT, */
-/* 	PROC_IRDA_COMM, */
-/*  	PROC_IRDA_IRDA_DEVICE, */
-/* 	PROC_IRDA_IRIAS */
-/* }; */
-
 struct irda_entry {
 	char *name;
 	int (*fn)(char*, char**, off_t, int, int);
@@ -62,7 +51,6 @@ struct proc_dir_entry *proc_irda;
  
 static struct irda_entry dir[] = {
 	{"discovery",	discovery_proc_read},
-	{"irda_device",	irda_device_proc_read},
 	{"irttp",	irttp_proc_read},
 	{"irlmp",	irlmp_proc_read},
 	{"irlap",	irlap_proc_read},

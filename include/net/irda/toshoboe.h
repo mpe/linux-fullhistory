@@ -154,7 +154,16 @@ struct OboeTaskFile
 
 struct toshoboe_cb
   {
-    struct irda_device idev;    /*IRDA device */
+    struct net_device *netdev; /* Yes! we are some kind of netdevice */
+    struct net_device_stats stats;
+
+    struct irlap_cb    *irlap; /* The link layer we are binded to */
+
+    struct chipio_t io;        /* IrDA controller information */
+    struct qos_info qos;       /* QoS capabilities for this device */
+
+    __u32 flags;               /* Interface flags */
+
     struct pci_dev *pdev;       /*PCI device */
     int base;                   /*IO base */
     int txpending;              /*how many tx's are pending */

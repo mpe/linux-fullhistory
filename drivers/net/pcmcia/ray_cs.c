@@ -38,6 +38,7 @@
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/if_arp.h>
 #include <linux/ioport.h>
 #include <linux/skbuff.h>
 
@@ -48,6 +49,19 @@
 #include <pcmcia/cisreg.h>
 #include <pcmcia/ds.h>
 #include <pcmcia/mem_op.h>
+
+#ifdef HAS_WIRELESS_EXTENSIONS
+#include <linux/wireless.h>
+#if WIRELESS_EXT < 8
+#warning "Wireless extension v8 or newer required"
+#endif	/* WIRELESS_EXT < 8 */
+/* Warning : these stuff will slow down the driver... */
+#define WIRELESS_SPY		/* Enable spying addresses */
+/* Definitions we need for spy */
+typedef struct iw_statistics	iw_stats;
+typedef struct iw_quality	iw_qual;
+typedef u_char	mac_addr[ETH_ALEN];	/* Hardware address */
+#endif	/* HAS_WIRELESS_EXTENSIONS */
 
 #include "rayctl.h"
 #include "ray_cs.h"
@@ -72,67 +86,68 @@ MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...)
 #endif
 /** Prototypes based on PCMCIA skeleton driver *******************************/
-void ray_config(dev_link_t *link);
-void ray_release(u_long arg);
-int ray_event(event_t event, int priority, event_callback_args_t *args);
-dev_link_t *ray_attach(void);
-void ray_detach(dev_link_t *);
+static void ray_config(dev_link_t *link);
+static void ray_release(u_long arg);
+static int ray_event(event_t event, int priority, event_callback_args_t *args);
+static dev_link_t *ray_attach(void);
+static void ray_detach(dev_link_t *);
 
 /***** Prototypes indicated by device structure ******************************/
-int ray_dev_close(struct net_device *dev);
-int ray_dev_config(struct net_device *dev, struct ifmap *map);
-struct enet_statistics *ray_get_stats(struct net_device *dev);
-int ray_dev_init(struct net_device *dev);
-int ray_dev_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
-int ray_open(struct net_device *dev);
-int ray_dev_start_xmit(struct sk_buff *skb, struct net_device *dev);
+static int ray_dev_close(struct net_device *dev);
+static int ray_dev_config(struct net_device *dev, struct ifmap *map);
+static struct enet_statistics *ray_get_stats(struct net_device *dev);
+static int ray_dev_init(struct net_device *dev);
+static int ray_dev_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
+static int ray_open(struct net_device *dev);
+static int ray_dev_start_xmit(struct sk_buff *skb, struct net_device *dev);
 static void set_multicast_list(struct net_device *dev);
 static void ray_update_multi_list(struct net_device *dev, int all);
-int encapsulate_frame(ray_dev_t *local, struct tx_msg *ptx, UCHAR msg_type,
+static int translate_frame(ray_dev_t *local, struct tx_msg *ptx,
                 unsigned char *data, int len);
-int translate_frame(ray_dev_t *local, struct tx_msg *ptx,
-                unsigned char *data, int len);
-void ray_build_header(ray_dev_t *local, struct tx_msg *ptx, UCHAR msg_type,
+static void ray_build_header(ray_dev_t *local, struct tx_msg *ptx, UCHAR msg_type,
                 unsigned char *data);
-void untranslate(ray_dev_t *local, struct sk_buff *skb, int len);
+static void untranslate(ray_dev_t *local, struct sk_buff *skb, int len);
+#if WIRELESS_EXT > 7	/* If wireless extension exist in the kernel */
+static iw_stats * ray_get_wireless_stats(struct device *	dev);
+#endif	/* WIRELESS_EXT > 7 */
 
 /***** Prototypes for raylink functions **************************************/
-int asc_to_int(char a);
-void authenticate(ray_dev_t *local);
-int build_auth_frame(ray_dev_t *local, UCHAR *dest, int auth_type);
-void authenticate_timeout(u_long);
-int get_free_ccs(ray_dev_t *local);
-int get_free_tx_ccs(ray_dev_t *local);
-void init_startup_params(ray_dev_t *local);
-int parse_addr(char *in_str, UCHAR *out);
-int ray_hw_xmit(unsigned char* data, int len, struct net_device* dev, UCHAR type);
-int ray_init(struct net_device *dev);
-int interrupt_ecf(ray_dev_t *local, int ccs);
-void ray_reset(struct net_device *dev);
-void ray_update_parm(struct net_device *dev, UCHAR objid, UCHAR *value, int len);
-void verify_dl_startup(u_long);
+static int asc_to_int(char a);
+static void authenticate(ray_dev_t *local);
+static int build_auth_frame(ray_dev_t *local, UCHAR *dest, int auth_type);
+static void authenticate_timeout(u_long);
+static int get_free_ccs(ray_dev_t *local);
+static int get_free_tx_ccs(ray_dev_t *local);
+static void init_startup_params(ray_dev_t *local);
+static int parse_addr(char *in_str, UCHAR *out);
+static int ray_hw_xmit(unsigned char* data, int len, struct net_device* dev, UCHAR type);
+static int ray_init(struct net_device *dev);
+static int interrupt_ecf(ray_dev_t *local, int ccs);
+static void ray_reset(struct net_device *dev);
+static void ray_update_parm(struct net_device *dev, UCHAR objid, UCHAR *value, int len);
+static void verify_dl_startup(u_long);
 
 /* Prototypes for interrpt time functions **********************************/
-void ray_interrupt(int reg, void *dev_id, struct pt_regs *regs);
-void clear_interrupt(ray_dev_t *local);
-void rx_deauthenticate(ray_dev_t *local, struct rcs *prcs, 
+static void ray_interrupt (int reg, void *dev_id, struct pt_regs *regs);
+static void clear_interrupt(ray_dev_t *local);
+static void rx_deauthenticate(ray_dev_t *local, struct rcs *prcs, 
                        unsigned int pkt_addr, int rx_len);
-int copy_from_rx_buff(ray_dev_t *local, UCHAR *dest, int pkt_addr, int len);
-void ray_rx(struct net_device *dev, ray_dev_t *local, struct rcs *prcs);
-void release_frag_chain(ray_dev_t *local, struct rcs *prcs);
-void rx_authenticate(ray_dev_t *local, struct rcs *prcs,
+static int copy_from_rx_buff(ray_dev_t *local, UCHAR *dest, int pkt_addr, int len);
+static void ray_rx(struct net_device *dev, ray_dev_t *local, struct rcs *prcs);
+static void release_frag_chain(ray_dev_t *local, struct rcs *prcs);
+static void rx_authenticate(ray_dev_t *local, struct rcs *prcs,
                      unsigned int pkt_addr, int rx_len);
-void rx_data(struct net_device *dev, struct rcs *prcs, unsigned int pkt_addr, 
+static void rx_data(struct net_device *dev, struct rcs *prcs, unsigned int pkt_addr, 
              int rx_len);
-void associate(ray_dev_t *local);
+static void associate(ray_dev_t *local);
 
 /* Card command functions */
-int dl_startup_params(struct net_device *dev);
-void join_net(u_long local);
-void start_net(u_long local);
+static int dl_startup_params(struct net_device *dev);
+static void join_net(u_long local);
+static void start_net(u_long local);
 /* void start_net(ray_dev_t *local); */
 
-int ray_cs_proc_read(char *buf, char **start, off_t off, int len, int spare);
+static int ray_cs_proc_read(char *buf, char **start, off_t off, int len, int spare);
 /* Create symbol table for registering with kernel in init_module */
 EXPORT_SYMBOL(ray_dev_ioctl);
 EXPORT_SYMBOL(ray_rx);
@@ -283,6 +298,14 @@ static UCHAR b4_default_startup_parms[] = {
 /*===========================================================================*/
 static unsigned char eth2_llc[] = {0xaa, 0xaa, 3, 0, 0, 0};
 
+static char hop_pattern_length[] = { 1,
+	     USA_HOP_MOD,             EUROPE_HOP_MOD,
+	     JAPAN_HOP_MOD,           KOREA_HOP_MOD,
+	     SPAIN_HOP_MOD,           FRANCE_HOP_MOD,
+	     ISRAEL_HOP_MOD,          AUSTRALIA_HOP_MOD,
+	     JAPAN_TEST_HOP_MOD
+};
+
 static char rcsid[] = "Raylink/WebGear wireless LAN - Corey <Thomas corey@world.std.com>";
 
 #ifdef CONFIG_PROC_FS
@@ -298,7 +321,7 @@ struct proc_dir_entry ray_cs_proc_entry = {
 };
 #endif
 /*===========================================================================*/
-void cs_error(client_handle_t handle, int func, int ret)
+static void cs_error(client_handle_t handle, int func, int ret)
 {
     error_info_t err = { func, ret };
     CardServices(ReportError, handle, &err);
@@ -311,7 +334,7 @@ void cs_error(client_handle_t handle, int func, int ret)
     configure the card at this point -- we wait until we receive a
     card insertion event.
 =============================================================================*/
-dev_link_t *ray_attach(void)
+static dev_link_t *ray_attach(void)
 {
     client_reg_t client_reg;
     dev_link_t *link;
@@ -367,6 +390,9 @@ dev_link_t *ray_attach(void)
     dev->set_config = &ray_dev_config;
     dev->get_stats  = &ray_get_stats;
     dev->do_ioctl = &ray_dev_ioctl;
+#if WIRELESS_EXT > 7	/* If wireless extension exist in the kernel */
+    dev->get_wireless_stats = ray_get_wireless_stats;
+#endif
 
     dev->set_multicast_list = &set_multicast_list;
 
@@ -411,7 +437,7 @@ dev_link_t *ray_attach(void)
     structures are freed.  Otherwise, the structures will be freed
     when the device is released.
 =============================================================================*/
-void ray_detach(dev_link_t *link)
+static void ray_detach(dev_link_t *link)
 {
     dev_link_t **linkp;
     struct net_device *dev;
@@ -470,7 +496,7 @@ void ray_detach(dev_link_t *link)
 #define CS_CHECK(fn, args...) \
 while ((last_ret=CardServices(last_fn=(fn),args))!=0) goto cs_failed
 #define MAX_TUPLE_SIZE 128
-void ray_config(dev_link_t *link)
+static void ray_config(dev_link_t *link)
 {
     client_handle_t handle = link->handle;
     tuple_t tuple;
@@ -585,7 +611,7 @@ cs_failed:
     ray_release((u_long)link);
 } /* ray_config */
 /*===========================================================================*/
-int ray_init(struct net_device *dev)
+static int ray_init(struct net_device *dev)
 {
     int i;
     UCHAR *p;
@@ -648,7 +674,7 @@ int ray_init(struct net_device *dev)
 } /* ray_init */
 /*===========================================================================*/
 /* Download startup parameters to the card and command it to read them       */
-int dl_startup_params(struct net_device *dev)
+static int dl_startup_params(struct net_device *dev)
 {
     int ccsindex;
     ray_dev_t *local = (ray_dev_t *)dev->priv;
@@ -694,16 +720,9 @@ int dl_startup_params(struct net_device *dev)
     return 0;
 } /* dl_startup_params */
 /*===========================================================================*/
-void init_startup_params(ray_dev_t *local)
+static void init_startup_params(ray_dev_t *local)
 {
     int i; 
-    static char hop_pattern_length[] = { 1,
-                     USA_HOP_MOD,             EUROPE_HOP_MOD,
-                     JAPAN_HOP_MOD,           KOREA_HOP_MOD,
-                     SPAIN_HOP_MOD,           FRANCE_HOP_MOD,
-                     ISRAEL_HOP_MOD,          AUSTRALIA_HOP_MOD,
-                     JAPAN_TEST_HOP_MOD
-    };
 
     if (country > JAPAN_TEST) country = USA;
     else
@@ -762,7 +781,7 @@ void init_startup_params(ray_dev_t *local)
         strncpy(local->sparm.b4.a_current_ess_id, essid, ESSID_SIZE);
 } /* init_startup_params */ 
 /*===========================================================================*/
-void verify_dl_startup(u_long data)
+static void verify_dl_startup(u_long data)
 {
     ray_dev_t *local = (ray_dev_t *)data;
     struct ccs *pccs = ((struct ccs *)(local->sram + CCS_BASE)) + local->dl_param_ccs;
@@ -779,7 +798,7 @@ void verify_dl_startup(u_long data)
     printk(KERN_DEBUG "verify_dl_startup parameters sent via ccs %d:\n",
            local->dl_param_ccs);
         for (i=0; i<sizeof(struct b5_startup_params); i++) {
-            printk(" %2x", readb(local->sram + HOST_TO_ECF_BASE + i));
+            printk(" %2x", (unsigned int) readb(local->sram + HOST_TO_ECF_BASE + i));
         }
     printk("\n");
     }
@@ -802,7 +821,7 @@ void verify_dl_startup(u_long data)
 } /* end verify_dl_startup */
 /*===========================================================================*/
 /* Command card to start a network */
-void start_net(u_long data)
+static void start_net(u_long data)
 {
     ray_dev_t *local = (ray_dev_t *)data;
     struct ccs *pccs;
@@ -828,7 +847,7 @@ void start_net(u_long data)
 } /* end start_net */
 /*===========================================================================*/
 /* Command card to join a network */
-void join_net(u_long data)
+static void join_net(u_long data)
 {
     ray_dev_t *local = (ray_dev_t *)data;
 
@@ -860,7 +879,7 @@ void join_net(u_long data)
     device, and release the PCMCIA configuration.  If the device is
     still open, this will be postponed until it is closed.
 =============================================================================*/
-void ray_release(u_long arg)
+static void ray_release(u_long arg)
 {
     dev_link_t *link = (dev_link_t *)arg;
     struct net_device *dev = link->priv; 
@@ -912,7 +931,7 @@ void ray_release(u_long arg)
     actually access the device should check this flag to make sure
     the card is still present.
 =============================================================================*/
-int ray_event(event_t event, int priority,
+static int ray_event(event_t event, int priority,
                      event_callback_args_t *args)
 {
     dev_link_t *link = args->client_data;
@@ -991,7 +1010,7 @@ int ray_dev_init(struct net_device *dev)
     return 0;
 }
 /*===========================================================================*/
-int ray_dev_config(struct net_device *dev, struct ifmap *map)
+static int ray_dev_config(struct net_device *dev, struct ifmap *map)
 {
     ray_dev_t *local = dev->priv;
     dev_link_t *link = local->finder;
@@ -1005,7 +1024,7 @@ int ray_dev_config(struct net_device *dev, struct ifmap *map)
     return 0;
 }
 /*===========================================================================*/
-int ray_dev_start_xmit(struct sk_buff *skb, struct net_device *dev)
+static int ray_dev_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
     ray_dev_t *local = dev->priv;
     dev_link_t *link = local->finder;
@@ -1047,7 +1066,7 @@ int ray_dev_start_xmit(struct sk_buff *skb, struct net_device *dev)
     return 0;
 } /* ray_dev_start_xmit */
 /*===========================================================================*/
-int ray_hw_xmit(unsigned char* data, int len, struct net_device* dev, 
+static int ray_hw_xmit(unsigned char* data, int len, struct net_device* dev, 
                 UCHAR msg_type)
 {
     ray_dev_t *local = (ray_dev_t *)dev->priv;
@@ -1089,7 +1108,7 @@ int ray_hw_xmit(unsigned char* data, int len, struct net_device* dev,
     }
     else { /* Encapsulate frame */
         /* TBD TIB length will move address of ptx->var */
-        memcpy( (UCHAR *)&ptx->var, data, len);
+        memcpy_toio(&ptx->var, data, len);
         offset = 0;
     }
 
@@ -1121,7 +1140,7 @@ int ray_hw_xmit(unsigned char* data, int len, struct net_device* dev,
     return XMIT_OK;
 } /* end ray_hw_xmit */
 /*===========================================================================*/
-int translate_frame(ray_dev_t *local, struct tx_msg *ptx, unsigned char *data,
+static int translate_frame(ray_dev_t *local, struct tx_msg *ptx, unsigned char *data,
                     int len)
 {
     unsigned short int proto = ((struct ethhdr *)data)->h_proto;
@@ -1137,7 +1156,7 @@ int translate_frame(ray_dev_t *local, struct tx_msg *ptx, unsigned char *data,
         /* Copy body of ethernet packet without ethernet header */
         memcpy_toio((UCHAR *)&ptx->var + sizeof(struct snaphdr_t), \
                     data + ETH_HLEN,  len - ETH_HLEN);
-        return sizeof(struct snaphdr_t) - ETH_HLEN;
+        return (int) sizeof(struct snaphdr_t) - ETH_HLEN;
     }
     else { /* already  802 type, and proto is length */
         DEBUG(3,"ray_cs translate_frame 802\n");
@@ -1152,15 +1171,16 @@ int translate_frame(ray_dev_t *local, struct tx_msg *ptx, unsigned char *data,
     /* TBD do other frame types */
 } /* end translate_frame */
 /*===========================================================================*/
-void ray_build_header(ray_dev_t *local, struct tx_msg *ptx, UCHAR msg_type,
+static void ray_build_header(ray_dev_t *local, struct tx_msg *ptx, UCHAR msg_type,
                 unsigned char *data)
 {
     writeb(PROTOCOL_VER | msg_type, &ptx->mac.frame_ctl_1);
 /*** IEEE 802.11 Address field assignments *************
-                     addr_1       addr_2     addr_3
-     AP              destination  AP(BSSID)  source
-     Infra Terminal  AP           terminal   destination
-     Adhoc           destination  terminal   BSSID
+                TODS FROMDS   addr_1     addr_2          addr_3   addr_4
+Adhoc           0    0        dest       src (terminal)  BSSID    N/A
+AP to Terminal  0    1        dest       AP(BSSID)       source   N/A
+Terminal to AP  1    0        AP(BSSID)  src (terminal)  dest     N/A
+AP to AP        1    1        dest AP    src AP          dest     source      
 *******************************************************/
     if (local->net_type == ADHOC) {   
         writeb(0, &ptx->mac.frame_ctl_2);
@@ -1186,11 +1206,14 @@ void ray_build_header(ray_dev_t *local, struct tx_msg *ptx, UCHAR msg_type,
     }
 } /* end encapsulate_frame */
 /*===========================================================================*/
-int ray_dev_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
+static int ray_dev_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
     ray_dev_t *local = (ray_dev_t *)dev->priv;
     dev_link_t *link = local->finder;
     int err = 0;
+#if WIRELESS_EXT > 7
+    struct iwreq *wrq = (struct iwreq *) ifr;
+#endif	/* WIRELESS_EXT > 7 */
 
     if (!(link->state & DEV_PRESENT)) {
         DEBUG(2,"ray_dev_ioctl - device not present\n");
@@ -1200,6 +1223,257 @@ int ray_dev_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
     /* Validate the command */
     switch (cmd)
     {
+#if WIRELESS_EXT > 7
+      /* --------------- WIRELESS EXTENSIONS --------------- */
+      /* Get name */
+    case SIOCGIWNAME:
+      strcpy(wrq->u.name, "IEEE 802.11-FH");
+      break;
+
+      /* Get frequency/channel */
+    case SIOCGIWFREQ:
+      wrq->u.freq.m = local->sparm.b5.a_hop_pattern;
+      wrq->u.freq.e = 0;
+      break;
+
+      /* Get current network name (ESSID) */
+    case SIOCGIWESSID:
+      if (wrq->u.data.pointer)
+	{
+	  char essid[IW_ESSID_MAX_SIZE + 1];
+	  /* Get the essid that was set */
+	  memcpy(essid, local->sparm.b5.a_current_ess_id,
+		 IW_ESSID_MAX_SIZE);
+	  essid[IW_ESSID_MAX_SIZE] = '\0';
+
+	  /* Push it out ! */
+	  wrq->u.data.length = strlen(essid) + 1;
+	  wrq->u.data.flags = 1; /* active */
+	  copy_to_user(wrq->u.data.pointer, essid, sizeof(essid));
+	}
+      break;
+
+      /* Get current Access Point (BSSID in our case) */
+    case SIOCGIWAP:
+      memcpy(wrq->u.ap_addr.sa_data, local->bss_id, ETH_ALEN);
+      wrq->u.ap_addr.sa_family = ARPHRD_ETHER;
+      break;
+
+      /* Get the current bit-rate */
+    case SIOCGIWRATE:
+      if(local->net_default_tx_rate == 3)
+	wrq->u.bitrate.value = 2000000;		/* Hum... */
+      else
+	wrq->u.bitrate.value = local->net_default_tx_rate * 500000;
+      wrq->u.bitrate.fixed = 0;		/* We are in auto mode */
+      break;
+
+      /* Set the desired bit-rate */
+    case SIOCSIWRATE:
+      /* Check if rate is in range */
+      if((wrq->u.bitrate.value != 1000000) &&
+	 (wrq->u.bitrate.value != 2000000))
+	{
+	  err = -EINVAL;
+	  break;
+	}
+      /* Hack for 1.5 Mb/s instead of 2 Mb/s */
+      if((local->fw_ver == 0x55) &&		/* Please check */
+	 (wrq->u.bitrate.value == 2000000))
+	local->net_default_tx_rate = 3;
+      else
+	local->net_default_tx_rate = wrq->u.bitrate.value/500000;
+      break;
+
+      /* Get the current RTS threshold */
+    case SIOCGIWRTS:
+      wrq->u.rts.value = (local->sparm.b5.a_rts_threshold[0] << 8)
+	+ local->sparm.b5.a_rts_threshold[1];
+#if WIRELESS_EXT > 8
+      wrq->u.rts.disabled = (wrq->u.rts.value == 32767);
+#endif /* WIRELESS_EXT > 8 */
+      wrq->u.rts.fixed = 1;
+      break;
+
+      /* Get the current fragmentation threshold */
+    case SIOCGIWFRAG:
+      wrq->u.frag.value = (local->sparm.b5.a_frag_threshold[0] << 8)
+	+ local->sparm.b5.a_frag_threshold[1];
+#if WIRELESS_EXT > 8
+      wrq->u.frag.disabled = (wrq->u.frag.value == 32767);
+#endif /* WIRELESS_EXT > 8 */
+      wrq->u.frag.fixed = 1;
+      break;
+#endif	/* WIRELESS_EXT > 7 */
+#if WIRELESS_EXT > 8
+
+      /* Get the current mode of operation */
+    case SIOCGIWMODE:
+      if(local->sparm.b5.a_network_type)
+	wrq->u.mode = IW_MODE_INFRA;
+      else
+	wrq->u.mode = IW_MODE_ADHOC;
+      break;
+#endif /* WIRELESS_EXT > 8 */
+#if WIRELESS_EXT > 7
+      /* ------------------ IWSPY SUPPORT ------------------ */
+      /* Define the range (variations) of above parameters */
+    case SIOCGIWRANGE:
+      /* Basic checking... */
+      if(wrq->u.data.pointer != (caddr_t) 0)
+	{
+	  struct iw_range	range;
+	  memset((char *) &range, 0, sizeof(struct iw_range));
+
+	  /* Set the length (useless : its constant...) */
+	  wrq->u.data.length = sizeof(struct iw_range);
+
+	  /* Set information in the range struct */
+	  range.throughput = 1.1 * 1000 * 1000;	/* Put the right number here */
+	  range.num_channels = hop_pattern_length[(int)country]; 
+	  range.num_frequency = 0;
+	  range.max_qual.qual = 0;
+	  range.max_qual.level = 255;	/* What's the correct value ? */
+	  range.max_qual.noise = 255;	/* Idem */
+	  range.num_bitrates = 2;
+	  range.bitrate[0] = 1000000;	/* 1 Mb/s */
+	  range.bitrate[1] = 2000000;	/* 2 Mb/s */
+
+	  /* Copy structure to the user buffer */
+	  if(copy_to_user(wrq->u.data.pointer, &range,
+			  sizeof(struct iw_range)))
+	    err = -EFAULT;
+	}
+      break;
+
+#ifdef WIRELESS_SPY
+      /* Set addresses to spy */
+    case SIOCSIWSPY:
+      /* Check the number of addresses */
+      if(wrq->u.data.length > IW_MAX_SPY)
+	{
+	  err = -E2BIG;
+	  break;
+	}
+      local->spy_number = wrq->u.data.length;
+
+      /* If there is some addresses to copy */
+      if(local->spy_number > 0)
+	{
+	  struct sockaddr	address[IW_MAX_SPY];
+	  int			i;
+
+	  /* Copy addresses to the driver */
+	  if(copy_from_user(address, wrq->u.data.pointer,
+			    sizeof(struct sockaddr) * local->spy_number))
+	    {
+	      err = -EFAULT;
+	      break;
+	    }
+
+	  /* Copy addresses to the lp structure */
+	  for(i = 0; i < local->spy_number; i++)
+	    memcpy(local->spy_address[i], address[i].sa_data, ETH_ALEN);
+
+	  /* Reset structure... */
+	  memset(local->spy_stat, 0x00, sizeof(iw_qual) * IW_MAX_SPY);
+
+#ifdef DEBUG_IOCTL_INFO
+	  printk(KERN_DEBUG "SetSpy - Set of new addresses is :\n");
+	  for(i = 0; i < local->spy_number; i++)
+	    printk(KERN_DEBUG "%02X:%02X:%02X:%02X:%02X:%02X\n",
+		   local->spy_address[i][0],
+		   local->spy_address[i][1],
+		   local->spy_address[i][2],
+		   local->spy_address[i][3],
+		   local->spy_address[i][4],
+		   local->spy_address[i][5]);
+#endif	/* DEBUG_IOCTL_INFO */
+	}
+      break;
+
+      /* Get the spy list and spy stats */
+    case SIOCGIWSPY:
+      /* Set the number of addresses */
+      wrq->u.data.length = local->spy_number;
+
+      /* If the user want to have the addresses back... */
+      if((local->spy_number > 0) && (wrq->u.data.pointer != (caddr_t) 0))
+	{
+	  struct sockaddr	address[IW_MAX_SPY];
+	  int			i;
+
+	  /* Copy addresses from the lp structure */
+	  for(i = 0; i < local->spy_number; i++)
+	    {
+	      memcpy(address[i].sa_data, local->spy_address[i], ETH_ALEN);
+	      address[i].sa_family = ARPHRD_ETHER;
+	    }
+
+	  /* Copy addresses to the user buffer */
+	  if(copy_to_user(wrq->u.data.pointer, address,
+		       sizeof(struct sockaddr) * local->spy_number))
+	    {
+	      err = -EFAULT;
+	      break;
+	    }
+
+	  /* Copy stats to the user buffer (just after) */
+	  if(copy_to_user(wrq->u.data.pointer +
+		       (sizeof(struct sockaddr) * local->spy_number),
+		       local->spy_stat, sizeof(iw_qual) * local->spy_number))
+	    {
+	      err = -EFAULT;
+	      break;
+	    }
+
+	  /* Reset updated flags */
+	  for(i = 0; i < local->spy_number; i++)
+	    local->spy_stat[i].updated = 0x0;
+	}	/* if(pointer != NULL) */
+
+      break;
+#endif	/* WIRELESS_SPY */
+
+      /* ------------------ PRIVATE IOCTL ------------------ */
+#define SIOCSIPFRAMING	SIOCDEVPRIVATE		/* Set framing mode */
+#define SIOCGIPFRAMING	SIOCDEVPRIVATE + 1	/* Get framing mode */
+#define SIOCGIPCOUNTRY	SIOCDEVPRIVATE + 3	/* Get country code */
+    case SIOCSIPFRAMING:
+      if(!suser())	/* For private IOCTLs, we need to check permissions */
+	{
+	  err = -EPERM;
+	  break;
+	}
+      translate = *(wrq->u.name);	/* Set framing mode */
+      break;
+    case SIOCGIPFRAMING:
+      *(wrq->u.name) = translate;
+      break;
+    case SIOCGIPCOUNTRY:
+      *(wrq->u.name) = country;
+      break;
+    case SIOCGIWPRIV:
+      /* Export our "private" intercace */
+      if(wrq->u.data.pointer != (caddr_t) 0)
+	{
+	  struct iw_priv_args	priv[] =
+	  {	/* cmd,		set_args,	get_args,	name */
+	    { SIOCSIPFRAMING, IW_PRIV_TYPE_BYTE | IW_PRIV_SIZE_FIXED | 1, 0, "set_framing" },
+	    { SIOCGIPFRAMING, 0, IW_PRIV_TYPE_BYTE | IW_PRIV_SIZE_FIXED | 1, "get_framing" },
+	    { SIOCGIPCOUNTRY, 0, IW_PRIV_TYPE_BYTE | IW_PRIV_SIZE_FIXED | 1, "get_country" },
+	  };
+	  /* Set the number of ioctl available */
+	  wrq->u.data.length = 3;
+	  /* Copy structure to the user buffer */
+	  if(copy_to_user(wrq->u.data.pointer, (u_char *) priv,
+		       sizeof(priv)))
+	    err = -EFAULT;
+	}
+      break;
+#endif	/* WIRELESS_EXT > 7 */
+
+
         default:
             DEBUG(0,"ray_dev_ioctl cmd = 0x%x\n", cmd);
             err = -EOPNOTSUPP;
@@ -1207,7 +1481,38 @@ int ray_dev_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
     return err;
 } /* end ray_dev_ioctl */
 /*===========================================================================*/
-int ray_open(struct net_device *dev)
+#if WIRELESS_EXT > 7	/* If wireless extension exist in the kernel */
+static iw_stats * ray_get_wireless_stats(struct device *	dev)
+{
+  ray_dev_t *	local = (ray_dev_t *) dev->priv;
+  dev_link_t *link = local->finder;
+  struct status *p = (struct status *)(local->sram + STATUS_BASE);
+
+  if(local == (ray_dev_t *) NULL)
+    return (iw_stats *) NULL;
+
+  local->wstats.status = local->card_status;
+#ifdef WIRELESS_SPY
+  if((local->spy_number > 0) && (local->sparm.b5.a_network_type == 0))
+    {
+      /* Get it from the first node in spy list */
+      local->wstats.qual.qual = local->spy_stat[0].qual;
+      local->wstats.qual.level = local->spy_stat[0].level;
+      local->wstats.qual.noise = local->spy_stat[0].noise;
+      local->wstats.qual.updated = local->spy_stat[0].updated;
+    }
+#endif /* WIRELESS_SPY */
+
+  if((link->state & DEV_PRESENT)) {
+    local->wstats.qual.noise = readb(&p->rxnoise);
+    local->wstats.qual.updated |= 4;
+  }
+
+  return &local->wstats;
+} /* end ray_get_wireless_stats */
+#endif	/* WIRELESS_EXT > 7 */
+/*===========================================================================*/
+static int ray_open(struct net_device *dev)
 {
     dev_link_t *link;
     ray_dev_t *local = (ray_dev_t *)dev->priv;
@@ -1232,7 +1537,7 @@ int ray_open(struct net_device *dev)
     return 0;
 } /* end ray_open */
 /*===========================================================================*/
-int ray_dev_close(struct net_device *dev)
+static int ray_dev_close(struct net_device *dev)
 {
     dev_link_t *link;
 
@@ -1255,14 +1560,14 @@ int ray_dev_close(struct net_device *dev)
     return 0;
 } /* end ray_dev_close */
 /*===========================================================================*/
-void ray_reset(struct net_device *dev) {
+static void ray_reset(struct net_device *dev) {
     DEBUG(1,"ray_reset entered\n");
     return;
 }
 /*===========================================================================*/
 /* Cause a firmware interrupt if it is ready for one                         */
 /* Return nonzero if not ready                                               */
-int interrupt_ecf(ray_dev_t *local, int ccs)
+static int interrupt_ecf(ray_dev_t *local, int ccs)
 {
     int i = 50;
     dev_link_t *link = local->finder;
@@ -1288,7 +1593,7 @@ int interrupt_ecf(ray_dev_t *local, int ccs)
 /*===========================================================================*/
 /* Get next free transmit CCS                                                */
 /* Return - index of current tx ccs                                          */
-int get_free_tx_ccs(ray_dev_t *local)
+static int get_free_tx_ccs(ray_dev_t *local)
 {
     int i;
     struct ccs *pccs = (struct ccs *)(local->sram + CCS_BASE);
@@ -1319,7 +1624,7 @@ int get_free_tx_ccs(ray_dev_t *local)
 /*===========================================================================*/
 /* Get next free CCS                                                         */
 /* Return - index of current ccs                                             */
-int get_free_ccs(ray_dev_t *local)
+static int get_free_ccs(ray_dev_t *local)
 {
     int i;
     struct ccs *pccs = (struct ccs *)(local->sram + CCS_BASE);
@@ -1347,7 +1652,7 @@ int get_free_ccs(ray_dev_t *local)
     return ECCSFULL;
 } /* get_free_ccs */
 /*===========================================================================*/
-void authenticate_timeout(u_long data)
+static void authenticate_timeout(u_long data)
 {
     ray_dev_t *local = (ray_dev_t *)data;
     del_timer(&local->timer);
@@ -1356,7 +1661,7 @@ void authenticate_timeout(u_long data)
     join_net((u_long)local);
 }
 /*===========================================================================*/
-int asc_to_int(char a)
+static int asc_to_int(char a)
 {
     if (a < '0') return -1;
     if (a <= '9') return (a - '0');
@@ -1367,7 +1672,7 @@ int asc_to_int(char a)
     return -1;
 }
 /*===========================================================================*/
-int parse_addr(char *in_str, UCHAR *out)
+static int parse_addr(char *in_str, UCHAR *out)
 {
     int len;
     int i,j,k;
@@ -1395,7 +1700,7 @@ int parse_addr(char *in_str, UCHAR *out)
     return status;
 }
 /*===========================================================================*/
-struct enet_statistics *ray_get_stats(struct net_device *dev)
+static struct enet_statistics *ray_get_stats(struct net_device *dev)
 {
     ray_dev_t *local = (ray_dev_t *)dev->priv;
     dev_link_t *link = local->finder;
@@ -1425,7 +1730,7 @@ struct enet_statistics *ray_get_stats(struct net_device *dev)
     return &local->stats;
 }
 /*===========================================================================*/
-void ray_update_parm(struct net_device *dev, UCHAR objid, UCHAR *value, int len)
+static void ray_update_parm(struct net_device *dev, UCHAR objid, UCHAR *value, int len)
 {
     ray_dev_t *local = (ray_dev_t *)dev->priv;
     dev_link_t *link = local->finder;
@@ -1542,7 +1847,7 @@ static void set_multicast_list(struct net_device *dev)
 /*=============================================================================
  * All routines below here are run at interrupt time.
 =============================================================================*/
-void ray_interrupt(int irq, void *dev_id, struct pt_regs * regs)
+static void ray_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
     struct net_device *dev = (struct net_device *)dev_id;
     dev_link_t *link;
@@ -1727,7 +2032,7 @@ void ray_interrupt(int irq, void *dev_id, struct pt_regs * regs)
             break;
         default:
             DEBUG(1,"ray_cs Unexpected interrupt for RCS 0x%x cmd = 0x%x\n",\
-                  rcsindex, readb(&prcs->interrupt_id));
+                  rcsindex, (unsigned int) readb(&prcs->interrupt_id));
             break;
         }
         writeb(CCS_BUFFER_FREE, &prcs->buffer_status);
@@ -1736,7 +2041,7 @@ void ray_interrupt(int irq, void *dev_id, struct pt_regs * regs)
     dev->interrupt = 0;
 } /* ray_interrupt */
 /*===========================================================================*/
-void ray_rx(struct net_device *dev, ray_dev_t *local, struct rcs *prcs)
+static void ray_rx(struct net_device *dev, ray_dev_t *local, struct rcs *prcs)
 {
     int rx_len;
     unsigned int pkt_addr;
@@ -1750,6 +2055,7 @@ void ray_rx(struct net_device *dev, ray_dev_t *local, struct rcs *prcs)
     rx_len = (readb(&prcs->var.rx_packet.rx_data_length[0]) << 8)
         + readb(&prcs->var.rx_packet.rx_data_length[1]);
 
+    local->last_rsl = readb(&prcs->var.rx_packet.rx_sig_lev);
     pmsg = local->rmem + pkt_addr;
     switch(readb(pmsg))
     {
@@ -1778,17 +2084,18 @@ void ray_rx(struct net_device *dev, ray_dev_t *local, struct rcs *prcs)
                           rx_len < sizeof(struct beacon_rx) ? 
                           rx_len : sizeof(struct beacon_rx));
 
+	local->beacon_rxed = 1;
         /* Get the statistics so the card counters never overflow */
         ray_get_stats(dev);
             break;
     default:
-        DEBUG(0,"ray_cs unknown pkt type %2x\n", readb(pmsg));
+        DEBUG(0,"ray_cs unknown pkt type %2x\n", (unsigned int) readb(pmsg));
         break;
     }
 
 } /* end ray_rx */
 /*===========================================================================*/
-void rx_data(struct net_device *dev, struct rcs *prcs, unsigned int pkt_addr, 
+static void rx_data(struct net_device *dev, struct rcs *prcs, unsigned int pkt_addr, 
              int rx_len)
 {
     struct sk_buff *skb = NULL;
@@ -1797,6 +2104,10 @@ void rx_data(struct net_device *dev, struct rcs *prcs, unsigned int pkt_addr,
     UCHAR *rx_ptr;
     int total_len;
     int tmp;
+#ifdef WIRELESS_SPY
+    int siglev = prcs->var.rx_packet.rx_sig_lev;
+    u_char linksrcaddr[ETH_ALEN];	/* Other end of the wireless link */
+#endif
 
     if (!sniffer) {
         if (translate) {
@@ -1819,7 +2130,7 @@ void rx_data(struct net_device *dev, struct rcs *prcs, unsigned int pkt_addr,
     }
     DEBUG(4,"ray_cs rx_data packet\n");
     /* If fragmented packet, verify sizes of fragments add up */
-    if (prcs->var.rx_packet.next_frag_rcs_index != 0xFF) {
+    if (readb(&prcs->var.rx_packet.next_frag_rcs_index) != 0xFF) {
         DEBUG(1,"ray_cs rx'ed fragment\n");
         tmp = (readb(&prcs->var.rx_packet.totalpacketlength[0]) << 8)
             +  readb(&prcs->var.rx_packet.totalpacketlength[1]);
@@ -1865,7 +2176,10 @@ void rx_data(struct net_device *dev, struct rcs *prcs, unsigned int pkt_addr,
     rx_ptr = skb_put( skb, total_len);
     /* Copy the whole packet to sk_buff */
     rx_ptr += copy_from_rx_buff(local, rx_ptr, pkt_addr & RX_BUFF_END, rx_len);
-
+    /* Get source address */
+#ifdef WIRELESS_SPY
+    memcpy(linksrcaddr, ((struct mac_header *)skb->data)->addr_2, ETH_ALEN);
+#endif
     /* Now, deal with encapsulation/translation/sniffer */
     if (!sniffer) {
         if (!translate) { 
@@ -1909,9 +2223,39 @@ void rx_data(struct net_device *dev, struct rcs *prcs, unsigned int pkt_addr,
 
     local->stats.rx_packets++;
     local->stats.rx_bytes += skb->len;
+
+    /* Gather signal strength per address */
+#ifdef WIRELESS_SPY
+    /* For the Access Point or the node having started the ad-hoc net
+     * note : ad-hoc work only in some specific configurations, but we
+     * kludge in ray_get_wireless_stats... */
+    if(!memcmp(linksrcaddr, local->bss_id, ETH_ALEN))
+      {
+	/* Update statistics */
+	/*local->wstats.qual.qual = none ? */
+	local->wstats.qual.level = siglev;
+	/*local->wstats.qual.noise = none ? */
+	local->wstats.qual.updated = 0x2;
+      }
+    /* Now, for the addresses in the spy list */
+    {
+      int	i;
+      /* Look all addresses */
+      for(i = 0; i < local->spy_number; i++)
+	/* If match */
+	if(!memcmp(linksrcaddr, local->spy_address[i], ETH_ALEN))
+	  {
+	    /* Update statistics */
+	    /*local->spy_stat[i].qual = none ? */
+	    local->spy_stat[i].level = siglev;
+	    /*local->spy_stat[i].noise = none ? */
+	    local->spy_stat[i].updated = 0x2;
+	  }
+    }
+#endif	/* WIRELESS_SPY */
 } /* end rx_data */
 /*===========================================================================*/
-void untranslate(ray_dev_t *local, struct sk_buff *skb, int len)
+static void untranslate(ray_dev_t *local, struct sk_buff *skb, int len)
 {
     snaphdr_t *psnap = (snaphdr_t *)(skb->data + RX_MAC_HEADER_LENGTH);
     struct mac_header *pmac = (struct mac_header *)skb->data;
@@ -1923,11 +2267,23 @@ void untranslate(ray_dev_t *local, struct sk_buff *skb, int len)
     UCHAR srcaddr[ADDRLEN];
     UCHAR destaddr[ADDRLEN];
 
-    if (local->sparm.b5.a_acting_as_ap_status != TYPE_STA)
-        memcpy(destaddr, pmac->addr_3, ADDRLEN);
-    else
-        memcpy(destaddr, pmac->addr_1, ADDRLEN);
-    memcpy(srcaddr, pmac->addr_2, ADDRLEN);
+    if (pmac->frame_ctl_2 & FC2_FROM_DS) {
+	if (pmac->frame_ctl_2 & FC2_TO_DS) { /* AP to AP */
+	    memcpy(destaddr, pmac->addr_3, ADDRLEN);
+	    memcpy(srcaddr, ((unsigned char *)pmac->addr_3) + ADDRLEN, ADDRLEN);
+	} else { /* AP to terminal */
+	    memcpy(destaddr, pmac->addr_1, ADDRLEN);
+	    memcpy(srcaddr, pmac->addr_3, ADDRLEN); 
+	}
+    } else { /* Terminal to AP */
+	if (pmac->frame_ctl_2 & FC2_TO_DS) {
+	    memcpy(destaddr, pmac->addr_3, ADDRLEN);
+	    memcpy(srcaddr, pmac->addr_2, ADDRLEN); 
+	} else { /* Adhoc */
+	    memcpy(destaddr, pmac->addr_1, ADDRLEN);
+	    memcpy(srcaddr, pmac->addr_2, ADDRLEN); 
+	}
+    }
 
 #ifdef PCMCIA_DEBUG
     if (pc_debug > 3) {
@@ -2005,7 +2361,7 @@ void untranslate(ray_dev_t *local, struct sk_buff *skb, int len)
  * pkt_addr = source address in receive buffer
  * len      = length of packet to copy
  */
-int copy_from_rx_buff(ray_dev_t *local, UCHAR *dest, int pkt_addr, int length)
+static int copy_from_rx_buff(ray_dev_t *local, UCHAR *dest, int pkt_addr, int length)
 {
     int wrap_bytes = (pkt_addr + length) - (RX_BUFF_END + 1);
     if (wrap_bytes <= 0)
@@ -2020,7 +2376,7 @@ int copy_from_rx_buff(ray_dev_t *local, UCHAR *dest, int pkt_addr, int length)
     return length;
 }
 /*===========================================================================*/
-void release_frag_chain(ray_dev_t *local, struct rcs* prcs)
+static void release_frag_chain(ray_dev_t *local, struct rcs* prcs)
 {
     struct rcs *prcslink = prcs;
     int tmp = 17;
@@ -2038,7 +2394,7 @@ void release_frag_chain(ray_dev_t *local, struct rcs* prcs)
     writeb(CCS_BUFFER_FREE, &prcslink->buffer_status);
 }
 /*===========================================================================*/
-void authenticate(ray_dev_t *local)
+static void authenticate(ray_dev_t *local)
 {
     dev_link_t *link = local->finder;
     DEBUG(0,"ray_cs Starting authentication.\n");
@@ -2060,7 +2416,7 @@ void authenticate(ray_dev_t *local)
     local->authentication_state = AWAITING_RESPONSE;
 } /* end authenticate */
 /*===========================================================================*/
-void rx_authenticate(ray_dev_t *local, struct rcs *prcs,
+static void rx_authenticate(ray_dev_t *local, struct rcs *prcs,
                      unsigned int pkt_addr, int rx_len)
 {
     UCHAR buff[256];
@@ -2103,7 +2459,7 @@ void rx_authenticate(ray_dev_t *local, struct rcs *prcs,
 
 } /* end rx_authenticate */
 /*===========================================================================*/
-void associate(ray_dev_t *local)
+static void associate(ray_dev_t *local)
 {
     struct ccs *pccs;
     dev_link_t *link = local->finder;
@@ -2141,7 +2497,7 @@ void associate(ray_dev_t *local)
 
 } /* end associate */
 /*===========================================================================*/
-void rx_deauthenticate(ray_dev_t *local, struct rcs *prcs, 
+static void rx_deauthenticate(ray_dev_t *local, struct rcs *prcs, 
                        unsigned int pkt_addr, int rx_len)
 {
 /*  UCHAR buff[256];
@@ -2154,7 +2510,7 @@ void rx_deauthenticate(ray_dev_t *local, struct rcs *prcs,
  */
 }
 /*===========================================================================*/
-void clear_interrupt(ray_dev_t *local)
+static void clear_interrupt(ray_dev_t *local)
 {
     writeb(0, local->amem + CIS_OFFSET + HCS_INTR_OFFSET);
 }
@@ -2183,7 +2539,7 @@ static char *nettype[] = {"Adhoc", "Infra "};
 static char *framing[] = {"Encapsulation", "Translation"}
 ;
 /*===========================================================================*/
-int ray_cs_proc_read(char *buf, char **start, off_t offset, 
+static int ray_cs_proc_read(char *buf, char **start, off_t offset, 
                      int len, int unused)
 {
 /* Print current values which are not available via other means
@@ -2229,10 +2585,13 @@ int ray_cs_proc_read(char *buf, char **start, off_t offset,
 
     len += sprintf(buf + len, "Framing mode         = %s\n",framing[translate]);
 
-    /* Pull some fields out of last beacon received */
-    len += sprintf(buf + len, "Beacon Interval      = %d Kus\n", 
-                   local->last_bcn.beacon_intvl[0]
-                   + 256 * local->last_bcn.beacon_intvl[1]);
+    len += sprintf(buf + len, "Last pkt signal lvl  = %d\n", local->last_rsl);
+
+    if (local->beacon_rxed) {
+	/* Pull some fields out of last beacon received */
+	len += sprintf(buf + len, "Beacon Interval      = %d Kus\n", 
+		       local->last_bcn.beacon_intvl[0]
+		       + 256 * local->last_bcn.beacon_intvl[1]);
     
     p = local->last_bcn.elements;
     if (p[0] == C_ESSID_ELEMENT_ID) p += p[1] + 2;
@@ -2253,25 +2612,28 @@ int ray_cs_proc_read(char *buf, char **start, off_t offset,
         return len;
     }
 
-    if (p[0] == C_FH_PARAM_SET_ELEMENT_ID) {
-        pfh = (struct freq_hop_element *)p;
-        len += sprintf(buf + len, "Hop dwell            = %d Kus\n",
-                       pfh->dwell_time[0] + 256 * pfh->dwell_time[1]);
-        len += sprintf(buf + len, "Hop set              = %d \n", pfh->hop_set);
-        len += sprintf(buf + len, "Hop pattern          = %d \n", pfh->hop_pattern);
-        len += sprintf(buf + len, "Hop index            = %d \n", pfh->hop_index);
-        p += p[1] + 2;
-    }
-    else {
-        len += sprintf(buf + len, "Parse beacon failed at FH param element\n");
-        return len;
+	if (p[0] == C_FH_PARAM_SET_ELEMENT_ID) {
+	    pfh = (struct freq_hop_element *)p;
+	    len += sprintf(buf + len, "Hop dwell            = %d Kus\n",
+			   pfh->dwell_time[0] + 256 * pfh->dwell_time[1]);
+	    len += sprintf(buf + len, "Hop set              = %d \n", pfh->hop_set);
+	    len += sprintf(buf + len, "Hop pattern          = %d \n", pfh->hop_pattern);
+	    len += sprintf(buf + len, "Hop index            = %d \n", pfh->hop_index);
+	    p += p[1] + 2;
+	}
+	else {
+	    len += sprintf(buf + len, "Parse beacon failed at FH param element\n");
+	    return len;
+	}
+    } else {
+	len += sprintf(buf + len, "No beacons received\n");
     }
     return len;
 }
 
 #endif
 /*===========================================================================*/
-int  build_auth_frame(ray_dev_t *local, UCHAR *dest, int auth_type)
+static int build_auth_frame(ray_dev_t *local, UCHAR *dest, int auth_type)
 {
     int addr;
     struct ccs *pccs;

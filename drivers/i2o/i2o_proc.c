@@ -1,7 +1,7 @@
 /*
  *   procfs handler for Linux I2O subsystem
  *
- *   Copyright (c) 1999 Deepak Saxena
+ *   (c) Copyright 1999 Deepak Saxena
  *   
  *   Originally written by Deepak Saxena(deepak@plexity.net)
  *
@@ -790,16 +790,15 @@ int i2o_proc_read_hw(char *buf, char **start, off_t offset, int len,
 
 	len = 0;
 
-	token = i2o_query_scalar(c, ADAPTER_TID, proc_context, 
+	token = i2o_query_scalar(c, ADAPTER_TID,
 					0,		// ParamGroup 0x0000h
 					-1,		// all fields
 					&work32,
-					sizeof(work32),
-					&i2o_proc_token);
+					sizeof(work32));
 
 	if(token < 0)
 	{
-		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
+		len += sprintf(buf, "Error waiting for reply from IOP\n");
 		spin_unlock(&i2o_proc_lock);
 		return len;
 	}
@@ -875,10 +874,10 @@ int i2o_proc_read_ddm_table(char *buf, char **start, off_t offset, int len,
 	len = 0;
 
 	token = i2o_query_table(I2O_PARAMS_TABLE_GET,
-				c, ADAPTER_TID, proc_context,
+				c, ADAPTER_TID, 
 				0x0003, -1,
 				NULL, 0,
-				&result, sizeof(result), &i2o_proc_token);
+				&result, sizeof(result));
 
 	if (token<0)
 		switch (token)
@@ -941,16 +940,13 @@ int i2o_proc_read_ds(char *buf, char **start, off_t offset, int len,
 {
 	struct i2o_controller *c = (struct i2o_controller*)data;
 	u32 work32[8];
-	int token;
 
 	spin_lock(&i2o_proc_lock);
 
 	len = 0;
 
-	token = i2o_query_scalar(c, ADAPTER_TID, proc_context, 0x0004, -1, 
-				 &work32, sizeof(work32), &i2o_proc_token);
-
-	if (token<0)
+	if(i2o_query_scalar(c, ADAPTER_TID, 0x0004, -1, &work32,
+		sizeof(work32)) < 0)
 	{
 		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
 		spin_unlock(&i2o_proc_lock);
@@ -1009,10 +1005,10 @@ int i2o_proc_read_dst(char *buf, char **start, off_t offset, int len,
 	len = 0;
 
 	token = i2o_query_table(I2O_PARAMS_TABLE_GET,
-				c, ADAPTER_TID, proc_context,
+				c, ADAPTER_TID,
 				0x0005, -1,
 				NULL, 0,
-				&result, sizeof(result), &i2o_proc_token);
+				&result, sizeof(result));
 
 	if (token<0)
 		switch (token)
@@ -1094,10 +1090,10 @@ int i2o_proc_read_groups(char *buf, char **start, off_t offset, int len,
 	len = 0;
 
 	token = i2o_query_table(I2O_PARAMS_TABLE_GET,
-				c, ADAPTER_TID, proc_context,
+				c, ADAPTER_TID,
 				0xF000, -1,
 				NULL, 0,
-				&work16, sizeof(work16), &i2o_proc_token);
+				&work16, sizeof(work16));
 
 	if (token<0)
 		switch (token)
@@ -1181,10 +1177,10 @@ int i2o_proc_read_priv_msgs(char *buf, char **start, off_t offset, int len,
 	len = 0;
 
 	token = i2o_query_table(I2O_PARAMS_TABLE_GET,
-				c, ADAPTER_TID, proc_context,
+				c, ADAPTER_TID,
 				0xF000, -1,
 				NULL, 0,
-				&work16, sizeof(work16), &i2o_proc_token);
+				&work16, sizeof(work16));
 
 	if (token<0)
 		switch (token)
@@ -1243,12 +1239,11 @@ int i2o_proc_read_dev(char *buf, char **start, off_t offset, int len,
 	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->id, proc_context, 
+	token = i2o_query_scalar(d->controller, d->lct_data->tid,
 					0xF100,		// ParamGroup F100h (Device Identity)
 					-1,		// all fields
 					&work32,
-					sizeof(work32),
-					&i2o_proc_token);
+					sizeof(work32));
 
 	if(token < 0)
 	{
@@ -1308,12 +1303,11 @@ int i2o_proc_read_ddm(char *buf, char **start, off_t offset, int len,
 	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->id, proc_context, 
+	token = i2o_query_scalar(d->controller, d->lct_data->tid, 
 					0xF101,		// ParamGroup F101h (DDM Identity)
 					-1,		// all fields
 					&work32,
-					sizeof(work32),
-					&i2o_proc_token);
+					sizeof(work32));
 
 	if(token < 0)
 	{
@@ -1352,12 +1346,11 @@ int i2o_proc_read_uinfo(char *buf, char **start, off_t offset, int len,
 	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->id, proc_context, 
+	token = i2o_query_scalar(d->controller, d->lct_data->tid,
 					0xF102,		// ParamGroup F102h (User Information)
 					-1,		// all fields
 					&work32,
-					sizeof(work32),
-					&i2o_proc_token);
+					sizeof(work32));
 
 	if(token < 0)
 	{
@@ -1390,12 +1383,11 @@ int i2o_proc_read_sgl_limits(char *buf, char **start, off_t offset, int len,
 	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->id, proc_context, 
+	token = i2o_query_scalar(d->controller, d->lct_data->tid, 
 				 0xF103,	// ParamGroup F103h (SGL Operating Limits)
 				 -1,		// all fields
 				 &work32,
-				 sizeof(work32),
-				 &i2o_proc_token);
+				 sizeof(work32));
 
 	if(token < 0)
 	{
@@ -1760,8 +1752,8 @@ int i2o_proc_read_lan_dev_info(char *buf, char **start, off_t offset, int len,
 
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->id, proc_context, 
-				 0x0000, -1, &work32, 56*4, &i2o_proc_token);
+	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+				 0x0000, -1, &work32, 56*4);
 	if(token < 0)
 	{
 		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
@@ -1883,8 +1875,8 @@ int i2o_proc_read_lan_mac_addr(char *buf, char **start, off_t offset, int len,
 	spin_lock(&i2o_proc_lock);	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->id, proc_context, 
-				 0x0001, -1, &work32, 48*4, &i2o_proc_token);
+	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+				 0x0001, -1, &work32, 48*4);
 	if(token < 0)
 	{
 		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
@@ -1973,9 +1965,8 @@ int i2o_proc_read_lan_mcast_addr(char *buf, char **start, off_t offset,
 	len = 0;
 
 	token = i2o_query_table(I2O_PARAMS_TABLE_GET,
-			d->controller, d->id, proc_context, 0x0002, -1, 
-			NULL, 0, &field32, sizeof(field32),
-			&i2o_proc_token);
+			d->controller, d->lct_data->tid, 0x0002, -1, 
+			NULL, 0, &field32, sizeof(field32));
 
 	if (token<0)
 		switch (token) {
@@ -2026,8 +2017,8 @@ int i2o_proc_read_lan_batch_control(char *buf, char **start, off_t offset,
 	spin_lock(&i2o_proc_lock);	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->id, proc_context, 
-				 0x0003, -1, &work32, 9*4, &i2o_proc_token);
+	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+				 0x0003, -1, &work32, 9*4);
 	if(token < 0)
 	{
 		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
@@ -2086,8 +2077,8 @@ int i2o_proc_read_lan_operation(char *buf, char **start, off_t offset, int len,
 	spin_lock(&i2o_proc_lock);	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->id, proc_context, 
-				 0x0004, -1, &work32, 20, &i2o_proc_token);
+	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+				 0x0004, -1, &work32, 20);
 	if(token < 0)
 	{
 		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
@@ -2151,8 +2142,8 @@ int i2o_proc_read_lan_media_operation(char *buf, char **start, off_t offset,
 	spin_lock(&i2o_proc_lock);	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->id, proc_context, 
-				 0x0005, -1, &work32, 36, &i2o_proc_token);
+	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+				 0x0005, -1, &work32, 36);
 	if(token < 0)
 	{
 		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
@@ -2225,9 +2216,8 @@ int i2o_proc_read_lan_alt_addr(char *buf, char **start, off_t offset, int len,
 	len = 0;
 
 	token = i2o_query_table(I2O_PARAMS_TABLE_GET,
-			d->controller, d->id, proc_context, 0x0006, -1, 
-			NULL, 0, &field32, sizeof(field32),
-			&i2o_proc_token);
+			d->controller, d->lct_data->tid, 0x0006, -1, 
+			NULL, 0, &field32, sizeof(field32));
 
 	if (token<0)
 		switch (token) {
@@ -2279,8 +2269,8 @@ int i2o_proc_read_lan_tx_info(char *buf, char **start, off_t offset, int len,
 	spin_lock(&i2o_proc_lock);	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->id, proc_context, 
-				 0x0007, -1, &work32, 8*4, &i2o_proc_token);
+	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+				 0x0007, -1, &work32, 8*4);
 	if(token < 0)
 	{
 		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
@@ -2341,8 +2331,8 @@ int i2o_proc_read_lan_rx_info(char *buf, char **start, off_t offset, int len,
 	spin_lock(&i2o_proc_lock);	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->id, proc_context, 
-				 0x0008, -1, &work32, 8*4, &i2o_proc_token);
+	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+				 0x0008, -1, &work32, 8*4);
 	if(token < 0)
 	{
 		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
@@ -2376,8 +2366,8 @@ int i2o_proc_read_lan_hist_stats(char *buf, char **start, off_t offset, int len,
 	spin_lock(&i2o_proc_lock);	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->id, proc_context, 
-				 0x0100, -1, &work64, 9*8, &i2o_proc_token);
+	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+				 0x0100, -1, &work64, 9*8);
 	if(token < 0)
 	{
 		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
@@ -2421,8 +2411,8 @@ int i2o_proc_read_lan_supp_opt_stats(char *buf, char **start, off_t offset,
 
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->id, proc_context, 
-				 0x0180, -1, &work64, 4*8, &i2o_proc_token);
+	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+				 0x0180, -1, &work64, 4*8);
 	if(token < 0)
 	{
 		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
@@ -2461,8 +2451,8 @@ int i2o_proc_read_lan_opt_tx_hist_stats(char *buf, char **start, off_t offset,
 
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->id, proc_context, 
-				 0x0182, -1, &work64, 9*8, &i2o_proc_token);
+	token = i2o_query_scalar(d->controller, d->lct_data->tid, 
+				 0x0182, -1, &work64, 9*8);
 	if(token < 0)
 	{
 		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
@@ -2506,8 +2496,8 @@ int i2o_proc_read_lan_opt_rx_hist_stats(char *buf, char **start, off_t offset,
 
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->id, proc_context, 
-				 0x0183, -1, &work64, 11*8, &i2o_proc_token);
+	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+				 0x0183, -1, &work64, 11*8);
 	if(token < 0)
 	{
 		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
@@ -2555,8 +2545,8 @@ int i2o_proc_read_lan_eth_stats(char *buf, char **start, off_t offset,
 	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->id, proc_context, 
-				 0x0200, -1, &work64, 8*8, &i2o_proc_token);
+	token = i2o_query_scalar(d->controller, d->lct_data->tid, 
+				 0x0200, -1, &work64, 8*8);
 	if(token < 0)
 	{
 		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
@@ -2597,8 +2587,8 @@ int i2o_proc_read_lan_supp_eth_stats(char *buf, char **start, off_t offset,
 
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->id, proc_context, 
-				 0x0280, -1, &work64, 8, &i2o_proc_token);
+	token = i2o_query_scalar(d->controller, d->lct_data->tid, 
+				 0x0280, -1, &work64, 8);
 	if(token < 0)
 	{
 		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
@@ -2625,8 +2615,8 @@ int i2o_proc_read_lan_opt_eth_stats(char *buf, char **start, off_t offset,
 
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->id, proc_context, 
-				 0x0281, -1, &work64, 3*8, &i2o_proc_token);
+	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+				 0x0281, -1, &work64, 3*8);
 	if(token < 0)
 	{
 		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
@@ -2677,8 +2667,8 @@ int i2o_proc_read_lan_tr_stats(char *buf, char **start, off_t offset,
 	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->id, proc_context, 
-				 0x0300, -1, &work64, 13*8, &i2o_proc_token);
+	token = i2o_query_scalar(d->controller, d->lct_data->tid, 
+				 0x0300, -1, &work64, 13*8);
 	if(token < 0)
 	{
 		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
@@ -2771,8 +2761,8 @@ int i2o_proc_read_lan_fddi_stats(char *buf, char **start, off_t offset,
 	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->id, proc_context, 
-				 0x0400, -1, &work64, 11*8, &i2o_proc_token);
+	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+				 0x0400, -1, &work64, 11*8);
 	if(token < 0)
 	{
 		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
@@ -2853,7 +2843,7 @@ static int i2o_proc_add_controller(struct i2o_controller *pctrl,
 	
 	for(dev = pctrl->devices; dev; dev = dev->next)
 	{
-		sprintf(buff, "%0#5x", dev->id);
+		sprintf(buff, "%0#5x", dev->lct_data->tid);
 
 		dir1 = create_proc_entry(buff, S_IFDIR, dir);
 		dev->proc_entry = dir1;
@@ -2863,7 +2853,7 @@ static int i2o_proc_add_controller(struct i2o_controller *pctrl,
 		
 		i2o_proc_create_entries(dev, generic_dev_entries, dir1);
 
-		switch(dev->class)
+		switch(dev->lct_data->class_id)
 		{
 		case I2O_CLASS_SCSI_PERIPHERAL:
 		case I2O_CLASS_RANDOM_BLOCK_STORAGE:
@@ -2871,7 +2861,7 @@ static int i2o_proc_add_controller(struct i2o_controller *pctrl,
 			break;
 		case I2O_CLASS_LAN:
 			i2o_proc_create_entries(dev, lan_entries, dir1);
-			switch(dev->subclass)
+			switch(dev->lct_data->sub_class)
 			{
 			case I2O_LAN_ETHERNET:
 				i2o_proc_create_entries(dev, lan_eth_entries,
@@ -2909,14 +2899,14 @@ static void i2o_proc_remove_controller(struct i2o_controller *pctrl,
 	for(dev=pctrl->devices; dev; dev=dev->next)
 	{
 		de=dev->proc_entry;
-		sprintf(dev_id, "%0#5x", dev->id);
+		sprintf(dev_id, "%0#5x", dev->lct_data->tid);
 
 		/* Would it be safe to remove _files_ even if they are in use? */
 		if((de) && (!de->count))
 		{
 			i2o_proc_remove_entries(generic_dev_entries, de);
 
-			switch(dev->class)
+			switch(dev->lct_data->class_id)
 			{
 			case I2O_CLASS_SCSI_PERIPHERAL:
 			case I2O_CLASS_RANDOM_BLOCK_STORAGE:
@@ -2924,7 +2914,7 @@ static void i2o_proc_remove_controller(struct i2o_controller *pctrl,
 				break;
 			case I2O_CLASS_LAN:
 				i2o_proc_remove_entries(lan_entries, de);
-				switch(dev->subclass)
+				switch(dev->lct_data->sub_class)
 				{
 				case I2O_LAN_ETHERNET:
 					i2o_proc_remove_entries(lan_eth_entries, de);

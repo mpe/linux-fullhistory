@@ -66,16 +66,16 @@ static struct page *try_to_get_symlink_page(struct dentry *dentry, struct inode 
 	if (!page_cache)
 		goto out;
 
-	hash = page_hash(inode, 0);
+	hash = page_hash(&inode->i_data, 0);
 repeat:
-	page = __find_lock_page(inode, 0, hash);
+	page = __find_lock_page(&inode->i_data, 0, hash);
 	if (page) {
 		page_cache_free(page_cache);
 		goto unlock_out;
 	}
 
 	page = page_cache;
-	if (add_to_page_cache_unique(page, inode, 0, hash)) {
+	if (add_to_page_cache_unique(page, &inode->i_data, 0, hash)) {
 		page_cache_release(page);
 		goto repeat;
 	}
@@ -107,7 +107,7 @@ static int nfs_readlink(struct dentry *dentry, char *buffer, int buflen)
 	u32 *p, len;
 
 	/* Caller revalidated the directory inode already. */
-	page = find_get_page(inode, 0);
+	page = find_get_page(&inode->i_data, 0);
 	if (!page)
 		goto no_readlink_page;
 	if (!Page_Uptodate(page))
@@ -142,7 +142,7 @@ nfs_follow_link(struct dentry *dentry, struct dentry *base, unsigned int follow)
 	u32 *p;
 
 	/* Caller revalidated the directory inode already. */
-	page = find_get_page(inode, 0);
+	page = find_get_page(&inode->i_data, 0);
 	if (!page)
 		goto no_followlink_page;
 	if (!Page_Uptodate(page))

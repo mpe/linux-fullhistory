@@ -255,7 +255,7 @@ static long refetch_to_readdir_cookie(struct file *file, struct inode *inode)
 again:
 	cur_off = 0;
 	for (;;) {
-		page = find_get_page(inode, cur_off);
+		page = find_get_page(&inode->i_data, cur_off);
 		if (page) {
 			if (!Page_Uptodate(page))
 				goto out_error;
@@ -332,16 +332,16 @@ static struct page *try_to_get_dirent_page(struct file *file, __u32 cookie, int 
 		goto out;
 	}
 
-	hash = page_hash(inode, offset);
+	hash = page_hash(&inode->i_data, offset);
 repeat:
-	page = __find_lock_page(inode, offset, hash);
+	page = __find_lock_page(&inode->i_data, offset, hash);
 	if (page) {
 		page_cache_free(page_cache);
 		goto unlock_out;
 	}
 
 	page = page_cache;
-	if (add_to_page_cache_unique(page, inode, offset, hash)) {
+	if (add_to_page_cache_unique(page, &inode->i_data, offset, hash)) {
 		page_cache_release(page);
 		goto repeat;
 	}
@@ -431,8 +431,8 @@ static int nfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	if ((offset = nfs_readdir_offset(inode, filp->f_pos)) < 0)
 		goto no_dirent_page;
 
-	hash = page_hash(inode, offset);
-	page = __find_get_page(inode, offset, hash);
+	hash = page_hash(&inode->i_data, offset);
+	page = __find_get_page(&inode->i_data, offset, hash);
 	if (!page)
 		goto no_dirent_page;
 	if (!Page_Uptodate(page))

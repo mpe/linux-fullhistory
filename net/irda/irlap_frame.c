@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Aug 19 10:27:26 1997
- * Modified at:   Tue Sep 28 08:49:58 1999
+ * Modified at:   Sat Oct  9 09:42:11 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -43,23 +43,25 @@
 #include <net/irda/qos.h>
 
 /*
- * Function irlap_insert_mtt (self, skb)
+ * Function irlap_insert_info (self, skb)
  *
- *    Insert minimum turnaround time relevant information into the skb. We 
+ *    Insert minimum turnaround time and speed information into the skb. We 
  *    need to do this since it's per packet relevant information.
  *
  */
-static inline void irlap_insert_mtt(struct irlap_cb *self, struct sk_buff *skb)
+static inline void irlap_insert_info(struct irlap_cb *self, 
+				     struct sk_buff *skb)
 {
 	struct irda_skb_cb *cb = (struct irda_skb_cb *) skb->cb;
 
-	/* 
-	 * Insert MTT (min. turn time) into skb, so that the device driver 
-	 * knows which MTT to use 
-	 */	
+	/*  
+	 * Insert MTT (min. turn time) and speed into skb, so that the
+	 * device driver knows which settings to use 
+	 */
 	cb->magic = LAP_MAGIC;
 	cb->mtt = self->mtt_required;
-	
+	cb->speed = self->qos_tx.baud_rate.value;
+
 	/* Reset */
 	self->mtt_required = 0;
 	
@@ -94,10 +96,9 @@ void irlap_queue_xmit(struct irlap_cb *self, struct sk_buff *skb)
  	skb->protocol = htons(ETH_P_IRDA);
 	skb->priority = TC_PRIO_BESTEFFORT;
 
-	irlap_insert_mtt(self, skb);
+	irlap_insert_info(self, skb);
 
 	dev_queue_xmit(skb);
-	self->stats.tx_packets++;
 }
 
 /*
@@ -169,7 +170,7 @@ static void irlap_recv_snrm_cmd(struct irlap_cb *self, struct sk_buff *skb,
 
 		/* Check if the new connection address is valid */
 		if ((info->caddr == 0x00) || (info->caddr == 0xfe)) {
-			DEBUG(3, __FUNCTION__ 
+			IRDA_DEBUG(3, __FUNCTION__ 
 			      "(), invalid connection address!\n");
 			dev_kfree_skb(skb);
 			return;
@@ -181,7 +182,7 @@ static void irlap_recv_snrm_cmd(struct irlap_cb *self, struct sk_buff *skb,
 		
 		/* Only accept if addressed directly to us */
 		if (info->saddr != self->saddr) {
-			DEBUG(2, __FUNCTION__ "(), not addressed to us!\n");
+			IRDA_DEBUG(2, __FUNCTION__ "(), not addressed to us!\n");
 			dev_kfree_skb(skb);
 			return;
 		}
@@ -203,7 +204,7 @@ void irlap_send_ua_response_frame(struct irlap_cb *self, struct qos_info *qos)
 	struct ua_frame *frame;
 	int ret;
 	
-	DEBUG(2, __FUNCTION__ "() <%ld>\n", jiffies);
+	IRDA_DEBUG(2, __FUNCTION__ "() <%ld>\n", jiffies);
 	
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == LAP_MAGIC, return;);
@@ -280,7 +281,7 @@ void irlap_send_disc_frame(struct irlap_cb *self)
 	struct sk_buff *skb = NULL;
 	__u8 *frame;
 	
-	DEBUG(3, __FUNCTION__ "()\n");
+	IRDA_DEBUG(3, __FUNCTION__ "()\n");
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == LAP_MAGIC, return;);
@@ -312,7 +313,7 @@ void irlap_send_discovery_xid_frame(struct irlap_cb *self, int S, __u8 s,
 	__u32 bcast = BROADCAST;
 	__u8 *info;
 
- 	DEBUG(4, __FUNCTION__ "(), s=%d, S=%d, command=%d\n", s, S, command);
+ 	IRDA_DEBUG(4, __FUNCTION__ "(), s=%d, S=%d, command=%d\n", s, S, command);
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == LAP_MAGIC, return;);
@@ -404,7 +405,7 @@ static void irlap_recv_discovery_xid_rsp(struct irlap_cb *self,
 	__u8 *discovery_info;
 	char *text;
 
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == LAP_MAGIC, return;);
@@ -417,7 +418,7 @@ static void irlap_recv_discovery_xid_rsp(struct irlap_cb *self,
 	/* Make sure frame is addressed to us */
 	if ((info->saddr != self->saddr) && (info->saddr != BROADCAST)) {
 		dev_kfree_skb(skb);
-		DEBUG(0, __FUNCTION__ "(), frame is not addressed to us!\n");
+		IRDA_DEBUG(0, __FUNCTION__ "(), frame is not addressed to us!\n");
 		return;
 	}
 
@@ -431,14 +432,14 @@ static void irlap_recv_discovery_xid_rsp(struct irlap_cb *self,
 	discovery->saddr = self->saddr;
 	discovery->timestamp = jiffies;
 
-	DEBUG(4, __FUNCTION__ "(), daddr=%08x\n", discovery->daddr);
+	IRDA_DEBUG(4, __FUNCTION__ "(), daddr=%08x\n", discovery->daddr);
 
 	discovery_info = skb_pull(skb, sizeof(struct xid_frame));
 
 	/* Get info returned from peer */
 	discovery->hints.byte[0] = discovery_info[0];
 	if (discovery_info[0] & HINT_EXTENSION) {
-		DEBUG(4, "EXTENSION\n");
+		IRDA_DEBUG(4, "EXTENSION\n");
 		discovery->hints.byte[1] = discovery_info[1];
 		discovery->charset = discovery_info[2];
 		text = (char *) &discovery_info[3];
@@ -482,7 +483,7 @@ static void irlap_recv_discovery_xid_cmd(struct irlap_cb *self,
 
 	/* Make sure frame is addressed to us */
 	if ((info->saddr != self->saddr) && (info->saddr != BROADCAST)) {
-		DEBUG(0, __FUNCTION__ "(), frame is not addressed to us!\n");
+		IRDA_DEBUG(0, __FUNCTION__ "(), frame is not addressed to us!\n");
 		dev_kfree_skb(skb);
 		return;
 	}
@@ -619,7 +620,7 @@ void irlap_send_frmr_frame( struct irlap_cb *self, int command)
 
 	frame[2] = 0;
 
-   	DEBUG( 4, __FUNCTION__ "(), vr=%d, %ld\n",self->vr, jiffies); 
+   	IRDA_DEBUG( 4, __FUNCTION__ "(), vr=%d, %ld\n",self->vr, jiffies); 
 
 	irlap_queue_xmit(self, skb);
 }
@@ -641,7 +642,7 @@ static void irlap_recv_rnr_frame( struct irlap_cb *self, struct sk_buff *skb,
 	frame = skb->data;
 	info->nr = frame[1] >> 5;
 
-	DEBUG( 4, __FUNCTION__ "(), nr=%d, %ld\n", info->nr, jiffies);
+	IRDA_DEBUG( 4, __FUNCTION__ "(), nr=%d, %ld\n", info->nr, jiffies);
 
 	irlap_do_event( self, RECV_RNR_FRAME, skb, info);
 }
@@ -700,7 +701,7 @@ void irlap_send_data_primary(struct irlap_cb *self, struct sk_buff *skb)
 
 		irlap_send_i_frame( self, tx_skb, CMD_FRAME);
 	} else {
-		DEBUG( 4, __FUNCTION__ "(), sending unreliable frame\n");
+		IRDA_DEBUG( 4, __FUNCTION__ "(), sending unreliable frame\n");
 		irlap_send_ui_frame(self, skb, CMD_FRAME);
 		self->window -= 1;
 	}
@@ -759,7 +760,7 @@ void irlap_send_data_primary_poll(struct irlap_cb *self, struct sk_buff *skb)
 
 		irlap_send_i_frame(self, tx_skb, CMD_FRAME);
 	} else {
-		DEBUG(4, __FUNCTION__ "(), sending unreliable frame\n");
+		IRDA_DEBUG(4, __FUNCTION__ "(), sending unreliable frame\n");
 
 		del_timer(&self->poll_timer);
 
@@ -959,7 +960,7 @@ void irlap_resend_rejected_frames(struct irlap_cb *self, int command)
 
 	while (skb_queue_len( &self->tx_list) > 0) {
 		
-		DEBUG(0, __FUNCTION__ "(), sending additional frames!\n");
+		IRDA_DEBUG(0, __FUNCTION__ "(), sending additional frames!\n");
 		if ((skb_queue_len( &self->tx_list) > 0) && 
 		    (self->window > 0)) {
 			skb = skb_dequeue( &self->tx_list); 
@@ -991,7 +992,7 @@ void irlap_send_ui_frame(struct irlap_cb *self, struct sk_buff *skb,
 {
 	__u8  *frame;
 
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 	
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == LAP_MAGIC, return;);
@@ -1056,7 +1057,7 @@ static void irlap_recv_ui_frame(struct irlap_cb *self, struct sk_buff *skb,
 {
 	__u8 *frame;
 
-	DEBUG( 4, __FUNCTION__ "()\n");
+	IRDA_DEBUG( 4, __FUNCTION__ "()\n");
 
 	frame = skb->data;
 
@@ -1077,7 +1078,7 @@ static void irlap_recv_frmr_frame(struct irlap_cb *self, struct sk_buff *skb,
 	__u8 *frame;
 	int w, x, y, z;
 
-	DEBUG(0, __FUNCTION__ "()\n");
+	IRDA_DEBUG(0, __FUNCTION__ "()\n");
 	
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == LAP_MAGIC, return;);
@@ -1096,20 +1097,20 @@ static void irlap_recv_frmr_frame(struct irlap_cb *self, struct sk_buff *skb,
 	z = frame[3] & 0x08;
 	
 	if (w) {
-		DEBUG(0, "Rejected control field is undefined or not "
+		IRDA_DEBUG(0, "Rejected control field is undefined or not "
 		      "implemented.\n");
 	} 
 	if (x) {
-		DEBUG(0, "Rejected control field was invalid because it "
+		IRDA_DEBUG(0, "Rejected control field was invalid because it "
 		      "contained a non permitted I field.\n");
 	}
 	if (y) {
-		DEBUG(0, "Received I field exceeded the maximum negotiated "
+		IRDA_DEBUG(0, "Received I field exceeded the maximum negotiated "
 		      "for the existing connection or exceeded the maximum "
 		      "this station supports if no connection exists.\n");
 	}
 	if (z) {
-		DEBUG(0, "Rejected control field control field contained an "
+		IRDA_DEBUG(0, "Rejected control field control field contained an "
 		      "invalid Nr count.\n");
 	}
 	irlap_do_event(self, RECV_FRMR_RSP, skb, info);
@@ -1168,10 +1169,10 @@ void irlap_recv_test_frame(struct irlap_cb *self, struct sk_buff *skb,
 {
 	struct test_frame *frame;
 
-	DEBUG(2, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 	
 	if (skb->len < sizeof(struct test_frame)) {
-		DEBUG(0, __FUNCTION__ "() test frame to short!\n");
+		IRDA_DEBUG(0, __FUNCTION__ "() test frame to short!\n");
 		return;
 	}
 
@@ -1205,12 +1206,11 @@ int irlap_driver_rcv(struct sk_buff *skb, struct net_device *dev,
 {
 	struct irlap_info info;
 	struct irlap_cb *self;
-	struct irda_device *idev;
 	int command;
 	__u8 control;
 	
-	idev = (struct irda_device *) dev->priv;
-	self = idev->irlap;
+	/* FIXME: should we get our own field? */
+	self = (struct irlap_cb *) dev->atalk_ptr;
 
 	/* If the net device is down, then IrLAP is gone! */
 	if (!self || self->magic != LAP_MAGIC) {
@@ -1235,7 +1235,7 @@ int irlap_driver_rcv(struct sk_buff *skb, struct net_device *dev,
 
 	/*  First we check if this frame has a valid connection address */
 	if ((info.caddr != self->caddr) && (info.caddr != CBROADCAST)) {
-		DEBUG(0, __FUNCTION__ "(), wrong connection address!\n");
+		IRDA_DEBUG(0, __FUNCTION__ "(), wrong connection address!\n");
 		dev_kfree_skb(skb);
 		return 0;
 	}
@@ -1245,7 +1245,6 @@ int irlap_driver_rcv(struct sk_buff *skb, struct net_device *dev,
 	 */
 	if (~control & 0x01) {
 		irlap_recv_i_frame(self, skb, &info, command);
-		self->stats.rx_packets++;
 		return 0;
 	}
 	/*
@@ -1260,17 +1259,15 @@ int irlap_driver_rcv(struct sk_buff *skb, struct net_device *dev,
 		switch (control & 0x0f) {
 		case RR:
 			irlap_recv_rr_frame(self, skb, &info, command);
-			self->stats.rx_packets++;
 			break;
 		case RNR:
 			irlap_recv_rnr_frame(self, skb, &info);
-			self->stats.rx_packets++;
 			break;
 		case REJ:
-			DEBUG( 0, "*** REJ frame received! ***\n");
+			IRDA_DEBUG( 0, "*** REJ frame received! ***\n");
 			break;
 		case SREJ:
-			DEBUG( 0, "*** SREJ frame received! ***\n");
+			IRDA_DEBUG( 0, "*** SREJ frame received! ***\n");
 			break;
 		default:
 			WARNING(__FUNCTION__ 
@@ -1294,7 +1291,7 @@ int irlap_driver_rcv(struct sk_buff *skb, struct net_device *dev,
 		irlap_recv_snrm_cmd(self, skb, &info);
 		break;
 	case DM_RSP:
-		DEBUG( 0, "DM rsp frame received!\n");
+		IRDA_DEBUG( 0, "DM rsp frame received!\n");
 		irlap_next_state(self, LAP_NDM);
 		break;
 	case DISC_CMD:
@@ -1310,7 +1307,6 @@ int irlap_driver_rcv(struct sk_buff *skb, struct net_device *dev,
 		irlap_recv_frmr_frame(self, skb, &info);
 		break;
 	case UI_FRAME:
-		DEBUG(4, "UI-frame received!\n");
 		irlap_recv_ui_frame(self, skb, &info);
 		break;
 	default:
@@ -1319,7 +1315,5 @@ int irlap_driver_rcv(struct sk_buff *skb, struct net_device *dev,
 		dev_kfree_skb( skb); 
 		break;
 	}
-	self->stats.rx_packets++;
-
 	return 0;
 }

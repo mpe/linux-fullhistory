@@ -34,6 +34,7 @@
 #include <linux/blkpg.h>
 #include <linux/timer.h>
 #include <linux/proc_fs.h>
+#include <linux/init.h>
 #include <linux/hdreg.h>
 #include <linux/spinlock.h>
 #include <asm/uaccess.h>
@@ -703,6 +704,26 @@ static ulong remap_pci_mem(ulong base, ulong size)
         return (ulong) (page_remapped ? (page_remapped + page_offs) : 0UL);
 }
 
+#ifndef MODULE
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,13)
+/*
+ * Config string is a comma seperated set of i/o addresses of EISA cards.
+ */
+static int cpqarray_setup(char *str)
+{
+	int i, ints[9];
+
+	(void)get_options(str, ARRAY_SIZE(ints), ints);
+
+	for(i=0; i<ints[0] && i<8; i++)
+		eisa[i] = ints[i+1];
+	return 1;
+}
+
+__setup("smart2=", cpqarray_setup);
+
+#else
+
 /*
  * Copy the contents of the ints[] array passed to us by init.
  */
@@ -712,6 +733,8 @@ void cpqarray_setup(char *str, int *ints)
 	for(i=0; i<ints[0] && i<8; i++)
 		eisa[i] = ints[i+1];
 }
+#endif
+#endif
 
 /*
  * Find an EISA controller's signature.  Set up an hba if we find it.

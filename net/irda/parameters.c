@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Jun  7 10:25:11 1999
- * Modified at:   Wed Aug 25 13:31:32 1999
+ * Modified at:   Tue Oct  5 11:52:54 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -29,6 +29,7 @@
  ********************************************************************/
 
 #include <asm/unaligned.h>
+#include <asm/byteorder.h>
 
 #include <net/irda/irda.h>
 #include <net/irda/parameters.h>
@@ -148,13 +149,13 @@ static int irda_insert_integer(void *self, __u8 *buf, int len, __u8 pi,
 	 */
 	if (p.pl == 0) {
 		if (p.pv.i < 0xff) {
-			DEBUG(2, __FUNCTION__ "(), using 1 byte\n");
+			IRDA_DEBUG(2, __FUNCTION__ "(), using 1 byte\n");
 			p.pl = 1;
 		} else if (p.pv.i < 0xffff) {
-			DEBUG(2, __FUNCTION__ "(), using 2 bytes\n");
+			IRDA_DEBUG(2, __FUNCTION__ "(), using 2 bytes\n");
 			p.pl = 2;
 		} else {
-			DEBUG(2, __FUNCTION__ "(), using 4 bytes\n");
+			IRDA_DEBUG(2, __FUNCTION__ "(), using 4 bytes\n");
 			p.pl = 4; /* Default length */
 		}
 	}
@@ -163,7 +164,7 @@ static int irda_insert_integer(void *self, __u8 *buf, int len, __u8 pi,
 		WARNING(__FUNCTION__ "(), buffer to short for insertion!\n");
 		return -1;
 	}
-	DEBUG(2, __FUNCTION__ "(), pi=%#x, pl=%d, pi=%d\n", p.pi, p.pl, p.pv.i);
+	IRDA_DEBUG(2, __FUNCTION__ "(), pi=%#x, pl=%d, pi=%d\n", p.pi, p.pl, p.pv.i);
 	switch (p.pl) {
 	case 1:
 		n += irda_param_pack(buf, "bbb", p.pi, p.pl, p.pv.b);
@@ -275,12 +276,12 @@ static int irda_extract_string(void *self, __u8 *buf, int len, __u8 pi,
 	param_t p;
 	int err;
 
-	DEBUG(2, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
 	p.pi = pi;     /* In case handler needs to know */
 	p.pl = buf[1]; /* Extract lenght of value */
 
-	DEBUG(2, __FUNCTION__ "(), pi=%#x, pl=%d\n", p.pi, p.pl);
+	IRDA_DEBUG(2, __FUNCTION__ "(), pi=%#x, pl=%d\n", p.pi, p.pl);
 
 	/* Check if buffer is long enough for parsing */
 	if (len < (2+p.pl)) {
@@ -293,7 +294,7 @@ static int irda_extract_string(void *self, __u8 *buf, int len, __u8 pi,
 	 * checked that the buffer is long enough */
 	strncpy(str, buf+2, p.pl);
 
-	DEBUG(2, __FUNCTION__ "(), str=0x%02x 0x%02x\n", (__u8) str[0], 
+	IRDA_DEBUG(2, __FUNCTION__ "(), str=0x%02x 0x%02x\n", (__u8) str[0], 
 	      (__u8) str[1]);
 	
 	/* Null terminate string */
@@ -330,7 +331,7 @@ static int irda_extract_octseq(void *self, __u8 *buf, int len, __u8 pi,
 		return -1;
 	}
 
-	DEBUG(0, __FUNCTION__ "(), not impl\n");
+	IRDA_DEBUG(0, __FUNCTION__ "(), not impl\n");
 	
 	return p.pl+2; /* Extracted pl+2 bytes */
 }
@@ -454,7 +455,7 @@ int irda_param_insert(void *self, __u8 pi, __u8 *buf, int len,
 	if ((pi_major > info->len-1) || 
 	    (pi_minor > info->tables[pi_major].len-1))
 	{
-		DEBUG(0, __FUNCTION__ 
+		IRDA_DEBUG(0, __FUNCTION__ 
 		      "(), no handler for parameter=0x%02x\n", pi);
 		
 		/* Skip this parameter */
@@ -467,7 +468,7 @@ int irda_param_insert(void *self, __u8 pi, __u8 *buf, int len,
 	/* Find expected data type for this parameter identifier (pi)*/
 	type = pi_minor_info->type;
 
-	DEBUG(3, __FUNCTION__ "(), pi=[%d,%d], type=%d\n",
+	IRDA_DEBUG(3, __FUNCTION__ "(), pi=[%d,%d], type=%d\n",
 	      pi_major, pi_minor, type);
 		
 	/*  Check if handler has been implemented */
@@ -509,7 +510,7 @@ int irda_param_extract(void *self, __u8 *buf, int len, pi_param_info_t *info)
 	if ((pi_major > info->len-1) || 
 	    (pi_minor > info->tables[pi_major].len-1))
 	{
-		DEBUG(0, __FUNCTION__ "(), no handler for parameter=0x%02x\n",
+		IRDA_DEBUG(0, __FUNCTION__ "(), no handler for parameter=0x%02x\n",
 		      buf[0]);
 		
 		/* Skip this parameter */
@@ -525,7 +526,7 @@ int irda_param_extract(void *self, __u8 *buf, int len, pi_param_info_t *info)
 	/* Find expected data type for this parameter identifier (pi)*/
 	type = pi_minor_info->type;
 	
-	DEBUG(3, __FUNCTION__ "(), pi=[%d,%d], type=%d\n",
+	IRDA_DEBUG(3, __FUNCTION__ "(), pi=[%d,%d], type=%d\n",
 	      pi_major, pi_minor, type);
 	
 	/*  Check if handler has been implemented */

@@ -328,6 +328,11 @@ struct iattr {
  */
 struct page;
 
+struct address_space {
+	struct list_head	pages;
+	unsigned long		nrpages;
+};
+
 struct inode {
 	struct list_head	i_hash;
 	struct list_head	i_list;
@@ -348,14 +353,13 @@ struct inode {
 	unsigned long		i_blksize;
 	unsigned long		i_blocks;
 	unsigned long		i_version;
-	unsigned long		i_nrpages;
 	struct semaphore	i_sem;
 	struct inode_operations	*i_op;
 	struct super_block	*i_sb;
 	wait_queue_head_t	i_wait;
 	struct file_lock	*i_flock;
 	struct vm_area_struct	*i_mmap;
-	struct list_head	i_pages;
+	struct address_space	i_data;	
 	spinlock_t		i_shared_lock;
 	struct dquot		*i_dquot[MAXQUOTAS];
 	struct pipe_inode_info	*i_pipe;

@@ -42,7 +42,7 @@ static inline void free_area_pte(pmd_t * pmd, unsigned long address, unsigned lo
 				__free_page(mem_map + map_nr);
 			continue;
 		}
-		printk("Whee.. Swapped out page in kernel page table\n");
+		printk(KERN_CRIT "Whee.. Swapped out page in kernel page table\n");
 	} while (address < end);
 }
 
@@ -96,7 +96,7 @@ static inline int alloc_area_pte(pte_t * pte, unsigned long address, unsigned lo
 	do {
 		struct page * page;
 		if (!pte_none(*pte))
-			printk("alloc_area_pte: page already exists\n");
+			printk(KERN_ERR "alloc_area_pte: page already exists\n");
 		page = get_free_highpage(GFP_KERNEL|__GFP_HIGHMEM);
 		if (!page)
 			return -ENOMEM;
@@ -184,7 +184,7 @@ void vfree(void * addr)
 	if (!addr)
 		return;
 	if ((PAGE_SIZE-1) & (unsigned long) addr) {
-		printk("Trying to vfree() bad address (%p)\n", addr);
+		printk(KERN_ERR "Trying to vfree() bad address (%p)\n", addr);
 		return;
 	}
 	for (p = &vmlist ; (tmp = *p) ; p = &tmp->next) {
@@ -195,7 +195,7 @@ void vfree(void * addr)
 			return;
 		}
 	}
-	printk("Trying to vfree() nonexistent vm area (%p)\n", addr);
+	printk(KERN_ERR "Trying to vfree() nonexistent vm area (%p)\n", addr);
 }
 
 void * vmalloc(unsigned long size)

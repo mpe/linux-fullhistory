@@ -89,7 +89,7 @@ static void init_once(void * foo, kmem_cache_t * cachep, unsigned long flags)
 		memset(inode, 0, sizeof(*inode));
 		init_waitqueue_head(&inode->i_wait);
 		INIT_LIST_HEAD(&inode->i_hash);
-		INIT_LIST_HEAD(&inode->i_pages);
+		INIT_LIST_HEAD(&inode->i_data.pages);
 		INIT_LIST_HEAD(&inode->i_dentry);
 		sema_init(&inode->i_sem, 1);
 		spin_lock_init(&inode->i_shared_lock);
@@ -247,7 +247,7 @@ void write_inode_now(struct inode *inode)
  */
 void clear_inode(struct inode *inode)
 {
-	if (inode->i_nrpages)
+	if (inode->i_data.nrpages)
 		BUG();
 	if (!(inode->i_state & I_FREEING))
 		BUG();
@@ -274,7 +274,7 @@ static void dispose_list(struct list_head * head)
 		list_del(inode_entry);
 
 		inode = list_entry(inode_entry, struct inode, i_list);
-		if (inode->i_nrpages)
+		if (inode->i_data.nrpages)
 			truncate_inode_pages(inode, 0);
 		clear_inode(inode);
 		destroy_inode(inode);
@@ -351,7 +351,7 @@ int invalidate_inodes(struct super_block * sb)
  *      dispose_list.
  */
 #define CAN_UNUSE(inode) \
-	(((inode)->i_state | (inode)->i_nrpages) == 0)
+	(((inode)->i_state | (inode)->i_data.nrpages) == 0)
 #define INODE(entry)	(list_entry(entry, struct inode, i_list))
 
 void prune_icache(int goal)
@@ -658,7 +658,7 @@ void iput(struct inode *inode)
 				if (op && op->delete_inode) {
 					void (*delete)(struct inode *) = op->delete_inode;
 					spin_unlock(&inode_lock);
-					if (inode->i_nrpages)
+					if (inode->i_data.nrpages)
 						truncate_inode_pages(inode, 0);
 					delete(inode);
 					spin_lock(&inode_lock);

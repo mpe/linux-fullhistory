@@ -576,9 +576,9 @@ printk("ncp_do_readdir: finding cache for %s/%s\n",
 #endif
 
 	/* cache using inspired by smbfs and nfs */
-	hash = page_hash(dir, 0);
+	hash = page_hash(&dir->i_data, 0);
 
-	page = __find_lock_page(dir, 0, hash);
+	page = __find_lock_page(&dir->i_data, 0, hash);
 
 	if (!page) {
 		unsigned long page_cache;
@@ -586,7 +586,7 @@ printk("ncp_do_readdir: finding cache for %s/%s\n",
 		page_cache = page_cache_alloc();
 		if (page_cache) {
 			page = page_cache_entry(page_cache);
-			if (add_to_page_cache_unique(page, dir, 0, hash)) {
+			if (add_to_page_cache_unique(page, &dir->i_data, 0, hash)) {
 				page_cache_release(page);
 				page = NULL;
 				page_cache_free(page_cache);

@@ -1,27 +1,33 @@
 /*********************************************************************
  *                
  * Filename:      esi.c
- * Version:       1.4
+ * Version:       1.5
  * Description:   Driver for the Extended Systems JetEye PC dongle
  * Status:        Experimental.
- * Author:        Thomas Davis, <ratbert@radiks.net>
+ * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Feb 21 18:54:38 1998
- * Modified at:   Sat Jun 26 16:50:17 1999
+ * Modified at:   Mon Oct 18 12:35:43 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
- * Sources:	  esi.c
- *
- *     Copyright (c) 1998-1999, Dag Brattli, <dagb@cs.uit.no>
- *     Copyright (c) 1998, Thomas Davis, <ratbert@radiks.net>,
+ * 
+ *     Copyright (c) 1999 Dag Brattli, <dagb@cs.uit.no>,
+ *     Copyright (c) 1998 Thomas Davis, <ratbert@radiks.net>,
  *     All Rights Reserved.
- *
- *     This program is free software; you can redistribute it and/or
- *     modify it under the terms of the GNU General Public License as
- *     published by the Free Software Foundation; either version 2 of
+ *     
+ *     This program is free software; you can redistribute it and/or 
+ *     modify it under the terms of the GNU General Public License as 
+ *     published by the Free Software Foundation; either version 2 of 
  *     the License, or (at your option) any later version.
- *
- *     I, Thomas Davis, provide no warranty for any of this software.
- *     This material is provided "AS-IS" and at no charge.
- *
+ * 
+ *     This program is distributed in the hope that it will be useful,
+ *     but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *     GNU General Public License for more details.
+ * 
+ *     You should have received a copy of the GNU General Public License 
+ *     along with this program; if not, write to the Free Software 
+ *     Foundation, Inc., 59 Temple Place, Suite 330, Boston, 
+ *     MA 02111-1307 USA
+ *     
  ********************************************************************/
 
 #include <linux/module.h>
@@ -34,22 +40,19 @@
 #include <net/irda/irda.h>
 #include <net/irda/irmod.h>
 #include <net/irda/irda_device.h>
-#include <net/irda/irtty.h>
-#include <net/irda/dongle.h>
 
-static void esi_open(struct irda_device *idev, int type);
-static void esi_close(struct irda_device *driver);
-static void esi_change_speed(struct irda_device *idev, __u32 speed);
-static void esi_reset(struct irda_device *idev);
-static void esi_qos_init(struct irda_device *idev, struct qos_info *qos);
+static void esi_open(dongle_t *self, struct qos_info *qos);
+static void esi_close(dongle_t *self);
+static int  esi_change_speed(struct irda_task *task);
+static int  esi_reset(struct irda_task *task);
 
-static struct dongle dongle = {
-	ESI_DONGLE,
+static struct dongle_reg dongle = {
+	Q_NULL,
+	IRDA_ESI_DONGLE,
 	esi_open,
 	esi_close,
 	esi_reset,
 	esi_change_speed,
-	esi_qos_init,
 };
 
 int __init esi_init(void)
@@ -62,37 +65,40 @@ void esi_cleanup(void)
 	irda_device_unregister_dongle(&dongle);
 }
 
-static void esi_open(struct irda_device *idev, int type)
+static void esi_open(dongle_t *self, struct qos_info *qos)
 {
-	strcat(idev->description, " <-> esi");
-
-	idev->io.dongle_id = type;
-	idev->flags |= IFF_DONGLE;
+	qos->baud_rate.bits &= IR_9600|IR_19200|IR_115200;
+	qos->min_turn_time.bits &= 0x01; /* Needs at least 10 ms */
 
 	MOD_INC_USE_COUNT;
 }
 
-static void esi_close(struct irda_device *idev)
+static void esi_close(dongle_t *dongle)
 {		
 	/* Power off dongle */
-	irda_device_set_dtr_rts(idev, FALSE, FALSE);
+	dongle->set_dtr_rts(dongle->dev, FALSE, FALSE);
 
 	MOD_DEC_USE_COUNT;
 }
 
 /*
- * Function esi_change_speed (idev, speed)
+ * Function esi_change_speed (task)
  *
  *    Set the speed for the Extended Systems JetEye PC ESI-9680 type dongle
  *
  */
-static void esi_change_speed(struct irda_device *idev, __u32 speed)
+static int esi_change_speed(struct irda_task *task)
 {
+	dongle_t *self = (dongle_t *) task->instance;
+	__u32 speed = (__u32) task->param;
 	int dtr, rts;
 	
-	ASSERT(idev != NULL, return;);
-	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
-	
+	/* Lock dongle */
+	if (irda_lock((void *) &self->busy) == FALSE) {
+		IRDA_DEBUG(0, __FUNCTION__ "(), busy!\n");
+		return MSECS_TO_JIFFIES(100);
+	}
+
 	switch (speed) {
 	case 19200:
 		dtr = TRUE;
@@ -109,28 +115,34 @@ static void esi_change_speed(struct irda_device *idev, __u32 speed)
 	}
 
 	/* Change speed of dongle */
-	irda_device_set_dtr_rts(idev, dtr, rts);
-}
+	self->set_dtr_rts(self->dev, dtr, rts);
+	self->speed = speed;
 
-static void esi_reset( struct irda_device *idev)
-{
-	/* Empty */
+	irda_task_next_state(task, IRDA_TASK_DONE);
+
+	/* Unlock */
+	self->busy = 0;
+	
+	return 0;
 }
 
 /*
- * Function esi_qos_init (qos)
+ * Function esi_reset (task)
  *
- *    Init QoS capabilities for the dongle
+ *    Reset dongle;
  *
  */
-static void esi_qos_init(struct irda_device *idev, struct qos_info *qos)
+static int esi_reset(struct irda_task *task)
 {
-	qos->baud_rate.bits &= IR_9600|IR_19200|IR_115200;
-	qos->min_turn_time.bits &= 0x01; /* Needs at least 10 ms */
+	dongle_t *self = (dongle_t *) task->instance;
+	
+	self->set_dtr_rts(self->dev, FALSE, FALSE);
+	irda_task_next_state(task, IRDA_TASK_DONE);
+
+	return 0;
 }
 
 #ifdef MODULE
-
 MODULE_AUTHOR("Dag Brattli <dagb@cs.uit.no>");
 MODULE_DESCRIPTION("Extended Systems JetEye PC dongle driver");
 
@@ -155,6 +167,5 @@ void cleanup_module(void)
 {
         esi_cleanup();
 }
-
-#endif
+#endif /* MODULE */
 

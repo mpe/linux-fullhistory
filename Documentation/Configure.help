@@ -5670,7 +5670,7 @@ CONFIG_EQUALIZER
   module, say M here and read Documentation/modules.txt. If unsure,
   say N.
 
-Ethertap network tap
+Ethertap network tap (EXPERIMENTAL)
 CONFIG_ETHERTAP
   If you say Y here (and have said Y to "Kernel/User network link
   driver", above) and create a character special file /dev/tap0 with
@@ -6185,7 +6185,7 @@ CONFIG_WANPIPE_PPP
   you say N, the PPP support will not be included in the driver (saves
   about 16 KB of kernel memory).
 
-Cyclom 2X(tm) multiprotocol cards
+Cyclom 2X(tm) multiprotocol cards (EXPERIMENTAL)
 CONFIG_CYCLADES_SYNC
   Cyclom 2X from Cyclades Corporation (http://www.cyclades.com and
   http://www.cyclades.com.br ) is an intelligent multiprotocol WAN
@@ -6378,7 +6378,7 @@ CONFIG_NET_VENDOR_RACAL
   the questions about NI cards. If you say Y, you will be asked for
   your specific card in the following questions.
 
-NI5010 support
+NI5010 support (EXPERIMENTAL)
 CONFIG_NI5010
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
@@ -6983,7 +6983,7 @@ CONFIG_AC3200
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 
-Mylex EISA LNE390A/LNE390B support
+Mylex EISA LNE390A/LNE390B support (EXPERIMENTAL)
 CONFIG_LNE390
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
@@ -6995,7 +6995,7 @@ CONFIG_LNE390
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 
-Novell/Eagle/Microdyne NE3210 EISA support
+Novell/Eagle/Microdyne NE3210 EISA support (EXPERIMENTAL)
 CONFIG_NE3210
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
@@ -7080,7 +7080,7 @@ CONFIG_EEXPRESS_PRO100
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 
-ICL EtherTeam 16i/32 support
+ICL EtherTeam 16i/32 support (EXPERIMENTAL)
 CONFIG_ETH16I
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
@@ -7122,7 +7122,7 @@ CONFIG_VIA_RHINE
   a module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 
-Racal-Interlan EISA ES3210 support
+Racal-Interlan EISA ES3210 support (EXPERIMENTAL)
 CONFIG_ES3210
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
@@ -7151,7 +7151,7 @@ CONFIG_SGISEEQ
   Say Y here if you have an Seeq based Ethernet network card. This is
   used in many Silicon Graphics machines.
 
-Zenith Z-Note support
+Zenith Z-Note support (EXPERIMENTAL)
 CONFIG_ZNET
   The Zenith Z-Note notebook computer has a built-in network
   (Ethernet) card, and this is the Linux driver for it. Note that the
@@ -7650,7 +7650,7 @@ CONFIG_QUOTA
   http://metalab.unc.edu/mdw/linux.html#howto . Probably the quota
   support is only useful for multi user systems. If unsure, say N.
 
-Support for USB (EXPERIMENTAL!)
+Support for USB (EXPERIMENTAL)
 CONFIG_USB
   Universal Serial Bus (USB) is a specification for a serial bus
   system which offers higher speeds and more features than the
@@ -7801,6 +7801,16 @@ CONFIG_USB_ACM
   inserted in and removed from the running kernel whenever you want).
   The module will be called acm.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
+
+USB Belkin and Peracom serial support
+CONFIG_USB_SERIAL
+  Say Y here if you want to connect a Belkin, Peracom, or eTek
+  single port USB to serial converter.
+  
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called usb-serial.o. If you want to compile it 
+  as a module, say M here and read Documentation/modules.txt.
 
 USB Printer support
 CONFIG_USB_PRINTER
@@ -8203,7 +8213,7 @@ CONFIG_NFSD_SUN
   directories that are mount points on the local filesystem (this is
   how nfsd behaves on Sun systems), say Y here. If unsure, say N.
 
-OS/2 HPFS filesystem support (read only)
+OS/2 HPFS filesystem support
 CONFIG_HPFS_FS
   OS/2 is IBM's operating system for PC's, the same as Warp, and HPFS
   is the filesystem used for organizing files on OS/2 hard disk
@@ -8230,7 +8240,7 @@ CONFIG_NTFS_FS
   The module will be called ntfs.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
-NTFS read-write support (EXPERIMENTAL)
+NTFS write support (DANGEROUS)
 CONFIG_NTFS_RW
   If you say Y here, you will (hopefully) be able to write to NTFS
   file systems as well as read from them. The read-write support
@@ -8265,7 +8275,7 @@ CONFIG_SYSV_FS
   tar" or preferably "info tar"). Note also that this option has
   nothing whatsoever to do with the option "System V IPC". Read about
   the System V filesystem in Documentation/filesystems/sysv-fs.txt.
-  Saying Y here will enlarge your kernel by about 34 KB.
+  Saying Y here will enlarge your kernel by about 27 kB.
 
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -8322,7 +8332,7 @@ CONFIG_ROMFS_FS
   If you don't know whether you need it, then you don't need it:
   answer N.
 
-QNX filesystem support (EXPERIMENTAL)
+QNX filesystem support (read only) (EXPERIMENTAL)
 CONFIG_QNX4FS_FS  
   This is the filesystem used by the operating system QNX 4. Say Y if
   you intend to mount QNX hard disks or floppies. Unless you say Y to
@@ -8336,7 +8346,7 @@ CONFIG_QNX4FS_FS
 
   If unsure, say N.
 
-QNXFS read-write support (FOR TESTING ONLY)
+QNXFS write support (DANGEROUS)
 CONFIG_QNX4FS_RW
   Say Y if you want to test write support for QNX filesystems.
 
@@ -9289,7 +9299,7 @@ CONFIG_ESPSERIAL
   and read Documentation/modules.txt. The module will be called esp.o.
   If unsure, say N.
 
-Multi-Tech multiport card support
+Multi-Tech multiport card support (EXPERIMENTAL)
 CONFIG_ISI
   This is a driver for the Multi-Tech cards which provide several
   serial ports. The driver is experimental and can currently only be
@@ -9459,9 +9469,9 @@ CONFIG_82C710_MOUSE
 
 PC110 digitizer pad support
 CONFIG_PC110_PAD
-  This drives the digitizer pad on the IBM PC110 palmtop (see
-  http://toy.cabi.net ). It can turn the digitizer pad into a PS/2
-  mouse emulation with tap gestures or into an absolute pad.
+  This drives the digitizer pad on the IBM PC110 palmtop. It can turn 
+  the digitizer pad into a PS/2 mouse emulation with tap gestures or
+  into an absolute pad.
 
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),

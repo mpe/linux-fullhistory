@@ -302,7 +302,7 @@ static int i2o_lan_receive_post(struct net_device *dev, u32 count)
 			     : count - total;
 
 		msg[0] = I2O_MESSAGE_SIZE(4 + 3 *  bucket_count) | SGL_OFFSET_4;
-		msg[1] = LAN_RECEIVE_POST<<24 | HOST_TID<<12 | i2o_dev->id;
+		msg[1] = LAN_RECEIVE_POST<<24 | HOST_TID<<12 | i2o_dev->lct_data->tid;
 		msg[2] = priv->unit << 16 | lan_context; // InitiatorContext	
 		msg[3] = bucket_count;			 // BucketCount
 
@@ -343,12 +343,12 @@ static int i2o_lan_reset(struct net_device *dev)
 	u32 msg[5];
 
 	msg[0] = FIVE_WORD_MSG_SIZE | SGL_OFFSET_0;
-	msg[1] = LAN_RESET<<24 | HOST_TID<<12 | i2o_dev->id;
+	msg[1] = LAN_RESET<<24 | HOST_TID<<12 | i2o_dev->lct_data->tid;
 	msg[2] = priv->unit << 16 | lan_context; // InitiatorContext
 	msg[3] = 0; 				 // TransactionContext
 	msg[4] = 1 << 16; 			 // return posted buckets
 
-	if (i2o_post_this(iop, i2o_dev->id, msg, sizeof(msg)) < 0)
+	if (i2o_post_this(iop, msg, sizeof(msg)) < 0)
 		return -ETIMEDOUT;		
 
 	return 0; 
@@ -368,12 +368,12 @@ static int i2o_lan_suspend(struct net_device *dev)
 
 	dprintk( "%s: LAN SUSPEND MESSAGE\n", dev->name );
 	msg[0] = FIVE_WORD_MSG_SIZE | SGL_OFFSET_0;
-	msg[1] = LAN_SUSPEND<<24 | HOST_TID<<12 | i2o_dev->id;
+	msg[1] = LAN_SUSPEND<<24 | HOST_TID<<12 | i2o_dev->lct_data->tid;
 	msg[2] = priv->unit << 16 | lan_context; // InitiatorContext
 	msg[3] = 0; 				 // TransactionContext
 	msg[4] = 1 << 16; 			 // return posted buckets
 
-	if (i2o_post_this(iop, i2o_dev->id, msg, sizeof(msg)) < 0)
+	if (i2o_post_this(iop, msg, sizeof(msg))< 0)
 		return -ETIMEDOUT;
 
 	return 0;
@@ -400,8 +400,7 @@ static void i2o_set_batch_mode(struct net_device *dev)
 	// enable batch mode, toggle automatically
 	val = 0x00000000;
 //	val = 0x00000001; // turn off batch mode
-	if (i2o_set_scalar(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0x0003, 0,
-			&val, 4, &priv->reply_flag) <0)
+	if (i2o_set_scalar(iop, i2o_dev->lct_data->tid, 0x0003, 0, &val, 4) < 0)
 		printk(KERN_WARNING "Unable to enter I2O LAN batch mode.\n");
 	else
 		dprintk(KERN_INFO "%s: I2O LAN batch mode enabled.\n",dev->name);
@@ -414,8 +413,7 @@ static void i2o_set_batch_mode(struct net_device *dev)
 	/* set LAN_OPERATION attributes */
 
 	val = dev->mtu + dev->hard_header_len; // PacketOrphanLimit
-	if (i2o_set_scalar(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0x0004, 2,
-		&val, 4, &priv->reply_flag) < 0)
+	if (i2o_set_scalar(iop, i2o_dev->lct_data->tid, 0x0004, 2, &val, 4))
 		printk(KERN_WARNING "i2o_lan: Unable to set PacketOrphanLimit.\n");
 	else
 		dprintk(KERN_INFO "%s: PacketOrphanLimit set to %d\n",
@@ -438,7 +436,7 @@ static int i2o_lan_open(struct net_device *dev)
 		printk(KERN_WARNING "%s: Unable to claim the I2O LAN device.\n", dev->name);
 		return -EAGAIN;
 	}
-	dprintk(KERN_INFO "%s: I2O LAN device claimed (tid=%d).\n", dev->name, i2o_dev->id);
+	dprintk(KERN_INFO "%s: I2O LAN device claimed (tid=%d).\n", dev->name, i2o_dev->lct_data->tid);
 
 	i2o_lan_reset(dev);
 	
@@ -467,7 +465,7 @@ static int i2o_lan_close(struct net_device *dev)
 
 	if(i2o_release_device(i2o_dev, &i2o_lan_handler, I2O_CLAIM_PRIMARY))
 		printk(KERN_WARNING "%s: Unable to unclaim I2O LAN device "
-		       "(tid=%d)\n", dev->name, i2o_dev->id);
+		       "(tid=%d)\n", dev->name, i2o_dev->lct_data->tid);
 
 	MOD_DEC_USE_COUNT;
 
@@ -521,7 +519,7 @@ static int i2o_lan_packet_send(struct sk_buff *skb, struct net_device *dev)
 	msg = bus_to_virt(iop->mem_offset + m);
 	
 	msg[0] = SEVEN_WORD_MSG_SIZE | 1<<12 | SGL_OFFSET_4;
-	msg[1] = LAN_PACKET_SEND<<24 | HOST_TID<<12 | i2o_dev->id;	
+	msg[1] = LAN_PACKET_SEND<<24 | HOST_TID<<12 | i2o_dev->lct_data->tid;	
 	msg[2] = priv->unit << 16 | lan_context; // IntiatorContext
 	msg[3] = 1 << 4; 			 // TransmitControlWord
 	
@@ -554,8 +552,8 @@ static struct net_device_stats *i2o_lan_get_stats(struct net_device *dev)
 	u64 val64[16];
 	u64 supported_group[4] = { 0, 0, 0, 0 };
 
-        if (i2o_query_scalar(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0x0100, -1, 
-        		 val64, sizeof(val64), &priv->reply_flag) < 0)
+        if (i2o_query_scalar(iop, i2o_dev->lct_data->tid, 0x0100, -1, 
+        		 val64, sizeof(val64)) < 0)
         	printk("%s: Unable to query LAN_HISTORICAL_STATS.\n",dev->name);
 	else {
         	dprintk("%s: LAN_HISTORICAL_STATS queried.\n",dev->name);
@@ -568,13 +566,13 @@ static struct net_device_stats *i2o_lan_get_stats(struct net_device *dev)
 		priv->stats.rx_dropped = val64[6];
 	}
 
-        if (i2o_query_scalar(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0x0180, -1, 
-        		&supported_group, sizeof(supported_group), &priv->reply_flag) < 0)
+        if (i2o_query_scalar(iop, i2o_dev->lct_data->tid, 0x0180, -1, 
+        		&supported_group, sizeof(supported_group)) < 0)
         	printk("%s: Unable to query LAN_SUPPORTED_OPTIONAL_HISTORICAL_STATS.\n",dev->name);
 
 	if (supported_group[2]) {
-        	if (i2o_query_scalar(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0x0183, -1, 
-        	 	val64, sizeof(val64), &priv->reply_flag) < 0)
+        	if (i2o_query_scalar(iop, i2o_dev->lct_data->tid, 0x0183, -1, 
+        	 	val64, sizeof(val64) ) < 0)
         		printk("%s: Unable to query LAN_OPTIONAL_RX_HISTORICAL_STATS.\n",dev->name);
 		else {
         		dprintk("%s: LAN_OPTIONAL_RX_HISTORICAL_STATS queried.\n",dev->name);
@@ -584,12 +582,12 @@ static struct net_device_stats *i2o_lan_get_stats(struct net_device *dev)
 		}
 	}
 
-	if (i2o_dev->subclass == I2O_LAN_ETHERNET)
+	if (i2o_dev->lct_data->sub_class == I2O_LAN_ETHERNET)
 	{
 		u64 supported_stats = 0;		
 
-        	if (i2o_query_scalar(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0x0200, -1, 
-        			 val64, sizeof(val64), &priv->reply_flag) < 0)
+        	if (i2o_query_scalar(iop, i2o_dev->lct_data->tid, 0x0200, -1, 
+        			 val64, sizeof(val64)) < 0)
         		printk("%s: Unable to query LAN_802_3_HISTORICAL_STATS.\n",dev->name);
 		else {
         		dprintk("%s: LAN_802_3_HISTORICAL_STATS queried.\n",dev->name);
@@ -598,13 +596,13 @@ static struct net_device_stats *i2o_lan_get_stats(struct net_device *dev)
 			priv->stats.tx_carrier_errors  = val64[6];
 		}
 
-        	if (i2o_query_scalar(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0x0280, -1, 
-        			 &supported_stats, 8, &priv->reply_flag) < 0)
+        	if (i2o_query_scalar(iop, i2o_dev->lct_data->tid, 0x0280, -1, 
+        			 &supported_stats, 8) < 0)
         		printk("%s: Unable to query LAN_SUPPORTED_802_3_HISTORICAL_STATS\n", dev->name);
 
         	if (supported_stats != 0) {
-        		if (i2o_query_scalar(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0x0281, -1, 
-        				 val64, sizeof(val64), &priv->reply_flag) < 0)
+        		if (i2o_query_scalar(iop, i2o_dev->lct_data->tid, 0x0281, -1, 
+        				 val64, sizeof(val64)) < 0)
         			printk("%s: Unable to query LAN_OPTIONAL_802_3_HISTORICAL_STATS.\n",dev->name);
 			else {
         			dprintk("%s: LAN_OPTIONAL_802_3_HISTORICAL_STATS queried.\n",dev->name);
@@ -618,10 +616,10 @@ static struct net_device_stats *i2o_lan_get_stats(struct net_device *dev)
 	}
 
 #ifdef CONFIG_TR
-	if (i2o_dev->subclass == I2O_LAN_TR)
+	if (i2o_dev->lct_data->sub_class == I2O_LAN_TR)
 	{
-        	if (i2o_query_scalar(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0x0300, -1, 
-        			 val64, sizeof(val64), &priv->reply_flag) < 0)
+        	if (i2o_query_scalar(iop, i2o_dev->lct_data->tid, 0x0300, -1, 
+        			 val64, sizeof(val64)) < 0)
         		printk("%s: Unable to query LAN_802_5_HISTORICAL_STATS.\n",dev->name);
 		else {
 			struct tr_statistics *stats = 
@@ -644,10 +642,10 @@ static struct net_device_stats *i2o_lan_get_stats(struct net_device *dev)
 #endif
 
 #ifdef CONFIG_FDDI
-	if (i2o_dev->subclass == I2O_LAN_FDDI)
+	if (i2o_dev->lct_data->sub_class == I2O_LAN_FDDI)
 	{
-        	if (i2o_query_scalar(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0x0400, -1, 
-        			 val64, sizeof(val64), &priv->reply_flag) < 0)
+        	if (i2o_query_scalar(iop, i2o_dev->lct_data->tid, 0x0400, -1, 
+        			 val64, sizeof(val64)) < 0)
         		printk("%s: Unable to query LAN_FDDI_HISTORICAL_STATS.\n",dev->name);
 		else {
 //        		dprintk("%s: LAN_FDDI_HISTORICAL_STATS queried.\n",dev->name);
@@ -691,8 +689,8 @@ return;
  * *because its trying to sleep in an irq - this must be async - Alan
  */
 
-	if (i2o_query_scalar(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0x0001, -1,
-			     &work32, sizeof(work32), &priv->reply_flag) < 0 ) 
+	if (i2o_query_scalar(iop, i2o_dev->lct_data->tid, 0x0001, -1,
+			     &work32, sizeof(work32)) < 0) 
 	{
 		printk(KERN_WARNING "i2o_lan: Unable to query "
 			" LAN_MAC_ADDRESS table.\n");	
@@ -734,12 +732,11 @@ return;
 			mclist = mclist->next;
 		} 
 
-		if (i2o_clear_table(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0x0002,
-				&priv->reply_flag) < 0 ) 
+		if (i2o_clear_table(iop, i2o_dev->lct_data->tid, 0x0002) < 0)
 			dprintk("%s: Unable to clear LAN_MULTICAST_MAC_ADDRESS table.\n",dev->name);
 
-		if (i2o_row_add_table(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0x0002, -1,
-			work32, dev->mc_count*8, &priv->reply_flag) < 0)	
+		if (i2o_row_add_table(iop, i2o_dev->lct_data->tid, 0x0002, -1,
+			work32, dev->mc_count*8) < 0)	
 			dprintk("%s: Unable to set LAN_MULTICAST_MAC_ADDRESS table.\n",dev->name);
 	} 
 	
@@ -748,8 +745,8 @@ return;
 		dprintk(KERN_INFO "i2o_lan: Enabling unicast mode...\n");
         }
 
-	if (i2o_set_scalar(iop, i2o_dev->id, priv->unit << 16 | lan_context, 0x0001, 3,
-			&filter_mask, 4, &priv->reply_flag) <0)
+	if (i2o_set_scalar(iop, i2o_dev->lct_data->tid, 0x0001, 3,
+			&filter_mask, 4) < 0)
 		printk(KERN_WARNING "i2o_lan: Unable to set MAC FilterMask.\n");
 
 	return;
@@ -764,10 +761,10 @@ struct net_device *i2o_lan_register_device(struct i2o_device *i2o_dev)
 	unsigned short (*type_trans)(struct sk_buff *, struct net_device *);
 	void (*unregister_dev)(struct net_device *dev);
 
-	switch (i2o_dev->subclass)
+	switch (i2o_dev->lct_data->sub_class)
 	{
 	case I2O_LAN_ETHERNET:
-        	dev = init_etherdev(NULL, sizeof(struct i2o_lan_local));
+		dev = init_etherdev(NULL, sizeof(struct i2o_lan_local));
 		if (dev == NULL)
 			return NULL;
 		type_trans = eth_type_trans;
@@ -827,7 +824,7 @@ struct net_device *i2o_lan_register_device(struct i2o_device *i2o_dev)
 	case I2O_LAN_UNKNOWN:
 	default:
 		printk(KERN_ERR "i2o_lan: LAN type 0x%08X not supported\n",
-		       i2o_dev->subclass);
+		       i2o_dev->lct_data->sub_class);
 		return NULL;
 	}
 
@@ -840,9 +837,8 @@ struct net_device *i2o_lan_register_device(struct i2o_device *i2o_dev)
 	i2o_landevs[unit] = dev;
 	priv->unit = unit;
 
-	if (i2o_query_scalar(i2o_dev->controller, i2o_dev->id, 
-			priv->unit << 16 | lan_context,
-			0x0001, 0, &hw_addr, 8, &priv->reply_flag) < 0)
+	if (i2o_query_scalar(i2o_dev->controller, i2o_dev->lct_data->tid,
+			0x0001, 0, &hw_addr, 8) < 0)
 	{
      	printk(KERN_ERR "%s: Unable to query hardware address.\n", dev->name);
 		unit--;
@@ -858,9 +854,8 @@ struct net_device *i2o_lan_register_device(struct i2o_device *i2o_dev)
 	dev->addr_len = 6;
 	memcpy(dev->dev_addr, hw_addr, 6);
 
-   if (i2o_query_scalar(i2o_dev->controller, i2o_dev->id,
-         priv->unit << 16 | lan_context,
-         0x0007, 2, &max_tx, 4, &priv->reply_flag) < 0)
+   if (i2o_query_scalar(i2o_dev->controller, i2o_dev->lct_data->tid,
+         0x0007, 2, &max_tx, 4) < 0)
    {
       printk(KERN_ERR "%s: Unable to query max TX queue.\n", dev->name);
       unit--;
@@ -912,7 +907,10 @@ int __init i2o_lan_init(void)
 
 		for (i2o_dev=iop->devices;i2o_dev != NULL;i2o_dev=i2o_dev->next)
 		{
-			if (i2o_dev->class != I2O_CLASS_LAN) 
+			if (i2o_dev->lct_data->class_id != I2O_CLASS_LAN) 
+				continue;
+
+			if(i2o_dev->lct_data->user_tid != 0xFFF)
 				continue;
 
 			if (unit == MAX_LAN_CARDS)
@@ -931,7 +929,7 @@ int __init i2o_lan_init(void)
 
 			printk(KERN_INFO "%s: I2O LAN device registered, tid = %d,"
 				" subclass = 0x%08X, unit = %d.\n",
-				dev->name, i2o_dev->id, i2o_dev->subclass,
+				dev->name, i2o_dev->lct_data->tid, i2o_dev->lct_data->sub_class,
 				((struct i2o_lan_local *)dev->priv)->unit);
 		}
 
@@ -955,7 +953,7 @@ void cleanup_module(void)
 		struct i2o_lan_local *priv = (struct i2o_lan_local *)dev->priv;	
 		struct i2o_device *i2o_dev = priv->i2o_dev;	
 
-		switch (i2o_dev->subclass)
+		switch (i2o_dev->lct_data->sub_class)
 		{
 		case I2O_LAN_ETHERNET:
 			unregister_netdev(dev);
@@ -975,7 +973,7 @@ void cleanup_module(void)
 #endif
 		default:
 			printk(KERN_WARNING "i2o_lan: Spurious I2O LAN subclass 0x%08X.\n",
-			       i2o_dev->subclass);
+			       i2o_dev->lct_data->sub_class);
 		}
 
 		dprintk(KERN_INFO "%s: I2O LAN device unregistered.\n", 

@@ -59,10 +59,13 @@ extern void page_cache_init(unsigned long);
  * and get a reasonable hash by knowing roughly how the
  * inode pointer and offsets are distributed (ie, we
  * roughly know which bits are "significant")
+ *
+ * For the time being it will work for struct address_space too (most of
+ * them sitting inside the inodes). We might want to change it later.
  */
-extern inline unsigned long _page_hashfn(struct inode * inode, unsigned long offset)
+extern inline unsigned long _page_hashfn(struct address_space * mapping, unsigned long offset)
 {
-#define i (((unsigned long) inode)/(sizeof(struct inode) & ~ (sizeof(struct inode) - 1)))
+#define i (((unsigned long) mapping)/(sizeof(struct inode) & ~ (sizeof(struct inode) - 1)))
 #define o (offset >> PAGE_SHIFT)
 #define s(x) ((x)+((x)>>PAGE_HASH_BITS))
 	return s(i+o) & (PAGE_HASH_SIZE-1);
@@ -71,33 +74,33 @@ extern inline unsigned long _page_hashfn(struct inode * inode, unsigned long off
 #undef s
 }
 
-#define page_hash(inode,offset) (page_hash_table+_page_hashfn(inode,offset))
+#define page_hash(mapping,offset) (page_hash_table+_page_hashfn(mapping,offset))
 
-extern struct page * __find_get_page (struct inode * inode,
+extern struct page * __find_get_page (struct address_space *mapping,
 				unsigned long offset, struct page **hash);
-#define find_get_page(inode, offset) \
-		__find_get_page(inode, offset, page_hash(inode, offset))
-extern struct page * __find_lock_page (struct inode * inode,
+#define find_get_page(mapping, offset) \
+		__find_get_page(mapping, offset, page_hash(mapping, offset))
+extern struct page * __find_lock_page (struct address_space * mapping,
 				unsigned long offset, struct page **hash);
 extern void lock_page(struct page *page);
-#define find_lock_page(inode, offset) \
-		__find_lock_page(inode, offset, page_hash(inode, offset))
+#define find_lock_page(mapping, offset) \
+		__find_lock_page(mapping, offset, page_hash(mapping, offset))
 
 extern void __add_page_to_hash_queue(struct page * page, struct page **p);
 
-extern void add_to_page_cache(struct page * page, struct inode * inode, unsigned long offset);
-extern int add_to_page_cache_unique(struct page * page, struct inode * inode, unsigned long offset, struct page **hash);
+extern void add_to_page_cache(struct page * page, struct address_space *mapping, unsigned long offset);
+extern int add_to_page_cache_unique(struct page * page, struct address_space *mapping, unsigned long offset, struct page **hash);
 
 extern inline void add_page_to_hash_queue(struct page * page, struct inode * inode, unsigned long offset)
 {
-	__add_page_to_hash_queue(page, page_hash(inode,offset));
+	__add_page_to_hash_queue(page, page_hash(&inode->i_data,offset));
 }
 
-extern inline void add_page_to_inode_queue(struct inode * inode, struct page * page)
+extern inline void add_page_to_inode_queue(struct address_space *mapping, struct page * page)
 {
-	struct list_head *head = &inode->i_pages;
+	struct list_head *head = &mapping->pages;
 
-	if (!inode->i_nrpages++) {
+	if (!mapping->nrpages++) {
 		if (!list_empty(head))
 			BUG();
 	} else {
@@ -105,14 +108,14 @@ extern inline void add_page_to_inode_queue(struct inode * inode, struct page * p
 			BUG();
 	}
 	list_add(&page->list, head);
-	page->inode = inode;
+	page->mapping = mapping;
 }
 
 extern inline void remove_page_from_inode_queue(struct page * page)
 {
-	struct inode * inode = page->inode;
+	struct address_space * mapping = page->mapping;
 
-	inode->i_nrpages--;
+	mapping->nrpages--;
 	list_del(&page->list);
 }
 

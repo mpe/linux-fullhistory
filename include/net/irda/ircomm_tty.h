@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Jun  6 23:24:22 1999
- * Modified at:   Tue Aug 31 10:22:02 1999
+ * Modified at:   Tue Oct  5 12:01:07 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -32,6 +32,8 @@
 #define IRCOMM_TTY_H
 
 #include <linux/serial.h>
+#include <linux/termios.h>
+#include <linux/timer.h>
 
 #include <net/irda/irias_object.h>
 #include <net/irda/ircomm_core.h>
@@ -46,7 +48,7 @@
  * IrCOMM TTY driver state
  */
 struct ircomm_tty_cb {
-	QUEUE   queue;
+	queue_t queue;
 	magic_t magic;
 
 	int state;
@@ -54,7 +56,6 @@ struct ircomm_tty_cb {
 	struct tty_struct *tty;
 	struct ircomm_cb *ircomm;
 
-	struct sk_buff_head tx_queue;  /* Frames to be transmitted */
 	struct sk_buff *tx_skb;
 	struct sk_buff *ctrl_skb;
 
@@ -64,7 +65,7 @@ struct ircomm_tty_cb {
 	__u8 service_type;
 
 	int line;
-	int flags;
+	__u32 flags;
 
 	__u8 dlsap_sel;
 	__u8 slsap_sel;

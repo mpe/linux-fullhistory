@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Dec 15 13:58:52 1997
- * Modified at:   Fri Apr  9 11:13:39 1999
+ * Modified at:   Tue Oct  5 10:26:46 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  *
- *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -69,7 +69,7 @@ typedef void (*TODO_CALLBACK)( void *self, __u32 param);
  *  addtional information
  */
 struct irda_event {
-	QUEUE q; /* Must be first */
+	queue_t q; /* Must be first */
 	
 	struct irmanager_event event;
 };
@@ -78,7 +78,7 @@ struct irda_event {
  *  Funtions with needs to be called with a process context
  */
 struct irda_todo {
-	QUEUE q; /* Must be first */
+	queue_t q; /* Must be first */
 
 	void *self;
 	TODO_CALLBACK callback;
@@ -94,8 +94,8 @@ struct irda_cb {
 
 	int in_use;
 
-	QUEUE *event_queue; /* Events queued for the irmanager */
-	QUEUE *todo_queue;  /* Todo list */
+	queue_t *event_queue; /* Events queued for the irmanager */
+	queue_t *todo_queue;  /* Todo list */
 };
 
 int irmod_init_module(void);
@@ -110,7 +110,7 @@ void irmod_cleanup_module(void);
 static inline int irda_lock(int *lock) 
 {
 	if (test_and_set_bit( 0, (void *) lock))  {
-		DEBUG(3, __FUNCTION__ 
+		IRDA_DEBUG(3, __FUNCTION__ 
 		      "(), Trying to lock, already locked variable!\n");
 		return FALSE;
         }  

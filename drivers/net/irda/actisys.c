@@ -7,7 +7,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Oct 21 20:02:35 1998
- * Modified at:   Sat Jun 26 16:57:57 1999
+ * Modified at:   Mon Oct 18 23:37:06 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -32,33 +32,31 @@
 #include <net/irda/irda.h>
 #include <net/irda/irmod.h>
 #include <net/irda/irda_device.h>
-#include <net/irda/dongle.h>
 
-static void actisys_reset(struct irda_device *dev);
-static void actisys_open(struct irda_device *idev, int type);
-static void actisys_close(struct irda_device *dev);
-static void actisys_change_speed( struct irda_device *dev, __u32 speed);
-static void actisys_init_qos(struct irda_device *idev, struct qos_info *qos);
+static int  actisys_change_speed(struct irda_task *task);
+static int  actisys_reset(struct irda_task *task);
+static void actisys_open(dongle_t *self, struct qos_info *qos);
+static void actisys_close(dongle_t *self);
 
 /* These are the baudrates supported */
-static __u32 baud_rates[] = { 9600, 19200, 57600, 115200, 38400};
+static __u32 baud_rates[] = { 9600, 19200, 57600, 115200, 38400 };
 
-static struct dongle dongle = {
-	ACTISYS_DONGLE,
+static struct dongle_reg dongle = {
+	Q_NULL,
+	IRDA_ACTISYS_DONGLE,
 	actisys_open,
 	actisys_close,
 	actisys_reset,
 	actisys_change_speed,
-	actisys_init_qos,
 };
 
-static struct dongle dongle_plus = {
-	ACTISYS_PLUS_DONGLE,
+static struct dongle_reg dongle_plus = {
+	Q_NULL,
+	IRDA_ACTISYS_PLUS_DONGLE,
 	actisys_open,
 	actisys_close,
 	actisys_reset,
 	actisys_change_speed,
-	actisys_init_qos,
 };
 
 int __init actisys_init(void)
@@ -82,20 +80,23 @@ void actisys_cleanup(void)
 	irda_device_unregister_dongle(&dongle_plus);
 }
 
-static void actisys_open(struct irda_device *idev, int type)
+static void actisys_open(dongle_t *self, struct qos_info *qos)
 {
-	strcat(idev->description, " <-> actisys");
+	qos->baud_rate.bits &= IR_9600|IR_19200|IR_38400|IR_57600|IR_115200;
 
-        idev->io.dongle_id = type;
-	idev->flags |= IFF_DONGLE;
+	/* Remove support for 38400 if this is not a 220L+ dongle */
+	if (self->issue->type == IRDA_ACTISYS_DONGLE)
+		qos->baud_rate.bits &= ~IR_38400;
+	
+	qos->min_turn_time.bits &= 0x40; /* Needs 0.01 ms */
 
 	MOD_INC_USE_COUNT;
 }
 
-static void actisys_close(struct irda_device *idev)
+static void actisys_close(dongle_t *self)
 {
 	/* Power off dongle */
-	irda_device_set_dtr_rts(idev, FALSE, FALSE);
+	self->set_dtr_rts(self->dev, FALSE, FALSE);
 
 	MOD_DEC_USE_COUNT;
 }
@@ -107,52 +108,84 @@ static void actisys_close(struct irda_device *idev)
  *    To cycle through the available baud rates, pulse RTS low for a few
  *    ms.  
  */
-static void actisys_change_speed(struct irda_device *idev, __u32 speed)
+static int actisys_change_speed(struct irda_task *task)
 {
-        __u32 current_baudrate;
+	dongle_t *self = (dongle_t *) task->instance;
+	__u32 speed = (__u32) task->param;
+        __u32 current_speed;
         int index = 0;
+	int ret = 0;
 	
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
-	ASSERT(idev != NULL, return;);
-	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
-	
-	current_baudrate = idev->qos.baud_rate.value;
+	current_speed = self->speed;
 
 	/* Find the correct baudrate index for the currently used baudrate */
-	while (current_baudrate != baud_rates[index])
+	while (current_speed != baud_rates[index])
 		index++;
 
-        DEBUG( 4, __FUNCTION__ "(), index=%d\n", index);
+        IRDA_DEBUG(4, __FUNCTION__ "(), index=%d\n", index);
 
-	/* Cycle through avaiable baudrates until we reach the correct one */
-        while (current_baudrate != speed) {	
-                DEBUG(4, __FUNCTION__ "(), current baudrate = %d\n",
+	switch (task->state) {
+	case IRDA_TASK_INIT:
+		/* Lock dongle */
+		if (irda_lock((void *) &self->busy) == FALSE) {
+			IRDA_DEBUG(0, __FUNCTION__ "(), busy!\n");
+			ret = MSECS_TO_JIFFIES(100);
+			break;
+		}
+	
+                IRDA_DEBUG(4, __FUNCTION__ "(), current baudrate = %d\n",
 		      baud_rates[index]);
 		
 		/* Set DTR, clear RTS */
-		irda_device_set_dtr_rts(idev, TRUE, FALSE);
+		self->set_dtr_rts(self->dev, TRUE, FALSE);
 		
+		irda_task_next_state(task, IRDA_TASK_WAIT1);
+
 		/* Wait at a few ms */
-		current->state = TASK_INTERRUPTIBLE;
-		schedule_timeout(MSECS_TO_JIFFIES(20));
-
+		ret = MSECS_TO_JIFFIES(20);
+		break;
+	case IRDA_TASK_WAIT1:
 		/* Set DTR, Set RTS */
-		irda_device_set_dtr_rts(idev, TRUE, TRUE);
+		self->set_dtr_rts(self->dev, TRUE, TRUE);
 		
-		/* Wait at a few ms again */
-		current->state = TASK_INTERRUPTIBLE;
-		schedule_timeout(MSECS_TO_JIFFIES(20));
+		irda_task_next_state(task, IRDA_TASK_WAIT2);
 
+		/* Wait at a few ms again */
+		ret = MSECS_TO_JIFFIES(20);
+		break;
+	case IRDA_TASK_WAIT2:
                 /* Go to next baudrate */
-		if (idev->io.dongle_id == ACTISYS_DONGLE)
+		if (self->issue->type == IRDA_ACTISYS_DONGLE)
                         index = (index+1) % 4; /* IR-220L */
 		else
                         index = (index+1) % 5; /* IR-220L+ */
 
-                current_baudrate = baud_rates[index];
+                current_speed = baud_rates[index];
+
+		/* Check if we need to go some more rounds */
+		if (current_speed != speed)
+			irda_task_next_state(task, IRDA_TASK_INIT);
+		else {
+			irda_task_next_state(task, IRDA_TASK_DONE);
+			self->busy = 0;
+		}
+		break;
+	default:
+		ERROR(__FUNCTION__ "(), unknown state %d\n", task->state);
+		irda_task_next_state(task, IRDA_TASK_DONE);
+		self->busy = 0;
+		ret = -1;
+		break;
         }
-	DEBUG(4, __FUNCTION__ "(), current baudrate = %d\n", baud_rates[index]);
+
+	self->speed = speed;
+
+	IRDA_DEBUG(4, __FUNCTION__ "(), current baudrate = %d\n", 
+	      baud_rates[index]);
+
+	return ret;
 }
 
 /*
@@ -162,45 +195,42 @@ static void actisys_change_speed(struct irda_device *idev, __u32 speed)
  *      called with a process context!
  *
  *    	1. Clear DTR for a few ms.
- *
  */
-static void actisys_reset(struct irda_device *idev)
+static int actisys_reset(struct irda_task *task)
 {
-	ASSERT(idev != NULL, return;);
-	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
-	
-	/* Clear DTR */
-	irda_device_set_dtr_rts(idev, FALSE, TRUE);
+	dongle_t *self = (dongle_t *) task->instance;
+	int ret = 0;
 
-	/* Sleep 10-20 ms*/
-	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(MSECS_TO_JIFFIES(20));
-	
-	/* Go back to normal mode */
-	irda_device_set_dtr_rts(idev, TRUE, TRUE);
-	
-	idev->qos.baud_rate.value = 9600;
-}
+	ASSERT(task != NULL, return -1;);
 
-/*
- * Function actisys_init_qos (qos)
- *
- *    Initialize QoS capabilities
- *
- */
-static void actisys_init_qos(struct irda_device *idev, struct qos_info *qos)
-{
-	qos->baud_rate.bits &= IR_9600|IR_19200|IR_38400|IR_57600|IR_115200;
+	switch (task->state) {
+	case IRDA_TASK_INIT:
+		/* Clear DTR */
+		self->set_dtr_rts(self->dev, FALSE, TRUE);
+		
+		irda_task_next_state(task, IRDA_TASK_WAIT);
 
-	/* Remove support for 38400 if this is not a 220L+ dongle */
-	if (idev->io.dongle_id == ACTISYS_DONGLE)
-		qos->baud_rate.bits &= ~IR_38400;
+		/* Sleep 10-20 ms*/
+		ret = MSECS_TO_JIFFIES(20);
+		break;
+	case IRDA_TASK_WAIT:			
+		/* Go back to normal mode */
+		self->set_dtr_rts(self->dev, TRUE, TRUE);
 	
-	qos->min_turn_time.bits &= 0x40; /* Needs 0.01 ms */
+		irda_task_next_state(task, IRDA_TASK_DONE);
+
+		self->speed = 9600;
+		break;
+	default:
+		ERROR(__FUNCTION__ "(), unknown state %d\n", task->state);
+		irda_task_next_state(task, IRDA_TASK_DONE);
+		ret = -1;
+		break;
+	}
+	return ret;
 }
 
 #ifdef MODULE
-
 MODULE_AUTHOR("Dag Brattli <dagb@cs.uit.no>");
 MODULE_DESCRIPTION("ACTiSYS IR-220L and IR-220L+ dongle driver");	
 		
@@ -225,5 +255,4 @@ void cleanup_module(void)
 {
 	actisys_cleanup();
 }
-
-#endif
+#endif /* MODULE */

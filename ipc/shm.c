@@ -681,7 +681,6 @@ again:
 			pte_t entry = pte;
 
 			spin_unlock(&shm_lock);
-			BUG();
 			page = lookup_swap_cache(entry);
 			if (!page) {
 				lock_kernel();

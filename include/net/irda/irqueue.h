@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Jun  9 13:26:50 1998
- * Modified at:   Thu Jul  1 10:18:21 1999
+ * Modified at:   Thu Oct  7 13:25:16 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (C) 1998-1999, Aage Kvalnes <aage@cs.uit.no>
@@ -53,56 +53,49 @@
 #define ALIGN __attribute__((aligned))
 #endif
 
-typedef void (*FREE_FUNC)( void *arg);
+#define Q_NULL { NULL, NULL, "", 0 }
+
+typedef void (*FREE_FUNC)(void *arg);
 
 /*
  * Hashbin
  */
 #define GET_HASHBIN(x) ( x & HASHBIN_MASK )
 
-#define QUEUE struct queue_t
-struct queue_t {
-	QUEUE* q_next;
-	QUEUE* q_prev;
+struct irqueue {
+	struct irqueue *q_next;
+	struct irqueue *q_prev;
 
-	char   q_name[ NAME_SIZE];
+	char   q_name[NAME_SIZE];
 	__u32  q_hash;
 };
+typedef struct irqueue queue_t;
 
 typedef struct hashbin_t {
 	__u32      magic;
 	int        hb_type;
 	int        hb_size;
-	spinlock_t hb_mutex[ HASHBIN_SIZE ] ALIGN;
-	QUEUE*     hb_queue[ HASHBIN_SIZE ] ALIGN;
+	spinlock_t hb_mutex[HASHBIN_SIZE] ALIGN;
+	queue_t   *hb_queue[HASHBIN_SIZE] ALIGN;
 
-	QUEUE* hb_current;
+	queue_t* hb_current;
 } hashbin_t;
 
 hashbin_t *hashbin_new(int type);
 int      hashbin_delete(hashbin_t* hashbin, FREE_FUNC func);
 int      hashbin_clear(hashbin_t* hashbin, FREE_FUNC free_func);
-void     hashbin_insert(hashbin_t* hashbin, QUEUE* entry, __u32 hashv, 
+void     hashbin_insert(hashbin_t* hashbin, queue_t* entry, __u32 hashv, 
 			char* name);
 void*    hashbin_find(hashbin_t* hashbin, __u32 hashv, char* name);
 void*    hashbin_remove(hashbin_t* hashbin, __u32 hashv, char* name);
 void*    hashbin_remove_first(hashbin_t *hashbin);
-QUEUE   *hashbin_get_first(hashbin_t *hashbin);
-QUEUE   *hashbin_get_next(hashbin_t *hashbin);
+queue_t *hashbin_get_first(hashbin_t *hashbin);
+queue_t *hashbin_get_next(hashbin_t *hashbin);
 
-void enqueue_last(QUEUE **queue, QUEUE* element);
-void enqueue_first(QUEUE **queue, QUEUE* element);
-QUEUE *dequeue_first(QUEUE **queue);
+void enqueue_last(queue_t **queue, queue_t* element);
+void enqueue_first(queue_t **queue, queue_t* element);
+queue_t *dequeue_first(queue_t **queue);
 
-/*
- * Function hashbin_get_size (hashbin)
- *
- *    Returns the number of elements in the hashbin
- *
- */
-extern __inline__ int  hashbin_get_size(hashbin_t* hashbin) 
-{
-	return hashbin->hb_size;
-}
+#define HASHBIN_GET_SIZE(hashbin) hashbin->hb_size
 
 #endif

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug  3 13:49:59 1997
- * Modified at:   Sat Jun 26 16:57:03 1999
+ * Modified at:   Mon Oct 18 12:55:07 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997, 1998-1999 Dag Brattli <dagb@cs.uit.no>
@@ -29,6 +29,7 @@
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
 #include <linux/types.h>
+#include <linux/spinlock.h>
 
 #include <net/irda/irda_device.h>
 
@@ -49,14 +50,35 @@
 
 #define FRAME_MAX_SIZE 2048
 
-void irport_start(struct irda_device *idev, int iobase);
-void irport_stop(struct irda_device *idev, int iobase);
+struct irport_cb {
+	queue_t q;     /* Must be first */
+	magic_t magic;
+
+	struct net_device *netdev; /* Yes! we are some kind of netdevice */
+	struct net_device_stats stats;
+
+	struct tty_struct  *tty;
+	struct irlap_cb    *irlap; /* The link layer we are binded to */
+
+	struct chipio_t io;        /* IrDA controller information */
+	struct iobuff_t tx_buff;   /* Transmit buffer */
+	struct iobuff_t rx_buff;   /* Receive buffer */
+
+	struct qos_info qos;       /* QoS capabilities for this device */
+	dongle_t *dongle;          /* Dongle driver */
+
+ 	__u32 flags;               /* Interface flags */
+
+	spinlock_t lock;           /* For serializing operations */
+
+	int mode;
+};
+
+void irport_start(struct irport_cb *self, int iobase);
+void irport_stop(struct irport_cb *self, int iobase);
 int  irport_probe(int iobase);
 
-void irport_change_speed(struct irda_device *idev, __u32 speed);
 void irport_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-
 int  irport_hard_xmit(struct sk_buff *skb, struct net_device *dev);
-void irport_wait_until_sent(struct irda_device *idev);
 
 #endif

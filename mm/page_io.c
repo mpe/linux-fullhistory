@@ -136,7 +136,7 @@ void rw_swap_page(int rw, struct page *page, int wait)
 		PAGE_BUG(page);
 	if (!PageSwapCache(page))
 		PAGE_BUG(page);
-	if (page->inode != &swapper_inode)
+	if (page->mapping != &swapper_space)
 		PAGE_BUG(page);
 	if (!rw_swap_page_base(rw, entry, page, wait))
 		UnlockPage(page);

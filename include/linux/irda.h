@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      irda.h
- * Version:       1.0
- * Description:   Exported IrDA sockets interface
+ * Version:       
+ * Description:   
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Mar  8 14:06:12 1999
- * Modified at:   Mon Sep 27 12:11:49 1999
+ * Modified at:   Sun Oct 10 23:00:59 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -19,7 +19,7 @@
  *     Neither Dag Brattli nor University of Tromsø admit liability nor
  *     provide warranty for any of this software. This material is 
  *     provided "AS-IS" and at no charge.
- *     
+ *
  ********************************************************************/
 
 #ifndef KERNEL_IRDA_H
@@ -44,17 +44,28 @@
 #define HINT_OBEX        0x20
 
 /* IrLMP character code values */
-#define CS_ASCII       0x00
-#define	CS_ISO_8859_1  0x01
-#define	CS_ISO_8859_2  0x02
-#define	CS_ISO_8859_3  0x03
-#define	CS_ISO_8859_4  0x04
-#define	CS_ISO_8859_5  0x05
-#define	CS_ISO_8859_6  0x06
-#define	CS_ISO_8859_7  0x07
-#define	CS_ISO_8859_8  0x08
-#define	CS_ISO_8859_9  0x09
-#define CS_UNICODE     0xff
+#define CS_ASCII         0x00
+#define	CS_ISO_8859_1    0x01
+#define	CS_ISO_8859_2    0x02
+#define	CS_ISO_8859_3    0x03
+#define	CS_ISO_8859_4    0x04
+#define	CS_ISO_8859_5    0x05
+#define	CS_ISO_8859_6    0x06
+#define	CS_ISO_8859_7    0x07
+#define	CS_ISO_8859_8    0x08
+#define	CS_ISO_8859_9    0x09
+#define CS_UNICODE       0xff
+
+/* These are the currently known dongles */
+typedef enum {
+	IRDA_TEKRAM_DONGLE,
+	IRDA_ESI_DONGLE,
+	IRDA_ACTISYS_DONGLE,
+	IRDA_ACTISYS_PLUS_DONGLE,
+	IRDA_GIRBIL_DONGLE,
+	IRDA_LITELINK_DONGLE,
+	IRDA_AIRPORT_DONGLE,
+} IRDA_DONGLE;
 
 #define SOL_IRLMP      266 /* Same as SOL_IRDA for now */
 #define SOL_IRTTP      266 /* Same as SOL_IRDA for now */
@@ -68,12 +79,12 @@
 #define IRTTP_QOS_GET            6
 #define IRTTP_MAX_SDU_SIZE       7
 
-#define IAS_MAX_STRING           256
-#define IAS_MAX_OCTET_STRING     1024
-#define IAS_MAX_CLASSNAME        64
-#define IAS_MAX_ATTRIBNAME       256
+#define IAS_MAX_STRING         256
+#define IAS_MAX_OCTET_STRING  1024
+#define IAS_MAX_CLASSNAME       64
+#define IAS_MAX_ATTRIBNAME     256
 
-#define LSAP_ANY                 0xff
+#define LSAP_ANY               0xff
 
 struct sockaddr_irda {
 	sa_family_t   sir_family;   /* AF_IRDA */
@@ -112,6 +123,61 @@ struct irda_ias_set {
 		} irda_attrib_string;
 	} attribute;
 };
+
+/* Some private IOCTL's (max 16) */
+#define SIOCSDONGLE    (SIOCDEVPRIVATE + 0)
+#define SIOCGDONGLE    (SIOCDEVPRIVATE + 1)
+#define SIOCSBANDWIDTH (SIOCDEVPRIVATE + 2)
+#define SIOCSMEDIABUSY (SIOCDEVPRIVATE + 3)
+#define SIOCGMEDIABUSY (SIOCDEVPRIVATE + 4)
+#define SIOCGRECEIVING (SIOCDEVPRIVATE + 5)
+#define SIOCSRAWMODE   (SIOCDEVPRIVATE + 6)
+#define SIOCSDTRRTS    (SIOCDEVPRIVATE + 7)
+#define SIOCGQOS       (SIOCDEVPRIVATE + 8)
+
+/* No reason to include <linux/if.h> just because of this one ;-) */
+#define IRNAMSIZ 16 
+
+/* IrDA quality of service information (must not exceed 16 bytes) */
+struct if_irda_qos {
+	unsigned long  baudrate;
+	unsigned short data_size;
+	unsigned short window_size;
+	unsigned short min_turn_time;
+	unsigned short max_turn_time;
+	unsigned char  add_bofs;
+	unsigned char  link_disc;
+};
+
+/* For setting RTS and DTR lines of a dongle */
+struct if_irda_line {
+	unsigned char dtr;
+	unsigned char rts;
+};
+
+/* IrDA interface configuration (data part must not exceed 16 bytes) */
+struct if_irda_req {
+	union {
+		char ifrn_name[IRNAMSIZ];  /* if name, e.g. "irda0" */
+	} ifr_ifrn;
+	
+	/* Data part */
+	union {
+		struct if_irda_line ifru_line;
+		struct if_irda_qos  ifru_qos;
+		unsigned short      ifru_flags;
+		unsigned int        ifru_receiving;
+		unsigned int        ifru_raw_mode;
+		unsigned int        ifru_dongle;
+	} ifr_ifru;
+};
+
+#define ifr_baudrate  ifr_ifru.ifru_qos.baudrate
+#define ifr_receiving ifr_ifru.ifru_receiving 
+#define ifr_dongle    ifr_ifru.ifru_dongle
+#define ifr_raw_mode  ifr_ifru.ifru_raw_mode
+#define ifr_dtr       ifr_ifru.ifru_line.dtr
+#define ifr_rts       ifr_ifru.ifru_line.rts
 
 #endif /* KERNEL_IRDA_H */
 

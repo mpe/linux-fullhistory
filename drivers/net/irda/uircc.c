@@ -113,7 +113,7 @@ static void uircc_cleanup(void)
 {
 	int i;
 
-        DEBUG(4, __FUNCTION__ "()\n");
+        IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
 	for (i=0; i < 4; i++) {
 		if (dev_self[i])
@@ -135,7 +135,7 @@ static int uircc_open(int i, unsigned int iobase, unsigned int iobase2,
 	struct irda_device *idev;
 	int ret;
 
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
 	if ((uircc_probe(iobase, iobase2, irq, dma)) == -1)
 		return -1;
@@ -168,14 +168,14 @@ static int uircc_open(int i, unsigned int iobase, unsigned int iobase2,
 	/* Lock the port that we need */
 	ret = check_region(idev->io.iobase, idev->io.io_ext);
 	if (ret < 0) { 
-		DEBUG(0, __FUNCTION__ "(), can't get iobase of 0x%03x\n",
+		IRDA_DEBUG(0, __FUNCTION__ "(), can't get iobase of 0x%03x\n",
 		      idev->io.iobase);
 		/* uircc_cleanup( self->idev);  */
 		return -ENODEV;
 	}
 	ret = check_region(idev->io.iobase2, idev->io.io_ext2);
 	if (ret < 0) { 
-		DEBUG(0, __FUNCTION__ "(), can't get iobase of 0x%03x\n",
+		IRDA_DEBUG(0, __FUNCTION__ "(), can't get iobase of 0x%03x\n",
 		      idev->io.iobase2);
 		/* uircc_cleanup( self->idev);  */
 		return -ENODEV;
@@ -235,7 +235,7 @@ static int uircc_close(struct irda_device *idev)
 	int iobase;
 	int status;
 
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
 	ASSERT(idev != NULL, return -1;);
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return -1;);
@@ -252,11 +252,11 @@ static int uircc_close(struct irda_device *idev)
 	irport_stop(idev, idev->io.iobase2);
 
 	/* Release the PORT that this driver is using */
-	DEBUG(4, __FUNCTION__ "(), Releasing Region %03x\n", idev->io.iobase);
+	IRDA_DEBUG(4, __FUNCTION__ "(), Releasing Region %03x\n", idev->io.iobase);
 	release_region(idev->io.iobase, idev->io.io_ext);
 
 	if (idev->io.iobase2) {
-		DEBUG(4, __FUNCTION__ "(), Releasing Region %03x\n", 
+		IRDA_DEBUG(4, __FUNCTION__ "(), Releasing Region %03x\n", 
 		      idev->io.iobase2);
 		release_region(idev->io.iobase2, idev->io.io_ext2);
 	}
@@ -278,13 +278,13 @@ static int uircc_probe(int iobase, int iobase2, int irq, int dma)
 {
 	int version;
 	
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
 	/* read the chip version, should be 0x03 */
 	version = inb(iobase+UIRCC_SR8);
 
 	if (version != 0x03) {
-		DEBUG(0, __FUNCTION__ "(), Wrong chip version");	
+		IRDA_DEBUG(0, __FUNCTION__ "(), Wrong chip version");	
 		return -1;
 	}
         printk(KERN_INFO "Sharp UIRCC IrDA driver loaded. Version: 0x%02x\n",
@@ -298,7 +298,7 @@ static int uircc_probe(int iobase, int iobase2, int irq, int dma)
 	outb(0, iobase+UIRCC_CR11);
 	outb(0, iobase+UIRCC_CR9);
 
-	DEBUG(0, __FUNCTION__ "(), sr15=%#x\n", inb(iobase+UIRCC_SR15));
+	IRDA_DEBUG(0, __FUNCTION__ "(), sr15=%#x\n", inb(iobase+UIRCC_SR15));
 
 	/* Enable DMA single mode */
 	outb(UIRCC_CR1_RX_DMA|UIRCC_CR1_TX_DMA|UIRCC_CR1_MUST_SET, 
@@ -325,7 +325,7 @@ static void uircc_change_speed(struct irda_device *idev, __u32 speed)
 	int modem = UIRCC_CR10_SIR;
 	int status;
 
-	DEBUG(0, __FUNCTION__ "()\n");
+	IRDA_DEBUG(0, __FUNCTION__ "()\n");
 
 	/* Just test the high speed stuff */
 	/*speed = 4000000;*/
@@ -358,11 +358,11 @@ static void uircc_change_speed(struct irda_device *idev, __u32 speed)
 		break;
 	case 576000:		
 		
-		DEBUG(0, __FUNCTION__ "(), handling baud of 576000\n");
+		IRDA_DEBUG(0, __FUNCTION__ "(), handling baud of 576000\n");
 		break;
 	case 1152000:
 
-		DEBUG(0, __FUNCTION__ "(), handling baud of 1152000\n");
+		IRDA_DEBUG(0, __FUNCTION__ "(), handling baud of 1152000\n");
 		break;
 	case 4000000:
 		irport_stop(idev, idev->io.iobase2);
@@ -371,7 +371,7 @@ static void uircc_change_speed(struct irda_device *idev, __u32 speed)
 		uircc_toshiba_cmd(&status, 0xffff, 0x001b, 0x0001);
 
 		modem = UIRCC_CR10_FIR;
-		DEBUG(0, __FUNCTION__ "(), handling baud of 4000000\n");
+		IRDA_DEBUG(0, __FUNCTION__ "(), handling baud of 4000000\n");
 
 		/* Set self pole address */
 		//outb(0xfe, iobase+UIRCC_CR8);
@@ -379,7 +379,7 @@ static void uircc_change_speed(struct irda_device *idev, __u32 speed)
 	 	/* outb(0x10, iobase+UIRCC_CR11); */
 		break;
 	default:
-		DEBUG( 0, __FUNCTION__ "(), unknown baud rate of %d\n", speed);
+		IRDA_DEBUG( 0, __FUNCTION__ "(), unknown baud rate of %d\n", speed);
 		break;
 	}
 
@@ -419,7 +419,7 @@ static int uircc_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	iobase = idev->io.iobase;
 
-	DEBUG(4, __FUNCTION__ "(%ld), skb->len=%d\n", jiffies, (int) skb->len);
+	IRDA_DEBUG(4, __FUNCTION__ "(%ld), skb->len=%d\n", jiffies, (int) skb->len);
 	
 	/* Reset carrier latch */
 	/*outb(0x02, iobase+UIRCC_CR0);*/
@@ -429,7 +429,7 @@ static int uircc_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 		return irport_hard_xmit(skb, dev);
 	}
 	
-	DEBUG(0, __FUNCTION__ "(), sr0=%#x, sr1=%#x, sr2=%#x, sr3=%#x, sr10=%#x, sr11=%#x\n",
+	IRDA_DEBUG(0, __FUNCTION__ "(), sr0=%#x, sr1=%#x, sr2=%#x, sr3=%#x, sr10=%#x, sr11=%#x\n",
 	      inb(iobase+UIRCC_SR0), inb(iobase+UIRCC_SR3),
 	      inb(iobase+UIRCC_SR2), inb(iobase+UIRCC_SR3), 
 	      inb(iobase+UIRCC_SR10), inb(iobase+UIRCC_SR11));
@@ -473,7 +473,7 @@ static void uircc_dma_write(struct irda_device *idev, int iobase)
 {
 	struct uircc_cb *self;
 
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
 	ASSERT(idev != NULL, return;);
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
@@ -519,7 +519,7 @@ static void uircc_dma_xmit_complete( struct irda_device *idev, int underrun)
 	int iobase;
 	int len;
 
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
 	ASSERT(idev != NULL, return;);
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
@@ -535,7 +535,7 @@ static void uircc_dma_xmit_complete( struct irda_device *idev, int underrun)
 	len  = inb(iobase+UIRCC_SR4);      /* Low byte */
 	len |= inb(iobase+UIRCC_SR5) << 8; /* High byte */
 
-	DEBUG(4, __FUNCTION__ "(), sent %d bytes\n", len);
+	IRDA_DEBUG(4, __FUNCTION__ "(), sent %d bytes\n", len);
 
 	/* Disable transmit */
 	self->cr3 &= ~UIRCC_CR3_XMIT_EN;
@@ -576,7 +576,7 @@ static int uircc_dma_receive(struct irda_device *idev)
 	ASSERT(idev != NULL, return -1;);
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return -1;);
 
-	DEBUG(4, __FUNCTION__ "\n");
+	IRDA_DEBUG(4, __FUNCTION__ "\n");
 
 	self = idev->priv;
 	iobase= idev->io.iobase;
@@ -614,7 +614,7 @@ static int uircc_dma_receive(struct irda_device *idev)
 	self->cr3 = (UIRCC_CR3_RECV_EN|UIRCC_CR3_RX_CRC_EN);
 	outb(self->cr3, iobase+UIRCC_CR3);
 #endif
-	DEBUG(4, __FUNCTION__ "(), cr3=%#x\n", self->cr3);
+	IRDA_DEBUG(4, __FUNCTION__ "(), cr3=%#x\n", self->cr3);
 	
 	/* Address check? */
 
@@ -636,11 +636,11 @@ static int uircc_dma_receive_complete(struct irda_device *idev, int iobase)
 
 	self = idev->priv;
 
-	DEBUG(0, __FUNCTION__ "()\n");
+	IRDA_DEBUG(0, __FUNCTION__ "()\n");
 
 	/* Check for CRC or framing error */
 	if (inb(iobase+UIRCC_SR0) & UIRCC_SR0_RX_CRCFRM) {
-		DEBUG(0, __FUNCTION__ "(), CRC or FRAME error\n");
+		IRDA_DEBUG(0, __FUNCTION__ "(), CRC or FRAME error\n");
 		return -1;
 	}
 
@@ -651,7 +651,7 @@ static int uircc_dma_receive_complete(struct irda_device *idev, int iobase)
 	len = inb(iobase+UIRCC_SR4);       /* Low byte */
 	len |= inb(iobase+UIRCC_SR5) << 8; /* High byte */
 
-	DEBUG(0, __FUNCTION__ "(), len=%d\n", len);
+	IRDA_DEBUG(0, __FUNCTION__ "(), len=%d\n", len);
 
 	/* Receiving disable */
 	self->cr3 &= ~UIRCC_CR3_RECV_EN;
@@ -716,12 +716,12 @@ static void uircc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	/* Read interrupt status */
 	sr3 = inb( iobase+UIRCC_SR3); 
 	if (!sr3) {
-		DEBUG(4,"**\n");
+		IRDA_DEBUG(4,"**\n");
 		return;
 	}
 	idev->netdev.interrupt = 1;
 
-	DEBUG(4, __FUNCTION__ "(), sr3=%#x, sr2=%#x, sr10=%#x\n", 
+	IRDA_DEBUG(4, __FUNCTION__ "(), sr3=%#x, sr2=%#x, sr10=%#x\n", 
 	      inb( iobase+UIRCC_SR3), inb( iobase+UIRCC_SR2), 
 	      inb( iobase+UIRCC_SR10));
 
@@ -750,7 +750,7 @@ static void uircc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		     iobase+UIRCC_CR11);
 		break;
 	default:
-		DEBUG(0, __FUNCTION__ "(), unknown interrupt status=%#x\n",
+		IRDA_DEBUG(0, __FUNCTION__ "(), unknown interrupt status=%#x\n",
 		      sr3);
 		break;
 	}	
@@ -800,7 +800,7 @@ static int uircc_is_receiving( struct irda_device *idev)
  */
 static int uircc_net_init( struct net_device *dev)
 {
-	DEBUG( 4, __FUNCTION__ "()\n");
+	IRDA_DEBUG( 4, __FUNCTION__ "()\n");
 
 	/* Setup to be a normal IrDA network device driver */
 	irda_device_setup(dev);
@@ -822,7 +822,7 @@ static int uircc_net_open(struct net_device *dev)
 	struct irda_device *idev;
 	int iobase;
 	
-	DEBUG( 4, __FUNCTION__ "()\n");
+	IRDA_DEBUG( 4, __FUNCTION__ "()\n");
 	
 	ASSERT(dev != NULL, return -1;);
 	idev = (struct irda_device *) dev->priv;
@@ -866,7 +866,7 @@ static int uircc_net_close(struct net_device *dev)
 	struct irda_device *idev;
 	int iobase;
 
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 	
 	ASSERT(dev != NULL, return -1;);
 	idev = (struct irda_device *) dev->priv;

@@ -7,7 +7,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Sep  9 00:00:26 1997
- * Modified at:   Wed Sep  1 09:14:55 1999
+ * Modified at:   Tue Oct  5 11:50:41 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -167,7 +167,7 @@ int irlap_qos_negotiate(struct irlap_cb *self, struct sk_buff *skb)
 	
 #ifdef CONFIG_IRDA_COMPRESSION
 	if (!comp_seen) {
-		DEBUG( 4, __FUNCTION__ "(), Compression not seen!\n");
+		IRDA_DEBUG( 4, __FUNCTION__ "(), Compression not seen!\n");
 		self->qos_tx.compression.bits = 0x00;
 		self->qos_rx.compression.bits = 0x00;
 	}
@@ -177,22 +177,22 @@ int irlap_qos_negotiate(struct irlap_cb *self, struct sk_buff *skb)
 	irda_qos_bits_to_value(&self->qos_tx);
 	irda_qos_bits_to_value(&self->qos_rx);
 		
-	DEBUG(2, "Setting BAUD_RATE to %d bps.\n", 
+	IRDA_DEBUG(2, "Setting BAUD_RATE to %d bps.\n", 
 	      self->qos_tx.baud_rate.value);
-	DEBUG(2, "Setting DATA_SIZE to %d bytes\n",
+	IRDA_DEBUG(2, "Setting DATA_SIZE to %d bytes\n",
 	      self->qos_tx.data_size.value);
-	DEBUG(2, "Setting WINDOW_SIZE to %d\n", 
+	IRDA_DEBUG(2, "Setting WINDOW_SIZE to %d\n", 
 	      self->qos_tx.window_size.value);
-	DEBUG(2, "Setting XBOFS to %d\n", 
+	IRDA_DEBUG(2, "Setting XBOFS to %d\n", 
 	      self->qos_tx.additional_bofs.value);
-	DEBUG(2, "Setting MAX_TURN_TIME to %d ms.\n",
+	IRDA_DEBUG(2, "Setting MAX_TURN_TIME to %d ms.\n",
 	      self->qos_tx.max_turn_time.value);
-	DEBUG(2, "Setting MIN_TURN_TIME to %d usecs.\n",
+	IRDA_DEBUG(2, "Setting MIN_TURN_TIME to %d usecs.\n",
 	      self->qos_tx.min_turn_time.value);
-	DEBUG(2, "Setting LINK_DISC to %d secs.\n", 
+	IRDA_DEBUG(2, "Setting LINK_DISC to %d secs.\n", 
 	      self->qos_tx.link_disc_time.value);
 #ifdef CONFIG_IRDA_COMPRESSION
-	DEBUG(2, "Setting COMPRESSION to %d\n", 
+	IRDA_DEBUG(2, "Setting COMPRESSION to %d\n", 
 	      self->qos_tx.compression.value);
 #endif	
 	return ret;
@@ -278,16 +278,16 @@ static int irlap_param_baud_rate(void *instance, param_t *param, int get)
 
 	if (get) {
 		param->pv.i = self->qos_rx.baud_rate.bits;
-		DEBUG(2, __FUNCTION__ "(), baud rate = 0x%02x\n", param->pv.i);		
+		IRDA_DEBUG(2, __FUNCTION__ "(), baud rate = 0x%02x\n", param->pv.i);		
 	} else {
 		/* 
 		 *  Stations must agree on baud rate, so calculate
 		 *  intersection 
 		 */
-		DEBUG(2, "Requested BAUD_RATE: 0x%04x\n", param->pv.s);
+		IRDA_DEBUG(2, "Requested BAUD_RATE: 0x%04x\n", param->pv.s);
 		final = param->pv.s & self->qos_rx.baud_rate.bits;
 
-		DEBUG(2, "Final BAUD_RATE: 0x%04x\n", final);
+		IRDA_DEBUG(2, "Final BAUD_RATE: 0x%04x\n", final);
 		self->qos_tx.baud_rate.bits = final;
 		self->qos_rx.baud_rate.bits = final;	       
 	}
@@ -317,10 +317,10 @@ static int irlap_param_link_disconnect(void *instance, param_t *param, int get)
 		 *  Stations must agree on link disconnect/threshold 
 		 *  time.
 		 */
-		DEBUG(2, "LINK_DISC: %02x\n", param->pv.b);
+		IRDA_DEBUG(2, "LINK_DISC: %02x\n", param->pv.b);
 		final = param->pv.b & self->qos_rx.link_disc_time.bits;
 
-		DEBUG(2, "Final LINK_DISC: %02x\n", final);
+		IRDA_DEBUG(2, "Final LINK_DISC: %02x\n", final);
 		self->qos_tx.link_disc_time.bits = final;
 		self->qos_rx.link_disc_time.bits = final;
 	}
@@ -435,7 +435,7 @@ static int irlap_param_min_turn_time(void *instance, param_t *param, int get)
 	return 0;
 }
 
-__u32 byte_value(__u8 byte, int *array) 
+__u32 byte_value(__u8 byte, __u32 *array) 
 {
 	int index;
 
@@ -472,7 +472,7 @@ int msb_index (__u16 word)
  *
  *    Returns the index to the value in the specified array
  */
-int value_index(__u32 value, int *array) 
+int value_index(__u32 value, __u32 *array) 
 {
 	int i;
 	
@@ -488,7 +488,7 @@ int value_index(__u32 value, int *array)
  *    Returns value to index in array, easy!
  *
  */
-__u32 index_value(int index, int *array) 
+__u32 index_value(int index, __u32 *array) 
 {
 	return array[index];
 }

@@ -17,42 +17,12 @@
 
 #include <asm/pgtable.h>
 
-/* 
- * Keep a reserved false inode which we will use to mark pages in the
- * page cache are acting as swap cache instead of file cache. 
- *
- * We only need a unique pointer to satisfy the page cache, but we'll
- * reserve an entire zeroed inode structure for the purpose just to
- * ensure that any mistaken dereferences of this structure cause a
- * kernel oops.
- */
-
-static struct inode_operations swapper_inode_operations = {
-	NULL,				/* default file operations */
-	NULL,				/* create */
-	NULL,				/* lookup */
-	NULL,				/* link */
-	NULL,				/* unlink */
-	NULL,				/* symlink */
-	NULL,				/* mkdir */
-	NULL,				/* rmdir */
-	NULL,				/* mknod */
-	NULL,				/* rename */
-	NULL,				/* readlink */
-	NULL,				/* follow_link */
-	NULL,				/* get_block */
-	NULL,				/* readpage */
-	NULL,				/* writepage */
-	block_flushpage,		/* flushpage */
-	NULL,				/* truncate */
-	NULL,				/* permission */
-	NULL,				/* smap */
-	NULL				/* revalidate */
-};
-
-struct inode swapper_inode = {
-	i_op: &swapper_inode_operations,
-	i_pages: {&swapper_inode.i_pages,&swapper_inode.i_pages}
+struct address_space swapper_space = {
+	{				/* pages	*/
+		&swapper_space.pages,	/*        .next */
+		&swapper_space.pages	/*	  .prev */
+	},
+	0				/* nrpages	*/
 };
 
 #ifdef SWAP_CACHE_INFO
@@ -77,9 +47,9 @@ void add_to_swap_cache(struct page *page, pte_t entry)
 #endif
 	if (PageTestandSetSwapCache(page))
 		BUG();
-	if (page->inode)
+	if (page->mapping)
 		BUG();
-	add_to_page_cache(page, &swapper_inode, pte_val(entry));
+	add_to_page_cache(page, &swapper_space, pte_val(entry));
 }
 
 /*
@@ -173,11 +143,9 @@ bad_unused:
 
 static inline void remove_from_swap_cache(struct page *page)
 {
-	struct inode *inode = page->inode;
+	struct address_space *mapping = page->mapping;
 
-	if (!inode)
-		BUG();
-	if (inode != &swapper_inode)
+	if (mapping != &swapper_space)
 		BUG();
 	if (!PageSwapCache(page))
 		PAGE_BUG(page);
@@ -205,8 +173,7 @@ void __delete_from_swap_cache(struct page *page)
 
 static void delete_from_swap_cache_nolock(struct page *page)
 {
-	if (!swapper_inode.i_op->flushpage ||
-	    swapper_inode.i_op->flushpage(&swapper_inode, page, 0))
+	if (block_flushpage(NULL, page, 0))
 		lru_cache_del(page);
 
 	__delete_from_swap_cache(page);
@@ -267,10 +234,10 @@ struct page * lookup_swap_cache(pte_t entry)
 		/*
 		 * Right now the pagecache is 32-bit only.
 		 */
-		found = find_lock_page(&swapper_inode, pte_val(entry));
+		found = find_lock_page(&swapper_space, pte_val(entry));
 		if (!found)
 			return 0;
-		if (found->inode != &swapper_inode || !PageSwapCache(found))
+		if (found->mapping != &swapper_space || !PageSwapCache(found))
 			goto out_bad;
 #ifdef SWAP_CACHE_INFO
 		swap_cache_find_success++;

@@ -91,7 +91,7 @@ static int hpfs_write_partial_page(struct file *file, struct page *page, unsigne
 	struct inode *inode = dentry->d_inode;
 	struct page *new_page, **hash;
 	unsigned long pgpos;
-	unsigned long page_cache = 0;
+	struct page * page_cache = NULL;
 	long status;
 
 	printk("- off: %08x\n", (int)page->offset);
@@ -99,8 +99,8 @@ static int hpfs_write_partial_page(struct file *file, struct page *page, unsigne
 	while (pgpos < page->offset) {
 long pgp = pgpos;
 		printk("pgpos: %08x, bl: %d\n", (int)pgpos, (int)inode->i_blocks);
-		hash = page_hash(inode, pgpos);
-repeat_find:	new_page = __find_lock_page(inode, pgpos, hash);
+		hash = page_hash(&inode->i_data, pgpos);
+repeat_find:	new_page = __find_lock_page(&inode->i_data, pgpos, hash);
 		if (!new_page) {
 			if (!page_cache) {
 				page_cache = page_cache_alloc();
@@ -109,10 +109,10 @@ repeat_find:	new_page = __find_lock_page(inode, pgpos, hash);
 				status = -ENOMEM;
 				goto out;
 			}
-			new_page = page_cache_entry(page_cache);
-			if (add_to_page_cache_unique(new_page,inode,pgpos,hash))
+			new_page = page_cache;
+			if (add_to_page_cache_unique(new_page,&inode->i_data,pgpos,hash))
 				goto repeat_find;
-			page_cache = 0;
+			page_cache = NULL;
 		}
 		printk("A\n");
 		status = block_write_cont_page(file, new_page, PAGE_SIZE, 0, NULL);

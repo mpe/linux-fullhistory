@@ -286,15 +286,39 @@ void set_device_ro(kdev_t dev,int flag)
 	else ro_bits[major][minor >> 5] &= ~(1 << (minor & 31));
 }
 
-static inline void drive_stat_acct(int cmd, unsigned long nr_sectors,
-                                   short disk_index)
+static inline void drive_stat_acct(struct request *req,
+                                   unsigned long nr_sectors, int new_io)
 {
-	kstat.dk_drive[disk_index]++;
-	if (cmd == READ) {
-		kstat.dk_drive_rio[disk_index]++;
+	int major = MAJOR(req->rq_dev);
+	int minor = MINOR(req->rq_dev);
+	unsigned int disk_index;
+
+	switch (major) {
+		case DAC960_MAJOR+0:
+			disk_index = (minor & 0x00f8) >> 3;
+			break;
+		case SCSI_DISK0_MAJOR:
+			disk_index = (minor & 0x00f0) >> 4;
+			break;
+		case IDE0_MAJOR:	/* same as HD_MAJOR */
+		case XT_DISK_MAJOR:
+			disk_index = (minor & 0x0040) >> 6;
+			break;
+		case IDE1_MAJOR:
+			disk_index = ((minor & 0x0040) >> 6) + 2;
+			break;
+		default:
+			return;
+	}
+	if (disk_index >= DK_NDRIVE)
+		return;
+
+	kstat.dk_drive[disk_index] += new_io;
+	if (req->cmd == READ) {
+		kstat.dk_drive_rio[disk_index] += new_io;
 		kstat.dk_drive_rblk[disk_index] += nr_sectors;
-	} else if (cmd == WRITE) {
-		kstat.dk_drive_wio[disk_index]++;
+	} else if (req->cmd == WRITE) {
+		kstat.dk_drive_wio[disk_index] += new_io;
 		kstat.dk_drive_wblk[disk_index] += nr_sectors;
 	} else
 		printk(KERN_ERR "drive_stat_acct: cmd not R/W?\n");
@@ -313,35 +337,11 @@ static inline void drive_stat_acct(int cmd, unsigned long nr_sectors,
 void add_request(struct blk_dev_struct * dev, struct request * req)
 {
 	int major = MAJOR(req->rq_dev);
-	int minor = MINOR(req->rq_dev);
 	struct request * tmp, **current_request;
-	short		 disk_index;
 	unsigned long flags;
 	int queue_new_request = 0;
 
-	switch (major) {
-		case DAC960_MAJOR+0:
-			disk_index = (minor & 0x00f8) >> 3;
-			if (disk_index < 4)
-				drive_stat_acct(req->cmd, req->nr_sectors, disk_index);
-			break;
-		case SCSI_DISK0_MAJOR:
-			disk_index = (minor & 0x00f0) >> 4;
-			if (disk_index < 4)
-				drive_stat_acct(req->cmd, req->nr_sectors, disk_index);
-			break;
-		case IDE0_MAJOR:	/* same as HD_MAJOR */
-		case XT_DISK_MAJOR:
-			disk_index = (minor & 0x0040) >> 6;
-			drive_stat_acct(req->cmd, req->nr_sectors, disk_index);
-			break;
-		case IDE1_MAJOR:
-			disk_index = ((minor & 0x0040) >> 6) + 2;
-			drive_stat_acct(req->cmd, req->nr_sectors, disk_index);
-		default:
-			break;
-	}
-
+	drive_stat_acct(req, req->nr_sectors, 1);
 	req->next = NULL;
 
 	/*
@@ -575,6 +575,7 @@ void make_request(int major,int rw, struct buffer_head * bh)
 				req->bhtail->b_reqnext = bh;
 				req->bhtail = bh;
 			    	req->nr_sectors += count;
+				drive_stat_acct(req, count, 0);
 				/* Can we now merge this req with the next? */
 				attempt_merge(req, max_sectors);
 			/* or to the beginning? */
@@ -585,6 +586,7 @@ void make_request(int major,int rw, struct buffer_head * bh)
 			    	req->current_nr_sectors = count;
 			    	req->sector = sector;
 			    	req->nr_sectors += count;
+				drive_stat_acct(req, count, 0);
 			} else
 				continue;
 

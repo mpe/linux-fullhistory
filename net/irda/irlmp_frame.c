@@ -44,7 +44,7 @@ inline void irlmp_send_data_pdu(struct lap_cb *self, __u8 dlsap, __u8 slsap,
 	skb->data[1] = slsap;
 
 	if (expedited) {
-		DEBUG(4, __FUNCTION__ "(), sending expedited data\n");
+		IRDA_DEBUG(4, __FUNCTION__ "(), sending expedited data\n");
 		irlap_data_request(self->irlap, skb, FALSE);
 	} else
 		irlap_data_request(self->irlap, skb, TRUE);
@@ -60,7 +60,7 @@ void irlmp_send_lcf_pdu(struct lap_cb *self, __u8 dlsap, __u8 slsap,
 {
 	__u8 *frame;
 	
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 	
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == LMP_LAP_MAGIC, return;);
@@ -114,7 +114,7 @@ void irlmp_link_data_indication(struct lap_cb *self, int reliable,
 	 *  it in a different way than other established connections.
 	 */
 	if ((fp[0] & CONTROL_BIT) && (fp[2] == CONNECT_CMD)) {
-		DEBUG(3,"Incoming connection, source LSAP=%d, dest LSAP=%d\n",
+		IRDA_DEBUG(3,"Incoming connection, source LSAP=%d, dest LSAP=%d\n",
 		      slsap_sel, dlsap_sel);
 		
 		/* Try to find LSAP among the unconnected LSAPs */
@@ -130,15 +130,15 @@ void irlmp_link_data_indication(struct lap_cb *self, int reliable,
 				       self->lsaps);
 	
 	if (lsap == NULL) {
-		DEBUG(2, "IrLMP, Sorry, no LSAP for received frame!\n");
-		DEBUG(2, __FUNCTION__ 
+		IRDA_DEBUG(2, "IrLMP, Sorry, no LSAP for received frame!\n");
+		IRDA_DEBUG(2, __FUNCTION__ 
 		      "(), slsap_sel = %02x, dlsap_sel = %02x\n", slsap_sel, 
 		      dlsap_sel);
 		if (fp[0] & CONTROL_BIT) {
-			DEBUG(2, __FUNCTION__ 
+			IRDA_DEBUG(2, __FUNCTION__ 
 			      "(), received control frame %02x\n", fp[2]);
 		} else {
-			DEBUG(2, __FUNCTION__ "(), received data frame\n");
+			IRDA_DEBUG(2, __FUNCTION__ "(), received data frame\n");
 		}
 		dev_kfree_skb(skb);
 		return;
@@ -157,18 +157,18 @@ void irlmp_link_data_indication(struct lap_cb *self, int reliable,
 			irlmp_do_lsap_event(lsap, LM_CONNECT_CONFIRM, skb);
 			break;
 		case DISCONNECT:
-			DEBUG( 4, __FUNCTION__ "(), Disconnect indication!\n");
+			IRDA_DEBUG( 4, __FUNCTION__ "(), Disconnect indication!\n");
 			irlmp_do_lsap_event(lsap, LM_DISCONNECT_INDICATION, 
 					    skb);
 			break;
 		case ACCESSMODE_CMD:
-			DEBUG( 0, "Access mode cmd not implemented!\n");
+			IRDA_DEBUG( 0, "Access mode cmd not implemented!\n");
 			break;
 		case ACCESSMODE_CNF:
-			DEBUG( 0, "Access mode cnf not implemented!\n");
+			IRDA_DEBUG( 0, "Access mode cnf not implemented!\n");
 			break;
 		default:
-			DEBUG( 0, __FUNCTION__ 
+			IRDA_DEBUG( 0, __FUNCTION__ 
 			       "(), Unknown control frame %02x\n", fp[2]);
 			break;
 		}
@@ -198,7 +198,7 @@ void irlmp_link_disconnect_indication(struct lap_cb *lap,
 				      LAP_REASON reason, 
 				      struct sk_buff *userdata)
 {
-	DEBUG(2, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
 	ASSERT(lap != NULL, return;);
 	ASSERT(lap->magic == LMP_LAP_MAGIC, return;);
@@ -224,7 +224,7 @@ void irlmp_link_connect_indication(struct lap_cb *self, __u32 saddr,
 				   __u32 daddr, struct qos_info *qos,
 				   struct sk_buff *skb) 
 {
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
 	/* Copy QoS settings for this session */
 	self->qos = qos;
@@ -245,7 +245,7 @@ void irlmp_link_connect_indication(struct lap_cb *self, __u32 saddr,
 void irlmp_link_connect_confirm(struct lap_cb *self, struct qos_info *qos, 
 				struct sk_buff *userdata)
 {
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == LMP_LAP_MAGIC, return;);
@@ -287,7 +287,7 @@ void irlmp_link_discovery_indication(struct lap_cb *self,
  */
 void irlmp_link_discovery_confirm(struct lap_cb *self, hashbin_t *log)
 {
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == LMP_LAP_MAGIC, return;);

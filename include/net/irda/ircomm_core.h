@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Jun  9 08:58:43 1999
- * Modified at:   Fri Aug 13 07:24:18 1999
+ * Modified at:   Tue Oct  5 09:13:50 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -53,7 +53,7 @@ typedef struct {
 } call_t;
 
 struct ircomm_cb {
-	QUEUE   queue;
+	queue_t queue;
 	magic_t magic;
 
 	notify_t notify;

@@ -108,9 +108,11 @@
 #define UIRCC_SR13          0x0d /* Timer counter status (high byte) */
 #define UIRCC_SR15          0x0f
 
+#include <net/irda/irda_device.h>
+
 /* Private data for each instance */
 struct uircc_cb {
-	struct irda_device idev;
+	struct net_device idev;
 	
 	__u8 cr3;                 /* Copy of register sr3 */
 };

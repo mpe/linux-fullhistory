@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Mon May  3 09:02:36 1999
+ * Modified at:   Thu Oct  7 11:40:25 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -28,6 +28,7 @@
 
 #include <linux/types.h>
 #include <linux/skbuff.h>
+#include <linux/netdevice.h>
 
 #include <net/irda/irda_device.h>
 
@@ -51,6 +52,7 @@ enum {
 
 /* Proto definitions */
 int async_wrap_skb(struct sk_buff *skb, __u8 *tx_buff, int buffsize);
-inline void async_unwrap_char(struct irda_device *idev, __u8 byte);
+int async_bump(struct net_device *dev, __u8 *buf, int len);
+int async_unwrap_char(struct net_device *dev, struct iobuff_t *buf, __u8 byte);
 
 #endif

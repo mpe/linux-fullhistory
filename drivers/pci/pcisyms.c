@@ -19,6 +19,7 @@ EXPORT_SYMBOL(pci_write_config_word);
 EXPORT_SYMBOL(pci_write_config_dword);
 EXPORT_SYMBOL(pci_devices);
 EXPORT_SYMBOL(pci_root);
+EXPORT_SYMBOL(pci_enable_device);
 EXPORT_SYMBOL(pci_find_class);
 EXPORT_SYMBOL(pci_find_device);
 EXPORT_SYMBOL(pci_find_slot);

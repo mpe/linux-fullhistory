@@ -751,9 +751,6 @@ static void end_buffer_io_async(struct buffer_head * bh, int uptodate)
 	if (test_and_clear_bit(PG_decr_after, &page->flags))
 		atomic_dec(&nr_async_pages);
 
-	if (page->owner != (void *)-1)
-		PAGE_BUG(page);
-	page->owner = current;
 	UnlockPage(page);
 
 	return;
@@ -1181,8 +1178,6 @@ static int create_page_buffers(int rw, struct page *page, kdev_t dev, int b[], i
 
 	if (!PageLocked(page))
 		BUG();
-	if (page->owner != current)
-		PAGE_BUG(page);
 	/*
 	 * Allocate async buffer heads pointing to this page, just for I/O.
 	 * They don't show up in the buffer hash table, but they *are*
@@ -1947,7 +1942,6 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size)
 	}
 	if (!page->buffers)
 		BUG();
-	page->owner = (void *)-1;
 
 	head = page->buffers;
 	bh = head;
@@ -1989,7 +1983,6 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size)
 	} else {
 		if (!nr && rw == READ) {
 			SetPageUptodate(page);
-			page->owner = current;
 			UnlockPage(page);
 		}
 		if (nr && (rw == WRITE))
@@ -2023,7 +2016,6 @@ int block_read_full_page(struct file * file, struct page * page)
 
 	blocks = PAGE_SIZE >> inode->i_sb->s_blocksize_bits;
 	iblock = page->offset >> inode->i_sb->s_blocksize_bits;
-	page->owner = (void *)-1;
 	bh = head;
 	nr = 0;
 
@@ -2057,7 +2049,6 @@ int block_read_full_page(struct file * file, struct page * page)
 		 * uptodate as well.
 		 */
 		SetPageUptodate(page);
-		page->owner = current;
 		UnlockPage(page);
 	}
 	return 0;

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Jun  6 20:37:34 1999
- * Modified at:   Tue Aug 17 11:05:41 1999
+ * Modified at:   Tue Oct  5 11:37:11 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -128,7 +128,7 @@ struct ircomm_cb *ircomm_open(notify_t *notify, __u8 service_type, int line)
 	self->service_type = service_type;
 	self->line = line;
 
-	hashbin_insert(ircomm, (QUEUE *) self, line, NULL);
+	hashbin_insert(ircomm, (queue_t *) self, line, NULL);
 
 	ircomm_next_state(self, IRCOMM_IDLE);	
 

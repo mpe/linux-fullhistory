@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Oct 21 20:02:35 1998
- * Modified at:   Thu Jul 15 01:17:53 1999
+ * Modified at:   Mon Oct 18 23:25:44 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -29,15 +29,14 @@
 #include <linux/init.h>
 
 #include <net/irda/irda.h>
+#include <net/irda/irmod.h>
 #include <net/irda/irda_device.h>
 #include <net/irda/irtty.h>
-#include <net/irda/dongle.h>
 
-static void tekram_reset(struct irda_device *dev);
-static void tekram_open(struct irda_device *dev, int type);
-static void tekram_close(struct irda_device *dev);
-static void tekram_change_speed(struct irda_device *dev, __u32 speed);
-static void tekram_init_qos(struct irda_device *idev, struct qos_info *qos);
+static void tekram_open(dongle_t *self, struct qos_info *qos);
+static void tekram_close(dongle_t *self);
+static int  tekram_change_speed(struct irda_task *task);
+static int  tekram_reset(struct irda_task *task);
 
 #define TEKRAM_115200 0x00
 #define TEKRAM_57600  0x01
@@ -47,13 +46,13 @@ static void tekram_init_qos(struct irda_device *idev, struct qos_info *qos);
 
 #define TEKRAM_PW     0x10 /* Pulse select bit */
 
-static struct dongle dongle = {
-	TEKRAM_DONGLE,
+static struct dongle_reg dongle = {
+	Q_NULL,
+	IRDA_TEKRAM_DONGLE,
 	tekram_open,
 	tekram_close,
 	tekram_reset,
 	tekram_change_speed,
-	tekram_init_qos,
 };
 
 int __init tekram_init(void)
@@ -66,26 +65,29 @@ void tekram_cleanup(void)
 	irda_device_unregister_dongle(&dongle);
 }
 
-static void tekram_open(struct irda_device *idev, int type)
+static void tekram_open(dongle_t *self, struct qos_info *qos)
 {
-	strcat(idev->description, " <-> tekram");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
-	idev->io.dongle_id = type;
-	idev->flags |= IFF_DONGLE;
-	
+	qos->baud_rate.bits &= IR_9600|IR_19200|IR_38400|IR_57600|IR_115200;
+	qos->min_turn_time.bits &= 0x01; /* Needs at least 10 ms */
+	irda_qos_bits_to_value(qos);
+
 	MOD_INC_USE_COUNT;
 }
 
-static void tekram_close(struct irda_device *idev)
-{		
+static void tekram_close(dongle_t *self)
+{
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
+
 	/* Power off dongle */
-	irda_device_set_dtr_rts(idev, FALSE, FALSE);
+	self->set_dtr_rts(self->dev, FALSE, FALSE);
 
 	MOD_DEC_USE_COUNT;
 }
 
 /*
- * Function tekram_change_speed (tty, speed)
+ * Function tekram_change_speed (dev, state, speed)
  *
  *    Set the speed for the Tekram IRMate 210 type dongle. Warning, this 
  *    function must be called with a process context!
@@ -100,14 +102,16 @@ static void tekram_close(struct irda_device *idev)
  *    6. wait at least 50 us, new setting (baud rate, etc) takes effect here 
  *       after
  */
-static void tekram_change_speed(struct irda_device *idev, __u32 speed)
+static int tekram_change_speed(struct irda_task *task)
 {
+	dongle_t *self = (dongle_t *) task->instance;
+	__u32 speed = (__u32) task->param;
 	__u8 byte;
+	int ret = 0;
 	
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
-	ASSERT(idev != NULL, return;);
-	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
+	ASSERT(task != NULL, return -1;);
 
 	switch (speed) {
 	default:
@@ -128,24 +132,65 @@ static void tekram_change_speed(struct irda_device *idev, __u32 speed)
 		break;
 	}
 
-	/* Need to reset the dongle and go to 9600 bps before programming */
-	tekram_reset(idev);
-	
-	/* Set DTR, Clear RTS */
-	irda_device_set_dtr_rts(idev, TRUE, FALSE);
-	
-	/* Wait at least 7us */
-	udelay(10);
+	switch (task->state) {
+	case IRDA_TASK_INIT:
+		/* Lock dongle */
+		if (irda_lock((void *) &self->busy) == FALSE) {
+			IRDA_DEBUG(0, __FUNCTION__ "(), busy!\n");
+			return MSECS_TO_JIFFIES(100);
+		}
+		irda_task_next_state(task, IRDA_TASK_CHILD_INIT);
+		break;
+	case IRDA_TASK_CHILD_INIT:		
+		/* 
+		 * Need to reset the dongle and go to 9600 bps before
+                 * programming 
+		 */
+		if (irda_task_execute(self, tekram_reset, NULL, task, 
+				      (void *) speed))
+		{
+			/* Dongle need more time to reset */
+			irda_task_next_state(task, IRDA_TASK_CHILD_WAIT);
 
-	/* Write control byte */
-	irda_device_raw_write(idev, &byte, 1);
+			/* Give reset 1 sec to finish */
+			ret = MSECS_TO_JIFFIES(1000);
+		} else
+			irda_task_next_state(task, IRDA_TASK_CHILD_DONE);
+		break;
+	case IRDA_TASK_CHILD_WAIT:
+		WARNING(__FUNCTION__ "(), resetting dongle timed out!\n");
+		ret = -1;
+		break;
+	case IRDA_TASK_CHILD_DONE:
+		/* Set DTR, Clear RTS */
+		self->set_dtr_rts(self->dev, TRUE, FALSE);
 	
-	/* Wait at least 100 ms */
-	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(MSECS_TO_JIFFIES(100));
-        
-	/* Set DTR, Set RTS */
-	irda_device_set_dtr_rts(idev, TRUE, TRUE);
+		/* Wait at least 7us */
+		udelay(10);
+
+		/* Write control byte */
+		self->write(self->dev, &byte, 1);
+		
+		irda_task_next_state(task, IRDA_TASK_WAIT);
+
+		/* Wait at least 100 ms */
+		ret = MSECS_TO_JIFFIES(100);
+		break;
+	case IRDA_TASK_WAIT:
+		/* Set DTR, Set RTS */
+		self->set_dtr_rts(self->dev, TRUE, TRUE);
+
+		irda_task_next_state(task, IRDA_TASK_DONE);
+		self->busy = 0;
+		break;
+	default:
+		ERROR(__FUNCTION__ "(), unknown state %d\n", task->state);
+		irda_task_next_state(task, IRDA_TASK_DONE);
+		self->busy = 0;
+		ret = -1;
+		break;
+	}
+	return ret;
 }
 
 /*
@@ -161,50 +206,52 @@ static void tekram_change_speed(struct irda_device *idev, __u32 speed)
  *        3. clear DTR to SPACE state, wait at least 50 us for further 
  *         operation
  */
-void tekram_reset(struct irda_device *idev)
+int tekram_reset(struct irda_task *task)
 {
-	ASSERT(idev != NULL, return;);
-	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
+	dongle_t *self = (dongle_t *) task->instance;
+	int ret = 0;
+
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
+
+	ASSERT(task != NULL, return -1;);
 	
 	/* Power off dongle */
-	irda_device_set_dtr_rts(idev, FALSE, FALSE);
+	self->set_dtr_rts(self->dev, FALSE, FALSE);
 
-	/* Sleep 50 ms */
-	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(MSECS_TO_JIFFIES(50));
+	switch (task->state) {
+	case IRDA_TASK_INIT:
+		irda_task_next_state(task, IRDA_TASK_WAIT1);
 
-	/* Clear DTR, Set RTS */
-	irda_device_set_dtr_rts(idev, FALSE, TRUE); 
+		/* Sleep 50 ms */
+		ret = MSECS_TO_JIFFIES(50);
+		break;
+	case IRDA_TASK_WAIT1:
+		/* Clear DTR, Set RTS */
+		self->set_dtr_rts(self->dev, FALSE, TRUE); 
 
-	/* Should sleep 1 ms, but 10-20 should not do any harm */
-	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(MSECS_TO_JIFFIES(20));
-
-	/* Set DTR, Set RTS */
-	irda_device_set_dtr_rts(idev, TRUE, TRUE);
+		irda_task_next_state(task, IRDA_TASK_WAIT2);
+		
+		/* Should sleep 1 ms, but 10 should not do any harm */
+		ret = MSECS_TO_JIFFIES(10);
+		break;
+	case IRDA_TASK_WAIT2:
+		/* Set DTR, Set RTS */
+		self->set_dtr_rts(self->dev, TRUE, TRUE);
 	
-	udelay(50);
-	
-	/* Make sure the IrDA chip also goes to defalt speed */
-	if (idev->change_speed)
-		idev->change_speed(idev, 9600);
-}
+		udelay(50);
 
-/*
- * Function tekram_init_qos (qos)
- *
- *    Initialize QoS capabilities
- *
- */
-static void tekram_init_qos(struct irda_device *idev, struct qos_info *qos)
-{
-	qos->baud_rate.bits &= IR_9600|IR_19200|IR_38400|IR_57600|IR_115200;
-	qos->min_turn_time.bits &= 0x01; /* Needs at least 10 ms */
-	irda_qos_bits_to_value(qos);
+		irda_task_next_state(task, IRDA_TASK_DONE);
+		break;
+	default:
+		ERROR(__FUNCTION__ "(), unknown state %d\n", task->state);
+		irda_task_next_state(task, IRDA_TASK_DONE);		
+
+		ret = -1;
+	}
+	return ret;
 }
 
 #ifdef MODULE
-
 MODULE_AUTHOR("Dag Brattli <dagb@cs.uit.no>");
 MODULE_DESCRIPTION("Tekram IrMate IR-210B dongle driver");
 		
@@ -229,5 +276,4 @@ void cleanup_module(void)
 {
         tekram_cleanup();
 }
-
 #endif /* MODULE */

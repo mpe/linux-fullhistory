@@ -43,16 +43,16 @@ printk_name(const char *name, int len)
  * the page if it isn't in memory. As I understand it the rest of the
  * smb-cache code assumes we return a locked page.
  */
-unsigned long
-get_cached_page(struct inode * inode, unsigned long offset, int new)
+static unsigned long
+get_cached_page(struct address_space *owner, unsigned long offset, int new)
 {
 	struct page * page;
 	struct page ** hash;
 	unsigned long new_page;
 
  again:
-	hash = page_hash(inode, offset);
-	page = __find_lock_page(inode, offset, hash);
+	hash = page_hash(owner, offset);
+	page = __find_lock_page(owner, offset, hash);
 	if(!page && new) {
 		/* not in cache, alloc a new page */
 		new_page = page_cache_alloc();
@@ -60,7 +60,7 @@ get_cached_page(struct inode * inode, unsigned long offset, int new)
 			return 0;
 		clear_page(new_page);	/* smb code assumes pages are zeroed */
 		page = page_cache_entry(new_page);
-		if (add_to_page_cache_unique(page, inode, offset, hash)) {
+		if (add_to_page_cache_unique(page, owner, offset, hash)) {
 			/* Hmm, a page has materialized in the
                            cache. Fine. Go back and get that page
                            instead ... throwing away this one first. */
@@ -75,10 +75,10 @@ get_cached_page(struct inode * inode, unsigned long offset, int new)
 	return page_address(page);
 }
 
-static inline struct inode * 
+static inline struct address_space * 
 get_cache_inode(struct cache_head *cachep)
 {
-	return (mem_map + MAP_NR((unsigned long) cachep))->inode;
+	return (mem_map + MAP_NR((unsigned long) cachep))->owner;
 }
 
 /*
@@ -89,14 +89,14 @@ get_cache_inode(struct cache_head *cachep)
 struct cache_head *
 smb_get_dircache(struct dentry * dentry)
 {
-	struct inode * inode = dentry->d_inode;
+	struct address_space * owner = &dentry->d_inode->i_data;
 	struct cache_head * cachep;
 
 #ifdef SMBFS_DEBUG_VERBOSE
 	printk("smb_get_dircache: finding cache for %s/%s\n",
 	       dentry->d_parent->d_name.name, dentry->d_name.name);
 #endif
-	cachep = (struct cache_head *) get_cached_page(inode, 0, 1);
+	cachep = (struct cache_head *) get_cached_page(owner, 0, 1);
 	if (!cachep)
 		goto out;
 	if (cachep->valid)
@@ -118,7 +118,7 @@ printk("smb_get_dircache: cache %s/%s has existing block!\n",
 dentry->d_parent->d_name.name, dentry->d_name.name);
 #endif
 			offset = PAGE_SIZE + (i << PAGE_SHIFT);
-			block = (struct cache_block *) get_cached_page(inode,
+			block = (struct cache_block *) get_cached_page(owner,
 								offset, 0);
 			if (!block)
 				goto out;
@@ -187,7 +187,7 @@ void
 smb_add_to_cache(struct cache_head * cachep, struct cache_dirent *entry,
 			off_t fpos)
 {
-	struct inode * inode = get_cache_inode(cachep);
+	struct address_space * owner = get_cache_inode(cachep);
 	struct cache_index * index;
 	struct cache_block * block;
 	unsigned long page_off;
@@ -195,8 +195,8 @@ smb_add_to_cache(struct cache_head * cachep, struct cache_dirent *entry,
 	unsigned int needed = len + sizeof(struct cache_entry);
 
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_add_to_cache: cache inode %p, status %d, adding ", 
-       inode, cachep->status);
+printk("smb_add_to_cache: cache %p, status %d, adding ", 
+       owner, cachep->status);
 printk_name(entry->name, entry->len);
 printk(" at %ld\n", fpos);
 #endif
@@ -251,14 +251,14 @@ printk("smb_add_to_cache: new index already has block!\n");
 get_block:
 	cachep->pages++;
 	page_off = PAGE_SIZE + (cachep->idx << PAGE_SHIFT);
-	block = (struct cache_block *) get_cached_page(inode, page_off, 1);
+	block = (struct cache_block *) get_cached_page(owner, page_off, 1);
 	if (block)
 	{
 		index->block = block;
 		index->space = PAGE_SIZE;
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_add_to_cache: inode=%p, pages=%d, block at %ld\n",
-inode, cachep->pages, page_off);
+printk("smb_add_to_cache: owner=%p, pages=%d, block at %ld\n",
+owner, cachep->pages, page_off);
 #endif
 		goto add_entry;
 	}

@@ -106,7 +106,7 @@ int __init ircc_init(void)
 {
 	int i;
 
-	DEBUG(ircc_debug, __FUNCTION__ " -->\n");
+	IRDA_DEBUG(ircc_debug, __FUNCTION__ " -->\n");
 	for ( i=0; (io[i] < 2000) && (i < 4); i++) {
 		int ioaddr = io[i];
 		if (check_region(ioaddr, CHIP_IO_EXTENT))
@@ -114,7 +114,7 @@ int __init ircc_init(void)
 		if (ircc_open( i, io[i], io2[i]) == 0)
 			return 0;
 	}
-	DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
+	IRDA_DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
 
 	return -ENODEV;
 }
@@ -130,13 +130,13 @@ static void ircc_cleanup(void)
 {
 	int i;
 
-	DEBUG(ircc_debug, __FUNCTION__ " -->\n");
+	IRDA_DEBUG(ircc_debug, __FUNCTION__ " -->\n");
 
 	for ( i=0; i < 4; i++) {
 		if ( dev_self[i])
 			ircc_close( &(dev_self[i]->idev));
 	}
-	DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
+	IRDA_DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
 }
 #endif /* MODULE */
 
@@ -153,10 +153,10 @@ static int ircc_open( int i, unsigned int iobase, unsigned int iobase2)
 	int ret;
 	int config;
 
-	DEBUG( ircc_debug, __FUNCTION__ " -->\n");
+	IRDA_DEBUG( ircc_debug, __FUNCTION__ " -->\n");
 
 	if ((config = ircc_probe( iobase, iobase2)) == -1) {
-	        DEBUG(ircc_debug, 
+	        IRDA_DEBUG(ircc_debug, 
 		      __FUNCTION__ ": addr 0x%04x - no device found!\n", iobase);
 		return -1;
 	}
@@ -199,14 +199,14 @@ static int ircc_open( int i, unsigned int iobase, unsigned int iobase2)
 	/* Lock the port that we need */
 	ret = check_region( idev->io.iobase, idev->io.io_ext);
 	if ( ret < 0) { 
-		DEBUG( 0, __FUNCTION__ ": can't get iobase of 0x%03x\n",
+		IRDA_DEBUG( 0, __FUNCTION__ ": can't get iobase of 0x%03x\n",
 		       idev->io.iobase);
 		/* ircc_cleanup( self->idev);  */
 		return -ENODEV;
 	}
 	ret = check_region( idev->io.iobase2, idev->io.io_ext2);
 	if ( ret < 0) { 
-		DEBUG( 0, __FUNCTION__ ": can't get iobase of 0x%03x\n",
+		IRDA_DEBUG( 0, __FUNCTION__ ": can't get iobase of 0x%03x\n",
 		       idev->io.iobase2);
 		/* ircc_cleanup( self->idev);  */
 		return -ENODEV;
@@ -256,7 +256,7 @@ static int ircc_open( int i, unsigned int iobase, unsigned int iobase2)
 	/* Open the IrDA device */
 	irda_device_open( idev, driver_name, self);
 	
-	DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
+	IRDA_DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
 	return 0;
 }
 
@@ -271,7 +271,7 @@ static int ircc_close( struct irda_device *idev)
 {
 	int iobase;
 
-	DEBUG(ircc_debug, __FUNCTION__ " -->\n");
+	IRDA_DEBUG(ircc_debug, __FUNCTION__ " -->\n");
 
 	ASSERT( idev != NULL, return -1;);
 	ASSERT( idev->magic == IRDA_DEVICE_MAGIC, return -1;);
@@ -291,20 +291,20 @@ static int ircc_close( struct irda_device *idev)
         serial_out(iobase, UART_SCE_CFGB, UART_CFGB_IR);
  
 	/* Release the PORT that this driver is using */
-	DEBUG( ircc_debug, 
+	IRDA_DEBUG( ircc_debug, 
 	       __FUNCTION__ ": releasing 0x%03x\n", idev->io.iobase);
 
 	release_region( idev->io.iobase, idev->io.io_ext);
 
 	if ( idev->io.iobase2) {
-		DEBUG( ircc_debug, __FUNCTION__ ": releasing 0x%03x\n", 
+		IRDA_DEBUG( ircc_debug, __FUNCTION__ ": releasing 0x%03x\n", 
 		       idev->io.iobase2);
 		release_region( idev->io.iobase2, idev->io.io_ext2);
 	}
 
 	irda_device_close( idev);
 
-	DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
+	IRDA_DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
 	return 0;
 }
 #endif /* MODULE */
@@ -320,7 +320,7 @@ static int ircc_probe(int iobase, int iobase2)
 	int version = 1;
 	int low, high, chip, config, dma, irq;
 	
-	DEBUG(ircc_debug, __FUNCTION__ " -->\n");
+	IRDA_DEBUG(ircc_debug, __FUNCTION__ " -->\n");
 
 	register_bank(iobase, 3);
 	high = serial_in(iobase, UART_ID_HIGH);
@@ -332,7 +332,7 @@ static int ircc_probe(int iobase, int iobase2)
 	dma = config & 0x0f;
 
         if (high == 0x10 && low == 0xb8 && (chip == 0xf1 || chip == 0xf2)) { 
-                DEBUG(0, "SMC IrDA Controller found; IrCC version %d.%d, "
+                IRDA_DEBUG(0, "SMC IrDA Controller found; IrCC version %d.%d, "
 		      "port 0x%04x, dma %d, interrupt %d\n",
                       chip & 0x0f, version, iobase, dma, irq);
 	} else {
@@ -341,7 +341,7 @@ static int ircc_probe(int iobase, int iobase2)
 
 	serial_out(iobase, UART_MASTER, 0);
 
-	DEBUG(ircc_debug, "--> " __FUNCTION__ "\n");
+	IRDA_DEBUG(ircc_debug, "--> " __FUNCTION__ "\n");
 
 	return config;
 }
@@ -357,7 +357,7 @@ static void ircc_change_speed( struct irda_device *idev, __u32 speed)
 	struct ircc_cb *self;
 	int iobase, ir_mode, select, fast; 
 
-	DEBUG(ircc_debug+1, __FUNCTION__ " -->\n");
+	IRDA_DEBUG(ircc_debug+1, __FUNCTION__ " -->\n");
 
 	ASSERT(idev != NULL, return;);
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
@@ -374,7 +374,7 @@ static void ircc_change_speed( struct irda_device *idev, __u32 speed)
 	case 37600:
 	case 57600:
 	case 115200:
-	        DEBUG(ircc_debug+1, 
+	        IRDA_DEBUG(ircc_debug+1, 
 		      __FUNCTION__ ": using irport to change speed to %d\n",
 		      speed);
 		register_bank(iobase, 0);
@@ -390,22 +390,22 @@ static void ircc_change_speed( struct irda_device *idev, __u32 speed)
 		ir_mode = UART_CFGA_IRDA_HDLC;
 		select = 0;
 		fast = 0;
-		DEBUG( ircc_debug, __FUNCTION__ ": handling baud of 576000\n");
+		IRDA_DEBUG( ircc_debug, __FUNCTION__ ": handling baud of 576000\n");
 		break;
 	case 1152000:
 		ir_mode = UART_CFGA_IRDA_HDLC;
 		select = UART_1152;
 		fast = 0;
-		DEBUG(ircc_debug, __FUNCTION__ ": handling baud of 1152000\n");
+		IRDA_DEBUG(ircc_debug, __FUNCTION__ ": handling baud of 1152000\n");
 		break;
 	case 4000000:
 		ir_mode = UART_CFGA_IRDA_4PPM;
 		select = 0;
 		fast = UART_LCR_A_FAST;
-		DEBUG(ircc_debug, __FUNCTION__ ": handling baud of 4000000\n");
+		IRDA_DEBUG(ircc_debug, __FUNCTION__ ": handling baud of 4000000\n");
 		break;
 	default:
-		DEBUG( 0, __FUNCTION__ ": unknown baud rate of %d\n", speed);
+		IRDA_DEBUG( 0, __FUNCTION__ ": unknown baud rate of %d\n", speed);
 		return;
 	}
 
@@ -443,7 +443,7 @@ static void ircc_change_speed( struct irda_device *idev, __u32 speed)
 
 	serial_out(iobase, UART_LCR_A, fast);
 
-	DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
+	IRDA_DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
 }
 
 /*
@@ -458,7 +458,7 @@ static int ircc_hard_xmit( struct sk_buff *skb, struct net_device *dev)
 	int iobase;
 	int mtt;
 
-	DEBUG(ircc_debug+1, __FUNCTION__ " -->\n");
+	IRDA_DEBUG(ircc_debug+1, __FUNCTION__ " -->\n");
 	idev = (struct irda_device *) dev->priv;
 
 	ASSERT( idev != NULL, return 0;);
@@ -466,15 +466,15 @@ static int ircc_hard_xmit( struct sk_buff *skb, struct net_device *dev)
 
 	iobase = idev->io.iobase;
 
-	DEBUG(ircc_debug+1, __FUNCTION__ "(%ld), skb->len=%d\n", jiffies, (int) skb->len);
+	IRDA_DEBUG(ircc_debug+1, __FUNCTION__ "(%ld), skb->len=%d\n", jiffies, (int) skb->len);
 
 	/* Use irport for SIR speeds */
 	if (idev->io.baudrate <= 115200) {
-		DEBUG(ircc_debug+1, __FUNCTION__ ": calling irport_hard_xmit\n");
+		IRDA_DEBUG(ircc_debug+1, __FUNCTION__ ": calling irport_hard_xmit\n");
 		return irport_hard_xmit(skb, dev);
 	}
 	
-	DEBUG(ircc_debug, __FUNCTION__ ": using dma; len=%d\n", skb->len);
+	IRDA_DEBUG(ircc_debug, __FUNCTION__ ": using dma; len=%d\n", skb->len);
 
 	/* Lock transmit buffer */
 	if (irda_lock((void *) &dev->tbusy) == FALSE)
@@ -502,7 +502,7 @@ static int ircc_hard_xmit( struct sk_buff *skb, struct net_device *dev)
 	
 	dev_kfree_skb( skb);
 
-	DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
+	IRDA_DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
 	return 0;
 }
 
@@ -516,7 +516,7 @@ static void ircc_dma_write( struct irda_device *idev, int iobase)
 {
 	struct ircc_cb *self;
 
-	DEBUG(ircc_debug, __FUNCTION__ " -->\n");
+	IRDA_DEBUG(ircc_debug, __FUNCTION__ " -->\n");
 
 	ASSERT( idev != NULL, return;);
 	ASSERT( idev->magic == IRDA_DEVICE_MAGIC, return;);
@@ -557,7 +557,7 @@ static void ircc_dma_write( struct irda_device *idev, int iobase)
 
 	serial_out(iobase, UART_MASTER, UART_MASTER_INT_EN);
 
-	DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
+	IRDA_DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
 }
 
 /*
@@ -572,7 +572,7 @@ static void ircc_dma_xmit_complete( struct irda_device *idev, int underrun)
 	struct ircc_cb *self;
 	int iobase, d;
 
-	DEBUG(ircc_debug, __FUNCTION__ " -->\n");
+	IRDA_DEBUG(ircc_debug, __FUNCTION__ " -->\n");
 
 	ASSERT( idev != NULL, return;);
 	ASSERT( idev->magic == IRDA_DEVICE_MAGIC, return;);
@@ -585,7 +585,7 @@ static void ircc_dma_xmit_complete( struct irda_device *idev, int underrun)
 
 	d = get_dma_residue(idev->io.dma);
 
-	DEBUG(ircc_debug, __FUNCTION__ ": dma residue = %d, len=%d, sent=%d\n", 
+	IRDA_DEBUG(ircc_debug, __FUNCTION__ ": dma residue = %d, len=%d, sent=%d\n", 
 	      d, idev->tx_buff.len, idev->tx_buff.len - d);
 
 	self = idev->priv;
@@ -608,7 +608,7 @@ static void ircc_dma_xmit_complete( struct irda_device *idev, int underrun)
 	/* Tell the network layer, that we can accept more frames */
 	mark_bh( NET_BH);
 
-	DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
+	IRDA_DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
 }
 
 /*
@@ -623,7 +623,7 @@ static int ircc_dma_receive( struct irda_device *idev)
 	struct ircc_cb *self;
 	int iobase;
 
-	DEBUG(ircc_debug, __FUNCTION__ " -->\n");
+	IRDA_DEBUG(ircc_debug, __FUNCTION__ " -->\n");
 
 	ASSERT( idev != NULL, return -1;);
 	ASSERT( idev->magic == IRDA_DEVICE_MAGIC, return -1;);
@@ -660,7 +660,7 @@ static int ircc_dma_receive( struct irda_device *idev)
 		   serial_in(iobase, UART_SCE_CFGB) | 
 		   UART_CFGB_DMA_ENABLE | UART_CFGB_DMA_BURST);
 
-	DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
+	IRDA_DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
 	return 0;
 }
 
@@ -677,18 +677,18 @@ static int ircc_dma_receive_complete( struct irda_device *idev, int iobase)
 	struct ircc_cb *self;
 	int len, msgcnt;
 
-	DEBUG(ircc_debug, __FUNCTION__ " -->\n");
+	IRDA_DEBUG(ircc_debug, __FUNCTION__ " -->\n");
 
 	self = idev->priv;
 
 	msgcnt = serial_in(idev->io.iobase, UART_LCR_B) & 0x08;
 
-	DEBUG(ircc_debug, __FUNCTION__ ": dma count = %d\n",
+	IRDA_DEBUG(ircc_debug, __FUNCTION__ ": dma count = %d\n",
 	      get_dma_residue(idev->io.dma));
 
 	len = idev->rx_buff.truesize - get_dma_residue(idev->io.dma) - 4;
 
-	DEBUG(ircc_debug, __FUNCTION__ ": msgcnt = %d, len=%d\n", msgcnt, len);
+	IRDA_DEBUG(ircc_debug, __FUNCTION__ ": msgcnt = %d, len=%d\n", msgcnt, len);
 
 	skb = dev_alloc_skb( len+1);
 
@@ -715,7 +715,7 @@ static int ircc_dma_receive_complete( struct irda_device *idev, int iobase)
 		   serial_in(idev->io.iobase, UART_SCE_CFGB) &
 		   ~UART_CFGB_DMA_ENABLE);
 
-	DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
+	IRDA_DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
 	return TRUE;
 }
 
@@ -731,7 +731,7 @@ static void ircc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	struct irda_device *idev = (struct irda_device *) dev_id;
 
-	DEBUG(ircc_debug+1, __FUNCTION__ " -->\n");
+	IRDA_DEBUG(ircc_debug+1, __FUNCTION__ " -->\n");
 
 	if (idev == NULL) {
 		printk( KERN_WARNING "%s: irq %d for unknown device.\n", 
@@ -740,7 +740,7 @@ static void ircc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	}
 	
 	if (idev->io.baudrate <= 115200) {
-		DEBUG(ircc_debug+1, __FUNCTION__ 
+		IRDA_DEBUG(ircc_debug+1, __FUNCTION__ 
 		      ": routing interrupt to irport_interrupt\n");
 		return irport_interrupt( irq, dev_id, regs);
 	}
@@ -757,10 +757,10 @@ static void ircc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	serial_out(iobase, UART_IER, 0);
 
-	DEBUG(ircc_debug, __FUNCTION__ ": iir = 0x%02x\n", iir);
+	IRDA_DEBUG(ircc_debug, __FUNCTION__ ": iir = 0x%02x\n", iir);
 
 	if (iir & UART_IIR_EOM) {
-	        DEBUG(ircc_debug, __FUNCTION__ ": UART_IIR_EOM\n");
+	        IRDA_DEBUG(ircc_debug, __FUNCTION__ ": UART_IIR_EOM\n");
 		if (idev->io.direction == IO_RECV) {
 			ircc_dma_receive_complete(idev, iobase);
 		} else {
@@ -770,7 +770,7 @@ static void ircc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	}
 
 	if (iir & UART_IIR_ACTIVE_FRAME) {
-	        DEBUG(ircc_debug, __FUNCTION__ ": UART_IIR_ACTIVE_FRAME\n");
+	        IRDA_DEBUG(ircc_debug, __FUNCTION__ ": UART_IIR_ACTIVE_FRAME\n");
 		idev->rx_buff.state = INSIDE_FRAME;
 #if 0
 		ircc_dma_receive(idev);
@@ -778,7 +778,7 @@ static void ircc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	}
 
 	if (iir & UART_IIR_RAW_MODE) {
-		DEBUG(ircc_debug, __FUNCTION__ ": IIR RAW mode interrupt.\n");
+		IRDA_DEBUG(ircc_debug, __FUNCTION__ ": IIR RAW mode interrupt.\n");
 	}
 
 	idev->netdev.interrupt = 0;
@@ -787,7 +787,7 @@ static void ircc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	serial_out(iobase, UART_IER, UART_IER_ACTIVE_FRAME|UART_IER_EOM);
 	serial_out(iobase, UART_MASTER, UART_MASTER_INT_EN);
 
-	DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
+	IRDA_DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
 }
 
 /*
@@ -798,13 +798,13 @@ static void ircc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
  */
 static void ircc_wait_until_sent( struct irda_device *idev)
 {
-	DEBUG(ircc_debug, __FUNCTION__ " -->\n");
+	IRDA_DEBUG(ircc_debug, __FUNCTION__ " -->\n");
 
 	/* Just delay 60 ms */
 	current->state = TASK_INTERRUPTIBLE;
 	schedule_timeout(MSECS_TO_JIFFIES(60));
 
-	DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
+	IRDA_DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
 }
 
 /*
@@ -818,17 +818,17 @@ static int ircc_is_receiving( struct irda_device *idev)
 	int status = FALSE;
 	/* int iobase; */
 
-	DEBUG(ircc_debug, __FUNCTION__ " -->\n");
+	IRDA_DEBUG(ircc_debug, __FUNCTION__ " -->\n");
 
 	ASSERT( idev != NULL, return FALSE;);
 	ASSERT( idev->magic == IRDA_DEVICE_MAGIC, return FALSE;);
 
-	DEBUG(ircc_debug, __FUNCTION__ ": dma count = %d\n",
+	IRDA_DEBUG(ircc_debug, __FUNCTION__ ": dma count = %d\n",
 	      get_dma_residue(idev->io.dma));
 
 	status = ( idev->rx_buff.state != OUTSIDE_FRAME);
 	
-	DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
+	IRDA_DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
 
 	return status;
 }
@@ -841,14 +841,14 @@ static int ircc_is_receiving( struct irda_device *idev)
  */
 static int ircc_net_init( struct net_device *dev)
 {
-	DEBUG(ircc_debug, __FUNCTION__ " -->\n");
+	IRDA_DEBUG(ircc_debug, __FUNCTION__ " -->\n");
 
 	/* Setup to be a normal IrDA network device driver */
 	irda_device_setup( dev);
 
 	/* Insert overrides below this line! */
 
-	DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
+	IRDA_DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
 	return 0;
 }
 
@@ -864,7 +864,7 @@ static int ircc_net_open( struct net_device *dev)
 	struct irda_device *idev;
 	int iobase;
 	
-	DEBUG(ircc_debug, __FUNCTION__ " -->\n");
+	IRDA_DEBUG(ircc_debug, __FUNCTION__ " -->\n");
 	
 	ASSERT( dev != NULL, return -1;);
 	idev = (struct irda_device *) dev->priv;
@@ -894,7 +894,7 @@ static int ircc_net_open( struct net_device *dev)
 	
 	MOD_INC_USE_COUNT;
 
-	DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
+	IRDA_DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
 	return 0;
 }
 
@@ -909,7 +909,7 @@ static int ircc_net_close(struct net_device *dev)
 	struct irda_device *idev;
 	int iobase;
 
-	DEBUG(ircc_debug, __FUNCTION__ " -->\n");
+	IRDA_DEBUG(ircc_debug, __FUNCTION__ " -->\n");
 	
 	ASSERT( dev != NULL, return -1;);
 	idev = (struct irda_device *) dev->priv;
@@ -930,7 +930,7 @@ static int ircc_net_close(struct net_device *dev)
 
 	MOD_DEC_USE_COUNT;
 
-	DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
+	IRDA_DEBUG( ircc_debug, "--> " __FUNCTION__ "\n");
 	return 0;
 }
 

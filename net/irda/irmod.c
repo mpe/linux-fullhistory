@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Dec 15 13:55:39 1997
- * Modified at:   Mon Sep 20 09:27:25 1999
+ * Modified at:   Mon Oct 18 14:54:35 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997, 1999 Dag Brattli, All Rights Reserved.
@@ -173,28 +173,31 @@ EXPORT_SYMBOL(hashbin_get_next);
 EXPORT_SYMBOL(hashbin_get_first);
 
 /* IrLAP */
+EXPORT_SYMBOL(irlap_open);
+EXPORT_SYMBOL(irlap_close);
 #ifdef CONFIG_IRDA_COMPRESSION
 EXPORT_SYMBOL(irda_unregister_compressor);
 EXPORT_SYMBOL(irda_register_compressor);
 #endif /* CONFIG_IRDA_COMPRESSION */
 EXPORT_SYMBOL(irda_init_max_qos_capabilies);
 EXPORT_SYMBOL(irda_qos_bits_to_value);
-EXPORT_SYMBOL(irda_device_open);
-EXPORT_SYMBOL(irda_device_close);
 EXPORT_SYMBOL(irda_device_setup);
 EXPORT_SYMBOL(irda_device_set_media_busy);
 EXPORT_SYMBOL(irda_device_txqueue_empty);
-EXPORT_SYMBOL(irda_device_net_open);
-EXPORT_SYMBOL(irda_device_net_close);
 
-EXPORT_SYMBOL(irda_device_init_dongle);
+EXPORT_SYMBOL(irda_device_dongle_init);
+EXPORT_SYMBOL(irda_device_dongle_cleanup);
 EXPORT_SYMBOL(irda_device_register_dongle);
 EXPORT_SYMBOL(irda_device_unregister_dongle);
+EXPORT_SYMBOL(irda_task_execute);
+EXPORT_SYMBOL(irda_task_kick);
+EXPORT_SYMBOL(irda_task_next_state);
 
 EXPORT_SYMBOL(async_wrap_skb);
 EXPORT_SYMBOL(async_unwrap_char);
 EXPORT_SYMBOL(irda_start_timer);
 EXPORT_SYMBOL(setup_dma);
+EXPORT_SYMBOL(infrared_mode);
 
 #ifdef CONFIG_IRTTY
 EXPORT_SYMBOL(irtty_set_dtr_rts);
@@ -205,7 +208,7 @@ EXPORT_SYMBOL(irtty_set_packet_mode);
 
 int __init irda_init(void)
 {
-	printk(KERN_INFO "IrDA (tm) Protocols for Linux-2.3 (Dag Brattli)\n");
+	MESSAGE("IrDA (tm) Protocols for Linux-2.3 (Dag Brattli)\n");
 	
  	irlmp_init();
 	irlap_init();
@@ -344,7 +347,7 @@ void irda_execute_as_process( void *self, TODO_CALLBACK callback, __u32 param)
 	new->param = param;
 	
 	/* Queue todo */
-	enqueue_last(&irda.todo_queue, (QUEUE *) new);
+	enqueue_last(&irda.todo_queue, (queue_t *) new);
 
 	event.event = EVENT_NEED_PROCESS_CONTEXT;
 
@@ -362,7 +365,7 @@ void irmanager_notify( struct irmanager_event *event)
 {
 	struct irda_event *new;
 	
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 	
 	/* Make sure irmanager is running */
 	if (!irda.in_use) {
@@ -380,7 +383,7 @@ void irmanager_notify( struct irmanager_event *event)
 	new->event = *event;
 	
 	/* Queue event */
-	enqueue_last(&irda.event_queue, (QUEUE *) new);
+	enqueue_last(&irda.event_queue, (queue_t *) new);
 	
 	/* Wake up irmanager sleeping on read */
 	wake_up_interruptible(&irda.wait_queue);
@@ -388,10 +391,10 @@ void irmanager_notify( struct irmanager_event *event)
 
 static int irda_open( struct inode * inode, struct file *file)
 {
-	DEBUG( 4, __FUNCTION__ "()\n");
+	IRDA_DEBUG( 4, __FUNCTION__ "()\n");
 
 	if ( irda.in_use) {
-		DEBUG( 0, __FUNCTION__ "(), irmanager is already running!\n");
+		IRDA_DEBUG( 0, __FUNCTION__ "(), irmanager is already running!\n");
 		return -1;
 	}
 	irda.in_use = TRUE;
@@ -414,7 +417,7 @@ static int irda_ioctl( struct inode *inode, struct file *filp,
 	int err = 0;
 	int size = _IOC_SIZE(cmd);
 	
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 	
 	if ( _IOC_DIR(cmd) & _IOC_READ)
 		err = verify_area( VERIFY_WRITE, (void *) arg, size);
@@ -426,7 +429,7 @@ static int irda_ioctl( struct inode *inode, struct file *filp,
 	switch( cmd) {
 	case IRMGR_IOCTNPC:
 		/* Got process context! */
-		DEBUG(4, __FUNCTION__ "(), got process context!\n");
+		IRDA_DEBUG(4, __FUNCTION__ "(), got process context!\n");
 		
 		while ((todo = (struct irda_todo *) dequeue_first( 
 			&irda.todo_queue)) != NULL)
@@ -446,7 +449,7 @@ static int irda_ioctl( struct inode *inode, struct file *filp,
 
 static int irda_close(struct inode *inode, struct file *file)
 {
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 	
 	MOD_DEC_USE_COUNT;
 	
@@ -462,7 +465,7 @@ static ssize_t irda_read(struct file *file, char *buffer, size_t count,
 	unsigned long flags;
 	int len;
 
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
 	/* * Go to sleep and wait for event if there is no event to be read! */
 	save_flags( flags);
@@ -494,14 +497,14 @@ static ssize_t irda_read(struct file *file, char *buffer, size_t count,
 static ssize_t irda_write(struct file *file, const char *buffer,
 			  size_t count, loff_t *noidea)
 {
-	DEBUG(0, __FUNCTION__ "()\n");
+	IRDA_DEBUG(0, __FUNCTION__ "()\n");
 	
 	return 0;
 }
 
 static u_int irda_poll(struct file *file, poll_table *wait)
 {
-	DEBUG(0, __FUNCTION__ "(), Sorry not implemented yet!\n");
+	IRDA_DEBUG(0, __FUNCTION__ "(), Sorry not implemented yet!\n");
 
 	return 0;
 }

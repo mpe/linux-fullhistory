@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:31 1997
- * Modified at:   Mon Sep 27 11:38:01 1999
+ * Modified at:   Tue Oct  5 15:17:14 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -63,7 +63,7 @@
  *  connection.
  */
 struct tsap_cb {
-	QUEUE   queue;        /* For linking it into the hashbin */
+	queue_t q;            /* Must be first */
 	magic_t magic;        /* Just in case */
 
 	__u8 stsap_sel;       /* Source TSAP */
@@ -88,7 +88,7 @@ struct tsap_cb {
 
 	notify_t notify;       /* Callbacks to client layer */
 
-	struct irda_statistics stats;
+	struct net_device_stats stats;
 	struct timer_list todo_timer; 
 	
 	__u32 max_seg_size;     /* Max data that fit into an IrLAP frame */

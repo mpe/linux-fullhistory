@@ -703,7 +703,7 @@ static int i2ob_release(struct inode *inode, struct file *file)
 		msg[2] = i2ob_context|0x80000000;
 		msg[3] = (u32)query_done;
 		msg[4] = 60<<16;
-		i2o_post_wait(dev->controller, dev->tid, msg, 20, query_done,2);
+		i2o_post_wait(dev->controller, msg, 20, 2);
 		/*
 		 *	Unlock the media
 		 */
@@ -712,7 +712,7 @@ static int i2ob_release(struct inode *inode, struct file *file)
 		msg[2] = i2ob_context|0x80000000;
 		msg[3] = (u32)query_done;
 		msg[4] = -1;
-		i2o_post_wait(dev->controller, dev->tid, msg, 20, query_done,2);
+		i2o_post_wait(dev->controller, msg, 20, 2);
 	
 		/*
  		 * Now unclaim the device.
@@ -766,7 +766,7 @@ static int i2ob_open(struct inode *inode, struct file *file)
 		msg[3] = (u32)query_done;
 		msg[4] = -1;
 		msg[5] = 0;
-		i2o_post_wait(dev->controller, dev->tid, msg, 24, query_done,2);
+		i2o_post_wait(dev->controller, msg, 24, 2);
 		/*
 		 *	Lock the media
 		 */
@@ -775,7 +775,7 @@ static int i2ob_open(struct inode *inode, struct file *file)
 		msg[2] = i2ob_context|0x80000000;
 		msg[3] = (u32)query_done;
 		msg[4] = -1;
-		i2o_post_wait(dev->controller, dev->tid, msg, 20, query_done,2);
+		i2o_post_wait(dev->controller, msg, 20, 2);
 	}		
 	MOD_INC_USE_COUNT;
 	return 0;
@@ -788,8 +788,8 @@ static int i2ob_open(struct inode *inode, struct file *file)
 static int i2ob_query_device(struct i2ob_device *dev, int table, 
 	int field, void *buf, int buflen)
 {
-	return i2o_query_scalar(dev->controller, dev->tid, i2ob_context,
-		table, field, buf, buflen, &dev->done_flag);
+	return i2o_query_scalar(dev->controller, dev->tid,
+		table, field, buf, buflen);
 }
 
 
@@ -891,7 +891,10 @@ static void i2ob_probe(void)
 
 		for(d=c->devices;d!=NULL;d=d->next)
 		{
-			if(d->class!=I2O_CLASS_RANDOM_BLOCK_STORAGE)
+			if(d->lct_data->class_id!=I2O_CLASS_RANDOM_BLOCK_STORAGE)
+				continue;
+
+			if(d->lct_data->user_tid != 0xFFF)
 				continue;
 
 			if(unit<MAX_I2OB<<4)
@@ -903,7 +906,7 @@ static void i2ob_probe(void)
 				struct i2ob_device *dev=&i2ob_dev[unit];
 				dev->i2odev = d; 
 				dev->controller = c;
-				dev->tid = d->id;
+				dev->tid = d->lct_data->tid;
  
 				/*
 				 * Insure the device can be claimed
@@ -930,9 +933,10 @@ static void i2ob_probe(void)
 			else
 			{
 				if(!warned++)
-					printk("i2o_block: too many controllers, registering only %d.\n", unit>>4);
+					printk("i2o_block: too many device, registering only %d.\n", unit>>4);
 			}
 		}
+		i2o_unlock_controller(c);
 	}
 	i2ob_devices = unit;
 }
@@ -981,7 +985,7 @@ static int i2ob_reboot_event(struct notifier_block *n, unsigned long code, void 
 			msg[2] = i2ob_context|0x80000000;
 			msg[3] = (u32)query_done;
 			msg[4] = 60<<16;
-			i2o_post_wait(dev->controller, dev->tid, msg, 20, query_done,2);
+			i2o_post_wait(dev->controller, msg, 20, 2);
 			/*
 			 *	Unlock the media
 			 */
@@ -990,7 +994,7 @@ static int i2ob_reboot_event(struct notifier_block *n, unsigned long code, void 
 			msg[2] = i2ob_context|0x80000000;
 			msg[3] = (u32)query_done;
 			msg[4] = -1;
-			i2o_post_wait(dev->controller, dev->tid, msg, 20, query_done,2);
+			i2o_post_wait(dev->controller, msg, 20, 2);
 		}
 	}	
 	return NOTIFY_DONE;
@@ -1058,7 +1062,7 @@ int i2o_block_init(void)
 {
 	int i;
 
-	printk(KERN_INFO "I2O block device OSM v0.07. (C) 1999 Red Hat Software.\n");
+	printk(KERN_INFO "I2O Block Storage OSM v0.07. (C) 1999 Red Hat Software.\n");
 	
 	/*
 	 *	Register the block device interfaces

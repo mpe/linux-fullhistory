@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Aug 21 00:02:07 1997
- * Modified at:   Thu Jul  1 10:10:42 1999
+ * Modified at:   Tue Oct  5 10:05:33 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997, 1999 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -57,7 +57,7 @@ typedef void (*CONFIRM_CALLBACK)(int result, __u16 obj_id,
 				 struct ias_value *value, void *priv);
 
 struct iriap_cb {
-	QUEUE   queue;  /* Must be first */	
+	queue_t q;      /* Must be first */	
 	magic_t magic;  /* Magic cookie */
 
 	int          mode;   /* Client or server */

@@ -65,7 +65,7 @@ extern int nr_free_pages;
 extern int nr_lru_pages;
 extern struct list_head lru_cache;
 extern atomic_t nr_async_pages;
-extern struct inode swapper_inode;
+extern struct address_space swapper_space;
 extern atomic_t page_cache_size;
 extern atomic_t buffermem_pages;
 

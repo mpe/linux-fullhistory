@@ -29,6 +29,8 @@
  *  Cleaned up cache-detection code
  *	Dave Jones <dave@powertweak.com>, October 1999
  *
+ *	Added proper L2 cache detection for Coppermine
+ *	Dragan Stancevic <visitor@valinux.com>, October 1999
  */
 
 /*
@@ -1237,6 +1239,7 @@ void __init identify_cpu(struct cpuinfo_x86 *c)
 				break;
 
 			case 0x42:
+			case 0x82: /*Detect 256-Kbyte cache on Coppermine*/
 				c->x86_cache_size = 256;
 				break;
 
