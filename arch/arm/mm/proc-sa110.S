@@ -7,6 +7,9 @@
  * functions on the StrongARM-110, StrongARM-1100 and StrongARM-1110.
  * 
  * Note that SA1100 and SA1110 share everything but their name and CPU ID.
+ *
+ * 12-jun-2000, Erik Mouw (J.A.K.Mouw@its.tudelft.nl):
+ *   Flush the read buffer at context switches
  */
 #include <linux/linkage.h>
 #include <asm/assembler.h>
@@ -82,6 +85,7 @@ cpu_sa1100_flush_cache_all_r2:
 		mov	ip, #0
 		teq	r2, #0
 		mcrne	p15, 0, ip, c7, c5, 0		@ flush I cache
+		mcr	p15, 0, r1, c9, c0, 0		@ flush RB
 		mcr	p15, 0, ip, c7, c10, 4		@ drain WB
 		mov	pc, lr
 
@@ -300,19 +304,18 @@ ENTRY(cpu_sa1100_flush_icache_page)
  * Params  : r0 = address of aborted instruction
  * Purpose : obtain information about current aborted instruction
  * Returns : r0 = address of abort
- *	   : r1 = FSR
- *	   : r2 != 0 if writing
+ *	   : r1 != 0 if writing
+ *	   : r3 = FSR
  */
 		.align	5
 ENTRY(cpu_sa110_data_abort)
 ENTRY(cpu_sa1100_data_abort)
-		ldr	r2, [r0]			@ read instruction causing problem
+		ldr	r1, [r0]			@ read instruction causing problem
 		mrc	p15, 0, r0, c6, c0, 0		@ get FAR
-		mov	r2, r2, lsr #19			@ b1 = L
-		and	r3, r2, #0x69 << 2
-		and	r2, r2, #2
-		mrc	p15, 0, r1, c5, c0, 0		@ get FSR
-		and	r1, r1, #255
+		mov	r1, r1, lsr #19			@ b1 = L
+		and	r1, r1, #2
+		mrc	p15, 0, r3, c5, c0, 0		@ get FSR
+		and	r3, r3, #255
 		mov	pc, lr
 
 		.align	5
@@ -351,6 +354,7 @@ ENTRY(cpu_sa1100_set_pgd)
 		flush_1100_dcache	r3, ip, r1
 		mov	r1, #0
 		mcr	p15, 0, r1, c7, c5, 0		@ flush I cache
+		mcr	p15, 0, r1, c9, c0, 0		@ flush RB
 		mcr	p15, 0, r1, c7, c10, 4		@ drain WB
 		mcr	p15, 0, r0, c2, c0, 0		@ load page table pointer
 		mcr	p15, 0, r1, c8, c7, 0		@ flush TLBs
@@ -423,7 +427,8 @@ ENTRY(cpu_sa1100_proc_init)
 
 ENTRY(cpu_sa110_proc_fin)
 		stmfd	sp!, {r1, lr}
-		msr	cpsr_c, #F_BIT | I_BIT | SVC_MODE
+		mov	ip, #F_BIT | I_BIT | SVC_MODE
+		msr	cpsr_c, ip
 		bl	cpu_sa110_flush_cache_all	@ clean caches
 1:		mov	r0, #0
 		mcr	p15, 0, r0, c15, c2, 2		@ Disable clock switching
@@ -435,7 +440,8 @@ ENTRY(cpu_sa110_proc_fin)
 
 ENTRY(cpu_sa1100_proc_fin)
 		stmfd	sp!, {r1, lr}
-		msr	cpsr_c, #F_BIT | I_BIT | SVC_MODE
+		mov	ip, #F_BIT | I_BIT | SVC_MODE
+		msr	cpsr_c, ip
 		bl	cpu_sa1100_flush_cache_all	@ clean caches
 		b	1b
 
@@ -501,7 +507,11 @@ cpu_sa1110_name:
 
 		.section ".text.init", #alloc, #execinstr
 
-__sa110_setup:	msr	cpsr_c, #F_BIT | I_BIT | SVC_MODE
+__sa1100_setup:	@ Allow read-buffer operations from userland
+		mcr	p15, 0, r0, c9, c0, 5
+
+__sa110_setup:	mov	r0, #F_BIT | I_BIT | SVC_MODE
+		msr	cpsr_c, r0
 		mov	r0, #0
 		mcr	p15, 0, r0, c7, c7		@ flush I,D caches on v4
 		mcr	p15, 0, r0, c7, c10, 4		@ drain write buffer on v4
@@ -623,7 +633,7 @@ __sa1100_proc_info:
 		.long	0x4401a110
 		.long	0xfffffff0
 		.long	0x00000c02
-		b	__sa110_setup
+		b	__sa1100_setup
 		.long	cpu_arch_name
 		.long	cpu_elf_name
 		.long	HWCAP_SWP | HWCAP_HALF | HWCAP_26BIT
@@ -636,7 +646,7 @@ __sa1110_proc_info:
 		.long	0x6901b110
 		.long	0xfffffff0
 		.long	0x00000c02
-		b	__sa110_setup
+		b	__sa1100_setup
 		.long	cpu_arch_name
 		.long	cpu_elf_name
 		.long	HWCAP_SWP | HWCAP_HALF | HWCAP_26BIT

@@ -148,7 +148,7 @@ void fake_drq(int irq, void *dev_id, struct pt_regs *pregs)
 #define DRIVER_SETUP
 
 /*
- * Function : mac_scsi_setup(char *str, int *ints)
+ * Function : mac_esp_setup(char *str, int *ints)
  *
  * Purpose : booter command line initialization of the overrides array,
  *
@@ -160,7 +160,7 @@ void fake_drq(int irq, void *dev_id, struct pt_regs *pregs)
  *
  */
 
-void mac_esp_setup(char *str, int *ints) {
+static int __init mac_esp_setup(char *str, int *ints) {
 #ifdef DRIVER_SETUP
 	/* Format of mac53c9x parameter is:
 	 *   mac53c9x=<num_esps>,<disconnect>,<nosync>,<can_queue>,<cmd_per_lun>,<sg_tablesize>,<hostid>,<use_tags>
@@ -186,7 +186,7 @@ void mac_esp_setup(char *str, int *ints) {
 	
 	if (ints[0] < 1) {
 		printk( "mac_esp_setup: no arguments!\n" );
-		return;
+		return 0;
 	}
 
 	if (ints[0] >= 1) {
@@ -237,6 +237,7 @@ void mac_esp_setup(char *str, int *ints) {
 	}
 #endif
 #endif
+	return 1; 
 }
 
 __setup("mac53c9x=", mac_esp_setup);

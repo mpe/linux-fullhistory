@@ -538,13 +538,18 @@ USER(		ldrget	r3, [r1], #0)			@ May fault
 
 		.section .fixup,"ax"
 		.align	0
-		/* We took an exception.  Zero out the buffer and pretend no
-		   data was copied.  */
-9001:		ldr	r0, [sp], #4
-		ldr	r1, [sp]
-		teq	r1, #0
+		/*
+		 * We took an exception.  r0 contains a pointer to
+		 * the byte not copied.
+		 */
+9001:		ldr	r2, [sp], #4			@ void *to
+		sub	r2, r0, r2			@ bytes copied
+		ldr	r1, [sp], #4			@ unsigned long count
+		subs	r4, r1, r2			@ bytes left to copy
+		movne	r1, r4
 		blne	SYMBOL_NAME(__memzero)
-		LOADREGS(fd,sp!, {r0, r4 - r7, pc})
+		mov	r0, r4
+		LOADREGS(fd,sp!, {r4 - r7, pc})
 		.previous
 
 /* Prototype: int __arch_clear_user(void *addr, size_t sz)

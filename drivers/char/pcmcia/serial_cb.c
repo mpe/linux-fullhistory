@@ -92,6 +92,7 @@ static dev_node_t *serial_attach(dev_locator_t *loc)
     if (loc->bus != LOC_PCI) goto err_out;
     pdev = pci_find_slot (loc->b.pci.bus, loc->b.pci.devfn);
     if (!pdev) goto err_out;
+    if (pci_enable_device(pdev)) goto err_out;
 
     printk(KERN_INFO "serial_attach(bus %d, fn %d)\n", pdev->bus->number, pdev->devfn);
     io = pci_resource_start (pdev, 0);

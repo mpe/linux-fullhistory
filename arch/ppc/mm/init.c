@@ -94,6 +94,7 @@ unsigned long avail_start;
 extern int num_memory;
 extern struct mem_info memory[];
 extern boot_infos_t *boot_infos;
+extern unsigned int rtas_data, rtas_size;
 #ifndef CONFIG_SMP
 struct pgtable_cache_struct quicklists;
 #endif
@@ -116,21 +117,26 @@ unsigned long *m8260_find_end_of_memory(void);
 #endif /* CONFIG_8260 */
 static void mapin_ram(void);
 void map_page(unsigned long va, unsigned long pa, int flags);
+void set_phys_avail(struct mem_pieces *mp);
 extern void die_if_kernel(char *,struct pt_regs *,long);
 
-struct mem_pieces phys_mem;
-
+extern char _start[], _end[];
+extern char _stext[], etext[];
 extern struct task_struct *current_set[NR_CPUS];
 
-PTE *Hash, *Hash_end;
-unsigned long Hash_size, Hash_mask;
+struct mem_pieces phys_mem;
+char *klimit = _end;
+struct mem_pieces phys_avail;
+
+PTE *Hash=0, *Hash_end;
+unsigned long Hash_size=0, Hash_mask;
 #if !defined(CONFIG_4xx) && !defined(CONFIG_8xx)
-unsigned long _SDR1;
+unsigned long _SDR1=0;
 static void hash_init(void);
 
 union ubat {			/* BAT register values to be loaded */
 	BAT	bat;
-#ifdef CONFIG_PPC64
+#ifdef CONFIG_PPC64BRIDGE
 	u64	word[2];
 #else
 	u32	word[2];
@@ -479,7 +485,8 @@ map_page(unsigned long va, unsigned long pa, int flags)
 	if (pmd_none(oldpd) && mem_init_done)
 		set_pgdir(va, *(pgd_t *)pd);
 	set_pte(pg, mk_pte_phys(pa & PAGE_MASK, __pgprot(flags)));
-	flush_hash_page(0, va);
+	if (mem_init_done)
+		flush_hash_page(0, va);
 }
 
 #ifndef CONFIG_8xx
@@ -503,11 +510,16 @@ map_page(unsigned long va, unsigned long pa, int flags)
 void
 local_flush_tlb_all(void)
 {
+#ifdef CONFIG_PPC64BRIDGE
+	/* XXX this assumes that the vmalloc arena starts no lower than
+	 * 0xd0000000 on 64-bit machines. */
+	flush_hash_segments(0xd, 0xffffff);
+#else
 	__clear_user(Hash, Hash_size);
-	_tlbia();
 #ifdef CONFIG_SMP
 	smp_send_tlb_invalidate(0);
-#endif	
+#endif /* CONFIG_SMP */
+#endif /* CONFIG_PPC64BRIDGE */
 }
 
 /*
@@ -591,7 +603,10 @@ mmu_context_overflow(void)
 	atomic_set(&next_mmu_context, 0);
 	/* make sure current always has a context */
 	current->mm->context = MUNGE_CONTEXT(atomic_inc_return(&next_mmu_context));
-	set_context(current->mm->context);
+	/* The PGD is only a placeholder.  It is only used on
+	 * 8xx processors.
+	 */
+	set_context(current->mm->context, current->mm->pgd);
 }
 #endif /* CONFIG_8xx */
 
@@ -690,7 +705,7 @@ static void __init mapin_ram(void)
 	int i;
 	unsigned long v, p, s, f;
 
-#if !defined(CONFIG_4xx) && !defined(CONFIG_8xx)
+#if !defined(CONFIG_4xx) && !defined(CONFIG_8xx) && !defined(CONFIG_POWER4)
 	if (!__map_without_bats) {
 		unsigned long tot, mem_base, bl, done;
 		unsigned long max_size = (256<<20);
@@ -725,7 +740,7 @@ static void __init mapin_ram(void)
 			       RAM_PAGE);
 		}
 	}
-#endif /* !CONFIG_4xx && !CONFIG_8xx */
+#endif /* !CONFIG_4xx && !CONFIG_8xx && !CONFIG_POWER4 */
 
 	for (i = 0; i < phys_mem.n_regions; ++i) {
 		v = (ulong)__va(phys_mem.regions[i].address);
@@ -940,9 +955,7 @@ void __init MMU_init(void)
 
 	if ( ppc_md.progress ) ppc_md.progress("MMU:hash init", 0x300);
         hash_init();
-#ifdef CONFIG_PPC64
-	_SDR1 = __pa(Hash) | (ffz(~Hash_size) - 7)-11;
-#else
+#ifndef CONFIG_PPC64BRIDGE
         _SDR1 = __pa(Hash) | (Hash_mask >> 10);
 #endif
 	
@@ -952,6 +965,11 @@ void __init MMU_init(void)
 	/* Map in all of RAM starting at KERNELBASE */
 	mapin_ram();
 
+#ifdef CONFIG_POWER4
+	ioremap_base = ioremap_bot = 0xfffff000;
+	isa_io_base = (unsigned long) ioremap(0xffd00000, 0x200000) + 0x100000;
+
+#else /* CONFIG_POWER4 */
 	/*
 	 * Setup the bat mappings we're going to load that cover
 	 * the io areas.  RAM was mapped by mapin_ram().
@@ -966,26 +984,15 @@ void __init MMU_init(void)
 		break;
 	case _MACH_chrp:
 		setbat(0, 0xf8000000, 0xf8000000, 0x08000000, IO_PAGE);
-#ifdef CONFIG_PPC64
-		/* temporary hack to get working until page tables are stable -- Cort*/
-/*		setbat(1, 0x80000000, 0xc0000000, 0x10000000, IO_PAGE);*/
-		setbat(3, 0xd0000000, 0xd0000000, 0x10000000, IO_PAGE);
+#ifdef CONFIG_PPC64BRIDGE
+		setbat(1, 0x80000000, 0xc0000000, 0x10000000, IO_PAGE);
 #else
 		setbat(1, 0x80000000, 0x80000000, 0x10000000, IO_PAGE);
 		setbat(3, 0x90000000, 0x90000000, 0x10000000, IO_PAGE);
-#endif		
+#endif
 		break;
 	case _MACH_Pmac:
-#if 0
-		{
-			unsigned long base = 0xf3000000;
-			struct device_node *macio = find_devices("mac-io");
-			if (macio && macio->n_addrs)
-				base = macio->addrs[0].address;
-			setbat(0, base, base, 0x100000, IO_PAGE);
-		}
-#endif
-		ioremap_base = 0xf0000000;
+		ioremap_base = 0xf8000000;
 		break;
 	case _MACH_apus:
 		/* Map PPC exception vectors. */
@@ -1009,6 +1016,7 @@ void __init MMU_init(void)
 		break;
 	}
 	ioremap_bot = ioremap_base;
+#endif /* CONFIG_POWER4 */
 #else /* CONFIG_8xx */
 
 	end_of_DRAM = m8xx_find_end_of_memory();
@@ -1080,6 +1088,7 @@ void __init do_init_bootmem(void)
 
 	/* remove the bootmem bitmap from the available memory */
 	mem_pieces_remove(&phys_avail, start, boot_mapsize, 1);
+
 	/* add everything in phys_avail into the bootmem map */
 	for (i = 0; i < phys_avail.n_regions; ++i)
 		free_bootmem(phys_avail.regions[i].address,
@@ -1159,9 +1168,6 @@ void __init mem_init(void)
 	int codepages = 0;
 	int datapages = 0;
 	int initpages = 0;
-#if defined(CONFIG_ALL_PPC)	
-	extern unsigned int rtas_data, rtas_size;
-#endif /* defined(CONFIG_ALL_PPC) */
 	max_mapnr = max_low_pfn;
 	high_memory = (void *) __va(max_low_pfn * PAGE_SIZE);
 	num_physpages = max_mapnr;	/* RAM is assumed contiguous */
@@ -1223,13 +1229,7 @@ void __init mem_init(void)
 unsigned long __init *pmac_find_end_of_memory(void)
 {
 	unsigned long a, total;
-	unsigned long ram_limit = 0xf0000000 - KERNELBASE;
-	/* allow 0x08000000 for IO space */
-	if ( _machine & (_MACH_prep|_MACH_Pmac) )
-		ram_limit = 0xd8000000 - KERNELBASE;
-#ifdef CONFIG_PPC64
-	ram_limit = 64<<20;
-#endif
+	unsigned long ram_limit = 0xe0000000 - KERNELBASE;
 
 	memory_node = find_devices("memory");
 	if (memory_node == NULL) {
@@ -1422,27 +1422,42 @@ unsigned long __init *apus_find_end_of_memory(void)
  */
 static void __init hash_init(void)
 {
-	int Hash_bits;
-	unsigned long h, ramsize;
+	int Hash_bits, mb, mb2;
+	unsigned int hmask, ramsize, h;
 
 	extern unsigned int hash_page_patch_A[], hash_page_patch_B[],
 		hash_page_patch_C[], hash_page[];
+
+	ramsize = (ulong)end_of_DRAM - KERNELBASE;
+#ifdef CONFIG_PPC64BRIDGE
+	/* The hash table has already been allocated and initialized
+	   in prom.c */
+	Hash_mask = (Hash_size >> 7) - 1;
+	hmask = Hash_mask >> 9;
+	Hash_bits = __ilog2(Hash_size) - 7;
+	mb = 25 - Hash_bits;
+	if (Hash_bits > 16)
+		Hash_bits = 16;
+	mb2 = 25 - Hash_bits;
+
+#else /* CONFIG_PPC64BRIDGE */
 
 	if ( ppc_md.progress ) ppc_md.progress("hash:enter", 0x105);
 	/*
 	 * Allow 64k of hash table for every 16MB of memory,
 	 * up to a maximum of 2MB.
 	 */
-	ramsize = (ulong)end_of_DRAM - KERNELBASE;
-	for (h = 64<<10; h < ramsize / 256 && h < 2<<20; h *= 2)
+	for (h = 64<<10; h < ramsize / 256 && h < (2<<20); h *= 2)
 		;
 	Hash_size = h;
-#ifdef CONFIG_PPC64
-	Hash_mask = (h >> 7) - 1;
-#else	
 	Hash_mask = (h >> 6) - 1;
-#endif	
-	
+	hmask = Hash_mask >> 10;
+	Hash_bits = __ilog2(h) - 6;
+	mb = 26 - Hash_bits;
+	if (Hash_bits > 16)
+		Hash_bits = 16;
+	mb2 = 26 - Hash_bits;
+
 	/* shrink the htab since we don't use it on 603's -- Cort */
 	switch (_get_PVR()>>16) {
 	case 3: /* 603 */
@@ -1459,50 +1474,36 @@ static void __init hash_init(void)
 	
 	if ( ppc_md.progress ) ppc_md.progress("hash:find piece", 0x322);
 	/* Find some memory for the hash table. */
-	if ( Hash_size )
+	if ( Hash_size ) {
 		Hash = mem_pieces_find(Hash_size, Hash_size);
-	else
+		/*__clear_user(Hash, Hash_size);*/
+	} else
 		Hash = 0;
+#endif /* CONFIG_PPC64BRIDGE */
 
-	printk("Total memory = %ldMB; using %ldkB for hash table (at %p)\n",
+	printk("Total memory = %dMB; using %ldkB for hash table (at %p)\n",
 	       ramsize >> 20, Hash_size >> 10, Hash);
 	if ( Hash_size )
 	{
 		if ( ppc_md.progress ) ppc_md.progress("hash:patch", 0x345);
 		Hash_end = (PTE *) ((unsigned long)Hash + Hash_size);
-		/*__clear_user(Hash, Hash_size);*/
 
 		/*
 		 * Patch up the instructions in head.S:hash_page
 		 */
-#ifdef CONFIG_PPC64		
-		Hash_bits = ffz(~Hash_size) - 7;
-#else
-		Hash_bits = ffz(~Hash_size) - 6;
-#endif		
 		hash_page_patch_A[0] = (hash_page_patch_A[0] & ~0xffff)
 			| (__pa(Hash) >> 16);
 		hash_page_patch_A[1] = (hash_page_patch_A[1] & ~0x7c0)
-			| ((26 - Hash_bits) << 6);
-		if (Hash_bits > 16)
-			Hash_bits = 16;
+			| (mb << 6);
 		hash_page_patch_A[2] = (hash_page_patch_A[2] & ~0x7c0)
-			| ((26 - Hash_bits) << 6);
+			| (mb2 << 6);
 		hash_page_patch_B[0] = (hash_page_patch_B[0] & ~0xffff)
-#ifdef CONFIG_PPC64			
-			| (Hash_mask >> 11);
-#else
-			| (Hash_mask >> 10);
-#endif		
+			| hmask;
 		hash_page_patch_C[0] = (hash_page_patch_C[0] & ~0xffff)
-#ifdef CONFIG_PPC64			
-			| (Hash_mask >> 11);
-#else
-			| (Hash_mask >> 10);
-#endif		
+			| hmask;
 #if 0	/* see hash_page in head.S, note also patch_C ref below */
 		hash_page_patch_D[0] = (hash_page_patch_D[0] & ~0xffff)
-			| (Hash_mask >> 10);
+			| hmask;
 #endif
 		/*
 		 * Ensure that the locations we've patched have been written
@@ -1579,3 +1580,48 @@ oak_find_end_of_memory(void)
 	return (ret);
 }
 #endif
+
+/*
+ * Set phys_avail to phys_mem less the kernel text/data/bss.
+ */
+void __init
+set_phys_avail(struct mem_pieces *mp)
+{
+	unsigned long kstart, ksize;
+
+	/*
+	 * Initially, available phyiscal memory is equivalent to all
+	 * physical memory.
+	 */
+
+	phys_avail = *mp;
+
+	/*
+	 * Map out the kernel text/data/bss from the available physical
+	 * memory.
+	 */
+
+	kstart = __pa(_stext);	/* should be 0 */
+	ksize = PAGE_ALIGN(klimit - _stext);
+
+	mem_pieces_remove(&phys_avail, kstart, ksize, 0);
+	mem_pieces_remove(&phys_avail, 0, 0x4000, 0);
+
+#if defined(CONFIG_BLK_DEV_INITRD)
+	/* Remove the init RAM disk from the available memory. */
+	if (initrd_start) {
+		mem_pieces_remove(&phys_avail, __pa(initrd_start),
+				  initrd_end - initrd_start, 1);
+	}
+#endif /* CONFIG_BLK_DEV_INITRD */
+#ifdef CONFIG_ALL_PPC
+	/* remove the RTAS pages from the available memory */
+	if (rtas_data)
+		mem_pieces_remove(&phys_avail, rtas_data, rtas_size, 1);
+#endif /* CONFIG_ALL_PPC */
+#ifdef CONFIG_PPC64BRIDGE
+	/* Remove the hash table from the available memory */
+	if (Hash)
+		mem_pieces_remove(&phys_avail, __pa(Hash), Hash_size, 1);
+#endif /* CONFIG_PPC64BRIDGE */
+}

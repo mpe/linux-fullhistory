@@ -9,7 +9,7 @@
 
 #ifdef __GNUC__
 
-extern __inline__ unsigned ld_le16(volatile unsigned short *addr)
+extern __inline__ unsigned ld_le16(const volatile unsigned short *addr)
 {
 	unsigned val;
 
@@ -17,12 +17,12 @@ extern __inline__ unsigned ld_le16(volatile unsigned short *addr)
 	return val;
 }
 
-extern __inline__ void st_le16(volatile unsigned short *addr, unsigned val)
+extern __inline__ void st_le16(volatile unsigned short *addr, const unsigned val)
 {
 	__asm__ __volatile__ ("sthbrx %1,0,%2" : "=m" (*addr) : "r" (val), "r" (addr));
 }
 
-extern __inline__ unsigned ld_le32(volatile unsigned *addr)
+extern __inline__ unsigned ld_le32(const volatile unsigned *addr)
 {
 	unsigned val;
 
@@ -30,7 +30,7 @@ extern __inline__ unsigned ld_le32(volatile unsigned *addr)
 	return val;
 }
 
-extern __inline__ void st_le32(volatile unsigned *addr, unsigned val)
+extern __inline__ void st_le32(volatile unsigned *addr, const unsigned val)
 {
 	__asm__ __volatile__ ("stwbrx %1,0,%2" : "=m" (*addr) : "r" (val), "r" (addr));
 }

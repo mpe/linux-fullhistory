@@ -89,26 +89,26 @@ extern unsigned long empty_zero_page[1024];
 #define VMALLOC_VMADDR(x) ((unsigned long)(x))
 #define VMALLOC_END	P4SEG
 
-#define _PAGE_READ 	0x001  /* software: read access allowed */
+#define _PAGE_PRESENT	0x001  /* software: page is present */
 #define _PAGE_ACCESSED	0x002  /* software: page referenced */
 #define _PAGE_DIRTY	0x004  /* D-bit   : page changed */
 #define _PAGE_CACHABLE	0x008  /* C-bit   : cachable */
-/*		 	0x010  */
+/*		 	0x010     SZ-bit  : size of page */
 #define _PAGE_RW	0x020  /* PR0-bit : write access allowed */
 #define _PAGE_USER	0x040  /* PR1-bit : user space access allowed */
 #define _PAGE_PROTNONE	0x080  /* software: if not present */
-#define _PAGE_PRESENT	0x100  /* V-bit   : page is valid */
+/*			0x100     V-bit   : page is valid */
 
 #if defined(__sh3__)
 /* Mask which drop software flags */
-#define _PAGE_FLAGS_HARDWARE_MASK	0x1ffff16c
+#define _PAGE_FLAGS_HARDWARE_MASK	0x1ffff06c
 /* Flags defalult: SZ=1 (4k-byte), C=0 (non-cachable), SH=0 (not shared) */
-#define _PAGE_FLAGS_HARDWARE_DEFAULT	0x00000010
+#define _PAGE_FLAGS_HARDWARE_DEFAULT	0x00000110
 #elif defined(__SH4__)
 /* Mask which drops software flags */
-#define _PAGE_FLAGS_HARDWARE_MASK	0x1ffff16c
+#define _PAGE_FLAGS_HARDWARE_MASK	0x1ffff06c
 /* Flags defalult: SZ=01 (4k-byte), C=0 (non-cachable), SH=0 (not shared), WT=0 */
-#define _PAGE_FLAGS_HARDWARE_DEFAULT	0x00000010
+#define _PAGE_FLAGS_HARDWARE_DEFAULT	0x00000110
 #endif
 
 #define _PAGE_TABLE	(_PAGE_PRESENT | _PAGE_RW | _PAGE_USER | _PAGE_ACCESSED | _PAGE_DIRTY)

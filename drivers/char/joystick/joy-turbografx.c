@@ -101,6 +101,7 @@ static int js_tg_read(void *xinfo, int **axes, int **buttons)
 
 /*
  * open callback: claim parport.
+ * FIXME: race possible here.
  */
 
 int js_tg_open(struct js_dev *dev)
@@ -205,7 +206,7 @@ static struct js_port __init *js_tg_probe(int *config, struct js_port *port)
 	for (i = 0; i < 7; i++)
 		if (config[i+1] > 0 && config[i+1] < 6) {
 			printk(KERN_INFO "js%d: Multisystem joystick on %s\n",
-				js_register_device(port, i, 2, config[i+1], "Multisystem joystick", js_tg_open, js_tg_close),
+				js_register_device(port, i, 2, config[i+1], "Multisystem joystick", NULL, js_tg_open, js_tg_close),
 				info->port->port->name);
 			info->sticks |= (1 << i);
 		}

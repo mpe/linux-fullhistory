@@ -154,21 +154,29 @@ static inline void do_set_rtc(void)
 
 static void do_leds(void)
 {
-	static unsigned int count = 50;
-	static int last_pid;
+#ifdef CONFIG_LEDS_CPU
+	{
+		static int last_pid;
 
-	if (current->pid != last_pid) {
-		last_pid = current->pid;
-		if (last_pid)
-			leds_event(led_idle_end);
-		else
-			leds_event(led_idle_start);
+		if (current->pid != last_pid) {
+			last_pid = current->pid;
+			if (last_pid)
+				leds_event(led_idle_end);
+			else
+				leds_event(led_idle_start);
+		}
 	}
-		
-	if (--count == 0) {
-		count = 50;
-		leds_event(led_timer);
+#endif
+#ifdef CONFIG_LEDS_TIMER
+	{
+		static unsigned int count = 50;
+
+		if (--count == 0) {
+			count = 50;
+			leds_event(led_timer);
+		}
 	}
+#endif
 }
 #else
 #define do_leds()

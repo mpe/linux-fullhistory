@@ -1,6 +1,6 @@
 # $Id: config.in,v 1.106 1999/09/14 19:21:18 cort Exp $
 # For a description of the syntax of this configuration file,
-# see the Configure script.
+# see Documentation/kbuild/config-language.txt.
 #
 define_bool CONFIG_UID16 n
 
@@ -17,10 +17,14 @@ define_bool CONFIG_PPC y
 choice 'Processor Type'	\
 	"6xx/7xx/7400		CONFIG_6xx	\
 	 4xx			CONFIG_4xx	\
-	 630/Power3(64-Bit)	CONFIG_PPC64	\
+	 POWER3/POWER4(64-Bit)	CONFIG_PPC64BRIDGE	\
 	 8260			CONFIG_8260	\
 	 8xx			CONFIG_8xx"	6xx
 
+if [ "$CONFIG_PPC64BRIDGE" = "y" ]; then
+  bool 'Power 4 support'	CONFIG_POWER4
+fi
+ 
 if [ "$CONFIG_8260" = "y" ]; then
   define_bool CONFIG_6xx y
   define_bool CONFIG_SERIAL_CONSOLE y
@@ -34,14 +38,6 @@ fi
 
 if [ "$CONFIG_8xx" = "y" ]; then
   define_bool CONFIG_SERIAL_CONSOLE y
-
-  choice 'Processor Model'	\
-	"821		CONFIG_MPC821		\
-	 823		CONFIG_MPC823		\
-	 850		CONFIG_MPC850		\
-	 855		CONFIG_MPC855		\
-	 860		CONFIG_MPC860		\
-	 860T		CONFIG_MPC860T"		860
 
   choice 'Machine Type'		\
 	"RPX-Lite	CONFIG_RPXLITE		\
@@ -58,7 +54,7 @@ if [ "$CONFIG_6xx" = "y" ]; then
 	 APUS		CONFIG_APUS"		PowerMac/PReP/MTX/CHRP
 fi
 
-if [ "$CONFIG_PPC64" = "y" ]; then
+if [ "$CONFIG_PPC64BRIDGE" = "y" ]; then
   define_bool CONFIG_ALL_PPC y
 fi
 
@@ -99,7 +95,7 @@ if [ "$CONFIG_APUS" = "y" -o "$CONFIG_4xx" = "y" -o \
      "$CONFIG_8260" = "y" ]; then
    define_bool CONFIG_PCI n
 else
-   if [ "$CONFIG_6xx" = "y" -o "$CONFIG_PPC64" = "y" ]; then
+   if [ "$CONFIG_6xx" = "y" -o "$CONFIG_PPC64BRIDGE" = "y" ]; then
       define_bool CONFIG_PCI y
    else
    # CONFIG_8xx
@@ -161,7 +157,7 @@ fi
 if [ "$CONFIG_PREP" = "y" -o "$CONFIG_ALL_PPC" = "y" ]; then
   bool 'PReP bootloader kernel arguments' CONFIG_CMDLINE_BOOL y
   if [ "$CONFIG_CMDLINE_BOOL" = "y" ] ; then
-    string 'Initial kernel command string' CONFIG_CMDLINE console=ttyS0,9600 console=tty0 root=/dev/sda2
+    string 'Initial kernel command string' CONFIG_CMDLINE "console=ttyS0,9600 console=tty0 root=/dev/sda2"
   fi
 fi
 

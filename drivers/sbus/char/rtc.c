@@ -1,4 +1,4 @@
-/* $Id: rtc.c,v 1.19 2000/02/09 22:33:26 davem Exp $
+/* $Id: rtc.c,v 1.20 2000/06/19 06:24:47 davem Exp $
  *
  * Linux/SPARC Real Time Clock Driver
  * Copyright (C) 1996 Thomas K. Dyas (tdyas@eden.rutgers.edu)
@@ -124,19 +124,17 @@ static int rtc_open(struct inode *inode, struct file *file)
 
 	rtc_busy = 1;
 
-	MOD_INC_USE_COUNT;
-
 	return 0;
 }
 
 static int rtc_release(struct inode *inode, struct file *file)
 {
-	MOD_DEC_USE_COUNT;
 	rtc_busy = 0;
 	return 0;
 }
 
 static struct file_operations rtc_fops = {
+	owner:		THIS_MODULE,
 	llseek:		rtc_lseek,
 	ioctl:		rtc_ioctl,
 	open:		rtc_open,

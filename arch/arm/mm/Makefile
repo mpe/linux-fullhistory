@@ -22,6 +22,9 @@ ifeq ($(CONFIG_CPU_32),y)
   ifeq ($(CONFIG_CPU_ARM7),y)
     P_OBJS	+= proc-arm6,7.o
   endif
+  ifeq ($(CONFIG_CPU_ARM720),y)
+    P_OBJS	+= proc-arm720.o
+  endif
   ifeq ($(CONFIG_CPU_SA110),y)
     P_OBJS	+= proc-sa110.o
   endif
@@ -41,5 +44,6 @@ fault-armv.o: fault-common.c
 fault-armo.o: fault-common.c
 proc-arm2,3.o:	../lib/constants.h
 proc-arm6,7.o:	../lib/constants.h
+proc-arm720.o:	../lib/constants.h
 proc-sa110.o:	../lib/constants.h
 

@@ -1,9 +1,7 @@
-			   ARM Linux 2.2.3
-			   ===============
+			   ARM Linux 2.4.0test1
+			   ====================
 
-      * NOTE * The ARM support in the mainstream Linux kernel sources
-    is not up to date.  Please check ftp.arm.uk.linux.org:/pub/armlinux
-                             for latest updates.
+    Please check ftp.arm.linux.org.uk:/pub/armlinux for latest updates.
 
 Compilation of kernel
 ---------------------
@@ -13,10 +11,10 @@ Compilation of kernel
   and EGCS are good compilers.  Note that GCC-2.7.2.2 ELF is rare, and
   you probably don't have it.
 
-  To build ARM Linux natively, you shouldn't have to alter the ARCH = line in
-  the top level Makefile.  However, if you don't have the ARM Linux ELF tools
-  installed as default, then you should change the CROSS_COMPILE line as
-  detailed below.
+  To build ARM Linux natively, you shouldn't have to alter the ARCH = line
+  in the top level Makefile.  However, if you don't have the ARM Linux ELF
+  tools installed as default, then you should change the CROSS_COMPILE
+  line as detailed below.
 
   If you wish to cross-compile, then alter the following lines in the top
   level make file:
@@ -41,27 +39,28 @@ Compilation of kernel
 Bug reports etc
 ---------------
 
-  Please send patches, bug reports and code for the ARM Linux project
-  to linux@arm.linux.org.uk  Patches will not be included into future
-  kernels unless they come to me (or the relevant person concerned).
+  Please send patches to the patch system.  For more information, see
+  http://www.arm.linux.org.uk/patches/info.html  Always include some
+  explanation as to what the patch does and why it is needed.
+
+  Bug reports should be sent to linux-arm-kernel@lists.arm.linux.org.uk,
+  or submitted through the web form at
+  http://www.arm.linux.org.uk/forms/solution.shtml
 
   When sending bug reports, please ensure that they contain all relevant
   information, eg. the kernel messages that were printed before/during
   the problem, what you were doing, etc.
-
-  For patches, please include some explanation as to what the patch does
-  and why (if relevant).
 
 
 Modules
 -------
 
   Although modularisation is supported (and required for the FP emulator),
-  each module on an arm2/arm250/arm3 machine when is loaded will take
-  memory up to the next 32k boundary due to the size of the pages.  Hence is
-  modularisation on these machines really worth it?
+  each module on an ARM2/ARM250/ARM3 machine when is loaded will take
+  memory up to the next 32k boundary due to the size of the pages.
+  Therefore, modularisation on these machines really worth it?
 
-  However, arm6 and up machines allow modules to take multiples of 4k, and
+  However, ARM6 and up machines allow modules to take multiples of 4k, and
   as such Acorn RiscPCs and other architectures using these processors can
   make good use of modularisation.
 
@@ -124,7 +123,7 @@ Kernel entry (head-armv.S)
   The initial entry into the kernel made via head-armv.S uses architecture
   independent code.  The architecture is selected by the value of 'r1' on
   entry, which must be kept unique.  You can register a new architecture
-  by mailing the following details to rmk@arm.uk.linux.org.  Please give
+  by mailing the following details to rmk@arm.linux.org.uk  Please give
   the mail a subject of 'Register new architecture':
 
     Name: <name of your architecture>
@@ -133,7 +132,7 @@ Kernel entry (head-armv.S)
     <description of your architecture>
 
   Please follow this format - it is an automated system.  You should
-  receive a reply the next day.
+  receive a reply within one day.
 
 ---
-Russell King (27/03/1999)
+Russell King (12/06/2000)

@@ -9,9 +9,6 @@
  *
  */
 
-#include <asm/arch/hardware.h>
-#include <asm/arch/irqs.h>
-
 
 /* IRQs are disabled before entering here from do_gettimeofday() */
 static unsigned long sa1100_gettimeoffset (void)
@@ -33,16 +30,22 @@ static unsigned long sa1100_gettimeoffset (void)
 
 static void sa1100_timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
+	long flags;
 	int next_match;
 
 	/* Loop until we get ahead of the free running timer.
 	 * This ensures an exact clock tick count and time acuracy.
-	 * Should be IRQ race free.
+	 * IRQs are disabled inside the loop to ensure coherence between
+	 * lost_ticks (updated in do_timer()) and the match reg value, so we
+	 * can use do_gettimeofday() from interrupt handlers.
 	 */
 	do {
+		do_leds();
+		save_flags_cli( flags );
 		do_timer(regs);
 		OSSR = OSSR_M0;  /* Clear match on timer 0 */
 		next_match = (OSMR0 += LATCH);
+		restore_flags( flags );
 	} while( (signed long)(next_match - OSCR) <= 0 );
 }
 

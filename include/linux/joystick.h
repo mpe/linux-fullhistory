@@ -219,6 +219,7 @@ struct js_dev {
 	int num_buttons;
 	char *name;
 	devfs_handle_t devfs_handle;
+	struct module *owner;
 };
 
 struct js_list {
@@ -251,7 +252,7 @@ extern struct js_port *js_register_port(struct js_port *port, void *info,
 extern struct js_port *js_unregister_port(struct js_port *port);
 
 extern int js_register_device(struct js_port *port, int number, int axes,
-	int buttons, char *name, js_ops_func open, js_ops_func close);
+	int buttons, char *name, struct module *owner, js_ops_func open, js_ops_func close);
 extern void js_unregister_device(struct js_dev *dev);
 
 /*

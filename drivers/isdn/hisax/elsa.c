@@ -1058,20 +1058,20 @@ setup_elsa(struct IsdnCard *card)
 		cs->subtyp = 0;
 		if ((dev_qs1000 = pci_find_device(PCI_VENDOR_ELSA, PCI_QS1000_ID,
 			 dev_qs1000))) {
-				cs->subtyp = ELSA_QS1000PCI;
+			if (pci_enable_device(dev_qs1000))
+				return (0);
+			cs->subtyp = ELSA_QS1000PCI;
 			cs->irq = dev_qs1000->irq;
-			cs->hw.elsa.cfg = dev_qs1000->resource[ 1].start & 
-				PCI_BASE_ADDRESS_IO_MASK;
-			cs->hw.elsa.base = dev_qs1000->resource[ 3].start & 
-				PCI_BASE_ADDRESS_IO_MASK;
+			cs->hw.elsa.cfg = pci_resource_start(dev_qs1000, 1);
+			cs->hw.elsa.base = pci_resource_start(dev_qs1000, 3);
 		} else if ((dev_qs3000 = pci_find_device(PCI_VENDOR_ELSA,
 			PCI_QS3000_ID, dev_qs3000))) {
+			if (pci_enable_device(dev_qs1000))
+				return (0);
 			cs->subtyp = ELSA_QS3000PCI;
 			cs->irq = dev_qs3000->irq;
-			cs->hw.elsa.cfg = dev_qs3000->resource[ 1].start & 
-				PCI_BASE_ADDRESS_IO_MASK;
-			cs->hw.elsa.base = dev_qs3000->resource[ 3].start & 
-				PCI_BASE_ADDRESS_IO_MASK;
+			cs->hw.elsa.cfg = pci_resource_start(dev_qs3000, 1);
+			cs->hw.elsa.base = pci_resource_start(dev_qs3000, 3);
 		} else {
 			printk(KERN_WARNING "Elsa: No PCI card found\n");
 			return(0);

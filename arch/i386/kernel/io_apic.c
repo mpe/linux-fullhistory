@@ -175,8 +175,6 @@ int skip_ioapic_setup = 0;
 
 static int __init ioapic_setup(char *str)
 {
-	extern int skip_ioapic_setup;	/* defined in arch/i386/kernel/smp.c */
-
 	skip_ioapic_setup = 1;
 	return 1;
 }
@@ -658,8 +656,6 @@ void __init setup_ExtINT_IRQ0_pin(unsigned int pin, int vector)
 	/* mask LVT0 */
 	apic_write_around(APIC_LVT0, APIC_LVT_MASKED | APIC_DM_EXTINT);
 
-	init_8259A(1);
-
 	/*
 	 * We use logical delivery to get the timer IRQ
 	 * to the first CPU.
@@ -907,9 +903,12 @@ void print_all_local_APICs (void)
 
 void /*__init*/ print_PIC(void)
 {
+	extern spinlock_t i8259A_lock;
 	unsigned int v, flags;
 
 	printk(KERN_DEBUG "\nprinting PIC contents\n");
+
+	spin_lock_irqsave(&i8259A_lock, flags);
 
 	v = inb(0xa1) << 8 | inb(0x21);
 	printk(KERN_DEBUG "... PIC  IMR: %04x\n", v);
@@ -917,14 +916,14 @@ void /*__init*/ print_PIC(void)
 	v = inb(0xa0) << 8 | inb(0x20);
 	printk(KERN_DEBUG "... PIC  IRR: %04x\n", v);
 
-	__save_flags(flags);
-	__cli();
 	outb(0x0b,0xa0);
 	outb(0x0b,0x20);
 	v = inb(0xa0) << 8 | inb(0x20);
 	outb(0x0a,0xa0);
 	outb(0x0a,0x20);
-	__restore_flags(flags);
+
+	spin_unlock_irqrestore(&i8259A_lock, flags);
+
 	printk(KERN_DEBUG "... PIC  ISR: %04x\n", v);
 
 	v = inb(0x4d1) << 8 | inb(0x4d0);
@@ -991,6 +990,14 @@ static void __init setup_ioapic_ids_from_mpc (void)
 		/* Read the register 0 value */
 		*(int *)&reg_00 = io_apic_read(apic, 0);
 		
+		if (mp_ioapics[apic].mpc_apicid >= 0xf) {
+			printk(KERN_ERR "BIOS bug, IO-APIC#%d ID is %d in the MPC table!...\n",
+				apic, mp_ioapics[apic].mpc_apicid);
+			printk(KERN_ERR "... fixing up to %d. (tell your hw vendor)\n",
+				reg_00.ID);
+			mp_ioapics[apic].mpc_apicid = reg_00.ID;
+		}
+
 		/*
 		 * Read the right value from the MPC table and
 		 * write it into the ID register.
@@ -1295,6 +1302,7 @@ static void setup_nmi (void)
  */
 static inline void check_timer(void)
 {
+	extern int timer_ack;
 	int pin1, pin2;
 	int vector;
 
@@ -1304,6 +1312,18 @@ static inline void check_timer(void)
 	disable_8259A_irq(0);
 	vector = assign_irq_vector(0);
 	set_intr_gate(vector, interrupt[0]);
+
+	/*
+	 * Subtle, code in do_timer_interrupt() expects an AEOI
+	 * mode for the 8259A whenever interrupts are routed
+	 * through I/O APICs.  Also IRQ0 has to be enabled in
+	 * the 8259A which implies the virtual wire has to be
+	 * disabled in the local APIC.
+	 */
+	apic_write_around(APIC_LVT0, APIC_LVT_MASKED | APIC_DM_EXTINT);
+	init_8259A(1);
+	timer_ack = 1;
+	enable_8259A_irq(0);
 
 	pin1 = find_timer_pin(mp_INT);
 	pin2 = find_timer_pin(mp_ExtINT);
@@ -1318,7 +1338,6 @@ static inline void check_timer(void)
 		if (timer_irq_works()) {
 			if (nmi_watchdog) {
 				disable_8259A_irq(0);
-				init_8259A(1);
 				setup_nmi();
 				enable_8259A_irq(0);
 				nmi_irq_works();
@@ -1360,7 +1379,6 @@ static inline void check_timer(void)
 
 	disable_8259A_irq(0);
 	irq_desc[0].handler = &lapic_irq_type;
-	init_8259A(1);						/* AEOI mode */
 	apic_write_around(APIC_LVT0, APIC_DM_FIXED | vector);	/* Fixed mode */
 	enable_8259A_irq(0);
 

@@ -1,4 +1,4 @@
-/* $Id: openprom.h,v 1.23 1998/09/21 05:07:26 jj Exp $ */
+/* $Id: openprom.h,v 1.24 2000/06/04 06:23:53 anton Exp $ */
 #ifndef __SPARC_OPENPROM_H
 #define __SPARC_OPENPROM_H
 
@@ -8,10 +8,9 @@
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
 
+#include <asm/vaddrs.h>
+
 /* Empirical constants... */
-#define KADB_DEBUGGER_BEGVM     0xffc00000    /* Where kern debugger is in virt-mem */
-#define	LINUX_OPPROM_BEGVM	0xffd00000
-#define	LINUX_OPPROM_ENDVM	0xfff00000
 #define	LINUX_OPPROM_MAGIC      0x10010407
 
 #ifndef __ASSEMBLY__

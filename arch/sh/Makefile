@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.4 2000/03/08 15:14:14 gniibe Exp $
+# $Id: Makefile,v 1.6 2000/06/10 03:03:52 gniibe Exp $
 #
 # This file is subject to the terms and conditions of the GNU General Public
 # License.  See the file "COPYING" in the main directory of this archive
@@ -22,6 +22,11 @@ CFLAGS		+= -ml
 AFLAGS		+= -ml
 # LINKFLAGS	+= -EL
 LDFLAGS		:= -EL
+else
+CFLAGS		+= -mb
+AFLAGS		+= -mb
+# LINKFLAGS	+= -EB
+LDFLAGS		:= -EB
 endif
 
 # ifdef CONFIG_CROSSCOMPILE
@@ -29,7 +34,7 @@ CROSS_COMPILE  = $(tool-prefix)
 # endif
 
 LD	=$(CROSS_COMPILE)ld $(LDFLAGS)
-OBJCOPY=$(CROSS_COMPILE)objcopy -O binary -R .note -R .comment -S
+OBJCOPY=$(CROSS_COMPILE)objcopy -O binary -R .note -R .comment -R .stab -R .stabstr -S
 
 MODFLAGS	+=
 

@@ -31,8 +31,8 @@
 #include <linux/sys.h>
 #include <linux/config.h>
 
-#define SHOW_SYSCALLS
-#define SHOW_SYSCALLS_TASK
+#undef SHOW_SYSCALLS
+#undef SHOW_SYSCALLS_TASK
 
 #ifdef SHOW_SYSCALLS_TASK
 	.data
@@ -83,8 +83,8 @@ _GLOBAL(DoSyscall)
 #endif /* SHOW_SYSCALLS */
 	cmpi	0,r0,0x7777	/* Special case for 'sys_sigreturn' */
 	beq-	10f
-	lwz	r10,TASK_FLAGS(r2)
-	andi.	r10,r10,PF_TRACESYS
+	lwz	r10,TASK_PTRACE(r2)
+	andi.	r10,r10,PT_TRACESYS
 	bne-	50f
 	cmpli	0,r0,NR_syscalls
 	bge-	66f
@@ -227,12 +227,15 @@ _GLOBAL(_switch)
 	stw	r1,KSP(r3)	/* Set old stack pointer */
 	sync
 	tophys(r0,r4)
+	CLR_TOP32(r0)
 	mtspr	SPRG3,r0	/* Update current THREAD phys addr */
 #ifdef CONFIG_8xx
 	/* XXX it would be nice to find a SPRGx for this on 6xx,7xx too */
 	lwz	r9,PGDIR(r4)	/* cache the page table root */
         tophys(r9,r9)		/* convert to phys addr */
         mtspr   M_TWB,r9	/* Update MMU base address */
+	tlbia
+	SYNC
 #endif /* CONFIG_8xx */
 	lwz	r1,KSP(r4)	/* Load new stack pointer */
 	/* save the old current 'last' for return value */
@@ -244,6 +247,7 @@ _GLOBAL(_switch)
 8:	addi	r4,r1,INT_FRAME_SIZE	/* size of frame */
 	stw	r4,THREAD+KSP(r2)	/* save kernel stack pointer */
 	tophys(r9,r1)
+	CLR_TOP32(r9)
 	mtspr	SPRG2,r9	/* phys exception stack pointer */
 10:	lwz	r2,_CTR(r1)
 	lwz	r0,_LINK(r1)
@@ -270,12 +274,13 @@ _GLOBAL(_switch)
 	
 	lwz	r0,_MSR(r1)
 	mtspr	SRR0,r2
+	FIX_SRR1(r0,r2)
 	mtspr	SRR1,r0
 	lwz	r0,GPR0(r1)
 	lwz	r2,GPR2(r1)
 	lwz	r1,GPR1(r1)
 	SYNC
-	rfi
+	RFI
 
 #ifdef CONFIG_SMP	
 	.globl	ret_from_smpfork
@@ -311,11 +316,7 @@ lost_irq_ret:
 #ifdef CONFIG_SMP
 	/* get processor # */
 	lwz	r3,PROCESSOR(r2)
-#ifndef CONFIG_PPC64
 	slwi	r3,r3,5
-#else
-#error not 64-bit ready	
-#endif
 	add	r4,r4,r3
 #endif /* CONFIG_SMP */
 	lwz	r5,0(r4)
@@ -365,14 +366,17 @@ restore:
 	
 	/* if returning to user mode, set new sprg2 and save kernel SP */
 	lwz	r0,_MSR(r1)
-	mtspr	SRR1,r0
 	andi.	r0,r0,MSR_PR
 	beq+	1f
 	addi	r0,r1,INT_FRAME_SIZE	/* size of frame */
 	stw	r0,THREAD+KSP(r2)	/* save kernel stack pointer */
 	tophys(r2,r1)
+	CLR_TOP32(r2)
 	mtspr	SPRG2,r2	/* phys exception stack pointer */
-1:	
+1:
+	lwz	r0,_MSR(r1)
+	FIX_SRR1(r0,r2)
+	mtspr	SRR1,r0
 	lwz	r2,_CCR(r1)
 	mtcrf	0xFF,r2
 	lwz	r2,_NIP(r1)
@@ -381,7 +385,7 @@ restore:
 	lwz	r2,GPR2(r1)
 	lwz	r1,GPR1(r1)
 	SYNC
-	rfi
+	RFI
 
 /*
  * Fake an interrupt from kernel mode.
@@ -423,7 +427,6 @@ enter_rtas:
 	stw	r0,20(r1)
 	lis	r4,rtas_data@ha
 	lwz	r4,rtas_data@l(r4)
-	addis	r4,r4,-KERNELBASE@h
 	lis	r6,1f@ha	/* physical return address for rtas */
 	addi	r6,r6,1f@l
 	addis	r6,r6,-KERNELBASE@h
@@ -436,20 +439,23 @@ enter_rtas:
 	li	r0,0
 	ori	r0,r0,MSR_EE|MSR_SE|MSR_BE
 	andc	r0,r9,r0
-	andi.	r9,r9,MSR_ME|MSR_RI
+	li	r10,MSR_IR|MSR_DR|MSR_FE0|MSR_FE1|MSR_FP
+	andc	r9,r0,r10
 	sync			/* disable interrupts so SRR0/1 */
 	mtmsr	r0		/* don't get trashed */
 	mtlr	r6
+	CLR_TOP32(r7)
 	mtspr	SPRG2,r7
 	mtspr	SRR0,r8
 	mtspr	SRR1,r9
-	rfi
+	RFI
 1:	addis	r9,r1,-KERNELBASE@h
 	lwz	r8,20(r9)	/* get return address */
 	lwz	r9,8(r9)	/* original msr value */
+	FIX_SRR1(r9,r0)
 	li	r0,0
 	mtspr	SPRG2,r0
 	mtspr	SRR0,r8
 	mtspr	SRR1,r9
-	rfi			/* return to caller */
+	RFI			/* return to caller */
 #endif /* CONFIG_ALL_PPC */

@@ -26,17 +26,22 @@ O_OBJS   += smp.o irq_smp.o
 endif
 
 ifdef CONFIG_PCI
-L_OBJS   += pci.o pci_iommu.o
+O_OBJS   += pci.o pci_iommu.o
+endif
+
+ifdef CONFIG_VGA_HOSE
+L_OBJS	 += console.o
 endif
 
 ifdef CONFIG_ALPHA_GENERIC
 
 O_OBJS	 += core_apecs.o core_cia.o core_irongate.o core_lca.o core_mcpcia.o \
-	    core_polaris.o core_t2.o core_tsunami.o \
+	    core_polaris.o core_t2.o core_tsunami.o core_titan.o \
 	    sys_alcor.o sys_cabriolet.o sys_dp264.o sys_eb64p.o sys_eiger.o \
-	    sys_jensen.o sys_miata.o sys_mikasa.o sys_nautilus.o \
+	    sys_jensen.o sys_miata.o sys_mikasa.o sys_nautilus.o sys_titan.o \
 	    sys_noritake.o sys_rawhide.o sys_ruffian.o sys_rx164.o \
-	    sys_sable.o sys_sio.o sys_sx164.o sys_takara.o sys_rx164.o
+	    sys_sable.o sys_sio.o sys_sx164.o sys_takara.o sys_rx164.o \
+	    sys_wildfire.o core_wildfire.o
 
 else
 
@@ -62,8 +67,14 @@ endif
 ifdef CONFIG_ALPHA_TSUNAMI
 O_OBJS   += core_tsunami.o
 endif
+ifdef CONFIG_ALPHA_TITAN
+O_OBJS   += core_titan.o
+endif
 ifdef CONFIG_ALPHA_POLARIS
 O_OBJS   += core_polaris.o
+endif
+ifdef CONFIG_ALPHA_WILDFIRE
+O_OBJS	+= core_wildfire.o
 endif
 
 # Board support
@@ -75,6 +86,9 @@ O_OBJS   += sys_cabriolet.o
 endif
 ifdef CONFIG_ALPHA_DP264
 O_OBJS   += sys_dp264.o
+endif
+ifdef CONFIG_ALPHA_TITAN
+O_OBJS   += sys_titan.o
 endif
 ifneq ($(CONFIG_ALPHA_EB64P)$(CONFIG_ALPHA_EB66),)
 O_OBJS   += sys_eb64p.o
@@ -117,6 +131,9 @@ O_OBJS   += sys_sx164.o
 endif
 ifdef CONFIG_ALPHA_TAKARA
 O_OBJS   += sys_takara.o
+endif
+ifdef CONFIG_ALPHA_WILDFIRE
+O_OBJS	+= sys_wildfire.o
 endif
 
 endif # GENERIC

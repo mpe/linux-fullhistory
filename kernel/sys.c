@@ -4,6 +4,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
+#include <linux/module.h>
 #include <linux/mm.h>
 #include <linux/utsname.h>
 #include <linux/mman.h>
@@ -46,13 +47,123 @@ int C_A_D = 1;
  *	and the like. 
  */
 
-struct notifier_block *reboot_notifier_list = NULL;
+static struct notifier_block *reboot_notifier_list = NULL;
+rwlock_t notifier_lock = RW_LOCK_UNLOCKED;
 
+/**
+ *	notifier_chain_register	- Add notifier to a notifier chain
+ *	@list: Pointer to root list pointer
+ *	@n: New entry in notifier chain
+ *
+ *	Adds a notifier to a notifier chain.
+ *
+ *	Currently always returns zero.
+ */
+ 
+int notifier_chain_register(struct notifier_block **list, struct notifier_block *n)
+{
+	write_lock(&notifier_lock);
+	while(*list)
+	{
+		if(n->priority > (*list)->priority)
+			break;
+		list= &((*list)->next);
+	}
+	n->next = *list;
+	*list=n;
+	write_unlock(&notifier_lock);
+	return 0;
+}
+
+/**
+ *	notifier_chain_unregister - Remove notifier from a notifier chain
+ *	@nl: Pointer to root list pointer
+ *	@n: New entry in notifier chain
+ *
+ *	Removes a notifier from a notifier chain.
+ *
+ *	Returns zero on success, or %-ENOENT on failure.
+ */
+ 
+int notifier_chain_unregister(struct notifier_block **nl, struct notifier_block *n)
+{
+	write_lock(&notifier_lock);
+	while((*nl)!=NULL)
+	{
+		if((*nl)==n)
+		{
+			*nl=n->next;
+			write_unlock(&notifier_lock);
+			return 0;
+		}
+		nl=&((*nl)->next);
+	}
+	write_unlock(&notifier_lock);
+	return -ENOENT;
+}
+
+/**
+ *	notifier_call_chain - Call functions in a notifier chain
+ *	@n: Pointer to root pointer of notifier chain
+ *	@val: Value passed unmodified to notifier function
+ *	@v: Pointer passed unmodified to notifier function
+ *
+ *	Calls each function in a notifier chain in turn.
+ *
+ *	If the return value of the notifier can be and'd
+ *	with %NOTIFY_STOP_MASK, then notifier_call_chain
+ *	will return immediately, with the return value of
+ *	the notifier function which halted execution.
+ *	Otherwise, the return value is the return value
+ *	of the last notifier function called.
+ */
+ 
+int notifier_call_chain(struct notifier_block **n, unsigned long val, void *v)
+{
+	int ret=NOTIFY_DONE;
+	struct notifier_block *nb = *n;
+
+	read_lock(&notifier_lock);
+	while(nb)
+	{
+		ret=nb->notifier_call(nb,val,v);
+		if(ret&NOTIFY_STOP_MASK)
+		{
+			read_unlock(&notifier_lock);
+			return ret;
+		}
+		nb=nb->next;
+	}
+	read_unlock(&notifier_lock);
+	return ret;
+}
+
+/**
+ *	register_reboot_notifier - Register function to be called at reboot time
+ *	@nb: Info about notifier function to be called
+ *
+ *	Registers a function with the list of functions
+ *	to be called at reboot time.
+ *
+ *	Currently always returns zero, as notifier_chain_register
+ *	always returns zero.
+ */
+ 
 int register_reboot_notifier(struct notifier_block * nb)
 {
 	return notifier_chain_register(&reboot_notifier_list, nb);
 }
 
+/**
+ *	unregister_reboot_notifier - Unregister previously registered reboot notifier
+ *	@nb: Hook to be unregistered
+ *
+ *	Unregisters a previously registered reboot
+ *	notifier function.
+ *
+ *	Returns zero on success, or %-ENOENT on failure.
+ */
+ 
 int unregister_reboot_notifier(struct notifier_block * nb)
 {
 	return notifier_chain_unregister(&reboot_notifier_list, nb);
@@ -1102,3 +1213,10 @@ asmlinkage long sys_prctl(int option, unsigned long arg2, unsigned long arg3,
 	return error;
 }
 
+EXPORT_SYMBOL(notifier_chain_register);
+EXPORT_SYMBOL(notifier_chain_unregister);
+EXPORT_SYMBOL(notifier_call_chain);
+EXPORT_SYMBOL(register_reboot_notifier);
+EXPORT_SYMBOL(unregister_reboot_notifier);
+EXPORT_SYMBOL(in_group_p);
+EXPORT_SYMBOL(in_egroup_p);

@@ -1,7 +1,7 @@
 /*
  * linux/arch/arm/lib/getconsdata.c
  *
- * Copyright (C) 1995-1998 Russell King
+ * Copyright (C) 1995-2000 Russell King
  */
 #include <linux/config.h>
 #include <linux/sched.h>
@@ -25,15 +25,11 @@
 #define OFF_TSK(n) (unsigned long)&(((struct task_struct *)0)->n)
 #define OFF_MM(n) (unsigned long)&(((struct mm_struct *)0)->n)
 
-unsigned long TSK_STATE = OFF_TSK(state);
-unsigned long TSK_FLAGS = OFF_TSK(flags);
-unsigned long TSK_NEED_RESCHED = OFF_TSK(need_resched);
 unsigned long TSK_SIGPENDING = OFF_TSK(sigpending);
 unsigned long TSK_ADDR_LIMIT = OFF_TSK(addr_limit);
+unsigned long TSK_NEED_RESCHED = OFF_TSK(need_resched);
+unsigned long TSK_PTRACE = OFF_TSK(ptrace);
 unsigned long TSK_USED_MATH = OFF_TSK(used_math);
-
-unsigned long MM = OFF_TSK(mm);
-unsigned long PGD = OFF_MM(pgd);
 
 unsigned long TSS_SAVE = OFF_TSK(thread.save);
 unsigned long TSS_FPESAVE = OFF_TSK(thread.fpstate.soft.save);

@@ -84,10 +84,6 @@ CONFIG_CMDLINE="ip=off"
 # Please see Documentation/ide.txt for help/info on IDE drives
 #
 # CONFIG_BLK_DEV_HD_ONLY is not set
-
-#
-# Additional Block Devices
-#
 # CONFIG_BLK_DEV_LOOP is not set
 # CONFIG_BLK_DEV_NBD is not set
 # CONFIG_BLK_DEV_MD is not set

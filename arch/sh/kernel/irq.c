@@ -37,6 +37,9 @@
 #include <asm/irq.h>
 #include <linux/irq.h>
 
+#ifdef CONFIG_HD64461
+#include <asm/hd64461.h>
+#endif
 
 unsigned int local_bh_count[NR_CPUS];
 unsigned int local_irq_count[NR_CPUS];
@@ -243,6 +246,18 @@ asmlinkage int do_IRQ(unsigned long r4, unsigned long r5,
 		     "shlr	%0\n\t"
 		     "add	#-16, %0\n\t"
 		     :"=z" (irq));
+#if defined(CONFIG_HD64461)
+	if (irq == CONFIG_HD64461_IRQ) {
+		unsigned short bit;
+		unsigned short nirr = inw(HD64461_NIRR);
+		unsigned short nimr = inw(HD64461_NIMR);
+		nirr &= ~nimr;
+		for (bit = 1, irq = 0; irq < 16; bit <<= 1, irq++)
+			if (nirr & bit) break;
+		if (irq == 16) irq = CONFIG_HD64461_IRQ;
+		else irq += HD64461_IRQBASE;
+	}
+#endif
 
 	kstat.irqs[cpu][irq]++;
 	desc = irq_desc + irq;

@@ -11,7 +11,7 @@
 #include <linux/config.h>
 #include <asm/arch/memory.h>
 
-#ifdef CONFIG_HOST_FOOTBRIDGE
+#ifdef CONFIG_FOOTBRIDGE_HOST
 /*   Virtual      Physical	Size
  * 0xff800000	0x40000000	1MB	X-Bus
  * 0xff000000	0x7c000000	1MB	PCI I/O space

@@ -78,26 +78,6 @@ static int js_am_read(void *info, int **axes, int **buttons)
 }
 
 /*
- * js_am_open() is a callback from the file open routine.
- */
-
-static int js_am_open(struct js_dev *jd)
-{
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-/*
- * js_am_close() is a callback from the file release routine.
- */
-
-static int js_am_close(struct js_dev *jd)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
-
-/*
  * js_am_init_corr() initializes correction values of
  * Amiga joysticks.
  */
@@ -139,7 +119,7 @@ int __init js_am_init(void)
 		if (js_am[i]) {
 			js_am_port = js_register_port(js_am_port, &i, 1, sizeof(int), js_am_read);
 			printk(KERN_INFO "js%d: Amiga joystick at joy%ddat\n",
-				js_register_device(js_am_port, 0, 2, 1, "Amiga joystick", js_am_open, js_am_close), i);
+				js_register_device(js_am_port, 0, 2, 1, "Amiga joystick", THIS_MODULE, NULL, NULL), i);
 			js_am_init_corr(js_am_port->corr);
 		}
 	if (js_am_port) return 0;

@@ -13,7 +13,6 @@
  * Copyright (c) 1996,1997,1998 Russell King.
  */
 
-#include <linux/config.h>
 #include <asm/leds.h>
 #include <linux/mc146818rtc.h>
 
@@ -28,15 +27,7 @@ static void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	CMOS_READ(RTC_INTR_FLAGS);	
 
-#ifdef CONFIG_LEDS
-	{
-		static int count = 50;
-		if (--count == 0) {
-			count = 50;
-			leds_event(led_timer);
-		}
-	}
-#endif
+	do_leds();
 
 	{
 #ifdef DIVISOR

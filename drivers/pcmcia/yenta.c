@@ -788,7 +788,7 @@ static int yenta_open(pci_socket_t *socket)
 	 */
 	if (pci_enable_device(dev))
 		return -1;
-	if (!dev->resource[0].start) {
+	if (!pci_resource_start(dev, 0)) {
 		printk("No cardbus resource!\n");
 		return -1;
 	}
@@ -797,7 +797,7 @@ static int yenta_open(pci_socket_t *socket)
 	 * Ok, start setup.. Map the cardbus registers,
 	 * and request the IRQ.
 	 */
-	socket->base = ioremap(dev->resource[0].start, 0x1000);
+	socket->base = ioremap(pci_resource_start(dev, 0), 0x1000);
 	if (!socket->base)
 		return -1;
 

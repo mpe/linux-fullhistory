@@ -1,3 +1,6 @@
+Thu May 11   12:30 2000 Pam Delaney (pam.delaney@lsil.com)
+	* revision 3.3b
+ 
 Mon Apr 24 12:00 2000 Gerard Roudier (groudier@club-internet.fr)
 	* revision 3.2i
 	- Return value 1 (instead of 0) from the driver setup routine.
@@ -13,6 +16,11 @@ Sat Apr 1  12:00 2000 Gerard Roudier (groudier@club-internet.fr)
 	- Make sure no data transfer will happen for Scsi_Cmnd requests 
 	  that supply SCSI_DATA_NONE direction (this avoids some BUG() 
 	  statement in the PCI code when a data buffer is also supplied).
+
+Thu Mar 16   9:30 2000 Pam Delaney (pam.delaney@lsil.com)
+	* revision 3.3b-3
+ 	- Added exclusion for the 53C1010 and 53C1010_66 chips
+	  to the driver (change to sym53c8xx_comm.h).
 
 Mon March 6  23:15 2000 Gerard Roudier (groudier@club-internet.fr)
 	* revision 3.2g
@@ -30,6 +38,40 @@ Mon March 6  23:15 2000 Gerard Roudier (groudier@club-internet.fr)
 	  Requires Linux-2.3.47 (tested with pre-2.3.47-6).
 	- Get data transfer direction from the scsi command structure 
 	  (Scsi_Cmnd) when this information is available.
+
+Mon March 6  23:15 2000 Gerard Roudier (groudier@club-internet.fr)
+        * revision 3.2g
+        - Add the file sym53c8xx_comm.h that collects code that should
+          be shared by sym53c8xx and ncr53c8xx drivers. For now, it is
+          a header file that is only included by the ncr53c8xx driver,
+          but things will be cleaned up later. This code addresses
+          notably:
+          * Chip detection and PCI related initialisations
+          * NVRAM detection and reading
+          * DMA mapping
+          * Boot setup command
+          * And some other ...
+        - Add support for the new dynamic dma mapping kernel interface.
+          Requires Linux-2.3.47 (tested with pre-2.3.47-6).
+        - Get data transfer direction from the scsi command structure
+          (Scsi_Cmnd) when this information is available.
+
+Fri Jan 14 14:00 2000 Pam Delaney (pam.delaney@lsil.com)
+	* revision pre-3.3b-1
+	- Merge parallel driver series 3.31 and 3.2e 
+
+Tue Jan 11 14:00 2000 Pam Delaney (pam.delaney@lsil.com)
+	* revision 3.31
+	- Added support for mounting disks on wide-narrow-wide
+	  scsi configurations.  
+	- Built off of version 3.30
+
+Mon Jan 10 13:30 2000 Pam Delaney (pam.delaney@lsil.com)
+	* revision 3.30
+	- Added capability to use the integrity checking code
+	  in the kernel (optional).
+	- Disabled support for the 53C1010.
+	- Built off of version 3.2c
 
 Sat Jan 8  22:00 2000 Gerard Roudier (groudier@club-internet.fr)
 	* revision 3.2e
@@ -94,7 +136,7 @@ Thu Mar 11  23:00 1999 Gerard Roudier (groudier@club-internet.fr)
 	* revision 3.2	  (8xx-896 driver bundle)
 	- Only define the host template in ncr53c8xx.h and include the 
 	  sym53c8xx_defs.h file.
-	- Declare static all symbols that donnot need to be visible from 
+	- Declare static all symbols that do not need to be visible from 
 	  outside the driver code.
 	- Add 'excl' boot command option that allows to pass to the driver 
 	  io address of devices not to attach.

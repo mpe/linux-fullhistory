@@ -391,7 +391,7 @@ static void exit_notify(void)
 		p = current->p_cptr;
 		current->p_cptr = p->p_osptr;
 		p->p_ysptr = NULL;
-		p->flags &= ~(PF_PTRACED|PF_TRACESYS);
+		p->ptrace = 0;
 
 		p->p_pptr = p->p_opptr;
 		p->p_osptr = p->p_pptr->p_cptr;
@@ -512,7 +512,7 @@ repeat:
 			case TASK_STOPPED:
 				if (!p->exit_code)
 					continue;
-				if (!(options & WUNTRACED) && !(p->flags & PF_PTRACED))
+				if (!(options & WUNTRACED) && !(p->ptrace & PT_PTRACED))
 					continue;
 				read_unlock(&tasklist_lock);
 				retval = ru ? getrusage(p, RUSAGE_BOTH, ru) : 0; 

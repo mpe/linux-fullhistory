@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.147 2000/05/22 07:29:40 davem Exp $
+/* $Id: sys_sparc32.c,v 1.149 2000/06/19 06:24:37 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -3028,9 +3028,7 @@ do_execve32(char * filename, u32 * argv, u32 * envp, struct pt_regs * regs)
 	bprm.p = PAGE_SIZE*MAX_ARG_PAGES-sizeof(void *);
 	memset(bprm.page, 0, MAX_ARG_PAGES * sizeof(bprm.page[0]));
 
-	lock_kernel();
 	file = open_exec(filename);
-	unlock_kernel();
 
 	retval = PTR_ERR(file);
 	if (IS_ERR(file))
@@ -3042,10 +3040,12 @@ do_execve32(char * filename, u32 * argv, u32 * envp, struct pt_regs * regs)
 	bprm.loader = 0;
 	bprm.exec = 0;
 	if ((bprm.argc = count32(argv)) < 0) {
+		allow_write_access(file);
 		fput(file);
 		return bprm.argc;
 	}
 	if ((bprm.envc = count32(envp)) < 0) {
+		allow_write_access(file);
 		fput(file);
 		return bprm.envc;
 	}
@@ -3074,6 +3074,7 @@ do_execve32(char * filename, u32 * argv, u32 * envp, struct pt_regs * regs)
 
 out:
 	/* Something went wrong, return the inode and free the argument pages*/
+	allow_write_access(bprm.file);
 	if (bprm.file)
 		fput(bprm.file);
 

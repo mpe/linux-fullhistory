@@ -142,6 +142,24 @@ tulip_core.c	- Driver core (a.k.a. where "everything else" goes)
 
 Version history
 ===============
+0.9.6 (May 31, 2000):
+* Revert 21143-related support flag patch
+* Add HPPA/media-table debugging printk
+
+0.9.5 (May 30, 2000):
+* HPPA support (willy@puffingroup)
+* CSR6 bits and tulip.h cleanup (Chris Smith)
+* Improve debugging messages a bit
+* Add delay after CSR13 write in t21142_start_nway
+* Remove unused ETHER_STATS code
+* Convert 'extern inline' to 'static inline' in tulip.h (Chris Smith)
+* Update DS21143 support flags in tulip_chip_info[]
+* Use spin_lock_irq, not _irqsave/restore, in tulip_start_xmit()
+* Add locking to set_rx_mode()
+* Fix race with chip setting DescOwned bit (Hal Murray)
+* Request 100% of PIO and MMIO resource space assigned to card
+* Remove error message from pci_enable_device failure
+
 0.9.4.3 (April 14, 2000):
 * mod_timer fix (Hal Murray)
 * PNIC2 resusitation (Chris Smith)

@@ -501,6 +501,8 @@ asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
 		giveup_altivec(current);
 #endif /* CONFIG_ALTIVEC */ 
 	error = do_execve(filename, (char **) a1, (char **) a2, regs);
+	if (error == 0)
+		current->ptrace &= ~PT_DTRACE;
 	putname(filename);
 out:
 	return error;

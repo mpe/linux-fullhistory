@@ -29,7 +29,7 @@
  * You can then access the PCI bus at 0xe0000000 and 0xffe00000.
  */
 
-#ifdef CONFIG_HOST_FOOTBRIDGE
+#ifdef CONFIG_FOOTBRIDGE_HOST
 
 /*
  * The mapping when the footbridge is in host mode.

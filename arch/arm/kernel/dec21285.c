@@ -1,9 +1,8 @@
 /*
  * arch/arm/kernel/dec21285.c: PCI functions for DC21285
  *
- * Copyright (C) 1998-1999 Russell King, Phil Blundell
+ * Copyright (C) 1998-2000 Russell King, Phil Blundell
  */
-#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>
@@ -23,7 +22,8 @@
 #define MAX_SLOTS		21
 
 extern int setup_arm_irq(int, struct irqaction *);
-extern void pcibios_report_device_errors(int warn);
+extern void pcibios_report_status(u_int status_mask, int warn);
+extern void register_isa_ports(unsigned int, unsigned int, unsigned int);
 
 static unsigned long
 dc21285_base_address(struct pci_dev *dev)
@@ -145,86 +145,125 @@ static struct pci_ops dc21285_ops = {
 	dc21285_write_config_dword,
 };
 
+static struct timer_list serr_timer;
+static struct timer_list perr_timer;
+
+static void dc21285_enable_error(unsigned long __data)
+{
+	switch (__data) {
+	case IRQ_PCI_SERR:
+		del_timer(&serr_timer);
+		break;
+
+	case IRQ_PCI_PERR:
+		del_timer(&perr_timer);
+		break;
+	}
+
+	enable_irq(__data);
+}
+
 /*
  * Warn on PCI errors.
  */
-static void
-dc21285_error(int irq, void *dev_id, struct pt_regs *regs)
+static void dc21285_abort_irq(int irq, void *dev_id, struct pt_regs *regs)
 {
-	static unsigned long next_warn;
-	unsigned long cmd       = *CSR_PCICMD & 0x0000ffff;
-	unsigned long ctrl      = (*CSR_SA110_CNTL) & 0xffffde07;
-	unsigned long irqstatus = *CSR_IRQ_RAWSTATUS;
-	int warn = time_after_eq(jiffies, next_warn);
+	unsigned int cmd;
+	unsigned int status;
 
-	if (machine_is_netwinder())
-		warn = 0;
+	cmd = *CSR_PCICMD;
+	status = cmd >> 16;
+	cmd = cmd & 0xffff;
 
-	ctrl |= SA110_CNTL_DISCARDTIMER;
+	if (status & PCI_STATUS_REC_MASTER_ABORT) {
+		printk(KERN_DEBUG "PCI: master abort: ");
+		pcibios_report_status(PCI_STATUS_REC_MASTER_ABORT, 1);
+		printk("\n");
 
-	if (warn) {
-		next_warn = jiffies + HZ;
-		printk(KERN_DEBUG "PCI: ");
+		cmd |= PCI_STATUS_REC_MASTER_ABORT << 16;
 	}
 
-	if (irqstatus & (1 << 31)) {
-		if (warn)
-			printk("parity error ");
-		cmd |= 1 << 31;
+	if (status & PCI_STATUS_REC_TARGET_ABORT) {
+		printk(KERN_DEBUG "PCI: target abort: ");
+		pcibios_report_status(PCI_STATUS_SIG_TARGET_ABORT, 1);
+		printk("\n");
+
+		cmd |= PCI_STATUS_REC_TARGET_ABORT << 16;
 	}
-
-	if (irqstatus & (1 << 30)) {
-		if (warn)
-			printk("target abort ");
-		cmd |= 1 << 28;
-	}
-
-	if (irqstatus & (1 << 29)) {
-		if (warn)
-			printk("master abort ");
-		cmd |= 1 << 29;
-	}
-
-	if (irqstatus & (1 << 28)) {
-		if (warn)
-			printk("data parity error ");
-		cmd |= 1 << 24;
-	}
-
-	if (irqstatus & (1 << 27)) {
-		if (warn)
-			printk("discard timer expired ");
-		ctrl &= ~SA110_CNTL_DISCARDTIMER;
-	}
-
-	if (irqstatus & (1 << 23)) {
-		if (warn)
-			printk("system error ");
-		ctrl |= SA110_CNTL_RXSERR;
-	}
-
-	if (warn)
-		printk("pc=[<%08lX>]\n", instruction_pointer(regs));
-
-	pcibios_report_device_errors(warn);
 
 	*CSR_PCICMD = cmd;
-	*CSR_SA110_CNTL = ctrl;
 }
 
-static struct irqaction dc21285_error_action = {
-	dc21285_error, SA_INTERRUPT, 0, "PCI error", NULL, NULL
-};
+static void dc21285_serr_irq(int irq, void *dev_id, struct pt_regs *regs)
+{
+	struct timer_list *timer = dev_id;
+	unsigned int cntl;
+
+	printk(KERN_DEBUG "PCI: system error received: ");
+	pcibios_report_status(PCI_STATUS_SIG_SYSTEM_ERROR, 1);
+	printk("\n");
+
+	cntl = *CSR_SA110_CNTL & 0xffffdf07;
+	*CSR_SA110_CNTL = cntl | SA110_CNTL_RXSERR;
+
+	/*
+	 * back off this interrupt
+	 */
+	disable_irq(irq);
+	timer->expires = jiffies + HZ;
+	add_timer(timer);
+}
+
+static void dc21285_discard_irq(int irq, void *dev_id, struct pt_regs *regs)
+{
+	printk(KERN_DEBUG "PCI: discard timer expired\n");
+	*CSR_SA110_CNTL &= 0xffffde07;
+}
+
+static void dc21285_dparity_irq(int irq, void *dev_id, struct pt_regs *regs)
+{
+	unsigned int cmd;
+
+	printk(KERN_DEBUG "PCI: data parity error detected: ");
+	pcibios_report_status(PCI_STATUS_PARITY | PCI_STATUS_DETECTED_PARITY, 1);
+	printk("\n");
+
+	cmd = *CSR_PCICMD & 0xffff;
+	*CSR_PCICMD = cmd | 1 << 24;
+}
+
+static void dc21285_parity_irq(int irq, void *dev_id, struct pt_regs *regs)
+{
+	struct timer_list *timer = dev_id;
+	unsigned int cmd;
+
+	printk(KERN_DEBUG "PCI: parity error detected: ");
+	pcibios_report_status(PCI_STATUS_PARITY | PCI_STATUS_DETECTED_PARITY, 1);
+	printk("\n");
+
+	cmd = *CSR_PCICMD & 0xffff;
+	*CSR_PCICMD = cmd | 1 << 31;
+
+	/*
+	 * back off this interrupt
+	 */
+	disable_irq(irq);
+	timer->expires = jiffies + HZ;
+	add_timer(timer);
+}
 
 void __init dc21285_init(void)
 {
-	static struct resource csrmem, csrio;
-	struct arm_pci_sysdata sysdata;
 	unsigned long cntl;
-	unsigned int mem_size, pci_cmd = PCI_COMMAND_IO | PCI_COMMAND_MEMORY |
+	unsigned int mem_size;
+	unsigned int pci_cmd = PCI_COMMAND_IO | PCI_COMMAND_MEMORY |
 				PCI_COMMAND_MASTER | PCI_COMMAND_INVALIDATE;
-	int i;
+	int cfn_mode;
 
+	/*
+	 * These registers need to be set up whether we're the
+	 * central function or not.
+	 */
 	mem_size = (unsigned int)high_memory - PAGE_OFFSET;
 	*CSR_SDRAMBASEMASK    = (mem_size - 1) & 0x0ffc0000;
 	*CSR_SDRAMBASEOFFSET  = 0;
@@ -233,60 +272,93 @@ void __init dc21285_init(void)
 	*CSR_CSRBASEOFFSET    = 0;
 	*CSR_PCIADDR_EXTN     = 0;
 
-#ifdef CONFIG_HOST_FOOTBRIDGE
+	cfn_mode = __footbridge_cfn_mode();
 
-	csrio.flags = IORESOURCE_IO;
-	csrio.name  = "DC21285";
-	csrmem.flags = IORESOURCE_MEM;
-	csrmem.name  = "DC21285";
+	printk(KERN_INFO "PCI: DC21285 footbridge, revision %02lX in "
+		"%s mode\n", *CSR_CLASSREV & 0xff, cfn_mode ?
+		"central function" : "addin");
 
-	allocate_resource(&ioport_resource, &csrio, 128,
-			  0xff00, 0xffff, 128, NULL, NULL);
-	allocate_resource(&iomem_resource, &csrmem, 128,
-			  0xf4000000, 0xf8000000, 128, NULL, NULL);
+	if (cfn_mode) {
+		static struct resource csrmem, csrio;
+		struct arm_pci_sysdata sysdata;
+		int i;
 
-	/*
-	 * Map our SDRAM at a known address in PCI space, just in case
-	 * the firmware had other ideas.  Using a nonzero base is
-	 * necessary, since some VGA cards forcefully use PCI addresses
-	 * in the range 0x000a0000 to 0x000c0000. (eg, S3 cards).
-	 */
-	*CSR_PCICACHELINESIZE = 0x00002008;
-	*CSR_PCICSRBASE       = csrmem.start;
-	*CSR_PCICSRIOBASE     = csrio.start;
-	*CSR_PCISDRAMBASE     = virt_to_bus((void *)PAGE_OFFSET);
-	*CSR_PCIROMBASE       = 0;
-	*CSR_PCICMD           = pci_cmd |
+		csrio.flags = IORESOURCE_IO;
+		csrio.name  = "DC21285";
+		csrmem.flags = IORESOURCE_MEM;
+		csrmem.name  = "DC21285";
+
+		allocate_resource(&ioport_resource, &csrio, 128,
+				  0xff00, 0xffff, 128, NULL, NULL);
+		allocate_resource(&iomem_resource, &csrmem, 128,
+				  0xf4000000, 0xf8000000, 128, NULL, NULL);
+
+		/*
+		 * Map our SDRAM at a known address in PCI space, just in case
+		 * the firmware had other ideas.  Using a nonzero base is
+		 * necessary, since some VGA cards forcefully use PCI addresses
+		 * in the range 0x000a0000 to 0x000c0000. (eg, S3 cards).
+		 */
+		*CSR_PCICACHELINESIZE = 0x00002008;
+		*CSR_PCICSRBASE       = csrmem.start;
+		*CSR_PCICSRIOBASE     = csrio.start;
+		*CSR_PCISDRAMBASE     = virt_to_bus((void *)PAGE_OFFSET);
+		*CSR_PCIROMBASE       = 0;
+		*CSR_PCICMD           = pci_cmd |
 				(1 << 31) | (1 << 29) | (1 << 28) | (1 << 24);
-#endif
 
-	printk(KERN_DEBUG "PCI: DC21285 footbridge, revision %02lX\n",
-		*CSR_CLASSREV & 0xff);
+		for (i = 0; i < MAX_NR_BUS; i++) {
+			sysdata.bus[i].features  = PCI_COMMAND_FAST_BACK |
+						   PCI_COMMAND_SERR |
+						   PCI_COMMAND_PARITY;
+			sysdata.bus[i].maxdevsel = PCI_STATUS_DEVSEL_FAST;
+		}
 
-	for (i = 0; i < MAX_NR_BUS; i++) {
-		sysdata.bus[i].features  = PCI_COMMAND_FAST_BACK |
-					   PCI_COMMAND_SERR |
-					   PCI_COMMAND_PARITY;
-		sysdata.bus[i].maxdevsel = PCI_STATUS_DEVSEL_FAST;
+		pci_scan_bus(0, &dc21285_ops, &sysdata);
+
+		pci_cmd |= sysdata.bus[0].features;
+
+		printk("PCI: Fast back to back transfers %sabled\n",
+		       (sysdata.bus[0].features & PCI_COMMAND_FAST_BACK) ?
+			"en" : "dis");
+
+		/*
+		 * Clear any existing errors - we aren't
+		 * interested in historical data...
+		 */
+		cntl		= *CSR_SA110_CNTL & 0xffffde07;
+		*CSR_SA110_CNTL	= cntl | SA110_CNTL_RXSERR;
+		*CSR_PCICMD	= pci_cmd | 1 << 31 | 1 << 29 | 1 << 28 | 1 << 24;
+	} else {
+		/*
+		 * If we are not compiled to accept "add-in" mode, then
+		 * we are using a constant virt_to_bus translation which
+		 * can not hope to cater for the way the host BIOS  has
+		 * set up the machine.
+		 */
+		panic("PCI: this kernel is compiled for central "
+			"function mode only");
 	}
-
-	pci_scan_bus(0, &dc21285_ops, &sysdata);
-
-	pci_cmd |= sysdata.bus[0].features;
-
-	printk("Fast back to back PCI transfers %sabled\n",
-	       (sysdata.bus[0].features & PCI_COMMAND_FAST_BACK) ? "en" : "dis");
-
-	/*
-	 * Clear any existing errors - we aren't
-	 * interested in historical data...
-	 */
-	cntl		= *CSR_SA110_CNTL & 0xffffde07;
-	*CSR_SA110_CNTL	= cntl | SA110_CNTL_RXSERR;
-	*CSR_PCICMD	= pci_cmd | 1 << 31 | 1 << 29 | 1 << 28 | 1 << 24;
 
 	/*
 	 * Initialise PCI error IRQ after we've finished probing
 	 */
-	setup_arm_irq(IRQ_PCI_ERR, &dc21285_error_action);
+	request_irq(IRQ_PCI_ABORT,     dc21285_abort_irq,   SA_INTERRUPT, "PCI abort",       NULL);
+	request_irq(IRQ_DISCARD_TIMER, dc21285_discard_irq, SA_INTERRUPT, "Discard timer",   NULL);
+	request_irq(IRQ_PCI_DPERR,     dc21285_dparity_irq, SA_INTERRUPT, "PCI data parity", NULL);
+
+	init_timer(&serr_timer);
+	init_timer(&perr_timer);
+
+	serr_timer.data = IRQ_PCI_SERR;
+	serr_timer.function = dc21285_enable_error;
+	perr_timer.data = IRQ_PCI_PERR;
+	perr_timer.function = dc21285_enable_error;
+
+	request_irq(IRQ_PCI_SERR, dc21285_serr_irq, SA_INTERRUPT,
+		    "PCI system error", &serr_timer);
+	request_irq(IRQ_PCI_PERR, dc21285_parity_irq, SA_INTERRUPT,
+		    "PCI parity error", &perr_timer);
+
+	register_isa_ports(DC21285_PCI_MEM, DC21285_PCI_IO, 0);
 }

@@ -1,6 +1,6 @@
 Traffic Shaper For Linux
 
-This is the current ALPHA release of the traffic shaper for Linux. It works
+This is the current BETA release of the traffic shaper for Linux. It works
 within the following limits:
 
 o	Minimum shaping speed is currently about 9600 baud (it can only
@@ -37,13 +37,12 @@ and will treat it as such unless patched. Note that for mrouted you can run
 mrouted tunnels via a traffic shaper to control bandwidth usage.
 
 	The shaper is device/route based. This makes it very easy to use
-with any setup BUT less flexible. You may well want to combine this patch
-with Mike McLagan <mmclagan@linux.org>'s patch to allow routes to be
-specified by source/destination pairs.
+with any setup BUT less flexible. You may need to use iproute2 to set up
+multiple route tables to get the flexibility.
 
 	There is no "borrowing" or "sharing" scheme. This is a simple
-traffic limiter. I'd like to implement Van Jacobson and Sally Floyd's CBQ
-architecture into Linux one day (maybe in 2.1 sometime) and do this with
-style.
+traffic limiter. We implement Van Jacobson and Sally Floyd's CBQ
+architecture into Linux 2.2. THis is the preferred solution. Shaper is
+for simple or back compatible setups.
 
 Alan

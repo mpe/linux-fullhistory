@@ -22,14 +22,17 @@
 /* Remove when official MILO sources have ELF support: */
 #define BOOT_SIZE	(16*1024)
 
-#define KERNEL_START	(PAGE_OFFSET+0x300000)
-#define SWAPPER_PGD	(PAGE_OFFSET+0x300000)
-#define INIT_STACK	(PAGE_OFFSET+0x302000)
-#define EMPTY_PGT	(PAGE_OFFSET+0x304000)
-#define EMPTY_PGE	(PAGE_OFFSET+0x308000)
-#define ZERO_PGE	(PAGE_OFFSET+0x30A000)
 
-#define START_ADDR	(PAGE_OFFSET+0x310000)
+#define KERNEL_START_PHYS	0x800000 /* Wildfire has a huge console */
+
+#define KERNEL_START	(PAGE_OFFSET+KERNEL_START_PHYS)
+#define SWAPPER_PGD	KERNEL_START
+#define INIT_STACK	(PAGE_OFFSET+KERNEL_START_PHYS+0x02000)
+#define EMPTY_PGT	(PAGE_OFFSET+KERNEL_START_PHYS+0x04000)
+#define EMPTY_PGE	(PAGE_OFFSET+KERNEL_START_PHYS+0x08000)
+#define ZERO_PGE	(PAGE_OFFSET+KERNEL_START_PHYS+0x0A000)
+
+#define START_ADDR	(PAGE_OFFSET+KERNEL_START_PHYS+0x10000)
 
 #ifndef __ASSEMBLY__
 
@@ -111,6 +114,7 @@ struct el_common_EV6_mcheck {
 };
 
 extern void halt(void) __attribute__((noreturn));
+#define __halt() __asm__ __volatile__ ("call_pal %0 #halt" : : "i" (PAL_halt))
 
 #define prepare_to_switch()	do { } while(0)
 #define switch_to(prev,next,last)			\

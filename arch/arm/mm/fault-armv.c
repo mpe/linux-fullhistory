@@ -250,6 +250,8 @@ do_alignment(unsigned long addr, int error_code, struct pt_regs *regs)
 			}
 		}
 
+if (addr != eaddr)
+printk("PC = %08lx, instr = %08x, addr = %08lx, eaddr = %08lx\n", instruction_pointer(regs), instr, addr, eaddr);
 		if (LDST_L_BIT(instr)) {
 			regs->uregs[rd] = get_unaligned((unsigned long *)eaddr);
 			if (rd == 15)
@@ -383,29 +385,38 @@ static const struct fsr_info {
 	"more information\n"
 
 asmlinkage void
-do_DataAbort(unsigned long addr, int fsr, int error_code, struct pt_regs *regs)
+do_DataAbort(unsigned long addr, int error_code, struct pt_regs *regs, int fsr)
 {
-	const struct fsr_info *inf;
+	const struct fsr_info *inf = fsr_info + (fsr & 15);
 
-	if (user_mode(regs) && addr == regs->ARM_pc) {
+	if (addr == regs->ARM_pc)
+		goto weirdness;
+
+	if (!inf->fn)
+		goto bad;
+
+	if (!inf->fn(addr, error_code, regs))
+		return;
+bad:
+	force_sig(inf->sig, current);
+	die_if_kernel(inf->name, regs, fsr);
+	return;
+
+weirdness:
+	if (user_mode(regs)) {
 		static int first = 1;
-		if (first) {
+		if (first)
 			/*
 			 * I want statistical information on this problem,
 			 * but we don't want to hastle the users too much.
 			 */
 			printk(BUG_PROC_MSG, fsr);
-			first = 0;
-		}
+		first = 0;
 		return;
 	}
 
-	inf = fsr_info + (fsr & 15);
-
-	if (!inf->fn || inf->fn(addr, error_code, regs)) {
-		force_sig(inf->sig, current);
-		die_if_kernel(inf->name, regs, fsr);
-	}
+	if (!inf->fn || inf->fn(addr, error_code, regs))
+		goto bad;
 }
 
 asmlinkage int

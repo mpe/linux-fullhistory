@@ -272,7 +272,7 @@ xmon_init_scc()
 	if ( _machine == _MACH_chrp )
 	{
 		sccd[3] = 0x83; eieio();	/* LCR = 8N1 + DLAB */
-		sccd[0] = 3; eieio();		/* DLL = 38400 baud */
+		sccd[0] = 12; eieio();		/* DLL = 9600 baud */
 		sccd[1] = 0; eieio();
 		sccd[2] = 0; eieio();		/* FCR = 0 */
 		sccd[3] = 3; eieio();		/* LCR = 8N1 */

@@ -132,6 +132,26 @@ void fill_iso_packet(struct hpsb_packet *packet, int length, int channel,
 }
 
 
+/**
+ * get_tlabel - allocate a transaction label
+ * @host: host to be used for transmission
+ * @nodeid: the node ID of the transmission target
+ * @wait: whether to sleep if no tlabel is available
+ *
+ * Every asynchronous transaction on the 1394 bus needs a transaction label to
+ * match the response to the request.  This label has to be different from any
+ * other transaction label in an outstanding request to the same node to make
+ * matching possible without ambiguity.
+ *
+ * There are 64 different tlabels, so an allocated tlabel has to be freed with
+ * free_tlabel() after the transaction is complete (unless it's reused again for
+ * the same target node).
+ *
+ * @wait must not be set to true if you are calling from interrupt context.
+ *
+ * Return value: The allocated transaction label or -1 if there was no free
+ * tlabel and @wait is false.
+ */
 int get_tlabel(struct hpsb_host *host, nodeid_t nodeid, int wait)
 {
         unsigned long flags;
@@ -166,6 +186,18 @@ int get_tlabel(struct hpsb_host *host, nodeid_t nodeid, int wait)
         }
 }
 
+/**
+ * free_tlabel - free an allocated transaction label
+ * @host: host to be used for transmission
+ * @nodeid: the node ID of the transmission target
+ * @tlabel: the transaction label to free
+ *
+ * Frees the transaction label allocated with get_tlabel().  The tlabel has to
+ * be freed after the transaction is complete (i.e. response was received for a
+ * split transaction or packet was sent for a unified transaction).
+ *
+ * A tlabel must not be freed twice.
+ */
 void free_tlabel(struct hpsb_host *host, nodeid_t nodeid, int tlabel)
 {
         unsigned long flags;

@@ -44,8 +44,9 @@ main(void)
 	DEFINE(PGDIR, offsetof(struct thread_struct, pgdir));
 	DEFINE(LAST_SYSCALL, offsetof(struct thread_struct, last_syscall));
 	DEFINE(PT_REGS, offsetof(struct thread_struct, regs));
-	DEFINE(PF_TRACESYS, PF_TRACESYS);
+	DEFINE(PT_TRACESYS, PT_TRACESYS);
 	DEFINE(TASK_FLAGS, offsetof(struct task_struct, flags));
+	DEFINE(TASK_PTRACE, offsetof(struct task_struct, ptrace));
 	DEFINE(NEED_RESCHED, offsetof(struct task_struct, need_resched));
 	DEFINE(THREAD_FPR0, offsetof(struct thread_struct, fpr[0]));
 	DEFINE(THREAD_FPSCR, offsetof(struct thread_struct, fpscr));

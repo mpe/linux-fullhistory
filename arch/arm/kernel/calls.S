@@ -119,7 +119,7 @@
 		.long	SYMBOL_NAME(sys_newlstat)
 		.long	SYMBOL_NAME(sys_newfstat)
 		.long	SYMBOL_NAME(sys_ni_syscall)		/* was sys_uname */
-/* 110 */	.long	SYMBOL_NAME(sys_iopl)
+/* 110 */	.long	SYMBOL_NAME(sys_ni_syscall)		/* was sys_iopl */
 		.long	SYMBOL_NAME(sys_vhangup)
 		.long	SYMBOL_NAME(sys_ni_syscall)
 		.long	SYMBOL_NAME(sys_syscall)		/* call a syscall */

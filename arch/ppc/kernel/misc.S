@@ -22,11 +22,14 @@
 #include "ppc_asm.h"
 
 #if defined(CONFIG_4xx) || defined(CONFIG_8xx)
-CACHE_LINE_SIZE = 16
-LG_CACHE_LINE_SIZE = 4
+#define CACHE_LINE_SIZE		16
+#define LG_CACHE_LINE_SIZE	4
+#elif !defined(CONFIG_PPC64BRIDGE)
+#define CACHE_LINE_SIZE		32
+#define LG_CACHE_LINE_SIZE	5
 #else
-CACHE_LINE_SIZE = 32
-LG_CACHE_LINE_SIZE = 5
+#define CACHE_LINE_SIZE		128
+#define LG_CACHE_LINE_SIZE	7
 #endif /* CONFIG_4xx || CONFIG_8xx */
 
 	.text
@@ -140,12 +143,33 @@ _GLOBAL(do_lost_interrupts)
  * Flush MMU TLB
  */
 _GLOBAL(_tlbia)
+#if defined(CONFIG_SMP)
+	mfmsr	r10
+	sync
+	rlwinm	r0,r10,0,17,15		/* clear bit 16 (MSR_EE) */
+	mtmsr	r0
+	SYNC
+	lis	r9,hash_table_lock@h
+	ori	r9,r9,hash_table_lock@l
+	lwz	r8,PROCESSOR(r2)
+	oris	r8,r8,10
+10:	lwarx	r7,0,r9
+	cmpi	0,r7,0
+	bne-	10b
+	stwcx.	r8,0,r9
+	bne-	10b
+	eieio
+#endif /* CONFIG_SMP */
 	sync
 	tlbia
 	sync
 #ifdef CONFIG_SMP
 	tlbsync
 	sync
+	li	r0,0
+	stw	r0,0(r9)		/* clear hash_table_lock */
+	mtmsr	r10
+	SYNC
 #endif
 	blr	
 
@@ -153,11 +177,32 @@ _GLOBAL(_tlbia)
  * Flush MMU TLB for a particular address
  */
 _GLOBAL(_tlbie)
+#if defined(CONFIG_SMP)
+	mfmsr	r10
+	sync
+	rlwinm	r0,r10,0,17,15		/* clear bit 16 (MSR_EE) */
+	mtmsr	r0
+	SYNC
+	lis	r9,hash_table_lock@h
+	ori	r9,r9,hash_table_lock@l
+	lwz	r8,PROCESSOR(r2)
+	oris	r8,r8,11
+10:	lwarx	r7,0,r9
+	cmpi	0,r7,0
+	bne-	10b
+	stwcx.	r8,0,r9
+	bne-	10b
+	eieio
+#endif /* CONFIG_SMP */
 	tlbie	r3
 	sync
 #ifdef CONFIG_SMP
 	tlbsync
 	sync
+	li	r0,0
+	stw	r0,0(r9)		/* clear hash_table_lock */
+	mtmsr	r10
+	SYNC
 #endif
 	blr
 
@@ -305,6 +350,16 @@ _GLOBAL(clear_page)
  * the destination into cache).  This requires that the destination
  * is cacheable.
  */
+#define COPY_16_BYTES		\
+	lwz	r6,4(r4);	\
+	lwz	r7,8(r4);	\
+	lwz	r8,12(r4);	\
+	lwzu	r9,16(r4);	\
+	stw	r6,4(r3);	\
+	stw	r7,8(r3);	\
+	stw	r8,12(r3);	\
+	stwu	r9,16(r3)
+
 _GLOBAL(copy_page)
 	li	r0,4096/CACHE_LINE_SIZE
 	mtctr	r0
@@ -312,22 +367,20 @@ _GLOBAL(copy_page)
 	addi	r4,r4,-4
 	li	r5,4
 1:	dcbz	r5,r3
-	lwz	r6,4(r4)
-	lwz	r7,8(r4)
-	lwz	r8,12(r4)
-	lwzu	r9,16(r4)
-	stw	r6,4(r3)
-	stw	r7,8(r3)
-	stw	r8,12(r3)
-	stwu	r9,16(r3)
-	lwz	r6,4(r4)
-	lwz	r7,8(r4)
-	lwz	r8,12(r4)
-	lwzu	r9,16(r4)
-	stw	r6,4(r3)
-	stw	r7,8(r3)
-	stw	r8,12(r3)
-	stwu	r9,16(r3)
+	COPY_16_BYTES
+#if CACHE_LINE_SIZE >= 32
+	COPY_16_BYTES
+#if CACHE_LINE_SIZE >= 64
+	COPY_16_BYTES
+	COPY_16_BYTES
+#if CACHE_LINE_SIZE >= 128
+	COPY_16_BYTES
+	COPY_16_BYTES
+	COPY_16_BYTES
+	COPY_16_BYTES
+#endif
+#endif
+#endif
 	bdnz	1b
 	blr
 
@@ -464,7 +517,7 @@ _GLOBAL(atomic_set_mask)
  * The *_ns versions don't do byte-swapping.
  */
 _GLOBAL(_insb)
-	cmpw	0,r5,0
+	cmpwi	0,r5,0
 	mtctr	r5
 	subi	r4,r4,1
 	blelr-
@@ -475,7 +528,7 @@ _GLOBAL(_insb)
 	blr
 
 _GLOBAL(_outsb)
-	cmpw	0,r5,0
+	cmpwi	0,r5,0
 	mtctr	r5
 	subi	r4,r4,1
 	blelr-
@@ -486,7 +539,7 @@ _GLOBAL(_outsb)
 	blr	
 
 _GLOBAL(_insw)
-	cmpw	0,r5,0
+	cmpwi	0,r5,0
 	mtctr	r5
 	subi	r4,r4,2
 	blelr-
@@ -497,7 +550,7 @@ _GLOBAL(_insw)
 	blr
 
 _GLOBAL(_outsw)
-	cmpw	0,r5,0
+	cmpwi	0,r5,0
 	mtctr	r5
 	subi	r4,r4,2
 	blelr-
@@ -508,7 +561,7 @@ _GLOBAL(_outsw)
 	blr	
 
 _GLOBAL(_insl)
-	cmpw	0,r5,0
+	cmpwi	0,r5,0
 	mtctr	r5
 	subi	r4,r4,4
 	blelr-
@@ -519,7 +572,7 @@ _GLOBAL(_insl)
 	blr
 
 _GLOBAL(_outsl)
-	cmpw	0,r5,0
+	cmpwi	0,r5,0
 	mtctr	r5
 	subi	r4,r4,4
 	blelr-
@@ -531,7 +584,7 @@ _GLOBAL(_outsl)
 
 _GLOBAL(ide_insw)
 _GLOBAL(_insw_ns)
-	cmpw	0,r5,0
+	cmpwi	0,r5,0
 	mtctr	r5
 	subi	r4,r4,2
 	blelr-
@@ -543,7 +596,7 @@ _GLOBAL(_insw_ns)
 
 _GLOBAL(ide_outsw)
 _GLOBAL(_outsw_ns)
-	cmpw	0,r5,0
+	cmpwi	0,r5,0
 	mtctr	r5
 	subi	r4,r4,2
 	blelr-
@@ -554,7 +607,7 @@ _GLOBAL(_outsw_ns)
 	blr	
 
 _GLOBAL(_insl_ns)
-	cmpw	0,r5,0
+	cmpwi	0,r5,0
 	mtctr	r5
 	subi	r4,r4,4
 	blelr-
@@ -565,7 +618,7 @@ _GLOBAL(_insl_ns)
 	blr
 
 _GLOBAL(_outsl_ns)
-	cmpw	0,r5,0
+	cmpwi	0,r5,0
 	mtctr	r5
 	subi	r4,r4,4
 	blelr-
@@ -650,6 +703,12 @@ _GLOBAL(_set_THRM3)
 _GLOBAL(_get_PVR)
 	mfspr	r3,PVR
 	blr
+
+#ifdef CONFIG_8xx
+_GLOBAL(_get_IMMR)
+	mfspr	r3, 638
+	blr
+#endif
 	
 _GLOBAL(_get_HID0)
 	mfspr	r3,HID0

@@ -616,27 +616,23 @@ void AM53C974_setup(char *str, int *ints)
 * 
 * Returns : number of host adapters detected
 **************************************************************************/
-static __inline__ int AM53C974_pci_detect(Scsi_Host_Template * tpnt)
+static inline int AM53C974_pci_detect(Scsi_Host_Template * tpnt)
 {
 	int count = 0;		/* number of boards detected */
 	struct pci_dev *pdev = NULL;
 	unsigned short command;
 
 	while ((pdev = pci_find_device(PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD_SCSI, pdev))) {
+		if (pci_enable_device(pdev))
+			continue;
 		pci_read_config_word(pdev, PCI_COMMAND, &command);
 
 		/* check whether device is I/O mapped -- should be */
 		if (!(command & PCI_COMMAND_IO))
 			continue;
 
-		/* PCI Spec 2.1 states that it is either the driver's or the PCI card's responsibility
-		   to set the PCI Master Enable Bit if needed. 
-		   (from Mark Stockton <marks@schooner.sys.hou.compaq.com>) */
-		if (!(command & PCI_COMMAND_MASTER)) {
-			command |= PCI_COMMAND_MASTER;
-			printk("PCI Master Bit has not been set. Setting...\n");
-			pci_write_config_word(pdev, PCI_COMMAND, command);
-		}
+		pci_set_master (pdev);
+
 		/* everything seems OK now, so initialize */
 		if (AM53C974_init(tpnt, pdev))
 			count++;
@@ -696,7 +692,7 @@ static int __init  AM53C974_init(Scsi_Host_Template * tpnt, struct pci_dev *pdev
 	instance = scsi_register(tpnt, sizeof(struct AM53C974_hostdata));
 	hostdata = (struct AM53C974_hostdata *) instance->hostdata;
 	instance->base = 0;
-	instance->io_port = pdev->resource[0].start;
+	instance->io_port = pci_resource_start(pdev, 0);
 	instance->irq = pdev->irq;
 	instance->dma_channel = -1;
 	AM53C974_setio(instance);

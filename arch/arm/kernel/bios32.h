@@ -10,6 +10,11 @@ struct arm_bus_sysdata {
 	 * Maximum devsel for this bus.
 	 */
 	u16		maxdevsel;
+	/*
+	 * The maximum latency that devices on this
+	 * bus can withstand.
+	 */
+	u8		max_lat;
 };
 
 struct arm_pci_sysdata {

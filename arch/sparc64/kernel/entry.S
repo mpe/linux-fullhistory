@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.115 2000/03/29 09:55:30 davem Exp $
+/* $Id: entry.S,v 1.116 2000/06/19 06:24:37 davem Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -867,8 +867,8 @@ sys_ptrace:	add		%sp, STACK_BIAS + REGWIN_SZ, %o0
 		 add		%o7, 1f-.-4, %o7
 		nop
 		.align		32
-1:		ldx		[%curptr + AOFF_task_flags], %l5
-		andcc		%l5, 0x20, %g0
+1:		ldx		[%curptr + AOFF_task_ptrace], %l5
+		andcc		%l5, 0x02, %g0
 		be,pt		%icc, rtrap
 		 clr		%l6
 		call		syscall_trace
@@ -994,11 +994,11 @@ linux_sparc_syscall32:
 	mov		%i4, %o4				! IEU1
 	lduw		[%l7 + %l4], %l7			! Load
 	srl		%i1, 0, %o1				! IEU0	Group
-	ldx		[%curptr + AOFF_task_flags], %l0	! Load
+	ldx		[%curptr + AOFF_task_ptrace], %l0	! Load
 
 	mov		%i5, %o5				! IEU1
 	srl		%i2, 0, %o2				! IEU0	Group
-	andcc		%l0, 0x20, %g0				! IEU0	Group
+	andcc		%l0, 0x02, %g0				! IEU0	Group
 	bne,pn		%icc, linux_syscall_trace32		! CTI
 	 mov		%i0, %l5				! IEU1
 	call		%l7					! CTI	Group brk forced
@@ -1023,11 +1023,11 @@ linux_sparc_syscall:
 	mov		%i1, %o1				! IEU1
 	lduw		[%l7 + %l4], %l7			! Load
 4:	mov		%i2, %o2				! IEU0	Group
-	ldx		[%curptr + AOFF_task_flags], %l0	! Load
+	ldx		[%curptr + AOFF_task_ptrace], %l0	! Load
 
 	mov		%i3, %o3				! IEU1
 	mov		%i4, %o4				! IEU0	Group
-	andcc		%l0, 0x20, %g0				! IEU1	Group+1 bubble
+	andcc		%l0, 0x02, %g0				! IEU1	Group+1 bubble
 	bne,pn		%icc, linux_syscall_trace		! CTI	Group
 	 mov		%i0, %l5				! IEU0
 2:	call		%l7					! CTI	Group brk forced
@@ -1048,7 +1048,7 @@ ret_sys_call:
 	sllx		%g2, 32, %g2
 	bgeu,pn		%xcc, 1f
 
-	 andcc		%l0, 0x20, %l6	
+	 andcc		%l0, 0x02, %l6	
 	andn		%g3, %g2, %g3		/* System call success, clear Carry condition code. */
 	stx		%g3, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TSTATE]	
 	bne,pn		%icc, linux_syscall_trace2

@@ -1,4 +1,4 @@
-/* $Id: viking.S,v 1.16 2000/05/09 17:40:13 davem Exp $
+/* $Id: viking.S,v 1.17 2000/06/04 06:23:53 anton Exp $
  * viking.S: High speed Viking cache/mmu operations
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -31,12 +31,10 @@ sun4dsmp_flush_tlb_spin:
 	.globl	viking_flush_cache_range, viking_flush_cache_page
 	.globl	viking_flush_page, viking_mxcc_flush_page
 	.globl	viking_flush_page_for_dma, viking_flush_page_to_ram
-	.globl	viking_flush_chunk, viking_mxcc_flush_chunk
 	.globl	viking_flush_sig_insns
 	.globl	viking_flush_tlb_all, viking_flush_tlb_mm
 	.globl	viking_flush_tlb_range, viking_flush_tlb_page
 
-viking_flush_chunk:
 viking_flush_page:
 	sethi	%hi(PAGE_OFFSET), %g2
 	sub	%o0, %g2, %g3
@@ -107,10 +105,6 @@ viking_mxcc_flush_page:
 	 sub	%g3, MXCC_STREAM_SIZE, %g3
 
 9:	retl
-	 nop
-
-viking_mxcc_flush_chunk:
-	retl
 	 nop
 
 #define WINDOW_FLUSH(tmp1, tmp2)					\

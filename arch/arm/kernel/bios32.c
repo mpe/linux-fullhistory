@@ -21,65 +21,94 @@ int have_isa_bridge;
 
 extern void hw_init(void);
 
-void pcibios_report_device_errors(int warn)
+void pcibios_report_status(u_int status_mask, int warn)
 {
 	struct pci_dev *dev;
 
 	pci_for_each_dev(dev) {
 		u16 status;
 
-		pci_read_config_word(dev, PCI_STATUS, &status);
-
-		if ((status & 0xf900) == 0)
+		/*
+		 * ignore host bridge - we handle
+		 * that separately
+		 */
+		if (dev->bus->number == 0 && dev->devfn == 0)
 			continue;
 
-		pci_write_config_word(dev, PCI_STATUS, status & 0xf900);
+		pci_read_config_word(dev, PCI_STATUS, &status);
+
+		status &= status_mask;
+		if (status == 0)
+			continue;
+
+		/* clear the status errors */
+		pci_write_config_word(dev, PCI_STATUS, status);
 
 		if (warn)
-			printk(KERN_DEBUG "PCI: %02X:%02X: status %04X "
-			       "on %s\n", dev->bus->number, dev->devfn,
-			       status, dev->name);
+			printk("(%02x:%02x.%d: %04X) ", dev->bus->number,
+				PCI_SLOT(dev->devfn), PCI_FUNC(dev->devfn),
+				status);
 	}
 }
 
 /*
  * We don't use this to fix the device, but initialisation of it.
- * It's not the correct use for this, but it works.  The actions we
- * take are:
- * - enable only IO
- * - set memory region to start at zero
- * - (0x48) enable all memory requests from ISA to be channeled to PCI
- * - (0x42) disable ping-pong (as per errata)
- * - (0x40) enable PCI packet retry
+ * It's not the correct use for this, but it works.
+ * Note that the arbiter/ISA bridge appears to be buggy, specifically in
+ * the following area:
+ * 1. park on CPU
+ * 2. ISA bridge ping-pong
+ * 3. ISA bridge master handling of target RETRY
+ *
+ * Bug 3 is responsible for the sound DMA grinding to a halt.  We now
+ * live with bug 2.
  */
 static void __init pci_fixup_83c553(struct pci_dev *dev)
 {
+	/*
+	 * Set memory region to start at address 0, and enable IO
+	 */
 	pci_write_config_dword(dev, PCI_BASE_ADDRESS_0, PCI_BASE_ADDRESS_SPACE_MEMORY);
 	pci_write_config_word(dev, PCI_COMMAND, PCI_COMMAND_IO);
 
 	dev->resource[0].end -= dev->resource[0].start;
 	dev->resource[0].start = 0;
 
+	/*
+	 * All memory requests from ISA to be channelled to PCI
+	 */
 	pci_write_config_byte(dev, 0x48, 0xff);
-	pci_write_config_byte(dev, 0x42, 0x00);
+
+	/*
+	 * Enable ping-pong on bus master to ISA bridge transactions.
+	 * This improves the sound DMA substantially.  The fixed
+	 * priority arbiter also helps (see below).
+	 */
+	pci_write_config_byte(dev, 0x42, 0x01);
+
+	/*
+	 * Enable PCI retry
+	 */
 	pci_write_config_byte(dev, 0x40, 0x22);
 
 	/*
-	 * We used to set the arbiter to "park on last master"
-	 * (bit 1 set), but unfortunately the CyberPro does not
-	 * park the bus.  We must therefore park on CPU.
+	 * We used to set the arbiter to "park on last master" (bit
+	 * 1 set), but unfortunately the CyberPro does not park the
+	 * bus.  We must therefore park on CPU.  Unfortunately, this
+	 * may trigger yet another bug in the 553.
 	 */
-	pci_write_config_byte(dev, 0x83, 0x00);
+	pci_write_config_byte(dev, 0x83, 0x02);
 
 	/*
-	 * Rotate priorities of each PCI request
+	 * Make the ISA DMA request lowest priority, and disable
+	 * rotating priorities completely.
 	 */
-	pci_write_config_byte(dev, 0x80, 0xe0);
-	pci_write_config_byte(dev, 0x81, 0x01);
+	pci_write_config_byte(dev, 0x80, 0x11);
+	pci_write_config_byte(dev, 0x81, 0x00);
 
 	/*
-	 * Route INTA input to IRQ 11, and set
-	 * IRQ11 to be level sensitive.
+	 * Route INTA input to IRQ 11, and set IRQ11 to be level
+	 * sensitive.
 	 */
 	pci_write_config_word(dev, 0x44, 0xb000);
 	outb(0x08, 0x4d1);
@@ -193,8 +222,8 @@ void __init pcibios_update_irq(struct pci_dev *dev, int irq)
 	pci_write_config_byte(dev, PCI_INTERRUPT_LINE, irq);
 }
 
-/*
- * Called after each bus is probed, but before its children
+/**
+ * pcibios_fixup_bus - Called after each bus is probed, but before its children
  * are examined.
  */
 void __init pcibios_fixup_bus(struct pci_bus *bus)
@@ -209,6 +238,8 @@ void __init pcibios_fixup_bus(struct pci_bus *bus)
 	else
 		BUG();
 
+	busdata->max_lat = 255;
+
 	/*
 	 * Walk the devices on this bus, working out what we can
 	 * and can't support.
@@ -216,6 +247,7 @@ void __init pcibios_fixup_bus(struct pci_bus *bus)
 	for (walk = walk->next; walk != &bus->devices; walk = walk->next) {
 		struct pci_dev *dev = pci_dev_b(walk);
 		u16 status;
+		u8 max_lat, min_gnt;
 
 		pci_read_config_word(dev, PCI_STATUS, &status);
 
@@ -226,6 +258,17 @@ void __init pcibios_fixup_bus(struct pci_bus *bus)
 		if (!(status & PCI_STATUS_FAST_BACK))
 			busdata->features &= ~PCI_COMMAND_FAST_BACK;
 
+		/*
+		 * If we encounter a CyberPro 2000, then we disable
+		 * SERR and PERR reporting - this chip doesn't drive the
+		 * parity line correctly.
+		 */
+#if 1 /* !testing */
+		if (dev->vendor == PCI_VENDOR_ID_INTERG &&
+		    dev->device == PCI_DEVICE_ID_INTERG_2000)
+			busdata->features &= ~(PCI_COMMAND_SERR |
+					       PCI_COMMAND_PARITY);
+#endif
 		/*
 		 * Calculate the maximum devsel latency.
 		 */
@@ -240,6 +283,16 @@ void __init pcibios_fixup_bus(struct pci_bus *bus)
 		if (dev->class >> 8 == PCI_CLASS_BRIDGE_ISA ||
 		    dev->class >> 8 == PCI_CLASS_BRIDGE_EISA)
 			have_isa_bridge = !0;
+
+		/*
+		 * Calculate the maximum latency on this bus.  Note
+		 * that we ignore any device which reports its max
+		 * latency is the same as its use.
+		 */
+		pci_read_config_byte(dev, PCI_MAX_LAT, &max_lat);
+		pci_read_config_byte(dev, PCI_MIN_GNT, &min_gnt);
+		if (max_lat && max_lat != min_gnt && max_lat < busdata->max_lat)
+			busdata->max_lat = max_lat;
 	}
 
 	/*
@@ -249,6 +302,7 @@ void __init pcibios_fixup_bus(struct pci_bus *bus)
 	for (walk = walk->next; walk != &bus->devices; walk = walk->next) {
 		struct pci_dev *dev = pci_dev_b(walk);
 		u16 cmd;
+		u8 min_gnt, latency;
 
 		/*
 		 * architecture specific hacks. I don't really want
@@ -263,11 +317,27 @@ void __init pcibios_fixup_bus(struct pci_bus *bus)
 			pci_write_config_dword(dev, 0x40, 0x80000000);
 
 		/*
-		 * Set latency timer to 32, and a cache line size to 32 bytes.
+		 * Calculate this masters latency timer value.
+		 * This is rather primitive - it does not take
+		 * account of the number of masters in a system
+		 * wanting to use the bus.
+		 */
+		pci_read_config_byte(dev, PCI_MIN_GNT, &min_gnt);
+		if (min_gnt) {
+			if (min_gnt > busdata->max_lat)
+				min_gnt = busdata->max_lat;
+
+			latency = (int)min_gnt * 25 / 3;
+		} else
+			latency = 32; /* 1us */
+
+		pci_write_config_byte(dev, PCI_LATENCY_TIMER, latency);
+
+		/*
+		 * Set the cache line size to 32 bytes.
 		 * Also, set system error enable, parity error enable.
 		 * Disable ROM.
 		 */
-		pci_write_config_byte(dev, PCI_LATENCY_TIMER, 32);
 		pci_write_config_byte(dev, PCI_CACHE_LINE_SIZE, 8);
 		pci_read_config_word(dev, PCI_COMMAND, &cmd);
 
@@ -520,15 +590,6 @@ void __init pcibios_init(void)
 	pci_assign_unassigned_resources();
 	pci_fixup_irqs(hw_pci->swizzle, hw_pci->map_irq);
 	pci_set_bus_ranges();
-
-#ifdef CONFIG_FOOTBRIDGE
-	/*
-	 * Initialise any other hardware after we've got the PCI bus
-	 * initialised.  We may need the PCI bus to talk to this other
-	 * hardware.
-	 */
-	hw_init();
-#endif
 }
 
 char * __init pcibios_setup(char *str)
@@ -544,10 +605,18 @@ void pcibios_align_resource(void *data, struct resource *res, unsigned long size
 {
 }
 
+/**
+ * pcibios_set_master - Setup device for bus mastering.
+ * @dev: PCI device to be setup
+ */
 void pcibios_set_master(struct pci_dev *dev)
 {
 }
 
+/**
+ * pcibios_enable_device - Enable I/O and memory.
+ * @dev: PCI device to be enabled
+ */
 int pcibios_enable_device(struct pci_dev *dev)
 {
 	u16 cmd, old_cmd;

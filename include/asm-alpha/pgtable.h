@@ -45,7 +45,8 @@
 /* Number of pointers that fit on a page:  this will go away. */
 #define PTRS_PER_PAGE	(1UL << (PAGE_SHIFT-3))
 
-#define VMALLOC_START		0xFFFFFE0000000000
+#define CONSOLE_REMAP_START    0xFFFFFE0000000000
+#define VMALLOC_START          (CONSOLE_REMAP_START + PMD_SIZE)
 #define VMALLOC_VMADDR(x)	((unsigned long)(x))
 #define VMALLOC_END		(~0UL)
 

@@ -14,9 +14,10 @@
 #define EV5_CPU                 5       /* EV5 (21164)          */
 #define EV45_CPU                6       /* EV4.5 (21064/xxx)    */
 #define EV56_CPU		7	/* EV5.6 (21164)	*/
-#define EV6_CPU			8	/* EV6 (21164)		*/
+#define EV6_CPU			8	/* EV6 (21264)		*/
 #define PCA56_CPU		9	/* PCA56 (21164PC)	*/
 #define PCA57_CPU		10	/* PCA57 (notyet)	*/
+#define EV67_CPU		11	/* EV67 (21264A)	*/
 
 /*
  * DEC system types for Alpha systems.  Found in HWRPB.
@@ -56,6 +57,7 @@
 #define ST_DEC_WILDFIRE		 35	/* Wildfire systype	*/
 #define ST_DEC_CUSCO		 36	/* CUSCO systype	*/
 #define ST_DEC_EIGER		 37	/* Eiger systype	*/
+#define ST_DEC_TITAN		 38	/* Titan systype	*/
 
 /* UNOFFICIAL!!! */
 #define ST_UNOFFICIAL_BIAS	100

@@ -58,10 +58,7 @@
 #define SJCD_VERSION_MAJOR 1
 #define SJCD_VERSION_MINOR 7
 
-#ifdef MODULE
 #include <linux/module.h>
-#endif /* MODULE */
-
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -1339,6 +1336,8 @@ int sjcd_open( struct inode *ip, struct file *fp ){
    */
   if( fp->f_mode & 2 ) return( -EROFS );
   
+  MOD_INC_USE_COUNT;
+
   if( sjcd_open_count == 0 ){
     int s, sjcd_open_tries;
 /* We don't know that, do we? */
@@ -1360,7 +1359,7 @@ int sjcd_open( struct inode *ip, struct file *fp ){
 #if defined( SJCD_DIAGNOSTIC )
 	printk( "SJCD: open: timed out when check status.\n" );
 #endif
-	return( -EIO );
+	goto err_out;
       } else if( !sjcd_media_is_available ){
 #if defined( SJCD_DIAGNOSTIC )
 	printk("SJCD: open: no disk in drive\n");
@@ -1375,10 +1374,10 @@ int sjcd_open( struct inode *ip, struct file *fp ){
 #if defined( SJCD_DIAGNOSTIC )
 	    printk("SJCD: open: tray close attempt failed\n");
 #endif
-	    return( -EIO );
+	    goto err_out;
 	  }
 	  continue;
-	} else return( -EIO );
+	} else goto err_out;
       }
       break;
     }
@@ -1387,17 +1386,19 @@ int sjcd_open( struct inode *ip, struct file *fp ){
 #if defined( SJCD_DIAGNOSTIC )
       printk("SJCD: open: tray lock attempt failed\n");
 #endif
-      return( -EIO );
+      goto err_out;
     }
 #if defined( SJCD_TRACE )
     printk( "SJCD: open: done\n" );
 #endif
   }
-#ifdef MODULE
-  MOD_INC_USE_COUNT;
-#endif
+
   ++sjcd_open_count;
   return( 0 );
+
+err_out:
+  MOD_DEC_USE_COUNT;
+  return( -EIO );
 }
 
 /*

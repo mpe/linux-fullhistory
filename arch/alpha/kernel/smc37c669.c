@@ -2588,6 +2588,9 @@ void __init SMC669_Init ( int index )
         );
         SMC37c669_enable_device( FLOPPY_0 );
           
+	/* Wake up sometimes forgotten floppy, especially on DP264. */
+	outb(0xc, 0x3f2);
+
         SMC37c669_disable_device( IDE_0 );
 
 #if SMC_DEBUG

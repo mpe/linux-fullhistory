@@ -1,4 +1,4 @@
-/* $Id: timod.c,v 1.6 2000/03/25 03:23:21 davem Exp $
+/* $Id: timod.c,v 1.7 2000/06/09 07:35:30 davem Exp $
  * timod.c: timod emulation.
  *
  * Copyright (C) 1998 Patrik Rak (prak3264@ss1000.ms.mff.cuni.cz)
@@ -17,6 +17,8 @@
 #include <linux/fs.h>
 #include <linux/netdevice.h>
 #include <linux/poll.h>
+
+#include <net/sock.h>
 
 #include <asm/uaccess.h>
 #include <asm/termios.h>
@@ -151,8 +153,10 @@ static void timod_wake_socket(unsigned int fd)
 	SOLD("wakeing socket");
 	sock = &current->files->fd[fd]->f_dentry->d_inode->u.socket_i;
 	wake_up_interruptible(&sock->wait);
+	read_lock(&sock->sk->callback_lock);
 	if (sock->fasync_list && !test_bit(SOCK_ASYNC_WAITDATA, &sock->flags))
-		kill_fasync(sock->fasync_list, SIGIO, POLL_IN);
+		__kill_fasync(sock->fasync_list, SIGIO, POLL_IN);
+	read_unlock(&sock->sk->callback_lock);
 	SOLD("done");
 }
 

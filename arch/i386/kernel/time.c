@@ -114,9 +114,11 @@ static inline unsigned long do_fast_gettimeoffset(void)
 
 #define TICK_SIZE tick
 
-#ifndef CONFIG_X86_TSC
-
 spinlock_t i8253_lock = SPIN_LOCK_UNLOCKED;
+
+extern spinlock_t i8259A_lock;
+
+#ifndef CONFIG_X86_TSC
 
 /* This function must be called with interrupts disabled 
  * It was inspired by Steve McCanne's microtime-i386 for BSD.  -- jrs
@@ -176,6 +178,7 @@ static unsigned long do_slow_gettimeoffset(void)
  	jiffies_t = jiffies;
 
 	count |= inb_p(0x40) << 8;
+	spin_unlock(&i8253_lock);
 
 	/*
 	 * avoiding timer inconsistencies (they are rare, but they happen)...
@@ -194,10 +197,18 @@ static unsigned long do_slow_gettimeoffset(void)
 		if( count > count_p ) {
 			/* the nutcase */
 
-			outb_p(0x0A, 0x20);
+			int i;
 
-			/* assumption about timer being IRQ1 */
-			if( inb(0x20) & 0x01 ) {
+			spin_lock(&i8259A_lock);
+			/*
+			 * This is tricky when I/O APICs are used;
+			 * see do_timer_interrupt().
+			 */
+			i = inb(0x20);
+			spin_unlock(&i8259A_lock);
+
+			/* assumption about timer being IRQ0 */
+			if (i & 0x01) {
 				/*
 				 * We cannot detect lost timer interrupts ... 
 				 * well, that's why we call them lost, don't we? :)
@@ -222,7 +233,6 @@ static unsigned long do_slow_gettimeoffset(void)
 		}
 	} else
 		jiffies_p = jiffies_t;
-	spin_unlock(&i8253_lock);
 
 	count_p = count;
 
@@ -365,12 +375,30 @@ static int set_rtc_mmss(unsigned long nowtime)
 /* last time the cmos clock got updated */
 static long last_rtc_update = 0;
 
+int timer_ack = 0;
+
 /*
  * timer_interrupt() needs to keep up the real-time clock,
  * as well as call the "do_timer()" routine every clocktick
  */
 static inline void do_timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
+#ifdef CONFIG_X86_IO_APIC
+	if (timer_ack) {
+		/*
+		 * Subtle, when I/O APICs are used we have to ack timer IRQ
+		 * manually to reset the IRR bit for do_slow_gettimeoffset().
+		 * This will also deassert NMI lines for the watchdog if run
+		 * on an 82489DX-based system.
+		 */
+		spin_lock(&i8259A_lock);
+		outb(0x0c, 0x20);
+		/* Ack the IRQ; AEOI will end it automatically. */
+		inb(0x20);
+		spin_unlock(&i8259A_lock);
+	}
+#endif
+
 #ifdef CONFIG_VISWS
 	/* Clear the interrupt */
 	co_cpu_write(CO_CPU_STAT,co_cpu_read(CO_CPU_STAT) & ~CO_STAT_TIMEINTR);
@@ -459,19 +487,12 @@ static void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 		rdtscl(last_tsc_low);
 
-#if 0 /*
-       * SUBTLE: this is not necessary from here because it's implicit in the
-       * write xtime_lock.
-       */
 		spin_lock(&i8253_lock);
-#endif
 		outb_p(0x00, 0x43);     /* latch the count ASAP */
 
 		count = inb_p(0x40);    /* read the latched count */
 		count |= inb(0x40) << 8;
-#if 0
 		spin_unlock(&i8253_lock);
-#endif
 
 		count = ((LATCH-1) - count) * TICK_SIZE;
 		delay_at_last_interrupt = (count + LATCH/2) / LATCH;
@@ -667,7 +688,7 @@ void __init time_init(void)
  
  	dodgy_tsc();
  	
-	if (boot_cpu_data.x86_capability & X86_FEATURE_TSC) {
+	if (cpu_has_tsc) {
 		unsigned long tsc_quotient = calibrate_tsc();
 		if (tsc_quotient) {
 			fast_gettimeoffset_quotient = tsc_quotient;

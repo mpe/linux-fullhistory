@@ -170,6 +170,10 @@ extern void _sethae (unsigned long addr);	/* cached version */
 # include <asm/core_t2.h>
 #elif defined(CONFIG_ALPHA_TSUNAMI)
 # include <asm/core_tsunami.h>
+#elif defined(CONFIG_ALPHA_TITAN)
+# include <asm/core_titan.h>
+#elif defined(CONFIG_ALPHA_WILDFIRE)
+# include <asm/core_wildfire.h>
 #else
 #error "What system is this?"
 #endif

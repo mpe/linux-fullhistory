@@ -1,6 +1,6 @@
 #
 # For a description of the syntax of this configuration file,
-# see the Configure script.
+# see Documentation/kbuild/config-language.txt.
 #
 mainmenu_name "Linux/SuperH Kernel Configuration"
 
@@ -17,7 +17,9 @@ mainmenu_option next_comment
 comment 'Processor type and features'
 choice 'SuperH system type'					\
 	"Generic		CONFIG_SH_GENERIC		\
-	 SolutionEngine		CONFIG_SH_SOLUTION_ENGINE" Generic
+	 SolutionEngine		CONFIG_SH_SOLUTION_ENGINE	\
+	 Overdrive		CONFIG_SH_OVERDRIVE		\
+	 HP600			CONFIG_SH_HP600" Generic
 
 choice 'Processor type' \
    "SH7708 CONFIG_CPU_SUBTYPE_SH7708 \
@@ -36,7 +38,8 @@ if [ "$CONFIG_CPU_SUBTYPE_SH7750" = "y" ]; then
    define_bool CONFIG_CPU_SH4 y
 fi
 bool 'Little Endian' CONFIG_LITTLE_ENDIAN
-if [ "$CONFIG_SH_SOLUTION_ENGINE" = "y" ]; then
+if [ "$CONFIG_SH_SOLUTION_ENGINE" = "y" -o "$CONFIG_SH_HP600" = "y" -o \
+     "$CONFIG_SH_OVERDRIVE" = "y" ]; then
   define_hex CONFIG_MEMORY_START 0c000000
 else
   hex 'Physical memory start address' CONFIG_MEMORY_START 08000000
@@ -61,8 +64,14 @@ define_bool CONFIG_SBUS n
 
 bool 'Networking support' CONFIG_NET
 
-if [ "$CONFIG_SH_SOLUTION_ENGINE" != "y" ]; then
-   bool 'Directly Connected Compact Flash support' CONFIG_CF_ENABLER
+if [ "$CONFIG_SH_GENERIC" = "y" -o "$CONFIG_SH_SOLUTION_ENGINE" = "y" ]; then
+  bool 'Compact Flash Enabler support' CONFIG_CF_ENABLER
+fi
+
+bool 'Hitachi HD64461 companion chip support' CONFIG_HD64461
+if [ "$CONFIG_HD64461" = "y" ]; then
+   int 'HD64461 IRQ' CONFIG_HD64461_IRQ 36
+   bool 'HD64461 PCMCIA enabler' CONFIG_HD64461_ENABLER
 fi
 
 bool 'PCI support' CONFIG_PCI
@@ -158,11 +167,6 @@ if [ "$CONFIG_VT" = "y" ]; then
 fi
 
 tristate 'Serial support' CONFIG_SERIAL
-if [ "$CONFIG_SERIAL" = "y" -o "$CONFIG_SERIAL" = "m" ]; then
-   choice 'Serial interface type' \
-      "SCI  CONFIG_SH_SCI_SERIAL \
-       SCIF CONFIG_SH_SCIF_SERIAL"
-fi
 if [ "$CONFIG_SERIAL" = "y" ]; then
    bool '  Support for console on serial port' CONFIG_SERIAL_CONSOLE
 fi

@@ -595,19 +595,17 @@ static int openprom_open(struct inode * inode, struct file * file)
 	data->lastnode = prom_root_node;
 	file->private_data = (void *)data;
 
-	MOD_INC_USE_COUNT;
-
 	return 0;
 }
 
 static int openprom_release(struct inode * inode, struct file * file)
 {
 	kfree_s(file->private_data, sizeof(DATA));
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 static struct file_operations openprom_fops = {
+	owner:		THIS_MODULE,
 	llseek:		openprom_lseek,
 	ioctl:		openprom_ioctl,
 	open:		openprom_open,

@@ -705,6 +705,7 @@ struct block_device_operations {
  *   without the big kernel lock held in all filesystems.
  */
 struct file_operations {
+	struct module *owner;
 	loff_t (*llseek) (struct file *, loff_t, int);
 	ssize_t (*read) (struct file *, char *, size_t, loff_t *);
 	ssize_t (*write) (struct file *, const char *, size_t, loff_t *);
@@ -788,6 +789,18 @@ struct file_system_type var = { \
 
 #define DECLARE_FSTYPE_DEV(var,type,read) \
 	DECLARE_FSTYPE(var,type,read,FS_REQUIRES_DEV)
+
+/* Alas, no aliases. Too much hassle with bringing module.h everywhere */
+#define fops_get(fops) \
+	(((fops) && (fops)->owner)	\
+		? __MOD_INC_USE_COUNT((fops)->owner), (fops) \
+		: (fops))
+
+#define fops_put(fops) \
+do {	\
+	if ((fops) && (fops)->owner) \
+		__MOD_DEC_USE_COUNT((fops)->owner);	\
+} while(0)
 
 extern int register_filesystem(struct file_system_type *);
 extern int unregister_filesystem(struct file_system_type *);

@@ -1,4 +1,4 @@
-/* $Id: ioport.c,v 1.37 2000/03/28 06:38:19 davem Exp $
+/* $Id: ioport.c,v 1.38 2000/06/04 06:23:52 anton Exp $
  * ioport.c:  Simple io mapping allocator.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -52,11 +52,11 @@ static void _sparc_free_io(struct resource *res);
 
 /* This points to the next to use virtual memory for DVMA mappings */
 static struct resource _sparc_dvma = {
-	"sparc_dvma", DVMA_VADDR, DVMA_VADDR + DVMA_LEN - 1
+	"sparc_dvma", DVMA_VADDR, DVMA_END - 1
 };
 /* This points to the start of I/O mappings, cluable from outside. */
 /*ext*/ struct resource sparc_iomap = {
-	"sparc_iomap", IOBASE_VADDR, IOBASE_END-1
+	"sparc_iomap", IOBASE_VADDR, IOBASE_END - 1
 };
 
 /*
@@ -453,7 +453,11 @@ void sbus_dma_sync_single(struct sbus_dev *sdev, u32 ba, long size, int directio
 		panic("sbus_dma_sync_single: 0x%x\n", ba);
 
 	va = (unsigned long) phys_to_virt(mmu_translate_dvma(ba));
-	mmu_inval_dma_area(va, (size + PAGE_SIZE-1) & PAGE_MASK);
+	/*
+	 * XXX This bogosity will be fixed with the iommu rewrite coming soon
+	 * to a kernel near you. - Anton
+	 */
+	/* mmu_inval_dma_area(va, (size + PAGE_SIZE-1) & PAGE_MASK); */
 }
 
 void sbus_dma_sync_sg(struct sbus_dev *sdev, struct scatterlist *sg, int n, int direction)

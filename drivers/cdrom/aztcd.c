@@ -1543,14 +1543,17 @@ int aztcd_open(struct inode *ip, struct file *fp)
 #ifdef AZT_DEBUG
 	printk("aztcd: starting aztcd_open\n");
 #endif
+
 	if (aztPresent == 0)
 		return -ENXIO;                  /* no hardware */
+
+        MOD_INC_USE_COUNT;
 
 	if (!azt_open_count && azt_state == AZT_S_IDLE) 
 	  { azt_invalidate_buffers();
 
 	    st = getAztStatus();                    /* check drive status */
-	    if (st == -1) return -EIO;              /* drive doesn't respond */
+	    if (st == -1) goto err_out;              /* drive doesn't respond */
 
             if (st & AST_DOOR_OPEN)
                { /* close door, then get the status again. */
@@ -1563,18 +1566,20 @@ int aztcd_open(struct inode *ip, struct file *fp)
 	       { printk("aztcd: Disk Changed or No Disk in Drive?\n");
                  aztTocUpToDate=0;
                }
-            if (aztUpdateToc())	return -EIO;
+            if (aztUpdateToc())	goto err_out;
 	       
 	  }
 	++azt_open_count;
-        MOD_INC_USE_COUNT;
 	aztLockDoor();
-
 
 #ifdef AZT_DEBUG
 	printk("aztcd: exiting aztcd_open\n");
 #endif
 	return 0;
+
+err_out:
+	MOD_DEC_USE_COUNT;
+	return -EIO;
 }
 
 

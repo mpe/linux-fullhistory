@@ -14,7 +14,7 @@ CONFIG_EXPERIMENTAL=y
 CONFIG_PPC=y
 CONFIG_6xx=y
 # CONFIG_4xx is not set
-# CONFIG_PPC64 is not set
+# CONFIG_PPC64BRIDGE is not set
 # CONFIG_8260 is not set
 # CONFIG_8xx is not set
 CONFIG_ALL_PPC=y

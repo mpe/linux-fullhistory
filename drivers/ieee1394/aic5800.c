@@ -723,14 +723,17 @@ inline static void * quadquadalign(void *buf)
 
 static int add_card(struct pci_dev *dev)
 {
-#define FAIL(fmt, args...) \
+#define FAIL(fmt, args...) do {\
         PRINT_G(KERN_ERR, fmt , ## args); \
         num_of_cards--; \
         remove_card(aic); \
-        return 1;
+        return 1; } while (0)
 
         struct aic5800 *aic; /* shortcut to currently handled device */
         unsigned long page;
+
+	if (pci_enable_device(dev))
+		return 1;
 
         if (num_of_cards == MAX_AIC5800_CARDS) {
                 PRINT_G(KERN_WARNING, "cannot handle more than %d cards.  "

@@ -84,9 +84,7 @@ start:
 		b	1f
 		.word	0x016f2818		@ Magic numbers to help the loader
 		.word	start	
-1:		adr	r8, start		@ get the start address of the code
-						@ (used for locating the page tables)
-
+1:
 		/*
 		 * some architecture specific code can be inserted
 		 * by the linker here, but it should preserve r0, r1
@@ -178,9 +176,13 @@ LC0:		.word	__bss_start
 		.align	5
 cache_on:	ldr	r1, proc_sa110_type
 		eor	r1, r1, r6
-		movs	r1, r1, lsr #5
+		movs	r1, r1, lsr #5		@ catch SA110 and SA1100
+		beq	1f
+		ldr     r1, proc_sa1110_type
+		eor	r1, r1, r6
+		movs	r1, r1, lsr #4
 		movne	pc, lr
-
+1:
 		sub	r3, r4, #16384		@ Page directory size
 		bic	r3, r3, #0xff		@ Align the pointer
 		bic	r3, r3, #0x3f
@@ -259,6 +261,11 @@ proc_sa110_type:
 		.word	0x4401a100
 		.size	proc_sa110_type, . - proc_sa110_type
 
+		.type	proc_sa1110_type,#object
+proc_sa1110_type:
+		.word	0x6901b110
+		.size	proc_sa1110_type, . - proc_sa1110_type
+
 /*
  * Turn off StrongARM cache and MMU.  It is safe to
  * leave the I-cache on.
@@ -273,8 +280,13 @@ proc_sa110_type:
 		.align	5
 cache_off:	ldr	r1, proc_sa110_type
 		eor	r1, r1, r6
-		movs	r1, r1, lsr #5
+		movs	r1, r1, lsr #5		@ catch SA110 and SA1100
+		beq	1f
+		ldr	r1, proc_sa1110_type
+		eor	r1, r1, r6
+		movs	r1, r1, lsr #4
 		movne	pc, lr
+1:
 		mrc	p15, 0, r0, c1, c0
 		bic	r0, r0, #0x000d
 		mcr	p15, 0, r0, c1, c0
@@ -292,11 +304,15 @@ cache_off:	ldr	r1, proc_sa110_type
  */
 		.align	5
 cache_clean_flush:
-		ldr	r1, proc_sa110_type	@ SA-110 or SA-1100?
+		ldr	r1, proc_sa110_type
 		eor	r1, r1, r6
-		movs	r1, r1, lsr #5
+		movs	r1, r1, lsr #5		@ catch SA110 and SA1100
+		beq	1f
+		ldr	r1, proc_sa1110_type
+		eor	r1, r1, r6
+		movs	r1, r1, lsr #4
 		movne	pc, lr
-
+1:
 		bic	r1, pc, #31
 		add	r2, r1, #32768
 1:		ldr	r12, [r1], #32		@ s/w flush D cache

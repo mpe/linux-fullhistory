@@ -161,6 +161,20 @@ extern inline void * bus_to_virt(unsigned long address)
 }
 
 /*
+ * The PCI bus bridge can translate addresses issued by the processor(s)
+ * into a different address on the PCI bus.  On 32-bit cpus, we assume
+ * this mapping is 1-1, but on 64-bit systems it often isn't.
+ */
+#ifndef CONFIG_PPC64BRIDGE
+#define phys_to_bus(x)	(x)
+#define bus_to_phys(x)	(x)
+
+#else
+extern unsigned long phys_to_bus(unsigned long pa);
+extern unsigned long bus_to_phys(unsigned int ba, int busnr);
+#endif /* CONFIG_PPC64BRIDGE */
+
+/*
  * Change virtual addresses to physical addresses and vv, for
  * addresses in the area where the kernel has the RAM mapped.
  */

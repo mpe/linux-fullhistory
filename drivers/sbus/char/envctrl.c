@@ -1,4 +1,4 @@
-/* $Id: envctrl.c,v 1.16 2000/03/22 21:29:23 ecd Exp $
+/* $Id: envctrl.c,v 1.17 2000/06/19 06:24:47 davem Exp $
  * envctrl.c: Temperature and Fan monitoring on Machines providing it.
  *
  * Copyright (C) 1998  Eddie C. Dost  (ecd@skynet.be)
@@ -1507,24 +1507,16 @@ static int
 envctrl_open(struct inode *inode, struct file *file)
 {
 	file->private_data = 0;
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-static int
-envctrl_release(struct inode *inode, struct file *file)
-{
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 static struct file_operations envctrl_fops = {
+	owner:		THIS_MODULE,
 	llseek:		envctrl_llseek,
 	read:		envctrl_read,
 	write:		envctrl_write,
 	ioctl:		envctrl_ioctl,
 	open:		envctrl_open,
-	release:	envctrl_release,
 };
 
 static struct miscdevice envctrl_dev = {

@@ -25,6 +25,7 @@
 #include "highlevel.h"
 #include "ieee1394_transactions.h"
 #include "csr.h"
+#include "guid.h"
 
 
 atomic_t hpsb_generation = ATOMIC_INIT(0);
@@ -45,6 +46,26 @@ static void dump_packet(const char *text, quadlet_t *data, int size)
 }
 
 
+/**
+ * alloc_hpsb_packet - allocate new packet structure
+ * @data_size: size of the data block to be allocated
+ *
+ * This function allocates, initializes and returns a new &struct hpsb_packet.
+ * It can be used in interrupt context.  A header block is always included, its
+ * size is big enough to contain all possible 1394 headers.  The data block is
+ * only allocated when @data_size is not zero.
+ *
+ * For packets for which responses will be received the @data_size has to be big
+ * enough to contain the response's data block since no further allocation
+ * occurs at response matching time.
+ *
+ * The packet's generation value will be set to the current generation number
+ * for ease of use.  Remember to overwrite it with your own recorded generation
+ * number if you can not be sure that your code will not race with a bus reset.
+ *
+ * Return value: A pointer to a &struct hpsb_packet or NULL on allocation
+ * failure.
+ */
 struct hpsb_packet *alloc_hpsb_packet(size_t data_size)
 {
         struct hpsb_packet *packet = NULL;
@@ -83,6 +104,14 @@ struct hpsb_packet *alloc_hpsb_packet(size_t data_size)
         return packet;
 }
 
+
+/**
+ * free_hpsb_packet - free packet and data associated with it
+ * @packet: packet to free (is NULL safe)
+ *
+ * This function will free packet->data, packet->header and finally the packet
+ * itself.
+ */
 void free_hpsb_packet(struct hpsb_packet *packet)
 {
         if (packet == NULL) {
@@ -336,6 +365,20 @@ void hpsb_packet_sent(struct hpsb_host *host, struct hpsb_packet *packet,
         queue_task(&host->timeout_tq, &tq_timer);
 }
 
+/**
+ * hpsb_send_packet - transmit a packet on the bus
+ * @packet: packet to send
+ *
+ * The packet is sent through the host specified in the packet->host field.
+ * Before sending, the packet's transmit speed is automatically determined using
+ * the local speed map.
+ *
+ * Possibilities for failure are that host is either not initialized, in bus
+ * reset, the packet's generation number doesn't match the current generation
+ * number or the host reports a transmit error.
+ *
+ * Return value: False (0) on failure, true (1) otherwise.
+ */
 int hpsb_send_packet(struct hpsb_packet *packet)
 {
         struct hpsb_host *host = packet->host;
@@ -721,47 +764,6 @@ void abort_timedouts(struct hpsb_host *host)
 }
 
 
-#if 0
-int hpsb_host_thread(void *hostPointer)
-{
-        struct hpsb_host *host = (struct hpsb_host *)hostPointer;
-
-        /* I don't understand why, but I just want to be on the safe side. */
-        lock_kernel();
-
-        HPSB_INFO(__FUNCTION__ " starting for one %s adapter",
-                  host->template->name);
-
-        exit_mm(current);
-        exit_files(current);
-        exit_fs(current);
-
-        strcpy(current->comm, "ieee1394 thread");
-
-        /* ... but then again, I think the following is safe. */
-        unlock_kernel();
-
-        for (;;) {
-                siginfo_t info;
-                unsigned long signr;
-
-                if (signal_pending(current)) {
-                        spin_lock_irq(&current->sigmask_lock);
-                        signr = dequeue_signal(&current->blocked, &info);
-                        spin_unlock_irq(&current->sigmask_lock);
-
-                        break;
-                }
-
-                abort_timedouts(host);
-        }
-
-        HPSB_INFO(__FUNCTION__ " exiting");
-        return 0;
-}
-#endif
-
-
 #ifndef MODULE
 
 void __init ieee1394_init(void)
@@ -769,6 +771,7 @@ void __init ieee1394_init(void)
         register_builtin_lowlevels();
         init_hpsb_highlevel();
         init_csr();
+        init_ieee1394_guid();
 }
 
 #else
@@ -777,6 +780,8 @@ int init_module(void)
 {
         init_hpsb_highlevel();
         init_csr();
+        init_ieee1394_guid();
+
         return 0;
 }
 

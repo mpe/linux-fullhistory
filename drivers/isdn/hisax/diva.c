@@ -936,26 +936,28 @@ setup_diva(struct IsdnCard *card))
 		cs->subtyp = 0;
 		if ((dev_diva = pci_find_device(PCI_VENDOR_EICON_DIEHL,
 			PCI_DIVA20_ID, dev_diva))) {
+			if (pci_enable_device(dev_diva))
+				return (0);
 			cs->subtyp = DIVA_PCI;
 			cs->irq = dev_diva->irq;
-			cs->hw.diva.cfg_reg = dev_diva->resource[ 2].start
-				& PCI_BASE_ADDRESS_IO_MASK;
+			cs->hw.diva.cfg_reg = pci_resource_start(dev_diva, 2);
 		} else if ((dev_diva_u = pci_find_device(PCI_VENDOR_EICON_DIEHL,
 			PCI_DIVA20_U_ID, dev_diva_u))) {
+			if (pci_enable_device(dev_diva_u))
+				return (0);
 			cs->subtyp = DIVA_PCI;
 			cs->irq = dev_diva_u->irq;
-			cs->hw.diva.cfg_reg = dev_diva_u->resource[ 2].start
-				& PCI_BASE_ADDRESS_IO_MASK;
+			cs->hw.diva.cfg_reg = pci_resource_start(dev_diva_u, 2);
 		} else if ((dev_diva201 = pci_find_device(PCI_VENDOR_EICON_DIEHL,
 			PCI_DIVA_201, dev_diva201))) {
+			if (pci_enable_device(dev_diva201))
+				return (0);
 			cs->subtyp = DIVA_IPAC_PCI;
 			cs->irq = dev_diva201->irq;
 			cs->hw.diva.pci_cfg =
-				(ulong) ioremap((dev_diva201->resource[ 0].start
-					& PCI_BASE_ADDRESS_IO_MASK), 4096);
+				(ulong) ioremap(pci_resource_start(dev_diva201, 0), 4096);
 			cs->hw.diva.cfg_reg =
-				(ulong) ioremap((dev_diva201->resource[ 1].start
-					& PCI_BASE_ADDRESS_IO_MASK), 4096);
+				(ulong) ioremap(pci_resource_start(dev_diva201, 1), 4096);
 		} else {
 			printk(KERN_WARNING "Diva: No PCI card found\n");
 			return(0);

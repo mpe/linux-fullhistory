@@ -1301,9 +1301,65 @@ MODULE_PARM(timid, "1i");
 
 static struct net_device *dev_plip[PLIP_MAX] = { NULL, };
 
+static int inline 
+plip_searchfor(int list[], int a)
+{
+	int i;
+	for (i = 0; i < PLIP_MAX && list[i] != -1; i++) {
+		if (list[i] == a) return 1;
+	}
+	return 0;
+}
+
+/* plip_attach() is called (by the parport code) when a port is
+ * available to use. */
+static void plip_attach (struct parport *port)
+{
+	static int i = 0;
+
+	if ((parport[0] == -1 && (!timid || !port->devices)) || 
+	    plip_searchfor(parport, port->number)) {
+		if (i == PLIP_MAX) {
+			printk(KERN_ERR "plip: too many devices\n");
+			return;
+		}
+		dev_plip[i] = kmalloc(sizeof(struct net_device),
+				      GFP_KERNEL);
+		if (!dev_plip[i]) {
+			printk(KERN_ERR "plip: memory squeeze\n");
+			return;
+		}
+		memset(dev_plip[i], 0, sizeof(struct net_device));
+		sprintf(dev_plip[i]->name, "plip%d", i);
+		dev_plip[i]->priv = port;
+		if (plip_init_dev(dev_plip[i],port) ||
+		    register_netdev(dev_plip[i])) {
+			kfree(dev_plip[i]);
+			dev_plip[i] = NULL;
+		} else {
+			i++;
+		}
+	}
+}
+
+/* plip_detach() is called (by the parport code) when a port is
+ * no longer available to use. */
+static void plip_detach (struct parport *port)
+{
+	/* Nothing to do */
+}
+
+static struct parport_driver plip_driver = {
+	name:	"plip",
+	attach:	plip_attach,
+	detach:	plip_detach
+};
+
 static void __exit plip_cleanup_module (void)
 {
 	int i;
+
+	parport_unregister_driver (&plip_driver);
 
 	for (i=0; i < PLIP_MAX; i++) {
 		if (dev_plip[i]) {
@@ -1314,7 +1370,6 @@ static void __exit plip_cleanup_module (void)
 				parport_release(nl->pardev);
 			parport_unregister_device(nl->pardev);
 			kfree(dev_plip[i]->priv);
-			kfree(dev_plip[i]->name);
 			kfree(dev_plip[i]);
 			dev_plip[i] = NULL;
 		}
@@ -1357,21 +1412,8 @@ __setup("plip=", plip_setup);
 
 #endif /* !MODULE */
 
-static int inline 
-plip_searchfor(int list[], int a)
-{
-	int i;
-	for (i = 0; i < PLIP_MAX && list[i] != -1; i++) {
-		if (list[i] == a) return 1;
-	}
-	return 0;
-}
-
 static int __init plip_init (void)
 {
-	struct parport *pb = parport_enumerate();
-	int i=0;
-
 	if (parport[0] == -2)
 		return 0;
 
@@ -1380,38 +1422,11 @@ static int __init plip_init (void)
 		timid = 0;
 	}
 
-	/* If the user feeds parameters, use them */
-	while (pb) {
-		if ((parport[0] == -1 && (!timid || !pb->devices)) || 
-		    plip_searchfor(parport, pb->number)) {
-			if (i == PLIP_MAX) {
-				printk(KERN_ERR "plip: too many devices\n");
-				break;
-			}
-			dev_plip[i] = kmalloc(sizeof(struct net_device),
-					      GFP_KERNEL);
-			if (!dev_plip[i]) {
-				printk(KERN_ERR "plip: memory squeeze\n");
-				break;
-			}
-			memset(dev_plip[i], 0, sizeof(struct net_device));
-			sprintf(dev_plip[i]->name, "plip%d", i);
-			dev_plip[i]->priv = pb;
-			if (plip_init_dev(dev_plip[i],pb) || register_netdev(dev_plip[i])) {
-				kfree(dev_plip[i]->name);
-				kfree(dev_plip[i]);
-				dev_plip[i] = NULL;
-			} else {
-				i++;
-			}
-		}
-		pb = pb->next;
-  	}
-
-	if (i == 0) {
-		printk(KERN_INFO "plip: no devices registered\n");
-		return -EIO;
+	if (parport_register_driver (&plip_driver)) {
+		printk (KERN_WARNING "plip: couldn't register driver\n");
+		return 1;
 	}
+
 	return 0;
 }
 

@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.52 2000/03/28 06:07:25 anton Exp $
+/* $Id: page.h,v 1.53 2000/06/04 08:36:33 anton Exp $
  * page.h:  Various defines and such for MMU operations on the Sparc for
  *          the Linux kernel.
  *
@@ -32,7 +32,13 @@
 
 #ifndef __ASSEMBLY__
 
-#if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8)
+/*
+ * XXX I am hitting compiler bugs with __builtin_trap. This has
+ * hit me before and rusty was blaming his netfilter bugs on
+ * this so lets disable it. - Anton
+ */
+#if 0
+/* #if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8) */
 /* We need the mb()'s so we don't trigger a compiler bug - Anton */
 #define BUG() do { \
 	mb(); \

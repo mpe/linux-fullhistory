@@ -53,6 +53,9 @@ unsigned int prof_multiplier[NR_CPUS];
 unsigned int prof_counter[NR_CPUS];
 cycles_t cacheflush_time;
 
+/* this has to go in the data section because it is accessed from prom_init */
+int smp_hw_index[NR_CPUS] = {0};
+
 /* all cpu mappings are 1-1 -- Cort */
 volatile unsigned long cpu_callin_map[NR_CPUS] = {0,};
 
@@ -238,6 +241,7 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 	case _MACH_chrp:
 	case _MACH_prep:
 	case _MACH_gemini:
+#ifndef CONFIG_POWER4
 		/* make sure we're sending something that translates to an IPI */
 		if ( msg > 0x3 )
 			break;
@@ -254,6 +258,18 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 			openpic_cause_IPI(smp_processor_id(), msg, 1<<target);
 			break;
 		}
+#else /* CONFIG_POWER4 */
+		/* for now, only do reschedule messages
+		   since we only have one IPI */
+		if (msg != MSG_RESCHEDULE)
+			break;
+		for (i = 0; i < smp_num_cpus; ++i) {
+			if (target == MSG_ALL || target == i
+			    || (target == MSG_ALL_BUT_SELF
+				&& i != smp_processor_id()))
+				xics_cause_IPI(i);
+		}
+#endif /* CONFIG_POWER4 */
 		break;
 	}
 }
@@ -306,8 +322,9 @@ void __init smp_boot_cpus(void)
 		cpu_nr = 2; 
 		break;
 	case _MACH_chrp:
-		for ( i = 0; i < 4 ; i++ )
-			openpic_enable_IPI(i);
+		if (OpenPIC)
+			for ( i = 0; i < 4 ; i++ )
+				openpic_enable_IPI(i);
 		cpu_nr = smp_chrp_cpu_nr;
 		break;
 	case _MACH_gemini:
@@ -390,10 +407,10 @@ void __init smp_boot_cpus(void)
 			printk("Processor %d is stuck.\n", i);
 		}
 	}
-	
-	if ( _machine & (_MACH_gemini|_MACH_chrp|_MACH_prep) )
+
+	if (OpenPIC && (_machine & (_MACH_gemini|_MACH_chrp|_MACH_prep)))
 		do_openpic_setup_cpu();
-	
+
 	if ( _machine == _MACH_Pmac )
 	{
 		/* reset the entry point so if we get another intr we won't
@@ -433,19 +450,19 @@ void __init smp_callin(void)
 	set_dec(decrementer_count);
 	
 	init_idle();
-#if 0
-	current->mm->mmap->vm_page_prot = PAGE_SHARED;
-	current->mm->mmap->vm_start = PAGE_OFFSET;
-	current->mm->mmap->vm_end = init_mm.mmap->vm_end;
-#endif
 	cpu_callin_map[current->processor] = 1;
+
+#ifndef CONFIG_POWER4
 	/*
 	 * Each processor has to do this and this is the best
 	 * place to stick it for now.
 	 *  -- Cort
 	 */
-	if ( _machine & (_MACH_gemini|_MACH_chrp|_MACH_prep) )
+	if (OpenPIC && _machine & (_MACH_gemini|_MACH_chrp|_MACH_prep))
 		do_openpic_setup_cpu();
+#else
+	xics_setup_cpu();
+#endif /* CONFIG_POWER4 */
 #ifdef CONFIG_GEMINI	
 	if ( _machine == _MACH_gemini )
 		gemini_init_l2();

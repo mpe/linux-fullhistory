@@ -17,7 +17,7 @@
 
 #include <linux/config.h>
 
-#if defined(CONFIG_HOST_FOOTBRIDGE)
+#if defined(CONFIG_FOOTBRIDGE_HOST)
 
 /*
  * Task size: 3GB
@@ -36,7 +36,7 @@
 #define __bus_to_virt__is_a_macro
 #define __bus_to_virt(x)	((x) + 0xe0000000)
 
-#elif defined(CONFIG_ADDIN_FOOTBRIDGE)
+#elif defined(CONFIG_FOOTBRIDGE_ADDIN)
 
 #if defined(CONFIG_ARCH_CO285)
 

@@ -110,23 +110,6 @@ static struct resource rom_resources[MAXROMS] = {
 
 static unsigned long memory_start, memory_end;
 
-unsigned long __init memparse(char *ptr, char **retptr)
-{
-	unsigned long ret;
-
-	ret = simple_strtoul(ptr, retptr, 0);
-
-	if (**retptr == 'K' || **retptr == 'k') {
-		ret <<= 10;
-		(*retptr)++;
-	}
-	else if (**retptr == 'M' || **retptr == 'm') {
-		ret <<= 20;
-		(*retptr)++;
-	}
-	return ret;
-} /* memparse */
-
 static inline void parse_mem_cmdline (char ** cmdline_p)
 {
 	char c = ' ', *to = command_line, *from = COMMAND_LINE;
@@ -326,6 +309,14 @@ int get_cpuinfo(char *buffer)
 	p += sprintf(p, "bogomips\t: %lu.%02lu\n\n",
 		     (loops_per_sec+2500)/500000,
 		     ((loops_per_sec+2500)/5000) % 100);
+
+#define PRINT_CLOCK(name, value) \
+	p += sprintf(p, name " clock: %d.%02dMHz\n", \
+		     ((value) / 1000000), ((value) % 1000000)/10000)
+	
+	PRINT_CLOCK("CPU", boot_cpu_data.cpu_clock);
+	PRINT_CLOCK("Bus", boot_cpu_data.bus_clock);
+	PRINT_CLOCK("Peripheral module", boot_cpu_data.module_clock);
 
 	return p - buffer;
 }

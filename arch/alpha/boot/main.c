@@ -90,7 +90,7 @@ pal_init(void)
 	i = switch_to_osf_pal(2, pcb_va, pcb_pa, VPTB);
 	if (i) {
 		srm_printk("failed, code %ld\n", i);
-		halt();
+		__halt();
 	}
 
 	percpu = (struct percpu_struct *)
@@ -107,15 +107,15 @@ static inline long openboot(void)
 	char bootdev[256];
 	long result;
 
-	result = srm_dispatch(CCB_GET_ENV, ENV_BOOTED_DEV, bootdev, 255);
+	result = callback_getenv(ENV_BOOTED_DEV, bootdev, 255);
 	if (result < 0)
 		return result;
-	return srm_dispatch(CCB_OPEN, bootdev, result & 255);
+	return callback_open(bootdev, result & 255);
 }
 
 static inline long close(long dev)
 {
-	return srm_dispatch(CCB_CLOSE, dev);
+	return callback_close(dev);
 }
 
 static inline long load(long dev, unsigned long addr, unsigned long count)
@@ -124,7 +124,7 @@ static inline long load(long dev, unsigned long addr, unsigned long count)
 	extern char _end;
 	long result, boot_size = &_end - (char *) BOOT_ADDR;
 
-	result = srm_dispatch(CCB_GET_ENV, ENV_BOOTED_FILE, bootfile, 255);
+	result = callback_getenv(ENV_BOOTED_FILE, bootfile, 255);
 	if (result < 0)
 		return result;
 	result &= 255;
@@ -132,7 +132,7 @@ static inline long load(long dev, unsigned long addr, unsigned long count)
 	if (result)
 		srm_printk("Boot file specification (%s) not implemented\n",
 		       bootfile);
-	return srm_dispatch(CCB_READ, dev, count, addr, boot_size/512 + 1);
+	return callback_read(dev, count, addr, boot_size/512 + 1);
 }
 
 /*
@@ -176,8 +176,7 @@ void start_kernel(void)
 		return;
 	}
 
-	nbytes = srm_dispatch(CCB_GET_ENV, ENV_BOOTED_OSFLAGS,
-			  envval, sizeof(envval));
+	nbytes = callback_getenv(ENV_BOOTED_OSFLAGS, envval, sizeof(envval));
 	if (nbytes < 0) {
 		nbytes = 0;
 	}
@@ -188,5 +187,5 @@ void start_kernel(void)
 	runkernel();
 	for (i = 0 ; i < 0x100000000 ; i++)
 		/* nothing */;
-	halt();
+	__halt();
 }

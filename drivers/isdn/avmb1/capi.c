@@ -653,6 +653,7 @@ int handle_recv_skb(struct capiminor *mp, struct sk_buff *skb)
 					datahandle, skb->len);
 #endif
 		mp->tty->ldisc.receive_buf(mp->tty, skb->data, 0, skb->len);
+		kfree_skb(skb);
 		return 0;
 
 	} else if (mp->file) {

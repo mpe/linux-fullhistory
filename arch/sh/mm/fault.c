@@ -82,7 +82,7 @@ bad_area:
 	return 0;
 }
 
-static void handle_vmalloc_fault(struct task_struct *tsk, unsigned long address)
+static void handle_vmalloc_fault(struct mm_struct *mm, unsigned long address)
 {
 	pgd_t *dir;
 	pmd_t *pmd;
@@ -107,6 +107,13 @@ static void handle_vmalloc_fault(struct task_struct *tsk, unsigned long address)
 		return;
 	}
 
+#if defined(__SH4__)
+	/*
+	 * ITLB is not affected by "ldtlb" instruction.
+	 * So, we need to flush the entry by ourselves.
+	 */
+	__flush_tlb_page(mm, address&PAGE_MASK);
+#endif
 	update_mmu_cache(NULL, address, entry);
 }
 
@@ -128,7 +135,7 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long writeaccess,
 	mm = tsk->mm;
 
 	if (address >= VMALLOC_START && address < VMALLOC_END) {
-		handle_vmalloc_fault(tsk, address);
+		handle_vmalloc_fault(mm, address);
 		return;
 	}
 
@@ -269,18 +276,13 @@ void update_mmu_cache(struct vm_area_struct * vma,
 	unsigned long pteaddr;
 
 	save_and_cli(flags);
-#if defined(__SH4__)
-	/*
-	 * ITLB is not affected by "ldtlb" instruction.
-	 * So, we need to flush the entry by ourselves.
-	 */
-	__flush_tlb_page(vma->vm_mm, address&PAGE_MASK);
-#endif
 
 	/* Set PTEH register */
-	pteaddr = (address & MMU_VPN_MASK) |
-		(vma->vm_mm->context & MMU_CONTEXT_ASID_MASK);
-	ctrl_outl(pteaddr, MMU_PTEH);
+	if (vma) {
+		pteaddr = (address & MMU_VPN_MASK) |
+			(vma->vm_mm->context & MMU_CONTEXT_ASID_MASK);
+		ctrl_outl(pteaddr, MMU_PTEH);
+	}
 
 	/* Set PTEL register */
 	pteval = pte_val(pte);

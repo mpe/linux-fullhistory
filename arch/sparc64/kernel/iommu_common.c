@@ -1,4 +1,4 @@
-/* $Id: iommu_common.c,v 1.3 2000/01/28 13:41:59 jj Exp $
+/* $Id: iommu_common.c,v 1.4 2000/06/04 21:50:23 anton Exp $
  * iommu_common.c: UltraSparc SBUS/PCI common iommu code.
  *
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
@@ -45,7 +45,7 @@ int verify_lengths(struct scatterlist *sg, int nents, int npages)
 	}
 
 	if (pgcount != npages) {
-		printk("verify_langths: Error, page count wrong, "
+		printk("verify_lengths: Error, page count wrong, "
 		       "npages[%d] pgcount[%d]\n",
 		       npages, pgcount);
 		return -1;

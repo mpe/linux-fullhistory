@@ -37,8 +37,10 @@ void smp_send_tlb_invalidate(int);
 #define cpu_number_map(x) (x)
 extern volatile unsigned long cpu_callin_map[NR_CPUS];
 
-#define hard_smp_processor_id() (0)
 #define smp_processor_id() (current->processor)
+
+extern int smp_hw_index[NR_CPUS];
+#define hard_smp_processor_id() (smp_hw_index[smp_processor_id()])
 
 struct klock_info_struct {
 	unsigned long kernel_flag;

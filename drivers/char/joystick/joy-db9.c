@@ -244,6 +244,7 @@ static int js_db9_read(void *xinfo, int **axes, int **buttons)
 
 /*
  * open callback: claim parport.
+ * FIXME: race possible.
  */
 
 int js_db9_open(struct js_dev *dev)
@@ -364,7 +365,7 @@ static struct js_port __init *js_db9_probe(int *config, struct js_port *port)
 
 	for (i = 0; i < 1 + (info.mode == JS_MULTI_0802_2); i++) {
 		printk(KERN_INFO "js%d: %s on %s\n",
-			js_register_device(port, i, 2, buttons[info.mode], name[info.mode], js_db9_open, js_db9_close),
+			js_register_device(port, i, 2, buttons[info.mode], name[info.mode], NULL, js_db9_open, js_db9_close),
 			name[info.mode], info.port->port->name);
 
 		js_db9_init_corr(port->corr[i]);

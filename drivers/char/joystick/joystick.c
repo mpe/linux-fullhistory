@@ -511,15 +511,21 @@ static int js_open(struct inode *inode, struct file *file)
 
 	if (!jd) return -ENODEV;
 
-	if ((result = jd->open(jd)))
+	if (jd->owner)
+		__MOD_INC_USE_COUNT(jd->owner);
+	if (jd->open && (result = jd->open(jd))) {
+		if (jd->owner)
+			__MOD_DEC_USE_COUNT(jd->owner);
 		return result;
-
-	MOD_INC_USE_COUNT;
+	}
 
 	new = kmalloc(sizeof(struct js_list), GFP_KERNEL);
 	if (!new) {
-		jd->close(jd);
-		MOD_DEC_USE_COUNT;
+		if (jd->close)
+			jd->close(jd);
+		if (jd->owner)
+			__MOD_DEC_USE_COUNT(jd->owner);
+
 		return -ENOMEM;
 	}
 
@@ -577,9 +583,10 @@ static int js_release(struct inode *inode, struct file *file)
 
 	if (!--js_use_count) del_timer(&js_timer);
 
-	jd->close(jd);
-
-	MOD_DEC_USE_COUNT;
+	if (jd->close)
+		jd->close(jd);
+	if (jd->owner)
+		__MOD_DEC_USE_COUNT(jd->owner);
 
 	return 0;
 }
@@ -659,8 +666,9 @@ extern struct file_operations js_fops;
 
 static devfs_handle_t devfs_handle = NULL;
 
-int js_register_device(struct js_port *port, int number, int axes, int buttons, char *name,
-					js_ops_func open, js_ops_func close)
+int js_register_device(struct js_port *port, int number, int axes,
+			int buttons, char *name, struct module *owner,
+			js_ops_func open, js_ops_func close)
 {
 	struct js_dev **ptrd = &js_dev;
 	struct js_dev *curd;
@@ -681,6 +689,7 @@ int js_register_device(struct js_port *port, int number, int axes, int buttons, 
 	curd->port = port;
 	curd->open = open;
 	curd->close = close;
+	curd->owner = owner;
 
 	init_waitqueue_head(&curd->wait);
 

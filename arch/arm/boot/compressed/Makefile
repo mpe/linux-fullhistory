@@ -89,7 +89,7 @@ $(HEAD): 	$(HEAD:.o=.S)
 
 piggy.o:	$(SYSTEM)
 		$(OBJCOPY) $(SYSTEM) piggy
-		gzip -9 < piggy > piggy.gz
+		gzip $(GZFLAGS) < piggy > piggy.gz
 		$(LD) -r -o $@ -b binary piggy.gz
 		rm -f piggy piggy.gz
 

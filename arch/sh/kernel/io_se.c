@@ -1,4 +1,4 @@
-/* $Id: io_se.c,v 1.4 2000/05/07 23:31:58 gniibe Exp $
+/* $Id: io_se.c,v 1.5 2000/06/08 05:50:10 gniibe Exp $
  *
  * linux/arch/sh/kernel/io_se.c
  *
@@ -7,6 +7,7 @@
  * I/O routine for Hitachi SolutionEngine.
  *
  */
+
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <asm/io.h>

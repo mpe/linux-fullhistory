@@ -209,6 +209,7 @@ __asm__ __volatile__( \
 extern void __put_user_unknown(void);
 
 /* Generic arbitrary sized copy.  */
+/* Return the number of bytes NOT copied */
 /* XXX: should be such that: 4byte and the rest. */
 extern __inline__ __kernel_size_t
 __copy_user(void *__to, const void *__from, __kernel_size_t __n)
@@ -216,6 +217,7 @@ __copy_user(void *__to, const void *__from, __kernel_size_t __n)
 	unsigned long __dummy, _f, _t;
 	__kernel_size_t res;
 
+	if ((res = __n))
 	__asm__ __volatile__(
 		"9:\n\t"
 		"mov.b	@%2+, %1\n\t"
@@ -229,17 +231,17 @@ __copy_user(void *__to, const void *__from, __kernel_size_t __n)
 		"3:\n\t"
 		"mov.l	5f, %1\n\t"
 		"jmp	@%1\n\t"
-		" mov	%7, %0\n\t"
+		" add	#1, %0\n\t"
 		".balign 4\n"
 		"5:	.long 2b\n"
 		".previous\n"
 		".section __ex_table,\"a\"\n"
 		"	.balign 4\n"
-		"	.long 9b,3b\n"
-		"	.long 1b,2b\n"
+		"	.long 9b,2b\n"
+		"	.long 1b,3b\n"
 		".previous"
 		: "=r" (res), "=&z" (__dummy), "=r" (_f), "=r" (_t)
-		: "2" (__from), "3" (__to), "0" (__n), "i" (-EFAULT)
+		: "2" (__from), "3" (__to), "0" (res)
 		: "memory");
 
 	return res;

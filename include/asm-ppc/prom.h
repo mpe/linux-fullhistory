@@ -4,6 +4,8 @@
  *
  * Copyright (C) 1996 Paul Mackerras.
  */
+#ifndef _PPC_PROM_H
+#define _PPC_PROM_H
 
 typedef void *phandle;
 typedef void *ihandle;
@@ -86,3 +88,5 @@ extern int call_rtas(const char *service, int nargs, int nret,
 extern void prom_drawstring(const char *c);
 extern void prom_drawhex(unsigned long v);
 extern void prom_drawchar(char c);
+
+#endif /* _PPC_PROM_H */

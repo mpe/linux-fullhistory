@@ -17,22 +17,23 @@ O_OBJS_a5k        = dma-a5k.o
 O_OBJS_rpc        = dma-rpc.o
 O_OBJS_ebsa110    = dma-dummy.o
 O_OBJS_footbridge = dma.o dma-footbridge.o $(ISA_DMA_OBJS) hw-footbridge.o isa.o
+O_OBJS_clps7500   = dma-dummy.o
 O_OBJS_nexuspci   = dma-dummy.o
-O_OBJS_sa1100     = dma-dummy.o fiq.o
+O_OBJS_sa1100     = dma-dummy.o hw-sa1100.o
 O_OBJS_l7200      = dma-dummy.o fiq.o
 
 O_TARGET := kernel.o
 
 # Object file lists.
 
-obj-y			:= arch.o $(ENTRY_OBJ) ioport.o irq.o process.o ptrace.o \
-			   semaphore.o setup.o signal.o sys_arm.o time.o traps.o \
-			   $(O_OBJS_$(MACHINE))
+obj-y			:= arch.o $(ENTRY_OBJ) irq.o process.o ptrace.o \
+			   semaphore.o setup.o signal.o sys_arm.o time.o \
+			   traps.o $(O_OBJS_$(MACHINE))
 obj-m			:=
 obj-n			:=
 obj-			:=
 
-export-objs		:= armksyms.o dma.o ecard.o hw-footbridge.o leds-$(MACHINE).o
+export-objs		:= armksyms.o dma.o ecard.o hw-footbridge.o hw-sa1100.o leds-$(MACHINE).o
 
 obj-$(CONFIG_ARCH_ACORN) += dma.o ecard.o fiq.o time-acorn.o
 obj-$(CONFIG_DEBUG_LL)	+= debug-$(PROCESSOR).o

@@ -92,11 +92,11 @@ extern void show_regs(struct pt_regs *);
 
 #define BAMR_ASID		(1 << 2)
 #define BAMR_NONE		0
-#define BAMR_10		0x1
-#define BAMR_12		0x2
+#define BAMR_10			0x1
+#define BAMR_12			0x2
 #define BAMR_ALL		0x3
-#define BAMR_16		0x8
-#define BAMR_20		0x9
+#define BAMR_16			0x8
+#define BAMR_20			0x9
 
 #define BBR_INST		(1 << 4)
 #define BBR_DATA		(2 << 4)

@@ -182,43 +182,15 @@ load_PCB(struct thread_struct * pcb)
 	return __reload_thread(pcb);
 }
 
-/*
- * paging_init() sets up the page tables: in the alpha version this actually
- * unmaps the bootup page table (as we're now in KSEG, so we don't need it).
- */
+/* switch_to_system_map() sets up some necessary page tables. */
 void
-paging_init(void)
+switch_to_system_map(void)
 {
 	unsigned long newptbr;
 	unsigned long original_pcb_ptr;
-	unsigned long zones_size[MAX_NR_ZONES] = {0, 0, 0};
-	unsigned long dma_pfn, high_pfn;
-
-	dma_pfn = virt_to_phys((char *)MAX_DMA_ADDRESS) >> PAGE_SHIFT;
-	high_pfn = max_low_pfn;
-
-#define ORDER_MASK (~((1 << (MAX_ORDER-1))-1))
-#define ORDER_ALIGN(n)	(((n) +  ~ORDER_MASK) & ORDER_MASK)
-
-	dma_pfn = ORDER_ALIGN(dma_pfn);
-	high_pfn = ORDER_ALIGN(high_pfn);
-
-#undef ORDER_MASK
-#undef ORDER_ALIGN
-
-	if (dma_pfn > high_pfn)
-		zones_size[ZONE_DMA] = high_pfn;
-	else {
-		zones_size[ZONE_DMA] = dma_pfn;
-		zones_size[ZONE_NORMAL] = high_pfn - dma_pfn;
-	}
-
-	/* Initialize mem_map[].  */
-	free_area_init(zones_size);
 
 	/* Initialize the kernel's page tables.  Linux puts the vptb in
 	   the last slot of the L1 page table.  */
-	memset((void *)ZERO_PGE, 0, PAGE_SIZE);
 	memset(swapper_pg_dir, 0, PAGE_SIZE);
 	newptbr = ((unsigned long) swapper_pg_dir - PAGE_OFFSET) >> PAGE_SHIFT;
 	pgd_val(swapper_pg_dir[1023]) =
@@ -251,6 +223,41 @@ paging_init(void)
 			phys_to_virt(original_pcb_ptr);
 	}
 	original_pcb = *(struct thread_struct *) original_pcb_ptr;
+}
+
+/*
+ * paging_init() sets up the memory map.
+ */
+void
+paging_init(void)
+{
+	unsigned long zones_size[MAX_NR_ZONES] = {0, 0, 0};
+	unsigned long dma_pfn, high_pfn;
+
+	dma_pfn = virt_to_phys((char *)MAX_DMA_ADDRESS) >> PAGE_SHIFT;
+	high_pfn = max_low_pfn;
+
+#define ORDER_MASK (~((1L << (MAX_ORDER-1))-1))
+#define ORDER_ALIGN(n)	(((n) +  ~ORDER_MASK) & ORDER_MASK)
+
+	dma_pfn = ORDER_ALIGN(dma_pfn);
+	high_pfn = ORDER_ALIGN(high_pfn);
+
+#undef ORDER_MASK
+#undef ORDER_ALIGN
+
+	if (dma_pfn > high_pfn)
+		zones_size[ZONE_DMA] = high_pfn;
+	else {
+		zones_size[ZONE_DMA] = dma_pfn;
+		zones_size[ZONE_NORMAL] = high_pfn - dma_pfn;
+	}
+
+	/* Initialize mem_map[].  */
+	free_area_init(zones_size);
+
+	/* Initialize the kernel's ZERO_PGE. */
+	memset((void *)ZERO_PGE, 0, PAGE_SIZE);
 }
 
 #if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_SRM)

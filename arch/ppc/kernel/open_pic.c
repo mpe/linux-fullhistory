@@ -97,10 +97,6 @@ struct hw_interrupt_type open_pic = {
 #define check_arg_cpu(cpu)	do {} while (0)
 #endif
 
-void no_action(int ir1, void *dev, struct pt_regs *regs)
-{
-}
-
 #ifdef CONFIG_SMP
 void openpic_ipi_action(int cpl, void *dev_id, struct pt_regs *regs)
 {
@@ -293,7 +289,7 @@ void __init openpic_init(int main_pic)
 
 void find_ISUs(void)
 {
-#ifdef CONFIG_PPC64
+#ifdef CONFIG_PPC64BRIDGE
 	/* hardcode this for now since the IBM 260 is the only thing with
 	 * a distributed openpic right now.  -- Cort
 	 */

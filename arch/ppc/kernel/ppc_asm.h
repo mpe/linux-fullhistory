@@ -73,11 +73,13 @@
 /*
  * This instruction is not implemented on the PPC 603 or 601; however, on
  * the 403GCX and 405GP tlbia IS defined and tlbie is not.
+ * All of these instructions exist in the 8xx, they have magical powers,
+ * and they must be used.
  */
 
-#if !defined(CONFIG_4xx)
+#if !defined(CONFIG_4xx) && !defined(CONFIG_8xx)
 #define tlbia					\
-	li	r4,128;				\
+	li	r4,1024;			\
 	mtctr	r4;				\
 	lis	r4,KERNELBASE@h;		\
 0:	tlbie	r4;				\
@@ -102,3 +104,25 @@
 	.align  1;				\
 	.long   0b;				\
 	.previous
+
+/*
+ * On 64-bit cpus, we use the rfid instruction instead of rfi, but
+ * we then have to make sure we preserve the top 32 bits except for
+ * the 64-bit mode bit, which we clear.
+ */
+#ifdef CONFIG_PPC64BRIDGE
+#define	FIX_SRR1(ra, rb)	\
+	mr	rb,ra;		\
+	mfmsr	ra;		\
+	clrldi	ra,ra,1;		/* turn off 64-bit mode */ \
+	rldimi	ra,rb,0,32
+#define	RFI		.long	0x4c000024	/* rfid instruction */
+#define MTMSRD(r)	.long	(0x7c000164 + ((r) << 21))	/* mtmsrd */
+#define CLR_TOP32(r)	rlwinm	(r),(r),0,0,31	/* clear top 32 bits */
+
+#else
+#define FIX_SRR1(ra, rb)
+#define	RFI		rfi
+#define MTMSRD(r)	mtmsr	r
+#define CLR_TOP32(r)
+#endif /* CONFIG_PPC64BRIDGE */

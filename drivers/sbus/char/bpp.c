@@ -835,6 +835,7 @@ static int bpp_ioctl(struct inode *inode, struct file *f, unsigned int cmd,
 }
 
 static struct file_operations bpp_fops = {
+	owner:		THIS_MODULE,
 	read:		bpp_read,
 	write:		bpp_write,
 	ioctl:		bpp_ioctl,

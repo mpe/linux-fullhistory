@@ -25,6 +25,9 @@
  *
  *       Modified by Richard Gooch <rgooch@atnf.csiro.au> to support devfs
  *
+ *       Modified by Jens Axboe <axboe@suse.de> - support DVD-RAM
+ *	 transparently and loose the GHOST hack
+ *
  */
 
 #include <linux/module.h>
@@ -297,9 +300,10 @@ static int sr_init_command(Scsi_Cmnd * SCpnt)
 		else
 			printk("sr: can't switch blocksize: in interrupt\n");
 	}
-	if (SCpnt->request.cmd == WRITE) {
+
+	if ((SCpnt->request.cmd == WRITE) && !scsi_CDs[dev].device->writeable)
 		return 0;
-	}
+
 	if (scsi_CDs[dev].device->sector_size == 1024) {
 		if ((block & 1) || (SCpnt->request.nr_sectors & 1)) {
 			printk("sr.c:Bad 1K block number requested (%d %ld)",
@@ -322,9 +326,6 @@ static int sr_init_command(Scsi_Cmnd * SCpnt)
 	}
 	switch (SCpnt->request.cmd) {
 	case WRITE:
-		if (!scsi_CDs[dev].device->writeable) {
-			return 0;
-		}
 		SCpnt->cmnd[0] = WRITE_10;
 		SCpnt->sc_data_direction = SCSI_DATA_WRITE;
 		break;
@@ -587,10 +588,11 @@ void get_capabilities(int i)
 	scsi_CDs[i].readcd_known = 1;
 	scsi_CDs[i].readcd_cdda = buffer[n + 5] & 0x01;
 	/* print some capability bits */
-	printk("sr%i: scsi3-mmc drive: %dx/%dx %s%s%s%s%s\n", i,
+	printk("sr%i: scsi3-mmc drive: %dx/%dx %s%s%s%s%s%s\n", i,
 	       ((buffer[n + 14] << 8) + buffer[n + 15]) / 176,
 	       scsi_CDs[i].cdi.speed,
 	       buffer[n + 3] & 0x01 ? "writer " : "",	/* CD Writer */
+	       buffer[n + 3] & 0x20 ? "dvd-ram " : "",
 	       buffer[n + 2] & 0x02 ? "cd/rw " : "",	/* can read rewriteable */
 	       buffer[n + 4] & 0x20 ? "xa/form2 " : "",		/* can read xa/from2 */
 	       buffer[n + 5] & 0x01 ? "cdda " : "",	/* can read audio data */
@@ -601,9 +603,12 @@ void get_capabilities(int i)
 	if ((buffer[n + 2] & 0x8) == 0)
 		/* not a DVD drive */
 		scsi_CDs[i].cdi.mask |= CDC_DVD;
-	if ((buffer[n + 3] & 0x20) == 0)
+	if ((buffer[n + 3] & 0x20) == 0) {
 		/* can't write DVD-RAM media */
 		scsi_CDs[i].cdi.mask |= CDC_DVD_RAM;
+	} else {
+		scsi_CDs[i].device->writeable = 1;
+	}
 	if ((buffer[n + 3] & 0x10) == 0)
 		/* can't write DVD-R media */
 		scsi_CDs[i].cdi.mask |= CDC_DVD_R;
@@ -626,7 +631,6 @@ void get_capabilities(int i)
 		scsi_CDs[i].cdi.mask |= CDC_SELECT_DISC;
 	/*else    I don't think it can close its tray
 	   scsi_CDs[i].cdi.mask |= CDC_CLOSE_TRAY; */
-
 
 	scsi_free(buffer, 512);
 }

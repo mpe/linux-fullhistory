@@ -15,12 +15,14 @@ SECTIONS
   . = 0x80000000 + CONFIG_MEMORY_START + 0x1000;
   _text = .;			/* Text and read-only data */
   text = .;			/* Text and read-only data */
-  .text : {
+  .empty_zero_page : {
 	*(.empty_zero_page)
+	} = 0
+  .text : {
 	*(.text)
 	*(.fixup)
 	*(.gnu.warning)
-	} = 0
+	} = 0x0009
   .text.lock : { *(.text.lock) }	/* out-of-line lock text */
   .rodata : { *(.rodata) }
   .kstrtab : { *(.kstrtab) }

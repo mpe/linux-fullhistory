@@ -1310,8 +1310,7 @@ push_kbd (int scan)
 	}
 	spin_unlock_irqrestore(&kbd_queue_lock, flags);
 
-	if (kb_fasync)
-		kill_fasync (kb_fasync, SIGIO, POLL_IN);
+	kill_fasync (&kb_fasync, SIGIO, POLL_IN);
 	wake_up_interruptible (&kbd_wait);
 }
 

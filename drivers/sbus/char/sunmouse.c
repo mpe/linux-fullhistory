@@ -147,8 +147,7 @@ push_char (char c)
 
 	spin_unlock_irqrestore(&sunmouse.lock, flags);
 
-	if (sunmouse.fasync)
-		kill_fasync (sunmouse.fasync, SIGIO, POLL_IN);
+	kill_fasync (&sunmouse.fasync, SIGIO, POLL_IN);
 	wake_up_interruptible (&sunmouse.proc_list);
 }
 
@@ -382,8 +381,7 @@ sun_mouse_inbyte(unsigned char byte, int is_break)
 		/* We just completed a transaction, wake up whoever is awaiting
 		 * this event.
 		 */
-		if (sunmouse.fasync)
-			kill_fasync (sunmouse.fasync, SIGIO, POLL_IN);
+		kill_fasync (&sunmouse.fasync, SIGIO, POLL_IN);
 		wake_up_interruptible(&sunmouse.proc_list);
 	}
 	return;

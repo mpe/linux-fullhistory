@@ -208,26 +208,6 @@ static void js_l4_calibrate(struct js_l4_info *info)
 
 	js_l4_setcal(info->port, cal);
 }
-	
-/*
- * js_l4_open() is a callback from the file open routine.
- */
-
-static int js_l4_open(struct js_dev *jd)
-{
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-/*
- * js_l4_close() is a callback from the file release routine.
- */
-
-static int js_l4_close(struct js_dev *jd)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
 
 /*
  * js_l4_probe() probes for joysticks on the L4 cards.
@@ -262,7 +242,7 @@ static struct js_port __init *js_l4_probe(unsigned char *cards, int l4port, int 
 	for (i = 0; i < numdev; i++)
 		printk(KERN_INFO "js%d: %s on L4 port %d\n",
 			js_register_device(port, i, js_an_axes(i, &info->an), js_an_buttons(i, &info->an),
-				js_an_name(i, &info->an), js_l4_open, js_l4_close),
+				js_an_name(i, &info->an), THIS_MODULE, NULL, NULL),
 			js_an_name(i, &info->an), info->port);
 
 	js_l4_calibrate(info);

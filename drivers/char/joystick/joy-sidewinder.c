@@ -476,26 +476,6 @@ static int js_sw_read(void *xinfo, int **axes, int **buttons)
 }
 
 /*
- * js_sw_open() is a callback from the file open routine.
- */
-
-static int js_sw_open(struct js_dev *jd)
-{
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-/*
- * js_sw_close() is a callback from the file release routine.
- */
-
-static int js_sw_close(struct js_dev *jd)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
-
-/*
  * js_sw_init_corr() initializes the correction values for
  * SideWinders.
  */
@@ -810,7 +790,7 @@ static struct js_port __init *js_sw_probe(int io, struct js_port *port)
 	for (i = 0; i < info.number; i++)
 		printk(KERN_INFO "js%d: %s%s at %#x [%d ns res %d-bit id %d data %d]\n",
 			js_register_device(port, i, axes[info.type], buttons[info.type],
-				names[info.type], js_sw_open, js_sw_close), names[info.type], comment, io,
+				names[info.type], THIS_MODULE, NULL, NULL), names[info.type], comment, io,
 				1000000 / speed, m, j, k);
 
 	js_sw_init_corr(axes[info.type], info.type, info.number, port->corr);

@@ -25,11 +25,13 @@
  */
 
 const char *const pci_io_names[] = {
-	"PCI IO bus 0", "PCI IO bus 1", "PCI IO bus 2", "PCI IO bus 3"
+  "PCI IO bus 0", "PCI IO bus 1", "PCI IO bus 2", "PCI IO bus 3",
+  "PCI IO bus 4", "PCI IO bus 5", "PCI IO bus 6", "PCI IO bus 7"
 };
 
 const char *const pci_mem_names[] = {
-	"PCI mem bus 0", "PCI mem bus 1", "PCI mem bus 2", "PCI mem bus 3"
+  "PCI mem bus 0", "PCI mem bus 1", "PCI mem bus 2", "PCI mem bus 3",
+  "PCI mem bus 4", "PCI mem bus 5", "PCI mem bus 6", "PCI mem bus 7"
 };
 
 const char pci_hae0_name[] = "HAE0";
@@ -266,6 +268,7 @@ pcibios_fixup_bus(struct pci_bus *bus)
 	struct pci_controler *hose = (struct pci_controler *) bus->sysdata;
 	struct list_head *ln;
 
+	/* ???? */
 	bus->resource[0] = hose->io_space;
 	bus->resource[1] = hose->mem_space;
 
@@ -291,15 +294,14 @@ pcibios_update_resource(struct pci_dev *dev, struct resource *root,
 	u32 reg;
 
 	if (resource < PCI_ROM_RESOURCE) 
-	where = PCI_BASE_ADDRESS_0 + (resource * 4);
+		where = PCI_BASE_ADDRESS_0 + (resource * 4);
 	else if (resource == PCI_ROM_RESOURCE)
 		where = dev->rom_base_reg;
 	else {
-	/* Don't update non-standard resources here */
-		return;
+		return; /* Don't update non-standard resources here. */
 	}
 
-	/* Point root at the hose root */
+	/* Point root at the hose root. */
 	if (res->flags & IORESOURCE_IO)
 		root = hose->io_space;
 	if (res->flags & IORESOURCE_MEM)
@@ -430,6 +432,11 @@ pcibios_size_bridge(struct pci_bus *bus, struct pbus_set_ranges_data *outer)
 	/* Adjust the bridge's allocation requirements */
 	bridge->resource[0].end = bridge->resource[0].start + inner.io_end;
 	bridge->resource[1].end = bridge->resource[1].start + inner.mem_end;
+
+	bridge->resource[PCI_BRIDGE_RESOURCES].end =
+	    bridge->resource[PCI_BRIDGE_RESOURCES].start + inner.io_end;
+	bridge->resource[PCI_BRIDGE_RESOURCES+1].end =
+	    bridge->resource[PCI_BRIDGE_RESOURCES+1].start + inner.mem_end;
 
 	/* adjust parent's resource requirements */
 	if (outer) {

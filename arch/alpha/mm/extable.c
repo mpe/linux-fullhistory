@@ -36,12 +36,12 @@ search_one_table(const struct exception_table_entry *first,
 
 register unsigned long gp __asm__("$29");
 
-unsigned
-search_exception_table(unsigned long addr)
+static unsigned
+search_exception_table_without_gp(unsigned long addr)
 {
 	unsigned ret;
 
-#ifndef CONFIG_MODULE
+#ifndef CONFIG_MODULES
 	/* There is only the kernel to search.  */
 	ret = search_one_table(__start___ex_table, __stop___ex_table - 1,
 			       addr - gp);
@@ -57,6 +57,42 @@ search_exception_table(unsigned long addr)
 		if (ret) return ret;
 	}
 #endif
+
+	return 0;
+}
+
+unsigned
+search_exception_table(unsigned long addr, unsigned long exc_gp)
+{
+	unsigned ret;
+
+#ifndef CONFIG_MODULES
+	ret = search_one_table(__start___ex_table, __stop___ex_table - 1,
+			       addr - exc_gp);
+	if (ret) return ret;
+#else
+	/* The kernel is the last "module" -- no need to treat it special. */
+	struct module *mp;
+	for (mp = module_list; mp ; mp = mp->next) {
+		if (!mp->ex_table_start)
+			continue;
+		ret = search_one_table(mp->ex_table_start,
+				       mp->ex_table_end - 1, addr - exc_gp);
+		if (ret) return ret;
+	}
+#endif
+
+	/*
+	 * The search failed with the exception gp. To be safe, try the
+	 * old method before giving up.
+	 */
+	ret = search_exception_table_without_gp(addr);
+	if (ret) {
+		printk(KERN_ALERT, "%s: [%lx] EX_TABLE search fail with"
+		       "exc frame GP, success with raw GP\n",
+		       current->comm, addr);
+		return ret;
+	}
 
 	return 0;
 }

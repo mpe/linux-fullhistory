@@ -94,9 +94,9 @@ vector_swi:	save_user_regs
 		bcs	2f
 
 		get_current_task ip
-		ldr	ip, [ip, #TSK_FLAGS]	@ check for syscall tracing
+		ldr	ip, [ip, #TSK_PTRACE]	@ check for syscall tracing
 		adr	tbl, SYMBOL_NAME(sys_call_table)
-		tst	ip, #PF_TRACESYS
+		tst	ip, #PT_TRACESYS
 		ldreq	pc, [tbl, scno, lsl #2]	@ call sys routine
 
 		ldr	tip, [sp, #S_IP + S_OFF]	@ save old IP

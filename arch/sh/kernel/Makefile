@@ -28,8 +28,20 @@ ifdef CONFIG_SH_SOLUTION_ENGINE
 O_OBJS += setup_se.o io_se.o
 endif
 
+ifdef CONFIG_SH_OVERDRIVE
+O_OBJS += setup_od.o io_generic.o
+endif
+
+ifdef CONFIG_SH_HP600
+O_OBJS += io_hd64461.o
+endif
+
 ifdef CONFIG_CPU_SH4
 O_OBJS += fpu.o
+endif
+
+ifdef CONFIG_HD64461
+O_OBJS += setup_hd64461.o
 endif
 
 all: kernel.o head.o init_task.o

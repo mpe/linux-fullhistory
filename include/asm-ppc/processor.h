@@ -15,10 +15,10 @@
 
 /* Machine State Register (MSR) Fields */
 
-#ifdef CONFIG_PPC64
+#ifdef CONFIG_PPC64BRIDGE
 #define MSR_SF		(1<<63)
 #define MSR_ISF		(1<<61)
-#endif /* CONFIG_PPC64 */   
+#endif /* CONFIG_PPC64BRIDGE */
 #define MSR_VEC		(1<<25)		/* Enable AltiVec */
 #define MSR_POW		(1<<18)		/* Enable Power Management */
 #define MSR_WE		(1<<18)		/* Wait State Enable */

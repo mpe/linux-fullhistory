@@ -93,7 +93,6 @@
 
 #endif
 
-#ifdef HAS_EXPMASK
 #ifndef __ASSEMBLY__
 #define __EXPMASK(offset)	(((volatile unsigned char *)EXPMASK_BASE)[offset])
 #else
@@ -102,7 +101,5 @@
 
 #define	EXPMASK_STATUS	__EXPMASK(0x00)
 #define EXPMASK_ENABLE	__EXPMASK(0x04)
-
-#endif
 
 #endif

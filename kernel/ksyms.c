@@ -129,7 +129,6 @@ EXPORT_SYMBOL(highmem_start_page);
 
 /* filesystem internal functions */
 EXPORT_SYMBOL(def_blk_fops);
-EXPORT_SYMBOL(in_group_p);
 EXPORT_SYMBOL(update_atime);
 EXPORT_SYMBOL(get_super);
 EXPORT_SYMBOL(get_empty_super);
@@ -444,8 +443,6 @@ EXPORT_SYMBOL(sys_call_table);
 EXPORT_SYMBOL(machine_restart);
 EXPORT_SYMBOL(machine_halt);
 EXPORT_SYMBOL(machine_power_off);
-EXPORT_SYMBOL(register_reboot_notifier);
-EXPORT_SYMBOL(unregister_reboot_notifier);
 EXPORT_SYMBOL(_ctype);
 EXPORT_SYMBOL(secure_tcp_sequence_number);
 EXPORT_SYMBOL(get_random_bytes);

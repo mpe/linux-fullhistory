@@ -1,9 +1,10 @@
 #
 # MPC8xx Communication options
 #
+mainmenu_option next_comment
+comment 'MPC8xx CPM Options'
+
 if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
-  mainmenu_option next_comment
-  comment 'MPC8xx Communication Options'
   bool 'CPM SCC Ethernet' CONFIG_SCC_ENET
   if [ "$CONFIG_SCC_ENET" = "y" ]; then
   bool 'Ethernet on SCC1' CONFIG_SCC1_ENET
@@ -12,5 +13,15 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
     fi
   fi
   bool '860T FEC Ethernet' CONFIG_FEC_ENET
-  endmenu
+  bool 'Use SMC2 for UART' CONFIG_8xxSMC2
+  bool 'Enable SCC2 and SCC3 for UART' CONFIG_8xxSCC
 fi
+
+# This doesn't really belong here, but it is convenient to ask
+# 8xx specific questions.
+
+comment 'Generic MPC8xx Options'
+bool 'Copy-Back Data Cache (else Writethrough)' CONFIG_8xx_COPYBACK
+bool 'CPU6 Silicon Errata (860 Pre Rev. C)' CONFIG_8xx_CPU6
+
+endmenu

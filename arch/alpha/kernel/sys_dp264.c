@@ -36,7 +36,7 @@
 /* Note mask bit is true for ENABLED irqs.  */
 static unsigned long cached_irq_mask;
 /* dp264 boards handle at max four CPUs */
-static unsigned long cpu_irq_affinity[4] = { ~0UL, ~0UL, ~0UL, ~0UL };
+static unsigned long cpu_irq_affinity[4] = { 0UL, 0UL, 0UL, 0UL };
 
 spinlock_t dp264_irq_lock = SPIN_LOCK_UNLOCKED;
 
@@ -52,6 +52,7 @@ tsunami_update_irq_hw(unsigned long mask)
 	volatile unsigned long *dim0, *dim1, *dim2, *dim3;
 	unsigned long mask0, mask1, mask2, mask3, dummy;
 
+	mask &= ~isa_enable;
 	mask0 = mask & cpu_irq_affinity[0];
 	mask1 = mask & cpu_irq_affinity[1];
 	mask2 = mask & cpu_irq_affinity[2];
@@ -170,7 +171,6 @@ cpu_set_irq_affinity(unsigned int irq, unsigned long affinity)
 			aff &= ~(1UL << irq);
 		cpu_irq_affinity[cpu] = aff;
 	}
-
 }
 
 static void
@@ -275,7 +275,12 @@ clipper_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 
 	irq = (vector - 0x800) >> 4;
 
-	/*
+#if 0
+	printk("clipper_srm_device_interrupt: vector 0x%lx IRQ %d cpu %d\n",
+	       vector, irq, smp_processor_id());
+#endif
+
+/*
 	 * The SRM console reports PCI interrupts with a vector calculated by:
 	 *
 	 *	0x900 + (0x10 * DRIR-bit)

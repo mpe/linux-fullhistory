@@ -74,6 +74,7 @@ struct meminfo {
 	struct {
 		unsigned long start;
 		unsigned long size;
+		int           node;
 	} bank[NR_BANKS];
 };
 

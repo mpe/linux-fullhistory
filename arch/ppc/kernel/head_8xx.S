@@ -31,6 +31,13 @@
 #include <asm/cache.h>
 #include <asm/pgtable.h>
 	
+/* XXX need definitions here for 16 byte cachelines on some/all 8xx
+   -- paulus */
+CACHELINE_BYTES = 32
+LG_CACHELINE_BYTES = 5
+CACHELINE_MASK = 0x1f
+CACHELINE_WORDS = 8
+
 	.text
 	.globl	_stext
 _stext:
@@ -90,6 +97,9 @@ __start:
 	li	r8, 0
 	mtspr	MI_CTR, r8	/* Set instruction control to zero */
 	lis	r8, MD_RESETVAL@h
+#ifndef CONFIG_8xx_COPYBACK
+	oris	r8, r8, MD_WTDEF@h
+#endif
 	mtspr	MD_CTR, r8	/* Set data TLB control */
 
 	/* Now map the lower 8 Meg into the TLBs.  For this quick hack,
@@ -374,6 +384,16 @@ InstructionTLBMiss:
 #endif
 	mtspr	MD_EPN, r20	/* Have to use MD_EPN for walk, MI_EPN can't */
 	mfspr	r20, M_TWB	/* Get level 1 table entry address */
+
+	/* If we are faulting a kernel address, we have to use the
+	 * kernel page tables.
+	 */
+	andi.	r21, r20, 0x0800	/* Address >= 0x80000000 */
+	beq	3f
+	lis	r21, swapper_pg_dir@h
+	ori	r21, r21, swapper_pg_dir@l
+	rlwimi	r20, r21, 0, 2, 19
+3:
 	lwz	r21, 0(r20)	/* Get the level 1 entry */
 	rlwinm.	r20, r21,0,0,19	/* Extract page descriptor page address */
 	beq	2f		/* If zero, don't try to find a pte */
@@ -445,6 +465,16 @@ DataStoreTLBMiss:
 	stw	r20, 0(r0)
 	stw	r21, 4(r0)
 	mfspr	r20, M_TWB	/* Get level 1 table entry address */
+
+	/* If we are faulting a kernel address, we have to use the
+	 * kernel page tables.
+	 */
+	andi.	r21, r20, 0x0800
+	beq	3f
+	lis	r21, swapper_pg_dir@h
+	ori	r21, r21, swapper_pg_dir@l
+	rlwimi r20, r21, 0, 2, 19
+3:
 	lwz	r21, 0(r20)	/* Get the level 1 entry */
 	rlwinm.	r20, r21,0,0,19	/* Extract page descriptor page address */
 	beq	2f		/* If zero, don't try to find a pte */
@@ -546,6 +576,16 @@ DataTLBError:
 	beq	2f
 
 	mfspr	r20, M_TWB	/* Get level 1 table entry address */
+
+	/* If we are faulting a kernel address, we have to use the
+	 * kernel page tables.
+	 */
+	andi.	r21, r20, 0x0800
+	beq	3f
+	lis	r21, swapper_pg_dir@h
+	ori	r21, r21, swapper_pg_dir@l
+	rlwimi	r20, r21, 0, 2, 19
+3:
 	lwz	r21, 0(r20)	/* Get the level 1 entry */
 	rlwinm.	r20, r21,0,0,19	/* Extract page descriptor page address */
 	beq	2f		/* If zero, bail */
@@ -717,7 +757,7 @@ relocate_kernel:
 copy_and_flush:
 	addi	r5,r5,-4
 	addi	r6,r6,-4
-4:	li	r0,8
+4:	li	r0,CACHELINE_WORDS
 	mtctr	r0
 3:	addi	r6,r6,4			/* copy a cache line */
 	lwzx	r0,r6,r4
@@ -901,6 +941,8 @@ start_here:
  */
 _GLOBAL(set_context)
         mtspr   M_CASID,r3		/* Update context */
+	tophys	(r4, r4)
+	mtspr	M_TWB, r4		/* and pgd */
         tlbia
 	SYNC
 	blr
@@ -948,3 +990,4 @@ swapper_pg_dir:
 	.globl	cmd_line
 cmd_line:
 	.space	512
+

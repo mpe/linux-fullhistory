@@ -8,7 +8,6 @@
 
 #include <linux/config.h>
 #include <linux/kdev_t.h>
-#include <linux/bitops.h>
 
 #include <asm/processor.h>
 #include <asm/atomic.h>

@@ -1,4 +1,4 @@
-/* $Id: audio.c,v 1.50 2000/03/13 03:54:07 davem Exp $
+/* $Id: audio.c,v 1.51 2000/06/19 06:24:47 davem Exp $
  * drivers/sbus/audio/audio.c
  *
  * Copyright 1996 Thomas K. Dyas (tdyas@noc.rutgers.edu)
@@ -87,8 +87,6 @@ static devfs_handle_t devfs_handle = NULL;
 #include <linux/poll.h>
 #define COPY_IN(arg, get) get_user(get, (int *)arg)
 #define COPY_OUT(arg, ret) put_user(ret, (int *)arg)
-#define sparcaudio_release_ret sparcaudio_release
-#define sparcaudioctl_release_ret sparcaudioctl_release
 #define sparcaudio_select sparcaudio_poll
 
 #endif
@@ -1767,24 +1765,10 @@ static int sparcaudio_ioctl(struct inode * inode, struct file * file,
 	return retval;
 }
 
-static int sparcaudioctl_release_ret(struct inode * inode, struct file * file)
-{
-        MOD_DEC_USE_COUNT;
-        return 0;
-}
-
-/* For 2.0 kernels */
-#if defined (LINUX_VERSION_CODE) && LINUX_VERSION_CODE < 0x20100
-static void sparcaudioctl_release(struct inode * inode, struct file * file)
-{
-        sparcaudioctl_release_ret(inode, file);
-}
-#endif
-
 static struct file_operations sparcaudioctl_fops = {
+	owner:		THIS_MODULE,
 	poll:		sparcaudio_select,
 	ioctl:		sparcaudio_ioctl,
-	release:	sparcaudioctl_release,
 };
 
 static int sparcaudio_open(struct inode * inode, struct file * file)
@@ -1917,13 +1901,11 @@ static int sparcaudio_open(struct inode * inode, struct file * file)
                 }          
         }
 
-	MOD_INC_USE_COUNT;
-
 	/* Success! */
 	return 0;
 }
 
-static int sparcaudio_release_ret(struct inode * inode, struct file * file)
+static int sparcaudio_release(struct inode * inode, struct file * file)
 {
         struct sparcaudio_driver *drv = drivers[(MINOR(inode->i_rdev) >>
                                                  SPARCAUDIO_DEVICE_SHIFT)];
@@ -1968,20 +1950,10 @@ static int sparcaudio_release_ret(struct inode * inode, struct file * file)
         /* Status changed. Signal control device */
         kill_procs(drv->sd_siglist,SIGPOLL,S_MSG);
 
-        MOD_DEC_USE_COUNT;
-
         wake_up_interruptible(&drv->open_wait);
 
         return 0;
 }
-
-/* For 2.0 kernels */
-#if defined (LINUX_VERSION_CODE) && LINUX_VERSION_CODE < 0x20100
-static void sparcaudio_release(struct inode * inode, struct file * file)
-{
-        sparcaudio_release_ret(inode, file);
-}
-#endif
 
 static struct file_operations sparcaudio_fops = {
 	llseek:		sparcaudio_lseek,

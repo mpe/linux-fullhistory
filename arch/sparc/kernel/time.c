@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.55 2000/05/09 17:40:13 davem Exp $
+/* $Id: time.c,v 1.56 2000/06/13 22:51:28 anton Exp $
  * linux/arch/sparc/kernel/time.c
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -79,12 +79,15 @@ void sparc_do_profile(unsigned long pc, unsigned long o7)
 		extern int _stext;
 		extern int __copy_user_begin, __copy_user_end;
 		extern int __atomic_begin, __atomic_end;
+		extern int __bzero_begin, __bzero_end;
 		extern int __bitops_begin, __bitops_end;
 
 		if ((pc >= (unsigned long) &__copy_user_begin &&
 		     pc < (unsigned long) &__copy_user_end) ||
 		    (pc >= (unsigned long) &__atomic_begin &&
 		     pc < (unsigned long) &__atomic_end) ||
+		    (pc >= (unsigned long) &__bzero_begin &&
+		     pc < (unsigned long) &__bzero_end) ||
 		    (pc >= (unsigned long) &__bitops_begin &&
 		     pc < (unsigned long) &__bitops_end))
 			pc = o7;

@@ -32,7 +32,7 @@
 
 		.text
 
-#define PF_TRACESYS	0x20
+#define PT_TRACESYS	0x00000002
 
 @ Bad Abort numbers
 @ -----------------
@@ -233,14 +233,12 @@ irq_prio_ebsa110:
 		.macro	irq_prio_table
 		.endm
 
-#elif defined(CONFIG_HOST_FOOTBRIDGE) || defined(CONFIG_ADDIN_FOOTBRIDGE)
+#elif defined(CONFIG_FOOTBRIDGE)
 #include <asm/dec21285.h>
 
 		.macro	disable_fiq
 		.endm
 
-		.equ	irq_mask_pci_err_high, IRQ_MASK_PCI_ERR & 0xff000000
-		.equ	irq_mask_pci_err_low,  IRQ_MASK_PCI_ERR & 0x00ffffff
 		.equ	dc21285_high, ARMCSR_BASE & 0xff000000
 		.equ	dc21285_low, ARMCSR_BASE & 0x00ffffff
 
@@ -311,10 +309,24 @@ irq_prio_ebsa110:
 		movne	\irqnr, #IRQ_CONTX
 		bne	1001f
 
-		tst	\irqstat, #irq_mask_pci_err_high
-		tsteq	\irqstat, #irq_mask_pci_err_low
-		movne	\irqnr, #IRQ_PCI_ERR
+		tst	\irqstat, #IRQ_MASK_PCI_ABORT
+		movne	\irqnr, #IRQ_PCI_ABORT
 		bne	1001f
+
+		tst	\irqstat, #IRQ_MASK_PCI_SERR
+		movne	\irqnr, #IRQ_PCI_SERR
+		bne	1001f
+
+		tst	\irqstat, #IRQ_MASK_DISCARD_TIMER
+		movne	\irqnr, #IRQ_DISCARD_TIMER
+		bne	1001f
+
+		tst	\irqstat, #IRQ_MASK_PCI_DPERR
+		movne	\irqnr, #IRQ_PCI_DPERR
+		bne	1001f
+
+		tst	\irqstat, #IRQ_MASK_PCI_PERR
+		movne	\irqnr, #IRQ_PCI_PERR
 1001:
 		.endm
 
@@ -389,12 +401,25 @@ ENTRY(soft_irq_mask)
 		ldr	\irqnr, [r4, #4]		@ ICMR = 0xfa050004
 		ands	\irqstat, \irqstat, \irqnr
 		mov	\irqnr, #0
-		beq	1002f
-1001:		tst	\irqstat, #1
-		addeq	\irqnr, \irqnr, #1
-		moveq	\irqstat, \irqstat, lsr #1
-		beq	1001b
-1002:
+		beq	1001f
+		tst	\irqstat, #0xff
+		moveq	\irqstat, \irqstat, lsr #8
+		addeq	\irqnr, \irqnr, #8
+		tsteq	\irqstat, #0xff
+		moveq	\irqstat, \irqstat, lsr #8
+		addeq	\irqnr, \irqnr, #8
+		tsteq	\irqstat, #0xff
+		moveq	\irqstat, \irqstat, lsr #8
+		addeq	\irqnr, \irqnr, #8
+		tst	\irqstat, #0x0f
+		moveq	\irqstat, \irqstat, lsr #4
+		addeq	\irqnr, \irqnr, #4
+		tst	\irqstat, #0x03
+		moveq	\irqstat, \irqstat, lsr #2
+		addeq	\irqnr, \irqnr, #2
+		tst	\irqstat, #0x01
+		addeqs	\irqnr, \irqnr, #1
+1001:
 		.endm
 
 		.macro	irq_prio_table
@@ -441,7 +466,8 @@ ENTRY(soft_irq_mask)
 
 		.macro	restore_user_regs
 		ldr	r0, [sp, #S_PSR]		@ Get calling cpsr
-		msr	cpsr_c, #I_BIT | MODE_SVC	@ disable IRQs
+		mov	ip, #I_BIT | MODE_SVC
+		msr	cpsr_c, ip			@ disable IRQs
 		msr	spsr, r0			@ save in spsr_svc
 		ldmia	sp, {r0 - lr}^			@ Get calling r0 - lr
 		mov	r0, r0
@@ -592,9 +618,10 @@ __dabt_svc:	sub	sp, sp, #S_FRAME_SIZE
 		bl	cpu_data_abort
 #endif
 		msr	cpsr_c, r9
-		mov	r3, sp
+		mov	r2, sp
 		bl	SYMBOL_NAME(do_DataAbort)
-		msr	cpsr_c, #I_BIT | MODE_SVC
+		mov	r0, #I_BIT | MODE_SVC
+		msr	cpsr_c, r0
 		ldr	r0, [sp, #S_PSR]
 		msr	spsr, r0
 		ldmia	sp, {r0 - pc}^			@ load r0 - pc, cpsr
@@ -636,7 +663,8 @@ __und_svc:	sub	sp, sp, #S_FRAME_SIZE
 		mov	r1, sp				@ struct pt_regs *regs
 		bl	SYMBOL_NAME(do_undefinstr)
 
-1:		msr	cpsr_c, #I_BIT | MODE_SVC
+1:		mov	r0, #I_BIT | MODE_SVC
+		msr	cpsr_c, r0
 		ldr	lr, [sp, #S_PSR]		@ Get SVC cpsr
 		msr	spsr, lr
 		ldmia	sp, {r0 - pc}^			@ Restore SVC registers
@@ -675,8 +703,9 @@ __dabt_usr:	sub	sp, sp, #S_FRAME_SIZE		@ Allocate frame size in one go
 #else
 		bl	cpu_data_abort
 #endif
-		msr	cpsr_c, #MODE_SVC		@ Enable interrupts
-		mov	r3, sp
+		mov	r2, #MODE_SVC
+		msr	cpsr_c, r2			@ Enable interrupts
+		mov	r2, sp
 		adrsvc	al, lr, ret_from_sys_call
 		b	SYMBOL_NAME(do_DataAbort)
 
@@ -720,9 +749,10 @@ call_fpe:	get_current_task r10
 		add	r10, r10, #TSS_FPESAVE		@ r10 = workspace
 		ldr	pc, [r4]			@ Call FP module USR entry point
 
-fpundefinstr:	mov	r0, lr
+fpundefinstr:	mov	r0, #MODE_SVC
+		msr	cpsr_c, r0			@ Enable interrupts
+		mov	r0, lr
 		mov	r1, sp
-		msr	cpsr_c, #MODE_SVC		@ Enable interrupts
 		adrsvc	al, lr, ret_from_sys_call
 		b	SYMBOL_NAME(do_undefinstr)
 
@@ -736,7 +766,8 @@ __pabt_usr:	sub	sp, sp, #S_FRAME_SIZE		@ Allocate frame size in one go
 		stmdb	r8, {sp, lr}^			@ Save sp_usr lr_usr
 		alignment_trap r4, r7, __temp_abt
 		zero_fp
-		msr	cpsr_c, #MODE_SVC		@ Enable interrupts
+		mov	r0, #MODE_SVC
+		msr	cpsr_c, r0			@ Enable interrupts
 		mov	r0, r5				@ address (pc)
 		mov	r1, sp				@ regs
 		bl	SYMBOL_NAME(do_PrefetchAbort)	@ call abort handler
@@ -816,7 +847,8 @@ vector_IRQ:	@
 		@
 		@ now branch to the relevent MODE handling routine
 		@
-		msr	spsr_c, #I_BIT | MODE_SVC	@ switch to SVC_32 mode
+		mov	r13, #I_BIT | MODE_SVC
+		msr	spsr_c, r13			@ switch to SVC_32 mode
 
 		and	lr, lr, #15
 		ldr	lr, [pc, lr, lsl #2]
@@ -856,7 +888,8 @@ vector_data:	@
 		@
 		@ now branch to the relevent MODE handling routine
 		@
-		msr	spsr_c, #I_BIT | MODE_SVC	@ switch to SVC_32 mode
+		mov	r13, #I_BIT | MODE_SVC
+		msr	spsr_c, r13			@ switch to SVC_32 mode
 
 		and	lr, lr, #15
 		ldr	lr, [pc, lr, lsl #2]
@@ -897,7 +930,8 @@ vector_prefetch:
 		@
 		@ now branch to the relevent MODE handling routine
 		@
-		msr	spsr_c, #I_BIT | MODE_SVC	@ switch to SVC_32 mode
+		mov	r13, #I_BIT | MODE_SVC
+		msr	spsr_c, r13			@ switch to SVC_32 mode
 
 		ands	lr, lr, #15
 		ldreq	lr, .LCtab_pabt
@@ -924,7 +958,8 @@ vector_undefinstr:
 		@
 		@ now branch to the relevent MODE handling routine
 		@
-		msr	spsr_c, #I_BIT | MODE_SVC	@ switch to SVC_32 mode
+		mov	r13, #I_BIT | MODE_SVC
+		msr	spsr_c, r13			@ switch to SVC_32 mode
 
 		and	lr, lr, #15
 		ldr	lr, [pc, lr, lsl #2]

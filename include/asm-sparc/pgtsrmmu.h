@@ -1,4 +1,4 @@
-/* $Id: pgtsrmmu.h,v 1.29 1998/07/26 03:05:42 davem Exp $
+/* $Id: pgtsrmmu.h,v 1.30 2000/06/05 06:08:46 anton Exp $
  * pgtsrmmu.h:  SRMMU page table defines and code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -28,9 +28,6 @@
 #define SRMMU_PTE_TABLE_SIZE    0x100 /* 64 entries, 4 bytes a piece */
 #define SRMMU_PMD_TABLE_SIZE    0x100 /* 64 entries, 4 bytes a piece */
 #define SRMMU_PGD_TABLE_SIZE    0x400 /* 256 entries, 4 bytes a piece */
-
-#define SRMMU_VMALLOC_START   (0xfe300000)
-#define SRMMU_VMALLOC_END     ~0x0UL
 
 /* Definition of the values in the ET field of PTD's and PTE's */
 #define SRMMU_ET_MASK         0x3

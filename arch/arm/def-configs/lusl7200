@@ -79,10 +79,6 @@ CONFIG_BINFMT_ELF=y
 # CONFIG_PARIDE is not set
 # CONFIG_BLK_CPQ_DA is not set
 # CONFIG_BLK_DEV_DAC960 is not set
-
-#
-# Additional Block Devices
-#
 # CONFIG_BLK_DEV_LOOP is not set
 # CONFIG_BLK_DEV_NBD is not set
 # CONFIG_BLK_DEV_LVM is not set

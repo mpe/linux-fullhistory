@@ -17,7 +17,7 @@
 #include <linux/config.h>
 
 #ifndef MAX_HWIFS
-#define MAX_HWIFS	1	/* XXX: For my board -- gniibe */
+#define MAX_HWIFS	1
 #endif
 
 #define ide__sti()	__sti()
@@ -25,8 +25,13 @@
 static __inline__ int ide_default_irq(ide_ioreg_t base)
 {
 	switch (base) {
-		case 0xba0001f0: return 14;
-		case 0xba000170: return 14;
+#ifdef CONFIG_SH_HP600
+		case 0x201f0: return 77;
+		case 0x20170: return 77;
+#else
+		case 0x01f0: return 14;
+		case 0x0170: return 15;
+#endif
 		default:
 			return 0;
 	}
@@ -35,10 +40,17 @@ static __inline__ int ide_default_irq(ide_ioreg_t base)
 static __inline__ ide_ioreg_t ide_default_io_base(int index)
 {
 	switch (index) {
+#ifdef CONFIG_SH_HP600
 		case 0:	
-			return 0xba0001f0;
+			return 0x201f0;
 		case 1:	
-			return 0xba000170;
+			return 0x20170;
+#else
+		case 0:	
+			return 0x1f0;
+		case 1:	
+			return 0x170;
+#endif
 		default:
 			return 0;
 	}

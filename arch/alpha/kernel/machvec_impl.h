@@ -9,12 +9,14 @@
 #include <linux/config.h>
 #include <asm/pgalloc.h>
 
-/* Whee.  IRONGATE, POLARIS and TSUNAMI don't have an HAE.  Fix things up for
-   the GENERIC kernel by defining the HAE address to be that of the cache.
-   Now we can read and write it as we like.  ;-)  */
+/* Whee.  IRONGATE, POLARIS, TSUNAMI, TITAN, and WILDFIRE don't have an HAE.
+   Fix things up for the GENERIC kernel by defining the HAE address
+   to be that of the cache. Now we can read and write it as we like.  ;-)  */
 #define IRONGATE_HAE_ADDRESS	(&alpha_mv.hae_cache)
 #define POLARIS_HAE_ADDRESS	(&alpha_mv.hae_cache)
 #define TSUNAMI_HAE_ADDRESS	(&alpha_mv.hae_cache)
+#define TITAN_HAE_ADDRESS	(&alpha_mv.hae_cache)
+#define WILDFIRE_HAE_ADDRESS	(&alpha_mv.hae_cache)
 
 #if CIA_ONE_HAE_WINDOW
 #define CIA_HAE_ADDRESS		(&alpha_mv.hae_cache)
@@ -28,6 +30,7 @@
    seems like such a pain.  Define this to get things to compile.  */
 #define JENSEN_IACK_SC		1
 #define T2_IACK_SC		1
+#define WILDFIRE_IACK_SC	1 /* FIXME */
 
 
 /*
@@ -91,6 +94,8 @@
 #define DO_POLARIS_IO	IO(POLARIS,polaris)
 #define DO_T2_IO	IO(T2,t2)
 #define DO_TSUNAMI_IO	IO(TSUNAMI,tsunami)
+#define DO_TITAN_IO	IO(TITAN,titan)
+#define DO_WILDFIRE_IO	IO(WILDFIRE,wildfire)
 
 #define DO_PYXIS_IO	IO_LITE(CIA,cia_bwx), \
 			pci_ops: &CAT(cia,_pci_ops)
@@ -107,6 +112,8 @@
 #define DO_POLARIS_BUS	BUS(polaris)
 #define DO_T2_BUS	BUS(t2)
 #define DO_TSUNAMI_BUS	BUS(tsunami)
+#define DO_TITAN_BUS	BUS(titan)
+#define DO_WILDFIRE_BUS	BUS(wildfire)
 
 
 /*

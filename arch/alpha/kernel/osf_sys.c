@@ -230,7 +230,6 @@ asmlinkage unsigned long osf_mmap(unsigned long addr, unsigned long len,
 	struct file *file = NULL;
 	unsigned long ret = -EBADF;
 
-	down(&current->mm->mmap_sem);
 	lock_kernel();
 #if 0
 	if (flags & (_MAP_HASSEMAPHORE | _MAP_INHERIT | _MAP_UNALIGNED))
@@ -243,12 +242,13 @@ asmlinkage unsigned long osf_mmap(unsigned long addr, unsigned long len,
 			goto out;
 	}
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
+	down(&current->mm->mmap_sem);
 	ret = do_mmap(file, addr, len, prot, flags, off);
+	up(&current->mm->mmap_sem);
 	if (file)
 		fput(file);
 out:
 	unlock_kernel();
-	up(&current->mm->mmap_sem);
 	return ret;
 }
 

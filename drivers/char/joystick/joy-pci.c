@@ -150,26 +150,6 @@ static int js_pci_read(void *xinfo, int **axes, int **buttons)
         
         return 0;
 }
-	
-/*
- * js_pci_open() is a callback from the file open routine.
- */
-
-static int js_pci_open(struct js_dev *jd)
-{
-        MOD_INC_USE_COUNT;
-        return 0;
-}
-
-/*
- * js_pci_close() is a callback from the file release routine.
- */
-
-static int js_pci_close(struct js_dev *jd)
-{
-        MOD_DEC_USE_COUNT;
-        return 0;
-}
 
 static struct js_port * __init js_pci_probe(struct js_port *port, int type, int number,
 					struct pci_dev *pci_p, struct js_pci_data *data)
@@ -212,7 +192,7 @@ static struct js_port * __init js_pci_probe(struct js_port *port, int type, int 
 	for (i = 0; i < numdev; i++)
 		printk(KERN_WARNING "js%d: %s on %s #%d\n",
 			js_register_device(port, i, js_an_axes(i, &info->an), js_an_buttons(i, &info->an),
-			js_an_name(i, &info->an), js_pci_open, js_pci_close), js_an_name(i, &info->an), data->name, number);
+			js_an_name(i, &info->an), THIS_MODULE, NULL, NULL), js_an_name(i, &info->an), data->name, number);
 
 	js_pci_read(info, port->axes, port->buttons);
 	js_an_init_corr(&info->an, port->axes, port->corr, 32);
@@ -243,7 +223,8 @@ int __init js_pci_init(void)
 
 	for (i = 0; js_pci_data[i].vendor; i++)
 		for (j = 0; (pci_p = pci_find_device(js_pci_data[i].vendor, js_pci_data[i].model, pci_p)); j++)
-			js_pci_port = js_pci_probe(js_pci_port, i, j, pci_p, js_pci_data + i);
+			if (pci_enable_device(pci_p) == 0)
+				js_pci_port = js_pci_probe(js_pci_port, i, j, pci_p, js_pci_data + i);
 
         if (!js_pci_port) {
 #ifdef MODULE

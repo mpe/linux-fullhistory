@@ -269,6 +269,7 @@ struct task_struct {
 	struct mm_struct *mm, *active_mm;
 	int has_cpu;
 	int processor;
+	unsigned long ptrace;
 	struct list_head run_list;
 	struct task_struct *next_task, *prev_task;
 	int last_processor;
@@ -356,8 +357,6 @@ struct task_struct {
 					/* Not implemented yet, only for 486*/
 #define PF_STARTING	0x00000002	/* being created */
 #define PF_EXITING	0x00000004	/* getting shut down */
-#define PF_PTRACED	0x00000010	/* set if ptrace (0) has been called */
-#define PF_TRACESYS	0x00000020	/* tracing system calls */
 #define PF_FORKNOEXEC	0x00000040	/* forked but didn't exec */
 #define PF_SUPERPRIV	0x00000100	/* used super-user privileges */
 #define PF_DUMPCORE	0x00000200	/* dumped core */
@@ -366,7 +365,14 @@ struct task_struct {
 #define PF_VFORK	0x00001000	/* Wake up parent in mm_release */
 
 #define PF_USEDFPU	0x00100000	/* task used FPU this quantum (SMP) */
-#define PF_DTRACE	0x00200000	/* delayed trace (used on m68k, i386) */
+
+/*
+ * Ptrace flags
+ */
+
+#define PT_PTRACED	0x00000001
+#define PT_TRACESYS	0x00000002
+#define PT_DTRACE	0x00000004	/* delayed trace (used on m68k, i386) */
 
 /*
  * Limit the stack by to some sane default: root can always

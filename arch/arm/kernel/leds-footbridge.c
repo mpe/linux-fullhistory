@@ -46,7 +46,7 @@ static void ebsa285_leds_event(led_event_t evt)
 	switch (evt) {
 	case led_start:
 		hw_led_state = XBUS_LED_RED | XBUS_LED_GREEN;
-#ifndef CONFIG_LEDS_IDLE
+#ifndef CONFIG_LEDS_CPU
 		hw_led_state |= XBUS_LED_AMBER;
 #endif
 		led_state |= LED_STATE_ENABLED;
@@ -223,11 +223,12 @@ static void dummy_leds_event(led_event_t evt)
 {
 }
 
-static void __init
-init_leds_event(led_event_t evt)
-{
-	leds_event = dummy_leds_event;
+void (*leds_event)(led_event_t) = dummy_leds_event;
 
+EXPORT_SYMBOL(leds_event);
+
+static int __init leds_init(void)
+{
 #ifdef CONFIG_FOOTBRIDGE
 	if (machine_is_ebsa285() || machine_is_co285())
 		leds_event = ebsa285_leds_event;
@@ -237,9 +238,9 @@ init_leds_event(led_event_t evt)
 		leds_event = netwinder_leds_event;
 #endif
 
-	leds_event(evt);
+	leds_event(led_start);
+
+	return 0;
 }
 
-void (*leds_event)(led_event_t) = init_leds_event;
-
-EXPORT_SYMBOL(leds_event);
+__initcall(leds_init);

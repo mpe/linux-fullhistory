@@ -1,4 +1,4 @@
-/* $Id: head.h,v 1.38 1999/12/01 23:52:04 davem Exp $ */
+/* $Id: head.h,v 1.39 2000/05/26 22:18:45 ecd Exp $ */
 #ifndef __SPARC_HEAD_H
 #define __SPARC_HEAD_H
 
@@ -95,7 +95,7 @@
 
 /* The Get PSR software trap for userland. */
 #define GETPSR_TRAP \
-	mov %psr, %o0; jmpl %l2, %g0; rett %l2 + 4; nop;
+	mov %psr, %i0; jmp %l2; rett %l2 + 4; nop;
 
 /* This is for hard interrupts from level 1-14, 15 is non-maskable (nmi) and
  * gets handled with another macro.

@@ -246,18 +246,23 @@ sys_ptrace(long request, long pid, long addr, long data,
 	ret = -EPERM;
 	if (request == PTRACE_TRACEME) {
 		/* are we already being traced? */
-		if (current->flags & PF_PTRACED)
-			goto out;
-		/* set the ptrace bit in the process flags. */
-		current->flags |= PF_PTRACED;
+		if (current->ptrace & PT_PTRACED)
+			goto out_notsk;
+		/* set the ptrace bit in the process ptrace flags. */
+		current->ptrace |= PT_PTRACED;
 		ret = 0;
-		goto out;
+		goto out_notsk;
 	}
 	if (pid == 1)		/* you may not mess with init */
-		goto out;
+		goto out_notsk;
 	ret = -ESRCH;
-	if (!(child = find_task_by_pid(pid)))
-		goto out;
+	read_lock(&tasklist_lock);
+	child = find_task_by_pid(pid);
+	if (child)
+		get_task_struct(child);
+	read_unlock(&tasklist_lock);
+	if (!child)
+		goto out_notsk;
 	if (request == PTRACE_ATTACH) {
 		ret = -EPERM;
 		if (child == current)
@@ -273,20 +278,22 @@ sys_ptrace(long request, long pid, long addr, long data,
 		    && !capable(CAP_SYS_PTRACE))
 			goto out;
 		/* the same process cannot be attached many times */
-		if (child->flags & PF_PTRACED)
+		if (child->ptrace & PT_PTRACED)
 			goto out;
-		child->flags |= PF_PTRACED;
+		child->ptrace |= PT_PTRACED;
+		write_lock_irq(&tasklist_lock);
 		if (child->p_pptr != current) {
 			REMOVE_LINKS(child);
 			child->p_pptr = current;
 			SET_LINKS(child);
 		}
+		write_unlock_irq(&tasklist_lock);
 		send_sig(SIGSTOP, child, 1);
 		ret = 0;
 		goto out;
 	}
 	ret = -ESRCH;
-	if (!(child->flags & PF_PTRACED)) {
+	if (!(child->ptrace & PT_PTRACED)) {
 		DBG(DBG_MEM, ("child not traced\n"));
 		goto out;
 	}
@@ -343,9 +350,9 @@ sys_ptrace(long request, long pid, long addr, long data,
 		if ((unsigned long) data > _NSIG)
 			goto out;
 		if (request == PTRACE_SYSCALL)
-			child->flags |= PF_TRACESYS;
+			child->ptrace |= PT_TRACESYS;
 		else
-			child->flags &= ~PF_TRACESYS;
+			child->ptrace &= ~PT_TRACESYS;
 		child->exit_code = data;
 		wake_up_process(child);
 		/* make sure single-step breakpoint is gone. */
@@ -373,7 +380,7 @@ sys_ptrace(long request, long pid, long addr, long data,
 		if ((unsigned long) data > _NSIG)
 			goto out;
 		child->thread.bpt_nsaved = -1;	/* mark single-stepping */
-		child->flags &= ~PF_TRACESYS;
+		child->ptrace &= ~PT_TRACESYS;
 		wake_up_process(child);
 		child->exit_code = data;
 		/* give it a chance to run. */
@@ -384,12 +391,14 @@ sys_ptrace(long request, long pid, long addr, long data,
 		ret = -EIO;
 		if ((unsigned long) data > _NSIG)
 			goto out;
-		child->flags &= ~(PF_PTRACED|PF_TRACESYS);
+		child->ptrace &= ~(PT_PTRACED|PT_TRACESYS);
 		wake_up_process(child);
 		child->exit_code = data;
+		write_lock_irq(&tasklist_lock);
 		REMOVE_LINKS(child);
 		child->p_pptr = child->p_opptr;
 		SET_LINKS(child);
+		write_unlock_irq(&tasklist_lock);
 		/* make sure single-step breakpoint is gone. */
 		ptrace_cancel_bpt(child);
 		ret = 0;
@@ -400,6 +409,8 @@ sys_ptrace(long request, long pid, long addr, long data,
 		goto out;
 	}
  out:
+	free_task_struct(child);
+ out_notsk:
 	unlock_kernel();
 	return ret;
 }
@@ -407,8 +418,8 @@ sys_ptrace(long request, long pid, long addr, long data,
 asmlinkage void
 syscall_trace(void)
 {
-	if ((current->flags & (PF_PTRACED|PF_TRACESYS))
-	    != (PF_PTRACED|PF_TRACESYS))
+	if ((current->ptrace & (PT_PTRACED|PT_TRACESYS))
+	    != (PT_PTRACED|PT_TRACESYS))
 		return;
 	current->exit_code = SIGTRAP;
 	current->state = TASK_STOPPED;

@@ -5,37 +5,30 @@
 # License.  See the file "COPYING" in the main directory of this archive
 # for more details.
 #
-
-.S.s:
-	$(CPP) $(CFLAGS) $< -o $*.s
-.S.o:
-	$(CC) $(CFLAGS) -c $< -o $*.o
-
-OBJS  = 
-
+# Copyright (C) 1999 Stuart Menefy
 #
-# Drop some uninteresting sections in the kernel.
-#
-drop-sections	= .reginfo .mdebug
-strip-flags	= $(addprefix --remove-section=,$(drop-sections))
 
-#
-# Fake compressed boot
-#
-zImage:	$(CONFIGURE) mkboot $(TOPDIR)/vmlinux
-	$(OBJCOPY) $(strip-flags) $(TOPDIR)/vmlinux zImage.tmp
-	./mkboot zImage.tmp zImage
-	rm -f zImage.tmp
+SYSTEM  =$(TOPDIR)/vmlinux
 
-mkboot: mkboot.c
-	$(HOSTCC) -o $@ $^
+Image:	$(CONFIGURE) $(SYSTEM)
+	$(OBJCOPY) $(SYSTEM) Image
 
-# Don't build dependencies, this may die if $(CC) isn't gcc
+zImage: $(CONFIGURE) compressed/vmlinux
+	$(OBJCOPY) compressed/vmlinux zImage
+
+compressed/vmlinux: $(TOPDIR)/vmlinux
+	$(MAKE) -C compressed vmlinux
+
+install: $(CONFIGURE) Image
+	sh -x ./install.sh $(KERNELRELEASE) Image $(TOPDIR)/System.map "$(INSTALL_PATH)"
+
+zinstall: $(CONFIGURE) zImage
+	sh -x ./install.sh $(KERNELRELEASE) zImage $(TOPDIR)/System.map "$(INSTALL_PATH)"
+
 dep:
 
 clean:
-	rm -f zImage zImage.tmp mkboot
-
-dummy:
-
-include $(TOPDIR)/Rules.make
+	rm -f tools/build
+	rm -f setup bootsect zImage compressed/vmlinux.out
+	rm -f bsetup bbootsect bzImage compressed/bvmlinux.out
+	@$(MAKE) -C compressed clean

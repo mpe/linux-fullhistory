@@ -651,7 +651,7 @@ do_signal(sigset_t *oldset, struct pt_regs * regs, struct switch_stack * sw,
 		if (!signr)
 			break;
 
-		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {
+		if ((current->ptrace & PT_PTRACED) && signr != SIGKILL) {
 			/* Let the debugger run.  */
 			current->exit_code = signr;
 			current->state = TASK_STOPPED;

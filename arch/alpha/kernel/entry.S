@@ -34,11 +34,12 @@
 #define TASK_EXEC_DOMAIN	32
 #define TASK_NEED_RESCHED	40
 #define TASK_PROCESSOR		100
+#define TASK_PTRACE		104
 
 /*
  * task flags (must match include/linux/sched.h):
  */
-#define	PF_PTRACED	0x00000010
+#define	PT_PTRACED	0x00000001
 
 #define CLONE_VM        0x00000100 
 
@@ -557,10 +558,10 @@ entSys:
 	lda	$5,sys_call_table
 	lda	$27,sys_ni_syscall
 	cmpult	$0,$4,$4
-	ldq	$3,TASK_FLAGS($8)
+	ldq	$3,TASK_PTRACE($8)
 	stq	$17,SP_OFF+32($30)
 	s8addq	$0,$5,$5
-	and     $3,PF_PTRACED,$3
+	and     $3,PT_PTRACED,$3
 	stq	$18,SP_OFF+40($30)
 	bne     $3,strace
 	beq	$4,1f

@@ -437,6 +437,7 @@ struct cdrom_generic_command
 #define GPCMD_PAUSE_RESUME		    0x4b
 #define GPCMD_PLAY_AUDIO_10		    0x45
 #define GPCMD_PLAY_AUDIO_MSF		    0x47
+#define GPCMD_PLAY_AUDIO_TI		    0x48
 #define GPCMD_PLAY_CD			    0xbc
 #define GPCMD_PREVENT_ALLOW_MEDIUM_REMOVAL  0x1e
 #define GPCMD_READ_10			    0x28
@@ -477,16 +478,11 @@ struct cdrom_generic_command
 /* This seems to be a SCSI specific CD-ROM opcode 
  * to play data at track/index */
 #define GPCMD_PLAYAUDIO_TI		    0x48
-
-/* Is this really used by anything?  I couldn't find these...*/
-#if 0
-/* MMC2/MTFuji Opcodes */
-#define ERASE			0x2c
-#define READ_BUFFER		0x3c
-#endif
-
-
-
+/*
+ * From MS Media Status Notification Support Specification. For
+ * older drives only.
+ */
+#define GPCMD_GET_MEDIA_STATUS		    0xda
 
 /* Mode page codes for mode sense/set */
 #define GPMODE_R_W_ERROR_PAGE		0x01
@@ -997,6 +993,40 @@ typedef struct {
 	__u8 subhdr2;
 	__u8 subhdr3;
 } __attribute__((packed)) write_param_page;
+
+struct modesel_head
+{
+	__u8	reserved1;
+	__u8	medium;
+	__u8	reserved2;
+	__u8	block_desc_length;
+	__u8	density;
+	__u8	number_of_blocks_hi;
+	__u8	number_of_blocks_med;
+	__u8	number_of_blocks_lo;
+	__u8	reserved3;
+	__u8	block_length_hi;
+	__u8	block_length_med;
+	__u8	block_length_lo;
+};
+
+typedef struct {
+	__u16 report_key_length;
+	__u8 reserved1;
+	__u8 reserved2;
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 type_code			: 2;
+	__u8 vra			: 3;
+	__u8 ucca			: 3;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	__u8 ucca			: 3;
+	__u8 vra			: 3;
+	__u8 type_code			: 2;
+#endif
+	__u8 region_mask;
+	__u8 rpc_scheme;
+	__u8 reserved3;
+} rpc_state_t;
 
 #endif  /* End of kernel only stuff */ 
 

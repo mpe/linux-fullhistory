@@ -344,11 +344,13 @@ tsunami_init_one_pchip(tsunami_pchip *pchip, int index)
 	/*
 	 * Set up the PCI to main memory translation windows.
 	 *
+	 * Note: Window 3 is scatter-gather only
+	 * 
 	 * Window 0 is scatter-gather 8MB at 8MB (for isa)
-	 * Window 1 is scatter-gather 128MB at 3GB
-	 * Window 2 is direct access 1GB at 1GB
-	 * Window 3 is direct access 1GB at 2GB
-	 * ??? We ought to scale window 1 memory.
+	 * Window 1 is direct access 1GB at 1GB
+	 * Window 2 is direct access 1GB at 2GB
+	 * Window 3 is scatter-gather 128MB at 3GB
+	 * ??? We ought to scale window 3 memory.
 	 *
 	 * We must actually use 2 windows to direct-map the 2GB space,
 	 * because of an idiot-syncrasy of the CYPRESS chip.  It may
@@ -364,17 +366,17 @@ tsunami_init_one_pchip(tsunami_pchip *pchip, int index)
 	pchip->wsm[0].csr  = (hose->sg_isa->size - 1) & 0xfff00000;
 	pchip->tba[0].csr  = virt_to_phys(hose->sg_isa->ptes);
 
-	pchip->wsba[1].csr = hose->sg_pci->dma_base | 3;
-	pchip->wsm[1].csr  = (hose->sg_pci->size - 1) & 0xfff00000;
-	pchip->tba[1].csr  = virt_to_phys(hose->sg_pci->ptes);
+	pchip->wsba[1].csr = 0x40000000 | 1;
+	pchip->wsm[1].csr  = (0x40000000 - 1) & 0xfff00000;
+	pchip->tba[1].csr  = 0;
 
-	pchip->wsba[2].csr = 0x40000000 | 1;
+	pchip->wsba[2].csr = 0x80000000 | 1;
 	pchip->wsm[2].csr  = (0x40000000 - 1) & 0xfff00000;
-	pchip->tba[2].csr  = 0;
+	pchip->tba[2].csr  = 0x40000000;
 
-	pchip->wsba[3].csr = 0x80000000 | 1;
-	pchip->wsm[3].csr  = (0x40000000 - 1) & 0xfff00000;
-	pchip->tba[3].csr  = 0x40000000;
+	pchip->wsba[3].csr = hose->sg_pci->dma_base | 3;
+	pchip->wsm[3].csr  = (hose->sg_pci->size - 1) & 0xfff00000;
+	pchip->tba[3].csr  = virt_to_phys(hose->sg_pci->ptes);
 
 	tsunami_pci_tbi(hose, 0, -1);
 }

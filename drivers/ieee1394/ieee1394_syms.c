@@ -8,6 +8,7 @@
 
 #include <linux/types.h>
 #include <linux/module.h>
+#include <linux/string.h>
 
 #include "ieee1394_types.h"
 #include "hosts.h"
@@ -15,6 +16,7 @@
 #include "ieee1394_transactions.h"
 /* #include "events.h" */
 #include "highlevel.h"
+#include "guid.h"
 
 EXPORT_SYMBOL(hpsb_register_lowlevel);
 EXPORT_SYMBOL(hpsb_unregister_lowlevel);
@@ -52,3 +54,7 @@ EXPORT_SYMBOL(highlevel_read);
 EXPORT_SYMBOL(highlevel_write);
 EXPORT_SYMBOL(highlevel_lock);
 EXPORT_SYMBOL(highlevel_lock64);
+
+EXPORT_SYMBOL(hpsb_guid_get_handle);
+EXPORT_SYMBOL(hpsb_guid_localhost);
+EXPORT_SYMBOL(hpsb_guid_fill_packet);

@@ -55,6 +55,7 @@ fixup_acorn(struct machine_desc *desc, struct param_struct *params,
 
 		for (i = 0; i < 4; i++) {
 			mi->bank[i].start = PHYS_OFFSET + (i << 26);
+			mi->bank[i].node  = 0;
 			mi->bank[i].size  =
 				params->u1.s.pages_in_bank[i] *
 				params->u1.s.page_size;
@@ -122,6 +123,17 @@ static void __init
 fixup_netwinder(struct machine_desc *desc, struct param_struct *params,
 		char **cmdline, struct meminfo *mi)
 {
+#ifdef CONFIG_ISAPNP
+	extern int isapnp_disable;
+
+	/*
+	 * We must not use the kernels ISAPnP code
+	 * on the NetWinder - it will reset the settings
+	 * for the WaveArtist chip and render it inoperable.
+	 */
+	isapnp_disable = 1;
+#endif
+
 	if (params->u1.s.nr_pages != 0x2000 &&
 	    params->u1.s.nr_pages != 0x4000) {
 		printk(KERN_WARNING "Warning: bad NeTTrom parameters "
@@ -181,6 +193,7 @@ fixup_coebsa285(struct machine_desc *desc, struct param_struct *params,
 	mi->nr_banks      = 1;
 	mi->bank[0].start = PHYS_OFFSET;
 	mi->bank[0].size  = boot_memory_end;
+	mi->bank[0].node  = 0;
 
 	*cmdline = boot_command_line;
 }
@@ -197,7 +210,8 @@ MACHINE_END
 extern void select_sa1100_io_desc(void);
 #define SET_BANK(__nr,__start,__size) \
 	mi->bank[__nr].start = (__start), \
-	mi->bank[__nr].size = (__size)
+	mi->bank[__nr].size = (__size), \
+	mi->bank[__nr].node = (((unsigned)(__start) - PHYS_OFFSET) >> 27)
 static void __init
 fixup_sa1100(struct machine_desc *desc, struct param_struct *params,
 	     char **cmdline, struct meminfo *mi)
@@ -252,7 +266,7 @@ fixup_sa1100(struct machine_desc *desc, struct param_struct *params,
 		setup_initrd(0xc0400000, 4*1024*1024);
 	}
 
-	else if (machine_is_thinclient()) {
+	else if (machine_is_thinclient() || machine_is_graphicsclient()) {
 		SET_BANK( 0, 0xc0000000, 16*1024*1024 );
 		mi->nr_banks = 1;
 
@@ -312,6 +326,12 @@ MACHINE_START(EMPEG, "empeg MP3 Car Audio Player")
 	FIXUP(fixup_sa1100)
 MACHINE_END
 #endif
+#ifdef CONFIG_SA1100_GRAPHICSCLIENT
+MACHINE_START(GRAPHICSCLIENT, "ADS GraphicsClient")
+	BOOT_MEM(0xc0000000, 0x80000000, 0xf8000000)
+	FIXUP(fixup_sa1100)
+MACHINE_END
+#endif
 #ifdef CONFIG_SA1100_ITSY
 MACHINE_START(ITSY, "Compaq Itsy")
 	BOOT_MEM(0xc0000000, 0x80000000, 0xf8000000)
@@ -349,6 +369,35 @@ MACHINE_START(VICTOR, "VisuAide Victor")
 	FIXUP(fixup_sa1100)
 MACHINE_END
 #endif
+#ifdef CONFIG_SA1100_XP860
+MACHINE_START(XP860, "XP860")
+	BOOT_MEM(0xc0000000, 0x80000000, 0xf8000000)
+	FIXUP(fixup_sa1100)
+MACHINE_END
+#endif
+#endif
+
+#ifdef CONFIG_ARCH_L7200
+
+static void __init
+fixup_l7200(struct machine_desc *desc, struct param_struct *params,
+             char **cmdline, struct meminfo *mi)
+{
+        mi->nr_banks      = 1;
+        mi->bank[0].start = PHYS_OFFSET;
+        mi->bank[0].size  = (32*1024*1024);
+        mi->bank[0].node  = 0;
+
+        ROOT_DEV = MKDEV(RAMDISK_MAJOR,0);
+        setup_ramdisk( 1, 0, 0, 8192 );
+        setup_initrd( __phys_to_virt(0xf1000000), 0x00162b0d);
+}
+
+MACHINE_START(L7200, "LinkUp Systems L7200SDB")
+	MAINTAINER("Steve Hill")
+	BOOT_MEM(0xf0000000, 0x80040000, 0xd0000000)
+	FIXUP(fixup_l7200)
+MACHINE_END
 #endif
 
 #ifdef CONFIG_ARCH_EBSA110

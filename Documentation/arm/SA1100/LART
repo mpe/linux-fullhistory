@@ -10,6 +10,5 @@ daughterboards. A quad Ethernet / IDE / PS2 / sound daughterboard
 is under development, with plenty of others in different stages of
 planning.
 
-The designs for this board have been released under a GPL-like license;
-
-For lot more info, see the LART page at http://www.lart.tudelft.nl.
+The hardware designs for this board have been released under an open license;
+see the LART page at http://www.lart.tudelft.nl/ for more information.

@@ -89,10 +89,10 @@ int sys_ptrace(long request, long pid, long addr, long data)
 	lock_kernel();
 	if (request == PTRACE_TRACEME) {
 		/* are we already being traced? */
-		if (current->flags & PF_PTRACED)
+		if (current->ptrace & PT_PTRACED)
 			goto out;
 		/* set the ptrace bit in the process flags. */
-		current->flags |= PF_PTRACED;
+		current->ptrace |= PT_PTRACED;
 		ret = 0;
 		goto out;
 	}
@@ -123,9 +123,9 @@ int sys_ptrace(long request, long pid, long addr, long data)
 		    && !capable(CAP_SYS_PTRACE))
 			goto out_tsk;
 		/* the same process cannot be attached many times */
-		if (child->flags & PF_PTRACED)
+		if (child->ptrace & PT_PTRACED)
 			goto out_tsk;
-		child->flags |= PF_PTRACED;
+		child->ptrace |= PT_PTRACED;
 
 		write_lock_irq(&tasklist_lock);
 		if (child->p_pptr != current) {
@@ -140,7 +140,7 @@ int sys_ptrace(long request, long pid, long addr, long data)
 		goto out_tsk;
 	}
 	ret = -ESRCH;
-	if (!(child->flags & PF_PTRACED))
+	if (!(child->ptrace & PT_PTRACED))
 		goto out_tsk;
 	if (child->state != TASK_STOPPED) {
 		if (request != PTRACE_KILL)
@@ -175,7 +175,7 @@ int sys_ptrace(long request, long pid, long addr, long data)
 		if ((addr & 3) || index > PT_FPSCR)
 			break;
 
-		if (addr < PT_FPR0) {
+		if (index < PT_FPR0) {
 			tmp = get_reg(child, (int) index);
 		} else {
 			if (child->thread.regs->msr & MSR_FP)
@@ -206,10 +206,10 @@ int sys_ptrace(long request, long pid, long addr, long data)
 		if ((addr & 3) || index > PT_FPSCR)
 			break;
 
-		if (addr == PT_ORIG_R3)
+		if (index == PT_ORIG_R3)
 			break;
-		if (addr < PT_FPR0) {
-			ret = put_reg(child, addr, data);
+		if (index < PT_FPR0) {
+			ret = put_reg(child, index, data);
 		} else {
 			if (child->thread.regs->msr & MSR_FP)
 				giveup_fpu(child);
@@ -225,9 +225,9 @@ int sys_ptrace(long request, long pid, long addr, long data)
 		if ((unsigned long) data > _NSIG)
 			break;
 		if (request == PTRACE_SYSCALL)
-			child->flags |= PF_TRACESYS;
+			child->ptrace |= PT_TRACESYS;
 		else
-			child->flags &= ~PF_TRACESYS;
+			child->ptrace &= ~PT_TRACESYS;
 		child->exit_code = data;
 		/* make sure the single step bit is not set. */
 		clear_single_step(child);
@@ -256,7 +256,7 @@ int sys_ptrace(long request, long pid, long addr, long data)
 		ret = -EIO;
 		if ((unsigned long) data > _NSIG)
 			break;
-		child->flags &= ~PF_TRACESYS;
+		child->ptrace &= ~PT_TRACESYS;
 		set_single_step(child);
 		child->exit_code = data;
 		/* give it a chance to run. */
@@ -269,7 +269,7 @@ int sys_ptrace(long request, long pid, long addr, long data)
 		ret = -EIO;
 		if ((unsigned long) data > _NSIG)
 			break;
-		child->flags &= ~(PF_PTRACED|PF_TRACESYS);
+		child->ptrace &= ~(PT_PTRACED|PT_TRACESYS);
 		child->exit_code = data;
 		write_lock_irq(&tasklist_lock);
 		REMOVE_LINKS(child);
@@ -296,8 +296,8 @@ out:
 
 void syscall_trace(void)
 {
-	if ((current->flags & (PF_PTRACED|PF_TRACESYS))
-			!= (PF_PTRACED|PF_TRACESYS))
+	if ((current->ptrace & (PT_PTRACED|PT_TRACESYS))
+			!= (PT_PTRACED|PT_TRACESYS))
 		return;
 	current->exit_code = SIGTRAP;
 	current->state = TASK_STOPPED;

@@ -3578,7 +3578,7 @@ repeat:
 }
 #else
 /* For SMP we only service one ESP on the list list at our IRQ level! */
-static void esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
+void esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
 {
 	struct NCR_ESP *esp;
 	unsigned long flags;

@@ -687,7 +687,6 @@ static int agp_release(struct inode *inode, struct file *file)
 	}
 	agp_remove_file_private(priv);
 	kfree(priv);
-	MOD_DEC_USE_COUNT;
 	AGP_UNLOCK();
 	return 0;
 }
@@ -697,19 +696,17 @@ static int agp_open(struct inode *inode, struct file *file)
 	int minor = MINOR(inode->i_rdev);
 	agp_file_private *priv;
 	agp_client *client;
+	int rc = -ENXIO;
 
 	AGP_LOCK();
 
-	if (minor != AGPGART_MINOR) {
-		AGP_UNLOCK();
-		return -ENXIO;
-	}
-	priv = kmalloc(sizeof(agp_file_private), GFP_KERNEL);
+	if (minor != AGPGART_MINOR)
+		goto err_out;
 
-	if (priv == NULL) {
-		AGP_UNLOCK();
-		return -ENOMEM;
-	}
+	priv = kmalloc(sizeof(agp_file_private), GFP_KERNEL);
+	if (priv == NULL)
+		goto err_out_nomem;
+
 	memset(priv, 0, sizeof(agp_file_private));
 	set_bit(AGP_FF_ALLOW_CLIENT, &priv->access_flags);
 	priv->my_pid = current->pid;
@@ -726,9 +723,14 @@ static int agp_open(struct inode *inode, struct file *file)
 	}
 	file->private_data = (void *) priv;
 	agp_insert_file_private(priv);
-	MOD_INC_USE_COUNT;
 	AGP_UNLOCK();
 	return 0;
+
+err_out_nomem:
+	rc = -ENOMEM;
+err_out:
+	AGP_UNLOCK();
+	return rc;
 }
 
 

@@ -94,10 +94,6 @@ CONFIG_BLK_DEV_IDE_ICSIDE=y
 # CONFIG_BLK_DEV_IDEDMA_ICS is not set
 # CONFIG_BLK_DEV_IDE_RAPIDE is not set
 # CONFIG_IDE_CHIPSETS is not set
-
-#
-# Additional Block Devices
-#
 CONFIG_BLK_DEV_LOOP=m
 # CONFIG_BLK_DEV_NBD is not set
 # CONFIG_BLK_DEV_MD is not set

@@ -72,8 +72,8 @@ serial_init(bd_t *bd)
 	*/
 	up->smc_rbase = dpaddr;
 	up->smc_tbase = dpaddr+sizeof(cbd_t);
-	up->smc_rfcr = SMC_EB;
-	up->smc_tfcr = SMC_EB;
+	up->smc_rfcr = CPMFCR_EB;
+	up->smc_tfcr = CPMFCR_EB;
 	up->smc_brklen = 0;
 	up->smc_brkec = 0;
 	up->smc_brkcr = 0;

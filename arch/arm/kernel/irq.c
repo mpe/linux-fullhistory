@@ -15,7 +15,7 @@
  * IRQ's are in fact implemented a bit like signal handlers for the kernel.
  * Naturally it's not a 1:1 relation, but there are similarities.
  */
-#include <linux/config.h> /* for CONFIG_DEBUG_ERRORS */
+#include <linux/config.h>
 #include <linux/ptrace.h>
 #include <linux/errno.h>
 #include <linux/kernel_stat.h>
@@ -32,13 +32,6 @@
 #include <asm/hardware.h>
 #include <asm/io.h>
 #include <asm/system.h>
-
-#ifndef SMP
-#define irq_enter(cpu, irq)	(++local_irq_count[cpu])
-#define irq_exit(cpu, irq)	(--local_irq_count[cpu])
-#else
-#error SMP not supported
-#endif
 
 #ifndef cliIF
 #define cliIF()
@@ -85,6 +78,7 @@ struct irqdesc {
 };
 
 static struct irqdesc irq_desc[NR_IRQS];
+static volatile unsigned long irq_err_count;
 
 /*
  * Get architecture specific interrupt handlers
@@ -133,8 +127,8 @@ int get_irq_list(char *buf)
 	    	action = irq_desc[i].action;
 		if (!action)
 			continue;
-		p += sprintf(p, "%3d: %10u   %s",
-			     i, kstat_irqs(i), action->name);
+		p += sprintf(p, "%3d: %10u ", i, kstat_irqs(i));
+		p += sprintf(p, "  %s", action->name);
 		for (action = action->next; action; action = action->next) {
 			p += sprintf(p, ", %s", action->name);
 		}
@@ -144,6 +138,7 @@ int get_irq_list(char *buf)
 #ifdef CONFIG_ARCH_ACORN
 	p += get_fiq_list(p);
 #endif
+	p += sprintf(p, "Err: %10lu\n", irq_err_count);
 	return p - buf;
 }
 
@@ -181,9 +176,16 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 {
 	struct irqdesc * desc;
 	struct irqaction * action;
-	int status, cpu;
+	int cpu;
 
 	irq = fixup_irq(irq);
+
+	/*
+	 * Some hardware gives randomly wrong interrupts.  Rather
+	 * than crashing, do something sensible.
+	 */
+	if (irq >= NR_IRQS)
+		goto bad_irq;
 
 	desc = irq_desc + irq;
 
@@ -197,10 +199,11 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 	desc->triggered = 1;
 
 	/* Return with this interrupt masked if no action */
-	status = 0;
 	action = desc->action;
 
 	if (action) {
+		int status = 0;
+
 		if (desc->nomask) {
 			spin_lock(&irq_controller_lock);
 			desc->unmask(irq);
@@ -237,9 +240,15 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 
 	if (softirq_state[cpu].active & softirq_state[cpu].mask)
 		do_softirq();
+	return;
+
+bad_irq:
+	irq_err_count += 1;
+	printk(KERN_ERR "IRQ: spurious interrupt %d\n", irq);
+	return;
 }
 
-#if defined(CONFIG_ARCH_ACORN)
+#ifdef CONFIG_ARCH_ACORN
 void do_ecard_IRQ(int irq, struct pt_regs *regs)
 {
 	struct irqdesc * desc;

@@ -233,14 +233,14 @@ static unsigned long irq_affinity[NR_IRQS] = { [0 ... NR_IRQS-1] = ~0UL };
 static void
 select_smp_affinity(int irq)
 {
-	static int last_cpu;
+	static int last_cpu = 0;
 	int cpu = last_cpu + 1;
 
 	if (! irq_desc[irq].handler->set_affinity || irq_user_affinity[irq])
 		return;
 
 	while (((cpu_present_mask >> cpu) & 1) == 0)
-		cpu = (cpu < NR_CPUS ? cpu + 1 : 0);
+		cpu = (cpu < (NR_CPUS-1) ? cpu + 1 : 0);
 	last_cpu = cpu;
 
 	irq_affinity[irq] = 1UL << cpu;
@@ -520,8 +520,10 @@ get_irq_list(char *buf)
 	p += sprintf(p, "           ");
 	for (i = 0; i < smp_num_cpus; i++)
 		p += sprintf(p, "CPU%d       ", i);
+#ifdef DO_BROADCAST_INTS
 	for (i = 0; i < smp_num_cpus; i++)
 		p += sprintf(p, "TRY%d       ", i);
+#endif
 	*p++ = '\n';
 #endif
 
@@ -536,9 +538,11 @@ get_irq_list(char *buf)
 		for (j = 0; j < smp_num_cpus; j++)
 			p += sprintf(p, "%10u ",
 				     kstat.irqs[cpu_logical_map(j)][i]);
+#ifdef DO_BROADCAST_INTS
 		for (j = 0; j < smp_num_cpus; j++)
 			p += sprintf(p, "%10lu ",
 				     irq_attempt(cpu_logical_map(j), i));
+#endif
 #endif
 		p += sprintf(p, " %14s", irq_desc[i].handler->typename);
 		p += sprintf(p, "  %c%s",

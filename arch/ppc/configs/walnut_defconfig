@@ -13,7 +13,7 @@ CONFIG_EXPERIMENTAL=y
 CONFIG_PPC=y
 # CONFIG_6xx is not set
 CONFIG_4xx=y
-# CONFIG_PPC64 is not set
+# CONFIG_PPC64BRIDGE is not set
 # CONFIG_82xx is not set
 # CONFIG_8xx is not set
 # CONFIG_OAK is not set
@@ -69,10 +69,6 @@ CONFIG_KERNEL_ELF=y
 # Please see Documentation/ide.txt for help/info on IDE drives
 #
 # CONFIG_BLK_DEV_HD_ONLY is not set
-
-#
-# Additional Block Devices
-#
 CONFIG_BLK_DEV_LOOP=y
 # CONFIG_BLK_DEV_NBD is not set
 # CONFIG_BLK_DEV_MD is not set

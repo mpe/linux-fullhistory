@@ -19,7 +19,7 @@ ARCHCC		:= $(word 1,$(CC))
 
 AFLAGS		+= -mno-fpu
 CFLAGS_PIPE	:= -pipe
-CFLAGS		:= $(CFLAGS) $(CFLAGS_PIPE)
+CFLAGS		:= $(CFLAGS) $(CFLAGS_PIPE) -msoft-float
 
 ifdef CONFIG_FRAME_POINTER
 CFLAGS		:= $(CFLAGS:-fomit-frame-pointer=)
@@ -29,11 +29,13 @@ ifdef CONFIG_DEBUG_INFO
 CFLAGS		+= -g
 endif
 
+GZFLAGS		= -9
+
 # Ensure this is ld "2.9.4" or later
 NEW_LINKER	:= $(shell if $(LD) --gc-sections --version >/dev/null 2>&1; then echo y; else echo n; fi)
 
 ifneq ($(NEW_LINKER),y)
-dummy:;		@echo '*** 2.3 kernels no longer build correctly with old versions of binutils.'
+dummy:;		@echo '*** ${VERSION}.${PATCHLEVEL} kernels no longer build correctly with old versions of binutils.'
 		@echo '*** Please upgrade your binutils to 2.9.5.'
 		@false
 endif
@@ -45,7 +47,7 @@ NEW_GCC		:= $(shell if $(CC) --version 2>&1 | grep '^2\.7' > /dev/null; then ech
 # select flags depending on the compiler
 #
 ifeq ($(NEW_GCC),y)
-CFLAGS			+= -mshort-load-bytes -msoft-float
+CFLAGS			+= -mshort-load-bytes
 CFLAGS_PROC_CPU_26	:= -mcpu=arm3 -Os
 CFLAGS_PROC_CPU_32v3	:= -march=armv3
 CFLAGS_PROC_CPU_32v4	:= -march=armv4
@@ -110,7 +112,7 @@ endif
 
 LIBGCC		:= $(shell $(CC) $(CFLAGS) --print-libgcc-file-name)
 
-export	LIBGCC MACHINE PROCESSOR TEXTADDR
+export	LIBGCC MACHINE PROCESSOR TEXTADDR GZFLAGS
 
 ifeq ($(CONFIG_ARCH_A5K),y)
 MACHINE		 = a5k

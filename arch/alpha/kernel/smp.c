@@ -212,8 +212,19 @@ smp_tune_scheduling (void)
 
 	freq = hwrpb->cycle_freq ? : est_cycle_freq;
 
+#if 0
 	/* Magic estimation stolen from x86 port.  */
-	cacheflush_time = freq / 1024 * on_chip_cache / 5000;
+	cacheflush_time = freq / 1024L * on_chip_cache / 5000L;
+
+        printk("Using heuristic of %d cycles.\n",
+               cacheflush_time);
+#else
+	/* Magic value to force potential preemption of other CPUs.  */
+	cacheflush_time = INT_MAX;
+
+        printk("Using heuristic of %d cycles.\n",
+               cacheflush_time);
+#endif
 }
 
 /*
@@ -325,8 +336,8 @@ recv_secondary_console_msg(void)
 			}
 		}
 
-		printk(KERN_INFO "recv_secondary_console_msg: on %d "
-		       "message is '%s'\n", mycpu, buf);
+		DBGS((KERN_INFO "recv_secondary_console_msg: on %d "
+		      "message is '%s'\n", mycpu, buf));
 	}
 
 	hwrpb->txrdy = 0;
@@ -361,8 +372,10 @@ secondary_cpu_start(int cpuid, struct task_struct *idle)
 	hwpcb->flags = idle->thread.pal_flags;
 	hwpcb->res1 = hwpcb->res2 = 0;
 
+#if 0
 	DBGS(("KSP 0x%lx PTBR 0x%lx VPTBR 0x%lx UNIQUE 0x%lx\n",
 	      hwpcb->ksp, hwpcb->ptbr, hwrpb->vptb, hwcpb->unique));
+#endif
 	DBGS(("Starting secondary cpu %d: state 0x%lx pal_flags 0x%lx\n",
 	      cpuid, idle->state, idle->thread.pal_flags));
 
@@ -738,8 +751,10 @@ handle_ipi(struct pt_regs *regs)
 	unsigned long *pending_ipis = &ipi_data[this_cpu].bits;
 	unsigned long ops;
 
-	DBGS(("handle_ipi: on CPU %d ops 0x%x PC 0x%lx\n",
+#if 0
+	DBGS(("handle_ipi: on CPU %d ops 0x%lx PC 0x%lx\n",
 	      this_cpu, *pending_ipis, regs->pc));
+#endif
 
 	mb();	/* Order interrupt and bit testing. */
 	while ((ops = xchg(pending_ipis, 0)) != 0) {

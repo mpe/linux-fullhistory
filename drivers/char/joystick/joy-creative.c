@@ -151,26 +151,6 @@ static int js_cr_read(void *xinfo, int **axes, int **buttons)
 }
 
 /*
- * js_cr_open() is a callback from the file open routine.
- */
-
-static int js_cr_open(struct js_dev *jd)
-{
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-/*
- * js_cr_close() is a callback from the file release routine.
- */
-
-static int js_cr_close(struct js_dev *jd)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
-
-/*
  * js_cr_init_corr() initializes correction values of
  * Blaster gamepads.
  */
@@ -243,7 +223,7 @@ static struct js_port __init *js_cr_probe(int io, struct js_port *port)
 		if (info.mode[i]) {
 			printk(KERN_INFO "js%d: %s at %#x\n",
 				js_register_device(port, i, axes[info.mode[i]], buttons[info.mode[i]],
-					names[info.mode[i]], js_cr_open, js_cr_close),
+					names[info.mode[i]], THIS_MODULE, NULL, NULL),
 				names[info.mode[i]], io);
 			js_cr_init_corr(info.mode[i], port->corr[i]);
 		}

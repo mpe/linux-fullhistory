@@ -6,21 +6,16 @@ Author: Mark McClelland
 Homepage: http://alpha.dyndns.org/ov511
 
 NEW IN THIS VERSION:
- o 384x288 and 448x336 modes
- o better /proc/video support
+ o Race conditions and other bugs fixed
 
 INTRODUCTION:
 
-This is a preliminary version of my OV511 Linux device driver. Currently, it can
-grab a frame in color (YUV420) at 640x480 or 320x240 using either vidcat or
-xawtv. Other utilities may work but have not yet been tested.
-
-Any camera using the OV511/OV511+ and the OV7610/20/20AE CCD should work. The
-driver only detects known cameras though, based on their custom id number. If
-you have a currently unsupported camera, the ID number should be reported to you
-in the kernel logs. Please send me the model, manufacturer and ID number and I 
-will add it to the detection code. In the meantime, you can add to the code
-yourself in the function ov511_probe().
+This is a driver for the OV511, a USB-only chip used in many "webcam" devices.
+Any camera using the OV511/OV511+ and the OV7610/20/20AE CCD should work.It 
+supports streaming and capture of color or monochrome video via the Video4Linux
+API. Most V4L apps are compatible with it, but a few videoconferencing programs
+do not work yet. The following resolutions are supported: 640x480, 448x336,
+384x288, 352x288, and 320x240.
 
 WHAT YOU NEED:
 
@@ -93,7 +88,8 @@ A: The I2C code that allows the OV511 to communicate with the camera chip is a
    bit flaky right now. This message means that the I2C bus never got
    initialized properly, and the camera will most likely not work even if you
    disable this warning. Try unloading/reloading the driver or unplugging/re-
-   plugging the camera if this happens.
+   plugging the camera if this happens. Also try increasing the i2c_detect_tries
+   parameter (see below).
 
 Q: "Why do you bother with this phony camera detection crap? It doesn't do
     anything useful!"
@@ -200,9 +196,6 @@ TODO:
    would like them to release their specifications to the Linux community.
  o Get 160x120 working
  o YUV422 (and other color modes)
- o Fix read(). It only works right now if you run an mmap() based app like xawtv
-   or vidcat after loading the module and before using read(). Apparently there
-   are some initialization issues.
  o Get snapshot mode working with mmap().
  o Fix fixFrameRGBoffset(). It is not stable yet with streaming video.
  o Get hue (red/blue channel balance) adjustment working (in ov511_get_picture()

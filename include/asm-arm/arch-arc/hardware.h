@@ -25,11 +25,6 @@
 #include <asm/memc.h>
 #define HAS_VIDC
 
-/*
- * Optional hardware
- */
-#define HAS_EXPMASK
-
 /* Hardware addresses of major areas.
  *  *_START is the physical address
  *  *_SIZE  is the size of the region
@@ -100,7 +95,6 @@
 
 #endif
 
-#ifdef HAS_EXPMASK
 #ifndef __ASSEMBLY__
 #define __EXPMASK(offset)	(((volatile unsigned char *)EXPMASK_BASE)[offset])
 #else
@@ -109,7 +103,5 @@
 
 #define	EXPMASK_STATUS	__EXPMASK(0x00)
 #define EXPMASK_ENABLE	__EXPMASK(0x04)
-
-#endif
 
 #endif

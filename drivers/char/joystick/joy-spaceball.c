@@ -152,7 +152,6 @@ static int js_sball_open(struct js_dev *jd)
 {
 	struct js_sball_info *info = jd->port->info;
 	info->used++;
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -167,7 +166,6 @@ static int js_sball_close(struct js_dev *jd)
 		js_unregister_device(jd->port->devs[0]);
 		js_sball_port = js_unregister_port(jd->port);
 	}
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -219,7 +217,7 @@ static int js_sball_ldisc_open(struct tty_struct *tty)
 	info->port = js_sball_port;
 	tty->disc_data = info;
 
-	info->js = js_register_device(js_sball_port, 0, 6, 12, "SpaceBall 4000 FLX", js_sball_open, js_sball_close);
+	info->js = js_register_device(js_sball_port, 0, 6, 12, "SpaceBall 4000 FLX", THIS_MODULE, js_sball_open, js_sball_close);
 
 	js_sball_init_corr(js_sball_port->corr);
 

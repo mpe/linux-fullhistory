@@ -8,6 +8,8 @@
 #ifndef __MACH_RPX_DEFS
 #define __MACH_RPX_DEFS
 
+#include <linux/config.h>
+
 /* A Board Information structure that is given to a program when
  * prom starts it up.
  */
@@ -26,8 +28,6 @@ extern bd_t m8xx_board_info;
  * We just map a few things we need.  The CSR is actually 4 byte-wide
  * registers that can be accessed as 8-, 16-, or 32-bit values.
  */
-#define PCMCIA_MEM_ADDR		((uint)0x04000000)
-#define PCMCIA_MEM_SIZE		((uint)(64 * 1024))
 #define PCI_ISA_IO_ADDR		((unsigned)0x80000000)
 #define PCI_ISA_IO_SIZE		((uint)(512 * 1024 * 1024))
 #define PCI_ISA_MEM_ADDR	((unsigned)0xc0000000)
@@ -38,6 +38,12 @@ extern bd_t m8xx_board_info;
 #define IMAP_SIZE		((uint)(64 * 1024))
 #define PCI_CSR_ADDR		((uint)0x80000000)
 #define PCI_CSR_SIZE		((uint)(64 * 1024))
+#define PCMCIA_MEM_ADDR		((uint)0xe0000000)
+#define PCMCIA_MEM_SIZE		((uint)(64 * 1024))
+#define PCMCIA_IO_ADDR		((uint)0xe4000000)
+#define PCMCIA_IO_SIZE		((uint)(4 * 1024))
+#define PCMCIA_ATTRB_ADDR	((uint)0xe8000000)
+#define PCMCIA_ATTRB_SIZE	((uint)(4 * 1024))
 
 /* Things of interest in the CSR.
 */
@@ -49,8 +55,19 @@ extern bd_t m8xx_board_info;
 #define BCSR0_FLASH_SEL		((uint)0x02000000)
 #define BCSR0_ENMONXCVR		((uint)0x01000000)
 
+#define BCSR0_PCMCIAVOLT	((uint)0x000f0000)	/* CLLF */
+#define BCSR0_PCMCIA3VOLT	((uint)0x000a0000)	/* CLLF */
+#define BCSR0_PCMCIA5VOLT	((uint)0x00060000)	/* CLLF */
+
 #define BCSR2_EN232XCVR		((uint)0x00008000)
 #define BCSR2_QSPACESEL		((uint)0x00004000)
+#define BCSR2_FETHLEDMODE	((uint)0x00000800)	/* CLLF */
+
+#if defined(CONFIG_RPXLCD) || defined(CONFIG_HTDMSOUND)
+/* HIOX Expansion card.
+*/
+#include <asm/rpx_hiox.h>
+#endif
 
 /* Interrupt level assignments.
 */

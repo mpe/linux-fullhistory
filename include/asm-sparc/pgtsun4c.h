@@ -1,4 +1,4 @@
-/* $Id: pgtsun4c.h,v 1.36 1998/07/26 03:05:44 davem Exp $
+/* $Id: pgtsun4c.h,v 1.37 2000/06/05 06:08:46 anton Exp $
  * pgtsun4c.h:  Sun4c specific pgtable.h defines and code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -41,13 +41,6 @@
 #define SUN4C_PTRS_PER_PTE    1024
 #define SUN4C_PTRS_PER_PMD    1
 #define SUN4C_PTRS_PER_PGD    1024
-
-/* On the sun4c the physical ram limit is 128MB.  We set up our I/O
- * translations at KERNBASE + 128MB for 1MB, then we begin the VMALLOC
- * area, makes sense.  This works out to the value below.
- */
-#define SUN4C_VMALLOC_START   (0xfe300000)
-#define SUN4C_VMALLOC_END     ~0x0UL
 
 /*
  * Sparc SUN4C pte fields.

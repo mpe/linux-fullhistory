@@ -20,7 +20,9 @@
 
 #include "dma.h"
 
-static struct fiq_handler fh = { NULL, "floppydma", NULL, NULL };
+static struct fiq_handler fh = {
+	name: "floppydma"
+};
 
 #if 0
 typedef enum {

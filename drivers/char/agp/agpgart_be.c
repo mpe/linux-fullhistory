@@ -315,6 +315,9 @@ static int agp_return_size(void)
 	case U32_APER_SIZE:
 		current_size = A_SIZE_32(temp)->size;
 		break;
+	case LVL2_APER_SIZE:
+		current_size = A_SIZE_LVL2(temp)->size;
+		break;
 	case FIXED_APER_SIZE:
 		current_size = A_SIZE_FIX(temp)->size;
 		break;
@@ -539,6 +542,11 @@ static int agp_generic_create_gatt_table(void)
 	int i;
 	void *temp;
 
+	/* The generic routines can't handle 2 level gatt's */
+	if (agp_bridge.size_type == LVL2_APER_SIZE) {
+		return -EINVAL;
+	}
+
 	table = NULL;
 	i = agp_bridge.aperture_size_idx;
 	temp = agp_bridge.current_size;
@@ -566,6 +574,7 @@ static int agp_generic_create_gatt_table(void)
 				break;
 				/* This case will never really happen. */
 			case FIXED_APER_SIZE:
+			case LVL2_APER_SIZE:
 			default:
 				size = page_order = num_entries = 0;
 				break;
@@ -590,6 +599,7 @@ static int agp_generic_create_gatt_table(void)
 					 * happen. 
 					 */
 				case FIXED_APER_SIZE:
+				case LVL2_APER_SIZE:
 				default:
 					agp_bridge.current_size =
 					    agp_bridge.current_size;
@@ -663,6 +673,10 @@ static int agp_generic_free_gatt_table(void)
 	case FIXED_APER_SIZE:
 		page_order = A_SIZE_FIX(temp)->page_order;
 		break;
+	case LVL2_APER_SIZE:
+		/* The generic routines can't deal with 2 level gatt's */
+		return -EINVAL;
+		break;
 	default:
 		page_order = 0;
 		break;
@@ -705,6 +719,10 @@ static int agp_generic_insert_memory(agp_memory * mem,
 		break;
 	case FIXED_APER_SIZE:
 		num_entries = A_SIZE_FIX(temp)->num_entries;
+		break;
+	case LVL2_APER_SIZE:
+		/* The generic routines can't deal with 2 level gatt's */
+		return -EINVAL;
 		break;
 	default:
 		num_entries = 0;
@@ -1126,6 +1144,38 @@ static int intel_configure(void)
 	return 0;
 }
 
+static int intel_840_configure(void)
+{
+	u32 temp;
+	u16 temp2;
+	aper_size_info_16 *current_size;
+
+	current_size = A_SIZE_16(agp_bridge.current_size);
+
+	/* aperture size */
+	pci_write_config_byte(agp_bridge.dev, INTEL_APSIZE,
+			      (char)current_size->size_value); 
+
+	/* address to map to */
+	pci_read_config_dword(agp_bridge.dev, INTEL_APBASE, &temp);
+	agp_bridge.gart_bus_addr = (temp & PCI_BASE_ADDRESS_MEM_MASK);
+
+	/* attbase - aperture base */
+	pci_write_config_dword(agp_bridge.dev, INTEL_ATTBASE,
+			       agp_bridge.gatt_bus_addr); 
+
+	/* agpctrl */
+	pci_write_config_dword(agp_bridge.dev, INTEL_AGPCTRL, 0x0000); 
+
+	/* mcgcfg */
+	pci_read_config_word(agp_bridge.dev, INTEL_I840_MCHCFG, &temp2);
+	pci_write_config_word(agp_bridge.dev, INTEL_I840_MCHCFG,
+			      temp2 | (1 << 9));
+	/* clear any possible error conditions */
+	pci_write_config_word(agp_bridge.dev, INTEL_I840_ERRSTS, 0xc000); 
+	return 0;
+}
+
 static unsigned long intel_mask_memory(unsigned long addr, int type)
 {
 	/* Memory type is ignored */
@@ -1161,6 +1211,34 @@ static int __init intel_generic_setup (struct pci_dev *pdev)
 	agp_bridge.dev_private_data = NULL;
 	agp_bridge.needs_scratch_page = FALSE;
 	agp_bridge.configure = intel_configure;
+	agp_bridge.fetch_size = intel_fetch_size;
+	agp_bridge.cleanup = intel_cleanup;
+	agp_bridge.tlb_flush = intel_tlbflush;
+	agp_bridge.mask_memory = intel_mask_memory;
+	agp_bridge.agp_enable = agp_generic_agp_enable;
+	agp_bridge.cache_flush = global_cache_flush;
+	agp_bridge.create_gatt_table = agp_generic_create_gatt_table;
+	agp_bridge.free_gatt_table = agp_generic_free_gatt_table;
+	agp_bridge.insert_memory = agp_generic_insert_memory;
+	agp_bridge.remove_memory = agp_generic_remove_memory;
+	agp_bridge.alloc_by_type = agp_generic_alloc_by_type;
+	agp_bridge.free_by_type = agp_generic_free_by_type;
+
+	return 0;
+	
+	(void) pdev; /* unused */
+}
+
+static int __init intel_840_setup (struct pci_dev *pdev)
+{
+	agp_bridge.masks = intel_generic_masks;
+	agp_bridge.num_of_masks = 1;
+	agp_bridge.aperture_sizes = (void *) intel_generic_sizes;
+	agp_bridge.size_type = U16_APER_SIZE;
+	agp_bridge.num_aperture_sizes = 7;
+	agp_bridge.dev_private_data = NULL;
+	agp_bridge.needs_scratch_page = FALSE;
+	agp_bridge.configure = intel_840_configure;
 	agp_bridge.fetch_size = intel_fetch_size;
 	agp_bridge.cleanup = intel_cleanup;
 	agp_bridge.tlb_flush = intel_tlbflush;
@@ -1403,19 +1481,180 @@ static int __init sis_generic_setup (struct pci_dev *pdev)
 
 #ifdef CONFIG_AGP_AMD
 
+typedef struct _amd_page_map {
+	unsigned long *real;
+	unsigned long *remapped;
+} amd_page_map;
+
 static struct _amd_irongate_private {
 	volatile u8 *registers;
+	amd_page_map **gatt_pages;
+	int num_tables;
 } amd_irongate_private;
+
+static int amd_create_page_map(amd_page_map *page_map)
+{
+	int i;
+
+	page_map->real = (unsigned long *) __get_free_page(GFP_KERNEL);
+	if (page_map->real == NULL) {
+		return -ENOMEM;
+	}
+	set_bit(PG_reserved, &mem_map[MAP_NR(page_map->real)].flags);
+	CACHE_FLUSH();
+	page_map->remapped = ioremap_nocache(virt_to_phys(page_map->real), 
+					    PAGE_SIZE);
+	if (page_map->remapped == NULL) {
+		clear_bit(PG_reserved, 
+			  &mem_map[MAP_NR(page_map->real)].flags);
+		free_page((unsigned long) page_map->real);
+		page_map->real = NULL;
+		return -ENOMEM;
+	}
+	CACHE_FLUSH();
+
+	for(i = 0; i < PAGE_SIZE / sizeof(unsigned long); i++) {
+		page_map->remapped[i] = agp_bridge.scratch_page;
+	}
+
+	return 0;
+}
+
+static void amd_free_page_map(amd_page_map *page_map)
+{
+	iounmap(page_map->remapped);
+	clear_bit(PG_reserved, 
+		  &mem_map[MAP_NR(page_map->real)].flags);
+	free_page((unsigned long) page_map->real);
+}
+
+static void amd_free_gatt_pages(void)
+{
+	int i;
+	amd_page_map **tables;
+	amd_page_map *entry;
+
+	tables = amd_irongate_private.gatt_pages;
+	for(i = 0; i < amd_irongate_private.num_tables; i++) {
+		entry = tables[i];
+		if (entry != NULL) {
+			if (entry->real != NULL) {
+				amd_free_page_map(entry);
+			}
+			kfree(entry);
+		}
+	}
+	kfree(tables);
+}
+
+static int amd_create_gatt_pages(int nr_tables)
+{
+	amd_page_map **tables;
+	amd_page_map *entry;
+	int retval = 0;
+	int i;
+
+	tables = kmalloc((nr_tables + 1) * sizeof(amd_page_map *), 
+			 GFP_KERNEL);
+	if (tables == NULL) {
+		return -ENOMEM;
+	}
+	memset(tables, 0, sizeof(amd_page_map *) * (nr_tables + 1));
+	for (i = 0; i < nr_tables; i++) {
+		entry = kmalloc(sizeof(amd_page_map), GFP_KERNEL);
+		if (entry == NULL) {
+			retval = -ENOMEM;
+			break;
+		}
+		memset(entry, 0, sizeof(amd_page_map));
+		tables[i] = entry;
+		retval = amd_create_page_map(entry);
+		if (retval != 0) break;
+	}
+	amd_irongate_private.num_tables = nr_tables;
+	amd_irongate_private.gatt_pages = tables;
+
+	if (retval != 0) amd_free_gatt_pages();
+
+	return retval;
+}
+
+/* Since we don't need contigious memory we just try
+ * to get the gatt table once
+ */
+
+#define GET_PAGE_DIR_OFF(addr) (addr >> 22)
+#define GET_PAGE_DIR_IDX(addr) (GET_PAGE_DIR_OFF(addr) - \
+	GET_PAGE_DIR_OFF(agp_bridge.gart_bus_addr))
+#define GET_GATT_OFF(addr) ((addr & 0x003ff000) >> 12) 
+#define GET_GATT(addr) (amd_irongate_private.gatt_pages[\
+	GET_PAGE_DIR_IDX(addr)]->remapped)
+
+static int amd_create_gatt_table(void)
+{
+	aper_size_info_lvl2 *value;
+	amd_page_map page_dir;
+	unsigned long addr;
+	int retval;
+	u32 temp;
+	int i;
+
+	value = A_SIZE_LVL2(agp_bridge.current_size);
+	retval = amd_create_page_map(&page_dir);
+	if (retval != 0) {
+		return retval;
+	}
+
+	retval = amd_create_gatt_pages(value->num_entries / 1024);
+	if (retval != 0) {
+		amd_free_page_map(&page_dir);
+		return retval;
+	}
+
+	agp_bridge.gatt_table_real = page_dir.real;
+	agp_bridge.gatt_table = page_dir.remapped;
+	agp_bridge.gatt_bus_addr = virt_to_bus(page_dir.real);
+
+	/* Get the address for the gart region.
+	 * This is a bus address even on the alpha, b/c its
+	 * used to program the agp master not the cpu
+	 */
+
+	pci_read_config_dword(agp_bridge.dev, AMD_APBASE, &temp);
+	addr = (temp & PCI_BASE_ADDRESS_MEM_MASK);
+	agp_bridge.gart_bus_addr = addr;
+
+	/* Calculate the agp offset */
+	for(i = 0; i < value->num_entries / 1024; i++, addr += 0x00400000) {
+		page_dir.remapped[GET_PAGE_DIR_OFF(addr)] =
+			virt_to_bus(amd_irongate_private.gatt_pages[i]->real);
+		page_dir.remapped[GET_PAGE_DIR_OFF(addr)] |= 0x00000001;
+	}
+
+	return 0;
+}
+
+static int amd_free_gatt_table(void)
+{
+	amd_page_map page_dir;
+   
+	page_dir.real = agp_bridge.gatt_table_real;
+	page_dir.remapped = agp_bridge.gatt_table;
+
+	amd_free_gatt_pages();
+	amd_free_page_map(&page_dir);
+	return 0;
+}
 
 static int amd_irongate_fetch_size(void)
 {
 	int i;
 	u32 temp;
-	aper_size_info_32 *values;
+	aper_size_info_lvl2 *values;
 
 	pci_read_config_dword(agp_bridge.dev, AMD_APSIZE, &temp);
 	temp = (temp & 0x0000000e);
-	values = A_SIZE_32(agp_bridge.aperture_sizes);
+	values = A_SIZE_LVL2(agp_bridge.aperture_sizes);
 	for (i = 0; i < agp_bridge.num_aperture_sizes; i++) {
 		if (temp == values[i].size_value) {
 			agp_bridge.previous_size =
@@ -1431,12 +1670,11 @@ static int amd_irongate_fetch_size(void)
 
 static int amd_irongate_configure(void)
 {
-	aper_size_info_32 *current_size;
-	unsigned long addr;
+	aper_size_info_lvl2 *current_size;
 	u32 temp;
 	u16 enable_reg;
 
-	current_size = A_SIZE_32(agp_bridge.current_size);
+	current_size = A_SIZE_LVL2(agp_bridge.current_size);
 
 	/* Get the memory mapped registers */
 	pci_read_config_dword(agp_bridge.dev, AMD_MMBASE, &temp);
@@ -1451,7 +1689,7 @@ static int amd_irongate_configure(void)
 	pci_write_config_byte(agp_bridge.dev, AMD_MODECNTL, 0x80);
    
    	/* Set indexing mode */
-   	pci_write_config_byte(agp_bridge.dev, AMD_MODECNTL2, 0x02);
+   	pci_write_config_byte(agp_bridge.dev, AMD_MODECNTL2, 0x00);
 
 	/* Write the enable register */
 	enable_reg = INREG16(amd_irongate_private.registers, AMD_GARTENABLE);
@@ -1467,28 +1705,16 @@ static int amd_irongate_configure(void)
 	/* Flush the tlb */
 	OUTREG32(amd_irongate_private.registers, AMD_TLBFLUSH, 0x00000001);
 
-	/* Get the address for the gart region */
-	pci_read_config_dword(agp_bridge.dev, AMD_APBASE, &temp);
-	addr = (temp & PCI_BASE_ADDRESS_MEM_MASK);
-#ifdef __alpha__
-	/* ??? Presumably what is wanted is the bus address as seen
-	   from the CPU side, since it appears that this value is
-	   exported to userland via an ioctl.  The terminology below
-	   is confused, mixing `physical address' with `bus address',
-	   as x86 folk are wont to do.  */
-	addr = virt_to_phys(ioremap(addr, 0));
-#endif
-	agp_bridge.gart_bus_addr = addr;
 	return 0;
 }
 
 static void amd_irongate_cleanup(void)
 {
-	aper_size_info_32 *previous_size;
+	aper_size_info_lvl2 *previous_size;
 	u32 temp;
 	u16 enable_reg;
 
-	previous_size = A_SIZE_32(agp_bridge.previous_size);
+	previous_size = A_SIZE_LVL2(agp_bridge.previous_size);
 
 	enable_reg = INREG16(amd_irongate_private.registers, AMD_GARTENABLE);
 	enable_reg = (enable_reg & ~(0x0004));
@@ -1521,15 +1747,76 @@ static unsigned long amd_irongate_mask_memory(unsigned long addr, int type)
 	return addr | agp_bridge.masks[0].mask;
 }
 
-static aper_size_info_32 amd_irongate_sizes[7] =
+static int amd_insert_memory(agp_memory * mem,
+			     off_t pg_start, int type)
 {
-	{2048, 524288, 9, 0x0000000c},
-	{1024, 262144, 8, 0x0000000a},
-	{512, 131072, 7, 0x00000008},
-	{256, 65536, 6, 0x00000006},
-	{128, 32768, 5, 0x00000004},
-	{64, 16384, 4, 0x00000002},
-	{32, 8192, 3, 0x00000000}
+	int i, j, num_entries;
+	unsigned long *cur_gatt;
+	unsigned long addr;
+
+	num_entries = A_SIZE_LVL2(agp_bridge.current_size)->num_entries;
+
+	if (type != 0 || mem->type != 0) {
+		return -EINVAL;
+	}
+	if ((pg_start + mem->page_count) > num_entries) {
+		return -EINVAL;
+	}
+
+	j = pg_start;
+	while (j < (pg_start + mem->page_count)) {
+		addr = (j * PAGE_SIZE) + agp_bridge.gart_bus_addr;
+		cur_gatt = GET_GATT(addr);
+		if (!PGE_EMPTY(cur_gatt[GET_GATT_OFF(addr)])) {
+			return -EBUSY;
+		}
+		j++;
+	}
+
+	if (mem->is_flushed == FALSE) {
+		CACHE_FLUSH();
+		mem->is_flushed = TRUE;
+	}
+
+	for (i = 0, j = pg_start; i < mem->page_count; i++, j++) {
+		addr = (j * PAGE_SIZE) + agp_bridge.gart_bus_addr;
+		cur_gatt = GET_GATT(addr);
+		cur_gatt[GET_GATT_OFF(addr)] = mem->memory[i];
+	}
+	agp_bridge.tlb_flush(mem);
+	return 0;
+}
+
+static int amd_remove_memory(agp_memory * mem, off_t pg_start,
+			     int type)
+{
+	int i;
+	unsigned long *cur_gatt;
+	unsigned long addr;
+
+	if (type != 0 || mem->type != 0) {
+		return -EINVAL;
+	}
+	for (i = pg_start; i < (mem->page_count + pg_start); i++) {
+		addr = (i * PAGE_SIZE) + agp_bridge.gart_bus_addr;
+		cur_gatt = GET_GATT(addr);
+		cur_gatt[GET_GATT_OFF(addr)] = 
+			(unsigned long) agp_bridge.scratch_page;
+	}
+
+	agp_bridge.tlb_flush(mem);
+	return 0;
+}
+
+static aper_size_info_lvl2 amd_irongate_sizes[7] =
+{
+	{2048, 524288, 0x0000000c},
+	{1024, 262144, 0x0000000a},
+	{512, 131072, 0x00000008},
+	{256, 65536, 0x00000006},
+	{128, 32768, 0x00000004},
+	{64, 16384, 0x00000002},
+	{32, 8192, 0x00000000}
 };
 
 static gatt_mask amd_irongate_masks[] =
@@ -1542,7 +1829,7 @@ static int __init amd_irongate_setup (struct pci_dev *pdev)
 	agp_bridge.masks = amd_irongate_masks;
 	agp_bridge.num_of_masks = 1;
 	agp_bridge.aperture_sizes = (void *) amd_irongate_sizes;
-	agp_bridge.size_type = U32_APER_SIZE;
+	agp_bridge.size_type = LVL2_APER_SIZE;
 	agp_bridge.num_aperture_sizes = 7;
 	agp_bridge.dev_private_data = (void *) &amd_irongate_private;
 	agp_bridge.needs_scratch_page = FALSE;
@@ -1553,10 +1840,10 @@ static int __init amd_irongate_setup (struct pci_dev *pdev)
 	agp_bridge.mask_memory = amd_irongate_mask_memory;
 	agp_bridge.agp_enable = agp_generic_agp_enable;
 	agp_bridge.cache_flush = global_cache_flush;
-	agp_bridge.create_gatt_table = agp_generic_create_gatt_table;
-	agp_bridge.free_gatt_table = agp_generic_free_gatt_table;
-	agp_bridge.insert_memory = agp_generic_insert_memory;
-	agp_bridge.remove_memory = agp_generic_remove_memory;
+	agp_bridge.create_gatt_table = amd_create_gatt_table;
+	agp_bridge.free_gatt_table = amd_free_gatt_table;
+	agp_bridge.insert_memory = amd_insert_memory;
+	agp_bridge.remove_memory = amd_remove_memory;
 	agp_bridge.alloc_by_type = agp_generic_alloc_by_type;
 	agp_bridge.free_by_type = agp_generic_free_by_type;
 
@@ -1755,6 +2042,12 @@ static struct {
 		"Intel",
 		"440GX",
 		intel_generic_setup },
+	{ PCI_DEVICE_ID_INTEL_840_0,
+		PCI_VENDOR_ID_INTEL,
+		INTEL_I840,
+		"Intel",
+		"i840",
+		intel_840_setup },
 	{ 0,
 		PCI_VENDOR_ID_INTEL,
 		INTEL_GENERIC,

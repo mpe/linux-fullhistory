@@ -78,10 +78,6 @@ CONFIG_BLK_DEV_IDEDMA_PMAC=y
 CONFIG_BLK_DEV_IDEDMA=y
 CONFIG_IDEDMA_PMAC_AUTO=y
 # CONFIG_IDE_CHIPSETS is not set
-
-#
-# Additional Block Devices
-#
 # CONFIG_BLK_DEV_LOOP is not set
 # CONFIG_BLK_DEV_NBD is not set
 # CONFIG_BLK_DEV_MD is not set

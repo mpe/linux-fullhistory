@@ -595,7 +595,7 @@ int do_signal(struct pt_regs *regs, sigset_t *oldset)
 		if (!signr)
 			break;
 
-		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {
+		if ((current->ptrace & PT_PTRACED) && signr != SIGKILL) {
 			/* Let the debugger run.  */
 			current->exit_code = signr;
 			current->state = TASK_STOPPED;

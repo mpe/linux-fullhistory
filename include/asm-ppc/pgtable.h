@@ -72,7 +72,7 @@ extern void __flush_page_to_ram(unsigned long page_va);
 #define flush_page_to_ram(page)	__flush_page_to_ram(page_address(page))
 
 extern unsigned long va_to_phys(unsigned long address);
-extern pte_t *va_to_pte(struct task_struct *tsk, unsigned long address);
+extern pte_t *va_to_pte(unsigned long address);
 extern unsigned long ioremap_bot, ioremap_base;
 #endif /* __ASSEMBLY__ */
 

@@ -153,26 +153,6 @@ static int js_an_read(void *xinfo, int **axes, int **buttons)
 }
 
 /*
- * js_an_open() is a callback from the file open routine.
- */
-
-static int js_an_open(struct js_dev *jd)
-{
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-/*
- * js_an_close() is a callback from the file release routine.
- */
-
-static int js_an_close(struct js_dev *jd)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
-
-/*
  * js_an_calibrate_timer() calibrates the timer and computes loop
  * and timeout values for a joystick port.
  */
@@ -248,7 +228,7 @@ static struct js_port __init *js_an_probe(int io, int mask0, int mask1, struct j
 	for (i = 0; i < numdev; i++)
 		printk(KERN_INFO "js%d: %s at %#x ["TIME_NAME" timer, %d %sHz clock, %d ns res]\n",
 			js_register_device(port, i, js_an_axes(i, &ax->an), js_an_buttons(i, &ax->an),
-				js_an_name(i, &ax->an), js_an_open, js_an_close),
+				js_an_name(i, &ax->an), THIS_MODULE, NULL, NULL),
 			js_an_name(i, &ax->an),
 			ax->io,
 			ax->speed > 10000 ? (ax->speed + 800) / 1000 : ax->speed,

@@ -276,26 +276,6 @@ static int js_lt_read(void *xinfo, int **axes, int **buttons)
 }
 
 /*
- * js_lt_open() is a callback from the file open routine.
- */
-
-static int js_lt_open(struct js_dev *jd)
-{
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-/*
- * js_lt_close() is a callback from the file release routine.
- */
-
-static int js_lt_close(struct js_dev *jd)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
-
-/*
  * js_lt_init_digital() sends a trigger & delay sequence
  * to reset and initialize a Logitech joystick into digital mode.
  */
@@ -482,7 +462,7 @@ static struct js_port __init *js_lt_probe(int io, struct js_port *port)
 			printk(KERN_INFO "js%d: %s [%s] at %#x\n",
 				js_register_device(port, i,
 					info->axes10[i] + info->axes8[i] + ((info->hats[i] + (info->pad[i] >= 0)) << 1),
-					info->buttons[i], name, js_lt_open, js_lt_close), name, info->name[i], io);
+					info->buttons[i], name, THIS_MODULE, NULL, NULL), name, info->name[i], io);
 		}
 
 	mdelay(JS_LT_INIT_DELAY);

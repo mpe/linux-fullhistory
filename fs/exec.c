@@ -528,7 +528,7 @@ flush_failed:
  */
 static inline int must_not_trace_exec(struct task_struct * p)
 {
-	return (p->flags & PF_PTRACED) && !cap_raised(p->p_pptr->cap_effective, CAP_SYS_PTRACE);
+	return (p->ptrace & PT_PTRACED) && !cap_raised(p->p_pptr->cap_effective, CAP_SYS_PTRACE);
 }
 
 /* 

@@ -167,9 +167,11 @@ int m8260_setup_residual(char *buffer)
 
 	bp = (bd_t *)__res;
 			
-	len += sprintf(len+buffer,"clock\t\t: %dMHz\n"
-		       "bus clock\t: %dMHz\n",
+	len += sprintf(len+buffer,"core clock\t: %d MHz\n"
+		       "CPM  clock\t: %d MHz\n"
+		       "bus  clock\t: %d MHz\n",
 		       bp->bi_intfreq /*/ 1000000*/,
+		       bp->bi_cpmfreq /*/ 1000000*/,
 		       bp->bi_busfreq /*/ 1000000*/);
 
 	return len;

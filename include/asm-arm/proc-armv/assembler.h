@@ -1,10 +1,10 @@
 /*
  * linux/asm-arm/proc-armv/assembler.h
  *
- * Copyright (C) 1996 Russell King
+ * Copyright (C) 1996-2000 Russell King
  *
- * This file contains arm architecture specific defines
- * for the different processors
+ * This file contains ARM processor specifics for
+ * the ARM6 and better processors.
  */
 #ifndef __ASSEMBLY__
 #error "Only include this from assembly code"
@@ -19,68 +19,36 @@
 
 /*
  * LOADREGS - ldm with PC in register list (eg, ldmfd sp!, {pc})
- * RETINSTR - return instruction (eg, mov pc, lr)
  */
 #ifdef __STDC__
 #define LOADREGS(cond, base, reglist...)\
 	ldm##cond	base,reglist
-
-#define RETINSTR(instr, regs...)\
-	instr	regs
 #else
 #define LOADREGS(cond, base, reglist...)\
 	ldm/**/cond	base,reglist
-
-#define RETINSTR(instr, regs...)\
-	instr		regs
 #endif
 
 /*
- * No nop required after mode change
+ * Build a return instruction for this processor type.
  */
-#define MODENOP
+#define RETINSTR(instr, regs...)\
+	instr	regs
 
 /*
- * Change to `mode'
+ * Save the current IRQ state and disable IRQs
+ * Note that this macro assumes FIQs are enabled, and
+ * that the processor is in SVC mode.
  */
-#define MODE(savereg,tmpreg,mode) \
-	mrs	savereg, cpsr; \
-	bic	tmpreg, savereg, $0x1f; \
-	orr	tmpreg, tmpreg, $mode; \
-	msr	cpsr, tmpreg
+	.macro	save_and_disable_irqs, oldcpsr, temp
+	mrs	\oldcpsr, cpsr
+	mov	\temp, #I_BIT | MODE_SVC
+	msr	cpsr_c, \temp
+	.endm
 
 /*
- * Restore mode
+ * Restore interrupt state previously stored in
+ * a register
  */
-#define RESTOREMODE(savereg) \
-	msr	cpsr, savereg
-
-/*
- * save interrupt state (uses stack)
- */	
-#define SAVEIRQS(tmpreg)\
-	mrs	tmpreg, cpsr; \
-	str	tmpreg, [sp, $-4]!
-
-/*
- * restore interrupt state (uses stack)
- */
-#define RESTOREIRQS(tmpreg)\
-	ldr	tmpreg, [sp], $4; \
-	msr	cpsr, tmpreg
-
-/*
- * disable IRQs
- */
-#define DISABLEIRQS(tmpreg)\
-	mrs	tmpreg , cpsr; \
-	orr	tmpreg , tmpreg , $I_BIT; \
-	msr	cpsr, tmpreg
-
-/*
- * enable IRQs
- */
-#define ENABLEIRQS(tmpreg)\
-	mrs	tmpreg , cpsr; \
-	bic	tmpreg , tmpreg , $I_BIT; \
-	msr	cpsr, tmpreg
+	.macro	restore_irqs, oldcpsr
+	msr	cpsr_c, \oldcpsr
+	.endm

@@ -46,6 +46,7 @@ extern unsigned int __machine_arch_type;
 #define MACH_TYPE_LART			27
 #define MACH_TYPE_RANGER		28
 #define MACH_TYPE_GRAPHICSCLIENT	29
+#define MACH_TYPE_XP860			30
 
 /*
  * Sort out a definition for machine_arch_type
@@ -278,6 +279,32 @@ extern unsigned int __machine_arch_type;
 # define machine_is_lart()	(machine_arch_type == MACH_TYPE_LART)
 #else
 # define machine_is_lart()	(0)
+#endif
+
+#ifdef CONFIG_SA1100_GRAPHICSCLIENT
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_GRAPHICSCLIENT
+# endif
+# define machine_is_grpahicsclient() \
+				(machine_arch_type == MACH_TYPE_GRAPHICSCLIENT)
+#else
+# define machine_is_graphicsclient() \
+				(0)
+#endif
+
+#ifdef CONFIG_SA1100_XP860
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_XP860
+# endif
+# define machine_is_xp860()	(machine_arch_type == MACH_TYPE_XP860)
+#else
+# define machine_is_xp860()	(0)
 #endif
 
 /*

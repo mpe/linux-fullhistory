@@ -41,7 +41,7 @@ else
 TFTPSIMAGE=/tftpboot/sImage
 endif
 
-ifeq ($(CONFIG_PPC64),y)
+ifeq ($(CONFIG_PPC64BRIDGE),y)
 MSIZE=.64
 else
 MSIZE=

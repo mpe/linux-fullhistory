@@ -1,6 +1,7 @@
-			  Linux Input drivers v0.9
-		 (c) 1999 Vojtech Pavlik <vojtech@suse.cz>
+			  Linux Input drivers v1.0
+	       (c) 1999-2000 Vojtech Pavlik <vojtech@suse.cz>
 			     Sponsored by SuSE
+	    $Id: input.txt,v 1.4 2000/05/28 17:57:22 vojtech Exp $
 ----------------------------------------------------------------------------
 
 0. Disclaimer
@@ -62,27 +63,27 @@ kernel):
 	hid.o
 
   After this, the USB keyboard will work straight away, and the USB mouse
-will be available as a character device on major 13, minor 32:
+will be available as a character device on major 13, minor 63:
 
-	crw-r--r--   1 root     root      13,  32 Mar 28 22:45 mouse0
+	crw-r--r--   1 root     root      13,  63 Mar 28 22:45 mice
 
   This device, has to be created, unless you use devfs, in which case it's
 created automatically. The commands to do that are:
 
 	cd /dev
 	mkdir input
-	mknod input/mouse0 c 13 32
+	mknod input/mice c 13 63
 
   After that you have to point GPM (the textmode mouse cut&paste tool) and
 XFree to this device to use it - GPM should be called like:
 
-	gpm -t ps2 -m /dev/input/mouse0
+	gpm -t ps2 -m /dev/input/mice
 
   And in X:
 
 	Section "Pointer"
 	    Protocol    "ImPS/2"
-	    Device      "/dev/input/mouse0"
+	    Device      "/dev/input/mice"
 	    ZAxisMapping 4 5
 	EndSection
 
@@ -199,10 +200,11 @@ no mice are present.
   CONFIG_INPUT_MOUSEDEV_SCREEN_[XY] in the kernel configuration are the size
 of your screen (in pixels) in XFree86. This is needed if you want to use
 your digitizer in X, because it's movement is sent to X via a virtual PS/2
-mouse. These values won't be used if you use a mouse only.
+mouse and thus needs to be scaled accordingly. These values won't be used if
+you use a mouse only.
 
-  Mousedev.c will generate either PS/2, ImPS/2 (microsoft intellimouse) or
-GenPS/2 (genius netmouse/netscroll) protocols, depending on what the program
+  Mousedev will generate either PS/2, ImPS/2 (Microsoft IntelliMouse) or
+GenPS/2 (Genius NetMouse/NetScroll) protocols, depending on what the program
 reading the data wishes. You can set GPM and X to any of these. You'll need
 ImPS/2 if you want to make use of a wheel on a USB mouse and GenPS/2 if you
 want to use extra (up to 5) buttons. I'm not sure how much is GenPS/2 supported
@@ -249,8 +251,12 @@ independent.
 
 	http://www.suse.cz/development/input/
 
-You'll find both the latest HID driver and the complete Input driver there.
-There is also a mailing list for this:
+You'll find both the latest HID driver and the complete Input driver there
+as well as information how to access the CVS repository for latest revisions
+of the drivers.
+
+
+  There is also a mailing list for this:
 
 	majordomo@atrey.karlin.mff.cuni.cz
 
@@ -278,8 +284,8 @@ can. Here goes a description of the current state of things, which is going
 to be extended, but not changed incompatibly as time goes:
 
   You can use blocking and nonblocking reads, also select() on the
-/dev/inputX devices, and you'll always get a whole number of input events on
-a read. Their layout is:
+/dev/input/eventX devices, and you'll always get a whole number of input
+events on a read. Their layout is:
 
 struct input_event {
 	struct timeval time;

@@ -177,26 +177,6 @@ static int js_as_read(void *xinfo, int **axes, int **buttons)
 }
 
 /*
- * js_as_open() is a callback from the file open routine.
- */
-
-static int js_as_open(struct js_dev *jd)
-{
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-/*
- * js_as_close() is a callback from the file release routine.
- */
-
-static int js_as_close(struct js_dev *jd)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
-
-/*
  * js_as_pxl_init_corr() initializes the correction values for
  * the Panther XL.
  */
@@ -317,13 +297,13 @@ static struct js_port __init *js_as_probe(int io, int mask0, int mask1, struct j
 
 	if (info->mode == JS_AS_MODE_PXL) {
 			printk(KERN_INFO "js%d: MadCatz Panther XL at %#x\n",
-				js_register_device(port, 0, 9, 9, "MadCatz Panther XL", js_as_open, js_as_close),
+				js_register_device(port, 0, 9, 9, "MadCatz Panther XL", THIS_MODULE, NULL, NULL),
 				info->io);
 			js_as_read(port->info, port->axes, port->buttons);
 			js_as_pxl_init_corr(port->corr, port->axes);
 			if (info->an.axes[0] < 254) {
 			printk(KERN_INFO "js%d: Analog rudder on MadCatz Panther XL\n",
-				js_register_device(port, 1, 1, 0, "Analog rudder", js_as_open, js_as_close));
+				js_register_device(port, 1, 1, 0, "Analog rudder", THIS_MODULE, NULL, NULL));
 				info->rudder = 1;
 				port->axes[1][0] = info->an.axes[0];
 				js_as_rudder_init_corr(port->corr, port->axes);
@@ -339,7 +319,7 @@ static struct js_port __init *js_as_probe(int io, int mask0, int mask1, struct j
 	}
 
 	printk(KERN_INFO "js%d: %s at %#x\n",
-		js_register_device(port, 0, 2, 3, name, js_as_open, js_as_close),
+		js_register_device(port, 0, 2, 3, name, THIS_MODULE, NULL, NULL),
 		name, info->io);
 
 	js_as_as_init_corr(port->corr);
@@ -354,7 +334,7 @@ static struct js_port __init *js_as_probe(int io, int mask0, int mask1, struct j
 	for (i = 0; i < numdev; i++)
 		printk(KERN_INFO "js%d: %s on %s\n",
 			js_register_device(port, i + 1, js_an_axes(i, &info->an), js_an_buttons(i, &info->an),
-				js_an_name(i, &info->an), js_as_open, js_as_close),
+				js_an_name(i, &info->an), THIS_MODULE, NULL, NULL),
 			js_an_name(i, &info->an), name);
 
 	js_an_decode(&info->an, port->axes + 1, port->buttons + 1);

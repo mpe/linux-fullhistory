@@ -5,30 +5,19 @@
 #include <linux/string.h>
 #include <asm/console.h>
 
-void
-srm_puts(const char *str)
+long
+srm_puts(const char *str, long len)
 {
-	/* Expand \n to \r\n as we go.  */
+	long remaining, written;
 
-	while (*str) {
-		long len;
-		const char *e = str;
+	if (!callback_init_done)
+		return len;
 
-		if (*str == '\n') {
-			if (srm_dispatch(CCB_PUTS, 0, "\r", 1) < 0)
-				return;
-			++e;
-		}
-
-		e = strchr(e, '\n') ? : strchr(e, '\0');
-		len = e - str;
-
-		while (len > 0) {
-			long written = srm_dispatch(CCB_PUTS, 0, str, len);
-			if (written < 0)
-				return;
-			len -= written & 0xffffffff;
-			str += written & 0xffffffff;
-		}
+	for (remaining = len; remaining > 0; remaining -= written)
+	{
+		written = callback_puts(0, str, remaining);
+		written &= 0xffffffff;
+		str += written;
 	}
+	return len;
 }

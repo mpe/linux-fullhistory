@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.59 2000/05/09 17:40:15 davem Exp $ */
+/* $Id: system.h,v 1.60 2000/05/29 05:34:02 davem Exp $ */
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
 
@@ -269,7 +269,8 @@ extern void die_if_kernel(char *str, struct pt_regs *regs) __attribute__ ((noret
 extern __inline__ unsigned long
 __cmpxchg_u32(volatile int *m, int old, int new)
 {
-	__asm__ __volatile__("cas [%2], %3, %0"
+	__asm__ __volatile__("cas [%2], %3, %0\n\t"
+			     "membar #StoreStore | #StoreLoad"
 			     : "=&r" (new)
 			     : "0" (new), "r" (m), "r" (old)
 			     : "memory");
@@ -280,7 +281,8 @@ __cmpxchg_u32(volatile int *m, int old, int new)
 extern __inline__ unsigned long
 __cmpxchg_u64(volatile long *m, unsigned long old, unsigned long new)
 {
-	__asm__ __volatile__("casx [%2], %3, %0"
+	__asm__ __volatile__("casx [%2], %3, %0\n\t"
+			     "membar #StoreStore | #StoreLoad"
 			     : "=&r" (new)
 			     : "0" (new), "r" (m), "r" (old)
 			     : "memory");

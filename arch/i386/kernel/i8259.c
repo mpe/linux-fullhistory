@@ -127,7 +127,7 @@ void (*interrupt[NR_IRQS])(void) = {
  * moves to arch independent land
  */
 
-static spinlock_t i8259A_lock = SPIN_LOCK_UNLOCKED;
+spinlock_t i8259A_lock = SPIN_LOCK_UNLOCKED;
 
 static void end_8259A_irq (unsigned int irq)
 {
@@ -180,10 +180,6 @@ static unsigned int cached_irq_mask = 0xffff;
  */
 unsigned long io_apic_irqs = 0;
 
-/*
- * These have to be protected by the irq controller spinlock
- * before being called.
- */
 void disable_8259A_irq(unsigned int irq)
 {
 	unsigned int mask = 1 << irq;
@@ -239,6 +235,8 @@ void make_8259A_irq(unsigned int irq)
 /*
  * This function assumes to be called rarely. Switching between
  * 8259A registers is slow.
+ * This has to be protected by the irq controller spinlock
+ * before being called.
  */
 static inline int i8259A_irq_real(unsigned int irq)
 {
@@ -337,8 +335,7 @@ void __init init_8259A(int auto_eoi)
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&i8259A_lock, flags);
 
 	outb(0xff, 0x21);	/* mask all of 8259A-1 */
 	outb(0xff, 0xA1);	/* mask all of 8259A-2 */
@@ -372,7 +369,7 @@ void __init init_8259A(int auto_eoi)
 	outb(cached_21, 0x21);	/* restore master IRQ mask */
 	outb(cached_A1, 0xA1);	/* restore slave IRQ mask */
 
-	restore_flags(flags);
+	spin_unlock_irqrestore(&i8259A_lock, flags);
 }
 
 #ifndef CONFIG_VISWS

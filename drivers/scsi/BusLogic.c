@@ -771,12 +771,15 @@ static int BusLogic_InitializeMultiMasterProbeInfo(BusLogic_HostAdapter_T
       unsigned char Bus = PCI_Device->bus->number;
       unsigned char Device = PCI_Device->devfn >> 3;
       unsigned int IRQ_Channel = PCI_Device->irq;
-      unsigned long BaseAddress0 = PCI_Device->resource[0].start;
-      unsigned long BaseAddress1 = PCI_Device->resource[1].start;
+      unsigned long BaseAddress0 = pci_resource_start(PCI_Device, 0);
+      unsigned long BaseAddress1 = pci_resource_start(PCI_Device, 1);
       BusLogic_IO_Address_T IO_Address = BaseAddress0;
       BusLogic_PCI_Address_T PCI_Address = BaseAddress1;
+
+      if (pci_enable_device(PCI_Device))
+      	continue;
       
-      if (!(PCI_Device->resource[0].flags & PCI_BASE_ADDRESS_SPACE_IO))
+      if (pci_resource_flags(PCI_Device, 0) & IORESOURCE_MEM)
 	{
 	  BusLogic_Error("BusLogic: Base Address0 0x%X not I/O for "
 			 "MultiMaster Host Adapter\n", NULL, BaseAddress0);
@@ -784,7 +787,7 @@ static int BusLogic_InitializeMultiMasterProbeInfo(BusLogic_HostAdapter_T
 			 NULL, Bus, Device, IO_Address);
 	  continue;
 	}
-      if (PCI_Device->resource[1].flags & PCI_BASE_ADDRESS_SPACE_IO)
+      if (pci_resource_flags(PCI_Device,1) & IORESOURCE_IO)
 	{
 	  BusLogic_Error("BusLogic: Base Address1 0x%X not Memory for "
 			 "MultiMaster Host Adapter\n", NULL, BaseAddress1);
@@ -973,7 +976,10 @@ static int BusLogic_InitializeMultiMasterProbeInfo(BusLogic_HostAdapter_T
       unsigned char Bus = PCI_Device->bus->number;
       unsigned char Device = PCI_Device->devfn >> 3;
       unsigned int IRQ_Channel = PCI_Device->irq;
-      BusLogic_IO_Address_T IO_Address = PCI_Device->resource[0].start;
+      BusLogic_IO_Address_T IO_Address = pci_resource_start(PCI_Device, 0);
+
+      if (pci_enable_device(PCI_Device))
+		continue;
 
       if (IO_Address == 0 || IRQ_Channel == 0) continue;
       for (i = 0; i < BusLogic_ProbeInfoCount; i++)
@@ -1017,12 +1023,16 @@ static int BusLogic_InitializeFlashPointProbeInfo(BusLogic_HostAdapter_T
       unsigned char Bus = PCI_Device->bus->number;
       unsigned char Device = PCI_Device->devfn >> 3;
       unsigned int IRQ_Channel = PCI_Device->irq;
-      unsigned long BaseAddress0 = PCI_Device->resource[0].start;
-      unsigned long BaseAddress1 = PCI_Device->resource[1].start;
+      unsigned long BaseAddress0 = pci_resource_start(PCI_Device, 0);
+      unsigned long BaseAddress1 = pci_resource_start(PCI_Device, 1);
       BusLogic_IO_Address_T IO_Address = BaseAddress0;
       BusLogic_PCI_Address_T PCI_Address = BaseAddress1;
+
+      if (pci_enable_device(PCI_Device))
+		continue;
+
 #ifndef CONFIG_SCSI_OMIT_FLASHPOINT
-      if (!(PCI_Device->resource[0].flags & PCI_BASE_ADDRESS_SPACE_IO))
+      if (pci_resource_flags(PCI_Device, 0) & IORESOURCE_MEM)
 	{
 	  BusLogic_Error("BusLogic: Base Address0 0x%X not I/O for "
 			 "FlashPoint Host Adapter\n", NULL, BaseAddress0);
@@ -1030,7 +1040,7 @@ static int BusLogic_InitializeFlashPointProbeInfo(BusLogic_HostAdapter_T
 			 NULL, Bus, Device, IO_Address);
 	  continue;
 	}
-      if (PCI_Device->resource[1].flags & PCI_BASE_ADDRESS_SPACE_IO)
+      if (pci_resource_flags(PCI_Device, 1) & IORESOURCE_IO)
 	{
 	  BusLogic_Error("BusLogic: Base Address1 0x%X not Memory for "
 			 "FlashPoint Host Adapter\n", NULL, BaseAddress1);

@@ -34,8 +34,8 @@ ifdef CONFIG_8xx
 CFLAGS := $(CFLAGS) -mcpu=860 -I../8xx_io
 endif
 
-ifdef CONFIG_PPC64
-CFLAGS := $(CFLAGS) -Wa,-mppc64bridge #-mpowerpc64
+ifdef CONFIG_PPC64BRIDGE
+CFLAGS := $(CFLAGS) -Wa,-mppc64bridge
 endif
 
 ifdef CONFIG_4xx
@@ -128,7 +128,7 @@ $(BOOT_TARGETS): $(CHECKS) vmlinux
 endif
 endif
 
-ifdef CONFIG_PPC64
+ifdef CONFIG_PPC64BRIDGE
 $(BOOT_TARGETS): $(CHECKS) vmlinux
 	@$(MAKECOFFBOOT) $@
 	@$(MAKEBOOT) $@
@@ -171,6 +171,18 @@ oak_config: clean_config
 
 walnut_config: clean_config
 	cp -f arch/ppc/configs/walnut_defconfig arch/ppc/defconfig
+
+rpxlite_config: clean_config
+	cp -f arch/ppc/configs/rpxlite_defconfig arch/ppc/defconfig
+
+rpxcllf_config: clean_config
+	cp -f arch/ppc/configs/rpxcllf_defconfig arch/ppc/defconfig
+
+bseip_config: clean_config
+	cp -f arch/ppc/configs/bseip_defconfig arch/ppc/defconfig
+
+est8260_config: clean_config
+	cp -f arch/ppc/configs/est8260_defconfig arch/ppc/defconfig
 
 archclean:
 	rm -f arch/ppc/kernel/{mk_defs,ppc_defs.h,find_name,checks}

@@ -102,6 +102,14 @@
 #	define	SCSI_NCR_USER_INFO_SUPPORT
 #endif
 
+/*
+**	To disable integrity checking, do not define the 
+**	following option.
+*/
+#ifdef	CONFIG_SCSI_NCR53C8XX_INTEGRITY_CHECK
+#	define SCSI_NCR_ENABLE_INTEGRITY_CHECK
+#endif
+
 /*==========================================================
 **
 ** nvram settings - #define SCSI_NCR_NVRAM_SUPPORT to enable
@@ -121,10 +129,9 @@
 */
 
 /*
- * For Ultra2 SCSI support option, use special features and allow 40Mhz 
- * synchronous data transfers.
+ * For Ultra2 and Ultra3 SCSI support option, use special features. 
  *
- * Value 5 (default) means:
+ * Value (default) means:
  *	bit 0 : all features enabled, except:
  *		bit 1 : PCI Write And Invalidate.
  *		bit 2 : Data Phase Mismatch handling from SCRIPTS.
@@ -133,8 +140,20 @@
  * enabled by the driver.
  */
 #define	SCSI_NCR_SETUP_SPECIAL_FEATURES		(3)
-#define SCSI_NCR_SETUP_ULTRA_SCSI		(2)
-#define SCSI_NCR_MAX_SYNC			(40)
+
+/*
+ * For Ultra2 and Ultra3 SCSI support allow 80Mhz synchronous data transfers.
+ * Value means:
+ *  0 - Ultra speeds disabled
+ *  1 - Ultra enabled  (Maximum 20Mtrans/sec)
+ *  2 - Ultra2 enabled (Maximum 40Mtrans/sec)
+ *  3 - Ultra3 enabled (Maximum 80Mtrans/sec)
+ *
+ * Use boot options sym53c8xx=ultra:3 to enable Ultra3 support.
+ */
+
+#define SCSI_NCR_SETUP_ULTRA_SCSI		(3)
+#define SCSI_NCR_MAX_SYNC			(80)
 
 /*
  * Allow tags from 2 to 256, default 8
@@ -190,7 +209,7 @@
 
 /*
  * Sync transfer frequency at startup.
- * Allow from 5Mhz to 40Mhz default 20 Mhz.
+ * Allow from 5Mhz to 80Mhz default 20 Mhz.
  */
 #ifndef	CONFIG_SCSI_NCR53C8XX_SYNC
 #define	CONFIG_SCSI_NCR53C8XX_SYNC	(20)
@@ -207,8 +226,10 @@
 #define	SCSI_NCR_SETUP_DEFAULT_SYNC	(250/(CONFIG_SCSI_NCR53C8XX_SYNC))
 #elif	CONFIG_SCSI_NCR53C8XX_SYNC <= 33
 #define	SCSI_NCR_SETUP_DEFAULT_SYNC	(11)
-#else
+#elif	CONFIG_SCSI_NCR53C8XX_SYNC <= 40
 #define	SCSI_NCR_SETUP_DEFAULT_SYNC	(10)
+#else
+#define	SCSI_NCR_SETUP_DEFAULT_SYNC 	(9)
 #endif
 
 /*
@@ -469,6 +490,15 @@
 #define PCI_DEVICE_ID_NCR_53C1510D 0xa
 #endif
 
+#ifndef PCI_DEVICE_ID_LSI_53C1010
+#define PCI_DEVICE_ID_LSI_53C1010 0x20
+#endif
+
+#ifndef PCI_DEVICE_ID_LSI_53C1010_66
+#define PCI_DEVICE_ID_LSI_53C1010_66 0x21
+#endif
+
+
 /*
 **   NCR53C8XX devices features table.
 */
@@ -502,6 +532,8 @@ typedef struct {
 #define FE_NOPM		(1<<19)   /* Scripts handles phase mismatch */
 #define FE_LEDC		(1<<20)   /* Hardware control of LED */
 #define FE_DIFF		(1<<21)   /* Support Differential SCSI */
+#define FE_ULTRA3	(1<<22)   /* Ultra-3 80Mtrans/sec */
+#define FE_66MHZ 	(1<<23)   /* 66MHz PCI Support */
 
 #define FE_CACHE_SET	(FE_ERL|FE_CLSE|FE_WRIE|FE_ERMP)
 #define FE_SCSI_SET	(FE_WIDE|FE_ULTRA|FE_ULTRA2|FE_DBLR|FE_QUAD|F_CLK80)
@@ -586,7 +618,15 @@ typedef struct {
  ,									\
  {PCI_DEVICE_ID_NCR_53C1510D, 0xff, "1510D",  7, 31, 7,			\
  FE_WIDE|FE_ULTRA2|FE_QUAD|FE_CACHE_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|	\
- FE_RAM|FE_IO256}\
+ FE_RAM|FE_IO256}							\
+ ,									\
+ {PCI_DEVICE_ID_LSI_53C1010, 0xff, "1010",  6, 62, 7,			\
+ FE_WIDE|FE_QUAD|FE_CACHE_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|		\
+ FE_RAM|FE_RAM8K|FE_64BIT|FE_IO256|FE_NOPM|FE_LEDC|FE_ULTRA3}		\
+ ,									\
+ {PCI_DEVICE_ID_LSI_53C1010_66, 0xff, "1010_66",  6, 62, 7,		\
+ FE_WIDE|FE_QUAD|FE_CACHE_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|		\
+ FE_RAM|FE_RAM8K|FE_64BIT|FE_IO256|FE_NOPM|FE_LEDC|FE_ULTRA3|FE_66MHZ}	\
 }
 
 /*
@@ -605,7 +645,9 @@ typedef struct {
 	PCI_DEVICE_ID_NCR_53C895,	\
 	PCI_DEVICE_ID_NCR_53C896,	\
 	PCI_DEVICE_ID_NCR_53C895A,	\
-	PCI_DEVICE_ID_NCR_53C1510D	\
+	PCI_DEVICE_ID_NCR_53C1510D,	\
+ 	PCI_DEVICE_ID_LSI_53C1010,	\
+ 	PCI_DEVICE_ID_LSI_53C1010_66	\
 }
 
 /*
@@ -640,7 +682,7 @@ struct ncr_driver_setup {
 	u_char	recovery;
 	u_char	host_id;
 	u_short	iarb;
-	u_int	excludes[SCSI_NCR_MAX_EXCLUDES];
+	u_long	excludes[SCSI_NCR_MAX_EXCLUDES];
 	char	tag_ctrl[100];
 };
 
@@ -662,7 +704,7 @@ struct ncr_driver_setup {
 	1,					\
 	SCSI_NCR_SETUP_DEFAULT_TAGS,		\
 	SCSI_NCR_SETUP_DEFAULT_SYNC,		\
-	0x00,					\
+	0x0200,					\
 	7,					\
 	SCSI_NCR_SETUP_LED_PIN,			\
 	1,					\
@@ -864,12 +906,14 @@ struct ncr_reg {
 /*03*/  u_char    nc_scntl3;    /* cnf system clock dependent       */
 	#define   EWS     0x08  /* cmd: enable wide scsi         [W]*/
 	#define   ULTRA   0x80  /* cmd: ULTRA enable                */
+				/* bits 0-2, 7 rsvd for C1010       */
 
 /*04*/  u_char    nc_scid;	/* cnf host adapter scsi address    */
 	#define   RRE     0x40  /* r/w:e enable response to resel.  */
 	#define   SRE     0x20  /* r/w:e enable response to select  */
 
 /*05*/  u_char    nc_sxfer;	/* ### Sync speed and count         */
+				/* bits 6-7 rsvd for C1010          */
 
 /*06*/  u_char    nc_sdid;	/* ### Destination-ID               */
 
@@ -944,12 +988,14 @@ struct ncr_reg {
 
 /*1a*/  u_char    nc_ctest2;
 	#define   CSIGP   0x40
+				/* bits 0-2,7 rsvd for C1010        */
 
 /*1b*/  u_char    nc_ctest3;
 	#define   FLF     0x08  /* cmd: flush dma fifo              */
 	#define   CLF	  0x04	/* cmd: clear dma fifo		    */
 	#define   FM      0x02  /* mod: fetch pin mode              */
 	#define   WRIE    0x01  /* mod: write and invalidate enable */
+				/* bits 4-7 rsvd for C1010          */
 
 /*1c*/  u_int32    nc_temp;	/* ### Temporary stack              */
 
@@ -960,6 +1006,7 @@ struct ncr_reg {
 
 /*22*/  u_char    nc_ctest5;
 	#define   DFS     0x20  /* mod: dma fifo size               */
+				/* bits 0-1, 3-7 rsvd for C1010          */
 /*23*/  u_char    nc_ctest6;
 
 /*24*/  u_int32    nc_dbc;	/* ### Byte count and command       */
@@ -991,6 +1038,7 @@ struct ncr_reg {
 	#define   STD     0x04  /* cmd: start dma mode              */
 	#define   IRQD    0x02  /* mod: irq disable                 */
  	#define	  NOCOM   0x01	/* cmd: protect sfbr while reselect */
+				/* bits 0-1 rsvd for C1010          */
 
 /*3c*/  u_int32    nc_adder;
 
@@ -1041,6 +1089,7 @@ struct ncr_reg {
 	#define    SMODE_SE  0x80	/* Single Ended                    */
 	#define    SMODE_LVD 0xc0	/* Low Voltage Differential        */
 	#define   LCKFRQ 0x20	/* Frequency Lock (895/6 only)     */
+				/* bits 0-5 rsvd for C1010          */
 
 /*53*/  u_char    nc_53_;
 /*54*/  u_short   nc_sodl;	/* Lowlevel: data out to scsi data  */
@@ -1054,6 +1103,7 @@ struct ncr_reg {
 
 /*57*/	u_char    nc_ccntl1;	/* Chip Control 1 (896)             */
 	#define   ZMOD   0x80	/* High Impedance Mode              */
+	#define	  DIC	 0x10	/* Disable Internal Cycles	    */
 	#define   DDAC   0x08	/* Disable Dual Address Cycle       */
 	#define   XTIMOD 0x04	/* 64-bit Table Ind. Indexing Mode  */
 	#define   EXTIBMV 0x02	/* Enable 64-bit Table Ind. BMOV    */
@@ -1075,7 +1125,16 @@ struct ncr_reg {
 /*b0*/	u_int32   nc_sbms;	/* Static Block Move Selector       */
 /*b4*/	u_int32   nc_dbms;	/* Dynamic Block Move Selector      */
 /*b8*/	u_int32   nc_dnad64;	/* DMA Next Address 64              */
-/*bc*/	u_int32   nc_bc_;
+/*bc*/	u_short   nc_scntl4;    /* C1010 only                       */
+	#define   U3EN   0x80	/* Enable Ultra 3                   */
+	#define   AIPEN	 0x40   /* Allow check upper byte lanes     */
+	#define   XCLKH_DT 0x08 /* Extra clock of data hold on DT
+					transfer edge	            */
+	#define   XCLKH_ST 0x04 /* Extra clock of data hold on ST
+					transfer edge	            */
+
+/*be*/  u_char   nc_aipcntl0;	/* Epat Control 1 C1010 only        */
+/*bf*/  u_char   nc_aipcntl1;	/* AIP Control C1010_66 Only        */
 
 /*c0*/	u_int32   nc_pmjad1;	/* Phase Mismatch Jump Address 1    */
 /*c4*/	u_int32   nc_pmjad2;	/* Phase Mismatch Jump Address 2    */
@@ -1095,6 +1154,17 @@ struct ncr_reg {
 /*d7*/	u_char    nc_ia3;
 /*d8*/	u_int32   nc_sbc;	/* SCSI Byte Count (3 bytes only)   */
 /*dc*/	u_int32   nc_csbc;	/* Cumulative SCSI Byte Count       */
+
+                                /* Following for C1010 only         */
+/*e0*/ u_short    nc_crcpad;    /* CRC Value                        */
+/*e2*/ u_char     nc_crccntl0;  /* CRC control register             */
+	#define   SNDCRC  0x10	/* Send CRC Request                 */
+/*e3*/ u_char     nc_crccntl1;  /* CRC control register             */
+/*e4*/ u_int32    nc_crcdata;   /* CRC data register                */ 
+/*e8*/ u_int32	  nc_e8_;	/* rsvd 			    */
+/*ec*/ u_int32	  nc_ec_;	/* rsvd 			    */
+/*f0*/ u_short    nc_dfbc;      /* DMA FIFO byte count              */ 
+
 };
 
 /*-----------------------------------------------------------
@@ -1113,6 +1183,8 @@ typedef u_int32 ncrcmd;
 **
 **	SCSI phases
 **
+**	DT phases illegal for ncr driver.
+**
 **-----------------------------------------------------------
 */
 
@@ -1120,10 +1192,13 @@ typedef u_int32 ncrcmd;
 #define	SCR_DATA_IN	0x01000000
 #define	SCR_COMMAND	0x02000000
 #define	SCR_STATUS	0x03000000
-#define SCR_ILG_OUT	0x04000000
-#define SCR_ILG_IN	0x05000000
+#define SCR_DT_DATA_OUT	0x04000000
+#define SCR_DT_DATA_IN	0x05000000
 #define SCR_MSG_OUT	0x06000000
 #define SCR_MSG_IN      0x07000000
+
+#define SCR_ILG_OUT	0x04000000
+#define SCR_ILG_IN	0x05000000
 
 /*-----------------------------------------------------------
 **
@@ -1179,7 +1254,7 @@ struct scr_tblmove {
 #define	SCR_SEL_TBL_ATN	0x43000000
 
 struct scr_tblsel {
-        u_char  sel_0;
+        u_char  sel_scntl4;	
         u_char  sel_sxfer;
         u_char  sel_id;
         u_char  sel_scntl3;
@@ -1463,6 +1538,7 @@ struct scr_tblsel {
 #define	M_X_MODIFY_DP	(0x00)
 #define	M_X_SYNC_REQ	(0x01)
 #define	M_X_WIDE_REQ	(0x03)
+#define	M_X_PPR_REQ	(0x04)
 
 /*
 **	Status

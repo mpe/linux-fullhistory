@@ -12,9 +12,15 @@
  *	probe=1		  -- use IEEE-1284 autoprobe data only (default)
  *	probe=2		  -- probe aggressively for cameras
  *
+ *	force_rgb=1       -- force data format to RGB (default is BGR)
+ *
  * The parport parameter controls which parports will be scanned.
  * Scanning all parports causes some printers to print a garbage page.
  *       -- March 14, 1999  Billy Donahue <billy@escape.com> 
+ *
+ * Fixed data format to BGR, added force_rgb parameter. Added missing
+ * parport_unregister_driver() on module removal.
+ *       -- May 28, 2000  Claudio Matsuoka <claudio@conectiva.com>
  */
 
 #include <linux/module.h>
@@ -62,6 +68,7 @@ struct qcam_device {
 
 static int parport[MAX_CAMS] = { [1 ... MAX_CAMS-1] = -1 };
 static int probe = 2;
+static int force_rgb = 0;
 
 static inline void qcam_set_ack(struct qcam_device *qcam, unsigned int i)
 {
@@ -278,6 +285,7 @@ static void qc_setup(struct qcam_device *q)
 static unsigned int qcam_read_bytes(struct qcam_device *q, unsigned char *buf, unsigned int nbytes)
 {
 	unsigned int bytes = 0;
+
 	qcam_set_ack(q, 0);
 	if (q->bidirectional)
 	{
@@ -285,6 +293,8 @@ static unsigned int qcam_read_bytes(struct qcam_device *q, unsigned char *buf, u
 		while (bytes < nbytes)
 		{
 			unsigned int lo1, hi1, lo2, hi2;
+			unsigned char r, g, b;
+
 			if (qcam_await_ready2(q, 1)) return bytes;
 			lo1 = parport_read_data(q->pport) >> 1;
 			hi1 = ((parport_read_status(q->pport) >> 3) & 0x1f) ^ 0x10;
@@ -293,17 +303,30 @@ static unsigned int qcam_read_bytes(struct qcam_device *q, unsigned char *buf, u
 			lo2 = parport_read_data(q->pport) >> 1;
 			hi2 = ((parport_read_status(q->pport) >> 3) & 0x1f) ^ 0x10;
 			qcam_set_ack(q, 0);
-			buf[bytes++] = (lo1 | ((hi1 & 1)<<7));
-			buf[bytes++] = ((hi1 & 0x1e)<<3) | ((hi2 & 0x1e)>>1);
-			buf[bytes++] = (lo2 | ((hi2 & 1)<<7));
+			r = (lo1 | ((hi1 & 1)<<7));
+			g = ((hi1 & 0x1e)<<3) | ((hi2 & 0x1e)>>1);
+			b = (lo2 | ((hi2 & 1)<<7));
+			if (force_rgb) {
+				buf[bytes++] = r;
+				buf[bytes++] = g;
+				buf[bytes++] = b;
+			} else {
+				buf[bytes++] = b;
+				buf[bytes++] = g;
+				buf[bytes++] = r;
+			}
 		}
 	}
 	else
 	{
 		/* It's a unidirectional port */
+		int i = 0, n = bytes;
+		unsigned char rgb[3];
+
 		while (bytes < nbytes)
 		{
 			unsigned int hi, lo;
+
 			if (qcam_await_ready1(q, 1)) return bytes;
 			hi = (parport_read_status(q->pport) & 0xf0);
 			qcam_set_ack(q, 1);
@@ -311,7 +334,23 @@ static unsigned int qcam_read_bytes(struct qcam_device *q, unsigned char *buf, u
 			lo = (parport_read_status(q->pport) & 0xf0);
 			qcam_set_ack(q, 0);
 			/* flip some bits */
-			buf[bytes++] = (hi | (lo >> 4)) ^ 0x88;
+			rgb[(i = bytes++ % 3)] = (hi | (lo >> 4)) ^ 0x88;
+			if (i >= 2) {
+get_fragment:
+				if (force_rgb) {
+					buf[n++] = rgb[0];
+					buf[n++] = rgb[1];
+					buf[n++] = rgb[2];
+				} else {
+					buf[n++] = rgb[2];
+					buf[n++] = rgb[1];
+					buf[n++] = rgb[0];
+				}
+			}
+		}
+		if (i) {
+			i = 0;
+			goto get_fragment;
 		}
 	}
 	return bytes;
@@ -408,8 +447,13 @@ static long qc_capture(struct qcam_device *q, char *buf, unsigned long len)
 			if (current->need_resched)
 				schedule();
 		} while (l && (tmpbuf[0] == 0x7e || tmpbuf[1] == 0x7e || tmpbuf[2] == 0x7e));
-		if (tmpbuf[0] != 0xe || tmpbuf[1] != 0x0 || tmpbuf[2] != 0xf)
-			printk("qcam: bad EOF\n");
+		if (force_rgb) {
+			if (tmpbuf[0] != 0xe || tmpbuf[1] != 0x0 || tmpbuf[2] != 0xf)
+				printk("qcam: bad EOF\n");
+		} else {
+			if (tmpbuf[0] != 0xf || tmpbuf[1] != 0x0 || tmpbuf[2] != 0xe)
+				printk("qcam: bad EOF\n");
+		}
 		qcam_set_ack(q, 0);
 		if (qcam_await_ready1(q, 1))
 		{
@@ -437,8 +481,13 @@ static long qc_capture(struct qcam_device *q, char *buf, unsigned long len)
 				schedule();
 		} while (l && tmpbuf[0] == 0x7e);
 		l = qcam_read_bytes(q, tmpbuf+1, 2);
-		if (tmpbuf[0] != 0xe || tmpbuf[1] != 0x0 || tmpbuf[2] != 0xf)
-			printk("qcam: bad EOF\n");
+		if (force_rgb) {
+			if (tmpbuf[0] != 0xe || tmpbuf[1] != 0x0 || tmpbuf[2] != 0xf)
+				printk("qcam: bad EOF\n");
+		} else {
+			if (tmpbuf[0] != 0xf || tmpbuf[1] != 0x0 || tmpbuf[2] != 0xe)
+				printk("qcam: bad EOF\n");
+		}
 	}
 
 	qcam_write_data(q, 0);
@@ -829,19 +878,24 @@ static int __init cqcam_init (void)
 	return parport_register_driver(&cqcam_driver);
 }
 
-MODULE_AUTHOR("Philip Blundell <philb@gnu.org>");
-MODULE_DESCRIPTION(BANNER);
-MODULE_PARM_DESC(parport ,"parport=<auto|n[,n]...> for port detection method \n\
-probe=<0|1|2>  # for camera detection method");
-MODULE_PARM(parport, "1-" __MODULE_STRING(MAX_CAMS) "i");
-MODULE_PARM(probe, "i");
-
 static void __exit cqcam_cleanup (void)
 {
 	unsigned int i;
+
 	for (i = 0; i < num_cams; i++)
 		close_cqcam(qcams[i]);
+
+	parport_unregister_driver(&cqcam_driver);
 }
+
+MODULE_AUTHOR("Philip Blundell <philb@gnu.org>");
+MODULE_DESCRIPTION(BANNER);
+MODULE_PARM_DESC(parport ,"parport=<auto|n[,n]...> for port detection method\n\
+probe=<0|1|2> for camera detection method\n\
+force_rgb=<0|1> for RGB data format (default BGR)");
+MODULE_PARM(parport, "1-" __MODULE_STRING(MAX_CAMS) "i");
+MODULE_PARM(probe, "i");
+MODULE_PARM(force_rgb, "i");
 
 module_init(cqcam_init);
 module_exit(cqcam_cleanup);

@@ -133,6 +133,5 @@ UART1_BASE:	.long	0x80010000
 #endif
 
 		@ Restore initial r0/r1
-		@ (r8 preserved)
 		mov	r0, r8
 		mov	r1, r9

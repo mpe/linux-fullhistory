@@ -8,19 +8,20 @@
 #include <asm/assembler.h>
                 .text
 
-@ Purpose  : Function to set a bit
-@ Prototype: int set_bit(int bit,int *addr)
+/*
+ * Purpose  : Function to set a bit
+ * Prototype: int set_bit(int bit, void *addr)
+ */
 
 ENTRY(set_bit)
                 and     r2, r0, #7
                 mov     r3, #1
                 mov     r3, r3, lsl r2
-		SAVEIRQS(ip)
-		DISABLEIRQS(ip)
+		save_and_disable_irqs ip, r2
 		ldrb	r2, [r1, r0, lsr #3]
 		orr	r2, r2, r3
 		strb	r2, [r1, r0, lsr #3]
-		RESTOREIRQS(ip)
+		restore_irqs ip
 		RETINSTR(mov,pc,lr)
 
 

@@ -20,7 +20,7 @@
 #include <linux/config.h>
 
 #ifndef __ASSEMBLY__
-#ifdef CONFIG_PPC64
+#ifdef CONFIG_PPC64BRIDGE
 #define PPC_REG unsigned long /*long*/
 #else
 #define PPC_REG unsigned long

@@ -64,7 +64,7 @@
 		beq	1001b
 		.endm
 
-#elif defined(CONFIG_HOST_FOOTBRIDGE) || defined(CONFIG_ADDIN_FOOTBRIDGE)
+#elif defined(CONFIG_FOOTBRIDGE)
 #ifndef CONFIG_DEBUG_DC21285_PORT
 	/* For NetWinder debugging */
 		.macro	addruart,rx

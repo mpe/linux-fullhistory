@@ -23,6 +23,7 @@
 #include <asm/setup.h>
 #include <asm/amigappc.h>
 #include <asm/smp.h>
+#include <asm/elf.h>
 #ifdef CONFIG_8xx
 #include <asm/mpc8xx.h>
 #include <asm/8xx_immap.h>
@@ -128,6 +129,14 @@ struct screen_info screen_info = {
 	1,			/* orig-video-isVGA */
 	16			/* orig-video-points */
 };
+
+/*
+ * These are used in binfmt_elf.c to put aux entries on the stack
+ * for each elf executable being started.
+ */
+int dcache_bsize;
+int icache_bsize;
+int ucache_bsize;
 
 /*
  * I really need to add multiple-console support... -- Cort
@@ -275,7 +284,11 @@ int get_cpuinfo(char *buffer)
 			}
 			break;
 		case 0x000C:
-			len += sprintf(len+buffer, "7400 (G4)\n");
+			len += sprintf(len+buffer, "7400 (G4");
+#ifdef CONFIG_ALTIVEC
+			len += sprintf(len+buffer, ", altivec enabled");
+#endif /* CONFIG_ALTIVEC */
+			len += sprintf(len+buffer, ")\n");
 			break;
 		case 0x0020:
 			len += sprintf(len+buffer, "403G");
@@ -287,6 +300,15 @@ int get_cpuinfo(char *buffer)
 				len += sprintf(len+buffer, "CX\n");
 				break;
 			}
+			break;
+		case 0x0035:
+			len += sprintf(len+buffer, "POWER4\n");
+			break;
+		case 0x0040:
+			len += sprintf(len+buffer, "POWER3 (630)\n");
+			break;
+		case 0x0041:
+			len += sprintf(len+buffer, "POWER3 (630+)\n");
 			break;
 		case 0x0050:
 			len += sprintf(len+buffer, "8xx\n");
@@ -458,7 +480,6 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 			intuit_machine_type();
 #endif /* CONFIG_MACH_SPECIFIC */
 		finish_device_tree();
-
 		/*
 		 * If we were booted via quik, r3 points to the physical
 		 * address of the command-line parameters.
@@ -494,6 +515,8 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 #ifdef CONFIG_BLK_DEV_INITRD
 			if (r3 && r4 && r4 != 0xdeadbeef)
 			{
+				if (r3 < KERNELBASE)
+					r3 += KERNELBASE;
 				initrd_start = r3;
 				initrd_end = r3 + r4;
 				ROOT_DEV = MKDEV(RAMDISK_MAJOR, 0);
@@ -574,7 +597,7 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		}
 		__max_memory = maxmem;
 	}
-	
+
 	/* this is for modules since _machine can be a define -- Cort */
 	ppc_md.ppc_machine = _machine;
 
@@ -684,6 +707,24 @@ void __init setup_arch(char **cmdline_p)
 	breakpoint();
 #endif
 
+	/*
+	 * Set cache line size based on type of cpu as a default.
+	 * Systems with OF can look in the properties on the cpu node(s)
+	 * for a possibly more accurate value.
+	 */
+	dcache_bsize = icache_bsize = 32;	/* most common value */
+	switch (_get_PVR() >> 16) {
+	case 1:		/* 601, with unified cache */
+		ucache_bsize = 32;
+		break;
+	/* XXX need definitions in here for 8xx etc. */
+	case 0x40:
+	case 0x41:
+	case 0x35:	/* 64-bit POWER3, POWER3+, POWER4 */
+		dcache_bsize = icache_bsize = 128;
+		break;
+	}
+
 	/* reboot on panic */
 	panic_timeout = 180;
 
@@ -779,7 +820,7 @@ void ppc_generic_ide_fix_driveid(struct hd_driveid *id)
 	for (i = 0; i < 26; i++)
 		id->words130_155[i] = __le16_to_cpu(id->words130_155[i]);
 	id->word156        = __le16_to_cpu(id->word156);
-	for (i = 0; i < 4; i++)
+	for (i = 0; i < 3; i++)
 		id->words157_159[i] = __le16_to_cpu(id->words157_159[i]);
 	for (i = 0; i < 96; i++)
 		id->words160_255[i] = __le16_to_cpu(id->words160_255[i]);

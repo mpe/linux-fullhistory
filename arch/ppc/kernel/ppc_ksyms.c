@@ -97,12 +97,14 @@ EXPORT_SYMBOL(ucSystemType);
 #endif
 #endif
 
+#if !__INLINE_BITOPS
 EXPORT_SYMBOL(set_bit);
 EXPORT_SYMBOL(clear_bit);
 EXPORT_SYMBOL(change_bit);
 EXPORT_SYMBOL(test_and_set_bit);
 EXPORT_SYMBOL(test_and_clear_bit);
 EXPORT_SYMBOL(test_and_change_bit);
+#endif /* __INLINE_BITOPS */
 
 EXPORT_SYMBOL(strcpy);
 EXPORT_SYMBOL(strncpy);
@@ -267,11 +269,13 @@ EXPORT_SYMBOL(ppc_irq_dispatch_handler);
 EXPORT_SYMBOL(decrementer_count);
 EXPORT_SYMBOL(get_wchan);
 EXPORT_SYMBOL(console_drivers);
+EXPORT_SYMBOL(console_lock);
 #ifdef CONFIG_XMON
 EXPORT_SYMBOL(xmon);
 #endif
 EXPORT_SYMBOL(down_read_failed);
 
+#if defined(CONFIG_KGDB) || defined(CONFIG_XMON)
 extern void (*debugger)(struct pt_regs *regs);
 extern int (*debugger_bpt)(struct pt_regs *regs);
 extern int (*debugger_sstep)(struct pt_regs *regs);
@@ -285,5 +289,7 @@ EXPORT_SYMBOL(debugger_sstep);
 EXPORT_SYMBOL(debugger_iabr_match);
 EXPORT_SYMBOL(debugger_dabr_match);
 EXPORT_SYMBOL(debugger_fault_handler);
+#endif
 
 EXPORT_SYMBOL(ret_to_user_hook);
+EXPORT_SYMBOL(do_softirq);

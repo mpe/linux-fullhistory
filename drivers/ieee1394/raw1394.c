@@ -575,8 +575,8 @@ static int handle_local_request(struct file_info *fi,
                 break;
 
         case RAW1394_REQ_LOCK:
-                if ((req->req.misc != EXTCODE_FETCH_ADD)
-                    && (req->req.misc != EXTCODE_LITTLE_ADD)) {
+                if ((req->req.misc == EXTCODE_FETCH_ADD)
+                    || (req->req.misc == EXTCODE_LITTLE_ADD)) {
                         if (req->req.length != 4) {
                                 req->req.error = RAW1394_ERROR_INVALID_ARG;
                                 break;
@@ -667,8 +667,8 @@ static int handle_remote_request(struct file_info *fi,
                 break;
 
         case RAW1394_REQ_LOCK:
-                if ((req->req.misc != EXTCODE_FETCH_ADD)
-                    && (req->req.misc != EXTCODE_LITTLE_ADD)) {
+                if ((req->req.misc == EXTCODE_FETCH_ADD)
+                    || (req->req.misc == EXTCODE_LITTLE_ADD)) {
                         if (req->req.length != 4) {
                                 req->req.error = RAW1394_ERROR_INVALID_ARG;
                                 break;
@@ -690,6 +690,7 @@ static int handle_remote_request(struct file_info *fi,
                         break;
                 }
 
+                req->data = packet->data;
                 req->req.length = 4;
                 break;
 
@@ -716,6 +717,7 @@ static int handle_remote_request(struct file_info *fi,
         if (!hpsb_send_packet(packet)) {
                 req->req.error = RAW1394_ERROR_SEND_ERROR;
                 req->req.length = 0;
+                free_tlabel(packet->host, packet->node_id, packet->tlabel);
                 queue_complete_req(req);
         }
         return sizeof(struct raw1394_request);
@@ -843,7 +845,6 @@ static int dev_open(struct inode *inode, struct file *file)
 
         file->private_data = fi;
 
-        MOD_INC_USE_COUNT;
         return 0;
 }
 
@@ -897,7 +898,6 @@ static int dev_release(struct inode *inode, struct file *file)
 
         kfree(fi);
 
-        MOD_DEC_USE_COUNT;
         return 0;
 }
 
@@ -910,6 +910,7 @@ static struct hpsb_highlevel_ops hl_ops = {
 };
 
 static struct file_operations file_ops = {
+	owner:	  THIS_MODULE,
         read:     dev_read, 
         write:    dev_write, 
         poll:     dev_poll, 

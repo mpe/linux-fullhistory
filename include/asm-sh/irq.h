@@ -43,7 +43,11 @@
 #elif defined(CONFIG_CPU_SUBTYPE_SH7708)
 #define NR_IRQS 32
 #elif defined(CONFIG_CPU_SUBTYPE_SH7709)
+#ifdef CONFIG_HD64461
+#define NR_IRQS 80		/* HD64461_IRQBASE+16, see hd64461.h */
+#else
 #define NR_IRQS 61
+#endif
 #endif
 
 extern void disable_irq(unsigned int);

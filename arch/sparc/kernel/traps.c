@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.62 2000/05/09 17:40:13 davem Exp $
+/* $Id: traps.c,v 1.63 2000/06/04 06:23:52 anton Exp $
  * arch/sparc/kernel/traps.c
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -498,8 +498,6 @@ void handle_hw_divzero(struct pt_regs *regs, unsigned long pc, unsigned long npc
  */
 
 extern void sparc_cpu_startup(void);
-
-extern ctxd_t *srmmu_ctx_table_phys;
 
 int linux_smp_still_initting;
 unsigned int thiscpus_tbr;

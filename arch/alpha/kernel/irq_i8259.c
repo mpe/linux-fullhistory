@@ -126,6 +126,8 @@ init_i8259a_irqs(void)
 # define IACK_SC	CIA_IACK_SC
 #elif defined(CONFIG_ALPHA_PYXIS)
 # define IACK_SC	PYXIS_IACK_SC
+#elif defined(CONFIG_ALPHA_TITAN)
+# define IACK_SC	TITAN_IACK_SC
 #elif defined(CONFIG_ALPHA_TSUNAMI)
 # define IACK_SC	TSUNAMI_IACK_SC
 #elif defined(CONFIG_ALPHA_POLARIS)

@@ -101,6 +101,11 @@ start_ldr:
 	subi	r1,r1,256
 	li	r2,0x000F		/* Mask pointer to 16-byte boundary */
 	andc	r1,r1,r2
+
+	/* Speed us up a little.
+	*/
+	bl	flush_instruction_cache
+
 /* Run loader */
 	mr	r3,r8			/* Load point */
 	mr	r4,r7			/* Program length */

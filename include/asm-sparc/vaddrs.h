@@ -1,38 +1,27 @@
-/* $Id: vaddrs.h,v 1.23 2000/03/12 04:10:46 davem Exp $ */
+/* $Id: vaddrs.h,v 1.25 2000/06/05 06:08:46 anton Exp $ */
 #ifndef _SPARC_VADDRS_H
 #define _SPARC_VADDRS_H
 
 #include <asm/head.h>
 
-/* asm-sparc/vaddrs.h:  Here will be define the virtual addresses at
- *                      which important I/O addresses will be mapped.
- *                      For instance the timer register virtual address
- *                      is defined here.
+/*
+ * asm-sparc/vaddrs.h:  Here we define the virtual addresses at
+ *                      which important things will be mapped.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 2000 Anton Blanchard (anton@linuxcare.com)
  */
 
-/* I can see only one reason why we should have statically defined
- * mappings for devices and is the speedup improvements of not loading
- * a pointer and then the value in the assembly code
- */
-#define  IOBASE_VADDR   0xfe000000  /* Base for mapping pages */
-#define  IOBASE_LEN     0x00300000  /* Length of the IO area */
-#define  IOBASE_END     0xfe300000
-#define  DVMA_VADDR     0xfff00000  /* Base area of the DVMA on suns */
-#define  DVMA_LEN       0x000c0000  /* Size of the DVMA address space */
-#define  DVMA_END       0xfffc0000
+#define SUN4M_IOBASE_VADDR	0xfd000000 /* Base for mapping pages */
+#define IOBASE_VADDR		0xfe000000
+#define IOBASE_END		0xfe300000
 
-/* IOMMU Mapping area, must be on a 16MB boundary!  Note this
- * doesn't count the DVMA areas, the prom lives between the
- * iommu mapping area (for scsi transfer buffers) and the
- * dvma upper range (for lance packet ring buffers).
- */
-#define  IOMMU_VADDR    0xff000000
-#define  IOMMU_LEN      0x00c00000
-#define  IOMMU_END      0xffc00000 /* KADB debugger vm starts here */
+#define VMALLOC_START		0xfe300000
+/* XXX Alter this when I get around to fixing sun4c - Anton */
+#define VMALLOC_END		0xffc00000
 
-/* On the sun4/4c we don't need an IOMMU area, but we need a place
+/*
+ * On the sun4/4c we need a place
  * to reliably map locked down kernel data.  This includes the
  * task_struct and kernel stack pages of each process plus the
  * scsi buffers during dvma IO transfers, also the floppy buffers
@@ -44,22 +33,18 @@
  * careful if you change NR_TASKS or else there won't be enough
  * room for it all.
  */
-#define  SUN4C_LOCK_VADDR  0xff000000
-#define  SUN4C_LOCK_LEN    0x00c00000
-#define  SUN4C_LOCK_END    0xffc00000
+#define SUN4C_LOCK_VADDR	0xff000000
+#define SUN4C_LOCK_END		0xffc00000
 
-/* On sun4m machines we need per-cpu virtual areas */
-#define  PERCPU_VADDR   0xffc00000  /* Base for per-cpu virtual mappings */
-#define  PERCPU_ENTSIZE 0x00100000
-#define  PERCPU_LEN     ((PERCPU_ENTSIZE*SUN4M_NCPUS))
+#define KADB_DEBUGGER_BEGVM	0xffc00000 /* Where kern debugger is in virt-mem */
+#define KADB_DEBUGGER_ENDVM	0xffd00000
+#define DEBUG_FIRSTVADDR	KADB_DEBUGGER_BEGVM
+#define DEBUG_LASTVADDR		KADB_DEBUGGER_ENDVM
 
-/* per-cpu offsets */
-#define  PERCPU_TBR_OFFSET      0x00000      /* %tbr, mainly used for identification. */
-#define  PERCPU_KSTACK_OFFSET   0x01000      /* Beginning of kernel stack for this cpu */
-#define  PERCPU_MBOX_OFFSET     0x03000      /* Prom SMP Mailbox */
-#define  PERCPU_CPUID_OFFSET    0x04000      /* Per-cpu ID number. */
-#define  PERCPU_ISALIVE_OFFSET  0x04004      /* Has CPU been initted yet? */
-#define  PERCPU_ISIDLING_OFFSET 0x04008      /* Is CPU in idle loop spinning? */
+#define LINUX_OPPROM_BEGVM	0xffd00000
+#define LINUX_OPPROM_ENDVM	0xfff00000
+
+#define DVMA_VADDR		0xfff00000 /* Base area of the DVMA on suns */
+#define DVMA_END		0xfffc0000
 
 #endif /* !(_SPARC_VADDRS_H) */
-

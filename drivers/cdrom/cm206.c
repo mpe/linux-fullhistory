@@ -736,13 +736,14 @@ void get_disc_status(void)
 
 static int cm206_open(struct cdrom_device_info * cdi, int purpose) 
 {
+  MOD_INC_USE_COUNT;
   if (!cd->openfiles) {		/* reset only first time */
     cd->background=0;
     reset_cm260();
     cd->adapter_last = -1;	/* invalidate adapter memory */
     cd->sector_last = -1;
   }
-  ++cd->openfiles; MOD_INC_USE_COUNT;
+  ++cd->openfiles;
   stats(open);
   return 0;
 }
@@ -757,7 +758,8 @@ static void cm206_release(struct cdrom_device_info * cdi)
     cd->sector_last = -1;	/* Make our internal buffer invalid */
     FIRST_TRACK = 0;		/* No valid disc status */
   }
-  --cd->openfiles; MOD_DEC_USE_COUNT;
+  --cd->openfiles;
+  MOD_DEC_USE_COUNT;
 }
 
 /* Empty buffer empties $sectors$ sectors of the adapter card buffer,
@@ -1258,6 +1260,7 @@ static struct cdrom_device_info cm206_info = {
   &cm206_dops,                  /* device operations */
   NULL,				/* link */
   NULL,				/* handle (not used by cm206) */
+  0,				/* devfs handle */
   0,				/* dev */
   0,				/* mask */
   2,				/* maximum speed */

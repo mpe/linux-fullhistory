@@ -231,26 +231,6 @@ static int js_gr_read(void *xinfo, int **axes, int **buttons)
 }
 
 /*
- * js_gr_open() is a callback from the file open routine.
- */
-
-static int js_gr_open(struct js_dev *jd)
-{
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-/*
- * js_gr_close() is a callback from the file release routine.
- */
-
-static int js_gr_close(struct js_dev *jd)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
-
-/*
  * js_gr_init_corr() initializes correction values of
  * GrIP joysticks.
  */
@@ -359,7 +339,7 @@ static struct js_port __init *js_gr_probe(int io, struct js_port *port)
 		if (info.mode[i]) {
 			printk(KERN_INFO "js%d: %s at %#x\n",
 				js_register_device(port, i, axes[info.mode[i]], buttons[info.mode[i]],
-					names[info.mode[i]], js_gr_open, js_gr_close),
+					names[info.mode[i]], THIS_MODULE, NULL, NULL),
 				names[info.mode[i]], io);
 			js_gr_init_corr(info.mode[i], port->corr[i]);
 		}

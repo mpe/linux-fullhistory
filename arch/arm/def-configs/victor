@@ -80,10 +80,6 @@ CONFIG_BLK_DEV_IDECD=y
 # CONFIG_BLK_DEV_IDESCSI is not set
 # CONFIG_BLK_DEV_CMD640 is not set
 # CONFIG_IDE_CHIPSETS is not set
-
-#
-# Additional Block Devices
-#
 # CONFIG_BLK_DEV_LOOP is not set
 # CONFIG_BLK_DEV_MD is not set
 # CONFIG_BLK_DEV_RAM is not set

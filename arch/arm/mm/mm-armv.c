@@ -411,50 +411,41 @@ void __init pagetable_init(struct meminfo *mi)
 }
 
 /*
- * The mem_map array can get very big.  Mark the end of the valid mem_map
- * banks with PG_skip, and setup the address validity bitmap.
+ * The mem_map array can get very big.  Free the unused area of the memory map.
  */
-void __init create_memmap_holes(struct meminfo *mi)
+static inline void free_unused_memmap_node(int node, struct meminfo *mi)
 {
-	unsigned int start_pfn, end_pfn = -1;
-	struct page *pg = NULL;
+	unsigned long bank_start, prev_bank_end = 0;
 	unsigned int i;
 
-#define PFN(x)	(((x) - PHYS_OFFSET) >> PAGE_SHIFT)
-#define free_bootmem(s,sz)  free_bootmem(((s)<<PAGE_SHIFT)+PHYS_OFFSET, (sz)<<PAGE_SHIFT)
-
+	/*
+	 * [FIXME] This relies on each bank being in address order.  This
+	 * may not be the case, especially if the user has provided the
+	 * information on the command line.
+	 */
 	for (i = 0; i < mi->nr_banks; i++) {
-		if (mi->bank[i].size == 0)
+		if (mi->bank[i].size == 0 || mi->bank[i].node != node)
 			continue;
 
-		start_pfn = PFN(mi->bank[i].start);
+		bank_start = mi->bank[i].start & PAGE_MASK;
 
 		/*
-		 * subtle here - if we have a full bank, then
-		 * start_pfn == end_pfn, and we don't want to
-		 * set PG_skip, or next_hash
+		 * If we had a previous bank, and there is a space
+		 * between the current bank and the previous, free it.
 		 */
-		if (pg && start_pfn != end_pfn) {
-			set_bit(PG_skip, &pg->flags);
-			pg->next_hash = mem_map + start_pfn;
+		if (prev_bank_end && prev_bank_end != bank_start)
+			free_bootmem_node(node, prev_bank_end,
+					  bank_start - prev_bank_end);
 
-			start_pfn = PFN(PAGE_ALIGN(__pa(pg + 1)));
-			end_pfn   = PFN(__pa(pg->next_hash) & PAGE_MASK);
-
-			if (end_pfn != start_pfn)
-				free_bootmem(start_pfn, end_pfn - start_pfn);
-
-			pg = NULL;
-		}
-
-		end_pfn = PFN(mi->bank[i].start + mi->bank[i].size);
-
-		if (end_pfn != PFN(mi->end))
-			pg = mem_map + end_pfn;
+		prev_bank_end = PAGE_ALIGN(mi->bank[i].start +
+					   mi->bank[i].size);
 	}
+}
 
-	if (pg) {
-		set_bit(PG_skip, &pg->flags);
-		pg->next_hash = NULL;
-	}
+void __init create_memmap_holes(struct meminfo *mi)
+{
+	int node;
+
+	for (node = 0; node < numnodes; node++)
+		free_unused_memmap_node(node, mi);
 }

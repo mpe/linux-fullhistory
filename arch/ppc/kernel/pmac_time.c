@@ -28,6 +28,8 @@
 
 #include "time.h"
 
+extern rwlock_t xtime_lock;
+
 /* Apparently the RTC stores seconds since 1 Jan 1904 */
 #define RTC_OFFSET	2082844800
 
@@ -151,16 +153,21 @@ int __init via_calibrate_decr(void)
 static int time_sleep_notify(struct pmu_sleep_notifier *self, int when)
 {
 	static unsigned long time_diff;
+	unsigned long flags;
 
 	switch (when) {
 	case PBOOK_SLEEP_NOW:
+		read_lock_irqsave(&xtime_lock, flags);
 		time_diff = xtime.tv_sec - pmac_get_rtc_time();
+		read_unlock_irqrestore(&xtime_lock, flags);
 		break;
 	case PBOOK_WAKE:
+		write_lock_irqsave(&xtime_lock, flags);
 		xtime.tv_sec = pmac_get_rtc_time() + time_diff;
 		xtime.tv_usec = 0;
 		set_dec(decrementer_count);
 		last_rtc_update = xtime.tv_sec;
+		write_unlock_irqrestore(&xtime_lock, flags);
 		break;
 	}
 	return PBOOK_SLEEP_OK;

@@ -83,6 +83,63 @@ struct pp_struct {
 /* ROUND_UP macro from fs/select.c */
 #define ROUND_UP(x,y) (((x)+(y)-1)/(y))
 
+struct pp_port_list_struct {
+	struct parport *port;
+	struct pp_port_list_struct *next;
+};
+static struct pp_port_list_struct *pp_port_list;
+static DECLARE_MUTEX(pp_port_list_lock);
+
+/* pp_attach and pp_detach are for keeping a list of currently
+ * available ports, held under a mutex.  We do this rather than
+ * using parport_enumerate because it stops a load of races.
+ */
+
+static void pp_attach (struct parport *port)
+{
+	struct pp_port_list_struct *add;
+
+	add = kmalloc (sizeof (struct pp_port_list_struct), GFP_KERNEL);
+	if (!add) {
+		printk (KERN_WARNING CHRDEV ": memory squeeze\n");
+		return;
+	}
+
+	add->next = pp_port_list;
+	down (&pp_port_list_lock);
+	pp_port_list = add;
+	up (&pp_port_list_lock);
+}
+
+static void pp_detach (struct parport *port)
+{
+	struct pp_port_list_struct *del;
+
+	down (&pp_port_list_lock);
+	del = pp_port_list;
+	if (del->port == port)
+		pp_port_list = del->next;
+	else {
+		struct pp_port_list_struct *prev;
+		do {
+			prev = del;
+			del = del->next;
+		} while (del && del->port != port);
+		if (del)
+			prev->next = del->next;
+	}
+	up (&pp_port_list_lock);
+
+	if (del)
+		kfree (del);
+}
+
+static struct parport_driver ppdev_driver = {
+	name:	CHRDEV,
+	attach:	pp_attach,
+	detach:	pp_detach
+};
+
 static inline void pp_enable_irq (struct pp_struct *pp)
 {
 	struct parport *port = pp->pdev->port;
@@ -216,7 +273,7 @@ static void pp_irq (int irq, void * private, struct pt_regs * unused)
 
 static int register_device (int minor, struct pp_struct *pp)
 {
-	struct parport * port;
+	struct pp_port_list_struct *ports;
 	struct pardevice * pdev = NULL;
 	char *name;
 	int fl;
@@ -226,20 +283,24 @@ static int register_device (int minor, struct pp_struct *pp)
 		return -ENOMEM;
 
 	sprintf (name, CHRDEV "%x", minor);
-	port = parport_enumerate (); /* FIXME: use attach/detach */
 
-	while (port && port->number != minor)
-		port = port->next;
+	down (&pp_port_list_lock);
+	ports = pp_port_list;
+	while (ports && ports->port->number != minor)
+		ports = ports->next;
+	if (ports->port) {
+		fl = (pp->flags & PP_EXCL) ? PARPORT_FLAG_EXCL : 0;
+		pdev = parport_register_device (ports->port, name, NULL,
+						NULL, pp_irq, fl, pp);
+	}
+	up (&pp_port_list_lock);
 
-	if (!port) {
+	if (!ports->port) {
 		printk (KERN_WARNING "%s: no associated port!\n", name);
 		kfree (name);
 		return -ENXIO;
 	}
 
-	fl = (pp->flags & PP_EXCL) ? PARPORT_FLAG_EXCL : 0;
-	pdev = parport_register_device (port, name, NULL, NULL, pp_irq, fl,
-					pp);
 
 	if (!pdev) {
 		printk (KERN_WARNING "%s: failed to register device!\n", name);
@@ -507,13 +568,9 @@ static int pp_open (struct inode * inode, struct file * file)
 	if (minor >= PARPORT_MAX)
 		return -ENXIO;
 
-	MOD_INC_USE_COUNT;
-
 	pp = kmalloc (sizeof (struct pp_struct), GFP_KERNEL);
-	if (!pp) {
-		MOD_DEC_USE_COUNT;
+	if (!pp)
 		return -ENOMEM;
-	}
 
 	pp->state.mode = IEEE1284_MODE_COMPAT;
 	pp->state.phase = init_phase (pp->state.mode);
@@ -565,7 +622,6 @@ static int pp_release (struct inode * inode, struct file * file)
 
 	kfree (pp);
 
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -596,6 +652,10 @@ static devfs_handle_t devfs_handle = NULL;
 
 static int __init ppdev_init (void)
 {
+	if (parport_register_driver (&ppdev_driver)) {
+		printk (KERN_WARNING CHRDEV ": unable to register driver\n");
+		return -EIO;
+	}
 	if (devfs_register_chrdev (PP_MAJOR, CHRDEV, &pp_fops)) {
 		printk (KERN_WARNING CHRDEV ": unable to get major %d\n",
 			PP_MAJOR);
@@ -616,6 +676,7 @@ static void __exit ppdev_cleanup (void)
 	/* Clean up all parport stuff */
 	devfs_unregister (devfs_handle);
 	devfs_unregister_chrdev (PP_MAJOR, CHRDEV);
+	parport_unregister_driver (&ppdev_driver);
 }
 
 module_init(ppdev_init);

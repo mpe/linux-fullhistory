@@ -1,10 +1,10 @@
-/* $Id: sun4c.c,v 1.192 2000/05/09 17:40:13 davem Exp $
+/* $Id: sun4c.c,v 1.194 2000/06/05 06:08:45 anton Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1996 Eddie C. Dost (ecd@skynet.be)
  * Copyright (C) 1996 Andrew Tridgell (Andrew.Tridgell@anu.edu.au)
- * Copyright (C) 1997,99 Anton Blanchard (anton@progsoc.uts.edu.au)
+ * Copyright (C) 1997-2000 Anton Blanchard (anton@linuxcare.com)
  * Copyright (C) 1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
@@ -597,14 +597,6 @@ static void sun4c_unmap_dma_area(unsigned long busa, int len)
 	/* XXX Implement this */
 }
 
-static void sun4c_inval_dma_area(unsigned long virt, int len)
-{
-}
-
-static void sun4c_flush_dma_area(unsigned long virt, int len)
-{
-}
-
 /* TLB management. */
 
 /* Don't change this struct without changing entry.S. This is used
@@ -1009,13 +1001,6 @@ void sun4c_grow_kernel_ring(void)
 		add_ring(&sun4c_kfree_ring, entry);
 		sun4c_user_taken_entries++;
 	}
-}
-
-/* This is now a fast in-window trap handler to avoid any and all races. */
-static void sun4c_quick_kernel_fault(unsigned long address)
-{
-        printk("Kernel faults at addr 0x%08lx\n", address);
-        panic("sun4c kernel fault handler bolixed...");
 }
 
 /* 2 page buckets for task struct and kernel stack allocation.
@@ -2280,22 +2265,6 @@ extern __inline__ pgd_t *sun4c_get_pgd_fast(void)
 	return (pgd_t *)ret;
 }
 
-static int sun4c_check_pgt_cache(int low, int high)
-{
-	int freed = 0;
-	if (pgtable_cache_size > high) {
-		do {
-			if (pgd_quicklist)
-				free_pgd_slow(get_pgd_fast()), freed++;
-			if (pmd_quicklist)
-				free_pmd_slow(get_pmd_fast()), freed++;
-			if (pte_quicklist)
-				free_pte_slow(get_pte_fast()), freed++;
-		} while (pgtable_cache_size > low);
-	}
-	return freed;
-}
-
 static void sun4c_set_pgdir(unsigned long address, pgd_t entry)
 {
 	/* Nothing to do */
@@ -2361,11 +2330,6 @@ static pte_t *sun4c_pte_alloc(pmd_t * pmd, unsigned long address)
 	return (pte_t *) sun4c_pmd_page(*pmd) + address;
 }
 
-static pte_t *sun4c_pte_get(void)
-{
-	return sun4c_get_pte_fast();
-}
-
 /*
  * allocating and freeing a pmd is trivial: the 1-entry pmd is
  * inside the pgd, so has no extra memory associated with it.
@@ -2387,6 +2351,22 @@ static void sun4c_pgd_free(pgd_t *pgd)
 static pgd_t *sun4c_pgd_alloc(void)
 {
 	return sun4c_get_pgd_fast();
+}
+
+static int sun4c_check_pgt_cache(int low, int high)
+{
+	int freed = 0;
+	if (pgtable_cache_size > high) {
+		do {
+			if (pgd_quicklist)
+				sun4c_free_pgd_slow(sun4c_get_pgd_fast()), freed++;
+			if (pmd_quicklist)
+				sun4c_free_pmd_slow(sun4c_get_pmd_fast()), freed++;
+			if (pte_quicklist)
+				sun4c_free_pte_slow(sun4c_get_pte_fast()), freed++;
+		} while (pgtable_cache_size > low);
+	}
+	return freed;
 }
 
 /* There are really two cases of aliases to watch out for, and these
@@ -2568,7 +2548,7 @@ void __init sun4c_paging_init(void)
 	memset(pg3, 0, PAGE_SIZE);
 
 	/* Save work later. */
-	vaddr = SUN4C_VMALLOC_START;
+	vaddr = VMALLOC_START;
 	swapper_pg_dir[vaddr>>SUN4C_PGDIR_SHIFT] = __pgd(PGD_TABLE | (unsigned long) pg0);
 	vaddr += SUN4C_PGDIR_SIZE;
 	swapper_pg_dir[vaddr>>SUN4C_PGDIR_SHIFT] = __pgd(PGD_TABLE | (unsigned long) pg1);
@@ -2628,10 +2608,6 @@ void __init ld_mmu_sun4c(void)
 #ifndef CONFIG_SMP
 	BTFIXUPSET_CALL(___xchg32, ___xchg32_sun4c, BTFIXUPCALL_NORM);
 #endif
-	BTFIXUPSET_CALL(get_pte_fast, sun4c_pte_get, BTFIXUPCALL_NORM);
-	BTFIXUPSET_CALL(get_pgd_fast, sun4c_pgd_alloc, BTFIXUPCALL_NORM);
-	BTFIXUPSET_CALL(free_pte_slow, sun4c_free_pte_slow, BTFIXUPCALL_NORM);
-	BTFIXUPSET_CALL(free_pgd_slow, sun4c_free_pgd_slow, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(do_check_pgt_cache, sun4c_check_pgt_cache, BTFIXUPCALL_NORM);
 	
 	BTFIXUPSET_CALL(set_pgdir, sun4c_set_pgdir, BTFIXUPCALL_NOP);
@@ -2727,14 +2703,11 @@ void __init ld_mmu_sun4c(void)
 	BTFIXUPSET_CALL(mmu_map_dma_area, sun4c_map_dma_area, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(mmu_unmap_dma_area, sun4c_unmap_dma_area, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(mmu_translate_dvma, sun4c_translate_dvma, BTFIXUPCALL_NORM);
-	BTFIXUPSET_CALL(mmu_flush_dma_area, sun4c_flush_dma_area, BTFIXUPCALL_NOP);
-	BTFIXUPSET_CALL(mmu_inval_dma_area, sun4c_inval_dma_area, BTFIXUPCALL_NORM);
 
 	/* Task struct and kernel stack allocating/freeing. */
 	BTFIXUPSET_CALL(alloc_task_struct, sun4c_alloc_task_struct, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(get_task_struct, sun4c_get_task_struct, BTFIXUPCALL_NORM);
 
-	BTFIXUPSET_CALL(quick_kernel_fault, sun4c_quick_kernel_fault, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(mmu_info, sun4c_mmu_info, BTFIXUPCALL_NORM);
 
 	/* These should _never_ get called with two level tables. */

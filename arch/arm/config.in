@@ -1,57 +1,50 @@
 #
 # For a description of the syntax of this configuration file,
-# see the Configure script.
+# see Documentation/kbuild/config-language.txt.
 #
 mainmenu_name "Linux Kernel Configuration"
 
 define_bool CONFIG_ARM y
-
+define_bool CONFIG_SBUS n
 define_bool CONFIG_UID16 y
+
 
 mainmenu_option next_comment
 comment 'Code maturity level options'
 bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
 endmenu
 
+
 mainmenu_option next_comment
-comment 'System and Processor Type'
+comment 'System Type'
 
 choice 'ARM system type'	\
 	"Archimedes		CONFIG_ARCH_ARC \
 	 A5000			CONFIG_ARCH_A5K \
-	 RiscPC			CONFIG_ARCH_RPC \
+	 Co-EBSA285		CONFIG_ARCH_CO285 \
 	 EBSA-110		CONFIG_ARCH_EBSA110 \
-	 FootBridge-based	CONFIG_FOOTBRIDGE" RiscPC
+	 FootBridge		CONFIG_ARCH_FOOTBRIDGE \
+	 RiscPC			CONFIG_ARCH_RPC \
+ 	 SA1100-based		CONFIG_ARCH_SA1100" RiscPC
+
 # the following are placeholders for when they are fully integrated
+#	 Cirrus CL-PS7500FE	CONFIG_ARCH_CLPS7500 \
 #	 LinkUp-L7200		CONFIG_ARCH_L7200
-# 	 SA1100-based		CONFIG_ARCH_SA1100
 
-if [ "$CONFIG_FOOTBRIDGE" = "y" ]; then
-   bool 'FootBridge in HOST mode' CONFIG_HOST_FOOTBRIDGE
-   if [ "$CONFIG_HOST_FOOTBRIDGE" = "y" ]; then
-      define_bool CONFIG_ADDIN_FOOTBRIDGE n
-   else
-      define_bool CONFIG_ADDIN_FOOTBRIDGE y
-   fi
-fi
-
-if [ "$CONFIG_HOST_FOOTBRIDGE" = "y" ]; then
+if [ "$CONFIG_ARCH_FOOTBRIDGE" = "y" ]; then
    comment 'Footbridge Implementations'
-   bool '  Include support for EBSA285' CONFIG_ARCH_EBSA285
-   bool '  Include support for CATS' CONFIG_ARCH_CATS
-   bool '  Include support for NetWinder' CONFIG_ARCH_NETWINDER
-   bool '  Include support for Compaq Personal Server' CONFIG_ARCH_PERSONAL_SERVER
+   bool '  CATS support' CONFIG_ARCH_CATS
+   bool '  Compaq Personal Server support' CONFIG_ARCH_PERSONAL_SERVER
+   bool '  EBSA285 (addin mode) support' CONFIG_ARCH_EBSA285_ADDIN
+   bool '  EBSA285 (host mode) support' CONFIG_ARCH_EBSA285_HOST
+   bool '  NetWinder support' CONFIG_ARCH_NETWINDER
 fi
-
-if [ "$CONFIG_ADDIN_FOOTBRIDGE" = "y" ]; then
-   # If we get any other footbridge-based plug-in boards, then
-   # add your architecture options here
-   define_bool CONFIG_ARCH_CO285 y
-fi
-
 if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
    comment 'SA11x0 Implementations'
-   bool '  Include support for Assabet' CONFIG_SA110_ASSABET
+   bool '  Include support for Assabet' CONFIG_SA1100_ASSABET
+   if [ "$CONFIG_SA1100_ASSABET" = "y" ]; then
+      bool '  Include support for Neponset' CONFIG_ASSABET_NEPONSET
+   fi
    bool '  Include support for Bitsy' CONFIG_SA1100_BITSY
    bool '  Include support for Brutus' CONFIG_SA1100_BRUTUS
 #   bool '  Include support for Empeg' CONFIG_SA1100_EMPEG
@@ -62,43 +55,21 @@ if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
    bool '  Include support for GraphicsClient' CONFIG_SA1100_GRAPHICSCLIENT
    bool '  Include support for Victor' CONFIG_SA1100_VICTOR
 #   bool '  Include support for Tifon' CONFIG_SA1100_TIFON
-   define_bool CONFIG_DISCONTIGMEM y
+#   bool '  Include support for XP860' CONFIG_SA1100_XP860
 fi
 
-#
-# Select various configuration options depending on the machine type
-#  Easy check for Acorn-style architectures
-#
-if [ "$CONFIG_ARCH_ARC" = "y" -o \
-     "$CONFIG_ARCH_A5K" = "y" -o \
-     "$CONFIG_ARCH_RPC" = "y" ]; then
-   define_bool CONFIG_ARCH_ACORN y
-else
-   define_bool CONFIG_ARCH_ACORN n
-fi
-
-#
-# Figure out whether this system uses 26-bit or 32-bit CPUs.  Nobody has
-# ever built a machine that can take both, and now that ARM3 is obsolete
-# nobody is likely to either.
-#
+# Figure out whether this system uses 26-bit or 32-bit CPUs.
 if [ "$CONFIG_ARCH_ARC" = "y" -o \
      "$CONFIG_ARCH_A5K" = "y" ]; then
    define_bool CONFIG_CPU_32 n
    define_bool CONFIG_CPU_26 y
-
-   #
-   # Select memory size
-   #
    bool '2MB physical memory' CONFIG_PAGESIZE_16
 else
    define_bool CONFIG_CPU_32 y
    define_bool CONFIG_CPU_26 n
 fi
 
-#
 # Select CPU and optimisation dependent on architecture
-#
 if [ "$CONFIG_ARCH_RPC" = "y" ]; then
    define_bool CONFIG_CPU_32v3 y
    bool 'Support ARM610' CONFIG_CPU_ARM6
@@ -113,6 +84,10 @@ if [ "$CONFIG_ARCH_EBSA110" = "y" -o \
    define_bool CONFIG_CPU_32v4 y
    define_bool CONFIG_CPU_SA110 y
 fi
+if [ "$CONFIG_ARCH_CLPS7500" = "y" ]; then
+   define_bool CONFIG_CPU_32v4 y
+   define_bool CONFIG_CPU_ARM7 y
+fi
 if [ "$CONFIG_ARCH_L7200" = "y" ]; then
    define_bool CONFIG_CPU_32v4 y
    define_bool CONFIG_CPU_ARM720 y
@@ -122,20 +97,54 @@ if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
    define_bool CONFIG_CPU_SA1100 y
 fi
 
-#
-#  These machines always have PCI
-#
+# Select various configuration options depending on the machine type
+if [ "$CONFIG_ARCH_ARC" = "y" -o \
+     "$CONFIG_ARCH_A5K" = "y" -o \
+     "$CONFIG_ARCH_RPC" = "y" ]; then
+   define_bool CONFIG_ARCH_ACORN y
+else
+   define_bool CONFIG_ARCH_ACORN n
+fi
+
+if [ "$CONFIG_ARCH_CO285" = "y" -o \
+     "$CONFIG_ARCH_FOOTBRIDGE" = "y" ]; then
+   define_bool CONFIG_FOOTBRIDGE y
+else
+   define_bool CONFIG_FOOTBRIDGE n
+fi
+if [ "$CONFIG_ARCH_CATS" = "y" -o \
+     "$CONFIG_ARCH_EBSA285_HOST" = "y" -o \
+     "$CONFIG_ARCH_NETWINDER" = "y" -o \
+     "$CONFIG_ARCH_PERSONAL_SERVER" = "y" ]; then
+   define_bool CONFIG_FOOTBRIDGE_HOST y
+else
+   define_bool CONFIG_FOOTBRIDGE_HOST n
+fi
+if [ "$CONFIG_ARCH_CO285" = "y" -o \
+     "$CONFIG_ARCH_EBSA285_ADDIN" = "y" ]; then
+   define_bool CONFIG_FOOTBRIDGE_ADDIN y
+else
+   define_bool CONFIG_FOOTBRIDGE_ADDIN n
+fi
+if [ "$CONFIG_ARCH_EBSA285_HOST" = "y" -o \
+     "$CONFIG_ARCH_EBSA285_ADDIN" = "y" ]; then
+   define_bool CONFIG_ARCH_EBSA285 y
+fi
+
+if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
+   define_bool CONFIG_DISCONTIGMEM y
+else
+   define_bool CONFIG_DISCONTIGMEM n
+fi
+
+# Now handle the bus types
 if [ "$CONFIG_ARCH_NEXUSPCI" = "y" -o \
-     "$CONFIG_HOST_FOOTBRIDGE" = "y" ]; then
+     "$CONFIG_FOOTBRIDGE_HOST" = "y" ]; then
    define_bool CONFIG_PCI y
-   source drivers/pci/Config.in
 else
    define_bool CONFIG_PCI n
 fi
 
-#
-# These machines have ISA-DMA
-#
 if [ "$CONFIG_ARCH_CATS" = "y" -o \
      "$CONFIG_ARCH_SHARK" = "y" -o \
      "$CONFIG_ARCH_NETWINDER" = "y" ]; then
@@ -145,14 +154,8 @@ else
    define_bool CONFIG_ISA n
    define_bool CONFIG_ISA_DMA n
 fi
-
-define_bool CONFIG_SBUS n
-define_bool CONFIG_PCMCIA n
-
-if [ "$CONFIG_CPU_32" = "y" -a "$CONFIG_ARCH_EBSA110" != "y" ]; then
-   bool 'Kernel-mode alignment trap handler' CONFIG_ALIGNMENT_TRAP
-fi
 endmenu
+
 
 mainmenu_option next_comment
 comment 'Loadable module support'
@@ -163,53 +166,61 @@ if [ "$CONFIG_MODULES" = "y" ]; then
 fi
 endmenu
 
+
 mainmenu_option next_comment
 comment 'General setup'
+source drivers/pci/Config.in
+bool 'Support hot-pluggable devices' CONFIG_HOTPLUG
+if [ "$CONFIG_HOTPLUG" = "y" ]; then
+   source drivers/pcmcia/Config.in
+else
+   define_bool CONFIG_PCMCIA n
+fi
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
 bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
 bool 'Sysctl support' CONFIG_SYSCTL
-tristate 'Math emulation' CONFIG_NWFPE
-if [ "$CONFIG_PROC_FS" = "y" ]; then
-   choice 'Kernel core (/proc/kcore) format' \
+tristate 'NWFPE math emulation' CONFIG_NWFPE
+choice 'Kernel core (/proc/kcore) format' \
 	"ELF		CONFIG_KCORE_ELF	\
 	 A.OUT		CONFIG_KCORE_AOUT" ELF
-fi
 tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 if [ "$CONFIG_CPU_32" = "y" ]; then
    tristate 'RISC OS personality' CONFIG_ARTHUR
 fi
-
-source drivers/parport/Config.in
-
 if [ "$CONFIG_ARCH_EBSA110" = "y" -o \
      "$CONFIG_ARCH_SA1100" = "y" -o \
-     "$CONFIG_ARCH_NETWINDER" = "y" -o \
      "$CONFIG_ARCH_PERSONAL_SERVER" = "y" -o \
      "$CONFIG_ARCH_CATS" = "y" ]; then
-   string 'Initial kernel command string' CONFIG_CMDLINE
+   string 'Default kernel command string' CONFIG_CMDLINE ""
 fi
 if [ "$CONFIG_ARCH_NETWINDER" = "y" -o \
      "$CONFIG_ARCH_EBSA110" = "y" -o   \
      "$CONFIG_ARCH_EBSA285" = "y" -o   \
-     "$CONFIG_ARCH_CO285" = "y" ]; then
+     "$CONFIG_ARCH_CO285" = "y" -o     \
+     "$CONFIG_ARCH_SA1100" = "y" ]; then
    bool 'Timer and CPU usage LEDs' CONFIG_LEDS
    if [ "$CONFIG_LEDS" = "y" ]; then
       if [ "$CONFIG_ARCH_NETWINDER" = "y" -o \
 	   "$CONFIG_ARCH_EBSA285" = "y" -o   \
-	   "$CONFIG_ARCH_CO285" = "y" ]; then
+	   "$CONFIG_ARCH_CO285" = "y" -o     \
+	   "$CONFIG_ARCH_SA1100" = "y" ]; then
          bool '  Timer LED' CONFIG_LEDS_TIMER
          bool '  CPU usage LED' CONFIG_LEDS_CPU
       fi
    fi
+   if [ "$CONFIG_ARCH_EBSA110" = "y" ]; then
+      define_bool CONFIG_LEDS_TIMER y
+   fi
+fi
+if [ "$CONFIG_CPU_32" = "y" -a "$CONFIG_ARCH_EBSA110" != "y" ]; then
+   bool 'Kernel-mode alignment trap handler' CONFIG_ALIGNMENT_TRAP
 fi
 endmenu
 
-source drivers/ieee1394/Config.in
-
-source drivers/i2o/Config.in
+source drivers/parport/Config.in
 
 source drivers/pnp/Config.in
 
@@ -219,36 +230,8 @@ if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
    source drivers/acorn/block/Config.in
 fi
 
-source drivers/char/Config.in
-if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
-   if [ "$CONFIG_BUSMOUSE" = "y" ]; then
-      if [ "$CONFIG_ARCH_RPC" != "y" ]; then
-         define_bool CONFIG_KBDMOUSE y
-      else
-         define_bool CONFIG_RPCMOUSE y
-      fi
-   fi
-fi
-
-#source drivers/misc/Config.in
-
-if [ "$CONFIG_VT" = "y" ]; then
-   mainmenu_option next_comment
-   comment 'Console drivers'
-   if [ "$CONFIG_ARCH_ACORN" != "y" -a "$CONFIG_ARCH_EBSA110" != "y" ]; then
-      bool 'VGA text console' CONFIG_VGA_CONSOLE
-   fi
-   bool 'Support Frame buffer devices' CONFIG_FB
-   source drivers/video/Config.in
-   endmenu
-fi
-
 if [ "$CONFIG_NET" = "y" ]; then
    source net/Config.in
-
-   source net/ax25/Config.in
-
-   source net/irda/Config.in
 
    mainmenu_option next_comment
    comment 'Network device support'
@@ -258,16 +241,11 @@ if [ "$CONFIG_NET" = "y" ]; then
       source drivers/net/Config.in
    fi
    endmenu
-fi
 
-# mainmenu_option next_comment
-# comment 'ISDN subsystem'
-#
-# tristate 'ISDN support' CONFIG_ISDN
-# if [ "$CONFIG_ISDN" != "n" ]; then
-#    source drivers/isdn/Config.in
-# fi
-# endmenu
+   source net/ax25/Config.in
+
+   source net/irda/Config.in
+fi
 
 mainmenu_option next_comment
 comment 'ATA/IDE/MFM/RLL support'
@@ -292,6 +270,44 @@ if [ "$CONFIG_SCSI" != "n" ]; then
 fi
 endmenu
 
+source drivers/ieee1394/Config.in
+
+source drivers/i2o/Config.in
+
+mainmenu_option next_comment
+comment 'ISDN subsystem'
+
+tristate 'ISDN support' CONFIG_ISDN
+if [ "$CONFIG_ISDN" != "n" ]; then
+   source drivers/isdn/Config.in
+fi
+endmenu
+
+source drivers/char/Config.in
+if [ "$CONFIG_ARCH_ACORN" = "y" -a \
+     "$CONFIG_BUSMOUSE" = "y" ]; then
+   if [ "$CONFIG_ARCH_RPC" != "y" ]; then
+      define_bool CONFIG_KBDMOUSE y
+   else
+      define_bool CONFIG_RPCMOUSE y
+   fi
+fi
+
+#source drivers/misc/Config.in
+
+source fs/Config.in
+
+if [ "$CONFIG_VT" = "y" ]; then
+   mainmenu_option next_comment
+   comment 'Console drivers'
+   if [ "$CONFIG_ARCH_ACORN" != "y" -a "$CONFIG_ARCH_EBSA110" != "y" ]; then
+      bool 'VGA text console' CONFIG_VGA_CONSOLE
+   fi
+   bool 'Support Frame buffer devices' CONFIG_FB
+   source drivers/video/Config.in
+   endmenu
+fi
+
 if [ "$CONFIG_ARCH_ACORN" = "y" -o \
      "$CONFIG_ARCH_CLPS7500" = "y" -o \
      "$CONFIG_ARCH_SHARK" = "y" -o \
@@ -306,9 +322,8 @@ if [ "$CONFIG_ARCH_ACORN" = "y" -o \
    endmenu
 fi
 
-source fs/Config.in
-
 source drivers/usb/Config.in
+
 
 mainmenu_option next_comment
 comment 'Kernel hacking'
@@ -317,7 +332,6 @@ bool 'Compile kernel with frame pointer (for useful debugging)' CONFIG_FRAME_POI
 bool 'Verbose kernel error messages' CONFIG_DEBUG_ERRORS
 bool 'Verbose user fault messages' CONFIG_DEBUG_USER
 bool 'Include debugging information in kernel binary' CONFIG_DEBUG_INFO
-#bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC
 bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
 if [ "$CONFIG_CPU_26" = "y" ]; then
    bool 'Disable pgtable cache' CONFIG_NO_PGT_CACHE

@@ -210,7 +210,7 @@ asmlinkage void math_emulate(long arg)
     }
 
   FPU_lookahead = 1;
-  if (current->flags & PF_PTRACED)
+  if (current->ptrace & PT_PTRACED)
     FPU_lookahead = 0;
 
   if ( !valid_prefix(&byte1, (u_char **)&FPU_EIP,

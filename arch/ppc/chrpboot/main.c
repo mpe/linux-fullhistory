@@ -16,11 +16,11 @@ extern void *finddevice(const char *);
 extern int getprop(void *, const char *, void *, int);
 void gunzip(void *, int, unsigned char *, int *);
 
-#define get_16be(x)	(*(unsigned short *)(x))
-#define get_32be(x)	(*(unsigned *)(x))
-
 #define RAM_START	0x00000000
-#define RAM_END		(8<<20)
+#define RAM_END		(64<<20)
+
+#define BOOT_START	((unsigned long)_start)
+#define BOOT_END	((unsigned long)(_end + 0xFFF) & ~0xFFF)
 
 #define RAM_FREE	((unsigned long)(_end+0x1000)&~0xFFF)
 #define PROG_START	0x00010000
@@ -36,6 +36,7 @@ extern int initrd_len;
 extern char sysmap_data[];
 extern int sysmap_len;
 
+static char scratch[1024<<10];	/* 1MB of scratch space for gunzip */
 
 chrpboot(int a1, int a2, void *prom)
 {
@@ -48,13 +49,25 @@ chrpboot(int a1, int a2, void *prom)
     
     printf("chrpboot starting: loaded at 0x%x\n\r", &_start);
 
-    end_avail = (char *) RAM_END;
+    if (initrd_len) {
+	initrd_size = initrd_len;
+	initrd_start = (RAM_END - initrd_size) & ~0xFFF;
+	a1 = initrd_start;
+	a2 = initrd_size;
+	claim(initrd_start, RAM_END - initrd_start, 0);
+	printf("initial ramdisk moving 0x%x <- 0x%x (%x bytes)\n\r",
+	       initrd_start, initrd_data, initrd_size);
+	memcpy((char *)initrd_start, initrd_data, initrd_size);
+    }
 
     im = image_data;
     len = image_len;
+    /* claim 4MB starting at PROG_START */
+    claim(PROG_START, (4<<20) - PROG_START, 0);
     dst = (void *) PROG_START;
     if (im[0] == 0x1f && im[1] == 0x8b) {
-	avail_ram = (char *)RAM_FREE;
+	avail_ram = scratch;
+	end_avail = scratch + sizeof(scratch);
 	printf("gunzipping (0x%x <- 0x%x:0x%0x)...", dst, im, im+len);
 	gunzip(dst, 0x400000, im, &len);
 	printf("done %u bytes\n\r", len);
@@ -86,17 +99,18 @@ chrpboot(int a1, int a2, void *prom)
 	    rec->data[1] = 1;
 	    rec->size = sizeof(struct bi_record) + sizeof(unsigned long);
 	    rec = (struct bi_record *)((unsigned long)rec + rec->size);
-	    
+#if 0
 	    rec->tag = BI_SYSMAP;
 	    rec->data[0] = (unsigned long)sysmap_data;
 	    rec->data[1] = sysmap_len;
 	    rec->size = sizeof(struct bi_record) + sizeof(unsigned long);
 	    rec = (struct bi_record *)((unsigned long)rec + rec->size);
+#endif
 	    rec->tag = BI_LAST;
 	    rec->size = sizeof(struct bi_record);
 	    rec = (struct bi_record *)((unsigned long)rec + rec->size);
     }
-    (*(void (*)())sa)(0, 0, prom, a1, a2);
+    (*(void (*)())sa)(a1, a2, prom);
 
     printf("returned?\n\r");
 

@@ -1,4 +1,4 @@
-/* $Id: ptrace.c,v 1.5 2000/05/09 01:42:21 gniibe Exp $
+/* $Id: ptrace.c,v 1.6 2000/06/08 23:44:50 gniibe Exp $
  *
  * linux/arch/sh/kernel/ptrace.c
  *
@@ -10,6 +10,7 @@
  *
  */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -121,13 +122,21 @@ ubc_set_tracing(int asid, unsigned long nextpc1, unsigned nextpc2)
 {
 	ctrl_outl(nextpc1, UBC_BARA);
 	ctrl_outb(asid, UBC_BASRA);
+#if defined(CONFIG_CPU_SUBTYPE_SH7709)
+	ctrl_outl(0x0fff, UBC_BAMRA);
+#else
 	ctrl_outb(BAMR_12, UBC_BAMRA);
+#endif
 	ctrl_outw(BBR_INST | BBR_READ, UBC_BBRA);
 
 	if (nextpc2 != (unsigned long) -1) {
 		ctrl_outl(nextpc2, UBC_BARB);
 		ctrl_outb(asid, UBC_BASRB);
+#if defined(CONFIG_CPU_SUBTYPE_SH7709)
+		ctrl_outl(0x0fff, UBC_BAMRA);
+#else
 		ctrl_outb(BAMR_12, UBC_BAMRB);
+#endif
 		ctrl_outw(BBR_INST | BBR_READ, UBC_BBRB);
 	}
 	ctrl_outw(BRCR_PCBA | BRCR_PCBB, UBC_BRCR);
@@ -143,10 +152,10 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	ret = -EPERM;
 	if (request == PTRACE_TRACEME) {
 		/* are we already being traced? */
-		if (current->flags & PF_PTRACED)
+		if (current->ptrace & PT_PTRACED)
 			goto out;
 		/* set the ptrace bit in the process flags. */
-		current->flags |= PF_PTRACED;
+		current->ptrace |= PT_PTRACED;
 		ret = 0;
 		goto out;
 	}
@@ -176,9 +185,9 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	 	    (tsk->gid != child->gid)) && !capable(CAP_SYS_PTRACE))
 			goto out_tsk;
 		/* the same process cannot be attached many times */
-		if (child->flags & PF_PTRACED)
+		if (child->ptrace & PT_PTRACED)
 			goto out_tsk;
-		child->flags |= PF_PTRACED;
+		child->ptrace |= PT_PTRACED;
 
 		write_lock_irq(&tasklist_lock);
 		if (child->p_pptr != tsk) {
@@ -193,7 +202,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		goto out_tsk;
 	}
 	ret = -ESRCH;
-	if (!(child->flags & PF_PTRACED))
+	if (!(child->ptrace & PT_PTRACED))
 		goto out_tsk;
 	if (child->state != TASK_STOPPED) {
 		if (request != PTRACE_KILL)
@@ -280,9 +289,9 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		if ((unsigned long) data > _NSIG)
 			break;
 		if (request == PTRACE_SYSCALL)
-			child->flags |= PF_TRACESYS;
+			child->ptrace |= PT_TRACESYS;
 		else
-			child->flags &= ~PF_TRACESYS;
+			child->ptrace &= ~PT_TRACESYS;
 		child->exit_code = data;
 		wake_up_process(child);
 		ret = 0;
@@ -313,16 +322,16 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		ret = -EIO;
 		if ((unsigned long) data > _NSIG)
 			break;
-		child->flags &= ~PF_TRACESYS;
-		if ((child->flags & PF_DTRACE) == 0) {
+		child->ptrace &= ~PT_TRACESYS;
+		if ((child->ptrace & PT_DTRACE) == 0) {
 			/* Spurious delayed TF traps may occur */
-			child->flags |= PF_DTRACE;
+			child->ptrace |= PT_DTRACE;
 		}
 
 		/* Compute next pc.  */
 		pc = get_stack_long(child, (long)&dummy->pc);
 		regs = (struct pt_regs *)((unsigned long)child + THREAD_SIZE - sizeof(struct pt_regs));
-		if (access_process_vm(child, pc&~3, &tmp, sizeof(tmp), 1) != sizeof(data))
+		if (access_process_vm(child, pc&~3, &tmp, sizeof(tmp), 0) != sizeof(tmp))
 			break;
  
 #ifdef  __LITTLE_ENDIAN__
@@ -357,7 +366,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		ret = -EIO;
 		if ((unsigned long) data > _NSIG)
 			break;
-		child->flags &= ~(PF_PTRACED|PF_TRACESYS);
+		child->ptrace &= ~(PT_PTRACED|PT_TRACESYS);
 		child->exit_code = data;
 		write_lock_irq(&tasklist_lock);
 		REMOVE_LINKS(child);
@@ -384,8 +393,8 @@ asmlinkage void syscall_trace(void)
 {
 	struct task_struct *tsk = current;
 
-	if ((tsk->flags & (PF_PTRACED|PF_TRACESYS))
-	    != (PF_PTRACED|PF_TRACESYS))
+	if ((tsk->ptrace & (PT_PTRACED|PT_TRACESYS))
+	    != (PT_PTRACED|PT_TRACESYS))
 		return;
 	tsk->exit_code = SIGTRAP;
 	tsk->state = TASK_STOPPED;

@@ -124,11 +124,11 @@ static void __init setup_processor(void)
 
 #ifdef MULTI_CPU
 	processor = *list->proc;
+#endif
 
 	printk("Processor: %s %s revision %d\n",
 	       proc_info.manufacturer, proc_info.cpu_name,
 	       (int)processor_id & 15);
-#endif
 
 	sprintf(system_utsname.machine, "%s%c", list->arch_name, ENDIANNESS);
 	sprintf(elf_platform, "%s%c", list->elf_name, ENDIANNESS);
@@ -162,24 +162,6 @@ static struct machine_desc * __init setup_architecture(unsigned int nr)
 	printk("Architecture: %s\n", list->name);
 
 	return list;
-}
-
-static unsigned long __init memparse(char *ptr, char **retptr)
-{
-	unsigned long ret = simple_strtoul(ptr, retptr, 0);
-
-	switch (**retptr) {
-	case 'M':
-	case 'm':
-		ret <<= 10;
-	case 'K':
-	case 'k':
-		ret <<= 10;
-		(*retptr)++;
-	default:
-		break;
-	}
-	return ret;
 }
 
 /*
@@ -217,6 +199,7 @@ parse_cmdline(struct meminfo *mi, char **cmdline_p, char *from)
 
 			mi->bank[mi->nr_banks].start = start;
 			mi->bank[mi->nr_banks].size  = size;
+			mi->bank[mi->nr_banks].node  = 0;
 			mi->nr_banks += 1;
 		}
 		c = *from++;
@@ -378,6 +361,7 @@ void __init setup_arch(char **cmdline_p)
 	if (meminfo.nr_banks == 0) {
 		meminfo.nr_banks      = 1;
 		meminfo.bank[0].start = PHYS_OFFSET;
+		meminfo.bank[0].node  = 0;
 		if (params)
 			meminfo.bank[0].size = params->u1.s.nr_pages << PAGE_SHIFT;
 		else
@@ -393,8 +377,8 @@ void __init setup_arch(char **cmdline_p)
 	saved_command_line[COMMAND_LINE_SIZE-1] = '\0';
 	parse_cmdline(&meminfo, cmdline_p, from);
 	bootmem_init(&meminfo);
-	request_standard_resources(&meminfo, mdesc);
 	paging_init(&meminfo);
+	request_standard_resources(&meminfo, mdesc);
 
 #ifdef CONFIG_VT
 #if defined(CONFIG_VGA_CONSOLE)

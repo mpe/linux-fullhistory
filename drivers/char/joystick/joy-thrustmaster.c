@@ -163,26 +163,6 @@ static int js_tm_read(void *xinfo, int **axes, int **buttons)
 }
 
 /*
- * js_tm_open() is a callback from the file open routine.
- */
-
-static int js_tm_open(struct js_dev *jd)
-{
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-/*
- * js_tm_close() is a callback from the file release routine.
- */
-
-static int js_tm_close(struct js_dev *jd)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
-
-/*
  * js_tm_init_corr() initializes the correction values for
  * ThrustMaster joysticks.
  */
@@ -261,7 +241,7 @@ static struct js_port __init *js_tm_probe(int io, struct js_port *port)
 	request_region(io, 1, "joystick (thrustmaster)");
 	port = js_register_port(port, &info, 1, sizeof(struct js_tm_info), js_tm_read);
 	printk(KERN_INFO "js%d: %s revision %d at %#x\n",
-		js_register_device(port, 0, a, b, name, js_tm_open, js_tm_close), name, data[JS_TM_BYTE_REV], io);
+		js_register_device(port, 0, a, b, name, THIS_MODULE, NULL, NULL), name, data[JS_TM_BYTE_REV], io);
 	js_tm_init_corr(a, info.mode, port->axes, port->corr);
 
 	return port;

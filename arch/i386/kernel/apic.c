@@ -325,18 +325,18 @@ void __init init_apic_mappings(void)
  */
 static unsigned int __init get_8254_timer_count(void)
 {
-	extern rwlock_t xtime_lock;
+	extern spinlock_t i8253_lock;
 	unsigned long flags;
 
 	unsigned int count;
 
-	write_lock_irqsave(&xtime_lock, flags);
+	spin_lock_irqsave(&i8253_lock, flags);
 
 	outb_p(0x00, 0x43);
 	count = inb_p(0x40);
 	count |= inb_p(0x40) << 8;
 
-	write_unlock_irqrestore(&xtime_lock, flags);
+	spin_unlock_irqrestore(&i8253_lock, flags);
 
 	return count;
 }
@@ -423,21 +423,21 @@ void setup_APIC_timer(void * data)
 
 	__setup_APIC_LVTT(clocks);
 
-	t0 = apic_read(APIC_TMCCT)*APIC_DIVISOR;
+	t0 = apic_read(APIC_TMICT)*APIC_DIVISOR;
+	/* Wait till TMCCT gets reloaded from TMICT... */
 	do {
-		/*
-		 * It looks like the 82489DX cannot handle
-		 * consecutive reads of the TMCCT register well;
-		 * this dummy read prevents it from a lockup.
-		 */
-		apic_read(APIC_SPIV);
+		t1 = apic_read(APIC_TMCCT)*APIC_DIVISOR;
+		delta = (int)(t0 - t1 - slice*(smp_processor_id()+1));
+	} while (delta >= 0);
+	/* Now wait for our slice for real. */
+	do {
 		t1 = apic_read(APIC_TMCCT)*APIC_DIVISOR;
 		delta = (int)(t0 - t1 - slice*(smp_processor_id()+1));
 	} while (delta < 0);
 
 	__setup_APIC_LVTT(clocks);
 
-	printk("CPU%d<C0:%d,C:%d,D:%d,S:%d,C:%d>\n",
+	printk("CPU%d<T0:%d,T1:%d,D:%d,S:%d,C:%d>\n",
 			smp_processor_id(), t0, t1, delta, slice, clocks);
 
 	__restore_flags(flags);
@@ -464,7 +464,7 @@ int __init calibrate_APIC_clock(void)
 	int i;
 	const int LOOPS = HZ/10;
 
-	printk("calibrating APIC timer ... ");
+	printk("calibrating APIC timer ...\n");
 
 	/*
 	 * Put whatever arbitrary (but long enough) timeout
@@ -509,7 +509,7 @@ int __init calibrate_APIC_clock(void)
 	result = (tt1-tt2)*APIC_DIVISOR/LOOPS;
 
 	if (cpu_has_tsc)
-		printk("\n..... CPU clock speed is %ld.%04ld MHz.\n",
+		printk("..... CPU clock speed is %ld.%04ld MHz.\n",
 			((long)(t2-t1)/LOOPS)/(1000000/HZ),
 			((long)(t2-t1)/LOOPS)%(1000000/HZ));
 
@@ -701,7 +701,7 @@ asmlinkage void smp_spurious_interrupt(void)
 		ack_APIC_irq();
 
 	/* see sw-dev-man vol 3, chapter 7.4.13.5 */
-	printk("spurious APIC interrupt on CPU#%d, should never happen.\n",
+	printk(KERN_INFO "spurious APIC interrupt on CPU#%d, should never happen.\n",
 			smp_processor_id());
 }
 
@@ -718,32 +718,32 @@ asmlinkage void smp_error_interrupt(void)
 	spin_lock(&err_lock);
 
 	v = apic_read(APIC_ESR);
-	printk("APIC error interrupt on CPU#%d, should never happen.\n",
+	printk(KERN_INFO "APIC error interrupt on CPU#%d, should never happen.\n",
 			smp_processor_id());
-	printk("... APIC ESR0: %08lx\n", v);
+	printk(KERN_INFO "... APIC ESR0: %08lx\n", v);
 
 	apic_write(APIC_ESR, 0);
 	v |= apic_read(APIC_ESR);
-	printk("... APIC ESR1: %08lx\n", v);
+	printk(KERN_INFO "... APIC ESR1: %08lx\n", v);
 	/*
 	 * Be a bit more verbose. (multiple bits can be set)
 	 */
 	if (v & 0x01)
-		printk("... bit 0: APIC Send CS Error (hw problem).\n");
+		printk(KERN_INFO "... bit 0: APIC Send CS Error (hw problem).\n");
 	if (v & 0x02)
-		printk("... bit 1: APIC Receive CS Error (hw problem).\n");
+		printk(KERN_INFO "... bit 1: APIC Receive CS Error (hw problem).\n");
 	if (v & 0x04)
-		printk("... bit 2: APIC Send Accept Error.\n");
+		printk(KERN_INFO "... bit 2: APIC Send Accept Error.\n");
 	if (v & 0x08)
-		printk("... bit 3: APIC Receive Accept Error.\n");
+		printk(KERN_INFO "... bit 3: APIC Receive Accept Error.\n");
 	if (v & 0x10)
-		printk("... bit 4: Reserved!.\n");
+		printk(KERN_INFO "... bit 4: Reserved!.\n");
 	if (v & 0x20)
-		printk("... bit 5: Send Illegal Vector (kernel bug).\n");
+		printk(KERN_INFO "... bit 5: Send Illegal Vector (kernel bug).\n");
 	if (v & 0x40)
-		printk("... bit 6: Received Illegal Vector.\n");
+		printk(KERN_INFO "... bit 6: Received Illegal Vector.\n");
 	if (v & 0x80)
-		printk("... bit 7: Illegal Register Address.\n");
+		printk(KERN_INFO "... bit 7: Illegal Register Address.\n");
 
 	ack_APIC_irq();
 

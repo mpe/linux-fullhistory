@@ -27,7 +27,19 @@ static __inline__ void list_add_tail(struct list_head *new, struct list_head *he
 
 #define __constant_cpu_to_be32(x) __constant_htonl((x))
 
-#endif
+#define set_current_state(state_value) \
+ do { current->state = (state_value); } while (0)
+
+#include <linux/pci.h>
+inline static int pci_enable_device(struct pci_dev *dev)
+{
+        u16 cmd;
+        pci_read_config_word(dev, PCI_COMMAND, &cmd);
+        pci_write_config_word(dev, PCI_COMMAND, cmd | PCI_COMMAND_MEMORY);
+        return 0;
+}
+
+#endif /* Linux version < 2.3 */
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,18)
 #include <asm/spinlock.h>
@@ -39,6 +51,9 @@ static __inline__ void list_add_tail(struct list_head *new, struct list_head *he
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #endif
 
+#ifndef MAX
+#define MAX(a,b) ((a) > (b) ? (a) : (b))
+#endif
 
 typedef __u32 quadlet_t;
 typedef __u64 octlet_t;

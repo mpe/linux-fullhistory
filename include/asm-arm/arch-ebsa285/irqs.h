@@ -9,11 +9,13 @@
  *  01-Feb-1999	PJB	ISA IRQs start at 0 not 16
  */
 
-#define NR_IRQS			32
+#define NR_IRQS			36
 #define NR_DC21285_IRQS		16
 
 #define _ISA_IRQ(x)		(0 + (x))
+#define _ISA_INR(x)		((x) - 0)
 #define _DC21285_IRQ(x)		(16 + (x))
+#define _DC21285_INR(x)		((x) - 16)
 
 /*
  * This is a list of all interrupts that the 21285
@@ -34,7 +36,11 @@
 #define IRQ_PCI			_DC21285_IRQ(12)
 #define IRQ_SDRAMPARITY		_DC21285_IRQ(13)
 #define IRQ_I2OINPOST		_DC21285_IRQ(14)
-#define IRQ_PCI_ERR		_DC21285_IRQ(15)
+#define IRQ_PCI_ABORT		_DC21285_IRQ(15)
+#define IRQ_PCI_SERR		_DC21285_IRQ(16)
+#define IRQ_DISCARD_TIMER	_DC21285_IRQ(17)
+#define IRQ_PCI_DPERR		_DC21285_IRQ(18)
+#define IRQ_PCI_PERR		_DC21285_IRQ(19)
 
 #define IRQ_ISA_TIMER		_ISA_IRQ(0)
 #define IRQ_ISA_KEYBOARD	_ISA_IRQ(1)
@@ -64,7 +70,11 @@
 #define IRQ_MASK_PCI		(1 << 18)
 #define IRQ_MASK_SDRAMPARITY	(1 << 24)
 #define IRQ_MASK_I2OINPOST	(1 << 25)
-#define IRQ_MASK_PCI_ERR	((1 <<23) | (1 << 27) | (1 << 28) | (1 << 29) | (1 << 30) | (1 << 31))
+#define IRQ_MASK_PCI_ABORT	((1 << 29) | (1 << 30))
+#define IRQ_MASK_PCI_SERR	(1 << 23)
+#define IRQ_MASK_DISCARD_TIMER	(1 << 27)
+#define IRQ_MASK_PCI_DPERR	(1 << 28)
+#define IRQ_MASK_PCI_PERR	(1 << 31)
 
 /*
  * Netwinder interrupt allocations

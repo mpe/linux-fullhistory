@@ -319,11 +319,13 @@ __initfunc(int
 	if ((dev_a4t = pci_find_device(I20_VENDOR_ID, I20_DEVICE_ID, dev_a4t))) {
 		u_int sub_sys_id = 0;
 
+		if (pci_enable_device(dev_a4t))
+			return (0);
 		pci_read_config_dword(dev_a4t, PCI_SUBSYSTEM_VENDOR_ID,
 			&sub_sys_id);
 		if (sub_sys_id == ((A4T_SUBSYS_ID << 16) | A4T_SUBVEN_ID)) {
 			found = 1;
-			pci_memaddr = dev_a4t->resource[ 0].start;
+			pci_memaddr = pci_resource_start (dev_a4t, 0);
 			cs->irq = dev_a4t->irq;
 		}
 	}
@@ -339,7 +341,6 @@ __initfunc(int
 		printk(KERN_WARNING "HiSax: %s: No Memory base address\n", CardType[card->typ]);
 		return (0);
 	}
-	pci_memaddr &= PCI_BASE_ADDRESS_MEM_MASK;
 	cs->hw.ax.base = (u_int) ioremap(pci_memaddr, 4096);
 	/* Check suspecious address */
 	pI20_Regs = (I20_REGISTER_FILE *) (cs->hw.ax.base);

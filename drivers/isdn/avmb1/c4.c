@@ -1333,9 +1333,12 @@ int c4_init(void)
 			PCI_VENDOR_ID_AVM, PCI_DEVICE_ID_AVM_C4, dev))) {
 		struct capicardparams param;
 
-		param.port = dev->resource[ 1].start & PCI_BASE_ADDRESS_IO_MASK;
+		if (pci_enable_device(dev))
+			continue;
+
+		param.port = pci_resource_start (dev, 1);
 		param.irq = dev->irq;
-		param.membase = dev->resource[ 0].start & PCI_BASE_ADDRESS_MEM_MASK;
+		param.membase = pci_resource_start (dev, 0);
 
 		printk(KERN_INFO
 			"%s: PCI BIOS reports AVM-C4 at i/o %#x, irq %d, mem %#x\n",

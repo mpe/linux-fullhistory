@@ -3,7 +3,7 @@
 
 sk98lin.txt created 11-Nov-1999
 
-Readme File for sk98lin.o v3.02
+Readme File for sk98lin.o v3.04
 SK-NET Gigabit Ethernet Adapter SK-98xx Driver for Linux
 
 This file contains
@@ -24,8 +24,8 @@ This file contains
 ============
 
 The sk98lin driver supports the SysKonnect SK-NET Gigabit Ethernet
-Adapter SK-98xx family on Linux 2.2.x.
-It has been tested with Linux on Intel/x86 and ALPHA machines.
+Adapter SK-98xx family on Linux 2.2.x and above.
+It has been tested with Linux on Intel/x86, ALPHA and UltraSPARC machines.
 From v3.02 on, the driver is integrated in the linux kernel source.
 ***
 
@@ -132,7 +132,8 @@ Parameters can be set at the command line while loading the
 module with 'insmod'. The configuration tools of some distributions
 can also give parameters to the driver module.
 If you use the kernel module loader, you can set driver parameters
-in the file /etc/conf.modules. Insert a line of the form:
+in the file /etc/modules.conf (or old name: /etc/conf.modules).
+Insert a line of the form:
 
 options sk98lin ...
 
@@ -281,14 +282,12 @@ The setting must be done on all adapters that can be reached by
 the large frames. If one adapter is not set to receive large frames,
 it will simply drop them.
 
-NOTE: If you look at the statistics (with netstat) in large frame
-      mode while there is traffic on the net, you will see the
-      RX error counter go up. This is because the adapter hardware
-      counts received large frames as errors, although they are
-      received correctly. So ignore this counter in that case.
-
 You can switch back to the standard ethernet frame size with:
   ifconfig eth0 mtu 1500
+
+To make this setting persitent, add a script with the 'ifconfig'
+line to the system startup sequence (named something like "S99sk98lin"
+in /etc/rc.d/rc2.d).
 ***
 
 
@@ -374,15 +373,27 @@ following information is available:
 (8) HISTORY
 ===========
 
-VERSION 3.02
+VERSION 3.04 (In-Kernel version)
 Problems fixed:
-- None
-New Features:
-- Integration in linux kernel source.
+- Driver start failed on UltraSPARC
+- Rx checksum calculation for big endian machines did not work
+- Jumbo frames were counted as input-errors in netstat
+
+VERSION 3.03 (Standalone version)
+Problems fixed:
+- Compilation did not find script "printver.sh" if "." not in PATH
 Known limitations:
 - None
 
-VERSION 3.02
+VERSION 3.02 (In-Kernel version)
+Problems fixed:
+- None
+New Features:
+- Integration in Linux kernel source (2.2.14 and 2.3.29) 
+Known limitations:
+- None
+
+VERSION 3.01
 Problems fixed:
 - None
 New Features:

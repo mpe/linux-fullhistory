@@ -4,6 +4,7 @@
 #ifndef _ASMARM_PGTABLE_H
 #define _ASMARM_PGTABLE_H
 
+#include <linux/config.h>
 #include <asm/arch/memory.h>
 #include <asm/proc-fns.h>
 #include <asm/system.h>
@@ -77,7 +78,18 @@ extern void __handle_bad_pmd_kernel(pmd_t *pmd);
 
 #define pte_none(pte)		(!pte_val(pte))
 #define pte_clear(ptep)		set_pte((ptep), __pte(0))
+
+#ifndef CONFIG_DISCONTIGMEM
 #define pte_pagenr(pte)		((unsigned long)(((pte_val(pte) - PHYS_OFFSET) >> PAGE_SHIFT)))
+#else
+/*
+ * I'm not happy with this - we needlessly convert a physical address
+ * to a virtual one, and then immediately back to a physical address,
+ * which, if __va and __pa are expensive causes twice the expense for
+ * zero gain. --rmk
+ */
+#define pte_pagenr(pte)		MAP_NR(__va(pte_val(pte)))
+#endif
 
 #define pmd_none(pmd)		(!pmd_val(pmd))
 #define pmd_clear(pmdp)		set_pmd(pmdp, __pmd(0))

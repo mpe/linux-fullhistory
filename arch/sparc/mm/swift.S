@@ -1,4 +1,4 @@
-/* $Id: swift.S,v 1.5 2000/05/09 17:40:13 davem Exp $
+/* $Id: swift.S,v 1.6 2000/06/04 06:23:53 anton Exp $
  * swift.S: MicroSparc-II mmu/cache operations.
  *
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
@@ -30,7 +30,7 @@
 	 */
 	.globl	swift_flush_cache_all, swift_flush_cache_mm
 	.globl	swift_flush_cache_range, swift_flush_cache_page
-	.globl	swift_flush_page_for_dma, swift_flush_chunk
+	.globl	swift_flush_page_for_dma
 	.globl	swift_flush_page_to_ram
 
 swift_flush_cache_all:
@@ -38,7 +38,6 @@ swift_flush_cache_mm:
 swift_flush_cache_range:
 swift_flush_cache_page:
 swift_flush_page_for_dma:
-swift_flush_chunk:
 swift_flush_page_to_ram:
 	sethi	%hi(0x2000), %o0
 1:	subcc	%o0, 0x10, %o0
@@ -190,10 +189,8 @@ swift_flush_cache_page_out:
 	 * caches which are virtually indexed and tagged.
 	 */
 	.globl	swift_flush_page_for_dma
-	.globl	swift_flush_chunk
 	.globl	swift_flush_page_to_ram
 swift_flush_page_for_dma:
-swift_flush_chunk:
 swift_flush_page_to_ram:
 	andn	%o0, (PAGE_SIZE - 1), %o1
 #if 1

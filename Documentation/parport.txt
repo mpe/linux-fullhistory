@@ -109,7 +109,10 @@ parport
 |   |   |-- active
 |   |   `-- lp
 |   |       `-- timeslice
-|   |-- hardware
+|   |-- base-addr
+|   |-- irq
+|   |-- dma
+|   |-- modes
 |   `-- spintime
 `-- parport1
     |-- autoprobe
@@ -121,7 +124,10 @@ parport
     |   |-- active
     |   `-- ppa
     |       `-- timeslice
-    |-- hardware
+    |-- base-addr
+    |-- irq
+    |-- dma
+    |-- modes
     `-- spintime
 
 
@@ -133,7 +139,28 @@ devices/active	A list of the device drivers using that port.  A "+"
 		string "none" means that there are no device drivers
 		using that port.
 
-hardware	Parallel port's base address, IRQ line and DMA channel.
+base-addr	Parallel port's base address, or addresses if the port
+		has more than one in which case they are separated
+		with tabs.  These values might not have any sensible
+		meaning for some ports.
+
+irq		Parallel port's IRQ, or -1 if none is being used.
+
+dma		Parallel port's DMA channel, or -1 if none is being
+		used.
+
+modes		Parallel port's hardware modes, comma-separated,
+		meaning:
+
+		PCSPP		PC-style SPP registers are available.
+		TRISTATE	Port is bidirectional.
+		COMPAT		Hardware acceleration for printers is
+				available and will be used.
+		EPP		Hardware acceleration for EPP protocol
+				is available and will be used.
+		ECP		Hardware acceleration for ECP protocol
+				is available and will be used.
+		DMA		DMA is available and will be used.
 
 autoprobe	Any IEEE-1284 device ID information that has been
 		acquired from the (non-IEEE 1284.3) device.

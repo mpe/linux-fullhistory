@@ -13,7 +13,7 @@
 #include <asm/leds.h>
 #include <asm/system.h>
 
-void ebsa110_leds_event(led_event_t ledevt)
+static void ebsa110_leds_event(led_event_t ledevt)
 {
 	unsigned long flags;
 

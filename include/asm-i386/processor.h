@@ -519,4 +519,6 @@ struct microcode {
 	unsigned int bits[500];
 };
 
+#define MICROCODE_IOCFREE	_IO('6',0) /* because it is for P6 */
+
 #endif /* __ASM_I386_PROCESSOR_H */

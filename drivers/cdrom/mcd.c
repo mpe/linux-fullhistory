@@ -1110,12 +1110,16 @@ static int mcd_open(struct cdrom_device_info * cdi, int purpose)
 	if (mcdPresent == 0)
 		return -ENXIO;			/* no hardware */
 
-        if (!mcd_open_count && mcd_state == MCD_S_IDLE) {
+        MOD_INC_USE_COUNT;
+
+        if (mcd_open_count || mcd_state != MCD_S_IDLE)
+		goto bump_count;
+
         mcd_invalidate_buffers();
         do {
                 st = statusCmd();               /* check drive status */
                 if (st == -1)
-                        return -EIO;            /* drive doesn't respond */
+                        goto err_out;            /* drive doesn't respond */
                 if ((st & MST_READY) == 0) {    /* no disk? wait a sec... */
                         current->state = TASK_INTERRUPTIBLE;
                         schedule_timeout(HZ);
@@ -1123,11 +1127,15 @@ static int mcd_open(struct cdrom_device_info * cdi, int purpose)
         } while (((st & MST_READY) == 0) && count++ < MCD_RETRY_ATTEMPTS);
 
         if (updateToc() < 0)
-                       return -EIO;
-        }
+                       goto err_out;
+
+bump_count:
 	++mcd_open_count;
-        MOD_INC_USE_COUNT;
 	return 0;
+
+err_out:
+        MOD_DEC_USE_COUNT;
+	return -EIO;
 }
 
 

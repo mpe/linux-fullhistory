@@ -466,12 +466,15 @@ static int add_card(struct pci_dev *dev)
 	struct capicardparams param;
 	int retval;
 
-	if (dev->resource[ 2].start & PCI_BASE_ADDRESS_IO_MASK) { /* B1 PCI V4 */
+	if (pci_enable_device(dev))
+		return 0; /* return failure */
+
+	if (pci_resource_flags(dev, 2) & IORESOURCE_IO) { /* B1 PCI V4 */
 #ifdef CONFIG_ISDN_DRV_AVMB1_B1PCIV4
 		driver = &b1pciv4_driver;
 #endif
-		param.membase = dev->resource[ 0].start & PCI_BASE_ADDRESS_MEM_MASK;
-		param.port = dev->resource[ 2].start & PCI_BASE_ADDRESS_IO_MASK;
+		param.membase = pci_resource_start (dev, 0);
+		param.port = pci_resource_start (dev, 2);
 		param.irq = dev->irq;
 		printk(KERN_INFO
 		"%s: PCI BIOS reports AVM-B1 V4 at i/o %#x, irq %d, mem %#x\n",
@@ -488,7 +491,7 @@ static int add_card(struct pci_dev *dev)
 		}
 	} else {
 		param.membase = 0;
-		param.port = dev->resource[ 1].start & PCI_BASE_ADDRESS_IO_MASK;
+		param.port = pci_resource_start (dev, 1);
 		param.irq = dev->irq;
 		printk(KERN_INFO
 		"%s: PCI BIOS reports AVM-B1 at i/o %#x, irq %d\n",

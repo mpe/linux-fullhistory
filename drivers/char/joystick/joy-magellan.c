@@ -232,7 +232,6 @@ static int js_mag_open(struct js_dev *jd)
 {
 	struct js_mag_info *info = jd->port->info;
 	info->used++;	
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -247,7 +246,6 @@ static int js_mag_close(struct js_dev *jd)
 		js_unregister_device(jd->port->devs[0]);
 		js_mag_port = js_unregister_port(jd->port);
 	}
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -298,7 +296,7 @@ static int js_mag_ldisc_open(struct tty_struct *tty)
 	}
 
 	printk(KERN_INFO "js%d: Magellan [%s] on %s%d\n",
-		js_register_device(js_mag_port, 0, 6, 9, "Magellan", js_mag_open, js_mag_close),
+		js_register_device(js_mag_port, 0, 6, 9, "Magellan", THIS_MODULE, js_mag_open, js_mag_close),
 		info->name, tty->driver.name, MINOR(tty->device) - tty->driver.minor_start);
 
 

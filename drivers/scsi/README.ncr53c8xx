@@ -168,6 +168,12 @@ Chip   SDMS BIOS   Wide   SCSI std.   Max. sync   driver         driver
 895        Y         Y      FAST40    80 MB/s        Y             Y
 895A       Y         Y      FAST40    80 MB/s        Y             Y
 896        Y         Y      FAST40    80 MB/s        Y             Y
+897        Y         Y      FAST40    80 MB/s        Y             Y
+1510D      Y         Y      FAST40    80 MB/s        Y             Y
+1010       Y         Y      FAST80   160 MB/s        N             Y
+1010_66*   Y         Y      FAST80   160 MB/s        N             Y
+
+* Chip supports 33MHz and 66MHz PCI buses.
 
 
 Summary of other supported features:
@@ -686,11 +692,12 @@ port address 0x1400.
    Invalidate.
 
 10.2.5  Ultra SCSI support
-   Only apply to 860, 875 and 895 controllers.
+   Only apply to 860, 875, 895, 895a, 896, 1010 and 1010_66 controllers.
    Have no effect with other ones.
+        ultra:n    All ultra speeds enabled
         ultra:2    Ultra2 enabled
         ultra:1    Ultra enabled
-        ultra:n    disabled
+        ultra:0    Ultra speeds disabled
 
 10.2.6  Default number of tagged commands
         tags:0     (or tags:1 ) tagged command queuing disabled
@@ -822,6 +829,7 @@ port address 0x1400.
         0x0:   No check.
         0x1:   Check and donnot attach the controller on error.  
         0x2:   Check and just warn on error.
+        0x4:   Disable SCSI bus integrity checking.
 
 10.2.20 Exclude a host from being attached
         excl=<io_address>

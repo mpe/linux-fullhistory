@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.91 2000/05/23 05:25:44 davem Exp $
+/* $Id: ioctl32.c,v 1.92 2000/05/26 22:44:11 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997-2000  Jakub Jelinek  (jakub@redhat.com)
@@ -2442,8 +2442,8 @@ out:
 }
 
 typedef struct drm32_unique {
-	size_t unique_len;	  /* Length of unique			    */
-	u32    unique;		  /* Unique name for driver instantiation   */
+	int	unique_len;	  /* Length of unique			    */
+	u32	unique;		  /* Unique name for driver instantiation   */
 } drm32_unique_t;
 #define DRM32_IOCTL_GET_UNIQUE DRM_IOWR(0x01, drm32_unique_t)
 #define DRM32_IOCTL_SET_UNIQUE DRM_IOW( 0x10, drm32_unique_t)
@@ -2487,13 +2487,15 @@ static int drm32_getsetunique(unsigned int fd, unsigned int cmd, unsigned long a
 
 	if (!ret) {
 		if (cmd == DRM32_IOCTL_GET_UNIQUE &&
+		    uptr != NULL &&
 		    copy_to_user(uptr, karg.unique, karg.unique_len))
 			ret = -EFAULT;
 		if (put_user(karg.unique_len, &uarg->unique_len))
 			ret = -EFAULT;
 	}
 
-	kfree(karg.unique);
+	if (karg.unique != NULL)
+		kfree(karg.unique);
 
 	return ret;
 }
@@ -2836,7 +2838,7 @@ typedef struct drm32_ctx_res {
 	int		count;
 	u32		contexts; /* (drm_ctx_t *) */
 } drm32_ctx_res_t;
-#define DRM32_IOCTL_RES_CTX    DRM_IOWR(0x26, drm_ctx_res_t)
+#define DRM32_IOCTL_RES_CTX    DRM_IOWR(0x26, drm32_ctx_res_t)
 
 static int drm32_res_ctx(unsigned int fd, unsigned int cmd, unsigned long arg)
 {

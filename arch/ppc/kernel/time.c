@@ -50,6 +50,7 @@ void smp_local_timer_interrupt(struct pt_regs *);
 
 /* keep track of when we need to update the rtc */
 time_t last_rtc_update = 0;
+extern rwlock_t xtime_lock;
 
 /* The decrementer counts down by 128 every 128ns on a 601. */
 #define DECREMENTER_COUNT_601	(1000000000 / HZ)
@@ -69,6 +70,7 @@ unsigned long last_tb;
 int timer_interrupt(struct pt_regs * regs)
 {
 	int dval, d;
+	unsigned long flags;
 	unsigned long cpu = smp_processor_id();
 	
 	hardirq_enter(cpu);
@@ -102,7 +104,6 @@ int timer_interrupt(struct pt_regs * regs)
 	while ((d = get_dec()) == dval)
 		;
 	asm volatile("mftb 	%0" : "=r" (last_tb) );
-	
 	/*
 	 * Don't play catchup between the call to time_init()
 	 * and sti() in init/main.c.
@@ -122,6 +123,7 @@ int timer_interrupt(struct pt_regs * regs)
 		/*
 		 * update the rtc when needed
 		 */
+		read_lock_irqsave(&xtime_lock, flags);
 		if ( (time_status & STA_UNSYNC) &&
 		     ((xtime.tv_sec > last_rtc_update + 60) ||
 		      (xtime.tv_sec < last_rtc_update)) )
@@ -132,6 +134,7 @@ int timer_interrupt(struct pt_regs * regs)
 				/* do it again in 60 s */
 				last_rtc_update = xtime.tv_sec;
 		}
+		read_unlock_irqrestore(&xtime_lock, flags);
 	}
 #ifdef CONFIG_SMP
 	smp_local_timer_interrupt(regs);
@@ -153,17 +156,18 @@ void do_gettimeofday(struct timeval *tv)
 
 	save_flags(flags);
 	cli();
+	read_lock_irqsave(&xtime_lock, flags);
 	*tv = xtime;
+	read_unlock_irqrestore(&xtime_lock, flags);
 	/* XXX we don't seem to have the decrementers synced properly yet */
 #ifndef CONFIG_SMP
 	asm volatile("mftb %0" : "=r" (diff) );
 	diff -= last_tb;
-	
 	tv->tv_usec += diff * count_period_num / count_period_den;
 	tv->tv_sec += tv->tv_usec / 1000000;
 	tv->tv_usec = tv->tv_usec % 1000000;
 #endif
-
+	
 	restore_flags(flags);
 }
 
@@ -177,8 +181,10 @@ void do_settimeofday(struct timeval *tv)
 	frac_tick = tv->tv_usec % (1000000 / HZ);
 	save_flags(flags);
 	cli();
+	write_lock_irqsave(&xtime_lock, flags);
 	xtime.tv_sec = tv->tv_sec;
 	xtime.tv_usec = tv->tv_usec - frac_tick;
+	write_unlock_irqrestore(&xtime_lock, flags);
 	set_dec(frac_tick * count_period_den / count_period_num);
 	time_adjust = 0;                /* stop active adjtime() */
 	time_status |= STA_UNSYNC;
@@ -191,6 +197,7 @@ void do_settimeofday(struct timeval *tv)
 
 void __init time_init(void)
 {
+	unsigned long flags;
         if (ppc_md.time_init != NULL)
         {
                 ppc_md.time_init();
@@ -205,8 +212,10 @@ void __init time_init(void)
                 ppc_md.calibrate_decr();
 	}
 
-        xtime.tv_sec = ppc_md.get_rtc_time();
-        xtime.tv_usec = 0;
+	write_lock_irqsave(&xtime_lock, flags);
+	xtime.tv_sec = ppc_md.get_rtc_time();
+	xtime.tv_usec = 0;
+	write_unlock_irqrestore(&xtime_lock, flags);
 
 	set_dec(decrementer_count);
 	/* allow setting the time right away */

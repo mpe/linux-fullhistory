@@ -1,4 +1,10 @@
 
+/* Board information for the EST8260, which should be generic for
+ * all 8260 boards.  The IMMR is now given to us so the hard define
+ * will soon be removed.  All of the clock values are computed from
+ * the configuration SCMR and the Power-On-Reset word.
+ */
+
 #define IMAP_ADDR	((uint)0xf0000000)
 
 
@@ -12,8 +18,10 @@ typedef struct bd_info {
 	unsigned int	bi_busfreq;	/* Bus Freq, in MHz */
 	unsigned int	bi_cpmfreq;	/* CPM Freq, in MHz */
 	unsigned int	bi_brgfreq;	/* BRG Freq, in MHz */
+	unsigned int	bi_vco;		/* VCO Out from PLL */
+	unsigned int	bi_baudrate;	/* Default console baud rate */
+	unsigned int	bi_immr;	/* IMMR when called from boot rom */
 	unsigned char	bi_enetaddr[6];
-	unsigned int	bi_baudrate;
 } bd_t;
 
 extern bd_t m8xx_board_info;

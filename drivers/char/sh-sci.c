@@ -5,6 +5,7 @@
  *  SuperH on-chip serial module support.  (SCI with no FIFO / with FIFO)
  *  Copyright (C) 1999, 2000  Niibe Yutaka
  *  Copyright (C) 2000  Sugioka Toshinobu
+ *  Modified to support multiple serial ports. Stuart Menefy (May 2000).
  *
  * TTY code is based on sx.c (Specialix SX driver) by:
  *
@@ -31,7 +32,9 @@
 #include <linux/malloc.h>
 #include <linux/init.h>
 #include <linux/delay.h>
+#ifdef CONFIG_SERIAL_CONSOLE
 #include <linux/console.h>
+#endif
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -40,15 +43,23 @@
 #include <asm/bitops.h>
 
 #include <linux/generic_serial.h>
-#include "sh-sci.h"
 
 #ifdef CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
 static void gdb_detach(void);
+static int in_gdb = 1;
+#define IN_GDB in_gdb
+#endif
+#include "sh-sci.h"
+
+#ifdef CONFIG_SERIAL_CONSOLE
+static struct console sercons;
+static struct sci_port* sercons_port;
+static int sercons_baud;
 #endif
 
-struct sci_port sci_ports[1];
-
 /* Function prototypes */
+static void sci_init_pins_sci(struct sci_port* port, unsigned int cflag);
+static void sci_init_pins_scif(struct sci_port* port, unsigned int cflag);
 static void sci_disable_tx_interrupts(void *ptr);
 static void sci_enable_tx_interrupts(void *ptr);
 static void sci_disable_rx_interrupts(void *ptr);
@@ -63,9 +74,10 @@ static int sci_init_drivers(void);
 
 static struct tty_driver sci_driver, sci_callout_driver;
 
-#define SCI_NPORTS 1
+static struct sci_port sci_ports[SCI_NPORTS] = SCI_INIT;
 static struct tty_struct *sci_table[SCI_NPORTS] = { NULL, };
-static struct termios *sci_termios[2]; /* nomal, locked */
+static struct termios *sci_termios[SCI_NPORTS];
+static struct termios *sci_termios_locked[SCI_NPORTS];
 
 int sci_refcount;
 int sci_debug = 0;
@@ -87,6 +99,63 @@ static struct real_driver sci_real_driver = {
 	sci_hungup,
 	NULL
 };
+
+#if defined(SCI_ONLY) || defined(SCI_AND_SCIF)
+static void sci_init_pins_sci(struct sci_port* port, unsigned int cflag)
+{
+}
+#endif
+
+#if defined(SCIF_ONLY) || defined(SCI_AND_SCIF)
+#if defined(__sh3__)
+/* For SH7709, SH7709A, SH7729 */
+static void sci_init_pins_scif(struct sci_port* port, unsigned int cflag)
+{
+	unsigned int fcr_val = 0;
+
+	{
+		unsigned short data;
+
+		/* We need to set SCPCR to enable RTS/CTS */
+		data = ctrl_inw(SCPCR);
+		/* Clear out SCP7MD1,0, SCP6MD1,0, SCP4MD1,0*/
+		ctrl_outw(data&0x0fcf, SCPCR);
+	}
+	if (cflag & CRTSCTS)
+		fcr_val |= SCFCR_MCE;
+	else {
+		unsigned short data;
+
+		/* We need to set SCPCR to enable RTS/CTS */
+		data = ctrl_inw(SCPCR);
+		/* Clear out SCP7MD1,0, SCP4MD1,0,
+		   Set SCP6MD1,0 = {01} (output)  */
+		ctrl_outw((data&0x0fcf)|0x1000, SCPCR);
+
+		data = ctrl_inb(SCPDR);
+		/* Set /RTS2 (bit6) = 0 */
+		ctrl_outb(data&0xbf, SCPDR);
+	}
+	sci_out(port, SCFCR, fcr_val);
+}
+
+#else
+
+/* For SH7750 */
+static void sci_init_pins_scif(struct sci_port* port, unsigned int cflag)
+{
+	unsigned int fcr_val = 0;
+
+	if (cflag & CRTSCTS) {
+		fcr_val |= SCFCR_MCE;
+	} else {
+		ctrl_outw(0x0080, SCSPTR2); /* Set RTS = 1 */
+	}
+	sci_out(port, SCFCR, fcr_val);
+}
+
+#endif
+#endif /* SCIF_ONLY || SCI_AND_SCIF */
 
 static void sci_setsignals(struct sci_port *port, int dtr, int rts)
 {
@@ -112,11 +181,11 @@ static int sci_getsignals(struct sci_port *port)
 */
 }
 
-static void sci_set_baud(struct sci_port *port)
+static void sci_set_baud(struct sci_port *port, int baud)
 {
 	int t;
 
-	switch (port->gs.baud) {
+	switch (baud) {
 	case 0:
 		t = -1;
 		break;
@@ -136,7 +205,7 @@ static void sci_set_baud(struct sci_port *port)
 		t = BPS_38400;
 		break;
 	default:
-		printk(KERN_INFO "sci: unsupported baud rate: %d, use 115200 instead.\n", port->gs.baud);
+		printk(KERN_INFO "sci: unsupported baud rate: %d, use 115200 instead.\n", baud);
 	case 115200:
 		t = BPS_115200;
 		break;
@@ -145,93 +214,57 @@ static void sci_set_baud(struct sci_port *port)
 	if (t > 0) {
 		sci_setsignals (port, 1, -1);
 		if(t >= 256) {
-			ctrl_out((ctrl_in(SCSMR) & ~3) | 1, SCSMR);
+			sci_out(port, SCSMR, (sci_in(port, SCSMR) & ~3) | 1);
 			t >>= 2;
 		}
-		ctrl_outb(t, SCBRR);
-		ctrl_outw(0xa400, RFCR); /* Refresh counter clear */
-		while (ctrl_inw(RFCR) < WAIT_RFCR_COUNTER)
-			;
+		sci_out(port, SCBRR, t);
+		udelay((1000000+(baud-1)) / baud); /* Wait one bit interval */
 	} else {
 		sci_setsignals (port, 0, -1);
 	}
 }
 
-static void sci_set_termios_cflag(struct sci_port *port)
+static void sci_set_termios_cflag(struct sci_port *port, int cflag, int baud)
 {
-	unsigned short status;
-	unsigned short smr_val;
-#if defined(CONFIG_SH_SCIF_SERIAL)
-	unsigned short fcr_val=6; /* TFRST=1, RFRST=1 */
-#endif
+	unsigned int status;
+	unsigned int smr_val;
 
 	do
-		status = ctrl_in(SC_SR);
-	while (!(status & SCI_TEND));
+		status = sci_in(port, SCxSR);
+	while (!(status & SCxSR_TEND(port)));
 
-	port->old_cflag = port->gs.tty->termios->c_cflag;
+	sci_out(port, SCSCR, 0x00);	/* TE=0, RE=0, CKE1=0 */
 
-	ctrl_out(0x00, SCSCR);	/* TE=0, RE=0, CKE1=0 */
-#if defined(CONFIG_SH_SCIF_SERIAL)
-	ctrl_out(fcr_val, SCFCR);
-	fcr_val = 0;
-#endif
+	if (port->type == PORT_SCIF) {
+		sci_out(port, SCFCR, SCFCR_RFRST | SCFCR_TFRST);
+	}
 
-	smr_val = ctrl_in(SCSMR) & 3;
-	if ((port->gs.tty->termios->c_cflag & CSIZE) == CS7)
+	smr_val = sci_in(port, SCSMR) & 3;
+	if ((cflag & CSIZE) == CS7)
 		smr_val |= 0x40;
-	if (C_PARENB(port->gs.tty))
+	if (cflag & PARENB)
 		smr_val |= 0x20;
-	if (C_PARODD(port->gs.tty))
+	if (cflag & PARODD)
 		smr_val |= 0x10;
-	if (C_CSTOPB(port->gs.tty))
+	if (cflag & CSTOPB)
 		smr_val |= 0x08;
-	ctrl_out(smr_val, SCSMR);
+	sci_out(port, SCSMR, smr_val);
 
-#if defined(CONFIG_SH_SCIF_SERIAL)
-#if defined(__sh3__)
-	{ /* For SH7709, SH7709A, SH7729 */
-		unsigned short data;
+	port->init_pins(port, cflag);
 
-		/* We need to set SCPCR to enable RTS/CTS */
-		data = ctrl_inw(SCPCR);
-		/* Clear out SCP7MD1,0, SCP6MD1,0, SCP4MD1,0*/
-		ctrl_outw(data&0x0fcf, SCPCR); 
-	}
-#endif
-	if (C_CRTSCTS(port->gs.tty))
-		fcr_val |= 0x08;
-	else {
-#if defined(__sh3__)
-		unsigned short data;
-
-		/* We need to set SCPCR to enable RTS/CTS */
-		data = ctrl_inw(SCPCR);
-		/* Clear out SCP7MD1,0, SCP4MD1,0,
-		   Set SCP6MD1,0 = {01} (output)  */
-		ctrl_outw((data&0x0fcf)|0x1000, SCPCR);
-
-		data = ctrl_inb(SCPDR);
-		/* Set /RTS2 (bit6) = 0 */
-		ctrl_outb(data&0xbf, SCPDR);
-#elif defined(__SH4__)
-		ctrl_outw(0x0080, SCSPTR); /* Set RTS = 1 */
-#endif
-	}
-	ctrl_out(fcr_val, SCFCR);
-#endif
-
-	sci_set_baud(port);
-	ctrl_out(SCSCR_INIT, SCSCR);	/* TIE=0,RIE=0,TE=1,RE=1 */
-	sci_enable_rx_interrupts(port);
+	sci_set_baud(port, baud);
+	sci_out(port, SCSCR, SCSCR_INIT(port));
 }
 
 static int sci_set_real_termios(void *ptr)
 {
 	struct sci_port *port = ptr;
 
-	if (port->old_cflag != port->gs.tty->termios->c_cflag)
-		sci_set_termios_cflag(port);
+	if (port->old_cflag != port->gs.tty->termios->c_cflag) {
+		port->old_cflag = port->gs.tty->termios->c_cflag;
+		sci_set_termios_cflag(port, port->old_cflag, port->gs.baud);
+		sci_enable_rx_interrupts(port);
+	}
 
 	/* Tell line discipline whether we will do input cooking */
 	if (I_OTHER(port->gs.tty))
@@ -265,27 +298,27 @@ static void sci_transmit_chars(struct sci_port *port)
 	unsigned short ctrl;
 	unsigned char c;
 
-	status = ctrl_in(SC_SR);
-	if (!(status & SCI_TD_E)) {
+	status = sci_in(port, SCxSR);
+	if (!(status & SCxSR_TDxE(port))) {
 		save_and_cli(flags);
-		ctrl = ctrl_in(SCSCR);
+		ctrl = sci_in(port, SCSCR);
 		if (port->gs.xmit_cnt == 0) {
 			ctrl &= ~SCI_CTRL_FLAGS_TIE;
 			port->gs.flags &= ~GS_TX_INTEN;
 		} else
 			ctrl |= SCI_CTRL_FLAGS_TIE;
-		ctrl_out(ctrl, SCSCR);
+		sci_out(port, SCSCR, ctrl);
 		restore_flags(flags);
 		return;
 	}
 
 	while (1) {
 		count = port->gs.xmit_cnt;
-#if defined(CONFIG_SH_SCIF_SERIAL)
-		txroom = 16 - (ctrl_inw(SCFDR)>>8);
-#else
-		txroom = (ctrl_in(SC_SR)&SCI_TD_E)?1:0;
-#endif
+		if (port->type == PORT_SCIF) {
+			txroom = 16 - (sci_in(port, SCFDR)>>8);
+		} else {
+			txroom = (sci_in(port, SCxSR) & SCI_TDRE)?1:0;
+		}
 		if (count > txroom)
 			count = txroom;
 
@@ -299,9 +332,9 @@ static void sci_transmit_chars(struct sci_port *port)
 
 		for (i=0; i<count; i++) {
 			c = port->gs.xmit_buf[port->gs.xmit_tail + i];
-			ctrl_outb(c, SC_TDR);
+			sci_out(port, SCxTDR, c);
 		}
-		ctrl_out(SCI_TD_E_CLEAR, SC_SR);
+		sci_out(port, SCxSR, SCxSR_TDxE_CLEAR(port));
 
 		/* Update the kernel buffer end */
 		port->gs.xmit_tail = (port->gs.xmit_tail + count) & (SERIAL_XMIT_SIZE-1);
@@ -319,18 +352,18 @@ static void sci_transmit_chars(struct sci_port *port)
 	}
 
 	save_and_cli(flags);
-	ctrl = ctrl_in(SCSCR);
+	ctrl = sci_in(port, SCSCR);
 	if (port->gs.xmit_cnt == 0) {
 		ctrl &= ~SCI_CTRL_FLAGS_TIE;
 		port->gs.flags &= ~GS_TX_INTEN;
 	} else {
-#if defined(CONFIG_SH_SCIF_SERIAL)
-		ctrl_in(SC_SR); /* Dummy read */
-		ctrl_out(SCI_TD_E_CLEAR, SC_SR);
-#endif
+		if (port->type == PORT_SCIF) {
+			sci_in(port, SCxSR); /* Dummy read */
+			sci_out(port, SCxSR, SCIF_TDFE);
+		}
 		ctrl |= SCI_CTRL_FLAGS_TIE;
 	}
-	ctrl_out(ctrl, SCSCR);
+	sci_out(port, SCSCR, ctrl);
 	restore_flags(flags);
 }
 
@@ -341,17 +374,17 @@ static inline void sci_receive_chars(struct sci_port *port)
 	int copied=0;
 	unsigned short status;
 
-	status = ctrl_in(SC_SR);
-	if (!(status & SCI_RD_F))
+	status = sci_in(port, SCxSR);
+	if (!(status & SCxSR_RDxF(port)))
 		return;
 
 	tty = port->gs.tty;
 	while (1) {
-#if defined(CONFIG_SH_SCIF_SERIAL)
-		count = ctrl_inw(SCFDR)&0x001f;
-#else
-		count = (ctrl_in(SC_SR)&SCI_RD_F)?1:0;
-#endif
+		if (port->type == PORT_SCIF) {
+			count = sci_in(port, SCFDR)&0x001f;
+		} else {
+			count = (sci_in(port, SCxSR)&SCxSR_RDxF(port))?1:0;
+		}
 
 		/* Don't copy more bytes than there is room for in the buffer */
 		if (tty->flip.count + count > TTY_FLIPBUF_SIZE)
@@ -362,9 +395,9 @@ static inline void sci_receive_chars(struct sci_port *port)
 			break;
 
 		for (i=0; i<count; i++)
-			tty->flip.char_buf_ptr[i] = ctrl_inb(SC_RDR);
-		ctrl_in(SC_SR); /* dummy read */
-		ctrl_out(SCI_RDRF_CLEAR, SC_SR);
+			tty->flip.char_buf_ptr[i] = sci_in(port, SCxRDR);
+		sci_in(port, SCxSR); /* dummy read */
+		sci_out(port, SCxSR, SCxSR_RDxF_CLEAR(port));
 
 		memset(tty->flip.flag_buf_ptr, TTY_NORMAL, count);
 
@@ -384,16 +417,13 @@ static inline void sci_receive_chars(struct sci_port *port)
 static void sci_rx_interrupt(int irq, void *ptr, struct pt_regs *regs)
 {
 	struct sci_port *port = ptr;
-	unsigned long flags;
 
 	if (port->gs.flags & GS_ACTIVE)
 		if (!(port->gs.flags & SCI_RX_THROTTLE)) {
 			sci_receive_chars(port);
 			return;
 		}
-	save_and_cli(flags);
-	ctrl_out(ctrl_in(SCSCR) & ~SCI_CTRL_FLAGS_RIE, SCSCR);
-	restore_flags(flags);
+	sci_disable_rx_interrupts(port);
 }
 
 static void sci_tx_interrupt(int irq, void *ptr, struct pt_regs *regs)
@@ -403,19 +433,17 @@ static void sci_tx_interrupt(int irq, void *ptr, struct pt_regs *regs)
 	if (port->gs.flags & GS_ACTIVE)
 		sci_transmit_chars(port);
 	else {
-		unsigned long flags;
-
-		save_and_cli(flags);
-		ctrl_out(ctrl_in(SCSCR) & ~SCI_CTRL_FLAGS_TIE, SCSCR);
-		restore_flags(flags);
+		sci_disable_tx_interrupts(port);
 	}
 }
 
 static void sci_er_interrupt(int irq, void *ptr, struct pt_regs *regs)
 {
+	struct sci_port *port = ptr;
+
 	/* Handle errors */
-	if (ctrl_in(SC_SR) & SCI_ERRORS)
-		ctrl_out(SCI_ERROR_CLEAR, SC_SR);
+	if (sci_in(port, SCxSR) & SCxSR_ERRORS(port))
+		sci_out(port, SCxSR, SCxSR_ERROR_CLEAR(port));
 
 	/* Kick the transmission */
 	sci_tx_interrupt(irq, ptr, regs);
@@ -428,14 +456,15 @@ static void sci_er_interrupt(int irq, void *ptr, struct pt_regs *regs)
 
 static void sci_disable_tx_interrupts(void *ptr)
 {
+	struct sci_port *port = ptr;
 	unsigned long flags;
 	unsigned short ctrl;
 
 	/* Clear TIE (Transmit Interrupt Enable) bit in SCSCR */
 	save_and_cli(flags);
-	ctrl = ctrl_in(SCSCR);
+	ctrl = sci_in(port, SCSCR);
 	ctrl &= ~SCI_CTRL_FLAGS_TIE;
-	ctrl_out(ctrl, SCSCR);
+	sci_out(port, SCSCR, ctrl);
 	restore_flags(flags);
 }
 
@@ -443,34 +472,36 @@ static void sci_enable_tx_interrupts(void *ptr)
 {
 	struct sci_port *port = ptr; 
 
-	disable_irq(SCI_TXI_IRQ);
+	disable_irq(port->irqs[SCIx_TXI_IRQ]);
 	sci_transmit_chars(port);
-	enable_irq(SCI_TXI_IRQ);
+	enable_irq(port->irqs[SCIx_TXI_IRQ]);
 }
 
 static void sci_disable_rx_interrupts(void * ptr)
 {
+	struct sci_port *port = ptr;
 	unsigned long flags;
 	unsigned short ctrl;
 
 	/* Clear RIE (Receive Interrupt Enable) bit in SCSCR */
 	save_and_cli(flags);
-	ctrl = ctrl_in(SCSCR);
+	ctrl = sci_in(port, SCSCR);
 	ctrl &= ~SCI_CTRL_FLAGS_RIE;
-	ctrl_out(ctrl, SCSCR);
+	sci_out(port, SCSCR, ctrl);
 	restore_flags(flags);
 }
 
 static void sci_enable_rx_interrupts(void * ptr)
 {
+	struct sci_port *port = ptr;
 	unsigned long flags;
 	unsigned short ctrl;
 
 	/* Set RIE (Receive Interrupt Enable) bit in SCSCR */
 	save_and_cli(flags);
-	ctrl = ctrl_in(SCSCR);
+	ctrl = sci_in(port, SCSCR);
 	ctrl |= SCI_CTRL_FLAGS_RIE;
-	ctrl_out(ctrl, SCSCR);
+	sci_out(port, SCSCR, ctrl);
 	restore_flags(flags);
 }
 
@@ -482,11 +513,13 @@ static int sci_get_CD(void * ptr)
 
 static int sci_chars_in_buffer(void * ptr)
 {
-#if defined(CONFIG_SH_SCIF_SERIAL)
-	return (ctrl_inw(SCFDR) >> 8) + ((ctrl_in(SC_SR) & SCI_TEND)? 0: 1);
-#else
-	return (ctrl_in(SC_SR) & SCI_TEND)? 0: 1;
-#endif
+	struct sci_port *port = ptr;
+
+	if (port->type == PORT_SCIF) {
+		return (sci_in(port, SCFDR) >> 8) + ((sci_in(port, SCxSR) & SCxSR_TEND(port))? 0: 1);
+	} else {
+		return (sci_in(port, SCxSR) & SCxSR_TEND(port))? 0: 1;
+	}
 }
 
 static void sci_shutdown_port(void * ptr)
@@ -550,6 +583,15 @@ static int sci_open(struct tty_struct * tty, struct file * filp)
 			*tty->termios = port->gs.callout_termios;
 		sci_set_real_termios(port);
 	}
+
+#ifdef CONFIG_SERIAL_CONSOLE
+	if (sercons.cflag && sercons.index == line) {
+		tty->termios->c_cflag = sercons.cflag;
+		port->gs.baud = sercons_baud;
+		sercons.cflag = 0;
+		sci_set_real_termios(port);
+	}
+#endif
 
 	sci_enable_rx_interrupts(port);
 
@@ -665,6 +707,25 @@ static void sci_unthrottle(struct tty_struct * tty)
 	return;
 }
 
+#ifdef CONFIG_PROC_FS
+static int sci_read_proc(char *page, char **start, off_t off, int count,
+			 int *eof, void *data)
+{
+	int i;
+	struct sci_port *port;
+	int len = 0;
+	
+        len += sprintf(page, "serinfo:1.0\n");
+	for (i = 0; i < SCI_NPORTS && len < 4000; i++) {
+		port = &sci_ports[i];
+		len += sprintf(page+len, "%d: uart:%s address: %08x\n", i,
+			       (port->type == PORT_SCI) ? "SCI" : "SCIF",
+			       port->base);
+	}
+	return len;
+}
+#endif
+
 /* ********************************************************************** *
  *                    Here are the initialization routines.               *
  * ********************************************************************** */
@@ -678,20 +739,19 @@ static int sci_init_drivers(void)
 	sci_driver.magic = TTY_DRIVER_MAGIC;
 	sci_driver.driver_name = "serial";
 	sci_driver.name = "ttyS";
-	sci_driver.major = TTY_MAJOR;
+	sci_driver.major = SCI_MAJOR;
 	sci_driver.minor_start = SCI_MINOR_START;
-	sci_driver.num = 1;
+	sci_driver.num = SCI_NPORTS;
 	sci_driver.type = TTY_DRIVER_TYPE_SERIAL;
 	sci_driver.subtype = SERIAL_TYPE_NORMAL;
 	sci_driver.init_termios = tty_std_termios;
 	sci_driver.init_termios.c_cflag =
-		B115200 | CS8 | CREAD | HUPCL | CLOCAL | CRTSCTS;
+		B9600 | CS8 | CREAD | HUPCL | CLOCAL | CRTSCTS;
 	sci_driver.flags = TTY_DRIVER_REAL_RAW;
 	sci_driver.refcount = &sci_refcount;
 	sci_driver.table = sci_table;
-	sci_driver.termios = &sci_termios[0];
-	sci_driver.termios_locked = &sci_termios[1];
-	sci_termios[0] = sci_termios[1] = NULL;
+	sci_driver.termios = sci_termios;
+	sci_driver.termios_locked = sci_termios_locked;
 
 	sci_driver.open	= sci_open;
 	sci_driver.close = gs_close;
@@ -708,11 +768,15 @@ static int sci_init_drivers(void)
 	sci_driver.stop = gs_stop;
 	sci_driver.start = gs_start;
 	sci_driver.hangup = gs_hangup;
+#ifdef CONFIG_PROC_FS
+	sci_driver.read_proc = sci_read_proc;
+#endif
 
 	sci_callout_driver = sci_driver;
-	sci_callout_driver.name = "cua";
-	sci_callout_driver.major = TTYAUX_MAJOR;
+	sci_callout_driver.name = "cusc";
+	sci_callout_driver.major = SCI_MAJOR + 1;
 	sci_callout_driver.subtype = SERIAL_TYPE_CALLOUT;
+	sci_callout_driver.read_proc = NULL;
 
 	if ((error = tty_register_driver(&sci_driver))) {
 		printk(KERN_ERR "sci: Couldn't register SCI driver, error = %d\n",
@@ -726,16 +790,17 @@ static int sci_init_drivers(void)
 		return 1;
 	}
 
-	port = &sci_ports[0];
-	port->gs.callout_termios = tty_std_termios;
-	port->gs.normal_termios	= tty_std_termios;
-	port->gs.magic = SCI_MAGIC;
-	port->gs.close_delay = HZ/2;
-	port->gs.closing_wait = 30 * HZ;
-	port->gs.rd = &sci_real_driver;
-	init_waitqueue_head(&port->gs.open_wait);
-	init_waitqueue_head(&port->gs.close_wait);
-	port->old_cflag = 0;
+	for (port = &sci_ports[0]; port < &sci_ports[SCI_NPORTS]; port++) {
+		port->gs.callout_termios = sci_callout_driver.init_termios;
+		port->gs.normal_termios	= sci_driver.init_termios;
+		port->gs.magic = SCI_MAGIC;
+		port->gs.close_delay = HZ/2;
+		port->gs.closing_wait = 30 * HZ;
+		port->gs.rd = &sci_real_driver;
+		init_waitqueue_head(&port->gs.open_wait);
+		init_waitqueue_head(&port->gs.close_wait);
+		port->old_cflag = 0;
+	}
 
 	return 0;
 }
@@ -744,26 +809,20 @@ int __init sci_init(void)
 {
 	struct sci_port *port;
 	int i;
+	void (*handlers[3])(int irq, void *ptr, struct pt_regs *regs) = {
+		sci_er_interrupt, sci_rx_interrupt, sci_tx_interrupt
+	};
 
-	for (i=SCI_ERI_IRQ; i<SCI_IRQ_END; i++)
-		set_ipr_data(i, SCI_IPR_ADDR, SCI_IPR_POS, SCI_PRIORITY);
+	for (port = &sci_ports[0]; port < &sci_ports[SCI_NPORTS]; port++) {
+		for (i=0; i<3; i++) {
+			set_ipr_data(port->irqs[i], port->intc_addr, port->intc_pos, SCI_PRIORITY);
 
-	port = &sci_ports[0];
-
-	if (request_irq(SCI_ERI_IRQ, sci_er_interrupt, SA_INTERRUPT,
-			"serial", port)) {
-		printk(KERN_ERR "sci: Cannot allocate error irq.\n");
-		return -ENODEV;
-	}
-	if (request_irq(SCI_RXI_IRQ, sci_rx_interrupt, SA_INTERRUPT,
-			"serial", port)) {
-		printk(KERN_ERR "sci: Cannot allocate rx irq.\n");
-		return -ENODEV;
-	}
-	if (request_irq(SCI_TXI_IRQ, sci_tx_interrupt, SA_INTERRUPT,
-			"serial", port)) {
-		printk(KERN_ERR "sci: Cannot allocate tx irq.\n");
-		return -ENODEV;
+			if (request_irq(port->irqs[i], handlers[i], SA_INTERRUPT,
+					"serial", port)) {
+				printk(KERN_ERR "sci: Cannot allocate irq.\n");
+				return -ENODEV;
+			}
+		}
 	}
 	/* XXX: How about BRI interrupt?? */
 
@@ -802,120 +861,20 @@ void cleanup_module(void)
  * ------------------------------------------------------------
  */
 
-static inline void put_char(char c)
-{
-	unsigned long flags;
-	unsigned short status;
-
-	save_and_cli(flags);
-
-	do
-		status = ctrl_in(SC_SR);
-	while (!(status & SCI_TD_E));
-
-	ctrl_outb(c, SC_TDR);
-	ctrl_in(SC_SR);		/* Dummy read */
-	ctrl_out(SCI_TD_E_CLEAR, SC_SR);
-
-	restore_flags(flags);
-}
-
 #ifdef CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
-static int in_gdb = 1;
 
-static inline void handle_error(void)
-{				/* Clear error flags */
-	ctrl_out(SCI_ERROR_CLEAR, SC_SR);
-}
-
-static inline int get_char(void)
-{
-	unsigned long flags;
-	unsigned short status;
-	int c;
-
-	save_and_cli(flags);
-	do {
-		status = ctrl_in(SC_SR);
-		if (status & SCI_ERRORS) {
-			handle_error();
-			continue;
-		}
-	} while (!(status & SCI_RD_F));
-	c = ctrl_inb(SC_RDR);
-	ctrl_in(SC_SR);		/* Dummy read */
-	ctrl_out(SCI_RDRF_CLEAR, SC_SR);
-	restore_flags(flags);
-
-	return c;
-}
-
-/* Taken from sh-stub.c of GDB 4.18 */
-static const char hexchars[] = "0123456789abcdef";
-static char highhex(int  x)
-{
-	return hexchars[(x >> 4) & 0xf];
-}
-
-static char lowhex(int  x)
-{
-	return hexchars[x & 0xf];
-}
-
-static void gdb_detach(void)
+static void __init gdb_detach(void)
 {
 	asm volatile("trapa	#0xff");
 
 	if (in_gdb == 1) {
 		in_gdb = 0;
-		get_char();
-		put_char('\r');
-		put_char('\n');
+		get_char(sercons_port);
+		put_char(sercons_port, '\r');
+		put_char(sercons_port, '\n');
 	}
 }
 #endif
-
-/* send the packet in buffer.  The host get's one chance to read it.
-   This routine does not wait for a positive acknowledge.  */
-
-static void
-put_string(const char *buffer, int count)
-{
-	int i;
-	const unsigned char *p = buffer;
-#ifdef CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
-	int checksum;
-
-if (in_gdb) {
-	/*  $<packet info>#<checksum>. */
-	do {
-		unsigned char c;
-		put_char('$');
-		put_char('O'); /* 'O'utput to console */
-		checksum = 'O';
-
-		for (i=0; i<count; i++) { /* Don't use run length encoding */
-			int h, l;
-
-			c = *p++;
-			h = highhex(c);
-			l = lowhex(c);
-			put_char(h);
-			put_char(l);
-			checksum += h + l;
-		}
-		put_char('#');
-		put_char(highhex(checksum));
-		put_char(lowhex(checksum));
-	} while  (get_char() != '+');
-} else
-#endif
-	for (i=0; i<count; i++) {
-		if (*p == 10)
-			put_char('\r');
-		put_char(*p++);
-	}
-}
 
 /*
  *	Print a string to the serial port trying not to disturb
@@ -924,7 +883,7 @@ if (in_gdb) {
 static void serial_console_write(struct console *co, const char *s,
 				 unsigned count)
 {
-	put_string(s, count);
+	put_string(sercons_port, s, count);
 }
 
 /*
@@ -938,7 +897,7 @@ static int serial_console_wait_key(struct console *co)
 
 static kdev_t serial_console_device(struct console *c)
 {
-	return MKDEV(TTY_MAJOR, SCI_MINOR_START + c->index);
+	return MKDEV(SCI_MAJOR, SCI_MINOR_START + c->index);
 }
 
 /*
@@ -949,11 +908,13 @@ static kdev_t serial_console_device(struct console *c)
  */
 static int __init serial_console_setup(struct console *co, char *options)
 {
-	int	baud = 115200;
+	int	baud = 9600;
 	int	bits = 8;
 	int	parity = 'n';
 	int	cflag = CREAD | HUPCL | CLOCAL;
 	char	*s;
+
+	sercons_port = &sci_ports[co->index];
 
 	if (options) {
 		baud = simple_strtoul(options, NULL, 10);
@@ -983,6 +944,7 @@ static int __init serial_console_setup(struct console *co, char *options)
 		case 9600:
 		default:
 			cflag |= B9600;
+			baud = 9600;
 			break;
 	}
 	switch (bits) {
@@ -1002,14 +964,18 @@ static int __init serial_console_setup(struct console *co, char *options)
 			cflag |= PARENB;
 			break;
 	}
-	co->cflag = cflag;
 
-	/* XXX: set baud, char, and parity here. */
+	co->cflag = cflag;
+	sercons_baud = baud;
+
+	sci_set_termios_cflag(sercons_port, cflag, baud);
+	sercons_port->old_cflag = cflag;
+
 	return 0;
 }
 
 static struct console sercons = {
-	"ttyS",
+	"ttySC",
 	serial_console_write,
 	NULL,
 	serial_console_device,

@@ -14,7 +14,7 @@ CONFIG_EXPERIMENTAL=y
 CONFIG_PPC=y
 CONFIG_6xx=y
 # CONFIG_4xx is not set
-# CONFIG_PPC64 is not set
+# CONFIG_PPC64BRIDGE is not set
 # CONFIG_82xx is not set
 # CONFIG_8xx is not set
 # CONFIG_PMAC is not set
@@ -77,10 +77,6 @@ CONFIG_KERNEL_ELF=y
 #
 # CONFIG_BLK_DEV_HD_ONLY is not set
 # CONFIG_BLK_CPQ_DA is not set
-
-#
-# Additional Block Devices
-#
 # CONFIG_BLK_DEV_LOOP is not set
 # CONFIG_BLK_DEV_NBD is not set
 # CONFIG_BLK_DEV_MD is not set

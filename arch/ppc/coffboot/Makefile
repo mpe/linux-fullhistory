@@ -14,7 +14,7 @@ COFFOBJS = coffcrt0.o start.o coffmain.o misc.o string.o zlib.o image.o
 CHRPOBJS = crt0.o start.o chrpmain.o misc.o string.o zlib.o image.o
 LIBS = $(TOPDIR)/lib/lib.a
 
-ifeq ($(CONFIG_PPC64),y)
+ifeq ($(CONFIG_PPC64BRIDGE),y)
 MSIZE=.64
 else
 MSIZE=
@@ -54,7 +54,7 @@ floppy: zImage
 miboot.image: dummy.o vmlinux.gz
 	$(OBJCOPY) $(OBJCOPY_ARGS) --add-section=image=vmlinux.gz dummy.o $@
 
-miboot.image.initrd: dummy.o vmlinux.gz
+miboot.image.initrd: miboot.image ramdisk.image.gz
 	$(OBJCOPY) $(OBJCOPY_ARGS) --add-section=initrd=ramdisk.image.gz miboot.image $@
 
 coffboot: $(COFFOBJS) no_initrd.o ld.script

@@ -1412,8 +1412,10 @@ ncr_pci_init (Scsi_Host_Template *tpnt, int board, int chip,
 		"	 perhaps you specified an incorrect PCI bus, device, or function.\n", error);
 	return -1;
     }
-    io_port = pdev->resource[0].start;
-    base = pdev->resource[1].start;
+    if (pci_enable_device(pdev))
+	return -1;
+    io_port = pci_resource_start(pdev, 0);
+    base = pci_resource_start(pdev, 1);
     irq = pdev->irq;
 
     /* If any one ever clones the NCR chips, this will have to change */

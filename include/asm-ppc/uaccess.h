@@ -211,16 +211,28 @@ extern int __copy_tofrom_user(void *to, const void *from, unsigned long size);
 extern inline unsigned long
 copy_from_user(void *to, const void *from, unsigned long n)
 {
+	unsigned long over;
+
 	if (access_ok(VERIFY_READ, from, n))
 		return __copy_tofrom_user(to, from, n);
+	if ((unsigned long)from < TASK_SIZE) {
+		over = (unsigned long)from + n - TASK_SIZE;
+		return __copy_tofrom_user(to, from, n - over) + over;
+	}
 	return n;
 }
 
 extern inline unsigned long
 copy_to_user(void *to, const void *from, unsigned long n)
 {
+	unsigned long over;
+
 	if (access_ok(VERIFY_WRITE, to, n))
 		return __copy_tofrom_user(to, from, n);
+	if ((unsigned long)to < TASK_SIZE) {
+		over = (unsigned long)to + n - TASK_SIZE;
+		return __copy_tofrom_user(to, from, n - over) + over;
+	}
 	return n;
 }
 

@@ -152,7 +152,6 @@ static int js_orb_open(struct js_dev *jd)
 {
 	struct js_orb_info *info = jd->port->info;
 	info->used++;
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -167,7 +166,6 @@ static int js_orb_close(struct js_dev *jd)
 		js_unregister_device(jd->port->devs[0]);
 		js_orb_port = js_unregister_port(jd->port);
 	}
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -211,7 +209,7 @@ static int js_orb_ldisc_open(struct tty_struct *tty)
 	info->port = js_orb_port;
 	tty->disc_data = info;
 
-	info->js = js_register_device(js_orb_port, 0, 6, 7, "SpaceOrb 360", js_orb_open, js_orb_close);
+	info->js = js_register_device(js_orb_port, 0, 6, 7, "SpaceOrb 360", THIS_MODULE, js_orb_open, js_orb_close);
 
 	js_orb_init_corr(js_orb_port->corr);
 

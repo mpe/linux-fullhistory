@@ -270,6 +270,7 @@ do {                                                                         \
 extern inline int pte_none(pte_t pte)           { return ((pte_val(pte) & (_PAGE_INVALID | _PAGE_RO)) == _PAGE_INVALID); } 
 extern inline int pte_present(pte_t pte)        { return pte_val(pte) & _PAGE_PRESENT; }
 extern inline void pte_clear(pte_t *ptep)       { pte_val(*ptep) = _PAGE_INVALID; }
+#define PTE_INIT(x) pte_clear(x)
 extern inline int pte_pagenr(pte_t pte)	        { return ((unsigned long)((pte_val(pte) >> PAGE_SHIFT))); }
 
 extern inline int pmd_none(pmd_t pmd)           { return pmd_val(pmd) & _PAGE_TABLE_INV; }

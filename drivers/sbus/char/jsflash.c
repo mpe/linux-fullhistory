@@ -479,7 +479,6 @@ static int jsf_open(struct inode * inode, struct file * filp)
 	if (test_and_set_bit(0, (void *)&jsf0.busy) != 0)
 		return -EBUSY;
 
-	MOD_INC_USE_COUNT;
 	return 0;	/* XXX What security? */
 }
 
@@ -505,9 +504,6 @@ static int jsfd_open(struct inode *inode, struct file *file)
 
 static int jsf_release(struct inode *inode, struct file *file)
 {
-
-	MOD_DEC_USE_COUNT;
-
 	jsf0.busy = 0;
 	return 0;
 }
@@ -537,6 +533,7 @@ static int jsfd_release(struct inode *inode, struct file *file)
 }
 
 static struct file_operations jsf_fops = {
+	owner:		THIS_MODULE,
 	llseek:		jsf_lseek,
 	read:		jsf_read,
 	write:		jsf_write,

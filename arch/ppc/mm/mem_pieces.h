@@ -17,8 +17,7 @@
 #ifndef __MEM_PIECES_H__
 #define	__MEM_PIECES_H__
 
-#include <linux/init.h>
-
+#include <asm/prom.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,13 +33,6 @@ struct mem_pieces {
     struct reg_property regions[MEM_PIECES_MAX];
 };
 
-
-/* Global Variables */
-
-extern char *klimit;
-extern struct mem_pieces phys_avail;
-
-
 /* Function Prototypes */
 
 extern void	*mem_pieces_find(unsigned int size, unsigned int align);
@@ -50,9 +42,6 @@ extern void	 mem_pieces_append(struct mem_pieces *mp, unsigned int start,
 				   unsigned int size);
 extern void	 mem_pieces_coalesce(struct mem_pieces *mp);
 extern void	 mem_pieces_sort(struct mem_pieces *mp);
-
-extern void	 set_phys_avail(struct mem_pieces *mp);
-
 
 #ifdef __cplusplus
 }

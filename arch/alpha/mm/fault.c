@@ -164,11 +164,13 @@ bad_area:
 
 no_context:
 	/* Are we prepared to handle this fault as an exception?  */
-	if ((fixup = search_exception_table(regs->pc)) != 0) {
+	if ((fixup = search_exception_table(regs->pc, regs->gp)) != 0) {
 		unsigned long newpc;
 		newpc = fixup_exception(dpf_reg, fixup, regs->pc);
-		printk("%s: Exception at [<%lx>] (%lx)\n",
+#if 1
+		printk("%s: Exception at [<%lx>] (%lx) handled successfully\n",
 		       current->comm, regs->pc, newpc);
+#endif
 		regs->pc = newpc;
 		return;
 	}

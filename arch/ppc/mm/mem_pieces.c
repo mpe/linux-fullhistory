@@ -18,18 +18,11 @@
 #include <linux/kernel.h>
 #include <linux/stddef.h>
 #include <linux/blk.h>
-
-#include <asm/page.h>
-#include <asm/prom.h>
+#include <linux/init.h>
 
 #include "mem_pieces.h"
 
-extern char _start[], _end[];
-extern char _stext[], etext[];
-
-char *klimit = _end;
-
-struct mem_pieces phys_avail;
+extern struct mem_pieces phys_avail;
 
 static void mem_pieces_print(struct mem_pieces *);
 
@@ -142,7 +135,7 @@ mem_pieces_append(struct mem_pieces *mp, unsigned int start, unsigned int size)
 	rp->address = start;
 	rp->size = size;
 }
-#endif
+#endif /* CONFIG_APUS || CONFIG_ALL_PPC */
 
 void __init
 mem_pieces_sort(struct mem_pieces *mp)
@@ -184,39 +177,4 @@ mem_pieces_coalesce(struct mem_pieces *mp)
 		++d;
 	}
 	mp->n_regions = d;
-}
-
-/*
- * Set phys_avail to phys_mem less the kernel text/data/bss.
- */
-void __init
-set_phys_avail(struct mem_pieces *mp)
-{
-	unsigned long kstart, ksize;
-
-	/*
-	 * Initially, available phyiscal memory is equivalent to all
-	 * physical memory.
-	 */
-
-	phys_avail = *mp;
-
-	/*
-	 * Map out the kernel text/data/bss from the available physical
-	 * memory.
-	 */
-
-	kstart = __pa(_stext);	/* should be 0 */
-	ksize = PAGE_ALIGN(klimit - _stext);
-
-	mem_pieces_remove(&phys_avail, kstart, ksize, 0);
-	mem_pieces_remove(&phys_avail, 0, 0x4000, 0);
-
-#if defined(CONFIG_BLK_DEV_INITRD)
-	/* Remove the init RAM disk from the available memory. */
-	if (initrd_start) {
-		mem_pieces_remove(&phys_avail, __pa(initrd_start),
-				  initrd_end - initrd_start, 1);
-	}
-#endif /* CONFIG_BLK_DEV_INITRD */
 }

@@ -8,11 +8,11 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := kernel.o
-O_OBJS    = sched.o dma.o fork.o exec_domain.o panic.o printk.o sys.o \
+O_OBJS    = sched.o dma.o fork.o exec_domain.o panic.o printk.o \
 	    module.o exit.o itimer.o info.o time.o softirq.o resource.o \
 	    sysctl.o acct.o capability.o ptrace.o timer.o
 
-OX_OBJS  += signal.o
+OX_OBJS  += signal.o sys.o
 
 ifeq ($(CONFIG_UID16),y)
 O_OBJS += uid16.o

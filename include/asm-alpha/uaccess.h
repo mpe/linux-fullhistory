@@ -530,7 +530,7 @@ struct exception_table_entry
 };
 
 /* Returns 0 if exception not found and fixup.unit otherwise.  */
-extern unsigned search_exception_table(unsigned long);
+extern unsigned search_exception_table(unsigned long, unsigned long);
 
 /* Returns the new pc */
 #define fixup_exception(map_reg, fixup_unit, pc)		\

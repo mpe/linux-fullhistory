@@ -28,14 +28,14 @@ ISZ = 0
 TFTPIMAGE=/tftpboot/zImage.embedded
 
 ifdef CONFIG_8xx
-ZLINKFLAGS = -T vmlinux.lds -Ttext 0x00180000
-OBJECTS := head.o misc.o ../coffboot/zlib.o m8xx_tty.o gzimage.o rdimage.o
+ZLINKFLAGS = -T ../vmlinux.lds -Ttext 0x00180000
+OBJECTS := head.o misc.o ../coffboot/zlib.o m8xx_tty.o
 CFLAGS = $(CPPFLAGS) -O2 -DSTDC_HEADERS -fno-builtin -DCONFIG_8xx
 endif
 
 ifdef CONFIG_8260
-ZLINKFLAGS = -T vmlinux.lds -Ttext 0x00400000
-OBJECTS := head_8260.o misc.o ../coffboot/zlib.o m8260_tty.o embed_config.o gzimage.o rdimage.o
+ZLINKFLAGS = -T ../vmlinux.lds -Ttext 0x00400000
+OBJECTS := head_8260.o misc.o ../coffboot/zlib.o m8260_tty.o embed_config.o
 CFLAGS = $(CPPFLAGS) -O2 -DSTDC_HEADERS -fno-builtin -DCONFIG_8260
 endif
 
@@ -61,32 +61,21 @@ endif
 all:	zImage
 
 zvmlinux.initrd: zvmlinux
-#
-# Build the boot loader images 
-#
-	$(OBJCOPY) $(OBJCOPY_ARGS) -R .gzimage gzimage.o
+	$(LD) $(ZLINKFLAGS) -o zvmlinux.initrd.tmp1 $(OBJECTS)
 	$(OBJCOPY) $(OBJCOPY_ARGS) -R .comment \
-		--add-section=.gzimage=../coffboot/vmlinux.gz \
-		--set-section-flags=.gzimage=alloc,load,readonly,data \
-		gzimage.o
-	$(OBJCOPY) $(OBJCOPY_ARGS) -R .rdimage rdimage.o
-	$(OBJCOPY) $(OBJCOPY_ARGS) -R .comment \
-		--add-section=.rdimage=ramdisk.image.gz \
-		--set-section-flags=.rdimage=alloc,load,readonly,data \
-		rdimage.o
-	$(LD) $(ZLINKFLAGS) -o $@ $(OBJECTS)
-#
-# Compute the sizes/offsets for the final image, and rebuild with these values.
-#
-	$(CC) $(CFLAGS) \
-		-DINITRD_OFFSET=`sh offset $(OBJDUMP) zvmlinux.initrd .rdimage` \
-		-DINITRD_SIZE=`sh size $(OBJDUMP) zvmlinux.initrd .rdimage` \
-		-DZIMAGE_OFFSET=`sh offset $(OBJDUMP) zvmlinux.initrd .gzimage` \
-		-DZIMAGE_SIZE=`sh size $(OBJDUMP) zvmlinux.initrd .gzimage` \
+		--add-section=initrd=ramdisk.image.gz \
+		--add-section=image=../coffboot/vmlinux.gz \
+		zvmlinux.initrd.tmp1 zvmlinux.initrd1
+	$(CC) $(CFLAGS) -DINITRD_OFFSET=`sh offset $(OBJDUMP) zvmlinux.initrd1 initrd` \
+		-DINITRD_SIZE=`sh size $(OBJDUMP) zvmlinux.initrd1 initrd` \
+		-DZIMAGE_OFFSET=`sh offset $(OBJDUMP) zvmlinux.initrd1 image` \
+		-DZIMAGE_SIZE=`sh size $(OBJDUMP) zvmlinux.initrd1 image` \
 		-c -o misc.o misc.c
-	$(LD) $(ZLINKFLAGS) -o $@ $(OBJECTS)
-	$(OBJCOPY) $(OBJCOPY_ARGS) -R .comment $@
-	$(OBJDUMP) -h $@
+	$(LD) $(ZLINKFLAGS) -o zvmlinux.initrd.tmp $(OBJECTS)
+	$(OBJCOPY) $(OBJCOPY_ARGS) -R .comment \
+		--add-section=initrd=ramdisk.image.gz \
+		--add-section=image=../coffboot/vmlinux.gz \
+		zvmlinux.initrd.tmp $@
 
 zImage: zvmlinux
 	ln -sf zvmlinux zImage
@@ -96,27 +85,23 @@ zImage.initrd: zvmlinux.initrd
 
 zvmlinux: $(OBJECTS) ../coffboot/vmlinux.gz
 #
-# Build the boot loader images 
+# build the boot loader image and then compute the offset into it
+# for the kernel image
 #
+	$(LD) $(ZLINKFLAGS) -o zvmlinux.tmp $(OBJECTS)
+	$(OBJCOPY) $(OBJCOPY_ARGS) -R .comment --add-section=image=../coffboot/vmlinux.gz \
+		zvmlinux.tmp $@
 #
-	$(OBJCOPY) $(OBJCOPY_ARGS) -R .gzimage gzimage.o
-	$(OBJCOPY) $(OBJCOPY_ARGS) -R .comment \
-		--add-section=.gzimage=../coffboot/vmlinux.gz \
-		--set-section-flags=.gzimage=alloc,load,readonly,data \
-		gzimage.o
-	$(LD) $(ZLINKFLAGS) -o $@ $(OBJECTS)
+# then with the offset rebuild the bootloader so we know where the kernel is
 #
-# Compute the sizes/offsets for the final image, and rebuild with these values.
-#
-	$(CC) $(CFLAGS) \
-		-DINITRD_OFFSET=0 \
-		-DINITRD_SIZE=0 \
-		-DZIMAGE_OFFSET=`sh offset $(OBJDUMP) zvmlinux .gzimage` \
-		-DZIMAGE_SIZE=`sh size $(OBJDUMP) zvmlinux .gzimage` \
+	$(CC) $(CFLAGS) -DINITRD_OFFSET=0 -DINITRD_SIZE=0 \
+		-DZIMAGE_OFFSET=`sh offset $(OBJDUMP) zvmlinux image` \
+		-DZIMAGE_SIZE=`sh size $(OBJDUMP) zvmlinux image` \
 		-c -o misc.o misc.c
-	$(LD) $(ZLINKFLAGS) -o $@ $(OBJECTS)
-	$(OBJCOPY) $(OBJCOPY_ARGS) -R .comment $@
-	$(OBJDUMP) -h $@
+	$(LD) $(ZLINKFLAGS) -o zvmlinux.tmp $(OBJECTS)
+	$(OBJCOPY) $(OBJCOPY_ARGS) -R .comment --add-section=image=../coffboot/vmlinux.gz \
+		zvmlinux.tmp $@
+	rm zvmlinux.tmp
 
 znetboot : zImage
 	cp zImage $(TFTPIMAGE)

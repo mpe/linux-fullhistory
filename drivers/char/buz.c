@@ -48,6 +48,7 @@
 #include <linux/types.h>
 #include <linux/wrapper.h>
 #include <linux/spinlock.h>
+#include <linux/vmalloc.h>
 
 #include <linux/videodev.h>
 

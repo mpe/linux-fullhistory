@@ -93,37 +93,30 @@ ENTRY(cpu_arm7_flush_tlb_page)
  * Purpose : obtain information about current aborted instruction
  *
  * Returns : r0 = address of abort
- *	   : r1 = FSR
- *	   : r2 != 0 if writing
+ *	   : r1 != 0 if writing
+ *	   : r3 = FSR
  *	   : sp = pointer to registers
  */
 
-Lukabttxt:	.ascii	"Unknown data abort code %d [pc=%p, *pc=%p] LR=%p\0"
-		.align
-
-msg:		.ascii	"DA*%p=%p\n\0"
-		.align
-
 ENTRY(cpu_arm6_data_abort)
 		ldr	r4, [r0]			@ read instruction causing problem
-		mov	r2, r4, lsr #19			@ r2 b1 = L
-		and	r1, r4, #14 << 24
-		and	r2, r2, #2			@ check read/write bit
-		teq	r1, #4 << 23
+		mov	r1, r4, lsr #19			@ r1 b1 = L
+		and	r2, r4, #14 << 24
+		and	r1, r1, #2			@ check read/write bit
+		teq	r2, #8 << 24			@ was it ldm/stm
 		bne	Ldata_simple
-
 
 Ldata_ldmstm:	tst	r4, #1 << 21			@ check writeback bit
 		beq	Ldata_simple
 		mov	r7, #0x11
 		orr	r7, r7, r7, lsl #8
 		and	r0, r4, r7
-		and	r1, r4, r7, lsl #1
-		add	r0, r0, r1, lsr #1
-		and	r1, r4, r7, lsl #2
-		add	r0, r0, r1, lsr #2
-		and	r1, r4, r7, lsl #3
-		add	r0, r0, r1, lsr #3
+		and	r2, r4, r7, lsl #1
+		add	r0, r0, r2, lsr #1
+		and	r2, r4, r7, lsl #2
+		add	r0, r0, r2, lsr #2
+		and	r2, r4, r7, lsl #3
+		add	r0, r0, r2, lsr #3
 		add	r0, r0, r0, lsr #8
 		add	r0, r0, r0, lsr #4
 		and	r7, r0, #15			@ r7 = no. of registers to transfer.
@@ -134,16 +127,16 @@ Ldata_ldmstm:	tst	r4, #1 << 21			@ check writeback bit
 		addeq	r7, r0, r7, lsl #2		@ Do correction (signed)
 Ldata_saver7:	str	r7, [sp, r5, lsr #14]		@ Put register
 Ldata_simple:	mrc	p15, 0, r0, c6, c0, 0		@ get FAR
-		mrc	p15, 0, r1, c5, c0, 0		@ get FSR
-		and	r1, r1, #255
+		mrc	p15, 0, r3, c5, c0, 0		@ get FSR
+		and	r3, r3, #255
 		mov	pc, lr
 
 ENTRY(cpu_arm7_data_abort)
 		ldr	r4, [r0]			@ read instruction causing problem
-		mov	r2, r4, lsr #19			@ r2 b1 = L
-		and	r1, r4, #15 << 24
-		and	r2, r2, #2			@ check read/write bit
-		add	pc, pc, r1, lsr #22		@ Now branch to the relevent processing routine
+		mov	r1, r4, lsr #19			@ r1 b1 = L
+		and	r2, r4, #15 << 24
+		and	r1, r1, #2			@ check read/write bit
+		add	pc, pc, r2, lsr #22		@ Now branch to the relevent processing routine
 		movs	pc, lr
 
 		b	Ldata_unknown
@@ -162,7 +155,7 @@ ENTRY(cpu_arm7_data_abort)
 		b	Ldata_simple			@ ldc	rd, [rn, #m]
 		b	Ldata_unknown
 Ldata_unknown:	@ Part of jumptable
-		mov	r0, r1
+		mov	r0, r2
 		mov	r1, r4
 		mov	r2, r3
 		b	baddataabort
@@ -172,13 +165,13 @@ Ldata_lateldrpreconst:
 		tst	r4, #1 << 21			@ check writeback bit
 		beq	Ldata_simple
 Ldata_lateldrpostconst:
-		movs	r1, r4, lsl #20			@ Get offset
+		movs	r2, r4, lsl #20			@ Get offset
 		beq	Ldata_simple
 		and	r5, r4, #15 << 16		@ Get Rn
 		ldr	r0, [sp, r5, lsr #14]
 		tst	r4, #1 << 23			@ U bit
-		subne	r7, r0, r1, lsr #20
-		addeq	r7, r0, r1, lsr #20
+		subne	r7, r0, r2, lsr #20
+		addeq	r7, r0, r2, lsr #20
 		b	Ldata_saver7
 
 Ldata_lateldrprereg:
@@ -186,7 +179,7 @@ Ldata_lateldrprereg:
 		beq	Ldata_simple
 Ldata_lateldrpostreg:
 		and	r5, r4, #15
-		ldr	r1, [sp, r5, lsl #2]		@ Get Rm
+		ldr	r2, [sp, r5, lsl #2]		@ Get Rm
 		mov	r3, r4, lsr #7
 		ands	r3, r3, #31
 		and	r6, r4, #0x70
@@ -194,7 +187,7 @@ Ldata_lateldrpostreg:
 		add	pc, pc, r6
 		mov	r0, r0
 
-		mov	r1, r1, lsl r3			@ 0: LSL #!0
+		mov	r2, r2, lsl r3			@ 0: LSL #!0
 		b	1f
 		b	1f				@ 1: LSL #0
 		mov	r0, r0
@@ -202,25 +195,25 @@ Ldata_lateldrpostreg:
 		mov	r0, r0
 		b	1f				@ 3: MUL?
 		mov	r0, r0
-		mov	r1, r1, lsr r3			@ 4: LSR #!0
+		mov	r2, r2, lsr r3			@ 4: LSR #!0
 		b	1f
-		mov	r1, r1, lsr #32			@ 5: LSR #32
+		mov	r2, r2, lsr #32			@ 5: LSR #32
 		b	1f
 		b	1f				@ 6: MUL?
 		mov	r0, r0
 		b	1f				@ 7: MUL?
 		mov	r0, r0
-		mov	r1, r1, asr r3			@ 8: ASR #!0
+		mov	r2, r2, asr r3			@ 8: ASR #!0
 		b	1f
-		mov	r1, r1, asr #32			@ 9: ASR #32
+		mov	r2, r2, asr #32			@ 9: ASR #32
 		b	1f
 		b	1f				@ A: MUL?
 		mov	r0, r0
 		b	1f				@ B: MUL?
 		mov	r0, r0
-		mov	r1, r1, ror r3			@ C: ROR #!0
+		mov	r2, r2, ror r3			@ C: ROR #!0
 		b	1f
-		mov	r1, r1, rrx			@ D: RRX
+		mov	r2, r2, rrx			@ D: RRX
 		b	1f
 		mov	r0, r0				@ E: MUL?
 		mov	r0, r0
@@ -230,8 +223,8 @@ Ldata_lateldrpostreg:
 1:		and	r5, r4, #15 << 16		@ Get Rn
 		ldr	r0, [sp, r5, lsr #14]
 		tst	r4, #1 << 23			@ U bit
-		subne	r7, r0, r1
-		addeq	r7, r0, r1
+		subne	r7, r0, r2
+		addeq	r7, r0, r2
 		b	Ldata_saver7
 
 /*
@@ -254,7 +247,8 @@ ENTRY(cpu_arm7_proc_init)
 
 ENTRY(cpu_arm6_proc_fin)
 ENTRY(cpu_arm7_proc_fin)
-		msr	cpsr_c, #F_BIT | I_BIT | SVC_MODE
+		mov	r0, #F_BIT | I_BIT | SVC_MODE
+		msr	cpsr_c, r0
 		mov	r0, #0x31			@ ....S..DP...M
 		mcr	p15, 0, r0, c1, c0, 0		@ disable caches
 		mov	pc, lr
@@ -364,7 +358,8 @@ cpu_arm710_name:
 
 		.section ".text.init", #alloc, #execinstr
 
-__arm6_setup:	msr	cpsr_c, #F_BIT | I_BIT | SVC_MODE
+__arm6_setup:	mov	r0, #F_BIT | I_BIT | SVC_MODE
+		msr	cpsr_c, r0
 		mov	r0, #0
 		mcr	p15, 0, r0, c7, c0		@ flush caches on v3
 		mcr	p15, 0, r0, c5, c0		@ flush TLBs on v3
@@ -375,7 +370,8 @@ __arm6_setup:	msr	cpsr_c, #F_BIT | I_BIT | SVC_MODE
 		orr	r0, r0, #0x100
 		mov	pc, lr
 
-__arm7_setup:	msr	cpsr_c, #F_BIT | I_BIT | SVC_MODE
+__arm7_setup:	mov	r0, #F_BIT | I_BIT | SVC_MODE
+		msr	cpsr_c, r0
 		mov	r0, #0
 		mcr	p15, 0, r0, c7, c0		@ flush caches on v3
 		mcr	p15, 0, r0, c5, c0		@ flush TLBs on v3

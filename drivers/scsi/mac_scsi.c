@@ -133,7 +133,7 @@ static volatile unsigned char *mac_scsi_nodrq = NULL;
  *
  */
 
-void mac_scsi_setup(char *str, int *ints) {
+static int __init mac_scsi_setup(char *str, int *ints) {
 #ifdef DRIVER_SETUP
 	/* Format of mac5380 parameter is:
 	 *   mac5380=<can_queue>,<cmd_per_lun>,<sg_tablesize>,<hostid>,<use_tags>
@@ -159,7 +159,7 @@ void mac_scsi_setup(char *str, int *ints) {
 	
 	if (ints[0] < 1) {
 		printk( "mac_scsi_setup: no arguments!\n" );
-		return;
+		return 0;
 	}
 
 	if (ints[0] >= 1) {
@@ -193,6 +193,7 @@ void mac_scsi_setup(char *str, int *ints) {
 	}
 #endif
 #endif
+	return 1; 
 }
 
 __setup("mac5380=", mac_scsi_setup);

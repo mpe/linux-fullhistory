@@ -36,6 +36,7 @@ struct sh_cpuinfo {
 	unsigned long *pgd_quick;
 	unsigned long *pte_quick;
 	unsigned long pgtable_cache_sz;
+	unsigned int cpu_clock, master_clock, bus_clock, module_clock;
 };
 
 extern struct sh_cpuinfo boot_cpu_data;

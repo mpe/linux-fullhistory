@@ -52,6 +52,7 @@ typedef struct {
 	tsunami_64	mpr2;
 	tsunami_64	mpr3;
 	tsunami_64	mctl;
+	tsunami_64	__pad1;
 	tsunami_64	ttr;
 	tsunami_64	tdr;
 	tsunami_64	dim2;

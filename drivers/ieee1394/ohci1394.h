@@ -1,8 +1,29 @@
+/*
+ * ohci1394.h - driver for OHCI 1394 boards
+ * Copyright (C)1999,2000 Sebastien Rougeaux <sebastien.rougeaux@anu.edu.au>
+ *                        Gord Peters <GordPeters@smarttech.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+ */
 
 #ifndef _OHCI1394_H
 #define _OHCI1394_H
 
 #include "ieee1394_types.h"
+/* include this for the video frame grabber */
+/* #include "video1394.h" */
 
 #define OHCI1394_DRIVER_NAME      "ohci1394"
 
@@ -46,11 +67,16 @@
 #define PCI_DEVICE_ID_NEC_UPD72871      0x00ce
 #endif
 
+#ifndef PCI_DEVICE_ID_APPLE_UNI_N_FW
+#define PCI_DEVICE_ID_APPLE_UNI_N_FW	0x0018
+#endif
+
 #define MAX_OHCI1394_CARDS        4
 
 #define OHCI1394_MAX_AT_REQ_RETRIES       0x2
 #define OHCI1394_MAX_AT_RESP_RETRIES      0x2
 #define OHCI1394_MAX_PHYS_RESP_RETRIES    0x8
+#define OHCI1394_MAX_SELF_ID_ERRORS       16
 
 #define AR_REQ_NUM_DESC                   4 /* number of AR req descriptors */
 #define AR_REQ_BUF_SIZE                4096 /* size of AR req buffers */
@@ -116,7 +142,33 @@ struct dma_trm_ctx {
 	int ctrlClear;
 	int ctrlSet;
 	int cmdPtr;
+	wait_queue_head_t waitq;
 };
+
+#ifdef _VIDEO_1394_H
+
+#define OHCI1394_MAJOR 172
+#define ISO_CHANNELS 64
+
+struct dma_fbuf_ctx {
+	void *ohci;
+	int ctx;
+	int channel;
+	int last_buffer;
+	unsigned int num_desc;
+	unsigned int buf_size;
+	unsigned int frame_size;
+	unsigned int nb_cmd;
+	unsigned char *buf;
+        struct dma_cmd **prg;
+	unsigned int *buffer_status;
+	int ctrlClear;
+	int ctrlSet;
+	int cmdPtr;
+	int ctxMatch;
+	wait_queue_head_t waitq;
+};
+#endif
 
 struct ti_ohci {
         int id; /* sequential card number */
@@ -147,6 +199,12 @@ struct ti_ohci {
         spinlock_t IR_channel_lock;
 	int nb_iso_ctx;
 
+#ifdef _VIDEO_1394_H
+	/* frame buffer context */
+	struct dma_fbuf_ctx **fbuf_context;
+	struct dma_fbuf_ctx *current_fbuf_ctx;
+#endif
+
         /* IEEE-1394 part follows */
         struct hpsb_host *host;
 
@@ -154,6 +212,7 @@ struct ti_ohci {
 
         spinlock_t phy_reg_lock;
 
+	int self_id_errors;
         int NumBusResets;
 };
 
@@ -328,8 +387,8 @@ quadlet_t ohci_csr_rom[] = {
 #define OHCI1394_RSPkt                   0x00000020
 #define OHCI1394_isochTx                 0x00000040
 #define OHCI1394_isochRx                 0x00000080
-#define OHCI1394_postedWriteErr          0x00001000
-#define OHCI1394_lockRespErr             0x00002000
+#define OHCI1394_postedWriteErr          0x00000100
+#define OHCI1394_lockRespErr             0x00000200
 #define OHCI1394_selfIDComplete          0x00010000
 #define OHCI1394_busReset                0x00020000
 #define OHCI1394_phy                     0x00080000

@@ -25,15 +25,13 @@ O_OBJS   :=
 OX_OBJS  :=
 
 ifeq ($(CONFIG_IEEE1394),y)
-L_OBJS  += ieee1394.o hosts.o highlevel.o csr.o
-O_TARGET = ieee1394.o
-O_OBJS  += ieee1394_core.o ieee1394_transactions.o
-OX_OBJS += ieee1394_syms.o
+L_OBJS  += ieee1394_core.o ieee1394_transactions.o hosts.o highlevel.o csr.o guid.o
+LX_OBJS += ieee1394_syms.o
 else
   ifeq ($(CONFIG_IEEE1394),m)
   M_OBJS  += ieee1394.o
   O_TARGET = ieee1394.o
-  O_OBJS  += ieee1394_core.o ieee1394_transactions.o hosts.o highlevel.o csr.o
+  O_OBJS  += ieee1394_core.o ieee1394_transactions.o hosts.o highlevel.o csr.o guid.o
   OX_OBJS += ieee1394_syms.o
   endif
 endif

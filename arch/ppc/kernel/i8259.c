@@ -104,11 +104,6 @@ struct hw_interrupt_type i8259_pic = {
         0
 };
 
-static void
-no_action(int cpl, void *dev_id, struct pt_regs *regs)
-{
-}
-
 void __init i8259_init(void)
 {
         /* init master interrupt controller */

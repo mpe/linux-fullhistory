@@ -29,6 +29,9 @@
 #include <asm/bootx.h>
 #include <asm/system.h>
 #include <asm/gemini.h>
+#include <asm/mmu.h>
+#include <asm/pgtable.h>
+#include <asm/bitops.h>
 
 #ifdef CONFIG_FB
 #include <asm/linux_logo.h>
@@ -80,7 +83,8 @@ struct pci_intr_map {
 	unsigned intr;
 };
 
-typedef unsigned long interpret_func(struct device_node *, unsigned long);
+typedef unsigned long interpret_func(struct device_node *, unsigned long,
+				     int, int);
 static interpret_func interpret_pci_props;
 static interpret_func interpret_dbdma_props;
 static interpret_func interpret_isa_props;
@@ -101,7 +105,7 @@ extern char *klimit;
 char *bootpath = 0;
 char *bootdevice = 0;
 
-unsigned int rtas_data = 0;   /* virtual pointer */
+unsigned int rtas_data = 0;   /* physical pointer */
 unsigned int rtas_entry = 0;  /* physical pointer */
 unsigned int rtas_size = 0;
 unsigned int old_rtas = 0;
@@ -145,7 +149,7 @@ static unsigned long copy_device_tree(unsigned long, unsigned long);
 static unsigned long inspect_node(phandle, struct device_node *, unsigned long,
 				  unsigned long, struct device_node ***);
 static unsigned long finish_node(struct device_node *, unsigned long,
-				 interpret_func *);
+				 interpret_func *, int, int);
 static unsigned long finish_node_interrupts(struct device_node *, unsigned long);
 static unsigned long check_display(unsigned long);
 static int prom_next_node(phandle *);
@@ -158,6 +162,7 @@ static void prom_welcome(boot_infos_t* bi, unsigned long phys);
 
 extern void enter_rtas(void *);
 extern unsigned long reloc_offset(void);
+void phys_call_rtas(int, int, int, ...);
 
 extern char cmd_line[512];	/* XXX */
 boot_infos_t *boot_infos = 0;	/* init it so it's in data segment not bss */
@@ -279,7 +284,267 @@ prom_print(const char *msg)
 	}
 }
 
-unsigned long smp_chrp_cpu_nr __initdata = 1;
+void
+prom_print_hex(unsigned int v)
+{
+	char buf[16];
+	int i, c;
+
+	for (i = 0; i < 8; ++i) {
+		c = (v >> ((7-i)*4)) & 0xf;
+		c += (c >= 10)? ('a' - 10): '0';
+		buf[i] = c;
+	}
+	buf[i] = ' ';
+	buf[i+1] = 0;
+	prom_print(buf);
+}
+
+void
+prom_print_nl(void)
+{
+	unsigned long offset = reloc_offset();
+	prom_print(RELOC("\n"));
+}
+
+unsigned long smp_chrp_cpu_nr __initdata = 0;
+
+#ifdef CONFIG_SMP
+/*
+ * With CHRP SMP we need to use the OF to start the other
+ * processors so we can't wait until smp_boot_cpus (the OF is
+ * trashed by then) so we have to put the processors into
+ * a holding pattern controlled by the kernel (not OF) before
+ * we destroy the OF.
+ *
+ * This uses a chunk of high memory, puts some holding pattern
+ * code there and sends the other processors off to there until
+ * smp_boot_cpus tells them to do something.  We do that by using
+ * physical address 0x0.  The holding pattern checks that address
+ * until its cpu # is there, when it is that cpu jumps to
+ * __secondary_start().  smp_boot_cpus() takes care of setting those
+ * values.
+ *
+ * We also use physical address 0x4 here to tell when a cpu
+ * is in its holding pattern code.
+ *
+ * -- Cort
+ */
+static void
+prom_hold_cpus(unsigned long mem)
+{
+	extern void __secondary_hold(void);
+	unsigned long i;
+	int cpu;
+	phandle node;
+	unsigned long offset = reloc_offset();
+	char type[16], *path;
+	unsigned int reg;
+
+	/*
+	 * XXX: hack to make sure we're chrp, assume that if we're
+	 *      chrp we have a device_type property -- Cort
+	 */
+	node = call_prom(RELOC("finddevice"), 1, 1, RELOC("/"));
+	if ( (int)call_prom(RELOC("getprop"), 4, 1, node,
+			    RELOC("device_type"),type, sizeof(type)) <= 0)
+		return;
+
+	/* copy the holding pattern code to someplace safe (0) */
+	/* the holding pattern is now within the first 0x100
+	   bytes of the kernel image -- paulus */
+	memcpy((void *)0, KERNELBASE + offset, 0x100);
+	flush_icache_range(0, 0x100);
+
+	/* look for cpus */
+	*(unsigned long *)(0x0) = 0;
+	asm volatile("dcbf 0,%0": : "r" (0) : "memory");
+	for (node = 0; prom_next_node(&node); ) {
+		type[0] = 0;
+		call_prom(RELOC("getprop"), 4, 1, node, RELOC("device_type"),
+			  type, sizeof(type));
+		if (strcmp(type, RELOC("cpu")) != 0)
+			continue;
+		path = (char *) mem;
+		memset(path, 0, 256);
+		if ((int) call_prom(RELOC("package-to-path"), 3, 1,
+				    node, path, 255) < 0)
+			continue;
+		reg = -1;
+		call_prom(RELOC("getprop"), 4, 1, node, RELOC("reg"),
+			  &reg, sizeof(reg));
+		cpu = RELOC(smp_chrp_cpu_nr)++;
+		RELOC(smp_hw_index)[cpu] = reg;
+		/* XXX: hack - don't start cpu 0, this cpu -- Cort */
+		if (cpu == 0)
+			continue;
+		prom_print(RELOC("starting cpu "));
+		prom_print(path);
+		*(ulong *)(0x4) = 0;
+		call_prom(RELOC("start-cpu"), 3, 0, node,
+			  __pa(__secondary_hold), cpu);
+		prom_print(RELOC("..."));
+		for ( i = 0 ; (i < 10000) && (*(ulong *)(0x4) == 0); i++ )
+			;
+		if (*(ulong *)(0x4) == cpu)
+			prom_print(RELOC("ok\n"));
+		else {
+			prom_print(RELOC("failed: "));
+			prom_print_hex(*(ulong *)0x4);
+			prom_print_nl();
+		}
+	}
+}
+#endif /* CONFIG_SMP */
+
+void
+bootx_init(unsigned long r4, unsigned long phys)
+{
+	boot_infos_t *bi = (boot_infos_t *) r4;
+	unsigned long space;
+	unsigned long ptr, x;
+	char *model;
+	unsigned long offset = reloc_offset();
+
+	RELOC(boot_infos) = PTRUNRELOC(bi);
+	if (!BOOT_INFO_IS_V2_COMPATIBLE(bi))
+		bi->logicalDisplayBase = 0;
+
+#ifdef CONFIG_BOOTX_TEXT
+	RELOC(g_loc_X) = 0;
+	RELOC(g_loc_Y) = 0;
+	RELOC(g_max_loc_X) = (bi->dispDeviceRect[2] - bi->dispDeviceRect[0]) / 8;
+	RELOC(g_max_loc_Y) = (bi->dispDeviceRect[3] - bi->dispDeviceRect[1]) / 16;
+	RELOC(disp_bi) = PTRUNRELOC(bi);
+		
+	clearscreen();
+
+	/* Test if boot-info is compatible. Done only in config CONFIG_BOOTX_TEXT since
+	   there is nothing much we can do with an incompatible version, except display
+	   a message and eventually hang the processor...
+		   
+	   I'll try to keep enough of boot-info compatible in the future to always allow
+	   display of this message;
+	*/
+	if (!BOOT_INFO_IS_COMPATIBLE(bi))
+		prom_print(RELOC(" !!! WARNING - Incompatible version of BootX !!!\n\n\n"));
+		
+	prom_welcome(bi, phys);
+	flushscreen();
+#endif	/* CONFIG_BOOTX_TEXT */	
+		
+	/* New BootX enters kernel with MMU off, i/os are not allowed
+	   here. This hack will have been done by the boostrap anyway.
+	*/
+	if (bi->version < 4) {
+		/*
+		 * XXX If this is an iMac, turn off the USB controller.
+		 */
+		model = (char *) early_get_property
+			(r4 + bi->deviceTreeOffset, 4, RELOC("model"));
+		if (model
+		    && (strcmp(model, RELOC("iMac,1")) == 0
+			|| strcmp(model, RELOC("PowerMac1,1")) == 0)) {
+			out_le32((unsigned *)0x80880008, 1);	/* XXX */
+		}
+	}
+		
+	/* Move klimit to enclose device tree, args, ramdisk, etc... */
+	if (bi->version < 5) {
+		space = bi->deviceTreeOffset + bi->deviceTreeSize;
+		if (bi->ramDisk)
+			space = bi->ramDisk + bi->ramDiskSize;
+	} else
+		space = bi->totalParamsSize;
+	RELOC(klimit) = PTRUNRELOC((char *) bi + space);
+
+	/* New BootX will have flushed all TLBs and enters kernel with
+	   MMU switched OFF, so this should not be useful anymore.
+	*/
+	if (bi->version < 4) {
+		/*
+		 * Touch each page to make sure the PTEs for them
+		 * are in the hash table - the aim is to try to avoid
+		 * getting DSI exceptions while copying the kernel image.
+		 */
+		for (ptr = (KERNELBASE + offset) & PAGE_MASK;
+		     ptr < (unsigned long)bi + space; ptr += PAGE_SIZE)
+			x = *(volatile unsigned long *)ptr;
+	}
+		
+#ifdef CONFIG_BOOTX_TEXT
+	prom_drawstring(RELOC("booting...\n"));
+	flushscreen();
+	RELOC(bootx_text_mapped) = 0;
+#endif
+}
+
+#ifdef CONFIG_PPC64BRIDGE
+/*
+ * Set up a hash table with a set of entries in it to map the
+ * first 64MB of RAM.  This is used on 64-bit machines since
+ * some of them don't have BATs.
+ * We assume the PTE will fit in the primary PTEG.
+ */
+
+static inline void make_pte(unsigned long htab, unsigned int hsize,
+			    unsigned int va, unsigned int pa, int mode)
+{
+	unsigned int *pteg;
+	unsigned int hash, i;
+
+	hash = ((va >> 5) ^ (va >> 21)) & 0x7fff80;
+	pteg = (unsigned int *)(htab + (hash & (hsize - 1)));
+	for (i = 0; i < 8; ++i, pteg += 4) {
+		if ((pteg[1] & 1) == 0) {
+			pteg[1] = ((va >> 16) & 0xff80) | 1;
+			pteg[3] = pa | mode;
+			break;
+		}
+	}
+}
+
+extern unsigned long _SDR1;
+extern PTE *Hash;
+extern unsigned long Hash_size;
+
+void
+prom_alloc_htab(void)
+{
+	unsigned int hsize;
+	unsigned long htab;
+	unsigned int addr;
+	unsigned long offset = reloc_offset();
+
+	/*
+	 * Because of OF bugs we can't use the "claim" client
+	 * interface to allocate memory for the hash table.
+	 * This code is only used on 64-bit PPCs, and the only
+	 * 64-bit PPCs at the moment are RS/6000s, and their
+	 * OF is based at 0xc00000 (the 12M point), so we just
+	 * arbitrarily use the 0x800000 - 0xc00000 region for the
+	 * hash table.
+	 *  -- paulus.
+	 */
+#ifdef CONFIG_POWER4
+	hsize = 4 << 20;	/* POWER4 has no BATs */
+#else
+	hsize = 2 << 20;
+#endif /* CONFIG_POWER4 */
+	htab = (8 << 20);
+	RELOC(Hash) = (void *)(htab + KERNELBASE);
+	RELOC(Hash_size) = hsize;
+	RELOC(_SDR1) = htab + __ilog2(hsize) - 18;
+
+	/*
+	 * Put in PTEs for the first 64MB of RAM
+	 */
+	cacheable_memzero((void *)htab, hsize);
+	for (addr = 0; addr < 0x4000000; addr += 0x1000)
+		make_pte(htab, hsize, addr + KERNELBASE, addr,
+			 _PAGE_ACCESSED | _PAGE_COHERENT | PP_RWXX);
+}
+#endif /* CONFIG_PPC64BRIDGE */
 
 /*
  * We enter here early on, when the Open Firmware prom is still
@@ -289,11 +554,6 @@ __init
 unsigned long
 prom_init(int r3, int r4, prom_entry pp)
 {
-#ifdef CONFIG_SMP	
-	int i;
-	phandle node;
-	char type[16], *path;
-#endif
 	int chrp = 0;
 	unsigned long mem;
 	ihandle prom_rtas, prom_mmu, prom_op;
@@ -313,82 +573,7 @@ prom_init(int r3, int r4, prom_entry pp)
 	/* If we came here from BootX, clear the screen,
 	 * set up some pointers and return. */
 	if (r3 == 0x426f6f58 && pp == NULL) {
-		boot_infos_t *bi = (boot_infos_t *) r4;
-		unsigned long space;
-		unsigned long ptr, x;
-		char *model;
-
-		RELOC(boot_infos) = PTRUNRELOC(bi);
-		if (!BOOT_INFO_IS_V2_COMPATIBLE(bi))
-			bi->logicalDisplayBase = 0;
-
-#ifdef CONFIG_BOOTX_TEXT
-		RELOC(g_loc_X) = 0;
-		RELOC(g_loc_Y) = 0;
-		RELOC(g_max_loc_X) = (bi->dispDeviceRect[2] - bi->dispDeviceRect[0]) / 8;
-		RELOC(g_max_loc_Y) = (bi->dispDeviceRect[3] - bi->dispDeviceRect[1]) / 16;
-		RELOC(disp_bi) = PTRUNRELOC(bi);
-		
-		clearscreen();
-
-		/* Test if boot-info is compatible. Done only in config CONFIG_BOOTX_TEXT since
-		   there is nothing much we can do with an incompatible version, except display
-		   a message and eventually hang the processor...
-		   
-		   I'll try to keep enough of boot-info compatible in the future to always allow
-		   display of this message;
-		*/
-		if (!BOOT_INFO_IS_COMPATIBLE(bi))
-			prom_print(RELOC(" !!! WARNING - Incompatible version of BootX !!!\n\n\n"));
-		
-		prom_welcome(bi, phys);
-		flushscreen();
-#endif	/* CONFIG_BOOTX_TEXT */	
-		
-		/* New BootX enters kernel with MMU off, i/os are not allowed
-		   here. This hack will have been done by the boostrap anyway.
-		 */
-		if (bi->version < 4) {
-			/*
-			 * XXX If this is an iMac, turn off the USB controller.
-			 */
-			model = (char *) early_get_property
-				(r4 + bi->deviceTreeOffset, 4, RELOC("model"));
-			if (model
-			    && (strcmp(model, RELOC("iMac,1")) == 0
-				|| strcmp(model, RELOC("PowerMac1,1")) == 0)) {
-				out_le32((unsigned *)0x80880008, 1);	/* XXX */
-			}
-		}
-		
-		/* Move klimit to enclose device tree, args, ramdisk, etc... */
-		if (bi->version < 5) {
-			space = bi->deviceTreeOffset + bi->deviceTreeSize;
-			if (bi->ramDisk)
-				space = bi->ramDisk + bi->ramDiskSize;
-		} else
-			space = bi->totalParamsSize;
-		RELOC(klimit) = PTRUNRELOC((char *) bi + space);
-
-		/* New BootX will have flushed all TLBs and enters kernel with
-		   MMU switched OFF, so this should not be useful anymore.
-		 */
-		if (bi->version < 4) {
-			/*
-			 * Touch each page to make sure the PTEs for them
-			 * are in the hash table - the aim is to try to avoid
-			 * getting DSI exceptions while copying the kernel image.
-			 */
-			for (ptr = (KERNELBASE + offset) & PAGE_MASK;
-			     ptr < (unsigned long)bi + space; ptr += PAGE_SIZE)
-				x = *(volatile unsigned long *)ptr;
-		}
-		
-#ifdef CONFIG_BOOTX_TEXT
-		prom_print(RELOC("booting...\n"));
-		flushscreen();
-		RELOC(bootx_text_mapped) = 0;
-#endif
+		bootx_init(r4, phys);
 		return phys;
 	}
 
@@ -421,7 +606,8 @@ prom_init(int r3, int r4, prom_entry pp)
 	if (prom_op != (void*)-1) {
 		char model[64];
 		int sz;
-		sz = (int)call_prom(RELOC("getprop"), 4, 1, prom_op, RELOC("model"), model, 64);
+		sz = (int)call_prom(RELOC("getprop"), 4, 1, prom_op,
+				    RELOC("model"), model, 64);
 		if (sz > 0) {
 			char *c;
 			/* hack to skip the ibm chrp firmware # */
@@ -454,61 +640,67 @@ prom_init(int r3, int r4, prom_entry pp)
 		mem = ALIGN(mem + strlen(d) + 1);
 	}
 
+	prom_rtas = call_prom(RELOC("finddevice"), 1, 1, RELOC("/rtas"));
+	if (prom_rtas != (void *) -1) {
+		int i, nargs;
+		struct prom_args prom_args;
+
+		RELOC(rtas_size) = 0;
+		call_prom(RELOC("getprop"), 4, 1, prom_rtas,
+			  RELOC("rtas-size"), &RELOC(rtas_size), sizeof(rtas_size));
+		prom_print(RELOC("instantiating rtas"));
+		if (RELOC(rtas_size) == 0) {
+			RELOC(rtas_data) = 0;
+		} else {
+			/*
+			 * Ask OF for some space for RTAS.
+			 * Actually OF has bugs so we just arbitrarily
+			 * use memory at the 6MB point.
+			 */
+			RELOC(rtas_data) = 6 << 20;
+			prom_print(RELOC(" at "));
+			prom_print_hex(RELOC(rtas_data));
+		}
+		prom_rtas = call_prom(RELOC("open"), 1, 1, RELOC("/rtas"));
+		prom_print(RELOC("..."));
+		nargs = 3;
+		prom_args.service = RELOC("call-method");
+		prom_args.nargs = nargs;
+		prom_args.nret = 2;
+		prom_args.args[0] = RELOC("instantiate-rtas");
+		prom_args.args[1] = prom_rtas;
+		prom_args.args[2] = (void *) RELOC(rtas_data);
+		RELOC(prom)(&prom_args);
+		if (prom_args.args[nargs] != 0)
+			i = 0;
+		else
+			i = (int)prom_args.args[nargs+1];
+		RELOC(rtas_entry) = i;
+		if ((RELOC(rtas_entry) == -1) || (RELOC(rtas_entry) == 0))
+			prom_print(RELOC(" failed\n"));
+		else
+			prom_print(RELOC(" done\n"));
+	}
+
+#ifdef CONFIG_PPC64BRIDGE
+	/*
+	 * Find out how much memory we have and allocate a
+	 * suitably-sized hash table.
+	 */
+	prom_alloc_htab();
+#endif
+
+#ifdef CONFIG_SMP
+	prom_hold_cpus(mem);
+#endif
+
 	mem = check_display(mem);
 
 	prom_print(RELOC("copying OF device tree..."));
 	mem = copy_device_tree(mem, mem + (1<<20));
 	prom_print(RELOC("done\n"));
 
-
 	RELOC(klimit) = (char *) (mem - offset);
-	
-	prom_rtas = call_prom(RELOC("finddevice"), 1, 1, RELOC("/rtas"));
-	if (prom_rtas != (void *) -1) {
-		RELOC(rtas_size) = 0;
-		call_prom(RELOC("getprop"), 4, 1, prom_rtas,
-			  RELOC("rtas-size"), &RELOC(rtas_size), sizeof(rtas_size));
-		prom_print(RELOC("instantiating rtas..."));
-		if (RELOC(rtas_size) == 0) {
-			RELOC(rtas_data) = 0;
-		} else {
-			/*
-			 * We do _not_ want the rtas_data inside the klimit
-			 * boundry since it'll be squashed when we do the
-			 * relocate of the kernel on chrp right after prom_init()
-			 * in head.S.  So, we just pick a spot in memory.
-			 * -- Cort
-			 */
-#if 0
-			mem = (mem + 4095) & -4096;
-			RELOC(rtas_data) = mem + KERNELBASE;
-			mem += RELOC(rtas_size);
-#endif
-			RELOC(rtas_data) = (6<<20) + KERNELBASE;
-		}
-		prom_rtas = call_prom(RELOC("open"), 1, 1, RELOC("/rtas"));
-		{
-			int i, nargs;
-			struct prom_args prom_args;
-			nargs = 3;
-			prom_args.service = RELOC("call-method");
-			prom_args.nargs = nargs;
-			prom_args.nret = 2;
-			prom_args.args[0] = RELOC("instantiate-rtas");
-			prom_args.args[1] = prom_rtas;
-			prom_args.args[2] = ((void *)(RELOC(rtas_data)-KERNELBASE));
-			RELOC(prom)(&prom_args);
-			if (prom_args.args[nargs] != 0)
-				i = 0;
-			else
-				i = (int)prom_args.args[nargs+1];
-			RELOC(rtas_entry) = i;
-		}
-		if ((RELOC(rtas_entry) == -1) || (RELOC(rtas_entry) == 0))
-			prom_print(RELOC(" failed\n"));
-		else
-			prom_print(RELOC(" done\n"));
-	}
 
 	/* If we are already running at 0xc0000000, we assume we were loaded by
 	 * an OF bootloader which did set a BAT for us. This breaks OF translate
@@ -542,85 +734,10 @@ prom_init(int r3, int r4, prom_entry pp)
 	}
 
 #ifdef CONFIG_BOOTX_TEXT
-	if (!chrp && RELOC(prom_disp_node) != 0)
+	if (RELOC(prom_disp_node) != 0)
 		setup_disp_fake_bi(RELOC(prom_disp_node));
 #endif
 
-#ifdef CONFIG_SMP
-	/*
-	 * With CHRP SMP we need to use the OF to start the other
-	 * processors so we can't wait until smp_boot_cpus (the OF is
-	 * trashed by then) so we have to put the processors into
-	 * a holding pattern controlled by the kernel (not OF) before
-	 * we destroy the OF.
-	 *
-	 * This uses a chunk of high memory, puts some holding pattern
-	 * code there and sends the other processors off to there until
-	 * smp_boot_cpus tells them to do something.  We do that by using
-	 * physical address 0x0.  The holding pattern checks that address
-	 * until its cpu # is there, when it is that cpu jumps to
-	 * __secondary_start().  smp_boot_cpus() takes care of setting those
-	 * values.
-	 *
-	 * We also use physical address 0x4 here to tell when a cpu
-	 * is in its holding pattern code.
-	 *
-	 * -- Cort
-	 */
-	{
-		extern void __secondary_hold(void);
-		unsigned long i;
-		char type[16];
-		
-
-		/*
-		 * XXX: hack to make sure we're chrp, assume that if we're
-		 *      chrp we have a device_type property -- Cort
-		 */
-		node = call_prom(RELOC("finddevice"), 1, 1, RELOC("/"));
-		if ( (int)call_prom(RELOC("getprop"), 4, 1, node,
-			    RELOC("device_type"),type, sizeof(type)) <= 0)
-			return phys;
-		
-		/* copy the holding pattern code to someplace safe (8M) */
-		memcpy( (void *)(8<<20), RELOC(__secondary_hold), 0x100 );
-		for (i = 8<<20; i < ((8<<20)+0x100); i += 32)
-		{
-			asm volatile("dcbf 0,%0" : : "r" (i) : "memory");
-			asm volatile("icbi 0,%0" : : "r" (i) : "memory");
-		}
-	}
-
-	/* look for cpus */
-	for (node = 0; prom_next_node(&node);)
-	{
-		type[0] = 0;
-		call_prom(RELOC("getprop"), 4, 1, node, RELOC("device_type"),
-			  type, sizeof(type));
-		if (strcmp(type, RELOC("cpu")) != 0)
-			continue;
-		path = (char *) mem;
-		memset(path, 0, 256);
-		if ((int) call_prom(RELOC("package-to-path"), 3, 1,
-				    node, path, 255) < 0)
-			continue;
-		/* XXX: hack - don't start cpu 0, this cpu -- Cort */
-		if ( smp_chrp_cpu_nr++ == 0 )
-			continue;
-		prom_print(RELOC("starting cpu "));
-		prom_print(path);
-		*(unsigned long *)(0x4) = 0;
-		asm volatile("dcbf 0,%0": : "r" (0x4) : "memory");
-		call_prom(RELOC("start-cpu"), 3, 0, node, 8<<20, smp_chrp_cpu_nr-1);
-		for ( i = 0 ; (i < 10000) &&
-			      (*(ulong *)(0x4) == (ulong)0); i++ )
-			;
-		if (*(ulong *)(0x4) == (ulong)smp_chrp_cpu_nr-1 )
-			prom_print(RELOC("...ok\n"));
-		else
-			prom_print(RELOC("...failed\n"));
-	}
-#endif
 	/* If OpenFirmware version >= 3, then use quiesce call */
 	if (prom_version >= 3) {
 		prom_print(RELOC("Calling quiesce ...\n"));
@@ -631,15 +748,39 @@ prom_init(int r3, int r4, prom_entry pp)
 
 #ifdef CONFIG_BOOTX_TEXT
 	if (!chrp && RELOC(disp_bi)) {
-		RELOC(prom_stdout) = 0;
 		clearscreen();
 		prom_welcome(PTRRELOC(RELOC(disp_bi)), phys);
-		prom_print(RELOC("booting...\n"));
+		prom_drawstring(RELOC("booting...\n"));
 	}
 	RELOC(bootx_text_mapped) = 0;
 #endif
 
+	prom_print(RELOC("returning from prom_init\n"));
+	RELOC(prom_stdout) = 0;
 	return phys;
+}
+
+void phys_call_rtas(int service, int nargs, int nret, ...)
+{
+	va_list list;
+	union {
+		unsigned long words[16];
+		double align;
+	} u;
+	unsigned long offset = reloc_offset();
+	void (*rtas)(void *, unsigned long);
+	int i;
+
+	u.words[0] = service;
+	u.words[1] = nargs;
+	u.words[2] = nret;
+	va_start(list, nret);
+	for (i = 0; i < nargs; ++i)
+		u.words[i+3] = va_arg(list, unsigned long);
+	va_end(list);
+
+	rtas = (void (*)(void *, unsigned long)) RELOC(rtas_entry);
+	rtas(&u, RELOC(rtas_data));
 }
 
 #ifdef CONFIG_BOOTX_TEXT
@@ -650,34 +791,34 @@ prom_welcome(boot_infos_t* bi, unsigned long phys)
 	unsigned long flags;
 	unsigned long pvr;
 	
-	prom_print(RELOC("Welcome to Linux, kernel " UTS_RELEASE "\n"));
-	prom_print(RELOC("\nstarted at       : 0x"));
+	prom_drawstring(RELOC("Welcome to Linux, kernel " UTS_RELEASE "\n"));
+	prom_drawstring(RELOC("\nstarted at       : 0x"));
 	prom_drawhex(phys);
-	prom_print(RELOC("\nlinked at        : 0x"));
+	prom_drawstring(RELOC("\nlinked at        : 0x"));
 	prom_drawhex(KERNELBASE);
-	prom_print(RELOC("\nframe buffer at  : 0x"));
+	prom_drawstring(RELOC("\nframe buffer at  : 0x"));
 	prom_drawhex((unsigned long)bi->dispDeviceBase);
-	prom_print(RELOC(" (phys), 0x"));
+	prom_drawstring(RELOC(" (phys), 0x"));
 	prom_drawhex((unsigned long)bi->logicalDisplayBase);
-	prom_print(RELOC(" (log)"));
-	prom_print(RELOC("\nklimit           : 0x"));
-	prom_drawhex(RELOC(klimit));
-	prom_print(RELOC("\nMSR              : 0x"));
+	prom_drawstring(RELOC(" (log)"));
+	prom_drawstring(RELOC("\nklimit           : 0x"));
+	prom_drawhex((unsigned long)RELOC(klimit));
+	prom_drawstring(RELOC("\nMSR              : 0x"));
 	__asm__ __volatile__ ("mfmsr %0" : "=r" (flags));
 	prom_drawhex(flags);
 	__asm__ __volatile__ ("mfspr %0, 287" : "=r" (pvr));
 	pvr >>= 16;
 	if (pvr > 1) {
-	    prom_print(RELOC("\nHID0             : 0x"));
+	    prom_drawstring(RELOC("\nHID0             : 0x"));
 	    __asm__ __volatile__ ("mfspr %0, 1008" : "=r" (flags));
 	    prom_drawhex(flags);
 	}
 	if (pvr == 8 || pvr == 12) {
-	    prom_print(RELOC("\nICTC             : 0x"));
+	    prom_drawstring(RELOC("\nICTC             : 0x"));
 	    __asm__ __volatile__ ("mfspr %0, 1019" : "=r" (flags));
 	    prom_drawhex(flags);
 	}
-	prom_print(RELOC("\n\n"));
+	prom_drawstring(RELOC("\n\n"));
 }
 #endif
 
@@ -822,6 +963,10 @@ setup_disp_fake_bi(ihandle dp)
 	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("linebytes"),
 		  &pitch, sizeof(pitch));
 	address = 0;
+	if (pitch == 1) {
+		address = 0xfa000000;
+		pitch = 0x1000;		/* for strange IBM display */
+	}
 	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("address"),
 		  &address, sizeof(address));
 	if (address == 0) {
@@ -987,6 +1132,7 @@ finish_device_tree(void)
 
 	/* All newworld machines now use the interrupt tree */
 	struct device_node *np = allnodes;
+
 	while(np) {
 		if (get_property(np, "interrupt-parent", 0)) {
 			pmac_newworld = 1;
@@ -997,7 +1143,7 @@ finish_device_tree(void)
 	if (boot_infos == 0 && pmac_newworld)
 		use_of_interrupt_tree = 1;
 
-	mem = finish_node(allnodes, mem, NULL);
+	mem = finish_node(allnodes, mem, NULL, 0, 0);
 	dev_tree_size = mem - (unsigned long) allnodes;
 	klimit = (char *) mem;
 }
@@ -1025,20 +1171,29 @@ early_get_property(unsigned long base, unsigned long node, char *prop)
 __init
 static unsigned long
 finish_node(struct device_node *np, unsigned long mem_start,
-	    interpret_func *ifunc)
+	    interpret_func *ifunc, int naddrc, int nsizec)
 {
 	struct device_node *child;
+	int *ip;
 
 	np->name = get_property(np, "name", 0);
 	np->type = get_property(np, "device_type", 0);
 
 	/* get the device addresses and interrupts */
 	if (ifunc != NULL) {
-		mem_start = ifunc(np, mem_start);
+		mem_start = ifunc(np, mem_start, naddrc, nsizec);
 	}
 	if (use_of_interrupt_tree) {
 		mem_start = finish_node_interrupts(np, mem_start);
 	}
+
+	/* Look for #address-cells and #size-cells properties. */
+	ip = (int *) get_property(np, "#address-cells", 0);
+	if (ip != NULL)
+		naddrc = *ip;
+	ip = (int *) get_property(np, "#size-cells", 0);
+	if (ip != NULL)
+		nsizec = *ip;
 
 	/* the f50 sets the name to 'display' and 'compatible' to what we
 	 * expect for the name -- Cort
@@ -1080,7 +1235,8 @@ finish_node(struct device_node *np, unsigned long mem_start,
 	}
 
 	for (child = np->child; child != NULL; child = child->sibling)
-		mem_start = finish_node(child, mem_start, ifunc);
+		mem_start = finish_node(child, mem_start, ifunc,
+					naddrc, nsizec);
 
 	return mem_start;
 }
@@ -1246,7 +1402,8 @@ void relocate_nodes(void)
 
 __init
 static unsigned long
-interpret_pci_props(struct device_node *np, unsigned long mem_start)
+interpret_pci_props(struct device_node *np, unsigned long mem_start,
+		    int naddrc, int nsizec)
 {
 	struct address_range *adr;
 	struct pci_reg_property *pci_addrs;
@@ -1329,7 +1486,8 @@ interpret_pci_props(struct device_node *np, unsigned long mem_start)
 
 __init
 static unsigned long
-interpret_dbdma_props(struct device_node *np, unsigned long mem_start)
+interpret_dbdma_props(struct device_node *np, unsigned long mem_start,
+		      int naddrc, int nsizec)
 {
 	struct reg_property *rp;
 	struct address_range *adr;
@@ -1381,7 +1539,8 @@ interpret_dbdma_props(struct device_node *np, unsigned long mem_start)
 
 __init
 static unsigned long
-interpret_macio_props(struct device_node *np, unsigned long mem_start)
+interpret_macio_props(struct device_node *np, unsigned long mem_start,
+		      int naddrc, int nsizec)
 {
 	struct reg_property *rp;
 	struct address_range *adr;
@@ -1450,7 +1609,8 @@ interpret_macio_props(struct device_node *np, unsigned long mem_start)
 
 __init
 static unsigned long
-interpret_isa_props(struct device_node *np, unsigned long mem_start)
+interpret_isa_props(struct device_node *np, unsigned long mem_start,
+		    int naddrc, int nsizec)
 {
 	struct isa_reg_property *rp;
 	struct address_range *adr;
@@ -1491,21 +1651,24 @@ interpret_isa_props(struct device_node *np, unsigned long mem_start)
 
 __init
 static unsigned long
-interpret_root_props(struct device_node *np, unsigned long mem_start)
+interpret_root_props(struct device_node *np, unsigned long mem_start,
+		     int naddrc, int nsizec)
 {
-	struct reg_property *rp;
 	struct address_range *adr;
 	int i, l, *ip;
+	unsigned int *rp;
+	int rpsize = (naddrc + nsizec) * sizeof(unsigned int);
 
-	rp = (struct reg_property *) get_property(np, "reg", &l);
-	if (rp != 0 && l >= sizeof(struct reg_property)) {
+	rp = (unsigned int *) get_property(np, "reg", &l);
+	if (rp != 0 && l >= rpsize) {
 		i = 0;
 		adr = (struct address_range *) mem_start;
-		while ((l -= sizeof(struct reg_property)) >= 0) {
+		while ((l -= rpsize) >= 0) {
 			adr[i].space = 0;
-			adr[i].address = rp[i].address;
-			adr[i].size = rp[i].size;
+			adr[i].address = rp[naddrc - 1];
+			adr[i].size = rp[naddrc + nsizec - 1];
 			++i;
+			rp += naddrc + nsizec;
 		}
 		np->addrs = adr;
 		np->n_addrs = i;
@@ -1583,9 +1746,8 @@ find_pci_device_OFnode(unsigned char bus, unsigned char dev_fn)
 	int l;
 	
 	for (np = allnodes; np != 0; np = np->allnext) {
-		char *pname = np->parent ?
-			(char *)get_property(np->parent, "name", &l) : 0;
-		if (pname && strcmp(pname, "mac-io") == 0)
+		if (np->parent == NULL || np->parent->type == NULL
+		    || strcmp(np->parent->type, "pci") != 0)
 			continue;
 		reg = (unsigned int *) get_property(np, "reg", &l);
 		if (reg == 0 || l < sizeof(struct reg_property))
@@ -1781,6 +1943,8 @@ print_properties(struct device_node *np)
 }
 #endif
 
+spinlock_t rtas_lock = SPIN_LOCK_UNLOCKED;
+
 /* this can be called after setup -- Cort */
 __openfirmware
 int
@@ -1813,11 +1977,10 @@ call_rtas(const char *service, int nargs, int nret,
 		u.words[i+3] = va_arg(list, unsigned long);
 	va_end(list);
 
-	save_flags(s);
-	cli();
-	
+	spin_lock_irqsave(&rtas_lock, s);
 	enter_rtas((void *)__pa(&u));
-	restore_flags(s);
+	spin_unlock_irqrestore(&rtas_lock, s);
+
 	if (nret > 1 && outputs != NULL)
 		for (i = 0; i < nret-1; ++i)
 			outputs[i] = u.words[i+nargs+4];

@@ -55,6 +55,7 @@
 #include "local_irq.h"
 #include "i8259.h"
 #include "open_pic.h"
+#include "xics.h"
 
 extern volatile unsigned char *chrp_int_ack_special;
 
@@ -259,6 +260,7 @@ chrp_setup_arch(void)
 	request_region(0x80,0x10,"dma page reg");
 	request_region(0xc0,0x20,"dma2");
 
+#ifndef CONFIG_PPC64BRIDGE
 	/* PCI bridge config space access area -
 	 * appears to be not in devtree on longtrail. */
 	ioremap(GG2_PCI_CONFIG_BASE, 0x80000);
@@ -267,14 +269,23 @@ chrp_setup_arch(void)
 	 *  -- Geert
 	 */
 	hydra_init();		/* Mac I/O */
+#endif /* CONFIG_PPC64BRIDGE */
 
+#ifndef CONFIG_POWER4
 	/* Some IBM machines don't have the hydra -- Cort */
 	if ( !OpenPIC )
 	{
-		OpenPIC = (struct OpenPIC *)*(unsigned long *)get_property(
-			find_path_device("/"), "platform-open-pic", NULL);
-		OpenPIC = ioremap((unsigned long)OpenPIC, sizeof(struct OpenPIC));
+		unsigned long *opprop;
+
+		opprop = (unsigned long *)get_property(find_path_device("/"),
+						"platform-open-pic", NULL);
+		if (opprop != 0) {
+			printk("OpenPIC addrs: %lx %lx %lx\n",
+			       opprop[0], opprop[1], opprop[2]);
+			OpenPIC = ioremap(opprop[0], sizeof(struct OpenPIC));
+		}
 	}
+#endif
 
 	/*
 	 *  Fix the Super I/O configuration
@@ -283,7 +294,10 @@ chrp_setup_arch(void)
 #ifdef CONFIG_DUMMY_CONSOLE
 	conswitchp = &dummy_con;
 #endif
+
+#ifndef CONFIG_PPC64BRIDGE
 	pmac_find_bridges();
+#endif /* CONFIG_PPC64BRIDGE */
 
 	/* Get the event scan rate for the rtas so we know how
 	 * often it expects a heartbeat. -- Cort
@@ -402,15 +416,15 @@ void __init chrp_init_IRQ(void)
 {
 	struct device_node *np;
 	int i;
+	unsigned long *addrp;
 
-	if ( !(np = find_devices("pci") ) )
+	if (!(np = find_devices("pci"))
+	    || !(addrp = (unsigned long *)
+		 get_property(np, "8259-interrupt-acknowledge", NULL)))
 		printk("Cannot find pci to get ack address\n");
 	else
-	{
 		chrp_int_ack_special = (volatile unsigned char *)
-			(*(unsigned long *)get_property(np,
-							"8259-interrupt-acknowledge", NULL));
-	}
+			ioremap(*addrp, 1);
 	open_pic_irq_offset = 16;
 	for ( i = 16 ; i < NR_IRQS ; i++ )
 		irq_desc[i].handler = &open_pic;
@@ -435,6 +449,8 @@ chrp_init2(void)
 #ifdef CONFIG_NVRAM  
 	pmac_nvram_init();
 #endif
+	if (ppc_md.progress)
+		ppc_md.progress("  Have fun!    ", 0x7777);
 }
 
 #if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
@@ -560,10 +576,16 @@ void __init
 	ppc_md.setup_residual = NULL;
 	ppc_md.get_cpuinfo    = chrp_get_cpuinfo;
 	ppc_md.irq_cannonicalize = chrp_irq_cannonicalize;
+#ifndef CONFIG_POWER4
 	ppc_md.init_IRQ       = chrp_init_IRQ;
 	ppc_md.get_irq        = chrp_get_irq;
 	ppc_md.post_irq	      = chrp_post_irq;
-		
+#else
+	ppc_md.init_IRQ	      = xics_init_IRQ;
+	ppc_md.get_irq	      = xics_get_irq;
+	ppc_md.post_irq	      = NULL;
+#endif /* CONFIG_POWER4 */
+
 	ppc_md.init           = chrp_init2;
 
 	ppc_md.restart        = chrp_restart;
@@ -652,6 +674,7 @@ chrp_progress(char *s, unsigned short hex)
 	if ( call_rtas( "display-character", 1, 1, NULL, '\r' ) )
 	{
 		/* assume no display-character RTAS method - use hex display */
+		call_rtas("set-indicator", 3, 1, NULL, 6, 0, hex);
 		return;
 	}
 

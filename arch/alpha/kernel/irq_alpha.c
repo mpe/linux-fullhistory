@@ -105,8 +105,18 @@ common_init_isa_dma(void)
 void __init
 init_IRQ(void)
 {
-	alpha_mv.init_irq();
+	/* Uh, this really MUST come first, just in case
+	 * the platform init_irq() causes interrupts/mchecks
+	 * (as is the case with RAWHIDE, at least).
+	 */
 	wrent(entInt, 0);
+
+	alpha_mv.init_irq();
+
+	/* If we had wanted SRM console printk echoing early, undo it now. */
+	if (alpha_using_srm && srmcons_output) {
+		unregister_srm_console();
+	}
 }
 
 /*

@@ -1,4 +1,4 @@
-/* $Id: flash.c,v 1.17 2000/02/10 02:51:35 davem Exp $
+/* $Id: flash.c,v 1.18 2000/06/19 06:24:47 davem Exp $
  * flash.c: Allow mmap access to the OBP Flash, for OBP updates.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -115,14 +115,12 @@ flash_open(struct inode *inode, struct file *file)
 	if (test_and_set_bit(0, (void *)&flash.busy) != 0)
 		return -EBUSY;
 
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
 static int
 flash_release(struct inode *inode, struct file *file)
 {
-	MOD_DEC_USE_COUNT;
 	flash.busy = 0;
 	return 0;
 }
@@ -131,6 +129,7 @@ static struct file_operations flash_fops = {
 	/* no write to the Flash, use mmap
 	 * and play flash dependent tricks.
 	 */
+	owner:		THIS_MODULE,
 	llseek:		flash_llseek,
 	read:		flash_read,
 	mmap:		flash_mmap,

@@ -286,10 +286,18 @@ void ppc_irq_dispatch_handler(struct pt_regs *regs, int irq)
 			action = action->next;
 		} while ( action );
 		__cli();
-		unmask_irq(irq);
+		if (irq_desc[irq].handler) {
+			if (irq_desc[irq].handler->end)
+				irq_desc[irq].handler->end(irq);
+			else if (irq_desc[irq].handler->enable)
+				irq_desc[irq].handler->enable(irq);
+		}
 	} else {
 		ppc_spurious_interrupts++;
-		disable_irq( irq );
+		printk(KERN_DEBUG "Unhandled interrupt %x, disabled\n", irq);
+		disable_irq(irq);
+		if (irq_desc[irq].handler->end)
+			irq_desc[irq].handler->end(irq);
 	}
 }
 
@@ -301,6 +309,7 @@ asmlinkage int do_IRQ(struct pt_regs *regs, int isfake)
 
 	/* every arch is required to have a get_irq -- Cort */
 	irq = ppc_md.get_irq( regs );
+
 	if ( irq < 0 )
 	{
 		/* -2 means ignore, already handled */
@@ -313,7 +322,7 @@ asmlinkage int do_IRQ(struct pt_regs *regs, int isfake)
 		goto out;
 	}
 	ppc_irq_dispatch_handler( regs, irq );
-	if ( ppc_md.post_irq )
+	if (ppc_md.post_irq)
 		ppc_md.post_irq( regs, irq );
 
  out:	
@@ -769,4 +778,8 @@ void init_irq_proc (void)
 			continue;
 		register_irq_proc(i);
 	}
+}
+
+void no_action(int irq, void *dev, struct pt_regs *regs)
+{
 }

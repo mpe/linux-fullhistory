@@ -52,8 +52,9 @@
 flags		=  4
 sigpending	=  8
 need_resched	= 20
+tsk_ptrace	= 60
 
-PF_TRACESYS  = 0x00000020
+PT_TRACESYS  = 0x00000002
 PF_USEDFPU   = 0x00100000
 
 ENOSYS = 38
@@ -127,7 +128,7 @@ SYSCALL_NR =  (16*4+6*4)
 	or	$r11, $r10;		\
 	ldc	$r10, $sr
 
-	.balign	4
+	.align	2
 tlb_miss_load:
 	mov.l	2f, $r0
 	mov.l	@$r0, $r6
@@ -137,7 +138,7 @@ tlb_miss_load:
 	jmp	@$r0
 	 mov	#0, $r5
 
-	.balign	4
+	.align	2
 tlb_miss_store:
 	mov.l	2f, $r0
 	mov.l	@$r0, $r6
@@ -147,7 +148,7 @@ tlb_miss_store:
 	jmp	@$r0
 	 mov	#1, $r5
 
-	.balign	4
+	.align	2
 initial_page_write:
 	mov.l	2f, $r0
 	mov.l	@$r0, $r6
@@ -157,7 +158,7 @@ initial_page_write:
 	jmp	@$r0
 	 mov	#1, $r5
 
-	.balign	4
+	.align	2
 tlb_protection_violation_load:
 	mov.l	2f, $r0
 	mov.l	@$r0, $r6
@@ -167,7 +168,7 @@ tlb_protection_violation_load:
 	jmp	@$r0
 	 mov	#0, $r5
 
-	.balign	4
+	.align	2
 tlb_protection_violation_store:
 	mov.l	2f, $r0
 	mov.l	@$r0, $r6
@@ -177,14 +178,14 @@ tlb_protection_violation_store:
 	jmp	@$r0
 	 mov	#1, $r5
 
-	.balign 4
+	.align 2
 1:	.long	SYMBOL_NAME(do_page_fault)
 2:	.long	MMU_TEA
 
 #ifdef CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
-	.balign	4
+	.align	2
 	/* Unwind the stack and jmp to the debug entry */
-debug:
+debug_kernel:
 	mov.l	@$r15+, $r0
 	mov.l	@$r15+, $r1
 	mov.l	@$r15+, $r2
@@ -216,19 +217,36 @@ debug:
 	mov.l	2f, $k0
 	jmp	@$k0
 	 ldc	$k1, $ssr
-	.balign	4
+	.align	2
 1:	.long	0x300000f0
 2:	.long	0xa0000100
 #endif
 
-	.balign	4
+	.align	2
+debug_trap:	
+#ifdef CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
+	mov	#SR, $r0
+	mov.l	@($r0,$r15), $r0	! get status register
+	shll	$r0
+	shll	$r0			! kernel space?
+	bt/s	debug_kernel
+#endif
+	 mov.l	@$r15, $r0
+	mov.l	1f, $r8
+	jmp	@$r8
+	 nop
+
+	.align	2
+1:	.long	SYMBOL_NAME(break_point_trap_software)
+
+	.align	2
 error:	
 	!
 	STI()
 	mov.l	1f, $r0
 	jmp	@$r0
 	 nop
-	.balign	4
+	.align	2
 1:	.long	SYMBOL_NAME(do_exception_error)
 
 badsys:	mov	#-ENOSYS, $r0
@@ -263,13 +281,11 @@ system_call:
 	mov.l	1f, $r9
 	mov.l	@$r9, $r8
 	!
-#ifdef CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
 	mov	#0x20, $r9
 	extu.b	$r9, $r9
 	shll2	$r9
 	cmp/hs	$r9, $r8
-	bt	debug
-#endif
+	bt	debug_trap
 	!
 	mov	#SYSCALL_NR, $r14
 	add	$r15, $r14
@@ -311,16 +327,34 @@ system_call:
 	bt	7b
 #endif
 0:	stc	$k_current, $r11
-	mov.l	@(flags,$r11), $r10	! Is it trace?
-	mov	#PF_TRACESYS, $r11
+	mov.l	@(tsk_ptrace,$r11), $r10	! Is it trace?
+	mov	#PT_TRACESYS, $r11
 	tst	$r11, $r10
 	bt	5f
 	!                     Trace system call
 	mov	#-ENOSYS, $r11
 	mov.l	$r11, @(R0,$r15)
+	!			Push up $R0--$R2, and $R4--$R7
+	mov.l	$r0, @-$r15
+	mov.l	$r1, @-$r15
+	mov.l	$r2, @-$r15
+	mov.l	$r4, @-$r15
+	mov.l	$r5, @-$r15
+	mov.l	$r6, @-$r15
+	mov.l	$r7, @-$r15
+	!
 	mov.l	2f, $r11
 	jsr	@$r11
 	 nop
+	!			Pop down $R0--$R2, and $R4--$R7
+	mov.l	@$r15+, $r7
+	mov.l	@$r15+, $r6
+	mov.l	@$r15+, $r5
+	mov.l	@$r15+, $r4
+	mov.l	@$r15+, $r2
+	mov.l	@$r15+, $r1
+	mov.l	@$r15+, $r0
+	!
 	mov.l	__syscall_ret_trace, $r10
 	bra	6f
 	 lds	$r10, $pr
@@ -337,7 +371,7 @@ system_call:
 	 nop
 
 	! In case of trace
-	.balign	4
+	.align	2
 3:
 #ifdef COMPAT_OLD_SYSCALL_ABI
 	add	$r8, $r15		! pop off the arguments
@@ -347,7 +381,7 @@ system_call:
 	mova	SYMBOL_NAME(ret_from_syscall), $r0
 	jmp	@$r1
 	 lds	$r0, $pr
-	.balign	4
+	.align	2
 1:	.long	TRA
 2:	.long	SYMBOL_NAME(syscall_trace)
 __n_sys:	.long	NR_syscalls
@@ -366,18 +400,18 @@ fixup_syscall_argerr:
 .previous
 
 	.section	__ex_table, "a"
-	.balign	4
+	.align	2
 	.long	4b,fixup_syscall_argerr
 .previous
 #endif
 
-	.balign	4
+	.align	2
 reschedule:
 	mova	SYMBOL_NAME(ret_from_syscall), $r0
 	mov.l	1f, $r1
 	jmp	@$r1
 	 lds	$r0, $pr
-	.balign	4
+	.align	2
 1:	.long	SYMBOL_NAME(schedule)
 
 ENTRY(ret_from_irq)
@@ -401,11 +435,11 @@ ENTRY(ret_from_exception)
 	STI()
 	bra	ret_from_syscall
 	 nop
-	.balign	4
+	.align	2
 __INV_IMASK:
 	.long	0xffffff0f	! ~(IMASK)
 
-	.balign 4
+	.align 2
 syscall_ret:
 #ifdef COMPAT_OLD_SYSCALL_ABI
 	add	$r8, $r15	! pop off the arguments
@@ -438,7 +472,7 @@ signal_return:
 	mova	restore_all, $r0
 	jmp	@$r1
 	 lds	$r0, $pr
-	.balign	4
+	.align	2
 __do_signal:
 	.long	SYMBOL_NAME(do_signal)
 __softirq_state:
@@ -446,7 +480,7 @@ __softirq_state:
 __do_softirq:
 	.long	SYMBOL_NAME(do_softirq)
 
-	.balign 4
+	.align 2
 restore_all:
 #if defined(__SH4__)
 	mov.l	__fpu_prepare_fd, $r0
@@ -554,7 +588,7 @@ restore_all:
 	rte
 	 nop
 
-	.balign	4
+	.align	2
 __blrb_flags:	.long	0x30000000
 #if defined(__SH4__)
 __fpu_prepare_fd:
@@ -582,7 +616,7 @@ general_exception:
 	mov.l	2f, $k3
 	bra	handle_exception
 	 mov.l	@$k2, $k2
-	.balign	4
+	.align	2
 2:	.long	SYMBOL_NAME(ret_from_exception)
 1:	.long	EXPEVT
 !
@@ -601,7 +635,7 @@ interrupt:
 	bra	handle_exception
 	 mov.l	@$k2, $k2
 
-	.balign	4
+	.align	2
 1:	.long	EXPEVT
 2:	.long	INTEVT
 3:	.long	SYMBOL_NAME(ret_from_irq)
@@ -707,7 +741,7 @@ handle_exception:
 	mov.l	@$r9, $r9
 	jmp	@$r9
 	 nop
-	.balign	4
+	.align	2
 1:	.long	SYMBOL_NAME(exception_handling_table)
 2:	.long	0x00008000	! FD=1
 3:	.long	0x000000f0	! FD=0, IMASK=15

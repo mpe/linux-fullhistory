@@ -2,7 +2,7 @@ OUTPUT_FORMAT("elf64-alpha")
 ENTRY(__start)
 SECTIONS
 {
-  . = 0xfffffc0000310000;
+  . = 0xfffffc0000810000;
   _text = .;
   .text : { *(.text) }
   _etext = .;
@@ -50,9 +50,11 @@ SECTIONS
   .got : { *(.got) }
   .sdata : { *(.sdata) }
   _edata = .;
-  _bss = .;
+
+  __bss_start = .;
   .sbss : { *(.sbss) *(.scommon) }
   .bss : { *(.bss) *(COMMON) }
+  __bss_stop = .;
   _end = .;
 
   .mdebug 0 : { *(.mdebug) }

@@ -339,7 +339,7 @@ asmlinkage int sys_execve(char *ufilename, char **uargv,
 
 	error = do_execve(filename, uargv, uenvp, &regs);
 	if (error == 0)
-		current->flags &= ~PF_DTRACE;
+		current->ptrace &= ~PT_DTRACE;
 	putname(filename);
 out:
 	unlock_kernel();
@@ -384,11 +384,21 @@ asmlinkage void print_syscall(int x)
 	restore_flags(flags);
 }
 
-asmlinkage void break_point_trap(void)
+asmlinkage void break_point_trap(unsigned long r4, unsigned long r5,
+				 unsigned long r6, unsigned long r7,
+				 struct pt_regs regs)
 {
-	/* Clear traicng.  */
+	/* Clear tracing.  */
 	ctrl_outw(0, UBC_BBRA);
 	ctrl_outw(0, UBC_BBRB);
 
+	force_sig(SIGTRAP, current);
+}
+
+asmlinkage void break_point_trap_software(unsigned long r4, unsigned long r5,
+					  unsigned long r6, unsigned long r7,
+					  struct pt_regs regs)
+{
+	regs.pc -= 2;
 	force_sig(SIGTRAP, current);
 }

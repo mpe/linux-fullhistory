@@ -181,11 +181,25 @@ User-mode (or maybe optional /proc) diagnostics program.
 
 11) RTL8139C support untested.
 
+12) 10base-T support flaky or slow
+
 
 
 
 Change History
 --------------
+Version 0.9.7 - June 11, 2000
+
+* Fix support for older chips (RTL8139 early chips should now work again)
+
+
+Version 0.9.6 - May 30, 2000
+
+* Fix 4-extra-bytes bug
+  (thanks to Markus Westergren, via Santiago Garcia Mantinan)
+* Yet more improved chip recognition
+
+
 Version 0.9.5 - May 17, 2000
 
 * Improved chip version recognition

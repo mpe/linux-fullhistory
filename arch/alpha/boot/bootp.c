@@ -93,7 +93,7 @@ pal_init(void)
 	i = switch_to_osf_pal(2, pcb_va, pcb_pa, VPTB);
 	if (i) {
 		srm_printk("failed, code %ld\n", i);
-		halt();
+		__halt();
 	}
 
 	percpu = (struct percpu_struct *)
@@ -171,8 +171,7 @@ start_kernel(void)
 	srm_printk("Initrd positioned at %#lx\n", initrd_start);
 #endif
 
-	nbytes = srm_dispatch(CCB_GET_ENV, ENV_BOOTED_OSFLAGS,
-			      envval, sizeof(envval));
+	nbytes = callback_getenv(ENV_BOOTED_OSFLAGS, envval, sizeof(envval));
 	if (nbytes < 0 || nbytes >= sizeof(envval)) {
 		nbytes = 0;
 	}
@@ -181,18 +180,17 @@ start_kernel(void)
 
 	/* NOTE: *no* callbacks or printouts from here on out!!! */
 
-	/*
-	 * This is a hack, as some consoles seem to get virtual 20000000
-	 * (ie where the SRM console puts the kernel bootp image) memory
-	 * overlapping physical 310000 memory, which causes real problems
-	 * when attempting to copy the former to the latter... :-(
+	/* This is a hack, as some consoles seem to get virtual 20000000 (ie
+	 * where the SRM console puts the kernel bootp image) memory
+	 * overlapping physical memory where the kernel wants to be put,
+	 * which causes real problems when attempting to copy the former to
+	 * the latter... :-(
 	 *
 	 * So, we first move the kernel virtual-to-physical way above where
 	 * we physically want the kernel to end up, then copy it from there
 	 * to its final resting place... ;-}
 	 *
-	 * Sigh...
-	 */
+	 * Sigh...  */
 
 #ifdef INITRD_SIZE
 	load(initrd_start, KERNEL_ORIGIN+KERNEL_SIZE, INITRD_SIZE);

@@ -11,13 +11,14 @@
  *	Memory is listed physically now.
  *
  * 2000/04/07 Nicolas Pitre <nico@cam.org>
- *	Reworked for real-time selection of memory definitions
+ *	Reworked for run-time selection of memory definitions
  *
  */
 
 #include <linux/config.h>
 #include <linux/mm.h>
 #include <linux/init.h>
+#include <linux/bootmem.h>
 
 #include <asm/pgtable.h>
 #include <asm/page.h>
@@ -44,7 +45,9 @@
 static struct map_desc assabet_io_desc[] __initdata = {
 #ifdef CONFIG_SA1100_ASSABET
   { 0xd0000000, 0x00000000, 0x02000000, DOMAIN_IO, 1, 1, 0, 0 }, /* Flash bank 0 */
+  { 0xd4000000, 0x10000000, 0x00100000, DOMAIN_IO, 1, 1, 0, 0 }, /* System Registers */
   { 0xdc000000, 0x12000000, 0x00100000, DOMAIN_IO, 1, 1, 0, 0 }, /* Board Control Register */
+  { 0xd8000000, 0x40000000, 0x00800000, DOMAIN_IO, 1, 1, 0, 0 }, /* SA-1111 */
   SA1100_STD_IO_MAPPING
 #endif
 };
@@ -140,4 +143,21 @@ void __init select_sa1100_io_desc(void)
 		io_desc_size = SIZE(default_io_desc);
 	}
 }
+
+#ifdef CONFIG_DISCONTIGMEM
+
+/*
+ * Our node_data structure for discontigous memory.
+ * There is 4 possible nodes i.e. the 4 SA1100 RAM banks.
+ */
+
+static bootmem_data_t node_bootmem_data[4];
+
+pg_data_t sa1100_node_data[4] =
+{ { bdata: &node_bootmem_data[0] },
+  { bdata: &node_bootmem_data[1] },
+  { bdata: &node_bootmem_data[2] },
+  { bdata: &node_bootmem_data[3] } };
+
+#endif
 

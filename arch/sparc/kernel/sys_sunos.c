@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.123 2000/05/22 07:29:39 davem Exp $
+/* $Id: sys_sunos.c,v 1.124 2000/06/19 06:24:37 davem Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -68,7 +68,6 @@ asmlinkage unsigned long sunos_mmap(unsigned long addr, unsigned long len,
 	struct file * file = NULL;
 	unsigned long retval, ret_type;
 
-	down(&current->mm->mmap_sem);
 	lock_kernel();
 	if(flags & MAP_NORESERVE) {
 		static int cnt;
@@ -118,7 +117,9 @@ asmlinkage unsigned long sunos_mmap(unsigned long addr, unsigned long len,
 	}
 
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
+	down(&current->mm->mmap_sem);
 	retval = do_mmap(file, addr, len, prot, flags, off);
+	up(&current->mm->mmap_sem);
 	if(!ret_type)
 		retval = ((retval < PAGE_OFFSET) ? 0 : retval);
 
@@ -127,7 +128,6 @@ out_putf:
 		fput(file);
 out:
 	unlock_kernel();
-	up(&current->mm->mmap_sem);
 	return retval;
 }
 

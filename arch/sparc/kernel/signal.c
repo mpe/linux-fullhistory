@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.103 2000/05/09 17:40:13 davem Exp $
+/*  $Id: signal.c,v 1.105 2000/06/19 06:24:37 davem Exp $
  *  linux/arch/sparc/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -1177,7 +1177,7 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs * regs,
 
 		if (!signr) break;
 
-		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {
+		if ((current->ptrace & PT_PTRACED) && signr != SIGKILL) {
 			current->exit_code = signr;
 			current->state = TASK_STOPPED;
 
@@ -1241,7 +1241,7 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs * regs,
 					continue;
 
 			case SIGSTOP:
-				if (current->flags & PF_PTRACED)
+				if (current->ptrace & PT_PTRACED)
 					continue;
 				current->state = TASK_STOPPED;
 				current->exit_code = signr;

@@ -662,12 +662,13 @@ static void __init cats_hw_init(void)
 
 #endif
 
-void __init hw_init(void)
+/*
+ * Initialise any other hardware after we've got the PCI bus
+ * initialised.  We may need the PCI bus to talk to this other
+ * hardware.
+ */
+static int __init hw_init(void)
 {
-	extern void register_isa_ports(unsigned int, unsigned int, 
-				       unsigned int);
-	register_isa_ports(DC21285_PCI_MEM, DC21285_PCI_IO, 0);
-
 #ifdef CONFIG_ARCH_NETWINDER
 	/*
 	 * this ought to have a better home...
@@ -678,7 +679,6 @@ void __init hw_init(void)
 	 */
 	if (machine_is_netwinder()) {
 		unsigned long flags;
-		extern int isapnp_disable;
 
 		wb977_init();
 		cpld_init();
@@ -687,21 +687,13 @@ void __init hw_init(void)
 		spin_lock_irqsave(&gpio_lock, flags);
 		gpio_modify_op(GPIO_RED_LED|GPIO_GREEN_LED, DEFAULT_LEDS);
 		spin_unlock_irqrestore(&gpio_lock, flags);
-
-#ifdef CONFIG_ISAPNP
-		/*
-		 * We must not use the kernels ISAPnP code
-		 * on the NetWinder - it will reset the settings
-		 * for the WaveArtist chip and render it inoperable.
-		 */
-		isapnp_disable = 1;
-#endif
 	}
 #endif
 #ifdef CONFIG_ARCH_CATS
 	if (machine_is_cats())
 		cats_hw_init();
 #endif
-
-	leds_event(led_start);
+	return 0;
 }
+
+__initcall(hw_init);

@@ -52,6 +52,10 @@
 #define oldlatch_init()
 #endif
 
+#ifndef CONFIG_ARCH_RPC
+#define HAVE_EXPMASK
+#endif
+
 enum req {
 	req_readbytes,
 	req_reset

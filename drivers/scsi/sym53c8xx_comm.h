@@ -155,6 +155,7 @@
 #define DEBUG_NEGO     (0x0200)
 #define DEBUG_TAGS     (0x0400)
 #define DEBUG_SCATTER  (0x0800)
+#define DEBUG_IC        (0x1000)
 
 /*
 **    Enable/Disable debug messages.
@@ -2414,6 +2415,11 @@ sym53c8xx_pci_init(Scsi_Host_Template *tpnt, pcidev_t pdev, ncr_device *device)
 	/*
 	**    Check if the chip is supported
 	*/
+	if ((device_id == PCI_DEVICE_ID_LSI_53C1010) ||
+			(device_id == PCI_DEVICE_ID_LSI_53C1010_66)){
+		printk(NAME53C8XX ": not initializing, device not supported\n");
+		return -1;
+	}
 	chip = 0;
 	for (i = 0; i < sizeof(ncr_chip_table)/sizeof(ncr_chip_table[0]); i++) {
 		if (device_id != ncr_chip_table[i].device_id)

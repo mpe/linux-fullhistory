@@ -353,10 +353,12 @@ pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 	pid_t __ret;
 
 	__asm__ __volatile__(
-	"mov	r0, %1		@ kernel_thread sys_clone\n"
-"	mov	r1, #0\n"
-	__syscall(clone)"\n"
-"	mov	%0, r0"
+	"mov	r0, %1		@ kernel_thread sys_clone
+	mov	r1, #0
+	"__syscall(clone)"
+	teq	r0, #0		@ if we are the child
+	moveq	fp, #0		@ ensure that fp is zero
+	mov	%0, r0"
         : "=r" (__ret)
         : "Ir" (flags | CLONE_VM) : "r0", "r1");
 	if (__ret == 0)

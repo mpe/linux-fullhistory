@@ -31,6 +31,51 @@
 				            "floppy", NULL)
 #define fd_free_irq()           free_irq(FLOPPY_IRQ, NULL);
 
+#ifdef CONFIG_PCI
+
+#include <linux/pci.h>
+
+#define fd_dma_setup(addr,size,mode,io) alpha_fd_dma_setup(addr,size,mode,io)
+
+static __inline__ int 
+alpha_fd_dma_setup(char *addr, unsigned long size, int mode, int io)
+{
+	static unsigned long prev_size;
+	static dma_addr_t bus_addr = 0;
+	static char *prev_addr;
+	static int prev_dir;
+	int dir;
+
+	dir = (mode != DMA_MODE_READ) ? PCI_DMA_FROMDEVICE : PCI_DMA_TODEVICE;
+
+	if (bus_addr 
+	    && (addr != prev_addr || size != prev_size || dir != prev_dir)) {
+		/* different from last time -- unmap prev */
+		pci_unmap_single(NULL, bus_addr, prev_size, prev_dir);
+		bus_addr = 0;
+	}
+
+	if (!bus_addr)	/* need to map it */
+		bus_addr = pci_map_single(NULL, addr, size, dir);
+
+	/* remember this one as prev */
+	prev_addr = addr;
+	prev_size = size;
+	prev_dir = dir;
+
+	fd_clear_dma_ff();
+	fd_cacheflush(addr, size);
+	fd_set_dma_mode(mode);
+	set_dma_addr(FLOPPY_DMA, bus_addr);
+	fd_set_dma_count(size);
+	virtual_dma_port = io;
+	fd_enable_dma();
+
+	return 0;
+}
+
+#endif /* CONFIG_PCI */
+
 __inline__ void virtual_dma_init(void)
 {
 	/* Nothing to do on an Alpha */

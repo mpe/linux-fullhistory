@@ -84,11 +84,15 @@ extern __inline__ int get_order(unsigned long size)
 
 #endif /* !__ASSEMBLY__ */
 
+#include <linux/config.h>
 #include <asm/arch/memory.h>
 
 #define __pa(x)			__virt_to_phys((unsigned long)(x))
 #define __va(x)			((void *)__phys_to_virt((unsigned long)(x)))
+
+#ifndef CONFIG_DISCONTIGMEM
 #define MAP_NR(addr)		((__pa(addr) - PHYS_OFFSET) >> PAGE_SHIFT)
+#endif
 
 #endif
 

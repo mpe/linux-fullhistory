@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.94 2000/03/28 06:07:25 anton Exp $ */
+/* $Id: pgtable.h,v 1.96 2000/06/05 06:08:46 anton Exp $ */
 #ifndef _SPARC_PGTABLE_H
 #define _SPARC_PGTABLE_H
 
@@ -52,19 +52,14 @@ BTFIXUPDEF_CALL(void,  mmu_release_scsi_sgl, struct scatterlist *, int, struct s
 
 /*
  * mmu_map/unmap are provided by iommu/iounit; Invalid to call on IIep.
- * mmu_flush/inval belong to CPU. Valid on IIep.
  */
 BTFIXUPDEF_CALL(void,  mmu_map_dma_area, unsigned long va, __u32 addr, int len)
 BTFIXUPDEF_CALL(unsigned long /*phys*/, mmu_translate_dvma, unsigned long busa)
 BTFIXUPDEF_CALL(void,  mmu_unmap_dma_area, unsigned long busa, int len)
-BTFIXUPDEF_CALL(void,  mmu_inval_dma_area, unsigned long virt, int len)
-BTFIXUPDEF_CALL(void,  mmu_flush_dma_area, unsigned long virt, int len)
 
 #define mmu_map_dma_area(va, ba,len) BTFIXUP_CALL(mmu_map_dma_area)(va,ba,len)
 #define mmu_unmap_dma_area(ba,len) BTFIXUP_CALL(mmu_unmap_dma_area)(ba,len)
 #define mmu_translate_dvma(ba)     BTFIXUP_CALL(mmu_translate_dvma)(ba)
-#define mmu_inval_dma_area(va,len) BTFIXUP_CALL(mmu_inval_dma_area)(va,len)
-#define mmu_flush_dma_area(va,len) BTFIXUP_CALL(mmu_flush_dma_area)(va,len)
 
 BTFIXUPDEF_SIMM13(pmd_shift)
 BTFIXUPDEF_SETHI(pmd_size)
@@ -92,9 +87,6 @@ BTFIXUPDEF_SIMM13(ptrs_per_pgd)
 BTFIXUPDEF_SIMM13(user_ptrs_per_pgd)
 
 #define VMALLOC_VMADDR(x) ((unsigned long)(x))
-/* This is the same accross all platforms */
-#define VMALLOC_START (0xfe300000)
-#define VMALLOC_END   ~0x0UL
 
 #if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8)
 #define pte_ERROR(e)   __builtin_trap()

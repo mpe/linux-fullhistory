@@ -5,28 +5,23 @@
 #
 # Based on coffboot by Paul Mackerras
 
-.c.s:
-	$(CC) $(CFLAGS) -S -o $*.s $<
-.s.o:
-	$(AS) -o $*.o $<
+ifeq ($(CONFIG_PPC64BRIDGE),y)
+MSIZE=.64
+AFLAGS += -Wa,-mppc64bridge
+else
+MSIZE=
+endif
+
 .c.o:
 	$(CC) $(CFLAGS) -DKERNELBASE=$(KERNELBASE) -c -o $*.o $<
-.S.s:
-	$(CPP) $(AFLAGS) -traditional -o $*.o $<
 .S.o:
 	$(CC) $(AFLAGS) -traditional -c -o $*.o $<
 
 CFLAGS	= $(CPPFLAGS) -O -fno-builtin -DSTDC_HEADERS
 LD_ARGS = -Ttext 0x00400000
 
-OBJS = crt0.o start.o main.o misc.o ../coffboot/string.o ../coffboot/zlib.o image.o sysmap.o
+OBJS = crt0.o start.o main.o misc.o ../coffboot/string.o ../coffboot/zlib.o image.o
 LIBS = $(TOPDIR)/lib/lib.a
-
-ifeq ($(CONFIG_PPC64),y)
-MSIZE=.64
-else
-MSIZE=
-endif
 
 ifeq ($(CONFIG_ALL_PPC),y)
 # yes, we want to build chrp stuff
@@ -58,8 +53,8 @@ floppy: zImage
 piggyback: piggyback.c
 	$(HOSTCC) $(HOSTCFLAGS) -DKERNELBASE=$(KERNELBASE) -o piggyback piggyback.c
 
-mknote: mknote.c
-	$(HOSTCC) $(HOSTCFLAGS) -o mknote mknote.c
+addnote: addnote.c
+	$(HOSTCC) $(HOSTCFLAGS) -o addnote addnote.c
 
 image.o: piggyback ../coffboot/vmlinux.gz
 	./piggyback image < ../coffboot/vmlinux.gz | $(AS) -o image.o
@@ -70,13 +65,13 @@ sysmap.o: piggyback ../../../System.map
 initrd.o: ramdisk.image.gz piggyback
 	./piggyback initrd < ramdisk.image.gz | $(AS) -o initrd.o
 
-zImage: $(OBJS) no_initrd.o mknote
+zImage: $(OBJS) no_initrd.o addnote
 	$(LD) $(LD_ARGS) -o $@ $(OBJS) no_initrd.o $(LIBS)
-	./mknote > note
-	$(OBJCOPY) $@ $@ --add-section=.note=note -R .comment
+	./addnote $@
 
-zImage.initrd: $(OBJS) initrd.o
+zImage.initrd: $(OBJS) initrd.o addnote
 	$(LD) $(LD_ARGS) -o $@ $(OBJS) initrd.o $(LIBS)
+	./addnote $@
 
 else
 znetboot:
@@ -98,7 +93,7 @@ vmlinux.coff.initrd:
 
 
 clean:
-	rm -f piggyback note mknote $(OBJS) zImage
+	rm -f piggyback note addnote $(OBJS) zImage
 
 fastdep:
 	$(TOPDIR)/scripts/mkdep *.[Sch] > .depend

@@ -747,7 +747,7 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 #endif
 
 	start_thread(regs, elf_entry, bprm->p);
-	if (current->flags & PF_PTRACED)
+	if (current->ptrace & PT_PTRACED)
 		send_sig(SIGTRAP, current, 0);
 	retval = 0;
 out:

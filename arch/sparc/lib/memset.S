@@ -55,6 +55,9 @@
 	.text
 	.align 4
 
+        .globl  __bzero_begin
+__bzero_begin:
+
 	.globl	C_LABEL(__bzero), C_LABEL(__memset), 
 	.globl	C_LABEL(memset)
 	.globl	C_LABEL(__memset_start), C_LABEL(__memset_end)
@@ -193,3 +196,6 @@ C_LABEL(__memset_end):
 	 mov	%i4, %o2
 	ret
 	 restore
+
+	.globl __bzero_end
+__bzero_end:

@@ -123,7 +123,6 @@ static int js_war_open(struct js_dev *jd)
 {
 	struct js_war_info *info = jd->port->info;
 	info->used++;
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -138,7 +137,6 @@ static int js_war_close(struct js_dev *jd)
 		js_unregister_device(jd->port->devs[0]);
 		js_war_port = js_unregister_port(jd->port);
 	}
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -200,7 +198,7 @@ static int js_war_ldisc_open(struct tty_struct *tty)
 	tty->disc_data = info;
 
 	printk(KERN_INFO "js%d: WingMan Warrior on %s%d\n",
-		js_register_device(js_war_port, 0, 6, 4, "WingMan Warrior", js_war_open, js_war_close),
+		js_register_device(js_war_port, 0, 6, 4, "WingMan Warrior", THIS_MODULE, js_war_open, js_war_close),
 		tty->driver.name, MINOR(tty->device) - tty->driver.minor_start);
 
 	js_war_init_corr(js_war_port->corr);

@@ -131,6 +131,29 @@ finddevice(const char *name)
     return args.phandle;
 }
 
+void *
+claim(unsigned int virt, unsigned int size, unsigned int align)
+{
+    struct prom_args {
+	char *service;
+	int nargs;
+	int nret;
+	unsigned int virt;
+	unsigned int size;
+	unsigned int align;
+	void *ret;
+    } args;
+
+    args.service = "claim";
+    args.nargs = 3;
+    args.nret = 1;
+    args.virt = virt;
+    args.size = size;
+    args.align = align;
+    (*prom)(&args);
+    return args.ret;
+}
+
 int
 getprop(void *phandle, const char *name, void *buf, int buflen)
 {

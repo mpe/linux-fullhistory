@@ -85,9 +85,6 @@ extern unsigned long sh_isa_slot(unsigned long offset);
 #define isa_memcpy_toio(a,b,c) \
   memcpy((void *)(sh_isa_slot((unsigned long)(a))),(b),(c))
 
-#define ctrl_in(addr)		*(addr)
-#define ctrl_out(data,addr)	*(addr) = (data)
-
 extern __inline__ unsigned long ctrl_inb(unsigned long addr)
 {
 	return *(volatile unsigned char*)addr;

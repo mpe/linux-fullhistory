@@ -305,11 +305,12 @@ int t1pci_init(void)
 	while ((dev = pci_find_device(PCI_VENDOR_ID_AVM, PCI_DEVICE_ID_AVM_T1, dev))) {
 		struct capicardparams param;
 
+		if (pci_enable_device(dev))
+			continue;
+
 		param.port = pci_resource_start (dev, 1);
 		param.irq = dev->irq;
 		param.membase = pci_resource_start (dev, 0);
-
-		pci_enable_device (dev); /* XXX check return */
 
 		printk(KERN_INFO
 			"%s: PCI BIOS reports AVM-T1-PCI at i/o %#x, irq %d, mem %#x\n",

@@ -9,8 +9,10 @@
 #include <linux/interrupt.h>
 #include <linux/errno.h>
 #include <linux/pci.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
+#include <asm/pgtable.h>
 #include <asm/pgalloc.h>
 
 /*
@@ -19,6 +21,8 @@
  * whether this could be called from an interrupt context or not.  For
  * now, we expressly forbid it, especially as some of the stuff we do
  * here is not interrupt context safe.
+ *
+ * Note that this does *not* zero the allocated area!
  */
 void *consistent_alloc(int gfp, size_t size, dma_addr_t *dma_handle)
 {
@@ -36,15 +40,21 @@ void *consistent_alloc(int gfp, size_t size, dma_addr_t *dma_handle)
 	if (!page)
 		goto no_page;
 
-	memset((void *)page, 0, size);
-	clean_cache_area(page, size);
-
-	*dma_handle = virt_to_bus((void *)page);
-
 	ret = __ioremap(virt_to_phys((void *)page), size, 0);
 	if (ret) {
 		/* free wasted pages */
 		unsigned long end = page + (PAGE_SIZE << order);
+
+		/*
+		 * we need to ensure that there are no
+		 * cachelines in use, or worse dirty in
+		 * this area.
+		 */
+		dma_cache_inv(page, size);
+		dma_cache_inv(ret, size);
+
+		*dma_handle = virt_to_bus((void *)page);
+
 		page += size;
 		while (page < end) {
 			free_page(page);

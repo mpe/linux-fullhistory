@@ -315,7 +315,7 @@
 #define __NR_mincore			375
 #define __NR_pciconfig_iobase		376
 
-#if defined(__LIBRARY__) && defined(__GNUC__)
+#if defined(__GNUC__)
 
 #define _syscall_return(type)						\
 	return (_sc_err ? errno = _sc_ret, _sc_ret = -1L : 0), (type) _sc_ret

@@ -116,7 +116,7 @@
 #define __NR_lstat			(__NR_SYSCALL_BASE+107)
 #define __NR_fstat			(__NR_SYSCALL_BASE+108)
 
-#define __NR_iopl			(__NR_SYSCALL_BASE+110)
+
 #define __NR_vhangup			(__NR_SYSCALL_BASE+111)
 #define __NR_idle			(__NR_SYSCALL_BASE+112)
 #define __NR_syscall			(__NR_SYSCALL_BASE+113) /* syscall to call a syscall! */

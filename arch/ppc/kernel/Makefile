@@ -7,8 +7,13 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
+ifdef CONFIG_PPC64BRIDGE
+.S.o:
+	$(CC) $(CFLAGS) -D__ASSEMBLY__ -mppc64bridge -c $< -o $*.o
+else
 .S.o:
 	$(CC) $(CFLAGS) -D__ASSEMBLY__ -c $< -o $*.o
+endif
 
 O_TARGET := kernel.o
 OX_OBJS := ppc_ksyms.o setup.o
@@ -32,6 +37,10 @@ endif
 
 O_OBJS := entry.o traps.o irq.o idle.o time.o process.o signal.o syscalls.o \
 	  misc.o ptrace.o align.o ppc_htab.o semaphore.o bitops.o
+
+ifdef CONFIG_POWER4
+O_OBJS += xics.o
+endif
 
 ifndef CONFIG_8xx
 O_OBJS += hashtable.o

@@ -565,6 +565,8 @@ int tw_findcards(Scsi_Host_Template *tw_host)
 
 	dprintk(KERN_NOTICE "3w-xxxx: tw_findcards()\n");
 	while ((tw_pci_dev = pci_find_device(TW_VENDOR_ID, TW_DEVICE_ID, tw_pci_dev))) {
+		if (pci_enable_device(tw_pci_dev))
+			continue;
 		/* Prepare temporary device extension */
 		tw_dev=(TW_Device_Extension *)kmalloc(sizeof(TW_Device_Extension), GFP_ATOMIC);
 		if (tw_dev == NULL) {
@@ -582,11 +584,11 @@ int tw_findcards(Scsi_Host_Template *tw_host)
 		}
 
 		/* Calculate the cards register addresses */
-		tw_dev->registers.base_addr = tw_pci_dev->resource[0].start;
-		tw_dev->registers.control_reg_addr = (tw_pci_dev->resource[0].start & ~15);
-		tw_dev->registers.status_reg_addr = ((tw_pci_dev->resource[0].start & ~15) + 0x4);
-		tw_dev->registers.command_que_addr = ((tw_pci_dev->resource[0].start & ~15) + 0x8);
-		tw_dev->registers.response_que_addr = ((tw_pci_dev->resource[0].start & ~15) + 0xC);
+		tw_dev->registers.base_addr = pci_resource_start(tw_pci_dev, 0);
+		tw_dev->registers.control_reg_addr = pci_resource_start(tw_pci_dev, 0);
+		tw_dev->registers.status_reg_addr = pci_resource_start(tw_pci_dev, 0) + 0x4;
+		tw_dev->registers.command_que_addr = pci_resource_start(tw_pci_dev, 0) + 0x8;
+		tw_dev->registers.response_que_addr = pci_resource_start(tw_pci_dev, 0) + 0xC;
 		/* Save pci_dev struct to device extension */
 		tw_dev->tw_pci_dev = tw_pci_dev;
 

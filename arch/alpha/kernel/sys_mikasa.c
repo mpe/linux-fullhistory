@@ -185,8 +185,8 @@ static void
 mikasa_apecs_machine_check(unsigned long vector, unsigned long la_ptr,
 		           struct pt_regs * regs)
 {
-#define MCHK_NO_DEVSEL 0x205L
-#define MCHK_NO_TABT 0x204L
+#define MCHK_NO_DEVSEL 0x205U
+#define MCHK_NO_TABT 0x204U
 
 	struct el_common *mchk_header;
 	unsigned int code;

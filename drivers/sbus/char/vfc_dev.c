@@ -190,7 +190,6 @@ static int vfc_open(struct inode *inode, struct file *file)
 		return -EBUSY;
 
 	dev->busy = 1;
-	MOD_INC_USE_COUNT;
 	vfc_lock_device(dev);
 	
 	vfc_csr_init(dev);
@@ -214,7 +213,6 @@ static void vfc_release(struct inode *inode,struct file *file)
 	if (!dev->busy)
 		return;
 	dev->busy = 0;
-	MOD_DEC_USE_COUNT;
 }
 
 static int vfc_debug(struct vfc_dev *dev, int cmd, unsigned long arg) 
@@ -635,6 +633,7 @@ static int vfc_lseek(struct inode *inode, struct file *file,
 }
 
 static struct file_operations vfc_fops = {
+	owner:		THIS_MODULE,
 	llseek:		vfc_lseek,
 	ioctl:		vfc_ioctl,
 	mmap:		vfc_mmap,

@@ -260,6 +260,7 @@ struct file;
 
 struct fb_ops {
     /* open/release and usage marking */
+    struct module *owner;
     int (*fb_open)(struct fb_info *info, int user);
     int (*fb_release)(struct fb_info *info, int user);
     /* get non settable parameters */

@@ -72,7 +72,8 @@
  * BIAS once per CPU will result in the long remaining
  * negative.
  */
-#define RW_LOCK_BIAS	0x01000000
+#define RW_LOCK_BIAS      0x01000000
+#define RW_LOCK_BIAS_STR "0x01000000"
 
 #define __down_op_write(ptr,fail)		\
 	({					\

@@ -344,10 +344,20 @@ static void __init synchronize_tsc_ap (void)
 
 extern void calibrate_delay(void);
 
+static atomic_t init_deasserted;
+
 void __init smp_callin(void)
 {
 	int cpuid, phys_id;
 	unsigned long timeout;
+
+	/*
+	 * If waken up by an INIT in an 82489DX configuration
+	 * we may get here before an INIT-deassert IPI reaches
+	 * our local APIC.  We have to wait for the IPI or we'll
+	 * lock up on an APIC access.
+	 */
+	while (!atomic_read(&init_deasserted));
 
 	/*
 	 * (This works even if the APIC is not enabled.)
@@ -573,6 +583,8 @@ static void __init do_boot_cpu (int apicid)
 	 * the targeted processor.
 	 */
 
+	atomic_set(&init_deasserted, 0);
+
 	Dprintk("Setting warm reset code and vector.\n");
 
 	CMOS_WRITE(0xa, 0xf);
@@ -641,6 +653,8 @@ static void __init do_boot_cpu (int apicid)
 		udelay(100);
 		send_status = apic_read(APIC_ICR) & APIC_ICR_BUSY;
 	} while (send_status && (timeout++ < 1000));
+
+	atomic_set(&init_deasserted, 1);
 
 	/*
 	 * Should we send STARTUP IPIs ?
@@ -869,14 +883,6 @@ void __init smp_boot_cpus(void)
 		phys_cpu_present_map |= (1 << hard_smp_processor_id());
 	}
 
-	/*
-	 * If SMP should be disabled, then really disable it!
-	 */
-	if (!max_cpus) {
-		smp_found_config = 0;
-		printk(KERN_INFO "SMP mode deactivated, forcing use of dummy APIC emulation.\n");
-	}
-
 	{
 		int reg;
 
@@ -910,6 +916,20 @@ void __init smp_boot_cpus(void)
 
 		reg = apic_read(APIC_LVT1);
 		Dprintk("Getting LVT1: %x\n", reg);
+	}
+
+	/*
+	 * If SMP should be disabled, then really disable it!
+	 */
+	if (!max_cpus) {
+		smp_found_config = 0;
+		printk(KERN_INFO "SMP mode deactivated, forcing use of dummy APIC emulation.\n");
+#ifndef CONFIG_VISWS
+		io_apic_irqs = 0;
+#endif
+		cpu_online_map = phys_cpu_present_map = 1;
+		smp_num_cpus = 1;
+		goto smp_done;
 	}
 
 	connect_bsp_APIC();
@@ -998,7 +1018,6 @@ void __init smp_boot_cpus(void)
 		setup_IO_APIC();
 #endif
 
-smp_done:
 	/*
 	 * Set up all local APIC timers in the system:
 	 */
@@ -1010,6 +1029,7 @@ smp_done:
 	if (cpu_has_tsc && cpucount)
 		synchronize_tsc_bp();
 
+smp_done:
 	zap_low_mappings();
 }
 

@@ -501,6 +501,7 @@ static int js_console_read(void *xinfo, int **axes, int **buttons)
 
 /*
  * open callback: claim parport.
+ * FIXME: if parport_claim() will sleep we can get into mess.
  */
 
 int js_console_open(struct js_dev *dev)
@@ -754,7 +755,7 @@ static struct js_port __init *js_console_probe(int *config, struct js_port *port
 
 	for (i = 0; i < info.pads; i++) {
 		printk(KERN_INFO "js%d: %s on %s\n",
-			js_register_device(port, i, axes[i], buttons[i], name[i], js_console_open, js_console_close),
+			js_register_device(port, i, axes[i], buttons[i], name[i], NULL, js_console_open, js_console_close),
 			name[i], info.port->port->name);
 
 		js_console_init_corr(axes[i], type[i], port->corr[i]);

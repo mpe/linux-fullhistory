@@ -1,10 +1,10 @@
-/*  $Id: init.c,v 1.85 2000/05/09 17:40:13 davem Exp $
+/*  $Id: init.c,v 1.86 2000/06/04 06:23:52 anton Exp $
  *  linux/arch/sparc/mm/init.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  *  Copyright (C) 1995 Eddie C. Dost (ecd@skynet.be)
  *  Copyright (C) 1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
- *  Copyright (C) 2000 Anton Blanchard (anton@progsoc.uts.edu.au)
+ *  Copyright (C) 2000 Anton Blanchard (anton@linuxcare.com)
  */
 
 #include <linux/config.h>
@@ -125,9 +125,13 @@ unsigned long __init bootmem_init(void)
 	unsigned long bootmap_pfn;
 	int i;
 
-	/* Limit maximum memory until we implement highmem for sparc */
-	if (!cmdline_memory_size || cmdline_memory_size > 0x0d000000)
-		cmdline_memory_size = 0x0d000000;
+	/* 
+	 * XXX Limit maximum memory until we implement highmem for sparc.
+	 * The nocache region has taken up some room but I'll rearrange
+	 * the virtual address regions soon - Anton
+	 */
+	if (!cmdline_memory_size || cmdline_memory_size > 0x0c000000)
+		cmdline_memory_size = 0x0c000000;
 
 	/* XXX It is a bit ambiguous here, whether we should
 	 * XXX treat the user specified mem=xxx as total wanted
