@@ -293,12 +293,10 @@ flush:	in	al,#0x60		! Flush the keyboard buffer
 	jb	nokey
 	jmp	flush
 nokey:	call getkey
-	cmp	al,#0x82
-	jb	nokey
-	cmp	al,#0xe0
-	ja	nokey
-	cmp	al,#0x9c
-	je	svga
+	cmp	al,#0x9c		! enter ?
+	je	svga			! yes - svga selection
+	cmp	al,#0xb9		! space ?
+	jne	nokey			! no - repeat
 #endif
 #if !defined(SVGA_MODE) || SVGA_MODE == NORMAL_VGA
 	mov	ax,#0x5019
@@ -694,7 +692,7 @@ gdt_48:
 	.word	0x800		! gdt limit=2048, 256 GDT entries
 	.word	512+gdt,0x9	! gdt base = 0X9xxxx
 
-msg1:		.ascii	"Press <RETURN> to see SVGA-modes available or any other key to continue."
+msg1:		.ascii	"Press <RETURN> to see SVGA-modes available or <SPACE> to continue."
 		db	0x0d, 0x0a, 0x0a, 0x00
 msg2:		.ascii	"Mode:  COLSxROWS:"
 		db	0x0d, 0x0a, 0x0a, 0x00

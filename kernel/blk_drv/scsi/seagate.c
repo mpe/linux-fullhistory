@@ -11,15 +11,15 @@
 #if defined(CONFIG_SCSI_SEAGATE) || defined(CONFIG_SCSI_FD_88x) 
 #include <asm/io.h>
 #include <asm/system.h>
+#include <linux/signal.h>
 #include <linux/sched.h>
 #include "seagate.h"
 #include "scsi.h"
 #include "hosts.h"
 
-extern void seagate_intr(void);
+
 static int internal_command(unsigned char target, const void *cmnd,
 			 void *buff, int bufflen, int reselect);
-void (*do_seagate)(void) = NULL;
 
 static int incommand;			/*
 						set if arbitration has finished and we are 
@@ -121,12 +121,19 @@ SEAGATE SCSI BIOS REVISION 3.2
  */
 
 static int hostno = -1;
+static void seagate_reconnect_intr(int);
 
 int seagate_st0x_detect (int hostnum)
 	{
 #ifndef OVERRIDE
 	int i,j;
 #endif
+static struct sigaction seagate_sigaction = {
+	&seagate_reconnect_intr,
+	0,
+	SA_INTERRUPT,
+	NULL
+};
 
 /*
  *	First, we try for the manual override.
@@ -170,19 +177,14 @@ int seagate_st0x_detect (int hostnum)
 #ifdef DEBUG
 		printk("ST0x detected. Base address = %x, cr = %x, dr = %x\n", base_address, st0x_cr_sr, st0x_dr);
 #endif
-		hostno = hostnum;
-
 /*
  *	At all times, we will use IRQ 5.  
  */
-		
-#if 1
-		set_intr_gate (0x25, seagate_intr);
-		__asm__("
-		inb	$0x21, %%al
-		andb	$0xdf, %%al
-		outb	%%al, $0x21"::);
-#endif
+		hostno = hostnum;
+		if (irqaction(5, &seagate_sigaction)) {
+			printk("Unable to allocate IRQ5 for ST0x driver\n");
+			return 0;
+		}
 		return -1;
 		}
 	else
@@ -212,7 +214,7 @@ static int current_bufflen;
 static void (*done_fn)(int, int) = NULL;
 
 /*
- * These control weather or not disconnect / reconnect will be attempted,
+ * These control whether or not disconnect / reconnect will be attempted,
  * or are being attempted.
  */
 
@@ -226,27 +228,24 @@ static void (*done_fn)(int, int) = NULL;
 
 static int should_reconnect = 0;
 
-void seagate_unexpected_intr (void)
-	{
-	printk("scsi%d: unexpected interrupt.\n", hostno);
-	}	
-	
 /*
  * The seagate_reconnect_intr routine is called when a target reselects the 
  * host adapter.  This occurs on the interrupt triggered by the target 
  * asserting SEL.
  */
 
-void seagate_reconnect_intr (void)
+static void seagate_reconnect_intr (int unused)
 	{
 	int temp;
-	
+
+/* enable all other interrupts. */	
+	sti();
 #if (DEBUG & PHASE_RESELECT)
 	printk("scsi%d : seagate_reconnect_intr() called\n", hostno);
 #endif
 
 	if (!should_reconnect)
-		seagate_unexpected_intr();
+	    printk("scsi%d: unexpected interrupt.\n", hostno);
 	else
 		{
 		should_reconnect = 0;
@@ -336,8 +335,6 @@ static int internal_command(unsigned char target, const void *cmnd,
 	unsigned char message = 0;
 	register unsigned char status_read;
 
-	do_seagate = seagate_unexpected_intr;
-
 	len=bufflen;
 	data=(unsigned char *) buff;
 
@@ -369,7 +366,6 @@ static int internal_command(unsigned char target, const void *cmnd,
 	if (target > 6)
 		{
 		if (reselect == RECONNECT_NOW)
-			eoi();
 		return DID_BAD_TARGET;
 		}
 
@@ -403,7 +399,6 @@ static int internal_command(unsigned char target, const void *cmnd,
 			printk("scsi%d : RESELECT timed out while waiting for IO .\n",
 				hostno);
 #endif
-			eoi();
 			return (DID_BAD_INTR << 16);
 			}
 
@@ -418,7 +413,6 @@ static int internal_command(unsigned char target, const void *cmnd,
 			printk("scsi%d : detected reconnect request to different target.\n" 
 			       "\tData bus = %d\n", hostno, temp);
 #endif
-			eoi();
 			return (DID_BAD_INTR << 16);
 			}
 
@@ -426,7 +420,6 @@ static int internal_command(unsigned char target, const void *cmnd,
 			{
 			printk("scsi%d : Unexpected reselect interrupt.  Data bus = %d\n",
 				hostno, temp);
-			eoi();
 			return (DID_BAD_INTR << 16);
 			}
                 data=current_data;      /* WDE add */
@@ -454,7 +447,6 @@ static int internal_command(unsigned char target, const void *cmnd,
 			printk("scsi%d : RESELECT timed out while waiting for SEL.\n",
 				hostno);
 #endif
-			eoi();
 			return (DID_BAD_INTR << 16);				 
 			}
 
@@ -464,7 +456,6 @@ static int internal_command(unsigned char target, const void *cmnd,
  *	At this point, we have connected with the target and can get 
  *	on with our lives.
  */	 
-		eoi();
 		}  	
 	else
  		{	
@@ -927,7 +918,6 @@ static int internal_command(unsigned char target, const void *cmnd,
 		printk("scsi%d : exiting seagate_st0x_queue_command() with reconnect enabled.\n",
 			hostno);
 #endif
-		do_seagate = seagate_reconnect_intr;
 		CONTROL = BASE_CMD | CMD_INTR ;
 		}
 	else

@@ -18,7 +18,6 @@
 	$(CC) $(CFLAGS) $(DEBUG) -c $<
 
 
-LOWLEVELSSRC = seagate2.s
 LOWLEVELCSRC = aha1542.c fdomain.c seagate.c ultrastor.c 7000fasst.c
 LOWLEVELHSRC = aha1542.h fdomain.h seagate.h ultrastor.h 7000fasst.o
  
@@ -27,7 +26,7 @@ HSRC = hosts.h sd.h st.h sr.h sr_ioctl.h scsi.h scsi_ioctl.h $(LOWLEVELHSRC)
 
 OBJS =	scsi.o hosts.o scsi_ioctl.o sd.o sd_ioctl.o st.o st_ioctl.o \
 	sr.o sr_ioctl.o \
-	aha1542.o fdomain.o seagate.o seagate2.o ultrastor.o 7000fasst.o
+	aha1542.o fdomain.o seagate.o ultrastor.o 7000fasst.o
 
 all: scsi.a
 
@@ -47,8 +46,6 @@ scsi.a: $(OBJS)
 
 clean:
 	rm -f core *.o *.a tmp_make tmp_max figure max_hosts.h
-
-seagate2.o : seagate2.s
 
 seagate.o: seagate.c
 	$(CC) -Wall -c seagate.c 

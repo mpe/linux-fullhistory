@@ -126,9 +126,6 @@ static int mem_lseek(struct inode * inode, struct file * file, off_t offset, int
 		default:
 			return -EINVAL;
 	}
-	if (file->f_pos < 0)
-		return 0;
-	return file->f_pos;
 }
 
 static struct file_operations proc_mem_operations = {

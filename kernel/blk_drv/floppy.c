@@ -45,6 +45,16 @@
  * TODO: Errors are still not counted properly.
  */
 
+/* 1992/9/20
+ * Modifications for ``Sector Shifting'' by Rob Hooft (hooft@chem.ruu.nl)
+ * modelled after the freeware MS/DOS program fdformat/88 V1.8 by 
+ * Christoph H. Hochst\"atter.
+ * I have fixed the shift values to the ones I always use. Maybe a new
+ * ioctl() should be created to be able to modify them.
+ * There is a bug in the driver that makes it impossible to format a
+ * floppy as the first thing after bootup.
+ */
+
 #define REALLY_SLOW_IO
 #define FLOPPY_IRQ 6
 
@@ -271,7 +281,7 @@ struct wait_queue * wait_on_floppy_select = NULL;
 void floppy_deselect(unsigned int nr)
 {
 	if (nr != (current_DOR & 3))
-		printk("floppy_deselect: drive not selected\n\r");
+		printk("floppy_deselect: drive not selected\n");
 	selected = 0;
 	wake_up(&wait_on_floppy_select);
 }
@@ -297,7 +307,7 @@ int floppy_change(struct buffer_head * bh)
 	unsigned int mask = 1 << (bh->b_dev & 0x03);
 
 	if (MAJOR(bh->b_dev) != 2) {
-		printk("floppy_changed: not a floppy\r\n");
+		printk("floppy_changed: not a floppy\n");
 		return 0;
 	}
 	if (fake_change & mask) {
@@ -413,7 +423,7 @@ static void output_byte(char byte)
 	}
 	current_track = NO_TRACK;
 	reset = 1;
-	printk("Unable to send byte to FDC\n\r");
+	printk("Unable to send byte to FDC\n");
 }
 
 static int result(void)
@@ -437,7 +447,7 @@ static int result(void)
 	}
 	reset = 1;
 	current_track = NO_TRACK;
-	printk("Getstatus times out\n\r");
+	printk("Getstatus times out\n");
 	return -1;
 }
 
@@ -557,7 +567,7 @@ static void rw_interrupt(void)
 		int drive = MINOR(CURRENT->dev);
 
 		if (ftd_msg[drive])
-			printk("Auto-detected floppy type %s in fd%d\r\n",
+			printk("Auto-detected floppy type %s in fd%d\n",
 			    floppy->name,drive);
 		current_type[drive] = floppy;
 		floppy_sizes[drive] = floppy->size >> 1;
@@ -777,7 +787,7 @@ static void reset_floppy(void)
 	cur_spec1 = -1;
 	cur_rate = -1;
 	recalibrate = 1;
-	printk("Reset-floppy called\n\r");
+	printk("Reset-floppy called\n");
 	cli();
 	outb_p(current_DOR & ~0x04,FD_DOR);
 	for (i=0 ; i<1000 ; i++)
@@ -839,7 +849,7 @@ static void floppy_on_interrupt(void)
 			if (ftd_msg[current_drive] && current_type[
 			    current_drive] != NULL)
 				printk("Disk type is undefined after disk "
-				    "change in fd%d\r\n",current_drive);
+				    "change in fd%d\n",current_drive);
 			current_type[current_drive] = NULL;
 			floppy_sizes[current_drive] = MAX_DISK_SIZE;
 		}
@@ -878,13 +888,21 @@ static void floppy_on_interrupt(void)
 static void setup_format_params(void)
 {
     unsigned char *here = (unsigned char *) tmp_floppy_area;
-    int count;
+    int count,head_shift,track_shift,total_shift;
+
+    /* allow for about 30ms for data transport per track */
+    head_shift  = floppy->sect / 6;
+    /* a ``cylinder'' is two tracks plus a little stepping time */
+    track_shift = 2 * head_shift + 1; 
+    /* count backwards */
+    total_shift = floppy->sect - 
+	((track_shift * track + head_shift * head) % floppy->sect);
 
     /* XXX: should do a check to see this fits in tmp_floppy_area!! */
-    for (count = 1; count <= floppy->sect; count++) {
+    for (count = 0; count < floppy->sect; count++) {
 	*here++ = track;
 	*here++ = head;
-	*here++ = count;
+	*here++ = 1 + (( count + total_shift ) % floppy->sect);
 	*here++ = 2; /* 512 bytes */
     }
 }
@@ -1136,7 +1154,7 @@ static void config_types(void)
 		base_type[1] = find_base(1,CMOS_READ(0x10) & 15);
 	}
 	base_type[2] = base_type[3] = NULL;
-	printk("\r\n");
+	printk("\n");
 }
 
 /*

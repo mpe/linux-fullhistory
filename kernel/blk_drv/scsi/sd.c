@@ -43,6 +43,8 @@ static int this_count, total_count = 0;
 static int the_result;
 
 static char sense_buffer[255];
+int slow_scsi_io = -1;  /* This is set by aha1542.c, and others, if needed */
+
 
 extern int sd_ioctl(struct inode *, struct file *, unsigned long, unsigned long);
 
@@ -108,12 +110,14 @@ static void rw_intr (int host, int result)
 
 	if (!result) {
 		CURRENT->nr_sectors -= this_count;
-		total_count -= this_count;
-		if(total_count){
-		  CURRENT->sector += this_count;
-		  CURRENT->buffer += (this_count << 9);
-		  do_sd_request();
-		  return;
+		if (slow_scsi_io == host) {
+		  total_count -= this_count;
+		  if(total_count){
+		    CURRENT->sector += this_count;
+		    CURRENT->buffer += (this_count << 9);
+		    do_sd_request();
+		    return;
+		  };
 		};
 
 #ifdef DEBUG
@@ -255,10 +259,14 @@ repeat:
 		this_count = CURRENT->nr_sectors;
 	else
 		this_count = (BLOCK_SIZE / 512);
+
+
 /* This is a temporary hack for the AHA1742. */
-	if(total_count == 0)
-	  total_count = this_count;
-	this_count = 1;  /* Take only 512 bytes at a time */
+	if(slow_scsi_io == HOST) {
+	  if(total_count == 0)
+	    total_count = this_count;
+	  this_count = 1;  /* Take only 512 bytes at a time */
+	};
 
 #ifdef DEBUG
 	printk("sd%d : %s %d/%d 512 byte blocks.\n", MINOR(CURRENT->dev), 

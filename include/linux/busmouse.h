@@ -82,27 +82,19 @@
 			    outb(MS_MSE_ENABLE_INTERRUPTS, MS_MSE_DATA_PORT);}
 
  
-struct mouse_status
-	{
+struct mouse_status {
 	char		buttons;
 	char		latch_buttons;
 	int		dx;
 	int		dy;	
-
 	int 		present;
 	int		ready;
 	int		active;
-
-	struct inode    *inode;
-	};
-
-/* Variable Definitions */
-extern int mse_busmouse_type;   /* to distinguish what type mouse we're working with */
-
+	struct wait_queue *wait;
+};
 
 /* Function Prototypes */
 extern long mouse_init(long);
-
 
 #endif
 

@@ -17,21 +17,28 @@
  * library, the executable area etc).
  */
 struct vm_area_struct {
-	unsigned long vm_start;			/* VM area parameters */
+	struct task_struct * vm_task;		/* VM area parameters */
+	unsigned long vm_start;
 	unsigned long vm_end;
 	struct vm_area_struct * vm_next;	/* ordered linked list */
 	struct vm_area_struct * vm_share;	/* circular linked list */
 	struct inode * vm_inode;
 	unsigned long vm_offset;
 	struct vm_operations_struct * vm_ops;
-	unsigned long vm_flags;
 };
 
+/*
+ * These are the virtual MM functions - opening of an area, closing it (needed to
+ * keep files on disk up-to-date etc), pointer to the functions called when a
+ * no-page or a wp-page exception occurs, and the function which decides on sharing
+ * of pages between different processes.
+ */
 struct vm_operations_struct {
-	void (*open)(struct task_struct * tsk, struct vm_area_struct * area);
-	void (*close)(struct task_struct * tsk, struct vm_area_struct * area);
-	void (*nopage)(struct task_struct * tsk, struct vm_area_struct * area, unsigned long address);
-	void (*wppage)(struct task_struct * tsk, struct vm_area_struct * area, unsigned long address);
+	void (*open)(struct vm_area_struct * area);
+	void (*close)(struct vm_area_struct * area);
+	void (*nopage)(struct vm_area_struct * area, unsigned long address);
+	void (*wppage)(struct vm_area_struct * area, unsigned long address);
+	void (*share)(struct vm_area_struct * old, struct vm_area_struct * new, unsigned long address);
 };
 
 #endif

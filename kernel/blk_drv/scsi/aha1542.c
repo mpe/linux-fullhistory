@@ -32,6 +32,8 @@ static const char RCSid[] = "$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/aha
 static struct mailbox mb[2];
 static struct ccb ccb;
 
+extern int slow_scsi_io;
+
 long WAITtimeout, WAITnexttimeout = 3000000;
 
 void (*do_done)(int, int) = NULL;
@@ -389,7 +391,7 @@ void call_buh()
 }
 
 /* Query the board to find out if it is a 1542 or a 1740, or whatever. */
-static void aha1542_query()
+static void aha1542_query(int hostnum)
 {
   static unchar inquiry_cmd[] = {CMD_INQUIRY };
   static unchar inquiry_result[4];
@@ -397,7 +399,6 @@ static void aha1542_query()
   i = inb(STATUS);
   if (i & DF) {
     i = inb(DATA);
-    printk("Stale data:%x ");
   };
   aha1542_out(inquiry_cmd, 1);
   aha1542_in(inquiry_result, 4);
@@ -406,9 +407,18 @@ static void aha1542_query()
   fail:
     printk("aha1542_detect: query card type\n");
   }
-      aha1542_intr_reset();
-  printk("Inquiry:");
-  for(i=0;i<4;i++) printk("%x ",inquiry_result[i]);
+  aha1542_intr_reset();
+
+/* For an AHA1740 series board, we select slower I/O because there is a
+   hardware bug which can lead to wrong blocks being returned.  The slow
+   I/O somehow prevents this.  Once we have drivers for extended mode
+   on the aha1740, this will no longer be required.
+*/
+
+  if (inquiry_result[0] == 0x43) {
+    slow_scsi_io = hostnum;
+    printk("aha1542.c: Slow SCSI disk I/O selected for AHA 174N hardware.\n");
+  };
 }
 /* return non-zero on detection */
 int aha1542_detect(int hostnum)
@@ -421,11 +431,16 @@ int aha1542_detect(int hostnum)
 	return 0;
     }
  
+#if MAX_MEGABYTES > 16
+  printk("Adaptec 1542 disabled for kernels for which MAX_MEGABYTES > 16.\n");
+  return 0;
+#endif
+
     /* Set the Bus on/off-times as not to ruin floppy performens */
     {
 	static unchar oncmd[] = {CMD_BUSON_TIME, 5};
 	static unchar offcmd[] = {CMD_BUSOFF_TIME, 9};
-	
+
 	aha1542_intr_reset();
 	aha1542_out(oncmd, 2);
 	WAIT(INTRFLAGS, INTRMASK, HACC, 0);
@@ -438,7 +453,7 @@ int aha1542_detect(int hostnum)
 	}
 	aha1542_intr_reset();
     }
-    aha1542_query();
+    aha1542_query(hostnum);
 
     DEB(aha1542_stat());
     setup_mailboxes();

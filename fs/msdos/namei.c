@@ -511,11 +511,12 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,
 		    MSDOS_I(new_dir)->i_start;
 		dotdot_inode->i_dirt = 1;
 		dotdot_bh->b_dirt = 1;
-		iput(dotdot_inode);
-		brelse(dotdot_bh);
 		old_dir->i_nlink--;
 		new_dir->i_nlink++;
 		/* no need to mark them dirty */
+		dotdot_inode->i_nlink = new_dir->i_nlink;
+		iput(dotdot_inode);
+		brelse(dotdot_bh);
 	}
 	error = 0;
 rename_done:

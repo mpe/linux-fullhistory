@@ -88,7 +88,7 @@ LD86	=ld86 -0
 # Set it to -DSVGA_MODE=NORMAL_VGA if you just want the EGA/VGA mode.
 # The number is the same as you would ordinarily press at bootup.
 #
-SVGA_MODE=	-DSVGA_MODE=1
+SVGA_MODE=#	-DSVGA_MODE=1
 
 AS	=as
 LD	=ld
@@ -127,7 +127,7 @@ linuxsubdirs: dummy
 
 Version:
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.98-`cat .version`\" > tools/version.h
+	@echo \#define UTS_RELEASE \"0.98.pl1-`cat .version`\" > tools/version.h
 	@echo \#define UTS_VERSION \"`date +%D`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h

@@ -9,6 +9,7 @@
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/string.h>
+#include <linux/ctype.h>
 #include <linux/stat.h>
 
 #include <asm/segment.h>
@@ -54,12 +55,32 @@ static struct super_operations msdos_sops = {
 };
 
 
-static int parse_options(char *options,char *check,char *conversion)
+static unsigned long simple_strtoul(const char *cp,char **endp)
+{
+	int base = 10;
+	unsigned long result = 0;
+
+	if (*cp == '0') {
+		base = 8;
+		cp++;
+	}
+	while (isdigit(*cp) && (*cp - '0') < base)
+		result = result*base + *cp++ - '0';
+	if (*endp)
+		*endp = (char *)cp;
+	return result;
+}
+
+
+static int parse_options(char *options,char *check,char *conversion,uid_t *uid, gid_t *gid, int *umask)
 {
 	char *this,*value;
 
 	*check = 'n';
 	*conversion = 'b';
+	*uid = current->uid;
+	*gid = current->gid;
+	*umask = current->umask;
 	if (!options) return 1;
 	for (this = strtok(options,","); this; this = strtok(NULL,",")) {
 		if (value = strchr(this,'=')) *value++ = 0;
@@ -79,6 +100,27 @@ static int parse_options(char *options,char *check,char *conversion)
 			else if (!strcmp(value,"auto")) *conversion = 'a';
 			else return 0;
 		}
+		else if (!strcmp(this,"uid")) {
+			if (!value || !*value)
+				return 0;
+			*uid = simple_strtoul(value,&value);
+			if (*value)
+				return 0;
+		}
+		else if (!strcmp(this,"gid")) {
+			if (!value || !*value)
+				return 0;
+			*gid = simple_strtoul(value,&value);
+			if (*value)
+				return 0;
+		}
+		else if (!strcmp(this,"umask")) {
+			if (!value || !*value)
+				return 0;
+			*umask = simple_strtoul(value,&value);
+			if (*value)
+				return 0;
+		}
 		else return 0;
 	}
 	return 1;
@@ -93,8 +135,11 @@ struct super_block *msdos_read_super(struct super_block *s,void *data)
 	struct msdos_boot_sector *b;
 	int data_sectors;
 	char check,conversion;
+	uid_t uid;
+	gid_t gid;
+	int umask;
 
-	if (!parse_options((char *) data,&check,&conversion)) {
+	if (!parse_options((char *) data,&check,&conversion,&uid,&gid,&umask)) {
 		s->s_dev = 0;
 		return NULL;
 	}
@@ -123,8 +168,8 @@ struct super_block *msdos_read_super(struct super_block *s,void *data)
 	    0;
 	MSDOS_SB(s)->fat_bits = MSDOS_SB(s)->clusters > MSDOS_FAT12 ? 16 : 12;
 	brelse(bh);
-printk("[MS-DOS FS Rel. alpha.8, FAT %d, check=%c, conv=%c]\n",
-  MSDOS_SB(s)->fat_bits,check,conversion);
+printk("[MS-DOS FS Rel. alpha.8, FAT %d, check=%c, conv=%c, uid=%d, gid=%d, umask=%03o]\n",
+  MSDOS_SB(s)->fat_bits,check,conversion,uid,gid,umask);
 printk("[me=0x%x,cs=%d,#f=%d,fs=%d,fl=%d,ds=%d,de=%d,data=%d,se=%d,ts=%d]\n",
   b->media,MSDOS_SB(s)->cluster_size,MSDOS_SB(s)->fats,MSDOS_SB(s)->fat_start,
   MSDOS_SB(s)->fat_length,MSDOS_SB(s)->dir_start,MSDOS_SB(s)->dir_entries,
@@ -142,9 +187,9 @@ printk("[me=0x%x,cs=%d,#f=%d,fs=%d,fl=%d,ds=%d,de=%d,data=%d,se=%d,ts=%d]\n",
 	MSDOS_SB(s)->conversion = conversion;
 	/* set up enough so that it can read an inode */
 	s->s_op = &msdos_sops;
-	MSDOS_SB(s)->fs_uid = current->uid;
-	MSDOS_SB(s)->fs_gid = current->gid;
-	MSDOS_SB(s)->fs_umask = current->umask;
+	MSDOS_SB(s)->fs_uid = uid;
+	MSDOS_SB(s)->fs_gid = gid;
+	MSDOS_SB(s)->fs_umask = umask;
 	MSDOS_SB(s)->free_clusters = -1; /* don't know yet */
 	MSDOS_SB(s)->fat_wait = NULL;
 	MSDOS_SB(s)->fat_lock = 0;

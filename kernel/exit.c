@@ -197,7 +197,7 @@ int kill_pg(int pgrp, int sig, int priv)
 		return -EINVAL;
  	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p)
 		if (*p && (*p)->pgrp == pgrp) {
-			if (sig && (err = send_sig(sig,*p,priv)))
+			if (err = send_sig(sig,*p,priv))
 				retval = err;
 			else
 				found++;
@@ -237,7 +237,7 @@ int kill_proc(int pid, int sig, int priv)
 		return -EINVAL;
 	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p)
 		if (*p && (*p)->pid == pid)
-			return(sig ? send_sig(sig,*p,priv) : 0);
+			return send_sig(sig,*p,priv);
 	return(-ESRCH);
 }
 

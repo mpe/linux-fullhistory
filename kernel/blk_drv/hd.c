@@ -289,6 +289,7 @@ ok_to_read:
 		sti();
 		return;
 	}
+	(void) inb_p(HD_STATUS);
 #if (HD_DELAY > 0)
 	last_req = read_timer();
 #endif
