@@ -505,6 +505,35 @@ static void guarantee_online_mems(const struct cpuset *cs, nodemask_t *pmask)
 }
 
 /*
+ * Refresh current tasks mems_allowed and mems_generation from
+ * current tasks cpuset.  Call with cpuset_sem held.
+ *
+ * Be sure to call refresh_mems() on any cpuset operation which
+ * (1) holds cpuset_sem, and (2) might possibly alloc memory.
+ * Call after obtaining cpuset_sem lock, before any possible
+ * allocation.  Otherwise one risks trying to allocate memory
+ * while the task cpuset_mems_generation is not the same as
+ * the mems_generation in its cpuset, which would deadlock on
+ * cpuset_sem in cpuset_update_current_mems_allowed().
+ *
+ * Since we hold cpuset_sem, once refresh_mems() is called, the
+ * test (current->cpuset_mems_generation != cs->mems_generation)
+ * in cpuset_update_current_mems_allowed() will remain false,
+ * until we drop cpuset_sem.  Anyone else who would change our
+ * cpusets mems_generation needs to lock cpuset_sem first.
+ */
+
+static void refresh_mems(void)
+{
+	struct cpuset *cs = current->cpuset;
+
+	if (current->cpuset_mems_generation != cs->mems_generation) {
+		guarantee_online_mems(cs, &current->mems_allowed);
+		current->cpuset_mems_generation = cs->mems_generation;
+	}
+}
+
+/*
  * is_cpuset_subset(p, q) - Is cpuset p a subset of cpuset q?
  *
  * One cpuset is a subset of another if all its allowed CPUs and
@@ -1224,6 +1253,7 @@ static long cpuset_create(struct cpuset *parent, const char *name, int mode)
 		return -ENOMEM;
 
 	down(&cpuset_sem);
+	refresh_mems();
 	cs->flags = 0;
 	if (notify_on_release(parent))
 		set_bit(CS_NOTIFY_ON_RELEASE, &cs->flags);
@@ -1277,6 +1307,7 @@ static int cpuset_rmdir(struct inode *unused_dir, struct dentry *dentry)
 	/* the vfs holds both inode->i_sem already */
 
 	down(&cpuset_sem);
+	refresh_mems();
 	if (atomic_read(&cs->count) > 0) {
 		up(&cpuset_sem);
 		return -EBUSY;
@@ -1433,8 +1464,7 @@ void cpuset_update_current_mems_allowed()
 		return;		/* task is exiting */
 	if (current->cpuset_mems_generation != cs->mems_generation) {
 		down(&cpuset_sem);
-		guarantee_online_mems(cs, &current->mems_allowed);
-		current->cpuset_mems_generation = cs->mems_generation;
+		refresh_mems();
 		up(&cpuset_sem);
 	}
 }

@@ -256,6 +256,3 @@ void do_show_syscall_exit(unsigned long r3)
 {
 	printk(" -> %lx, current=%p cpu=%d\n", r3, current, smp_processor_id());
 }
-
-/* Only exists on P-series. */
-cond_syscall(ppc_rtas);

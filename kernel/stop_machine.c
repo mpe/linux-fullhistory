@@ -6,6 +6,7 @@
 #include <linux/syscalls.h>
 #include <asm/atomic.h>
 #include <asm/semaphore.h>
+#include <asm/uaccess.h>
 
 /* Since we effect priority and affinity (both of which are visible
  * to, and settable by outside processes) we do indirection via a
@@ -86,9 +87,13 @@ static int stop_machine(void)
 {
 	int i, ret = 0;
 	struct sched_param param = { .sched_priority = MAX_RT_PRIO-1 };
+	mm_segment_t old_fs = get_fs();
 
 	/* One high-prio thread per cpu.  We'll do this one. */
-	sys_sched_setscheduler(current->pid, SCHED_FIFO, &param);
+	set_fs(KERNEL_DS);
+	sys_sched_setscheduler(current->pid, SCHED_FIFO,
+				(struct sched_param __user *)&param);
+	set_fs(old_fs);
 
 	atomic_set(&stopmachine_thread_ack, 0);
 	stopmachine_num_threads = 0;

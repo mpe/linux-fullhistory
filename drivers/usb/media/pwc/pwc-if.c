@@ -1896,7 +1896,7 @@ static int usb_pwc_probe(struct usb_interface *intf, const struct usb_device_id 
 	}
 
 	init_MUTEX(&pdev->modlock);
-	pdev->ptrlock = SPIN_LOCK_UNLOCKED;
+	spin_lock_init(&pdev->ptrlock);
 
 	pdev->udev = udev;
 	init_waitqueue_head(&pdev->frameq);

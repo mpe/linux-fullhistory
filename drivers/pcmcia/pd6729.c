@@ -615,11 +615,6 @@ static int pd6729_set_mem_map(struct pcmcia_socket *sock,
 	return 0;
 }
 
-static int pd6729_suspend(struct pcmcia_socket *sock)
-{
-	return pd6729_set_socket(sock, &dead_socket);
-}
-
 static int pd6729_init(struct pcmcia_socket *sock)
 {
 	int i;
@@ -644,7 +639,6 @@ static int pd6729_init(struct pcmcia_socket *sock)
 /* the pccard structure and its functions */
 static struct pccard_operations pd6729_operations = {
 	.init 			= pd6729_init,
-	.suspend		= pd6729_suspend,
 	.get_status		= pd6729_get_status,
 	.get_socket		= pd6729_get_socket,
 	.set_socket		= pd6729_set_socket,

@@ -683,7 +683,7 @@ struct dvb_frontend* tda80xx_attach(const struct tda80xx_config* config,
 	return &state->frontend;
 
 error:
-	if (state) kfree(state);
+	kfree(state);
 	return NULL;
 }
 

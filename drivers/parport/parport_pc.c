@@ -2733,11 +2733,11 @@ enum parport_pc_pci_cards {
 	aks_0100,
 	mobility_pp,
 	netmos_9705,
+	netmos_9715,
+	netmos_9755,
 	netmos_9805,
 	netmos_9815,
 	netmos_9855,
-	netmos_9755,
-	netmos_9715
 };
 
 
@@ -2808,11 +2808,11 @@ static struct parport_pc_pci {
 	/* aks_0100 */                  { 1, { { 0, -1 }, } },
 	/* mobility_pp */		{ 1, { { 0, 1 }, } },
 	/* netmos_9705 */               { 1, { { 0, -1 }, } }, /* untested */
+        /* netmos_9715 */               { 2, { { 0, 1 }, { 2, 3 },} }, /* untested */
+        /* netmos_9755 */               { 2, { { 0, 1 }, { 2, 3 },} }, /* untested */
 	/* netmos_9805 */               { 1, { { 0, -1 }, } }, /* untested */
 	/* netmos_9815 */               { 2, { { 0, -1 }, { 2, -1 }, } }, /* untested */
 	/* netmos_9855 */               { 2, { { 0, -1 }, { 2, -1 }, } }, /* untested */
-        /* netmos_9755 */               { 2, { { 0, 1 }, { 2, 3 },} }, /* untested */
-        /* netmos_9715 */               { 2, { { 0, 1 }, { 2, 3 },} }, /* untested */
 };
 
 static struct pci_device_id parport_pc_pci_tbl[] = {
@@ -2885,16 +2885,16 @@ static struct pci_device_id parport_pc_pci_tbl[] = {
 	/* NetMos communication controllers */
 	{ PCI_VENDOR_ID_NETMOS, PCI_DEVICE_ID_NETMOS_9705,
 	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, netmos_9705 },
+	{ PCI_VENDOR_ID_NETMOS, PCI_DEVICE_ID_NETMOS_9715,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, netmos_9715 },
+	{ PCI_VENDOR_ID_NETMOS, PCI_DEVICE_ID_NETMOS_9755,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, netmos_9755 },
 	{ PCI_VENDOR_ID_NETMOS, PCI_DEVICE_ID_NETMOS_9805,
 	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, netmos_9805 },
 	{ PCI_VENDOR_ID_NETMOS, PCI_DEVICE_ID_NETMOS_9815,
 	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, netmos_9815 },
 	{ PCI_VENDOR_ID_NETMOS, PCI_DEVICE_ID_NETMOS_9855,
 	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, netmos_9855 },
-	{ PCI_VENDOR_ID_NETMOS, PCI_DEVICE_ID_NETMOS_9755,
-	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, netmos_9755 },
-	{ PCI_VENDOR_ID_NETMOS, PCI_DEVICE_ID_NETMOS_9715,
-	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, netmos_9715 },
 	{ 0, } /* terminate list */
 };
 MODULE_DEVICE_TABLE(pci,parport_pc_pci_tbl);

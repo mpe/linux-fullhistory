@@ -98,6 +98,7 @@ struct dvb_demux_feed {
         u16 peslen;
 
 	struct list_head list_head;
+		int index; /* a unique index for each feed (can be used as hardware pid filter index) */
 };
 
 struct dvb_demux {
@@ -138,12 +139,8 @@ struct dvb_demux {
 
 int dvb_dmx_init(struct dvb_demux *dvbdemux);
 int dvb_dmx_release(struct dvb_demux *dvbdemux);
-void dvb_dmx_swfilter_packet(struct dvb_demux *dvbdmx, const u8 *buf);
 void dvb_dmx_swfilter_packets(struct dvb_demux *dvbdmx, const u8 *buf, size_t count);
 void dvb_dmx_swfilter(struct dvb_demux *demux, const u8 *buf, size_t count);
 void dvb_dmx_swfilter_204(struct dvb_demux *demux, const u8 *buf, size_t count);
-
-int dvbdmx_connect_frontend(struct dmx_demux *demux, struct dmx_frontend *frontend);
-int dvbdmx_disconnect_frontend(struct dmx_demux *demux);
 
 #endif /* _DVB_DEMUX_H_ */

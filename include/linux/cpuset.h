@@ -34,7 +34,7 @@ static inline void cpuset_init_smp(void) {}
 static inline void cpuset_fork(struct task_struct *p) {}
 static inline void cpuset_exit(struct task_struct *p) {}
 
-static inline const cpumask_t cpuset_cpus_allowed(struct task_struct *p)
+static inline cpumask_t cpuset_cpus_allowed(struct task_struct *p)
 {
 	return cpu_possible_map;
 }

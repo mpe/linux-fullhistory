@@ -993,8 +993,7 @@ static int sock_fasync(int fd, struct file *filp, int on)
 	sock = SOCKET_I(filp->f_dentry->d_inode);
 
 	if ((sk=sock->sk) == NULL) {
-		if (fna)
-			kfree(fna);
+		kfree(fna);
 		return -EINVAL;
 	}
 

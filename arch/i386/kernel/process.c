@@ -161,7 +161,7 @@ void cpu_idle (void)
 			if (!idle)
 				idle = default_idle;
 
-			irq_stat[cpu].idle_timestamp = jiffies;
+			__get_cpu_var(irq_stat).idle_timestamp = jiffies;
 			idle();
 		}
 		schedule();

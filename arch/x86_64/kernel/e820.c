@@ -507,21 +507,7 @@ void __init setup_memory_region(void)
 
 void __init parse_memopt(char *p, char **from) 
 { 
-	/*
-	 * mem=XXX[kKmM] limits kernel memory to XXX+1MB
-	 *
-	 * It would be more logical to count from 0 instead of from
-	 * HIGH_MEMORY, but we keep that for now for i386 compatibility. 
-	 *	
-	 * No support for custom mapping like i386.  The reason is
-	 * that we need to read the e820 map anyways to handle the
-	 * ACPI mappings in the direct map.  Also on x86-64 there
-	 * should be always a good e820 map. This is only an upper
-	 * limit, you cannot force usage of memory not in e820.
-	 *
-	 * -AK
-			 */
-	end_user_pfn = memparse(p, from) + HIGH_MEMORY;
+	end_user_pfn = memparse(p, from);
 	end_user_pfn >>= PAGE_SHIFT;	
 } 
 

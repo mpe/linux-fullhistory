@@ -199,7 +199,7 @@ MODULE_PARM_DESC(iProduct, "USB Product string");
 /* initial value, changed by "ifconfig usb0 hw ether xx:xx:xx:xx:xx:xx" */
 static char *__initdata dev_addr;
 module_param(dev_addr, charp, S_IRUGO);
-MODULE_PARM_DESC(iProduct, "Device Ethernet Address");
+MODULE_PARM_DESC(dev_addr, "Device Ethernet Address");
 
 /* this address is invisible to ifconfig */
 static char *__initdata host_addr;

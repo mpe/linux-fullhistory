@@ -411,7 +411,7 @@ printk("[-3..0] 0x%08lx 0x%08lx 0x%08lx 0x%08lx\n",((unsigned *) skb->data)[-3],
 #if 0
 printk("dummy: 0x%08lx, 0x%08lx\n",dummy[0],dummy[1]);
 #endif
-		size = error ? 0 : ntohs(((u16 *) skb->data)[cells*
+		size = error ? 0 : ntohs(((__be16 *) skb->data)[cells*
 		    ATM_CELL_PAYLOAD/sizeof(u16)-3]);
 		EVENT("got skb 0x%lx, size %d\n",(unsigned long) skb,size);
 		chan = (here[3] & uPD98401_AAL5_CHAN) >>

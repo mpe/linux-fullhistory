@@ -158,7 +158,7 @@ static int samsung_tdtc9251dh0_demod_init(struct dvb_frontend* fe)
 	return 0;
 }
 
-int samsung_tdtc9251dh0_pll_set(struct dvb_frontend* fe, struct dvb_frontend_parameters* params, u8* pllbuf)
+static int samsung_tdtc9251dh0_pll_set(struct dvb_frontend* fe, struct dvb_frontend_parameters* params, u8* pllbuf)
 {
 	u32 div;
 	unsigned char bs = 0;

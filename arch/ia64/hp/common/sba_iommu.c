@@ -762,7 +762,7 @@ sba_io_pdir_entry(u64 *pdir_ptr, unsigned long vba)
 #ifdef ENABLE_MARK_CLEAN
 /**
  * Since DMA is i-cache coherent, any (complete) pages that were written via
- * DMA can be marked as "clean" so that update_mmu_cache() doesn't have to
+ * DMA can be marked as "clean" so that lazy_mmu_prot_update() doesn't have to
  * flush them when they get mapped into an executable vm-area.
  */
 static void

@@ -888,14 +888,8 @@ static int tcic_init(struct pcmcia_socket *s)
 	return 0;
 }
 
-static int tcic_suspend(struct pcmcia_socket *sock)
-{
-	return tcic_set_socket(sock, &dead_socket);
-}
-
 static struct pccard_operations tcic_operations = {
 	.init		   = tcic_init,
-	.suspend	   = tcic_suspend,
 	.get_status	   = tcic_get_status,
 	.get_socket	   = tcic_get_socket,
 	.set_socket	   = tcic_set_socket,

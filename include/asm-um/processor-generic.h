@@ -16,8 +16,6 @@ struct task_struct;
 
 struct mm_struct;
 
-#define cpu_relax()   barrier()
-
 struct thread_struct {
 	int forking;
 	int nsyscalls;

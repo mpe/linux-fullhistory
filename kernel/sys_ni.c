@@ -83,3 +83,4 @@ cond_syscall(sys_pciconfig_write);
 cond_syscall(sys_pciconfig_iobase);
 cond_syscall(sys32_ipc);
 cond_syscall(sys32_sysctl);
+cond_syscall(ppc_rtas);

@@ -350,7 +350,7 @@ static void __devexit nicstar_remove_one(struct pci_dev *pcidev)
    kfree(card->rsq.org);
    kfree(card->tsq.org);
    free_irq(card->pcidev->irq, card);
-   iounmap((void *) card->membase);
+   iounmap(card->membase);
    kfree(card);
 }
 
@@ -976,7 +976,7 @@ static void __devinit ns_init_card_error(ns_dev *card, int error)
    }
    if (error >= 4)
    {
-      iounmap((void *) card->membase);
+      iounmap(card->membase);
    }
    if (error >= 3)
    {

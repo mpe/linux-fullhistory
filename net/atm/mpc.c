@@ -564,7 +564,7 @@ static int mpc_send_packet(struct sk_buff *skb, struct net_device *dev)
 	return retval;
 }
 
-int atm_mpoa_vcc_attach(struct atm_vcc *vcc, void __user *arg)
+static int atm_mpoa_vcc_attach(struct atm_vcc *vcc, void __user *arg)
 {
 	int bytes_left;
 	struct mpoa_client *mpc;
@@ -753,7 +753,7 @@ static struct atm_dev mpc_dev = {
 	/* members not explicitly initialised will be 0 */
 };
 
-int atm_mpoa_mpoad_attach (struct atm_vcc *vcc, int arg)
+static int atm_mpoa_mpoad_attach (struct atm_vcc *vcc, int arg)
 {
 	struct mpoa_client *mpc;
 	struct lec_priv *priv;
@@ -1460,7 +1460,7 @@ static __init int atm_mpoa_init(void)
 	return 0;
 }
 
-void __exit atm_mpoa_cleanup(void)
+static void __exit atm_mpoa_cleanup(void)
 {
 	struct mpoa_client *mpc, *tmp;
 	struct atm_mpoa_qos *qos, *nextqos;

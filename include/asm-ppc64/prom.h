@@ -209,8 +209,8 @@ extern struct device_node *of_node_get(struct device_node *node);
 extern void of_node_put(struct device_node *node);
 
 /* For updating the device tree at runtime */
-extern int of_add_node(const char *path, struct property *proplist);
-extern int of_remove_node(struct device_node *np);
+extern void of_attach_node(struct device_node *);
+extern void of_detach_node(const struct device_node *);
 
 /* Other Prototypes */
 extern unsigned long prom_init(unsigned long, unsigned long, unsigned long,

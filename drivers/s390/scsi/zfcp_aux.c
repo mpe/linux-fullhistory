@@ -583,7 +583,7 @@ zfcp_sg_list_alloc(struct zfcp_sg_list *sg_list, size_t size)
 		retval = -ENOMEM;
 		goto out;
 	}
-	memset(sg_list->sg, sg_list->count * sizeof(struct scatterlist), 0);
+	memset(sg_list->sg, 0, sg_list->count * sizeof(struct scatterlist));
 
 	for (i = 0, sg = sg_list->sg; i < sg_list->count; i++, sg++) {
 		sg->length = min(size, PAGE_SIZE);
@@ -928,7 +928,7 @@ zfcp_unit_dequeue(struct zfcp_unit *unit)
 }
 
 static void *
-zfcp_mempool_alloc(int gfp_mask, void *size)
+zfcp_mempool_alloc(unsigned int __nocast gfp_mask, void *size)
 {
 	return kmalloc((size_t) size, gfp_mask);
 }

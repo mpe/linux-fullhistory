@@ -24,7 +24,7 @@
 
 #include "qeth_mpc.h"
 
-#define VERSION_QETH_H 		"$Revision: 1.132 $"
+#define VERSION_QETH_H 		"$Revision: 1.135 $"
 
 #ifdef CONFIG_QETH_IPV6
 #define QETH_VERSION_IPV6 	":IPv6"
@@ -68,7 +68,8 @@
 #define QETH_DBF_TRACE_LEN 8
 #define QETH_DBF_TRACE_INDEX 2
 #define QETH_DBF_TRACE_NR_AREAS 2
-#define QETH_DBF_TRACE_LEVEL 5
+#define QETH_DBF_TRACE_LEVEL 3
+extern debug_info_t *qeth_dbf_trace;
 
 #define QETH_DBF_SENSE_NAME "qeth_sense"
 #define QETH_DBF_SENSE_LEN 64
@@ -206,6 +207,11 @@ struct qeth_perf_stats {
 	__u64 outbound_do_qdio_start_time;
 	unsigned int outbound_do_qdio_cnt;
 	unsigned int outbound_do_qdio_time;
+	/* eddp data */
+	unsigned int large_send_bytes;
+	unsigned int large_send_cnt;
+	unsigned int sg_skbs_sent;
+	unsigned int sg_frags_sent;
 };
 #endif /* CONFIG_QETH_PERF_STATS */
 
@@ -334,8 +340,8 @@ qeth_is_ipa_enabled(struct qeth_ipa_info *ipa, enum qeth_ipa_funcs func)
 struct qeth_hdr_layer3 {
 	__u8  id;
 	__u8  flags;
-	__u16 inbound_checksum;
-	__u32 token;
+	__u16 inbound_checksum; /*TSO:__u16 seqno */
+	__u32 token;		/*TSO: __u32 reserved */
 	__u16 length;
 	__u8  vlan_prio;
 	__u8  ext_flags;
@@ -386,6 +392,7 @@ enum qeth_layer2_frame_flags {
 enum qeth_header_ids {
 	QETH_HEADER_TYPE_LAYER3 = 0x01,
 	QETH_HEADER_TYPE_LAYER2 = 0x02,
+	QETH_HEADER_TYPE_TSO	= 0x03,
 };
 /* flags for qeth_hdr.ext_flags */
 #define QETH_HDR_EXT_VLAN_FRAME       0x01
@@ -394,6 +401,7 @@ enum qeth_header_ids {
 #define QETH_HDR_EXT_SRC_MAC_ADDR     0x08
 #define QETH_HDR_EXT_CSUM_HDR_REQ     0x10
 #define QETH_HDR_EXT_CSUM_TRANSP_REQ  0x20
+#define QETH_HDR_EXT_UDP_TSO          0x40 /*bit off for TCP*/
 
 static inline int
 qeth_is_last_sbale(struct qdio_buffer_element *sbale)
@@ -448,11 +456,19 @@ struct qeth_qdio_q {
 	volatile int next_buf_to_init;
 } __attribute__ ((aligned(256)));
 
+/* possible types of qeth large_send support */
+enum qeth_large_send_types {
+	QETH_LARGE_SEND_NO,
+	QETH_LARGE_SEND_EDDP,
+	QETH_LARGE_SEND_TSO,
+};
+
 struct qeth_qdio_out_buffer {
 	struct qdio_buffer *buffer;
 	atomic_t state;
 	volatile int next_element_to_fill;
 	struct sk_buff_head skb_list;
+	struct list_head ctx_list;
 };
 
 struct qeth_card;
@@ -668,6 +684,14 @@ struct qeth_reply {
 #define QETH_BROADCAST_WITH_ECHO    1
 #define QETH_BROADCAST_WITHOUT_ECHO 2
 
+struct qeth_card_blkt {
+	int time_total;
+	int inter_packet;
+	int inter_packet_jumbo;
+};
+
+
+
 struct qeth_card_info {
 	unsigned short unit_addr2;
 	unsigned short cula;
@@ -686,6 +710,7 @@ struct qeth_card_info {
 	int max_mtu;
 	int broadcast_capable;
 	int unique_id;
+	struct qeth_card_blkt blkt;
 	__u32 csum_mask;
 };
 
@@ -704,6 +729,7 @@ struct qeth_card_options {
 	int add_hhlen;
 	int fake_ll;
 	int layer2;
+	enum qeth_large_send_types large_send;
 };
 
 /*
@@ -790,6 +816,57 @@ qeth_get_ipa_adp_type(enum qeth_link_types link_type)
 }
 
 inline static int
+qeth_realloc_headroom(struct qeth_card *card, struct sk_buff **skb, int size)
+{
+	struct sk_buff *new_skb = NULL;
+
+	if (skb_headroom(*skb) < size){
+		new_skb = skb_realloc_headroom(*skb, size);
+		if (!new_skb) {
+                        PRINT_ERR("qeth_prepare_skb: could "
+                                  "not realloc headroom for qeth_hdr "
+                                  "on interface %s", QETH_CARD_IFNAME(card));
+                        return -ENOMEM;
+                }
+                *skb = new_skb;
+	}
+	return 0;
+}
+static inline struct sk_buff *
+qeth_pskb_unshare(struct sk_buff *skb, int pri)
+{
+        struct sk_buff *nskb;
+        if (!skb_cloned(skb))
+                return skb;
+        nskb = skb_copy(skb, pri);
+        kfree_skb(skb); /* free our shared copy */
+        return nskb;
+}
+
+
+inline static void *
+qeth_push_skb(struct qeth_card *card, struct sk_buff **skb, int size)
+{
+        void *hdr;
+
+	hdr = (void *) skb_push(*skb, size);
+        /*
+         * sanity check, the Linux memory allocation scheme should
+         * never present us cases like this one (the qdio header size plus
+         * the first 40 bytes of the paket cross a 4k boundary)
+         */
+        if ((((unsigned long) hdr) & (~(PAGE_SIZE - 1))) !=
+            (((unsigned long) hdr + size +
+              QETH_IP_HEADER_SIZE) & (~(PAGE_SIZE - 1)))) {
+                PRINT_ERR("qeth_prepare_skb: misaligned "
+                          "packet on interface %s. Discarded.",
+                          QETH_CARD_IFNAME(card));
+                return NULL;
+        }
+        return hdr;
+}
+
+inline static int
 qeth_get_hlen(__u8 link_type)
 {
 #ifdef CONFIG_QETH_IPV6
@@ -830,17 +907,6 @@ qeth_get_netdev_flags(struct qeth_card *card)
 #endif
 	}
 }
-static inline struct sk_buff *
-qeth_pskb_unshare(struct sk_buff *skb, int pri)
-{
-        struct sk_buff *nskb;
-        if (!skb_cloned(skb))
-                return skb;
-        nskb = skb_copy(skb, pri);
-        kfree_skb(skb); /* free our shared copy */
-        return nskb;
-}
-
 
 inline static int
 qeth_get_initial_mtu_for_card(struct qeth_card * card)
@@ -1083,5 +1149,14 @@ qeth_schedule_recovery(struct qeth_card *);
 
 extern int
 qeth_realloc_buffer_pool(struct qeth_card *, int);
+
+extern int
+qeth_set_large_send(struct qeth_card *);
+
+extern void
+qeth_fill_header(struct qeth_card *, struct qeth_hdr *,
+		 struct sk_buff *, int, int);
+extern void
+qeth_flush_buffers(struct qeth_qdio_out_q *, int, int, int);
 
 #endif /* __QETH_H__ */

@@ -140,6 +140,8 @@
 #define   CHIPREV_5703_AX		 0x10
 #define   CHIPREV_5704_AX		 0x20
 #define   CHIPREV_5704_BX		 0x21
+#define   CHIPREV_5750_AX		 0x40
+#define   CHIPREV_5750_BX		 0x41
 #define  GET_METAL_REV(CHIP_REV_ID)	((CHIP_REV_ID) & 0xff)
 #define   METAL_REV_A0			 0x00
 #define   METAL_REV_A1			 0x01
@@ -1516,6 +1518,7 @@
 #define  MII_TG3_CTRL_ENABLE_AS_MASTER	0x1000
 
 #define MII_TG3_EXT_CTRL		0x10 /* Extended control register */
+#define  MII_TG3_EXT_CTRL_FIFO_ELASTIC	0x0001
 #define  MII_TG3_EXT_CTRL_LNK3_LED_MODE	0x0002
 #define  MII_TG3_EXT_CTRL_TBI		0x8000
 
@@ -2096,6 +2099,7 @@ struct tg3 {
 #define TG3_FLG2_FLASH			0x00008000
 #define TG3_FLG2_HW_TSO			0x00010000
 #define TG3_FLG2_SERDES_PREEMPHASIS	0x00020000
+#define TG3_FLG2_5705_PLUS		0x00040000
 
 	u32				split_mode_max_reqs;
 #define SPLIT_MODE_5704_MAX_REQ		3

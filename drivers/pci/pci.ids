@@ -1812,6 +1812,7 @@
 		103c 1226  Keystone SP2
 		103c 1227  Powerbar SP2
 		103c 1282  Everest SP2
+		103c 1301  Diva RMP3
 	1054  PCI Local Bus Adapter
 	1064  79C970 PCnet Ethernet Controller
 	108b  Visualize FXe
@@ -6304,6 +6305,7 @@
 	7401  Four Port RS-232 Interface
 	7402  Four Port RS-422/485 Interface
 	7801  Eight Port RS-232 Interface
+	7804  Eight Port RS-232/422/485 Interface
 	8001  8001 Digital I/O Adapter
 135f  I-Data International A-S
 1360  Meinberg Funkuhren
@@ -9570,14 +9572,25 @@
 	6565  6565
 9710  NetMos Technology
 	7780  USB IRDA-port
-	9815  PCI 9815 Multi-I/O Controller
+	9705  PCI 9705 Parallel Port
+	9715  PCI 9715 Dual Parallel Port
+	9735  PCI 9735 Multi-I/O Controller
+		1000 0002  0P2S (2 serial)
+		1000 0012  1P2S (1 parallel + 2 serial)
+	9745  PCI 9745 Multi-I/O Controller
+		1000 0002  0P2S (2 serial)
+		1000 0012  1P2S (1 parallel + 2 serial)
+	9755  PCI 9755 Parallel Port and ISA Bridge
+	9805  PCI 9805 Parallel Port
+	9815  PCI 9815 Dual Parallel Port
 		1000 0020  2P0S (2 port parallel adaptor)
 	9835  PCI 9835 Multi-I/O Controller
-		1000 0002  2S (16C550 UART)
+		1000 0002  0P2S (16C550 UART)
 		1000 0012  1P2S
 	9845  PCI 9845 Multi-I/O Controller
 		1000 0004  0P4S (4 port 16550A serial card)
-		1000 0006  0P6S (6 port 16550a serial card)
+		1000 0006  0P6S (6 port 16550A serial card)
+		1000 0014  1P4S (4 port 16550A serial card + parallel)
 	9855  PCI 9855 Multi-I/O Controller
 		1000 0014  1P4S
 9902  Stargen Inc.

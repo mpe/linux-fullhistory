@@ -15,10 +15,6 @@
  * #define DRIVER_DESC		"Matrox G200/G400"
  * #define DRIVER_DATE		"20001127"
  *
- * #define DRIVER_MAJOR		2
- * #define DRIVER_MINOR		0
- * #define DRIVER_PATCHLEVEL	2
- *
  * #define DRIVER_IOCTL_COUNT	DRM_ARRAY_SIZE( mga_ioctls )
  *
  * #define drm_x		mga_##x
@@ -143,6 +139,12 @@ int drm_takedown( drm_device_t *dev )
 
 	if (dev->driver->pretakedown)
 	  dev->driver->pretakedown(dev);
+
+	if (dev->unique) {
+		drm_free(dev->unique, strlen(dev->unique) + 1, DRM_MEM_DRIVER);
+		dev->unique = NULL;
+		dev->unique_len = 0;
+	}
 
 	if ( dev->irq_enabled ) drm_irq_uninstall( dev );
 
@@ -406,12 +408,8 @@ static int __init drm_core_init(void)
 	}
 		
 	DRM_INFO( "Initialized %s %d.%d.%d %s\n",
-		DRIVER_NAME,
-		DRIVER_MAJOR,
-		DRIVER_MINOR,
-		DRIVER_PATCHLEVEL,
-		DRIVER_DATE
-		);
+		CORE_NAME, CORE_MAJOR, CORE_MINOR, CORE_PATCHLEVEL,
+		CORE_DATE);
 	return 0;
 err_p3:
 	drm_sysfs_destroy(drm_class);

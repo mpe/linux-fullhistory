@@ -148,13 +148,13 @@ struct dvb_ca_private {
 	wait_queue_head_t thread_queue;
 
 	/* Flag indicating when thread should exit */
-	int exit:1;
+	unsigned int exit:1;
 
 	/* Flag indicating if the CA device is open */
-	int open:1;
+	unsigned int open:1;
 
 	/* Flag indicating the thread should wake up now */
-	int wakeup:1;
+	unsigned int wakeup:1;
 
 	/* Delay the main thread should use */
 	unsigned long delay;
@@ -804,8 +804,7 @@ static int dvb_ca_en50221_slot_shutdown(struct dvb_ca_private *ca, int slot)
 	down_write(&ca->slot_info[slot].sem);
 	ca->pub->slot_shutdown(ca->pub, slot);
 	ca->slot_info[slot].slot_state = DVB_CA_SLOTSTATE_NONE;
-	if (ca->slot_info[slot].rx_buffer.data)
-		vfree(ca->slot_info[slot].rx_buffer.data);
+	vfree(ca->slot_info[slot].rx_buffer.data);
 	ca->slot_info[slot].rx_buffer.data = NULL;
 	up_write(&ca->slot_info[slot].sem);
 
@@ -974,7 +973,7 @@ static void dvb_ca_en50221_thread_update_delay(struct dvb_ca_private *ca)
 			if (ca->open) {
 				if ((!ca->slot_info[slot].da_irq_supported) ||
 				    (!(ca->flags & DVB_CA_EN50221_FLAG_IRQ_DA))) {
-					delay = HZ / 100;
+					delay = HZ / 10;
 				}
 			}
 			break;
@@ -1733,8 +1732,7 @@ int dvb_ca_en50221_init(struct dvb_adapter *dvb_adapter,
 	if (ca != NULL) {
 		if (ca->dvbdev != NULL)
 			dvb_unregister_device(ca->dvbdev);
-		if (ca->slot_info != NULL)
-			kfree(ca->slot_info);
+		kfree(ca->slot_info);
 		kfree(ca);
 	}
 	pubca->private = NULL;

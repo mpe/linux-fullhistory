@@ -7,7 +7,7 @@
 #ifndef __SYSDEP_X86_64_SIGCONTEXT_H
 #define __SYSDEP_X86_64_SIGCONTEXT_H
 
-#include "sc.h"
+#include <sysdep/sc.h>
 
 #define IP_RESTART_SYSCALL(ip) ((ip) -= 2)
 

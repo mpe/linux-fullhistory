@@ -1077,6 +1077,8 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 		"fid",  /* frequency id control */
 		"vid",  /* voltage id control */
 		"ttp",  /* thermal trip */
+		"tm",
+		"stc"
 	};
 
 

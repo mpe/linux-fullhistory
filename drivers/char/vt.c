@@ -221,9 +221,6 @@ enum {
 #define DO_UPDATE(vc)	CON_IS_VISIBLE(vc)
 #endif
 
-static int pm_con_request(struct pm_dev *dev, pm_request_t rqst, void *data);
-static struct pm_dev *pm_con;
-
 static inline unsigned short *screenpos(struct vc_data *vc, int offset, int viewed)
 {
 	unsigned short *p;
@@ -723,12 +720,6 @@ int vc_allocate(unsigned int currcons)	/* return 0 on success */
 	    }
 	    vc->vc_kmalloced = 1;
 	    vc_init(vc, vc->vc_rows, vc->vc_cols, 1);
-
-	    if (!pm_con) {
-		    pm_con = pm_register(PM_SYS_DEV,
-					 PM_SYS_VGA,
-					 pm_con_request);
-	    }
 	}
 	return 0;
 }
@@ -3216,24 +3207,6 @@ void vcs_scr_writew(struct vc_data *vc, u16 val, u16 *org)
 		softcursor_original = -1;
 		add_softcursor(vc);
 	}
-}
-
-static int pm_con_request(struct pm_dev *dev, pm_request_t rqst, void *data)
-{
-	switch (rqst)
-	{
-	case PM_RESUME:
-		acquire_console_sem();
-		unblank_screen();
-		release_console_sem();
-		break;
-	case PM_SUSPEND:
-		acquire_console_sem();
-		do_blank_screen(0);
-		release_console_sem();
-		break;
-	}
-	return 0;
 }
 
 /*

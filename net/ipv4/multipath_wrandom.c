@@ -248,7 +248,7 @@ static void wrandom_set_nhinfo(__u32 network,
 
 		target_route->gw = nh->nh_gw;
 		target_route->oif = nh->nh_oif;
-		memset(&target_route->rcu, sizeof(struct rcu_head), 0);
+		memset(&target_route->rcu, 0, sizeof(struct rcu_head));
 		INIT_LIST_HEAD(&target_route->dests);
 
 		list_add_rcu(&target_route->list, &state[state_idx].head);
@@ -271,7 +271,7 @@ static void wrandom_set_nhinfo(__u32 network,
 		target_dest->network = network;
 		target_dest->netmask = netmask;
 		target_dest->prefixlen = prefixlen;
-		memset(&target_dest->rcu, sizeof(struct rcu_head), 0);
+		memset(&target_dest->rcu, 0, sizeof(struct rcu_head));
 
 		list_add_rcu(&target_dest->list, &target_route->dests);
 	}

@@ -347,7 +347,7 @@
 #define	MV64360_SRAM_ERR_DATA_HI		0x03a0
 #define	MV64360_SRAM_ERR_PARITY			0x03a8
 
-#define	MV64360_SRAM_SIZE			0x00200000 /* 2 MB of SRAM */
+#define	MV64360_SRAM_SIZE			0x00040000 /* 2Mb/256KB SRAM */
 
 /*
  *****************************************************************************

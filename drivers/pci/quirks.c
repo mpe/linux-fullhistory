@@ -1259,6 +1259,40 @@ DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_E7520_MCH,	quir
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_E7320_MCH,	quirk_pcie_mch );
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_E7525_MCH,	quirk_pcie_mch );
 
+static void __devinit quirk_netmos(struct pci_dev *dev)
+{
+	unsigned int num_parallel = (dev->subsystem_device & 0xf0) >> 4;
+	unsigned int num_serial = dev->subsystem_device & 0xf;
+
+	/*
+	 * These Netmos parts are multiport serial devices with optional
+	 * parallel ports.  Even when parallel ports are present, they
+	 * are identified as class SERIAL, which means the serial driver
+	 * will claim them.  To prevent this, mark them as class OTHER.
+	 * These combo devices should be claimed by parport_serial.
+	 *
+	 * The subdevice ID is of the form 0x00PS, where <P> is the number
+	 * of parallel ports and <S> is the number of serial ports.
+	 */
+	switch (dev->device) {
+	case PCI_DEVICE_ID_NETMOS_9735:
+	case PCI_DEVICE_ID_NETMOS_9745:
+	case PCI_DEVICE_ID_NETMOS_9835:
+	case PCI_DEVICE_ID_NETMOS_9845:
+	case PCI_DEVICE_ID_NETMOS_9855:
+		if ((dev->class >> 8) == PCI_CLASS_COMMUNICATION_SERIAL &&
+		    num_parallel) {
+			printk(KERN_INFO "PCI: Netmos %04x (%u parallel, "
+				"%u serial); changing class SERIAL to OTHER "
+				"(use parport_serial)\n",
+				dev->device, num_parallel, num_serial);
+			dev->class = (PCI_CLASS_COMMUNICATION_OTHER << 8) |
+			    (dev->class & 0xff);
+		}
+	}
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_NETMOS, PCI_ANY_ID, quirk_netmos);
+
 static void pci_do_fixups(struct pci_dev *dev, struct pci_fixup *f, struct pci_fixup *end)
 {
 	while (f < end) {

@@ -12,6 +12,7 @@
 
 /* enable ir debugging by or'ing av7110_debug with 16 */
 
+static int ir_initialized;
 static struct input_dev input_dev;
 
 static u32 ir_config;
@@ -162,6 +163,9 @@ int __init av7110_ir_init(void)
 {
 	static struct proc_dir_entry *e;
 
+	if (ir_initialized)
+		return 0;
+
 	init_timer(&keyup_timer);
 	keyup_timer.data = 0;
 
@@ -187,16 +191,20 @@ int __init av7110_ir_init(void)
 		e->size = 4 + 256 * sizeof(u16);
 	}
 
+	ir_initialized = 1;
 	return 0;
 }
 
 
 void __exit av7110_ir_exit(void)
 {
+	if (ir_initialized == 0)
+		return;
 	del_timer_sync(&keyup_timer);
 	remove_proc_entry("av7110_ir", NULL);
 	av7110_unregister_irc_handler(av7110_emit_key);
 	input_unregister_device(&input_dev);
+	ir_initialized = 0;
 }
 
 //MODULE_AUTHOR("Holger Waechtler <holger@convergence.de>");

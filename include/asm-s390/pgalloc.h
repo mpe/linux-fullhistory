@@ -14,7 +14,6 @@
 #define _S390_PGALLOC_H
 
 #include <linux/config.h>
-#include <asm/processor.h>
 #include <linux/threads.h>
 #include <linux/gfp.h>
 #include <linux/mm.h>

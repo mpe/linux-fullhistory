@@ -79,7 +79,7 @@ int register_kprobe(struct kprobe *p)
 	unsigned long flags = 0;
 
 	if ((ret = arch_prepare_kprobe(p)) != 0) {
-		goto out;
+		goto rm_kprobe;
 	}
 	spin_lock_irqsave(&kprobe_lock, flags);
 	INIT_HLIST_NODE(&p->hlist);
@@ -96,8 +96,9 @@ int register_kprobe(struct kprobe *p)
 	*p->addr = BREAKPOINT_INSTRUCTION;
 	flush_icache_range((unsigned long) p->addr,
 			   (unsigned long) p->addr + sizeof(kprobe_opcode_t));
-      out:
+out:
 	spin_unlock_irqrestore(&kprobe_lock, flags);
+rm_kprobe:
 	if (ret == -EEXIST)
 		arch_remove_kprobe(p);
 	return ret;

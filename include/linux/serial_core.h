@@ -113,6 +113,12 @@
 /* Samsung S3C2400 SoC */
 #define PORT_S3C2400	67
 
+/* M32R SIO */
+#define PORT_M32R_SIO	68
+
+/*Digi jsm */
+#define PORT_JSM        65
+
 #ifdef __KERNEL__
 
 #include <linux/config.h>
@@ -357,6 +363,7 @@ void uart_unregister_port(struct uart_driver *reg, int line);
 int uart_register_port(struct uart_driver *reg, struct uart_port *port);
 int uart_add_one_port(struct uart_driver *reg, struct uart_port *port);
 int uart_remove_one_port(struct uart_driver *reg, struct uart_port *port);
+int uart_match_port(struct uart_port *port1, struct uart_port *port2);
 
 /*
  * Power Management

@@ -31,21 +31,6 @@
 #include "ptrace_user.h"
 #include "uml-config.h"
 
-#define COMMAND_LINE_SIZE _POSIX_ARG_MAX
-
-/* Changed in linux_main and setup_arch, which run before SMP is started */
-char command_line[COMMAND_LINE_SIZE] = { 0 };
-
-void add_arg(char *cmd_line, char *arg)
-{
-	if (strlen(cmd_line) + strlen(arg) + 1 > COMMAND_LINE_SIZE) {
-		printf("add_arg: Too much command line!\n");
-		exit(1);
-	}
-	if(strlen(cmd_line) > 0) strcat(cmd_line, " ");
-	strcat(cmd_line, arg);
-}
-
 void stop(void)
 {
 	while(1) sleep(1000000);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
+ * Copyright (c) 2000-2004 Silicon Graphics, Inc.  All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -248,7 +248,7 @@ xfs_getattr(
 	/*
 	 * Convert di_flags to xflags.
 	 */
-	vap->va_xflags = xfs_dic2xflags(&ip->i_d, ARCH_NOCONVERT);
+	vap->va_xflags = xfs_ip2xflags(ip);
 
 	/*
 	 * Exit for inode revalidate.  See if any of the rest of
@@ -1995,7 +1995,7 @@ xfs_create(
 	 * create transaction goes to disk before returning to
 	 * the user.
 	 */
-	if (mp->m_flags & XFS_MOUNT_WSYNC) {
+	if (mp->m_flags & (XFS_MOUNT_WSYNC|XFS_MOUNT_DIRSYNC)) {
 		xfs_trans_set_sync(tp);
 	}
 
@@ -2492,7 +2492,7 @@ xfs_remove(
 	 * remove transaction goes to disk before returning to
 	 * the user.
 	 */
-	if (mp->m_flags & XFS_MOUNT_WSYNC) {
+	if (mp->m_flags & (XFS_MOUNT_WSYNC|XFS_MOUNT_DIRSYNC)) {
 		xfs_trans_set_sync(tp);
 	}
 
@@ -2704,7 +2704,7 @@ xfs_link(
 	 * link transaction goes to disk before returning to
 	 * the user.
 	 */
-	if (mp->m_flags & XFS_MOUNT_WSYNC) {
+	if (mp->m_flags & (XFS_MOUNT_WSYNC|XFS_MOUNT_DIRSYNC)) {
 		xfs_trans_set_sync(tp);
 	}
 
@@ -2921,7 +2921,7 @@ xfs_mkdir(
 	 * mkdir transaction goes to disk before returning to
 	 * the user.
 	 */
-	if (mp->m_flags & XFS_MOUNT_WSYNC) {
+	if (mp->m_flags & (XFS_MOUNT_WSYNC|XFS_MOUNT_DIRSYNC)) {
 		xfs_trans_set_sync(tp);
 	}
 
@@ -3168,7 +3168,7 @@ xfs_rmdir(
 	 * rmdir transaction goes to disk before returning to
 	 * the user.
 	 */
-	if (mp->m_flags & XFS_MOUNT_WSYNC) {
+	if (mp->m_flags & (XFS_MOUNT_WSYNC|XFS_MOUNT_DIRSYNC)) {
 		xfs_trans_set_sync(tp);
 	}
 
@@ -3520,7 +3520,7 @@ xfs_symlink(
 	 * symlink transaction goes to disk before returning to
 	 * the user.
 	 */
-	if (mp->m_flags & XFS_MOUNT_WSYNC) {
+	if (mp->m_flags & (XFS_MOUNT_WSYNC|XFS_MOUNT_DIRSYNC)) {
 		xfs_trans_set_sync(tp);
 	}
 

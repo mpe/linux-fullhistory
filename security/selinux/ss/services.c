@@ -52,7 +52,7 @@ static DECLARE_MUTEX(load_sem);
 #define LOAD_LOCK down(&load_sem)
 #define LOAD_UNLOCK up(&load_sem)
 
-struct sidtab sidtab;
+static struct sidtab sidtab;
 struct policydb policydb;
 int ss_initialized = 0;
 
@@ -64,9 +64,9 @@ int ss_initialized = 0;
  */
 static u32 latest_granting = 0;
 
-/* Forward declarations. */
-int context_struct_to_string(struct context *context, char **scontext,
-                             u32 *scontext_len);
+/* Forward declaration. */
+static int context_struct_to_string(struct context *context, char **scontext,
+				    u32 *scontext_len);
 
 /*
  * Return the boolean value of a constraint expression
@@ -79,10 +79,10 @@ int context_struct_to_string(struct context *context, char **scontext,
  * of the process performing the transition.  All other callers of
  * constraint_expr_eval should pass in NULL for xcontext.
  */
-int constraint_expr_eval(struct context *scontext,
-                         struct context *tcontext,
-                         struct context *xcontext,
-                         struct constraint_expr *cexpr)
+static int constraint_expr_eval(struct context *scontext,
+				struct context *tcontext,
+				struct context *xcontext,
+				struct constraint_expr *cexpr)
 {
 	u32 val1, val2;
 	struct context *c;
@@ -515,7 +515,7 @@ out:
  * to point to this string and set `*scontext_len' to
  * the length of the string.
  */
-int context_struct_to_string(struct context *context, char **scontext, u32 *scontext_len)
+static int context_struct_to_string(struct context *context, char **scontext, u32 *scontext_len)
 {
 	char *scontextp;
 

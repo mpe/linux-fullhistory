@@ -4297,6 +4297,10 @@ static int __init bond_init(struct net_device *bond_dev, struct bond_params *par
 	 */
 	bond_dev->features |= NETIF_F_VLAN_CHALLENGED;
 
+	/* don't acquire bond device's xmit_lock when 
+	 * transmitting */
+	bond_dev->features |= NETIF_F_LLTX;
+
 	/* By default, we declare the bond to be fully
 	 * VLAN hardware accelerated capable. Special
 	 * care is taken in the various xmit functions

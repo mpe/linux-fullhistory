@@ -1322,14 +1322,8 @@ static int pcic_init(struct pcmcia_socket *s)
 	return 0;
 }
 
-static int pcic_suspend(struct pcmcia_socket *sock)
-{
-	return pcic_set_socket(sock, &dead_socket);
-}
-
 static struct pccard_operations pcic_operations = {
 	.init			= pcic_init,
-	.suspend		= pcic_suspend,
 	.get_status		= pcic_get_status,
 	.get_socket		= pcic_get_socket,
 	.set_socket		= pcic_set_socket,

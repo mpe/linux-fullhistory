@@ -12,6 +12,14 @@
 struct arch_thread {
 };
 
+/* REP NOP (PAUSE) is a good thing to insert into busy-wait loops. */
+extern inline void rep_nop(void)
+{
+	__asm__ __volatile__("rep;nop": : :"memory");
+}
+
+#define cpu_relax()   rep_nop()
+
 #define INIT_ARCH_THREAD { }
 
 #define current_text_addr() \

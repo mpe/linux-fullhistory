@@ -203,6 +203,10 @@ static __inline__ int radeon_check_and_fixup_packets( drm_radeon_private_t *dev_
 	case RADEON_EMIT_PP_TEX_SIZE_2:
 	case R200_EMIT_RB3D_BLENDCOLOR:
 	case R200_EMIT_TCL_POINT_SPRITE_CNTL:
+	case RADEON_EMIT_PP_CUBIC_FACES_0:
+	case RADEON_EMIT_PP_CUBIC_FACES_1:
+	case RADEON_EMIT_PP_CUBIC_FACES_2:
+	case R200_EMIT_PP_TRI_PERF_CNTL:
 		/* These packets don't contain memory offsets */
 		break;
 
@@ -557,6 +561,13 @@ static struct {
 	{ RADEON_PP_TEX_SIZE_2, 2, "RADEON_PP_TEX_SIZE_2" },
 	{ R200_RB3D_BLENDCOLOR, 3, "R200_RB3D_BLENDCOLOR" },
 	{ R200_SE_TCL_POINT_SPRITE_CNTL, 1, "R200_SE_TCL_POINT_SPRITE_CNTL" },
+	{ RADEON_PP_CUBIC_FACES_0, 1, "RADEON_PP_CUBIC_FACES_0"},
+	{ RADEON_PP_CUBIC_OFFSET_T0_0, 5, "RADEON_PP_CUBIC_OFFSET_T0_0"},
+	{ RADEON_PP_CUBIC_FACES_1, 1, "RADEON_PP_CUBIC_FACES_1"},
+	{ RADEON_PP_CUBIC_OFFSET_T1_0, 5, "RADEON_PP_CUBIC_OFFSET_T1_0"},
+	{ RADEON_PP_CUBIC_FACES_2, 1, "RADEON_PP_CUBIC_FACES_2"},
+	{ RADEON_PP_CUBIC_OFFSET_T2_0, 5, "RADEON_PP_CUBIC_OFFSET_T2_0"},
+	{ R200_PP_TRI_PERF, 2, "R200_PP_TRI_PERF"},
 };
 
 
@@ -1917,7 +1928,7 @@ static int free_surface(DRMFILE filp, drm_radeon_private_t *dev_priv, int lower)
 				dev_priv->surfaces[s->surface_index].refcount--;
 				if (dev_priv->surfaces[s->surface_index].refcount == 0)
 					dev_priv->surfaces[s->surface_index].flags = 0;
-				s->filp = 0;
+				s->filp = NULL;
 				radeon_apply_surface_regs(s->surface_index, dev_priv);
 				return 0;
 			}
@@ -2777,8 +2788,10 @@ static int radeon_cp_cmdbuf( DRM_IOCTL_ARGS )
 		kbuf = drm_alloc(cmdbuf.bufsz, DRM_MEM_DRIVER);
 		if (kbuf == NULL)
 			return DRM_ERR(ENOMEM);
-		if (DRM_COPY_FROM_USER(kbuf, cmdbuf.buf, cmdbuf.bufsz))
+		if (DRM_COPY_FROM_USER(kbuf, cmdbuf.buf, cmdbuf.bufsz)) {
+			drm_free(kbuf, orig_bufsz, DRM_MEM_DRIVER);
 			return DRM_ERR(EFAULT);
+		}
 		cmdbuf.buf = kbuf;
 	}
 

@@ -55,10 +55,10 @@ static unsigned int bt878_verbose = 1;
 static unsigned int bt878_debug;
 
 module_param_named(verbose, bt878_verbose, int, 0444);
-MODULE_PARM_DESC(bt878_verbose,
+MODULE_PARM_DESC(verbose,
 		 "verbose startup messages, default is 1 (yes)");
 module_param_named(debug, bt878_debug, int, 0644);
-MODULE_PARM_DESC(bt878_debug, "Turn on/off debugging (default:off).");
+MODULE_PARM_DESC(debug, "Turn on/off debugging (default:off).");
 
 int bt878_num;
 struct bt878 bt878[BT878_MAX];
@@ -381,21 +381,6 @@ bt878_device_control(struct bt878 *bt, unsigned int cmd, union dst_gpio_packet *
 
 EXPORT_SYMBOL(bt878_device_control);
 
-struct bt878 *bt878_find_by_i2c_adap(struct i2c_adapter *adapter)
-{
-	unsigned int card_nr;
-	
-	printk("bt878 find by dvb adap: checking \"%s\"\n",adapter->name);
-	for (card_nr = 0; card_nr < bt878_num; card_nr++) {
-		if (bt878[card_nr].adapter == adapter)
-			return &bt878[card_nr];
-	}
-	printk("bt878 find by dvb adap: NOT found \"%s\"\n",adapter->name);
-	return NULL;
-}
-
-EXPORT_SYMBOL(bt878_find_by_i2c_adap);
-
 /***********************/
 /* PCI device handling */
 /***********************/
@@ -578,7 +563,7 @@ static int bt878_init_module(void)
 	/* later we register inside of bt878_find_audio_dma()
 	 * because we may want to ignore certain cards */
 	bt878_pci_driver_registered = 1;
-	return pci_module_init(&bt878_pci_driver);
+	return pci_register_driver(&bt878_pci_driver);
 }
 
 static void bt878_cleanup_module(void)

@@ -48,8 +48,8 @@
 #define ARCH_HAS_HUGEPAGE_ONLY_RANGE
 #define ARCH_HAS_PREPARE_HUGEPAGE_RANGE
 
-#define touches_hugepage_low_range(addr, len) \
-	(LOW_ESID_MASK((addr), (len)) & current->mm->context.htlb_segs)
+#define touches_hugepage_low_range(mm, addr, len) \
+	(LOW_ESID_MASK((addr), (len)) & mm->context.htlb_segs)
 #define touches_hugepage_high_range(addr, len) \
 	(((addr) > (TASK_HPAGE_BASE-(len))) && ((addr) < TASK_HPAGE_END))
 
@@ -61,9 +61,9 @@
 #define within_hugepage_high_range(addr, len) (((addr) >= TASK_HPAGE_BASE) \
 	  && ((addr)+(len) <= TASK_HPAGE_END) && ((addr)+(len) >= (addr)))
 
-#define is_hugepage_only_range(addr, len) \
+#define is_hugepage_only_range(mm, addr, len) \
 	(touches_hugepage_high_range((addr), (len)) || \
-	  touches_hugepage_low_range((addr), (len)))
+	  touches_hugepage_low_range((mm), (addr), (len)))
 #define HAVE_ARCH_HUGETLB_UNMAPPED_AREA
 
 #define in_hugepage_area(context, addr) \

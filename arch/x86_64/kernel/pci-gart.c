@@ -720,6 +720,7 @@ static __init int init_k8_gatt(struct agp_kern_info *info)
 	unsigned aper_base, new_aper_base;
 	unsigned aper_size, gatt_size, new_aper_size;
 	
+	printk(KERN_INFO "PCI-DMA: Disabling AGP.\n");
 	aper_size = aper_base = info->aper_size = 0;
 	for_all_nb(dev) { 
 		new_aper_base = read_aperture(dev, &new_aper_size); 
@@ -798,25 +799,14 @@ static int __init pci_iommu_init(void)
 		return -1; 
 	} 
 	
-	if (no_iommu || (!force_iommu && end_pfn < 0xffffffff>>PAGE_SHIFT) || 
-	    !iommu_aperture) {
+	if (no_iommu ||
+	    (!force_iommu && end_pfn < 0xffffffff>>PAGE_SHIFT) ||
+	    !iommu_aperture ||
+	    (no_agp && init_k8_gatt(&info) < 0)) {
 		printk(KERN_INFO "PCI-DMA: Disabling IOMMU.\n"); 
 		no_iommu = 1;
 		return -1;
 	}
-
-	if (no_agp) { 
-		int err = -1;
-		printk(KERN_INFO "PCI-DMA: Disabling AGP.\n");
-		no_agp = 1;
-		if (force_iommu || end_pfn >= 0xffffffff>>PAGE_SHIFT)
-			err = init_k8_gatt(&info);
-		if (err < 0) { 
-			printk(KERN_INFO "PCI-DMA: Disabling IOMMU.\n"); 
-			no_iommu = 1;
-			return -1;
-		}
-	} 
 
 	aper_size = info.aper_size * 1024 * 1024;	
 	iommu_size = check_iommu_size(info.aper_base, aper_size); 

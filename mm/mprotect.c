@@ -39,8 +39,9 @@ static void change_pte_range(struct mm_struct *mm, pmd_t *pmd,
 			 * bits by wiping the pte and then setting the new pte
 			 * into place.
 			 */
-			ptent = ptep_get_and_clear(mm, addr, pte);
-			set_pte_at(mm, addr, pte, pte_modify(ptent, newprot));
+			ptent = pte_modify(ptep_get_and_clear(mm, addr, pte), newprot);
+			set_pte_at(mm, addr, pte, ptent);
+			lazy_mmu_prot_update(ptent);
 		}
 	} while (pte++, addr += PAGE_SIZE, addr != end);
 	pte_unmap(pte - 1);
@@ -189,14 +190,14 @@ sys_mprotect(unsigned long start, size_t len, unsigned long prot)
 
 	if (start & ~PAGE_MASK)
 		return -EINVAL;
+	if (!len)
+		return 0;
 	len = PAGE_ALIGN(len);
 	end = start + len;
-	if (end < start)
+	if (end <= start)
 		return -ENOMEM;
 	if (prot & ~(PROT_READ | PROT_WRITE | PROT_EXEC | PROT_SEM))
 		return -EINVAL;
-	if (end == start)
-		return 0;
 
 	reqprot = prot;
 	/*

@@ -180,8 +180,12 @@ static int pnp_dock_thread(void * unused)
 		 * Poll every 2 seconds
 		 */
 		msleep_interruptible(2000);
-		if(signal_pending(current))
+
+		if(signal_pending(current)) {
+			if (try_to_freeze(PF_FREEZE))
+				continue;
 			break;
+		}
 
 		status = pnp_bios_dock_station_info(&now);
 

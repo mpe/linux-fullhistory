@@ -97,11 +97,13 @@ obj-$(CONFIG_MPC10X_OPENPIC)	+= open_pic.o
 obj-$(CONFIG_40x)		+= dcr.o
 obj-$(CONFIG_BOOKE)		+= dcr.o
 obj-$(CONFIG_85xx)		+= open_pic.o ppc85xx_common.o ppc85xx_setup.o \
-					ppc_sys.o
+					ppc_sys.o mpc85xx_sys.o \
+					mpc85xx_devices.o
 ifeq ($(CONFIG_85xx),y)
 obj-$(CONFIG_PCI)		+= indirect_pci.o pci_auto.o
 endif
-obj-$(CONFIG_83xx)		+= ipic.o ppc83xx_setup.o ppc_sys.o
+obj-$(CONFIG_83xx)		+= ipic.o ppc83xx_setup.o ppc_sys.o \
+					mpc83xx_sys.o mpc83xx_devices.o
 ifeq ($(CONFIG_83xx),y)
 obj-$(CONFIG_PCI)		+= indirect_pci.o pci_auto.o
 endif

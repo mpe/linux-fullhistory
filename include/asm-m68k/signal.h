@@ -213,7 +213,7 @@ static inline int sigfindinword(unsigned long word)
 	return word ^ 31;
 }
 
-#define HAVE_ARCH_GET_SIGNAL_TO_DELIVER
+extern void ptrace_signal_deliver(struct pt_regs *regs, void *cookie);
 
 #endif /* __KERNEL__ */
 

@@ -1144,6 +1144,8 @@ prep_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	/* this gets changed later on if we have an OpenPIC -- Cort */
 	ppc_md.get_irq        = i8259_irq;
 
+	ppc_md.phys_mem_access_prot = pci_phys_mem_access_prot;
+
 	ppc_md.restart        = prep_restart;
 	ppc_md.power_off      = NULL; /* set in prep_setup_arch() */
 	ppc_md.halt           = prep_halt;

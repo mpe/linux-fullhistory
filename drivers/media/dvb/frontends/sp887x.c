@@ -564,7 +564,7 @@ struct dvb_frontend* sp887x_attach(const struct sp887x_config* config,
 	return &state->frontend;
 
 error:
-	if (state) kfree(state);
+	kfree(state);
 	return NULL;
 }
 

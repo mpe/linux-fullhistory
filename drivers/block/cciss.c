@@ -304,7 +304,7 @@ cciss_proc_write(struct file *file, const char __user *buffer,
 	if (copy_from_user(cmd, buffer, count)) return -EFAULT;
 	cmd[count] = '\0';
 	len = strlen(cmd);	// above 3 lines ensure safety
-	if (cmd[len-1] == '\n') 
+	if (len && cmd[len-1] == '\n')
 		cmd[--len] = '\0';
 #	ifdef CONFIG_CISS_SCSI_TAPE
 		if (strcmp("engage scsi", cmd)==0) {

@@ -77,13 +77,17 @@ void give_up_console(const struct consw *sw);
 #define CM_MOVE     (3)
 
 /*
- *	The interface for a console, or any other device that
- *	wants to capture console messages (printer driver?)
+ * The interface for a console, or any other device that wants to capture
+ * console messages (printer driver?)
+ *
+ * If a console driver is marked CON_BOOT then it will be auto-unregistered
+ * when the first real console is registered.  This is for early-printk drivers.
  */
 
 #define CON_PRINTBUFFER	(1)
 #define CON_CONSDEV	(2) /* Last on the command line */
 #define CON_ENABLED	(4)
+#define CON_BOOT	(8)
 
 struct console
 {

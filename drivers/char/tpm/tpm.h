@@ -22,6 +22,7 @@
 #include <linux/version.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
+#include <linux/fs.h>
 #include <linux/miscdevice.h>
 
 #define TPM_TIMEOUT msecs_to_jiffies(5)

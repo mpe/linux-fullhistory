@@ -25,7 +25,7 @@
  * SKB == NULL indicates that the link is being closed
  */
 
-void atm_push_raw(struct atm_vcc *vcc,struct sk_buff *skb)
+static void atm_push_raw(struct atm_vcc *vcc,struct sk_buff *skb)
 {
 	if (skb) {
 		struct sock *sk = sk_atm(vcc);

@@ -26,6 +26,11 @@
  *  serial.c driver, and is currently the preferred form.
  */
 #include <linux/config.h>
+
+#if defined(CONFIG_SERIAL_M32R_SIO_CONSOLE) && defined(CONFIG_MAGIC_SYSRQ)
+#define SUPPORT_SYSRQ
+#endif
+
 #include <linux/module.h>
 #include <linux/tty.h>
 #include <linux/ioport.h>
@@ -40,12 +45,8 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 
-#if defined(CONFIG_SERIAL_M32R_SIO_CONSOLE) && defined(CONFIG_MAGIC_SYSRQ)
-#define SUPPORT_SYSRQ
-#endif
-
-#define PORT_SIO	1
-#define PORT_MAX_SIO	1
+#define PORT_M32R_BASE	PORT_M32R_SIO
+#define PORT_INDEX(x)	(x - PORT_M32R_BASE + 1)
 #define BAUD_RATE	115200
 
 #include <linux/serial_core.h>
@@ -83,44 +84,20 @@ unsigned int share_irqs_sio = M32R_SIO_SHARE_IRQS;
  */
 #define is_real_interrupt(irq)	((irq) != 0)
 
-/*
- * This converts from our new CONFIG_ symbols to the symbols
- * that asm/serial.h expects.  You _NEED_ to comment out the
- * linux/config.h include contained inside asm/serial.h for
- * this to work.
- */
-#undef CONFIG_SERIAL_MANY_PORTS
-#undef CONFIG_SERIAL_DETECT_IRQ
-#undef CONFIG_SERIAL_MULTIPORT
-#undef CONFIG_HUB6
-
-#ifdef CONFIG_SERIAL_M32R_SIO_DETECT_IRQ
-#define CONFIG_SERIAL_DETECT_IRQ 1
-#endif
-#ifdef CONFIG_SERIAL_M32R_SIO_MULTIPORT
-#define CONFIG_SERIAL_MULTIPORT 1
-#endif
-#ifdef CONFIG_SERIAL_M32R_SIO_MANY_PORTS
-#define CONFIG_SERIAL_MANY_PORTS 1
-#endif
-
-/*
- * HUB6 is always on.  This will be removed once the header
- * files have been cleaned.
- */
-#define CONFIG_HUB6 1
-
 #include <asm/serial.h>
 
-#ifdef CONFIG_SERIAL_M32R_PLDSIO
-static struct old_serial_port old_serial_port[] = {
-	{ 0, BASE_BAUD, ((unsigned long)PLD_ESIO0CR), PLD_IRQ_SIO0_RCV, STD_COM_FLAGS },
-};
-#else
-static struct old_serial_port old_serial_port[] = {
-	{ 0, BASE_BAUD, M32R_SIO_OFFSET, M32R_IRQ_SIO0_R, STD_COM_FLAGS },
-};
+/*
+ * SERIAL_PORT_DFNS tells us about built-in ports that have no
+ * standard enumeration mechanism.   Platforms that can find all
+ * serial ports via mechanisms like ACPI or PCI need not supply it.
+ */
+#ifndef SERIAL_PORT_DFNS
+#define SERIAL_PORT_DFNS
 #endif
+
+static struct old_serial_port old_serial_port[] = {
+	SERIAL_PORT_DFNS	/* defined in asm/serial.h */
+};
 
 #define UART_NR	ARRAY_SIZE(old_serial_port)
 
@@ -153,9 +130,17 @@ static struct irq_info irq_lists[NR_IRQS];
 /*
  * Here we define the default xmit fifo size used for each type of UART.
  */
-static const struct serial_uart_config uart_config[PORT_MAX_SIO+1] = {
-	{ "unknown",	1,	0 },
-	{ "M32RSIO",	1,	0 }
+static const struct serial_uart_config uart_config[] = {
+	[PORT_UNKNOWN] = {
+		.name			= "unknown",
+		.dfl_xmit_fifo_size	= 1,
+		.flags			= 0,
+	},
+	[PORT_INDEX(PORT_M32R_SIO)] = {
+		.name			= "M32RSIO",
+		.dfl_xmit_fifo_size	= 1,
+		.flags			= 0,
+	},
 };
 
 #ifdef CONFIG_SERIAL_M32R_PLDSIO
@@ -460,7 +445,6 @@ static inline void m32r_sio_handle_port(struct uart_sio_port *up,
 
 	if (status & 0x04)
 		receive_chars(up, &status, regs);
-	// check_modem_status(up);
 	if (status & 0x01)
 		transmit_chars(up);
 }
@@ -842,13 +826,12 @@ m32r_sio_request_std_resource(struct uart_sio_port *up, struct resource **res)
 	int ret = 0;
 
 	switch (up->port.iotype) {
-	case SERIAL_IO_MEM:
+	case UPIO_MEM:
 		if (up->port.mapbase) {
 #ifdef CONFIG_SERIAL_M32R_PLDSIO
 			*res = request_mem_region(up->port.mapbase, size, "serial");
 #else
 			start = up->port.mapbase;
-			start += UART_RSA_BASE << up->port.regshift;
 			*res = request_mem_region(start, size, "serial");
 #endif
 			if (!*res)
@@ -856,8 +839,7 @@ m32r_sio_request_std_resource(struct uart_sio_port *up, struct resource **res)
 		}
 		break;
 
-	case SERIAL_IO_HUB6:
-	case SERIAL_IO_PORT:
+	case UPIO_PORT:
 		*res = request_region(up->port.iobase, size, "serial");
 		if (!*res)
 			ret = -EBUSY;
@@ -866,55 +848,15 @@ m32r_sio_request_std_resource(struct uart_sio_port *up, struct resource **res)
 	return ret;
 }
 
-static int
-m32r_sio_request_rsa_resource(struct uart_sio_port *up, struct resource **res)
-{
-	unsigned int size = 8 << up->port.regshift;
-	unsigned long start;
-	int ret = 0;
-
-	switch (up->port.iotype) {
-	case SERIAL_IO_MEM:
-		if (up->port.mapbase) {
-			start = up->port.mapbase;
-			start += UART_RSA_BASE << up->port.regshift;
-#ifdef CONFIG_SERIAL_M32R_PLDSIO
-			*res = request_mem_region(start, size, "serial-rsa");
-#else
-			*res = request_mem_region(up->port.mapbase, size, "serial-rsa");
-#endif
-			if (!*res)
-				ret = -EBUSY;
-		}
-		break;
-
-	case SERIAL_IO_HUB6:
-	case SERIAL_IO_PORT:
-		start = up->port.iobase;
-		start += UART_RSA_BASE << up->port.regshift;
-		*res = request_region(up->port.iobase, size, "serial-rsa");
-		if (!*res)
-			ret = -EBUSY;
-		break;
-	}
-
-	return ret;
-}
-
 static void m32r_sio_release_port(struct uart_port *port)
 {
 	struct uart_sio_port *up = (struct uart_sio_port *)port;
 	unsigned long start, offset = 0, size = 0;
 
-	if (up->port.type == PORT_RSA) {
-		offset = UART_RSA_BASE << up->port.regshift;
-		size = 8;
-	}
-
 	size <<= up->port.regshift;
 
 	switch (up->port.iotype) {
-	case SERIAL_IO_MEM:
+	case UPIO_MEM:
 		if (up->port.mapbase) {
 			/*
 			 * Unmap the area.
@@ -930,8 +872,7 @@ static void m32r_sio_release_port(struct uart_port *port)
 		}
 		break;
 
-	case SERIAL_IO_HUB6:
-	case SERIAL_IO_PORT:
+	case UPIO_PORT:
 		start = up->port.iobase;
 
 		if (size)
@@ -947,14 +888,9 @@ static void m32r_sio_release_port(struct uart_port *port)
 static int m32r_sio_request_port(struct uart_port *port)
 {
 	struct uart_sio_port *up = (struct uart_sio_port *)port;
-	struct resource *res = NULL, *res_rsa = NULL;
+	struct resource *res = NULL;
 	int ret = 0;
 
-	if (up->port.type == PORT_RSA){
-		ret = m32r_sio_request_rsa_resource(up, &res_rsa);
-		if (ret < 0)
-			return ret;
-	}
 	ret = m32r_sio_request_std_resource(up, &res);
 
 	/*
@@ -969,11 +905,10 @@ static int m32r_sio_request_port(struct uart_port *port)
 	}
 
 	if (ret < 0) {
-		if (res_rsa)
-			release_resource(res_rsa);
 		if (res)
 			release_resource(res);
 	}
+
 	return ret;
 }
 
@@ -983,7 +918,7 @@ static void m32r_sio_config_port(struct uart_port *port, int flags)
 
 	spin_lock_irqsave(&up->port.lock, flags);
 
-	up->port.type = PORT_SIO;
+	up->port.type = (PORT_M32R_SIO - PORT_M32R_BASE + 1);
 	up->port.fifosize = uart_config[up->port.type].dfl_xmit_fifo_size;
 
 	spin_unlock_irqrestore(&up->port.lock, flags);
@@ -994,8 +929,7 @@ m32r_sio_verify_port(struct uart_port *port, struct serial_struct *ser)
 {
 	if (ser->irq >= NR_IRQS || ser->irq < 0 ||
 	    ser->baud_base < 9600 || ser->type < PORT_UNKNOWN ||
-	    ser->type > PORT_MAX_SIO || ser->type == PORT_CIRRUS ||
-	    ser->type == PORT_STARTECH)
+	    ser->type >= ARRAY_SIZE(uart_config))
 		return -EINVAL;
 	return 0;
 }
@@ -1048,7 +982,6 @@ static void __init m32r_sio_isa_init_ports(void)
 		up->port.irq      = irq_canonicalize(old_serial_port[i].irq);
 		up->port.uartclk  = old_serial_port[i].baud_base * 16;
 		up->port.flags    = old_serial_port[i].flags;
-		up->port.hub6     = old_serial_port[i].hub6;
 		up->port.membase  = old_serial_port[i].iomem_base;
 		up->port.iotype   = old_serial_port[i].io_type;
 		up->port.regshift = old_serial_port[i].iomem_reg_shift;
@@ -1255,7 +1188,7 @@ static int __register_m32r_sio(struct serial_struct *req, int line)
 }
 
 /**
- *	register_serial - configure a 16x50 serial port at runtime
+ *	register_m32r_sio - configure a 16x50 serial port at runtime
  *	@req: request structure
  *
  *	Configure the serial port specified by the request. If the
@@ -1272,7 +1205,7 @@ int register_m32r_sio(struct serial_struct *req)
 	return __register_m32r_sio(req, -1);
 }
 
-int __init early_m32r_sio_setup(struct uart_port *port)
+int __init early_serial_setup(struct uart_port *port)
 {
 	m32r_sio_isa_init_ports();
  	m32r_sio_ports[port->line].port = *port;
@@ -1282,7 +1215,7 @@ int __init early_m32r_sio_setup(struct uart_port *port)
 }
 
 /**
- *	unregister_serial - remove a 16x50 serial port at runtime
+ *	unregister_m32r_sio - remove a 16x50 serial port at runtime
  *	@line: serial line number
  *
  *	Remove one serial port.  This may be called from interrupt
@@ -1291,20 +1224,6 @@ int __init early_m32r_sio_setup(struct uart_port *port)
 void unregister_m32r_sio(int line)
 {
 	uart_unregister_port(&m32r_sio_reg, line);
-}
-
-/*
- * This is for ISAPNP only.
- */
-void m32r_sio_get_irq_map(unsigned int *map)
-{
-	int i;
-
-	for (i = 0; i < UART_NR; i++) {
-		if (m32r_sio_ports[i].port.type != PORT_UNKNOWN &&
-		    m32r_sio_ports[i].port.irq < 16)
-			*map |= 1 << m32r_sio_ports[i].port.irq;
-	}
 }
 
 /**
@@ -1361,7 +1280,6 @@ module_exit(m32r_sio_exit);
 
 EXPORT_SYMBOL(register_m32r_sio);
 EXPORT_SYMBOL(unregister_m32r_sio);
-EXPORT_SYMBOL(m32r_sio_get_irq_map);
 EXPORT_SYMBOL(m32r_sio_suspend_port);
 EXPORT_SYMBOL(m32r_sio_resume_port);
 

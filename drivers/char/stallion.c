@@ -232,13 +232,12 @@ static char	*stl_brdnames[] = {
 
 /*****************************************************************************/
 
-#ifdef MODULE
 /*
  *	Define some string labels for arguments passed from the module
  *	load line. These allow for easy board definitions, and easy
  *	modification of the io, memory and irq resoucres.
  */
-
+static int	stl_nargs = 0;
 static char	*board0[4];
 static char	*board1[4];
 static char	*board2[4];
@@ -299,16 +298,14 @@ MODULE_AUTHOR("Greg Ungerer");
 MODULE_DESCRIPTION("Stallion Multiport Serial Driver");
 MODULE_LICENSE("GPL");
 
-MODULE_PARM(board0, "1-4s");
+module_param_array(board0, charp, &stl_nargs, 0);
 MODULE_PARM_DESC(board0, "Board 0 config -> name[,ioaddr[,ioaddr2][,irq]]");
-MODULE_PARM(board1, "1-4s");
+module_param_array(board1, charp, &stl_nargs, 0);
 MODULE_PARM_DESC(board1, "Board 1 config -> name[,ioaddr[,ioaddr2][,irq]]");
-MODULE_PARM(board2, "1-4s");
+module_param_array(board2, charp, &stl_nargs, 0);
 MODULE_PARM_DESC(board2, "Board 2 config -> name[,ioaddr[,ioaddr2][,irq]]");
-MODULE_PARM(board3, "1-4s");
+module_param_array(board3, charp, &stl_nargs, 0);
 MODULE_PARM_DESC(board3, "Board 3 config -> name[,ioaddr[,ioaddr2][,irq]]");
-
-#endif
 
 /*****************************************************************************/
 
@@ -464,12 +461,10 @@ static unsigned int	stl_baudrates[] = {
  *	Declare all those functions in this driver!
  */
 
-#ifdef MODULE
 static void	stl_argbrds(void);
 static int	stl_parsebrd(stlconf_t *confp, char **argp);
 
 static unsigned long stl_atol(char *str);
-#endif
 
 int		stl_init(void);
 static int	stl_open(struct tty_struct *tty, struct file *filp);
@@ -726,8 +721,6 @@ static struct file_operations	stl_fsiomem = {
 
 static struct class_simple *stallion_class;
 
-#ifdef MODULE
-
 /*
  *	Loadable module initialization stuff.
  */
@@ -842,15 +835,13 @@ static void stl_argbrds(void)
 {
 	stlconf_t	conf;
 	stlbrd_t	*brdp;
-	int		nrargs, i;
+	int		i;
 
 #ifdef DEBUG
 	printk("stl_argbrds()\n");
 #endif
 
-	nrargs = sizeof(stl_brdsp) / sizeof(char **);
-
-	for (i = stl_nrbrds; (i < nrargs); i++) {
+	for (i = stl_nrbrds; (i < stl_nargs); i++) {
 		memset(&conf, 0, sizeof(conf));
 		if (stl_parsebrd(&conf, stl_brdsp[i]) == 0)
 			continue;
@@ -949,8 +940,6 @@ static int stl_parsebrd(stlconf_t *confp, char **argp)
 		confp->irq = stl_atol(argp[i]);
 	return(1);
 }
-
-#endif
 
 /*****************************************************************************/
 
@@ -2787,9 +2776,7 @@ static inline int stl_initbrds(void)
  */
 	for (i = 0; (i < stl_nrbrds); i++) {
 		confp = &stl_brdconf[i];
-#ifdef MODULE
 		stl_parsebrd(confp, stl_brdsp[i]);
-#endif
 		if ((brdp = stl_allocbrd()) == (stlbrd_t *) NULL)
 			return(-ENOMEM);
 		brdp->brdnr = i;
@@ -2805,9 +2792,7 @@ static inline int stl_initbrds(void)
  *	Find any dynamically supported boards. That is via module load
  *	line options or auto-detected on the PCI bus.
  */
-#ifdef MODULE
 	stl_argbrds();
-#endif
 #ifdef CONFIG_PCI
 	stl_findpcibrds();
 #endif

@@ -3110,4 +3110,4 @@ module_param(debug, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(debug, "Debug enabled or not");
 
 module_param(low_latency, bool, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(debug, "Low latency enabled or not");
+MODULE_PARM_DESC(low_latency, "Low latency enabled or not");

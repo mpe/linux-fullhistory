@@ -1202,10 +1202,11 @@ static int suspend(int vetoable)
 	}
 
 	device_suspend(PMSG_SUSPEND);
+	local_irq_disable();
 	device_power_down(PMSG_SUSPEND);
 
 	/* serialize with the timer interrupt */
-	write_seqlock_irq(&xtime_lock);
+	write_seqlock(&xtime_lock);
 
 	/* protect against access to timer chip registers */
 	spin_lock(&i8253_lock);
@@ -1216,20 +1217,22 @@ static int suspend(int vetoable)
 	 * We'll undo any timer changes due to interrupts below.
 	 */
 	spin_unlock(&i8253_lock);
-	write_sequnlock_irq(&xtime_lock);
+	write_sequnlock(&xtime_lock);
+	local_irq_enable();
 
 	save_processor_state();
 	err = set_system_power_state(APM_STATE_SUSPEND);
 	restore_processor_state();
 
-	write_seqlock_irq(&xtime_lock);
+	local_irq_disable();
+	write_seqlock(&xtime_lock);
 	spin_lock(&i8253_lock);
 	reinit_timer();
 	set_time();
 	ignore_normal_resume = 1;
 
 	spin_unlock(&i8253_lock);
-	write_sequnlock_irq(&xtime_lock);
+	write_sequnlock(&xtime_lock);
 
 	if (err == APM_NO_ERROR)
 		err = APM_SUCCESS;
@@ -1237,6 +1240,7 @@ static int suspend(int vetoable)
 		apm_error("suspend", err);
 	err = (err == APM_SUCCESS) ? 0 : -EIO;
 	device_power_up();
+	local_irq_enable();
 	device_resume();
 	pm_send_all(PM_RESUME, (void *)0);
 	queue_event(APM_NORMAL_RESUME, NULL);
@@ -1255,17 +1259,22 @@ static void standby(void)
 {
 	int	err;
 
+	local_irq_disable();
 	device_power_down(PMSG_SUSPEND);
 	/* serialize with the timer interrupt */
-	write_seqlock_irq(&xtime_lock);
+	write_seqlock(&xtime_lock);
 	/* If needed, notify drivers here */
 	get_time_diff();
-	write_sequnlock_irq(&xtime_lock);
+	write_sequnlock(&xtime_lock);
+	local_irq_enable();
 
 	err = set_system_power_state(APM_STATE_STANDBY);
 	if ((err != APM_SUCCESS) && (err != APM_NO_ERROR))
 		apm_error("standby", err);
+
+	local_irq_disable();
 	device_power_up();
+	local_irq_enable();
 }
 
 static apm_event_t get_event(void)

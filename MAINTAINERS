@@ -2548,8 +2548,9 @@ P:	Roger Luethi
 M:	rl@hellgate.ch
 S:	Maintained
 
-UCLINUX
+UCLINUX (AND M68KNOMMU)
 P:	Greg Ungerer
+M:	gerg@uclinux.org
 M:	gerg@snapgear.com
 P:	David McCullough
 M:	davidm@snapgear.com

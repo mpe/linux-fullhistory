@@ -896,16 +896,16 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr,
 			prot |= PROT_EXEC;
 
 	if (!len)
-		return addr;
+		return -EINVAL;
 
 	/* Careful about overflows.. */
 	len = PAGE_ALIGN(len);
 	if (!len || len > TASK_SIZE)
-		return -EINVAL;
+		return -ENOMEM;
 
 	/* offset overflow? */
 	if ((pgoff + (len >> PAGE_SHIFT)) < pgoff)
-		return -EINVAL;
+               return -EOVERFLOW;
 
 	/* Too many mappings? */
 	if (mm->map_count > sysctl_max_map_count)
@@ -1316,7 +1316,7 @@ get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 			 * reserved hugepage range.  For some archs like IA-64,
 			 * there is a separate region for hugepages.
 			 */
-			ret = is_hugepage_only_range(addr, len);
+			ret = is_hugepage_only_range(current->mm, addr, len);
 		}
 		if (ret)
 			return -EINVAL;
@@ -1687,7 +1687,7 @@ static void unmap_region(struct mm_struct *mm,
 	unmap_vmas(&tlb, mm, vma, start, end, &nr_accounted, NULL);
 	vm_unacct_memory(nr_accounted);
 
-	if (is_hugepage_only_range(start, end - start))
+	if (is_hugepage_only_range(mm, start, end - start))
 		hugetlb_free_pgtables(tlb, prev, start, end);
 	else
 		free_pgtables(tlb, prev, start, end);
@@ -1978,7 +1978,7 @@ void exit_mmap(struct mm_struct *mm)
 	vma = mm->mmap;
 	mm->mmap = mm->mmap_cache = NULL;
 	mm->mm_rb = RB_ROOT;
-	mm->rss = 0;
+	set_mm_counter(mm, rss, 0);
 	mm->total_vm = 0;
 	mm->locked_vm = 0;
 

@@ -225,7 +225,7 @@ mb_cache_shrink_fn(int nr_to_scan, unsigned int gfp_mask)
 						   e_lru_list), gfp_mask);
 	}
 out:
-	return count;
+	return (count / 100) * sysctl_vfs_cache_pressure;
 }
 
 

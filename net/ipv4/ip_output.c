@@ -498,7 +498,7 @@ int ip_fragment(struct sk_buff *skb, int (*output)(struct sk_buff*))
 		skb->data_len = first_len - skb_headlen(skb);
 		skb->len = first_len;
 		iph->tot_len = htons(first_len);
-		iph->frag_off |= htons(IP_MF);
+		iph->frag_off = htons(IP_MF);
 		ip_send_check(iph);
 
 		for (;;) {
@@ -1152,7 +1152,8 @@ int ip_push_pending_frames(struct sock *sk)
 	 * If local_df is set too, we still allow to fragment this frame
 	 * locally. */
 	if (inet->pmtudisc == IP_PMTUDISC_DO ||
-	    (!skb_shinfo(skb)->frag_list && ip_dont_fragment(sk, &rt->u.dst)))
+	    (skb->len <= dst_mtu(&rt->u.dst) &&
+	     ip_dont_fragment(sk, &rt->u.dst)))
 		df = htons(IP_DF);
 
 	if (inet->cork.flags & IPCORK_OPT)

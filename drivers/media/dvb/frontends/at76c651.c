@@ -402,7 +402,7 @@ struct dvb_frontend* at76c651_attach(const struct at76c651_config* config,
 	return &state->frontend;
 
 error:
-	if (state) kfree(state);
+	kfree(state);
 	return NULL;
 }
 

@@ -609,18 +609,13 @@ void __init do_init_bootmem(void)
 new_range:
 			mem_start = read_n_cells(addr_cells, &memcell_buf);
 			mem_size = read_n_cells(size_cells, &memcell_buf);
-			numa_domain = of_node_numa_domain(memory);
+			numa_domain = numa_enabled ? of_node_numa_domain(memory) : 0;
 
 			if (numa_domain != nid)
 				continue;
 
-			if (mem_start < end_paddr &&
-			    (mem_start+mem_size) > start_paddr) {
-				/* should be no overlaps ! */
-				dbg("free_bootmem %lx %lx\n", mem_start, mem_size);
-				free_bootmem_node(NODE_DATA(nid), mem_start,
-						  mem_size);
-			}
+			dbg("free_bootmem %lx %lx\n", mem_start, mem_size);
+			free_bootmem_node(NODE_DATA(nid), mem_start, mem_size);
 
 			if (--ranges)		/* process all ranges in cell */
 				goto new_range;

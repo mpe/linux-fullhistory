@@ -31,7 +31,7 @@
 #include "pci.h"
 
 static void *pci_direct_alloc_coherent(struct device *hwdev, size_t size,
-				   dma_addr_t *dma_handle, int flag)
+				   dma_addr_t *dma_handle, unsigned int __nocast flag)
 {
 	void *ret;
 

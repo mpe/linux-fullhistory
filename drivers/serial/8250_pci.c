@@ -31,6 +31,8 @@
 
 #include "8250.h"
 
+#undef SERIAL_DEBUG_PCI
+
 /*
  * Definitions for PCI support.
  */
@@ -577,6 +579,16 @@ static int __devinit pci_xircom_init(struct pci_dev *dev)
 	return 0;
 }
 
+static int __devinit pci_netmos_init(struct pci_dev *dev)
+{
+	/* subdevice 0x00PS means <P> parallel, <S> serial */
+	unsigned int num_serial = dev->subsystem_device & 0xf;
+
+	if (num_serial == 0)
+		return -ENODEV;
+	return num_serial;
+}
+
 static int
 pci_default_setup(struct pci_dev *dev, struct pci_board *board,
 		  struct uart_port *port, int idx)
@@ -931,6 +943,17 @@ static struct pci_serial_quirk pci_serial_quirks[] = {
 		.subvendor	= PCI_ANY_ID,
 		.subdevice	= PCI_ANY_ID,
 		.init		= pci_xircom_init,
+		.setup		= pci_default_setup,
+	},
+	/*
+	 * Netmos cards
+	 */
+	{
+		.vendor		= PCI_VENDOR_ID_NETMOS,
+		.device		= PCI_ANY_ID,
+		.subvendor	= PCI_ANY_ID,
+		.subdevice	= PCI_ANY_ID,
+		.init		= pci_netmos_init,
 		.setup		= pci_default_setup,
 	},
 	/*
@@ -1877,6 +1900,9 @@ static struct pci_device_id serial_pci_tbl[] = {
 	{	PCI_VENDOR_ID_SEALEVEL, PCI_DEVICE_ID_SEALEVEL_COMM8,
 		PCI_ANY_ID, PCI_ANY_ID, 0, 0, 
 		pbn_b2_8_115200 },
+	{	PCI_VENDOR_ID_SEALEVEL, PCI_DEVICE_ID_SEALEVEL_UCOMM8,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0,
+		pbn_b2_8_115200 },
 
 	{	PCI_VENDOR_ID_PLX, PCI_DEVICE_ID_PLX_GTEK_SERIAL2,
 		PCI_ANY_ID, PCI_ANY_ID, 0, 0,
@@ -2184,6 +2210,9 @@ static struct pci_device_id serial_pci_tbl[] = {
 	/*
 	 * HP Diva card
 	 */
+	{	PCI_VENDOR_ID_HP, PCI_DEVICE_ID_HP_DIVA,
+		PCI_VENDOR_ID_HP, PCI_DEVICE_ID_HP_DIVA_RMP3, 0, 0,
+		pbn_b1_1_115200 },
 	{	PCI_VENDOR_ID_HP, PCI_DEVICE_ID_HP_DIVA,
 		PCI_ANY_ID, PCI_ANY_ID, 0, 0,
 		pbn_b0_5_115200 },

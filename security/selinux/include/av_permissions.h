@@ -253,6 +253,7 @@
 #define TCP_SOCKET__NEWCONN                       0x00800000UL
 #define TCP_SOCKET__ACCEPTFROM                    0x01000000UL
 #define TCP_SOCKET__NODE_BIND                     0x02000000UL
+#define TCP_SOCKET__NAME_CONNECT                  0x04000000UL
 
 #define UDP_SOCKET__IOCTL                         0x00000001UL
 #define UDP_SOCKET__READ                          0x00000002UL

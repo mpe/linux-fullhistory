@@ -80,6 +80,9 @@ restrictions referred to are that the relevant option is valid if:
 	VT	Virtual terminal support is enabled.
 	WDT	Watchdog support is enabled.
 	XT	IBM PC/XT MFM hard disk support is enabled.
+	X86-64	X86-64 architecture is enabled.
+			More X86-64 boot options can be found in
+			Documentation/x86_64/boot-options.txt .
 
 In addition, the following text indicates that the option:
 
@@ -403,7 +406,7 @@ running once the system is up.
 
 	dtc3181e=	[HW,SCSI]
 
-	earlyprintk=	[x86, x86_64]
+	earlyprintk=	[IA-32, X86-64]
 			earlyprintk=vga
 			earlyprintk=serial[,ttySn[,baudrate]]
 
@@ -635,6 +638,9 @@ running once the system is up.
 
 	keepinitrd	[HW,ARM]
 
+	kstack=N	[IA-32, X86-64] Print N words from the kernel stack
+			in oops dumps.
+
 	l2cr=		[PPC]
 
 	lapic		[IA-32,APIC] Enable the local APIC even if BIOS disabled it.
@@ -864,7 +870,7 @@ running once the system is up.
 
 	noexec		[IA-64]
 
-	noexec		[i386, x86_64]
+	noexec		[IA-32, X86-64]
 			noexec=on: enable non-executable mappings (default)
 			noexec=off: disable nn-executable mappings
 
