@@ -26,6 +26,7 @@ struct hw_interrupt_type {
 	void (*disable)(unsigned int irq);
 	void (*ack)(unsigned int irq);
 	void (*end)(unsigned int irq);
+	void (*set_affinity)(unsigned int irq, unsigned int mask);
 };
 
 typedef struct hw_interrupt_type  hw_irq_controller;
@@ -38,17 +39,33 @@ typedef struct hw_interrupt_type  hw_irq_controller;
  * Pad this out to 32 bytes for cache and indexing reasons.
  */
 typedef struct {
-	unsigned int status;	/* IRQ status
-				  - IRQ_INPROGRESS, IRQ_DISABLED */
-	hw_irq_controller *handler;	/* never derefed in arch
-					   independent code */
-	struct irqaction *action;		/* IRQ action list */
-	unsigned int depth;			/* Disable depth for nested irq disables */
+	unsigned int status;		/* IRQ status */
+	hw_irq_controller *handler;
+	struct irqaction *action;	/* IRQ action list */
+	unsigned int depth;		/* nested irq disables */
+	spinlock_t lock;
+	unsigned int __pad[3];
 } ____cacheline_aligned irq_desc_t;
 
-#include <asm/hw_irq.h> /* the arch dependent stuff */
+extern irq_desc_t irq_desc [NR_IRQS];
 
-extern irq_desc_t irq_desc[NR_IRQS];
+typedef struct {
+	unsigned int __local_irq_count;
+	unsigned int __local_bh_count;
+	atomic_t __nmi_counter;
+	unsigned int __pad[5];
+} ____cacheline_aligned irq_cpustat_t;
+
+extern irq_cpustat_t irq_stat [NR_CPUS];
+
+/*
+ * Simple wrappers reducing source bloat
+ */
+#define local_irq_count(cpu) (irq_stat[(cpu)].__local_irq_count)
+#define local_bh_count(cpu) (irq_stat[(cpu)].__local_bh_count)
+#define nmi_counter(cpu) (irq_stat[(cpu)].__nmi_counter)
+
+#include <asm/hw_irq.h> /* the arch dependent stuff */
 
 extern int handle_IRQ_event(unsigned int, struct pt_regs *, struct irqaction *);
 extern spinlock_t irq_controller_lock;

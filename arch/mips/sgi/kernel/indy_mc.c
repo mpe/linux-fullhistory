@@ -4,21 +4,21 @@
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  * Copyright (C) 1999 Andrew R. Baker (andrewb@uab.edu) - Indigo2 changes
  *
- * $Id: indy_mc.c,v 1.4 1999/05/07 22:34:32 ulfc Exp $
+ * $Id: indy_mc.c,v 1.8 1999/12/06 23:13:20 ralf Exp $
  */
 #include <linux/init.h>
 #include <linux/kernel.h>
 
 #include <asm/addrspace.h>
 #include <asm/ptrace.h>
-#include <asm/sgimc.h>
-#include <asm/sgihpc.h>
+#include <asm/sgi/sgimc.h>
+#include <asm/sgi/sgihpc.h>
 #include <asm/sgialib.h>
 
 /* #define DEBUG_SGIMC */
 
 struct sgimc_misc_ctrl *mcmisc_regs;
-unsigned long *rpsscounter;
+u32 *rpsscounter;
 struct sgimc_dma_ctrl *dmactrlregs;
 
 static inline char *mconfig_string(unsigned long val)
@@ -52,7 +52,7 @@ void __init sgimc_init(void)
 	unsigned long tmpreg;
 
 	mcmisc_regs = (struct sgimc_misc_ctrl *)(KSEG1+0x1fa00000);
-	rpsscounter = (unsigned long *) (KSEG1 + 0x1fa01004);
+	rpsscounter = (unsigned int *) (KSEG1 + 0x1fa01004);
 	dmactrlregs = (struct sgimc_dma_ctrl *) (KSEG1+0x1fa02000);
 
 	printk("MC: SGI memory controller Revision %d\n",

@@ -1,13 +1,14 @@
-/* $Id: current.h,v 1.4 1998/07/20 17:52:19 ralf Exp $
+/* $Id: current.h,v 1.6 1999/09/28 22:27:17 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
  * Copyright (C) 1998 Ralf Baechle
+ * Copyright (C) 1999 Silicon Graphics, Inc.
  */
-#ifndef __ASM_MIPS_CURRENT_H
-#define __ASM_MIPS_CURRENT_H
+#ifndef _ASM_CURRENT_H
+#define _ASM_CURRENT_H
 
 #ifdef _LANGUAGE_C
 
@@ -24,7 +25,7 @@ register struct task_struct *current asm("$28");
 #define _GET_CURRENT(reg)			\
 	lui	reg, %hi(kernelsp);		\
 	.set	push;				\
-	.set	noreorder;			\
+	.set	reorder;			\
 	lw	reg, %lo(kernelsp)(reg);	\
 	.set	pop;				\
 	ori	reg, 8191;			\
@@ -32,4 +33,4 @@ register struct task_struct *current asm("$28");
 
 #endif
 
-#endif /* __ASM_MIPS_CURRENT_H */
+#endif /* _ASM_CURRENT_H */

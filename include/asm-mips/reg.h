@@ -6,7 +6,7 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1995 by Ralf Baechle
+ * Copyright (C) 1995, 1999 by Ralf Baechle
  */
 #ifndef __ASM_MIPS_REG_H
 #define __ASM_MIPS_REG_H
@@ -55,14 +55,12 @@
  */
 #define EF_LO			38
 #define EF_HI			39
-#define EF_ORIG_REG2		40
-#define EF_ORIG_REG7		41
 
-#define EF_CP0_EPC		42
-#define EF_CP0_BADVADDR		43
-#define EF_CP0_STATUS		44
-#define EF_CP0_CAUSE		45
+#define EF_CP0_EPC		40
+#define EF_CP0_BADVADDR		41
+#define EF_CP0_STATUS		42
+#define EF_CP0_CAUSE		44
 
-#define EF_SIZE			180
+#define EF_SIZE			180	/* size in bytes */
 
 #endif /* __ASM_MIPS_REG_H */

@@ -34,9 +34,6 @@
 #include "sound_firmware.h"
 #include "soundmodule.h"
 
-#ifdef CONFIG_PSS
-#ifdef CONFIG_AUDIO
-
 /*
  * PSS registers.
  */
@@ -82,14 +79,7 @@
 #define NO_WSS_MIXER	-1
 
 #include "coproc.h"
-
-#ifdef PSS_HAVE_LD
 #include "pss_boot.h"
-#else
-static int pss_synthLen = 0;
-static unsigned char *pss_synth =
-NULL;
-#endif
 
 /* If compiled into kernel, it enable or disable pss mixer */
 #ifdef CONFIG_PSS_MIXER
@@ -675,11 +665,7 @@ int probe_pss_mpu(struct address_info *hw_config)
 			break;	/* No more input */
 	}
 
-#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
 	return probe_mpu401(hw_config);
-#else
-	return 0;
-#endif
 }
 
 static int pss_coproc_open(void *dev_info, int sub_device)
@@ -926,11 +912,9 @@ static coproc_operations pss_coproc_operations =
 
 void attach_pss_mpu(struct address_info *hw_config)
 {
-#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
 	attach_mpu401(hw_config);	/* Slot 1 */
 	if (hw_config->slots[1] != -1)	/* The MPU driver installed itself */
 		midi_devs[hw_config->slots[1]]->coproc = &pss_coproc_operations;
-#endif
 }
 
 int probe_pss_mss(struct address_info *hw_config)
@@ -1015,9 +999,7 @@ void unload_pss(struct address_info *hw_config)
 
 void unload_pss_mpu(struct address_info *hw_config)
 {
-#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
 	unload_mpu401(hw_config);
-#endif
 }
 
 void unload_pss_mss(struct address_info *hw_config)
@@ -1114,6 +1096,4 @@ void cleanup_module(void)
 	unload_pss(&cfgpss);
 	SOUND_LOCK_END;
 }
-#endif
-#endif
-#endif
+#endif /* MODULE */

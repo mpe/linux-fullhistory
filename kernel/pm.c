@@ -87,21 +87,27 @@ void pm_unregister_all(pm_callback callback)
 }
 
 /*
- * Send request to an individual device
+ * Send request to a single device
  */
-static int pm_send(struct pm_dev *dev, pm_request_t rqst, void *data)
+int pm_send(struct pm_dev *dev, pm_request_t rqst, void *data)
 {
 	int status = 0;
-	int next_state;
+	int prev_state, next_state;
 	switch (rqst) {
 	case PM_SUSPEND:
 	case PM_RESUME:
+		prev_state = dev->state;
 		next_state = (int) data;
-		if (dev->state != next_state) {
+		if (prev_state != next_state) {
 			if (dev->callback)
 				status = (*dev->callback)(dev, rqst, data);
-			if (!status)
+			if (!status) {
 				dev->state = next_state;
+				dev->prev_state = prev_state;
+			}
+		}
+		else {
+			dev->prev_state = prev_state;
 		}
 		break;
 	default:
@@ -115,13 +121,19 @@ static int pm_send(struct pm_dev *dev, pm_request_t rqst, void *data)
 /*
  * Undo incomplete request
  */
-static void pm_undo_request(struct pm_dev *last, pm_request_t undo, void *data)
+static void pm_undo_all(struct pm_dev *last)
 {
 	struct list_head *entry = last->entry.prev;
 	while (entry != &pm_devs) {
 		struct pm_dev *dev = list_entry(entry, struct pm_dev, entry);
-		if (dev->callback)
-			pm_send(dev, undo, data);
+		if (dev->state != dev->prev_state) {
+			/* previous state was zero (running) resume or
+			 * previous state was non-zero (suspended) suspend
+			 */
+			pm_request_t undo = (dev->prev_state
+					     ? PM_SUSPEND:PM_RESUME);
+			pm_send(dev, undo, (void*) dev->prev_state);
+		}
 		entry = entry->prev;
 	}
 }
@@ -129,7 +141,7 @@ static void pm_undo_request(struct pm_dev *last, pm_request_t undo, void *data)
 /*
  * Send a request to all devices
  */
-int pm_send_request(pm_request_t rqst, void *data)
+int pm_send_all(pm_request_t rqst, void *data)
 {
 	struct list_head *entry = pm_devs.next;
 	while (entry != &pm_devs) {
@@ -137,9 +149,11 @@ int pm_send_request(pm_request_t rqst, void *data)
 		if (dev->callback) {
 			int status = pm_send(dev, rqst, data);
 			if (status) {
-				/* resume devices on failed suspend request */
+				/* return devices to previous state on
+				 * failed suspend request
+				 */
 				if (rqst == PM_SUSPEND)
-					pm_undo_request(dev, PM_RESUME, 0);
+					pm_undo_all(dev);
 				return status;
 			}
 		}
@@ -166,6 +180,7 @@ struct pm_dev *pm_find(pm_dev_t type, struct pm_dev *from)
 EXPORT_SYMBOL(pm_register);
 EXPORT_SYMBOL(pm_unregister);
 EXPORT_SYMBOL(pm_unregister_all);
-EXPORT_SYMBOL(pm_send_request);
+EXPORT_SYMBOL(pm_send);
+EXPORT_SYMBOL(pm_send_all);
 EXPORT_SYMBOL(pm_find);
 EXPORT_SYMBOL(pm_active);

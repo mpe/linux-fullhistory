@@ -1,4 +1,4 @@
-/* $Id: mc146818rtc.h,v 1.3 1998/06/25 20:19:26 ralf Exp $
+/* $Id: mc146818rtc.h,v 1.3 1999/08/19 22:56:33 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -8,8 +8,8 @@
  *
  * Copyright (C) 1996, 1997, 1998 Ralf Baechle
  */
-#ifndef __ASM_MIPS_MC146818RTC_H
-#define __ASM_MIPS_MC146818RTC_H
+#ifndef _ASM_MC146818RTC_H
+#define _ASM_MC146818RTC_H
 
 #include <asm/io.h>
 
@@ -43,4 +43,4 @@ struct rtc_ops {
 
 extern struct rtc_ops *rtc_ops;
 
-#endif /* __ASM_MIPS_MC146818RTC_H */
+#endif /* _ASM_MC146818RTC_H */

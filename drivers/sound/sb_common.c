@@ -23,12 +23,6 @@
 #include "sound_config.h"
 #include "sound_firmware.h"
 
-#ifdef CONFIG_SBDSP
-
-#ifndef CONFIG_AUDIO
-#error You will need to configure the sound driver with CONFIG_AUDIO option.
-#endif
-
 #include "sb_mixer.h"
 #include "sb.h"
 
@@ -114,11 +108,9 @@ static void sb_intr (sb_devc *devc)
 	{
 		src = sb_getmixer(devc, IRQ_STAT);	/* Interrupt source register */
 
-#if defined(CONFIG_MIDI)&& defined(CONFIG_UART401)
 		if (src & 4)						/* MPU401 interrupt */
 			if(devc->midi_irq_cookie)
 				uart401intr(devc->irq, devc->midi_irq_cookie, NULL);
-#endif
 
 		if (!(src & 3))
 			return;	/* Not a DSP interrupt */
@@ -139,9 +131,7 @@ static void sb_intr (sb_devc *devc)
 				break;
 
 			case IMODE_MIDI:
-#ifdef CONFIG_MIDI
 				sb_midi_interrupt(devc);
-#endif
 				break;
 
 			default:
@@ -284,7 +274,6 @@ static int sb16_set_dma_hw(sb_devc * devc)
 	return 1;
 }
 
-#if defined(CONFIG_MIDI) && defined(CONFIG_UART401)
 static void sb16_set_mpu_port(sb_devc * devc, struct address_info *hw_config)
 {
 	/*
@@ -307,7 +296,6 @@ static void sb16_set_mpu_port(sb_devc * devc, struct address_info *hw_config)
 			printk(KERN_ERR "SB16: Invalid MIDI I/O port %x\n", hw_config->io_base);
 	}
 }
-#endif
 
 static int sb16_set_irq_hw(sb_devc * devc, int level)
 {
@@ -807,10 +795,8 @@ int sb_dsp_init(struct address_info *hw_config)
 		if (devc->major == 3 || devc->major == 4)
 			sb_mixer_init(devc);
 
-#ifdef CONFIG_MIDI
 	if (!(devc->caps & SB_NO_MIDI))
 		sb_dsp_midi_init(devc);
-#endif
 
 	if (hw_config->name == NULL)
 		hw_config->name = "Sound Blaster (8 BIT/MONO ONLY)";
@@ -970,8 +956,6 @@ void sb_chgmixer
 	value = (value & ~mask) | (val & mask);
 	sb_setmixer(devc, reg, value);
 }
-
-#ifdef CONFIG_MIDI
 
 /*
  *	MPU401 MIDI initialization.
@@ -1200,10 +1184,8 @@ void attach_sbmpu(struct address_info *hw_config)
 #endif
 		return;
 	}
-#if defined(CONFIG_UART401)
 	attach_uart401(hw_config);
 	last_sb->midi_irq_cookie=midi_devs[hw_config->slots[4]]->devc;
-#endif
 }
 
 int probe_sbmpu(struct address_info *hw_config)
@@ -1244,7 +1226,6 @@ int probe_sbmpu(struct address_info *hw_config)
 	}
 #endif
 
-#if defined(CONFIG_UART401)
 	if (check_region(hw_config->io_base, 4))
 	{
 		printk(KERN_ERR "sbmpu: I/O port conflict (%x)\n", hw_config->io_base);
@@ -1279,9 +1260,6 @@ int probe_sbmpu(struct address_info *hw_config)
 			return 0;
 	}
 	return probe_uart401(hw_config);
-#else
-	return 0;
-#endif
 }
 
 void unload_sbmpu(struct address_info *hw_config)
@@ -1292,23 +1270,5 @@ void unload_sbmpu(struct address_info *hw_config)
 		return;
 	}
 #endif
-#if defined(CONFIG_UART401)
 	unload_uart401(hw_config);
-#endif
 }
-#else				/* !CONFIG_MIDI */
-
-void unload_sbmpu(struct address_info *hw_config)
-{
-}
-
-int probe_sbmpu(struct address_info *hw_config)
-{
-	return 0;
-}
-
-void attach_sbmpu(struct address_info *hw_config)
-{
-}
-#endif
-#endif

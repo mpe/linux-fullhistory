@@ -28,6 +28,8 @@
 #include <asm/smp.h>
 #include <asm/desc.h>
 
+static spinlock_t ioapic_lock = SPIN_LOCK_UNLOCKED;
+
 /*
  * # of IO-APICs and # of IRQ routing registers
  */
@@ -87,9 +89,8 @@ static void add_pin_to_irq(unsigned int irq, int apic, int pin)
 	entry->pin = pin;
 }
 
-#define DO_ACTION(name,R,ACTION, FINAL)					\
+#define __DO_ACTION(name,R,ACTION, FINAL)				\
 									\
-static void name##_IO_APIC_irq(unsigned int irq)			\
 {									\
 	int pin;							\
 	struct irq_pin_list *entry = irq_2_pin + irq;			\
@@ -109,8 +110,31 @@ static void name##_IO_APIC_irq(unsigned int irq)			\
 	FINAL;								\
 }
 
-DO_ACTION( mask,    0, |= 0x00010000, io_apic_sync(entry->apic))/* mask = 1 */
-DO_ACTION( unmask,  0, &= 0xfffeffff, )				/* mask = 0 */
+#define DO_ACTION(name,R,ACTION, FINAL)					\
+									\
+static void name##_IO_APIC_irq(unsigned int irq)			\
+__DO_ACTION(name,R,ACTION, FINAL)
+
+DO_ACTION( __mask,    0, |= 0x00010000, io_apic_sync(entry->apic))/* mask = 1 */
+DO_ACTION( __unmask,  0, &= 0xfffeffff, )				/* mask = 0 */
+
+static void mask_IO_APIC_irq (unsigned int irq)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&ioapic_lock, flags);
+	__mask_IO_APIC_irq(irq);
+	spin_unlock_irqrestore(&ioapic_lock, flags);
+}
+
+static void unmask_IO_APIC_irq (unsigned int irq)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&ioapic_lock, flags);
+	__unmask_IO_APIC_irq(irq);
+	spin_unlock_irqrestore(&ioapic_lock, flags);
+}
 
 void clear_IO_APIC_pin(unsigned int apic, unsigned int pin)
 {
@@ -537,7 +561,7 @@ void __init setup_IO_APIC_irqs(void)
 		entry.delivery_mode = dest_LowestPrio;
 		entry.dest_mode = 1;			/* logical delivery */
 		entry.mask = 0;				/* enable IRQ */
-		entry.dest.logical.logical_dest = APIC_ALL_CPUS; /* all CPUs */
+		entry.dest.logical.logical_dest = APIC_ALL_CPUS;
 
 		idx = find_irq_entry(apic,pin,mp_INT);
 		if (idx == -1) {
@@ -1026,16 +1050,16 @@ extern atomic_t nmi_counter[NR_CPUS];
 
 static int __init nmi_irq_works(void)
 {
-	atomic_t tmp[NR_CPUS];
+	irq_cpustat_t tmp[NR_CPUS];
 	int j, cpu;
 
-	memcpy(tmp, nmi_counter, sizeof(tmp));
+	memcpy(tmp, irq_stat, sizeof(tmp));
 	sti();
 	mdelay(50);
 
 	for (j = 0; j < smp_num_cpus; j++) {
 		cpu = cpu_logical_map(j);
-		if (atomic_read(nmi_counter+cpu) - atomic_read(tmp+cpu) <= 3) {
+		if (atomic_read(&nmi_counter(cpu)) - atomic_read(&tmp[cpu].__nmi_counter) <= 3) {
 			printk("CPU#%d NMI appears to be stuck.\n", cpu);
 			return 0;
 		}
@@ -1055,14 +1079,9 @@ static int __init nmi_irq_works(void)
  * that was delayed but this is now handled in the device
  * independent code.
  */
-static void enable_edge_ioapic_irq(unsigned int irq)
-{
-	unmask_IO_APIC_irq(irq);
-}
+#define enable_edge_ioapic_irq unmask_IO_APIC_irq
 
-static void disable_edge_ioapic_irq(unsigned int irq)
-{
-}
+static void disable_edge_ioapic_irq (unsigned int irq) { /* nothing */ }
 
 /*
  * Starting up a edge-triggered IO-APIC interrupt is
@@ -1077,12 +1096,17 @@ static void disable_edge_ioapic_irq(unsigned int irq)
 static unsigned int startup_edge_ioapic_irq(unsigned int irq)
 {
 	int was_pending = 0;
+	unsigned long flags;
+
+	spin_lock_irqsave(&ioapic_lock, flags);
 	if (irq < 16) {
 		disable_8259A_irq(irq);
 		if (i8259A_irq_pending(irq))
 			was_pending = 1;
 	}
-	enable_edge_ioapic_irq(irq);
+	__unmask_IO_APIC_irq(irq);
+	spin_unlock_irqrestore(&ioapic_lock, flags);
+
 	return was_pending;
 }
 
@@ -1093,14 +1117,15 @@ static unsigned int startup_edge_ioapic_irq(unsigned int irq)
  * interrupt for real. This prevents IRQ storms from unhandled
  * devices.
  */
-void static ack_edge_ioapic_irq(unsigned int irq)
+static void ack_edge_ioapic_irq(unsigned int irq)
 {
 	if ((irq_desc[irq].status & (IRQ_PENDING | IRQ_DISABLED))
 					== (IRQ_PENDING | IRQ_DISABLED))
 		mask_IO_APIC_irq(irq);
 	ack_APIC_irq();
 }
-void static end_edge_ioapic_irq(unsigned int i){}
+
+static void end_edge_ioapic_irq (unsigned int i) { /* nothing */ }
 
 
 /*
@@ -1108,21 +1133,44 @@ void static end_edge_ioapic_irq(unsigned int i){}
  * and shutting down and starting up the interrupt
  * is the same as enabling and disabling them -- except
  * with a startup need to return a "was pending" value.
+ *
+ * Level triggered interrupts are special because we
+ * do not touch any IO-APIC register while handling
+ * them. We ack the APIC in the end-IRQ handler, not
+ * in the start-IRQ-handler. Protection against reentrance
+ * from the same interrupt is still provided, both by the
+ * generic IRQ layer and by the fact that an unacked local
+ * APIC does not accept IRQs.
  */
-static unsigned int startup_level_ioapic_irq(unsigned int irq)
+static unsigned int startup_level_ioapic_irq (unsigned int irq)
 {
 	unmask_IO_APIC_irq(irq);
+
 	return 0; /* don't check for pending */
 }
 
 #define shutdown_level_ioapic_irq	mask_IO_APIC_irq
 #define enable_level_ioapic_irq		unmask_IO_APIC_irq
 #define disable_level_ioapic_irq	mask_IO_APIC_irq
-#define end_level_ioapic_irq		unmask_IO_APIC_irq	
-void static mask_and_ack_level_ioapic_irq(unsigned int i)
+
+static void end_level_ioapic_irq (unsigned int i)
 {
-	mask_IO_APIC_irq(i);
 	ack_APIC_irq();
+}
+
+static void mask_and_ack_level_ioapic_irq (unsigned int i) { /* nothing */ }
+
+static void set_ioapic_affinity (unsigned int irq, unsigned int mask)
+{
+	unsigned long flags;
+	/*
+	 * Only the first 8 bits are valid.
+	 */
+	mask = mask << 24;
+
+	spin_lock_irqsave(&ioapic_lock, flags);
+	__DO_ACTION( target,  1, = mask, )
+	spin_unlock_irqrestore(&ioapic_lock, flags);
 }
 
 /*
@@ -1141,7 +1189,8 @@ static struct hw_interrupt_type ioapic_edge_irq_type = {
 	enable_edge_ioapic_irq,
 	disable_edge_ioapic_irq,
 	ack_edge_ioapic_irq,
-	end_edge_ioapic_irq
+	end_edge_ioapic_irq,
+	set_ioapic_affinity,
 };
 
 static struct hw_interrupt_type ioapic_level_irq_type = {
@@ -1151,7 +1200,8 @@ static struct hw_interrupt_type ioapic_level_irq_type = {
 	enable_level_ioapic_irq,
 	disable_level_ioapic_irq,
 	mask_and_ack_level_ioapic_irq,
-	end_level_ioapic_irq
+	end_level_ioapic_irq,
+	set_ioapic_affinity,
 };
 
 static inline void init_IO_APIC_traps(void)
@@ -1185,12 +1235,12 @@ static inline void init_IO_APIC_traps(void)
 	}
 }
 
-void static ack_lapic_irq (unsigned int irq)
+static void ack_lapic_irq (unsigned int irq)
 {
 	ack_APIC_irq();
 }
 
-void static end_lapic_irq (unsigned int i) { /* nothing */ }
+static void end_lapic_irq (unsigned int i) { /* nothing */ }
 
 static struct hw_interrupt_type lapic_irq_type = {
 	"local-APIC-edge",

@@ -60,6 +60,7 @@ static char *lancestr = "LANCE";
 #include <asm/dec/machtype.h>
 #include <asm/dec/tc.h>
 #include <asm/dec/kn01.h>
+#include <asm/wbflush.h>
 #include <asm/addrspace.h>
 
 #include <linux/config.h>
@@ -301,6 +302,7 @@ int dec_lance_debug = 2;
 static inline void writereg(volatile unsigned short *regptr, short value)
 {
 	*regptr = value;
+	wbflush();
 }
 
 /* Load the CSR registers */
@@ -380,6 +382,7 @@ void cp_to_buf(void *to, const void *from, __kernel_size_t len)
 		}
 	}
 
+	wbflush();
 }
 
 void cp_from_buf(void *to, unsigned char *from, int len)
@@ -515,6 +518,7 @@ static void lance_init_ring(struct net_device *dev)
 		if (i < 3 && ZERO)
 			printk("%d: 0x%8.8x(0x%8.8x)\n", i, leptr, (int) lp->rx_buf_ptr_cpu[i]);
 	}
+	wbflush();
 }
 
 static int init_restart_lance(struct lance_private *lp)
@@ -752,6 +756,7 @@ static void lance_interrupt(const int irq, void *dev_id, struct pt_regs *regs)
 			 * re-enable LANCE DMA
 			 */
 			*(unsigned long *) (system_base + IOCTL + SSR) |= (1 << 16);
+			wbflush();
 		}
 		writereg(&ll->rdp, LE_C0_STOP);
 
@@ -1071,6 +1076,7 @@ static int __init dec_lance_init(struct net_device *dev, const int type)
 		lp->dma_ptr_reg = (unsigned long *) (system_base + IOCTL + LANCE_DMA_P);
 		*(lp->dma_ptr_reg) = PHYSADDR(dev->mem_start) << 3;
 		*(unsigned long *) (system_base + IOCTL + SSR) |= (1 << 16);
+		wbflush();
 
 		break;
 	case PMAD_LANCE:

@@ -357,7 +357,7 @@ struct mixer_operations *mixer_devs[MAX_MIXER_DEV] = {NULL}; int num_mixers = 0;
 struct synth_operations *synth_devs[MAX_SYNTH_DEV+MAX_MIDI_DEV] = {NULL}; int num_synths = 0;
 struct midi_operations *midi_devs[MAX_MIDI_DEV] = {NULL}; int num_midis = 0;
 
-#if defined(CONFIG_SEQUENCER) && !defined(EXCLUDE_TIMERS) && !defined(VMIDI)
+#ifndef EXCLUDE_TIMERS
 extern struct sound_timer_operations default_sound_timer;
 struct sound_timer_operations *sound_timer_devs[MAX_TIMER_DEV] = {
 	&default_sound_timer, NULL
@@ -386,10 +386,8 @@ struct driver_info sound_drivers[] =
 #ifdef CONFIG_GUS16
 	{"GUS16", 0, SNDCARD_GUS16,	"Ultrasound 16-bit opt.",	attach_gus_db16, probe_gus_db16, unload_gus_db16},
 #endif
-#ifdef CONFIG_GUS
 	{"GUS", 0, SNDCARD_GUS,	"Gravis Ultrasound",	attach_gus_card, probe_gus, unload_gus},
 	{"GUSPNP", 1, SNDCARD_GUSPNP,	"GUS PnP",	attach_gus_card, probe_gus, unload_gus},
-#endif
 #endif
 
 #ifdef CONFIG_SOUND_MSS
@@ -433,11 +431,11 @@ probe_ad1816, unload_ad1816},
 	{"PAS16", 0, SNDCARD_PAS,	"ProAudioSpectrum",	attach_pas_card, probe_pas, unload_pas},
 #endif
 
-#if (defined(CONFIG_SOUND_MPU401) || defined(CONFIG_SOUND_MPU_EMU)) && defined(CONFIG_MIDI)
+#if (defined(CONFIG_SOUND_MPU401) || defined(CONFIG_SOUND_MPU_EMU))
 	{"MPU401", 0, SNDCARD_MPU401,"Roland MPU-401",	attach_mpu401, probe_mpu401, unload_mpu401},
 #endif
 
-#if defined(CONFIG_SOUND_UART401) && defined(CONFIG_MIDI)
+#if defined(CONFIG_SOUND_UART401)
 	{"UART401", 0, SNDCARD_UART401,"MPU-401 (UART)", 
 		attach_uart401, probe_uart401, unload_uart401},
 #endif
@@ -450,7 +448,7 @@ probe_ad1816, unload_ad1816},
 	{"MAUI", 0, SNDCARD_MAUI,"TB Maui",	attach_maui, probe_maui, unload_maui},
 #endif
 
-#if defined(CONFIG_SOUND_UART6850) && defined(CONFIG_MIDI)
+#if defined(CONFIG_SOUND_UART6850)
 	{"MIDI6850", 0, SNDCARD_UART6850,"6860 UART Midi",	attach_uart6850, probe_uart6850, unload_uart6850},
 #endif
 
@@ -461,9 +459,7 @@ probe_ad1816, unload_ad1816},
 	{"SBLAST", 0, SNDCARD_SB,	"Sound Blaster",		attach_sb_card, probe_sb, unload_sb},
 	{"SBPNP", 6, SNDCARD_SBPNP,	"Sound Blaster PnP",		attach_sb_card, probe_sb, unload_sb},
 
-#ifdef CONFIG_MIDI
 	{"SBMPU", 0, SNDCARD_SB16MIDI,"SB MPU-401",	attach_sbmpu, probe_sbmpu, unload_sbmpu},
-#endif
 #endif
 
 #ifdef CONFIG_SOUND_SSCAPE
@@ -488,7 +484,7 @@ probe_ad1816, unload_ad1816},
 		attach_softsyn_card, probe_softsyn, unload_softsyn},
 #endif
 
-#if defined(CONFIG_SOUND_VMIDI) && defined(CONFIG_MIDI)
+#ifdef CONFIG_SOUND_VMIDI
 	{"VMIDI", 0, SNDCARD_VMIDI,"Loopback MIDI Device",      attach_v_midi, probe_v_midi, unload_v_midi},
 #endif
 #ifdef CONFIG_SOUND_VIDC
@@ -502,8 +498,6 @@ probe_ad1816, unload_ad1816},
 
 int num_sound_drivers = sizeof(sound_drivers) / sizeof (struct driver_info);
 
-
-#ifndef FULL_SOUND
 
 /*
  *	List of devices actually configured in the system.
@@ -632,7 +626,7 @@ struct card_info snd_installed_cards[] =
 	{SNDCARD_MAUI, {CONFIG_MAUI_BASE, CONFIG_MAUI_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
 #endif
 
-#if defined(CONFIG_SOUND_MPU401) && defined(CONFIG_MIDI)
+#ifdef CONFIG_SOUND_MPU401
 	{SNDCARD_MPU401, {CONFIG_MPU_BASE, CONFIG_MPU_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
 #ifdef MPU2_BASE
 	{SNDCARD_MPU401, {MPU2_BASE, MPU2_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
@@ -642,12 +636,12 @@ struct card_info snd_installed_cards[] =
 #endif
 #endif
 
-#if defined(CONFIG_SOUND_UART6850) && defined(CONFIG_MIDI)
+#ifdef CONFIG_SOUND_UART6850
 	{SNDCARD_UART6850, {CONFIG_U6850_BASE, CONFIG_U6850_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
 #endif
 
 #ifdef CONFIG_SOUND_SB
-#if defined(CONFIG_MIDI) && defined(CONFIG_SB_MPU_BASE)
+#ifdef CONFIG_SB_MPU_BASE
 	{SNDCARD_SB16MIDI,{CONFIG_SB_MPU_BASE, CONFIG_SB_MPU_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
 #endif
 #endif
@@ -666,7 +660,7 @@ struct card_info snd_installed_cards[] =
 	{SNDCARD_ADLIB, {FM_MONO, 0, 0, -1}, SND_DEFAULT_ENABLE},
 #endif
 
-#if defined(CONFIG_SOUND_VMIDI) && defined(CONFIG_MIDI)
+#ifdef CONFIG_SOUND_VMIDI
 	{SNDCARD_VMIDI, {0, 0, 0, -1}, SND_DEFAULT_ENABLE},
 #endif
 
@@ -683,13 +677,7 @@ struct card_info snd_installed_cards[] =
 int num_sound_cards = sizeof(snd_installed_cards) / sizeof (struct card_info);
 static int max_sound_cards =  sizeof(snd_installed_cards) / sizeof (struct card_info);
 
-#else
-int num_sound_cards = 0;
-struct card_info snd_installed_cards[20] = {{0}};
-static int max_sound_cards = 20;
-#endif
-
-#if defined(MODULE) || (!defined(linux) && !defined(_AIX))
+#if defined(MODULE)
 int trace_init = 0;
 #else
 int trace_init = 1;

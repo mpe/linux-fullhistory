@@ -144,6 +144,4 @@ EXPORT_SYMBOL(screen_info);
 
 EXPORT_SYMBOL(get_wchan);
 
-
-EXPORT_SYMBOL(local_bh_count); 
-EXPORT_SYMBOL(local_irq_count); 
+EXPORT_SYMBOL(irq_stat);

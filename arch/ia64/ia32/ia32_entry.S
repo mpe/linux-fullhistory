@@ -75,7 +75,7 @@ ia32_syscall_table:
 	data8 sys_unlink	  /* 10 */
 	data8 sys32_execve
 	data8 sys_chdir
-	data8 sys_ni_syscall /* sys_time is not supported on ia64 */
+	data8 sys32_time
 	data8 sys_mknod
 	data8 sys_chmod		  /* 15 */
 	data8 sys_lchown

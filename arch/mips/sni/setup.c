@@ -1,4 +1,4 @@
-/* $Id: setup.c,v 1.10 1999/01/04 16:03:59 ralf Exp $
+/* $Id: setup.c,v 1.14 2000/01/27 01:05:23 ralf Exp $
  *
  * Setup pointers to hardware-dependent routines.
  *
@@ -103,6 +103,11 @@ static inline void sni_pcimt_detect(void)
 	printk("%s.\n", boardtype);
 }
 
+int __init page_is_ram(unsigned long pagenr)
+{
+	return 1;
+}
+
 void __init sni_rm200_pci_setup(void)
 {
 	tag *atag;
@@ -169,6 +174,19 @@ void __init sni_rm200_pci_setup(void)
 	ide_ops = &std_ide_ops;
 #endif
 	conswitchp = &vga_con;
+
+	screen_info = (struct screen_info) {
+		0, 0,		/* orig-x, orig-y */
+		0,		/* unused */
+		52,		/* orig_video_page */
+		3,		/* orig_video_mode */
+		80,		/* orig_video_cols */
+		4626, 3, 9,	/* unused, ega_bx, unused */
+		50,		/* orig_video_lines */
+		0x22,		/* orig_video_isVGA */
+		16		/* orig_video_points */
+	};
+
 	rtc_ops = &std_rtc_ops;
 	kbd_ops = &std_kbd_ops;
 #ifdef CONFIG_PSMOUSE

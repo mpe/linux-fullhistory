@@ -1,4 +1,4 @@
-/* $Id: bootinfo.h,v 1.5 1998/08/19 21:58:10 ralf Exp $
+/* $Id: bootinfo.h,v 1.10 2000/01/26 00:07:45 ralf Exp $
  *
  * bootinfo.h -- Definition of the Linux/MIPS boot information structure
  *
@@ -26,9 +26,10 @@
 #define MACH_GROUP_ACN		5
 #define MACH_GROUP_SGI          6 /* Silicon Graphics workstations and servers */
 #define MACH_GROUP_COBALT       7 /* Cobalt servers		 	      */
+#define MACH_GROUP_NEC_DDB	8 /* NEC DDB */
 
 #define GROUP_NAMES { "unknown", "Jazz", "Digital", "ARC", \
-                      "SNI", "ACN", "SGI", "Cobalt" }
+                      "SNI", "ACN", "SGI", "Cobalt", "NEC DDB" }
 
 /*
  * Valid machtype values for group unknown (low order halfword of mips_machtype)
@@ -102,6 +103,13 @@
 #define GROUP_COBALT_NAMES { "Microserver 27" }
 
 /*
+ * Valid machtype for group NEC DDB
+ */
+#define MACH_NEC_DDB5074	 0	/* NEC DDB Vrc-5074 */
+
+#define GROUP_NEC_DDB_NAMES { "Vrc-5074" }
+
+/*
  * Valid cputype values
  */
 #define CPU_UNKNOWN		0
@@ -161,19 +169,8 @@ typedef struct mips_arc_DisplayInfo {	/* video adapter information */
 	unsigned short lines;
 } mips_arc_DisplayInfo;
 
-#ifdef CONFIG_SGI
-/* screen info will dissapear... soon */
-//#define DEFAULT_SCREEN_INFO {0, 0, 0, 0, 0, 158, 0, 0, 0, 62, 0, 16}
-#define DEFAULT_SCREEN_INFO {0, 0, 0, 0, 0, 160, 0, 0, 0, 64, 0, 16}
-#define DEFAULT_DRIVE_INFO { {0,}}
-#else
-/* default values for screen_info variable (Colour VGA) */
-#define DEFAULT_SCREEN_INFO {0, 0, 0, 52, 3, 80, 4626, 3, 9, 50, 0x22, 16}
-#endif
-
 /* default values for drive info */
 #define DEFAULT_DRIVE_INFO { {0,}}
-
 
 /*
  * These are the kernel variables initialized from

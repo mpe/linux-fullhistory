@@ -1,30 +1,33 @@
-/* $Id: siginfo.h,v 1.4 1998/08/28 16:23:06 ralf Exp $
+/* $Id: siginfo.h,v 1.6 2000/02/18 00:24:48 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1998 by Ralf Baechle
+ * Copyright (C) 1998, 1999 by Ralf Baechle
  */
-#ifndef __ASM_MIPS_SIGINFO_H
-#define __ASM_MIPS_SIGINFO_H
+#ifndef _ASM_SIGINFO_H
+#define _ASM_SIGINFO_H
 
 #include <linux/types.h>
 
-/* This structure matches OSF/1 for binary compatibility. */
+/* This structure matches IRIX 32/n32 ABIs for binary compatibility. */
 
 typedef union sigval {
 	int sival_int;
 	void *sival_ptr;
 } sigval_t;
 
+/* This structure matches IRIX 32/n32 ABIs for binary compatibility but
+   has Linux extensions.  */
+
 #define SI_MAX_SIZE	128
-#define SI_PAD_SIZE	((SI_MAX_SIZE/sizeof(int)) - 4)
+#define SI_PAD_SIZE	((SI_MAX_SIZE/sizeof(int)) - 3)
 
 typedef struct siginfo {
 	int si_signo;
-	int si_errno;
 	int si_code;
+	int si_errno;
 
 	union {
 		int _pad[SI_PAD_SIZE];
@@ -34,6 +37,34 @@ typedef struct siginfo {
 			pid_t _pid;		/* sender's pid */
 			uid_t _uid;		/* sender's uid */
 		} _kill;
+
+		/* SIGCHLD */
+		struct {
+			pid_t _pid;		/* which child */
+			uid_t _uid;		/* sender's uid */
+			clock_t _utime;
+			int _status;		/* exit code */
+			clock_t _stime;
+		} _sigchld;
+
+		/* IRIX SIGCHLD */
+		struct {
+			pid_t _pid;		/* which child */
+			clock_t _utime;
+			int _status;		/* exit code */
+			clock_t _stime;
+		} _irix_sigchld;
+
+		/* SIGILL, SIGFPE, SIGSEGV, SIGBUS */
+		struct {
+			void *_addr; /* faulting insn/memory ref. */
+		} _sigfault;
+
+		/* SIGPOLL, SIGXFSZ (To do ...)  */
+		struct {
+			int _band;	/* POLL_IN, POLL_OUT, POLL_MSG */
+			int _fd;
+		} _sigpoll;
 
 		/* POSIX.1b timers */
 		struct {
@@ -48,25 +79,6 @@ typedef struct siginfo {
 			sigval_t _sigval;
 		} _rt;
 
-		/* SIGCHLD */
-		struct {
-			pid_t _pid;		/* which child */
-			uid_t _uid;		/* sender's uid */
-			int _status;		/* exit code */
-			clock_t _utime;
-			clock_t _stime;
-		} _sigchld;
-
-		/* SIGILL, SIGFPE, SIGSEGV, SIGBUS */
-		struct {
-			void *_addr; /* faulting insn/memory ref. */
-		} _sigfault;
-
-		/* SIGPOLL */
-		struct {
-			int _band;	/* POLL_IN, POLL_OUT, POLL_MSG */
-			int _fd;
-		} _sigpoll;
 	} _sifields;
 } siginfo_t;
 
@@ -87,7 +99,7 @@ typedef struct siginfo {
 
 /*
  * si_code values
- * Digital reserves positive values for kernel-generated signals.
+ * Again these have been choosen to be IRIX compatible.
  */
 #define SI_USER		0	/* sent by kill, sigsend, raise */
 #define SI_KERNEL	0x80	/* sent by the kernel from somewhere */
@@ -165,7 +177,7 @@ typedef struct siginfo {
 #define POLL_IN		1	/* data input available */
 #define POLL_OUT	2	/* output buffers available */
 #define POLL_MSG	3	/* input message available */
-#define POLL_ERR	4	/* i/o error */
+#define POLL_ERR	4	/* I/O error */
 #define POLL_PRI	5	/* high priority input available */
 #define POLL_HUP	6	/* device disconnected */
 #define NSIGPOLL	6
@@ -178,17 +190,19 @@ typedef struct siginfo {
  * thread manager then catches and does the appropriate nonsense.
  * However, everything is written out here so as to not get lost.
  */
-#define SIGEV_SIGNAL	0	/* notify via signal */
-#define SIGEV_NONE	1	/* other notification: meaningless */
-#define SIGEV_THREAD	2	/* deliver via thread creation */
+#define SIGEV_NONE	128	/* other notification: meaningless */
+#define SIGEV_SIGNAL	129	/* notify via signal */
+#define SIGEV_CALLBACK	130	/* ??? */
+#define SIGEV_THREAD	131	/* deliver via thread creation */
 
 #define SIGEV_MAX_SIZE	64
 #define SIGEV_PAD_SIZE	((SIGEV_MAX_SIZE/sizeof(int)) - 4)
 
+/* XXX This one isn't yet IRIX / ABI compatible.  */
 typedef struct sigevent {
+	int sigev_notify;
 	sigval_t sigev_value;
 	int sigev_signo;
-	int sigev_notify;
 	union {
 		int _pad[SIGEV_PAD_SIZE];
 
@@ -202,4 +216,4 @@ typedef struct sigevent {
 #define sigev_notify_function	_sigev_un._sigev_thread._function
 #define sigev_notify_attributes	_sigev_un._sigev_thread._attribute
 
-#endif /* __ASM_MIPS_SIGINFO_H */
+#endif /* _ASM_SIGINFO_H */

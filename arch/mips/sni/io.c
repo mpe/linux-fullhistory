@@ -1,4 +1,4 @@
-/* $Id: io.c,v 1.3 1999/01/04 16:03:58 ralf Exp $
+/* $Id: io.c,v 1.5 1999/10/09 00:00:59 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -8,7 +8,6 @@
  */
 #include <linux/string.h>
 #include <linux/spinlock.h>
-#include <asm/mipsconfig.h>
 #include <asm/addrspace.h>
 #include <asm/system.h>
 #include <asm/sni.h>

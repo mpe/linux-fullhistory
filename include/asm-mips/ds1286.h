@@ -1,16 +1,18 @@
-/* $Id: ds1286.h,v 1.1 1998/07/09 20:01:30 ralf Exp $
+/* $Id: ds1286.h,v 1.2 1999/08/19 22:56:33 ralf Exp $
+ *
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
  *
  * mc146818rtc.h - register definitions for the Real-Time-Clock / CMOS RAM
  * Copyright Torsten Duwe <duwe@informatik.uni-erlangen.de> 1993
  * derived from Data Sheet, Copyright Motorola 1984 (!).
  * It was written to be part of the Linux operating system.
+ *
+ * Copyright (C) 1998, 1999 Ralf Baechle
  */
-/* permission is hereby granted to copy, modify and redistribute this code
- * in terms of the GNU Library General Public License, Version 2 or later,
- * at your option.
- */
-#ifndef _MC146818RTC_H
-#define _MC146818RTC_H
+#ifndef _ASM_DS1286_h
+#define _ASM_DS1286_h
 
 #include <asm/mc146818rtc.h>
 
@@ -66,4 +68,4 @@
 #define BIN_TO_BCD(val) ((val)=(((val)/10)<<4) + (val)%10)
 #endif
 
-#endif /* _MC146818RTC_H */
+#endif /* _ASM_DS1286_h */

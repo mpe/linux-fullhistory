@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.7 1999/05/07 18:00:16 ulfc Exp $
+# $Id: Makefile,v 1.8 2000/02/05 06:47:08 ralf Exp $
 # Makefile for the SGI specific kernel interface routines
 # under Linux.
 #

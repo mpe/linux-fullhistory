@@ -1,30 +1,33 @@
-/* $Id: system.h,v 1.8 1998/07/20 17:52:21 ralf Exp $
+/* $Id: system.h,v 1.21 1999/12/30 14:21:21 raiko Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1994, 1995, 1996, 1997, 1998 by Ralf Baechle
- * Modified further for R[236]000 by Paul M. Antoine, 1996
+ * Copyright (C) 1994 - 1999 by Ralf Baechle
+ * Copyright (C) 1996 by Paul M. Antoine
+ * Copyright (C) 1994 - 1999 by Ralf Baechle
  */
-#ifndef __ASM_MIPS_SYSTEM_H
-#define __ASM_MIPS_SYSTEM_H
+#ifndef _ASM_SYSTEM_H
+#define _ASM_SYSTEM_H
 
+#include <linux/config.h>
 #include <asm/sgidefs.h>
+#include <asm/ptrace.h>
 #include <linux/kernel.h>
 
 extern __inline__ void
 __sti(void)
 {
 	__asm__ __volatile__(
-		".set\tnoreorder\n\t"
+		".set\tpush\n\t"
+		".set\treorder\n\t"
 		".set\tnoat\n\t"
 		"mfc0\t$1,$12\n\t"
 		"ori\t$1,0x1f\n\t"
 		"xori\t$1,0x1e\n\t"
 		"mtc0\t$1,$12\n\t"
-		".set\tat\n\t"
-		".set\treorder"
+		".set\tpop\n\t"
 		: /* no outputs */
 		: /* no inputs */
 		: "$1", "memory");
@@ -41,17 +44,18 @@ extern __inline__ void
 __cli(void)
 {
 	__asm__ __volatile__(
-		".set\tnoreorder\n\t"
+		".set\tpush\n\t"
+		".set\treorder\n\t"
 		".set\tnoat\n\t"
 		"mfc0\t$1,$12\n\t"
 		"ori\t$1,1\n\t"
 		"xori\t$1,1\n\t"
+		".set\tnoreorder\n\t"
 		"mtc0\t$1,$12\n\t"
 		"nop\n\t"
 		"nop\n\t"
 		"nop\n\t"
-		".set\tat\n\t"
-		".set\treorder"
+		".set\tpop\n\t"
 		: /* no outputs */
 		: /* no inputs */
 		: "$1", "memory");
@@ -59,26 +63,28 @@ __cli(void)
 
 #define __save_flags(x)                  \
 __asm__ __volatile__(                    \
-	".set\tnoreorder\n\t"            \
+	".set\tpush\n\t"		 \
+	".set\treorder\n\t"              \
 	"mfc0\t%0,$12\n\t"               \
-	".set\treorder"                  \
+	".set\tpop\n\t"                      \
 	: "=r" (x)                       \
 	: /* no inputs */                \
 	: "memory")
 
 #define __save_and_cli(x)                \
 __asm__ __volatile__(                    \
-	".set\tnoreorder\n\t"            \
+	".set\tpush\n\t"		 \
+	".set\treorder\n\t"              \
 	".set\tnoat\n\t"                 \
 	"mfc0\t%0,$12\n\t"               \
 	"ori\t$1,%0,1\n\t"               \
 	"xori\t$1,1\n\t"                 \
+	".set\tnoreorder\n\t"		 \
 	"mtc0\t$1,$12\n\t"               \
 	"nop\n\t"                        \
 	"nop\n\t"                        \
 	"nop\n\t"                        \
-	".set\tat\n\t"                   \
-	".set\treorder"                  \
+	".set\tpop\n\t"                  \
 	: "=r" (x)                       \
 	: /* no inputs */                \
 	: "$1", "memory")
@@ -87,19 +93,21 @@ extern void __inline__
 __restore_flags(int flags)
 {
 	__asm__ __volatile__(
-		".set\tnoreorder\n\t"
+		".set\tpush\n\t"
+		".set\treorder\n\t"
 		"mfc0\t$8,$12\n\t"
 		"li\t$9,0xff00\n\t"
 		"and\t$8,$9\n\t"
 		"nor\t$9,$0,$9\n\t"
 		"and\t%0,$9\n\t"
 		"or\t%0,$8\n\t"
+		".set\tnoreorder\n\t"
 		"mtc0\t%0,$12\n\t"
 		"nop\n\t"
 		"nop\n\t"
 		"nop\n\t"
-		".set\treorder"
-		: /* no output */
+		".set\tpop\n\t"
+		:
 		: "r" (flags)
 		: "$8", "$9", "memory");
 }
@@ -122,6 +130,12 @@ __restore_flags(int flags)
 /*
  * These are probably defined overly paranoid ...
  */
+#ifdef CONFIG_CPU_HAS_WB
+#include <asm/wbflush.h>
+#define rmb()
+#define wmb() wbflush()
+#define mb() wbflush()
+#else
 #define mb()						\
 __asm__ __volatile__(					\
 	"# prevent instructions being moved around\n\t"	\
@@ -134,13 +148,23 @@ __asm__ __volatile__(					\
 	: "memory")
 #define rmb() mb()
 #define wmb() mb()
+#endif
+
+#define set_mb(var, value) \
+do { var = value; mb(); } while (0)
+
+#define set_rmb(var, value) \
+do { var = value; rmb(); } while (0)
+
+#define set_wmb(var, value) \
+do { var = value; wmb(); } while (0)
 
 #if !defined (_LANGUAGE_ASSEMBLY)
 /*
  * switch_to(n) should switch tasks to task nr n, first
  * checking that n isn't the current task, in which case it does nothing.
  */
-extern asmlinkage void *(*resume)(void *last, void *next);
+extern asmlinkage void *resume(void *last, void *next);
 #endif /* !defined (_LANGUAGE_ASSEMBLY) */
 
 #define prepare_to_switch()	do { } while(0)
@@ -155,8 +179,7 @@ do { \
  */
 extern __inline__ unsigned long xchg_u32(volatile int * m, unsigned long val)
 {
-#if (_MIPS_ISA == _MIPS_ISA_MIPS2) || (_MIPS_ISA == _MIPS_ISA_MIPS3) || \
-    (_MIPS_ISA == _MIPS_ISA_MIPS4) || (_MIPS_ISA == _MIPS_ISA_MIPS5)
+#if defined(CONFIG_CPU_HAS_LLSC)
 	unsigned long dummy;
 
 	__asm__ __volatile__(
@@ -172,6 +195,8 @@ extern __inline__ unsigned long xchg_u32(volatile int * m, unsigned long val)
 		: "=r" (val), "=r" (m), "=r" (dummy)
 		: "1" (m), "2" (val)
 		: "memory");
+
+	return val;
 #else
 	unsigned long flags, retval;
 
@@ -180,9 +205,9 @@ extern __inline__ unsigned long xchg_u32(volatile int * m, unsigned long val)
 	retval = *m;
 	*m = val;
 	restore_flags(flags);
+	return retval;
 
 #endif /* Processor-dependent optimization */
-	return val;
 }
 
 /*
@@ -199,7 +224,7 @@ extern __inline__ unsigned long xchg_u64(volatile long * m, unsigned long val)
 		"1:\tmove\t$1,%2\n\t"
 		"scd\t$1,(%1)\n\t"
 		"beqzl\t$1,1b\n\t"
-		"ll\t%0,(%1)\n\t"
+		"lld\t%0,(%1)\n\t"
 		".set\tat\n\t"
 		".set\treorder"
 		: "=r" (val), "=r" (m), "=r" (dummy)
@@ -238,4 +263,14 @@ static __inline__ unsigned long __xchg(unsigned long x, volatile void * ptr, int
 
 extern void set_except_vector(int n, void *addr);
 
-#endif /* __ASM_MIPS_SYSTEM_H */
+extern void __die(const char *, struct pt_regs *, const char *where,
+	unsigned long line) __attribute__((noreturn));
+extern void __die_if_kernel(const char *, struct pt_regs *, const char *where,
+	unsigned long line);
+
+#define die(msg, regs)							\
+	__die(msg, regs, __FILE__ ":"__FUNCTION__, __LINE__)
+#define die_if_kernel(msg, regs)					\
+	__die_if_kernel(msg, regs, __FILE__ ":"__FUNCTION__, __LINE__)
+
+#endif /* _ASM_SYSTEM_H */

@@ -173,7 +173,7 @@ __down_read(struct rw_semaphore *sem, int count)
 			"	subl	%0,1,%0\n"
 			"	stl_c	%2,%1\n"
 			"	bne	%2,2f\n"
-			".section .text2,\"ax\"\n"
+			".subsection 2\n"
 			"2:	br	1b\n"
 			".previous"
 			: "=r"(count), "=m"(sem->count), "=r"(tmp)
@@ -226,7 +226,7 @@ __down_write(struct rw_semaphore *sem, int count)
 			"	ldah	%0,%3(%0)\n"
 			"	stl_c	%2,%1\n"
 			"	bne	%2,2f\n"
-			".section .text2,\"ax\"\n"
+			".subsection 2\n"
 			"2:	br	1b\n"
 			".previous"
 			: "=r"(count), "=m"(sem->count), "=r"(tmp)

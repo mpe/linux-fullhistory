@@ -31,8 +31,6 @@ static int sb_initialized = 0;
 
 #endif
 
-#ifdef CONFIG_OPL3SA1
-
 static int kilroy_was_here = 0;	/* Don't detect twice */
 static int mpu_initialized = 0;
 
@@ -177,15 +175,12 @@ void attach_opl3sa_wss(struct address_info *hw_config)
 
 void attach_opl3sa_mpu(struct address_info *hw_config)
 {
-#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
 	hw_config->name = "OPL3-SA (MPU401)";
 	attach_uart401(hw_config);
-#endif
 }
 
 int probe_opl3sa_mpu(struct address_info *hw_config)
 {
-#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
 	unsigned char conf;
 	static signed char irq_bits[] = {
 		-1, -1, -1, -1, -1, 1, -1, 2, -1, 3, 4
@@ -240,9 +235,6 @@ int probe_opl3sa_mpu(struct address_info *hw_config)
 	mpu_initialized = 1;
 
 	return probe_uart401(hw_config);
-#else
-	return 0;
-#endif
 }
 
 void unload_opl3sa_wss(struct address_info *hw_config)
@@ -265,17 +257,13 @@ void unload_opl3sa_wss(struct address_info *hw_config)
 
 void unload_opl3sa_mpu(struct address_info *hw_config)
 {
-#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
 	unload_uart401(hw_config);
-#endif
 }
 
 #ifdef SB_OK
 void unload_opl3sa_sb(struct address_info *hw_config)
 {
-#ifdef CONFIG_SBDSP
 	sb_dsp_unload(hw_config);
-#endif
 }
 #endif
 
@@ -334,6 +322,4 @@ void cleanup_module(void)
 	SOUND_LOCK_END;
 }
 
-#endif
-
-#endif
+#endif /* MODULE */

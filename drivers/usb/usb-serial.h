@@ -288,6 +288,10 @@ static struct usb_serial_device_type handspring_device = {
 /* function prototypes for a FTDI serial converter */
 static int  ftdi_sio_serial_open	(struct tty_struct *tty, struct file *filp);
 static void ftdi_sio_serial_close	(struct tty_struct *tty, struct file *filp);
+static int  ftdi_sio_serial_write	(struct tty_struct *tty, int from_user, const unsigned char *buf, int count);
+static void ftdi_sio_read_bulk_callback	(struct urb *urb);
+static void ftdi_sio_set_termios		(struct tty_struct *tty, struct termios * old);
+static int ftdi_sio_ioctl (struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned long arg);
 
 /* All of the device info needed for the FTDI SIO serial converter */
 static __u16	ftdi_vendor_id		= FTDI_VENDOR_ID;
@@ -305,6 +309,9 @@ static struct usb_serial_device_type ftdi_sio_device = {
 	num_ports:		1,
 	open:			ftdi_sio_serial_open,
 	close:			ftdi_sio_serial_close,
+	write:			ftdi_sio_serial_write,
+	read_bulk_callback:	ftdi_sio_read_bulk_callback,
+	set_termios:		ftdi_sio_set_termios
 };
 #endif
 
@@ -348,8 +355,8 @@ static struct usb_serial_device_type keyspan_pda_device = {
 #endif
 
 /* To add support for another serial converter, create a usb_serial_device_type
-   structure for that device, and add it to this list, making sure that the last
-   entry is NULL. */
+   structure for that device, and add it to this list, making sure that the
+   last  entry is NULL. */
 static struct usb_serial_device_type *usb_serial_devices[] = {
 #ifdef CONFIG_USB_SERIAL_GENERIC
 	&generic_device,

@@ -1,5 +1,5 @@
 /*
- * $Id: elf.h,v 1.10 1998/05/01 01:35:51 ralf Exp $
+ * $Id: elf.h,v 1.7 1999/08/20 21:59:08 ralf Exp $
  */
 #ifndef __ASM_MIPS_ELF_H
 #define __ASM_MIPS_ELF_H
@@ -21,7 +21,6 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
 
 /*
  * These are used to set parameters in the core dumps.
- * FIXME(eric) I don't know what the correct endianness to use is.
  */
 #define ELF_CLASS	ELFCLASS32
 #ifdef __MIPSEB__

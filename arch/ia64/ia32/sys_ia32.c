@@ -1930,6 +1930,25 @@ out:
 	return err;
 }
 
+/*
+ * sys_time() can be implemented in user-level using
+ * sys_gettimeofday().  IA64 did this but i386 Linux did not
+ * so we have to implement this system call here.
+ */
+asmlinkage long sys32_time(int * tloc)
+{
+	int i;
+
+	/* SMP: This is fairly trivial. We grab CURRENT_TIME and 
+	   stuff it to user space. No side effects */
+	i = CURRENT_TIME;
+	if (tloc) {
+		if (put_user(i,tloc))
+			i = -EFAULT;
+	}
+	return i;
+}
+
 #ifdef	NOTYET  /* UNTESTED FOR IA64 FROM HERE DOWN */
 
 /* In order to reduce some races, while at the same time doing additional

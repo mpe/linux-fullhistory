@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.18 1998/10/14 20:31:12 ralf Exp $
+/* $Id: processor.h,v 1.25 2000/02/05 06:47:37 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -6,10 +6,13 @@
  *
  * Copyright (C) 1994 Waldorf GMBH
  * Copyright (C) 1995, 1996, 1997, 1998 Ralf Baechle
- * Modified further for R[236]000 compatibility by Paul M. Antoine
+ * Copyright (C) 1996 Paul M. Antoine
+ * Copyright (C) 1999 Silicon Graphics, Inc.
  */
-#ifndef __ASM_MIPS_PROCESSOR_H
-#define __ASM_MIPS_PROCESSOR_H
+#ifndef _ASM_PROCESSOR_H
+#define _ASM_PROCESSOR_H
+
+#include <asm/isadep.h>
 
 /*
  * Default implementation of macro that returns current
@@ -18,6 +21,7 @@
 #define current_text_addr() ({ __label__ _l; _l: &&_l;})
 
 #if !defined (_LANGUAGE_ASSEMBLY)
+#include <linux/threads.h>
 #include <asm/cachectl.h>
 #include <asm/mipsregs.h>
 #include <asm/reg.h>
@@ -90,9 +94,9 @@ extern struct task_struct *last_task_used_math;
 #define NUM_FPU_REGS	32
 
 struct mips_fpu_hard_struct {
-	double fp_regs[NUM_FPU_REGS];
+	unsigned int fp_regs[NUM_FPU_REGS];
 	unsigned int control;
-};
+} __attribute__((aligned(8)));
 
 /*
  * FIXME: no fpu emulator yet (but who cares anyway?)
@@ -134,7 +138,6 @@ struct thread_struct {
 	unsigned long cp0_baduaddr;	/* Last kernel fault accessing USEG */
 	unsigned long error_code;
 	unsigned long trap_no;
-	unsigned long pg_dir;                   /* used in tlb refill    */
 #define MF_FIXADE 1			/* Fix address errors in software */
 #define MF_LOGADE 2			/* Log address errors to syslog */
 	unsigned long mflags;
@@ -148,7 +151,7 @@ struct thread_struct {
 #define INIT_MMAP { &init_mm, KSEG0, KSEG1, NULL, PAGE_SHARED, \
                     VM_READ | VM_WRITE | VM_EXEC, 1, NULL, NULL }
 
-#define INIT_TSS  { \
+#define INIT_THREAD  { \
         /* \
          * saved main processor registers \
          */ \
@@ -165,7 +168,7 @@ struct thread_struct {
 	/* \
 	 * Other stuff associated with the process \
 	 */ \
-	0, 0, 0, 0, (unsigned long) swapper_pg_dir, \
+	0, 0, 0, 0, \
 	/* \
 	 * For now the default is to fix address errors \
 	 */ \
@@ -179,45 +182,51 @@ struct thread_struct {
 #if !defined (_LANGUAGE_ASSEMBLY)
 
 /* Free all resources held by a thread. */
-extern void release_thread(struct task_struct *);
+#define release_thread(thread) do { } while(0)
+
 extern int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags);
 
 /* Copy and release all segment info associated with a VM */
-#define copy_segments(nr, p, mm) do { } while(0)
+#define copy_segments(p, mm) do { } while(0)
 #define release_segments(mm) do { } while(0)
-#define forget_segments()		do { } while (0)
 
 /*
  * Return saved PC of a blocked thread.
  */
 extern inline unsigned long thread_saved_pc(struct thread_struct *t)
 {
-	extern void ret_from_sys_call(void);
+	extern void ret_from_fork(void);
 
 	/* New born processes are a special case */
-	if (t->reg31 == (unsigned long) ret_from_sys_call)
+	if (t->reg31 == (unsigned long) ret_from_fork)
 		return t->reg31;
 
-	return ((unsigned long*)t->reg29)[17];
+	return ((unsigned long *)t->reg29)[10];
 }
 
 /*
  * Do necessary setup to start up a newly executed thread.
  */
-extern void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp);
+#define start_thread(regs, new_pc, new_sp) do {				\
+	/* New thread looses kernel privileges. */			\
+	regs->cp0_status = (regs->cp0_status & ~(ST0_CU0|ST0_KSU)) | KU_USER;\
+	regs->cp0_epc = new_pc;						\
+	regs->regs[29] = new_sp;					\
+	current->thread.current_ds = USER_DS;				\
+} while (0)
 
 unsigned long get_wchan(struct task_struct *p);
 
-#define PT_REG(reg)		((long)&((struct pt_regs *)0)->reg \
-				 - sizeof(struct pt_regs))
-#define KSTK_TOS(tsk) ((unsigned long)(tsk) + KERNEL_STACK_SIZE - 32)
-#define KSTK_EIP(tsk)	(*(unsigned long *)(KSTK_TOS(tsk) + PT_REG(cp0_epc)))
-#define KSTK_ESP(tsk)	(*(unsigned long *)(KSTK_TOS(tsk) + PT_REG(regs[29])))
+#define __PT_REG(reg) ((long)&((struct pt_regs *)0)->reg - sizeof(struct pt_regs))
+#define __KSTK_TOS(tsk) ((unsigned long)(tsk) + KERNEL_STACK_SIZE - 32)
+#define KSTK_EIP(tsk) (*(unsigned long *)(__KSTK_TOS(tsk) + __PT_REG(cp0_epc)))
+#define KSTK_ESP(tsk) (*(unsigned long *)(__KSTK_TOS(tsk) + __PT_REG(regs[29])))
 
 /* Allocation and freeing of basic task resources. */
 /*
  * NOTE! The task struct and the stack go together
  */
+#define THREAD_SIZE (2*PAGE_SIZE)
 #define alloc_task_struct() \
 	((struct task_struct *) __get_free_pages(GFP_KERNEL,1))
 #define free_task_struct(p)	free_pages((unsigned long)(p),1)
@@ -253,4 +262,4 @@ unsigned long get_wchan(struct task_struct *p);
 #define return_address() NULL
 #endif
 
-#endif /* __ASM_MIPS_PROCESSOR_H */
+#endif /* _ASM_PROCESSOR_H */

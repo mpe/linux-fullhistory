@@ -12,7 +12,6 @@
 #include <linux/config.h>
 
 #include "sound_config.h"
-#ifdef CONFIG_GUS
 #include "gus_linearvol.h"
 
 #define GUS_VOLUME	gus_wave_volume
@@ -152,5 +151,3 @@ unsigned short gus_linear_vol(int vol, int mainvol)
 #endif
 	return gus_linearvol[(((vol * mainvol) / 127) * mixer_mainvol) / 100];
 }
-
-#endif

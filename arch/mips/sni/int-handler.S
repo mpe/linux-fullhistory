@@ -1,11 +1,10 @@
-/* $Id: int-handler.S,v 1.4 1999/01/04 16:03:58 ralf Exp $
+/* $Id: int-handler.S,v 1.5 1999/08/18 23:37:46 ralf Exp $
  *
  * SNI RM200 PCI specific interrupt handler code.
  *
  * Copyright (C) 1994 - 1997 by Ralf Baechle
  */
 #include <asm/asm.h>
-#include <asm/mipsconfig.h>
 #include <asm/mipsregs.h>
 #include <asm/regdef.h>
 #include <asm/sni.h>

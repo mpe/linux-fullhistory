@@ -1,5 +1,5 @@
-/* $Id: r2300_misc.S,v 1.3 1999/05/01 22:40:36 ralf Exp $
- * r2300_misc.S: Misc. exception handling code for R3000/R2000.
+/* $Id: r2300_misc.S,v 1.8 1999/12/08 22:05:10 harald Exp $
+ * misc.S: Misc. exception handling code for R3000/R2000.
  *
  * Copyright (C) 1994, 1995, 1996 by Ralf Baechle and Andreas Busse
  *
@@ -8,14 +8,15 @@
  *
  * Further modifications to make this work:
  * Copyright (c) 1998 Harald Koerfgen
- * Copyright (c) 1998 Gleb Raiko & Vladimir Roganov
+ * Copyright (c) 1998, 1999 Gleb Raiko & Vladimir Roganov
  */
+#include <linux/config.h>
+
 #include <asm/asm.h>
 #include <asm/current.h>
 #include <asm/bootinfo.h>
 #include <asm/cachectl.h>
 #include <asm/fpregdef.h>
-#include <asm/mipsconfig.h>
 #include <asm/mipsregs.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
@@ -38,11 +39,10 @@
 	 */
 #define LOAD_PTE(pte, ptr) \
 	mfc0	pte, CP0_BADVADDR; \
-	_GET_CURRENT(ptr); \
+	lw	ptr, current_pgd; \
 	srl	pte, pte, 22; \
-	lw	ptr, THREAD_PGDIR(ptr); \
 	sll	pte, pte, 2; \
-	addu	ptr, pte, ptr; \
+	addu	ptr, ptr, pte; \
 	mfc0	pte, CP0_CONTEXT; \
 	lw	ptr, (ptr); \
 	andi	pte, pte, 0xffc; \
@@ -115,56 +115,67 @@
 			   _PAGE_VALID | _PAGE_DIRTY); \
 	sw	pte, (ptr);
 
+/*
+ * The index register may have the probe fail bit set,
+ * because we would trap on access kseg2, i.e. without refill.
+ */
+#define TLB_WRITE(reg) \
+	mfc0	reg, CP0_INDEX; \
+	nop; \
+	bltz    reg, 1f; \
+	 nop; \
+	tlbwi; \
+	j	2f; \
+	 nop; \
+1:	tlbwr; \
+2:
+
+#define RET(reg) \
+	mfc0	reg, CP0_EPC; \
+	nop; \
+	jr	reg; \
+	 rfe
+			
 	.set	noreorder
 
 	.align	5
-NESTED(r2300_handle_tlbl, PT_SIZE, sp)
+NESTED(handle_tlbl, PT_SIZE, sp)
 	.set	noat
 
 #ifndef NOTLB_OPTIMIZE
 	/* Test present bit in entry. */
 	LOAD_PTE(k0, k1)
         tlbp
-	nop
         PTE_PRESENT(k0, k1, nopage_tlbl)
         PTE_MAKEVALID(k0, k1)
         PTE_RELOAD(k1)
-	tlbwi
-	nop
-	mfc0	k0, CP0_EPC
-	nop
-	jr	k0
-	 rfe
+	TLB_WRITE(k0)
+	RET(k0)
 nopage_tlbl:
 #endif
 
 	DO_FAULT(0)
-END(r2300_handle_tlbl)
+END(handle_tlbl)
 
-NESTED(r2300_handle_tlbs, PT_SIZE, sp)
+NESTED(handle_tlbs, PT_SIZE, sp)
 	.set	noat
 
 #ifndef NOTLB_OPTIMIZE
 	LOAD_PTE(k0, k1)
 	tlbp                            # find faulting entry
-	nop
 	PTE_WRITABLE(k0, k1, nopage_tlbs)
 	PTE_MAKEWRITE(k0, k1)
 	PTE_RELOAD(k1)
-	tlbwi
-	nop
-	mfc0	k0, CP0_EPC
-	nop
-	jr	k0
-	 rfe
+	TLB_WRITE(k0)
+	RET(k0)
 nopage_tlbs:
 #endif
 
 	DO_FAULT(1)
-END(r2300_handle_tlbs)
+END(handle_tlbs)
 
 	.align	5
-NESTED(r2300_handle_mod, PT_SIZE, sp)
+NESTED(handle_mod, PT_SIZE, sp)
 	.set	noat
 #ifndef NOTLB_OPTIMIZE
 	LOAD_PTE(k0, k1)
@@ -181,15 +192,10 @@ NESTED(r2300_handle_mod, PT_SIZE, sp)
 
 	/* Now reload the entry into the tlb. */
 	PTE_RELOAD(k1)
-	nop
 	tlbwi
-	nop
-	mfc0	k0, CP0_EPC
-	nop
-	jr	k0
-	 rfe
+	RET(k0)
 #endif
 
 nowrite_mod:
 	DO_FAULT(1)
-END(r2300_handle_mod)
+END(handle_mod)

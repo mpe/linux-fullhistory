@@ -62,7 +62,8 @@ extern inline void pci_dma_sync_single(struct pci_dev *hwdev,
 		BUG();
 	/* nothing to do */
 }
-extern inline void pci_dma_syng_sg(struct pci_dev *hwdev,
+
+extern inline void pci_dma_sync_sg(struct pci_dev *hwdev,
 				   struct scatterlist *sg,
 				   int nelems, int direction)
 {

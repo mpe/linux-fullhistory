@@ -59,8 +59,6 @@ Changes:
 #include "soundmodule.h"
 #include "sound_config.h"
 
-#ifdef CONFIG_AD1816
-
 #define DEBUGNOISE(x)
 #define DEBUGINFO(x) 
 #define DEBUGLOG(x) x
@@ -1429,5 +1427,3 @@ void cleanup_module(void)
 }
 
 #endif /* MODULE */
-
-#endif /* CONFIG_AD1816 */

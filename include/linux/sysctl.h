@@ -21,10 +21,10 @@
  ****************************************************************
  */
 
-#include <linux/lists.h>
-
 #ifndef _LINUX_SYSCTL_H
 #define _LINUX_SYSCTL_H
+
+#include <linux/list.h>
 
 #define CTL_MAXNAME 10
 

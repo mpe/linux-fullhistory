@@ -24,9 +24,6 @@
  *
  */
 #include <linux/config.h>
-#include "legacy.h"
-
-#ifdef CONFIG_SBDSP
 
 /*
  * Mixer registers
@@ -108,6 +105,3 @@
 #define ALS007_LINE	6
 #define ALS007_CD	2
 #define ALS007_SYNTH	7
-
-#endif
-

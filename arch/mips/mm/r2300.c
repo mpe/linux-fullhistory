@@ -4,10 +4,10 @@
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
  * with a lot of changes to make this thing work for R3000s
- * Copyright (C) 1998 Harald Koerfgen
+ * Copyright (C) 1998, 2000 Harald Koerfgen
  * Copyright (C) 1998 Gleb Raiko & Vladimir Roganov
  *
- * $Id: r2300.c,v 1.8 1999/04/11 17:13:56 harald Exp $
+ * $Id: r2300.c,v 1.15 2000/02/24 00:12:40 ralf Exp $
  */
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -19,13 +19,9 @@
 #include <asm/mmu_context.h>
 #include <asm/system.h>
 #include <asm/sgialib.h>
-#include <asm/mipsregs.h>
+#include <asm/isadep.h>
 #include <asm/io.h>
-/*
- * Temporarily disabled
- *
 #include <asm/wbflush.h>
- */
 
 /*
  * According to the paper written by D. Miller about Linux cache & TLB
@@ -33,25 +29,18 @@
  * driver layer.  Thus, normally, we don't need flush dcache for R3000.
  * Define this if driver does not handle cache consistency during DMA ops.
  */
-#undef DO_DCACHE_FLUSH
 
-/*
- *  Unified cache space description structure
- */
-static struct cache_space {
-	unsigned long ca_flags;  /* Cache space access flags */
-	int           size;      /* Cache space size */
-} icache, dcache;
+/* Primary cache parameters. */
+static int icache_size, dcache_size; /* Size in bytes */
+/* the linesizes are usually fixed on R3000s */
 
 #undef DEBUG_TLB
 #undef DEBUG_CACHE
 
-extern unsigned long mips_tlb_entries;
-
 #define NTLB_ENTRIES       64  /* Fixed on all R23000 variants... */
 
 /* page functions */
-void r2300_clear_page(unsigned long page)
+void r3k_clear_page(void * page)
 {
 	__asm__ __volatile__(
 		".set\tnoreorder\n\t"
@@ -75,7 +64,7 @@ void r2300_clear_page(unsigned long page)
 		:"$1","memory");
 }
 
-static void r2300_copy_page(unsigned long to, unsigned long from)
+static void r3k_copy_page(void * to, void * from)
 {
 	unsigned long dummy1, dummy2;
 	unsigned long reg1, reg2, reg3, reg4;
@@ -163,278 +152,248 @@ static unsigned long __init size_cache(unsigned long ca_flags)
 
 static void __init probe_dcache(void)
 {
-	dcache.size = size_cache(dcache.ca_flags = ST0_DE);
-	printk("Data cache %dkb\n", dcache.size >> 10);
+	dcache_size = size_cache(ST0_DE);
+	printk("Primary data cache %dkb, linesize 4 bytes\n",
+		dcache_size >> 10);
 }
 
 static void __init probe_icache(void)
 {
-	icache.size = size_cache(icache.ca_flags = ST0_DE|ST0_CE);
-	printk("Instruction cache %dkb\n", icache.size >> 10);
+	icache_size = size_cache(ST0_DE|ST0_CE);
+	printk("Primary instruction cache %dkb, linesize 8 bytes\n",
+		icache_size >> 10);
 }
 
-static inline unsigned long get_phys_page (unsigned long page,
-					   struct mm_struct *mm)
+static void r3k_flush_icache_range(unsigned long start, unsigned long size)
 {
-        page &= PAGE_MASK;
-	if (page >= KSEG0 && page < KSEG1) {
-		/*
-		 *  We already have physical address
-		 */
-		return page;
-	} else {
-		if (!mm) {
-			printk ("get_phys_page: vaddr without mm\n");
-			return 0;
-		} else {
-			/* 
-			 *  Find a physical page using mm_struct
-			 */
-			pgd_t *page_dir;
-			pmd_t *page_middle;
-			pte_t *page_table, pte;
+	unsigned long i, flags;
+	volatile unsigned char *p = (char *)start;
 
-			unsigned long address = page;
-
-			page_dir = pgd_offset(mm, address);
-			if (pgd_none(*page_dir))
-				return 0; 
-			page_middle = pmd_offset(page_dir, address);
-			if (pmd_none(*page_middle))
-				return 0; 
-			page_table = pte_offset(page_middle, address);
-			pte = *page_table;
-			if (!pte_present(pte))
-				return 0; 
-			return pte_page(pte);
-	}
-	}
-}
-
-static inline void flush_cache_space_page(struct cache_space *space,
-					  unsigned long page)
-{
-	register unsigned long i, flags, size = space->size;
-	register volatile unsigned char *p = (volatile unsigned char*) page;
-
-#ifndef DO_DCACHE_FLUSH
-	if (space == &dcache)
-		return;
-#endif
-	if (size > PAGE_SIZE)
-		size = PAGE_SIZE;
+	if (size > icache_size)
+		size = icache_size;
 
 	save_and_cli(flags);
 
 	/* isolate cache space */
-	write_32bit_cp0_register(CP0_STATUS, (space->ca_flags|flags)&~ST0_IEC);
+	write_32bit_cp0_register(CP0_STATUS, (ST0_DE|ST0_CE|flags)&~ST0_IEC);
 
-	for (i = 0; i < size; i += 64) {
-		asm ( 	"sb\t$0,(%0)\n\t"
-			"sb\t$0,4(%0)\n\t"
-			"sb\t$0,8(%0)\n\t"
-			"sb\t$0,12(%0)\n\t"
-			"sb\t$0,16(%0)\n\t"
-			"sb\t$0,20(%0)\n\t"
-			"sb\t$0,24(%0)\n\t"
-			"sb\t$0,28(%0)\n\t"
- 		        "sb\t$0,32(%0)\n\t"
- 			"sb\t$0,36(%0)\n\t"
- 			"sb\t$0,40(%0)\n\t"
- 			"sb\t$0,44(%0)\n\t"
- 			"sb\t$0,48(%0)\n\t"
- 			"sb\t$0,52(%0)\n\t"
- 			"sb\t$0,56(%0)\n\t"
- 			"sb\t$0,60(%0)\n\t"
+	for (i = 0; i < size; i += 0x100) {
+		asm ( 	"sb\t$0,0x000(%0)\n\t"
+			"sb\t$0,0x008(%0)\n\t"
+			"sb\t$0,0x010(%0)\n\t"
+			"sb\t$0,0x018(%0)\n\t"
+			"sb\t$0,0x020(%0)\n\t"
+			"sb\t$0,0x028(%0)\n\t"
+			"sb\t$0,0x030(%0)\n\t"
+			"sb\t$0,0x038(%0)\n\t"
+		 	"sb\t$0,0x040(%0)\n\t"
+			"sb\t$0,0x048(%0)\n\t"
+			"sb\t$0,0x050(%0)\n\t"
+			"sb\t$0,0x058(%0)\n\t"
+			"sb\t$0,0x060(%0)\n\t"
+			"sb\t$0,0x068(%0)\n\t"
+			"sb\t$0,0x070(%0)\n\t"
+			"sb\t$0,0x078(%0)\n\t"
+			"sb\t$0,0x080(%0)\n\t"
+			"sb\t$0,0x088(%0)\n\t"
+			"sb\t$0,0x090(%0)\n\t"
+			"sb\t$0,0x098(%0)\n\t"
+			"sb\t$0,0x0a0(%0)\n\t"
+			"sb\t$0,0x0a8(%0)\n\t"
+			"sb\t$0,0x0b0(%0)\n\t"
+			"sb\t$0,0x0b8(%0)\n\t"
+		 	"sb\t$0,0x0c0(%0)\n\t"
+			"sb\t$0,0x0c8(%0)\n\t"
+			"sb\t$0,0x0d0(%0)\n\t"
+			"sb\t$0,0x0d8(%0)\n\t"
+			"sb\t$0,0x0e0(%0)\n\t"
+			"sb\t$0,0x0e8(%0)\n\t"
+			"sb\t$0,0x0f0(%0)\n\t"
+			"sb\t$0,0x0f8(%0)\n\t"
 			: : "r" (p) );
-		p += 64;
+		p += 0x100;
 	}
 
 	restore_flags(flags);
 }
 
-static inline void flush_cache_space_all(struct cache_space *space)
+static void r3k_flush_dcache_range(unsigned long start, unsigned long size)
 {
-	unsigned long page = KSEG0;
-	int size = space->size;
+	unsigned long i, flags;
+	volatile unsigned char *p = (char *)start;
 
-#ifndef DO_DCACHE_FLUSH
-	if (space == &dcache)
-		return;
-#endif
-	while(size > 0) { 
-		flush_cache_space_page(space, page);
-		page += PAGE_SIZE; size -= PAGE_SIZE;
-        }
-}
-
-static inline void r2300_flush_cache_all(void)
-{
-	flush_cache_space_all(&dcache);
-	flush_cache_space_all(&icache);
-}
- 
-static void r2300_flush_cache_mm(struct mm_struct *mm)
-{
-	if(mm->context == 0) 
-		return;
-#ifdef DEBUG_CACHE
-		printk("cmm[%d]", (int)mm->context);
-#endif
-	/*
-	 *  This function is called not offen, so it looks
-	 *  enough good to flush all caches than scan mm_struct,
-	 *  count pages to flush (and, very probably, flush more
-	 *  than cache space size :-)
- */
-	flush_cache_all();
-}
-
-static void r2300_flush_cache_range(struct mm_struct *mm,
-				    unsigned long start,
-				    unsigned long end)
-{
-	/*
-	 *  In general, we need to flush both i- & d- caches here.
-	 *  Optimization: if cache space is less than given range,
-	 *  it is more quickly to flush all cache than all pages in range.
-	 */
-
-	unsigned long page;
-	int icache_done = 0, dcache_done = 0;
-
-	if(mm->context == 0) 
-		return;
-#ifdef DEBUG_CACHE
-	printk("crange[%d]", (int)mm->context);
-#endif
-	if (end - start >= icache.size) {
-		flush_cache_space_all(&icache);
-		icache_done = 1;
-	}
-	if (end - start >= dcache.size) {
-		flush_cache_space_all(&dcache);
-		dcache_done = 1;
-	}
-	if (icache_done && dcache_done)
-		return;
-
-	for (page = start; page < end; page += PAGE_SIZE) {
-		unsigned long phys_page = get_phys_page(page, mm);
-		
-		if (phys_page) {
-			if (!icache_done) 
-				flush_cache_space_page(&icache, phys_page);
-			if (!dcache_done) 
-				flush_cache_space_page(&dcache, phys_page);
-		}
-	}
-}
-
-static void r2300_flush_cache_page(struct vm_area_struct *vma,
-				   unsigned long page)
-{
-	struct mm_struct *mm = vma->vm_mm;
-
-	if(mm->context == 0)
-		return;
-#ifdef DEBUG_CACHE
-	printk("cpage[%d,%08lx]", (int)mm->context, page);
-#endif
-	/*
-	 *  User changes page, so we need to check:
-         *     is icache page flush needed ?
-	 *  It looks we don't need to flush dcache,
-	 *  due it is write-transparent on R3000
-	 */
-	if (vma->vm_flags & VM_EXEC) {
-		unsigned long phys_page = get_phys_page(page, vma->vm_mm);
-		if (phys_page)
-			flush_cache_space_page(&icache, phys_page); 
-	}
-}
-
-static void r2300_flush_page_to_ram(unsigned long page)
-{
-	/*
-	 *  We need to flush both i- & d- caches :-(
-	 */
-	unsigned long phys_page = get_phys_page(page, NULL);
-#ifdef DEBUG_CACHE
-	printk("cram[%08lx]", page);
-#endif
-	if (phys_page) {
-		flush_cache_space_page(&icache, phys_page);
-		flush_cache_space_page(&dcache, phys_page);
-	}
-}
-
-static void r3k_dma_cache_wback_inv(unsigned long start, unsigned long size)
-{
-	register unsigned long i, flags;
-	register volatile unsigned char *p = (volatile unsigned char*) start;
-
-/*
- * Temporarily disabled
-	wbflush();
-	 */
-
-	/*
-	 * Invalidate dcache
-	 */
-	if (size < 64)
-		size = 64;
-
-	if (size > dcache.size)
-		size = dcache.size;
+	if (size > icache_size)
+		size = icache_size;
 
 	save_and_cli(flags);
 
 	/* isolate cache space */
 	write_32bit_cp0_register(CP0_STATUS, (ST0_DE|flags)&~ST0_IEC);
 
-	for (i = 0; i < size; i += 64) {
-		asm ( 	"sb\t$0,(%0)\n\t"
-			"sb\t$0,4(%0)\n\t"
-			"sb\t$0,8(%0)\n\t"
-			"sb\t$0,12(%0)\n\t"
-			"sb\t$0,16(%0)\n\t"
-			"sb\t$0,20(%0)\n\t"
-			"sb\t$0,24(%0)\n\t"
-			"sb\t$0,28(%0)\n\t"
- 		        "sb\t$0,32(%0)\n\t"
- 			"sb\t$0,36(%0)\n\t"
- 			"sb\t$0,40(%0)\n\t"
- 			"sb\t$0,44(%0)\n\t"
- 			"sb\t$0,48(%0)\n\t"
- 			"sb\t$0,52(%0)\n\t"
- 			"sb\t$0,56(%0)\n\t"
- 			"sb\t$0,60(%0)\n\t"
+	for (i = 0; i < size; i += 0x080) {
+		asm ( 	"sb\t$0,0x000(%0)\n\t"
+			"sb\t$0,0x004(%0)\n\t"
+			"sb\t$0,0x008(%0)\n\t"
+			"sb\t$0,0x00c(%0)\n\t"
+		 	"sb\t$0,0x010(%0)\n\t"
+			"sb\t$0,0x014(%0)\n\t"
+			"sb\t$0,0x018(%0)\n\t"
+			"sb\t$0,0x01c(%0)\n\t"
+		 	"sb\t$0,0x020(%0)\n\t"
+			"sb\t$0,0x024(%0)\n\t"
+			"sb\t$0,0x028(%0)\n\t"
+			"sb\t$0,0x02c(%0)\n\t"
+		 	"sb\t$0,0x030(%0)\n\t"
+			"sb\t$0,0x034(%0)\n\t"
+			"sb\t$0,0x038(%0)\n\t"
+			"sb\t$0,0x03c(%0)\n\t"
+		 	"sb\t$0,0x040(%0)\n\t"
+			"sb\t$0,0x044(%0)\n\t"
+			"sb\t$0,0x048(%0)\n\t"
+			"sb\t$0,0x04c(%0)\n\t"
+		 	"sb\t$0,0x050(%0)\n\t"
+			"sb\t$0,0x054(%0)\n\t"
+			"sb\t$0,0x058(%0)\n\t"
+			"sb\t$0,0x05c(%0)\n\t"
+		 	"sb\t$0,0x060(%0)\n\t"
+			"sb\t$0,0x064(%0)\n\t"
+			"sb\t$0,0x068(%0)\n\t"
+			"sb\t$0,0x06c(%0)\n\t"
+		 	"sb\t$0,0x070(%0)\n\t"
+			"sb\t$0,0x074(%0)\n\t"
+			"sb\t$0,0x078(%0)\n\t"
+			"sb\t$0,0x07c(%0)\n\t"
 			: : "r" (p) );
-		p += 64;
+		p += 0x080;
 	}
 
 	restore_flags(flags);
 }
 
-static void r2300_flush_cache_sigtramp(unsigned long page)
+static inline unsigned long get_phys_page (unsigned long addr,
+					   struct mm_struct *mm)
+{
+	pgd_t *pgd;
+	pmd_t *pmd;
+	pte_t *pte;
+	unsigned long physpage;
+
+	pgd = pgd_offset(mm, addr);
+	pmd = pmd_offset(pgd, addr);
+	pte = pte_offset(pmd, addr);
+
+	if((physpage = pte_val(*pte)) & _PAGE_VALID)
+		return KSEG1ADDR(physpage & PAGE_MASK);
+	else
+		return 0;
+}
+
+static inline void r3k_flush_cache_all(void)
+{
+	r3k_flush_icache_range(KSEG0, icache_size);
+}
+ 
+static void r3k_flush_cache_mm(struct mm_struct *mm)
+{
+	if(mm->context != 0) {
+
+#ifdef DEBUG_CACHE
+		printk("cmm[%d]", (int)mm->context);
+#endif
+		r3k_flush_cache_all();
+	}
+}
+
+static void r3k_flush_cache_range(struct mm_struct *mm,
+				    unsigned long start,
+				    unsigned long end)
+{
+	struct vm_area_struct *vma;
+
+	if(mm->context == 0) 
+		return;
+
+	start &= PAGE_MASK;
+#ifdef DEBUG_CACHE
+	printk("crange[%d,%08lx,%08lx]", (int)mm->context, start, end);
+#endif
+	vma = find_vma(mm, start);
+	if(vma) {
+		if(mm->context != current->mm->context) {
+			flush_cache_all();
+		} else {
+			unsigned long flags, physpage;
+
+			save_and_cli(flags);
+			while(start < end) {
+				if((physpage = get_phys_page(start, mm)))
+					r3k_flush_icache_range(physpage, PAGE_SIZE);
+		
+				start += PAGE_SIZE;
+			}
+			restore_flags(flags);
+		}
+	}
+}
+
+static void r3k_flush_cache_page(struct vm_area_struct *vma,
+				   unsigned long page)
+{
+	struct mm_struct *mm = vma->vm_mm;
+
+	if(mm->context == 0)
+		return;
+
+#ifdef DEBUG_CACHE
+	printk("cpage[%d,%08lx]", (int)mm->context, page);
+#endif
+	if (vma->vm_flags & VM_EXEC) {
+		unsigned long physpage;
+
+		if((physpage = get_phys_page(page, vma->vm_mm)))
+			r3k_flush_icache_range(physpage, PAGE_SIZE);
+
+	}
+}
+
+static void r3k_flush_page_to_ram(struct page * page)
 {
 	/*
-	 *  We need only flush i-cache here
-	 *
-	 *  This function receives virtual address (from signal.c),
-	 *  but this moment we have needed mm_struct in 'current'
+	 * Nothing to be done
 	 */
-	unsigned long phys_page = get_phys_page(page, current->mm);
+}
+
+static void r3k_flush_cache_sigtramp(unsigned long addr)
+{
+	unsigned long flags;
+
 #ifdef DEBUG_CACHE
-		printk("csigtramp[%08lx]", page);
+	printk("csigtramp[%08lx]", addr);
 #endif
-	if (phys_page)
-		flush_cache_space_page(&icache, phys_page);  
+	/*
+	 * I am assuming an 8 Byte cacheline here. HK
+	 */
+	addr &= ~7;
+
+	save_and_cli(flags);
+
+	write_32bit_cp0_register(CP0_STATUS, (ST0_DE|ST0_CE|flags)&~ST0_IEC);
+
+	asm ( 	"sb\t$0,0x000(%0)\n\t"
+		"sb\t$0,0x008(%0)\n\t"
+		: : "r" (addr) );
+
+	restore_flags(flags);
+}
+
+static void r3k_dma_cache_wback_inv(unsigned long start, unsigned long size)
+{
+	wbflush();
+	r3k_flush_dcache_range(start, size);
 }
 
 /* TLB operations. */
-static inline void r2300_flush_tlb_all(void)
+void flush_tlb_all(void)
 {
 	unsigned long flags;
 	unsigned long old_ctx;
@@ -456,7 +415,7 @@ static inline void r2300_flush_tlb_all(void)
 	restore_flags(flags);
 }
 
-static void r2300_flush_tlb_mm(struct mm_struct *mm)
+void flush_tlb_mm(struct mm_struct *mm)
 {
 	if(mm->context != 0) {
 		unsigned long flags;
@@ -466,16 +425,16 @@ static void r2300_flush_tlb_mm(struct mm_struct *mm)
 #endif
 		save_and_cli(flags);
 		get_new_mmu_context(mm, asid_cache);
-	if(mm == current->mm)
+		if (mm == current->active_mm)
 			set_entryhi(mm->context & 0xfc0);
 		restore_flags(flags);
 	}
 }
 
-static void r2300_flush_tlb_range(struct mm_struct *mm, unsigned long start,
+void flush_tlb_range(struct mm_struct *mm, unsigned long start,
 				  unsigned long end)
 {
-	if(mm->context != 0) {
+	if (mm->context != 0) {
 		unsigned long flags;
 		int size;
 
@@ -508,14 +467,14 @@ static void r2300_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 			set_entryhi(oldpid);
 		} else {
 			get_new_mmu_context(mm, asid_cache);
-	if(mm == current->mm)
+			if (mm == current->active_mm)
 				set_entryhi(mm->context & 0xfc0);
 		}
 		restore_flags(flags);
 	}
 }
 
-static void r2300_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
+void flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 {
 	if(vma->vm_mm->context != 0) {
 		unsigned long flags;
@@ -543,15 +502,10 @@ finish:
 	}
 }
 
-/* Load a new root pointer into the TLB. */
-static void r2300_load_pgd(unsigned long pg_dir)
-{
-}
-
 /*
  * Initialize new page directory with pointers to invalid ptes
  */
-static void r2300_pgd_init(unsigned long page)
+void pgd_init(unsigned long page)
 {
 	unsigned long dummy1, dummy2;
 
@@ -580,7 +534,7 @@ static void r2300_pgd_init(unsigned long page)
 		 "1" (PAGE_SIZE/(sizeof(pmd_t)*8)));
 }
 
-static void r2300_update_mmu_cache(struct vm_area_struct * vma,
+void update_mmu_cache(struct vm_area_struct * vma,
 				   unsigned long address, pte_t pte)
 {
 	unsigned long flags;
@@ -636,7 +590,7 @@ static void r2300_update_mmu_cache(struct vm_area_struct * vma,
 	restore_flags(flags);
 }
 
-static void r2300_show_regs(struct pt_regs * regs)
+void show_regs(struct pt_regs * regs)
 {
 	/*
 	 * Saved main processor registers
@@ -669,54 +623,33 @@ static void r2300_show_regs(struct pt_regs * regs)
 	       (unsigned int) regs->cp0_cause);
 }
 
-static void r2300_add_wired_entry(unsigned long entrylo0, unsigned long entrylo1,
+void add_wired_entry(unsigned long entrylo0, unsigned long entrylo1,
 				  unsigned long entryhi, unsigned long pagemask)
 {
-printk("r2300_add_wired_entry");
+printk("r3k_add_wired_entry");
         /*
 	 * FIXME, to be done
 	 */
-}
-
-static int r2300_user_mode(struct pt_regs *regs)
-{
-	return !(regs->cp0_status & ST0_KUP);
 }
 
 void __init ld_mmu_r2300(void)
 {
 	printk("CPU revision is: %08x\n", read_32bit_cp0_register(CP0_PRID));
 
-	clear_page = r2300_clear_page;
-	copy_page = r2300_copy_page;
+	_clear_page = r3k_clear_page;
+	_copy_page = r3k_copy_page;
 
 	probe_icache();
 	probe_dcache();
 
-	flush_cache_all = r2300_flush_cache_all;
-	flush_cache_mm = r2300_flush_cache_mm;
-	flush_cache_range = r2300_flush_cache_range;
-	flush_cache_page = r2300_flush_cache_page;
-	flush_cache_sigtramp = r2300_flush_cache_sigtramp;
-	flush_page_to_ram = r2300_flush_page_to_ram;
+	_flush_cache_all = r3k_flush_cache_all;
+	_flush_cache_mm = r3k_flush_cache_mm;
+	_flush_cache_range = r3k_flush_cache_range;
+	_flush_cache_page = r3k_flush_cache_page;
+	_flush_cache_sigtramp = r3k_flush_cache_sigtramp;
+	_flush_page_to_ram = r3k_flush_page_to_ram;
 
-	flush_tlb_all = r2300_flush_tlb_all;
-	flush_tlb_mm = r2300_flush_tlb_mm;
-	flush_tlb_range = r2300_flush_tlb_range;
-	flush_tlb_page = r2300_flush_tlb_page;
-
-        dma_cache_wback_inv = r3k_dma_cache_wback_inv;
-
-	load_pgd = r2300_load_pgd;
-	pgd_init = r2300_pgd_init;
-	update_mmu_cache = r2300_update_mmu_cache;
-	r3000_asid_setup();
-
-	show_regs = r2300_show_regs;
-    
-        add_wired_entry = r2300_add_wired_entry;
-
-	user_mode = r2300_user_mode;
+        _dma_cache_wback_inv = r3k_dma_cache_wback_inv;
 
 	flush_tlb_all();
 }

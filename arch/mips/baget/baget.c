@@ -1,4 +1,4 @@
-/* $Id$
+/* $Id: baget.c,v 1.1 1999/01/17 03:49:37 ralf Exp $
  *
  * baget.c: Baget low level stuff
  *

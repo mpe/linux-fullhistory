@@ -5,26 +5,6 @@ SECTIONS
 {
   /* Read-only sections, merged into text segment: */
   . = 0x80000000;
-  .rel.text      : { *(.rel.text)	}
-  .rela.text     : { *(.rela.text) 	}
-  .rel.data      : { *(.rel.data)	}
-  .rela.data     : { *(.rela.data) 	}
-  .rel.rodata    : { *(.rel.rodata) 	}
-  .rela.rodata   : { *(.rela.rodata) 	}
-  .rel.got       : { *(.rel.got)	}
-  .rela.got      : { *(.rela.got)	}
-  .rel.ctors     : { *(.rel.ctors)	}
-  .rela.ctors    : { *(.rela.ctors)	}
-  .rel.dtors     : { *(.rel.dtors)	}
-  .rela.dtors    : { *(.rela.dtors)	}
-  .rel.init      : { *(.rel.init)	}
-  .rela.init     : { *(.rela.init)	}
-  .rel.fini      : { *(.rel.fini)	}
-  .rela.fini     : { *(.rela.fini)	}
-  .rel.bss       : { *(.rel.bss)	}
-  .rela.bss      : { *(.rela.bss)	}
-  .rel.plt       : { *(.rel.plt)	}
-  .rela.plt      : { *(.rela.plt)	}
   .init          : { *(.init)		} =0
   .text      :
   {
@@ -38,13 +18,29 @@ SECTIONS
   _etext = .;
   PROVIDE (etext = .);
 
+  . = ALIGN(8192);
+  .data.init_task : { *(.data.init_task) }
+
   /* Startup code */
   . = ALIGN(4096);
   __init_begin = .;
   .text.init : { *(.text.init) }
   .data.init : { *(.data.init) }
+  . = ALIGN(16);
+  __setup_start = .;
+  .setup.init : { *(.setup.init) }
+  __setup_end = .;
+  __initcall_start = .;
+  .initcall.init : { *(.initcall.init) }
+  __initcall_end = .;
   . = ALIGN(4096);	/* Align double page for init_task_union */
   __init_end = .;
+
+  . = ALIGN(4096);
+  .data.page_aligned : { *(.data.idt) }
+
+  . = ALIGN(32);
+  .data.cacheline_aligned : { *(.data.cacheline_aligned) }
 
   .fini      : { *(.fini)    } =0
   .reginfo : { *(.reginfo) }
@@ -86,6 +82,7 @@ SECTIONS
 
   __bss_start = .;
   _fbss = .;
+  .sbss      : { *(.sbss) *(.scommon) }
   .bss       :
   {
    *(.dynbss)
@@ -93,8 +90,6 @@ SECTIONS
    *(COMMON)
   _end = . ;
   PROVIDE (end = .);
-   *(.sbss)
-   *(.scommon)
   }
   /* These are needed for ELF backends which have not yet been
      converted to the new style linker.  */

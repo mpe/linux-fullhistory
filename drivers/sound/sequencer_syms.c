@@ -9,7 +9,6 @@
 char sequencer_syms_symbol;
 
 #include "sound_config.h"
-
 #include "sound_calls.h"
 
 EXPORT_SYMBOL(note_to_freq);

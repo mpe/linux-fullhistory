@@ -1,4 +1,4 @@
-/* $Id: dma.h,v 1.2 1998/10/19 21:29:10 ralf Exp $
+/* $Id: dma.h,v 1.7 2000/01/29 01:42:28 ralf Exp $
  * linux/include/asm/dma.h: Defines for using and allocating dma channels.
  * Written by Hennus Bergman, 1992.
  * High DMA channel support & info by Hannu Savolainen
@@ -83,11 +83,7 @@
  * Deskstations or Acer PICA but not the much more versatile DMA logic used
  * for the local devices on Acer PICA or Magnums.
  */
-#ifndef CONFIG_SGI
 #define MAX_DMA_ADDRESS		(PAGE_OFFSET + 0x01000000)
-#else
-#define MAX_DMA_ADDRESS		(~0UL)
-#endif
 
 /* 8237 DMA controllers */
 #define IO_DMA1_BASE	0x00	/* 8 bit slave DMA, channels 0..3 */
@@ -298,5 +294,11 @@ static __inline__ int get_dma_residue(unsigned int dmanr)
 /* These are in kernel/dma.c: */
 extern int request_dma(unsigned int dmanr, const char * device_id);	/* reserve a DMA channel */
 extern void free_dma(unsigned int dmanr);	/* release it again */
+
+#ifdef CONFIG_PCI
+extern int isa_dma_bridge_buggy;
+#else
+#define isa_dma_bridge_buggy 	(0)
+#endif
 
 #endif /* __ASM_MIPS_DMA_H */

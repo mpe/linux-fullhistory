@@ -33,94 +33,80 @@
 #include "machvec_impl.h"
 
 
+/* Note mask bit is true for ENABLED irqs.  */
 static unsigned long cached_irq_mask;
 
+static void
+tsunami_update_irq_hw(unsigned long mask, unsigned long isa_enable)
+{
+	register tsunami_cchip *cchip = TSUNAMI_cchip;
+	register int bcpu = boot_cpuid;
 
-#define TSUNAMI_SET_IRQ_MASK(cpu, value)	\
-do {						\
-	volatile unsigned long *csr;		\
-	csr = &TSUNAMI_cchip->dim##cpu##.csr;	\
-	*csr = (value);				\
-	mb();					\
-	*csr;					\
-} while(0)
+#ifdef CONFIG_SMP
+	register unsigned long cpm = cpu_present_mask;
+	volatile unsigned long *dim0, *dim1, *dim2, *dim3;
+	unsigned long mask0, mask1, mask2, mask3, maskB, dummy;
+
+	mask0 = mask1 = mask2 = mask3 = mask;
+	maskB = mask | isa_enable;
+	if (bcpu == 0) mask0 = maskB;
+	if (bcpu == 1) mask1 = maskB;
+	if (bcpu == 2) mask2 = maskB;
+	if (bcpu == 3) mask3 = maskB;
+
+	dim0 = &cchip->dim0.csr;
+	dim1 = &cchip->dim1.csr;
+	dim2 = &cchip->dim2.csr;
+	dim3 = &cchip->dim3.csr;
+	if ((cpm & 1) == 0) dim0 = &dummy;
+	if ((cpm & 2) == 0) dim1 = &dummy;
+	if ((cpm & 4) == 0) dim2 = &dummy;
+	if ((cpm & 8) == 0) dim3 = &dummy;
+
+	*dim0 = mask0;
+	*dim1 = mask1;
+	*dim2 = mask2;
+	*dim3 = mask3;
+	mb();
+	*dim0;
+	*dim1;
+	*dim2;
+	*dim3;
+#else
+	volatile unsigned long *dimB = &cchip->dim1.csr;
+	if (bcpu == 0) dimB = &cchip->dim0.csr;
+	if (bcpu == 2) dimB = &cchip->dim2.csr;
+	if (bcpu == 3) dimB = &cchip->dim3.csr;
+	*dimB = mask | isa_enable;
+	mb();
+	*dimB;
+#endif
+}
 
 static inline void
-do_flush_irq_mask(unsigned long value)
+dp264_update_irq_hw(unsigned long mask)
 {
-	switch (TSUNAMI_bootcpu) {
-	case 0:
-		TSUNAMI_SET_IRQ_MASK(0, value);
-		break;
-	case 1:
-		TSUNAMI_SET_IRQ_MASK(1, value);
-		break;
-	case 2:
-		TSUNAMI_SET_IRQ_MASK(2, value);
-		break;
-	case 3:
-		TSUNAMI_SET_IRQ_MASK(3, value);
-		break;
-	}
+	tsunami_update_irq_hw(mask, (1UL << 55) | 0xffff);
 }
 
-#ifdef CONFIG_SMP
 static inline void
-do_flush_smp_irq_mask(unsigned long value)
+clipper_update_irq_hw(unsigned long mask)
 {
-	extern unsigned long cpu_present_mask;
-	unsigned long other_cpus = cpu_present_mask & ~(1L << TSUNAMI_bootcpu);
-
-	if (other_cpus & 1)
-		TSUNAMI_SET_IRQ_MASK(0, value);
-	if (other_cpus & 2)
-		TSUNAMI_SET_IRQ_MASK(1, value);
-	if (other_cpus & 4)
-		TSUNAMI_SET_IRQ_MASK(2, value);
-	if (other_cpus & 8)
-		TSUNAMI_SET_IRQ_MASK(3, value);
-}
-#endif
-
-static void
-dp264_flush_irq_mask(unsigned long mask)
-{
-	unsigned long value;
-
-#ifdef CONFIG_SMP
-	do_flush_smp_irq_mask(mask);
-#endif
-
-	value = mask | (1UL << 55) | 0xffff; /* isa irqs always enabled */
-	do_flush_irq_mask(value);
-}
-
-static void
-clipper_flush_irq_mask(unsigned long mask)
-{
-	unsigned long value;
-
-	value = mask >> 16;
-#ifdef CONFIG_SMP
-	do_flush_smp_irq_mask(value);
-#endif
-
-	value = value | (1UL << 55); /* master ISA enable */
-	do_flush_irq_mask(value);
+	tsunami_update_irq_hw(mask, 1UL << 55);
 }
 
 static inline void
 dp264_enable_irq(unsigned int irq)
 {
 	cached_irq_mask |= 1UL << irq;
-	dp264_flush_irq_mask(cached_irq_mask);
+	dp264_update_irq_hw(cached_irq_mask);
 }
 
 static void
 dp264_disable_irq(unsigned int irq)
 {
 	cached_irq_mask &= ~(1UL << irq);
-	dp264_flush_irq_mask(cached_irq_mask);
+	dp264_update_irq_hw(cached_irq_mask);
 }
 
 static unsigned int
@@ -134,14 +120,14 @@ static inline void
 clipper_enable_irq(unsigned int irq)
 {
 	cached_irq_mask |= 1UL << irq;
-	clipper_flush_irq_mask(cached_irq_mask);
+	clipper_update_irq_hw(cached_irq_mask);
 }
 
 static void
 clipper_disable_irq(unsigned int irq)
 {
 	cached_irq_mask &= ~(1UL << irq);
-	clipper_flush_irq_mask(cached_irq_mask);
+	clipper_update_irq_hw(cached_irq_mask);
 }
 
 static unsigned int
@@ -271,7 +257,7 @@ dp264_init_irq(void)
 	if (alpha_using_srm)
 		alpha_mv.device_interrupt = dp264_srm_device_interrupt;
 
-	dp264_flush_irq_mask(0UL);
+	dp264_update_irq_hw(0UL);
 
 	init_i8259a_irqs();
 	init_rtc_irq();
@@ -289,7 +275,7 @@ clipper_init_irq(void)
 	if (alpha_using_srm)
 		alpha_mv.device_interrupt = clipper_srm_device_interrupt;
 
-	clipper_flush_irq_mask(0UL);
+	clipper_update_irq_hw(0UL);
 
 	init_i8259a_irqs();
 	init_rtc_irq();

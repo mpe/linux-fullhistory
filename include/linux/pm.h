@@ -101,6 +101,7 @@ struct pm_dev
 
 	unsigned long	 flags;
 	int		 state;
+	int		 prev_state;
 
 	struct list_head entry;
 };
@@ -129,9 +130,14 @@ void pm_unregister(struct pm_dev *dev);
 void pm_unregister_all(pm_callback callback);
 
 /*
+ * Send a request to a single device
+ */
+int pm_send(struct pm_dev *dev, pm_request_t rqst, void *data);
+
+/*
  * Send a request to all devices
  */
-int pm_send_request(pm_request_t rqst, void *data);
+int pm_send_all(pm_request_t rqst, void *data);
 
 /*
  * Find a device
@@ -156,7 +162,12 @@ extern inline void pm_unregister(struct pm_dev *dev) {}
 
 extern inline void pm_unregister_all(pm_callback callback) {}
 
-extern inline int pm_send_request(pm_request_t rqst, void *data)
+extern inline int pm_send(struct pm_dev *dev, pm_request_t rqst, void *data)
+{
+	return 0;
+}
+
+extern inline int pm_send_all(pm_request_t rqst, void *data)
 {
 	return 0;
 }

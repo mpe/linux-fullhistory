@@ -60,7 +60,7 @@ internal_noop (unsigned int irq)
 }
 
 struct hw_interrupt_type irq_type_ia64_internal = {
-	"IA64 internal",
+	"IA64-internal",
 	(void (*)(unsigned long)) internal_noop,	/* init */
 	internal_noop,					/* startup */
 	internal_noop,					/* shutdown */

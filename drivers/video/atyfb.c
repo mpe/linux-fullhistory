@@ -63,10 +63,12 @@
 
 #ifdef __powerpc__
 #include <linux/adb.h>
-#include <linux/pmu.h>
 #include <asm/prom.h>
 #include <asm/pci-bridge.h>
 #include <video/macmodes.h>
+#endif
+#ifdef CONFIG_ADB_PMU
+#include <linux/pmu.h>
 #endif
 #ifdef CONFIG_NVRAM
 #include <linux/nvram.h>
@@ -3519,6 +3521,9 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
 	    info->total_vram -= GUI_RESERVE;
 	}
 
+    /* Clear the video memory */
+    memset_io(info->frame_buffer, 0, info->total_vram);
+
     disp = &info->disp;
 
     strcpy(info->fb_info.modename, atyfb_name);
@@ -4186,7 +4191,7 @@ static void atyfbcon_blank(int blank, struct fb_info *fb)
     struct fb_info_aty *info = (struct fb_info_aty *)fb;
     u8 gen_cntl;
 
-#ifdef CONFIG_PPC
+#ifdef CONFIG_ADB_PMU
     if ((_machine == _MACH_Pmac) && blank)
     	pmu_enable_backlight(0);
 #endif
@@ -4211,7 +4216,7 @@ static void atyfbcon_blank(int blank, struct fb_info *fb)
 	gen_cntl &= ~(0x4c);
     aty_st_8(CRTC_GEN_CNTL, gen_cntl, info);
 
-#ifdef CONFIG_PPC
+#ifdef CONFIG_ADB_PMU
     if ((_machine == _MACH_Pmac) && !blank)
     	pmu_enable_backlight(1);
 #endif

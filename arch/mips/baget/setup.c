@@ -1,10 +1,11 @@
-/* $Id$
+/* $Id: setup.c,v 1.4 1999/10/09 00:00:57 ralf Exp $
  *
  * setup.c: Baget/MIPS specific setup, including init of the feature struct.
  *
  * Copyright (C) 1998 Gleb Raiko & Vladimir Roganov
  *
  */
+#include <linux/config.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -15,8 +16,6 @@
 #include <asm/baget/baget.h>
 
 extern long mips_memory_upper;
-
-extern void wbflush_setup(void);
 
 #define CACHEABLE_STR(val) ((val) ? "not cached" : "cached")
 #define MIN(a,b)           (((a)<(b)) ? (a):(b)) 
@@ -480,8 +479,6 @@ void __init baget_setup(void)
 	printk("BT23/63-201n found.\n");
 	*BAGET_WRERR_ACK = 0;
 	irq_setup = baget_irq_setup;
-
-	wbflush_setup();
 
         _machine_restart   = baget_machine_restart;
         _machine_halt      = baget_machine_halt;

@@ -133,6 +133,9 @@ pci_map_single(struct pci_dev *pdev, void *cpu_addr, long size, int direction)
 	unsigned long paddr;
 	dma_addr_t ret;
 
+	if (direction == PCI_DMA_NONE)
+		BUG();
+
 	paddr = virt_to_phys(cpu_addr);
 
 	/* First check to see if we can use the direct map window.  */
@@ -186,12 +189,15 @@ pci_map_single(struct pci_dev *pdev, void *cpu_addr, long size, int direction)
    wrote there.  */
 
 void
-pci_unmap_single(struct pci_dev *pdev, dma_addr_t dma_addr, long size, int direction)
+pci_unmap_single(struct pci_dev *pdev, dma_addr_t dma_addr, long size,
+		 int direction)
 {
 	struct pci_controler *hose = pdev ? pdev->sysdata : pci_isa_hose;
 	struct pci_iommu_arena *arena;
 	long dma_ofs, npages;
 
+	if (direction == PCI_DMA_NONE)
+		BUG();
 
 	if (dma_addr >= __direct_map_base
 	    && dma_addr < __direct_map_base + __direct_map_size) {
@@ -247,7 +253,8 @@ pci_alloc_consistent(struct pci_dev *pdev, long size, dma_addr_t *dma_addrp)
 	}
 	memset(cpu_addr, 0, size);
 
-	*dma_addrp = pci_map_single(pdev, cpu_addr, size, PCI_DMA_BIDIRECTIONAL);
+	*dma_addrp = pci_map_single(pdev, cpu_addr, size,
+				    PCI_DMA_BIDIRECTIONAL);
 	if (*dma_addrp == 0) {
 		free_pages((unsigned long)cpu_addr, order);
 		return NULL;
@@ -424,12 +431,16 @@ sg_fill(struct scatterlist *leader, struct scatterlist *end,
 }
 
 int
-pci_map_sg(struct pci_dev *pdev, struct scatterlist *sg, int nents, int direction)
+pci_map_sg(struct pci_dev *pdev, struct scatterlist *sg, int nents,
+	   int direction)
 {
 	struct scatterlist *start, *end, *out;
 	struct pci_controler *hose;
 	struct pci_iommu_arena *arena;
 	dma_addr_t max_dma;
+
+	if (direction == PCI_DMA_NONE)
+		BUG();
 
 	/* Fast path single entry scatterlists.  */
 	if (nents == 1) {
@@ -499,13 +510,17 @@ error:
    above.  */
 
 void
-pci_unmap_sg(struct pci_dev *pdev, struct scatterlist *sg, int nents, int direction)
+pci_unmap_sg(struct pci_dev *pdev, struct scatterlist *sg, int nents,
+	     int direction)
 {
 	struct pci_controler *hose;
 	struct pci_iommu_arena *arena;
 	struct scatterlist *end;
 	dma_addr_t max_dma;
 	dma_addr_t fstart, fend;
+
+	if (direction == PCI_DMA_NONE)
+		BUG();
 
 	if (! alpha_mv.mv_pci_tbi)
 		return;
@@ -554,4 +569,34 @@ pci_unmap_sg(struct pci_dev *pdev, struct scatterlist *sg, int nents, int direct
 		alpha_mv.mv_pci_tbi(hose, fstart, fend);
 
 	DBGA("pci_unmap_sg: %d entries\n", nents - (end - sg));
+}
+
+/* Return whether the given PCI device DMA address mask can be
+   supported properly.  */
+
+int
+pci_dma_supported(struct pci_dev *pdev, dma_addr_t mask)
+{
+	struct pci_controler *hose;
+	struct pci_iommu_arena *arena;
+
+	/* If there exists a direct map, and the mask fits either
+	   MAX_DMA_ADDRESS defined such that GFP_DMA does something
+	   useful, or the total system memory as shifted by the
+	   map base.  */
+	if (__direct_map_size != 0
+	    && (__direct_map_base + MAX_DMA_ADDRESS-IDENT_ADDR-1 <= mask
+		|| __direct_map_base + (max_low_pfn<<PAGE_SHIFT)-1 <= mask))
+		return 1;
+
+	/* Check that we have a scatter-gather arena that fits.  */
+	hose = pdev ? pdev->sysdata : pci_isa_hose;
+	arena = hose->sg_isa;
+	if (arena && arena->dma_base + arena->size <= mask)
+		return 1;
+	arena = hose->sg_pci;
+	if (arena && arena->dma_base + arena->size <= mask)
+		return 1;
+
+	return 0;
 }

@@ -2749,13 +2749,13 @@ qla1280_setup_chip(scsi_qla_host_t *ha)
     long         risc_code_size;
     uint16_t     mb[MAILBOX_REGISTER_COUNT];
 #ifdef QLA1280_UNUSED
+    uint8_t	*sp;
     int i;
 #endif
     uint16_t     cnt;
     int          num;
-    uint8_t    *tbuf, *sp;
+    uint8_t    *tbuf;
     u_long     p_tbuf;
-    int i;
 
 #ifdef QL_DEBUG_LEVEL_3
     ENTER("qla1280_setup_chip");

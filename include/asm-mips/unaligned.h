@@ -1,16 +1,16 @@
-/*
- * Inline functions to do unaligned accesses.
+/* $Id: unaligned.h,v 1.3 1999/08/19 22:56:34 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1996 by Ralf Baechle
+ * Copyright (C) 1996, 1999 by Ralf Baechle
  */
-#ifndef __ASM_MIPS_UNALIGNED_H
-#define __ASM_MIPS_UNALIGNED_H
+#ifndef _ASM_UNALIGNED_H
+#define _ASM_UNALIGNED_H
 
-#include <asm/string.h>
+extern void __get_unaligned_bad_length(void);
+extern void __put_unaligned_bad_length(void);
 
 /*
  * Load quad unaligned.
@@ -94,17 +94,20 @@ extern inline unsigned long __get_unaligned(const void *ptr, size_t size)
 {
 	unsigned long val;
 	switch (size) {
-	      case 1:
+	case 1:
 		val = *(const unsigned char *)ptr;
 		break;
-	      case 2:
+	case 2:
 		val = ldw_u((const unsigned short *)ptr);
 		break;
-	      case 4:
+	case 4:
 		val = ldl_u((const unsigned int *)ptr);
 		break;
-	      case 8:
+	case 8:
 		val = ldq_u((const unsigned long long *)ptr);
+		break;
+	default:
+		__get_unaligned_bad_length();
 		break;
 	}
 	return val;
@@ -113,17 +116,20 @@ extern inline unsigned long __get_unaligned(const void *ptr, size_t size)
 extern inline void __put_unaligned(unsigned long val, void *ptr, size_t size)
 {
 	switch (size) {
-	      case 1:
+	case 1:
 		*(unsigned char *)ptr = (val);
-	        break;
-	      case 2:
+		break;
+	case 2:
 		stw_u(val, (unsigned short *)ptr);
 		break;
-	      case 4:
+	case 4:
 		stl_u(val, (unsigned int *)ptr);
 		break;
-	      case 8:
+	case 8:
 		stq_u(val, (unsigned long long *)ptr);
+		break;
+	default:
+		__put_unaligned_bad_length();
 		break;
 	}
 }
@@ -136,4 +142,4 @@ extern inline void __put_unaligned(unsigned long val, void *ptr, size_t size)
 #define put_unaligned(x,ptr) \
 	__put_unaligned((unsigned long)(x), (ptr), sizeof(*(ptr)))
 
-#endif /* __ASM_MIPS_UNALIGNED_H */
+#endif /* _ASM_UNALIGNED_H */

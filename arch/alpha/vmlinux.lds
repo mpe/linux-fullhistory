@@ -5,7 +5,6 @@ SECTIONS
   . = 0xfffffc0000310000;
   _text = .;
   .text : { *(.text) }
-  .text2 : { *(.text2) }
   _etext = .;
 
   /* Exception table */

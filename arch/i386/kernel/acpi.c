@@ -34,6 +34,7 @@
 #include <linux/spinlock.h>
 #include <linux/ioport.h>
 #include <linux/slab.h>
+#include <linux/mm.h>
 #include <linux/pci.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -379,13 +380,14 @@ static struct acpi_table *__init acpi_map_table(u32 addr)
 				ioremap((unsigned long) addr, table_size);
 		}
 
-		if (!table) {
-			/* ioremap is a pain, it returns NULL if the
-			 * table starts within mapped physical memory.
-			 * Hopefully, no table straddles a mapped/unmapped
-			 * physical memory boundary, ugh
+		if (!table && addr < virt_to_phys(high_memory)) {
+			/* sometimes we see ACPI tables in low memory
+			 * and not reserved by the memory map (E820) code,
+			 * who is at fault for this?  BIOS?
 			 */
-			table = (struct acpi_table*) phys_to_virt(addr);
+			printk(KERN_ERR
+			       "ACPI: unreserved table memory @ 0x%p!\n",
+			       (void*) addr);
 		}
 	}
 	return table;
@@ -933,9 +935,9 @@ static int acpi_enter_dx(acpi_dstate_t state)
 	int status = 0;
 	
 	if (state == ACPI_D0)
-		status = pm_send_request(PM_RESUME, (void*) state);
+		status = pm_send_all(PM_RESUME, (void*) state);
 	else
-		status = pm_send_request(PM_SUSPEND, (void*) state);
+		status = pm_send_all(PM_SUSPEND, (void*) state);
 
 	return status;
 }
@@ -1333,10 +1335,7 @@ static int __init acpi_init(void)
 
 	if (acpi_claim_ioports(acpi_facp)) {
 		printk(KERN_ERR "ACPI: I/O port allocation failed\n");
-		if (pci_driver_registered)
-			pci_unregister_driver(&acpi_driver);
-		acpi_destroy_tables();
-		return -ENODEV;
+		goto err_out;
 	}
 
 	if (acpi_facp->sci_int
@@ -1347,12 +1346,7 @@ static int __init acpi_init(void)
 			   acpi_facp)) {
 		printk(KERN_ERR "ACPI: SCI (IRQ%d) allocation failed\n",
 		       acpi_facp->sci_int);
-
-		if (pci_driver_registered)
-			pci_unregister_driver(&acpi_driver);
-		acpi_destroy_tables();
-
-		return -ENODEV;
+		goto err_out;
 	}
 
 	acpi_sysctl = register_sysctl_table(acpi_dir_table, 1);
@@ -1379,6 +1373,13 @@ static int __init acpi_init(void)
 		pm_idle = acpi_idle;
 
 	return 0;
+
+err_out:
+	if (pci_driver_registered)
+		pci_unregister_driver(&acpi_driver);
+	acpi_destroy_tables();
+
+	return -ENODEV;
 }
 
 /*

@@ -11,12 +11,12 @@
  *
  * Copyright (C) 1996, 1997 by Ralf Baechle
  *
- * $Id: atomic.h,v 1.4 1998/05/01 01:35:45 ralf Exp $
+ * $Id: atomic.h,v 1.7 1999/08/13 17:07:27 harald Exp $
  */
 #ifndef __ASM_MIPS_ATOMIC_H
 #define __ASM_MIPS_ATOMIC_H
 
-#include <asm/sgidefs.h>
+#include <linux/config.h>
 
 #ifdef __SMP__
 typedef struct { volatile int counter; } atomic_t;
@@ -30,7 +30,7 @@ typedef struct { int counter; } atomic_t;
 #define atomic_read(v)	((v)->counter)
 #define atomic_set(v,i)	((v)->counter = (i))
 
-#if (_MIPS_ISA == _MIPS_ISA_MIPS1)
+#if !defined(CONFIG_CPU_HAS_LLSC)
 
 #include <asm/system.h>
 
@@ -44,7 +44,7 @@ extern __inline__ void atomic_add(int i, volatile atomic_t * v)
 
 	save_flags(flags);
 	cli();
-	*v += i;
+	v->counter += i;
 	restore_flags(flags);
 }
 
@@ -54,7 +54,7 @@ extern __inline__ void atomic_sub(int i, volatile atomic_t * v)
 
 	save_flags(flags);
 	cli();
-	*v -= i;
+	v->counter -= i;
 	restore_flags(flags);
 }
 
@@ -64,9 +64,9 @@ extern __inline__ int atomic_add_return(int i, atomic_t * v)
 
 	save_flags(flags);
 	cli();
-	temp = *v;
+	temp = v->counter;
 	temp += i;
-	*v = temp;
+	v->counter = temp;
 	restore_flags(flags);
 
 	return temp;
@@ -78,17 +78,31 @@ extern __inline__ int atomic_sub_return(int i, atomic_t * v)
 
 	save_flags(flags);
 	cli();
-	temp = *v;
+	temp = v->counter;
 	temp -= i;
-	*v = temp;
+	v->counter = temp;
 	restore_flags(flags);
 
 	return temp;
 }
-#endif
 
-#if (_MIPS_ISA == _MIPS_ISA_MIPS2) || (_MIPS_ISA == _MIPS_ISA_MIPS3) || \
-    (_MIPS_ISA == _MIPS_ISA_MIPS4) || (_MIPS_ISA == _MIPS_ISA_MIPS5)
+extern __inline__ void atomic_clear_mask(unsigned long mask, unsigned long * v)
+{
+        unsigned long temp;
+        int     flags;
+
+        save_flags(flags);
+        cli();
+        temp = *v;
+        temp &= ~mask;
+        *v = temp;
+        restore_flags(flags);
+
+        return;
+}
+
+#else
+
 /*
  * ... while for MIPS II and better we can use ll/sc instruction.  This
  * implementation is SMP safe ...

@@ -13,7 +13,7 @@
 
 all: dec.o
 O_TARGET := dec.o
-O_OBJS	 := int-handler.o setup.o irq.o time.o reset.o rtc-dec.o wbflush.o
+O_OBJS	 := int-handler.o setup.o irq.o time.o reset.o rtc-dec.o
 
 ifdef CONFIG_PROM_CONSOLE
 O_OBJS   += promcon.o
@@ -21,6 +21,12 @@ endif
 
 ifdef CONFIG_SERIAL
 O_OBJS   += serial.o
+endif
+
+ifeq ($(CONFIG_MODULES),y)
+ OX_OBJS  = wbflush.o
+else
+ O_OBJS   += wbflush.o
 endif
 
 int-handler.o:	int-handler.S

@@ -1,4 +1,4 @@
-/* $Id: ds1286.c,v 1.4 1999/06/17 13:29:03 ralf Exp $
+/* $Id: ds1286.c,v 1.7 2000/02/23 00:41:21 ralf Exp $
  *
  *	Real Time Clock interface for Linux	
  *
@@ -73,9 +73,7 @@ void clear_rtc_irq_bit(unsigned char bit);
 
 static inline unsigned char ds1286_is_updating(void);
 
-#ifdef __SMP__
 static spinlock_t ds1286_lock = SPIN_LOCK_UNLOCKED;
-#endif
 
 /*
  *	Bits in rtc_status. (7 bits of room for future expansion)

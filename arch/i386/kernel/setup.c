@@ -119,7 +119,7 @@ extern int rd_image_start;	/* starting block # of image */
 #endif
 
 extern int root_mountflags;
-extern int _text, _etext, _edata, _end;
+extern char _text, _etext, _edata, _end;
 extern unsigned long cpu_hz;
 
 /*

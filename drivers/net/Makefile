@@ -18,7 +18,7 @@ SUB_DIRS     :=
 MOD_SUB_DIRS :=
 MOD_IN_SUB_DIRS :=
 ALL_SUB_DIRS := $(SUB_DIRS) fc hamradio irda pcmcia tokenring wan sk98lin \
-		arcnet skfp
+		arcnet skfp tulip
 
 O_TARGET := net.o
 MOD_LIST_NAME := NET_MODULES
@@ -40,6 +40,7 @@ endif
 
 ifeq ($(CONFIG_TULIP),y)
   SUB_DIRS += tulip
+  obj-y += tulip/tulip.o
 else
   ifeq ($(CONFIG_TULIP),m)
     MOD_SUB_DIRS += tulip
@@ -268,6 +269,7 @@ obj-$(CONFIG_HPLANCE) += hplance.o 7990.o
 obj-$(CONFIG_MVME147_NET) += mvme147.o 7990.o
 obj-$(CONFIG_EQUALIZER) += eql.o
 obj-$(CONFIG_MIPS_JAZZ_SONIC) += jazzsonic.o
+obj-$(CONFIG_SGI_IOC3_ETH) += ioc3-eth.o
 obj-$(CONFIG_BAGETLANCE) += bagetlance.o
 obj-$(CONFIG_DECLANCE) += declance.o
 obj-$(CONFIG_ATARILANCE) += atarilance.o

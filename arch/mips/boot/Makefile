@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.9 1999/04/07 18:45:23 harald Exp $
+# $Id: Makefile,v 1.10 1999/10/17 19:55:22 harald Exp $
 #
 # This file is subject to the terms and conditions of the GNU General Public
 # License.  See the file "COPYING" in the main directory of this archive
@@ -46,6 +46,8 @@ dep:
 
 clean:
 	rm -f vmlinux.ecoff
+	rm -f addinitrd
+	rm -f elf2ecoff
 
 dummy:
 

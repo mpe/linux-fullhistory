@@ -5,7 +5,7 @@
  *	Authors:
  *	Lennert Buytenhek		<buytenh@gnu.org>
  *
- *	$Id: br_device.c,v 1.1 2000/02/18 16:47:11 davem Exp $
+ *	$Id: br_device.c,v 1.2 2000/02/24 19:48:06 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -116,12 +116,10 @@ static int br_dev_stop(struct net_device *dev)
 	return 0;
 }
 
-#ifdef CONFIG_NET_FASTROUTE
 static int br_dev_accept_fastpath(struct net_device *dev, struct dst_entry *dst)
 {
 	return -1;
 }
-#endif
 
 void br_dev_setup(struct net_device *dev)
 {
@@ -133,9 +131,7 @@ void br_dev_setup(struct net_device *dev)
 	dev->open = br_dev_open;
 	dev->set_multicast_list = br_dev_set_multicast_list;
 	dev->stop = br_dev_stop;
-#ifdef CONFIG_NET_FASTROUTE
 	dev->accept_fastpath = br_dev_accept_fastpath;
-#endif
-
 	dev->tx_queue_len = 0;
+	dev->set_mac_address = NULL;
 }

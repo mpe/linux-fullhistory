@@ -12,6 +12,7 @@
  * (troy@microux.com, hozer@drgw.net)
  */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/smp.h>

@@ -24,8 +24,6 @@
 #include "sound_config.h"
 #include "soundmodule.h"
 
-#ifdef CONFIG_VMIDI
-
 #include "v_midi.h"
 
 static vmidi_devc *v_devc[2] = { NULL, NULL};
@@ -52,7 +50,7 @@ void cleanup_module(void)
 	SOUND_LOCK_END;
 }
 
-#endif
+#endif /* MODULE */
 
 /*
  * The DSP channel can be used either for input or output. Variable
@@ -297,5 +295,3 @@ void unload_v_midi(struct address_info *hw_config)
 	sound_unload_mididev(midi2);
 	kfree(midi_mem);
 }
-
-#endif

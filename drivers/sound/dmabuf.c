@@ -29,8 +29,6 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_AUDIO) || defined(CONFIG_GUS)
-
 #define DMAP_FREE_ON_CLOSE      0
 #define DMAP_KEEP_ON_CLOSE      1
 extern int sound_dmap_flag;
@@ -1286,5 +1284,3 @@ void DMAbuf_deinit(int dev)
 			sound_free_dmap(adev->dmap_in);
 	}
 }
-
-#endif

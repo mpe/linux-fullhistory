@@ -40,9 +40,6 @@
 #define DEB(x)
 #define DEB1(x)
 #include "sound_config.h"
-
-#ifdef CONFIG_AD1848
-
 #include "ad1848_mixer.h"
 
 typedef struct
@@ -113,7 +110,7 @@ static volatile signed char irq2dev[17] = {
 	-1, -1, -1, -1, -1, -1, -1, -1, -1
 };
 
-#if defined(CONFIG_SEQUENCER) && !defined(EXCLUDE_TIMERS) || defined(MODULE)
+#ifdef MODULE
 
 static int timer_installed = -1;
 
@@ -167,7 +164,7 @@ static void     ad1848_halt_input(int dev);
 static void     ad1848_halt_output(int dev);
 static void     ad1848_trigger(int dev, int bits);
 
-#if defined(CONFIG_SEQUENCER) && !defined(EXCLUDE_TIMERS)
+#ifndef EXCLUDE_TIMERS
 static int ad1848_tmr_install(int dev);
 static void ad1848_tmr_reprogram(int dev);
 
@@ -1131,7 +1128,7 @@ static int ad1848_prepare_for_output(int dev, int bsize, int bcount)
 	restore_flags(flags);
 	devc->xfer_count = 0;
 
-#if defined(CONFIG_SEQUENCER) && !defined(EXCLUDE_TIMERS)
+#ifndef EXCLUDE_TIMERS
 	if (dev == timer_installed && devc->timer_running)
 		if ((fs & 0x01) != (old_fs & 0x01))
 		{
@@ -1245,7 +1242,7 @@ static int ad1848_prepare_for_input(int dev, int bsize, int bcount)
 	restore_flags(flags);
 	devc->xfer_count = 0;
 
-#if defined(CONFIG_SEQUENCER) && !defined(EXCLUDE_TIMERS)
+#ifndef EXCLUDE_TIMERS
 	if (dev == timer_installed && devc->timer_running)
 	{
 		if ((fs & 0x01) != (old_fs & 0x01))
@@ -1931,7 +1928,7 @@ int ad1848_init(char *name, int io_base, int irq, int dma_playback, int dma_capt
 		}
 		if (capabilities[devc->model].flags & CAP_F_TIMER)
 		{
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 			int x;
 			unsigned char tmp = ad_read(devc, 16);
 #endif			
@@ -1940,7 +1937,7 @@ int ad1848_init(char *name, int io_base, int irq, int dma_playback, int dma_capt
 
 			ad_write(devc, 21, 0x00);	/* Timer MSB */
 			ad_write(devc, 20, 0x10);	/* Timer LSB */
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 			ad_write(devc, 16, tmp | 0x40);	/* Enable timer */
 			for (x = 0; x < 100000 && devc->timer_ticks == 0; x++);
 			ad_write(devc, 16, tmp & ~0x40);	/* Disable timer */
@@ -1961,7 +1958,7 @@ int ad1848_init(char *name, int io_base, int irq, int dma_playback, int dma_capt
 	} else if (irq < 0)
 		irq2dev[-irq] = devc->dev_no = my_dev;
 
-#if defined(CONFIG_SEQUENCER) && !defined(EXCLUDE_TIMERS)
+#ifndef EXCLUDE_TIMERS
 	if ((capabilities[devc->model].flags & CAP_F_TIMER) &&
 	    devc->irq_ok)
 		ad1848_tmr_install(my_dev);
@@ -2146,7 +2143,7 @@ interrupt_again:		/* Jump back here if int status doesn't reset */
 		if (devc->model != MD_1848 && (alt_stat & 0x40))	/* Timer interrupt */
 		{
 			devc->timer_ticks++;
-#if defined(CONFIG_SEQUENCER) && !defined(EXCLUDE_TIMERS)
+#ifndef EXCLUDE_TIMERS
 			if (timer_installed == dev && devc->timer_running)
 				sound_timer_interrupt();
 #endif
@@ -2583,7 +2580,7 @@ void unload_ms_sound(struct address_info *hw_config)
 	release_region(hw_config->io_base, 4);
 }
 
-#if defined(CONFIG_SEQUENCER) && !defined(EXCLUDE_TIMERS)
+#ifndef EXCLUDE_TIMERS
 
 /*
  * Timer stuff (for /dev/music).
@@ -2693,7 +2690,7 @@ static int ad1848_tmr_install(int dev)
 
 	return 1;
 }
-#endif
+#endif /* EXCLUDE_TIMERS */
 
 
 EXPORT_SYMBOL(ad1848_detect);
@@ -2757,5 +2754,4 @@ void cleanup_module(void)
 		unload_ms_sound(&hw_config);
 }
 
-#endif
-#endif
+#endif /* MODULE */

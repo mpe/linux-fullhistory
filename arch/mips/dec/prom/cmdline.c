@@ -3,10 +3,11 @@
  *
  * Copyright (C) 1998 Harald Koerfgen
  *
- * $Id: $
+ * $Id: cmdline.c,v 1.2 1999/10/09 00:00:57 ralf Exp $
  */
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/config.h>
 #include <linux/string.h>
 
 #include <asm/bootinfo.h>

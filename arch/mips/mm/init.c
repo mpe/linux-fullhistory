@@ -1,10 +1,11 @@
-/* $Id: init.c,v 1.13 1999/05/01 22:40:40 ralf Exp $
+/* $Id: init.c,v 1.27 2000/02/23 01:33:56 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1994 - 1998 by Ralf Baechle
+ * Copyright (C) 1994 - 2000 by Ralf Baechle
+ * Copyright (C) 2000 Silicon Graphics, Inc.
  */
 #include <linux/config.h>
 #include <linux/init.h>
@@ -18,6 +19,8 @@
 #include <linux/ptrace.h>
 #include <linux/mman.h>
 #include <linux/mm.h>
+#include <linux/bootmem.h>
+#include <linux/highmem.h>
 #include <linux/swap.h>
 #include <linux/swapctl.h>
 #ifdef CONFIG_BLK_DEV_INITRD
@@ -30,21 +33,28 @@
 #include <asm/jazzdma.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
-#ifdef CONFIG_SGI
+#include <asm/pgalloc.h>
+#ifdef CONFIG_SGI_IP22
 #include <asm/sgialib.h>
 #endif
 #include <asm/mmu_context.h>
 
+static unsigned long totalram_pages = 0;
+
+extern void prom_fixup_mem_map(unsigned long start, unsigned long end);
+extern void prom_free_prom_memory(void);
+
+
 void __bad_pte_kernel(pmd_t *pmd)
 {
 	printk("Bad pmd in pte_alloc_kernel: %08lx\n", pmd_val(*pmd));
-	pmd_val(*pmd) = BAD_PAGETABLE;
+	pmd_set(pmd, BAD_PAGETABLE);
 }
 
 void __bad_pte(pmd_t *pmd)
 {
 	printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
-	pmd_val(*pmd) = BAD_PAGETABLE;
+	pmd_set(pmd, BAD_PAGETABLE);
 }
 
 pte_t *get_pte_kernel_slow(pmd_t *pmd, unsigned long offset)
@@ -54,11 +64,11 @@ pte_t *get_pte_kernel_slow(pmd_t *pmd, unsigned long offset)
 	page = (pte_t *) __get_free_page(GFP_USER);
 	if (pmd_none(*pmd)) {
 		if (page) {
-			clear_page((unsigned long)page);
+			clear_page(page);
 			pmd_val(*pmd) = (unsigned long)page;
 			return page + offset;
 		}
-		pmd_val(*pmd) = BAD_PAGETABLE;
+		pmd_set(pmd, BAD_PAGETABLE);
 		return NULL;
 	}
 	free_page((unsigned long)page);
@@ -76,11 +86,11 @@ pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
 	page = (pte_t *) __get_free_page(GFP_KERNEL);
 	if (pmd_none(*pmd)) {
 		if (page) {
-			clear_page((unsigned long)page);
+			clear_page(page);
 			pmd_val(*pmd) = (unsigned long)page;
 			return page + offset;
 		}
-		pmd_val(*pmd) = BAD_PAGETABLE;
+		pmd_set(pmd, BAD_PAGETABLE);
 		return NULL;
 	}
 	free_page((unsigned long)page);
@@ -128,9 +138,9 @@ static inline unsigned long setup_zero_pages(void)
 		panic("Oh boy, that early out of memory?");
 
 	pg = MAP_NR(empty_zero_page);
-	while(pg < MAP_NR(empty_zero_page) + (1 << order)) {
+	while (pg < MAP_NR(empty_zero_page) + (1 << order)) {
 		set_bit(PG_reserved, &mem_map[pg].flags);
-		atomic_set(&mem_map[pg].count, 0);
+		set_page_count(mem_map + pg, 0);
 		pg++;
 	}
 
@@ -138,7 +148,7 @@ static inline unsigned long setup_zero_pages(void)
 	zero_page_mask = (size - 1) & PAGE_MASK;
 	memset((void *)empty_zero_page, 0, size);
 
-	return size;
+	return 1UL << order;
 }
 
 int do_check_pgt_cache(int low, int high)
@@ -174,43 +184,9 @@ int do_check_pgt_cache(int low, int high)
 pte_t * __bad_pagetable(void)
 {
 	extern char empty_bad_page_table[PAGE_SIZE];
-	unsigned long page;
-	unsigned long dummy1, dummy2;
-#if (_MIPS_ISA == _MIPS_ISA_MIPS3) || (_MIPS_ISA == _MIPS_ISA_MIPS4)
-	unsigned long dummy3;
-#endif
+	unsigned long page, dummy1, dummy2;
 
 	page = (unsigned long) empty_bad_page_table;
-	/*
-	 * As long as we only save the low 32 bit of the 64 bit wide
-	 * R4000 registers on interrupt we cannot use 64 bit memory accesses
-	 * to the main memory.
-	 */
-#if (_MIPS_ISA == _MIPS_ISA_MIPS3) || (_MIPS_ISA == _MIPS_ISA_MIPS4)
-        /*
-         * Use 64bit code even for Linux/MIPS 32bit on R4000
-         */
-	__asm__ __volatile__(
-		".set\tnoreorder\n"
-		".set\tnoat\n\t"
-		".set\tmips3\n\t"
-		"dsll32\t$1,%2,0\n\t"
-		"dsrl32\t%2,$1,0\n\t"
-		"or\t%2,$1\n"
-		"1:\tsd\t%2,(%0)\n\t"
-		"subu\t%1,1\n\t"
-		"bnez\t%1,1b\n\t"
-		"addiu\t%0,8\n\t"
-		".set\tmips0\n\t"
-		".set\tat\n"
-		".set\treorder"
-		:"=r" (dummy1),
-		 "=r" (dummy2),
-		 "=r" (dummy3)
-		:"0" (page),
-		 "1" (PAGE_SIZE/8),
-		 "2" (pte_val(BAD_PAGE)));
-#else /* (_MIPS_ISA == _MIPS_ISA_MIPS1) || (_MIPS_ISA == _MIPS_ISA_MIPS2) */
 	__asm__ __volatile__(
 		".set\tnoreorder\n"
 		"1:\tsw\t%2,(%0)\n\t"
@@ -218,12 +194,9 @@ pte_t * __bad_pagetable(void)
 		"bnez\t%1,1b\n\t"
 		"addiu\t%0,4\n\t"
 		".set\treorder"
-		:"=r" (dummy1),
-		 "=r" (dummy2)
-		:"r" (pte_val(BAD_PAGE)),
-		 "0" (page),
-		 "1" (PAGE_SIZE/4));
-#endif
+		:"=r" (dummy1), "=r" (dummy2)
+		:"r" (pte_val(BAD_PAGE)), "0" (page), "1" (PAGE_SIZE/4)
+		:"$1");
 
 	return (pte_t *)page;
 }
@@ -231,10 +204,10 @@ pte_t * __bad_pagetable(void)
 pte_t __bad_page(void)
 {
 	extern char empty_bad_page[PAGE_SIZE];
-	unsigned long page = (unsigned long)empty_bad_page;
+	unsigned long page = (unsigned long) empty_bad_page;
 
-	clear_page(page);
-	return pte_mkdirty(mk_pte(page, PAGE_SHARED));
+	clear_page((void *)page);
+	return pte_mkdirty(mk_pte_phys(__pa(page), PAGE_SHARED));
 }
 
 void show_mem(void)
@@ -252,10 +225,10 @@ void show_mem(void)
 			reserved++;
 		else if (PageSwapCache(mem_map+i))
 			cached++;
-		else if (!atomic_read(&mem_map[i].count))
+		else if (!page_count(mem_map + i))
 			free++;
 		else
-			shared += atomic_read(&mem_map[i].count) - 1;
+			shared += page_count(mem_map + i) - 1;
 	}
 	printk("%d pages of RAM\n", total);
 	printk("%d reserved pages\n", reserved);
@@ -266,79 +239,83 @@ void show_mem(void)
 	show_buffers();
 }
 
-extern unsigned long free_area_init(unsigned long, unsigned long);
+/* References to section boundaries */
 
-unsigned long __init paging_init(unsigned long start_mem, unsigned long end_mem)
+extern char _ftext, _etext, _fdata, _edata;
+extern char __init_begin, __init_end;
+
+void __init paging_init(void)
 {
+	unsigned long zones_size[MAX_NR_ZONES] = {0, 0, 0};
+	unsigned long max_dma, low;
+
 	/* Initialize the entire pgd.  */
 	pgd_init((unsigned long)swapper_pg_dir);
 	pgd_init((unsigned long)swapper_pg_dir + PAGE_SIZE / 2);
-	return free_area_init(start_mem, end_mem);
-}
 
-void __init mem_init(unsigned long start_mem, unsigned long end_mem)
-{
-	int codepages = 0;
-	int datapages = 0;
-	unsigned long tmp;
-	extern int _etext, _ftext;
+	max_dma = virt_to_phys((char *)MAX_DMA_ADDRESS) >> PAGE_SHIFT;
+	low = max_low_pfn;
 
-#ifdef CONFIG_MIPS_JAZZ
-	if (mips_machgroup == MACH_GROUP_JAZZ)
-		start_mem = vdma_init(start_mem, end_mem);
-#endif
-
-	end_mem &= PAGE_MASK;
-	max_mapnr = MAP_NR(end_mem);
-	high_memory = (void *)end_mem;
-	num_physpages = 0;
-
-	/* mark usable pages in the mem_map[] */
-	start_mem = PAGE_ALIGN(start_mem);
-
-	for(tmp = MAP_NR(start_mem);tmp < max_mapnr;tmp++)
-		clear_bit(PG_reserved, &mem_map[tmp].flags);
-
-	prom_fixup_mem_map(start_mem, (unsigned long)high_memory);
-
-	for (tmp = PAGE_OFFSET; tmp < end_mem; tmp += PAGE_SIZE) {
-		/*
-		 * This is only for PC-style DMA.  The onboard DMA
-		 * of Jazz and Tyne machines is completely different and
-		 * not handled via a flag in mem_map_t.
-		 */
-		if (tmp >= MAX_DMA_ADDRESS)
-			clear_bit(PG_DMA, &mem_map[MAP_NR(tmp)].flags);
-		if (PageReserved(mem_map+MAP_NR(tmp))) {
-			if ((tmp < (unsigned long) &_etext) &&
-			    (tmp >= (unsigned long) &_ftext))
-				codepages++;
-			else if ((tmp < start_mem) &&
-				 (tmp > (unsigned long) &_etext))
-				datapages++;
-			continue;
-		}
-		num_physpages++;
-		atomic_set(&mem_map[MAP_NR(tmp)].count, 1);
-#ifdef CONFIG_BLK_DEV_INITRD
-		if (!initrd_start || (tmp < initrd_start || tmp >=
-		    initrd_end))
-#endif
-			free_page(tmp);
+	if (low < max_dma)
+		zones_size[ZONE_DMA] = low;
+	else {
+		zones_size[ZONE_DMA] = max_dma;
+		zones_size[ZONE_NORMAL] = low - max_dma;
 	}
-	tmp = nr_free_pages << PAGE_SHIFT;
 
-	/* Setup zeroed pages.  */
-	tmp -= setup_zero_pages();
-
-	printk("Memory: %luk/%luk available (%dk kernel code, %dk data)\n",
-		tmp >> 10,
-		max_mapnr << (PAGE_SHIFT-10),
-		codepages << (PAGE_SHIFT-10),
-		datapages << (PAGE_SHIFT-10));
+	free_area_init(zones_size);
 }
+
+extern int page_is_ram(unsigned long pagenr);
+
+void __init mem_init(void)
+{
+	unsigned long codesize, reservedpages, datasize, initsize;
+	unsigned long tmp, ram;
+
+	max_mapnr = num_physpages = max_low_pfn;
+	high_memory = (void *) __va(max_mapnr << PAGE_SHIFT);
+
+	totalram_pages += free_all_bootmem();
+	totalram_pages -= setup_zero_pages();	/* Setup zeroed pages.  */
+
+	reservedpages = ram = 0;
+	for (tmp = 0; tmp < max_low_pfn; tmp++)
+		if (page_is_ram(tmp)) {
+			ram++;
+			if (PageReserved(mem_map+tmp))
+				reservedpages++;
+		}
+
+	codesize =  (unsigned long) &_etext - (unsigned long) &_ftext;
+	datasize =  (unsigned long) &_edata - (unsigned long) &_fdata;
+	initsize =  (unsigned long) &__init_end - (unsigned long) &__init_begin;
+
+	printk("Memory: %luk/%luk available (%ldk kernel code, %ldk reserved, "
+	       "%ldk data, %ldk init)\n",
+	       (unsigned long) nr_free_pages() << (PAGE_SHIFT-10),
+	       ram << (PAGE_SHIFT-10),
+	       codesize >> 10,
+	       reservedpages << (PAGE_SHIFT-10),
+	       datasize >> 10,
+	       initsize >> 10);
+}
+
+#ifdef CONFIG_BLK_DEV_INITRD
+void free_initrd_mem(unsigned long start, unsigned long end)
+{
+	for (; start < end; start += PAGE_SIZE) {
+		ClearPageReserved(mem_map + MAP_NR(start));
+		set_page_count(mem_map+MAP_NR(start), 1);
+		free_page(start);
+		totalram_pages++;
+	}
+	printk ("Freeing initrd memory: %ldk freed\n", (end - start) >> 10);
+}
+#endif
 
 extern char __init_begin, __init_end;
+extern void prom_free_prom_memory(void);
 
 void free_initmem(void)
 {
@@ -346,11 +323,13 @@ void free_initmem(void)
 
 	prom_free_prom_memory ();
     
-	addr = (unsigned long)(&__init_begin);
-	for (; addr < (unsigned long)(&__init_end); addr += PAGE_SIZE) {
-		mem_map[MAP_NR(addr)].flags &= ~(1 << PG_reserved);
-		atomic_set(&mem_map[MAP_NR(addr)].count, 1);
+	addr = (unsigned long) &__init_begin;
+	while (addr < (unsigned long) &__init_end) {
+		ClearPageReserved(mem_map + MAP_NR(addr));
+		set_page_count(mem_map + MAP_NR(addr), 1);
 		free_page(addr);
+		totalram_pages++;
+		addr += PAGE_SIZE;
 	}
 	printk("Freeing unused kernel memory: %dk freed\n",
 	       (&__init_end - &__init_begin) >> 10);
@@ -358,54 +337,13 @@ void free_initmem(void)
 
 void si_meminfo(struct sysinfo *val)
 {
-	int i;
-
-	i = MAP_NR(high_memory);
-	val->totalram = 0;
+	val->totalram = totalram_pages;
 	val->sharedram = 0;
-	val->freeram = nr_free_pages << PAGE_SHIFT;
-	val->bufferram = atomic_read(&buffermem);
-	while (i-- > 0)  {
-		if (PageReserved(mem_map+i))
-			continue;
-		val->totalram++;
-		if (!atomic_read(&mem_map[i].count))
-			continue;
-		val->sharedram += atomic_read(&mem_map[i].count) - 1;
-	}
-	val->totalram <<= PAGE_SHIFT;
-	val->sharedram <<= PAGE_SHIFT;
+	val->freeram = nr_free_pages();
+	val->bufferram = atomic_read(&buffermem_pages);
+	val->totalhigh = 0;
+	val->freehigh = nr_free_highpages();
+	val->mem_unit = PAGE_SIZE;
+
 	return;
-}
-
-/* Fixup an immediate instruction  */
-static void __init __i_insn_fixup(unsigned int **start, unsigned int **stop,
-                         unsigned int i_const)
-{
-	unsigned int **p, *ip;
-
-	for (p = start;p < stop; p++) {
-		ip = *p;
-		*ip = (*ip & 0xffff0000) | i_const;
-	}
-}
-
-#define i_insn_fixup(section, const)					  \
-do {									  \
-	extern unsigned int *__start_ ## section;			  \
-	extern unsigned int *__stop_ ## section;			  \
-	__i_insn_fixup(&__start_ ## section, &__stop_ ## section, const); \
-} while(0)
-
-/* Caller is assumed to flush the caches before the first context switch.  */
-void __init __asid_setup(unsigned int inc, unsigned int mask,
-                             unsigned int version_mask,
-                             unsigned int first_version)
-{
-	i_insn_fixup(__asid_inc, inc);
-	i_insn_fixup(__asid_mask, mask);
-	i_insn_fixup(__asid_version_mask, version_mask);
-	i_insn_fixup(__asid_first_version, first_version);
-
-	asid_cache = first_version;
 }

@@ -712,6 +712,19 @@ int remap_page_range(unsigned long from, unsigned long phys_addr, unsigned long 
 }
 
 /*
+ * Establish a new mapping:
+ *  - flush the old one
+ *  - update the page tables
+ *  - inform the TLB about the new one
+ */
+static inline void establish_pte(struct vm_area_struct * vma, unsigned long address, pte_t *page_table, pte_t entry)
+{
+	flush_tlb_page(vma, address);
+	set_pte(page_table, entry);
+	update_mmu_cache(vma, address, entry);
+}
+
+/*
  * This routine handles present pages, when users try to write
  * to a shared page. It is done by copying the page to a new address
  * and decrementing the shared-page counter for the old page.
@@ -769,8 +782,7 @@ static int do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 		/* FallThrough */
 	case 1:
 		flush_cache_page(vma, address);
-		set_pte(page_table, pte_mkyoung(pte_mkdirty(pte_mkwrite(pte))));
-		flush_tlb_page(vma, address);
+		establish_pte(vma, address, page_table, pte_mkyoung(pte_mkdirty(pte_mkwrite(pte))));
 		spin_unlock(&tsk->mm->page_table_lock);
 		return 1;
 	}
@@ -793,8 +805,7 @@ static int do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 		copy_cow_page(old_page, new_page, address);
 		flush_page_to_ram(new_page);
 		flush_cache_page(vma, address);
-		set_pte(page_table, pte_mkwrite(pte_mkdirty(mk_pte(new_page, vma->vm_page_prot))));
-		flush_tlb_page(vma, address);
+		establish_pte(vma, address, page_table, pte_mkwrite(pte_mkdirty(mk_pte(new_page, vma->vm_page_prot))));
 
 		/* Free the old page.. */
 		new_page = old_page;
@@ -1125,9 +1136,7 @@ static inline int handle_pte_fault(struct task_struct *tsk,
 			entry = pte_mkdirty(entry);
 		}
 		entry = pte_mkyoung(entry);
-		set_pte(pte, entry);
-		flush_tlb_page(vma, address);
-		update_mmu_cache(vma, address, entry);
+		establish_pte(vma, address, pte, entry);
 	}
 	spin_unlock(&tsk->mm->page_table_lock);
 	return 1;

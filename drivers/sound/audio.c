@@ -29,8 +29,6 @@
 #include <linux/kmod.h>
 
 #include "sound_config.h"
-
-#ifdef CONFIG_AUDIO
 #include "ulaw.h"
 #include "coproc.h"
 
@@ -516,8 +514,6 @@ void audio_init_devices(void)
 	 * NOTE! This routine could be called several times during boot.
 	 */
 }
-
-#endif
 
 void reorganize_buffers(int dev, struct dma_buffparms *dmap, int recording)
 {

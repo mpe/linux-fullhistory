@@ -1,14 +1,14 @@
-/*
- * include/asm-mips/bcache.h
+/* $Id: bcache.h,v 1.2 1999/08/20 21:59:07 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (c) 1997 by Ralf Baechle
- *
- * $Id: bcache.h,v 1.1 1998/05/01 01:35:46 ralf Exp $
+ * Copyright (c) 1997, 1999 by Ralf Baechle
  */
+#ifndef _ASM_BCACHE_H
+#define _ASM_BCACHE_H
+
 struct bcache_ops {
 	void (*bc_enable)(void);
 	void (*bc_disable)(void);
@@ -20,3 +20,5 @@ extern void indy_sc_init(void);
 extern void sni_pcimt_sc_init(void);
 
 extern struct bcache_ops *bcops;
+
+#endif /* _ASM_BCACHE_H */

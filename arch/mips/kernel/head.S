@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.11 1998/10/18 13:27:12 tsbogend Exp $
+/* $Id: head.S,v 1.17 1999/12/04 03:58:59 ralf Exp $
  *
  * arch/mips/kernel/head.S
  *
@@ -8,10 +8,11 @@
  *
  * Copyright (C) 1994, 1995 Waldorf Electronics
  * Written by Ralf Baechle and Andreas Busse
- * Copyright (C) 1995, 1996, 1997, 1998 Ralf Baechle
+ * Copyright (C) 1995 - 1999 Ralf Baechle
  * Copyright (C) 1996 Paul M. Antoine
  * Modified for DECStation and hence R3000 support by Paul M. Antoine
- * Further modifications by David S. Miller
+ * Further modifications by David S. Miller and Harald Koerfgen
+ * Copyright (C) 1999 Silicon Graphics, Inc.
  *
  * Head.S contains the MIPS exception handler and startup code.
  */
@@ -26,7 +27,6 @@
 #include <asm/regdef.h>
 #include <asm/cachectl.h>
 #include <asm/mipsregs.h>
-#include <asm/mipsconfig.h>
 #include <asm/stackframe.h>
 #include <asm/bootinfo.h>
 #include <asm/cpu.h>
@@ -54,9 +54,8 @@
 	LEAF(except_vec0_r4000)
 	.set	mips3
 	mfc0	k0, CP0_BADVADDR		# Get faulting address
-	_GET_CURRENT(k1)			# get current task ptr
 	srl	k0, k0, 22			# get pgd only bits
-	lw	k1, THREAD_PGDIR(k1)		# get task pg_dir
+	lw	k1, current_pgd			# get pgd pointer
 	sll	k0, k0, 2
 	addu	k1, k1, k0			# add in pgd offset
 	mfc0	k0, CP0_CONTEXT			# get context reg
@@ -81,9 +80,8 @@
 	LEAF(except_vec0_r4600)
 	.set	mips3
 	mfc0	k0, CP0_BADVADDR
-	_GET_CURRENT(k1)			# get current task ptr
 	srl	k0, k0, 22
-	lw	k1, THREAD_PGDIR(k1)
+	lw	k1, current_pgd			# get pgd pointer
 	sll	k0, k0, 2
 	addu	k1, k1, k0
 	mfc0	k0, CP0_CONTEXT
@@ -109,9 +107,8 @@
 	LEAF(except_vec0_nevada)
 	.set	mips3
 	mfc0	k0, CP0_BADVADDR		# Get faulting address
-	_GET_CURRENT(k1)			# get current task ptr
 	srl	k0, k0, 22			# get pgd only bits
-	lw	k1, THREAD_PGDIR(k1)		# get task pg_dir
+	lw	k1, current_pgd			# get pgd pointer
 	sll	k0, k0, 2
 	addu	k1, k1, k0			# add in pgd offset
 	lw	k1, (k1)
@@ -135,9 +132,8 @@
 	LEAF(except_vec0_r45k_bvahwbug)
 	.set	mips3
 	mfc0	k0, CP0_BADVADDR
-	_GET_CURRENT(k1)			# get current task ptr
 	srl	k0, k0, 22
-	lw	k1, THREAD_PGDIR(k1)
+	lw	k1, current_pgd			# get pgd pointer
 	sll	k0, k0, 2
 	addu	k1, k1, k0
 	mfc0	k0, CP0_CONTEXT
@@ -166,9 +162,8 @@
 	LEAF(except_vec0_r4k_mphwbug)
 	.set	mips3
 	mfc0	k0, CP0_BADVADDR
-	_GET_CURRENT(k1)			# get current task ptr
 	srl	k0, k0, 22
-	lw	k1, THREAD_PGDIR(k1)
+	lw	k1, current_pgd			# get pgd pointer
 	sll	k0, k0, 2
 	addu	k1, k1, k0
 	mfc0	k0, CP0_CONTEXT
@@ -197,9 +192,8 @@
 	LEAF(except_vec0_r4k_250MHZhwbug)
 	.set	mips3
 	mfc0	k0, CP0_BADVADDR
-	_GET_CURRENT(k1)			# get current task ptr
 	srl	k0, k0, 22
-	lw	k1, THREAD_PGDIR(k1)
+	lw	k1, current_pgd			# get pgd pointer
 	sll	k0, k0, 2
 	addu	k1, k1, k0
 	mfc0	k0, CP0_CONTEXT
@@ -227,9 +221,8 @@
 	LEAF(except_vec0_r4k_MP250MHZhwbug)
 	.set	mips3
 	mfc0	k0, CP0_BADVADDR
-	_GET_CURRENT(k1)			# get current task ptr
 	srl	k0, k0, 22
-	lw	k1, THREAD_PGDIR(k1)
+	lw	k1, current_pgd			# get pgd pointer
 	sll	k0, k0, 2
 	addu	k1, k1, k0
 	mfc0	k0, CP0_CONTEXT
@@ -258,27 +251,22 @@
 
 	/* TLB refill, EXL == 0, R[23]00 version */
 	LEAF(except_vec0_r2300)
+	.set	noat
 	.set	mips1
 	mfc0	k0, CP0_BADVADDR
-	_GET_CURRENT(k1)			# get current task ptr
+	lw	k1, current_pgd			# get pgd pointer
 	srl	k0, k0, 22
-	lw	k1, THREAD_PGDIR(k1)
 	sll	k0, k0, 2
 	addu	k1, k1, k0
 	mfc0	k0, CP0_CONTEXT
 	lw	k1, (k1)
-	srl	k0, k0, 1
 	and	k0, k0, 0xffc
 	addu	k1, k1, k0
 	lw	k0, (k1)
-	srl	k0, k0, 12
+	nop
 	mtc0	k0, CP0_ENTRYLO0
 	mfc0	k1, CP0_EPC
 	tlbwr
-	nop
-	nop
-	nop
-	nop
 	jr	k1
 	rfe
 	END(except_vec0_r2300)
@@ -346,23 +334,25 @@ handle_vced:
  li k1, -4
  and k0, k1
 	mtc0	zero, CP0_TAGLO
- //	nop;nop
 	cache	Index_Store_Tag_D,(k0)
- //	nop;nop
 	cache	Hit_Writeback_Inv_SD,(k0)
+#ifdef CONFIG_PROC_FS
 	lui	k0, %hi(vced_count)
 	lw	k1, %lo(vced_count)(k0)
 	addiu	k1, 1
 	sw	k1, %lo(vced_count)(k0)
+#endif
 	eret
 
 handle_vcei:
 	mfc0	k0, CP0_BADVADDR
 	cache	Hit_Writeback_Inv_SD,(k0)		# also cleans pi
+#ifdef CONFIG_PROC_FS
 	lui	k0, %hi(vcei_count)
 	lw	k1, %lo(vcei_count)(k0)
 	addiu	k1, 1
 	sw	k1, %lo(vcei_count)(k0)
+#endif
 	eret
 
 	END(except_vec3_r4000)
@@ -371,6 +361,7 @@ handle_vcei:
 	/* General exception vector. */
 	NESTED(except_vec3_generic, 0, sp)
 	.set	noat
+	.set	mips0
 	mfc0	k1, CP0_CAUSE
 	la	k0, exception_handlers
 	andi	k1, k1, 0x7c
@@ -408,6 +399,14 @@ NESTED(kernel_entry, 16, sp)
 
 probe_done:
 
+	/*
+	 * Stack for kernel and init, current variable
+	 */
+	la	$28, init_task_union
+	addiu	t0, $28, KERNEL_STACK_SIZE-32
+	sw	t0, kernelsp
+	subu	sp, t0, 4*SZREG
+
 	/* The firmware/bootloader passes argc/argp/envp
 	 * to us as arguments.  But clear bss first because
 	 * the romvec and other important info is stored there
@@ -423,7 +422,7 @@ probe_done:
 
 	jal	prom_init /* prom_init(argc, argv, envp); */
 	 nop
-#ifdef CONFIG_SGI
+#ifdef CONFIG_SGI_IP22
 	jal	sgi_sysinit
 	 nop
 #endif
@@ -440,14 +439,6 @@ probe_done:
 	 */
 	jal	loadmmu
 	 nop
-
-	/*
-	 * Stack for kernel and init, current variable
-	 */
-	la	$28, init_task_union
-	addiu	t0, $28, KERNEL_STACK_SIZE-32
-	sw	t0, kernelsp
-	subu	sp, t0, 4*SZREG
 
 	/* Disable coprocessors */
 	mfc0	t0, CP0_STATUS
@@ -598,6 +589,8 @@ probe_done:
 		.fill	32*4,1,0
 
 EXPORT(kernelsp)
+		PTR	0
+EXPORT(current_pgd)
 		PTR	0
 		.text
 

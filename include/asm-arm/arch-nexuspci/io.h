@@ -46,7 +46,7 @@ extern __inline__ unsigned int __ioaddr (unsigned int port)			\
 
 DECLARE_IO(char,b,"b","Jr")
 DECLARE_IO(short,w,"h","r")
-DECLARE_IO(long,l,"","Jr")
+DECLARE_IO(int,l,"","Jr")
 
 #undef DECLARE_IO
 #undef DECLARE_DYN_OUT

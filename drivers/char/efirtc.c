@@ -334,6 +334,7 @@ efi_rtc_read_proc(char *page, char **start, off_t off,
         if (len<0) len = 0;
         return len;
 }
+
 static int __init 
 efi_rtc_init(void)
 {
@@ -345,6 +346,7 @@ efi_rtc_init(void)
 
 	return 0;
 }
+
 static int __exit
 efi_rtc_exit(void)
 {

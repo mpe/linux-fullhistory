@@ -65,4 +65,4 @@ void cleanup_module(void)
 	SOUND_LOCK_END;
 }
 
-#endif
+#endif /* MODULE */

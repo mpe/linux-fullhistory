@@ -25,9 +25,6 @@
 #include "sound_config.h"
 #include "soundmodule.h"
 
-#ifdef CONFIG_UART401
-#ifdef CONFIG_MIDI
-
 typedef struct uart401_devc
 {
 	int             base;
@@ -482,12 +479,9 @@ void cleanup_module(void)
 	SOUND_LOCK_END;
 }
 
-#endif
+#endif /* MODULE */
 
 EXPORT_SYMBOL(attach_uart401);
 EXPORT_SYMBOL(probe_uart401);
 EXPORT_SYMBOL(unload_uart401);
 EXPORT_SYMBOL(uart401intr);
-
-#endif
-#endif

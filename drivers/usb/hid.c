@@ -40,6 +40,8 @@
 #include <linux/smp_lock.h>
 #include <linux/spinlock.h>
 
+#include <asm/unaligned.h>
+
 #undef DEBUG
 #undef DEBUG_DATA
 
@@ -573,14 +575,14 @@ static __u8 *fetch_item(__u8 *start, __u8 *end, struct hid_item *item)
 
 				case 2: 
 					if ((end - start) >= 2) {
-						item->data.u16 = le16_to_cpu( *((__u16*)start)++);
+						item->data.u16 = le16_to_cpu( get_unaligned(((__u16*)start)++));
 						return start;
 					}
 
 				case 3: 
 					item->size++;
 					if ((end - start) >= 4) {
-						item->data.u32 = le32_to_cpu( *((__u32*)start)++);
+						item->data.u32 = le32_to_cpu( get_unaligned(((__u32*)start)++));
 						return start;
 					}
 			}
@@ -706,7 +708,7 @@ static __inline__ __u32 s32ton(__s32 value, unsigned n)
 static __inline__ __u32 extract(__u8 *report, unsigned offset, unsigned n)
 {
 	report += (offset >> 5) << 2; offset &= 31;
-	return (le64_to_cpu(*(__u64*)report) >> offset) & ((1 << n) - 1);
+	return (le64_to_cpu(get_unaligned((__u64*)report)) >> offset) & ((1 << n) - 1);
 }
 
 static __inline__ void implement(__u8 *report, unsigned offset, unsigned n, __u32 value)

@@ -20,8 +20,6 @@
 
 #include "sound_config.h"
 
-#ifdef CONFIG_SEQUENCER
-
 static volatile int opened = 0, tmr_running = 0;
 static volatile time_t tmr_offs, tmr_ctr;
 static volatile unsigned long ticks_offs;
@@ -289,5 +287,3 @@ struct sound_timer_operations default_sound_timer =
 	def_tmr_ioctl,
 	def_tmr_arm
 };
-
-#endif

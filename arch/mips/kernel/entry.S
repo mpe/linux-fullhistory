@@ -1,20 +1,13 @@
-/*
+/* $Id: entry.S,v 1.20 2000/02/23 00:41:00 ralf Exp $
+ *
  * Low level exception handling
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1994, 1995 by Ralf Baechle
- *
- * $Id: entry.S,v 1.14 1999/04/12 19:13:21 harald Exp $
- */
-
-/*
- * entry.S contains the system-call and fault low-level handling routines.
- * This also contains the timer-interrupt handler, as well as all interrupts
- * and faults that can result in a task-switch. The ISA dependent TLB
- * code is in arch/mips/<ISA-level>/<cputype>.S
+ * Copyright (C) 1994 - 2000 by Ralf Baechle
+ * Copyright (C) 1999, 2000 Silicon Graphics, Inc.
  */
 #include <linux/config.h>
 #include <linux/sys.h>
@@ -23,7 +16,6 @@
 #include <asm/current.h>
 #include <asm/errno.h>
 #include <asm/mipsregs.h>
-#include <asm/mipsconfig.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/stackframe.h>
@@ -31,46 +23,45 @@
 #include <asm/regdef.h>
 #include <asm/fpregdef.h>
 #include <asm/unistd.h>
+#include <asm/isadep.h>
 
-/*
- * Heia ...  The %lo, %hi and %HI stuff is too strong for the ELF assembler
- * and the ABI to cope with ...
- */
 		.text
-		.set	noreorder
-		.set	mips3
 		.align 4
-EXPORT(handle_bottom_half)
-		jal	do_bottom_half
-		 nop
+		.set	push
+		.set	reorder
+EXPORT(ret_from_fork)
+		 move	a0, v0			# prev
+		jal	schedule_tail
+		j	ret_from_sys_call
+
+EXPORT(handle_softirq)
+		jal	do_softirq
 		b	9f
-		 nop
 
 reschedule:	jal	schedule 
-		 nop
 
 EXPORT(ret_from_sys_call)
 EXPORT(ret_from_irq)
-		lw	t0,bh_mask
-		lw	t1,bh_active		# unused delay slot
-		and	t0,t1
-		bnez	t0,handle_bottom_half
-9:		 lw	t0,PT_STATUS(sp)	# returning to kernel mode?
+		.type	ret_from_irq,@function
+		lw	t0, softirq_state
+		lw	t1, softirq_state+4	# unused delay slot
+		and	t0, t1
+		bnez	t0, handle_softirq
 
-		andi	t1, t0, 0x10
+
+9:		lw	t0,PT_STATUS(sp)	# returning to kernel mode?
+		lw	t2, TASK_NEED_RESCHED($28)
+		andi	t1, t0, KU_USER
 		beqz	t1, return		# -> yes
-		 lw	t1, TASK_NEED_RESCHED($28)
-		bnez	t1, reschedule
+		bnez	t2, reschedule
 		lw	v0, TASK_SIGPENDING($28)
 		 move	a0, zero
 		beqz	v0, return
-		 nop
-		jal	do_signal
 		 move	a1, sp
+		jal	do_signal
 
 EXPORT(return)	.set	noat
-		RESTORE_ALL
-		eret
+		RESTORE_ALL_AND_RET
 		.set	at
 
 /*
@@ -84,7 +75,9 @@ LEAF(spurious_interrupt)
 		 * couldn't find a cause for it.
 		 */
 		lui     t1,%hi(spurious_count)
+		.set	reorder
 		lw      t0,%lo(spurious_count)(t1)
+		.set	noreorder
 		addiu   t0,1
 		j	ret_from_irq
 		 sw      t0,%lo(spurious_count)(t1)
@@ -107,7 +100,9 @@ LEAF(spurious_interrupt)
 		ctc1	a2,fcr31;                                       \
 		STI
 #define __BUILD_clear_ade(exception)                                    \
+		.set	reorder;						\
 		MFC0	t0,CP0_BADVADDR;                                \
+		.set	noreorder;					\
 		REG_S	t0,PT_BVADDR(sp);                               \
 		KMODE
 #define __BUILD_silent(exception)
@@ -122,9 +117,9 @@ LEAF(spurious_interrupt)
 #define __BUILD_count(exception)                                        \
 		.set	reorder;                                        \
 		lw	t0,exception_count_##exception;                 \
+		.set	noreorder;                                      \
 		addiu	t0, 1;                                          \
 		sw	t0,exception_count_##exception;                 \
-		.set	noreorder;                                      \
 		.data;                                                  \
 EXPORT(exception_count_##exception);                                    \
 		.word	0;                                              \
@@ -155,6 +150,8 @@ EXPORT(exception_count_##exception);                                    \
 		BUILD_HANDLER(fpe,fpe,fpe,silent)		/* #15 */
 		BUILD_HANDLER(watch,watch,sti,verbose)		/* #23 */
 		BUILD_HANDLER(reserved,reserved,sti,verbose)	/* others */
+
+		.set	pop
 
 /*
  * Table of syscalls

@@ -17,7 +17,6 @@
 
 
 #include "sound_config.h"
-#ifdef CONFIG_GUS
 
 #include <linux/ultrasound.h>
 #include "gus_hw.h"
@@ -244,5 +243,3 @@ ics2101_mixer_init(void)
 	}
 	return n;
 }
-
-#endif

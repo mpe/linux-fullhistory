@@ -1,4 +1,4 @@
-/* $Id: setup.c,v 1.16 1999/06/17 13:25:47 ralf Exp $
+/* $Id: setup.c,v 1.22 2000/01/27 01:05:23 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -39,7 +39,7 @@
 #include <asm/io.h>
 #include <asm/stackframe.h>
 #include <asm/system.h>
-#ifdef CONFIG_SGI
+#ifdef CONFIG_SGI_IP22
 #include <asm/sgialib.h>
 #endif
 
@@ -66,16 +66,7 @@ char cyclecounter_available;
  */
 int EISA_bus = 0;
 
-/*
- * Milo passes some information to the kernel that looks like as if it
- * had been returned by a Intel PC BIOS.  Milo doesn't fill the passed
- * drive_info and Linux can find out about this anyway, so I'm going to
- * remove this sometime.  screen_info contains information about the 
- * resolution of the text screen.  For VGA graphics based machine this
- * information is being use to continue the screen output just below
- * the BIOS printed text and with the same text resolution.
- */
-struct screen_info screen_info = DEFAULT_SCREEN_INFO;
+struct screen_info screen_info;
 
 #ifdef CONFIG_BLK_DEV_FD
 extern struct fd_ops no_fd_ops;
@@ -106,13 +97,6 @@ unsigned long mips_machgroup = MACH_GROUP_UNKNOWN;
 unsigned char aux_device_present;
 extern int _end;
 
-extern char empty_zero_page[PAGE_SIZE];
-
-/*
- * This is set up by the setup-routine at boot-time
- */
-#define PARAM	empty_zero_page
-
 static char command_line[CL_SIZE] = { 0, };
        char saved_command_line[CL_SIZE];
 extern char arcs_cmdline[CL_SIZE];
@@ -140,10 +124,8 @@ static void __init default_irq_setup(void)
 	panic("Unknown machtype in init_IRQ");
 }
 
-void __init setup_arch(char **cmdline_p,
-           unsigned long * memory_start_p, unsigned long * memory_end_p)
+void __init setup_arch(char **cmdline_p)
 {
-	unsigned long memory_end;
 #ifdef CONFIG_BLK_DEV_INITRD
 	unsigned long tmp;
 	unsigned long *initrd_header;
@@ -155,6 +137,7 @@ void __init setup_arch(char **cmdline_p,
 	void jazz_setup(void);
 	void sni_rm200_pci_setup(void);
 	void sgi_setup(void);
+	void ddb_setup(void);
 
 	/* Save defaults for configuration-dependent routines.  */
 	irq_setup = default_irq_setup;
@@ -192,7 +175,8 @@ void __init setup_arch(char **cmdline_p,
 		jazz_setup();
 		break;
 #endif
-#ifdef CONFIG_SGI
+#ifdef CONFIG_SGI_IP22
+	/* As of now this is only IP22.  */
 	case MACH_GROUP_SGI:
 		sgi_setup();
 		break;
@@ -202,29 +186,23 @@ void __init setup_arch(char **cmdline_p,
 		sni_rm200_pci_setup();
 		break;
 #endif
+#ifdef CONFIG_DDB5074
+	case MACH_GROUP_NEC_DDB:
+		ddb_setup();
+		break;
+#endif
 	default:
 		panic("Unsupported architecture");
 	}
-
-	memory_end = mips_memory_upper;
-	/*
-	 * Due to prefetching and similar mechanism the CPU sometimes
-	 * generates addresses beyond the end of memory.  We leave the size
-	 * of one cache line at the end of memory unused to make shure we
-	 * don't catch this type of bus errors.
-	 */
-	memory_end -= 128;
-	memory_end &= PAGE_MASK;
 
         strncpy (command_line, arcs_cmdline, CL_SIZE);
 	memcpy(saved_command_line, command_line, CL_SIZE);
 	saved_command_line[CL_SIZE-1] = '\0';
 
 	*cmdline_p = command_line;
-	*memory_start_p = (unsigned long) &_end;
-	*memory_end_p = memory_end;
 
 #ifdef CONFIG_BLK_DEV_INITRD
+#error "Fixme, I'm broken."
 	tmp = (((unsigned long)&_end + PAGE_SIZE-1) & PAGE_MASK) - 8;
 	if (tmp < (unsigned long)&_end)
 		tmp += PAGE_SIZE;

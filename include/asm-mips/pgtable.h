@@ -1,21 +1,23 @@
-/* $Id: pgtable.h,v 1.19 1998/10/26 19:59:39 davem Exp $
+/* $Id: pgtable.h,v 1.30 2000/02/24 00:13:19 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1994 - 1998 by Ralf Baechle at alii
+ * Copyright (C) 1994 - 1999 by Ralf Baechle at alii
+ * Copyright (C) 1999 Silicon Graphics, Inc.
  */
-#ifndef __ASM_MIPS_PGTABLE_H
-#define __ASM_MIPS_PGTABLE_H
+#ifndef _ASM_PGTABLE_H
+#define _ASM_PGTABLE_H
 
 #include <asm/addrspace.h>
-#include <asm/mipsconfig.h>
+#include <asm/page.h>
 
 #ifndef _LANGUAGE_ASSEMBLY
 
 #include <linux/linkage.h>
 #include <asm/cachectl.h>
+#include <linux/config.h>
 
 /* Cache flushing:
  *
@@ -25,36 +27,29 @@
  *  - flush_cache_range(mm, start, end) flushes a range of pages
  *  - flush_page_to_ram(page) write back kernel page to ram
  */
-extern void (*flush_cache_all)(void);
-extern void (*flush_cache_mm)(struct mm_struct *mm);
-extern void (*flush_cache_range)(struct mm_struct *mm, unsigned long start,
+extern void (*_flush_cache_all)(void);
+extern void (*_flush_cache_mm)(struct mm_struct *mm);
+extern void (*_flush_cache_range)(struct mm_struct *mm, unsigned long start,
 				 unsigned long end);
-extern void (*flush_cache_page)(struct vm_area_struct *vma, unsigned long page);
-extern void (*flush_cache_sigtramp)(unsigned long addr);
-extern void (*flush_page_to_ram)(unsigned long page);
-#define flush_icache_range(start, end) flush_cache_all()
+extern void (*_flush_cache_page)(struct vm_area_struct *vma, unsigned long page);
+extern void (*_flush_cache_sigtramp)(unsigned long addr);
+extern void (*_flush_page_to_ram)(struct page * page);
 
-/* TLB flushing:
- *
- *  - flush_tlb_all() flushes all processes TLB entries
- *  - flush_tlb_mm(mm) flushes the specified mm context TLB entries
- *  - flush_tlb_page(mm, vmaddr) flushes a single page
- *  - flush_tlb_range(mm, start, end) flushes a range of pages
- */
-extern void (*flush_tlb_all)(void);
-extern void (*flush_tlb_mm)(struct mm_struct *mm);
-extern void (*flush_tlb_range)(struct mm_struct *mm, unsigned long start,
-			       unsigned long end);
-extern void (*flush_tlb_page)(struct vm_area_struct *vma, unsigned long page);
+#define flush_cache_all()		_flush_cache_all()
+#define flush_cache_mm(mm)		_flush_cache_mm(mm)
+#define flush_cache_range(mm,start,end)	_flush_cache_range(mm,start,end)
+#define flush_cache_page(vma,page)	_flush_cache_page(vma, page)
+#define flush_cache_sigtramp(addr)	_flush_cache_sigtramp(addr)
+#define flush_page_to_ram(page)		_flush_page_to_ram(page)
 
-extern __inline__ void flush_tlb_pgtables(struct mm_struct *mm, unsigned long start, unsigned long end)
-{
-}
+#define flush_icache_range(start, end)	flush_cache_all()
+#define flush_icache_page(start,page)	do { } while(0)
+
 
 /*
  * - add_wired_entry() add a fixed TLB entry, and move wired register
  */
-extern void (*add_wired_entry)(unsigned long entrylo0, unsigned long entrylo1,
+extern void add_wired_entry(unsigned long entrylo0, unsigned long entrylo1,
 			       unsigned long entryhi, unsigned long pagemask);
 
 
@@ -114,6 +109,20 @@ extern void (*add_wired_entry)(unsigned long entrylo0, unsigned long entrylo1,
 #define _PAGE_WRITE                 (1<<2)  /* implemented in software */
 #define _PAGE_ACCESSED              (1<<3)  /* implemented in software */
 #define _PAGE_MODIFIED              (1<<4)  /* implemented in software */
+
+#if defined(CONFIG_CPU_R3000)
+
+#define _PAGE_GLOBAL                (1<<8)
+#define _PAGE_VALID                 (1<<9)
+#define _PAGE_SILENT_READ           (1<<9)  /* synonym                 */
+#define _PAGE_DIRTY                 (1<<10) /* The MIPS dirty bit      */
+#define _PAGE_SILENT_WRITE          (1<<10)
+#define _CACHE_UNCACHED             (1<<11) /* R4[0246]00              */
+#define _CACHE_MASK                 (1<<11)
+#define _CACHE_CACHABLE_NONCOHERENT 0
+
+#else
+ 
 #define _PAGE_R4KBUG                (1<<5)  /* workaround for r4k bug  */
 #define _PAGE_GLOBAL                (1<<6)
 #define _PAGE_VALID                 (1<<7)
@@ -129,6 +138,8 @@ extern void (*add_wired_entry)(unsigned long entrylo0, unsigned long entrylo1,
 #define _CACHE_CACHABLE_CUW         (6<<9)  /* R4[04]00 only           */
 #define _CACHE_CACHABLE_ACCELERATED (7<<9)  /* R10000 only             */
 #define _CACHE_MASK                 (7<<9)
+
+#endif
 
 #define __READABLE	(_PAGE_READ | _PAGE_SILENT_READ | _PAGE_ACCESSED)
 #define __WRITEABLE	(_PAGE_WRITE | _PAGE_SILENT_WRITE | _PAGE_MODIFIED)
@@ -174,6 +185,13 @@ extern void (*add_wired_entry)(unsigned long entrylo0, unsigned long entrylo1,
 
 #if !defined (_LANGUAGE_ASSEMBLY)
 
+#define pte_ERROR(e) \
+	printk("%s:%d: bad pte %016lx.\n", __FILE__, __LINE__, pte_val(e))
+#define pmd_ERROR(e) \
+	printk("%s:%d: bad pmd %016lx.\n", __FILE__, __LINE__, pmd_val(e))
+#define pgd_ERROR(e) \
+	printk("%s:%d: bad pgd %016lx.\n", __FILE__, __LINE__, pgd_val(e))
+
 /*
  * BAD_PAGETABLE is used when we need a bogus page-table, while
  * BAD_PAGE is used for a bogus page.
@@ -189,8 +207,8 @@ extern unsigned long zero_page_mask;
 
 #define BAD_PAGETABLE __bad_pagetable()
 #define BAD_PAGE __bad_page()
-#define ZERO_PAGE(__vaddr) \
-	(empty_zero_page + (((unsigned long)(__vaddr)) & zero_page_mask))
+#define ZERO_PAGE(vaddr) \
+	(mem_map + MAP_NR(empty_zero_page + (((unsigned long)(vaddr)) & zero_page_mask)))
 
 /* number of bits that fit into a memory pointer */
 #define BITS_PER_PTR			(8*sizeof(unsigned long))
@@ -207,10 +225,7 @@ extern unsigned long zero_page_mask;
 #define PAGE_PTR(address) \
 ((unsigned long)(address)>>(PAGE_SHIFT-SIZEOF_PTR_LOG2)&PTR_MASK&~PAGE_MASK)
 
-extern void (*load_pgd)(unsigned long pg_dir);
-
-/* to set the page-dir */
-#define SET_PAGE_DIR(tsk,pgdir) (tsk)->tss.pg_dir = ((unsigned long) (pgdir))
+extern void load_pgd(unsigned long pg_dir);
 
 extern pmd_t invalid_pte_table[PAGE_SIZE/sizeof(pmd_t)];
 
@@ -285,6 +300,14 @@ extern inline int pgd_present(pgd_t pgd)	{ return 1; }
 extern inline void pgd_clear(pgd_t *pgdp)	{ }
 
 /*
+ * Permanent address of a page.  On MIPS64 we never have highmem, so this
+ * is simple.
+ */
+#define page_address(page)	((page)->virtual)
+#define pte_pagenr(x)		((unsigned long)((pte_val(x) >> PAGE_SHIFT)))
+#define pte_page(x)		(mem_map+pte_pagenr(x))
+
+/*
  * The following only work if pte_present() is true.
  * Undefined behaviour if not..
  */
@@ -353,20 +376,27 @@ extern inline pte_t pte_mkyoung(pte_t pte)
  * Conversion functions: convert a page and protection to a page entry,
  * and a page entry and page directory to the page they refer to.
  */
-extern inline pte_t mk_pte(unsigned long page, pgprot_t pgprot)
-{
-	return __pte(((page & PAGE_MASK) - PAGE_OFFSET) | pgprot_val(pgprot));
-}
+#define mk_pte(page, pgprot)						\
+({									\
+	pte_t   __pte;							\
+									\
+	pte_val(__pte) = ((unsigned long)(page - mem_map) << PAGE_SHIFT) | \
+	                 pgprot_val(pgprot);				\
+									\
+	__pte;								\
+})
 
 extern inline pte_t mk_pte_phys(unsigned long physpage, pgprot_t pgprot)
 {
-	return __pte(physpage | pgprot_val(pgprot));
+	return __pte(((physpage & PAGE_MASK) - PAGE_OFFSET) | pgprot_val(pgprot));
 }
 
 extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 {
 	return __pte((pte_val(pte) & _PAGE_CHG_MASK) | pgprot_val(newprot));
 }
+
+#define page_pte(page) page_pte_prot(page, __pgprot(0))
 
 /* to find an entry in a kernel page-table-directory */
 #define pgd_offset_k(address) pgd_offset(&init_mm, address)
@@ -395,97 +425,7 @@ extern inline pte_t *pte_offset(pmd_t * dir, unsigned long address)
 /*
  * Initialize new page directory with pointers to invalid ptes
  */
-extern void (*pgd_init)(unsigned long page);
-
-/*
- * Allocate and free page tables. The xxx_kernel() versions are
- * used to allocate a kernel page table - this turns on ASN bits
- * if any.
- */
-
-#define pgd_quicklist (current_cpu_data.pgd_quick)
-#define pmd_quicklist ((unsigned long *)0)
-#define pte_quicklist (current_cpu_data.pte_quick)
-#define pgtable_cache_size (current_cpu_data.pgtable_cache_sz)
-
-extern __inline__ pgd_t *get_pgd_slow(void)
-{
-	pgd_t *ret = (pgd_t *)__get_free_page(GFP_KERNEL), *init;
-
-	if (ret) {
-		init = pgd_offset(&init_mm, 0);
-		pgd_init((unsigned long)ret);
-		memcpy (ret + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
-			(PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
-	}
-	return ret;
-}
-
-extern __inline__ pgd_t *get_pgd_fast(void)
-{
-	unsigned long *ret;
-
-	if((ret = pgd_quicklist) != NULL) {
-		pgd_quicklist = (unsigned long *)(*ret);
-		ret[0] = ret[1];
-		pgtable_cache_size--;
-	} else
-		ret = (unsigned long *)get_pgd_slow();
-	return (pgd_t *)ret;
-}
-
-extern __inline__ void free_pgd_fast(pgd_t *pgd)
-{
-	*(unsigned long *)pgd = (unsigned long) pgd_quicklist;
-	pgd_quicklist = (unsigned long *) pgd;
-	pgtable_cache_size++;
-}
-
-extern __inline__ void free_pgd_slow(pgd_t *pgd)
-{
-	free_page((unsigned long)pgd);
-}
-
-extern pte_t *get_pte_slow(pmd_t *pmd, unsigned long address_preadjusted);
-extern pte_t *get_pte_kernel_slow(pmd_t *pmd, unsigned long address_preadjusted);
-
-extern __inline__ pte_t *get_pte_fast(void)
-{
-	unsigned long *ret;
-
-	if((ret = (unsigned long *)pte_quicklist) != NULL) {
-		pte_quicklist = (unsigned long *)(*ret);
-		ret[0] = ret[1];
-		pgtable_cache_size--;
-	}
-	return (pte_t *)ret;
-}
-
-extern __inline__ void free_pte_fast(pte_t *pte)
-{
-	*(unsigned long *)pte = (unsigned long) pte_quicklist;
-	pte_quicklist = (unsigned long *) pte;
-	pgtable_cache_size++;
-}
-
-extern __inline__ void free_pte_slow(pte_t *pte)
-{
-	free_page((unsigned long)pte);
-}
-
-/* We don't use pmd cache, so these are dummy routines */
-extern __inline__ pmd_t *get_pmd_fast(void)
-{
-	return (pmd_t *)0;
-}
-
-extern __inline__ void free_pmd_fast(pmd_t *pmd)
-{
-}
-
-extern __inline__ void free_pmd_slow(pmd_t *pmd)
-{
-}
+extern void pgd_init(unsigned long page);
 
 extern void __bad_pte(pmd_t *pmd);
 extern void __bad_pte_kernel(pmd_t *pmd);
@@ -495,100 +435,19 @@ extern void __bad_pte_kernel(pmd_t *pmd);
 #define pgd_free(pgd)           free_pgd_fast(pgd)
 #define pgd_alloc()             get_pgd_fast()
 
-extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
-{
-	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
-
-	if (pmd_none(*pmd)) {
-		pte_t *page = get_pte_fast();
-		if (page) {
-			pmd_val(*pmd) = (unsigned long)page;
-			return page + address;
-		}
-		return get_pte_kernel_slow(pmd, address);
-	}
-	if (pmd_bad(*pmd)) {
-		__bad_pte_kernel(pmd);
-		return NULL;
-	}
-	return (pte_t *) pmd_page(*pmd) + address;
-}
-
-extern inline pte_t * pte_alloc(pmd_t * pmd, unsigned long address)
-{
-	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
-
-	if (pmd_none(*pmd)) {
-		pte_t *page = get_pte_fast();
-		if (page) {
-			pmd_val(*pmd) = (unsigned long)page;
-			return page + address;
-		}
-		return get_pte_slow(pmd, address);
-	}
-	if (pmd_bad(*pmd)) {
-		__bad_pte(pmd);
-		return NULL;
-	}
-	return (pte_t *) pmd_page(*pmd) + address;
-}
-
-/*
- * allocating and freeing a pmd is trivial: the 1-entry pmd is
- * inside the pgd, so has no extra memory associated with it.
- */
-extern inline void pmd_free(pmd_t * pmd)
-{
-}
-
-extern inline pmd_t * pmd_alloc(pgd_t * pgd, unsigned long address)
-{
-	return (pmd_t *) pgd;
-}
-
-#define pmd_free_kernel		pmd_free
-#define pmd_alloc_kernel	pmd_alloc
-
 extern int do_check_pgt_cache(int, int);
-
-extern inline void set_pgdir(unsigned long address, pgd_t entry)
-{
-	struct task_struct * p;
-	pgd_t *pgd;
-#ifdef __SMP__
-	int i;
-#endif	
-        
-	read_lock(&tasklist_lock);
-	for_each_task(p) {
-		if (!p->mm)
-			continue;
-		*pgd_offset(p->mm,address) = entry;
-	}
-	read_unlock(&tasklist_lock);
-#ifndef __SMP__
-	for (pgd = (pgd_t *)pgd_quicklist; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
-		pgd[address >> PGDIR_SHIFT] = entry;
-#else
-	/* To pgd_alloc/pgd_free, one holds master kernel lock and so does our
-	   callee, so we can modify pgd caches of other CPUs as well. -jj */
-	for (i = 0; i < NR_CPUS; i++)
-		for (pgd = (pgd_t *)cpu_data[i].pgd_quick; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
-			pgd[address >> PGDIR_SHIFT] = entry;
-#endif
-}
 
 extern pgd_t swapper_pg_dir[1024];
 
-extern void (*update_mmu_cache)(struct vm_area_struct *vma,
+extern void update_mmu_cache(struct vm_area_struct *vma,
 				unsigned long address, pte_t pte);
 
-/*
- * Kernel with 32 bit address space
- */
-#define SWP_TYPE(entry) (((entry) >> 1) & 0x3f)
-#define SWP_OFFSET(entry) ((entry) >> 8)
-#define SWP_ENTRY(type,offset) (((type) << 1) | ((offset) << 8))
+#define SWP_TYPE(x)		(((x).val >> 1) & 0x3f)
+#define SWP_OFFSET(x)		((x).val >> 8)
+#define SWP_ENTRY(type,offset)	((swp_entry_t) { ((type) << 1) | ((offset) << 8) })
+#define pte_to_swp_entry(pte)	((swp_entry_t) { pte_val(pte) })
+#define swp_entry_to_pte(x)	((pte_t) { (x).val })
+
 
 #define module_map      vmalloc
 #define module_unmap    vfree
@@ -601,33 +460,37 @@ extern void (*update_mmu_cache)(struct vm_area_struct *vma,
 extern inline void tlb_probe(void)
 {
 	__asm__ __volatile__(
-		".set noreorder\n\t"
+		".set push\n\t"
+		".set reorder\n\t"
 		"tlbp\n\t"
-		".set reorder");
+		".set pop");
 }
 
 extern inline void tlb_read(void)
 {
 	__asm__ __volatile__(
-		".set noreorder\n\t"
+		".set push\n\t"
+		".set reorder\n\t"
 		"tlbr\n\t"
-		".set reorder");
+		".set pop");
 }
 
 extern inline void tlb_write_indexed(void)
 {
 	__asm__ __volatile__(
-		".set noreorder\n\t"
+		".set push\n\t"
+		".set reorder\n\t"
 		"tlbwi\n\t"
-		".set reorder");
+		".set pop");
 }
 
 extern inline void tlb_write_random(void)
 {
 	__asm__ __volatile__(
-		".set noreorder\n\t"
+		".set push\n\t"
+		".set reorder\n\t"
 		"tlbwr\n\t"
-		".set reorder");
+		".set pop");
 }
 
 /* Dealing with various CP0 mmu/cache related registers. */
@@ -638,11 +501,10 @@ extern inline unsigned long get_pagemask(void)
 	unsigned long val;
 
 	__asm__ __volatile__(
-		".set noreorder\n\t"
-		".set mips3\n\t"
+		".set push\n\t"
+		".set reorder\n\t"
 		"mfc0 %0, $5\n\t"
-		".set mips0\n\t"
-		".set reorder"
+		".set pop"
 		: "=r" (val));
 	return val;
 }
@@ -650,11 +512,10 @@ extern inline unsigned long get_pagemask(void)
 extern inline void set_pagemask(unsigned long val)
 {
 	__asm__ __volatile__(
-		".set noreorder\n\t"
-		".set mips3\n\t"
+		".set push\n\t"
+		".set reorder\n\t"
 		"mtc0 %0, $5\n\t"
-		".set mips0\n\t"
-		".set reorder"
+		".set pop"
 		: : "r" (val));
 }
 
@@ -664,11 +525,10 @@ extern inline unsigned long get_entrylo0(void)
 	unsigned long val;
 
 	__asm__ __volatile__(	
-		".set noreorder\n\t"
-		".set mips3\n\t"
+		".set push\n\t"
+		".set reorder\n\t"
 		"mfc0 %0, $2\n\t"
-		".set mips0\n\t"
-		".set reorder"
+		".set pop"
 		: "=r" (val));
 	return val;
 }
@@ -676,11 +536,10 @@ extern inline unsigned long get_entrylo0(void)
 extern inline void set_entrylo0(unsigned long val)
 {
 	__asm__ __volatile__(
-		".set noreorder\n\t"
-		".set mips3\n\t"
+		".set push\n\t"
+		".set reorder\n\t"
 		"mtc0 %0, $2\n\t"
-		".set mips0\n\t"
-		".set reorder"
+		".set pop"
 		: : "r" (val));
 }
 
@@ -689,11 +548,10 @@ extern inline unsigned long get_entrylo1(void)
 	unsigned long val;
 
 	__asm__ __volatile__(
-		".set noreorder\n\t"
-		".set mips3\n\t"
+		".set push\n\t"
+		".set reorder\n\t"
 		"mfc0 %0, $3\n\t"
-		".set mips0\n\t"
-		".set reorder" : "=r" (val));
+		".set pop" : "=r" (val));
 
 	return val;
 }
@@ -701,11 +559,10 @@ extern inline unsigned long get_entrylo1(void)
 extern inline void set_entrylo1(unsigned long val)
 {
 	__asm__ __volatile__(
-		".set noreorder\n\t"
-		".set mips3\n\t"
+		".set push\n\t"
+		".set reorder\n\t"
 		"mtc0 %0, $3\n\t"
-		".set mips0\n\t"
-		".set reorder"
+		".set pop"
 		: : "r" (val));
 }
 
@@ -715,11 +572,10 @@ extern inline unsigned long get_entryhi(void)
 	unsigned long val;
 
 	__asm__ __volatile__(
-		".set noreorder\n\t"
-		".set mips3\n\t"
+		".set push\n\t"
+		".set reorder\n\t"
 		"mfc0 %0, $10\n\t"
-		".set mips0\n\t"
-		".set reorder"
+		".set pop"
 		: "=r" (val));
 
 	return val;
@@ -728,11 +584,10 @@ extern inline unsigned long get_entryhi(void)
 extern inline void set_entryhi(unsigned long val)
 {
 	__asm__ __volatile__(
-		".set noreorder\n\t"
-		".set mips3\n\t"
+		".set push\n\t"
+		".set reorder\n\t"
 		"mtc0 %0, $10\n\t"
-		".set mips0\n\t"
-		".set reorder"
+		".set pop"
 		: : "r" (val));
 }
 
@@ -742,11 +597,10 @@ extern inline unsigned long get_index(void)
 	unsigned long val;
 
 	__asm__ __volatile__(
-		".set noreorder\n\t"
-		".set mips3\n\t"
+		".set push\n\t"
+		".set reorder\n\t"
 		"mfc0 %0, $0\n\t"
-		".set mips0\n\t"
-		".set reorder"
+		".set pop"
 		: "=r" (val));
 	return val;
 }
@@ -754,11 +608,10 @@ extern inline unsigned long get_index(void)
 extern inline void set_index(unsigned long val)
 {
 	__asm__ __volatile__(
-		".set noreorder\n\t"
-		".set mips3\n\t"
-		"mtc0 %0, $0\n\t"
-		".set mips0\n\t"
+		".set push\n\t"
 		".set reorder\n\t"
+		"mtc0 %0, $0\n\t"
+		".set pop"
 		: : "r" (val));
 }
 
@@ -768,11 +621,10 @@ extern inline unsigned long get_wired(void)
 	unsigned long val;
 
 	__asm__ __volatile__(
-		".set noreorder\n\t"
-		".set mips3\n\t"
-		"mfc0 %0, $6\n\t"
-		".set mips0\n\t"
+		".set push\n\t"
 		".set reorder\n\t"
+		"mfc0 %0, $6\n\t"
+		".set pop"
 		: "=r" (val));
 	return val;
 }
@@ -780,11 +632,10 @@ extern inline unsigned long get_wired(void)
 extern inline void set_wired(unsigned long val)
 {
 	__asm__ __volatile__(
-		"\n\t.set noreorder\n\t"
-		".set mips3\n\t"
+		".set push\n\t"
+		".set reorder\n\t"
 		"mtc0 %0, $6\n\t"
-		".set mips0\n\t"
-		".set reorder"
+		".set pop"
 		: : "r" (val));
 }
 
@@ -794,11 +645,10 @@ extern inline unsigned long get_taglo(void)
 	unsigned long val;
 
 	__asm__ __volatile__(
-		".set noreorder\n\t"
-		".set mips3\n\t"
+		".set push\n\t"
+		".set reorder\n\t"
 		"mfc0 %0, $28\n\t"
-		".set mips0\n\t"
-		".set reorder"
+		".set pop"
 		: "=r" (val));
 	return val;
 }
@@ -806,11 +656,10 @@ extern inline unsigned long get_taglo(void)
 extern inline void set_taglo(unsigned long val)
 {
 	__asm__ __volatile__(
-		".set noreorder\n\t"
-		".set mips3\n\t"
+		".set push\n\t"
+		".set reorder\n\t"
 		"mtc0 %0, $28\n\t"
-		".set mips0\n\t"
-		".set reorder"
+		".set pop"
 		: : "r" (val));
 }
 
@@ -819,11 +668,10 @@ extern inline unsigned long get_taghi(void)
 	unsigned long val;
 
 	__asm__ __volatile__(
-		".set noreorder\n\t"
-		".set mips3\n\t"
+		".set push\n\t"
+		".set reorder\n\t"
 		"mfc0 %0, $29\n\t"
-		".set mips0\n\t"
-		".set reorder"
+		".set pop"
 		: "=r" (val));
 	return val;
 }
@@ -831,11 +679,10 @@ extern inline unsigned long get_taghi(void)
 extern inline void set_taghi(unsigned long val)
 {
 	__asm__ __volatile__(
-		".set noreorder\n\t"
-		".set mips3\n\t"
+		".set push\n\t"
+		".set reorder\n\t"
 		"mtc0 %0, $29\n\t"
-		".set mips0\n\t"
-		".set reorder"
+		".set pop"
 		: : "r" (val));
 }
 
@@ -845,11 +692,10 @@ extern inline unsigned long get_context(void)
 	unsigned long val;
 
 	__asm__ __volatile__(
-		".set noreorder\n\t"
-		".set mips3\n\t"
+		".set push\n\t"
+		".set reorder\n\t"
 		"mfc0 %0, $4\n\t"
-		".set mips0\n\t"
-		".set reorder"
+		".set pop"
 		: "=r" (val));
 
 	return val;
@@ -858,14 +704,15 @@ extern inline unsigned long get_context(void)
 extern inline void set_context(unsigned long val)
 {
 	__asm__ __volatile__(
-		".set noreorder\n\t"
-		".set mips3\n\t"
+		".set push\n\t"
+		".set reorder\n\t"
 		"mtc0 %0, $4\n\t"
-		".set mips0\n\t"
-		".set reorder"
+		".set pop"
 		: : "r" (val));
 }
 
 #endif /* !defined (_LANGUAGE_ASSEMBLY) */
 
-#endif /* __ASM_MIPS_PGTABLE_H */
+#define io_remap_page_range remap_page_range
+
+#endif /* _ASM_PGTABLE_H */

@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.9 1999/01/04 16:03:53 ralf Exp $
+/* $Id: fault.c,v 1.16 2000/02/18 00:24:30 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -21,7 +21,7 @@
 #include <linux/version.h>
 
 #include <asm/hardirq.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/mmu_context.h>
 #include <asm/softirq.h>
 #include <asm/system.h>
@@ -29,9 +29,7 @@
 
 #define development_version (LINUX_VERSION_CODE & 0x100)
 
-extern void die(char *, struct pt_regs *, unsigned long write);
-
-unsigned long asid_cache;
+unsigned long asid_cache = ASID_FIRST_VERSION;
 
 /*
  * Macro for exception fixup code to access integer registers.
@@ -49,6 +47,7 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long write,
 	struct vm_area_struct * vma;
 	struct task_struct *tsk = current;
 	struct mm_struct *mm = tsk->mm;
+	int si_code = SEGV_MAPERR;
 	unsigned long fixup;
 
 	/*
@@ -76,6 +75,8 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long write,
  * we can handle it..
  */
 good_area:
+	si_code = SEGV_ACCERR;
+
 	if (write) {
 		if (!(vma->vm_flags & VM_WRITE))
 			goto bad_area;
@@ -96,6 +97,7 @@ good_area:
 		if (!fault)
 			goto do_sigbus;
 	}
+
 	up(&mm->mmap_sem);
 	return;
 
@@ -107,8 +109,9 @@ bad_area:
 	up(&mm->mmap_sem);
 
 	if (user_mode(regs)) {
-		tsk->tss.cp0_badvaddr = address;
-		tsk->tss.error_code = write;
+		struct siginfo si;
+		tsk->thread.cp0_badvaddr = address;
+		tsk->thread.error_code = write;
 #if 0
 		printk("do_page_fault() #2: sending SIGSEGV to %s for illegal %s\n"
 		       "%08lx (epc == %08lx, ra == %08lx)\n",
@@ -118,7 +121,10 @@ bad_area:
 		       (unsigned long) regs->cp0_epc,
 		       (unsigned long) regs->regs[31]);
 #endif
-		force_sig(SIGSEGV, tsk);
+		si.si_signo = SIGSEGV;
+		si.si_code = si_code;
+		si.si_addr = (void *) address;
+		force_sig_info(SIGSEGV, &si, tsk);
 		return;
 	}
 
@@ -128,7 +134,7 @@ no_context:
 	if (fixup) {
 		long new_epc;
 
-		tsk->tss.cp0_baduaddr = address;
+		tsk->thread.cp0_baduaddr = address;
 		new_epc = fixup_exception(dpf_reg, fixup, regs->cp0_epc);
 		if (development_version)
 			printk(KERN_DEBUG "%s: Exception at [<%lx>] (%lx)\n",
@@ -144,7 +150,7 @@ no_context:
 	printk(KERN_ALERT "Unable to handle kernel paging request at virtual "
 	       "address %08lx, epc == %08lx, ra == %08lx\n",
 	       address, regs->cp0_epc, regs->regs[31]);
-	die("Oops", regs, write);
+	die("Oops", regs);
 	do_exit(SIGKILL);
 
 /*
@@ -164,8 +170,8 @@ do_sigbus:
 	/*
 	 * Send a sigbus, regardless of whether we were in kernel
 	 * or user mode.
-	 * XXX Store details about fault for siginfo handling into tss.
 	 */
+	tsk->thread.cp0_badvaddr = address;
 	force_sig(SIGBUS, tsk);
 
 	/* Kernel mode? Handle exceptions or die */

@@ -1,4 +1,4 @@
-/* $Id: floppy-std.c,v 1.3 1998/10/28 12:38:13 ralf Exp $
+/* $Id: floppy-std.c,v 1.3 2000/02/24 00:12:40 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

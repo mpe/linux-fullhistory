@@ -1,9 +1,11 @@
-/*
- * init.c: PROM library initialisation code.
+/* $Id: init.c,v 1.4 1999/10/09 00:00:57 ralf Exp $
+ * This file is subject to the terms and conditions of the GNU General Public+ 
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
+ *
+ * PROM library initialisation code.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
- *
- * $Id: init.c,v 1.2 1999/02/25 21:22:49 tsbogend Exp $
  */
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -11,7 +13,7 @@
 
 #include <asm/sgialib.h>
 
-/* #define DEBUG_PROM_INIT */
+#undef DEBUG_PROM_INIT
 
 /* Master romvec interface. */
 struct linux_romvec *romvec;
@@ -43,18 +45,9 @@ int __init prom_init(int argc, char **argv, char **envp)
 	prom_vers = pb->ver;
 	prom_rev = pb->rev;
 	prom_identify_arch();
-#ifdef CONFIG_SGI
-	printk("PROMLIB: SGI ARCS firmware Version %d Revision %d\n",
-		    prom_vers, prom_rev);
-#else
 	printk("PROMLIB: ARC firmware Version %d Revision %d\n",
 		    prom_vers, prom_rev);
-#endif
 	prom_meminit();
-
-#if 0
-	prom_testtree();
-#endif
 
 #ifdef DEBUG_PROM_INIT
 	{

@@ -783,12 +783,12 @@ int __init lp_init (void)
 		return -EIO;
 	}
 
+	devfs_handle = devfs_mk_dir (NULL, "printers", 0, NULL);
+
 	if (parport_register_driver (&lp_driver)) {
 		printk ("lp: unable to register with parport\n");
 		return -EIO;
 	}
-
-	devfs_handle = devfs_mk_dir (NULL, "printers", 0, NULL);
 
 	if (!lp_count) {
 		printk (KERN_INFO "lp: driver loaded but no devices found\n");

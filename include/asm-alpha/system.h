@@ -352,7 +352,7 @@ __xchg_u32(volatile int *m, unsigned long val)
 	"	stl_c %1,%2\n"
 	"	beq %1,2f\n"
 	"	mb\n"
-	".section .text2,\"ax\"\n"
+	".subsection 2\n"
 	"2:	br 1b\n"
 	".previous"
 	: "=&r" (val), "=&r" (dummy), "=m" (*m)
@@ -372,7 +372,7 @@ __xchg_u64(volatile long *m, unsigned long val)
 	"	stq_c %1,%2\n"
 	"	beq %1,2f\n"
 	"	mb\n"
-	".section .text2,\"ax\"\n"
+	".subsection 2\n"
 	"2:	br 1b\n"
 	".previous"
 	: "=&r" (val), "=&r" (dummy), "=m" (*m)
@@ -428,7 +428,7 @@ __cmpxchg_u32(volatile int *m, int old, int new)
 	"	stl_c %1,%2\n"
 	"	beq %1,3f\n"
 	"2:	mb\n"
-	".section .text2,\"ax\"\n"
+	".subsection 2\n"
 	"3:	br 1b\n"
 	".previous"
 	: "=&r"(prev), "=&r"(cmp), "=m"(*m)
@@ -450,7 +450,7 @@ __cmpxchg_u64(volatile long *m, unsigned long old, unsigned long new)
 	"	stq_c %1,%2\n"
 	"	beq %1,3f\n"
 	"2:	mb\n"
-	".section .text2,\"ax\"\n"
+	".subsection 2\n"
 	"3:	br 1b\n"
 	".previous"
 	: "=&r"(prev), "=&r"(cmp), "=m"(*m)

@@ -1,4 +1,4 @@
-/* $Id: string.h,v 1.6 1998/07/20 17:52:21 ralf Exp $
+/* $Id: string.h,v 1.13 2000/02/19 14:12:14 harald Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -8,6 +8,8 @@
  */
 #ifndef __ASM_MIPS_STRING_H
 #define __ASM_MIPS_STRING_H
+
+#include <linux/config.h>
 
 #define __HAVE_ARCH_STRCPY
 extern __inline__ char *strcpy(char *__dest, __const__ char *__src)
@@ -74,7 +76,7 @@ extern __inline__ int strcmp(__const__ char *__cs, __const__ char *__ct)
 	"addiu\t%1,1\n\t"
 	"bnez\t%2,1b\n\t"
 	"lbu\t%2,(%0)\n\t"
-#if _MIPS_ISA == _MIPS_ISA_MIPS1
+#if defined(CONFIG_CPU_R3000)
 	"nop\n\t"
 #endif
 	"move\t%2,$1\n"
@@ -89,30 +91,37 @@ extern __inline__ int strcmp(__const__ char *__cs, __const__ char *__ct)
 }
 
 #define __HAVE_ARCH_STRNCMP
-extern __inline__ int strncmp(__const__ char *__cs, __const__ char *__ct, size_t __count)
+extern __inline__ int
+strncmp(__const__ char *__cs, __const__ char *__ct, size_t __count)
 {
-  int __res;
+	int __res;
 
-  __asm__ __volatile__(
+	__asm__ __volatile__(
 	".set\tnoreorder\n\t"
 	".set\tnoat\n"
-	"1:\tlbu\t%3,(%1)\n\t"
+	"1:\tlbu\t%3,(%0)\n\t"
+#if defined(CONFIG_CPU_R3000)
+	"lbu\t$1,(%1)\n\t"
+	"nop\n\t"
 	"beqz\t%2,2f\n\t"
-	"lbu\t$1,(%0)\n\t"
-	"addiu\t%1,1\n\t"
-	"subu\t%3,$1,%3\n\t"
-	"bnez\t%3,2f\n\t"
+#else
+	"beqz\t%2,2f\n\t"
+	"lbu\t$1,(%1)\n\t"
+#endif
+	"subu\t%2,1\n\t"
+	"bne\t$1,%3,3f\n\t"
 	"addiu\t%0,1\n\t"
-	"bnez\t%1,1b\n"
-	"addiu\t%2,-1\n"
-	"2:\n\t"
+	"bnez\t%3,1b\n\t"
+	"addiu\t%1,1\n"
+	"2:\tmove\t%3,$1\n"
+	"3:\tsubu\t%3,$1\n\t"
 	".set\tat\n\t"
 	".set\treorder"
 	: "=r" (__cs), "=r" (__ct), "=r" (__count), "=r" (__res)
 	: "0" (__cs), "1" (__ct), "2" (__count)
 	: "$1");
 
-  return __res;
+	return __res;
 }
 
 #define __HAVE_ARCH_MEMSET

@@ -86,8 +86,6 @@ static int      mad16_cdsel;
 
 #endif
 
-#ifdef CONFIG_MAD16
-
 #include "sb.h"
 
 static int      already_initialized = 0;
@@ -724,7 +722,7 @@ void attach_mad16(struct address_info *hw_config)
 
 void attach_mad16_mpu(struct address_info *hw_config)
 {
-#if defined(CONFIG_MIDI) && defined(CONFIG_MAD16_OLDCARD)
+#ifdef CONFIG_MAD16_OLDCARD
 
 	if (mad_read(MC1_PORT) & 0x20)
 		hw_config->io_base = 0x240;
@@ -746,7 +744,6 @@ void attach_mad16_mpu(struct address_info *hw_config)
 
 int probe_mad16_mpu(struct address_info *hw_config)
 {
-#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
 	static int mpu_attached = 0;
 	static int valid_ports[] = {
 		0x330, 0x320, 0x310, 0x300
@@ -766,7 +763,7 @@ int probe_mad16_mpu(struct address_info *hw_config)
 	if (board_type < C929)	/* Early chip. No MPU support. Just SB MIDI */
 	{
 
-#if defined(CONFIG_MIDI) && defined(CONFIG_MAD16_OLDCARD)
+#ifdef CONFIG_MAD16_OLDCARD
 		unsigned char   tmp;
 
 		tmp = mad_read(MC3_PORT);
@@ -899,9 +896,6 @@ int probe_mad16_mpu(struct address_info *hw_config)
 	mad_write(MC6_PORT, tmp);	/* Write MPU401 config */
 
 	return probe_uart401(hw_config);
-#else
-	return 0;
-#endif
 }
 
 void unload_mad16(struct address_info *hw_config)
@@ -917,7 +911,7 @@ void unload_mad16(struct address_info *hw_config)
 void
 unload_mad16_mpu(struct address_info *hw_config)
 {
-#if defined(CONFIG_MIDI) && defined(CONFIG_MAD16_OLDCARD)
+#ifdef CONFIG_MAD16_OLDCARD
 	if (board_type < C929)	/* Early chip. No MPU support. Just SB MIDI */
 	{
 		sb_dsp_unload(hw_config, 0);
@@ -925,9 +919,7 @@ unload_mad16_mpu(struct address_info *hw_config)
 	}
 #endif
 
-#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
 	unload_uart401(hw_config);
-#endif
 }
 
 #ifdef MODULE
@@ -1126,9 +1118,4 @@ void cleanup_module(void)
 	SOUND_LOCK_END;
 }
 
-#endif
-
-
-
-/* That's all folks */
-#endif
+#endif /* MODULE */

@@ -10,10 +10,11 @@
  * and return the more usual NULL pointer as logical address.
  */
 #include <linux/kernel.h>
+#include <linux/init.h>
 #include <linux/errno.h>
 #include <linux/mm.h>
+#include <linux/bootmem.h>
 #include <asm/mipsregs.h>
-#include <asm/mipsconfig.h>
 #include <asm/jazz.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -27,7 +28,6 @@
 #define CONF_DEBUG_VDMA 0
 
 static unsigned long vdma_pagetable_start = 0;
-static unsigned long vdma_pagetable_end = 0;
 
 /*
  * Debug stuff
@@ -59,30 +59,31 @@ static inline void vdma_pgtbl_init(void)
 /*
  * Initialize the Jazz R4030 dma controller
  */
-unsigned long vdma_init(unsigned long memory_start, unsigned long memory_end)
+void __init vdma_init(void)
 {
-    /*
-     * Allocate 32k of memory for DMA page tables.
-     * This needs to be page aligned and should be
-     * uncached to avoid cache flushing after every
-     * update.
-     */
-    vdma_pagetable_start = KSEG1ADDR((memory_start + 4095) & ~4095);
-    vdma_pagetable_end = vdma_pagetable_start + VDMA_PGTBL_SIZE;
-    flush_cache_all();
+	/*
+	 * Allocate 32k of memory for DMA page tables.  This needs to be page
+	 * aligned and should be uncached to avoid cache flushing after every
+	 * update.
+	 */
+	vdma_pagetable_start = alloc_bootmem_low_pages(VDMA_PGTBL_SIZE);
+	if (!vdma_pagetable_start)
+		BUG();
+	dma_cache_wback_inv(vdma_pagetable_start, VDMA_PGTBL_SIZE);
+	vdma_pagetable_start = KSEG1ADDR(vdma_pagetable_start);
 
-    /*
-     * Clear the R4030 translation table
-     */
-    vdma_pgtbl_init();
+	/*
+	 * Clear the R4030 translation table
+	 */
+	vdma_pgtbl_init();
 
-    r4030_write_reg32(JAZZ_R4030_TRSTBL_BASE,PHYSADDR(vdma_pagetable_start));
-    r4030_write_reg32(JAZZ_R4030_TRSTBL_LIM,VDMA_PGTBL_SIZE);
-    r4030_write_reg32(JAZZ_R4030_TRSTBL_INV,0);
+	r4030_write_reg32(JAZZ_R4030_TRSTBL_BASE,PHYSADDR(vdma_pagetable_start));
+	r4030_write_reg32(JAZZ_R4030_TRSTBL_LIM, VDMA_PGTBL_SIZE);
+	r4030_write_reg32(JAZZ_R4030_TRSTBL_INV, 0);
 
-    printk("VDMA: R4030 DMA pagetables initialized.\n");
+	printk("VDMA: R4030 DMA pagetables initialized.\n");
 
-    return KSEG0ADDR(vdma_pagetable_end);
+	return KSEG0ADDR(vdma_pagetable_end);
 }
 
 /*

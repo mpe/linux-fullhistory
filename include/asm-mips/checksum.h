@@ -1,4 +1,4 @@
-/* $Id: checksum.h,v 1.6 1998/09/16 13:30:51 ralf Exp $
+/* $Id: checksum.h,v 1.9 2000/02/18 22:06:19 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -6,8 +6,10 @@
  *
  * Copyright (C) 1995, 1996, 1997, 1998 by Ralf Baechle
  */
-#ifndef __ASM_MIPS_CHECKSUM_H
-#define __ASM_MIPS_CHECKSUM_H
+#ifndef _ASM_CHECKSUM_H
+#define _ASM_CHECKSUM_H
+
+#include <asm/uaccess.h>
 
 /*
  * computes the checksum of a memory block at buff, length len,
@@ -36,9 +38,23 @@ unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum)
 unsigned int csum_partial_copy_from_user(const char *src, char *dst, int len,
                                          unsigned int sum, int *errp);
 
+/*
+ * Copy and checksum to user
+ */
 #define HAVE_CSUM_COPY_USER
-unsigned int csum_and_copy_to_user (const char *src, char *dst,
-                                    int len, int sum, int *err_ptr);
+extern inline unsigned int
+csum_and_copy_to_user (const char *src, char *dst,
+                       int len, int sum, int *err_ptr)
+{
+	sum = csum_partial(src, len, sum);
+
+	if (copy_to_user(dst, src, len)) {
+		*err_ptr = -EFAULT;
+		return -1;
+	}
+
+	return sum;
+}
 
 /*
  * the same as csum_partial, but copies from user space (but on MIPS
@@ -252,4 +268,4 @@ static __inline__ unsigned short int csum_ipv6_magic(struct in6_addr *saddr,
 	return csum_fold(sum);
 }
 
-#endif /* __ASM_MIPS_CHECKSUM_H */
+#endif /* _ASM_CHECKSUM_H */

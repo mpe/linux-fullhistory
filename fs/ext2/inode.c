@@ -50,7 +50,7 @@ void ext2_delete_inode (struct inode * inode)
 	if (is_bad_inode(inode) ||
 	    inode->i_ino == EXT2_ACL_IDX_INO ||
 	    inode->i_ino == EXT2_ACL_DATA_INO)
-		return;
+		goto no_delete;
 	inode->u.ext2_i.i_dtime	= CURRENT_TIME;
 	mark_inode_dirty(inode);
 	ext2_update_inode(inode, IS_SYNC(inode));
@@ -59,6 +59,10 @@ void ext2_delete_inode (struct inode * inode)
 		ext2_truncate (inode);
 	ext2_free_inode (inode);
 
+	unlock_kernel();
+	return;
+no_delete:
+	clear_inode(inode);	/* We must guarantee clearing of inode... */
 	unlock_kernel();
 }
 

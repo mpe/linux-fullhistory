@@ -1,4 +1,4 @@
-/* $Id: r2300_switch.S,v 1.6 1999/06/13 16:30:32 ralf Exp $
+/* $Id: r2300_switch.S,v 1.9 1999/10/12 17:33:49 harald Exp $
  *
  * r2300_switch.S: R2300 specific task switching code.
  *
@@ -16,7 +16,6 @@
 #include <asm/cachectl.h>
 #include <asm/current.h>
 #include <asm/fpregdef.h>
-#include <asm/mipsconfig.h>
 #include <asm/mipsregs.h>
 #include <asm/offset.h>
 #include <asm/page.h>
@@ -34,7 +33,7 @@
  * task_struct *r4xx0_resume(task_struct *prev,
  *                           task_struct *next)
  */
-LEAF(r2300_resume)
+LEAF(resume)
 	.set	reorder
 	mfc0	t1, CP0_STATUS
 	.set	noreorder
@@ -56,15 +55,11 @@ LEAF(r2300_resume)
 	lw	a2, THREAD_STATUS($28)
 	nor	a3, $0, a3
 	and	a2, a3
-	lw	a3, TASK_MM($28)
 	or	a2, t1
-	lw	a3, MM_CONTEXT(a3)
 	mtc0	a2, CP0_STATUS
-	andi	a3, 0xfc0
-	mtc0	a3, CP0_ENTRYHI
 	jr	ra
 	 move	v0, a0
-	END(r2300_resume)
+	END(resume)
 
 /*
  * Do lazy fpu context switch.  Saves FPU context to the process in a0
@@ -73,7 +68,7 @@ LEAF(r2300_resume)
 
 #define ST_OFF (KERNEL_STACK_SIZE - 32 - PT_SIZE + PT_STATUS)
 
-LEAF(r2300_lazy_fpu_switch)
+LEAF(lazy_fpu_switch)
 	mfc0	t0, CP0_STATUS			# enable cp1
 	li	t3, 0x20000000
 	or	t0, t3
@@ -87,24 +82,24 @@ LEAF(r2300_lazy_fpu_switch)
 	and	t1, t3
 	sw	t1, ST_OFF(a0)
 	swc1	$f0, (THREAD_FPU + 0x00)(a0)
-	FPU_SAVE(a0, t1)			# clobbers t1
+	FPU_SAVE_SINGLE(a0, t1)			# clobbers t1
 
 2:
 	lwc1	$f0, (THREAD_FPU + 0x00)($28)
 	.set	reorder
-	FPU_RESTORE($28, t0)		# clobbers t0
+	FPU_RESTORE_SINGLE($28, t0)		# clobbers t0
 	jr	ra
-	END(r2300_lazy_fpu_switch)
+	END(lazy_fpu_switch)
 
 /*
  * Save a thread's fp context.
  */
 	.set	noreorder
-LEAF(r2300_save_fp)
-	FPU_SAVE(a0, t1)			# clobbers t1
+LEAF(save_fp)
+	FPU_SAVE_SINGLE(a0, t1)			# clobbers t1
 	jr	ra
 	 swc1	$f0, (THREAD_FPU + 0x00)(a0)
-	END(r2300_save_fp)
+	END(save_fp)
 
 /*
  * Load the FPU with signalling NANS.  This bit pattern we're using has
@@ -116,7 +111,7 @@ LEAF(r2300_save_fp)
 
 #define FPU_DEFAULT  0x00000000
 
-LEAF(r2300_init_fpu)
+LEAF(init_fpu)
 	mfc0	t0, CP0_STATUS
 	li	t1, 0x20000000
 	or	t0, t1
@@ -160,4 +155,4 @@ LEAF(r2300_init_fpu)
 	mtc1	t0, $f30
 	jr	ra
 	 mtc1	t0, $f31
-	END(r2300_init_fpu)
+	END(init_fpu)

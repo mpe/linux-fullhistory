@@ -32,8 +32,6 @@
 #include "soundmodule.h"
 #include "sound_firmware.h"
 
-#ifdef CONFIG_MAUI
-
 static int      maui_base = 0x330;
 
 static volatile int irq_ok = 0;
@@ -53,12 +51,7 @@ static int     *maui_osp;
 static int      (*orig_load_patch) (int dev, int format, const char *addr,
 			      int offs, int count, int pmgr_flag) = NULL;
 
-#ifdef HAVE_MAUI_BOOT
 #include "maui_boot.h"
-#else
-static unsigned char *maui_os = NULL;
-static int maui_osLen = 0;
-#endif
 
 static int maui_wait(int mask)
 {
@@ -190,7 +183,7 @@ failure:
 
 static int maui_init(int irq)
 {
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	int i;
 #endif	
 	unsigned char bits;
@@ -221,7 +214,7 @@ static int maui_init(int irq)
 	outb((0x80), HOST_CTRL_PORT);	/* Leave reset */
 	outb((0xD0), HOST_CTRL_PORT);	/* Cause interrupt */
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	for (i = 0; i < 1000000 && !irq_ok; i++);
 
 	if (!irq_ok)
@@ -500,5 +493,4 @@ void cleanup_module(void)
 	unload_maui(&cfg);
 	SOUND_LOCK_END;
 }
-#endif
-#endif
+#endif /* MODULE */

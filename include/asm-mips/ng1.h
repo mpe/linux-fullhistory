@@ -1,7 +1,13 @@
-/*
- * SGI/Newport video card ioctl definitions
+/* $Id: ng1.h,v 1.4 1999/08/19 22:56:33 ralf Exp $
  *
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
+ *
+ * SGI/Newport video card ioctl definitions
  */
+#ifndef _ASM_NG1_H
+#define _ASM_NG1_H
 
 typedef struct {
         int flags;
@@ -47,4 +53,4 @@ struct ng1_setgammaramp_args {
         unsigned char blue  [256];
 };
 
-
+#endif /* _ASM_NG1_H */

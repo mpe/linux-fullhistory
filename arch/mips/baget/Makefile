@@ -1,4 +1,4 @@
-# $Id$
+# $Id: Makefile,v 1.3 1999/08/13 17:07:26 harald Exp $
 #
 # Makefile for the Baget specific kernel interface routines
 # under Linux.
@@ -15,7 +15,7 @@ image:	../../../vmlinux
 	cp -f $< $@
 
 O_TARGET := baget.a
-O_OBJS   := baget.o print.o setup.o time.o irq.o bagetIRQ.o reset.o wbflush.o
+O_OBJS   := baget.o print.o setup.o time.o irq.o bagetIRQ.o reset.o
 
 ifeq ($(CONFIG_SERIAL),y)
 	OX_OBJS += vacserial.o

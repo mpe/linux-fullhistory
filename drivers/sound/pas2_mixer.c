@@ -19,8 +19,6 @@
 
 #include "sound_config.h"
 
-#ifdef CONFIG_PAS
-
 #ifndef DEB
 #define DEB(what)		/* (what) */
 #endif
@@ -332,5 +330,3 @@ pas_init_mixer(void)
 	  }
 	return 1;
 }
-
-#endif

@@ -118,7 +118,8 @@ extern void pci_unmap_sg(struct pci_dev *, struct scatterlist *, int, int);
    again owns the buffer.  */
 
 extern inline void
-pci_dma_sync_single(struct pci_dev *dev, dma_addr_t dma_addr, long size, int direction)
+pci_dma_sync_single(struct pci_dev *dev, dma_addr_t dma_addr, long size,
+		    int direction)
 {
 	/* Nothing to do.  */
 }
@@ -128,19 +129,17 @@ pci_dma_sync_single(struct pci_dev *dev, dma_addr_t dma_addr, long size, int dir
    for a scatter-gather list, same rules and usage.  */
 
 extern inline void
-pci_dma_sync_sg(struct pci_dev *dev, struct scatterlist *sg, int nents, int direction)
+pci_dma_sync_sg(struct pci_dev *dev, struct scatterlist *sg, int nents,
+	        int direction)
 {
 	/* Nothing to do.  */
 }
 
 /* Return whether the given PCI device DMA address mask can
- * be supported properly.  For example, if your device can
- * only drive the low 24-bits during PCI bus mastering, then
- * you would pass 0x00ffffff as the mask to this function.
- */
-extern inline int pci_dma_supported(struct pci_dev *hwdev, dma_addr_t mask)
-{
-	return 1;
-}
+   be supported properly.  For example, if your device can
+   only drive the low 24-bits during PCI bus mastering, then
+   you would pass 0x00ffffff as the mask to this function.  */
+
+extern int pci_dma_supported(struct pci_dev *hwdev, dma_addr_t mask);
 
 #endif /* __ALPHA_PCI_H */

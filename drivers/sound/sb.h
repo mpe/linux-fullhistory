@@ -1,7 +1,5 @@
 #include <linux/config.h>
-#include "legacy.h"
 
-#ifdef CONFIG_SBDSP
 #define DSP_RESET	(devc->base + 0x6)
 #define DSP_READ	(devc->base + 0xA)
 #define DSP_WRITE	(devc->base + 0xC)
@@ -168,4 +166,3 @@ void sb_audio_close(int dev);
 
 extern int acer;
 extern sb_devc *last_sb;
-#endif

@@ -1174,7 +1174,8 @@ void __init mem_init(void)
 
         printk("Memory: %luk available (%dk kernel code, %dk data, %dk init) [%08x,%08lx]\n",
 	       (unsigned long)nr_free_pages()<< (PAGE_SHIFT-10),
-	       codepages, datapages, initpages,
+	       codepages<< (PAGE_SHIFT-10), datapages<< (PAGE_SHIFT-10),
+	       initpages<< (PAGE_SHIFT-10),
 	       PAGE_OFFSET, (unsigned long) end_of_DRAM);
 	mem_init_done = 1;
 }

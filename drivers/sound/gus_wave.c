@@ -25,8 +25,6 @@
 #include <linux/ultrasound.h>
 #include "gus_hw.h"
 
-#ifdef CONFIG_GUS
-
 #define GUS_BANK_SIZE (((iw_mode) ? 256*1024*1024 : 256*1024))
 
 #define MAX_SAMPLE	150
@@ -3111,9 +3109,7 @@ void gus_wave_init(struct address_info *hw_config)
 		hw_config->slots[0] = sdev;
 		synth_devs[sdev] = &guswave_operations;
 		sequencer_init();
-#ifdef CONFIG_SEQUENCER
 		gus_tmr_install(gus_base + 8);
-#endif
 	}
 
 	reset_sample_memory();
@@ -3433,8 +3429,6 @@ void guswave_dma_irq(void)
 	}
 }
 
-#ifdef CONFIG_SEQUENCER
-
 /*
  * Timer stuff
  */
@@ -3535,6 +3529,3 @@ static void gus_tmr_install(int io_base)
 	sound_timer_init(&gus_tmr, "GUS");
 #endif
 }
-#endif
-
-#endif

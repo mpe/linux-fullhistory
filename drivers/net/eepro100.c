@@ -1844,10 +1844,6 @@ static int __init eepro100_init_module(void)
 	if (debug >= 0)
 		speedo_debug = debug;
 
-	/* Always emit the version message. */
-	if (speedo_debug)
-		printk(KERN_INFO "%s", version);
-
 	return pci_module_init (&eepro100_driver);
 }
 

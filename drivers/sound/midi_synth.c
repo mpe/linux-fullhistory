@@ -21,8 +21,6 @@
 
 #include "sound_config.h"
 
-#ifdef CONFIG_MIDI
-
 #define _MIDI_SYNTH_C_
 
 #include "midi_synth.h"
@@ -32,9 +30,6 @@ static int      sysex_state[MAX_MIDI_DEV] =
 {0};
 static unsigned char prev_out_status[MAX_MIDI_DEV];
 
-#ifndef CONFIG_SEQUENCER
-#define STORE(cmd)
-#else
 #define STORE(cmd) \
 { \
   int len; \
@@ -42,7 +37,6 @@ static unsigned char prev_out_status[MAX_MIDI_DEV];
   cmd; \
   seq_input_event(obuf, len); \
 }
-#endif
 
 #define _seqbuf obuf
 #define _seqbufptr 0
@@ -709,6 +703,3 @@ midi_synth_send_sysex(int dev, unsigned char *bytes, int len)
 
 	return 0;
 }
-
-
-#endif

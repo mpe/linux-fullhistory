@@ -26,8 +26,6 @@
 #include "sound_config.h"
 #include "soundmodule.h"
 
-#ifdef CONFIG_GUS
-
 #include "gus_hw.h"
 
 void            gusintr(int irq, void *dev_id, struct pt_regs *dummy);
@@ -55,9 +53,7 @@ void attach_gus_card(struct address_info *hw_config)
 	if (hw_config->dma2 != -1 && hw_config->dma2 != hw_config->dma)
 		if (sound_alloc_dma(hw_config->dma2, "GUS(2)"))
 			printk(KERN_ERR "gus_card.c: Can't allocate DMA channel %d\n", hw_config->dma2);
-#ifdef CONFIG_MIDI
 	gus_midi_init(hw_config);
-#endif
 	if(request_irq(hw_config->irq, gusintr, 0,  "Gravis Ultrasound", hw_config)<0)
 		printk(KERN_ERR "gus_card.c: Unable to allocate IRQ %d\n", hw_config->irq);
 
@@ -156,27 +152,19 @@ void gusintr(int irq, void *dev_id, struct pt_regs *dummy)
 		}
 		if (src & (MIDI_TX_IRQ | MIDI_RX_IRQ))
 		{
-#ifdef CONFIG_MIDI
 			gus_midi_interrupt(0);
-#endif
 		}
 		if (src & (GF1_TIMER1_IRQ | GF1_TIMER2_IRQ))
 		{
-#ifdef CONFIG_SEQUENCER
 			if (gus_timer_enabled)
 				sound_timer_interrupt();
 			gus_write8(0x45, 0);	/* Ack IRQ */
 			gus_timer_command(4, 0x80);		/* Reset IRQ flags */
-#else
-			gus_write8(0x45, 0);	/* Stop timers */
-#endif
 		}
 		if (src & (WAVETABLE_IRQ | ENVELOPE_IRQ))
 			gus_voice_irq();
 	}
 }
-
-#endif
 
 /*
  *	Some extra code for the 16 bit sampling option
@@ -191,10 +179,8 @@ int probe_gus_db16(struct address_info *hw_config)
 
 void attach_gus_db16(struct address_info *hw_config)
 {
-#ifdef CONFIG_GUS
 	gus_pcm_volume = 100;
 	gus_wave_volume = 90;
-#endif
 
 	hw_config->slots[3] = ad1848_init("GUS 16 bit sampling", hw_config->io_base,
 					  hw_config->irq,
@@ -292,4 +278,4 @@ void cleanup_module(void)
 	SOUND_LOCK_END;
 }
 
-#endif
+#endif /* MODULE */

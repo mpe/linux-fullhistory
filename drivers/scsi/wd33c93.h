@@ -191,7 +191,7 @@
 typedef struct {
    volatile unsigned char   SASR;
    char                     pad;
-#ifdef CONFIG_SGI
+#ifdef CONFIG_SGI_IP22
    char                     pad2,pad3;
 #endif
    volatile unsigned char   SCMD;

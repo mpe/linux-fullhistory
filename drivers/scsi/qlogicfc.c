@@ -18,6 +18,9 @@
 
 /* This is a version of the isp1020 driver which was modified by
  * Chris Loveland <cwl@iol.unh.edu> to support the isp2100 and isp2200
+ *
+ * Big endian support and dynamic DMA mapping added
+ * by Jakub Jelinek <jakub@redhat.com>.
  */
 
 /*
@@ -59,6 +62,24 @@
 
 #include "sd.h"
 #include "hosts.h"
+
+#if 1
+/* Once pci64_ DMA mapping interface is in, kill this. */
+typedef dma_addr_t dma64_addr_t;
+#define pci64_alloc_consistent(d,s,p) pci_alloc_consistent((d),(s),(p))
+#define pci64_free_consistent(d,s,c,a) pci_free_consistent((d),(s),(c),(a))
+#define pci64_map_single(d,c,s,dir) pci_map_single((d),(c),(s),(dir))
+#define pci64_map_sg(d,s,n,dir) pci_map_sg((d),(s),(n),(dir))
+#define pci64_unmap_single(d,a,s,dir) pci_unmap_single((d),(a),(s),(dir))
+#define pci64_unmap_sg(d,s,n,dir) pci_unmap_sg((d),(s),(n),(dir))
+#define pci64_dma_hi32(a) 0
+#define pci64_dma_lo32(a) (a)
+#define pci64_dma_build(hi,lo) (lo)
+#define sg_dma64_address(s) sg_dma_address(s)
+#define sg_dma64_len(s) sg_dma_len(s)
+#define PCI64_DMA_BITS	32
+#endif
+
 #include "qlogicfc.h"
 
 /* Configuration section **************************************************** */
@@ -157,18 +178,6 @@ struct {
 #endif				/* DEBUG ISP2x00_INTR */
 
 
-#if BITS_PER_LONG > 32
-#define virt_to_bus_low32(x)   ((u32) (0xffffffff & virt_to_bus(x)))
-#define virt_to_bus_high32(x)  ((u32) (0xffffffff & (virt_to_bus(x)>>32)))
-#define bus_to_virt_low32(x)   ((u32) (0xffffffff & bus_to_virt(x)))
-#define bus_to_virt_high32(x)  ((u32) (0xffffffff & (bus_to_virt(x)>>32)))
-#else
-#define virt_to_bus_low32(x)   virt_to_bus(x)
-#define virt_to_bus_high32(x)  0x0
-#define bus_to_virt_low32(x)   bus_to_virt(x)
-#define bus_to_virt_high32(x)  0x0
-#endif
-
 #define ISP2100_REV_ID1	       1
 #define ISP2100_REV_ID3        3
 #define ISP2200_REV_ID5        5
@@ -230,7 +239,7 @@ struct Entry_header {
 };
 
 /* entry header type commands */
-#if BITS_PER_LONG > 32
+#if PCI64_DMA_BITS > 32
 #define ENTRY_COMMAND		0x19
 #define ENTRY_CONTINUATION	0x0a
 #else
@@ -247,34 +256,23 @@ struct Entry_header {
 #define EFLAG_BAD_HEADER	4
 #define EFLAG_BAD_PAYLOAD	8
 
-#if BITS_PER_LONG > 32
+#if PCI64_DMA_BITS > 32
+
 struct dataseg {
 	u_int d_base;
 	u_int d_base_hi;
 	u_int d_count;
 };
 
-struct Command_Entry {
-	struct Entry_header hdr;
-	u_int handle;
-	u_char target_lun;
-	u_char target_id;
-	u_short expanded_lun;
-	u_short control_flags;
-	u_short rsvd2;
-	u_short time_out;
-	u_short segment_cnt;
-	u_char cdb[16];
-	u_int total_byte_cnt;
-	struct dataseg dataseg[DATASEGS_PER_COMMAND];
-};
-
 #else
+
 struct dataseg {
 	u_int d_base;
 	u_int d_count;
 };
 
+#endif
+
 struct Command_Entry {
 	struct Entry_header hdr;
 	u_int handle;
@@ -289,9 +287,6 @@ struct Command_Entry {
 	u_int total_byte_cnt;
 	struct dataseg dataseg[DATASEGS_PER_COMMAND];
 };
-
-#endif
-
 
 /* command entry control flag definitions */
 #define CFLAG_NODISC		0x01
@@ -302,7 +297,7 @@ struct Command_Entry {
 #define CFLAG_READ		0x20
 #define CFLAG_WRITE		0x40
 
-#if BITS_PER_LONG > 32
+#if PCI64_DMA_BITS > 32
 struct Continuation_Entry {
 	struct Entry_header hdr;
 	struct dataseg dataseg[DATASEGS_PER_CONT];
@@ -650,6 +645,9 @@ struct init_cb {
 #define AS_REDO_FABRIC_PORTDB  2
 #define AS_REDO_LOOP_PORTDB    4
 
+#define RES_SIZE	((RES_QUEUE_LEN + 1)*QUEUE_ENTRY_LEN)
+#define REQ_SIZE	((QLOGICFC_REQ_QUEUE_LEN + 1)*QUEUE_ENTRY_LEN)
+
 struct isp2x00_hostdata {
 	u_char revision;
 	struct pci_dev *pci_dev;
@@ -730,6 +728,7 @@ int isp2x00_detect(Scsi_Host_Template * tmpt)
 	struct isp2x00_hostdata *hostdata;
 	struct pci_dev *pdev = NULL;
 	unsigned short device_ids[2];
+	dma64_addr_t busaddr;
 	int i;
 
 
@@ -756,50 +755,43 @@ int isp2x00_detect(Scsi_Host_Template * tmpt)
 
 			memset(hostdata, 0, sizeof(struct isp2x00_hostdata));
 			hostdata->pci_dev = pdev;
-			hostdata->res = (char *) kmalloc((RES_QUEUE_LEN + 1)*QUEUE_ENTRY_LEN, GFP_KERNEL);
-			if (!hostdata->res){
-			        printk("qlogicfc%d : could not allocate memory for response queue.\n", hostdata->host_id);
-			        scsi_unregister(host);
-				continue;
-			}
-			hostdata->req = (char *) kmalloc((QLOGICFC_REQ_QUEUE_LEN + 1)*QUEUE_ENTRY_LEN, GFP_KERNEL);
-			if (!hostdata->req){
-			        printk("qlogicfc%d : could not allocate memory for request queue.\n", hostdata->host_id);
-			        kfree(hostdata->res);
-			        scsi_unregister(host);
-				continue;
-			}
+			hostdata->res = pci64_alloc_consistent(pdev, RES_SIZE + REQ_SIZE, &busaddr);
 
+			if (!hostdata->res){
+			        printk("qlogicfc%d : could not allocate memory for request and response queue.\n", hostdata->host_id);
+			        scsi_unregister(host);
+				continue;
+			}
+			hostdata->req = hostdata->res + (RES_QUEUE_LEN + 1)*QUEUE_ENTRY_LEN;
 			hostdata->queued = 0;
 			/* set up the control block */
 			hostdata->control_block.version = 0x1;
-			hostdata->control_block.firm_opts = 0x800e;
-			hostdata->control_block.max_frame_len = 2048;
-			hostdata->control_block.max_iocb = QLOGICFC_REQ_QUEUE_LEN;
-			hostdata->control_block.exec_throttle = QLOGICFC_CMD_PER_LUN;
+			hostdata->control_block.firm_opts = cpu_to_le16(0x800e);
+			hostdata->control_block.max_frame_len = cpu_to_le16(2048);
+			hostdata->control_block.max_iocb = cpu_to_le16(QLOGICFC_REQ_QUEUE_LEN);
+			hostdata->control_block.exec_throttle = cpu_to_le16(QLOGICFC_CMD_PER_LUN);
 			hostdata->control_block.retry_delay = 5;
 			hostdata->control_block.retry_cnt = 1;
-			hostdata->control_block.node_name[0] = 0x0020;
-			hostdata->control_block.node_name[1] = 0xE000;
-			hostdata->control_block.node_name[2] = 0x008B;
-			hostdata->control_block.node_name[3] = 0x0000;
-			hostdata->control_block.hard_addr = 0x0003;
-			hostdata->control_block.req_queue_len = QLOGICFC_REQ_QUEUE_LEN + 1;
-			hostdata->control_block.res_queue_len = RES_QUEUE_LEN + 1;
-			hostdata->control_block.res_queue_addr_lo = virt_to_bus_low32(hostdata->res);
-			hostdata->control_block.res_queue_addr_high = virt_to_bus_high32(hostdata->res);
-			hostdata->control_block.req_queue_addr_lo = virt_to_bus_low32(hostdata->req);
-			hostdata->control_block.req_queue_addr_high = virt_to_bus_high32(hostdata->req);
+			hostdata->control_block.node_name[0] = cpu_to_le16(0x0020);
+			hostdata->control_block.node_name[1] = cpu_to_le16(0xE000);
+			hostdata->control_block.node_name[2] = cpu_to_le16(0x008B);
+			hostdata->control_block.node_name[3] = cpu_to_le16(0x0000);
+			hostdata->control_block.hard_addr = cpu_to_le16(0x0003);
+			hostdata->control_block.req_queue_len = cpu_to_le16(QLOGICFC_REQ_QUEUE_LEN + 1);
+			hostdata->control_block.res_queue_len = cpu_to_le16(RES_QUEUE_LEN + 1);
+			hostdata->control_block.res_queue_addr_lo = cpu_to_le32(pci64_dma_lo32(busaddr));
+			hostdata->control_block.res_queue_addr_high = cpu_to_le32(pci64_dma_hi32(busaddr));
+			hostdata->control_block.req_queue_addr_lo = cpu_to_le32(pci64_dma_lo32(busaddr + RES_SIZE));
+			hostdata->control_block.req_queue_addr_high = cpu_to_le32(pci64_dma_hi32(busaddr + RES_SIZE));
 
 
-			hostdata->control_block.add_firm_opts |= CONNECTION_PREFERENCE<<4;
+			hostdata->control_block.add_firm_opts |= cpu_to_le16(CONNECTION_PREFERENCE<<4);
 			hostdata->adapter_state = AS_LOOP_DOWN;
 			hostdata->explore_timer.data = 1;
 			hostdata->host_id = hosts;
 
 			if (isp2x00_init(host) || isp2x00_reset_hardware(host)) {
-			        kfree(hostdata->res);
-				kfree(hostdata->req);
+				pci64_free_consistent (pdev, RES_SIZE + REQ_SIZE, hostdata->res, busaddr);
 			        scsi_unregister(host);
 				continue;
 			}
@@ -808,8 +800,7 @@ int isp2x00_detect(Scsi_Host_Template * tmpt)
 			if (request_irq(host->irq, do_isp2x00_intr_handler, SA_INTERRUPT | SA_SHIRQ, "qlogicfc", host)) {
 			        printk("qlogicfc%d : interrupt %d already in use\n",
 				       hostdata->host_id, host->irq);
-			        kfree(hostdata->res);
-				kfree(hostdata->req);
+				pci64_free_consistent (pdev, RES_SIZE + REQ_SIZE, hostdata->res, busaddr);
 				scsi_unregister(host);
 				continue;
 			}
@@ -818,8 +809,7 @@ int isp2x00_detect(Scsi_Host_Template * tmpt)
 				       "in use\n",
 				       hostdata->host_id, host->io_port, host->io_port + 0xff);
 				free_irq(host->irq, host);
-			        kfree(hostdata->res);
-				kfree(hostdata->req);
+				pci64_free_consistent (pdev, RES_SIZE + REQ_SIZE, hostdata->res, busaddr);
 				scsi_unregister(host);
 				continue;
 			}
@@ -977,12 +967,13 @@ int isp2x00_init_fabric(struct Scsi_Host *host, struct id_name_map *port_db, int
 	u_short loop_id = 0x81;
 	u_short scsi_id = cur_scsi_id;
 	u_int port_id;
-	struct sns_cb req;
-	u_char sns_response[608];
+	struct sns_cb *req;
+	u_char *sns_response;
+	dma64_addr_t busaddr;
 	struct isp2x00_hostdata *hostdata;
 
 	hostdata = (struct isp2x00_hostdata *) host->hostdata;
-
+	
 	DEBUG_FABRIC(printk("qlogicfc%d : Checking for a fabric.\n", hostdata->host_id));
 	param[0] = MBOX_GET_PORT_NAME;
 	param[1] = (u16)FABRIC_PORT << 8;
@@ -995,52 +986,60 @@ int isp2x00_init_fabric(struct Scsi_Host *host, struct id_name_map *port_db, int
 	}
 	printk("qlogicfc%d : Fabric found.\n", hostdata->host_id);
 
-	if (hostdata->adapter_state & AS_REDO_LOOP_PORTDB){
-	        memset(&req, 0, sizeof(req));
+	req = (struct sns_cb *)pci64_alloc_consistent(hostdata->pci_dev, sizeof(*req) + 608, &busaddr);
 	
-		req.len = 8;
-		req.response_low = virt_to_bus_low32(sns_response);
-		req.response_high = virt_to_bus_high32(sns_response);
-		req.sub_len = 22;
-		req.data[0] = 0x17;
-		req.data[1] = 0x02;
-		req.data[8] = (u_char) (hostdata->port_id & 0xff);
-		req.data[9] = (u_char) (hostdata->port_id >> 8 & 0xff);
-		req.data[10] = (u_char) (hostdata->port_id >> 16 & 0xff);
-		req.data[13] = 0x01;
+	if (!req){
+		printk("qlogicfc%d : Could not allocate DMA resources for fabric initialization\n", hostdata->host_id);
+		return 0;
+	}
+	sns_response = (u_char *)(req + 1);
+
+	if (hostdata->adapter_state & AS_REDO_LOOP_PORTDB){
+	        memset(req, 0, sizeof(*req));
+	
+		req->len = cpu_to_le16(8);
+		req->response_low = cpu_to_le32(pci64_dma_lo32(busaddr + sizeof(*req)));
+		req->response_high = cpu_to_le32(pci64_dma_hi32(busaddr + sizeof(*req)));
+		req->sub_len = cpu_to_le16(22);
+		req->data[0] = 0x17;
+		req->data[1] = 0x02;
+		req->data[8] = (u_char) (hostdata->port_id & 0xff);
+		req->data[9] = (u_char) (hostdata->port_id >> 8 & 0xff);
+		req->data[10] = (u_char) (hostdata->port_id >> 16 & 0xff);
+		req->data[13] = 0x01;
 		param[0] = MBOX_SEND_SNS;
 		param[1] = 30;
-		param[2] = virt_to_bus_low32(&req) >> 16;
-		param[3] = virt_to_bus_low32(&req);
-		param[6] = virt_to_bus_high32(&req) >> 16;
-		param[7] = virt_to_bus_high32(&req);
-		
+		param[2] = pci64_dma_lo32(busaddr) >> 16;
+		param[3] = pci64_dma_lo32(busaddr);
+		param[6] = pci64_dma_hi32(busaddr) >> 16;
+		param[7] = pci64_dma_hi32(busaddr);
+
 		isp2x00_mbox_command(host, param);
 	
 		if (param[0] != MBOX_COMMAND_COMPLETE)
-		        printk("qlogicfc%d : error sending RFC-4\n", hostdata->host_id);	       
+		        printk("qlogicfc%d : error sending RFC-4\n", hostdata->host_id);
 	}
 
 	port_id = hostdata->port_id;
 	while (!done) {
-		memset(&req, 0, sizeof(req));
+		memset(req, 0, sizeof(*req));
 
-		req.len = 304;
-		req.response_low = virt_to_bus_low32(sns_response);
-		req.response_high = virt_to_bus_high32(sns_response);
-		req.sub_len = 6;
-		req.data[0] = 0x00;
-		req.data[1] = 0x01;
-		req.data[8] = (u_char) (port_id & 0xff);
-		req.data[9] = (u_char) (port_id >> 8 & 0xff);
-		req.data[10] = (u_char) (port_id >> 16 & 0xff);
+		req->len = cpu_to_le16(304);
+		req->response_low = cpu_to_le32(pci64_dma_lo32(busaddr + sizeof(*req)));
+		req->response_high = cpu_to_le32(pci64_dma_hi32(busaddr + sizeof(*req)));
+		req->sub_len = cpu_to_le16(6);
+		req->data[0] = 0x00;
+		req->data[1] = 0x01;
+		req->data[8] = (u_char) (port_id & 0xff);
+		req->data[9] = (u_char) (port_id >> 8 & 0xff);
+		req->data[10] = (u_char) (port_id >> 16 & 0xff);
 
 		param[0] = MBOX_SEND_SNS;
 		param[1] = 14;
-		param[2] = virt_to_bus_low32(&req) >> 16;
-		param[3] = virt_to_bus_low32(&req);
-		param[6] = virt_to_bus_high32(&req) >> 16;
-		param[7] = virt_to_bus_high32(&req);
+		param[2] = pci64_dma_lo32(busaddr) >> 16;
+		param[3] = pci64_dma_lo32(busaddr);
+		param[6] = pci64_dma_hi32(busaddr) >> 16;
+		param[7] = pci64_dma_hi32(busaddr);
 
 		isp2x00_mbox_command(host, param);
 
@@ -1089,10 +1088,12 @@ int isp2x00_init_fabric(struct Scsi_Host *host, struct id_name_map *port_db, int
 				done = 1;
 		} else {
 			printk("qlogicfc%d : Get All Next failed %x.\n", hostdata->host_id, param[0]);
+			pci64_free_consistent(hostdata->pci_dev, sizeof(*req) + 608, req, busaddr);
 			return 0;
 		}
 	}
 
+	pci64_free_consistent(hostdata->pci_dev, sizeof(*req) + 608, req, busaddr);
 	return 1;
 }
 
@@ -1102,6 +1103,7 @@ int isp2x00_init_fabric(struct Scsi_Host *host, struct id_name_map *port_db, int
 int isp2x00_release(struct Scsi_Host *host)
 {
 	struct isp2x00_hostdata *hostdata;
+	dma64_addr_t busaddr;
 
 	ENTER("isp2x00_release");
 
@@ -1112,8 +1114,9 @@ int isp2x00_release(struct Scsi_Host *host)
 
 	release_region(host->io_port, 0xff);
 
-	kfree(hostdata->res);
-	kfree(hostdata->req);
+	busaddr = pci64_dma_build(le32_to_cpu(hostdata->control_block.res_queue_addr_high),
+				  le32_to_cpu(hostdata->control_block.res_queue_addr_lo));
+	pci64_free_consistent(hostdata->pci_dev, RES_SIZE + REQ_SIZE, hostdata->res, busaddr);
 
 	LEAVE("isp2x00_release");
 
@@ -1245,19 +1248,20 @@ int isp2x00_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 	cmd->hdr.entry_type = ENTRY_COMMAND;
 	cmd->hdr.entry_cnt = 1;
 	cmd->target_lun = Cmnd->lun;
-	cmd->expanded_lun = Cmnd->lun;
+	cmd->expanded_lun = cpu_to_le16(Cmnd->lun);
 #if ISP2x00_PORTDB
 	cmd->target_id = hostdata->port_db[Cmnd->target].loop_id;
 #else
 	cmd->target_id = Cmnd->target;
 #endif
-	cmd->total_byte_cnt = (u_int) Cmnd->request_bufflen;
+	cmd->total_byte_cnt = cpu_to_le32(Cmnd->request_bufflen);
 	cmd->time_out = 0;
 	memcpy(cmd->cdb, Cmnd->cmnd, Cmnd->cmd_len);
 
 	if (Cmnd->use_sg) {
-		cmd->segment_cnt = sg_count = Cmnd->use_sg;
 		sg = (struct scatterlist *) Cmnd->request_buffer;
+		sg_count = pci64_map_sg(hostdata->pci_dev, sg, Cmnd->use_sg, scsi_to_pci_dma_dir(Cmnd->sc_data_direction));
+		cmd->segment_cnt = cpu_to_le16(sg_count);
 		ds = cmd->dataseg;
 		/* fill in first two sg entries: */
 		n = sg_count;
@@ -1265,11 +1269,11 @@ int isp2x00_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 			n = DATASEGS_PER_COMMAND;
 
 		for (i = 0; i < n; i++) {
-			ds[i].d_base = virt_to_bus_low32(sg->address);
-#if BITS_PER_LONG > 32
-			ds[i].d_base_hi = virt_to_bus_high32(sg->address);
+			ds[i].d_base = cpu_to_le32(pci64_dma_lo32(sg_dma64_address(sg)));
+#if PCI64_DMA_BITS > 32
+			ds[i].d_base_hi = cpu_to_le32(pci64_dma_hi32(sg_dma64_address(sg)));
 #endif
-			ds[i].d_count = sg->length;
+			ds[i].d_count = cpu_to_le32(sg_dma64_len(sg));
 			++sg;
 		}
 		sg_count -= DATASEGS_PER_COMMAND;
@@ -1291,22 +1295,32 @@ int isp2x00_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 			if (n > DATASEGS_PER_CONT)
 				n = DATASEGS_PER_CONT;
 			for (i = 0; i < n; ++i) {
-				ds[i].d_base = virt_to_bus_low32(sg->address);
-#if BITS_PER_LONG > 32
-				ds[i].d_base_hi = virt_to_bus_high32(sg->address);
+				ds[i].d_base = cpu_to_le32(pci64_dma_lo32(sg_dma64_address(sg)));
+#if PCI64_DMA_BITS > 32
+				ds[i].d_base_hi = cpu_to_le32(pci64_dma_hi32(sg_dma64_address(sg)));
 #endif
-				ds[i].d_count = sg->length;
+				ds[i].d_count = cpu_to_le32(sg_dma64_len(sg));
 				++sg;
 			}
 			sg_count -= n;
 		}
-	} else {
-		cmd->dataseg[0].d_base = virt_to_bus_low32(Cmnd->request_buffer);
-#if BITS_PER_LONG > 32
-		cmd->dataseg[0].d_base_hi = virt_to_bus_high32(Cmnd->request_buffer);
+	} else if (Cmnd->request_bufflen) {
+		dma64_addr_t busaddr = pci64_map_single(hostdata->pci_dev, Cmnd->request_buffer, Cmnd->request_bufflen,
+							scsi_to_pci_dma_dir(Cmnd->sc_data_direction));
+
+		*(dma64_addr_t *)&Cmnd->SCp = busaddr;
+		cmd->dataseg[0].d_base = cpu_to_le32(pci64_dma_lo32(busaddr));
+#if PCI64_DMA_BITS > 32
+		cmd->dataseg[0].d_base_hi = cpu_to_le32(pci64_dma_hi32(busaddr));
 #endif
-		cmd->dataseg[0].d_count = (u_int) Cmnd->request_bufflen;
-		cmd->segment_cnt = 1;
+		cmd->dataseg[0].d_count = cpu_to_le32(Cmnd->request_bufflen);
+		cmd->segment_cnt = cpu_to_le16(1);
+	} else {
+		cmd->dataseg[0].d_base = 0;
+#if PCI64_DMA_BITS > 32
+		cmd->dataseg[0].d_base_hi = 0;
+#endif
+		cmd->segment_cnt = cpu_to_le16(1); /* Shouldn't this be 0? */
 	}
 
 	switch (Cmnd->cmnd[0]) {
@@ -1317,38 +1331,28 @@ int isp2x00_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 	case WRITE_6:
 	case WRITE_BUFFER:
 	case MODE_SELECT:
-		cmd->control_flags = CFLAG_WRITE;
-		break;
-	case REQUEST_SENSE:
-		/* scsi.c expects sense info in a different buffer */
-		cmd->dataseg[0].d_base = virt_to_bus_low32(Cmnd->sense_buffer);
-#if BITS_PER_LONG > 32
-		cmd->dataseg[0].d_base_hi = virt_to_bus_high32(Cmnd->sense_buffer);
-#endif
-		cmd->dataseg[0].d_count = sizeof(Cmnd->sense_buffer);
-		cmd->segment_cnt = 1;
-		cmd->control_flags = CFLAG_READ;
+		cmd->control_flags = cpu_to_le16(CFLAG_WRITE);
 		break;
 	default:
-		cmd->control_flags = CFLAG_READ;
+		cmd->control_flags = cpu_to_le16(CFLAG_READ);
 		break;
 	}
 
 
 	if (Cmnd->device->tagged_supported) {
 		if ((jiffies - hostdata->tag_ages[Cmnd->target]) > (2 * SCSI_TIMEOUT)) {
-			cmd->control_flags |= CFLAG_ORDERED_TAG;
+			cmd->control_flags |= cpu_to_le16(CFLAG_ORDERED_TAG);
 			hostdata->tag_ages[Cmnd->target] = jiffies;
 		} else
 			switch (Cmnd->tag) {
 			case HEAD_OF_QUEUE_TAG:
-				cmd->control_flags |= CFLAG_HEAD_TAG;
+				cmd->control_flags |= cpu_to_le16(CFLAG_HEAD_TAG);
 				break;
 			case ORDERED_QUEUE_TAG:
-				cmd->control_flags |= CFLAG_ORDERED_TAG;
+				cmd->control_flags |= cpu_to_le16(CFLAG_ORDERED_TAG);
 				break;
 			default:
-				cmd->control_flags |= CFLAG_SIMPLE_TAG;
+				cmd->control_flags |= cpu_to_le16(CFLAG_SIMPLE_TAG);
 				break;
 		}
 	}
@@ -1543,6 +1547,16 @@ void isp2x00_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 			if (sts->hdr.entry_type == ENTRY_STATUS && (Cmnd = hostdata->handle_ptrs[sts->handle])) {
 				Cmnd->result = isp2x00_return_status(Cmnd, sts);
 				hostdata->queued--;
+
+				if (Cmnd->use_sg)
+					pci64_unmap_sg(hostdata->pci_dev,
+						       (struct scatterlist *)Cmnd->buffer, Cmnd->use_sg,
+						       scsi_to_pci_dma_dir(Cmnd->sc_data_direction));
+				else if (Cmnd->request_bufflen)
+					pci64_unmap_single(hostdata->pci_dev, *(dma64_addr_t *)&Cmnd->SCp,
+							   Cmnd->request_bufflen,
+							   scsi_to_pci_dma_dir(Cmnd->sc_data_direction));
+
 				/* 
 				 * if any of the following are true we do not
 				 * call scsi_done.  if the status is CS_ABORTED
@@ -1550,7 +1564,7 @@ void isp2x00_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 				 * level should already know its aborted.
 				 */
 				if (hostdata->handle_serials[sts->handle] != Cmnd->serial_number 
-				    || sts->completion_status == CS_ABORTED){
+				    || le16_to_cpu(sts->completion_status) == CS_ABORTED){
 					hostdata->handle_serials[sts->handle] = 0;
 					hostdata->handle_ptrs[sts->handle] = NULL;
 					outw(out_ptr, host->io_port + MBOX5);
@@ -1564,7 +1578,7 @@ void isp2x00_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 				 * the device may well be back in a couple of
 				 * seconds.
 				 */
-				if ((hostdata->adapter_state == AS_LOOP_DOWN || sts->completion_status == CS_PORT_UNAVAILABLE || sts->completion_status == CS_PORT_LOGGED_OUT || sts->completion_status == CS_PORT_CONFIG_CHANGED) && hostdata->port_db[Cmnd->target].wwn){
+				if ((hostdata->adapter_state == AS_LOOP_DOWN || sts->completion_status == cpu_to_le16(CS_PORT_UNAVAILABLE) || sts->completion_status == cpu_to_le16(CS_PORT_LOGGED_OUT) || sts->completion_status == cpu_to_le16(CS_PORT_CONFIG_CHANGED)) && hostdata->port_db[Cmnd->target].wwn){
 					outw(out_ptr, host->io_port + MBOX5);
 					continue;
 				}
@@ -1575,12 +1589,11 @@ void isp2x00_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 
 			hostdata->handle_ptrs[sts->handle] = NULL;
 
-			if (sts->completion_status == CS_RESET_OCCURRED
-			    || (sts->status_flags & STF_BUS_RESET))
+			if (sts->completion_status == cpu_to_le16(CS_RESET_OCCURRED)
+			    || (sts->status_flags & cpu_to_le16(STF_BUS_RESET)))
 				hostdata->send_marker = 1;
 
-			memset(Cmnd->sense_buffer, 0, sizeof(Cmnd->sense_buffer));
-			if (sts->scsi_status & 0x0200)
+			if (le16_to_cpu(sts->scsi_status) & 0x0200)
 				memcpy(Cmnd->sense_buffer, sts->req_sense_data,
 				       sizeof(Cmnd->sense_buffer));
 
@@ -1638,9 +1651,9 @@ static int isp2x00_return_status(Scsi_Cmnd *Cmnd, struct Status_Entry *sts)
 	ENTER("isp2x00_return_status");
 
 	DEBUG(printk("qlogicfc : completion status = 0x%04x\n",
-		     sts->completion_status));
+		     le16_to_cpu(sts->completion_status)));
 
-	switch (sts->completion_status) {
+	switch (le16_to_cpu(sts->completion_status)) {
 	case CS_COMPLETE:
 		host_status = DID_OK;
 		break;
@@ -1660,7 +1673,7 @@ static int isp2x00_return_status(Scsi_Cmnd *Cmnd, struct Status_Entry *sts)
 		host_status = DID_ERROR;
 		break;
 	case CS_DATA_UNDERRUN:
-	        if (Cmnd->underflow <= (Cmnd->request_bufflen - sts->residual))
+	        if (Cmnd->underflow <= (Cmnd->request_bufflen - le32_to_cpu(sts->residual)))
 		        host_status = DID_OK;
 		else
 		        host_status = DID_ERROR;
@@ -1675,17 +1688,17 @@ static int isp2x00_return_status(Scsi_Cmnd *Cmnd, struct Status_Entry *sts)
 		break;
 	default:
 		printk("qlogicfc : unknown completion status 0x%04x\n",
-		       sts->completion_status);
+		       le16_to_cpu(sts->completion_status));
 		host_status = DID_ERROR;
 		break;
 	}
 
 	DEBUG_INTR(printk("qlogicfc : host status (%s) scsi status %x\n",
-			  reason[host_status], sts->scsi_status));
+			  reason[host_status], le16_to_cpu(sts->scsi_status)));
 
 	LEAVE("isp2x00_return_status");
 
-	return (sts->scsi_status & STATUS_MASK) | (host_status << 16);
+	return (le16_to_cpu(sts->scsi_status) & STATUS_MASK) | (host_status << 16);
 }
 
 
@@ -1802,6 +1815,7 @@ static int isp2x00_reset_hardware(struct Scsi_Host *host)
 	u_short param[8];
 	struct isp2x00_hostdata *hostdata;
 	int loop_count;
+	dma64_addr_t busaddr;
 
 	ENTER("isp2x00_reset_hardware");
 
@@ -1896,6 +1910,14 @@ static int isp2x00_reset_hardware(struct Scsi_Host *host)
 	}
 #endif
 
+#ifdef __BIG_ENDIAN
+	{
+		u64 val;
+		memcpy(&val, &hostdata->control_block.node_name, sizeof(u64));
+		hostdata->wwn = ((val & 0xff00ff00ff00ff00ULL) >> 8)
+			      | ((val & 0x00ff00ff00ff00ffULL) << 8);
+	}
+#else
 	hostdata->wwn = (u64) (hostdata->control_block.node_name[0]) << 56;
 	hostdata->wwn |= (u64) (hostdata->control_block.node_name[0] & 0xff00) << 48;
 	hostdata->wwn |= (u64) (hostdata->control_block.node_name[1] & 0xff00) << 24;
@@ -1904,26 +1926,37 @@ static int isp2x00_reset_hardware(struct Scsi_Host *host)
 	hostdata->wwn |= (u64) (hostdata->control_block.node_name[2] & 0xff00) << 8;
 	hostdata->wwn |= (u64) (hostdata->control_block.node_name[3] & 0x00ff) << 8;
 	hostdata->wwn |= (u64) (hostdata->control_block.node_name[3] & 0xff00) >> 8;
+#endif
+
+	/* FIXME: If the DMA transfer goes one way only, this should use PCI_DMA_TODEVICE and below as well. */
+	busaddr = pci64_map_single(hostdata->pci_dev, &hostdata->control_block, sizeof(hostdata->control_block),
+				   PCI_DMA_BIDIRECTIONAL);
 
 	param[0] = MBOX_INIT_FIRMWARE;
-	param[2] = (u_short) (virt_to_bus_low32(&hostdata->control_block) >> 16);
-	param[3] = (u_short) (virt_to_bus_low32(&hostdata->control_block) & 0xffff);
+	param[2] = (u_short) (pci64_dma_lo32(busaddr) >> 16);
+	param[3] = (u_short) (pci64_dma_lo32(busaddr) & 0xffff);
 	param[4] = 0;
 	param[5] = 0;
-	param[6] = (u_short) (virt_to_bus_high32(&hostdata->control_block) >> 16);
-	param[7] = (u_short) (virt_to_bus_high32(&hostdata->control_block) & 0xffff);
+	param[6] = (u_short) (pci64_dma_hi32(busaddr) >> 16);
+	param[7] = (u_short) (pci64_dma_hi32(busaddr) & 0xffff);
 	isp2x00_mbox_command(host, param);
 	if (param[0] != MBOX_COMMAND_COMPLETE) {
 		printk("qlogicfc%d.c: Ouch 0x%04x\n", hostdata->host_id,  param[0]);
+		pci64_unmap_single(hostdata->pci_dev, busaddr, sizeof(hostdata->control_block),
+				   PCI_DMA_BIDIRECTIONAL);
 		return 1;
 	}
 	param[0] = MBOX_GET_FIRMWARE_STATE;
 	isp2x00_mbox_command(host, param);
 	if (param[0] != MBOX_COMMAND_COMPLETE) {
 		printk("qlogicfc%d.c: 0x%04x\n", hostdata->host_id,  param[0]);
+		pci64_unmap_single(hostdata->pci_dev, busaddr, sizeof(hostdata->control_block),
+				   PCI_DMA_BIDIRECTIONAL);
 		return 1;
 	}
 
+	pci64_unmap_single(hostdata->pci_dev, busaddr, sizeof(hostdata->control_block),
+			   PCI_DMA_BIDIRECTIONAL);
 	LEAVE("isp2x00_reset_hardware");
 
 	return 0;
@@ -1939,11 +1972,11 @@ static int isp2x00_get_nvram_defaults(struct Scsi_Host *host, struct init_cb *co
 		return 1;
 
 	value = isp2x00_read_nvram_word(host, 8);
-	control_block->node_name[0] = isp2x00_read_nvram_word(host, 9);
-	control_block->node_name[1] = isp2x00_read_nvram_word(host, 10);
-	control_block->node_name[2] = isp2x00_read_nvram_word(host, 11);
-	control_block->node_name[3] = isp2x00_read_nvram_word(host, 12);
-	control_block->hard_addr = isp2x00_read_nvram_word(host, 13);
+	control_block->node_name[0] = cpu_to_le16(isp2x00_read_nvram_word(host, 9));
+	control_block->node_name[1] = cpu_to_le16(isp2x00_read_nvram_word(host, 10));
+	control_block->node_name[2] = cpu_to_le16(isp2x00_read_nvram_word(host, 11));
+	control_block->node_name[3] = cpu_to_le16(isp2x00_read_nvram_word(host, 12));
+	control_block->hard_addr = cpu_to_le16(isp2x00_read_nvram_word(host, 13));
 
 	return 0;
 
@@ -2156,12 +2189,12 @@ void isp2x00_print_status_entry(struct Status_Entry *status)
 	printk("qlogicfc : entry count = 0x%02x, type = 0x%02x, flags = 0x%02x\n", 
 	status->hdr.entry_cnt, status->hdr.entry_type, status->hdr.flags);
 	printk("qlogicfc : scsi status = 0x%04x, completion status = 0x%04x\n",
-	       status->scsi_status, status->completion_status);
+	       le16_to_cpu(status->scsi_status), le16_to_cpu(status->completion_status));
 	printk("qlogicfc : state flags = 0x%04x, status flags = 0x%04x\n", 
-	       status->state_flags, status->status_flags);
+	       le16_to_cpu(status->state_flags), le16_to_cpu(status->status_flags));
 	printk("qlogicfc : response info length = 0x%04x, request sense length = 0x%04x\n",
-	       status->res_info_len, status->req_sense_len);
-	printk("qlogicfc : residual transfer length = 0x%08x, response = 0x%02x\n", status->residual, status->res_info[3]);
+	       le16_to_cpu(status->res_info_len), le16_to_cpu(status->req_sense_len));
+	printk("qlogicfc : residual transfer length = 0x%08x, response = 0x%02x\n", le32_to_cpu(status->residual), status->res_info[3]);
 
 }
 

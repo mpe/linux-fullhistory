@@ -1,4 +1,4 @@
-/* $Id: jazz.h,v 1.8 1998/09/16 22:52:41 ralf Exp $
+/* $Id: jazz.h,v 1.10 1998/10/18 13:16:02 tsbogend Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

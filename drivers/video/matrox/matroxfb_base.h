@@ -42,7 +42,6 @@
 #include <linux/timer.h>
 #include <linux/pci.h>
 #include <linux/spinlock.h>
-#include <linux/ioport.h>
 
 #include <asm/io.h>
 #include <asm/unaligned.h>

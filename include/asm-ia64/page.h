@@ -127,9 +127,10 @@ typedef union ia64_va {
 #define BUG() do { printk("kernel BUG at %s:%d!\n", __FILE__, __LINE__); *(int *)0=0; } while (0)
 #define PAGE_BUG(page) do { BUG(); } while (0)
 
-extern __inline__ int get_order(unsigned long size)
+extern __inline__ int
+get_order (unsigned long size)
 {
-        double d = size - 1;
+	double d = size - 1;
 	long order;
                 
 	__asm__ ("getf.exp %0=%1" : "=r"(order) : "f"(d));

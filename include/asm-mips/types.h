@@ -1,14 +1,14 @@
-/*
- * include/asm-mips/types.h
+/* $Id: types.h,v 1.4 2000/02/18 00:24:48 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1994, 1995, 1996 by Ralf Baechle
+ * Copyright (C) 1994, 1995, 1996, 1999 by Ralf Baechle
+ * Copyright (C) 1999 Silicon Graphics, Inc.
  */
-#ifndef __ASM_MIPS_TYPES_H
-#define __ASM_MIPS_TYPES_H
+#ifndef _ASM_TYPES_H
+#define _ASM_TYPES_H
 
 typedef unsigned long umode_t;
 
@@ -26,18 +26,18 @@ typedef unsigned short __u16;
 typedef __signed__ int __s32;
 typedef unsigned int __u32;
 
-#if ((~0UL) == 0xffffffff)
+#if (_MIPS_SZLONG == 64)
 
+typedef __signed__ long __s64;
+typedef unsigned long __u64;
+
+#else
+ 
 #if defined(__GNUC__) && !defined(__STRICT_ANSI__)
 typedef __signed__ long long __s64;
 typedef unsigned long long __u64;
 #endif
-  
-#else
-  
-typedef __signed__ long __s64;
-typedef unsigned long __u64;
-
+ 
 #endif
 
 /*
@@ -54,21 +54,24 @@ typedef unsigned short u16;
 typedef __signed int s32;
 typedef unsigned int u32;
 
-#if ((~0UL) == 0xffffffff)
+#if (_MIPS_SZLONG == 64)
+
+typedef __signed__ long s64;
+typedef unsigned long u64;
+
+#else
 
 #if defined(__GNUC__) && !defined(__STRICT_ANSI__)
 typedef __signed__ long long s64;
 typedef unsigned long long u64;
 #endif
-  
-#else
-  
-typedef __signed__ long s64;
-typedef unsigned long u64;
 
 #endif
+
 #define BITS_PER_LONG _MIPS_SZLONG
+
+typedef unsigned long dma_addr_t;
 
 #endif /* __KERNEL__ */
 
-#endif /* __ASM_MIPS_TYPES_H */
+#endif /* _ASM_TYPES_H */

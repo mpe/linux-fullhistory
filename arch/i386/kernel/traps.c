@@ -360,8 +360,6 @@ static void unknown_nmi_error(unsigned char reason, struct pt_regs * regs)
 	printk("Do you have a strange power saving mode enabled?\n");
 }
 
-atomic_t nmi_counter[NR_CPUS];
-
 #if CONFIG_X86_IO_APIC
 
 int nmi_watchdog = 1;
@@ -437,7 +435,8 @@ asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 {
 	unsigned char reason = inb(0x61);
 
-	atomic_inc(nmi_counter+smp_processor_id());
+
+	atomic_inc(&nmi_counter(smp_processor_id()));
 	if (!(reason & 0xc0)) {
 #if CONFIG_X86_IO_APIC
 		/*

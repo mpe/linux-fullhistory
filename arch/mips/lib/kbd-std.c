@@ -1,4 +1,4 @@
-/* $Id: kbd-std.c,v 1.2 1999/06/11 14:29:45 ralf Exp $
+/* $Id: kbd-std.c,v 1.2 1999/06/17 13:25:50 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

@@ -1384,30 +1384,33 @@ ia64_handle_unaligned(unsigned long ifa, struct pt_regs *regs)
 	load_store_t *insn;
 	int ret = -1;
 
-	/*
-	 * We flag unaligned references while in kernel as
-	 * errors: the kernel must be fixed. The switch code
-	 * is in ivt.S at entry 30.
-	 *
-	 * So here we keep a simple sanity check.
-	 */
-	if ( !user_mode(regs) ) {
-		die_if_kernel("Unaligned reference while in kernel\n", regs, 30);
-		/* NOT_REACHED */
+	if (current->thread.flags & IA64_THREAD_UAC_SIGBUS) {
+		struct siginfo si;
+
+		si.si_signo = SIGBUS;
+		si.si_errno = 0;
+		si.si_code = BUS_ADRALN;
+		si.si_addr = (void *) ifa;
+		send_sig_info (SIGBUS, &si, current);
+		return;
 	}
 
-	/*
-	 * Make sure we log the unaligned access, so that user/sysadmin can notice it
-	 * and eventually fix the program.
-	 *
-	 * We don't want to do that for every access so we pace it with jiffies.
-	 */
-	if ( unalign_count > 5 && jiffies - last_time > 5*HZ )  unalign_count = 0;
-	if ( ++unalign_count < 5 ) {
-		last_time = jiffies;
-		printk("%s(%d): unaligned trap accessing %016lx (ip=%016lx)\n",
-			current->comm, current->pid, ifa, regs->cr_iip + ipsr->ri);
-		
+	if (!(current->thread.flags & IA64_THREAD_UAC_NOPRINT)) {
+		/*
+		 * Make sure we log the unaligned access, so that
+		 * user/sysadmin can notice it and eventually fix the
+		 * program.
+		 *
+		 * We don't want to do that for every access so we
+		 * pace it with jiffies.
+		 */
+		if (unalign_count > 5 && jiffies - last_time > 5*HZ)
+			unalign_count = 0;
+		if (++unalign_count < 5) {
+			last_time = jiffies;
+			printk("%s(%d): unaligned trap accessing %016lx (ip=%016lx)\n",
+			       current->comm, current->pid, ifa, regs->cr_iip + ipsr->ri);
+		}
 	}
 
 	DPRINT(("iip=%lx ifa=%lx isr=%lx\n", regs->cr_iip, ifa, regs->cr_ipsr));

@@ -1724,6 +1724,11 @@ struct parport *__maybe_init parport_pc_probe_port (unsigned long int base,
 /* Look for PCI parallel port cards. */
 static int __init parport_pc_init_pci (int irq, int dma)
 {
+#ifndef PCI_VENDOR_ID_AFAVLAB
+#define PCI_VENDOR_ID_AFAVLAB		0x14db
+#define PCI_DEVICE_ID_AFAVLAB_TK9902	0x2120
+#endif
+
 	struct {
 		unsigned int vendor;
 		unsigned int device;
@@ -1807,6 +1812,9 @@ static int __init parport_pc_init_pci (int irq, int dma)
 		{ PCI_VENDOR_ID_PLX, PCI_DEVICE_ID_PLX_9050,
 		  PCI_SUBVENDOR_ID_EXSYS, PCI_SUBDEVICE_ID_EXSYS_4014,
 		  2, { { 4, -1 }, { 5, -1 }, } },
+		{ PCI_VENDOR_ID_AFAVLAB, PCI_DEVICE_ID_AFAVLAB_TK9902,
+		  PCI_ANY_ID, PCI_ANY_ID,
+		  1, { { 0, 1 }, } },
 		{ 0, }
 	};
 

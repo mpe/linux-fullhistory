@@ -9,7 +9,6 @@
  */
 #include <linux/string.h>
 #include <linux/spinlock.h>
-#include <asm/mipsconfig.h>
 #include <asm/addrspace.h>
 #include <asm/system.h>
 #include <asm/jazz.h>

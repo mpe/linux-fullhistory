@@ -9,8 +9,6 @@
 #include "sound_config.h"
 #include "soundmodule.h"
 
-#ifdef CONFIG_PAS
-
 static unsigned char dma_bits[] = {
 	4, 1, 2, 3, 0, 5, 6, 7
 };
@@ -92,16 +90,12 @@ static void pasintr(int irq, void *dev_id, struct pt_regs *dummy)
 
 	if (status & 0x08)
 	{
-#ifdef CONFIG_AUDIO
 		  pas_pcm_interrupt(status, 1);
-#endif
 		  status &= ~0x08;
 	}
 	if (status & 0x10)
 	{
-#ifdef CONFIG_MIDI
 		  pas_midi_interrupt();
-#endif
 		  status &= ~0x10;
 	}
 }
@@ -239,7 +233,7 @@ static int config_pas_hw(struct address_info *hw_config)
 	mix_write(0x80 | 5, 0x078B);
 	mix_write(5, 0x078B);
 
-#if !defined(DISABLE_SB_EMULATION) && defined(CONFIG_SB)
+#if !defined(DISABLE_SB_EMULATION)
 
 	{
 		struct address_info *sb_config;
@@ -351,18 +345,14 @@ void attach_pas_card(struct address_info *hw_config)
 		}
 		if (config_pas_hw(hw_config))
 		{
-#ifdef CONFIG_AUDIO
 			pas_pcm_init(hw_config);
-#endif
 
-#if !defined(MODULE) && !defined(DISABLE_SB_EMULATION) && defined(CONFIG_SB)
+#if !defined(MODULE) && !defined(DISABLE_SB_EMULATION)
 
 			sb_dsp_disable_midi(pas_sb_base);	/* No MIDI capability */
 #endif
 
-#ifdef CONFIG_MIDI
 			pas_midi_init();
-#endif
 			pas_init_mixer();
 		}
 	}
@@ -453,5 +443,4 @@ void cleanup_module(void)
 }
 
 
-#endif
-#endif
+#endif /* MODULE */

@@ -499,7 +499,7 @@ repeat_schedule:
 		goto still_running;
 
 still_running_back:
-	list_for_each(tmp, runqueue_head) {
+	list_for_each(tmp, &runqueue_head) {
 		p = list_entry(tmp, struct task_struct, run_list);
 		if (can_schedule(p)) {
 			int weight = goodness(p, this_cpu, prev->active_mm);
@@ -656,7 +656,7 @@ static inline void __wake_up_common(wait_queue_head_t *q, unsigned int mode, con
         if (!head->next || !head->prev)
                 WQ_BUG();
 #endif
-	list_for_each(tmp, *head) {
+	list_for_each(tmp, head) {
 		unsigned int state;
                 wait_queue_t *curr = list_entry(tmp, wait_queue_t, task_list);
 

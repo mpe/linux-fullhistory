@@ -49,53 +49,50 @@
 #define TASK_FLAGS         4
 #define TASK_SIGPENDING    8
 #define TASK_NEED_RESCHED  20
-#define TASK_COUNTER       24
-#define TASK_PRIORITY      28
-#define TASK_MM            928
+#define TASK_COUNTER       32
+#define TASK_PRIORITY      36
+#define TASK_MM            44
+#define TASK_STRUCT_SIZE   904
 
 /* MIPS specific thread_struct offsets. */
-#define THREAD_REG16   568
-#define THREAD_REG17   572
-#define THREAD_REG18   576
-#define THREAD_REG19   580
-#define THREAD_REG20   584
-#define THREAD_REG21   588
-#define THREAD_REG22   592
-#define THREAD_REG23   596
-#define THREAD_REG29   600
-#define THREAD_REG30   604
-#define THREAD_REG31   608
-#define THREAD_STATUS  612
-#define THREAD_FPU     616
-#define THREAD_BVADDR  880
-#define THREAD_BUADDR  884
-#define THREAD_ECODE   888
-#define THREAD_TRAPNO  892
-#define THREAD_PGDIR   896
-#define THREAD_MFLAGS  900
-#define THREAD_CURDS   904
-#define THREAD_TRAMP   908
-#define THREAD_OLDCTX  912
+#define THREAD_REG16   584
+#define THREAD_REG17   588
+#define THREAD_REG18   592
+#define THREAD_REG19   596
+#define THREAD_REG20   600
+#define THREAD_REG21   604
+#define THREAD_REG22   608
+#define THREAD_REG23   612
+#define THREAD_REG29   616
+#define THREAD_REG30   620
+#define THREAD_REG31   624
+#define THREAD_STATUS  628
+#define THREAD_FPU     632
+#define THREAD_BVADDR  768
+#define THREAD_BUADDR  772
+#define THREAD_ECODE   776
+#define THREAD_TRAPNO  780
+#define THREAD_MFLAGS  784
+#define THREAD_CURDS   788
+#define THREAD_TRAMP   792
+#define THREAD_OLDCTX  796
 
 /* Linux mm_struct offsets. */
-#define MM_COUNT      16
+#define MM_USERS      16
 #define MM_PGD        12
-#define MM_CONTEXT    52
+#define MM_CONTEXT    64
 
 /* Linux sigcontext offsets. */
-#define SC_REGMASK    0
-#define SC_STATUS     4
-#define SC_PC         8
 #define SC_REGS       16
 #define SC_FPREGS     272
+#define SC_MDHI       544
+#define SC_MDLO       552
+#define SC_PC         8
+#define SC_STATUS     4
 #define SC_OWNEDFP    528
 #define SC_FPC_CSR    532
 #define SC_FPC_EIR    536
-#define SC_SSFLAGS    540
-#define SC_MDHI       544
-#define SC_MDLO       552
 #define SC_CAUSE      560
 #define SC_BADVADDR   564
-#define SC_SIGSET     568
 
 #endif /* !(_MIPS_OFFSET_H) */

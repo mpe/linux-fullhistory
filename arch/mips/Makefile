@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.13 1998/08/17 10:16:23 ralf Exp $
+# $Id: Makefile,v 1.22 2000/01/26 00:07:44 ralf Exp $
 #
 # This file is subject to the terms and conditions of the GNU General Public
 # License.  See the file "COPYING" in the main directory of this archive
@@ -18,44 +18,27 @@
 #
 ifdef CONFIG_CPU_LITTLE_ENDIAN
 tool-prefix	= mipsel-linux-
-ifdef CONFIG_MIPS_ECOFF
-oformat		= ecoff-littlemips
-else
-oformat		= elf32-littlemips
-endif
 else
 tool-prefix	= mips-linux-
-ifdef CONFIG_MIPS_ECOFF
-oformat		= ecoff-bigmips
-else
-oformat		= elf32-bigmips
-endif
 endif
 
 ifdef CONFIG_CROSSCOMPILE
 CROSS_COMPILE  = $(tool-prefix)
 endif
 
-LINKFLAGS	= -static -N
-MODFLAGS	+= -mlong-calls
-
 #
-# The new ELF GCC uses -G0 -mabicalls -fpic as default.  We don't need PIC
+# The ELF GCC uses -G0 -mabicalls -fpic as default.  We don't need PIC
 # code in the kernel since it only slows down the whole thing.  For the
 # old GCC these options are just the defaults.  At some point we might
 # make use of global pointer optimizations.
 #
 # The DECStation requires an ECOFF kernel for remote booting, other MIPS
-# machines may also.
+# machines may also.  Since BFD is incredibly buggy with respect to
+# crossformat linking we rely on the elf2ecoff tool for format conversion.
 #
-ifdef CONFIG_ELF_KERNEL
 CFLAGS		+= -G 0 -mno-abicalls -fno-pic
-LINKFLAGS	+= -G 0
-endif
-ifdef CONFIG_ECOFF_KERNEL
-CFLAGS		+= -G 0 -mno-abicalls -fno-pic
-LINKFLAGS	+= -G 0 -oformat ecoff-littlemips
-endif
+LINKFLAGS	+= -static -G 0
+MODFLAGS	+= -mlong-calls
 
 ifdef CONFIG_REMOTE_DEBUG
 CFLAGS		:= $(CFLAGS) -g
@@ -125,7 +108,7 @@ LIBS          += arch/mips/arc/arclib.a
 LOADADDR      += 0x80080000
 endif
 
-ifdef CONFIG_SGI
+ifdef CONFIG_SGI_IP22
 LIBS          += arch/mips/sgi/kernel/sgikern.a arch/mips/arc/arclib.a
 SUBDIRS       += arch/mips/sgi/kernel arch/mips/arc
 #
@@ -134,7 +117,6 @@ SUBDIRS       += arch/mips/sgi/kernel arch/mips/arc
 # 8kb aligned or the handling of the current variable will break.
 #
 LOADADDR      += 0x88002000
-HOSTCC        = cc
 endif
 
 #
@@ -143,6 +125,15 @@ endif
 ifdef CONFIG_BAGET_MIPS
 SUBDIRS       += arch/mips/baget arch/mips/baget/prom
 LIBS          += arch/mips/baget/baget.a arch/mips/baget/prom/bagetlib.a
+endif
+
+#
+# NEC DDB Vrc-5074
+#
+ifdef CONFIG_DDB5074
+SUBDIRS       += arch/mips/ddb5074
+LIBS          += arch/mips/ddb5074/ddb5074.a
+LOADADDR      += 0x80080000
 endif
 
 #
@@ -171,7 +162,7 @@ CFLAGS		+= -pipe
 
 HEAD := arch/mips/kernel/head.o arch/mips/kernel/init_task.o
 
-SUBDIRS := $(SUBDIRS) $(addprefix arch/mips/, kernel mm lib tools)
+SUBDIRS := $(addprefix arch/mips/, tools) $(SUBDIRS) $(addprefix arch/mips/, kernel mm lib)
 CORE_FILES := arch/mips/kernel/kernel.o arch/mips/mm/mm.o $(CORE_FILES)
 LIBS := arch/mips/lib/lib.a $(LIBS)
 

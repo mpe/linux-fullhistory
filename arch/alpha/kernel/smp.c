@@ -62,11 +62,13 @@ spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
 /* Set to a secondary's cpuid when it comes online.  */
 static unsigned long smp_secondary_alive;
 
-unsigned long cpu_present_mask;	/* Which cpus ids came online.  */
-static unsigned long __cpu_present_mask __initdata = 0; /* cpu reported in the hwrpb */
+/* Which cpus ids came online.  */
+unsigned long cpu_present_mask;
+
+/* cpus reported in the hwrpb */
+static unsigned long hwrpb_cpu_present_mask __initdata = 0;
 
 static int max_cpus = -1;	/* Command-line limitation.  */
-int smp_boot_cpuid;		/* Which processor we booted from.  */
 int smp_num_probed;		/* Internal processor count */
 int smp_num_cpus = 1;		/* Number that came online.  */
 int smp_threads_ready;		/* True once the per process idle is forked. */
@@ -486,10 +488,9 @@ setup_smp(void)
 	struct percpu_struct *cpubase, *cpu;
 	int i;
 
-	smp_boot_cpuid = hard_smp_processor_id();
-	if (smp_boot_cpuid != 0) {
+	if (boot_cpuid != 0) {
 		printk(KERN_WARNING "SMP: Booting off cpu %d instead of 0?\n",
-		       smp_boot_cpuid);
+		       boot_cpuid);
 	}
 
 	if (hwrpb->nr_processors > 1) {
@@ -508,7 +509,7 @@ setup_smp(void)
 			if ((cpu->flags & 0x1cc) == 0x1cc) {
 				smp_num_probed++;
 				/* Assume here that "whami" == index */
-				__cpu_present_mask |= (1L << i);
+				hwrpb_cpu_present_mask |= (1L << i);
 				cpu->pal_revision = boot_cpu_palrev;
 			}
 
@@ -519,12 +520,12 @@ setup_smp(void)
 		}
 	} else {
 		smp_num_probed = 1;
-		__cpu_present_mask = (1L << smp_boot_cpuid);
+		hwrpb_cpu_present_mask = (1L << boot_cpuid);
 	}
-	cpu_present_mask = 1L << smp_boot_cpuid;
+	cpu_present_mask = 1L << boot_cpuid;
 
 	printk(KERN_INFO "SMP: %d CPUs probed -- cpu_present_mask = %lx\n",
-	       smp_num_probed, __cpu_present_mask);
+	       smp_num_probed, hwrpb_cpu_present_mask);
 }
 
 /*
@@ -541,13 +542,13 @@ smp_boot_cpus(void)
 	memset(__cpu_logical_map, -1, sizeof(__cpu_logical_map));
 	memset(ipi_data, 0, sizeof(ipi_data));
 
-	__cpu_number_map[smp_boot_cpuid] = 0;
-	__cpu_logical_map[0] = smp_boot_cpuid;
-	current->processor = smp_boot_cpuid;
+	__cpu_number_map[boot_cpuid] = 0;
+	__cpu_logical_map[0] = boot_cpuid;
+	current->processor = boot_cpuid;
 
-	smp_store_cpu_info(smp_boot_cpuid);
+	smp_store_cpu_info(boot_cpuid);
 	smp_tune_scheduling();
-	smp_setup_percpu_timer(smp_boot_cpuid);
+	smp_setup_percpu_timer(boot_cpuid);
 
 	init_idle();
 
@@ -565,10 +566,10 @@ smp_boot_cpus(void)
 
 	cpu_count = 1;
 	for (i = 0; i < NR_CPUS; i++) {
-		if (i == smp_boot_cpuid)
+		if (i == boot_cpuid)
 			continue;
 
-		if (((__cpu_present_mask >> i) & 1) == 0)
+		if (((hwrpb_cpu_present_mask >> i) & 1) == 0)
 			continue;
 
 		if (smp_boot_one_cpu(i, cpu_count))
@@ -1023,7 +1024,7 @@ debug_spin_lock(spinlock_t * lock, const char *base_file, int line_no)
 	"	stl_c	%0,%1\n"
 	"	beq	%0,3f\n"
 	"4:	mb\n"
-	".section .text2,\"ax\"\n"
+	".subsection 2\n"
 	"2:	ldl	%0,%1\n"
 	"	subq	%2,1,%2\n"
 	"3:	blt	%2,4b\n"
@@ -1097,7 +1098,7 @@ void write_lock(rwlock_t * lock)
 	"	stl_c	%1,%0\n"
 	"	beq	%1,6f\n"
 	"4:	mb\n"
-	".section .text2,\"ax\"\n"
+	".subsection 2\n"
 	"6:	blt	%3,4b	# debug\n"
 	"	subl	%3,1,%3	# debug\n"
 	"	ldl	%1,%0\n"
@@ -1140,7 +1141,7 @@ void read_lock(rwlock_t * lock)
 	"	stl_c	%1,%0;"
 	"	beq	%1,6f;"
 	"4:	mb\n"
-	".section .text2,\"ax\"\n"
+	".subsection 2\n"
 	"6:	ldl	%1,%0;"
 	"	blt	%2,4b	# debug\n"
 	"	subl	%2,1,%2	# debug\n"

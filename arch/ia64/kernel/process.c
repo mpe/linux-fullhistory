@@ -97,6 +97,14 @@ cpu_idle (void *unused)
 		check_pgt_cache();
 		if (pm_idle)
 			(*pm_idle)();
+#ifdef CONFIG_ITANIUM_ASTEP_SPECIFIC
+		if (ia64_get_itm() < ia64_get_itc()) {
+			extern void ia64_reset_itm();
+
+			printk("cpu_idle: ITM in past, resetting it...\n");
+			ia64_reset_itm();
+		}
+#endif
 	}
 }
 

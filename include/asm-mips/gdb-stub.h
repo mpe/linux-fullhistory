@@ -1,4 +1,4 @@
-/* $Id: gdb-stub.h,v 1.3 1998/07/20 17:52:19 ralf Exp $
+/* $Id: gdb-stub.h,v 1.3 1998/08/25 09:21:55 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

@@ -24,14 +24,10 @@
 #include "sound_config.h"
 #include "soundmodule.h"
 
-#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
 #include "coproc.h"
 
 
-#ifdef CONFIG_SEQUENCER
 static int      timer_mode = TMR_INTERNAL, timer_caps = TMR_INTERNAL;
-
-#endif
 
 struct mpu_config
 {
@@ -159,9 +155,6 @@ static unsigned char len_tab[] =	/* # of data bytes following a status
 	0			/* Fx */
 };
 
-#ifndef CONFIG_SEQUENCER
-#define STORE(cmd)
-#else
 #define STORE(cmd) \
 { \
 	int len; \
@@ -169,7 +162,6 @@ static unsigned char len_tab[] =	/* # of data bytes following a status
 	cmd; \
 	seq_input_event(obuf, len); \
 }
-#endif
 
 #define _seqbuf obuf
 #define _seqbufptr 0
@@ -1225,8 +1217,6 @@ void unload_mpu401(struct address_info *hw_config)
  *      Timer stuff
  ****************************************************/
 
-#if defined(CONFIG_SEQUENCER)
-
 static volatile int timer_initialized = 0, timer_open = 0, tmr_running = 0;
 static volatile int curr_tempo, curr_timebase, hw_timebase;
 static int      max_timebase = 8;	/* 8*24=192 ppqn */
@@ -1718,9 +1708,6 @@ static int mpu_timer_init(int midi_dev)
 
 }
 
-#endif
-
-
 EXPORT_SYMBOL(probe_mpu401);
 EXPORT_SYMBOL(attach_mpu401);
 EXPORT_SYMBOL(unload_mpu401);
@@ -1762,5 +1749,4 @@ void cleanup_module(void)
 	SOUND_LOCK_END;
 }
 
-#endif
-#endif
+#endif /* MODULE */

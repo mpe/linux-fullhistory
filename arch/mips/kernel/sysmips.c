@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1995, 1996, 1997 by Ralf Baechle
  *
- * $Id: sysmips.c,v 1.6 1998/08/25 09:14:42 ralf Exp $
+ * $Id: sysmips.c,v 1.9 2000/02/18 00:24:30 ralf Exp $
  */
 #include <linux/errno.h>
 #include <linux/linkage.h>
@@ -19,7 +19,7 @@
 #include <linux/utsname.h>
 
 #include <asm/cachectl.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/sysmips.h>
 #include <asm/uaccess.h>
 
@@ -72,6 +72,7 @@ sys_sysmips(int cmd, int arg1, int arg2, int arg3)
 		if (len == 0 || len > __NEW_UTS_LEN)
 			goto out;
 
+		/* Fiiiixmeeee...  */
 		copy_from_user(system_utsname.nodename, name, len);
 		system_utsname.nodename[len] = '\0';
 		retval = 0;
@@ -91,8 +92,8 @@ sys_sysmips(int cmd, int arg1, int arg2, int arg3)
 		goto out;
 
 	case MIPS_FIXADE:
-		tmp = current->tss.mflags & ~3;
-		current->tss.mflags = tmp | (arg1 & 3);
+		tmp = current->thread.mflags & ~3;
+		current->thread.mflags = tmp | (arg1 & 3);
 		retval = 0;
 		goto out;
 

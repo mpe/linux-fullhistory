@@ -1,4 +1,4 @@
-/* $Id: kbd-no.c,v 1.1 1998/10/28 12:38:14 ralf Exp $
+/* $Id: kbd-no.c,v 1.1 1999/01/04 16:03:51 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

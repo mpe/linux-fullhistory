@@ -1,4 +1,5 @@
-/*
+/* $Id: unaligned.c,v 1.7 1999/12/04 03:59:00 ralf Exp $
+ *
  * Handle unaligned accesses by emulation.
  *
  * This file is subject to the terms and conditions of the GNU General Public
@@ -7,7 +8,7 @@
  *
  * Copyright (C) 1996, 1998 by Ralf Baechle
  *
- * $Id: unaligned.c,v 1.5 1999/05/01 22:40:39 ralf Exp $
+ * $Id: unaligned.c,v 1.7 1999/12/04 03:59:00 ralf Exp $
  *
  * This file contains exception handler for address error exception with the
  * special capability to execute faulting instructions in software.  The
@@ -365,19 +366,13 @@ fault:
 		return;
 	}
 
-	lock_kernel();
 	send_sig(SIGSEGV, current, 1);
-	unlock_kernel();
 	return;
 sigbus:
-	lock_kernel();
 	send_sig(SIGBUS, current, 1);
-	unlock_kernel();
 	return;
 sigill:
-	lock_kernel();
 	send_sig(SIGILL, current, 1);
-	unlock_kernel();
 	return;
 }
 
@@ -398,7 +393,7 @@ asmlinkage void do_ade(struct pt_regs *regs)
 	pc = regs->cp0_epc + ((regs->cp0_cause & CAUSEF_BD) ? 4 : 0);
 	if (compute_return_epc(regs))
 		return;
-	if ((current->tss.mflags & MF_FIXADE) == 0)
+	if ((current->thread.mflags & MF_FIXADE) == 0)
 		goto sigbus;
 
 	emulate_load_store_insn(regs, regs->cp0_badvaddr, pc);
@@ -407,9 +402,7 @@ asmlinkage void do_ade(struct pt_regs *regs)
 	return;
 
 sigbus:
-	lock_kernel();
 	force_sig(SIGBUS, current);
-	unlock_kernel();
 
 	return;
 }

@@ -179,13 +179,21 @@ SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
 	"pushl $"#nr"-256\n\t" \
 	"jmp common_interrupt");
 
+extern unsigned long prof_cpu_mask;
 /*
  * x86 profiling function, SMP safe. We might want to do this in
  * assembly totally?
  */
 static inline void x86_do_profile (unsigned long eip)
 {
-	if (prof_buffer && current->pid) {
+	/*
+	 * Only measure the CPUs specified by /proc/irq/prof_cpu_mask.
+	 * (default is all CPUs.)
+	 */
+	if (!((1<<smp_processor_id()) & prof_cpu_mask))
+		return;
+
+	if (prof_buffer) {
 		eip -= (unsigned long) &_stext;
 		eip >>= prof_shift;
 		/*

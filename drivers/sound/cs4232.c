@@ -176,7 +176,6 @@ int probe_cs4232(struct address_info *hw_config)
 		 * Initialize logical device 3 (MPU)
 		 */
 
-#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
 		if (mpu_base != 0 && mpu_irq != 0)
 		{
 			CS_OUT2(0x15, 0x03);	/* Select logical device 3 (MPU) */
@@ -184,7 +183,6 @@ int probe_cs4232(struct address_info *hw_config)
 			CS_OUT2(0x22, mpu_irq);	/* MPU IRQ */
 			CS_OUT2(0x33, 0x01);	/* Activate logical dev 3 */
 		}
-#endif
 
 		if(synth_base != 0)
 		{
@@ -238,7 +236,6 @@ void attach_cs4232(struct address_info *hw_config)
 		AD1848_REROUTE(SOUND_MIXER_LINE2, SOUND_MIXER_CD);
 		AD1848_REROUTE(SOUND_MIXER_LINE3, SOUND_MIXER_SYNTH);		/* FM synth */
 	}
-#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
 	if (mpu_base != 0 && mpu_irq != 0)
 	{
 		static struct address_info hw_config2 = {
@@ -266,7 +263,6 @@ void attach_cs4232(struct address_info *hw_config)
 		}
 		hw_config->slots[1] = hw_config2.slots[1];
 	}
-#endif
 }
 
 void unload_cs4232(struct address_info *hw_config)
@@ -284,7 +280,6 @@ void unload_cs4232(struct address_info *hw_config)
 		      0);
 
 	sound_unload_audiodev(hw_config->slots[0]);
-#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
 	if (mpu_base != 0 && mpu_irq != 0 && mpu_detected)
 	{
 		static struct address_info hw_config2 =
@@ -305,7 +300,6 @@ void unload_cs4232(struct address_info *hw_config)
 
 		unload_uart401(&hw_config2);
 	}
-#endif
 }
 
 void unload_cs4232_mpu(struct address_info *hw_config)
@@ -397,4 +391,4 @@ void cleanup_module(void)
 	SOUND_LOCK_END;
 }
 
-#endif
+#endif /* MODULE */

@@ -31,7 +31,8 @@
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 
-#include <asm/sgihpc.h>
+#include <asm/sgi/sgihpc.h>
+#include <asm/sgi/sgint23.h>
 #include <asm/sgialib.h>
 
 #include "sgiseeq.h"
@@ -70,12 +71,12 @@ static char *sgiseeqstr = "SGI Seeq8003";
 
 struct sgiseeq_rx_desc {
 	struct hpc_dma_desc rdma;
-	unsigned long buf_vaddr;
+	signed int buf_vaddr;
 };
 
 struct sgiseeq_tx_desc {
 	struct hpc_dma_desc tdma;
-	unsigned long buf_vaddr;
+	signed int buf_vaddr;
 };
 
 /* Warning: This structure is layed out in a certain way because
@@ -86,7 +87,7 @@ struct sgiseeq_init_block { /* Note the name ;-) */
 	/* Ptrs to the descriptors in KSEG1 uncached space. */
 	struct sgiseeq_rx_desc *rx_desc;
 	struct sgiseeq_tx_desc *tx_desc;
-	unsigned long _padding[30]; /* Pad out to largest cache line size. */
+	unsigned int _padding[30]; /* Pad out to largest cache line size. */
 
 	struct sgiseeq_rx_desc rxvector[SEEQ_RX_BUFFERS];
 	struct sgiseeq_tx_desc txvector[SEEQ_TX_BUFFERS];
@@ -140,7 +141,7 @@ static inline void seeq_load_eaddr(struct net_device *dev,
 	int i;
 
 	sregs->tstat = SEEQ_TCMD_RB0;
-	for(i = 0; i < 6; i++)
+	for (i = 0; i < 6; i++)
 		sregs->rw.eth_addr[i] = dev->dev_addr[i];
 }
 
@@ -154,7 +155,7 @@ static void seeq_init_ring(struct net_device *dev)
 	volatile struct sgiseeq_init_block *ib = &sp->srings;
 	int i;
 
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
 	sp->rx_new = sp->tx_new = 0;
 	sp->rx_old = sp->tx_old = 0;
 
@@ -180,8 +181,8 @@ static void seeq_init_ring(struct net_device *dev)
 	}
 
 	/* And now the rx ring. */
-	for(i = 0; i < SEEQ_RX_BUFFERS; i++) {
-		if(!ib->rx_desc[i].rdma.pbuf) {
+	for (i = 0; i < SEEQ_RX_BUFFERS; i++) {
+		if (!ib->rx_desc[i].rdma.pbuf) {
 			unsigned long buffer;
 
 			buffer = (unsigned long) kmalloc(PKT_BUF_SZ, GFP_KERNEL);
@@ -210,29 +211,29 @@ void sgiseeq_dump_rings(void)
 		return;
 	once++;
 	printk("RING DUMP:\n");
-	for(i = 0; i < SEEQ_RX_BUFFERS; i++) {
-		printk("RX [%d]: @(%p) [%08lx,%08lx,%08lx] ",
+	for (i = 0; i < SEEQ_RX_BUFFERS; i++) {
+		printk("RX [%d]: @(%p) [%08x,%08x,%08x] ",
 		       i, (&r[i]), r[i].rdma.pbuf, r[i].rdma.cntinfo,
 		       r[i].rdma.pnext);
 		i += 1;
-		printk("-- [%d]: @(%p) [%08lx,%08lx,%08lx]\n",
+		printk("-- [%d]: @(%p) [%08x,%08x,%08x]\n",
 		       i, (&r[i]), r[i].rdma.pbuf, r[i].rdma.cntinfo,
 		       r[i].rdma.pnext);
 	}
-	for(i = 0; i < SEEQ_TX_BUFFERS; i++) {
-		printk("TX [%d]: @(%p) [%08lx,%08lx,%08lx] ",
+	for (i = 0; i < SEEQ_TX_BUFFERS; i++) {
+		printk("TX [%d]: @(%p) [%08x,%08x,%08x] ",
 		       i, (&t[i]), t[i].tdma.pbuf, t[i].tdma.cntinfo,
 		       t[i].tdma.pnext);
 		i += 1;
-		printk("-- [%d]: @(%p) [%08lx,%08lx,%08lx]\n",
+		printk("-- [%d]: @(%p) [%08x,%08x,%08x]\n",
 		       i, (&t[i]), t[i].tdma.pbuf, t[i].tdma.cntinfo,
 		       t[i].tdma.pnext);
 	}
 	printk("INFO: [rx_new = %d rx_old=%d] [tx_new = %d tx_old = %d]\n",
 	       gpriv->rx_new, gpriv->rx_old, gpriv->tx_new, gpriv->tx_old);
-	printk("RREGS: rx_cbptr[%08lx] rx_ndptr[%08lx] rx_ctrl[%08lx]\n",
+	printk("RREGS: rx_cbptr[%08x] rx_ndptr[%08x] rx_ctrl[%08x]\n",
 	       hregs->rx_cbptr, hregs->rx_ndptr, hregs->rx_ctrl);
-	printk("TREGS: tx_cbptr[%08lx] tx_ndptr[%08lx] tx_ctrl[%08lx]\n",
+	printk("TREGS: tx_cbptr[%08x] tx_ndptr[%08x] tx_ctrl[%08x]\n",
 	       hregs->tx_cbptr, hregs->tx_ndptr, hregs->tx_ctrl);
 }
 #endif
@@ -250,7 +251,7 @@ static void init_seeq(struct net_device *dev, struct sgiseeq_private *sp,
 	seeq_init_ring(dev);
 
 	/* Setup to field the proper interrupt types. */
-	if(sp->is_edlc) {
+	if (sp->is_edlc) {
 		sregs->tstat = (TSTAT_INIT_EDLC);
 		sregs->rw.wregs.control = sp->control;
 		sregs->rw.wregs.frame_gap = 0;
@@ -269,14 +270,14 @@ static void init_seeq(struct net_device *dev, struct sgiseeq_private *sp,
 static inline void record_rx_errors(struct sgiseeq_private *sp,
 				    unsigned char status)
 {
-	if(status & SEEQ_RSTAT_OVERF ||
-	   status & SEEQ_RSTAT_SFRAME)
+	if (status & SEEQ_RSTAT_OVERF ||
+	    status & SEEQ_RSTAT_SFRAME)
 		sp->stats.rx_over_errors++;
-	if(status & SEEQ_RSTAT_CERROR)
+	if (status & SEEQ_RSTAT_CERROR)
 		sp->stats.rx_crc_errors++;
-	if(status & SEEQ_RSTAT_DERROR)
+	if (status & SEEQ_RSTAT_DERROR)
 		sp->stats.rx_frame_errors++;
-	if(status & SEEQ_RSTAT_REOF)
+	if (status & SEEQ_RSTAT_REOF)
 		sp->stats.rx_errors++;
 }
 
@@ -284,7 +285,7 @@ static inline void rx_maybe_restart(struct sgiseeq_private *sp,
 				    volatile struct hpc3_ethregs *hregs,
 				    volatile struct sgiseeq_regs *sregs)
 {
-	if(!(hregs->rx_ctrl & HPC3_ERXCTRL_ACTIVE)) {
+	if (!(hregs->rx_ctrl & HPC3_ERXCTRL_ACTIVE)) {
 		hregs->rx_ndptr = PHYSADDR(&sp->srings.rx_desc[sp->rx_new]);
 		seeq_go(sp, hregs, sregs);
 	}
@@ -308,14 +309,14 @@ static inline void sgiseeq_rx(struct net_device *dev, struct sgiseeq_private *sp
 	/* Service every received packet. */
 	for_each_rx(rd, sp) {
 		len = (PKT_BUF_SZ - (rd->rdma.cntinfo & HPCDMA_BCNT) - 3);
-		pkt_pointer = (unsigned char *)rd->buf_vaddr;
+		pkt_pointer = (unsigned char *)(long)rd->buf_vaddr;
 		pkt_status = pkt_pointer[len + 2];
 
-		if(pkt_status & SEEQ_RSTAT_FIG) {
+		if (pkt_status & SEEQ_RSTAT_FIG) {
 			/* Packet is OK. */
 			skb = dev_alloc_skb(len + 2);
 
-			if(skb) {
+			if (skb) {
 				skb->dev = dev;
 				skb_reserve(skb, 2);
 				skb_put(skb, len);
@@ -346,7 +347,7 @@ static inline void sgiseeq_rx(struct net_device *dev, struct sgiseeq_private *sp
 static inline void tx_maybe_reset_collisions(struct sgiseeq_private *sp,
 					     volatile struct sgiseeq_regs *sregs)
 {
-	if(sp->is_edlc) {
+	if (sp->is_edlc) {
 		sregs->rw.wregs.control = sp->control & ~(SEEQ_CTRL_XCNT);
 		sregs->rw.wregs.control = sp->control;
 	}
@@ -361,11 +362,10 @@ static inline void kick_tx(struct sgiseeq_tx_desc *td,
 	 * adapter.  The following code is only safe iff the HPCDMA
 	 * is not active!
 	 */
-	while((td->tdma.cntinfo & (HPCDMA_XIU | HPCDMA_ETXD)) ==
+	while ((td->tdma.cntinfo & (HPCDMA_XIU | HPCDMA_ETXD)) ==
 	      (HPCDMA_XIU | HPCDMA_ETXD))
-		td = (struct sgiseeq_tx_desc *)
-			KSEG1ADDR(td->tdma.pnext);
-	if(td->tdma.cntinfo & HPCDMA_XIU) {
+		td = (struct sgiseeq_tx_desc *)(long) KSEG1ADDR(td->tdma.pnext);
+	if (td->tdma.cntinfo & HPCDMA_XIU) {
 		hregs->tx_ndptr = PHYSADDR(td);
 		hregs->tx_ctrl = HPC3_ETXCTRL_ACTIVE;
 	}
@@ -381,23 +381,23 @@ static inline void sgiseeq_tx(struct net_device *dev, struct sgiseeq_private *sp
 
 	tx_maybe_reset_collisions(sp, sregs);
 
-	if(!(status & (HPC3_ETXCTRL_ACTIVE | SEEQ_TSTAT_PTRANS))) {
+	if (!(status & (HPC3_ETXCTRL_ACTIVE | SEEQ_TSTAT_PTRANS))) {
 		/* Oops, HPC detected some sort of error. */
-		if(status & SEEQ_TSTAT_R16)
+		if (status & SEEQ_TSTAT_R16)
 			sp->stats.tx_aborted_errors++;
-		if(status & SEEQ_TSTAT_UFLOW)
+		if (status & SEEQ_TSTAT_UFLOW)
 			sp->stats.tx_fifo_errors++;
-		if(status & SEEQ_TSTAT_LCLS)
+		if (status & SEEQ_TSTAT_LCLS)
 			sp->stats.collisions++;
 	}
 
 	/* Ack 'em... */
-	for(j = sp->tx_old; j != sp->tx_new; j = NEXT_TX(j)) {
+	for (j = sp->tx_old; j != sp->tx_new; j = NEXT_TX(j)) {
 		td = &sp->srings.tx_desc[j];
 
-		if(!(td->tdma.cntinfo & (HPCDMA_XIU)))
+		if (!(td->tdma.cntinfo & (HPCDMA_XIU)))
 			break;
-		if(!(td->tdma.cntinfo & (HPCDMA_ETXD))) {
+		if (!(td->tdma.cntinfo & (HPCDMA_ETXD))) {
 			if(!(status & HPC3_ETXCTRL_ACTIVE)) {
 				hregs->tx_ndptr = PHYSADDR(td);
 				hregs->tx_ctrl = HPC3_ETXCTRL_ACTIVE;
@@ -411,15 +411,6 @@ static inline void sgiseeq_tx(struct net_device *dev, struct sgiseeq_private *sp
 	}
 }
 
-static inline void tx_maybe_unbusy(struct sgiseeq_private *sp,
-				   struct net_device *dev)
-{
-	if((TX_BUFFS_AVAIL(sp) >= 0) && dev->tbusy) {
-		dev->tbusy = 0;
-		mark_bh(NET_BH);
-	}
-}
-
 static void sgiseeq_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct net_device *dev = (struct net_device *) dev_id;
@@ -429,17 +420,17 @@ static void sgiseeq_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	/* Ack the IRQ and set software state. */
 	hregs->rx_reset = HPC3_ERXRST_CLRIRQ;
-	dev->interrupt = 1;
 
 	/* Always check for received packets. */
 	sgiseeq_rx(dev, sp, hregs, sregs);
 
 	/* Only check for tx acks iff we have something queued. */
-	if(sp->tx_old != sp->tx_new)
+	if (sp->tx_old != sp->tx_new)
 		sgiseeq_tx(dev, sp, hregs, sregs);
 
-	tx_maybe_unbusy(sp, dev);
-	dev->interrupt = 0;
+	if ((TX_BUFFS_AVAIL(sp) > 0) && netif_queue_stopped(dev)) {
+		netif_wake_queue(dev);
+	}
 }
 
 static int sgiseeq_open(struct net_device *dev)
@@ -449,7 +440,7 @@ static int sgiseeq_open(struct net_device *dev)
 	unsigned long flags;
 
 	save_flags(flags); cli();
-	if(request_irq(dev->irq, sgiseeq_interrupt, 0, sgiseeqstr, (void *) dev)) {
+	if (request_irq(dev->irq, sgiseeq_interrupt, 0, sgiseeqstr, (void *) dev)) {
 		printk("Seeq8003: Can't get irq %d\n", dev->irq);
 		restore_flags(flags);
 		return -EAGAIN;
@@ -457,9 +448,7 @@ static int sgiseeq_open(struct net_device *dev)
 
 	init_seeq(dev, sp, sregs);
 
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
+	netif_start_queue(dev);
 	restore_flags(flags);
 	return 0;
 }
@@ -469,8 +458,7 @@ static int sgiseeq_close(struct net_device *dev)
 	struct sgiseeq_private *sp = (struct sgiseeq_private *) dev->priv;
 	volatile struct sgiseeq_regs *sregs = sp->sregs;
 
-	dev->start = 0;
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
 
 	/* Shutdown the Seeq. */
 	reset_hpc3_and_seeq(sp->hregs, sregs);
@@ -488,9 +476,7 @@ static inline int sgiseeq_reset(struct net_device *dev)
 	init_seeq(dev, sp, sregs);
 
 	dev->trans_start = jiffies;
-	dev->interrupt = 0;
-	dev->start = 1;
-	dev->tbusy = 0;
+	netif_wake_queue(dev);
 
 	return 0;
 }
@@ -501,34 +487,6 @@ void sgiseeq_my_reset(void)
 	sgiseeq_reset(gdev);
 }
 
-static inline int verify_tx(struct sgiseeq_private *sp,
-			    struct net_device *dev,
-			    struct sk_buff *skb)
-{
-	/* Are we bolixed? */
-	if(dev->tbusy) {
-		int tickssofar = jiffies - dev->trans_start;
-		if (tickssofar < 20)
-			return 1;
-
-		printk("%s: transmit timed out, ticks=%d resetting\n",
-		       dev->name, tickssofar);
-		sgiseeq_reset(dev);
-		return 0;
-	}
-	/* Are we getting in someone else's way? */
-	if(test_and_set_bit(0, (void *) &dev->tbusy) != 0) {
-		printk("%s: Transmitter access conflict.\n", dev->name);
-		return -1;
-	}
-
-	/* Can we even send anything? */
-	if(!TX_BUFFS_AVAIL(sp))
-		return -1;
-
-	return 0;
-}
-
 static int sgiseeq_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct sgiseeq_private *sp = (struct sgiseeq_private *) dev->priv;
@@ -537,10 +495,7 @@ static int sgiseeq_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct sgiseeq_tx_desc *td;
 	int skblen, len, entry;
 
-	if(verify_tx(sp, dev, skb))
-		return -1; /* Yeee... */
-
-	save_flags(flags); cli();
+	save_and_cli(flags);
 
 	/* Setup... */
 	skblen = skb->len;
@@ -561,10 +516,10 @@ static int sgiseeq_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	 *    entry and the HPC got to the end of the chain before we
 	 *    added this new entry and restarted it.
 	 */
-	memcpy((char *)td->buf_vaddr, skb->data, skblen);
-	td->tdma.cntinfo = ((len) & HPCDMA_BCNT) |
-		(HPCDMA_XIU | HPCDMA_EOXP | HPCDMA_XIE | HPCDMA_EOX);
-	if(sp->tx_old != sp->tx_new) {
+	memcpy((char *)(long)td->buf_vaddr, skb->data, skblen);
+	td->tdma.cntinfo = (len & HPCDMA_BCNT) |
+	                   (HPCDMA_XIU | HPCDMA_EOXP | HPCDMA_XIE | HPCDMA_EOX);
+	if (sp->tx_old != sp->tx_new) {
 		struct sgiseeq_tx_desc *backend;
 
 		backend = &sp->srings.tx_desc[PREV_TX(sp->tx_new)];
@@ -573,16 +528,26 @@ static int sgiseeq_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	sp->tx_new = NEXT_TX(sp->tx_new); /* Advance. */
 
 	/* Maybe kick the HPC back into motion. */
-	if(!(hregs->tx_ctrl & HPC3_ETXCTRL_ACTIVE))
+	if (!(hregs->tx_ctrl & HPC3_ETXCTRL_ACTIVE))
 		kick_tx(&sp->srings.tx_desc[sp->tx_old], hregs);
 
 	dev->trans_start = jiffies;
 	dev_kfree_skb(skb);
 
-	if(TX_BUFFS_AVAIL(sp))
-		dev->tbusy = 0;
+	if (!TX_BUFFS_AVAIL(sp))
+		netif_stop_queue(dev);
 	restore_flags(flags);
+
 	return 0;
+}
+
+static void timeout(struct net_device *dev)
+{
+	printk("%s: transmit timed out, resetting\n", dev->name);
+	sgiseeq_reset(dev);
+
+	dev->trans_start = jiffies;
+	netif_wake_queue(dev);
 }
 
 static struct enet_statistics *sgiseeq_get_stats(struct net_device *dev)
@@ -600,7 +565,7 @@ static inline void setup_tx_ring(struct sgiseeq_tx_desc *buf, int nbufs)
 {
 	int i = 0;
 
-	while(i < (nbufs - 1)) {
+	while (i < (nbufs - 1)) {
 		buf[i].tdma.pnext = PHYSADDR(&buf[i + 1]);
 		buf[i].tdma.pbuf = 0;
 		i++;
@@ -612,7 +577,7 @@ static inline void setup_rx_ring(struct sgiseeq_rx_desc *buf, int nbufs)
 {
 	int i = 0;
 
-	while(i < (nbufs - 1)) {
+	while (i < (nbufs - 1)) {
 		buf[i].rdma.pnext = PHYSADDR(&buf[i + 1]);
 		buf[i].rdma.pbuf = 0;
 		i++;
@@ -632,20 +597,20 @@ int sgiseeq_init(struct net_device *dev, struct sgiseeq_regs *sregs,
 	int i;
 	struct sgiseeq_private *sp;
 
-	if(dev == NULL) {
+	if (dev == NULL) {
 		dev = init_etherdev(0, sizeof(struct sgiseeq_private));
 	} else {
 		dev->priv = (struct sgiseeq_private *) get_free_page(GFP_KERNEL);
-		if(dev->priv == NULL)
+		if (dev->priv == NULL)
 			return -ENOMEM;
 	}
 
-	if(!version_printed++)
+	if (!version_printed++)
 		printk(version);
 
 	printk("%s: SGI Seeq8003 ", dev->name);
 
-	for(i = 0; i < 6; i++)
+	for (i = 0; i < 6; i++)
 		printk("%2.2x%c",
 		       dev->dev_addr[i] = onboard_eth_addr[i],
 		       i == 5 ? ' ': ':');
@@ -679,7 +644,7 @@ int sgiseeq_init(struct net_device *dev, struct sgiseeq_regs *sregs,
 	hpc3_eth_reset((volatile struct hpc3_ethregs *) hregs);
 
 	sp->is_edlc = !(sregs->rw.rregs.collision_tx[0] & 0xff);
-	if(sp->is_edlc) {
+	if (sp->is_edlc) {
 		sp->control = (SEEQ_CTRL_XCNT | SEEQ_CTRL_ACCNT |
 			       SEEQ_CTRL_SFLAG | SEEQ_CTRL_ESHORT |
 			       SEEQ_CTRL_ENCARR);
@@ -688,6 +653,8 @@ int sgiseeq_init(struct net_device *dev, struct sgiseeq_regs *sregs,
 	dev->open                 = sgiseeq_open;
 	dev->stop                 = sgiseeq_close;
 	dev->hard_start_xmit      = sgiseeq_start_xmit;
+	dev->tx_timeout           = timeout;
+	dev->watchdog_timeo       = (200 * HZ) / 1000;
 	dev->get_stats            = sgiseeq_get_stats;
 	dev->set_multicast_list   = sgiseeq_set_multicast;
 	dev->irq                  = irq;
@@ -699,9 +666,9 @@ int sgiseeq_init(struct net_device *dev, struct sgiseeq_regs *sregs,
 
 static inline unsigned char str2hexnum(unsigned char c)
 {
-	if(c >= '0' && c <= '9')
+	if (c >= '0' && c <= '9')
 		return c - '0';
-	if(c >= 'a' && c <= 'f')
+	if (c >= 'a' && c <= 'f')
 		return c - 'a' + 10;
 	return 0; /* foo */
 }
@@ -710,7 +677,7 @@ static inline void str2eaddr(unsigned char *ea, unsigned char *str)
 {
 	int i;
 
-	for(i = 0; i < 6; i++) {
+	for (i = 0; i < 6; i++) {
 		unsigned char num;
 
 		if(*str == ':')
@@ -732,11 +699,12 @@ int sgiseeq_probe(struct net_device *dev)
 
 	/* First get the ethernet address of the onboard
 	 * interface from ARCS.
-	 * (This is fragile; PROM doesn't like running from cache.)
+	 * This is fragile; PROM doesn't like running from cache.
+	 * On MIPS64 it crashes for some other, yet unknown reason.
 	 */
 	ep = romvec->get_evar("eaddr");
 	str2eaddr(onboard_eth_addr, ep);
 	return sgiseeq_init(dev,
 			    (struct sgiseeq_regs *) (KSEG1ADDR(0x1fbd4000)),
-			    &hpc3c0->ethregs, 3);
+			    &hpc3c0->ethregs, SGI_ENET_IRQ);
 }

@@ -74,13 +74,14 @@ extern void tsunami_pci_tbi(struct pci_controler *, dma_addr_t, dma_addr_t);
 
 /* setup.c */
 extern unsigned long srm_hae;
+extern int boot_cpuid;
 
 /* smp.c */
 extern void setup_smp(void);
 extern int smp_info(char *buffer);
 extern void handle_ipi(struct pt_regs *);
 extern void smp_percpu_timer_interrupt(struct pt_regs *);
-extern int smp_boot_cpuid;
+extern unsigned long cpu_present_mask;
 
 /* bios32.c */
 /* extern void reset_for_srm(void); */

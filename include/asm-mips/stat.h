@@ -52,4 +52,41 @@ struct stat {
 	unsigned int	st_gen;
 };
 
+/* This matches struct stat64 in glibc2.1, hence the absolutely
+ * insane amounts of padding around dev_t's.
+ * XXX We don't ship glibc 2.1 for MIPS yet, so this structure may be
+ * changed without breaking compatibility.  You've been warned.
+ */
+struct stat64 {
+	unsigned long	st_dev;
+	unsigned char	__pad0[8];
+
+	unsigned long	st_ino;
+	unsigned int	st_mode;
+	unsigned int	st_nlink;
+
+	unsigned long	st_uid;
+	unsigned long	st_gid;
+
+	unsigned short	st_rdev;
+	unsigned char	__pad3[10];
+
+	long long	st_size;
+	unsigned long	st_blksize;
+
+	unsigned long	st_blocks;	/* Number 512-byte blocks allocated. */
+	unsigned long	__pad4;		/* future possible st_blocks high bits */
+
+	unsigned long	st_atime;
+	unsigned long	__pad5;
+
+	unsigned long	st_mtime;
+	unsigned long	__pad6;
+
+	unsigned long	st_ctime;
+	unsigned long	__pad7;		/* will be high 32 bits of ctime someday */
+
+	unsigned long	__unused1;
+	unsigned long	__unused2;
+};
 #endif /* __ASM_MIPS_STAT_H */

@@ -191,24 +191,24 @@ ENTRY(vidc_sound_dma_irq)
 		.data
 		.globl	SYMBOL_NAME(dma_interrupt)
 SYMBOL_NAME(dma_interrupt):
-		.long	0
+		.long	0				@ r3
 		.globl	SYMBOL_NAME(dma_pbuf)
 SYMBOL_NAME(dma_pbuf):
-		.long	0
-		.long	0
+		.long	0				@ r4
+		.long	0				@ r5
 		.globl	SYMBOL_NAME(dma_start)
 SYMBOL_NAME(dma_start):
-		.long	0
+		.long	0				@ r0
 		.globl	SYMBOL_NAME(dma_count)
 SYMBOL_NAME(dma_count):
-		.long	0
+		.long	0				@ r1
 		.globl	SYMBOL_NAME(dma_buf)
 SYMBOL_NAME(dma_buf):
-		.long	0
-		.long	0
+		.long	0				@ r2
+		.long	0				@ r3
 		.globl	SYMBOL_NAME(vidc_filler)
 SYMBOL_NAME(vidc_filler):
-		.long	SYMBOL_NAME(vidc_fill_noaudio)
+		.long	SYMBOL_NAME(vidc_fill_noaudio)	@ r4
 		.globl	SYMBOL_NAME(dma_bufsize)
 SYMBOL_NAME(dma_bufsize):
-		.long	0x1000
+		.long	0x1000				@ r5

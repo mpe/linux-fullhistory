@@ -34,7 +34,7 @@ waking_non_zero(struct semaphore *sem)
 		"	stl_c	%0,%2\n"
 		"	beq	%0,3f\n"
 		"2:\n"
-		".section .text2,\"ax\"\n"
+		".subsection 2\n"
 		"3:	br	1b\n"
 		".previous"
 		: "=r"(ret), "=r"(tmp), "=m"(__atomic_fool_gcc(&sem->waking))
@@ -104,7 +104,7 @@ waking_non_zero_interruptible(struct semaphore *sem, struct task_struct *tsk)
 		"	stq_c	%1,%4\n"
 		"	beq	%1,3f\n"
 		"2:\n"
-		".section .text2,\"ax\"\n"
+		".subsection 2\n"
 		"3:	br	1b\n"
 		".previous"
 		: "=&r"(ret), "=&r"(tmp), "=&r"(tmp2), "=&r"(tmp3), "=m"(*sem)

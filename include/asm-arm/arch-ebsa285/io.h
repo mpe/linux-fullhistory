@@ -45,7 +45,7 @@ extern __inline__ unsigned long ___mem_isa(unsigned long a)
  * Generic virtual read/write
  */
 #define __arch_getb(a)		(*(volatile unsigned char *)(a))
-#define __arch_getl(a)		(*(volatile unsigned long *)(a))
+#define __arch_getl(a)		(*(volatile unsigned int  *)(a))
 
 extern __inline__ unsigned int __arch_getw(unsigned long a)
 {
@@ -58,7 +58,7 @@ extern __inline__ unsigned int __arch_getw(unsigned long a)
 
 
 #define __arch_putb(v,a)	(*(volatile unsigned char *)(a) = (v))
-#define __arch_putl(v,a)	(*(volatile unsigned long *)(a) = (v))
+#define __arch_putl(v,a)	(*(volatile unsigned int  *)(a) = (v))
 
 extern __inline__ void __arch_putw(unsigned int value, unsigned long a)
 {

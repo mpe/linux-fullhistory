@@ -15,7 +15,9 @@
 #include <asm/fixmap.h>
 #include <asm/bitops.h>
 #include <asm/mpspec.h>
+#ifdef CONFIG_X86_IO_APIC
 #include <asm/io_apic.h>
+#endif
 #include <asm/apic.h>
 #endif
 #endif

@@ -127,11 +127,14 @@ void (*interrupt[NR_IRQS])(void) = {
  * moves to arch independent land
  */
 
-void enable_8259A_irq(unsigned int irq);
-void disable_8259A_irq(unsigned int irq);
+static spinlock_t i8259A_lock = SPIN_LOCK_UNLOCKED;
 
-/* shutdown is same as "disable" */
-#define end_8259A_irq		enable_8259A_irq
+static void end_8259A_irq (unsigned int irq)
+{
+	if (!(irq_desc[irq].status & IRQ_DISABLED))
+		enable_8259A_irq(irq);
+}
+
 #define shutdown_8259A_irq	disable_8259A_irq
 
 void mask_and_ack_8259A(unsigned int);
@@ -149,7 +152,8 @@ static struct hw_interrupt_type i8259A_irq_type = {
 	enable_8259A_irq,
 	disable_8259A_irq,
 	mask_and_ack_8259A,
-	end_8259A_irq
+	end_8259A_irq,
+	NULL
 };
 
 /*
@@ -183,30 +187,45 @@ unsigned long io_apic_irqs = 0;
 void disable_8259A_irq(unsigned int irq)
 {
 	unsigned int mask = 1 << irq;
+	unsigned long flags;
+
+	spin_lock_irqsave(&i8259A_lock, flags);
 	cached_irq_mask |= mask;
 	if (irq & 8)
 		outb(cached_A1,0xA1);
 	else
 		outb(cached_21,0x21);
+	spin_unlock_irqrestore(&i8259A_lock, flags);
 }
 
 void enable_8259A_irq(unsigned int irq)
 {
 	unsigned int mask = ~(1 << irq);
+	unsigned long flags;
+
+	spin_lock_irqsave(&i8259A_lock, flags);
 	cached_irq_mask &= mask;
 	if (irq & 8)
 		outb(cached_A1,0xA1);
 	else
 		outb(cached_21,0x21);
+	spin_unlock_irqrestore(&i8259A_lock, flags);
 }
 
 int i8259A_irq_pending(unsigned int irq)
 {
 	unsigned int mask = 1<<irq;
+	unsigned long flags;
+	int ret;
 
+	spin_lock_irqsave(&i8259A_lock, flags);
 	if (irq < 8)
-		return (inb(0x20) & mask);
-	return (inb(0xA0) & (mask >> 8));
+		ret = inb(0x20) & mask;
+	else
+		ret = inb(0xA0) & (mask >> 8);
+	spin_unlock_irqrestore(&i8259A_lock, flags);
+
+	return ret;
 }
 
 void make_8259A_irq(unsigned int irq)
@@ -247,7 +266,9 @@ static inline int i8259A_irq_real(unsigned int irq)
 void mask_and_ack_8259A(unsigned int irq)
 {
 	unsigned int irqmask = 1 << irq;
+	unsigned long flags;
 
+	spin_lock_irqsave(&i8259A_lock, flags);
 	/*
 	 * Lightweight spurious IRQ detection. We do not want
 	 * to overdo spurious IRQ handling - it's usually a sign
@@ -278,6 +299,7 @@ handle_real_irq:
 		outb(cached_21,0x21);
 		outb(0x20,0x20);	/* 'generic EOI' to master */
 	}
+	spin_unlock_irqrestore(&i8259A_lock, flags);
 	return;
 
 spurious_8259A_irq:

@@ -1,12 +1,11 @@
-/*
+/* $Id: r4k_misc.S,v 1.9 1999/12/04 03:59:00 ralf Exp $
+ *
  * r4k_misc.S: Misc. exception handling code for r4k.
  *
  * Copyright (C) 1994, 1995, 1996 by Ralf Baechle and Andreas Busse
  *
  * Multi-cpu abstraction and reworking:
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
- *
- * $Id: r4k_misc.S,v 1.4 1997/12/01 17:57:30 ralf Exp $
  */
 #include <asm/asm.h>
 #include <asm/current.h>
@@ -14,7 +13,6 @@
 #include <asm/bootinfo.h>
 #include <asm/cachectl.h>
 #include <asm/fpregdef.h>
-#include <asm/mipsconfig.h>
 #include <asm/mipsregs.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
@@ -33,10 +31,9 @@
 #define LOAD_PTE(pte, ptr) \
 	mfc0	pte, CP0_BADVADDR; \
 	srl	pte, pte, 22; \
-	_GET_CURRENT(ptr); \
+	lw	ptr, current_pgd; \
 	sll	pte, pte, 2; \
-	lw	ptr, THREAD_PGDIR(ptr); \
-	addu	ptr, pte, ptr; \
+	addu	ptr, ptr, pte; \
 	mfc0	pte, CP0_BADVADDR; \
 	lw	ptr, (ptr); \
 	srl	pte, pte, 10; \
@@ -60,7 +57,6 @@
 
 #define DO_FAULT(write) \
 	.set	noat; \
-	.set	macro; \
 	SAVE_ALL; \
 	mfc0	a2, CP0_BADVADDR; \
 	STI; \
@@ -70,8 +66,7 @@
 	 li	a1, write; \
 	j	ret_from_sys_call; \
 	 nop; \
-	.set	noat; \
-	.set	nomacro;
+	.set	noat;
 
 	/* Check is PTE is present, if not then jump to LABEL.
 	 * PTR points to the page table where this PTE is located,
@@ -136,9 +131,8 @@
 	 * of the instruction cache else you get bogus results.
 	 */
 	.align	5
-	NESTED(r4k_handle_tlbl, PT_SIZE, sp)
+	NESTED(handle_tlbl, PT_SIZE, sp)
 	.set	noat
-	.set	nomacro
 invalid_tlbl:
 #ifndef NOTLB_OPTIMIZE
 	/* Test present bit in entry. */
@@ -158,10 +152,10 @@ invalid_tlbl:
 
 nopage_tlbl:
 	DO_FAULT(0)
-	END(r4k_handle_tlbl)
+	END(handle_tlbl)
 
 	.align	5
-	NESTED(r4k_handle_tlbs, PT_SIZE, sp)
+	NESTED(handle_tlbs, PT_SIZE, sp)
 	.set	noat
 #ifndef NOTLB_OPTIMIZE
 	LOAD_PTE(k0, k1)
@@ -180,10 +174,10 @@ nopage_tlbl:
 
 nopage_tlbs:
 	DO_FAULT(1)
-	END(r4k_handle_tlbs)
+	END(handle_tlbs)
 
 	.align	5
-	NESTED(r4k_handle_mod, PT_SIZE, sp)
+	NESTED(handle_mod, PT_SIZE, sp)
 	.set	noat
 #ifndef NOTLB_OPTIMIZE
 	LOAD_PTE(k0, k1)
@@ -212,4 +206,4 @@ nopage_tlbs:
 
 nowrite_mod:
 	DO_FAULT(1)
-	END(r4k_handle_mod)
+	END(handle_mod)

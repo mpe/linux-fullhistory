@@ -1,9 +1,10 @@
-/* $Id: offset.c,v 1.10 1998/08/19 21:53:53 ralf Exp $
+/* $Id: offset.c,v 1.12 1999/10/09 00:00:59 ralf Exp $
  *
  * offset.c: Calculate pt_regs and task_struct offsets.
  *
  * Copyright (C) 1996 David S. Miller
- * Made portable by Ralf Baechle
+ * Copyright (C) 1997, 1998, 1999 Ralf Baechle
+ * Copyright (C) 1999 Silicon Graphics, Inc.
  */
 
 #include <linux/types.h>
@@ -82,41 +83,48 @@ void output_task_defines(void)
 	offset("#define TASK_COUNTER       ", struct task_struct, counter);
 	offset("#define TASK_PRIORITY      ", struct task_struct, priority);
 	offset("#define TASK_MM            ", struct task_struct, mm);
+	size("#define TASK_STRUCT_SIZE   ", struct task_struct);
 	linefeed;
 }
 
 void output_thread_defines(void)
 {
 	text("/* MIPS specific thread_struct offsets. */");
-	offset("#define THREAD_REG16   ", struct task_struct, tss.reg16);
-	offset("#define THREAD_REG17   ", struct task_struct, tss.reg17);
-	offset("#define THREAD_REG18   ", struct task_struct, tss.reg18);
-	offset("#define THREAD_REG19   ", struct task_struct, tss.reg19);
-	offset("#define THREAD_REG20   ", struct task_struct, tss.reg20);
-	offset("#define THREAD_REG21   ", struct task_struct, tss.reg21);
-	offset("#define THREAD_REG22   ", struct task_struct, tss.reg22);
-	offset("#define THREAD_REG23   ", struct task_struct, tss.reg23);
-	offset("#define THREAD_REG29   ", struct task_struct, tss.reg29);
-	offset("#define THREAD_REG30   ", struct task_struct, tss.reg30);
-	offset("#define THREAD_REG31   ", struct task_struct, tss.reg31);
-	offset("#define THREAD_STATUS  ", struct task_struct, tss.cp0_status);
-	offset("#define THREAD_FPU     ", struct task_struct, tss.fpu);
-	offset("#define THREAD_BVADDR  ", struct task_struct, tss.cp0_badvaddr);
-	offset("#define THREAD_BUADDR  ", struct task_struct, tss.cp0_baduaddr);
-	offset("#define THREAD_ECODE   ", struct task_struct, tss.error_code);
-	offset("#define THREAD_TRAPNO  ", struct task_struct, tss.trap_no);
-	offset("#define THREAD_PGDIR   ", struct task_struct, tss.pg_dir);
-	offset("#define THREAD_MFLAGS  ", struct task_struct, tss.mflags);
-	offset("#define THREAD_CURDS   ", struct task_struct, tss.current_ds);
-	offset("#define THREAD_TRAMP   ", struct task_struct, tss.irix_trampoline);
-	offset("#define THREAD_OLDCTX  ", struct task_struct, tss.irix_oldctx);
+	offset("#define THREAD_REG16   ", struct task_struct, thread.reg16);
+	offset("#define THREAD_REG17   ", struct task_struct, thread.reg17);
+	offset("#define THREAD_REG18   ", struct task_struct, thread.reg18);
+	offset("#define THREAD_REG19   ", struct task_struct, thread.reg19);
+	offset("#define THREAD_REG20   ", struct task_struct, thread.reg20);
+	offset("#define THREAD_REG21   ", struct task_struct, thread.reg21);
+	offset("#define THREAD_REG22   ", struct task_struct, thread.reg22);
+	offset("#define THREAD_REG23   ", struct task_struct, thread.reg23);
+	offset("#define THREAD_REG29   ", struct task_struct, thread.reg29);
+	offset("#define THREAD_REG30   ", struct task_struct, thread.reg30);
+	offset("#define THREAD_REG31   ", struct task_struct, thread.reg31);
+	offset("#define THREAD_STATUS  ", struct task_struct, \
+	       thread.cp0_status);
+	offset("#define THREAD_FPU     ", struct task_struct, thread.fpu);
+	offset("#define THREAD_BVADDR  ", struct task_struct, \
+	       thread.cp0_badvaddr);
+	offset("#define THREAD_BUADDR  ", struct task_struct, \
+	       thread.cp0_baduaddr);
+	offset("#define THREAD_ECODE   ", struct task_struct, \
+	       thread.error_code);
+	offset("#define THREAD_TRAPNO  ", struct task_struct, thread.trap_no);
+	offset("#define THREAD_MFLAGS  ", struct task_struct, thread.mflags);
+	offset("#define THREAD_CURDS   ", struct task_struct, \
+	       thread.current_ds);
+	offset("#define THREAD_TRAMP   ", struct task_struct, \
+	       thread.irix_trampoline);
+	offset("#define THREAD_OLDCTX  ", struct task_struct, \
+	       thread.irix_oldctx);
 	linefeed;
 }
 
 void output_mm_defines(void)
 {
 	text("/* Linux mm_struct offsets. */");
-	offset("#define MM_COUNT      ", struct mm_struct, count);
+	offset("#define MM_USERS      ", struct mm_struct, mm_users);
 	offset("#define MM_PGD        ", struct mm_struct, pgd);
 	offset("#define MM_CONTEXT    ", struct mm_struct, context);
 	linefeed;
@@ -125,20 +133,17 @@ void output_mm_defines(void)
 void output_sc_defines(void)
 {
 	text("/* Linux sigcontext offsets. */");
-	offset("#define SC_REGMASK    ", struct sigcontext, sc_regmask);
-	offset("#define SC_STATUS     ", struct sigcontext, sc_status);
-	offset("#define SC_PC         ", struct sigcontext, sc_pc);
 	offset("#define SC_REGS       ", struct sigcontext, sc_regs);
 	offset("#define SC_FPREGS     ", struct sigcontext, sc_fpregs);
+	offset("#define SC_MDHI       ", struct sigcontext, sc_mdhi);
+	offset("#define SC_MDLO       ", struct sigcontext, sc_mdlo);
+	offset("#define SC_PC         ", struct sigcontext, sc_pc);
+	offset("#define SC_STATUS     ", struct sigcontext, sc_status);
 	offset("#define SC_OWNEDFP    ", struct sigcontext, sc_ownedfp);
 	offset("#define SC_FPC_CSR    ", struct sigcontext, sc_fpc_csr);
 	offset("#define SC_FPC_EIR    ", struct sigcontext, sc_fpc_eir);
-	offset("#define SC_SSFLAGS    ", struct sigcontext, sc_ssflags);
-	offset("#define SC_MDHI       ", struct sigcontext, sc_mdhi);
-	offset("#define SC_MDLO       ", struct sigcontext, sc_mdlo);
 	offset("#define SC_CAUSE      ", struct sigcontext, sc_cause);
 	offset("#define SC_BADVADDR   ", struct sigcontext, sc_badvaddr);
-	offset("#define SC_SIGSET     ", struct sigcontext, sc_sigset);
 	linefeed;
 }
 

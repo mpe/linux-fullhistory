@@ -1,7 +1,18 @@
 /* sgiserial.c: Serial port driver for SGI machines.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
- *
+ */
+
+/*
+ * Note: This driver seems to have been derived from some
+ * version of the sbus/char/zs.c driver.  A lot of clean-up
+ * and bug fixes seem to have happened to the Sun driver in
+ * the intervening time.  As of 21.09.1999, I have merged in
+ * ONLY the changes necessary to fix observed functional
+ * problems on the Indy.  Someone really ought to do a
+ * thorough pass to merge in the rest of the updates.
+ * Better still, someone really ought to make it a common
+ * code module for both platforms.   kevink@mips.com
  */
 
 #include <linux/config.h> /* for CONFIG_REMOTE_DEBUG */
@@ -26,8 +37,8 @@
 #include <asm/sgialib.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
-#include <asm/sgihpc.h>
-#include <asm/sgint23.h>
+#include <asm/sgi/sgihpc.h>
+#include <asm/sgi/sgint23.h>
 #include <asm/uaccess.h>
 
 #include "sgiserial.h"
@@ -44,7 +55,7 @@ struct sgi_zschannel *zs_kgdbchan;
 
 struct sgi_serial zs_soft[NUM_CHANNELS];
 struct sgi_serial *zs_chain;  /* IRQ servicing chain */
-static int zilog_irq = 21;
+static int zilog_irq = SGI_SERIAL_IRQ;
 
 /* Console hooks... */
 static int zs_cons_chanout = 0;
@@ -452,7 +463,7 @@ static _INLINE_ void transmit_chars(struct sgi_serial *info)
 	volatile unsigned char junk;
 
 	/* P3: In theory we have to test readiness here because a
-	 * serial console can clog the chip through rs_put_char().
+	 * serial console can clog the chip through zs_cons_put_char().
 	 * David did not do this. I think he relies on 3-chars FIFO in 8530.
 	 * Let's watch for lost _output_ characters. XXX
 	 */
@@ -891,9 +902,34 @@ static void change_speed(struct sgi_serial *info)
 }
 
 /* This is for console output over ttya/ttyb */
-static void rs_put_char(char ch)
+static void zs_cons_put_char(char ch)
 {
 	struct sgi_zschannel *chan = zs_conschan;
+	volatile unsigned char junk;
+	int flags, loops = 0;
+
+	save_flags(flags); cli();
+	while(((junk = chan->control) & Tx_BUF_EMP)==0 && loops < 10000) {
+		loops++;
+		udelay(2);
+	}
+
+	udelay(2);
+	chan->data = ch;
+	junk = ioc_icontrol->istat0;
+	restore_flags(flags);
+}
+
+/* 
+ * This is the more generic put_char function for the driver.
+ * In earlier versions of this driver, "rs_put_char" was the
+ * name of the console-specific fucntion, now called zs_cons_put_char
+ */
+
+static void rs_put_char(struct tty_struct *tty, char ch)
+{
+	struct sgi_zschannel *chan = 
+		((struct sgi_serial *)tty->driver_data)->zs_channel;
 	volatile unsigned char junk;
 	int flags, loops = 0;
 
@@ -966,7 +1002,7 @@ static void rs_fair_output(void)
 		info->xmit_cnt--;
 		restore_flags(flags);
 
-		rs_put_char(c);
+		zs_cons_put_char(c);
 
 		save_flags(flags);  cli();
 		left = MIN(info->xmit_cnt, left-1);
@@ -1019,8 +1055,18 @@ static int rs_write(struct tty_struct * tty, int from_user,
 		count -= c;
 		total += c;
 	}
-	if (info->xmit_cnt && !tty->stopped && !tty->hw_stopped &&
-	    !(info->curregs[5] & TxENAB)) {
+
+	if (info->xmit_cnt && !tty->stopped && !tty->hw_stopped) {
+	/*
+	 * The above test used to include the condition
+ 	 * "&& !(info->curregs[5] & TxENAB)", but there
+	 * is reason to suspect that it is never statisfied
+	 * when the port is running.  The problem may in fact
+	 * have been masked by the fact that, if O_POST is set,
+	 * there is always a rs_flush_xx operation following the
+	 * rs_write, and the flush ignores that condition when
+	 * it kicks off the transmit.
+	 */
 		/* Enable transmitter */
 		info->curregs[1] |= TxINT_ENAB|EXT_INT_ENAB;
 		info->pendregs[1] |= TxINT_ENAB|EXT_INT_ENAB;
@@ -1028,7 +1074,21 @@ static int rs_write(struct tty_struct * tty, int from_user,
 		info->curregs[5] |= TxENAB;
 		info->pendregs[5] |= TxENAB;
 		write_zsreg(info->zs_channel, 5, info->curregs[5]);
+
+	/*
+	 * The following code is imported from the 2.3.6 Sun sbus zs.c
+	 * driver, of which an earlier version served as the basis
+	 * for sgiserial.c.  Perhaps due to changes over time in
+	 * the line discipline code, ns_write()s with from_user
+	 * set would not otherwise actually kick-off output in
+	 * Linux 2.2.x or later.  Maybe it never really worked.
+	 */
+
+		rs_put_char(tty, info->xmit_buf[info->xmit_tail++]);
+                info->xmit_tail = info->xmit_tail & (SERIAL_XMIT_SIZE-1);
+                info->xmit_cnt--;
 	}
+
 	restore_flags(flags);
 	return total;
 }
@@ -2021,13 +2081,14 @@ rs_kgdb_hook(int tty_num)
 	ZS_CLEARFIFO(zs_kgdbchan);
 }
 
-static void zs_console_write(struct console *co, const char *str, unsigned int count)
+static void zs_console_write(struct console *co, const char *str,
+                             unsigned int count)
 {
 
 	while(count--) {
 		if(*str == '\n')
-			rs_put_char('\r');
-		rs_put_char(*str++);
+			zs_cons_put_char('\r');
+		zs_cons_put_char(*str++);
 	}
 
 	/* Comment this if you want to have a strict interrupt-driven output */
@@ -2186,10 +2247,7 @@ static struct console sgi_console_driver = {
 /*
  *	Register console.
  */
-long __init serial_console_init(long kmem_start, long kmem_end)
+void __init serial_console_init(void)
 {
 	register_console(&sgi_console_driver);
-	return kmem_start;
 }
-
-

@@ -34,6 +34,16 @@ bool '  SCSI logging facility' CONFIG_SCSI_LOGGING
 mainmenu_option next_comment
 comment 'SCSI low-level drivers'
 
+if [ "$CONFIG_SGI_IP22" = "y" ]; then
+   dep_tristate 'SGI WD93C93 SCSI Driver' CONFIG_SCSI_SGIWD93 $CONFIG_SCSI
+fi
+if [ "$CONFIG_DECSTATION" = "y" ]; then
+   if [ "$CONFIG_TC" = "y" ]; then
+      dep_tristate 'DEC NCR53C94 Scsi Driver' CONFIG_SCSI_DECNCR $CONFIG_SCSI
+   fi
+   dep_tristate 'DEC SII Scsi Driver' CONFIG_SCSI_DECSII $CONFIG_SCSI
+fi
+
 dep_tristate '7000FASST SCSI support' CONFIG_SCSI_7000FASST $CONFIG_SCSI
 dep_tristate 'ACARD SCSI support' CONFIG_SCSI_ACARD $CONFIG_SCSI
 dep_tristate 'Adaptec AHA152X/2825 support' CONFIG_SCSI_AHA152X $CONFIG_SCSI

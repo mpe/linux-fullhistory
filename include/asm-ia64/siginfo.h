@@ -54,12 +54,13 @@ typedef struct siginfo {
 
 		/* SIGILL, SIGFPE, SIGSEGV, SIGBUS */
 		struct {
-			void *_addr; /* faulting insn/memory ref. */
+			void *_addr;		/* faulting insn/memory ref. */
+			int _imm;		/* immediate value for "break" */
 		} _sigfault;
 
 		/* SIGPOLL */
 		struct {
-			int _band;	/* POLL_IN, POLL_OUT, POLL_MSG */
+			long _band;	/* POLL_IN, POLL_OUT, POLL_MSG (XPG requires a "long") */
 			int _fd;
 		} _sigpoll;
 	} _sifields;
@@ -77,6 +78,7 @@ typedef struct siginfo {
 #define si_int		_sifields._rt._sigval.sival_int
 #define si_ptr		_sifields._rt._sigval.sival_ptr
 #define si_addr		_sifields._sigfault._addr
+#define si_imm		_sifields._sigfault._imm	/* as per UNIX SysV ABI spec */
 #define si_band		_sifields._sigpoll._band
 #define si_fd		_sifields._sigpoll._fd
 
@@ -106,8 +108,9 @@ typedef struct siginfo {
 #define ILL_PRVREG	6	/* privileged register */
 #define ILL_COPROC	7	/* coprocessor error */
 #define ILL_BADSTK	8	/* internal stack error */
-#define ILL_BADIADDR    9	/* Unimplemented instruction address */
-#define NSIGILL		9
+#define ILL_BADIADDR    9	/* unimplemented instruction address */
+#define __ILL_BREAK	10	/* illegal break */
+#define NSIGILL		10
 
 /*
  * SIGFPE si_codes
@@ -120,14 +123,20 @@ typedef struct siginfo {
 #define FPE_FLTRES	6	/* floating point inexact result */
 #define FPE_FLTINV	7	/* floating point invalid operation */
 #define FPE_FLTSUB	8	/* subscript out of range */
-#define NSIGFPE		8
+#define __FPE_DECOVF	9	/* decimal overflow */
+#define __FPE_DECDIV	10	/* decimal division by zero */
+#define __FPE_DECERR	11	/* packed decimal error */
+#define __FPE_INVASC	12	/* invalid ASCII digit */
+#define __FPE_INVDEC	13	/* invalid decimal digit */
+#define NSIGFPE		13
 
 /*
  * SIGSEGV si_codes
  */
 #define SEGV_MAPERR	1	/* address not mapped to object */
 #define SEGV_ACCERR	2	/* invalid permissions for mapped object */
-#define NSIGSEGV	2
+#define __SEGV_PSTKOVF	3	/* paragraph stack overflow */
+#define NSIGSEGV	3
 
 /*
  * SIGBUS si_codes

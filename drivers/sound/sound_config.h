@@ -18,7 +18,6 @@
 #include <linux/fs.h>
 #include <linux/sound.h>
 
-#include "legacy.h"
 #include "os.h"
 #include "soundvers.h"
 

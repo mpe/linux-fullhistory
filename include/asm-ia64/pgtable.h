@@ -294,6 +294,18 @@ extern pmd_t *ia64_bad_pagetable (void);
  */
 #define pgprot_noncached(prot)	__pgprot((pgprot_val(prot) & ~_PAGE_MA_MASK) | _PAGE_MA_UC)
 
+/*
+ * Return the region index for virtual address ADDRESS.
+ */
+extern __inline__ unsigned long
+rgn_index (unsigned long address)
+{
+	ia64_va a;
+
+	a.l = address;
+	return a.f.reg;
+}
+
 extern __inline__ unsigned long
 pgd_index (unsigned long address)
 {
@@ -347,7 +359,7 @@ extern pgd_t swapper_pg_dir[PTRS_PER_PGD];
  * execution context?).
  *
  */
-#if 0
+#if 1
 # define update_mmu_cache(vma,address,pte)
 #else
 # define update_mmu_cache(vma,address,pte)							\

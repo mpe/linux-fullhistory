@@ -67,8 +67,6 @@
 #define CHIPSET_OPL3SAX  4
 
 
-#ifdef CONFIG_OPL3SA2
-
 /* What's my version? */
 static int chipset = CHIPSET_UNKNOWN;
 
@@ -443,27 +441,19 @@ static struct mixer_operations opl3sa2_mixer_operations =
 
 int probe_opl3sa2_mpu(struct address_info *hw_config)
 {
-#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
 	return probe_mpu401(hw_config);
-#else
-	return 0;
-#endif
 }
 
 
 void attach_opl3sa2_mpu(struct address_info *hw_config)
 {
-#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
 	attach_mpu401(hw_config);
-#endif
 }
 
 
 void unload_opl3sa2_mpu(struct address_info *hw_config)
 {
-#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
 	unload_mpu401(hw_config);
-#endif
 }
 
 
@@ -706,7 +696,6 @@ int init_module(void)
 	attach_opl3sa2(&cfg);
 	attach_opl3sa2_mss(&mss_cfg);
 
-#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
 	if(mpu_io != -1)
 	{
             /* MPU config: */
@@ -720,7 +709,6 @@ int init_module(void)
 		    attach_opl3sa2_mpu(&mpu_cfg);
 	    }
 	}
-#endif
 	SOUND_LOCK;
 	return 0;
 }
@@ -728,16 +716,13 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
         if(mpu_cfg.slots[1] != -1)
 	{
 		unload_opl3sa2_mpu(&mpu_cfg);
 	}
-#endif
 	unload_opl3sa2_mss(&mss_cfg);
 	unload_opl3sa2(&cfg);
 	SOUND_LOCK_END;
 }
 
 #endif /* MODULE */
-#endif /* CONFIG_OPL3SA2 */

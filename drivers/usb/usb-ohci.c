@@ -45,6 +45,7 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/system.h>
+#include <asm/unaligned.h>
 
 #undef DEBUG
 #define OHCI_USE_NPS
@@ -62,7 +63,7 @@ static int handle_pm_event (struct pm_dev *dev, pm_request_t rqst, void *data);
 
 static DECLARE_WAIT_QUEUE_HEAD (op_wakeup); 
 static LIST_HEAD (ohci_hcd_list);
-spinlock_t usb_ed_lock = SPIN_LOCK_UNLOCKED;
+static spinlock_t usb_ed_lock = SPIN_LOCK_UNLOCKED;
 
 /*-------------------------------------------------------------------------*
  * URB support functions 
@@ -319,6 +320,7 @@ static int sohci_submit_urb (urb_t * urb)
 	if (ed->state == ED_NEW || (ed->state & ED_DEL)) {
 		urb_rm_priv(urb);
 		usb_dec_dev_use (urb->dev);	
+		spin_unlock_irqrestore(&usb_ed_lock, flags);
 		return -EINVAL;
 	}
 	
@@ -1261,7 +1263,7 @@ static int rh_submit_urb (urb_t * urb)
 	int len = 0;
 	int status = TD_CC_NOERROR;
 	
-	__u8 datab[16];
+	__u32 datab[4];
 	__u8  * data_buf = datab;
 	
  	__u16 bmRType_bReq;
@@ -1371,7 +1373,8 @@ static int rh_submit_urb (urb_t * urb)
 		
 		case RH_GET_DESCRIPTOR | RH_CLASS:
 			*(__u8 *)  (data_buf+1) = 0x29;
-			*(__u32 *) (data_buf+2) = cpu_to_le32 (readl (&ohci->regs->roothub.a));  
+			put_unaligned(cpu_to_le32 (readl (&ohci->regs->roothub.a)),
+				      (__u32 *) (data_buf + 2));
 	 		*(__u8 *)  data_buf = (*(__u8 *) (data_buf + 2) / 8) * 2 + 9; /* length of descriptor */
 				 
 			len = min (leni, min(*(__u8 *) data_buf, wLength));
@@ -1380,7 +1383,8 @@ static int rh_submit_urb (urb_t * urb)
 				*(__u8 *) (data_buf+7) = readl (&ohci->regs->roothub.b) & 0xff; 
 				*(__u8 *) (data_buf+8) = (readl (&ohci->regs->roothub.b) & 0xff0000) >> 16; 
 			} else {
-				*(__u32 *) (data_buf+7) = cpu_to_le32 (readl(&ohci->regs->roothub.b)); 
+				put_unaligned(cpu_to_le32 (readl(&ohci->regs->roothub.b)),
+					      (__u32 *) (data_buf + 7));
 			}
 			OK (len); 
  

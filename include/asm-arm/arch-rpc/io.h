@@ -90,7 +90,7 @@ extern __inline__ unsigned int __ioaddr (unsigned int port)			\
 
 DECLARE_IO(char,b,"b")
 DECLARE_IO(short,w,"")
-DECLARE_IO(long,l,"")
+DECLARE_IO(int,l,"")
 
 #undef DECLARE_IO
 #undef DECLARE_DYN_IN

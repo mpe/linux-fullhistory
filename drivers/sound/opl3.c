@@ -1217,7 +1217,7 @@ void cleanup_module(void)
 
 MODULE_PARM(io, "i");
 
-#endif
+#endif /* MODULE */
 
 EXPORT_SYMBOL(opl3_init);
 EXPORT_SYMBOL(opl3_detect);

@@ -1,4 +1,4 @@
-/* $Id: indy_sc.c,v 1.9 1999/05/12 21:57:49 ulfc Exp $
+/* $Id: indy_sc.c,v 1.13 1999/12/04 03:59:00 ralf Exp $
  *
  * indy_sc.c: Indy cache managment functions.
  *
@@ -11,8 +11,8 @@
 #include <linux/mm.h>
 
 #include <asm/bcache.h>
-#include <asm/sgi.h>
-#include <asm/sgimc.h>
+#include <asm/sgi/sgi.h>
+#include <asm/sgi/sgimc.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
@@ -221,6 +221,7 @@ struct bcache_ops indy_sc_ops = {
 
 void __init indy_sc_init(void)
 {
+return;
 	if (indy_sc_probe()) {
 		indy_sc_enable();
 		bcops = &indy_sc_ops;

@@ -689,6 +689,10 @@ ifeq ($(CONFIG_JAZZ_ESP),y)
 L_OBJS += NCR53C9x.o jazz_esp.o
 endif
 
+ifeq ($(CONFIG_SCSI_DECNCR),y)
+L_OBJS += NCR53C9x.o dec_esp.o
+endif
+
 ifeq ($(CONFIG_SUN3X_ESP),y)
 L_OBJS += NCR53C9x.o sun3x_esp.o
 endif

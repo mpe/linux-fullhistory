@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.6 1999/01/04 16:09:24 ralf Exp $
+/* $Id: page.h,v 1.9 2000/02/24 00:13:19 ralf Exp $
  *
  * Definitions for page handling
  *
@@ -6,10 +6,10 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1994 - 1998 by Ralf Baechle
+ * Copyright (C) 1994 - 1999 by Ralf Baechle
  */
-#ifndef __ASM_MIPS_PAGE_H
-#define __ASM_MIPS_PAGE_H
+#ifndef __ASM_PAGE_H
+#define __ASM_PAGE_H
 
 /* PAGE_SHIFT determines the page size */
 #define PAGE_SHIFT	12
@@ -18,14 +18,17 @@
 
 #ifdef __KERNEL__
 
-#define STRICT_MM_TYPECHECKS
-
 #ifndef _LANGUAGE_ASSEMBLY
 
-extern void (*clear_page)(unsigned long page);
-extern void (*copy_page)(unsigned long to, unsigned long from);
+#define BUG() do { printk("kernel BUG at %s:%d!\n", __FILE__, __LINE__); *(int *)0=0; } while (0)
+#define PAGE_BUG(page) do {  BUG(); } while (0)
 
-#ifdef STRICT_MM_TYPECHECKS
+extern void (*_clear_page)(void * page);
+extern void (*_copy_page)(void * to, void * from);
+
+#define clear_page(page)	_clear_page(page)
+#define copy_page(to, from)	_copy_page(to, from)
+
 /*
  * These are used to make use of C type-checking..
  */
@@ -43,27 +46,6 @@ typedef struct { unsigned long pgprot; } pgprot_t;
 #define __pme(x)	((pme_t) { (x) } )
 #define __pgd(x)	((pgd_t) { (x) } )
 #define __pgprot(x)	((pgprot_t) { (x) } )
-
-#else /* !defined (STRICT_MM_TYPECHECKS) */
-/*
- * .. while these make it easier on the compiler
- */
-typedef unsigned long pte_t;
-typedef unsigned long pmd_t;
-typedef unsigned long pgd_t;
-typedef unsigned long pgprot_t;
-
-#define pte_val(x)	(x)
-#define pmd_val(x)	(x)
-#define pgd_val(x)	(x)
-#define pgprot_val(x)	(x)
-
-#define __pte(x)	(x)
-#define __pmd(x)	(x)
-#define __pgd(x)	(x)
-#define __pgprot(x)	(x)
-
-#endif /* !defined (STRICT_MM_TYPECHECKS) */
 
 /* Pure 2^n version of get_order */
 extern __inline__ int get_order(unsigned long size)
@@ -95,4 +77,4 @@ extern __inline__ int get_order(unsigned long size)
 
 #endif /* defined (__KERNEL__) */
 
-#endif /* __ASM_MIPS_PAGE_H */
+#endif /* __ASM_PAGE_H */

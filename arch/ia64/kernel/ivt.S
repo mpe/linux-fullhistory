@@ -1026,7 +1026,7 @@ dispatch_to_fault_handler:
 // 0x5000 Entry 20 (size 16 bundles) Page Not Present (10,22,49)
 	mov r16=cr.ifa
 	rsm psr.dt
-#if 0
+#if 1
 	// If you disable this, you MUST re-enable to update_mmu_cache() code in pgtable.h
 	mov r17=_PAGE_SIZE_4K<<2
 	;;

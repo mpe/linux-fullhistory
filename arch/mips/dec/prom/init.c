@@ -3,9 +3,11 @@
  *
  * Copyright (C) 1998 Harald Koerfgen
  *
- * $Id: $
+ * $Id: init.c,v 1.4 1999/10/09 00:00:58 ralf Exp $
  */
 #include <linux/init.h>
+#include <linux/config.h>
+#include <asm/bootinfo.h>
 #include "prom.h"
 
 /*
@@ -81,11 +83,30 @@ void __init which_prom(unsigned long magic, int *prom_vec)
 int __init prom_init(int argc, char **argv,
 	       unsigned long magic, int *prom_vec)
 {
+	extern void dec_machine_halt(void);
+
 	/* Determine which PROM's we have (and therefore which machine we're on!) */
 	which_prom(magic, prom_vec);
 
 	if (magic == REX_PROM_MAGIC)
 		rex_clear_cache();
+
+	/* Were we compiled with the right CPU option? */
+#if defined(CONFIG_CPU_R3000)
+	if ((mips_cputype == CPU_R4000SC) || (mips_cputype == CPU_R4400SC)) {
+		prom_printf("Sorry, this kernel is compiled for the wrong CPU type!\n");
+		prom_printf("Please recompile with \"CONFIG_CPU_R4x00 = y\"\n");
+		dec_machine_halt();
+	}
+#endif
+
+#if defined(CONFIG_CPU_R4x00)
+	if ((mips_cputype == CPU_R3000) || (mips_cputype == CPU_R3000A)) {
+		prom_printf("Sorry, this kernel is compiled for the wrong CPU type!\n");
+		prom_printf("Please recompile with \"CONFIG_CPU_R3000 = y\"\n");
+		dec_machine_halt();
+	}
+#endif
 
 	prom_meminit(magic);
 	prom_identify_arch(magic);

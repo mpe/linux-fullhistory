@@ -45,8 +45,11 @@
 #include <linux/delay.h>
 #include <linux/proc_fs.h>
 #include <linux/smp_lock.h>
-
 #include "soundmodule.h"
+
+/* From obsolete legacy.h */
+#define SELECTED_SOUND_OPTIONS 0x0
+
 struct notifier_block *sound_locker=(struct notifier_block *)0;
 static int lock_depth = 0;
 
@@ -219,9 +222,6 @@ static int sound_proc_get_info(char *buffer, char **start, off_t offset, int len
 	}
 	if (!sound_started)
 		len += sprintf(buffer + len, "\n\n***** Sound driver not started *****\n\n");
-#ifndef CONFIG_AUDIO
-	len += sprintf(buffer + len, "\nAudio devices: NOT ENABLED IN CONFIG\n");
-#else
 	len += sprintf(buffer + len, "\nAudio devices:\n");
 	for (i = 0; (i < num_audiodevs) && (pos <= offset + length); i++) {
 		if (audio_devs[i] == NULL)
@@ -234,11 +234,7 @@ static int sound_proc_get_info(char *buffer, char **start, off_t offset, int len
 			begin = pos;
 		}
 	}
-#endif
 
-#ifndef CONFIG_SEQUENCER
-	len += sprintf(buffer + len, "\nSynth devices: NOT ENABLED IN CONFIG\n");
-#else
 	len += sprintf(buffer + len, "\nSynth devices:\n");
 	for (i = 0; (i < num_synths) && (pos <= offset + length); i++) {
 		if (synth_devs[i] == NULL)
@@ -250,11 +246,7 @@ static int sound_proc_get_info(char *buffer, char **start, off_t offset, int len
 			begin = pos;
 		}
 	}
-#endif
 
-#ifndef CONFIG_MIDI
-	len += sprintf(buffer + len, "\nMidi devices: NOT ENABLED IN CONFIG\n");
-#else
 	len += sprintf(buffer + len, "\nMidi devices:\n");
 	for (i = 0; (i < num_midis) && (pos <= offset + length); i++) {
 		if (midi_devs[i] == NULL)
@@ -266,9 +258,7 @@ static int sound_proc_get_info(char *buffer, char **start, off_t offset, int len
 			begin = pos;
 		}
 	}
-#endif
 
-#ifdef CONFIG_SEQUENCER
 	len += sprintf(buffer + len, "\nTimers:\n");
 
 	for (i = 0; (i < num_sound_timers) && (pos <= offset + length); i++) {
@@ -281,7 +271,6 @@ static int sound_proc_get_info(char *buffer, char **start, off_t offset, int len
 			begin = pos;
 		}
 	}
-#endif
 
 	len += sprintf(buffer + len, "\nMixers:\n");
 	for (i = 0; (i < num_mixers) && (pos <= offset + length); i++) {
@@ -388,25 +377,19 @@ static ssize_t sound_read(struct file *file, char *buf, size_t count, loff_t *pp
 		ret = sndstat_file_read(file, buf, count, ppos);
 		break;
 
-#ifdef CONFIG_AUDIO
 	case SND_DEV_DSP:
 	case SND_DEV_DSP16:
 	case SND_DEV_AUDIO:
 		ret = audio_read(dev, file, buf, count);
 		break;
-#endif
 
-#ifdef CONFIG_SEQUENCER
 	case SND_DEV_SEQ:
 	case SND_DEV_SEQ2:
 		ret = sequencer_read(dev, file, buf, count);
 		break;
-#endif
 
-#ifdef CONFIG_MIDI
 	case SND_DEV_MIDIN:
 		ret = MIDIbuf_read(dev, file, buf, count);
-#endif
 	}
 	unlock_kernel();
 	return ret;
@@ -420,26 +403,20 @@ static ssize_t sound_write(struct file *file, const char *buf, size_t count, lof
 	lock_kernel();
 	DEB(printk("sound_write(dev=%d, count=%d)\n", dev, count));
 	switch (dev & 0x0f) {
-#ifdef CONFIG_SEQUENCER
 	case SND_DEV_SEQ:
 	case SND_DEV_SEQ2:
 		ret =  sequencer_write(dev, file, buf, count);
 		break;
-#endif
 
-#ifdef CONFIG_AUDIO
 	case SND_DEV_DSP:
 	case SND_DEV_DSP16:
 	case SND_DEV_AUDIO:
 		ret = audio_write(dev, file, buf, count);
 		break;
-#endif
 
-#ifdef CONFIG_MIDI
 	case SND_DEV_MIDIN:
 		ret =  MIDIbuf_write(dev, file, buf, count);
 		break;
-#endif
 	}
 	unlock_kernel();
 	return ret;
@@ -483,29 +460,23 @@ static int sound_open(struct inode *inode, struct file *file)
 			return -ENXIO;
 		break;
 
-#ifdef CONFIG_SEQUENCER
 	case SND_DEV_SEQ:
 	case SND_DEV_SEQ2:
 		if ((retval = sequencer_open(dev, file)) < 0)
 			return retval;
 		break;
-#endif
 
-#ifdef CONFIG_MIDI
 	case SND_DEV_MIDIN:
 		if ((retval = MIDIbuf_open(dev, file)) < 0)
 			return retval;
 		break;
-#endif
 
-#ifdef CONFIG_AUDIO
 	case SND_DEV_DSP:
 	case SND_DEV_DSP16:
 	case SND_DEV_AUDIO:
 		if ((retval = audio_open(dev, file)) < 0)
 			return retval;
 		break;
-#endif
 
 	default:
 		printk(KERN_ERR "Invalid minor device %d\n", dev);
@@ -531,26 +502,20 @@ static int sound_release(struct inode *inode, struct file *file)
 	case SND_DEV_CTL:
 		break;
 		
-#ifdef CONFIG_SEQUENCER
 	case SND_DEV_SEQ:
 	case SND_DEV_SEQ2:
 		sequencer_release(dev, file);
 		break;
-#endif
 
-#ifdef CONFIG_MIDI
 	case SND_DEV_MIDIN:
 		MIDIbuf_release(dev, file);
 		break;
-#endif
 
-#ifdef CONFIG_AUDIO
 	case SND_DEV_DSP:
 	case SND_DEV_DSP16:
 	case SND_DEV_AUDIO:
 		audio_release(dev, file);
 		break;
-#endif
 
 	default:
 		printk(KERN_ERR "Sound error: Releasing unknown device 0x%02x\n", dev);
@@ -641,13 +606,11 @@ static int sound_ioctl(struct inode *inode, struct file *file,
 	    (dev & 0x0f) != SND_DEV_CTL) {              
 		dtype = dev & 0x0f;
 		switch (dtype) {
-#ifdef CONFIG_AUDIO
 		case SND_DEV_DSP:
 		case SND_DEV_DSP16:
 		case SND_DEV_AUDIO:
 			return sound_mixer_ioctl(audio_devs[dev >> 4]->mixer_dev,
 						 cmd, (caddr_t)arg);
-#endif
 			
 		default:
 			return sound_mixer_ioctl(dev >> 4, cmd, (caddr_t)arg);
@@ -661,25 +624,19 @@ static int sound_ioctl(struct inode *inode, struct file *file,
 			return set_mixer_levels((caddr_t)arg);
 		return sound_mixer_ioctl(dev >> 4, cmd, (caddr_t)arg);
 
-#ifdef CONFIG_SEQUENCER
 	case SND_DEV_SEQ:
 	case SND_DEV_SEQ2:
 		return sequencer_ioctl(dev, file, cmd, (caddr_t)arg);
-#endif
 
-#ifdef CONFIG_AUDIO
 	case SND_DEV_DSP:
 	case SND_DEV_DSP16:
 	case SND_DEV_AUDIO:
 		return audio_ioctl(dev, file, cmd, (caddr_t)arg);
 		break;
-#endif
 
-#ifdef CONFIG_MIDI
 	case SND_DEV_MIDIN:
 		return MIDIbuf_ioctl(dev, file, cmd, (caddr_t)arg);
 		break;
-#endif
 
 	}
 	return -EINVAL;
@@ -692,23 +649,17 @@ static unsigned int sound_poll(struct file *file, poll_table * wait)
 
 	DEB(printk("sound_poll(dev=%d)\n", dev));
 	switch (dev & 0x0f) {
-#ifdef CONFIG_SEQUENCER
 	case SND_DEV_SEQ:
 	case SND_DEV_SEQ2:
 		return sequencer_poll(dev, file, wait);
-#endif
 
-#ifdef CONFIG_MIDI
 	case SND_DEV_MIDIN:
 		return MIDIbuf_poll(dev, file, wait);
-#endif
 
-#ifdef CONFIG_AUDIO
 	case SND_DEV_DSP:
 	case SND_DEV_DSP16:
 	case SND_DEV_AUDIO:
 		return DMAbuf_poll(file, dev >> 4, wait);
-#endif
 	}
 	return 0;
 }
@@ -828,13 +779,11 @@ static const struct {
 	umode_t mode;
 	int *num;
 } dev_list[] = { /* list of minor devices */
-#ifdef CONFIG_AUDIO
 /* seems to be some confusion here -- this device is not in the device list */
 	{SND_DEV_DSP16,     "dspW",	 S_IWUGO | S_IRUSR | S_IRGRP,
 	 &num_audiodevs},
 	{SND_DEV_AUDIO,     "audio",	 S_IWUGO | S_IRUSR | S_IRGRP,
 	 &num_audiodevs},
-#endif /* CONFIG_AUDIO */
 };
 
 static char * 
@@ -903,12 +852,10 @@ soundcard_init(void)
 		return;		/* No cards detected */
 #endif
 
-#ifdef CONFIG_AUDIO
 	if (num_audiodevs || modular)	/* Audio devices present */
 	{
 		audio_init_devices();
 	}
-#endif
 #ifdef CONFIG_PROC_FS
 	if (!create_proc_info_entry("sound", 0, NULL, sound_proc_get_info))
 		printk(KERN_ERR "sound: registering /proc/sound failed\n");
@@ -1000,9 +947,7 @@ void cleanup_module(void)
 	if (chrdev_registered)
 		destroy_special_devices();
 
-#ifdef CONFIG_SEQUENCER
 	sound_stop_timer();
-#endif
 
 #ifdef CONFIG_LOWLEVEL_SOUND
 	{
@@ -1093,8 +1038,6 @@ void sound_close_dma(int chn)
 	restore_flags(flags);
 }
 
-#ifdef CONFIG_SEQUENCER
-
 static void do_sequencer_timer(unsigned long dummy)
 {
 	sequencer_timer(0);
@@ -1129,7 +1072,6 @@ void sound_stop_timer(void)
 {
 	del_timer(&seq_timer);;
 }
-#endif
 
 void conf_printf(char *name, struct address_info *hw_config)
 {

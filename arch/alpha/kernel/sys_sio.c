@@ -391,7 +391,7 @@ struct alpha_machine_vector xl_mv __initmv = {
 	nr_irqs:		16,
 	device_interrupt:	isa_device_interrupt,
 
-	init_arch:		lca_init_arch,
+	init_arch:		apecs_init_arch,
 	init_irq:		sio_init_irq,
 	init_rtc:		common_init_rtc,
 	init_pci:		noname_init_pci,

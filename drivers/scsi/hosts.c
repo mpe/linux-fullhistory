@@ -345,6 +345,10 @@
 #include "jazz_esp.h"
 #endif
 
+#ifdef CONFIG_SCSI_DECNCR
+#include "dec_esp.h"
+#endif
+
 #ifdef CONFIG_SUN3X_ESP
 #include "sun3x_esp.h"
 #endif
@@ -638,10 +642,12 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #ifdef CONFIG_IPHASE5526
 	IPH5526_SCSI_FC,
 #endif
+#ifdef CONFIG_SCSI_DECNCR	
+    SCSI_DEC_ESP,
+#endif
 #ifdef CONFIG_BLK_DEV_3W_XXXX_RAID
 	TWXXXX,
 #endif
-
 /* "Removable host adapters" below this line (Parallel Port/USB/other) */
 #ifdef CONFIG_SCSI_PPA
     PPA,

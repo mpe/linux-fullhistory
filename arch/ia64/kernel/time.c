@@ -21,6 +21,10 @@
 #include <asm/ptrace.h>
 #include <asm/sal.h>
 #include <asm/system.h>
+#ifdef CONFIG_KDB
+# include <linux/kdb.h>
+#endif
+
 
 extern rwlock_t xtime_lock;
 extern volatile unsigned long lost_ticks;
@@ -61,7 +65,7 @@ do_profile (unsigned long ip)
  * update to jiffy.  The xtime_lock must be at least read-locked when
  * calling this routine.
  */
-static inline unsigned long
+static /*inline*/ unsigned long
 gettimeoffset (void)
 {
 	unsigned long now = ia64_get_itc();
@@ -185,6 +189,20 @@ timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	}
 	write_unlock(&xtime_lock);
 }
+
+#ifdef CONFIG_ITANIUM_ASTEP_SPECIFIC
+
+void 
+ia64_reset_itm (void)
+{
+	unsigned long flags;
+
+	local_irq_save(flags);
+	timer_interrupt(0, 0, current);
+	local_irq_restore(flags);
+}
+
+#endif /* CONFIG_ITANIUM_ASTEP_SPECIFIC */
 
 /*
  * Encapsulate access to the itm structure for SMP.

@@ -148,12 +148,17 @@ obj-$(CONFIG_ADBMOUSE) += adbmouse.o busmouse.o
 obj-$(CONFIG_PC110_PAD) += pc110pad.o
 obj-$(CONFIG_WDT) += wdt.o
 obj-$(CONFIG_RTC) += rtc.o
+obj-$(CONFIG_EFI_RTC) += efirtc.o
 ifeq ($(CONFIG_PPC),)
   obj-$(CONFIG_NVRAM) += nvram.o
 endif
 obj-$(CONFIG_I810_RNG) += i810_rng.o
 
 obj-$(CONFIG_VIDEO_DEV) += videodev.o
+
+obj-$(CONFIG_21825_WATCHDOG) += wdt285.o
+obj-$(CONFIG_977_WATCHDOG) += wdt977.o
+obj-$(CONFIG_DS1620) += ds1620.o
 
 #
 # for external dependencies in arm/config.in and video/config.in
@@ -195,7 +200,7 @@ ifeq ($(CONFIG_I2C_PARPORT),y)
 L_I2C = y
 else
   ifeq ($(CONFIG_I2C_PARPORT),m)
-    M_I2C = y
+    L_I2C = m
   endif
 endif
 
@@ -262,6 +267,9 @@ obj-$(L_DECODERS) += saa7110.o saa7111.o saa7185.o
 
 # set when a framegrabber implements i2c support
 obj-$(L_I2C) += i2c-old.o
+
+obj-$(CONFIG_NWBUTTON) += nwbutton.o
+obj-$(CONFIG_NWFLASH) += nwflash.o
 
 ifeq ($(CONFIG_DRM),y)
   SUB_DIRS += drm

@@ -1,4 +1,4 @@
-/* $Id: syscall.c,v 1.10 1999/02/15 02:16:52 ralf Exp $
+/* $Id: syscall.c,v 1.13 2000/02/04 07:40:23 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -55,64 +55,46 @@ out:
 	return res;
 }
 
-asmlinkage unsigned long sys_mmap(unsigned long addr, size_t len, int prot,
-                                  int flags, int fd, off_t offset)
+/* common code for old and new mmaps */
+static inline long
+do_mmap2(unsigned long addr, unsigned long len, unsigned long prot,
+        unsigned long flags, unsigned long fd, unsigned long pgoff)
 {
+	int error = -EBADF;
 	struct file * file = NULL;
-	unsigned long error = -EFAULT;
 
-	down(&current->mm->mmap_sem);
-	lock_kernel();
+	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 	if (!(flags & MAP_ANONYMOUS)) {
-		error = -EBADF;
 		file = fget(fd);
 		if (!file)
 			goto out;
 	}
-        flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
-        error = do_mmap(file, addr, len, prot, flags, offset);
-        if (file)
-                fput(file);
-out:
+
+	down(&current->mm->mmap_sem);
+	lock_kernel();
+
+	error = do_mmap_pgoff(file, addr, len, prot, flags, pgoff);
+
 	unlock_kernel();
 	up(&current->mm->mmap_sem);
+
+	if (file)
+		fput(file);
+out:
 	return error;
 }
 
-asmlinkage int sys_idle(void)
+asmlinkage unsigned long old_mmap(unsigned long addr, size_t len, int prot,
+                                  int flags, int fd, off_t offset)
 {
-	unsigned long start_idle = 0;
+	return do_mmap2(addr, len, prot, flags, fd, offset >> PAGE_SHIFT);
+}
 
-	if (current->pid != 0)
-		return -EPERM;
-
-	/* endless idle loop with no priority at all */
-	current->priority = 0;
-	current->counter = 0;
-	for (;;) {
-		/*
-		 * R4[36]00 have wait, R4[04]00 don't.
-		 * FIXME: We should save power by reducing the clock where
-		 *        possible.  Thiss will cut down the power consuption
-		 *        of R4200 systems to about 1/16th of normal, the
-		 *        same for logic clocked with the processor generated
-		 *        clocks.
-		 */
-		if (!start_idle) {
-			check_pgt_cache();
-			start_idle = jiffies;
-		}
-		if (wait_available && !current->need_resched)
-			__asm__(".set\tmips3\n\t"
-				"wait\n\t"
-				".set\tmips0");
-		run_task_queue(&tq_scheduler);
-		if (current->need_resched)
-			start_idle = 0;
-		schedule();
-	}
-
-	return 0;
+asmlinkage long
+sys_mmap2(unsigned long addr, unsigned long len, unsigned long prot,
+          unsigned long flags, unsigned long fd, unsigned long pgoff)
+{
+	return do_mmap2(addr, len, prot, flags, fd, pgoff);
 }
 
 asmlinkage int sys_fork(struct pt_regs regs)

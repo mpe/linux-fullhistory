@@ -68,9 +68,9 @@
 #define MAXINE_DTOP_RECV	0x00000001	/* DTI Recv-Available	*/
 
 /* kn03 aka 3max+ aka DS5000_2x0 */
-#define KN03_TC2		0x00004000
-#define KN03_TC1		0x00002000
-#define KN03_TC0		0x00001000
+#define KN03_TC2		0x00002000
+#define KN03_TC1		0x00001000
+#define KN03_TC0		0x00000800
 #define KN03_SCSI_FIFO		0x00000004	/* ??? Info from Mach	*/
 
 /*

@@ -1,12 +1,23 @@
-#ifndef __ASM_MIPS_IO_H
-#define __ASM_MIPS_IO_H
+/* $Id: io.h,v 1.13 2000/02/24 00:13:19 ralf Exp $
+ *
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
+ *
+ * Copyright (C) 1994, 1995 Waldorf GmbH
+ * Copyright (C) 1994 - 2000 Ralf Baechle
+ * Copyright (C) 1999, 2000 Silicon Graphics, Inc.
+ */
+#ifndef _ASM_IO_H
+#define _ASM_IO_H
 
 /*
  * Slowdown I/O port space accesses for antique hardware.
  */
 #undef CONF_SLOWDOWN_IO
 
-#include <asm/mipsconfig.h>
+#include <linux/config.h>
+
 #include <asm/addrspace.h>
 
 /*
@@ -142,25 +153,53 @@ extern inline void iounmap(void *addr)
  * 24-31 on SNI.
  * XXX more SNI hacks.
  */
-#define readb(addr) (*(volatile unsigned char *) (0xa0000000 + (unsigned long)(addr)))
-#define readw(addr) (*(volatile unsigned short *) (0xa0000000 + (unsigned long)(addr)))
-#define readl(addr) (*(volatile unsigned int *) (0xa0000000 + (unsigned long)(addr)))
+#define readb(addr) (*(volatile unsigned char *)(addr))
+#define readw(addr) (*(volatile unsigned short *)(addr))
+#define readl(addr) (*(volatile unsigned int *)(addr))
+#define __raw_readb readb
+#define __raw_readw readw
+#define __raw_readl readl
 
-#define writeb(b,addr) (*(volatile unsigned char *) (0xa0000000 + (unsigned long)(addr)) = (b))
-#define writew(b,addr) (*(volatile unsigned short *) (0xa0000000 + (unsigned long)(addr)) = (b))
-#define writel(b,addr) (*(volatile unsigned int *) (0xa0000000 + (unsigned long)(addr)) = (b))
+#define writeb(b,addr) (*(volatile unsigned char *)(addr)) = (b)
+#define writew(b,addr) (*(volatile unsigned short *)(addr)) = (b)
+#define writel(b,addr) (*(volatile unsigned int *)(addr)) = (b)
+#define __raw_writeb writeb
+#define __raw_writew writew
+#define __raw_writel writel
 
-#define memset_io(a,b,c)	memset((void *)(0xa0000000 + (unsigned long)a),(b),(c))
-#define memcpy_fromio(a,b,c)	memcpy((a),(void *)(0xa0000000 + (unsigned long)(b)),(c))
-#define memcpy_toio(a,b,c)	memcpy((void *)(0xa0000000 + (unsigned long)(a)),(b),(c))
+#define memset_io(a,b,c)	memset((void *)(a),(b),(c))
+#define memcpy_fromio(a,b,c)	memcpy((a),(void *)(b),(c))
+#define memcpy_toio(a,b,c)	memcpy((void *)(a),(b),(c))
 
 /* END SNI HACKS ... */
+
+/*
+ * ISA space is 'always mapped' on currently supported MIPS systems, no need
+ * to explicitly ioremap() it. The fact that the ISA IO space is mapped
+ * to PAGE_OFFSET is pure coincidence - it does not mean ISA values
+ * are physical addresses. The following constant pointer can be
+ * used as the IO-area pointer (it can be iounmapped as well, so the
+ * analogy with PCI is quite large):
+ */
+#define __ISA_IO_base ((char *)(PAGE_OFFSET))
+
+#define isa_readb(a) readb(a)
+#define isa_readw(a) readw(a)
+#define isa_readl(a) readl(a)
+#define isa_writeb(b,a) writeb(b,a)
+#define isa_writew(w,a) writew(w,a)
+#define isa_writel(l,a) writel(l,a)
+
+#define isa_memset_io(a,b,c)     memset_io((a),(b),(c))
+#define isa_memcpy_fromio(a,b,c) memcpy_fromio((a),(b),(c))
+#define isa_memcpy_toio(a,b,c)   memcpy_toio((a),(b),(c))
 
 /*
  * We don't have csum_partial_copy_fromio() yet, so we cheat here and
  * just copy it. The net code will then do the checksum later.
  */
-#define eth_io_copy_and_sum(skb,src,len,unused)	memcpy_fromio((skb)->data,(src),(len))
+#define eth_io_copy_and_sum(skb,src,len,unused) memcpy_fromio((skb)->data,(src),(len))
+#define isa_eth_io_copy_and_sum(a,b,c,d) eth_copy_and_sum((a),(b),(c),(d))
 
 static inline int check_signature(unsigned long io_addr,
                                   const unsigned char *signature, int length)
@@ -177,6 +216,7 @@ static inline int check_signature(unsigned long io_addr,
 out:
 	return retval;
 }
+#define isa_check_signature(io, s, l) check_signature(i,s,l)
 
 /*
  * Talk about misusing macros..
@@ -395,8 +435,12 @@ __OUTS(w,l,4)
  *    be discarded.  This operation is necessary before dma operations
  *    to the memory.
  */
-extern void (*dma_cache_wback_inv)(unsigned long start, unsigned long size);
-extern void (*dma_cache_wback)(unsigned long start, unsigned long size);
-extern void (*dma_cache_inv)(unsigned long start, unsigned long size);
+extern void (*_dma_cache_wback_inv)(unsigned long start, unsigned long size);
+extern void (*_dma_cache_wback)(unsigned long start, unsigned long size);
+extern void (*_dma_cache_inv)(unsigned long start, unsigned long size);
 
-#endif /* __ASM_MIPS_IO_H */
+#define dma_cache_wback_inv(start,size)	_dma_cache_wback_inv(start,size)
+#define dma_cache_wback(start,size)	_dma_cache_wback(start,size)
+#define dma_cache_inv(start,size)	_dma_cache_inv(start,size)
+
+#endif /* _ASM_IO_H */

@@ -41,9 +41,6 @@
 #include <linux/delay.h>
 #include <linux/proc_fs.h>
 
-
-#ifdef CONFIG_SSCAPE
-
 #include "coproc.h"
 
 /*
@@ -722,7 +719,6 @@ void attach_sscape(struct address_info *hw_config)
 	}
 #endif
 
-#if defined(CONFIG_MIDI) && defined(CONFIG_MPU_EMU)
 	if (probe_mpu401(hw_config))
 		hw_config->always_detect = 1;
 	hw_config->name = "SoundScape";
@@ -736,7 +732,6 @@ void attach_sscape(struct address_info *hw_config)
 		sscape_mididev = hw_config->slots[1];
 		midi_devs[hw_config->slots[1]]->coproc = &sscape_coproc_operations;
 	}
-#endif
 	sscape_write(devc, GA_INTENA_REG, 0x80);	/* Master IRQ enable */
 	devc->ok = 1;
 	devc->failed = 0;
@@ -1421,9 +1416,7 @@ void attach_ss_ms_sound(struct address_info *hw_config)
 void unload_sscape(struct address_info *hw_config)
 {
 	release_region(devc->base + 2, 6);
-#if defined(CONFIG_MPU_EMU) && defined(CONFIG_MIDI)
 	unload_mpu401(hw_config);
-#endif
 }
 
 void unload_ss_ms_sound(struct address_info *hw_config)
@@ -1516,5 +1509,4 @@ void cleanup_module(void)
 	unload_sscape(&mpu_config);
 }
 
-#endif
-#endif
+#endif /* MODULE */

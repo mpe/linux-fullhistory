@@ -4,9 +4,8 @@
  * Copyright (C) 1996 David S. Miller (dm@sgi.com)
  * Compability with board caches, Ulf Carlsson
  *
- * $Id: console.c,v 1.2 1999/06/12 18:42:38 ulfc Exp $
+ * $Id: console.c,v 1.3 1999/10/09 00:00:57 ralf Exp $
  */
-#include <linux/config.h>
 #include <linux/init.h>
 #include <asm/sgialib.h>
 #include <asm/bcache.h>

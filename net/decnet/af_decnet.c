@@ -1837,7 +1837,8 @@ static int dn_sendmsg(struct socket *sock, struct msghdr *msg, int size,
 	scp->persist_fxn = dn_nsp_xmit_timeout;
 
 	while(sent < size) {
-		if ((err = sock_error(sk) != 0))
+		err = sock_error(sk);
+		if (err)
 			goto out;
 
 		if (signal_pending(current)) {

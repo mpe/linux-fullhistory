@@ -838,7 +838,6 @@ waveartist_intr(int irq, void *dev_id, struct pt_regs *regs)
 	else
 		printk(KERN_WARNING "waveartist: unexpected interrupt\n");
 
-#ifdef CONFIG_AUDIO
 	if (irqstatus & 0x01) {
 		int temp = 1;
 
@@ -855,7 +854,6 @@ waveartist_intr(int irq, void *dev_id, struct pt_regs *regs)
 		if (temp)	//default:
 			printk(KERN_WARNING "waveartist: Unknown interrupt\n");
 	}
-#endif
 	if (irqstatus & 0x2)
 		// We do not use SB mode natively...
 		printk(KERN_WARNING "waveartist: Unexpected SB interrupt...\n");

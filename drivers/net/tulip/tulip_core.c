@@ -18,7 +18,7 @@
 
 */
 
-static const char version[] = "Linux Tulip driver version 0.9.2 (Feb 15, 2000)\n";
+static const char version[] = "Linux Tulip driver version 0.9.3 (Feb 23, 2000)\n";
 
 #include <linux/module.h>
 #include "tulip.h"
@@ -237,7 +237,7 @@ out_write:
 	/* now it is safe to change csr6 */
 	outl (newcsr6, ioaddr + CSR6);
 
-	spin_unlock_irqrestore (&tp->lock, flags);
+	spin_unlock_irqrestore (&tp->tx_lock, flags);
 }
 
 
@@ -978,22 +978,24 @@ static int __devinit tulip_init_one (struct pci_dev *pdev,
 	ioaddr = pci_resource_start (pdev, 0);
 	irq = pdev->irq;
 
-	/* Make certain the data structures are quadword aligned. */
+	/* init_etherdev ensures qword aligned structures */
 	dev = init_etherdev (NULL, sizeof (*tp));
 	if (!dev) {
-		printk (KERN_ERR PFX "unable to allocate ether device, aborting\n");
+		printk (KERN_ERR PFX "ether device alloc failed, aborting\n");
 		return -ENOMEM;
 	}
 
 	/* We do a request_region() only to register /proc/ioports info. */
 	/* Note that proper size is tulip_tbl[chip_idx].chip_name, but... */
 	if (!request_region (ioaddr, tulip_tbl[chip_idx].io_size, dev->name)) {
-		printk (KERN_ERR PFX "unable to allocate ether device, aborting\n");
+		printk (KERN_ERR PFX "I/O ports (0x%x@0x%lx) unavailable, "
+			"aborting\n", tulip_tbl[chip_idx].io_size, ioaddr);
 		goto err_out_free_netdev;
 	}
 
 	if (pci_enable_device(pdev)) {
-		printk (KERN_ERR PFX "cannot enable PCI device (id %04x:%04x, bus %d, devfn %d), aborting\n",
+		printk (KERN_ERR PFX "cannot enable PCI device (id %04x:%04x, "
+			"bus %d, devfn %d), aborting\n",
 			pdev->vendor, pdev->device,
 			pdev->bus->number, pdev->devfn);
 		goto err_out_free_netdev;
@@ -1001,10 +1003,17 @@ static int __devinit tulip_init_one (struct pci_dev *pdev,
 
 	pci_set_master(pdev);
 
-	tp = dev->priv;
-	memset(tp, 0, sizeof(*tp));
-
 	pci_read_config_byte (pdev, PCI_REVISION_ID, &chip_rev);
+
+	/* tp/dev->priv zeroed in init_etherdev */
+	tp = dev->priv;
+
+	tp->chip_id = chip_idx;
+	tp->flags = tulip_tbl[chip_idx].flags;
+	tp->pdev = pdev;
+	tp->base_addr = ioaddr;
+	tp->revision = chip_rev;
+	spin_lock_init(&tp->tx_lock);
 
 	printk(KERN_INFO "%s: %s rev %d at %#3lx,",
 		   dev->name, tulip_tbl[chip_idx].chip_name, chip_rev, ioaddr);
@@ -1106,13 +1115,7 @@ static int __devinit tulip_init_one (struct pci_dev *pdev,
 	pdev->driver_data = dev;
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
-
-	tp->chip_id = chip_idx;
-	tp->revision = chip_rev;
-	tp->flags = tulip_tbl[chip_idx].flags;
 	tp->csr0 = csr0;
-	tp->pdev = pdev;
-	tp->base_addr = dev->base_addr;
 
 	/* BugFixes: The 21143-TD hangs with PCI Write-and-Invalidate cycles.
 	   And the ASIX must have a burst limit or horrible things happen. */

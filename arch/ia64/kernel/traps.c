@@ -110,15 +110,75 @@ void
 ia64_bad_break (unsigned long break_num, struct pt_regs *regs)
 {
 	siginfo_t siginfo;
+	int sig, code;
 
-	/* gdb uses a break number of 0xccccc for debug breakpoints: */
-	if (break_num != 0xccccc)
-		die_if_kernel("Bad break", regs, break_num);
+	/* SIGILL, SIGFPE, SIGSEGV, and SIGBUS want these field initialized: */
+	siginfo.si_addr = (void *) (regs->cr_iip + ia64_psr(regs)->ri);
+	siginfo.si_imm = break_num;
 
-	siginfo.si_signo = SIGTRAP;
-	siginfo.si_errno = break_num;	/* XXX is it legal to abuse si_errno like this? */
-	siginfo.si_code = TRAP_BRKPT;
-	send_sig_info(SIGTRAP, &siginfo, current);
+	switch (break_num) {
+	      case 0: /* unknown error */
+		sig = SIGILL; code = ILL_ILLOPC;
+		break;
+
+	      case 1: /* integer divide by zero */
+		sig = SIGFPE; code = FPE_INTDIV;
+		break;
+
+	      case 2: /* integer overflow */
+		sig = SIGFPE; code = FPE_INTOVF;
+		break;
+
+	      case 3: /* range check/bounds check */
+		sig = SIGFPE; code = FPE_FLTSUB;
+		break;
+
+	      case 4: /* null pointer dereference */
+		sig = SIGSEGV; code = SEGV_MAPERR;
+		break;
+
+	      case 5: /* misaligned data */
+		sig = SIGSEGV; code = BUS_ADRALN;
+		break;
+
+	      case 6: /* decimal overflow */
+		sig = SIGFPE; code = __FPE_DECOVF;
+		break;
+
+	      case 7: /* decimal divide by zero */
+		sig = SIGFPE; code = __FPE_DECDIV;
+		break;
+
+	      case 8: /* packed decimal error */
+		sig = SIGFPE; code = __FPE_DECERR;
+		break;
+
+	      case 9: /* invalid ASCII digit */
+		sig = SIGFPE; code = __FPE_INVASC;
+		break;
+
+	      case 10: /* invalid decimal digit */
+		sig = SIGFPE; code = __FPE_INVDEC;
+		break;
+
+	      case 11: /* paragraph stack overflow */
+		sig = SIGSEGV; code = __SEGV_PSTKOVF;
+		break;
+
+	      default:
+		if (break_num < 0x40000 || break_num > 0x100000)
+			die_if_kernel("Bad break", regs, break_num);
+
+		if (break_num < 0x80000) {
+			sig = SIGILL; code = __ILL_BREAK;
+		} else {
+			sig = SIGTRAP; code = TRAP_BRKPT;
+		}
+	}
+	siginfo.si_signo = sig;
+	siginfo.si_errno = 0;
+	siginfo.si_code = code;
+	send_sig_info(sig, &siginfo, current);
 }
 
 /*
@@ -240,6 +300,7 @@ handle_fpu_swa (int fp_fault, struct pt_regs *regs, unsigned long isr)
 {
 	long exception, bundle[2];
 	unsigned long fault_ip;
+	struct siginfo siginfo;
 	static int fpu_swa_count = 0;
 	static unsigned long last_time;
 
@@ -265,21 +326,41 @@ handle_fpu_swa (int fp_fault, struct pt_regs *regs, unsigned long isr)
  			ia64_increment_ip(regs);
 		} else if (exception == -1) {
 			printk("handle_fpu_swa: fp_emulate() returned -1\n");
-			return -2;
+			return -1;
 		} else {
 			/* is next instruction a trap? */
 			if (exception & 2) {
 				ia64_increment_ip(regs);
 			}
-			return -1;
+			siginfo.si_signo = SIGFPE;
+			siginfo.si_errno = 0;
+			siginfo.si_code = 0;
+			siginfo.si_addr = (void *) (regs->cr_iip + ia64_psr(regs)->ri);
+			if (isr & 0x11) {
+				siginfo.si_code = FPE_FLTINV;
+			} else if (isr & 0x44) {
+				siginfo.si_code = FPE_FLTDIV;
+			}
+			send_sig_info(SIGFPE, &siginfo, current);
 		}
 	} else {
 		if (exception == -1) {
 			printk("handle_fpu_swa: fp_emulate() returned -1\n");
-			return -2;
+			return -1;
 		} else if (exception != 0) {
 			/* raise exception */
-			return -1;
+			siginfo.si_signo = SIGFPE;
+			siginfo.si_errno = 0;
+			siginfo.si_code = 0;
+			siginfo.si_addr = (void *) (regs->cr_iip + ia64_psr(regs)->ri);
+			if (isr & 0x880) {
+				siginfo.si_code = FPE_FLTOVF;
+			} else if (isr & 0x1100) {
+				siginfo.si_code = FPE_FLTUND;
+			} else if (isr & 0x2200) {
+				siginfo.si_code = FPE_FLTRES;
+			}
+			send_sig_info(SIGFPE, &siginfo, current);
 		}
 	}
 	return 0;
@@ -369,22 +450,19 @@ ia64_fault (unsigned long vector, unsigned long isr, unsigned long ifa,
 		return;
 
 	      case 30: /* Unaligned fault */
-		sprintf(buf, "Unaligned access in kernel mode---don't do this!");
+		sprintf(buf, "Kernel unaligned trap accessing %016lx (ip=%016lx)!",
+			ifa, regs->cr_iip + ia64_psr(regs)->ri);
 		break;
 
 	      case 32: /* fp fault */
 	      case 33: /* fp trap */
-		result = handle_fpu_swa((vector == 32) ? 1 : 0, regs, isr);
+		result = handle_fpu_swa((vector == 32) ? 1 : 0, regs, &isr);
 		if (result < 0) {
 			siginfo.si_signo = SIGFPE;
 			siginfo.si_errno = 0;
-			siginfo.si_code = 0;	/* XXX fix me */
+			siginfo.si_code = FPE_FLTINV;
 			siginfo.si_addr = (void *) (regs->cr_iip + ia64_psr(regs)->ri);
-			send_sig_info(SIGFPE, &siginfo, current);
-			if (result == -1)
-				send_sig_info(SIGFPE, &siginfo, current);
-			else
-				force_sig(SIGFPE, current);
+			force_sig(SIGFPE, current);
 		}
 		return;
 

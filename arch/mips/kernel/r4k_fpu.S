@@ -1,4 +1,5 @@
-/*
+/* $Id: r4k_fpu.S,v 1.8 1999/09/28 22:25:47 ralf Exp $
+ *
  * r4k_fpu.S: Save/restore floating point context for signal handlers.
  *
  * This file is subject to the terms and conditions of the GNU General Public
@@ -9,10 +10,9 @@
  *
  * Multi-arch abstraction and asm macros for easier reading:
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
- *
- * $Id: r4k_fpu.S,v 1.5 1999/05/01 22:40:36 ralf Exp $
  */
 #include <asm/asm.h>
+#include <asm/errno.h>
 #include <asm/fpregdef.h>
 #include <asm/mipsregs.h>
 #include <asm/offset.h>
@@ -21,35 +21,15 @@
 #define EX(a,b)							\
 9:	a,##b;							\
 	.section __ex_table,"a";				\
-	PTR	9b,bad_stack;					\
+	PTR	9b, fault;					\
 	.previous
 
 	.set	noreorder
 	.set	mips3
 	/* Save floating point context */
-LEAF(r4k_save_fp_context)
-	mfc0	t1,CP0_STATUS
-	 sll	t2,t1,5
-
-	bgez	t2,1f
-	 cfc1	t1,fcr31
-	/* Store the 16 odd double precision registers */
-	EX(sdc1	$f1,(SC_FPREGS+8)(a0))
-	EX(sdc1	$f3,(SC_FPREGS+24)(a0))
-	EX(sdc1	$f5,(SC_FPREGS+40)(a0))
-	EX(sdc1	$f7,(SC_FPREGS+56)(a0))
-	EX(sdc1	$f9,(SC_FPREGS+72)(a0))
-	EX(sdc1	$f11,(SC_FPREGS+88)(a0))
-	EX(sdc1	$f13,(SC_FPREGS+104)(a0))
-	EX(sdc1	$f15,(SC_FPREGS+120)(a0))
-	EX(sdc1	$f17,(SC_FPREGS+136)(a0))
-	EX(sdc1	$f19,(SC_FPREGS+152)(a0))
-	EX(sdc1	$f21,(SC_FPREGS+168)(a0))
-	EX(sdc1	$f23,(SC_FPREGS+184)(a0))
-	EX(sdc1	$f25,(SC_FPREGS+200)(a0))
-	EX(sdc1	$f27,(SC_FPREGS+216)(a0))
-	EX(sdc1	$f29,(SC_FPREGS+232)(a0))
-	EX(sdc1	$f31,(SC_FPREGS+248)(a0))
+LEAF(save_fp_context)
+	li	v0, 0					# assume success
+	cfc1	t1,fcr31
 
 	/* Store the 16 even double precision registers */
 1:
@@ -76,7 +56,7 @@ LEAF(r4k_save_fp_context)
 	.set	nomacro
 	 EX(sw	t0,SC_FPC_EIR(a0))
 	.set	macro
-	END(r4k_save_fp_context)
+	END(save_fp_context)
 
 /*
  * Restore FPU state:
@@ -87,31 +67,9 @@ LEAF(r4k_save_fp_context)
  * frame on the current content of c0_status, not on the content of the
  * stack frame which might have been changed by the user.
  */
-LEAF(r4k_restore_fp_context)
-	mfc0	t1, CP0_STATUS
-	sll	t0,t1,5
-	bgez	t0,1f
-	 EX(lw	t0,SC_FPC_CSR(a0))
-
-	/* Restore the 16 odd double precision registers only
-	 * when enabled in the cp0 status register.
-	 */
-	EX(ldc1	$f1,(SC_FPREGS+8)(a0))
-	EX(ldc1	$f3,(SC_FPREGS+24)(a0))
-	EX(ldc1	$f5,(SC_FPREGS+40)(a0))
-	EX(ldc1	$f7,(SC_FPREGS+56)(a0))
-	EX(ldc1	$f9,(SC_FPREGS+72)(a0))
-	EX(ldc1	$f11,(SC_FPREGS+88)(a0))
-	EX(ldc1	$f13,(SC_FPREGS+104)(a0))
-	EX(ldc1	$f15,(SC_FPREGS+120)(a0))
-	EX(ldc1	$f17,(SC_FPREGS+136)(a0))
-	EX(ldc1	$f19,(SC_FPREGS+152)(a0))
-	EX(ldc1	$f21,(SC_FPREGS+168)(a0))
-	EX(ldc1	$f23,(SC_FPREGS+184)(a0))
-	EX(ldc1	$f25,(SC_FPREGS+200)(a0))
-	EX(ldc1	$f27,(SC_FPREGS+216)(a0))
-	EX(ldc1	$f29,(SC_FPREGS+232)(a0))
-	EX(ldc1	$f31,(SC_FPREGS+248)(a0))
+LEAF(restore_fp_context)
+	li	v0, 0					# assume success
+	EX(lw	t0,SC_FPC_CSR(a0))
 
 	/*
 	 * Restore the 16 even double precision registers
@@ -135,4 +93,10 @@ LEAF(r4k_restore_fp_context)
 	EX(ldc1	$f30,(SC_FPREGS+240)(a0))
 	jr	ra
 	 ctc1	t0,fcr31
-	END(r4k_restore_fp_context)
+	END(restore_fp_context)
+
+	.type	fault@function
+	.ent	fault
+fault:	li	v0, -EFAULT
+	jr	ra
+	.end	fault

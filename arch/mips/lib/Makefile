@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.9 1999/01/04 16:03:50 ralf Exp $
+# $Id: Makefile,v 1.12 1999/12/04 03:59:00 ralf Exp $
 #
 # Makefile for MIPS-specific library files..
 #
@@ -9,8 +9,15 @@
 	$(CC) $(CFLAGS) -c $< -o $*.o
 
 L_TARGET = lib.a
-L_OBJS	= csum_partial.o csum_partial_copy.o dump_tlb.o floppy-std.o \
+L_OBJS	= csum_partial.o csum_partial_copy.o floppy-std.o \
 	  floppy-no.o ide-std.o ide-no.o kbd-std.o kbd-no.o rtc-std.o \
-	  rtc-no.o memset.o memcpy.o strlen_user.o strncpy_user.o watch.o
+	  rtc-no.o memcpy.o memset.o strlen_user.o strncpy_user.o \
+	  strnlen_user.o watch.o
+
+ifdef CONFIG_CPU_R3000
+  L_OBJS += r3k_dump_tlb.o 
+else
+  L_OBJS += dump_tlb.o 
+endif
 
 include $(TOPDIR)/Rules.make

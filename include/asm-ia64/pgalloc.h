@@ -8,8 +8,8 @@
  * This hopefully works with any (fixed) ia-64 page-size, as defined
  * in <asm/page.h> (currently 8192).
  *
- * Copyright (C) 1998, 1999 Hewlett-Packard Co
- * Copyright (C) 1998, 1999 David Mosberger-Tang <davidm@hpl.hp.com>
+ * Copyright (C) 1998-2000 Hewlett-Packard Co
+ * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
  * Copyright (C) 2000, Goutham Rao <goutham.rao@intel.com>
  */
 
@@ -252,6 +252,23 @@ static __inline__ void
 flush_tlb_page (struct vm_area_struct *vma, unsigned long addr)
 {
 	flush_tlb_range(vma->vm_mm, addr, addr + PAGE_SIZE);
+}
+
+/*
+ * Flush the TLB entries mapping the virtually mapped linear page
+ * table corresponding to address range [START-END).
+ */
+static inline void
+flush_tlb_pgtables (struct mm_struct *mm, unsigned long start, unsigned long end)
+{
+	/*
+	 * XXX fix mmap(), munmap() et al to guarantee that there are no mappings
+	 * across region boundaries. --davidm 00/02/23
+	 */
+	if (rgn_index(start) != rgn_index(end)) {
+		printk("flush_tlb_pgtables: can't flush across regions!!\n");
+	}
+	flush_tlb_range(mm, ia64_thash(start), ia64_thash(end));
 }
 
 #endif /* _ASM_IA64_PGALLOC_H */

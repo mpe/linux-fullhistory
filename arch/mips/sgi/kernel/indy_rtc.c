@@ -1,4 +1,4 @@
-/* $Id: indy_rtc.c,v 1.1 1998/06/25 20:19:17 ralf Exp $
+/* $Id: indy_rtc.c,v 1.2 1999/10/21 00:23:05 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -9,7 +9,7 @@
  * Copyright (C) 1998 by Ralf Baechle
  */
 #include <linux/mc146818rtc.h>
-#include <asm/sgihpc.h>
+#include <asm/sgi/sgihpc.h>
 
 static unsigned char indy_rtc_read_data(unsigned long addr)
 {

@@ -1,6 +1,7 @@
-/* $Id: serial.h,v 1.3 1998/08/28 15:55:38 ralf Exp $
+/* $Id: serial.h,v 1.9 2000/02/16 01:45:55 ralf Exp $
  *
- * include/asm-mips/serial.h
+ * Copyright (C) 1999 by Ralf Baechle
+ * Copyright (C) 1999, 2000 Silicon Graphics, Inc.
  */
 #include <linux/config.h>
 #include <asm/bootinfo.h>
@@ -16,8 +17,8 @@
 #define BASE_BAUD ( 1843200 / 16 )
 
 #ifndef CONFIG_OLIVETTI_M700
-/* Some Jazz machines seem to have an 8MHz crystal clock but I don't know
-   exactly which ones ... XXX */
+   /* Some Jazz machines seem to have an 8MHz crystal clock but I don't know
+      exactly which ones ... XXX */
 #define JAZZ_BASE_BAUD ( 8000000 / 16 ) /* ( 3072000 / 16) */
 #else
 /* but the M700 isn't such a strange beast */
@@ -38,6 +39,9 @@
 #define ACCENT_FLAGS 0
 #define BOCA_FLAGS 0
 #define HUB6_FLAGS 0
+#define RS_TABLE_SIZE	64
+#else
+#define RS_TABLE_SIZE
 #endif
 
 /*
@@ -57,12 +61,13 @@
 #define C_P(card,port) (((card)<<6|(port)<<3) + 1)
 
 #ifdef CONFIG_MIPS_JAZZ
-#define JAZZ_SERIAL_PORT_DEFNS			\
-	/* UART CLK   PORT IRQ     FLAGS        */			\
-	{ 0, JAZZ_BASE_BAUD, JAZZ_SERIAL1_BASE,         /* ttyS0 */	\
-	  JAZZ_SERIAL1_IRQ, STD_COM_FLAGS },				\
-	{ 0, JAZZ_BASE_BAUD, JAZZ_SERIAL2_BASE,         /* ttyS1 */	\
-	  JAZZ_SERIAL2_IRQ, STD_COM_FLAGS },
+#define _JAZZ_SERIAL_INIT(int, base)					\
+	{ baud_base: JAZZ_BASE_BAUD, irq: int, flags: STD_COM_FLAGS,	\
+	  iomem_base: (u8 *) base, iomem_reg_shift: 0,			\
+	  io_type: SERIAL_IO_MEM }
+#define JAZZ_SERIAL_PORT_DEFNS						\
+	_JAZZ_SERIAL_INIT(JAZZ_SERIAL1_IRQ, JAZZ_SERIAL1_BASE),		\
+	_JAZZ_SERIAL_INIT(JAZZ_SERIAL2_IRQ, JAZZ_SERIAL2_BASE),
 #else
 #define JAZZ_SERIAL_PORT_DEFNS
 #endif

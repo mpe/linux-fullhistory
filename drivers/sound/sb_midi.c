@@ -14,9 +14,6 @@
 #include <linux/config.h>
 #include "sound_config.h"
 
-#ifdef CONFIG_SBDSP
-#ifdef CONFIG_MIDI
-
 #include "sb.h"
 #undef SB_TEST_IRQ
 
@@ -210,6 +207,3 @@ void sb_dsp_midi_init(sb_devc * devc)
 	midi_devs[dev]->converter->id = "SBMIDI";
 	sequencer_init();
 }
-
-#endif
-#endif

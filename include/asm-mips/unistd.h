@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.21 1998/10/19 21:29:15 ralf Exp $
+/* $Id: unistd.h,v 1.20 2000/02/18 00:24:48 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -1015,7 +1015,7 @@
 #define __NR_ptrace			(__NR_Linux +  26)
 #define __NR_alarm			(__NR_Linux +  27)
 #define __NR_oldfstat			(__NR_Linux +  28)
-#define __NR_pause			(__NR_Linux +  29)
+#define __NR_unused29			(__NR_Linux +  29)
 #define __NR_utime			(__NR_Linux +  30)
 #define __NR_stty			(__NR_Linux +  31)
 #define __NR_gtty			(__NR_Linux +  32)
@@ -1196,11 +1196,18 @@
 #define __NR_sendfile			(__NR_Linux + 207)
 #define __NR_getpmsg			(__NR_Linux + 208)
 #define __NR_putpmsg			(__NR_Linux + 209)
+#define __NR_mmap2			(__NR_Linux + 210)
+#define __NR_truncate64			(__NR_Linux + 211)
+#define __NR_ftruncate64		(__NR_Linux + 212)
+#define __NR_stat64			(__NR_Linux + 213)
+#define __NR_lstat64			(__NR_Linux + 214)
+#define __NR_fstat64			(__NR_Linux + 215)
+#define __NR_pivot_root			(__NR_Linux + 216)
 
 /*
  * Offset of the last Linux flavoured syscall
  */
-#define __NR_Linux_syscalls		209
+#define __NR_Linux_syscalls		216
 
 #ifndef _LANGUAGE_ASSEMBLY
 
@@ -1419,8 +1426,6 @@ return -1; \
  * some others too.
  */
 #define __NR__exit __NR_exit
-static inline _syscall0(int,idle)
-static inline _syscall0(int,pause)
 static inline _syscall0(int,sync)
 static inline _syscall0(pid_t,setsid)
 static inline _syscall3(int,write,int,fd,const char *,buf,off_t,count)

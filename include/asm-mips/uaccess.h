@@ -1,16 +1,14 @@
-/*
- * include/asm-mips/uaccess.h
+/* $Id: uaccess.h,v 1.12 2000/02/21 18:05:07 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1996, 1997, 1998 by Ralf Baechle
- *
- * $Id: uaccess.h,v 1.15 1998/05/03 11:13:54 ralf Exp $
+ * Copyright (C) 1996, 1997, 1998, 1999 by Ralf Baechle
+ * Copyright (C) 1999 Silicon Graphics, Inc.
  */
-#ifndef __ASM_MIPS_UACCESS_H
-#define __ASM_MIPS_UACCESS_H
+#ifndef _ASM_UACCESS_H
+#define _ASM_UACCESS_H
 
 #include <linux/errno.h>
 #include <linux/sched.h>
@@ -25,15 +23,15 @@
  *
  * For historical reasons, these macros are grossly misnamed.
  */
-#define KERNEL_DS	((mm_segment_t) { 0UL })
-#define USER_DS		((mm_segment_t) { 1UL })
+#define KERNEL_DS	((mm_segment_t) { (unsigned long) 0L })
+#define USER_DS		((mm_segment_t) { (unsigned long) -1L })
 
 #define VERIFY_READ    0
 #define VERIFY_WRITE   1
 
-#define get_fs()        (current->tss.current_ds)
+#define get_fs()        (current->thread.current_ds)
 #define get_ds()	(KERNEL_DS)
-#define set_fs(x)       (current->tss.current_ds=(x))
+#define set_fs(x)       (current->thread.current_ds=(x))
 
 #define segment_eq(a,b)	((a).seg == (b).seg)
 
@@ -50,7 +48,7 @@
  */
 #define __access_ok(addr,size,mask) \
         (((__signed__ long)((mask)&(addr | size | (addr+size)))) >= 0)
-#define __access_mask (-(long)(get_fs().seg))
+#define __access_mask ((long)(get_fs().seg))
 
 #define access_ok(type,addr,size) \
 __access_ok(((unsigned long)(addr)),(size),__access_mask)
@@ -325,10 +323,12 @@ extern size_t __copy_user(void *__to, const void *__from, size_t __n);
 		"move\t$4, %1\n\t" \
 		"move\t$5, %2\n\t" \
 		"move\t$6, %3\n\t" \
+		".set\tnoreorder\n\t" \
+		__MODULE_JAL(__copy_user) \
 		".set\tnoat\n\t" \
 		"addu\t$1, %2, %3\n\t" \
 		".set\tat\n\t" \
-		__MODULE_JAL(__copy_user) \
+		".set\treorder\n\t" \
 		"move\t%0, $6" \
 		: "=r" (__cu_len) \
 		: "r" (__cu_to), "r" (__cu_from), "r" (__cu_len) \
@@ -372,10 +372,12 @@ extern size_t __copy_user(void *__to, const void *__from, size_t __n);
 			"move\t$4, %1\n\t" \
 			"move\t$5, %2\n\t" \
 			"move\t$6, %3\n\t" \
+			".set\tnoreorder\n\t" \
+			__MODULE_JAL(__copy_user) \
 			".set\tnoat\n\t" \
 			"addu\t$1, %2, %3\n\t" \
 			".set\tat\n\t" \
-			__MODULE_JAL(__copy_user) \
+			".set\treorder\n\t" \
 			"move\t%0, $6" \
 			: "=r" (__cu_len) \
 			: "r" (__cu_to), "r" (__cu_from), "r" (__cu_len) \
@@ -449,7 +451,6 @@ strncpy_from_user(char *__to, const char *__from, long __len)
 	return res;
 }
 
-
 /* Returns: 0 if bad, string length+1 (memory size) of string if ok */
 extern inline long __strlen_user(const char *s)
 {
@@ -481,6 +482,39 @@ extern inline long strlen_user(const char *s)
 	return res;
 }
 
+/* Returns: 0 if bad, string length+1 (memory size) of string if ok */
+extern inline long __strnlen_user(const char *s, long n)
+{
+	long res;
+
+	__asm__ __volatile__(
+		"move\t$4, %1\n\t"
+		"move\t$5, %2\n\t"
+		__MODULE_JAL(__strnlen_user_nocheck_asm)
+		"move\t%0, $2"
+		: "=r" (res)
+		: "r" (s), "r" (n)
+		: "$2", "$4", "$5", "$8", "$31");
+
+	return res;
+}
+
+extern inline long strnlen_user(const char *s, long n)
+{
+	long res;
+
+	__asm__ __volatile__(
+		"move\t$4, %1\n\t"
+		"move\t$5, %2\n\t"
+		__MODULE_JAL(__strnlen_user_asm)
+		"move\t%0, $2"
+		: "=r" (res)
+		: "r" (s), "r" (n)
+		: "$2", "$4", "$5", "$8", "$31");
+
+	return res;
+}
+
 struct exception_table_entry
 {
 	unsigned long insn;
@@ -496,4 +530,4 @@ extern unsigned long search_exception_table(unsigned long addr);
 	fixup_unit;                                             \
 })
 
-#endif /* __ASM_MIPS_UACCESS_H */
+#endif /* _ASM_UACCESS_H */

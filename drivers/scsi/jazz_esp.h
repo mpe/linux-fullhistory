@@ -37,4 +37,3 @@ extern int esp_proc_info(char *buffer, char **start, off_t offset, int length,
 		use_clustering: DISABLE_CLUSTERING, }
 
 #endif /* JAZZ_ESP_H */
-

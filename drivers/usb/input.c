@@ -31,7 +31,6 @@
 #include <linux/init.h>
 #include <linux/input.h>
 #include <linux/module.h>
-#include <linux/config.h>
 #include <linux/random.h>
 
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");

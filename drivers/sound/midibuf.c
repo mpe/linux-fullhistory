@@ -21,7 +21,6 @@
 
 #include "sound_config.h"
 
-#ifdef CONFIG_MIDI
 
 /*
  * Don't make MAX_QUEUE_SIZE larger than 4000
@@ -431,6 +430,3 @@ int MIDIbuf_avail(int dev)
 		return DATA_AVAIL (midi_in_buf[dev]);
 	return 0;
 }
-
-
-#endif

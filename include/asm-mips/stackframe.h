@@ -3,16 +3,20 @@
  *
  *  Copyright (C) 1994, 1995, 1996 by Ralf Baechle and Paul M. Antoine.
  *
- * $Id: stackframe.h,v 1.7 1998/04/28 19:39:15 ralf Exp $
+ * $Id: stackframe.h,v 1.11 1999/12/04 03:59:12 ralf Exp $
  */
 #ifndef __ASM_MIPS_STACKFRAME_H
 #define __ASM_MIPS_STACKFRAME_H
 
 #include <asm/asm.h>
 #include <asm/offset.h>
+#include <linux/config.h>
 
 #define SAVE_AT                                          \
-		sw	$1, PT_R1(sp)
+		.set	push;                            \
+		.set	noat;                            \
+		sw	$1, PT_R1(sp);                   \
+		.set	pop
 
 #define SAVE_TEMP                                        \
 		mfhi	v1;                              \
@@ -100,10 +104,10 @@
 		SAVE_STATIC
 
 #define RESTORE_AT                                       \
+		.set	push;                            \
+		.set	noat;                            \
 		lw	$1,  PT_R1(sp);                  \
-
-#define RESTORE_SP                                       \
-		lw	sp,  PT_R29(sp)
+		.set	pop;
 
 #define RESTORE_TEMP                                     \
 		lw	$24, PT_LO(sp);                  \
@@ -130,6 +134,44 @@
 		lw	$22, PT_R22(sp);                 \
 		lw	$23, PT_R23(sp);                 \
 		lw	$30, PT_R30(sp)
+
+#if defined(CONFIG_CPU_R3000)
+
+#define RESTORE_SOME                                     \
+		.set	push;                            \
+		.set	reorder;                         \
+		mfc0	t0, CP0_STATUS;                  \
+		.set	pop;                             \
+		ori	t0, 0x1f;                        \
+		xori	t0, 0x1f;                        \
+		mtc0	t0, CP0_STATUS;                  \
+		li	v1, 0xff00;                      \
+		and	t0, v1;				 \
+		lw	v0, PT_STATUS(sp);               \
+		nor	v1, $0, v1;			 \
+		and	v0, v1;				 \
+		or	v0, t0;				 \
+		mtc0	v0, CP0_STATUS;                  \
+		lw	$31, PT_R31(sp);                 \
+		lw	$28, PT_R28(sp);                 \
+		lw	$25, PT_R25(sp);                 \
+		lw	$7,  PT_R7(sp);                  \
+		lw	$6,  PT_R6(sp);                  \
+		lw	$5,  PT_R5(sp);                  \
+		lw	$4,  PT_R4(sp);                  \
+		lw	$3,  PT_R3(sp);                  \
+		lw	$2,  PT_R2(sp)
+
+#define RESTORE_SP_AND_RET                               \
+		.set	push;				 \
+		.set	noreorder;			 \
+		lw	k0, PT_EPC(sp);                  \
+		lw	sp,  PT_R29(sp);                 \
+		jr	k0;                              \
+		 rfe;					 \
+		.set	pop
+
+#else
 
 #define RESTORE_SOME                                     \
 		.set	push;                            \
@@ -158,12 +200,20 @@
 		lw	$3,  PT_R3(sp);                  \
 		lw	$2,  PT_R2(sp)
 
-#define RESTORE_ALL                                      \
+#define RESTORE_SP_AND_RET                               \
+		lw	sp,  PT_R29(sp);                 \
+		.set	mips3;				 \
+		eret;					 \
+		.set	mips0
+
+#endif
+
+#define RESTORE_ALL_AND_RET                              \
 		RESTORE_SOME;                            \
 		RESTORE_AT;                              \
 		RESTORE_TEMP;                            \
 		RESTORE_STATIC;                          \
-		RESTORE_SP
+		RESTORE_SP_AND_RET
 
 /*
  * Move to kernel mode and disable interrupts.

@@ -1,4 +1,4 @@
-/* $Id: sgiseeq.h,v 1.3 1998/08/25 09:17:45 ralf Exp $
+/* $Id: sgiseeq.h,v 1.5 1999/12/04 03:59:03 ralf Exp $
  * sgiseeq.h: Defines for the Seeq8003 ethernet controller.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
@@ -7,27 +7,27 @@
 #define _SGISEEQ_H
 
 struct sgiseeq_wregs {
-	volatile unsigned long multicase_high[2];
-	volatile unsigned long frame_gap;
-	volatile unsigned long control;
+	volatile unsigned int multicase_high[2];
+	volatile unsigned int frame_gap;
+	volatile unsigned int control;
 };
 
 struct sgiseeq_rregs {
-	volatile unsigned long collision_tx[2];
-	volatile unsigned long collision_all[2];
-	volatile unsigned long _unused0;
-	volatile unsigned long rflags; 
+	volatile unsigned int collision_tx[2];
+	volatile unsigned int collision_all[2];
+	volatile unsigned int _unused0;
+	volatile unsigned int rflags; 
 };
 
 struct sgiseeq_regs {
 	union {
-		volatile unsigned long eth_addr[6];
-		volatile unsigned long multicast_low[6];
+		volatile unsigned int eth_addr[6];
+		volatile unsigned int multicast_low[6];
 		struct sgiseeq_wregs wregs;
 		struct sgiseeq_rregs rregs;
 	} rw;
-	volatile unsigned long rstat;
-	volatile unsigned long tstat;
+	volatile unsigned int rstat;
+	volatile unsigned int tstat;
 };
 
 /* Seeq8003 receive status register */

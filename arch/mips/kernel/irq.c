@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.15 1999/02/25 21:50:49 tsbogend Exp $
+/* $Id: irq.c,v 1.20 2000/02/23 00:41:00 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -29,6 +29,7 @@
 #include <asm/mipsregs.h>
 #include <asm/system.h>
 #include <asm/sni.h>
+#include <asm/nile4.h>
 
 /*
  * This contains the irq mask for both 8259A irq controllers, it's an
@@ -72,7 +73,7 @@ static inline void unmask_irq(unsigned int irq)
 	}
 }
 
-void disable_irq(unsigned int irq_nr)
+void i8259_disable_irq(unsigned int irq_nr)
 {
 	unsigned long flags;
 
@@ -81,7 +82,7 @@ void disable_irq(unsigned int irq_nr)
 	restore_flags(flags);
 }
 
-void enable_irq(unsigned int irq_nr)
+void i8259_enable_irq(unsigned int irq_nr)
 {
 	unsigned long flags;
 	save_and_cli(flags);
@@ -123,8 +124,6 @@ int get_irq_list(char *buf)
 	return len;
 }
 
-atomic_t __mips_bh_counter;
-
 static inline void i8259_mask_and_ack_irq(int irq)
 {
 	cached_irq_mask |= 1 << irq;
@@ -147,7 +146,7 @@ asmlinkage void i8259_do_irq(int irq, struct pt_regs *regs)
 	int do_random, cpu;
 
 	cpu = smp_processor_id();
-	hardirq_enter(cpu);
+	irq_enter(cpu);
 
 	if (irq >= 16)
 		goto out;
@@ -175,7 +174,7 @@ asmlinkage void i8259_do_irq(int irq, struct pt_regs *regs)
 	unmask_irq (irq);
 
 out:
-	hardirq_exit(cpu);
+	irq_exit(cpu);
 }
 
 /*
@@ -191,7 +190,7 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 	int do_random, cpu;
 
 	cpu = smp_processor_id();
-	hardirq_enter(cpu);
+	irq_enter(cpu);
 	kstat.irqs[cpu][irq]++;
 
 	action = *(irq + irq_action);
@@ -209,7 +208,10 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 			add_interrupt_randomness(irq);
 		__cli();
 	}
-	hardirq_exit(cpu);
+	irq_exit(cpu);
+
+	if (softirq_state[cpu].active&softirq_state[cpu].mask)
+		do_softirq();
 
 	/* unmasking and bottom half handling is done magically for us. */
 }
@@ -245,7 +247,10 @@ int i8259_setup_irq(int irq, struct irqaction * new)
 	*p = new;
 
 	if (!shared) {
-		unmask_irq(irq);
+		if (is_i8259_irq(irq))
+		    unmask_irq(irq);
+		else
+		    nile4_enable_irq(irq_to_nile4(irq));
 	}
 	restore_flags(flags);
 	return 0;
@@ -356,7 +361,7 @@ static int i8259_irq_cannonicalize(int irq)
 	return ((irq == 2) ? 9 : irq);
 }
 
-static void __init i8259_init(void)
+void __init i8259_init(void)
 {
 	/* Init master interrupt controller */
 	outb(0x11, 0x20); /* Start init sequence */

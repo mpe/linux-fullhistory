@@ -90,55 +90,82 @@ cpu_idle(void)
 	}
 }
 
+
+struct halt_info {
+	int mode;
+	char *restart_cmd;
+};
+
 static void
-common_shutdown(int mode, char *restart_cmd)
+common_shutdown_1(void *generic_ptr)
 {
-	/* The following currently only has any effect on SRM.  We should
-	   fix MILO to understand it.  Should be pretty easy.  Also we can
-	   support RESTART2 via the ipc_buffer machinations pictured below,
-	   which SRM ignores.  */
+	struct halt_info *how = (struct halt_info *)generic_ptr;
+	struct percpu_struct *cpup;
+	unsigned long *pflags, flags;
+	int cpuid = smp_processor_id();
 
-	if (alpha_using_srm) {
-		struct percpu_struct *cpup;
-		unsigned long flags;
-	
-		cpup = (struct percpu_struct *)
-		  ((unsigned long)hwrpb + hwrpb->processor_offset);
+	/* No point in taking interrupts anymore. */
+	__cli();
 
-		flags = cpup->flags;
+	cpup = (struct percpu_struct *)
+			((unsigned long)hwrpb + hwrpb->processor_offset
+			 + hwrpb->processor_size * cpuid);
+	pflags = &cpup->flags;
+	flags = *pflags;
 
-		/* Clear reason to "default"; clear "bootstrap in progress". */
-		flags &= ~0x00ff0001UL;
+	/* Clear reason to "default"; clear "bootstrap in progress". */
+	flags &= ~0x00ff0001UL;
 
-		if (mode == LINUX_REBOOT_CMD_RESTART) {
-			if (!restart_cmd) {
-				flags |= 0x00020000UL; /* "cold bootstrap" */
-				cpup->ipc_buffer[0] = 0;
-			} else {
-				flags |=  0x00030000UL; /* "warm bootstrap" */
-				strncpy((char *)cpup->ipc_buffer, restart_cmd,
-					sizeof(cpup->ipc_buffer));
-			}
+#ifdef __SMP__
+	/* Secondaries halt here. */
+	if (cpuid != boot_cpuid) {
+		flags |= 0x00040000UL; /* "remain halted" */
+		*pflags = flags;
+		clear_bit(cpuid, &cpu_present_mask);
+		halt();
+	}
+#endif
+
+	if (how->mode == LINUX_REBOOT_CMD_RESTART) {
+		if (!how->restart_cmd) {
+			flags |= 0x00020000UL; /* "cold bootstrap" */
 		} else {
-			flags |=  0x00040000UL; /* "remain halted" */
+			/* For SRM, we could probably set environment
+			   variables to get this to work.  We'd have to
+			   delay this until after srm_paging_stop unless
+			   we ever got srm_fixup working.
+
+			   At the moment, SRM will use the last boot device,
+			   but the file and flags will be the defaults, when
+			   doing a "warm" bootstrap.  */
+			flags |= 0x00030000UL; /* "warm bootstrap" */
 		}
-			
-		cpup->flags = flags;					       
-		mb();						
+	} else {
+		flags |= 0x00040000UL; /* "remain halted" */
+	}
+	*pflags = flags;
 
-		/* reset_for_srm(); */
-		set_hae(srm_hae);
+#ifdef __SMP__
+	/* Wait for the secondaries to halt. */
+	clear_bit(boot_cpuid, &cpu_present_mask);
+	while (cpu_present_mask)
+		barrier();
+#endif
 
+        /* If booted from SRM, reset some of the original environment. */
+	if (alpha_using_srm) {
 #ifdef CONFIG_DUMMY_CONSOLE
-		/* This has the effect of reseting the VGA video origin.  */
+		/* This has the effect of resetting the VGA video origin.  */
 		take_over_console(&dummy_con, 0, MAX_NR_CONSOLES-1, 1);
 #endif
+		/* reset_for_srm(); */
+		set_hae(srm_hae);
 	}
 
 	if (alpha_mv.kill_arch)
-		alpha_mv.kill_arch(mode);
+		alpha_mv.kill_arch(how->mode);
 
-	if (!alpha_using_srm && mode != LINUX_REBOOT_CMD_RESTART) {
+	if (! alpha_using_srm && how->mode != LINUX_REBOOT_CMD_RESTART) {
 		/* Unfortunately, since MILO doesn't currently understand
 		   the hwrpb bits above, we can't reliably halt the 
 		   processor and keep it halted.  So just loop.  */
@@ -149,6 +176,18 @@ common_shutdown(int mode, char *restart_cmd)
 		srm_paging_stop();
 
 	halt();
+}
+
+static void
+common_shutdown(int mode, char *restart_cmd)
+{
+	struct halt_info args;
+	args.mode = mode;
+	args.restart_cmd = restart_cmd;
+#ifdef __SMP__
+	smp_call_function(common_shutdown_1, &args, 1, 0);
+#endif
+	common_shutdown_1(&args);
 }
 
 void

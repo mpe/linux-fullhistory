@@ -590,7 +590,11 @@ static void apm_cpu_idle(void)
 					continue;
 				if (hlt_counter)
 					continue;
-				asm volatile("sti ; hlt" : : : "memory");
+				asm volatile("cli" : : : "memory");
+				if (!current->need_resched)
+					asm volatile("sti ; hlt" : : : "memory");
+				else
+					asm volatile("sti" : : : "memory");
 				continue;
 			}
 
@@ -916,7 +920,7 @@ static int send_event(apm_event_t event, struct apm_user *sender)
 	case APM_CRITICAL_SUSPEND:
 	case APM_USER_SUSPEND:
 		/* map all suspends to ACPI D3 */
-		if (pm_send_request(PM_SUSPEND, (void *)3)) {
+		if (pm_send_all(PM_SUSPEND, (void *)3)) {
 			if (apm_bios_info.version > 0x100)
 				apm_set_power_state(APM_STATE_REJECT);
 			return 0;
@@ -925,7 +929,7 @@ static int send_event(apm_event_t event, struct apm_user *sender)
 	case APM_NORMAL_RESUME:
 	case APM_CRITICAL_RESUME:
 		/* map all resumes to ACPI D0 */
-		(void) pm_send_request(PM_RESUME, (void *)0);
+		(void) pm_send_all(PM_RESUME, (void *)0);
 		break;
 	}
 

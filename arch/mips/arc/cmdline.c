@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: cmdline.c,v 1.1 1998/10/18 13:32:08 tsbogend Exp $
+ * $Id: cmdline.c,v 1.2 1999/10/09 00:00:57 ralf Exp $
  */
 #include <linux/init.h>
 #include <linux/kernel.h>

@@ -1,4 +1,4 @@
-/* $Id: mipsregs.h,v 1.6 1998/08/17 11:27:08 ralf Exp $
+/* $Id: mipsregs.h,v 1.6 1999/07/26 19:42:43 harald Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -103,7 +103,10 @@
 #define read_32bit_cp0_register(source)                         \
 ({ int __res;                                                   \
         __asm__ __volatile__(                                   \
-        "mfc0\t%0,"STR(source)                                  \
+	".set\tpush\n\t"					\
+	".set\treorder\n\t"					\
+        "mfc0\t%0,"STR(source)"\n\t"                            \
+	".set\tpop"						\
         : "=r" (__res));                                        \
         __res;})
 
@@ -121,7 +124,8 @@
 
 #define write_32bit_cp0_register(register,value)                \
         __asm__ __volatile__(                                   \
-        "mtc0\t%0,"STR(register)                                \
+        "mtc0\t%0,"STR(register)"\n\t"				\
+	"nop"							\
         : : "r" (value));
 
 #define write_64bit_cp0_register(register,value)                \

@@ -4,8 +4,8 @@
  * Copyright (C) 1999 Gleb Raiko & Vladimir Roganov
  */
 
+#include <linux/init.h>
 #include <asm/bootinfo.h>
-#include <asm/init.h>
 
 void (*__wbflush) (void);
 

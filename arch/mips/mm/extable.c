@@ -8,7 +8,7 @@
 extern const struct exception_table_entry __start___ex_table[];
 extern const struct exception_table_entry __stop___ex_table[];
 
-static inline unsigned
+static inline unsigned long
 search_one_table(const struct exception_table_entry *first,
                  const struct exception_table_entry *last,
                  unsigned long value)

@@ -1,4 +1,4 @@
-/* $Id$
+/* $Id: vacserial.c,v 1.4 1999/10/09 00:00:57 ralf Exp $
  * vacserial.c: VAC UART serial driver
  *              This code stealed and adopted from linux/drivers/char/serial.c
  *              See that for author info
@@ -22,7 +22,8 @@
 #define RS_STROBE_TIME (10*HZ)
 #define RS_ISR_PASS_LIMIT  2 /* Beget is not a super-computer (old=256) */
 
-#define IRQ_T(info) ((info->flags & ASYNC_SHARE_IRQ) ? SA_SHIRQ : SA_INTERRUPT)
+#define IRQ_T(state) \
+ ((state->flags & ASYNC_SHARE_IRQ) ? SA_SHIRQ : SA_INTERRUPT)
 
 #define SERIAL_INLINE
   
@@ -157,7 +158,7 @@ static struct termios *serial_termios_locked[NR_PORTS];
  * memory if large numbers of serial ports are open.
  */
 static unsigned char *tmp_buf;
-static struct semaphore tmp_buf_sem = MUTEX;
+static DECLARE_MUTEX(tmp_buf_sem);
 
 static inline int serial_paranoia_check(struct async_struct *info,
 					kdev_t device, const char *routine)
@@ -695,7 +696,7 @@ static int startup(struct async_struct * info)
 			handler = rs_interrupt_single;
 
 
-		retval = request_irq(state->irq, handler, IRQ_T(info),
+		retval = request_irq(state->irq, handler, IRQ_T(state),
 				     "serial", NULL);
 		if (retval) {
 			if (capable(CAP_SYS_ADMIN)) {
@@ -813,7 +814,7 @@ static void shutdown(struct async_struct * info)
 		if (IRQ_ports[state->irq]) {
 			free_irq(state->irq, NULL);
 			retval = request_irq(state->irq, rs_interrupt_single,
-					     IRQ_T(info), "serial", NULL);
+					     IRQ_T(state), "serial", NULL);
 			
 			if (retval)
 				printk("serial shutdown: request_irq: error %d"
@@ -912,6 +913,8 @@ static void change_speed(struct async_struct *info)
 
 	/* Determine divisor based on baud rate */
 	baud = tty_get_baud_rate(info->tty);
+	if (!baud)
+		baud = 9600;    /* B0 transition handled in rs_set_termios */
 	baud_base = info->state->baud_base;
 	if (baud == 38400 &&
 	    ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST))
@@ -1357,7 +1360,7 @@ static int set_serial_info(struct async_struct * info,
 check_and_exit:
 	if (!state->port || !state->type)
 		return 0;
-	if (state->flags & ASYNC_INITIALIZED) {
+	if (info->flags & ASYNC_INITIALIZED) {
 		if (((old_state.flags & ASYNC_SPD_MASK) !=
 		     (state->flags & ASYNC_SPD_MASK)) ||
 		    (old_state.custom_divisor != state->custom_divisor)) {
@@ -1603,8 +1606,9 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 static void rs_set_termios(struct tty_struct *tty, struct termios *old_termios)
 {
 	struct async_struct *info = (struct async_struct *)tty->driver_data;
-	
-	if (   (tty->termios->c_cflag == old_termios->c_cflag)
+	unsigned int cflag = tty->termios->c_cflag;
+
+	if (   (cflag == old_termios->c_cflag)
 	    && (   RELEVANT_IFLAG(tty->termios->c_iflag) 
 		== RELEVANT_IFLAG(old_termios->c_iflag)))
 	  return;
@@ -1613,7 +1617,7 @@ static void rs_set_termios(struct tty_struct *tty, struct termios *old_termios)
 
 	/* Handle turning off CRTSCTS */
 	if ((old_termios->c_cflag & CRTSCTS) &&
-	    !(tty->termios->c_cflag & CRTSCTS)) {
+	    !(cflag & CRTSCTS)) {
 		tty->hw_stopped = 0;
 		rs_start(tty);
 	}
@@ -1820,7 +1824,7 @@ static void rs_hangup(struct tty_struct *tty)
 static int block_til_ready(struct tty_struct *tty, struct file * filp,
 			   struct async_struct *info)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	struct serial_state *state = info->state;
 	int		retval;
 	int		do_clocal = 0,  extra_count = 0;  
@@ -1960,6 +1964,9 @@ static int get_async_struct(int line, struct async_struct **ret_info)
 		return -ENOMEM;
 	}
 	memset(info, 0, sizeof(struct async_struct));
+	init_waitqueue_head(&info->open_wait);
+	init_waitqueue_head(&info->close_wait);
+	init_waitqueue_head(&info->delta_msr_wait);
 	info->magic = SERIAL_MAGIC;
 	info->port = sstate->port;
 	info->flags = sstate->flags;

@@ -1,7 +1,7 @@
 PARPORT interface documentation
 -------------------------------
 
-Time-stamp: <2000-02-22 16:48:16 twaugh>
+Time-stamp: <2000-02-24 13:30:20 twaugh>
 
 Described here are the following functions:
 
@@ -56,11 +56,9 @@ Port functions (can be overridden by low-level drivers):
     port->ops->ecp_write_addr
 
   Other:
-    port->ops->nibble_read_data (*)
-    port->ops->byte_read_data (*)
-    port->ops->compat_write_data (*)
-
-(*) - no documentation yet
+    port->ops->nibble_read_data
+    port->ops->byte_read_data
+    port->ops->compat_write_data
 
 The parport subsystem comprises 'parport' (the core port-sharing
 code), and a variety of low-level drivers that actually do the port
@@ -1411,3 +1409,82 @@ This may use a FIFO, and if so shall not return until the FIFO is empty.
 SEE ALSO
 
 ecp_read_data, ecp_write_data
+
+port->ops->nibble_read_data - read a block of data in nibble mode
+---------------------------
+
+SYNOPSIS
+
+#include <linux/parport.h>
+
+struct parport_operations {
+	...
+	size_t (*nibble_read_data) (struct parport *port,
+				    void *buf, size_t len, int flags);
+	...
+};
+
+DESCRIPTION
+
+Reads a block of data in nibble mode.  The 'flags' parameter is ignored.
+
+RETURN VALUE
+
+The number of whole bytes read.
+
+SEE ALSO
+
+byte_read_data, compat_write_data
+
+port->ops->byte_read_data - read a block of data in byte mode
+-------------------------
+
+SYNOPSIS
+
+#include <linux/parport.h>
+
+struct parport_operations {
+	...
+	size_t (*byte_read_data) (struct parport *port,
+				  void *buf, size_t len, int flags);
+	...
+};
+
+DESCRIPTION
+
+Reads a block of data in byte mode.  The 'flags' parameter is ignored.
+
+RETURN VALUE
+
+The number of bytes read.
+
+SEE ALSO
+
+nibble_read_data, compat_write_data
+
+port->ops->compat_write_data - write a block of data in compatibility mode
+----------------------------
+
+SYNOPSIS
+
+#include <linux/parport.h>
+
+struct parport_operations {
+	...
+	size_t (*compat_write_data) (struct parport *port,
+				     const void *buf, size_t len, int flags);
+	...
+};
+
+DESCRIPTION
+
+Writes a block of data in compatibility mode.  The 'flags' parameter
+is ignored.
+
+RETURN VALUE
+
+The number of bytes written.
+
+SEE ALSO
+
+nibble_read_data, byte_read_data

@@ -31,7 +31,7 @@ extern __inline__ void set_bit(unsigned long nr, volatile void * addr)
 	"	stl_c %0,%1\n"
 	"	beq %0,3f\n"
 	"2:\n"
-	".section .text2,\"ax\"\n"
+	".subsection 2\n"
 	"3:	br 1b\n"
 	".previous"
 	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)
@@ -52,7 +52,7 @@ extern __inline__ void clear_bit(unsigned long nr, volatile void * addr)
 	"	stl_c %0,%1\n"
 	"	beq %0,3f\n"
 	"2:\n"
-	".section .text2,\"ax\"\n"
+	".subsection 2\n"
 	"3:	br 1b\n"
 	".previous"
 	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)
@@ -69,7 +69,7 @@ extern __inline__ void change_bit(unsigned long nr, volatile void * addr)
 	"	xor %0,%2,%0\n"
 	"	stl_c %0,%1\n"
 	"	beq %0,3f\n"
-	".section .text2,\"ax\"\n"
+	".subsection 2\n"
 	"3:	br 1b\n"
 	".previous"
 	:"=&r" (temp), "=m" (*m)
@@ -92,7 +92,7 @@ extern __inline__ int test_and_set_bit(unsigned long nr,
 	"	beq %0,3f\n"
 	"	mb\n"
 	"2:\n"
-	".section .text2,\"ax\"\n"
+	".subsection 2\n"
 	"3:	br 1b\n"
 	".previous"
 	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)
@@ -117,7 +117,7 @@ extern __inline__ int test_and_clear_bit(unsigned long nr,
 	"	beq %0,3f\n"
 	"	mb\n"
 	"2:\n"
-	".section .text2,\"ax\"\n"
+	".subsection 2\n"
 	"3:	br 1b\n"
 	".previous"
 	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)
@@ -140,7 +140,7 @@ extern __inline__ int test_and_change_bit(unsigned long nr,
 	"	stl_c %0,%1\n"
 	"	beq %0,3f\n"
 	"	mb\n"
-	".section .text2,\"ax\"\n"
+	".subsection 2\n"
 	"3:	br 1b\n"
 	".previous"
 	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)

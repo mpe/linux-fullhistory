@@ -1,4 +1,4 @@
-/* $Id: irq.h,v 1.4 1998/05/28 03:18:13 ralf Exp $
+/* $Id: irq.h,v 1.7 2000/02/23 00:41:38 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -7,8 +7,8 @@
  * Copyright (C) 1994 by Waldorf GMBH, written by Ralf Baechle
  * Copyright (C) 1995, 1996, 1997, 1998 by Ralf Baechle
  */
-#ifndef __ASM_MIPS_IRQ_H
-#define __ASM_MIPS_IRQ_H
+#ifndef _ASM_IRQ_H
+#define _ASM_IRQ_H
 
 #define NR_IRQS 64
 
@@ -19,9 +19,10 @@ extern int (*irq_cannonicalize)(int irq);
 struct irqaction;
 extern int i8259_setup_irq(int irq, struct irqaction * new);
 extern void disable_irq(unsigned int);
+#define disable_irq_nosync	disable_irq
 extern void enable_irq(unsigned int);
 
 /* Machine specific interrupt initialization  */
 extern void (*irq_setup)(void);
 
-#endif /* __ASM_MIPS_IRQ_H */
+#endif /* _ASM_IRQ_H */

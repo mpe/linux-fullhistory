@@ -1,4 +1,9 @@
-/*
+/* $Id: gfx.h,v 1.5 1999/08/19 22:56:33 ralf Exp $
+ *
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
+ *
  * This is the user-visible SGI GFX interface.
  *
  * This must be used verbatim into the GNU libc.  It does not include
@@ -6,6 +11,8 @@
  *
  * miguel@nuclecu.unam.mx
  */
+#ifndef _ASM_GFX_H
+#define _ASM_GFX_H
 
 /* The iocls, yes, they do not make sense, but such is life */
 #define GFX_BASE             100
@@ -45,3 +52,5 @@ extern void remove_mapping (struct task_struct *, unsigned long, unsigned long);
 extern void *vmalloc_uncached (unsigned long size);
 extern int vmap_page_range (unsigned long from, unsigned long size, unsigned long vaddr);
 #endif
+
+#endif /* _ASM_GFX_H */

@@ -5,7 +5,7 @@
  *      Code (mostly sleleton and comments) derived from DECstation IRQ
  *      handling.
  *
- * $Id$
+ * $Id: irq.c,v 1.6 2000/02/04 07:40:23 ralf Exp $
  */
 #include <linux/errno.h>
 #include <linux/init.h>
@@ -32,8 +32,6 @@
 unsigned int local_bh_count[NR_CPUS];
 unsigned int local_irq_count[NR_CPUS];
 unsigned long spurious_count = 0;
-
-atomic_t __mips_bh_counter;
 
 /*
  * This table is a correspondence between IRQ numbers and CPU PILs
@@ -142,15 +140,6 @@ void enable_irq(unsigned int irq_nr)
 }
 
 /*
- * Data definition for static irqaction allocation.
- * It is used while SLAB module is not initialized.
- */
-
-#define MAX_STATIC_ALLOC 4 
-struct irqaction static_irqaction[MAX_STATIC_ALLOC];
-int static_irq_count = 0;
- 
-/*
  * Pointers to the low-level handlers: first the general ones, then the
  * fast ones, then the bad ones.
  */
@@ -193,7 +182,7 @@ static void do_IRQ(int irq, struct pt_regs * regs)
 	int do_random, cpu;
 
 	cpu = smp_processor_id();
-	hardirq_enter(cpu);
+	irq_enter(cpu);
 	kstat.irqs[cpu][irq]++;
 
 	mask_irq(irq);  
@@ -215,7 +204,7 @@ static void do_IRQ(int irq, struct pt_regs * regs)
 		printk("do_IRQ: Unregistered IRQ (0x%X) occured\n", irq);
 	}
 	unmask_irq(irq);
-	hardirq_exit(cpu);
+	irq_exit(cpu);
 
 	/* unmasking and bottom half handling is done magically for us. */
 }
@@ -319,7 +308,7 @@ int request_irq(unsigned int irq,
 		void *dev_id)
 {
 	int retval;
-	struct irqaction * action = NULL;
+	struct irqaction * action;
 
 	if (irq >= BAGET_IRQ_NR)
 		return -EINVAL;
@@ -328,22 +317,8 @@ int request_irq(unsigned int irq,
 	if (irq_to_pil_map[irq] < 0) 
 		return -EINVAL;
 
-        if (irqflags & SA_STATIC_ALLOC) {
-		unsigned long flags;
-
-		save_and_cli(flags);
-		if (static_irq_count < MAX_STATIC_ALLOC)
-			action = &static_irqaction[static_irq_count++];
-		else 
-			printk("Request for IRQ%d (%s) SA_STATIC_ALLOC failed "
-			       "using kmalloc\n", irq, devname);
-		restore_flags(flags);
-	}
-  
-	if (action == NULL)
-		action = (struct irqaction *)
+	action = (struct irqaction *)
 			kmalloc(sizeof(struct irqaction), GFP_KERNEL);
-
 	if (!action) 
 		return -ENOMEM;
 
@@ -380,17 +355,6 @@ void free_irq(unsigned int irq, void *dev_id)
 		if (!irq[irq_action])
 			unmask_irq_count(irq);
 		restore_flags(flags);
-
-		if (action->flags & SA_STATIC_ALLOC)
-		{
-			/* This interrupt is marked as specially allocated
-			 * so it is a bad idea to free it.
-			 */
-			printk("Attempt to free statically allocated "
-			       "IRQ%d (%s)\n", irq, action->name);
-			return;
-		}
- 
 		kfree(action);
 		return;
 	}
@@ -422,6 +386,9 @@ static void write_err_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	*(volatile char*) BAGET_WRERR_ACK = 0;
 }
 
+static struct irqaction irq0  = 
+{ write_err_interrupt, SA_INTERRUPT, 0, "bus write error", NULL, NULL};
+
 void __init init_IRQ(void)
 {
 	irq_setup();
@@ -432,7 +399,6 @@ void __init init_IRQ(void)
 	/* Enable interrupts for pils 2 and 3 (lines 0 and 1) */
 	modify_cp0_intmask(0, (1<<2)|(1<<3));
 
-	if (request_irq(0/*fixme*/, write_err_interrupt, 
-			SA_INTERRUPT|SA_STATIC_ALLOC, "write_err", NULL) < 0) 
+	if (setup_baget_irq(0, &irq0) < 0) 
 		printk("init_IRQ: unable to register write_err irq\n");
 }

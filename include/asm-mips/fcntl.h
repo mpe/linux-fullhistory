@@ -1,4 +1,4 @@
-/* $Id: fcntl.h,v 1.3 1998/08/29 20:41:02 ralf Exp $
+/* $Id: fcntl.h,v 1.5 1999/01/04 16:09:21 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

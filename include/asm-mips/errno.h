@@ -5,10 +5,10 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1995 by Ralf Baechle
+ * Copyright (C) 1995, 1999 by Ralf Baechle
  */
-#ifndef __ASM_MIPS_ERRNO_H
-#define __ASM_MIPS_ERRNO_H
+#ifndef _ASM_ERRNO_H
+#define _ASM_ERRNO_H
 
 /*
  * These error numbers are intended to be MIPS ABI compatible
@@ -144,19 +144,13 @@
 #define ENOMEDIUM	159	/* No medium found */
 #define EMEDIUMTYPE	160	/* Wrong medium type */
 
-/*
- * IRIX 5 error number start from 1000.
- * Stupid enough; ECANCELED gets redefined with a different value ...
-#define ECANCELED       1000
- */
+#define EDQUOT		1133	/* Quota exceeded */
 
-/*
- * IRIX 4 compatibility error numbers.
- */
-#define	EDQUOT		1133	/* Quota exceeded */
-#define ENFSREMOTE	1134	/* ??? */
+#ifdef __KERNEL__
 
 /* The biggest error number defined here or in <linux/errno.h>. */
-#define EMAXERRNO	1134
+#define EMAXERRNO	1133
 
-#endif /* __ASM_MIPS_ERRNO_H */
+#endif /* __KERNEL__ */
+
+#endif /* _ASM_ERRNO_H */

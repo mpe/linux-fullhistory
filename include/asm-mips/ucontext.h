@@ -1,5 +1,15 @@
-#ifndef __ASM_MIPS_UCONTEXT_H
-#define __ASM_MIPS_UCONTEXT_H
+/* $Id: ucontext.h,v 1.2 1999/09/28 22:27:17 ralf Exp $
+ *
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
+ *
+ * Low level exception handling
+ *
+ * Copyright (C) 1998, 1999 by Ralf Baechle
+ */
+#ifndef _ASM_UCONTEXT_H
+#define _ASM_UCONTEXT_H
 
 struct ucontext {
 	unsigned long	  uc_flags;
@@ -9,4 +19,4 @@ struct ucontext {
 	sigset_t	  uc_sigmask;	/* mask last for extensibility */
 };
 
-#endif /* __ASM_MIPS_UCONTEXT_H */
+#endif /* _ASM_UCONTEXT_H */

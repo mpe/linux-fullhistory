@@ -5,7 +5,7 @@
  *	Authors:
  *	Lennert Buytenhek		<buytenh@gnu.org>
  *
- *	$Id: br_fdb.c,v 1.3 2000/02/21 16:14:17 davem Exp $
+ *	$Id: br_fdb.c,v 1.4 2000/02/24 06:16:45 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -14,9 +14,9 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/spinlock.h>
 #include <linux/if_bridge.h>
 #include <asm/atomic.h>
-#include <asm/spinlock.h>
 #include <asm/uaccess.h>
 #include "br_private.h"
 

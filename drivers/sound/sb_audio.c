@@ -24,8 +24,6 @@
 #include <linux/config.h>
 #include "sound_config.h"
 
-#ifdef CONFIG_SBDSP
-
 #include "sb_mixer.h"
 #include "sb.h"
 
@@ -1126,5 +1124,3 @@ void sb_audio_init(sb_devc * devc, char *name)
 	audio_devs[devc->dev]->mixer_dev = devc->my_mixerdev;
 	audio_devs[devc->dev]->min_fragment = 5;
 }
-
-#endif

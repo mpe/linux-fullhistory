@@ -1,4 +1,4 @@
-/* $Id: setup.c,v 1.20 1999/02/25 21:57:47 tsbogend Exp $
+/* $Id: setup.c,v 1.25 2000/01/27 01:05:23 ralf Exp $
  *
  * Setup pointers to hardware-dependent routines.
  *
@@ -18,11 +18,12 @@
 #include <linux/console.h>
 #include <linux/fb.h>
 #include <linux/mc146818rtc.h>
+#include <linux/ide.h>
 #include <asm/bootinfo.h>
 #include <asm/keyboard.h>
-#include <asm/ide.h>
 #include <asm/irq.h>
 #include <asm/jazz.h>
+#include <asm/jazzdma.h>
 #include <asm/ptrace.h>
 #include <asm/reboot.h>
 #include <asm/io.h>
@@ -79,6 +80,11 @@ static void __init jazz_irq_setup(void)
 	i8259_setup_irq(2, &irq2);
 }
 
+int __init page_is_ram(unsigned long pagenr)
+{
+	return 1;
+}
+
 void __init jazz_setup(void)
 {
 	add_wired_entry (0x02000017, 0x03c00017, 0xe0000000, PM_64K);
@@ -102,8 +108,29 @@ void __init jazz_setup(void)
 #ifdef CONFIG_BLK_DEV_IDE
 	ide_ops = &std_ide_ops;
 #endif
+#ifdef CONFIG_BLK_DEV_FD
+	fd_ops = &jazz_fd_ops;
+#endif
+#ifdef CONFIG_VT
 	conswitchp = &dummy_con;
+#endif
+
+#warning "Somebody should check if screen_info is ok for Jazz."
+
+	screen_info = (struct screen_info) {
+		0, 0,		/* orig-x, orig-y */
+		0,		/* unused */
+		0,		/* orig_video_page */
+		0,		/* orig_video_mode */
+		160,		/* orig_video_cols */
+		0, 0, 0,	/* unused, ega_bx, unused */
+		64,		/* orig_video_lines */
+		0,		/* orig_video_isVGA */
+		16		/* orig_video_points */
+	};
+
 	rtc_ops = &jazz_rtc_ops;
 	kbd_ops = &jazz_kbd_ops;
-	fd_ops = &jazz_fd_ops;
+
+	vdma_init();
 }

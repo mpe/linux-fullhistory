@@ -28,9 +28,10 @@
 #include <linux/stddef.h> 
 #include <linux/vmalloc.h>
 
-#include <asm/uaccess.h>
+#include <asm/delay.h>
 #include <asm/kdbsupport.h>
 #include <asm/rse.h>
+#include <asm/uaccess.h>
 
 extern kdb_state_t kdb_state ;
 k_machreg_t dbregs[KDB_DBREGS];
@@ -45,6 +46,21 @@ kdb_setup (char *str)
 __setup("kdb", kdb_setup);
 
 static int
+kdb_ia64_itm (int argc, const char **argv, const char **envp, struct pt_regs *regs)
+{
+	int diag;
+	unsigned long val;
+
+	diag = kdbgetularg(argv[1], &val);
+	if (diag)
+		return diag;
+	kdb_printf("new itm=%0xlx\n", val);
+
+	ia64_set_itm(val);
+	return 0;
+}
+
+static int
 kdb_ia64_sir (int argc, const char **argv, const char **envp, struct pt_regs *regs)
 {
 	u64 lid, tpr, lrr0, lrr1, itv, pmv, cmcv;
@@ -53,15 +69,17 @@ kdb_ia64_sir (int argc, const char **argv, const char **envp, struct pt_regs *re
 	asm ("mov %0=cr.tpr" : "=r"(tpr));
 	asm ("mov %0=cr.lrr0" : "=r"(lrr0));
 	asm ("mov %0=cr.lrr1" : "=r"(lrr1));
-	printk ("lid=0x%lx, tpr=0x%lx, lrr0=0x%lx, llr1=0x%lx\n", lid, tpr, lrr0, lrr1);
+	printk("lid=0x%lx, tpr=0x%lx, lrr0=0x%lx, llr1=0x%lx\n", lid, tpr, lrr0, lrr1);
 
 	asm ("mov %0=cr.itv" : "=r"(itv));
 	asm ("mov %0=cr.pmv" : "=r"(pmv));
 	asm ("mov %0=cr.cmcv" : "=r"(cmcv));
-	printk ("itv=0x%lx, pmv=0x%lx, cmcv=0x%lx\n", itv, pmv, cmcv);
+	printk("itv=0x%lx, pmv=0x%lx, cmcv=0x%lx\n", itv, pmv, cmcv);
 
-	printk ("irr=0x%016lx,0x%016lx,0x%016lx,0x%016lx\n",
+	printk("irr=0x%016lx,0x%016lx,0x%016lx,0x%016lx\n",
 		ia64_get_irr0(), ia64_get_irr1(), ia64_get_irr2(), ia64_get_irr3());
+
+	printk("itc=0x%016lx, itm=0x%016lx\n", ia64_get_itc(), ia64_get_itm());
 	return 0;
 }
 
@@ -90,6 +108,7 @@ kdb_init (void)
 	kdb_state.bkpt_handling_state = BKPTSTATE_NOT_HANDLED ;
 
 	kdb_register("irr", kdb_ia64_sir, "", "Show interrupt registers", 0);
+	kdb_register("itm", kdb_ia64_itm, "", "Set new ITM value", 0);
 }
 
 /*

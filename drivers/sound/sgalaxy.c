@@ -24,8 +24,6 @@
 #include "sound_config.h"
 #include "soundmodule.h"
 
-#if defined(CONFIG_SGALAXY) || defined (MODULE)
-
 static void sleep( unsigned howlong )
 {
 	current->state   = TASK_INTERRUPTIBLE;
@@ -182,5 +180,4 @@ void cleanup_module(void)
 	SOUND_LOCK_END;
 }
 
-#endif
-#endif
+#endif /* MODULE */

@@ -84,6 +84,17 @@ static __inline__ int atomic_dec_and_test(volatile atomic_t *v)
 	return c != 0;
 }
 
+static __inline__ int atomic_inc_and_test(volatile atomic_t *v)
+{
+	unsigned char c;
+
+	__asm__ __volatile__(
+		LOCK "incl %0; sete %1"
+		:"=m" (__atomic_fool_gcc(v)), "=qm" (c)
+		:"m" (__atomic_fool_gcc(v)));
+	return c != 0;
+}
+
 extern __inline__ int atomic_add_negative(int i, volatile atomic_t *v)
 {
 	unsigned char c;

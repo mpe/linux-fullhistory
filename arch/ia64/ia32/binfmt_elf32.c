@@ -82,6 +82,8 @@ void ia64_elf32_init(struct pt_regs *regs)
 	
 	/* Do all the IA-32 setup here */
 
+	current->thread.map_base = 0x40000000;
+
 	/* CS descriptor */
 	__asm__("mov ar.csd = %0" : /* no outputs */
 		: "r" IA64_SEG_DESCRIPTOR(0L, 0xFFFFFL, 0xBL, 1L,

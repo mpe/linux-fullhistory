@@ -158,6 +158,9 @@ ia64_handle_irq (unsigned long irq, struct pt_regs *regs)
 	unsigned long eoi_ptr;
  
 # ifdef CONFIG_USB
+	extern void reenable_usb (void);
+	extern void disable_usb (void);
+
 	if (usbfix)
 		disable_usb();
 # endif

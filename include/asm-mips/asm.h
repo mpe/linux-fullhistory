@@ -151,17 +151,17 @@ symbol		=	value
 /*
  * MIPS ISA IV/V movn/movz instructions and equivalents for older CPUs.
  */
-#if _MIPS_ISA == _MIPS_ISA_MIPS1
+#if (_MIPS_ISA == _MIPS_ISA_MIPS1)
 #define MOVN(rd,rs,rt)                                  \
 		.set	push;				\
-		.set	reorder;			\
+		.set	noreorder;			\
 		beqz	rt,9f;                          \
 		move	rd,rs;                          \
 		.set	pop;				\
 9:
 #define MOVZ(rd,rs,rt)                                  \
 		.set	push;				\
-		.set	reorder;			\
+		.set	noreorder;			\
 		bnez	rt,9f;                          \
 		move	rd,rt;                          \
 		.set	pop;				\

@@ -15,15 +15,12 @@
  * Alan Cox	   : reformatted and fixed a pair of null pointer bugs
  */
 #include <linux/config.h>
-
 #include <linux/kmod.h>
-
 
 #define SEQUENCER_C
 #include "sound_config.h"
-
-#ifdef CONFIG_SEQUENCER
 #include "softoss.h"
+
 int             (*softsynthp) (int cmd, int parm1, int parm2, unsigned long parm3) = NULL;
 
 #include "midi_ctrl.h"
@@ -719,9 +716,7 @@ static void seq_local_event(unsigned char *event_rec)
 	switch (cmd)
 	{
 		case LOCL_STARTAUDIO:
-#ifdef CONFIG_AUDIO
 			DMAbuf_start_devices(parm);
-#endif
 			break;
 
 		default:
@@ -1692,9 +1687,7 @@ void sequencer_init(void)
 
 	if (sequencer_ok)
 		return;
-#ifdef CONFIG_MIDI
 	MIDIbuf_init();
-#endif
 	queue = (unsigned char *)vmalloc(SEQ_MAX_QUEUE * EV_SZ);
 	if (queue == NULL)
 	{
@@ -1724,5 +1717,3 @@ void sequencer_unload(void)
 		iqueue=NULL;
 	}
 }
-
-#endif

@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: irixsig.c,v 1.11 1999/06/17 13:25:46 ralf Exp $
+ * $Id: irixsig.c,v 1.14 2000/01/17 03:58:59 ralf Exp $
  */
 
 #include <linux/kernel.h>
@@ -114,17 +114,17 @@ static void setup_irix_frame(struct k_sigaction *ka, struct pt_regs *regs,
 	dump_irix5_sigctx(ctx);
 #endif
 
-	regs->regs[5] = 0; /* XXX sigcode XXX */
 	regs->regs[4] = (unsigned long) signr;
+	regs->regs[5] = 0; /* XXX sigcode XXX */
 	regs->regs[6] = regs->regs[29] = sp;
 	regs->regs[7] = (unsigned long) ka->sa.sa_handler;
-	regs->regs[25] = regs->cp0_epc = current->tss.irix_trampoline;
+	regs->regs[25] = regs->cp0_epc = (unsigned long) ka->sa.sa_restorer;
 	return;
 
 segv_and_exit:
-	lock_kernel();
-	do_exit(SIGSEGV);
-	unlock_kernel();
+	if (signr == SIGSEGV)
+		ka->sa.sa_handler = SIG_DFL;
+	force_sig(SIGSEGV, current);
 }
 
 static void inline
@@ -296,11 +296,12 @@ asmlinkage int do_irix_signal(sigset_t *oldset, struct pt_regs *regs)
 	return 0;
 }
 
-asmlinkage unsigned long irix_sigreturn(struct pt_regs *regs)
+asmlinkage void
+irix_sigreturn(struct pt_regs *regs)
 {
 	struct sigctx_irix5 *context, *magic;
 	unsigned long umask, mask;
-	u64 *fregs, res;
+	u64 *fregs;
 	int sig, i, base = 0;
 	sigset_t blocked;
 
@@ -333,10 +334,10 @@ asmlinkage unsigned long irix_sigreturn(struct pt_regs *regs)
 	__get_user(regs->lo, &context->lo);
 
 	if ((umask & 1) && context->usedfp) {
-		fregs = (u64 *) &current->tss.fpu;
+		fregs = (u64 *) &current->thread.fpu;
 		for(i = 0; i < 32; i++)
 			fregs[i] = (u64) context->fpregs[i];
-		__get_user(current->tss.fpu.hard.control, &context->fpcsr);
+		__get_user(current->thread.fpu.hard.control, &context->fpcsr);
 	}
 
 	/* XXX do sigstack crapola here... XXX */
@@ -361,11 +362,7 @@ asmlinkage unsigned long irix_sigreturn(struct pt_regs *regs)
 		/* Unreached */
 
 badframe:
-	lock_kernel();
-	do_exit(SIGSEGV);
-	unlock_kernel();
-
-	return res;
+	force_sig(SIGSEGV, current);
 }
 
 struct sigact_irix5 {
@@ -386,7 +383,7 @@ static inline void dump_sigact_irix5(struct sigact_irix5 *p)
 
 asmlinkage int 
 irix_sigaction(int sig, const struct sigaction *act,
-	      struct sigaction *oact, unsigned long trampoline)
+	      struct sigaction *oact, void *trampoline)
 {
 	struct k_sigaction new_ka, old_ka;
 	int ret;
@@ -406,15 +403,14 @@ irix_sigaction(int sig, const struct sigaction *act,
 			return -EFAULT;
 
 		__copy_from_user(&mask, &act->sa_mask, sizeof(sigset_t));
-		new_ka.ka_restorer = NULL;
-	}
 
-	/*
-	 * Hmmm... methinks IRIX libc always passes a valid trampoline
-	 * value for all invocations of sigaction.  Will have to
-	 * investigate.  POSIX POSIX, die die die...
-	 */
-	current->tss.irix_trampoline = trampoline;
+		/*
+		 * Hmmm... methinks IRIX libc always passes a valid trampoline
+		 * value for all invocations of sigaction.  Will have to
+		 * investigate.  POSIX POSIX, die die die...
+		 */
+		new_ka.sa.sa_restorer = trampoline;
+	}
 
 /* XXX Implement SIG_SETMASK32 for IRIX compatibility */
 	ret = do_sigaction(sig, act ? &new_ka : NULL, oact ? &old_ka : NULL);
@@ -512,6 +508,7 @@ asmlinkage int irix_sigsuspend(struct pt_regs *regs)
 	spin_lock_irq(&current->sigmask_lock);
 	saveset = current->blocked;
 	current->blocked = newset;
+	recalc_sigpending(current);
 	spin_unlock_irq(&current->sigmask_lock);
 
 	regs->regs[2] = -EINTR;
@@ -795,7 +792,7 @@ asmlinkage int irix_getcontext(struct pt_regs *regs)
 	error = verify_area(VERIFY_WRITE, ctx, sizeof(*ctx));
 	if(error)
 		goto out;
-	__put_user(current->tss.irix_oldctx, &ctx->link);
+	__put_user(current->thread.irix_oldctx, &ctx->link);
 
 	__copy_to_user(&ctx->sigmask, &current->blocked, sizeof(irix_sigset_t));
 
@@ -867,7 +864,7 @@ asmlinkage unsigned long irix_setcontext(struct pt_regs *regs)
 		/* XXX fpu context, blah... */
 		printk("Wheee, cannot restore FPU context yet...\n");
 	}
-	current->tss.irix_oldctx = ctx->link;
+	current->thread.irix_oldctx = ctx->link;
 	error = regs->regs[2];
 
 out:

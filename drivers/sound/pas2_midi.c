@@ -12,11 +12,7 @@
  */
 #include <linux/config.h>
 
-
 #include "sound_config.h"
-
-#ifdef CONFIG_PAS
-#ifdef CONFIG_MIDI
 
 static int      midi_busy = 0, input_opened = 0;
 static int      my_dev;
@@ -264,6 +260,3 @@ void pas_midi_interrupt(void)
 	}
 	pas_write(stat, 0x1B88);	/* Acknowledge interrupts */
 }
-
-#endif
-#endif

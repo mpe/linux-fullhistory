@@ -30,8 +30,6 @@
 
 #include "sound_config.h"
 #include "soundmodule.h"
-
-#ifdef CONFIG_SOFTOSS
 #include "softoss.h"
 #include <linux/ultrasound.h>
 
@@ -1529,5 +1527,4 @@ void cleanup_module(void)
 	sound_unload_timerdev(devc->timerdev);
 	SOUND_LOCK_END;
 }
-#endif
-#endif
+#endif /* MODULE */

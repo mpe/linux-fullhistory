@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.12 1999/06/13 16:30:34 ralf Exp $
+/* $Id: time.c,v 1.14 2000/01/26 00:07:44 ralf Exp $
  *
  *  Copyright (C) 1991, 1992, 1995  Linus Torvalds
  *  Copyright (C) 1996, 1997, 1998  Ralf Baechle
@@ -6,7 +6,6 @@
  * This file contains the time handling details for PC-style clocks as
  * found in some MIPS systems.
  */
-#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/sched.h>
@@ -20,6 +19,7 @@
 #include <asm/mipsregs.h>
 #include <asm/io.h>
 #include <asm/irq.h>
+#include <asm/ddb5074.h>
 
 #include <linux/mc146818rtc.h>
 #include <linux/timex.h>
@@ -336,6 +336,24 @@ static long last_rtc_update = 0;
 static void inline
 timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
+#ifdef CONFIG_DDB5074
+	static unsigned cnt = 0, period = 0, dist = 0;
+
+	if (cnt == 0 || cnt == dist)
+	    ddb5074_led_d2(1);
+	else if (cnt == 7 || cnt == dist+7)
+	    ddb5074_led_d2(0);
+	
+	if (++cnt > period) {
+	    cnt = 0;
+	    /* The hyperbolic function below modifies the heartbeat period
+	     * length in dependency of the current (5min) load. It goes
+	     * through the points f(0)=126, f(1)=86, f(5)=51,
+	     * f(inf)->30. */
+	     period = ((672<<FSHIFT)/(5*avenrun[0]+(7<<FSHIFT))) + 30;
+	     dist = period / 4;
+	}
+#endif
 #ifdef CONFIG_PROFILE
 	if(!user_mode(regs)) {
 		if (prof_buffer && current->pid) {

@@ -27,15 +27,11 @@
  */
 #define TASK_SIZE		0xa000000000000000
 
-#ifdef CONFIG_IA32_SUPPORT
-# define TASK_UNMAPPED_BASE	0x40000000	/* XXX fix me! */
-#else
 /*
  * This decides where the kernel will search for a free chunk of vm
  * space during mmap's.
  */
-#define TASK_UNMAPPED_BASE	0x2000000000000000
-#endif
+#define TASK_UNMAPPED_BASE	(current->thread.map_base)
 
 /*
  * Bus types
@@ -153,7 +149,12 @@
 
 #define IA64_THREAD_FPH_VALID	(__IA64_UL(1) << 0)	/* floating-point high state valid? */
 #define IA64_THREAD_DBG_VALID	(__IA64_UL(1) << 1)	/* debug registers valid? */
-#define IA64_KERNEL_DEATH	(__IA64_UL(1) << 63)	/* used for die_if_kernel() recursion detection */
+#define IA64_THREAD_UAC_NOPRINT	(__IA64_UL(1) << 2)	/* don't log unaligned accesses */
+#define IA64_THREAD_UAC_SIGBUS	(__IA64_UL(1) << 3)	/* generate SIGBUS on unaligned acc. */
+#define IA64_KERNEL_DEATH	(__IA64_UL(1) << 63)	/* see die_if_kernel()... */
+
+#define IA64_THREAD_UAC_SHIFT	2	
+#define IA64_THREAD_UAC_MASK	(IA64_THREAD_UAC_NOPRINT | IA64_THREAD_UAC_SIGBUS)
 
 #ifndef __ASSEMBLY__
 
@@ -258,12 +259,24 @@ typedef struct {
 	unsigned long seg;
 } mm_segment_t;
 
+#define SET_UNALIGN_CTL(task,value)								\
+({												\
+	(task)->thread.flags |= ((value) << IA64_THREAD_UAC_SHIFT) & IA64_THREAD_UAC_MASK;	\
+	0;											\
+})
+#define GET_UNALIGN_CTL(task,addr)								\
+({												\
+	put_user(((task)->thread.flags & IA64_THREAD_UAC_MASK) >> IA64_THREAD_UAC_SHIFT,	\
+		 (int *) (addr));								\
+})
+
 struct thread_struct {
 	__u64 ksp;			/* kernel stack pointer */
 	unsigned long flags;		/* various flags */
 	struct ia64_fpreg fph[96];	/* saved/loaded on demand */
 	__u64 dbr[IA64_NUM_DBG_REGS];
 	__u64 ibr[IA64_NUM_DBG_REGS];
+	__u64 map_base;			/* base address for mmap() */
 #ifdef CONFIG_IA32_SUPPORT
 	__u64 fsr;			/* IA32 floating pt status reg */
 	__u64 fcr;			/* IA32 floating pt control reg */
@@ -285,7 +298,8 @@ struct thread_struct {
 	0,				/* flags */	\
 	{{{{0}}}, },			/* fph */	\
 	{0, },				/* dbr */	\
-	{0, }				/* ibr */	\
+	{0, },				/* ibr */	\
+	0x2000000000000000		/* map_base */	\
 	INIT_THREAD_IA32				\
 }
 
@@ -780,6 +794,14 @@ ia64_get_gp(void)
 #endif
 
 #define ia64_rotl(w,n)	ia64_rotr((w),(64)-(n))
+
+extern __inline__ __u64
+ia64_thash (__u64 addr)
+{
+	__u64 result;
+	asm ("thash %0=%1" : "=r"(result) : "r" (addr));
+	return result;
+}
 
 #endif /* !__ASSEMBLY__ */
 

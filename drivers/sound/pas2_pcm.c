@@ -18,9 +18,6 @@
 
 #include "sound_config.h"
 
-#ifdef CONFIG_PAS
-#ifdef CONFIG_AUDIO
-
 #ifndef DEB
 #define DEB(WHAT)
 #endif
@@ -440,6 +437,3 @@ void pas_pcm_interrupt(unsigned char status, int cause)
 		}
 	}
 }
-
-#endif
-#endif

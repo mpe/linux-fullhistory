@@ -1,4 +1,4 @@
-/* $Id: sgiarcs.h,v 1.2 1998/07/08 16:01:57 ralf Exp $
+/* $Id: sgiarcs.h,v 1.3 1999/02/25 20:55:08 tsbogend Exp $
  *
  * SGI ARCS firmware interface defines.
  *

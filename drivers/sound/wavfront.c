@@ -86,7 +86,7 @@
  */
  
 #if defined(__alpha__)
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define LOOPS_PER_SEC cpu_data[smp_processor_id()].loops_per_sec
 #else
 #define LOOPS_PER_SEC	loops_per_sec
@@ -1686,13 +1686,11 @@ wavefront_load_gus_patch (int devno, int format, const char *addr,
 	   master otherwise.
 	*/
 
-#ifdef CONFIG_MIDI
 	if (dev.mididev > 0) {
 		midi_synth_controller (dev.mididev, guspatch.instr_no, 10,
 				       ((guspatch.panning << 4) > 127) ?
 				       127 : (guspatch.panning << 4));
 	}
-#endif CONFIG_MIDI
 
 	return(0);
 }

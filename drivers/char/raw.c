@@ -197,7 +197,12 @@ int raw_ctl_ioctl(struct inode *inode,
 			raw_device_bindings[minor] = 
 				bdget(kdev_t_to_nr(MKDEV(rq.block_major, rq.block_minor)));
 		} else {
-			kdev_t dev=to_kdev_t(raw_device_bindings[minor]->bd_dev);
+			kdev_t dev;
+			if (!raw_device_bindings[minor]) {
+				err = -ENODEV;
+				break;
+			}
+			dev = to_kdev_t(raw_device_bindings[minor]->bd_dev);
 			rq.block_major = MAJOR(dev);
 			rq.block_minor = MINOR(dev);
 			err = copy_to_user((void *) arg, &rq, sizeof(rq));

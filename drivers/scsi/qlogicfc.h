@@ -62,7 +62,7 @@
  * determined for each queue request anew.
  */
 
-#if BITS_PER_LONG > 32
+#if PCI64_DMA_BITS > 32
 #define DATASEGS_PER_COMMAND 2
 #define DATASEGS_PER_CONT 5
 #else

@@ -1,5 +1,5 @@
 /*
- * $Id: inventory.h,v 1.2 1998/05/01 01:35:54 ralf Exp $
+ * $Id: inventory.h,v 1.2 1997/12/06 23:55:49 ralf Exp $
  */
 #ifndef __ASM_MIPS_INVENTORY_H
 #define __ASM_MIPS_INVENTORY_H

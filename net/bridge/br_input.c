@@ -5,7 +5,7 @@
  *	Authors:
  *	Lennert Buytenhek		<buytenh@gnu.org>
  *
- *	$Id: br_input.c,v 1.2 2000/02/21 15:51:34 davem Exp $
+ *	$Id: br_input.c,v 1.3 2000/02/24 19:48:06 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -23,21 +23,15 @@ unsigned char bridge_ula[5] = { 0x01, 0x80, 0xc2, 0x00, 0x00 };
 
 static void br_pass_frame_up(struct net_bridge *br, struct sk_buff *skb)
 {
-	if (br->dev.flags & IFF_UP) {
-		br->statistics.rx_packets++;
-		br->statistics.rx_bytes += skb->len;
+	br->statistics.rx_packets++;
+	br->statistics.rx_bytes += skb->len;
 
-		skb->dev = &br->dev;
-		skb->pkt_type = PACKET_HOST;
-		skb->mac.raw = skb->data;
-		skb_pull(skb, skb->nh.raw - skb->data);
-		skb->protocol = eth_type_trans(skb, &br->dev);
-		netif_rx(skb);
-
-		return;
-	}
-
-	kfree_skb(skb);
+	skb->dev = &br->dev;
+	skb->pkt_type = PACKET_HOST;
+	skb->mac.raw = skb->data;
+	skb_pull(skb, skb->nh.raw - skb->data);
+	skb->protocol = eth_type_trans(skb, &br->dev);
+	netif_rx(skb);
 }
 
 static void __br_handle_frame(struct sk_buff *skb)
@@ -46,16 +40,43 @@ static void __br_handle_frame(struct sk_buff *skb)
 	unsigned char *dest;
 	struct net_bridge_fdb_entry *dst;
 	struct net_bridge_port *p;
+	int passedup;
 
 	skb->nh.raw = skb->mac.raw;
 	dest = skb->mac.ethernet->h_dest;
 
 	p = skb->dev->br_port;
 	br = p->br;
+	passedup = 0;
 
-	if (p->state == BR_STATE_DISABLED ||
-	    skb->mac.ethernet->h_source[0] & 1)
+	if (!(br->dev.flags & IFF_UP) ||
+	    p->state == BR_STATE_DISABLED)
 		goto freeandout;
+
+	if (br->dev.flags & IFF_PROMISC) {
+		struct sk_buff *skb2;
+
+		skb2 = skb_clone(skb, GFP_ATOMIC);
+		if (skb2) {
+			passedup = 1;
+			br_pass_frame_up(br, skb2);
+		}
+	}
+
+	if (skb->mac.ethernet->h_source[0] & 1)
+		goto freeandout;
+
+	if (!passedup &&
+	    (dest[0] & 1) &&
+	    (br->dev.flags & IFF_ALLMULTI || br->dev.mc_list != NULL)) {
+		struct sk_buff *skb2;
+
+		skb2 = skb_clone(skb, GFP_ATOMIC);
+		if (skb2) {
+			passedup = 1;
+			br_pass_frame_up(br, skb2);
+		}
+	}
 
 	if (!memcmp(dest, bridge_ula, 5) && !(dest[5] & 0xF0))
 		goto handle_special_frame;
@@ -71,14 +92,16 @@ static void __br_handle_frame(struct sk_buff *skb)
 
 	if (dest[0] & 1) {
 		br_flood(br, skb, 1);
-		br_pass_frame_up(br, skb);
+		if (!passedup)
+			br_pass_frame_up(br, skb);
 		return;
 	}
 
 	dst = br_fdb_get(br, dest);
 
 	if (dst != NULL && dst->is_local) {
-		br_pass_frame_up(br, skb);
+		if (!passedup)
+			br_pass_frame_up(br, skb);
 		br_fdb_put(dst);
 		return;
 	}

@@ -3,11 +3,19 @@
  *
  * Copyright (C) 1998 Harald Koerfgen, Frieder Streffer and Paul M. Antoine
  *
- * $Id: $
+ * $Id: memory.c,v 1.4 2000/02/13 20:52:05 harald Exp $
  */
-#include <asm/addrspace.h>
 #include <linux/init.h>
-#include <linux/string.h>
+#include <linux/config.h>
+#include <linux/kernel.h>
+#include <linux/mm.h>
+#include <linux/bootmem.h>
+
+#include <asm/addrspace.h>
+#include <asm/page.h>
+
+#include <asm/dec/machtype.h>
+
 #include "prom.h"
 
 typedef struct {
@@ -23,9 +31,12 @@ extern int (*rex_getbitmap)(memmap *);
 extern int (*prom_printf)(char *, ...);
 #endif
 
-extern unsigned long mips_memory_upper;
-
 volatile unsigned long mem_err = 0;	/* So we know an error occured */
+
+extern char _end;
+
+#define PFN_UP(x)	(((x) + PAGE_SIZE-1) >> PAGE_SHIFT)
+#define PFN_ALIGN(x)	(((unsigned long)(x) + (PAGE_SIZE - 1)) & PAGE_MASK)
 
 /*
  * Probe memory in 4MB chunks, waiting for an error to tell us we've fallen
@@ -78,26 +89,72 @@ unsigned long __init rex_get_memory_size(void)
 		if (bm->bitmap[i] == 0xff)
 			mem_size += (8 * bm->pagesize);
 	}
+
 	return (mem_size);
 }
 
 void __init prom_meminit(unsigned int magic)
 {
+	unsigned long free_start, free_end, start_pfn, bootmap_size;
+	unsigned long mem_size = 0;
+
 	if (magic != REX_PROM_MAGIC)
-		mips_memory_upper = KSEG0 + pmax_get_memory_size();
+		mem_size = pmax_get_memory_size();
 	else
-		mips_memory_upper = KSEG0 + rex_get_memory_size();
+		mem_size = rex_get_memory_size();
+
+	free_start = PHYSADDR(PFN_ALIGN(&_end));
+	free_end = mem_size;
+	start_pfn = PFN_UP((unsigned long)&_end);
 
 #ifdef PROM_DEBUG
-	prom_printf("mips_memory_upper: 0x%08x\n", mips_memory_upper);
+	prom_printf("free_start: 0x%08x\n", free_start);
+	prom_printf("free_end: 0x%08x\n", free_end);
+	prom_printf("start_pfn: 0x%08x\n", start_pfn);
 #endif
+
+	/* Register all the contiguous memory with the bootmem allocator
+	   and free it.  Be careful about the bootmem freemap.  */
+	bootmap_size = init_bootmem(start_pfn, mem_size >> PAGE_SHIFT);
+	free_bootmem(free_start + bootmap_size, free_end - free_start - bootmap_size);
 }
 
-/* Called from mem_init() to fixup the mem_map page settings. */
-void __init prom_fixup_mem_map(unsigned long start, unsigned long end)
+int __init page_is_ram(unsigned long pagenr)
 {
+        return 1;
 }
 
 void prom_free_prom_memory (void)
 {
+	unsigned long addr, end;
+	extern	char _ftext;
+
+	/*
+	 * Free everything below the kernel itself but leave
+	 * the first page reserved for the exception handlers.
+	 */
+
+#ifdef CONFIG_DECLANCE
+	/*
+	 * Leave 128 KB reserved for Lance memory for
+	 * IOASIC DECstations.
+	 *
+	 * XXX: save this address for use in dec_lance.c?
+	 */
+	if (IOASIC)
+		end = PHYSADDR(&_ftext) - 0x00020000;
+	else
+#endif
+		end = PHYSADDR(&_ftext);
+
+	addr = PAGE_SIZE;
+	while (addr < end) {
+		ClearPageReserved(mem_map + MAP_NR(addr));
+		set_page_count(mem_map + MAP_NR(addr), 1);
+		free_page(addr);
+		addr += PAGE_SIZE;
+	}
+
+	printk("Freeing unused PROM memory: %dk freed\n",
+	       (end - PAGE_SIZE) >> 10);
 }

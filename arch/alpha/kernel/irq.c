@@ -852,6 +852,7 @@ handle_irq(int irq, struct pt_regs * regs)
 	desc->handler->ack(irq);
 	status = desc->status;
 
+#ifndef CONFIG_SMP
 	/* Look for broken irq masking.  */
 	if (status & IRQ_MASKED) {
 		static unsigned long last_printed;
@@ -860,6 +861,7 @@ handle_irq(int irq, struct pt_regs * regs)
 			last_printed = jiffies;
 		}
 	}
+#endif
 
 	/*
 	 * REPLAY is when Linux resends an IRQ that was dropped earlier.
@@ -1078,7 +1080,7 @@ do_entInt(unsigned long type, unsigned long vector, unsigned long la_ptr,
 #ifdef CONFIG_SMP
 		cpu_data[smp_processor_id()].smp_local_irq_count++;
 		smp_percpu_timer_interrupt(&regs);
-		if (smp_processor_id() == smp_boot_cpuid)
+		if (smp_processor_id() == boot_cpuid)
 #endif
 			handle_irq(RTC_IRQ, &regs);
 		return;

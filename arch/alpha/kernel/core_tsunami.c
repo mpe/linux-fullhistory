@@ -24,7 +24,6 @@
 #include "proto.h"
 #include "pci_impl.h"
 
-int TSUNAMI_bootcpu;
 
 static struct 
 {
@@ -210,17 +209,23 @@ void
 tsunami_pci_tbi(struct pci_controler *hose, dma_addr_t start, dma_addr_t end)
 {
 	tsunami_pchip *pchip = hose->index ? TSUNAMI_pchip1 : TSUNAMI_pchip0;
-
-	wmb();
+	volatile unsigned long *csr;
+	unsigned long value;
 
 	/* We can invalidate up to 8 tlb entries in a go.  The flush
 	   matches against <31:16> in the pci address.  */
+	csr = &pchip->tlbia.csr;
 	if (((start ^ end) & 0xffff0000) == 0)
-		pchip->tlbiv.csr = (start & 0xffff0000) >> 12;
-	else
-		pchip->tlbia.csr = 0;
+		csr = &pchip->tlbiv.csr;
 
+	/* For TBIA, it doesn't matter what value we write.  For TBI, 
+	   it's the shifted tag bits.  */
+	value = (start & 0xffff0000) >> 12;
+
+	wmb();
+	*csr = value;
 	mb();
+	*csr;
 }
 
 #ifdef NXM_MACHINE_CHECKS_ON_TSUNAMI
@@ -338,9 +343,13 @@ tsunami_init_one_pchip(tsunami_pchip *pchip, int index)
 	 * because of an idiot-syncrasy of the CYPRESS chip.  It may
 	 * respond to a PCI bus address in the last 1MB of the 4GB
 	 * address range.
+	 *
+	 * Note that the TLB lookup logic uses bitwise concatenation,
+	 * not addition, so the required arena alignment is based on
+	 * the size of the window.
 	 */
-	hose->sg_isa = iommu_arena_new(0x00800000, 0x00800000, PAGE_SIZE);
-	hose->sg_pci = iommu_arena_new(0xc0000000, 0x08000000, PAGE_SIZE);
+	hose->sg_isa = iommu_arena_new(0x00800000, 0x00800000, 0x00800000>>10);
+	hose->sg_pci = iommu_arena_new(0xc0000000, 0x08000000, 0x08000000>>10);
 	__direct_map_base = 0x40000000;
 	__direct_map_size = 0x80000000;
 
@@ -399,8 +408,6 @@ tsunami_init_arch(void)
 	printk("%s: CSR_STR 0x%lx\n", FN, TSUNAMI_dchip->str.csr);
 	printk("%s: CSR_DREV 0x%lx\n", FN, TSUNAMI_dchip->drev.csr);
 #endif
-	TSUNAMI_bootcpu = __hard_smp_processor_id();
-
 	/* With multiple PCI busses, we play with I/O as physical addrs.  */
 	ioport_resource.end = ~0UL;
 	iomem_resource.end = ~0UL;
@@ -444,12 +451,10 @@ tsunami_kill_arch(int mode)
 static inline void
 tsunami_pci_clr_err_1(tsunami_pchip *pchip)
 {
-	unsigned int jd;
-
-	jd = pchip->perror.csr;
+	pchip->perror.csr;
 	pchip->perror.csr = 0x040;
 	mb();
-	jd = pchip->perror.csr;
+	pchip->perror.csr;
 }
 
 static inline void

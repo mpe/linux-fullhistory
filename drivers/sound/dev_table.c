@@ -43,7 +43,6 @@ static void start_services(void)
 		return;		/* No cards detected */
 #endif
 
-#ifdef CONFIG_AUDIO
 	if (num_audiodevs)	/* Audio devices present */
 	{
 		int             dev;
@@ -52,7 +51,6 @@ static void start_services(void)
 		}
 		audio_init_devices();
 	  }
-#endif
 
 	return;
 }
@@ -410,7 +408,6 @@ int sound_install_audiodrv(int vers, char *name, struct audio_driver *driver,
 			int driver_size, int flags, unsigned int format_mask,
 			void *devc, int dma1, int dma2)
 {
-#ifdef CONFIG_AUDIO
 	struct audio_driver *d;
 	struct audio_operations *op;
 	int l, num;
@@ -470,9 +467,6 @@ int sound_install_audiodrv(int vers, char *name, struct audio_driver *driver,
 
 	audio_init_devices();
 	return num;
-#else
-	return -EINVAL;
-#endif
 }
 
 int sound_install_mixer(int vers, char *name, struct mixer_operations *driver,
@@ -544,7 +538,6 @@ int sound_alloc_audiodev(void)
 
 int sound_alloc_mididev(void)
 {
-#ifdef CONFIG_MIDI
 	int i = register_sound_midi(&oss_sound_fops, -1);
 	if(i==-1)
 		return i;
@@ -552,9 +545,6 @@ int sound_alloc_mididev(void)
 	if(i>=num_midis)
 		num_midis = i + 1;
 	return i;
-#else
-	return (-1);
-#endif
 }
 
 int sound_alloc_synthdev(void)
@@ -611,13 +601,11 @@ void sound_unload_mixerdev(int dev)
 
 void sound_unload_mididev(int dev)
 {
-#ifdef CONFIG_MIDI
 	if (dev != -1)
 	{
 		midi_devs[dev] = NULL;
 		unregister_sound_midi((dev<<4)+2);
 	}
-#endif
 }
 
 void sound_unload_synthdev(int dev)

@@ -4,7 +4,7 @@
  * Copyright (C) 1992 Linus Torvalds
  * Copyright (C) 1994, 1995, 1996, 1997 Ralf Baechle
  *
- * $Id: irq.c,v 1.3 1999/04/11 17:06:16 harald Exp $
+ * $Id: irq.c,v 1.6 2000/02/04 07:40:23 ralf Exp $
  */
 #include <linux/errno.h>
 #include <linux/init.h>
@@ -114,8 +114,6 @@ int get_irq_list(char *buf)
     return len;
 }
 
-atomic_t __mips_bh_counter;
-
 /*
  * do_IRQ handles IRQ's that have been installed without the
  * SA_INTERRUPT flag: it uses the full signal-handling return
@@ -129,7 +127,7 @@ asmlinkage void do_IRQ(int irq, struct pt_regs *regs)
     int do_random, cpu;
 
     cpu = smp_processor_id();
-    hardirq_enter(cpu);
+    irq_enter(cpu);
     kstat.irqs[cpu][irq]++;
 
     mask_irq(irq);
@@ -149,7 +147,7 @@ asmlinkage void do_IRQ(int irq, struct pt_regs *regs)
 	unmask_irq(irq);
 	__cli();
     }
-    hardirq_exit(cpu);
+    irq_exit(cpu);
 
     /* unmasking and bottom half handling is done magically for us. */
 }

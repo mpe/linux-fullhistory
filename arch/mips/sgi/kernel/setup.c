@@ -1,4 +1,4 @@
-/* $Id: setup.c,v 1.24 1999/06/12 17:26:15 ulfc Exp $
+/* $Id: setup.c,v 1.29 2000/01/27 01:05:23 ralf Exp $
  *
  * setup.c: SGI specific setup, including init of the feature struct.
  *
@@ -22,10 +22,9 @@
 #include <asm/irq.h>
 #include <asm/reboot.h>
 #include <asm/sgialib.h>
-#include <asm/sgi.h>
-#include <asm/sgimc.h>
-#include <asm/sgihpc.h>
-#include <asm/sgint23.h>
+#include <asm/sgi/sgimc.h>
+#include <asm/sgi/sgihpc.h>
+#include <asm/sgi/sgint23.h>
 #include <asm/gdb-stub.h>
 
 #ifdef CONFIG_REMOTE_DEBUG
@@ -34,7 +33,7 @@ extern void breakpoint(void);
 #endif
 
 #if defined(CONFIG_SERIAL_CONSOLE) || defined(CONFIG_PROM_CONSOLE)
-extern void console_setup(char *, int *);
+extern void console_setup(char *);
 #endif
 
 extern struct rtc_ops indy_rtc_ops;
@@ -129,6 +128,15 @@ static void __init sgi_irq_setup(void)
 #endif
 }
 
+int __init page_is_ram(unsigned long pagenr)
+{
+	if (pagenr < MAP_NR(PAGE_OFFSET + 0x2000UL))
+		return 1;
+	if (pagenr > MAP_NR(PAGE_OFFSET + 0x08002000))
+		return 1;
+	return 0;
+}
+
 void __init sgi_setup(void)
 {
 #ifdef CONFIG_SERIAL_CONSOLE
@@ -161,9 +169,9 @@ void __init sgi_setup(void)
 	ctype = prom_getenv("console");
 	if(*ctype == 'd') {
 		if(*(ctype+1)=='2')
-			console_setup ("ttyS1", NULL);
+			console_setup ("ttyS1");
 		else
-			console_setup ("ttyS0", NULL);
+			console_setup ("ttyS0");
 	}
 #endif
 
@@ -197,6 +205,18 @@ void __init sgi_setup(void)
 #ifdef CONFIG_VT
 #ifdef CONFIG_SGI_NEWPORT_CONSOLE
 	conswitchp = &newport_con;
+
+	screen_info = (struct screen_info) {
+		0, 0,		/* orig-x, orig-y */
+		0,		/* unused */
+		0,		/* orig_video_page */
+		0,		/* orig_video_mode */
+		160,		/* orig_video_cols */
+		0, 0, 0,	/* unused, ega_bx, unused */
+		64,		/* orig_video_lines */
+		0,		/* orig_video_isVGA */
+		16		/* orig_video_points */
+	};
 #else
 	conswitchp = &dummy_con;
 #endif

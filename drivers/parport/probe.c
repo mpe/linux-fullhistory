@@ -150,13 +150,11 @@ ssize_t parport_device_id (int devnum, char *buffer, size_t len)
 	if (!retval) {
 		int idlen;
 		unsigned char length[2];
-		mm_segment_t oldfs = get_fs ();
-		set_fs (get_ds ());
 
 		/* First two bytes are MSB,LSB of inclusive length. */
 		retval = parport_read (dev->port, length, 2);
 
-		if (retval != 2) goto restore_fs;
+		if (retval != 2) goto end_id;
 
 		idlen = (length[0] << 8) + length[1] - 2;
 		if (idlen < len)
@@ -169,8 +167,8 @@ ssize_t parport_device_id (int devnum, char *buffer, size_t len)
 				len);
 
 		/* Some printer manufacturers mistakenly believe that
-                   the length field is supposed to be _exclusive_. */
-		/* In addition, there are broken devices out there
+                   the length field is supposed to be _exclusive_.
+		   In addition, there are broken devices out there
                    that don't even finish off with a semi-colon. */
 		if (buffer[len - 1] != ';') {
 			ssize_t diff;
@@ -196,9 +194,8 @@ ssize_t parport_device_id (int devnum, char *buffer, size_t len)
 			}
 		}
 
-	restore_fs:
+	end_id:
 		buffer[len] = '\0';
-		set_fs (oldfs);
 		parport_negotiate (dev->port, IEEE1284_MODE_COMPAT);
 	}
 	parport_release (dev);

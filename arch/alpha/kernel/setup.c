@@ -50,6 +50,9 @@
 struct hwrpb_struct *hwrpb;
 unsigned long srm_hae;
 
+/* Which processor we booted from.  */
+int boot_cpuid;
+
 #ifdef CONFIG_ALPHA_GENERIC
 struct alpha_machine_vector alpha_mv;
 int alpha_using_srm;
@@ -351,6 +354,7 @@ setup_arch(char **cmdline_p)
 	char *type_name, *var_name, *p;
 
 	hwrpb = (struct hwrpb_struct*) __va(INIT_HWRPB->phys_addr);
+	boot_cpuid = hard_smp_processor_id();
 
 	/* 
 	 * Locate the command line.

@@ -23,15 +23,8 @@
 #include "sb.h"
 #include "sound_firmware.h"
 
-#ifdef CONFIG_TRIX
-
-#ifdef INCLUDE_TRIX_BOOT
 #include <linux/init.h>
 #include "trix_boot.h"
-#else
-static unsigned char *trix_boot = NULL;
-static int trix_boot_len = 0;
-#endif
 
 
 static int kilroy_was_here = 0;	/* Don't detect twice */
@@ -327,11 +320,7 @@ int probe_trix_sb(struct address_info *hw_config)
 	sb_initialized = 1;
 
 	hw_config->name = "AudioTrix SB";
-#ifdef CONFIG_SBDSP
 	return sb_dsp_detect(hw_config, 0, 0);
-#else
-	return 0;
-#endif
 }
 
 void attach_trix_sb(struct address_info *hw_config)
@@ -339,7 +328,6 @@ void attach_trix_sb(struct address_info *hw_config)
 	extern int sb_be_quiet;
 	int old_quiet;
 
-#ifdef CONFIG_SBDSP
 	hw_config->driver_use_1 = SB_NO_MIDI | SB_NO_MIXER | SB_NO_RECORDING;
 
 	/* Prevent false alarms */
@@ -349,20 +337,16 @@ void attach_trix_sb(struct address_info *hw_config)
 	sb_dsp_init(hw_config);
 
 	sb_be_quiet = old_quiet;
-#endif
 }
 
 void attach_trix_mpu(struct address_info *hw_config)
 {
-#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
 	hw_config->name = "AudioTrix Pro";
 	attach_uart401(hw_config);
-#endif
 }
 
 int probe_trix_mpu(struct address_info *hw_config)
 {
-#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
 	unsigned char conf;
 	static char irq_bits[] = {
 		-1, -1, -1, 1, 2, 3, -1, 4, -1, 5
@@ -420,9 +404,6 @@ int probe_trix_mpu(struct address_info *hw_config)
 	trix_write(0x19, (trix_read(0x19) & 0x83) | conf);
 	mpu_initialized = 1;
 	return probe_uart401(hw_config);
-#else
-	return 0;
-#endif
 }
 
 void unload_trix_wss(struct address_info *hw_config)
@@ -445,16 +426,12 @@ void unload_trix_wss(struct address_info *hw_config)
 
 void unload_trix_mpu(struct address_info *hw_config)
 {
-#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
 	unload_uart401(hw_config);
-#endif
 }
 
 void unload_trix_sb(struct address_info *hw_config)
 {
-#ifdef CONFIG_SBDSP
 	sb_dsp_unload(hw_config, mpu);
-#endif
 }
 
 #ifdef MODULE
@@ -566,5 +543,4 @@ void cleanup_module(void)
 	SOUND_LOCK_END;
 }
 
-#endif
-#endif
+#endif /* MODULE */

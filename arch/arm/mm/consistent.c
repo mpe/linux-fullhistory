@@ -23,7 +23,6 @@ void *consistent_alloc(int gfp, size_t size, dma_addr_t *dma_handle)
 {
 	int order;
 	unsigned long page;
-	struct vm_struct *area;
 	void *ret;
 
 	if (in_interrupt())
@@ -40,15 +39,10 @@ void *consistent_alloc(int gfp, size_t size, dma_addr_t *dma_handle)
 
 	*dma_handle = virt_to_bus((void *)page);
 
-	area = get_vm_area(size, VM_IOREMAP); /* maybe new type? */
-	if (!area)
-		goto no_area;
-
 	ret = __ioremap(virt_to_phys((void *)page), PAGE_SIZE << order, 0);
 	if (ret)
 		return ret;
 
-no_area:
 	free_pages(page, order);
 no_page:
 	BUG();

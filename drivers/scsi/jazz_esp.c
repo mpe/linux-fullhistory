@@ -1,7 +1,7 @@
 /*
  * jazz_esp.c: Driver for SCSI chip on Mips Magnum Boards (JAZZ architecture)
  *
- * Copyright (C) 1997 Thomas Boegndoerfer (tsbogend@alpha.franken.de)
+ * Copyright (C) 1997 Thomas Bogendoerfer (tsbogend@alpha.franken.de)
  *
  * jazz_esp is based on David S. Miller's ESP driver and cyber_esp
  */
@@ -161,7 +161,7 @@ static void dma_dump_state(struct NCR_ESP *esp)
 {
     
     ESPLOG(("esp%d: dma -- enable <%08x> residue <%08x\n",
-	    esp->esp_id, vdma_get_enable((int)esp->dregs), vdma_get_resdiue((int)esp->dregs)));
+	    esp->esp_id, vdma_get_enable((int)esp->dregs), vdma_get_residue((int)esp->dregs)));
 }
 
 static void dma_init_read(struct NCR_ESP *esp, __u32 vaddress, int length)
