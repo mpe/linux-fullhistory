@@ -421,7 +421,7 @@ extern void sysv_put_super(struct super_block *);
 extern struct super_block *sysv_read_super(struct super_block *,void *,int);
 extern void sysv_write_super(struct super_block *);
 extern void sysv_read_inode(struct inode *);
-extern int sysv_notify_change(int,struct inode *);
+extern int sysv_notify_change(struct inode *, struct iattr *);
 extern void sysv_write_inode(struct inode *);
 extern void sysv_put_inode(struct inode *);
 extern void sysv_statfs(struct super_block *, struct statfs *);

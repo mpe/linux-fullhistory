@@ -18,14 +18,10 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 
+#include <asm/bitops.h>
+
 #include "xiafs_mac.h"
 
-
-#define clear_bit(nr,addr) ({\
-char res; \
-__asm__ __volatile__("btrl %1,%2\n\tsetnb %0": \
-"=q" (res):"r" (nr),"m" (*(addr))); \
-res;})
 
 char internal_error_message[]="XIA-FS: internal error %s %d\n"; 
 
@@ -59,9 +55,7 @@ zone_found:
     for (j=0; j < 32; j++)
         if (tmp & (1 << j))
 	    break;
-    __asm__ ("btsl %1,%2\n\tsetb %0": \
-	     "=q" (res):"r" (j),"m" (bmap[i]));
-    if (res) {
+    if (set_bit(j,bmap+i)) {
         start_bit=j + (i << 5) + 1;
 	goto repeat;
     }
@@ -241,7 +235,7 @@ void xiafs_free_zone(struct super_block * sb, int d_addr)
     if (!bh)
 	return;
     offset = bit & (XIAFS_BITS_PER_Z(sb) -1);
-    if (clear_bit(offset, bh->b_data))
+    if (!clear_bit(offset, bh->b_data))
         printk("XIA-FS: dev %04x"
 	       " block bit %u (0x%x) already cleared (%s %d)\n",
 	       sb->s_dev, bit, bit, WHERE_ERR);
@@ -301,7 +295,7 @@ void xiafs_free_inode(struct inode * inode)
     if (!bh)
 	return;
     clear_inode(inode);
-    if (clear_bit(ino & (XIAFS_BITS_PER_Z(sb)-1), bh->b_data))
+    if (!clear_bit(ino & (XIAFS_BITS_PER_Z(sb)-1), bh->b_data))
         printk("XIA-FS: dev %04x"
 	       "inode bit %ld (0x%lx) already cleared (%s %d)\n",
 	       inode->i_dev, ino, ino, WHERE_ERR);

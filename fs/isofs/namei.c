@@ -26,33 +26,28 @@
  */
 static int isofs_match(int len,const char * name, char * compare, int dlen)
 {
-	register int same;
-	
-	if (!compare) return 0;
-	/* "" means "." ---> so paths like "/usr/lib//libc.a" work */
-	if (!len && (compare[0]==0) && (dlen==1))
-		return 1;
-	
-	if (compare[0]==0 && dlen==1 && len == 1)
-		compare = ".";
- 	if (compare[0]==1 && dlen==1 && len == 2) {
-		compare = "..";
-		dlen = 2;
-	};
+	if (!compare)
+		return 0;
+
+	/* check special "." and ".." files */
+	if (dlen == 1) {
+		/* "." */
+		if (compare[0] = 0) {
+			if (!len)
+				return 1;
+			compare = ".";
+		} else if (compare[0] == 1) {
+			compare = "..";
+			dlen = 2;
+		}
+	}
 #if 0
 	if (len <= 2) printk("Match: %d %d %s %d %d \n",len,dlen,compare,de->name[0], dlen);
 #endif
 	
 	if (dlen != len)
 		return 0;
-	__asm__ __volatile__(
-		"cld\n\t"
-		"repe ; cmpsb\n\t"
-		"setz %%al"
-		:"=a" (same)
-		:"0" (0),"S" ((long) name),"D" ((long) compare),"c" (len)
-		:"cx","di","si");
-	return same;
+	return !memcmp(name, compare, len);
 }
 
 /*

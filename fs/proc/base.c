@@ -69,8 +69,6 @@ static struct proc_dir_entry base_dir[] = {
 
 int proc_match(int len,const char * name,struct proc_dir_entry * de)
 {
-	register int same;
-
 	if (!de || !de->low_ino)
 		return 0;
 	/* "" means "." ---> so paths like "/usr/lib//libc.a" work */
@@ -78,14 +76,7 @@ int proc_match(int len,const char * name,struct proc_dir_entry * de)
 		return 1;
 	if (de->namelen != len)
 		return 0;
-	__asm__ __volatile__(
-		"cld\n\t"
-		"repe ; cmpsb\n\t"
-		"setz %%al"
-		:"=a" (same)
-		:"0" (0),"S" ((long) name),"D" ((long) de->name),"c" (len)
-		:"cx","di","si");
-	return same;
+	return !memcmp(name, de->name, len);
 }
 
 static int proc_lookupbase(struct inode * dir,const char * name, int len,

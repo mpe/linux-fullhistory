@@ -77,7 +77,7 @@ void umsdos_patch_inode (struct inode *inode,
 int umsdos_get_dirowner (struct inode *inode, struct inode **result);
 void UMSDOS_read_inode (struct inode *inode);
 void UMSDOS_write_inode (struct inode *inode);
-int UMSDOS_notify_change (int flags, struct inode *inode);
+int UMSDOS_notify_change (struct inode *inode, struct iattr *attr);
 struct super_block *UMSDOS_read_super (struct super_block *s,
 	 void *data,
 	 int silent);

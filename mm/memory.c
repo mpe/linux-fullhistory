@@ -240,7 +240,7 @@ int copy_page_tables(struct task_struct * tsk)
 			continue;
 		if (old_pg_table >= high_memory || !(old_pg_table & PAGE_PRESENT)) {
 			printk("copy_page_tables: bad page table: "
-				"probable memory corruption");
+				"probable memory corruption\n");
 			*old_page_dir = 0;
 			continue;
 		}

@@ -14,28 +14,6 @@
 
 #include <asm/bitops.h>
 
-#define clear_block(addr) \
-__asm__("cld\n\t" \
-	"rep\n\t" \
-	"stosl" \
-	: \
-	:"a" (0),"c" (BLOCK_SIZE/4),"D" ((long) (addr)):"cx","di")
-
-#define find_first_zero(addr) ({ \
-int __res; \
-__asm__("cld\n" \
-	"1:\tlodsl\n\t" \
-	"notl %%eax\n\t" \
-	"bsfl %%eax,%%edx\n\t" \
-	"jne 2f\n\t" \
-	"addl $32,%%ecx\n\t" \
-	"cmpl $8192,%%ecx\n\t" \
-	"jl 1b\n\t" \
-	"xorl %%edx,%%edx\n" \
-	"2:\taddl %%edx,%%ecx" \
-	:"=c" (__res):"0" (0),"S" (addr):"ax","dx","si"); \
-__res;})
-
 static int nibblemap[] = { 0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4 };
 
 static unsigned long count_used(struct buffer_head *map[], unsigned numblocks,
@@ -110,7 +88,7 @@ repeat:
 	j = 8192;
 	for (i=0 ; i<8 ; i++)
 		if ((bh=sb->u.minix_sb.s_zmap[i]) != NULL)
-			if ((j=find_first_zero(bh->b_data))<8192)
+			if ((j=find_first_zero_bit(bh->b_data, 8192)) < 8192)
 				break;
 	if (i>=8 || !bh || j>=8192)
 		return 0;
@@ -127,7 +105,7 @@ repeat:
 		printk("new_block: cannot get block");
 		return 0;
 	}
-	clear_block(bh->b_data);
+	memset(bh->b_data, 0, BLOCK_SIZE);
 	bh->b_uptodate = 1;
 	mark_buffer_dirty(bh, 1);
 	brelse(bh);
@@ -193,7 +171,7 @@ struct inode * minix_new_inode(const struct inode * dir)
 	j = 8192;
 	for (i=0 ; i<8 ; i++)
 		if ((bh = inode->i_sb->u.minix_sb.s_imap[i]) != NULL)
-			if ((j=find_first_zero(bh->b_data))<8192)
+			if ((j=find_first_zero_bit(bh->b_data, 8192)) < 8192)
 				break;
 	if (!bh || j >= 8192) {
 		iput(inode);

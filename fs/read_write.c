@@ -159,8 +159,10 @@ asmlinkage int sys_write(unsigned int fd,char * buf,unsigned int count)
 	 * the setgid bits
 	 */
 	if (written > 0 && !suser() && (inode->i_mode & (S_ISUID | S_ISGID))) {
-		inode->i_mode &= ~(S_ISUID | S_ISGID);
-		notify_change (NOTIFY_MODE, inode);
+		struct iattr newattrs;
+		newattrs.ia_mode = inode->i_mode & ~(S_ISUID | S_ISGID);
+		newattrs.ia_valid = ATTR_MODE;
+		notify_change(inode, &newattrs);
 	}
 	return written;
 }

@@ -127,13 +127,6 @@ extern unsigned long name_cache_init(unsigned long start, unsigned long end);
 #define FIBMAP	   1	/* bmap access */
 #define FIGETBSZ   2	/* get the block size used for bmap */
 
-/* these flags tell notify_change what is being changed */
-
-#define NOTIFY_SIZE	1
-#define NOTIFY_MODE	2
-#define NOTIFY_TIME	4
-#define NOTIFY_UIDGID	8
-
 typedef char buffer_block[BLOCK_SIZE];
 
 struct buffer_head {
@@ -173,6 +166,38 @@ struct buffer_head {
 #include <linux/sysv_fs_i.h>
 
 #ifdef __KERNEL__
+
+/*
+ * Attribute flags.  These should be or-ed together to figure out what
+ * has been changed!
+ */
+#define ATTR_MODE	1
+#define ATTR_UID	2
+#define ATTR_GID	4
+#define ATTR_SIZE	8
+#define ATTR_ATIME	16
+#define ATTR_MTIME	32
+#define ATTR_CTIME	64
+
+/*
+ * This is the Inode Attributes structure, used for notify_change().  It
+ * uses the above definitions as flags, to know which values have changed.
+ * Also, in this manner, a Filesystem can look at only the values it cares
+ * about.  Basically, these are the attributes that the VFS layer can
+ * request to change from the FS layer.
+ *
+ * Derek Atkins <warlord@MIT.EDU> 94-10-20
+ */
+struct iattr {
+	unsigned int	ia_valid;
+	umode_t		ia_mode;
+	uid_t		ia_uid;
+	gid_t		ia_gid;
+	off_t		ia_size;
+	time_t		ia_atime;
+	time_t		ia_mtime;
+	time_t		ia_ctime;
+};
 
 struct inode {
 	dev_t		i_dev;
@@ -331,7 +356,7 @@ struct inode_operations {
 
 struct super_operations {
 	void (*read_inode) (struct inode *);
-	int (*notify_change) (int flags, struct inode *);
+	int (*notify_change) (struct inode *, struct iattr *);
 	void (*write_inode) (struct inode *);
 	void (*put_inode) (struct inode *);
 	void (*put_super) (struct super_block *);
@@ -435,7 +460,7 @@ extern void sync_dev(dev_t dev);
 extern int fsync_dev(dev_t dev);
 extern void sync_supers(dev_t dev);
 extern int bmap(struct inode * inode,int block);
-extern int notify_change(int flags, struct inode * inode);
+extern int notify_change(struct inode *, struct iattr *);
 extern int namei(const char * pathname, struct inode ** res_inode);
 extern int lnamei(const char * pathname, struct inode ** res_inode);
 extern int permission(struct inode * inode,int mask);
@@ -482,6 +507,9 @@ extern int file_fsync(struct inode *, struct file *);
 
 extern void dcache_add(struct inode *, const char *, int, unsigned long);
 extern int dcache_lookup(struct inode *, const char *, int, unsigned long *);
+
+extern int inode_change_ok(struct inode *, struct iattr *);
+extern void inode_setattr(struct inode *, struct iattr *);
 
 extern inline struct inode * iget(struct super_block * sb,int nr)
 {

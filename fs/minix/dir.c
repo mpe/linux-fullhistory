@@ -86,13 +86,13 @@ static int minix_readdir(struct inode * inode, struct file * filp,
 			filp->f_pos += info->s_dirsize;
 retry:
 			if (de->inode) {
+				version = inode->i_version;
 				for (i = 0; i < info->s_namelen; i++)
 					if ((c = de->name[i]) != 0)
 						put_fs_byte(c,i+dirent->d_name);
 					else
 						break;
 				if (i) {
-					version = inode->i_version;
 					put_fs_long(de->inode,&dirent->d_ino);
 					put_fs_byte(0,i+dirent->d_name);
 					put_fs_word(i,&dirent->d_reclen);

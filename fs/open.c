@@ -69,6 +69,7 @@ asmlinkage int sys_truncate(const char * path, unsigned int length)
 {
 	struct inode * inode;
 	int error;
+	struct iattr newattrs;
 
 	error = namei(path,&inode);
 	if (error)
@@ -85,12 +86,13 @@ asmlinkage int sys_truncate(const char * path, unsigned int length)
 		iput(inode);
 		return -EPERM;
 	}
-	inode->i_size = length;
+	inode->i_size = newattrs.ia_size = length;
 	if (inode->i_op && inode->i_op->truncate)
 		inode->i_op->truncate(inode);
-	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
+	newattrs.ia_ctime = newattrs.ia_mtime = CURRENT_TIME;
+	newattrs.ia_valid = ATTR_SIZE | ATTR_CTIME | ATTR_MTIME;
 	inode->i_dirt = 1;
-	error = notify_change(NOTIFY_SIZE, inode);
+	error = notify_change(inode, &newattrs);
 	iput(inode);
 	return error;
 }
@@ -99,6 +101,7 @@ asmlinkage int sys_ftruncate(unsigned int fd, unsigned int length)
 {
 	struct inode * inode;
 	struct file * file;
+	struct iattr newattrs;
 
 	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 		return -EBADF;
@@ -108,12 +111,13 @@ asmlinkage int sys_ftruncate(unsigned int fd, unsigned int length)
 		return -EACCES;
 	if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
 		return -EPERM;
-	inode->i_size = length;
+	inode->i_size = newattrs.ia_size = length;
 	if (inode->i_op && inode->i_op->truncate)
 		inode->i_op->truncate(inode);
-	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
+	newattrs.ia_ctime = newattrs.ia_mtime = CURRENT_TIME;
+	newattrs.ia_valid = ATTR_SIZE | ATTR_CTIME | ATTR_MTIME;
 	inode->i_dirt = 1;
-	return notify_change(NOTIFY_SIZE, inode);
+	return notify_change(inode, &newattrs);
 }
 
 /* If times==NULL, set access and modification to current time,
@@ -125,6 +129,7 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 	struct inode * inode;
 	long actime,modtime;
 	int error;
+	struct iattr newattrs;
 
 	error = namei(filename,&inode);
 	if (error)
@@ -140,19 +145,20 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 		}
 		actime = get_fs_long((unsigned long *) &times->actime);
 		modtime = get_fs_long((unsigned long *) &times->modtime);
-		inode->i_ctime = CURRENT_TIME;
+		newattrs.ia_ctime = CURRENT_TIME;
 	} else {
 		if ((current->fsuid != inode->i_uid) &&
 		    !permission(inode,MAY_WRITE)) {
 			iput(inode);
 			return -EACCES;
 		}
-		actime = modtime = inode->i_ctime = CURRENT_TIME;
+		actime = modtime = newattrs.ia_ctime = CURRENT_TIME;
 	}
-	inode->i_atime = actime;
-	inode->i_mtime = modtime;
+	newattrs.ia_atime = actime;
+	newattrs.ia_mtime = modtime;
+	newattrs.ia_valid = ATTR_CTIME | ATTR_MTIME | ATTR_ATIME;
 	inode->i_dirt = 1;
-	error = notify_change(NOTIFY_TIME, inode);
+	error = notify_change(inode, &newattrs);
 	iput(inode);
 	return error;
 }
@@ -249,49 +255,43 @@ asmlinkage int sys_fchmod(unsigned int fd, mode_t mode)
 {
 	struct inode * inode;
 	struct file * file;
+	struct iattr newattrs;
 
 	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 		return -EBADF;
 	if (!(inode = file->f_inode))
 		return -ENOENT;
-	if ((current->fsuid != inode->i_uid) && !fsuser())
-		return -EPERM;
 	if (IS_RDONLY(inode))
 		return -EROFS;
 	if (mode == (mode_t) -1)
 		mode = inode->i_mode;
-	inode->i_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
-	if (!fsuser() && !in_group_p(inode->i_gid))
-		inode->i_mode &= ~S_ISGID;
-	inode->i_ctime = CURRENT_TIME;
+	newattrs.ia_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
+	newattrs.ia_ctime = CURRENT_TIME;
+	newattrs.ia_valid = ATTR_MODE | ATTR_CTIME;
 	inode->i_dirt = 1;
-	return notify_change(NOTIFY_MODE, inode);
+	return notify_change(inode, &newattrs);
 }
 
 asmlinkage int sys_chmod(const char * filename, mode_t mode)
 {
 	struct inode * inode;
 	int error;
+	struct iattr newattrs;
 
 	error = namei(filename,&inode);
 	if (error)
 		return error;
-	if ((current->fsuid != inode->i_uid) && !fsuser()) {
-		iput(inode);
-		return -EPERM;
-	}
 	if (IS_RDONLY(inode)) {
 		iput(inode);
 		return -EROFS;
 	}
 	if (mode == (mode_t) -1)
 		mode = inode->i_mode;
-	inode->i_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
-	if (!fsuser() && !in_group_p(inode->i_gid))
-		inode->i_mode &= ~S_ISGID;
-	inode->i_ctime = CURRENT_TIME;
+	newattrs.ia_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
+	newattrs.ia_ctime = CURRENT_TIME;
+	newattrs.ia_valid = ATTR_MODE | ATTR_CTIME;
 	inode->i_dirt = 1;
-	error = notify_change(NOTIFY_MODE, inode);
+	error = notify_change(inode, &newattrs);
 	iput(inode);
 	return error;
 }
@@ -300,9 +300,7 @@ asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 {
 	struct inode * inode;
 	struct file * file;
-	uid_t old_user;
-	gid_t old_group;
-	int notify_flag = 0;
+	struct iattr newattrs;
 
 	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 		return -EBADF;
@@ -310,45 +308,37 @@ asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 		return -ENOENT;
 	if (IS_RDONLY(inode))
 		return -EROFS;
-	old_user = inode->i_uid;
-	old_group = inode->i_gid;
 	if (user == (uid_t) -1)
 		user = inode->i_uid;
 	if (group == (gid_t) -1)
 		group = inode->i_gid;
-	if ((current->fsuid == inode->i_uid && user == inode->i_uid &&
-	     (in_group_p(group) || group == inode->i_gid)) ||
-	    fsuser()) {
-		inode->i_uid = user;
-		inode->i_gid = group;
-		/*
-		 * If the owner has been changed, remove the setuid bit
-		 */
-		if (old_user != inode->i_uid && inode->i_mode & S_ISUID) {
-			inode->i_mode &= ~S_ISUID;
-			notify_flag = NOTIFY_MODE;
-		}
-		/*
-		 * If the group has been changed, remove the setgid bit
-		 */
-		if (old_group != inode->i_gid && inode->i_mode & S_ISGID) {
-			inode->i_mode &= ~S_ISGID;
-			notify_flag = NOTIFY_MODE;
-		}
-		inode->i_ctime = CURRENT_TIME;
-		inode->i_dirt = 1;
-		return notify_change(notify_flag | NOTIFY_UIDGID, inode);
+	newattrs.ia_uid = user;
+	newattrs.ia_gid = group;
+	newattrs.ia_ctime = CURRENT_TIME;
+	newattrs.ia_valid =  ATTR_UID | ATTR_GID | ATTR_CTIME;
+	/*
+	 * If the owner has been changed, remove the setuid bit
+	 */
+	if (user != inode->i_uid && inode->i_mode & S_ISUID) {
+		newattrs.ia_mode = inode->i_mode & ~S_ISUID;
+		newattrs.ia_valid |= ATTR_MODE;
 	}
-	return -EPERM;
+	/*
+	 * If the group has been changed, remove the setgid bit
+	 */
+	if (group != inode->i_gid && inode->i_mode & S_ISGID) {
+		newattrs.ia_mode = inode->i_mode & ~S_ISGID;
+		newattrs.ia_valid |= ATTR_MODE;
+	}
+	inode->i_dirt = 1;
+	return notify_change(inode, &newattrs);
 }
 
 asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 {
 	struct inode * inode;
 	int error;
-	uid_t old_user;
-	gid_t old_group;
-	int notify_flag = 0;
+	struct iattr newattrs;
 
 	error = lnamei(filename,&inode);
 	if (error)
@@ -357,39 +347,32 @@ asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 		iput(inode);
 		return -EROFS;
 	}
-	old_user = inode->i_uid;
-	old_group = inode->i_uid;
 	if (user == (uid_t) -1)
 		user = inode->i_uid;
 	if (group == (gid_t) -1)
 		group = inode->i_gid;
-	if ((current->fsuid == inode->i_uid && user == inode->i_uid &&
-	     (in_group_p(group) || group == inode->i_gid)) ||
-	    fsuser()) {
-		inode->i_uid = user;
-		inode->i_gid = group;
-		/*
-		 * If the owner has been changed, remove the setuid bit
-		 */
-		if (old_user != inode->i_uid && inode->i_mode & S_ISUID) {
-			inode->i_mode &= ~S_ISUID;
-			notify_flag = NOTIFY_MODE;
-		}
-		/*
-		 * If the group has been changed, remove the setgid bit
-		 */
-		if (old_group != inode->i_gid && inode->i_mode & S_ISGID) {
-			inode->i_mode &= ~S_ISGID;
-			notify_flag = NOTIFY_MODE;
-		}
-		inode->i_ctime = CURRENT_TIME;
-		inode->i_dirt = 1;
-		error = notify_change(notify_flag | NOTIFY_UIDGID, inode);
-		iput(inode);
-		return error;
+	newattrs.ia_uid = user;
+	newattrs.ia_gid = group;
+	newattrs.ia_ctime = CURRENT_TIME;
+	newattrs.ia_valid =  ATTR_UID | ATTR_GID | ATTR_CTIME;
+	/*
+	 * If the owner has been changed, remove the setuid bit
+	 */
+	if (user != inode->i_uid && inode->i_mode & S_ISUID) {
+		newattrs.ia_mode = inode->i_mode & ~S_ISUID;
+		newattrs.ia_valid |= ATTR_MODE;
 	}
+	/*
+	 * If the group has been changed, remove the setgid bit
+	 */
+	if (group != inode->i_gid && inode->i_mode & S_ISGID) {
+		newattrs.ia_mode = inode->i_mode & ~S_ISGID;
+		newattrs.ia_valid |= ATTR_MODE;
+	}
+	inode->i_dirt = 1;
+	error = notify_change(inode, &newattrs);
 	iput(inode);
-	return -EPERM;
+	return(error);
 }
 
 /*

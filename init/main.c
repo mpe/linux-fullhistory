@@ -157,7 +157,7 @@ static char fpu_error = 0;
 
 static char command_line[COMMAND_LINE_SIZE] = { 0, };
 
-char *get_options(char *str, int *ints) 
+char *get_options(char *str, int *ints)
 {
 	char *cur = str;
 	int i=1;
@@ -253,6 +253,11 @@ static void calibrate_delay(void)
 
 	printk("Calibrating delay loop.. ");
 	while (loops_per_sec <<= 1) {
+		/* wait for "start of" clock tick */
+		ticks = jiffies;
+		while (ticks == jiffies)
+			/* nothing */;
+		/* Go .. */
 		ticks = jiffies;
 		__delay(loops_per_sec);
 		ticks = jiffies - ticks;
@@ -271,7 +276,7 @@ static void calibrate_delay(void)
 	}
 	printk("failed\n");
 }
-	
+
 
 /*
  * This is a simple kernel command line parsing function: it parses
@@ -347,7 +352,7 @@ static void parse_options(char *line)
 		/*
 		 * Then check if it's an environment variable or
 		 * an option.
-		 */	
+		 */
 		if (strchr(line,'=')) {
 			if (envs >= MAX_INIT_ENVS)
 				break;
@@ -459,7 +464,7 @@ asmlinkage void start_kernel(void)
 	ipc_init();
 #endif
 	sti();
-	
+
 	/*
 	 * check if exception 16 works correctly.. This is truly evil
 	 * code: it disables the high 8 interrupts to make sure that

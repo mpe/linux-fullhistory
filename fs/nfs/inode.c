@@ -20,7 +20,7 @@
 
 extern int close_fp(struct file *filp, unsigned int fd);
 
-static int nfs_notify_change(int, struct inode *);
+static int nfs_notify_change(struct inode *, struct iattr *);
 static void nfs_put_inode(struct inode *);
 static void nfs_put_super(struct super_block *);
 static void nfs_statfs(struct super_block *, struct statfs *);
@@ -193,36 +193,44 @@ struct inode *nfs_fhget(struct super_block *sb, struct nfs_fh *fhandle,
 	return inode;
 }
 
-int nfs_notify_change(int flags, struct inode *inode)
+int nfs_notify_change(struct inode *inode, struct iattr *attr)
 {
 	struct nfs_sattr sattr;
 	struct nfs_fattr fattr;
 	int error;
 
-	if (flags & NOTIFY_MODE)
-		sattr.mode = inode->i_mode;
+	if (attr->ia_valid & ATTR_MODE) 
+		sattr.mode = attr->ia_mode;
 	else
 		sattr.mode = (unsigned) -1;
-	if (flags & NOTIFY_UIDGID) {
-		sattr.uid = inode->i_uid;
-		sattr.gid = inode->i_gid;
-	}
+
+	if (attr->ia_valid & ATTR_UID)
+		sattr.uid = attr->ia_uid;
 	else
-		sattr.uid = sattr.gid = (unsigned) -1;
-	if (flags & NOTIFY_SIZE)
-		sattr.size = S_ISREG(inode->i_mode) ? inode->i_size : -1;
+		sattr.uid = (unsigned) -1;
+
+	if (attr->ia_valid & ATTR_GID)
+		sattr.gid = attr->ia_gid;
+	else
+		sattr.gid = (unsigned) -1;
+
+	if (attr->ia_valid & ATTR_SIZE)
+		sattr.size = S_ISREG(inode->i_mode) ? attr->ia_size : -1;
 	else
 		sattr.size = (unsigned) -1;
-	if (flags & NOTIFY_TIME) {
-		sattr.mtime.seconds = inode->i_mtime;
+
+	if (attr->ia_valid & ATTR_MTIME) {
+		sattr.mtime.seconds = attr->ia_mtime;
 		sattr.mtime.useconds = 0;
-		sattr.atime.seconds = inode->i_atime;
-		sattr.atime.useconds = 0;
-	}
-	else {
+	} else 
 		sattr.mtime.seconds = sattr.mtime.useconds = (unsigned) -1;
+
+	if (attr->ia_valid & ATTR_ATIME) {
+		sattr.atime.seconds = attr->ia_atime;
+		sattr.atime.useconds = 0;
+	} else
 		sattr.atime.seconds = sattr.atime.useconds = (unsigned) -1;
-	}
+
 	error = nfs_proc_setattr(NFS_SERVER(inode), NFS_FH(inode),
 		&sattr, &fattr);
 	if (!error)
@@ -230,4 +238,3 @@ int nfs_notify_change(int flags, struct inode *inode)
 	inode->i_dirt = 0;
 	return error;
 }
-

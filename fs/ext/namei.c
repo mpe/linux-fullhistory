@@ -55,23 +55,14 @@
  */
 static int ext_match(int len,const char * name,struct ext_dir_entry * de)
 {
-	register int same;
-
 	if (!de || !de->inode || len > EXT_NAME_LEN)
 		return 0;
 	/* "" means "." ---> so paths like "/usr/lib//libc.a" work */
 	if (!len && (de->name[0]=='.') && (de->name[1]=='\0'))
 		return 1;
-	if (len < EXT_NAME_LEN && len != de->name_len)
+	if (len != de->name_len)
 		return 0;
-	__asm__ __volatile__(
-		"cld\n\t"
-		"repe ; cmpsb\n\t"
-		"setz %%al"
-		:"=a" (same)
-		:"0" (0),"S" ((long) name),"D" ((long) de->name),"c" (len)
-		:"cx","di","si");
-	return same;
+	return !memcmp(name, de->name, len);
 }
 
 /*

@@ -8,6 +8,7 @@
  */
 
 /* Hd controller regs. Ref: IBM AT Bios-listing */
+/* For a second IDE interface, xor all addresses with 0x80 */
 #define HD_DATA		0x1f0	/* _CTL when writing */
 #define HD_ERROR	0x1f1	/* see err-bits */
 #define HD_NSECTOR	0x1f2	/* nr of sectors to read/write */
@@ -16,10 +17,12 @@
 #define HD_HCYL		0x1f5	/* high byte of starting cyl */
 #define HD_CURRENT	0x1f6	/* 101dhhhh , d=drive, hhhh=head */
 #define HD_STATUS	0x1f7	/* see status-bits */
-#define HD_PRECOMP HD_ERROR	/* same io address, read=error, write=precomp */
+#define HD_FEATURE HD_ERROR	/* same io address, read=error, write=feature */
+#define HD_PRECOMP HD_FEATURE	/* obsolete use of this port - predates IDE */
 #define HD_COMMAND HD_STATUS	/* same io address, read=status, write=cmd */
 
-#define HD_CMD		0x3f6
+#define HD_CMD		0x3f6	/* used for resets */
+#define HD_ALTSTATUS	0x3f6	/* same as HD_STATUS but doesn't clear irq */
 
 /* Bits of HD_STATUS */
 #define ERR_STAT	0x01
@@ -41,7 +44,9 @@
 #define WIN_SEEK 		0x70
 #define WIN_DIAGNOSE		0x90
 #define WIN_SPECIFY		0x91
+#define WIN_SETIDLE		0x97
 
+#define WIN_PIDENTIFY		0xA1	/* identify ATA-PI device	*/
 #define WIN_MULTREAD		0xC4	/* read multiple sectors	*/
 #define WIN_MULTWRITE		0xC5	/* write multiple sectors	*/
 #define WIN_SETMULT		0xC6	/* enable read multiple		*/
@@ -56,25 +61,29 @@
 #define ECC_ERR		0x40	/* Uncorrectable ECC error */
 #define	BBD_ERR		0x80	/* block marked bad */
 
-
-/* HDIO_GETGEO is the preferred choice - HDIO_REQ will be removed at some
-   later date */
-#define HDIO_REQ 0x301
-#define HDIO_GETGEO 0x301
 struct hd_geometry {
       unsigned char heads;
       unsigned char sectors;
       unsigned short cylinders;
       unsigned long start;
 };
-#define HDIO_GETUNMASKINTR	0x302
-#define HDIO_SETUNMASKINTR	0x303
-#define HDIO_GETMULTCOUNT	0x304
-#define HDIO_SETMULTCOUNT	0x305
-#define HDIO_GETIDENTITY 	0x307
-#endif
 
-/* structure returned by HDIO_GETIDENTITY, as per ASC X3T9.2 rev 4a */
+/* hd/ide ctl's that pass (arg) ptrs to user space are numbered 0x30n/0x31n */
+#define HDIO_GETGEO		0x301	/* get device geometry */
+#define HDIO_REQ		HDIO_GETGEO	/* obsolete, use HDIO_GETGEO */
+#define HDIO_GET_UNMASKINTR	0x302	/* get current unmask setting */
+#define HDIO_SETUNMASKINTR	0x303	/* obsolete */
+#define HDIO_GET_MULTCOUNT	0x304	/* get current IDE blockmode setting */
+#define HDIO_SETMULTCOUNT	0x305	/* obsolete */
+#define HDIO_GET_IDENTITY 	0x307	/* get IDE identification info */
+
+/* hd/ide ctl's that pass (arg) non-ptr values are numbered 0x32n/0x33n */
+#define HDIO_SET_MULTCOUNT	0x321	/* set IDE blockmode */
+#define HDIO_SET_UNMASKINTR	0x322	/* permit other irqs during I/O */
+#define HDIO_SET_KEEPSETTINGS	0x323	/* keep ioctl settings on reset */
+#define HDIO_SET_XFERMODE	0x324	/* set IDE transfer mode */
+
+/* structure returned by HDIO_GET_IDENTITY, as per ANSI ATA2 rev.2f spec */
 struct hd_driveid {
 	unsigned short	config;		/* lots of obsolete bit flags */
 	unsigned short	cyls;		/* "physical" cyls */
@@ -124,3 +133,4 @@ struct hd_driveid {
 	/* unsigned short vendor7  [32];*/	/* vendor unique (words 128-159) */
 	/* unsigned short reservedyy[96];*/	/* reserved (words 160-255) */
 };
+#endif

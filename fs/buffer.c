@@ -1106,11 +1106,6 @@ static inline unsigned long try_to_share_buffers(unsigned long address,
 	return try_to_load_aligned(address, dev, b, size);
 }
 
-#define COPYBLK(size,from,to) \
-__asm__ __volatile__("rep ; movsl": \
-	:"c" (((unsigned long) size) >> 2),"S" (from),"D" (to) \
-	:"cx","di","si")
-
 /*
  * bread_page reads four buffers into memory at the desired address. It's
  * a function of its own, as there is some speed to be got by reading them
@@ -1140,7 +1135,7 @@ unsigned long bread_page(unsigned long address, dev_t dev, int b[], int size, in
  	for (i=0, j=0; j<PAGE_SIZE ; i++, j += size, where += size) {
 		if (bh[i]) {
 			if (bh[i]->b_uptodate)
-				COPYBLK(size, (unsigned long) bh[i]->b_data, where);
+				memcpy((void *) where, bh[i]->b_data, size);
 			brelse(bh[i]);
 		}
 	}

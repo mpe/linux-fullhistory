@@ -314,17 +314,17 @@ static struct floppy_struct floppy_type[32] = {
 	{ 2988,18,2,83,0,0x25,0x00,0xDF,0x02,"h1494" },	/* 18 1.49MB 5.25"  */
 	{ 3486,21,2,83,0,0x25,0x00,0xDF,0x0C,"H1743" }, /* 19 1.74 MB 3.5"  */
 
-	{ 1760,11,2,80,0,0x1C,0x09,0xCF,0x6C,"h880"  }, /* 20 880KB 5.25"   */
-	{ 2080,13,2,80,0,0x1C,0x01,0xCF,0x6C,"D1040" }, /* 21 1.04MB 3.5"   */
-	{ 2240,14,2,80,0,0x1C,0x19,0xCF,0x6C,"D1120" }, /* 22 1.12MB 3.5"   */
+	{ 1760,11,2,80,0,0x1C,0x09,0xCF,0x00,"h880"  }, /* 20 880KB 5.25"   */
+	{ 2080,13,2,80,0,0x1C,0x01,0xCF,0x00,"D1040" }, /* 21 1.04MB 3.5"   */
+	{ 2240,14,2,80,0,0x1C,0x19,0xCF,0x00,"D1120" }, /* 22 1.12MB 3.5"   */
 	{ 3200,20,2,80,0,0x1C,0x20,0xCF,0x2C,"h1600" }, /* 23 1.6MB 5.25"   */
 	{ 3520,22,2,80,0,0x1C,0x08,0xCF,0x2e,"H1760" }, /* 24 1.76MB 3.5"   */
-	{ 3840,24,2,80,0,0x1C,0x20,0xCF,0x6C,"H1920" }, /* 25 1.92MB 3.5"   */
-	{ 6400,40,2,80,0,0x25,0x5B,0xCF,0x6C,"E3200" }, /* 26 3.20MB 3.5"   */
-	{ 7040,44,2,80,0,0x25,0x5B,0xCF,0x6C,"E3520" }, /* 27 3.52MB 3.5"   */
-	{ 7680,48,2,80,0,0x25,0x63,0xCF,0x6C,"E3840" }, /* 28 3.84MB 3.5"   */
+	{ 3840,24,2,80,0,0x1C,0x20,0xCF,0x00,"H1920" }, /* 25 1.92MB 3.5"   */
+	{ 6400,40,2,80,0,0x25,0x5B,0xCF,0x00,"E3200" }, /* 26 3.20MB 3.5"   */
+	{ 7040,44,2,80,0,0x25,0x5B,0xCF,0x00,"E3520" }, /* 27 3.52MB 3.5"   */
+	{ 7680,48,2,80,0,0x25,0x63,0xCF,0x00,"E3840" }, /* 28 3.84MB 3.5"   */
 
-	{ 3680,23,2,80,0,0x1C,0x10,0xCF,0x6C,"H1840" }, /* 29 1.84MB 3.5"   */
+	{ 3680,23,2,80,0,0x1C,0x10,0xCF,0x00,"H1840" }, /* 29 1.84MB 3.5"   */
 	{ 1600,10,2,80,0,0x25,0x02,0xDF,0x2E,"D800"  },	/* 30 800KB 3.5"    */
 	{ 3200,20,2,80,0,0x1C,0x00,0xCF,0x2C,"H1600" }, /* 31 1.6MB 3.5"    */
 };
@@ -499,6 +499,9 @@ static inline void debugt(char *message)
 
 static int disk_change(int drive)
 {
+	if(jiffies < DP->select_delay + DRS->select_date)
+		udelay(20000);
+
 	if(inb_p(FD_DIR) & 0x80){
 		UDRS->flags |= FD_VERIFY; /* verify write protection */
 		
@@ -526,12 +529,12 @@ static int disk_change(int drive)
 	}
 }
 
-
+static int locked=0;
 static int set_dor(int fdc, char mask, char data)
 {
 	register unsigned char drive, unit, newdor,olddor;
 
-	cli();
+	locked=1;
 	olddor = FDCS->dor;
 	newdor =  (olddor & mask) | data;
 	if ( newdor != olddor ){
@@ -542,7 +545,7 @@ static int set_dor(int fdc, char mask, char data)
 		FDCS->dor = newdor;
 		outb_p( newdor, FD_DOR);
 	}
-	sti();
+	locked=0;
 	return olddor;
 }
 
@@ -636,7 +639,10 @@ static void motor_off_callback(unsigned long nr)
 {
 	unsigned char mask = ~(0x10 << UNIT(nr));
 
-	set_dor( FDC(nr), mask, 0 );
+	if(locked)
+		floppy_off(nr);
+	else
+		set_dor( FDC(nr), mask, 0 );
 }
 
 static struct timer_list motor_off_timer[N_DRIVE] = {
@@ -657,6 +663,10 @@ static struct timer_list motor_off_timer[N_DRIVE] = {
 static void floppy_off(unsigned int nr)
 {
 	unsigned long volatile delta;
+	register int fdc=FDC(nr);
+
+	if( !(FDCS->dor & ( 0x10 << UNIT(nr))))
+		return;
 
 	del_timer(motor_off_timer+nr);
 
@@ -1175,6 +1185,7 @@ static void seek_interrupt(void)
 	    )
 		DRS->flags &= ~FD_DISK_NEWCHANGE; /* effective seek */
 	DRS->track = ST1;
+	DRS->select_date = jiffies;
 	seek_floppy();
 }
 
@@ -1466,7 +1477,8 @@ static void start_motor(void)
 
 	mask = 0xfc;
 	data = UNIT(current_drive);
-	if ( (FDCS->dor & 0x03) != UNIT(current_drive) )
+	if ( (FDCS->dor & 0x03) != UNIT(current_drive) ||
+	    !(FDCS->dor & ( 0x10 << UNIT(current_drive) ) ))
 		/* notes select time if floppy is not yet selected */
 		DRS->select_date = jiffies;
 
@@ -1489,9 +1501,7 @@ static void start_motor(void)
 	if( raw_cmd.flags & FD_RAW_NO_MOTOR)
 		return;
 
-	if(disk_change(current_drive))
-		twaddle(); /* this clears the dcl on certain drive/controller
-			    * combinations */
+	disk_change(current_drive);
 
 	return;
 }
@@ -1929,17 +1939,12 @@ static int buffer_chain_size(void)
 	size = CURRENT->current_nr_sectors << 9;
 	bh = CURRENT->bh;
 
-#ifdef SANITY
-	if ( !bh ){
-		DPRINT("null request in buffer_chain_size\n");
-		return size >> 9;
-	}
-#endif
-
-	bh = bh->b_reqnext;
-	while ( bh && bh->b_data == base + size ){
-		size += bh->b_size;
+	if(bh){
 		bh = bh->b_reqnext;
+		while ( bh && bh->b_data == base + size ){
+			size += bh->b_size;
+			bh = bh->b_reqnext;
+		}
 	}
 	return size >> 9;
 }
@@ -2008,10 +2013,6 @@ static void copy_buffer(int ssize, int max_sector, int max_sector_2)
 		if ( size > remaining )
 			size = remaining;
 #ifdef SANITY
-		if (!bh){
-			DPRINT("bh=null in copy buffer before copy\n");
-			break;
-		}
 		if (dma_buffer + size >
 		    floppy_track_buffer + (max_buffer_sectors << 10) ||
 		    dma_buffer < floppy_track_buffer ){
@@ -2355,8 +2356,6 @@ static void redo_fd_request(void)
 			continue;
 		}
 
-		if ( DRS->flags & FD_NEED_TWADDLE )
-			twaddle();
 		floppy_tq.routine = (void *)(void *) floppy_start;
 		queue_task(&floppy_tq, &tq_timer);
 #ifdef DEBUGT
@@ -2506,7 +2505,7 @@ static int raw_cmd_ioctl(int drive, void *param)
 	current_addr = floppy_track_buffer;
 	cont = &raw_cmd_cont;
 	CALL(ret=wait_til_done(floppy_start,1));
-	if( inb_p(FD_DIR) & 0x80 )
+	if( disk_change(current_drive) )
 		raw_cmd.flags |= FD_RAW_DISK_CHANGE;
 	else
 		raw_cmd.flags &= ~FD_RAW_DISK_CHANGE;
@@ -3123,12 +3122,21 @@ void floppy_init(void)
 
 static int floppy_grab_irq_and_dma(void)
 {
+	int i;
 	cli();
 	if (usage_count++){
 		sti();
 		return 0;
 	}
 	sti();
+
+	for(i=0; i< N_FDC; i++){		
+		fdc = i;
+		reset_fdc_info(1);
+		outb_p( FDCS->dor, FD_DOR);
+	}
+	set_dor(0, ~0, 8); /* avoid immediate interrupt */
+
 	if (request_irq(FLOPPY_IRQ, floppy_interrupt, SA_INTERRUPT, "floppy")) {
 		DPRINT1("Unable to grab IRQ%d for the floppy driver\n",
 			FLOPPY_IRQ);
@@ -3146,6 +3154,7 @@ static int floppy_grab_irq_and_dma(void)
 
 static void floppy_release_irq_and_dma(void)
 {
+	int i;
 	cli();
 	if (--usage_count){
 		sti();
@@ -3156,10 +3165,7 @@ static void floppy_release_irq_and_dma(void)
 	free_dma(FLOPPY_DMA);
 	disable_irq(FLOPPY_IRQ);
 	free_irq(FLOPPY_IRQ);
-#ifdef HAVE_2_CONTROLLERS
-	/* switch on first controller.
-	 * This saves us trouble on the next reboot. */
-	set_dor(0, ~0, 8 );
-	set_dor(1, ~8, 0 );
-#endif
+	/* switch off dma gates */
+	for(i=0; i< N_FDC; i++)
+		set_dor(i, ~8, 0);
 }

@@ -257,13 +257,24 @@ void UMSDOS_read_inode(struct inode *inode)
 */
 void UMSDOS_write_inode(struct inode *inode)
 {
+	struct iattr newattrs;
+
 	PRINTK (("UMSDOS_write_inode emd %d\n",inode->u.umsdos_i.i_emd_owner));
 	msdos_write_inode(inode);
-	UMSDOS_notify_change (NOTIFY_TIME,inode);
+	newattrs.ia_mtime = inode->i_mtime;
+	newattrs.ia_atime = inode->i_atime;
+	newattrs.ia_ctime = inode->i_ctime;
+	newattrs.ia_valid = ATTR_MTIME | ATTR_ATIME | ATTR_CTIME;
+	UMSDOS_notify_change (inode, &newattrs);
 }
-int UMSDOS_notify_change (int flags, struct inode *inode)
+
+int UMSDOS_notify_change(struct inode *inode, struct iattr *attr)
 {
 	int ret = 0;
+
+	if ((ret = inode_change_ok(inode, attr)) != 0) 
+		return ret;
+
 	if (inode->i_nlink > 0){
 		/* #Specification: notify_change / i_nlink > 0
 			notify change is only done for inode with nlink > 0. An inode
@@ -306,25 +317,24 @@ int UMSDOS_notify_change (int flags, struct inode *inode)
 				ret = umsdos_emd_dir_read (emd_owner,&filp,(char*)&entry
 					,UMSDOS_REC_SIZE);
 				if (ret == 0){
-					if (flags & NOTIFY_UIDGID){
-						entry.uid = inode->i_uid;
-						entry.gid = inode->i_gid;
-						/* Remove those flags msdos don't like */
-						flags &= ~NOTIFY_UIDGID;
-					}
-					if (flags & NOTIFY_MODE){
-						entry.mode = inode->i_mode;
-						flags &= ~NOTIFY_MODE;
-					}
-					if (flags & NOTIFY_TIME){
-						entry.atime = inode->i_atime;
-						entry.mtime = inode->i_mtime;
-						entry.ctime = inode->i_ctime;
-					}
+					if (attr->ia_valid & ATTR_UID) 
+						entry.uid = attr->ia_uid;
+					if (attr->ia_valid & ATTR_GID) 
+						entry.gid = attr->ia_gid;
+					if (attr->ia_valid & ATTR_MODE) 
+						entry.mode = attr->ia_mode;
+					if (attr->ia_valid & ATTR_ATIME) 
+						entry.atime = attr->ia_atime;
+					if (attr->ia_valid & ATTR_MTIME) 
+						entry.mtime = attr->ia_mtime;
+					if (attr->ia_valid & ATTR_CTIME) 
+						entry.ctime = attr->ia_ctime;
+
 					entry.nlink = inode->i_nlink;
 					filp.f_pos = inode->u.umsdos_i.pos;
 					ret = umsdos_emd_dir_write (emd_owner,&filp,(char*)&entry
 						,UMSDOS_REC_SIZE);
+
 					PRINTK (("notify pos %d ret %d nlink %d "
 						,inode->u.umsdos_i.pos
 						,ret,entry.nlink));
@@ -332,20 +342,14 @@ int UMSDOS_notify_change (int flags, struct inode *inode)
 						notify_change operation are done only on the
 						EMD file. The msdos fs is not even called.
 					*/
-					#if 0
-					if (ret == 0
-						&& (S_ISDIR(inode->i_mode)
-							|| S_ISREG(inode->i_mode))){
-						ret = msdos_notify_change(flags, inode);
-						printk ("msdos_notify %x %d",inode,ret);
-					}
-					#endif
 				}
 				iput (emd_owner);
 			}
 			PRINTK (("\n"));
 		}
 	}
+	if (ret == 0) 
+		inode_setattr(inode, attr);
 	return ret;
 }
 

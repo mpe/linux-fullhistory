@@ -618,7 +618,7 @@ int UMSDOS_link (
 	}
 	if (ret == 0){
 		oldinode->i_nlink++;
-		ret = UMSDOS_notify_change (0,oldinode);
+		ret = UMSDOS_notify_change (0,NULL,oldinode);
 	}
 	iput (oldinode);
 	iput (dir);
@@ -923,7 +923,7 @@ int UMSDOS_unlink (
 								iput (hdir);
 							}
 						}else{
-							ret = UMSDOS_notify_change (0,inode);
+							ret = UMSDOS_notify_change (0,NULL,inode);
 						}
 						iput (inode);
 					}

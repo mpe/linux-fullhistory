@@ -175,7 +175,7 @@ extern void msdos_statfs(struct super_block *sb,struct statfs *buf);
 extern int msdos_bmap(struct inode *inode,int block);
 extern void msdos_read_inode(struct inode *inode);
 extern void msdos_write_inode(struct inode *inode);
-extern int msdos_notify_change(int flags,struct inode *inode);
+extern int msdos_notify_change(struct inode *,struct iattr *);
 
 /* dir.c */
 

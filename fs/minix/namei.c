@@ -23,15 +23,11 @@
 static inline int namecompare(int len, int maxlen,
 	const char * name, const char * buffer)
 {
-	if (len >= maxlen || !buffer[len]) {
-		unsigned char same;
-		__asm__("repe ; cmpsb ; setz %0"
-			:"=q" (same)
-			:"S" ((long) name),"D" ((long) buffer),"c" (len)
-			:"cx","di","si");
-		return same;
-	}
-	return 0;
+	if (len > maxlen)
+		return 0;
+	if (len < maxlen && buffer[len])
+		return 0;
+	return !memcmp(name, buffer, len);
 }
 
 /*

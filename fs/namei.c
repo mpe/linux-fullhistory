@@ -373,6 +373,7 @@ int open_namei(const char * pathname, int flag, int mode,
 			iput(inode);
 			return -EACCES;
 		}
+		flag &= ~O_TRUNC;
 	} else {
 		if (IS_RDONLY(inode) && (flag & 2)) {
 			iput(inode);
@@ -404,14 +405,18 @@ int open_namei(const char * pathname, int flag, int mode,
 		return -EPERM;
 	}
 	if (flag & O_TRUNC) {
-	      inode->i_size = 0;
-	      if (inode->i_op && inode->i_op->truncate)
-	           inode->i_op->truncate(inode);
-	      if ((error = notify_change(NOTIFY_SIZE, inode))) {
-		   iput(inode);
-		   return error;
-	      }
-	      inode->i_dirt = 1;
+		struct iattr newattrs;
+
+		newattrs.ia_size = 0;
+		newattrs.ia_valid = ATTR_SIZE;
+		if ((error = notify_change(inode, &newattrs))) {
+			iput(inode);
+			return error;
+		}
+		inode->i_size = 0;
+		if (inode->i_op && inode->i_op->truncate)
+			inode->i_op->truncate(inode);
+		inode->i_dirt = 1;
 	}
 	*res_inode = inode;
 	return 0;

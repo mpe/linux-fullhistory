@@ -420,28 +420,34 @@ void msdos_write_inode(struct inode *inode)
 }
 
 
-int msdos_notify_change(int flags,struct inode *inode)
+int msdos_notify_change(struct inode * inode,struct iattr * attr)
 {
 	int error;
 
-	error = 0;
-	if ((flags & NOTIFY_UIDGID) && (inode->i_uid != MSDOS_SB(inode->i_sb)->
-	    fs_uid || inode->i_gid != MSDOS_SB(inode->i_sb)->fs_gid)) {
-		inode->i_uid = MSDOS_SB(inode->i_sb)->fs_uid;
-		inode->i_gid = MSDOS_SB(inode->i_sb)->fs_gid;
+	error = inode_change_ok(inode, attr);
+	if (error)
+		return error;
+
+	if (((attr->ia_valid & ATTR_UID) && 
+	     (attr->ia_uid != MSDOS_SB(inode->i_sb)->fs_uid)) ||
+	    ((attr->ia_valid & ATTR_GID) && 
+	     (attr->ia_gid != MSDOS_SB(inode->i_sb)->fs_gid)) ||
+	    ((attr->ia_valid & ATTR_MODE) &&
+	     (attr->ia_mode & ~MSDOS_VALID_MODE)))
 		error = -EPERM;
-	}
-	if (!(flags & NOTIFY_MODE))
+
+	if (error)
 		return MSDOS_SB(inode->i_sb)->quiet ? 0 : error;
-	if (inode->i_mode & ~MSDOS_VALID_MODE) {
-		inode->i_mode &= MSDOS_VALID_MODE;
-		error = -EPERM;
-	}
+
+	inode_setattr(inode, attr);
+
 	if (IS_NOEXEC(inode) && !S_ISDIR(inode->i_mode))
 		inode->i_mode &= S_IFMT | S_IRUGO | S_IWUGO;
-	else inode->i_mode |= S_IXUGO;
+	else
+		inode->i_mode |= S_IXUGO;
+
 	inode->i_mode = ((inode->i_mode & S_IFMT) | ((((inode->i_mode & S_IRWXU
 	    & ~MSDOS_SB(inode->i_sb)->fs_umask) | S_IRUSR) >> 6)*S_IXUGO)) &
 	    ~MSDOS_SB(inode->i_sb)->fs_umask;
-	return MSDOS_SB(inode->i_sb)->quiet ? 0 : error;
+	return 0;
 }

@@ -233,6 +233,59 @@ static void read_inode(struct inode * inode)
 	unlock_inode(inode);
 }
 
+/* POSIX UID/GID verification for setting inode attributes */
+int inode_change_ok(struct inode *inode, struct iattr *attr)
+{
+	/* Make sure a caller can chown */
+	if ((attr->ia_valid & ATTR_UID) &&
+	    (current->fsuid != inode->i_uid ||
+	     attr->ia_uid != inode->i_uid) && !fsuser())
+		return -EPERM;
+
+	/* Make sure caller can chgrp */
+	if ((attr->ia_valid & ATTR_GID) &&
+	    (!in_group_p(attr->ia_gid) && attr->ia_gid != inode->i_gid) &&
+	    !fsuser())
+		return -EPERM;
+
+	/* Make sure a caller can chmod */
+	if (attr->ia_valid & ATTR_MODE) {
+		if ((current->fsuid != inode->i_uid) && !fsuser())
+			return -EPERM;
+		/* Also check the setgid bit! */
+		if (!fsuser() && !in_group_p((attr->ia_valid & ATTR_GID) ? attr->ia_gid :
+					     inode->i_gid))
+			attr->ia_mode &= ~S_ISGID;
+	}
+
+	return 0;
+}
+
+/*
+ * Set the appropriate attributes from an attribute structure into
+ * the inode structure.
+ */
+void inode_setattr(struct inode *inode, struct iattr *attr)
+{
+	if (attr->ia_valid & ATTR_UID)
+		inode->i_uid = attr->ia_uid;
+	if (attr->ia_valid & ATTR_GID)
+		inode->i_gid = attr->ia_gid;
+	if (attr->ia_valid & ATTR_SIZE)
+		inode->i_size = attr->ia_size;
+	if (attr->ia_valid & ATTR_ATIME)
+		inode->i_atime = attr->ia_atime;
+	if (attr->ia_valid & ATTR_MTIME)
+		inode->i_mtime = attr->ia_mtime;
+	if (attr->ia_valid & ATTR_CTIME)
+		inode->i_ctime = attr->ia_ctime;
+	if (attr->ia_valid & ATTR_MODE) {
+		inode->i_mode = attr->ia_mode;
+		if (!fsuser() && !in_group_p(inode->i_gid))
+			inode->i_mode &= ~S_ISGID;
+	}
+}
+
 /*
  * notify_change is called for inode-changing operations such as
  * chown, chmod, utime, and truncate.  It is guaranteed (unlike
@@ -241,11 +294,18 @@ static void read_inode(struct inode * inode)
  * NFS uses this to get the authentication correct.  -- jrs
  */
 
-int notify_change(int flags, struct inode * inode)
+int notify_change(struct inode * inode, struct iattr *attr)
 {
+	int retval;
+
 	if (inode->i_sb && inode->i_sb->s_op  &&
-	    inode->i_sb->s_op->notify_change)
-		return inode->i_sb->s_op->notify_change(flags, inode);
+	    inode->i_sb->s_op->notify_change) 
+		return inode->i_sb->s_op->notify_change(inode, attr);
+
+	if ((retval = inode_change_ok(inode, attr)) != 0)
+		return retval;
+
+	inode_setattr(inode, attr);
 	return 0;
 }
 

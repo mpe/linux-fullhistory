@@ -715,9 +715,16 @@ void sysv_read_inode(struct inode * inode)
 }
 
 /* To avoid inconsistencies between inodes in memory and inodes on disk. */
-extern int sysv_notify_change(int flags, struct inode *inode)
+extern int sysv_notify_change(struct inode *inode, struct iattr *attr)
 {
-	if (flags & NOTIFY_MODE)
+	int error;
+
+	if ((error = inode_change_ok(inode, attr)) != 0)
+		return error;
+
+	inode_setattr(inode, attr);
+
+	if (attr->ia_valid & ATTR_MODE)
 		if (inode->i_sb->sv_kludge_symlinks)
 			if (inode->i_mode == COH_KLUDGE_SYMLINK_MODE) {
 				inode->i_mode = COH_KLUDGE_NOT_SYMLINK;

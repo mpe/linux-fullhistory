@@ -29,16 +29,6 @@
    sb->sv_sbd->s_tfree = *sb->sv_sb_total_free_blocks
    but we nevertheless keep it up to date. */
 
-extern inline void memzero (void * s, size_t count)
-{
-__asm__("cld\n\t"
-	"rep\n\t"
-	"stosl"
-	:
-	:"a" (0),"D" (s),"c" (count/4)
-	:"cx","di","memory");
-}
-
 void sysv_free_block(struct super_block * sb, unsigned int block)
 {
 	struct buffer_head * bh;
@@ -115,7 +105,7 @@ void sysv_free_block(struct super_block * sb, unsigned int block)
 			return;
 		}
 		bh_data = bh->b_data + ((block & sb->sv_block_size_ratio_1) << sb->sv_block_size_bits);
-		memzero(bh_data, sb->sv_block_size);
+		memset(bh_data, 0, sb->sv_block_size);
 		/* this implies ((struct ..._freelist_chunk *) bh_data)->flc_count = 0; */
 		mark_buffer_dirty(bh, 1);
 		bh->b_uptodate = 1;
@@ -228,7 +218,7 @@ int sysv_new_block(struct super_block * sb)
 			unlock_super(sb);
 			return 0;
 		}
-	memzero(bh_data,sb->sv_block_size);
+	memset(bh_data, 0, sb->sv_block_size);
 	mark_buffer_dirty(bh, 1);
 	bh->b_uptodate = 1;
 	brelse(bh);

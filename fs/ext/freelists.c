@@ -37,13 +37,6 @@
 #include <linux/string.h>
 #include <linux/locks.h>
 
-#define clear_block(addr) \
-__asm__("cld\n\t" \
-        "rep\n\t" \
-        "stosl" \
-        : \
-        :"a" (0),"c" (BLOCK_SIZE/4),"D" ((long) (addr)):"cx","di")
-
 void ext_free_block(struct super_block * sb, int block)
 {
 	struct buffer_head * bh;
@@ -133,7 +126,7 @@ printk("ext_new_block: block empty, skipping to %d\n", efb->next);
 		printk("new_block: cannot get block");
 		return 0;
 	}
-	clear_block(bh->b_data);
+	memset(bh->b_data, 0, BLOCK_SIZE);
 	bh->b_uptodate = 1;
 	mark_buffer_dirty(bh, 1);
 	brelse(bh);

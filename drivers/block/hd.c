@@ -305,7 +305,8 @@ static void identify_intr(void)
 	if (unmask_intr[dev])
 		sti();
 	if (stat & (BUSY_STAT|ERR_STAT)) {
-		printk ("  hd%c: non-IDE device, CHS=%d/%d/%d\n", dev+'a',
+		printk ("  hd%c: non-IDE device, %dMB, CHS=%d/%d/%d\n", dev+'a',
+			hd_info[dev].cyl*hd_info[dev].head*hd_info[dev].sect / 2048,
 			hd_info[dev].cyl, hd_info[dev].head, hd_info[dev].sect);
 		if (id != NULL) {
 			hd_ident_info[dev] = NULL;
@@ -796,6 +797,7 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 {
 	struct hd_geometry *loc = (struct hd_geometry *) arg;
 	int dev, err;
+	unsigned long flags;
 
 	if ((!inode) || (!inode->i_rdev))
 		return -EINVAL;
@@ -845,17 +847,22 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 		case BLKRRPART: /* Re-read partition tables */
 			return revalidate_hddisk(inode->i_rdev, 1);
 
-		case HDIO_SETUNMASKINTR:
-			if (!suser()) return -EACCES;
+		case HDIO_SETUNMASKINTR:	/* obsolete */
+			printk("hd: obsolete syscall: HDIO_SETUNMASKINTR\n");
 			if (!arg)  return -EINVAL;
-			if (MINOR(inode->i_rdev) & 0x3F) return -EINVAL;
 			err = verify_area(VERIFY_READ, (long *) arg, sizeof(long));
 			if (err)
 				return err;
-			unmask_intr[dev] = get_fs_long((long *) arg);
+			arg = get_fs_long((long *) arg);
+			/* drop into HDIO_SET_UNMASKINTR */
+		case HDIO_SET_UNMASKINTR:
+			if (!suser()) return -EACCES;
+			if ((arg > 1) || (MINOR(inode->i_rdev) & 0x3F))
+				return -EINVAL;
+			unmask_intr[dev] = arg;
 			return 0;
 
-                case HDIO_GETUNMASKINTR:
+                case HDIO_GET_UNMASKINTR:
 			if (!arg)  return -EINVAL;
 			err = verify_area(VERIFY_WRITE, (long *) arg, sizeof(long));
 			if (err)
@@ -863,7 +870,7 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 			put_fs_long(unmask_intr[dev], (long *) arg);
 			return 0;
 
-                case HDIO_GETMULTCOUNT:
+                case HDIO_GET_MULTCOUNT:
 			if (!arg)  return -EINVAL;
 			err = verify_area(VERIFY_WRITE, (long *) arg, sizeof(long));
 			if (err)
@@ -871,16 +878,17 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 			put_fs_long(mult_count[dev], (long *) arg);
 			return 0;
 
-		case HDIO_SETMULTCOUNT:
-		{
-			unsigned long flags;
-			if (!suser()) return -EACCES;
+		case HDIO_SETMULTCOUNT:		/* obsolete */
+			printk("hd: obsolete syscall: HDIO_SETMULTCOUNT\n");
 			if (!arg)  return -EINVAL;
-			if (MINOR(inode->i_rdev) & 0x3F) return -EINVAL;
 			err = verify_area(VERIFY_READ, (long *) arg, sizeof(long));
 			if (err)
 				return err;
 			arg = get_fs_long((long *) arg);
+			/* drop into HDIO_SET_MULTCOUNT */
+		case HDIO_SET_MULTCOUNT:
+			if (!suser()) return -EACCES;
+			if (MINOR(inode->i_rdev) & 0x3F) return -EINVAL;
 			save_flags(flags);
 			cli();	/* a prior request might still be in progress */
 			if (arg > max_mult[dev])
@@ -895,8 +903,8 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 			}
 			restore_flags(flags);
 			return err;
-		}
-		case HDIO_GETIDENTITY:
+
+		case HDIO_GET_IDENTITY:
 			if (!arg)  return -EINVAL;
 			if (MINOR(inode->i_rdev) & 0x3F) return -EINVAL;
 			if (hd_ident_info[dev] == NULL)  return -ENOMSG;
