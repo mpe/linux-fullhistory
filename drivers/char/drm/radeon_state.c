@@ -1917,7 +1917,7 @@ static int free_surface(DRMFILE filp, drm_radeon_private_t *dev_priv, int lower)
 				dev_priv->surfaces[s->surface_index].refcount--;
 				if (dev_priv->surfaces[s->surface_index].refcount == 0)
 					dev_priv->surfaces[s->surface_index].flags = 0;
-				s->filp = 0;
+				s->filp = NULL;
 				radeon_apply_surface_regs(s->surface_index, dev_priv);
 				return 0;
 			}
