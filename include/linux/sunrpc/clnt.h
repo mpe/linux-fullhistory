@@ -23,7 +23,7 @@ struct rpc_portmap {
 	__u32			pm_prog;
 	__u32			pm_vers;
 	__u32			pm_prot;
-	__u32			pm_port;
+	__u16			pm_port;
 };
 
 /*

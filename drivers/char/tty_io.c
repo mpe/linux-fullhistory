@@ -838,7 +838,7 @@ static void release_dev(struct file * filp)
 {
 	struct tty_struct *tty, *o_tty;
 	struct termios *tp, *o_tp, *ltp, *o_ltp;
-	struct task_struct **p;
+	struct task_struct *p;
 	int	idx;
 	
 	tty = (struct tty_struct *)filp->private_data;
@@ -972,14 +972,14 @@ static void release_dev(struct file * filp)
 	 * Make sure there aren't any processes that still think this
 	 * tty is their controlling tty.
 	 */
-	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
-		if (*p == 0)
-			continue;
-		if ((*p)->tty == tty)
-			(*p)->tty = NULL;
-		if (o_tty && (*p)->tty == o_tty)
-			(*p)->tty = NULL;
+	read_lock(&tasklist_lock);
+	for_each_task(p) {
+		if (p->tty == tty)
+			p->tty = NULL;
+		if (o_tty && p->tty == o_tty)
+			p->tty = NULL;
 	}
+	read_unlock(&tasklist_lock);
 
 	/*
 	 * Shutdown the current line discipline, and reset it to
@@ -1215,40 +1215,6 @@ static int tty_fasync(struct inode * inode, struct file * filp, int on)
 	}
 	return 0;
 }
-
-#if 0
-/*
- * XXX does anyone use this anymore?!?
- */
-static int do_get_ps_info(unsigned long arg)
-{
-	struct tstruct {
-		int flag;
-		int present[NR_TASKS];
-		struct task_struct tasks[NR_TASKS];
-	};
-	struct tstruct *ts = (struct tstruct *)arg;
-	struct task_struct **p;
-	char *c, *d;
-	int i, n = 0;
-	
-	i = verify_area(VERIFY_WRITE, (void *)arg, sizeof(struct tstruct));
-	if (i)
-		return i;
-	for (p = &FIRST_TASK ; p <= &LAST_TASK ; p++, n++)
-		if (*p)
-		{
-			c = (char *)(*p);
-			d = (char *)(ts->tasks+n);
-			for (i=0 ; i<sizeof(struct task_struct) ; i++)
-				put_user(*c++, d++);
-			put_user(1, ts->present+n);
-		}
-		else	
-			put_user(0, ts->present+n);
-	return(0);			
-}
-#endif
 
 static int tiocsti(struct tty_struct *tty, char * arg)
 {
@@ -1495,7 +1461,7 @@ void do_SAK( struct tty_struct *tty)
 #ifdef TTY_SOFT_SAK
 	tty_hangup(tty);
 #else
-	struct task_struct **p;
+	struct task_struct *p;
 	int session;
 	int		i;
 	struct file	*filp;
@@ -1507,23 +1473,23 @@ void do_SAK( struct tty_struct *tty)
 		tty->ldisc.flush_buffer(tty);
 	if (tty->driver.flush_buffer)
 		tty->driver.flush_buffer(tty);
- 	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
-		if (!(*p))
-			continue;
-		if (((*p)->tty == tty) ||
-		    ((session > 0) && ((*p)->session == session)))
-			send_sig(SIGKILL, *p, 1);
-		else if ((*p)->files) {
+	read_lock(&tasklist_lock);
+	for_each_task(p) {
+		if ((p->tty == tty) ||
+		    ((session > 0) && (p->session == session)))
+			send_sig(SIGKILL, p, 1);
+		else if (p->files) {
 			for (i=0; i < NR_OPEN; i++) {
-				filp = (*p)->files->fd[i];
+				filp = p->files->fd[i];
 				if (filp && (filp->f_op == &tty_fops) &&
 				    (filp->private_data == tty)) {
-					send_sig(SIGKILL, *p, 1);
+					send_sig(SIGKILL, p, 1);
 					break;
 				}
 			}
 		}
 	}
+	read_unlock(&tasklist_lock);
 #endif
 }
 

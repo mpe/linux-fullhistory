@@ -11,7 +11,7 @@ int u14_34f_abort(Scsi_Cmnd *);
 int u14_34f_reset(Scsi_Cmnd *, unsigned int);
 int u14_34f_biosparam(Disk *, kdev_t, int *);
 
-#define U14_34F_VERSION "3.00.09"
+#define U14_34F_VERSION "3.10.00"
 
 #define ULTRASTOR_14_34F {                                            \
 		NULL, /* Ptr for modules */                           \

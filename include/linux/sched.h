@@ -58,9 +58,6 @@ extern unsigned long avenrun[];		/* Load averages */
 extern int nr_running, nr_tasks;
 extern int last_pid;
 
-#define FIRST_TASK task[0]
-#define LAST_TASK task[NR_TASKS-1]
-
 #include <linux/head.h>
 #include <linux/fs.h>
 #include <linux/signal.h>

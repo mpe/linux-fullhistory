@@ -65,7 +65,6 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 	unsigned char bufbits = ISOFS_BUFFER_BITS(dir);
 	unsigned int block, i, f_pos, offset, inode_number;
 	struct buffer_head * bh;
-	void * cpnt = NULL;
 	unsigned int old_offset;
 	unsigned int backlink;
 	int dlen, rrflag, match;
@@ -117,21 +116,8 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 		/* Handle case where the directory entry spans two blocks.
 		   Usually 1024 byte boundaries */
 		if (offset >= bufsize) {
-		        unsigned int frag1;
-			frag1 = bufsize - old_offset;
-			cpnt = kmalloc(*((unsigned char *) de),GFP_KERNEL);
-			if (!cpnt) return 0;
-			memcpy(cpnt, bh->b_data + old_offset, frag1);
-
-			de = (struct iso_directory_record *) cpnt;
-			brelse(bh);
-			offset = f_pos & (bufsize - 1);
-			block = isofs_bmap(dir,f_pos>>bufbits);
-			if (!block || !(bh = bread(dir->i_dev,block,bufsize))) {
-			        kfree(cpnt);
-				return 0;
-			};
-			memcpy((char *)cpnt+frag1, bh->b_data, offset);
+			printk("Directory entry extends past end of iso9660 block\n");
+	 		return 0;
 		}
 		
 		/* Handle the '.' case */
@@ -190,12 +176,6 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 			match = isofs_match(namelen,name,dpnt,dlen);
 		}
 
-		if (cpnt)
-		{
-			kfree(cpnt);
-			cpnt = NULL;
-		}
-
 		if(rrflag) kfree(dpnt);
 		if (match) {
 			if(inode_number == -1) {
@@ -217,8 +197,6 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 		}
 	}
  out:
-	if (cpnt)
-		kfree(cpnt);
 	brelse(bh);
 	return NULL;
 }

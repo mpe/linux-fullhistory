@@ -62,32 +62,8 @@ static inline void irq_exit(int cpu, int irq)
 	"mov %dx,%ds\n\t" \
 	"mov %dx,%es\n\t"
 
-/*
- * These are used just for the "bad" interrupt handlers, 
- * which just clear the mask and return..
- */
-#define SAVE_MOST \
-	"cld\n\t" \
-	"push %es\n\t" \
-	"push %ds\n\t" \
-	"pushl %eax\n\t" \
-	"pushl %edx\n\t" \
-	"pushl %ecx\n\t" \
-	"movl $" STR(KERNEL_DS) ",%edx\n\t" \
-	"mov %dx,%ds\n\t" \
-	"mov %dx,%es\n\t"
-
-#define RESTORE_MOST \
-	"popl %ecx\n\t" \
-	"popl %edx\n\t" \
-	"popl %eax\n\t" \
-	"pop %ds\n\t" \
-	"pop %es\n\t" \
-	"iret"
-
 #define IRQ_NAME2(nr) nr##_interrupt(void)
 #define IRQ_NAME(nr) IRQ_NAME2(IRQ##nr)
-#define BAD_IRQ_NAME(nr) IRQ_NAME2(bad_IRQ##nr)
 
 #define GET_CURRENT \
 	"movl %esp, %ebx\n\t" \
@@ -150,15 +126,14 @@ static inline void x86_do_profile (unsigned long eip)
 		extern int _stext;
 		eip -= (unsigned long) &_stext;
 		eip >>= prof_shift;
-		if (eip < prof_len)
-			atomic_inc((atomic_t *)&prof_buffer[eip]);
-		else
 		/*
 		 * Dont ignore out-of-bounds EIP values silently,
 		 * put them into the last histogram slot, so if
 		 * present, they will show up as a sharp peak.
 		 */
-			atomic_inc((atomic_t *)&prof_buffer[prof_len-1]);
+		if (eip > prof_len-1)
+			eip = prof_len-1;
+		atomic_inc((atomic_t *)&prof_buffer[eip]);
 	}
 }
 

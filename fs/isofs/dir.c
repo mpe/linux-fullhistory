@@ -121,6 +121,11 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 	char *name;
 	struct iso_directory_record *de;
 
+ 	if( filp->f_pos >= inode->i_size ) {
+ 	  return 0;
+ 
+ 	}
+ 
 	offset = filp->f_pos & (bufsize - 1);
 	block = isofs_bmap(inode, filp->f_pos >> bufbits);
 

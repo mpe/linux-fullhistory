@@ -725,7 +725,7 @@ void vmtruncate(struct inode * inode, unsigned long offset)
 		flush_cache_range(mm, start, end);
 		zap_page_range(mm, start, len);
 		flush_tlb_range(mm, start, end);
-	} while ((mpnt = mpnt->vm_next_share) != inode->i_mmap);
+	} while ((mpnt = mpnt->vm_next_share) != NULL);
 }
 
 

@@ -60,21 +60,6 @@
     block = cont_extent; \
     offset = cont_offset; \
     offset1 = 0; \
-    if(ISOFS_BUFFER_SIZE(DEV) == 1024) {     \
-      block <<= 1;    \
-      if (offset >= 1024) block++; \
-      offset &= 1023; \
-      if(offset + cont_size >= 1024) { \
-	  bh = bread(DEV->i_dev, block++, ISOFS_BUFFER_SIZE(DEV)); \
-	  if(!bh) {printk("Unable to read continuation Rock Ridge record\n"); \
-		     kfree(buffer); \
-		     buffer = NULL; } else { \
-	    memcpy(buffer, bh->b_data + offset, 1024 - offset); \
-            brelse(bh); \
-	    offset1 = 1024 - offset; \
-	    offset = 0;} \
-      }  \
-    };     \
     if(buffer) { \
       bh = bread(DEV->i_dev, block, ISOFS_BUFFER_SIZE(DEV)); \
       if(bh){       \
@@ -429,7 +414,6 @@ char * get_rock_ridge_symlink(struct inode * inode)
   unsigned char bufbits = ISOFS_BUFFER_BITS(inode);
   struct buffer_head * bh;
   unsigned char * pnt;
-  void * cpnt = NULL;
   char * rpnt;
   struct iso_directory_record * raw_inode;
   CONTINUE_DECLS;
@@ -455,24 +439,12 @@ char * get_rock_ridge_symlink(struct inode * inode)
   
   raw_inode = ((struct iso_directory_record *) pnt);
   
+  /*
+   * If we go past the end of the buffer, there is some sort of error.
+   */
   if ((inode->i_ino & (bufsize - 1)) + *pnt > bufsize){
-    int frag1, offset;
-    
-    offset = (inode->i_ino & (bufsize - 1));
-    frag1 = bufsize - offset;
-    cpnt = kmalloc(*pnt,GFP_KERNEL);
-    if(!cpnt) return NULL;
-    memcpy(cpnt, bh->b_data + offset, frag1);
-    brelse(bh);
-    if (!(bh = bread(inode->i_dev,++block, bufsize))) {
-      kfree(cpnt);
-      printk("unable to read i-node block");
-      return NULL;
-    };
-    offset += *pnt - bufsize;
-    memcpy((char *)cpnt+frag1, bh->b_data, offset);
-    pnt = ((unsigned char *) cpnt);
-    raw_inode = ((struct iso_directory_record *) pnt);
+	printk("symlink spans iso9660 blocks\n");
+	return NULL;
   };
   
   /* Now test for possible Rock Ridge extensions which will override some of
@@ -558,11 +530,6 @@ char * get_rock_ridge_symlink(struct inode * inode)
   MAYBE_CONTINUE(repeat,inode);
   brelse(bh);
   
-  if (cpnt) {
-    kfree(cpnt);
-    cpnt = NULL;
-  };
-
   return rpnt;
  out:
   if(buffer) kfree(buffer);

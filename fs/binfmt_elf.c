@@ -280,7 +280,6 @@ static unsigned long load_elf_interp(struct elfhdr * interp_elf_ex,
 	      /* Real error */
 	      sys_close(elf_exec_fileno);
 	      kfree(elf_phdata);
-printk("%d", error);
 	      return ~0UL;
 	    }
 

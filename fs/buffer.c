@@ -591,8 +591,9 @@ void set_blocksize(kdev_t dev, int size)
 				 continue;
 			if (bh->b_size == size)
 				 continue;
-			
+			bhnext->b_count++;
 			wait_on_buffer(bh);
+			bhnext->b_count--;
 			if (bh->b_dev == dev && bh->b_size != size) {
 				clear_bit(BH_Dirty, &bh->b_state);
 				clear_bit(BH_Uptodate, &bh->b_state);
@@ -1606,6 +1607,7 @@ asmlinkage int sync_old_buffers(void)
 				 ndirty++;
 				 if(bh->b_flushtime > jiffies) continue;
 				 nwritten++;
+				 next->b_count++;
 				 bh->b_count++;
 				 bh->b_flushtime = 0;
 #ifdef DEBUG
@@ -1613,6 +1615,7 @@ asmlinkage int sync_old_buffers(void)
 #endif
 				 ll_rw_block(WRITE, 1, &bh);
 				 bh->b_count--;
+				 next->b_count--;
 			 }
 	}
 #ifdef DEBUG
@@ -1751,6 +1754,7 @@ int bdflush(void * unused)
 					     currently dirty buffers are not shared, so it does not matter */
 					  if (refilled && major == LOOP_MAJOR)
 						   continue;
+					  next->b_count++;
 					  bh->b_count++;
 					  ndirty++;
 					  bh->b_flushtime = 0;
@@ -1766,6 +1770,7 @@ int bdflush(void * unused)
 					  if(nlist != BUF_DIRTY) ncount++;
 #endif
 					  bh->b_count--;
+					  next->b_count--;
 				  }
 		 }
 #ifdef DEBUG
