@@ -368,6 +368,7 @@ wd_close_card(struct device *dev)
 	if (ei_debug > 1)
 		printk("%s: Shutting down ethercard.\n", dev->name);
 	NS8390_init(dev, 0);
+	dev->start = 0;
 
 	/* Change from 16-bit to 8-bit shared memory so reboot works. */
 	outb(ei_status.reg5, wd_cmdreg + WD_CMDREG5 );

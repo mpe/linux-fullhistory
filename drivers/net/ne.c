@@ -1,4 +1,3 @@
-#define rw_bugfix
 /* ne.c: A general non-shared-memory NS8390 ethernet driver for linux. */
 /*
     Written 1992-94 by Donald Becker.
@@ -14,8 +13,16 @@
         Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 
     This driver should work with many programmed-I/O 8390-based ethernet
-    boards.  Currently it support the NE1000, NE2000, many clones,
+    boards.  Currently it supports the NE1000, NE2000, many clones,
     and some Cabletron products.
+
+    13/04/95 -- Change in philosophy. We now monitor ENISR_RDC for
+    handshaking the Tx PIO xfers. If we don't get a RDC within a
+    reasonable period of time, we know the 8390 has gone south, and we
+    kick the board before it locks the system. Also use set_bit() to
+    create atomic locks on the PIO xfers, and added some defines
+    that the end user can play with to save memory.	-- Paul Gortmaker
+
 */
 
 /* Routines for the NatSemi-based designs (NE[12]000). */
@@ -31,6 +38,20 @@ static char *version =
 
 #include <linux/netdevice.h>
 #include "8390.h"
+
+/* Some defines that people can play with if so inclined. */
+
+/* Do we support clones that don't adhere to 14,15 of the SAprom ? */
+#define CONFIG_NE_BAD_CLONES
+
+/* Do we perform extra sanity checks on stuff ? */
+/* #define CONFIG_NE_SANITY */
+
+/* Do we implement the read before write bugfix ? */
+/* #define CONFIG_NE_RW_BUGFIX */
+
+/* ---- No user-servicable parts below ---- */
+
 extern struct device *init_etherdev(struct device *dev, int sizeof_private,
 				    unsigned long *mem_startp);
 
@@ -39,6 +60,7 @@ extern struct device *init_etherdev(struct device *dev, int sizeof_private,
 static unsigned int netcard_portlist[] =
 { 0x300, 0x280, 0x320, 0x340, 0x360, 0};
 
+#ifdef CONFIG_NE_BAD_CLONES
 /* A list of bad clones that we none-the-less recognize. */
 static struct { char *name8, *name16; unsigned char SAprefix[4];}
 bad_clone_list[] = {
@@ -46,8 +68,12 @@ bad_clone_list[] = {
     {"DE120", "DE220", {0x00, 0x80, 0xc8,}},
     {"DFI1000", "DFI2000", {'D', 'F', 'I',}}, /* Original, eh?  */
     {"EtherNext UTP8", "EtherNext UTP16", {0x00, 0x00, 0x79}},
+    {"NE1000","NE2000-invalid", {0x00, 0x00, 0xd8}}, /* Ancient real NE1000. */
+    {"NN1000", "NN2000",  {0x08, 0x03, 0x08}}, /* Outlaw no-name clone. */
+    {"4-DIM8","4-DIM16", {0x00,0x00,0x4d,}},  /* Outlaw 4-Dimension cards. */
     {0,}
 };
+#endif
 
 #define NE_BASE	 (dev->base_addr)
 #define NE_CMD	 	0x00
@@ -59,6 +85,8 @@ bad_clone_list[] = {
 #define NE1SM_STOP_PG 	0x40	/* Last page +1 of RX ring */
 #define NESM_START_PG	0x40	/* First page of TX buffer */
 #define NESM_STOP_PG	0x80	/* Last page +1 of RX ring */
+
+#define NE_RDC_TIMEOUT	0x03	/* Max wait in jiffies for Tx RDC */
 
 int ne_probe(struct device *dev);
 static int ne_probe1(struct device *dev, int ioaddr);
@@ -126,9 +154,9 @@ static int ne_probe1(struct device *dev, int ioaddr)
     char *name = NULL;
     int start_page, stop_page;
     int neX000, ctron;
-    int reg0 = inb(ioaddr);
+    int reg0 = inb_p(ioaddr);
 
-    if ( reg0 == 0xFF)
+    if (reg0 == 0xFF)
 	return ENODEV;
 
     /* Do a preliminary verification that we have a 8390. */
@@ -140,7 +168,7 @@ static int ne_probe1(struct device *dev, int ioaddr)
 	inb_p(ioaddr + EN0_COUNTER0); /* Clear the counter by reading. */
 	if (inb_p(ioaddr + EN0_COUNTER0) != 0) {
 	    outb_p(reg0, ioaddr);
-	    outb(regd, ioaddr + 0x0d);	/* Restore the old values. */
+	    outb_p(regd, ioaddr + 0x0d);	/* Restore the old values. */
 	    return ENODEV;
 	}
     }
@@ -169,6 +197,7 @@ static int ne_probe1(struct device *dev, int ioaddr)
 	};
 	for (i = 0; i < sizeof(program_seq)/sizeof(program_seq[0]); i++)
 	    outb_p(program_seq[i].value, ioaddr + program_seq[i].offset);
+
     }
     for(i = 0; i < 32 /*sizeof(SA_prom)*/; i+=2) {
 	SA_prom[i] = inb(ioaddr + NE_DATAPORT);
@@ -208,6 +237,7 @@ static int ne_probe1(struct device *dev, int ioaddr)
 	start_page = 0x01;
 	stop_page = (wordlength == 2) ? 0x40 : 0x20;
     } else {
+#ifdef CONFIG_NE_BAD_CLONES
 	/* Ack!  Well, there might be a *bad* NE*000 clone there.
 	   Check for total bogus addresses. */
 	for (i = 0; bad_clone_list[i].name8; i++) {
@@ -227,6 +257,11 @@ static int ne_probe1(struct device *dev, int ioaddr)
 		   SA_prom[14], SA_prom[15]);
 	    return ENXIO;
 	}
+#else
+	printk(" not found.\n");
+	return ENXIO;
+#endif
+
     }
 
 
@@ -242,7 +277,7 @@ static int ne_probe1(struct device *dev, int ioaddr)
 	outb_p(0x00, ioaddr + EN0_IMR); 		/* Mask it again. */
 	dev->irq = autoirq_report(0);
 	if (ei_debug > 2)
-	    printk(" autoirq is %d", dev->irq);
+	    printk(" autoirq is %d\n", dev->irq);
     } else if (dev->irq == 2)
 	/* Fixup for users that don't know that IRQ 2 is really IRQ 9,
 	   or don't know which one to set. */
@@ -251,7 +286,7 @@ static int ne_probe1(struct device *dev, int ioaddr)
     /* Snarf the interrupt now.  There's no point in waiting since we cannot
        share and the board will usually be enabled. */
     {
-	int irqval = request_irq (dev->irq, ei_interrupt, 0, "ne");
+	int irqval = request_irq (dev->irq, ei_interrupt, 0, wordlength==2 ? "ne2000":"ne1000");
 	if (irqval) {
 	    printk (" unable to get IRQ %d (irqval=%d).\n", dev->irq, irqval);
 	    return EAGAIN;
@@ -260,7 +295,7 @@ static int ne_probe1(struct device *dev, int ioaddr)
 
     dev->base_addr = ioaddr;
 
-    request_region(ioaddr, NE_IO_EXTENT,"ne2000");
+    request_region(ioaddr, NE_IO_EXTENT, wordlength==2 ? "ne2000":"ne1000");
 
     for(i = 0; i < ETHER_ADDR_LEN; i++)
 	dev->dev_addr[i] = SA_prom[i];
@@ -318,10 +353,13 @@ ne_reset_8390(struct device *dev)
 static int
 ne_block_input(struct device *dev, int count, char *buf, int ring_offset)
 {
+#ifdef CONFIG_NE_SANITY
     int xfer_count = count;
+#endif
     int nic_base = dev->base_addr;
 
-    if (ei_status.dmaing) {
+    /* This *shouldn't* happen. If it does, it's the last thing you'll see */
+    if (set_bit(0,(void*)&ei_status.dmaing)) {
 	if (ei_debug > 0)
 	    printk("%s: DMAing conflict in ne_block_input "
 		   "[DMAstat:%d][irqlock:%d][intr:%d].\n",
@@ -329,7 +367,7 @@ ne_block_input(struct device *dev, int count, char *buf, int ring_offset)
 		   dev->interrupt);
 	return 0;
     }
-    ei_status.dmaing |= 0x01;
+    ei_status.dmaing |= 0x02;
     outb_p(E8390_NODMA+E8390_PAGE0+E8390_START, nic_base+ NE_CMD);
     outb_p(count & 0xff, nic_base + EN0_RCNTLO);
     outb_p(count >> 8, nic_base + EN0_RCNTHI);
@@ -338,14 +376,18 @@ ne_block_input(struct device *dev, int count, char *buf, int ring_offset)
     outb_p(E8390_RREAD+E8390_START, nic_base + NE_CMD);
     if (ei_status.word16) {
       insw(NE_BASE + NE_DATAPORT,buf,count>>1);
-      if (count & 0x01)
-	buf[count-1] = inb(NE_BASE + NE_DATAPORT), xfer_count++;
+      if (count & 0x01) {
+	buf[count-1] = inb(NE_BASE + NE_DATAPORT);
+#ifdef CONFIG_NE_SANITY
+	xfer_count++;
+#endif
+      }
     } else {
 	insb(NE_BASE + NE_DATAPORT, buf, count);
     }
 
     /* This was for the ALPHA version only, but enough people have
-       encountering problems that it is still here.  If you see
+       been encountering problems so it is still here.  If you see
        this message you either 1) have a slightly incompatible clone
        or 2) have noise/speed problems with your bus. */
 #ifdef CONFIG_NE_SANITY
@@ -353,7 +395,7 @@ ne_block_input(struct device *dev, int count, char *buf, int ring_offset)
 	int addr, tries = 20;
 	do {
 	    /* DON'T check for 'inb_p(EN0_ISR) & ENISR_RDC' here
-	       -- it's broken! Check the "DMA" address instead. */
+	       -- it's broken for Rx on some cards! */
 	    int high = inb_p(nic_base + EN0_RSARHI);
 	    int low = inb_p(nic_base + EN0_RSARLO);
 	    addr = (high << 8) + low;
@@ -366,7 +408,8 @@ ne_block_input(struct device *dev, int count, char *buf, int ring_offset)
 		   dev->name, ring_offset + xfer_count, addr);
     }
 #endif
-    ei_status.dmaing &= ~0x01;
+    outb_p(ENISR_RDC, nic_base + EN0_ISR);	/* Ack intr. */
+    ei_status.dmaing &= ~0x03;
     return ring_offset + count;
 }
 
@@ -374,15 +417,20 @@ static void
 ne_block_output(struct device *dev, int count,
 		const unsigned char *buf, const int start_page)
 {
+#ifdef CONFIG_NE_SANITY
     int retries = 0;
+#endif
     int nic_base = NE_BASE;
+    unsigned long dma_start;
 
     /* Round the count up for word writes.  Do we need to do this?
        What effect will an odd byte count have on the 8390?
        I should check someday. */
     if (ei_status.word16 && (count & 0x01))
       count++;
-    if (ei_status.dmaing) {
+
+    /* This *shouldn't* happen. If it does, it's the last thing you'll see */
+    if (set_bit(0,(void*)&ei_status.dmaing)) {
 	if (ei_debug > 0)
 	    printk("%s: DMAing conflict in ne_block_output."
 		   "[DMAstat:%d][irqlock:%d][intr:%d]\n",
@@ -390,12 +438,15 @@ ne_block_output(struct device *dev, int count,
 		   dev->interrupt);
 	return;
     }
-    ei_status.dmaing |= 0x02;
+    ei_status.dmaing |= 0x04;
     /* We should already be in page 0, but to be safe... */
     outb_p(E8390_PAGE0+E8390_START+E8390_NODMA, nic_base + NE_CMD);
 
+#ifdef CONFIG_NE_SANITY
  retry:
-#if defined(rw_bugfix)
+#endif
+
+#ifdef CONFIG_NE_RW_BUGFIX 
     /* Handle the read-before-write bug the same way as the
        Crynwr packet driver -- the NatSemi method doesn't work.
        Actually this doesn't always work either, but if you have
@@ -410,6 +461,9 @@ ne_block_output(struct device *dev, int count,
     SLOW_DOWN_IO;
     SLOW_DOWN_IO;
 #endif  /* rw_bugfix */
+
+    dma_start = jiffies;
+    outb_p(ENISR_RDC, nic_base + EN0_ISR);
 
    /* Now the normal output. */
     outb_p(count & 0xff, nic_base + EN0_RCNTLO);
@@ -426,12 +480,10 @@ ne_block_output(struct device *dev, int count,
 
 #ifdef CONFIG_NE_SANITY
     /* This was for the ALPHA version only, but enough people have
-       encountering problems that it is still here. */
+       been encountering problems so it is still here. */
     if (ei_debug > 1) {		/* DMA termination address check... */
 	int addr, tries = 20;
 	do {
-	    /* DON'T check for 'inb_p(EN0_ISR) & ENISR_RDC' here
-	       -- it's broken! Check the "DMA" address instead. */
 	    int high = inb_p(nic_base + EN0_RSARHI);
 	    int low = inb_p(nic_base + EN0_RSARLO);
 	    addr = (high << 8) + low;
@@ -447,7 +499,17 @@ ne_block_output(struct device *dev, int count,
 	}
     }
 #endif
-    ei_status.dmaing &= ~0x02;
+
+    while ((inb_p(nic_base + EN0_ISR) & ENISR_RDC) == 0)
+	if (jiffies - dma_start > NE_RDC_TIMEOUT) {
+		printk("%s: timeout waiting for Tx RDC.\n", dev->name);
+		ne_reset_8390(dev);
+		NS8390_init(dev,1);
+		break;
+	}
+
+    outb_p(ENISR_RDC, nic_base + EN0_ISR);	/* Ack intr. */
+    ei_status.dmaing &= ~0x05;
     return;
 }
 

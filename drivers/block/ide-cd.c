@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/ide-cd.c  (BETA)
+ * linux/drivers/block/ide-cd.c
  *
  * 1.00  Oct 31, 1994 -- Initial version.
  * 1.01  Nov  2, 1994 -- Fixed problem with starting request in
@@ -20,10 +20,17 @@
  * 2.03  Jan 10, 1995 -- Rewrite block read routines to handle block sizes
  *                       other than 2k and to move multiple sectors in a
  *                       single transaction.
+ * 2.04  Apr 21, 1995 -- Add work-around for Creative Labs CD220E drives.
+ *                       Thanks to Nick Saw <cwsaw@pts7.pts.mot.com> for
+ *                       help in figuring this out.  Ditto for Acer and
+ *                       Aztech drives, which seem to have the same problem.
+ *                       
  *
  * ATAPI cd-rom driver.  To be used with ide.c.
  *
  * Copyright (C) 1994, 1995  scott snyder  <snyder@fnald0.fnal.gov>
+ * May be copied or modified under the terms of the GNU General Public License
+ * (../../COPYING).
  */
 
 #include <linux/cdrom.h>
@@ -88,7 +95,8 @@ struct ide_cd_flags {
 
   unsigned media_changed : 1; /* Driver has noticed a media change. */
   unsigned toc_valid     : 1; /* Saved TOC information is current. */
-  unsigned reserved : 4;
+  unsigned no_lba_toc    : 1; /* Drive cannot return TOC info in LBA format */
+  unsigned reserved : 3;
 };
 
 #define CDROM_FLAGS(dev) ((struct ide_cd_flags *)&((dev)->bios_sect))
@@ -1094,6 +1102,7 @@ cdrom_read_tocentry (ide_dev_t *dev, int trackno, int msf_flag,
 static int
 cdrom_read_toc (ide_dev_t *dev)
 {
+  int msf_flag;
   int stat, ntracks, i;
   struct atapi_toc *toc = cdrom_info[dev->hwif][dev->select.b.drive].toc;
 
@@ -1118,8 +1127,11 @@ cdrom_read_toc (ide_dev_t *dev)
 
   if (CDROM_FLAGS (dev)->toc_valid) return 0;
 
+  /* Some drives can't return TOC data in LBA format. */
+  msf_flag = (CDROM_FLAGS (dev)->no_lba_toc);
+
   /* First read just the header, so we know how long the TOC is. */
-  stat = cdrom_read_tocentry (dev, 0, 0, (char *)toc,
+  stat = cdrom_read_tocentry (dev, 0, msf_flag, (char *)toc,
                               sizeof (struct atapi_toc_header) +
                               sizeof (struct atapi_toc_entry));
   if (stat) return stat;
@@ -1129,13 +1141,21 @@ cdrom_read_toc (ide_dev_t *dev)
   if (ntracks > MAX_TRACKS) ntracks = MAX_TRACKS;
 
   /* Now read the whole schmeer. */
-  stat = cdrom_read_tocentry (dev, 0, 0, (char *)toc,
+  stat = cdrom_read_tocentry (dev, 0, msf_flag, (char *)toc,
                               sizeof (struct atapi_toc_header) +
                               (ntracks+1) * sizeof (struct atapi_toc_entry));
   if (stat) return stat;
   byte_swap_word (&toc->hdr.toc_length);
   for (i=0; i<=ntracks; i++)
-    byte_swap_long (&toc->ent[i].lba);
+    {
+      if (msf_flag)
+	{
+	  byte *adr = (byte *)&(toc->ent[i].lba);
+	  toc->ent[i].lba = msf_to_lba (adr[1], adr[2], adr[3]);
+	}
+      else
+	byte_swap_long (&toc->ent[i].lba);
+    }
 
   /* Remember that we've read this stuff. */
   CDROM_FLAGS (dev)->toc_valid = 1;
@@ -1618,7 +1638,19 @@ static void cdrom_setup (ide_dev_t *dev)
   CDROM_FLAGS (dev)->toc_valid     = 0;
 
   CDROM_FLAGS (dev)->no_playaudio12 = 0;
+  CDROM_FLAGS (dev)->no_lba_toc = 0;
   CDROM_FLAGS (dev)->drq_interrupt = ((dev->id->config & 0x0060) == 0x20);
+
+  /* Accommodate some broken drives... */
+  if (strcmp (dev->id->model, "CD220E") == 0)  /* Creative Labs */
+    CDROM_FLAGS (dev)->no_lba_toc = 1;
+
+  else if (strcmp (dev->id->model, "TO-ICSLYAL") == 0 ||  /* Acer CD525E */
+           strcmp (dev->id->model, "OTI-SCYLLA") == 0)
+    CDROM_FLAGS (dev)->no_lba_toc = 1;
+
+  else if (strcmp (dev->id->model, "CDA26803I SE") == 0) /* Aztech */
+    CDROM_FLAGS (dev)->no_lba_toc = 1;
 
   cdrom_info[dev->hwif][dev->select.b.drive].toc               = NULL;
   cdrom_info[dev->hwif][dev->select.b.drive].sector_buffer     = NULL;

@@ -1,3 +1,16 @@
+Wed Apr 26 10:23:44 1995  Theodore Y. Ts'o  <tytso@localhost>
+
+	* tty_io.c (release_dev): Try to shutdown the line discpline
+		*before* decrementing the tty count variable; this removes
+		a potential race condition which occurs when the line
+		discpline close blocks, and another process then tries
+		open the same serial port.
+
+	* serial.c (rs_hangup): When hanging up, flush the output buffer
+		befure shutting down the UART.  Otherwise the line
+		discpline close blocks waiting for the characters to get
+		flushed, which never happens until the serial port gets reused.
+
 Wed Apr 12 08:06:16 1995  Theodore Y. Ts'o  <tytso@localhost>
 
 	* serial.c (do_serial_hangup, do_softint, check_modem_status,

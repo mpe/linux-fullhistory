@@ -1006,6 +1006,22 @@ static void release_dev(struct file * filp)
 			tty->link->count = 0;
 		}
 	}
+	if (tty->count <= 1) {
+		/*
+		 * Shutdown the current line discipline, and reset it
+		 * to N_TTY.
+		 */
+		if (tty->ldisc.close)
+			(tty->ldisc.close)(tty);
+		tty->ldisc = ldiscs[N_TTY];
+		tty->termios->c_line = N_TTY;
+		if (o_tty && o_tty->count <= 0) {
+			if (o_tty->ldisc.close)
+				(o_tty->ldisc.close)(o_tty);
+			o_tty->ldisc = ldiscs[N_TTY];
+			o_tty->termios->c_line = N_TTY;
+		}
+	}
 	if (--tty->count < 0) {
 		printk("release_dev: bad tty->count (%d) for %s\n",
 		       tty->count, tty_name(tty));
@@ -1039,23 +1055,6 @@ static void release_dev(struct file * filp)
 			(*p)->tty = NULL;
 	}
 
-	/*
-	 * Shutdown the current line discipline, and reset it to
-	 * N_TTY.
-	 */
-	if (tty->ldisc.close)
-		(tty->ldisc.close)(tty);
-	tty->ldisc = ldiscs[N_TTY];
-	tty->termios->c_line = N_TTY;
-	if (o_tty) {
-		if (o_tty->ldisc.close)
-			(o_tty->ldisc.close)(o_tty);
-		o_tty->ldisc = ldiscs[N_TTY];
-#if 0 /* No way! We just released the termios struct! */
-		o_tty->termios->c_line = N_TTY;
-#endif
-	}
-	
 	tty->driver.table[idx] = NULL;
 	if (tty->driver.flags & TTY_DRIVER_RESET_TERMIOS) {
 		tty->driver.termios[idx] = NULL;

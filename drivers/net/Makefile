@@ -11,8 +11,8 @@ include CONFIG
 MODULES :=
 
 NETDRV_OBJS := Space.o auto_irq.o net_init.o loopback.o
-CFLAGS := $(CFLAGS) -I../../net/inet
-CPP := $(CPP) -I../../net/inet
+override CFLAGS := $(CFLAGS) -I../../net/inet
+override CPP := $(CPP) -I../../net/inet
 
 .c.o:
 	$(CC) $(CFLAGS) -c $<

@@ -59,7 +59,7 @@ extern int NCR53c7xx_release(struct Scsi_Host *);
 #endif
 
 #define NCR53c7xx {NULL, NULL, "NCR53c{7,8}xx (rel 4)", NCR53c7xx_detect, 	\
-    	NULL, /* info */ NULL, /* command, depricated */ NULL, 		\
+    	NULL, /* info */ NULL, /* command, deprecated */ NULL, 		\
 	NCR53c7xx_queue_command, NCR53c7xx_abort, NCR53c7xx_reset,	\
         NULL /* slave attach */, scsicam_bios_param, /* can queue */ 1, \
 	/* id */ 7, 127 /* old SG_ALL */, /* cmd per lun */ 1 , 	\

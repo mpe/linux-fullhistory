@@ -69,10 +69,10 @@ else
 
 comment 'SCSI support type (disk, tape, CDrom)'
 
-bool 'Scsi disk support' CONFIG_BLK_DEV_SD y
-bool 'Scsi tape support' CONFIG_CHR_DEV_ST n
-bool 'Scsi CDROM support' CONFIG_BLK_DEV_SR n
-bool 'Scsi generic support' CONFIG_CHR_DEV_SG n
+bool 'SCSI disk support' CONFIG_BLK_DEV_SD y
+bool 'SCSI tape support' CONFIG_CHR_DEV_ST n
+bool 'SCSI CDROM support' CONFIG_BLK_DEV_SR n
+bool 'SCSI generic support' CONFIG_CHR_DEV_SG n
 
 comment 'Some SCSI devices (e.g. CD jukebox) support multiple LUNs'
 
@@ -267,5 +267,5 @@ if [ "$CONFIG_PROFILE" = "y" ]; then
   int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
 fi
 if [ "$CONFIG_SCSI" = "y" ]; then
-bool 'Verbose scsi error reporting (kernel size +=12K)' CONFIG_SCSI_CONSTANTS y
+bool 'Verbose SCSI error reporting (kernel size +=12K)' CONFIG_SCSI_CONSTANTS y
 fi

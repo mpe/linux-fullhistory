@@ -89,7 +89,7 @@ Mon Feb 20 08:57:17 1995  Eric Youngdale  (eric@andante)
 	* 53c7,8xx.c: crash on AEN fixed, SCSI reset is no longer a NOP,
 	  NULL pointer panic on odd UDCs fixed, two bugs in diagnostic output 
 	  fixed, should initialize correctly if left running, now loadable, 
- 	  new memory allocation, extraneous diagnostic output supressed,
+ 	  new memory allocation, extraneous diagnostic output suppressed,
 	  splx() replaced with save/restore flags. [ Drew ]
 
 	* hosts.c, hosts.h, scsi_ioctl.c, sd.c, sd_ioctl.c, sg.c, sr.c,
@@ -111,7 +111,7 @@ Mon Feb 20 08:57:17 1995  Eric Youngdale  (eric@andante)
 	* sr.c: More photo-cd hacks to make sure we get the xa stuff right.
 	* sr.h, sr.c: Change is_xa to xa_flags field.
 
-	* st.c: Diable retries for write operations.
+	* st.c: Disable retries for write operations.
 
 Wed Feb 15 10:52:56 1995  Eric Youngdale  (eric@andante)
 
@@ -181,7 +181,7 @@ Wed Feb  1 09:20:45 1995  Eric Youngdale  (eric@andante)
 
 	* Linux 1.1.89 released.
 
-	* Makefile, u14-34f.c: Modulariz.e
+	* Makefile, u14-34f.c: Modularize.
 
 	* Makefile, eata.c: Modularize.  Now version 1.14
 
@@ -202,7 +202,7 @@ Wed Feb  1 09:20:45 1995  Eric Youngdale  (eric@andante)
 
 	* scsi.h: Define QUEUE_FULL condition.
 
-	* sd.c: Do not check for non-existant partition until after
+	* sd.c: Do not check for non-existent partition until after
 	new media check.
 
 	* sg.c: Undo previous change which was wrong.
@@ -281,7 +281,7 @@ Wed Jan 18 23:33:09 1995  Eric Youngdale  (eric@andante)
 
 	* scsi.c: Make RECOVERED_ERROR a SUGGEST_IS_OK.
 
-	* sd.c: Fail if we are opening a non-existant partition.
+	* sd.c: Fail if we are opening a non-existent partition.
 
 	* sr.c: Bump SR_TIMEOUT to 15000.
 	Do not probe for media size at boot time(hard on changers).

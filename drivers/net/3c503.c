@@ -317,6 +317,7 @@ el2_close(struct device *dev)
     outb(EGACFR_IRQOFF, E33G_GACFR);	/* disable interrupts. */
 
     NS8390_init(dev, 0);
+    dev->start = 0;
 
     return 0;
 }

@@ -2090,6 +2090,7 @@ void rs_hangup(struct tty_struct *tty)
 	if (serial_paranoia_check(info, tty->device, "rs_hangup"))
 		return;
 	
+	rs_flush_buffer(tty);
 	shutdown(info);
 	info->event = 0;
 	info->count = 0;

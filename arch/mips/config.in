@@ -63,10 +63,10 @@ else
 
 comment 'SCSI support type (disk, tape, CDrom)'
 
-bool 'Scsi disk support' CONFIG_BLK_DEV_SD y
-bool 'Scsi tape support' CONFIG_CHR_DEV_ST y
-bool 'Scsi CDROM support' CONFIG_BLK_DEV_SR y
-bool 'Scsi generic support' CONFIG_CHR_DEV_SG y
+bool 'SCSI disk support' CONFIG_BLK_DEV_SD y
+bool 'SCSI tape support' CONFIG_CHR_DEV_ST y
+bool 'SCSI CDROM support' CONFIG_BLK_DEV_SR y
+bool 'SCSI generic support' CONFIG_CHR_DEV_SG y
 
 comment 'SCSI low-level drivers'
 
@@ -252,5 +252,5 @@ if [ "$CONFIG_PROFILE" = "y" ]; then
   int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
 fi
 if [ "$CONFIG_SCSI" = "y" ]; then
-bool 'Verbose scsi error reporting (kernel size +=12K)' CONFIG_SCSI_CONSTANTS y
+bool 'Verbose SCSI error reporting (kernel size +=12K)' CONFIG_SCSI_CONSTANTS y
 fi

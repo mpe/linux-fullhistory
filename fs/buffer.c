@@ -1849,7 +1849,7 @@ asmlinkage int sys_bdflush(int func, long data)
 		/* If there are still a lot of dirty buffers around, skip the sleep
 		   and flush some more */
 		
-		if(nr_buffers_type[BUF_DIRTY] < (nr_buffers - nr_buffers_type[BUF_SHARED]) * 
+		if(nr_buffers_type[BUF_DIRTY] <= (nr_buffers - nr_buffers_type[BUF_SHARED]) * 
 		   bdf_prm.b_un.nfract/100) {
 		   	if (current->signal & (1 << (SIGKILL-1))) {
 				bdflush_running--;

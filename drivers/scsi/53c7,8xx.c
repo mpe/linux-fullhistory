@@ -740,7 +740,7 @@ static int normal_init (Scsi_Host_Template *tpnt, int board, int chip,
        So, we stick it past the end of our hostdata structure.
 
        ASSUMPTION : 
-       	 Irregardless of how many simultaenous SCSI commands we allow,
+       	 Regardless of how many simultaneous SCSI commands we allow,
          the probe code only executes a _single_ instruction at a time,
 	 so we only need one here, and don't need to allocate NCR53c7x0_cmd
 	 structures for each target until we are no longer in scan_scsis
@@ -2304,8 +2304,8 @@ NCR53c8x0_soft_reset (struct Scsi_Host *host) {
 /*
  * Function static struct NCR53c7x0_cmd *create_cmd (Scsi_Cmnd *cmd) 
  *
- * Purpose : If we have not allready allocated enough NCR53c7x0_cmd
- *	structures to satisfy any allowable number of simultaenous 
+ * Purpose : If we have not already allocated enough NCR53c7x0_cmd
+ *	structures to satisfy any allowable number of simultaneous 
  *	commands for this host; do so (using either scsi_malloc()
  *	or kmalloc() depending on configuration), and add them to the 
  *	hostdata free list.  Take the first structure off the free list, 
@@ -2339,9 +2339,9 @@ create_cmd (Scsi_Cmnd *cmd) {
     unsigned long flags;
     NCR53c7x0_local_setup(cmd->host);
 
-/* FIXME : when we start doing multiple simultaenous commands per LUN, 
+/* FIXME : when we start doing multiple simultaneous commands per LUN, 
    we will need to either
-    	- Do an attach_slave() and detach_slave() the right way (alocate
+    	- Do an attach_slave() and detach_slave() the right way (allocate
     	  memory in attach_slave() as we do in scsi_register).
     	- Make sure this code works
     with the former being cleaner.  At the same time, we can also go with
@@ -2355,7 +2355,7 @@ create_cmd (Scsi_Cmnd *cmd) {
     	!(hostdata->cmd_allocated[cmd->target] & (1 << cmd->lun))) {
     	for (i = host->hostt->cmd_per_lun - 1; i >= 0  --i) {
 #ifdef SCSI_MALLOC
-    /* scsi_malloc must allocate with a 512 byte granularity, but allways
+    /* scsi_malloc must allocate with a 512 byte granularity, but always
        returns buffers which are aligned on a 512 boundary */
 	    size = (hostdata->max_cmd_size + 511) / 512 * 512;
 	    tmp = (struct NCR53c7x0_cmd *) scsi_malloc (size);
@@ -3815,7 +3815,7 @@ NCR53c7xx_reset (Scsi_Cmnd *cmd) {
     save_flags(flags);
     halt (host);
     NCR53c7x0_write8(SCNTL1_REG, SCNTL1_RST);
-    udelay(25);	/* Minimum ammount of time to assert RST */
+    udelay(25);	/* Minimum amount of time to assert RST */
     NCR53c7x0_write8(SCNTL1_REG, SCNTL1_RST);
     for (c = (struct NCR53c7x0_cmd *) hostdata->running_list, found = 0; c; 
     	c = (struct NCR53c7x0_cmd *) c->next)  {
@@ -3899,7 +3899,7 @@ shutdown (struct Scsi_Host *host) {
  *	reset.  
  */
     NCR53c7x0_write8(SCNTL1_REG, SCNTL1_RST);
-    udelay(25);	/* Minimum ammount of time to assert RST */
+    udelay(25);	/* Minimum amount of time to assert RST */
     NCR53c7x0_write8(SCNTL1_REG, SCNTL1_RST);
     restore_flags (flags);
     return 0;
