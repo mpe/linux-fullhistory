@@ -1,6 +1,8 @@
 #ifndef __ALPHA_STRING_H__
 #define __ALPHA_STRING_H__
 
+#ifdef __KERNEL__
+
 extern void * __constant_c_memset(void *, unsigned long, long);
 extern void * __memset(void *, char, size_t);
 
@@ -26,5 +28,7 @@ extern void * __memcpy(void *, const void *, size_t);
  __memset((s),(c),(count)))
 
 #define __HAVE_ARCH_STRLEN
+
+#endif /* __KERNEL__ */
 
 #endif /* __ALPHA_STRING_H__ */

@@ -8,13 +8,6 @@
  *  isofs regular file handling primitives
  */
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
-#include <asm/segment.h>
-#include <asm/system.h>
-
 #include <linux/sched.h>
 #include <linux/iso_fs.h>
 #include <linux/fcntl.h>
@@ -23,7 +16,8 @@
 #include <linux/stat.h>
 #include <linux/locks.h>
 
-#include <linux/dirent.h>
+#include <asm/segment.h>
+#include <asm/system.h>
 
 #define	NBUF	32
 

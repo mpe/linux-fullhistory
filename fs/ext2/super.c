@@ -13,13 +13,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <stdarg.h>
 
@@ -687,16 +681,13 @@ int ext2_remount (struct super_block * sb, int * flags, char * data)
 
 #ifdef MODULE
 
-char kernel_version[] = UTS_RELEASE;
-
 static struct file_system_type ext2_fs_type = {
         ext2_read_super, "ext2", 1, NULL
 };
 
 int init_module(void)
 {
-        register_filesystem(&ext2_fs_type);
-        return 0;
+        return register_filesystem(&ext2_fs_type);
 }
 
 void cleanup_module(void)

@@ -2990,10 +2990,6 @@ static int cdu31a_block_size;
 /*
  * Initialize the driver.
  */
-#ifdef MODULE
-#define cdu31a_init init_module
-#endif
-
 int
 cdu31a_init(void)
 {
@@ -3156,6 +3152,13 @@ cdu31a_init(void)
 }
 
 #ifdef MODULE
+
+int
+init_module(void)
+{
+	return cdu31a_init();
+}
+
 void
 cleanup_module(void)
 {

@@ -308,8 +308,6 @@ free_all_irqs (void)
   irqs = 0;
 }
 
-char            kernel_version[] = UTS_RELEASE;
-
 #endif
 
 static int      debugmem = 0;	/* switched off by default */

@@ -9,8 +9,8 @@
  * by Bjorn Ekwall <bj0rn@blox.se>
  */
 
-#include <linux/autoconf.h>
 #include <linux/module.h>
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/blkdev.h>
@@ -32,7 +32,6 @@
 #include <linux/locks.h>
 #include <linux/string.h>
 #include <linux/delay.h>
-#include <linux/config.h>
 #include <linux/sem.h>
 #include <linux/minix_fs.h>
 #include <linux/ext2_fs.h>
@@ -191,8 +190,6 @@ struct symbol_table symbol_table = {
 	X(verify_area),
 	X(do_mmap),
 	X(do_munmap),
-	X(zeromap_page_range),
-	X(unmap_page_range),
 	X(insert_vm_struct),
 	X(merge_segments),
 

@@ -14,6 +14,7 @@ endif
 L_TARGET := scsi.a
 L_OBJS   := 
 M_OBJS   := 
+MX_OBJS  := 
 MOD_LIST_NAME := SCSI_MODULES
 SCSI_SRCS = $(wildcard $(L_OBJS:%.o=%.c))
 
@@ -34,11 +35,7 @@ ifeq ($(CONFIG_SCSI),y)
 L_OBJS += hosts.o scsi.o scsi_ioctl.o constants.o scsicam.o scsi_proc.o
 else
   ifeq ($(CONFIG_SCSI),m)
-    ifdef CONFIG_MODVERSIONS
-      # Create this before we build anything else.
-      SCSI_MODULE_VER := scsi_syms.ver
-    endif
-    SYMTAB_OBJS := scsi_syms.o
+    MX_OBJS += scsi_syms.o
     M_OBJS += scsi_mod.o
   endif
 endif
@@ -242,12 +239,6 @@ endif
 
 include $(TOPDIR)/Rules.make
 
-ifeq ($(CONFIG_SCSI),m)
-  ifdef CONFIG_MODVERSIONS
-      include ../../versions.mk
-  endif
-endif
-
 aha152x.o: aha152x.c
 	$(CC) $(CFLAGS) $(AHA152X) -c aha152x.c 
 
@@ -272,16 +263,12 @@ seagate.o: seagate.c
 	mv scriptu.h 53c8xx_u.h
 	rm fake.c
 
-scsi_mod.o: $(SCSI_MODULE_VER) hosts.o scsi.o scsi_ioctl.o constants.o \
-		scsicam.o scsi_proc.o $(SYMTAB_OBJS)
-	$(LD) $(LD_RFLAG) -r -o $@ hosts.o scsi.o scsi_ioctl.o constants.o scsicam.o scsi_proc.o $(SYMTAB_OBJS)
+scsi_mod.o: $(MX_OBJS) hosts.o scsi.o scsi_ioctl.o constants.o \
+		scsicam.o scsi_proc.o
+	$(LD) $(LD_RFLAG) -r -o $@ $(MX_OBJS) hosts.o scsi.o scsi_ioctl.o constants.o scsicam.o scsi_proc.o
 
-sr_mod.o: $(SCSI_MODULE_VER) sr.o sr_ioctl.o
+sr_mod.o: sr.o sr_ioctl.o
 	$(LD) $(LD_RFLAG) -r -o $@ sr.o sr_ioctl.o
 
-sd_mod.o: $(SCSI_MODULE_VER) sd.o sd_ioctl.o
+sd_mod.o: sd.o sd_ioctl.o
 	$(LD) $(LD_RFLAG) -r -o $@ sd.o sd_ioctl.o
-
-$(SYMTAB_OBJS): $(SYMTAB_OBJS:.o=.c)
-
-modules: $(SCSI_MODULE_VER)

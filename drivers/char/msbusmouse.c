@@ -30,16 +30,7 @@
  * version 0.3b
  */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-
-char kernel_version[] = UTS_RELEASE;
-#define ms_bus_mouse_init init_module
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <linux/kernel.h>
 #include <linux/ioport.h>
@@ -219,12 +210,13 @@ int ms_bus_mouse_init(void)
 }
 
 #ifdef MODULE
+int init_module(void)
+{
+	return ms_bus_mouse_init();
+}
+
 void cleanup_module(void)
 {
-	if (MOD_IN_USE) {
-		printk("msbusmouse: in use, remove delayed\n");
-		return;
-	}
 	mouse_deregister(&ms_bus_mouse);
 	release_region(MS_MSE_CONTROL_PORT, 0x04);
 }

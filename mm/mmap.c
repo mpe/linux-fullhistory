@@ -773,7 +773,7 @@ int do_munmap(unsigned long addr, size_t len)
 		kfree(mpnt);
 	}
 
-	unmap_page_range(addr, len);
+	zap_page_range(current->mm, addr, len);
 	return 0;
 }
 

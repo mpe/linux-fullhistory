@@ -128,12 +128,10 @@
 
 static const char *version = "ewrk3.c:v0.32 1/16/95 davies@wanton.lkg.dec.com\n";
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif /* MODULE */
 
 #include <stdarg.h>
+
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -142,18 +140,17 @@ static const char *version = "ewrk3.c:v0.32 1/16/95 davies@wanton.lkg.dec.com\n"
 #include <linux/ioport.h>
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
+#include <linux/netdevice.h>
+#include <linux/etherdevice.h>
+#include <linux/skbuff.h>
+#include <linux/time.h>
+#include <linux/types.h>
+#include <linux/unistd.h>
+
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <asm/segment.h>
-
-#include <linux/netdevice.h>
-#include <linux/etherdevice.h>
-#include <linux/skbuff.h>
-
-#include <linux/time.h>
-#include <linux/types.h>
-#include <linux/unistd.h>
 
 #include "ewrk3.h"
 
@@ -712,10 +709,7 @@ ewrk3_open(struct device *dev)
     printk("      Run the 'ewrk3setup' utility or remove the hard straps.\n");
   }
 
-#ifdef MODULE
-    MOD_INC_USE_COUNT;
-#endif       
-
+  MOD_INC_USE_COUNT;
 
   return status;
 }
@@ -1190,9 +1184,7 @@ ewrk3_close(struct device *dev)
     irq2dev_map[dev->irq] = 0;
   }
 
-#ifdef MODULE
   MOD_DEC_USE_COUNT;
-#endif    
 
   return 0;
 }
@@ -1856,7 +1848,6 @@ static char asc2hex(char value)
 }
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static char devicename[9] = { 0, };
 static struct device thisEthwrk = {
   devicename, /* device name is inserted by linux/drivers/net/net_init.c */
@@ -1864,8 +1855,8 @@ static struct device thisEthwrk = {
   0x300, 5,  /* I/O address, IRQ */
   0, 0, 0, NULL, ewrk3_probe };
 	
-int io=0x300;	/* <--- EDIT THESE LINES FOR YOUR CONFIGURATION */
-int irq=5;	/* or use the insmod io= irq= options 		*/
+static int io=0x300;	/* <--- EDIT THESE LINES FOR YOUR CONFIGURATION */
+static int irq=5;	/* or use the insmod io= irq= options 		*/
 
 int
 init_module(void)
@@ -1880,14 +1871,10 @@ init_module(void)
 void
 cleanup_module(void)
 {
-  if (MOD_IN_USE) {
-    printk("%s: device busy, remove delayed\n",thisEthwrk.name);
-  } else {
     release_region(thisEthwrk.base_addr, EWRK3_TOTAL_SIZE);
     unregister_netdev(&thisEthwrk);
     kfree(thisEthwrk.priv);
     thisEthwrk.priv = NULL;
-  }
 }
 #endif /* MODULE */
 

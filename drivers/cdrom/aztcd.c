@@ -139,18 +139,7 @@
 	NOTE: 
 	Points marked with ??? are questionable !
 */
-#include <linux/major.h>
-#include <linux/config.h>
-
-#ifdef MODULE
-# include <linux/module.h>
-# include <linux/version.h>
-# ifndef CONFIG_MODVERSIONS
-    char kernel_version[]= UTS_RELEASE;
-# endif
-#define aztcd_init init_module
-#endif
-
+#include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -160,6 +149,7 @@
 #include <linux/cdrom.h>
 #include <linux/ioport.h>
 #include <linux/string.h>
+#include <linux/major.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -167,14 +157,7 @@
 
 #define MAJOR_NR AZTECH_CDROM_MAJOR 
 
-#include "blk.h"
-
-#ifdef MODULE
-#else
-# define MOD_INC_USE_COUNT
-# define MOD_DEC_USE_COUNT
-#endif
-
+#include <linux/blk.h>
 #include <linux/aztcd.h>
 
 #define SET_TIMER(func, jifs)   delay_timer.expires = jiffies + (jifs); \
@@ -246,7 +229,7 @@ static volatile int azt_read_count = 1;
 #define READ_TIMEOUT 3000
 
 #define azt_port aztcd  /*needed for the modutils*/
-static short azt_port = AZT_BASE_ADDR;
+static int azt_port = AZT_BASE_ADDR;
 
 static char  azt_cont = 0;
 static char  azt_init_end = 0;
@@ -2079,11 +2062,14 @@ static int aztGetToc(int multi)
 }
 
 #ifdef MODULE
+
+int init_module(void)
+{
+	return aztcd_init();
+}
+
 void cleanup_module(void)
-{ if (MOD_IN_USE)
-    { printk("aztcd module in use - can't remove it.\n");
-      return;
-    }
+{
   if ((unregister_blkdev(MAJOR_NR, "aztcd") == -EINVAL))    
     { printk("What's that: can't unregister aztcd\n");
       return;

@@ -2764,20 +2764,16 @@ cleanup_module(void)
 {
   struct de4x5_private *lp = (struct de4x5_private *) thisDE4X5.priv;
 
-  if (MOD_IN_USE) {
-    printk("%s: device busy, remove delayed\n",thisDE4X5.name);
-  } else {
-    if (lp) {
-      kfree_s(bus_to_virt(lp->rx_ring[0].buf), RX_BUFF_SZ * NUM_RX_DESC + ALIGN);
-    }
-    kfree_s(thisDE4X5.priv, sizeof(struct de4x5_private) + ALIGN);
-    thisDE4X5.priv = NULL;
+  if (lp) {
+    kfree_s(bus_to_virt(lp->rx_ring[0].buf), RX_BUFF_SZ * NUM_RX_DESC + ALIGN);
+  }
+  kfree_s(thisDE4X5.priv, sizeof(struct de4x5_private) + ALIGN);
+  thisDE4X5.priv = NULL;
 
-    release_region(thisDE4X5.base_addr, (lp->bus == PCI ? 
+  release_region(thisDE4X5.base_addr, (lp->bus == PCI ? 
 					             DE4X5_PCI_TOTAL_SIZE :
 			                             DE4X5_EISA_TOTAL_SIZE));
-    unregister_netdev(&thisDE4X5);
-  }
+  unregister_netdev(&thisDE4X5);
 }
 #endif /* MODULE */
 

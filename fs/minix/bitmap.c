@@ -6,10 +6,6 @@
 
 /* bitmap.c contains the code that handles the inode and block bitmaps */
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
 #include <linux/stat.h>

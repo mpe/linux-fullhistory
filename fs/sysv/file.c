@@ -13,12 +13,6 @@
  *  SystemV/Coherent regular file handling primitives
  */
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
-#include <asm/segment.h>
-
 #include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/sysv_fs.h>
@@ -27,6 +21,8 @@
 #include <linux/stat.h>
 #include <linux/string.h>
 #include <linux/locks.h>
+
+#include <asm/segment.h>
 
 #define	NBUF	32
 

@@ -125,16 +125,9 @@
 static const char *version =
  "arcnet.c:v2.12 ALPHA 95/10/27 Avery Pennarun <apenwarr@foxnet.net>\n";
 
- 
+#include <linux/module.h>
 
 #include <linux/config.h>
-#include <linux/version.h>
-
-#ifdef MODULE
-#include <linux/module.h>
-#endif /* MODULE */
-
-
 /* are we Linux 1.2.x? */
 #if LINUX_VERSION_CODE < 0x10300
 #define LINUX12
@@ -155,15 +148,16 @@ static const char *version =
 #include <linux/errno.h>
 #include <linux/delay.h>
 #include <linux/if_arp.h>
+#include <linux/netdevice.h>
+#include <linux/etherdevice.h>
+#include <linux/skbuff.h>
+
+#include <linux/config.h>	/* for CONFIG_INET */
 
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
-
-#include <linux/netdevice.h>
-#include <linux/etherdevice.h>
-#include <linux/skbuff.h>
 
 #ifdef LINUX12
 #include "arp.h"
@@ -1140,11 +1134,8 @@ arcnet_open(struct device *dev)
 	JIFFER(ACKtime);
 	outb(NORXflag|RECON_flag,INTMASK);
 	
-
-#ifdef MODULE
 	MOD_INC_USE_COUNT;
-#endif
-                                 	
+
 	return 0;
 }
 
@@ -1189,9 +1180,7 @@ arcnet_close(struct device *dev)
 
 	/* Update the statistics here. */
 
-#ifdef MODULE
 	MOD_DEC_USE_COUNT;
-#endif
 
 	return 0;
 }
@@ -2997,7 +2986,6 @@ unsigned short arcnetS_type_trans(struct sk_buff *skb,struct device *dev)
 
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static char devicename[9] = { 0, };
 static struct device thiscard = {
   devicename, /* device name is inserted by linux/drivers/net/net_init.c */
@@ -3007,10 +2995,10 @@ static struct device thiscard = {
 };
 	
 	
-int io=0x0;	/* <--- EDIT THESE LINES FOR YOUR CONFIGURATION */
-int irqnum=0;	/* or use the insmod io= irqnum= shmem= options */
-int shmem=0;
-int num=0;	/* number of device (ie for 0 for arc0, 1 for arc1...) */
+static int io=0x0;	/* <--- EDIT THESE LINES FOR YOUR CONFIGURATION */
+static int irqnum=0;	/* or use the insmod io= irqnum= shmem= options */
+static int shmem=0;
+static int num=0;	/* number of device (ie for 0 for arc0, 1 for arc1...) */
 
 int
 init_module(void)
@@ -3038,20 +3026,13 @@ init_module(void)
 void
 cleanup_module(void)
 {
-	if (MOD_IN_USE)
-	{
-		printk("%s: device busy, remove delayed\n",thiscard.name);
-	}
-	else
-	{
-		if (thiscard.start) arcnet_close(&thiscard);
-		if (thiscard.irq) free_irq(thiscard.irq);
-		if (thiscard.base_addr) release_region(thiscard.base_addr,
+	if (thiscard.start) arcnet_close(&thiscard);
+	if (thiscard.irq) free_irq(thiscard.irq);
+	if (thiscard.base_addr) release_region(thiscard.base_addr,
 						ARCNET_TOTAL_SIZE);
-		unregister_netdev(&thiscard);
-		kfree(thiscard.priv);
-		thiscard.priv = NULL;
-	}
+	unregister_netdev(&thiscard);
+	kfree(thiscard.priv);
+	thiscard.priv = NULL;
 }
 
 #endif /* MODULE */

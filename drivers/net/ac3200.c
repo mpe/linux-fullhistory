@@ -17,19 +17,18 @@
 static const char *version =
 	"ac3200.c:v1.01 7/1/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
+
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/string.h>
+#include <linux/netdevice.h>
+#include <linux/etherdevice.h>
+
 #include <asm/system.h>
 #include <asm/io.h>
 
-#include <linux/netdevice.h>
-#include <linux/etherdevice.h>
 #include "8390.h"
 
 /* Offsets from the base address. */
@@ -221,9 +220,7 @@ static int ac_open(struct device *dev)
 	rc = ei_open(dev);
 	if (rc != 0) return rc;
 
-#ifdef MODULE
 	MOD_INC_USE_COUNT;
-#endif
 
 	return 0;
 }
@@ -298,15 +295,12 @@ static int ac_close_card(struct device *dev)
 
 	NS8390_init(dev, 0);
 
-#ifdef MODULE
 	MOD_DEC_USE_COUNT;
-#endif
 
 	return 0;
 }
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static char devicename[9] = { 0, };
 static struct device dev_ac3200 = {
 	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
@@ -314,8 +308,8 @@ static struct device dev_ac3200 = {
 	0, 0,
 	0, 0, 0, NULL, ac3200_probe };
 
-int io = 0;
-int irq = 0;
+static int io = 0;
+static int irq = 0;
 
 int init_module(void)
 {
@@ -331,16 +325,11 @@ int init_module(void)
 void
 cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("ac3200: device busy, remove delayed\n");
-	else
-	{
-		unregister_netdev(&dev_ac3200);
+	unregister_netdev(&dev_ac3200);
 
-		/* If we don't do this, we can't re-insmod it later. */
-		free_irq(dev_ac3200.irq);
-		release_region(dev_ac3200.base_addr, AC_IO_EXTENT);
-	}
+	/* If we don't do this, we can't re-insmod it later. */
+	free_irq(dev_ac3200.irq);
+	release_region(dev_ac3200.base_addr, AC_IO_EXTENT);
 }
 #endif /* MODULE */
 

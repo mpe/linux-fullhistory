@@ -1,5 +1,3 @@
-#!/usr/bin/wish -f
-
 #
 # Used to determine size of canvas inserted for booleans. It holds the
 # place where the 'm' button goes in a tristate, and keeps the look and feel
@@ -52,7 +50,7 @@ proc do_cmd { w command } {
 	pack $w.back -side bottom -pady 10
 
 	focus $w
-	wm geometry $w +30+35	
+	wm geometry $w +30+35
 
 	$w.tb.text delete 1.0 end
 	set f [open |$command]
@@ -86,7 +84,34 @@ proc load_configfile { w title func } {
 	pack $w.f.back $w.f.canc -side left -pady 10 -padx 45
 	pack $w.f -pady 10 -side bottom -padx 10 -anchor w
 	focus $w
-	wm geometry $w +30+35	
+	global winx; global winy
+	set winx [expr [winfo x .]+30]; set winy [expr [winfo y .]+30]
+	wm geometry $w +$winx+$winy
+}
+
+proc maybe_exit { w } {
+	catch {destroy $w}
+	toplevel $w -class Dialog
+	label $w.bm -bitmap questhead
+	pack  $w.bm -pady 10 -side top -padx 10
+	message $w.m -width 400 -aspect 300 \
+		-text "Changes will be lost.  Are you sure?"  -relief raised \
+		-fg black
+	pack  $w.m -pady 10 -side top -padx 10
+	wm title $w "Are you sure?" 
+
+	set oldFocus [focus]
+	frame $w.f
+	button $w.f.back -text "OK" -activebackground green -width 20 \
+		-command "exit"
+	button $w.f.canc -text "Cancel" -activebackground red \
+		-width 20 -command "destroy $w; focus $oldFocus"
+	pack $w.f.back $w.f.canc -side left -pady 10 -padx 45
+	pack $w.f -pady 10 -side bottom -padx 10 -anchor w
+	focus $w
+	global winx; global winy
+	set winx [expr [winfo x .]+30]; set winy [expr [winfo y .]+30]
+	wm geometry $w +$winx+$winy
 }
 
 proc read_config_file { w } {
@@ -110,7 +135,9 @@ proc read_config_file { w } {
 		pack $w.f.back -side bottom -pady 10 -anchor s
 		pack $w.f -pady 10 -side top -padx 10 -anchor s
 		focus $w
-		wm geometry $w +30+35
+		global winx; global winy
+		set winx [expr [winfo x .]+30]; set winy [expr [winfo y .]+30]
+		wm geometry $w +$winx+$winy
 	}
 }
 
@@ -136,12 +163,15 @@ proc write_config_file  { w } {
 		pack $w.f.back -side bottom -pady 10 -anchor s
 		pack $w.f -pady 10 -side top -padx 10 -anchor s
 		focus $w
-		wm geometry $w +30+35
+		global winx; global winy
+		set winx [expr [winfo x .]+30]; set winy [expr [winfo y .]+30]
+		wm geometry $w +$winx+$winy
 	}
 }
 
 proc read_config { filename } {
 	set file1 [open $filename r]
+	clear_choices
 	while { [gets $file1 line] >= 0} {
 		if [regexp {([0-9A-Z_]+)=([ynm])} $line foo var value] {
 			if { $value == "y" } then { set cmd "global $var; set $var 1" }
@@ -155,8 +185,11 @@ proc read_config { filename } {
 		}
 	}
 	close $file1
+	update_choices
+	update_mainmenu .rdupd
 }
 proc write_comment { file1 file2 text } {
+    	puts $file1 ""
 	puts $file1 "#"
 	puts $file1 "# $text"
 	puts $file1 "#"
@@ -180,7 +213,7 @@ proc write_variable { file1 file2 varname variable dep } {
 	}
 }
 
-proc bool {w mnum line text variable default} {
+proc bool {w mnum line text variable} {
 	frame $w.x$line
 	global modbutton_width
 	global modbutton_height
@@ -210,7 +243,7 @@ proc bool {w mnum line text variable default} {
 	}
 }
 
-proc int { w mnum line text variable default } {
+proc int { w mnum line text variable } {
 	frame $w.x$line
 	button $w.x$line.help -text "Help" -relief raised \
 		-command "dohelp .dohelp $variable "
@@ -235,6 +268,7 @@ proc dohelp {w varname }  {
 
 	set filefound 0
 	set found 0
+	set lineno 0
 	if { [file readable Documentation/Configure.help] == 1} then {
 		set f [open Documentation/Configure.help r]
 		set filefound 1	
@@ -247,15 +281,23 @@ proc dohelp {w varname }  {
 				if { $found == 0 } continue 
 			}
 			if { [string length $line1 ] == 0 } break
-			append message $line
+			if { [string  range $line1 0 0 ] == "#" } continue
+			if { $lineno == 0 } then {
+			    append message $line1
+ 			    append message ":"
+			} else {
+ 			    append message " "
+			    append message $line1
+			}
+			set lineno [expr $lineno + 1]
 		}
 		close $f
 	}
 
 	if { $found == 0 } then {
 		if { $filefound == 0 } then {
-		message $w.m -width 400 -aspect 300 -text \
-			"No help available - unable to open file Documentation/Configure.help"  -relief raised -fg black
+		message $w.m -width 750 -aspect 300 -text \
+			"No help available - unable to open file Documentation/Configure.help.  This file is available from http://math-www.uni-paderborn.de/~axel/config_help.html or ftp://sunsite.unc.edu/pub/Linux/kernel/config/krnl_cnfg_hlp_1.X.XX.tgz"  -relief raised -fg black
 		} else {
 		message $w.m -width 400 -aspect 300 -text \
 			"No help available for $varname"  -relief raised -fg black
@@ -277,7 +319,9 @@ proc dohelp {w varname }  {
 	pack $w.f.back -side bottom -pady 10 -anchor s
 	pack $w.f -pady 10 -side top -padx 10 -anchor s
 	focus $w
-	wm geometry $w +30+35
+	global winx; global winy
+	set winx [expr [winfo x .]+30]; set winy [expr [winfo y .]+30]
+	wm geometry $w +$winx+$winy
 }
 
 proc wrapup {w }  {
@@ -296,7 +340,9 @@ proc wrapup {w }  {
 	pack $w.f.back -side bottom -pady 10 -anchor s
 	pack $w.f -pady 10 -side top -padx 10 -anchor s
 	focus $w
-	wm geometry $w +30+35
+	global winx; global winy
+	set winx [expr [winfo x .]+30]; set winy [expr [winfo y .]+30]
+	wm geometry $w +$winx+$winy
 
 }
 
@@ -304,7 +350,7 @@ proc check_sound_config { num } {
 #nothing for now.
 }
 
-proc tristate {w mnum line text variable default} {
+proc tristate {w mnum line text variable } {
 	frame $w.x$line
 	radiobutton $w.x$line.y -text "y" -variable $variable -value 1 \
 		-width 2 -command "update_menu$mnum .menu$mnum"
@@ -319,7 +365,7 @@ proc tristate {w mnum line text variable default} {
 	pack $w.x$line -anchor w
 }
 
-proc dep_tristate {w mnum line text variable default} {
+proc dep_tristate {w mnum line text variable } {
 	frame $w.x$line
 	radiobutton $w.x$line.y -text "y" -variable $variable -value 1 \
 		-width 2 -command "update_menu$mnum .menu$mnum"
@@ -334,6 +380,11 @@ proc dep_tristate {w mnum line text variable default} {
 	pack $w.x$line -anchor w
 }
 
+
+proc do_sound {w mnum line} {
+	message $w.x$line -width 400 -aspect 300 -text "Note: The sound drivers cannot as of yet be configured via the X-based interface" -relief raised
+	pack $w.x$line -side top -pady 10
+}
 
 #
 # Next set up the particulars for the top level menu, and define a few

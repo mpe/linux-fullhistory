@@ -450,15 +450,14 @@ static int get_stat(int pid, char * buffer)
 		state = "RSDZTD"[tsk->state];
 	vsize = eip = esp = 0;
 	if (tsk->mm) {
+		struct vm_area_struct *vma = tsk->mm->mmap;
+		while (vma) {
+			vsize += vma->vm_end - vma->vm_start;
+			vma = vma->vm_next;
+		}
 		if (tsk->kernel_stack_page) {
 			eip = KSTK_EIP(tsk);
 			esp = KSTK_ESP(tsk);
-			vsize = (  (tsk->mm->end_code - tsk->mm->start_code)	/* text */
-				 + (tsk->mm->end_data - tsk->mm->start_data)	/* data */
-				 + (tsk->mm->brk - tsk->mm->start_brk));	/* bss + heap */
-			if (esp) {
-				vsize += tsk->mm->start_stack - esp;		/* stack */
-			}
 		}
 	}
 	wchan = get_wchan(tsk);
@@ -482,11 +481,12 @@ static int get_stat(int pid, char * buffer)
 	else
 		tty_pgrp = -1;
 
-	/* scale priority and nice values from timeslices to 0..40 */
+	/* scale priority and nice values from timeslices to -20..20 */
 	priority = tsk->counter;
-	priority = (priority * 10 + 5) / DEF_PRIORITY;
+	priority = (priority * 10 + DEF_PRIORITY / 2) / DEF_PRIORITY - 20;
 	nice = tsk->priority;
-	nice = (nice * 20 + 10) / DEF_PRIORITY;
+	nice = (nice * 20 + DEF_PRIORITY / 2) / DEF_PRIORITY - 20;
+
 	return sprintf(buffer,"%d (%s) %c %d %d %d %d %d %lu %lu \
 %lu %lu %lu %ld %ld %ld %ld %ld %ld %lu %lu %ld %lu %lu %lu %lu %lu %lu %lu %lu %lu \
 %lu %lu %lu %lu\n",

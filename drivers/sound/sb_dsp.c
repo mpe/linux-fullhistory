@@ -737,7 +737,7 @@ sb_dsp_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
     {
     case SOUND_PCM_WRITE_RATE:
       if (local)
-	return dsp_speed ((int) arg);
+	return dsp_speed ((long) arg);
       return snd_ioctl_return ((int *) arg, dsp_speed (get_fs_long ((long *) arg)));
       break;
 
@@ -749,7 +749,7 @@ sb_dsp_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
 
     case SOUND_PCM_WRITE_CHANNELS:
       if (local)
-	return dsp_set_stereo ((int) arg - 1) + 1;
+	return dsp_set_stereo ((long) arg - 1) + 1;
       return snd_ioctl_return ((int *) arg, dsp_set_stereo (get_fs_long ((long *) arg) - 1) + 1);
       break;
 
@@ -761,7 +761,7 @@ sb_dsp_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
 
     case SNDCTL_DSP_STEREO:
       if (local)
-	return dsp_set_stereo ((int) arg);
+	return dsp_set_stereo ((long) arg);
       return snd_ioctl_return ((int *) arg, dsp_set_stereo (get_fs_long ((long *) arg)));
       break;
 
@@ -785,9 +785,7 @@ sb_dsp_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
     case SOUND_PCM_READ_BITS:
       if (local)
 	return 8;
-      return snd_ioctl_return ((int *) (int) arg, 8);	/*
-							   * Only 8 bits/sample supported
-							 */
+      return snd_ioctl_return ((int *) arg, 8);	/* Only 8 bits/sample supported */
       break;
 #endif /* ifdef JAZZ16  */
 

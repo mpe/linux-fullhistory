@@ -156,9 +156,7 @@
  *
  */
 
-#ifdef MODULE
 #include <linux/module.h>
-#endif
 
 #include <asm/dma.h>
 #include <asm/io.h>

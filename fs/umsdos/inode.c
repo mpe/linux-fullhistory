@@ -6,13 +6,7 @@
  *
  */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <linux/fs.h>
 #include <linux/msdos_fs.h>
@@ -501,16 +495,13 @@ struct super_block *UMSDOS_read_super(
 
 #ifdef MODULE
 
-char kernel_version[] = UTS_RELEASE;
-
 static struct file_system_type umsdos_fs_type = {
 	UMSDOS_read_super, "umsdos", 1, NULL
 };
 
 int init_module(void)
 {
-	register_filesystem(&umsdos_fs_type);
-	return 0;
+	return register_filesystem(&umsdos_fs_type);
 }
 
 void cleanup_module(void)

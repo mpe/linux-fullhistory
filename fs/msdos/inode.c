@@ -4,13 +4,7 @@
  *  Written 1992,1993 by Werner Almesberger
  */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <linux/msdos_fs.h>
 #include <linux/kernel.h>
@@ -506,9 +500,8 @@ int msdos_notify_change(struct inode * inode,struct iattr * attr)
 	    ~MSDOS_SB(inode->i_sb)->fs_umask;
 	return 0;
 }
-#ifdef MODULE
 
-char kernel_version[] = UTS_RELEASE;
+#ifdef MODULE
 
 static struct file_system_type msdos_fs_type = {
 	msdos_read_super, "msdos", 1, NULL
@@ -516,8 +509,7 @@ static struct file_system_type msdos_fs_type = {
 
 int init_module(void)
 {
-	register_filesystem(&msdos_fs_type);
-	return 0;
+	return register_filesystem(&msdos_fs_type);
 }
 
 void cleanup_module(void)

@@ -29,6 +29,7 @@
  * If the input condition contains '(' or ')' it would screw us up, but for now
  * this is not a problem.
  */
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include "tkparse.h"
@@ -52,7 +53,15 @@ static int invert_condition(struct condition * cnd)
 	  cnd->op = op_or;
 	  break;
 	case op_or:
-	  cnd->op = op_and;
+	  /*
+	   * This is not turned into op_and - we need to keep track
+	   * of what operators were used here since we have an optimization
+	   * later on to remove duplicate conditions, and having
+	   * inverted ors in there would make it harder if we did not
+	   * distinguish an inverted or from an and we inserted because
+	   * of nested ifs.
+	   */
+	  cnd->op = op_and1;
 	  break;
 	case op_neq:
 	  cnd->op = op_eq;
@@ -78,6 +87,54 @@ static int free_condition(struct condition * cnd)
 	free(cnd->variable.str);
 
       free(cnd);
+    }
+}
+
+/*
+ * Walk all of the conditions, and look for choice values.  Convert
+ * the tokens into something more digestable.
+ */
+void fix_choice_cond()
+{
+  struct condition * cond;
+  struct condition * cond2;
+  struct kconfig * cfg;
+  char tmpbuf[10];
+
+  for(cfg = config;cfg != NULL; cfg = cfg->next)
+    {
+      if( cfg->cond == NULL )
+	{
+	  continue;
+	}
+
+      for(cond = cfg->cond; cond != NULL; cond = cond->next)
+	{
+	  if( cond->op != op_kvariable )
+	    continue;
+
+	  if( cond->variable.cfg->tok != tok_choice )
+	    continue;
+
+	  /*
+	   * Look ahead for what we are comparing this to.  There should
+	   * be one operator inbetween.
+	   */
+	  cond2 = cond->next->next;
+	  sprintf(tmpbuf, "%d", cond->variable.cfg->choice_value);
+
+	  if( strcmp(cond2->variable.str, "y") == 0 )
+	    {
+	      cond->variable.cfg = cond->variable.cfg->choice_label;
+	      cond2->variable.str = strdup(tmpbuf);
+	    }
+	  else
+	    {
+	      fprintf(stderr,"Ooops\n");
+	      exit(0);
+	    }
+	}
+
     }
 }
 
@@ -135,6 +192,7 @@ struct condition * get_token_cond(struct condition ** cond, int depth)
 		    {
 		      if( cfg->tok != tok_bool && cfg->tok != tok_int
 			 && cfg->tok != tok_tristate 
+			 && cfg->tok != tok_choice
 			 && cfg->tok != tok_dep_tristate)
 			{
 			  continue;
@@ -145,6 +203,10 @@ struct condition * get_token_cond(struct condition ** cond, int depth)
 			  new->op = op_kvariable;
 			  break;
 			}
+		    }
+		  if( cfg == NULL )
+		    {
+		      new->variable.str = strdup(ocond->variable.str);
 		    }
 		}
 	      else
@@ -288,11 +350,13 @@ int fix_conditionals(struct kconfig * scfg)
 	  cfg->tok = tok_nop;
 	  break;
 	case tok_comment:
+	case tok_define:
 	case tok_menuoption:
 	case tok_bool:
 	case tok_tristate:
 	case tok_dep_tristate:
 	case tok_int:
+	case tok_choice:
 	  /*
 	   * We need to duplicate the chain of conditions and attach them to
 	   * this token.
@@ -303,6 +367,12 @@ int fix_conditionals(struct kconfig * scfg)
 	  break;
 	}
     }
+
+  /*
+   * Fix any conditions involving the "choice" operator.
+   */
+  fix_choice_cond();
+
   /*
    * Walk through and see if there are multiple options that control the
    * same kvariable.  If there are we need to treat them a little bit
@@ -320,6 +390,7 @@ int fix_conditionals(struct kconfig * scfg)
 	    {
 	      switch(cfg1->tok)
 		{
+		case tok_define:
 		case tok_bool:
 		case tok_tristate:
 		case tok_dep_tristate:

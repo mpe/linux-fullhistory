@@ -6,10 +6,6 @@
  *  minix directory handling functions
  */
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/fs.h>

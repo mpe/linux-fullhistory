@@ -156,19 +156,23 @@ extern void		_writew(unsigned short b, unsigned long addr);
 /*
  * String version of IO memory access ops:
  */
-extern void memcpy_fromio(void *, unsigned long, unsigned long);
-extern void memcpy_toio(unsigned long, void *, unsigned long);
-extern void memset_io(unsigned long, int, unsigned long);
+extern void _memcpy_fromio(void *, unsigned long, unsigned long);
+extern void _memcpy_toio(unsigned long, void *, unsigned long);
+extern void _memset_io(unsigned long, int, unsigned long);
+
+#define memcpy_fromio(to,from,len)	_memcpy_fromio((to),(unsigned long)(from),(len))
+#define memcpy_toio(to,from,len)	_memcpy_toio((unsigned long)(to),(from),(len))
+#define memset_io(addr,c,len)		_memset_io((unsigned long)(addr),(c),(len))
 
 /*
  * String versions of in/out ops:
  */
-extern void insb (unsigned long port, void *src, unsigned long count);
-extern void insw (unsigned long port, void *src, unsigned long count);
-extern void insl (unsigned long port, void *src, unsigned long count);
-extern void outsb (unsigned long port, void *dst, unsigned long count);
-extern void outsw (unsigned long port, void *dst, unsigned long count);
-extern void outsl (unsigned long port, void *dst, unsigned long count);
+extern void insb (unsigned long port, void *dst, unsigned long count);
+extern void insw (unsigned long port, void *dst, unsigned long count);
+extern void insl (unsigned long port, void *dst, unsigned long count);
+extern void outsb (unsigned long port, const void *src, unsigned long count);
+extern void outsw (unsigned long port, const void *src, unsigned long count);
+extern void outsl (unsigned long port, const void *src, unsigned long count);
 
 /*
  * XXX - We don't have csum_partial_copy_fromio() yet, so we cheat here and 

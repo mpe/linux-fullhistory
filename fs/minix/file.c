@@ -6,13 +6,6 @@
  *  minix regular file handling primitives
  */
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
-#include <asm/segment.h>
-#include <asm/system.h>
-
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
 #include <linux/kernel.h>
@@ -20,6 +13,9 @@
 #include <linux/fcntl.h>
 #include <linux/stat.h>
 #include <linux/locks.h>
+
+#include <asm/segment.h>
+#include <asm/system.h>
 
 #define	NBUF	32
 

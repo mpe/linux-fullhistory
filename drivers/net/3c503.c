@@ -31,22 +31,18 @@
 static const char *version =
     "3c503.c:v1.10 9/23/93  Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
-
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/delay.h>
-#include <asm/io.h>
-#include <asm/system.h>
-
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+
+#include <asm/io.h>
+#include <asm/system.h>
 
 #include "8390.h"
 #include "3c503.h"
@@ -531,15 +527,14 @@ el2_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_off
     outb_p(ei_status.interface_num == 0 ? ECNTRL_THIN : ECNTRL_AUI, E33G_CNTRL);
 }
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static struct device el2_drv =
 {"3c503", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, el2_probe };
        
 static struct device el2pio_drv =
 {"3c503pio", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, el2_pio_probe };
 
-int io = 0x300;
-int irq = 0;
+static int io = 0x300;
+static int irq = 0;
 
 static int no_pio = 1;
 int init_module(void)
@@ -569,23 +564,18 @@ int init_module(void)
 void
 cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("3c503: device busy, remove delayed\n");
-	else {
-	    int ioaddr;
+	int ioaddr;
 
-	    if (no_pio) {
+	if (no_pio) {
 		ioaddr = el2_drv.base_addr;
 		unregister_netdev(&el2_drv);
-	    } else {
+	} else {
 		ioaddr = el2pio_drv.base_addr;
 		unregister_netdev(&el2pio_drv);
-	    }
-
-	    /* If we don't do this, we can't re-insmod it later. */
-	    release_region(ioaddr, EL2_IO_EXTENT);
-
 	}
+
+	/* If we don't do this, we can't re-insmod it later. */
+	release_region(ioaddr, EL2_IO_EXTENT);
 }
 #endif /* MODULE */
 

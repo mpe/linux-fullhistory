@@ -16,10 +16,8 @@
  *       low-level scsi drivers.
  */
 
-#ifdef MODULE
-#include <linux/autoconf.h>
 #include <linux/module.h>
-#include <linux/version.h>
+#ifdef MODULE
 /*
  * This is a variable in scsi.c that is set when we are processing something
  * after boot time.  By definition, this is true when we are a loadable module
@@ -1462,10 +1460,6 @@ static void sd_detach(Scsi_Device * SDp)
 }
 
 #ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
-
-char kernel_version[] = UTS_RELEASE;
 
 int init_module(void) {
     sd_template.usage_count = &mod_use_count_;
@@ -1477,10 +1471,6 @@ void cleanup_module( void)
     struct gendisk * prev_sdgd;
     struct gendisk * sdgd;
     
-    if (MOD_IN_USE) {
-	printk(KERN_INFO __FILE__ ": module is in use, remove rejected\n");
-	return;
-    }
     scsi_unregister_module(MODULE_SCSI_DEV, &sd_template);
     unregister_blkdev(SCSI_DISK_MAJOR, "sd");
     sd_registered--;

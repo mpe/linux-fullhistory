@@ -405,8 +405,6 @@ int smb_current_malloced;
 
 #ifdef MODULE
 
-char kernel_version[] = UTS_RELEASE;
-
 /* looks ugly, taken from gcc-info */
 static void *shut_up_gcc = (&shut_up_gcc, kernel_version);
 
@@ -425,8 +423,7 @@ init_module( void)
 #endif
 
         smb_init_dir_cache();
-        register_filesystem(&smb_fs_type);
-        return 0;
+        return register_filesystem(&smb_fs_type);
 }
 
 void

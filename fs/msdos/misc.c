@@ -4,10 +4,6 @@
  *  Written 1992,1993 by Werner Almesberger
  */
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
 #include <linux/fs.h>
 #include <linux/msdos_fs.h>
 #include <linux/sched.h>

@@ -1,8 +1,8 @@
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
-#include <asm/system.h>
+/*
+ * linux/fs/umsdos/check.c
+ *
+ *
+ */
 
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -13,6 +13,8 @@
 #include <linux/types.h>
 #include <linux/ptrace.h>
 #include <linux/mman.h>
+
+#include <asm/system.h>
 
 extern unsigned long high_memory;
 

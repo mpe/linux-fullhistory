@@ -28,16 +28,7 @@
  * Modularised 6-Sep-95 Philip Blundell <pjb27@cam.ac.uk> 
  */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-
-char kernel_version[] = UTS_RELEASE;
-#define bus_mouse_init init_module
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -272,10 +263,14 @@ int bus_mouse_init(void)
 }
 
 #ifdef MODULE
+
+int init_module(void)
+{
+	return bus_mouse_init();
+}
+
 void cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("busmouse: in use - remove delayed\n");
 	mouse_deregister(&bus_mouse);
 }
 #endif

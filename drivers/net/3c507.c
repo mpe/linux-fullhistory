@@ -442,9 +442,7 @@ el16_open(struct device *dev)
 	dev->interrupt = 0;
 	dev->start = 1;
 
-#ifdef MODULE
 	MOD_INC_USE_COUNT;
-#endif
 
 	return 0;
 }
@@ -637,9 +635,7 @@ el16_close(struct device *dev)
 
 	/* Update the statistics here. */
 
-#ifdef MODULE
 	MOD_DEC_USE_COUNT;
-#endif
 
 	return 0;
 }
@@ -887,8 +883,8 @@ static struct device dev_3c507 = {
 	0, 0, 0, NULL, el16_probe
 };
 
-int io = 0x300;
-int irq = 0;
+static int io = 0x300;
+static int irq = 0;
 
 int init_module(void)
 {
@@ -906,18 +902,13 @@ int init_module(void)
 void
 cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("3c507: device busy, remove delayed\n");
-	else
-	{
-		unregister_netdev(&dev_3c507);
-		kfree(dev_3c507.priv);
-		dev_3c507.priv = NULL;
+	unregister_netdev(&dev_3c507);
+	kfree(dev_3c507.priv);
+	dev_3c507.priv = NULL;
 
-		/* If we don't do this, we can't re-insmod it later. */
-		free_irq(dev_3c507.irq);
-		release_region(dev_3c507.base_addr, EL16_IO_EXTENT);
-	}
+	/* If we don't do this, we can't re-insmod it later. */
+	free_irq(dev_3c507.irq);
+	release_region(dev_3c507.base_addr, EL16_IO_EXTENT);
 }
 #endif /* MODULE */
 

@@ -8,13 +8,6 @@
  *  xiafs fsync primitive
  */
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
-#include <asm/segment.h>
-#include <asm/system.h>
-
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/stat.h>
@@ -23,6 +16,9 @@
 
 #include <linux/fs.h>
 #include <linux/xia_fs.h>
+
+#include <asm/segment.h>
+#include <asm/system.h>
 
 #include "xiafs_mac.h"
 

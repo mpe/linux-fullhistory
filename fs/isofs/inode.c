@@ -8,13 +8,7 @@
  *
  */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <linux/stat.h>
 #include <linux/sched.h>
@@ -798,16 +792,13 @@ void leak_check_brelse(struct buffer_head * bh){
 
 #ifdef MODULE
 
-char kernel_version[] = UTS_RELEASE;
-
 static struct file_system_type iso9660_fs_type = {
 	isofs_read_super, "iso9660", 1, NULL
 };
 
 int init_module(void)
 {
-	register_filesystem(&iso9660_fs_type);
-	return 0;
+	return register_filesystem(&iso9660_fs_type);
 }
 
 void cleanup_module(void)

@@ -6,9 +6,6 @@
  *
  *	msdos mmap handling
  */
-#ifdef MODULE
-#include <linux/module.h>
-#endif
 
 #include <linux/stat.h>
 #include <linux/sched.h>
@@ -19,9 +16,10 @@
 #include <linux/mman.h>
 #include <linux/string.h>
 #include <linux/malloc.h>
+#include <linux/msdos_fs.h>
+
 #include <asm/segment.h>
 #include <asm/system.h>
-#include <linux/msdos_fs.h>
 
 /*
  * Fill in the supplied page for mmap

@@ -59,22 +59,21 @@
 	DOS DRIVERS .... Accuracy counts... speed is secondary ;)
 	17 June 95 Modifications By Andrew J. Kroll <ag784@freenet.buffalo.edu>
 	07 July 1995 Modifications by Andrew J. Kroll
+	
+	0.6
+        8 November 95 More Modifications By Andrew J. Kroll
+        Media change detect now works :) That means that SuperMount and
+        other programs that depend on this will now work!
+        You are welcome in advance!  You will notice, however that you don't 
+        always get the kernel message saying "VFS: Disk change detected on 
+        device", so I'm not sure that it's *PERFECT* but it does seem to
+        actually work! What else should I add?
+	                                                         
 
 */
 
-#include <linux/config.h>
 
-#ifdef MODULE
-# include <linux/module.h>
-# include <linux/version.h>
-# ifndef CONFIG_MODVERSIONS
-    char kernel_version[]= UTS_RELEASE;
-# endif
-#define mcd_init init_module
-#else
-# define MOD_INC_USE_COUNT
-# define MOD_DEC_USE_COUNT
-#endif
+#include <linux/module.h>
 
 #include <linux/errno.h>
 #include <linux/signal.h>
@@ -145,18 +144,22 @@ static int mcdPresent = 0;
 #define MFL_STATUSorDATA (MFL_STATUS | MFL_DATA)
 #define MCD_BUF_SIZ 16
 static volatile int mcd_transfer_is_active;
+
+/* Are you sleeping, Are you sleeping, Brother John, Brother John? ;) */
+static volatile int sleeping_for_status;
+
 static char mcd_buf[2048*MCD_BUF_SIZ];	/* buffer for block size conversion */
 static volatile int mcd_buf_bn[MCD_BUF_SIZ], mcd_next_bn;
 static volatile int mcd_buf_in, mcd_buf_out = -1;
 static volatile int mcd_error;
 static int mcd_open_count;
 enum mcd_state_e {
-  MCD_S_IDLE,   /* 0 */
-  MCD_S_START,  /* 1 */
-  MCD_S_MODE, /* 2 */
-  MCD_S_READ,   /* 3 */
-  MCD_S_DATA,   /* 4 */
-  MCD_S_STOP,   /* 5 */
+  MCD_S_IDLE,    /* 0 */
+  MCD_S_START,   /* 1 */
+  MCD_S_MODE,    /* 2 */
+  MCD_S_READ,    /* 3 */
+  MCD_S_DATA,    /* 4 */
+  MCD_S_STOP,    /* 5 */
   MCD_S_STOPPING /* 6 */
 };
 static volatile enum mcd_state_e mcd_state = MCD_S_IDLE;
@@ -211,31 +214,7 @@ void mcd_setup(char *str, int *ints)
       mitsumi_bug_93_wait = ints[3];
 #endif /* WORK_AROUND_MITSUMI_BUG_93 */
 }
-
  
-static int
-check_mcd_change(kdev_t full_dev)
-{
-   int retval, target;
-
-
-#if 1	 /* the below is not reliable */
-   return 0;
-#endif  
-   target = MINOR(full_dev);
-
-   if (target > 0) {
-      printk("mcd: Mitsumi CD-ROM request error: invalid device.\n");
-      return 0;
-   }
-
-   retval = mcdDiskChanged;
-   mcdDiskChanged = 0;
-
-   return retval;
-}
-
-
 /*
  * Do a 'get status' command and get the result.  Only use from the top half
  * because it calls 'getMcdStatus' which sleeps.
@@ -256,6 +235,69 @@ statusCmd(void)
 	}
 
 	return st;
+}
+
+/*
+ *             This detects a media change on the CD ROM.
+ *        We need to grab the status right off the drive in here.
+ *     Before, it ALWAYS returned a value of 0, which was not right!
+ */
+ 
+static int
+check_mcd_change(dev_t full_dev)
+{
+   int retval, target, st, count;
+   st = -1;
+   target = MINOR(full_dev);
+
+   if (target > 0) 
+   	{
+   	printk("mcd: Mitsumi CD-ROM request error: invalid device.\n");
+   	return 0;
+   	}
+
+/* 
+ * SOMETIMES it changes, sometimes not! Well, here we FIX that little nasty!
+ * All we need to do is read the status from the drive without spamming the 
+ * kernel! In other words, this routine CANNOT sleep! 
+ * The kernel will automagically picks up on this now.
+ * Devilishly sneaky it is! 8) -- AJK
+ */
+if ((!mcd_transfer_is_active) && 
+    (!sleeping_for_status) &&
+    (mcd_state == MCD_S_IDLE)) /* YES I'm paraniod! :) */
+	{
+	outb(MCMD_GET_STATUS, MCDPORT(0)); 	/* send get-status cmd */
+	for (count = 0; count < 3000; count++) /* wait for the status */
+		{
+		if (!(inb(MCDPORT(1)) & MFL_STATUS))
+			break;
+		}
+	if (count >= 3000)	/* Did we time out? */
+		{
+		retval = mcdDiskChanged; /* We can just jump out of here */
+		mcdDiskChanged = 0; /* as it's not needed all the time. */
+		return retval;	/* So we pretend nothing happened here! ;) */
+		}
+	st=inb(MCDPORT(0)) & 0xFF ;	/* Read the status in... */
+       
+	/* okay... here's that magic part! Muhuhuhuh...*/
+
+	if (st & MST_DSK_CHG)      /* Devil made me do it! O];) */ 
+		{
+		mcdDiskChanged = 1;  /* Show a change. */
+		audioStatus = CDROM_AUDIO_NO_STATUS; /* just incase... */
+		tocUpToDate = 0; 	/* Frantic laughing continues... */
+		mcd_invalidate_buffers(); /* 666 wins! */
+      		}		/* Stupid comments are fun! */
+	
+	
+	}
+ 
+   retval = mcdDiskChanged; /* Indicate status. */
+   mcdDiskChanged = 0;   /* Go, now. Enjoy a good beer! */
+
+   return retval; /* The End. */
 }
 
 
@@ -1175,7 +1217,7 @@ mcd_init(void)
 {
 	int count;
 	unsigned char result[3];
-
+        sleeping_for_status = 0;
 	if (mcd_port <= 0 || mcd_irq <= 0) {
 	  printk("skip mcd_init\n");
           return -EIO;
@@ -1377,10 +1419,14 @@ getMcdStatus(int timeout)
 
 	McdTimeout = timeout;
 	SET_TIMER(mcdStatTimer, 1);
-	sleep_on(&mcd_waitq);
+        sleeping_for_status = 1;
+        sleep_on(&mcd_waitq);
 	if (McdTimeout <= 0)
-		return -1;
-
+		{
+		sleeping_for_status = 0;
+	      	return -1;
+		}
+	sleeping_for_status = 0;
 	st = inb(MCDPORT(0)) & 0xFF;
 	if (st == 0xFF)
 		return -1;
@@ -1616,11 +1662,13 @@ Toc[i].diskTime.min, Toc[i].diskTime.sec, Toc[i].diskTime.frame);
 }
 
 #ifdef MODULE
+int init_module(void)
+{
+	return mcd_init();
+}
+
 void cleanup_module(void)
-{ if (MOD_IN_USE)
-     { printk("mcd module in use - can't remove it.\n");
-       return;    
-     }
+{
   if ((unregister_blkdev(MAJOR_NR, "mcd") == -EINVAL))
      { printk("What's that: can't unregister mcd\n");
        return;    

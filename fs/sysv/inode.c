@@ -20,13 +20,7 @@
  *  the superblock.
  */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -979,8 +973,6 @@ int sysv_sync_inode(struct inode * inode)
 
 /* Every kernel module contains stuff like this. */
 
-char kernel_version[] = UTS_RELEASE;
-
 static struct file_system_type sysv_fs_type[3] = {
 	{sysv_read_super, "xenix", 1, NULL},
 	{sysv_read_super, "sysv", 1, NULL},
@@ -990,10 +982,12 @@ static struct file_system_type sysv_fs_type[3] = {
 int init_module(void)
 {
 	int i;
+	int ouch;
 
-	for (i = 0; i < 3; i++)
-		register_filesystem(&sysv_fs_type[i]);
-
+	for (i = 0; i < 3; i++) {
+		if ((ouch = register_filesystem(&sysv_fs_type[i])) != 0)
+			return ouch;
+	}
 	return 0;
 }
 
@@ -1002,6 +996,7 @@ void cleanup_module(void)
 	int i;
 
 	for (i = 0; i < 3; i++)
+		/* No error message if this breaks... that's OK... */
 		unregister_filesystem(&sysv_fs_type[i]);
 }
 

@@ -6,16 +6,9 @@
 #error Go away.
 #endif
 
-/*
- * Even though we are building a module, we need to undef this, since
- * we are building a symbol table to be used by other modules.  For
- * the symbol table to build properly, we need to undefine this.
- */
-#undef MODULE
-
 #include <linux/module.h>
-
 #include <linux/config.h>
+
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/string.h>
@@ -47,10 +40,6 @@ extern void print_sense(const char * devclass, Scsi_Cmnd * SCpnt);
 
 struct symbol_table scsi_symbol_table = {
 #include <linux/symtab_begin.h>
-#ifdef CONFIG_MODVERSIONS
-    { (void *)1 /* Version version :-) */, 
-	SYMBOL_NAME_STR(Using_Versions) },
-#endif
     X(scsi_register_module),
     X(scsi_unregister_module),
     X(scsi_free),

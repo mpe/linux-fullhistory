@@ -3107,12 +3107,6 @@ void cleanup_module( void)
 
     timer_table[SCSI_TIMER].fn = NULL;
     timer_table[SCSI_TIMER].expires = 0;
-    /*
-     * Supposedly you just do this, and the last symtab registered will
-     * be removed.  If someone else registered a symtab, this could
-     * blow up in our faces.  FIXME.
-     */
-    register_symtab(0);
 }
 #endif /* MODULE */
 

@@ -1,3 +1,30 @@
+Sat Nov  4 17:14:45 1995    <tytso@rsts-11.mit.edu>
+
+	* tty_io.c (tty_init): Move registration of TTY_MAJOR and
+		TTY_AUX_MAJOR to the end, so that /proc/devices looks
+		prettier. 
+
+	* pty.c (pty_init): Use new major numbers for PTY master and slave
+		devices.  This allow us to have more than 64 pty's.  We
+		register the old pty devices for backwards compatibility.
+		Note that a system should either be using the old pty
+		devices or the new pty devices --- in general, it should
+		try to use both, since they map into the same pty table.
+		The old pty devices are strictly for backwards compatibility.
+
+Wed Oct 11 12:45:24 1995    <tytso@rsts-11.mit.edu>
+
+	* tty_io.c (disassociate_ctty): If dissassociate_ctty is called by
+		exit, perform an implicit vhangup on the tty.
+
+	* pty.c (pty_close): When the master pty is closed, send a hangup
+		to the slave pty.
+		(pty_open): Use the flag TTY_SLAVE_CLOSED to test to see
+		if there are any open slave ptys, instead of using
+		tty->link->count.  The old method got confused if there
+		were processes that had hung-up file descriptors on the
+		slave tty.
+
 Tue May  2 00:53:25 1995    <tytso@rsx-11.mit.edu>
 
 	* tty_io.c (tty_set_ldisc): Wait until the output buffer is

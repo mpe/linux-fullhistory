@@ -13,16 +13,12 @@
  *  SystemV/Coherent symlink handling code
  */
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
-#include <asm/segment.h>
-
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/sysv_fs.h>
 #include <linux/stat.h>
+
+#include <asm/segment.h>
 
 static int sysv_readlink(struct inode *, char *, int);
 static int sysv_follow_link(struct inode *, struct inode *, int, int, struct inode **);

@@ -164,13 +164,8 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("dummy: device busy, remove delayed\n");
-	else
-	{
-		unregister_netdev(&dev_dummy);
-		kfree(dev_dummy.priv);
-		dev_dummy.priv = NULL;
-	}
+	unregister_netdev(&dev_dummy);
+	kfree(dev_dummy.priv);
+	dev_dummy.priv = NULL;
 }
 #endif /* MODULE */

@@ -1264,9 +1264,7 @@ wavelan_open(device *dev)
 		return -EAGAIN;
 	}
 
-#if	defined(MODULE)
 	MOD_INC_USE_COUNT;
-#endif	/* defined(MODULE) */
 
 	if (wavelan_debug > 0)
 		printk("%s: <-wavelan_open(): 0\n", dev->name);
@@ -1992,9 +1990,7 @@ wavelan_close(device *dev)
 	 */
 	release_region(ioaddr, sizeof(ha_t));
 
-#if	defined(MODULE)
 	MOD_DEC_USE_COUNT;
-#endif	/* defined(MODULE) */
 
 	if (wavelan_debug > 0)
 		printk("%s: <-wavelan_close(): 0\n", dev->name);
@@ -2179,8 +2175,8 @@ static struct device	dev_wavelan		=
 	0, 0, 0, NULL, wavelan_probe
 };
 
-int io = 0x390; /* Default from above.. */
-int irq = 0;
+static int io = 0x390; /* Default from above.. */
+static int irq = 0;
 
 int
 init_module(void)
@@ -2196,15 +2192,10 @@ init_module(void)
 void
 cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("wavelan: device busy, remove delayed\n");
-	else
-	{
-		proc_net_unregister(PROC_NET_WAVELAN);
-		unregister_netdev(&dev_wavelan);
-		kfree_s(dev_wavelan.priv, sizeof(struct net_local));
-		dev_wavelan.priv = NULL;
-	}
+	proc_net_unregister(PROC_NET_WAVELAN);
+	unregister_netdev(&dev_wavelan);
+	kfree_s(dev_wavelan.priv, sizeof(struct net_local));
+	dev_wavelan.priv = NULL;
 }
 #endif	/* defined(MODULE) */
 

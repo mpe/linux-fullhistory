@@ -26,12 +26,9 @@
 
 static const  char *version = "3c509.c:1.03 10/8/94 becker@cesdis.gsfc.nasa.gov\n";
 
-#include <linux/config.h>
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -41,12 +38,13 @@ static const  char *version = "3c509.c:1.03 10/8/94 becker@cesdis.gsfc.nasa.gov\
 #include <linux/in.h>
 #include <linux/malloc.h>
 #include <linux/ioport.h>
-#include <asm/bitops.h>
-#include <asm/io.h>
-
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+#include <linux/config.h>	/* for CONFIG_MCA */
+
+#include <asm/bitops.h>
+#include <asm/io.h>
 
 
 #ifdef EL3_DEBUG
@@ -380,9 +378,7 @@ el3_open(struct device *dev)
 		printk("%s: Opened 3c509  IRQ %d  status %4.4x.\n",
 			   dev->name, dev->irq, inw(ioaddr + EL3_STATUS));
 
-#ifdef MODULE
 	MOD_INC_USE_COUNT;
-#endif
 	return 0;					/* Always succeed */
 }
 
@@ -699,14 +695,11 @@ el3_close(struct device *dev)
 	irq2dev_map[dev->irq] = 0;
 
 	update_stats(ioaddr, dev);
-#ifdef MODULE
 	MOD_DEC_USE_COUNT;
-#endif
 	return 0;
 }
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static char devicename[9] = { 0, };
 static struct device dev_3c509 = {
 	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
@@ -714,8 +707,8 @@ static struct device dev_3c509 = {
 	0, 0,
 	0, 0, 0, NULL, el3_probe };
 
-int io = 0;
-int irq = 0;
+static int io = 0;
+static int irq = 0;
 
 int
 init_module(void)
@@ -733,16 +726,11 @@ init_module(void)
 void
 cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("3c509: device busy, remove delayed\n");
-	else
-	{
-		unregister_netdev(&dev_3c509);
-		kfree_s(dev_3c509.priv,sizeof(struct el3_private));
-		dev_3c509.priv=NULL;
-		/* If we don't do this, we can't re-insmod it later. */
-		release_region(dev_3c509.base_addr, EL3_IO_EXTENT);
-	}
+	unregister_netdev(&dev_3c509);
+	kfree_s(dev_3c509.priv,sizeof(struct el3_private));
+	dev_3c509.priv=NULL;
+	/* If we don't do this, we can't re-insmod it later. */
+	release_region(dev_3c509.base_addr, EL3_IO_EXTENT);
 }
 #endif /* MODULE */
 

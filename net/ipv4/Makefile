@@ -30,6 +30,10 @@ endif
 
 ifeq ($(CONFIG_NET_IPIP),y)
 IPV4_OBJS += ipip.o
+else
+  ifeq ($(CONFIG_NET_IPIP),m)
+  M_OBJS += ipip.o
+  endif
 endif
 
 ifdef CONFIG_INET

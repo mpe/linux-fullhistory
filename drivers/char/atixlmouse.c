@@ -10,16 +10,7 @@
  * version 0.3a
  */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-
-char kernel_version[] = UTS_RELEASE;
-#define atixl_busmouse_init init_module
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -236,12 +227,14 @@ int atixl_busmouse_init(void)
 }
 
 #ifdef MODULE
+
+int init_module(void)
+{
+	return atixl_busmouse_init();
+}
+
 void cleanup_module(void)
 {
-	if (MOD_IN_USE) {
-		printk("atixlmouse: in use, remove delayed\n");
-		return;
-	}
 	mouse_deregister(&atixl_mouse);
 }
 #endif

@@ -62,14 +62,6 @@
    code pages OS/2 is using.  Recoding from on-disk names to UTF-8
    could use the code page tags, though this is not what OS/2 does. */
 
-#ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
-
 
 static const unsigned char tb_cp850_to_latin1[128] =
 {

@@ -11,10 +11,6 @@
  *  Copyright (C) 1993  Bruno Haible
  */
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>

@@ -18,20 +18,17 @@
  *
  */
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
 #include <linux/sched.h>
 #include <linux/nfs_fs.h>
 #include <linux/errno.h>
 #include <linux/socket.h>
 #include <linux/fcntl.h>
-#include <asm/segment.h>
 #include <linux/in.h>
 #include <linux/net.h>
 #include <linux/mm.h>
 #include <linux/rpcsock.h>
+
+#include <asm/segment.h>
 
 /* JEJB/JSP 2/7/94
  * this must match the value of NFS_SLACK_SPACE in linux/fs/nfs/proc.c 

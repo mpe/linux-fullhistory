@@ -11,10 +11,6 @@
 
 /* bitmap.c contains the code that handles the inode and block bitmaps */
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
 #include <linux/sched.h>
 #include <linux/locks.h>
 #include <linux/xia_fs.h>

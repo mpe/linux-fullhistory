@@ -52,19 +52,11 @@
 #define FLOPPY0_TYPE 4		/* this is wrong for the Olli M700, but who cares... */
 #define FLOPPY1_TYPE 0
 
-#ifdef MODULE
-#define FDC1			((boot_info.machtype == MACH_ACER_PICA_61 || \
-				boot_info.machtype == MACH_MIPS_MAGNUM_4000 || \
-				boot_info.machtype == MACH_OLIVETTI_M700) ? \
-				0xe0003000 : 0x3f0)
-int FDC2=-1;
-#else
 #define FDC1			((boot_info.machtype == MACH_ACER_PICA_61 || \
 				boot_info.machtype == MACH_MIPS_MAGNUM_4000 || \
 				boot_info.machtype == MACH_OLIVETTI_M700) ? \
 				0xe0003000 : 0x3f0)
 static int FDC2=-1;
-#endif /* MODULE */
 
 #define N_FDC 1			/* do you *really* want a second controller? */
 #define N_DRIVE 8

@@ -49,20 +49,7 @@
 	29-9-95		v0.4a	Fixed bug that prevented compilation as module
 */
 
-#include <linux/major.h>
-#include <linux/config.h>
-
-#ifdef MODULE
-# include <linux/module.h>
-# include <linux/version.h>
-# ifndef CONFIG_MODVERSIONS
-	char kernel_version[]= UTS_RELEASE;
-# endif
-#define optcd_init init_module
-#else
-# define MOD_INC_USE_COUNT
-# define MOD_DEC_USE_COUNT
-#endif
+#include <linux/module.h>
 
 #include <linux/errno.h>
 #include <linux/mm.h>
@@ -71,6 +58,8 @@
 #include <linux/kernel.h>
 #include <linux/cdrom.h>
 #include <linux/ioport.h>
+#include <linux/major.h>
+
 #include <asm/io.h>
 
 #define MAJOR_NR OPTICS_CDROM_MAJOR
@@ -1466,11 +1455,12 @@ int optcd_init(void) {
 }
 
 #ifdef MODULE
+int init_module(void)
+{
+	return optcd_init();
+}
+
 void cleanup_module(void) {
-	if (MOD_IN_USE) {
-		printk("optcd: module in use - can't remove it.\n");
-	return;
-	}
 	if ((unregister_blkdev(MAJOR_NR, "optcd") == -EINVAL)) {
 		printk("optcd: what's that: can't unregister\n");
 		return;

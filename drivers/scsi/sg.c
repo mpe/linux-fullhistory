@@ -6,11 +6,7 @@
  *   
  *  Borrows code from st driver.
  */
-#ifdef MODULE
-#include <linux/autoconf.h>
 #include <linux/module.h>
-#include <linux/version.h>
-#endif /* MODULE */
 
 #include <linux/fs.h>
 #include <linux/kernel.h>
@@ -602,7 +598,6 @@ static void sg_detach(Scsi_Device * SDp)
 }
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 
 int init_module(void) {
     sg_template.usage_count = &mod_use_count_;
@@ -611,10 +606,6 @@ int init_module(void) {
 
 void cleanup_module( void) 
 {
-    if (MOD_IN_USE) {
-	printk(KERN_INFO __FILE__ ": module is in use, remove rejected\n");
-	return;
-    }
     scsi_unregister_module(MODULE_SCSI_DEV, &sg_template);
     unregister_chrdev(SCSI_GENERIC_MAJOR, "sg");
     

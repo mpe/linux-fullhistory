@@ -81,16 +81,7 @@ History:
  *                       David van Leeuwen, david@tm.tno.nl.  */
 #define VERSION "0.34"
 
-#ifdef MODULE			/* OK, so some of this is stolen */
 #include <linux/module.h>	
-#include <linux/version.h>
-#ifndef CONFIG_MODVERSIONS
-char kernel_version[]=UTS_RELEASE;
-#endif
-#else 
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif MODULE
 
 #include <linux/errno.h>	/* These include what we really need */
 #include <linux/delay.h>
@@ -1123,41 +1114,12 @@ int probe_irq(int nr) {
 }
 #endif
 
-#ifdef MODULE
-
-static int cm206[2] = {0,0};	/* for compatible `insmod' parameter passing */
-void parse_options(void) 
-{
-  int i;
-  for (i=0; i<2; i++) {
-    if (0x300 <= cm206[i] && i<= 0x370 && cm206[i] % 0x10 == 0) {
-      cm206_base = cm206[i];
-      auto_probe=0;
-    }
-    else if (3 <= cm206[i] && cm206[i] <= 15) {
-      cm206_irq = cm206[i];
-      auto_probe=0;
-    }
-  }
-}
-
-#define cm206_init init_module
-
-#endif MODULE
-
-
 int cm206_init(void)
 {
   uch e=0;
   long int size=sizeof(struct cm206_struct);
 
   printk("cm206: v" VERSION);
-#if defined(MODULE) 
-  parse_options();
-#if !defined(AUTO_PROBE_MODULE)
-   auto_probe=0;
-#endif
-#endif
   cm206_base = probe_base_port(auto_probe ? 0 : cm206_base);
   if (!cm206_base) {
     printk(" can't find adapter!\n");
@@ -1221,13 +1183,40 @@ int cm206_init(void)
 }
 
 #ifdef MODULE
+
+static int cm206[2] = {0,0};	/* for compatible `insmod' parameter passing */
+
+void parse_options(void) 
+{
+  int i;
+  for (i=0; i<2; i++) {
+    if (0x300 <= cm206[i] && i<= 0x370 && cm206[i] % 0x10 == 0) {
+      cm206_base = cm206[i];
+      auto_probe=0;
+    }
+    else if (3 <= cm206[i] && cm206[i] <= 15) {
+      cm206_irq = cm206[i];
+      auto_probe=0;
+    }
+  }
+}
+
+int init_module(void)
+{
+	parse_options();
+#if !defined(AUTO_PROBE_MODULE)
+	auto_probe=0;
+#endif
+	return cm206_init();
+}
+
 void cleanup_module(void)
 {
   cleanup(4);
   printk("cm206 removed\n");
 }
       
-#else MODULE
+#else /* !MODULE */
 
 /* This setup function accepts either `auto' or numbers in the range
  * 3--11 (for irq) or 0x300--0x370 (for base port) or both. */
@@ -1246,4 +1235,4 @@ void cm206_setup(char *s, int *p)
     }
   }
 }
-#endif MODULE
+#endif /* MODULE */

@@ -18,12 +18,7 @@
 		-Alan Cox	(Alan.Cox@linux.org) 21 March 95
 */
 
-#include <linux/config.h>
-#ifdef CONFIG_IP_FORWARD
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -316,4 +311,3 @@ void cleanup_module(void)
 	dev_tunnel.priv=NULL;
 }
 #endif /* MODULE */
-#endif

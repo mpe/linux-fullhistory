@@ -6,7 +6,7 @@
  *  Dynamic PPP devices by Jim Freeman <jfree@caldera.com>.
  *  ppp_tty_receive ``noisy-raise-bug'' fixed by Ove Ewerlid <ewerlid@syscon.uu.se>
  *
- *  ==FILEVERSION 6==
+ *  ==FILEVERSION 7==
  *
  *  NOTE TO MAINTAINERS:
  *     If you modify this file at all, increment the number above.
@@ -68,11 +68,6 @@
  */
 
 #include <linux/module.h>
-#ifdef MODULE
-#define  STATIC
-#else
-#define  STATIC static
-#endif /* def MODULE */
 
 #include <endian.h>
 #include <linux/kernel.h>
@@ -131,8 +126,8 @@ typedef struct sk_buff	     sk_buff;
 #define PPP_LQR 0xc025  /* Link Quality Reporting Protocol */
 #endif
 
-STATIC int ppp_register_compressor (struct compressor *cp);
-STATIC void ppp_unregister_compressor (struct compressor *cp);
+static int ppp_register_compressor (struct compressor *cp);
+static void ppp_unregister_compressor (struct compressor *cp);
 
 /*
  * Local functions
@@ -176,8 +171,8 @@ static int  rcv_proto_ccp (struct ppp *, u_short, u_char *, int);
  * Parameters which may be changed via insmod.
  */
 
-STATIC int  flag_time = OPTIMIZE_FLAG_TIME;
-STATIC int  max_dev   = PPP_MAX_DEV;
+static int  flag_time = OPTIMIZE_FLAG_TIME;
+static int  max_dev   = PPP_MAX_DEV;
 
 /*
  * The "main" procedure to the ppp device
@@ -541,6 +536,14 @@ ppp_init_ctrl_blk (register struct ppp *ppp)
 	ppp->sc_rc_state = NULL;
 }
 
+static struct symbol_table ppp_syms = {
+#include <linux/symtab_begin.h>
+	X(ppp_register_compressor),
+	X(ppp_unregister_compressor),
+	X(ppp_crc16_table),
+#include <linux/symtab_end.h>
+};
+
 /* called at boot/load time for each ppp device defined in the kernel */
 
 #ifndef MODULE
@@ -551,28 +554,19 @@ ppp_init (struct device *dev)
 	int    answer = 0;
 
 	if (first_time) {
-		static struct symbol_table ppp_syms = {
-#include <linux/symtab_begin.h>
-#define Y(sym) { (void *) &sym, SYMBOL_NAME_STR (sym) }
-			Y(ppp_register_compressor),
-			Y(ppp_unregister_compressor),
-			Y(ppp_crc16_table),
-#undef Y
-#include <linux/symtab_end.h>
-		};
-
 		first_time = 0;
 		answer     = ppp_first_time();
 		if (answer == 0)
 			(void) register_symtab (&ppp_syms);
 	}
-/*
- * Un-register the devices defined at the start of the system. They will
- * be added when they are needed again. The first device just gets us into
- * this code to register the handlers.
- */
-	unregister_netdev (dev);
-	return answer;
+	if (answer)
+		return answer;
+	/*
+	 * Return "not found", so that dev_init() will unlink
+	 * the placeholder device entry for us.
+	 */
+	return ENODEV;
+
 }
 #endif
 
@@ -3471,7 +3465,7 @@ static struct compressor *find_compressor (int type)
 	return (struct compressor *) 0;
 }
 
-STATIC int ppp_register_compressor (struct compressor *cp)
+static int ppp_register_compressor (struct compressor *cp)
 {
 	struct compressor_link *new;
 	unsigned long flags;
@@ -3498,7 +3492,7 @@ STATIC int ppp_register_compressor (struct compressor *cp)
 	return 0;
 }
 
-STATIC void ppp_unregister_compressor (struct compressor *cp)
+static void ppp_unregister_compressor (struct compressor *cp)
 {
 	struct compressor_link *prev = (struct compressor_link *) 0;
 	struct compressor_link *lnk;
@@ -3528,7 +3522,6 @@ STATIC void ppp_unregister_compressor (struct compressor *cp)
  *************************************************************/
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 
 int
 init_module(void)
@@ -3540,6 +3533,8 @@ init_module(void)
 	if (status != 0)
 		printk (KERN_INFO
 		       "PPP: ppp_init() failure %d\n", status);
+	else
+		(void) register_symtab (&ppp_syms);
 	return (status);
 }
 
@@ -3550,26 +3545,24 @@ cleanup_module(void)
 	ppp_ctrl_t *ctl, *next_ctl;
 	struct device *dev;
 	struct ppp *ppp;
-	int busy_flag = MOD_IN_USE;
+	int busy_flag = 0;
 /*
  * Ensure that the devices are not in operation.
  */
-	if (!busy_flag) {
-		ctl = ppp_list;
-		while (ctl) {
-			ppp = ctl2ppp (ctl);
-			if (ppp->inuse && ppp->tty != NULL) {
-				busy_flag = 1;
-				break;
-			}
-
-			dev = ctl2dev (ctl);
-			if (dev->start || dev->flags & IFF_UP) {
-				busy_flag = 1;
-				break;
-			}
-			ctl = ctl->next;
+	ctl = ppp_list;
+	while (ctl) {
+		ppp = ctl2ppp (ctl);
+		if (ppp->inuse && ppp->tty != NULL) {
+			busy_flag = 1;
+			break;
 		}
+
+		dev = ctl2dev (ctl);
+		if (dev->start || dev->flags & IFF_UP) {
+			busy_flag = 1;
+			break;
+		}
+		ctl = ctl->next;
 	}
 /*
  * Ensure that there are no compressor modules registered
@@ -3594,10 +3587,6 @@ cleanup_module(void)
 	else
 		printk (KERN_INFO
 		       "PPP: ppp line discipline successfully unregistered\n");
-/*
- * Remove the symbol definitions
- */
-	(void) register_symtab ((struct symbol_table *) 0);
 /*
  * De-register the devices so that there is no problem with them
  */	

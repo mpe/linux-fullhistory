@@ -355,9 +355,7 @@ static int net_open(struct device *dev)
 	dev->interrupt = 0;
 	dev->start = 1;
 
-#ifdef MODULE
 	MOD_INC_USE_COUNT;
-#endif
 
 	return 0;
 }
@@ -587,9 +585,7 @@ static int net_close(struct device *dev)
 	/* Power-down the chip.  Green, green, green! */
 	outb(0x00, ioaddr + CONFIG_1);
 
-#ifdef MODULE
 	MOD_DEC_USE_COUNT;
-#endif
 
 	return 0;
 }
@@ -640,8 +636,8 @@ static struct device dev_at1700 = {
 	0, 0,
 	0, 0, 0, NULL, at1700_probe };
 
-int io = 0x260;
-int irq = 0;
+static int io = 0x260;
+static int irq = 0;
 
 int init_module(void)
 {
@@ -659,19 +655,14 @@ int init_module(void)
 void
 cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("at1700: device busy, remove delayed\n");
-	else
-	{
-		unregister_netdev(&dev_at1700);
-		kfree(dev_at1700.priv);
-		dev_at1700.priv = NULL;
+	unregister_netdev(&dev_at1700);
+	kfree(dev_at1700.priv);
+	dev_at1700.priv = NULL;
 
-		/* If we don't do this, we can't re-insmod it later. */
-		free_irq(dev_at1700.irq);
-		irq2dev_map[dev_at1700.irq] = NULL;
-		release_region(dev_at1700.base_addr, AT1700_IO_EXTENT);
-	}
+	/* If we don't do this, we can't re-insmod it later. */
+	free_irq(dev_at1700.irq);
+	irq2dev_map[dev_at1700.irq] = NULL;
+	release_region(dev_at1700.base_addr, AT1700_IO_EXTENT);
 }
 #endif /* MODULE */
 

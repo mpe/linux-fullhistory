@@ -30,6 +30,9 @@ LIBS := $(TOPDIR)/arch/alpha/lib/lib.a $(LIBS) $(TOPDIR)/arch/alpha/lib/lib.a
 
 MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
 
+rawboot:
+	@$(MAKEBOOT) rawboot
+
 #
 # my boot writes directly to a specific disk partition, I doubt most
 # people will want to do that without changes..

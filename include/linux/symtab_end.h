@@ -1,4 +1,4 @@
-#ifdef MODVERSIONS /* MODVERSIONS */
+#ifdef MODVERSIONS
 #undef _set_ver
 #if defined(MODULE) && !defined(__GENKSYMS__)
 #define _set_ver(sym,vers) sym ## _R ## vers

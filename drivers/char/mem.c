@@ -323,30 +323,6 @@ static struct file_operations full_fops = {
 	NULL		/* no special release code */
 };
 
-static struct file_operations random_fops = {
-	memory_lseek,
-	read_random,
-	write_random,
-	NULL,		/* random_readdir */
-	NULL,		/* random_select */
-	random_ioctl,
-	NULL,		/* random_mmap */
-	NULL,		/* no special open code */
-	NULL		/* no special release code */
-};
-
-static struct file_operations urandom_fops = {
-	memory_lseek,
-	read_random_unlimited,
-	write_random,
-	NULL,		/* urandom_readdir */
-	NULL,		/* urandom_select */
-	random_ioctl,
-	NULL,		/* urandom_mmap */
-	NULL,		/* no special open code */
-	NULL		/* no special release code */
-};
-
 static int memory_open(struct inode * inode, struct file * filp)
 {
 	switch (MINOR(inode->i_rdev)) {

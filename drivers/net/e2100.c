@@ -34,21 +34,19 @@
 static const char *version =
 	"e2100.c:v1.01 7/21/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/string.h>
-#include <asm/io.h>
-#include <asm/system.h>
 #include <linux/ioport.h>
-
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+
+#include <asm/io.h>
+#include <asm/system.h>
+
 #include "8390.h"
 
 static int e21_probe_list[] = {0x300, 0x280, 0x380, 0x220, 0};
@@ -261,9 +259,7 @@ e21_open(struct device *dev)
 
 	rc = ei_open(dev);
 	if (rc != 0) return rc;
-#ifdef MODULE
 	MOD_INC_USE_COUNT;
-#endif
 	return 0;
 }
 
@@ -359,9 +355,7 @@ e21_close(struct device *dev)
 	   really bad things happen if it isn't. */
 	mem_off(ioaddr);
 
-#ifdef MODULE
 	MOD_DEC_USE_COUNT;
-#endif
 
 	return 0;
 }
@@ -372,7 +366,6 @@ struct netdev_entry e21_drv =
 #endif
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static char devicename[9] = { 0, };
 static struct device dev_e2100 = {
 	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
@@ -380,8 +373,8 @@ static struct device dev_e2100 = {
 	0, 0,
 	0, 0, 0, NULL, e2100_probe };
 
-int io = 0x300;
-int irq = 0;
+static int io = 0x300;
+static int irq = 0;
 
 int init_module(void)
 {
@@ -399,15 +392,10 @@ int init_module(void)
 void
 cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("e2100: device busy, remove delayed\n");
-	else
-	{
-		unregister_netdev(&dev_e2100);
+	unregister_netdev(&dev_e2100);
 
-		/* If we don't do this, we can't re-insmod it later. */
-		release_region(dev_e2100.base_addr, E21_IO_EXTENT);
-	}
+	/* If we don't do this, we can't re-insmod it later. */
+	release_region(dev_e2100.base_addr, E21_IO_EXTENT);
 }
 #endif /* MODULE */
 

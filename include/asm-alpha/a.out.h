@@ -32,7 +32,7 @@ struct aouthdr
 	__u64 text_start;	/* with a few additions that actually make sense */
 	__u64 data_start;
 	__u64 bss_start;
-	__u32 gprmask, fprmask;	/* but what are these? */
+	__u32 gprmask, fprmask;	/* bitmask of general & floating point regs used in binary */
 	__u64 gpvalue;
 };
 

@@ -1,7 +1,6 @@
-#include <linux/config.h>
 #include <linux/linkage.h>
 
-#ifdef CONFIG_MODVERSIONS
+#ifdef MODVERSIONS
 # undef _set_ver
 # undef X
 
@@ -15,9 +14,9 @@
 #  endif /* !MODULE */
 #  define X(a) a
 # endif /* !__GENKSYMS__ */
-#else /* !CONFIG_MODVERSIONS */
+#else /* !MODVERSIONS */
 # define X(sym) { (void *) & sym, SYMBOL_NAME_STR(sym)}
-#endif /* !CONFIG_MODVERSIONS */
+#endif /* MODVERSIONS */
 
 #define EMPTY {0,0}
 	0, 0, 0, {

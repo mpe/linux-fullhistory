@@ -8,12 +8,6 @@
  *  nfs symlink handling code
  */
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
-#include <asm/segment.h>
-
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/nfs_fs.h>
@@ -21,6 +15,8 @@
 #include <linux/mm.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
+
+#include <asm/segment.h>
 
 static int nfs_readlink(struct inode *, char *, int);
 static int nfs_follow_link(struct inode *, struct inode *, int, int,

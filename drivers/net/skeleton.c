@@ -39,13 +39,7 @@ static const char *version =
 	under the GPL.
 */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#else
-#define  MOD_INC_USE_COUNT do {} while (0)
-#define  MOD_DEC_USE_COUNT do {} while (0)
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -531,7 +525,6 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 
 #ifdef MODULE
 
-char kernel_version[] = UTS_RELEASE;
 static char devicename[9] = { 0, };
 static struct device this_device = {
 	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
@@ -539,10 +532,10 @@ static struct device this_device = {
 	0, 0,  /* I/O address, IRQ */
 	0, 0, 0, NULL, netcard_probe };
 
-int io = 0x300;
-int irq = 0;
-int dma = 0;
-int mem = 0;
+static int io = 0x300;
+static int irq = 0;
+static int dma = 0;
+static int mem = 0;
 
 int init_module(void)
 {

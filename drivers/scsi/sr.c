@@ -19,11 +19,7 @@
  *
  */
 
-#ifdef MODULE
-#include <linux/autoconf.h>
 #include <linux/module.h>
-#include <linux/version.h>
-#endif /* MODULE */
 
 #include <linux/fs.h>
 #include <linux/kernel.h>
@@ -1139,10 +1135,6 @@ static void sr_detach(Scsi_Device * SDp)
 
 
 #ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
-
-char kernel_version[] = UTS_RELEASE;
 
 int init_module(void) {
     sr_template.usage_count = &mod_use_count_;

@@ -10,13 +10,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <linux/sched.h>
 #include <linux/ext_fs.h>
@@ -459,16 +453,13 @@ int ext_sync_inode (struct inode *inode)
 
 #ifdef MODULE
 
-char kernel_version[] = UTS_RELEASE;
-
 static struct file_system_type ext_fs_type = {
         ext_read_super, "ext", 1, NULL
 };
 
 int init_module(void)
 {
-        register_filesystem(&ext_fs_type);
-        return 0;
+        return register_filesystem(&ext_fs_type);
 }
 
 void cleanup_module(void)

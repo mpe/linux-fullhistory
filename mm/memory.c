@@ -118,6 +118,49 @@ static inline void free_one_pgd(pgd_t * dir)
 	pmd_free(pmd);
 }
 	
+/*
+ * This function clears all user-level page tables of a process - this
+ * is needed by execve(), so that old pages aren't in the way.
+ */
+void clear_page_tables(struct task_struct * tsk)
+{
+	int i;
+	pgd_t * page_dir;
+
+	page_dir = tsk->mm->pgd;
+	if (!page_dir || page_dir == swapper_pg_dir) {
+		printk("%s trying to clear kernel page-directory: not good\n", tsk->comm);
+		return;
+	}
+	for (i = 0 ; i < USER_PTRS_PER_PGD ; i++)
+		free_one_pgd(page_dir + i);
+	invalidate();
+}
+
+/*
+ * This function frees up all page tables of a process when it exits. It
+ * is the same as "clear_page_tables()", except it also changes the process'
+ * page table directory to the kernel page tables and then frees the old
+ * page table directory.
+ */
+void free_page_tables(struct task_struct * tsk)
+{
+	int i;
+	pgd_t * page_dir;
+
+	page_dir = tsk->mm->pgd;
+	if (!page_dir || page_dir == swapper_pg_dir) {
+		printk("%s trying to free kernel page-directory: not good\n", tsk->comm);
+		return;
+	}
+	SET_PAGE_DIR(tsk, swapper_pg_dir);
+	tsk->mm->pgd = swapper_pg_dir;	/* or else... */
+	for (i = 0 ; i < PTRS_PER_PGD ; i++)
+		free_one_pgd(page_dir + i);
+	pgd_free(page_dir);
+	invalidate();
+}
+
 int new_page_tables(struct task_struct * tsk)
 {
 	pgd_t * page_dir, * new_pg;
@@ -131,68 +174,6 @@ int new_page_tables(struct task_struct * tsk)
 	SET_PAGE_DIR(tsk, new_pg);
 	tsk->mm->pgd = new_pg;
 	return 0;
-}
-
-/*
- * This function clears all user-level page tables of a process - this
- * is needed by execve(), so that old pages aren't in the way. Note that
- * unlike 'free_page_tables()', this function still leaves a valid
- * page-table-tree in memory: it just removes the user pages. The two
- * functions are similar, but there is a fundamental difference.
- */
-void clear_page_tables(struct task_struct * tsk)
-{
-	int i;
-	pgd_t * page_dir;
-
-	if (!tsk)
-		return;
-	if (tsk == task[0])
-		panic("task[0] (swapper) doesn't support exec()\n");
-	page_dir = pgd_offset(tsk->mm, 0);
-	if (!page_dir) {
-		printk("%s trying to clear NULL page-directory: not good\n", tsk->comm);
-		return;
-	}
-	if (pgd_inuse(page_dir)) {
-		if (new_page_tables(tsk))
-			oom(tsk);
-		pgd_free(page_dir);
-		return;
-	}
-	if (page_dir == swapper_pg_dir) {
-		printk("%s trying to clear kernel page-directory: not good\n", tsk->comm);
-		return;
-	}
-	for (i = 0 ; i < USER_PTRS_PER_PGD ; i++)
-		free_one_pgd(page_dir + i);
-	invalidate();
-	return;
-}
-
-/*
- * This function frees up all page tables of a process when it exits.
- */
-void free_page_tables(struct task_struct * tsk)
-{
-	int i;
-	pgd_t * page_dir;
-
-	page_dir = tsk->mm->pgd;
-	if (!page_dir || page_dir == swapper_pg_dir) {
-		printk("%s trying to free kernel page-directory: not good\n", tsk->comm);
-		return;
-	}
-	SET_PAGE_DIR(tsk, swapper_pg_dir);
-	if (pgd_inuse(page_dir)) {
-		pgd_free(page_dir);
-		return;
-	}
-	tsk->mm->pgd = swapper_pg_dir;	/* or else... */
-	for (i = 0 ; i < PTRS_PER_PGD ; i++)
-		free_one_pgd(page_dir + i);
-	pgd_free(page_dir);
-	invalidate();
 }
 
 static inline void copy_one_pte(pte_t * old_pte, pte_t * new_pte)
@@ -324,7 +305,7 @@ static inline void forget_pte(pte_t page)
 	swap_free(pte_val(page));
 }
 
-static inline void unmap_pte_range(pmd_t * pmd, unsigned long address, unsigned long size)
+static inline void zap_pte_range(pmd_t * pmd, unsigned long address, unsigned long size)
 {
 	pte_t * pte;
 	unsigned long end;
@@ -332,7 +313,7 @@ static inline void unmap_pte_range(pmd_t * pmd, unsigned long address, unsigned 
 	if (pmd_none(*pmd))
 		return;
 	if (pmd_bad(*pmd)) {
-		printk("unmap_pte_range: bad pmd (%08lx)\n", pmd_val(*pmd));
+		printk("zap_pte_range: bad pmd (%08lx)\n", pmd_val(*pmd));
 		pmd_clear(pmd);
 		return;
 	}
@@ -350,7 +331,7 @@ static inline void unmap_pte_range(pmd_t * pmd, unsigned long address, unsigned 
 	} while (address < end);
 }
 
-static inline void unmap_pmd_range(pgd_t * dir, unsigned long address, unsigned long size)
+static inline void zap_pmd_range(pgd_t * dir, unsigned long address, unsigned long size)
 {
 	pmd_t * pmd;
 	unsigned long end;
@@ -358,7 +339,7 @@ static inline void unmap_pmd_range(pgd_t * dir, unsigned long address, unsigned 
 	if (pgd_none(*dir))
 		return;
 	if (pgd_bad(*dir)) {
-		printk("unmap_pmd_range: bad pgd (%08lx)\n", pgd_val(*dir));
+		printk("zap_pmd_range: bad pgd (%08lx)\n", pgd_val(*dir));
 		pgd_clear(dir);
 		return;
 	}
@@ -368,7 +349,7 @@ static inline void unmap_pmd_range(pgd_t * dir, unsigned long address, unsigned 
 	if (end > PGDIR_SIZE)
 		end = PGDIR_SIZE;
 	do {
-		unmap_pte_range(pmd, address, end - address);
+		zap_pte_range(pmd, address, end - address);
 		address = (address + PMD_SIZE) & PMD_MASK; 
 		pmd++;
 	} while (address < end);
@@ -384,21 +365,12 @@ int zap_page_range(struct mm_struct *mm, unsigned long address, unsigned long si
 
 	dir = pgd_offset(mm, address);
 	while (address < end) {
-		unmap_pmd_range(dir, address, end - address);
+		zap_pmd_range(dir, address, end - address);
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}
 	invalidate();
 	return 0;
-}
-
-/*
- * a more complete version of free_page_tables which performs with page
- * granularity.
- */
-int unmap_page_range(unsigned long address, unsigned long size)
-{
-	return zap_page_range(current->mm, address, size);
 }
 
 static inline void zeromap_pte_range(pte_t * pte, unsigned long address, unsigned long size, pte_t zero_pte)

@@ -1197,8 +1197,5 @@ init_module(void)
 void
 cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("ppp_bsd_comp: device busy, remove delayed\n");
-	else
-		ppp_unregister_compressor (&ppp_bsd_compress);
+	ppp_unregister_compressor (&ppp_bsd_compress);
 }

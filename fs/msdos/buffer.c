@@ -1,6 +1,8 @@
-#ifdef MODULE
-#include <linux/module.h>
-#endif
+/*
+ * linux/fs/msdos/buffer.c
+ *
+ *
+ */
 
 #include <linux/mm.h>
 #include <linux/malloc.h>

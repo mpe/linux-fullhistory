@@ -40,10 +40,7 @@
       active adapter is identified.
 */
 	
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #define NO_AUTODETECT 1
 #undef NO_AUTODETECT
@@ -563,9 +560,7 @@ static int tok_open(struct device *dev) {
       /*  NEED to see smem size *AND* reset high 512 bytes if
           needed */
 
-#ifdef MODULE
-	MOD_INC_USE_COUNT;
-#endif
+      MOD_INC_USE_COUNT;
 
       return 0;
    }
@@ -589,11 +584,9 @@ static int tok_close(struct device *dev) {
 
 	if(close_adapter->ret_code)
 		DPRINTK("close adapter failed: %02X\n",close_adapter->ret_code);
-
-#ifdef MODULE
-	MOD_DEC_USE_COUNT;
-#endif
 	
+	MOD_DEC_USE_COUNT;
+
 	return 0;
 }
 
@@ -1294,7 +1287,6 @@ static struct enet_statistics * tok_get_stats(struct device *dev) {
 }
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static char devicename[9] = { 0, };
 static struct device dev_ibmtr = {
 	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
@@ -1302,7 +1294,7 @@ static struct device dev_ibmtr = {
 	0, 0,
 	0, 0, 0, NULL, tok_probe };
 
-int io = 0xa20;
+static int io = 0xa20;
 
 int init_module(void)
 {
@@ -1320,16 +1312,11 @@ int init_module(void)
 void
 cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("ibmtr: device busy, remove delayed\n");
-	else
-	{
-		unregister_netdev(&dev_ibmtr);
+	unregister_netdev(&dev_ibmtr);
 
-		/* If we don't do this, we can't re-insmod it later. */
-		free_irq(dev_ibmtr.irq);
-		irq2dev_map[dev_ibmtr.irq] = NULL;
-		release_region(dev_ibmtr.base_addr, TR_IO_EXTENT);
-	}
+	/* If we don't do this, we can't re-insmod it later. */
+	free_irq(dev_ibmtr.irq);
+	irq2dev_map[dev_ibmtr.irq] = NULL;
+	release_region(dev_ibmtr.base_addr, TR_IO_EXTENT);
 }
 #endif /* MODULE */

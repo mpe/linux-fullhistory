@@ -34,13 +34,8 @@ __inline__ void virtual_dma_init(void)
 	/* Nothing to do on an Alpha */
 }
 
-#ifdef MODULE
-int FDC1 = 0x3f0;
-int FDC2 = -1;
-#else
-#define FDC1 0x3f0
+static int FDC1 = 0x3f0;
 static int FDC2 = -1;
-#endif
 
 /*
  * Again, the CMOS information doesn't work on the alpha..

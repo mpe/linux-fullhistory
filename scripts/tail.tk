@@ -18,23 +18,31 @@ if { [file readable .config] == 1} then {
 		if { [lindex $argv 0] != "-D" } then {
 			read_config .config
 		}
+		else
+		{
+			read_config $defaults
+		}
 	} else {
 		read_config .config
 	}
+} else {
+	read_config $defaults
 }
+
+update_mainmenu .f0
 
 button .f0r_bot.save -text "Write Configuration" -width 25 -command {
 	writeconfig .config include/linux/autoconf.h; wrapup .wrap }
 
-button .f0r_bot.quit -text "Quit" -command { exit } -width 25 \
+button .f0r_bot.quit -text "Quit" -command { maybe_exit .maybe } -width 25 \
 	-activebackground red -activeforeground white
 
 button .f0l_bot.store -text "Store Configuration to file" -width 25 -command {
-	load_configfile .load "Store Configuration" write_config_file
+	load_configfile .load "Save Configuration in file" write_config_file
 }
 
 button .f0l_bot.load -text "Load Configuration" -width 25 -command {
-	load_configfile .load "Load Configuration" read_config_file
+	load_configfile .load "Load Configuration from file" read_config_file
 }
 
 pack  .f0r_bot.save .f0r_bot.quit -padx 25 -ipadx 10 -ipady 2 -anchor w

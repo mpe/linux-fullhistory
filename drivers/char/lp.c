@@ -9,13 +9,7 @@
  * Statistics and support for slow printers by Rob Janssen, rob@knoware.nl
  */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <linux/errno.h>
 #include <linux/kernel.h>
@@ -556,9 +550,9 @@ static int lp_probe(int offset)
 }
 
 #ifdef MODULE
-char kernel_version[]=UTS_RELEASE;
-int io[] = {0, 0, 0};
-int irq[] = {0, 0, 0};
+static int io[] = {0, 0, 0};
+static int irq[] = {0, 0, 0};
+
 #define lp_init init_module
 #endif
 

@@ -499,9 +499,7 @@ static int hp100_open( struct device *dev )
     }
   irq2dev_map[ dev -> irq ] = dev;
 
-#ifdef MODULE
   MOD_INC_USE_COUNT;
-#endif
   
   dev -> tbusy = 0;
   dev -> trans_start = jiffies;
@@ -569,9 +567,7 @@ static int hp100_close( struct device *dev )
 
   free_irq( dev -> irq );
   irq2dev_map[ dev -> irq ] = NULL;
-#ifdef MODULE
   MOD_DEC_USE_COUNT;
-#endif
   return 0;
 }
 

@@ -14,11 +14,8 @@
   Last modified: Sat Nov  4 22:23:54 1995 by root@kai.makisara.fi
   Some small formal changes - aeb, 950809
 */
-#ifdef MODULE
-#include <linux/autoconf.h>
+
 #include <linux/module.h>
-#include <linux/version.h>
-#endif /* MODULE */
 
 #include <linux/fs.h>
 #include <linux/kernel.h>
@@ -2241,7 +2238,6 @@ static void st_detach(Scsi_Device * SDp)
 
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 
 int init_module(void) {
   st_template.usage_count = &mod_use_count_;
@@ -2252,10 +2248,6 @@ void cleanup_module( void)
 {
   int i;
 
-  if (MOD_IN_USE) {
-    printk(KERN_INFO __FILE__ ": module is in use, remove rejected\n");
-    return;
-  }
   scsi_unregister_module(MODULE_SCSI_DEV, &st_template);
   unregister_chrdev(SCSI_TAPE_MAJOR, "st");
   st_registered--;

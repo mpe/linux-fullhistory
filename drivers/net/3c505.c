@@ -33,10 +33,7 @@
  *                     
  */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -924,9 +921,7 @@ elp_open (struct device *dev)
 	if (elp_debug >= 3)
 		printk("%s: start receive command sent\n", dev->name);
 
-#ifdef MODULE
 	MOD_INC_USE_COUNT;
-#endif
 
 	return 0;			/* Always succeed */
 }
@@ -1157,9 +1152,7 @@ elp_close (struct device *dev)
 	 */
 	irq2dev_map[dev->irq] = 0;
 
-#ifdef MODULE
 	MOD_DEC_USE_COUNT;
-#endif
 
 	return 0;
 }
@@ -1462,7 +1455,6 @@ elplus_probe (struct device *dev)
 	return 0;
 }
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static char devicename[9] = { 0, };
 static struct device dev_3c505 = {
 	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
@@ -1470,8 +1462,8 @@ static struct device dev_3c505 = {
 	0, 0,
 	0, 0, 0, NULL, elplus_probe };
 
-int io = 0x300;
-int irq = 0;
+static int io = 0x300;
+static int irq = 0;
 
 int init_module(void)
 {
@@ -1489,16 +1481,11 @@ int init_module(void)
 void
 cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("3c505: device busy, remove delayed\n");
-	else
-	{
-		unregister_netdev(&dev_3c505);
-		kfree(dev_3c505.priv);
-		dev_3c505.priv = NULL;
+	unregister_netdev(&dev_3c505);
+	kfree(dev_3c505.priv);
+	dev_3c505.priv = NULL;
 
-		/* If we don't do this, we can't re-insmod it later. */
-		release_region(dev_3c505.base_addr, ELP_IO_EXTENT);
-	}
+	/* If we don't do this, we can't re-insmod it later. */
+	release_region(dev_3c505.base_addr, ELP_IO_EXTENT);
 }
 #endif /* MODULE */

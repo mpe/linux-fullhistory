@@ -267,10 +267,7 @@ struct task_struct {
 /* utime */	0,0,0,0,0, \
 /* flt */	0,0,0,0,0,0, \
 /* swp */	0,0,0,0,0, \
-/* rlimits */   { {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX},  \
-		  {LONG_MAX, LONG_MAX}, {_STK_LIM, _STK_LIM},  \
-		  {       0, LONG_MAX}, {LONG_MAX, LONG_MAX}, \
-		  {MAX_TASKS_PER_USER, MAX_TASKS_PER_USER}, {NR_OPEN, NR_OPEN}}, \
+/* rlimits */   INIT_RLIMITS, \
 /* math */	0, \
 /* comm */	"swapper", \
 /* fs info */	0,NULL, \

@@ -5,19 +5,17 @@
  *
  *  Extended MS-DOS directory handling functions
  */
-#ifdef MODULE
-#include <linux/module.h>
-#endif
 
 #include <linux/types.h>
 #include <linux/fcntl.h>
 #include <linux/kernel.h>
-#include <asm/segment.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/msdos_fs.h>
 #include <linux/umsdos_fs.h>
+
+#include <asm/segment.h>
 
 #define PRINTK(x)
 #define Printk(x) printk x

@@ -6,17 +6,13 @@
  *  MS-DOS directory handling functions
  */
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
-#include <asm/segment.h>
-
 #include <linux/fs.h>
 #include <linux/msdos_fs.h>
 #include <linux/errno.h>
 #include <linux/stat.h>
 #include <linux/string.h>
+
+#include <asm/segment.h>
 
 #include "msbuffer.h"
 

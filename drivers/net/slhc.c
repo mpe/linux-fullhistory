@@ -53,10 +53,7 @@
 #include <linux/config.h>
 #ifdef CONFIG_INET
 /* Entire module is for IP only */
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #include <linux/types.h>
 #include <linux/sched.h>
@@ -158,9 +155,7 @@ slhc_init(int rslots, int tslots)
 		ts[0].next = &(ts[comp->tslot_limit]);
 		ts[0].cs_this = 0;
 	}
-#ifdef MODULE
 	MOD_INC_USE_COUNT;
-#endif
 	return comp;
 }
 
@@ -178,9 +173,7 @@ slhc_free(struct slcompress *comp)
 	if ( comp->tstate != NULLSLSTATE )
 		kfree( comp->tstate );
 
-#ifdef MODULE
 	MOD_DEC_USE_COUNT;
-#endif
 	kfree( comp );
 }
 
@@ -735,7 +728,6 @@ void slhc_o_status(struct slcompress *comp)
 }
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 
 int init_module(void)
 {
@@ -745,9 +737,6 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	if (MOD_IN_USE)  {
-		printk("CSLIP: module in use, remove delayed");
-	}
 	return;
 }
 #endif /* MODULE */

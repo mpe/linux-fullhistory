@@ -107,19 +107,7 @@
  */
 
 
-#include <linux/config.h>
-
-#ifdef MODULE
 # include <linux/module.h>
-# include <linux/version.h>
-# ifndef CONFIG_MODVERSIONS
-	char kernel_version[]= UTS_RELEASE;
-# endif
-#define sony535_init init_module
-#else
-# define MOD_INC_USE_COUNT
-# define MOD_DEC_USE_COUNT
-#endif
 
 #include <linux/errno.h>
 #include <linux/signal.h>
@@ -209,10 +197,7 @@ static int do_sony_cmd(Byte * cmd, int nCmd, Byte status[2],
 
 /* The base I/O address of the Sony Interface.  This is a variable (not a
    #define) so it can be easily changed via some future ioctl() */
-#ifndef MODULE
-static
-#endif
-unsigned short sony535_cd_base_io = CDU535_ADDRESS;
+static unsigned int sony535_cd_base_io = CDU535_ADDRESS;
 
 /*
  * The following are I/O addresses of the various registers for the drive.  The
@@ -271,10 +256,7 @@ static Byte cur_pos_msf[3] = {0, 0, 0};
 static Byte final_pos_msf[3] = {0, 0, 0};
 
 /* What IRQ is the drive using?  0 if none. */
-#ifndef MODULE
-static
-#endif
-int sony535_irq_used = CDU535_INTERRUPT;
+static int sony535_irq_used = CDU535_INTERRUPT;
 
 /* The interrupt handler will wake this queue up when it gets an interrupt. */
 static struct wait_queue *cdu535_irq_wait = NULL;
@@ -1681,14 +1663,16 @@ sonycd535_setup(char *strings, int *ints)
 
 #else /* MODULE */
 
+int init_module(void)
+{
+	return sony535_init();
+}
+
 void
 cleanup_module(void)
 {
 	int i;
-	if (MOD_IN_USE) {
-		printk(CDU535_HANDLE " module in use, cannot remove\n");
-		return;
-	}
+
 	release_region(sony535_cd_base_io, 4);
 	for (i = 0; i < sony_buffer_sectors; i++)
 		kfree_s(sony_buffer[i], 2048);

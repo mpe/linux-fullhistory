@@ -31,12 +31,7 @@
  *
  */
 
-#include <linux/config.h>
-
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #include <linux/types.h>
 #include <linux/string.h>
@@ -48,6 +43,8 @@
 #include <linux/errno.h>
 #include <linux/if_arp.h>
 #include <linux/in.h>
+#include <linux/config.h>
+
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <stdarg.h>
@@ -67,8 +64,6 @@
 #endif
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
-
-#if	defined(CONFIG_INET_RARP) || defined(MODULE)
 
 extern int (*rarp_ioctl_hook)(unsigned int,void*);
 
@@ -555,10 +550,7 @@ rarp_init(void)
 	rarp_ioctl_hook = rarp_ioctl;
 }
 
-
-#endif
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 
 int init_module(void)
 {
@@ -568,22 +560,18 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	if (MOD_IN_USE)
-	  ;
-	else {
-		struct rarp_table *rt, *rt_next;
-		proc_net_unregister(PROC_NET_RARP);
-		rarp_ioctl_hook = NULL;
-		cli();
-		/* Destroy the RARP-table */
-		rt = rarp_tables;
-		rarp_tables = NULL;
-		sti();
-		/* ... and free it. */
-		for ( ; rt != NULL; rt = rt_next) {
-			rt_next = rt->next;
-			rarp_release_entry(rt);
-		}
+	struct rarp_table *rt, *rt_next;
+	proc_net_unregister(PROC_NET_RARP);
+	rarp_ioctl_hook = NULL;
+	cli();
+	/* Destroy the RARP-table */
+	rt = rarp_tables;
+	rarp_tables = NULL;
+	sti();
+	/* ... and free it. */
+	for ( ; rt != NULL; rt = rt_next) {
+		rt_next = rt->next;
+		rarp_release_entry(rt);
 	}
 }
 

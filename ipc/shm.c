@@ -360,9 +360,9 @@ asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
  */
 
 static struct vm_operations_struct shm_vm_ops = {
-	shm_open,		/* open */
-	shm_close,		/* close */
-	NULL,			/* unmap */
+	shm_open,		/* open - callback for a new vm-area open */
+	shm_close,		/* close - callback for when the vm-area is released */
+	NULL,			/* no need to sync pages at unmap */
 	NULL,			/* protect */
 	NULL,			/* sync */
 	NULL,			/* advise */
@@ -569,8 +569,6 @@ static void shm_close (struct vm_area_struct *shmd)
 {
 	struct shmid_ds *shp;
 	int id;
-
-	unmap_page_range (shmd->vm_start, shmd->vm_end - shmd->vm_start);
 
 	/* remove from the list of attaches of the shm segment */
 	id = SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK;

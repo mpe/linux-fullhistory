@@ -9,17 +9,13 @@
  *  This software may be redistributed per Linux Copyright.
  */
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
-#include <asm/segment.h>
-
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/xia_fs.h>
 #include <linux/stat.h>
+
+#include <asm/segment.h>
 
 static int 
 xiafs_readlink(struct inode *, char *, int);

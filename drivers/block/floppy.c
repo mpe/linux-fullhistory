@@ -109,29 +109,14 @@ static int print_unex=1;
 
 #include <linux/module.h>
 
-#ifdef MODULE
-
-#define FD_MODULE
-
-int FLOPPY_IRQ=6;
-int FLOPPY_DMA=2;
-int ALLOWED_DRIVE_MASK = 0x33;
-
-#endif
-
-#ifndef FD_MODULE
 /* the following is the mask of allowed drives. By default units 2 and
  * 3 of both floppy controllers are disabled, because switching on the
  * motor of these drives causes system hangs on some PCI computers. drive
  * 0 is the low bit (0x1), and drive 7 is the high bit (0x80). Bits are on if
  * a drive is allowed. */
-static int ALLOWED_DRIVE_MASK=0x33;
-
-#define FLOPPY_IRQ 6
-#define FLOPPY_DMA 2
-#endif
-
-#define MODULE_AWARE_DRIVER
+static int FLOPPY_IRQ=6;
+static int FLOPPY_DMA=2;
+static int ALLOWED_DRIVE_MASK = 0x33;
 
 #include <linux/sched.h>
 #include <linux/fs.h>
@@ -3910,9 +3895,7 @@ static int floppy_grab_irq_and_dma(void)
 		return 0;
 	}
 	sti();
-#ifdef FD_MODULE
 	MOD_INC_USE_COUNT;
-#endif
 	for(i=0; i< N_FDC; i++){
 		if(FDCS->address != -1){
 			fdc = i;
@@ -3955,9 +3938,7 @@ static void floppy_release_irq_and_dma(void)
 		return;
 	}
 	sti();
-#ifdef FD_MODULE
 	MOD_DEC_USE_COUNT;
-#endif
 	fd_disable_dma();
 	fd_free_dma();
 	fd_disable_irq();

@@ -796,6 +796,20 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 	}
 	return sent;
 }
+
+/*
+ * Sleep until data has arrive. But check for races..
+ */
+static void unix_data_wait(unix_socket * sk)
+{
+	cli();
+	if (!skb_peek(&sk->receive_queue)) {
+		sk->socket->flags |= SO_WAITDATA;
+		interruptible_sleep_on(sk->sleep);
+		sk->socket->flags &= ~SO_WAITDATA;
+	}
+	sti();
+}
 		
 static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int noblock, int flags, int *addr_len)
 {
@@ -818,10 +832,7 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 	if(sk->err)
 		return sock_error(sk);
 	
-/*	printk("get rcv sem\n");*/
 	down(&sk->protinfo.af_unix.readsem);		/* Lock the socket */
-/*	printk("got rcv sem\n");*/
-
 	while(ct--)
 	{
 		int done=0;
@@ -831,42 +842,23 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 		
 		while(done<len)
 		{
-			if(copied & (flags&MSG_PEEK))
-			{
-				up(&sk->protinfo.af_unix.readsem);
-				return copied;
-			}
-			cli();
-			skb=skb_peek(&sk->receive_queue);
+			if (copied && (flags & MSG_PEEK))
+				goto out;
+			if (copied == size)
+				goto out;
+			skb=skb_dequeue(&sk->receive_queue);
 			if(skb==NULL)
 			{
 				up(&sk->protinfo.af_unix.readsem);
 				if(sk->shutdown & RCV_SHUTDOWN)
-				{
-					sti();
 					return copied;
-				}
 				if(copied)
-				{
-					sti();
 					return copied;
-				}
 				if(noblock)
-				{
-					sti();
 					return -EAGAIN;
-				}
-				sk->socket->flags |= SO_WAITDATA;
-				interruptible_sleep_on(sk->sleep);
-				sk->socket->flags &= ~SO_WAITDATA;
-				if( current->signal & ~current->blocked)
-				{
-					sti();
-					if(copied)
-						return copied;
+				if(current->signal & ~current->blocked)
 					return -ERESTARTSYS;
-				}
-				sti();
+				unix_data_wait(sk);
 				down(&sk->protinfo.af_unix.readsem);
 				continue;
 			}
@@ -884,29 +876,23 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 						*addr_len=sizeof(short);
 			}
 			num=min(skb->len,size-copied);
+			memcpy_tofs(sp, skb->data, num);
 			copied+=num;
 			done+=num;
-			if(flags&MSG_PEEK)
-			{
-				memcpy_tofs(sp, skb->data, num);
-				break;
+			sp+=num;
+			if (!(flags & MSG_PEEK))
+				skb_pull(skb, num);
+			/* put the skb back if we didn't use it up.. */
+			if (skb->len) {
+				skb_queue_head(&sk->receive_queue, skb);
+				continue;
 			}
-			else
-			{
-				memcpy_tofs(sp, skb->data,num);
-				skb_pull(skb,num);
-				sp+=num;
-				if(skb->len==0)
-				{
-					skb_unlink(skb);
-					kfree_skb(skb, FREE_WRITE);
-					if(sock->type==SOCK_DGRAM)
-						break;
-				}
-			}
-			sti();
-		}	
-	}	
+			kfree_skb(skb, FREE_WRITE);
+			if(sock->type==SOCK_DGRAM)
+				goto out;
+		}
+	}
+out:
 	up(&sk->protinfo.af_unix.readsem);
 	return copied;
 }

@@ -19,28 +19,26 @@
  *
  */
  
+#include <linux/module.h>
+
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
 #include <linux/in.h>
+#include <linux/tcp.h>
+#include <linux/udp.h>
+#include <linux/firewall.h>
+#include <linux/config.h>	/* For CONFIG_FIREWALL */
+
 #include <net/datalink.h>
 #include <net/sock.h>
 #include <net/ip.h>
 #include <net/icmp.h>
-#include <linux/tcp.h>
-#include <linux/udp.h>
 #include <net/protocol.h>
 #include <net/ipip.h>
-#include <linux/firewall.h>
-
-#include <linux/config.h>
-
-#include <linux/module.h>
-
-#if ( defined(CONFIG_NET_IPIP) && defined(CONFIG_IP_FORWARD)) || defined(MODULE)
-
 
 /*
  *	The IPIP protocol driver.
@@ -114,6 +112,7 @@ int ipip_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 }
 
 #ifdef MODULE
+
 static struct inet_protocol ipip_protocol = {
   ipip_rcv,             /* IPIP handler          */
   NULL,                 /* Will be UDP fraglist handler */
@@ -142,5 +141,4 @@ void cleanup_module( void)
 		printk("ipip close: can't remove protocol\n");
 }
 
-#endif
 #endif

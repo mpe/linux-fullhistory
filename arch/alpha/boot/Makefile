@@ -22,20 +22,28 @@ endif
 	$(CC) -D__ASSEMBLY__ -traditional -c -o $*.o $<
 
 OBJECTS = head.o main.o
-TARGETS = tools/lxboot tools/bootlx vmlinux vmlinux.gz
+TARGETS = vmlinux.gz
 
 all:	$(TARGETS)
 	@echo Ready to install kernel in $(shell pwd)/vmlinux.gz
 
-msb:	tools/lxboot tools/bootlx vmlinux
-	( cat tools/lxboot tools/bootlx vmlinux ) > /dev/rz0a
+# normally no need to build these:
+rawboot: vmlinux.nh tools/lxboot tools/bootlx vmlinux
+
+msb:	tools/lxboot tools/bootlx vmlinux.nh
+	( cat tools/lxboot tools/bootlx vmlinux.nh ) > /dev/rz0a
 	disklabel -rw rz0 'linux' tools/lxboot tools/bootlx
 
 vmlinux.gz: vmlinux
 	gzip -fv vmlinux
 
-vmlinux: tools/build $(TOPDIR)/vmlinux
-#	tools/build -v $(TOPDIR)/vmlinux > vmlinux
+#
+# A raw binary without header.  Used by raw boot.
+#
+vmlinux.nh: tools/build
+	tools/build -v $(TOPDIR)/vmlinux > vmlinux.nh
+
+vmlinux: $(TOPDIR)/vmlinux
 	cp $(TOPDIR)/vmlinux vmlinux
 	quickstrip vmlinux
 

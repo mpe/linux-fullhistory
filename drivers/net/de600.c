@@ -90,10 +90,7 @@ static const char *version =
 #endif
 unsigned int de600_debug = DE600_DEBUG;
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -345,9 +342,7 @@ de600_open(struct device *dev)
 	}
 	irq2dev_map[DE600_IRQ] = dev;
 
-#ifdef MODULE
 	MOD_INC_USE_COUNT;
-#endif
 	dev->start = 1;
 	if (adapter_init(dev)) {
 		return 1;
@@ -373,9 +368,7 @@ de600_close(struct device *dev)
 		free_irq(DE600_IRQ);
 		irq2dev_map[DE600_IRQ] = NULL;
 		dev->start = 0;
-#ifdef MODULE
 		MOD_DEC_USE_COUNT;
-#endif
 	}
 	return 0;
 }
@@ -832,7 +825,6 @@ de600_rspace(struct sock *sk)
 #endif
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static char nullname[8];
 static struct device de600_dev = {
 	nullname, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, de600_probe };

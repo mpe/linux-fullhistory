@@ -14,13 +14,6 @@
  *  nfs regular file handling functions
  */
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
-#include <asm/segment.h>
-#include <asm/system.h>
-
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
@@ -29,6 +22,9 @@
 #include <linux/mm.h>
 #include <linux/nfs_fs.h>
 #include <linux/malloc.h>
+
+#include <asm/segment.h>
+#include <asm/system.h>
 
 static int nfs_file_read(struct inode *, struct file *, char *, int);
 static int nfs_file_write(struct inode *, struct file *, const char *, int);

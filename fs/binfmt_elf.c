@@ -9,13 +9,7 @@
  * Copyright 1993, 1994: Eric Youngdale (ericy@cais.com).
  */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <linux/fs.h>
 #include <linux/stat.h>
@@ -1229,23 +1223,17 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 }
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 
 int init_module(void) {
 	/* Install the COFF, ELF and XOUT loaders.
 	 * N.B. We *rely* on the table being the right size with the
 	 * right number of free slots...
 	 */
-	register_binfmt(&elf_format);
-	return 0;
+	return register_binfmt(&elf_format);
 }
 
 
 void cleanup_module( void) {
-	
-	if (MOD_IN_USE)
-		printk(KERN_INFO "iBCS: module is in use, remove delayed\n");
-
 	/* Remove the COFF and ELF loaders. */
 	unregister_binfmt(&elf_format);
 }

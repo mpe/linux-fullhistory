@@ -51,10 +51,7 @@
 
 #define SL_CHECK_TRANSMIT
 #include <linux/config.h>
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 /* Undef this, if you don't need 6bit encapsulation code in the driver */
 #define CONFIG_SLIP_MODE_SLIP6
@@ -761,9 +758,7 @@ slip_open(struct tty_struct *tty)
 		return err;
 	}
 	
-#ifdef MODULE
 	MOD_INC_USE_COUNT;
-#endif
 
 	/* Done.  We have linked the TTY line to a channel. */
 	return sl->dev->base_addr;
@@ -792,9 +787,7 @@ slip_close(struct tty_struct *tty)
 	sl->tty = NULL;
 	sl_free(sl);
 	unregister_netdev(sl->dev);
-#ifdef MODULE
 	MOD_DEC_USE_COUNT;
-#endif
 }
 
 
@@ -1235,7 +1228,6 @@ slip_init(struct device *dev)
 	return 0;
 }
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 
 int
 init_module(void)
@@ -1248,10 +1240,6 @@ cleanup_module(void)
 {
 	int i;
 
-	if (MOD_IN_USE)  {
-		printk("SLIP: device busy, remove delayed\n");
-		return;
-	}
 	if (slip_ctrls != NULL) {
 	  for (i = 0; i < slip_maxdev; i++)  {
 	    if (slip_ctrls[i] != NULL) {

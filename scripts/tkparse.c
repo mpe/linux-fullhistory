@@ -18,6 +18,7 @@
  *
  * This file contains the code to do the first parse of config.in.
  */
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include "tkparse.h"
@@ -29,6 +30,10 @@ static int lineno = 0;
 static int menus_seen = 0;
 static char * current_file = NULL;
 static int do_source(char * filename);
+static char * get_string(char *pnt, char ** labl);
+static int choose_number = 0;
+
+
 /*
  * Simple function just to skip over spaces and tabs in config.in.
  */
@@ -93,6 +98,13 @@ static struct condition * parse_if(char * pnt)
 	continue;
       }
 
+    if( *pnt == '-' && pnt[1] == 'o' )
+      {
+	cpnt->op = op_or;
+	pnt += 2;
+	continue;
+      }
+
     if( *pnt == '!' && pnt[1] == '=' )
       {
 	cpnt->op = op_neq;
@@ -116,6 +128,18 @@ static struct condition * parse_if(char * pnt)
 
     if( *pnt != '"' ) goto error;  /* This cannot be right. */
     pnt++;
+    if( *pnt == '`' )
+      {
+	cpnt->op = op_shellcmd;
+	pnt1 = varname;
+	pnt++;
+	while(*pnt && *pnt != '`') *pnt1++ = *pnt++;
+	*pnt1++ = '\0';
+	cpnt->variable = strdup(varname);
+	if( *pnt == '`' ) pnt++;
+	if( *pnt == '"' ) pnt++;
+	continue;
+      }
     if( *pnt == '$' )
       {
 	cpnt->op = op_variable;
@@ -141,9 +165,11 @@ static struct condition * parse_if(char * pnt)
 
  error:
   if(current_file != NULL) 
-    printf("Bad if clause at line %d(%s):%s\n", lineno, current_file, opnt);
+    fprintf(stderr, 
+	    "Bad if clause at line %d(%s):%s\n", lineno, current_file, opnt);
   else
-    printf("Bad if clause at line %d:%s\n", lineno, opnt);
+    fprintf(stderr,
+	    "Bad if clause at line %d:%s\n", lineno, opnt);
   return NULL;
 }
 
@@ -190,6 +216,44 @@ static char * get_qstring(char *pnt, char ** labl)
   return pnt;
 }
 
+static char * parse_choices(struct kconfig * choice_kcfg, char * pnt)
+{
+  struct kconfig * kcfg;
+  int index = 1;
+
+  /*
+   * Choices appear in pairs of strings.  The parse is fairly trivial.
+   */
+  while(1)
+    {
+      pnt = skip_whitespace(pnt);
+      if(*pnt == '\0') break;
+
+      kcfg = (struct kconfig *) malloc(sizeof(struct kconfig));
+      memset(kcfg, 0, sizeof(struct kconfig));
+      kcfg->tok = tok_choice;
+      if( clast != NULL )
+	{
+	  clast->next = kcfg;
+	  clast = kcfg;
+	}
+      else
+	{
+	  clast = config = kcfg;
+	}
+
+      pnt = get_string(pnt, &kcfg->label);
+      pnt = skip_whitespace(pnt);
+      pnt = get_string(pnt, &kcfg->optionname);
+      kcfg->choice_label = choice_kcfg;
+      kcfg->choice_value = index++;
+      if( strcmp(kcfg->label, choice_kcfg->value) == 0 )
+	choice_kcfg->choice_value = kcfg->choice_value;
+    }
+
+}
+
+
 /*
  * This function grabs one text token from the input buffer
  * and returns a pointer to a copy of just the identifier.
@@ -229,6 +293,8 @@ static char * get_string(char *pnt, char ** labl)
 int parse(char * pnt) {
   enum token tok;
   struct kconfig * kcfg;
+  char tmpbuf[24];
+
   /*
    * Ignore comments and leading whitespace.
    */
@@ -260,10 +326,25 @@ int parse(char * pnt) {
       tok = tok_menuoption;
       pnt += 15;
     }
+  else if      (strncmp(pnt, "$MAKE -C drivers/sound", 22) == 0) 
+    {
+      pnt += 22;
+      tok = tok_sound;
+    }
   else if (strncmp(pnt, "comment", 7) == 0) 
     {
       tok = tok_comment;
       pnt += 7;
+    }
+  else if (strncmp(pnt, "choice", 6) == 0) 
+    {
+      tok = tok_choose;
+      pnt += 6;
+    }
+  else if (strncmp(pnt, "define_bool", 11) == 0) 
+    {
+      tok = tok_define;
+      pnt += 11;
     }
   else if (strncmp(pnt, "bool", 4) == 0) 
     {
@@ -303,7 +384,13 @@ int parse(char * pnt) {
 
   if( tok == tok_unknown)
     {
-      printf("unknown command=%s\n", pnt);
+      if( clast != NULL && clast->tok == tok_if 
+	  && strcmp(pnt,"then") == 0) return 0;
+      if( current_file != NULL )
+	fprintf(stderr, "unknown command=%s(%s %d)\n", pnt,
+		current_file, lineno);
+      else
+	fprintf(stderr, "unknown command=%s(%d)\n", pnt,lineno);
       return 1;
     }
 
@@ -332,6 +419,25 @@ int parse(char * pnt) {
    */
   switch (tok)
     {
+    case tok_choose:
+      pnt = get_qstring(pnt, &kcfg->label);
+      pnt = get_qstring(pnt, &kcfg->optionname);
+      pnt = get_string(pnt, &kcfg->value);
+      /*
+       * Now we need to break apart the individual options into their
+       * own configuration structures.
+       */
+      parse_choices(kcfg, kcfg->optionname);
+      free(kcfg->optionname);
+      sprintf(tmpbuf, "tmpvar_%d", choose_number++);
+      kcfg->optionname = strdup(tmpbuf);
+      break;
+    case tok_define:
+      pnt = get_string(pnt, &kcfg->optionname);
+      if(*pnt == 'y' || *pnt == 'Y' ) kcfg->value = "1";
+      if(*pnt == 'n' || *pnt == 'N' ) kcfg->value = "0";
+      if(*pnt == 'm' || *pnt == 'M' ) kcfg->value = "2";
+      break;
     case tok_menuname:
       pnt = get_qstring(pnt, &kcfg->label);
       break;
@@ -340,12 +446,10 @@ int parse(char * pnt) {
     case tok_int:
       pnt = get_qstring(pnt, &kcfg->label);
       pnt = get_string(pnt, &kcfg->optionname);
-      pnt = get_string(pnt, &kcfg->dflt);
       break;
     case tok_dep_tristate:
       pnt = get_qstring(pnt, &kcfg->label);
       pnt = get_string(pnt, &kcfg->optionname);
-      pnt = get_string(pnt, &kcfg->dflt);
       pnt = skip_whitespace(pnt);
       if( *pnt == '$') pnt++;
       pnt = get_string(pnt, &kcfg->depend.str);
@@ -371,6 +475,7 @@ int parse(char * pnt) {
       break;
     case tok_else:
     case tok_fi:
+    case tok_sound:
       break;
     case tok_if:
       /*
@@ -432,55 +537,78 @@ dump_if(struct condition * cond)
 static int do_source(char * filename)
 {
   char buffer[1024];
+  int  offset;
   int old_lineno;
+  char * old_file;
   char * pnt;
   FILE * infile;
 
-  infile = fopen(filename,"r");
+  if( strcmp(filename, "-") == 0 )
+    infile = stdin;
+  else
+    infile = fopen(filename,"r");
+
+  /*
+   * If our cwd was in the scripts directory, we might have to go up one
+   * to find the sourced file.
+   */
+  if(!infile) {
+    strcpy (buffer, "../");
+    strcat (buffer, filename);
+    infile = fopen(buffer,"r");
+  }
+
   if(!infile) {
     fprintf(stderr,"Unable to open file %s\n", filename);
     return 1;
   }
   old_lineno = lineno;
   lineno = 0;
-  current_file = filename;
-  while (fgets(buffer, sizeof(buffer), infile))
+  if( infile != stdin ) {
+    old_file = current_file;
+    current_file = filename;
+  }
+  offset = 0;
+  while(1)
     {
+      fgets(&buffer[offset], sizeof(buffer) - offset, infile);
+      if(feof(infile)) break;
+
       /*
        * Strip the trailing return character.
        */
       pnt = buffer + strlen(buffer) - 1;
-      if( *pnt == '\n') *pnt = 0;
+      if( *pnt == '\n') *pnt-- = 0;
       lineno++;
-      parse(buffer);
+      if( *pnt == '\\' )
+	{
+	  offset = pnt - buffer;
+	}
+      else
+	{
+	  parse(buffer);
+	  offset = 0;
+	}
     }
   fclose(infile);
-  current_file = NULL;
+  if( infile != stdin ) {
+    current_file = old_file;
+  }
   lineno = old_lineno;
   return 0;
 }
 
 main(int argc, char * argv[])
 {
+  char buffer[1024];
   char * pnt;
   struct kconfig * cfg;
-  char buffer[1024];
   int    i;
 
   /*
-   * Loop over every input line, and parse it into the tables.
+   * Read stdin to get the top level script.
    */
-  while(fgets(buffer, sizeof(buffer), stdin))
-    {
-      /*
-       * Strip the trailing return character.
-       */
-      pnt = buffer + strlen(buffer) - 1;
-      if( *pnt == '\n') *pnt = 0;
-      lineno++;
-      parse(buffer);
-    }
-
+  do_source("-");
 
   if( menus_seen == 0 )
     {
@@ -558,7 +686,7 @@ main(int argc, char * argv[])
 	case tok_tristate:
 	case tok_dep_tristate:
 	case tok_int:
-	  printf("%s %s %s\n", cfg->label, cfg->optionname, cfg->dflt);
+	  printf("%s %s\n", cfg->label, cfg->optionname);
 	  break;
 	case tok_if:
 	  dump_if(cfg->cond);

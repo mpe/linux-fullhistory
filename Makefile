@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 38
+SUBLEVEL = 39
 
 ARCH = i386
 
@@ -224,12 +224,12 @@ net: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=net
 
 ifdef CONFIG_MODVERSIONS
-MODV = -DCONFIG_MODVERSIONS
+MODV = -DMODVERSIONS
 endif
 
 modules: include/linux/version.h
 	@set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i CFLAGS="$(CFLAGS) -DMODULE $(MODV)" modules; done
-	
+
 modules_install:
 	@( \
 	MODLIB=/lib/modules/$(VERSION).$(PATCHLEVEL).$(SUBLEVEL); \

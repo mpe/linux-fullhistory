@@ -9,13 +9,7 @@
  *  This software may be redistributed per Linux Copyright.
  */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <linux/sched.h>
 #include <linux/xia_fs.h>
@@ -521,16 +515,13 @@ int xiafs_sync_inode (struct inode *inode)
 
 /* Every kernel module contains stuff like this. */
 
-char kernel_version[] = UTS_RELEASE;
-
 static struct file_system_type xiafs_fs_type = {
 	xiafs_read_super, "xiafs", 1, NULL
 };
 
 int init_module(void)
 {
-	register_filesystem(&xiafs_fs_type);
-	return 0;
+	return register_filesystem(&xiafs_fs_type);
 }
 
 void cleanup_module(void)

@@ -83,14 +83,7 @@ static const char *version =
   The 3c501 board.
   */
 
-#include <linux/config.h>
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -102,6 +95,7 @@ static const char *version =
 #include <linux/string.h>
 #include <linux/ioport.h>
 #include <linux/errno.h>
+#include <linux/config.h>	/* for CONFIG_IP_MULTICAST */
 
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -677,7 +671,6 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
     }
 }
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static char devicename[9] = { 0, };
 static struct device dev_3c501 = {
 	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
@@ -685,8 +678,8 @@ static struct device dev_3c501 = {
 	0x280, 5,
 	0, 0, 0, NULL, el1_probe };
 
-int io=0x280;
-int irq=5;
+static int io=0x280;
+static int irq=5;
 	
 int
 init_module(void)

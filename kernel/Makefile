@@ -14,19 +14,9 @@ O_TARGET := kernel.o
 O_OBJS    = sched.o dma.o fork.o exec_domain.o panic.o printk.o sys.o \
 	module.o exit.o signal.o itimer.o info.o time.o softirq.o \
 	resource.o
-
-SYMTAB_OBJS = ksyms.o
-O_OBJS     += $(SYMTAB_OBJS)
-
-ifdef CONFIG_MODVERSIONS
-$(O_TARGET): $(SYMTAB_OBJS:.o=.ver)
-dep: $(SYMTAB_OBJS:.o=.ver)
-fastdep: $(SYMTAB_OBJS:.o=.ver)
-endif
+OX_OBJS = ksyms.o
 
 include $(TOPDIR)/Rules.make
-
-include ../versions.mk
 
 sched.o: sched.c
 	$(CC) $(CFLAGS) $(PROFILING) -fno-omit-frame-pointer -c $<

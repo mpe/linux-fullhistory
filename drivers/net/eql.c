@@ -291,9 +291,7 @@ eql_open(struct device *dev)
 	eql->timer_on = 1;
 	add_timer (&eql->timer);
 
-#ifdef MODULE
 	MOD_INC_USE_COUNT;
-#endif
 	return 0;
       }
   return 1;
@@ -318,9 +316,7 @@ eql_close(struct device *dev)
 
   eql_delete_slave_queue (eql->queue);
 
-#ifdef MODULE
   MOD_DEC_USE_COUNT;
-#endif
 
   return 0;
 }
@@ -1203,12 +1199,7 @@ int init_module(void)
 void
 cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("eql: device busy, remove delayed\n");
-	else
-	{
-		unregister_netdev(&dev_eql);
-	}
+	unregister_netdev(&dev_eql);
 }
 #endif /* MODULE */
 

@@ -91,7 +91,7 @@ static const char *version =
 #define PI2_MODULE 0
 
 #if PI2_MODULE > 0
-#include <linux/modules.h>
+#include <linux/module.h>
 #endif
 
 #include <linux/kernel.h>

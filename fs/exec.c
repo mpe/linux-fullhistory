@@ -853,10 +853,19 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	current->suid = current->euid = current->fsuid = bprm->e_uid;
 	current->sgid = current->egid = current->fsgid = bprm->e_gid;
 	if (N_MAGIC(ex) == OMAGIC) {
+#ifdef __alpha__
+		do_mmap(NULL, N_TXTADDR(ex) & PAGE_MASK,
+			ex.a_text+ex.a_data + PAGE_SIZE - 1,
+			PROT_READ|PROT_WRITE|PROT_EXEC,
+			MAP_FIXED|MAP_PRIVATE, 0);
+		read_exec(bprm->inode, fd_offset, (char *) N_TXTADDR(ex),
+			  ex.a_text+ex.a_data, 0);
+#else
 		do_mmap(NULL, 0, ex.a_text+ex.a_data,
 			PROT_READ|PROT_WRITE|PROT_EXEC,
 			MAP_FIXED|MAP_PRIVATE, 0);
 		read_exec(bprm->inode, 32, (char *) 0, ex.a_text+ex.a_data, 0);
+#endif
 	} else {
 		if (ex.a_text & 0xfff || ex.a_data & 0xfff)
 			printk(KERN_NOTICE "executable not page aligned\n");

@@ -7,21 +7,25 @@
 #ifndef _LINUX_MODULE_H
 #define _LINUX_MODULE_H
 
-#ifdef MODVERSIONS
-# ifndef __GENKSYMS__
+#ifdef __GENKSYMS__
+#  define _set_ver(sym,vers) sym
+#  define MODVERSIONS
+#else /* ! __GENKSYMS__ */
+# ifdef MODVERSIONS
+#  undef CONFIG_MODVERSIONS /* the *.ver files need this... */
+#  define CONFIG_MODVERSIONS /* the *.ver files need this... */
 #  ifdef MODULE
 #   define _set_ver(sym,vers) sym ## _R ## vers
 #   include <linux/modversions.h>
-#  else /* MODULE */
+#  else /* !MODULE */
 #   ifdef EXPORT_SYMTAB
 #    define _set_ver(sym,vers) sym
 #    include <linux/modversions.h>
 #   endif /* EXPORT_SYMTAB */
 #  endif /* MODULE */
-# else /* __GENKSYMS__ */
-#  define _set_ver(sym,vers) sym
-# endif /* __GENKSYMS__ */
-#endif /* MODVERSIONS */
+#  undef CONFIG_MODVERSIONS /* the *.ver files needed this... */
+# endif /* MODVERSIONS */
+#endif /* __GENKSYMS__ */
 
 /* values of module.state */
 #define MOD_UNINITIALIZED 0

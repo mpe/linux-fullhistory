@@ -21,10 +21,7 @@
 static const char *version =
 "hp-plus.c:v1.10 9/24/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #include <linux/string.h>		/* Important -- this inlines word moves. */
 #include <linux/kernel.h>
@@ -400,7 +397,6 @@ hpp_mem_block_output(struct device *dev, int count,
 }
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static char devicename[9] = { 0, };
 static struct device dev_hp = {
 	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
@@ -408,8 +404,8 @@ static struct device dev_hp = {
 	0, 0,
 	0, 0, 0, NULL, hp_plus_probe };
 
-int io = 0x200;
-int irq = 0;
+static int io = 0x200;
+static int irq = 0;
 
 int init_module(void)
 {
@@ -427,17 +423,12 @@ int init_module(void)
 void
 cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("HP-plus: device busy, remove delayed\n");
-	else
-	{
-		int ioaddr = dev_hp.base_addr - NIC_OFFSET;
+	int ioaddr = dev_hp.base_addr - NIC_OFFSET;
 
-		unregister_netdev(&dev_hp);
+	unregister_netdev(&dev_hp);
 
-		/* If we don't do this, we can't re-insmod it later. */
-		release_region(ioaddr, HP_IO_EXTENT);
-	}
+	/* If we don't do this, we can't re-insmod it later. */
+	release_region(ioaddr, HP_IO_EXTENT);
 }
 #endif /* MODULE */
 

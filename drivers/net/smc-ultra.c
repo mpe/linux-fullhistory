@@ -41,10 +41,7 @@ static const char *version =
 	"smc-ultra.c:v1.12 1/18/95 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -235,9 +232,7 @@ ultra_open(struct device *dev)
 	outb(0x01, ioaddr + 6);		/* Enable interrupts and memory. */
 	rc = ei_open(dev);
 	if (rc != 0) return rc;
-#ifdef MODULE
 	MOD_INC_USE_COUNT;
-#endif
 	return 0;
 }
 
@@ -330,15 +325,12 @@ ultra_close_card(struct device *dev)
 	/* We should someday disable shared memory and change to 8-bit mode
 	   "just in case"... */
 
-#ifdef MODULE
 	MOD_DEC_USE_COUNT;
-#endif
 
 	return 0;
 }
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static char devicename[9] = { 0, };
 static struct device dev_ultra = {
 	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
@@ -346,8 +338,8 @@ static struct device dev_ultra = {
 	0, 0,
 	0, 0, 0, NULL, ultra_probe };
 
-int io = 0x200;
-int irq = 0;
+static int io = 0x200;
+static int irq = 0;
 
 int init_module(void)
 {
@@ -365,17 +357,12 @@ int init_module(void)
 void
 cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("smc-ultra: device busy, remove delayed\n");
-	else
-	{
-		int ioaddr = dev_ultra.base_addr - ULTRA_NIC_OFFSET;
+	int ioaddr = dev_ultra.base_addr - ULTRA_NIC_OFFSET;
 
-		unregister_netdev(&dev_ultra);
+	unregister_netdev(&dev_ultra);
 
-		/* If we don't do this, we can't re-insmod it later. */
+	/* If we don't do this, we can't re-insmod it later. */
     	release_region(ioaddr, ULTRA_IO_EXTENT);
-	}
 }
 #endif /* MODULE */
 

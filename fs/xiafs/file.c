@@ -9,13 +9,6 @@
  *  This software may be redistributed per Linux Copyright.
  */
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
-#include <asm/segment.h>
-#include <asm/system.h>
-
 #include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/xia_fs.h>
@@ -24,6 +17,9 @@
 #include <linux/fcntl.h>
 #include <linux/stat.h>
 #include <linux/locks.h>
+
+#include <asm/segment.h>
+#include <asm/system.h>
 
 #include "xiafs_mac.h"
 

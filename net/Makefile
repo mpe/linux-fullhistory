@@ -32,6 +32,15 @@ SUB_DIRS += ax25
 endif
 
 L_TARGET     := network.a
-L_OBJS	     := socket.o protocols.o netlink.o $(join $(SUB_DIRS),$(SUB_DIRS:%=/%.o))
+L_OBJS	     := socket.o protocols.o $(join $(SUB_DIRS),$(SUB_DIRS:%=/%.o))
+M_OBJS	     :=
+
+ifeq ($(CONFIG_NETLINK),y)
+L_OBJS += netlink.o
+else
+  ifeq ($(CONFIG_NETLINK),m)
+    M_OBJS += netlink.o
+  endif
+endif
 
 include $(TOPDIR)/Rules.make

@@ -25,11 +25,7 @@
 
 /*****************************************************************************/
 
-#ifdef MODULE
-#include <linux/config.h>
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #include <linux/errno.h>
 #include <linux/sched.h>
@@ -45,6 +41,8 @@
 #include <linux/string.h>
 #include <linux/malloc.h>
 #include <linux/ioport.h>
+#include <linux/config.h>	/* for CONFIG_PCI */
+
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/segment.h>
@@ -508,8 +506,6 @@ static int	stl_findpcibrds(void);
 /*
  *	Use the kernel version number for modules.
  */
-char	kernel_version[] = UTS_RELEASE;
-
 int init_module()
 {
 	unsigned long	flags;

@@ -13,17 +13,13 @@
  *  SystemV/Coherent directory handling functions
  */
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
-#include <asm/segment.h>
-
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/sysv_fs.h>
 #include <linux/stat.h>
 #include <linux/string.h>
+
+#include <asm/segment.h>
 
 static int sysv_dir_read(struct inode * inode, struct file * filp, char * buf, int count)
 {

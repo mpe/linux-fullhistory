@@ -20,7 +20,7 @@
  * of submenus.  I need to fix the window titles before it would really be
  * appropriate to enable this.
  */
-/* #define PREVLAST_LIMITED_RANGE */
+#define PREVLAST_LIMITED_RANGE
 
 /*
  * This is the total number of submenus that we have.
@@ -67,12 +67,14 @@ generate_if(struct kconfig * item,
 	    int menu_num,
 	    int line_num)
 {
+  int i;
   struct condition * ocond;
+
+  ocond = cond;
 
   /*
    * First write any global declarations we need for this conditional.
    */
-  ocond = cond;
   while(cond != NULL )
     {
       switch(cond->op){
@@ -89,15 +91,16 @@ generate_if(struct kconfig * item,
       }
       cond = cond->next;
     }
-
+  
   /*
    * Now write this option.
    */
-  if( (item->flags & GLOBAL_WRITTEN) == 0)
+  if(   (item->flags & GLOBAL_WRITTEN) == 0
+     && (item->optionname != NULL) )
     {
-	printf("\tglobal %s\n", item->optionname);
+      printf("\tglobal %s\n", item->optionname);
+      item->flags |= GLOBAL_WRITTEN;
     }
-
   /*
    * Now generate the body of the conditional.
    */
@@ -116,6 +119,7 @@ generate_if(struct kconfig * item,
 	printf(" != ");
 	break;
       case op_and:
+      case op_and1:
 	printf(" && ");
 	break;
       case op_or:
@@ -133,6 +137,9 @@ generate_if(struct kconfig * item,
       case op_kvariable:
 	printf("$%s", cond->variable.cfg->optionname);
 	break;
+      case op_shellcmd:
+	printf("[exec %s]", cond->variable.str);
+	break;
       case op_constant:
 	if( strcmp(cond->variable.str, "y") == 0 )
 	  printf("1");
@@ -141,7 +148,7 @@ generate_if(struct kconfig * item,
 	else if( strcmp(cond->variable.str, "m") == 0 )
 	  printf("2");
 	else
-	  printf("'%s'", cond->variable);
+	  printf("\"%s\"", cond->variable);
 	break;
       }
       cond = cond->next;
@@ -155,6 +162,9 @@ generate_if(struct kconfig * item,
    */
   switch(item->tok)
     {
+    case tok_define:
+      printf("} then { set %s %s } \n",  item->optionname, item->value);
+      break;
     case tok_menuoption:
       printf("} then { .f0.x%d configure -state normal } else { .f0.x%d configure -state disabled }\n",
 	     menu_num, menu_num);
@@ -189,7 +199,7 @@ generate_if(struct kconfig * item,
       printf(".menu%d.x%d.y configure -state disabled;",menu_num, line_num);
       printf(".menu%d.x%d.n configure -state disabled;",menu_num, line_num);
       printf(".menu%d.x%d.l configure -state disabled;",menu_num, line_num);
-      printf("set %s [ expr $%s | 16 ];", item->optionname, item->optionname);
+      printf("set %s [expr $%s|16];", item->optionname, item->optionname);
       printf("}\n");
 #endif
       break;
@@ -229,6 +239,10 @@ generate_if(struct kconfig * item,
       printf("set %s [expr $%s|16];", item->optionname, item->optionname);
       printf("}\n");
       break;
+    case tok_choose:
+    case tok_choice:
+      fprintf(stderr,"Fixme\n");
+      exit(0);
     default:
       break;
     }
@@ -283,6 +297,7 @@ generate_if_for_outfile(struct kconfig * item,
 	printf(" != ");
 	break;
       case op_and:
+      case op_and1:
 	printf(" && ");
 	break;
       case op_or:
@@ -297,6 +312,9 @@ generate_if_for_outfile(struct kconfig * item,
       case op_variable:
 	printf("$%s", cond->variable.str);
 	break;
+      case op_shellcmd:
+	printf("[exec %s]", cond->variable.str);
+	break;
       case op_kvariable:
 	printf("$%s", cond->variable.cfg->optionname);
 	break;
@@ -308,7 +326,7 @@ generate_if_for_outfile(struct kconfig * item,
 	else if( strcmp(cond->variable.str, "m") == 0 )
 	  printf("2");
 	else
-	  printf("'%s'", cond->variable);
+	  printf("\"%s\"", cond->variable);
 	break;
       }
       cond = cond->next;
@@ -323,6 +341,9 @@ generate_if_for_outfile(struct kconfig * item,
    */
   switch(item->tok)
     {
+    case tok_define:
+      printf("} then {write_variable $cfg $autocfg %s %s $notmod }\n", item->optionname, item->value);
+      break;
     case tok_comment:
       printf("} then {write_comment $cfg $autocfg \"%s\"}\n", item->label);
       break;
@@ -336,6 +357,10 @@ generate_if_for_outfile(struct kconfig * item,
       printf("} then { write_variable $cfg $autocfg %s $%s $notmod }\n", 
 	     item->optionname, item->optionname);
       break;
+    case tok_choose:
+    case tok_choice:
+      fprintf(stderr,"Fixme\n");
+      exit(0);
     default:
       break;
     }
@@ -384,7 +409,7 @@ static end_proc(int menu_num, int first, int last)
   printf("}\n\n\n");
 
   /*
-   * Now we generate the companion procedure for the muen we just
+   * Now we generate the companion procedure for the menu we just
    * generated.  This procedure contains all of the code to
    * disable/enable widgets based upon the settings of the other
    * widgets, and will be called first when the window is mapped,
@@ -392,7 +417,27 @@ static end_proc(int menu_num, int first, int last)
    */
   printf("proc update_menu%d {w}  {\n", menu_num);
 
+  printf("\tupdate_define\n");
   clear_globalflags(config);
+  for(cfg = config;cfg != NULL; cfg = cfg->next)
+    {
+      /*
+       * Skip items not for this menu, or ones having no conditions.
+       */
+      if (cfg->menu_number != menu_num ) continue;
+      if (cfg->tok != tok_define) continue;
+      /*
+       * Clear all of the booleans that are defined in this menu.
+       */
+      if(   (cfg->flags & GLOBAL_WRITTEN) == 0
+	 && (cfg->optionname != NULL) )
+	{
+	  printf("\tglobal %s\n", cfg->optionname);
+	  cfg->flags |= GLOBAL_WRITTEN;
+	  printf("\tset %s 0\n", cfg->optionname);
+	}
+
+    }
   for(cfg = config;cfg != NULL; cfg = cfg->next)
     {
       /*
@@ -453,6 +498,9 @@ static int find_menu_size(struct kconfig *cfg,
       case tok_tristate:
       case tok_dep_tristate:
       case tok_int:
+      case tok_choose:
+      case tok_choice:
+      case tok_sound:
 	tot++;
 	break;
       default:
@@ -474,12 +522,14 @@ static int find_menu_size(struct kconfig *cfg,
  */
 dump_tk_script(struct kconfig *scfg)
 {
+  int i;
   int menu_num =0;
   int menu_max =0;
   int menu_min =0;
   int menu_line = 0;
   int menu_maxlines = 0;
   struct kconfig * cfg;
+  struct kconfig * cfg1 = NULL;
   char * menulabel;
 
   /*
@@ -510,6 +560,9 @@ dump_tk_script(struct kconfig *scfg)
 	case tok_tristate:
 	case tok_dep_tristate:
 	case tok_int:
+	case tok_choose:
+	case tok_choice:
+	case tok_sound:
 	  /*
 	   * If we have overfilled the menu, then go to the next one.
 	   */
@@ -523,6 +576,8 @@ dump_tk_script(struct kconfig *scfg)
 	  cfg->submenu_end = menu_max;
 	  cfg->menu_line = menu_line++;
 	  break;
+	case tok_define:
+	  cfg->menu_number = -1;
 	default:
 	  break;
 	};
@@ -530,10 +585,8 @@ dump_tk_script(struct kconfig *scfg)
 
   /*
    * Record this so we can set up the prev/next buttons correctly.
-   * We will be adding one more menu for sound configuration, so
-   * take this into account.
    */
-  tot_menu_num = menu_num+1;
+  tot_menu_num = menu_num;
 
   /*
    * Now start generating the actual wish script that we will use.
@@ -577,14 +630,35 @@ dump_tk_script(struct kconfig *scfg)
 	      start_proc(menulabel, cfg->menu_number, FALSE);
 	      menu_num = cfg->menu_number;
 	    }
-	  printf("\tbool $w %d %d \"%s\" %s %s\n",
+	  printf("\tbool $w %d %d \"%s\" %s\n",
 		 cfg->menu_number,
 		 cfg->menu_line,
 		 cfg->label,
-		 cfg->optionname,
-		 cfg->dflt);
+		 cfg->optionname);
 	  break;
 
+	case tok_choice:
+	  printf("\t$w.line%d.menu add radiobutton -label \"%s\" -variable %s -value %d -command \"update_menu%d .menu%d\"\n",
+		 cfg1->menu_line,
+		 cfg->label,
+		 cfg1->optionname,
+		 cfg->choice_value,
+		 cfg->menu_number, cfg->menu_number);
+	  break;
+	case tok_choose:
+	  if( cfg->menu_number != menu_num )
+	    {
+	      end_proc(menu_num, menu_min, menu_max);
+	      start_proc(menulabel, cfg->menu_number, FALSE);
+	      menu_num = cfg->menu_number;
+	    }
+	  printf("\tmenubutton $w.line%d -text \"%s\" -menu $w.line%d.menu \\\n",
+		 cfg->menu_line, cfg->label, cfg->menu_line);
+	  printf("\t	-relief raised -width 35\n");
+	  printf("\tpack $w.line%d -anchor w\n", cfg->menu_line);
+	  printf("\tmenu $w.line%d.menu\n", cfg->menu_line);
+	  cfg1 = cfg;
+	  break;
 	case tok_tristate:
 	  if( cfg->menu_number != menu_num )
 	    {
@@ -592,12 +666,11 @@ dump_tk_script(struct kconfig *scfg)
 	      start_proc(menulabel, cfg->menu_number, FALSE);
 	      menu_num = cfg->menu_number;
 	    }
-	  printf("\ttristate $w %d %d \"%s\" %s %s\n",
+	  printf("\ttristate $w %d %d \"%s\" %s\n",
 		 cfg->menu_number,
 		 cfg->menu_line,
 		 cfg->label,
-		 cfg->optionname,
-		 cfg->dflt);
+		 cfg->optionname);
 	  break;
 	case tok_dep_tristate:
 	  if( cfg->menu_number != menu_num )
@@ -606,12 +679,11 @@ dump_tk_script(struct kconfig *scfg)
 	      start_proc(menulabel, cfg->menu_number, FALSE);
 	      menu_num = cfg->menu_number;
 	    }
-	  printf("\tdep_tristate $w %d %d \"%s\" %s %s\n",
+	  printf("\tdep_tristate $w %d %d \"%s\" %s\n",
 		 cfg->menu_number,
 		 cfg->menu_line,
 		 cfg->label,
 		 cfg->optionname,
-		 cfg->dflt,
 		 cfg->depend);
 	  break;
 	case tok_int:
@@ -621,12 +693,23 @@ dump_tk_script(struct kconfig *scfg)
 	      start_proc(menulabel, cfg->menu_number, FALSE);
 	      menu_num = cfg->menu_number;
 	    }
-	  printf("\tint $w %d %d \"%s\" %s %s\n",
+	  printf("\tint $w %d %d \"%s\" %s\n",
 		 cfg->menu_number,
 		 cfg->menu_line,
 		 cfg->label,
-		 cfg->optionname,
-		 cfg->dflt);
+		 cfg->optionname);
+	  break;
+	case tok_sound:
+	  if( cfg->menu_number != menu_num )
+	    {
+	      end_proc(menu_num, menu_min, menu_max);
+	      start_proc(menulabel, cfg->menu_number, FALSE);
+	      menu_num = cfg->menu_number;
+	    }
+	  printf("\tdo_sound $w %d %d\n",
+		 cfg->menu_number,
+		 cfg->menu_line);
+	  break;
 	default:
 	  break;
 	}
@@ -638,6 +721,7 @@ dump_tk_script(struct kconfig *scfg)
    */
   end_proc(menu_num, menu_min, menu_max);
 
+#ifdef ERIC_DONT_DEF
   /*
    * Generate the code for configuring the sound driver.  Right now this
    * cannot be done from the X script, but we insert the menu anyways.
@@ -650,11 +734,11 @@ dump_tk_script(struct kconfig *scfg)
   printf("\tlabel $w.m0 -bitmap error\n");
   printf("\tmessage $w.m1 -width 400 -aspect 300 -text \"The sound drivers cannot as of yet be configured via the X-based interface\" -relief raised\n");
   printf("\tpack $w.m0 $w.m1 -side top -pady 10\n");
-
   /*
    * Close out the last menu.
    */
   end_proc(menu_num, menu_num, menu_num);
+#endif
 
   /*
    * The top level menu also needs an update function.  When we exit a
@@ -678,6 +762,26 @@ dump_tk_script(struct kconfig *scfg)
 
   printf("}\n\n\n");
 
+#if 0
+  /*
+   * Generate some code to set the variables that are "defined".
+   */
+  for(cfg = config;cfg != NULL; cfg = cfg->next)
+    {
+      /*
+       * Skip items not for this menu, or ones having no conditions.
+       */
+      if( cfg->tok != tok_define) continue;
+      if (cfg->cond != NULL ) 
+	generate_if(cfg, cfg->cond, menu_num, cfg->menu_line);
+      else
+	{
+	  printf("\twrite_define %s %s\n", cfg->optionname, cfg->value);
+	}
+
+    }
+#endif
+
   /*
    * Now generate code to load the default settings into the variables.
    * Note that the script in tail.tk will attempt to load .config,
@@ -688,18 +792,14 @@ dump_tk_script(struct kconfig *scfg)
       switch (cfg->tok)
 	{
 	case tok_int:
-	    printf("set %s %s\n", cfg->optionname, cfg->dflt);
-	    break;
 	case tok_bool:
 	case tok_tristate:
 	case tok_dep_tristate:
-	  if( strcmp(cfg->dflt, "y") == 0 )
-	    printf("set %s 1\n", cfg->optionname);
-	  else if( strcmp(cfg->dflt, "n") == 0 )
-	    printf("set %s 0\n", cfg->optionname);
-	  else if( strcmp(cfg->dflt, "m") == 0 )
-	    printf("set %s 2\n", cfg->optionname);
+	case tok_choice:
+	  printf("set %s 0\n", cfg->optionname);
 	  break;
+	case tok_choose:
+	  printf("set %s %d\n", cfg->optionname, cfg->choice_value);
 	default:
 	  break;
 	}
@@ -731,6 +831,8 @@ dump_tk_script(struct kconfig *scfg)
 	case tok_bool:
 	case tok_tristate:
 	case tok_dep_tristate:
+	case tok_define:
+	case tok_choose:
 	  if(cfg->flags & GLOBAL_WRITTEN) break;
 	  cfg->flags |= GLOBAL_WRITTEN;
 	  printf("\tglobal %s\n", cfg->optionname);
@@ -752,6 +854,25 @@ dump_tk_script(struct kconfig *scfg)
 		{
 		  printf("\twrite_comment $cfg $autocfg \"%s\"\n", cfg->label);
 		}
+#if 0
+	      else if(cfg->tok == tok_define)
+		{
+		  printf("\twrite_define %s %s\n", cfg->optionname,
+			 cfg->value);
+		}
+#endif
+	      else if (cfg->tok == tok_choose )
+		{
+		  for(cfg1 = cfg->next; 
+		      cfg1 != NULL && cfg1->tok == tok_choice;
+		      cfg1 = cfg1->next)
+		    {
+		      printf("\tif { $%s == %d } then { write_variable $cfg $autocfg %s 1 $notmod }\n",
+			     cfg->optionname,
+			     cfg1->choice_value,
+			     cfg1->optionname);
+		    }
+		}
 	      else
 		{
 		  printf("\twrite_variable $cfg $autocfg %s $%s $notmod\n",
@@ -769,6 +890,62 @@ dump_tk_script(struct kconfig *scfg)
   printf("\tclose $autocfg\n");
   printf("}\n\n\n");
 
+  /*
+   * Finally write a simple function that updates the master choice
+   * variable depending upon what values were loaded from a .config
+   * file.  
+   */
+  printf("proc clear_choices { } {\n");
+  for(cfg = scfg; cfg != NULL; cfg = cfg->next)
+    {
+      if( cfg->tok != tok_choose ) continue;
+      for(cfg1 = cfg->next; 
+	  cfg1 != NULL && cfg1->tok == tok_choice;
+	  cfg1 = cfg1->next)
+	{
+	  printf("\tglobal %s; set %s 0\n",  cfg1->optionname, cfg1->optionname);
+	}
+    }
+  printf("}\n\n\n");
+
+  printf("proc update_choices { } {\n");
+  for(cfg = scfg; cfg != NULL; cfg = cfg->next)
+    {
+      if( cfg->tok != tok_choose ) continue;
+      printf("\tglobal %s\n", cfg->optionname);
+      for(cfg1 = cfg->next; 
+	  cfg1 != NULL && cfg1->tok == tok_choice;
+	  cfg1 = cfg1->next)
+	{
+	  printf("\tglobal %s\n", cfg1->optionname);
+	  printf("\tif { $%s == 1 } then { set %s %d }\n",
+		 cfg1->optionname,
+		 cfg->optionname,
+		 cfg1->choice_value);
+	}
+    }
+  printf("}\n\n\n");
+
+  printf("proc update_define { } {\n");
+  clear_globalflags(config);
+  for(cfg = scfg; cfg != NULL; cfg = cfg->next)
+    {
+      if( cfg->tok != tok_define ) continue;
+      printf("\tglobal %s; set %s 0\n",  cfg->optionname,  cfg->optionname);
+      cfg->flags |= GLOBAL_WRITTEN;
+    }
+  for(cfg = scfg; cfg != NULL; cfg = cfg->next)
+    {
+      if( cfg->tok != tok_define ) continue;
+      if (cfg->cond != NULL ) 
+	generate_if(cfg, cfg->cond, -1, 0);
+      else
+	{
+	  printf("\tset %s %s\n",
+		 cfg->optionname, cfg->value);
+	}
+    }
+  printf("}\n\n\n");
   /*
    * That's it.  We are done.  The output of this file will have header.tk
    * prepended and tail.tk appended to create an executable wish script.

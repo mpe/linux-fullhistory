@@ -40,7 +40,6 @@ then
 	define_bool CONFIG_ALPHA_APECS y
 fi
 
-bool 'Kernel GDB support' CONFIG_KGDB
 bool 'Echo console messages on /dev/ttyS1' CONFIG_SERIAL_ECHO
 if [ "$CONFIG_PCI" = "y" ]; then
   bool 'TGA Console Support' CONFIG_TGA_CONSOLE

@@ -13,16 +13,7 @@
  *
  */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
-
-#include <asm/system.h>
-#include <asm/segment.h>
 
 #include <linux/sched.h>
 #include <linux/nfs_fs.h>
@@ -32,6 +23,9 @@
 #include <linux/stat.h>
 #include <linux/errno.h>
 #include <linux/locks.h>
+
+#include <asm/system.h>
+#include <asm/segment.h>
 
 extern int close_fp(struct file *filp);
 
@@ -298,16 +292,13 @@ int nfs_notify_change(struct inode *inode, struct iattr *attr)
 
 /* Every kernel module contains stuff like this. */
 
-char kernel_version[] = UTS_RELEASE;
-
 static struct file_system_type nfs_fs_type = {
 	nfs_read_super, "nfs", 0, NULL
 };
 
 int init_module(void)
 {
-	register_filesystem(&nfs_fs_type);
-	return 0;
+	return register_filesystem(&nfs_fs_type);
 }
 
 void cleanup_module(void)

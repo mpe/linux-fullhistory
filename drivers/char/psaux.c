@@ -31,13 +31,7 @@
 
 /* #define INITIALIZE_DEVICE */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
  
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -537,10 +531,13 @@ int psaux_init(void)
 }
 
 #ifdef MODULE
+int init_module(void)
+{
+	return psaux_init(); /*?? Bjorn */
+}
+
 void cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("psaux: in use, remove delayed\n");
 	mouse_deregister(&psaux_mouse);
 }
 #endif

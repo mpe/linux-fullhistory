@@ -6,12 +6,6 @@
  *
  *  Extended MS-DOS regular file handling primitives
  */
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
-#include <asm/segment.h>
-#include <asm/system.h>
 
 #include <linux/sched.h>
 #include <linux/fs.h>
@@ -22,8 +16,12 @@
 #include <linux/umsdos_fs.h>
 #include <linux/malloc.h>
 
+#include <asm/segment.h>
+#include <asm/system.h>
+
 #define PRINTK(x)
 #define Printk(x)	printk x
+
 /*
 	Read the data associate with the symlink.
 	Return length read in buffer or  a negative error code.

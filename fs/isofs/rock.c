@@ -5,9 +5,6 @@
  *
  *  Rock Ridge Extensions to iso9660
  */
-#ifdef MODULE
-#include <linux/module.h>
-#endif
 
 #include <linux/stat.h>
 #include <linux/sched.h>

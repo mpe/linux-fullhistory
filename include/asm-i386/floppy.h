@@ -34,13 +34,8 @@ __inline__ void virtual_dma_init(void)
 	/* Nothing to do on an i386 */
 }
 
-#ifdef MODULE
-int FDC1 = 0x3f0;
-int FDC2 = -1;
-#else
-#define FDC1 0x3f0
+static int FDC1 = 0x3f0;
 static int FDC2 = -1;
-#endif
 
 #define FLOPPY0_TYPE	((CMOS_READ(0x10) >> 4) & 15)
 #define FLOPPY1_TYPE	(CMOS_READ(0x10) & 15)

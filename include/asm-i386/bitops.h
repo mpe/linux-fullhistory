@@ -24,6 +24,7 @@
  */
 struct __dummy { unsigned long a[100]; };
 #define ADDR (*(struct __dummy *) addr)
+#define CONST_ADDR (*(const struct __dummy *) addr)
 
 extern __inline__ int set_bit(int nr, void * addr)
 {
@@ -68,7 +69,7 @@ extern __inline__ int test_bit(int nr, const void * addr)
 
 	__asm__ __volatile__("btl %2,%1\n\tsbbl %0,%0"
 		:"=r" (oldbit)
-		:"m" (ADDR),"ir" (nr));
+		:"m" (CONST_ADDR),"ir" (nr));
 	return oldbit;
 }
 

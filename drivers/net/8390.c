@@ -36,10 +36,7 @@ static const char *version =
   The National Semiconductor LAN Databook, and the 3Com 3c503 databook.
   */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -704,7 +701,6 @@ static void NS8390_trigger_send(struct device *dev, unsigned int length,
 }
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 
 int init_module(void)
 {

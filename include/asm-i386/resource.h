@@ -20,4 +20,16 @@
 
 #define RLIM_NLIMITS	8
 
+#ifdef __KERNEL__
+
+#define INIT_RLIMITS							\
+{									\
+    {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX},				\
+    {LONG_MAX, LONG_MAX}, {_STK_LIM, _STK_LIM},				\
+    {       0, LONG_MAX}, {LONG_MAX, LONG_MAX},				\
+    {MAX_TASKS_PER_USER, MAX_TASKS_PER_USER}, {NR_OPEN, NR_OPEN}	\
+}
+
+#endif /* __KERNEL__ */
+
 #endif

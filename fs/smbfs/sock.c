@@ -26,6 +26,42 @@
 
 #define _S(nr) (1<<((nr)-1))
 
+static int _recvfrom(struct socket *sock, unsigned char *ubuf, int size, int noblock, unsigned flags,
+                struct sockaddr_in *sa, int *addr_len)
+{
+        struct iovec iov;
+        struct msghdr msg;
+
+        iov.iov_base = ubuf;
+        iov.iov_len  = size;
+
+        msg.msg_name      = (void *)sa;
+        msg.msg_namelen   = 0;
+        if (addr_len)
+                msg.msg_namelen = *addr_len;
+        msg.msg_accrights = NULL;
+        msg.msg_iov       = &iov;
+        msg.msg_iovlen    = 1;
+
+        return sock->ops->recvmsg(sock, &msg, size, noblock, flags, addr_len);
+}
+
+static int _send(struct socket *sock, const void *buff, int len, int nonblock, unsigned flags) {
+        struct iovec iov;
+        struct msghdr msg;
+
+        iov.iov_base = (void *)buff;
+        iov.iov_len  = len;
+
+        msg.msg_name      = NULL;
+        msg.msg_namelen   = 0;
+        msg.msg_accrights = NULL;
+        msg.msg_iov       = &iov;
+        msg.msg_iovlen    = 1;
+
+        return sock->ops->sendmsg(sock, &msg, len, nonblock, flags);
+}
+
 static void
 smb_data_callback(struct sock *sk,int len)
 {
@@ -40,13 +76,13 @@ smb_data_callback(struct sock *sk,int len)
                 fs = get_fs();
                 set_fs(get_ds());
 
-		result = sock->ops->recvfrom(sock, (void *)peek_buf, 1, 1,
+		result = _recvfrom(sock, (void *)peek_buf, 1, 1,
                                              MSG_PEEK, NULL, NULL);
 
                 while ((result != -EAGAIN) && (peek_buf[0] == 0x85)) {
 
                         /* got SESSION KEEP ALIVE */
-                        result = sock->ops->recvfrom(sock, (void *)peek_buf,
+                        result = _recvfrom(sock, (void *)peek_buf,
                                                      4, 1, 0, NULL, NULL);
 
                         DDPRINTK("smb_data_callback:"
@@ -55,7 +91,7 @@ smb_data_callback(struct sock *sk,int len)
                         if (result == -EAGAIN)
                                 break;
 
-                        result = sock->ops->recvfrom(sock, (void *)peek_buf,
+                        result = _recvfrom(sock, (void *)peek_buf,
                                                      1, 1, MSG_PEEK,
                                                      NULL, NULL);
 
@@ -190,7 +226,7 @@ smb_receive_raw(struct socket *sock, unsigned char *target,
 
 	fs = get_fs();
 	set_fs(get_ds());
-        result = sock->ops->recvfrom(sock, (void *)peek_buf, 4, 0,
+        result = _recvfrom(sock, (void *)peek_buf, 4, 0,
                                      0, NULL, NULL);
         set_fs(fs);
 
@@ -236,8 +272,7 @@ smb_receive_raw(struct socket *sock, unsigned char *target,
 
         while (already_read < len) {
                 
-                result = sock->ops->
-                        recvfrom(sock,
+                result = _recvfrom(sock,
                                  (void *)(target+already_read),
                                  len - already_read, 0, 0,
                                  NULL, NULL);
@@ -488,7 +523,7 @@ smb_request(struct smb_server *server)
 	fs = get_fs();
 	set_fs(get_ds());
 
-        result = sock->ops->send(sock, (void *)buffer, len, 0, 0);
+        result = _send(sock, (void *)buffer, len, 0, 0);
         if (result < 0) {
                 printk("smb_request: send error = %d\n", result);
         }
@@ -556,7 +591,7 @@ smb_trans2_request(struct smb_server *server,
 
         DDPRINTK("smb_request: len = %d cmd = 0x%X\n", len, buffer[8]);
 
-        result = sock->ops->send(sock, (void *)buffer, len, 0, 0);
+        result = _send(sock, (void *)buffer, len, 0, 0);
         if (result < 0) {
                 printk("smb_trans2_request: send error = %d\n", result);
         }
@@ -627,7 +662,7 @@ smb_request_read_raw(struct smb_server *server,
         DPRINTK("smb_request_read_raw: buffer=%X, sock=%X\n",
                 (unsigned int)buffer, (unsigned int)sock);
 
-        result = sock->ops->send(sock, (void *)buffer, len, 0, 0);
+        result = _send(sock, (void *)buffer, len, 0, 0);
 
         DPRINTK("smb_request_read_raw: send returned %d\n", result);
 
@@ -695,11 +730,11 @@ smb_request_write_raw(struct smb_server *server,
 
         smb_encode_smb_length(nb_header, length);
 
-        result = sock->ops->send(sock, (void *)nb_header, 4, 0, 0);
+        result = _send(sock, (void *)nb_header, 4, 0, 0);
 
         if (result == 4) {
                 set_fs(fs);     /* source is in user-land */
-                result = sock->ops->send(sock, (void *)source, length, 0, 0);
+                result = _send(sock, (void *)source, length, 0, 0);
                 set_fs(get_ds());
         } else {
                 result = -EIO;

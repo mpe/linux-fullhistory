@@ -51,17 +51,7 @@
  *
  */
 
-#include <linux/major.h>
-#include <linux/config.h>
-
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#define sjcd_init init_module
-#ifndef CONFIG_MODVERSIONS
-char kernel_version[]= UTS_RELEASE;
-#endif
-#endif
 
 #include <linux/errno.h>
 #include <linux/sched.h>
@@ -72,6 +62,7 @@ char kernel_version[]= UTS_RELEASE;
 #include <linux/cdrom.h>
 #include <linux/ioport.h>
 #include <linux/string.h>
+#include <linux/major.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -1440,9 +1431,7 @@ int sjcd_open( struct inode *ip, struct file *fp ){
     printk( "sjcd: open: done\n" );
 #endif
   }
-#ifdef MODULE
   MOD_INC_USE_COUNT;
-#endif
   ++sjcd_open_count;
   return( 0 );
 }
@@ -1456,9 +1445,7 @@ static void sjcd_release( struct inode *inode, struct file *file ){
 #if defined( SJCD_TRACE )
   printk( "sjcd: release\n" );
 #endif
-#ifdef MODULE
   MOD_DEC_USE_COUNT;
-#endif
   if( --sjcd_open_count == 0 ){
     sjcd_invalidate_buffers();
     sync_dev( inode->i_rdev );
@@ -1632,10 +1619,14 @@ int sjcd_init( void ){
 }
 
 #ifdef MODULE
+
+int init_module(void)
+{
+	return sjcd_init();
+}
+
 void cleanup_module( void ){
-  if( MOD_IN_USE ){
-    printk( "sjcd: module: in use - can not remove.\n" );
-  } else if( ( unregister_blkdev( MAJOR_NR, "sjcd" ) == -EINVAL ) ){
+  if( ( unregister_blkdev( MAJOR_NR, "sjcd" ) == -EINVAL ) ){
     printk( "sjcd: module: can not unregister device.\n" );
   } else {
     release_region( sjcd_port, 4 );

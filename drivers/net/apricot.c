@@ -21,10 +21,7 @@
 
 static const char *version = "apricot.c:v0.2 05/12/94\n";
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -34,13 +31,13 @@ static const char *version = "apricot.c:v0.2 05/12/94\n";
 #include <linux/ioport.h>
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
-#include <asm/bitops.h>
-#include <asm/io.h>
-#include <asm/dma.h>
-
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+
+#include <asm/bitops.h>
+#include <asm/io.h>
+#include <asm/dma.h>
 
 #ifndef HAVE_PORTRESERVE
 #define check_region(addr, size)	0
@@ -562,9 +559,7 @@ i596_open(struct device *dev)
     dev->tbusy = 0;
     dev->interrupt = 0;
     dev->start = 1;
-#ifdef MODULE
     MOD_INC_USE_COUNT;
-#endif
 
     /* Initialize the 82596 memory */
     init_i596_mem(dev);
@@ -946,10 +941,7 @@ i596_close(struct device *dev)
     free_irq(dev->irq);
     irq2dev_map[dev->irq] = 0;
     remove_rx_bufs(dev);
-#ifdef MODULE
     MOD_DEC_USE_COUNT;
-#endif
-
 
     return 0;
 }
@@ -1013,7 +1005,6 @@ struct netdev_entry apricot_drv =
 #endif
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static char devicename[9] = { 0, };
 static struct device dev_apricot = {
   devicename, /* device name inserted by /linux/drivers/net/net_init.c */
@@ -1021,8 +1012,8 @@ static struct device dev_apricot = {
   0x300, 10,
   0, 0, 0, NULL, apricot_probe };
 
-int io = 0x300;
-int irq = 10;
+static int io = 0x300;
+static int irq = 10;
 
 int
 init_module(void)
@@ -1037,17 +1028,12 @@ init_module(void)
 void
 cleanup_module(void)
 {
-  if (MOD_IN_USE)
-    printk("%s: device busy, remove delayed\n", dev_apricot.name);
-  else
-  {
     unregister_netdev(&dev_apricot);
     kfree_s((void *)dev_apricot.mem_start, sizeof(struct i596_private) + 0xf);
     dev_apricot.priv = NULL;
 
     /* If we don't do this, we can't re-insmod it later. */
     release_region(dev_apricot.base_addr, APRICOT_TOTAL_SIZE);
-  }
 }
 #endif /* MODULE */
 

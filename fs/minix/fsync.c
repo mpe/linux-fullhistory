@@ -8,13 +8,6 @@
  *  minix fsync primitive
  */
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
-#include <asm/segment.h>
-#include <asm/system.h>
-
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/stat.h>
@@ -24,6 +17,8 @@
 #include <linux/fs.h>
 #include <linux/minix_fs.h>
 
+#include <asm/segment.h>
+#include <asm/system.h>
 
 #define blocksize BLOCK_SIZE
 #define addr_per_block 512

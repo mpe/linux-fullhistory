@@ -5,10 +5,7 @@
  *
  * Control the mangling of file name to fit msdos name space.
  * Many optimisation by GLU == dglaude@is1.vub.ac.be (GLAUDE DAVID)
-*/
-#ifdef MODULE
-#include <linux/module.h>
-#endif
+ */
 
 #include <linux/errno.h>
 #include <linux/ctype.h>

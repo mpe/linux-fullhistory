@@ -12,11 +12,13 @@
 #define RNDGETENTCNT	0x01080000
 #define RNDADDTOENTCNT	0x01080001
 #define RNDGETPOOL	0x01080002
+#define RNDADDENTROPY	0x01080003
+#define RNDZAPENTCNT	0x01080004
 
-struct rand_pool_state {
+struct rand_pool_info {
 	int	entropy_count;
-	int	pool_size;
-	__u32	pool[0];
+	int	buf_size;
+	__u32	buf[0];
 };
 
 /* Exported functions */
@@ -33,14 +35,8 @@ void add_interrupt_randomness(int irq);
 void add_blkdev_randomness(int major);
 
 void get_random_bytes(void *buf, int nbytes);
-int read_random(struct inode * inode, struct file * file,
-		char * buf, int nbytes);
-int read_random_unlimited(struct inode * inode, struct file * file,
-			  char * buf, int nbytes);
-int write_random(struct inode * inode, struct file * file,
-		 const char * buffer, int count);
-int random_ioctl(struct inode * inode, struct file * file,
-		 unsigned int cmd, unsigned long arg);
+
+struct file_operations random_fops, urandom_fops;
 
 #endif /* __KERNEL___ */
 

@@ -8,14 +8,7 @@
  *  isofs directory handling functions
  */
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
 #include <linux/errno.h>
-
-#include <asm/segment.h>
-
 #include <linux/fs.h>
 #include <linux/iso_fs.h>
 #include <linux/kernel.h>
@@ -25,6 +18,8 @@
 #include <linux/malloc.h>
 #include <linux/sched.h>
 #include <linux/locks.h>
+
+#include <asm/segment.h>
 
 static int isofs_readdir(struct inode *, struct file *, void *, filldir_t);
 

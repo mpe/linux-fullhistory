@@ -4,10 +4,6 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
 #include <linux/kernel.h>

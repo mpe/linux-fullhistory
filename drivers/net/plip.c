@@ -85,13 +85,7 @@ static const char *version = "NET3 PLIP version 2.1 gniibe@mri.co.jp\n";
     extra grounds are 18,19,20,21,22,23,24
 */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -1060,9 +1054,8 @@ plip_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 }
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
-int io[] = {0, 0, 0};
-int irq[] = {0, 0, 0};
+static int io[] = {0, 0, 0};
+static int irq[] = {0, 0, 0};
 
 static struct device dev_plip[] = {
 	{

@@ -130,12 +130,12 @@ else
 endif
 
 ifeq ($(CONFIG_PPP),y)
-L_OBJS += ppp.o
+LX_OBJS += ppp.o
 CONFIG_SLHC_BUILTIN = y
 else
   ifeq ($(CONFIG_PPP),m)
   CONFIG_SLHC_MODULE = y
-  M_OBJS += ppp.o
+  MX_OBJS += ppp.o
   endif
 endif
 

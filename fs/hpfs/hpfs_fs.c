@@ -12,13 +12,7 @@
  *   linux/fs/isofs  Copyright (C) 1991  Eric Youngdale
  */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <linux/fs.h>
 #include <linux/hpfs_fs.h>
@@ -1743,16 +1737,13 @@ static void brelse4(struct quad_buffer_head *qbh)
 
 #ifdef MODULE
 
-char kernel_version[] = UTS_RELEASE;
-
 static struct file_system_type hpfs_fs_type = {
         hpfs_read_super, "hpfs", 1, NULL
 };
 
 int init_module(void)
 {
-        register_filesystem(&hpfs_fs_type);
-        return 0;
+        return register_filesystem(&hpfs_fs_type);
 }
 
 void cleanup_module(void)

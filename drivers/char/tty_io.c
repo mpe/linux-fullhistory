@@ -443,22 +443,28 @@ int tty_hung_up_p(struct file * filp)
  * 	(2)  Clears the tty from being controlling the session
  * 	(3)  Clears the controlling tty for all processes in the
  * 		session group.
+ *
+ * The argument on_exit is set to 1 if called when a process is
+ * exiting; it is 0 if called by the ioctl TIOCNOTTY.
  */
-void disassociate_ctty(int priv)
+void disassociate_ctty(int on_exit)
 {
 	struct tty_struct *tty = current->tty;
 	struct task_struct *p;
 
-	if (!tty) {
+	if (tty) {
+		if (on_exit)
+			tty_vhangup(tty);
+	} else {
 		if (current->tty_old_pgrp) {
-			kill_pg(current->tty_old_pgrp, SIGHUP, priv);
-			kill_pg(current->tty_old_pgrp, SIGCONT, priv);
+			kill_pg(current->tty_old_pgrp, SIGHUP, on_exit);
+			kill_pg(current->tty_old_pgrp, SIGCONT, on_exit);
 		}
 		return;
 	}
 	if (tty->pgrp > 0) {
-		kill_pg(tty->pgrp, SIGHUP, priv);
-		kill_pg(tty->pgrp, SIGCONT, priv);
+		kill_pg(tty->pgrp, SIGHUP, on_exit);
+		kill_pg(tty->pgrp, SIGCONT, on_exit);
 	}
 
 	current->tty_old_pgrp = 0;
@@ -1781,11 +1787,6 @@ int tty_init(void)
 {
 	if (sizeof(struct tty_struct) > PAGE_SIZE)
 		panic("size of tty structure > PAGE_SIZE!");
-	if (register_chrdev(TTY_MAJOR,"tty",&tty_fops))
-		panic("unable to get major %d for tty device", TTY_MAJOR);
-	if (register_chrdev(TTYAUX_MAJOR,"cua",&tty_fops))
-		panic("unable to get major %d for tty device", TTYAUX_MAJOR);
-
 	kbd_init();
 	rs_init();
 #ifdef CONFIG_SCC
@@ -1802,5 +1803,10 @@ int tty_init(void)
 #endif
 	pty_init();
 	vcs_init();
+	if (register_chrdev(TTY_MAJOR,"tty",&tty_fops))
+		panic("unable to get major %d for tty device", TTY_MAJOR);
+	if (register_chrdev(TTYAUX_MAJOR,"cua",&tty_fops))
+		panic("unable to get major %d for tty device", TTYAUX_MAJOR);
+
 	return 0;
 }

@@ -180,7 +180,7 @@ void insl (unsigned long port, void *dst, unsigned long count)
  * doing byte reads the "slow" way isn't nearly as slow as
  * doing byte writes the slow way (no r-m-w cycle).
  */
-void outsb(unsigned long port, void * src, unsigned long count)
+void outsb(unsigned long port, const void * src, unsigned long count)
 {
 	while (count) {
 		count--;
@@ -195,7 +195,7 @@ void outsb(unsigned long port, void * src, unsigned long count)
  * interfaces seems to be slow: just using the inlined version of the
  * outw() breaks things.
  */
-void outsw (unsigned long port, void *src, unsigned long count)
+void outsw (unsigned long port, const void *src, unsigned long count)
 {
 	if (((unsigned long)src) & 0x3) {
 		if (((unsigned long)src) & 0x1) {
@@ -227,7 +227,7 @@ void outsw (unsigned long port, void *src, unsigned long count)
  * interfaces seems to be slow: just using the inlined version of the
  * outw() breaks things.
  */
-void outsl (unsigned long port, void *src, unsigned long count)
+void outsl (unsigned long port, const void *src, unsigned long count)
 {
 	if (((unsigned long)src) & 0x3) {
 		panic("outsw: memory not aligned");
@@ -245,7 +245,7 @@ void outsl (unsigned long port, void *src, unsigned long count)
  * Copy data from IO memory space to "real" memory space.
  * This needs to be optimized.
  */
-void memcpy_fromio(void * to, unsigned long from, unsigned long count)
+void _memcpy_fromio(void * to, unsigned long from, unsigned long count)
 {
 	while (count) {
 		count--;
@@ -259,7 +259,7 @@ void memcpy_fromio(void * to, unsigned long from, unsigned long count)
  * Copy data from "real" memory space to IO memory space.
  * This needs to be optimized.
  */
-void memcpy_toio(unsigned long to, void * from, unsigned long count)
+void _memcpy_toio(unsigned long to, void * from, unsigned long count)
 {
 	while (count) {
 		count--;
@@ -273,7 +273,7 @@ void memcpy_toio(unsigned long to, void * from, unsigned long count)
  * "memset" on IO memory space.
  * This needs to be optimized.
  */
-void memset_io(unsigned long dst, int c, unsigned long count)
+void _memset_io(unsigned long dst, int c, unsigned long count)
 {
 	while (count) {
 		count--;

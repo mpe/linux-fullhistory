@@ -11,16 +11,7 @@
  * 
  */
 
-#include <linux/config.h>
-
-#if defined(CONFIG_NETLINK) || defined(MODULE)
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <linux/errno.h>
 #include <linux/kernel.h>
@@ -134,6 +125,7 @@ static int netlink_open(struct inode * inode, struct file * file)
 	if(active_map&(1<<minor))
 	{
 		open_map|=(1<<minor);
+		MOD_INC_USE_COUNT;
 		return 0;
 	}
 	return -EUNATCH;
@@ -220,15 +212,11 @@ int netlink_post(int unit, struct sk_buff *skb)
 	return ret;
 }
 
-
-#ifdef MODULE
-char kernel_version[]=UTS_RELEASE;
-
-int init_module(void)
+int init_netlink(void)
 {
 	int ct;
-	printk("Network Kernel/User communications module 0.03\n");
-	if (register_chrdev(NET_MAJOR,"netlink",&netlink_fops)) {
+
+	if(register_chrdev(NET_MAJOR,"netlink", &netlink_fops)) {
 		printk("netlink: unable to get major %d\n", NET_MAJOR);
 		return -EIO;
 	}
@@ -240,25 +228,17 @@ int init_module(void)
 	return 0;
 }
 
+#ifdef MODULE
+
+int init_module(void)
+{
+	printk("Network Kernel/User communications module 0.03\n");
+	return init_netlink();
+}
+
 void cleanup_module(void)
 {
 	unregister_chrdev(NET_MAJOR,"netlink");
 }
 
-#else
-
-void init_netlink(void)
-{
-	int ct;
-	/* Keep quiet on booting, we don't want too many messages */
-	if(register_chrdev(NET_MAJOR,"netlink", &netlink_fops))
-		printk("netlink: unable to get major %d\n", NET_MAJOR);
-	for(ct=0;ct<MAX_LINKS;ct++)
-	{
-		skb_queue_head_init(&skb_queue_rd[ct]);
-		netlink_handler[ct]=netlink_err;
-	}
-}
-
-#endif
 #endif

@@ -1837,9 +1837,6 @@ init_module(void)
 void
 cleanup_module(void)
 {
-  if (MOD_IN_USE) {
-    printk("%s: device busy, remove delayed\n",thisDepca.name);
-  } else {
     release_region(thisDepca.base_addr, DEPCA_TOTAL_SIZE);
     if (thisDepca.priv) {
       kfree_s(thisDepca.priv, sizeof(struct depca_private));
@@ -1847,7 +1844,6 @@ cleanup_module(void)
     }
 
     unregister_netdev(&thisDepca);
-  }
 }
 #endif /* MODULE */
 

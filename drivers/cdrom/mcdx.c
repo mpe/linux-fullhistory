@@ -37,18 +37,7 @@ static const char *mcdx_c_version
 		= "mcdx.c,v 1.7 1995/08/27 01:46:41 heiko Exp";
 #endif
 
-#include <linux/config.h>
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#ifndef CONFIG_MODVERSIONS
-char kernel_version[] = UTS_RELEASE;
-#endif
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#define MOD_IN_USE 1
-#endif MODULE
 
 #include <linux/errno.h>
 #include <linux/signal.h>

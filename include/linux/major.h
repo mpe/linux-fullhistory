@@ -19,8 +19,8 @@
  *      --------------------   --------------------   --------------------
  *  0 - unnamed                unnamed                minor 0 = true nodev
  *  1 - /dev/mem               ramdisk
- *  2 -                        floppy
- *  3 -                        ide0 or hd
+ *  2 - /dev/ptyp*             floppy
+ *  3 - /dev/ttyp*             ide0 or hd
  *  4 - /dev/tty*
  *  5 - /dev/tty; /dev/cua*
  *  6 - lp
@@ -55,7 +55,9 @@
 #define UNNAMED_MAJOR	0
 #define MEM_MAJOR	1
 #define FLOPPY_MAJOR	2
+#define PTY_MASTER_MAJOR 2
 #define IDE0_MAJOR	3
+#define PTY_SLAVE_MAJOR 3
 #define HD_MAJOR	IDE0_MAJOR
 #define TTY_MAJOR	4
 #define TTYAUX_MAJOR	5

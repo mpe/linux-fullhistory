@@ -48,6 +48,7 @@ static unsigned char *tmp_buf;
 static struct semaphore tmp_buf_sem = MUTEX;
 
 struct tty_driver pty_driver, pty_slave_driver;
+struct tty_driver old_pty_driver, old_pty_slave_driver;
 static int pty_refcount;
 
 static struct tty_struct *pty_table[NR_PTYS];
@@ -77,9 +78,10 @@ static void pty_close(struct tty_struct * tty, struct file * filp)
 		return;
 	wake_up_interruptible(&tty->link->read_wait);
 	wake_up_interruptible(&tty->link->write_wait);
-	if (tty->driver.subtype == PTY_TYPE_MASTER)
+	if (tty->driver.subtype == PTY_TYPE_MASTER) {
 		tty_hangup(tty->link);
-	else {
+		set_bit(TTY_SLAVE_CLOSED, &tty->flags);
+	} else {
 		start_tty(tty);
 		set_bit(TTY_SLAVE_CLOSED, &tty->link->flags);
 	}
@@ -204,7 +206,8 @@ int pty_open(struct tty_struct *tty, struct file * filp)
 	set_bit(TTY_THROTTLED, &tty->flags);
 	if (filp->f_flags & O_NDELAY)
 		return 0;
-	while (!tty->link->count && !(current->signal & ~current->blocked))
+	while (test_bit(TTY_SLAVE_CLOSED, &tty->link->flags) &&
+	       !(current->signal & ~current->blocked))
 		interruptible_sleep_on(&pty->open_wait);
 	if (!tty->link->count)
 		return -ERESTARTSYS;
@@ -217,8 +220,8 @@ int pty_init(void)
 	memset(&pty_driver, 0, sizeof(struct tty_driver));
 	pty_driver.magic = TTY_DRIVER_MAGIC;
 	pty_driver.name = "pty";
-	pty_driver.major = TTY_MAJOR;
-	pty_driver.minor_start = 128;
+	pty_driver.major = PTY_MASTER_MAJOR;
+	pty_driver.minor_start = 0;
 	pty_driver.num = NR_PTYS;
 	pty_driver.type = TTY_DRIVER_TYPE_PTY;
 	pty_driver.subtype = PTY_TYPE_MASTER;
@@ -245,7 +248,8 @@ int pty_init(void)
 	pty_slave_driver = pty_driver;
 	pty_slave_driver.name = "ttyp";
 	pty_slave_driver.subtype = PTY_TYPE_SLAVE;
-	pty_slave_driver.minor_start = 192;
+	pty_slave_driver.major = PTY_SLAVE_MAJOR;
+	pty_slave_driver.minor_start = 0;
 	pty_slave_driver.init_termios = tty_std_termios;
 	pty_slave_driver.init_termios.c_cflag = B38400 | CS8 | CREAD;
 	pty_slave_driver.table = ttyp_table;
@@ -253,12 +257,28 @@ int pty_init(void)
 	pty_slave_driver.termios_locked = ttyp_termios_locked;
 	pty_slave_driver.other = &pty_driver;
 
+	old_pty_driver = pty_driver;
+	old_pty_driver.major = TTY_MAJOR;
+	old_pty_driver.minor_start = 128;
+	old_pty_driver.num = (NR_PTYS > 64) ? 64 : NR_PTYS;
+	old_pty_driver.other = &old_pty_slave_driver;
+	
+	old_pty_slave_driver = pty_slave_driver;
+	old_pty_slave_driver.major = TTY_MAJOR;
+	old_pty_slave_driver.minor_start = 192;
+	old_pty_slave_driver.num = (NR_PTYS > 64) ? 64 : NR_PTYS;
+	old_pty_slave_driver.other = &old_pty_driver;
+
 	tmp_buf = 0;
 
 	if (tty_register_driver(&pty_driver))
 		panic("Couldn't register pty driver");
 	if (tty_register_driver(&pty_slave_driver))
 		panic("Couldn't register pty slave driver");
+	if (tty_register_driver(&old_pty_driver))
+		panic("Couldn't register compat pty driver");
+	if (tty_register_driver(&old_pty_slave_driver))
+		panic("Couldn't register compat pty slave driver");
 	
 	return 0;
 }

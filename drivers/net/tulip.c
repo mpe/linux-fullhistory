@@ -344,9 +344,7 @@ tulip_open(struct device *dev)
 		printk("%s: Done tulip_open(), CSR0 %8.8x, CSR13 %8.8x.\n",
 			   dev->name, inl(ioaddr + CSR0), inl(ioaddr + CSR13));
 	}
-#ifdef MODULE
 	MOD_INC_USE_COUNT;
-#endif
 	return 0;
 }
 
@@ -660,9 +658,7 @@ tulip_close(struct device *dev)
 	free_irq(dev->irq);
 	irq2dev_map[dev->irq] = 0;
 
-#ifdef MODULE
 	MOD_DEC_USE_COUNT;
-#endif
 	return 0;
 }
 
@@ -745,8 +741,8 @@ static struct device dev_tulip = {
 	0, 0, 0, NULL, tulip_probe
 };
 
-int io = 0;
-int irq = 0;
+static int io = 0;
+static int irq = 0;
 
 int init_module(void)
 {
@@ -768,12 +764,7 @@ int init_module(void)
 void
 cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("tulip: device busy, remove delayed\n");
-	else
-	{
-		unregister_netdev(&dev_tulip);
-	}
+	unregister_netdev(&dev_tulip);
 }
 #endif /* MODULE */
 

@@ -1,7 +1,7 @@
 /*
  * random.c -- A strong random number generator
  *
- * Version 0.94, last modified 11-Oct-95
+ * Version 0.95, last modified 4-Nov-95
  * 
  * Copyright Theodore Ts'o, 1994, 1995.  All rights reserved.
  *
@@ -186,17 +186,17 @@
 
 /*
  * The pool is stirred with a primitive polynomial of degree 128
- * over GF(2), namely x^128 + x^119 + x^72 + x^64 + x^14 + x^8 + 1.
+ * over GF(2), namely x^128 + x^99 + x^59 + x^31 + x^9 + x^7 + 1.
  * For a pool of size 64, try x^64+x^62+x^38+x^10+x^6+x+1.
  */
 #define POOLWORDS 128    /* Power of 2 - note that this is 32-bit words */
 #define POOLBITS (POOLWORDS*32)
 #if POOLWORDS == 128
-#define TAP1    119     /* The polynomial taps */
-#define TAP2    72
-#define TAP3    64
-#define TAP4    14
-#define TAP5    8
+#define TAP1    99     /* The polynomial taps */
+#define TAP2    59
+#define TAP3    31
+#define TAP4    9
+#define TAP5    7
 #elif POOLWORDS == 64
 #define TAP1    62      /* The polynomial taps */
 #define TAP2    38
@@ -219,7 +219,7 @@ struct random_bucket {
 struct timer_rand_state {
 	unsigned long	last_time;
 	int 		last_delta;
-	int 		nbits;
+	int		dont_count_entropy:1;
 };
 
 static struct random_bucket random_state;
@@ -230,6 +230,18 @@ static struct timer_rand_state extract_timer_state;
 static struct timer_rand_state *irq_timer_state[NR_IRQS];
 static struct timer_rand_state *blkdev_timer_state[MAX_BLKDEV];
 static struct wait_queue *random_wait;
+
+static int random_read(struct inode * inode, struct file * file,
+		       char * buf, int nbytes);
+static int random_read_unlimited(struct inode * inode, struct file * file,
+				 char * buf, int nbytes);
+static int random_select(struct inode *inode, struct file *file,
+			 int sel_type, select_table * wait);
+static int random_write(struct inode * inode, struct file * file,
+			const char * buffer, int count);
+static int random_ioctl(struct inode * inode, struct file * file,
+			unsigned int cmd, unsigned long arg);
+
 
 #ifndef MIN
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
@@ -242,10 +254,14 @@ void rand_initialize(void)
 	random_state.pool = random_pool;
 	memset(irq_timer_state, 0, sizeof(irq_timer_state));
 	memset(blkdev_timer_state, 0, sizeof(blkdev_timer_state));
-	random_wait = NULL;}
+	extract_timer_state.dont_count_entropy = 1;
+	random_wait = NULL;
+}
 
 void rand_initialize_irq(int irq)
 {
+	struct timer_rand_state *state;
+	
 	if (irq >= NR_IRQS || irq_timer_state[irq])
 		return;
 
@@ -253,12 +269,17 @@ void rand_initialize_irq(int irq)
 	 * If kamlloc returns null, we just won't use that entropy
 	 * source.
 	 */
-	irq_timer_state[irq] = kmalloc(sizeof(struct timer_rand_state), 
-				       GFP_KERNEL);
+	state = kmalloc(sizeof(struct timer_rand_state), GFP_KERNEL);
+	if (state) {
+		irq_timer_state[irq] = state;
+		memset(state, 0, sizeof(struct timer_rand_state));
+	}
 }
 
 void rand_initialize_blkdev(int major)
 {
+	struct timer_rand_state *state;
+	
 	if (major >= MAX_BLKDEV || blkdev_timer_state[major])
 		return;
 
@@ -266,8 +287,11 @@ void rand_initialize_blkdev(int major)
 	 * If kamlloc returns null, we just won't use that entropy
 	 * source.
 	 */
-	blkdev_timer_state[major] = kmalloc(sizeof(struct timer_rand_state), 
-					    GFP_KERNEL);
+	state = kmalloc(sizeof(struct timer_rand_state), GFP_KERNEL);
+	if (state) {
+		blkdev_timer_state[major] = state;
+		memset(state, 0, sizeof(struct timer_rand_state));
+	}
 }
 
 /*
@@ -275,7 +299,7 @@ void rand_initialize_blkdev(int major)
  * update the entropy estimate.  The caller must do this if appropriate.
  *
  * The pool is stirred with a primitive polynomial of degree 128
- * over GF(2), namely x^128 + x^119 + x^72 + x^64 + x^14 + x^8 + 1.
+ * over GF(2), namely x^128 + x^99 + x^59 + x^31 + x^9 + x^7 + 1.
  * For a pool of size 64, try x^64+x^62+x^38+x^10+x^6+x+1.
  * 
  * We rotate the input word by a changing number of bits, to help
@@ -352,7 +376,8 @@ static void add_timer_randomness(struct random_bucket *r,
 		outb_p(0x00, 0x43);	/* latch the count ASAP */
 		num |= inb_p(0x40) << 16;
 		num |= inb(0x40) << 24;
-		r->entropy_count += 2;
+		if (!state->dont_count_entropy)
+			r->entropy_count += 2;
 #endif
 		
 		time = jiffies;
@@ -369,24 +394,26 @@ static void add_timer_randomness(struct random_bucket *r,
 	 * added.  We take into account the first and second order
 	 * deltas in order to make our estimate.
 	 */
-	delta = time - state->last_time;
-	state->last_time = time;
+	if (!state->dont_count_entropy) {
+		delta = time - state->last_time;
+		state->last_time = time;
 
-	delta2 = delta - state->last_delta;
-	state->last_delta = delta;
+		delta2 = delta - state->last_delta;
+		state->last_delta = delta;
 
-	if (delta < 0) delta = -delta;
-	if (delta2 < 0) delta2 = -delta2;
-	delta = MIN(delta, delta2) >> 1;
-	for (nbits = 0; delta; nbits++)
-		delta >>= 1;
+		if (delta < 0) delta = -delta;
+		if (delta2 < 0) delta2 = -delta2;
+		delta = MIN(delta, delta2) >> 1;
+		for (nbits = 0; delta; nbits++)
+			delta >>= 1;
 
-	r->entropy_count += nbits;
+		r->entropy_count += nbits;
 	
-	/* Prevent overflow */
-	if (r->entropy_count > POOLBITS)
-		r->entropy_count = POOLBITS;
-	
+		/* Prevent overflow */
+		if (r->entropy_count > POOLBITS)
+			r->entropy_count = POOLBITS;
+	}
+		
 	wake_up_interruptible(&random_wait);	
 }
 
@@ -609,23 +636,71 @@ void get_random_bytes(void *buf, int nbytes)
 	extract_entropy(&random_state, (char *) buf, nbytes, 0);
 }
 
-int read_random(struct inode * inode, struct file * file,
-                char * buf, int nbytes)
+static int
+random_read(struct inode * inode, struct file * file, char * buf, int nbytes)
 {
-	if (nbytes > random_state.entropy_count / 8)
-		nbytes = random_state.entropy_count / 8;
+	struct wait_queue 	wait = { current, NULL };
+	int			n;
+	int			retval = 0;
+	int			count = 0;
 	
-	return extract_entropy(&random_state, buf, nbytes, 1);
+	if (nbytes == 0)
+		return 0;
+
+	add_wait_queue(&random_wait, &wait);
+	while (nbytes > 0) {
+		current->state = TASK_INTERRUPTIBLE;
+		
+		n = nbytes;
+		if (n > random_state.entropy_count / 8)
+			n = random_state.entropy_count / 8;
+		if (n == 0) {
+			if (file->f_flags & O_NONBLOCK) {
+				retval = -EAGAIN;
+				break;
+			}
+			if (current->signal & ~current->blocked) {
+				retval = -ERESTARTSYS;
+				break;
+			}
+			schedule();
+			continue;
+		}
+		n = extract_entropy(&random_state, buf, n, 1);
+		count += n;
+		buf += n;
+		nbytes -= n;
+		break;		/* This break makes the device work */
+				/* like a named pipe */
+	}
+	current->state = TASK_RUNNING;
+	remove_wait_queue(&random_wait, &wait);
+
+	return (count ? count : retval);
 }
 
-int read_random_unlimited(struct inode * inode, struct file * file,
-			  char * buf, int nbytes)
+static int
+random_read_unlimited(struct inode * inode, struct file * file,
+		      char * buf, int nbytes)
 {
 	return extract_entropy(&random_state, buf, nbytes, 1);
 }
 
-int write_random(struct inode * inode, struct file * file,
-		 const char * buffer, int count)
+static int
+random_select(struct inode *inode, struct file *file,
+		      int sel_type, select_table * wait)
+{
+	if (sel_type == SEL_IN) {
+		if (random_state.entropy_count >= 8)
+			return 1;
+		select_wait(&random_wait, wait);
+	}
+	return 0;
+}
+
+static int
+random_write(struct inode * inode, struct file * file,
+	     const char * buffer, int count)
 {
 	int i;
 	__u32 word, *p;
@@ -641,22 +716,31 @@ int write_random(struct inode * inode, struct file * file,
 		memcpy_fromfs(&word, p, i);
 		add_entropy_word(&random_state, word);
 	}
-	inode->i_mtime = CURRENT_TIME;
+	if (inode)
+		inode->i_mtime = CURRENT_TIME;
 	return count;
 }
 
-int random_ioctl(struct inode * inode, struct file * file,
-			unsigned int cmd, unsigned long arg)
+static int
+random_ioctl(struct inode * inode, struct file * file,
+	     unsigned int cmd, unsigned long arg)
 {
-	int *p, max_size;
+	int *p, size, ent_count;
+	int retval;
 	
 	switch (cmd) {
 	case RNDGETENTCNT:
+		retval = verify_area(VERIFY_WRITE, (void *) arg, sizeof(int));
+		if (retval)
+			return(retval);
 		put_user(random_state.entropy_count, (int *) arg);
 		return 0;
 	case RNDADDTOENTCNT:
 		if (!suser())
 			return -EPERM;
+		retval = verify_area(VERIFY_READ, (void *) arg, sizeof(int));
+		if (retval)
+			return(retval);
 		random_state.entropy_count += get_user((int *) arg);
 		if (random_state.entropy_count > POOLBITS)
 			random_state.entropy_count = POOLBITS;
@@ -665,17 +749,67 @@ int random_ioctl(struct inode * inode, struct file * file,
 		if (!suser())
 			return -EPERM;
 		p = (int *) arg;
-		put_user(random_state.entropy_count, p);
-		max_size = get_user(++p);
+		retval = verify_area(VERIFY_WRITE, (void *) p, sizeof(int));
+		if (retval)
+			return(retval);
+		put_user(random_state.entropy_count, p++);
+		retval = verify_area(VERIFY_READ, (void *) p, sizeof(int));
+		if (retval)
+			return(retval);
+		size = get_user(p);
 		put_user(POOLWORDS, p);
-		if (max_size < 0)
+		if (size < 0)
 			return -EINVAL;
-		if (max_size > POOLWORDS)
-			max_size = POOLWORDS;
+		if (size > POOLWORDS)
+			size = POOLWORDS;
 		memcpy_tofs(++p, random_state.pool,
-			    max_size*sizeof(__u32));
+			    size*sizeof(__u32));
+		return 0;
+	case RNDADDENTROPY:
+		if (!suser())
+			return -EPERM;
+		p = (int *) arg;
+		retval = verify_area(VERIFY_READ, (void *) p, 2*sizeof(int));
+		if (retval)
+			return(retval);
+		ent_count = get_user(p++);
+		size = get_user(p++);
+		(void) random_write(0, file, (const char *) p, size);
+		random_state.entropy_count += ent_count;
+		if (random_state.entropy_count > POOLBITS)
+			random_state.entropy_count = POOLBITS;
+		return 0;
+	case RNDZAPENTCNT:
+		if (!suser())
+			return -EPERM;
+		random_state.entropy_count = 0;
 		return 0;
 	default:
 		return -EINVAL;
 	}
 }
+
+struct file_operations random_fops = {
+	NULL,		/* random_lseek */
+	random_read,
+	random_write,
+	NULL,		/* random_readdir */
+	random_select,	/* random_select */
+	random_ioctl,
+	NULL,		/* random_mmap */
+	NULL,		/* no special open code */
+	NULL		/* no special release code */
+};
+
+struct file_operations urandom_fops = {
+	NULL,		/* unrandom_lseek */
+	random_read_unlimited,
+	random_write,
+	NULL,		/* urandom_readdir */
+	NULL,		/* urandom_select */
+	random_ioctl,
+	NULL,		/* urandom_mmap */
+	NULL,		/* no special open code */
+	NULL		/* no special release code */
+};
+

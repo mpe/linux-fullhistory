@@ -7,12 +7,6 @@
  *  Extended MS-DOS directory handling functions
  */
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
-#include <asm/segment.h>
-
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/fs.h>
@@ -22,6 +16,8 @@
 #include <linux/limits.h>
 #include <linux/umsdos_fs.h>
 #include <linux/malloc.h>
+
+#include <asm/segment.h>
 
 #define PRINTK(x)
 #define Printk(x) printk x

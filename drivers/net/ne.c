@@ -30,10 +30,7 @@ static const char *version =
     "ne.c:v1.10 9/23/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -572,7 +569,6 @@ ne_block_output(struct device *dev, int count,
 }
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static char devicename[9] = { 0, };
 static struct device dev_ne2000 = {
 	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
@@ -580,8 +576,8 @@ static struct device dev_ne2000 = {
 	0, 0,
 	0, 0, 0, NULL, ne_probe };
 
-int io = 0x300;
-int irq = 0;
+static int io = 0x300;
+static int irq = 0;
 
 int init_module(void)
 {
@@ -597,16 +593,11 @@ int init_module(void)
 void
 cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("ne2000: device busy, remove delayed\n");
-	else
-	{
-		unregister_netdev(&dev_ne2000);
+	unregister_netdev(&dev_ne2000);
 
-		/* If we don't do this, we can't re-insmod it later. */
-		free_irq(dev_ne2000.irq);
-		release_region(dev_ne2000.base_addr, NE_IO_EXTENT);
-	}
+	/* If we don't do this, we can't re-insmod it later. */
+	free_irq(dev_ne2000.irq);
+	release_region(dev_ne2000.base_addr, NE_IO_EXTENT);
 }
 #endif /* MODULE */
 

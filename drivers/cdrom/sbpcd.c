@@ -261,18 +261,7 @@
 #define SBPCD_ISSUE 1
 #endif SBPCD_ISSUE
 
-#include <linux/config.h>
-
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#ifndef CONFIG_MODVERSIONS
-char kernel_version[]=UTS_RELEASE;
-#endif
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif MODULE
 
 #include <linux/errno.h>
 #include <linux/sched.h>

@@ -587,9 +587,7 @@ eepro_open(struct device *dev)
 
 	outb(RCV_ENABLE_CMD, ioaddr);
 
-#ifdef MODULE
 	MOD_INC_USE_COUNT;
-#endif
 	return 0;
 }
 
@@ -756,9 +754,7 @@ eepro_close(struct device *dev)
 	SLOW_DOWN_IO;
 	SLOW_DOWN_IO; /* May not be enough? */
 
-#ifdef MODULE
 	MOD_DEC_USE_COUNT;
-#endif
 	return 0;
 }
 
@@ -1138,8 +1134,8 @@ static struct device dev_eepro = {
 	0, 0,
 	0, 0, 0, NULL, eepro_probe };
 
-int io = 0x200;
-int irq = 0;
+static int io = 0x200;
+static int irq = 0;
 
 int
 init_module(void)
@@ -1157,16 +1153,11 @@ init_module(void)
 void
 cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("eepro: device busy, remove delayed\n");
-	else
-	{
-		unregister_netdev(&dev_eepro);
-		kfree_s(dev_eepro.priv,sizeof(struct eepro_local));
-		dev_eepro.priv=NULL;
+	unregister_netdev(&dev_eepro);
+	kfree_s(dev_eepro.priv,sizeof(struct eepro_local));
+	dev_eepro.priv=NULL;
 
-		/* If we don't do this, we can't re-insmod it later. */
-		release_region(dev_eepro.base_addr, EEPRO_IO_EXTENT);
-	}
+	/* If we don't do this, we can't re-insmod it later. */
+	release_region(dev_eepro.base_addr, EEPRO_IO_EXTENT);
 }
 #endif /* MODULE */

@@ -1,5 +1,5 @@
 /*
- *	de620.c $Revision: 1.31 $ BETA
+ *	de620.c $Revision: 1.40 $ BETA
  *
  *
  *	Linux driver for the D-Link DE-620 Ethernet pocket adapter.
@@ -39,7 +39,7 @@
  *
  *****************************************************************************/
 static const char *version =
-	"de620.c: $Revision: 1.31 $,  Bjorn Ekwall <bj0rn@blox.se>\n";
+	"de620.c: $Revision: 1.40 $,  Bjorn Ekwall <bj0rn@blox.se>\n";
 
 /***********************************************************************
  *
@@ -55,6 +55,22 @@ static const char *version =
  * -DREAD_DELAY
  * -DWRITE_DELAY
  */
+
+/*
+ * This driver assumes that the printer port is a "normal",
+ * dumb, uni-directional port!
+ * If your port is "fancy" in any way, please try to set it to "normal"
+ * with your BIOS setup.  I have no access to machines with bi-directional
+ * ports, so I can't test such a driver :-(
+ * (Yes, I _know_ it is possible to use DE620 with bidirectional ports...)
+ *
+ * There are some clones of DE620 out there, with different names.
+ * If the current driver does not recognize a clone, try to change
+ * the following #define to:
+ *
+ * #define DE620_CLONE 1
+ */
+#define DE620_CLONE 0
 
 /*
  * If the adapter has problems with high speeds, enable this #define
@@ -100,18 +116,8 @@ static const char *version =
 #define COUNT_LOOPS
  */
 #endif
-static int bnc = 0, utp = 0;
-/*
- * Force media with insmod:
- *	insmod de620.o bnc=1
- * or
- *	insmod de620.o utp=1
- */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -165,6 +171,27 @@ typedef unsigned char byte;
 #define PRINTK(x) /**/
 #endif
 
+
+/*
+ * Force media with insmod:
+ *	insmod de620.o bnc=1
+ * or
+ *	insmod de620.o utp=1
+ *
+ * Force io and/or irq with insmod:
+ *	insmod de620.o io=0x378 irq=7
+ *
+ * Make a clone skip the Ethernet-address range check:
+ *	insmod de620.o clone=1
+ */
+static int bnc = 0;
+static int utp = 0;
+static int io  = DE620_IO;
+static int irq = DE620_IRQ;
+static int clone = DE620_CLONE;
+
+static unsigned int de620_debug = DE620_DEBUG;
+
 /***********************************************
  *                                             *
  * Index to functions, as function prototypes. *
@@ -199,8 +226,6 @@ static int	read_eeprom(struct device *);
 #define	TCR_DEF RXPB			/* not used: | TXSUCINT | T16INT */
 #define DE620_RX_START_PAGE 12		/* 12 pages (=3k) reserved for tx */
 #define DEF_NIC_CMD IRQEN | ICEN | DS1
-
-unsigned int de620_debug = DE620_DEBUG;
 
 static volatile byte	NIC_Cmd;
 static volatile byte	next_rx_page;
@@ -407,15 +432,13 @@ de620_get_register(struct device *dev, byte reg)
 static int
 de620_open(struct device *dev)
 {
-	if (request_irq(DE620_IRQ, de620_interrupt, 0, "de620")) {
-		printk ("%s: unable to get IRQ %d\n", dev->name, DE620_IRQ);
+	if (request_irq(dev->irq, de620_interrupt, 0, "de620")) {
+		printk ("%s: unable to get IRQ %d\n", dev->name, dev->irq);
 		return 1;
 	}
-	irq2dev_map[DE620_IRQ] = dev;
+	irq2dev_map[dev->irq] = dev;
 
-#ifdef MODULE
 	MOD_INC_USE_COUNT;
-#endif
 	if (adapter_init(dev)) {
 		return 1;
 	}
@@ -434,13 +457,11 @@ de620_close(struct device *dev)
 	/* disable recv */
 	de620_set_register(dev, W_TCR, RXOFF);
 
-	free_irq(DE620_IRQ);
-	irq2dev_map[DE620_IRQ] = NULL;
+	free_irq(dev->irq);
+	irq2dev_map[dev->irq] = NULL;
 
 	dev->start = 0;
-#ifdef MODULE
 	MOD_DEC_USE_COUNT;
-#endif
 	return 0;
 }
 
@@ -580,16 +601,16 @@ de620_start_xmit(struct sk_buff *skb, struct device *dev)
  *
  */
 static void
-de620_interrupt(int irq, struct pt_regs *regs)
+de620_interrupt(int irq_in, struct pt_regs *regs)
 {
-	struct device *dev = irq2dev_map[irq];
+	struct device *dev = irq2dev_map[irq_in];
 	byte irq_status;
 	int bogus_count = 0;
 	int again = 0;
 
 	/* This might be deleted now, no crummy drivers present :-) Or..? */
-	if ((dev == NULL) || (DE620_IRQ != irq)) {
-		printk("%s: bogus interrupt %d\n", dev?dev->name:"DE620", irq);
+	if ((dev == NULL) || (irq != irq_in)) {
+		printk("%s: bogus interrupt %d\n", dev?dev->name:"de620", irq_in);
 		return;
 	}
 
@@ -817,6 +838,13 @@ de620_probe(struct device *dev)
 	int i;
 	byte checkbyte = 0xa5;
 
+	/*
+	 * This is where the base_addr and irq gets set.
+	 * Tunable at compile-time and insmod-time
+	 */
+	dev->base_addr = io;
+	dev->irq       = irq;
+
 	if (de620_debug)
 		printk(version);
 
@@ -836,12 +864,12 @@ de620_probe(struct device *dev)
 	}
 
 #if 0 /* Not yet */
-	if (check_region(DE620_IO, 3)) {
-		printk(", port 0x%x busy\n", DE620_IO);
+	if (check_region(dev->base_addr, 3)) {
+		printk(", port 0x%x busy\n", dev->base_addr);
 		return EBUSY;
 	}
 #endif
-	request_region(DE620_IO, 3, "de620");
+	request_region(dev->base_addr, 3, "de620");
 
 	/* else, got it! */
 	printk(", Ethernet Address: %2.2X",
@@ -869,8 +897,7 @@ de620_probe(struct device *dev)
 	dev->stop = de620_close;
 	dev->hard_start_xmit = &de620_start_xmit;
 	dev->set_multicast_list = &de620_set_multicast_list;
-	dev->base_addr = DE620_IO;
-	dev->irq = DE620_IRQ;
+	/* base_addr and irq are already set, see above! */
 
 	ether_setup(dev);
 	
@@ -948,13 +975,13 @@ read_eeprom(struct device *dev)
 
 	/* D-Link Ethernet addresses are in the series  00:80:c8:7X:XX:XX:XX */
 	wrd = ReadAWord(dev, 0x1aa);	/* bytes 0 + 1 of NodeID */
-	if (wrd != htons(0x0080)) /* Valid D-Link ether sequence? */
+	if (!clone && (wrd != htons(0x0080))) /* Valid D-Link ether sequence? */
 		return -1; /* Nope, not a DE-620 */
 	nic_data.NodeID[0] = wrd & 0xff;
 	nic_data.NodeID[1] = wrd >> 8;
 
 	wrd = ReadAWord(dev, 0x1ab);	/* bytes 2 + 3 of NodeID */
-	if ((wrd & 0xff) != 0xc8) /* Valid D-Link ether sequence? */
+	if (!clone && ((wrd & 0xff) != 0xc8)) /* Valid D-Link ether sequence? */
 		return -1; /* Nope, not a DE-620 */
 	nic_data.NodeID[2] = wrd & 0xff;
 	nic_data.NodeID[3] = wrd >> 8;
@@ -984,19 +1011,13 @@ read_eeprom(struct device *dev)
  *
  */
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static char nullname[8] = "";
 static struct device de620_dev = {
 	nullname, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, de620_probe };
 
-int de620_io  = DE620_IO;
-int de620_irq = DE620_IRQ;
-
 int
 init_module(void)
 {
-	de620_dev.base_addr = de620_io;
-	de620_dev.irq       = de620_irq;
 	if (register_netdev(&de620_dev) != 0)
 		return -EIO;
 	return 0;

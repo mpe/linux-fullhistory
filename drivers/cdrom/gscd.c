@@ -41,17 +41,9 @@
 #define  NO_FUTURE_WORK
 /*------------------------*/
 
-#include <linux/config.h>
-
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#include <linux/malloc.h>
-#ifndef CONFIG_MODVERSIONS
-char kernel_version[] = UTS_RELEASE;
-#endif
-#endif MODULE
 
+#include <linux/malloc.h>
 #include <linux/errno.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -390,9 +382,7 @@ printk ( "GSCD: open\n" );
 		return -EIO;
 */
 
-        #ifdef MODULE
-           MOD_INC_USE_COUNT;
-        #endif
+	MOD_INC_USE_COUNT;
  
 	return 0;
 }
@@ -413,9 +403,7 @@ printk ( "GSCD: release\n" );
 	sync_dev(inode->i_rdev);
 	invalidate_buffers(inode -> i_rdev);
 
-        #ifdef MODULE
-           MOD_DEC_USE_COUNT;
-        #endif
+	MOD_DEC_USE_COUNT;
 }
 
 
@@ -963,6 +951,7 @@ unsigned int AX;
 }
 #endif
 
+#ifdef MODULE
 /* Init for the Module-Version */
 int init_module (void)
 {
@@ -983,16 +972,9 @@ long err;
      }    
 }
 
-#ifdef MODULE
 void cleanup_module (void)
 {
 
-   if (MOD_IN_USE)
-   {
-      printk("GoldStar-module in use - can't remove it.\n" );
-      return;
-   }
- 
    if ((unregister_blkdev(MAJOR_NR, "gscd" ) == -EINVAL))
    {
       printk("What's that: can't unregister GoldStar-module\n" );

@@ -135,4 +135,3 @@ extern struct vc vc_cons [MAX_NR_CONSOLES];
 
 #define vcmode		(vt_cons[currcons]->vc_mode)
 #define structsize	(sizeof(struct vc_data) + sizeof(struct vt_struct))
-

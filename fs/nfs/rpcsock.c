@@ -19,10 +19,6 @@
  *  Copyright (C) 1995, Olaf Kirch <okir@monad.swb.de>
  */
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
 #include <linux/types.h>
 #include <linux/malloc.h>
 #include <linux/sched.h>
@@ -30,11 +26,12 @@
 #include <linux/errno.h>
 #include <linux/socket.h>
 #include <linux/fcntl.h>
-#include <asm/segment.h>
 #include <linux/in.h>
 #include <linux/net.h>
 #include <linux/mm.h>
 #include <linux/rpcsock.h>
+
+#include <asm/segment.h>
 
 #define msleep(sec)	{ current->timeout = sec * HZ / 1000; \
 			  current->state = TASK_INTERRUPTIBLE; \

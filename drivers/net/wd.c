@@ -25,10 +25,7 @@
 static const char *version =
 	"wd.c:v1.10 9/23/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -302,9 +299,7 @@ wd_open(struct device *dev)
 
   rc = ei_open(dev);
   if (rc != 0) return rc;
-#ifdef MODULE
   MOD_INC_USE_COUNT;
-#endif
   return 0;
 }
 
@@ -406,9 +401,7 @@ wd_close_card(struct device *dev)
 	/* And disable the shared memory. */
 	outb(ei_status.reg0 & ~WD_MEMENB, wd_cmdreg);
 
-#ifdef MODULE
 	MOD_DEC_USE_COUNT;
-#endif
 
 	return 0;
 }
@@ -417,7 +410,6 @@ wd_close_card(struct device *dev)
 #ifdef MODULE
 #define MAX_WD_MODS	4	/* Max number of wd modules allowed */
 #define NAMELEN		9	/* # of chars for storing dev->name */
-char kernel_version[] = UTS_RELEASE;
 static char namelist[NAMELEN * MAX_WD_MODS] = { 0, };
 static struct device dev_wd80x3[MAX_WD_MODS] = {
 	{

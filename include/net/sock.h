@@ -172,7 +172,7 @@ struct sock
  */
  
 	volatile unsigned short	backoff;
-	volatile short		err;
+	volatile int		err;
 	unsigned char		protocol;
 	volatile unsigned char	state;
 	volatile unsigned char	ack_backlog;
