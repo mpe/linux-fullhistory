@@ -296,7 +296,7 @@ static void dn_fb_set_disp(int con, struct fb_info *info) {
 
 }
   
-unsigned long dnfb_init(unsigned long mem_start) {
+unsigned long __init dnfb_init(unsigned long mem_start) {
 
 	int err;
        

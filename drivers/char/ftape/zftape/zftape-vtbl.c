@@ -48,8 +48,8 @@
  *  global variables 
  */
 int zft_qic_mode   = 1; /* use the vtbl */
-int zft_old_ftape  = 0; /* prevents old ftaped tapes to be overwritten */
-int zft_volume_table_changed = 0; /* for write_header_segments() */
+int zft_old_ftape; /* prevents old ftaped tapes to be overwritten */
+int zft_volume_table_changed; /* for write_header_segments() */
 
 /*
  *  private variables (only exported for inline functions)
@@ -59,9 +59,9 @@ LIST_HEAD(zft_vtbl);
 /*  We could also allocate these dynamically when extracting the volume table
  *  sizeof(zft_volinfo) is about 32 or something close to that
  */
-static zft_volinfo  tape_vtbl = { {NULL, NULL}, 0, };
-static zft_volinfo  eot_vtbl  = { {NULL, NULL}, 0, };
-static zft_volinfo *cur_vtbl = NULL;
+static zft_volinfo  tape_vtbl;
+static zft_volinfo  eot_vtbl;
+static zft_volinfo *cur_vtbl;
 
 inline void zft_new_vtbl_entry(void)
 {

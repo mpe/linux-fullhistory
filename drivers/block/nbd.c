@@ -55,7 +55,7 @@ static int nbd_sizes[MAX_NBD];
 static u64 nbd_bytesizes[MAX_NBD];
 
 static struct nbd_device nbd_dev[MAX_NBD];
-static devfs_handle_t devfs_handle = NULL;
+static devfs_handle_t devfs_handle;
 
 #define DEBUG( s )
 /* #define DEBUG( s ) printk( s ) 

@@ -78,11 +78,11 @@
 /* ----------------- Begin global definitions ------------------- */
 
 static char mesg[100];
-static int pc_refcount, nbdevs = 0, num_cards = 0, liloconfig = 0;
+static int pc_refcount, nbdevs, num_cards, liloconfig;
 static int digi_poller_inhibited = 1 ;
 
-static int setup_error_code = 0;
-static int invalid_lilo_config = 0;
+static int setup_error_code;
+static int invalid_lilo_config;
 
 /* -----------------------------------------------------------------------
 	MAXBOARDS is typically 12, but ISA and EISA cards are restricted to 

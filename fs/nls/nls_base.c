@@ -20,7 +20,7 @@
 #endif
 #include <linux/spinlock.h>
 
-static struct nls_table *tables = (struct nls_table *) NULL;
+static struct nls_table *tables;
 static spinlock_t nls_lock = SPIN_LOCK_UNLOCKED;
 
 /*

@@ -545,28 +545,6 @@ void irda_proc_modcount(struct inode *inode, int fill)
 MODULE_AUTHOR("Dag Brattli <dagb@cs.uit.no>");
 MODULE_DESCRIPTION("The Linux IrDA Protocol Subsystem"); 
 MODULE_PARM(irda_debug, "1l");
-
-/*
- * Function init_module (void)
- *
- *    Initialize the irda module
- *
- */
-int init_module(void) 
-{
-	irda_proto_init(NULL);
-
-	return 0;
-}
-
-/*
- * Function cleanup_module (void)
- *
- *    Cleanup the irda module
- *
- */
-void cleanup_module(void) 
-{
-	irda_proto_cleanup();
-}
+module_exit(irda_proto_cleanup);
 #endif /* MODULE */
+

@@ -873,7 +873,7 @@ unsigned long __init bootmem_init(unsigned long *pages_avail)
 	}
 #endif	
 	/* Initialize the boot-time allocator. */
-	bootmap_size = init_bootmem_node(0, bootmap_pfn, phys_base>>PAGE_SHIFT, end_pfn);
+	bootmap_size = init_bootmem_node(NODE_DATA(0), bootmap_pfn, phys_base>>PAGE_SHIFT, end_pfn);
 
 	/* Now register the available physical memory with the
 	 * allocator.

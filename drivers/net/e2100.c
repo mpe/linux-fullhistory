@@ -390,10 +390,10 @@ static struct net_device dev_e21[MAX_E21_CARDS] = {
 	},
 };
 
-static int io[MAX_E21_CARDS] = { 0, };
-static int irq[MAX_E21_CARDS]  = { 0, };
-static int mem[MAX_E21_CARDS] = { 0, };
-static int xcvr[MAX_E21_CARDS] = { 0, };		/* choose int. or ext. xcvr */
+static int io[MAX_E21_CARDS];
+static int irq[MAX_E21_CARDS];
+static int mem[MAX_E21_CARDS];
+static int xcvr[MAX_E21_CARDS];		/* choose int. or ext. xcvr */
 
 MODULE_PARM(io, "1-" __MODULE_STRING(MAX_E21_CARDS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_E21_CARDS) "i");

@@ -42,7 +42,7 @@ unsigned long page_kernel;
 struct sparc_phys_banks sp_banks[SPARC_PHYS_BANKS];
 unsigned long sparc_unmapped_base;
 
-struct pgtable_cache_struct pgt_quicklists = { 0, 0, 0, 0 };
+struct pgtable_cache_struct pgt_quicklists;
 
 /* References to section boundaries */
 extern char __init_begin, __init_end, _start, _end, etext , edata;

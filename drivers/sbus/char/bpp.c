@@ -1015,7 +1015,7 @@ static inline void freeLptPort(int idx)
 
 #endif
 
-static devfs_handle_t devfs_handle = NULL;
+static devfs_handle_t devfs_handle;
 
 #ifdef MODULE
 int init_module(void)

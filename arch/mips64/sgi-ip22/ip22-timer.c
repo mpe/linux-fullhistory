@@ -79,8 +79,8 @@ static int set_rtc_mmss(unsigned long nowtime)
 	return retval;
 }
 
-static long last_rtc_update = 0;
-unsigned long missed_heart_beats = 0;
+static long last_rtc_update;
+unsigned long missed_heart_beats;
 
 void indy_timer_interrupt(struct pt_regs *regs)
 {

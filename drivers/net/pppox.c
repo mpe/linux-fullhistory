@@ -142,8 +142,6 @@ struct net_proto_family pppox_proto_family = {
 	pppox_create
 };
 
-extern int pppoe_init (void);
-
 int __init pppox_init(void)
 {
 	int err = 0;
@@ -152,7 +150,6 @@ int __init pppox_init(void)
 
 	if (err == 0) {
 		printk(KERN_INFO "Registered PPPoX v0.5\n");
-		pppoe_init();
 	}
 
 	return err;

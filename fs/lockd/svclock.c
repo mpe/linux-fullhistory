@@ -40,7 +40,7 @@ static void	nlmsvc_notify_blocked(struct file_lock *);
 /*
  * The list of blocked locks to retry
  */
-static struct nlm_block *	nlm_blocked = NULL;
+static struct nlm_block *	nlm_blocked;
 
 /*
  * Insert a blocked lock into the global list

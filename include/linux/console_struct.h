@@ -16,7 +16,7 @@ struct vc_data {
 	unsigned int	vc_cols;		/* [#] Console size */
 	unsigned int	vc_rows;
 	unsigned int	vc_size_row;		/* Bytes per row */
-	struct consw	*vc_sw;
+	const struct consw *vc_sw;
 	unsigned short	*vc_screenbuf;		/* In-memory character/attribute buffer */
 	unsigned int	vc_screenbuf_size;
 	unsigned char	vc_attr;		/* Current attributes */

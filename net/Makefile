@@ -46,7 +46,7 @@ subdir-$(CONFIG_DECNET)		+= decnet
 subdir-$(CONFIG_ECONET)		+= econet
 
 
-obj-y	:= socket.o protocols.o $(join $(subdir-y), $(patsubst %,/%.o,$(notdir $(subdir-y))))
+obj-y	:= socket.o $(join $(subdir-y), $(patsubst %,/%.o,$(notdir $(subdir-y))))
 ifeq ($(CONFIG_NET),y)
 obj-$(CONFIG_MODULES)		+= netsyms.o
 obj-$(CONFIG_SYSCTL)		+= sysctl_net.o

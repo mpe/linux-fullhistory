@@ -54,7 +54,7 @@ static void	nfs_readpage_result(struct rpc_task *task);
 # define IS_SWAPFILE(inode)	(0)
 #endif
 
-static kmem_cache_t *nfs_rdata_cachep = NULL;
+static kmem_cache_t *nfs_rdata_cachep;
 
 static __inline__ struct nfs_read_data *nfs_readdata_alloc(void)
 {

@@ -78,7 +78,7 @@ void __init free_area_init_node(int nid, pg_data_t *pgdat, struct page *pmap,
 	for (i = 0; i < MAX_NR_ZONES; i++)
 		size += zones_size[i];
 	size = LONG_ALIGN((size + 7) >> 3);
-	pgdat->valid_addr_bitmap = (unsigned long *)alloc_bootmem_node(nid, size);
+	pgdat->valid_addr_bitmap = (unsigned long *)alloc_bootmem_node(pgdat, size);
 	memset(pgdat->valid_addr_bitmap, 0, size);
 }
 

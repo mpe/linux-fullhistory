@@ -33,7 +33,7 @@
 static char *                  tmp_buf; 
 static DECLARE_MUTEX(tmp_buf_sem);
 
-int gs_debug = 0;
+int gs_debug;
 
 
 #ifdef DEBUG

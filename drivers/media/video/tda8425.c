@@ -13,6 +13,10 @@
  * two stereo inputs, so if someone has this card, could they tell me if the
  * second one can be used for anything (i.e., does it have an external input
  * that you can't hear even if you set input to composite?)
+ *
+ * Changes:
+ * Arnaldo Carvalho de Melo <acme@conectiva.com.br> - 08/14/2000
+ * - resource allocation fixes in tda8425_attach
  */
 
 #include <linux/module.h>
@@ -148,8 +152,10 @@ static int tda8425_attach(struct i2c_adapter *adap, int addr,
         client->addr = addr;
 
 	client->data = tda = kmalloc(sizeof *tda,GFP_KERNEL);
-	if (!tda)
+	if (!tda) {
+		kfree(client);
 		return -ENOMEM;
+	}
 	memset(tda,0,sizeof *tda);
 	do_tda8425_init(client);
 	MOD_INC_USE_COUNT;

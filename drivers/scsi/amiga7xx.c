@@ -72,8 +72,6 @@ int __init amiga7xx_detect(Scsi_Host_Template *tpnt)
 	    case ZORRO_PROD_PHASE5_BLIZZARD_603E_PLUS:
 		address = 0xf40000;
 		if (request_mem_region(address, 0x1000, "ncr53c710")) {
-		    strcpy(z->name,
-			   "Blizzard 603e+ Accelerator and SCSI Host Adapter");
 		    address = ZTWO_VADDR(address);
 		    options = OPTION_MEMORY_MAPPED | OPTION_DEBUG_TEST1 |
 			      OPTION_INTFLY | OPTION_SYNCHRONOUS | 
@@ -89,8 +87,6 @@ int __init amiga7xx_detect(Scsi_Host_Template *tpnt)
 #ifdef CONFIG_WARPENGINE_SCSI
     	    case ZORRO_PROD_MACROSYSTEMS_WARP_ENGINE_40xx:
 		if (request_mem_region(address+0x40000, 0x1000, "ncr53c710")) {
-		    strcpy(z->name, "Warp Engine 40xx Accelerator, SCSI Host "
-		    		    "Adapter and RAM Expansion");
 		    address = (unsigned long)ioremap(address, size);
 		    options = OPTION_MEMORY_MAPPED | OPTION_DEBUG_TEST1 |
 			      OPTION_INTFLY | OPTION_SYNCHRONOUS |
@@ -107,7 +103,6 @@ int __init amiga7xx_detect(Scsi_Host_Template *tpnt)
 	    case ZORRO_PROD_CBM_A4091_1:
 	    case ZORRO_PROD_CBM_A4091_2:
 		if (request_mem_region(address+0x800000, 0x1000, "ncr53c710")) {
-		    strcpy(z->name, "A4091 SCSI Host Adapter");
 		    address = (unsigned long)ioremap(address, size);
 		    options = OPTION_MEMORY_MAPPED | OPTION_DEBUG_TEST1 |
 			      OPTION_INTFLY | OPTION_SYNCHRONOUS |
@@ -123,8 +118,6 @@ int __init amiga7xx_detect(Scsi_Host_Template *tpnt)
 #ifdef CONFIG_GVP_TURBO_SCSI
     	    case ZORRO_PROD_GVP_GFORCE_040_060:
 		if (request_mem_region(address+0x40000, 0x1000, "ncr53c710")) {
-		    strcpy(z->name, "GForce 040/060 Accelerator and SCSI Host "
-		    		    "Adapter");
 		    address = ZTWO_VADDR(address);
 		    options = OPTION_MEMORY_MAPPED | OPTION_DEBUG_TEST1 |
 			      OPTION_INTFLY | OPTION_SYNCHRONOUS |

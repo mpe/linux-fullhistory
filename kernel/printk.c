@@ -45,7 +45,7 @@ int default_console_loglevel = DEFAULT_CONSOLE_LOGLEVEL;
 
 spinlock_t console_lock = SPIN_LOCK_UNLOCKED;
 
-struct console *console_drivers = NULL;
+struct console *console_drivers;
 static char log_buf[LOG_BUF_LEN];
 static unsigned long log_start;
 static unsigned long logged_chars;

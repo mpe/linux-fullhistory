@@ -74,7 +74,7 @@
 
 #undef USE_STATIC_SCSI_MEMORY
 
-struct proc_dir_entry *proc_scsi = NULL;
+struct proc_dir_entry *proc_scsi;
 
 #ifdef CONFIG_PROC_FS
 static int scsi_proc_info(char *buffer, char **start, off_t offset, int length);
@@ -98,23 +98,23 @@ static void scsi_dump_status(int level);
 /*
  * Data declarations.
  */
-unsigned long scsi_pid = 0;
-Scsi_Cmnd *last_cmnd = NULL;
+unsigned long scsi_pid;
+Scsi_Cmnd *last_cmnd;
 /* Command groups 3 and 4 are reserved and should never be used.  */
 const unsigned char scsi_command_size[8] =
 {
 	6, 10, 10, 12,
 	12, 12, 10, 10
 };
-static unsigned long serial_number = 0;
-static Scsi_Cmnd *scsi_bh_queue_head = NULL;
-static Scsi_Cmnd *scsi_bh_queue_tail = NULL;
+static unsigned long serial_number;
+static Scsi_Cmnd *scsi_bh_queue_head;
+static Scsi_Cmnd *scsi_bh_queue_tail;
 
 /*
  * Note - the initial logging level can be set here to log events at boot time.
  * After the system is up, you may enable logging via the /proc interface.
  */
-unsigned int scsi_logging_level = 0;
+unsigned int scsi_logging_level;
 
 const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE] =
 {
@@ -716,7 +716,7 @@ int scsi_dispatch_cmd(Scsi_Cmnd * SCpnt)
 	return rtn;
 }
 
-devfs_handle_t scsi_devfs_handle = NULL;
+devfs_handle_t scsi_devfs_handle;
 
 /*
  * scsi_do_cmd sends all the commands out to the low-level driver.  It
@@ -2166,12 +2166,11 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 		while ((SHT = *SHTp) != NULL) {
 			if (SHT == tpnt) {
 				*SHTp = SHT->next;
+				remove_proc_entry(tpnt->proc_name, proc_scsi);
 				break;
 			}
 			SHTp = &SHT->next;
 		}
-		/* Rebuild the /proc/scsi directory entries */
-		remove_proc_entry(tpnt->proc_name, proc_scsi);
 	}
 	MOD_DEC_USE_COUNT;
 }

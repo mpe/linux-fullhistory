@@ -442,10 +442,13 @@ static struct net_proto_family svc_family_ops = {
  *	Initialize the ATM SVC protocol family
  */
 
-void __init atmsvc_proto_init(struct net_proto *pro)
+static int __init atmsvc_init(void)
 {
 	if (sock_register(&svc_family_ops) < 0) {
 		printk(KERN_ERR "ATMSVC: can't register");
-		return;
+		return -1;
 	}
+	return 0;
 }
+
+module_init(atmsvc_init);

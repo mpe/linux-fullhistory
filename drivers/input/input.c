@@ -49,12 +49,12 @@ EXPORT_SYMBOL(input_event);
 #define INPUT_MAJOR	13
 #define INPUT_DEVICES	256
 
-static struct input_dev *input_dev = NULL;
-static struct input_handler *input_handler = NULL;
-static struct input_handler *input_table[8] = { NULL, /* ... */ };
-static devfs_handle_t input_devfs_handle = NULL;
-static int input_number = 0;
-static long input_devices[NBITS(INPUT_DEVICES)] = { 0, /* ... */ };
+static struct input_dev *input_dev;
+static struct input_handler *input_handler;
+static struct input_handler *input_table[8];
+static devfs_handle_t input_devfs_handle;
+static int input_number;
+static long input_devices[NBITS(INPUT_DEVICES)];
 
 void input_event(struct input_dev *dev, unsigned int type, unsigned int code, int value)
 {

@@ -64,8 +64,8 @@ static void idedisk_bswap_data (void *buffer, int wcount)
 	u16 *p = buffer;
 
 	while (wcount--) {
-		*p++ = *p << 8 | *p >> 8;
-		*p++ = *p << 8 | *p >> 8;
+		*p = *p << 8 | *p >> 8; p++;
+		*p = *p << 8 | *p >> 8; p++;
 	}
 }
 

@@ -938,7 +938,20 @@ CONFIG_BLK_DEV_SIS5513
   available" as well.
 
   Please read the comments at the top of drivers/ide/sis5513.c
- 
+
+SLC90E66 chipset support
+CONFIG_BLK_DEV_SLC90E66
+  This driver ensures (U)DMA support for Victroy66 SouthBridges for
+  SMsC with Intel NorthBridges.  This is an Ultra66 based chipset.
+  The nice thing about it is that you can mix Ultra/DMA/PIO devices
+  and it will handle timing cycles.  Since this is an improved look-a-like
+  to the PIIX4 it should be a nice addition.
+
+  If you say Y here, you need to say Y to "Use DMA by default when
+  available" as well.
+
+  Please read the comments at the top of drivers/ide/slc90e66.c
+
 Winbond SL82c105 support
 CONFIG_BLK_DEV_SL82C105
   If you have a Winbond SL82c105 IDE controller, say Y here to enable
@@ -2146,12 +2159,25 @@ CONFIG_ALPHA_LEGACY_START_ADDRESS
 
   If you're using aboot 0.7 or later, the bootloader will examine
   the ELF headers to determine where to transfer control.  Unfortunately,
-  most older bootloaders -- APB, or MILO -- hardcoded the kernel
+  most older bootloaders -- APB or MILO -- hardcoded the kernel
   start address rather than examining the ELF headers, and the result
   is a hard lockup.
 
   Say Y if you have a broken bootloader.  Say N if you do not, or
   if you wish to run on Wildfire.
+
+Large VMALLOC support
+CONFIG_ALPHA_LARGE_VMALLOC
+  Process creation and other aspects of virtual memory management
+  can be streamlined if we restrict the kernel to one PGD for all
+  vmalloc allocations.  This equates to about 8GB.
+
+  Under normal circumstances, this is so far and above what is needed
+  as to be laughable.  However, there are certain applications (such
+  as benchmark-grade in-kernel web serving) that can make use of as
+  much vmalloc space as is available.
+
+  Say N unless you know you need gobs and gobs of vmalloc space.
 
 Non-standard serial port support
 CONFIG_SERIAL_NONSTANDARD
@@ -15131,18 +15157,27 @@ CONFIG_RMW_INSNS
   really know what you are doing, say N. Try Y only if you're quite
   adventurous.
 
-Amiga AutoConfig Identification
+Zorro support
 CONFIG_ZORRO
-  This enables support for automatic identification of Amiga expansion
-  cards that obey the AutoConfig(tm) specification.
-  Say Y if you want your expansion cards to be identified on bootup;
-  it will enlarge your kernel by about 10 KB. The identification
-  information is then also available through /proc/zorro (say Y to
-  "/proc file system support"!). Read Documentation/zorro.txt for more
-  information. 
+  This enables support for the Zorro bus in the Amiga. If you have
+  expansion cards in your Amiga that conform to the Amiga
+  AutoConfig(tm) specification, say Y, otherwise N. Note that even
+  expansion cards that do not fit in the Zorro slots but fit in e.g.
+  the CPU slot may fall in this category, so you have to say Y to let
+  Linux use these.
 
-  Note that even if you say N here, you can still use your expansion
-  cards. If in doubt, say Y.
+Zorro device name database
+CONFIG_ZORRO_NAMES
+  By default, the kernel contains a database of all known Zorro device
+  names to make the information in /proc/iomem comprehensible to the
+  user. This database increases the size of the kernel image by about
+  15KB, but it gets freed after the system boots up, so it doesn't
+  take up kernel memory. Anyway, if you are building an installation
+  floppy or kernel for an embedded system where kernel image size
+  really matters, you can disable this feature and you'll get device
+  ID numbers instead of names.
+
+  When in doubt, say Y.
 
 Amiga 1200/600 PCMCIA support (EXPERIMENTAL)
 CONFIG_AMIGA_PCMCIA

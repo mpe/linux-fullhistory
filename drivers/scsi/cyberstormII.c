@@ -85,7 +85,6 @@ int __init cyberII_esp_detect(Scsi_Host_Template *tpnt)
 					   sizeof(struct ESP_regs));
 			return 0; /* Bail out if address did not hold data */
 		}
-		strcpy(z->name, "CyberStorm Mk II SCSI Host Adapter");
 
 		/* Do command transfer with programmed I/O */
 		esp->do_pio_cmds = 1;

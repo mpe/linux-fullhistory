@@ -68,7 +68,7 @@ static struct pc110pad_params current_params;
 /* driver/filesystem interface management */
 static wait_queue_head_t queue;
 static struct fasync_struct *asyncptr;
-static int active=0;	/* number of concurrent open()s */
+static int active;	/* number of concurrent open()s */
 static struct semaphore reader_lock;
 
 /**
@@ -111,10 +111,10 @@ static void wake_readers(void)
  * up/down mouse events to be created by incrementing synthesize_tap.
  */
  
-static int button_pending=0;
-static int recent_transition=0;
-static int transition_count=0;
-static int synthesize_tap=0;
+static int button_pending;
+static int recent_transition;
+static int transition_count;
+static int synthesize_tap;
 static void tap_timeout(unsigned long data);
 static struct timer_list tap_timer = { function: tap_timeout };
 
@@ -218,13 +218,13 @@ static void read_button(int *b)
  */
 
 static int raw_data[3];
-static int raw_data_count=0;
-static int raw_x=0, raw_y=0;	/* most recent absolute co-ords read */
-static int raw_down=0;		/* raw up/down state */
-static int debounced_down=0;	/* up/down state after debounce processing */
+static int raw_data_count;
+static int raw_x, raw_y;	/* most recent absolute co-ords read */
+static int raw_down;		/* raw up/down state */
+static int debounced_down;	/* up/down state after debounce processing */
 static enum { NO_BOUNCE, JUST_GONE_UP, JUST_GONE_DOWN } bounce=NO_BOUNCE;
 				/* set just after an up/down transition */
-static int xy_pending=0;	/* set if new data have not yet been read */
+static int xy_pending;	/* set if new data have not yet been read */
 
 /* 
  * Timer goes off a short while after an up/down transition and copies
@@ -425,7 +425,7 @@ static void read_raw_pad(int *down, int *debounced, int *x, int *y)
  * will make much sense in that case.
  */
 static int read_bytes[3];
-static int read_byte_count=0;
+static int read_byte_count;
 
 /**
  *	sample_raw:

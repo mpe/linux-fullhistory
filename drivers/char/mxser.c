@@ -170,10 +170,10 @@ static mxser_pciinfo mxser_pcibrds[] =
 	{PCI_VENDOR_ID_MOXA, PCI_DEVICE_ID_C104, MXSER_BOARD_C104_PCI},
 };
 
-static int ioaddr[MXSER_BOARDS] = {0, 0, 0, 0};
+static int ioaddr[MXSER_BOARDS];
 static int ttymajor = MXSERMAJOR;
 static int calloutmajor = MXSERCUMAJOR;
-static int verbose = 0;
+static int verbose;
 
 /* Variables for insmod */
 
@@ -274,7 +274,7 @@ static int mxvar_diagflag;
  * buffer across all the serial ports, since it significantly saves
  * memory if large numbers of serial ports are open.
  */
-static unsigned char *mxvar_tmp_buf = 0;
+static unsigned char *mxvar_tmp_buf;
 static struct semaphore mxvar_tmp_buf_sem;
 
 /*

@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.115 2000/10/06 10:37:47 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.116 2000/10/15 01:34:45 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -956,7 +956,7 @@ extern void tcp_v4_init(struct net_proto_family *);
  *	Called by socket.c on kernel startup.  
  */
  
-void __init inet_proto_init(struct net_proto *pro)
+static int __init inet_init(void)
 {
 	struct sk_buff *dummy_skb;
 	struct inet_protocol *p;
@@ -966,7 +966,7 @@ void __init inet_proto_init(struct net_proto *pro)
 	if (sizeof(struct inet_skb_parm) > sizeof(dummy_skb->cb))
 	{
 		printk(KERN_CRIT "inet_proto_init: panic\n");
-		return;
+		return -EINVAL;
 	}
 
 	/*
@@ -1040,4 +1040,6 @@ void __init inet_proto_init(struct net_proto *pro)
 	proc_net_create ("tcp", 0, tcp_get_info);
 	proc_net_create ("udp", 0, udp_get_info);
 #endif		/* CONFIG_PROC_FS */
+	return 0;
 }
+module_init(inet_init);

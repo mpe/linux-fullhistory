@@ -514,7 +514,7 @@ void hfs_latin2mac(struct hfs_name *out, const char *in, int len)
 	int hi, lo;
 	unsigned char code, c, *count;
 	unsigned char *p = out->Name;
-	static int map_initialized = 0;
+	static int map_initialized;
 
 	if (!map_initialized) {
 		int i;

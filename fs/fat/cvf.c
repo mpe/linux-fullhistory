@@ -98,8 +98,8 @@ struct cvf_format bigblock_cvf = {
 	NULL
 };
 
-struct cvf_format *cvf_formats[MAX_CVF_FORMATS]={NULL,NULL,NULL};
-int cvf_format_use_count[MAX_CVF_FORMATS]={0,0,0};
+struct cvf_format *cvf_formats[MAX_CVF_FORMATS];
+int cvf_format_use_count[MAX_CVF_FORMATS];
 
 int register_cvf_format(struct cvf_format*cvf_format)
 { int i,j;

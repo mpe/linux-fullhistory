@@ -1,4 +1,4 @@
-/* $Id: pgalloc.h,v 1.10 2000/10/13 01:40:26 davem Exp $ */
+/* $Id: pgalloc.h,v 1.11 2000/10/16 14:32:49 anton Exp $ */
 #ifndef _SPARC_PGALLOC_H
 #define _SPARC_PGALLOC_H
 
@@ -138,9 +138,5 @@ BTFIXUPDEF_CALL(pgd_t *, pgd_alloc, void)
 
 #define pgd_free(pgd) BTFIXUP_CALL(pgd_free)(pgd)
 #define pgd_alloc() BTFIXUP_CALL(pgd_alloc)()
-
-#error Anton, you need to do set_pgdir things now as on ix86, see i386/mm/fault.c
-
-#define set_pgdir(address,entry) BTFIXUP_CALL(set_pgdir)(address,entry)
 
 #endif /* _SPARC64_PGALLOC_H */

@@ -38,7 +38,7 @@ static struct nfscache_head *	hash_list;
 static struct svc_cacherep *	lru_head;
 static struct svc_cacherep *	lru_tail;
 static struct svc_cacherep *	nfscache;
-static int			cache_initialized = 0;
+static int			cache_initialized;
 static int			cache_disabled = 1;
 
 static int	nfsd_cache_append(struct svc_rqst *rqstp, struct svc_buf *data);
@@ -215,7 +215,7 @@ nfsd_cache_lookup(struct svc_rqst *rqstp, int type)
 
 	/* This should not happen */
 	if (rp == NULL) {
-		static int	complaints = 0;
+		static int	complaints;
 
 		printk(KERN_WARNING "nfsd: all repcache entries locked!\n");
 		if (++complaints > 5) {

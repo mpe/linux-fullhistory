@@ -161,7 +161,7 @@ static struct file_operations socksys_fops = {
 	release:	socksys_release,
 };
 
-static devfs_handle_t devfs_handle = NULL;
+static devfs_handle_t devfs_handle;
 
 int __init
 init_socksys(void)

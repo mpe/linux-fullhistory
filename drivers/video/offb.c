@@ -369,7 +369,7 @@ static void __init offb_init_nodriver(struct device_node *dp)
     
 }
 
-static void offb_init_fb(const char *name, const char *full_name,
+static void __init offb_init_fb(const char *name, const char *full_name,
 				    int width, int height, int depth,
 				    int pitch, unsigned long address,
 				    struct device_node *dp)

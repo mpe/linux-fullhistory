@@ -30,10 +30,6 @@ static int cc_to_error[16] = {
 };
 
 
-struct ed;
-struct td;
-/* for ED and TD structures */
-
 /* ED States */
 
 #define ED_NEW 		0x00
@@ -406,12 +402,100 @@ static int rh_submit_urb(urb_t * urb);
 static int rh_unlink_urb(urb_t * urb);
 static int rh_init_int_timer(urb_t * urb);
 
-#ifdef OHCI_VERBOSE_DEBUG
-#define OHCI_FREE(x) kfree(x); printk("OHCI FREE: %d: %4x\n", -- __ohci_free_cnt, (unsigned int) x)
-#define OHCI_ALLOC(x,size) (x) = kmalloc(size, in_interrupt() ? GFP_ATOMIC : GFP_KERNEL); printk("OHCI ALLO: %d: %4x\n", ++ __ohci_free_cnt,(unsigned int) x)
-static int __ohci_free_cnt = 0;
-#else
-#define OHCI_FREE(x) kfree(x) 
-#define OHCI_ALLOC(x,size) (x) = kmalloc(size, in_interrupt() ? GFP_ATOMIC : GFP_KERNEL) 
-#endif
+/*-------------------------------------------------------------------------*/
+
+#define ALLOC_FLAGS (in_interrupt () ? GFP_ATOMIC : GFP_KERNEL)
  
+#ifdef OHCI_MEM_SLAB
+#define	__alloc(t,c) kmem_cache_alloc(c,ALLOC_FLAGS)
+#define	__free(c,x) kmem_cache_free(c,x)
+static kmem_cache_t *td_cache, *ed_cache;
+
+/*
+ * WARNING:  do NOT use this with "forced slab debug"; it won't respect
+ * our hardware alignment requirement.
+ */
+#ifndef OHCI_MEM_FLAGS
+#define	OHCI_MEM_FLAGS 0
+#endif
+
+static int ohci_mem_init (void)
+{
+	/* redzoning (or forced debug!) breaks alignment */
+	int	flags = (OHCI_MEM_FLAGS) & ~SLAB_RED_ZONE;
+
+	/* TDs accessed by controllers and host */
+	td_cache = kmem_cache_create ("ohci_td", sizeof (struct td), 0,
+		flags | SLAB_HWCACHE_ALIGN, NULL, NULL);
+	if (!td_cache) {
+		dbg ("no TD cache?");
+		return -ENOMEM;
+	}
+
+	/* EDs are accessed by controllers and host;  dev part is host-only */
+	ed_cache = kmem_cache_create ("ohci_ed", sizeof (struct ohci_device), 0,
+		flags | SLAB_HWCACHE_ALIGN, NULL, NULL);
+	if (!ed_cache) {
+		dbg ("no ED cache?");
+		kmem_cache_destroy (td_cache);
+		td_cache = 0;
+		return -ENOMEM;
+	}
+	dbg ("slab flags 0x%x", flags);
+	return 0;
+}
+
+static void ohci_mem_cleanup (void)
+{
+	if (ed_cache && kmem_cache_destroy (ed_cache))
+		err ("ed_cache remained");
+	ed_cache = 0;
+
+	if (td_cache && kmem_cache_destroy (td_cache))
+		err ("td_cache remained");
+	td_cache = 0;
+}
+
+#else
+#define	__alloc(t,c) kmalloc(sizeof(t),ALLOC_FLAGS)
+#define	__free(dev,x) kfree(x)
+#define td_cache 0
+#define ed_cache 0
+
+static inline int ohci_mem_init (void) { return 0; }
+static inline void ohci_mem_cleanup (void) { return; }
+
+/* FIXME: pci_consistent version */
+
+#endif
+
+
+/* TDs ... */
+static inline struct td *
+td_alloc (struct ohci *hc)
+{
+	struct td *td = (struct td *) __alloc (struct td, td_cache);
+	return td;
+}
+
+static inline void
+td_free (struct ohci *hc, struct td *td)
+{
+	__free (td_cache, td);
+}
+
+
+/* DEV + EDs ... only the EDs need to be consistent */
+static inline struct ohci_device *
+dev_alloc (struct ohci *hc)
+{
+	struct ohci_device *dev = (struct ohci_device *)
+		__alloc (struct ohci_device, ed_cache);
+	return dev;
+}
+
+static inline void
+dev_free (struct ohci_device *dev)
+{
+	__free (ed_cache, dev);
+}

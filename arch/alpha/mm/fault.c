@@ -108,6 +108,11 @@ do_page_fault(unsigned long address, unsigned long mmcsr,
 	if (!mm || in_interrupt())
 		goto no_context;
 
+#ifdef CONFIG_ALPHA_LARGE_VMALLOC
+	if (address >= TASK_SIZE)
+		goto vmalloc_fault;
+#endif
+
 	down(&mm->mmap_sem);
 	vma = find_vma(mm, address);
 	if (!vma)
@@ -204,4 +209,25 @@ do_sigbus:
 	if (!user_mode(regs))
 		goto no_context;
 	return;
+
+#ifdef CONFIG_ALPHA_LARGE_VMALLOC
+vmalloc_fault:
+	if (user_mode(regs)) {
+		force_sig(SIGSEGV, current);
+		return;
+	} else {
+		/* Synchronize this task's top level page-table
+		   with the "reference" page table from init.  */
+		long offset = __pgd_offset(address);
+		pgd_t *pgd, *pgd_k;
+
+		pgd = current->active_mm->pgd + offset;
+		pgd_k = swapper_pg_dir + offset;
+		if (!pgd_present(*pgd) && pgd_present(*pgd_k)) {
+			pgd_val(*pgd) = pgd_val(*pgd_k);
+			return;
+		}
+		goto no_context;
+	}
+#endif
 }

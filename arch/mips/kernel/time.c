@@ -26,7 +26,7 @@
 #include <linux/timex.h>
 
 extern volatile unsigned long wall_jiffies;
-unsigned long r4k_interval = 0;
+unsigned long r4k_interval;
 extern rwlock_t xtime_lock;
 
 /*
@@ -40,7 +40,7 @@ extern rwlock_t xtime_lock;
 
 /* Cycle counter value at the previous timer interrupt.. */
 
-static unsigned int timerhi = 0, timerlo = 0;
+static unsigned int timerhi, timerlo;
 
 /*
  * On MIPS only R4000 and better have a cycle counter.
@@ -53,14 +53,14 @@ static unsigned long do_fast_gettimeoffset(void)
 	unsigned long res, tmp;
 
 	/* Last jiffy when do_fast_gettimeoffset() was called. */
-	static unsigned long last_jiffies=0;
+	static unsigned long last_jiffies;
 	unsigned long quotient;
 
 	/*
 	 * Cached "1/(clocks per usec)*2^32" value.
 	 * It has to be recalculated once each jiffy.
 	 */
-	static unsigned long cached_quotient=0;
+	static unsigned long cached_quotient;
 
 	tmp = jiffies;
 
@@ -154,7 +154,7 @@ static unsigned long do_slow_gettimeoffset(void)
 	int count;
 
 	static int count_p = LATCH;    /* for the first call after boot */
-	static unsigned long jiffies_p = 0;
+	static unsigned long jiffies_p;
 
 	/*
 	 * cache volatile jiffies temporarily; we have IRQs turned off. 
@@ -330,7 +330,7 @@ static int set_rtc_mmss(unsigned long nowtime)
 }
 
 /* last time the cmos clock got updated */
-static long last_rtc_update = 0;
+static long last_rtc_update;
 
 /*
  * timer_interrupt() needs to keep up the real-time clock,
@@ -340,7 +340,7 @@ static void inline
 timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 #ifdef CONFIG_DDB5074
-	static unsigned cnt = 0, period = 0, dist = 0;
+	static unsigned cnt, period, dist;
 
 	if (cnt == 0 || cnt == dist)
 	    ddb5074_led_d2(1);

@@ -43,11 +43,11 @@
  *       8              + everything else
  */
 ft_trace_t ftape_tracing = ft_t_info; /* Default level: information and up */
-int  ftape_function_nest_level = 0;
+int  ftape_function_nest_level;
 
 /*      Local vars.
  */
-static __u8 trace_id = 0;
+static __u8 trace_id;
 static char spacing[] = "*                              ";
 
 void ftape_trace_call(const char *file, const char *name)

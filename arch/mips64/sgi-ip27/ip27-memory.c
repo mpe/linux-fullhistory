@@ -200,11 +200,11 @@ void __init prom_meminit(void)
 							<< PAGE_SHIFT));
 		NODE_DATA(node)->bdata = plat_node_bdata + node;
 		slot_freepfn += node_datasz;
-	  	bootmap_size = init_bootmem_node(node, slot_freepfn, 
+	  	bootmap_size = init_bootmem_node(NODE_DATA(node), slot_freepfn, 
 						slot_firstpfn, slot_lastpfn);
-		free_bootmem_node(node, slot_firstpfn << PAGE_SHIFT, 
+		free_bootmem_node(NODE_DATA(node), slot_firstpfn << PAGE_SHIFT, 
 				(slot_lastpfn - slot_firstpfn) << PAGE_SHIFT);
-		reserve_bootmem_node(node, slot_firstpfn << PAGE_SHIFT,
+		reserve_bootmem_node(NODE_DATA(node), slot_firstpfn << PAGE_SHIFT,
 		  ((slot_freepfn - slot_firstpfn) << PAGE_SHIFT) + bootmap_size);
 	}
 	printk("Total memory probed : 0x%lx pages\n", numpages);
@@ -278,7 +278,7 @@ void __init mem_init(void)
 		/*
 	 	 * This will free up the bootmem, ie, slot 0 memory.
 	 	 */
-		totalram_pages += free_all_bootmem_node(nid);
+		totalram_pages += free_all_bootmem_node(NODE_DATA(nid));
 
 		/*
 		 * We need to manually do the other slots.

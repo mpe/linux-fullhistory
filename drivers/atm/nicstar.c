@@ -259,7 +259,7 @@ static unsigned char ns_phy_get(struct atm_dev *dev, unsigned long addr);
 /* Global variables ***********************************************************/
 
 static struct ns_dev *cards[NS_MAX_CARDS];
-static unsigned num_cards = 0;
+static unsigned num_cards;
 static struct atmdev_ops atm_ops =
 {
    open:	ns_open,

@@ -89,12 +89,14 @@ static void snap_datalink_header(struct datalink_proto *dl, struct sk_buff *skb,
 EXPORT_SYMBOL(register_snap_client);
 EXPORT_SYMBOL(unregister_snap_client);
 
-void __init snap_proto_init(struct net_proto *pro)
+static int __init snap_init(void)
 {
 	snap_dl=register_8022_client(0xAA, snap_rcv);
 	if(snap_dl==NULL)
 		printk("SNAP - unable to register with 802.2\n");
+	return 0;
 }
+module_init(snap_init);
 
 /*
  *	Register SNAP clients. We don't yet use this for IP.

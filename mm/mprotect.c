@@ -30,9 +30,16 @@ static inline void change_pte_range(pmd_t * pmd, unsigned long address,
 	if (end > PMD_SIZE)
 		end = PMD_SIZE;
 	do {
-		pte_t entry = *pte;
-		if (pte_present(entry))
+		if (pte_present(*pte)) {
+			pte_t entry;
+
+			/* Avoid an SMP race with hardware updated dirty/clean
+			 * bits by wiping the pte and then setting the new pte
+			 * into place.
+			 */
+			entry = ptep_get_and_clear(pte);
 			set_pte(pte, pte_modify(entry, newprot));
+		}
 		address += PAGE_SIZE;
 		pte++;
 	} while (address && (address < end));

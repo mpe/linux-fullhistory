@@ -101,6 +101,7 @@
  *						ax25_connect() and ax25_sendmsg()
  *			Joerg(DL1BKE)		Added support for SO_BINDTODEVICE
  *			Arnaldo C. Melo		s/suser/capable(CAP_NET_ADMIN)/, some more cleanups
+ *			Michal Ostrowski	Module initialization cleanup.
  */
 
 #include <linux/config.h>
@@ -136,6 +137,8 @@
 #include <linux/init.h>
 #include <net/ip.h>
 #include <net/arp.h>
+
+
 
 ax25_cb *volatile ax25_list = NULL;
 
@@ -1844,7 +1847,7 @@ EXPORT_SYMBOL(asc2ax);
 EXPORT_SYMBOL(null_ax25_address);
 EXPORT_SYMBOL(ax25_display_timer);
 
-void __init ax25_proto_init(struct net_proto *pro)
+static int __init ax25_init(void)
 {
 	sock_register(&ax25_family_ops);
 	ax25_packet_type.type = htons(ETH_P_AX25);
@@ -1861,20 +1864,16 @@ void __init ax25_proto_init(struct net_proto *pro)
 #endif
 
 	printk(KERN_INFO "NET4: G4KLX/GW4PTS AX.25 for Linux. Version 0.37 for Linux NET4.0\n");
+	return 0;
 }
+module_init(ax25_init);
+
 
 #ifdef MODULE
 MODULE_AUTHOR("Jonathan Naylor G4KLX <g4klx@g4klx.demon.co.uk>");
 MODULE_DESCRIPTION("The amateur radio AX.25 link layer protocol");
 
-int init_module(void)
-{
-	ax25_proto_init(NULL);
-
-	return 0;
-}
-
-void cleanup_module(void)
+static void __exit ax25_exit(void)
 {
 #ifdef CONFIG_PROC_FS
 	proc_net_remove("ax25_route");
@@ -1895,6 +1894,7 @@ void cleanup_module(void)
 
 	sock_unregister(PF_AX25);
 }
-#endif
+module_exit(ax25_exit);
+#endif /* MODULE */
 
 #endif

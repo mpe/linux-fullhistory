@@ -367,6 +367,7 @@ clean:	archclean
 	rm -f drivers/char/consolemap_deftbl.c drivers/video/promcon_tbl.c
 	rm -f drivers/char/conmakehash
 	rm -f drivers/pci/devlist.h drivers/pci/classlist.h drivers/pci/gen-devlist
+	rm -f drivers/zorro/devlist.h drivers/zorro/gen-devlist
 	rm -f drivers/sound/bin2hex drivers/sound/hex2hex
 	rm -f drivers/atm/fore200e_mkfirm drivers/atm/{pca,sba}*{.bin,.bin1,.bin2}
 	rm -f net/khttpd/make_times_h

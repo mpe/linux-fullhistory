@@ -1581,7 +1581,7 @@ static struct proc_dir_entry *proc_root_mtrr;
 
 #  endif  /*  CONFIG_PROC_FS  */
 
-static devfs_handle_t devfs_handle = NULL;
+static devfs_handle_t devfs_handle;
 
 static void compute_ascii (void)
 {

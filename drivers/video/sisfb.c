@@ -3313,7 +3313,7 @@ static struct fb_ops sisfb_ops = {
 	fb_mmap:	sisfb_mmap,
 };
 
-int sisfb_setup(char *options)
+int __init sisfb_setup(char *options)
 {
 	char *this_opt;
 

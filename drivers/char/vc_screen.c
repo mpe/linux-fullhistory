@@ -459,7 +459,7 @@ static struct file_operations vcs_fops = {
 	open:		vcs_open,
 };
 
-static devfs_handle_t devfs_handle = NULL;
+static devfs_handle_t devfs_handle;
 
 void vcs_make_devfs (unsigned int index, int unregister)
 {

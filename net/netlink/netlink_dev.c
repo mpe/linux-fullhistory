@@ -31,7 +31,7 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 
-static unsigned open_map = 0;
+static unsigned open_map;
 static struct socket *netlink_user[MAX_LINKS];
 
 /*
@@ -178,7 +178,7 @@ static struct file_operations netlink_fops = {
 	release:	netlink_release,
 };
 
-static devfs_handle_t devfs_handle = NULL;
+static devfs_handle_t devfs_handle;
 
 static void __init make_devfs_entries (const char *name, int minor)
 {

@@ -36,7 +36,7 @@
 #define CYCLES_PER_JIFFY	(CYCLES_PER_SEC/HZ)
 
 static unsigned long ct_cur[NR_CPUS];	/* What counter should be at next timer irq */
-static long last_rtc_update = 0;	/* Last time the rtc clock got updated */
+static long last_rtc_update;		/* Last time the rtc clock got updated */
 
 extern rwlock_t xtime_lock;
 extern volatile unsigned long wall_jiffies;

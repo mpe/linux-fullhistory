@@ -51,9 +51,9 @@ EXPORT_SYMBOL(gameport_close);
 EXPORT_SYMBOL(gameport_rescan);
 EXPORT_SYMBOL(gameport_cooked_read);
 
-static struct gameport *gameport_list = NULL;
-static struct gameport_dev *gameport_dev = NULL;
-static int gameport_number = 0;
+static struct gameport *gameport_list;
+static struct gameport_dev *gameport_dev;
+static int gameport_number;
 
 /*
  * gameport_measure_speed() measures the gameport i/o speed.

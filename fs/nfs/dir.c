@@ -796,7 +796,7 @@ static int nfs_rmdir(struct inode *dir_i, struct dentry *dentry)
 static int nfs_sillyrename(struct inode *dir_i, struct dentry *dentry)
 {
 	struct dentry *dir = dentry->d_parent;
-	static unsigned int sillycounter = 0;
+	static unsigned int sillycounter;
 	const int      i_inosize  = sizeof(dir_i->i_ino)*2;
 	const int      countersize = sizeof(sillycounter)*2;
 	const int      slen       = strlen(".nfs") + i_inosize + countersize;

@@ -38,9 +38,9 @@ static int max_interrupt_work = 25;
 
 #define MAX_UNITS 8
 /* Used to pass the full-duplex flag, etc. */
-static int full_duplex[MAX_UNITS] = {0, };
-static int options[MAX_UNITS] = {0, };
-static int mtu[MAX_UNITS] = {0, };			/* Jumbo MTU for interfaces. */
+static int full_duplex[MAX_UNITS];
+static int options[MAX_UNITS];
+static int mtu[MAX_UNITS];			/* Jumbo MTU for interfaces. */
 
 /*  The possible media types that can be set in options[] are: */
 const char * const medianame[] = {
@@ -924,18 +924,20 @@ static void set_rx_mode(struct net_device *dev)
 				 i++, mclist = mclist->next)
 				set_bit(ether_crc_le(ETH_ALEN, mclist->dmi_addr) & 0x1ff,
 						hash_table);
-			for (i = 0; i < 32; i++)
-				*setup_frm++ = *setup_frm++ = hash_table[i];
+			for (i = 0; i < 32; i++) {
+				*setup_frm++ = hash_table[i];
+				*setup_frm++ = hash_table[i];
+			}
 			setup_frm = &tp->setup_frame[13*6];
 		} else {
 			/* We have <= 14 addresses so we can use the wonderful
 			   16 address perfect filtering of the Tulip. */
 			for (i = 0, mclist = dev->mc_list; i < dev->mc_count;
 				 i++, mclist = mclist->next) {
-				eaddrs = (u16 *)mclist->dmi_addr;
-				*setup_frm++ = *setup_frm++ = *eaddrs++;
-				*setup_frm++ = *setup_frm++ = *eaddrs++;
-				*setup_frm++ = *setup_frm++ = *eaddrs++;
+				u16 *eaddrs = (u16 *)mclist->dmi_addr;
+				*setup_frm++ = eaddrs[0]; *setup_frm++ = eaddrs[0];
+				*setup_frm++ = eaddrs[1]; *setup_frm++ = eaddrs[1];
+				*setup_frm++ = eaddrs[2]; *setup_frm++ = eaddrs[2];
 			}
 			/* Fill the unused entries with the broadcast address. */
 			memset(setup_frm, 0xff, (15-i)*12);
@@ -944,9 +946,9 @@ static void set_rx_mode(struct net_device *dev)
 
 		/* Fill the final entry with our physical address. */
 		eaddrs = (u16 *)dev->dev_addr;
-		*setup_frm++ = *setup_frm++ = eaddrs[0];
-		*setup_frm++ = *setup_frm++ = eaddrs[1];
-		*setup_frm++ = *setup_frm++ = eaddrs[2];
+		*setup_frm++ = eaddrs[0]; *setup_frm++ = eaddrs[0];
+		*setup_frm++ = eaddrs[1]; *setup_frm++ = eaddrs[1];
+		*setup_frm++ = eaddrs[2]; *setup_frm++ = eaddrs[2];
 
 		spin_lock_irqsave(&tp->lock, flags);
 
@@ -1010,12 +1012,12 @@ static void set_rx_mode(struct net_device *dev)
 static int __devinit tulip_init_one (struct pci_dev *pdev,
 				     const struct pci_device_id *ent)
 {
-	static int did_version = 0;			/* Already printed version info. */
+	static int did_version;			/* Already printed version info. */
 	struct tulip_private *tp;
 	/* See note below on the multiport cards. */
 	static unsigned char last_phys_addr[6] = {0x00, 'L', 'i', 'n', 'u', 'x'};
-	static int last_irq = 0;
-	static int multiport_cnt = 0;		/* For four-port boards w/one EEPROM */
+	static int last_irq;
+	static int multiport_cnt;		/* For four-port boards w/one EEPROM */
 	u8 chip_rev;
 	int i, irq;
 	unsigned short sum;

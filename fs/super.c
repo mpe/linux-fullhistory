@@ -884,24 +884,27 @@ static struct super_block *get_sb_single(struct file_system_type *fs_type,
 	return sb;
 }
 
-static struct block_device *kill_super(struct super_block *sb, int umount_root)
+static void kill_super(struct super_block *sb, int umount_root)
 {
 	struct block_device *bdev;
 	kdev_t dev;
 	struct dentry *root = sb->s_root;
+	struct file_system_type *fs = sb->s_type;
+	struct super_operations *sop = sb->s_op;
+
 	sb->s_root = NULL;
 	/* Need to clean after the sucker */
-	if (sb->s_type->fs_flags & FS_LITTER)
+	if (fs->fs_flags & FS_LITTER)
 		d_genocide(root);
-	if (sb->s_type->fs_flags & (FS_SINGLE|FS_LITTER))
+	if (fs->fs_flags & (FS_SINGLE|FS_LITTER))
 		shrink_dcache_parent(root);
 	dput(root);
 	lock_super(sb);
-	if (sb->s_op) {
-		if (sb->s_op->write_super && sb->s_dirt)
-			sb->s_op->write_super(sb);
-		if (sb->s_op->put_super)
-			sb->s_op->put_super(sb);
+	if (sop) {
+		if (sop->write_super && sb->s_dirt)
+			sop->write_super(sb);
+		if (sop->put_super)
+			sop->put_super(sb);
 	}
 
 	/* Forget any remaining inodes */
@@ -914,7 +917,7 @@ static struct block_device *kill_super(struct super_block *sb, int umount_root)
 	sb->s_dev = 0;		/* Free the superblock */
 	bdev = sb->s_bdev;
 	sb->s_bdev = NULL;
-	put_filesystem(sb->s_type);
+	put_filesystem(fs);
 	sb->s_type = NULL;
 	unlock_super(sb);
 	if (umount_root) {
@@ -928,7 +931,6 @@ static struct block_device *kill_super(struct super_block *sb, int umount_root)
 		bdput(bdev);
 	} else
 		put_unnamed_dev(dev);
-	return bdev;
 }
 
 /*

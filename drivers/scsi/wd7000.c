@@ -951,7 +951,7 @@ static int mail_out (Adapter *host, Scb *scbptr)
 	    break;
 	}
 	else
-	    ogmb = (++ogmb) % OGMB_CNT;
+	    ogmb = (ogmb + 1) % OGMB_CNT;
     }
     restore_flags (flags);
 

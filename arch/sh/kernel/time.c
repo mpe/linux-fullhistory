@@ -213,7 +213,7 @@ static int set_rtc_time(unsigned long nowtime)
 }
 
 /* last time the RTC clock got updated */
-static long last_rtc_update = 0;
+static long last_rtc_update;
 
 /*
  * timer_interrupt() needs to keep up the real-time clock,

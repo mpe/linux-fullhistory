@@ -426,5 +426,5 @@ static void __init check_bugs(void)
 	check_pentium_f00f();
 #endif
 	check_cyrix_coma();
-	system_utsname.machine[1] = '0' + boot_cpu_data.x86;
+	system_utsname.machine[1] = '0' + (boot_cpu_data.x86 > 6 ? 6 : boot_cpu_data.x86);
 }

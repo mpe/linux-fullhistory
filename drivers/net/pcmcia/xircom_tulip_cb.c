@@ -28,9 +28,9 @@ static int max_interrupt_work = 25;
 
 #define MAX_UNITS 8
 /* Used to pass the full-duplex flag, etc. */
-static int full_duplex[MAX_UNITS] = {0, };
-static int options[MAX_UNITS] = {0, };
-static int mtu[MAX_UNITS] = {0, };			/* Jumbo MTU for interfaces. */
+static int full_duplex[MAX_UNITS];
+static int options[MAX_UNITS];
+static int mtu[MAX_UNITS];			/* Jumbo MTU for interfaces. */
 
 /*  The possible media types that can be set in options[] are: */
 static const char * const medianame[] = {
@@ -506,12 +506,12 @@ static struct net_device *tulip_probe1(struct pci_dev *pdev,
 				       struct net_device *dev, long ioaddr, int irq,
 				       int chip_idx, int board_idx)
 {
-	static int did_version = 0;			/* Already printed version info. */
+	static int did_version;			/* Already printed version info. */
 	struct tulip_private *tp;
 	/* See note below on the multiport cards. */
 	static unsigned char last_phys_addr[6] = {0x00, 'L', 'i', 'n', 'u', 'x'};
-	static int last_irq = 0;
-	static int multiport_cnt = 0;		/* For four-port boards w/one EEPROM */
+	static int last_irq;
+	static int multiport_cnt;		/* For four-port boards w/one EEPROM */
 	u8 chip_rev;
 	int i;
 	unsigned short sum;
@@ -913,9 +913,9 @@ static const char * block_name[] = {"21140 non-MII", "21140 MII PHY",
 static void parse_eeprom(struct net_device *dev)
 {
 	/* The last media info list parsed, for multiport boards.  */
-	static struct mediatable *last_mediatable = NULL;
-	static unsigned char *last_ee_data = NULL;
-	static int controller_index = 0;
+	static struct mediatable *last_mediatable;
+	static unsigned char *last_ee_data;
+	static int controller_index;
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 	unsigned char *ee_data = tp->eeprom;
@@ -3074,7 +3074,7 @@ MODULE_DEVICE_TABLE(pci, tulip_pci_table);
 static int __devinit tulip_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	struct net_device *dev;
-	static int board_idx = 0;
+	static int board_idx;
 
 	printk(KERN_INFO "tulip_attach(%s)\n", pdev->slot_name);
 

@@ -34,7 +34,7 @@
  * The timezone where the local system is located.  Used as a default by some
  * programs who obtain this value by using gettimeofday.
  */
-struct timezone sys_tz = { 0, 0};
+struct timezone sys_tz;
 
 static void do_normal_gettime(struct timeval * tm)
 {
@@ -218,7 +218,7 @@ long pps_errcnt;		/* calibration errors */
 long pps_stbcnt;		/* stability limit exceeded */
 
 /* hook for a loadable hardpps kernel module */
-void (*hardpps_ptr)(struct timeval *) = (void (*)(struct timeval *))0;
+void (*hardpps_ptr)(struct timeval *);
 
 /* adjtimex mainly allows reading (and writing, if superuser) of
  * kernel time-keeping variables. used by xntpd.

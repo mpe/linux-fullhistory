@@ -9,7 +9,7 @@ Last revised: February 27, 2000
 ---------------
 
 The Zorro bus is the bus used in the Amiga family of computers. Thanks to
-AutoConfig(tm), it's is 100% Plug-and-Play.
+AutoConfig(tm), it's 100% Plug-and-Play.
 
 There are two types of Zorro busses, Zorro II and Zorro III:
 
@@ -32,7 +32,6 @@ for the board with Zorro ID `ZORRO_PROD_xxx' looks like:
     while ((z = zorro_find_device(ZORRO_PROD_xxx, z))) {
 	if (!zorro_request_region(z->resource.start+MY_START, MY_SIZE,
 				  "My explanation"))
-	strcpy(z->name, "My board name");
 	...
     }
 
@@ -94,16 +93,7 @@ The treatment of these regions depends on the type of Zorro space:
 	iounmap(virt_addr);
 
 
-5. Zorro Device Naming
-----------------------
-
-Since we think generic device naming is something for userspace (zorroutils),
-we don't keep a Zorro device name database in the kernel.
-However, device drivers are allowed to store the expansion board name in struct
-zorro_dev.
-
-
-6. References
+5. References
 -------------
 
 linux/include/linux/zorro.h
@@ -111,6 +101,6 @@ linux/include/linux/ioport.h
 linux/include/asm-m68k/io.h
 linux/include/asm-m68k/amigahw.h
 linux/include/asm-ppc/io.h
-linux/driver/zorro
+linux/drivers/zorro
 /proc/bus/zorro
 

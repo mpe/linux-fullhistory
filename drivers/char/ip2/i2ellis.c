@@ -51,9 +51,9 @@ static void ii2Nop(void);
 //* Static Data *
 //***************
 
-static int ii2Safe = 0;         // Safe I/O address for delay routine
+static int ii2Safe;         // Safe I/O address for delay routine
 
-static int iiDelayed = 0;	// Set when the iiResetDelay function is
+static int iiDelayed;	// Set when the iiResetDelay function is
 							// called. Cleared when ANY board is reset.
 static struct timer_list * pDelayTimer;   // Used by iiDelayTimer
 static wait_queue_head_t pDelayWait;    // Used by iiDelayTimer

@@ -58,7 +58,7 @@ static int coda_venus_readdir(struct file *filp, void *dirent,
 			      filldir_t filldir);
 int coda_fsync(struct file *, struct dentry *dentry, int datasync);
 
-int coda_hasmknod = 0;
+int coda_hasmknod;
 
 struct dentry_operations coda_dentry_operations =
 {

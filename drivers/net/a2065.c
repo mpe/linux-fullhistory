@@ -749,7 +749,6 @@ static int __init a2065_probe(void)
 					   sizeof(struct lance_regs));
 			continue;
 		}
-		strcpy(z->name, "A2065 Ethernet Card");
 
 		dev = init_etherdev(NULL, sizeof(struct lance_private));
 

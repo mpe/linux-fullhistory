@@ -22,8 +22,8 @@
 
 extern struct dentry_operations umsdos_dentry_operations;
 
-struct dentry *saved_root = NULL;	/* Original root if changed */
-struct inode *pseudo_root = NULL;	/* Useful to simulate the pseudo DOS */
+struct dentry *saved_root;	/* Original root if changed */
+struct inode *pseudo_root;	/* Useful to simulate the pseudo DOS */
 					/* directory. See UMSDOS_readdir_x() */
 
 static struct dentry *check_pseudo_root(struct super_block *);

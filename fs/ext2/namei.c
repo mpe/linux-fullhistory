@@ -183,25 +183,22 @@ static struct dentry *ext2_lookup(struct inode * dir, struct dentry *dentry)
 	return NULL;
 }
 
+#define S_SHIFT 12
+static unsigned char ext2_type_by_mode[S_IFMT >> S_SHIFT] = {
+	[S_IFREG >> S_SHIFT]	EXT2_FT_REG_FILE,
+	[S_IFDIR >> S_SHIFT]	EXT2_FT_DIR,
+	[S_IFCHR >> S_SHIFT]	EXT2_FT_CHRDEV,
+	[S_IFBLK >> S_SHIFT]	EXT2_FT_BLKDEV,
+	[S_IFIFO >> S_SHIFT]	EXT2_FT_FIFO,
+	[S_IFSOCK >> S_SHIFT]	EXT2_FT_SOCK,
+	[S_IFLNK >> S_SHIFT]	EXT2_FT_SYMLINK,
+};
+
 static inline void ext2_set_de_type(struct super_block *sb,
 				struct ext2_dir_entry_2 *de,
 				umode_t mode) {
-	if (!EXT2_HAS_INCOMPAT_FEATURE(sb, EXT2_FEATURE_INCOMPAT_FILETYPE))
-		return;
-	if (S_ISREG(mode))
-		de->file_type = EXT2_FT_REG_FILE;
-	else if (S_ISDIR(mode))
-		de->file_type = EXT2_FT_DIR;
-	else if (S_ISLNK(mode))
-		de->file_type = EXT2_FT_SYMLINK;
-	else if (S_ISSOCK(mode))
-		de->file_type = EXT2_FT_SOCK;
-	else if (S_ISFIFO(mode))
-		de->file_type = EXT2_FT_FIFO;
-	else if (S_ISCHR(mode))
-		de->file_type = EXT2_FT_CHRDEV;
-	else if (S_ISBLK(mode))
-		de->file_type = EXT2_FT_BLKDEV;
+	if (EXT2_HAS_INCOMPAT_FEATURE(sb, EXT2_FEATURE_INCOMPAT_FILETYPE))
+		de->file_type = ext2_type_by_mode[(mode & S_IFMT)>>S_SHIFT];
 }
 
 /*

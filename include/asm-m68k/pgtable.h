@@ -399,4 +399,6 @@ extern inline void update_mmu_cache(struct vm_area_struct * vma,
 
 #define io_remap_page_range remap_page_range
 
+#include <asm-generic/pgtable.h>
+
 #endif /* _M68K_PGTABLE_H */

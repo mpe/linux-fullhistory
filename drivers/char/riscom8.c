@@ -82,13 +82,13 @@ DECLARE_TASK_QUEUE(tq_riscom);
 #define RISCOM_TYPE_NORMAL	1
 #define RISCOM_TYPE_CALLOUT	2
 
-static struct riscom_board * IRQ_to_board[16] = { NULL, } ;
+static struct riscom_board * IRQ_to_board[16];
 static struct tty_driver riscom_driver, riscom_callout_driver;
-static int    riscom_refcount = 0;
-static struct tty_struct * riscom_table[RC_NBOARD * RC_NPORT] = { NULL, };
-static struct termios * riscom_termios[RC_NBOARD * RC_NPORT] = { NULL, };
-static struct termios * riscom_termios_locked[RC_NBOARD * RC_NPORT] = { NULL, };
-static unsigned char * tmp_buf = NULL;
+static int    riscom_refcount;
+static struct tty_struct * riscom_table[RC_NBOARD * RC_NPORT];
+static struct termios * riscom_termios[RC_NBOARD * RC_NPORT];
+static struct termios * riscom_termios_locked[RC_NBOARD * RC_NPORT];
+static unsigned char * tmp_buf;
 static DECLARE_MUTEX(tmp_buf_sem);
 
 static unsigned long baud_table[] =  {
@@ -103,9 +103,7 @@ static struct riscom_board rc_board[RC_NBOARD] =  {
 	{ 0, RC_IOBASE4, 0, },
 };
 
-static struct riscom_port rc_port[RC_NBOARD * RC_NPORT] =  {
-	{ 0, },
-};
+static struct riscom_port rc_port[RC_NBOARD * RC_NPORT];
 		
 /* RISCom/8 I/O ports addresses (without address translation) */
 static unsigned short rc_ioport[] =  {

@@ -43,6 +43,7 @@
  ********************************************************************/
 
 #include <linux/config.h>
+#include <linux/init.h>
 #include <linux/types.h>
 #include <linux/socket.h>
 #include <linux/sockios.h>
@@ -2155,17 +2156,19 @@ static struct notifier_block irda_dev_notifier = {
  *    Initialize IrDA protocol layer
  *
  */
-void __init irda_proto_init(struct net_proto *pro)
+static int __init irda_proto_init(void)
 {
-	sock_register(&irda_family_ops);
-
-	irda_packet_type.type = htons(ETH_P_IRDA);
+        sock_register(&irda_family_ops);
+	
+        irda_packet_type.type = htons(ETH_P_IRDA);
         dev_add_pack(&irda_packet_type);
-
-	register_netdevice_notifier(&irda_dev_notifier);
-
-	irda_init();
+	
+        register_netdevice_notifier(&irda_dev_notifier);
+	
+        irda_init();
+	return 0;
 }
+module_init(irda_proto_init);
 
 /*
  * Function irda_proto_cleanup (void)
@@ -2186,4 +2189,5 @@ void irda_proto_cleanup(void)
 	
         return;
 }
+module_exit(irda_proto_cleanup);
 #endif /* MODULE */

@@ -45,11 +45,11 @@
 
 #define FLOPPY_CAN_FALLBACK_ON_NODMA
 
-static int virtual_dma_count=0;
-static int virtual_dma_residue=0;
-static char *virtual_dma_addr=0;
-static int virtual_dma_mode=0;
-static int doing_pdma=0;
+static int virtual_dma_count;
+static int virtual_dma_residue;
+static char *virtual_dma_addr;
+static int virtual_dma_mode;
+static int doing_pdma;
 
 static void floppy_hardint(int irq, void *dev_id, struct pt_regs * regs)
 {

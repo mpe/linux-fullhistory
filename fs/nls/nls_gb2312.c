@@ -8,7 +8,7 @@
 #include <linux/nls.h>
 #include <linux/errno.h>
 
-static struct nls_table *p_nls = NULL;
+static struct nls_table *p_nls;
 
 static struct nls_table table = {
 	"gb2312",

@@ -11,7 +11,7 @@
 static const char *arlan_version = "C.Jennigs 97 & Elmer.Joandi@ut.ee  Oct'98, http://www.ylenurme.ee/~elmer/655/";
 
 struct net_device *arlan_device[MAX_ARLANS];
-int last_arlan = 0;
+int last_arlan;
 
 static int SID = SIDUNKNOWN;
 static int radioNodeId = radioNodeIdUNKNOWN;
@@ -26,22 +26,22 @@ static int channelNumber = channelNumberUNKNOWN;
 static int channelSet = channelSetUNKNOWN;
 static int systemId = systemIdUNKNOWN;
 static int registrationMode = registrationModeUNKNOWN;
-static int keyStart = 0;
-static int tx_delay_ms = 0;
+static int keyStart;
+static int tx_delay_ms;
 static int retries = 5;
 static int async = 1;
 static int tx_queue_len = 1;
-static int arlan_EEPROM_bad = 0;
-int arlan_entry_and_exit_debug = 0;
+static int arlan_EEPROM_bad;
+int arlan_entry_and_exit_debug;
 
 #ifdef ARLAN_DEBUGING
 
-static int arlan_entry_debug = 0;
-static int arlan_exit_debug = 0;
+static int arlan_entry_debug;
+static int arlan_exit_debug;
 static int testMemory = testMemoryUNKNOWN;
 static int irq = irqUNKNOWN;
 static int txScrambled = 1;
-static int mdebug = 0;
+static int mdebug;
 #endif
 
 #if LINUX_VERSION_CODE > 0x20100
@@ -87,7 +87,7 @@ EXPORT_SYMBOL(last_arlan);
 #endif
 
 struct arlan_conf_stru arlan_conf[MAX_ARLANS];
-int arlans_found = 0;
+int arlans_found;
 
 static  int 	arlan_probe_here(struct net_device *dev, int ioaddr);
 static  int 	arlan_open(struct net_device *dev);

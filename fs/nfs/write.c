@@ -102,8 +102,8 @@ static void	nfs_commit_done(struct rpc_task *);
 # define IS_SWAPFILE(inode)	(0)
 #endif
 
-static kmem_cache_t *nfs_page_cachep = NULL;
-static kmem_cache_t *nfs_wdata_cachep = NULL;
+static kmem_cache_t *nfs_page_cachep;
+static kmem_cache_t *nfs_wdata_cachep;
 
 static __inline__ struct nfs_page *nfs_page_alloc(void)
 {
@@ -1207,7 +1207,7 @@ nfs_writeback_done(struct rpc_task *task)
 
 	/* We can't handle that yet but we check for it nevertheless */
 	if (resp->count < argp->count && task->tk_status >= 0) {
-		static unsigned long    complain = 0;
+		static unsigned long    complain;
 		if (time_before(complain, jiffies)) {
 			printk(KERN_WARNING
 			       "NFS: Server wrote less than requested.\n");
@@ -1227,7 +1227,7 @@ nfs_writeback_done(struct rpc_task *task)
 		 *	 NFS_FILE_SYNC. We therefore implement this checking
 		 *	 as a dprintk() in order to avoid filling syslog.
 		 */
-		static unsigned long    complain = 0;
+		static unsigned long    complain;
 
 		if (time_before(complain, jiffies)) {
 			dprintk("NFS: faulty NFSv3 server %s:"

@@ -29,8 +29,8 @@
 #define WATCHDOG_MINOR	130
 
 static	int timeout = 3;
-static	int timer_alive = 0;
-static	int testmode = 0;
+static	int timer_alive;
+static	int testmode;
 
 /*
  *	Allow only one person to hold it open

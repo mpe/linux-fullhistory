@@ -176,6 +176,9 @@
 	* Small miscellaneous bug fixes (prumpf)
 	* Use pci table for PCI id list
 
+	Version 0.9.2:
+	* Simplify open blocking logic
+
  */
 
 
@@ -199,7 +202,7 @@
 /*
  * core module and version information
  */
-#define RNG_VERSION "0.9.1"
+#define RNG_VERSION "0.9.2"
 #define RNG_MODULE_NAME "i810_rng"
 #define RNG_DRIVER_NAME   RNG_MODULE_NAME " hardware driver " RNG_VERSION
 #define PFX RNG_MODULE_NAME ": "
@@ -288,8 +291,6 @@ static spinlock_t rng_lock = SPIN_LOCK_UNLOCKED; /* hardware lock */
 static struct timer_list rng_timer;	/* kernel timer for RNG hardware reads and tests */
 static struct pci_dev *rng_pdev;	/* Firmware Hub PCI device found during PCI probe */
 static struct semaphore rng_open_sem;	/* Semaphore for serializing rng_open/release */
-static wait_queue_head_t rng_open_wait;	/* Wait queue for serializing open/release */
-static int rng_open_mode;		/* Open mode (we only allow reads) */
 
 
 /*
@@ -624,22 +625,17 @@ static int rng_dev_open (struct inode *inode, struct file *filp)
 	int rc = -EINVAL;
 
 	if ((filp->f_mode & FMODE_READ) == 0)
-		goto err_out_ret;
+		return rc;
 	if (filp->f_mode & FMODE_WRITE)
-		goto err_out_ret;
+		return rc;
 
 	/* wait for device to become free */
-	down (&rng_open_sem);
-	while (rng_open_mode & filp->f_mode) {
-		if (filp->f_flags & O_NONBLOCK) {
-			up (&rng_open_sem);
-			return -EWOULDBLOCK;
-		}
-		up (&rng_open_sem);
-		interruptible_sleep_on (&rng_open_wait);
-		if (signal_pending (current))
+	if (filp->f_flags & O_NONBLOCK) {
+		if (down_trylock (&rng_open_sem))
+			return -EAGAIN;
+	} else {
+		if (down_interruptible (&rng_open_sem))
 			return -ERESTARTSYS;
-		down (&rng_open_sem);
 	}
 
 	if (rng_enable (1)) {
@@ -647,26 +643,18 @@ static int rng_dev_open (struct inode *inode, struct file *filp)
 		goto err_out;
 	}
 
-	rng_open_mode |= filp->f_mode & (FMODE_READ | FMODE_WRITE);
-	up (&rng_open_sem);
 	return 0;
 
 err_out:
 	up (&rng_open_sem);
-err_out_ret:
 	return rc;
 }
 
 
 static int rng_dev_release (struct inode *inode, struct file *filp)
 {
-	down(&rng_open_sem);
-
 	rng_enable(0);
-	rng_open_mode &= (~filp->f_mode) & (FMODE_READ|FMODE_WRITE);
-
 	up (&rng_open_sem);
-	wake_up (&rng_open_wait);
 	return 0;
 }
 
@@ -824,7 +812,6 @@ static int __init rng_init (void)
 	DPRINTK ("ENTER\n");
 
 	init_MUTEX (&rng_open_sem);
-	init_waitqueue_head (&rng_open_wait);
 
 	pci_for_each_dev(pdev) {
 		if (pci_match_device (rng_pci_tbl, pdev) != NULL)

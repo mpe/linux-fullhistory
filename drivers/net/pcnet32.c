@@ -42,7 +42,7 @@ static unsigned int pcnet32_portlist[] __initdata = {0x300, 0x320, 0x340, 0x360,
 static int pcnet32_debug = 1;
 static int tx_start = 1; /* Mapping -- 0:20, 1:64, 2:128, 3:~220 (depends on chip vers) */
 
-static struct net_device *pcnet32_dev = NULL;
+static struct net_device *pcnet32_dev;
 
 static const int max_interrupt_work = 80;
 static const int rx_copybreak = 200;
@@ -83,8 +83,8 @@ static unsigned char options_mapping[] = {
 };
 
 #define MAX_UNITS 8
-static int options[MAX_UNITS] = {0, };
-static int full_duplex[MAX_UNITS] = {0, };
+static int options[MAX_UNITS];
+static int full_duplex[MAX_UNITS];
 
 /*
  *				Theory of Operation
@@ -476,7 +476,7 @@ static int __init pcnet32_probe_vlbus(int cards_found)
 static int __init
 pcnet32_probe_pci(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
-    static int card_idx = 0;
+    static int card_idx;
     long ioaddr;
     int err = 0;
 

@@ -1,4 +1,4 @@
-/* $Id: semaphore.c,v 1.2 1999/12/28 11:50:37 jj Exp $
+/* $Id: semaphore.c,v 1.3 2000/10/14 10:09:00 davem Exp $
  * Generic semaphore code. Buyer beware. Do your own
  * specific changes in <asm/semaphore-helper.h>
  */

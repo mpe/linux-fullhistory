@@ -347,6 +347,10 @@ static ssize_t mem_read(struct file * file, char * buf,
 	return copied;
 }
 
+#define mem_write NULL
+
+#ifndef mem_write
+/* This is a security hazard */
 static ssize_t mem_write(struct file * file, const char * buf,
 			 size_t count, loff_t *ppos)
 {
@@ -385,6 +389,7 @@ static ssize_t mem_write(struct file * file, const char * buf,
 	free_page((unsigned long) page);
 	return copied;
 }
+#endif
 
 static struct file_operations proc_mem_operations = {
 	read:		mem_read,

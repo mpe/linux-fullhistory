@@ -58,7 +58,7 @@ static void watchdog_fire(unsigned long);
 static struct timer_list watchdog_ticktock = {
 	function:	watchdog_fire,
 };
-static int timer_alive = 0;
+static int timer_alive;
 
 
 /*

@@ -28,22 +28,13 @@ extern const struct exception_table_entry __stop___ex_table[];
 
 static struct module kernel_module =
 {
-	sizeof(struct module),	/* size_of_struct */
-	NULL,			/* next */
-	"",			/* name */
-	0,			/* size */
-	{ATOMIC_INIT(1)},	/* usecount */
-	MOD_RUNNING,		/* flags */
-	0,			/* nsyms -- to filled in in init_modules */
-	0,			/* ndeps */
-	__start___ksymtab,	/* syms */
-	NULL,			/* deps */
-	NULL,			/* refs */
-	NULL,			/* init */
-	NULL,			/* cleanup */
-	__start___ex_table,	/* ex_table_start */
-	__stop___ex_table,	/* ex_table_end */
-	/* Rest are NULL */
+	size_of_struct:		sizeof(struct module),
+	name: 			"",
+	uc:	 		{ATOMIC_INIT(1)},
+	flags:			MOD_RUNNING,
+	syms:			__start___ksymtab,
+	ex_table_start:		__start___ex_table,	
+	ex_table_end:		__stop___ex_table
 };
 
 struct module *module_list = &kernel_module;

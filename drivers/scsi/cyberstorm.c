@@ -89,8 +89,6 @@ int __init cyber_esp_detect(Scsi_Host_Template *tpnt)
 					   sizeof(struct ESP_regs));
 			return 0;
 		}
-		strcpy(z->name, "Cyberstorm SCSI Host Adapter");
-
 		esp = esp_allocate(tpnt, (void *)board+CYBER_ESP_ADDR);
 
 		/* Do command transfer with programmed I/O */

@@ -839,7 +839,7 @@ static struct fb_ops macfb_ops = {
 	fb_set_cmap:	macfb_set_cmap,
 };
 
-void macfb_setup(char *options, int *ints)
+void __init macfb_setup(char *options, int *ints)
 {
 	char *this_opt;
 	

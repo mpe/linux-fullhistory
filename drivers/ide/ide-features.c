@@ -224,7 +224,8 @@ int ide_ata66_check (ide_drive_t *drive, byte cmd, byte nsect, byte feature)
 #ifndef CONFIG_IDEDMA_IVB
 		if ((drive->id->hw_config & 0x6000) == 0) {
 #else /* !CONFIG_IDEDMA_IVB */
-		if ((drive->id->hw_config & 0x2000) == 0) {
+		if (((drive->id->hw_config & 0x2000) == 0) ||
+		    ((drive->id->hw_config & 0x4000) == 0)) {
 #endif /* CONFIG_IDEDMA_IVB */
 			printk("%s: Speed warnings UDMA 3/4/5 is not functional.\n", drive->name);
 			return 1;
@@ -260,7 +261,7 @@ byte eighty_ninty_three (ide_drive_t *drive)
 #ifndef CONFIG_IDEDMA_IVB
 			(drive->id->hw_config & 0x4000) &&
 #endif /* CONFIG_IDEDMA_IVB */
-			(drive->id->hw_config & 0x2000)) ? 1 : 0);
+			(drive->id->hw_config & 0x6000)) ? 1 : 0);
 }
 
 /*

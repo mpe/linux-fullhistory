@@ -95,7 +95,7 @@ static struct inode *get_cramfs_inode(struct super_block *sb, struct cramfs_inod
 static unsigned char read_buffers[READ_BUFFERS][BUFFER_SIZE];
 static unsigned buffer_blocknr[READ_BUFFERS];
 static struct super_block * buffer_dev[READ_BUFFERS];
-static int next_buffer = 0;
+static int next_buffer;
 
 /*
  * Returns a pointer to a buffer containing at least LEN bytes of

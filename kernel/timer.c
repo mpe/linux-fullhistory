@@ -164,7 +164,7 @@ static inline void internal_add_timer(struct timer_list *timer)
 spinlock_t timerlist_lock = SPIN_LOCK_UNLOCKED;
 
 #ifdef CONFIG_SMP
-volatile struct timer_list * volatile running_timer = NULL;
+volatile struct timer_list * volatile running_timer;
 #define timer_enter(t) do { running_timer = t; mb(); } while (0)
 #define timer_exit() do { running_timer = NULL; } while (0)
 #define timer_is_running(t) (running_timer == t)

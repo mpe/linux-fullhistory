@@ -293,7 +293,7 @@ void pt_init_units( void )
         }
 } 
 
-static devfs_handle_t devfs_handle = NULL;
+static devfs_handle_t devfs_handle;
 
 int pt_init (void)      /* preliminary initialisation */
 

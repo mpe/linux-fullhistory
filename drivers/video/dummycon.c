@@ -53,7 +53,7 @@ static int dummycon_dummy(void)
  *  Most of the operations are dummies.
  */
 
-struct consw dummy_con = {
+const struct consw dummy_con = {
     con_startup:	dummycon_startup,
     con_init:		dummycon_init,
     con_deinit:		DUMMY,

@@ -69,9 +69,9 @@ spinlock_t kbd_controller_lock = SPIN_LOCK_UNLOCKED;
 static unsigned char handle_kbd_event(void);
 
 /* used only by send_data - set by keyboard_interrupt */
-static volatile unsigned char reply_expected = 0;
-static volatile unsigned char acknowledge = 0;
-static volatile unsigned char resend = 0;
+static volatile unsigned char reply_expected;
+static volatile unsigned char acknowledge;
+static volatile unsigned char resend;
 
 
 #if defined CONFIG_PSMOUSE
@@ -84,9 +84,9 @@ static int __init psaux_init(void);
 #define AUX_RECONNECT 170 /* scancode when ps2 device is plugged (back) in */
  
 static struct aux_queue *queue;	/* Mouse data buffer. */
-static int aux_count = 0;
+static int aux_count;
 /* used when we send commands to the mouse that expect an ACK. */
-static unsigned char mouse_reply_expected = 0;
+static unsigned char mouse_reply_expected;
 
 #define AUX_INTS_OFF (KBD_MODE_KCC | KBD_MODE_DISABLE_MOUSE | KBD_MODE_SYS | KBD_MODE_KBD_INT)
 #define AUX_INTS_ON  (KBD_MODE_KCC | KBD_MODE_SYS | KBD_MODE_MOUSE_INT | KBD_MODE_KBD_INT)
@@ -291,7 +291,7 @@ static int do_acknowledge(unsigned char scancode)
 int pckbd_translate(unsigned char scancode, unsigned char *keycode,
 		    char raw_mode)
 {
-	static int prev_scancode = 0;
+	static int prev_scancode;
 
 	/* special prefix scancodes.. */
 	if (scancode == 0xe0 || scancode == 0xe1) {

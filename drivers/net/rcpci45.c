@@ -135,14 +135,7 @@ DPA, *PDPA;
 
 #define MAX_ADAPTERS 32
 
-static PDPA  PCIAdapters[MAX_ADAPTERS] = 
-{
-    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
-};
-
+static PDPA  PCIAdapters[MAX_ADAPTERS];
 
 static int RCinit(struct net_device *dev);
 static int RCscan(void);
@@ -163,7 +156,7 @@ static int RC_allocate_and_post_buffers(struct net_device *, int);
 
 
 /* A list of all installed RC devices, for removing the driver module. */
-static struct net_device *root_RCdev = NULL;
+static struct net_device *root_RCdev;
 
 static int __init rcpci_init_module (void)
 {
@@ -178,7 +171,7 @@ static int __init rcpci_init_module (void)
 static int RCscan(void)
 {
     int cards_found = 0;
-    static int pci_index = 0;
+    static int pci_index;
 
     if (!pcibios_present()) 
         return cards_found;
@@ -816,7 +809,7 @@ static void rc_timer(unsigned long data)
     struct net_device *dev = (struct net_device *)data;
     PDPA pDpa = (PDPA) (dev->priv);
     int init_status;
-    static int retry = 0;
+    static int retry;
     int post_buffers = MAX_NMBR_RCV_BUFFERS;
     int count = 0;
     int requested = 0;
@@ -1111,7 +1104,7 @@ static int RCioctl(struct net_device *dev, struct ifreq *rq, int cmd)
             }
             RCUD_GETSPEED = &RCuser.RCUS_GETSPEED;
             RCGetLinkSpeed(pDpa->id, (PU32) &RCUD_GETSPEED->LinkSpeedCode, NULL);
-            printk("RC speed = 0x%ld\n", RCUD_GETSPEED->LinkSpeedCode);
+            printk("RC speed = 0x%u\n", RCUD_GETSPEED->LinkSpeedCode);
             break;
         case RCUC_SETIPANDMASK:
             printk("RC SETIPANDMASK\n");

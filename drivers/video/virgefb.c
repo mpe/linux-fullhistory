@@ -1139,7 +1139,6 @@ int __init virgefb_init(void)
 		release_mem_region(CyberRegs_phys, 0x10000);
 		continue;
 	    }
-	    strcpy(z->name, "CyberVision64-3D Graphics Board");
 
 	    if (board_addr < 0x01000000) {
 		/*

@@ -448,7 +448,7 @@ static struct fb_ops vesafb_ops = {
 	fb_pan_display:	vesafb_pan_display,
 };
 
-int vesafb_setup(char *options)
+int __init vesafb_setup(char *options)
 {
 	char *this_opt;
 	

@@ -123,7 +123,7 @@ static struct net_proto_family pvc_family_ops = {
  */
 
 
-void __init atmpvc_proto_init(struct net_proto *pro)
+static int __init atmpvc_init(void)
 {
 	int error;
 
@@ -139,4 +139,7 @@ void __init atmpvc_proto_init(struct net_proto *pro)
 	error = atm_proc_init();
 	if (error) printk("atm_proc_init fails with %d\n",error);
 #endif
+	return 0;
 }
+
+module_init(atmpvc_init);

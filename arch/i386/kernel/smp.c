@@ -422,7 +422,7 @@ struct call_data_struct {
 	int wait;
 };
 
-static struct call_data_struct * call_data = NULL;
+static struct call_data_struct * call_data;
 
 /*
  * this function sends a 'generic call function' IPI to all other CPUs

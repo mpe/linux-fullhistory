@@ -45,7 +45,7 @@ choice 'Processor family' \
 #
 if [ "$CONFIG_M386" = "y" ]; then
    define_bool CONFIG_X86_CMPXCHG n
-   define_int  CONFIG_X86_L1_CACHE_BYTES 16
+   define_int  CONFIG_X86_L1_CACHE_SHIFT 4
 else
    define_bool CONFIG_X86_WP_WORKS_OK y
    define_bool CONFIG_X86_INVLPG y
@@ -54,37 +54,37 @@ else
    define_bool CONFIG_X86_POPAD_OK y
 fi
 if [ "$CONFIG_M486" = "y" ]; then
-   define_int  CONFIG_X86_L1_CACHE_BYTES 16
+   define_int  CONFIG_X86_L1_CACHE_SHIFT 4
    define_bool CONFIG_X86_USE_STRING_486 y
    define_bool CONFIG_X86_ALIGNMENT_16 y
 fi
 if [ "$CONFIG_M586" = "y" ]; then
-   define_int  CONFIG_X86_L1_CACHE_BYTES 32
+   define_int  CONFIG_X86_L1_CACHE_SHIFT 5
    define_bool CONFIG_X86_USE_STRING_486 y
    define_bool CONFIG_X86_ALIGNMENT_16 y
 fi
 if [ "$CONFIG_M586TSC" = "y" ]; then
-   define_int  CONFIG_X86_L1_CACHE_BYTES 32
+   define_int  CONFIG_X86_L1_CACHE_SHIFT 5
    define_bool CONFIG_X86_USE_STRING_486 y
    define_bool CONFIG_X86_ALIGNMENT_16 y
    define_bool CONFIG_X86_TSC y
 fi
 if [ "$CONFIG_M586MMX" = "y" ]; then
-   define_int  CONFIG_X86_L1_CACHE_BYTES 32
+   define_int  CONFIG_X86_L1_CACHE_SHIFT 5
    define_bool CONFIG_X86_USE_STRING_486 y
    define_bool CONFIG_X86_ALIGNMENT_16 y
    define_bool CONFIG_X86_TSC y
    define_bool CONFIG_X86_GOOD_APIC y
 fi
 if [ "$CONFIG_M686" = "y" ]; then
-   define_int  CONFIG_X86_L1_CACHE_BYTES 32
+   define_int  CONFIG_X86_L1_CACHE_SHIFT 5
    define_bool CONFIG_X86_TSC y
    define_bool CONFIG_X86_GOOD_APIC y
    define_bool CONFIG_X86_PGE y
    define_bool CONFIG_X86_USE_PPRO_CHECKSUM y
 fi
 if [ "$CONFIG_M686FXSR" = "y" ]; then
-   define_int  CONFIG_X86_L1_CACHE_BYTES 32
+   define_int  CONFIG_X86_L1_CACHE_SHIFT 5
    define_bool CONFIG_X86_TSC y
    define_bool CONFIG_X86_GOOD_APIC y
    define_bool CONFIG_X86_PGE y
@@ -93,13 +93,13 @@ if [ "$CONFIG_M686FXSR" = "y" ]; then
    define_bool CONFIG_X86_XMM y
 fi
 if [ "$CONFIG_MK6" = "y" ]; then
-   define_int  CONFIG_X86_L1_CACHE_BYTES 32
+   define_int  CONFIG_X86_L1_CACHE_SHIFT 5
    define_bool CONFIG_X86_ALIGNMENT_16 y
    define_bool CONFIG_X86_TSC y
    define_bool CONFIG_X86_USE_PPRO_CHECKSUM y
 fi
 if [ "$CONFIG_MK7" = "y" ]; then
-   define_int  CONFIG_X86_L1_CACHE_BYTES 64
+   define_int  CONFIG_X86_L1_CACHE_SHIFT 6
    define_bool CONFIG_X86_TSC y
    define_bool CONFIG_X86_GOOD_APIC y
    define_bool CONFIG_X86_USE_3DNOW y
@@ -107,22 +107,22 @@ if [ "$CONFIG_MK7" = "y" ]; then
    define_bool CONFIG_X86_USE_PPRO_CHECKSUM y
 fi
 if [ "$CONFIG_MCRUSOE" = "y" ]; then
-   define_int  CONFIG_X86_L1_CACHE_BYTES 32
+   define_int  CONFIG_X86_L1_CACHE_SHIFT 5
    define_bool CONFIG_X86_TSC y
 fi
 if [ "$CONFIG_MWINCHIPC6" = "y" ]; then
-   define_int  CONFIG_X86_L1_CACHE_BYTES 32
+   define_int  CONFIG_X86_L1_CACHE_SHIFT 5
    define_bool CONFIG_X86_ALIGNMENT_16 y
    define_bool CONFIG_X86_USE_PPRO_CHECKSUM y
 fi
 if [ "$CONFIG_MWINCHIP2" = "y" ]; then
-   define_int  CONFIG_X86_L1_CACHE_BYTES 32
+   define_int  CONFIG_X86_L1_CACHE_SHIFT 5
    define_bool CONFIG_X86_ALIGNMENT_16 y
    define_bool CONFIG_X86_TSC y
    define_bool CONFIG_X86_USE_PPRO_CHECKSUM y
 fi
 if [ "$CONFIG_MWINCHIP3D" = "y" ]; then
-   define_int  CONFIG_X86_L1_CACHE_BYTES 32
+   define_int  CONFIG_X86_L1_CACHE_SHIFT 5
    define_bool CONFIG_X86_ALIGNMENT_16 y
    define_bool CONFIG_X86_TSC y
    define_bool CONFIG_X86_USE_PPRO_CHECKSUM y

@@ -1861,8 +1861,8 @@ int ibmtr_change_mtu(struct net_device *dev, int mtu) {
 /* 3COM 3C619C supports 8 interrupts, 32 I/O ports */
 static struct net_device* dev_ibmtr[IBMTR_MAX_ADAPTERS];
 static int io[IBMTR_MAX_ADAPTERS] = {0xa20,0xa24};
-static int irq[IBMTR_MAX_ADAPTERS] = {0,0};
-static int mem[IBMTR_MAX_ADAPTERS] = {0,0};
+static int irq[IBMTR_MAX_ADAPTERS];
+static int mem[IBMTR_MAX_ADAPTERS];
 
 MODULE_PARM(io, "1-" __MODULE_STRING(IBMTR_MAX_ADAPTERS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(IBMTR_MAX_ADAPTERS) "i");

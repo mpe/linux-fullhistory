@@ -5,7 +5,7 @@
  *
  *		PACKET - implements raw packet sockets.
  *
- * Version:	$Id: af_packet.c,v 1.43 2000/10/06 10:37:47 davem Exp $
+ * Version:	$Id: af_packet.c,v 1.44 2000/10/15 01:34:47 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -33,6 +33,7 @@
  *		Alan Cox	:	Protocol setting support
  *	Alexey Kuznetsov	:	Untied from IPv4 stack.
  *	Cyrus Durgin		:	Fixed kerneld for kmod.
+ *	Michal Ostrowski        :       Module initialization cleanup.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -1872,8 +1873,8 @@ done:
 #endif
 
 
-#ifdef MODULE
-void cleanup_module(void)
+
+static void __exit packet_exit(void)
 {
 #ifdef CONFIG_PROC_FS
 	remove_proc_entry("net/packet", 0);
@@ -1884,17 +1885,16 @@ void cleanup_module(void)
 }
 
 
-int init_module(void)
-#else
-void __init packet_proto_init(struct net_proto *pro)
-#endif
+static int __init packet_init(void)
 {
 	sock_register(&packet_family_ops);
 	register_netdevice_notifier(&packet_netdev_notifier);
 #ifdef CONFIG_PROC_FS
 	create_proc_read_entry("net/packet", 0, 0, packet_read_proc, NULL);
 #endif
-#ifdef MODULE
 	return 0;
-#endif
 }
+
+
+module_init(packet_init);
+module_exit(packet_exit);

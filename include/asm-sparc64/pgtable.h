@@ -295,6 +295,8 @@ extern unsigned long *sparc64_valid_addr_bitmap;
 extern int io_remap_page_range(unsigned long from, unsigned long offset,
 			       unsigned long size, pgprot_t prot, int space);
 
+#include <asm-generic/pgtable.h>
+
 #endif /* !(__ASSEMBLY__) */
 
 /* We provide our own get_unmapped_area to cope with VA holes for userland */

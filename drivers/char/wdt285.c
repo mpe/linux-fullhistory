@@ -43,7 +43,7 @@
 #define FCLK	(50*1000*1000)		/* 50MHz */
 
 static int soft_margin = TIMER_MARGIN;	/* in seconds */
-static int timer_alive = 0;
+static int timer_alive;
 
 #ifdef ONLY_TESTING
 /*

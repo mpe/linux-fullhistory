@@ -948,6 +948,10 @@
 1053  Young Micro Systems
 1054  Hitachi, Ltd
 1055  EFAR Microsystems
+	9130  EIDE Controller
+	9460  PCI to ISA Bridge
+	9462  USB Universal Host Controller [OHCI]
+	9463  Power Management Controller [Bridge]
 1056  ICL
 # Motorola made a mistake and used 1507 instead of 1057 in some chips.
 # Please look at the 1507 entry as well when updating this.

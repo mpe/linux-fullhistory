@@ -942,7 +942,7 @@ static int slm_get_pagesize( int device, int *w, int *h )
 
 int attach_slm( int target, int lun )
 
-{	static int	did_register = 0;
+{	static int	did_register;
 	int			len;
 
 	if (N_SLM_Printers >= MAX_SLM) {
@@ -992,7 +992,7 @@ int attach_slm( int target, int lun )
 	return( 1 );
 }
 
-static devfs_handle_t devfs_handle = NULL;
+static devfs_handle_t devfs_handle;
 
 int slm_init( void )
 

@@ -70,8 +70,8 @@ static int lis_del_from_elist( strevent_t **list, pid_t pid, short events );
 static void lis_free_elist( strevent_t **list);
 static void kill_procs( struct strevent *elist, int sig, short e);
 
-static struct sparcaudio_driver *drivers[SPARCAUDIO_MAX_DEVICES] = {NULL};
-static devfs_handle_t devfs_handle = NULL;
+static struct sparcaudio_driver *drivers[SPARCAUDIO_MAX_DEVICES];
+static devfs_handle_t devfs_handle;
  
 /* This crap to be pulled off into a local include file */
 #if defined (LINUX_VERSION_CODE) && LINUX_VERSION_CODE < 0x20100

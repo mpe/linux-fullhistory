@@ -80,7 +80,7 @@ extern void reset_vc(unsigned int new_console);
 extern void scrollback(int);
 extern void scrollfront(int);
 
-struct l1a_kbd_state l1a_state = { 0, 0 };
+struct l1a_kbd_state l1a_state;
 
 #ifndef CONFIG_PCI
 DECLARE_WAIT_QUEUE_HEAD(keypress_wait);
@@ -101,30 +101,30 @@ static spinlock_t sunkbd_lock = SPIN_LOCK_UNLOCKED;
  */
 
 /* shift state counters.. */
-static unsigned char k_down[NR_SHIFT] = {0, };
+static unsigned char k_down[NR_SHIFT];
 /* keyboard key bitmap */
-static unsigned long key_down[256/BITS_PER_LONG] = { 0, };
+static unsigned long key_down[256/BITS_PER_LONG];
 
 void push_kbd (int scan);
-int kbd_redirected = 0;
+int kbd_redirected;
 
-static int dead_key_next = 0;
+static int dead_key_next;
 /* 
  * In order to retrieve the shift_state (for the mouse server), either
  * the variable must be global, or a new procedure must be created to 
  * return the value. I chose the former way.
  */
 #ifndef CONFIG_PCI
-/*static*/ int shift_state = 0;
+/*static*/ int shift_state;
 #endif
 static int npadch = -1;			/* -1 or number assembled on pad */
-static unsigned char diacr = 0;
-static char rep = 0;			/* flag telling character repeat */
+static unsigned char diacr;
+static char rep;			/* flag telling character repeat */
 struct kbd_struct kbd_table[MAX_NR_CONSOLES];
 static struct tty_struct **ttytab;
 static struct kbd_struct * kbd = kbd_table;
-static struct tty_struct * tty = NULL;
-static int compose_led_on = 0;
+static struct tty_struct * tty;
+static int compose_led_on;
 static int kbd_delay_ticks = HZ / 5;
 static int kbd_rate_ticks = HZ / 20;
 

@@ -40,8 +40,8 @@
  */
 unsigned long mmu_context_cache;
 
-static unsigned long totalram_pages = 0;
-static unsigned long totalhigh_pages = 0;
+static unsigned long totalram_pages;
+static unsigned long totalhigh_pages;
 
 extern unsigned long init_smp_mappings(unsigned long);
 

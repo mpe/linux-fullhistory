@@ -689,12 +689,12 @@ static void do_interrupt_handler(int, void *, struct pt_regs *);
 static void flush_dev(Scsi_Device *, unsigned long, unsigned int, unsigned int);
 static int do_trace = FALSE;
 static int setup_done = FALSE;
-static int link_statistics = 0;
+static int link_statistics;
 static int tag_mode = TAG_MIXED;
 static int ext_tran = FALSE;
 static int rev_scan = TRUE;
 static int use_new_eh_code = TRUE;
-static char *boot_options = NULL;
+static char *boot_options;
 
 #if defined(CONFIG_SCSI_EATA_TAGGED_QUEUE)
 static int tagged_comm = TRUE;

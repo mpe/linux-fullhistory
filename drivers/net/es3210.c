@@ -388,9 +388,9 @@ static struct net_device dev_es3210[MAX_ES_CARDS] = {
 	},
 };
 
-static int io[MAX_ES_CARDS] = { 0, };
-static int irq[MAX_ES_CARDS]  = { 0, };
-static int mem[MAX_ES_CARDS] = { 0, };
+static int io[MAX_ES_CARDS];
+static int irq[MAX_ES_CARDS];
+static int mem[MAX_ES_CARDS];
 
 MODULE_PARM(io, "1-" __MODULE_STRING(MAX_ES_CARDS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_ES_CARDS) "i");

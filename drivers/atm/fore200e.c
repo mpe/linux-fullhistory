@@ -2920,7 +2920,7 @@ fore200e_proc_read(struct atm_dev *dev,loff_t* pos,char* page)
 
 
 #ifdef MODULE
-static unsigned int __init
+static int __init
 fore200e_module_init(void)
 {
     DPRINTK(1, "module loaded\n");

@@ -1143,7 +1143,5 @@ int __init econet_proto_init(void)
 	return 0;
 }
 
-#ifdef MODULE
 module_init(econet_proto_init);
 module_exit(econet_proto_exit);
-#endif

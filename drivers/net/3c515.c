@@ -90,7 +90,7 @@ MODULE_PARM(max_interrupt_work, "i");
 #define DRIVER_DEBUG 1
 /* Some values here only for performance evaluation and path-coverage
    debugging. */
-static int rx_nocopy = 0, rx_copy = 0, queued_packet = 0;
+static int rx_nocopy, rx_copy, queued_packet;
 
 /* Number of times to check to see if the Tx FIFO has space, used in some
    limited cases. */
@@ -364,7 +364,7 @@ int corkscrew_isapnp_phys_addr[3] = {
 	0, 0, 0
 };
 
-static int nopnp = 0;
+static int nopnp;
 #endif
 
 static int corkscrew_scan(struct net_device *dev);

@@ -41,8 +41,8 @@
 
 #include <asm/time.h>
 #include "open_pic.h"
-int smp_threads_ready = 0;
-volatile int smp_commenced = 0;
+int smp_threads_ready;
+volatile int smp_commenced;
 int smp_num_cpus = 1;
 struct cpuinfo_PPC cpu_data[NR_CPUS];
 struct klock_info_struct klock_info = { KLOCK_CLEAR, 0 };
@@ -54,10 +54,10 @@ unsigned int prof_counter[NR_CPUS];
 cycles_t cacheflush_time;
 
 /* this has to go in the data section because it is accessed from prom_init */
-int smp_hw_index[NR_CPUS] = {0};
+int smp_hw_index[NR_CPUS];
 
 /* all cpu mappings are 1-1 -- Cort */
-volatile unsigned long cpu_callin_map[NR_CPUS] = {0,};
+volatile unsigned long cpu_callin_map[NR_CPUS];
 
 int start_secondary(void *);
 extern int cpu_idle(void *unused);
@@ -226,7 +226,7 @@ static volatile struct call_data_struct {
 	atomic_t started;
 	atomic_t finished;
 	int wait;
-} *call_data = NULL;
+} *call_data;
 
 /*
  * this function sends a 'generic call function' IPI to all other CPUs

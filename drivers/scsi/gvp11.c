@@ -230,7 +230,6 @@ int __init gvp11_detect(Scsi_Host_Template *tpnt)
 	address = z->resource.start;
 	if (!request_mem_region(address, 256, "wd33c93"))
 	    continue;
-	strcpy(z->name, "GVP Series II SCSI");
 
 #ifdef CHECK_WD33C93
 

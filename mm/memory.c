@@ -215,30 +215,30 @@ skip_copy_pte_range:		address = (address + PMD_SIZE) & PMD_MASK;
 				/* copy_one_pte */
 
 				if (pte_none(pte))
-					goto cont_copy_pte_range;
+					goto cont_copy_pte_range_noset;
 				if (!pte_present(pte)) {
 					swap_duplicate(pte_to_swp_entry(pte));
-					set_pte(dst_pte, pte);
 					goto cont_copy_pte_range;
 				}
 				ptepage = pte_page(pte);
 				if ((!VALID_PAGE(ptepage)) || 
-				    PageReserved(ptepage)) {
-					set_pte(dst_pte, pte);
+				    PageReserved(ptepage))
 					goto cont_copy_pte_range;
-				}
+
 				/* If it's a COW mapping, write protect it both in the parent and the child */
 				if (cow) {
-					pte = pte_wrprotect(pte);
-					set_pte(src_pte, pte);
+					ptep_clear_wrprotect(src_pte);
+					pte = *src_pte;
 				}
+
 				/* If it's a shared mapping, mark it clean in the child */
 				if (vma->vm_flags & VM_SHARED)
 					pte = pte_mkclean(pte);
-				set_pte(dst_pte, pte_mkold(pte));
+				pte = pte_mkold(pte);
 				get_page(ptepage);
-			
-cont_copy_pte_range:		address += PAGE_SIZE;
+
+cont_copy_pte_range:		set_pte(dst_pte, pte);
+cont_copy_pte_range_noset:	address += PAGE_SIZE;
 				if (address >= end)
 					goto out;
 				src_pte++;
@@ -306,10 +306,9 @@ static inline int zap_pte_range(struct mm_struct *mm, pmd_t * pmd, unsigned long
 		pte_t page;
 		if (!size)
 			break;
-		page = *pte;
+		page = ptep_get_and_clear(pte);
 		pte++;
 		size--;
-		pte_clear(pte-1);
 		if (pte_none(page))
 			continue;
 		freed += free_pte(page);
@@ -642,7 +641,7 @@ static inline void zeromap_pte_range(pte_t * pte, unsigned long address,
 		end = PMD_SIZE;
 	do {
 		pte_t zero_pte = pte_wrprotect(mk_pte(ZERO_PAGE(address), prot));
-		pte_t oldpage = *pte;
+		pte_t oldpage = ptep_get_and_clear(pte);
 		set_pte(pte, zero_pte);
 		forget_pte(oldpage);
 		address += PAGE_SIZE;
@@ -712,8 +711,8 @@ static inline void remap_pte_range(pte_t * pte, unsigned long address, unsigned 
 		end = PMD_SIZE;
 	do {
 		struct page *page;
-		pte_t oldpage = *pte;
-		pte_clear(pte);
+		pte_t oldpage;
+		oldpage = ptep_get_and_clear(pte);
 
 		page = virt_to_page(__va(phys_addr));
 		if ((!VALID_PAGE(page)) || PageReserved(page))
@@ -746,6 +745,7 @@ static inline int remap_pmd_range(pmd_t * pmd, unsigned long address, unsigned l
 	return 0;
 }
 
+/*  Note: this is only safe if the mm semaphore is held when called. */
 int remap_page_range(unsigned long from, unsigned long phys_addr, unsigned long size, pgprot_t prot)
 {
 	int error = 0;
@@ -867,7 +867,7 @@ static int do_wp_page(struct mm_struct *mm, struct vm_area_struct * vma,
 	/*
 	 * Re-check the pte - we dropped the lock
 	 */
-	if (pte_val(*page_table) == pte_val(pte)) {
+	if (pte_same(*page_table, pte)) {
 		if (PageReserved(old_page))
 			++mm->rss;
 		break_cow(vma, old_page, new_page, address, page_table);
@@ -1214,7 +1214,7 @@ static inline int handle_pte_fault(struct mm_struct *mm,
 	 * didn't change from under us..
 	 */
 	spin_lock(&mm->page_table_lock);
-	if (pte_val(entry) == pte_val(*pte)) {
+	if (pte_same(entry, *pte)) {
 		if (write_access) {
 			if (!pte_write(entry))
 				return do_wp_page(mm, vma, address, pte, entry);

@@ -63,6 +63,7 @@ unset CONFIG_ALPHA_T2 CONFIG_ALPHA_PYXIS CONFIG_ALPHA_POLARIS
 unset CONFIG_ALPHA_TSUNAMI CONFIG_ALPHA_MCPCIA
 unset CONFIG_ALPHA_IRONGATE
 unset CONFIG_ALPHA_BROKEN_IRQ_MASK
+unset CONFIG_ALPHA_LARGE_VMALLOC
 
 # Most of these machines have ISA slots; not exactly sure which don't,
 # and this doesn't activate hordes of code, so do it always.
@@ -205,6 +206,14 @@ if [ "$CONFIG_ALPHA_SABLE" = "y" -o "$CONFIG_ALPHA_RAWHIDE" = "y" \
 	-o "$CONFIG_ALPHA_TITAN" = "y" -o "$CONFIG_ALPHA_GENERIC" = "y" ]
 then
 	bool 'Symmetric multi-processing support' CONFIG_SMP
+fi
+
+# The machine must be able to support more than 8GB physical memory
+# before large vmalloc might even pretend to be an issue.
+if [ "$CONFIG_ALPHA_GENERIC" = "y" -o "$CONFIG_ALPHA_DP264" = "y" \
+	-o "$CONFIG_ALPHA_WILDFIRE" = "y" -o "$CONFIG_ALPHA_TITAN" = "y" ]
+then
+	bool 'Large VMALLOC support' CONFIG_ALPHA_LARGE_VMALLOC
 fi
 
 source drivers/pci/Config.in

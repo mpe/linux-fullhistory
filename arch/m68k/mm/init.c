@@ -32,7 +32,7 @@
 #include <asm/atari_stram.h>
 #endif
 
-static unsigned long totalram_pages = 0;
+static unsigned long totalram_pages;
 
 #ifdef CONFIG_SUN3
 void mmu_emu_reserve_pages(unsigned long max_page);

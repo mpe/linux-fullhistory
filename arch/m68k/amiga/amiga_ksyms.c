@@ -1,7 +1,6 @@
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/types.h>
-#include <linux/zorro.h>
 #include <asm/ptrace.h>
 #include <asm/amigahw.h>
 #include <asm/amigaints.h>

@@ -2579,11 +2579,13 @@ _static int process_urb (uhci_t *s, struct list_head *p)
 
 				if (urb->complete) {
 					dbg("process_transfer: calling completion");
-					urb->dev=NULL;
+					if (urb->status!=-EINPROGRESS)
+						urb->dev=NULL;
 					urb->complete ((struct urb *) urb);
 				}
 				else
-					urb->dev=NULL;
+					if (urb->status!=-EINPROGRESS)
+						urb->dev=NULL;
 			}
 			
 			usb_dec_dev_use (usb_dev);

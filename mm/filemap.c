@@ -1475,39 +1475,47 @@ int filemap_swapout(struct page * page, struct file * file)
 	return retval;
 }
 
+/* Called with mm->page_table_lock held to protect against other
+ * threads/the swapper from ripping pte's out from under us.
+ */
 static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 	unsigned long address, unsigned int flags)
 {
 	unsigned long pgoff;
-	pte_t pte = *ptep;
+	pte_t pte;
 	struct page *page;
 	int error;
 
+	pte = *ptep;
+
 	if (!(flags & MS_INVALIDATE)) {
 		if (!pte_present(pte))
-			return 0;
-		if (!pte_dirty(pte))
-			return 0;
+			goto out;
+		if (!ptep_test_and_clear_dirty(ptep))
+			goto out;
 		flush_page_to_ram(pte_page(pte));
 		flush_cache_page(vma, address);
-		set_pte(ptep, pte_mkclean(pte));
 		flush_tlb_page(vma, address);
 		page = pte_page(pte);
 		page_cache_get(page);
 	} else {
 		if (pte_none(pte))
-			return 0;
+			goto out;
 		flush_cache_page(vma, address);
-		pte_clear(ptep);
+
+		pte = ptep_get_and_clear(ptep);
 		flush_tlb_page(vma, address);
+
 		if (!pte_present(pte)) {
+			spin_unlock(&vma->vm_mm->page_table_lock);
 			swap_free(pte_to_swp_entry(pte));
-			return 0;
+			spin_lock(&vma->vm_mm->page_table_lock);
+			goto out;
 		}
 		page = pte_page(pte);
 		if (!pte_dirty(pte) || flags == MS_INVALIDATE) {
 			page_cache_free(page);
-			return 0;
+			goto out;
 		}
 	}
 	pgoff = (address - vma->vm_start) >> PAGE_CACHE_SHIFT;
@@ -1516,11 +1524,18 @@ static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 		printk("weirdness: pgoff=%lu index=%lu address=%lu vm_start=%lu vm_pgoff=%lu\n",
 			pgoff, page->index, address, vma->vm_start, vma->vm_pgoff);
 	}
+
+	spin_unlock(&vma->vm_mm->page_table_lock);
 	lock_page(page);
 	error = filemap_write_page(vma->vm_file, page, 1);
 	UnlockPage(page);
 	page_cache_free(page);
+
+	spin_lock(&vma->vm_mm->page_table_lock);
 	return error;
+
+out:
+	return 0;
 }
 
 static inline int filemap_sync_pte_range(pmd_t * pmd,
@@ -1590,6 +1605,11 @@ int filemap_sync(struct vm_area_struct * vma, unsigned long address,
 	unsigned long end = address + size;
 	int error = 0;
 
+	/* Aquire the lock early; it may be possible to avoid dropping
+	 * and reaquiring it repeatedly.
+	 */
+	spin_lock(&vma->vm_mm->page_table_lock);
+
 	dir = pgd_offset(vma->vm_mm, address);
 	flush_cache_range(vma->vm_mm, end - size, end);
 	if (address >= end)
@@ -1600,6 +1620,9 @@ int filemap_sync(struct vm_area_struct * vma, unsigned long address,
 		dir++;
 	} while (address && (address < end));
 	flush_tlb_range(vma->vm_mm, end - size, end);
+
+	spin_unlock(&vma->vm_mm->page_table_lock);
+
 	return error;
 }
 

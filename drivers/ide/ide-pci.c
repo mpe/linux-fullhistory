@@ -72,6 +72,7 @@
 #define DEVID_CS5530	((ide_pci_devid_t){PCI_VENDOR_ID_CYRIX,   PCI_DEVICE_ID_CYRIX_5530_IDE})
 #define DEVID_AMD7403	((ide_pci_devid_t){PCI_VENDOR_ID_AMD,     PCI_DEVICE_ID_AMD_COBRA_7403})
 #define DEVID_AMD7409	((ide_pci_devid_t){PCI_VENDOR_ID_AMD,     PCI_DEVICE_ID_AMD_VIPER_7409})
+#define DEVID_SLC90E66	((ide_pci_devid_t){PCI_VENDOR_ID_EFAR,    PCI_DEVICE_ID_EFAR_SLC90E66_1})
 
 #define	IDE_IGNORE	((void *)-1)
 
@@ -253,6 +254,19 @@ extern void ide_init_sis5513(ide_hwif_t *);
 #define INIT_SIS5513	NULL
 #endif
 
+#ifdef CONFIG_BLK_DEV_SLC90E66
+extern unsigned int pci_init_slc90e66(struct pci_dev *, const char *);
+extern unsigned int ata66_slc90e66(ide_hwif_t *);
+extern void ide_init_slc90e66(ide_hwif_t *);
+#define PCI_SLC90E66	&pci_init_slc90e66
+#define ATA66_SLC90E66	&ata66_slc90e66
+#define INIT_SLC90E66	&ide_init_slc90e66
+#else
+#define PCI_SLC90E66	NULL
+#define ATA66_SLC90E66	NULL
+#define INIT_SLC90E66	NULL
+#endif
+
 #ifdef CONFIG_BLK_DEV_SL82C105
 extern void ide_init_sl82c105(ide_hwif_t *);
 extern void ide_dmacapable_sl82c105(ide_hwif_t *, unsigned long);
@@ -351,6 +365,7 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 	{DEVID_CS5530,	"CS5530",	PCI_CS5530,	NULL,		INIT_CS5530,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_AMD7403,	"AMD7403",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_AMD7409,	"AMD7409",	PCI_AMD7409,	ATA66_AMD7409,	INIT_AMD7409,	DMA_AMD7409,	{{0x40,0x01,0x01}, {0x40,0x02,0x02}},	ON_BOARD,	0 },
+	{DEVID_SLC90E66,"SLC90E66",	PCI_SLC90E66,	ATA66_SLC90E66,	INIT_SLC90E66,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}},	ON_BOARD,	0 },
 	{IDE_PCI_DEVID_NULL, "PCI_IDE",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 }};
 
 /*
@@ -466,7 +481,7 @@ static int __init ide_setup_pci_baseregs (struct pci_dev *dev, const char *name)
 	 */
 	for (reg = 0; reg < 4; reg++) {
 		struct resource *res = dev->resource + reg;
-		if (!(res->flags & PCI_BASE_ADDRESS_SPACE_IO))
+		if ((res->flags & IORESOURCE_IO) == 0)
 			continue;
 		if (!res->start) {
 			printk("%s: Missing I/O address #%d\n", name, reg);
@@ -493,11 +508,16 @@ static void __init ide_setup_pci_device (struct pci_dev *dev, ide_pci_device_t *
 	byte tmp = 0;
 	ide_hwif_t *hwif, *mate = NULL;
 	unsigned int class_rev;
-	int pci_class_ide;
 
 #ifdef CONFIG_IDEDMA_AUTO
 	autodma = 1;
 #endif
+
+#if 1	/* what do do with this useful tool ??? */
+	if (pci_enable_device(dev))
+		return;
+#endif
+
 check_if_enabled:
 	if (pci_read_config_word(dev, PCI_COMMAND, &pcicmd)) {
 		printk("%s: error accessing PCI regs\n", d->name);
@@ -539,8 +559,7 @@ check_if_enabled:
 	 * Can we trust the reported IRQ?
 	 */
 	pciirq = dev->irq;
-	pci_class_ide = ((dev->class >> 8) == PCI_CLASS_STORAGE_IDE);
-	if (!pci_class_ide) {
+	if ((dev->class & ~(0xfa)) != ((PCI_CLASS_STORAGE_IDE << 8) | 5)) {
 		printk("%s: not 100%% native mode: will probe irqs later\n", d->name);
 		/*
 		 * This allows offboard ide-pci cards the enable a BIOS,
@@ -550,17 +569,11 @@ check_if_enabled:
 		 */
 		pciirq = (d->init_chipset) ? d->init_chipset(dev, d->name) : ide_special_settings(dev, d->name);
 	} else if (tried_config) {
-		printk(KERN_INFO "%s: will probe irqs later\n", d->name);
+		printk("%s: will probe irqs later\n", d->name);
 		pciirq = 0;
 	} else if (!pciirq) {
-		if (pci_class_ide) {
-			/* this is the normal path for most IDE devices */
-			if (d->init_chipset)
-				pciirq = d->init_chipset(dev, d->name);
-			else
-				printk(KERN_INFO "%s standard IDE storage device detected\n", d->name);
-		} else
-			printk(KERN_WARNING "%s: bad irq (0): will probe later\n", d->name);
+		printk("%s: bad irq (%d): will probe later\n", d->name, pciirq);
+		pciirq = 0;
 	} else {
 		if (d->init_chipset)
 			(void) d->init_chipset(dev, d->name);

@@ -76,7 +76,7 @@ static unsigned long last_tsc_low; /* lsb 32 bits of Time Stamp Counter */
  * Equal to 2^32 * (1 / (clocks per usec) ).
  * Initialized in time_init.
  */
-unsigned long fast_gettimeoffset_quotient=0;
+unsigned long fast_gettimeoffset_quotient;
 
 extern rwlock_t xtime_lock;
 extern unsigned long wall_jiffies;
@@ -373,9 +373,9 @@ static int set_rtc_mmss(unsigned long nowtime)
 }
 
 /* last time the cmos clock got updated */
-static long last_rtc_update = 0;
+static long last_rtc_update;
 
-int timer_ack = 0;
+int timer_ack;
 
 /*
  * timer_interrupt() needs to keep up the real-time clock,
@@ -449,7 +449,7 @@ static inline void do_timer_interrupt(int irq, void *dev_id, struct pt_regs *reg
 #endif
 }
 
-static int use_tsc = 0;
+static int use_tsc;
 
 /*
  * This is the same as the above, except we _also_ save the current

@@ -67,6 +67,14 @@ static char ixj_c_revision[] = "$Revision: 3.31 $";
 #include <asm/segment.h>
 #include <asm/uaccess.h>
 
+#ifdef CONFIG_PCMCIA
+#include <pcmcia/version.h>
+#include <pcmcia/cs_types.h>
+#include <pcmcia/cs.h>
+#include <pcmcia/cistpl.h>
+#include <pcmcia/ds.h>
+#endif
+
 #ifdef CONFIG_ISAPNP
 #include <linux/isapnp.h>
 #endif
@@ -5876,8 +5884,8 @@ static void ixj_detach(dev_link_t * link)
 	}
 	/* Unlink device structure, free bits */
 	*linkp = link->next;
-	kfree_s(link->priv, sizeof(ixj_info_t));
-	kfree_s(link, sizeof(struct dev_link_t));
+	kfree(link->priv);
+	kfree(link);
 }
 
 #define CS_CHECK(fn, args...) \
@@ -6039,7 +6047,7 @@ int ixj_event(event_t event, int priority, event_callback_args_t * args)
 	case CS_EVENT_CARD_REMOVAL:
 		link->state &= ~DEV_PRESENT;
 		if (link->state & DEV_CONFIG) {
-			link->release.expires = RUN_AT(HZ / 20);
+			link->release.expires = jiffies + (HZ / 20);
 			link->state |= DEV_RELEASE_PENDING;
 			add_timer(&link->release);
 		}

@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.102 2000/08/14 00:46:13 anton Exp $ */
+/* $Id: pgtable.h,v 1.103 2000/10/16 14:32:49 anton Exp $ */
 #ifndef _SPARC_PGTABLE_H
 #define _SPARC_PGTABLE_H
 
@@ -321,8 +321,10 @@ BTFIXUPDEF_CALL_CONST(pte_t, mk_pte_io, unsigned long, pgprot_t, int)
 #define mk_pte_io(page,pgprot,space) BTFIXUP_CALL(mk_pte_io)(page,pgprot,space)
 
 BTFIXUPDEF_CALL(void, pgd_set, pgd_t *, pmd_t *)
+BTFIXUPDEF_CALL(void, pmd_set, pmd_t *, pte_t *)
 
 #define pgd_set(pgdp,pmdp) BTFIXUP_CALL(pgd_set)(pgdp,pmdp)
+#define pmd_set(pmdp,ptep) BTFIXUP_CALL(pmd_set)(pmdp,ptep)
 
 BTFIXUPDEF_INT(pte_modify_mask)
 
@@ -454,6 +456,8 @@ extern unsigned long *sparc_valid_addr_bitmap;
 
 extern int io_remap_page_range(unsigned long from, unsigned long to,
 			       unsigned long size, pgprot_t prot, int space);
+
+#include <asm-generic/pgtable.h>
 
 #endif /* !(__ASSEMBLY__) */
 

@@ -1283,8 +1283,11 @@ void x25_kill_by_neigh(struct x25_neigh *neigh)
 	} 
 }
 
-void __init x25_proto_init(struct net_proto *pro)
+static int __init x25_init(void)
 {
+#ifdef MODULE
+	struct net_device *dev;
+#endif /* MODULE */
 	sock_register(&x25_family_ops);
 
 	x25_packet_type.type = htons(ETH_P_X25);
@@ -1302,20 +1305,8 @@ void __init x25_proto_init(struct net_proto *pro)
 	proc_net_create("x25", 0, x25_get_info);
 	proc_net_create("x25_routes", 0, x25_routes_get_info);
 #endif	
-}
 
 #ifdef MODULE
-EXPORT_NO_SYMBOLS;
-
-MODULE_AUTHOR("Jonathan Naylor <g4klx@g4klx.demon.co.uk>");
-MODULE_DESCRIPTION("The X.25 Packet Layer network layer protocol");
-
-int init_module(void)
-{
-	struct net_device *dev;
-
-	x25_proto_init(NULL);
-
 	/*
 	 *	Register any pre existing devices.
 	 */
@@ -1329,11 +1320,20 @@ int init_module(void)
 			x25_link_device_up(dev);
 	}
 	read_unlock(&dev_base_lock);
-
+#endif /* MODULE */
 	return 0;
 }
+module_init(x25_init);
 
-void cleanup_module(void)
+
+
+#ifdef MODULE
+EXPORT_NO_SYMBOLS;
+
+MODULE_AUTHOR("Jonathan Naylor <g4klx@g4klx.demon.co.uk>");
+MODULE_DESCRIPTION("The X.25 Packet Layer network layer protocol");
+
+static void __exit x25_exit(void)
 {
 
 #ifdef CONFIG_PROC_FS
@@ -1354,7 +1354,7 @@ void cleanup_module(void)
 
 	sock_unregister(AF_X25);
 }
-
+module_exit(x25_exit);
 #endif
 
 #endif

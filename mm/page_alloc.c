@@ -261,7 +261,7 @@ static struct page * __alloc_pages_limit(zonelist_t *zonelist,
 				water_mark = z->pages_high;
 		}
 
-		if (z->free_pages + z->inactive_clean_pages >= water_mark) {
+		if (z->free_pages + z->inactive_clean_pages > water_mark) {
 			struct page *page = NULL;
 			/* If possible, reclaim a page directly. */
 			if (direct_reclaim && z->free_pages < z->pages_min + 8)
@@ -287,7 +287,7 @@ struct page * __alloc_pages(zonelist_t *zonelist, unsigned long order)
 	zone_t **zone;
 	int direct_reclaim = 0;
 	unsigned int gfp_mask = zonelist->gfp_mask;
-	struct page * page = NULL;
+	struct page * page;
 
 	/*
 	 * Allocations put pressure on the VM subsystem.
@@ -510,17 +510,17 @@ try_again:
 		 * happen when the OOM killer selects this task for
 		 * instant execution...
 		 */
-		if (direct_reclaim)
+		if (direct_reclaim) {
 			page = reclaim_page(z);
-		if (page)
-			return page;
+			if (page)
+				return page;
+		}
 
 		/* XXX: is pages_min/4 a good amount to reserve for this? */
 		if (z->free_pages < z->pages_min / 4 &&
 				!(current->flags & PF_MEMALLOC))
 			continue;
-		if (!page)
-			page = rmqueue(z, order);
+		page = rmqueue(z, order);
 		if (page)
 			return page;
 	}
@@ -779,9 +779,6 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 	unsigned long totalpages, offset, realtotalpages;
 	unsigned int cumulative = 0;
 
-	pgdat->node_next = pgdat_list;
-	pgdat_list = pgdat;
-
 	totalpages = 0;
 	for (i = 0; i < MAX_NR_ZONES; i++) {
 		unsigned long size = zones_size[i];
@@ -806,7 +803,7 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 	 */
 	map_size = (totalpages + 1)*sizeof(struct page);
 	if (lmem_map == (struct page *)0) {
-		lmem_map = (struct page *) alloc_bootmem_node(nid, map_size);
+		lmem_map = (struct page *) alloc_bootmem_node(pgdat, map_size);
 		lmem_map = (struct page *)(PAGE_OFFSET + 
 			MAP_ALIGN((unsigned long)lmem_map - PAGE_OFFSET));
 	}
@@ -898,7 +895,7 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 			bitmap_size = (bitmap_size + 7) >> 3;
 			bitmap_size = LONG_ALIGN(bitmap_size);
 			zone->free_area[i].map = 
-			  (unsigned int *) alloc_bootmem_node(nid, bitmap_size);
+			  (unsigned int *) alloc_bootmem_node(pgdat, bitmap_size);
 		}
 	}
 	build_zonelists(pgdat);

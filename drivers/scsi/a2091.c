@@ -205,7 +205,6 @@ int __init a2091_detect(Scsi_Host_Template *tpnt)
 	address = z->resource.start;
 	if (!request_mem_region(address, 256, "wd33c93"))
 	    continue;
-	strcpy(z->name, "A590/A2091 SCSI Host Adapter");
 
 	instance = scsi_register (tpnt, sizeof (struct WD33C93_hostdata));
 	instance->base = ZTWO_VADDR(address);

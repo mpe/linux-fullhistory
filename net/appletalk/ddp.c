@@ -2120,7 +2120,7 @@ EXPORT_SYMBOL(atalk_find_dev_addr);
 
 /* Called by proto.c on kernel start up */
 
-void __init atalk_proto_init(struct net_proto *pro)
+static int __init atalk_init(void)
 {
 	(void) sock_register(&atalk_family_ops);
 	if((ddp_dl = register_snap_client(ddp_snap_id, atalk_rcv)) == NULL)
@@ -2148,16 +2148,11 @@ void __init atalk_proto_init(struct net_proto *pro)
 #endif /* CONFIG_SYSCTL */
 
 	printk(KERN_INFO "NET4: AppleTalk 0.18 for Linux NET4.0\n");
+	return 0;
 }
+module_init(atalk_init);
 
 #ifdef MODULE
-
-int init_module(void)
-{
-	atalk_proto_init(NULL);
-	return (0);
-}
-
 /*
  * Note on MOD_{INC,DEC}_USE_COUNT:
  *
@@ -2171,7 +2166,7 @@ int init_module(void)
  * sockets be closed from user space.
  */
 
-void cleanup_module(void)
+static void __exit atalk_exit(void)
 {
 #ifdef CONFIG_SYSCTL
 	atalk_unregister_sysctl();
@@ -2195,6 +2190,7 @@ void cleanup_module(void)
 
 	return;
 }
-
+module_exit(atalk_exit);
 #endif  /* MODULE */
+
 #endif  /* CONFIG_ATALK || CONFIG_ATALK_MODULE */

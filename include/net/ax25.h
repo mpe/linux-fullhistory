@@ -253,8 +253,6 @@ extern void ax25_ds_heartbeat_expiry(ax25_cb *);
 extern void ax25_ds_t3timer_expiry(ax25_cb *);
 extern void ax25_ds_idletimer_expiry(ax25_cb *);
 
-#include <net/ax25call.h>
-
 /* ax25_iface.c */
 extern int  ax25_protocol_register(unsigned int, int (*)(struct sk_buff *, ax25_cb *));
 extern void ax25_protocol_release(unsigned int);

@@ -212,6 +212,9 @@ typedef unsigned char	byte;	/* used everywhere */
 		(drive)->quirk_list = hwif->quirkproc(drive);	\
 }
 
+#define IDE_DEBUG(lineno) \
+	printk("%s,%s,line=%d\n", __FILE__, __FUNCTION__, (lineno))
+
 /*
  * Check for an interrupt and acknowledge the interrupt status
  */

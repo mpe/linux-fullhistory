@@ -9,6 +9,8 @@
 #ifndef _LINUX_DIVERT_H
 #define _LINUX_DIVERT_H
 
+#include <asm/types.h>
+
 #define	MAX_DIVERT_PORTS	8	/* Max number of ports to divert (tcp, udp) */
 
 /* Divertable protocols */
@@ -18,22 +20,6 @@
 #define	DIVERT_PROTO_TCP	0x0004
 #define	DIVERT_PROTO_UDP	0x0008
 
-#ifdef __KERNEL__
-	#define S16     s16
-	#define U16     u16
-	#define S32     s32
-	#define U32     u32
-	#define S64     s64
-	#define U64     u64
-#else
-	#define	S16		__s16
-	#define	U16		__u16
-	#define	S32		__s32
-	#define	U32		__u32
-	#define	S64		__s64
-	#define	U64		__u64
-#endif
-
 /*
  *	This is an Ethernet Frame Diverter option block
  */
@@ -41,10 +27,10 @@ struct divert_blk
 {
 	int		divert;  /* are we active */
 	unsigned int protos;	/* protocols */
-	U16		tcp_dst[MAX_DIVERT_PORTS]; /* specific tcp dst ports to divert */
-	U16		tcp_src[MAX_DIVERT_PORTS]; /* specific tcp src ports to divert */
-	U16		udp_dst[MAX_DIVERT_PORTS]; /* specific udp dst ports to divert */
-	U16		udp_src[MAX_DIVERT_PORTS]; /* specific udp src ports to divert */
+	u16		tcp_dst[MAX_DIVERT_PORTS]; /* specific tcp dst ports to divert */
+	u16		tcp_src[MAX_DIVERT_PORTS]; /* specific tcp src ports to divert */
+	u16		udp_dst[MAX_DIVERT_PORTS]; /* specific udp dst ports to divert */
+	u16		udp_src[MAX_DIVERT_PORTS]; /* specific udp src ports to divert */
 };
 
 /*
@@ -54,12 +40,12 @@ struct divert_blk
 
 typedef union _divert_cf_arg
 {
-	S16		int16;
-	U16		uint16;
-	S32		int32;
-	U32		uint32;
-	S64		int64;
-	U64		uint64;
+	s16		int16;
+	u16		uint16;
+	s32		int32;
+	u32		uint32;
+	s64		int64;
+	u64		uint64;
 	void	*ptr;
 } divert_cf_arg;
 

@@ -509,7 +509,7 @@ static struct file_operations dsp56k_fops = {
 
 /****** Init and module functions ******/
 
-static devfs_handle_t devfs_handle = NULL;
+static devfs_handle_t devfs_handle;
 
 int __init dsp56k_init(void)
 {

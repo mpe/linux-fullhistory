@@ -117,19 +117,15 @@ static int __init find_buddha(void)
     buddha_num_hwifs = 0;
     while ((z = zorro_find_device(ZORRO_WILDCARD, z))) {
 	unsigned long board;
-	const char *name;
-	if (z->id == ZORRO_PROD_INDIVIDUAL_COMPUTERS_BUDDHA) {
+	if (z->id == ZORRO_PROD_INDIVIDUAL_COMPUTERS_BUDDHA)
 	    buddha_num_hwifs = BUDDHA_NUM_HWIFS;
-	    name = "Buddha IDE Interface";
-	} else if (z->id == ZORRO_PROD_INDIVIDUAL_COMPUTERS_CATWEASEL) {
+	else if (z->id == ZORRO_PROD_INDIVIDUAL_COMPUTERS_CATWEASEL)
 	    buddha_num_hwifs = CATWEASEL_NUM_HWIFS;
-	    name = "Catweasel IDE Interface and Floppy Controller";
-	} else
+	else
 	    continue;
 	board = z->resource.start;
 	if (!request_mem_region(board+BUDDHA_BASE1, 0x800, "IDE"))
 	    continue;
-	strcpy(z->name, name);
 	buddha_board = ZTWO_VADDR(board);
 	/* write to BUDDHA_IRQ_MR to enable the board IRQ */
 	*(char *)(buddha_board+BUDDHA_IRQ_MR) = 0;

@@ -95,7 +95,6 @@ int __init ariadne2_probe(struct net_device *dev)
 	    release_mem_region(ioaddr, NE_IO_EXTENT*2);
 	    return err;
 	}
-	strcpy(z->name, "AriadNE2 Ethernet");
 	return 0;
     }
     return -ENODEV;

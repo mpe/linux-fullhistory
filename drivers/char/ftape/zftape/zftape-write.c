@@ -48,8 +48,8 @@
 
 /*      Local vars.
  */
-static int last_write_failed = 0;
-static int need_flush = 0;
+static int last_write_failed;
+static int need_flush;
 
 void zft_prevent_flush(void)
 {

@@ -205,7 +205,7 @@ ENTRY(system_call)
 ENTRY(ret_from_sys_call)
 #ifdef CONFIG_SMP
 	movl processor(%ebx),%eax
-	shll $5,%eax
+	shll $CONFIG_X86_L1_CACHE_SHIFT,%eax
 	movl SYMBOL_NAME(irq_stat)(,%eax),%ecx		# softirq_active
 	testl SYMBOL_NAME(irq_stat)+4(,%eax),%ecx	# softirq_mask
 #else
@@ -261,7 +261,7 @@ ret_from_exception:
 #ifdef CONFIG_SMP
 	GET_CURRENT(%ebx)
 	movl processor(%ebx),%eax
-	shll $5,%eax
+	shll $CONFIG_X86_L1_CACHE_SHIFT,%eax
 	movl SYMBOL_NAME(irq_stat)(,%eax),%ecx		# softirq_active
 	testl SYMBOL_NAME(irq_stat)+4(,%eax),%ecx	# softirq_mask
 #else

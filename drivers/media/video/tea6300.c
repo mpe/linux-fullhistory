@@ -15,6 +15,10 @@
  * balance (different left,right values) and, if someone ever finds a card
  * with the support (or if you're careful with a soldering iron), fade
  * (front/back).
+ *
+ * Changes:
+ * Arnaldo Carvalho de Melo <acme@conectiva.com.br> - 08/14/2000
+ * - resource allocation fixes in tea6300_attach
  */
 
 #include <linux/module.h>
@@ -170,8 +174,10 @@ static int tea6300_attach(struct i2c_adapter *adap, int addr,
         client->addr = addr;
 
 	client->data = tea = kmalloc(sizeof *tea,GFP_KERNEL);
-	if (!tea)
+	if (!tea) {
+		kfree(client);
 		return -ENOMEM;
+	}
 	memset(tea,0,sizeof *tea);
 	do_tea6300_init(client);
 

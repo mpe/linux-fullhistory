@@ -11,9 +11,13 @@
  * Based on tda9855.c by Steve VanDeBogart (vandebo@uclink.berkeley.edu)
  * Which was based on tda8425.c by Greg Alexander (c) 1998
  *
+ * Contributors:
+ * Arnaldo Carvalho de Melo <acme@conectiva.com.br> (0.2)
+ *
  * OPTIONS:
  * debug   - set to 1 if you'd like to see debug messages
  * 
+ *  Revision  0.2 - resource allocation fixes in tda9875_attach (08/14/2000)
  *  Revision: 0.1 - original version
  */
 
@@ -232,8 +236,10 @@ static int tda9875_attach(struct i2c_adapter *adap, int addr,
         client->addr = addr;
 	
 	client->data = t = kmalloc(sizeof *t,GFP_KERNEL);
-	if (!t)
+	if (!t) {
+		kfree(client);
 		return -ENOMEM;
+	}
 	memset(t,0,sizeof *t);
 	do_tda9875_init(client);
 	MOD_INC_USE_COUNT;

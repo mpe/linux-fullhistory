@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.216 2000/10/10 03:58:56 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.217 2000/10/15 13:15:19 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -75,7 +75,15 @@ static struct socket *tcp_socket=&tcp_inode.u.socket_i;
 void tcp_v4_send_check(struct sock *sk, struct tcphdr *th, int len, 
 		       struct sk_buff *skb);
 
+/*
+ * ALL members must be initialised to prevent gcc-2.7.2.3 miscompilation
+ */
 struct tcp_hashinfo __cacheline_aligned tcp_hashinfo = {
+	__tcp_ehash:          NULL,
+	__tcp_bhash:          NULL,
+	__tcp_bhash_size:     0,
+	__tcp_ehash_size:     0,
+	__tcp_listening_hash: { NULL, },
 	__tcp_lhash_lock:     RW_LOCK_UNLOCKED,
 	__tcp_lhash_users:    ATOMIC_INIT(0),
 	__tcp_lhash_wait:

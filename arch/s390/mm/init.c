@@ -36,7 +36,7 @@
 #include <asm/dma.h>
 #include <asm/lowcore.h>
 
-static unsigned long totalram_pages = 0;
+static unsigned long totalram_pages;
 
 /*
  * BAD_PAGE is the page that is used for page faults when linux

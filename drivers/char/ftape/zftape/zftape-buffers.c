@@ -48,8 +48,8 @@
 
 /*  local varibales
  */
-static unsigned int used_memory = 0;
-static unsigned int peak_memory = 0;
+static unsigned int used_memory;
+static unsigned int peak_memory;
 
 void zft_memory_stats(void)
 {

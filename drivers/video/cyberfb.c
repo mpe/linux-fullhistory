@@ -1070,7 +1070,6 @@ int __init cyberfb_init(void)
 		release_mem_region(CyberRegs_phys, 0x10000);
 		continue;
 	    }
-	    strcpy(z->name, "CyberVision64 Graphics Board");
 	    DPRINTK("board_addr=%08lx\n", board_addr);
 	    DPRINTK("board_size=%08lx\n", board_size);
 

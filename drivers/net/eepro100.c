@@ -34,12 +34,12 @@ static const char *version =
 /* A few user-configurable values that apply to all boards.
    First set is undocumented and spelled per Intel recommendations. */
 
-static int congenb = 0;		/* Enable congestion control in the DP83840. */
+static int congenb;		/* Enable congestion control in the DP83840. */
 static int txfifo = 8;		/* Tx FIFO threshold in 4 byte units, 0-15 */
 static int rxfifo = 8;		/* Rx FIFO threshold, default 32 bytes. */
 /* Tx/Rx DMA burst length, 0-127, 0 == no preemption, tx==128 -> disabled. */
 static int txdmacount = 128;
-static int rxdmacount = 0;
+static int rxdmacount;
 
 /* Set the copy breakpoint for the copy-only-tiny-buffer Rx method.
    Lower values use more memory, but are faster. */
@@ -611,9 +611,9 @@ static int __devinit eepro100_init_one (struct pci_dev *pdev,
 	unsigned long ioaddr;
 	int irq;
 	int acpi_idle_state = 0, pm;
-	static int cards_found = 0;
+	static int cards_found;
 
-	static int did_version = 0;			/* Already printed version info. */
+	static int did_version;			/* Already printed version info. */
 	if (speedo_debug > 0  &&  did_version++ == 0)
 		printk(version);
 

@@ -438,7 +438,7 @@ static inline void free_memmap(int node, unsigned long start, unsigned long end)
 	start = __virt_to_phys(pg);
 	end   = __virt_to_phys(pgend);
 
-	free_bootmem_node(node, start, end - start);
+	free_bootmem_node(NODE_DATA(node), start, end - start);
 }
 
 static inline void free_unused_memmap_node(int node, struct meminfo *mi)

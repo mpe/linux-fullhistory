@@ -55,8 +55,7 @@ static int try_to_swap_out(struct mm_struct * mm, struct vm_area_struct* vma, un
 
 	onlist = PageActive(page);
 	/* Don't look at this pte if it's been accessed recently. */
-	if (pte_young(pte)) {
-		set_pte(page_table, pte_mkold(pte));
+	if (ptep_test_and_clear_young(page_table)) {
 		if (onlist) {
 			/*
 			 * Transfer the "accessed" bit from the page
@@ -99,6 +98,10 @@ static int try_to_swap_out(struct mm_struct * mm, struct vm_area_struct* vma, un
 	if (PageSwapCache(page)) {
 		entry.val = page->index;
 		swap_duplicate(entry);
+		if (pte_dirty(pte))
+			BUG();
+		if (pte_write(pte))
+			BUG();
 		set_pte(page_table, swp_entry_to_pte(entry));
 drop_pte:
 		UnlockPage(page);
@@ -108,6 +111,13 @@ drop_pte:
 		page_cache_release(page);
 		goto out_failed;
 	}
+
+	/* From this point on, the odds are that we're going to
+	 * nuke this pte, so read and clear the pte.  This hook
+	 * is needed on CPUs which update the accessed and dirty
+	 * bits in hardware.
+	 */
+	pte = ptep_get_and_clear(page_table);
 
 	/*
 	 * Is it a clean page? Then it must be recoverable
@@ -124,7 +134,6 @@ drop_pte:
 	 */
 	if (!pte_dirty(pte)) {
 		flush_cache_page(vma, address);
-		pte_clear(page_table);
 		goto drop_pte;
 	}
 
@@ -134,7 +143,7 @@ drop_pte:
 	 * locks etc.
 	 */
 	if (!(gfp_mask & __GFP_IO))
-		goto out_unlock;
+		goto out_unlock_restore;
 
 	/*
 	 * Don't do any of the expensive stuff if
@@ -143,7 +152,7 @@ drop_pte:
 	if (page->zone->free_pages + page->zone->inactive_clean_pages
 					+ page->zone->inactive_dirty_pages
 		      	> page->zone->pages_high + inactive_target)
-		goto out_unlock;
+		goto out_unlock_restore;
 
 	/*
 	 * Ok, it's really dirty. That means that
@@ -169,7 +178,7 @@ drop_pte:
 		int error;
 		struct file *file = vma->vm_file;
 		if (file) get_file(file);
-		pte_clear(page_table);
+
 		mm->rss--;
 		flush_tlb_page(vma, address);
 		spin_unlock(&mm->page_table_lock);
@@ -191,7 +200,7 @@ drop_pte:
 	 */
 	entry = get_swap_page();
 	if (!entry.val)
-		goto out_unlock; /* No swap space left */
+		goto out_unlock_restore; /* No swap space left */
 
 	if (!(page = prepare_highmem_swapout(page)))
 		goto out_swap_free;
@@ -215,10 +224,12 @@ out_free_success:
 	page_cache_release(page);
 	return 1;
 out_swap_free:
+	set_pte(page_table, pte);
 	swap_free(entry);
 out_failed:
 	return 0;
-out_unlock:
+out_unlock_restore:
+	set_pte(page_table, pte);
 	UnlockPage(page);
 	return 0;
 }

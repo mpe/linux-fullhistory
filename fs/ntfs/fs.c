@@ -416,8 +416,7 @@ static struct file_operations ntfs_file_operations_nommap = {
 #endif
 };
 
-static struct inode_operations ntfs_inode_operations_nobmap = {
-};
+static struct inode_operations ntfs_inode_operations_nobmap;
 
 #ifdef CONFIG_NTFS_RW
 static int
@@ -577,8 +576,7 @@ static struct file_operations ntfs_file_operations = {
 #endif
 };
 
-static struct inode_operations ntfs_inode_operations = {
-};
+static struct inode_operations ntfs_inode_operations;
 
 static struct file_operations ntfs_dir_operations = {
 	read:		generic_read_dir,

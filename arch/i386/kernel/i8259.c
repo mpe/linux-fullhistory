@@ -178,7 +178,7 @@ static unsigned int cached_irq_mask = 0xffff;
  * this 'mixed mode' IRQ handling costs nothing because it's only used
  * at IRQ setup time.
  */
-unsigned long io_apic_irqs = 0;
+unsigned long io_apic_irqs;
 
 void disable_8259A_irq(unsigned int irq)
 {
@@ -312,7 +312,7 @@ spurious_8259A_irq:
 		goto handle_real_irq;
 
 	{
-		static int spurious_irq_mask = 0;
+		static int spurious_irq_mask;
 		/*
 		 * At this point we can be sure the IRQ is spurious,
 		 * lets ACK and report it. [once per IRQ]

@@ -2053,8 +2053,36 @@ void dn_register_sysctl(void);
 void dn_unregister_sysctl(void);
 #endif
 
-void __init decnet_proto_init(struct net_proto *pro)
+
+#ifdef MODULE
+EXPORT_NO_SYMBOLS;
+MODULE_DESCRIPTION("The Linux DECnet Network Protocol");
+MODULE_AUTHOR("Linux DECnet Project Team");
+
+static int addr[2] = {0, 0};
+
+MODULE_PARM(addr, "2i");
+MODULE_PARM_DESC(addr, "The DECnet address of this machine: area,node");
+#endif
+
+
+static int __init decnet_init(void)
 {
+#ifdef MODULE
+	if (addr[0] > 63 || addr[0] < 0) {
+		printk(KERN_ERR "DECnet: Area must be between 0 and 63");
+		return 1;
+	}
+
+	if (addr[1] > 1023 || addr[1] < 0) {
+		printk(KERN_ERR "DECnet: Node must be between 0 and 1023");
+		return 1;
+	}
+
+	decnet_address = dn_htons((addr[0] << 10) | addr[1]);
+	dn_dn2eth(decnet_ether_address, dn_ntohs(decnet_address));
+#endif
+
         printk(KERN_INFO "NET4: DECnet for Linux: V.2.3.49s (C) 1995-2000 Linux DECnet Project Team\n");
 
 	sock_register(&dn_family_ops);
@@ -2074,6 +2102,7 @@ void __init decnet_proto_init(struct net_proto *pro)
 #ifdef CONFIG_SYSCTL
 	dn_register_sysctl();
 #endif /* CONFIG_SYSCTL */
+	return 0;
 
 }
 
@@ -2093,37 +2122,7 @@ static int __init decnet_setup(char *str)
 __setup("decnet=", decnet_setup);
 #endif
 
-#ifdef MODULE
-EXPORT_NO_SYMBOLS;
-MODULE_DESCRIPTION("The Linux DECnet Network Protocol");
-MODULE_AUTHOR("Linux DECnet Project Team");
-
-static int addr[2] = {0, 0};
-
-MODULE_PARM(addr, "2i");
-MODULE_PARM_DESC(addr, "The DECnet address of this machine: area,node");
-
-int __init init_module(void)
-{
-	if (addr[0] > 63 || addr[0] < 0) {
-		printk(KERN_ERR "DECnet: Area must be between 0 and 63");
-		return 1;
-	}
-
-	if (addr[1] > 1023 || addr[1] < 0) {
-		printk(KERN_ERR "DECnet: Node must be between 0 and 1023");
-		return 1;
-	}
-
-	decnet_address = dn_htons((addr[0] << 10) | addr[1]);
-	dn_dn2eth(decnet_ether_address, dn_ntohs(decnet_address));
-
-	decnet_proto_init(NULL);
-
-	return 0;
-}
-
-void __exit cleanup_module(void)
+static void __exit decnet_exit(void)
 {
 #ifdef CONFIG_SYSCTL
 	dn_unregister_sysctl();
@@ -2145,4 +2144,5 @@ void __exit cleanup_module(void)
 	sock_unregister(AF_DECnet);
 }
 
-#endif
+module_init(decnet_init);
+module_exit(decnet_exit);

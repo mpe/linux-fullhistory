@@ -1638,20 +1638,6 @@ int sock_unregister(int family)
 	return 0;
 }
 
-void __init proto_init(void)
-{
-	extern struct net_proto protocols[];	/* Network protocols */
-	struct net_proto *pro;
-
-	/* Kick all configured protocols. */
-	pro = protocols;
-	while (pro->name != NULL) 
-	{
-		(*pro->init_func)(pro);
-		pro++;
-	}
-	/* We're all done... */
-}
 
 extern void sk_init(void);
 
@@ -1712,10 +1698,13 @@ void __init sock_init(void)
 
 	register_filesystem(&sock_fs_type);
 	sock_mnt = kern_mount(&sock_fs_type);
-	proto_init();
+	/* The real protocol initialization is performed when
+	 *  do_initcalls is run.  
+	 */
+
 
 	/*
-	 *	The netlink device handler may be needed early.
+	 * The netlink device handler may be needed early.
 	 */
 
 #ifdef  CONFIG_RTNETLINK

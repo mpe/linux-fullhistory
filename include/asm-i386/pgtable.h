@@ -17,6 +17,10 @@
 #include <asm/fixmap.h>
 #include <linux/threads.h>
 
+#ifndef _I386_BITOPS_H
+#include <asm/bitops.h>
+#endif
+
 extern pgd_t swapper_pg_dir[1024];
 extern void paging_init(void);
 
@@ -145,6 +149,16 @@ extern unsigned long empty_zero_page[1024];
  * the page directory entry points directly to a 4MB-aligned block of
  * memory. 
  */
+#define _PAGE_BIT_PRESENT	0
+#define _PAGE_BIT_RW		1
+#define _PAGE_BIT_USER		2
+#define _PAGE_BIT_PWT		3
+#define _PAGE_BIT_PCD		4
+#define _PAGE_BIT_ACCESSED	5
+#define _PAGE_BIT_DIRTY		6
+#define _PAGE_BIT_PSE		7	/* 4 MB (or 2MB) page, Pentium+, if present.. */
+#define _PAGE_BIT_GLOBAL	8	/* Global TLB entry PPro+ */
+
 #define _PAGE_PRESENT	0x001
 #define _PAGE_RW	0x002
 #define _PAGE_USER	0x004
@@ -231,8 +245,7 @@ extern unsigned long pg0[1024];
 extern void __handle_bad_pmd(pmd_t * pmd);
 extern void __handle_bad_pmd_kernel(pmd_t * pmd);
 
-#define pte_none(x)	(!pte_val(x))
-#define pte_present(x)	(pte_val(x) & (_PAGE_PRESENT | _PAGE_PROTNONE))
+#define pte_present(x)	((x).pte_low & (_PAGE_PRESENT | _PAGE_PROTNONE))
 #define pte_clear(xp)	do { set_pte(xp, __pte(0)); } while (0)
 
 #define pmd_none(x)	(!pmd_val(x))
@@ -246,49 +259,49 @@ extern void __handle_bad_pmd_kernel(pmd_t * pmd);
  */
 #define page_address(page) ((page)->virtual)
 #define pages_to_mb(x) ((x) >> (20-PAGE_SHIFT))
-#define pte_page(x) (mem_map+((unsigned long)((pte_val(x) >> PAGE_SHIFT))))
 
 /*
  * The following only work if pte_present() is true.
  * Undefined behaviour if not..
  */
-extern inline int pte_read(pte_t pte)		{ return pte_val(pte) & _PAGE_USER; }
-extern inline int pte_exec(pte_t pte)		{ return pte_val(pte) & _PAGE_USER; }
-extern inline int pte_dirty(pte_t pte)		{ return pte_val(pte) & _PAGE_DIRTY; }
-extern inline int pte_young(pte_t pte)		{ return pte_val(pte) & _PAGE_ACCESSED; }
-extern inline int pte_write(pte_t pte)		{ return pte_val(pte) & _PAGE_RW; }
+static inline int pte_read(pte_t pte)		{ return (pte).pte_low & _PAGE_USER; }
+static inline int pte_exec(pte_t pte)		{ return (pte).pte_low & _PAGE_USER; }
+static inline int pte_dirty(pte_t pte)		{ return (pte).pte_low & _PAGE_DIRTY; }
+static inline int pte_young(pte_t pte)		{ return (pte).pte_low & _PAGE_ACCESSED; }
+static inline int pte_write(pte_t pte)		{ return (pte).pte_low & _PAGE_RW; }
 
-extern inline pte_t pte_rdprotect(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) & ~_PAGE_USER)); return pte; }
-extern inline pte_t pte_exprotect(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) & ~_PAGE_USER)); return pte; }
-extern inline pte_t pte_mkclean(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) & ~_PAGE_DIRTY)); return pte; }
-extern inline pte_t pte_mkold(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) & ~_PAGE_ACCESSED)); return pte; }
-extern inline pte_t pte_wrprotect(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) & ~_PAGE_RW)); return pte; }
-extern inline pte_t pte_mkread(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) | _PAGE_USER)); return pte; }
-extern inline pte_t pte_mkexec(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) | _PAGE_USER)); return pte; }
-extern inline pte_t pte_mkdirty(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) | _PAGE_DIRTY)); return pte; }
-extern inline pte_t pte_mkyoung(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) | _PAGE_ACCESSED)); return pte; }
-extern inline pte_t pte_mkwrite(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) | _PAGE_RW)); return pte; }
+static inline pte_t pte_rdprotect(pte_t pte)	{ (pte).pte_low &= ~_PAGE_USER; return pte; }
+static inline pte_t pte_exprotect(pte_t pte)	{ (pte).pte_low &= ~_PAGE_USER; return pte; }
+static inline pte_t pte_mkclean(pte_t pte)	{ (pte).pte_low &= ~_PAGE_DIRTY; return pte; }
+static inline pte_t pte_mkold(pte_t pte)	{ (pte).pte_low &= ~_PAGE_ACCESSED; return pte; }
+static inline pte_t pte_wrprotect(pte_t pte)	{ (pte).pte_low &= ~_PAGE_RW; return pte; }
+static inline pte_t pte_mkread(pte_t pte)	{ (pte).pte_low |= _PAGE_USER; return pte; }
+static inline pte_t pte_mkexec(pte_t pte)	{ (pte).pte_low |= _PAGE_USER; return pte; }
+static inline pte_t pte_mkdirty(pte_t pte)	{ (pte).pte_low |= _PAGE_DIRTY; return pte; }
+static inline pte_t pte_mkyoung(pte_t pte)	{ (pte).pte_low |= _PAGE_ACCESSED; return pte; }
+static inline pte_t pte_mkwrite(pte_t pte)	{ (pte).pte_low |= _PAGE_RW; return pte; }
+
+static inline  int ptep_test_and_clear_dirty(pte_t *ptep)	{ return test_and_clear_bit(_PAGE_BIT_DIRTY, ptep); }
+static inline  int ptep_test_and_clear_young(pte_t *ptep)	{ return test_and_clear_bit(_PAGE_BIT_ACCESSED, ptep); }
+static inline void ptep_clear_wrprotect(pte_t *ptep)		{ clear_bit(_PAGE_BIT_RW, ptep); }
+static inline void ptep_mkdirty(pte_t *ptep)			{ set_bit(_PAGE_BIT_RW, ptep); }
 
 /*
  * Conversion functions: convert a page and protection to a page entry,
  * and a page entry and page directory to the page they refer to.
  */
 
-#define mk_pte(page,pgprot) \
-({									\
-	pte_t __pte;							\
-									\
-	set_pte(&__pte, __pte(((page)-mem_map) * 			\
-		(unsigned long long)PAGE_SIZE + pgprot_val(pgprot)));	\
-	__pte;								\
-})
+#define mk_pte(page, pgprot)	__mk_pte((page) - mem_map, (pgprot))
 
 /* This takes a physical page address that is used by the remapping functions */
-#define mk_pte_phys(physpage, pgprot) \
-({ pte_t __pte; set_pte(&__pte, __pte(physpage + pgprot_val(pgprot))); __pte; })
+#define mk_pte_phys(physpage, pgprot)	__mk_pte((physpage) >> PAGE_SHIFT, pgprot)
 
-extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
-{ set_pte(&pte, __pte((pte_val(pte) & _PAGE_CHG_MASK) | pgprot_val(newprot))); return pte; }
+static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
+{
+	pte.pte_low &= _PAGE_CHG_MASK;
+	pte.pte_low |= pgprot_val(newprot);
+	return pte;
+}
 
 #define page_pte(page) page_pte_prot(page, __pgprot(0))
 
@@ -324,7 +337,7 @@ extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 #define SWP_TYPE(x)			(((x).val >> 1) & 0x3f)
 #define SWP_OFFSET(x)			((x).val >> 8)
 #define SWP_ENTRY(type, offset)		((swp_entry_t) { ((type) << 1) | ((offset) << 8) })
-#define pte_to_swp_entry(pte)		((swp_entry_t) { pte_val(pte) })
+#define pte_to_swp_entry(pte)		((swp_entry_t) { (pte).pte_low })
 #define swp_entry_to_pte(x)		((pte_t) { (x).val })
 
 #define module_map      vmalloc

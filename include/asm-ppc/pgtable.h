@@ -488,6 +488,7 @@ extern void kernel_set_cachemode (unsigned long address, unsigned long size,
 
 #define io_remap_page_range remap_page_range 
 
+#include <asm-generic/pgtable.h>
 
 #endif __ASSEMBLY__
 #endif /* _PPC_PGTABLE_H */

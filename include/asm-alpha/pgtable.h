@@ -33,22 +33,23 @@
 /*
  * Entries per page directory level:  the Alpha is three-level, with
  * all levels having a one-page page table.
- *
- * The PGD is special:  the last entry is reserved for self-mapping.
  */
 #define PTRS_PER_PTE	(1UL << (PAGE_SHIFT-3))
 #define PTRS_PER_PMD	(1UL << (PAGE_SHIFT-3))
-#define PTRS_PER_PGD	((1UL << (PAGE_SHIFT-3))-1)
+#define PTRS_PER_PGD	(1UL << (PAGE_SHIFT-3))
 #define USER_PTRS_PER_PGD	(TASK_SIZE / PGDIR_SIZE)
 #define FIRST_USER_PGD_NR	0
 
 /* Number of pointers that fit on a page:  this will go away. */
 #define PTRS_PER_PAGE	(1UL << (PAGE_SHIFT-3))
 
-#define CONSOLE_REMAP_START    0xFFFFFE0000000000
-#define VMALLOC_START          (CONSOLE_REMAP_START + PMD_SIZE)
+#ifdef CONFIG_ALPHA_LARGE_VMALLOC
+#define VMALLOC_START		0xfffffe0000000000
+#else
+#define VMALLOC_START		(-2*PGDIR_SIZE)
+#endif
 #define VMALLOC_VMADDR(x)	((unsigned long)(x))
-#define VMALLOC_END		(~0UL)
+#define VMALLOC_END		(-PGDIR_SIZE)
 
 /*
  * OSF/1 PAL-code-imposed page table bits
@@ -260,7 +261,7 @@ extern inline pte_t pte_mkyoung(pte_t pte)	{ pte_val(pte) |= __ACCESS_BITS; retu
 #define pgd_offset_k(address) pgd_offset(&init_mm, address)
 
 /* to find an entry in a page-table-directory. */
-#define pgd_index(address)	((address >> PGDIR_SHIFT) & PTRS_PER_PGD)
+#define pgd_index(address)	((address >> PGDIR_SHIFT) & (PTRS_PER_PGD - 1))
 #define __pgd_offset(address)	pgd_index(address)
 #define pgd_offset(mm, address)	((mm)->pgd+pgd_index(address))
 
@@ -318,5 +319,7 @@ extern inline pte_t mk_swap_pte(unsigned long type, unsigned long offset)
 	printk("%s:%d: bad pgd %016lx.\n", __FILE__, __LINE__, pgd_val(e))
 
 extern void paging_init(void);
+
+#include <asm-generic/pgtable.h>
 
 #endif /* _ALPHA_PGTABLE_H */

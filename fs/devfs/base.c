@@ -654,7 +654,7 @@ struct devfs_entry
 };
 
 /*  The root of the device tree  */
-static struct devfs_entry *root_entry = NULL;
+static struct devfs_entry *root_entry;
 
 struct devfsd_buf_entry
 {

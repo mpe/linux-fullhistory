@@ -117,7 +117,7 @@ static int irq_list[4] = { -1 };
 static int max_interrupt_work = 32;
 
 /* Force full duplex modes? */
-static int full_duplex = 0;
+static int full_duplex;
 
 /* To minimize the size of the driver source and make the driver more
    readable not all constants are symbolically defined.

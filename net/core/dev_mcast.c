@@ -13,6 +13,7 @@
  *					rather than any time but...
  *		Alan Cox	:	IFF_ALLMULTI support.
  *		Alan Cox	: 	New format set_multicast_list() calls.
+ *		Gleb Natapov    :       Remove dev_mc_lock.
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -59,16 +60,14 @@
  *	Device mc lists are changed by bh at least if IPv6 is enabled,
  *	so that it must be bh protected.
  *
- *	We protect all mc lists with global rw lock
- *	and block accesses to device mc filters with dev->xmit_lock.
+ *	We block accesses to device mc filters with dev->xmit_lock.
  */
-static rwlock_t dev_mc_lock = RW_LOCK_UNLOCKED;
 
 /*
  *	Update the multicast list into the physical NIC controller.
  */
  
-void dev_mc_upload(struct net_device *dev)
+static void __dev_mc_upload(struct net_device *dev)
 {
 	/* Don't do anything till we up the interface
 	 * [dev_open will call this function so the list will
@@ -87,13 +86,14 @@ void dev_mc_upload(struct net_device *dev)
 	    !netif_device_present(dev))
 		return;
 
-	read_lock_bh(&dev_mc_lock);
-	spin_lock(&dev->xmit_lock);
-	dev->xmit_lock_owner = smp_processor_id();
 	dev->set_multicast_list(dev);
-	dev->xmit_lock_owner = -1;
-	spin_unlock(&dev->xmit_lock);
-	read_unlock_bh(&dev_mc_lock);
+}
+
+void dev_mc_upload(struct net_device *dev)
+{
+	spin_lock_bh(&dev->xmit_lock);
+	__dev_mc_upload(dev);
+	spin_unlock_bh(&dev->xmit_lock);
 }
 
 /*
@@ -105,7 +105,8 @@ int dev_mc_delete(struct net_device *dev, void *addr, int alen, int glbl)
 	int err = 0;
 	struct dev_mc_list *dmi, **dmip;
 
-	write_lock_bh(&dev_mc_lock);
+	spin_lock_bh(&dev->xmit_lock);
+
 	for (dmip = &dev->mc_list; (dmi = *dmip) != NULL; dmip = &dmi->next) {
 		/*
 		 *	Find the entry we want to delete. The device could
@@ -127,7 +128,6 @@ int dev_mc_delete(struct net_device *dev, void *addr, int alen, int glbl)
 			 */
 			*dmip = dmi->next;
 			dev->mc_count--;
-			write_unlock_bh(&dev_mc_lock);
 
 			kfree(dmi);
 
@@ -135,13 +135,15 @@ int dev_mc_delete(struct net_device *dev, void *addr, int alen, int glbl)
 			 *	We have altered the list, so the card
 			 *	loaded filter is now wrong. Fix it
 			 */
-			dev_mc_upload(dev);
+			__dev_mc_upload(dev);
+			
+			spin_unlock_bh(&dev->xmit_lock);
 			return 0;
 		}
 	}
 	err = -ENOENT;
 done:
-	write_unlock_bh(&dev_mc_lock);
+	spin_unlock_bh(&dev->xmit_lock);
 	return err;
 }
 
@@ -156,7 +158,7 @@ int dev_mc_add(struct net_device *dev, void *addr, int alen, int glbl)
 
 	dmi1 = (struct dev_mc_list *)kmalloc(sizeof(*dmi), GFP_ATOMIC);
 
-	write_lock_bh(&dev_mc_lock);
+	spin_lock_bh(&dev->xmit_lock);
 	for (dmi = dev->mc_list; dmi != NULL; dmi = dmi->next) {
 		if (memcmp(dmi->dmi_addr, addr, dmi->dmi_addrlen) == 0 &&
 		    dmi->dmi_addrlen == alen) {
@@ -172,7 +174,7 @@ int dev_mc_add(struct net_device *dev, void *addr, int alen, int glbl)
 	}
 
 	if ((dmi = dmi1) == NULL) {
-		write_unlock_bh(&dev_mc_lock);
+		spin_unlock_bh(&dev->xmit_lock);
 		return -ENOMEM;
 	}
 	memcpy(dmi->dmi_addr, addr, alen);
@@ -182,12 +184,14 @@ int dev_mc_add(struct net_device *dev, void *addr, int alen, int glbl)
 	dmi->dmi_gusers = glbl ? 1 : 0;
 	dev->mc_list = dmi;
 	dev->mc_count++;
-	write_unlock_bh(&dev_mc_lock);
-	dev_mc_upload(dev);
+
+	__dev_mc_upload(dev);
+	
+	spin_unlock_bh(&dev->xmit_lock);
 	return 0;
 
 done:
-	write_unlock_bh(&dev_mc_lock);
+	spin_unlock_bh(&dev->xmit_lock);
 	if (dmi1)
 		kfree(dmi1);
 	return err;
@@ -199,7 +203,8 @@ done:
 
 void dev_mc_discard(struct net_device *dev)
 {
-	write_lock_bh(&dev_mc_lock);
+	spin_lock_bh(&dev->xmit_lock);
+	
 	while (dev->mc_list != NULL) {
 		struct dev_mc_list *tmp = dev->mc_list;
 		dev->mc_list = tmp->next;
@@ -208,7 +213,8 @@ void dev_mc_discard(struct net_device *dev)
 		kfree(tmp);
 	}
 	dev->mc_count = 0;
-	write_unlock_bh(&dev_mc_lock);
+
+	spin_unlock_bh(&dev->xmit_lock);
 }
 
 #ifdef CONFIG_PROC_FS
@@ -222,7 +228,7 @@ static int dev_mc_read_proc(char *buffer, char **start, off_t offset,
 
 	read_lock(&dev_base_lock);
 	for (dev = dev_base; dev; dev = dev->next) {
-		read_lock_bh(&dev_mc_lock);
+		spin_lock_bh(&dev->xmit_lock);
 		for (m = dev->mc_list; m; m = m->next) {
 			int i;
 
@@ -240,11 +246,11 @@ static int dev_mc_read_proc(char *buffer, char **start, off_t offset,
 				begin = pos;
 			}
 			if (pos > offset + length) {
-				read_unlock_bh(&dev_mc_lock);
+				spin_unlock_bh(&dev->xmit_lock);
 				goto done;
 			}
 		}
-		read_unlock_bh(&dev_mc_lock);
+		spin_unlock_bh(&dev->xmit_lock);
 	}
 	*eof = 1;
 

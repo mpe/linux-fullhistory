@@ -60,8 +60,8 @@ static void get_rtc_time(struct rtc_time *rtc_tm);
 #define RTC_IS_OPEN		0x01	/* means /dev/rtc is in use	*/
 #define RTC_TIMER_ON		0x02	/* missed irq timer active	*/
 
-static unsigned char rtc_status = 0;	/* bitmapped status byte.	*/
-static unsigned long rtc_freq = 0;	/* Current periodic IRQ rate	*/
+static unsigned char rtc_status;	/* bitmapped status byte.	*/
+static unsigned long rtc_freq;	/* Current periodic IRQ rate	*/
 static struct m48t35_rtc *rtc;
 
 /*

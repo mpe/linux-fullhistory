@@ -26,7 +26,6 @@ ctl_table unix_table[] = {
 	{0}
 };
 
-#ifdef MODULE
 static struct ctl_table_header * unix_sysctl_header;
 static struct ctl_table unix_root_table[];
 static struct ctl_table unix_net_table[];
@@ -50,6 +49,5 @@ void unix_sysctl_unregister(void)
 {
 	unregister_sysctl_table(unix_sysctl_header);
 }
-#endif	/* MODULE */
 
 #endif	/* CONFIG_SYSCTL */

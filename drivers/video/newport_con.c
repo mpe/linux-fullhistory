@@ -574,7 +574,7 @@ static int newport_dummy(struct vc_data *c)
 
 #define DUMMY (void *) newport_dummy
 
-struct consw newport_con = {
+const struct consw newport_con = {
     con_startup:	newport_startup,
     con_init:		newport_init,
     con_deinit:		DUMMY,

@@ -1,7 +1,7 @@
 /*
  *	fs/bfs/inode.c
  *	BFS superblock and inode operations.
- *	Copyright (C) 1999 Tigran Aivazian <tigran@veritas.com>
+ *	Copyright (C) 1999,2000 Tigran Aivazian <tigran@veritas.com>
  *	From fs/minix, Copyright (C) 1991, 1992 Linus Torvalds.
  */
 
@@ -325,7 +325,7 @@ out:
 	return NULL;
 }
 
-static DECLARE_FSTYPE_DEV( bfs_fs_type, "bfs", bfs_read_super);
+static DECLARE_FSTYPE_DEV(bfs_fs_type, "bfs", bfs_read_super);
 
 static int __init init_bfs_fs(void)
 {

@@ -401,25 +401,18 @@ EXPORT_SYMBOL(lapb_disconnect_request);
 EXPORT_SYMBOL(lapb_data_request);
 EXPORT_SYMBOL(lapb_data_received);
 
-void __init lapb_proto_init(struct net_proto *pro)
+static int __init lapb_init(void)
 {
 	printk(KERN_INFO "NET4: LAPB for Linux. Version 0.01 for NET4.0\n");
+	return 0;
 }
 
 #ifdef MODULE
 MODULE_AUTHOR("Jonathan Naylor <g4klx@g4klx.demon.co.uk>");
 MODULE_DESCRIPTION("The X.25 Link Access Procedure B link layer protocol");
-
-int init_module(void)
-{
-	lapb_proto_init(NULL);
-
-	return 0;
-}
-
-void cleanup_module(void)
-{
-}
 #endif
+
+
+module_init(lapb_init);
 
 #endif

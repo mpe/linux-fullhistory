@@ -447,10 +447,10 @@ static struct net_device dev_wd[MAX_WD_CARDS] = {
 	},
 };
 
-static int io[MAX_WD_CARDS] = { 0, };
-static int irq[MAX_WD_CARDS]  = { 0, };
-static int mem[MAX_WD_CARDS] = { 0, };
-static int mem_end[MAX_WD_CARDS] = { 0, };	/* for non std. mem size */
+static int io[MAX_WD_CARDS];
+static int irq[MAX_WD_CARDS];
+static int mem[MAX_WD_CARDS];
+static int mem_end[MAX_WD_CARDS];	/* for non std. mem size */
 
 MODULE_PARM(io, "1-" __MODULE_STRING(MAX_WD_CARDS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_WD_CARDS) "i");

@@ -25,8 +25,8 @@
 /* #define NFSD_DEBUG_VERBOSE 1 */
 
 
-static int nfsd_nr_verified = 0;
-static int nfsd_nr_put = 0;
+static int nfsd_nr_verified;
+static int nfsd_nr_put;
 
 
 struct nfsd_getdents_callback {

@@ -34,7 +34,7 @@ extern struct list_head super_blocks;
 int sysrq_enabled = 1;
 
 /* Machine specific power off function */
-void (*sysrq_power_off)(void) = NULL;
+void (*sysrq_power_off)(void);
 
 EXPORT_SYMBOL(sysrq_power_off);
 

@@ -130,10 +130,9 @@ static void flush_all_zero_pkmaps(void)
 		if (pkmap_count[i] != 1)
 			continue;
 		pkmap_count[i] = 0;
-		pte = pkmap_page_table[i];
+		pte = ptep_get_and_clear(pkmap_page_table+i);
 		if (pte_none(pte))
 			BUG();
-		pte_clear(pkmap_page_table+i);
 		page = pte_page(pte);
 		page->virtual = NULL;
 	}

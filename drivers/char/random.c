@@ -763,7 +763,7 @@ static void add_timer_randomness(struct timer_rand_state *state, unsigned num)
 
 void add_keyboard_randomness(unsigned char scancode)
 {
-	static unsigned char last_scancode = 0;
+	static unsigned char last_scancode;
 	/* ignore autorepeat (multiple key down w/o key up) */
 	if (scancode != last_scancode) {
 		last_scancode = scancode;
@@ -1998,8 +1998,8 @@ static __u32 twothirdsMD4Transform (__u32 const buf[4], __u32 const in[12])
 __u32 secure_tcpv6_sequence_number(__u32 *saddr, __u32 *daddr,
 				   __u16 sport, __u16 dport)
 {
-	static __u32	rekey_time = 0;
-	static __u32	count = 0;
+	static __u32	rekey_time;
+	static __u32	count;
 	static __u32	secret[12];
 	struct timeval 	tv;
 	__u32		seq;
@@ -2027,7 +2027,7 @@ __u32 secure_tcpv6_sequence_number(__u32 *saddr, __u32 *daddr,
 
 __u32 secure_ipv6_id(__u32 *daddr)
 {
-	static time_t	rekey_time = 0;
+	static time_t	rekey_time;
 	static __u32	secret[12];
 	time_t		t;
 
@@ -2050,8 +2050,8 @@ __u32 secure_ipv6_id(__u32 *daddr)
 __u32 secure_tcp_sequence_number(__u32 saddr, __u32 daddr,
 				 __u16 sport, __u16 dport)
 {
-	static __u32	rekey_time = 0;
-	static __u32	count = 0;
+	static __u32	rekey_time;
+	static __u32	count;
 	static __u32	secret[12];
 	struct timeval 	tv;
 	__u32		seq;
@@ -2105,7 +2105,7 @@ __u32 secure_tcp_sequence_number(__u32 saddr, __u32 daddr,
  */
 __u32 secure_ip_id(__u32 daddr)
 {
-	static time_t	rekey_time = 0;
+	static time_t	rekey_time;
 	static __u32	secret[12];
 	time_t		t;
 
@@ -2144,7 +2144,7 @@ __u32 secure_ip_id(__u32 daddr)
 #define COOKIEBITS 24	/* Upper bits store count */
 #define COOKIEMASK (((__u32)1 << COOKIEBITS) - 1)
 
-static int	syncookie_init = 0;
+static int	syncookie_init;
 static __u32	syncookie_secret[2][16-3+HASH_BUFFER_SIZE];
 
 __u32 secure_tcp_syn_cookie(__u32 saddr, __u32 daddr, __u16 sport,

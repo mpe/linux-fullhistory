@@ -15,6 +15,7 @@
 #include <linux/module.h>
 
 #include <linux/kernel.h>
+#include <linux/init.h>
 #include <linux/major.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -968,16 +969,19 @@ struct net_proto_family netlink_family_ops = {
 	netlink_create
 };
 
-void netlink_proto_init(struct net_proto *pro)
+static int __init netlink_proto_init(void)
 {
 	struct sk_buff *dummy_skb;
 
 	if (sizeof(struct netlink_skb_parms) > sizeof(dummy_skb->cb)) {
-		printk(KERN_CRIT "netlink_proto_init: panic\n");
-		return;
+		printk(KERN_CRIT "netlink_init: panic\n");
+		return -1;
 	}
 	sock_register(&netlink_family_ops);
 #ifdef CONFIG_PROC_FS
 	create_proc_read_entry("net/netlink", 0, 0, netlink_read_proc, NULL);
 #endif
+	return 0;
 }
+
+module_init(netlink_proto_init);

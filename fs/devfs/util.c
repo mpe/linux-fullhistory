@@ -114,8 +114,8 @@ void devfs_register_tape (devfs_handle_t de)
     int pos;
     devfs_handle_t parent, slave;
     char name[16], dest[64];
-    static unsigned int tape_counter = 0;
-    static devfs_handle_t tape_dir = NULL;
+    static unsigned int tape_counter;
+    static devfs_handle_t tape_dir;
 
     if (tape_dir == NULL) tape_dir = devfs_mk_dir (NULL, "tapes", NULL);
     parent = devfs_get_parent (de);

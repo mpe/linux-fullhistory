@@ -183,7 +183,7 @@ static struct reply_info events[I2O_EVT_Q_LEN];
 static int evt_in = 0;
 static int evt_out = 0;
 static int evt_q_len = 0;
-#define MODINC(x,y) (x = x++ % y)
+#define MODINC(x,y) ((x) = ((x) + 1) % (y))
 
 /*
  * I2O configuration spinlock. This isnt a big deal for contention

@@ -8,7 +8,7 @@
 #include <asm/processor.h> 
 #include <asm/msr.h>
 
-static int banks = 0;
+static int banks;
 
 void mcheck_fault(void)
 {
@@ -71,7 +71,7 @@ void mcheck_init(void)
 	u32 l, h;
 	int i;
 	struct cpuinfo_x86 *c;
-	static int done=0;
+	static int done;
 
 	c=cpu_data+smp_processor_id();
 	

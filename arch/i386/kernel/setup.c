@@ -1548,7 +1548,6 @@ void __init identify_cpu(struct cpuinfo_x86 *c)
 
 			/* Pentium IV. */
 			if (c->x86 == 15) {
-				c->x86 = 6;
 				get_model_name(c);
 				goto name_decoded;
 			}

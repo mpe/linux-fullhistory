@@ -267,7 +267,7 @@ static struct rs_multiport_struct rs_multiport[NR_IRQS];
 static int IRQ_timeout[NR_IRQS];
 #ifdef CONFIG_SERIAL_CONSOLE
 static struct console sercons;
-static int lsr_break_flag = 0;
+static int lsr_break_flag;
 #endif
 #if defined(CONFIG_SERIAL_CONSOLE) && defined(CONFIG_MAGIC_SYSRQ)
 static unsigned long break_pressed; /* break, really ... */
@@ -325,7 +325,7 @@ static struct serial_state rs_table[RS_TABLE_SIZE] = {
 #define NR_PCI_BOARDS	8
 
 static struct pci_board_inst	serial_pci_board[NR_PCI_BOARDS];
-static int serial_pci_board_idx = 0;
+static int serial_pci_board_idx;
 
 #ifndef IS_PCI_REGION_IOPORT
 #define IS_PCI_REGION_IOPORT(dev, r) (pci_resource_flags((dev), (r)) & \
@@ -1060,7 +1060,7 @@ static void do_softint(void *private_)
  */
 static void rs_timer(unsigned long dummy)
 {
-	static unsigned long last_strobe = 0;
+	static unsigned long last_strobe;
 	struct async_struct *info;
 	unsigned int	i;
 	unsigned long flags;

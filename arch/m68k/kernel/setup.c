@@ -365,7 +365,7 @@ void __init setup_arch(char **cmdline_p)
 		high_memory += m68k_memory[i].size;
 	}
 
-	availmem += init_bootmem_node(0, availmem >> PAGE_SHIFT,
+	availmem += init_bootmem_node(NODE_DATA(0), availmem >> PAGE_SHIFT,
 				      startmem >> PAGE_SHIFT, endmem >> PAGE_SHIFT);
 
 	for (i = 0; i < m68k_num_memory; i++)

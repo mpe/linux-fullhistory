@@ -104,9 +104,9 @@
 
 static void wdt_timer_ping(unsigned long);
 static struct timer_list timer;
-static unsigned long next_heartbeat = 0;
-static int wdt_is_open = 0;
-static int wdt_expect_close = 0;
+static unsigned long next_heartbeat;
+static int wdt_is_open;
+static int wdt_expect_close;
 
 /*
  *	Whack the dog

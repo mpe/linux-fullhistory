@@ -146,7 +146,7 @@ static struct tty_driver	stl_callout;
 static struct tty_struct	*stl_ttys[STL_MAXDEVS];
 static struct termios		*stl_termios[STL_MAXDEVS];
 static struct termios		*stl_termioslocked[STL_MAXDEVS];
-static int			stl_refcount = 0;
+static int			stl_refcount;
 
 /*
  *	We will need to allocate a temporary write buffer for chars that
@@ -192,7 +192,7 @@ static char		stl_unwanted[SC26198_RXFIFOSIZE];
  *	shared with another Stallion board.
  */
 static int	stl_gotintrs[STL_MAXBRDS];
-static int	stl_numintrs = 0;
+static int	stl_numintrs;
 
 /*****************************************************************************/
 
@@ -748,7 +748,7 @@ static struct file_operations	stl_fsiomem = {
 
 /*****************************************************************************/
 
-static devfs_handle_t devfs_handle = NULL;
+static devfs_handle_t devfs_handle;
 
 #ifdef MODULE
 

@@ -343,7 +343,6 @@ int __init parport_mfc3_init(void)
 		unsigned long piabase = z->resource.start+PIABASE;
 		if (!request_mem_region(piabase, sizeof(struct pia), "PIA"))
 			continue;
-		strcpy(z->name, "MultiFace III MC6821 PIA");
 		pp = (struct pia *)ZTWO_VADDR(piabase);
 		if (pias < MAX_MFC) {
 			pp->crb = 0;

@@ -1,13 +1,12 @@
 /*
- *    $Id: zorro.c,v 1.1.2.1 1998/06/07 23:21:02 geert Exp $
+ *	Zorro Device Name Tables
  *
- *    Zorro Expansion Device Names
+ *	Copyright (C) 1999--2000 Geert Uytterhoeven
  *
- *    Copyright (C) 1999-2000 Geert Uytterhoeven
+ *	Based on the PCI version:
  *
- *    This file is subject to the terms and conditions of the GNU General Public
- *    License.  See the file COPYING in the main directory of this archive
- *    for more details.
+ *	Copyright 1992--1999 Drew Eckhardt, Frederic Potter,
+ *	David Mosberger-Tang, Martin Mares
  */
 
 #include <linux/init.h>
@@ -16,68 +15,94 @@
 #include <linux/zorro.h>
 
 
-    /*
-     *  Just for reference, these are the boards we have a driver for in the
-     *  kernel:
-     *
-     *  ZORRO_PROD_AMERISTAR_A2065
-     *  ZORRO_PROD_BSC_FRAMEMASTER_II
-     *  ZORRO_PROD_BSC_MULTIFACE_III
-     *  ZORRO_PROD_BSC_OKTAGON_2008
-     *  ZORRO_PROD_CBM_A2065_1
-     *  ZORRO_PROD_CBM_A2065_2
-     *  ZORRO_PROD_CBM_A4091_1
-     *  ZORRO_PROD_CBM_A4091_2
-     *  ZORRO_PROD_CBM_A590_A2091_1
-     *  ZORRO_PROD_CBM_A590_A2091_2
-     *  ZORRO_PROD_GVP_A1291
-     *  ZORRO_PROD_GVP_A530_SCSI
-     *  ZORRO_PROD_GVP_COMBO_030_R3_SCSI
-     *  ZORRO_PROD_GVP_COMBO_030_R4_SCSI
-     *  ZORRO_PROD_GVP_EGS_28_24_SPECTRUM_RAM
-     *  ZORRO_PROD_GVP_EGS_28_24_SPECTRUM_REG
-     *  ZORRO_PROD_GVP_GFORCE_030_SCSI
-     *  ZORRO_PROD_GVP_GFORCE_040_060
-     *  ZORRO_PROD_GVP_GFORCE_040_1
-     *  ZORRO_PROD_GVP_GFORCE_040_SCSI_1
-     *  ZORRO_PROD_GVP_IO_EXTENDER
-     *  ZORRO_PROD_GVP_SERIES_II
-     *  ZORRO_PROD_HELFRICH_PICCOLO_RAM
-     *  ZORRO_PROD_HELFRICH_PICCOLO_REG
-     *  ZORRO_PROD_HELFRICH_RAINBOW_II
-     *  ZORRO_PROD_HELFRICH_SD64_RAM
-     *  ZORRO_PROD_HELFRICH_SD64_REG
-     *  ZORRO_PROD_HYDRA_SYSTEMS_AMIGANET
-     *  ZORRO_PROD_INDIVIDUAL_COMPUTERS_BUDDHA
-     *  ZORRO_PROD_INDIVIDUAL_COMPUTERS_CATWEASEL
-     *  ZORRO_PROD_MACROSYSTEMS_RETINA_Z3
-     *  ZORRO_PROD_MACROSYSTEMS_WARP_ENGINE_40xx
-     *  ZORRO_PROD_PHASE5_BLIZZARD_1220_CYBERSTORM
-     *  ZORRO_PROD_PHASE5_BLIZZARD_1230_II_FASTLANE_Z3_CYBERSCSI_CYBERSTORM060
-     *  ZORRO_PROD_PHASE5_BLIZZARD_1230_IV_1260
-     *  ZORRO_PROD_PHASE5_BLIZZARD_2060
-     *  ZORRO_PROD_PHASE5_BLIZZARD_603E_PLUS
-     *  ZORRO_PROD_PHASE5_CYBERSTORM_MK_II
-     *  ZORRO_PROD_PHASE5_CYBERVISION64
-     *  ZORRO_PROD_PHASE5_CYBERVISION64_3D
-     *  ZORRO_PROD_VILLAGE_TRONIC_ARIADNE
-     *  ZORRO_PROD_VILLAGE_TRONIC_ARIADNE2
-     *  ZORRO_PROD_VILLAGE_TRONIC_PICASSO_II_II_PLUS_RAM
-     *  ZORRO_PROD_VILLAGE_TRONIC_PICASSO_II_II_PLUS_REG
-     *  ZORRO_PROD_VILLAGE_TRONIC_PICASSO_IV_Z3
-     *
-     *  And I guess these are automagically supported as well :-)
-     *
-     *  ZORRO_PROD_CBM_A560_RAM
-     *  ZORRO_PROD_CBM_A590_A2052_A2058_A2091
-     */
+#ifdef CONFIG_ZORRO_NAMES
 
-void __init zorro_namedevice(struct zorro_dev *dev)
+struct zorro_prod_info {
+	__u16 prod;
+	unsigned short seen;
+	const char *name;
+};
+
+struct zorro_manuf_info {
+	__u16 manuf;
+	unsigned short nr;
+	const char *name;
+	struct zorro_prod_info *prods;
+};
+
+/*
+ * This is ridiculous, but we want the strings in
+ * the .init section so that they don't take up
+ * real memory.. Parse the same file multiple times
+ * to get all the info.
+ */
+#define MANUF( manuf, name )		static const char __manufstr_##manuf[] __initdata = name;
+#define ENDMANUF()
+#define PRODUCT( manuf, prod, name ) 	static const char __prodstr_##manuf##prod[] __initdata = name;
+#include "devlist.h"
+
+
+#define MANUF( manuf, name )		static struct zorro_prod_info __prods_##manuf[] __initdata = {
+#define ENDMANUF()			};
+#define PRODUCT( manuf, prod, name )	{ 0x##prod, 0, __prodstr_##manuf##prod },
+#include "devlist.h"
+
+static const struct zorro_manuf_info __initdata zorro_manuf_list[] = {
+#define MANUF( manuf, name )		{ 0x##manuf, sizeof(__prods_##manuf) / sizeof(struct zorro_prod_info), __manufstr_##manuf, __prods_##manuf },
+#define ENDMANUF()
+#define PRODUCT( manuf, prod, name )
+#include "devlist.h"
+};
+
+#define MANUFS (sizeof(zorro_manuf_list)/sizeof(struct zorro_manuf_info))
+
+void __init zorro_name_device(struct zorro_dev *dev)
 {
-    /*
-     *  Nah, we're not that stupid to put name databases in the kernel ;-)
-     *  That's why we have zorroutils...
-     */
-    sprintf(dev->name, "Zorro device %08x", dev->id);
+	const struct zorro_manuf_info *manuf_p = zorro_manuf_list;
+	int i = MANUFS;
+	char *name = dev->name;
+
+	do {
+		if (manuf_p->manuf == ZORRO_MANUF(dev->id))
+			goto match_manuf;
+		manuf_p++;
+	} while (--i);
+
+	/* Couldn't find either the manufacturer nor the product */
+	sprintf(name, "Zorro device %08x", dev->id);
+	return;
+
+	match_manuf: {
+		struct zorro_prod_info *prod_p = manuf_p->prods;
+		int i = manuf_p->nr;
+
+		while (i > 0) {
+			if (prod_p->prod ==
+			    ((ZORRO_PROD(dev->id)<<8) | ZORRO_EPC(dev->id)))
+				goto match_prod;
+			prod_p++;
+			i--;
+		}
+
+		/* Ok, found the manufacturer, but unknown product */
+		sprintf(name, "Zorro device %08x (%s)", dev->id, manuf_p->name);
+		return;
+
+		/* Full match */
+		match_prod: {
+			char *n = name + sprintf(name, "%s %s", manuf_p->name, prod_p->name);
+			int nr = prod_p->seen + 1;
+			prod_p->seen = nr;
+			if (nr > 1)
+				sprintf(n, " (#%d)", nr);
+		}
+	}
 }
 
+#else
+
+void __init zorro_name_device(struct zorro_dev *dev)
+{
+}
+
+#endif

@@ -110,8 +110,8 @@ static int fasync_qp(int fd, struct file *filp, int on)
 
 #define QP_IRQ          12
 
-static int qp_present = 0;
-static int qp_count = 0;
+static int qp_present;
+static int qp_count;
 static int qp_data = QP_DATA;
 static int qp_status = QP_STATUS;
 

@@ -228,7 +228,7 @@ static int cosa_major = 117;
 
 /* Maybe the following should be allocated dynamically */
 static struct cosa_data cosa_cards[MAX_CARDS];
-static int nr_cards = 0;
+static int nr_cards;
 
 #ifdef COSA_ISA_AUTOPROBE
 static int io[MAX_CARDS+1]  = { 0x220, 0x228, 0x210, 0x218, 0, };
@@ -365,7 +365,7 @@ static void debug_status_out(struct cosa_data *cosa, int status);
 
 /* ---------- Initialization stuff ---------- */
 
-static devfs_handle_t devfs_handle = NULL;
+static devfs_handle_t devfs_handle;
 
 #ifdef MODULE
 int init_module(void)
@@ -1387,7 +1387,7 @@ static void cosa_kick(struct cosa_data *cosa)
  */
 static int cosa_dma_able(struct channel_data *chan, char *buf, int len)
 {
-	static int count = 0;
+	static int count;
 	unsigned long b = (unsigned long)buf;
 	if (b+len >= MAX_DMA_ADDRESS)
 		return 0;

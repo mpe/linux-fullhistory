@@ -430,12 +430,12 @@ static ide_startstop_t idescsi_issue_pc (ide_drive_t *drive, idescsi_pc_t *pc)
 	if (drive->using_dma && rq->bh)
 		dma_ok=!HWIF(drive)->dmaproc(test_bit (PC_WRITING, &pc->flags) ? ide_dma_write : ide_dma_read, drive);
 
+	SELECT_DRIVE(HWIF(drive), drive);
 	if (IDE_CONTROL_REG)
 		OUT_BYTE (drive->ctl,IDE_CONTROL_REG);
 	OUT_BYTE (dma_ok,IDE_FEATURE_REG);
 	OUT_BYTE (bcount >> 8,IDE_BCOUNTH_REG);
 	OUT_BYTE (bcount & 0xff,IDE_BCOUNTL_REG);
-	OUT_BYTE (drive->select.all,IDE_SELECT_REG);
 
 	if (dma_ok) {
 		set_bit (PC_DMA_IN_PROGRESS, &pc->flags);

@@ -49,16 +49,16 @@
 
 /*      Global vars.
  */
-int zft_write_protected = 0; /* this is when cartridge rdonly or O_RDONLY */
-int zft_header_read     = 0;
-int zft_offline         = 0;
-unsigned int zft_unit   = 0;
-int zft_resid           = 0;
-int zft_mt_compression  = 0;
+int zft_write_protected; /* this is when cartridge rdonly or O_RDONLY */
+int zft_header_read;
+int zft_offline;
+unsigned int zft_unit;
+int zft_resid;
+int zft_mt_compression;
 
 /*      Local vars.
  */
-static int going_offline   = 0;
+static int going_offline;
 
 typedef int (mt_fun)(int *argptr);
 typedef int (*mt_funp)(int *argptr);

@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.199 2000/08/29 08:59:23 davem Exp $
+/* $Id: sun4c.c,v 1.200 2000/10/16 14:32:49 anton Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -1904,6 +1904,10 @@ static void sun4c_pgd_set(pgd_t * pgdp, pmd_t * pmdp)
 {
 }
 
+static void sun4c_pmd_set(pmd_t * pmdp, pte_t * ptep)
+{
+}
+
 void sun4c_mapioaddr(unsigned long physaddr, unsigned long virt_addr,
 		     int bus_type, int rdonly)
 {
@@ -2267,11 +2271,6 @@ extern __inline__ pgd_t *sun4c_get_pgd_fast(void)
 	return (pgd_t *)ret;
 }
 
-static void sun4c_set_pgdir(unsigned long address, pgd_t entry)
-{
-	/* Nothing to do */
-}
-
 extern __inline__ void sun4c_free_pgd_fast(pgd_t *pgd)
 {
 	*(unsigned long *)pgd = (unsigned long) pgd_quicklist;
@@ -2616,8 +2615,6 @@ void __init ld_mmu_sun4c(void)
 #endif
 	BTFIXUPSET_CALL(do_check_pgt_cache, sun4c_check_pgt_cache, BTFIXUPCALL_NORM);
 	
-	BTFIXUPSET_CALL(set_pgdir, sun4c_set_pgdir, BTFIXUPCALL_NOP);
-
 	BTFIXUPSET_CALL(flush_cache_all, sun4c_flush_cache_all, BTFIXUPCALL_NORM);
 
 	if (sun4c_vacinfo.do_hwflushes) {
@@ -2719,4 +2716,5 @@ void __init ld_mmu_sun4c(void)
 	/* These should _never_ get called with two level tables. */
 	BTFIXUPSET_CALL(pgd_set, sun4c_pgd_set, BTFIXUPCALL_NOP);
 	BTFIXUPSET_CALL(pgd_page, sun4c_pgd_page, BTFIXUPCALL_RETO0);
+	BTFIXUPSET_CALL(pmd_set, sun4c_pmd_set, BTFIXUPCALL_NOP);
 }

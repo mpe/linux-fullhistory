@@ -313,7 +313,7 @@ static void q40fb_set_disp(int con, struct fb_info *info)
 #endif
 }
   
-int q40fb_init(void)
+int __init q40fb_init(void)
 {
 
         if ( !MACH_IS_Q40)

@@ -40,7 +40,7 @@
 #include <linux/spinlock.h>
 #include <linux/smp_lock.h>
 
-static int acq_is_open=0;
+static int acq_is_open;
 static spinlock_t acq_lock;
 
 /*

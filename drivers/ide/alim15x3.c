@@ -171,11 +171,11 @@ static int ali_get_info (char *buffer, char **addr, off_t offset, int count)
 				((reg5yh & 0x30)>>4) + 12 );
 		}
 	} else {
-		p += sprintf(p, q,
-			(tmp = (reg5xh & 0x03)) ? (tmp << 3) : 4,
-			(tmp = ((reg5xh & 0x30)>>4)) ? (tmp << 3) : 4,
-			(tmp = (reg5yh & 0x03)) ? (tmp << 3) : 4,
-			(tmp = ((reg5yh & 0x30)>>4)) ? (tmp << 3) : 4 );
+		int t1 = (tmp = (reg5xh & 0x03)) ? (tmp << 3) : 4;
+		int t2 = (tmp = ((reg5xh & 0x30)>>4)) ? (tmp << 3) : 4;
+		int t3 = (tmp = (reg5yh & 0x03)) ? (tmp << 3) : 4;
+		int t4 = (tmp = ((reg5yh & 0x30)>>4)) ? (tmp << 3) : 4;
+		p += sprintf(p, q, t1, t2, t3, t4);
 	}
 
 #if 0

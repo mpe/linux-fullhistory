@@ -367,7 +367,7 @@ void __init setup_arch(char **cmdline_p)
 	 * bootstrap step all allocations (until the page allocator
 	 * is intact) must be done via bootmem_alloc().
 	 */
-	bootmap_size = init_bootmem_node(0, start_pfn,
+	bootmap_size = init_bootmem_node(NODE_DATA(0), start_pfn,
 					 __MEMORY_START>>PAGE_SHIFT, 
 					 max_low_pfn);
 

@@ -80,7 +80,7 @@ ev5_flush_tlb_current(struct mm_struct *mm)
 	__load_new_mm_context(mm);
 }
 
-extern inline void
+static inline void
 flush_tlb_other(struct mm_struct *mm)
 {
 	mm->context = 0;
@@ -234,27 +234,13 @@ extern struct pgtable_cache_struct {
 #define pte_quicklist (quicklists.pte_cache)
 #define pgtable_cache_size (quicklists.pgtable_cache_sz)
 
-extern __inline__ pgd_t *get_pgd_slow(void)
-{
-	pgd_t *ret = (pgd_t *)__get_free_page(GFP_KERNEL), *init;
-	
-	if (ret) {
-		init = pgd_offset(&init_mm, 0UL);
-		memset (ret, 0, USER_PTRS_PER_PGD * sizeof(pgd_t));
-		memcpy (ret + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
-			(PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
+extern pgd_t *get_pgd_slow(void);
 
-		pgd_val(ret[PTRS_PER_PGD])
-		  = pte_val(mk_pte(virt_to_page(ret), PAGE_KERNEL));
-	}
-	return ret;
-}
-
-extern __inline__ pgd_t *get_pgd_fast(void)
+static inline pgd_t *get_pgd_fast(void)
 {
 	unsigned long *ret;
 
-	if((ret = pgd_quicklist) != NULL) {
+	if ((ret = pgd_quicklist) != NULL) {
 		pgd_quicklist = (unsigned long *)(*ret);
 		ret[0] = ret[1];
 		pgtable_cache_size--;
@@ -263,25 +249,25 @@ extern __inline__ pgd_t *get_pgd_fast(void)
 	return (pgd_t *)ret;
 }
 
-extern __inline__ void free_pgd_fast(pgd_t *pgd)
+static inline void free_pgd_fast(pgd_t *pgd)
 {
 	*(unsigned long *)pgd = (unsigned long) pgd_quicklist;
 	pgd_quicklist = (unsigned long *) pgd;
 	pgtable_cache_size++;
 }
 
-extern __inline__ void free_pgd_slow(pgd_t *pgd)
+static inline void free_pgd_slow(pgd_t *pgd)
 {
 	free_page((unsigned long)pgd);
 }
 
 extern pmd_t *get_pmd_slow(pgd_t *pgd, unsigned long address_premasked);
 
-extern __inline__ pmd_t *get_pmd_fast(void)
+static inline pmd_t *get_pmd_fast(void)
 {
 	unsigned long *ret;
 
-	if((ret = (unsigned long *)pte_quicklist) != NULL) {
+	if ((ret = (unsigned long *)pte_quicklist) != NULL) {
 		pte_quicklist = (unsigned long *)(*ret);
 		ret[0] = ret[1];
 		pgtable_cache_size--;
@@ -289,25 +275,25 @@ extern __inline__ pmd_t *get_pmd_fast(void)
 	return (pmd_t *)ret;
 }
 
-extern __inline__ void free_pmd_fast(pmd_t *pmd)
+static inline void free_pmd_fast(pmd_t *pmd)
 {
 	*(unsigned long *)pmd = (unsigned long) pte_quicklist;
 	pte_quicklist = (unsigned long *) pmd;
 	pgtable_cache_size++;
 }
 
-extern __inline__ void free_pmd_slow(pmd_t *pmd)
+static inline void free_pmd_slow(pmd_t *pmd)
 {
 	free_page((unsigned long)pmd);
 }
 
 extern pte_t *get_pte_slow(pmd_t *pmd, unsigned long address_preadjusted);
 
-extern __inline__ pte_t *get_pte_fast(void)
+static inline pte_t *get_pte_fast(void)
 {
 	unsigned long *ret;
 
-	if((ret = (unsigned long *)pte_quicklist) != NULL) {
+	if ((ret = (unsigned long *)pte_quicklist) != NULL) {
 		pte_quicklist = (unsigned long *)(*ret);
 		ret[0] = ret[1];
 		pgtable_cache_size--;
@@ -315,14 +301,14 @@ extern __inline__ pte_t *get_pte_fast(void)
 	return (pte_t *)ret;
 }
 
-extern __inline__ void free_pte_fast(pte_t *pte)
+static inline void free_pte_fast(pte_t *pte)
 {
 	*(unsigned long *)pte = (unsigned long) pte_quicklist;
 	pte_quicklist = (unsigned long *) pte;
 	pgtable_cache_size++;
 }
 
-extern __inline__ void free_pte_slow(pte_t *pte)
+static inline void free_pte_slow(pte_t *pte)
 {
 	free_page((unsigned long)pte);
 }
@@ -337,7 +323,7 @@ extern void __bad_pmd(pgd_t *pgd);
 #define pgd_free(pgd)		free_pgd_fast(pgd)
 #define pgd_alloc()		get_pgd_fast()
 
-extern inline pte_t * pte_alloc(pmd_t *pmd, unsigned long address)
+static inline pte_t * pte_alloc(pmd_t *pmd, unsigned long address)
 {
 	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
 	if (pmd_none(*pmd)) {
@@ -355,7 +341,7 @@ extern inline pte_t * pte_alloc(pmd_t *pmd, unsigned long address)
 	return (pte_t *) pmd_page(*pmd) + address;
 }
 
-extern inline pmd_t * pmd_alloc(pgd_t *pgd, unsigned long address)
+static inline pmd_t * pmd_alloc(pgd_t *pgd, unsigned long address)
 {
 	address = (address >> PMD_SHIFT) & (PTRS_PER_PMD - 1);
 	if (pgd_none(*pgd)) {
@@ -377,21 +363,5 @@ extern inline pmd_t * pmd_alloc(pgd_t *pgd, unsigned long address)
 #define pmd_alloc_kernel	pmd_alloc
 
 extern int do_check_pgt_cache(int, int);
-
-extern inline void set_pgdir(unsigned long address, pgd_t entry)
-{
-	struct task_struct * p;
-	pgd_t *pgd;
-        
-	read_lock(&tasklist_lock);
-	for_each_task(p) {
-		if (!p->mm)
-			continue;
-		*pgd_offset(p->mm,address) = entry;
-	}
-	read_unlock(&tasklist_lock);
-	for (pgd = (pgd_t *)pgd_quicklist; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
-		pgd[(address >> PGDIR_SHIFT) & (PTRS_PER_PAGE - 1)] = entry;
-}
 
 #endif /* _ALPHA_PGALLOC_H */

@@ -38,6 +38,7 @@
 #define RCLANMTL_H
 
 /* Linux specific includes */
+#include <asm/types.h>
 #define kprintf printk
 #ifdef RC_LINUX_MODULE     /* linux modules need non-library version of string functions */
 #include <linux/string.h>
@@ -68,12 +69,12 @@
 #define WARM_REBOOT_CAPABLE      0x01
 
  /* scalar data types */
-typedef unsigned char   U8;
-typedef unsigned char*  PU8;
-typedef unsigned short  U16;
-typedef unsigned short* PU16;
-typedef unsigned long   U32;
-typedef unsigned long*  PU32;
+typedef __u8		U8;
+typedef __u16		U16;
+typedef __u32		U32;
+typedef __u8*		PU8;
+typedef __u16*		PU16;
+typedef __u32*		PU32;
 typedef unsigned long   BF;
 typedef int             RC_RETURN;
 

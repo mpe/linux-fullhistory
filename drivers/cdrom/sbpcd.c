@@ -561,9 +561,9 @@ static int sbpcd_debug = 0 & ((1<<DBG_INF) |
 
 static int sbpcd_ioaddr = CDROM_PORT;	/* default I/O base address */
 static int sbpro_type = SBPRO;
-static unsigned char setup_done = 0;
-static unsigned char f_16bit = 0;
-static unsigned char do_16bit = 0;
+static unsigned char setup_done;
+static unsigned char f_16bit;
+static unsigned char do_16bit;
 static int CDo_command, CDo_reset;
 static int CDo_sel_i_d, CDo_enable;
 static int CDi_info, CDi_status, CDi_data;
@@ -575,7 +575,7 @@ static struct cdrom_subchnl SC;
 static struct cdrom_volctrl volctrl;
 static struct cdrom_read_audio read_audio;
 
-static unsigned char msgnum=0;
+static unsigned char msgnum;
 static char msgbuf[80];
 
 static const char *str_sb = "SoundBlaster";
@@ -618,26 +618,26 @@ static u_char familyL[]="LCS-7260"; /* Longshine LCS-7260 */
 static u_char familyT[]="CD-55";    /* TEAC CD-55A */
 static u_char familyV[]="ECS-AT";   /* ECS Vertos 100 */
 
-static u_int recursion=0; /* internal testing only */
-static u_int fatal_err=0; /* internal testing only */
-static u_int response_count=0;
+static u_int recursion; /* internal testing only */
+static u_int fatal_err; /* internal testing only */
+static u_int response_count;
 static u_int flags_cmd_out;
-static u_char cmd_type=0;
+static u_char cmd_type;
 static u_char drvcmd[10];
 static u_char infobuf[20];
 static u_char xa_head_buf[CD_XA_HEAD];
 static u_char xa_tail_buf[CD_XA_TAIL];
 
 #if OLD_BUSY
-static volatile u_char busy_data=0;
-static volatile u_char busy_audio=0; /* true semaphores would be safer */
+static volatile u_char busy_data;
+static volatile u_char busy_audio; /* true semaphores would be safer */
 #endif OLD_BUSY
 static DECLARE_MUTEX(ioctl_read_sem);
 static u_long timeout;
-static volatile u_char timed_out_delay=0;
-static volatile u_char timed_out_data=0;
+static volatile u_char timed_out_delay;
+static volatile u_char timed_out_data;
 #if 0
-static volatile u_char timed_out_audio=0;
+static volatile u_char timed_out_audio;
 #endif
 static u_int datarate= 1000000;
 static u_int maxtim16=16000000;
@@ -656,15 +656,15 @@ static int n_retries=6;
 #endif
 /*==========================================================================*/
 
-static int ndrives=0;
+static int ndrives;
 static u_char drv_pattern[NR_SBPCD]={speed_auto,speed_auto,speed_auto,speed_auto};
-static int sbpcd_blocksizes[NR_SBPCD] = {0, };
+static int sbpcd_blocksizes[NR_SBPCD];
 
 /*==========================================================================*/
 /*
  * drive space begins here (needed separate for each unit) 
  */
-static int d=0; /* DriveStruct index: drive number */
+static int d; /* DriveStruct index: drive number */
 
 static struct {
 	char drv_id;           /* "jumpered" drive ID or -1 */
@@ -5654,7 +5654,7 @@ static int __init config_spea(void)
  *  Called once at boot or load time.
  */
 
-static devfs_handle_t devfs_handle = NULL;
+static devfs_handle_t devfs_handle;
 
 #ifdef MODULE
 int __init __SBPCD_INIT(void)

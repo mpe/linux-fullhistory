@@ -115,7 +115,7 @@ main(void)
 #undef VENDOR\n\
 #undef DEVICE\n\
 #undef ENDVENDOR\n", devf);
-	fputs("\n#undef CLASS", clsf);
+	fputs("\n#undef CLASS\n", clsf);
 
 	fclose(devf);
 	fclose(clsf);

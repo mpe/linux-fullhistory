@@ -102,8 +102,8 @@ static char drvname[]	= "wanpipe";
 static char fullname[]	= "WANPIPE(tm) Multiprotocol Driver";
 static char copyright[]	= "(c) 1995-1999 Sangoma Technologies Inc.";
 static int ncards = CONFIG_WANPIPE_CARDS;
-static int active = 0;			/* number of active cards */
-static sdla_t* card_array = NULL;	/* adapter data space */
+static int active;			/* number of active cards */
+static sdla_t* card_array;	/* adapter data space */
 
 /* Task queue element for creating a 'thread' */
 static struct tq_struct sdla_tq =

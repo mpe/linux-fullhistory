@@ -8,7 +8,7 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
- * Version:	$Id: af_unix.c,v 1.105 2000/08/16 10:58:22 davem Exp $
+ * Version:	$Id: af_unix.c,v 1.106 2000/10/15 01:34:48 davem Exp $
  *
  * Fixes:
  *		Linus Torvalds	:	Assorted bug cures.
@@ -46,6 +46,7 @@
  *		Artur Skawina   :	Hash function optimizations
  *	     Alexey Kuznetsov   :	Full scale SMP. Lot of bugs are introduced 8)
  *	      Malcolm Beattie   :	Set peercred for socketpair
+ *	     Michal Ostrowski   :       Module initialization cleanup.
  *
  *
  * Known differences from reference BSD that was tested:
@@ -1845,16 +1846,12 @@ struct net_proto_family unix_family_ops = {
 	unix_create
 };
 
-#ifdef MODULE
 #ifdef CONFIG_SYSCTL
 extern void unix_sysctl_register(void);
 extern void unix_sysctl_unregister(void);
 #endif
 
-int init_module(void)
-#else
-void __init unix_proto_init(struct net_proto *pro)
-#endif
+static int __init af_unix_init(void)
 {
 	struct sk_buff *dummy_skb;
 	
@@ -1862,28 +1859,21 @@ void __init unix_proto_init(struct net_proto *pro)
 	if (sizeof(struct unix_skb_parms) > sizeof(dummy_skb->cb))
 	{
 		printk(KERN_CRIT "unix_proto_init: panic\n");
-#ifdef MODULE
 		return -1;
-#else
-		return;
-#endif
 	}
 	sock_register(&unix_family_ops);
 #ifdef CONFIG_PROC_FS
 	create_proc_read_entry("net/unix", 0, 0, unix_read_proc, NULL);
 #endif
 
-#ifdef MODULE
 #ifdef CONFIG_SYSCTL
 	unix_sysctl_register();
 #endif
 
 	return 0;
-#endif
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void __exit af_unix_exit(void)
 {
 	sock_unregister(PF_UNIX);
 #ifdef CONFIG_SYSCTL
@@ -1893,7 +1883,9 @@ void cleanup_module(void)
 	remove_proc_entry("net/unix", 0);
 #endif
 }
-#endif
+
+module_init(af_unix_init);
+module_exit(af_unix_exit);
 
 /*
  * Local variables:

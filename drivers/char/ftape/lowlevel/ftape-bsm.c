@@ -39,8 +39,8 @@
 
 /*      Local vars.
  */
-static __u8 *bad_sector_map = NULL;
-static SectorCount *bsm_hash_ptr = NULL; 
+static __u8 *bad_sector_map;
+static SectorCount *bsm_hash_ptr; 
 
 typedef enum {
 	forward, backward
@@ -454,7 +454,7 @@ SectorMap ftape_get_bad_sector_entry(int segment_id)
 		 *  For true random access it may have to be redesigned.
 		 */
 		static int last_reference = -1;
-		static SectorMap map = 0;
+		static SectorMap map;
 
 		if (segment_id > last_reference) {
 			/*  Skip all sectors before segment_id

@@ -151,8 +151,6 @@ extern int netlink_dump_start(struct sock *ssk, struct sk_buff *skb,
 			      int (*done)(struct netlink_callback*));
 
 
-extern void netlink_proto_init(struct net_proto *pro);
-
 #endif /* __KERNEL__ */
 
 #endif	/* __LINUX_NETLINK_H */

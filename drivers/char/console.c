@@ -108,7 +108,7 @@
 #include "console_macros.h"
 
 
-struct consw *conswitchp = NULL;
+const struct consw *conswitchp;
 
 /* A bitmap for codes <32. A bit of 1 indicates that the code
  * corresponding to that bit number invokes some special action
@@ -136,7 +136,7 @@ static struct termios *console_termios_locked[MAX_NR_CONSOLES];
 struct vc vc_cons [MAX_NR_CONSOLES];
 
 #ifndef VT_SINGLE_DRIVER
-static struct consw *con_driver_map[MAX_NR_CONSOLES];
+static const struct consw *con_driver_map[MAX_NR_CONSOLES];
 #endif
 
 static int con_open(struct tty_struct *, struct file *);
@@ -152,14 +152,14 @@ static void set_cursor(int currcons);
 static void hide_cursor(int currcons);
 static void unblank_screen_t(unsigned long dummy);
 
-static int printable = 0;		/* Is console ready for printing? */
+static int printable;		/* Is console ready for printing? */
 
-int do_poke_blanked_console = 0;
-int console_blanked = 0;
+int do_poke_blanked_console;
+int console_blanked;
 
-static int vesa_blank_mode = 0; /* 0:none 1:suspendV 2:suspendH 3:powerdown */
+static int vesa_blank_mode; /* 0:none 1:suspendV 2:suspendH 3:powerdown */
 static int blankinterval = 10*60*HZ;
-static int vesa_off_interval = 0;
+static int vesa_off_interval;
 
 /*
  * fg_console is the current virtual console,
@@ -167,10 +167,10 @@ static int vesa_off_interval = 0;
  * want_console is the console we want to switch to,
  * kmsg_redirect is the console for kernel messages,
  */
-int fg_console = 0;
-int last_console = 0;
+int fg_console;
+int last_console;
 int want_console = -1;
-int kmsg_redirect = 0;
+int kmsg_redirect;
 
 /*
  * For each existing display, we have a pointer to console currently visible
@@ -178,7 +178,7 @@ int kmsg_redirect = 0;
  * appropriately. Unless the low-level driver supplies its own display_fg
  * variable, we use this one for the "master display".
  */
-static struct vc_data *master_display_fg = NULL;
+static struct vc_data *master_display_fg;
 
 /*
  * Unfortunately, we need to delay tty echo when we're currently writing to the
@@ -192,13 +192,13 @@ DECLARE_TASK_QUEUE(con_task_queue);
 /*
  * For the same reason, we defer scrollback to the console tasklet.
  */
-static int scrollback_delta = 0;
+static int scrollback_delta;
 
 /*
  * Hook so that the power management routines can (un)blank
  * the console on our behalf.
  */
-int (*console_blank_hook)(int) = NULL;
+int (*console_blank_hook)(int);
 
 static struct timer_list console_timer;
 
@@ -216,7 +216,7 @@ static struct timer_list console_timer;
 #endif
 
 static int pm_con_request(struct pm_dev *dev, pm_request_t rqst, void *data);
-static struct pm_dev *pm_con = NULL;
+static struct pm_dev *pm_con;
 
 static inline unsigned short *screenpos(int currcons, int offset, int viewed)
 {
@@ -415,9 +415,9 @@ void invert_screen(int currcons, int offset, int count, int viewed)
 /* used by selection: complement pointer position */
 void complement_pos(int currcons, int offset)
 {
-	static unsigned short *p = NULL;
-	static unsigned short old = 0;
-	static unsigned short oldx = 0, oldy = 0;
+	static unsigned short *p;
+	static unsigned short old;
+	static unsigned short oldx, oldy;
 
 	if (p) {
 		scr_writew(old, p);
@@ -2056,7 +2056,7 @@ void vt_console_print(struct console *co, const char * b, unsigned count)
 {
 	int currcons = fg_console;
 	unsigned char c;
-	static unsigned long printing = 0;
+	static unsigned long printing;
 	const ushort *start;
 	ushort cnt = 0;
 	ushort myx;
@@ -2480,7 +2480,7 @@ static void clear_buffer_attributes(int currcons)
  *	and become default driver for newly opened ones.
  */
 
-void take_over_console(struct consw *csw, int first, int last, int deflt)
+void take_over_console(const struct consw *csw, int first, int last, int deflt)
 {
 	int i, j = -1;
 	const char *desc;
@@ -2528,7 +2528,7 @@ void take_over_console(struct consw *csw, int first, int last, int deflt)
 		printk("to %s\n", desc);
 }
 
-void give_up_console(struct consw *csw)
+void give_up_console(const struct consw *csw)
 {
 	int i;
 

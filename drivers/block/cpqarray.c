@@ -68,10 +68,10 @@ MODULE_DESCRIPTION("Driver for Compaq Smart2 Array Controllers");
 #define MAX_CTLR	8
 #define CTLR_SHIFT	8
 
-static int nr_ctlr = 0;
-static ctlr_info_t *hba[MAX_CTLR] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+static int nr_ctlr;
+static ctlr_info_t *hba[MAX_CTLR];
 
-static int eisa[8] = { 0, 0 ,0 ,0, 0, 0 ,0 ,0 };
+static int eisa[8];
 
 #define NR_PRODUCTS (sizeof(products)/sizeof(struct board_type))
 
@@ -103,7 +103,7 @@ static int * ida_blocksizes;
 static int * ida_hardsizes;
 static struct gendisk ida_gendisk[MAX_CTLR];
 
-static struct proc_dir_entry *proc_array = NULL;
+static struct proc_dir_entry *proc_array;
 
 /* Debug... */
 #define DBG(s)	do { s } while(0)

@@ -57,7 +57,8 @@ struct ns558 {
 	struct gameport gameport;
 };
 	
-static struct ns558 *ns558 = NULL;
+static struct ns558 *ns558;
+static int have_pci_devices;
 
 /*
  * ns558_isa_probe() tries to find an isa gameport at the
@@ -311,6 +312,15 @@ int __init ns558_init(void)
 #endif
 
 /*
+ * Probe for PCI ports.  Always probe for PCI first,
+ * it is the least-invasive probe.
+ */
+
+	i = pci_module_init(&ns558_pci_driver);
+	if (i == 0)
+		have_pci_devices = 1;
+
+/*
  * Probe for ISA ports.
  */
 
@@ -329,14 +339,7 @@ int __init ns558_init(void)
 	}
 #endif
 
-/*
- * Probe for PCI ports.
- */
-
-	if (!ns558 && pci_module_init(&ns558_pci_driver))
-		return -ENODEV;
-
-	return 0;
+	return ns558 ? 0 : -ENODEV;
 }
 
 void __exit ns558_exit(void)
@@ -365,7 +368,8 @@ void __exit ns558_exit(void)
 		port = port->next;
 	}
 
-	pci_unregister_driver(&ns558_pci_driver);
+	if (have_pci_devices)
+		pci_unregister_driver(&ns558_pci_driver);
 }
 
 module_init(ns558_init);

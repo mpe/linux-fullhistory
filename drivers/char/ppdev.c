@@ -595,7 +595,7 @@ static struct file_operations pp_fops = {
 	release:	pp_release,
 };
 
-static devfs_handle_t devfs_handle = NULL;
+static devfs_handle_t devfs_handle;
 
 static int __init ppdev_init (void)
 {

@@ -8,7 +8,7 @@
 #include <linux/nls.h>
 #include <linux/errno.h>
 
-static struct nls_table *p_nls = NULL;
+static struct nls_table *p_nls;
 
 
 #define SS2		(0x8E)		/* Single Shift 2 */

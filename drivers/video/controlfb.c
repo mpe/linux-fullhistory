@@ -1190,7 +1190,7 @@ static void control_set_dispsw(struct display *disp, int cmode, struct fb_info_c
 	}
 }
 
-static void control_init_info(struct fb_info *info, struct fb_info_control *p)
+static void __init control_init_info(struct fb_info *info, struct fb_info_control *p)
 {
 	strcpy(info->modename, "control");
 	info->node = -1;	/* ??? danj */

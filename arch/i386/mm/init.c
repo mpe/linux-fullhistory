@@ -37,8 +37,8 @@
 #include <asm/apic.h>
 
 unsigned long highstart_pfn, highend_pfn;
-static unsigned long totalram_pages = 0;
-static unsigned long totalhigh_pages = 0;
+static unsigned long totalram_pages;
+static unsigned long totalhigh_pages;
 
 /*
  * BAD_PAGE is the page that is used for page faults when linux
@@ -491,16 +491,42 @@ void __init paging_init(void)
  * before and after the test are here to work-around some nasty CPU bugs.
  */
 
+/*
+ * This function cannot be __init, since exceptions don't work in that
+ * section.
+ */
+static int do_test_wp_bit(unsigned long vaddr)
+{
+	char tmp_reg;
+	int flag;
+
+	__asm__ __volatile__(
+		"	movb %0,%1	\n"
+		"1:	movb %1,%0	\n"
+		"	xorl %2,%2	\n"
+		"2:			\n"
+		".section __ex_table,\"a\"\n"
+		"	.align 4	\n"
+		"	.long 1b,2b	\n"
+		".previous		\n"
+		:"=m" (*(char *) vaddr),
+		 "=q" (tmp_reg),
+		 "=r" (flag)
+		:"2" (1)
+		:"memory");
+	
+	return flag;
+}
+
 void __init test_wp_bit(void)
 {
 /*
- * Ok, all PAE-capable CPUs are definitely handling the WP bit right.
+ * Ok, all PSE-capable CPUs are definitely handling the WP bit right.
  */
 	const unsigned long vaddr = PAGE_OFFSET;
 	pgd_t *pgd;
 	pmd_t *pmd;
 	pte_t *pte, old_pte;
-	char tmp_reg;
 
 	printk("Checking if this processor honours the WP bit even in supervisor mode... ");
 
@@ -511,27 +537,19 @@ void __init test_wp_bit(void)
 	*pte = mk_pte_phys(0, PAGE_READONLY);
 	local_flush_tlb();
 
-	__asm__ __volatile__(
-		"jmp 1f; 1:\n"
-		"movb %0,%1\n"
-		"movb %1,%0\n"
-		"jmp 1f; 1:\n"
-		:"=m" (*(char *) vaddr),
-		 "=q" (tmp_reg)
-		:/* no inputs */
-		:"memory");
+	boot_cpu_data.wp_works_ok = do_test_wp_bit(vaddr);
 
 	*pte = old_pte;
 	local_flush_tlb();
 
-	if (boot_cpu_data.wp_works_ok < 0) {
-		boot_cpu_data.wp_works_ok = 0;
+	if (!boot_cpu_data.wp_works_ok) {
 		printk("No.\n");
 #ifdef CONFIG_X86_WP_WORKS_OK
 		panic("This kernel doesn't support CPU's with broken WP. Recompile it for a 386!");
 #endif
-	} else
-		printk(".\n");
+	} else {
+		printk("Ok.\n");
+	}
 }
 
 static inline int page_is_ram (unsigned long pagenr)

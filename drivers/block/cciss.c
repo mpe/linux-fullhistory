@@ -71,10 +71,10 @@ static struct board_type products[] = {
 #define READ_AHEAD 	 128
 #define NR_CMDS		 128 /* #commands that can be outstanding */
 #define MAX_CTLR 8
-static int nr_ctlr =0; 
-static ctlr_info_t *hba[MAX_CTLR] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+static int nr_ctlr; 
+static ctlr_info_t *hba[MAX_CTLR];
 
-static struct proc_dir_entry *proc_cciss = NULL;
+static struct proc_dir_entry *proc_cciss;
 
 static void do_cciss_request(int i);
 /*

@@ -27,6 +27,7 @@
 #include <linux/config.h>
 #if defined(CONFIG_ROSE) || defined(CONFIG_ROSE_MODULE)
 #include <linux/module.h>
+#include <linux/init.h>
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -56,7 +57,6 @@
 #include <linux/proc_fs.h>
 #include <net/ip.h>
 #include <net/arp.h>
-#include <linux/init.h>
 
 int rose_ndevs = 10;
 
@@ -1427,7 +1427,7 @@ static struct notifier_block rose_dev_notifier = {
 
 static struct net_device *dev_rose;
 
-void __init rose_proto_init(struct net_proto *pro)
+static int __init rose_proto_init(void)
 {
 	int i;
 
@@ -1435,7 +1435,7 @@ void __init rose_proto_init(struct net_proto *pro)
 
 	if ((dev_rose = kmalloc(rose_ndevs * sizeof(struct net_device), GFP_KERNEL)) == NULL) {
 		printk(KERN_ERR "ROSE: rose_proto_init - unable to allocate device structure\n");
-		return;
+		return -1;
 	}
 
 	memset(dev_rose, 0x00, rose_ndevs * sizeof(struct net_device));
@@ -1466,7 +1466,9 @@ void __init rose_proto_init(struct net_proto *pro)
 	proc_net_create("rose_nodes", 0, rose_nodes_get_info);
 	proc_net_create("rose_routes", 0, rose_routes_get_info);
 #endif
+	return 0;
 }
+module_init(rose_proto_init);
 
 #ifdef MODULE
 EXPORT_NO_SYMBOLS;
@@ -1477,14 +1479,7 @@ MODULE_PARM_DESC(rose_ndevs, "number of ROSE devices");
 MODULE_AUTHOR("Jonathan Naylor G4KLX <g4klx@g4klx.demon.co.uk>");
 MODULE_DESCRIPTION("The amateur radio ROSE network layer protocol");
 
-int init_module(void)
-{
-	rose_proto_init(NULL);
-
-	return 0;
-}
-
-void cleanup_module(void)
+static void __exit rose_exit(void)
 {
 	int i;
 
@@ -1522,7 +1517,8 @@ void cleanup_module(void)
 
 	kfree(dev_rose);
 }
+module_exit(rose_exit);
+#endif /* MODULE */
 
-#endif
 
 #endif

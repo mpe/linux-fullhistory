@@ -1280,7 +1280,8 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
 			scsi_unregister(shpnt);
 			registered_count--;
 			release_region(shpnt->io_port, IO_RANGE);
-			aha152x_host[shpnt->irq - IRQ_MIN] = shpnt = 0;
+			aha152x_host[shpnt->irq - IRQ_MIN] = 0;
+			shpnt = 0;
 			continue;
 		}
 		HOSTDATA(shpnt)->swint = 0;

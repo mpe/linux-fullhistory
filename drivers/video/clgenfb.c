@@ -997,10 +997,10 @@ static int clgen_decode_var (const struct fb_var_screeninfo *var, void *par,
 		vsync *= 2;
 		vback *= 2;
 	} else if (_par->var.vmode & FB_VMODE_INTERLACED) {
-		yres = ++yres / 2;
-		vfront = ++vfront / 2;
-		vsync = ++vsync / 2;
-		vback = ++vback / 2;
+		yres = (yres + 1) / 2;
+		vfront = (vfront + 1) / 2;
+		vsync = (vsync + 1) / 2;
+		vback = (vback + 1) / 2;
 	}
 	_par->HorizRes = xres;
 	_par->HorizTotal = (xres + hfront + hsync + hback) / 8 - 5;

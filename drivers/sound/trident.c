@@ -306,7 +306,7 @@ static int attr2mask [] = {
 	DSP_BIND_I2S, DSP_BIND_CENTER_LFE, DSP_BIND_SURR, DSP_BIND_SPDIF
 };
 
-static struct trident_card *devs = NULL;
+static struct trident_card *devs;
 
 static void ali_ac97_set(struct ac97_codec *codec, u8 reg, u16 val);
 static u16 ali_ac97_get(struct ac97_codec *codec, u8 reg);

@@ -51,7 +51,7 @@
 */
 
 static int
-  DAC960_ControllerCount =			0;
+  DAC960_ControllerCount;
 
 
 /*
@@ -60,7 +60,7 @@ static int
 */
 
 static int
-  DAC960_ActiveControllerCount =		0;
+  DAC960_ActiveControllerCount;
 
 
 /*
@@ -69,7 +69,7 @@ static int
 */
 
 static DAC960_Controller_T
-  *DAC960_Controllers[DAC960_MaxControllers] =	{ NULL };
+  *DAC960_Controllers[DAC960_MaxControllers];
 
 
 /*
@@ -5679,7 +5679,7 @@ static void DAC960_Message(DAC960_MessageLevel_T MessageLevel,
 	    }
 	  if (MessageLevel == DAC960_AnnounceLevel)
 	    {
-	      static int AnnouncementLines = 0;
+	      static int AnnouncementLines;
 	      if (++AnnouncementLines <= 2)
 		printk("%sDAC960: %s", DAC960_MessageLevelMap[MessageLevel],
 		       Buffer);

@@ -284,3 +284,9 @@ get_user macro actually returns a value: 0, if the user access was
 successful, -EFAULT on failure. Our original code did not test this
 return value, however the inline assembly code in get_user tries to
 return -EFAULT. GCC selected EAX to return this value.
+
+NOTE:
+Due to the way that the exception table is built and needs to be ordered,
+only use exceptions for code in the .text section.  Any other section
+will cause the exception table to not be sorted correctly, and the
+exceptions will fail.

@@ -45,11 +45,11 @@
 
 /*      Global vars.
  */
-int zft_just_before_eof = 0;
+int zft_just_before_eof;
 
 /*      Local vars.
  */
-static int buf_len_rd = 0;
+static int buf_len_rd;
 
 void zft_zap_read_buffers(void)
 {
@@ -194,7 +194,7 @@ static int check_read_access(int *req_len,
 			     int *req_clipped, 
 			     const zft_position *pos)
 {
-	static __s64 remaining = 0;
+	static __s64 remaining;
 	static int eod;
 	TRACE_FUN(ft_t_flow);
 	

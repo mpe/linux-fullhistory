@@ -25,6 +25,10 @@
  *                  Added I2C_DRIVERID_TDA7432
  *			added loudness insmod control
  *  Revision: 0.1 - initial version
+ *
+ *  Changes:
+ *  Arnaldo Carvalho de Melo <acme@conectiva.com.br> - 08/14/2000
+ *  - resource allocation fixes in tda7432_attach
  */
 
 #include <linux/module.h>
@@ -320,8 +324,10 @@ static int tda7432_attach(struct i2c_adapter *adap, int addr,
         client->addr = addr;
 	
 	client->data = t = kmalloc(sizeof *t,GFP_KERNEL);
-	if (!t)
+	if (!t) {
+		kfree(client);
 		return -ENOMEM;
+	}
 	memset(t,0,sizeof *t);
 	do_tda7432_init(client);
 	MOD_INC_USE_COUNT;

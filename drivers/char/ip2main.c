@@ -295,13 +295,13 @@ static int ref_count;
 /* Here, then is a table of board pointers which the interrupt routine should
  * scan through to determine who it must service.
  */
-static unsigned short i2nBoards = 0; // Number of boards here
+static unsigned short i2nBoards; // Number of boards here
 
 static i2eBordStrPtr i2BoardPtrTable[IP2_MAX_BOARDS];
 
 static i2ChanStrPtr  DevTable[IP2_MAX_PORTS];
 //DevTableMem just used to save addresses for kfree
-static void  *DevTableMem[IP2_MAX_BOARDS] = {NULL,NULL,NULL,NULL};
+static void  *DevTableMem[IP2_MAX_BOARDS];
 
 static struct tty_struct * TtyTable[IP2_MAX_PORTS];
 static struct termios    * Termios[IP2_MAX_PORTS];
@@ -318,8 +318,8 @@ static struct file_operations ip2_ipl = {
 	open:		ip2_ipl_open,
 }; 
 
-static long irq_counter = 0;
-static long bh_counter = 0;
+static long irq_counter;
+static long bh_counter;
 
 // Use immediate queue to service interrupts
 //#define USE_IQI	// PCI&2.2 needs work
@@ -330,15 +330,15 @@ static long bh_counter = 0;
  */
 #define  POLL_TIMEOUT   (jiffies + 1)
 static struct timer_list PollTimer = { function: ip2_poll };
-static char  TimerOn = 0;
+static char  TimerOn;
 
 #ifdef IP2DEBUG_TRACE
 /* Trace (debug) buffer data */
 #define TRACEMAX  1000
 static unsigned long tracebuf[TRACEMAX];
-static int tracestuff = 0;
-static int tracestrip = 0;
-static int tracewrap  = 0;
+static int tracestuff;
+static int tracestrip;
+static int tracewrap;
 #endif
 
 /**********/
@@ -372,13 +372,13 @@ static int tracewrap  = 0;
 #	endif	/* LINUX_VERSION */
 #endif	/* MODULE */
 
-static int poll_only = 0;
+static int poll_only;
 
-static int Eisa_irq = 0;
-static int Eisa_slot = 0;
+static int Eisa_irq;
+static int Eisa_slot;
 
-static int iindx = 0;
-static char rirqs[IP2_MAX_BOARDS] = {0,};
+static int iindx;
+static char rirqs[IP2_MAX_BOARDS];
 static int Valid_Irqs[] = { 3, 4, 5, 7, 10, 11, 12, 15, 0};
 
 /******************************************************************************/
@@ -584,13 +584,13 @@ int __init
 old_ip2_init(void)
 {
 #ifdef	CONFIG_DEVFS_FS
-	static devfs_handle_t devfs_handle = NULL;
+	static devfs_handle_t devfs_handle;
 	int j, box;
 #endif
 	int i;
 	int err;
 	int status = 0;
-	static int loaded = 0;
+	static int loaded;
 	i2eBordStrPtr pB = NULL;
 	int rc = -1;
 

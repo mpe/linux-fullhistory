@@ -61,7 +61,7 @@
 #define KBD_DEFLOCK 0
 #endif
 
-void (*kbd_ledfunc)(unsigned int led) = NULL;
+void (*kbd_ledfunc)(unsigned int led);
 EXPORT_SYMBOL(handle_scancode);
 EXPORT_SYMBOL(kbd_ledfunc);
 
@@ -83,24 +83,24 @@ int keyboard_wait_for_keypress(struct console *co)
  */
 
 /* shift state counters.. */
-static unsigned char k_down[NR_SHIFT] = {0, };
+static unsigned char k_down[NR_SHIFT];
 /* keyboard key bitmap */
-static unsigned long key_down[256/BITS_PER_LONG] = { 0, };
+static unsigned long key_down[256/BITS_PER_LONG];
 
-static int dead_key_next = 0;
+static int dead_key_next;
 /* 
  * In order to retrieve the shift_state (for the mouse server), either
  * the variable must be global, or a new procedure must be created to 
  * return the value. I chose the former way.
  */
-int shift_state = 0;
+int shift_state;
 static int npadch = -1;			/* -1 or number assembled on pad */
-static unsigned char diacr = 0;
-static char rep = 0;			/* flag telling character repeat */
+static unsigned char diacr;
+static char rep;			/* flag telling character repeat */
 struct kbd_struct kbd_table[MAX_NR_CONSOLES];
 static struct tty_struct **ttytab;
 static struct kbd_struct * kbd = kbd_table;
-static struct tty_struct * tty = NULL;
+static struct tty_struct * tty;
 
 void compute_shiftstate(void);
 
@@ -160,7 +160,7 @@ struct pt_regs * kbd_pt_regs;
 static int sysrq_pressed;
 #endif
 
-static struct pm_dev *pm_kbd = NULL;
+static struct pm_dev *pm_kbd;
 
 /*
  * Many other routines do put_queue, but I think either

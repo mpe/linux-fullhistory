@@ -566,7 +566,7 @@ static int promcon_dummy(void)
 
 #define DUMMY (void *) promcon_dummy
 
-struct consw prom_con = {
+const struct consw prom_con = {
 	con_startup:		promcon_startup,
 	con_init:		promcon_init,
 	con_deinit:		promcon_deinit,

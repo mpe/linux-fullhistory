@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.222 2000/08/29 08:59:23 davem Exp $
+/* $Id: srmmu.c,v 1.223 2000/10/16 14:32:49 anton Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -68,9 +68,6 @@ pgd_t *srmmu_swapper_pg_dir;
 #define FLUSH_BEGIN(mm) if((mm)->context != NO_CONTEXT) {
 #define FLUSH_END	}
 #endif
-
-BTFIXUPDEF_CALL(void, pmd_set, pmd_t *, pte_t *)
-#define pmd_set(pmdp,ptep) BTFIXUP_CALL(pmd_set)(pmdp,ptep)
 
 BTFIXUPDEF_CALL(void, flush_page_for_dma, unsigned long)
 #define flush_page_for_dma(page) BTFIXUP_CALL(flush_page_for_dma)(page)
@@ -480,19 +477,6 @@ static pmd_t *srmmu_pmd_alloc(pgd_t * pgd, unsigned long address)
 static void srmmu_pmd_free(pmd_t * pmd)
 {
 	srmmu_free_nocache((unsigned long)pmd, SRMMU_PMD_TABLE_SIZE);
-}
-
-static void srmmu_set_pgdir(unsigned long address, pgd_t entry)
-{
-	struct task_struct * p;
-
-	read_lock(&tasklist_lock);
-	for_each_task(p) {
-		if (!p->mm)
-			continue;
-		*srmmu_pgd_offset(p->mm,address) = entry;
-	}
-	read_unlock(&tasklist_lock);
 }
 
 static inline void alloc_context(struct mm_struct *old_mm, struct mm_struct *mm)
@@ -2148,8 +2132,6 @@ void __init ld_mmu_srmmu(void)
 #endif
 	BTFIXUPSET_CALL(do_check_pgt_cache, srmmu_check_pgt_cache, BTFIXUPCALL_NORM);
 
-	BTFIXUPSET_CALL(set_pgdir, srmmu_set_pgdir, BTFIXUPCALL_NORM);
-
 	BTFIXUPSET_CALL(set_pte, srmmu_set_pte, BTFIXUPCALL_SWAPO0O1);
 	BTFIXUPSET_CALL(switch_mm, srmmu_switch_mm, BTFIXUPCALL_NORM);
 
@@ -2175,6 +2157,7 @@ void __init ld_mmu_srmmu(void)
 	BTFIXUPSET_CALL(mk_pte_phys, srmmu_mk_pte_phys, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(mk_pte_io, srmmu_mk_pte_io, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(pgd_set, srmmu_pgd_set, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pmd_set, srmmu_pmd_set, BTFIXUPCALL_NORM);
 	
 	BTFIXUPSET_INT(pte_modify_mask, SRMMU_CHG_MASK);
 	BTFIXUPSET_CALL(pmd_offset, srmmu_pmd_offset, BTFIXUPCALL_NORM);
@@ -2208,9 +2191,6 @@ void __init ld_mmu_srmmu(void)
 	BTFIXUPSET_CALL(alloc_task_struct, srmmu_alloc_task_struct, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(free_task_struct, srmmu_free_task_struct, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(get_task_struct, srmmu_get_task_struct, BTFIXUPCALL_NORM);
-
-	/* SRMMU specific. */
-	BTFIXUPSET_CALL(pmd_set, srmmu_pmd_set, BTFIXUPCALL_NORM);
 
 	get_srmmu_type();
 	patch_window_trap_handlers();

@@ -41,7 +41,7 @@ struct nlm_wait {
 	u32			b_status;	/* grant callback status */
 };
 
-static struct nlm_wait *	nlm_blocked = NULL;
+static struct nlm_wait *	nlm_blocked;
 
 /*
  * Block on a lock

@@ -82,8 +82,8 @@ unsigned long total_lowmem;
 int mem_init_done;
 int init_bootmem_done;
 int boot_mapsize;
-unsigned long totalram_pages = 0;
-unsigned long totalhigh_pages = 0;
+unsigned long totalram_pages;
+unsigned long totalhigh_pages;
 extern pgd_t swapper_pg_dir[];
 extern char _start[], _end[];
 extern char etext[], _stext[];
@@ -138,10 +138,10 @@ struct mem_pieces phys_mem;
 char *klimit = _end;
 struct mem_pieces phys_avail;
 
-PTE *Hash=0, *Hash_end;
-unsigned long Hash_size=0, Hash_mask;
+PTE *Hash, *Hash_end;
+unsigned long Hash_size, Hash_mask;
 #if !defined(CONFIG_4xx) && !defined(CONFIG_8xx)
-unsigned long _SDR1=0;
+unsigned long _SDR1;
 static void hash_init(void);
 
 union ubat {			/* BAT register values to be loaded */
@@ -195,7 +195,7 @@ static inline unsigned long p_mapped_by_bats(unsigned long pa)
  * (i.e. page tables) instead of the bats.
  * -- Cort
  */
-int __map_without_bats = 0;
+int __map_without_bats;
 
 /* max amount of RAM to use */
 unsigned long __max_memory;

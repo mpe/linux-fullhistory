@@ -38,7 +38,7 @@
 #endif
 #include <asm/mmu_context.h>
 
-unsigned long totalram_pages = 0;
+unsigned long totalram_pages;
 
 void __bad_pte_kernel(pmd_t *pmd)
 {

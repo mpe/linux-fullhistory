@@ -143,7 +143,8 @@ xdr_encode_time(u32 *p, time_t time)
 static inline u32 *
 xdr_decode_time3(u32 *p, u64 *timep)
 {
-	*timep = ((u64)ntohl(*p++) << 32) + (u64)ntohl(*p++);
+	u64 tmp = (u64)ntohl(*p++) << 32;
+	*timep = tmp + (u64)ntohl(*p++);
 	return p;
 }
 
@@ -184,7 +185,8 @@ xdr_decode_fattr(u32 *p, struct nfs_fattr *fattr)
 	p = xdr_decode_hyper(p, &fattr->size);
 	p = xdr_decode_hyper(p, &fattr->du.nfs3.used);
 	/* Turn remote device info into Linux-specific dev_t */
-	fattr->rdev = (ntohl(*p++) << MINORBITS) | (ntohl(*p++) & MINORMASK);
+	fattr->rdev = ntohl(*p++) << MINORBITS;
+	fattr->rdev |= ntohl(*p++) & MINORMASK;
 	p = xdr_decode_hyper(p, &fattr->fsid);
 	p = xdr_decode_hyper(p, &fattr->fileid);
 	p = xdr_decode_time3(p, &fattr->atime);

@@ -285,7 +285,7 @@ char func_buf[] = {
 
 char *funcbufptr = func_buf;
 int funcbufsize = sizeof(func_buf);
-int funcbufleft = 0;          /* space left */
+int funcbufleft;          /* space left */
 
 char *func_table[MAX_NR_FUNC] = {
 	func_buf + 0,

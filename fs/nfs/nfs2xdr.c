@@ -104,7 +104,8 @@ xdr_decode_string2(u32 *p, char **string, unsigned int *len,
 static inline u32*
 xdr_decode_time(u32 *p, u64 *timep)
 {
-	*timep = ((u64)ntohl(*p++) << 32) + (u64)ntohl(*p++);
+	u64 tmp = (u64)ntohl(*p++) << 32;
+	*timep = tmp + (u64)ntohl(*p++);
 	return p;
 }
 

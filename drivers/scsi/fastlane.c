@@ -100,8 +100,6 @@ int __init fastlane_esp_detect(Scsi_Host_Template *tpnt)
 					   sizeof(struct ESP_regs));
 			return 0;
 		}
-		strcpy(z->name, "Fastlane Z3 SCSI Host Adapter");
-
 		esp = esp_allocate(tpnt, (void *)board+FASTLANE_ESP_ADDR);
 
 		/* Do command transfer with programmed I/O */

@@ -174,7 +174,7 @@ static struct file_operations misc_fops = {
  
 int misc_register(struct miscdevice * misc)
 {
-	static devfs_handle_t devfs_handle = NULL;
+	static devfs_handle_t devfs_handle;
 
 	if (misc->next || misc->prev)
 		return -EBUSY;

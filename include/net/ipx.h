@@ -41,8 +41,6 @@ struct ipxhdr
 	ipx_address	ipx_source __attribute__ ((packed));
 };
 
-#include <net/ipxcall.h>
-
 typedef struct ipx_interface {
 	/* IPX address */
 	__u32           if_netnum;

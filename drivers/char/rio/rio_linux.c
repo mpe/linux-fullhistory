@@ -211,7 +211,7 @@ void my_hd (void *addr, int len);
 static struct tty_driver rio_driver, rio_callout_driver;
 static struct tty_driver rio_driver2, rio_callout_driver2;
 
-static struct tty_struct * rio_table[RIO_NPORTS] = { NULL, };
+static struct tty_struct * rio_table[RIO_NPORTS];
 static struct termios ** rio_termios;
 static struct termios ** rio_termios_locked;
 
@@ -223,9 +223,9 @@ struct rio_info *p;
 struct rio_port *rio_ports;
 
 int rio_refcount;
-int rio_initialized = 0;
-int rio_nports = 0;
-int rio_debug = 0;
+int rio_initialized;
+int rio_nports;
+int rio_debug;
 
 
 /* You can have the driver poll your card. 

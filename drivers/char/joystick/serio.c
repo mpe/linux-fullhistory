@@ -44,9 +44,9 @@ EXPORT_SYMBOL(serio_open);
 EXPORT_SYMBOL(serio_close);
 EXPORT_SYMBOL(serio_rescan);
 
-static struct serio *serio_list = NULL;
-static struct serio_dev *serio_dev = NULL;
-static int serio_number = 0;
+static struct serio *serio_list;
+static struct serio_dev *serio_dev;
+static int serio_number;
 
 static void serio_find_dev(struct serio *serio)
 {

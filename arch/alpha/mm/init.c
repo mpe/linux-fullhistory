@@ -19,6 +19,7 @@
 #include <linux/swap.h>
 #include <linux/init.h>
 #include <linux/bootmem.h> /* max_low_pfn */
+#include <linux/vmalloc.h>
 #ifdef CONFIG_BLK_DEV_INITRD
 #include <linux/blk.h>
 #endif
@@ -30,6 +31,7 @@
 #include <asm/hwrpb.h>
 #include <asm/dma.h>
 #include <asm/mmu_context.h>
+#include <asm/console.h>
 
 static unsigned long totalram_pages;
 
@@ -53,6 +55,29 @@ __bad_pte(pmd_t *pmd)
 {
 	printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
 	pmd_set(pmd, (pte_t *) BAD_PAGETABLE);
+}
+
+pgd_t *
+get_pgd_slow(void)
+{
+	pgd_t *ret, *init;
+
+	ret = (pgd_t *)__get_free_page(GFP_KERNEL);
+	init = pgd_offset(&init_mm, 0UL);
+	if (ret) {
+		clear_page(ret);
+#ifdef CONFIG_ALPHA_LARGE_VMALLOC
+		memcpy (ret + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
+			(PTRS_PER_PGD - USER_PTRS_PER_PGD - 1)*sizeof(pgd_t));
+#else
+		pgd_val(ret[PTRS_PER_PGD-2]) = pgd_val(init[PTRS_PER_PGD-2]);
+#endif
+
+		/* The last PGD entry is the VPTB self-map.  */
+		pgd_val(ret[PTRS_PER_PGD-1])
+		  = pte_val(mk_pte(virt_to_page(ret), PAGE_KERNEL));
+	}
+	return ret;
 }
 
 pmd_t *
@@ -182,8 +207,9 @@ load_PCB(struct thread_struct * pcb)
 	return __reload_thread(pcb);
 }
 
-/* switch_to_system_map() sets up some necessary page tables. */
-void
+/* Set up initial PCB, VPTB, and other such nicities.  */
+
+static inline void
 switch_to_system_map(void)
 {
 	unsigned long newptbr;
@@ -224,6 +250,84 @@ switch_to_system_map(void)
 	}
 	original_pcb = *(struct thread_struct *) original_pcb_ptr;
 }
+
+int callback_init_done;
+
+void * __init
+callback_init(void * kernel_end)
+{
+	struct crb_struct * crb;
+	pgd_t *pgd;
+	pmd_t *pmd;
+	void *two_pages;
+
+	/* Starting at the HWRPB, locate the CRB. */
+	crb = (struct crb_struct *)((char *)hwrpb + hwrpb->crb_offset);
+
+	if (alpha_using_srm) {
+		/* Tell the console whither it is to be remapped. */
+		if (srm_fixup(VMALLOC_START, (unsigned long)hwrpb))
+			__halt();		/* "We're boned."  --Bender */
+
+		/* Edit the procedure descriptors for DISPATCH and FIXUP. */
+		crb->dispatch_va = (struct procdesc_struct *)
+			(VMALLOC_START + (unsigned long)crb->dispatch_va
+			 - crb->map[0].va);
+		crb->fixup_va = (struct procdesc_struct *)
+			(VMALLOC_START + (unsigned long)crb->fixup_va
+			 - crb->map[0].va);
+	}
+
+	switch_to_system_map();
+
+	/* Allocate one PGD and one PMD.  In the case of SRM, we'll need
+	   these to actually remap the console.  There is an assumption
+	   here that only one of each is needed, and this allows for 8MB.
+	   Currently (late 1999), big consoles are still under 4MB.
+
+	   In the case of not SRM, but not CONFIG_ALPHA_LARGE_VMALLOC,
+	   we need to allocate the PGD we use for vmalloc before we start
+	   forking other tasks.  */
+
+	two_pages = (void *)
+	  (((unsigned long)kernel_end + ~PAGE_MASK) & PAGE_MASK);
+	kernel_end = two_pages + 2*PAGE_SIZE;
+	memset(two_pages, 0, 2*PAGE_SIZE);
+
+	pgd = pgd_offset_k(VMALLOC_START);
+	pgd_set(pgd, (pmd_t *)two_pages);
+	pmd = pmd_offset(pgd, VMALLOC_START);
+	pmd_set(pmd, (pte_t *)(two_pages + PAGE_SIZE));
+
+	if (alpha_using_srm) {
+		static struct vm_struct console_remap_vm;
+		unsigned long vaddr = VMALLOC_START;
+		long i, j;
+
+		/* Set up the third level PTEs and update the virtual
+		   addresses of the CRB entries.  */
+		for (i = 0; i < crb->map_entries; ++i) {
+			unsigned long paddr = crb->map[i].pa;
+			crb->map[i].va = vaddr;
+			for (j = 0; j < crb->map[i].count; ++j) {
+				set_pte(pte_offset(pmd, vaddr),
+					mk_pte_phys(paddr, PAGE_KERNEL));
+				paddr += PAGE_SIZE;
+				vaddr += PAGE_SIZE;
+			}
+		}
+
+		/* Let vmalloc know that we've allocated some space.  */
+		console_remap_vm.flags = VM_ALLOC;
+		console_remap_vm.addr = VMALLOC_START;
+		console_remap_vm.size = vaddr - VMALLOC_START;
+		vmlist = &console_remap_vm;
+	}
+
+	callback_init_done = 1;
+	return kernel_end;
+}
+
 
 /*
  * paging_init() sets up the memory map.

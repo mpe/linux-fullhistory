@@ -41,10 +41,14 @@ unsigned long __init bootmem_bootmap_pages (unsigned long pages)
 /*
  * Called once to set up the allocator itself.
  */
-static unsigned long __init init_bootmem_core (bootmem_data_t *bdata,
+static unsigned long __init init_bootmem_core (pg_data_t *pgdat,
 	unsigned long mapstart, unsigned long start, unsigned long end)
 {
+	bootmem_data_t *bdata = pgdat->bdata;
 	unsigned long mapsize = ((end - start)+7)/8;
+
+	pgdat->node_next = pgdat_list;
+	pgdat_list = pgdat;
 
 	mapsize = (mapsize + (sizeof(long) - 1UL)) & ~(sizeof(long) - 1UL);
 	bdata->node_bootmem_map = phys_to_virt(mapstart << PAGE_SHIFT);
@@ -172,10 +176,6 @@ restart_scan:
 		preferred = 0;
 		goto restart_scan;
 	}
-	/*
-	 * Whoops, we cannot satisfy the allocation request.
-	 */
-	BUG();
 found:
 	if (start >= eidx)
 		BUG();
@@ -221,15 +221,15 @@ found:
 	return ret;
 }
 
-static unsigned long __init free_all_bootmem_core(int nid, bootmem_data_t *bdata)
+static unsigned long __init free_all_bootmem_core(pg_data_t *pgdat)
 {
-	struct page * page;
+	struct page *page = pgdat->node_mem_map;
+	bootmem_data_t *bdata = pgdat->bdata;
 	unsigned long i, count, total = 0;
 	unsigned long idx;
 
 	if (!bdata->node_bootmem_map) BUG();
 
-	page = NODE_MEM_MAP(nid);
 	count = 0;
 	idx = bdata->node_low_pfn - (bdata->node_boot_start >> PAGE_SHIFT);
 	for (i = 0; i < idx; i++, page++) {
@@ -260,59 +260,78 @@ static unsigned long __init free_all_bootmem_core(int nid, bootmem_data_t *bdata
 	return total;
 }
 
-unsigned long __init init_bootmem_node (int nid, unsigned long freepfn, unsigned long startpfn, unsigned long endpfn)
+unsigned long __init init_bootmem_node (pg_data_t *pgdat, unsigned long freepfn, unsigned long startpfn, unsigned long endpfn)
 {
-	return(init_bootmem_core(NODE_DATA(nid)->bdata, freepfn, startpfn, endpfn));
+	return(init_bootmem_core(pgdat, freepfn, startpfn, endpfn));
 }
 
-void __init reserve_bootmem_node (int nid, unsigned long physaddr, unsigned long size)
+void __init reserve_bootmem_node (pg_data_t *pgdat, unsigned long physaddr, unsigned long size)
 {
-	reserve_bootmem_core(NODE_DATA(nid)->bdata, physaddr, size);
+	reserve_bootmem_core(pgdat->bdata, physaddr, size);
 }
 
-void __init free_bootmem_node (int nid, unsigned long physaddr, unsigned long size)
+void __init free_bootmem_node (pg_data_t *pgdat, unsigned long physaddr, unsigned long size)
 {
-	return(free_bootmem_core(NODE_DATA(nid)->bdata, physaddr, size));
+	return(free_bootmem_core(pgdat->bdata, physaddr, size));
 }
 
-unsigned long __init free_all_bootmem_node (int nid)
+unsigned long __init free_all_bootmem_node (pg_data_t *pgdat)
 {
-	return(free_all_bootmem_core(nid, NODE_DATA(nid)->bdata));
+	return(free_all_bootmem_core(pgdat));
 }
 
 unsigned long __init init_bootmem (unsigned long start, unsigned long pages)
 {
 	max_low_pfn = pages;
 	min_low_pfn = start;
-	return(init_bootmem_core(NODE_DATA(0)->bdata, start, 0, pages));
+	return(init_bootmem_core(&contig_page_data, start, 0, pages));
 }
 
 void __init reserve_bootmem (unsigned long addr, unsigned long size)
 {
-	reserve_bootmem_core(NODE_DATA(0)->bdata, addr, size);
+	reserve_bootmem_core(contig_page_data.bdata, addr, size);
 }
 
 void __init free_bootmem (unsigned long addr, unsigned long size)
 {
-	return(free_bootmem_core(NODE_DATA(0)->bdata, addr, size));
+	return(free_bootmem_core(contig_page_data.bdata, addr, size));
 }
 
 unsigned long __init free_all_bootmem (void)
 {
-	return(free_all_bootmem_core(0, NODE_DATA(0)->bdata));
+	return(free_all_bootmem_core(&contig_page_data));
 }
 
 void * __init __alloc_bootmem (unsigned long size, unsigned long align, unsigned long goal)
 {
+	pg_data_t *pgdat = pgdat_list;
+	void *ptr;
+
+	while (pgdat) {
+		if ((ptr = __alloc_bootmem_core(pgdat->bdata, size,
+						align, goal)))
+			return(ptr);
+		pgdat = pgdat->node_next;
+	}
 	/*
-	 * In the discontigmem case, all non-node specific allocations come 
-	 * from the first node, node 0.
+	 * Whoops, we cannot satisfy the allocation request.
 	 */
-	return(__alloc_bootmem_core(NODE_DATA(0)->bdata, size, align, goal));
+	BUG();
+	return NULL;
 }
 
-void * __init __alloc_bootmem_node (int nid, unsigned long size, unsigned long align, unsigned long goal)
+void * __init __alloc_bootmem_node (pg_data_t *pgdat, unsigned long size, unsigned long align, unsigned long goal)
 {
-	return(__alloc_bootmem_core(NODE_DATA(nid)->bdata, size, align, goal));
+	void *ptr;
+
+	ptr = __alloc_bootmem_core(pgdat->bdata, size, align, goal);
+	if (ptr)
+		return (ptr);
+
+	/*
+	 * Whoops, we cannot satisfy the allocation request.
+	 */
+	BUG();
+	return NULL;
 }
 

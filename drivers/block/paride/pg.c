@@ -289,7 +289,7 @@ void pg_init_units( void )
 	}
 } 
 
-static devfs_handle_t devfs_handle = NULL;
+static devfs_handle_t devfs_handle;
 
 int pg_init (void)      /* preliminary initialisation */
 

@@ -13,7 +13,7 @@ OBJS  = __divqu.o __remqu.o __divlu.o __remlu.o memset.o memcpy.o io.o \
 	strchr.o strrchr.o memchr.o \
 	copy_user.o clear_user.o strncpy_from_user.o strlen_user.o \
 	csum_ipv6_magic.o strcasecmp.o semaphore.o fpreg.o \
-	callback_srm.o callback_init.o srm_puts.o srm_printk.o
+	callback_srm.o srm_puts.o srm_printk.o
 
 lib.a: $(OBJS)
 	$(AR) rcs lib.a $(OBJS)

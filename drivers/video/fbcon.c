@@ -2384,7 +2384,7 @@ static int __init fbcon_show_logo( void )
  *  The console `switch' structure for the frame buffer based console
  */
  
-struct consw fb_con = {
+const struct consw fb_con = {
     con_startup: 	fbcon_startup, 
     con_init: 		fbcon_init,
     con_deinit: 	fbcon_deinit,

@@ -25,7 +25,7 @@
 
 static const char *version =
 	"daynaport.c: v0.02 1999-05-17 Alan Cox (Alan.Cox@linux.org) and others\n";
-static int version_printed = 0;
+static int version_printed;
 
 #include <linux/module.h>
 #include <linux/init.h>

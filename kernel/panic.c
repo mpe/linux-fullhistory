@@ -22,7 +22,7 @@ extern void unblank_console(void);
 
 int panic_timeout;
 
-struct notifier_block *panic_notifier_list = NULL;
+struct notifier_block *panic_notifier_list;
 
 static int __init panic_setup(char *str)
 {

@@ -178,7 +178,6 @@ int __init hydra_probe(struct net_device *dev)
 		    release_mem_region(base_addr, 0x20);
 		    continue;
 		}
-		strcpy(z->name, "Hydra Ethernet Card");
 
 		dev = init_etherdev(NULL, sizeof(struct hydra_private));
 

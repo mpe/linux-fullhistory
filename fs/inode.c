@@ -547,7 +547,7 @@ static void clean_inode(struct inode *inode)
  
 struct inode * get_empty_inode(void)
 {
-	static unsigned long last_ino = 0;
+	static unsigned long last_ino;
 	struct inode * inode;
 
 	inode = alloc_inode();

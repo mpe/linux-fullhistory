@@ -257,6 +257,8 @@ extern void update_mmu_cache(struct vm_area_struct * vma,
 #define module_map      vmalloc
 #define module_unmap    vfree
 
+#include <asm-generic/pgtable.h>
+
 #endif /* !__ASSEMBLY__ */
 
 /* Needs to be defined here and not in linux/mm.h, as it is arch dependent */

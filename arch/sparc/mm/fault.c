@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.116 2000/05/03 06:37:03 davem Exp $
+/* $Id: fault.c,v 1.117 2000/10/16 14:32:50 anton Exp $
  * fault.c:  Page fault handlers for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -200,9 +200,22 @@ asmlinkage void do_sparc_fault(struct pt_regs *regs, int text_fault, int write,
 	siginfo_t info;
 	int from_user = !(regs->psr & PSR_PS);
 
-	info.si_code = SEGV_MAPERR;
 	if(text_fault)
 		address = regs->pc;
+
+	/*
+	 * We fault-in kernel-space virtual memory on-demand. The
+	 * 'reference' page table is init_mm.pgd.
+	 *
+	 * NOTE! We MUST NOT take any locks for this case. We may
+	 * be in an interrupt or a critical region, and should
+	 * only copy the information from the master page table,
+	 * nothing more.
+	 */
+	if (!ARCH_SUN4C_SUN4 && address >= TASK_SIZE)
+		goto vmalloc_fault;
+
+	info.si_code = SEGV_MAPERR;
 
 	/*
 	 * If we're in an interrupt or have no user
@@ -271,6 +284,7 @@ good_area:
 bad_area:
 	up(&mm->mmap_sem);
 
+bad_area_nosemaphore:
 	/* User mode accesses just cause a SIGSEGV */
 	if(from_user) {
 #if 0
@@ -340,6 +354,35 @@ do_sigbus:
 	force_sig_info (SIGBUS, &info, tsk);
 	if (!from_user)
 		goto no_context;
+
+vmalloc_fault:
+	{
+		/*
+		 * Synchronize this task's top level page-table
+		 * with the 'reference' page table.
+		 */
+		int offset = pgd_index(address);
+		pgd_t *pgd, *pgd_k;
+		pmd_t *pmd, *pmd_k;
+
+		pgd = tsk->active_mm->pgd + offset;
+		pgd_k = init_mm.pgd + offset;
+
+		if (!pgd_present(*pgd)) {
+			if (!pgd_present(*pgd_k))
+				goto bad_area_nosemaphore;
+			pgd_set(pgd, *pgd_k);
+			return;
+		}
+
+		pmd = pmd_offset(pgd, address);
+		pmd_k = pmd_offset(pgd_k, address);
+
+		if (pmd_present(*pmd) || !pmd_present(*pmd_k))
+			goto bad_area_nosemaphore;
+		pmd_set(pmd, *pmd_k);
+		return;
+	}
 }
 
 asmlinkage void do_sun4c_fault(struct pt_regs *regs, int text_fault, int write,

@@ -1261,13 +1261,13 @@ static struct notifier_block nr_dev_notifier = {
 
 static struct net_device *dev_nr;
 
-void __init nr_proto_init(struct net_proto *pro)
+static int __init nr_proto_init(void)
 {
 	int i;
 
 	if ((dev_nr = kmalloc(nr_ndevs * sizeof(struct net_device), GFP_KERNEL)) == NULL) {
 		printk(KERN_ERR "NET/ROM: nr_proto_init - unable to allocate device structure\n");
-		return;
+		return -1;
 	}
 
 	memset(dev_nr, 0x00, nr_ndevs * sizeof(struct net_device));
@@ -1296,7 +1296,11 @@ void __init nr_proto_init(struct net_proto *pro)
 	proc_net_create("nr_neigh", 0, nr_neigh_get_info);
 	proc_net_create("nr_nodes", 0, nr_nodes_get_info);
 #endif	
+	return 0;
 }
+
+module_init(nr_proto_init);
+
 
 #ifdef MODULE
 EXPORT_NO_SYMBOLS;
@@ -1307,14 +1311,7 @@ MODULE_PARM_DESC(nr_ndevs, "number of NET/ROM devices");
 MODULE_AUTHOR("Jonathan Naylor G4KLX <g4klx@g4klx.demon.co.uk>");
 MODULE_DESCRIPTION("The amateur radio NET/ROM network and transport layer protocol");
 
-int init_module(void)
-{
-	nr_proto_init(NULL);
-
-	return 0;
-}
-
-void cleanup_module(void)
+static void nr_exit(void)
 {
 	int i;
 
@@ -1348,7 +1345,9 @@ void cleanup_module(void)
 
 	kfree(dev_nr);
 }
+module_exit(nr_exit);
+#endif /* MODULE */
 
-#endif
+
 
 #endif

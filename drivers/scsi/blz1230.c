@@ -95,7 +95,6 @@ int __init blz1230_esp_detect(Scsi_Host_Template *tpnt)
 					   sizeof(struct ESP_regs));
 			return 0; /* Bail out if address did not hold data */
 		}
-		strcpy(z->name, "Blizzard 1230 SCSI IV");
 
 		/* Do command transfer with programmed I/O */
 		esp->do_pio_cmds = 1;

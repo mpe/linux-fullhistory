@@ -1414,7 +1414,7 @@ init_dev_done:
 	if ((tty->driver.type == TTY_DRIVER_TYPE_SERIAL) &&
 	    (tty->driver.subtype == SERIAL_TYPE_CALLOUT) &&
 	    (tty->count == 1)) {
-		static int nr_warns = 0;
+		static int nr_warns;
 		if (nr_warns < 5) {
 			printk(KERN_WARNING "tty_io.c: "
 				"process %d (%s) used obsolete /dev/%s - "

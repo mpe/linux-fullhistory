@@ -35,7 +35,6 @@ void (*kd_mksound)(unsigned int hz, unsigned int ticks);
 /* console.c */
 
 struct console_font_op;
-struct consw;
 
 int vc_allocate(unsigned int console);
 int vc_cons_allocated(unsigned int console);

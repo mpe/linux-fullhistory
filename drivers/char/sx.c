@@ -309,16 +309,16 @@ static int sx_init_drivers(void);
 
 static struct tty_driver sx_driver, sx_callout_driver;
 
-static struct tty_struct * sx_table[SX_NPORTS] = { NULL, };
+static struct tty_struct * sx_table[SX_NPORTS];
 static struct termios ** sx_termios;
 static struct termios ** sx_termios_locked;
 
 struct sx_board boards[SX_NBOARDS];
 struct sx_port *sx_ports;
 int sx_refcount;
-int sx_initialized = 0;
-int sx_nports = 0;
-int sx_debug = 0;
+int sx_initialized;
+int sx_nports;
+int sx_debug;
 
 
 /* You can have the driver poll your card. 
@@ -330,7 +330,7 @@ int sx_debug = 0;
       everything will continue to work.... 
  */
 int sx_poll = 1;
-int sx_slowpoll = 0;
+int sx_slowpoll;
 
 /* The card limits the number of interrupts per second. 
    At 115k2 "100" should be sufficient. 
@@ -2077,7 +2077,7 @@ static int sx_init_board (struct sx_board *board)
 
 void printheader(void)
 {
-	static int header_printed = 0;
+	static int header_printed;
 
 	if (!header_printed) {
 		printk (KERN_INFO "Specialix SX driver "

@@ -74,8 +74,8 @@ struct raparms {
 				p_rawin;
 };
 
-static struct raparms *		raparml = NULL;
-static struct raparms *		raparm_cache = NULL;
+static struct raparms *		raparml;
+static struct raparms *		raparm_cache;
 
 /*
  * Look up one component of a pathname.
@@ -714,7 +714,7 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	}
 
 	if (err >= 0 && stable) {
-		static unsigned long	last_ino = 0;
+		static unsigned long	last_ino;
 		static kdev_t		last_dev = NODEV;
 
 		/*

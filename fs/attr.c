@@ -110,6 +110,9 @@ int notify_change(struct dentry * dentry, struct iattr * attr)
 	time_t now = CURRENT_TIME;
 	unsigned int ia_valid = attr->ia_valid;
 
+	if (!inode)
+		BUG();
+
 	attr->ia_ctime = now;
 	if (!(ia_valid & ATTR_ATIME_SET))
 		attr->ia_atime = now;
@@ -117,7 +120,7 @@ int notify_change(struct dentry * dentry, struct iattr * attr)
 		attr->ia_mtime = now;
 
 	lock_kernel();
-	if (inode && inode->i_op && inode->i_op->setattr) 
+	if (inode->i_op && inode->i_op->setattr) 
 		error = inode->i_op->setattr(dentry, attr);
 	else {
 		error = inode_change_ok(inode, attr);

@@ -5801,9 +5801,9 @@ static int smctr_wait_while_cbusy(struct net_device *dev)
 #ifdef MODULE
 
 static struct net_device* dev_smctr[SMCTR_MAX_ADAPTERS];
-static int io[SMCTR_MAX_ADAPTERS]        = { 0, 0 };
-static int irq[SMCTR_MAX_ADAPTERS]       = { 0, 0 };
-static int mem[SMCTR_MAX_ADAPTERS]       = { 0, 0 };
+static int io[SMCTR_MAX_ADAPTERS];
+static int irq[SMCTR_MAX_ADAPTERS];
+static int mem[SMCTR_MAX_ADAPTERS];
 
 MODULE_PARM(io,  "1-" __MODULE_STRING(SMCTR_MAX_ADAPTERS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(SMCTR_MAX_ADAPTERS) "i");

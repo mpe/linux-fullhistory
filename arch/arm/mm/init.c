@@ -383,27 +383,27 @@ static inline void reserve_node_zero(unsigned int bootmap_pfn, unsigned int boot
 	 * Register the kernel text and data with bootmem.
 	 * Note that this can only be in node 0.
 	 */
-	reserve_bootmem_node(0, __pa(&_stext), &_end - &_stext);
+	reserve_bootmem_node(NODE_DATA(0), __pa(&_stext), &_end - &_stext);
 
 #ifdef CONFIG_CPU_32
 	/*
 	 * Reserve the page tables.  These are already in use,
 	 * and can only be in node 0.
 	 */
-	reserve_bootmem_node(0, __pa(swapper_pg_dir),
+	reserve_bootmem_node(NODE_DATA(0), __pa(swapper_pg_dir),
 			     PTRS_PER_PGD * sizeof(void *));
 #else
 	/*
 	 * Stop this memory from being grabbed - its special DMA
 	 * memory that is required for the screen.
 	 */
-	reserve_bootmem_node(0, 0x02000000, 0x00080000);
+	reserve_bootmem_node(NODE_DATA(0), 0x02000000, 0x00080000);
 #endif
 	/*
 	 * And don't forget to reserve the allocator bitmap,
 	 * which will be freed later.
 	 */
-	reserve_bootmem_node(0, bootmap_pfn << PAGE_SHIFT,
+	reserve_bootmem_node(NODE_DATA(0), bootmap_pfn << PAGE_SHIFT,
 			     bootmap_pages << PAGE_SHIFT);
 }
 
@@ -416,7 +416,7 @@ static inline void free_bootmem_node_bank(int node, struct meminfo *mi)
 
 	for (bank = 0; bank < mi->nr_banks; bank++)
 		if (mi->bank[bank].node == node)
-			free_bootmem_node(node, mi->bank[bank].start,
+			free_bootmem_node(NODE_DATA(node), mi->bank[bank].start,
 					  mi->bank[bank].size);
 }
 
@@ -450,7 +450,7 @@ void __init bootmem_init(struct meminfo *mi)
 		/*
 		 * Initialise the bootmem allocator.
 		 */
-		init_bootmem_node(node, map_pg, np->start, np->end);
+		init_bootmem_node(NODE_DATA(node), map_pg, np->start, np->end);
 		free_bootmem_node_bank(node, mi);
 		map_pg += np->bootmap_pages;
 
@@ -465,7 +465,7 @@ void __init bootmem_init(struct meminfo *mi)
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	if (initrd_node >= 0)
-		reserve_bootmem_node(initrd_node, __pa(initrd_start),
+		reserve_bootmem_node(NODE_DATA(initrd_node), __pa(initrd_start),
 				     initrd_end - initrd_start);
 #endif
 
@@ -583,7 +583,7 @@ void __init mem_init(void)
 
 	/* this will put all unused low memory onto the freelists */
 	for (node = 0; node < numnodes; node++)
-		totalram_pages += free_all_bootmem_node(node);
+		totalram_pages += free_all_bootmem_node(NODE_DATA(node));
 
 	/*
 	 * Since our memory may not be contiguous, calculate the

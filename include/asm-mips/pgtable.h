@@ -714,6 +714,8 @@ extern inline void set_context(unsigned long val)
 		: : "r" (val));
 }
 
+#include <asm-generic/pgtable.h>
+
 #endif /* !defined (_LANGUAGE_ASSEMBLY) */
 
 #define io_remap_page_range remap_page_range

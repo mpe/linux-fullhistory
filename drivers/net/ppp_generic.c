@@ -709,7 +709,7 @@ static struct file_operations ppp_device_fops = {
 
 #define PPP_MAJOR	108
 
-static devfs_handle_t devfs_handle = NULL;
+static devfs_handle_t devfs_handle;
 
 /* Called at boot time if ppp is compiled into the kernel,
    or at module load time (from init_module) if compiled as a module. */

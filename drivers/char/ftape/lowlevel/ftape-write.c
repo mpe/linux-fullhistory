@@ -47,7 +47,7 @@
 
 /*      Local vars.
  */
-static int last_write_failed = 0;
+static int last_write_failed;
 
 void ftape_zap_write_buffers(void)
 {

@@ -1,7 +1,7 @@
 /*
  *	fs/bfs/file.c
  *	BFS file operations.
- *	Copyright (C) 1999 Tigran Aivazian <tigran@ocston.org>
+ *	Copyright (C) 1999,2000 Tigran Aivazian <tigran@veritas.com>
  */
 
 #include <linux/fs.h>
@@ -26,7 +26,7 @@ struct file_operations bfs_file_operations = {
 
 static int bfs_move_block(unsigned long from, unsigned long to, kdev_t dev)
 {
-	struct buffer_head *bh, *new = NULL;
+	struct buffer_head *bh, *new;
 
 	bh = bread(dev, from, BFS_BSIZE);
 	if (!bh)
@@ -56,11 +56,12 @@ static int bfs_move_blocks(kdev_t dev, unsigned long start, unsigned long end,
 static int bfs_get_block(struct inode * inode, long block, 
 	struct buffer_head * bh_result, int create)
 {
-	long phys, next_free_block;
+	long phys;
 	int err;
-	struct super_block *s = inode->i_sb;
+	struct super_block *sb = inode->i_sb;
+	struct buffer_head *sbh = sb->su_sbh;
 
-	if (block < 0 || block > s->su_blocks)
+	if (block < 0 || block > sb->su_blocks)
 		return -EIO;
 
 	phys = inode->iu_sblock + block;
@@ -90,24 +91,25 @@ static int bfs_get_block(struct inode * inode, long block,
 
 	/* if the last data block for this file is the last allocated block, we can
 	   extend the file trivially, without moving it anywhere */
-	if (inode->iu_eblock == s->su_lf_eblk) {
+	if (inode->iu_eblock == sb->su_lf_eblk) {
 		dprintf("c=%d, b=%08lx, phys=%08lx (simple extension)\n", 
 				create, block, phys);
 		bh_result->b_dev = inode->i_dev;
 		bh_result->b_blocknr = phys;
 		bh_result->b_state |= (1UL << BH_Mapped);
-		s->su_lf_eblk = inode->iu_eblock = inode->iu_sblock + block;
+		sb->su_freeb -= phys - inode->iu_eblock;
+		sb->su_lf_eblk = inode->iu_eblock = phys;
 		mark_inode_dirty(inode);
-		mark_buffer_dirty(s->su_sbh);
+		mark_buffer_dirty(sbh);
 		err = 0;
 		goto out;
 	}
 
 	/* Ok, we have to move this entire file to the next free block */
-	next_free_block = s->su_lf_eblk + 1;
+	phys = sb->su_lf_eblk + 1;
 	if (inode->iu_sblock) { /* if data starts on block 0 then there is no data */
 		err = bfs_move_blocks(inode->i_dev, inode->iu_sblock, 
-				inode->iu_eblock, next_free_block);
+				inode->iu_eblock, phys);
 		if (err) {
 			dprintf("failed to move ino=%08lx -> fs corruption\n", inode->i_ino);
 			goto out;
@@ -115,12 +117,18 @@ static int bfs_get_block(struct inode * inode, long block,
 	} else
 		err = 0;
 
-	inode->iu_sblock = next_free_block;
-	s->su_lf_eblk = inode->iu_eblock = next_free_block + block;
+	dprintf("c=%d, b=%08lx, phys=%08lx (moved)\n", create, block, phys);
+	inode->iu_sblock = phys;
+	phys += block;
+	sb->su_lf_eblk = inode->iu_eblock = phys;
+
+	/* this assumes nothing can write the inode back while we are here
+	 * and thus update inode->i_blocks! (XXX)*/
+	sb->su_freeb -= inode->iu_eblock - inode->iu_sblock + 1 - inode->i_blocks;
 	mark_inode_dirty(inode);
-	mark_buffer_dirty(s->su_sbh);
+	mark_buffer_dirty(sbh);
 	bh_result->b_dev = inode->i_dev;
-	bh_result->b_blocknr = inode->iu_sblock + block;
+	bh_result->b_blocknr = phys;
 	bh_result->b_state |= (1UL << BH_Mapped);
 out:
 	unlock_kernel();
@@ -153,8 +161,7 @@ struct address_space_operations bfs_aops = {
 	sync_page:	block_sync_page,
 	prepare_write:	bfs_prepare_write,
 	commit_write:	generic_commit_write,
-	bmap:		bfs_bmap
+	bmap:		bfs_bmap,
 };
 
-struct inode_operations bfs_file_inops = {
-};
+struct inode_operations bfs_file_inops;

@@ -116,7 +116,7 @@
 
 static struct mtconfiginfo qic02_tape_dynconf = 	/* user settable */
     { 0, 0, BOGUS_IRQ, 0, 0, TPQD_DEFAULT_FLAGS, };
-static struct qic02_ccb qic02_tape_ccb = { 0, };	/* private stuff */
+static struct qic02_ccb qic02_tape_ccb;	/* private stuff */
 
 #else
 
@@ -127,7 +127,7 @@ unsigned long qic02_tape_debug = TPQD_DEFAULT_FLAGS;
 # endif
 #endif /* CONFIG_QIC02_DYNCONF */
 
-static volatile int ctlbits = 0;     /* control reg bits for tape interface */
+static volatile int ctlbits;     /* control reg bits for tape interface */
 
 static wait_queue_head_t qic02_tape_transfer; /* sync rw with interrupts */
 
@@ -149,10 +149,10 @@ static 		flag status_zombie = YES; /* it's `zombie' until irq/dma allocated */
 static volatile flag status_bytes_wr = NO;	/* write FM at close or not */
 static volatile flag status_bytes_rd = NO;	/* (rd|wr) used for rewinding */
 
-static volatile unsigned long status_cmd_pending = 0; /* cmd in progress */
+static volatile unsigned long status_cmd_pending; /* cmd in progress */
 static volatile flag status_expect_int = NO;	/* ready for interrupts */
 static volatile flag status_timer_on = NO; 	/* using time-out */
-static volatile int  status_error = 0;		/* int handler may detect error */
+static volatile int  status_error;		/* int handler may detect error */
 static volatile flag status_eof_detected = NO;	/* end of file */
 static volatile flag status_eom_detected = NO;	/* end of recorded media */
 static volatile flag status_eot_detected = NO;	/* end of tape */
@@ -161,7 +161,7 @@ static volatile flag doing_write = NO;
 
 static volatile unsigned long dma_bytes_todo;
 static volatile unsigned long dma_bytes_done;
-static volatile unsigned dma_mode = 0;		/* !=0 also means DMA in use */
+static volatile unsigned dma_mode;		/* !=0 also means DMA in use */
 static 		flag need_rewind = YES;
 
 static kdev_t current_tape_dev;
@@ -208,7 +208,7 @@ static void qic02_release_resources(void);
  * must ensure that a large enough buffer is passed to the kernel, in order
  * to reduce tape repositioning wear and tear.
  */
-static unsigned long buffaddr = 0;	/* physical address of buffer */
+static unsigned long buffaddr;	/* physical address of buffer */
 
 /* This translates minor numbers to the corresponding recording format: */
 static const char *format_names[] = {

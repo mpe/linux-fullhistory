@@ -41,14 +41,14 @@
 /*      Global vars.
  */
 
-__u8 *zft_deblock_buf = NULL;
-__u8 *zft_hseg_buf    = NULL;
+__u8 *zft_deblock_buf;
+__u8 *zft_hseg_buf;
 int zft_deblock_segment = -1;
 zft_status_enum zft_io_state = zft_idle;
-int zft_header_changed         = 0;
-int zft_bad_sector_map_changed = 0;
-int zft_qic113 = 0; /* conform to old specs. and old zftape */
-int zft_use_compression        = 0;
+int zft_header_changed;
+int zft_bad_sector_map_changed;
+int zft_qic113; /* conform to old specs. and old zftape */
+int zft_use_compression;
 zft_position zft_pos = {
 	-1, /* seg_pos */
 	0,  /* seg_byte_pos */
@@ -56,10 +56,10 @@ zft_position zft_pos = {
 	0   /* volume_pos */
 };
 unsigned int zft_blk_sz = CONFIG_ZFT_DFLT_BLK_SZ;
-__s64 zft_capacity      = 0;
+__s64 zft_capacity;
 
-unsigned int zft_written_segments = 0;
-int zft_label_changed = 0;
+unsigned int zft_written_segments;
+int zft_label_changed;
 
 /*      Local vars.
  */
@@ -165,8 +165,8 @@ int zft_calc_seg_byte_coord(int *seg_byte_pos, __s64 tape_pos)
  * Also, it might be in the future that the bad sector map gets
  * changed.  -> reset the cache
  */
-static int seg_pos    = 0;
-static __s64 tape_pos = 0;
+static int seg_pos;
+static __s64 tape_pos;
 
 __s64 zft_get_capacity(void)
 {

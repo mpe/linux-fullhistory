@@ -767,6 +767,8 @@ extern inline void set_context(unsigned long val)
 		: : "r" (val));
 }
 
+#include <asm-generic/pgtable.h>
+
 #endif /* !defined (_LANGUAGE_ASSEMBLY) */
 
 #endif /* _ASM_PGTABLE_H */

@@ -369,9 +369,9 @@ static struct net_device dev_ne3210[MAX_NE3210_CARDS] = {
 	},
 };
 
-static int io[MAX_NE3210_CARDS] = { 0, };
-static int irq[MAX_NE3210_CARDS]  = { 0, };
-static int mem[MAX_NE3210_CARDS] = { 0, };
+static int io[MAX_NE3210_CARDS];
+static int irq[MAX_NE3210_CARDS];
+static int mem[MAX_NE3210_CARDS];
 
 MODULE_PARM(io, "1-" __MODULE_STRING(MAX_NE3210_CARDS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_NE3210_CARDS) "i");

@@ -43,18 +43,18 @@
 
 /*      Global vars.
  */
-int ft_nr_buffers = 0;
-buffer_struct *ft_buffer[FT_MAX_NR_BUFFERS] = {NULL, };
+int ft_nr_buffers;
+buffer_struct *ft_buffer[FT_MAX_NR_BUFFERS];
 static volatile int ft_head;
 static volatile int ft_tail;	/* not volatile but need same type as head */
 int fdc_setup_error;
 location_record ft_location = {-1, 0};
-volatile int ftape_tape_running = 0;
+volatile int ftape_tape_running;
 
 /*      Local vars.
  */
-static int overrun_count_offset = 0;
-static int inhibit_correction = 0;
+static int overrun_count_offset;
+static int inhibit_correction;
 
 /*  maxmimal allowed overshoot when fast seeking
  */

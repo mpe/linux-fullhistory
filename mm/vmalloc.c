@@ -34,8 +34,8 @@ static inline void free_area_pte(pmd_t * pmd, unsigned long address, unsigned lo
 	if (end > PMD_SIZE)
 		end = PMD_SIZE;
 	do {
-		pte_t page = *pte;
-		pte_clear(pte);
+		pte_t page;
+		page = ptep_get_and_clear(pte);
 		address += PAGE_SIZE;
 		pte++;
 		if (pte_none(page))

@@ -50,10 +50,10 @@
 
 /*      Global vars.
  */
-int ftape_motor = 0;
+int ftape_motor;
 volatile int ftape_current_cylinder = -1;
 volatile fdc_mode_enum fdc_mode = fdc_idle;
-fdc_config_info fdc = {0};
+fdc_config_info fdc;
 DECLARE_WAIT_QUEUE_HEAD(ftape_wait_intr);
 
 unsigned int ft_fdc_base       = CONFIG_FT_FDC_BASE;
@@ -73,15 +73,15 @@ volatile __u8 fdc_head;		/* FDC head from sector id */
 volatile __u8 fdc_cyl;		/* FDC track from sector id */
 volatile __u8 fdc_sect;		/* FDC sector from sector id */
 static int fdc_data_rate = 500;	/* data rate (Kbps) */
-static int fdc_rate_code = 0;	/* data rate code (0 == 500 Kbps) */
+static int fdc_rate_code;	/* data rate code (0 == 500 Kbps) */
 static int fdc_seek_rate = 2;	/* step rate (msec) */
 static void (*do_ftape) (void);
 static int fdc_fifo_state;	/* original fifo setting - fifo enabled */
 static int fdc_fifo_thr;	/* original fifo setting - threshold */
 static int fdc_lock_state;	/* original lock setting - locked */
-static int fdc_fifo_locked = 0;	/* has fifo && lock set ? */
-static __u8 fdc_precomp = 0;	/* default precomp. value (nsec) */
-static __u8 fdc_prec_code = 0;	/* fdc precomp. select code */
+static int fdc_fifo_locked;	/* has fifo && lock set ? */
+static __u8 fdc_precomp;	/* default precomp. value (nsec) */
+static __u8 fdc_prec_code;	/* fdc precomp. select code */
 
 static char ftape_id[] = "ftape";  /* used by request irq and free irq */
 
@@ -188,7 +188,7 @@ int fdc_command(const __u8 * cmd_data, int cmd_len)
 	int count = cmd_len;
 	int retry = 0;
 #ifdef TESTING
-	static unsigned int last_time = 0;
+	static unsigned int last_time;
 	unsigned int time;
 #endif
 	TRACE_FUN(ft_t_any);
@@ -387,7 +387,7 @@ int fdc_interrupt_wait(unsigned int time)
 {
 	DECLARE_WAITQUEUE(wait,current);
 	sigset_t old_sigmask;	
-	static int resetting = 0;
+	static int resetting;
 	long timeout;
 
 	TRACE_FUN(ft_t_fdc_dma);
@@ -868,7 +868,7 @@ int fdc_recalibrate(void)
 	TRACE_EXIT 0;
 }
 
-static int perpend_mode = 0; /* set if fdc is in perpendicular mode */
+static int perpend_mode; /* set if fdc is in perpendicular mode */
 
 static int perpend_off(void)
 {
@@ -1113,7 +1113,7 @@ static int fdc_fifo_enable(void)
 
 /*   Determine fd controller type 
  */
-static __u8 fdc_save_state[2] = {0, 0};
+static __u8 fdc_save_state[2];
 
 int fdc_probe(void)
 {
@@ -1283,7 +1283,7 @@ static int fdc_config_regs(unsigned int fdc_base,
 
 static int fdc_config(void)
 {
-	static int already_done = 0;
+	static int already_done;
 	TRACE_FUN(ft_t_any);
 
 	if (already_done) {

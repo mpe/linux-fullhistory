@@ -47,7 +47,7 @@
 /*
  *  first segment of the new buffer
  */
-static int switch_segment = 0;
+static int switch_segment;
 
 /*
  *  at most 256 segments fit into one 32 kb buffer.  Even TR-1 cartridges have

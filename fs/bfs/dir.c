@@ -1,7 +1,7 @@
 /*
  *	fs/bfs/dir.c
  *	BFS directory operations.
- *	Copyright (C) 1999  Tigran Aivazian <tigran@ocston.org>
+ *	Copyright (C) 1999,2000  Tigran Aivazian <tigran@veritas.com>
  */
 
 #include <linux/sched.h>

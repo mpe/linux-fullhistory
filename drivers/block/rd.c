@@ -99,7 +99,7 @@ static unsigned long rd_length[NUM_RAMDISKS];	/* Size of RAM disks in bytes   */
 static int rd_hardsec[NUM_RAMDISKS];		/* Size of real blocks in bytes */
 static int rd_blocksizes[NUM_RAMDISKS];		/* Size of 1024 byte blocks :)  */
 static int rd_kbsize[NUM_RAMDISKS];		/* Size in blocks of 1024 bytes */
-static devfs_handle_t devfs_handle = NULL;
+static devfs_handle_t devfs_handle;
 static struct inode *rd_inode[NUM_RAMDISKS];		/* Protected device inodes */
 
 /*
@@ -778,11 +778,11 @@ typedef unsigned long  ulg;
 static uch *inbuf;
 static uch *window;
 
-static unsigned insize = 0;  /* valid bytes in inbuf */
-static unsigned inptr = 0;   /* index of next byte to be processed in inbuf */
-static unsigned outcnt = 0;  /* bytes in output buffer */
-static int exit_code = 0;
-static long bytes_out = 0;
+static unsigned insize;  /* valid bytes in inbuf */
+static unsigned inptr;   /* index of next byte to be processed in inbuf */
+static unsigned outcnt;  /* bytes in output buffer */
+static int exit_code;
+static long bytes_out;
 static struct file *crd_infp, *crd_outfp;
 
 #define get_byte()  (inptr < insize ? inbuf[inptr++] : fill_inbuf())

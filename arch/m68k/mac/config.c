@@ -127,7 +127,6 @@ void mac_waitbut (void)
 }
 #endif
 
-extern struct consw fb_con;
 extern struct fb_info *mac_fb_init(long *);
 
 extern void mac_default_handler(int, void *, struct pt_regs *);

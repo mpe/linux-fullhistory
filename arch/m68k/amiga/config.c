@@ -20,7 +20,9 @@
 #include <linux/tty.h>
 #include <linux/console.h>
 #include <linux/init.h>
+#ifdef CONFIG_ZORRO
 #include <linux/zorro.h>
+#endif
 
 #include <asm/bootinfo.h>
 #include <asm/setup.h>
@@ -161,6 +163,7 @@ int amiga_parse_bootinfo(const struct bi_record *record)
 	    break;
 
 	case BI_AMIGA_AUTOCON:
+#ifdef CONFIG_ZORRO
 	    if (zorro_num_autocon < ZORRO_NUM_AUTO) {
 		const struct ConfigDev *cd = (struct ConfigDev *)data;
 		struct zorro_dev *dev = &zorro_autocon[zorro_num_autocon++];
@@ -171,6 +174,7 @@ int amiga_parse_bootinfo(const struct bi_record *record)
 		dev->resource.end = dev->resource.start+cd->cd_BoardSize-1;
 	    } else
 		printk("amiga_parse_bootinfo: too many AutoConfig devices\n");
+#endif
 	    break;
 
 	case BI_AMIGA_SERPER:
@@ -997,11 +1001,13 @@ static int amiga_get_hardware_list(char *buffer)
     AMIGAHW_ANNOUNCE(ALICE_NTSC, "NTSC Alice 8374");
     AMIGAHW_ANNOUNCE(MAGIC_REKICK, "Magic Hard Rekick");
     AMIGAHW_ANNOUNCE(PCMCIA, "PCMCIA Slot");
+#ifdef CONFIG_ZORRO
     if (AMIGAHW_PRESENT(ZORRO))
 	len += sprintf(buffer+len, "\tZorro II%s AutoConfig: %d Expansion "
 				   "Device%s\n",
 		       AMIGAHW_PRESENT(ZORRO3) ? "I" : "",
 		       zorro_num_autocon, zorro_num_autocon == 1 ? "" : "s");
+#endif
 
 #undef AMIGAHW_ANNOUNCE
 

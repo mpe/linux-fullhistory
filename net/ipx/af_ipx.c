@@ -2387,9 +2387,8 @@ static unsigned char ipx_snap_id[5] = { 0x0, 0x0, 0x0, 0x81, 0x37 };
 
 
 
-/* Called by protocols.c on kernel start up */
 
-void ipx_proto_init(struct net_proto *pro)
+static int __init ipx_init(void)
 {
 	(void) sock_register(&ipx_family_ops);
 
@@ -2415,7 +2414,9 @@ void ipx_proto_init(struct net_proto *pro)
 
 	printk(KERN_INFO "NET4: Linux IPX 0.38 for NET4.0\n");
 	printk(KERN_INFO "IPX Portions Copyright (c) 1995 Caldera, Inc.\n");
+	return 0;
 }
+module_init(ipx_init);
 
 /* Higher layers need this info to prep tx pkts */
 int ipx_if_offset(unsigned long ipx_net_number)
@@ -2434,7 +2435,6 @@ EXPORT_SYMBOL(ipx_remove_socket);
 EXPORT_SYMBOL(ipx_register_spx);
 EXPORT_SYMBOL(ipx_unregister_spx);
 
-#ifdef MODULE
 /* Note on MOD_{INC,DEC}_USE_COUNT:
  *
  * Use counts are incremented/decremented when
@@ -2448,6 +2448,7 @@ EXPORT_SYMBOL(ipx_unregister_spx);
  * sockets be closed from user space.
  */
 
+#ifdef MODULE
 static void ipx_proto_finito(void)
 {
 	ipx_interface	*ifc;
@@ -2486,18 +2487,7 @@ static void ipx_proto_finito(void)
 
 	return;
 }
-
-int init_module(void)
-{
-	ipx_proto_init(NULL);
-	return (0);
-}
-
-void cleanup_module(void)
-{
-	ipx_proto_finito();
-	return;
-}
-
+module_exit(ipx_proto_finito);
 #endif /* MODULE */
+
 #endif /* CONFIG_IPX || CONFIG_IPX_MODULE */

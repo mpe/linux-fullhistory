@@ -8,7 +8,7 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
-#include <linux/zorro.h>
+#include <linux/ioport.h>
 #include <asm/amigahw.h>
 
 struct chip_desc {

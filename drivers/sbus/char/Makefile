@@ -36,7 +36,7 @@ obj-$(CONFIG_SUN_AURORA)		+= aurora.o
 obj-$(CONFIG_TADPOLE_TS102_UCTRL)	+= uctrl.o
 obj-$(CONFIG_SUN_JSFLASH)		+= jsflash.o
 
-O_OBJS	:= $(obj-y)
+O_OBJS	+= $(obj-y)
 M_OBJS	:= $(obj-m)
 
 include $(TOPDIR)/Rules.make

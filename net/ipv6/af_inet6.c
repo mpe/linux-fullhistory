@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.58 2000/09/18 05:59:48 davem Exp $
+ *	$Id: af_inet6.c,v 1.59 2000/10/15 01:34:45 davem Exp $
  *
  * 	Fixes:
  * 	Hideaki YOSHIFUJI	:	sin6_scope_id support
@@ -502,11 +502,7 @@ extern void ipv6_sysctl_register(void);
 extern void ipv6_sysctl_unregister(void);
 #endif
 
-#ifdef MODULE
-int init_module(void)
-#else
-void __init inet6_proto_init(struct net_proto *pro)
-#endif
+static int __init inet6_init(void)
 {
 	struct sk_buff *dummy_skb;
 	int err;
@@ -523,11 +519,7 @@ void __init inet6_proto_init(struct net_proto *pro)
 	if (sizeof(struct inet6_skb_parm) > sizeof(dummy_skb->cb))
 	{
 		printk(KERN_CRIT "inet6_proto_init: size fault\n");
-#ifdef MODULE
 		return -EINVAL;
-#else
-		return;
-#endif
 	}
 
 	/*
@@ -577,11 +569,7 @@ void __init inet6_proto_init(struct net_proto *pro)
 	/* Now the userspace is allowed to create INET6 sockets. */
 	(void) sock_register(&inet6_family_ops);
 	
-#ifdef MODULE
 	return 0;
-#else
-	return;
-#endif
 
 #ifdef CONFIG_PROC_FS
 proc_snmp6_fail:
@@ -603,15 +591,13 @@ icmp_fail:
 #if defined(MODULE) && defined(CONFIG_SYSCTL)
 	ipv6_sysctl_unregister();
 #endif
-#ifdef MODULE
 	return err;
-#else
-	return;
-#endif
 }
+module_init(inet6_init);
+
 
 #ifdef MODULE
-void cleanup_module(void)
+static void inet6_exit(void)
 {
 	/* First of all disallow new sockets creation. */
 	sock_unregister(PF_INET6);
@@ -636,4 +622,5 @@ void cleanup_module(void)
 	ipv6_sysctl_unregister();	
 #endif
 }
-#endif	/* MODULE */
+module_exit(inet6_exit);
+#endif /* MODULE */

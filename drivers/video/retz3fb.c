@@ -1391,7 +1391,6 @@ int __init retz3fb_init(void)
 			release_mem_region(board_addr, 0x00c00000);
 			continue;
 		}
-		strcpy(z->name, "Retina Z3 Graphics ");
 		if (!(zinfo = kmalloc(sizeof(struct retz3_fb_info),
 				      GFP_KERNEL)))
 			return -ENOMEM;

@@ -463,12 +463,12 @@ static u_char de1xx_irq[] __initdata = {2,3,4,5,7,9,0};
 static u_char de2xx_irq[] __initdata = {5,9,10,11,15,0};
 static u_char de422_irq[] __initdata = {5,9,10,11,0};
 static u_char *depca_irq;
-static int    autoprobed = 0, loading_module = 0;
+static int    autoprobed, loading_module;
 #endif /* MODULE */
 
 static char   name[DEPCA_STRLEN];
-static int    num_depcas = 0, num_eth = 0;
-static int    mem=0;                       /* For loadable module assignment
+static int    num_depcas, num_eth;
+static int    mem;                       /* For loadable module assignment
                                               use insmod mem=0x????? .... */
 static char   *adapter_name = '\0';        /* If no PROM when loadable module
 					      use insmod adapter_name=DE??? ...
@@ -908,11 +908,11 @@ static void depca_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 	/* Any resources available? */
 	if ((TX_BUFFS_AVAIL >= 0) && netif_queue_stopped(dev)) {
 		netif_wake_queue (dev);
-
-		/* Unmask the DEPCA board interrupts and turn off the LED */
-		nicsr = (nicsr & ~IM & ~LED);
-		outb (nicsr, DEPCA_NICSR);
 	}
+
+	/* Unmask the DEPCA board interrupts and turn off the LED */
+	nicsr = (nicsr & ~IM & ~LED);
+	outb (nicsr, DEPCA_NICSR);
 
 	spin_unlock (&lp->lock);
 }

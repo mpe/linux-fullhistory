@@ -39,7 +39,7 @@
 #endif
 #include <asm/mmu_context.h>
 
-static unsigned long totalram_pages = 0;
+static unsigned long totalram_pages;
 
 extern void prom_fixup_mem_map(unsigned long start, unsigned long end);
 extern void prom_free_prom_memory(void);

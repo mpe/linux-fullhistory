@@ -74,7 +74,7 @@ static char *driver_name = "nsc-ircc";
 
 /* Module parameters */
 static int qos_mtt_bits = 0x07;  /* 1 ms or more */
-static int dongle_id = 0;
+static int dongle_id;
 
 /* Use BIOS settions by default, but user may supply module parameters */
 static unsigned int io[]  = { ~0, ~0, ~0, ~0 };

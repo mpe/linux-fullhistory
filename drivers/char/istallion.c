@@ -142,7 +142,7 @@ static int	stli_nrbrds = sizeof(stli_brdconf) / sizeof(stlconf_t);
  */
 #define	STLI_EISAPROBE	0
 
-static devfs_handle_t devfs_handle = NULL;
+static devfs_handle_t devfs_handle;
 
 /*****************************************************************************/
 
@@ -189,7 +189,7 @@ static int			stli_refcount;
  *	swapping!). All ports will share one buffer - since if the system
  *	is already swapping a shared buffer won't make things any worse.
  */
-static char			*stli_tmpwritebuf = (char *) NULL;
+static char			*stli_tmpwritebuf;
 static DECLARE_MUTEX(stli_tmpwritesem);
 
 #define	STLI_TXBUFSIZE		4096
@@ -201,10 +201,10 @@ static DECLARE_MUTEX(stli_tmpwritesem);
  *	with a large memcpy. Just use 1 buffer for all ports, since its
  *	use it is only need for short periods of time by each port.
  */
-static char			*stli_txcookbuf = (char *) NULL;
-static int			stli_txcooksize = 0;
-static int			stli_txcookrealsize = 0;
-static struct tty_struct	*stli_txcooktty = (struct tty_struct *) NULL;
+static char			*stli_txcookbuf;
+static int			stli_txcooksize;
+static int			stli_txcookrealsize;
+static struct tty_struct	*stli_txcooktty;
 
 /*
  *	Define a local default termios struct. All ports will be created
@@ -234,7 +234,7 @@ static stliport_t	stli_dummyport;
 
 static stlibrd_t	*stli_brds[STL_MAXBRDS];
 
-static int		stli_shared = 0;
+static int		stli_shared;
 
 /*
  *	Per board state flags. Used with the state field of the board struct.
@@ -796,7 +796,7 @@ static struct timer_list	stli_timerlist = {
 	function: stli_poll
 };
 
-static int	stli_timeron = 0;
+static int	stli_timeron;
 
 /*
  *	Define the calculation for the timeout routine.

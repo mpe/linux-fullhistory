@@ -168,7 +168,6 @@ static int __init ariadne_probe(void)
 	    release_mem_region(base_addr, sizeof(struct Am79C960));
 	    continue;
 	}
-	strcpy(z->name, "Ariadne Ethernet Card and Parallel Ports");
 
 	dev = init_etherdev(NULL, sizeof(struct ariadne_private));
 

@@ -90,11 +90,14 @@ static struct packet_type p8022_packet_type =
 EXPORT_SYMBOL(register_8022_client);
 EXPORT_SYMBOL(unregister_8022_client);
 
-void __init p8022_proto_init(struct net_proto *pro)
+static int __init p8022_init(void)
 {
 	p8022_packet_type.type=htons(ETH_P_802_2);
 	dev_add_pack(&p8022_packet_type);
+	return 0;
 }
+
+module_init(p8022_init);
 
 struct datalink_proto *register_8022_client(unsigned char type, int (*rcvfunc)(struct sk_buff *, struct net_device *, struct packet_type *))
 {

@@ -152,7 +152,7 @@ spinlock_t sound_loader_lock = SPIN_LOCK_UNLOCKED;
  *	list. Acquires locks as needed
  */
 
-static devfs_handle_t devfs_handle = NULL;
+static devfs_handle_t devfs_handle;
  
 static int sound_insert_unit(struct sound_unit **list, struct file_operations *fops, int index, int low, int top, const char *name, umode_t mode)
 {

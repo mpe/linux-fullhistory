@@ -80,7 +80,7 @@ static int max_loop = 8;
 static struct loop_device *loop_dev;
 static int *loop_sizes;
 static int *loop_blksizes;
-static devfs_handle_t devfs_handle = NULL;      /*  For the directory        */
+static devfs_handle_t devfs_handle;      /*  For the directory */
 
 #define FALSE 0
 #define TRUE (!FALSE)

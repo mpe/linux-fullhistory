@@ -60,7 +60,7 @@ extern asmlinkage long sys_setsid(void);
 # define dprintk(x...) do { } while(0)
 #endif
 
-static mdk_personality_t *pers[MAX_PERSONALITY] = {NULL, };
+static mdk_personality_t *pers[MAX_PERSONALITY];
 
 /*
  * Current RAID-1,4,5 parallel reconstruction 'guaranteed speed limit'
@@ -105,12 +105,12 @@ struct hd_struct md_hd_struct[MAX_MD_DEVS];
 static int md_blocksizes[MAX_MD_DEVS];
 static int md_hardsect_sizes[MAX_MD_DEVS];
 static int md_maxreadahead[MAX_MD_DEVS];
-static mdk_thread_t *md_recovery_thread = NULL;
+static mdk_thread_t *md_recovery_thread;
 
-int md_size[MAX_MD_DEVS] = {0, };
+int md_size[MAX_MD_DEVS];
 
 extern struct block_device_operations md_fops;
-static devfs_handle_t devfs_handle = NULL;
+static devfs_handle_t devfs_handle;
 
 static struct gendisk md_gendisk=
 {
@@ -136,7 +136,7 @@ static MD_LIST_HEAD(all_mddevs);
  * one! Eg. HSM uses several sub-devices to implement Logical
  * Volumes. All these sub-devices map to the same mddev.
  */
-dev_mapping_t mddev_map [MAX_MD_DEVS] = { {NULL, 0}, };
+dev_mapping_t mddev_map[MAX_MD_DEVS];
 
 void add_mddev_mapping (mddev_t * mddev, kdev_t dev, void *data)
 {

@@ -154,8 +154,6 @@ extern void x25_destroy_socket(struct sock *);
 extern int  x25_rx_call_request(struct sk_buff *, struct x25_neigh *, unsigned int);
 extern void x25_kill_by_neigh(struct x25_neigh *);
 
-#include <net/x25call.h>
-
 /* x25_dev.c */
 extern void x25_send_frame(struct sk_buff *, struct x25_neigh *);
 extern int  x25_lapb_receive_frame(struct sk_buff *, struct net_device *, struct packet_type *);

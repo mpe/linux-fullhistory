@@ -163,12 +163,12 @@
 
 static const byte ide_hwif_to_major[] = { IDE0_MAJOR, IDE1_MAJOR, IDE2_MAJOR, IDE3_MAJOR, IDE4_MAJOR, IDE5_MAJOR, IDE6_MAJOR, IDE7_MAJOR, IDE8_MAJOR, IDE9_MAJOR };
 
-static int	idebus_parameter = 0; /* holds the "idebus=" parameter */
-static int	system_bus_speed = 0; /* holds what we think is VESA/PCI bus speed */
+static int	idebus_parameter; /* holds the "idebus=" parameter */
+static int	system_bus_speed; /* holds what we think is VESA/PCI bus speed */
 static int	initializing;     /* set while initializing built-in drivers */
 
 #ifdef CONFIG_BLK_DEV_IDEPCI
-static int	ide_scan_direction = 0;	/* THIS was formerly 2.2.x pci=reverse */
+static int	ide_scan_direction;	/* THIS was formerly 2.2.x pci=reverse */
 #endif /* CONFIG_BLK_DEV_IDEPCI */
 
 #if defined(__mc68000__) || defined(CONFIG_APUS)
@@ -176,14 +176,14 @@ static int	ide_scan_direction = 0;	/* THIS was formerly 2.2.x pci=reverse */
  * ide_lock is used by the Atari code to obtain access to the IDE interrupt,
  * which is shared between several drivers.
  */
-static int	ide_lock = 0;
+static int	ide_lock;
 #endif /* __mc68000__ || CONFIG_APUS */
 
 /*
  * ide_modules keeps track of the available IDE chipset/probe/driver modules.
  */
-ide_module_t *ide_modules	= NULL;
-ide_module_t *ide_probe		= NULL;
+ide_module_t *ide_modules;
+ide_module_t *ide_probe;
 
 /*
  * This is declared extern in ide.h, for access by other IDE modules:
@@ -1509,7 +1509,7 @@ static void unexpected_intr (int irq, ide_hwgroup_t *hwgroup)
 			stat = IN_BYTE(hwif->io_ports[IDE_STATUS_OFFSET]);
 			if (!OK_STAT(stat, READY_STAT, BAD_STAT)) {
 				/* Try to not flood the console with msgs */
-				static unsigned long last_msgtime = 0, count = 0;
+				static unsigned long last_msgtime, count;
 				++count;
 				if (0 < (signed long)(jiffies - (last_msgtime + HZ))) {
 					last_msgtime = jiffies;
@@ -3499,7 +3499,7 @@ EXPORT_SYMBOL(ide_spin_wait_hwgroup);
 /*
  * Probe module
  */
-devfs_handle_t ide_devfs_handle = NULL;
+devfs_handle_t ide_devfs_handle;
 
 EXPORT_SYMBOL(ide_probe);
 EXPORT_SYMBOL(drive_is_flashcard);
@@ -3561,7 +3561,7 @@ EXPORT_SYMBOL(system_bus_clock);
  */
 int __init ide_init (void)
 {
-	static char banner_printed = 0;
+	static char banner_printed;
 	int i;
 
 	if (!banner_printed) {

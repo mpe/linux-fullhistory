@@ -70,9 +70,8 @@
 #define NR_PRIMARY 8	/* maximum number of primary ports */
 
 /* The following variables can be set by giving module options */
-static int irq[NR_PRIMARY] = {0,0,0,0,0,0,0,0};	/* IRQ for each base port */
-static unsigned int divisor[NR_PRIMARY] = {0,0,0,0,0,0,0,0};
-	/* custom divisor for each port */
+static int irq[NR_PRIMARY];	/* IRQ for each base port */
+static unsigned int divisor[NR_PRIMARY]; /* custom divisor for each port */
 static unsigned int dma = ESP_DMA_CHANNEL; /* DMA channel */
 static unsigned int rx_trigger = ESP_RX_TRIGGER;
 static unsigned int tx_trigger = ESP_TX_TRIGGER;
@@ -168,7 +167,7 @@ static struct termios *serial_termios_locked[NR_PORTS];
  * buffer across all the serial ports, since it significantly saves
  * memory if large numbers of serial ports are open.
  */
-static unsigned char *tmp_buf = 0;
+static unsigned char *tmp_buf;
 static DECLARE_MUTEX(tmp_buf_sem);
 
 static inline int serial_paranoia_check(struct esp_struct *info,

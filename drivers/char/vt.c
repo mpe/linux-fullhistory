@@ -36,7 +36,7 @@
 #include <asm/vc_ioctl.h>
 #endif /* CONFIG_FB_COMPAT_XPMAC */
 
-char vt_dont_switch = 0;
+char vt_dont_switch;
 extern struct tty_driver console_driver;
 
 #define VT_IS_IN_USE(i)	(console_driver.table[i] && console_driver.table[i]->count)

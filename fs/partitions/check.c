@@ -338,8 +338,8 @@ static void devfs_register_disc (struct gendisk *dev, int minor)
 	devfs_handle_t dir, slave;
 	unsigned int devfs_flags = DEVFS_FL_DEFAULT;
 	char dirname[64], symlink[16];
-	static unsigned int disc_counter = 0;
-	static devfs_handle_t devfs_handle = NULL;
+	static unsigned int disc_counter;
+	static devfs_handle_t devfs_handle;
 
 	if (dev->part[minor].de) return;
 	if ( dev->flags && (dev->flags[devnum] & GENHD_FL_REMOVABLE) )

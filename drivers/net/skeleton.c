@@ -662,9 +662,9 @@ static struct net_device this_device = {
 	0, 0, 0, NULL, netcard_probe };
 
 static int io = 0x300;
-static int irq = 0;
-static int dma = 0;
-static int mem = 0;
+static int irq;
+static int dma;
+static int mem;
 
 int init_module(void)
 {

@@ -382,9 +382,9 @@ static struct net_device dev_lne[MAX_LNE_CARDS] = {
 	},
 };
 
-static int io[MAX_LNE_CARDS] = { 0, };
-static int irq[MAX_LNE_CARDS]  = { 0, };
-static int mem[MAX_LNE_CARDS] = { 0, };
+static int io[MAX_LNE_CARDS];
+static int irq[MAX_LNE_CARDS];
+static int mem[MAX_LNE_CARDS];
 
 MODULE_PARM(io, "1-" __MODULE_STRING(MAX_LNE_CARDS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_LNE_CARDS) "i");

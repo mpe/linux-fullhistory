@@ -60,7 +60,7 @@ static const char *awc_version =
 #include <linux/pci.h>
 
 
-static int reverse_probe =0 ;
+static int reverse_probe;
 
 
 static int awc_pci_init(struct net_device * dev, struct pci_dev *pdev,
@@ -70,7 +70,7 @@ static int awc_pci_init(struct net_device * dev, struct pci_dev *pdev,
 int awc4500_pci_probe(struct net_device *dev)
 {
 	int cards_found = 0;
-	static int pci_index = 0;	/* Static, for multiple probe calls. */
+	static int pci_index;	/* Static, for multiple probe calls. */
 	u8 pci_irq_line = 0;
 //	int p;
 
@@ -491,7 +491,7 @@ MODULE_PARM_DESC(io,"Aironet 4x00 ISA non-PNP ioports,required");
 int awc4500_isa_probe(struct net_device *dev)
 {
 //	int cards_found = 0;
-//	static int isa_index = 0;	/* Static, for multiple probe calls. */
+//	static int isa_index;	/* Static, for multiple probe calls. */
 	int isa_irq_line = 0;
 	int isa_ioaddr = 0;
 //	int p;

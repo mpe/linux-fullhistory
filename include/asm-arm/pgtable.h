@@ -185,6 +185,8 @@ extern pgd_t swapper_pg_dir[PTRS_PER_PGD];
 
 #define io_remap_page_range	remap_page_range
 
+#include <asm-generic/pgtable.h>
+
 #endif /* !__ASSEMBLY__ */
 
 #endif /* _ASMARM_PGTABLE_H */

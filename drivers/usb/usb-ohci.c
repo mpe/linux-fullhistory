@@ -64,6 +64,8 @@
 
 #define OHCI_USE_NPS		// force NoPowerSwitching mode
 // #define OHCI_VERBOSE_DEBUG	/* not always helpful */
+#define OHCI_MEM_SLAB
+// #define OHCI_MEM_FLAGS	SLAB_POISON	/* no redzones; see mm/slab.c */
 
 #include "usb-ohci.h"
 
@@ -95,13 +97,13 @@ static spinlock_t usb_ed_lock = SPIN_LOCK_UNLOCKED;
  
 /* free HCD-private data associated with this URB */
 
-static void urb_free_priv (urb_priv_t * urb_priv)
+static void urb_free_priv (struct ohci *hc, urb_priv_t * urb_priv)
 {
 	int i;
 
 	for (i = 0; i < urb_priv->length; i++) {
 		if (urb_priv->td [i]) {
-			OHCI_FREE (urb_priv->td [i]);
+			td_free (hc, urb_priv->td [i]);
 		}
 	}
 
@@ -129,7 +131,7 @@ static void urb_rm_priv_locked (urb_t * urb)
 			}
 		}
 
-		urb_free_priv (urb_priv);
+		urb_free_priv ((struct ohci *)urb->dev->bus, urb_priv);
 		usb_dec_dev_use (urb->dev);
 		urb->dev = NULL;
 	}
@@ -531,16 +533,16 @@ static int sohci_submit_urb (urb_t * urb)
 
 	/* allocate the TDs */
 	for (i = 0; i < size; i++) { 
-		OHCI_ALLOC (urb_priv->td[i], sizeof (td_t));
+		urb_priv->td[i] = td_alloc (ohci);
 		if (!urb_priv->td[i]) {
-			urb_free_priv (urb_priv);
+			urb_free_priv (ohci, urb_priv);
 			usb_dec_dev_use (urb->dev);	
 			return -ENOMEM;
 		}
 	}	
 
 	if (ed->state == ED_NEW || (ed->state & ED_DEL)) {
-		urb_free_priv (urb_priv);
+		urb_free_priv (ohci, urb_priv);
 		usb_dec_dev_use (urb->dev);	
 		return -EINVAL;
 	}
@@ -561,7 +563,7 @@ static int sohci_submit_urb (urb_t * urb)
 				bustime = usb_check_bandwidth (urb->dev, urb);
 			}
 			if (bustime < 0) {
-				urb_free_priv (urb_priv);
+				urb_free_priv (ohci, urb_priv);
 				usb_dec_dev_use (urb->dev);	
 				return bustime;
 			}
@@ -683,7 +685,11 @@ static int sohci_alloc_dev (struct usb_device *usb_dev)
 {
 	struct ohci_device * dev;
 
-	dev = kmalloc (sizeof (*dev), GFP_KERNEL);
+	/* FIXME:  ED allocation with pci_consistent memory
+	 * must know the controller ... either pass it in here,
+	 * or decouple ED allocation from dev allocation.
+	 */
+	dev = dev_alloc (NULL);
 	if (!dev)
 		return -ENOMEM;
 		
@@ -772,7 +778,9 @@ static int sohci_free_dev (struct usb_device * usb_dev)
 			}
 		}
 	}
-	kfree (dev);
+
+	/* free device, and associated EDs */
+	dev_free (dev);
 
 	return 0;
 }
@@ -1077,7 +1085,8 @@ static ed_t * ep_add_ed (struct usb_device * usb_dev, unsigned int pipe, int int
 	
 	if (ed->state == ED_NEW) {
 		ed->hwINFO = cpu_to_le32 (OHCI_ED_SKIP); /* skip ed */
-  		OHCI_ALLOC (td, sizeof (*td)); /* dummy td; end of td list for ed */
+  		/* dummy td; end of td list for ed */
+		td = td_alloc (ohci);
   		if (!td) {
 			/* out of memory */
 			spin_unlock_irqrestore (&usb_ed_lock, flags);
@@ -1425,7 +1434,7 @@ static void dl_del_list (ohci_t  * ohci, unsigned int frame)
 
 		if (ed->state & ED_DEL) { /* set by sohci_free_dev */
 			struct ohci_device * dev = usb_to_ohci (ohci->dev[edINFO & 0x7F]);
-			OHCI_FREE (tdTailP); /* free dummy td */
+			td_free (ohci, tdTailP); /* free dummy td */
    	 		ed->hwINFO = cpu_to_le32 (OHCI_ED_SKIP); 
    	 		ed->state = ED_NEW; 
    	 		/* if all eds are removed wake up sohci_free_dev */
@@ -1443,7 +1452,7 @@ static void dl_del_list (ohci_t  * ohci, unsigned int frame)
 			if (tdHeadP == tdTailP) {
 				if (ed->state == ED_OPER)
 					ep_unlink(ohci, ed);
-				OHCI_FREE (tdTailP);
+				td_free (ohci, tdTailP);
 				ed->hwINFO = cpu_to_le32 (OHCI_ED_SKIP);
 				ed->state = ED_NEW;
 				--(usb_to_ohci (ohci->dev[edINFO & 0x7F]))->ed_cnt;
@@ -2536,15 +2545,23 @@ static struct pmu_sleep_notifier ohci_sleep_notifier = {
 };
 #endif /* CONFIG_PMAC_PBOOK */
 
+
 /*-------------------------------------------------------------------------*/
 
 static int __init ohci_hcd_init (void) 
 {
-	int ret = pci_module_init (&ohci_pci_driver);
+	int ret;
+
+	if ((ret = ohci_mem_init ()) < 0)
+		return ret;
+
+	if ((ret = pci_module_init (&ohci_pci_driver)) < 0) {
+		ohci_mem_cleanup ();
+		return ret;
+	}
 
 #ifdef CONFIG_PMAC_PBOOK
-	if (ret >= 0)
-		pmu_register_sleep_notifier (&ohci_sleep_notifier);
+	pmu_register_sleep_notifier (&ohci_sleep_notifier);
 #endif  
 	return ret;
 }
@@ -2557,6 +2574,7 @@ static void __exit ohci_hcd_cleanup (void)
 	pmu_unregister_sleep_notifier (&ohci_sleep_notifier);
 #endif  
 	pci_unregister_driver (&ohci_pci_driver);
+	ohci_mem_cleanup ();
 }
 
 module_init (ohci_hcd_init);

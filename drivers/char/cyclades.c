@@ -770,7 +770,7 @@ static struct cyclades_card cy_card[NR_CARDS];
 */
 static struct cyclades_port cy_port[NR_PORTS];
 
-static int cy_next_channel = 0; /* next minor available */
+static int cy_next_channel; /* next minor available */
 
 static struct tty_struct *serial_table[NR_PORTS];
 static struct termios *serial_termios[NR_PORTS];
@@ -862,9 +862,9 @@ static int cy_chip_offset [] =
 
 /* PCI related definitions */
 
-static unsigned short	cy_pci_nboard = 0;
-static unsigned short	cy_isa_nboard = 0;
-static unsigned short	cy_nboard = 0;
+static unsigned short	cy_pci_nboard;
+static unsigned short	cy_isa_nboard;
+static unsigned short	cy_nboard;
 #ifdef CONFIG_PCI
 static unsigned short	cy_pci_dev_id[] = {
 			    PCI_DEVICE_ID_CYCLOM_Y_Lo,	/* PCI < 1Mb */

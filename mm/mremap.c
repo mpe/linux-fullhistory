@@ -63,14 +63,14 @@ static inline int copy_one_pte(struct mm_struct *mm, pte_t * src, pte_t * dst)
 	pte_t pte;
 
 	spin_lock(&mm->page_table_lock);
-	pte = *src;
-	if (!pte_none(pte)) {
-		error++;
-		if (dst) {
-			pte_clear(src);
-			set_pte(dst, pte);
-			error--;
+	if (!pte_none(*src)) {
+		pte = ptep_get_and_clear(src);
+		if (!dst) {
+			/* No dest?  We must put it back. */
+			dst = src;
+			error++;
 		}
+		set_pte(dst, pte);
 	}
 	spin_unlock(&mm->page_table_lock);
 	return error;

@@ -47,7 +47,7 @@ int C_A_D = 1;
  *	and the like. 
  */
 
-static struct notifier_block *reboot_notifier_list = NULL;
+static struct notifier_block *reboot_notifier_list;
 rwlock_t notifier_lock = RW_LOCK_UNLOCKED;
 
 /**

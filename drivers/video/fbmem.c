@@ -618,7 +618,7 @@ int GET_FB_IDX(kdev_t rdev)
     int fbidx = MINOR(rdev);
     if (fbidx >= 32) {
 	int newfbidx = fbidx >> 5;
-	static int warned = 0;
+	static int warned;
 	if (!(warned & (1<<newfbidx))) {
 	    warned |= 1<<newfbidx;
 	    printk("Warning: Remapping obsolete /dev/fb* minor %d to %d\n",
@@ -679,7 +679,7 @@ static struct file_operations fb_fops = {
 	release:	fb_release,
 };
 
-static devfs_handle_t devfs_handle = NULL;
+static devfs_handle_t devfs_handle;
 
 int
 register_framebuffer(struct fb_info *fb_info)

@@ -54,7 +54,7 @@ static void sendintr(int destid, unsigned char status)
 
 /* The 'big kernel lock' */
 spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
-int smp_threads_ready = 0;	/* Not used */
+int smp_threads_ready;	/* Not used */
 atomic_t smp_commenced = ATOMIC_INIT(0);
 struct cpuinfo_mips cpu_data[NR_CPUS];
 int smp_num_cpus;		/* Number that came online.  */
@@ -130,7 +130,7 @@ static volatile struct call_data_struct {
 	atomic_t started;
 	atomic_t finished;
 	int wait;
-} *call_data = NULL;
+} *call_data;
 
 int smp_call_function (void (*func) (void *info), void *info, int retry, 
 								int wait)

@@ -222,7 +222,7 @@ MODULE_PARM(watchdog, "i");
 /* Set iff a MII transceiver on any interface requires mdio preamble.
    This only set with the original DP83840 on older 3c905 boards, so the extra
    code size of a per-interface flag is not worthwhile. */
-static char mii_preamble_required = 0;
+static char mii_preamble_required;
 
 #define PFX "3c59x: "
 
@@ -740,12 +740,12 @@ static int flow_ctrl[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 /* #define dev_alloc_skb dev_alloc_skb_debug */
 
 /* A list of all installed Vortex EISA devices, for removing the driver module. */
-static struct net_device *root_vortex_eisa_dev = NULL;
+static struct net_device *root_vortex_eisa_dev;
 
 /* Variables to work-around the Compaq PCI BIOS32 problem. */
-static int compaq_ioaddr = 0, compaq_irq = 0, compaq_device_id = 0x5900;
+static int compaq_ioaddr, compaq_irq, compaq_device_id = 0x5900;
 
-static int vortex_cards_found = 0;
+static int vortex_cards_found;
 
 static void vortex_suspend (struct pci_dev *pdev)
 {
@@ -853,7 +853,7 @@ static int __devinit vortex_probe1(struct pci_dev *pdev,
 	unsigned int eeprom[0x40], checksum = 0;		/* EEPROM contents */
 	int i;
 	struct net_device *dev;
-	static int printed_version = 0;
+	static int printed_version;
 	int retval;
 	struct vortex_chip_info * const vci = &vortex_info_tbl[chip_idx];
 
@@ -1616,7 +1616,7 @@ vortex_error(struct net_device *dev, int status)
 		outw(AckIntr | RxEarly, ioaddr + EL3_CMD);
 	}
 	if (status & StatsFull) {			/* Empty statistics. */
-		static int DoneDidThat = 0;
+		static int DoneDidThat;
 		if (vortex_debug > 4)
 			printk(KERN_DEBUG "%s: Updating stats.\n", dev->name);
 		update_stats(ioaddr, dev);
@@ -2573,8 +2573,8 @@ static struct pci_driver vortex_driver = {
 };
 
 
-static int vortex_have_pci = 0;
-static int vortex_have_eisa = 0;
+static int vortex_have_pci;
+static int vortex_have_eisa;
 
 
 static int __init vortex_init (void)

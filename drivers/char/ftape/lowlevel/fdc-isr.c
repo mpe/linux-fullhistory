@@ -44,10 +44,10 @@
 
 /*      Global vars.
  */
-volatile int ft_expected_stray_interrupts = 0;
-volatile int ft_interrupt_seen = 0;
-volatile int ft_seek_completed = 0;
-volatile int ft_hide_interrupt = 0;
+volatile int ft_expected_stray_interrupts;
+volatile int ft_interrupt_seen;
+volatile int ft_seek_completed;
+volatile int ft_hide_interrupt;
 /*      Local vars.
  */
 typedef enum {
@@ -55,7 +55,7 @@ typedef enum {
 	data_am_error = 0x04, data_crc_error = 0x08,
 	no_data_error = 0x10, overrun_error = 0x20,
 } error_cause;
-static int stop_read_ahead = 0;
+static int stop_read_ahead;
 
 
 static void print_error_cause(int cause)
@@ -730,7 +730,7 @@ static void continue_formatting(buffer_struct *buff)
  */
 static void handle_fdc_busy(buffer_struct *buff)
 {
-	static int no_data_error_count = 0;
+	static int no_data_error_count;
 	int retry = 0;
 	error_cause cause;
 	__u8 in[7];
@@ -1077,7 +1077,7 @@ static void handle_fdc_busy(buffer_struct *buff)
  */
 void fdc_isr(void)
 {
-	static int isr_active = 0;
+	static int isr_active;
 #ifdef TESTING
 	unsigned int t0 = ftape_timestamp();
 #endif

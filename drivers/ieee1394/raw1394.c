@@ -42,13 +42,13 @@
 #endif
 
 
-static devfs_handle_t devfs_handle = NULL;
+static devfs_handle_t devfs_handle;
 
 LIST_HEAD(host_info_list);
-static int host_count = 0;
+static int host_count;
 spinlock_t host_info_lock = SPIN_LOCK_UNLOCKED;
 
-static struct hpsb_highlevel *hl_handle = NULL;
+static struct hpsb_highlevel *hl_handle;
 
 static atomic_t iso_buffer_size;
 static const int iso_buffer_max = 4 * 1024 * 1024; /* 4 MB */

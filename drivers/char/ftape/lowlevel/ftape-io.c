@@ -50,14 +50,14 @@
  */
 /* NOTE: sectors start numbering at 1, all others at 0 ! */
 ft_timeout_table ftape_timeout;
-unsigned int ftape_tape_len = 0;
+unsigned int ftape_tape_len;
 volatile qic117_cmd_t ftape_current_command;
 const struct qic117_command_table qic117_cmds[] = QIC117_COMMANDS;
 int ftape_might_be_off_track;
 
 /*      Local vars.
  */
-static int diagnostic_mode   = 0;
+static int diagnostic_mode;
 static unsigned int ftape_udelay_count;
 static unsigned int ftape_udelay_time;
 
@@ -232,7 +232,7 @@ static int ft_check_cmd_restrictions(qic117_cmd_t command)
 int ftape_command(qic117_cmd_t command)
 {
 	int result = 0;
-	static int level = 0;
+	static int level;
 	TRACE_FUN(ft_t_any);
 
 	if ((unsigned int)command > NR_ITEMS(qic117_cmds)) {
@@ -778,7 +778,7 @@ int ftape_set_data_rate(unsigned int new_rate /* Kbps */, unsigned int qic_std)
 	int status;
 	int result = 0;
 	unsigned int data_rate = new_rate;
-	static int supported = 0;
+	static int supported;
 	int rate_changed = 0;
 	qic_model dummy_model;
 	unsigned int dummy_qic_std, dummy_tape_len;

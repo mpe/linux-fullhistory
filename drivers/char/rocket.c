@@ -154,26 +154,26 @@ static void rp_wait_until_sent(struct tty_struct *tty, int timeout);
 static void rp_flush_buffer(struct tty_struct *tty);
 
 static struct tty_driver rocket_driver, callout_driver;
-static int rocket_refcount = 0;
+static int rocket_refcount;
 
-static int rp_num_ports_open = 0;
+static int rp_num_ports_open;
 
 static struct timer_list rocket_timer;
 
-unsigned long board1 = 0;
-unsigned long board2 = 0;
-unsigned long board3 = 0;
-unsigned long board4 = 0;
-unsigned long controller = 0;
-unsigned long support_low_speed = 0;
+unsigned long board1;
+unsigned long board2;
+unsigned long board3;
+unsigned long board4;
+unsigned long controller;
+unsigned long support_low_speed;
 int rp_baud_base = 460800;
 static unsigned long rcktpt_io_addr[NUM_BOARDS];
 static int max_board;
 #ifdef TIME_STAT
-static unsigned long long time_stat = 0;
-static unsigned long time_stat_short = 0;
-static unsigned long time_stat_long = 0;
-static unsigned long time_counter = 0;
+static unsigned long long time_stat;
+static unsigned long time_stat_short;
+static unsigned long time_stat_long;
+static unsigned long time_counter;
 #endif
 
 #if ((LINUX_VERSION_CODE > 0x020111) && defined(MODULE))

@@ -181,11 +181,11 @@ DECLARE_TASK_QUEUE(tq_specialix);
 #define SPECIALIX_TYPE_CALLOUT	2
 
 static struct tty_driver specialix_driver, specialix_callout_driver;
-static int    specialix_refcount = 0;
-static struct tty_struct * specialix_table[SX_NBOARD * SX_NPORT] = { NULL, };
-static struct termios * specialix_termios[SX_NBOARD * SX_NPORT] = { NULL, };
-static struct termios * specialix_termios_locked[SX_NBOARD * SX_NPORT] = { NULL, };
-static unsigned char * tmp_buf = NULL;
+static int    specialix_refcount;
+static struct tty_struct * specialix_table[SX_NBOARD * SX_NPORT];
+static struct termios * specialix_termios[SX_NBOARD * SX_NPORT];
+static struct termios * specialix_termios_locked[SX_NBOARD * SX_NPORT];
+static unsigned char * tmp_buf;
 static DECLARE_MUTEX(tmp_buf_sem);
 
 static unsigned long baud_table[] =  {
@@ -200,9 +200,7 @@ static struct specialix_board sx_board[SX_NBOARD] =  {
 	{ 0, SX_IOBASE4, 15, },
 };
 
-static struct specialix_port sx_port[SX_NBOARD * SX_NPORT] =  {
-	{ 0, },
-};
+static struct specialix_port sx_port[SX_NBOARD * SX_NPORT];
 		
 
 #ifdef SPECIALIX_TIMER
@@ -1013,7 +1011,7 @@ static void sx_change_speed(struct specialix_board *bp, struct specialix_port *p
 	long tmp;
 	unsigned char cor1 = 0, cor3 = 0;
 	unsigned char mcor1 = 0, mcor2 = 0;
-	static int again=0;
+	static int again;
 	
 	if (!(tty = port->tty) || !tty->termios)
 		return;

@@ -267,15 +267,15 @@
 #include <asm/uaccess.h>
 
 /* used to tell the module to turn on full debugging messages */
-static int debug = 0;
+static int debug;
 /* used to keep tray locked at all times */
-static int keeplocked = 0;
+static int keeplocked;
 /* default compatibility mode */
 static int autoclose=1;
-static int autoeject=0;
+static int autoeject;
 static int lockdoor = 1;
 /* will we ever get to use this... sigh. */
-static int check_media_type = 0;
+static int check_media_type;
 MODULE_PARM(debug, "i");
 MODULE_PARM(autoclose, "i");
 MODULE_PARM(autoeject, "i");
@@ -326,8 +326,8 @@ int cdrom_get_next_writable(kdev_t dev, long *next_writable);
 #ifdef CONFIG_SYSCTL
 static void cdrom_sysctl_register(void);
 #endif /* CONFIG_SYSCTL */ 
-static struct cdrom_device_info *topCdromPtr = NULL;
-static devfs_handle_t devfs_handle = NULL;
+static struct cdrom_device_info *topCdromPtr;
+static devfs_handle_t devfs_handle;
 
 struct block_device_operations cdrom_fops =
 {
@@ -346,12 +346,12 @@ struct block_device_operations cdrom_fops =
 
 int register_cdrom(struct cdrom_device_info *cdi)
 {
-	static char banner_printed = 0;
+	static char banner_printed;
 	int major = MAJOR(cdi->dev);
         struct cdrom_device_ops *cdo = cdi->ops;
         int *change_capability = (int *)&cdo->capability; /* hack */
 	char vname[16];
-	static unsigned int cdrom_counter = 0;
+	static unsigned int cdrom_counter;
 
 	cdinfo(CD_OPEN, "entering register_cdrom\n"); 
 
@@ -2566,7 +2566,7 @@ static struct ctl_table_header *cdrom_sysctl_header;
 
 static void cdrom_sysctl_register(void)
 {
-	static int initialized = 0;
+	static int initialized;
 
 	if (initialized == 1)
 		return;

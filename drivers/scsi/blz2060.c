@@ -68,8 +68,6 @@ int __init blz2060_esp_detect(Scsi_Host_Template *tpnt)
 	    unsigned long board = z->resource.start;
 	    if (request_mem_region(board+BLZ2060_ESP_ADDR,
 				   sizeof(struct ESP_regs), "NCR53C9x")) {
-		strcpy(z->name, "Blizzard 2060 Accelerator");
-
 		esp = esp_allocate(tpnt, (void *)board+BLZ2060_ESP_ADDR);
 
 		/* Do command transfer with programmed I/O */

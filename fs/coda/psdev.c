@@ -54,7 +54,7 @@
 extern struct file_system_type coda_fs_type;
 
 /* statistics */
-int           coda_hard    = 0;  /* allows signals during upcalls */
+int           coda_hard;         /* allows signals during upcalls */
 unsigned long coda_timeout = 30; /* .. secs, then signals will dequeue */
 
 
@@ -376,7 +376,7 @@ static struct file_operations coda_psdev_fops = {
 	release:	coda_psdev_release,
 };
 
-static devfs_handle_t devfs_handle = NULL;
+static devfs_handle_t devfs_handle;
 
 static int init_coda_psdev(void)
 {

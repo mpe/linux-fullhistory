@@ -70,6 +70,6 @@ inline void pullphone(char *dn, char *str)
 	int i = 0;
 
 	while(dn[i] != ',')
-		str[i] = dn[i++];
+		str[i] = dn[i], i++;
 	str[i] = 0x0;
 }
