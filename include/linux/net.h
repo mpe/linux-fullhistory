@@ -81,8 +81,6 @@ struct socket {
   struct wait_queue	**wait;		/* ptr to place to wait on	*/
   struct inode		*inode;
   struct fasync_struct  *fasync_list;	/* Asynchronous wake up list	*/
-  struct socket		*nextsock;	/* next on the allocated socks	*/
-  struct socket		*prevsock;	/* precious on the allocated socks */
 };
 
 #define SOCK_INODE(S)	((S)->inode)

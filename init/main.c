@@ -98,7 +98,6 @@ extern void aha274x_setup(char *str, int *ints);
 extern void buslogic_setup(char *str, int *ints);
 extern void scsi_luns_setup(char *str, int *ints);
 extern void sound_setup(char *str, int *ints);
-extern void sock_setup(char *str, int *ints);
 #ifdef CONFIG_SBPCD
 extern void sbpcd_setup(char *str, int *ints);
 #endif CONFIG_SBPCD

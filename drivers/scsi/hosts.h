@@ -292,9 +292,12 @@ extern Scsi_Host_Template * scsi_hosts;
    looks normal.  Also, it makes it possible to use the same code for a
    loadable module. */
 
-extern void * scsi_init_malloc(unsigned int size);
+extern void * scsi_init_malloc(unsigned int size, int priority);
 extern void scsi_init_free(char * ptr, unsigned int size);
 
+void scan_scsis (struct Scsi_Host * shpnt);
+
+extern int next_scsi_host;
 
 extern int scsi_loadable_module_flag;
 unsigned int scsi_init(void);
@@ -317,7 +320,7 @@ struct Scsi_Device_Template
   int (*detect)(Scsi_Device *); /* Returns 1 if we can attach this device */
   void (*init)(void);  /* Sizes arrays based upon number of devices detected */
   void (*finish)(void);  /* Perform initialization after attachment */
-  void (*attach)(Scsi_Device *); /* Attach devices to arrays */
+  int (*attach)(Scsi_Device *); /* Attach devices to arrays */
   void (*detach)(Scsi_Device *);
 };
 
@@ -327,5 +330,27 @@ extern struct Scsi_Device_Template sr_template;
 extern struct Scsi_Device_Template sg_template;
 
 int scsi_register_device(struct Scsi_Device_Template * sdpnt);
+
+/* These are used by loadable modules */
+extern int scsi_register_module(int, void *);
+extern void scsi_unregister_module(int, void *);
+
+/* The different types of modules that we can load and unload */
+#define MODULE_SCSI_HA 1
+#define MODULE_SCSI_CONST 2
+#define MODULE_SCSI_IOCTL 3
+#define MODULE_SCSI_DEV 4
+
+
+/*
+ * This is an ugly hack.  If we expect to be able to load devices at run time, we need
+ * to leave extra room in some of the data structures.  Doing a realloc to enlarge
+ * the structures would be riddled with race conditions, so until a better solution 
+ * is discovered, we use this crude approach
+ */
+#define SD_EXTRA_DEVS 2
+#define ST_EXTRA_DEVS 2
+#define SR_EXTRA_DEVS 2
+#define SG_EXTRA_DEVS (SD_EXTRA_DEVS + SR_EXTRA_DEVS + ST_EXTRA_DEVS)
 
 #endif

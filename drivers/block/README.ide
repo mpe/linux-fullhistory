@@ -81,13 +81,13 @@ interface (/dev/hda) and an IDE cdrom drive on the secondary interface
 
 	ln -sf /dev/hdc /dev/cdrom
 	mkdir /cd
-	mount /dev/cdrom /cd -t iso9660 -o ro,block=2048
+	mount /dev/cdrom /cd -t iso9660 -o ro
 
 Please pass on any feedback on the cdrom stuff to the author & maintainer,
 Scott Snyder (snyder@fnald0.fnal.gov).
 
-Note that present, the kernel is unable to execute demand-paged binaries
-directly off of the cdrom (due to the different block size).
+The kernel is now be able to execute binaries directly off of the cdrom,
+provided it is mounted with the default block size of 1024.
 
 The hdparm.c program for controlling various IDE features is now packaged
 separately.  Look for it on popular linux FTP sites.

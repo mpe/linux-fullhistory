@@ -1,4 +1,4 @@
-/* $Id: mtio.h,v 1.13 1994/07/19 19:35:52 root Exp $
+/* $Id: /usr/src/linux-1.1.64/include/linux/mtio.h at Tue Jan 10 21:02:51 1995 by root@kai.home$
  *
  * linux/mtio.h header file for Linux. Written by H. Bergman
  */
@@ -220,5 +220,6 @@ struct	mtpos {
 #define MT_ST_READ_AHEAD	0x4
 #define MT_ST_DEBUGGING		0x8
 #define MT_ST_TWO_FM		0x10
+#define MT_ST_FAST_MTEOM	0x20
 
 #endif /* _LINUX_MTIO_H */

@@ -49,7 +49,7 @@ int unix_get_info(char *buffer, char **start, off_t offset, int length)
 	
   	len += sprintf(buffer, "Num RefCount Protocol Flags    Type St Path\n");
 
-  	for(i = 0; i < NSOCKETS; i++) 
+  	for(i = 0; i < NSOCKETS_UNIX; i++) 
   	{
   		save_flags(flags);
   		cli();

@@ -27,6 +27,8 @@
  *					to be allocated when needed, and mr.
  *					Uphoff's max is used as max to be
  *					allowed to allocate.
+ *		Linus		:	Argh. removed all the socket allocation
+ *					altogether: it's in the inode now.
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -95,44 +97,13 @@ static struct file_operations socket_file_ops = {
 };
 
 /*
- *	The lists of sockets
- */
-
-static struct socket *freesockets = NULL;	/* List of free sockets,
-						   pick the first */
-static struct socket *usedsockets = NULL;	/* Doubly-linked list of the
-						   active sockets */
-
-/*
- *	Used to wait for a socket.
- */
-static struct wait_queue *socket_wait_free = NULL;
-/*
  *	The protocol list. Each protocol is registered in here.
  */
 static struct proto_ops *pops[NPROTO];
-/*      
- *	Maximum number of sockets -- override-able on command-line.
- */
-static int maxnsockets = NSOCKETS;
 /*
- *	Number of sockets allocated
- */
-static int nsockets = 0;
-/*
- *	Statistics counters of the free/used lists
+ *	Statistics counters of the socket lists
  */
 static int sockets_in_use  = 0;
-static int sockets_in_free = 0;
-
-/*      
- *	Overrides default max number of sockets if supplied on command-line.
- */
-void sock_setup(char *str, int *ints)
-{
-	maxnsockets = ints[0] ? ints[1] : NSOCKETS;
-}
-
 
 /*
  *	Support routines. Move socket addresses back and forth across the kernel/user
@@ -219,25 +190,13 @@ static int get_fd(struct inode *inode)
 
 /*
  *	Go from an inode to its socket slot.
+ *
+ * The original socket implementation wasn't very clever, which is
+ * why this exists at all..
  */
-
-struct socket *socki_lookup(struct inode *inode)
+inline struct socket *socki_lookup(struct inode *inode)
 {
-	struct socket *sock;
-
-	if ((sock = inode->i_socket) != NULL) 
-	{
-		if (sock->state != SS_FREE && SOCK_INODE(sock) == inode)
-			return sock;
-		printk("socket.c: uhhuh. stale inode->i_socket pointer\n");
-	}
-	for (sock = usedsockets; sock != NULL; sock = sock->nextsock)
-		if (sock->state != SS_FREE && SOCK_INODE(sock) == inode) 
-		{
-			printk("socket.c: uhhuh. Found socket despite no inode->i_socket pointer\n");
-			return(sock);
-		}
-		return(NULL);
+	return &inode->u.socket_i;
 }
 
 /*
@@ -247,149 +206,51 @@ struct socket *socki_lookup(struct inode *inode)
 static inline struct socket *sockfd_lookup(int fd, struct file **pfile)
 {
 	struct file *file;
+	struct inode *inode;
 
 	if (fd < 0 || fd >= NR_OPEN || !(file = current->files->fd[fd])) 
-		return(NULL);
+		return NULL;
+
+	inode = file->f_inode;
+	if (!inode || !inode->i_sock)
+		return NULL;
 
 	if (pfile) 
 		*pfile = file;
 
-	return(socki_lookup(file->f_inode));
+	return socki_lookup(inode);
 }
 
 /*
- *	Allocate a socket. Wait if we are out of sockets.
+ *	Allocate a socket.
  */
-
-static struct socket *sock_alloc(int wait)
+static struct socket *sock_alloc(void)
 {
-	struct socket *sock;
-	int i;
+	struct inode * inode;
+	struct socket * sock;
 
-	while (1) 
-	{
-		if (freesockets == NULL)
-		{
-			/* Lets see if we can allocate some more */
-			cli();
-			/* Alloc them from same memory page, if possible.
-			   Nothing SHOULD prevent us from allocing one at
-			   the time.. */
-			for (i = 0; i < 16 && nsockets < maxnsockets; ++i)
-			{
-				sock = (struct socket*)kmalloc(sizeof(struct socket),GFP_KERNEL);
-				if (sock == NULL) break; /* Ah well.. */
-				sock->state = SS_FREE;
-				sock->nextsock = freesockets;
-				sock->prevsock = NULL;
-				freesockets = sock;
-				++sockets_in_free;
-				++nsockets;
-			}
-			sti();
-		}
+	inode = get_empty_inode();
+	if (!inode)
+		return NULL;
 
+	inode->i_mode = S_IFSOCK;
+	inode->i_sock = 1;
+	inode->i_uid = current->uid;
+	inode->i_gid = current->gid;
 
-		cli();
-		sock = freesockets;
-		if (sock != NULL) /* Freelist, we pick
-				     the first -- or only */
-		{
-		/*
-		 * Move it to the `usedsockets' linked-list
-		 * at its FRONT (thus  ->prevsock = NULL)
-		 */
-			freesockets = sock->nextsock;
-			sock->nextsock = usedsockets;
-			sock->prevsock = NULL;
-			/* Is there something in there already ? */
-			if (usedsockets != NULL)
-			  /* Yes, attach the `previous' pointer */
-			  usedsockets->prevsock = sock;
-			usedsockets = sock;
-
-			--sockets_in_free;
-			++sockets_in_use;
-			sti();
-		/*
-		 *	Got one..
-		 */
-			sock->state = SS_UNCONNECTED;
-			sock->flags = 0;
-			sock->ops = NULL;
-			sock->data = NULL;
-			sock->conn = NULL;
-			sock->iconn = NULL;
-			sock->fasync_list = NULL;
-		/*
-		 * This really shouldn't be necessary, but everything
-		 * else depends on inodes, so we grab it.
-		 * Sleeps are also done on the i_wait member of this
-		 * inode.  The close system call will iput this inode
-		 * for us.
-		 */
-			if (!(SOCK_INODE(sock) = get_empty_inode())) 
-			{
-				printk("NET: sock_alloc: no more inodes\n");
-			/*
-			 * Roll-back the linkage
-			 */
-				cli();
-				/* Not the last ? */
-				if (sock->nextsock != NULL)
-				  sock->nextsock->prevsock = sock->prevsock;
-				/* Not the first ? */
-				if (sock->prevsock != NULL)
-				  sock->prevsock->nextsock = sock->nextsock;
-				else
-				  /* It is the first, update the head-handle */
-				  usedsockets = sock->nextsock;
-				/* Link it back to the free-list */
-				sock->nextsock = freesockets;
-				sock->prevsock = NULL; /* Not used, but .. */
-				freesockets = sock;
-				++sockets_in_free;
-				--sockets_in_use;
-				sti();
-				sock->state = SS_FREE;
-				return(NULL);
-			}
-			SOCK_INODE(sock)->i_mode = S_IFSOCK;
-			SOCK_INODE(sock)->i_uid = current->euid;
-			SOCK_INODE(sock)->i_gid = current->egid;
-			SOCK_INODE(sock)->i_socket = sock;
-
-			sock->wait = &SOCK_INODE(sock)->i_wait;
-
-			return(sock);
-		}
-		sti();
-
-		/*
-		 * The rest of these are in fact vestigial from the previous
-		 * version, which didn't have growing list of sockets.
-		 * These may become necessary if there are 2000 (or whatever
-		 * the hard limit is set to) sockets already in system,
-		 * but then the system itself is quite catatonic.. IMO [mea]
-		 */
-
-		/*
-		 *	If its a 'now or never request' then return.
-		 */
-		if (!wait) 
-			return(NULL);
-		/*
-		 *	Sleep on the socket free'ing queue.
-		 */
-		interruptible_sleep_on(&socket_wait_free);
-		/*
-		 *	If we have been interrupted then return.
-		 */
-		if (current->signal & ~current->blocked) 
-		{
-			return(NULL);
-		}
-	}
+	sock = &inode->u.socket_i;
+	sock->state = SS_UNCONNECTED;
+	sock->flags = 0;
+	sock->ops = NULL;
+	sock->data = NULL;
+	sock->conn = NULL;
+	sock->iconn = NULL;
+	sock->next = NULL;
+	sock->wait = &inode->i_wait;
+	sock->inode = inode;		/* "backlink": we could use pointer arithmetic instead */
+	sock->fasync_list = NULL;
+	sockets_in_use++;
+	return sock;
 }
 
 /*
@@ -407,9 +268,7 @@ static inline void sock_release_peer(struct socket *peer)
 static void sock_release(struct socket *sock)
 {
 	int oldstate;
-	struct inode *inode;
 	struct socket *peersock, *nextsock;
-	unsigned long flags;
 
 	if ((oldstate = sock->state) != SS_UNCONNECTED)
 		sock->state = SS_DISCONNECTING;
@@ -434,40 +293,8 @@ static void sock_release(struct socket *sock)
 		sock->ops->release(sock, peersock);
 	if (peersock)
 		sock_release_peer(peersock);
-	inode = SOCK_INODE(sock);
-	/*
-	 * Remove this `sock' from the doubly-linked chain.
-	 */
-	save_flags(flags);
-	cli();
-	sock->state = SS_FREE;		/* this really releases us */
-	/* Not the last ? */
-	if (sock->nextsock != NULL)
-	  sock->nextsock->prevsock = sock->prevsock;
-	/* Not the first ? */
-	if (sock->prevsock != NULL)
-	  sock->prevsock->nextsock = sock->nextsock;
-	else
-	  /* It is the first, update the head-handle */
-	  usedsockets = sock->nextsock;
-	/* Link it back to the free-list */
-	sock->nextsock = freesockets;
-	sock->prevsock = NULL; /* Not really used, but.. */
-	freesockets = sock;
 	--sockets_in_use;	/* Bookkeeping.. */
-	++sockets_in_free;
-	restore_flags(flags);
-	
-	/*
-	 *	This will wake anyone waiting for a free socket.
-	 */
-	wake_up_interruptible(&socket_wait_free);
-
-	/*
-	 *	We need to do this. If sock alloc was called we already have an inode. 
-	 */
-	 
-	iput(inode);
+	iput(SOCK_INODE(sock));
 }
 
 /*
@@ -802,7 +629,7 @@ static int sock_socket(int family, int type, int protocol)
  *	default.
  */
 
-	if (!(sock = sock_alloc(1))) 
+	if (!(sock = sock_alloc())) 
 	{
 		printk("NET: sock_socket: no more sockets\n");
 		return(-ENOSR);	/* Was: EAGAIN, but we are out of
@@ -975,7 +802,7 @@ static int sock_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrl
 		return(-EINVAL);
 	}
 
-	if (!(newsock = sock_alloc(0))) 
+	if (!(newsock = sock_alloc())) 
 	{
 		printk("NET: sock_accept: no more sockets\n");
 		return(-ENOSR);	/* Was: EAGAIN, but we are out of system
@@ -1547,10 +1374,7 @@ void sock_init(void)
 
 int socket_get_info(char *buffer, char **start, off_t offset, int length)
 {
-	int len = sprintf(buffer,
-			  "sockets: used %d free %d alloced %d highlimit %d\n",
-			  sockets_in_use, sockets_in_free,
-			  nsockets, maxnsockets);
+	int len = sprintf(buffer, "sockets: used %d\n", sockets_in_use);
 	if (offset >= len)
 	{
 		*start = buffer;

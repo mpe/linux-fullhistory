@@ -57,6 +57,11 @@ extern char * ftape_big_buffer;
 extern void (*do_floppy)(void);
 #endif
 
+#ifdef CONFIG_SCSI
+#include "../drivers/scsi/scsi.h"
+#include "../drivers/scsi/hosts.h"
+#endif
+
 extern int sys_tz;
 extern int request_dma(unsigned int dmanr, char * deviceID);
 extern void free_dma(unsigned int dmanr);
@@ -267,6 +272,15 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(dev_ioctl),
 	X(dev_queue_xmit),
 	X(dev_base),
+#endif
+#ifdef CONFIG_SCSI
+	/* Supports loadable scsi drivers */
+	X(scsi_register_module),
+	X(scsi_unregister_module),
+	X(scsi_free),
+	X(scsi_malloc),
+	X(scsi_register),
+	X(scsi_unregister),
 #endif
 	/* Added to make file system as module */
 	X(set_writetime),

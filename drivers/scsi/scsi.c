@@ -23,6 +23,8 @@
 #include <linux/string.h>
 #include <linux/malloc.h>
 #include <asm/irq.h>
+#include <asm/dma.h>
+#include <linux/ioport.h>
 
 #include "../block/blk.h"
 #include "scsi.h"
@@ -219,6 +221,9 @@ static void scan_scsis_done (Scsi_Cmnd * SCpnt)
 	printk ("scan_scsis_done(%d, %06x)\n", SCpnt->host, SCpnt->result);
 #endif	
 	SCpnt->request.dev = 0xfffe;
+
+	if (SCpnt->request.sem != NULL)
+	  up(SCpnt->request.sem);
 	}
 
 #ifdef NO_MULTI_LUN
@@ -242,11 +247,12 @@ void scsi_luns_setup(char *str, int *ints) {
  *	devices to the disk driver.
  */
 
-static void scan_scsis (struct Scsi_Host * shpnt)
+void scan_scsis (struct Scsi_Host * shpnt)
 {
   int dev, lun, type;
   unsigned char scsi_cmd [12];
-  unsigned char scsi_result [256];
+  unsigned char scsi_result0 [256];
+  unsigned char * scsi_result;
   Scsi_Device * SDpnt, *SDtail;
   struct Scsi_Device_Template * sdtpnt;
   Scsi_Cmnd  SCmd;
@@ -256,11 +262,16 @@ static void scan_scsis (struct Scsi_Host * shpnt)
   type = -1;
   SCmd.next = NULL;
   SCmd.prev = NULL;
-  SDpnt = (Scsi_Device *) scsi_init_malloc(sizeof (Scsi_Device));
+  SDpnt = (Scsi_Device *) scsi_init_malloc(sizeof (Scsi_Device), GFP_ATOMIC);
   SDtail = scsi_devices;
   if(scsi_devices) {
     while(SDtail->next) SDtail = SDtail->next;
   }
+
+  /* Make sure we have something that is valid for DMA purposes */
+  scsi_result = ((current == task[0]  || !shpnt->unchecked_isa_dma) 
+		 ?  &scsi_result0[0] : scsi_malloc(512));
+	    
 
   shpnt->host_queue = &SCmd;  /* We need this so that
 					 commands can time out */
@@ -306,7 +317,21 @@ static void scan_scsis (struct Scsi_Host * shpnt)
 		       scsi_result, 256,  scan_scsis_done, 
 		       SCSI_TIMEOUT + 400, 5);
 	  
-	  while (SCmd.request.dev != 0xfffe);
+	  /* Wait for command to finish.  Use simple wait if we are booting, else
+	     do it right and use a mutex */
+
+	  if (current == task[0]){
+	    while (SCmd.request.dev != 0xfffe);
+	  } else {
+	    if (SCmd.request.dev != 0xfffe){
+	      struct semaphore sem = MUTEX_LOCKED;
+	      SCmd.request.sem = &sem;
+	      down(&sem);
+	      /* Hmm.. Have to ask about this one */
+	      while (SCmd.request.dev != 0xfffe) schedule();
+	    }
+	  }
+
 #if defined(DEBUG) || defined(DEBUG_INIT)
 	  printk("scsi: scan SCSIS id %d lun %d\n", dev, lun);
 	  printk("scsi: return code %08x\n", SCmd.result);
@@ -349,8 +374,18 @@ static void scan_scsis (struct Scsi_Host * shpnt)
 		       scsi_result, 256,  scan_scsis_done, 
 		       SCSI_TIMEOUT, 3);
 	  
-	  while (SCmd.request.dev != 0xfffe);
-	  
+	  if (current == task[0]){
+	    while (SCmd.request.dev != 0xfffe);
+	  } else {
+	    if (SCmd.request.dev != 0xfffe){
+	      struct semaphore sem = MUTEX_LOCKED;
+	      SCmd.request.sem = &sem;
+	      down(&sem);
+	      /* Hmm.. Have to ask about this one */
+	      while (SCmd.request.dev != 0xfffe) schedule();
+	    }
+	  }
+
 	  the_result = SCmd.result;
 	  
 #if defined(DEBUG) || defined(DEBUG_INIT)
@@ -498,8 +533,18 @@ static void scan_scsis (struct Scsi_Host * shpnt)
 				 scsi_result, 0x2a,  scan_scsis_done, 
 				 SCSI_TIMEOUT, 3);
 		    
-		    while (SCmd.request.dev != 0xfffe);
-		  };
+		    if (current == task[0]){
+		      while (SCmd.request.dev != 0xfffe);
+		    } else {
+		      if (SCmd.request.dev != 0xfffe){
+			struct semaphore sem = MUTEX_LOCKED;
+			SCmd.request.sem = &sem;
+			down(&sem);
+			/* Hmm.. Have to ask about this one */
+			while (SCmd.request.dev != 0xfffe) schedule();
+		      }
+		    }
+		  }
 		  /* Add this device to the linked list at the end */
 		  if(SDtail)
 		    SDtail->next = SDpnt;
@@ -507,7 +552,7 @@ static void scan_scsis (struct Scsi_Host * shpnt)
 		    scsi_devices = SDpnt;
 		  SDtail = SDpnt;
 
-		  SDpnt = (Scsi_Device *) scsi_init_malloc(sizeof (Scsi_Device));
+		  SDpnt = (Scsi_Device *) scsi_init_malloc(sizeof (Scsi_Device), GFP_ATOMIC);
 		  /* Some scsi devices cannot be polled for lun != 0
 		     due to firmware bugs */
 		  if(blacklisted(scsi_result)) break;
@@ -534,6 +579,10 @@ static void scan_scsis (struct Scsi_Host * shpnt)
   /* Last device block does not exist.  Free memory. */
   scsi_init_free((char *) SDpnt, sizeof(Scsi_Device));
   
+
+  /* If we allocated a buffer so we could do DMA, free it now */
+  if (scsi_result != &scsi_result0[0]) scsi_free(scsi_result, 512);
+
   in_scan_scsis = 0;
 }       /* scan_scsis  ends */
 
@@ -1805,18 +1854,23 @@ static int update_timeout(Scsi_Cmnd * SCset, int timeout)
 	}		
 
 
-static unsigned short * dma_malloc_freelist = NULL;
+static unsigned char * dma_malloc_freelist = NULL;
+static int scsi_need_isa_bounce_buffers;
 static unsigned int dma_sectors = 0;
 unsigned int dma_free_sectors = 0;
 unsigned int need_isa_buffer = 0;
-static unsigned char * dma_malloc_buffer = NULL;
+static unsigned char ** dma_malloc_pages = NULL;
+#define MALLOC_PAGEBITS 12
+
+static int scsi_register_host(Scsi_Host_Template *);
+static void scsi_unregister_host(Scsi_Host_Template *);
 
 void *scsi_malloc(unsigned int len)
 {
   unsigned int nbits, mask;
   unsigned long flags;
   int i, j;
-  if((len & 0x1ff) || len > 8192)
+  if((len & 0x1ff) || len > (1<<MALLOC_PAGEBITS))
     return NULL;
   
   save_flags(flags);
@@ -1824,16 +1878,16 @@ void *scsi_malloc(unsigned int len)
   nbits = len >> 9;
   mask = (1 << nbits) - 1;
   
-  for(i=0;i < (dma_sectors >> 4); i++)
-    for(j=0; j<17-nbits; j++){
+  for(i=0;i < (dma_sectors >> (MALLOC_PAGEBITS - 9)); i++)
+    for(j=0; j<=(sizeof(*dma_malloc_freelist) * 8) - nbits; j++){
       if ((dma_malloc_freelist[i] & (mask << j)) == 0){
 	dma_malloc_freelist[i] |= (mask << j);
 	restore_flags(flags);
 	dma_free_sectors -= nbits;
 #ifdef DEBUG
-	printk("SMalloc: %d %x ",len, dma_malloc_buffer + (i << 13) + (j << 9));
+	printk("SMalloc: %d %x ",len, dma_malloc_pages[i] + (j << 9));
 #endif
-	return (void *) ((unsigned long) dma_malloc_buffer + (i << 13) + (j << 9));
+	return (void *) ((unsigned long) dma_malloc_pages[i] + (j << 9));
       };
     };
   restore_flags(flags);
@@ -1850,14 +1904,20 @@ int scsi_free(void *obj, unsigned int len)
   printk("Sfree %x %d\n",obj, len);
 #endif
 
-  offset = ((unsigned long) obj) - ((unsigned long) dma_malloc_buffer);
-
-  if (offset < 0) panic("Bad offset");
-  page = offset >> 13;
+   offset = -1;
+  for (page = 0; page < (dma_sectors >> 3); page++)
+  	if ((unsigned long) obj >= (unsigned long) dma_malloc_pages[page] &&
+  		(unsigned long) obj < (unsigned long) dma_malloc_pages[page] + (1 << MALLOC_PAGEBITS))
+ 		{
+ 			offset = ((unsigned long) obj) - ((unsigned long)dma_malloc_pages[page]);
+  			break;
+ 		}
+ 		 
+  if (page == (dma_sectors >> 3)) panic("Bad offset");
   sector = offset >> 9;
   if(sector >= dma_sectors) panic ("Bad page");
 
-  sector = (offset >> 9) & 15;
+  sector = (offset >> 9) & (sizeof(*dma_malloc_freelist) * 8 - 1);
   nbits = len >> 9;
   mask = (1 << nbits) - 1;
 
@@ -1882,11 +1942,11 @@ int scsi_free(void *obj, unsigned int len)
 static unsigned long scsi_init_memory_start = 0;
 int scsi_loadable_module_flag; /* Set after we scan builtin drivers */
 
-void * scsi_init_malloc(unsigned int size)
+void * scsi_init_malloc(unsigned int size, int priority)
 {
   unsigned long retval;
   if(scsi_loadable_module_flag) {
-    retval = (unsigned long) kmalloc(size, GFP_ATOMIC);
+    retval = (unsigned long) kmalloc(size, priority);
   } else {
     retval = scsi_init_memory_start;
     scsi_init_memory_start += size;
@@ -1898,7 +1958,7 @@ void * scsi_init_malloc(unsigned int size)
 void scsi_init_free(char * ptr, unsigned int size)
 { /* FIXME - not right.  We need to compare addresses to see whether this was
      kmalloc'd or not */
-  if((unsigned long) ptr < scsi_loadable_module_flag) {
+  if((unsigned long) ptr > scsi_init_memory_start) {
     kfree(ptr);
   } else {
     if(((unsigned long) ptr) + size == scsi_init_memory_start)
@@ -1919,6 +1979,7 @@ unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end
 	struct Scsi_Host * shpnt;
 	struct Scsi_Device_Template * sdtpnt;
 	Scsi_Cmnd * SCpnt;
+	int i;
 #ifdef FOO_ON_YOU
 	return;
 #endif	
@@ -1945,10 +2006,11 @@ unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end
 	  int j;
 	  SDpnt->scsi_request_fn = NULL;
 	  for(sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
-	    if(sdtpnt->attach) (*sdtpnt->attach)(SDpnt);
-	  if(SDpnt->type != -1){
+	      if(sdtpnt->attach) (*sdtpnt->attach)(SDpnt);
+
+	  if(SDpnt->attached){
 	    for(j=0;j<SDpnt->host->cmd_per_lun;j++){
-	      SCpnt = (Scsi_Cmnd *) scsi_init_malloc(sizeof(Scsi_Cmnd));
+	      SCpnt = (Scsi_Cmnd *) scsi_init_malloc(sizeof(Scsi_Cmnd), GFP_ATOMIC);
 	      SCpnt->host = SDpnt->host;
 	      SCpnt->device = SDpnt;
 	      SCpnt->target = SDpnt->id;
@@ -1974,6 +2036,11 @@ unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end
 	if (scsi_devicelist)
 	  dma_sectors = 16;  /* Base value we use */
 
+	if (memory_end-1 > ISA_DMA_THRESHOLD)
+	  scsi_need_isa_bounce_buffers = 1;
+	else
+	  scsi_need_isa_bounce_buffers = 0;
+
 	for (SDpnt=scsi_devices; SDpnt; SDpnt = SDpnt->next) {
 	  host = SDpnt->host;
 	  
@@ -1995,16 +2062,22 @@ unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end
 	dma_free_sectors = dma_sectors;  /* This must be a multiple of 16 */
 
 	scsi_init_memory_start = (scsi_init_memory_start + 3) & 0xfffffffc;
-	dma_malloc_freelist = (unsigned short *) 
-	  scsi_init_malloc(dma_sectors >> 3);
+	dma_malloc_freelist = (unsigned char *) 
+	  scsi_init_malloc(dma_sectors >> 3, GFP_ATOMIC);
 	memset(dma_malloc_freelist, 0, dma_sectors >> 3);
 
+ 	dma_malloc_pages = (unsigned char **) 
+ 	  scsi_init_malloc(dma_sectors >> 1, GFP_ATOMIC);
+ 	memset(dma_malloc_pages, 0, dma_sectors >> 1);
+ 
 	/* Some host adapters require buffers to be word aligned */
 	if(scsi_init_memory_start & 1) scsi_init_memory_start++;
-
-	dma_malloc_buffer = (unsigned char *) 
-	  scsi_init_malloc(dma_sectors << 9);
 	
+ 	for(i=0; i< dma_sectors >> 3; i++)
+ 	  dma_malloc_pages[i] = (unsigned char *) 
+ 	    scsi_init_malloc(PAGE_SIZE, GFP_ATOMIC | GFP_DMA);
+
+
 	/* OK, now we finish the initialization by doing spin-up, read
 	   capacity, etc, etc */
 	for(sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
@@ -2059,7 +2132,6 @@ static void print_inquiry(unsigned char *data)
 	  printk("\n");
 }
 
-#ifdef NOT_YET
 /*
  * This entry point should be called by a loadable module if it is trying
  * add a low level scsi driver to the system.
@@ -2368,7 +2440,6 @@ void scsi_unregister_module(int module_type, void * ptr)
   }
   return;
 }
-#endif
 
 #ifdef DEBUG_TIMEOUT
 static void 
@@ -2424,5 +2495,3 @@ scsi_dump_status(void)
       }
 }
 #endif
-
-

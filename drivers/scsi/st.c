@@ -5,13 +5,13 @@
   History:
   Rewritten from Dwayne Forsyth's SCSI tape driver by Kai Makisara.
   Contribution and ideas from several people including (in alphabetical
-  order) Klaus Ehrenfried, Wolfgang Denk, Andreas Koppenh"ofer, J"org Weule,
-  and Eric Youngdale.
+  order) Klaus Ehrenfried, Steve Hirsch, Wolfgang Denk, Andreas Koppenh"ofer,
+  J"org Weule, and Eric Youngdale.
 
-  Copyright 1992, 1993, 1994 Kai Makisara
-		 email makisara@vtinsx.ins.vtt.fi or Kai.Makisara@vtt.fi
+  Copyright 1992, 1993, 1994, 1995 Kai Makisara
+		 email Kai.Makisara@metla.fi
 
-  Last modified: Sun Dec 18 10:15:33 1994 by root@kai.home
+  Last modified: Wed Jan 11 22:02:20 1995 by root@kai.home
 */
 
 #include <linux/fs.h>
@@ -42,6 +42,8 @@
 /* #define ST_RECOVERED_WRITE_FATAL */
 
 #define ST_TWO_FM 0
+
+#define ST_FAST_MTEOM 0
 
 #define ST_BUFFER_WRITES 1
 
@@ -86,13 +88,14 @@ static int st_max_buffers = ST_MAX_BUFFERS;
 static Scsi_Tape * scsi_tapes;
 
 static void st_init(void);
-static void st_attach(Scsi_Device *);
+static int st_attach(Scsi_Device *);
 static int st_detect(Scsi_Device *);
+static void st_detach(Scsi_Device *);
 
 struct Scsi_Device_Template st_template = {NULL, "tape", "st", TYPE_TAPE, 
 					     SCSI_TAPE_MAJOR, 0, 0, 0, 0,
 					     st_detect, st_init,
-					     NULL, st_attach, NULL};
+					     NULL, st_attach, st_detach};
 
 static int st_int_ioctl(struct inode * inode,struct file * file,
 	     unsigned int cmd_in, unsigned long arg);
@@ -366,7 +369,6 @@ flush_buffer(struct inode * inode, struct file * filp, int seek_next)
 	STp->block_size;
   (STp->buffer)->buffer_bytes = 0;
   (STp->buffer)->read_pointer = 0;
-  STp->drv_block -= backspace;
   result = 0;
   if (!seek_next) {
     if ((STp->eof == ST_FM) && !STp->eof_hit) {
@@ -592,6 +594,9 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 #endif
     }
 
+    if (scsi_tapes[dev].device->host->hostt->usage_count)
+      (*scsi_tapes[dev].device->host->hostt->usage_count)++;
+
     return 0;
 }
 
@@ -670,6 +675,9 @@ scsi_tape_close(struct inode * inode, struct file * filp)
     if (STp->buffer != NULL)
       (STp->buffer)->in_use = 0;
     STp->in_use = 0;
+
+    if (scsi_tapes[dev].device->host->hostt->usage_count)
+      (*scsi_tapes[dev].device->host->hostt->usage_count)--;
 
     return;
 }
@@ -1164,14 +1172,15 @@ st_set_options(struct inode * inode, long options)
     STp->do_async_writes  = (options & MT_ST_ASYNC_WRITES) != 0;
     STp->do_read_ahead    = (options & MT_ST_READ_AHEAD) != 0;
     STp->two_fm		  = (options & MT_ST_TWO_FM) != 0;
+    STp->fast_mteom	  = (options & MT_ST_FAST_MTEOM) != 0;
 #ifdef DEBUG
     debugging = (options & MT_ST_DEBUGGING) != 0;
     printk(
 "st%d: options: buffer writes: %d, async writes: %d, read ahead: %d\n",
 	   dev, STp->do_buffer_writes, STp->do_async_writes,
 	   STp->do_read_ahead);
-    printk("              two FMs: %d, debugging: %d\n", STp->two_fm,
-	   debugging);
+    printk("              two FMs: %d, fast mteom: %d debugging: %d\n",
+	   STp->two_fm, STp->fast_mteom, debugging);
 #endif
   }
   else if ((options & MT_ST_OPTIONS) == MT_ST_WRITE_THRESHOLD) {
@@ -1398,15 +1407,19 @@ st_int_ioctl(struct inode * inode,struct file * file,
        fileno = blkno = at_sm = 0;
        break; 
      case MTEOM:
-       /* space to the end of tape */
-       ioctl_result = st_int_ioctl(inode, file, MTFSF, 0x3fff);
-       fileno = (STp->mt_status)->mt_fileno ;
-       if (STp->eof == ST_EOD || STp->eof == ST_EOM_OK)
-	 return 0;
-       /* The next lines would hide the number of spaced FileMarks
-          That's why I inserted the previous lines. I had no luck
-	  with detecting EOM with FSF, so we go now to EOM.
-          Joerg Weule */
+       if (!STp->fast_mteom) {
+	 /* space to the end of tape */
+	 ioctl_result = st_int_ioctl(inode, file, MTFSF, 0x3fff);
+	 fileno = (STp->mt_status)->mt_fileno ;
+	 if (STp->eof == ST_EOD || STp->eof == ST_EOM_OK)
+	   return 0;
+	 /* The next lines would hide the number of spaced FileMarks
+	    That's why I inserted the previous lines. I had no luck
+	    with detecting EOM with FSF, so we go now to EOM.
+	    Joerg Weule */
+       }
+       else
+	 fileno = (-1);
        cmd[0] = SPACE;
        cmd[1] = 3;
 #ifdef DEBUG
@@ -1566,7 +1579,7 @@ st_int_ioctl(struct inode * inode,struct file * file,
      else if (cmd_in == MTSETDENSITY)
        STp->density = arg;
      else if (cmd_in == MTEOM) {
-       STp->eof = ST_EOM_OK;
+       STp->eof = ST_EOD;
        STp->eof_hit = 0;
      }
      else if (cmd_in != MTSETBLK && cmd_in != MTNOP) {
@@ -1606,6 +1619,10 @@ st_int_ioctl(struct inode * inode,struct file * file,
 	 STp->drv_block = blkno + undone;
        else
 	 STp->drv_block = (-1);
+     }
+     else if (cmd_in == MTEOM) {
+       (STp->mt_status)->mt_fileno = (-1);
+       STp->drv_block = (-1);
      }
      if (STp->eof == ST_NOEOF &&
 	 (SCpnt->sense_buffer[2] & 0x0f) == BLANK_CHECK)
@@ -1699,7 +1716,7 @@ st_ioctl(struct inode * inode,struct file * file,
      }
      if (STp->eof == ST_EOM_OK || STp->eof == ST_EOM_ERROR)
        (STp->mt_status)->mt_gstat |= GMT_EOT(0xffffffff);
-     else if (STp->eof == ST_EOD || STp->eof == ST_EOM_OK)
+     else if (STp->eof == ST_EOD)
        (STp->mt_status)->mt_gstat |= GMT_EOD(0xffffffff);
      if (STp->density == 1)
        (STp->mt_status)->mt_gstat |= GMT_D_800(0xffffffff);
@@ -1823,16 +1840,17 @@ static struct file_operations st_fops = {
    NULL		    /* fsync */
 };
 
-static void st_attach(Scsi_Device * SDp){
+static int st_attach(Scsi_Device * SDp){
    Scsi_Tape * tpnt;
    int i;
 
-   /* We do not support attaching loadable devices yet. */
-   if(scsi_loadable_module_flag) return;
-   if(SDp->type != TYPE_TAPE) return;
+   if(SDp->type != TYPE_TAPE) return 1;
 
    if(st_template.nr_dev >= st_template.dev_max) 
-     panic ("scsi_devices corrupt (st)");
+     {
+     	SDp->attached--;
+     	return 1;
+     }
 
    for(tpnt = scsi_tapes, i=0; i<st_template.dev_max; i++, tpnt++) 
      if(!tpnt->device) break;
@@ -1840,13 +1858,17 @@ static void st_attach(Scsi_Device * SDp){
    if(i >= st_template.dev_max) panic ("scsi_devices corrupt (st)");
 
    scsi_tapes[i].device = SDp;
+   if (SDp->scsi_level <= 2)
+     scsi_tapes[i].mt_status->mt_type = MT_ISSCSI1;
+   else
+     scsi_tapes[i].mt_status->mt_type = MT_ISSCSI2;
+
    st_template.nr_dev++;
+   return 0;
 };
 
-static int st_detect(Scsi_Device * SDp){
-  
-  /* We do not support attaching loadable devices yet. */
-  if(scsi_loadable_module_flag) return 0;
+static int st_detect(Scsi_Device * SDp)
+{
   if(SDp->type != TYPE_TAPE) return 0;
 
   printk("Detected scsi tape st%d at scsi%d, id %d, lun %d\n", 
@@ -1874,19 +1896,18 @@ static void st_init()
     st_registered++;
   }
 
-  /* We do not support attaching loadable devices yet. */
-  if(scsi_loadable_module_flag) return;
-
-  scsi_tapes = (Scsi_Tape *) scsi_init_malloc(st_template.dev_noticed * 
-					      sizeof(Scsi_Tape));
-  st_template.dev_max = st_template.dev_noticed;
+  if (scsi_tapes) return;
+  scsi_tapes = (Scsi_Tape *) scsi_init_malloc(
+  		(st_template.dev_noticed + ST_EXTRA_DEVS) * 
+					      sizeof(Scsi_Tape), GFP_ATOMIC);
+  st_template.dev_max = st_template.dev_noticed + ST_EXTRA_DEVS;
 
 #ifdef DEBUG
   printk("st: Buffer size %d bytes, write threshold %d bytes.\n",
 	 st_buffer_size, st_write_threshold);
 #endif
 
-  for (i=0, SDp = scsi_devices; i < st_template.dev_noticed; ++i) {
+  for (i=0; i < st_template.dev_max; ++i) {
     STp = &(scsi_tapes[i]);
     STp->device = NULL;
     STp->capacity = 0xfffff;
@@ -1901,25 +1922,14 @@ static void st_init()
     STp->do_async_writes = ST_ASYNC_WRITES;
     STp->do_read_ahead = ST_READ_AHEAD;
     STp->two_fm = ST_TWO_FM;
+    STp->fast_mteom = ST_FAST_MTEOM;
     STp->write_threshold = st_write_threshold;
     STp->drv_block = 0;
     STp->moves_after_eof = 1;
     STp->at_sm = 0;
-    STp->mt_status = (struct mtget *) scsi_init_malloc(sizeof(struct mtget));
+    STp->mt_status = (struct mtget *) scsi_init_malloc(sizeof(struct mtget), GFP_ATOMIC);
     /* Initialize status */
     memset((void *) scsi_tapes[i].mt_status, 0, sizeof(struct mtget));
-    for (; SDp; SDp = SDp->next)
-      if (SDp->type == TYPE_TAPE)
-	break;
-    if (!SDp)
-      printk("st%d: ERROR: Not found in scsi chain.\n", i);
-    else {
-      if (SDp->scsi_level <= 2)
-	STp->mt_status->mt_type = MT_ISSCSI1;
-      else
-	STp->mt_status->mt_type = MT_ISSCSI2;
-    }
-    SDp = SDp->next;
   }
 
   /* Allocate the buffers */
@@ -1927,15 +1937,36 @@ static void st_init()
   if (st_nbr_buffers > st_max_buffers)
     st_nbr_buffers = st_max_buffers;
   st_buffers = (ST_buffer **) scsi_init_malloc(st_nbr_buffers * 
-					       sizeof(ST_buffer *));
+					       sizeof(ST_buffer *), GFP_ATOMIC);
+  /* FIXME - if we are hitting this because we are loading a tape module
+  as a loadable driver, we should not use kmalloc - it will allocate
+  a 64Kb region in order to buffer about 32Kb.  Try using 31 blocks
+  instead. */
+  
   for (i=0; i < st_nbr_buffers; i++) {
     st_buffers[i] = (ST_buffer *) scsi_init_malloc(sizeof(ST_buffer) - 
-						   1 + st_buffer_size);
+						   1 + st_buffer_size, GFP_ATOMIC | GFP_DMA);
 #ifdef DEBUG
 /*    printk("st: Buffer address: %p\n", st_buffers[i]); */
 #endif
     st_buffers[i]->in_use = 0;
     st_buffers[i]->writing = 0;
   }
+  return;
+}
+
+static void st_detach(Scsi_Device * SDp)
+{
+  Scsi_Tape * tpnt;
+  int i;
+  
+  for(tpnt = scsi_tapes, i=0; i<st_template.dev_max; i++, tpnt++) 
+    if(tpnt->device == SDp) {
+      tpnt->device = NULL;
+      SDp->attached--;
+      st_template.nr_dev--;
+      st_template.dev_noticed--;
+      return;
+    }
   return;
 }

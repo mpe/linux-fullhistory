@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/ide-cd.c  (ALPHA)
+ * linux/drivers/block/ide-cd.c  (BETA)
  *
  * 1.00  Oct 31, 1994 -- Initial version.
  * 1.01  Nov  2, 1994 -- Fixed problem with starting request in
@@ -17,15 +17,22 @@
  *                       Try to use LBA instead of track or MSF addressing
  *                       when possible.
  *                       Don't wait for READY_STAT.
+ * 2.03  Jan 10, 1995 -- Rewrite block read routines to handle block sizes
+ *                       other than 2k and to move multiple sectors in a
+ *                       single transaction.
  *
  * ATAPI cd-rom driver.  To be used with ide.c.
  *
- * Copyright (C) 1994  scott snyder  <snyder@fnald0.fnal.gov>
+ * Copyright (C) 1994, 1995  scott snyder  <snyder@fnald0.fnal.gov>
  */
 
 #include <linux/cdrom.h>
 
-#define BLOCKS_PER_FRAME (CD_FRAMESIZE / 512)
+#define SECTOR_SIZE 512
+#define SECTOR_BITS 9
+#define SECTORS_PER_FRAME (CD_FRAMESIZE / SECTOR_SIZE)
+
+#define MIN(a,b) ((a) < (b) ? (a) : (b))
 
 #define OUT_WORDS(b,n)  outsw (IDE_PORT (HD_DATA, dev->hwif), (b), (n))
 #define IN_WORDS(b,n)   insw  (IDE_PORT (HD_DATA, dev->hwif), (b), (n))
@@ -107,17 +114,68 @@ struct atapi_toc_entry {
 
 struct atapi_toc {
   struct atapi_toc_header hdr;
-  struct atapi_toc_entry  ent[MAX_TRACKS+1];
+  struct atapi_toc_entry  ent[MAX_TRACKS+1];  /* One extra for the leadout. */
 };
 
 
-static struct atapi_toc *cdrom_toc[2][MAX_DRIVES];
+#define SECTOR_BUFFER_SIZE CD_FRAMESIZE
+
+/* Extra per-device info for cdrom drives. */
+struct cdrom_info {
+
+  /* Buffer for table of contents.  NULL if we haven't allocated
+     a TOC buffer for this device yet. */
+
+  struct atapi_toc *toc;
+
+  /* Sector buffer.  If a read request wants only the first part of a cdrom
+     block, we cache the rest of the block here, in the expectation that that
+     data is going to be wanted soon.  SECTOR_BUFFERED is the number of the
+     first buffered sector, and NSECTORS_BUFFERED is the number of sectors
+     in the buffer.  Before the buffer is allocated, we should have
+     SECTOR_BUFFER == NULL and NSECTORS_BUFFERED == 0. */
+
+  unsigned long sector_buffered;
+  unsigned long nsectors_buffered;
+  char *sector_buffer;
+};
+
+
+static struct cdrom_info cdrom_info[2][MAX_DRIVES];
 
 
 
 /****************************************************************************
  * Generic packet command support routines.
  */
+
+
+static void cdrom_end_request (int uptodate, ide_dev_t *dev)
+{
+  struct request *rq = ide_cur_rq[dev->hwif];
+
+  /* The code in blk.h can screw us up on error recovery if the block
+     size is larger than 1k.  Fix that up here. */
+  if (!uptodate && rq->bh != 0)
+    {
+      int adj = rq->current_nr_sectors - 1;
+      rq->current_nr_sectors -= adj;
+      rq->sector += adj;
+    }
+
+  end_request (uptodate, dev->hwif);
+}
+
+
+/* Mark that we've seen a media change, and invalidate our internal
+   buffers. */
+static void cdrom_saw_media_change (ide_dev_t *dev)
+{
+  CDROM_FLAGS (dev)->media_changed = 1;
+  CDROM_FLAGS (dev)->toc_valid = 0;
+  cdrom_info[dev->hwif][dev->select.b.drive].nsectors_buffered = 0;
+}
+
 
 /* Returns 0 if the request should be continued.
    Returns 1 if the request was ended. */
@@ -140,14 +198,13 @@ static int cdrom_decode_status (ide_dev_t *dev, int good_stat, int *stat_ret)
   if ((err & 0xf0) == 0x20)
     {
       struct packet_command *pc;
-      CDROM_FLAGS (dev)->media_changed = 1;
-      CDROM_FLAGS (dev)->toc_valid = 0;
+      cdrom_saw_media_change (dev);
 
       /* Fail the request if this is a read command. */
       if (rq->cmd == READ)
         {
           printk ("%s : tray open\n", dev->name);
-          end_request (0, dev->hwif);
+          cdrom_end_request (0, dev);
         }
 
       else
@@ -164,22 +221,21 @@ static int cdrom_decode_status (ide_dev_t *dev, int good_stat, int *stat_ret)
 
           /* Set the error flag and complete the request. */
           pc->stat = 1;
-          end_request (1, dev->hwif);
+          cdrom_end_request (1, dev);
         }
     }
 
   /* Check for media change. */
   else if ((err & 0xf0) == 0x60)
     {
-      CDROM_FLAGS (dev)->media_changed = 1;
-      CDROM_FLAGS (dev)->toc_valid = 0;
+      cdrom_saw_media_change (dev);
       printk ("%s: media changed\n", dev->name);
 
       /* We're going to retry this command.
          But be sure to give up if we've retried too many times. */
       if ((++rq->errors > ERROR_MAX))
         {
-          end_request (0, dev->hwif);
+          cdrom_end_request (0, dev);
         }
     }
 
@@ -189,19 +245,19 @@ static int cdrom_decode_status (ide_dev_t *dev, int good_stat, int *stat_ret)
       struct packet_command *pc = (struct packet_command *)rq->buffer;
       dump_status (dev->hwif, "packet command error", stat);
       pc->stat = 1;  /* signal error */
-      end_request (1, dev->hwif);
+      cdrom_end_request (1, dev);
     }
 
   /* If there were other errors, go to the default handler. */
   else if ((err & ~ABRT_ERR) != 0)
     {
-      ide_error (dev, "cdrom_read_intr", stat);
+      ide_error (dev, "cdrom_decode_status", stat);
     }
 
   /* Else, abort if we've racked up too many retries. */
   else if ((++rq->errors > ERROR_MAX))
     {
-      end_request (0, dev->hwif);
+      cdrom_end_request (0, dev);
     }
 
   /* Retry, or handle the next request. */
@@ -266,36 +322,95 @@ static int cdrom_transfer_packet_command (ide_dev_t *dev,
  * Block read functions.
  */
 
-static int cdrom_start_read (ide_dev_t *dev, unsigned int block);
+/*
+ * Buffer up to SECTORS_TO_TRANSFER sectors from the drive in our sector
+ * buffer.  SECTOR is the number of the first sector to be buffered.
+ */
+static void cdrom_buffer_sectors (ide_dev_t *dev, unsigned long sector,
+                                  int sectors_to_transfer)
+{
+  struct cdrom_info *info = &cdrom_info[dev->hwif][dev->select.b.drive];
+
+  /* Number of sectors to read into the buffer. */
+  int sectors_to_buffer = MIN (sectors_to_transfer,
+                               (SECTOR_BUFFER_SIZE >> SECTOR_BITS));
+
+  char *dest;
+
+  /* If we don't yet have a sector buffer, try to allocate one.
+     If we can't get one atomically, it's not fatal -- we'll just throw
+     the data away rather than caching it. */
+  if (info->sector_buffer == NULL)
+    {
+      info->sector_buffer = (char *) kmalloc (SECTOR_BUFFER_SIZE, GFP_ATOMIC);
+
+      /* If we couldn't get a buffer, don't try to buffer anything... */
+      if (info->sector_buffer == NULL)
+        sectors_to_buffer = 0;
+    }
+
+  /* Remember the sector number and the number of sectors we're storing. */
+  info->sector_buffered = sector;
+  info->nsectors_buffered = sectors_to_buffer;
+
+  /* Read the data into the buffer. */
+  dest = info->sector_buffer;
+  while (sectors_to_buffer > 0)
+    {
+      IN_WORDS (dest, SECTOR_SIZE / 2);
+      --sectors_to_buffer;
+      --sectors_to_transfer;
+      dest += SECTOR_SIZE;
+    }
+
+  /* Throw away any remaining data. */
+  while (sectors_to_transfer > 0)
+    {
+      char dum[SECTOR_SIZE];
+      IN_WORDS (dest, sizeof (dum) / 2);
+      --sectors_to_transfer;
+    }
+}
 
 
 /*
- * Interrupt routine to read the final status from a transfer.
+ * Check the contents of the interrupt reason register from the cdrom
+ * and attempt to recover if there are problems.  Returns  0 if everything's
+ * ok; nonzero if the request has been terminated.
  */
-static void cdrom_read_intr_2 (ide_dev_t *dev)
+static inline
+int cdrom_read_check_ireason (ide_dev_t *dev, int len, int ireason)
 {
-  int stat;
-  struct request *rq = ide_cur_rq[dev->hwif];
+  ireason &= 3;
+  if (ireason == 2) return 0;
 
-  stat = GET_STAT (dev->hwif);
-
-  if (OK_STAT (stat, 0, BAD_STAT))
+  if (ireason == 0)
     {
-      if (rq->current_nr_sectors <= 0)
-        {
-          end_request (1, dev->hwif);
-        }
+      /* Whoops... The drive is expecting to receive data from us! */
+      printk ("%s: cdrom_read_intr: "
+              "Drive wants to transfer data the wrong way!\n",
+              dev->name);
 
-      if (rq->current_nr_sectors > 0)
+      /* Throw some data at the drive so it doesn't hang
+         and quit this request. */
+      while (len > 0)
         {
-          cdrom_start_read (dev, rq->sector);
-          return;
+          short dum = 0;
+          OUT_WORDS (&dum, 1);
+          len -= 2;
         }
     }
-  else
-    ide_error (dev, "cdrom_read_intr_2", stat);
 
+  else
+    {
+      /* Drive wants a command packet, or invalid ireason... */
+      printk ("%s: cdrom_read_intr: bad interrupt reason %d\n",
+              dev->name, ireason);
+    }
+
+  cdrom_end_request (0, dev);
   DO_REQUEST;
+  return -1;
 }
 
 
@@ -304,32 +419,173 @@ static void cdrom_read_intr_2 (ide_dev_t *dev)
  */
 static void cdrom_read_intr (ide_dev_t *dev)
 {
-  int stat_dum, len;
+  int stat;
+  int ireason, len, sectors_to_transfer, nskip;
+
   struct request *rq = ide_cur_rq[dev->hwif];
 
   /* Check for errors. */
-  if (cdrom_decode_status (dev, DRQ_STAT, &stat_dum)) return;
+  if (cdrom_decode_status (dev, 0, &stat)) return;
 
-  /* Error bit not set.
-     Read the device registers to see how much data is waiting. */
+  /* Read the interrupt reason and the transfer length. */
+  ireason = IN_BYTE (HD_NSECTOR, dev->hwif);
   len = IN_BYTE (HD_LCYL, dev->hwif) + 256 * IN_BYTE (HD_HCYL, dev->hwif);
 
-  if (len != CD_FRAMESIZE)
+  /* If DRQ is clear, the command has completed. */
+  if ((stat & DRQ_STAT) == 0)
     {
-      printk ("cdrom_read_intr: funny value for read length %d\n", len);
-      if (len > CD_FRAMESIZE) len = CD_FRAMESIZE;
+      /* If we're not done filling the current buffer, complain.
+         Otherwise, complete the command normally. */
+      if (rq->current_nr_sectors > 0)
+        {
+          printk ("%s: cdrom_read_intr: data underrun (%ld blocks)\n",
+                  dev->name, rq->current_nr_sectors);
+          cdrom_end_request (0, dev);
+        }
+      else
+        cdrom_end_request (1, dev);
+
+      DO_REQUEST;
+      return;
     }
 
-  IN_WORDS (rq->buffer, len/2);
+  /* Check that the drive is expecting to do the same thing that we are. */
+  if (cdrom_read_check_ireason (dev, len, ireason)) return;
 
-  rq->current_nr_sectors -= BLOCKS_PER_FRAME;
-  rq->nr_sectors -= BLOCKS_PER_FRAME;
-  rq->sector += BLOCKS_PER_FRAME;
-  rq->buffer += CD_FRAMESIZE;
+  /* Assume that the drive will always provide data in multiples of at least
+     SECTOR_SIZE, as it gets hairy to keep track of the transfers otherwise. */
+  if ((len % SECTOR_SIZE) != 0)
+    {
+      printk ("%s: cdrom_read_intr: Bad transfer size %d\n",
+              dev->name, len);
+      printk ("  This drive is not supported by this version of the driver\n");
+      cdrom_end_request (0, dev);
+      DO_REQUEST;
+      return;
+    }
 
-  /* Wait for another interrupt with the final status. */
-  ide_handler[dev->hwif] = cdrom_read_intr_2;
+  /* The number of sectors we need to read from the drive. */
+  sectors_to_transfer = len / SECTOR_SIZE;
+
+  /* First, figure out if we need to bit-bucket any of the leading sectors. */
+  nskip = MIN ((int)(rq->current_nr_sectors - (rq->bh->b_size >> SECTOR_BITS)),
+               sectors_to_transfer);
+
+  while (nskip > 0)
+    {
+      /* We need to throw away a sector. */
+      char dum[SECTOR_SIZE];
+      IN_WORDS (dum, sizeof (dum) / 2);
+
+      --rq->current_nr_sectors;
+      --nskip;
+      --sectors_to_transfer;
+    }
+
+  /* Now loop while we still have data to read from the drive. */
+  while (sectors_to_transfer > 0)
+    {
+      int this_transfer;
+
+      /* If we've filled the present buffer but there's another chained
+         buffer after it, move on. */
+      if (rq->current_nr_sectors == 0 &&
+          rq->nr_sectors > 0)
+        cdrom_end_request (1, dev);
+
+      /* If the buffers are full, cache the rest of the data in our
+         internal buffer. */
+      if (rq->current_nr_sectors == 0)
+        {
+          cdrom_buffer_sectors (dev, rq->sector, sectors_to_transfer);
+          sectors_to_transfer = 0;
+        }
+      else
+        {
+          /* Transfer data to the buffers.
+             Figure out how many sectors we can transfer
+             to the current buffer. */
+          this_transfer = MIN (sectors_to_transfer,
+                               rq->current_nr_sectors);
+
+          /* Read this_transfer sectors into the current buffer. */
+          while (this_transfer > 0)
+            {
+              IN_WORDS (rq->buffer, SECTOR_SIZE / 2);
+              rq->buffer += SECTOR_SIZE;
+              --rq->nr_sectors;
+              --rq->current_nr_sectors;
+              ++rq->sector;
+              --this_transfer;
+              --sectors_to_transfer;
+            }
+        }
+    }
+
+  /* Done moving data!
+     Wait for another interrupt. */
+  ide_handler[dev->hwif] = cdrom_read_intr;
 }
+
+
+/*
+ * Try to satisfy some of the current read request from our cached data.
+ * Returns nonzero if the request has been completed, zero otherwise.
+ */
+static int cdrom_read_from_buffer (ide_dev_t *dev)
+{
+  struct cdrom_info *info = &cdrom_info[dev->hwif][dev->select.b.drive];
+  struct request *rq = ide_cur_rq[dev->hwif];
+
+  /* Can't do anything if there's no buffer. */
+  if (info->sector_buffer == NULL) return 0;
+
+  /* Loop while this request needs data and the next block is present
+     in our cache. */
+  while (rq->nr_sectors > 0 &&
+         rq->sector >= info->sector_buffered &&
+         rq->sector < info->sector_buffered + info->nsectors_buffered)
+    {
+      if (rq->current_nr_sectors == 0)
+        cdrom_end_request (1, dev);
+
+      memcpy (rq->buffer,
+              info->sector_buffer +
+                (rq->sector - info->sector_buffered) * SECTOR_SIZE,
+              SECTOR_SIZE);
+      rq->buffer += SECTOR_SIZE;
+      --rq->current_nr_sectors;
+      --rq->nr_sectors;
+      ++rq->sector;
+    }
+
+  /* If we've statisfied the current request, terminate it successfully. */
+  if (rq->nr_sectors == 0)
+    {
+      cdrom_end_request (1, dev);
+      return -1;
+    }
+
+  /* Move on to the next buffer if needed. */
+  if (rq->current_nr_sectors == 0)
+    cdrom_end_request (1, dev);
+
+  /* If this condition does not hold, then the kluge i use to
+     represent the number of sectors to skip at the start of a transfer
+     will fail.  I think that this will never happen, but let's be
+     paranoid and check. */
+  if (rq->current_nr_sectors < (rq->bh->b_size >> SECTOR_BITS) &&
+      (rq->sector % SECTORS_PER_FRAME) != 0)
+    {
+      printk ("%s: cdrom_read_from_buffer: buffer botch (%ld)\n",
+              dev->name, rq->sector);
+      cdrom_end_request (0, dev);
+      return -1;
+    }
+
+  return 0;
+}
+
 
 
 /*
@@ -343,10 +599,51 @@ static int cdrom_start_read_continuation (ide_dev_t *dev)
   struct packet_command pc;
   struct request *rq = ide_cur_rq[dev->hwif];
 
+  int nsect, sector, nframes, frame, nskip;
+
+  /* Number of sectors to transfer. */
+  nsect = rq->nr_sectors;
+
+  /* Starting sector. */
+  sector = rq->sector;
+
+  /* If the requested sector doesn't start on a cdrom block boundary,
+     we must adjust the start of the transfer so that it does,
+     and remember to skip the first few sectors.  If the CURRENT_NR_SECTORS
+     field is larger than the size of the buffer, it will mean that
+     we're to skip a number of sectors equal to the amount by which
+     CURRENT_NR_SECTORS is larger than the buffer size. */
+  nskip = (sector % SECTORS_PER_FRAME);
+  if (nskip > 0)
+    {
+      /* Sanity check... */
+      if (rq->current_nr_sectors != (rq->bh->b_size >> SECTOR_BITS))
+        {
+          printk ("%s: cdrom_start_read_continuation: buffer botch (%ld)\n",
+                  dev->name, rq->current_nr_sectors);
+          cdrom_end_request (0, dev);
+          DO_REQUEST;
+          return 1;
+        }
+
+      sector -= nskip;
+      nsect += nskip;
+      rq->current_nr_sectors += nskip;
+    }
+
+  /* Convert from sectors to cdrom blocks, rounding up the transfer
+     length if needed. */
+  nframes = (nsect + SECTORS_PER_FRAME-1) / SECTORS_PER_FRAME;
+  frame = sector / SECTORS_PER_FRAME;
+
+  /* Largest number of frames was can transfer at once is 64k-1. */
+  nframes = MIN (nframes, 65535);
+
   /* Set up the command */
   memset (&pc.c, 0, sizeof (pc.c));
   pc.c[0] = READ_10;
-  pc.c[8] = 1;  /* lsb of transfer length */
+  pc.c[7] = (nframes >> 8);
+  pc.c[8] = (nframes & 0xff);
 
   /* Write the sector address into the command image. */
   {
@@ -354,7 +651,7 @@ static int cdrom_start_read_continuation (ide_dev_t *dev)
       struct {unsigned char b0, b1, b2, b3;} b;
       struct {unsigned long l0;} l;
     } conv;
-    conv.l.l0 = rq->sector / BLOCKS_PER_FRAME;
+    conv.l.l0 = frame;
     pc.c[2] = conv.b.b3;
     pc.c[3] = conv.b.b2;
     pc.c[4] = conv.b.b1;
@@ -381,17 +678,25 @@ static int cdrom_start_read (ide_dev_t *dev, unsigned int block)
 {
   struct request *rq = ide_cur_rq[dev->hwif];
 
-  if (rq->cmd == READ &&
-      (rq->current_nr_sectors != BLOCKS_PER_FRAME ||
-       (rq->sector & (BLOCKS_PER_FRAME-1)) != 0))
-        {
-          printk ("cdrom_start_read: funny request 0x%lx 0x%lx\n",
-                  rq->current_nr_sectors, rq->sector);
-          end_request (0, dev->hwif);
-          return 1;
-        }
+  /* We may be retrying this request after an error.
+     Fix up any weirdness which might be present in the request packet. */
+  if (rq->buffer != rq->bh->b_data)
+    {
+      int n = (rq->buffer - rq->bh->b_data) / SECTOR_SIZE;
+      rq->buffer = rq->bh->b_data;
+      rq->nr_sectors += n;
+      rq->current_nr_sectors += n;
+      rq->sector -= n;
+    }
 
-  if (cdrom_start_packet_command (dev, CD_FRAMESIZE))
+  if (rq->current_nr_sectors > (rq->bh->b_size >> SECTOR_BITS))
+    rq->current_nr_sectors = rq->bh->b_size;
+
+  /* Satisfy whatever we can of this request from our cached sector. */
+  if (cdrom_read_from_buffer (dev))
+    return 1;
+
+  if (cdrom_start_packet_command (dev, 32768))
     return 1;
 
   if (CDROM_FLAGS (dev)->drq_interrupt)
@@ -404,6 +709,7 @@ static int cdrom_start_read (ide_dev_t *dev, unsigned int block)
 
   return 0;
 }
+
 
 
 
@@ -429,13 +735,13 @@ static void cdrom_pc_intr (ide_dev_t *dev)
   if ((stat & DRQ_STAT) == 0)
     {
       if (pc->buflen == 0)
-        end_request (1, dev->hwif);
+        cdrom_end_request (1, dev);
       else
         {
           printk ("%s: cdrom_pc_intr: data underrun %d\n",
                   dev->name, pc->buflen);
           pc->stat = 1;
-          end_request (1, dev->hwif);
+          cdrom_end_request (1, dev);
         }
       DO_REQUEST;
       return;
@@ -616,21 +922,8 @@ static int do_rw_cdrom (ide_dev_t *dev, unsigned long block)
   if (rq -> cmd != READ)
     {
       printk ("ide-cd: bad cmd %d\n", rq -> cmd);
-      end_request (0, dev->hwif);
+      cdrom_end_request (0, dev);
       return 1;
-    }
-
-  if (rq->cmd == READ)
-    {
-      /* This can happen if there was an I/O error on the previous
-         buffer in this request. */
-      if ((rq->nr_sectors & (BLOCKS_PER_FRAME-1)) == BLOCKS_PER_FRAME-1 &&
-          (rq->sector & (BLOCKS_PER_FRAME-1)) == 1 &&
-          (rq->current_nr_sectors & (BLOCKS_PER_FRAME-1)) == 0)
-        {
-          rq->nr_sectors &= (BLOCKS_PER_FRAME-1);
-          rq->sector = (rq->sector+BLOCKS_PER_FRAME) & (BLOCKS_PER_FRAME-1);
-        }
     }
 
   return cdrom_start_read (dev, block);
@@ -802,14 +1095,14 @@ static int
 cdrom_read_toc (ide_dev_t *dev)
 {
   int stat, ntracks, i;
-  struct atapi_toc *toc = cdrom_toc[dev->hwif][dev->select.b.drive];
+  struct atapi_toc *toc = cdrom_info[dev->hwif][dev->select.b.drive].toc;
 
   if (toc == NULL)
     {
       /* Try to allocate space. */
       toc = (struct atapi_toc *) kmalloc (sizeof (struct atapi_toc),
                                           GFP_KERNEL);
-      cdrom_toc[dev->hwif][dev->select.b.drive] = toc;
+      cdrom_info[dev->hwif][dev->select.b.drive].toc = toc;
     }
 
   if (toc == NULL)
@@ -1002,7 +1295,7 @@ int cdrom_get_toc_entry (ide_dev_t *dev, int track,
   stat = cdrom_read_toc (dev);
   if (stat) return stat;
 
-  toc = cdrom_toc[dev->hwif][dev->select.b.drive];
+  toc = cdrom_info[dev->hwif][dev->select.b.drive].toc;
 
   /* Check validity of requested track number. */
   ntracks = toc->hdr.last_track - toc->hdr.first_track + 1;
@@ -1098,7 +1391,7 @@ static int ide_cdrom_ioctl (ide_dev_t *dev, struct inode *inode,
         stat = cdrom_read_toc (dev);
         if (stat) return stat;
 
-        toc = cdrom_toc[dev->hwif][dev->select.b.drive];
+        toc = cdrom_info[dev->hwif][dev->select.b.drive].toc;
         tochdr.cdth_trk0 = toc->hdr.first_track;
         tochdr.cdth_trk1 = toc->hdr.last_track;
 
@@ -1327,18 +1620,22 @@ static void cdrom_setup (ide_dev_t *dev)
   CDROM_FLAGS (dev)->no_playaudio12 = 0;
   CDROM_FLAGS (dev)->drq_interrupt = ((dev->id->config & 0x0060) == 0x20);
 
-  cdrom_toc[dev->hwif][dev->select.b.drive] = NULL;
+  cdrom_info[dev->hwif][dev->select.b.drive].toc               = NULL;
+  cdrom_info[dev->hwif][dev->select.b.drive].sector_buffer     = NULL;
+  cdrom_info[dev->hwif][dev->select.b.drive].sector_buffered   = 0;
+  cdrom_info[dev->hwif][dev->select.b.drive].nsectors_buffered = 0;
 }
 
 
+#undef MIN
+#undef SECTOR_SIZE
+#undef SECTOR_BITS
 
 
 /*
  * TODO:
  *  Retrieve and interpret extended ATAPI error codes.
- *  Transfer multiple sectors at once.
  *  Read actual disk capacity.
- *  Support demand-paged executables (1k block sizes?).
  *  Multisession support.
  *  Direct reading of audio data.
  *  Eject-on-dismount.

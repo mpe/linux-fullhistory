@@ -94,7 +94,7 @@ void request_region(unsigned int from, unsigned int num, const char *name)
 
 /*
  * This is for compatibility with older drivers.
- * It can be removed when all driver call the new function.
+ * It can be removed when all drivers call the new function.
  */
 void snarf_region(unsigned int from, unsigned int num)
 {

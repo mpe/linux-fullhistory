@@ -72,6 +72,10 @@
 
 #define PCI_CLASS_REVISION	0x08	/* High 24 bits are class, low 8
 					   revision */
+#define PCI_REVISION_ID         0x08    /* Revision ID */
+#define PCI_CLASS_PROG          0x09    /* Reg. Level Programming Interface */
+#define PCI_CLASS_DEVICE        0x0a    /* Device class */
+
 #define PCI_CACHE_LINE_SIZE	0x0c	/* 8 bits */
 #define PCI_LATENCY_TIMER	0x0d	/* 8 bits */
 #define PCI_HEADER_TYPE		0x0e	/* 8 bits */
@@ -197,6 +201,9 @@ struct pci_class_type {
 #define PCI_VENDOR_ID_ADAPTEC		0x9004
 #define PCI_DEVICE_ID_ADAPTEC_2940	0x7178
 
+#define PCI_VENDOR_ID_DPT               0x1044   
+#define PCI_DEVICE_ID_DPT               0xa400  
+
 #define PCI_VENDOR_ID_S3		0x5333
 #define PCI_DEVICE_ID_S3_864_1		0x88c0
 #define PCI_DEVICE_ID_S3_864_2		0x88c1
@@ -261,10 +268,11 @@ struct pci_vendor_type {
 };
 
 
-#define PCI_VENDOR_NUM 17
+#define PCI_VENDOR_NUM 18
 #define PCI_VENDOR_TYPE { \
 	{PCI_VENDOR_ID_NCR,		"NCR"}, \
 	{PCI_VENDOR_ID_ADAPTEC,		"Adaptec"}, \
+	{PCI_VENDOR_ID_DPT,             "DPT"}, \
 	{PCI_VENDOR_ID_S3,		"S3 Inc."}, \
 	{PCI_VENDOR_ID_OPTI,		"OPTI"}, \
 	{PCI_VENDOR_ID_UMC,		"UMC"}, \
@@ -289,13 +297,14 @@ struct pci_device_type {
 	char *device_name;
 };
 
-#define PCI_DEVICE_NUM 33
+#define PCI_DEVICE_NUM 34
 #define PCI_DEVICE_TYPE { \
 	{PCI_VENDOR_ID_NCR,	PCI_DEVICE_ID_NCR_53C810,	"53c810"}, \
 	{PCI_VENDOR_ID_NCR,	PCI_DEVICE_ID_NCR_53C815,	"53c815"}, \
 	{PCI_VENDOR_ID_NCR,	PCI_DEVICE_ID_NCR_53C820,	"53c820"}, \
 	{PCI_VENDOR_ID_NCR,	PCI_DEVICE_ID_NCR_53C825,	"53c825"}, \
 	{PCI_VENDOR_ID_ADAPTEC,	PCI_DEVICE_ID_ADAPTEC_2940,	"2940"}, \
+	{PCI_VENDOR_ID_DPT,	PCI_DEVICE_ID_DPT,	        "SmartCache/Raid"}, \
 	{PCI_VENDOR_ID_S3,	PCI_DEVICE_ID_S3_864_1,		"Vision 864-P"}, \
 	{PCI_VENDOR_ID_S3,	PCI_DEVICE_ID_S3_864_2,		"Vision 864-P"}, \
 	{PCI_VENDOR_ID_S3,	PCI_DEVICE_ID_S3_928,		"Vision 928-P"}, \
@@ -326,6 +335,7 @@ struct pci_device_type {
 	{PCI_VENDOR_ID_CMD,	PCI_DEVICE_ID_CMD_640,		"640A"}, \
 	{0,0,"UNKNOWN DEVICE.PLEASE FIND OUT AND MAIL POTTER@CAO-VLSI.IBP.FR"} \
 }
+
 
 /* PCI BIOS */
 

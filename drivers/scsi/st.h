@@ -38,6 +38,7 @@ typedef struct {
   unsigned char do_async_writes;
   unsigned char do_read_ahead;
   unsigned char two_fm;
+  unsigned char fast_mteom;
   unsigned char density;
   ST_buffer * buffer;
   int block_size;

@@ -47,6 +47,10 @@
 #include "buslogic.h"
 #endif
 
+#ifdef CONFIG_SCSI_EATA_DMA
+#include "eata_dma.h"
+#endif
+
 #ifdef CONFIG_SCSI_U14_34F
 #include "u14-34f.h"
 #endif
@@ -178,6 +182,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #ifdef CONFIG_SCSI_NCR53C7xx
 	NCR53c7xx,
 #endif
+#ifdef CONFIG_SCSI_EATA_DMA
+	EATA_DMA,
+#endif
 #ifdef CONFIG_SCSI_7000FASST
 	WD7000,
 #endif
@@ -199,7 +206,7 @@ struct Scsi_Host * scsi_hostlist = NULL;
 struct Scsi_Device_Template * scsi_devicelist;
 
 int max_scsi_hosts = 0;
-static int next_host = 0;
+int next_scsi_host = 0;
 
 void
 scsi_unregister(struct Scsi_Host * sh){
@@ -215,7 +222,7 @@ scsi_unregister(struct Scsi_Host * sh){
 		while(shpnt->next != sh) shpnt = shpnt->next;
 		shpnt->next = shpnt->next->next;
 	};
-	next_host--;
+	next_scsi_host--;
 	scsi_init_free((char *) sh, sizeof(struct Scsi_Host) + j);
 }
 
@@ -225,13 +232,14 @@ scsi_unregister(struct Scsi_Host * sh){
 
 struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
 	struct Scsi_Host * retval, *shpnt;
-	retval = (struct Scsi_Host *)scsi_init_malloc(sizeof(struct Scsi_Host) + j);
+	retval = (struct Scsi_Host *)scsi_init_malloc(sizeof(struct Scsi_Host) + j,
+						      (tpnt->unchecked_isa_dma && j ? GFP_DMA : 0) | GFP_ATOMIC);
 	retval->host_busy = 0;
 	retval->block = NULL;
 	if(j > 0xffff) panic("Too many extra bytes requested\n");
 	retval->extra_bytes = j;
 	retval->loaded_as_module = scsi_loadable_module_flag;
-	retval->host_no = next_host++;
+	retval->host_no = next_scsi_host++;
 	retval->host_queue = NULL;
 	retval->host_wait = NULL;
 	retval->last_reset = 0;
@@ -241,7 +249,7 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
 	retval->hostt = tpnt;
 	retval->next = NULL;
 #ifdef DEBUG
-	printk("Register %x %x: %d\n", retval, retval->hostt, j);
+	printk("Register %x %x: %d\n", (int)retval, (int)retval->hostt, j);
 #endif
 
 	/* The next four are the default values which can be overridden
@@ -276,9 +284,10 @@ scsi_register_device(struct Scsi_Device_Template * sdpnt)
 unsigned int scsi_init()
 {
 	static int called = 0;
-	int i, j, count, pcount;
+	int i, pcount;
 	Scsi_Host_Template * tpnt;
-	count = 0;
+	struct Scsi_Host * shpnt;
+	const char * name;
 
 	if(called) return 0;
 
@@ -290,28 +299,37 @@ unsigned int scsi_init()
 		 * "inactive" - where as 0 will indicate a time out condition.
 		 */
 
-		pcount = next_host;
+		pcount = next_scsi_host;
 		if ((tpnt->detect) &&
 		    (tpnt->present =
 		     tpnt->detect(tpnt)))
 		{
 			/* The only time this should come up is when people use
 			   some kind of patched driver of some kind or another. */
-			if(pcount == next_host) {
+			if(pcount == next_scsi_host) {
 				if(tpnt->present > 1)
 					panic("Failure to register low-level scsi driver");
 				/* The low-level driver failed to register a driver.  We
-				   can do this now. */
+ 				   can do this now. */
 				scsi_register(tpnt,0);
 			};
 			tpnt->next = scsi_hosts;
 			scsi_hosts = tpnt;
-			for(j = 0; j < tpnt->present; j++)
-				printk ("scsi%d : %s\n",
-					count++, tpnt->name);
 		}
 	}
-	printk ("scsi : %d hosts.\n", count);
+
+
+	for(shpnt=scsi_hostlist; shpnt; shpnt = shpnt->next)
+	    {
+	      if(shpnt->hostt->info)
+		name = shpnt->hostt->info(shpnt);
+	      else
+		name = shpnt->hostt->name;
+	      printk ("scsi%d : %s\n", /* And print a little message */
+		      shpnt->host_no, name);
+	    }
+
+	printk ("scsi : %d hosts.\n", next_scsi_host);
 
       {
       int block_count = 0, index;
@@ -351,7 +369,7 @@ unsigned int scsi_init()
 	scsi_register_device(&sg_template);
 #endif
 
-	max_scsi_hosts = count;
+	max_scsi_hosts = next_scsi_host;
 	return 0;
 }
 

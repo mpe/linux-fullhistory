@@ -7,6 +7,10 @@
 			Linus
 ----------
 
+M: Matti Aarnio
+E: mea@utu.fi
+D: Dynamicized network socket allocations, LILO for AHA1542
+
 N: Werner Almesberger
 E: almesber@bernina.ethz.ch
 D: dosfs, LILO, some fd features, various other hacks here and there

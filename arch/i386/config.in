@@ -73,6 +73,7 @@ bool 'Adaptec AHA1542 support' CONFIG_SCSI_AHA1542 y
 bool 'Adaptec AHA1740 support' CONFIG_SCSI_AHA1740 n
 bool 'Adaptec AHA274X/284X support' CONFIG_SCSI_AHA274X n
 bool 'BusLogic SCSI support' CONFIG_SCSI_BUSLOGIC n
+bool 'EATA-DMA (DPT,NEC&ATT for ISA,EISA,PCI) support' CONFIG_SCSI_EATA_DMA n
 bool 'UltraStor 14F/34F support' CONFIG_SCSI_U14_34F n
 bool 'Future Domain 16xx SCSI support' CONFIG_SCSI_FUTURE_DOMAIN n
 bool 'Generic NCR5380 SCSI support' CONFIG_SCSI_GENERIC_NCR5380 n
@@ -86,7 +87,7 @@ bool 'Seagate ST-02 and Future Domain TMC-8xx SCSI support' CONFIG_SCSI_SEAGATE 
 bool 'Trantor T128/T128F/T228 SCSI support' CONFIG_SCSI_T128 n
 bool 'UltraStor SCSI support' CONFIG_SCSI_ULTRASTOR n
 bool '7000FASST SCSI support' CONFIG_SCSI_7000FASST n
-bool 'EATA ISA/EISA (DPT PM2011/021/012/022/122/322) support' CONFIG_SCSI_EATA n
+#bool 'EATA ISA/EISA (DPT PM2011/021/012/022/122/322) support' CONFIG_SCSI_EATA n
 #bool 'SCSI debugging host adapter' CONFIG_SCSI_DEBUG n
 fi
 

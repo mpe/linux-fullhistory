@@ -1,3 +1,150 @@
+Tue Jan 10 10:09:58 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.79 released.
+
+	Patch from some undetermined individual who needs to get a life :-).
+
+	* sr.c: Attacked by spelling bee...
+
+	Patches from Gerd Knorr:
+
+	* sr.c: make printk messages for photoCD a little more informative.
+
+	* sr_ioctl.c: Fix CDROMMULTISESSION_SYS ioctl.
+
+Mon Jan  9 10:01:37 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.78 released.
+
+	* Makefile: Add empty modules: target.
+
+	* Wheee.  Now change register_iomem to request_region.
+
+	* in2000.c: Bugfix - apparently this is the fix that we have
+	all been waiting for.  It fixes a problem whereby the driver
+	is not stable under heavy load.  Race condition and all that.
+	Patch from Peter Lu.
+
+Wed Jan  4 21:17:40 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.77 released.
+
+	* 53c7,8xx.c: Fix from Linus - emulate splx.
+
+	Throughout:
+
+		Change "snarf_region" with "register_iomem".
+
+	* scsi_module.c: New file.  Contains support for low-level loadable
+	  scsi drivers. [ERY].
+
+	* sd.c: More s/int/long/ changes.
+
+	* seagate.c: Explicitly include linux/config.h
+
+	* sg.c: Increment/decrement module usage count on open/close.
+
+	* sg.c: Be a bit more careful about the user not supplying enough
+	  information for a valid command.  Pass correct size down to
+	  scsi_do_cmd.
+
+	* sr.c:  More changes for Photo-CD.  This apparently breaks NEC drives.
+
+	* sr_ioctl.c:  Support CDROMMULTISESSION ioctl.
+
+
+Sun Jan  1 19:55:21 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.76 released.
+
+	* constants.c: Add type cast in switch statement.
+
+	* scsi.c (scsi_free): Change datatype of "offset" to long.
+	  (scsi_malloc): Change a few more variables to long.  Who
+	  did this and why was it important?  64 bit machines?
+
+
+	Lots of changes to use save_state/restore_state instead of cli/sti.
+	Files changed include:
+
+	* aha1542.c:
+	* aha1740.c:
+	* buslogic.c:
+	* in2000.c:
+	* scsi.c:
+	* scsi_debug.c:
+	* sd.c:
+	* sr.c:
+	* st.c:
+
+Wed Dec 28 16:38:29 1994  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.75 released.
+
+	* buslogic.c: Spelling fix.
+
+	* scsi.c: Add HP C1790A and C2500A scanjet to blacklist.
+
+	* scsi.c: Spelling fixup.
+
+	* sd.c: Add support for sd_hardsizes (hard sector sizes).
+
+	* ultrastor.c: Use save_flags/restore_flags instead of cli/sti.
+
+Fri Dec 23 13:36:25 1994  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.74 released.
+
+	* README.st: Update from Kai Makisara.
+
+	* eata.c: New version from Dario - version 1.11.
+	  use scsicam bios_param routine.  Add support for 2011
+	  and 2021 boards.
+
+	* hosts.c: Add support for blocking.  Linked list automatically
+	  generated when shpnt->block is set.
+
+	* scsi.c: Add sankyo & HP scanjet to blacklist.  Add support for
+	  kicking things loose when we deadlock.
+
+	* scsi.c: Recognize scanners and processors in scan_scsis.
+
+	* scsi_ioctl.h: Increase timeout to 9 seconds.
+
+	* st.c: New version from Kai - add better support for backspace.
+
+	* u14-34f.c: New version from Dario.  Supports blocking. 
+
+Wed Dec 14 14:46:30 1994  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.73 released.
+
+	* buslogic.c: Update from Dave Gentzel.  Version 1.14.
+	  Add module related stuff.   More fault tolerant if out of
+	  DMA memory.
+
+	* fdomain.c: New version from Rik Faith - version 5.22.  Add support
+	  for ISA-200S SCSI adapter.
+
+	* hosts.c: Spelling.
+
+	* qlogic.c: Update to version 0.38a.  Add more support for PCMIA.
+
+	* scsi.c: Mask device type with 0x1f during scan_scsis.
+	  Add support for deadlocking, err, make that getting out of
+	  deadlock situations that are created when we allow the user
+	  to limit requests to one host adapter at a time.
+
+	* scsi.c: Bugfix - pass pid, not SCpnt as second arg to
+	  scsi_times_out.
+
+	* scsi.c: Restore interrupt state to previous value instead of using
+	  cli/sti pairs.
+
+	* scsi.c: Add a bunch of module stuff (all commented out for now).
+
+	* scsi.c: Clean up scsi_dump_status.
+
 Tue Dec  6 12:34:20 1994  Eric Youngdale  (eric@andante)
 
 	* Linux 1.1.72 released.

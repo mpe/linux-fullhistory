@@ -9,7 +9,7 @@
  *            Not for the TEAC CD-55A drive (yet).
  *            Not for the CreativeLabs CD200 drive (yet).
  *
- *  NOTE:     This is release 3.0.
+ *  NOTE:     This is release 3.1.
  *            It works with my SbPro & drive CR-521 V2.11 from 2/92
  *            and with the new CR-562-B V0.75 on a "naked" Panasonic
  *            CI-101P interface. And vice versa. 
@@ -169,6 +169,13 @@
  *       Started CD200 support. Drive detection should work, but nothing
  *       more.
  *
+ *  3.1  Working to support the CD200 and the Teac CD-55A drives.
+ *       AT-BUS style device numbering no longer used: use SCSI style now.
+ *       So, the first "found" device has MINOR 0, regardless of the
+ *       jumpered drive ID. This implies modifications to the /dev/sbpcd*
+ *       entries for some people, but will help the DAU (german TLA, english:
+ *       "newbie", maybe ;-) to install his "first" system from a CD.
+ *     
  *  TODO
  *
  *     disk change detection
@@ -209,7 +216,9 @@
  *
  */
 
-#define SBPCD_ISSUE 1 /* change to 2, 3, 4 for multiple interface boards */
+#ifndef SBPCD_ISSUE
+#define SBPCD_ISSUE 1
+#endif SBPCD_ISSUE
 
 #include <linux/config.h>
 #include <linux/errno.h>
@@ -244,13 +253,13 @@
 
 #include "blk.h"
 
-#define VERSION "3.0 Eberhard Moenkeberg <emoenke@gwdg.de>"
+#define VERSION "3.1 Eberhard Moenkeberg <emoenke@gwdg.de>"
 
 /*
  * still testing around...
  */
-#define MULTISESSION_BY_DRIVER 1 /* if set to 0 here, we need a counterpart in
-                                  * linux/fs/isofs/inode.c
+#define MULTISESSION_BY_DRIVER 0 /* if set to 0 here, we need the counterpart
+                                  * in linux/fs/isofs/inode.c
                                   */
 #define READ_AUDIO 4 /* max. number of audio frames to read with one */
                      /* request (allocates n* 2352 bytes kernel memory!) */
@@ -271,6 +280,8 @@
 #define SPEA_TEST 0
 #define PRINTK_BUG 0
 #define TEST_STI 0
+
+#define DISTRIBUTION 1
 
 #if 0
 #define INLINE
@@ -329,7 +340,8 @@
  * send mail to emoenke@gwdg.de if your interface card is not FULLY
  * represented here.
  */
-static int autoprobe[] = 
+#if !(SBPCD_ISSUE-1)
+static int sbpcd_probe[] = 
 {
   CDROM_PORT, SBPRO, /* probe with user's setup first */
   0x230, 1, /* Soundblaster Pro and 16 (default) */
@@ -348,23 +360,29 @@ static int autoprobe[] =
   0x330, 2, /* SPEA Media FX (default) */
   0x320, 2, /* SPEA Media FX */
   0x340, 2, /* SPEA Media FX */
-  0x350, 2, /* SPEA Media FX */
+  0x634, 0, /* some newer sound cards */
+  0x638, 0, /* some newer sound cards */
 /* due to incomplete address decoding of the SbPro card, these must be last */
   0x630, 0, /* "sound card #9" (default) */
   0x650, 0, /* "sound card #9" */
-#if 0
-/* some "hazardous" locations
+/*
+ * some "hazardous" locations
  * (will stop the bus if a NE2000 ethernet card resides at offset -0x10)
  */
+#if 0
   0x330, 0, /* Lasermate, CI-101P, WDH-7001C */
   0x350, 0, /* Lasermate, CI-101P */
+  0x350, 2, /* SPEA Media FX */
   0x370, 0, /* Lasermate, CI-101P */
   0x290, 1, /* Soundblaster 16 */
   0x310, 0, /* Lasermate, CI-101P, WDH-7001C */
 #endif
 };
+#else
+static int sbpcd_probe[] = {CDROM_PORT, SBPRO}; /* probe with user's setup only */
+#endif
 
-#define NUM_AUTOPROBE  (sizeof(autoprobe) / sizeof(int))
+#define NUM_PROBE  (sizeof(sbpcd_probe) / sizeof(int))
 
 
 /*==========================================================================*/
@@ -392,7 +410,7 @@ static void sbp_read_cmd(void);
 static int sbp_data(void);
 static int cmd_out(void);
 static int DiskInfo(void);
-static int check_media_change(dev_t);
+static int sbpcd_chk_disk_change(dev_t);
 
 /*==========================================================================*/
 
@@ -430,7 +448,7 @@ static int check_media_change(dev_t);
  * (1<<DBG_CD2)  MKE CD200 debugging trace
  * (1<<DBG_000)  unnecessary information
  */
-#if 1
+#if DISTRIBUTION
 static int sbpcd_debug =  (1<<DBG_INF) |
                           (1<<DBG_WRN) |
                           (1<<DBG_MUL);
@@ -444,9 +462,9 @@ static int sbpcd_debug =  (1<<DBG_INF) |
                           (1<<DBG_ID)  |
                           (1<<DBG_UPC);
 #endif
-static unsigned char setup_done = 0;
 static int sbpcd_ioaddr = CDROM_PORT;	/* default I/O base address */
 static int sbpro_type = SBPRO;
+static unsigned char setup_done = 0;
 static int CDo_command, CDo_reset;
 static int CDo_sel_i_d, CDo_enable;
 static int CDi_info, CDi_status, CDi_data;
@@ -515,7 +533,11 @@ static u_int maxtim_data= 9000;
 #else
 static u_int maxtim_data= 3000;
 #endif LONG_TIMING
-
+#if DISTRIBUTION
+static int n_retries=3;
+#else
+static int n_retries=1;
+#endif
 /*==========================================================================*/
 
 static int ndrives=0;
@@ -529,7 +551,8 @@ static int sbpcd_blocksizes[NR_SBPCD] = {0, };
 static int d=0; /* DriveStruct index: drive number */
 
 static struct {
-  char drv_minor; /* minor number or -1 */
+  char drv_id; /* "jumpered" drive ID or -1 */
+  char drv_sel; /* drive select lines bits */
 
   char drive_model[9];
   char firmware_version[4];
@@ -665,9 +688,11 @@ static int sbpcd_dbg_ioctl(unsigned long arg, int level)
  */
 static INLINE void sbp_sleep(u_int jifs)
 {
-   current->state = TASK_INTERRUPTIBLE;
-   current->timeout = jiffies + jifs;
-   schedule();
+  sti();
+  current->state = TASK_INTERRUPTIBLE;
+  current->timeout = jiffies + jifs;
+  schedule();
+  sti();
 }
 
 /*==========================================================================*/
@@ -2266,6 +2291,18 @@ static int yy_ReadError(int fam)
 
 #endif CD200
 /*==========================================================================*/
+static void ask_mail(void)
+{
+  int i;
+
+  printk("SBPCD: please mail the following lines to emoenke@gwdg.de:\n");
+  printk("SBPCD: infobuf = \"");
+  for (i=0;i<12;i++) printk("%02X ",infobuf[i]);
+  printk("\"\nSBPCD: infobuf = \"");
+  for (i=0;i<12;i++) printk("%c",infobuf[i]);
+  printk("\"\n");
+}
+/*==========================================================================*/
 static int check_version(void)
 {
   int i, j;
@@ -2287,7 +2324,7 @@ static int check_version(void)
 #if 0
   OUT(CDo_reset,0);
   sbp_sleep(600);
-  OUT(CDo_enable,d);
+  OUT(CDo_enable,DriveStruct[d].drv_sel);
 #endif
   drvcmd[0]=CMD2_READ_VER;
   response_count=12;
@@ -2304,47 +2341,42 @@ static int check_version(void)
 	  for (i=0;i<12;i++) DPRINTF((DBG_ID,"%c",infobuf[i]));
 	  DPRINTF((DBG_ID,"\"\n"));
 	}
-    }
-
-  for (i=0;i<5;i++) if (infobuf[i]!=family2[i]) break;
-  if (i==5)
-    {
-      DriveStruct[d].drive_model[0]='C';
-      DriveStruct[d].drive_model[1]='D';
-      DriveStruct[d].drive_model[2]='2';
-      DriveStruct[d].drive_model[3]='0';
-      DriveStruct[d].drive_model[4]='0';
-      DriveStruct[d].drive_model[5]=infobuf[i++];
-      DriveStruct[d].drive_model[6]=infobuf[i++];
-      DriveStruct[d].drive_model[7]=0;
-      DriveStruct[d].drv_type=drv_fam2;
-    }
-  else
-    {
-      for (i=0;i<5;i++) if (infobuf[i]!=familyT[i]) break;
-      if (i==5)
+      else
 	{
-	  DriveStruct[d].drive_model[0]='C';
-	  DriveStruct[d].drive_model[1]='D';
-	  DriveStruct[d].drive_model[2]='-';
-	  DriveStruct[d].drive_model[3]='5';
-	  DriveStruct[d].drive_model[4]='5';
-	  DriveStruct[d].drive_model[5]='A';
-	  DriveStruct[d].drive_model[6]=infobuf[i++];
-	  DriveStruct[d].drive_model[7]=infobuf[i++];
-	  DriveStruct[d].drive_model[8]=0;
-	  DriveStruct[d].drv_type=drv_famT;
+	  for (i=0;i<5;i++) if (infobuf[i]!=family2[i]) break;
+	  if (i==5)
+	    {
+	      DriveStruct[d].drive_model[0]='C';
+	      DriveStruct[d].drive_model[1]='D';
+	      DriveStruct[d].drive_model[2]='2';
+	      DriveStruct[d].drive_model[3]='0';
+	      DriveStruct[d].drive_model[4]='0';
+	      DriveStruct[d].drive_model[5]=infobuf[i++];
+	      DriveStruct[d].drive_model[6]=infobuf[i++];
+	      DriveStruct[d].drive_model[7]=0;
+	      DriveStruct[d].drv_type=drv_fam2;
+	    }
+	  else
+	    {
+	      printk("\n\nSBPCD: possibly CD-55A present.\n");
+	      for (i=0;i<5;i++) if (infobuf[i]!=familyT[i]) break;
+	      if (i==5)
+		{
+		  DriveStruct[d].drive_model[0]='C';
+		  DriveStruct[d].drive_model[1]='D';
+		  DriveStruct[d].drive_model[2]='-';
+		  DriveStruct[d].drive_model[3]='5';
+		  DriveStruct[d].drive_model[4]='5';
+		  DriveStruct[d].drive_model[5]='A';
+		  DriveStruct[d].drive_model[6]=infobuf[i++];
+		  DriveStruct[d].drive_model[7]=infobuf[i++];
+		  DriveStruct[d].drive_model[8]=0;
+		}
+	      DriveStruct[d].drv_type=drv_famT;
+	    }
 	}
     }
-#if 1
-  if (DriveStruct[d].drv_type)
-    {
-      printk("\n\nSBPCD: new drive CD200 or CD-55A successfully detected.\n");
-      printk("SBPCD: support is not fulfilled yet - drive gets ignored.\n");
-      printk("SBPCD: just wait some days - don't mail, please.\n\n");
-      DriveStruct[d].drv_type=0;
-    }
-#endif
+
   if (!DriveStruct[d].drv_type)
     {
       /* check for CR-52x, CR-56x and LCS-7260 */
@@ -2425,7 +2457,15 @@ static int check_version(void)
 	  (DriveStruct[d].firmware_version[1]!='4') ||
 	  (DriveStruct[d].firmware_version[2]!='F') ||
 	  (DriveStruct[d].firmware_version[3]!='4'))
-	printk("SBPCD: please mail me your LCS-7260 DOS driver.\n");
+	ask_mail();
+    }
+  else if (famT_drive)
+    {
+      printk("\n\nSBPCD: possibly TEAC CD-55A present.\n");
+      printk("SBPCD: support is not fulfilled yet - drive gets ignored.\n");
+      ask_mail();
+      DriveStruct[d].drv_type=0;
+      return (-1);
     }
   else
     {
@@ -2446,8 +2486,16 @@ static int check_version(void)
 	  if (j<100) DriveStruct[d].drv_type=drv_099;
 	  else DriveStruct[d].drv_type=drv_100;
 	}
-      else /* CD200, CD-55A */
+      else if (fam2_drive)
 	{
+	  printk("\n\nSBPCD: new drive CD200 (%s)detected.\n", DriveStruct[d].firmware_version);
+	  printk("SBPCD: support is not fulfilled yet - drive gets ignored.\n");
+	  if (j!=101) /* only 1.01 known at time */
+	    ask_mail();
+	  else
+	    printk("SBPCD: just wait some days...\n\n");
+	  DriveStruct[d].drv_type=0;
+	  return (-1);
 	}
     }
   DPRINTF((DBG_LCS,"SBPCD: drive type %02X\n",DriveStruct[d].drv_type));
@@ -2455,17 +2503,16 @@ static int check_version(void)
   return (0);
 }
 /*==========================================================================*/
-static int switch_drive(int num)
+static int switch_drive(int i)
 {
-  int i;
-
-  d=num;
-
-  i=num;
-  if (sbpro_type==1) i=(i&0x01)<<1|(i&0x02)>>1;
-  OUT(CDo_enable,i);
-  DPRINTF((DBG_DID,"SBPCD: switch_drive: drive %d activated.\n",DriveStruct[d].drv_minor));
-  return (0);
+  d=i;
+  if (DriveStruct[d].drv_id!=-1)
+    {
+      OUT(CDo_enable,DriveStruct[d].drv_sel);
+      DPRINTF((DBG_DID,"SBPCD: drive %d (ID=%d) activated.\n", i, DriveStruct[d].drv_id));
+      return (0);
+    }
+  else return (-1);
 }
 /*==========================================================================*/
 /*
@@ -2481,26 +2528,27 @@ static int check_drives(void)
   ndrives=0;
   for (j=0;j<NR_SBPCD;j++)
     {
-      DriveStruct[j].drv_minor=j;
-      switch_drive(j);
-      DPRINTF((DBG_ID,"SBPCD: check_drives: drive %d activated.\n",j));
+      DriveStruct[ndrives].drv_id=j;
+      if (sbpro_type==1) DriveStruct[ndrives].drv_sel=(j&0x01)<<1|(j&0x02)>>1;
+      else DriveStruct[ndrives].drv_sel=j;
+      switch_drive(ndrives);
+      DPRINTF((DBG_INI,"SBPCD: check_drives: drive %d (ID=%d) activated.\n",ndrives,j));
       i=check_version();
-      DPRINTF((DBG_ID,"SBPCD: check_version returns %d.\n",i));
-      if (i>=0)
+      if (i<0) DPRINTF((DBG_INI,"SBPCD: check_version returns %d.\n",i));
+      else
 	{
-	  ndrives++;
 	  DriveStruct[d].drv_options=drv_pattern[j];
-	  if (fam0L_drive)
-	    DriveStruct[d].drv_options&=~(speed_auto|speed_300|speed_150);
-
-	  printk("%sDrive %d: %.9s (%.4s)\n", printk_header,
-		 DriveStruct[d].drv_minor,
+	  if (fam0L_drive) DriveStruct[d].drv_options&=~(speed_auto|speed_300|speed_150);
+	  printk("%sDrive %d (ID=%d): %.9s (%.4s)\n", printk_header, d,
+		 DriveStruct[d].drv_id,
 		 DriveStruct[d].drive_model,
 		 DriveStruct[d].firmware_version);
 	  printk_header="       - ";
+	  ndrives++;
 	}
-      else DriveStruct[d].drv_minor=-1;
+
     }
+  for (j=ndrives;j<NR_SBPCD;j++) DriveStruct[j].drv_id=-1;
   if (ndrives==0) return (-1);
   return (0);
 }
@@ -2933,16 +2981,15 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		       u_long arg)
 {
   int i, st;
-  unsigned int *p_lba;
 
   DPRINTF((DBG_IO2,"SBPCD: ioctl(%d, 0x%08lX, 0x%08lX)\n",
 				MINOR(inode->i_rdev), cmd, arg));
   if (!inode) return (-EINVAL);
   i=MINOR(inode->i_rdev);
-  if ( (i<0) || (i>=NR_SBPCD) )
+  if ((i<0) || (i>=NR_SBPCD) || (DriveStruct[i].drv_id==-1))
     {
-      printk("SBPCD: ioctl: bad device: %d\n", i);
-      return (-ENODEV);             /* no such drive */
+      printk("SBPCD: ioctl: bad device: %04X\n", inode->i_rdev);
+      return (-ENXIO);             /* no such drive */
     }
   switch_drive(i);
 
@@ -3339,6 +3386,8 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		DPRINTF((DBG_AUD,"SBPCD: read_audio: read aborted by drive\n"));
 #if 0000
 		i=DriveReset();                /* ugly fix to prevent a hang */
+#else
+		i=xx_ReadError();
 #endif 0000
 		continue;
 	      }
@@ -3424,13 +3473,12 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
     case CDROMMULTISESSION_SYS: /* tell start-of-last-session to kernel */
       DPRINTF((DBG_IOC,"SBPCD: ioctl: CDROMMULTISESSION_SYS entered.\n"));
       if(!suser()) return -EACCES;
-      p_lba=(unsigned int *) arg;
       if (DriveStruct[d].f_multisession)
-	*p_lba=DriveStruct[d].lba_multi;
+	*((unsigned int *) arg)=DriveStruct[d].lba_multi;
       else
-	*p_lba=0;
+	*((unsigned int *) arg)=0;
       DPRINTF((DBG_MUL,"SBPCD: ioctl: CDROMMULTISESSION_SYS done (%d).\n",
-	       p_lba[0]));
+	       ((unsigned int *) arg)[0]));
       return (0);
 
     case BLKRASET:
@@ -3471,7 +3519,6 @@ static void sbp_transfer(void)
 static void DO_SBPCD_REQUEST(void)
 {
   u_int block;
-  int dev;
   u_int nsect;
   int i, status_tries, data_tries;
   
@@ -3482,13 +3529,13 @@ request_loop:
   if ((CURRENT==NULL)||(CURRENT->dev<0)) goto done;
   if (CURRENT -> sector == -1) goto done;
 
-  dev = MINOR(CURRENT->dev);
-  if ( (dev<0) || (dev>=NR_SBPCD) )
+  i = MINOR(CURRENT->dev);
+  if ( (i<0) || (i>=NR_SBPCD) || (DriveStruct[i].drv_id==-1))
     {
-      printk("SBPCD: do_request: bad device: %d\n", dev);
+      printk("SBPCD: do_request: bad device: %04X\n", CURRENT->dev);
       goto done;
     }
-  switch_drive(dev);
+  switch_drive(i);
 
   INIT_REQUEST;
   block = CURRENT->sector; /* always numbered as 512-byte-pieces */
@@ -3530,13 +3577,14 @@ request_loop:
       }
 #endif XA_TEST1
 
-  for (data_tries=3; data_tries > 0; data_tries--)
+  for (data_tries=n_retries; data_tries > 0; data_tries--)
     {
       for (status_tries=3; status_tries > 0; status_tries--)
 	{
 	  flags_cmd_out |= f_respo3;
 	  xx_ReadStatus();
 	  if (sbp_status() != 0) break;
+	  if (st_check) xx_ReadError();
 	  sbp_sleep(1);    /* wait a bit, try again */
 	}
       if (status_tries == 0)
@@ -3761,7 +3809,11 @@ static int sbp_data(void)
   if (error_flag)    /* must have been spurious D_RDY or (ATTN&&!D_RDY) */
     {
       DPRINTF((DBG_INF,"SBPCD: read aborted by drive\n"));
+#if 0
       i=DriveReset();                /* ugly fix to prevent a hang */
+#else
+      i=xx_ReadError();
+#endif
       return (0);
     }
 
@@ -3824,17 +3876,15 @@ static int sbpcd_open(struct inode *ip, struct file *fp)
 {
   int i;
 
-  if (ndrives==0) return (-ENXIO);             /* no hardware */
-
+  i = MINOR(ip->i_rdev);
+  if ((i<0) || (i>=NR_SBPCD) || (DriveStruct[i].drv_id==-1))
+    {
+      printk("SBPCD: open: bad device: %04X\n", ip->i_rdev);
+      return (-ENXIO);             /* no such drive */
+    }
   if (fp->f_mode & 2)
 	  return -EROFS;
-
-  i = MINOR(ip->i_rdev);
-  if ( (i<0) || (i>=NR_SBPCD) )
-    {
-      printk("SBPCD: open: bad device: %d\n", i);
-      return (-ENODEV);             /* no such drive */
-    }
+  
   switch_drive(i);
 
   flags_cmd_out |= f_respo2;
@@ -3898,9 +3948,9 @@ static void sbpcd_release(struct inode * ip, struct file * file)
   int i;
 
   i = MINOR(ip->i_rdev);
-  if ( (i<0) || (i>=NR_SBPCD) ) 
+  if ((i<0) || (i>=NR_SBPCD) || (DriveStruct[i].drv_id==-1))
     {
-      printk("SBPCD: release: bad device: %d\n", i);
+      printk("SBPCD: release: bad device: %04X\n", ip->i_rdev);
       return;
     }
   switch_drive(i);
@@ -3908,7 +3958,6 @@ static void sbpcd_release(struct inode * ip, struct file * file)
   DriveStruct[d].sbp_first_frame=DriveStruct[d].sbp_last_frame=-1;
   sync_dev(ip->i_rdev);                   /* nonsense if read only device? */
   invalidate_buffers(ip->i_rdev);
-  DriveStruct[d].diskstate_flags &= ~cd_size_bit;
 
 /*
  * try to keep an "open" counter here and unlock the door if 1->0.
@@ -3923,6 +3972,7 @@ static void sbpcd_release(struct inode * ip, struct file * file)
 	    i=yy_LockDoor(0);
 	  while (i!=0);
 	  if (DriveStruct[d].f_eject) yy_SpinDown();
+	  DriveStruct[d].diskstate_flags &= ~cd_size_bit;
 	}
     }
 }
@@ -3943,7 +3993,7 @@ static struct file_operations sbpcd_fops =
   sbpcd_release,          /* release */
   NULL,                   /* fsync */
   NULL,                   /* fasync */
-  check_media_change,     /* media_change */
+  sbpcd_chk_disk_change,     /* media_change */
   NULL                    /* revalidate */
 };
 /*==========================================================================*/
@@ -4080,24 +4130,24 @@ unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
       DPRINTF((DBG_WRN,"SBPCD: = = = = = = = = = = END of WARNING = = = = = = = = = =\n"));
       DPRINTF((DBG_WRN,"SBPCD: \n"));
     }
-  autoprobe[0]=sbpcd_ioaddr; /* possibly changed by kernel command line */
-  autoprobe[1]=sbpro_type; /* possibly changed by kernel command line */
+  sbpcd_probe[0]=sbpcd_ioaddr; /* possibly changed by kernel command line */
+  sbpcd_probe[1]=sbpro_type; /* possibly changed by kernel command line */
 
-  for (port_index=0;port_index<NUM_AUTOPROBE;port_index+=2)
+  for (port_index=0;port_index<NUM_PROBE;port_index+=2)
     {
-      addr[1]=autoprobe[port_index];
+      addr[1]=sbpcd_probe[port_index];
       if (check_region(addr[1],4))
 	{
 	  DPRINTF((DBG_INI,"SBPCD: check_region: %03X is not free.\n",addr[1]));
 	  continue;
 	}
-      if (autoprobe[port_index+1]==0) type=str_lm;
-      else if (autoprobe[port_index+1]==1) type=str_sb;
+      if (sbpcd_probe[port_index+1]==0) type=str_lm;
+      else if (sbpcd_probe[port_index+1]==1) type=str_sb;
       else type=str_sp;
       sbpcd_setup(type, addr);
       DPRINTF((DBG_INF,"SBPCD: Trying to detect a %s CD-ROM drive at 0x%X.\n", type, CDo_command));
       DPRINTF((DBG_INF,"SBPCD: - "));
-      if (autoprobe[port_index+1]==2)
+      if (sbpcd_probe[port_index+1]==2)
 	{
 	  i=config_spea();
 	  if (i<0)
@@ -4153,7 +4203,7 @@ unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
 
   for (j=0;j<NR_SBPCD;j++)
     {
-      if (DriveStruct[j].drv_minor==-1) continue;
+      if (DriveStruct[j].drv_id==-1) continue;
       switch_drive(j);
       if (!famL_drive) xy_DriveReset();
       if (!st_spinning) xx_SpinUp();
@@ -4228,17 +4278,18 @@ unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
   blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
   read_ahead[MAJOR_NR] = SBP_BUFFER_FRAMES * (CD_FRAMESIZE / 512);
   
-  request_region(CDo_command,4,"sbpcd");
+  request_region(CDo_command,4,major_name);
 
   for (j=0;j<NR_SBPCD;j++)
     {
-      if (DriveStruct[j].drv_minor==-1) continue;
+      if (DriveStruct[j].drv_id==-1) continue;
+      switch_drive(j);
 /*
  * allocate memory for the frame buffers
  */ 
       DriveStruct[j].sbp_buf=(u_char *)mem_start;
       mem_start += SBP_BUFFER_FRAMES*CD_FRAMESIZE;
-      if (fam1_drive)
+      if ((fam1_drive) && (SBP_BUFFER_AUDIO_FRAMES>0))
 	{
 	  DriveStruct[j].aud_buf=(u_char *)mem_start;
 	  mem_start += SBP_BUFFER_AUDIO_FRAMES*CD_FRAMESIZE_RAW;
@@ -4274,20 +4325,21 @@ init_done:
  * used externally (isofs/inode.c, fs/buffer.c)
  * Currently disabled (has to get "synchronized").
  */
-static int check_media_change(dev_t full_dev)
+static int sbpcd_chk_disk_change(dev_t full_dev)
 {
-  int st;
+  int i, st;
 
   DPRINTF((DBG_CHK,"SBPCD: media_check (%d) called\n", MINOR(full_dev)));
   return (0); /* "busy" test necessary before we really can check */
 
-  if ((MAJOR(full_dev)!=MAJOR_NR)||(MINOR(full_dev)>=NR_SBPCD))
+  i=MINOR(full_dev);
+  if ( (i<0) || (i>=NR_SBPCD) || (DriveStruct[i].drv_id==-1) )
     {
       printk("SBPCD: media_check: invalid device %04X.\n", full_dev);
       return (-1);
     }
 
-  switch_drive(MINOR(full_dev));
+  switch_drive(i);
   
   xx_ReadStatus();                         /* command: give 1-byte status */
   st=ResponseStatus();

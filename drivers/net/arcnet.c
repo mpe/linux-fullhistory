@@ -99,11 +99,12 @@ static char *version =
 #include <linux/malloc.h>
 #include <linux/string.h>
 #include <linux/timer.h>
+#include <linux/errno.h>
+
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
-#include <errno.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>

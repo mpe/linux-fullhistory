@@ -30,7 +30,7 @@
  */
 
 #include <linux/module.h>
-#include "../../tools/version.h"
+#include <linux/version.h>
 
 char kernel_version[] = UTS_RELEASE;
 

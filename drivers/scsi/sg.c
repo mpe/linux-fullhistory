@@ -26,14 +26,15 @@
 #include "sg.h"
 
 static void sg_init(void);
-static void sg_attach(Scsi_Device *);
+static int sg_attach(Scsi_Device *);
 static int sg_detect(Scsi_Device *);
+static void sg_detach(Scsi_Device *);
 
 
 struct Scsi_Device_Template sg_template = {NULL, NULL, "sg", 0xff, 
 					     SCSI_GENERIC_MAJOR, 0, 0, 0, 0,
 					     sg_detect, sg_init,
-					     NULL, sg_attach, NULL};
+					     NULL, sg_attach, sg_detach};
 
 #ifdef SG_BIG_BUFF
 static char *big_buff;
@@ -334,9 +335,6 @@ static struct file_operations sg_fops = {
 
 
 static int sg_detect(Scsi_Device * SDp){
-  /* We do not support attaching loadable devices yet. */
-  if(scsi_loadable_module_flag) return 0;
-
   ++sg_template.dev_noticed;
   return 1;
 }
@@ -358,33 +356,36 @@ static void sg_init()
      sg_registered++;
    }
 
-   /* We do not support attaching loadable devices yet. */
-   if(scsi_loadable_module_flag) return;
+   /* If we have already been through here, return */
+   if(scsi_generics) return;
+
 #ifdef DEBUG
   printk("sg: Init generic device.\n");
 #endif
 
 #ifdef SG_BIG_BUFF
-  big_buff= (char *) scsi_init_malloc(SG_BIG_BUFF);
+  big_buff= (char *) scsi_init_malloc(SG_BIG_BUFF, GFP_ATOMIC | GFP_DMA);
 #endif
 
    scsi_generics = (struct scsi_generic *) 
-     scsi_init_malloc(sg_template.dev_noticed * sizeof(struct scsi_generic));
-   memset(scsi_generics, 0, sg_template.dev_noticed * sizeof(struct scsi_generic));
+     scsi_init_malloc((sg_template.dev_noticed + SG_EXTRA_DEVS) 
+		      * sizeof(struct scsi_generic), GFP_ATOMIC);
+   memset(scsi_generics, 0, (sg_template.dev_noticed + SG_EXTRA_DEVS)
+	  * sizeof(struct scsi_generic));
 
    sg_template.dev_max = sg_template.dev_noticed;
  }
 
-static void sg_attach(Scsi_Device * SDp)
+static int sg_attach(Scsi_Device * SDp)
  {
    struct scsi_generic * gpnt;
    int i;
 
-   /* We do not support attaching loadable devices yet. */
-   if(scsi_loadable_module_flag) return;
-
    if(sg_template.nr_dev >= sg_template.dev_max) 
-     panic ("scsi_devices corrupt (sg)");
+     {
+       SDp->attached--;
+       return 1;
+     }
 
    for(gpnt = scsi_generics, i=0; i<sg_template.dev_max; i++, gpnt++) 
      if(!gpnt->device) break;
@@ -401,4 +402,22 @@ static void sg_attach(Scsi_Device * SDp)
    scsi_generics[i].pending=0;
    scsi_generics[i].timeout=SG_DEFAULT_TIMEOUT;
    sg_template.nr_dev++;
+   return 0;
  };
+
+
+
+static void sg_detach(Scsi_Device * SDp)
+{
+  struct scsi_generic * gpnt;
+  int i;
+  
+  for(gpnt = scsi_generics, i=0; i<sg_template.dev_max; i++, gpnt++) 
+    if(gpnt->device == SDp) {
+      gpnt->device = NULL;
+      SDp->attached--;
+      sg_template.nr_dev--;
+      return;
+    }
+  return;
+}

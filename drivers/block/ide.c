@@ -1,7 +1,7 @@
 /*
- *  linux/drivers/block/ide.c	Version 3.6  January 5, 1994
+ *  linux/drivers/block/ide.c	Version 3.8  January 12, 1995
  *
- *  Copyright (C) 1994  Linus Torvalds & authors (see below)
+ *  Copyright (C) 1994, 1995  Linus Torvalds & authors (see below)
  */
 
 /*
@@ -92,6 +92,10 @@
  *			increase DRQ_WAIT to eliminate nuisance messages
  *			wait for DRQ_STAT instead of DATA_READY during probing
  *			  (courtesy of Gary Thomas gary@efland.UU.NET)
+ *  Version 3.8		fixed byte-swapping for confused Mitsumi cdrom drives
+ *			update of ide-cd.c from Scott, allows blocksize=1024
+ *			cdrom probe fixes, inspired by jprang@uni-duisburg.de
+ *
  *  To do:
  *	- special 32-bit controller-type detection & support
  *	- figure out why two WD drives on one i/f sometimes don't identify
@@ -460,7 +464,7 @@ static void do_ide_reset (ide_dev_t *dev)
 	printk("%s: do_ide_reset: ", ide_name[DEV_HWIF]);
 	/* ATAPI devices usually do *not* assert READY after a reset */
 	if (!OK_STAT(tmp=GET_STAT(DEV_HWIF), 0, BUSY_STAT)) {
-		printk("timed out, status=0x%02x\n", tmp);
+		printk("timed-out, status=0x%02x\n", tmp);
 	} else  {
 		if ((tmp = GET_ERR(DEV_HWIF)) == 1)
 			printk("success\n");
@@ -1596,19 +1600,23 @@ static void do_identify (ide_dev_t *dev)
 	sti();
 
 	/*
-	 * Everything except ATAPI seems to use big-endian string ordering,
-	 * whereas the NEC and Vertos ATAPI drives both use little-endian.
-	 * Latest reports indicate that some Mitsumi ATAPI use big-endian.
+	 * Non-ATAPI drives seem to always use big-endian string ordering.
+	 * Most ATAPI cdrom drives, such as the NEC, Vertos, and some Mitsumi
+	 * models, use little-endian.  But otherMitsumi models appear to use
+	 * big-endian, confusing the issue.  We try to take all of this into 
+	 * consideration, "knowing" that Mitsumi drive names begin with "FX".
 	 */
-	bswap = (id->config & 0x8000) ? 0 : 1;
-	if (bswap && id->model[0] == 'F' && id->model[1] == 'X')
-		bswap = 0; 
-	fixstring (id->serial_no, sizeof(id->serial_no), bswap);
-	fixstring (id->fw_rev,    sizeof(id->fw_rev),    bswap);
+	bswap = 1;
+	if (id->model[0] != 'X' || id->model[1] != 'F') {
+		if ((id->model[0] == 'F' && id->model[1] == 'X') || (id->config & 0x8000))
+			bswap = 0;
+	}
 	fixstring (id->model,     sizeof(id->model),     bswap);
+	fixstring (id->fw_rev,    sizeof(id->fw_rev),    bswap);
+	fixstring (id->serial_no, sizeof(id->serial_no), bswap);
 
 	/*
-	 * Check for ATAPI device (such as an NEC-260 IDE cdrom drive)
+	 * Check for an ATAPI device
 	 */
 	if (id->config & 0x8000) {
 #ifdef CONFIG_BLK_DEV_IDECD
@@ -1715,9 +1723,14 @@ static void delay_10ms (void)
 
 
 static int try_to_identify (ide_dev_t *dev, byte cmd)
+/*
+ * Returns:	0  device was identified
+ *		1  device timed-out (no response to identify request)
+ *		2  device aborted the command (refused to identify itself)
+ */
 {
 	int rc;
-	unsigned long timer, timeout;
+	unsigned long timeout;
 #if PROBE_FOR_IRQS
 	int irqs = 0;
 	static byte irq_probed[2] = {0,0};
@@ -1733,58 +1746,61 @@ static int try_to_identify (ide_dev_t *dev, byte cmd)
 	delay_10ms();				/* take a deep breath */
 	OUT_BYTE(cmd,HD_COMMAND);		/* ask drive for ID */
 	delay_10ms();				/* wait for BUSY_STAT */
-	timeout = (cmd == WIN_IDENTIFY) ? WAIT_WORSTCASE : WAIT_PIDENTIFY;
-	for (timer = jiffies + (timeout / 2); timer > jiffies;) {
-		if ((IN_BYTE(HD_ALTSTATUS,DEV_HWIF) & BUSY_STAT) == 0) {
-			delay_10ms();		/* wait for IRQ & DATA_READY */
-			if (OK_STAT(GET_STAT(DEV_HWIF),DRQ_STAT,BAD_RW_STAT)){
-				cli();			/* some sys need this */
-				do_identify(dev);	/* drive returned ID */
-				rc = 0;
-			} else
-				rc = 1;			/* drive refused ID */
+	timeout = ((cmd == WIN_IDENTIFY) ? WAIT_WORSTCASE : WAIT_PIDENTIFY) / 2;
+	for (timeout += jiffies; IN_BYTE(HD_ALTSTATUS,DEV_HWIF) & BUSY_STAT;) {
+		if (timeout < jiffies) {
 #if PROBE_FOR_IRQS
-			if (!irq_probed[DEV_HWIF]) {
-				irqs = probe_irq_off(irqs);  /* end probe */
-				if (irqs > 0) {
-					irq_probed[DEV_HWIF] = 1;
-					ide_irq[DEV_HWIF] = irqs;
-				} else
-					printk("%s: IRQ probe failed (%d)\n", dev->name, irqs);
-			}
+			if (!irq_probed[DEV_HWIF])
+				(void) probe_irq_off(irqs);
 #endif	/* PROBE_FOR_IRQS */
-			goto done_try;
+			return 1;	/* drive timed-out */
 		}
 	}
-	rc = 2;					/* it ain't responding */
+	delay_10ms();		/* wait for IRQ and DRQ_STAT */
+	if (OK_STAT(GET_STAT(DEV_HWIF),DRQ_STAT,BAD_RW_STAT)) {
+		cli();			/* some systems need this */
+		do_identify(dev);	/* drive returned ID */
+		rc = 0;			/* success */
+	} else
+		rc = 2;			/* drive refused ID */
 #if PROBE_FOR_IRQS
-	if (!irq_probed[DEV_HWIF])
-		(void) probe_irq_off(irqs);  	/* end probing */
+	if (!irq_probed[DEV_HWIF]) {
+		irqs = probe_irq_off(irqs);	/* get irq number */
+		if (irqs > 0) {
+			irq_probed[DEV_HWIF] = 1;
+			ide_irq[DEV_HWIF] = irqs;
+		} else				/* Mmmm.. multiple IRQs */
+			printk("%s: IRQ probe failed (%d)\n", dev->name, irqs);
+	}
 #endif	/* PROBE_FOR_IRQS */
-done_try:
-	OUT_BYTE(dev->ctl|2,HD_CMD);		/* disable device irq */
 	return rc;
 }
 
 /*
  * This routine has the difficult job of finding a drive if it exists,
- * without getting hung up if it doesn't exist, and without leaving any IRQs
- * dangling to haunt us later.  The last point actually occurred in v2.3, and
- * is the reason for the slightly complex exit sequence.  If a drive is "known"
- * to exist (from CMOS or kernel parameters), but does not respond right away,
- * the probe will "hang in there" for the maximum wait time (about 30 seconds).
- * Otherwise, it will exit much more quickly.
+ * without getting hung up if it doesn't exist, without trampling on
+ * ethernet cards, and without leaving any IRQs dangling to haunt us later.
  *
- * Returns 1 if device present but not identified.  Returns 0 otherwise.
+ * If a drive is "known" to exist (from CMOS or kernel parameters),
+ * but does not respond right away, the probe will "hang in there"
+ * for the maximum wait time (about 30 seconds), otherwise it will
+ * exit much more quickly.
  */
 static int do_probe (ide_dev_t *dev, byte cmd)
+/*
+ * Returns:	0  device was identified
+ *		1  device timed-out (no response to identify request)
+ *		2  device aborted the command (refused to identify itself)
+ *		3  bad status from device (possible for ATAPI drives)
+ *		4  probe was not attempted
+ */
 {
 	int rc;
 
 #ifdef CONFIG_BLK_DEV_IDECD
 	if (dev->present) {	/* avoid waiting for inappropriate probes */
 		if ((dev->type == disk) ^ (cmd == WIN_IDENTIFY))
-			return 1;
+			return 4;
 	}
 #endif	/* CONFIG_BLK_DEV_IDECD */
 #if DEBUG
@@ -1794,21 +1810,23 @@ static int do_probe (ide_dev_t *dev, byte cmd)
 #endif
 	OUT_BYTE(dev->select.all,HD_CURRENT);	/* select target drive */
 	delay_10ms();				/* wait for BUSY_STAT */
-	if (IN_BYTE(HD_CURRENT,DEV_HWIF) != dev->select.all && !dev->present)
-		return 0;     /* no i/f present: avoid killing ethernet cards */
+	if (IN_BYTE(HD_CURRENT,DEV_HWIF) != dev->select.all && !dev->present) {
+		OUT_BYTE(0xa0,HD_CURRENT);	/* exit with drive0 selected */
+		return 3;    /* no i/f present: avoid killing ethernet cards */
+	}
 
 	if (OK_STAT(GET_STAT(DEV_HWIF),READY_STAT,BUSY_STAT)
 	 || dev->present || cmd == WIN_PIDENTIFY)
 	{
-		if ((rc = try_to_identify(dev, cmd)))	/* send cmd and wait */
-			rc = try_to_identify(dev, cmd);		/* try again */
-		if (rc)
-			printk("%s: identification %s\n", dev->name,
-				(rc == 1) ? "refused" : "timed-out");
+		if ((rc = try_to_identify(dev, cmd)))  /* send cmd and wait */
+			rc = try_to_identify(dev, cmd);	/* failed: try again */
+		if (rc == 1)
+			printk("%s: no response\n", dev->name);
+		OUT_BYTE(dev->ctl|2,HD_CMD);	/* disable device irq */
 		delay_10ms();
 		(void) GET_STAT(DEV_HWIF);	/* ensure drive irq is clear */
 	} else {
-		rc = 2;				/* drive not present */
+		rc = 3;				/* not present or maybe ATAPI */
 	}
 	if (dev->select.b.drive == 1) {
 		OUT_BYTE(0xa0,HD_CURRENT);	/* exit with drive0 selected */
@@ -1821,16 +1839,20 @@ static int do_probe (ide_dev_t *dev, byte cmd)
 }
 
 static byte probe_for_drive (ide_dev_t *dev)
+/*
+ * Returns:	0  no device was found
+ *		1  device was found (note: dev->present might still be 0)
+ */
 {
 	if (dev->dont_probe)			/* skip probing? */
 		return dev->present;
-	if (do_probe(dev, WIN_IDENTIFY) == 1) {	/* 1 = drive aborted the cmd */
+	if (do_probe(dev, WIN_IDENTIFY) >= 2) {	/* if !(success || timed-out) */
 #ifdef CONFIG_BLK_DEV_IDECD
-		(void) do_probe(dev, WIN_PIDENTIFY);
+		(void) do_probe(dev, WIN_PIDENTIFY); /* look for ATAPI device */
 #endif	/* CONFIG_BLK_DEV_IDECD */
 	}
 	if (!dev->present)
-		return 0;			/* drive not present */
+		return 0;			/* drive not found */
 	if (dev->id == NULL) {			/* identification failed? */
 		if (dev->type == disk) {
 			printk ("%s: non-IDE device, CHS=%d/%d/%d\n",
@@ -1843,7 +1865,7 @@ static byte probe_for_drive (ide_dev_t *dev)
 #endif	/* CONFIG_BLK_DEV_IDECD */
 		else {
 			dev->present = 0;	/* nuke it */
-			return 0;		/* drive not present */
+			return 1;		/* drive was found */
 		}
 	}
 #ifdef CONFIG_BLK_DEV_IDECD
@@ -1857,7 +1879,7 @@ static byte probe_for_drive (ide_dev_t *dev)
 			dev->present = 0;
 		}
 	}
-	return 1;	/* drive present */
+	return 1;	/* drive was found */
 }
 
 static void probe_for_drives (byte hwif)
@@ -1877,15 +1899,15 @@ static void probe_for_drives (byte hwif)
 		save_flags(flags);
 		sti();	/* needed for jiffies and irq probing */
 
-		/* second drive can only exist if first drive was present */
+		/* second drive should only exist if first drive was found */
 		if (probe_for_drive(&devs[0]) || devs[1].present)
 			(void) probe_for_drive(&devs[1]);
 #if PROBE_FOR_IRQS
 		(void) probe_irq_off(probe_irq_on()); /* clear dangling irqs */
 #endif	/* PROBE_FOR_IRQS */
 		if (devs[0].present || devs[1].present) {
-			request_region(IDE_PORT(HD_DATA,HWIF),8,"ide");
-			request_region(IDE_PORT(HD_CMD,HWIF),1,"ide");
+			request_region(IDE_PORT(HD_DATA,HWIF),8,ide_name[HWIF]);
+			request_region(IDE_PORT(HD_CMD,HWIF),1,ide_name[HWIF]);
 		}
 		restore_flags(flags);
 	}

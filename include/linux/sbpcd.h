@@ -59,16 +59,16 @@
 /* ignore the rest if you have only one interface board & driver */
 
 #if !(SBPCD_ISSUE-2) /* second interface board: */
-#define CDROM_PORT 0x0370
+#define CDROM_PORT 0x0320
 #define SBPRO     0
 #endif
 #if !(SBPCD_ISSUE-3) /* third interface board: */
-#define CDROM_PORT 0x0330
-#define SBPRO     0
+#define CDROM_PORT 0x0630
+#define SBPRO     1
 #endif
 #if !(SBPCD_ISSUE-4) /* fourth interface board: */
-#define CDROM_PORT 0x0230
-#define SBPRO     1
+#define CDROM_PORT 0x0634
+#define SBPRO     0
 #endif
 
 /*==========================================================================*/
@@ -545,8 +545,7 @@ Read XA Parameter:
 #define CMD1_x08	0x08
 #define CMD2_x08	0x08
 #define CMDT_x08	0x08
-#define CMD2_xD4	0xd4
-#define CMD2_xDA	0xda
+#define CMD2_SETSPEED	0xda
 
 #define CMD0_PATH_CHECK	0x00
 #define CMD1_PATH_CHECK	0x00
@@ -563,6 +562,7 @@ Read XA Parameter:
 #define CMDL_READ	0x02
 #define CMDT_READ	0x28
 #define CMD0_READ_XA	0x03
+#define CMD2_READ_XA	0xd4
 #define CMDL_READ_XA	0x03 /* really ?? */
 #define CMD0_READ_HEAD	0x04
 #define CMD0_SPINUP	0x05

@@ -225,13 +225,13 @@ struct inode {
 	struct inode * i_hash_next, * i_hash_prev;
 	struct inode * i_bound_to, * i_bound_by;
 	struct inode * i_mount;
-	struct socket * i_socket;
 	unsigned short i_count;
 	unsigned short i_wcount;
 	unsigned short i_flags;
 	unsigned char i_lock;
 	unsigned char i_dirt;
 	unsigned char i_pipe;
+	unsigned char i_sock;
 	unsigned char i_seek;
 	unsigned char i_update;
 	union {
@@ -246,6 +246,7 @@ struct inode {
 		struct nfs_inode_info nfs_i;
 		struct xiafs_inode_info xiafs_i;
 		struct sysv_inode_info sysv_i;
+		struct socket socket_i;
 		void * generic_ip;
 	} u;
 };

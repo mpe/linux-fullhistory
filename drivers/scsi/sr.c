@@ -35,13 +35,14 @@
 
 static void sr_init(void);
 static void sr_finish(void);
-static void sr_attach(Scsi_Device *);
+static int sr_attach(Scsi_Device *);
 static int sr_detect(Scsi_Device *);
+static void sr_detach(Scsi_Device *);
 
 struct Scsi_Device_Template sr_template = {NULL, "cdrom", "sr", TYPE_ROM, 
 					     SCSI_CDROM_MAJOR, 0, 0, 0, 1,
 					     sr_detect, sr_init,
-					     sr_finish, sr_attach, NULL};
+					     sr_finish, sr_attach, sr_detach};
 
 Scsi_CD * scsi_CDs;
 static int * sr_sizes;
@@ -61,6 +62,8 @@ static void sr_release(struct inode * inode, struct file * file)
 	sync_dev(inode->i_rdev);
 	if(! --scsi_CDs[MINOR(inode->i_rdev)].device->access_count)
 	  sr_ioctl(inode, NULL, SCSI_IOCTL_DOORUNLOCK, 0);
+	if (scsi_CDs[MINOR(inode->i_rdev)].device->host->hostt->usage_count)
+	  (*scsi_CDs[MINOR(inode->i_rdev)].device->host->hostt->usage_count)--;
 }
 
 static struct file_operations sr_fops = 
@@ -413,6 +416,8 @@ static int sr_open(struct inode * inode, struct file * filp)
 
 	if(!scsi_CDs[MINOR(inode->i_rdev)].device->access_count++)
 	  sr_ioctl(inode, NULL, SCSI_IOCTL_DOORLOCK, 0);
+	if (scsi_CDs[MINOR(inode->i_rdev)].device->host->hostt->usage_count)
+	  (*scsi_CDs[MINOR(inode->i_rdev)].device->host->hostt->usage_count)++;
 
 	/* If this device did not have media in the drive at boot time, then
 	   we would have been unable to get the sector size.  Check to see if
@@ -795,8 +800,6 @@ are any multiple of 512 bytes long.  */
 
 static int sr_detect(Scsi_Device * SDp){
   
-  /* We do not support attaching loadable devices yet. */
-  if(scsi_loadable_module_flag) return 0;
   if(SDp->type != TYPE_ROM && SDp->type != TYPE_WORM) return 0;
 
   printk("Detected scsi CD-ROM sr%d at scsi%d, id %d, lun %d\n", 
@@ -806,17 +809,17 @@ static int sr_detect(Scsi_Device * SDp){
 	 return 1;
 }
 
-static void sr_attach(Scsi_Device * SDp){
+static int sr_attach(Scsi_Device * SDp){
   Scsi_CD * cpnt;
   int i;
   
-  /* We do not support attaching loadable devices yet. */
-  
-  if(scsi_loadable_module_flag) return;
-  if(SDp->type != TYPE_ROM && SDp->type != TYPE_WORM) return;
+  if(SDp->type != TYPE_ROM && SDp->type != TYPE_WORM) return 1;
   
   if (sr_template.nr_dev >= sr_template.dev_max)
-    panic ("scsi_devices corrupt (sr)");
+    {
+	SDp->attached--;
+	return 1;
+    }
   
   for(cpnt = scsi_CDs, i=0; i<sr_template.dev_max; i++, cpnt++) 
     if(!cpnt->device) break;
@@ -828,6 +831,7 @@ static void sr_attach(Scsi_Device * SDp){
   sr_template.nr_dev++;
   if(sr_template.nr_dev > sr_template.dev_max)
     panic ("scsi_devices corrupt (sr)");
+  return 0;
 }
      
 
@@ -923,20 +927,20 @@ static void sr_init()
 	    printk("Unable to get major %d for SCSI-CD\n",MAJOR_NR);
 	    return;
 	  }
+	  sr_registered++;
 	}
 
-	/* We do not support attaching loadable devices yet. */
-	if(scsi_loadable_module_flag) return;
-
-	sr_template.dev_max = sr_template.dev_noticed;
-	scsi_CDs = (Scsi_CD *) scsi_init_malloc(sr_template.dev_max * sizeof(Scsi_CD));
+	
+	if (scsi_CDs) return;
+	sr_template.dev_max = sr_template.dev_noticed + SR_EXTRA_DEVS;
+	scsi_CDs = (Scsi_CD *) scsi_init_malloc(sr_template.dev_max * sizeof(Scsi_CD), GFP_ATOMIC);
 	memset(scsi_CDs, 0, sr_template.dev_max * sizeof(Scsi_CD));
 
-	sr_sizes = (int *) scsi_init_malloc(sr_template.dev_max * sizeof(int));
+	sr_sizes = (int *) scsi_init_malloc(sr_template.dev_max * sizeof(int), GFP_ATOMIC);
 	memset(sr_sizes, 0, sr_template.dev_max * sizeof(int));
 
 	sr_blocksizes = (int *) scsi_init_malloc(sr_template.dev_max * 
-						 sizeof(int));
+						 sizeof(int), GFP_ATOMIC);
 	for(i=0;i<sr_template.dev_max;i++) sr_blocksizes[i] = 2048;
 	blksize_size[MAJOR_NR] = sr_blocksizes;
 
@@ -946,26 +950,61 @@ void sr_finish()
 {
   int i;
 
+	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blk_size[MAJOR_NR] = sr_sizes;	
+
 	for (i = 0; i < sr_template.nr_dev; ++i)
 		{
+		  /* If we have already seen this, then skip it.  Comes up
+		     with loadable modules. */
+		  if (scsi_CDs[i].capacity) continue;
 		  get_sectorsize(i);
-		  printk("Scd sectorsize = %d bytes\n", scsi_CDs[i].sector_size);
+		  printk("Scd sectorsize = %d bytes.\n", scsi_CDs[i].sector_size);
 		  scsi_CDs[i].use = 1;
 		  scsi_CDs[i].ten = 1;
 		  scsi_CDs[i].remap = 1;
 		  sr_sizes[i] = scsi_CDs[i].capacity;
 		}
 
-	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
-	blk_size[MAJOR_NR] = sr_sizes;	
 
 	/* If our host adapter is capable of scatter-gather, then we increase
 	   the read-ahead to 16 blocks (32 sectors).  If not, we use
 	   a two block (4 sector) read ahead. */
-	if(scsi_CDs[0].device->host->sg_tablesize)
+	if(scsi_CDs[0].device && scsi_CDs[0].device->host->sg_tablesize)
 	  read_ahead[MAJOR_NR] = 32;  /* 32 sector read-ahead.  Always removable. */
 	else
 	  read_ahead[MAJOR_NR] = 4;  /* 4 sector read-ahead */
 
 	return;
 }	
+
+static void sr_detach(Scsi_Device * SDp)
+{
+  Scsi_CD * cpnt;
+  int i, major;
+  
+  major = MAJOR_NR << 8;
+
+  for(cpnt = scsi_CDs, i=0; i<sg_template.dev_max; i++, cpnt++) 
+    if(cpnt->device == SDp) {
+      /*
+       * Since the cdrom is read-only, no need to sync the device.
+       * We should be kind to our buffer cache, however.
+       */
+      invalidate_inodes(major | i);
+      invalidate_buffers(major | i);
+
+      /*
+       * Reset things back to a sane state so that one can re-load a new
+       * driver (perhaps the same one).
+       */
+      cpnt->device = NULL;
+      cpnt->capacity = 0;
+      SDp->attached--;
+      sr_template.nr_dev--;
+      sr_template.dev_noticed--;
+      sr_sizes[i] = 0;
+      return;
+    }
+  return;
+}
