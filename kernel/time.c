@@ -64,7 +64,7 @@ void get_fast_time(struct timeval * t)
  *
  * XXX This function is NOT 64-bit clean!
  */
-asmlinkage int sys_time(int * tloc)
+asmlinkage long sys_time(int * tloc)
 {
 	int i;
 
@@ -85,7 +85,7 @@ asmlinkage int sys_time(int * tloc)
  * architectures that need it).
  */
  
-asmlinkage int sys_stime(int * tptr)
+asmlinkage long sys_stime(int * tptr)
 {
 	int value;
 
@@ -106,7 +106,7 @@ asmlinkage int sys_stime(int * tptr)
 
 #endif
 
-asmlinkage int sys_gettimeofday(struct timeval *tv, struct timezone *tz)
+asmlinkage long sys_gettimeofday(struct timeval *tv, struct timezone *tz)
 {
 	if (tv) {
 		struct timeval ktv;
@@ -181,7 +181,7 @@ int do_sys_settimeofday(struct timeval *tv, struct timezone *tz)
 	return 0;
 }
 
-asmlinkage int sys_settimeofday(struct timeval *tv, struct timezone *tz)
+asmlinkage long sys_settimeofday(struct timeval *tv, struct timezone *tz)
 {
 	struct timeval	new_tv;
 	struct timezone new_tz;
@@ -400,7 +400,7 @@ leave:	if ((time_status & (STA_UNSYNC|STA_CLOCKERR)) != 0
 	return(result);
 }
 
-asmlinkage int sys_adjtimex(struct timex *txc_p)
+asmlinkage long sys_adjtimex(struct timex *txc_p)
 {
 	struct timex txc;		/* Local copy of parameter */
 	int ret;

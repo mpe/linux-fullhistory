@@ -238,13 +238,12 @@ are you need to upgrade to a more recent net-tools that understands the
 new /proc/net/dev format.  This will also provide support for new
 features like IPv6.
 
-   As of 2.1.102, the IP firewalling code has been replaced; ipfwadm
-will no longer work.  You need to obtain "ipchains," available from
-http://www.rustcorp.com/linux/ipchains/ , and use that instead of
-ipfwadm.
-
-   To use masq forwarding you will need to obtain "ipmasqadm,"
-available from http://juanjox.linuxhq.com/ .
+   The IP firewalling and NAT code has been replaced again.  The
+actual modules (including ipfwadm and ipchains backwards-compatibility
+modules) are currently distributed separately: see
+	http://antarctica.penguincomputing.com/~netfilter/
+	http://www.samba.org/netfilter/
+	http://netfilter.kernenotes.org
 
    DHCP clients for 2.0 do not work with the new networking code in the
 2.2 kernel.  You will need to upgrade your dhcpcd / dhcpclient.

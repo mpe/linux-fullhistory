@@ -29,7 +29,6 @@
 #include <linux/inet.h>
 #include <net/ip.h>
 #include <net/protocol.h>
-#include <net/rarp.h>
 #include <net/tcp.h>
 #include <net/udp.h>
 #include <linux/skbuff.h>
@@ -162,11 +161,6 @@ int __scm_send(struct socket *sock, struct msghdr *msg, struct scm_cookie *p)
 		kfree(p->fp);
 		p->fp = NULL;
 	}
-
-	err = -EINVAL; 
-	if (msg->msg_flags & MSG_CTLFLAGS)
-		goto error;
-
 	return 0;
 	
 error:

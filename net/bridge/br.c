@@ -39,6 +39,8 @@
  *	Alan Cox:	Merged Jean-Rene's stuff, reformatted stuff a bit
  *			so blame me first if its broken ;)
  *
+ *	Robert Pintarelli:	fixed bug in bpdu time values
+ *	
  *	Todo:
  *		Don't bring up devices automatically. Start ports disabled
  *	and use a netlink notifier so a daemon can maintain the bridge
@@ -284,13 +286,13 @@ static void transmit_config(int port_no)	  /* (4.6.1)	 */
 			config_bpdu.message_age = Zero;	/* (4.6.1.3.2(5)) */
 		} else {
 			config_bpdu.message_age
-				= message_age_timer[bridge_info.root_port].value
-				+ Message_age_increment;	/* (4.6.1.3.2(6)) */
+				= (message_age_timer[bridge_info.root_port].value
+				+ Message_age_increment) << 8;	/* (4.6.1.3.2(6)) */
 		}
 
-		config_bpdu.max_age = bridge_info.max_age;/* (4.6.1.3.2(7)) */
-		config_bpdu.hello_time = bridge_info.hello_time;
-		config_bpdu.forward_delay = bridge_info.forward_delay;
+		config_bpdu.max_age = bridge_info.max_age << 8;/* (4.6.1.3.2(7)) */
+		config_bpdu.hello_time = bridge_info.hello_time << 8;
+		config_bpdu.forward_delay = bridge_info.forward_delay << 8;
 		config_bpdu.top_change_ack = 
 			port_info[port_no].top_change_ack;
 							/* (4.6.1.3.2(8)) */
@@ -363,10 +365,10 @@ static void record_config_information(int port_no, Config_bpdu *config)	  /* (4.
 
 static void record_config_timeout_values(Config_bpdu *config)		  /* (4.6.3)	 */
 {
-	bridge_info.max_age = config->max_age;	  /* (4.6.3.3)	 */
-	bridge_info.hello_time = config->hello_time;
-	bridge_info.forward_delay = config->forward_delay;
-	bridge_info.top_change = config->top_change;
+	bridge_info.max_age = config->max_age >> 8;	  /* (4.6.3.3)	 */
+	bridge_info.hello_time = config->hello_time >> 8;
+	bridge_info.forward_delay = config->forward_delay >> 8;
+	bridge_info.top_change = config->top_change >> 8;
 }
 
 static void config_bpdu_generation(void)

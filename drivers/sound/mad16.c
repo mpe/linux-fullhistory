@@ -668,7 +668,7 @@ void attach_mad16(struct address_info *hw_config)
 	 * Set the IRQ and DMA addresses.
 	 */
 	
-	if (board_type == C930)
+	if (board_type == C930 || c924pnp)
 		interrupt_bits[5] = 0x28;	/* Also IRQ5 is possible on C930 */
 
 	bits = interrupt_bits[hw_config->irq];
@@ -889,7 +889,7 @@ int             irq = -1;
 int             cdtype = 0;
 int             cdirq = 0;
 int             cdport = 0x340;
-int             cddma = 3;
+int             cddma = -1;
 int             opl4 = 0;
 int             joystick = 0;
 
@@ -949,23 +949,28 @@ int init_module(void)
 			break;
 		case 0x02:
 			printk("Sony CDU31A");
-			dmatype = 2;
+			dmatype = 1;
+			if(cddma == -1) cddma = 3;
 			break;
 		case 0x04:
 			printk("Mitsumi");
-			dmatype = 1;
+			dmatype = 0;
+			if(cddma == -1) cddma = 5;
 			break;
 		case 0x06:
 			printk("Panasonic Lasermate");
-			dmatype = 2;
+			dmatype = 1;
+			if(cddma == -1) cddma = 3;
 			break;
 		case 0x08:
 			printk("Secondary IDE");
-			dmatype = 1;
+			dmatype = 0;
+			if(cddma == -1) cddma = 5;
 			break;
 		case 0x0A:
 			printk("Primary IDE");
-			dmatype = 1;
+			dmatype = 0;
+			if(cddma == -1) cddma = 5;
 			break;
 		default:
 			printk("\n");
@@ -973,8 +978,16 @@ int init_module(void)
 			return -EINVAL;
 	}
 
-	if (dmatype)
-	{
+ 	/*
+         *    Build the config words
+         */
+
+        mad16_conf = (joystick ^ 1) | cdtype;
+	mad16_cdsel = 0;
+        if (opl4)
+                mad16_cdsel |= 0x20;
+
+	if(cdtype){
 		if (cddma > 7 || cddma < 0 || dma_map[dmatype][cddma] == -1)
 		{
 			printk("\n");
@@ -985,58 +998,51 @@ int init_module(void)
 			printk(", DMA %d", cddma);
 		else
 			printk(", no DMA");
+
+		if (!cdirq)
+			printk(", no IRQ");
+		else if (cdirq < 0 || cdirq > 15 || irq_map[cdirq] == -1)
+		{
+		  	printk(", invalid IRQ (disabling)");
+		  	cdirq = 0;
+		}
+		else printk(", IRQ %d", cdirq);
+
+		mad16_cdsel |= dma_map[dmatype][cddma];
+
+		if (cdtype < 0x08)
+		{
+			switch (cdport)
+			{
+				case 0x340:
+					mad16_cdsel |= 0x00;
+					break;
+				case 0x330:
+					mad16_cdsel |= 0x40;
+					break;
+				case 0x360:
+					mad16_cdsel |= 0x80;
+					break;
+				case 0x320:
+					mad16_cdsel |= 0xC0;
+					break;
+				default:
+					printk(KERN_ERR "Unknown CDROM I/O base %d\n", cdport);
+					return -EINVAL;
+			}
+		}
+		mad16_cdsel |= irq_map[cdirq];
 	}
-	if (cdtype && !cdirq)
-		printk(", no IRQ");
-	else if (cdirq < 0 || cdirq > 15 || irq_map[cdirq] == -1)
-	{
-		  printk(", invalid IRQ (disabling)");
-		  cdirq = 0;
-	}
-	else printk(", IRQ %d", cdirq);
 
 	printk(".\n");
-	printk(KERN_INFO "Joystick port ");
-	if (joystick == 1)
-		printk("enabled.\n");
-	else
-	{
-		joystick = 0;
-		printk("disabled.\n");
-	}
-
-	/*
-	 *    Build the config words
-	 */
-
-	mad16_conf = (joystick ^ 1) | cdtype;
-	mad16_cdsel = 0;
-	if (opl4)
-		mad16_cdsel |= 0x20;
-	mad16_cdsel |= dma_map[dmatype][cddma];
-
-	if (cdtype < 0x08)
-	{
-		switch (cdport)
-		{
-			case 0x340:
-				mad16_cdsel |= 0x00;
-				break;
-			case 0x330:
-				mad16_cdsel |= 0x40;
-				break;
-			case 0x360:
-				mad16_cdsel |= 0x80;
-				break;
-			case 0x320:
-				mad16_cdsel |= 0xC0;
-				break;
-			default:
-				printk(KERN_ERR "Unknown CDROM I/O base %d\n", cdport);
-				return -EINVAL;
-		}
-	}
-	mad16_cdsel |= irq_map[cdirq];
+        printk(KERN_INFO "Joystick port ");
+        if (joystick == 1)
+                printk("enabled.\n");
+        else
+        {
+                joystick = 0;
+                printk("disabled.\n");
+        }
 
 	config.io_base = io;
 	config.irq = irq;

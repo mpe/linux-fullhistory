@@ -71,8 +71,7 @@ static int nsp_backoff[NSP_MAXRXTSHIFT + 1] = { 1, 2, 4, 8, 16, 32, 64, 64, 64, 
 /*
  * If sk == NULL, then we assume that we are supposed to be making
  * a routing layer skb. If sk != NULL, then we are supposed to be
- * creating an skb for the NSP layer. The dn_send_skb() function will
- * recognise skbs on the same basis. 
+ * creating an skb for the NSP layer.
  *
  * The eventual aim is for each socket to have a cached header size
  * for its outgoing packets, and to set hdr from this when sk != NULL.
@@ -86,8 +85,10 @@ struct sk_buff *dn_alloc_skb(struct sock *sk, int size, int pri)
 		return NULL;
 
 	skb->protocol = __constant_htons(ETH_P_DNA_RT);
-	skb->sk       = sk;
 	skb->pkt_type = PACKET_OUTGOING;
+
+	if (sk)
+		skb_set_owner_w(skb, sk);
 
 	skb_reserve(skb, hdr);
 
@@ -148,9 +149,6 @@ struct sk_buff *dn_alloc_send_skb(struct sock *sk, int *size, int noblock, int *
 
 		if ((skb = dn_alloc_skb(sk, len, GFP_KERNEL)) == NULL)
 			continue;
-
-		skb->destructor = sock_wfree;
-		atomic_add(skb->truesize, &sk->wmem_alloc);
 
 		*size = len - 11;
 	}
@@ -253,7 +251,7 @@ void dn_nsp_output(struct sock *sk)
 				cb->stamp = jiffies;
 			cb->xmit_count++;
 			skb2->sk = sk;
-			dn_send_skb(skb2);
+			dn_nsp_send(skb2);
 		}
 		skb = skb->next;
 		win--;
@@ -277,7 +275,7 @@ void dn_nsp_output(struct sock *sk)
 				cb->stamp = jiffies;
 			cb->xmit_count++;
 			skb2->sk = sk;
-			dn_send_skb(skb2);
+			dn_nsp_send(skb2);
 		}
 		skb = skb->next;
 		win--;
@@ -340,7 +338,7 @@ void dn_nsp_queue_xmit(struct sock *sk, struct sk_buff *skb, int oth)
 		cb->stamp = jiffies;
 		cb->xmit_count++;
 		skb2->sk = sk;
-		dn_send_skb(skb2);
+		dn_nsp_send(skb2);
 	}
 }
 
@@ -399,8 +397,8 @@ int dn_nsp_check_xmit_queue(struct sock *sk, struct sk_buff *skb, struct sk_buff
 
 void dn_nsp_send_data_ack(struct sock *sk)
 {
-	struct	sk_buff			*skb = NULL;
-	struct  nsp_data_ack_msg	*msg;
+	struct sk_buff *skb = NULL;
+	struct  nsp_data_ack_msg *msg;
 
 	if ((skb = dn_alloc_skb(sk, 200, GFP_ATOMIC)) == NULL)
 		return;
@@ -414,29 +412,27 @@ void dn_nsp_send_data_ack(struct sock *sk)
 
 	sk->protinfo.dn.ackxmt_dat = sk->protinfo.dn.numdat_rcv;
 
-	dn_send_skb(skb);
+	dn_nsp_send(skb);
 }
 
 void dn_nsp_send_oth_ack(struct sock *sk)
 {
-	struct	sk_buff			*skb = NULL;
-	struct  nsp_data_ack_msg		*msg;
+	struct sk_buff *skb = NULL;
+	struct  nsp_data_ack_msg *msg;
 
 	if ((skb = dn_alloc_skb(sk, 200, GFP_ATOMIC)) == NULL)
 		return;
 	
-	/* printk(KERN_DEBUG "dn_send_oth_ack\n"); */
-
 	msg = (struct nsp_data_ack_msg *)skb_put(skb,sizeof(*msg));
 
-	msg->msgflg = 0x14;			/* oth ack message	*/
+	msg->msgflg = 0x14;	/* oth ack message	*/
 	msg->dstaddr = sk->protinfo.dn.addrrem;
 	msg->srcaddr = sk->protinfo.dn.addrloc;
 	msg->acknum  = dn_htons((sk->protinfo.dn.numoth_rcv & 0x0FFF) | 0x8000);
 
 	sk->protinfo.dn.ackxmt_oth = sk->protinfo.dn.numoth_rcv;
 
-	dn_send_skb(skb);
+	dn_nsp_send(skb);
 }
 
 
@@ -453,7 +449,7 @@ void dn_send_conn_ack (struct sock *sk)
         msg->msgflg = 0x24;                   
 	msg->dstaddr = scp->addrrem;
 
-	dn_send_skb(skb);	
+	dn_nsp_send(skb);	
 }
 
 void dn_nsp_delayed_ack(struct sock *sk)
@@ -492,7 +488,7 @@ void dn_send_conn_conf (struct sock *sk)
 	}
 	
 
-	dn_send_skb(skb);	
+	dn_nsp_send(skb);	
 }
 
 void dn_send_disc (struct sock *sk, unsigned char msgflg, unsigned short reason)
@@ -522,7 +518,7 @@ void dn_send_disc (struct sock *sk, unsigned char msgflg, unsigned short reason)
 		memcpy(msg, scp->discdata_out.opt_data, scp->discdata_out.opt_optl);
 	}
 
-	dn_send_skb(skb);	
+	dn_nsp_send(skb);	
 }
 
 void dn_nsp_send_lnk(struct sock *sk, unsigned short flgs)
@@ -587,9 +583,6 @@ void dn_nsp_send_conninit(struct sock *sk, unsigned char msgflg)
 	msg->msgflg	= msgflg;
 	msg->dstaddr	= 0x0000;		/* Remote Node will assign it*/
 
-	if (msgflg == NSP_CI)
-		sk->protinfo.dn.addrloc = dn_alloc_port();
-
 	msg->srcaddr	= sk->protinfo.dn.addrloc;
 	msg->services	= 1 | NSP_FC_NONE;	/* Requested flow control    */
 	msg->info	= 0x03;			/* Version Number            */	
@@ -634,6 +627,6 @@ void dn_nsp_send_conninit(struct sock *sk, unsigned char msgflg)
 
 	cb->rt_flags = DN_RT_F_RQR;
 
-	dn_send_skb(skb);	
+	dn_nsp_send(skb);	
 }
 

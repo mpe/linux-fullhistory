@@ -30,7 +30,7 @@
 */
 
 static char *version =
-"cs89x0.c:v1.02 11/26/96 Russell Nelson <nelson@crynwr.com>\n";
+"cs89x0.c:v1.03 11/26/96 Russell Nelson <nelson@crynwr.com>\n";
 
 /* ======================= configure the driver here ======================= */
 
@@ -306,7 +306,7 @@ static int __init cs89x0_probe1(struct net_device *dev, int ioaddr)
 	else if (get_eeprom_data(dev, START_EEPROM_DATA,CHKSUM_LEN,eeprom_buff) < 0) {
 		printk("\ncs89x0: EEPROM read failed, relying on command line.\n");
         } else if (get_eeprom_cksum(START_EEPROM_DATA,CHKSUM_LEN,eeprom_buff) < 0) {
-                printk("\ncs89x0: EEPROM checksum bad, relyong on command line\n");
+                printk("\ncs89x0: EEPROM checksum bad, relying on command line\n");
         } else {
                 /* get transmission control word  but keep the autonegotiation bits */
                 if (!lp->auto_neg_cnf) lp->auto_neg_cnf = eeprom_buff[AUTO_NEG_CNF_OFFSET/2];
@@ -841,6 +841,13 @@ static void net_interrupt(int irq, void *dev_id, struct pt_regs * regs)
                                 lp->send_underrun++;
                                 if (lp->send_underrun == 3) lp->send_cmd = TX_AFTER_381;
                                 else if (lp->send_underrun == 6) lp->send_cmd = TX_AFTER_ALL;
+				/* transmit cycle is done, although
+				   frame wasn't transmitted - this
+				   avoids having to wait for the upper
+				   layers to timeout on us, in the
+				   event of a tx underrun */
+				dev->tbusy = 0;
+				mark_bh(NET_BH);	/* Inform upper layers. */
                         }
 			break;
 		case ISQ_RX_MISS_EVENT:

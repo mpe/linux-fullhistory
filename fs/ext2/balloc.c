@@ -368,11 +368,10 @@ int ext2_new_block (const struct inode * inode, unsigned long goal,
 	struct super_block * sb;
 	struct ext2_group_desc * gdp;
 	struct ext2_super_block * es;
-
-	*err = -ENOSPC;
 #ifdef EXT2FS_DEBUG
 	static int goal_hits = 0, goal_attempts = 0;
 #endif
+	*err = -ENOSPC;
 	sb = inode->i_sb;
 	if (!sb) {
 		printk ("ext2_new_block: nonexistent device");

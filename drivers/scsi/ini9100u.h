@@ -63,7 +63,9 @@
  *		- Removed unused code
  * 12/13/98 bv	- v1.03b
  *		- Add spinlocks to HCS structure.
-*******************************************************************************/
+ * 21/01/99 bv	- v1.03e
+ *		- Added PCI_ID structure
+ **************************************************************************/
 
 #ifndef	CVT_LINUX_VERSION
 #define	CVT_LINUX_VERSION(V,P,S)	(((V) * 65536) + ((P) * 256) + (S))
@@ -88,7 +90,7 @@ extern struct proc_dir_entry proc_scsi_ini9100u;
 extern int i91u_biosparam(Disk *, int, int *);	/*for linux v1.13 */
 #endif
 
-#define i91u_REVID "Initio INI-9X00U/UW SCSI device driver; Revision: 1.03d"
+#define i91u_REVID "Initio INI-9X00U/UW SCSI device driver; Revision: 1.03g"
 
 #if LINUX_VERSION_CODE < CVT_LINUX_VERSION(1, 3, 0)
 #define INI9100U	{ \
@@ -207,11 +209,19 @@ extern int i91u_biosparam(Disk *, int, int *);	/*for linux v1.13 */
 #define SENSE_SIZE		14
 
 #define INI_VENDOR_ID   0x1101	/* Initio's PCI vendor ID       */
-#define DMX_VENDOR_ID   0x134a	/* Domex's PCI vendor ID       */
+#define DMX_VENDOR_ID	0x134a	/* Domex's PCI vendor ID	*/
 #define I950_DEVICE_ID	0x9500	/* Initio's inic-950 product ID   */
 #define I940_DEVICE_ID	0x9400	/* Initio's inic-940 product ID   */
 #define I935_DEVICE_ID	0x9401	/* Initio's inic-935 product ID   */
 #define I920_DEVICE_ID	0x0002	/* Initio's other product ID      */
+
+/************************************************************************/
+/*              Vendor ID/Device ID Pair Structure			*/
+/************************************************************************/
+typedef struct PCI_ID_Struc {
+	unsigned short vendor_id;
+	unsigned short device_id;
+} PCI_ID;
 
 /************************************************************************/
 /*              Scatter-Gather Element Structure                        */

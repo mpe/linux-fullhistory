@@ -66,6 +66,7 @@ struct ip_ra_chain
 };
 
 extern struct ip_ra_chain *ip_ra_chain;
+extern rwlock_t ip_ra_lock;
 
 /* IP flags. */
 #define IP_CE		0x8000		/* Flag: "Congestion"		*/
@@ -92,11 +93,11 @@ extern int		ip_local_deliver(struct sk_buff *skb);
 extern int		ip_mr_input(struct sk_buff *skb);
 extern int		ip_output(struct sk_buff *skb);
 extern int		ip_mc_output(struct sk_buff *skb);
-extern void		ip_fragment(struct sk_buff *skb, int (*out)(struct sk_buff*));
+extern int		ip_fragment(struct sk_buff *skb, int (*out)(struct sk_buff*));
 extern int		ip_do_nat(struct sk_buff *skb);
 extern void		ip_send_check(struct iphdr *ip);
 extern int		ip_id_count;			  
-extern void		ip_queue_xmit(struct sk_buff *skb);
+extern int		ip_queue_xmit(struct sk_buff *skb);
 extern void		ip_init(void);
 extern int		ip_build_xmit(struct sock *sk,
 				      int getfrag (const void *,
@@ -121,7 +122,7 @@ struct ip_reply_arg {
 void ip_send_reply(struct sock *sk, struct sk_buff *skb, struct ip_reply_arg *arg,
 		   unsigned int len); 
 
-extern int __ip_finish_output(struct sk_buff *skb);
+extern __inline__ int ip_finish_output(struct sk_buff *skb);
 
 struct ipv4_config
 {
@@ -136,34 +137,12 @@ extern struct linux_mib	net_statistics;
 
 extern int sysctl_local_port_range[2];
 
-extern __inline__ int ip_finish_output(struct sk_buff *skb)
-{
-	struct dst_entry *dst = skb->dst;
-	struct net_device *dev = dst->dev;
-	struct hh_cache *hh = dst->hh;
-
-	skb->dev = dev;
-	skb->protocol = __constant_htons(ETH_P_IP);
-
-	if (hh) {
-		read_lock_bh(&hh->hh_lock);
-		memcpy(skb->data - 16, hh->hh_data, 16);
-		read_unlock_bh(&hh->hh_lock);
-	        skb_push(skb, hh->hh_len);
-		return hh->hh_output(skb);
-	} else if (dst->neighbour)
-		return dst->neighbour->output(skb);
-
-	kfree_skb(skb);
-	return -EINVAL;
-}
-
-extern __inline__ void ip_send(struct sk_buff *skb)
+extern __inline__ int ip_send(struct sk_buff *skb)
 {
 	if (skb->len > skb->dst->pmtu)
-		ip_fragment(skb, __ip_finish_output);
+		return ip_fragment(skb, ip_finish_output);
 	else
-		ip_finish_output(skb);
+		return ip_finish_output(skb);
 }
 
 extern __inline__
@@ -180,8 +159,8 @@ int ip_decrease_ttl(struct iphdr *iph)
 extern __inline__
 int ip_dont_fragment(struct sock *sk, struct dst_entry *dst)
 {
-	return (sk->ip_pmtudisc == IP_PMTUDISC_DO ||
-		(sk->ip_pmtudisc == IP_PMTUDISC_WANT &&
+	return (sk->protinfo.af_inet.pmtudisc == IP_PMTUDISC_DO ||
+		(sk->protinfo.af_inet.pmtudisc == IP_PMTUDISC_WANT &&
 		 !(dst->mxlock&(1<<RTAX_MTU))));
 }
 

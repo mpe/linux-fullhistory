@@ -16,6 +16,7 @@ struct ipv4_devconf
 	int	log_martians;
 	int	forwarding;
 	int	mc_forwarding;
+	int	tag;
 	void	*sysctl;
 };
 
@@ -24,10 +25,12 @@ extern struct ipv4_devconf ipv4_devconf;
 struct in_device
 {
 	struct net_device		*dev;
+	atomic_t		refcnt;
+	rwlock_t		lock;
+	int			dead;
 	struct in_ifaddr	*ifa_list;	/* IP ifaddr chain		*/
 	struct ip_mc_list	*mc_list;	/* IP multicast filter chain    */
 	unsigned long		mr_v1_seen;
-	unsigned		flags;
 	struct neigh_parms	*arp_parms;
 	struct ipv4_devconf	cnf;
 };
@@ -43,6 +46,7 @@ struct in_device
 #define IN_DEV_SHARED_MEDIA(in_dev)	(ipv4_devconf.shared_media || (in_dev)->cnf.shared_media)
 #define IN_DEV_TX_REDIRECTS(in_dev)	(ipv4_devconf.send_redirects || (in_dev)->cnf.send_redirects)
 #define IN_DEV_SEC_REDIRECTS(in_dev)	(ipv4_devconf.secure_redirects || (in_dev)->cnf.secure_redirects)
+#define IN_DEV_IDTAG(in_dev)		((in_dev)->cnf.tag)
 
 #define IN_DEV_RX_REDIRECTS(in_dev) \
 	((IN_DEV_FORWARD(in_dev) && \
@@ -69,7 +73,7 @@ extern int register_inetaddr_notifier(struct notifier_block *nb);
 extern int unregister_inetaddr_notifier(struct notifier_block *nb);
 
 extern struct net_device 	*ip_dev_find(u32 addr);
-extern struct in_ifaddr	*inet_addr_onlink(struct in_device *in_dev, u32 a, u32 b);
+extern int		inet_addr_onlink(struct in_device *in_dev, u32 a, u32 b);
 extern int		devinet_ioctl(unsigned int cmd, void *);
 extern void		devinet_init(void);
 extern struct in_device *inetdev_init(struct net_device *dev);
@@ -105,6 +109,40 @@ extern __inline__ int bad_mask(u32 mask, u32 addr)
 
 
 #define endfor_ifa(in_dev) }
+
+extern rwlock_t inetdev_lock;
+
+
+extern __inline__ struct in_device *
+in_dev_get(const struct net_device *dev)
+{
+	struct in_device *in_dev;
+
+	read_lock(&inetdev_lock);
+	in_dev = dev->ip_ptr;
+	if (in_dev)
+		atomic_inc(&in_dev->refcnt);
+	read_unlock(&inetdev_lock);
+	return in_dev;
+}
+
+extern __inline__ struct in_device *
+__in_dev_get(const struct net_device *dev)
+{
+	return (struct in_device*)dev->ip_ptr;
+}
+
+extern void in_dev_finish_destroy(struct in_device *idev);
+
+extern __inline__ void
+in_dev_put(struct in_device *idev)
+{
+	if (atomic_dec_and_test(&idev->refcnt))
+		in_dev_finish_destroy(idev);
+}
+
+#define __in_dev_put(idev)  atomic_dec(&(idev)->refcnt)
+#define in_dev_hold(idev)   atomic_inc(&(idev)->refcnt)
 
 #endif /* __KERNEL__ */
 

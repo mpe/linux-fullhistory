@@ -427,7 +427,7 @@ static int eql_enslave(struct net_device *dev, slaving_request_t *srqp)
 			srq.slave_name, srq.priority);
 #endif  
 	master_dev = dev;		/* for "clarity" */
-	slave_dev  = dev_get (srq.slave_name);
+	slave_dev  = __dev_get_by_name (srq.slave_name);
 
 	if (master_dev != 0 && slave_dev != 0)
 	{
@@ -481,7 +481,7 @@ static int eql_emancipate(struct net_device *dev, slaving_request_t *srqp)
 		printk ("%s: emancipate `%s`\n", dev->name, srq.slave_name);
 #endif
 	master_dev = dev;		/* for "clarity" */
-	slave_dev  = dev_get (srq.slave_name);
+	slave_dev  = __dev_get_by_name (srq.slave_name);
 
 	if ( eql_is_slave (slave_dev) )	/* really is a slave */
 	{
@@ -511,7 +511,7 @@ static int eql_g_slave_cfg(struct net_device *dev, slave_config_t *scp)
 		printk ("%s: get config for slave `%s'\n", dev->name, sc.slave_name);
 #endif
 	eql = (equalizer_t *) dev->priv;
-	slave_dev = dev_get (sc.slave_name);
+	slave_dev = __dev_get_by_name (sc.slave_name);
 
 	if ( eql_is_slave (slave_dev) )
 	{
@@ -549,7 +549,7 @@ static int eql_s_slave_cfg(struct net_device *dev, slave_config_t *scp)
   
 
 	eql = (equalizer_t *) dev->priv;
-	slave_dev = dev_get (sc.slave_name);
+	slave_dev = __dev_get_by_name (sc.slave_name);
 
 	if ( eql_is_slave (slave_dev) )
 	{

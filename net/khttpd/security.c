@@ -257,13 +257,14 @@ void GetSecureString(char *String)
 	
 	memset(String,0,255);
 	
-	strcat(String,"Dynamic strings are : -");
+	strncpy(String,"Dynamic strings are : -",255);
 	Temp = DynamicList;
 	while (Temp!=NULL)
 	{
 		max=253 - strlen(String) - strlen(Temp->value);
 		strncat(String,Temp->value,max);
-		strcat(String,"- -");
+		max=253 - strlen(String) - 3;
+		strncat(String,"- -",max);
 		Temp = Temp->Next;
 	}	
 	

@@ -247,7 +247,7 @@ static int dn_node_address_strategy(ctl_table *table, int *name, int nlen,
 		dn_dev_devices_off();
 
 		decnet_address = addr;
-		dn_dn2eth(decnet_ether_address, decnet_address);
+		dn_dn2eth(decnet_ether_address, dn_ntohs(decnet_address));
 
 		dn_dev_devices_on();
 	}
@@ -281,7 +281,7 @@ static int dn_node_address_handler(ctl_table *table, int write,
 		dn_dev_devices_off();
 
 		decnet_address = dnaddr;
-		dn_dn2eth(decnet_ether_address, decnet_address);
+		dn_dn2eth(decnet_ether_address, dn_ntohs(decnet_address));
 
 		dn_dev_devices_on();
 
@@ -345,7 +345,7 @@ static int dn_def_dev_strategy(ctl_table *table, int *name, int nlen,
 
 		devname[newlen] = 0;
 
-		if ((dev = dev_get(devname)) == NULL)
+		if ((dev = __dev_get_by_name(devname)) == NULL)
 			return -ENODEV;
 
 		if (dev->dn_ptr == NULL)
@@ -381,7 +381,7 @@ static int dn_def_dev_handler(ctl_table *table, int write,
 
 		devname[*lenp] = 0;
 
-		if ((dev = dev_get(devname)) == NULL)
+		if ((dev = __dev_get_by_name(devname)) == NULL)
 			return -ENODEV;
 
 		if (dev->dn_ptr == NULL)

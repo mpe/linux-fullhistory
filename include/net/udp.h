@@ -32,6 +32,7 @@
  *        the port space is shared.
  */
 extern struct sock *udp_hash[UDP_HTABLE_SIZE];
+extern rwlock_t udp_hash_lock;
 
 extern int udp_port_rover;
 
@@ -66,8 +67,6 @@ extern int	udp_sendmsg(struct sock *sk, struct msghdr *msg, int len);
 
 extern int	udp_rcv(struct sk_buff *skb, unsigned short len);
 extern int	udp_ioctl(struct sock *sk, int cmd, unsigned long arg);
-
-/* CONFIG_IP_TRANSPARENT_PROXY */
-extern int	udp_chkaddr(struct sk_buff *skb);
+extern int	udp_disconnect(struct sock *sk, int flags);
 
 #endif	/* _UDP_H */

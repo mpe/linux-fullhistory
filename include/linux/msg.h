@@ -69,11 +69,10 @@ struct msg {
 	short msg_ts;           /* message text size */
 };
 
-asmlinkage int sys_msgget (key_t key, int msgflg);
-asmlinkage int sys_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg);
-asmlinkage int sys_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgtyp,
-		       int msgflg);
-asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf);
+asmlinkage long sys_msgget (key_t key, int msgflg);
+asmlinkage long sys_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg);
+asmlinkage long sys_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgtyp, int msgflg);
+asmlinkage long sys_msgctl (int msqid, int cmd, struct msqid_ds *buf);
 
 #endif /* __KERNEL__ */
 

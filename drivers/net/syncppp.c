@@ -48,6 +48,7 @@
 #include <linux/netdevice.h>
 #include <linux/inetdevice.h>
 #include <linux/random.h>
+#include <linux/pkt_sched.h>
 #include <asm/byteorder.h>
 #include "syncppp.h"
 
@@ -705,19 +706,23 @@ static void sppp_cisco_input (struct sppp *sp, struct sk_buff *skb)
 		/* Stolen from net/ipv4/devinet.c -- SIOCGIFADDR ioctl */
 		{
 		struct in_device *in_dev;
-		struct in_ifaddr *ifa, **ifap;
+		struct in_ifaddr *ifa;
 		u32 addr = 0, mask = ~0; /* FIXME: is the mask correct? */
 
-		if ((in_dev=dev->ip_ptr) != NULL)
+		if ((in_dev=in_dev_get(dev)) != NULL)
 		{
-			for (ifap=&in_dev->ifa_list; (ifa=*ifap) != NULL;
-				ifap=&ifa->ifa_next)
+			read_lock(&in_dev->lock);
+			for (ifa=in_dev->ifa_list; ifa != NULL;
+				ifa=ifa->ifa_next) {
 				if (strcmp(dev->name, ifa->ifa_label) == 0) 
 				{
 					addr = ifa->ifa_local;
 					mask = ifa->ifa_mask;
 					break;
 				}
+			}
+			read_unlock(&in_dev->lock);
+			in_dev_put(in_dev);
 		}
 		/* I hope both addr and mask are in the net order */
 		sppp_cisco_send (sp, CISCO_ADDR_REPLY, addr, mask);
@@ -771,7 +776,7 @@ static void sppp_cp_send (struct sppp *sp, u16 proto, u8 type,
 	}
 	sp->obytes += skb->len;
 	/* Control is high priority so it doesnt get queued behind data */
-	skb->priority=1;
+	skb->priority=TC_PRIO_CONTROL;
 	skb->dev = dev;
 	dev_queue_xmit(skb);
 }
@@ -813,7 +818,7 @@ static void sppp_cisco_send (struct sppp *sp, int type, long par1, long par2)
 			dev->name,  ntohl (ch->type), ch->par1,
 			ch->par2, ch->rel, ch->time0, ch->time1);
 	sp->obytes += skb->len;
-	skb->priority=1;
+	skb->priority=TC_PRIO_CONTROL;
 	skb->dev = dev;
 	dev_queue_xmit(skb);
 }

@@ -50,9 +50,6 @@ source drivers/sbus/char/Config.in
 source drivers/sbus/audio/Config.in
 
 tristate 'Openprom tree appears in /proc/openprom (EXPERIMENTAL)' CONFIG_SUN_OPENPROMFS
-if [ "$CONFIG_PCI" = "y" ]; then
-  bool 'Backward-compatible /proc/pci' CONFIG_PCI_OLD_PROC
-fi
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
 bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT

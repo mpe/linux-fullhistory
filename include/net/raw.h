@@ -30,9 +30,13 @@ extern int 	raw_rcv(struct sock *, struct sk_buff *);
 #define RAWV4_HTABLE_SIZE	MAX_INET_PROTOS
 extern struct sock *raw_v4_htable[RAWV4_HTABLE_SIZE];
 
+extern rwlock_t raw_v4_lock;
 
-extern struct sock *raw_v4_lookup(struct sock *sk, unsigned short num,
-				  unsigned long raddr, unsigned long laddr,
-				  int dif);
+
+extern struct sock *__raw_v4_lookup(struct sock *sk, unsigned short num,
+				    unsigned long raddr, unsigned long laddr,
+				    int dif);
+
+extern struct sock *raw_v4_input(struct sk_buff *skb, struct iphdr *iph, int hash);
 
 #endif	/* _RAW_H */

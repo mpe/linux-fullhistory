@@ -1432,13 +1432,13 @@ void do_timer(struct pt_regs * regs)
 		mark_bh(TQUEUE_BH);
 }
 
-#ifndef __alpha__
+#if !defined(__alpha__) && !defined(__ia64__)
 
 /*
  * For backwards compatibility?  This can be done in libc so Alpha
  * and all newer ports shouldn't need it.
  */
-asmlinkage unsigned int sys_alarm(unsigned int seconds)
+asmlinkage unsigned long sys_alarm(unsigned int seconds)
 {
 	struct itimerval it_new, it_old;
 	unsigned int oldalarm;
@@ -1455,12 +1455,16 @@ asmlinkage unsigned int sys_alarm(unsigned int seconds)
 	return oldalarm;
 }
 
+#endif
+
+#ifndef __alpha__
+
 /*
  * The Alpha uses getxpid, getxuid, and getxgid instead.  Maybe this
  * should be moved into arch/i386 instead?
  */
  
-asmlinkage int sys_getpid(void)
+asmlinkage long sys_getpid(void)
 {
 	/* This is SMP safe - current->pid doesn't change */
 	return current->pid;
@@ -1489,7 +1493,7 @@ asmlinkage int sys_getpid(void)
  * a small window for a race, using the old pointer is
  * harmless for a while).
  */
-asmlinkage int sys_getppid(void)
+asmlinkage long sys_getppid(void)
 {
 	int pid;
 	struct task_struct * me = current;
@@ -1512,25 +1516,25 @@ asmlinkage int sys_getppid(void)
 	return pid;
 }
 
-asmlinkage int sys_getuid(void)
+asmlinkage long sys_getuid(void)
 {
 	/* Only we change this so SMP safe */
 	return current->uid;
 }
 
-asmlinkage int sys_geteuid(void)
+asmlinkage long sys_geteuid(void)
 {
 	/* Only we change this so SMP safe */
 	return current->euid;
 }
 
-asmlinkage int sys_getgid(void)
+asmlinkage long sys_getgid(void)
 {
 	/* Only we change this so SMP safe */
 	return current->gid;
 }
 
-asmlinkage int sys_getegid(void)
+asmlinkage long sys_getegid(void)
 {
 	/* Only we change this so SMP safe */
 	return  current->egid;
@@ -1542,7 +1546,7 @@ asmlinkage int sys_getegid(void)
  * it for backward compatibility?
  */
 
-asmlinkage int sys_nice(int increment)
+asmlinkage long sys_nice(int increment)
 {
 	unsigned long newprio;
 	int increase = 0;
@@ -1672,18 +1676,18 @@ out_nounlock:
 	return retval;
 }
 
-asmlinkage int sys_sched_setscheduler(pid_t pid, int policy, 
+asmlinkage long sys_sched_setscheduler(pid_t pid, int policy, 
 				      struct sched_param *param)
 {
 	return setscheduler(pid, policy, param);
 }
 
-asmlinkage int sys_sched_setparam(pid_t pid, struct sched_param *param)
+asmlinkage long sys_sched_setparam(pid_t pid, struct sched_param *param)
 {
 	return setscheduler(pid, -1, param);
 }
 
-asmlinkage int sys_sched_getscheduler(pid_t pid)
+asmlinkage long sys_sched_getscheduler(pid_t pid)
 {
 	struct task_struct *p;
 	int retval;
@@ -1708,7 +1712,7 @@ out_nounlock:
 	return retval;
 }
 
-asmlinkage int sys_sched_getparam(pid_t pid, struct sched_param *param)
+asmlinkage long sys_sched_getparam(pid_t pid, struct sched_param *param)
 {
 	struct task_struct *p;
 	struct sched_param lp;
@@ -1739,7 +1743,7 @@ out_unlock:
 	return retval;
 }
 
-asmlinkage int sys_sched_yield(void)
+asmlinkage long sys_sched_yield(void)
 {
 	spin_lock_irq(&runqueue_lock);
 	if (current->policy == SCHED_OTHER)
@@ -1750,7 +1754,7 @@ asmlinkage int sys_sched_yield(void)
 	return 0;
 }
 
-asmlinkage int sys_sched_get_priority_max(int policy)
+asmlinkage long sys_sched_get_priority_max(int policy)
 {
 	int ret = -EINVAL;
 
@@ -1766,7 +1770,7 @@ asmlinkage int sys_sched_get_priority_max(int policy)
 	return ret;
 }
 
-asmlinkage int sys_sched_get_priority_min(int policy)
+asmlinkage long sys_sched_get_priority_min(int policy)
 {
 	int ret = -EINVAL;
 
@@ -1781,7 +1785,7 @@ asmlinkage int sys_sched_get_priority_min(int policy)
 	return ret;
 }
 
-asmlinkage int sys_sched_rr_get_interval(pid_t pid, struct timespec *interval)
+asmlinkage long sys_sched_rr_get_interval(pid_t pid, struct timespec *interval)
 {
 	struct timespec t;
 
@@ -1792,7 +1796,7 @@ asmlinkage int sys_sched_rr_get_interval(pid_t pid, struct timespec *interval)
 	return 0;
 }
 
-asmlinkage int sys_nanosleep(struct timespec *rqtp, struct timespec *rmtp)
+asmlinkage long sys_nanosleep(struct timespec *rqtp, struct timespec *rmtp)
 {
 	struct timespec t;
 	unsigned long expire;

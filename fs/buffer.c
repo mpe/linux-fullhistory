@@ -227,7 +227,6 @@ repeat:
 				continue;
 
 			atomic_inc(&bh->b_count);
-			bh->b_flushtime = 0;
 			spin_unlock(&lru_list_lock);
 			ll_rw_block(WRITE, 1, &bh);
 			atomic_dec(&bh->b_count);
@@ -308,7 +307,7 @@ int fsync_dev(kdev_t dev)
 	return sync_buffers(dev, 1);
 }
 
-asmlinkage int sys_sync(void)
+asmlinkage long sys_sync(void)
 {
 	fsync_dev(0);
 	return 0;
@@ -338,7 +337,7 @@ int file_fsync(struct file *filp, struct dentry *dentry)
 	return sync_buffers(dev, 1);
 }
 
-asmlinkage int sys_fsync(unsigned int fd)
+asmlinkage long sys_fsync(unsigned int fd)
 {
 	struct file * file;
 	struct dentry * dentry;
@@ -375,7 +374,7 @@ out:
 	return err;
 }
 
-asmlinkage int sys_fdatasync(unsigned int fd)
+asmlinkage long sys_fdatasync(unsigned int fd)
 {
 	struct file * file;
 	struct dentry * dentry;
@@ -437,7 +436,6 @@ void invalidate_buffers(kdev_t dev)
 			}
 			if (atomic_read(&bh->b_count))
 				continue;
-			bh->b_flushtime = 0;
 			clear_bit(BH_Protected, &bh->b_state);
 			clear_bit(BH_Uptodate, &bh->b_state);
 			clear_bit(BH_Dirty, &bh->b_state);
@@ -652,7 +650,6 @@ void set_blocksize(kdev_t dev, int size)
 				clear_bit(BH_Dirty, &bh->b_state);
 				clear_bit(BH_Uptodate, &bh->b_state);
 				clear_bit(BH_Req, &bh->b_state);
-				bh->b_flushtime = 0;
 			}
 			if (atomic_read(&bh->b_count) == 0) {
 				__remove_from_queues(bh);
@@ -678,7 +675,6 @@ static void refill_freelist(int size)
 void init_buffer(struct buffer_head *bh, bh_end_io_t *handler, void *dev_id)
 {
 	bh->b_list = BUF_CLEAN;
-	bh->b_flushtime = 0;
 	bh->b_end_io = handler;
 	bh->b_dev_id = dev_id;
 }
@@ -792,12 +788,8 @@ struct buffer_head * getblk(kdev_t dev, int block, int size)
 
 repeat:
 	bh = get_hash_table(dev, block, size);
-	if (bh) {
-		if (!buffer_dirty(bh)) {
-			bh->b_flushtime = 0;
-		}
+	if (bh)
 		goto out;
-	}
 
 	isize = BUFSIZE_INDEX(size);
 	spin_lock(&free_list[isize].lock);
@@ -1132,7 +1124,6 @@ try_again:
 
 		bh->b_data = (char *) (page+offset);
 		bh->b_list = BUF_CLEAN;
-		bh->b_flushtime = 0;
 		bh->b_end_io = end_buffer_io_bad;
 	}
 	return head;
@@ -2324,7 +2315,6 @@ static int sync_old_buffers(void)
 					continue;
 
 				/* OK, now we are committed to write it out. */
-				bh->b_flushtime = 0;
 				atomic_inc(&bh->b_count);
 				spin_unlock(&lru_list_lock);
 				ll_rw_block(WRITE, 1, &bh);
@@ -2343,7 +2333,7 @@ static int sync_old_buffers(void)
  * We would want to verify each parameter, however, to make sure that it 
  * is reasonable. */
 
-asmlinkage int sys_bdflush(int func, long data)
+asmlinkage long sys_bdflush(int func, long data)
 {
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
@@ -2448,7 +2438,6 @@ int bdflush(void * unused)
 
 				major = MAJOR(bh->b_dev);
 				written++;
-				bh->b_flushtime = 0;
 
 				/*
 				 * For the loop major we can try to do asynchronous writes,

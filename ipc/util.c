@@ -63,58 +63,58 @@ int shm_swap (int prio, int gfp_mask)
     return 0;
 }
 
-asmlinkage int sys_semget (key_t key, int nsems, int semflg)
+asmlinkage long sys_semget (key_t key, int nsems, int semflg)
 {
 	return -ENOSYS;
 }
 
-asmlinkage int sys_semop (int semid, struct sembuf *sops, unsigned nsops)
+asmlinkage long sys_semop (int semid, struct sembuf *sops, unsigned nsops)
 {
 	return -ENOSYS;
 }
 
-asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
+asmlinkage long sys_semctl (int semid, int semnum, int cmd, union semun arg)
 {
 	return -ENOSYS;
 }
 
-asmlinkage int sys_msgget (key_t key, int msgflg)
+asmlinkage long sys_msgget (key_t key, int msgflg)
 {
 	return -ENOSYS;
 }
 
-asmlinkage int sys_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg)
+asmlinkage long sys_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg)
 {
 	return -ENOSYS;
 }
 
-asmlinkage int sys_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgtyp,
+asmlinkage long sys_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgtyp,
 		       int msgflg)
 {
 	return -ENOSYS;
 }
 
-asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
+asmlinkage long sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 {
 	return -ENOSYS;
 }
 
-asmlinkage int sys_shmget (key_t key, int size, int flag)
+asmlinkage long sys_shmget (key_t key, int size, int flag)
 {
 	return -ENOSYS;
 }
 
-asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *addr)
+asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *addr)
 {
 	return -ENOSYS;
 }
 
-asmlinkage int sys_shmdt (char *shmaddr)
+asmlinkage long sys_shmdt (char *shmaddr)
 {
 	return -ENOSYS;
 }
 
-asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
+asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 {
 	return -ENOSYS;
 }

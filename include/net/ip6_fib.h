@@ -94,20 +94,25 @@ struct fib6_walker_t
 };
 
 extern struct fib6_walker_t fib6_walker_list;
+extern rwlock_t fib6_walker_lock;
 
 extern __inline__ void fib6_walker_link(struct fib6_walker_t *w)
 {
+	write_lock_bh(&fib6_walker_lock);
 	w->next = fib6_walker_list.next;
 	w->prev = &fib6_walker_list;
 	w->next->prev = w;
 	w->prev->next = w;
+	write_unlock_bh(&fib6_walker_lock);
 }
 
 extern __inline__ void fib6_walker_unlink(struct fib6_walker_t *w)
 {
+	write_lock_bh(&fib6_walker_lock);
 	w->next->prev = w->prev;
 	w->prev->next = w->next;
 	w->prev = w->next = w;
+	write_unlock_bh(&fib6_walker_lock);
 }
 
 struct rt6_statistics {
@@ -173,5 +178,6 @@ extern void			fib6_run_gc(unsigned long dummy);
 
 extern void			fib6_gc_cleanup(void);
 
+extern void			fib6_init(void);
 #endif
 #endif

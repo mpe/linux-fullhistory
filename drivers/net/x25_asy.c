@@ -663,9 +663,7 @@ static void x25_asy_close_tty(struct tty_struct *tty)
 
 	if (sl->dev->flags & IFF_UP)
 	{
-		dev_lock_wait();
 		(void) dev_close(sl->dev);
-		dev_unlock_list();
 	}
 
 	tty->disc_data = 0;

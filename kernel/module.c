@@ -157,7 +157,7 @@ err0:
  * Initialize a module.
  */
 
-asmlinkage int
+asmlinkage long
 sys_init_module(const char *name_user, struct module *mod_user)
 {
 	struct module mod_tmp, *mod;
@@ -349,7 +349,7 @@ err0:
 	return error;
 }
 
-asmlinkage int
+asmlinkage long
 sys_delete_module(const char *name_user)
 {
 	struct module *mod, *next;
@@ -624,7 +624,7 @@ qm_info(struct module *mod, char *buf, size_t bufsize, size_t *ret)
 	return error;
 }
 
-asmlinkage int
+asmlinkage long
 sys_query_module(const char *name_user, int which, char *buf, size_t bufsize,
 		 size_t *ret)
 {
@@ -689,7 +689,7 @@ out:
  * which does not arbitrarily limit the length of symbols.
  */
 
-asmlinkage int
+asmlinkage long
 sys_get_kernel_syms(struct kernel_sym *table)
 {
 	struct module *mod;
@@ -977,19 +977,19 @@ sys_create_module(const char *name_user, size_t size)
 	return -ENOSYS;
 }
 
-asmlinkage int
+asmlinkage long
 sys_init_module(const char *name_user, struct module *mod_user)
 {
 	return -ENOSYS;
 }
 
-asmlinkage int
+asmlinkage long
 sys_delete_module(const char *name_user)
 {
 	return -ENOSYS;
 }
 
-asmlinkage int
+asmlinkage long
 sys_query_module(const char *name_user, int which, char *buf, size_t bufsize,
 		 size_t *ret)
 {
@@ -1001,7 +1001,7 @@ sys_query_module(const char *name_user, int which, char *buf, size_t bufsize,
 	return -ENOSYS;
 }
 
-asmlinkage int
+asmlinkage long
 sys_get_kernel_syms(struct kernel_sym *table)
 {
 	return -ENOSYS;

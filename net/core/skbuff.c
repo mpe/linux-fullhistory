@@ -4,7 +4,7 @@
  *	Authors:	Alan Cox <iiitac@pyr.swan.ac.uk>
  *			Florian La Roche <rzsfl@rz.uni-sb.de>
  *
- *	Version:	$Id: skbuff.c,v 1.56 1999/05/29 23:20:42 davem Exp $
+ *	Version:	$Id: skbuff.c,v 1.60 1999/08/23 07:02:01 davem Exp $
  *
  *	Fixes:	
  *		Alan Cox	:	Fixed the worst of the load balancer bugs.
@@ -61,6 +61,10 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 
+#ifdef CONFIG_ATM
+#include <linux/atmdev.h>
+#endif
+
 /*
  *	Resource tracking variables
  */
@@ -81,14 +85,16 @@ static kmem_cache_t *skbuff_head_cache;
 
 void skb_over_panic(struct sk_buff *skb, int sz, void *here)
 {
-	panic("skput:over: %p:%d put:%d dev:%s", 
+	printk("skput:over: %p:%d put:%d dev:%s", 
 		here, skb->len, sz, skb->dev ? skb->dev->name : "<NULL>");
+	*(int*)0 = 0;
 }
 
 void skb_under_panic(struct sk_buff *skb, int sz, void *here)
 {
-        panic("skput:under: %p:%d put:%d dev:%s",
+        printk("skput:under: %p:%d put:%d dev:%s",
                 here, skb->len, sz, skb->dev ? skb->dev->name : "<NULL>");
+	*(int*)0 = 0;
 }
 
 void show_net_buffers(void)
@@ -120,7 +126,8 @@ struct sk_buff *alloc_skb(unsigned int size,int gfp_mask)
 		static int count = 0;
 		if (++count < 5) {
 			printk(KERN_ERR "alloc_skb called nonatomically "
-			       "from interrupt %p\n", __builtin_return_address(0));
+			       "from interrupt %p\n", NET_CALLER(size));
+ 			*(int*)0 = 0;
 		}
 		gfp_mask &= ~__GFP_WAIT;
 	}
@@ -142,7 +149,8 @@ struct sk_buff *alloc_skb(unsigned int size,int gfp_mask)
 	 */
 	atomic_inc(&net_allocs);
 
-	skb->truesize = size;
+	/* XXX: does not include slab overhead */ 
+	skb->truesize = size + sizeof(struct sk_buff);
 
 	atomic_inc(&net_skbcount);
 
@@ -156,6 +164,10 @@ struct sk_buff *alloc_skb(unsigned int size,int gfp_mask)
 	skb->len = 0;
 	skb->is_clone = 0;
 	skb->cloned = 0;
+
+#ifdef CONFIG_ATM
+	ATM_SKB(skb)->iovcnt = 0;
+#endif
 
 	atomic_set(&skb->users, 1); 
 	atomic_set(skb_datarefp(skb), 1);
@@ -187,8 +199,12 @@ static inline void skb_headerinit(void *p, kmem_cache_t *cache,
 	skb->ip_summed = 0;
 	skb->security = 0;	/* By default packets are insecure */
 	skb->dst = NULL;
-#ifdef CONFIG_IP_FIREWALL
-        skb->fwmark = 0;
+	skb->rx_dev = NULL;
+#ifdef CONFIG_NETFILTER
+	skb->nfmark = skb->nfreason = skb->nfcache = 0;
+#ifdef CONFIG_NETFILTER_DEBUG
+	skb->nf_debug = 0;
+#endif
 #endif
 	memset(skb->cb, 0, sizeof(skb->cb));
 	skb->priority = 0;
@@ -212,13 +228,17 @@ void kfree_skbmem(struct sk_buff *skb)
 
 void __kfree_skb(struct sk_buff *skb)
 {
-	if (skb->list)
+	if (skb->list) {
 	 	printk(KERN_WARNING "Warning: kfree_skb passed an skb still "
-		       "on a list (from %p).\n", __builtin_return_address(0));
+		       "on a list (from %p).\n", NET_CALLER(skb));
+		*(int*)0 = 0;
+	}
 
 	dst_release(skb->dst);
 	if(skb->destructor)
 		skb->destructor(skb);
+	if(skb->rx_dev)
+		dev_put(skb->rx_dev);
 	skb_headerinit(skb, NULL, 0);  /* clean state */
 	kfree_skbmem(skb);
 }
@@ -242,6 +262,7 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int gfp_mask)
 	atomic_inc(&net_allocs);
 	atomic_inc(&net_skbcount);
 	dst_clone(n->dst);
+	n->rx_dev = NULL;
 	n->cloned = 1;
 	n->next = n->prev = NULL;
 	n->list = NULL;
@@ -285,6 +306,7 @@ struct sk_buff *skb_copy(struct sk_buff *skb, int gfp_mask)
 	n->list=NULL;
 	n->sk=NULL;
 	n->dev=skb->dev;
+	n->rx_dev=NULL;
 	n->priority=skb->priority;
 	n->protocol=skb->protocol;
 	n->dst=dst_clone(skb->dst);
@@ -299,8 +321,13 @@ struct sk_buff *skb_copy(struct sk_buff *skb, int gfp_mask)
 	n->stamp=skb->stamp;
 	n->destructor = NULL;
 	n->security=skb->security;
-#ifdef CONFIG_IP_FIREWALL
-        n->fwmark = skb->fwmark;
+#ifdef CONFIG_NETFILTER
+	n->nfmark=skb->nfmark;
+	n->nfreason=skb->nfreason;
+	n->nfcache=skb->nfcache;
+#ifdef CONFIG_NETFILTER_DEBUG
+	n->nf_debug=skb->nf_debug;
+#endif
 #endif
 	return n;
 }
@@ -309,13 +336,12 @@ struct sk_buff *skb_realloc_headroom(struct sk_buff *skb, int newheadroom)
 {
 	struct sk_buff *n;
 	unsigned long offset;
-	int headroom = skb_headroom(skb);
 
 	/*
 	 *	Allocate the copy buffer
 	 */
  	 
-	n=alloc_skb(skb->truesize+newheadroom-headroom, GFP_ATOMIC);
+	n=alloc_skb((skb->end-skb->data)+newheadroom, GFP_ATOMIC);
 	if(n==NULL)
 		return NULL;
 
@@ -336,6 +362,7 @@ struct sk_buff *skb_realloc_headroom(struct sk_buff *skb, int newheadroom)
 	n->priority=skb->priority;
 	n->protocol=skb->protocol;
 	n->dev=skb->dev;
+	n->rx_dev=NULL;
 	n->dst=dst_clone(skb->dst);
 	n->h.raw=skb->h.raw+offset;
 	n->nh.raw=skb->nh.raw+offset;
@@ -348,10 +375,14 @@ struct sk_buff *skb_realloc_headroom(struct sk_buff *skb, int newheadroom)
 	n->stamp=skb->stamp;
 	n->destructor = NULL;
 	n->security=skb->security;
-#ifdef CONFIG_IP_FIREWALL
-        n->fwmark = skb->fwmark;
+#ifdef CONFIG_NETFILTER
+	n->nfmark=skb->nfmark;
+	n->nfreason=skb->nfreason;
+	n->nfcache=skb->nfcache;
+#ifdef CONFIG_NETFILTER_DEBUG
+	n->nf_debug=skb->nf_debug;
 #endif
-
+#endif
 	return n;
 }
 

@@ -96,9 +96,10 @@ struct neighbour
 	__u8			flags;
 	__u8			nud_state;
 	__u8			type;
+	__u8			dead;
 	atomic_t		probes;
 	rwlock_t		lock;
-	unsigned char		ha[MAX_ADDR_LEN];
+	unsigned char		ha[(MAX_ADDR_LEN+sizeof(unsigned long)-1)&~(sizeof(unsigned long)-1)];
 	struct hh_cache		*hh;
 	atomic_t		refcnt;
 	int			(*output)(struct sk_buff *skb);
@@ -141,10 +142,12 @@ struct neigh_table
 	int			family;
 	int			entry_size;
 	int			key_len;
+	__u32			(*hash)(const void *pkey, const struct net_device *);
 	int			(*constructor)(struct neighbour *);
 	int			(*pconstructor)(struct pneigh_entry *);
 	void			(*pdestructor)(struct pneigh_entry *);
 	void			(*proxy_redo)(struct sk_buff *skb);
+	char			*id;
 	struct neigh_parms	parms;
 	/* HACK. gc_* shoul follow parms without a gap! */
 	int			gc_interval;
@@ -159,6 +162,7 @@ struct neigh_table
 	rwlock_t		lock;
 	unsigned long		last_rand;
 	struct neigh_parms	*parms_list;
+	kmem_cache_t		*kmem_cachep;
 	struct neigh_statistics	stats;
 	struct neighbour	*hash_buckets[NEIGH_HASHMASK+1];
 	struct pneigh_entry	*phash_buckets[PNEIGH_HASHMASK+1];
@@ -174,7 +178,7 @@ extern struct neighbour *	neigh_create(struct neigh_table *tbl,
 					     struct net_device *dev);
 extern void			neigh_destroy(struct neighbour *neigh);
 extern int			__neigh_event_send(struct neighbour *neigh, struct sk_buff *skb);
-extern int			neigh_update(struct neighbour *neigh, u8 *lladdr, u8 new, int override, int arp);
+extern int			neigh_update(struct neighbour *neigh, const u8 *lladdr, u8 new, int override, int arp);
 extern int			neigh_ifdown(struct neigh_table *tbl, struct net_device *dev);
 extern int			neigh_resolve_output(struct sk_buff *skb);
 extern int			neigh_connected_output(struct sk_buff *skb);
@@ -205,15 +209,11 @@ extern void			neigh_sysctl_unregister(struct neigh_parms *p);
 
 /*
  *	Neighbour references
- *
- *	When neighbour pointers are passed to "client" code the
- *	reference count is increased. The count is 0 if the node
- *	is only referenced by the corresponding table.
  */
 
 extern __inline__ void neigh_release(struct neighbour *neigh)
 {
-	if (atomic_dec_and_test(&neigh->refcnt) && neigh->tbl == NULL)
+	if (atomic_dec_and_test(&neigh->refcnt))
 		neigh_destroy(neigh);
 }
 
@@ -223,6 +223,8 @@ extern __inline__ struct neighbour * neigh_clone(struct neighbour *neigh)
 		atomic_inc(&neigh->refcnt);
 	return neigh;
 }
+
+#define neigh_hold(n)	atomic_inc(&(n)->refcnt)
 
 extern __inline__ void neigh_confirm(struct neighbour *neigh)
 {

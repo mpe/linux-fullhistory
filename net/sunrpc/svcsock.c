@@ -523,13 +523,8 @@ svc_tcp_accept(struct svc_sock *svsk)
 	dprintk("svc: tcp_accept %p allocated\n", newsock);
 
 	newsock->type = sock->type;
-	if ((err = sock->ops->dup(newsock, sock)) < 0) {
-		printk(KERN_WARNING "%s: socket dup failed (err %d)!\n",
-					serv->sv_name, -err);
-		goto failed;
-	}
+	newsock->ops = ops = sock->ops;
 
-	ops = newsock->ops;
 	if ((err = ops->accept(sock, newsock, O_NONBLOCK)) < 0) {
 		printk(KERN_WARNING "%s: accept failed (err %d)!\n",
 					serv->sv_name, -err);

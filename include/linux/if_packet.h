@@ -34,6 +34,56 @@ struct sockaddr_ll
 
 #define PACKET_ADD_MEMBERSHIP		1
 #define PACKET_DROP_MEMBERSHIP		2
+#define PACKET_RECV_OUTPUT		3
+/* Value 4 is still used by obsolete turbo-packet. */
+#define PACKET_RX_RING			5
+#define PACKET_STATISTICS		6
+
+struct tpacket_stats
+{
+	unsigned int	tp_packets;
+	unsigned int	tp_drops;
+};
+
+struct tpacket_hdr
+{
+	unsigned long	tp_status;
+#define TP_STATUS_KERNEL	0
+#define TP_STATUS_USER		1
+#define TP_STATUS_COPY		2
+#define TP_STATUS_LOSING	4
+	unsigned int	tp_len;
+	unsigned int	tp_snaplen;
+	unsigned short	tp_mac;
+	unsigned short	tp_net;
+	unsigned int	tp_sec;
+	unsigned int	tp_usec;
+};
+
+#define TPACKET_ALIGNMENT	16
+#define TPACKET_ALIGN(x)	(((x)+TPACKET_ALIGNMENT-1)&~(TPACKET_ALIGNMENT-1))
+#define TPACKET_HDRLEN		(TPACKET_ALIGN(sizeof(struct tpacket_hdr)) + sizeof(struct sockaddr_ll))
+
+/*
+   Frame structure:
+
+   - Start. Frame must be aligned to TPACKET_ALIGNMENT=16
+   - struct tpacket_hdr
+   - pad to TPACKET_ALIGNMENT=16
+   - struct sockaddr_ll
+   - Gap, chosen so that packet data (Start+tp_net) alignes to TPACKET_ALIGNMENT=16
+   - Start+tp_mac: [ Optional MAC header ]
+   - Start+tp_net: Packet data, aligned to TPACKET_ALIGNMENT=16.
+   - Pad to align to TPACKET_ALIGNMENT=16
+ */
+
+struct tpacket_req
+{
+	unsigned int	tp_block_size;	/* Minimal size of contiguous block */
+	unsigned int	tp_block_nr;	/* Number of blocks */
+	unsigned int	tp_frame_size;	/* Size of frame */
+	unsigned int	tp_frame_nr;	/* Total number of frames */
+};
 
 struct packet_mreq
 {

@@ -52,8 +52,6 @@
 #include <net/sock.h>
 #include <net/pkt_sched.h>
 
-#define BUG_TRAP(x) if (!(x)) { printk("Assertion (" #x ") failed at " __FILE__ "(%d):" __FUNCTION__ "\n", __LINE__); }
-
 
 struct tc_u_knode
 {
@@ -488,7 +486,7 @@ static int u32_set_parms(struct Qdisc *q, unsigned long base,
 
 		sch_tree_lock(q);
 		police = xchg(&n->police, police);
-		sch_tree_lock(q);
+		sch_tree_unlock(q);
 
 		tcf_police_release(police);
 	}

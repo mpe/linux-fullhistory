@@ -10,6 +10,8 @@
  *
  * Changes:
  *           Steve Whitehouse - connect() function.
+ *           Steve Whitehouse - SMP changes, removed MOP stubs. MOP will
+ *                              be userland only.
  */
 
 #include <linux/config.h>
@@ -19,38 +21,62 @@
 #include <linux/socket.h>
 #include <linux/sockios.h>
 #include <net/sock.h>
+#include <net/dst.h>
 #include <net/dn.h>
 #include <net/dn_raw.h>
+#include <net/dn_route.h>
 
+static rwlock_t dn_raw_hash_lock = RW_LOCK_UNLOCKED;
 static struct sock *dn_raw_nsp_sklist = NULL;
 static struct sock *dn_raw_routing_sklist = NULL;
-#ifdef CONFIG_DECNET_MOP
-static struct sock *dn_raw_mop_sklist = NULL;
-#endif /* CONFIG_DECNET_MOP */
 
-static void dn_raw_autobind(struct sock *sk)
+static void dn_raw_hash(struct sock *sk)
 {
+	struct sock **skp;
 
 	switch(sk->protocol) {
 		case DNPROTO_NSP:
-			sklist_insert_socket(&dn_raw_nsp_sklist, sk);
+			skp = &dn_raw_nsp_sklist;
 			break;
 		case DNPROTO_ROU:
-			sklist_insert_socket(&dn_raw_routing_sklist, sk);
+			skp = &dn_raw_routing_sklist;
 			break;
-#ifdef CONFIG_DECNET_MOP
-		case DNPROTO_MOP:
-			sklist_insert_socket(&dn_raw_mop_sklist, sk);
-#endif /* CONFIG_DECNET_MOP */
 		default:
-			printk(KERN_DEBUG "dn_raw_autobind: Unknown protocol\n");
+			printk(KERN_DEBUG "dn_raw_hash: Unknown protocol\n");
 			return;
 	}
 
+	write_lock_bh(&dn_raw_hash_lock);
+	sk->next = *skp;
+	sk->pprev = skp;
+	*skp = sk;
+	write_unlock_bh(&dn_raw_hash_lock);
+}
+
+static void dn_raw_unhash(struct sock *sk)
+{
+	struct sock **skp = sk->pprev;
+
+	if (skp == NULL)
+		return;
+
+	write_lock_bh(&dn_raw_hash_lock);
+	while(*skp != sk)
+		skp = &((*skp)->next);
+	*skp = sk->next;
+	write_unlock_bh(&dn_raw_hash_lock);
+
+	sk->next = NULL;
+	sk->pprev = NULL;
+}
+
+static void dn_raw_autobind(struct sock *sk)
+{
+	dn_raw_hash(sk);
 	sk->zapped = 0;
 }
 
-static int dn_raw_release(struct socket *sock, struct socket *peer)
+static int dn_raw_release(struct socket *sock)
 {
 	struct sock *sk = sock->sk;
 
@@ -63,32 +89,21 @@ static int dn_raw_release(struct socket *sock, struct socket *peer)
 	sk->socket = NULL;
 	sock->sk = NULL;
 
-	switch(sk->protocol) {
-		case DNPROTO_NSP:
-			sklist_destroy_socket(&dn_raw_nsp_sklist, sk);
-			break;
-		case DNPROTO_ROU:
-			sklist_destroy_socket(&dn_raw_routing_sklist, sk);
-			break;
-#ifdef CONFIG_DECNET_MOP
-		case DNPROTO_MOP:
-			sklist_destroy_socket(&dn_raw_mop_sklist, sk);
-			break;
-#endif /* CONFIG_DECNET_MOP */
-	}
+	dn_raw_unhash(sk);
+	sock_put(sk);
 
 	return 0;
 }
 
 /*
  * Bind does odd things with raw sockets. Its basically used to filter
- * the incomming packets, but this differs with the different layers
+ * the incoming packets, but this differs with the different layers
  * at which you extract packets.
  *
  * For Routing layer sockets, the object name is a host ordered unsigned
  * short which is a mask for the 16 different types of possible routing
  * packet. I'd like to also select by destination address of the packets
- * but alas, this is rather too dificult to do at the moment.
+ * but alas, this is rather too difficult to do at the moment.
  */
 static int dn_raw_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 {
@@ -103,23 +118,22 @@ static int dn_raw_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len
 
 	switch(sk->protocol) {
 		case DNPROTO_ROU:
-			if (addr->sdn_objnamel && (addr->sdn_objnamel != 2))
+			if (dn_ntohs(addr->sdn_objnamel) && (dn_ntohs(addr->sdn_objnamel) != 2))
 				return -EINVAL;
 			/* Fall through here */
 		case DNPROTO_NSP:
-			if (addr->sdn_add.a_len && (addr->sdn_add.a_len != 2))
+			if (dn_ntohs(addr->sdn_add.a_len) && (dn_ntohs(addr->sdn_add.a_len) != 2))
 				return -EINVAL;
 			break;
 		default:
 			return -EPROTONOSUPPORT;
 	}
 
-	if (addr->sdn_objnamel > (DN_MAXOBJL-1))
+	if (dn_ntohs(addr->sdn_objnamel) > (DN_MAXOBJL-1))
 		return -EINVAL;
 
-	if (addr->sdn_add.a_len > DN_MAXADDL)
+	if (dn_ntohs(addr->sdn_add.a_len) > DN_MAXADDL)
 		return -EINVAL;
-
 
 	memcpy(&sk->protinfo.dn.addr, addr, sizeof(struct sockaddr_dn));
 
@@ -137,25 +151,34 @@ static int dn_raw_connect(struct socket *sock, struct sockaddr *uaddr, int addr_
 	struct sock *sk = sock->sk;
 	struct dn_scp *scp = &sk->protinfo.dn;
 	struct sockaddr_dn *saddr = (struct sockaddr_dn *)uaddr;
+	int err;
 
+	lock_sock(sk);
+
+	err = -EINVAL;
 	if (addr_len != sizeof(struct sockaddr_dn))
-		return -EINVAL;
+		goto out;
 
 	if (saddr->sdn_family != AF_DECnet)
-		return -EINVAL;
+		goto out;
 
-	if (saddr->sdn_objnamel > (DN_MAXOBJL-1))
-		return -EINVAL;
+	if (dn_ntohs(saddr->sdn_objnamel) > (DN_MAXOBJL-1))
+		goto out;
 
-	if (saddr->sdn_add.a_len > DN_MAXADDL)
-		return -EINVAL;
+	if (dn_ntohs(saddr->sdn_add.a_len) > DN_MAXADDL)
+		goto out;
 
 	if (sk->zapped)
 		dn_raw_autobind(sk);
 
-	memcpy(&scp->peer, saddr, sizeof(struct sockaddr_dn));
+	if ((err = dn_route_output(&sk->dst_cache, dn_saddr2dn(saddr), dn_saddr2dn(&scp->addr), 0)) < 0)
+		goto out;
 
-	return 0;
+	memcpy(&scp->peer, saddr, sizeof(struct sockaddr_dn));
+out:
+	release_sock(sk);
+
+	return err;
 }
 
 /*
@@ -187,6 +210,8 @@ static int dn_raw_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 	int err = 0;
 	int copied = 0;
 
+	lock_sock(sk);
+
 	if (sk->zapped)
 		dn_raw_autobind(sk);
 
@@ -212,13 +237,14 @@ static int dn_raw_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 	skb_free_datagram(sk, skb);
 
 out:
+	release_sock(sk);
+
 	return copied ? copied : err;
 }
 
 struct proto_ops dn_raw_proto_ops = {
 	AF_DECnet,
 
-	sock_no_dup,
 	dn_raw_release,
 	dn_raw_bind,
 	dn_raw_connect,
@@ -233,7 +259,8 @@ struct proto_ops dn_raw_proto_ops = {
 	sock_no_getsockopt,
 	sock_no_fcntl,
 	dn_raw_sendmsg,
-	dn_raw_recvmsg
+	dn_raw_recvmsg,
+	sock_no_mmap
 };
 
 #ifdef CONFIG_PROC_FS
@@ -244,7 +271,7 @@ int dn_raw_get_info(char *buffer, char **start, off_t offset, int length, int du
 	off_t begin = 0;
 	struct sock *sk;
 
-	cli();	
+	read_lock_bh(&dn_raw_hash_lock);
 	for(sk = dn_raw_nsp_sklist; sk; sk = sk->next) {	
 		len += sprintf(buffer+len, "NSP\n");
 
@@ -274,24 +301,8 @@ int dn_raw_get_info(char *buffer, char **start, off_t offset, int length, int du
 			goto all_done;
 	}
 
-#ifdef CONFIG_DECNET_MOP
-	for(sk = dn_raw_mop_sklist; sk; sk = sk->next) {
-		len += sprintf(buffer+len, "MOP\n");
-
-		pos = begin + len;
-
-		if (pos < offset) {
-			len = 0;
-			begin = pos;
-		}
-
-		if (pos > offset + length)
-			goto all_done;
-	}
-#endif /* CONFIG_DECNET_MOP */
-
 all_done:
-	sti();
+	read_unlock_bh(&dn_raw_hash_lock);
 
 	*start = buffer + (offset - begin);
 	len -= (offset - begin);
@@ -306,10 +317,8 @@ void dn_raw_rx_nsp(struct sk_buff *skb)
 {
 	struct sock *sk;
 	struct sk_buff *skb2;
-	unsigned long cpuflags;
 
-	save_flags(cpuflags);
-	cli();
+	read_lock(&dn_raw_hash_lock);
 	for(sk = dn_raw_nsp_sklist; sk != NULL; sk = sk->next) {
 		if (skb->len > sock_rspace(sk))
 			continue;
@@ -317,11 +326,11 @@ void dn_raw_rx_nsp(struct sk_buff *skb)
 			continue;
 		if ((skb2 = skb_clone(skb, GFP_ATOMIC)) != NULL) {
 			skb_set_owner_r(skb2, sk);
-			__skb_queue_tail(&sk->receive_queue, skb2);
+			skb_queue_tail(&sk->receive_queue, skb2);
 			sk->data_ready(sk, skb->len);	
 		}
 	}
-	restore_flags(cpuflags);
+	read_unlock(&dn_raw_hash_lock);
 }
 
 void dn_raw_rx_routing(struct sk_buff *skb)
@@ -329,13 +338,11 @@ void dn_raw_rx_routing(struct sk_buff *skb)
 	struct sock *sk;
 	struct sk_buff *skb2;
 	struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
-	unsigned long cpuflags;
 	unsigned short rt_flagmask;
 	unsigned short objnamel;
 	struct dn_scp *scp;
 
-	save_flags(cpuflags);
-	cli();
+	read_lock(&dn_raw_hash_lock);
 	for(sk = dn_raw_routing_sklist; sk != NULL; sk = sk->next) {
 		if (skb->len > sock_rspace(sk))
 			continue;
@@ -343,7 +350,7 @@ void dn_raw_rx_routing(struct sk_buff *skb)
 			continue;
 		scp = &sk->protinfo.dn;
 
-		rt_flagmask = *(unsigned short *)scp->addr.sdn_objname;
+		rt_flagmask = dn_ntohs(*(unsigned short *)scp->addr.sdn_objname);
 		objnamel = dn_ntohs(scp->addr.sdn_objnamel);
 
 		if ((objnamel == 2) && (!((1 << (cb->rt_flags & 0x0f)) & rt_flagmask)))
@@ -351,33 +358,10 @@ void dn_raw_rx_routing(struct sk_buff *skb)
 
 		if ((skb2 = skb_clone(skb, GFP_ATOMIC)) != NULL) {
 			skb_set_owner_r(skb2, sk);
-			__skb_queue_tail(&sk->receive_queue, skb2);
+			skb_queue_tail(&sk->receive_queue, skb2);
 			sk->data_ready(sk, skb->len);
 		}
 	}
-	restore_flags(cpuflags);
+	read_unlock(&dn_raw_hash_lock);
 }
 
-#ifdef CONFIG_DECNET_MOP
-void dn_raw_rx_mop(struct sk_buff *skb)
-{
-	struct sock *sk;
-	struct sk_buff *skb2;
-	unsigned long cpuflags;
-
-	save_flags(cpuflags);
-	cli();
-	for(sk = dn_raw_mop_sklist; sk != NULL; sk = sk->next) {
-		if (skb->len > sock_rspace(sk))
-			continue;
-		if (sk->dead)
-			continue;
-		if ((skb2 = skb_clone(skb, GFP_ATOMIC)) != NULL) {
-			skb_set_owner_r(skb2, sk);
-			__skb_queue_tail(&sk->receive_queue, skb2);
-			sk->data_ready(sk, skb->len);
-		}
-	}
-	restore_flags(cpuflags);
-}
-#endif /* CONFIG_DECNET_MOP */

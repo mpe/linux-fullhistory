@@ -120,8 +120,8 @@ struct swap_list_t {
 	int next;	/* swapfile to be used next */
 };
 extern struct swap_list_t swap_list;
-asmlinkage int sys_swapoff(const char *);
-asmlinkage int sys_swapon(const char *, int);
+asmlinkage long sys_swapoff(const char *);
+asmlinkage long sys_swapon(const char *, int);
 
 /*
  * vm_ops not present page codes for shared memory.

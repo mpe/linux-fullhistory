@@ -1,0 +1,45 @@
+#
+# ATM device configuration
+#
+comment 'ATM drivers'
+if [ "$CONFIG_INET" = "y" ]; then
+  tristate 'ATM over TCP' CONFIG_ATM_TCP y
+fi
+if [ "$CONFIG_PCI" = "y" ]; then
+  tristate 'Efficient Networks ENI155P' CONFIG_ATM_ENI y
+  if [ ! "$CONFIG_ATM_ENI" = "n" ]; then
+    bool '  Enable extended debugging' CONFIG_ATM_ENI_DEBUG n
+    bool '  Fine-tune burst settings' CONFIG_ATM_ENI_TUNE_BURST n
+    if [ "$CONFIG_ATM_ENI_TUNE_BURST" = "y" ]; then
+      bool '    Enable 16W TX bursts (discouraged)' CONFIG_ATM_ENI_BURST_TX_16W n
+      bool '    Enable 8W TX bursts (recommended)' CONFIG_ATM_ENI_BURST_TX_8W y
+      bool '    Enable 4W TX bursts (optional)' CONFIG_ATM_ENI_BURST_TX_4W n
+      bool '    Enable 2W TX bursts (optional)' CONFIG_ATM_ENI_BURST_TX_2W n
+      bool '    Enable 16W RX bursts (discouraged)' CONFIG_ATM_ENI_BURST_RX_16W n
+      bool '    Enable 8W RX bursts (discouraged)' CONFIG_ATM_ENI_BURST_RX_8W n
+      bool '    Enable 4W RX bursts (recommended)' CONFIG_ATM_ENI_BURST_RX_4W y
+      bool '    Enable 2W RX bursts (optional)' CONFIG_ATM_ENI_BURST_RX_2W n
+    fi
+  fi
+  tristate 'ZeitNet ZN1221/ZN1225' CONFIG_ATM_ZATM y
+  if [ ! "$CONFIG_ATM_ZATM" = "n" ]; then
+    bool '  Enable extended debugging' CONFIG_ATM_ZATM_DEBUG n
+    bool '  Enable usec resolution timestamps' CONFIG_ATM_ZATM_EXACT_TS y
+  fi
+#  bool 'Rolfs TI TNETA1570' CONFIG_ATM_TNETA1570 y
+#  if [ "$CONFIG_ATM_TNETA1570" = "y" ]; then
+#    bool '  Enable extended debugging' CONFIG_ATM_TNETA1570_DEBUG n
+#  fi
+  tristate 'IDT 77201 (NICStAR)' CONFIG_ATM_NICSTAR
+  if [ "$CONFIG_ATM_NICSTAR" != "n" ]; then
+    bool '  Use suni PHY driver' CONFIG_ATM_NICSTAR_USE_SUNI
+  fi
+  tristate 'Madge Ambassador (Collage PCI 155 Server)' CONFIG_ATM_AMBASSADOR
+  if [ "$CONFIG_ATM_AMBASSADOR" != "n" ]; then
+    bool '  Enable debugging messages' CONFIG_ATM_AMBASSADOR_DEBUG
+  fi
+  tristate 'Madge Horizon [Ultra] (Collage PCI 25 and Collage PCI 155 Client)' CONFIG_ATM_HORIZON y
+  if [ "$CONFIG_ATM_HORIZON" != "n" ]; then
+    bool '  Enable debugging messages' CONFIG_ATM_HORIZON_DEBUG
+  fi
+fi

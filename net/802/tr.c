@@ -50,7 +50,7 @@ typedef struct rif_cache_s *rif_cache;
  
 struct rif_cache_s {	
 	unsigned char addr[TR_ALEN];
-	unsigned char iface[5];
+	int iface;
 	__u16 rcf;
 	__u16 rseg[8];
 	rif_cache next;
@@ -231,9 +231,8 @@ static void tr_source_route(struct sk_buff *skb,struct trh_hdr *trh,struct net_d
 	unsigned int hash;
 	rif_cache entry;
 	unsigned char *olddata;
-	unsigned long flags;
 	
-	spin_lock_irqsave(&rif_lock, flags);
+	spin_lock_bh(&rif_lock);
 
 	/*
 	 *	Broadcasts are single route as stated in RFC 1042 
@@ -302,7 +301,7 @@ printk("source routing for %02X %02X %02X %02X %02X %02X\n",trh->daddr[0],
 	else 
 		slack = 18 - ((ntohs(trh->rcf) & TR_RCF_LEN_MASK)>>8);
 	olddata = skb->data;
-	spin_unlock_irqrestore(&rif_lock, flags);
+	spin_unlock_bh(&rif_lock);
 
 	skb_pull(skb, slack);
 	memmove(skb->data, olddata, sizeof(struct trh_hdr) - slack);
@@ -318,10 +317,9 @@ static void tr_add_rif_info(struct trh_hdr *trh, struct net_device *dev)
 	int i;
 	unsigned int hash, rii_p = 0;
 	rif_cache entry;
-	unsigned long flags;
 
 
-	spin_lock_irqsave(&rif_lock, flags);
+	spin_lock_bh(&rif_lock);
 	
 	/*
 	 *	Firstly see if the entry exists
@@ -360,12 +358,12 @@ printk("adding rif_entry: addr:%02X:%02X:%02X:%02X:%02X:%02X rcf:%04X\n",
 		if(!entry) 
 		{
 			printk(KERN_DEBUG "tr.c: Couldn't malloc rif cache entry !\n");
-			spin_unlock_irqrestore(&rif_lock, flags);
+			spin_unlock_bh(&rif_lock);
 			return;
 		}
 
 		memcpy(&(entry->addr[0]),&(trh->saddr[0]),TR_ALEN);
-		memcpy(&(entry->iface[0]),dev->name,5);
+		entry->iface = dev->ifindex;
 		entry->next=rif_table[hash];
 		entry->last_used=jiffies;
 		rif_table[hash]=entry;
@@ -402,7 +400,7 @@ printk("updating rif_entry: addr:%02X:%02X:%02X:%02X:%02X:%02X rcf:%04X\n",
 		    }                                         
            	entry->last_used=jiffies;               
 	}
-	spin_unlock_irqrestore(&rif_lock, flags);
+	spin_unlock_bh(&rif_lock);
 }
 
 /*
@@ -412,9 +410,9 @@ printk("updating rif_entry: addr:%02X:%02X:%02X:%02X:%02X:%02X rcf:%04X\n",
 static void rif_check_expire(unsigned long dummy) 
 {
 	int i;
-	unsigned long now=jiffies,flags;
+	unsigned long now=jiffies;
 
-	spin_lock_irqsave(&rif_lock, flags);
+	spin_lock(&rif_lock);
 	
 	for(i=0; i < RIF_TABLE_SIZE;i++) 
 	{
@@ -434,15 +432,13 @@ static void rif_check_expire(unsigned long dummy)
 		}
 	}
 	
-	spin_unlock_irqrestore(&rif_lock, flags);
+	spin_unlock(&rif_lock);
 
 	/*
 	 *	Reset the timer
 	 */
 	 
-	del_timer(&rif_timer);
-	rif_timer.expires = jiffies + sysctl_tr_rif_timeout;
-	add_timer(&rif_timer);
+	mod_timer(&rif_timer, jiffies+sysctl_tr_rif_timeout);
 
 }
 
@@ -467,11 +463,14 @@ int rif_get_info(char *buffer,char **start, off_t offset, int length, int dummy)
 	pos+=size;
 	len+=size;
 
+	spin_lock_bh(&rif_lock);
 	for(i=0;i < RIF_TABLE_SIZE;i++) 
 	{
 		for(entry=rif_table[i];entry;entry=entry->next) {
+			struct net_device *dev = __dev_get_by_index(entry->iface);
+
 			size=sprintf(buffer+len,"%s %02X:%02X:%02X:%02X:%02X:%02X %7li ",
-				     entry->iface,entry->addr[0],entry->addr[1],entry->addr[2],entry->addr[3],entry->addr[4],entry->addr[5],
+				     dev?dev->name:"?",entry->addr[0],entry->addr[1],entry->addr[2],entry->addr[3],entry->addr[4],entry->addr[5],
 				     sysctl_tr_rif_timeout-(now-entry->last_used));
 			len+=size;
 			pos=begin+len;
@@ -513,11 +512,14 @@ int rif_get_info(char *buffer,char **start, off_t offset, int length, int dummy)
 		if(pos>offset+length)
 			break;
 	}
+	spin_unlock_bh(&rif_lock);
 
 	*start=buffer+(offset-begin); /* Start of wanted data */
 	len-=(offset-begin);    /* Start slop */
 	if(len>length)
 		len=length;    /* Ending slop */
+	if (len<0)
+		len=0;
 	return len;
 }
 #endif

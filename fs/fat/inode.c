@@ -307,12 +307,12 @@ static int parse_options(char *options,int *fat, int *blksize, int *debug,
 			else opts->quiet = 1;
 		}
 		else if (!strcmp(this_char,"blocksize")) {
-			if (*value) ret = 0;
-			else if (*blksize != 512  &&
-				 *blksize != 1024 &&
-				 *blksize != 2048) {
-				printk ("MSDOS FS: Invalid blocksize "
-					"(512, 1024, or 2048)\n");
+			if (!value || !*value) ret = 0;
+			else {
+				*blksize = simple_strtoul(value,&value,0);
+				if (*value || (*blksize != 512 &&
+					*blksize != 1024 && *blksize != 2048))
+					ret = 0;
 			}
 		}
 		else if (!strcmp(this_char,"sys_immutable")) {
@@ -516,7 +516,7 @@ fat_read_super(struct super_block *sb, void *data, int silent,
 
 		/* Must be FAT32 */
 		fat32 = 1;
-		MSDOS_SB(sb)->fat_length= CF_LE_W(b->fat32_length)*sector_mult;
+		MSDOS_SB(sb)->fat_length= CF_LE_L(b->fat32_length)*sector_mult;
 		MSDOS_SB(sb)->root_cluster = CF_LE_L(b->root_cluster);
 
 		/* MC - if info_sector is 0, don't multiply by 0 */

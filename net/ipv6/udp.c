@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.43 1999/07/02 11:26:44 davem Exp $
+ *	$Id: udp.c,v 1.45 1999/08/20 11:06:32 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -41,6 +41,7 @@
 #include <net/addrconf.h>
 #include <net/ip.h>
 #include <net/udp.h>
+#include <net/inet_common.h>
 
 #include <net/checksum.h>
 
@@ -51,7 +52,7 @@ struct udp_mib udp_stats_in6;
  */
 static int udp_v6_get_port(struct sock *sk, unsigned short snum)
 {
-	SOCKHASH_LOCK_WRITE();
+	write_lock_bh(&udp_hash_lock);
 	if (snum == 0) {
 		int best_size_so_far, best, result, i;
 
@@ -112,11 +113,11 @@ gotit:
 	}
 
 	sk->num = snum;
-	SOCKHASH_UNLOCK_WRITE();
+	write_unlock_bh(&udp_hash_lock);
 	return 0;
 
 fail:
-	SOCKHASH_UNLOCK_WRITE();
+	write_unlock_bh(&udp_hash_lock);
 	return 1;
 }
 
@@ -124,7 +125,7 @@ static void udp_v6_hash(struct sock *sk)
 {
 	struct sock **skp = &udp_hash[sk->num & (UDP_HTABLE_SIZE - 1)];
 
-	SOCKHASH_LOCK_WRITE();
+	write_lock_bh(&udp_hash_lock);
 	if ((sk->next = *skp) != NULL)
 		(*skp)->pprev = &sk->next;
 	*skp = sk;
@@ -132,20 +133,22 @@ static void udp_v6_hash(struct sock *sk)
 	sk->prot->inuse++;
 	if(sk->prot->highestinuse < sk->prot->inuse)
 		sk->prot->highestinuse = sk->prot->inuse;
-	SOCKHASH_UNLOCK_WRITE();
+ 	sock_hold(sk);
+ 	write_unlock_bh(&udp_hash_lock);
 }
 
 static void udp_v6_unhash(struct sock *sk)
 {
-	SOCKHASH_LOCK_WRITE();
+ 	write_lock_bh(&udp_hash_lock);
 	if (sk->pprev) {
 		if (sk->next)
 			sk->next->pprev = sk->pprev;
 		*sk->pprev = sk->next;
 		sk->pprev = NULL;
 		sk->prot->inuse--;
+		__sock_put(sk);
 	}
-	SOCKHASH_UNLOCK_WRITE();
+	write_unlock_bh(&udp_hash_lock);
 }
 
 static struct sock *udp_v6_lookup(struct in6_addr *saddr, u16 sport,
@@ -155,11 +158,10 @@ static struct sock *udp_v6_lookup(struct in6_addr *saddr, u16 sport,
 	unsigned short hnum = ntohs(dport);
 	int badness = -1;
 
-	SOCKHASH_LOCK_READ();
+ 	read_lock(&udp_hash_lock);
 	for(sk = udp_hash[hnum & (UDP_HTABLE_SIZE - 1)]; sk != NULL; sk = sk->next) {
 		if((sk->num == hnum)		&&
-		   (sk->family == PF_INET6)	&&
-		   !(sk->dead && (sk->state == TCP_CLOSE))) {
+		   (sk->family == PF_INET6)) {
 			struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
 			int score = 0;
 			if(sk->dport) {
@@ -191,7 +193,9 @@ static struct sock *udp_v6_lookup(struct in6_addr *saddr, u16 sport,
 			}
 		}
 	}
-	SOCKHASH_UNLOCK_READ();
+	if (result)
+		sock_hold(result);
+ 	read_unlock(&udp_hash_lock);
 	return result;
 }
 
@@ -219,7 +223,7 @@ int udpv6_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	if (addr_len < sizeof(*usin)) 
 	  	return -EINVAL;
 
-	if (usin->sin6_family && usin->sin6_family != AF_INET6) 
+	if (usin->sin6_family != AF_INET6) 
 	  	return -EAFNOSUPPORT;
 
 	fl.fl6_flowlabel = 0;
@@ -334,13 +338,7 @@ ipv4_connected:
 
 static void udpv6_close(struct sock *sk, long timeout)
 {
-	bh_lock_sock(sk);
-
-	/* See for explanation: raw_close in ipv4/raw.c */
-	sk->state = TCP_CLOSE;
-	udp_v6_unhash(sk);
-	sk->dead = 1;
-	destroy_sock(sk);
+	inet_sock_release(sk);
 }
 
 #ifndef HAVE_CSUM_COPY_USER
@@ -383,6 +381,19 @@ int udpv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 					      copied);
 	} else if (copied > msg->msg_iov[0].iov_len || (msg->msg_flags&MSG_TRUNC)) {
 		if ((unsigned short)csum_fold(csum_partial(skb->h.raw, skb->len, skb->csum))) {
+			/* Clear queue. */
+			if (flags&MSG_PEEK) {
+				int clear = 0;
+				spin_lock_irq(&sk->receive_queue.lock);
+				if (skb == skb_peek(&sk->receive_queue)) {
+					__skb_unlink(skb, &sk->receive_queue);
+					clear = 1;
+				}
+				spin_unlock_irq(&sk->receive_queue.lock);
+				if (clear)
+					kfree_skb(skb);
+			}
+
 			/* Error for blocking case is chosen to masquerade
 			   as some normal condition.
 			 */
@@ -426,7 +437,7 @@ int udpv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 		if (skb->protocol == __constant_htons(ETH_P_IP)) {
 			ipv6_addr_set(&sin6->sin6_addr, 0, 0,
 				      __constant_htonl(0xffff), skb->nh.iph->saddr);
-			if (sk->ip_cmsg_flags)
+			if (sk->protinfo.af_inet.cmsg_flags)
 				ip_cmsg_recv(msg, skb);
 		} else {
 			memcpy(&sin6->sin6_addr, &skb->nh.ipv6h->saddr,
@@ -467,16 +478,19 @@ void udpv6_err(struct sk_buff *skb, struct ipv6hdr *hdr,
 
 	if (!icmpv6_err_convert(type, code, &err) &&
 	    !sk->net_pinfo.af_inet6.recverr)
-		return;
+		goto out;
 
-	if (sk->bsdism && sk->state!=TCP_ESTABLISHED)
-		return;
+	if (sk->bsdism && sk->state!=TCP_ESTABLISHED &&
+	    !sk->net_pinfo.af_inet6.recverr)
+		goto out;
 
 	if (sk->net_pinfo.af_inet6.recverr)
 		ipv6_icmp_error(sk, skb, err, uh->dest, ntohl(info), (u8 *)(uh+1));
 
 	sk->err = err;
 	sk->error_report(sk);
+out:
+	sock_put(sk);
 }
 
 static inline int udpv6_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
@@ -511,8 +525,7 @@ static struct sock *udp_v6_mcast_next(struct sock *sk,
 	struct sock *s = sk;
 	unsigned short num = ntohs(loc_port);
 	for(; s; s = s->next) {
-		if((s->num == num)		&&
-		   !(s->dead && (s->state == TCP_CLOSE))) {
+		if(s->num == num) {
 			struct ipv6_pinfo *np = &s->net_pinfo.af_inet6;
 			if(s->dport) {
 				if(s->dport != rmt_port)
@@ -549,6 +562,7 @@ static void udpv6_mcast_deliver(struct udphdr *uh,
 	struct sk_buff *buff;
 	int dif;
 
+	read_lock(&udp_hash_lock);
 	sk = udp_hash[ntohs(uh->dest) & (UDP_HTABLE_SIZE - 1)];
 	dif = skb->dev->ifindex;
 	sk = udp_v6_mcast_next(sk, uh->dest, daddr, uh->source, saddr, dif);
@@ -573,6 +587,7 @@ static void udpv6_mcast_deliver(struct udphdr *uh,
 free_skb:
 		kfree_skb(skb);
 	}
+	read_unlock(&udp_hash_lock);
 }
 
 int udpv6_rcv(struct sk_buff *skb, unsigned long len)
@@ -663,11 +678,17 @@ int udpv6_rcv(struct sk_buff *skb, unsigned long len)
 		kfree_skb(skb);
 		return(0);
 	}
+	if (0/*sk->user_callback &&
+	    sk->user_callback(sk->user_data, skb) == 0*/) {
+		udp_stats_in6.UdpInDatagrams++;
+		sock_put(sk);
+		return(0);
+	}
 	
 	/* deliver */
 	
 	udpv6_queue_rcv_skb(sk, skb);
-	
+	sock_put(sk);
 	return(0);
 	
 discard:
@@ -764,9 +785,6 @@ static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen)
 	if (ulen < 0 || ulen > INT_MAX - sizeof(struct udphdr))
 		return -EMSGSIZE;
 	
-	if (msg->msg_flags & ~(MSG_DONTROUTE|MSG_DONTWAIT))
-		return -EINVAL;
-
 	fl.fl6_flowlabel = 0;
 
 	if (sin6) {
@@ -886,6 +904,9 @@ static struct inet6_protocol udpv6_protocol =
 	"UDPv6"			/* name			*/
 };
 
+#define LINE_LEN 190
+#define LINE_FMT "%-190s\n"
+
 static void get_udp6_sock(struct sock *sp, char *tmpbuf, int i)
 {
 	struct in6_addr *dest, *src;
@@ -901,7 +922,7 @@ static void get_udp6_sock(struct sock *sp, char *tmpbuf, int i)
 	timer_expires = (timer_active == 2 ? sp->timer.expires : jiffies);
 	sprintf(tmpbuf,
 		"%4d: %08X%08X%08X%08X:%04X %08X%08X%08X%08X:%04X "
-		"%02X %08X:%08X %02X:%08lX %08X %5d %8d %ld",
+		"%02X %08X:%08X %02X:%08lX %08X %5d %8d %ld %d %p",
 		i,
 		src->s6_addr32[0], src->s6_addr32[1],
 		src->s6_addr32[2], src->s6_addr32[3], srcp,
@@ -910,8 +931,9 @@ static void get_udp6_sock(struct sock *sp, char *tmpbuf, int i)
 		sp->state, 
 		atomic_read(&sp->wmem_alloc), atomic_read(&sp->rmem_alloc),
 		timer_active, timer_expires-jiffies, 0,
-		sp->socket->inode->i_uid, timer_active ? sp->timeout : 0,
-		sp->socket ? sp->socket->inode->i_ino : 0);
+		sp->socket->inode->i_uid, 0,
+		sp->socket ? sp->socket->inode->i_ino : 0,
+		atomic_read(&sp->refcnt), sp);
 }
 
 int udp6_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
@@ -919,10 +941,10 @@ int udp6_get_info(char *buffer, char **start, off_t offset, int length, int dumm
 	int len = 0, num = 0, i;
 	off_t pos = 0;
 	off_t begin;
-	char tmpbuf[150];
+	char tmpbuf[LINE_LEN+2];
 
-	if (offset < 149)
-		len += sprintf(buffer, "%-148s\n",
+	if (offset < LINE_LEN+1)
+		len += sprintf(buffer, LINE_FMT,
 			       "  sl  "						/* 6 */
 			       "local_address                         "		/* 38 */
 			       "remote_address                        "		/* 38 */
@@ -930,25 +952,25 @@ int udp6_get_info(char *buffer, char **start, off_t offset, int length, int dumm
 			       "   uid  timeout inode");			/* 21 */
 										/*----*/
 										/*144 */
-	pos = 149;
-	SOCKHASH_LOCK_READ();
+	pos = LINE_LEN+1;
+	read_lock(&udp_hash_lock);
 	for (i = 0; i < UDP_HTABLE_SIZE; i++) {
 		struct sock *sk;
 
 		for (sk = udp_hash[i]; sk; sk = sk->next, num++) {
 			if (sk->family != PF_INET6)
 				continue;
-			pos += 149;
+			pos += LINE_LEN+1;
 			if (pos < offset)
 				continue;
 			get_udp6_sock(sk, tmpbuf, i);
-			len += sprintf(buffer+len, "%-148s\n", tmpbuf);
+			len += sprintf(buffer+len, LINE_FMT, tmpbuf);
 			if(len >= length)
 				goto out;
 		}
 	}
 out:
-	SOCKHASH_UNLOCK_READ();
+	read_unlock(&udp_hash_lock);
 	begin = len - (pos - offset);
 	*start = buffer + begin;
 	len -= begin;
@@ -962,6 +984,7 @@ out:
 struct proto udpv6_prot = {
 	udpv6_close,			/* close */
 	udpv6_connect,			/* connect */
+	udp_disconnect,			/* disconnect */
 	NULL,				/* accept */
 	NULL,				/* retransmit */
 	NULL,				/* write_wakeup */

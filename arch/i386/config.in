@@ -67,11 +67,6 @@ if [ "$CONFIG_PCI" = "y" ]; then
   if [ "$CONFIG_PCI_GODIRECT" = "y" -o "$CONFIG_PCI_GOANY" = "y" ]; then
     define_bool CONFIG_PCI_DIRECT y
   fi
-  bool '   PCI quirks' CONFIG_PCI_QUIRKS
-  if [ "$CONFIG_PCI_QUIRKS" = "y" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    bool '   PCI bridge optimization (experimental)' CONFIG_PCI_OPTIMIZE
-  fi
-  bool '   Backward-compatible /proc/pci' CONFIG_PCI_OLD_PROC
 fi
 bool 'MCA support' CONFIG_MCA
 bool 'SGI Visual Workstation support' CONFIG_VISWS
@@ -136,6 +131,9 @@ if [ "$CONFIG_NET" = "y" ]; then
   bool 'Network device support' CONFIG_NETDEVICES
   if [ "$CONFIG_NETDEVICES" = "y" ]; then
     source drivers/net/Config.in
+    if [ "$CONFIG_ATM" = "y" ]; then
+      source drivers/atm/Config.in
+    fi
   fi
   endmenu
 fi

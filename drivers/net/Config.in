@@ -24,6 +24,9 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
      tristate 'Ethertap network tap' CONFIG_ETHERTAP
   fi
 fi
+
+tristate 'General Instruments Surfboard 1000' CONFIG_NET_SB1000
+
 #
 #	Ethernet
 #
@@ -90,6 +93,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
   fi
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       tristate 'RealTek 8129/8139 (not 8019/8029!) support' CONFIG_RTL8139
+      tristate 'SiS 900 PCI Fast Ethernet Adapter support' CONFIG_SIS900
       tristate 'Packet Engines Yellowfin Gigabit-NIC support' CONFIG_YELLOWFIN
   fi
   bool 'Other ISA cards' CONFIG_NET_ISA
@@ -229,6 +233,11 @@ fi
 
 endmenu
 
+bool 'Fibre Channel driver support' CONFIG_NET_FC
+if [ "$CONFIG_NET_FC" = "y" ]; then
+  tristate 'Interphase 5526 Tachyon chipset based adaptor support' CONFIG_IPHASE5526
+fi
+
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Red Creek Hardware VPN (EXPERIMENTAL)' CONFIG_RCPCI
   tristate 'Traffic Shaper (EXPERIMENTAL)' CONFIG_SHAPER
@@ -285,6 +294,7 @@ if [ "$CONFIG_WAN_ROUTER" != "n" ]; then
 fi
 
 endmenu
+
 
 #
 # X.25 network drivers

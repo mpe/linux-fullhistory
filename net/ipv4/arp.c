@@ -1,6 +1,6 @@
 /* linux/net/inet/arp.c
  *
- * Version:	$Id: arp.c,v 1.78 1999/06/09 10:10:36 davem Exp $
+ * Version:	$Id: arp.c,v 1.80 1999/08/20 11:04:54 davem Exp $
  *
  * Copyright (C) 1994 by Florian  La Roche
  *
@@ -115,6 +115,9 @@
 #include <net/netrom.h>
 #endif
 #endif
+#ifdef CONFIG_ATM_CLIP
+#include <net/atmclip.h>
+#endif
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -127,6 +130,7 @@ static char *ax2asc2(ax25_address *a, char *buf);
 /*
  *	Interface to generic neighbour cache.
  */
+static u32 arp_hash(const void *pkey, const struct net_device *dev);
 static int arp_constructor(struct neighbour *neigh);
 static void arp_solicit(struct neighbour *neigh, struct sk_buff *skb);
 static void arp_error_report(struct neighbour *neigh, struct sk_buff *skb);
@@ -186,10 +190,12 @@ struct neigh_table arp_tbl =
 	AF_INET,
 	sizeof(struct neighbour) + 4,
 	4,
+	arp_hash,
 	arp_constructor,
 	NULL,
 	NULL,
 	parp_redo,
+	"arp_cache",
         { NULL, NULL, &arp_tbl, 0, NULL, NULL,
 		  30*HZ, 1*HZ, 60*HZ, 30*HZ, 5*HZ, 3, 3, 0, 3, 1*HZ, (8*HZ)/10, 64, 1*HZ },
 	30*HZ, 128, 512, 1024,
@@ -213,12 +219,24 @@ int arp_mc_map(u32 addr, u8 *haddr, struct net_device *dev, int dir)
 }
 
 
+static u32 arp_hash(const void *pkey, const struct net_device *dev)
+{
+	u32 hash_val;
+
+	hash_val = *(u32*)pkey;
+	hash_val ^= (hash_val>>16);
+	hash_val ^= hash_val>>8;
+	hash_val ^= hash_val>>3;
+	hash_val = (hash_val^dev->ifindex)&NEIGH_HASHMASK;
+
+	return hash_val;
+}
 
 static int arp_constructor(struct neighbour *neigh)
 {
 	u32 addr = *(u32*)neigh->primary_key;
 	struct net_device *dev = neigh->dev;
-	struct in_device *in_dev = dev->ip_ptr;
+	struct in_device *in_dev = in_dev_get(dev);
 
 	if (in_dev == NULL)
 		return -EINVAL;
@@ -226,6 +244,8 @@ static int arp_constructor(struct neighbour *neigh)
 	neigh->type = inet_addr_type(addr);
 	if (in_dev->arp_parms)
 		neigh->parms = in_dev->arp_parms;
+
+	in_dev_put(in_dev);
 
 	if (dev->hard_header == NULL) {
 		neigh->nud_state = NUD_NOARP;
@@ -293,7 +313,6 @@ static int arp_constructor(struct neighbour *neigh)
 		else
 			neigh->output = neigh->ops->output;
 	}
-
 	return 0;
 }
 
@@ -409,7 +428,11 @@ int arp_bind_neighbour(struct dst_entry *dst)
 		u32 nexthop = ((struct rtable*)dst)->rt_gateway;
 		if (dev->flags&(IFF_LOOPBACK|IFF_POINTOPOINT))
 			nexthop = 0;
-		dst->neighbour = __neigh_lookup(&arp_tbl, &nexthop, dev, 1);
+		dst->neighbour = __neigh_lookup(
+#ifdef CONFIG_ATM_CLIP
+		    dev->type == ARPHRD_ATM ? &clip_tbl :
+#endif
+		    &arp_tbl, &nexthop, dev, 1);
 	}
 	return (dst->neighbour != NULL);
 }
@@ -540,7 +563,7 @@ int arp_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 	u32 sip, tip;
 	u16 dev_type = dev->type;
 	int addr_type;
-	struct in_device *in_dev = dev->ip_ptr;
+	struct in_device *in_dev = in_dev_get(dev);
 	struct neighbour *n;
 
 /*
@@ -557,6 +580,9 @@ int arp_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 	    skb->pkt_type == PACKET_LOOPBACK ||
 	    arp->ar_pln != 4)
 		goto out;
+
+	if ((skb = skb_share_check(skb, GFP_ATOMIC)) == NULL)
+		goto out_of_mem;
 
 	switch (dev_type) {
 	default:	
@@ -610,7 +636,7 @@ int arp_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 #endif
 	}
 
-	/* Undertsand only these message types */
+	/* Understand only these message types */
 
 	if (arp->ar_op != __constant_htons(ARPOP_REPLY) &&
 	    arp->ar_op != __constant_htons(ARPOP_REQUEST))
@@ -685,6 +711,7 @@ int arp_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 					arp_send(ARPOP_REPLY,ETH_P_ARP,sip,dev,tip,sha,dev->dev_addr,sha);
 				} else {
 					pneigh_enqueue(&arp_tbl, in_dev->arp_parms, skb);
+					in_dev_put(in_dev);
 					return 0;
 				}
 				goto out;
@@ -731,6 +758,9 @@ int arp_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 
 out:
 	kfree_skb(skb);
+	if (in_dev)
+		in_dev_put(in_dev);
+out_of_mem:
 	return 0;
 }
 
@@ -768,8 +798,8 @@ int arp_req_set(struct arpreq *r, struct net_device * dev)
 			ipv4_devconf.proxy_arp = 1;
 			return 0;
 		}
-		if (dev->ip_ptr) {
-			((struct in_device*)dev->ip_ptr)->cnf.proxy_arp = 1;
+		if (__in_dev_get(dev)) {
+			__in_dev_get(dev)->cnf.proxy_arp = 1;
 			return 0;
 		}
 		return -ENXIO;
@@ -851,8 +881,8 @@ int arp_req_delete(struct arpreq *r, struct net_device * dev)
 				ipv4_devconf.proxy_arp = 0;
 				return 0;
 			}
-			if (dev->ip_ptr) {
-				((struct in_device*)dev->ip_ptr)->cnf.proxy_arp = 0;
+			if (__in_dev_get(dev)) {
+				__in_dev_get(dev)->cnf.proxy_arp = 0;
 				return 0;
 			}
 			return -ENXIO;
@@ -915,7 +945,7 @@ int arp_ioctl(unsigned int cmd, void *arg)
 	rtnl_lock();
 	if (r.arp_dev[0]) {
 		err = -ENODEV;
-		if ((dev = dev_get(r.arp_dev)) == NULL)
+		if ((dev = __dev_get_by_name(r.arp_dev)) == NULL)
 			goto out;
 
 		/* Mmmm... It is wrong... ARPHRD_NETROM==0 */
@@ -1082,7 +1112,7 @@ static struct packet_type arp_packet_type =
 	__constant_htons(ETH_P_ARP),
 	NULL,		/* All devices */
 	arp_rcv,
-	NULL,
+	(void*)1,
 	NULL
 };
 

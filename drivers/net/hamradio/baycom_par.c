@@ -60,6 +60,7 @@
  *   0.5  11.11.97  split into separate files for ser12/par96
  *   0.6  03.08.99  adapt to Linus' new __setup/__initcall
  *                  removed some pre-2.2 kernel compatibility cruft
+ *   0.7  10.08.99  Check if parport can do SPP and is safe to access during interrupt contexts
  */
 
 /*****************************************************************************/
@@ -336,6 +337,10 @@ static int par96_open(struct net_device *dev)
 		printk(KERN_ERR "baycom_par: parport at 0x%lx has no irq\n", pp->base);
 		return -ENXIO;
 	}
+	if ((~pp->modes) & (PARPORT_MODE_PCSPP | PARPORT_MODE_SAFEININT)) {
+		printk(KERN_ERR "baycom_par: parport at 0x%lx cannot be used\n", pp->base);
+		return -ENXIO;
+	}
 	memset(&bc->modem, 0, sizeof(bc->modem));
 	bc->hdrv.par.bitrate = 9600;
 	if (!(bc->pdev = parport_register_device(pp, dev->name, NULL, par96_wakeup, 
@@ -489,12 +494,17 @@ static int baycom_ioctl(struct net_device *dev, struct ifreq *ifr,
 static const char *mode[NR_PORTS] = { "picpar", };
 static int iobase[NR_PORTS] = { 0x378, };
 
+MODULE_PARM(mode, "1-" __MODULE_STRING(NR_PORTS) "s");
+MODULE_PARM_DESC(mode, "baycom operating mode; eg. par96 or picpar");
+MODULE_PARM(iobase, "1-" __MODULE_STRING(NR_PORTS) "i");
+MODULE_PARM_DESC(iobase, "baycom io base address");
+
+MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
+MODULE_DESCRIPTION("Baycom par96 and picpar amateur radio modem driver");
+
 /* --------------------------------------------------------------------- */
 
-#ifndef MODULE
-static
-#endif
-int __init init_module(void)
+static int __init init_baycompar(void)
 {
 	int i, j, found = 0;
 	char set_hw = 1;
@@ -530,19 +540,7 @@ int __init init_module(void)
 	return 0;
 }
 
-/* --------------------------------------------------------------------- */
-
-#ifdef MODULE
-
-MODULE_PARM(mode, "1-" __MODULE_STRING(NR_PORTS) "s");
-MODULE_PARM_DESC(mode, "baycom operating mode; eg. par96 or picpar");
-MODULE_PARM(iobase, "1-" __MODULE_STRING(NR_PORTS) "i");
-MODULE_PARM_DESC(iobase, "baycom io base address");
-
-MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
-MODULE_DESCRIPTION("Baycom par96 and picpar amateur radio modem driver");
-
-void cleanup_module(void)
+static void __exit cleanup_baycompar(void)
 {
 	int i;
 
@@ -560,7 +558,12 @@ void cleanup_module(void)
 	}
 }
 
-#else /* MODULE */
+module_init(init_baycompar);
+module_exit(cleanup_baycompar);
+
+/* --------------------------------------------------------------------- */
+
+#ifndef MODULE
 
 /*
  * format: baycom_par=io,mode
@@ -570,11 +573,11 @@ void cleanup_module(void)
 static int __init baycom_par_setup(char *str)
 {
         static unsigned __initdata nr_dev = 0;
-	int ints[11];
+	int ints[2];
 
         if (nr_dev >= NR_PORTS)
                 return 0;
-        str = get_options(str, ints);
+        str = get_options(str, 2, ints);
         if (ints[0] < 1)
                 return 0;
         mode[nr_dev] = str;
@@ -584,7 +587,6 @@ static int __init baycom_par_setup(char *str)
 }
 
 __setup("baycom_par=", baycom_par_setup);
-__initcall(init_module);
 
 #endif /* MODULE */
 /* --------------------------------------------------------------------- */

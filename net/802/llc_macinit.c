@@ -160,7 +160,7 @@ int register_cl2llc_client(llcptr lp, const char *device, void (*event)(llcptr),
 	char eye_init[] = "LLC\0";
 
 	memset(lp, 0, sizeof(*lp));
-	lp->dev = dev_get(device);
+	lp->dev = __dev_get_by_name(device);
 	if(lp->dev == NULL)
 		return -ENODEV;
 	memcpy(lp->eye, eye_init, sizeof(lp->eye));

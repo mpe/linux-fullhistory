@@ -289,7 +289,7 @@ extern void free_dma(unsigned int dmanr);	/* release it again */
 
 /* From PCI */
 
-#ifdef CONFIG_PCI_QUIRKS
+#ifdef CONFIG_PCI
 extern int isa_dma_bridge_buggy;
 #else
 #define isa_dma_bridge_buggy 	(0)

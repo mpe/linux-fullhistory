@@ -706,8 +706,8 @@ extern inline int locks_verify_area(int read_write, struct inode *inode,
 
 /* fs/open.c */
 
-asmlinkage int sys_open(const char *, int, int);
-asmlinkage int sys_close(unsigned int);		/* yes, it's really unsigned */
+asmlinkage long sys_open(const char *, int, int);
+asmlinkage long sys_close(unsigned int);	/* yes, it's really unsigned */
 extern int do_close(unsigned int, int);		/* yes, it's really unsigned */
 extern int do_truncate(struct dentry *, unsigned long);
 extern int get_unused_fd(void);

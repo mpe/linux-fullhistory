@@ -498,9 +498,14 @@ static int irda_accept(struct socket *sock, struct socket *newsock, int flags)
 	struct sock *sk = sock->sk;
 	struct sock *newsk;
 	struct sk_buff *skb;
+	int err;
 
 	self = sk->protinfo.irda;
 	ASSERT(self != NULL, return -1;);
+
+	err = irda_create(newsock, sk->protocol);
+	if (err)
+		return err;
 
 	if (sock->state != SS_UNCONNECTED)
 		return -EINVAL;
@@ -763,7 +768,7 @@ void irda_destroy_socket(struct irda_sock *self)
  *    
  *
  */
-static int irda_release(struct socket *sock, struct socket *peer)
+static int irda_release(struct socket *sock)
 {
 	struct sock *sk = sock->sk;
 	
@@ -1332,10 +1337,9 @@ static struct net_proto_family irda_family_ops =
 	irda_create
 };
 
-static struct proto_ops irda_stream_ops = {
+static struct proto_ops SOCKOPS_WRAPPED(irda_stream_ops) = {
 	PF_IRDA,
 	
-	sock_no_dup,
 	irda_release,
 	irda_bind,
 	irda_connect,
@@ -1350,13 +1354,13 @@ static struct proto_ops irda_stream_ops = {
 	irda_getsockopt,
 	sock_no_fcntl,
 	irda_sendmsg,
-	irda_recvmsg_stream
+	irda_recvmsg_stream,
+	sock_no_mmap
 };
 
-static struct proto_ops irda_dgram_ops = {
+static struct proto_ops SOCKOPS_WRAPPED(irda_dgram_ops) = {
 	PF_IRDA,
 	
-	sock_no_dup,
 	irda_release,
 	irda_bind,
 	irda_connect,
@@ -1371,8 +1375,13 @@ static struct proto_ops irda_dgram_ops = {
 	irda_getsockopt,
 	sock_no_fcntl,
 	irda_sendmsg,
-	irda_recvmsg_dgram
+	irda_recvmsg_dgram,
+	sock_no_mmap
 };
+
+#include <linux/smp_lock.h>
+SOCKOPS_WRAP(irda_dgram, PF_IRDA);
+SOCKOPS_WRAP(irda_stream, PF_IRDA);
 
 /*
  * Function irda_device_event (this, event, ptr)

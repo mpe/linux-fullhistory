@@ -713,14 +713,11 @@ S: Woodbridge, Connecticut 06525
 S: USA
 
 N: Paul Gortmaker
-E: gpg109@rsphy1.anu.edu.au
-W: http://rsphy1.anu.edu.au/~gpg109
-D: Real Time Clock driver author.
-D: 8390 net driver hacker (ne2000, wd8013, smc-ultra, 3c503, etc.) 
-D: Ethernet-HOWTO and BootPrompt-HOWTO author.
-D: Added many new CONFIG options (modules, ramdisk, generic-serial, etc.)
-D: Implemented 1st "official" kernel thread (moved user bdflush to kflushd)
-D: Various other random hacks, patches and utilities.
+E: p_gortmaker@yahoo.com
+D: Author of RTC driver & several net drivers, Ethernet & BootPrompt Howto.
+D: Made support for modules, ramdisk, generic-serial, etc. optional.
+D: Transformed old user space bdflush into 1st kernel thread - kflushd.
+D: Many other patches, documentation files, mini kernels, utilities, ...
 
 N: John E. Gotts
 E: jgotts@engin.umich.edu
@@ -1056,12 +1053,12 @@ S: 602 00 Brno
 S: Czech Republic
 
 N: Fred N. van Kempen
-E: waltje@uwalt.nl.mugnet.org
+E: waltje@linux.com
 D: NET-2
 D: Drivers
 D: Kernel cleanups
-S: Hoefbladhof 27
-S: 2215 DV Voorhout
+S: Korte Heul 95
+S: 1403 ND  BUSSUM
 S: The Netherlands
 
 N: Karl Keyte

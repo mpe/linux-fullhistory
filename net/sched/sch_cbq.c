@@ -176,6 +176,7 @@ struct cbq_sched_data
 	struct cbq_class	*tx_borrowed;
 	int			tx_len;
 	psched_time_t		now;		/* Cached timestamp */
+	psched_time_t		now_rt;		/* Cached real time */
 	unsigned		pmask;
 
 	struct timer_list	delay_timer;
@@ -190,8 +191,6 @@ struct cbq_sched_data
 
 
 #define L2T(cl,len)	((cl)->R_tab->data[(len)>>(cl)->R_tab->rate.cell_log])
-
-#define BUG_TRAP(x) if (!(x)) { printk("Assertion (" #x ") failed at " __FILE__ "(%d):" __FUNCTION__ "\n", __LINE__); }
 
 
 static __inline__ unsigned cbq_hash(u32 h)
@@ -375,9 +374,11 @@ cbq_mark_toplevel(struct cbq_sched_data *q, struct cbq_class *cl)
 
 	if (toplevel > cl->level && !(cl->q->flags&TCQ_F_THROTTLED)) {
 		psched_time_t now;
+		psched_tdiff_t incr;
+
 		PSCHED_GET_TIME(now);
-		if (PSCHED_TLESS(now, q->now))
-			now = q->now;
+		incr = PSCHED_TDIFF(now, q->now_rt);
+		PSCHED_TADD2(q->now, incr, now);
 
 		do {
 			if (PSCHED_TLESS(cl->undertime, now)) {
@@ -394,6 +395,7 @@ cbq_enqueue(struct sk_buff *skb, struct Qdisc *sch)
 	struct cbq_sched_data *q = (struct cbq_sched_data *)sch->data;
 	struct cbq_class *cl = cbq_classify(skb, sch);
 	int len = skb->len;
+	int ret = NET_XMIT_POLICED;
 
 #ifdef CONFIG_NET_CLS_POLICE
 	q->rx_class = cl;
@@ -402,14 +404,14 @@ cbq_enqueue(struct sk_buff *skb, struct Qdisc *sch)
 #ifdef CONFIG_NET_CLS_POLICE
 		cl->q->__parent = sch;
 #endif
-		if (cl->q->enqueue(skb, cl->q) == 1) {
+		if ((ret = cl->q->enqueue(skb, cl->q)) == 0) {
 			sch->q.qlen++;
 			sch->stats.packets++;
 			sch->stats.bytes+=len;
 			cbq_mark_toplevel(q, cl);
 			if (!cl->next_alive)
 				cbq_activate_class(cl);
-			return 1;
+			return 0;
 		}
 	}
 
@@ -420,7 +422,7 @@ cbq_enqueue(struct sk_buff *skb, struct Qdisc *sch)
 		cbq_mark_toplevel(q, cl);
 		cl->stats.drops++;
 	}
-	return 0;
+	return ret;
 }
 
 static int
@@ -428,11 +430,12 @@ cbq_requeue(struct sk_buff *skb, struct Qdisc *sch)
 {
 	struct cbq_sched_data *q = (struct cbq_sched_data *)sch->data;
 	struct cbq_class *cl;
+	int ret;
 
 	if ((cl = q->tx_class) == NULL) {
 		kfree_skb(skb);
 		sch->stats.drops++;
-		return 0;
+		return NET_XMIT_CN;
 	}
 	q->tx_class = NULL;
 
@@ -442,15 +445,15 @@ cbq_requeue(struct sk_buff *skb, struct Qdisc *sch)
 	q->rx_class = cl;
 	cl->q->__parent = sch;
 #endif
-	if (cl->q->ops->requeue(skb, cl->q) == 1) {
+	if ((ret = cl->q->ops->requeue(skb, cl->q)) == 0) {
 		sch->q.qlen++;
 		if (!cl->next_alive)
 			cbq_activate_class(cl);
-		return 1;
+		return 0;
 	}
 	sch->stats.drops++;
 	cl->stats.drops++;
-	return 0;
+	return ret;
 }
 
 /* Overlimit actions */
@@ -685,7 +688,7 @@ static int cbq_reshape_fail(struct sk_buff *skb, struct Qdisc *child)
 		q->rx_class = cl;
 		cl->q->__parent = sch;
 
-		if (cl->q->enqueue(skb, cl->q) == 1) {
+		if (cl->q->enqueue(skb, cl->q) == 0) {
 			sch->q.qlen++;
 			sch->stats.packets++;
 			sch->stats.bytes+=len;
@@ -756,14 +759,19 @@ cbq_update(struct cbq_sched_data *q)
 		         idle = (now - last) - last_pktlen/rate
 		 */
 
-		idle = PSCHED_TDIFF(q->now, cl->last) - L2T(cl, len);
+		idle = PSCHED_TDIFF(q->now, cl->last);
+		if ((unsigned long)idle > 128*1024*1024) {
+			avgidle = cl->maxidle;
+		} else {
+			idle -= L2T(cl, len);
 
 		/* true_avgidle := (1-W)*true_avgidle + W*idle,
 		   where W=2^{-ewma_log}. But cl->avgidle is scaled:
 		   cl->avgidle == true_avgidle/W,
 		   hence:
 		 */
-		avgidle += idle - (avgidle>>cl->ewma_log);
+			avgidle += idle - (avgidle>>cl->ewma_log);
+		}
 
 		if (avgidle <= 0) {
 			/* Overlimit or at-limit */
@@ -980,10 +988,13 @@ cbq_dequeue(struct Qdisc *sch)
 	struct sk_buff *skb;
 	struct cbq_sched_data *q = (struct cbq_sched_data *)sch->data;
 	psched_time_t now;
+	psched_tdiff_t incr;
 
 	PSCHED_GET_TIME(now);
+	incr = PSCHED_TDIFF(now, q->now_rt);
 
 	if (q->tx_class) {
+		psched_tdiff_t incr2;
 		/* Time integrator. We calculate EOS time
 		   by adding expected packet transmittion time.
 		   If real time is greater, we warp artificial clock,
@@ -991,12 +1002,14 @@ cbq_dequeue(struct Qdisc *sch)
 
 		   cbq_time = max(real_time, work);
 		 */
-		PSCHED_TADD(q->now, L2T(&q->link, q->tx_len));
-		if (PSCHED_TLESS(q->now, now))
-			q->now = now;
+		incr2 = L2T(&q->link, q->tx_len);
+		PSCHED_TADD(q->now, incr2);
 		cbq_update(q);
-	} else if (PSCHED_TLESS(q->now, now))
-		q->now = now;
+		if ((incr -= incr2) < 0)
+			incr = 0;
+	}
+	PSCHED_TADD(q->now, incr);
+	q->now_rt = now;
 
 	for (;;) {
 		q->wd_expires = 0;
@@ -1224,7 +1237,7 @@ static int cbq_drop(struct Qdisc* sch)
 	struct cbq_class *cl, *cl_head;
 	int prio;
 
-	for (prio = TC_CBQ_MAXPRIO; prio >= 0; prio++) {
+	for (prio = TC_CBQ_MAXPRIO; prio >= 0; prio--) {
 		if ((cl_head = q->active[prio]) == NULL)
 			continue;
 
@@ -1252,6 +1265,8 @@ cbq_reset(struct Qdisc* sch)
 	del_timer(&q->wd_timer);
 	del_timer(&q->delay_timer);
 	q->toplevel = TC_CBQ_MAXLEVEL;
+	PSCHED_GET_TIME(q->now);
+	q->now_rt = q->now;
 
 	for (prio = 0; prio <= TC_CBQ_MAXPRIO; prio++)
 		q->active[prio] = NULL;
@@ -1426,6 +1441,8 @@ static int cbq_init(struct Qdisc *sch, struct rtattr *opt)
 	q->delay_timer.data = (unsigned long)sch;
 	q->delay_timer.function = cbq_undelay;
 	q->toplevel = TC_CBQ_MAXLEVEL;
+	PSCHED_GET_TIME(q->now);
+	q->now_rt = q->now;
 
 	cbq_link_class(&q->link);
 
@@ -1561,7 +1578,7 @@ static int cbq_dump_attr(struct sk_buff *skb, struct cbq_class *cl)
 
 int cbq_copy_xstats(struct sk_buff *skb, struct tc_cbq_xstats *st)
 {
-	RTA_PUT(skb, TCA_STATS, sizeof(*st), st);
+	RTA_PUT(skb, TCA_XSTATS, sizeof(*st), st);
 	return 0;
 
 rtattr_failure:
@@ -1838,7 +1855,7 @@ cbq_change_class(struct Qdisc *sch, u32 classid, u32 parentid, struct rtattr **t
 		if (cl->q->q.qlen)
 			cbq_activate_class(cl);
 
-		sch_tree_lock(sch);
+		sch_tree_unlock(sch);
 
 #ifdef CONFIG_NET_ESTIMATOR
 		if (tca[TCA_RATE-1]) {

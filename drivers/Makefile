@@ -11,7 +11,7 @@ SUB_DIRS     := block char net parport sound misc
 MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS) pci sgi scsi sbus cdrom isdn pnp i2o \
 				macintosh video dio zorro fc4 usb \
-				nubus tc ap1000
+				nubus tc ap1000 atm
 
 ifdef CONFIG_DIO
 SUB_DIRS += dio
@@ -104,6 +104,11 @@ else
   ifeq ($(CONFIG_ISDN),m)
   MOD_SUB_DIRS += isdn
   endif
+endif
+
+ifdef CONFIG_ATM
+SUB_DIRS += atm
+MOD_SUB_DIRS += atm
 endif
 
 ifeq ($(CONFIG_AP1000),y)

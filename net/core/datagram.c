@@ -46,33 +46,64 @@
 
 
 /*
- * Wait for a packet..
- *
- * Interrupts off so that no packet arrives before we begin sleeping.
- * Otherwise we might miss our wake up
- */
-
-static inline void wait_for_packet(struct sock * sk)
-{
-	DECLARE_WAITQUEUE(wait, current);
-
-	add_wait_queue(sk->sleep, &wait);
-	current->state = TASK_INTERRUPTIBLE;
-
-	if (skb_peek(&sk->receive_queue) == NULL)
-		schedule();
-
-	current->state = TASK_RUNNING;
-	remove_wait_queue(sk->sleep, &wait);
-}
-
-/*
  *	Is a socket 'connection oriented' ?
  */
  
 static inline int connection_based(struct sock *sk)
 {
 	return (sk->type==SOCK_SEQPACKET || sk->type==SOCK_STREAM);
+}
+
+
+/*
+ * Wait for a packet..
+ */
+
+static int wait_for_packet(struct sock * sk, int *err)
+{
+	int error;
+
+	DECLARE_WAITQUEUE(wait, current);
+
+	add_wait_queue(sk->sleep, &wait);
+	current->state = TASK_INTERRUPTIBLE;
+
+	barrier();
+
+	/* Socket errors? */
+	error = sock_error(sk);
+	if (error)
+		goto out;
+
+	if (!skb_queue_empty(&sk->receive_queue))
+		goto ready;
+
+	/* Socket shut down? */
+	if (sk->shutdown & RCV_SHUTDOWN)
+		goto out;
+
+	/* Sequenced packets can come disconnected. If so we report the problem */
+	error = -ENOTCONN;
+	if(connection_based(sk) && sk->state!=TCP_ESTABLISHED)
+		goto out;
+
+	/* handle signals */
+	error = -ERESTARTSYS;
+	if (signal_pending(current))
+		goto out;
+
+	schedule();
+
+ready:
+	current->state = TASK_RUNNING;
+	remove_wait_queue(sk->sleep, &wait);
+	return 0;
+
+out:
+	current->state = TASK_RUNNING;
+	remove_wait_queue(sk->sleep, &wait);
+	*err = error;
+	return error;
 }
 
 /*
@@ -108,64 +139,36 @@ struct sk_buff *skb_recv_datagram(struct sock *sk, unsigned flags, int noblock, 
 	if (error)
 		goto no_packet;
 
-restart:
-	while(skb_queue_empty(&sk->receive_queue))	/* No data */
-	{
-		/* Socket errors? */
-		error = sock_error(sk);
-		if (error)
-			goto no_packet;
+	do {
+		/* Again only user level code calls this function, so nothing interrupt level
+		   will suddenly eat the receive_queue.
 
-		/* Socket shut down? */
-		if (sk->shutdown & RCV_SHUTDOWN)
-			goto no_packet;
+		   Look at current nfs client by the way...
+		   However, this function was corrent in any case. 8)
+		 */
+		if (flags & MSG_PEEK)
+		{
+			unsigned long cpu_flags;
 
-		/* Sequenced packets can come disconnected. If so we report the problem */
-		error = -ENOTCONN;
-		if(connection_based(sk) && sk->state!=TCP_ESTABLISHED)
-			goto no_packet;
+			spin_lock_irqsave(&sk->receive_queue.lock, cpu_flags);
+			skb = skb_peek(&sk->receive_queue);
+			if(skb!=NULL)
+				atomic_inc(&skb->users);
+			spin_unlock_irqrestore(&sk->receive_queue.lock, cpu_flags);
+		} else
+			skb = skb_dequeue(&sk->receive_queue);
 
-		/* handle signals */
-		error = -ERESTARTSYS;
-		if (signal_pending(current))
-			goto no_packet;
+		if (skb)
+			return skb;
 
 		/* User doesn't want to wait */
 		error = -EAGAIN;
 		if (noblock)
 			goto no_packet;
 
-		wait_for_packet(sk);
-	}
+	} while (wait_for_packet(sk, err) == 0);
 
-	/* Again only user level code calls this function, so nothing interrupt level
-	   will suddenly eat the receive_queue */
-	if (flags & MSG_PEEK)
-	{
-		unsigned long cpu_flags;
-
-		/* It is the only POTENTIAL race condition
-		   in this function. skb may be stolen by
-		   another receiver after peek, but before
-		   incrementing use count, provided kernel
-		   is reentearble (it is not) or this function
-		   is called by interrupts.
-
-		   Protect it with skb queue spinlock,
-		   though for now even this is overkill.
-		                                --ANK (980728)
-		 */
-		spin_lock_irqsave(&sk->receive_queue.lock, cpu_flags);
-		skb = skb_peek(&sk->receive_queue);
-		if(skb!=NULL)
-			atomic_inc(&skb->users);
-		spin_unlock_irqrestore(&sk->receive_queue.lock, cpu_flags);
-	} else
-		skb = skb_dequeue(&sk->receive_queue);
-
-	if (!skb)	/* Avoid race if someone beats us to the data */
-		goto restart;
-	return skb;
+	return NULL;
 
 no_packet:
 	*err = error;

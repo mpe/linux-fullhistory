@@ -68,10 +68,10 @@ struct shm_info {
 #define	SHM_DEST	01000	/* segment will be destroyed on last detach */
 #define SHM_LOCKED      02000   /* segment will not be swapped */
 
-asmlinkage int sys_shmget (key_t key, int size, int flag);
-asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, unsigned long *addr);
-asmlinkage int sys_shmdt (char *shmaddr);
-asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf);
+asmlinkage long sys_shmget (key_t key, int size, int flag);
+asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, unsigned long *addr);
+asmlinkage long sys_shmdt (char *shmaddr);
+asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf);
 extern void shm_unuse(unsigned long entry, unsigned long page);
 
 #endif /* __KERNEL__ */

@@ -8,7 +8,7 @@
  *	the older version didn't come out right using gcc 2.5.8, the newer one
  *	seems to fall out with gcc 2.6.2.
  *
- *	Version: $Id: igmp.c,v 1.32 1999/06/09 10:10:53 davem Exp $
+ *	Version: $Id: igmp.c,v 1.34 1999/08/20 11:05:12 davem Exp $
  *
  *	Authors:
  *		Alan Cox <Alan.Cox@linux.org>
@@ -97,18 +97,11 @@
 #include <linux/mroute.h>
 #endif
 
-/* Big mc list lock for all the devices */
-static rwlock_t ip_mc_lock = RW_LOCK_UNLOCKED;
-/* Big mc list semaphore for all the sockets.
-   We do not refer to this list in IP data paths or from BH,
-   so that semaphore is OK.
- */
-DECLARE_MUTEX(ip_sk_mc_sem);
-
 
 #define IP_MAX_MEMBERSHIPS 20
 
 #ifdef CONFIG_IP_MULTICAST
+
 
 /* Parameter names and values are taken from igmp-v2-06 draft */
 
@@ -129,28 +122,64 @@ DECLARE_MUTEX(ip_sk_mc_sem);
 
 #define IGMP_V1_SEEN(in_dev) ((in_dev)->mr_v1_seen && (long)(jiffies - (in_dev)->mr_v1_seen) < 0)
 
+#endif
+
+static void ip_ma_put(struct ip_mc_list *im)
+{
+	if (atomic_dec_and_test(&im->refcnt)) {
+		in_dev_put(im->interface);
+		kfree_s(im, sizeof(*im));
+	}
+}
+
+#ifdef CONFIG_IP_MULTICAST
+
 /*
  *	Timer management
  */
 
 static __inline__ void igmp_stop_timer(struct ip_mc_list *im)
 {
-	if (im->tm_running) {
-		del_timer(&im->timer);
-		im->tm_running=0;
-	}
+	spin_lock_bh(&im->lock);
+	if (del_timer(&im->timer))
+		atomic_dec(&im->refcnt);
+	im->tm_running=0;
+	im->reporter = 0;
+	im->unsolicit_count = 0;
+	spin_unlock_bh(&im->lock);
 }
 
 static __inline__ void igmp_start_timer(struct ip_mc_list *im, int max_delay)
 {
-	int tv;
-	if (im->tm_running)
-		return;
-	tv=net_random() % max_delay;
+	int tv=net_random() % max_delay;
+
+	spin_lock_bh(&im->lock);
+	if (!del_timer(&im->timer))
+		atomic_inc(&im->refcnt);
 	im->timer.expires=jiffies+tv+2;
 	im->tm_running=1;
 	add_timer(&im->timer);
+	spin_unlock_bh(&im->lock);
 }
+
+static void igmp_mod_timer(struct ip_mc_list *im, int max_delay)
+{
+	spin_lock_bh(&im->lock);
+	im->unsolicit_count = 0;
+	if (del_timer(&im->timer)) {
+		if ((long)(im->timer.expires-jiffies) < max_delay) {
+			add_timer(&im->timer);
+			im->tm_running=1;
+			spin_unlock_bh(&im->lock);
+			return;
+		}
+		atomic_dec(&im->refcnt);
+	}
+	spin_unlock_bh(&im->lock);
+
+	igmp_start_timer(im, max_delay);
+}
+
 
 /*
  *	Send an IGMP report.
@@ -225,8 +254,6 @@ static void igmp_timer_expire(unsigned long data)
 	struct in_device *in_dev = im->interface;
 	int err;
 
-	read_lock(&ip_mc_lock);
-
 	im->tm_running=0;
 
 	if (IGMP_V1_SEEN(in_dev))
@@ -236,7 +263,9 @@ static void igmp_timer_expire(unsigned long data)
 
 	/* Failed. Retry later. */
 	if (err) {
-		igmp_start_timer(im, IGMP_Unsolicited_Report_Interval);
+		if (!in_dev->dead)
+			igmp_start_timer(im, IGMP_Unsolicited_Report_Interval);
+		ip_ma_put(im);
 		return;
 	}
 
@@ -245,7 +274,7 @@ static void igmp_timer_expire(unsigned long data)
 		igmp_start_timer(im, IGMP_Unsolicited_Report_Interval);
 	}
 	im->reporter = 1;
-	read_unlock(&ip_mc_lock);
+	ip_ma_put(im);
 }
 
 static void igmp_heard_report(struct in_device *in_dev, u32 group)
@@ -254,19 +283,17 @@ static void igmp_heard_report(struct in_device *in_dev, u32 group)
 
 	/* Timers are only set for non-local groups */
 
-	if (LOCAL_MCAST(group))
+	if (group == IGMP_ALL_HOSTS)
 		return;
 
-	read_lock(&ip_mc_lock);
+	read_lock(&in_dev->lock);
 	for (im=in_dev->mc_list; im!=NULL; im=im->next) {
 		if (im->multiaddr == group) {
 			igmp_stop_timer(im);
-			im->reporter = 0;
-			im->unsolicit_count = 0;
 			break;
 		}
 	}
-	read_unlock(&ip_mc_lock);
+	read_unlock(&in_dev->lock);
 }
 
 static void igmp_heard_query(struct in_device *in_dev, unsigned char max_resp_time,
@@ -284,7 +311,7 @@ static void igmp_heard_query(struct in_device *in_dev, unsigned char max_resp_ti
 		in_dev->mr_v1_seen = jiffies + IGMP_V1_Router_Present_Timeout;
 		group = 0;
 	}
-		
+
 	/*
 	 * - Start the timers in all of our membership records
 	 *   that the query applies to for the interface on
@@ -295,28 +322,30 @@ static void igmp_heard_query(struct in_device *in_dev, unsigned char max_resp_ti
 	 * - Use the igmp->igmp_code field as the maximum
 	 *   delay possible
 	 */
-	read_lock(&ip_mc_lock);
+	read_lock(&in_dev->lock);
 	for (im=in_dev->mc_list; im!=NULL; im=im->next) {
 		if (group && group != im->multiaddr)
 			continue;
-		if (LOCAL_MCAST(im->multiaddr))
+		if (im->multiaddr == IGMP_ALL_HOSTS)
 			continue;
-		im->unsolicit_count = 0;
-		if (im->tm_running && (long)(im->timer.expires-jiffies) > max_delay)
-			igmp_stop_timer(im);
-		igmp_start_timer(im, max_delay);
+		igmp_mod_timer(im, max_delay);
 	}
-	read_unlock(&ip_mc_lock);
+	read_unlock(&in_dev->lock);
 }
 
 int igmp_rcv(struct sk_buff *skb, unsigned short len)
 {
 	/* This basically follows the spec line by line -- see RFC1112 */
 	struct igmphdr *ih = skb->h.igmph;
-	struct in_device *in_dev = skb->dev->ip_ptr;
+	struct in_device *in_dev = in_dev_get(skb->dev);
 
-	if (len < sizeof(struct igmphdr) || ip_compute_csum((void *)ih, len)
-	    || in_dev==NULL) {
+	if (in_dev==NULL) {
+		kfree_skb(skb);
+		return 0;
+	}
+
+	if (len < sizeof(struct igmphdr) || ip_compute_csum((void *)ih, len)) {
+		in_dev_put(in_dev);
 		kfree_skb(skb);
 		return 0;
 	}
@@ -334,6 +363,7 @@ int igmp_rcv(struct sk_buff *skb, unsigned short len)
 		break;
 	case IGMP_PIM:
 #ifdef CONFIG_IP_PIMSM_V1
+		in_dev_put(in_dev);
 		return pim_rcv_v1(skb, len);
 #endif
 	case IGMP_DVMRP:
@@ -345,6 +375,7 @@ int igmp_rcv(struct sk_buff *skb, unsigned short len)
 	default:
 		NETDEBUG(printk(KERN_DEBUG "New IGMP type=%d, why we do not know about it?\n", ih->type));
 	}
+	in_dev_put(in_dev);
 	kfree_skb(skb);
 	return 0;
 }
@@ -367,7 +398,7 @@ static void ip_mc_filter_add(struct in_device *in_dev, u32 addr)
 	   routine. Something sort of:
 	   if (dev->mc_list && dev->flags&IFF_MULTICAST) { do it; }
 	   --ANK
-	 */
+	   */
 	if (arp_mc_map(addr, buf, dev, 0) == 0)
 		dev_mc_add(dev,buf,dev->addr_len,0);
 }
@@ -387,18 +418,23 @@ static void ip_mc_filter_del(struct in_device *in_dev, u32 addr)
 
 static void igmp_group_dropped(struct ip_mc_list *im)
 {
+#ifdef CONFIG_IP_MULTICAST
+	int reporter;
+#endif
+
 	if (im->loaded) {
 		im->loaded = 0;
 		ip_mc_filter_del(im->interface, im->multiaddr);
 	}
 
 #ifdef CONFIG_IP_MULTICAST
-	if (LOCAL_MCAST(im->multiaddr))
+	if (im->multiaddr == IGMP_ALL_HOSTS)
 		return;
 
+	reporter = im->reporter;
 	igmp_stop_timer(im);
 
-	if (im->reporter && !IGMP_V1_SEEN(im->interface))
+	if (reporter && !IGMP_V1_SEEN(im->interface))
 		igmp_send_report(im->interface->dev, im->multiaddr, IGMP_HOST_LEAVE_MESSAGE);
 #endif
 }
@@ -411,7 +447,7 @@ static void igmp_group_added(struct ip_mc_list *im)
 	}
 
 #ifdef CONFIG_IP_MULTICAST
-	if (LOCAL_MCAST(im->multiaddr))
+	if (im->multiaddr == IGMP_ALL_HOSTS)
 		return;
 
 	igmp_start_timer(im, IGMP_Initial_Report_Delay);
@@ -430,24 +466,27 @@ static void igmp_group_added(struct ip_mc_list *im)
 
 void ip_mc_inc_group(struct in_device *in_dev, u32 addr)
 {
-	struct ip_mc_list *i, *im;
+	struct ip_mc_list *im;
 
-	im = (struct ip_mc_list *)kmalloc(sizeof(*im), GFP_KERNEL);
+	ASSERT_RTNL();
 
-	write_lock_bh(&ip_mc_lock);
-	for (i=in_dev->mc_list; i; i=i->next) {
-		if (i->multiaddr == addr) {
-			i->users++;
-			if (im)
-				kfree(im);
+	for (im=in_dev->mc_list; im; im=im->next) {
+		if (im->multiaddr == addr) {
+			im->users++;
 			goto out;
 		}
 	}
+
+	im = (struct ip_mc_list *)kmalloc(sizeof(*im), GFP_KERNEL);
 	if (!im)
 		goto out;
+
 	im->users=1;
 	im->interface=in_dev;
+	in_dev_hold(in_dev);
 	im->multiaddr=addr;
+	atomic_set(&im->refcnt, 1);
+	spin_lock_init(&im->lock);
 #ifdef  CONFIG_IP_MULTICAST
 	im->tm_running=0;
 	init_timer(&im->timer);
@@ -457,15 +496,14 @@ void ip_mc_inc_group(struct in_device *in_dev, u32 addr)
 	im->reporter = 0;
 	im->loaded = 0;
 #endif
+	write_lock_bh(&in_dev->lock);
 	im->next=in_dev->mc_list;
 	in_dev->mc_list=im;
+	write_unlock_bh(&in_dev->lock);
 	igmp_group_added(im);
-	write_unlock_bh(&ip_mc_lock);
 	if (in_dev->dev->flags & IFF_UP)
 		ip_rt_multicast_event(in_dev);
-	return;
 out:
-	write_unlock_bh(&ip_mc_lock);
 	return;
 }
 
@@ -477,25 +515,27 @@ int ip_mc_dec_group(struct in_device *in_dev, u32 addr)
 {
 	int err = -ESRCH;
 	struct ip_mc_list *i, **ip;
-
-	write_lock_bh(&ip_mc_lock);
+	
+	ASSERT_RTNL();
+	
 	for (ip=&in_dev->mc_list; (i=*ip)!=NULL; ip=&i->next) {
 		if (i->multiaddr==addr) {
 			if (--i->users == 0) {
+				write_lock_bh(&in_dev->lock);
 				*ip = i->next;
+				write_unlock_bh(&in_dev->lock);
 				igmp_group_dropped(i);
 
-				write_unlock_bh(&ip_mc_lock);
 				if (in_dev->dev->flags & IFF_UP)
 					ip_rt_multicast_event(in_dev);
-				kfree_s(i, sizeof(*i));
+
+				ip_ma_put(i);
 				return 0;
 			}
 			err = 0;
 			break;
 		}
 	}
-	write_unlock_bh(&ip_mc_lock);
 	return -ESRCH;
 }
 
@@ -505,10 +545,10 @@ void ip_mc_down(struct in_device *in_dev)
 {
 	struct ip_mc_list *i;
 
-	read_lock_bh(&ip_mc_lock);
+	ASSERT_RTNL();
+
 	for (i=in_dev->mc_list; i; i=i->next)
 		igmp_group_dropped(i);
-	read_unlock_bh(&ip_mc_lock);
 
 	ip_mc_dec_group(in_dev, IGMP_ALL_HOSTS);
 }
@@ -519,12 +559,12 @@ void ip_mc_up(struct in_device *in_dev)
 {
 	struct ip_mc_list *i;
 
+	ASSERT_RTNL();
+
 	ip_mc_inc_group(in_dev, IGMP_ALL_HOSTS);
 
-	read_lock_bh(&ip_mc_lock);
 	for (i=in_dev->mc_list; i; i=i->next)
 		igmp_group_added(i);
-	read_unlock_bh(&ip_mc_lock);
 }
 
 /*
@@ -535,24 +575,32 @@ void ip_mc_destroy_dev(struct in_device *in_dev)
 {
 	struct ip_mc_list *i;
 
-	write_lock_bh(&ip_mc_lock);
+	ASSERT_RTNL();
+
+	write_lock_bh(&in_dev->lock);
 	while ((i = in_dev->mc_list) != NULL) {
 		in_dev->mc_list = i->next;
+		write_unlock_bh(&in_dev->lock);
+
 		igmp_group_dropped(i);
-		kfree_s(i, sizeof(*i));
+		ip_ma_put(i);
+
+		write_lock_bh(&in_dev->lock);
 	}
-	write_unlock_bh(&ip_mc_lock);
+	write_unlock_bh(&in_dev->lock);
 }
 
 static struct in_device * ip_mc_find_dev(struct ip_mreqn *imr)
 {
 	struct rtable *rt;
 	struct net_device *dev = NULL;
+	struct in_device *idev = NULL;
 
 	if (imr->imr_address.s_addr) {
 		dev = ip_dev_find(imr->imr_address.s_addr);
 		if (!dev)
 			return NULL;
+		__dev_put(dev);
 	}
 
 	if (!dev && !ip_route_output(&rt, imr->imr_multiaddr.s_addr, 0, 0, 0)) {
@@ -561,9 +609,9 @@ static struct in_device * ip_mc_find_dev(struct ip_mreqn *imr)
 	}
 	if (dev) {
 		imr->imr_ifindex = dev->ifindex;
-		return dev->ip_ptr;
+		idev = __in_dev_get(dev);
 	}
-	return NULL;
+	return idev;
 }
 
 /*
@@ -586,8 +634,11 @@ int ip_mc_join_group(struct sock *sk , struct ip_mreqn *imr)
 
 	if (!imr->imr_ifindex)
 		in_dev = ip_mc_find_dev(imr);
-	else
+	else {
 		in_dev = inetdev_by_index(imr->imr_ifindex);
+		if (in_dev)
+			__in_dev_put(in_dev);
+	}
 
 	if (!in_dev) {
 		iml = NULL;
@@ -598,31 +649,28 @@ int ip_mc_join_group(struct sock *sk , struct ip_mreqn *imr)
 	iml = (struct ip_mc_socklist *)sock_kmalloc(sk, sizeof(*iml), GFP_KERNEL);
 
 	err = -EADDRINUSE;
-	down(&ip_sk_mc_sem);
-	for (i=sk->ip_mc_list; i; i=i->next) {
+	for (i=sk->protinfo.af_inet.mc_list; i; i=i->next) {
 		if (memcmp(&i->multi, imr, sizeof(*imr)) == 0) {
 			/* New style additions are reference counted */
 			if (imr->imr_address.s_addr == 0) {
 				i->count++;
 				err = 0;
 			}
-			goto done_unlock;
+			goto done;
 		}
 		count++;
 	}
 	err = -ENOBUFS;
 	if (iml == NULL || count >= sysctl_igmp_max_memberships)
-		goto done_unlock;
+		goto done;
 	memcpy(&iml->multi, imr, sizeof(*imr));
-	iml->next = sk->ip_mc_list;
+	iml->next = sk->protinfo.af_inet.mc_list;
 	iml->count = 1;
-	sk->ip_mc_list = iml;
+	sk->protinfo.af_inet.mc_list = iml;
 	ip_mc_inc_group(in_dev, addr);
 	iml = NULL;
 	err = 0;
 
-done_unlock:
-	up(&ip_sk_mc_sem);
 done:
 	rtnl_shunlock();
 	if (iml)
@@ -638,26 +686,30 @@ int ip_mc_leave_group(struct sock *sk, struct ip_mreqn *imr)
 {
 	struct ip_mc_socklist *iml, **imlp;
 
-	down(&ip_sk_mc_sem);
-	for (imlp=&sk->ip_mc_list; (iml=*imlp)!=NULL; imlp=&iml->next) {
+	rtnl_lock();
+	for (imlp=&sk->protinfo.af_inet.mc_list; (iml=*imlp)!=NULL; imlp=&iml->next) {
 		if (iml->multi.imr_multiaddr.s_addr==imr->imr_multiaddr.s_addr &&
 		    iml->multi.imr_address.s_addr==imr->imr_address.s_addr &&
 		    (!imr->imr_ifindex || iml->multi.imr_ifindex==imr->imr_ifindex)) {
 			struct in_device *in_dev;
-			if (--iml->count)
+			if (--iml->count) {
+				rtnl_unlock();
 				return 0;
+			}
 
 			*imlp = iml->next;
-			up(&ip_sk_mc_sem);
 
 			in_dev = inetdev_by_index(iml->multi.imr_ifindex);
-			if (in_dev)
+			if (in_dev) {
 				ip_mc_dec_group(in_dev, imr->imr_multiaddr.s_addr);
+				in_dev_put(in_dev);
+			}
+			rtnl_unlock();
 			sock_kfree_s(sk, iml, sizeof(*iml));
 			return 0;
 		}
 	}
-	up(&ip_sk_mc_sem);
+	rtnl_unlock();
 	return -EADDRNOTAVAIL;
 }
 
@@ -669,36 +721,36 @@ void ip_mc_drop_socket(struct sock *sk)
 {
 	struct ip_mc_socklist *iml;
 
-	down(&ip_sk_mc_sem);
-	while ((iml=sk->ip_mc_list) != NULL) {
-		struct in_device *in_dev;
-		sk->ip_mc_list = iml->next;
-		up(&ip_sk_mc_sem);
+	if (sk->protinfo.af_inet.mc_list == NULL)
+		return;
 
-		if ((in_dev = inetdev_by_index(iml->multi.imr_ifindex)) != NULL)
+	rtnl_lock();
+	while ((iml=sk->protinfo.af_inet.mc_list) != NULL) {
+		struct in_device *in_dev;
+		sk->protinfo.af_inet.mc_list = iml->next;
+
+		if ((in_dev = inetdev_by_index(iml->multi.imr_ifindex)) != NULL) {
 			ip_mc_dec_group(in_dev, iml->multi.imr_multiaddr.s_addr);
+			in_dev_put(in_dev);
+		}
 		sock_kfree_s(sk, iml, sizeof(*iml));
 
-		down(&ip_sk_mc_sem);
 	}
-	up(&ip_sk_mc_sem);
+	rtnl_unlock();
 }
 
-int ip_check_mc(struct net_device *dev, u32 mc_addr)
+int ip_check_mc(struct in_device *in_dev, u32 mc_addr)
 {
-	struct in_device *in_dev = dev->ip_ptr;
 	struct ip_mc_list *im;
 
-	if (in_dev) {
-		read_lock(&ip_mc_lock);
-		for (im=in_dev->mc_list; im; im=im->next) {
-			if (im->multiaddr == mc_addr) {
-				read_unlock(&ip_mc_lock);
-				return 1;
-			}
+	read_lock(&in_dev->lock);
+	for (im=in_dev->mc_list; im; im=im->next) {
+		if (im->multiaddr == mc_addr) {
+			read_unlock(&in_dev->lock);
+			return 1;
 		}
-		read_unlock(&ip_mc_lock);
 	}
+	read_unlock(&in_dev->lock);
 	return 0;
 }
 
@@ -716,9 +768,9 @@ int ip_mc_procinfo(char *buffer, char **start, off_t offset, int length, int dum
 
 	read_lock(&dev_base_lock);
 	for(dev = dev_base; dev; dev = dev->next) {
-		struct in_device *in_dev = dev->ip_ptr;
+		struct in_device *in_dev = in_dev_get(dev);
 		char   *querier = "NONE";
-		
+
 		if (in_dev == NULL)
 			continue;
 
@@ -727,7 +779,7 @@ int ip_mc_procinfo(char *buffer, char **start, off_t offset, int length, int dum
 		len+=sprintf(buffer+len,"%d\t%-10s: %5d %7s\n",
 			     dev->ifindex, dev->name, dev->mc_count, querier);
 
-		read_lock(&ip_mc_lock);
+		read_lock(&in_dev->lock);
 		for (im = in_dev->mc_list; im; im = im->next) {
 			len+=sprintf(buffer+len,
 				     "\t\t\t\t%08lX %5d %d:%08lX\t\t%d\n",
@@ -741,11 +793,13 @@ int ip_mc_procinfo(char *buffer, char **start, off_t offset, int length, int dum
 				begin=pos;
 			}
 			if(pos>offset+length) {
-				read_unlock(&ip_mc_lock);
+				read_unlock(&in_dev->lock);
+				in_dev_put(in_dev);
 				goto done;
 			}
 		}
-		read_unlock(&ip_mc_lock);
+		read_unlock(&in_dev->lock);
+		in_dev_put(in_dev);
 	}
 done:
 	read_unlock(&dev_base_lock);

@@ -46,7 +46,7 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 #include <linux/notifier.h>
-#include <linux/firewall.h>
+#include <linux/netfilter.h>
 #include <net/rose.h>
 
 static unsigned int rose_neigh_no = 1;
@@ -527,12 +527,13 @@ struct net_device *rose_ax25_dev_get(char *devname)
 {
 	struct net_device *dev;
 
-	if ((dev = dev_get(devname)) == NULL)
+	if ((dev = dev_get_by_name(devname)) == NULL)
 		return NULL;
 
 	if ((dev->flags & IFF_UP) && dev->type == ARPHRD_AX25)
 		return dev;
 
+	dev_put(dev);
 	return NULL;
 }
 
@@ -563,13 +564,32 @@ struct net_device *rose_dev_get(rose_address *addr)
 
 	read_lock(&dev_base_lock);
 	for (dev = dev_base; dev != NULL; dev = dev->next) {
-		if ((dev->flags & IFF_UP) && dev->type == ARPHRD_ROSE && rosecmp(addr, (rose_address *)dev->dev_addr) == 0)
+		if ((dev->flags & IFF_UP) && dev->type == ARPHRD_ROSE && rosecmp(addr, (rose_address *)dev->dev_addr) == 0) {
+			dev_hold(dev);
 			goto out;
+		}
 	}
 out:
 	read_unlock(&dev_base_lock);
 	return dev;
 }
+
+static int rose_dev_exists(rose_address *addr)
+{
+	struct net_device *dev;
+
+	read_lock(&dev_base_lock);
+	for (dev = dev_base; dev != NULL; dev = dev->next) {
+		if ((dev->flags & IFF_UP) && dev->type == ARPHRD_ROSE && rosecmp(addr, (rose_address *)dev->dev_addr) == 0)
+			goto out;
+	}
+out:
+	read_unlock(&dev_base_lock);
+	return dev != NULL;
+}
+
+
+
 
 struct rose_route *rose_route_free_lci(unsigned int lci, struct rose_neigh *neigh)
 {
@@ -622,6 +642,7 @@ int rose_rt_ioctl(unsigned int cmd, void *arg)
 {
 	struct rose_route_struct rose_route;
 	struct net_device *dev;
+	int err;
 
 	switch (cmd) {
 
@@ -630,19 +651,26 @@ int rose_rt_ioctl(unsigned int cmd, void *arg)
 				return -EFAULT;
 			if ((dev = rose_ax25_dev_get(rose_route.device)) == NULL)
 				return -EINVAL;
-			if (rose_dev_get(&rose_route.address) != NULL)	/* Can't add routes to ourself */
+			if (rose_dev_exists(&rose_route.address)) { /* Can't add routes to ourself */
+				dev_put(dev);
 				return -EINVAL;
+			}
 			if (rose_route.mask > 10) /* Mask can't be more than 10 digits */
 				return -EINVAL;
 
-			return rose_add_node(&rose_route, dev);
+			err = rose_add_node(&rose_route, dev);
+			dev_put(dev);
+			return err;
 
 		case SIOCDELRT:
 			if (copy_from_user(&rose_route, arg, sizeof(struct rose_route_struct)))
 				return -EFAULT;
 			if ((dev = rose_ax25_dev_get(rose_route.device)) == NULL)
 				return -EINVAL;
-			return rose_del_node(&rose_route, dev);
+			err = rose_del_node(&rose_route, dev);
+			dev_put(dev);
+			return err;
+				
 
 		case SIOCRSCLRRT:
 			return rose_clear_routes();
@@ -749,8 +777,10 @@ int rose_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 	unsigned long flags;
 	int len;
 
+#if 0
 	if (call_in_firewall(PF_ROSE, skb->dev, skb->data, NULL, &skb) != FW_ACCEPT)
 		return 0;
+#endif
 
 	frametype = skb->data[2];
 	lci = ((skb->data[0] << 8) & 0xF00) + ((skb->data[1] << 0) & 0x0FF);
@@ -810,8 +840,11 @@ int rose_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 	 *	Is is a Call Request and is it for us ?
 	 */
 	if (frametype == ROSE_CALL_REQUEST)
-		if ((dev = rose_dev_get(dest_addr)) != NULL)
-			return rose_rx_call_request(skb, dev, rose_neigh, lci);
+		if ((dev = rose_dev_get(dest_addr)) != NULL) {
+			int err = rose_rx_call_request(skb, dev, rose_neigh, lci);
+			dev_put(dev);
+			return err;
+		}
 
 	if (!sysctl_rose_routing_control) {
 		rose_transmit_clear_request(rose_neigh, lci, ROSE_NOT_OBTAINABLE, 0);

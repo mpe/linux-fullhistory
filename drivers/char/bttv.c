@@ -563,7 +563,7 @@ static struct tvcard tvcards[] =
         /* MIRO PCTV pro */
         { 3, 1, 0, 2, 65551, { 2, 3, 1, 1}, {1,65537, 0, 0,10}},
 	/* ADS Technologies Channel Surfer TV (and maybe TV+FM) */
-	{ 3, 4, 0, 2, 15, { 2, 3, 1, 1}, { 13, 14, 11, 7, 0, 0}, 0},
+	{ 3, 4, 2, 2, 15, { 2, 3, 1, 1}, { 13, 14, 11, 7, 0, 0}, 0},
         /* AVerMedia TVCapture 98 */
 	{ 3, 4, 0, 2, 15, { 2, 3, 1, 1}, { 13, 14, 11, 7, 0, 0}, 0},
         /* Aimslab VHX */
@@ -576,6 +576,8 @@ static struct tvcard tvcards[] =
         { 3, 1, 0, 2, 0x8300f8, { 2, 3, 1, 1,0}, {0x4fa007,0xcfa007,0xcfa007,0xcfa007,0xcfa007,0xcfa007}},
         /* AVEC Intercapture */
         { 3, 2, 0, 2, 0, { 2, 3, 1, 1}, { 1, 0, 0, 0, 0}},
+         /* LifeView FlyKit w/o Tuner */
+        { 3, 1, -1, -1, 0x8dff00, { 2, 3, 1, 1}}
 };
 #define TVCARDS (sizeof(tvcards)/sizeof(tvcard))
 
@@ -1986,12 +1988,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				v.height > 16 && v.bytesperline > 16)
 				return -EINVAL;
                         if (v.base)
-                        {
-                                if ((unsigned long)v.base&1)
-                                        btv->win.vidadr=(unsigned long)(PAGE_OFFSET|uvirt_to_bus((unsigned long)v.base));
-                                else
-                                        btv->win.vidadr=(unsigned long)v.base;
-                        }
+                        	btv->win.vidadr=(unsigned long)v.base;
 			btv->win.sheight=v.height;
 			btv->win.swidth=v.width;
 			btv->win.bpp=((v.depth+7)&0x38)/8;
@@ -3145,7 +3142,7 @@ static void idcard(int i)
                         break;
 	}
 	printk("%s\n",btv->video_dev.name);
-	audio(btv, AUDIO_MUTE);
+	audio(btv, AUDIO_INTERN);
 }
 
 

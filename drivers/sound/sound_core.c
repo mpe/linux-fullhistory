@@ -395,5 +395,8 @@ int soundcore_init(void)
 #ifdef CONFIG_SOUND_MSNDPIN
 	msnd_pinnacle_init();
 #endif
+#ifdef CONFIG_SOUND_VWSND
+	init_vwsnd();
+#endif
 	return 0;
 }

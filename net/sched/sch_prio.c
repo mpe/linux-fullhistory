@@ -69,17 +69,18 @@ prio_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 {
 	struct prio_sched_data *q = (struct prio_sched_data *)sch->data;
 	struct Qdisc *qdisc;
+	int ret;
 
 	qdisc = q->queues[prio_classify(skb, sch)];
 
-	if (qdisc->enqueue(skb, qdisc) == 1) {
+	if ((ret = qdisc->enqueue(skb, qdisc)) == 0) {
 		sch->stats.bytes += skb->len;
 		sch->stats.packets++;
 		sch->q.qlen++;
-		return 1;
+		return 0;
 	}
 	sch->stats.drops++;
-	return 0;
+	return ret;
 }
 
 
@@ -88,15 +89,16 @@ prio_requeue(struct sk_buff *skb, struct Qdisc* sch)
 {
 	struct prio_sched_data *q = (struct prio_sched_data *)sch->data;
 	struct Qdisc *qdisc;
+	int ret;
 
 	qdisc = q->queues[prio_classify(skb, sch)];
 
-	if (qdisc->ops->requeue(skb, qdisc) == 1) {
+	if ((ret = qdisc->ops->requeue(skb, qdisc)) == 0) {
 		sch->q.qlen++;
-		return 1;
+		return 0;
 	}
 	sch->stats.drops++;
-	return 0;
+	return ret;
 }
 
 

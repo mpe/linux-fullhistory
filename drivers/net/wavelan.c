@@ -1616,11 +1616,8 @@ wv_set_frequency(u_long		ioaddr,	/* I/O port of the card */
   if((frequency->e == 0) &&
      (frequency->m >= 0) && (frequency->m < BAND_NUM))
     {
-      /* frequency in units of 250 kHz (as read in the offset register) */
-      short	bands[] = { 0x30, 0x58, 0x64, 0x7A, 0x80, 0xA8, 0xD0, 0xF0, 0xF8, 0x150 };
-
       /* Get frequency offset. */
-      freq = bands[frequency->m] >> 1;
+      freq = channel_bands[frequency->m] >> 1;
     }
 
   /* Verify that the frequency is allowed. */
@@ -1791,6 +1788,7 @@ wv_frequency_list(u_long	ioaddr,	/* I/O port of the card */
   u_short	table[10];	/* Authorized frequency table */
   long		freq = 0L;	/* offset to 2.4 GHz in .5 MHz + 12 MHz */
   int		i;		/* index in the table */
+  int		c = 0;		/* Channel number */
 
   /* Read the frequency table. */
   fee_read(ioaddr, 0x71 /* frequency table */, table, 10);
@@ -1801,6 +1799,12 @@ wv_frequency_list(u_long	ioaddr,	/* I/O port of the card */
     /* Look in the table if the frequency is allowed */
     if(table[9 - (freq / 16)] & (1 << (freq % 16)))
       {
+	/* Compute approximate channel number */
+	while((((channel_bands[c] >> 1) - 24) < freq) &&
+	      (c < NELS(channel_bands)))
+	  c++;
+	list[i].i = c;	/* Set the list index */
+
 	/* put in the list */
 	list[i].m = (((freq + 24) * 5) + 24000L) * 10000;
 	list[i++].e = 1;
@@ -1969,14 +1973,12 @@ wavelan_ioctl(struct net_device *	dev,	/* device on which the ioctl is applied *
 	}
       else
 	{
-	  int	bands[] = { 915e6, 2.425e8, 2.46e8, 2.484e8, 2.4305e8 };
-
 	  psa_read(ioaddr, lp->hacr, (char *)&psa.psa_subband - (char *)&psa,
 		   (unsigned char *)&psa.psa_subband, 1);
 
 	  if(psa.psa_subband <= 4)
 	    {
-	      wrq->u.freq.m = bands[psa.psa_subband];
+	      wrq->u.freq.m = fixed_bands[psa.psa_subband];
 	      wrq->u.freq.e = (psa.psa_subband != 0);
 	    }
 	  else
@@ -1986,9 +1988,9 @@ wavelan_ioctl(struct net_device *	dev,	/* device on which the ioctl is applied *
 
     case SIOCSIWSENS:
       /* Set the level threshold. */
-      if(!suser())
-	return -EPERM;
-      psa.psa_thr_pre_set = wrq->u.sensitivity & 0x3F;
+      /* We should complain loudly if wrq->u.sens.fixed = 0, because we
+       * can't set auto mode... */
+      psa.psa_thr_pre_set = wrq->u.sens.value & 0x3F;
       psa_write(ioaddr, lp->hacr, (char *)&psa.psa_thr_pre_set - (char *)&psa,
 	       (unsigned char *) &psa.psa_thr_pre_set, 1);
       /* update the Wavelan checksum */
@@ -2000,7 +2002,8 @@ wavelan_ioctl(struct net_device *	dev,	/* device on which the ioctl is applied *
       /* Read the level threshold. */
       psa_read(ioaddr, lp->hacr, (char *)&psa.psa_thr_pre_set - (char *)&psa,
 	       (unsigned char *) &psa.psa_thr_pre_set, 1);
-      wrq->u.sensitivity = psa.psa_thr_pre_set & 0x3F;
+      wrq->u.sens.value = psa.psa_thr_pre_set & 0x3F;
+      wrq->u.sens.fixed = 1;
       break;
 
      case SIOCSIWENCODE:
@@ -2110,6 +2113,9 @@ wavelan_ioctl(struct net_device *	dev,	/* device on which the ioctl is applied *
 	  range.max_qual.qual = MMR_SGNL_QUAL;
 	  range.max_qual.level = MMR_SIGNAL_LVL;
 	  range.max_qual.noise = MMR_SILENCE_LVL;
+
+	  range.num_bitrates = 1;
+	  range.bitrate[0] = 2000000;	/* 2 Mb/s */
 
 	  /* Copy structure to the user buffer. */
 	  if (copy_to_user(wrq->u.data.pointer, &range, sizeof(struct iw_range)))

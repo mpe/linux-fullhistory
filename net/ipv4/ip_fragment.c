@@ -5,7 +5,7 @@
  *
  *		The IP fragmentation functionality.
  *		
- * Version:	$Id: ip_fragment.c,v 1.42 1999/06/12 13:11:34 davem Exp $
+ * Version:	$Id: ip_fragment.c,v 1.44 1999/08/20 11:05:19 davem Exp $
  *
  * Authors:	Fred N. van Kempen <waltje@uWalt.NL.Mugnet.ORG>
  *		Alan Cox <Alan.Cox@linux.org>
@@ -33,8 +33,7 @@
 #include <linux/tcp.h>
 #include <linux/udp.h>
 #include <linux/inet.h>
-#include <linux/firewall.h>
-#include <linux/ip_fw.h>
+#include <linux/netfilter_ipv4.h>
 
 /* Fragment cache limits. We will commit 256K at one time. Should we
  * cross that limit we will prune down to 192K. This should cope with
@@ -386,6 +385,10 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 	*	--rct
 	*/
 	skb->security = qp->fragments->skb->security;
+
+#ifdef CONFIG_NETFILTER_DEBUG
+	skb->nf_debug = qp->fragments->skb->nf_debug;
+#endif
 
 	/* Done with all fragments. Fixup the new IP header. */
 	iph = skb->nh.iph;

@@ -7,7 +7,7 @@
  *		handler for protocols to use and generic option handler.
  *
  *
- * Version:	$Id: sock.c,v 1.82 1999/05/27 00:37:03 davem Exp $
+ * Version:	$Id: sock.c,v 1.85 1999/08/23 05:16:08 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -116,7 +116,6 @@
 #include <net/ip.h>
 #include <net/protocol.h>
 #include <net/arp.h>
-#include <net/rarp.h>
 #include <net/route.h>
 #include <net/tcp.h>
 #include <net/udp.h>
@@ -180,7 +179,9 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 		return err;
 	
   	valbool = val?1:0;
-  	
+
+	lock_sock(sk);
+
   	switch(optname) 
   	{
 		case SO_DEBUG:	
@@ -257,14 +258,15 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			if ((val >= 0 && val <= 6) || capable(CAP_NET_ADMIN)) 
 				sk->priority = val;
 			else
-				return(-EPERM);
+				ret = -EPERM;
 			break;
 
 		case SO_LINGER:
-			if(optlen<sizeof(ling))
-				return -EINVAL;	/* 1003.1g */
-			err = copy_from_user(&ling,optval,sizeof(ling));
-			if (err)
+			if(optlen<sizeof(ling)) {
+				ret = -EINVAL;	/* 1003.1g */
+				break;
+			}
+			if (copy_from_user(&ling,optval,sizeof(ling)))
 			{
 				ret = -EFAULT;
 				break;
@@ -293,8 +295,10 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			char devname[IFNAMSIZ]; 
 
 			/* Sorry... */ 
-			if (!capable(CAP_NET_RAW)) 
-				return -EPERM; 
+			if (!capable(CAP_NET_RAW)) {
+				ret = -EPERM;
+				break;
+			}
 
 			/* Bind this socket to a particular device like "eth0",
 			 * as specified in the passed interface name. If the
@@ -307,24 +311,27 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			} else {
 				if (optlen > IFNAMSIZ) 
 					optlen = IFNAMSIZ; 
-				if (copy_from_user(devname, optval, optlen))
-					return -EFAULT;
+				if (copy_from_user(devname, optval, optlen)) {
+					ret = -EFAULT;
+					break;
+				}
 
 				/* Remove any cached route for this socket. */
-				lock_sock(sk);
-				dst_release(xchg(&sk->dst_cache, NULL));
-				release_sock(sk);
+				sk_dst_reset(sk);
 
 				if (devname[0] == '\0') {
 					sk->bound_dev_if = 0;
 				} else {
-					struct net_device *dev = dev_get(devname);
-					if (!dev)
-						return -EINVAL;
+					struct net_device *dev = dev_get_by_name(devname);
+					if (!dev) {
+						ret = -ENODEV;
+						break;
+					}
 					sk->bound_dev_if = dev->ifindex;
+					dev_put(dev);
 				}
-				return 0;
 			}
+			break;
 		}
 #endif
 
@@ -344,20 +351,25 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			break;
 
 		case SO_DETACH_FILTER:
+			spin_lock_bh(&sk->lock.slock);
 			filter = sk->filter;
-                        if(filter) {
+                        if (filter) {
 				sk->filter = NULL;
-				synchronize_bh();
+				spin_unlock_bh(&sk->lock.slock);
 				sk_filter_release(sk, filter);
-				return 0;
+				break;
 			}
-			return -ENOENT;
+			spin_unlock_bh(&sk->lock.slock);
+			ret = -ENONET;
+			break;
 #endif
 		/* We implement the SO_SNDLOWAT etc to
 		   not be settable (1003.1g 5.3) */
 		default:
-		  	return(-ENOPROTOOPT);
+		  	ret = -ENOPROTOOPT;
+			break;
   	}
+	release_sock(sk);
 	return ret;
 }
 
@@ -501,6 +513,7 @@ void sk_free(struct sock *sk)
 #ifdef CONFIG_FILTER
 	struct sk_filter *filter;
 #endif
+
 	if (sk->destruct)
 		sk->destruct(sk);
 
@@ -540,6 +553,7 @@ void sock_wfree(struct sk_buff *skb)
 	/* In case it might be waiting for more memory. */
 	atomic_sub(skb->truesize, &sk->wmem_alloc);
 	sk->write_space(sk);
+	sock_put(sk);
 }
 
 /* 
@@ -552,6 +566,10 @@ void sock_rfree(struct sk_buff *skb)
 	atomic_sub(skb->truesize, &sk->rmem_alloc);
 }
 
+void sock_cfree(struct sk_buff *skb)
+{
+	sock_put(skb->sk);
+}
 
 /*
  * Allocate a skb from the socket's send buffer.
@@ -561,9 +579,7 @@ struct sk_buff *sock_wmalloc(struct sock *sk, unsigned long size, int force, int
 	if (force || atomic_read(&sk->wmem_alloc) < sk->sndbuf) {
 		struct sk_buff * skb = alloc_skb(size, priority);
 		if (skb) {
-			atomic_add(skb->truesize, &sk->wmem_alloc);
-			skb->destructor = sock_wfree;
-			skb->sk = sk;
+			skb_set_owner_w(skb, sk);
 			return skb;
 		}
 	}
@@ -578,9 +594,7 @@ struct sk_buff *sock_rmalloc(struct sock *sk, unsigned long size, int force, int
 	if (force || atomic_read(&sk->rmem_alloc) < sk->rcvbuf) {
 		struct sk_buff *skb = alloc_skb(size, priority);
 		if (skb) {
-			atomic_add(skb->truesize, &sk->rmem_alloc);
-			skb->destructor = sock_rfree;
-			skb->sk = sk;
+			skb_set_owner_r(skb, sk);
 			return skb;
 		}
 	}
@@ -592,7 +606,8 @@ struct sk_buff *sock_rmalloc(struct sock *sk, unsigned long size, int force, int
  */ 
 void *sock_kmalloc(struct sock *sk, int size, int priority)
 {
-	if (atomic_read(&sk->omem_alloc)+size < sysctl_optmem_max) {
+	if ((unsigned)size <= sysctl_optmem_max &&
+	    atomic_read(&sk->omem_alloc)+size < sysctl_optmem_max) {
 		void *mem;
 		/* First do the add, to avoid the race if kmalloc
  		 * might sleep.
@@ -736,62 +751,57 @@ failure:
 	return NULL;
 }
 
-void lock_sock(struct sock *sk)
+void __lock_sock(struct sock *sk)
 {
-	spin_lock_bh(&sk->lock.slock);
-	if(sk->lock.users != 0) {
-		DECLARE_WAITQUEUE(wait, current);
+	DECLARE_WAITQUEUE(wait, current);
 
-		add_wait_queue_exclusive(&sk->lock.wq, &wait);
-		for(;;) {
-			current->state = TASK_EXCLUSIVE | TASK_UNINTERRUPTIBLE;
-			spin_unlock_bh(&sk->lock.slock);
-			schedule();
-			spin_lock_bh(&sk->lock.slock);
-			if(!sk->lock.users)
-				break;
-		}
-		current->state = TASK_RUNNING;
-		remove_wait_queue(&sk->lock.wq, &wait);
+	add_wait_queue_exclusive(&sk->lock.wq, &wait);
+	for(;;) {
+		current->state = TASK_EXCLUSIVE | TASK_UNINTERRUPTIBLE;
+		spin_unlock_bh(&sk->lock.slock);
+		schedule();
+		spin_lock_bh(&sk->lock.slock);
+		if(!sk->lock.users)
+			break;
 	}
-	sk->lock.users = 1;
-	spin_unlock_bh(&sk->lock.slock);
+	current->state = TASK_RUNNING;
+	remove_wait_queue(&sk->lock.wq, &wait);
 }
 
-void release_sock(struct sock *sk)
+void __release_sock(struct sock *sk)
 {
-	spin_lock_bh(&sk->lock.slock);
-	sk->lock.users = 0;
-	if(sk->backlog.tail != NULL) {
-		struct sk_buff *skb = sk->backlog.head;
-		do {	struct sk_buff *next = skb->next;
-			skb->next = NULL;
-			sk->backlog_rcv(sk, skb);
-			skb = next;
-		} while(skb != NULL);
-		sk->backlog.head = sk->backlog.tail = NULL;
-	}
-	wake_up(&sk->lock.wq);
-	spin_unlock_bh(&sk->lock.slock);
+	struct sk_buff *skb = sk->backlog.head;
+	do {
+		struct sk_buff *next = skb->next;
+		skb->next = NULL;
+		sk->backlog_rcv(sk, skb);
+		skb = next;
+	} while(skb != NULL);
+	sk->backlog.head = sk->backlog.tail = NULL;
 }
 
 /*
  *	Generic socket manager library. Most simpler socket families
  *	use this to manage their socket lists. At some point we should
  *	hash these. By making this generic we get the lot hashed for free.
+ *
+ *	It is broken by design. All the protocols using it must be fixed. --ANK
  */
+
+rwlock_t net_big_sklist_lock = RW_LOCK_UNLOCKED;
  
 void sklist_remove_socket(struct sock **list, struct sock *sk)
 {
 	struct sock *s;
 
-	start_bh_atomic();
+	write_lock_bh(&net_big_sklist_lock);
 
 	s= *list;
 	if(s==sk)
 	{
 		*list = s->next;
-		end_bh_atomic();
+		write_unlock_bh(&net_big_sklist_lock);
+		sock_put(sk);
 		return;
 	}
 	while(s && s->next)
@@ -803,15 +813,16 @@ void sklist_remove_socket(struct sock **list, struct sock *sk)
 		}
 		s=s->next;
 	}
-	end_bh_atomic();
+	write_unlock_bh(&net_big_sklist_lock);
 }
 
 void sklist_insert_socket(struct sock **list, struct sock *sk)
 {
-	start_bh_atomic();
+	write_lock_bh(&net_big_sklist_lock);
 	sk->next= *list;
 	*list=sk;
-	end_bh_atomic();
+	sock_hold(sk);
+	write_unlock_bh(&net_big_sklist_lock);
 }
 
 /*
@@ -853,7 +864,7 @@ void sklist_destroy_socket(struct sock **list,struct sock *sk)
 	   atomic_read(&sk->rmem_alloc) == 0 &&
 	   sk->dead)
 	{
-		sk_free(sk);
+		sock_put(sk);
 	}
 	else
 	{
@@ -875,14 +886,7 @@ void sklist_destroy_socket(struct sock **list,struct sock *sk)
  * function, some default processing is provided.
  */
 
-int sock_no_dup(struct socket *newsock, struct socket *oldsock)
-{
-	struct sock *sk = oldsock->sk;
-
-	return net_families[sk->family]->create(newsock, sk->protocol);
-}
-
-int sock_no_release(struct socket *sock, struct socket *peersock)
+int sock_no_release(struct socket *sock)
 {
 	return 0;
 }
@@ -986,7 +990,11 @@ int sock_no_recvmsg(struct socket *sock, struct msghdr *m, int flags,
 	return -EOPNOTSUPP;
 }
 
-
+int sock_no_mmap(struct file *file, struct socket *sock, struct vm_area_struct *vma)
+{
+	/* Mirror missing mmap method error code */
+	return -ENODEV;
+}
 
 /*
  *	Default Socket Callbacks
@@ -994,28 +1002,36 @@ int sock_no_recvmsg(struct socket *sock, struct msghdr *m, int flags,
 
 void sock_def_wakeup(struct sock *sk)
 {
+	read_lock(&sk->callback_lock);
 	if(!sk->dead)
 		wake_up_interruptible(sk->sleep);
+	read_unlock(&sk->callback_lock);
 }
 
 void sock_def_error_report(struct sock *sk)
 {
+	read_lock(&sk->callback_lock);
 	if (!sk->dead) {
 		wake_up_interruptible(sk->sleep);
 		sock_wake_async(sk->socket,0); 
 	}
+	read_unlock(&sk->callback_lock);
 }
 
 void sock_def_readable(struct sock *sk, int len)
 {
+	read_lock(&sk->callback_lock);
 	if(!sk->dead) {
 		wake_up_interruptible(sk->sleep);
 		sock_wake_async(sk->socket,1);
 	}
+	read_unlock(&sk->callback_lock);
 }
 
 void sock_def_write_space(struct sock *sk)
 {
+	read_lock(&sk->callback_lock);
+
 	/* Do not wake up a writer until he can make "significant"
 	 * progress.  --DaveM
 	 */
@@ -1027,6 +1043,7 @@ void sock_def_write_space(struct sock *sk)
 		if (sock_writeable(sk))
 			sock_wake_async(sk->socket, 2);
 	}
+	read_unlock(&sk->callback_lock);
 }
 
 void sock_def_destruct(struct sock *sk)
@@ -1040,7 +1057,8 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 	skb_queue_head_init(&sk->receive_queue);
 	skb_queue_head_init(&sk->write_queue);
 	skb_queue_head_init(&sk->error_queue);
-	
+
+	spin_lock_init(&sk->timer_lock);
 	init_timer(&sk->timer);
 	
 	sk->allocation	=	GFP_KERNEL;
@@ -1058,6 +1076,8 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 	} else
 		sk->sleep	=	NULL;
 
+	sk->callback_lock	=	RW_LOCK_UNLOCKED;
+
 	sk->state_change	=	sock_def_wakeup;
 	sk->data_ready		=	sock_def_readable;
 	sk->write_space		=	sock_def_write_space;
@@ -1068,4 +1088,5 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 	sk->peercred.uid	=	-1;
 	sk->peercred.gid	=	-1;
 
+	atomic_set(&sk->refcnt, 1);
 }

@@ -76,7 +76,7 @@
 #include <linux/notifier.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
-#include <linux/firewall.h>
+#include <linux/netfilter.h>
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/rtnetlink.h>
@@ -525,7 +525,7 @@ static int bpq_new_device(struct net_device *dev)
 
 		sprintf(buf, "bpq%d", k);
 
-		if ((odev = dev_get(buf)) == NULL || bpq_check_devices(odev))
+		if ((odev = __dev_get_by_name(buf)) == NULL || bpq_check_devices(odev))
 			break;
 	}
 

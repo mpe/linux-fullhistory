@@ -319,8 +319,8 @@
 #define TX_FRAME_PORT RX_FRAME_PORT
 #define TX_CMD_PORT	0x0004
 #define TX_NOW		0x0000       /*  Tx packet after   5 bytes copied */
-#define TX_AFTER_381	0x0020       /*  Tx packet after 381 bytes copied */
-#define TX_AFTER_ALL	0x0060       /*  Tx packet after all bytes copied */
+#define TX_AFTER_381	0x0040       /*  Tx packet after 381 bytes copied */
+#define TX_AFTER_ALL	0x00c0       /*  Tx packet after all bytes copied */
 #define TX_LEN_PORT	0x0006
 #define ISQ_PORT	0x0008
 #define ADD_PORT	0x000A

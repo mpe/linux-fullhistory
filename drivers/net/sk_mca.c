@@ -62,10 +62,16 @@ History:
 	implemented LANCE multicast filter
   Jun 6th, 1999
 	additions for Linux 2.2
+  Aug 2nd, 1999
+	small fixes (David Weinehall)
 
  *************************************************************************/
 
+#include <linux/module.h>
+#include <linux/version.h>
+
 #include <linux/kernel.h>
+#include <linux/version.h>
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/errno.h>
@@ -78,11 +84,6 @@ History:
 #include <asm/processor.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
-
-#ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -871,7 +872,7 @@ static struct enet_statistics *skmca_stats(struct net_device *dev)
   return &(priv->stat);
 }
 
-/* we don't support runtime reconfiguration, since am MCA card can
+/* we don't support runtime reconfiguration, since an MCA card can
    be unambigously identified by its POS registers. */
 
 static int skmca_config(struct net_device *dev, struct ifmap *map)
@@ -962,9 +963,6 @@ int skmca_probe(struct net_device *dev)
 
     getaddrs(slot, junior, &base, &irq, &medium);
 
-#if 0
-    /* this should work, but it doesn't with 2.2.9 :-( 
-       somehow 'mca_is_adapter_used()' is missing in kernel syms... */
 #if LINUX_VERSION_CODE >= 0x020200
     /* slot already in use ? */
 
@@ -973,7 +971,6 @@ int skmca_probe(struct net_device *dev)
       slot = dofind(&junior, slot + 1);
       continue;
     }
-#endif
 #endif
 
     /* were we looking for something different ? */

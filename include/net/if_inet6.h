@@ -15,22 +15,6 @@
 #ifndef _NET_IF_INET6_H
 #define _NET_IF_INET6_H
 
-/* These flags match corresponding IFA_F_* flags but ADDR_INVALID,
-   which is invisible externally.
- */
-
-#define ADDR_PERMANENT	0x80
-
-#define DAD_COMPLETE	0x00
-#define DAD_INCOMPLETE	0x40
-#define DAD_STATUS	0x40
-
-#define ADDR_STATUS	0x21
-#define ADDR_DEPRECATED 0x20
-#define ADDR_INVALID	0x01
-
-
-
 #define IF_RA_RCVD	0x20
 #define IF_RS_SENT	0x10
 
@@ -45,6 +29,7 @@ struct inet6_ifaddr
 	__u32			prefered_lft;
 	unsigned long		tstamp;
 	atomic_t		refcnt;
+	spinlock_t		lock;
 
 	__u8			probes;
 	__u8			flags;
@@ -57,8 +42,9 @@ struct inet6_ifaddr
 
 	struct inet6_ifaddr	*lst_next;      /* next addr in addr_lst */
 	struct inet6_ifaddr	*if_next;       /* next addr in inet6_dev */
-};
 
+	int			dead;
+};
 
 struct ipv6_mc_socklist
 {
@@ -74,9 +60,8 @@ struct ipv6_mc_socklist
 struct ifmcaddr6
 {
 	struct in6_addr		mca_addr;
-	struct net_device		*dev;
+	struct inet6_dev	*idev;
 	struct ifmcaddr6	*next;
-	struct ifmcaddr6	*if_next;
 	struct timer_list	mca_timer;
 	unsigned		mca_flags;
 	atomic_t		mca_users;	
@@ -110,7 +95,9 @@ struct inet6_dev
 	struct inet6_ifaddr	*addr_list;
 	struct ifmcaddr6	*mc_list;
 	rwlock_t		lock;
+	atomic_t		refcnt;
 	__u32			if_flags;
+	int			dead;
 
 	struct neigh_parms	*nd_parms;
 	struct inet6_dev	*next;

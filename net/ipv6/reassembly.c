@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: reassembly.c,v 1.13 1999/06/09 08:29:40 davem Exp $
+ *	$Id: reassembly.c,v 1.15 1999/08/20 11:06:27 davem Exp $
  *
  *	Based on: net/ipv4/ip_fragment.c
  *
@@ -49,6 +49,8 @@ int sysctl_ip6frag_low_thresh = 192*1024;
 int sysctl_ip6frag_time = IPV6_FRAG_TIMEOUT;
 
 atomic_t ip6_frag_mem = ATOMIC_INIT(0);
+
+static spinlock_t ip6_frag_lock = SPIN_LOCK_UNLOCKED;
 
 struct ipv6_frag {
 	__u16			offset;
@@ -131,15 +133,19 @@ static void frag_prune(void)
 {
 	struct frag_queue *fq;
 
+	spin_lock(&ip6_frag_lock);
 	while ((fq = ipv6_frag_queue.next) != &ipv6_frag_queue) {
 		ipv6_statistics.Ip6ReasmFails++;
 		fq_free(fq);
-		if (atomic_read(&ip6_frag_mem) <= sysctl_ip6frag_low_thresh)
+		if (atomic_read(&ip6_frag_mem) <= sysctl_ip6frag_low_thresh) {
+			spin_unlock(&ip6_frag_lock);
 			return;
+		}
 	}
 	if (atomic_read(&ip6_frag_mem))
 		printk(KERN_DEBUG "IPv6 frag_prune: memleak\n");
 	atomic_set(&ip6_frag_mem, 0);
+	spin_unlock(&ip6_frag_lock);
 }
 
 
@@ -166,21 +172,25 @@ u8* ipv6_reassembly(struct sk_buff **skbp, __u8 *nhptr)
 	if (atomic_read(&ip6_frag_mem) > sysctl_ip6frag_high_thresh)
 		frag_prune();
 
+	spin_lock(&ip6_frag_lock);
 	for (fq = ipv6_frag_queue.next; fq != &ipv6_frag_queue; fq = fq->next) {
 		if (fq->id == fhdr->identification && 
 		    !ipv6_addr_cmp(&hdr->saddr, &fq->saddr) &&
 		    !ipv6_addr_cmp(&hdr->daddr, &fq->daddr)) {
+			u8 *ret = NULL;
 
 			reasm_queue(fq, skb, fhdr, nhptr);
 
 			if (fq->last_in == (FIRST_IN|LAST_IN))
-				return reasm_frag(fq, skbp);
+				ret = reasm_frag(fq, skbp);
 
-			return NULL;
+			spin_unlock(&ip6_frag_lock);
+			return ret;
 		}
 	}
 
 	create_frag_entry(skb, nhptr, fhdr);
+	spin_unlock(&ip6_frag_lock);
 
 	return NULL;
 }
@@ -214,12 +224,15 @@ static void frag_expire(unsigned long data)
 
 	fq = (struct frag_queue *) data;
 
+	spin_lock(&ip6_frag_lock);
+
 	frag = fq->fragments;
 
 	ipv6_statistics.Ip6ReasmTimeout++;
 	ipv6_statistics.Ip6ReasmFails++;
 
 	if (frag == NULL) {
+		spin_unlock(&ip6_frag_lock);
 		printk(KERN_DEBUG "invalid fragment queue\n");
 		return;
 	}
@@ -239,10 +252,12 @@ static void frag_expire(unsigned long data)
 			frag->skb->dev = dev;
 			icmpv6_send(frag->skb, ICMPV6_TIME_EXCEED, ICMPV6_EXC_FRAGTIME, 0,
 				    dev);
+			dev_put(dev);
 		}
 	}
 	
 	fq_free(fq);
+	spin_unlock(&ip6_frag_lock);
 }
 
 

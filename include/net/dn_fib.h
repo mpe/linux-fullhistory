@@ -73,12 +73,12 @@ extern void dn_fib_cleanup(void);
 
 extern int dn_fib_rt_message(struct sk_buff *skb);
 extern int dn_fib_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg);
+extern int dn_fib_resolve(struct dn_fib_res *res);
 
 #ifdef CONFIG_RTNETLINK
 extern int dn_fib_rtm_delroute(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg);
 extern int dn_fib_rtm_newroute(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg);
 extern int dn_fib_dump(struct sk_buff *skb, struct netlink_callback *cb);
-extern int dn_fib_rtm_getroute(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg);
 #endif /* CONFIG_RTNETLINK */
 #endif /* CONFIG_DECNET_ROUTER */
 

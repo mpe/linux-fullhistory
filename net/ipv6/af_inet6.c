@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.45 1999/07/02 11:26:38 davem Exp $
+ *	$Id: af_inet6.c,v 1.46 1999/08/20 11:06:16 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -40,6 +40,7 @@
 #include <linux/inet.h>
 #include <linux/netdevice.h>
 #include <linux/icmpv6.h>
+#include <linux/smp_lock.h>
 
 #include <net/ip.h>
 #include <net/ipv6.h>
@@ -84,6 +85,16 @@ extern void ipv6_sysctl_register(void);
 extern void ipv6_sysctl_unregister(void);
 #endif
 
+atomic_t inet6_sock_nr;
+
+static void inet6_sock_destruct(struct sock *sk)
+{
+	inet_sock_destruct(sk);
+
+	atomic_dec(&inet6_sock_nr);
+	MOD_DEC_USE_COUNT;
+}
+
 static int inet6_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;
@@ -121,7 +132,7 @@ static int inet6_create(struct socket *sock, int protocol)
 	
 	sock_init_data(sock, sk);
 
-	sk->destruct            = NULL;
+	sk->destruct            = inet6_sock_destruct;
 	sk->zapped		= 0;
 	sk->family		= PF_INET6;
 	sk->protocol		= protocol;
@@ -130,7 +141,7 @@ static int inet6_create(struct socket *sock, int protocol)
 	sk->backlog_rcv		= prot->backlog_rcv;
 
 	sk->timer.data		= (unsigned long)sk;
-	sk->timer.function	= &net_timer;
+	sk->timer.function	= &tcp_keepalive_timer;
 
 	sk->net_pinfo.af_inet6.hop_limit  = -1;
 	sk->net_pinfo.af_inet6.mcast_hops = -1;
@@ -140,15 +151,19 @@ static int inet6_create(struct socket *sock, int protocol)
 	/* Init the ipv4 part of the socket since we can have sockets
 	 * using v6 API for ipv4.
 	 */
-	sk->ip_ttl	= 64;
+	sk->protinfo.af_inet.ttl	= 64;
 
-	sk->ip_mc_loop	= 1;
-	sk->ip_mc_ttl	= 1;
-	sk->ip_mc_index	= 0;
-	sk->ip_mc_list	= NULL;
+	sk->protinfo.af_inet.mc_loop	= 1;
+	sk->protinfo.af_inet.mc_ttl	= 1;
+	sk->protinfo.af_inet.mc_index	= 0;
+	sk->protinfo.af_inet.mc_list	= NULL;
+
+	atomic_inc(&inet6_sock_nr);
+	atomic_inc(&inet_sock_nr);
+	MOD_INC_USE_COUNT;
 
 	if (sk->type==SOCK_RAW && protocol==IPPROTO_RAW)
-		sk->ip_hdrincl=1;
+		sk->protinfo.af_inet.hdrincl=1;
 
 	if (sk->num) {
 		/* It assumes that any protocol which allows
@@ -162,11 +177,11 @@ static int inet6_create(struct socket *sock, int protocol)
 	if (sk->prot->init) {
 		int err = sk->prot->init(sk);
 		if (err != 0) {
-			destroy_sock(sk);
+			sk->dead = 1;
+			inet_sock_release(sk);
 			return(err);
 		}
 	}
-	MOD_INC_USE_COUNT;
 	return(0);
 
 free_and_badtype:
@@ -195,13 +210,10 @@ static int inet6_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	/* If the socket has its own bind function then use it. */
 	if(sk->prot->bind)
 		return sk->prot->bind(sk, uaddr, addr_len);
-		
-	/* Check these errors (active socket, bad address length, double bind). */
-	if ((sk->state != TCP_CLOSE)			||
-	    (addr_len < sizeof(struct sockaddr_in6))	||
-	    (sk->num != 0))
+
+	if (addr_len < sizeof(struct sockaddr_in6))
 		return -EINVAL;
-		
+
 	addr_type = ipv6_addr_type(&addr->sin6_addr);
 	if ((addr_type & IPV6_ADDR_MULTICAST) && sock->type == SOCK_STREAM)
 		return -EINVAL;
@@ -218,39 +230,54 @@ static int inet6_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 			 */
 			v4addr = LOOPBACK4_IPV6;
 			if (!(addr_type & IPV6_ADDR_MULTICAST))	{
-				if (ipv6_chk_addr(&addr->sin6_addr, NULL, 0) == NULL)
+				if (!ipv6_chk_addr(&addr->sin6_addr, NULL))
 					return -EADDRNOTAVAIL;
 			}
 		}
 	}
 
-	sk->rcv_saddr = v4addr;
-	sk->saddr = v4addr;
-		
-	memcpy(&sk->net_pinfo.af_inet6.rcv_saddr, &addr->sin6_addr, 
-	       sizeof(struct in6_addr));
-		
-	if (!(addr_type & IPV6_ADDR_MULTICAST))
-		memcpy(&sk->net_pinfo.af_inet6.saddr, &addr->sin6_addr, 
-		       sizeof(struct in6_addr));
-
 	snum = ntohs(addr->sin6_port);
 	if (snum && snum < PROT_SOCK && !capable(CAP_NET_BIND_SERVICE))
 		return -EACCES;
 
+	lock_sock(sk);
+
+	/* Check these errors (active socket, double bind). */
+	if ((sk->state != TCP_CLOSE)			||
+	    (sk->num != 0)) {
+		release_sock(sk);
+		return -EINVAL;
+	}
+
+	sk->rcv_saddr = v4addr;
+	sk->saddr = v4addr;
+
+	ipv6_addr_copy(&sk->net_pinfo.af_inet6.rcv_saddr, &addr->sin6_addr);
+		
+	if (!(addr_type & IPV6_ADDR_MULTICAST))
+		ipv6_addr_copy(&sk->net_pinfo.af_inet6.saddr, &addr->sin6_addr);
+
 	/* Make sure we are allowed to bind here. */
-	if(sk->prot->get_port(sk, snum) != 0)
+	if (sk->prot->get_port(sk, snum) != 0) {
+		sk->rcv_saddr = 0;
+		sk->saddr = 0;
+		memset(&sk->net_pinfo.af_inet6.rcv_saddr, 0, sizeof(struct in6_addr));
+		memset(&sk->net_pinfo.af_inet6.saddr, 0, sizeof(struct in6_addr));
+
+		release_sock(sk);
 		return -EADDRINUSE;
+	}
 
 	sk->sport = ntohs(sk->num);
 	sk->dport = 0;
 	sk->daddr = 0;
 	sk->prot->hash(sk);
+	release_sock(sk);
 
-	return(0);
+	return 0;
 }
 
-static int inet6_release(struct socket *sock, struct socket *peer)
+static int inet6_release(struct socket *sock)
 {
 	struct sock *sk = sock->sk;
 
@@ -260,15 +287,7 @@ static int inet6_release(struct socket *sock, struct socket *peer)
 	/* Free mc lists */
 	ipv6_sock_mc_close(sk);
 
-	/* Huh! MOD_DEC_USE_COUNT was here :-(
-	   It is impossible by two reasons: socket destroy
-	   may be delayed and inet_release may sleep and
-	   return to nowhere then. It should be moved to
-	   inet6_destroy_sock(), but we have no explicit constructor :-(
-	                                    --ANK (980802)
-	 */
-	MOD_DEC_USE_COUNT;
-	return inet_release(sock, peer);
+	return inet_release(sock);
 }
 
 int inet6_destroy_sock(struct sock *sk)
@@ -280,7 +299,7 @@ int inet6_destroy_sock(struct sock *sk)
 	 *	Release destination entry
 	 */
 
-	dst_release(xchg(&sk->dst_cache,NULL));
+	sk_dst_reset(sk);
 
 	/* Release rx options */
 
@@ -306,13 +325,12 @@ static int inet6_getname(struct socket *sock, struct sockaddr *uaddr,
 		 int *uaddr_len, int peer)
 {
 	struct sockaddr_in6 *sin=(struct sockaddr_in6 *)uaddr;
-	struct sock *sk;
+	struct sock *sk = sock->sk;
   
 	sin->sin6_family = AF_INET6;
 	sin->sin6_flowinfo = 0;
-	sk = sock->sk;
 	if (peer) {
-		if (!tcp_connected(sk->state))
+		if (!sk->dport)
 			return -ENOTCONN;
 		sin->sin6_port = sk->dport;
 		memcpy(&sin->sin6_addr, &sk->net_pinfo.af_inet6.daddr,
@@ -397,7 +415,6 @@ static int inet6_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 struct proto_ops inet6_stream_ops = {
 	PF_INET6,
 
-	sock_no_dup,
 	inet6_release,
 	inet6_bind,
 	inet_stream_connect,		/* ok		*/
@@ -412,13 +429,13 @@ struct proto_ops inet6_stream_ops = {
 	inet_getsockopt,		/* ok		*/
 	sock_no_fcntl,			/* ok		*/
 	inet_sendmsg,			/* ok		*/
-	inet_recvmsg			/* ok		*/
+	inet_recvmsg,			/* ok		*/
+	sock_no_mmap
 };
 
 struct proto_ops inet6_dgram_ops = {
 	PF_INET6,
 
-	sock_no_dup,
 	inet6_release,
 	inet6_bind,
 	inet_dgram_connect,		/* ok		*/
@@ -433,7 +450,8 @@ struct proto_ops inet6_dgram_ops = {
 	inet_getsockopt,		/* ok		*/
 	sock_no_fcntl,			/* ok		*/
 	inet_sendmsg,			/* ok		*/
-	inet_recvmsg			/* ok		*/
+	inet_recvmsg,			/* ok		*/
+	sock_no_mmap,
 };
 
 struct net_proto_family inet6_family_ops = {

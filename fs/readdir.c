@@ -142,7 +142,7 @@ static int filldir(void * __buf, const char * name, int namlen, off_t offset, in
 	return 0;
 }
 
-asmlinkage int sys_getdents(unsigned int fd, void * dirent, unsigned int count)
+asmlinkage long sys_getdents(unsigned int fd, void * dirent, unsigned int count)
 {
 	struct file * file;
 	struct dentry * dentry;

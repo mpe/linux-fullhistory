@@ -266,7 +266,7 @@ void gdth_halt(void);
 
 #ifdef DEBUG_GDTH
 static unchar   DebugState = DEBUG_GDTH;
-extern int sys_syslog(int,char*,int);
+extern long sys_syslog(int,char*,int);
 #define LOGEN sys_syslog(7,NULL,0)
 
 #ifdef __SERIAL__

@@ -110,6 +110,7 @@ EXPORT_SYMBOL(mca_isadapter);
 EXPORT_SYMBOL(mca_mark_as_used);
 EXPORT_SYMBOL(mca_mark_as_unused);
 EXPORT_SYMBOL(mca_find_unused_adapter);
+EXPORT_SYMBOL(mca_is_adapter_used);
 #endif
 
 #ifdef CONFIG_VT

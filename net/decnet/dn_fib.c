@@ -9,6 +9,7 @@
  *
  *
  * Changes:
+ *              Alexey Kuznetsov : SMP locking changes
  *
  */
 #include <linux/config.h>
@@ -46,6 +47,7 @@
 #ifdef CONFIG_RTNETLINK
 static int dn_fib_table_dump(struct dn_fib_table *t, struct sk_buff *skb, struct netlink_callback *cb);
 static void dn_rtmsg_fib(int event, int table, struct dn_fib_action *fa, struct nlmsghdr *nlh, struct netlink_skb_parms *req);
+extern int dn_cache_dump(struct sk_buff *skb, struct netlink_callback *cb);
 #endif /* CONFIG_RTNETLINK */
 
 static void dn_fib_del_tree(struct dn_fib_table *t);
@@ -448,7 +450,7 @@ int dn_fib_resolve(struct dn_fib_res *res)
 		struct dn_fib_table *t = dn_fib_get_tree(table, 0);
 
 		if (t == NULL)
-			return -ENOBUFS;
+			return -ENOENT;
 
 		if ((err = t->lookup(t, res)) < 0)
 			return err;
@@ -465,7 +467,13 @@ int dn_fib_resolve(struct dn_fib_res *res)
 			return -ENOENT;
 	}
 
-	return (fa->fa_type == RTN_PROHIBIT) ? -fa->fa_error : 0;
+	switch(fa->fa_type) {
+		case RTN_PROHIBIT:
+		case RTN_UNREACHABLE:
+			return -fa->fa_error;
+	}
+
+	return 0;
 }
 
 /*
@@ -487,7 +495,7 @@ static int dn_fib_convert_rtm(struct dn_fib_action *fa,
 					struct netlink_skb_parms *req)
 {
 	dn_address dst, gw, mask = 0xffff;
-	int ifindex;
+	int ifindex = 0;
 	struct neighbour *neigh;
 	struct net_device *dev;
 	unsigned char addr[ETH_ALEN];
@@ -505,16 +513,16 @@ static int dn_fib_convert_rtm(struct dn_fib_action *fa,
 		memcpy(&gw, RTA_DATA(rta[RTA_GATEWAY-1]), 2);
 
 	fa->fa_key      = dn_ntohs(dst);
-	fa->fa_mask     = mask;
+	fa->fa_mask     = dn_ntohs(mask);
 	fa->fa_ifindex  = ifindex;
 	fa->fa_proto    = r->rtm_protocol;
 	fa->fa_type     = r->rtm_type;
 
 	switch(fa->fa_type) {
 		case RTN_UNICAST:
-			if ((dev = dev_get_by_index(ifindex)) == NULL)
+			if ((dev = __dev_get_by_index(ifindex)) == NULL)
 				return -ENODEV;
-			dn_dn2eth(addr, gw);
+			dn_dn2eth(addr, dn_ntohs(gw));
 			if ((neigh = __neigh_lookup(&dn_neigh_table, &addr, dev, 1)) == NULL)
 				return -EHOSTUNREACH;
 			fa->fa_neigh = neigh;
@@ -523,10 +531,13 @@ static int dn_fib_convert_rtm(struct dn_fib_action *fa,
 			fa->fa_table = 0;
 			break;
 		case RTN_PROHIBIT:
-			fa->fa_error = 0;
+			fa->fa_error = EPERM;
 			break;
 		case RTN_UNREACHABLE:
 			fa->fa_error = EHOSTUNREACH;
+			break;
+		case RTN_BLACKHOLE:
+			fa->fa_error = EINVAL;
 			break;
 	}
 
@@ -662,20 +673,31 @@ static int dn_fib_table_dump(struct dn_fib_table *t, struct sk_buff *skb, struct
 
 int dn_fib_dump(struct sk_buff *skb, struct netlink_callback *cb)
 {
+	int t;
 	int s_t;
-	struct dn_fib_table *t;
+	struct dn_fib_table *tb;
 
-	for(s_t = cb->args[0]; s_t < DN_NUM_TABLES; s_t++) {
-		if (s_t > cb->args[0])
-			memset(&cb->args[1], 0, sizeof(cb->args)-sizeof(int));
-		t = dn_fib_get_tree(s_t, 0);
-		if (t == NULL)
+	if (NLMSG_PAYLOAD(cb->nlh, 0) >= sizeof(struct rtmsg) &&
+		((struct rtmsg *)NLMSG_DATA(cb->nlh))->rtm_flags&RTM_F_CLONED)
+			return dn_cache_dump(skb, cb);
+
+	s_t = cb->args[0];
+	if (s_t == 0)
+		s_t = cb->args[0] = DN_MIN_TABLE;
+
+	for(t = s_t; t < DN_NUM_TABLES; t++) {
+		if (t < s_t)
 			continue;
-		if (t->dump(t, skb, cb) < 0)
+		if (t > s_t)
+			memset(&cb->args[1], 0, sizeof(cb->args)-sizeof(int));
+		tb = dn_fib_get_tree(t, 0);
+		if (tb == NULL)
+			continue;
+		if (tb->dump(tb, skb, cb) < 0)
 			break;
 	}
 
-	cb->args[0] = s_t;
+	cb->args[0] = t;
 
 	return skb->len;
 }
@@ -695,6 +717,8 @@ int dn_fib_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 
 	return -EINVAL;
 }
+
+#ifdef CONFIG_PROC_FS
 
 struct dn_fib_procfs {
 	int len;
@@ -780,6 +804,8 @@ static struct proc_dir_entry proc_net_decnet_route = {
         0, &proc_net_inode_operations,
 	decnet_rt_get_info
 };
+
+#endif /* CONFIG_PROC_FS */
 
 #ifdef CONFIG_DECNET_MODULE
 void dn_fib_cleanup(void)

@@ -14,11 +14,11 @@
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
 *******************************************************************************/
-/* dn_route.c functions prototyping */
-extern void dn_send_skb(struct sk_buff *);
-extern struct sk_buff *dn_alloc_skb(struct sock *sk, int size, int pri);
-extern int dn_route_output(struct sock *sk);
 
+extern struct sk_buff *dn_alloc_skb(struct sock *sk, int size, int pri);
+extern int dn_route_output(struct dst_entry **pprt, dn_address dst, dn_address src, int flags);
+extern int dn_cache_dump(struct sk_buff *skb, struct netlink_callback *cb);
+extern int dn_cache_getroute(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg);
 /* Masks for flags field */
 #define DN_RT_F_PID 0x07 /* Mask for packet type                      */
 #define DN_RT_F_PF  0x80 /* Padding Follows                           */
@@ -70,5 +70,55 @@ struct dn_route {
 
 extern void dn_route_init(void);
 extern void dn_route_cleanup(void);
+
+#include <net/sock.h>
+#include <linux/if_arp.h>
+
+extern __inline__ void dn_rt_send(struct sk_buff *skb)
+{
+	dev_queue_xmit(skb);
+}
+
+extern __inline__ void dn_rt_finish_output(struct sk_buff *skb, char *dst)
+{
+	struct net_device *dev = skb->dev;
+
+	if ((dev->type != ARPHRD_ETHER) && (dev->type != ARPHRD_LOOPBACK))
+		dst = NULL;
+
+	if (!dev->hard_header || (dev->hard_header(skb, dev, ETH_P_DNA_RT,
+			dst, NULL, skb->len) >= 0))
+		dn_rt_send(skb);
+	else
+		kfree_skb(skb);
+}
+
+extern __inline__ void dn_nsp_send(struct sk_buff *skb)
+{
+	struct sock *sk = skb->sk;
+	struct dn_scp *scp = &sk->protinfo.dn;
+	struct dst_entry *dst;
+
+	skb->h.raw = skb->data;
+	scp->stamp = jiffies;
+
+	if ((dst = sk->dst_cache) && !dst->obsolete) {
+try_again:
+		skb->dst = dst_clone(dst);
+		dst->output(skb);
+		return;
+	}
+
+	dst_release(xchg(&sk->dst_cache, NULL));
+
+	if (dn_route_output(&sk->dst_cache, dn_saddr2dn(&scp->peer), dn_saddr2dn(&scp->addr), 0) == 0) {
+		dst = sk->dst_cache;
+		goto try_again;
+	}
+
+	sk->err = EHOSTUNREACH;
+	if (!sk->dead)
+		sk->state_change(sk);
+}
 
 #endif /* _NET_DN_ROUTE_H */

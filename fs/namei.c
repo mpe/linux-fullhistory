@@ -849,7 +849,7 @@ exit_lock:
 	return retval;
 }
 
-asmlinkage int sys_mknod(const char * filename, int mode, dev_t dev)
+asmlinkage long sys_mknod(const char * filename, int mode, dev_t dev)
 {
 	int error;
 	char * tmp;
@@ -940,7 +940,7 @@ exit:
 	return error;
 }
 
-asmlinkage int sys_mkdir(const char * pathname, int mode)
+asmlinkage long sys_mkdir(const char * pathname, int mode)
 {
 	int error;
 	char * tmp;
@@ -1035,7 +1035,7 @@ exit:
 	return error;
 }
 
-asmlinkage int sys_rmdir(const char * pathname)
+asmlinkage long sys_rmdir(const char * pathname)
 {
 	int error;
 	char * tmp;
@@ -1088,7 +1088,7 @@ exit:
 	return error;
 }
 
-asmlinkage int sys_unlink(const char * pathname)
+asmlinkage long sys_unlink(const char * pathname)
 {
 	int error;
 	char * tmp;
@@ -1139,7 +1139,7 @@ exit:
 	return error;
 }
 
-asmlinkage int sys_symlink(const char * oldname, const char * newname)
+asmlinkage long sys_symlink(const char * oldname, const char * newname)
 {
 	int error;
 	char * from;
@@ -1227,7 +1227,7 @@ exit:
 	return error;
 }
 
-asmlinkage int sys_link(const char * oldname, const char * newname)
+asmlinkage long sys_link(const char * oldname, const char * newname)
 {
 	int error;
 	char * from;
@@ -1398,7 +1398,7 @@ exit:
 	return error;
 }
 
-asmlinkage int sys_rename(const char * oldname, const char * newname)
+asmlinkage long sys_rename(const char * oldname, const char * newname)
 {
 	int error;
 	char * from;

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.110 1999/05/27 00:37:45 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.112 1999/08/23 06:30:37 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -63,6 +63,50 @@ static __inline__ void update_send_head(struct sock *sk)
 	tp->send_head = tp->send_head->next;
 	if (tp->send_head == (struct sk_buff *) &sk->write_queue)
 		tp->send_head = NULL;
+}
+
+/* Calculate mss to advertise in SYN segment.
+   RFC1122, RFC1063, draft-ietf-tcpimpl-pmtud-01 state that:
+
+   1. It is independent of path mtu.
+   2. Ideally, it is maximal possible segment size i.e. 65535-40.
+   3. For IPv4 it is reasonable to calculate it from maximal MTU of
+      attached devices, because some buggy hosts are confused by
+      large MSS.
+   4. We do not make 3, we advertise MSS, calculated from first
+      hop device mtu, but allow to raise it to ip_rt_min_advmss.
+      This may be overriden via information stored in routing table.
+   5. Value 65535 for MSS is valid in IPv6 and means "as large as possible,
+      probably even Jumbo".
+ */
+static __u16 tcp_advertise_mss(struct sock *sk)
+{
+	struct dst_entry *dst = __sk_dst_get(sk);
+	int mss;
+
+	if (dst) {
+		mss = dst->advmss;
+	} else {
+		struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+
+		/* No dst. It is bad. Guess some reasonable value.
+		 * Actually, this case should not be possible.
+		 * SANITY.
+		 */
+		BUG_TRAP(dst!=NULL);
+
+		mss = tp->mss_cache;
+		mss += (tp->tcp_header_len - sizeof(struct tcphdr)) +
+			tp->ext_header_len;
+
+		/* Minimal MSS to include full set of of TCP/IP options
+		   plus 8 bytes of data. It corresponds to mtu 128.
+		 */
+		if (mss < 88)
+			mss = 88;
+	}
+
+	return (__u16)mss;
 }
 
 /* This routine actually transmits TCP packets queued in by
@@ -124,8 +168,6 @@ void tcp_transmit_skb(struct sock *sk, struct sk_buff *skb)
 		th->doff		= (tcp_header_size >> 2);
 		th->res1		= 0;
 		*(((__u8 *)th) + 13)	= tcb->flags;
-		if(!(tcb->flags & TCPCB_FLAG_SYN))
-			th->window	= htons(tcp_select_window(sk));
 		th->check		= 0;
 		th->urg_ptr		= ntohs(tcb->urg_ptr);
 		if(tcb->flags & TCPCB_FLAG_SYN) {
@@ -133,7 +175,8 @@ void tcp_transmit_skb(struct sock *sk, struct sk_buff *skb)
 			 * is never scaled.
 			 */
 			th->window	= htons(tp->rcv_wnd);
-			tcp_syn_build_options((__u32 *)(th + 1), tp->mss_clamp,
+			tcp_syn_build_options((__u32 *)(th + 1),
+					      tcp_advertise_mss(sk),
 					      (sysctl_flags & SYSCTL_FLAG_TSTAMPS),
 					      (sysctl_flags & SYSCTL_FLAG_SACK),
 					      (sysctl_flags & SYSCTL_FLAG_WSCALE),
@@ -141,6 +184,7 @@ void tcp_transmit_skb(struct sock *sk, struct sk_buff *skb)
 					      TCP_SKB_CB(skb)->when,
 		      			      tp->ts_recent);
 		} else {
+			th->window	= htons(tcp_select_window(sk));
 			tcp_build_and_update_options((__u32 *)(th + 1),
 						     tp, TCP_SKB_CB(skb)->when);
 		}
@@ -283,7 +327,8 @@ int tcp_sync_mss(struct sock *sk, u32 pmtu)
 
 	/* Calculate base mss without TCP options:
 	   It is MMS_S - sizeof(tcphdr) of rfc1122
-	*/
+	 */
+
 	mss_now = pmtu - tp->af_specific->net_header_len - sizeof(struct tcphdr);
 
 	/* Clamp it (mss_clamp does not include tcp options) */
@@ -415,30 +460,30 @@ void tcp_write_xmit(struct sock *sk)
  * a multiple of the mss when it is feasible to do so.
  *
  * Note, we don't "adjust" for TIMESTAMP or SACK option bytes.
+ * Regular options like TIMESTAMP are taken into account.
  */
 u32 __tcp_select_window(struct sock *sk)
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
-	unsigned int mss = tp->mss_cache;
+	/* MSS for the peer's data.  Previous verions used mss_clamp
+	 * here.  I don't know if the value based on our guesses
+	 * of peer's MSS is better for the performance.  It's more correct
+	 * but may be worse for the performance because of rcv_mss
+	 * fluctuations.  --SAW  1998/11/1
+	 */
+	unsigned int mss = tp->rcv_mss;
 	int free_space;
 	u32 window;
 
 	/* Sometimes free_space can be < 0. */
-	free_space = (sk->rcvbuf - atomic_read(&sk->rmem_alloc)) / 2;
-	if (tp->window_clamp) {
-		if (free_space > ((int) tp->window_clamp))
-			free_space = tp->window_clamp;
-		mss = min(tp->window_clamp, mss);
-	} else {
-		printk("tcp_select_window: tp->window_clamp == 0.\n");
-	}
-
-	if (mss < 1) {
-		mss = 1;
-		printk("tcp_select_window: sk->mss fell to 0.\n");
-	}
+	free_space = tcp_space(sk); 
+	if (free_space > ((int) tp->window_clamp))
+		free_space = tp->window_clamp;
+	if (tp->window_clamp < mss)
+		mss = tp->window_clamp; 
 	
-	if ((free_space < (sk->rcvbuf/4)) && (free_space < ((int) (mss/2)))) {
+	if ((free_space < (tcp_full_space(sk) / 2)) && 
+		(free_space < ((int) (mss/2)))) {
 		window = 0;
 		tp->pred_flags = 0; 
 	} else {
@@ -741,7 +786,7 @@ void tcp_send_fin(struct sock *sk)
 		 */
 		if(tp->send_head == skb &&
 		   !sk->nonagle &&
-		   skb->len < (tp->mss_cache >> 1) &&
+		   skb->len < (tp->rcv_mss >> 1) &&
 		   tp->packets_out &&
 		   !(TCP_SKB_CB(skb)->flags & TCPCB_FLAG_URG)) {
 			update_send_head(sk);
@@ -813,7 +858,7 @@ int tcp_send_synack(struct sock *sk)
 {
 	struct tcp_opt* tp = &(sk->tp_pinfo.af_tcp);
 	struct sk_buff* skb;	
-	
+
 	skb = sock_wmalloc(sk, (MAX_HEADER + sk->prot->max_header),
 			   1, GFP_ATOMIC);
 	if (skb == NULL) 
@@ -840,7 +885,7 @@ int tcp_send_synack(struct sock *sk)
  * Prepare a SYN-ACK.
  */
 struct sk_buff * tcp_make_synack(struct sock *sk, struct dst_entry *dst,
-				 struct open_request *req, int mss)
+				 struct open_request *req)
 {
 	struct tcphdr *th;
 	int tcp_header_size;
@@ -854,17 +899,6 @@ struct sk_buff * tcp_make_synack(struct sock *sk, struct dst_entry *dst,
 	skb_reserve(skb, MAX_HEADER + sk->prot->max_header);
 
 	skb->dst = dst_clone(dst);
-
-	/* Don't offer more than they did.
-	 * This way we don't have to memorize who said what.
-	 * FIXME: maybe this should be changed for better performance
-	 * with syncookies.
-	 */
-	req->mss = min(mss, req->mss);
-	if (req->mss < 8) {
-		printk(KERN_DEBUG "initial req->mss below 8\n");
-		req->mss = 8;
-	}
 
 	tcp_header_size = (sizeof(struct tcphdr) + TCPOLEN_MSS +
 			   (req->tstamp_ok ? TCPOLEN_TSTAMP_ALIGNED : 0) +
@@ -886,7 +920,9 @@ struct sk_buff * tcp_make_synack(struct sock *sk, struct dst_entry *dst,
 		__u8 rcv_wscale; 
 		/* Set this up on the first call only */
 		req->window_clamp = skb->dst->window;
-		tcp_select_initial_window(sock_rspace(sk)/2,req->mss,
+		/* tcp_full_space because it is guaranteed to be the first packet */
+		tcp_select_initial_window(tcp_full_space(sk), 
+			dst->advmss - (req->tstamp_ok ? TCPOLEN_TSTAMP_ALIGNED : 0),
 			&req->rcv_wnd,
 			&req->window_clamp,
 			req->wscale_ok,
@@ -898,18 +934,18 @@ struct sk_buff * tcp_make_synack(struct sock *sk, struct dst_entry *dst,
 	th->window = htons(req->rcv_wnd);
 
 	TCP_SKB_CB(skb)->when = tcp_time_stamp;
-	tcp_syn_build_options((__u32 *)(th + 1), req->mss, req->tstamp_ok,
+	tcp_syn_build_options((__u32 *)(th + 1), dst->advmss, req->tstamp_ok,
 			      req->sack_ok, req->wscale_ok, req->rcv_wscale,
 			      TCP_SKB_CB(skb)->when,
 			      req->ts_recent);
 
 	skb->csum = 0;
 	th->doff = (tcp_header_size >> 2);
-	tcp_statistics.TcpOutSegs++; 
+	tcp_statistics.TcpOutSegs++;
 	return skb;
 }
 
-void tcp_connect(struct sock *sk, struct sk_buff *buff, int mtu)
+int tcp_connect(struct sock *sk, struct sk_buff *buff)
 {
 	struct dst_entry *dst = sk->dst_cache;
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
@@ -917,14 +953,6 @@ void tcp_connect(struct sock *sk, struct sk_buff *buff, int mtu)
 	/* Reserve space for headers. */
 	skb_reserve(buff, MAX_HEADER + sk->prot->max_header);
 
-	tp->snd_wnd = 0;
-	tp->snd_wl1 = 0;
-	tp->snd_wl2 = tp->write_seq;
-	tp->snd_una = tp->write_seq;
-	tp->rcv_nxt = 0;
-
-	sk->err = 0;
-	
 	/* We'll fix this up when we get a response from the other end.
 	 * See tcp_input.c:tcp_rcv_state_process case TCP_SYN_SENT.
 	 */
@@ -934,22 +962,39 @@ void tcp_connect(struct sock *sk, struct sk_buff *buff, int mtu)
 	/* If user gave his TCP_MAXSEG, record it to clamp */
 	if (tp->user_mss)
 		tp->mss_clamp = tp->user_mss;
-	tcp_sync_mss(sk, mtu);
+	tcp_sync_mss(sk, dst->pmtu);
 
-	/* Now unpleasant action: if initial pmtu is too low
-	   set lower clamp. I am not sure that it is good.
-	   To be more exact, I do not think that clamping at value, which
-	   is apparently transient and may improve in future is good idea.
-	   It would be better to wait until peer will returns its MSS
-	   (probably 65535 too) and now advertise something sort of 65535
-	   or at least first hop device mtu. Is it clear, what I mean?
-	   We should tell peer what maximal mss we expect to RECEIVE,
-	   it has nothing to do with pmtu.
-	   I am afraid someone will be confused by such huge value.
-	                                                   --ANK (980731)
+	tp->window_clamp = dst->window;
+
+	tcp_select_initial_window(tcp_full_space(sk),
+		dst->advmss - (tp->tcp_header_len - sizeof(struct tcphdr)),
+		&tp->rcv_wnd,
+		&tp->window_clamp,
+		sysctl_tcp_window_scaling,
+		&tp->rcv_wscale);
+
+	/* Socket identity change complete, no longer
+	 * in TCP_CLOSE, so enter ourselves into the
+	 * hash tables.
 	 */
-	if (tp->mss_cache + tp->tcp_header_len - sizeof(struct tcphdr) < tp->mss_clamp )
-		tp->mss_clamp = tp->mss_cache + tp->tcp_header_len - sizeof(struct tcphdr);
+	tcp_set_state(sk,TCP_SYN_SENT);
+	if (tp->af_specific->hash_connecting(sk))
+		goto err_out;
+
+	sk->err = 0;
+	tp->snd_wnd = 0;
+	tp->snd_wl1 = 0;
+	tp->snd_wl2 = tp->write_seq;
+	tp->snd_una = tp->write_seq;
+	tp->rcv_nxt = 0;
+	tp->rcv_wup = 0;
+	tp->copied_seq = 0;
+
+	tp->rto = TCP_TIMEOUT_INIT;
+	tcp_init_xmit_timers(sk);
+	tp->retransmits = 0;
+	tp->fackets_out = 0;
+	tp->retrans_out = 0;
 
 	TCP_SKB_CB(buff)->flags = TCPCB_FLAG_SYN;
 	TCP_SKB_CB(buff)->sacked = 0;
@@ -957,54 +1002,32 @@ void tcp_connect(struct sock *sk, struct sk_buff *buff, int mtu)
 	buff->csum = 0;
 	TCP_SKB_CB(buff)->seq = tp->write_seq++;
 	TCP_SKB_CB(buff)->end_seq = tp->write_seq;
-	tp->snd_nxt = TCP_SKB_CB(buff)->end_seq;
-
-	tp->window_clamp = dst->window;
-	tcp_select_initial_window(sock_rspace(sk)/2,tp->mss_clamp,
-		&tp->rcv_wnd,
-		&tp->window_clamp,
-		sysctl_tcp_window_scaling,
-		&tp->rcv_wscale);
-	/* Ok, now lock the socket before we make it visible to
-	 * the incoming packet engine.
-	 */
-	unlock_kernel();
-	lock_sock(sk);
-
-	/* Socket identity change complete, no longer
-	 * in TCP_CLOSE, so enter ourselves into the
-	 * hash tables.
-	 */
-	tcp_set_state(sk,TCP_SYN_SENT);
-	sk->prot->hash(sk);
-
-	tp->rto = dst->rtt;
-	tcp_init_xmit_timers(sk);
-	tp->retransmits = 0;
-	tp->fackets_out = 0;
-	tp->retrans_out = 0;
+	tp->snd_nxt = tp->write_seq;
 
 	/* Send it off. */
-	__skb_queue_tail(&sk->write_queue, buff);
 	TCP_SKB_CB(buff)->when = tcp_time_stamp;
+	__skb_queue_tail(&sk->write_queue, buff);
 	tp->packets_out++;
 	tcp_transmit_skb(sk, skb_clone(buff, GFP_KERNEL));
 	tcp_statistics.TcpActiveOpens++;
 
 	/* Timer for repeating the SYN until an answer. */
 	tcp_reset_xmit_timer(sk, TIME_RETRANS, tp->rto);
+	return 0;
 
-	/* Now, it is safe to release the socket. */
-	release_sock(sk);
-	lock_kernel();
+err_out:
+	tcp_set_state(sk,TCP_CLOSE);
+	kfree_skb(buff);
+	return -EADDRNOTAVAIL;
 }
 
 /* Send out a delayed ack, the caller does the policy checking
  * to see if we should even be here.  See tcp_input.c:tcp_ack_snd_check()
  * for details.
  */
-void tcp_send_delayed_ack(struct tcp_opt *tp, int max_timeout)
+void tcp_send_delayed_ack(struct sock *sk, int max_timeout)
 {
+	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 	unsigned long timeout;
 
 	/* Stay within the limit we were given */
@@ -1014,13 +1037,16 @@ void tcp_send_delayed_ack(struct tcp_opt *tp, int max_timeout)
 	timeout += jiffies;
 
 	/* Use new timeout only if there wasn't a older one earlier. */
-	if (!tp->delack_timer.prev) {
+	spin_lock_bh(&sk->timer_lock);
+	if (!tp->delack_timer.prev || !del_timer(&tp->delack_timer)) {
+		sock_hold(sk);
 		tp->delack_timer.expires = timeout;
-		add_timer(&tp->delack_timer);
-        } else {
+	} else {
 		if (time_before(timeout, tp->delack_timer.expires))
-			mod_timer(&tp->delack_timer, timeout);
+			tp->delack_timer.expires = timeout;
 	}
+	add_timer(&tp->delack_timer);
+	spin_unlock_bh(&sk->timer_lock);
 }
 
 /* This routine sends an ack and also updates the window. */
@@ -1048,7 +1074,7 @@ void tcp_send_ack(struct sock *sk)
 			 */
 			if(tcp_in_quickack_mode(tp))
 				tcp_exit_quickack_mode(tp);
-			tcp_send_delayed_ack(tp, HZ/2);
+			tcp_send_delayed_ack(sk, HZ/2);
 			return;
 		}
 
@@ -1082,7 +1108,7 @@ void tcp_write_wakeup(struct sock *sk)
 		 */
 		if ((1 << sk->state) &
 		    ~(TCPF_ESTABLISHED|TCPF_CLOSE_WAIT|TCPF_FIN_WAIT1|
-		      TCPF_LAST_ACK|TCPF_CLOSING))
+		      TCPF_FIN_WAIT2|TCPF_LAST_ACK|TCPF_CLOSING))
 			return;
 
 		if (before(tp->snd_nxt, tp->snd_una + tp->snd_wnd) &&

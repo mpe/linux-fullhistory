@@ -1200,6 +1200,17 @@ FKS_test (devc);
 
 	/* AAS: info stolen from ALSA: these boards have different clocks */
 	switch(devc->submodel) {
+/* APPARENTLY NOT 1869 
+		case SUBMDL_ES1869:
+*/		
+		case SUBMDL_ES1887:
+		case SUBMDL_ES1888:
+			devc->caps |= SB_CAP_ES18XX_RATE;
+			break;
+	}
+
+	/* AAS: info stolen from ALSA: these boards have different clocks */
+	switch(devc->submodel) {
 		case SUBMDL_ES1869:
 		case SUBMDL_ES1887:
 		case SUBMDL_ES1888:

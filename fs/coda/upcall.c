@@ -710,8 +710,8 @@ ENTRY;
 	/* Append msg to pending queue and poke Venus. */
 	list_add(&(req->uc_chain), vcommp->vc_pending.prev);
 	CDEBUG(D_UPCALL, 
-	       "Proc %d wake Venus for(opc,uniq) =(%d,%d) msg at %x.zzz.\n",
-	       current->pid, req->uc_opcode, req->uc_unique, (int)req);
+	       "Proc %d wake Venus for(opc,uniq) =(%d,%d) msg at %p.zzz.\n",
+	       current->pid, req->uc_opcode, req->uc_unique, req);
 
 	wake_up_interruptible(&vcommp->vc_waitq);
 	/* We can be interrupted while we wait for Venus to process
@@ -731,8 +731,8 @@ ENTRY;
 	       req->uc_opcode, jiffies - req->uc_posttime, 
 	       req->uc_unique, req->uc_outSize);
 	CDEBUG(D_UPCALL, 
-	       "..process %d woken up by Venus for req at 0x%x, data at %x\n", 
-	       current->pid, (int)req, (int)req->uc_data);
+	       "..process %d woken up by Venus for req at %p, data at %p\n", 
+	       current->pid, req, req->uc_data);
 	if (vcommp->vc_pid) {      /* i.e. Venus is still alive */
 	    /* Op went through, interrupt or not... */
 	    if (req->uc_flags & REQ_WRITE) {

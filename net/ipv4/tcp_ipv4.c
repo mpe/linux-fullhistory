@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.182 1999/07/05 01:34:07 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.186 1999/08/21 21:46:29 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -57,6 +57,7 @@
 #include <net/icmp.h>
 #include <net/tcp.h>
 #include <net/ipv6.h>
+#include <net/inet_common.h>
 
 #include <asm/segment.h>
 
@@ -67,6 +68,7 @@ extern int sysctl_tcp_timestamps;
 extern int sysctl_tcp_window_scaling;
 extern int sysctl_tcp_sack;
 extern int sysctl_tcp_syncookies;
+extern int sysctl_tcp_tw_recycle;
 extern int sysctl_ip_dynaddr;
 extern __u32 sysctl_wmem_max;
 extern __u32 sysctl_rmem_max;
@@ -90,23 +92,30 @@ void tcp_v4_send_check(struct sock *sk, struct tcphdr *th, int len,
  * First half of the table is for sockets not in TIME_WAIT, second half
  * is for TIME_WAIT sockets only.
  */
-struct sock **tcp_ehash;
-int tcp_ehash_size;
+struct tcp_ehash_bucket *tcp_ehash = NULL;
 
 /* Ok, let's try this, I give up, we do need a local binding
  * TCP hash as well as the others for fast bind/connect.
  */
-struct tcp_bind_bucket **tcp_bhash;
-int tcp_bhash_size;
+struct tcp_bind_hashbucket *tcp_bhash = NULL;
+
+int tcp_bhash_size = 0;
+int tcp_ehash_size = 0;
 
 /* All sockets in TCP_LISTEN state will be in here.  This is the only table
  * where wildcard'd TCP sockets can exist.  Hash function here is just local
  * port number.
  */
-struct sock *tcp_listening_hash[TCP_LHTABLE_SIZE];
+struct sock *tcp_listening_hash[TCP_LHTABLE_SIZE] = { NULL, };
+char __tcp_clean_cacheline_pad[(SMP_CACHE_BYTES -
+				(((sizeof(void *) * (TCP_LHTABLE_SIZE + 2)) +
+				  (sizeof(int) * 2)) % SMP_CACHE_BYTES))] = { 0, };
 
-/* Register cache. */
-struct sock *tcp_regs[TCP_NUM_REGS];
+rwlock_t tcp_lhash_lock = RW_LOCK_UNLOCKED;
+atomic_t tcp_lhash_users = ATOMIC_INIT(0);
+DECLARE_WAIT_QUEUE_HEAD(tcp_lhash_wait);
+
+spinlock_t tcp_portalloc_lock = SPIN_LOCK_UNLOCKED;
 
 /*
  * This array holds the first and last local port number.
@@ -119,7 +128,10 @@ int tcp_port_rover = (1024 - 1);
 static __inline__ int tcp_hashfn(__u32 laddr, __u16 lport,
 				 __u32 faddr, __u16 fport)
 {
-	return ((laddr ^ lport) ^ (faddr ^ fport)) & ((tcp_ehash_size >> 1) - 1);
+	int h = ((laddr ^ lport) ^ (faddr ^ fport));
+	h ^= h>>16;
+	h ^= h>>8;
+	return h & (tcp_ehash_size - 1);
 }
 
 static __inline__ int tcp_sk_hashfn(struct sock *sk)
@@ -133,67 +145,47 @@ static __inline__ int tcp_sk_hashfn(struct sock *sk)
 }
 
 /* Allocate and initialize a new TCP local port bind bucket.
- * The sockhash lock must be held as a writer here.
+ * The bindhash mutex for snum's hash chain must be held here.
  */
-struct tcp_bind_bucket *tcp_bucket_create(unsigned short snum)
+struct tcp_bind_bucket *tcp_bucket_create(struct tcp_bind_hashbucket *head,
+					  unsigned short snum)
 {
 	struct tcp_bind_bucket *tb;
 
 	tb = kmem_cache_alloc(tcp_bucket_cachep, SLAB_ATOMIC);
 	if(tb != NULL) {
-		struct tcp_bind_bucket **head =
-			&tcp_bhash[tcp_bhashfn(snum)];
 		tb->port = snum;
 		tb->fastreuse = 0;
 		tb->owners = NULL;
-		if((tb->next = *head) != NULL)
+		if((tb->next = head->chain) != NULL)
 			tb->next->pprev = &tb->next;
-		*head = tb;
-		tb->pprev = head;
+		head->chain = tb;
+		tb->pprev = &head->chain;
 	}
 	return tb;
 }
 
-#ifdef CONFIG_IP_TRANSPARENT_PROXY
-/* Ensure that the bound bucket for the port exists.
- * Return 0 on success.
- */
-static __inline__ int tcp_bucket_check(unsigned short snum)
-{
-	struct tcp_bind_bucket *tb;
-	int ret = 0;
-
-	SOCKHASH_LOCK_WRITE();
-	tb = tcp_bhash[tcp_bhashfn(snum)];
-	for( ; (tb && (tb->port != snum)); tb = tb->next)
-		;
-	ret = 0;
-	if (tb == NULL) {
-		if ((tb = tcp_bucket_create(snum)) == NULL)
-			ret = 1;
-	}
-	SOCKHASH_UNLOCK_WRITE();
-
-	return ret;
-}
-#endif
-
+/* Caller must disable local BH processing. */
 static __inline__ void __tcp_inherit_port(struct sock *sk, struct sock *child)
 {
-	struct tcp_bind_bucket *tb = (struct tcp_bind_bucket *)sk->prev;
+	struct tcp_bind_hashbucket *head = &tcp_bhash[tcp_bhashfn(child->num)];
+	struct tcp_bind_bucket *tb;
 
+	spin_lock(&head->lock);
+	tb = (struct tcp_bind_bucket *)sk->prev;
 	if ((child->bind_next = tb->owners) != NULL)
 		tb->owners->bind_pprev = &child->bind_next;
 	tb->owners = child;
 	child->bind_pprev = &tb->owners;
 	child->prev = (struct sock *) tb;
+	spin_unlock(&head->lock);
 }
 
 __inline__ void tcp_inherit_port(struct sock *sk, struct sock *child)
 {
-	SOCKHASH_LOCK_WRITE();
+	local_bh_disable();
 	__tcp_inherit_port(sk, child);
-	SOCKHASH_UNLOCK_WRITE();
+	local_bh_enable();
 }
 
 /* Obtain a reference to a local port for the given sock,
@@ -201,38 +193,48 @@ __inline__ void tcp_inherit_port(struct sock *sk, struct sock *child)
  */
 static int tcp_v4_get_port(struct sock *sk, unsigned short snum)
 {
+	struct tcp_bind_hashbucket *head;
 	struct tcp_bind_bucket *tb;
+	int ret;
 
-	SOCKHASH_LOCK_WRITE();
+	local_bh_disable();
 	if (snum == 0) {
-		int rover = tcp_port_rover;
 		int low = sysctl_local_port_range[0];
 		int high = sysctl_local_port_range[1];
 		int remaining = (high - low) + 1;
+		int rover;
 
+		spin_lock(&tcp_portalloc_lock);
+		rover = tcp_port_rover;
 		do {	rover++;
 			if ((rover < low) || (rover > high))
 				rover = low;
-			tb = tcp_bhash[tcp_bhashfn(rover)];
-			for ( ; tb; tb = tb->next)
+			head = &tcp_bhash[tcp_bhashfn(rover)];
+			spin_lock(&head->lock);
+			for (tb = head->chain; tb; tb = tb->next)
 				if (tb->port == rover)
 					goto next;
 			break;
 		next:
+			spin_unlock(&head->lock);
 		} while (--remaining > 0);
 		tcp_port_rover = rover;
+		spin_unlock(&tcp_portalloc_lock);
 
 		/* Exhausted local port range during search? */
+		ret = 1;
 		if (remaining <= 0)
 			goto fail;
 
-		/* OK, here is the one we will use. */
+		/* OK, here is the one we will use.  HEAD is
+		 * non-NULL and we hold it's mutex.
+		 */
 		snum = rover;
 		tb = NULL;
 	} else {
-		for (tb = tcp_bhash[tcp_bhashfn(snum)];
-		     tb != NULL;
-		     tb = tb->next)
+		head = &tcp_bhash[tcp_bhashfn(snum)];
+		spin_lock(&head->lock);
+		for (tb = head->chain; tb != NULL; tb = tb->next)
 			if (tb->port == snum)
 				break;
 	}
@@ -256,13 +258,15 @@ static int tcp_v4_get_port(struct sock *sk, unsigned short snum)
 				}
 			}
 			/* If we found a conflict, fail. */
+			ret = 1;
 			if (sk2 != NULL)
-				goto fail;
+				goto fail_unlock;
 		}
 	}
+	ret = 1;
 	if (tb == NULL &&
-	    (tb = tcp_bucket_create(snum)) == NULL)
-			goto fail;
+	    (tb = tcp_bucket_create(head, snum)) == NULL)
+			goto fail_unlock;
 	if (tb->owners == NULL) {
 		if (sk->reuse && sk->state != TCP_LISTEN)
 			tb->fastreuse = 1;
@@ -278,13 +282,13 @@ success:
 	tb->owners = sk;
 	sk->bind_pprev = &tb->owners;
 	sk->prev = (struct sock *) tb;
+	ret = 0;
 
-	SOCKHASH_UNLOCK_WRITE();
-	return 0;
-
+fail_unlock:
+	spin_unlock(&head->lock);
 fail:
-	SOCKHASH_UNLOCK_WRITE();
-	return 1;
+	local_bh_enable();
+	return ret;
 }
 
 /* Get rid of any references to a local port held by the
@@ -292,8 +296,10 @@ fail:
  */
 __inline__ void __tcp_put_port(struct sock *sk)
 {
+	struct tcp_bind_hashbucket *head = &tcp_bhash[tcp_bhashfn(sk->num)];
 	struct tcp_bind_bucket *tb;
 
+	spin_lock(&head->lock);
 	tb = (struct tcp_bind_bucket *) sk->prev;
 	if (sk->bind_next)
 		sk->bind_next->bind_pprev = sk->bind_pprev;
@@ -305,24 +311,136 @@ __inline__ void __tcp_put_port(struct sock *sk)
 		*(tb->pprev) = tb->next;
 		kmem_cache_free(tcp_bucket_cachep, tb);
 	}
+	spin_unlock(&head->lock);
 }
 
 void tcp_put_port(struct sock *sk)
 {
-	SOCKHASH_LOCK_WRITE();
+	local_bh_disable();
 	__tcp_put_port(sk);
-	SOCKHASH_UNLOCK_WRITE();
+	local_bh_enable();
+}
+
+#ifdef CONFIG_TCP_TW_RECYCLE
+/*
+   Very stupid pseudo-"algoritm". If the approach will be successful
+   (and it will!), we have to make it more reasonable.
+   Now it eats lots of CPU, when we are tough on ports.
+
+   Apparently, it should be hash table indexed by daddr/dport.
+
+   How does it work? We allow to truncate time-wait state, if:
+   1. PAWS works on it.
+   2. timewait bucket did not receive data for timeout:
+      - initially timeout := 2*RTO, so that if our ACK to first
+        transmitted peer's FIN is lost, we will see first retransmit.
+      - if we receive anything, the timout is increased exponentially
+        to follow normal TCP backoff pattern.
+      It is important that minimal RTO (HZ/5) > minimal timestamp
+      step (1ms).
+   3. When creating new socket, we inherit sequence number
+      and ts_recent of time-wait bucket, increasinf them a bit.
+
+   These two conditions guarantee, that data will not be corrupted
+   both by retransmitted and by delayed segments. They do not guarantee
+   that peer will leave LAST-ACK/CLOSING state gracefully, it will be
+   reset sometimes, namely, when more than two our ACKs to its FINs are lost.
+   This reset is harmless and even good.
+ */
+
+int tcp_v4_tw_recycle(struct sock *sk, u32 daddr, u16 dport)
+{
+	static int tw_rover;
+
+	struct tcp_tw_bucket *tw;
+	struct tcp_bind_hashbucket *head;
+	struct tcp_bind_bucket *tb;
+
+	int low = sysctl_local_port_range[0];
+	int high = sysctl_local_port_range[1];
+	unsigned long now = jiffies;
+	int i, rover;
+
+	rover = tw_rover;
+
+	local_bh_disable();
+	for (i=0; i<tcp_bhash_size; i++, rover++) {
+		rover &= (tcp_bhash_size-1);
+		head = &tcp_bhash[rover];
+
+		spin_lock(&head->lock);
+		for (tb = head->chain; tb; tb = tb->next) {
+			tw = (struct tcp_tw_bucket*)tb->owners;
+
+			if (tw->state != TCP_TIME_WAIT ||
+			    tw->dport != dport ||
+			    tw->daddr != daddr ||
+			    tw->rcv_saddr != sk->rcv_saddr ||
+			    tb->port < low ||
+			    tb->port >= high ||
+			    !TCP_INET_FAMILY(tw->family) ||
+			    tw->ts_recent_stamp == 0 ||
+			    (long)(now - tw->ttd) <= 0)
+				continue;
+			tw_rover = rover;
+			goto hit;
+		}
+		spin_unlock(&head->lock);
+	}
+	local_bh_enable();
+	tw_rover = rover;
+	return -EAGAIN;
+
+hit:
+	sk->num = tw->num;
+	if ((sk->bind_next = tb->owners) != NULL)
+		tb->owners->bind_pprev = &sk->bind_next;
+	tb->owners = sk;
+	sk->bind_pprev = &tb->owners;
+	sk->prev = (struct sock *) tb;
+	spin_unlock_bh(&head->lock);
+	return 0;
+}
+#endif
+
+
+void tcp_listen_wlock(void)
+{
+	write_lock(&tcp_lhash_lock);
+
+	if (atomic_read(&tcp_lhash_users)) {
+		DECLARE_WAITQUEUE(wait, current);
+
+		add_wait_queue(&tcp_lhash_wait, &wait);
+		do {
+			current->state = TASK_UNINTERRUPTIBLE;
+			if (atomic_read(&tcp_lhash_users) == 0)
+				break;
+			write_unlock_bh(&tcp_lhash_lock);
+			schedule();
+			write_lock_bh(&tcp_lhash_lock);
+		} while (atomic_read(&tcp_lhash_users));
+
+		current->state = TASK_RUNNING;
+		remove_wait_queue(&tcp_lhash_wait, &wait);
+	}
 }
 
 static __inline__ void __tcp_v4_hash(struct sock *sk)
 {
 	struct sock **skp;
+	rwlock_t *lock;
 
-	if(sk->state == TCP_LISTEN)
+	BUG_TRAP(sk->pprev==NULL);
+	if(sk->state == TCP_LISTEN) {
 		skp = &tcp_listening_hash[tcp_sk_listen_hashfn(sk)];
-	else
-		skp = &tcp_ehash[(sk->hashent = tcp_sk_hashfn(sk))];
-
+		lock = &tcp_lhash_lock;
+		tcp_listen_wlock();
+	} else {
+		skp = &tcp_ehash[(sk->hashent = tcp_sk_hashfn(sk))].chain;
+		lock = &tcp_ehash[sk->hashent].lock;
+		write_lock(lock);
+	}
 	if((sk->next = *skp) != NULL)
 		(*skp)->pprev = &sk->next;
 	*skp = sk;
@@ -330,30 +448,40 @@ static __inline__ void __tcp_v4_hash(struct sock *sk)
 	sk->prot->inuse++;
 	if(sk->prot->highestinuse < sk->prot->inuse)
 		sk->prot->highestinuse = sk->prot->inuse;
+	write_unlock(lock);
 }
 
 static void tcp_v4_hash(struct sock *sk)
 {
 	if (sk->state != TCP_CLOSE) {
-		SOCKHASH_LOCK_WRITE();
+		local_bh_disable();
 		__tcp_v4_hash(sk);
-		SOCKHASH_UNLOCK_WRITE();
+		local_bh_enable();
 	}
 }
 
-static void tcp_v4_unhash(struct sock *sk)
+void tcp_unhash(struct sock *sk)
 {
-	SOCKHASH_LOCK_WRITE();
+	rwlock_t *lock;
+
+	if (sk->state == TCP_LISTEN) {
+		local_bh_disable();
+		tcp_listen_wlock();
+		lock = &tcp_lhash_lock;
+	} else {
+		struct tcp_ehash_bucket *head = &tcp_ehash[sk->hashent];
+		lock = &head->lock;
+		write_lock_bh(&head->lock);
+	}
+
 	if(sk->pprev) {
 		if(sk->next)
 			sk->next->pprev = sk->pprev;
 		*sk->pprev = sk->next;
 		sk->pprev = NULL;
 		sk->prot->inuse--;
-		tcp_reg_zap(sk);
-		__tcp_put_port(sk);
 	}
-	SOCKHASH_UNLOCK_WRITE();
+	write_unlock_bh(lock);
 }
 
 /* Don't inline this cruft.  Here are some nice properties to
@@ -362,14 +490,13 @@ static void tcp_v4_unhash(struct sock *sk)
  * connection.  So always assume those are both wildcarded
  * during the search since they can never be otherwise.
  */
-struct sock *tcp_v4_lookup_listener(u32 daddr, unsigned short hnum, int dif)
+static struct sock *__tcp_v4_lookup_listener(struct sock *sk, u32 daddr, unsigned short hnum, int dif)
 {
-	struct sock *sk;
 	struct sock *result = NULL;
 	int score, hiscore;
 
 	hiscore=0;
-	for(sk = tcp_listening_hash[tcp_lhashfn(hnum)]; sk; sk = sk->next) {
+	for(; sk; sk = sk->next) {
 		if(sk->num == hnum) {
 			__u32 rcv_saddr = sk->rcv_saddr;
 
@@ -395,41 +522,62 @@ struct sock *tcp_v4_lookup_listener(u32 daddr, unsigned short hnum, int dif)
 	return result;
 }
 
+/* Optimize the common listener case. */
+__inline__ struct sock *tcp_v4_lookup_listener(u32 daddr, unsigned short hnum, int dif)
+{
+	struct sock *sk;
+
+	read_lock(&tcp_lhash_lock);
+	sk = tcp_listening_hash[tcp_lhashfn(hnum)];
+	if (sk) {
+		if (sk->num == hnum && sk->next == NULL)
+			goto sherry_cache;
+		sk = __tcp_v4_lookup_listener(sk, daddr, hnum, dif);
+	}
+	if (sk) {
+sherry_cache:
+		sock_hold(sk);
+	}
+	read_unlock(&tcp_lhash_lock);
+	return sk;
+}
+
 /* Sockets in TCP_CLOSE state are _always_ taken out of the hash, so
  * we need not check it for TCP lookups anymore, thanks Alexey. -DaveM
  *
- * The sockhash lock must be held as a reader here.
+ * Local BH must be disabled here.
  */
 static inline struct sock *__tcp_v4_lookup(u32 saddr, u16 sport,
 					   u32 daddr, u16 hnum, int dif)
 {
+	struct tcp_ehash_bucket *head;
 	TCP_V4_ADDR_COOKIE(acookie, saddr, daddr)
 	__u32 ports = TCP_COMBINED_PORTS(sport, hnum);
 	struct sock *sk;
 	int hash;
 
-	/* Check TCP register quick cache first. */
-	sk = TCP_RHASH(sport);
-	if(sk && TCP_IPV4_MATCH(sk, acookie, saddr, daddr, ports, dif))
-		goto hit;
-
 	/* Optimize here for direct hit, only listening connections can
 	 * have wildcards anyways.
 	 */
 	hash = tcp_hashfn(daddr, hnum, saddr, sport);
-	for(sk = tcp_ehash[hash]; sk; sk = sk->next) {
-		if(TCP_IPV4_MATCH(sk, acookie, saddr, daddr, ports, dif)) {
-			if (sk->state == TCP_ESTABLISHED)
-				TCP_RHASH(sport) = sk;
+	head = &tcp_ehash[hash];
+	read_lock(&head->lock);
+	for(sk = head->chain; sk; sk = sk->next) {
+		if(TCP_IPV4_MATCH(sk, acookie, saddr, daddr, ports, dif))
 			goto hit; /* You sunk my battleship! */
-		}
 	}
+
 	/* Must check for a TIME_WAIT'er before going to listener hash. */
-	for(sk = tcp_ehash[hash+(tcp_ehash_size >> 1)]; sk; sk = sk->next)
+	for(sk = (head + tcp_ehash_size)->chain; sk; sk = sk->next)
 		if(TCP_IPV4_MATCH(sk, acookie, saddr, daddr, ports, dif))
 			goto hit;
-	sk = tcp_v4_lookup_listener(daddr, hnum, dif);
+	read_unlock(&head->lock);
+
+	return tcp_v4_lookup_listener(daddr, hnum, dif);
+
 hit:
+	sock_hold(sk);
+	read_unlock(&head->lock);
 	return sk;
 }
 
@@ -437,97 +585,12 @@ __inline__ struct sock *tcp_v4_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport
 {
 	struct sock *sk;
 
-	SOCKHASH_LOCK_READ();
+	local_bh_disable();
 	sk = __tcp_v4_lookup(saddr, sport, daddr, ntohs(dport), dif);
-	SOCKHASH_UNLOCK_READ();
+	local_bh_enable();
 
 	return sk;
 }
-
-#ifdef CONFIG_IP_TRANSPARENT_PROXY
-/* Cleaned up a little and adapted to new bind bucket scheme.
- * Oddly, this should increase performance here for
- * transparent proxy, as tests within the inner loop have
- * been eliminated. -DaveM
- */
-static struct sock *tcp_v4_proxy_lookup(unsigned short num, unsigned long raddr,
-					unsigned short rnum, unsigned long laddr,
-					struct net_device *dev, unsigned short pnum,
-					int dif)
-{
-	struct sock *s, *result = NULL;
-	int badness = -1;
-	u32 paddr = 0;
-	unsigned short hnum = ntohs(num);
-	unsigned short hpnum = ntohs(pnum);
-	int firstpass = 1;
-
-	if(dev && dev->ip_ptr) {
-		struct in_device *idev = dev->ip_ptr;
-
-		if(idev->ifa_list)
-			paddr = idev->ifa_list->ifa_local;
-	}
-
-	/* We must obtain the sockhash lock here, we are always
-	 * in BH context.
-	 */
-	SOCKHASH_LOCK_READ_BH();
-	{
-		struct tcp_bind_bucket *tb = tcp_bhash[tcp_bhashfn(hnum)];
-		for( ; (tb && tb->port != hnum); tb = tb->next)
-			;
-		if(tb == NULL)
-			goto next;
-		s = tb->owners;
-	}
-pass2:
-	for(; s; s = s->bind_next) {
-		int score = 0;
-		if(s->rcv_saddr) {
-			if((s->num != hpnum || s->rcv_saddr != paddr) &&
-			   (s->num != hnum || s->rcv_saddr != laddr))
-				continue;
-			score++;
-		}
-		if(s->daddr) {
-			if(s->daddr != raddr)
-				continue;
-			score++;
-		}
-		if(s->dport) {
-			if(s->dport != rnum)
-				continue;
-			score++;
-		}
-		if(s->bound_dev_if) {
-			if(s->bound_dev_if != dif)
-				continue;
-			score++;
-		}
-		if(score == 4 && s->num == hnum) {
-			result = s;
-			goto gotit;
-		} else if(score > badness && (s->num == hpnum || s->rcv_saddr)) {
-			result = s;
-			badness = score;
-		}
-	}
-next:
-	if(firstpass--) {
-		struct tcp_bind_bucket *tb = tcp_bhash[tcp_bhashfn(hpnum)];
-		for( ; (tb && tb->port != hpnum); tb = tb->next)
-			;
-		if(tb) {
-			s = tb->owners;
-			goto pass2;
-		}
-	}
-gotit:
-	SOCKHASH_UNLOCK_READ_BH();
-	return result;
-}
-#endif /* CONFIG_IP_TRANSPARENT_PROXY */
 
 static inline __u32 tcp_v4_init_sequence(struct sock *sk, struct sk_buff *skb)
 {
@@ -536,39 +599,123 @@ static inline __u32 tcp_v4_init_sequence(struct sock *sk, struct sk_buff *skb)
 					  skb->h.th->source);
 }
 
-/* Check that a TCP address is unique, don't allow multiple
- * connects to/from the same address.  Actually we can optimize
- * quite a bit, since the socket about to connect is still
- * in TCP_CLOSE, a tcp_bind_bucket for the local port he will
- * use will exist, with a NULL owners list.  So check for that.
- * The good_socknum and verify_bind scheme we use makes this
- * work.
- */
-static int tcp_v4_unique_address(struct sock *sk)
+static int tcp_v4_check_established(struct sock *sk)
 {
-	struct tcp_bind_bucket *tb;
-	unsigned short snum = sk->num;
-	int retval = 1;
+	u32 daddr = sk->rcv_saddr;
+	u32 saddr = sk->daddr;
+	int dif = sk->bound_dev_if;
+	TCP_V4_ADDR_COOKIE(acookie, saddr, daddr)
+	__u32 ports = TCP_COMBINED_PORTS(sk->dport, sk->num);
+	int hash = tcp_hashfn(daddr, sk->num, saddr, sk->dport);
+	struct tcp_ehash_bucket *head = &tcp_ehash[hash];
+	struct sock *sk2, **skp;
+#ifdef CONFIG_TCP_TW_RECYCLE
+	struct tcp_tw_bucket *tw;
+#endif
 
-	/* Freeze the hash while we snoop around. */
-	SOCKHASH_LOCK_READ();
-	tb = tcp_bhash[tcp_bhashfn(snum)];
-	for(; tb; tb = tb->next) {
-		if(tb->port == snum && tb->owners != NULL) {
-			/* Almost certainly the re-use port case, search the real hashes
-			 * so it actually scales.
+	write_lock_bh(&head->lock);
+
+	/* Check TIME-WAIT sockets first. */
+	for(skp = &(head + tcp_ehash_size)->chain; (sk2=*skp) != NULL;
+	    skp = &sk2->next) {
+#ifdef CONFIG_TCP_TW_RECYCLE
+		tw = (struct tcp_tw_bucket*)sk2;
+#endif
+
+		if(TCP_IPV4_MATCH(sk2, acookie, saddr, daddr, ports, dif)) {
+#ifdef CONFIG_TCP_TW_RECYCLE
+			struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+
+			/* With PAWS, it is safe from the viewpoint
+			   of data integrity. Even without PAWS it
+			   is safe provided sequence spaces do not
+			   overlap i.e. at data rates <= 80Mbit/sec.
+
+			   Actually, the idea is close to VJ's (rfc1332)
+			   one, only timestamp cache is held not per host,
+			   but per port pair and TW bucket is used
+			   as state holder.
 			 */
-			sk = __tcp_v4_lookup(sk->daddr, sk->dport,
-					     sk->rcv_saddr, snum, sk->bound_dev_if);
-			SOCKHASH_UNLOCK_READ();
-
-			if((sk != NULL) && (sk->state != TCP_LISTEN))
-				retval = 0;
-			return retval;
+			if (sysctl_tcp_tw_recycle && tw->ts_recent_stamp) {
+				if ((tp->write_seq = tw->snd_nxt + 2) == 0)
+					tp->write_seq = 1;
+				tp->ts_recent = tw->ts_recent;
+				tp->ts_recent_stamp = tw->ts_recent_stamp;
+				sock_hold(sk2);
+				skp = &head->chain;
+				goto unique;
+			} else
+#endif
+			goto not_unique;
 		}
 	}
-	SOCKHASH_UNLOCK_READ();
-	return retval;
+#ifdef CONFIG_TCP_TW_RECYCLE
+	tw = NULL;
+#endif
+
+	/* And established part... */
+	for(skp = &head->chain; (sk2=*skp)!=NULL; skp = &sk2->next) {
+		if(TCP_IPV4_MATCH(sk2, acookie, saddr, daddr, ports, dif))
+			goto not_unique;
+	}
+
+#ifdef CONFIG_TCP_TW_RECYCLE
+unique:
+#endif
+	BUG_TRAP(sk->pprev==NULL);
+	if ((sk->next = *skp) != NULL)
+		(*skp)->pprev = &sk->next;
+
+	*skp = sk;
+	sk->pprev = skp;
+	sk->prot->inuse++;
+	if(sk->prot->highestinuse < sk->prot->inuse)
+		sk->prot->highestinuse = sk->prot->inuse;
+	write_unlock_bh(&head->lock);
+
+#ifdef CONFIG_TCP_TW_RECYCLE
+	if (tw) {
+		/* Silly. Should hash-dance instead... */
+		local_bh_disable();
+		tcp_tw_deschedule(tw);
+		tcp_timewait_kill(tw);
+		local_bh_enable();
+
+		tcp_tw_put(tw);
+	}
+#endif
+	return 0;
+
+not_unique:
+	write_unlock_bh(&head->lock);
+	return -EADDRNOTAVAIL;
+}
+
+/* Hash SYN-SENT socket to established hash table after
+ * checking that it is unique. Note, that without kernel lock
+ * we MUST make these two operations atomically.
+ *
+ * Optimization: if it is bound and tcp_bind_bucket has the only
+ * owner (us), we need not to scan established bucket.
+ */
+
+int tcp_v4_hash_connecting(struct sock *sk)
+{
+	unsigned short snum = sk->num;
+	struct tcp_bind_hashbucket *head = &tcp_bhash[tcp_bhashfn(snum)];
+	struct tcp_bind_bucket *tb = (struct tcp_bind_bucket *)sk->prev;
+
+	spin_lock_bh(&head->lock);
+	if (tb->owners == sk && sk->bind_next == NULL) {
+		__tcp_v4_hash(sk);
+		spin_unlock_bh(&head->lock);
+		return 0;
+	} else {
+		spin_unlock_bh(&head->lock);
+
+		/* No definite answer... Walk to established hash table */
+		return tcp_v4_check_established(sk);
+	}
 }
 
 /* This will initiate an outgoing connection. */
@@ -580,34 +727,26 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	struct rtable *rt;
 	u32 daddr, nexthop;
 	int tmp;
+	int err;
 
 	if (sk->state != TCP_CLOSE) 
 		return(-EISCONN);
 
-	/* Don't allow a double connect. */
-	if (sk->daddr)
-		return -EINVAL;
-
 	if (addr_len < sizeof(struct sockaddr_in))
 		return(-EINVAL);
 
-	if (usin->sin_family != AF_INET) {
-		static int complained;
-		if (usin->sin_family)
-			return(-EAFNOSUPPORT);
-		if (!complained++)
-			printk(KERN_DEBUG "%s forgot to set AF_INET in " __FUNCTION__ "\n", current->comm);
-	}
+	if (usin->sin_family != AF_INET)
+		return(-EAFNOSUPPORT);
 
 	nexthop = daddr = usin->sin_addr.s_addr;
-	if (sk->opt && sk->opt->srr) {
+	if (sk->protinfo.af_inet.opt && sk->protinfo.af_inet.opt->srr) {
 		if (daddr == 0)
 			return -EINVAL;
-		nexthop = sk->opt->faddr;
+		nexthop = sk->protinfo.af_inet.opt->faddr;
 	}
 
 	tmp = ip_route_connect(&rt, nexthop, sk->saddr,
-			       RT_TOS(sk->ip_tos)|RTO_CONN|sk->localroute, sk->bound_dev_if);
+			       RT_TOS(sk->protinfo.af_inet.tos)|RTO_CONN|sk->localroute, sk->bound_dev_if);
 	if (tmp < 0)
 		return tmp;
 
@@ -616,62 +755,72 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		return -ENETUNREACH;
 	}
 
-	dst_release(xchg(&sk->dst_cache, rt));
+	__sk_dst_set(sk, &rt->u.dst);
 
+	if (!sk->protinfo.af_inet.opt || !sk->protinfo.af_inet.opt->srr)
+		daddr = rt->rt_dst;
+
+	err = -ENOBUFS;
 	buff = sock_wmalloc(sk, (MAX_HEADER + sk->prot->max_header),
 			    0, GFP_KERNEL);
 
 	if (buff == NULL)
-		return -ENOBUFS;
+		goto failure;
 
-	/* Socket has no identity, so lock_sock() is useless.  Also
-	 * since state==TCP_CLOSE (checked above) the socket cannot
-	 * possibly be in the hashes.  TCP hash locking is only
-	 * needed while checking quickly for a unique address.
-	 * However, the socket does need to be (and is) locked
-	 * in tcp_connect().
-	 * Perhaps this addresses all of ANK's concerns. 8-)  -DaveM
-	 */
-	sk->dport = usin->sin_port;
-	sk->daddr = rt->rt_dst;
-	if (sk->opt && sk->opt->srr)
-		sk->daddr = daddr;
 	if (!sk->saddr)
 		sk->saddr = rt->rt_src;
 	sk->rcv_saddr = sk->saddr;
 
-	if (!tcp_v4_unique_address(sk)) {
-		kfree_skb(buff);
-		sk->daddr = 0;
-		return -EADDRNOTAVAIL;
+	if (!sk->num) {
+		if (sk->prot->get_port(sk, 0)
+#ifdef CONFIG_TCP_TW_RECYCLE
+		    && (!sysctl_tcp_tw_recycle ||
+			tcp_v4_tw_recycle(sk, daddr, usin->sin_port))
+#endif
+		    ) {
+			kfree_skb(buff);
+			err = -EAGAIN;
+			goto failure;
+		}
+		sk->sport = htons(sk->num);
 	}
+#ifdef CONFIG_TCP_TW_RECYCLE
+	else if (tp->ts_recent_stamp && sk->daddr != daddr) {
+		/* Reset inherited state */
+		tp->ts_recent = 0;
+		tp->ts_recent_stamp = 0;
+		tp->write_seq = 0;
+	}
+#endif
 
-	tp->write_seq = secure_tcp_sequence_number(sk->saddr, sk->daddr,
-						   sk->sport, usin->sin_port);
+	sk->dport = usin->sin_port;
+	sk->daddr = daddr;
+
+	if (!tp->write_seq)
+		tp->write_seq = secure_tcp_sequence_number(sk->saddr, sk->daddr,
+							   sk->sport, usin->sin_port);
 
 	tp->ext_header_len = 0;
-	if (sk->opt)
-		tp->ext_header_len = sk->opt->optlen;
+	if (sk->protinfo.af_inet.opt)
+		tp->ext_header_len = sk->protinfo.af_inet.opt->optlen;
 
-	/* Reset mss clamp */
-	tp->mss_clamp = ~0;
+	tp->mss_clamp = 536;
 
-	if (!ip_dont_fragment(sk, &rt->u.dst) &&
-	    rt->u.dst.pmtu > 576 && rt->rt_dst != rt->rt_gateway) {
-		/* Clamp mss at maximum of 536 and user_mss.
-		   Probably, user ordered to override tiny segment size
-		   in gatewayed case.
-		 */
-		tp->mss_clamp = max(tp->user_mss, 536);
-	}
+	err = tcp_connect(sk, buff);
+	if (err == 0)
+		return 0;
 
-	tcp_connect(sk, buff, rt->u.dst.pmtu);
-	return 0;
+failure:
+	__sk_dst_reset(sk);
+	sk->dport = 0;
+	return err;
 }
 
 static int tcp_v4_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 {
 	int retval = -EINVAL;
+
+	lock_sock(sk);
 
 	/* Do sanity checking for sendmsg/sendto/send. */
 	if (msg->msg_flags & ~(MSG_OOB|MSG_DONTROUTE|MSG_DONTWAIT|MSG_NOSIGNAL))
@@ -695,6 +844,7 @@ static int tcp_v4_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	retval = tcp_do_sendmsg(sk, msg);
 
 out:
+	release_sock(sk);
 	return retval;
 }
 
@@ -719,12 +869,27 @@ static struct open_request *tcp_v4_search_req(struct tcp_opt *tp,
 	for (req = prev->dl_next; req; req = req->dl_next) {
 		if (req->af.v4_req.rmt_addr == iph->saddr &&
 		    req->af.v4_req.loc_addr == iph->daddr &&
-		    req->rmt_port == rport
-#ifdef CONFIG_IP_TRANSPARENT_PROXY
-		    && req->lcl_port == th->dest
-#endif
-		    ) {
-			*prevp = prev; 
+		    req->rmt_port == rport &&
+		    TCP_INET_FAMILY(req->class->family)) {
+			if (req->sk) {
+				/* Weird case: connection was established
+				   and then killed by RST before user accepted
+				   it. This connection is dead, but we cannot
+				   kill openreq to avoid blocking in accept().
+
+				   accept() will collect this garbage,
+				   but such reqs must be ignored, when talking
+				   to network.
+				 */
+				bh_lock_sock(req->sk);
+				BUG_TRAP(req->sk->lock.users==0);
+				if (req->sk->state == TCP_CLOSE) {
+					bh_unlock_sock(req->sk);
+					prev = req;
+					continue;
+				}
+			}
+			*prevp = prev;
 			return req; 
 		}
 		prev = req; 
@@ -738,6 +903,7 @@ static struct open_request *tcp_v4_search_req(struct tcp_opt *tp,
  */
 static inline void do_pmtu_discovery(struct sock *sk, struct iphdr *ip, unsigned mtu)
 {
+	struct dst_entry *dst;
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 
 	/* We are not interested in TCP_LISTEN and open_requests (SYN-ACKs
@@ -747,23 +913,26 @@ static inline void do_pmtu_discovery(struct sock *sk, struct iphdr *ip, unsigned
 	if (sk->state == TCP_LISTEN)
 		return; 
 
-	bh_lock_sock(sk);
-	if(sk->lock.users != 0)
-		goto out;
-
 	/* We don't check in the destentry if pmtu discovery is forbidden
 	 * on this route. We just assume that no packet_to_big packets
 	 * are send back when pmtu discovery is not active.
      	 * There is a small race when the user changes this flag in the
 	 * route, but I think that's acceptable.
 	 */
-	if (sk->dst_cache == NULL)
-		goto out;
+	if ((dst = __sk_dst_check(sk, 0)) == NULL)
+		return;
 
-	ip_rt_update_pmtu(sk->dst_cache, mtu);
-	if (sk->ip_pmtudisc != IP_PMTUDISC_DONT &&
-	    tp->pmtu_cookie > sk->dst_cache->pmtu) {
-		tcp_sync_mss(sk, sk->dst_cache->pmtu);
+	ip_rt_update_pmtu(dst, mtu);
+
+	/* Something is about to be wrong... Remember soft error
+	 * for the case, if this connection will not able to recover.
+	 */
+	if (mtu < dst->pmtu && ip_dont_fragment(sk, dst))
+		sk->err_soft = EMSGSIZE;
+
+	if (sk->protinfo.af_inet.pmtudisc != IP_PMTUDISC_DONT &&
+	    tp->pmtu_cookie > dst->pmtu) {
+		tcp_sync_mss(sk, dst->pmtu);
 
 		/* Resend the TCP packet because it's  
 		 * clear that the old packet has been
@@ -772,8 +941,6 @@ static inline void do_pmtu_discovery(struct sock *sk, struct iphdr *ip, unsigned
 		 */
 		tcp_simple_retransmit(sk);
 	} /* else let the usual retransmit timer handle it */
-out:
-	bh_unlock_sock(sk);
 }
 
 /*
@@ -790,7 +957,6 @@ out:
  * A more general error queue to queue errors for later handling
  * is probably better.
  *
- * sk->err and sk->err_soft should be atomic_t.
  */
 
 void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
@@ -821,37 +987,51 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 	th = (struct tcphdr*)(dp+(iph->ihl<<2));
 
 	sk = tcp_v4_lookup(iph->daddr, th->dest, iph->saddr, th->source, skb->dev->ifindex);
-	if (sk == NULL || sk->state == TCP_TIME_WAIT) {
+	if (sk == NULL) {
 		icmp_statistics.IcmpInErrors++;
-		return; 
+		return;
 	}
+	if (sk->state == TCP_TIME_WAIT) {
+		tcp_tw_put((struct tcp_tw_bucket*)sk);
+		return;
+	}
+
+	bh_lock_sock(sk);
+	/* If too many ICMPs get dropped on busy
+	 * servers this needs to be solved differently.
+	 */
+	if (sk->lock.users != 0)
+		net_statistics.LockDroppedIcmps++;
 
 	tp = &sk->tp_pinfo.af_tcp;
 	seq = ntohl(th->seq);
 	if (sk->state != TCP_LISTEN && !between(seq, tp->snd_una, tp->snd_nxt)) {
 		net_statistics.OutOfWindowIcmps++;
-		return; 
+		goto out;
 	}
 
 	switch (type) {
 	case ICMP_SOURCE_QUENCH:
 #ifndef OLD_SOURCE_QUENCH /* This is deprecated */
-		tp->snd_ssthresh = tcp_recalc_ssthresh(tp);
-		tp->snd_cwnd = tp->snd_ssthresh;
-		tp->snd_cwnd_cnt = 0;
-		tp->high_seq = tp->snd_nxt;
+		if (sk->lock.users == 0) {
+			tp->snd_ssthresh = tcp_recalc_ssthresh(tp);
+			tp->snd_cwnd = tp->snd_ssthresh;
+			tp->snd_cwnd_cnt = 0;
+			tp->high_seq = tp->snd_nxt;
+		}
 #endif
-		return;
+		goto out;
 	case ICMP_PARAMETERPROB:
 		err = EPROTO;
 		break; 
 	case ICMP_DEST_UNREACH:
 		if (code > NR_ICMP_UNREACH)
-			return;
+			goto out;
 
 		if (code == ICMP_FRAG_NEEDED) { /* PMTU discovery (RFC1191) */
-			do_pmtu_discovery(sk, iph, ntohs(skb->h.icmph->un.frag.mtu));
-			return;
+			if (sk->lock.users == 0)
+				do_pmtu_discovery(sk, iph, ntohs(skb->h.icmph->un.frag.mtu));
+			goto out;
 		}
 
 		err = icmp_err_convert[code].errno;
@@ -860,12 +1040,15 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 		err = EHOSTUNREACH;
 		break;
 	default:
-		return;
+		goto out;
 	}
 
 	switch (sk->state) {
 		struct open_request *req, *prev;
 	case TCP_LISTEN:
+		if (sk->lock.users != 0)
+			goto out;
+
 		/* The final ACK of the handshake should be already 
 		 * handled in the new socket context, not here.
 		 * Strictly speaking - an ICMP error for the final
@@ -873,28 +1056,15 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 		 * complicated right now. 
 		 */ 
 		if (!no_flags && !th->syn && !th->ack)
-			return;
-
-		/* Prevent race conditions with accept() - 
-		 * ICMP is unreliable. 
-		 */
-		bh_lock_sock(sk);
-		if (sk->lock.users != 0) {
-			net_statistics.LockDroppedIcmps++;
-			 /* If too many ICMPs get dropped on busy
-			  * servers this needs to be solved differently.
-			  */
-			goto out_unlock;
-		}
+			goto out;
 
 		req = tcp_v4_search_req(tp, iph, th, &prev); 
 		if (!req)
-			goto out_unlock;
-		if (seq != req->snt_isn) {
-			net_statistics.OutOfWindowIcmps++;
-			goto out_unlock;
-		}
-		if (req->sk) {	
+			goto out;
+
+		if (req->sk) {
+			struct sock *nsk = req->sk;
+
 			/* 
 			 * Already in ESTABLISHED and a big socket is created,
 			 * set error code there.
@@ -902,9 +1072,23 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 			 * but only with the next operation on the socket after
 			 * accept. 
 			 */
+			sock_hold(nsk);
 			bh_unlock_sock(sk);
-			sk = req->sk;
+			sock_put(sk);
+			sk = nsk;
+
+			BUG_TRAP(sk->lock.users == 0);
+			tp = &sk->tp_pinfo.af_tcp;
+			if (!between(seq, tp->snd_una, tp->snd_nxt)) {
+				net_statistics.OutOfWindowIcmps++;
+				goto out;
+			}
 		} else {
+			if (seq != req->snt_isn) {
+				net_statistics.OutOfWindowIcmps++;
+				goto out;
+			}
+
 			/* 
 			 * Still in SYN_RECV, just remove it silently.
 			 * There is no good way to pass the error to the newly
@@ -913,23 +1097,30 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 			 */ 
 			tp->syn_backlog--;
 			tcp_synq_unlink(tp, req, prev);
+			tcp_dec_slow_timer(TCP_SLT_SYNACK);
 			req->class->destructor(req);
 			tcp_openreq_free(req);
-	out_unlock:
-			bh_unlock_sock(sk);
-			return; 
+			goto out;
 		}
 		break;
 	case TCP_SYN_SENT:
-	case TCP_SYN_RECV:  /* Cannot happen */ 
+	case TCP_SYN_RECV:  /* Cannot happen.
+			       It can f.e. if SYNs crossed.
+			     */ 
 		if (!no_flags && !th->syn)
-			return;
-		tcp_statistics.TcpAttemptFails++;
-		sk->err = err;
-		sk->zapped = 1;
-		mb();
-		sk->error_report(sk);
-		return;
+			goto out;
+		if (sk->lock.users == 0) {
+			tcp_statistics.TcpAttemptFails++;
+			sk->err = err;
+			/* Wake people up to see the error (see connect in sock.c) */
+			sk->error_report(sk);
+
+			tcp_set_state(sk, TCP_CLOSE);
+			tcp_done(sk);
+		} else {
+			sk->err_soft = err;
+		}
+		goto out;
 	}
 
 	/* If we've already connected we will keep trying
@@ -948,18 +1139,16 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 	 *							--ANK (980905)
 	 */
 
-	if (sk->ip_recverr) {
-		/* This code isn't serialized with the socket code */
-		/* ANK (980927) ... which is harmless now,
-		   sk->err's may be safely lost.
-		 */
+	if (sk->lock.users == 0 && sk->protinfo.af_inet.recverr) {
 		sk->err = err;
-		mb(); 
-		sk->error_report(sk);		/* Wake people up to see the error (see connect in sock.c) */
+		sk->error_report(sk);
 	} else	{ /* Only an error on timeout */
 		sk->err_soft = err;
-		mb(); 
 	}
+
+out:
+	bh_unlock_sock(sk);
+	sock_put(sk);
 }
 
 /* This routine computes an IPv4 TCP checksum. */
@@ -994,14 +1183,8 @@ static void tcp_v4_send_reset(struct sk_buff *skb)
 	if (th->rst)
 		return;
 
-	if (((struct rtable*)skb->dst)->rt_type != RTN_LOCAL) {
-#ifdef CONFIG_IP_TRANSPARENT_PROXY
-		if (((struct rtable*)skb->dst)->rt_type == RTN_UNICAST)
-			icmp_send(skb, ICMP_DEST_UNREACH,
-				  ICMP_PORT_UNREACH, 0);
-#endif
+	if (((struct rtable*)skb->dst)->rt_type != RTN_LOCAL)
 		return;
-	}
 
 	/* Swap the send and the receive. */
 	memset(&rth, 0, sizeof(struct tcphdr)); 
@@ -1014,7 +1197,8 @@ static void tcp_v4_send_reset(struct sk_buff *skb)
 		rth.seq = th->ack_seq;
 	} else {
 		rth.ack = 1;
-		rth.ack_seq = th->syn ? htonl(ntohl(th->seq)+1) : th->seq;
+		rth.ack_seq = htonl(ntohl(th->seq) + th->syn + th->fin
+				    + skb->len - (th->doff<<2));
 	}
 
 	memset(&arg, 0, sizeof arg); 
@@ -1034,71 +1218,69 @@ static void tcp_v4_send_reset(struct sk_buff *skb)
 	tcp_statistics.TcpOutRsts++;
 }
 
-#ifdef CONFIG_IP_TRANSPARENT_PROXY
-
-/*
-   Seems, I never wrote nothing more stupid.
-   I hope Gods will forgive me, but I cannot forgive myself 8)
-                                                --ANK (981001)
+/* The code following below sending ACKs in SYN-RECV and TIME-WAIT states
+   outside socket context is ugly, certainly. What can I do?
  */
 
-static struct sock *tcp_v4_search_proxy_openreq(struct sk_buff *skb)
+static void tcp_v4_send_ack(struct sk_buff *skb, u32 seq, u32 ack, u32 win, u32 ts)
 {
-	struct iphdr *iph = skb->nh.iph;
-	struct tcphdr *th = (struct tcphdr *)(skb->nh.raw + iph->ihl*4);
-	struct sock *sk = NULL;
-	int i;
+	struct tcphdr *th = skb->h.th;
+	struct {
+		struct tcphdr th;
+		u32 tsopt[3];
+	} rep;
+	struct ip_reply_arg arg;
 
-	SOCKHASH_LOCK_READ();
-	for (i=0; i<TCP_LHTABLE_SIZE; i++) {
-		for(sk = tcp_listening_hash[i]; sk; sk = sk->next) {
-			struct open_request *dummy;
-			if (tcp_v4_search_req(&sk->tp_pinfo.af_tcp, iph,
-					      th, &dummy) &&
-			    (!sk->bound_dev_if ||
-			     sk->bound_dev_if == skb->dev->ifindex))
-				goto out;
-		}
-	}
-out:
-	SOCKHASH_UNLOCK_READ();
-	return sk;
-}
+	memset(&rep.th, 0, sizeof(struct tcphdr));
+	memset(&arg, 0, sizeof arg);
 
-/*
- *	Check whether a received TCP packet might be for one of our
- *	connections.
- */
-
-int tcp_chkaddr(struct sk_buff *skb)
-{
-	struct iphdr *iph = skb->nh.iph;
-	struct tcphdr *th = (struct tcphdr *)(skb->nh.raw + iph->ihl*4);
-	struct sock *sk;
-
-	sk = tcp_v4_lookup(iph->saddr, th->source, iph->daddr,
-			   th->dest, skb->dev->ifindex);
-
-	if (!sk)
-		return tcp_v4_search_proxy_openreq(skb) != NULL;
-
-	if (sk->state == TCP_LISTEN) {
-		struct open_request *dummy;
-		if (tcp_v4_search_req(&sk->tp_pinfo.af_tcp, skb->nh.iph,
-				      th, &dummy) &&
-		    (!sk->bound_dev_if ||
-		     sk->bound_dev_if == skb->dev->ifindex))
-			return 1;
+	arg.iov[0].iov_base = (unsigned char *)&rep; 
+	arg.iov[0].iov_len  = sizeof(rep.th);
+	arg.n_iov = 1;
+	if (ts) {
+		rep.tsopt[0] = __constant_htonl((TCPOPT_NOP << 24) |
+						(TCPOPT_NOP << 16) |
+						(TCPOPT_TIMESTAMP << 8) |
+						TCPOLEN_TIMESTAMP);
+		rep.tsopt[1] = htonl(tcp_time_stamp);
+		rep.tsopt[2] = htonl(ts);
+		arg.iov[0].iov_len = sizeof(rep);
 	}
 
-	/* 0 means accept all LOCAL addresses here, not all the world... */
+	/* Swap the send and the receive. */
+	rep.th.dest = th->source;
+	rep.th.source = th->dest; 
+	rep.th.doff = arg.iov[0].iov_len/4;
+	rep.th.seq = htonl(seq);
+	rep.th.ack_seq = htonl(ack);
+	rep.th.ack = 1;
+	rep.th.window = htons(win);
 
-	if (sk->rcv_saddr == 0)
-		return 0;
+	arg.csum = csum_tcpudp_nofold(skb->nh.iph->daddr, 
+				      skb->nh.iph->saddr, /*XXX*/
+				      arg.iov[0].iov_len,
+				      IPPROTO_TCP,
+				      0);
+	arg.csumoffset = offsetof(struct tcphdr, check) / 2; 
 
-	return 1;
+	ip_send_reply(tcp_socket->sk, skb, &arg, arg.iov[0].iov_len);
+
+	tcp_statistics.TcpOutSegs++;
 }
-#endif
+
+static void tcp_v4_timewait_ack(struct sock *sk, struct sk_buff *skb)
+{
+	struct tcp_tw_bucket *tw = (struct tcp_tw_bucket *)sk;
+
+	tcp_v4_send_ack(skb, tw->snd_nxt, tw->rcv_nxt, 0, tw->ts_recent);
+
+	tcp_tw_put(tw);
+}
+
+static void tcp_v4_or_send_ack(struct sk_buff *skb, struct open_request *req)
+{
+	tcp_v4_send_ack(skb, req->snt_isn+1, req->rcv_isn+1, req->rcv_wnd, req->ts_recent);
+}
 
 /*
  *	Send a SYN-ACK after having received an ACK. 
@@ -1110,7 +1292,6 @@ static void tcp_v4_send_synack(struct sock *sk, struct open_request *req)
 	struct rtable *rt;
 	struct ip_options *opt;
 	struct sk_buff * skb;
-	int mss;
 
 	/* First, grab a route. */
 	opt = req->af.v4_req.opt;
@@ -1118,7 +1299,7 @@ static void tcp_v4_send_synack(struct sock *sk, struct open_request *req)
 				 opt->faddr :
 				 req->af.v4_req.rmt_addr),
 			   req->af.v4_req.loc_addr,
-			   RT_TOS(sk->ip_tos) | RTO_CONN | sk->localroute,
+			   RT_TOS(sk->protinfo.af_inet.tos) | RTO_CONN | sk->localroute,
 			   sk->bound_dev_if)) {
 		ip_statistics.IpOutNoRoutes++;
 		return;
@@ -1129,15 +1310,10 @@ static void tcp_v4_send_synack(struct sock *sk, struct open_request *req)
 		return;
 	}
 
-	mss = rt->u.dst.pmtu - sizeof(struct iphdr) - sizeof(struct tcphdr);
+	skb = tcp_make_synack(sk, &rt->u.dst, req);
 
-	skb = tcp_make_synack(sk, &rt->u.dst, req, mss);
 	if (skb) {
 		struct tcphdr *th = skb->h.th;
-
-#ifdef CONFIG_IP_TRANSPARENT_PROXY
-		th->source = req->lcl_port; /* LVE */
-#endif
 
 		th->check = tcp_v4_check(th, skb->len,
 					 req->af.v4_req.loc_addr, req->af.v4_req.rmt_addr,
@@ -1202,7 +1378,9 @@ tcp_v4_save_options(struct sock *sk, struct sk_buff *skb)
 int sysctl_max_syn_backlog = 128; 
 
 struct or_calltable or_ipv4 = {
+	PF_INET,
 	tcp_v4_send_synack,
+	tcp_v4_or_send_ack,
 	tcp_v4_or_free,
 	tcp_v4_send_reset
 };
@@ -1210,22 +1388,19 @@ struct or_calltable or_ipv4 = {
 #define BACKLOG(sk) ((sk)->tp_pinfo.af_tcp.syn_backlog) /* lvalue! */
 #define BACKLOGMAX(sk) sysctl_max_syn_backlog
 
-int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, __u32 isn)
+int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 {
 	struct tcp_opt tp;
 	struct open_request *req;
 	struct tcphdr *th = skb->h.th;
 	__u32 saddr = skb->nh.iph->saddr;
 	__u32 daddr = skb->nh.iph->daddr;
+	__u32 isn = TCP_SKB_CB(skb)->when;
 #ifdef CONFIG_SYN_COOKIES
 	int want_cookie = 0;
 #else
 #define want_cookie 0 /* Argh, why doesn't gcc optimize this :( */
 #endif
-
-	/* If the socket is dead, don't accept the connection.	*/
-	if (sk->dead) 
-		goto dead; 
 
 	/* Never answer to SYNs send to broadcast or multicast */
 	if (((struct rtable *)skb->dst)->rt_flags & 
@@ -1235,7 +1410,7 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, __u32 isn)
 	/* XXX: Check against a global syn pool counter. */
 	if (BACKLOG(sk) > BACKLOGMAX(sk)) {
 #ifdef CONFIG_SYN_COOKIES
-		if (sysctl_tcp_syncookies) {
+		if (sysctl_tcp_syncookies && !isn) {
 			syn_flood_warning(skb);
 			want_cookie = 1; 
 		} else
@@ -1257,30 +1432,29 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, __u32 isn)
 	req->rcv_isn = TCP_SKB_CB(skb)->seq;
  	tp.tstamp_ok = tp.sack_ok = tp.wscale_ok = tp.snd_wscale = 0;
 
-	tp.mss_clamp = 65535;
+	tp.mss_clamp = 536;
+	tp.user_mss = sk->tp_pinfo.af_tcp.user_mss;
+
 	tcp_parse_options(NULL, th, &tp, want_cookie);
-	if (tp.mss_clamp == 65535)
-		tp.mss_clamp = 576 - sizeof(struct iphdr) - sizeof(struct iphdr);
 
-	if (sk->tp_pinfo.af_tcp.user_mss && sk->tp_pinfo.af_tcp.user_mss < tp.mss_clamp)
-		tp.mss_clamp = sk->tp_pinfo.af_tcp.user_mss;
 	req->mss = tp.mss_clamp;
-
-	if (tp.saw_tstamp)
-		req->ts_recent = tp.rcv_tsval;
+	req->ts_recent = tp.saw_tstamp ? tp.rcv_tsval : 0;
 	req->tstamp_ok = tp.tstamp_ok;
 	req->sack_ok = tp.sack_ok;
 	req->snd_wscale = tp.snd_wscale;
 	req->wscale_ok = tp.wscale_ok;
 	req->rmt_port = th->source;
-#ifdef CONFIG_IP_TRANSPARENT_PROXY
-	req->lcl_port = th->dest ; /* LVE */
-#endif
 	req->af.v4_req.loc_addr = daddr;
 	req->af.v4_req.rmt_addr = saddr;
 
 	/* Note that we ignore the isn passed from the TIME_WAIT
 	 * state here. That's the price we pay for cookies.
+	 *
+	 * RED-PEN. The price is high... Then we cannot kill TIME-WAIT
+	 * and should reject connection attempt, duplicates with random
+	 * sequence number can corrupt data. Right?
+	 * I disabled sending cookie to request matching to a timewait
+	 * bucket.
 	 */
 	if (want_cookie)
 		isn = cookie_v4_init_sequence(sk, skb, &req->mss);
@@ -1308,11 +1482,6 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, __u32 isn)
 
 	return 0;
 
-dead:
-	SOCK_DEBUG(sk, "Reset on %p: Connect on dead socket.\n",sk);
-	tcp_statistics.TcpAttemptFails++;
-	return -ENOTCONN; /* send reset */
-
 dropbacklog:
 	if (!want_cookie) 
 		BACKLOG(sk)--;
@@ -1321,147 +1490,6 @@ drop:
 	return 0;
 }
 
-/* This is not only more efficient than what we used to do, it eliminates
- * a lot of code duplication between IPv4/IPv6 SYN recv processing. -DaveM
- *
- * This function wants to be moved to a common for IPv[46] file. --ANK
- */
-struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req, struct sk_buff *skb)
-{
-	struct sock *newsk = sk_alloc(PF_INET, GFP_ATOMIC, 0);
-
-	if(newsk != NULL) {
-		struct tcp_opt *newtp;
-#ifdef CONFIG_FILTER
-		struct sk_filter *filter;
-#endif
-
-		memcpy(newsk, sk, sizeof(*newsk));
-		newsk->state = TCP_SYN_RECV;
-
-		/* Clone the TCP header template */
-		newsk->dport = req->rmt_port;
-
-		sock_lock_init(newsk);
-
-		atomic_set(&newsk->rmem_alloc, 0);
-		skb_queue_head_init(&newsk->receive_queue);
-		atomic_set(&newsk->wmem_alloc, 0);
-		skb_queue_head_init(&newsk->write_queue);
-		atomic_set(&newsk->omem_alloc, 0);
-
-		newsk->done = 0;
-		newsk->proc = 0;
-		newsk->backlog.head = newsk->backlog.tail = NULL;
-		skb_queue_head_init(&newsk->error_queue);
-		newsk->write_space = tcp_write_space;
-#ifdef CONFIG_FILTER
-		if ((filter = newsk->filter) != NULL)
-			sk_filter_charge(newsk, filter);
-#endif
-
-		/* Now setup tcp_opt */
-		newtp = &(newsk->tp_pinfo.af_tcp);
-		newtp->pred_flags = 0;
-		newtp->rcv_nxt = req->rcv_isn + 1;
-		newtp->snd_nxt = req->snt_isn + 1;
-		newtp->snd_una = req->snt_isn + 1;
-		newtp->srtt = 0;
-		newtp->ato = 0;
-		newtp->snd_wl1 = req->rcv_isn;
-		newtp->snd_wl2 = req->snt_isn;
-
-		/* RFC1323: The window in SYN & SYN/ACK segments
-		 * is never scaled.
-		 */
-		newtp->snd_wnd = ntohs(skb->h.th->window);
-
-		newtp->max_window = newtp->snd_wnd;
-		newtp->pending = 0;
-		newtp->retransmits = 0;
-		newtp->last_ack_sent = req->rcv_isn + 1;
-		newtp->backoff = 0;
-		newtp->mdev = TCP_TIMEOUT_INIT;
-
-		/* So many TCP implementations out there (incorrectly) count the
-		 * initial SYN frame in their delayed-ACK and congestion control
-		 * algorithms that we must have the following bandaid to talk
-		 * efficiently to them.  -DaveM
-		 */
-		newtp->snd_cwnd = 2;
-
-		newtp->rto = TCP_TIMEOUT_INIT;
-		newtp->packets_out = 0;
-		newtp->fackets_out = 0;
-		newtp->retrans_out = 0;
-		newtp->high_seq = 0;
-		newtp->snd_ssthresh = 0x7fffffff;
-		newtp->snd_cwnd_cnt = 0;
-		newtp->dup_acks = 0;
-		newtp->delayed_acks = 0;
-		init_timer(&newtp->retransmit_timer);
-		newtp->retransmit_timer.function = &tcp_retransmit_timer;
-		newtp->retransmit_timer.data = (unsigned long) newsk;
-		init_timer(&newtp->delack_timer);
-		newtp->delack_timer.function = &tcp_delack_timer;
-		newtp->delack_timer.data = (unsigned long) newsk;
-		skb_queue_head_init(&newtp->out_of_order_queue);
-		newtp->send_head = newtp->retrans_head = NULL;
-		newtp->rcv_wup = req->rcv_isn + 1;
-		newtp->write_seq = req->snt_isn + 1;
-		newtp->copied_seq = req->rcv_isn + 1;
-
-		newtp->saw_tstamp = 0;
-		newtp->mss_clamp = req->mss;
-
-		init_timer(&newtp->probe_timer);
-		newtp->probe_timer.function = &tcp_probe_timer;
-		newtp->probe_timer.data = (unsigned long) newsk;
-		newtp->probes_out = 0;
-		newtp->syn_seq = req->rcv_isn;
-		newtp->fin_seq = req->rcv_isn;
-		newtp->urg_data = 0;
-		tcp_synq_init(newtp);
-		newtp->syn_backlog = 0;
-		if (skb->len >= 536)
-			newtp->last_seg_size = skb->len; 
-
-		/* Back to base struct sock members. */
-		newsk->err = 0;
-		newsk->ack_backlog = 0;
-		newsk->max_ack_backlog = SOMAXCONN;
-		newsk->priority = 0;
-
-		/* IP layer stuff */
-		newsk->timeout = 0;
-		init_timer(&newsk->timer);
-		newsk->timer.function = &net_timer;
-		newsk->timer.data = (unsigned long) newsk;
-		newsk->socket = NULL;
-
-		newtp->tstamp_ok = req->tstamp_ok;
-		if((newtp->sack_ok = req->sack_ok) != 0)
-			newtp->num_sacks = 0;
-		newtp->window_clamp = req->window_clamp;
-		newtp->rcv_wnd = req->rcv_wnd;
-		newtp->wscale_ok = req->wscale_ok;
-		if (newtp->wscale_ok) {
-			newtp->snd_wscale = req->snd_wscale;
-			newtp->rcv_wscale = req->rcv_wscale;
-		} else {
-			newtp->snd_wscale = newtp->rcv_wscale = 0;
-			newtp->window_clamp = min(newtp->window_clamp,65535);
-		}
-		if (newtp->tstamp_ok) {
-			newtp->ts_recent = req->ts_recent;
-			newtp->ts_recent_stamp = tcp_time_stamp;
-			newtp->tcp_header_len = sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED;
-		} else {
-			newtp->tcp_header_len = sizeof(struct tcphdr);
-		}
-	}
-	return newsk;
-}
 
 /* 
  * The three way handshake has completed - we got a valid synack - 
@@ -1482,23 +1510,13 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 		
 		if (ip_route_output(&rt,
 			opt && opt->srr ? opt->faddr : req->af.v4_req.rmt_addr,
-			req->af.v4_req.loc_addr, sk->ip_tos|RTO_CONN, 0))
+			req->af.v4_req.loc_addr, sk->protinfo.af_inet.tos|RTO_CONN, 0))
 			return NULL;
 	        dst = &rt->u.dst;
 	}
-#ifdef CONFIG_IP_TRANSPARENT_PROXY
-	/* The new socket created for transparent proxy may fall
-	 * into a non-existed bind bucket because sk->num != newsk->num.
-	 * Ensure existance of the bucket now. The placement of the check
-	 * later will require to destroy just created newsk in the case of fail.
-	 * 1998/04/22 Andrey V. Savochkin <saw@msu.ru>
-	 */
-	if (tcp_bucket_check(ntohs(skb->h.th->dest)))
-		goto exit;
-#endif
 
 	newsk = tcp_create_openreq_child(sk, req, skb);
-	if (!newsk) 
+	if (!newsk)
 		goto exit;
 
 	sk->tp_pinfo.af_tcp.syn_backlog--;
@@ -1510,30 +1528,25 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	newsk->daddr = req->af.v4_req.rmt_addr;
 	newsk->saddr = req->af.v4_req.loc_addr;
 	newsk->rcv_saddr = req->af.v4_req.loc_addr;
-#ifdef CONFIG_IP_TRANSPARENT_PROXY
-	newsk->num = ntohs(skb->h.th->dest);
-	newsk->sport = req->lcl_port;
-#endif
-	newsk->opt = req->af.v4_req.opt;
+	newsk->protinfo.af_inet.opt = req->af.v4_req.opt;
+	newsk->protinfo.af_inet.mc_index = ((struct rtable*)skb->dst)->rt_iif;
+	newsk->protinfo.af_inet.mc_ttl = skb->nh.iph->ttl;
 	newtp->ext_header_len = 0;
-	if (newsk->opt)
-		newtp->ext_header_len = newsk->opt->optlen;
+	if (newsk->protinfo.af_inet.opt)
+		newtp->ext_header_len = newsk->protinfo.af_inet.opt->optlen;
 
 	tcp_sync_mss(newsk, dst->pmtu);
-	newtp->rcv_mss = newtp->mss_clamp;
+	tcp_initialize_rcv_mss(newsk);
 
-	/* It would be better to use newtp->mss_clamp here */
-	if (newsk->rcvbuf < (3 * newtp->pmtu_cookie))
-		newsk->rcvbuf = min ((3 * newtp->pmtu_cookie), sysctl_rmem_max);
-	if (newsk->sndbuf < (3 * newtp->pmtu_cookie))
-		newsk->sndbuf = min ((3 * newtp->pmtu_cookie), sysctl_wmem_max);
+	if (newsk->rcvbuf < (3 * (dst->advmss+40+MAX_HEADER+15)))
+		newsk->rcvbuf = min ((3 * (dst->advmss+40+MAX_HEADER+15)), sysctl_rmem_max);
+	if (newsk->sndbuf < (3 * (newtp->mss_clamp+40+MAX_HEADER+15)))
+		newsk->sndbuf = min ((3 * (newtp->mss_clamp+40+MAX_HEADER+15)), sysctl_wmem_max);
+
+	bh_lock_sock(newsk);
  
-	SOCKHASH_LOCK_WRITE();
 	__tcp_v4_hash(newsk);
 	__tcp_inherit_port(sk, newsk);
-	SOCKHASH_UNLOCK_WRITE();
-
-	sk->data_ready(sk, 0); /* Deliver SIGIO */ 
 
 	return newsk;
 
@@ -1542,61 +1555,50 @@ exit:
 	return NULL;
 }
 
-static void tcp_v4_rst_req(struct sock *sk, struct sk_buff *skb)
+
+static struct sock *tcp_v4_hnd_req(struct sock *sk,struct sk_buff *skb)
 {
-	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 	struct open_request *req, *prev;
+	struct tcphdr *th = skb->h.th;
+	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
-	req = tcp_v4_search_req(tp,skb->nh.iph, skb->h.th, &prev);
-	if (!req)
-		return;
-	/* Sequence number check required by RFC793 */
-	if (before(TCP_SKB_CB(skb)->seq, req->rcv_isn) ||
-	    after(TCP_SKB_CB(skb)->seq, req->rcv_isn+1))
-		return;
-	tcp_synq_unlink(tp, req, prev);
-	(req->sk ? sk->ack_backlog : tp->syn_backlog)--;
-	req->class->destructor(req);
-	tcp_openreq_free(req); 
+	/* Find possible connection requests. */
+	req = tcp_v4_search_req(tp, skb->nh.iph, th, &prev);
+	if (req)
+		return tcp_check_req(sk, skb, req, prev);
 
-	net_statistics.EmbryonicRsts++;
-}
-
-/* Check for embryonic sockets (open_requests) We check packets with
- * only the SYN bit set against the open_request queue too: This
- * increases connection latency a bit, but is required to detect
- * retransmitted SYNs.  
- */
-static inline struct sock *tcp_v4_hnd_req(struct sock *sk,struct sk_buff *skb)
-{
-	struct tcphdr *th = skb->h.th; 
-	u32 flg = ((u32 *)th)[3]; 
-
-	/* Check for RST */
-	if (flg & __constant_htonl(0x00040000)) {
-		tcp_v4_rst_req(sk, skb);
-		return NULL;
-	}
-
-	/* Check for SYN|ACK */
-	flg &= __constant_htonl(0x00120000);
-	if (flg) {
-		struct open_request *req, *dummy; 
-		struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-
-		/* Find possible connection requests. */
-		req = tcp_v4_search_req(tp, skb->nh.iph, th, &dummy); 
-		if (req) {
-			sk = tcp_check_req(sk, skb, req);
-		}
 #ifdef CONFIG_SYN_COOKIES
-		else {
-			sk = cookie_v4_check(sk, skb, &(IPCB(skb)->opt));
-		}
+	if (!th->rst && (th->syn || th->ack))
+		sk = cookie_v4_check(sk, skb, &(IPCB(skb)->opt));
 #endif
-	}
-	return sk; 
+	return sk;
 }
+
+static int tcp_csum_verify(struct sk_buff *skb)
+{
+	switch (skb->ip_summed) {
+	case CHECKSUM_NONE:
+		skb->csum = csum_partial((char *)skb->h.th, skb->len, 0);
+	case CHECKSUM_HW:
+		if (tcp_v4_check(skb->h.th,skb->len,skb->nh.iph->saddr,skb->nh.iph->daddr,skb->csum)) {
+			NETDEBUG(printk(KERN_DEBUG "TCPv4 bad checksum "
+					"from %d.%d.%d.%d:%04x to %d.%d.%d.%d:%04x, "
+					"len=%d/%d\n",
+					NIPQUAD(skb->nh.iph->saddr),
+					ntohs(skb->h.th->source), 
+					NIPQUAD(skb->nh.iph->daddr),
+					ntohs(skb->h.th->dest),
+					skb->len,
+					ntohs(skb->nh.iph->tot_len)));
+			return 1;
+		}
+		skb->ip_summed = CHECKSUM_UNNECESSARY;
+	default:
+		/* CHECKSUM_UNNECESSARY */
+	}
+	return 0;
+}
+
 
 /* The socket must have it's spinlock held when we get
  * here.
@@ -1608,7 +1610,6 @@ static inline struct sock *tcp_v4_hnd_req(struct sock *sk,struct sk_buff *skb)
  */
 int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 {
-	int need_unlock = 0;
 #ifdef CONFIG_FILTER
 	struct sk_filter *filter = sk->filter;
 	if (filter && sk_filter(skb, filter))
@@ -1623,16 +1624,22 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 	skb_set_owner_r(skb, sk);
 
 	if (sk->state == TCP_ESTABLISHED) { /* Fast path */
+		/* Ready to move deeper ... */
+		if (tcp_csum_verify(skb))
+			goto csum_err;
 		if (tcp_rcv_established(sk, skb, skb->h.th, skb->len))
 			goto reset;
 		return 0; 
 	} 
 
+	if (tcp_csum_verify(skb))
+		goto csum_err;
+
 	if (sk->state == TCP_LISTEN) { 
 		struct sock *nsk;
-		
+
 		nsk = tcp_v4_hnd_req(sk, skb);
-		if (!nsk) 
+		if (!nsk)
 			goto discard;
 
 		/*
@@ -1641,21 +1648,35 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 		 * the new socket..
 		 */
 		if (nsk != sk) {
-			bh_lock_sock(nsk);
-			if (nsk->lock.users != 0) {
-				skb_orphan(skb);
-				sk_add_backlog(nsk, skb);
-				bh_unlock_sock(nsk);
-				return 0;
-			}
-			need_unlock = 1;
-			sk = nsk;
+			int ret;
+			int state = nsk->state;
+
+			skb_orphan(skb);
+
+			BUG_TRAP(nsk->lock.users == 0);
+			skb_set_owner_r(skb, nsk);
+			ret = tcp_rcv_state_process(nsk, skb, skb->h.th, skb->len);
+
+			/* Wakeup parent, send SIGIO, if this packet changed
+			   socket state from SYN-RECV.
+
+			   It still looks ugly, however it is much better
+			   than miracleous double wakeup in syn_recv_sock()
+			   and tcp_rcv_state_process().
+			 */
+			if (state == TCP_SYN_RECV && nsk->state != state)
+				sk->data_ready(sk, 0);
+
+			bh_unlock_sock(nsk);
+			if (ret)
+				goto reset;
+			return 0;
 		}
 	}
 	
 	if (tcp_rcv_state_process(sk, skb, skb->h.th, skb->len))
 		goto reset;
-	goto out_maybe_unlock;
+	return 0;
 
 reset:
 	tcp_v4_send_reset(skb);
@@ -1666,10 +1687,11 @@ discard:
 	 * might be destroyed here. This current version compiles correctly,
 	 * but you have been warned.
 	 */
-out_maybe_unlock:
-	if(need_unlock)
-		bh_unlock_sock(sk);
 	return 0;
+
+csum_err:
+	tcp_statistics.TcpInErrs++;
+	goto discard;
 }
 
 /*
@@ -1696,56 +1718,22 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 	if (len < sizeof(struct tcphdr))
 		goto bad_packet;
 
-	/* Try to use the device checksum if provided. */
-	switch (skb->ip_summed) {
-	case CHECKSUM_NONE:
-		skb->csum = csum_partial((char *)th, len, 0);
-	case CHECKSUM_HW:
-		if (tcp_v4_check(th,len,skb->nh.iph->saddr,skb->nh.iph->daddr,skb->csum)) {
-			NETDEBUG(printk(KERN_DEBUG "TCPv4 bad checksum "
-					"from %d.%d.%d.%d:%04x to %d.%d.%d.%d:%04x, "
-					"len=%d/%d/%d\n",
-					NIPQUAD(skb->nh.iph->saddr),
-					ntohs(th->source), 
-					NIPQUAD(skb->nh.iph->daddr),
-					ntohs(th->dest),
-					len, skb->len,
-					ntohs(skb->nh.iph->tot_len)));
-	bad_packet:		
-			tcp_statistics.TcpInErrs++;
-			goto discard_it;
-		}
-	default:
-		/* CHECKSUM_UNNECESSARY */
-	}
-
-#ifdef CONFIG_IP_TRANSPARENT_PROXY
-	if (IPCB(skb)->redirport)
-		sk = tcp_v4_proxy_lookup(th->dest, skb->nh.iph->saddr, th->source,
-					 skb->nh.iph->daddr, skb->dev,
-					 IPCB(skb)->redirport, skb->dev->ifindex);
-	else {
-#endif
-		SOCKHASH_LOCK_READ_BH();
-		sk = __tcp_v4_lookup(skb->nh.iph->saddr, th->source,
-				     skb->nh.iph->daddr, ntohs(th->dest), skb->dev->ifindex);
-		SOCKHASH_UNLOCK_READ_BH();
-#ifdef CONFIG_IP_TRANSPARENT_PROXY
-		if (!sk)
-			sk = tcp_v4_search_proxy_openreq(skb);
-	}
-#endif
-	if (!sk)
-		goto no_tcp_socket;
-	if(!ipsec_sk_policy(sk,skb))
-		goto discard_it;
-
 	TCP_SKB_CB(skb)->seq = ntohl(th->seq);
 	TCP_SKB_CB(skb)->end_seq = (TCP_SKB_CB(skb)->seq + th->syn + th->fin +
 				    len - th->doff*4);
 	TCP_SKB_CB(skb)->ack_seq = ntohl(th->ack_seq);
-
+	TCP_SKB_CB(skb)->when = 0;
 	skb->used = 0;
+
+	sk = __tcp_v4_lookup(skb->nh.iph->saddr, th->source,
+			     skb->nh.iph->daddr, ntohs(th->dest), skb->dev->ifindex);
+
+	if (!sk)
+		goto no_tcp_socket;
+
+process:
+	if(!ipsec_sk_policy(sk,skb))
+		goto discard_and_relse;
 
 	if (sk->state == TCP_TIME_WAIT)
 		goto do_time_wait;
@@ -1758,40 +1746,78 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 		sk_add_backlog(sk, skb);
 	bh_unlock_sock(sk);
 
+	sock_put(sk);
+
 	return ret;
 
 no_tcp_socket:
-	tcp_v4_send_reset(skb);
+	if (tcp_csum_verify(skb)) {
+bad_packet:
+		tcp_statistics.TcpInErrs++;
+	} else {
+		tcp_v4_send_reset(skb);
+	}
 
 discard_it:
 	/* Discard frame. */
 	kfree_skb(skb);
   	return 0;
 
+discard_and_relse:
+	sock_put(sk);
+	goto discard_it;
+
 do_time_wait:
-	if(tcp_timewait_state_process((struct tcp_tw_bucket *)sk,
-				      skb, th, skb->len))
+	if (tcp_csum_verify(skb)) {
+		tcp_statistics.TcpInErrs++;
+		goto discard_and_relse;
+	}
+	switch(tcp_timewait_state_process((struct tcp_tw_bucket *)sk,
+					  skb, th, skb->len)) {
+	case TCP_TW_SYN:
+	{
+		struct sock *sk2;
+
+		sk2 = tcp_v4_lookup_listener(skb->nh.iph->daddr, ntohs(th->dest), skb->dev->ifindex);
+		if (sk2 != NULL) {
+			tcp_tw_deschedule((struct tcp_tw_bucket *)sk);
+			tcp_timewait_kill((struct tcp_tw_bucket *)sk);
+			tcp_tw_put((struct tcp_tw_bucket *)sk);
+			sk = sk2;
+			goto process;
+		}
+		/* Fall through to ACK */
+	}
+	case TCP_TW_ACK:
+		tcp_v4_timewait_ack(sk, skb);
+		break;
+	case TCP_TW_RST:
 		goto no_tcp_socket;
+	case TCP_TW_SUCCESS:
+	}
 	goto discard_it;
 }
 
 static void __tcp_v4_rehash(struct sock *sk)
 {
-	struct sock **skp = &tcp_ehash[(sk->hashent = tcp_sk_hashfn(sk))];
+	struct tcp_ehash_bucket *oldhead = &tcp_ehash[sk->hashent];
+	struct tcp_ehash_bucket *head = &tcp_ehash[(sk->hashent = tcp_sk_hashfn(sk))];
+	struct sock **skp = &head->chain;
 
-	SOCKHASH_LOCK_WRITE();
+	write_lock_bh(&oldhead->lock);
 	if(sk->pprev) {
 		if(sk->next)
 			sk->next->pprev = sk->pprev;
 		*sk->pprev = sk->next;
 		sk->pprev = NULL;
-		tcp_reg_zap(sk);
 	}
+	write_unlock(&oldhead->lock);
+	write_lock(&head->lock);
 	if((sk->next = *skp) != NULL)
 		(*skp)->pprev = &sk->next;
 	*skp = sk;
 	sk->pprev = skp;
-	SOCKHASH_UNLOCK_WRITE();
+	write_unlock_bh(&head->lock);
 }
 
 int tcp_v4_rebuild_header(struct sock *sk)
@@ -1815,7 +1841,7 @@ int tcp_v4_rebuild_header(struct sock *sk)
 
 		/* Query new route using another rt buffer */
 		tmp = ip_route_connect(&new_rt, rt->rt_dst, 0,
-					RT_TOS(sk->ip_tos)|sk->localroute,
+					RT_TOS(sk->protinfo.af_inet.tos)|sk->localroute,
 					sk->bound_dev_if);
 
 		/* Only useful if different source addrs */
@@ -1824,11 +1850,10 @@ int tcp_v4_rebuild_header(struct sock *sk)
 			 *	Only useful if different source addrs
 			 */
 			if (new_rt->rt_src != old_saddr ) {
-				dst_release(sk->dst_cache);
-				sk->dst_cache = &new_rt->u.dst;
+				__sk_dst_set(sk, &new_rt->u.dst);
 				rt = new_rt;
 				goto do_rewrite;
-			} 
+			}
 			dst_release(&new_rt->u.dst);
 		}
 	}
@@ -1840,7 +1865,7 @@ int tcp_v4_rebuild_header(struct sock *sk)
 			sk->error_report(sk);
 			return -1;
 		}
-		dst_release(xchg(&sk->dst_cache, &rt->u.dst));
+		__sk_dst_set(sk, &rt->u.dst);
 	}
 
 	return 0;
@@ -1871,17 +1896,14 @@ do_rewrite:
 		/* XXX The only one ugly spot where we need to
 		 * XXX really change the sockets identity after
 		 * XXX it has entered the hashes. -DaveM
+		 *
+		 * Besides that, it does not check for connetion
+		 * uniqueness. Wait for troubles.
 		 */
 		__tcp_v4_rehash(sk);
 	} 
         
 	return 0;
-}
-
-static struct sock * tcp_v4_get_sock(struct sk_buff *skb, struct tcphdr *th)
-{
-	return tcp_v4_lookup(skb->nh.iph->saddr, th->source,
-			     skb->nh.iph->daddr, th->dest, skb->dev->ifindex);
 }
 
 static void v4_addr2sockaddr(struct sock *sk, struct sockaddr * uaddr)
@@ -1899,7 +1921,7 @@ struct tcp_func ipv4_specific = {
 	tcp_v4_rebuild_header,
 	tcp_v4_conn_request,
 	tcp_v4_syn_recv_sock,
-	tcp_v4_get_sock,
+	tcp_v4_hash_connecting,
 	sizeof(struct iphdr),
 
 	ip_setsockopt,
@@ -1918,9 +1940,8 @@ static int tcp_v4_init_sock(struct sock *sk)
 	skb_queue_head_init(&tp->out_of_order_queue);
 	tcp_init_xmit_timers(sk);
 
-	tp->rto  = TCP_TIMEOUT_INIT;		/*TCP_WRITE_TIME*/
+	tp->rto  = TCP_TIMEOUT_INIT;
 	tp->mdev = TCP_TIMEOUT_INIT;
-	tp->mss_clamp = ~0;
       
 	/* So many TCP implementations out there (incorrectly) count the
 	 * initial SYN frame in their delayed-ACK and congestion control
@@ -1934,10 +1955,11 @@ static int tcp_v4_init_sock(struct sock *sk)
 	 */
 	tp->snd_cwnd_cnt = 0;
 	tp->snd_ssthresh = 0x7fffffff;	/* Infinity */
+	tp->snd_cwnd_clamp = ~0;
+	tp->mss_cache = 536;
 
 	sk->state = TCP_CLOSE;
 	sk->max_ack_backlog = SOMAXCONN;
-	tp->rcv_mss = 536; 
 
 	sk->write_space = tcp_write_space; 
 
@@ -1952,20 +1974,14 @@ static int tcp_v4_init_sock(struct sock *sk)
 static int tcp_v4_destroy_sock(struct sock *sk)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-	struct sk_buff *skb;
 
 	tcp_clear_xmit_timers(sk);
 
-	if (sk->keepopen)
-		tcp_dec_slow_timer(TCP_SLT_KEEPALIVE);
-
 	/* Cleanup up the write buffer. */
-  	while((skb = __skb_dequeue(&sk->write_queue)) != NULL)
-		kfree_skb(skb);
+  	__skb_queue_purge(&sk->write_queue);
 
 	/* Cleans up our, hopefuly empty, out_of_order_queue. */
-  	while((skb = __skb_dequeue(&tp->out_of_order_queue)) != NULL)
-		kfree_skb(skb);
+  	__skb_queue_purge(&tp->out_of_order_queue);
 
 	/* Clean up a referenced TCP bind bucket, this only happens if a
 	 * port is allocated for a socket, but it never fully connects.
@@ -1980,7 +1996,7 @@ static int tcp_v4_destroy_sock(struct sock *sk)
 static void get_openreq(struct sock *sk, struct open_request *req, char *tmpbuf, int i)
 {
 	sprintf(tmpbuf, "%4d: %08lX:%04X %08lX:%04X"
-		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %u",
+		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %u %d %p",
 		i,
 		(long unsigned int)req->af.v4_req.loc_addr,
 		ntohs(sk->sport),
@@ -1993,7 +2009,9 @@ static void get_openreq(struct sock *sk, struct open_request *req, char *tmpbuf,
 		req->retrans,
 		sk->socket ? sk->socket->inode->i_uid : 0,
 		0,  /* non standard timer */  
-		0 /* open_requests have no inode */
+		0, /* open_requests have no inode */
+		atomic_read(&sk->refcnt),
+		req
 		); 
 }
 
@@ -2025,19 +2043,19 @@ static void get_tcp_sock(struct sock *sp, char *tmpbuf, int i)
 		timer_expires = jiffies;
 
 	sprintf(tmpbuf, "%4d: %08X:%04X %08X:%04X"
-		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %ld",
+		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %ld %d %p",
 		i, src, srcp, dest, destp, sp->state, 
 		tp->write_seq-tp->snd_una, tp->rcv_nxt-tp->copied_seq,
 		timer_active, timer_expires-jiffies,
 		tp->retransmits,
 		sp->socket ? sp->socket->inode->i_uid : 0,
-		timer_active ? sp->timeout : 0,
-		sp->socket ? sp->socket->inode->i_ino : 0);
+		0,
+		sp->socket ? sp->socket->inode->i_ino : 0,
+		atomic_read(&sp->refcnt), sp);
 }
 
 static void get_timewait_sock(struct tcp_tw_bucket *tw, char *tmpbuf, int i)
 {
-	extern int tcp_tw_death_row_slot;
 	unsigned int dest, src;
 	__u16 destp, srcp;
 	int slot_dist;
@@ -2054,9 +2072,10 @@ static void get_timewait_sock(struct tcp_tw_bucket *tw, char *tmpbuf, int i)
 		slot_dist = tcp_tw_death_row_slot - slot_dist;
 
 	sprintf(tmpbuf, "%4d: %08X:%04X %08X:%04X"
-		" %02X %08X:%08X %02X:%08X %08X %5d %8d %d",
+		" %02X %08X:%08X %02X:%08X %08X %5d %8d %d %d %p",
 		i, src, srcp, dest, destp, TCP_TIME_WAIT, 0, 0,
-		3, slot_dist * TCP_TWKILL_PERIOD, 0, 0, 0, 0);
+		3, slot_dist * TCP_TWKILL_PERIOD, 0, 0, 0, 0,
+		atomic_read(&tw->refcnt), tw);
 }
 
 int tcp_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
@@ -2071,9 +2090,9 @@ int tcp_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 			       "rx_queue tr tm->when retrnsmt   uid  timeout inode");
 
 	pos = 128;
-	SOCKHASH_LOCK_READ();
 
 	/* First, walk listening socket table. */
+	tcp_listen_lock();
 	for(i = 0; i < TCP_LHTABLE_SIZE; i++) {
 		struct sock *sk = tcp_listening_hash[i];
 
@@ -2081,66 +2100,86 @@ int tcp_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 			struct open_request *req;
 			struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
-			if (sk->family != PF_INET)
-				continue;
+			if (!TCP_INET_FAMILY(sk->family))
+				goto skip_listen;
+
 			pos += 128;
 			if (pos >= offset) {
 				get_tcp_sock(sk, tmpbuf, num);
 				len += sprintf(buffer+len, "%-127s\n", tmpbuf);
-				if (len >= length)
-					goto out;
+				if (len >= length) {
+					tcp_listen_unlock();
+					goto out_no_bh;
+				}
 			}
+
+skip_listen:
+			lock_sock(sk);
 			for (req = tp->syn_wait_queue; req; req = req->dl_next, num++) {
 				if (req->sk)
 					continue;
+				if (!TCP_INET_FAMILY(req->class->family))
+					continue;
+
 				pos += 128;
 				if (pos < offset)
 					continue;
 				get_openreq(sk, req, tmpbuf, num);
 				len += sprintf(buffer+len, "%-127s\n", tmpbuf);
-				if(len >= length) 
-					goto out;
+				if(len >= length) {
+					tcp_listen_unlock();
+					release_sock(sk);
+					goto out_no_bh;
+				}
 			}
+			release_sock(sk);
 		}
 	}
+	tcp_listen_unlock();
+
+	local_bh_disable();
 
 	/* Next, walk established hash chain. */
-	for (i = 0; i < (tcp_ehash_size >> 1); i++) {
+	for (i = 0; i < tcp_ehash_size; i++) {
+		struct tcp_ehash_bucket *head = &tcp_ehash[i];
 		struct sock *sk;
+		struct tcp_tw_bucket *tw;
 
-		for(sk = tcp_ehash[i]; sk; sk = sk->next, num++) {
-			if (sk->family != PF_INET)
+		read_lock(&head->lock);
+		for(sk = head->chain; sk; sk = sk->next, num++) {
+			if (!TCP_INET_FAMILY(sk->family))
 				continue;
 			pos += 128;
 			if (pos < offset)
 				continue;
 			get_tcp_sock(sk, tmpbuf, num);
 			len += sprintf(buffer+len, "%-127s\n", tmpbuf);
-			if(len >= length)
+			if(len >= length) {
+				read_unlock(&head->lock);
 				goto out;
+			}
 		}
-	}
-
-	/* Finally, walk time wait buckets. */
-	for (i = (tcp_ehash_size>>1); i < tcp_ehash_size; i++) {
-		struct tcp_tw_bucket *tw;
-		for (tw = (struct tcp_tw_bucket *)tcp_ehash[i];
+		for (tw = (struct tcp_tw_bucket *)tcp_ehash[i+tcp_ehash_size].chain;
 		     tw != NULL;
 		     tw = (struct tcp_tw_bucket *)tw->next, num++) {
-			if (tw->family != PF_INET)
+			if (!TCP_INET_FAMILY(tw->family))
 				continue;
 			pos += 128;
 			if (pos < offset)
 				continue;
 			get_timewait_sock(tw, tmpbuf, num);
 			len += sprintf(buffer+len, "%-127s\n", tmpbuf);
-			if(len >= length)
+			if(len >= length) {
+				read_unlock(&head->lock);
 				goto out;
+			}
 		}
+		read_unlock(&head->lock);
 	}
 
 out:
-	SOCKHASH_UNLOCK_READ();
+	local_bh_enable();
+out_no_bh:
 
 	begin = len - (pos - offset);
 	*start = buffer + begin;
@@ -2155,6 +2194,7 @@ out:
 struct proto tcp_prot = {
 	tcp_close,			/* close */
 	tcp_v4_connect,			/* connect */
+	tcp_disconnect,			/* disconnect */
 	tcp_accept,			/* accept */
 	NULL,				/* retransmit */
 	tcp_write_wakeup,		/* write_wakeup */
@@ -2171,7 +2211,7 @@ struct proto tcp_prot = {
 	NULL,				/* bind */
 	tcp_v4_do_rcv,			/* backlog_rcv */
 	tcp_v4_hash,			/* hash */
-	tcp_v4_unhash,			/* unhash */
+	tcp_unhash,			/* unhash */
 	tcp_v4_get_port,		/* get_port */
 	128,				/* max_header */
 	0,				/* retransmits */
@@ -2200,7 +2240,7 @@ __initfunc(void tcp_v4_init(struct net_proto_family *ops))
 	if ((err=ops->create(tcp_socket, IPPROTO_TCP))<0)
 		panic("Failed to create the TCP control socket.\n");
 	tcp_socket->sk->allocation=GFP_ATOMIC;
-	tcp_socket->sk->ip_ttl = MAXTTL;
+	tcp_socket->sk->protinfo.af_inet.ttl = MAXTTL;
 
 	/* Unhash it so that IP input processing does not even
 	 * see it, we do not wish this socket to see incoming

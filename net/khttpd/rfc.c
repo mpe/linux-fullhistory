@@ -43,7 +43,6 @@ RFC related functions (headers and stuff)
 #include <asm/semaphore.h>
 #include <asm/processor.h>
 #include <asm/uaccess.h>
-#include <asm/msr.h>
 
 
 #include "prototypes.h"
@@ -90,7 +89,7 @@ void AddMimeType(const char *Ident,const char *Type)
    	
    	
    	MimeTypes[atomic_read(&MimeCount)].identifier=*I;
-   	strcpy(MimeTypes[atomic_read(&MimeCount)].type,Type);
+   	strncpy(MimeTypes[atomic_read(&MimeCount)].type,Type,(64-sizeof(__u32)-sizeof(__kernel_size_t)));
    	MimeTypes[atomic_read(&MimeCount)].len = strlen(Type);
    	
    	atomic_inc(&MimeCount);
@@ -325,7 +324,7 @@ void ParseHeader(char *Buffer,const int length, struct http_request *Head)
 			
 			if (tmp>Endval) continue;
 			
-			strcpy(Head->FileName,sysctl_khttpd_docroot);
+			strncpy(Head->FileName,sysctl_khttpd_docroot,sizeof(Head->FileName));
 			PrefixLen = strlen(sysctl_khttpd_docroot);
 			Head->FileNameLength = min(255,tmp-Buffer+PrefixLen);		
 			

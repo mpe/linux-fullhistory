@@ -130,3 +130,5 @@ Code	Seq#	Include File		Comments
 0xA3	90-9F	DoubleTalk driver	in development:
 					<mailto:jrv@vanzandt.mv.com>
 0xAB	00-06	Network block device
+0xAD	00	Netfilter device	in development:
+					<mailto:rusty@rustcorp.com.au>	

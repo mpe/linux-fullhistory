@@ -42,7 +42,7 @@
 
 /* broacast/multicast storm limitation. This per source. */
 #define MAX_MCAST_PER_PERIOD    4
-#define MCAST_HOLD_TIME		10	/* in jiffies unit (10ms increment) */
+#define MCAST_HOLD_TIME		(10*HZ/100)
 
 #define Default_path_cost 10
 

@@ -32,3 +32,22 @@ options sb mad16=1
 options mad16 io=0x530 irq=7 dma=0 dma16=1 mpu_io=816 mpu_irq=5 && /usr/local/bin/aumix -w 15 -p 20 -m 0 -1 0 -2 0 -3 0 -i 0
 
 The addition of the "mpu_io=816 mpu_irq=5" to the mad16 options line is
+
+------------------------------------------------------------------------
+The mad16 module in addition supports the following options:
+
+option:			meaning:			default:
+joystick=0,1 		disabled, enabled 		disabled
+cdtype=0x00,0x02,0x04,	disabled, Sony CDU31A,		disabled
+       0x06,0x08,0x0a   Mitsumi, Panasonic,
+			Secondary IDE, Primary IDE 
+cdport=0x340,0x320,					0x340
+       0x330,0x360
+cdirq=0,3,5,7,9,10,11 	disabled, IRQ3, ... 		disabled
+cddma=0,5,6,7 		disabled, DMA5, ... 		DMA5 for Mitsumi or IDE
+cddma=0,1,2,3 		disabled, DMA1, ... 		DMA3 for Sony or Panasonic
+opl4=0,1 		OPL3, OPL4 			OPL3	
+
+for more details see linux/drivers/sound/mad16.c
+
+Rui Sousa

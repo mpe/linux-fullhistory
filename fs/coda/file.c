@@ -155,8 +155,8 @@ static ssize_t coda_file_read(struct file *coda_file, char *buff,
         result = cont_file.f_op->read(&cont_file , buff, count, 
 				      &(cont_file.f_pos));
 
-        CDEBUG(D_FILE, "ops at %x result %d, count %d, position: %d\n", 
-	       (int)cont_file.f_op, result, count, (int)cont_file.f_pos);
+        CDEBUG(D_FILE, "ops at %p result %d, count %ld, position: %d\n", 
+	       cont_file.f_op, result, (long)count, (int)cont_file.f_pos);
 
         coda_restore_codafile(coda_inode, coda_file, cont_inode, &cont_file);
         return result;
@@ -292,10 +292,10 @@ int coda_inode_grab(dev_t dev, ino_t ino, struct inode **ind)
 
         if ( *ind == NULL ) {
                 printk("coda_inode_grab: iget(dev: %d, ino: %ld) 
-                       returns NULL.\n", dev, ino);
+                       returns NULL.\n", dev, (long)ino);
                 return -ENOENT;
         }
-	CDEBUG(D_FILE, "ino: %ld, ops at %x\n", ino, (int)(*ind)->i_op);
+	CDEBUG(D_FILE, "ino: %ld, ops at %p\n", (long)ino, (*ind)->i_op);
         return 0;
 }
 

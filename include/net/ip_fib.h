@@ -58,16 +58,18 @@ struct fib_info
 {
 	struct fib_info		*fib_next;
 	struct fib_info		*fib_prev;
-	int			fib_refcnt;
+	int			fib_treeref;
+	atomic_t		fib_clntref;
+	int			fib_dead;
 	unsigned		fib_flags;
 	int			fib_protocol;
 	u32			fib_prefsrc;
 	u32			fib_priority;
-#define FIB_MAX_METRICS RTAX_RTT
-	unsigned		fib_metrics[FIB_MAX_METRICS];
+	unsigned		fib_metrics[RTAX_MAX];
 #define fib_mtu fib_metrics[RTAX_MTU-1]
 #define fib_window fib_metrics[RTAX_WINDOW-1]
 #define fib_rtt fib_metrics[RTAX_RTT-1]
+#define fib_advmss fib_metrics[RTAX_ADVMSS-1]
 	int			fib_nhs;
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
 	int			fib_power;
@@ -83,7 +85,6 @@ struct fib_rule;
 
 struct fib_result
 {
-	u32		*prefix;
 	unsigned char	prefixlen;
 	unsigned char	nh_sel;
 	unsigned char	type;
@@ -93,6 +94,7 @@ struct fib_result
 	struct fib_rule	*r;
 #endif
 };
+
 
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
 
@@ -171,6 +173,7 @@ extern __inline__ void fib_select_default(const struct rt_key *key, struct fib_r
 extern struct fib_table * fib_tables[RT_TABLE_MAX+1];
 extern int fib_lookup(const struct rt_key *key, struct fib_result *res);
 extern struct fib_table *__fib_new_table(int id);
+extern void fib_rule_put(struct fib_rule *r);
 
 extern __inline__ struct fib_table *fib_get_table(int id)
 {
@@ -253,5 +256,24 @@ extern __inline__ void fib_combine_itag(u32 *itag, struct fib_result *res)
 #endif
 #endif
 }
+
+extern void free_fib_info(struct fib_info *fi);
+
+extern __inline__ void fib_info_put(struct fib_info *fi)
+{
+	if (atomic_dec_and_test(&fi->fib_clntref))
+		free_fib_info(fi);
+}
+
+extern __inline__ void fib_res_put(struct fib_result *res)
+{
+	if (res->fi)
+		fib_info_put(res->fi);
+#ifdef CONFIG_IP_MULTIPLE_TABLES
+	if (res->r)
+		fib_rule_put(res->r);
+#endif
+}
+
 
 #endif  _NET_FIB_H

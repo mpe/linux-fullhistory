@@ -38,11 +38,7 @@
 #define RTO_ONLINK	0x01
 #define RTO_TPROXY	0x80000000
 
-#ifdef CONFIG_IP_TRANSPARENT_PROXY
-#define RTO_CONN	RTO_TPROXY
-#else
 #define RTO_CONN	0
-#endif
 
 struct rt_key
 {

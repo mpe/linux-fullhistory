@@ -53,6 +53,6 @@ extern struct exec_domain default_exec_domain;
 extern struct exec_domain *lookup_exec_domain(unsigned long personality);
 extern int register_exec_domain(struct exec_domain *it);
 extern int unregister_exec_domain(struct exec_domain *it);
-asmlinkage int sys_personality(unsigned long personality);
+asmlinkage long sys_personality(unsigned long personality);
 
 #endif /* _PERSONALITY_H */

@@ -25,8 +25,8 @@ ifdef CONFIG_NET
 
 O_OBJS	+= dev.o dev_mcast.o dst.o neighbour.o rtnetlink.o utils.o
 
-ifdef CONFIG_FIREWALL
-OX_OBJS += firewall.o
+ifdef CONFIG_NETFILTER
+OX_OBJS += netfilter.o
 endif
 
 endif

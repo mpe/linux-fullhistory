@@ -19,6 +19,9 @@ MOD_LIST_NAME := USB_MODULES
 
 ifeq ($(CONFIG_USB),y)
   L_OBJS +=usbcore.o
+  ifeq ($(CONFIG_USB_PROC),y)
+    L_OBJS += proc_usb.o
+  endif
 endif
 ifeq ($(CONFIG_USB),m)
   M_OBJS +=usbcore.o
@@ -187,10 +190,10 @@ usb-uhci.o: uhci.o uhci-debug.o
 
 usb-ohci.o: ohci.o ohci-debug.o 
 	$(LD) $(LD_RFLAG) -r -o $@ ohci.o ohci-debug.o 
-       
+
 usb-ohci-hcd.o: ohci-hcd.o ohci-root-hub.o 
 	$(LD) $(LD_RFLAG) -r -o $@ ohci-hcd.o ohci-root-hub.o 
-       
+
 ifeq ($(CONFIG_USB_PROC),y)
 usbcore.o: usb.o usb-debug.o usb-core.o proc_usb.o
 	$(LD) $(LD_RFLAG) -r -o $@ usb.o usb-debug.o usb-core.o proc_usb.o

@@ -5,7 +5,7 @@
 
 SUB_DIRS     := 
 MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) hamradio irda
+ALL_SUB_DIRS := $(SUB_DIRS) hamradio irda fc
 
 L_TARGET := net.a
 L_OBJS   := auto_irq.o
@@ -88,6 +88,14 @@ L_OBJS += ethertap.o
 else
   ifeq ($(CONFIG_ETHERTAP),m)
   M_OBJS += ethertap.o
+  endif
+endif
+
+ifeq ($(CONFIG_NET_SB1000),y)
+L_OBJS += sb1000.o
+else
+  ifeq ($(CONFIG_NET_SB1000),m)
+  M_OBJS += sb1000.o
   endif
 endif
 
@@ -577,6 +585,14 @@ L_OBJS += rtl8139.o
 else
   ifeq ($(CONFIG_RTL8139),m)
   M_OBJS += rtl8139.o
+  endif
+endif
+
+ifeq ($(CONFIG_SIS900),y)
+L_OBJS += sis900.o
+else
+  ifeq ($(CONFIG_SIS900),m)
+  M_OBJS += sis900.o
   endif
 endif
 
@@ -1171,6 +1187,15 @@ MOD_IN_SUB_DIRS += irda
 else
   ifeq ($(CONFIG_IRDA),m)
   MOD_IN_SUB_DIRS += irda
+  endif
+endif
+
+ifeq ($(CONFIG_NET_FC),y)
+SUB_DIRS += fc
+MOD_IN_SUB_DIRS += fc
+else
+  ifeq ($(CONFIG_NET_FC),m)
+  MOD_IN_SUB_DIRS += fc
   endif
 endif
 

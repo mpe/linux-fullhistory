@@ -135,7 +135,7 @@ extern int  get_dma_residue(dmach_t channel);
 #define NO_DMA	255
 #endif
 
-#ifdef CONFIG_PCI_QUIRKS
+#ifdef CONFIG_PCI
 extern int isa_dma_bridge_buggy;
 #else
 #define isa_dma_bridge_buggy    (0)

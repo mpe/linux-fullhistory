@@ -335,6 +335,10 @@
 #include "sun3x_esp.h"
 #endif
 
+#ifdef CONFIG_IPHASE5526
+#include "../net/fc/iph5526_scsi.h"
+#endif
+
 /*
  * Moved ppa driver to the end of the probe list
  * since it is a removable host adapter.
@@ -599,6 +603,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #ifdef CONFIG_SCSI_POWERTECSCSI
     POWERTECSCSI,
 #endif
+#endif
+#ifdef CONFIG_IPHASE5526
+	IPH5526_SCSI_FC,
 #endif
 /* "Removable host adapters" below this line (Parallel Port/USB/other) */
 #ifdef CONFIG_SCSI_PPA

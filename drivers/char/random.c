@@ -539,7 +539,7 @@ static void rand_clear_pool(void)
 	init_std_data(&random_state);
 }
 
-__initfunc(void rand_initialize(void))
+void __init rand_initialize(void)
 {
 	int i;
 
@@ -1854,9 +1854,9 @@ static inline unsigned long long get_clock_cnt(void)
 	return (((unsigned long long) high << 32) | low); 
 }
 
-__initfunc(static void
+static void __init 
 initialize_benchmark(struct random_benchmark *bench,
-	             const char *descr, int unit))
+	             const char *descr, int unit)
 {
 	bench->times = 0;
 	bench->accum = 0;

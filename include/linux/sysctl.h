@@ -224,7 +224,8 @@ enum
 	NET_IPV4_ICMP_PARAMPROB_RATE=62,
 	NET_IPV4_ICMP_ECHOREPLY_RATE=63,
 	NET_IPV4_ICMP_IGNORE_BOGUS_ERROR_RESPONSES=64,
-	NET_IPV4_IGMP_MAX_MEMBERSHIPS=65
+	NET_IPV4_IGMP_MAX_MEMBERSHIPS=65,
+	NET_TCP_TW_RECYCLE=66
 };
 
 enum {
@@ -242,7 +243,9 @@ enum {
 	NET_IPV4_ROUTE_ERROR_COST=12,
 	NET_IPV4_ROUTE_ERROR_BURST=13,
 	NET_IPV4_ROUTE_GC_ELASTICITY=14,
-	NET_IPV4_ROUTE_MTU_EXPIRES=15
+	NET_IPV4_ROUTE_MTU_EXPIRES=15,
+	NET_IPV4_ROUTE_MIN_PMTU=16,
+	NET_IPV4_ROUTE_MIN_ADVMSS=17
 };
 
 enum
@@ -265,7 +268,8 @@ enum
 	NET_IPV4_CONF_RP_FILTER=8,
 	NET_IPV4_CONF_ACCEPT_SOURCE_ROUTE=9,
 	NET_IPV4_CONF_BOOTP_RELAY=10,
-	NET_IPV4_CONF_LOG_MARTIANS=11
+	NET_IPV4_CONF_LOG_MARTIANS=11,
+	NET_IPV4_CONF_TAG=12
 };
 
 /* /proc/sys/net/ipv6 */
@@ -283,7 +287,8 @@ enum {
 	NET_IPV6_ROUTE_GC_TIMEOUT=5,
 	NET_IPV6_ROUTE_GC_INTERVAL=6,
 	NET_IPV6_ROUTE_GC_ELASTICITY=7,
-	NET_IPV6_ROUTE_MTU_EXPIRES=8
+	NET_IPV6_ROUTE_MTU_EXPIRES=8,
+	NET_IPV6_ROUTE_MIN_ADVMSS=9
 };
 
 enum {
@@ -515,7 +520,7 @@ enum {
 
 #ifdef __KERNEL__
 
-extern asmlinkage int sys_sysctl(struct __sysctl_args *);
+extern asmlinkage long sys_sysctl(struct __sysctl_args *);
 extern void sysctl_init(void);
 
 typedef struct ctl_table ctl_table;
@@ -554,6 +559,7 @@ extern int do_sysctl_strategy (ctl_table *table,
 
 extern ctl_handler sysctl_string;
 extern ctl_handler sysctl_intvec;
+extern ctl_handler sysctl_jiffies;
 
 extern int do_string (
 	void *oldval, size_t *oldlenp, void *newval, size_t newlen,

@@ -126,13 +126,9 @@ struct igmpmsg
  */
 
 #ifdef __KERNEL__
-extern struct sock *mroute_socket;
 extern int ip_mroute_setsockopt(struct sock *, int, char *, int);
 extern int ip_mroute_getsockopt(struct sock *, int, char *, int *);
 extern int ipmr_ioctl(struct sock *sk, int cmd, unsigned long arg);
-extern void mroute_close(struct sock *sk);
-extern void ipmr_forward(struct sk_buff *skb, int is_frag);
-extern int ip_mr_find_tunnel(__u32, __u32);
 extern void ip_mr_init(void);
 
 
@@ -148,29 +144,35 @@ struct vif_device
 	int		link;			/* Physical interface index	*/
 };
 
+#define VIFF_STATIC 0x8000
+
 struct mfc_cache 
 {
 	struct mfc_cache *next;			/* Next entry on cache line 	*/
 	__u32 mfc_mcastgrp;			/* Group the entry belongs to 	*/
 	__u32 mfc_origin;			/* Source of packet 		*/
 	vifi_t mfc_parent;			/* Source interface		*/
-	struct timer_list mfc_timer;		/* Expiry timer			*/
 	int mfc_flags;				/* Flags on line		*/
-	struct sk_buff_head mfc_unresolved;	/* Unresolved buffers		*/
-	int mfc_queuelen;			/* Unresolved buffer counter	*/
-	unsigned long mfc_last_assert;
-	int mfc_minvif;
-	int mfc_maxvif;
-	unsigned long mfc_bytes;
-	unsigned long mfc_pkt;
-	unsigned long mfc_wrong_if;
-	unsigned char mfc_ttls[MAXVIFS];	/* TTL thresholds		*/
+
+	union {
+		struct {
+			unsigned long expires;
+			struct sk_buff_head unresolved;	/* Unresolved buffers		*/
+		} unres;
+		struct {
+			unsigned long last_assert;
+			int minvif;
+			int maxvif;
+			unsigned long bytes;
+			unsigned long pkt;
+			unsigned long wrong_if;
+			unsigned char ttls[MAXVIFS];	/* TTL thresholds		*/
+		} res;
+	} mfc_un;
 };
 
-#define MFC_QUEUED		1
-#define MFC_RESOLVED		2
-#define MFC_NOTIFY		4
-
+#define MFC_STATIC		1
+#define MFC_NOTIFY		2
 
 #define MFC_LINES		64
 

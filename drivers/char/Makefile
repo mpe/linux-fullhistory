@@ -116,6 +116,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_COMPUTONE),y)
+L_OBJS += ip2.o ip2main.o
+else
+  ifeq ($(CONFIG_COMPUTONE),m)
+  M_OBJS += ip2.o ip2main.o
+  endif
+endif
+
 ifeq ($(CONFIG_RISCOM8),y)
 O_OBJS += riscom8.o
 else

@@ -312,13 +312,13 @@ static void isapnp_print_irq(isapnp_info_buffer_t *buffer, char *space, struct i
 		}
 	if (!irq->map)
 		isapnp_printf(buffer, "<none>");
-	if (irq->flags & DEVICE_IRQ_FLAG_HIGHEDGE)
+	if (irq->flags & IORESOURCE_IRQ_HIGHEDGE)
 		isapnp_printf(buffer, " High-Edge");
-	if (irq->flags & DEVICE_IRQ_FLAG_LOWEDGE)
+	if (irq->flags & IORESOURCE_IRQ_LOWEDGE)
 		isapnp_printf(buffer, " Low-Edge");
-	if (irq->flags & DEVICE_IRQ_FLAG_HIGHLEVEL)
+	if (irq->flags & IORESOURCE_IRQ_HIGHLEVEL)
 		isapnp_printf(buffer, " High-Level");
-	if (irq->flags & DEVICE_IRQ_FLAG_LOWLEVEL)
+	if (irq->flags & IORESOURCE_IRQ_LOWLEVEL)
 		isapnp_printf(buffer, " Low-Level");
 	isapnp_printf(buffer, "\n");
 }
@@ -340,31 +340,31 @@ static void isapnp_print_dma(isapnp_info_buffer_t *buffer, char *space, struct i
 		}
 	if (!dma->map)
 		isapnp_printf(buffer, "<none>");
-	switch (dma->type) {
-	case DEVICE_DMA_TYPE_8BIT:
+	switch (dma->flags & IORESOURCE_DMA_TYPE_MASK) {
+	case IORESOURCE_DMA_8BIT:
 		s = "8-bit";
 		break;
-	case DEVICE_DMA_TYPE_8AND16BIT:
+	case IORESOURCE_DMA_8AND16BIT:
 		s = "8-bit&16-bit";
 		break;
 	default:
 		s = "16-bit";
 	}
 	isapnp_printf(buffer, " %s", s);
-	if (dma->flags & DEVICE_DMA_FLAG_MASTER)
+	if (dma->flags & IORESOURCE_DMA_MASTER)
 		isapnp_printf(buffer, " master");
-	if (dma->flags & DEVICE_DMA_FLAG_BYTE)
+	if (dma->flags & IORESOURCE_DMA_BYTE)
 		isapnp_printf(buffer, " byte-count");
-	if (dma->flags & DEVICE_DMA_FLAG_WORD)
+	if (dma->flags & IORESOURCE_DMA_WORD)
 		isapnp_printf(buffer, " word-count");
-	switch (dma->speed) {
-	case DEVICE_DMA_SPEED_TYPEA:
+	switch (dma->flags & IORESOURCE_DMA_SPEED_MASK) {
+	case IORESOURCE_DMA_TYPEA:
 		s = "type-A";
 		break;
-	case DEVICE_DMA_SPEED_TYPEB:
+	case IORESOURCE_DMA_TYPEB:
 		s = "type-B";
 		break;
-	case DEVICE_DMA_SPEED_TYPEF:
+	case IORESOURCE_DMA_TYPEF:
 		s = "type-F";
 		break;
 	default:
@@ -380,21 +380,21 @@ static void isapnp_print_mem(isapnp_info_buffer_t *buffer, char *space, struct i
 
 	isapnp_printf(buffer, "%sMemory 0x%x-0x%x, align 0x%x, size 0x%x",
 			space, mem->min, mem->max, mem->align, mem->size);
-	if (mem->flags & ISAPNP_FLAG_WRITEABLE)
+	if (mem->flags & IORESOURCE_MEM_WRITEABLE)
 		isapnp_printf(buffer, ", writeable");
-	if (mem->flags & ISAPNP_FLAG_CACHEABLE)
+	if (mem->flags & IORESOURCE_MEM_CACHEABLE)
 		isapnp_printf(buffer, ", cacheable");
-	if (mem->flags & ISAPNP_FLAG_RANGELENGTH)
+	if (mem->flags & IORESOURCE_MEM_RANGELENGTH)
 		isapnp_printf(buffer, ", range-length");
-	if (mem->flags & ISAPNP_FLAG_SHADOWABLE)
+	if (mem->flags & IORESOURCE_MEM_SHADOWABLE)
 		isapnp_printf(buffer, ", shadowable");
-	if (mem->flags & ISAPNP_FLAG_EXPANSIONROM)
+	if (mem->flags & IORESOURCE_MEM_EXPANSIONROM)
 		isapnp_printf(buffer, ", expansion ROM");
-	switch (mem->type) {
-	case ISAPNP_TYPE_8BIT:
+	switch (mem->flags & IORESOURCE_MEM_TYPE_MASK) {
+	case IORESOURCE_MEM_8BIT:
 		s = "8-bit";
 		break;
-	case ISAPNP_TYPE_8AND16BIT:
+	case IORESOURCE_MEM_8AND16BIT:
 		s = "8-bit&16-bit";
 		break;
 	default:
@@ -734,11 +734,12 @@ static int isapnp_set_port(char *line)
 		return 1;
 	}
 	isapnp_write_word(ISAPNP_CFG_PORT + (idx << 1), port);
-	if (isapnp_info_device->resource[idx].start == ISAPNP_NOTSET)
+	if (!isapnp_info_device->resource[idx].flags)
 		return 0;
-	if (isapnp_info_device->resource[idx].start == ISAPNP_AUTO) {
+	if (isapnp_info_device->resource[idx].flags & IORESOURCE_AUTO) {
 		isapnp_info_device->resource[idx].start = port;
 		isapnp_info_device->resource[idx].end += port - 1;
+		isapnp_info_device->resource[idx].flags &= ~IORESOURCE_AUTO;
 	} else {
 		isapnp_info_device->resource[idx].end -= isapnp_info_device->resource[idx].start;
 		isapnp_info_device->resource[idx].start = port;
@@ -821,11 +822,12 @@ static int isapnp_set_mem(char *line)
 	}
 	mem >>= 8;
 	isapnp_write_word(ISAPNP_CFG_MEM + (idx<<2), mem & 0xffff);
-	if (isapnp_info_device->resource[idx + 8].start == ISAPNP_NOTSET)
+	if (!isapnp_info_device->resource[idx + 8].flags)
 		return 0;
-	if (isapnp_info_device->resource[idx + 8].start == ISAPNP_AUTO) {
+	if (isapnp_info_device->resource[idx + 8].flags & IORESOURCE_AUTO) {
 		isapnp_info_device->resource[idx + 8].start = mem & ~0x00ffff00;
 		isapnp_info_device->resource[idx + 8].end += (mem & ~0x00ffff00) - 1;
+		isapnp_info_device->resource[idx + 8].flags &= ~IORESOURCE_AUTO;
 	} else {
 		isapnp_info_device->resource[idx + 8].end -= isapnp_info_device->resource[idx + 8].start;
 		isapnp_info_device->resource[idx + 8].start = mem & ~0x00ffff00;

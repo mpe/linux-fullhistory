@@ -233,7 +233,7 @@ static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgty
 	return -1;
 }
 
-asmlinkage int sys_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg)
+asmlinkage long sys_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg)
 {
 	int ret;
 
@@ -243,8 +243,8 @@ asmlinkage int sys_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msg
 	return ret;
 }
 
-asmlinkage int sys_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz,
-	long msgtyp, int msgflg)
+asmlinkage long sys_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz,
+			    long msgtyp, int msgflg)
 {
 	int ret;
 
@@ -312,7 +312,7 @@ found:
 	return (unsigned int) msq->msg_perm.seq * MSGMNI + id;
 }
 
-asmlinkage int sys_msgget (key_t key, int msgflg)
+asmlinkage long sys_msgget (key_t key, int msgflg)
 {
 	int id, ret = -EPERM;
 	struct msqid_ds *msq;
@@ -365,7 +365,7 @@ static void freeque (int id)
 	kfree(msq);
 }
 
-asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
+asmlinkage long sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 {
 	int id, err = -EINVAL;
 	struct msqid_ds *msq;

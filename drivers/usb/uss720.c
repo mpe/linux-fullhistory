@@ -30,11 +30,13 @@
  *                  for no apparent reason (that is for me, anyway)
  *                  ECP currently untested
  *   0.3  10.08.99  fixing merge errors
+ *   0.4  13.08.99  Added Vendor/Product ID of Brad Hard's cable
  *
  */
 
 /*****************************************************************************/
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/socket.h>
 #include <linux/parport.h>
@@ -559,7 +561,8 @@ static int uss720_probe(struct usb_device *usbdev)
                usbdev->descriptor.idVendor, usbdev->descriptor.idProduct);
 
         if ((usbdev->descriptor.idVendor != 0x047e || usbdev->descriptor.idProduct != 0x1001) &&
-            (usbdev->descriptor.idVendor != 0x0557 || usbdev->descriptor.idProduct != 0x2001))
+            (usbdev->descriptor.idVendor != 0x0557 || usbdev->descriptor.idProduct != 0x2001) &&
+            (usbdev->descriptor.idVendor != 0x0729 || usbdev->descriptor.idProduct != 0x1284))
                 return -1;
 
         /* We don't handle multiple configurations */
@@ -571,7 +574,7 @@ static int uss720_probe(struct usb_device *usbdev)
                 return -1;
 
         /* We don't handle multiple interfaces */
-        if (usbdev->config[0].num_altsetting != 3)
+        if (usbdev->config[0].interface[0].num_altsetting != 3)
                 return -1;
 
         printk(KERN_DEBUG "uss720: set configuration\n");
@@ -580,7 +583,7 @@ static int uss720_probe(struct usb_device *usbdev)
         i = usb_set_interface(usbdev, 0, 2);
         printk(KERN_DEBUG "uss720: set inteface result %d\n", i);
 
-        interface = &usbdev->config[0].altsetting[2].interface[0];
+        interface = &usbdev->config[0].interface[0].altsetting[2];
 
         //printk(KERN_DEBUG "uss720: get interface\n");
         //i = usb_get_interface(usbdev, 0);
@@ -655,7 +658,7 @@ MODULE_DESCRIPTION("USB Parport Cable driver for Cables using the Lucent Technol
 static int __init uss720_init(void)
 {
 	usb_register(&uss720_driver);
-        printk(KERN_INFO "uss720: USB<->IEEE1284 cable driver v0.3 registered.\n"
+        printk(KERN_INFO "uss720: USB<->IEEE1284 cable driver v0.4 registered.\n"
 	       KERN_INFO "uss720: (C) 1999 by Thomas Sailer, <sailer@ife.ee.ethz.ch>\n");
 	return 0;
 }

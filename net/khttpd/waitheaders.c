@@ -67,8 +67,8 @@ int WaitForHeaders(const int CPUNR)
 		
 		/* If the connection is lost, remove from queue */
 		
-		lock_sock(CurrentRequest->sock->sk);
-		if (CurrentRequest->sock->sk->state!=TCP_ESTABLISHED)
+		if (CurrentRequest->sock->sk->state != TCP_ESTABLISHED
+		    && CurrentRequest->sock->sk->state != TCP_CLOSE_WAIT)
 		{
 			struct http_request *Next;
 			
@@ -76,7 +76,6 @@ int WaitForHeaders(const int CPUNR)
 			
 			*Prev = CurrentRequest->Next;
 			CurrentRequest->Next = NULL;
-			release_sock(CurrentRequest->sock->sk);
 			
 		
 			CleanUpRequest(CurrentRequest);
@@ -90,12 +89,11 @@ int WaitForHeaders(const int CPUNR)
 		
 		sk = CurrentRequest->sock->sk;
 		
-		if (atomic_read(&(sk->rmem_alloc))>0) /* Do we have data ? */
+		if (!skb_queue_empty(&(sk->receive_queue))) /* Do we have data ? */
 		{
 			struct http_request *Next;
 			
 			
-			release_sock(CurrentRequest->sock->sk);
 			
 			/* Decode header */
 			
@@ -129,8 +127,6 @@ int WaitForHeaders(const int CPUNR)
 			continue;
 		
 		}	
-		else
-			release_sock(CurrentRequest->sock->sk);
 
 		
 		Prev = &(CurrentRequest->Next);
@@ -200,6 +196,12 @@ static int DecodeHeader(const int CPUNR, struct http_request *Request)
 	
 	len = sock_recvmsg(Request->sock,&msg,4095,MSG_PEEK);
 	set_fs(oldfs);
+
+	if (len<0) {
+		/* WONDERFUL. NO COMMENTS. --ANK */
+		Request->IsForUserspace = 1;
+		return 0;
+	}
 
 	if (len>=4094) /* BIG header, we cannot decode it so leave it to userspace */	
 	{

@@ -4,7 +4,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: ipv6.h,v 1.16 1999/04/22 10:07:27 davem Exp $
+ *	$Id: ipv6.h,v 1.18 1999/08/20 11:00:53 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -89,6 +89,7 @@ struct frag_hdr {
 extern struct ipv6_mib		ipv6_statistics;
 extern struct icmpv6_mib	icmpv6_statistics;
 extern struct udp_mib		udp_stats_in6;
+extern atomic_t			inet6_sock_nr;
 
 struct ip6_ra_chain
 {
@@ -99,6 +100,7 @@ struct ip6_ra_chain
 };
 
 extern struct ip6_ra_chain	*ip6_ra_chain;
+extern rwlock_t ip6_ra_lock;
 
 /*
    This structure is prepared by protocol, when parsing

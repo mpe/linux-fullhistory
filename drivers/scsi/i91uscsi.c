@@ -218,8 +218,8 @@ extern int tul_num_ch;
 
 
 static void tul_do_pause(unsigned amount)
-{				/* Pause for amount*10 milliseconds */
-	unsigned long the_time = jiffies + amount;	/* 0.01 seconds per jiffy */
+{				/* Pause for amount jiffies */
+	unsigned long the_time = jiffies + amount;
 
 #if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	while (time_before_eq(jiffies, the_time));
@@ -579,7 +579,7 @@ int tul_reset_scsi(HCS * pCurHcb, int seconds)
 
 	/* Stall for a while, wait for target's firmware ready,make it 2 sec ! */
 	/* SONY 5200 tape drive won't work if only stall for 1 sec */
-	tul_do_pause(seconds * 100);
+	tul_do_pause(seconds * HZ);
 
 	TUL_RD(pCurHcb->HCS_Base, TUL_SInt);
 

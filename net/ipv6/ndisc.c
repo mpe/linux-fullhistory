@@ -75,6 +75,7 @@
 
 static struct socket *ndisc_socket;
 
+static u32 ndisc_hash(const void *pkey, const struct net_device *dev);
 static int ndisc_constructor(struct neighbour *neigh);
 static void ndisc_solicit(struct neighbour *neigh, struct sk_buff *skb);
 static void ndisc_error_report(struct neighbour *neigh, struct sk_buff *skb);
@@ -125,10 +126,12 @@ struct neigh_table nd_tbl =
 	AF_INET6,
 	sizeof(struct neighbour) + sizeof(struct in6_addr),
 	sizeof(struct in6_addr),
+	ndisc_hash,
 	ndisc_constructor,
 	pndisc_constructor,
 	pndisc_destructor,
 	pndisc_redo,
+	"ndisc_cache",
         { NULL, NULL, &nd_tbl, 0, NULL, NULL,
 		  30*HZ, 1*HZ, 60*HZ, 30*HZ, 5*HZ, 3, 3, 0, 3, 1*HZ, (8*HZ)/10, 64, 0 },
 	30*HZ, 128, 512, 1024,
@@ -167,11 +170,24 @@ int ndisc_mc_map(struct in6_addr *addr, char *buf, struct net_device *dev, int d
 	return -EINVAL;
 }
 
+static u32 ndisc_hash(const void *pkey, const struct net_device *dev)
+{
+	u32 hash_val;
+
+	hash_val = *(u32*)(pkey + sizeof(struct in6_addr) - 4);
+	hash_val ^= (hash_val>>16);
+	hash_val ^= hash_val>>8;
+	hash_val ^= hash_val>>3;
+	hash_val = (hash_val^dev->ifindex)&NEIGH_HASHMASK;
+
+	return hash_val;
+}
+
 static int ndisc_constructor(struct neighbour *neigh)
 {
 	struct in6_addr *addr = (struct in6_addr*)&neigh->primary_key;
 	struct net_device *dev = neigh->dev;
-	struct inet6_dev *in6_dev = ipv6_get_idev(dev);
+	struct inet6_dev *in6_dev = in6_dev_get(dev);
 	int addr_type;
 
 	if (in6_dev == NULL)
@@ -211,7 +227,7 @@ static int ndisc_constructor(struct neighbour *neigh)
 		else
 			neigh->output = neigh->ops->output;
 	}
-
+	in6_dev_put(in6_dev);
 	return 0;
 }
 
@@ -221,7 +237,7 @@ static int pndisc_constructor(struct pneigh_entry *n)
 	struct in6_addr maddr;
 	struct net_device *dev = n->dev;
 
-	if (dev == NULL || ipv6_get_idev(dev) == NULL)
+	if (dev == NULL || __in6_dev_get(dev) == NULL)
 		return -EINVAL;
 #ifndef CONFIG_IPV6_NO_PB
 	addrconf_addr_solict_mult_old(addr, &maddr);
@@ -240,7 +256,7 @@ static void pndisc_destructor(struct pneigh_entry *n)
 	struct in6_addr maddr;
 	struct net_device *dev = n->dev;
 
-	if (dev == NULL || ipv6_get_idev(dev) == NULL)
+	if (dev == NULL || __in6_dev_get(dev) == NULL)
 		return;
 #ifndef CONFIG_IPV6_NO_PB
 	addrconf_addr_solict_mult_old(addr, &maddr);
@@ -385,8 +401,11 @@ void ndisc_send_ns(struct net_device *dev, struct neighbour *neigh,
 	}
 
 	if (saddr == NULL) {
-		if (!ipv6_get_lladdr(dev, &addr_buf))
-			saddr = &addr_buf;
+		if (ipv6_get_lladdr(dev, &addr_buf)) {
+			kfree_skb(skb);
+			return;
+		}
+		saddr = &addr_buf;
 	}
 
 	if (ndisc_build_ll_hdr(skb, dev, daddr, neigh, len) == 0) {
@@ -514,7 +533,7 @@ static void ndisc_solicit(struct neighbour *neigh, struct sk_buff *skb)
 	struct in6_addr *target = (struct in6_addr *)&neigh->primary_key;
 	int probes = atomic_read(&neigh->probes);
 
-	if (skb && ipv6_chk_addr(&skb->nh.ipv6h->saddr, dev, 0))
+	if (skb && ipv6_chk_addr(&skb->nh.ipv6h->saddr, dev))
 		saddr = &skb->nh.ipv6h->saddr;
 
 	if ((probes -= neigh->parms->ucast_probes) < 0) {
@@ -567,13 +586,15 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 	 *	set the RA_RECV flag in the interface
 	 */
 
-	in6_dev = ipv6_get_idev(skb->dev);
+	in6_dev = in6_dev_get(skb->dev);
 	if (in6_dev == NULL) {
 		ND_PRINTK1("RA: can't find in6 device\n");
 		return;
 	}
-	if (in6_dev->cnf.forwarding || !in6_dev->cnf.accept_ra)
+	if (in6_dev->cnf.forwarding || !in6_dev->cnf.accept_ra) {
+		in6_dev_put(in6_dev);
 		return;
+	}
 
 	if (in6_dev->if_flags & IF_RS_SENT) {
 		/*
@@ -589,7 +610,6 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 
 	if (rt && lifetime == 0) {
 		ip6_del_rt(rt);
-		dst_release(&rt->u.dst);
 		rt = NULL;
 	}
 
@@ -599,6 +619,7 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 		rt = rt6_add_dflt_router(&skb->nh.ipv6h->saddr, skb->dev);
 		if (rt == NULL) {
 			ND_PRINTK1("route_add failed\n");
+			in6_dev_put(in6_dev);
 			return;
 		}
 
@@ -606,6 +627,7 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 		if (neigh == NULL) {
 			ND_PRINTK1("nd: add default router: null neighbour\n");
 			dst_release(&rt->u.dst);
+			in6_dev_put(in6_dev);
 			return;
 		}
 		neigh->flags |= NTF_ROUTER;
@@ -706,6 +728,7 @@ static void ndisc_router_discovery(struct sk_buff *skb)
         }
 	if (rt)
 		dst_release(&rt->u.dst);
+	in6_dev_put(in6_dev);
 }
 
 static void ndisc_redirect_rcv(struct sk_buff *skb)
@@ -752,9 +775,13 @@ static void ndisc_redirect_rcv(struct sk_buff *skb)
 		return;
 	}
 
-	in6_dev = ipv6_get_idev(skb->dev);
-	if (!in6_dev || in6_dev->cnf.forwarding || !in6_dev->cnf.accept_redirects)
+	in6_dev = in6_dev_get(skb->dev);
+	if (!in6_dev)
 		return;
+	if (in6_dev->cnf.forwarding || !in6_dev->cnf.accept_redirects) {
+		in6_dev_put(in6_dev);
+		return;
+	}
 
 	/* passed validation tests */
 
@@ -771,6 +798,7 @@ static void ndisc_redirect_rcv(struct sk_buff *skb)
 			__neigh_event_send(neigh, NULL);
 		neigh_release(neigh);
 	}
+	in6_dev_put(in6_dev);
 }
 
 void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
@@ -931,12 +959,10 @@ int ndisc_rcv(struct sk_buff *skb, unsigned long len)
 
 	switch (msg->icmph.icmp6_type) {
 	case NDISC_NEIGHBOUR_SOLICITATION:
-		if ((ifp = ipv6_chk_addr(&msg->target, dev, 1)) != NULL) {
+		if ((ifp = ipv6_get_ifaddr(&msg->target, dev)) != NULL) {
 			int addr_type = ipv6_addr_type(saddr);
 
-			if (ifp->flags & ADDR_INVALID)
-				return 0;
-			if (ifp->flags & DAD_INCOMPLETE) {
+			if (ifp->flags & IFA_F_TENTATIVE) {
 				/* Address is tentative. If the source
 				   is unspecified address, it is someone
 				   does DAD, otherwise we ignore solicitations
@@ -944,6 +970,8 @@ int ndisc_rcv(struct sk_buff *skb, unsigned long len)
 				 */
 				if (addr_type == IPV6_ADDR_ANY)
 					addrconf_dad_failure(ifp);
+				else
+					in6_ifa_put(ifp);
 				return 0;
 			}
 
@@ -953,6 +981,7 @@ int ndisc_rcv(struct sk_buff *skb, unsigned long len)
 				ipv6_addr_all_nodes(&maddr);
 				ndisc_send_na(dev, NULL, &maddr, &ifp->addr, 
 					      ifp->idev->cnf.forwarding, 0, 1, 1);
+				in6_ifa_put(ifp);
 				return 0;
 			}
 
@@ -977,8 +1006,9 @@ int ndisc_rcv(struct sk_buff *skb, unsigned long len)
 					neigh_release(neigh);
 				}
 			}
+			in6_ifa_put(ifp);
 		} else {
-			struct inet6_dev *in6_dev = ipv6_get_idev(dev);
+			struct inet6_dev *in6_dev = in6_dev_get(dev);
 			int addr_type = ipv6_addr_type(saddr);
 
 			if (in6_dev && in6_dev->cnf.forwarding &&
@@ -1008,9 +1038,13 @@ int ndisc_rcv(struct sk_buff *skb, unsigned long len)
 					 */
 					atomic_inc(&skb->users);
 					pneigh_enqueue(&nd_tbl, in6_dev->nd_parms, skb);
+					in6_dev_put(in6_dev);
 					return 0;
 				}
 			}
+			if (in6_dev)
+				in6_dev_put(in6_dev);
+			
 		}
 		return 0;
 
@@ -1020,11 +1054,8 @@ int ndisc_rcv(struct sk_buff *skb, unsigned long len)
 			ND_PRINTK0("NDISC: solicited NA is multicasted\n");
 			return 0;
 		}
-		/* BUG! Target can be link-local on ANOTHER interface. Fixed. */
-		if ((ifp = ipv6_chk_addr(&msg->target, dev, 1))) {
-			if (ifp->flags & ADDR_INVALID)
-				return 0;
-			if (ifp->flags & DAD_INCOMPLETE) {
+		if ((ifp = ipv6_get_ifaddr(&msg->target, dev))) {
+			if (ifp->flags & IFA_F_TENTATIVE) {
 				addrconf_dad_failure(ifp);
 				return 0;
 			}
@@ -1035,6 +1066,7 @@ int ndisc_rcv(struct sk_buff *skb, unsigned long len)
 			 */
 			ND_PRINTK0("%s: someone avertise our address!\n",
 				   ifp->idev->dev->name);
+			in6_ifa_put(ifp);
 			return 0;
 		}
 		neigh = neigh_lookup(&nd_tbl, &msg->target, skb->dev);
@@ -1109,7 +1141,7 @@ int ndisc_get_info(char *buffer, char **start, off_t offset, int length, int dum
 				       now - neigh->confirmed,
 				       neigh->parms->reachable_time,
 				       neigh->parms->gc_staletime,
-				       atomic_read(&neigh->refcnt),
+				       atomic_read(&neigh->refcnt) - 1,
 				       neigh->flags | (!neigh->hh ? 0 : (neigh->hh->hh_output==dev_queue_xmit ? 4 : 2)),
 				       neigh->dev->name);
 
@@ -1188,7 +1220,7 @@ __initfunc(int ndisc_init(struct net_proto_family *ops))
 	sk->net_pinfo.af_inet6.hop_limit = 255;
 	/* Do not loopback ndisc messages */
 	sk->net_pinfo.af_inet6.mc_loop = 0;
-	sk->num = 256;
+	sk->prot->unhash(sk);
 
         /*
          * Initialize the neighbour table

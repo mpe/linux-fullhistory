@@ -74,6 +74,13 @@
  *    10.08.99   0.15  (Re)added S/PDIF module option for cards revision >= 4.
  *                     Initial version by Dave Platt <dplatt@snulbug.mtview.ca.us>.
  *                     module_init/__setup fixes
+ *    08.16.99   0.16  Joe Cotellese <joec@ensoniq.com>
+ *                     Added detection for ES1371 revision ID so that we can
+ *                     detect the ES1373 and later parts.
+ *                     added AC97 #defines for readability
+ *                     added a /proc file system for dumping hardware state
+ *                     updated SRC and CODEC w/r functions to accomodate bugs
+ *                     in some versions of the ES137x chips.
  *
  */
 
@@ -89,17 +96,21 @@
 #include <linux/malloc.h>
 #include <linux/soundcard.h>
 #include <linux/pci.h>
-#include <asm/io.h>
-#include <asm/dma.h>
 #include <linux/init.h>
 #include <linux/poll.h>
+#include <linux/bitops.h>
+#include <linux/proc_fs.h>
+#include <asm/io.h>
+#include <asm/dma.h>
 #include <asm/spinlock.h>
 #include <asm/uaccess.h>
 #include <asm/hardirq.h>
+#include "ac97.h"
 
 /* --------------------------------------------------------------------- */
 
 #undef OSS_DOCUMENTED_MIXER_SEMANTICS
+#define ES1371_DEBUG
 
 /* --------------------------------------------------------------------- */
 
@@ -109,6 +120,18 @@
 #ifndef PCI_DEVICE_ID_ENSONIQ_ES1371
 #define PCI_DEVICE_ID_ENSONIQ_ES1371 0x1371
 #endif
+
+/* ES1371 chip ID */
+/* This is a little confusing because all ES1371 compatible chips have the
+   same DEVICE_ID, the only thing differentiating them is the REV_ID field.
+   This is only significant if you want to enable features on the later parts.
+   Yes, I know it's stupid and why didn't we use the sub IDs?
+*/
+#define ES1371REV_ES1373_A  0x04
+#define ES1371REV_ES1373_B  0x06
+#define ES1371REV_CT5880_A  0x07
+#define ES1371REV_ES1371_B  0x09
+
 
 #define ES1371_MAGIC  ((PCI_VENDOR_ID_ENSONIQ<<16)|PCI_DEVICE_ID_ENSONIQ_ES1371)
 
@@ -209,14 +232,22 @@ static const unsigned sample_shift[] = { 0, 1, 1, 2 };
 #define UCTRL_CNTRL_SWR 0x03        /* software reset command */
 
 /* sample rate converter */
+#define SRC_OKSTATE        1
+
 #define SRC_RAMADDR_MASK   0xfe000000
 #define SRC_RAMADDR_SHIFT  25
+#define SRC_DAC1FREEZE     (1UL << 21)
+#define SRC_DAC2FREEZE      (1UL << 20)
+#define SRC_ADCFREEZE      (1UL << 19)
+
+
 #define SRC_WE             0x01000000  /* read/write control for SRC RAM */
 #define SRC_BUSY           0x00800000  /* SRC busy */
 #define SRC_DIS            0x00400000  /* 1 = disable SRC */
 #define SRC_DDAC1          0x00200000  /* 1 = disable accum update for DAC1 */
 #define SRC_DDAC2          0x00100000  /* 1 = disable accum update for DAC2 */
 #define SRC_DADC           0x00080000  /* 1 = disable accum update for ADC2 */
+#define SRC_CTLMASK        0x00780000
 #define SRC_RAMDATA_MASK   0x0000ffff
 #define SRC_RAMDATA_SHIFT  0
 
@@ -296,7 +327,7 @@ static const unsigned sample_shift[] = { 0, 1, 1, 2 };
 
 
 /* misc stuff */
-
+#define POLL_COUNT   0x1000
 #define FMODE_DAC         4           /* slight misuse of mode_t */
 
 /* MIDI buffer sizes */
@@ -355,8 +386,13 @@ struct es1371_state {
 	/* hardware resources */
 	unsigned long io; /* long for SPARC */
 	unsigned int irq;
-
-	/* mixer registers; there is no HW readback */
+        u8 rev; /* the chip revision */
+        
+#ifdef ES1371_DEBUG
+        /* debug /proc entry */
+	struct proc_dir_entry *ps;
+#endif /* ES1371_DEBUG */
+        /* mixer registers; there is no HW readback */
 	struct {
 		unsigned short codec_id;
 		unsigned int modcnt;
@@ -441,31 +477,12 @@ extern inline unsigned ld2(unsigned int x)
 }
 
 /* --------------------------------------------------------------------- */
-/*
- * hweightN: returns the hamming weight (i.e. the number
- * of bits set) of a N-bit word
- */
-
-#ifdef hweight32
-#undef hweight32
-#endif
-
-extern __inline__ unsigned int hweight32(unsigned int w)
-{
-        unsigned int res = (w & 0x55555555) + ((w >> 1) & 0x55555555);
-        res = (res & 0x33333333) + ((res >> 2) & 0x33333333);
-        res = (res & 0x0F0F0F0F) + ((res >> 4) & 0x0F0F0F0F);
-        res = (res & 0x00FF00FF) + ((res >> 8) & 0x00FF00FF);
-        return (res & 0x0000FFFF) + ((res >> 16) & 0x0000FFFF);
-}
-
-/* --------------------------------------------------------------------- */
 
 static unsigned wait_src_ready(struct es1371_state *s)
 {
 	unsigned int t, r;
 
-	for (t = 0; t < 1000; t++) {
+	for (t = 0; t < POLL_COUNT; t++) {
 		if (!((r = inl(s->io + ES1371_REG_SRCONV)) & SRC_BUSY))
 			return r;
 		udelay(1);
@@ -476,29 +493,53 @@ static unsigned wait_src_ready(struct es1371_state *s)
 
 static unsigned src_read(struct es1371_state *s, unsigned reg)
 {
-	unsigned int r;
+        unsigned int temp,i,orig;
 
-	r = wait_src_ready(s) & (SRC_DIS | SRC_DDAC1 | SRC_DDAC2 | SRC_DADC);
-	r |= (reg << SRC_RAMADDR_SHIFT) & SRC_RAMADDR_MASK;
-	outl(r, s->io + ES1371_REG_SRCONV);
-	return (wait_src_ready(s) & SRC_RAMDATA_MASK) >> SRC_RAMDATA_SHIFT;
+        /* wait for ready */
+        temp = wait_src_ready (s);
+
+        /* we can only access the SRC at certain times, make sure
+           we're allowed to before we read */
+           
+        orig = temp;
+        /* expose the SRC state bits */
+        outl ( (temp & SRC_CTLMASK) | (reg << SRC_RAMADDR_SHIFT) | 0x10000UL,
+               s->io + ES1371_REG_SRCONV);
+
+        /* now, wait for busy and the correct time to read */
+        temp = wait_src_ready (s);
+
+        if ( (temp & 0x00870000UL ) != ( SRC_OKSTATE << 16 )){
+                /* wait for the right state */
+                for (i=0; i<POLL_COUNT; i++){
+                        temp = inl (s->io + ES1371_REG_SRCONV);
+                        if ( (temp & 0x00870000UL ) == ( SRC_OKSTATE << 16 ))
+                                break;
+                }
+        }
+
+        /* hide the state bits */
+        outl ((orig & SRC_CTLMASK) | (reg << SRC_RAMADDR_SHIFT), s->io + ES1371_REG_SRCONV);
+        return temp;
+                        
+                
 }
-
 
 static void src_write(struct es1371_state *s, unsigned reg, unsigned data)
 {
+      
 	unsigned int r;
 
 	r = wait_src_ready(s) & (SRC_DIS | SRC_DDAC1 | SRC_DDAC2 | SRC_DADC);
 	r |= (reg << SRC_RAMADDR_SHIFT) & SRC_RAMADDR_MASK;
 	r |= (data << SRC_RAMDATA_SHIFT) & SRC_RAMDATA_MASK;
 	outl(r | SRC_WE, s->io + ES1371_REG_SRCONV);
+
 }
 
 /* --------------------------------------------------------------------- */
 
 /* most of the following here is black magic */
-
 static void set_adc_rate(struct es1371_state *s, unsigned rate)
 {
 	unsigned long flags;
@@ -535,6 +576,7 @@ static void set_adc_rate(struct es1371_state *s, unsigned rate)
 	spin_unlock_irqrestore(&s->lock, flags);
 }
 
+
 static void set_dac1_rate(struct es1371_state *s, unsigned rate)
 {
 	unsigned long flags;
@@ -569,6 +611,7 @@ static void set_dac2_rate(struct es1371_state *s, unsigned rate)
 		rate = 4000;
         freq = (rate << 15) / 3000;
 	s->dac2rate = (freq * 3000) >> 15;
+        printk (KERN_DEBUG "dac2 freq: %d\n", freq);
 	spin_lock_irqsave(&s->lock, flags);
 	r = (wait_src_ready(s) & (SRC_DIS | SRC_DDAC1 | SRC_DADC)) | SRC_DDAC2;
 	outl(r, s->io + ES1371_REG_SRCONV);
@@ -583,26 +626,80 @@ static void set_dac2_rate(struct es1371_state *s, unsigned rate)
 
 /* --------------------------------------------------------------------- */
 
+static void __init src_init(struct es1371_state *s)
+{
+        unsigned int i;
+
+        /* before we enable or disable the SRC we need
+           to wait for it to become ready */
+        wait_src_ready(s);
+
+        outl(SRC_DIS, s->io + ES1371_REG_SRCONV);
+
+        for (i = 0; i < 0x80; i++)
+                src_write(s, i, 0);
+
+        src_write(s, SRCREG_DAC1+SRCREG_TRUNC_N, 16 << 4);
+        src_write(s, SRCREG_DAC1+SRCREG_INT_REGS, 16 << 10);
+        src_write(s, SRCREG_DAC2+SRCREG_TRUNC_N, 16 << 4);
+        src_write(s, SRCREG_DAC2+SRCREG_INT_REGS, 16 << 10);
+        src_write(s, SRCREG_VOL_ADC, 1 << 12);
+        src_write(s, SRCREG_VOL_ADC+1, 1 << 12);
+        src_write(s, SRCREG_VOL_DAC1, 1 << 12);
+        src_write(s, SRCREG_VOL_DAC1+1, 1 << 12);
+        src_write(s, SRCREG_VOL_DAC2, 1 << 12);
+        src_write(s, SRCREG_VOL_DAC2+1, 1 << 12);
+        set_adc_rate(s, 22050);
+        set_dac1_rate(s, 22050);
+        set_dac2_rate(s, 22050);
+
+        /* WARNING:
+         * enabling the sample rate converter without properly programming
+         * its parameters causes the chip to lock up (the SRC busy bit will
+         * be stuck high, and I've found no way to rectify this other than
+         * power cycle)
+         */
+        wait_src_ready(s);
+        outl(0, s->io+ES1371_REG_SRCONV);
+}
+
+/* --------------------------------------------------------------------- */
+
 static void wrcodec(struct es1371_state *s, unsigned addr, unsigned data)
 {
 	unsigned long flags;
 	unsigned t, x;
-
-	for (t = 0; t < 0x1000; t++)
+        
+	for (t = 0; t < POLL_COUNT; t++)
 		if (!(inl(s->io+ES1371_REG_CODEC) & CODEC_WIP))
 			break;
 	spin_lock_irqsave(&s->lock, flags);
-	/* save the current state for later */
-	x = inl(s->io+ES1371_REG_SRCONV);
-	/* enable SRC state data in SRC mux */
-	outl((wait_src_ready(s) & (SRC_DIS | SRC_DDAC1 | SRC_DDAC2 | SRC_DADC)) | 0x00010000,
+
+        /* save the current state for later */
+        x = wait_src_ready(s);
+
+        /* enable SRC state data in SRC mux */
+	outl(( x & (SRC_DIS | SRC_DDAC1 | SRC_DDAC2 | SRC_DADC)) | 0x00010000,
 	     s->io+ES1371_REG_SRCONV);
-	/* wait for a SAFE time to write addr/data and then do it, dammit */
-	for (t = 0; t < 0x1000; t++)
-		if ((inl(s->io+ES1371_REG_SRCONV) & 0x00070000) == 0x00010000)
-			break;
+
+        /* wait for not busy (state 0) first to avoid
+           transition states */
+        for (t=0; t<POLL_COUNT; t++){
+                if((inl(s->io+ES1371_REG_SRCONV) & 0x00870000) ==0 )
+                    break;
+                udelay(1);
+        }
+        
+        /* wait for a SAFE time to write addr/data and then do it, dammit */
+        for (t=0; t<POLL_COUNT; t++){
+                if((inl(s->io+ES1371_REG_SRCONV) & 0x00870000) ==0x00010000)
+                    break;
+                udelay(1);
+        }
+
 	outl(((addr << CODEC_POADD_SHIFT) & CODEC_POADD_MASK) |
 	     ((data << CODEC_PODAT_SHIFT) & CODEC_PODAT_MASK), s->io+ES1371_REG_CODEC);
+
 	/* restore SRC reg */
 	wait_src_ready(s);
 	outl(x, s->io+ES1371_REG_SRCONV);
@@ -614,28 +711,50 @@ static unsigned rdcodec(struct es1371_state *s, unsigned addr)
 	unsigned long flags;
 	unsigned t, x;
 
+        /* wait for WIP to go away */
 	for (t = 0; t < 0x1000; t++)
 		if (!(inl(s->io+ES1371_REG_CODEC) & CODEC_WIP))
 			break;
 	spin_lock_irqsave(&s->lock, flags);
+
 	/* save the current state for later */
-	x = inl(s->io+ES1371_REG_SRCONV);
+	x = (wait_src_ready(s) & (SRC_DIS | SRC_DDAC1 | SRC_DDAC2 | SRC_DADC));
+
 	/* enable SRC state data in SRC mux */
-	outl((wait_src_ready(s) & (SRC_DIS | SRC_DDAC1 | SRC_DDAC2 | SRC_DADC)) | 0x00010000,
-	     s->io+ES1371_REG_SRCONV);
-	/* wait for a SAFE time to write addr/data and then do it, dammit */
-	for (t = 0; t < 0x1000; t++)
-		if ((inl(s->io+ES1371_REG_SRCONV) & 0x00070000) == 0x00010000)
-			break;
+	outl( x | 0x00010000,
+              s->io+ES1371_REG_SRCONV);
+
+        /* wait for not busy (state 0) first to avoid
+           transition states */
+        for (t=0; t<POLL_COUNT; t++){
+                if((inl(s->io+ES1371_REG_SRCONV) & 0x00870000) ==0 )
+                    break;
+                udelay(1);
+        }
+        
+        /* wait for a SAFE time to write addr/data and then do it, dammit */
+        for (t=0; t<POLL_COUNT; t++){
+                if((inl(s->io+ES1371_REG_SRCONV) & 0x00870000) ==0x00010000)
+                    break;
+                udelay(1);
+        }
+
 	outl(((addr << CODEC_POADD_SHIFT) & CODEC_POADD_MASK) | CODEC_PORD, s->io+ES1371_REG_CODEC);
 	/* restore SRC reg */
 	wait_src_ready(s);
 	outl(x, s->io+ES1371_REG_SRCONV);
 	spin_unlock_irqrestore(&s->lock, flags);
-	/* now wait for the stinkin' data (RDY) */
+
+        /* wait for WIP again */
 	for (t = 0; t < 0x1000; t++)
+		if (!(inl(s->io+ES1371_REG_CODEC) & CODEC_WIP))
+			break;
+        
+	/* now wait for the stinkin' data (RDY) */
+	for (t = 0; t < POLL_COUNT; t++)
 		if ((x = inl(s->io+ES1371_REG_CODEC)) & CODEC_RDY)
 			break;
+        
 	return ((x & CODEC_PIDAT_MASK) >> CODEC_PIDAT_SHIFT);
 }
 
@@ -996,6 +1115,21 @@ static const char invalid_magic[] = KERN_CRIT "es1371: invalid magic value\n";
 
 /* --------------------------------------------------------------------- */
 
+/*
+ * AC97 Mixer Register to Connections mapping of the Concert 97 board
+ *
+ * AC97_MASTER_VOL_STEREO   Line Out
+ * AC97_MASTER_VOL_MONO     TAD Output
+ * AC97_PCBEEP_VOL          none
+ * AC97_PHONE_VOL           TAD Input (mono)
+ * AC97_MIC_VOL             MIC Input (mono)
+ * AC97_LINEIN_VOL          Line Input (stereo)
+ * AC97_CD_VOL              CD Input (stereo)
+ * AC97_VIDEO_VOL           none
+ * AC97_AUX_VOL             Aux Input (stereo)
+ * AC97_PCMOUT_VOL          Wave Output (stereo)
+ */
+
 #define AC97_PESSIMISTIC
 
 /*
@@ -1021,25 +1155,25 @@ static const unsigned int recsrc[8] =
 static const unsigned char volreg[SOUND_MIXER_NRDEVICES] = 
 {
 	/* 5 bit stereo */
-	[SOUND_MIXER_LINE] = 0x10,
-	[SOUND_MIXER_CD] = 0x12,
-	[SOUND_MIXER_VIDEO] = 0x14,
-	[SOUND_MIXER_LINE1] = 0x16,
-	[SOUND_MIXER_PCM] = 0x18,
+	[SOUND_MIXER_LINE] = AC97_LINEIN_VOL,
+	[SOUND_MIXER_CD] = AC97_CD_VOL,
+	[SOUND_MIXER_VIDEO] = AC97_VIDEO_VOL,
+	[SOUND_MIXER_LINE1] = AC97_AUX_VOL,
+	[SOUND_MIXER_PCM] = AC97_PCMOUT_VOL,
 	/* 6 bit stereo */
-	[SOUND_MIXER_VOLUME] = 0x02,
-	[SOUND_MIXER_PHONEOUT] = 0x04,
+	[SOUND_MIXER_VOLUME] = AC97_MASTER_VOL_STEREO,
+	[SOUND_MIXER_PHONEOUT] = AC97_HEADPHONE_VOL,
 	/* 6 bit mono */
-	[SOUND_MIXER_OGAIN] = 0x06,
-	[SOUND_MIXER_PHONEIN] = 0x0c,
+	[SOUND_MIXER_OGAIN] = AC97_MASTER_VOL_MONO,
+	[SOUND_MIXER_PHONEIN] = AC97_PHONE_VOL,
 	/* 4 bit mono but shifted by 1 */
-	[SOUND_MIXER_SPEAKER] = 0x08,
+	[SOUND_MIXER_SPEAKER] = AC97_MASTER_TONE,
 	/* 6 bit mono + preamp */
-	[SOUND_MIXER_MIC] = 0x0e,
+	[SOUND_MIXER_MIC] = AC97_MIC_VOL,
 	/* 4 bit stereo */
-	[SOUND_MIXER_RECLEV] = 0x1c,
+	[SOUND_MIXER_RECLEV] = AC97_RECORD_GAIN,
 	/* 4 bit mono */
-	[SOUND_MIXER_IGAIN] = 0x1e
+	[SOUND_MIXER_IGAIN] = AC97_RECORD_GAIN_MIC
 };
 
 #ifdef OSS_DOCUMENTED_MIXER_SEMANTICS
@@ -1052,8 +1186,8 @@ static int mixer_rdch(struct es1371_state *s, unsigned int ch, int *arg)
 
 	switch (ch) {
 	case SOUND_MIXER_MIC:
-		j = rdcodec(s, 0x0e);
-		if (j & 0x8000)
+		j = rdcodec(s, AC97_MIC_VOL);
+		if (j & AC97_MUTE)
 			return put_user(0, (int *)arg);
 #ifdef AC97_PESSIMISTIC
 		return put_user(0x4949 - 0x202 * (j & 0x1f) + ((j & 0x40) ? 0x1b1b : 0), (int *)arg);
@@ -1064,7 +1198,7 @@ static int mixer_rdch(struct es1371_state *s, unsigned int ch, int *arg)
 	case SOUND_MIXER_OGAIN:
 	case SOUND_MIXER_PHONEIN:
 		j = rdcodec(s, volreg[ch]);
-		if (j & 0x8000)
+		if (j & AC97_MUTE)
 			return put_user(0, (int *)arg);
 #ifdef AC97_PESSIMISTIC
 		return put_user(0x6464 - 0x303 * (j & 0x1f), (int *)arg);
@@ -1078,7 +1212,7 @@ static int mixer_rdch(struct es1371_state *s, unsigned int ch, int *arg)
 		/* fall through */
 	case SOUND_MIXER_VOLUME:
 		j = rdcodec(s, volreg[ch]);
-		if (j & 0x8000)
+		if (j & AC97_MUTE)
 			return put_user(0, (int *)arg);
 #ifdef AC97_PESSIMISTIC
 		return put_user(0x6464 - (swab(j) & 0x1f1f) * 3, (int *)arg);
@@ -1087,8 +1221,8 @@ static int mixer_rdch(struct es1371_state *s, unsigned int ch, int *arg)
 #endif /* AC97_PESSIMISTIC */
 		
 	case SOUND_MIXER_SPEAKER:
-		j = rdcodec(s, 0x0a);
-		if (j & 0x8000)
+		j = rdcodec(s, AC97_PCBEEP_VOL);
+		if (j & AC97_MUTE
 			return put_user(0, (int *)arg);
 		return put_user(0x6464 - ((j >> 1) & 0xf) * 0x606, (int *)arg);
 		
@@ -1098,7 +1232,7 @@ static int mixer_rdch(struct es1371_state *s, unsigned int ch, int *arg)
 	case SOUND_MIXER_LINE1:
 	case SOUND_MIXER_PCM:
 		j = rdcodec(s, volreg[ch]);
-		if (j & 0x8000)
+		if (j & AC97_MUTE)
 			return put_user(0, (int *)arg);
 		return put_user(0x6464 - (swab(j) & 0x1f1f) * 3, (int *)arg);
 
@@ -1106,23 +1240,23 @@ static int mixer_rdch(struct es1371_state *s, unsigned int ch, int *arg)
 	case SOUND_MIXER_TREBLE:
 		if (!(s->mix.codec_id & CODEC_ID_BASSTREBLE))
 			return -EINVAL;
-		j = rdcodec(s, 0x08);
+		j = rdcodec(s, AC97_MASTER_TONE);
 		if (ch == SOUND_MIXER_BASS)
 			j >>= 8;
 		return put_user((((j & 15) * 100) / 15) * 0x101, (int *)arg);
 	
 		/* SOUND_MIXER_RECLEV and SOUND_MIXER_IGAIN specify gain */
 	case SOUND_MIXER_RECLEV:
-		j = rdcodec(s, 0x1c);
-		if (j & 0x8000)
+		j = rdcodec(s, AC97_RECORD_GAIN);
+		if (j & AC97_MUTE)
 			return put_user(0, (int *)arg);
 		return put_user((swab(j)  & 0xf0f) * 6 + 0xa0a, (int *)arg);
 		
 	case SOUND_MIXER_IGAIN:
 		if (!(s->mix.codec_id & CODEC_ID_DEDICATEDMIC))
 			return -EINVAL;
-		j = rdcodec(s, 0x1e);
-		if (j & 0x8000)
+		j = rdcodec(s, AC97_RECORD_GAIN_MIC);
+		if (j & AC97_MUTE)
 			return put_user(0, (int *)arg);
 		return put_user((j & 0xf) * 0x606 + 0xa0a, (int *)arg);
 	
@@ -1177,7 +1311,7 @@ static int mixer_wrch(struct es1371_state *s, unsigned int ch, int val)
 	case SOUND_MIXER_LINE1:
 	case SOUND_MIXER_PCM:
 		if (l1 < 7 && r1 < 7) {
-			wrcodec(s, volreg[ch], 0x8000);
+			wrcodec(s, volreg[ch], AC97_MUTE);
 			return 0;
 		}
 		if (l1 < 7)
@@ -1194,7 +1328,7 @@ static int mixer_wrch(struct es1371_state *s, unsigned int ch, int val)
 	case SOUND_MIXER_VOLUME:
 #ifdef AC97_PESSIMISTIC
 		if (l1 < 7 && r1 < 7) {
-			wrcodec(s, volreg[ch], 0x8000);
+			wrcodec(s, volreg[ch], AC97_MUTE);
 			return 0;
 		}
 		if (l1 < 7)
@@ -1205,7 +1339,7 @@ static int mixer_wrch(struct es1371_state *s, unsigned int ch, int val)
 		return 0;
 #else /* AC97_PESSIMISTIC */
 		if (l1 < 4 && r1 < 4) {
-			wrcodec(s, volreg[ch], 0x8000);
+			wrcodec(s, volreg[ch], AC97_MUTE);
 			return 0;
 		}
 		if (l1 < 4)
@@ -1219,21 +1353,21 @@ static int mixer_wrch(struct es1371_state *s, unsigned int ch, int val)
 	case SOUND_MIXER_OGAIN:
 	case SOUND_MIXER_PHONEIN:
 #ifdef AC97_PESSIMISTIC
-		wrcodec(s, volreg[ch], (l1 < 7) ? 0x8000 : (100 - l1) / 3);
+		wrcodec(s, volreg[ch], (l1 < 7) ? AC97_MUTE : (100 - l1) / 3);
 		return 0;
 #else /* AC97_PESSIMISTIC */
-		wrcodec(s, volreg[ch], (l1 < 4) ? 0x8000 : (2 * (100 - l1) / 3));
+		wrcodec(s, volreg[ch], (l1 < 4) ? AC97_MUTE : (2 * (100 - l1) / 3));
 		return 0;
 #endif /* AC97_PESSIMISTIC */
 			
 	case SOUND_MIXER_SPEAKER:
-		wrcodec(s, 0x0a, (l1 < 10) ? 0x8000 : ((100 - l1) / 6) << 1);
+		wrcodec(s, AC97_PCBEEP_VOL, (l1 < 10) ? AC97_MUTE : ((100 - l1) / 6) << 1);
 		return 0;
 
 	case SOUND_MIXER_MIC:
 #ifdef AC97_PESSIMISTIC
 		if (l1 < 11) {
-			wrcodec(s, 0x0e, 0x8000);
+			wrcodec(s, AC97_MIC_VOL, AC97_MUTE);
 			return 0;
 		}
 		i = 0;
@@ -1243,11 +1377,11 @@ static int mixer_wrch(struct es1371_state *s, unsigned int ch, int val)
 		}
 		if (l1 < 11) 
 			l1 = 11;
-		wrcodec(s, 0x0e, ((73 - l1) / 2) | i);
+		wrcodec(s, AC97_MIC_VOL, ((73 - l1) / 2) | i);
 		return 0;
 #else /* AC97_PESSIMISTIC */
 		if (l1 < 9) {
-			wrcodec(s, 0x0e, 0x8000);
+			wrcodec(s, AC97_MIC_VOL, AC97_MUTE);
 			return 0;
 		}
 		i = 0;
@@ -1257,37 +1391,37 @@ static int mixer_wrch(struct es1371_state *s, unsigned int ch, int val)
 		}
 		if (l1 < 9) 
 			l1 = 9;
-		wrcodec(s, 0x0e, (((87 - l1) * 4) / 5) | i);
+		wrcodec(s, AC97_MIC_VOL, (((87 - l1) * 4) / 5) | i);
 		return 0;
 #endif /* AC97_PESSIMISTIC */
 		
 	case SOUND_MIXER_BASS:
 		val = ((l1 * 15) / 100) & 0xf;
-		wrcodec(s, 0x08, (rdcodec(s, 0x08) & 0x00ff) | (val << 8));
+		wrcodec(s, AC97_MASTER_TONE, (rdcodec(s, AC97_MASTER_TONE) & 0x00ff) | (val << 8));
 		return 0;
 
 	case SOUND_MIXER_TREBLE:
 		val = ((l1 * 15) / 100) & 0xf;
-		wrcodec(s, 0x08, (rdcodec(s, 0x08) & 0xff00) | val);
+		wrcodec(s, AC97_MASTER_TONE, (rdcodec(s, AC97_MASTER_TONE) & 0xff00) | val);
 		return 0;
 		
 		/* SOUND_MIXER_RECLEV and SOUND_MIXER_IGAIN specify gain */
 	case SOUND_MIXER_RECLEV:
 		if (l1 < 10 || r1 < 10) {
-			wrcodec(s, 0x1c, 0x8000);
+			wrcodec(s, AC97_RECORD_GAIN, AC97_MUTE);
 			return 0;
 		}
 		if (l1 < 10)
 			l1 = 10;
 		if (r1 < 10)
 			r1 = 10;
-		wrcodec(s, 0x1c, (((l1 - 10) / 6) << 8) | ((r1 - 10) / 6));
+		wrcodec(s, AC97_RECORD_GAIN, (((l1 - 10) / 6) << 8) | ((r1 - 10) / 6));
 		return 0;
 
 	case SOUND_MIXER_IGAIN:
 		if (!(s->mix.codec_id & CODEC_ID_DEDICATEDMIC))
 			return -EINVAL;
-		wrcodec(s, 0x1e, (l1 < 10) ? 0x8000 : ((l1 - 10) / 6) & 0xf);
+		wrcodec(s, AC97_RECORD_GAIN_MIC, (l1 < 10) ? AC97_MUTE : ((l1 - 10) / 6) & 0xf);
 		return 0;
 		
 	default:
@@ -1305,8 +1439,8 @@ static int mixer_ioctl(struct es1371_state *s, unsigned int cmd, unsigned long a
 			return -EINVAL;
 		get_user_ret(val, (int *)arg, -EFAULT);
 		if (val & 1)
-			wrcodec(s, 0x22, ((val << 3) & 0xf00) | ((val >> 1) & 0xf));
-		val = rdcodec(s, 0x22);
+			wrcodec(s, AC97_3D_CONTROL, ((val << 3) & 0xf00) | ((val >> 1) & 0xf));
+		val = rdcodec(s, AC97_3D_CONTROL);
 		return put_user(((val & 0xf) << 1) | ((val & 0xf00) >> 3), (int *)arg);
 	}
         if (cmd == SOUND_MIXER_INFO) {
@@ -1333,7 +1467,7 @@ static int mixer_ioctl(struct es1371_state *s, unsigned int cmd, unsigned long a
         if (_IOC_DIR(cmd) == _IOC_READ) {
                 switch (_IOC_NR(cmd)) {
                 case SOUND_MIXER_RECSRC: /* Arg contains a bit for each recording source */
-			return put_user(recsrc[rdcodec(s, 0x1a) & 7], (int *)arg);
+			return put_user(recsrc[rdcodec(s, AC97_RECORD_SELECT) & 7], (int *)arg);
 			
                 case SOUND_MIXER_DEVMASK: /* Arg contains a bit for each supported device */
 			return put_user(SOUND_MASK_LINE | SOUND_MASK_CD | SOUND_MASK_VIDEO |
@@ -1380,10 +1514,10 @@ static int mixer_ioctl(struct es1371_state *s, unsigned int cmd, unsigned long a
                 if (i == 0)
                         return 0; /*val = mixer_recmask(s);*/
                 else if (i > 1) 
-                        val &= ~recsrc[rdcodec(s, 0x1a) & 7];
+                        val &= ~recsrc[rdcodec(s, AC97_RECORD_SELECT) & 7];
                 for (i = 0; i < 8; i++) {
 			if (val & recsrc[i]) {
-				wrcodec(s, 0x1a, 0x101 * i);
+				wrcodec(s, AC97_RECORD_SELECT, 0x101 * i);
 				return 0;
 			}
 		}
@@ -1473,8 +1607,9 @@ static int drain_dac1(struct es1371_state *s, int nonblock)
 	
 	if (s->dma_dac1.mapped || !s->dma_dac1.ready)
 		return 0;
-        current->state = TASK_INTERRUPTIBLE;
+
         add_wait_queue(&s->dma_dac1.wait, &wait);
+        current->state = TASK_INTERRUPTIBLE;
         for (;;) {
                 spin_lock_irqsave(&s->lock, flags);
 		count = s->dma_dac1.count;
@@ -1491,7 +1626,7 @@ static int drain_dac1(struct es1371_state *s, int nonblock)
 		tmo = 3 * HZ * (count + s->dma_dac1.fragsize) / 2 / s->dac1rate;
 		tmo >>= sample_shift[(s->sctrl & SCTRL_P1FMT) >> SCTRL_SH_P1FMT];
 		if (!schedule_timeout(tmo + 1))
-			printk(KERN_DEBUG "es1371: dma timed out??\n");
+			printk(KERN_DEBUG "es1371: dac1 dma timed out??\n");
         }
         remove_wait_queue(&s->dma_dac1.wait, &wait);
         current->state = TASK_RUNNING;
@@ -1508,8 +1643,9 @@ static int drain_dac2(struct es1371_state *s, int nonblock)
 
 	if (s->dma_dac2.mapped || !s->dma_dac2.ready)
 		return 0;
-        current->state = TASK_INTERRUPTIBLE;
+
         add_wait_queue(&s->dma_dac2.wait, &wait);
+        current->state = TASK_UNINTERRUPTIBLE;
         for (;;) {
                 spin_lock_irqsave(&s->lock, flags);
 		count = s->dma_dac2.count;
@@ -1526,7 +1662,7 @@ static int drain_dac2(struct es1371_state *s, int nonblock)
 		tmo = 3 * HZ * (count + s->dma_dac2.fragsize) / 2 / s->dac2rate;
 		tmo >>= sample_shift[(s->sctrl & SCTRL_P2FMT) >> SCTRL_SH_P2FMT];
 		if (!schedule_timeout(tmo + 1))
-			printk(KERN_DEBUG "es1371: dma timed out??\n");
+			printk(KERN_DEBUG "es1371: dac2 dma timed out??\n");
         }
         remove_wait_queue(&s->dma_dac2.wait, &wait);
         current->state = TASK_RUNNING;
@@ -1753,6 +1889,7 @@ static int es1371_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 			if (file->f_mode & FMODE_WRITE) {
 				stop_dac2(s);
 				s->dma_dac2.ready = 0;
+                                printk (KERN_DEBUG "es137x: setting DAC2 rate: %d\n", val);
 				set_dac2_rate(s, val);
 			}
 		}
@@ -2700,6 +2837,44 @@ static /*const*/ struct file_operations es1371_midi_fops = {
 
 /* --------------------------------------------------------------------- */
 
+/*
+ * for debugging purposes, we'll create a proc device that dumps the
+ *  CODEC chipstate
+ */
+
+#ifdef ES1371_DEBUG
+static int proc_es1371_dump (char *buf, char **start, off_t fpos, int length, int *eof, void *data)
+{
+        int len = 0;
+        
+        struct es1371_state *s = devs;
+        int cnt;
+
+        /* print out header */
+        len += sprintf(buf + len, "\t\tCreative ES137x Debug Dump-o-matic\n");
+
+        /* print out CODEC state */
+        len += sprintf (buf + len, "AC97 CODEC state\n");
+        
+        for (cnt=0; cnt <= 0x7e; cnt = cnt +2)
+                len+= sprintf (buf + len, "reg:0x%02x  val:0x%04x\n", cnt, rdcodec(s , cnt));
+                
+        if (fpos >=len){
+                *start = buf;
+                *eof =1;
+                return 0;
+        }
+        *start = buf + fpos;
+        if ((len -= fpos) > length)
+                return length;
+        *eof =1;
+        return len;
+
+}
+#endif /* ES1371_DEBUG */
+
+/* --------------------------------------------------------------------- */
+
 /* maximum number of devices */
 #define NR_DEVICE 5
 
@@ -2741,7 +2916,6 @@ static int __init init_es1371(void)
 	struct pci_dev *pcidev = NULL;
 	mm_segment_t fs;
 	int i, val, val2, index = 0;
-	u8 revision;
 	unsigned cssr;
 
 	if (!pci_present())   /* No PCI bus in this machine! */
@@ -2769,6 +2943,7 @@ static int __init init_es1371(void)
 		s->magic = ES1371_MAGIC;
 		s->io = pcidev->resource[0].start;
 		s->irq = pcidev->irq;
+		pci_read_config_byte(pcidev, PCI_REVISION_ID, &s->rev);
 		if (check_region(s->io, ES1371_EXTENT)) {
 			printk(KERN_ERR "es1371: io ports %#lx-%#lx in use\n", s->io, s->io+ES1371_EXTENT-1);
 			goto err_region;
@@ -2778,8 +2953,8 @@ static int __init init_es1371(void)
 			printk(KERN_ERR "es1371: irq %u in use\n", s->irq);
 			goto err_irq;
 		}
-		printk(KERN_INFO "es1371: found adapter at io %#lx irq %u\n"
-		       KERN_INFO "es1371: features: joystick 0x%x\n", s->io, s->irq, joystick[index]);
+		printk(KERN_INFO "es1371: found es1371 rev %d at io %#lx irq %u\n"
+		       KERN_INFO "es1371: features: joystick 0x%x\n", s->rev, s->io, s->irq, joystick[index]);
 		/* register devices */
 		if ((s->dev_audio = register_sound_dsp(&es1371_audio_fops, -1)) < 0)
 			goto err_dev1;
@@ -2789,6 +2964,13 @@ static int __init init_es1371(void)
 			goto err_dev3;
 		if ((s->dev_midi = register_sound_midi(&es1371_midi_fops, -1)) < 0)
 			goto err_dev4;
+#ifdef ES1371_DEBUG
+                /* intialize the debug proc device */
+                s->ps = create_proc_entry("es1371", S_IFREG | S_IRUGO, NULL);
+                if (s->ps)
+                        s->ps->read_proc = proc_es1371_dump;
+#endif /* ES1371_DEBUG */
+
 		/* initialize codec registers */
 		s->ctrl = 0;
 		if ((joystick[index] & ~0x18) == 0x200) {
@@ -2801,14 +2983,13 @@ static int __init init_es1371(void)
 		s->sctrl = 0;
 		cssr = 0;
 		/* check to see if s/pdif mode is being requested */
-		pci_read_config_byte(pcidev, PCI_REVISION_ID, &revision);
 		if (spdif[index]) {
-			if (revision >= 4) {
+			if (s->rev >= 4) {
 				printk(KERN_INFO "es1371: enabling S/PDIF output\n");
 				cssr |= STAT_EN_SPDIF;
 				s->ctrl |= CTRL_SPDIFEN_B;
 			} else {
-				printk(KERN_ERR "es1371: revision %d does not support S/PDIF\n", revision);
+				printk(KERN_ERR "es1371: revision %d does not support S/PDIF\n", s->rev);
 			}
 		}
 		/* initialize the chips */
@@ -2821,35 +3002,12 @@ static int __init init_es1371(void)
 		udelay(2);
 		outl(s->ctrl, s->io+ES1371_REG_CONTROL);
 		/* init the sample rate converter */
-		outl(SRC_DIS, s->io + ES1371_REG_SRCONV);
-		for (val = 0; val < 0x80; val++)
-			src_write(s, val, 0);
-		src_write(s, SRCREG_DAC1+SRCREG_TRUNC_N, 16 << 4);
-		src_write(s, SRCREG_DAC1+SRCREG_INT_REGS, 16 << 10);
-		src_write(s, SRCREG_DAC2+SRCREG_TRUNC_N, 16 << 4);
-		src_write(s, SRCREG_DAC2+SRCREG_INT_REGS, 16 << 10);
-		src_write(s, SRCREG_VOL_ADC, 1 << 12);
-		src_write(s, SRCREG_VOL_ADC+1, 1 << 12);
-		src_write(s, SRCREG_VOL_DAC1, 1 << 12);
-		src_write(s, SRCREG_VOL_DAC1+1, 1 << 12);
-		src_write(s, SRCREG_VOL_DAC2, 1 << 12);
-		src_write(s, SRCREG_VOL_DAC2+1, 1 << 12);
-		set_adc_rate(s, 22050);
-		set_dac1_rate(s, 22050);
-		set_dac2_rate(s, 22050);
-		/* WARNING:
-		 * enabling the sample rate converter without properly programming
-		 * its parameters causes the chip to lock up (the SRC busy bit will
-		 * be stuck high, and I've found no way to rectify this other than
-		 * power cycle)
-		 */
-		wait_src_ready(s);
-		outl(0, s->io+ES1371_REG_SRCONV);
+                src_init(s);
 		/* codec init */
-		wrcodec(s, 0x00, 0); /* reset codec */
-		s->mix.codec_id = rdcodec(s, 0x00);  /* get codec ID */
-		val = rdcodec(s, 0x7c);
-		val2 = rdcodec(s, 0x7e);
+		wrcodec(s, AC97_RESET, 0); /* reset codec */
+		s->mix.codec_id = rdcodec(s, AC97_RESET);  /* get codec ID */
+		val = rdcodec(s, AC97_VENDOR_ID1);
+		val2 = rdcodec(s, AC97_VENDOR_ID2);
 		printk(KERN_INFO "es1371: codec vendor %c%c%c revision %d\n", 
 		       (val >> 8) & 0xff, val & 0xff, (val2 >> 8) & 0xff, val2 & 0xff);
 		printk(KERN_INFO "es1371: codec features");
@@ -2876,6 +3034,7 @@ static int __init init_es1371(void)
 		printk("%s\n", (s->mix.codec_id & 0x3ff) ? "" : " none");
 		val = (s->mix.codec_id >> CODEC_ID_SESHIFT) & CODEC_ID_SEMASK;
 		printk(KERN_INFO "es1371: stereo enhancement: %s\n", (val <= 20) ? stereo_enhancement[val] : "unknown");
+
 		fs = get_fs();
 		set_fs(KERNEL_DS);
 		val = SOUND_MASK_LINE;
@@ -2918,6 +3077,10 @@ static void __exit cleanup_es1371(void)
 
 	while ((s = devs)) {
 		devs = devs->next;
+#ifdef ES1371_DEBUG
+		if (s->ps)
+			remove_proc_entry("es1371", NULL);
+#endif /* ES1371_DEBUG */
 		outl(0, s->io+ES1371_REG_CONTROL); /* switch everything off */
 		outl(0, s->io+ES1371_REG_SERIAL_CONTROL); /* clear serial interrupts */
 		synchronize_irq();

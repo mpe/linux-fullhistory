@@ -98,8 +98,8 @@ static ssize_t coda_psdev_write(struct file *file, const char *buf,
 	if (copy_from_user(&hdr, buf, 2 * sizeof(u_long)))
 	        return -EFAULT;
 
-	CDEBUG(D_PSDEV, "(process,opc,uniq)=(%d,%ld,%ld), count %d\n", 
-	       current->pid, hdr.opcode, hdr.unique, count);
+	CDEBUG(D_PSDEV, "(process,opc,uniq)=(%d,%ld,%ld), count %ld\n", 
+	       current->pid, hdr.opcode, hdr.unique, (long)count);
 
         if (DOWNCALL(hdr.opcode)) {
 		struct super_block *sb = NULL;
@@ -160,8 +160,8 @@ static ssize_t coda_psdev_write(struct file *file, const char *buf,
 
         /* move data into response buffer. */
         if (req->uc_outSize < count) {
-                printk("psdev_write: too much cnt: %d, cnt: %d, opc: %ld, uniq: %ld.\n",
-		       req->uc_outSize, count, hdr.opcode, hdr.unique);
+                printk("psdev_write: too much cnt: %d, cnt: %ld, opc: %ld, uniq: %ld.\n",
+		       req->uc_outSize, (long)count, hdr.opcode, hdr.unique);
 		count = req->uc_outSize; /* don't have more space! */
 	}
         if (copy_from_user(req->uc_data, buf, count))
@@ -172,8 +172,8 @@ static ssize_t coda_psdev_write(struct file *file, const char *buf,
         req->uc_flags |= REQ_WRITE;
 
 	CDEBUG(D_PSDEV, 
-	       "Found! Count %d for (opc,uniq)=(%ld,%ld), upc_req at %x\n", 
-	        count, hdr.opcode, hdr.unique, (int)&req);
+	       "Found! Count %ld for (opc,uniq)=(%ld,%ld), upc_req at %p\n", 
+	        (long)count, hdr.opcode, hdr.unique, &req);
 
         wake_up(&req->uc_sleep);
         return(count);  
@@ -190,7 +190,7 @@ static ssize_t coda_psdev_read(struct file * file, char * buf,
         struct upc_req *req;
 	int result = count ;
 
-        CDEBUG(D_PSDEV, "count %d\n", count);
+        CDEBUG(D_PSDEV, "count %ld\n", (long)count);
         if (list_empty(&(vcp->vc_pending))) {
               return -1;	
         }
@@ -203,8 +203,8 @@ static ssize_t coda_psdev_read(struct file * file, char * buf,
               result = req->uc_inSize;
 
         if (count < req->uc_inSize) {
-                printk ("psdev_read: Venus read %d bytes of %d in message\n",
-			count, req->uc_inSize);
+                printk ("psdev_read: Venus read %ld bytes of %d in message\n",
+			(long)count, req->uc_inSize);
         }
 
         if ( copy_to_user(buf, req->uc_data, result))

@@ -98,7 +98,7 @@ int unregister_exec_domain(struct exec_domain *it)
 	return -EINVAL;
 }
 
-asmlinkage int sys_personality(unsigned long personality)
+asmlinkage long sys_personality(unsigned long personality)
 {
 	struct exec_domain *it;
 	unsigned long old_personality;

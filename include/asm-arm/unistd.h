@@ -306,39 +306,39 @@ type name(type1 arg1, type2 arg2, type3 arg3, type4 arg4, type5 arg5) {			\
 
 #ifdef __KERNEL_SYSCALLS__
 
-static inline int idle(void)
+static inline long idle(void)
 {
-	extern int sys_idle(void);
+	extern long sys_idle(void);
 	return sys_idle();
 }
 
-static inline int pause(void)
+static inline long pause(void)
 {
-	extern int sys_pause(void);
+	extern long sys_pause(void);
 	return sys_pause();
 }
 
-static inline int sync(void)
+static inline long sync(void)
 {
-	extern int sys_sync(void);
+	extern long sys_sync(void);
 	return sys_sync();
 }
 
 static inline pid_t setsid(void)
 {
-	extern int sys_setsid(void);
+	extern long sys_setsid(void);
 	return sys_setsid();
 }
 
-static inline int write(int fd, const char *buf, off_t count)
+static inline long write(int fd, const char *buf, off_t count)
 {
-	extern int sys_write(int, const char *, int);
+	extern long sys_write(int, const char *, int);
 	return sys_write(fd, buf, count);
 }
 
-static inline int read(int fd, char *buf, off_t count)
+static inline long read(int fd, char *buf, off_t count)
 {
-	extern int sys_read(int, char *, int);
+	extern long sys_read(int, char *, int);
 	return sys_read(fd, buf, count);
 }
 
@@ -348,44 +348,44 @@ static inline off_t lseek(int fd, off_t offset, int count)
 	return sys_lseek(fd, offset, count);
 }
 
-static inline int dup(int fd)
+static inline long dup(int fd)
 {
-	extern int sys_dup(int);
+	extern long sys_dup(int);
 	return sys_dup(fd);
 }
 
-static inline int open(const char *file, int flag, int mode)
+static inline long open(const char *file, int flag, int mode)
 {
-	extern int sys_open(const char *, int, int);
+	extern long sys_open(const char *, int, int);
 	return sys_open(file, flag, mode);
 }
 
-static inline int close(int fd)
+static inline long close(int fd)
 {
 	return sys_close(fd);
 }
 
-static inline int _exit(int exitcode)
+static inline long _exit(int exitcode)
 {
-	extern int sys_exit(int) __attribute__((noreturn));
+	extern long sys_exit(int) __attribute__((noreturn));
 	return sys_exit(exitcode);
 }
 
 static inline pid_t waitpid(pid_t pid, int *wait_stat, int options)
 {
-	extern int sys_wait4(int, int *, int, struct rusage *);
+	extern long sys_wait4(int, int *, int, struct rusage *);
 	return sys_wait4((int)pid, wait_stat, options, NULL);
 }
 
-static inline int delete_module(const char *name)
+static inline long delete_module(const char *name)
 {
-	extern int sys_delete_module(const char *name);
+	extern long sys_delete_module(const char *name);
 	return sys_delete_module(name);
 }
 
 static inline pid_t wait(int * wait_stat)
 {
-	extern int sys_wait4(int, int *, int, struct rusage *);
+	extern long sys_wait4(int, int *, int, struct rusage *);
 	return sys_wait4(-1, wait_stat, 0, NULL);
 }
 

@@ -31,6 +31,12 @@
 #define CHECKSUM_HW 1
 #define CHECKSUM_UNNECESSARY 2
 
+#ifdef __i386__
+#define NET_CALLER(arg) (*(((void**)&arg)-1))
+#else
+#define NET_CALLER(arg) __builtin_return_address(0)
+#endif
+
 struct sk_buff_head {
 	/* These two members must be first. */
 	struct sk_buff	* next;
@@ -49,6 +55,7 @@ struct sk_buff {
 	struct sock	*sk;			/* Socket we are owned by 			*/
 	struct timeval	stamp;			/* Time we arrived				*/
 	struct net_device	*dev;			/* Device we arrived on/are leaving by		*/
+	struct net_device	*rx_dev;
 
 	/* Transport layer header */
 	union
@@ -102,9 +109,17 @@ struct sk_buff {
 	unsigned char	*tail;			/* Tail pointer					*/
 	unsigned char 	*end;			/* End pointer					*/
 	void 		(*destructor)(struct sk_buff *);	/* Destruct function		*/
-#ifdef CONFIG_IP_FIREWALL
-        __u32           fwmark;                 /* Label made by fwchains, used by pktsched	*/
+#ifdef CONFIG_NETFILTER
+	/* Can be used for communication between hooks. */
+        unsigned long	nfmark;
+	/* Reason for doing this to the packet (see netfilter.h) */
+	__u32		nfreason;
+	/* Cache info */
+	__u32		nfcache;
+#ifdef CONFIG_NETFILTER_DEBUG
+        unsigned int nf_debug;
 #endif
+#endif /*CONFIG_NETFILTER*/
 #if defined(CONFIG_SHAPER) || defined(CONFIG_SHAPER_MODULE)
 	__u32		shapelatency;		/* Latency on frame */
 	__u32		shapeclock;		/* Time it should go out */
@@ -199,6 +214,18 @@ extern __inline__ int skb_shared(struct sk_buff *skb)
 {
 	return (atomic_read(&skb->users) != 1);
 }
+
+extern __inline__ struct sk_buff *skb_share_check(struct sk_buff *skb, int pri)
+{
+	if (skb_shared(skb)) {
+		struct sk_buff *nskb;
+		nskb = skb_clone(skb, pri);
+		kfree_skb(skb);
+		return nskb;
+	}
+	return skb;
+}
+
 
 /*
  *	Copy shared buffers into a new sk_buff. We effectively do COW on
@@ -548,6 +575,13 @@ extern __inline__ void skb_queue_purge(struct sk_buff_head *list)
 {
 	struct sk_buff *skb;
 	while ((skb=skb_dequeue(list))!=NULL)
+		kfree_skb(skb);
+}
+
+extern __inline__ void __skb_queue_purge(struct sk_buff_head *list)
+{
+	struct sk_buff *skb;
+	while ((skb=__skb_dequeue(list))!=NULL)
 		kfree_skb(skb);
 }
 

@@ -101,6 +101,10 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_NET_SCH_ATM), y)
+O_OBJS += sch_atm.o
+endif
+
 ifeq ($(CONFIG_NET_CLS_U32), y)
 O_OBJS += cls_u32.o
 else

@@ -73,18 +73,17 @@ struct socket
 
 	short			type;
 	unsigned char		passcred;
-	unsigned char		tli;
 };
 
 #define SOCK_INODE(S)	((S)->inode)
 
 struct scm_cookie;
+struct vm_area_struct;
 
 struct proto_ops {
   int	family;
 
-  int	(*dup)		(struct socket *newsock, struct socket *oldsock);
-  int	(*release)	(struct socket *sock, struct socket *peer);
+  int	(*release)	(struct socket *sock);
   int	(*bind)		(struct socket *sock, struct sockaddr *umyaddr,
 			 int sockaddr_len);
   int	(*connect)	(struct socket *sock, struct sockaddr *uservaddr,
@@ -107,6 +106,7 @@ struct proto_ops {
 			 unsigned long arg);	
   int   (*sendmsg)	(struct socket *sock, struct msghdr *m, int total_len, struct scm_cookie *scm);
   int   (*recvmsg)	(struct socket *sock, struct msghdr *m, int total_len, int flags, struct scm_cookie *scm);
+  int	(*mmap)		(struct file *file, struct socket *sock, struct vm_area_struct * vma);
 };
 
 struct net_proto_family 
@@ -126,7 +126,6 @@ struct net_proto
 	void (*init_func)(struct net_proto *);	/* Bootstrap */
 };
 
-extern struct net_proto_family *net_families[];
 extern int	sock_wake_async(struct socket *sk, int how);
 extern int	sock_register(struct net_proto_family *fam);
 extern int	sock_unregister(int family);
@@ -141,6 +140,89 @@ extern int	sock_readv_writev(int type, struct inode * inode, struct file * file,
 extern int	net_ratelimit(void);
 extern unsigned long net_random(void);
 extern void net_srandom(unsigned long);
+
+#ifndef __SMP__
+#define SOCKOPS_WRAPPED(name) name
+#define SOCKOPS_WRAP(name, fam)
+#else
+
+#define SOCKOPS_WRAPPED(name) __unlocked_##name
+
+#define SOCKCALL_WRAP(name, call, parms, args)		\
+static int __lock_##name##_##call  parms		\
+{							\
+	int ret;					\
+	lock_kernel();					\
+	ret = __unlocked_##name##_ops.call  args ;\
+	unlock_kernel();				\
+	return ret;					\
+}
+
+#define SOCKCALL_UWRAP(name, call, parms, args)		\
+static unsigned int __lock_##name##_##call  parms	\
+{							\
+	int ret;					\
+	lock_kernel();					\
+	ret = __unlocked_##name##_ops.call  args ;\
+	unlock_kernel();				\
+	return ret;					\
+}
+
+
+#define SOCKOPS_WRAP(name, fam)					\
+SOCKCALL_WRAP(name, release, (struct socket *sock), (sock))	\
+SOCKCALL_WRAP(name, bind, (struct socket *sock, struct sockaddr *uaddr, int addr_len), \
+	      (sock, uaddr, addr_len))				\
+SOCKCALL_WRAP(name, connect, (struct socket *sock, struct sockaddr * uaddr, \
+			      int addr_len, int flags), 	\
+	      (sock, uaddr, addr_len, flags))			\
+SOCKCALL_WRAP(name, socketpair, (struct socket *sock1, struct socket *sock2), \
+	      (sock1, sock2))					\
+SOCKCALL_WRAP(name, accept, (struct socket *sock, struct socket *newsock, \
+			 int flags), (sock, newsock, flags)) \
+SOCKCALL_WRAP(name, getname, (struct socket *sock, struct sockaddr *uaddr, \
+			 int *addr_len, int peer), (sock, uaddr, addr_len, peer)) \
+SOCKCALL_UWRAP(name, poll, (struct file *file, struct socket *sock, struct poll_table_struct *wait), \
+	      (file, sock, wait)) \
+SOCKCALL_WRAP(name, ioctl, (struct socket *sock, unsigned int cmd, \
+			 unsigned long arg), (sock, cmd, arg)) \
+SOCKCALL_WRAP(name, listen, (struct socket *sock, int len), (sock, len)) \
+SOCKCALL_WRAP(name, shutdown, (struct socket *sock, int flags), (sock, flags)) \
+SOCKCALL_WRAP(name, setsockopt, (struct socket *sock, int level, int optname, \
+			 char *optval, int optlen), (sock, level, optname, optval, optlen)) \
+SOCKCALL_WRAP(name, getsockopt, (struct socket *sock, int level, int optname, \
+			 char *optval, int *optlen), (sock, level, optname, optval, optlen)) \
+SOCKCALL_WRAP(name, fcntl, (struct socket *sock, unsigned int cmd, \
+			 unsigned long arg), (sock, cmd, arg)) \
+SOCKCALL_WRAP(name, sendmsg, (struct socket *sock, struct msghdr *m, int len, struct scm_cookie *scm), \
+	      (sock, m, len, scm)) \
+SOCKCALL_WRAP(name, recvmsg, (struct socket *sock, struct msghdr *m, int len, int flags, struct scm_cookie *scm), \
+	      (sock, m, len, flags, scm)) \
+SOCKCALL_WRAP(name, mmap, (struct file *file, struct socket *sock, struct vm_area_struct *vma), \
+	      (file, sock, vma)) \
+	      \
+static struct proto_ops name##_ops = {	\
+	fam,				\
+					\
+	__lock_##name##_release,	\
+	__lock_##name##_bind,		\
+	__lock_##name##_connect,	\
+	__lock_##name##_socketpair,	\
+	__lock_##name##_accept,		\
+	__lock_##name##_getname,	\
+	__lock_##name##_poll,		\
+	__lock_##name##_ioctl,		\
+	__lock_##name##_listen,		\
+	__lock_##name##_shutdown,	\
+	__lock_##name##_setsockopt,	\
+	__lock_##name##_getsockopt,	\
+	__lock_##name##_fcntl,		\
+	__lock_##name##_sendmsg,	\
+	__lock_##name##_recvmsg,	\
+	__lock_##name##_mmap,		\
+};
+#endif
+
 
 #endif /* __KERNEL__ */
 #endif	/* _LINUX_NET_H */

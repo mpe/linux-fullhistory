@@ -12,7 +12,7 @@
 
 #include <asm/uaccess.h>
 
-asmlinkage int sys_statfs(const char * path, struct statfs * buf)
+asmlinkage long sys_statfs(const char * path, struct statfs * buf)
 {
 	struct dentry * dentry;
 	int error;
@@ -34,7 +34,7 @@ asmlinkage int sys_statfs(const char * path, struct statfs * buf)
 	return error;
 }
 
-asmlinkage int sys_fstatfs(unsigned int fd, struct statfs * buf)
+asmlinkage long sys_fstatfs(unsigned int fd, struct statfs * buf)
 {
 	struct file * file;
 	struct super_block * sb;
@@ -79,7 +79,7 @@ int do_truncate(struct dentry *dentry, unsigned long length)
 	return error;
 }
 
-asmlinkage int sys_truncate(const char * path, unsigned long length)
+asmlinkage long sys_truncate(const char * path, unsigned long length)
 {
 	struct dentry * dentry;
 	struct inode * inode;
@@ -128,7 +128,7 @@ out:
 	return error;
 }
 
-asmlinkage int sys_ftruncate(unsigned int fd, unsigned long length)
+asmlinkage long sys_ftruncate(unsigned int fd, unsigned long length)
 {
 	struct inode * inode;
 	struct dentry *dentry;
@@ -176,7 +176,7 @@ out:
  * must be owner or have write permission.
  * Else, update from *times, must be owner or super user.
  */
-asmlinkage int sys_utime(char * filename, struct utimbuf * times)
+asmlinkage long sys_utime(char * filename, struct utimbuf * times)
 {
 	int error;
 	struct dentry * dentry;
@@ -224,7 +224,7 @@ out:
  * must be owner or have write permission.
  * Else, update from *times, must be owner or super user.
  */
-asmlinkage int sys_utimes(char * filename, struct timeval * utimes)
+asmlinkage long sys_utimes(char * filename, struct timeval * utimes)
 {
 	int error;
 	struct dentry * dentry;
@@ -270,7 +270,7 @@ out:
  * We do this by temporarily clearing all FS-related capabilities and
  * switching the fsuid/fsgid around to the real ones.
  */
-asmlinkage int sys_access(const char * filename, int mode)
+asmlinkage long sys_access(const char * filename, int mode)
 {
 	struct dentry * dentry;
 	int old_fsuid, old_fsgid;
@@ -311,7 +311,7 @@ out:
 	return res;
 }
 
-asmlinkage int sys_chdir(const char * filename)
+asmlinkage long sys_chdir(const char * filename)
 {
 	int error;
 	struct inode *inode;
@@ -346,7 +346,7 @@ out:
 	return error;
 }
 
-asmlinkage int sys_fchdir(unsigned int fd)
+asmlinkage long sys_fchdir(unsigned int fd)
 {
 	struct file *file;
 	struct dentry *dentry;
@@ -382,7 +382,7 @@ out:
 	return error;
 }
 
-asmlinkage int sys_chroot(const char * filename)
+asmlinkage long sys_chroot(const char * filename)
 {
 	int error;
 	struct inode *inode;
@@ -422,7 +422,7 @@ out:
 	return error;
 }
 
-asmlinkage int sys_fchmod(unsigned int fd, mode_t mode)
+asmlinkage long sys_fchmod(unsigned int fd, mode_t mode)
 {
 	struct inode * inode;
 	struct dentry * dentry;
@@ -460,7 +460,7 @@ out:
 	return err;
 }
 
-asmlinkage int sys_chmod(const char * filename, mode_t mode)
+asmlinkage long sys_chmod(const char * filename, mode_t mode)
 {
 	struct dentry * dentry;
 	struct inode * inode;
@@ -551,7 +551,7 @@ out:
 	return error;
 }
 
-asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
+asmlinkage long sys_chown(const char * filename, uid_t user, gid_t group)
 {
 	struct dentry * dentry;
 	int error;
@@ -568,7 +568,7 @@ asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 	return error;
 }
 
-asmlinkage int sys_lchown(const char * filename, uid_t user, gid_t group)
+asmlinkage long sys_lchown(const char * filename, uid_t user, gid_t group)
 {
 	struct dentry * dentry;
 	int error;
@@ -586,7 +586,7 @@ asmlinkage int sys_lchown(const char * filename, uid_t user, gid_t group)
 }
 
 
-asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
+asmlinkage long sys_fchown(unsigned int fd, uid_t user, gid_t group)
 {
 	struct dentry * dentry;
 	struct file * file;
@@ -748,7 +748,7 @@ inline void put_unused_fd(unsigned int fd)
 	write_unlock(&current->files->file_lock);
 }
 
-asmlinkage int sys_open(const char * filename, int flags, int mode)
+asmlinkage long sys_open(const char * filename, int flags, int mode)
 {
 	char * tmp;
 	int fd, error;
@@ -784,7 +784,7 @@ out_error:
  * For backward compatibility?  Maybe this should be moved
  * into arch/i386 instead?
  */
-asmlinkage int sys_creat(const char * pathname, int mode)
+asmlinkage long sys_creat(const char * pathname, int mode)
 {
 	return sys_open(pathname, O_CREAT | O_WRONLY | O_TRUNC, mode);
 }
@@ -847,7 +847,7 @@ out_unlock:
 	goto out;
 }
 
-asmlinkage int sys_close(unsigned int fd)
+asmlinkage long sys_close(unsigned int fd)
 {
 	return do_close(fd, 1);
 }
@@ -856,7 +856,7 @@ asmlinkage int sys_close(unsigned int fd)
  * This routine simulates a hangup on the tty, to arrange that users
  * are given clean terminals at login time.
  */
-asmlinkage int sys_vhangup(void)
+asmlinkage long sys_vhangup(void)
 {
 	int ret = -EPERM;
 

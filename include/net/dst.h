@@ -27,8 +27,8 @@ struct sk_buff;
 struct dst_entry
 {
 	struct dst_entry        *next;
-	atomic_t		refcnt;		/* tree/hash references	*/
-	atomic_t		use;		/* client references	*/
+	atomic_t		__refcnt;	/* client references	*/
+	int			__use;
 	struct net_device	        *dev;
 	int			obsolete;
 	unsigned long		lastuse;
@@ -37,6 +37,10 @@ struct dst_entry
 	unsigned		pmtu;
 	unsigned		window;
 	unsigned		rtt;
+	unsigned		rttvar;
+	unsigned		ssthresh;
+	unsigned		cwnd;
+	unsigned		advmss;
 	unsigned long		rate_last;	/* rate limiting for ICMP */
 	unsigned long		rate_tokens;
 
@@ -71,17 +75,24 @@ struct dst_ops
 	void			(*destroy)(struct dst_entry *);
 	struct dst_entry *	(*negative_advice)(struct dst_entry *);
 	void			(*link_failure)(struct sk_buff *);
+	int			entry_size;
 
 	atomic_t		entries;
+	kmem_cache_t 		*kmem_cachep;
 };
 
 #ifdef __KERNEL__
+
+extern __inline__ void dst_hold(struct dst_entry * dst)
+{
+	atomic_inc(&dst->__refcnt);
+}
 
 extern __inline__
 struct dst_entry * dst_clone(struct dst_entry * dst)
 {
 	if (dst)
-		atomic_inc(&dst->use);
+		atomic_inc(&dst->__refcnt);
 	return dst;
 }
 
@@ -89,42 +100,10 @@ extern __inline__
 void dst_release(struct dst_entry * dst)
 {
 	if (dst)
-		atomic_dec(&dst->use);
+		atomic_dec(&dst->__refcnt);
 }
 
-/* The following primitive should be use if and only if
-   destination entry has just been removed from a location
-   accessed directly by hard irq.
- */
-extern __inline__
-void dst_release_irqwait(struct dst_entry * dst)
-{
-	if (dst) {
-		synchronize_irq();
-		atomic_dec(&dst->use);
-	}
-}
-
-extern __inline__
-struct dst_entry * dst_check(struct dst_entry ** dst_p, u32 cookie)
-{
-	struct dst_entry * dst = *dst_p;
-	if (dst && dst->obsolete)
-		dst = dst->ops->check(dst, cookie);
-	return (*dst_p = dst);
-}
-
-extern __inline__
-struct dst_entry * dst_reroute(struct dst_entry ** dst_p, struct sk_buff *skb)
-{
-	struct dst_entry * dst = *dst_p;
-	if (dst && dst->obsolete)
-		dst = dst->ops->reroute(dst, skb);
-	return (*dst_p = dst);
-}
-
-
-extern void * dst_alloc(int size, struct dst_ops * ops);
+extern void * dst_alloc(struct dst_ops * ops);
 extern void __dst_free(struct dst_entry * dst);
 extern void dst_destroy(struct dst_entry * dst);
 
@@ -133,7 +112,7 @@ void dst_free(struct dst_entry * dst)
 {
 	if (dst->obsolete > 1)
 		return;
-	if (!atomic_read(&dst->use)) {
+	if (!atomic_read(&dst->__refcnt)) {
 		dst_destroy(dst);
 		return;
 	}

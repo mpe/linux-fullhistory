@@ -145,7 +145,7 @@ static int tc_ctl_tfilter(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 	/* Find head of filter chain. */
 
 	/* Find link */
-	if ((dev = dev_get_by_index(t->tcm_ifindex)) == NULL)
+	if ((dev = __dev_get_by_index(t->tcm_ifindex)) == NULL)
 		return -ENODEV;
 
 	/* Find qdisc */
@@ -372,6 +372,7 @@ static int tc_dump_tfilter(struct sk_buff *skb, struct netlink_callback *cb)
 		q = qdisc_lookup(dev, TC_H_MAJ(tcm->tcm_parent));
 	if (q == NULL) {
 		read_unlock(&qdisc_tree_lock);
+		dev_put(dev);
 		return skb->len;
 	}
 	if ((cops = q->ops->cl_ops) == NULL)
@@ -425,6 +426,7 @@ errout:
 		cops->put(q, cl);
 
 	read_unlock(&qdisc_tree_lock);
+	dev_put(dev);
 	return skb->len;
 }
 

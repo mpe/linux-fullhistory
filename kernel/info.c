@@ -13,7 +13,7 @@
 
 #include <asm/uaccess.h>
 
-asmlinkage int sys_sysinfo(struct sysinfo *info)
+asmlinkage long sys_sysinfo(struct sysinfo *info)
 {
 	struct sysinfo val;
 

@@ -126,6 +126,10 @@ endif
 
 DRIVERS := $(DRIVERS) drivers/net/net.a
 
+ifdef CONFIG_ATM
+DRIVERS := $(DRIVERS) drivers/atm/atm.a
+endif
+
 ifeq ($(CONFIG_SCSI),y)
 DRIVERS := $(DRIVERS) drivers/scsi/scsi.a
 endif
@@ -325,6 +329,7 @@ modules_install:
 	if [ -f NET_MODULES   ]; then inst_mod NET_MODULES   net;   fi; \
 	if [ -f IPV4_MODULES  ]; then inst_mod IPV4_MODULES  ipv4;  fi; \
 	if [ -f IPV6_MODULES  ]; then inst_mod IPV6_MODULES  ipv6;  fi; \
+	if [ -f ATM_MODULES   ]; then inst_mod ATM_MODULES   atm;   fi; \
 	if [ -f SCSI_MODULES  ]; then inst_mod SCSI_MODULES  scsi;  fi; \
 	if [ -f FS_MODULES    ]; then inst_mod FS_MODULES    fs;    fi; \
 	if [ -f NLS_MODULES   ]; then inst_mod NLS_MODULES   fs;    fi; \

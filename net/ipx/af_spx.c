@@ -36,10 +36,9 @@
 #include <asm/uaccess.h>
 #include <linux/uio.h>
 #include <linux/unistd.h>
-#include <linux/firewall.h>
 
 static struct proto_ops *ipx_operations;
-static struct proto_ops spx_operations;
+static struct proto_ops spx_ops;
 static __u16  connids;
 
 /* Functions needed for SPX connection start up */
@@ -96,7 +95,7 @@ static int spx_create(struct socket *sock, int protocol)
 	switch(sock->type)
         {
                 case SOCK_SEQPACKET:
-			sock->ops = &spx_operations;
+			sock->ops = &spx_ops;
 			break;
 		default:
 			sk_free(sk);
@@ -149,7 +148,7 @@ void spx_destroy_socket(struct sock *sk)
 }
 
 /* Release an SPX socket */
-static int spx_release(struct socket *sock, struct socket *peer)
+static int spx_release(struct socket *sock)
 {
  	struct sock *sk = sock->sk;
 	struct spx_opt *pdata = &sk->tp_pinfo.af_spx;
@@ -207,10 +206,6 @@ static int spx_accept(struct socket *sock, struct socket *newsock, int flags)
         struct sock *newsk;
         struct sk_buff *skb;
 	int err;
-
-	if(newsock->sk != NULL)
-		spx_destroy_socket(newsock->sk);
-        newsock->sk = NULL;
 
 	if(sock->sk == NULL)
 		return (-EINVAL);
@@ -847,9 +842,8 @@ static int spx_getsockopt(struct socket *sock, int level, int optname,
 	return (err);
 }
 
-static struct proto_ops spx_operations = {
+static struct proto_ops SOCKOPS_WRAPPED(spx_ops) = {
         PF_IPX,
-        sock_no_dup,
         spx_release,
         spx_bind,
         spx_connect,
@@ -864,8 +858,13 @@ static struct proto_ops spx_operations = {
 	spx_getsockopt,
         sock_no_fcntl,
         spx_sendmsg,
-        spx_recvmsg
+        spx_recvmsg,
+	sock_no_mmap
 };
+
+#include <linux/smp_lock.h>
+SOCKOPS_WRAP(spx, PF_IPX);
+
 
 static struct net_proto_family spx_family_ops=
 {

@@ -73,9 +73,9 @@ bad:
 }
 
 #if !defined(__alpha__)
-asmlinkage int sys_llseek(unsigned int fd, unsigned long offset_high,
-			  unsigned long offset_low, loff_t * result,
-			  unsigned int origin)
+asmlinkage long sys_llseek(unsigned int fd, unsigned long offset_high,
+			   unsigned long offset_low, loff_t * result,
+			   unsigned int origin)
 {
 	int retval;
 	struct file * file;

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_output.c,v 1.20 1999/06/09 10:11:12 davem Exp $
+ *	$Id: ip6_output.c,v 1.22 1999/08/20 11:06:21 davem Exp $
  *
  *	Based on linux/net/ipv4/ip_output.c
  *
@@ -149,14 +149,11 @@ int ip6_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 
 	if (skb->len <= dst->pmtu) {
 		ipv6_statistics.Ip6OutRequests++;
-		dst->output(skb);
-		return 0;
+		return dst->output(skb);
 	}
 
 	printk(KERN_DEBUG "IPv6: sending pkt_too_big to self\n");
-	start_bh_atomic();
 	icmpv6_send(skb, ICMPV6_PKT_TOOBIG, 0, dst->pmtu, skb->dev);
-	end_bh_atomic();
 	kfree_skb(skb);
 	return -EMSGSIZE;
 }
@@ -317,6 +314,9 @@ static int ip6_frag_xmit(struct sock *sk, inet_getfrag_t getfrag,
 		data_off = frag_off - opt->opt_flen;
 	}
 
+	if (flags&MSG_PROBE)
+		return 0;
+
 	last_skb = sock_alloc_send_skb(sk, unfrag_len + frag_len +
 				       dst->dev->hard_header_len + 15,
 				       0, flags & MSG_DONTWAIT, &err);
@@ -352,7 +352,7 @@ static int ip6_frag_xmit(struct sock *sk, inet_getfrag_t getfrag,
 				kfree_skb(last_skb);
 				return -ENOMEM;
 			}
-			
+
 			frag_off -= frag_len;
 			data_off -= frag_len;
 
@@ -378,7 +378,11 @@ static int ip6_frag_xmit(struct sock *sk, inet_getfrag_t getfrag,
 
 			ipv6_statistics.Ip6FragCreates++;
 			ipv6_statistics.Ip6OutRequests++;
-			dst->output(skb);
+			err = dst->output(skb);
+			if (err) {
+				kfree_skb(last_skb);
+				return err;
+			}
 		}
 	}
 
@@ -400,9 +404,7 @@ static int ip6_frag_xmit(struct sock *sk, inet_getfrag_t getfrag,
 	ipv6_statistics.Ip6FragCreates++;
 	ipv6_statistics.Ip6FragOKs++;
 	ipv6_statistics.Ip6OutRequests++;
-	dst->output(last_skb);
-
-	return 0;
+	return dst->output(last_skb);
 }
 
 int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
@@ -425,11 +427,9 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 	if (!fl->oif && ipv6_addr_is_multicast(fl->nl_u.ip6_u.daddr))
 		fl->oif = np->mcast_oif;
 
-	dst = NULL;
-	if (sk->dst_cache) {
-		dst = dst_check(&sk->dst_cache, np->dst_cookie);
-		if (dst) {
-			struct rt6_info *rt = (struct rt6_info*)dst_clone(dst);
+	dst = __sk_dst_check(sk, np->dst_cookie);
+	if (dst) {
+		struct rt6_info *rt = (struct rt6_info*)dst;
 
 			/* Yes, checking route validity in not connected
 			   case is not very simple. Take into account,
@@ -448,15 +448,15 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 			      sockets.
 			   2. oif also should be the same.
 			 */
-			if (((rt->rt6i_dst.plen != 128 ||
-			      ipv6_addr_cmp(fl->fl6_dst, &rt->rt6i_dst.addr))
-			     && (np->daddr_cache == NULL ||
-				 ipv6_addr_cmp(fl->fl6_dst, np->daddr_cache)))
-			    || (fl->oif && fl->oif != dst->dev->ifindex)) {
-				dst_release(dst);
-				dst = NULL;
-			}
-		}
+
+		if (((rt->rt6i_dst.plen != 128 ||
+		      ipv6_addr_cmp(fl->fl6_dst, &rt->rt6i_dst.addr))
+		     && (np->daddr_cache == NULL ||
+			 ipv6_addr_cmp(fl->fl6_dst, np->daddr_cache)))
+		    || (fl->oif && fl->oif != dst->dev->ifindex)) {
+			dst = NULL;
+		} else
+			dst_clone(dst);
 	}
 
 	if (dst == NULL)
@@ -493,14 +493,14 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 
 	jumbolen = 0;
 
-	if (!sk->ip_hdrincl) {
+	if (!sk->protinfo.af_inet.hdrincl) {
 		pktlength += sizeof(struct ipv6hdr);
 		if (opt)
 			pktlength += opt->opt_flen + opt->opt_nflen;
 
 		if (pktlength > 0xFFFF + sizeof(struct ipv6hdr)) {
 			/* Jumbo datagram.
-			   It is assumed, that in the case of sk->ip_hdrincl
+			   It is assumed, that in the case of hdrincl
 			   jumbo option is supplied by user.
 			 */
 			pktlength += 8;
@@ -525,10 +525,17 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 		goto out;
 	}
 
+	if (flags&MSG_CONFIRM)
+		dst_confirm(dst);
+
 	if (pktlength <= mtu) {
 		struct sk_buff *skb;
 		struct ipv6hdr *hdr;
 		struct net_device *dev = dst->dev;
+
+		err = 0;
+		if (flags&MSG_PROBE)
+			goto out;
 
 		skb = sock_alloc_send_skb(sk, pktlength + 15 +
 					  dev->hard_header_len, 0,
@@ -546,7 +553,7 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 		hdr = (struct ipv6hdr *) skb->tail;
 		skb->nh.ipv6h = hdr;
 
-		if (!sk->ip_hdrincl) {
+		if (!sk->protinfo.af_inet.hdrincl) {
 			ip6_bld_1(sk, skb, fl, hlimit,
 				  jumbolen ? sizeof(struct ipv6hdr) : pktlength);
 
@@ -565,13 +572,13 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 
 		if (!err) {
 			ipv6_statistics.Ip6OutRequests++;
-			dst->output(skb);
+			err = dst->output(skb);
 		} else {
 			err = -EFAULT;
 			kfree_skb(skb);
 		}
 	} else {
-		if (sk->ip_hdrincl || jumbolen ||
+		if (sk->protinfo.af_inet.hdrincl || jumbolen ||
 		    np->pmtudisc == IPV6_PMTUDISC_DO) {
 			ipv6_local_error(sk, EMSGSIZE, fl, mtu);
 			err = -EMSGSIZE;
@@ -587,6 +594,8 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 	 */
 out:
 	ip6_dst_store(sk, dst, fl->nl_u.ip6_u.daddr == &np->daddr ? &np->daddr : NULL);
+	if (err > 0)
+		err = np->recverr ? net_xmit_errno(err) : 0;
 	return err;
 }
 
@@ -595,6 +604,7 @@ int ip6_call_ra_chain(struct sk_buff *skb, int sel)
 	struct ip6_ra_chain *ra;
 	struct sock *last = NULL;
 
+	read_lock(&ip6_ra_lock);
 	for (ra = ip6_ra_chain; ra; ra = ra->next) {
 		struct sock *sk = ra->sk;
 		if (sk && ra->sel == sel) {
@@ -609,8 +619,10 @@ int ip6_call_ra_chain(struct sk_buff *skb, int sel)
 
 	if (last) {
 		rawv6_rcv(last, skb, skb->len);
+		read_unlock(&ip6_ra_lock);
 		return 1;
 	}
+	read_unlock(&ip6_ra_lock);
 	return 0;
 }
 

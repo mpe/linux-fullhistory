@@ -97,13 +97,13 @@ teql_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 	if (q->q.qlen <= dev->tx_queue_len) {
 		sch->stats.bytes += skb->len;
 		sch->stats.packets++;
-		return 1;
+		return 0;
 	}
 
 	__skb_unlink(skb, &q->q);
 	kfree_skb(skb);
 	sch->stats.drops++;
-	return 0;
+	return NET_XMIT_DROP;
 }
 
 static int
@@ -112,7 +112,7 @@ teql_requeue(struct sk_buff *skb, struct Qdisc* sch)
 	struct teql_sched_data *q = (struct teql_sched_data *)sch->data;
 
 	__skb_queue_head(&q->q, skb);
-	return 1;
+	return 0;
 }
 
 static struct sk_buff *

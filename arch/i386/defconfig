@@ -44,8 +44,6 @@ CONFIG_PCI=y
 CONFIG_PCI_GOANY=y
 CONFIG_PCI_BIOS=y
 CONFIG_PCI_DIRECT=y
-CONFIG_PCI_QUIRKS=y
-CONFIG_PCI_OLD_PROC=y
 # CONFIG_MCA is not set
 # CONFIG_VISWS is not set
 CONFIG_X86_IO_APIC=y
@@ -123,8 +121,9 @@ CONFIG_BLK_DEV_IDE_MODES=y
 # Networking options
 #
 CONFIG_PACKET=y
+# CONFIG_PACKET_MMAP is not set
 # CONFIG_NETLINK is not set
-# CONFIG_FIREWALL is not set
+# CONFIG_NETFILTER is not set
 # CONFIG_FILTER is not set
 CONFIG_UNIX=y
 CONFIG_INET=y
@@ -140,7 +139,6 @@ CONFIG_INET=y
 #
 # (it is safe to leave these untouched)
 #
-# CONFIG_INET_RARP is not set
 CONFIG_SKB_LARGE=y
 
 #
@@ -227,6 +225,7 @@ CONFIG_NETDEVICES=y
 # CONFIG_ARCNET is not set
 CONFIG_DUMMY=m
 # CONFIG_EQUALIZER is not set
+# CONFIG_NET_SB1000 is not set
 
 #
 # Ethernet (10 or 100Mbit)
@@ -258,6 +257,7 @@ CONFIG_EEXPRESS_PRO100=y
 # Token ring devices
 #
 # CONFIG_TR is not set
+# CONFIG_NET_FC is not set
 
 #
 # Wan interfaces

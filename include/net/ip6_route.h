@@ -87,6 +87,8 @@ extern int inet6_rtm_getroute(struct sk_buff *skb, struct nlmsghdr* nlh, void *a
 extern void rt6_ifdown(struct net_device *dev);
 extern void rt6_mtu_change(struct net_device *dev, unsigned mtu);
 
+extern rwlock_t rt6_lock;
+
 /*
  *	Store a destination cache entry in a socket
  *	For UDP/RAW sockets this is done on udp_connect.
@@ -95,16 +97,14 @@ extern void rt6_mtu_change(struct net_device *dev, unsigned mtu);
 extern __inline__ void ip6_dst_store(struct sock *sk, struct dst_entry *dst,
 				     struct in6_addr *daddr)
 {
-	struct ipv6_pinfo *np;
-	struct rt6_info *rt;
+	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
+	struct rt6_info *rt = (struct rt6_info *) dst;
 
-	np = &sk->net_pinfo.af_inet6;
-	dst_release(xchg(&sk->dst_cache,dst));
-
-	rt = (struct rt6_info *) dst;
-
+	write_lock(&sk->dst_lock);
+	__sk_dst_set(sk, dst);
 	np->daddr_cache = daddr;
 	np->dst_cookie = rt->rt6i_node ? rt->rt6i_node->fn_sernum : 0;
+	write_unlock(&sk->dst_lock);
 }
 
 #endif

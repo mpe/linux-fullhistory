@@ -88,7 +88,7 @@ out_putf:
 	return ret;
 }
 
-asmlinkage int sys_dup2(unsigned int oldfd, unsigned int newfd)
+asmlinkage long sys_dup2(unsigned int oldfd, unsigned int newfd)
 {
 	int err = -EBADF;
 	struct file * file;
@@ -133,7 +133,7 @@ out_unlock:
 	goto out;
 }
 
-asmlinkage int sys_dup(unsigned int fildes)
+asmlinkage long sys_dup(unsigned int fildes)
 {
 	int ret = -EBADF;
 	struct file * file = fget(fildes);

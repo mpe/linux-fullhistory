@@ -36,7 +36,4 @@ extern void	icmp_init(struct net_proto_family *ops);
 /* Move into dst.h ? */
 extern int 	xrlim_allow(struct dst_entry *dst, int timeout);
 
-/* CONFIG_IP_TRANSPARENT_PROXY */
-extern int	icmp_chkaddr(struct sk_buff *skb);
-
 #endif	/* _ICMP_H */

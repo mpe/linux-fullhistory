@@ -9,7 +9,7 @@
 int nr_dquots = 0, nr_free_dquots = 0;
 int max_dquots = 0;
 
-asmlinkage int sys_quotactl(int cmd, const char *special, int id, caddr_t addr)
+asmlinkage long sys_quotactl(int cmd, const char *special, int id, caddr_t addr)
 {
 	return(-ENOSYS);
 }

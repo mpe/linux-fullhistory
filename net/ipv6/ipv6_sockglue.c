@@ -7,7 +7,7 @@
  *
  *	Based on linux/net/ipv4/ip_sockglue.c
  *
- *	$Id: ipv6_sockglue.c,v 1.27 1999/04/22 10:07:43 davem Exp $
+ *	$Id: ipv6_sockglue.c,v 1.28 1999/08/20 11:06:23 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -21,6 +21,8 @@
  *	o	Return an optlen of the truncated length if need be
  */
 
+#define __NO_VERSION__
+#include <linux/module.h>
 #include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/types.h>
@@ -54,7 +56,7 @@ struct packet_type ipv6_packet_type =
 	__constant_htons(ETH_P_IPV6), 
 	NULL,					/* All devices */
 	ipv6_rcv,
-	NULL,
+	(void*)1,
 	NULL
 };
 
@@ -68,6 +70,7 @@ static struct notifier_block ipv6_dev_notf = {
 };
 
 struct ip6_ra_chain *ip6_ra_chain;
+rwlock_t ip6_ra_lock = RW_LOCK_UNLOCKED;
 
 int ip6_ra_control(struct sock *sk, int sel, void (*destructor)(struct sock *))
 {
@@ -79,32 +82,37 @@ int ip6_ra_control(struct sock *sk, int sel, void (*destructor)(struct sock *))
 
 	new_ra = (sel>=0) ? kmalloc(sizeof(*new_ra), GFP_KERNEL) : NULL;
 
+	write_lock_bh(&ip6_ra_lock);
 	for (rap = &ip6_ra_chain; (ra=*rap) != NULL; rap = &ra->next) {
 		if (ra->sk == sk) {
 			if (sel>=0) {
+				write_unlock_bh(&ip6_ra_lock);
 				if (new_ra)
 					kfree(new_ra);
 				return -EADDRINUSE;
 			}
 
 			*rap = ra->next;
-			synchronize_bh();
+			write_unlock_bh(&ip6_ra_lock);
 
 			if (ra->destructor)
 				ra->destructor(sk);
+			sock_put(sk);
 			kfree(ra);
 			return 0;
 		}
 	}
-	if (new_ra == NULL)
+	if (new_ra == NULL) {
+		write_unlock_bh(&ip6_ra_lock);
 		return -ENOBUFS;
+	}
 	new_ra->sk = sk;
 	new_ra->sel = sel;
 	new_ra->destructor = destructor;
-	start_bh_atomic();
 	new_ra->next = ra;
 	*rap = new_ra;
-	end_bh_atomic();
+	sock_hold(sk);
+	write_unlock_bh(&ip6_ra_lock);
 	return 0;
 }
 
@@ -129,6 +137,8 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 
 	valbool = (val!=0);
 
+	lock_sock(sk);
+
 	switch (optname) {
 
 	case IPV6_ADDRFORM:
@@ -138,17 +148,16 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 
 			if (sk->protocol != IPPROTO_UDP &&
 			    sk->protocol != IPPROTO_TCP)
-				goto out;
+				break;
 
-			lock_sock(sk);
 			if (sk->state != TCP_ESTABLISHED) {
-				retv = ENOTCONN;
-				goto addrform_done;
+				retv = -ENOTCONN;
+				break;
 			}
 
 			if (!(ipv6_addr_type(&np->daddr) & IPV6_ADDR_MAPPED)) {
 				retv = -EADDRNOTAVAIL;
-				goto addrform_done;
+				break;
 			}
 
 			fl6_free_socklist(sk);
@@ -172,14 +181,14 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 			pktopt = xchg(&np->pktoptions, NULL);
 			if (pktopt)
 				kfree_skb(pktopt);
-			retv = 0;
 
-addrform_done:
-			release_sock(sk);
-		} else {
-			retv = -EINVAL;
+			sk->destruct = inet_sock_destruct;
+			atomic_dec(&inet6_sock_nr);
+			MOD_DEC_USE_COUNT;
+			retv = 0;
+			break;
 		}
-		break;
+		goto e_inval;
 
 	case IPV6_PKTINFO:
 		np->rxopt.bits.rxinfo = valbool;
@@ -192,11 +201,10 @@ addrform_done:
 		break;
 
 	case IPV6_RTHDR:
-		retv = -EINVAL;
-		if (val >= 0 && val <= 2) {
-			np->rxopt.bits.srcrt = val;
-			retv = 0;
-		}
+		if (val < 0 || val > 2)
+			goto e_inval;
+		np->rxopt.bits.srcrt = val;
+		retv = 0;
 		break;
 
 	case IPV6_HOPOPTS:
@@ -216,7 +224,8 @@ addrform_done:
 
 	case IPV6_FLOWINFO:
 		np->rxopt.bits.rxflow = valbool;
-		return 0;
+		retv = 0;
+		break;
 
 	case IPV6_PKTOPTIONS:
 	{
@@ -250,18 +259,23 @@ addrform_done:
 			goto done;
 update:
 		retv = 0;
-		start_bh_atomic();
-		if (opt && sk->type == SOCK_STREAM) {
-			struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
-			if ((tcp_connected(sk->state) || sk->state == TCP_SYN_SENT)
-			    && sk->daddr != LOOPBACK4_IPV6) {
-				tp->ext_header_len = opt->opt_flen + opt->opt_nflen;
-				tcp_sync_mss(sk, tp->pmtu_cookie);
+		if (sk->type == SOCK_STREAM) {
+			if (opt) {
+				struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
+				if ((tcp_connected(sk->state) || sk->state == TCP_SYN_SENT)
+				    && sk->daddr != LOOPBACK4_IPV6) {
+					tp->ext_header_len = opt->opt_flen + opt->opt_nflen;
+					tcp_sync_mss(sk, tp->pmtu_cookie);
+				}
 			}
+			opt = xchg(&np->opt, opt);
+			sk_dst_reset(sk);
+		} else {
+			write_lock(&sk->dst_lock);
+			opt = xchg(&np->opt, opt);
+			write_unlock(&sk->dst_lock);
+			sk_dst_reset(sk);
 		}
-		opt = xchg(&np->opt, opt);
-		dst_release(xchg(&sk->dst_cache, NULL));
-		end_bh_atomic();
 
 done:
 		if (opt)
@@ -270,20 +284,18 @@ done:
 	}
 	case IPV6_UNICAST_HOPS:
 		if (val > 255 || val < -1)
-			retv = -EINVAL;
-		else {
-			np->hop_limit = val;
-			retv = 0;
-		}
+			goto e_inval;
+		np->hop_limit = val;
+		retv = 0;
 		break;
 
 	case IPV6_MULTICAST_HOPS:
+		if (sk->type == SOCK_STREAM)
+			goto e_inval;
 		if (val > 255 || val < -1)
-			retv = -EINVAL;
-		else {
-			np->mcast_hops = val;
-			retv = 0;
-		}
+			goto e_inval;
+		np->mcast_hops = val;
+		retv = 0;
 		break;
 
 	case IPV6_MULTICAST_LOOP:
@@ -292,11 +304,12 @@ done:
 		break;
 
 	case IPV6_MULTICAST_IF:
-		if (sk->bound_dev_if && sk->bound_dev_if != val) {
-			retv = -EINVAL;
-			break;
-		}
-		if (dev_get_by_index(val) == NULL) {
+		if (sk->type == SOCK_STREAM)
+			goto e_inval;
+		if (sk->bound_dev_if && sk->bound_dev_if != val)
+			goto e_inval;
+
+		if (__dev_get_by_index(val) == NULL) {
 			retv = -ENODEV;
 			break;
 		}
@@ -308,8 +321,9 @@ done:
 	{
 		struct ipv6_mreq mreq;
 
+		retv = -EFAULT;
 		if (copy_from_user(&mreq, optval, sizeof(struct ipv6_mreq)))
-			return -EFAULT;
+			break;
 
 		if (optname == IPV6_ADD_MEMBERSHIP)
 			retv = ipv6_sock_mc_join(sk, mreq.ipv6mr_ifindex, &mreq.ipv6mr_multiaddr);
@@ -322,28 +336,38 @@ done:
 		break;
 	case IPV6_MTU_DISCOVER:
 		if (val<0 || val>2)
-			return -EINVAL;
+			goto e_inval;
 		np->pmtudisc = val;
-		return 0;
+		retv = 0;
+		break;
 	case IPV6_MTU:
 		if (val && val < IPV6_MIN_MTU)
-			return -EINVAL;
+			goto e_inval;
 		np->frag_size = val;
-		return 0;
+		retv = 0;
+		break;
 	case IPV6_RECVERR:
 		np->recverr = valbool;
 		if (!val)
 			skb_queue_purge(&sk->error_queue);
-		return 0;
+		retv = 0;
+		break;
 	case IPV6_FLOWINFO_SEND:
 		np->sndflow = valbool;
-		return 0;
+		retv = 0;
+		break;
 	case IPV6_FLOWLABEL_MGR:
-		return ipv6_flowlabel_opt(sk, optval, optlen);
-	};
+		retv = ipv6_flowlabel_opt(sk, optval, optlen);
+		break;
+	}
+	release_sock(sk);
 
 out:
 	return retv;
+
+e_inval:
+	release_sock(sk);
+	return -EINVAL;
 }
 
 int ipv6_getsockopt(struct sock *sk, int level, int optname, char *optval, 
@@ -365,36 +389,54 @@ int ipv6_getsockopt(struct sock *sk, int level, int optname, char *optval,
 		struct msghdr msg;
 		struct sk_buff *skb;
 
-		start_bh_atomic();
+		if (sk->type != SOCK_STREAM)
+			return -ENOPROTOOPT;
+
+		msg.msg_control = optval;
+		msg.msg_controllen = len;
+		msg.msg_flags = 0;
+
+		lock_sock(sk);
 		skb = np->pktoptions;
 		if (skb)
 			atomic_inc(&skb->users);
-		end_bh_atomic();
+		release_sock(sk);
 
 		if (skb) {
-			int err;
-
-			msg.msg_control = optval;
-			msg.msg_controllen = len;
-			msg.msg_flags = 0;
-			err = datagram_recv_ctl(sk, &msg, skb);
+			int err = datagram_recv_ctl(sk, &msg, skb);
 			kfree_skb(skb);
 			if (err)
 				return err;
-			len -= msg.msg_controllen;
-		} else
-			len = 0;
+		} else {
+			if (np->rxopt.bits.rxinfo) {
+				struct in6_pktinfo src_info;
+				src_info.ipi6_ifindex = np->mcast_oif;
+				ipv6_addr_copy(&src_info.ipi6_addr, &np->daddr);
+				put_cmsg(&msg, SOL_IPV6, IPV6_PKTINFO, sizeof(src_info), &src_info);
+			}
+			if (np->rxopt.bits.rxhlim) {
+				int hlim = np->mcast_hops;
+				put_cmsg(&msg, SOL_IPV6, IPV6_HOPLIMIT, sizeof(hlim), &hlim);
+			}
+		}
+		len -= msg.msg_controllen;
 		return put_user(len, optlen);
 	}
 	case IP_MTU:
+	{
+		struct dst_entry *dst;
 		val = 0;	
 		lock_sock(sk);
-		if (sk->dst_cache)		
-			val = sk->dst_cache->pmtu;
+		dst = sk_dst_get(sk);
+		if (dst) {
+			val = dst->pmtu;
+			dst_release(dst);
+		}
 		release_sock(sk);
 		if (!val)
 			return -ENOTCONN;
 		break;
+	}
 	default:
 		return -EINVAL;
 	}

@@ -42,7 +42,6 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 #include <linux/notifier.h>
-#include <linux/firewall.h>
 #include <net/x25.h>
 
 static struct x25_route *x25_route_list = NULL;
@@ -142,7 +141,7 @@ struct net_device *x25_dev_get(char *devname)
 {
 	struct net_device *dev;
 
-	if ((dev = dev_get(devname)) == NULL)
+	if ((dev = dev_get_by_name(devname)) == NULL)
 		return NULL;
 
 	if ((dev->flags & IFF_UP) && (dev->type == ARPHRD_X25
@@ -151,6 +150,8 @@ struct net_device *x25_dev_get(char *devname)
 #endif
 	   ))
 		return dev;
+
+	dev_put(dev);
 
 	return NULL;
 }
@@ -183,6 +184,7 @@ int x25_route_ioctl(unsigned int cmd, void *arg)
 {
 	struct x25_route_struct x25_route;
 	struct net_device *dev;
+	int err;
 
 	switch (cmd) {
 
@@ -193,7 +195,9 @@ int x25_route_ioctl(unsigned int cmd, void *arg)
 				return -EINVAL;
 			if ((dev = x25_dev_get(x25_route.device)) == NULL)
 				return -EINVAL;
-			return x25_add_route(&x25_route.address, x25_route.sigdigits, dev);
+			err = x25_add_route(&x25_route.address, x25_route.sigdigits, dev);
+			dev_put(dev);
+			return err;
 
 		case SIOCDELRT:
 			if (copy_from_user(&x25_route, arg, sizeof(struct x25_route_struct)))
@@ -202,7 +206,9 @@ int x25_route_ioctl(unsigned int cmd, void *arg)
 				return -EINVAL;
 			if ((dev = x25_dev_get(x25_route.device)) == NULL)
 				return -EINVAL;
-			return x25_del_route(&x25_route.address, x25_route.sigdigits, dev);
+			err = x25_del_route(&x25_route.address, x25_route.sigdigits, dev);
+			dev_put(dev);
+			return err;
 
 		default:
 			return -EINVAL;

@@ -139,7 +139,7 @@ tbf_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 	if ((sch->stats.backlog += skb->len) <= q->limit) {
 		sch->stats.bytes += skb->len;
 		sch->stats.packets++;
-		return 1;
+		return 0;
 	}
 
 	/* Drop action: undo the things that we just did,
@@ -155,7 +155,7 @@ drop:
 	if (sch->reshape_fail==NULL || sch->reshape_fail(skb, sch))
 #endif
 		kfree_skb(skb);
-	return 0;
+	return NET_XMIT_DROP;
 }
 
 static int
@@ -163,7 +163,7 @@ tbf_requeue(struct sk_buff *skb, struct Qdisc* sch)
 {
 	__skb_queue_head(&sch->q, skb);
 	sch->stats.backlog += skb->len;
-	return 1;
+	return 0;
 }
 
 static int

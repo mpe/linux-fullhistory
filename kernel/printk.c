@@ -244,7 +244,7 @@ out:
 	return error;
 }
 
-asmlinkage int sys_syslog(int type, char * buf, int len)
+asmlinkage long sys_syslog(int type, char * buf, int len)
 {
 	if ((type != 3) && !capable(CAP_SYS_ADMIN))
 		return -EPERM;

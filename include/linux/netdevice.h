@@ -35,12 +35,16 @@
 #ifdef CONFIG_NET_PROFILE
 #include <net/profile.h>
 #endif
+
+#define NET_XMIT_SUCCESS	0
+#define NET_XMIT_DROP		1	/* skb dropped			*/
+#define NET_XMIT_CN		2	/* congestion notification	*/
+#define NET_XMIT_POLICED	3	/* skb is shot by police	*/
+
+#define net_xmit_errno(e)	((e) != NET_XMIT_CN ? -ENOBUFS : 0)
+
 #endif
 
-/*
- *	For future expansion when we will have different priorities. 
- */
- 
 #define MAX_ADDR_LEN	7		/* Largest hardware address length */
 
 /*
@@ -206,7 +210,6 @@ struct net_device
 	
 	/* The device initialization function. Called only once. */
 	int			(*init)(struct net_device *dev);
-	void			(*destructor)(struct net_device *dev);
 
 	/* Interface index. Unique device identifier	*/
 	int			ifindex;
@@ -276,7 +279,19 @@ struct net_device
 	int			xmit_lock_owner;
 	/* device queue lock */
 	spinlock_t		queue_lock;
+	/* Number of references to this device */
 	atomic_t		refcnt;
+	/* The flag marking that device is unregistered, but held by an user */
+	int			deadbeaf;
+	/* New style devices allow asynchronous destruction;
+	   netdevice_unregister for old style devices blocks until
+	   the last user will dereference this device.
+	 */
+	int			new_style;
+	/* Called after device is detached from network. */
+	void			(*uninit)(struct net_device *dev);
+	/* Called after last user reference disappears. */
+	void			(*destructor)(struct net_device *dev);
 
 	/* Pointers to interface service routines.	*/
 	int			(*open)(struct net_device *dev);
@@ -316,12 +331,10 @@ struct net_device
 	int			(*accept_fastpath)(struct net_device *, struct dst_entry*);
 
 #ifdef CONFIG_NET_FASTROUTE
-	/* Really, this semaphore may be necessary and for not fastroute code;
-	   f.e. SMP??
-	 */
-	int			tx_semaphore;
+	unsigned long		tx_semaphore;
 #define NETDEV_FASTROUTE_HMASK 0xF
 	/* Semi-private data. Keep it at the end of device struct. */
+	rwlock_t		fastpath_lock;
 	struct dst_entry	*fastpath[NETDEV_FASTROUTE_HMASK+1];
 #endif
 };
@@ -350,7 +363,9 @@ extern int			net_cpu_congestion;
 extern struct net_device    *dev_getbyhwaddr(unsigned short type, char *hwaddr);
 extern void		dev_add_pack(struct packet_type *pt);
 extern void		dev_remove_pack(struct packet_type *pt);
-extern struct net_device	*dev_get(const char *name);
+extern int		dev_get(const char *name);
+extern struct net_device	*dev_get_by_name(const char *name);
+extern struct net_device	*__dev_get_by_name(const char *name);
 extern struct net_device	*dev_alloc(const char *name, int *err);
 extern int		dev_alloc_name(struct net_device *dev, const char *name);
 extern int		dev_open(struct net_device *dev);
@@ -363,6 +378,7 @@ extern int 		register_netdevice_notifier(struct notifier_block *nb);
 extern int		unregister_netdevice_notifier(struct notifier_block *nb);
 extern int		dev_new_index(void);
 extern struct net_device	*dev_get_by_index(int ifindex);
+extern struct net_device	*__dev_get_by_index(int ifindex);
 extern int		dev_restart(struct net_device *dev);
 
 typedef int gifconf_func_t(struct net_device * dev, char * bufptr, int len);
@@ -384,61 +400,39 @@ extern void		dev_init(void);
 
 extern int		netdev_nit;
 
-/* Locking protection for page faults during outputs to devices unloaded during the fault */
-
-extern atomic_t		dev_lockct;
-
-/*
- *	These two don't currently need to be atomic
- *	but they may do soon. Do it properly anyway.
- */
-
-extern __inline__ void  dev_lock_list(void)
-{
-	atomic_inc(&dev_lockct);
-}
-
-extern __inline__ void  dev_unlock_list(void)
-{
-	atomic_dec(&dev_lockct);
-}
-
-/*
- *	This almost never occurs, isn't in performance critical paths
- *	and we can thus be relaxed about it. 
- *
- *	FIXME: What if this is being run as a real time process ??
- *		Linus: We need a way to force a yield here ?
- *
- *	FIXME: Though dev_lockct is atomic varible, locking procedure
- *		is not atomic.
- */
-
-extern __inline__ void dev_lock_wait(void)
-{
-	while (atomic_read(&dev_lockct)) {
-		current->policy |= SCHED_YIELD;
-		schedule();
-	}
-}
-
 extern __inline__ void dev_init_buffers(struct net_device *dev)
 {
 	/* DO NOTHING */
 }
+
+extern int netdev_finish_unregister(struct net_device *dev);
+
+extern __inline__ void dev_put(struct net_device *dev)
+{
+	if (atomic_dec_and_test(&dev->refcnt))
+		netdev_finish_unregister(dev);
+}
+
+#define __dev_put(dev) atomic_dec(&(dev)->refcnt)
+#define dev_hold(dev) atomic_inc(&(dev)->refcnt)
+
 
 /* These functions live elsewhere (drivers/net/net_init.c, but related) */
 
 extern void		ether_setup(struct net_device *dev);
 extern void		fddi_setup(struct net_device *dev);
 extern void		tr_setup(struct net_device *dev);
+extern void		fc_setup(struct net_device *dev);
 extern void		tr_freedev(struct net_device *dev);
+extern void		fc_freedev(struct net_device *dev);
 extern int		ether_config(struct net_device *dev, struct ifmap *map);
 /* Support for loadable net-drivers */
 extern int		register_netdev(struct net_device *dev);
 extern void		unregister_netdev(struct net_device *dev);
 extern int		register_trdev(struct net_device *dev);
 extern void		unregister_trdev(struct net_device *dev);
+extern int		register_fcdev(struct net_device *dev);
+extern void		unregister_fcdev(struct net_device *dev);
 /* Functions used for multicast support */
 extern void		dev_mc_upload(struct net_device *dev);
 extern int 		dev_mc_delete(struct net_device *dev, void *addr, int alen, int all);

@@ -1291,7 +1291,7 @@ static int arlan_open(struct net_device *dev)
 	priv->command_lock = 0;
 	add_timer(&priv->timer);
 
-	init_mutex(&priv->card_lock);
+	init_MUTEX(&priv->card_lock);
 	myATOMIC_INIT(priv->card_users, 1);	/* damn 2.0.33 */
 	priv->registrationLostCount = 0;
 	priv->registrationLastSeen = jiffies;

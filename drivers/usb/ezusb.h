@@ -45,13 +45,6 @@ struct ezusb_ctrltransfer {
 
 #define EZUSB_CONTROL        _IOWR('E', 0, struct ezusb_ctrltransfer)
 
-struct ezusb_interrupttransfer {
-	unsigned int ep;
-	unsigned char data[64];
-};
-
-#define EZUSB_INTERRUPT      _IOWR('E', 1, struct ezusb_interrupttransfer)
-
 struct ezusb_bulktransfer {
 	unsigned int ep;
 	unsigned int len;
@@ -62,6 +55,32 @@ struct ezusb_bulktransfer {
 
 #define EZUSB_RESETEP        _IOR('E', 3, unsigned int)
 
+struct ezusb_setinterface {
+	unsigned int interface;
+	unsigned int altsetting;
+};
+
+#define EZUSB_SETINTERFACE   _IOR('E', 4, struct ezusb_setinterface)
+
+struct ezusb_isotransfer {
+	unsigned int ep;
+	unsigned int pktsz;
+	unsigned int framesperint;
+};
+
+struct ezusb_isodata {
+	unsigned int ep;
+	unsigned int size;
+	unsigned int bufqueued;
+	unsigned int buffree;
+	void *data;
+};
+
+#define EZUSB_STARTISO       _IOR('E', 8, struct ezusb_isotransfer)
+#define EZUSB_STOPISO        _IOR('E', 9, unsigned int)
+#define EZUSB_ISODATA        _IOWR('E', 10, struct ezusb_isodata)
+#define EZUSB_PAUSEISO       _IOR('E', 11, unsigned int)
+#define EZUSB_RESUMEISO      _IOR('E', 12, unsigned int)
 
 /* --------------------------------------------------------------------- */
 #endif /* _LINUX_EZUSB_H */

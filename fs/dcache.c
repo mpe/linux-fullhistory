@@ -813,7 +813,7 @@ char * d_path(struct dentry *dentry, char *buffer, int buflen)
  *		return NULL;
  *	}
  */
-asmlinkage int sys_getcwd(char *buf, unsigned long size)
+asmlinkage long sys_getcwd(char *buf, unsigned long size)
 {
 	int error;
 	struct dentry *pwd = current->fs->pwd; 

@@ -4,8 +4,6 @@ Steve's quick list of things that need finishing off:
  o Proper timeouts on each neighbour (in routing mode) rather than
    just the 60 second On-Ethernet cache value.
 
- o MOP support (probably as part of Raw sockets) [hooks in]
-
  o Routing stuff in dn_fib.c
 
  o Misc. get/set_sockopt() functions [done for the time being, more later]
@@ -33,8 +31,6 @@ Steve's quick list of things that need finishing off:
     send/recvmsg() calls should simply be a vector of set/getsockopt()
     calls]
 
- o recvmsg() to optionally report remote address.
-
  o check MSG_TRUNC, MSG_CTRUNC are set where they should be.
 
  o Work out if I really need support for rtnetlink "link" messages and if
@@ -45,11 +41,7 @@ Steve's quick list of things that need finishing off:
  o Routing ioctl() support
 
  o Start to hack together user level software and add more DECnet support
-   in ifconfig for example. Also a DECnet equivalent to Alexey's ip config
-   tool is required. Hopefully I can steal some code from that.
-
- o Sort out MSG_EOR in sendmsg.... should it be used, or is each transmission
-   a seperate message ? What about when you get interrupted by a signal ?
+   in ifconfig for example. 
 
  o Fix conninit_rx to check out each CI before queuing it
 

@@ -46,21 +46,28 @@ int net_msg_burst = 10*5*HZ;
  */ 
 int net_ratelimit(void)
 {
+	static spinlock_t ratelimit_lock = SPIN_LOCK_UNLOCKED;
 	static unsigned long toks = 10*5*HZ;
 	static unsigned long last_msg; 
 	static int missed;
+	unsigned long flags;
 	unsigned long now = jiffies;
 
-	toks += now - xchg(&last_msg, now);
+	spin_lock_irqsave(&ratelimit_lock, flags);
+	toks += now - last_msg;
+	last_msg = now;
 	if (toks > net_msg_burst)
 		toks = net_msg_burst;
 	if (toks >= net_msg_cost) {
-		toks -= net_msg_cost;
-		if (missed)
-			printk(KERN_WARNING "NET: %d messages suppressed.\n", missed);
+		int lost = missed;
 		missed = 0;
+		toks -= net_msg_cost;
+		spin_unlock_irqrestore(&ratelimit_lock, flags);
+		if (lost)
+			printk(KERN_WARNING "NET: %d messages suppressed.\n", lost);
 		return 1;
 	}
-	missed++; 
+	missed++;
+	spin_unlock_irqrestore(&ratelimit_lock, flags);
 	return 0;
 }

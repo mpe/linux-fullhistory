@@ -277,4 +277,18 @@ enum
 
 #define TCA_CBQ_MAX	TCA_CBQ_POLICE
 
+/* ATM  section */
+
+enum {
+	TCA_ATM_UNSPEC,
+	TCA_ATM_FD,		/* file/socket descriptor */
+	TCA_ATM_PTR,		/* pointer to descriptor - later */
+	TCA_ATM_HDR,		/* LL header */
+	TCA_ATM_EXCESS,		/* excess traffic class (0 for CLP)  */
+	TCA_ATM_ADDR,		/* PVC address (for output only) */
+	TCA_ATM_STATE		/* VC state (ATM_VS_*; for output only) */
+};
+
+#define TCA_ATM_MAX	TCA_ATM_STATE
+
 #endif

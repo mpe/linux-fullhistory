@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *	Ian P. Morris		<I.P.Morris@soton.ac.uk>
  *
- *	$Id: ip6_input.c,v 1.11 1998/08/26 12:04:59 davem Exp $
+ *	$Id: ip6_input.c,v 1.13 1999/08/20 11:06:21 davem Exp $
  *
  *	Based in linux/net/ipv4/ip_input.c
  *
@@ -48,6 +48,9 @@ int ipv6_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt
 
 	ipv6_statistics.Ip6InReceives++;
 
+	if ((skb = skb_share_check(skb, GFP_ATOMIC)) == NULL)
+		goto out;
+
 	/* Store incoming device index. When the packet will
 	   be queued, we cannot refer to skb->dev anymore.
 	 */
@@ -86,73 +89,8 @@ err:
 	ipv6_statistics.Ip6InHdrErrors++;
 drop:
 	kfree_skb(skb);
+out:
 	return 0;
-}
-
-/*
- *	0 - deliver
- *	1 - block
- */
-static __inline__ int icmpv6_filter(struct sock *sk, struct sk_buff *skb)
-{
-	struct icmp6hdr *icmph;
-	struct raw6_opt *opt;
-
-	opt = &sk->tp_pinfo.tp_raw;
-	icmph = (struct icmp6hdr *) (skb->nh.ipv6h + 1);
-	return test_bit(icmph->icmp6_type, &opt->filter);
-}
-
-/*
- *	demultiplex raw sockets.
- *	(should consider queueing the skb in the sock receive_queue
- *	without calling rawv6.c)
- */
-static struct sock * ipv6_raw_deliver(struct sk_buff *skb,
-				      int nexthdr, unsigned long len)
-{
-	struct in6_addr *saddr;
-	struct in6_addr *daddr;
-	struct sock *sk, *sk2;
-	__u8 hash;
-
-	saddr = &skb->nh.ipv6h->saddr;
-	daddr = saddr + 1;
-
-	hash = nexthdr & (MAX_INET_PROTOS - 1);
-
-	sk = raw_v6_htable[hash];
-
-	/*
-	 *	The first socket found will be delivered after
-	 *	delivery to transport protocols.
-	 */
-
-	if (sk == NULL)
-		return NULL;
-
-	sk = raw_v6_lookup(sk, nexthdr, daddr, saddr);
-
-	if (sk) {
-		sk2 = sk;
-
-		while ((sk2 = raw_v6_lookup(sk2->next, nexthdr, daddr, saddr))) {
-			struct sk_buff *buff;
-
-			if (nexthdr == IPPROTO_ICMPV6 &&
-			    icmpv6_filter(sk2, skb))
-				continue;
-
-			buff = skb_clone(skb, GFP_ATOMIC);
-			if (buff)
-				rawv6_rcv(sk2, buff, len);
-		}
-	}
-
-	if (sk && nexthdr == IPPROTO_ICMPV6 && icmpv6_filter(sk, skb))
-		sk = NULL;
-
-	return sk;
 }
 
 /*
@@ -199,9 +137,17 @@ int ip6_input(struct sk_buff *skb)
 	}
 	len = skb->tail - skb->h.raw;
 
-	raw_sk = ipv6_raw_deliver(skb, nexthdr, len);
+	if (skb->rx_dev) {
+		dev_put(skb->rx_dev);
+		skb->rx_dev = NULL;
+	}
+
+	raw_sk = raw_v6_htable[nexthdr&(MAX_INET_PROTOS-1)];
+	if (raw_sk)
+		raw_sk = ipv6_raw_deliver(skb, nexthdr, len);
 
 	hash = nexthdr & (MAX_INET_PROTOS - 1);
+	read_lock(&inet6_protocol_lock);
 	for (ipprot = (struct inet6_protocol *) inet6_protos[hash]; 
 	     ipprot != NULL; 
 	     ipprot = (struct inet6_protocol *) ipprot->next) {
@@ -216,9 +162,11 @@ int ip6_input(struct sk_buff *skb)
 		ipprot->handler(buff, len);
 		found = 1;
 	}
+	read_unlock(&inet6_protocol_lock);
 
 	if (raw_sk) {
 		rawv6_rcv(raw_sk, skb, len);
+		sock_put(raw_sk);
 		found = 1;
 	}
 

@@ -146,7 +146,7 @@ static int check_free_space(struct file *file)
  *  should be written. If the filename is NULL, accounting will be
  *  shutdown.
  */
-asmlinkage int sys_acct(const char *name)
+asmlinkage long sys_acct(const char *name)
 {
 	struct file *file = NULL, *old_acct = NULL;
 	char *tmp;
@@ -354,7 +354,7 @@ int acct_process(long exitcode)
  * into the kernel.
  */
 
-asmlinkage int sys_acct(const char * filename)
+asmlinkage long sys_acct(const char * filename)
 {
 	return -ENOSYS;
 }

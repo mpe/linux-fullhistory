@@ -90,9 +90,8 @@ First way is lowlevel
 ---------------------
 
 All ISA PNP configuration registers are accessible via lowlevel
-isapnp_cfg_(set|get)_(byte|word|dword) functions.
+isapnp_(read|write)_(byte|word|dword) functions.
 
-Before any lowlevel function 
 The function isapnp_cfg_begin() must be called before any lowlevel function.
 The function isapnp_cfg_end() must be always called after configuration
 otherwise the access to the ISA PnP configuration functions will be blocked.
@@ -129,10 +128,12 @@ Example (game port initialization)
 		return -ENODEV;
 	if (dev->prepare(dev)<0)
 		return -EAGAIN;
+	if (!(dev->resource[0].flags & IORESOURCE_IO))
+		return -ENODEV;
 	if (!dev->ro) {
 		/* override resource */
 		if (user_port != USER_PORT_AUTO_VALUE)
-			dev->resource[0].start = user_port;
+			isapnp_resource_change(&dev->resource[0], user_port, 1);
 	}
 	if (dev->activate(dev)<0) {
 		printk("isapnp configure failed (out of resources?)\n");

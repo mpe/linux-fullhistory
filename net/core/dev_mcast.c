@@ -123,13 +123,14 @@ int dev_mc_delete(struct net_device *dev, void *addr, int alen, int glbl)
 			 */
 			*dmip = dmi->next;
 			dev->mc_count--;
+			write_unlock_bh(&dev_mc_lock);
+
 			kfree_s(dmi,sizeof(*dmi));
+
 			/*
 			 *	We have altered the list, so the card
 			 *	loaded filter is now wrong. Fix it
 			 */
-			write_unlock_bh(&dev_mc_lock);
-
 			dev_mc_upload(dev);
 			return 0;
 		}
@@ -149,10 +150,7 @@ int dev_mc_add(struct net_device *dev, void *addr, int alen, int glbl)
 	int err = 0;
 	struct dev_mc_list *dmi, *dmi1;
 
-	/* RED-PEN: does gfp_any() work now? It requires
-	   true local_bh_disable rather than global.
-	 */
-	dmi1 = (struct dev_mc_list *)kmalloc(sizeof(*dmi), gfp_any());
+	dmi1 = (struct dev_mc_list *)kmalloc(sizeof(*dmi), GFP_ATOMIC);
 
 	write_lock_bh(&dev_mc_lock);
 	for(dmi=dev->mc_list; dmi!=NULL; dmi=dmi->next) {

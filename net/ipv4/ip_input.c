@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) module.
  *
- * Version:	$Id: ip_input.c,v 1.40 1999/06/09 10:10:55 davem Exp $
+ * Version:	$Id: ip_input.c,v 1.42 1999/08/20 11:05:27 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -140,11 +140,7 @@
 #include <net/icmp.h>
 #include <net/raw.h>
 #include <net/checksum.h>
-#include <linux/ip_fw.h>
-#ifdef CONFIG_IP_MASQUERADE
-#include <net/ip_masq.h>
-#endif
-#include <linux/firewall.h>
+#include <linux/netfilter_ipv4.h>
 #include <linux/mroute.h>
 #include <linux/netlink.h>
 
@@ -153,10 +149,6 @@
  */
 
 struct ip_mib ip_statistics={2,IPDEFTTL,};	/* Forwarding=No, Default TTL=64 */
-
-#if defined(CONFIG_IP_TRANSPARENT_PROXY) && !defined(CONFIG_IP_ALWAYS_DEFRAG)
-#define CONFIG_IP_ALWAYS_DEFRAG 1
-#endif
 
 /*
  *	Process Router Attention IP option
@@ -167,13 +159,16 @@ int ip_call_ra_chain(struct sk_buff *skb)
 	u8 protocol = skb->nh.iph->protocol;
 	struct sock *last = NULL;
 
+	read_lock(&ip_ra_lock);
 	for (ra = ip_ra_chain; ra; ra = ra->next) {
 		struct sock *sk = ra->sk;
 		if (sk && sk->num == protocol) {
 			if (skb->nh.iph->frag_off & htons(IP_MF|IP_OFFSET)) {
 				skb = ip_defrag(skb);
-				if (skb == NULL)
+				if (skb == NULL) {
+					read_unlock(&ip_ra_lock);
 					return 1;
+				}
 			}
 			if (last) {
 				struct sk_buff *skb2 = skb_clone(skb, GFP_ATOMIC);
@@ -186,8 +181,10 @@ int ip_call_ra_chain(struct sk_buff *skb)
 
 	if (last) {
 		raw_rcv(last, skb);
+		read_unlock(&ip_ra_lock);
 		return 1;
 	}
+	read_unlock(&ip_ra_lock);
 	return 0;
 }
 
@@ -214,59 +211,19 @@ static int ip_run_ipprot(struct sk_buff *skb, struct iphdr *iph,
 	return ret;
 }
 
-extern struct sock *raw_v4_input(struct sk_buff *, struct iphdr *, int);
-
-/*
- * 	Deliver IP Packets to the higher protocol layers.
- */ 
-int ip_local_deliver(struct sk_buff *skb)
+static inline int ip_local_deliver_finish(struct sk_buff *skb)
 {
 	struct iphdr *iph = skb->nh.iph;
 
-#ifndef CONFIG_IP_ALWAYS_DEFRAG
-	/*
-	 *	Reassemble IP fragments.
-	 */
+#ifdef CONFIG_NETFILTER_DEBUG
+	nf_debug_ip_local_deliver(skb);
+#endif /*CONFIG_NETFILTER_DEBUG*/
 
-	if (iph->frag_off & htons(IP_MF|IP_OFFSET)) {
-		skb = ip_defrag(skb);
-		if (!skb)
-			return 0;
-		iph = skb->nh.iph;
+	/* Free rx_dev before enqueueing to sockets */
+	if (skb->rx_dev) {
+		dev_put(skb->rx_dev);
+		skb->rx_dev = NULL;
 	}
-#endif
-
-#ifdef CONFIG_IP_MASQUERADE
-	/* Do we need to de-masquerade this packet? */
-	if((IPCB(skb)->flags&IPSKB_MASQUERADED)) {
-		/* Some masq modules can re-inject packets if
-		 * bad configured.
-		 */
-		printk(KERN_DEBUG "ip_input(): demasq recursion detected. "
-		       "Check masq modules configuration\n");
-		kfree_skb(skb);
-		return 0;
-	} else {
-		int ret = ip_fw_demasquerade(&skb);
-
-		if (ret < 0) {
-			kfree_skb(skb);
-			return 0;
-		}
-		if (ret) {
-			iph = skb->nh.iph;
-			IPCB(skb)->flags |= IPSKB_MASQUERADED;
-			dst_release(skb->dst);
-			skb->dst = NULL;
-			if (ip_route_input(skb, iph->daddr, iph->saddr,
-					   iph->tos, skb->dev)) {
-				kfree_skb(skb);
-				return 0;
-			}
-			return skb->dst->input(skb);
-		}
-        }
-#endif
 
         /* Point into the IP datagram, just past the header. */
         skb->h.raw = skb->nh.raw + iph->ihl*4;
@@ -284,19 +241,26 @@ int ip_local_deliver(struct sk_buff *skb)
 		if(raw_sk != NULL)
 			raw_sk = raw_v4_input(skb, iph, hash);
 
+		read_lock(&inet_protocol_lock);
 		ipprot = (struct inet_protocol *) inet_protos[hash];
 		flag = 0;
 		if(ipprot != NULL) {
 			if(raw_sk == NULL &&
 			   ipprot->next == NULL &&
 			   ipprot->protocol == iph->protocol) {
+				int ret;
+				
 				/* Fast path... */
-				return ipprot->handler(skb, (ntohs(iph->tot_len) -
-							     (iph->ihl * 4)));
+				ret = ipprot->handler(skb, (ntohs(iph->tot_len) -
+							    (iph->ihl * 4)));
+
+				read_unlock(&inet_protocol_lock);
+				return ret;
 			} else {
 				flag = ip_run_ipprot(skb, iph, ipprot, (raw_sk != NULL));
 			}
-		}	
+		}
+		read_unlock(&inet_protocol_lock);
 
 		/* All protocols checked.
 		 * If this packet was a broadcast, we may *not* reply to it, since that
@@ -305,6 +269,7 @@ int ip_local_deliver(struct sk_buff *skb)
 		 */
 		if(raw_sk != NULL) {	/* Shift to last raw user */
 			raw_rcv(raw_sk, skb);
+			sock_put(raw_sk);
 		} else if (!flag) {		/* Free and report errors */
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PROT_UNREACH, 0);	
 			kfree_skb(skb);
@@ -315,75 +280,31 @@ int ip_local_deliver(struct sk_buff *skb)
 }
 
 /*
- * 	Main IP Receive routine.
+ * 	Deliver IP Packets to the higher protocol layers.
  */ 
-int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
+int ip_local_deliver(struct sk_buff *skb)
 {
 	struct iphdr *iph = skb->nh.iph;
-#ifdef	CONFIG_FIREWALL
-	int fwres;
-	u16 rport;
-#endif /* CONFIG_FIREWALL */
-
-	/* When the interface is in promisc. mode, drop all the crap
-	 * that it receives, do not try to analyse it.
-	 */
-	if (skb->pkt_type == PACKET_OTHERHOST)
-		goto drop;
-
-	ip_statistics.IpInReceives++;
 
 	/*
-	 *	RFC1122: 3.1.2.2 MUST silently discard any IP frame that fails the checksum.
-	 *
-	 *	Is the datagram acceptable?
-	 *
-	 *	1.	Length at least the size of an ip header
-	 *	2.	Version of 4
-	 *	3.	Checksums correctly. [Speed optimisation for later, skip loopback checksums]
-	 *	4.	Doesn't have a bogus length
+	 *	Reassemble IP fragments.
 	 */
 
-	if (skb->len < sizeof(struct iphdr))
-		goto inhdr_error; 
-	if (iph->ihl < 5 || iph->version != 4 || ip_fast_csum((u8 *)iph, iph->ihl) != 0)
-		goto inhdr_error; 
-
-	{
-		__u32 len = ntohs(iph->tot_len); 
-		if (skb->len < len)
-			goto inhdr_error; 
-
-		/* Our transport medium may have padded the buffer out. Now we know it
-		 * is IP we can trim to the true length of the frame.
-		 * Note this now means skb->len holds ntohs(iph->tot_len).
-		 */
-		__skb_trim(skb, len);
-	}
-	
-#ifdef CONFIG_IP_ALWAYS_DEFRAG
-	/* Won't send ICMP reply, since skb->dst == NULL. --RR */
 	if (iph->frag_off & htons(IP_MF|IP_OFFSET)) {
 		skb = ip_defrag(skb);
 		if (!skb)
 			return 0;
 		iph = skb->nh.iph;
-		ip_send_check(iph);
 	}
-#endif
 
-#ifdef CONFIG_FIREWALL
-	/*
-	 *	See if the firewall wants to dispose of the packet. 
-	 *
-	 * We can't do ICMP reply or local delivery before routing,
-	 * so we delay those decisions until after route. --RR
-	 */
-	fwres = call_in_firewall(PF_INET, dev, iph, &rport, &skb);
-	if (fwres < FW_ACCEPT && fwres != FW_REJECT)
-		goto drop;
-	iph = skb->nh.iph;
-#endif /* CONFIG_FIREWALL */
+	return NF_HOOK(PF_INET, NF_IP_LOCAL_IN, skb, skb->dev, NULL,
+		       ip_local_deliver_finish);
+}
+
+static inline int ip_rcv_finish(struct sk_buff *skb)
+{
+	struct net_device *dev = skb->dev;
+	struct iphdr *iph = skb->nh.iph;
 
 	/*
 	 *	Initialise the virtual path cache for the packet. It describes
@@ -428,29 +349,21 @@ int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 
 		opt = &(IPCB(skb)->opt);
 		if (opt->srr) {
-			struct in_device *in_dev = dev->ip_ptr;
-			if (in_dev && !IN_DEV_SOURCE_ROUTE(in_dev)) {
-				if (IN_DEV_LOG_MARTIANS(in_dev) && net_ratelimit())
-					printk(KERN_INFO "source route option %d.%d.%d.%d -> %d.%d.%d.%d\n",
-					       NIPQUAD(iph->saddr), NIPQUAD(iph->daddr));
-				goto drop;
+			struct in_device *in_dev = in_dev_get(dev);
+			if (in_dev) {
+				if (!IN_DEV_SOURCE_ROUTE(in_dev)) {
+					if (IN_DEV_LOG_MARTIANS(in_dev) && net_ratelimit())
+						printk(KERN_INFO "source route option %d.%d.%d.%d -> %d.%d.%d.%d\n",
+						       NIPQUAD(iph->saddr), NIPQUAD(iph->daddr));
+					in_dev_put(in_dev);
+					goto drop;
+				}
+				in_dev_put(in_dev);
 			}
 			if (ip_options_rcv_srr(skb))
 				goto drop;
 		}
 	}
-
-#ifdef CONFIG_FIREWALL
-#ifdef	CONFIG_IP_TRANSPARENT_PROXY
-	if (fwres == FW_REDIRECT && (IPCB(skb)->redirport = rport) != 0)
-		return ip_local_deliver(skb);
-#endif /* CONFIG_IP_TRANSPARENT_PROXY */
-
-	if (fwres == FW_REJECT) {
-		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0);
-		goto drop;
-	}
-#endif /* CONFIG_FIREWALL */
 
 	return skb->dst->input(skb);
 
@@ -458,6 +371,63 @@ inhdr_error:
 	ip_statistics.IpInHdrErrors++;
 drop:
         kfree_skb(skb);
+        return(0);
+}
+
+/*
+ * 	Main IP Receive routine.
+ */ 
+int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
+{
+	struct iphdr *iph = skb->nh.iph;
+
+	/* When the interface is in promisc. mode, drop all the crap
+	 * that it receives, do not try to analyse it.
+	 */
+	if (skb->pkt_type == PACKET_OTHERHOST)
+		goto drop;
+
+	ip_statistics.IpInReceives++;
+
+	if ((skb = skb_share_check(skb, GFP_ATOMIC)) == NULL)
+		goto out;
+
+	/*
+	 *	RFC1122: 3.1.2.2 MUST silently discard any IP frame that fails the checksum.
+	 *
+	 *	Is the datagram acceptable?
+	 *
+	 *	1.	Length at least the size of an ip header
+	 *	2.	Version of 4
+	 *	3.	Checksums correctly. [Speed optimisation for later, skip loopback checksums]
+	 *	4.	Doesn't have a bogus length
+	 */
+
+	if (skb->len < sizeof(struct iphdr))
+		goto inhdr_error; 
+	if (iph->ihl < 5 || iph->version != 4 || ip_fast_csum((u8 *)iph, iph->ihl) != 0)
+		goto inhdr_error; 
+
+	{
+		__u32 len = ntohs(iph->tot_len); 
+		if (skb->len < len)
+			goto inhdr_error;
+
+		/* Our transport medium may have padded the buffer out. Now we know it
+		 * is IP we can trim to the true length of the frame.
+		 * Note this now means skb->len holds ntohs(iph->tot_len).
+		 */
+		__skb_trim(skb, len);
+	}
+
+	return NF_HOOK(PF_INET, NF_IP_PRE_ROUTING, skb, dev, NULL,
+		       ip_rcv_finish);
+
+inhdr_error:
+	ip_statistics.IpInHdrErrors++;
+drop:
+        kfree_skb(skb);
+out:
         return(0);
 }
 

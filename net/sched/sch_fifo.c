@@ -51,14 +51,14 @@ bfifo_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 		sch->stats.backlog += skb->len;
 		sch->stats.bytes += skb->len;
 		sch->stats.packets++;
-		return 1;
+		return 0;
 	}
 	sch->stats.drops++;
 #ifdef CONFIG_NET_CLS_POLICE
 	if (sch->reshape_fail==NULL || sch->reshape_fail(skb, sch))
 #endif
 		kfree_skb(skb);
-	return 0;
+	return NET_XMIT_DROP;
 }
 
 static int
@@ -66,7 +66,7 @@ bfifo_requeue(struct sk_buff *skb, struct Qdisc* sch)
 {
 	__skb_queue_head(&sch->q, skb);
 	sch->stats.backlog += skb->len;
-	return 1;
+	return 0;
 }
 
 static struct sk_buff *
@@ -110,21 +110,21 @@ pfifo_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 		__skb_queue_tail(&sch->q, skb);
 		sch->stats.bytes += skb->len;
 		sch->stats.packets++;
-		return 1;
+		return 0;
 	}
 	sch->stats.drops++;
 #ifdef CONFIG_NET_CLS_POLICE
 	if (sch->reshape_fail==NULL || sch->reshape_fail(skb, sch))
 #endif
 		kfree_skb(skb);
-	return 0;
+	return NET_XMIT_DROP;
 }
 
 static int
 pfifo_requeue(struct sk_buff *skb, struct Qdisc* sch)
 {
 	__skb_queue_head(&sch->q, skb);
-	return 1;
+	return 0;
 }
 
 

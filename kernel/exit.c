@@ -412,12 +412,12 @@ fake_volatile:
 	goto fake_volatile;
 }
 
-asmlinkage int sys_exit(int error_code)
+asmlinkage long sys_exit(int error_code)
 {
 	do_exit((error_code&0xff)<<8);
 }
 
-asmlinkage int sys_wait4(pid_t pid,unsigned int * stat_addr, int options, struct rusage * ru)
+asmlinkage long sys_wait4(pid_t pid,unsigned int * stat_addr, int options, struct rusage * ru)
 {
 	int flag, retval;
 	DECLARE_WAITQUEUE(wait, current);
@@ -505,13 +505,13 @@ end_wait4:
 	return retval;
 }
 
-#ifndef __alpha__
+#if !defined(__alpha__) && !defined(__ia64__)
 
 /*
  * sys_waitpid() remains for compatibility. waitpid() should be
  * implemented by calling sys_wait4() from libc.a.
  */
-asmlinkage int sys_waitpid(pid_t pid,unsigned int * stat_addr, int options)
+asmlinkage long sys_waitpid(pid_t pid,unsigned int * stat_addr, int options)
 {
 	return sys_wait4(pid, stat_addr, options, NULL);
 }

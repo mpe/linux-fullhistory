@@ -111,6 +111,7 @@ extern int etherh_probe (struct net_device *dev);
 extern int am79c961_probe(struct net_device *dev);
 extern int epic100_probe(struct net_device *dev);
 extern int rtl8139_probe(struct net_device *dev);
+extern int sis900_probe(struct net_device *dev);
 extern int hplance_probe(struct net_device *dev);
 extern int bagetlance_probe(struct net_device *);
 extern int dec_lance_probe(struct net_device *);
@@ -136,6 +137,9 @@ extern int apfddi_init(struct net_device *dev);
 
 /* HIPPI boards */
 extern int rr_hippi_probe(struct net_device *);
+
+/* Fibre Channel adapters */
+extern int iph5526_probe(struct net_device *dev);
 
 struct devprobe
 {
@@ -206,6 +210,9 @@ struct devprobe pci_probes[] __initdata = {
 #endif
 #ifdef CONFIG_RTL8139
 	{rtl8139_probe, 0},
+#endif
+#ifdef CONFIG_SIS900
+	{sis900_probe, 0},
 #endif
 #ifdef CONFIG_YELLOWFIN
 	{yellowfin_probe, 0},
@@ -578,15 +585,41 @@ static int hippi_probe(struct net_device *dev)
 }
 #endif
 
+/* Pad device name to IFNAMSIZ=16. F.e. __PAD6 is tring of 9 zeros. */
+#define __PAD6 "\0\0\0\0\0\0\0\0\0"
+#define __PAD5 __PAD6 "\0"
+#define __PAD4 __PAD5 "\0"
+#define __PAD3 __PAD4 "\0"
+#define __PAD2 __PAD3 "\0"
+
+
+#ifdef CONFIG_NET_FC
+static int fcif_probe(struct net_device *dev)
+{
+	if (dev->base_addr == -1)
+		return 1;
+
+	if (1
+#ifdef CONFIG_IPHASE5526
+	    && iph5526_probe(dev)
+#endif
+	    && 1 ) {
+		return 1; /* -ENODEV or -EAGAIN would be more accurate. */
+	}
+	return 0;
+}
+#endif  /* CONFIG_NET_FC */
+
+
 #ifdef CONFIG_ETHERTAP
-    static struct net_device tap0_dev = { "tap0", 0, 0, 0, 0, NETLINK_TAPBASE, 0, 0, 0, 0, NEXT_DEV, ethertap_probe, };
+    static struct net_device tap0_dev = { "tap0" __PAD4, 0, 0, 0, 0, NETLINK_TAPBASE, 0, 0, 0, 0, NEXT_DEV, ethertap_probe, };
 #   undef NEXT_DEV
 #   define NEXT_DEV	(&tap0_dev)
 #endif
 
 #ifdef CONFIG_SDLA
     extern int sdla_init(struct net_device *);
-    static struct net_device sdla0_dev = { "sdla0", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, sdla_init, };
+    static struct net_device sdla0_dev = { "sdla0" __PAD5, 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, sdla_init, };
 
 #   undef NEXT_DEV
 #   define NEXT_DEV	(&sdla0_dev)
@@ -595,7 +628,7 @@ static int hippi_probe(struct net_device *dev)
 #if defined(CONFIG_LTPC)
     extern int ltpc_probe(struct net_device *);
     static struct net_device dev_ltpc = {
-        "lt0\0   ",
+        "lt0" __PAD3,
                 0, 0, 0, 0,
                 0x0, 0,
                 0, 0, 0, NEXT_DEV, ltpc_probe };
@@ -605,9 +638,9 @@ static int hippi_probe(struct net_device *dev)
 
 #if defined(CONFIG_COPS)
     extern int cops_probe(struct net_device *);
-    static struct net_device cops2_dev = { "lt2", 0, 0, 0, 0, 0x0, 0, 0, 0, 0, NEXT_DEV, cops_probe };
-    static struct net_device cops1_dev = { "lt1", 0, 0, 0, 0, 0x0, 0, 0, 0, 0, &cops2_dev, cops_probe };
-    static struct net_device cops0_dev = { "lt0", 0, 0, 0, 0, 0x0, 0, 0, 0, 0, &cops1_dev, cops_probe };
+    static struct net_device cops2_dev = { "lt2" __PAD3, 0, 0, 0, 0, 0x0, 0, 0, 0, 0, NEXT_DEV, cops_probe };
+    static struct net_device cops1_dev = { "lt1" __PAD3, 0, 0, 0, 0, 0x0, 0, 0, 0, 0, &cops2_dev, cops_probe };
+    static struct net_device cops0_dev = { "lt0" __PAD3, 0, 0, 0, 0, 0x0, 0, 0, 0, 0, &cops1_dev, cops_probe };
 #   undef NEXT_DEV
 #   define NEXT_DEV     (&cops0_dev)
 #endif  /* COPS */
@@ -615,7 +648,7 @@ static int hippi_probe(struct net_device *dev)
 #if defined(CONFIG_IPDDP)
     extern int ipddp_init(struct net_device *dev);
     static struct net_device dev_ipddp = {
-        "ipddp0\0   ",
+        "ipddp0"  __PAD6,
                 0, 0, 0, 0,
                 0x0, 0,
                 0, 0, 0, NEXT_DEV, ipddp_init };
@@ -638,22 +671,22 @@ static int hippi_probe(struct net_device *dev)
 #define ETH_NOPROBE_ADDR 0xffe0
 
 static struct net_device eth7_dev = {
-    "eth7", 0,0,0,0,ETH_NOPROBE_ADDR /* I/O base*/, 0,0,0,0, NEXT_DEV, ethif_probe };
+    "eth7" __PAD4, 0,0,0,0,ETH_NOPROBE_ADDR /* I/O base*/, 0,0,0,0, NEXT_DEV, ethif_probe };
 static struct net_device eth6_dev = {
-    "eth6", 0,0,0,0,ETH_NOPROBE_ADDR /* I/O base*/, 0,0,0,0, &eth7_dev, ethif_probe };
+    "eth6" __PAD4, 0,0,0,0,ETH_NOPROBE_ADDR /* I/O base*/, 0,0,0,0, &eth7_dev, ethif_probe };
 static struct net_device eth5_dev = {
-    "eth5", 0,0,0,0,ETH_NOPROBE_ADDR /* I/O base*/, 0,0,0,0, &eth6_dev, ethif_probe };
+    "eth5" __PAD4, 0,0,0,0,ETH_NOPROBE_ADDR /* I/O base*/, 0,0,0,0, &eth6_dev, ethif_probe };
 static struct net_device eth4_dev = {
-    "eth4", 0,0,0,0,ETH_NOPROBE_ADDR /* I/O base*/, 0,0,0,0, &eth5_dev, ethif_probe };
+    "eth4" __PAD4, 0,0,0,0,ETH_NOPROBE_ADDR /* I/O base*/, 0,0,0,0, &eth5_dev, ethif_probe };
 static struct net_device eth3_dev = {
-    "eth3", 0,0,0,0,ETH_NOPROBE_ADDR /* I/O base*/, 0,0,0,0, &eth4_dev, ethif_probe };
+    "eth3" __PAD4, 0,0,0,0,ETH_NOPROBE_ADDR /* I/O base*/, 0,0,0,0, &eth4_dev, ethif_probe };
 static struct net_device eth2_dev = {
-    "eth2", 0,0,0,0,ETH_NOPROBE_ADDR /* I/O base*/, 0,0,0,0, &eth3_dev, ethif_probe };
+    "eth2" __PAD4, 0,0,0,0,ETH_NOPROBE_ADDR /* I/O base*/, 0,0,0,0, &eth3_dev, ethif_probe };
 static struct net_device eth1_dev = {
-    "eth1", 0,0,0,0,ETH_NOPROBE_ADDR /* I/O base*/, 0,0,0,0, &eth2_dev, ethif_probe };
+    "eth1" __PAD4, 0,0,0,0,ETH_NOPROBE_ADDR /* I/O base*/, 0,0,0,0, &eth2_dev, ethif_probe };
 
 static struct net_device eth0_dev = {
-    "eth0", 0, 0, 0, 0, ETH0_ADDR, ETH0_IRQ, 0, 0, 0, &eth1_dev, ethif_probe };
+    "eth0" __PAD4, 0, 0, 0, 0, ETH0_ADDR, ETH0_IRQ, 0, 0, 0, &eth1_dev, ethif_probe };
 
 #   undef NEXT_DEV
 #   define NEXT_DEV	(&eth0_dev)
@@ -715,7 +748,7 @@ static struct net_device ppp_bootstrap = {
 #ifdef CONFIG_DUMMY
     extern int dummy_init(struct net_device *dev);
     static struct net_device dummy_dev = {
-	"dummy", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, dummy_init, };
+	"dummy" __PAD5, 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, dummy_init, };
 #   undef	NEXT_DEV
 #   define	NEXT_DEV	(&dummy_dev)
 #endif
@@ -723,7 +756,7 @@ static struct net_device ppp_bootstrap = {
 #ifdef CONFIG_EQUALIZER
 extern int eql_init(struct net_device *dev);
 struct net_device eql_dev = {
-  "eql",			/* Master device for IP traffic load 
+  "eql" __PAD3,			/* Master device for IP traffic load 
 				   balancing */
   0x0, 0x0, 0x0, 0x0,		/* recv end/start; mem end/start */
   0,				/* base I/O address */
@@ -763,21 +796,21 @@ trif_probe(struct net_device *dev)
     return 0;
 }
 static struct net_device tr7_dev = {
-    "tr7",0,0,0,0,0,0,0,0,0, NEXT_DEV, trif_probe };
+    "tr7" __PAD3,0,0,0,0,0,0,0,0,0, NEXT_DEV, trif_probe };
 static struct net_device tr6_dev = {
-    "tr6",0,0,0,0,0,0,0,0,0, &tr7_dev, trif_probe };
+    "tr6" __PAD3,0,0,0,0,0,0,0,0,0, &tr7_dev, trif_probe };
 static struct net_device tr5_dev = {
-    "tr5",0,0,0,0,0,0,0,0,0, &tr6_dev, trif_probe };
+    "tr5" __PAD3,0,0,0,0,0,0,0,0,0, &tr6_dev, trif_probe };
 static struct net_device tr4_dev = {
-    "tr4",0,0,0,0,0,0,0,0,0, &tr5_dev, trif_probe };
+    "tr4" __PAD3,0,0,0,0,0,0,0,0,0, &tr5_dev, trif_probe };
 static struct net_device tr3_dev = {
-    "tr3",0,0,0,0,0,0,0,0,0, &tr4_dev, trif_probe };
+    "tr3" __PAD3,0,0,0,0,0,0,0,0,0, &tr4_dev, trif_probe };
 static struct net_device tr2_dev = {
-    "tr2",0,0,0,0,0,0,0,0,0, &tr3_dev, trif_probe };
+    "tr2" __PAD3,0,0,0,0,0,0,0,0,0, &tr3_dev, trif_probe };
 static struct net_device tr1_dev = {
-    "tr1",0,0,0,0,0,0,0,0,0, &tr2_dev, trif_probe };
+    "tr1" __PAD3,0,0,0,0,0,0,0,0,0, &tr2_dev, trif_probe };
 static struct net_device tr0_dev = {
-    "tr0",0,0,0,0,0,0,0,0,0, &tr1_dev, trif_probe };
+    "tr0" __PAD3,0,0,0,0,0,0,0,0,0, &tr1_dev, trif_probe };
 #   undef       NEXT_DEV
 #   define      NEXT_DEV        (&tr0_dev)
 
@@ -785,34 +818,34 @@ static struct net_device tr0_dev = {
 
 #ifdef CONFIG_FDDI
 	static struct net_device fddi7_dev =
-		{"fddi7", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, fddiif_probe};
+		{"fddi7" __PAD5, 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, fddiif_probe};
 	static struct net_device fddi6_dev =
-		{"fddi6", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi7_dev, fddiif_probe};
+		{"fddi6" __PAD5, 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi7_dev, fddiif_probe};
 	static struct net_device fddi5_dev =
-		{"fddi5", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi6_dev, fddiif_probe};
+		{"fddi5" __PAD5, 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi6_dev, fddiif_probe};
 	static struct net_device fddi4_dev =
-		{"fddi4", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi5_dev, fddiif_probe};
+		{"fddi4" __PAD5, 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi5_dev, fddiif_probe};
 	static struct net_device fddi3_dev =
-		{"fddi3", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi4_dev, fddiif_probe};
+		{"fddi3" __PAD5, 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi4_dev, fddiif_probe};
 	static struct net_device fddi2_dev =
-		{"fddi2", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi3_dev, fddiif_probe};
+		{"fddi2" __PAD5, 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi3_dev, fddiif_probe};
 	static struct net_device fddi1_dev =
-		{"fddi1", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi2_dev, fddiif_probe};
+		{"fddi1" __PAD5, 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi2_dev, fddiif_probe};
 	static struct net_device fddi0_dev =
-		{"fddi0", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi1_dev, fddiif_probe};
+		{"fddi0" __PAD5, 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi1_dev, fddiif_probe};
 #undef	NEXT_DEV
 #define	NEXT_DEV	(&fddi0_dev)
 #endif 
 
 #ifdef CONFIG_HIPPI
 	static struct net_device hip3_dev =
-		{"hip3", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, hippi_probe};
+		{"hip3" __PAD4, 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, hippi_probe};
 	static struct net_device hip2_dev =
-		{"hip2", 0, 0, 0, 0, 0, 0, 0, 0, 0, &hip3_dev, hippi_probe};
+		{"hip2" __PAD4, 0, 0, 0, 0, 0, 0, 0, 0, 0, &hip3_dev, hippi_probe};
 	static struct net_device hip1_dev =
-		{"hip1", 0, 0, 0, 0, 0, 0, 0, 0, 0, &hip2_dev, hippi_probe};
+		{"hip1" __PAD4, 0, 0, 0, 0, 0, 0, 0, 0, 0, &hip2_dev, hippi_probe};
 	static struct net_device hip0_dev =
-		{"hip0", 0, 0, 0, 0, 0, 0, 0, 0, 0, &hip1_dev, hippi_probe};
+		{"hip0" __PAD4, 0, 0, 0, 0, 0, 0, 0, 0, 0, &hip1_dev, hippi_probe};
 
 #undef	NEXT_DEV
 #define	NEXT_DEV	(&hip0_dev)
@@ -821,14 +854,33 @@ static struct net_device tr0_dev = {
 #ifdef CONFIG_APBIF
     extern int bif_init(struct net_device *dev);
     static struct net_device bif_dev = {
-        "bif", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, bif_init };
+        "bif" __PAD3, 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, bif_init };
 #   undef       NEXT_DEV
 #   define      NEXT_DEV        (&bif_dev)
+#endif
+
+
+#ifdef CONFIG_NET_FC
+    static struct net_device fc1_dev = {
+        "fc1", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, fcif_probe};
+	static struct net_device fc0_dev = {
+		"fc0", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fc1_dev, fcif_probe};
+#   undef       NEXT_DEV
+#   define      NEXT_DEV        (&fc0_dev)
+#endif
+	
+	
+#ifdef CONFIG_NET_SB1000
+    extern int sb1000_probe(struct net_device *dev);
+    static struct net_device sb1000_dev = {
+        "cm0", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, sb1000_probe };
+#   undef       NEXT_DEV
+#   define      NEXT_DEV        (&sb1000_dev)
 #endif
 	
 extern int loopback_init(struct net_device *dev);
 struct net_device loopback_dev = {
-	"lo",			/* Software Loopback interface		*/
+	"lo" __PAD2,		/* Software Loopback interface		*/
 	0x0,			/* recv memory end			*/
 	0x0,			/* recv memory start			*/
 	0x0,			/* memory end				*/

@@ -1394,9 +1394,7 @@ int aha152x_reset(Scsi_Cmnd * SCpnt, unsigned int unused)
 		if (ptr && !ptr->device->soft_reset) {
 			ptr->host_scribble = NULL;
 			ptr->result = DID_RESET << 16;
-			spin_lock_irqsave(&io_request_lock, flags);
 			ptr->scsi_done(CURRENT_SC);
-			spin_unlock_irqrestore(&io_request_lock, flags);
 			CURRENT_SC = NULL;
 		}
 		save_flags(flags);

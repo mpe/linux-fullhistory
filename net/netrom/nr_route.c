@@ -47,7 +47,7 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 #include <linux/notifier.h>
-#include <linux/firewall.h>
+#include <linux/netfilter.h>
 #include <net/netrom.h>
 
 static unsigned int nr_neigh_no = 1;
@@ -548,12 +548,13 @@ static struct net_device *nr_ax25_dev_get(char *devname)
 {
 	struct net_device *dev;
 
-	if ((dev = dev_get(devname)) == NULL)
+	if ((dev = dev_get_by_name(devname)) == NULL)
 		return NULL;
 
 	if ((dev->flags & IFF_UP) && dev->type == ARPHRD_AX25)
 		return dev;
 
+	dev_put(dev);
 	return NULL;
 }
 
@@ -584,8 +585,10 @@ struct net_device *nr_dev_get(ax25_address *addr)
 
 	read_lock(&dev_base_lock);
 	for (dev = dev_base; dev != NULL; dev = dev->next) {
-		if ((dev->flags & IFF_UP) && dev->type == ARPHRD_NETROM && ax25cmp(addr, (ax25_address *)dev->dev_addr) == 0)
+		if ((dev->flags & IFF_UP) && dev->type == ARPHRD_NETROM && ax25cmp(addr, (ax25_address *)dev->dev_addr) == 0) {
+			dev_hold(dev);
 			goto out;
+		}
 	}
 out:
 	read_unlock(&dev_base_lock);
@@ -706,11 +709,6 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 	struct net_device *dev;
 	unsigned char *dptr;
 
-	if (ax25 != NULL && call_in_firewall(PF_NETROM, skb->dev, skb->data, NULL, &skb) != FW_ACCEPT)
-		return 0;
-
-	if (ax25 == NULL && call_out_firewall(PF_NETROM, skb->dev, skb->data, NULL, &skb) != FW_ACCEPT)
-		return 0;
 
 	nr_src  = (ax25_address *)(skb->data + 0);
 	nr_dest = (ax25_address *)(skb->data + 7);
@@ -743,9 +741,6 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 	nr_neigh = nr_node->routes[nr_node->which].neighbour;
 
 	if ((dev = nr_dev_first()) == NULL)
-		return 0;
-
-	if (ax25 != NULL && call_fw_firewall(PF_NETROM, skb->dev, skb->data, NULL, &skb) != FW_ACCEPT)
 		return 0;
 
 	dptr  = skb_push(skb, 1);

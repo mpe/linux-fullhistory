@@ -10,6 +10,7 @@
  *
  * Changes:
  * J Hadi Salim <hadi@nortel.com> 980914:	computation fixes
+ * Alexey Makarenko <makar@phoenix.kharkov.ua> 990814: qave on idle link was calculated incorrectly.
  */
 
 #include <linux/config.h>
@@ -159,6 +160,8 @@ red_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 
 	if (!PSCHED_IS_PASTPERFECT(q->qidlestart)) {
 		long us_idle;
+		int  shift;
+
 		PSCHED_GET_TIME(now);
 		us_idle = PSCHED_TDIFF_SAFE(now, q->qidlestart, q->Scell_max, 0);
 		PSCHED_SET_PASTPERFECT(q->qidlestart);
@@ -179,7 +182,25 @@ red_enqueue(struct sk_buff *skb, struct Qdisc* sch)
    I believe that a simpler model may be used here,
    but it is field for experiments.
 */
-		q->qave >>= q->Stab[(us_idle>>q->Scell_log)&0xFF];
+		shift = q->Stab[us_idle>>q->Scell_log];
+
+		if (shift) {
+			q->qave >>= shift;
+		} else {
+			/* Approximate initial part of exponent
+			   with linear function:
+			   (1-W)^m ~= 1-mW + ...
+
+			   Seems, it is the best solution to
+			   problem of too coarce exponent tabulation.
+			 */
+
+			us_idle = (q->qave * us_idle)>>q->Scell_log;
+			if (us_idle < q->qave/2)
+				q->qave -= us_idle;
+			else
+				q->qave >>= 1;
+		}
 	} else {
 		q->qave += sch->stats.backlog - (q->qave >> q->Wlog);
 		/* NOTE:
@@ -200,17 +221,19 @@ enqueue:
 			sch->stats.backlog += skb->len;
 			sch->stats.bytes += skb->len;
 			sch->stats.packets++;
-			return 1;
+			return 0;
 		}
-drop:
 		kfree_skb(skb);
 		sch->stats.drops++;
-		return 0;
+		return NET_XMIT_DROP;
 	}
 	if (q->qave >= q->qth_max) {
 		q->qcount = -1;
 		sch->stats.overlimits++;
-		goto drop;
+mark:
+		kfree_skb(skb);
+		sch->stats.drops++;
+		return NET_XMIT_CN;
 	}
 	if (++q->qcount) {
 		/* The formula used below causes questions.
@@ -231,11 +254,10 @@ drop:
 		 */
 		if (((q->qave - q->qth_min)>>q->Wlog)*q->qcount < q->qR)
 			goto enqueue;
-printk(KERN_DEBUG "Drop %d\n", q->qcount);
 		q->qcount = 0;
 		q->qR = net_random()&q->Rmask;
 		sch->stats.overlimits++;
-		goto drop;
+		goto mark;
 	}
 	q->qR = net_random()&q->Rmask;
 	goto enqueue;
@@ -250,7 +272,7 @@ red_requeue(struct sk_buff *skb, struct Qdisc* sch)
 
 	__skb_queue_head(&sch->q, skb);
 	sch->stats.backlog += skb->len;
-	return 1;
+	return 0;
 }
 
 static struct sk_buff *
@@ -298,7 +320,7 @@ static void red_reset(struct Qdisc* sch)
 	q->qcount = -1;
 }
 
-static int red_init(struct Qdisc *sch, struct rtattr *opt)
+static int red_change(struct Qdisc *sch, struct rtattr *opt)
 {
 	struct red_sched_data *q = (struct red_sched_data *)sch->data;
 	struct rtattr *tb[TCA_RED_STAB];
@@ -313,6 +335,7 @@ static int red_init(struct Qdisc *sch, struct rtattr *opt)
 
 	ctl = RTA_DATA(tb[TCA_RED_PARMS-1]);
 
+	sch_tree_lock(sch);
 	q->Wlog = ctl->Wlog;
 	q->Plog = ctl->Plog;
 	q->Rmask = ctl->Plog < 32 ? ((1<<ctl->Plog) - 1) : ~0UL;
@@ -324,10 +347,24 @@ static int red_init(struct Qdisc *sch, struct rtattr *opt)
 	memcpy(q->Stab, RTA_DATA(tb[TCA_RED_STAB-1]), 256);
 
 	q->qcount = -1;
-	PSCHED_SET_PASTPERFECT(q->qidlestart);
-	MOD_INC_USE_COUNT;
+	if (skb_queue_len(&sch->q) == 0)
+		PSCHED_SET_PASTPERFECT(q->qidlestart);
+	sch_tree_unlock(sch);
 	return 0;
 }
+
+static int red_init(struct Qdisc* sch, struct rtattr *opt)
+{
+	int err;
+
+	MOD_INC_USE_COUNT;
+
+	if ((err = red_change(sch, opt)) != 0) {
+		MOD_DEC_USE_COUNT;
+	}
+	return err;
+}
+
 
 #ifdef CONFIG_RTNETLINK
 static int red_dump(struct Qdisc *sch, struct sk_buff *skb)
@@ -376,7 +413,7 @@ struct Qdisc_ops red_qdisc_ops =
 	red_init,
 	red_reset,
 	red_destroy,
-	NULL /* red_change */,
+	red_change,
 
 #ifdef CONFIG_RTNETLINK
 	red_dump,

@@ -545,7 +545,7 @@ static struct sock *nr_make_new(struct sock *osk)
 	return sk;
 }
 
-static int nr_release(struct socket *sock, struct socket *peer)
+static int nr_release(struct socket *sock)
 {
 	struct sock *sk = sock->sk;
 
@@ -746,11 +746,6 @@ static int nr_accept(struct socket *sock, struct socket *newsock, int flags)
 	struct sock *sk;
 	struct sock *newsk;
 	struct sk_buff *skb;
-
-	if (newsock->sk != NULL)
-		nr_destroy_socket(newsock->sk);
-
-	newsock->sk = NULL;
 
 	if ((sk = sock->sk) == NULL)
 		return -EINVAL;
@@ -1248,10 +1243,9 @@ static struct net_proto_family nr_family_ops =
 	nr_create
 };
 
-static struct proto_ops nr_proto_ops = {
+static struct proto_ops SOCKOPS_WRAPPED(nr_proto_ops) = {
 	PF_NETROM,
 
-	sock_no_dup,
 	nr_release,
 	nr_bind,
 	nr_connect,
@@ -1266,8 +1260,12 @@ static struct proto_ops nr_proto_ops = {
 	nr_getsockopt,
 	sock_no_fcntl,
 	nr_sendmsg,
-	nr_recvmsg
+	nr_recvmsg,
+	sock_no_mmap
 };
+
+#include <linux/smp_lock.h>
+SOCKOPS_WRAP(nr_proto, PF_NETROM);
 
 static struct notifier_block nr_dev_notifier = {
 	nr_device_event,

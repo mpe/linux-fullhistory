@@ -125,7 +125,7 @@
 #include <linux/notifier.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
-#include <linux/firewall.h>
+#include <linux/netfilter.h>
 #include <linux/sysctl.h>
 #include <linux/init.h>
 #include <net/ip.h>
@@ -928,7 +928,7 @@ struct sock *ax25_make_new(struct sock *osk, struct ax25_dev *ax25_dev)
 	return sk;
 }
 
-static int ax25_release(struct socket *sock, struct socket *peer)
+static int ax25_release(struct socket *sock)
 {
 	struct sock *sk = sock->sk;
 
@@ -1225,15 +1225,6 @@ static int ax25_accept(struct socket *sock, struct socket *newsock, int flags)
 
 	if (sock->state != SS_UNCONNECTED)
 		return -EINVAL;
-
-	/*
-	 * sys_accept has already allocated a struct sock. we need to free it, 
-	 * since we want to use the one provided by ax25_make_new.
-	 */
-	if (newsock->sk != NULL) {
-		sk_free(newsock->sk);
-		newsock->sk = NULL;
-	}
 
 	if ((sk = sock->sk) == NULL)
 		return -EINVAL;
@@ -1716,10 +1707,9 @@ static struct net_proto_family ax25_family_ops =
 	ax25_create
 };
 
-static struct proto_ops ax25_proto_ops = {
+static struct proto_ops SOCKOPS_WRAPPED(ax25_proto_ops) = {
 	PF_AX25,
 
-	sock_no_dup,
 	ax25_release,
 	ax25_bind,
 	ax25_connect,
@@ -1734,8 +1724,12 @@ static struct proto_ops ax25_proto_ops = {
 	ax25_getsockopt,
 	sock_no_fcntl,
 	ax25_sendmsg,
-	ax25_recvmsg
+	ax25_recvmsg,
+	sock_no_mmap
 };
+
+#include <linux/smp_lock.h>
+SOCKOPS_WRAP(ax25_proto, PF_AX25);
 
 /*
  *	Called by socket.c on kernel start up

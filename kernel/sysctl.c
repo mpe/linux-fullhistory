@@ -323,7 +323,7 @@ int do_sysctl (int *name, int nlen,
 	return -ENOTDIR;
 }
 
-extern asmlinkage int sys_sysctl(struct __sysctl_args *args)
+extern asmlinkage long sys_sysctl(struct __sysctl_args *args)
 {
 	struct __sysctl_args tmp;
 	int error;
@@ -1177,6 +1177,34 @@ int sysctl_intvec(ctl_table *table, int *name, int nlen,
 	return 0;
 }
 
+/* Strategy function to convert jiffies to seconds */ 
+int sysctl_jiffies(ctl_table *table, int *name, int nlen,
+		void *oldval, size_t *oldlenp,
+		void *newval, size_t newlen, void **context)
+{
+	if (oldval) {
+		size_t olen;
+		if (oldlenp) { 
+			if (get_user(olen, oldlenp))
+				return -EFAULT;
+			if (olen!=sizeof(int))
+				return -EINVAL; 
+		}
+		if (put_user(*(int *)(table->data) / HZ, (int *)oldval) || 
+		    (oldlenp && put_user(sizeof(int),oldlenp)))
+			return -EFAULT;
+	}
+	if (newval && newlen) { 
+		int new;
+		if (newlen != sizeof(int))
+			return -EINVAL; 
+		if (get_user(new, (int *)newval))
+			return -EFAULT;
+		*(int *)(table->data) = new*HZ; 
+	}
+	return 1;
+}
+
 int do_string (
 	void *oldval, size_t *oldlenp, void *newval, size_t newlen,
 	int rdwr, char *data, size_t max)
@@ -1253,7 +1281,7 @@ int do_struct (
 #else /* CONFIG_SYSCTL */
 
 
-extern asmlinkage int sys_sysctl(struct __sysctl_args *args)
+extern asmlinkage long sys_sysctl(struct __sysctl_args *args)
 {
 	return -ENOSYS;
 }

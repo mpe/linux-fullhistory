@@ -5,7 +5,7 @@
  *
  *		Dumb Network Address Translation.
  *
- * Version:	$Id: ip_nat_dumb.c,v 1.8 1999/03/21 05:22:40 davem Exp $
+ * Version:	$Id: ip_nat_dumb.c,v 1.9 1999/08/20 11:05:46 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -37,8 +37,6 @@
 #include <net/icmp.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
-#include <linux/firewall.h>
-#include <linux/ip_fw.h>
 #include <net/checksum.h>
 #include <linux/route.h>
 #include <net/route.h>
@@ -129,10 +127,13 @@ ip_do_nat(struct sk_buff *skb)
 					/* Use fib_lookup() until we get our own
 					 * hash table of NATed hosts -- Rani
 				 	 */
-					if (fib_lookup(&key, &res) == 0 && res.r) {
-						ciph->daddr = fib_rules_policy(ciph->daddr, &res, &flags);
-						if (ciph->daddr != idaddr)
-							updated = 1;
+					if (fib_lookup(&key, &res) == 0) {
+						if (res.r) {
+							ciph->daddr = fib_rules_policy(ciph->daddr, &res, &flags);
+							if (ciph->daddr != idaddr)
+								updated = 1;
+						}
+						fib_res_put(&res);
 					}
 				} else {
 					ciph->daddr = iph->saddr;

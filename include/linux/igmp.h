@@ -95,13 +95,15 @@ struct ip_mc_list
 	struct ip_mc_list	*next;
 	struct timer_list	timer;
 	int			users;
+	atomic_t		refcnt;
+	spinlock_t		lock;
 	char			tm_running;
 	char			reporter;
 	char			unsolicit_count;
 	char			loaded;
 };
 
-extern int ip_check_mc(struct net_device *dev, u32 mc_addr);
+extern int ip_check_mc(struct in_device *dev, u32 mc_addr);
 extern int igmp_rcv(struct sk_buff *, unsigned short);
 extern int ip_mc_join_group(struct sock *sk, struct ip_mreqn *imr);
 extern int ip_mc_leave_group(struct sock *sk, struct ip_mreqn *imr);

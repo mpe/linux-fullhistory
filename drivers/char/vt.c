@@ -62,7 +62,7 @@ struct vt_struct *vt_cons[MAX_NR_CONSOLES];
 unsigned char keyboard_type = KB_101;
 
 #ifndef __alpha__
-asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on);
+asmlinkage long sys_ioperm(unsigned long from, unsigned long num, int on);
 #endif
 
 unsigned int video_font_height;

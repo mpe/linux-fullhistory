@@ -24,19 +24,6 @@
 
 #include <linux/config.h>
 
-#define ISAPNP_NOTSET	(~0)
-#define ISAPNP_AUTO		((~0)-1)
-
-#define ISAPNP_FLAG_WRITEABLE	(1<<0)
-#define ISAPNP_FLAG_CACHEABLE	(1<<1)
-#define ISAPNP_FLAG_RANGELENGTH	(1<<2)
-#define ISAPNP_FLAG_SHADOWABLE	(1<<4)
-#define ISAPNP_FLAG_EXPANSIONROM	(1<<5)
-
-#define ISAPNP_TYPE_8BIT		0
-#define ISAPNP_TYPE_16BIT		1
-#define ISAPNP_TYPE_8AND16BIT	2
-
 /*
  *  Configuration registers (TODO: change by specification)
  */ 
@@ -76,23 +63,23 @@ struct isapnp_port {
 	unsigned short max;		/* max base number */
 	unsigned char align;		/* align boundary */
 	unsigned char size;		/* size of range */
-	unsigned short flags;		/* port flags */
+	unsigned char flags;		/* port flags */
+	unsigned char pad;		/* pad */
 	struct isapnp_resources *res;	/* parent */
 	struct isapnp_port *next;	/* next port */
 };
 
 struct isapnp_irq {
 	unsigned short map;		/* bitmaks for IRQ lines */
-	unsigned short flags;		/* IRQ flags */
+	unsigned char flags;		/* IRQ flags */
+	unsigned char pad;		/* pad */
 	struct isapnp_resources *res;	/* parent */
 	struct isapnp_irq *next;	/* next IRQ */
 };
 
 struct isapnp_dma {
 	unsigned char map;		/* bitmask for DMA channels */
-	unsigned char type;		/* DMA type */
 	unsigned char flags;		/* DMA flags */
-	unsigned char speed;		/* DMA speed */
 	struct isapnp_resources *res;	/* parent */
 	struct isapnp_dma *next;	/* next port */
 };
@@ -102,8 +89,8 @@ struct isapnp_mem {
 	unsigned int max;		/* max base number */
 	unsigned int align;		/* align boundary */
 	unsigned int size;		/* size of range */
-	unsigned short flags;		/* memory flags */
-	unsigned short type;		/* memory type */
+	unsigned char flags;		/* memory flags */
+	unsigned char pad;		/* pad */
 	struct isapnp_resources *res;	/* parent */
 	struct isapnp_mem *next;	/* next memory resource */
 };
@@ -133,7 +120,7 @@ struct isapnp_resources {
 	struct isapnp_resources *next;	/* next resource */
 };
 
-#ifdef CONFIG_ISAPNP
+#if defined(CONFIG_ISAPNP) || (defined(CONFIG_ISAPNP_MODULE) && defined(MODULE))
 
 /* lowlevel configuration */
 int isapnp_present(void);
@@ -157,6 +144,10 @@ struct pci_dev *isapnp_find_dev(struct pci_bus *card,
 				unsigned short vendor,
 				unsigned short function,
 				struct pci_dev *from);
+/* misc */
+void isapnp_resource_change(struct resource *resource,
+			    unsigned long start,
+			    unsigned long size);
 /* init/main.c */
 int isapnp_init(void);
 
@@ -184,6 +175,9 @@ extern struct pci_dev *isapnp_find_dev(struct pci_bus *card,
 				       unsigned short vendor,
 				       unsigned short function,
 				       struct pci_dev *from) { return NULL; }
+extern void isapnp_resource_change(struct resource *resource,
+				   unsigned long start,
+				   unsigned long size) { ; }
 
 #endif /* CONFIG_ISAPNP */
 

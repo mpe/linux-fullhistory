@@ -61,6 +61,8 @@ typedef __u64	Elf64_Word;
 
 #define EM_SPARCV9     43	/* SPARC v9 64-bit */
 
+#define EM_IA_64	50	/* HP/Intel IA-64 */
+
 /*
  * This is an interim value that we will use until the committee comes
  * up with a final number.

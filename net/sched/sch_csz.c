@@ -477,7 +477,7 @@ csz_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 	if (this->q.qlen >= this->limit || this->L_tab == NULL) {
 		sch->stats.drops++;
 		kfree_skb(skb);
-		return 0;
+		return NET_XMIT_DROP;
 	}
 
 	R = csz_update(sch);
@@ -505,7 +505,7 @@ csz_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 	sch->q.qlen++;
 	sch->stats.bytes += skb->len;
 	sch->stats.packets++;
-	return 1;
+	return 0;
 }
 
 static __inline__ struct sk_buff *

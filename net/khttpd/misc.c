@@ -71,8 +71,6 @@ static void ReadRest(struct socket *sock)
 	
 	if (sock->sk==NULL)
 		return;
-	if (sock->sk->state!=TCP_ESTABLISHED)
-		return;
 
 	len = 1;
 		
@@ -115,12 +113,8 @@ void CleanUpRequest(struct http_request *Req)
 	if ((Req->sock!=NULL)&&(Req->sock->sk!=NULL))
 	{
 		ReadRest(Req->sock);
-		lock_kernel();   /* 2.3.11 quirk - needed for 2.3.13 ?? */
-		lock_sock(Req->sock->sk);
 		remove_wait_queue(Req->sock->sk->sleep,&(Req->sleep));
-		release_sock(Req->sock->sk);
 	    	sock_release(Req->sock);
-	    	unlock_kernel();  /* 2.3.13 quirk */
 	}
 	
 	/* ... and the file-pointer ... */
@@ -170,16 +164,11 @@ int SendBuffer(struct socket *sock, const char *Buffer,const size_t Length)
 	
 	len = 0;
 	
-	if (sock->sk->state==TCP_ESTABLISHED)
-	{
-		oldfs = get_fs(); set_fs(KERNEL_DS);
-		len = sock_sendmsg(sock,&msg,(size_t)(Length-len));
-		set_fs(oldfs);
-		LeaveFunction("SendBuffer");
-		return len;	
-	}
-	else
-		return -ECONNRESET;
+	oldfs = get_fs(); set_fs(KERNEL_DS);
+	len = sock_sendmsg(sock,&msg,(size_t)(Length-len));
+	set_fs(oldfs);
+	LeaveFunction("SendBuffer");
+	return len;	
 }
 
 int SendBuffer_async(struct socket *sock, const char *Buffer,const size_t Length)

@@ -130,24 +130,26 @@ struct __xchg_dummy { unsigned long a[100]; };
 
 /*
  * Note: no "lock" prefix even on SMP: xchg always implies lock anyway
+ * Note 2: xchg has side effect, so that attribute volatile is necessary,
+ *	  but generally the primitive is invalid, *ptr is output argument. --ANK
  */
 static inline unsigned long __xchg(unsigned long x, void * ptr, int size)
 {
 	switch (size) {
 		case 1:
-			__asm__("xchgb %b0,%1"
+			__asm__ __volatile__("xchgb %b0,%1"
 				:"=q" (x)
 				:"m" (*__xg(ptr)), "0" (x)
 				:"memory");
 			break;
 		case 2:
-			__asm__("xchgw %w0,%1"
+			__asm__ __volatile__("xchgw %w0,%1"
 				:"=r" (x)
 				:"m" (*__xg(ptr)), "0" (x)
 				:"memory");
 			break;
 		case 4:
-			__asm__("xchgl %0,%1"
+			__asm__ __volatile__("xchgl %0,%1"
 				:"=r" (x)
 				:"m" (*__xg(ptr)), "0" (x)
 				:"memory");

@@ -561,7 +561,7 @@ static int shaper_ioctl(struct net_device *dev,  struct ifreq *ifr, int cmd)
 	{
 		case SHAPER_SET_DEV:
 		{
-			struct net_device *them=dev_get(ss->ss_name);
+			struct net_device *them=__dev_get_by_name(ss->ss_name);
 			if(them==NULL)
 				return -ENODEV;
 			if(sh->dev)

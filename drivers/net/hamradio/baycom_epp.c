@@ -33,6 +33,7 @@
  *   0.4  26.07.99  Adapted to new lowlevel parport driver interface
  *   0.5  03.08.99  adapt to Linus' new __setup/__initcall
  *                  removed some pre-2.2 kernel compatibility cruft
+ *   0.6  10.08.99  Check if parport can do SPP and is safe to access during interrupt contexts
  *
  */
 
@@ -370,7 +371,7 @@ static void inline baycom_int_freq(struct baycom_state *bc)
  *    eppconfig_path should be setable  via /proc/sys.
  */
 
-char eppconfig_path[256] = "/usr/sbin/eppfpga";
+static char eppconfig_path[256] = "/usr/sbin/eppfpga";
 
 static char *envp[] = { "HOME=/", "TERM=linux", "PATH=/usr/bin:/bin", NULL };
 
@@ -1044,6 +1045,11 @@ static int epp_open(struct net_device *dev)
                 return -ENXIO;
         }
 #endif
+	if ((~pp->modes) & (PARPORT_MODE_TRISTATE | PARPORT_MODE_PCSPP | PARPORT_MODE_SAFEININT)) {
+                printk(KERN_ERR "%s: parport at 0x%lx cannot be used\n",
+		       bc_drvname, pp->base);
+                return -EIO;
+	}
 	memset(&bc->modem, 0, sizeof(bc->modem));
         if (!(bc->pdev = parport_register_device(pp, dev->name, NULL, epp_wakeup, 
                                                  epp_interrupt, PARPORT_DEV_EXCL, dev))) {
@@ -1055,13 +1061,6 @@ static int epp_open(struct net_device *dev)
                 parport_unregister_device(bc->pdev);
                 return -EBUSY;
         }
-	if (!(pp->modes & PARPORT_MODE_TRISTATE)) {
-                printk(KERN_ERR "%s: parport at 0x%lx does not support bidirectional data transfer\n",
-		       bc_drvname, pp->base);
-		parport_release(bc->pdev);
-                parport_unregister_device(bc->pdev);
-                return -EIO;		
-	}
         dev->irq = /*pp->irq*/ 0;
 	bc->run_bh = run_bh;
 	bc->bh_running = 1;
@@ -1418,12 +1417,17 @@ static int baycom_probe(struct net_device *dev)
 static const char *mode[NR_PORTS] = { "", };
 static int iobase[NR_PORTS] = { 0x378, };
 
+MODULE_PARM(mode, "1-" __MODULE_STRING(NR_PORTS) "s");
+MODULE_PARM_DESC(mode, "baycom operating mode");
+MODULE_PARM(iobase, "1-" __MODULE_STRING(NR_PORTS) "i");
+MODULE_PARM_DESC(iobase, "baycom io base address");
+
+MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
+MODULE_DESCRIPTION("Baycom epp amateur radio modem driver");
+
 /* --------------------------------------------------------------------- */
 
-#ifndef MODULE
-static
-#endif
-int __init init_module(void)
+static int __init init_baycomepp(void)
 {
 	struct net_device *dev;
 	int i, found = 0;
@@ -1476,19 +1480,7 @@ int __init init_module(void)
 	return 0;
 }
 
-/* --------------------------------------------------------------------- */
-
-#ifdef MODULE
-
-MODULE_PARM(mode, "1-" __MODULE_STRING(NR_PORTS) "s");
-MODULE_PARM_DESC(mode, "baycom operating mode");
-MODULE_PARM(iobase, "1-" __MODULE_STRING(NR_PORTS) "i");
-MODULE_PARM_DESC(iobase, "baycom io base address");
-
-MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
-MODULE_DESCRIPTION("Baycom epp amateur radio modem driver");
-
-void cleanup_module(void)
+static void __exit cleanup_baycomepp(void)
 {
 	struct net_device *dev;
 	struct baycom_state *bc;
@@ -1507,7 +1499,12 @@ void cleanup_module(void)
 	}
 }
 
-#else /* MODULE */
+module_init(init_baycomepp);
+module_exit(cleanup_baycomepp);
+
+/* --------------------------------------------------------------------- */
+
+#ifndef MODULE
 
 /*
  * format: baycom_epp=io,mode
@@ -1517,11 +1514,11 @@ void cleanup_module(void)
 static int __init baycom_epp_setup(char *str)
 {
         static unsigned __initdata nr_dev = 0;
-	int ints[11];
+	int ints[2];
 
         if (nr_dev >= NR_PORTS)
                 return 0;
-	str = get_options(str, ints);
+	str = get_options(str, 2, ints);
 	if (ints[0] < 1)
 		return 0;
 	mode[nr_dev] = str;
@@ -1531,7 +1528,6 @@ static int __init baycom_epp_setup(char *str)
 }
 
 __setup("baycom_epp=", baycom_epp_setup);
-__initcall(init_module);
 
 #endif /* MODULE */
 /* --------------------------------------------------------------------- */

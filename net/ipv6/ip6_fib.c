@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_fib.c,v 1.17 1999/04/22 10:07:41 davem Exp $
+ *	$Id: ip6_fib.c,v 1.18 1999/08/20 11:06:19 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -20,6 +20,7 @@
 #include <linux/route.h>
 #include <linux/netdevice.h>
 #include <linux/in6.h>
+#include <linux/init.h>
 
 #ifdef 	CONFIG_PROC_FS
 #include <linux/proc_fs.h>
@@ -35,12 +36,6 @@
 #define RT6_DEBUG 2
 #undef CONFIG_IPV6_SUBTREES
 
-#if RT6_DEBUG >= 1
-#define BUG_TRAP(x) ({ if (!(x)) { printk("Assertion (" #x ") failed at " __FILE__ "(%d):" __FUNCTION__ "\n", __LINE__); } })
-#else
-#define BUG_TRAP(x) do { ; } while (0)
-#endif
-
 #if RT6_DEBUG >= 3
 #define RT6_TRACE(x...) printk(KERN_DEBUG x)
 #else
@@ -48,6 +43,8 @@
 #endif
 
 struct rt6_statistics	rt6_stats;
+
+static kmem_cache_t * fib6_node_kmem;
 
 enum fib_walk_state_t
 {
@@ -66,6 +63,9 @@ struct fib6_cleaner_t
 	int (*func)(struct rt6_info *, void *arg);
 	void *arg;
 };
+
+rwlock_t fib6_walker_lock = RW_LOCK_UNLOCKED;
+
 
 #ifdef CONFIG_IPV6_SUBTREES
 #define FWS_INIT FWS_S
@@ -210,18 +210,15 @@ static __inline__ struct fib6_node * node_alloc(void)
 {
 	struct fib6_node *fn;
 
-	if ((fn = kmalloc(sizeof(struct fib6_node), GFP_ATOMIC)) != NULL) {
+	if ((fn = kmem_cache_alloc(fib6_node_kmem, SLAB_ATOMIC)) != NULL)
 		memset(fn, 0, sizeof(struct fib6_node));
-		rt6_stats.fib_nodes++;
-	}
 
 	return fn;
 }
 
 static __inline__ void node_free(struct fib6_node * fn)
 {
-	rt6_stats.fib_nodes--;
-	kfree(fn);
+	kmem_cache_free(fib6_node_kmem, fn);
 }
 
 static __inline__ void rt6_release(struct rt6_info *rt)
@@ -297,7 +294,7 @@ static struct fib6_node * fib6_add_1(struct fib6_node *root, void *addr,
 	} while (fn);
 
 	/*
-	 *	We wlaked to the bottom of tree.
+	 *	We walked to the bottom of tree.
 	 *	Create new leaf node without children.
 	 */
 
@@ -490,11 +487,8 @@ static int fib6_add_rt2node(struct fib6_node *fn, struct rt6_info *rt)
 static __inline__ void fib6_start_gc(struct rt6_info *rt)
 {
 	if (ip6_fib_timer.expires == 0 &&
-	    (rt->rt6i_flags & (RTF_EXPIRES|RTF_CACHE))) {
-		del_timer(&ip6_fib_timer);
-		ip6_fib_timer.expires = jiffies + ip6_rt_gc_interval;
-		add_timer(&ip6_fib_timer);
-	}
+	    (rt->rt6i_flags & (RTF_EXPIRES|RTF_CACHE)))
+		mod_timer(&ip6_fib_timer, jiffies + ip6_rt_gc_interval);
 }
 
 /*
@@ -512,7 +506,7 @@ int fib6_add(struct fib6_node *root, struct rt6_info *rt)
 			rt->rt6i_dst.plen, (u8*) &rt->rt6i_dst - (u8*) rt);
 
 	if (fn == NULL)
-		return -ENOMEM;
+		goto out;
 
 #ifdef CONFIG_IPV6_SUBTREES
 	if (rt->rt6i_src.plen) {
@@ -584,6 +578,7 @@ int fib6_add(struct fib6_node *root, struct rt6_info *rt)
 			fib6_prune_clones(fn, rt);
 	}
 
+out:
 	if (err)
 		dst_free(&rt->u.dst);
 	return err;
@@ -845,6 +840,7 @@ static void fib6_repair_tree(struct fib6_node *fn)
 		}
 #endif
 
+		read_lock(&fib6_walker_lock);
 		FOR_WALKERS(w) {
 			if (child == NULL) {
 				if (w->root == fn) {
@@ -872,6 +868,7 @@ static void fib6_repair_tree(struct fib6_node *fn)
 				}
 			}
 		}
+		read_unlock(&fib6_walker_lock);
 
 		node_free(fn);
 		if (pn->fn_flags&RTN_RTINFO || SUBTREE(pn))
@@ -896,6 +893,7 @@ static void fib6_del_route(struct fib6_node *fn, struct rt6_info **rtp)
 	rt6_stats.fib_rt_entries--;
 
 	/* Adjust walkers */
+	read_lock(&fib6_walker_lock);
 	FOR_WALKERS(w) {
 		if (w->state == FWS_C && w->leaf == rt) {
 			RT6_TRACE("walker %p adjusted by delroute\n", w);
@@ -904,6 +902,7 @@ static void fib6_del_route(struct fib6_node *fn, struct rt6_info **rtp)
 				w->state = FWS_U;
 		}
 	}
+	read_unlock(&fib6_walker_lock);
 
 	rt->u.next = NULL;
 
@@ -927,7 +926,7 @@ int fib6_del(struct rt6_info *rt)
 
 #if RT6_DEBUG >= 2
 	if (rt->u.dst.obsolete>0) {
-		BUG_TRAP(rt->u.dst.obsolete>0);
+		BUG_TRAP(rt->u.dst.obsolete<=0);
 		return -EFAULT;
 	}
 #endif
@@ -1112,9 +1111,7 @@ void fib6_clean_tree(struct fib6_node *root,
 	c.func = func;
 	c.arg = arg;
 
-	start_bh_atomic();
 	fib6_walk(&c.w);
-	end_bh_atomic();
 }
 
 static int fib6_prune_clone(struct rt6_info *rt, void *arg)
@@ -1151,7 +1148,7 @@ static int fib6_age(struct rt6_info *rt, void *arg)
 	 */
 
 	if (rt->rt6i_flags & RTF_CACHE) {
-		if (atomic_read(&rt->u.dst.use) == 0 &&
+		if (atomic_read(&rt->u.dst.__refcnt) == 0 &&
 		    (long)(now - rt->u.dst.lastuse) >= gc_args.timeout) {
 			RT6_TRACE("aging clone %p\n", rt);
 			return -1;
@@ -1175,24 +1172,45 @@ static int fib6_age(struct rt6_info *rt, void *arg)
 	return 0;
 }
 
+static spinlock_t fib6_gc_lock = SPIN_LOCK_UNLOCKED;
+
 void fib6_run_gc(unsigned long dummy)
 {
-	if (dummy != ~0UL)
+	if (dummy != ~0UL) {
+		spin_lock_bh(&fib6_gc_lock);
 		gc_args.timeout = (int)dummy;
-	else
+	} else {
+		local_bh_disable();
+		if (!spin_trylock(&fib6_gc_lock)) {
+			mod_timer(&ip6_fib_timer, jiffies + HZ);
+			local_bh_enable();
+			return;
+		}
 		gc_args.timeout = ip6_rt_gc_interval;
-
+	}
 	gc_args.more = 0;
 
+
+	write_lock_bh(&rt6_lock);
 	fib6_clean_tree(&ip6_routing_table, fib6_age, 0, NULL);
+	write_unlock_bh(&rt6_lock);
 
-	del_timer(&ip6_fib_timer);
-
-	ip6_fib_timer.expires = 0;
-	if (gc_args.more) {
-		ip6_fib_timer.expires = jiffies + ip6_rt_gc_interval;
-		add_timer(&ip6_fib_timer);
+	if (gc_args.more)
+		mod_timer(&ip6_fib_timer, jiffies + ip6_rt_gc_interval);
+	else {
+		del_timer(&ip6_fib_timer);
+		ip6_fib_timer.expires = 0;
 	}
+	spin_unlock_bh(&fib6_gc_lock);
+}
+
+__initfunc(void fib6_init(void))
+{
+	if (!fib6_node_kmem)
+		fib6_node_kmem = kmem_cache_create("fib6_nodes",
+						   sizeof(struct fib6_node),
+						   0, SLAB_HWCACHE_ALIGN,
+						   NULL, NULL);
 }
 
 #ifdef MODULE

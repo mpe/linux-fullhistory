@@ -95,6 +95,15 @@
  *		  pSRB_tail members of the HCS structure.
  * 09/01/99 bv	- v1.03d
  *		- Fixed a deadlock problem in SMP.
+ * 21/01/99 bv	- v1.03e
+ *		- Add support for the Domex 3192U PCI SCSI
+ *		  This is a slightly modified patch by
+ *		  Brian Macy <bmacy@sunshinecomputing.com>
+ * 22/02/99 bv	- v1.03f
+ *		- Didn't detect the INIC-950 in 2.0.x correctly.
+ *		  Now fixed.
+ * 05/07/99 bv	- v1.03g
+ *		- Changed the assumption that HZ = 100
  **************************************************************************/
 
 #define CVT_LINUX_VERSION(V,P,S)        (V * 65536 + P * 256 + S)
@@ -158,7 +167,7 @@ Scsi_Host_Template driver_template = INI9100U;
 char *i91uCopyright = "Copyright (C) 1996-98";
 char *i91uInitioName = "by Initio Corporation";
 char *i91uProductName = "INI-9X00U/UW";
-char *i91uVersion = "v1.03d";
+char *i91uVersion = "v1.03g";
 
 #if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 struct proc_dir_entry proc_scsi_ini9100u =
@@ -230,17 +239,12 @@ extern int tul_device_reset(HCS * pCurHcb, ULONG pSrb, unsigned int target, unsi
 				/* ---- EXTERNAL VARIABLES ---- */
 extern HCS tul_hcs[];
 
-struct id {
-  int vendor_id;
-  int device_id;
-};
-
-const struct id id_table[] = {
-  { INI_VENDOR_ID, I950_DEVICE_ID },
-  { INI_VENDOR_ID, I940_DEVICE_ID },
-  { INI_VENDOR_ID, I935_DEVICE_ID },
-  { INI_VENDOR_ID, 0x0002 },
-  { DMX_VENDOR_ID, 0x0002 },
+const PCI_ID i91u_pci_devices[] = {
+	{ INI_VENDOR_ID, I950_DEVICE_ID },
+	{ INI_VENDOR_ID, I940_DEVICE_ID },
+	{ INI_VENDOR_ID, I935_DEVICE_ID },
+	{ INI_VENDOR_ID, I920_DEVICE_ID },
+	{ DMX_VENDOR_ID, I920_DEVICE_ID },
 };
 
 /*
@@ -334,14 +338,13 @@ int tul_NewReturnNumberOfAdapters(void)
 	int iAdapters = 0;
 	long dRegValue;
 	WORD wBIOS;
-	const int iNumIdEntries = sizeof(id_table)/sizeof(id_table[0]);
 	int i = 0;
 
 	init_i91uAdapter_table();
 
-	for (i=0; i < iNumIdEntries; i++) {
-		struct id curId = id_table[i];
-		while ((pDev = pci_find_device(curId.vendor_id, curId.device_id, pDev)) != NULL) {
+	for (i = 0; i < TULSZ(i91u_pci_devices); i++)
+	{
+		while ((pDev = pci_find_device(i91u_pci_devices[i].vendor_id, i91u_pci_devices[i].device_id, pDev)) != NULL) {
 			pci_read_config_dword(pDev, 0x44, (u32 *) & dRegValue);
 			wBIOS = (UWORD) (dRegValue & 0xFF);
 			if (((dRegValue & 0xFF00) >> 8) == 0xFF)
@@ -377,17 +380,6 @@ int tul_ReturnNumberOfAdapters(void)
 	unsigned short command;
 	WORD wBIOS, wBASE;
 	BYTE bPCIBusNum, bInterrupt, bPCIDeviceNum;
-	struct {
-		unsigned short vendor_id;
-		unsigned short device_id;
-	} const i91u_pci_devices[] =
-	{
-		{INI_VENDOR_ID, I935_DEVICE_ID},
-		{INI_VENDOR_ID, I940_DEVICE_ID},
-		{INI_VENDOR_ID, I950_DEVICE_ID},
-		{INI_VENDOR_ID, I920_DEVICE_ID}
-	};
-
 
 	iAdapters = 0;
 	/*
@@ -398,57 +390,25 @@ int tul_ReturnNumberOfAdapters(void)
 		unsigned long page_offset, base;
 #endif
 
-#if LINUX_VERSION_CODE > CVT_LINUX_VERSION(2,1,92)
-		struct pci_dev *pdev = NULL;
-#else
 		int index;
 		unsigned char pci_bus, pci_devfn;
-#endif
 
 		bPCIBusNum = 0;
 		bPCIDeviceNum = 0;
 		init_i91uAdapter_table();
 		for (i = 0; i < TULSZ(i91u_pci_devices); i++) {
-#if LINUX_VERSION_CODE > CVT_LINUX_VERSION(2,1,92)
-			pdev = NULL;
-			while ((pdev = pci_find_device(i91u_pci_devices[i].vendor_id,
-					   i91u_pci_devices[i].device_id,
-						       pdev)))
-#else
 			index = 0;
 			while (!(pcibios_find_device(i91u_pci_devices[i].vendor_id,
 					   i91u_pci_devices[i].device_id,
 					 index++, &pci_bus, &pci_devfn)))
-#endif
 			{
-				if (i == 0) {
-					/*
+				if (i == 2) {
 					   printk("i91u: The RAID controller is not supported by\n");
 					   printk("i91u:         this driver, we are ignoring it.\n");
-					 */
 				} else {
 					/*
 					 * Read sundry information from PCI BIOS.
 					 */
-#if LINUX_VERSION_CODE > CVT_LINUX_VERSION(2,1,92)
-					bPCIBusNum = pdev->bus->number;
-					bPCIDeviceNum = pdev->devfn;
-					dRegValue = pdev->base_address[0];
-					if (dRegValue == -1) {	/* Check return code            */
-						printk("\n\ri91u: tulip read configuration error.\n");
-						return (0);	/* Read configuration space error  */
-					}
-					/* <02> read from base address + 0x50 offset to get the wBIOS balue. */
-					wBASE = (WORD) dRegValue;
-
-					/* Now read the interrupt line  */
-					dRegValue = pdev->irq;
-					bInterrupt = dRegValue & 0xFF;	/* Assign interrupt line      */
-					pci_read_config_word(pdev, PCI_COMMAND, &command);
-					pci_write_config_word(pdev, PCI_COMMAND,
-							      command | PCI_COMMAND_MASTER | PCI_COMMAND_IO);
-
-#else
 					bPCIBusNum = pci_bus;
 					bPCIDeviceNum = pci_devfn;
 					pcibios_read_config_dword(pci_bus, pci_devfn, PCI_BASE_ADDRESS_0,
@@ -467,7 +427,6 @@ int tul_ReturnNumberOfAdapters(void)
 					pcibios_read_config_word(pci_bus, pci_devfn, PCI_COMMAND, &command);
 					pcibios_write_config_word(pci_bus, pci_devfn, PCI_COMMAND,
 								  command | PCI_COMMAND_MASTER | PCI_COMMAND_IO);
-#endif
 					wBASE &= PCI_BASE_ADDRESS_IO_MASK;
 					wBIOS = TUL_RDWORD(wBASE, 0x50);
 

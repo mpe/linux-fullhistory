@@ -72,6 +72,7 @@ obj-$(CONFIG_SOUND_UART6850)	+= uart6850.o
 obj-$(CONFIG_SOUND_VMIDI)	+= v_midi.o
 obj-$(CONFIG_SOUND_YM3812)	+= adlib_card.o opl3.o
 obj-$(CONFIG_SOUND_VIDC)	+= vidc_mod.o
+obj-$(CONFIG_SOUND_VWSND)	+= vwsnd.o
 obj-$(CONFIG_SOUND_WAVEARTIST)	+= waveartist.o
 obj-$(CONFIG_SOUND_WAVEFRONT)   += wavefront.o
 

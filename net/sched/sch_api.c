@@ -40,8 +40,6 @@
 #include <asm/system.h>
 #include <asm/bitops.h>
 
-#define BUG_TRAP(x) if (!(x)) { printk("Assertion (" #x ") failed at " __FILE__ "(%d):" __FUNCTION__ "\n", __LINE__); }
-
 #ifdef CONFIG_RTNETLINK
 static int qdisc_notify(struct sk_buff *oskb, struct nlmsghdr *n, u32 clid,
 			struct Qdisc *old, struct Qdisc *new);
@@ -95,9 +93,15 @@ static int tclass_notify(struct sk_buff *oskb, struct nlmsghdr *n,
 
    ---enqueue
 
-   enqueue returns number of enqueued packets i.e. this number is 1,
-   if packet was enqueued successfully and <1 if something (not
-   necessary THIS packet) was dropped.
+   enqueue returns 0, if packet was enqueued successfully.
+   If packet (this one or another one) was dropped, it returns
+   not zero error code.
+   NET_XMIT_DROP 	- this packet dropped
+     Expected action: do not backoff, but wait until queue will clear.
+   NET_XMIT_CN	 	- probably this packet enqueued, but another one dropped.
+     Expected action: backoff or ignore
+   NET_XMIT_POLICED	- dropped by police.
+     Expected action: backoff or error to real-time apps.
 
    Auxiliary routines:
 
@@ -509,7 +513,7 @@ static int tc_get_qdisc(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 	struct Qdisc *p = NULL;
 	int err;
 
-	if ((dev = dev_get_by_index(tcm->tcm_ifindex)) == NULL)
+	if ((dev = __dev_get_by_index(tcm->tcm_ifindex)) == NULL)
 		return -ENODEV;
 
 	if (clid) {
@@ -566,7 +570,7 @@ static int tc_modify_qdisc(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 	struct Qdisc *p = NULL;
 	int err;
 
-	if ((dev = dev_get_by_index(tcm->tcm_ifindex)) == NULL)
+	if ((dev = __dev_get_by_index(tcm->tcm_ifindex)) == NULL)
 		return -ENODEV;
 
 	if (clid) {
@@ -807,7 +811,7 @@ static int tc_ctl_tclass(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 	u32 qid = TC_H_MAJ(clid);
 	int err;
 
-	if ((dev = dev_get_by_index(tcm->tcm_ifindex)) == NULL)
+	if ((dev = __dev_get_by_index(tcm->tcm_ifindex)) == NULL)
 		return -ENODEV;
 
 	/*
@@ -1006,6 +1010,7 @@ static int tc_dump_tclass(struct sk_buff *skb, struct netlink_callback *cb)
 
 	cb->args[0] = t;
 
+	dev_put(dev);
 	return skb->len;
 }
 #endif
@@ -1019,8 +1024,9 @@ static int psched_read_proc(char *buffer, char **start, off_t offset,
 {
 	int len;
 
-	len = sprintf(buffer, "%08x %08x\n",
-		      psched_tick_per_us, psched_us_per_tick);
+	len = sprintf(buffer, "%08x %08x %08x %08x\n",
+		      psched_tick_per_us, psched_us_per_tick,
+		      1000000, HZ);
 
 	len -= offset;
 
@@ -1201,6 +1207,9 @@ __initfunc(int pktsched_init(void))
 #endif
 #ifdef CONFIG_NET_SCH_PRIO
 	INIT_QDISC(prio);
+#endif
+#ifdef CONFIG_NET_SCH_ATM
+	INIT_QDISC(atm);
 #endif
 #ifdef CONFIG_NET_CLS
 	tc_filter_init();

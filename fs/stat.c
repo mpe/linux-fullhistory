@@ -119,7 +119,7 @@ static int cp_new_stat(struct inode * inode, struct stat * statbuf)
  * For backward compatibility?  Maybe this should be moved
  * into arch/i386 instead?
  */
-asmlinkage int sys_stat(char * filename, struct __old_kernel_stat * statbuf)
+asmlinkage long sys_stat(char * filename, struct __old_kernel_stat * statbuf)
 {
 	struct dentry * dentry;
 	int error;
@@ -140,7 +140,7 @@ asmlinkage int sys_stat(char * filename, struct __old_kernel_stat * statbuf)
 }
 #endif
 
-asmlinkage int sys_newstat(char * filename, struct stat * statbuf)
+asmlinkage long sys_newstat(char * filename, struct stat * statbuf)
 {
 	struct dentry * dentry;
 	int error;
@@ -166,7 +166,7 @@ asmlinkage int sys_newstat(char * filename, struct stat * statbuf)
  * For backward compatibility?  Maybe this should be moved
  * into arch/i386 instead?
  */
-asmlinkage int sys_lstat(char * filename, struct __old_kernel_stat * statbuf)
+asmlinkage long sys_lstat(char * filename, struct __old_kernel_stat * statbuf)
 {
 	struct dentry * dentry;
 	int error;
@@ -188,7 +188,7 @@ asmlinkage int sys_lstat(char * filename, struct __old_kernel_stat * statbuf)
 
 #endif
 
-asmlinkage int sys_newlstat(char * filename, struct stat * statbuf)
+asmlinkage long sys_newlstat(char * filename, struct stat * statbuf)
 {
 	struct dentry * dentry;
 	int error;
@@ -214,7 +214,7 @@ asmlinkage int sys_newlstat(char * filename, struct stat * statbuf)
  * For backward compatibility?  Maybe this should be moved
  * into arch/i386 instead?
  */
-asmlinkage int sys_fstat(unsigned int fd, struct __old_kernel_stat * statbuf)
+asmlinkage long sys_fstat(unsigned int fd, struct __old_kernel_stat * statbuf)
 {
 	struct file * f;
 	int err = -EBADF;
@@ -235,7 +235,7 @@ asmlinkage int sys_fstat(unsigned int fd, struct __old_kernel_stat * statbuf)
 
 #endif
 
-asmlinkage int sys_newfstat(unsigned int fd, struct stat * statbuf)
+asmlinkage long sys_newfstat(unsigned int fd, struct stat * statbuf)
 {
 	struct file * f;
 	int err = -EBADF;
@@ -254,7 +254,7 @@ asmlinkage int sys_newfstat(unsigned int fd, struct stat * statbuf)
 	return err;
 }
 
-asmlinkage int sys_readlink(const char * path, char * buf, int bufsiz)
+asmlinkage long sys_readlink(const char * path, char * buf, int bufsiz)
 {
 	struct dentry * dentry;
 	int error;

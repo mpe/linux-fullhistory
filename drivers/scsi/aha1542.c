@@ -18,6 +18,9 @@
  *        1-Jan-97
  *  Modified by Bjorn L. Thordarson and Einar Thor Einarsson
  *        Recognize that DMA0 is valid DMA channel -- 13-Jul-98
+ *  Modified by Chris Faulhaber	<jedgar@fxp.org>
+ *        Added module command-line options
+ *        18-Jul-99
  */
 
 #include <linux/module.h>
@@ -84,7 +87,7 @@ static int setup_dmaspeed[MAXBOARDS] = {-1,-1};
 static char *setup_str[MAXBOARDS] = {(char *)NULL,(char *)NULL};
 
 /*
- * LILO params:  aha1542=<PORTBASE>[,<BUSON>,<BUSOFF>[,<DMASPEED>]]
+ * LILO/Module params:  aha1542=<PORTBASE>[,<BUSON>,<BUSOFF>[,<DMASPEED>]]
  *
  * Where:  <PORTBASE> is any of the valid AHA addresses:
  *			0x130, 0x134, 0x230, 0x234, 0x330, 0x334
@@ -99,6 +102,11 @@ static char *setup_str[MAXBOARDS] = {(char *)NULL,(char *)NULL};
  *		    Valid values: 5, 6, 7, 8, 10 (MB/s)
  *		    Factory default is 5 MB/s.
  */
+
+#if defined(MODULE)
+int aha1542[] = { 0x330, 11, 4, -1 };
+MODULE_PARM(aha1542, "1-4i");
+#endif
 
 #define BIOS_TRANSLATION_1632 0  /* Used by some old 1542A boards */
 #define BIOS_TRANSLATION_6432 1 /* Default case these days */
@@ -823,7 +831,8 @@ static int aha1542_mbenable(int base)
      mbenable_cmd[1]=0;
      mbenable_cmd[2]=mbenable_result[1];
 
-     if(mbenable_result[1] & 0x03) retval = BIOS_TRANSLATION_25563;
+     if((mbenable_result[0] & 0x08) && (mbenable_result[1] & 0x03))
+       retval = BIOS_TRANSLATION_25563;
 
      aha1542_out(base,mbenable_cmd,3);
      WAIT(INTRFLAGS(base),INTRMASK,HACC,0);
@@ -877,7 +886,7 @@ static int aha1542_query(int base_io, int * transl)
 }
 
 /* called from init/main.c */
-__initfunc(void aha1542_setup( char *str, int *ints))
+void __init aha1542_setup( char *str, int *ints)
 {
     const char *ahausage = "aha1542: usage: aha1542=<PORTBASE>[,<BUSON>,<BUSOFF>[,<DMASPEED>]]\n";
     static int setup_idx = 0;
@@ -953,6 +962,14 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
     DEB(printk("aha1542_detect: \n"));
 
     tpnt->proc_dir = &proc_scsi_aha1542;
+
+#ifdef MODULE
+    bases[0] = 4;
+    bases[1] = aha1542[0];
+    bases[2] = aha1542[1];
+    bases[3] = aha1542[2];
+    bases[4] = aha1542[3];
+#endif
 
     for(indx = 0; indx < sizeof(bases)/sizeof(bases[0]); indx++)
 	    if(bases[indx] != 0 && !check_region(bases[indx], 4)) { 

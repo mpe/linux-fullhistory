@@ -51,10 +51,11 @@ static void dst_run_gc(unsigned long dummy)
 		return;
 	}
 
+
 	del_timer(&dst_gc_timer);
 	dstp = &dst_garbage_list;
 	while ((dst = *dstp) != NULL) {
-		if (atomic_read(&dst->use)) {
+		if (atomic_read(&dst->__refcnt)) {
 			dstp = &dst->next;
 			delayed++;
 			continue;
@@ -92,7 +93,7 @@ static int dst_blackhole(struct sk_buff *skb)
 	return 0;
 }
 
-void * dst_alloc(int size, struct dst_ops * ops)
+void * dst_alloc(struct dst_ops * ops)
 {
 	struct dst_entry * dst;
 
@@ -100,12 +101,11 @@ void * dst_alloc(int size, struct dst_ops * ops)
 		if (ops->gc())
 			return NULL;
 	}
-	dst = kmalloc(size, GFP_ATOMIC);
+	dst = kmem_cache_alloc(ops->kmem_cachep, SLAB_ATOMIC);
 	if (!dst)
 		return NULL;
-	memset(dst, 0, size);
+	memset(dst, 0, ops->entry_size);
 	dst->ops = ops;
-	atomic_set(&dst->refcnt, 0);
 	dst->lastuse = jiffies;
 	dst->input = dst_discard;
 	dst->output = dst_blackhole;
@@ -124,7 +124,6 @@ void __dst_free(struct dst_entry * dst)
 	if (dst->dev == NULL || !(dst->dev->flags&IFF_UP)) {
 		dst->input = dst_discard;
 		dst->output = dst_blackhole;
-		dst->dev = &loopback_dev;
 	}
 	dst->obsolete = 2;
 	dst->next = dst_garbage_list;
@@ -158,8 +157,10 @@ void dst_destroy(struct dst_entry * dst)
 
 	if (dst->ops->destroy)
 		dst->ops->destroy(dst);
+	if (dst->dev)
+		dev_put(dst->dev);
 	atomic_dec(&dst_total);
-	kfree(dst);
+	kmem_cache_free(dst->ops->kmem_cachep, dst);
 }
 
 static int dst_dev_event(struct notifier_block *this, unsigned long event, void *ptr)
@@ -175,7 +176,6 @@ static int dst_dev_event(struct notifier_block *this, unsigned long event, void 
 			if (dst->dev == dev) {
 				dst->input = dst_discard;
 				dst->output = dst_blackhole;
-				dst->dev = &loopback_dev;
 			}
 		}
 		spin_unlock_bh(&dst_lock);

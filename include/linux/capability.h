@@ -131,6 +131,7 @@ typedef __u32 kernel_cap_t;
 #define CAP_LINUX_IMMUTABLE  9
 
 /* Allows binding to TCP/UDP sockets below 1024 */
+/* Allows binding to ATM VCIs below 32 */
 
 #define CAP_NET_BIND_SERVICE 10
 
@@ -150,6 +151,7 @@ typedef __u32 kernel_cap_t;
 /* Allow clearing driver statistics */
 /* Allow multicasting */
 /* Allow read/write of device-specific registers */
+/* Allow activation of ATM control sockets */
 
 #define CAP_NET_ADMIN        12
 

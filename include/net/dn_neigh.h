@@ -7,7 +7,7 @@
  */
 struct dn_neigh {
         struct neighbour n;
-        unsigned char addr[ETH_ALEN];
+	dn_address addr;
         unsigned long flags;
 #define DN_NDFLAG_R1    0x0001 /* Router L1      */
 #define DN_NDFLAG_R2    0x0002 /* Router L2      */

@@ -5,7 +5,7 @@
  *
  *		PF_INET6 protocol dispatch tables.
  *
- * Version:	$Id: protocol.c,v 1.6 1998/05/03 14:31:09 alan Exp $
+ * Version:	$Id: protocol.c,v 1.7 1999/08/20 11:06:26 davem Exp $
  *
  * Authors:	Pedro Roque	<roque@di.fc.ul.pt>
  *
@@ -37,19 +37,7 @@ struct inet6_protocol *inet6_protos[MAX_INET_PROTOS] =
 	NULL
 };
 
-
-struct inet6_protocol *inet6_get_protocol(unsigned char prot)
-{
-	unsigned char hash;
-	struct inet6_protocol *p;
-
-	hash = prot & (MAX_INET_PROTOS - 1);
-	for (p = inet6_protos[hash] ; p != NULL; p=p->next) {
-		if (p->protocol == prot) 
-			return((struct inet6_protocol *) p);
-	}
-	return(NULL);
-}
+rwlock_t inet6_protocol_lock = RW_LOCK_UNLOCKED;
 
 void inet6_add_protocol(struct inet6_protocol *prot)
 {
@@ -57,6 +45,7 @@ void inet6_add_protocol(struct inet6_protocol *prot)
 	struct inet6_protocol *p2;
 
 	hash = prot->protocol & (MAX_INET_PROTOS - 1);
+	write_lock_bh(&inet6_protocol_lock);
 	prot->next = inet6_protos[hash];
 	inet6_protos[hash] = prot;
 	prot->copy = 0;
@@ -73,6 +62,7 @@ void inet6_add_protocol(struct inet6_protocol *prot)
 		}
 		p2 = (struct inet6_protocol *) p2->next;
 	}
+	write_unlock_bh(&inet6_protocol_lock);
 }
 
 /*
@@ -86,8 +76,10 @@ int inet6_del_protocol(struct inet6_protocol *prot)
 	unsigned char hash;
 
 	hash = prot->protocol & (MAX_INET_PROTOS - 1);
+	write_lock_bh(&inet6_protocol_lock);
 	if (prot == inet6_protos[hash]) {
 		inet6_protos[hash] = (struct inet6_protocol *) inet6_protos[hash]->next;
+		write_unlock_bh(&inet6_protocol_lock);
 		return(0);
 	}
 
@@ -106,6 +98,7 @@ int inet6_del_protocol(struct inet6_protocol *prot)
 			if (p->copy == 0 && lp != NULL) 
 				lp->copy = 0;
 			p->next = prot->next;
+			write_unlock_bh(&inet6_protocol_lock);
 			return(0);
 		}
 		if (p->next != NULL && p->next->protocol == prot->protocol) 
@@ -113,5 +106,6 @@ int inet6_del_protocol(struct inet6_protocol *prot)
 
 		p = (struct inet6_protocol *) p->next;
 	}
+	write_unlock_bh(&inet6_protocol_lock);
 	return(-1);
 }

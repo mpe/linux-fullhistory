@@ -19,6 +19,7 @@
  *    Steve Whitehouse:  More checks on skb->len to catch bogus packets
  *                       Fixed various race conditions and possible nasties.
  *    Steve Whitehouse:  Now handles returned conninit frames.
+ *     David S. Miller:  New socket locking
  */
 
 /******************************************************************************
@@ -60,6 +61,7 @@
 #include <linux/stat.h>
 #include <linux/init.h>
 #include <linux/poll.h>
+#include <linux/netfilter_decnet.h>
 #include <net/neighbour.h>
 #include <net/dst.h>
 #include <net/dn_nsp.h>
@@ -149,9 +151,8 @@ static int dn_process_ack(struct sock *sk, struct sk_buff *skb, int oth)
  * to find its sockets, since it searches on object name/number
  * rather than port numbers
  */
-static int dn_conninit_rx(struct sk_buff *skb)
+static struct sock *dn_find_listener(struct sk_buff *skb)
 {
-	struct sock *sk;
 	struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
 	struct nsp_conn_init_msg *msg = (struct nsp_conn_init_msg *)skb->data;
 	struct sockaddr_dn addr;
@@ -169,29 +170,29 @@ static int dn_conninit_rx(struct sk_buff *skb)
 
 	/* printk(KERN_DEBUG "username2sockaddr 1\n"); */
 	if (dn_username2sockaddr(skb->data, skb->len, &addr, &type) < 0)
-		goto free_out;
+		goto err_out;
 
 	if (type > 1)
-		goto free_out;
+		goto err_out;
 
 	/* printk(KERN_DEBUG "looking for listener...\n"); */
-	if ((sk = dn_sklist_find_listener(&addr)) == NULL)
-		return 1;
+	return dn_sklist_find_listener(&addr);
+err_out:
+	return NULL;
+}
 
+static void dn_nsp_conn_init(struct sock *sk, struct sk_buff *skb)
+{
 	/* printk(KERN_DEBUG "checking backlog...\n"); */
-	if (sk->ack_backlog >= sk->max_ack_backlog)
-		goto free_out;
+	if (sk->ack_backlog >= sk->max_ack_backlog) {
+		kfree_skb(skb);
+		return;
+	}
 
 	/* printk(KERN_DEBUG "waking up socket...\n"); */
 	sk->ack_backlog++;
 	skb_queue_tail(&sk->receive_queue, skb);
 	sk->state_change(sk);
-
-	return 0;
-
-free_out:
-	kfree_skb(skb);
-	return 0;
 }
 
 static void dn_nsp_conn_conf(struct sock *sk, struct sk_buff *skb)
@@ -393,13 +394,17 @@ out:
 }
 
 /*
- * Copy of sock_queue_rcv_skb (from net/core/datagram.c) to
+ * Copy of sock_queue_rcv_skb (from sock.h) to
  * queue other data segments. Also we send SIGURG here instead
  * of the normal SIGIO, 'cos its out of band data.
  */
 static __inline__ int dn_queue_other_skb(struct sock *sk, struct sk_buff *skb)
 {
+#ifdef CONFIG_FILTER
+	struct sk_filter *filter;
+#endif
 	struct dn_scp *scp = &sk->protinfo.dn;
+	unsigned long flags;
 
         /* Cast skb->rcvbuf to unsigned... It's pointless, but reduces
            number of warnings when compiling with -W --ANK
@@ -409,22 +414,28 @@ static __inline__ int dn_queue_other_skb(struct sock *sk, struct sk_buff *skb)
                 return -ENOMEM;
 
 #ifdef CONFIG_FILTER
-        if (sk->filter)
-        {
-                if (sk_filter(skb, sk->filter))
-                        return -EPERM;  /* Toss packet */
+        if (sk->filter) {
+		int err = 0;
+		bh_lock_sock(sk);
+                if ((filter = sk->filter) != NULL && sk_filter(skb, sk->filter))
+                        err = -EPERM;  /* Toss packet */
+		bh_unlock_sock(sk);
+		if (err)
+			return err;
         }
 #endif /* CONFIG_FILTER */
 
         skb_set_owner_r(skb, sk);
         skb_queue_tail(&scp->other_receive_queue, skb);
 
+	read_lock_irqsave(&sk->callback_lock, flags);
         if (!sk->dead) {
 		struct socket *sock = sk->socket;
 		wake_up_interruptible(sk->sleep);
 		if (!(sock->flags & SO_WAITDATA) && sock->fasync_list)
 			kill_fasync(sock->fasync_list, SIGURG);
 	}
+	read_unlock_irqrestore(&sk->callback_lock, flags);
 
         return 0;
 }
@@ -495,28 +506,21 @@ out:
  * deals with it. It puts the socket into the NO_COMMUNICATION
  * state.
  */
-static void dn_returned_conninit(struct sk_buff *skb)
+static void dn_returned_conn_init(struct sock *sk, struct sk_buff *skb)
 {
-	struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
-	struct sock *sk;
+	struct dn_scp *scp = &sk->protinfo.dn;
 
-	cb->dst_port = cb->src_port;
-	cb->src_port = 0;
-
-	if ((sk = dn_find_by_skb(skb)) != NULL) {
-		struct dn_scp *scp = &sk->protinfo.dn;
-		if (scp->state == DN_CI) {
-			scp->state = DN_NC;
-			sk->state = TCP_CLOSE;
-			if (!sk->dead)
-				sk->state_change(sk);
-		}
+	if (scp->state == DN_CI) {
+		scp->state = DN_NC;
+		sk->state = TCP_CLOSE;
+		if (!sk->dead)
+			sk->state_change(sk);
 	}
 
 	kfree_skb(skb);
 }
 
-int dn_nsp_rx(struct sk_buff *skb)
+static int dn_nsp_rx_packet(struct sk_buff *skb)
 {
 	struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
 	struct sock *sk = NULL;
@@ -525,7 +529,7 @@ int dn_nsp_rx(struct sk_buff *skb)
 	skb->h.raw    = skb->data;
 	cb->nsp_flags = *ptr++;
 
-	if (decnet_debug_level & 1)
+	if (decnet_debug_level & 2)
 		printk(KERN_DEBUG "dn_nsp_rx: Message type 0x%02x\n", (int)cb->nsp_flags);
 
 #ifdef CONFIG_DECNET_RAW
@@ -540,17 +544,17 @@ int dn_nsp_rx(struct sk_buff *skb)
 
 	/*
 	 * Returned packets...
+	 * Swap src & dst and look up in the normal way.
 	 */
 	if (cb->rt_flags & DN_RT_F_RTS) {
-		if ((cb->nsp_flags & 0x0c) == 0x08) {
-			switch(cb->nsp_flags & 0x70) {
-				case 0x10:
-				case 0x60:
-					dn_returned_conninit(skb);
-					goto out;
-			}
-		}
-		goto free_out;
+		unsigned short tmp = cb->dst_port;
+		cb->dst_port = cb->src_port;
+		cb->src_port = tmp;
+		tmp = cb->dst;
+		cb->dst = cb->src;
+		cb->src = tmp;
+		sk = dn_find_by_skb(skb);
+		goto got_it;
 	}
 
 	/*
@@ -564,7 +568,8 @@ int dn_nsp_rx(struct sk_buff *skb)
 				goto free_out;
 			case 0x10:
 			case 0x60:
-				return dn_conninit_rx(skb);
+				sk = dn_find_listener(skb);
+				goto got_it;
 		}
 	}
 
@@ -590,7 +595,9 @@ int dn_nsp_rx(struct sk_buff *skb)
 	/*
 	 * Find the socket to which this skb is destined.
 	 */
-	if ((sk = dn_find_by_skb(skb)) != NULL) {
+	sk = dn_find_by_skb(skb);
+got_it:
+	if (sk != NULL) {
 		struct dn_scp *scp = &sk->protinfo.dn;
 		int ret;
 		/* printk(KERN_DEBUG "dn_nsp_rx: Found a socket\n"); */
@@ -605,6 +612,7 @@ int dn_nsp_rx(struct sk_buff *skb)
 		else
 			sk_add_backlog(sk, skb);
 		bh_unlock_sock(sk);
+		sock_put(sk);
 
 		return ret;
 	}
@@ -612,8 +620,12 @@ int dn_nsp_rx(struct sk_buff *skb)
 
 free_out:
 	kfree_skb(skb);
-out:
 	return 0;
+}
+
+int dn_nsp_rx(struct sk_buff *skb)
+{
+	return NF_HOOK(PF_DECnet, NF_DN_LOCAL_IN, skb, skb->rx_dev, NULL, dn_nsp_rx_packet);
 }
 
 /*
@@ -626,12 +638,21 @@ int dn_nsp_backlog_rcv(struct sock *sk, struct sk_buff *skb)
 	struct dn_scp *scp = &sk->protinfo.dn;
 	struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
 
+	if (cb->rt_flags & DN_RT_F_RTS) {
+		dn_returned_conn_init(sk, skb);
+		return 0;
+	}
+
 	/*
 	 * Control packet.
 	 */
 	if ((cb->nsp_flags & 0x0c) == 0x08) {
 		/* printk(KERN_DEBUG "control type\n"); */
 		switch(cb->nsp_flags & 0x70) {
+			case 0x10:
+			case 0x60:
+				dn_nsp_conn_init(sk, skb);
+				break;
 			case 0x20:
 				dn_nsp_conn_conf(sk, skb);
 				break;

@@ -62,9 +62,6 @@ Return value:
 
 /* prototypes of local, static functions */
 static int AddSocketToAcceptQueue(struct socket *sock,const int Port);
-static void purge_delayed_release(int CPUNR, int All);
-
-static struct khttpd_delayed_release *delayed_release[CONFIG_KHTTPD_NUMCPU];
 
 
 int Userspace(const int CPUNR)
@@ -74,7 +71,6 @@ int Userspace(const int CPUNR)
 	EnterFunction("Userspace");
 
 	
-	purge_delayed_release(CPUNR,0);
 
 	
 	CurrentRequest = threadinfo[CPUNR].UserspaceQueue;
@@ -87,42 +83,21 @@ int Userspace(const int CPUNR)
 		   this is forgotten. */
 		if (CurrentRequest->sock!=NULL)
 		{
-			lock_kernel();  /* Just to be sure (2.3.11) -- Check this for 2.3.13 */
 			if ((CurrentRequest->sock!=NULL)&&(CurrentRequest->sock->sk!=NULL))
 			{
-				/* Some TCP/IP functions call waitqueue-operations without
-				   holding the sock-lock. I am not that brave.
-				*/
-				lock_sock(CurrentRequest->sock->sk);
 				remove_wait_queue(CurrentRequest->sock->sk->sleep,&(CurrentRequest->sleep));
-				release_sock(CurrentRequest->sock->sk);
 			}
-			unlock_kernel(); 
 		} 
 		
 
 		if  (AddSocketToAcceptQueue(CurrentRequest->sock,sysctl_khttpd_clientport)>=0)
 		{
-			struct khttpd_delayed_release *delayed;
 			
 			(*Prev) = CurrentRequest->Next;
 			Next = CurrentRequest->Next;
 			
 			
-			delayed = kmalloc(sizeof(struct khttpd_delayed_release),GFP_KERNEL);
-			if (delayed==NULL)
-			{
-				sock_release(CurrentRequest->sock);
-			} else
-			{
-				/* Schedule socket-deletion 120 seconds from now */
-				delayed->Next = delayed_release[CPUNR];
-				delayed->timeout = jiffies+120*HZ;
-				delayed->sock = CurrentRequest->sock;
-				delayed_release[CPUNR]=delayed;
-			}
-				
-		
+			sock_release(CurrentRequest->sock);
 			CurrentRequest->sock = NULL;	 /* We no longer own it */
 			
 			CleanUpRequest(CurrentRequest); 
@@ -168,25 +143,26 @@ void StopUserspace(const int CPUNR)
 		CurrentRequest=Next;		
 	}
 	threadinfo[CPUNR].UserspaceQueue = NULL;
-	purge_delayed_release(CPUNR,1);
 	
 	LeaveFunction("StopUserspace");
 }
-
-extern struct sock *tcp_v4_lookup_listener(u32 daddr, unsigned short hnum, int dif);
 
 
 /* 
    "FindUserspace" returns the struct sock of the userspace-daemon, so that we can
    "drop" our request in the accept-queue 
 */
+
 static struct sock *FindUserspace(const unsigned short Port)
 {
+	struct sock *sk;
+
 	EnterFunction("FindUserspace");
-	
-	return tcp_v4_lookup_listener(INADDR_ANY,Port,0);
-	
-	return NULL;
+
+	local_bh_disable();
+	sk = tcp_v4_lookup_listener(INADDR_ANY,Port,0);
+	local_bh_enable();
+	return sk;
 }
 
 static void dummy_destructor(struct open_request *req)
@@ -195,12 +171,12 @@ static void dummy_destructor(struct open_request *req)
 
 static struct or_calltable Dummy = 
 {
+	0,
+ 	NULL,
  	NULL,
  	&dummy_destructor,
  	NULL
 };
-
-#define BACKLOG(sk) ((sk)->tp_pinfo.af_tcp.syn_backlog) /* lvalue! */
 
 static int AddSocketToAcceptQueue(struct socket *sock,const int Port)
 {
@@ -219,42 +195,42 @@ static int AddSocketToAcceptQueue(struct socket *sock,const int Port)
 	}
 	
 	lock_sock(sk);
-	
-	if (BACKLOG(sk)>128) /* To many pending requests */
+
+	if (sk->state != TCP_LISTEN || 
+	    sk->ack_backlog > sk->max_ack_backlog) /* To many pending requests */
 	{
+		sock_put(sk);
 		return -1;
 	}
+
 	req = tcp_openreq_alloc();
 	
 	if (req==NULL)
 	{	
-		release_sock(sk);
-		return -1;	
+		sock_put(sk);
+		return -1;
 	}
 	
 	req->sk		= sock->sk;
 	sock->sk = NULL;
 	sock->state = SS_UNCONNECTED;
-	
-	
-	if (req->sk==NULL)
-		(void)printk(KERN_CRIT "kHTTPd: Woops, the socket-buffer is NULL \n"); 
-	  
+
 	req->class	= &Dummy;
+	write_lock_irq(&req->sk->callback_lock);
 	req->sk->socket = NULL;
-	req->expires    = jiffies + TCP_TIMEOUT_INIT;
-	
+	req->sk->sleep  = NULL;
+	write_unlock_irq(&req->sk->callback_lock);
+
 	tp =&(sk->tp_pinfo.af_tcp);
 	sk->ack_backlog++;
 
-	tcp_inc_slow_timer(TCP_SLT_SYNACK);
 	tcp_synq_queue(tp,req);	
 
-	if (!sk->dead)
-		wake_up_interruptible(sk->sleep);
-		
+	sk->data_ready(sk, 0);
+
 	release_sock(sk);
-	
+	sock_put(sk);
+
 	LeaveFunction("AddSocketToAcceptQueue");
 		
 	return +1;	
@@ -265,44 +241,6 @@ static int AddSocketToAcceptQueue(struct socket *sock,const int Port)
 
 void InitUserspace(const int CPUNR)
 {
-	int I;
-	
-	I=0;
-	while (I<CPUNR)
-		delayed_release[I++]=NULL;
 }
 
 
-/*
-
-This function checks in the delayed_release queue for candidate-sockets
-to be released. If All != 0, all sockets are released. This is required for
-unloading.
-
-*/
-static void purge_delayed_release(const int CPUNR,int All)
-{
-	struct khttpd_delayed_release *Current,*Next,**Prev;
-	
-	Prev = &(delayed_release[CPUNR]);
-	
-	Current = delayed_release[CPUNR];
-	while (Current!=NULL)
-	{
-		if ((Current->timeout<=jiffies)||(All))
-		{
-			Next = Current->Next;
-			
-			*Prev = Next;
-			
-			sock_release(Current->sock);
-			kfree(Current);
-			
-			Current = Next;
-			continue;
-		}
-		
-		Prev = &Current->Next;
-		Current=Current->Next;
-	}
-}

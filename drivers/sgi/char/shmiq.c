@@ -241,7 +241,7 @@ bad_file:
 	return -EBADF;
 }
 
-extern int sys_munmap(unsigned long addr, size_t len);
+extern long sys_munmap(unsigned long addr, size_t len);
 
 static int
 qcntl_ioctl (struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg, int minor)

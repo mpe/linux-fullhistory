@@ -126,10 +126,8 @@ done:
 	len-=(offset-begin);
 	if(len>length)
 		len=length;
-	if (len < 0) {
+	if (len < 0)
 		len = 0;
-		printk(KERN_CRIT "Yep, guys... our template for proc_*_read is crappy :-)\n");
-	}
 	if (offset == 0) {
 		cli();
 		net_prof_total.active = 0;
@@ -282,7 +280,6 @@ __initfunc(int net_profile_init(void))
 		return -1;
 	}
 #endif
-	start_bh_atomic();
 #ifdef __alpha__
 	alpha_tick(0);
 #endif
@@ -298,7 +295,6 @@ __initfunc(int net_profile_init(void))
 	}
 	net_prof_total.hits = 0;
 	net_profile_stamp(&net_prof_total.entered);
-	end_bh_atomic();
 	return 0;
 }
 

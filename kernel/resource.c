@@ -2,6 +2,7 @@
  *	linux/kernel/resource.c
  *
  * Copyright (C) 1999	Linus Torvalds
+ * Copyright (C) 1999	Martin Mares <mj@ucw.cz>
  *
  * Arbitrary resource management.
  */
@@ -121,6 +122,59 @@ int release_resource(struct resource *old)
 }
 
 /*
+ * Find empty slot in the resource tree given range and alignment.
+ */
+static int find_resource(struct resource *root, struct resource *new,
+			 unsigned long size,
+			 unsigned long min, unsigned long max,
+			 unsigned long align)
+{
+	struct resource *this = root->child;
+	unsigned long start, end;
+
+	start = root->start;
+	for(;;) {
+		if (this)
+			end = this->start;
+		else
+			end = root->end;
+		if (start < min)
+			start = min;
+		if (end > max)
+			end = max;
+		start = (start + align - 1) & ~(align - 1);
+		if (start < end && end - start + 1 >= size) {
+			new->start = start;
+			new->end = start + size - 1;
+			return 0;
+		}
+		if (!this)
+			break;
+		start = this->end + 1;
+		this = this->sibling;
+	}
+	return -EBUSY;
+}
+
+/*
+ * Allocate empty slot in the resource tree given range and alignment.
+ */
+int allocate_resource(struct resource *root, struct resource *new,
+		      unsigned long size,
+		      unsigned long min, unsigned long max,
+		      unsigned long align)
+{
+	int err;
+
+	write_lock(&resource_lock);
+	err = find_resource(root, new, size, min, max, align);
+	if (err >= 0 && __request_resource(root, new))
+		err = -EBUSY;
+	write_unlock(&resource_lock);
+	return err;
+}
+
+/*
  * This is compatibility stuff for IO resources.
  *
  * Note how this, unlike the above, knows about
@@ -167,8 +221,6 @@ struct resource * __request_region(struct resource *parent, unsigned long start,
 	return res;
 }
 
-/*
- */
 int __check_region(struct resource *parent, unsigned long start, unsigned long n)
 {
 	struct resource * res;
@@ -232,7 +284,7 @@ static int __init reserve_setup(char *str)
 			res->start = io_start;
 			res->end = io_start + io_num - 1;
 			res->child = NULL;
-			if (request_resource(&ioport_resource, res) == 0)
+			if (request_resource(res->start >= 0x10000 ? &iomem_resource : &ioport_resource, res) == 0)
 				reserved = x+1;
 		}
 	}

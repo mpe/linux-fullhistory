@@ -65,7 +65,7 @@ static void coda_ccremove(struct coda_cache *el)
         if ( ! list_empty(&el->cc_cclist) )
 	        list_del(&el->cc_cclist);
 	else
-		printk("coda_cnremove: loose cc entry!");
+		printk("coda_ccremove: loose cc entry!");
 }
 
 /* remove a cache entry from the inode's list */
@@ -139,7 +139,7 @@ void coda_cache_enter(struct inode *inode, int mask)
 /* remove all cached acl matches from an inode */
 void coda_cache_clear_inode(struct inode *inode)
 {
-	struct list_head *lh, *le;
+	struct list_head *le;
 	struct coda_inode_info *cii;
 	struct coda_cache *cc;
 	ENTRY;
@@ -150,9 +150,10 @@ void coda_cache_clear_inode(struct inode *inode)
 	}
 	cii = ITOC(inode);
 	
-	lh = le = &cii->c_cnhead;
-	while ( (le = le->next ) != lh ) {
+	le = cii->c_cnhead.next;
+	while ( le != &cii->c_cnhead ) {
 		cc = list_entry(le, struct coda_cache, cc_cnlist);
+		le = le->next;
 		coda_cnremove(cc);
 		coda_ccremove(cc);
 		CODA_FREE(cc, sizeof(*cc));
@@ -162,7 +163,7 @@ void coda_cache_clear_inode(struct inode *inode)
 /* remove all acl caches */
 void coda_cache_clear_all(struct super_block *sb)
 {
-	struct list_head *lh, *le;
+	struct list_head *le;
 	struct coda_cache *cc;
 	struct coda_sb_info *sbi = coda_sbp(sb);
 
@@ -174,9 +175,10 @@ void coda_cache_clear_all(struct super_block *sb)
 	if ( list_empty(&sbi->sbi_cchead) )
 		return;
 
-	lh = le = &sbi->sbi_cchead;
-	while ( (le = le->next ) != lh ) {
+	le = sbi->sbi_cchead.next;
+	while ( le != &sbi->sbi_cchead ) {
 		cc = list_entry(le, struct coda_cache, cc_cclist);
+		le = le->next;
 		coda_cnremove(cc);
 		coda_ccremove(cc);
 		CODA_FREE(cc, sizeof(*cc));
@@ -186,7 +188,7 @@ void coda_cache_clear_all(struct super_block *sb)
 /* remove all acl caches for a principal */
 void coda_cache_clear_cred(struct super_block *sb, struct coda_cred *cred)
 {
-	struct list_head *lh, *le;
+	struct list_head *le;
 	struct coda_cache *cc;
 	struct coda_sb_info *sbi = coda_sbp(sb);
 
@@ -198,9 +200,10 @@ void coda_cache_clear_cred(struct super_block *sb, struct coda_cred *cred)
 	if (list_empty(&sbi->sbi_cchead))
 		return;
 
-	lh = le = &sbi->sbi_cchead;
-	while ( (le = le->next ) != lh ) {
+	le = sbi->sbi_cchead.next;
+	while ( le != &sbi->sbi_cchead ) {
 		cc = list_entry(le, struct coda_cache, cc_cclist);
+		le = le->next;
 		if ( coda_cred_eq(&cc->cc_cred, cred)) {
 			coda_cnremove(cc);
 			coda_ccremove(cc);

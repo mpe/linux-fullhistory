@@ -46,6 +46,7 @@ struct dn_scp                                   /* Session Control Port */
 #define DN_NOCHANGE     0
 	unsigned char		accept_mode;
 	unsigned short          mss;
+	unsigned long		seg_size; /* Running total of current segment */
 
 	struct optdata_dn     conndata_in;
 	struct optdata_dn     conndata_out;
@@ -181,7 +182,6 @@ static __inline__ void dn_dn2eth(unsigned char *ethaddr, dn_address addr)
 
 extern struct sock *dn_sklist_find_listener(struct sockaddr_dn *addr);
 extern struct sock *dn_find_by_skb(struct sk_buff *skb);
-extern unsigned short dn_alloc_port(void);
 #define DN_ASCBUF_LEN 7
 extern char *dn_addr2asc(dn_address, char *);
 extern void dn_destroy_sock(struct sock *sk);

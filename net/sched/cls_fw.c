@@ -33,6 +33,7 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/notifier.h>
+#include <linux/netfilter.h>
 #include <net/ip.h>
 #include <net/route.h>
 #include <linux/skbuff.h>
@@ -64,8 +65,8 @@ static int fw_classify(struct sk_buff *skb, struct tcf_proto *tp,
 {
 	struct fw_head *head = (struct fw_head*)tp->root;
 	struct fw_filter *f;
-#ifdef CONFIG_IP_FIREWALL
-	u32 id = skb->fwmark;
+#ifdef CONFIG_NETFILTER
+	u32 id = (skb->nfreason == NF_REASON_FOR_CLS_FW ? skb->nfmark : 0);
 #else
 	u32 id = 0;
 #endif

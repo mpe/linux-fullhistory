@@ -346,12 +346,18 @@ void irlan_eth_send_gratuitous_arp(struct net_device *dev)
 	 * subnet.  
 	 */
 	DEBUG(4, "IrLAN: Sending gratuitous ARP\n");
-	in_dev = dev->ip_ptr;
+	in_dev = in_dev_get(dev);
+	if (in_dev == NULL)
+		return;
+	read_lock(&in_dev->lock);
+	if (in_dev->ifa_list)
 	arp_send(ARPOP_REQUEST, ETH_P_ARP, 
 		 in_dev->ifa_list->ifa_address,
 		 dev, 
 		 in_dev->ifa_list->ifa_address,
 		 NULL, dev->dev_addr, NULL);
+	read_unlock(&in_dev->lock);
+	in_dev_put(in_dev);
 }
 
 /*

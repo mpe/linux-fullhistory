@@ -116,7 +116,8 @@ static void sb_intr (sb_devc *devc)
 
 #if defined(CONFIG_MIDI)&& defined(CONFIG_UART401)
 		if (src & 4)						/* MPU401 interrupt */
-			uart401intr(devc->irq, devc->midi_irq_cookie, NULL);
+			if(devc->midi_irq_cookie)
+				uart401intr(devc->irq, devc->midi_irq_cookie, NULL);
 #endif
 
 		if (!(src & 3))
@@ -897,7 +898,7 @@ void sb_dsp_unload(struct address_info *hw_config, int sbmpu)
 		}
 		if (!(devc->caps & SB_NO_AUDIO && devc->caps & SB_NO_MIDI))
 		{
-			if (devc->irq > 0);
+			if (devc->irq > 0)
 				free_irq(devc->irq, devc);
 
 			sound_unload_mixerdev(devc->my_mixerdev);

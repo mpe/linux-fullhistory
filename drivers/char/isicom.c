@@ -1808,6 +1808,7 @@ static void unregister_drivers(void)
 static int register_isr(void)
 {
 	int count, done=0, card;
+	int flag;
 	unsigned char request;
 	for (count=0; count < BOARD_COUNT; count++ ) {
 		if (isi_card[count].base) {
@@ -1829,8 +1830,12 @@ static int register_isr(void)
 				isi_card[count].base = 0;
 				break;
 			}
+			flag=0;
+			if(isi_card[count].isa == NO)
+				flag |= SA_SHIRQ;
+				
 			if (request == YES) { 
-				if (request_irq(isi_card[count].irq, isicom_interrupt, SA_INTERRUPT, ISICOM_NAME, NULL)) {
+				if (request_irq(isi_card[count].irq, isicom_interrupt, SA_INTERRUPT|flag, ISICOM_NAME, NULL)) {
 					printk(KERN_WARNING "ISICOM: Could not install handler at Irq %d. Card%d will be disabled.\n",
 						isi_card[count].irq, count+1);
 					release_region(isi_card[count].base,16);

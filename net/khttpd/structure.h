@@ -64,21 +64,5 @@ struct khttpd_threadinfo
 };
 
 
-/*
-
-struct khttpd_delayed_release is used to build a list of all struct sockets
-that were passed to userspace. It seems to be required that they are not destroyed
-immediatly, so they have a timeout-counter.
-
-*/
-struct khttpd_delayed_release;
-
-struct khttpd_delayed_release
-{
-	struct socket *sock;
-	unsigned long timeout;
-	
-	struct khttpd_delayed_release *Next;
-};
 
 #endif

@@ -74,7 +74,7 @@
  *  Time out in seconds for disks and Magneto-opticals (which are slower).
  */
 
-#define SD_TIMEOUT (15 * HZ)
+#define SD_TIMEOUT (30 * HZ)
 #define SD_MOD_TIMEOUT (75 * HZ)
 
 #define CLUSTERABLE_DEVICE(SC) (SC->host->use_clustering && \

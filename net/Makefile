@@ -10,7 +10,7 @@
 MOD_SUB_DIRS := ipv4
 ALL_SUB_DIRS := 802 ax25 bridge core ethernet ipv4 ipv6 ipx unix appletalk \
 		netrom rose lapb x25 wanrouter netlink sched packet sunrpc \
-		econet irda decnet khttpd
+		econet irda decnet atm khttpd
 SUB_DIRS     := core ethernet sched
 MOD_LIST_NAME := NET_MISC_MODULES
 
@@ -151,6 +151,17 @@ else
   ifeq ($(CONFIG_SUNRPC),m)
   MOD_SUB_DIRS += sunrpc
   endif
+endif
+
+ifeq ($(CONFIG_ATM),y)
+SUB_DIRS += atm
+ifeq ($(CONFIG_ATM_LANE),m)
+  MOD_ATM = atm
+endif
+ifeq ($(CONFIG_ATM_MPOA),m)
+  MOD_ATM = atm
+endif
+MOD_SUB_DIRS += $(MOD_ATM)
 endif
 
 ifeq ($(CONFIG_DECNET),y)

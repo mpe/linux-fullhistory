@@ -5161,7 +5161,7 @@ static int sq_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		if (nbufs < 2 || nbufs > numBufs)
 			nbufs = numBufs;
 		size &= 0xffff;
-		if (size >= 8 && size <= 30) {
+		if (size >= 8 && size <= 29) {
 			size = 1 << size;
 			size *= sound.hard.size * (sound.hard.stereo + 1);
 			size /= sound.soft.size * (sound.soft.stereo + 1);

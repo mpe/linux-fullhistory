@@ -5,7 +5,7 @@
  *
  *		IPv4 FIB: lookup engine and maintenance routines.
  *
- * Version:	$Id: fib_hash.c,v 1.10 1999/06/09 10:10:45 davem Exp $
+ * Version:	$Id: fib_hash.c,v 1.11 1999/08/20 11:05:01 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -47,6 +47,8 @@
 /*
    printk(KERN_DEBUG a)
  */
+
+static kmem_cache_t * fn_hash_kmem;
 
 /*
    These bizarre types are just to force strict type checking.
@@ -216,7 +218,7 @@ static void fn_rehash_zone(struct fn_zone *fz)
 static void fn_free_node(struct fib_node * f)
 {
 	fib_release_info(FIB_INFO(f));
-	kfree_s(f, sizeof(struct fib_node));
+	kmem_cache_free(fn_hash_kmem, f);
 }
 
 
@@ -298,7 +300,6 @@ fn_hash_lookup(struct fib_table *tb, const struct rt_key *key, struct fib_result
 				res->type = f->fn_type;
 				res->scope = f->fn_scope;
 				res->prefixlen = fz->fz_order;
-				res->prefix = &fz_prefix(f->fn_key, fz);
 				goto out;
 			}
 			if (err < 0)
@@ -372,7 +373,10 @@ fn_hash_select_default(struct fib_table *tb, const struct rt_key *key, struct fi
 			if (next_fi != res->fi)
 				break;
 		} else if (!fib_detect_death(fi, order, &last_resort, &last_idx)) {
+			if (res->fi)
+				fib_info_put(res->fi);
 			res->fi = fi;
+			atomic_inc(&fi->fib_clntref);
 			fn_hash_last_dflt = order;
 			goto out;
 		}
@@ -386,13 +390,21 @@ fn_hash_select_default(struct fib_table *tb, const struct rt_key *key, struct fi
 	}
 
 	if (!fib_detect_death(fi, order, &last_resort, &last_idx)) {
+		if (res->fi)
+			fib_info_put(res->fi);
 		res->fi = fi;
+		atomic_inc(&fi->fib_clntref);
 		fn_hash_last_dflt = order;
 		goto out;
 	}
 
-	if (last_idx >= 0)
+	if (last_idx >= 0) {
+		if (res->fi)
+			fib_info_put(res->fi);
 		res->fi = last_resort;
+		if (last_resort)
+			atomic_inc(&last_resort->fib_clntref);
+	}
 	fn_hash_last_dflt = last_idx;
 out:
 	read_unlock(&fib_hash_lock);
@@ -554,7 +566,7 @@ create:
 
 replace:
 	err = -ENOBUFS;
-	new_f = (struct fib_node *) kmalloc(sizeof(struct fib_node), GFP_KERNEL);
+	new_f = kmem_cache_alloc(fn_hash_kmem, SLAB_KERNEL);
 	if (new_f == NULL)
 		goto out;
 
@@ -891,9 +903,17 @@ __initfunc(struct fib_table * fib_hash_init(int id))
 #endif
 {
 	struct fib_table *tb;
+
+	if (fn_hash_kmem == NULL)
+		fn_hash_kmem = kmem_cache_create("ip_fib_hash",
+						 sizeof(struct fib_node),
+						 0, SLAB_HWCACHE_ALIGN,
+						 NULL, NULL);
+
 	tb = kmalloc(sizeof(struct fib_table) + sizeof(struct fn_hash), GFP_KERNEL);
 	if (tb == NULL)
 		return NULL;
+
 	tb->tb_id = id;
 	tb->tb_lookup = fn_hash_lookup;
 	tb->tb_insert = fn_hash_insert;

@@ -170,6 +170,9 @@ if [ "$CONFIG_NET" = "y" ]; then
 #		bool 'FDDI driver support' CONFIG_FDDI
 #		if [ "$CONFIG_FDDI" = "y" ]; then
 #		fi
+		if [ "$CONFIG_ATM" = "y" ]; then
+		  source drivers/atm/Config.in
+		fi
 	fi
 	endmenu
 fi

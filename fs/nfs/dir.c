@@ -601,6 +601,8 @@ static int nfs_lookup_revalidate(struct dentry * dentry, int flags)
 
 	/* Filehandle matches? */
 	if (memcmp(dentry->d_fsdata, &fhandle, sizeof(struct nfs_fh))) {
+		if (!list_empty(&dentry->d_subdirs))
+			shrink_dcache_parent(dentry);
 		if (dentry->d_count < 2)
 			goto out_bad;
 	}

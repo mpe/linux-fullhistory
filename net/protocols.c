@@ -87,6 +87,10 @@ extern void packet_proto_init(struct net_proto *pro);
 extern void rif_init(struct net_proto *);
 #endif
 
+#ifdef CONFIG_ATM
+#include <linux/atm.h>
+#endif
+
 #ifdef NEED_LLC
 #define NEED_802
 #include <net/llccall.h>
@@ -121,6 +125,11 @@ struct net_proto protocols[] = {
 #ifdef CONFIG_TR
   { "RIF",	rif_init },				/* RIF for Token ring		*/
 #endif  
+
+#ifdef CONFIG_ATM
+  { "ATMPVC",	atmpvc_proto_init },			/* ATM PVCs */
+  { "ATMSVC",	atmsvc_proto_init },			/* ATM SVCs */
+#endif
 
 #ifdef NEED_LLC
   { "802.2LLC", llc_init },				/* 802.2 LLC */

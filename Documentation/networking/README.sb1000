@@ -1,0 +1,133 @@
+This is the new release of a module network device driver for General
+Instruments (also known as NextLevel) SB1000 cable modem board (also
+called internal SURFboard).
+I have tested and I am running this module on kernel 2.0.33.
+Steven N. Hirsch <shirsch@adelphia.net> gave me a diff patch
+(sb1000-1.1.2_127.patch to be applied with 'patch -p') that allows
+you to compile and run the driver with kernel versions 2.1.x.
+Thanks very much Steve!
+
+Here you'll the following files:
+
+- README
+- Makefile
+- sb1000.c      the actual device driver
+- cmconfig.c    an ifconfig-like program to correctly set the SB1000
+- cmping.c      a ping-like program to test your connection
+- ftptest.c     a small program to test your connection speed with FTP
+                (requires ftplib version >= 3.0)
+
+The directory ppp/ contains the files I am using to connect to MediaOne
+here in Jacksonville, to show how you can use the driver and the cmconfig
+program.
+
+Clemmitt Sigler wrote a very good and useful web page and installation
+script (for Adelphia PowerLink users but easy to port to other ISPs)
+about this SB1000 driver for Linux.
+You can find it here:
+     http://home.adelphia.net/~siglercm/sb1000.html
+Thanks very much Clemmitt!
+
+To install and run it:
+- cd sb1000-1.1.2
+- make
+- make install
+- configure the SB1000 card using the isapnp tools setting the correct
+  I/O's and IRQ. You can find more info about the isapnp tools at:
+     http://www.roestock.demon.co.uk/isapnptools/
+  (once you're happy with it, you may want to set the configuration
+   at boot time in one of the /etc/init.d/ scripts)
+  IMPORTANT NOTICE: after configuring isapnp, please look in the file
+  /etc/isapnp.conf for the line beginning with:
+     (READPORT
+  if it says: '(READPORT 0x0203)' (which should be the default), then
+  go to the next step. If instead it says something like:
+  '(READPORT 0x020b)' or '(READPORT 0x<another number>)', then please
+  follow the instructions at the end of this README file before going
+  to the next step.
+- install the PPP configuration files in the /etc/ppp directory; you
+  definitely have to change the file ppp@gi-on (the start up file),
+  setting the correct login name, the phone number for the PPP connection
+  and the frequency (k stands for kHz, M for MHz) for the cablemodem.
+  You'll also have to change the last line in the pap-secrets file
+  writing your login and password there (read the whole file for more
+  site specific configurations).
+  You may have to change the firewall file to suit your needs (IPs and
+  ports allowed to connect).
+- start the PPP connection with ppp@gi-on and see what happens; you may
+  want to set 'pppd' (the last command in the ppp@gi-on file) to debug
+  mode adding 'debug' at the end of the command ('pppd' prints its info in
+  the file /var/log/messages and/or /var/log/ppp.log). To make sure 'chat'
+  s not having problems you may want to add a '-v' (verbose) after the 'chat'
+  command in 'ppp-on-dialer' and check the results in /var/log/messages)
+- if everything is working fine you should see after a few seconds a message
+  likes this:
+            cm0: sb1000 at (0x120,0x310), csn 1, S/N 0x2a0d16d8, IRQ 9. 
+            sb1000.c:v1.1.2 6/01/98 (fventuri@mediaone.net) 
+  and ifconfig -a should show you two new interfaces: ppp0 and cm0.
+  Typing 'cmconfig cm0' will show you more info about the cablemodem interface.
+- please let me know if you see any other message coming from 'cm0' in
+  your '/var/log/messages' or '/var/log/debug' file, to help me debug the
+  code
+- also let me know if you have any problem; if everything works (hopefully),
+  let me know which speed you can reach downloading the 5Mb test file using
+  this driver.
+- if everything seems to work fine but your computer locks up after a while
+  (and typically during a lengthy download through the cablemodem), you may
+  need to add a short delay in the driver to 'slow down' the SURFboard
+  because your PC might not be able to keep up with the transfer rate of
+  the SB1000. To do this, edit the 'Makefile' and look for the 'SB1000_DELAY'
+  define: uncomment those 'CFLAGS' lines (and comment the default ones)
+  and try setting the delay to something like 60 microseconds with:
+  '-DSB1000_DELAY=60'; if it still doesn't work or you like playing with
+  the driver, you may try other numbers: remember though that the higher
+  the delay, the slower the driver (which slows down the rest of the PC
+  too when it is actively used). Thanks to Ed Daiga for this tip!
+
+This release has a few things fixed and a better handling of the frame errors.
+
+I also have slightly modified the 'cablemodem' script in the 'ppp' so
+you may interested in having a look at it: I basically have added filtering
+out broadcast messages (you shouldn't get them with a point-to-point
+interface and so far the ones I have received were from hosts trying to
+attack my system) and lower debug levels for the driver to avoid seeing
+the 'frame error' messages (so far noone has noticed any problem with the
+driver even with those messages).
+
+For questions, infos, etc, feel free to email me at:
+		fventuri@mediaone.net
+
+Good luck,
+Franco Venturi
+
+Thanks to Edge for his useful comments and to Steven N. Hirsch
+for his patch to run the driver with 2.1.x kernels.
+Thanks also to Ed Daiga for his help in finding that adding a delay
+in the driver fixes some lock up problems with some slow PCs.
+Many thanks to Clemmitt Sigler for his (much needed) web page about the
+SB1000 driver for Linux.
+An interesting URL for Linux + MediaOne (although with an external modem)
+is: http://rlz.ne.mediaone.net/linux/home.shtml
+Today, Sep 22 1998, I finished writing a short utility (ftptest.c) to
+'measure' your cablemodem speed connection in Linux, downloading to
+memory the same file several times. To compile it you need ftplib, version
+3 or above. To run it, type:
+  ftptest URL n
+where URL is in the form: ftp://ftp.site.local.isp/pub/testfile
+and n is the number of simultaneous FTP connections that you want to run
+
+---------------------------------------------------------------------------
+IMPORTANT NOTICE: if in your file /etc/isapnp.conf, you found something
+like '(READPORT 0x020b)' or '(READPORT 0x<another number>)', (anything
+different from the default 0x0203), you have to change the READ_DATA_PORT
+parameter in the sb1000.c file as follows.
+  - edit the sb1000.c file, look for:
+       READ_DATA_PORT
+    (it should be around line 127 in version 1.1.2)
+  - change the value of READ_DATA_PORT to the same value found in
+    /etc/isapnp.conf; for instance, if you found a: '(READPORT 0x020b)',
+    then in sb1000.c you should have:
+          static const int READ_DATA_PORT = 0x20b; 
+  - save sb1000.c
+  - compile and install again the driver
+    (i.e. do a 'make' and a 'make install').

@@ -256,7 +256,7 @@ static int fs_maxindex(void)
 /*
  * Whee.. Weird sysv syscall. 
  */
-asmlinkage int sys_sysfs(int option, unsigned long arg1, unsigned long arg2)
+asmlinkage long sys_sysfs(int option, unsigned long arg1, unsigned long arg2)
 {
 	int retval = -EINVAL;
 
@@ -474,7 +474,7 @@ restart:
 	return NULL;
 }
 
-asmlinkage int sys_ustat(dev_t dev, struct ustat * ubuf)
+asmlinkage long sys_ustat(dev_t dev, struct ustat * ubuf)
 {
         struct super_block *s;
         struct ustat tmp;
@@ -768,7 +768,7 @@ out:
  * unixes. Our API is identical to OSF/1 to avoid making a mess of AMD
  */
 
-asmlinkage int sys_umount(char * name, int flags)
+asmlinkage long sys_umount(char * name, int flags)
 {
 	struct dentry * dentry;
 	int retval;
@@ -808,7 +808,7 @@ asmlinkage int sys_umount(char * name, int flags)
  *	The 2.0 compatible umount. No flags. 
  */
  
-asmlinkage int sys_oldumount(char * name)
+asmlinkage long sys_oldumount(char * name)
 {
 	return sys_umount(name,0);
 }
@@ -1018,8 +1018,8 @@ static int copy_mount_options (const void * data, unsigned long *where)
  * aren't used, as the syscall assumes we are talking to an older
  * version that didn't understand them.
  */
-asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
-	unsigned long new_flags, void * data)
+asmlinkage long sys_mount(char * dev_name, char * dir_name, char * type,
+			  unsigned long new_flags, void * data)
 {
 	struct file_system_type * fstype;
 	struct dentry * dentry = NULL;

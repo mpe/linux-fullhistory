@@ -89,7 +89,7 @@
 
 
 typedef struct slip_ctrl {
-	char		if_name[8];	/* "sl0\0" .. "sl99999\0"	*/
+	char		if_name[16];	/* "sl0\0" .. "sl99999\0"	*/
 	struct slip	ctrl;		/* SLIP things			*/
 	struct net_device	dev;		/* the device			*/
 } slip_ctrl_t;

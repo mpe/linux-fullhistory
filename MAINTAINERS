@@ -89,10 +89,9 @@ S:	Maintained
 
 8390 NETWORK DRIVERS [WD80x3/SMC-ELITE, SMC-ULTRA, NE2000, 3C503, etc.]
 P:	Paul Gortmaker
-M:	gpg109@rsphy1.anu.edu.au
+M:	p_gortmaker@yahoo.com
 L:	linux-net@vger.rutgers.edu
 S:	Maintained
-W:	http://rsphy1.anu.edu.au/~gpg109/ne2000.html
 
 AD1816 SOUND DRIVER
 P:	Thorsten Knabe
@@ -181,6 +180,16 @@ P:	Jeff Garzik
 M:	jgarzik@pobox.com
 L:	linux-fbdev@vuser.vu.union.edu
 S:	Maintained
+
+COMPUTONE INTELLIPORT MULTIPORT CARD
+P:     Doug McNash
+P:     Michael H. Warfield
+M:     Doug McNash <dmcnash@computone.com>
+M:     Michael H. Warfield <mhw@wittsend.com>
+W:     http://www.computone.com/
+W:     http://www.wittsend.com/computone.html
+L:     linux-computone@lazuli.wittsend.com
+S:     Supported
 
 CONFIGURE, MENUCONFIG, XCONFIG
 P:	Michael Elizabeth Chastain
@@ -410,12 +419,6 @@ M:	Gadi Oxman <gadio@netvision.net.il>
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
-IP FIREWALL
-P:	Paul Russell
-M:	Paul.Russell@rustcorp.com.au
-W:	http://www.rustcorp.com/linux/ipchains
-S:	Supported
-
 IP MASQUERADING:
 P:	Juanjo Ciarlante
 M:	jjciarla@raiz.uncu.edu.ar
@@ -548,6 +551,15 @@ P:	Volker Lendecke
 M:	vl@kki.org
 L:	linware@sh.cvut.cz
 S:	Maintained
+
+NETFILTER
+P:	Rusty Russell
+M:	Rusty.Russell@rustcorp.com.au
+W:	http://www.samba.org/netfilter/
+W:	http://netfilter.kernelnotes.org
+W:	http://antarctica.penguincomputing.com/~netfilter/
+L:	netfilter@lists.samba.org
+S:	Supported
 
 NETROM NETWORK LAYER
 P:	Tomi Manninen 
@@ -682,7 +694,7 @@ S:	Maintained
 
 REAL TIME CLOCK DRIVER
 P:	Paul Gortmaker
-M:	gpg109@rsphy1.anu.edu.au
+M:	p_gortmaker@yahoo.com
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
@@ -869,7 +881,8 @@ S:     Supported
 
 WAVELAN NETWORK DRIVER & WIRELESS EXTENSIONS
 P:	Jean Tourrilhes
-M:	jt@hplb.hpl.hp.com
+M:	jt@hpl.hp.com
+W:	http://www.hpl.hp.com/personal/Jean_Tourrilhes/Linux/
 S:	Maintained
 
 WD7000 SCSI DRIVER

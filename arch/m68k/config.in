@@ -48,9 +48,6 @@ fi
 bool 'Sun3x support' CONFIG_SUN3X
   
 define_bool CONFIG_SUN3 n
-if [ "$CONFIG_PCI" = "y" ]; then
-  bool 'Backward-compatible /proc/pci' CONFIG_PCI_OLD_PROC
-fi
 bool 'Q40/Q60 support' CONFIG_Q40
 
 comment 'Processor type'

@@ -1,9 +1,9 @@
 /*
  * This file define a set of standard wireless extensions
  *
- * Version :	7	23.4.99
+ * Version :	8	28.7.99
  *
- * Authors :	Jean Tourrilhes - HPLB - <jt@hplb.hpl.hp.com>
+ * Authors :	Jean Tourrilhes - HPL - <jt@hpl.hp.com>
  */
 
 #ifndef _LINUX_WIRELESS_H
@@ -63,7 +63,7 @@
  * (there is some stuff that will be added in the future...)
  * I just plan to increment with each new version.
  */
-#define WIRELESS_EXT	6
+#define WIRELESS_EXT	8
 
 /*
  * Changes :
@@ -90,6 +90,12 @@
  * V6 to V7
  * --------
  *	- define IW_ESSID_MAX_SIZE and IW_MAX_AP
+ *
+ * V7 to V8
+ * --------
+ *	- Changed my e-mail address
+ *	- More 802.11 support (nickname, rate, rts, frag)
+ *	- List index in frequencies
  */
 
 /* -------------------------- IOCTL LIST -------------------------- */
@@ -117,24 +123,34 @@
 #define SIOCGIWSPY	0x8B11		/* get spy info (quality of link) */
 
 /* Access Point manipulation */
-#define SIOCSIWAP	0x8B14		/* set access point hardware addresses */
-#define SIOCGIWAP	0x8B15		/* get access point hardware addresses */
+#define SIOCSIWAP	0x8B14		/* set access point MAC addresses */
+#define SIOCGIWAP	0x8B15		/* get access point MAC addresses */
 #define SIOCGIWAPLIST	0x8B17		/* get list of access point in range */
 
 /* 802.11 specific support */
 #define SIOCSIWESSID	0x8B1A		/* set ESSID (network name) */
 #define SIOCGIWESSID	0x8B1B		/* get ESSID */
-/* As the ESSID is a string up to 32 bytes long, it doesn't fit within the
- * 'iwreq' structure, so we need to use the 'data' member to point to a
- * string in user space, like it is done for RANGE...
- * The "flags" member indicate if the ESSID is active or not.
+#define SIOCSIWNICKN	0x8B1C		/* set node name/nickname */
+#define SIOCGIWNICKN	0x8B1D		/* get node name/nickname */
+/* As the ESSID and NICKN are strings up to 32 bytes long, it doesn't fit
+ * within the 'iwreq' structure, so we need to use the 'data' member to
+ * point to a string in user space, like it is done for RANGE...
+ * The "flags" member indicate if the ESSID is active or not (promiscuous).
  */
+
+/* Other parameters usefull in 802.11 and some other devices */
+#define SIOCSIWRATE	0x8B20		/* set default bit rate (bps) */
+#define SIOCGIWRATE	0x8B21		/* get default bit rate (bps) */
+#define SIOCSIWRTS	0x8B22		/* set RTS/CTS threshold (bytes) */
+#define SIOCGIWRTS	0x8B23		/* get RTS/CTS threshold (bytes) */
+#define SIOCSIWFRAG	0x8B24		/* set fragmentation thr (bytes) */
+#define SIOCGIWFRAG	0x8B25		/* get fragmentation thr (bytes) */
 
 /* ------------------------- IOCTL STUFF ------------------------- */
 
 /* The first and the last (range) */
 #define SIOCIWFIRST	0x8B00
-#define SIOCIWLAST	0x8B1B
+#define SIOCIWLAST	0x8B25
 
 /* Even : get (world access), odd : set (root access) */
 #define IW_IS_SET(cmd)	(!((cmd) & 0x1))
@@ -171,6 +187,9 @@
  * don't increase this constant and don't fill the frequency list.
  * The user will be able to set by channel anyway... */
 
+/* Maximum bit rates in the range struct */
+#define IW_MAX_BITRATES		8
+
 /* Maximum of address that you may set with SPY */
 #define IW_MAX_SPY		8
 
@@ -178,7 +197,7 @@
    list of access points in range */
 #define IW_MAX_AP		8
 
-/* Maximum size of the ESSID string */
+/* Maximum size of the ESSID and NICKN strings */
 #define IW_ESSID_MAX_SIZE	32
 
 /****************************** TYPES ******************************/
@@ -186,15 +205,17 @@
 /* --------------------------- SUBTYPES --------------------------- */
 /*
  *	A frequency
- *	For numbers lower than 10^9, we encode the number in 'mant' and
- *	set 'exp' to 0
- *	For number greater than 10^9, we divide it by a power of 10.
- *	The power of 10 is in 'exp', the result is in 'mant'.
+ *	For numbers lower than 10^9, we encode the number in 'm' and
+ *	set 'e' to 0
+ *	For number greater than 10^9, we divide it by the lowest power
+ *	of 10 to get 'm' lower than 10^9, with 'm'= f / (10^'e')...
+ *	The power of 10 is in 'e', the result of the division is in 'm'.
  */
 struct	iw_freq
 {
 	__u32		m;		/* Mantissa */
 	__u16		e;		/* Exponent */
+	__u8		i;		/* List index (when in range struct) */
 };
 
 /*
@@ -229,6 +250,15 @@ struct	iw_encoding
   __u64	code;			/* Data/key used for algorithm */
 };
 
+/*
+ *	Generic format for parameters
+ */
+struct	iw_param
+{
+  __s32		value;		/* The value of the parameter itself */
+  __u8		fixed;		/* Hardware should not use auto select */
+};
+
 
 /* ------------------------ WIRELESS STATS ------------------------ */
 /*
@@ -258,7 +288,7 @@ struct	iwreq
 {
 	union
 	{
-		char	ifrn_name[IFNAMSIZ];	/* if name, e.g. "en0" */
+		char	ifrn_name[IFNAMSIZ];	/* if name, e.g. "eth0" */
 	} ifr_ifrn;
 
 	/* Data part */
@@ -281,7 +311,11 @@ struct	iwreq
 
 		struct iw_encoding	encoding;	/* Encoding stuff */
 
-		__u32	sensitivity;		/* signal level threshold */
+		__u32	sensitivity;		/* Obsolete, but compatible */
+		struct iw_param	sens;		/* signal level threshold */
+		struct iw_param	bitrate;	/* default bit rate */
+		struct iw_param	rts;		/* RTS threshold threshold */
+		struct iw_param	frag;		/* Fragmentation threshold */
 
 		struct sockaddr	ap_addr;	/* Access point address */
 
@@ -309,6 +343,12 @@ struct	iw_range
 {
 	/* Informative stuff (to choose between different interface) */
 	__u32		throughput;	/* To give an idea... */
+	/* In theory this value should be the maximum benchmarked
+	 * TCP/IP throughput, because with most of these devices the
+	 * bit rate is meaningless (overhead an co) to estimate how
+	 * fast the connection will go and pick the fastest one.
+	 * I suggest people to play with Netperf or any benchmark...
+	 */
 
 	/* NWID (or domain id) */
 	__u32		min_nwid;	/* Minimal NWID we are able to set */
@@ -321,13 +361,25 @@ struct	iw_range
 	/* Note : this frequency list doesn't need to fit channel numbers */
 
 	/* signal level threshold range */
-	__u32	sensitivity;
+	__s32	sensitivity;
 
 	/* Quality of link & SNR stuff */
 	struct iw_quality	max_qual;	/* Quality of the link */
 
 	/* Encoder stuff */
 	struct iw_encoding	max_encoding;	/* Encoding max range */
+
+	/* Rates */
+	__u8		num_bitrates;	/* Number of entries in the list */
+	__s32		bitrate[IW_MAX_BITRATES];	/* list, in bps */
+
+	/* RTS threshold */
+	__s32		min_rts;	/* Minimal RTS threshold */
+	__s32		max_rts;	/* Maximal RTS threshold */
+
+	/* Frag threshold */
+	__s32		min_frag;	/* Minimal frag threshold */
+	__s32		max_frag;	/* Maximal frag threshold */
 };
 
 /*

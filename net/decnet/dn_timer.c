@@ -12,6 +12,8 @@
  *       Steve Whitehouse      : Made keepalive timer part of the same
  *                               timer idea.
  *       Steve Whitehouse      : Added checks for sk->sock_readers
+ *       David S. Miller       : New socket locking
+ *       Steve Whitehouse      : Timer grabs socket ref.
  */
 #include <linux/net.h>
 #include <linux/socket.h>
@@ -44,12 +46,7 @@ void dn_start_slow_timer(struct sock *sk)
 
 void dn_stop_slow_timer(struct sock *sk)
 {
-	unsigned long cpuflags;
-
-	save_flags(cpuflags);
-	cli();
 	del_timer(&sk->timer);
-	restore_flags(cpuflags);
 }
 
 static void dn_slow_timer(unsigned long arg)
@@ -57,6 +54,7 @@ static void dn_slow_timer(unsigned long arg)
 	struct sock *sk = (struct sock *)arg;
 	struct dn_scp *scp = &sk->protinfo.dn;
 
+	sock_hold(sk);
 	bh_lock_sock(sk);
 
 	if (sk->lock.users != 0) {
@@ -72,7 +70,9 @@ static void dn_slow_timer(unsigned long arg)
 	 * the function pointer in the socket. Setting the timer to a value
 	 * of zero turns it off. We allow the persist_fxn to turn the
 	 * timer off in a permant way by returning non-zero, so that
-	 * timer based routines may remove sockets.
+	 * timer based routines may remove sockets. This is why we have a
+	 * sock_hold()/sock_put() around the timer to prevent the socket
+	 * going away in the middle.
 	 */
 	if (scp->persist && scp->persist_fxn) {
 		if (scp->persist <= SLOW_INTERVAL) {
@@ -106,6 +106,7 @@ static void dn_slow_timer(unsigned long arg)
 	add_timer(&sk->timer);
 out:
 	bh_unlock_sock(sk);
+	sock_put(sk);
 }
 
 static void dn_fast_timer(unsigned long arg)
@@ -131,10 +132,7 @@ out:
 void dn_start_fast_timer(struct sock *sk)
 {
 	struct dn_scp *scp = &sk->protinfo.dn;
-	unsigned long cpuflags;
 
-	save_flags(cpuflags);
-	cli();
 	if (!scp->delack_pending) {
 		scp->delack_pending = 1;
 		scp->delack_timer.next =
@@ -144,20 +142,15 @@ void dn_start_fast_timer(struct sock *sk)
 		scp->delack_timer.function = dn_fast_timer;
 		add_timer(&scp->delack_timer);
 	}
-	restore_flags(cpuflags);
 }
 
 void dn_stop_fast_timer(struct sock *sk)
 {
 	struct dn_scp *scp = &sk->protinfo.dn;
-	unsigned long cpuflags;
 
-	save_flags(cpuflags);
-	cli();
 	if (scp->delack_pending) {
 		scp->delack_pending = 0;
 		del_timer(&scp->delack_timer);
 	}
-	restore_flags(cpuflags);
 }
 

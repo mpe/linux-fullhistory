@@ -707,7 +707,7 @@ int do_munmap(unsigned long addr, size_t len)
 	return 0;
 }
 
-asmlinkage int sys_munmap(unsigned long addr, size_t len)
+asmlinkage long sys_munmap(unsigned long addr, size_t len)
 {
 	int ret;
 

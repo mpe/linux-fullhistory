@@ -177,7 +177,7 @@ static const struct signature {
  *
 */
 
-__initfunc(void dtc_setup(char *str, int *ints)) {
+void __init dtc_setup(char *str, int *ints){
    static int commandline_current = 0;
    int i;
    if (ints[0] != 2)
@@ -208,8 +208,7 @@ __initfunc(void dtc_setup(char *str, int *ints)) {
  *
 */
 
-
-__initfunc(int dtc_detect(Scsi_Host_Template * tpnt)) {
+int __init dtc_detect(Scsi_Host_Template * tpnt){
    static int current_override = 0, current_base = 0;
    struct Scsi_Host *instance;
    unsigned int base;

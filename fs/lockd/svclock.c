@@ -335,9 +335,12 @@ again:
 	/* Append to list of blocked */
 	nlmsvc_insert_block(block, NLM_NEVER);
 
-	/* Now add block to block list of the conflicting lock */
-	dprintk("lockd: blocking on this lock.\n");
-	posix_block_lock(conflock, &block->b_call.a_args.lock.fl);
+	if (!block->b_call.a_args.lock.fl.fl_prevblock) {
+		/* Now add block to block list of the conflicting lock
+		   if we haven't done so. */
+		dprintk("lockd: blocking on this lock.\n");
+		posix_block_lock(conflock, &block->b_call.a_args.lock.fl);
+	}
 
 	up(&file->f_sema);
 	return nlm_lck_blocked;
@@ -440,7 +443,7 @@ nlmsvc_notify_blocked(struct file_lock *fl)
 	dprintk("lockd: VFS unblock notification for block %p\n", fl);
 	posix_unblock_lock(fl);
 	for (bp = &nlm_blocked; (block = *bp); bp = &block->b_next) {
-		if (&block->b_call.a_args.lock.fl == fl) {
+		if (nlm_compare_locks(&block->b_call.a_args.lock.fl, fl)) {
 			svc_wake_up(block->b_daemon);
 			nlmsvc_insert_block(block, 0);
 			return;

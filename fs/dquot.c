@@ -1337,7 +1337,7 @@ cleanup:
  * calls. Maybe we need to add the process quotas etc. in the future,
  * but we probably should use rlimits for that.
  */
-asmlinkage int sys_quotactl(int cmd, const char *special, int id, caddr_t addr)
+asmlinkage long sys_quotactl(int cmd, const char *special, int id, caddr_t addr)
 {
 	int cmds = 0, type = 0, flags = 0;
 	kdev_t dev;

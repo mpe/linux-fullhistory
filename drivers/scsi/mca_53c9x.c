@@ -275,7 +275,7 @@ int mca_esp_release(struct Scsi_Host *host)
 	free_irq(esp->irq, esp_intr);
 	free_dma(esp->dma);
 
-	mca_mark_as_unused(esp->eregs->slot);
+	mca_mark_as_unused(esp->slot);
 
 	return 0;
 }

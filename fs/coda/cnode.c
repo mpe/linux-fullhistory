@@ -108,10 +108,10 @@ int coda_cnode_make(struct inode **inode, ViceFid *fid, struct super_block *sb)
 	if ( coda_f2i(fid) != ino ) {
 	        if ( !coda_fid_is_weird(fid) ) 
 		        printk("Coda: unknown weird fid: ino %ld, fid %s."
-			       "Tell Peter.\n", ino, coda_f2s(&cnp->c_fid));
+			       "Tell Peter.\n", (long)ino, coda_f2s(&cnp->c_fid));
 		list_add(&cnp->c_volrootlist, &sbi->sbi_volroothead);
 		CDEBUG(D_UPCALL, "Added %ld ,%s to volroothead\n",
-		       ino, coda_f2s(&cnp->c_fid));
+		       (long)ino, coda_f2s(&cnp->c_fid));
 	}
 
         coda_fill_inode(*inode, &attr);
@@ -199,7 +199,7 @@ struct inode *coda_fid_to_inode(ViceFid *fid, struct super_block *sb)
 	inode = iget(sb, nr);
 	if ( !inode ) {
 		printk("coda_fid_to_inode: null from iget, sb %p, nr %ld.\n",
-		       sb, nr);
+		       sb, (long)nr);
 		return NULL;
 	}
 

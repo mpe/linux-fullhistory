@@ -11,8 +11,7 @@ extern struct proto_ops		inet_dgram_ops;
 extern void			inet_remove_sock(struct sock *sk1);
 extern void			inet_put_sock(unsigned short num, 
 					      struct sock *sk);
-extern int			inet_release(struct socket *sock, 
-					     struct socket *peer);
+extern int			inet_release(struct socket *sock);
 extern int			inet_stream_connect(struct socket *sock,
 						    struct sockaddr * uaddr,
 						    int addr_len, int flags);
@@ -39,6 +38,10 @@ extern int			inet_fcntl(struct socket *sock,
 					   unsigned int cmd, 
 					   unsigned long arg);
 extern int			inet_listen(struct socket *sock, int backlog);
+
+extern void			inet_sock_release(struct sock *sk);
+extern void			inet_sock_destruct(struct sock *sk);
+extern atomic_t			inet_sock_nr;
 
 #endif
 

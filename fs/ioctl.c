@@ -48,7 +48,7 @@ static int file_ioctl(struct file *filp,unsigned int cmd,unsigned long arg)
 }
 
 
-asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
+asmlinkage long sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {	
 	struct file * filp;
 	unsigned int flag;

@@ -522,7 +522,7 @@ static struct sock *x25_make_new(struct sock *osk)
 	return sk;
 }
 
-static int x25_release(struct socket *sock, struct socket *peer)
+static int x25_release(struct socket *sock)
 {
 	struct sock *sk = sock->sk;
 
@@ -679,11 +679,6 @@ static int x25_accept(struct socket *sock, struct socket *newsock, int flags)
 	struct sock *sk;
 	struct sock *newsk;
 	struct sk_buff *skb;
-
-	if (newsock->sk != NULL)
-		x25_destroy_socket(newsock->sk);
-
-	newsock->sk = NULL;
 
 	if ((sk = sock->sk) == NULL)
 		return -EINVAL;
@@ -1239,10 +1234,9 @@ struct net_proto_family x25_family_ops = {
 	x25_create
 };
 
-static struct proto_ops x25_proto_ops = {
+static struct proto_ops SOCKOPS_WRAPPED(x25_proto_ops) = {
 	AF_X25,
 
-	sock_no_dup,
 	x25_release,
 	x25_bind,
 	x25_connect,
@@ -1257,8 +1251,13 @@ static struct proto_ops x25_proto_ops = {
 	x25_getsockopt,
 	sock_no_fcntl,
 	x25_sendmsg,
-	x25_recvmsg
+	x25_recvmsg,
+	sock_no_mmap
 };
+
+#include <linux/smp_lock.h>
+SOCKOPS_WRAP(x25_proto, AF_X25);
+
 
 static struct packet_type x25_packet_type =
 {

@@ -113,10 +113,10 @@ void coda_sysctl_clean(void);
 do {                                                                      \
     if (size < 3000) {                                                    \
         ptr = (cast)kmalloc((unsigned long) size, GFP_KERNEL);            \
-                CDEBUG(D_MALLOC, "kmalloced: %x at %x.\n", (int) size, (int) ptr);\
+                CDEBUG(D_MALLOC, "kmalloced: %lx at %p.\n", (long)size, ptr);\
      }  else {                                                             \
         ptr = (cast)vmalloc((unsigned long) size);                        \
-	CDEBUG(D_MALLOC, "vmalloced: %x at %x.\n", (int) size, (int) ptr);}\
+	CDEBUG(D_MALLOC, "vmalloced: %lx at %p .\n", (long)size, ptr);}\
     if (ptr == 0) {                                                       \
         printk("kernel malloc returns 0 at %s:%d\n", __FILE__, __LINE__);  \
     }                                                                     \
@@ -124,7 +124,7 @@ do {                                                                      \
 } while (0)
 
 
-#define CODA_FREE(ptr,size) do {if (size < 3000) { kfree_s((ptr), (size)); CDEBUG(D_MALLOC, "kfreed: %x at %x.\n", (int) size, (int) ptr); } else { vfree((ptr)); CDEBUG(D_MALLOC, "vfreed: %x at %x.\n", (int) size, (int) ptr);} } while (0)
+#define CODA_FREE(ptr,size) do {if (size < 3000) { kfree_s((ptr), (size)); CDEBUG(D_MALLOC, "kfreed: %lx at %p.\n", (long) size, ptr); } else { vfree((ptr)); CDEBUG(D_MALLOC, "vfreed: %lx at %p.\n", (long) size, ptr);} } while (0)
 
 /* inode to cnode */
 

@@ -278,11 +278,11 @@ sfq_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 	if (++sch->q.qlen < SFQ_DEPTH-1) {
 		sch->stats.bytes += skb->len;
 		sch->stats.packets++;
-		return 1;
+		return 0;
 	}
 
 	sfq_drop(sch);
-	return 0;
+	return NET_XMIT_CN;
 }
 
 static int
@@ -311,11 +311,11 @@ sfq_requeue(struct sk_buff *skb, struct Qdisc* sch)
 		}
 	}
 	if (++sch->q.qlen < SFQ_DEPTH-1)
-		return 1;
+		return 0;
 
 	sch->stats.drops++;
 	sfq_drop(sch);
-	return 0;
+	return NET_XMIT_CN;
 }
 
 

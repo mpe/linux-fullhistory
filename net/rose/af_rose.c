@@ -618,7 +618,7 @@ static struct sock *rose_make_new(struct sock *osk)
 	return sk;
 }
 
-static int rose_release(struct socket *sock, struct socket *peer)
+static int rose_release(struct socket *sock)
 {
 	struct sock *sk = sock->sk;
 
@@ -846,11 +846,6 @@ static int rose_accept(struct socket *sock, struct socket *newsock, int flags)
 	struct sock *sk;
 	struct sock *newsk;
 	struct sk_buff *skb;
-
-	if (newsock->sk != NULL)
-		rose_destroy_socket(newsock->sk);
-
-	newsock->sk = NULL;
 
 	if ((sk = sock->sk) == NULL)
 		return -EINVAL;
@@ -1438,10 +1433,9 @@ static struct net_proto_family rose_family_ops = {
 	rose_create
 };
 
-static struct proto_ops rose_proto_ops = {
+static struct proto_ops SOCKOPS_WRAPPED(rose_proto_ops) = {
 	PF_ROSE,
 
-	sock_no_dup,
 	rose_release,
 	rose_bind,
 	rose_connect,
@@ -1456,8 +1450,12 @@ static struct proto_ops rose_proto_ops = {
 	rose_getsockopt,
 	sock_no_fcntl,
 	rose_sendmsg,
-	rose_recvmsg
+	rose_recvmsg,
+	sock_no_mmap
 };
+
+#include <linux/smp_lock.h>
+SOCKOPS_WRAP(rose_proto, PF_ROSE);
 
 static struct notifier_block rose_dev_notifier = {
 	rose_device_event,

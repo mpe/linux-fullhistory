@@ -52,33 +52,36 @@ static struct timer_list ip6_fl_gc_timer;
 
 /* FL hash table lock: it protects only of GC */
 
-static atomic_t ip6_fl_lock = ATOMIC_INIT(0);
+static rwlock_t ip6_fl_lock = RW_LOCK_UNLOCKED;
 
-static __inline__ void fl_lock(void)
-{
-	atomic_inc(&ip6_fl_lock);
-	synchronize_bh();
-}
+/* Big socket sock */
 
-static __inline__ void fl_unlock(void)
+static rwlock_t ip6_sk_fl_lock = RW_LOCK_UNLOCKED;
+
+
+static __inline__ struct ip6_flowlabel * __fl_lookup(u32 label)
 {
-	atomic_dec(&ip6_fl_lock);
+	struct ip6_flowlabel *fl;
+
+	for (fl=fl_ht[FL_HASH(label)]; fl; fl = fl->next) {
+		if (fl->label == label)
+			return fl;
+	}
+	return NULL;
 }
 
 static struct ip6_flowlabel * fl_lookup(u32 label)
 {
 	struct ip6_flowlabel *fl;
 
-	fl_lock();
-	for (fl=fl_ht[FL_HASH(label)]; fl; fl = fl->next) {
-		if (fl->label == label) {
-			atomic_inc(&fl->users);
-			break;
-		}
-	}
-	fl_unlock();
+	read_lock_bh(&ip6_fl_lock);
+	fl = __fl_lookup(label);
+	if (fl)
+		atomic_inc(&fl->users);
+	read_unlock_bh(&ip6_fl_lock);
 	return fl;
 }
+
 
 static void fl_free(struct ip6_flowlabel *fl)
 {
@@ -89,7 +92,6 @@ static void fl_free(struct ip6_flowlabel *fl)
 
 static void fl_release(struct ip6_flowlabel *fl)
 {
-	fl_lock();
 	fl->lastuse = jiffies;
 	if (atomic_dec_and_test(&fl->users)) {
 		unsigned long ttd = fl->lastuse + fl->linger;
@@ -106,7 +108,6 @@ static void fl_release(struct ip6_flowlabel *fl)
 			ip6_fl_gc_timer.expires = ttd;
 		add_timer(&ip6_fl_gc_timer);
 	}
-	fl_unlock();
 }
 
 static void ip6_fl_gc(unsigned long dummy)
@@ -115,11 +116,7 @@ static void ip6_fl_gc(unsigned long dummy)
 	unsigned long now = jiffies;
 	unsigned long sched = 0;
 
-	if (atomic_read(&ip6_fl_lock)) {
-		ip6_fl_gc_timer.expires = now + HZ/10;
-		add_timer(&ip6_fl_gc_timer);
-		return;
-	}
+	write_lock(&ip6_fl_lock);
 
 	for (i=0; i<=FL_HASH_MASK; i++) {
 		struct ip6_flowlabel *fl, **flp;
@@ -148,22 +145,22 @@ static void ip6_fl_gc(unsigned long dummy)
 		ip6_fl_gc_timer.expires = sched;
 		add_timer(&ip6_fl_gc_timer);
 	}
+	write_unlock(&ip6_fl_lock);
 }
 
 static int fl_intern(struct ip6_flowlabel *fl, __u32 label)
 {
 	fl->label = label & IPV6_FLOWLABEL_MASK;
 
-	fl_lock();
+	write_lock_bh(&ip6_fl_lock);
 	if (label == 0) {
 		for (;;) {
 			fl->label = htonl(net_random())&IPV6_FLOWLABEL_MASK;
 			if (fl->label) {
 				struct ip6_flowlabel *lfl;
-				lfl = fl_lookup(fl->label);
+				lfl = __fl_lookup(fl->label);
 				if (lfl == NULL)
 					break;
-				fl_release(lfl);
 			}
 		}
 	}
@@ -172,7 +169,7 @@ static int fl_intern(struct ip6_flowlabel *fl, __u32 label)
 	fl->next = fl_ht[FL_HASH(fl->label)];
 	fl_ht[FL_HASH(fl->label)] = fl;
 	atomic_inc(&fl_size);
-	fl_unlock();
+	write_unlock_bh(&ip6_fl_lock);
 	return 0;
 }
 
@@ -421,24 +418,29 @@ int ipv6_flowlabel_opt(struct sock *sk, char *optval, int optlen)
 
 	switch (freq.flr_action) {
 	case IPV6_FL_A_PUT:
+		write_lock_bh(&ip6_sk_fl_lock);
 		for (sflp = &np->ipv6_fl_list; (sfl=*sflp)!=NULL; sflp = &sfl->next) {
 			if (sfl->fl->label == freq.flr_label) {
 				if (freq.flr_label == (np->flow_label&IPV6_FLOWLABEL_MASK))
 					np->flow_label &= ~IPV6_FLOWLABEL_MASK;
 				*sflp = sfl->next;
-				synchronize_bh();
+				write_unlock_bh(&ip6_sk_fl_lock);
 				fl_release(sfl->fl);
 				kfree(sfl);
 				return 0;
 			}
 		}
+		write_unlock_bh(&ip6_sk_fl_lock);
 		return -ESRCH;
 
 	case IPV6_FL_A_RENEW:
+		read_lock_bh(&ip6_sk_fl_lock);
 		for (sfl = np->ipv6_fl_list; sfl; sfl = sfl->next) {
 			if (sfl->fl->label == freq.flr_label)
 				return fl6_renew(sfl->fl, freq.flr_linger, freq.flr_expires);
 		}
+		read_unlock_bh(&ip6_sk_fl_lock);
+
 		if (freq.flr_share == IPV6_FL_S_NONE && capable(CAP_NET_ADMIN)) {
 			fl = fl_lookup(freq.flr_label);
 			if (fl) {
@@ -462,15 +464,19 @@ int ipv6_flowlabel_opt(struct sock *sk, char *optval, int optlen)
 			struct ip6_flowlabel *fl1 = NULL;
 
 			err = -EEXIST;
+			read_lock_bh(&ip6_sk_fl_lock);
 			for (sfl = np->ipv6_fl_list; sfl; sfl = sfl->next) {
 				if (sfl->fl->label == freq.flr_label) {
-					if (freq.flr_flags&IPV6_FL_F_EXCL)
+					if (freq.flr_flags&IPV6_FL_F_EXCL) {
+						read_unlock_bh(&ip6_sk_fl_lock);
 						goto done;
+					}
 					fl1 = sfl->fl;
 					atomic_inc(&fl->users);
 					break;
 				}
 			}
+			read_unlock_bh(&ip6_sk_fl_lock);
 
 			if (fl1 == NULL)
 				fl1 = fl_lookup(freq.flr_label);
@@ -496,10 +502,11 @@ int ipv6_flowlabel_opt(struct sock *sk, char *optval, int optlen)
 					fl1->linger = fl->linger;
 				if ((long)(fl->expires - fl1->expires) > 0)
 					fl1->expires = fl->expires;
+				write_lock_bh(&ip6_sk_fl_lock);
 				sfl1->fl = fl1;
 				sfl1->next = np->ipv6_fl_list;
 				np->ipv6_fl_list = sfl1;
-				synchronize_bh();
+				write_unlock_bh(&ip6_sk_fl_lock);
 				fl_free(fl);
 				return 0;
 
@@ -556,7 +563,7 @@ static int ip6_fl_read_proc(char *buffer, char **start, off_t offset,
 	len+= sprintf(buffer,"Label S Owner  Users  Linger Expires  "
 		      "Dst                              Opt\n");
 
-	fl_lock();
+	read_lock_bh(&ip6_fl_lock);
 	for (i=0; i<=FL_HASH_MASK; i++) {
 		for (fl = fl_ht[i]; fl; fl = fl->next) {
 			len+=sprintf(buffer+len,"%05X %-1d %-6d %-6d %-6d %-8ld ",
@@ -585,7 +592,7 @@ static int ip6_fl_read_proc(char *buffer, char **start, off_t offset,
 	*eof = 1;
 
 done:
-	fl_unlock();
+	read_unlock_bh(&ip6_fl_lock);
 	*start=buffer+(offset-begin);
 	len-=(offset-begin);
 	if(len>length)

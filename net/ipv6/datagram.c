@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: datagram.c,v 1.17 1999/04/22 10:07:40 davem Exp $
+ *	$Id: datagram.c,v 1.18 1999/08/20 11:06:17 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -158,7 +158,7 @@ int ipv6_recv_error(struct sock *sk, struct msghdr *msg, int len)
 			ipv6_addr_set(&sin->sin6_addr, 0, 0,
 				      __constant_htonl(0xffff),
 				      skb->nh.iph->saddr);
-			if (sk->ip_cmsg_flags)
+			if (sk->protinfo.af_inet.cmsg_flags)
 				ip_cmsg_recv(msg, skb);
 		}
 	}
@@ -269,11 +269,7 @@ int datagram_send_ctl(struct msghdr *msg, struct flowi *fl,
 			}
 
 			if (!ipv6_addr_any(&src_info->ipi6_addr)) {
-				struct inet6_ifaddr *ifp;
-
-				ifp = ipv6_chk_addr(&src_info->ipi6_addr, NULL, 0);
-
-				if (ifp == NULL) {
+				if (!ipv6_chk_addr(&src_info->ipi6_addr, NULL)) {
 					err = -EINVAL;
 					goto exit_f;
 				}

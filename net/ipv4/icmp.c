@@ -3,7 +3,7 @@
  *	
  *		Alan Cox, <alan@redhat.com>
  *
- *	Version: $Id: icmp.c,v 1.57 1999/06/09 10:10:50 davem Exp $
+ *	Version: $Id: icmp.c,v 1.60 1999/08/20 11:05:10 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -261,6 +261,7 @@
 #include <linux/inet.h>
 #include <linux/netdevice.h>
 #include <linux/string.h>
+#include <linux/netfilter_ipv4.h>
 #include <net/snmp.h>
 #include <net/ip.h>
 #include <net/route.h>
@@ -277,10 +278,6 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <net/checksum.h>
-
-#ifdef CONFIG_IP_MASQUERADE
-#include <net/ip_masq.h>
-#endif
 
 #define min(a,b)	((a)<(b)?(a):(b))
 
@@ -356,6 +353,47 @@ struct icmp_bxm
 	
 struct inode icmp_inode;
 struct socket *icmp_socket=&icmp_inode.u.socket_i;
+
+/* ICMPv4 socket is only a bit non-reenterable (unlike ICMPv6,
+   which is strongly non-reenterable). A bit later it will be made
+   reenterable and the lock may be removed then.
+ */
+
+static int icmp_xmit_holder = -1;
+
+static int icmp_xmit_lock_bh(void)
+{
+	if (!spin_trylock(&icmp_socket->sk->lock.slock)) {
+		if (icmp_xmit_holder == smp_processor_id())
+			return -EAGAIN;
+		spin_lock(&icmp_socket->sk->lock.slock);
+	}
+	icmp_xmit_holder = smp_processor_id();
+	return 0;
+}
+
+static __inline__ int icmp_xmit_lock(void)
+{
+	int ret;
+	local_bh_disable();
+	ret = icmp_xmit_lock_bh();
+	if (ret)
+		local_bh_enable();
+	return ret;
+}
+
+static void icmp_xmit_unlock_bh(void)
+{
+	icmp_xmit_holder = -1;
+	spin_unlock(&icmp_socket->sk->lock.slock);
+}
+
+static __inline__ void icmp_xmit_unlock(void)
+{
+	icmp_xmit_unlock_bh();
+	local_bh_enable();
+}
+
 
 /*
  *	Send an ICMP frame.
@@ -480,21 +518,26 @@ static void icmp_reply(struct icmp_bxm *icmp_param, struct sk_buff *skb)
 	if (ip_options_echo(&icmp_param->replyopts, skb))
 		return;
 
+	if (icmp_xmit_lock_bh())
+		return;
+
 	icmp_param->icmph.checksum=0;
 	icmp_param->csum=0;
 	icmp_out_count(icmp_param->icmph.type);
 
-	sk->ip_tos = skb->nh.iph->tos;
+	sk->protinfo.af_inet.tos = skb->nh.iph->tos;
 	daddr = ipc.addr = rt->rt_src;
 	ipc.opt = &icmp_param->replyopts;
 	if (ipc.opt->srr)
 		daddr = icmp_param->replyopts.faddr;
 	if (ip_route_output(&rt, daddr, rt->rt_spec_dst, RT_TOS(skb->nh.iph->tos), 0))
-		return;
+		goto out;
 	ip_build_xmit(sk, icmp_glue_bits, icmp_param, 
 		icmp_param->data_len+sizeof(struct icmphdr),
 		&ipc, rt, MSG_DONTWAIT);
 	ip_rt_put(rt);
+out:
+	icmp_xmit_unlock_bh();
 }
 
 
@@ -536,10 +579,8 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info)
 	 *	Now check at the protocol level
 	 */
 	if (!rt) {
-#ifndef CONFIG_IP_ALWAYS_DEFRAG
 		if (net_ratelimit())
 			printk(KERN_DEBUG "icmp_send: destinationless packet\n");
-#endif
 		return;
 	}
 	if (rt->rt_flags&(RTCF_BROADCAST|RTCF_MULTICAST))
@@ -575,6 +616,9 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info)
 	}
 
 
+	if (icmp_xmit_lock())
+		return;
+
 	/*
 	 *	Construct source address and options.
 	 */
@@ -586,11 +630,6 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info)
 	if (rt->rt_flags&RTCF_NAT && IPCB(skb_in)->flags&IPSKB_TRANSLATED) {
 		iph->daddr = rt->key.dst;
 		iph->saddr = rt->key.src;
-	}
-#endif
-#ifdef CONFIG_IP_MASQUERADE
-	if (type==ICMP_DEST_UNREACH && IPCB(skb_in)->flags&IPSKB_MASQUERADED) {
-			ip_fw_unmasq_icmp(skb_in);
 	}
 #endif
 
@@ -609,7 +648,7 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info)
 	 * grow the routing table.
 	 */
 	if (ip_route_output(&rt, iph->saddr, saddr, RT_TOS(tos), 0))
-		return;
+		goto out;
 	
 	if (ip_options_echo(&icmp_param.replyopts, skb_in)) 
 		goto ende;
@@ -626,13 +665,13 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info)
 	icmp_param.csum=0;
 	icmp_param.data_ptr=iph;
 	icmp_out_count(icmp_param.icmph.type);
-	icmp_socket->sk->ip_tos = tos;
+	icmp_socket->sk->protinfo.af_inet.tos = tos;
 	ipc.addr = iph->saddr;
 	ipc.opt = &icmp_param.replyopts;
 	if (icmp_param.replyopts.srr) {
 		ip_rt_put(rt);
 		if (ip_route_output(&rt, icmp_param.replyopts.faddr, saddr, RT_TOS(tos), 0))
-			return;
+			goto out;
 	}
 
 	if (!icmpv4_xrlim_allow(rt, type, code))
@@ -656,6 +695,8 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info)
 
 ende:
 	ip_rt_put(rt);
+out:
+	icmp_xmit_unlock();
 }
 
 
@@ -752,19 +793,22 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, int len)
 
 	/* Note: See raw.c and net/raw.h, RAWV4_HTABLE_SIZE==MAX_INET_PROTOS */
 	hash = iph->protocol & (MAX_INET_PROTOS - 1);
+	read_lock(&raw_v4_lock);
 	if ((raw_sk = raw_v4_htable[hash]) != NULL) 
 	{
-		while ((raw_sk = raw_v4_lookup(raw_sk, iph->protocol, iph->saddr,
-					       iph->daddr, skb->dev->ifindex)) != NULL) {
+		while ((raw_sk = __raw_v4_lookup(raw_sk, iph->protocol, iph->saddr,
+						 iph->daddr, skb->dev->ifindex)) != NULL) {
 			raw_err(raw_sk, skb);
 			raw_sk = raw_sk->next;
 		}
 	}
+	read_unlock(&raw_v4_lock);
 
 	/*
 	 *	This can't change while we are doing it. 
 	 */
 
+	read_lock(&inet_protocol_lock);
 	ipprot = (struct inet_protocol *) inet_protos[hash];
 	while(ipprot != NULL) {
 		struct inet_protocol *nextip;
@@ -783,6 +827,7 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, int len)
 
 		ipprot = nextip;
   	}
+	read_unlock(&inet_protocol_lock);
 }
 
 
@@ -936,88 +981,39 @@ static void icmp_address_reply(struct icmphdr *icmph, struct sk_buff *skb, int l
 {
 	struct rtable *rt = (struct rtable*)skb->dst;
 	struct net_device *dev = skb->dev;
-	struct in_device *in_dev = dev->ip_ptr;
+	struct in_device *in_dev;
 	struct in_ifaddr *ifa;
 	u32 mask;
 
-	if (!in_dev || !in_dev->ifa_list ||
-	    !IN_DEV_LOG_MARTIANS(in_dev) ||
-	    !IN_DEV_FORWARD(in_dev) ||
-	    len < 4 ||
-	    !(rt->rt_flags&RTCF_DIRECTSRC))
+	if (len < 4 || !(rt->rt_flags&RTCF_DIRECTSRC))
 		return;
 
-	mask = *(u32*)&icmph[1];
-	for (ifa=in_dev->ifa_list; ifa; ifa = ifa->ifa_next) {
-		if (mask == ifa->ifa_mask && inet_ifa_match(rt->rt_src, ifa))
-			return;
+	in_dev = in_dev_get(dev);
+	if (!in_dev)
+		return;
+	read_lock(&in_dev->lock);
+	if (in_dev->ifa_list &&
+	    IN_DEV_LOG_MARTIANS(in_dev) &&
+	    IN_DEV_FORWARD(in_dev)) {
+
+		mask = *(u32*)&icmph[1];
+		for (ifa=in_dev->ifa_list; ifa; ifa = ifa->ifa_next) {
+			if (mask == ifa->ifa_mask && inet_ifa_match(rt->rt_src, ifa))
+				break;
+		}
+		if (!ifa && net_ratelimit()) {
+			char b1[16], b2[16];
+			printk(KERN_INFO "Wrong address mask %s from %s/%s\n",
+			       in_ntoa2(mask, b1), in_ntoa2(rt->rt_src, b2), dev->name);
+		}
 	}
-	if (net_ratelimit())
-		printk(KERN_INFO "Wrong address mask %08lX from %08lX/%s\n",
-		       ntohl(mask), ntohl(rt->rt_src), dev->name);
+	read_unlock(&in_dev->lock);
+	in_dev_put(in_dev);
 }
 
 static void icmp_discard(struct icmphdr *icmph, struct sk_buff *skb, int len)
 {
 }
-
-#ifdef CONFIG_IP_TRANSPARENT_PROXY
-/*
- *	Check incoming icmp packets not addressed locally, to check whether
- *	they relate to a (proxying) socket on our system.
- *	Needed for transparent proxying.
- *
- *	This code is presently ugly and needs cleanup.
- *	Probably should add a chkaddr entry to ipprot to call a chk routine
- *	in udp.c or tcp.c...
- */
-
-/* This should work with the new hashes now. -DaveM */
-extern struct sock *tcp_v4_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport, int dif);
-extern struct sock *udp_v4_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport, int dif);
-
-int icmp_chkaddr(struct sk_buff *skb)
-{
-	struct icmphdr *icmph=(struct icmphdr *)(skb->nh.raw + skb->nh.iph->ihl*4);
-	struct iphdr *iph = (struct iphdr *) (icmph + 1);
-	void (*handler)(struct icmphdr *icmph, struct sk_buff *skb, int len) = icmp_pointers[icmph->type].handler;
-
-	if (handler == icmp_unreach || handler == icmp_redirect) {
-		struct sock *sk;
-
-		switch (iph->protocol) {
-		case IPPROTO_TCP:
-			{
-			struct tcphdr *th = (struct tcphdr *)(((unsigned char *)iph)+(iph->ihl<<2));
-
-			sk = tcp_v4_lookup(iph->daddr, th->dest, iph->saddr, th->source, skb->dev->ifindex);
-			if (!sk || (sk->state == TCP_LISTEN))
-				return 0;
-			/*
-			 * This packet came from us.
-			 */
-			return 1;
-			}
-		case IPPROTO_UDP:
-			{
-			struct udphdr *uh = (struct udphdr *)(((unsigned char *)iph)+(iph->ihl<<2));
-
-			sk = udp_v4_lookup(iph->daddr, uh->dest, iph->saddr, uh->source, skb->dev->ifindex);
-			if (!sk) return 0;
-			if (sk->saddr != iph->saddr && inet_addr_type(iph->saddr) != RTN_LOCAL)
-				return 0;
-			/*
-			 * This packet may have come from us.
-			 * Assume it did.
-			 */
-			return 1;
-			}
-		}
-	}
-	return 0;
-}
-
-#endif
 
 /* 
  *	Deal with incoming ICMP packets.
@@ -1151,7 +1147,7 @@ __initfunc(void icmp_init(struct net_proto_family *ops))
 	if ((err=ops->create(icmp_socket, IPPROTO_ICMP))<0)
 		panic("Failed to create the ICMP control socket.\n");
 	icmp_socket->sk->allocation=GFP_ATOMIC;
-	icmp_socket->sk->ip_ttl = MAXTTL;
+	icmp_socket->sk->protinfo.af_inet.ttl = MAXTTL;
 
 	/* Unhash it so that IP input processing does not even
 	 * see it, we do not wish this socket to see incoming

@@ -44,6 +44,7 @@
  *   0.9  03.08.99  adapt to Linus' new __setup/__initcall
  *                  use parport lowlevel drivers instead of directly writing to a parallel port
  *                  removed some pre-2.2 kernel compatibility cruft
+ *   0.10 10.08.99  Check if parport can do SPP and is safe to access during interrupt contexts
  */
 
 /*****************************************************************************/
@@ -56,6 +57,7 @@
 #include <linux/init.h>
 #include <linux/parport.h>
 #include <asm/uaccess.h>
+#include <asm/io.h>
 #include "sm.h"
 
 /* --------------------------------------------------------------------- */
@@ -300,6 +302,8 @@ static void sm_output_open(struct sm_state *sm)
 			pp = pp->next;
 		if (!pp)
 			printk(KERN_WARNING "%s: parport at address 0x%x not found\n", sm_drvname, sm->hdrv.ptt_out.pariobase);
+		else if ((~pp->modes) & (PARPORT_MODE_PCSPP | PARPORT_MODE_SAFEININT))
+			printk(KERN_WARNING "%s: parport at address 0x%x cannot be used\n", sm_drvname, sm->hdrv.ptt_out.pariobase);
 		else {
 			sm->pardev = parport_register_device(pp, sm->hdrv.ifname, NULL, NULL, NULL, PARPORT_DEV_EXCL, NULL);
 			if (!sm->pardev) {
@@ -609,12 +613,29 @@ static int serio[NR_PORTS] = { [0 ... NR_PORTS-1] = 0 };
 static int pario[NR_PORTS] = { [0 ... NR_PORTS-1] = 0 };
 static int midiio[NR_PORTS] = { [0 ... NR_PORTS-1] = 0 };
 
+MODULE_PARM(mode, "1-" __MODULE_STRING(NR_PORTS) "s");
+MODULE_PARM_DESC(mode, "soundmodem operating mode; eg. sbc:afsk1200 or wss:fsk9600");
+MODULE_PARM(iobase, "1-" __MODULE_STRING(NR_PORTS) "i");
+MODULE_PARM_DESC(iobase, "soundmodem base address");
+MODULE_PARM(irq, "1-" __MODULE_STRING(NR_PORTS) "i");
+MODULE_PARM_DESC(irq, "soundmodem interrupt");
+MODULE_PARM(dma, "1-" __MODULE_STRING(NR_PORTS) "i");
+MODULE_PARM_DESC(dma, "soundmodem dma channel");
+MODULE_PARM(dma2, "1-" __MODULE_STRING(NR_PORTS) "i");
+MODULE_PARM_DESC(dma2, "soundmodem 2nd dma channel; full duplex only");
+MODULE_PARM(serio, "1-" __MODULE_STRING(NR_PORTS) "i");
+MODULE_PARM_DESC(serio, "soundmodem PTT output on serial port");
+MODULE_PARM(pario, "1-" __MODULE_STRING(NR_PORTS) "i");
+MODULE_PARM_DESC(pario, "soundmodem PTT output on parallel port");
+MODULE_PARM(midiio, "1-" __MODULE_STRING(NR_PORTS) "i");
+MODULE_PARM_DESC(midiio, "soundmodem PTT output on midi port");
+
+MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
+MODULE_DESCRIPTION("Soundcard amateur radio modem driver");
+
 /* --------------------------------------------------------------------- */
 
-#ifndef MODULE
-static
-#endif
-int __init init_module(void)
+static int __init init_soundmodem(void)
 {
 	int i, j, found = 0;
 	char set_hw = 1;
@@ -669,31 +690,7 @@ int __init init_module(void)
 	return 0;
 }
 
-/* --------------------------------------------------------------------- */
-
-#ifdef MODULE
-
-MODULE_PARM(mode, "1-" __MODULE_STRING(NR_PORTS) "s");
-MODULE_PARM_DESC(mode, "soundmodem operating mode; eg. sbc:afsk1200 or wss:fsk9600");
-MODULE_PARM(iobase, "1-" __MODULE_STRING(NR_PORTS) "i");
-MODULE_PARM_DESC(iobase, "soundmodem base address");
-MODULE_PARM(irq, "1-" __MODULE_STRING(NR_PORTS) "i");
-MODULE_PARM_DESC(irq, "soundmodem interrupt");
-MODULE_PARM(dma, "1-" __MODULE_STRING(NR_PORTS) "i");
-MODULE_PARM_DESC(dma, "soundmodem dma channel");
-MODULE_PARM(dma2, "1-" __MODULE_STRING(NR_PORTS) "i");
-MODULE_PARM_DESC(dma2, "soundmodem 2nd dma channel; full duplex only");
-MODULE_PARM(serio, "1-" __MODULE_STRING(NR_PORTS) "i");
-MODULE_PARM_DESC(serio, "soundmodem PTT output on serial port");
-MODULE_PARM(pario, "1-" __MODULE_STRING(NR_PORTS) "i");
-MODULE_PARM_DESC(pario, "soundmodem PTT output on parallel port");
-MODULE_PARM(midiio, "1-" __MODULE_STRING(NR_PORTS) "i");
-MODULE_PARM_DESC(midiio, "soundmodem PTT output on midi port");
-
-MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
-MODULE_DESCRIPTION("Soundcard amateur radio modem driver");
-
-void cleanup_module(void)
+static void __exit cleanup_soundmodem(void)
 {
 	int i;
 
@@ -713,7 +710,12 @@ void cleanup_module(void)
 	}
 }
 
-#else /* MODULE */
+module_init(init_soundmodem);
+module_exit(cleanup_soundmodem);
+
+/* --------------------------------------------------------------------- */
+
+#ifndef MODULE
 
 /*
  * format: soundmodem=io,irq,dma[,dma2[,serio[,pario]]],mode
@@ -725,11 +727,11 @@ void cleanup_module(void)
 static int __init sm_setup(char *str)
 {
 	static unsigned __initdata nr_dev = 0;
-	int ints[11];
+	int ints[8];
 
 	if (nr_dev >= NR_PORTS)
 		return 0;
-	str = get_options(str, ints);
+	str = get_options(str, 8, ints);
 	mode[nr_dev] = str;
 	if (ints[0] >= 1)
 		iobase[nr_dev] = ints[1];
@@ -750,7 +752,6 @@ static int __init sm_setup(char *str)
 }
 
 __setup("soundmodem=", sm_setup);
-__initcall(init_module);
 
 #endif /* MODULE */
 /* --------------------------------------------------------------------- */

@@ -125,12 +125,12 @@ static struct dentry *coda_lookup(struct inode *dir, struct dentry *entry)
 
 	if ( length > CODA_MAXNAMLEN ) {
 	        printk("name too long: lookup, %s (%*s)\n", 
-		       coda_f2s(&dircnp->c_fid), length, name);
+		       coda_f2s(&dircnp->c_fid), (int)length, name);
 		return ERR_PTR(-ENAMETOOLONG);
 	}
 
-        CDEBUG(D_INODE, "name %s, len %d in ino %ld, fid %s\n", 
-	       name, length, dir->i_ino, coda_f2s(&dircnp->c_fid));
+        CDEBUG(D_INODE, "name %s, len %ld in ino %ld, fid %s\n", 
+	       name, (long)length, dir->i_ino, coda_f2s(&dircnp->c_fid));
 
         /* control object, create inode on the fly */
         if (coda_isroot(dir) && coda_iscontrol(name, length)) {
@@ -157,7 +157,7 @@ static struct dentry *coda_lookup(struct inode *dir, struct dentry *entry)
 			return ERR_PTR(error);
 	} else if (error != -ENOENT) {
 	        CDEBUG(D_INODE, "error for %s(%*s)%d\n",
-		       coda_f2s(&dircnp->c_fid), length, name, error);
+		       coda_f2s(&dircnp->c_fid), (int)length, name, error);
 		return ERR_PTR(error);
 	}
 	CDEBUG(D_INODE, "lookup: %s is (%s), type %d result %d, dropme %d\n",
@@ -504,10 +504,10 @@ static int coda_rename(struct inode *old_dir, struct dentry *old_dentry,
         old_cnp = ITOC(old_dir);
         new_cnp = ITOC(new_dir);
 
-        CDEBUG(D_INODE, "old: %s, (%d length, %d strlen), new: %s"
-	       "(%d length, %d strlen).old:d_count: %d, new:d_count: %d\n", 
-	       old_name, old_length, strlen(old_name), new_name, new_length, 
-	       strlen(new_name),old_dentry->d_count, new_dentry->d_count);
+        CDEBUG(D_INODE, "old: %s, (%d length, %ld strlen), new: %s"
+	       "(%d length, %ld strlen).old:d_count: %d, new:d_count: %d\n", 
+	       old_name, old_length, (long)strlen(old_name), new_name, new_length, 
+	       (long)strlen(new_name),old_dentry->d_count, new_dentry->d_count);
 
 	/* the C library will do unlink/create etc */
 	if ( coda_crossvol_rename == 0 && 
@@ -594,12 +594,12 @@ int coda_open(struct inode *i, struct file *f)
 	error = venus_open(i->i_sb, &(cnp->c_fid), coda_flags, &ino, &dev); 
 	if (error) {
 	        CDEBUG(D_FILE, "venus: dev %d, inode %ld, out->result %d\n",
-		       dev, ino, error);
+		       dev, (long)ino, error);
 		return error;
 	}
 
         /* coda_upcall returns ino number of cached object, get inode */
-        CDEBUG(D_FILE, "cache file dev %d, ino %ld\n", dev, ino);
+        CDEBUG(D_FILE, "cache file dev %d, ino %ld\n", dev, (long)ino);
 	error = coda_inode_grab(dev, ino, &cont_inode);
 	
 	if ( error || !cont_inode ){
@@ -622,9 +622,9 @@ int coda_open(struct inode *i, struct file *f)
 
         CDEBUG(D_FILE, "result %d, coda i->i_count is %d for ino %ld\n", 
 	       error, i->i_count, i->i_ino);
-        CDEBUG(D_FILE, "cache ino: %ld, count %d, ops %x\n", 
+        CDEBUG(D_FILE, "cache ino: %ld, count %d, ops %p\n", 
 	       cnp->c_ovp->i_ino, cnp->c_ovp->i_count,
-	       (int)(cnp->c_ovp->i_op));
+	       (cnp->c_ovp->i_op));
         EXIT;
         return 0;
 }

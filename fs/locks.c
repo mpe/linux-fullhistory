@@ -193,6 +193,14 @@ static void locks_insert_block(struct file_lock *blocker,
 {
 	struct file_lock *prevblock;
 
+	if (waiter->fl_prevblock) {
+		printk(KERN_ERR "locks_insert_block: remove duplicated lock "
+			"(pid=%d %ld-%ld type=%d)\n",
+			waiter->fl_pid, waiter->fl_start,
+			waiter->fl_end, waiter->fl_type);
+		locks_delete_block(waiter->fl_prevblock, waiter);
+	}
+
 	if (blocker->fl_prevblock == NULL)
 		/* No previous waiters - list is empty */
 		prevblock = blocker;
@@ -282,7 +290,7 @@ static void locks_wake_up_blocks(struct file_lock *blocker, unsigned int wait)
 /* flock() system call entry point. Apply a FL_FLOCK style lock to
  * an open file descriptor.
  */
-asmlinkage int sys_flock(unsigned int fd, unsigned int cmd)
+asmlinkage long sys_flock(unsigned int fd, unsigned int cmd)
 {
 	struct file_lock file_lock;
 	struct file *filp;

@@ -41,6 +41,10 @@ struct page **page_hash_table;
 
 spinlock_t pagecache_lock = SPIN_LOCK_UNLOCKED;
 
+#define CLUSTER_PAGES		(1 << page_cluster)
+#define CLUSTER_SHIFT		(PAGE_CACHE_SHIFT + page_cluster)
+#define CLUSTER_BYTES		(1 << CLUSTER_SHIFT)
+#define CLUSTER_OFFSET(x)	(((x) >> CLUSTER_SHIFT) << CLUSTER_SHIFT)
 
 void __add_page_to_hash_queue(struct page * page, struct page **p)
 {
@@ -500,39 +504,58 @@ int add_to_page_cache_unique(struct page * page,
 }
 
 /*
- * Try to read ahead in the file. "page_cache" is a potentially free page
- * that we could use for the cache (if it is 0 we can try to create one,
- * this is all overlapped with the IO on the previous page finishing anyway)
+ * This adds the requested page to the page cache if it isn't already there,
+ * and schedules an I/O to read in its contents from disk.
  */
-static unsigned long try_to_read_ahead(struct file * file,
-				unsigned long offset, unsigned long page_cache)
+static inline void page_cache_read(struct file * file, unsigned long offset) 
 {
+	unsigned long new_page;
 	struct inode *inode = file->f_dentry->d_inode;
-	struct page * page;
-	struct page ** hash;
+	struct page ** hash = page_hash(inode, offset);
+	struct page * page; 
 
-	offset &= PAGE_CACHE_MASK;
-	switch (page_cache) {
-	case 0:
-		page_cache = page_cache_alloc();
-		if (!page_cache)
-			break;
-	default:
-		if (offset >= inode->i_size)
-			break;
-		hash = page_hash(inode, offset);
-		page = page_cache_entry(page_cache);
-		if (!add_to_page_cache_unique(page, inode, offset, hash)) {
-			/*
-			 * We do not have to check the return value here
-			 * because it's a readahead.
-			 */
-			inode->i_op->readpage(file, page);
-			page_cache = 0;
-			page_cache_release(page);
-		}
+	spin_lock(&pagecache_lock);
+	page = __find_page_nolock(inode, offset, *hash); 
+	spin_unlock(&pagecache_lock);
+	if (page)
+		return;
+
+	new_page = page_cache_alloc();
+	if (!new_page)
+		return;
+	page = page_cache_entry(new_page);
+
+	if (!add_to_page_cache_unique(page, inode, offset, hash)) {
+		inode->i_op->readpage(file, page);
+		page_cache_release(page);
+		return;
 	}
-	return page_cache;
+
+	/*
+	 * We arrive here in the unlikely event that someone 
+	 * raced with us and added our page to the cache first.
+	 */
+	page_cache_free(new_page);
+	return;
+}
+
+/*
+ * Read in an entire cluster at once.  A cluster is usually a 64k-
+ * aligned block that includes the address requested in "offset."
+ */
+static void read_cluster_nonblocking(struct file * file,
+	unsigned long offset)
+{
+	off_t filesize = file->f_dentry->d_inode->i_size;
+	unsigned long pages = CLUSTER_PAGES;
+
+	offset = CLUSTER_OFFSET(offset);
+	while ((pages-- > 0) && (offset < filesize)) {
+		page_cache_read(file, offset);
+		offset += PAGE_CACHE_SIZE;
+	}
+
+	return;
 }
 
 /* 
@@ -813,9 +836,9 @@ static inline int get_max_readahead(struct inode * inode)
 	return max_readahead[MAJOR(inode->i_dev)][MINOR(inode->i_dev)];
 }
 
-static inline unsigned long generic_file_readahead(int reada_ok,
+static void generic_file_readahead(int reada_ok,
 	struct file * filp, struct inode * inode,
-	unsigned long ppos, struct page * page, unsigned long page_cache)
+	unsigned long ppos, struct page * page)
 {
 	unsigned long max_ahead, ahead;
 	unsigned long raend;
@@ -879,8 +902,7 @@ static inline unsigned long generic_file_readahead(int reada_ok,
 	ahead = 0;
 	while (ahead < max_ahead) {
 		ahead += PAGE_CACHE_SIZE;
-		page_cache = try_to_read_ahead(filp, raend + ahead,
-						page_cache);
+		page_cache_read(filp, raend + ahead);
 	}
 /*
  * If we tried to read ahead some pages,
@@ -912,7 +934,7 @@ static inline unsigned long generic_file_readahead(int reada_ok,
 #endif
 	}
 
-	return page_cache;
+	return;
 }
 
 /*
@@ -1046,7 +1068,8 @@ page_ok:
  * Ok, the page was not immediately readable, so let's try to read ahead while we're at it..
  */
 page_not_up_to_date:
-		page_cache = generic_file_readahead(reada_ok, filp, inode, pos & PAGE_CACHE_MASK, page, page_cache);
+		generic_file_readahead(reada_ok, filp, inode,
+						pos & PAGE_CACHE_MASK, page);
 
 		if (Page_Uptodate(page))
 			goto page_ok;
@@ -1067,7 +1090,8 @@ readpage:
 				goto page_ok;
 
 			/* Again, try some read-ahead while waiting for the page to finish.. */
-			page_cache = generic_file_readahead(reada_ok, filp, inode, pos & PAGE_CACHE_MASK, page, page_cache);
+			generic_file_readahead(reada_ok, filp, inode,
+						pos & PAGE_CACHE_MASK, page);
 			wait_on_page(page);
 			if (Page_Uptodate(page))
 				goto page_ok;
@@ -1269,31 +1293,36 @@ out:
 }
 
 /*
- * Semantics for shared and private memory areas are different past the end
- * of the file. A shared mapping past the last page of the file is an error
- * and results in a SIGBUS, while a private mapping just maps in a zero page.
+ * filemap_nopage() is invoked via the vma operations vector for a
+ * mapped memory region to read in file data during a page fault.
  *
  * The goto's are kind of ugly, but this streamlines the normal case of having
  * it in the page cache, and handles the special cases reasonably without
  * having a lot of duplicated code.
  *
- * WSH 06/04/97: fixed a memory leak and moved the allocation of new_page
- * ahead of the wait if we're sure to need it.
+ * XXX - at some point, this should return unique values to indicate to
+ *       the caller whether this is EIO, OOM, or SIGBUS.
  */
-static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long address, int no_share)
+static unsigned long filemap_nopage(struct vm_area_struct * area,
+	unsigned long address, int no_share)
 {
 	struct file * file = area->vm_file;
 	struct dentry * dentry = file->f_dentry;
 	struct inode * inode = dentry->d_inode;
-	unsigned long offset, reada, i;
 	struct page * page, **hash;
-	unsigned long old_page, new_page;
-	int error;
+	unsigned long old_page, new_page = 0;
 
-	new_page = 0;
-	offset = (address & PAGE_MASK) - area->vm_start + area->vm_offset;
-	if (offset >= inode->i_size && (area->vm_flags & VM_SHARED) && area->vm_mm == current->mm)
-		goto no_page;
+	unsigned long offset = address - area->vm_start + area->vm_offset;
+
+	/*
+	 * Semantics for shared and private memory areas are different
+	 * past the end of the file. A shared mapping past the last page
+	 * of the file is an error and results in a SIGBUS, while a
+	 * private mapping just maps in a zero page.
+	 */
+	if ((offset >= inode->i_size) &&
+		(area->vm_flags & VM_SHARED) && (area->vm_mm == current->mm))
+		return 0;
 
 	/*
 	 * Do we have something in the page cache already?
@@ -1306,15 +1335,8 @@ retry_find:
 
 	/*
 	 * Ok, found a page in the page cache, now we need to check
-	 * that it's up-to-date.  First check whether we'll need an
-	 * extra page -- better to overlap the allocation with the I/O.
+	 * that it's up-to-date.
 	 */
-	if (no_share && !new_page) {
-		new_page = page_cache_alloc();
-		if (!new_page)
-			goto failure;
-	}
-
 	if (!Page_Uptodate(page))
 		goto page_not_uptodate;
 
@@ -1325,35 +1347,30 @@ success:
 	 */
 	old_page = page_address(page);
 	if (!no_share) {
-		/*
-		 * Ok, we can share the cached page directly.. Get rid
-		 * of any potential extra pages.
-		 */
-		if (new_page)
-			page_cache_free(new_page);
-
 		flush_page_to_ram(old_page);
 		return old_page;
 	}
 
-	/*
-	 * No sharing ... copy to the new page.
-	 */
-	copy_page(new_page, old_page);
-	flush_page_to_ram(new_page);
+	new_page = page_cache_alloc();
+	if (new_page) {
+		copy_page(new_page, old_page);
+		flush_page_to_ram(new_page);
+	}
 	page_cache_release(page);
 	return new_page;
 
 no_cached_page:
 	/*
-	 * Try to read in an entire cluster at once.
+	 * If the requested offset is within our file, try to read a whole 
+	 * cluster of pages at once.
+	 *
+	 * Otherwise, we're off the end of a privately mapped file,
+	 * so we need to map a zero page.
 	 */
-	reada   = offset;
-	reada >>= PAGE_CACHE_SHIFT + page_cluster;
-	reada <<= PAGE_CACHE_SHIFT + page_cluster;
-
-	for (i = 1 << page_cluster; i > 0; --i, reada += PAGE_CACHE_SIZE)
-		new_page = try_to_read_ahead(file, reada, new_page);
+	if (offset < inode->i_size)
+		read_cluster_nonblocking(file, offset);
+	else
+		page_cache_read(file, offset);
 
 	/*
 	 * The page we want has now been added to the page cache.
@@ -1369,9 +1386,7 @@ page_not_uptodate:
 		goto success;
 	}
 
-	error = inode->i_op->readpage(file, page);
-
-	if (!error) {
+	if (!inode->i_op->readpage(file, page)) {
 		wait_on_page(page);
 		if (Page_Uptodate(page))
 			goto success;
@@ -1389,22 +1404,19 @@ page_not_uptodate:
 		goto success;
 	}
 	ClearPageError(page);
-	error = inode->i_op->readpage(file, page);
-	if (error)
-		goto failure;
-	wait_on_page(page);
-	if (Page_Uptodate(page))
-		goto success;
+	if (!inode->i_op->readpage(file, page)) {
+		wait_on_page(page);
+		if (Page_Uptodate(page))
+			goto success;
+	}
 
 	/*
 	 * Things didn't work out. Return zero to tell the
 	 * mm layer so, possibly freeing the page cache page first.
 	 */
-failure:
 	page_cache_release(page);
 	if (new_page)
 		page_cache_free(new_page);
-no_page:
 	return 0;
 }
 
@@ -1686,7 +1698,7 @@ static int msync_interval(struct vm_area_struct * vma,
 	return 0;
 }
 
-asmlinkage int sys_msync(unsigned long start, size_t len, int flags)
+asmlinkage long sys_msync(unsigned long start, size_t len, int flags)
 {
 	unsigned long end;
 	struct vm_area_struct * vma;

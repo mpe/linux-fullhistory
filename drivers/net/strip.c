@@ -1464,9 +1464,18 @@ static unsigned char *strip_make_packet(unsigned char *buffer, struct strip *str
      */
     if (haddr.c[0] == 0xFF)
     {
- 	struct in_device *in_dev = strip_info->dev.ip_ptr;
+	u32 brd = 0;
+ 	struct in_device *in_dev = in_dev_get(&strip_info->dev);
+	if (in_dev == NULL)
+		return NULL;
+	read_lock(&in_dev->lock);
+	if (in_dev->ifa_list)
+		brd = in_dev->ifa_list->ifa_broadcast;
+	read_unlock(&in_dev->lock);
+	in_dev_put(in_dev);
+
 	/* arp_query returns 1 if it succeeds in looking up the address, 0 if it fails */
-        if (!arp_query(haddr.c, in_dev->ifa_list->ifa_broadcast, &strip_info->dev))
+        if (!arp_query(haddr.c, brd, &strip_info->dev))
         {
             printk(KERN_ERR "%s: Unable to send packet (no broadcast hub configured)\n",
                 strip_info->dev.name);
@@ -1510,7 +1519,7 @@ static void strip_send(struct strip *strip_info, struct sk_buff *skb)
     unsigned char *ptr = strip_info->tx_buff;
     int doreset = (long)jiffies - strip_info->watchdog_doreset >= 0;
     int doprobe = (long)jiffies - strip_info->watchdog_doprobe >= 0 && !doreset;
-    struct in_device *in_dev = strip_info->dev.ip_ptr;
+    u32 addr, brd;
 
     /*
      * 1. If we have a packet, encapsulate it and put it in the buffer
@@ -1594,6 +1603,21 @@ static void strip_send(struct strip *strip_info, struct sk_buff *skb)
      */
     if (doreset) { ResetRadio(strip_info); return; }
 
+    if (1) {
+	    struct in_device *in_dev = in_dev_get(&strip_info->dev);
+	    brd = addr = 0;
+	    if (in_dev) {
+		    read_lock(&in_dev->lock);
+		    if (in_dev->ifa_list) {
+			    brd = in_dev->ifa_list->ifa_broadcast;
+			    addr = in_dev->ifa_list->ifa_local;
+		    }
+		    read_unlock(&in_dev->lock);
+		    in_dev_put(in_dev);
+	    }
+    }
+    
+
     /*
      * 6. If it is time for a periodic ARP, queue one up to be sent.
      * We only do this if:
@@ -1610,7 +1634,7 @@ static void strip_send(struct strip *strip_info, struct sk_buff *skb)
      */
     if (strip_info->working && (long)jiffies - strip_info->gratuitous_arp >= 0 &&
         memcmp(strip_info->dev.dev_addr, zero_address.c, sizeof(zero_address)) &&
-        arp_query(haddr.c, in_dev->ifa_list->ifa_broadcast, &strip_info->dev))
+        arp_query(haddr.c, brd, &strip_info->dev))
     {
         /*printk(KERN_INFO "%s: Sending gratuitous ARP with interval %ld\n",
             strip_info->dev.name, strip_info->arp_interval / HZ);*/
@@ -1618,12 +1642,12 @@ static void strip_send(struct strip *strip_info, struct sk_buff *skb)
         strip_info->arp_interval *= 2;
         if (strip_info->arp_interval > MaxARPInterval)
             strip_info->arp_interval = MaxARPInterval;
-	if (in_dev && in_dev->ifa_list)
+	if (addr)
 	    arp_send(
 		ARPOP_REPLY, ETH_P_ARP,
-		in_dev->ifa_list->ifa_address, /* Target address of ARP packet is our address */
+		addr, /* Target address of ARP packet is our address */
 		&strip_info->dev,	       /* Device to send packet on */
-		in_dev->ifa_list->ifa_address, /* Source IP address this ARP packet comes from */
+		addr, /* Source IP address this ARP packet comes from */
 		NULL,			       /* Destination HW address is NULL (broadcast it) */
 		strip_info->dev.dev_addr,      /* Source HW address is our HW address */
 		strip_info->dev.dev_addr);     /* Target HW address is our HW address (redundant) */
@@ -2471,7 +2495,9 @@ static struct enet_statistics *strip_get_stats(struct net_device *dev)
 static int strip_open_low(struct net_device *dev)
 {
     struct strip *strip_info = (struct strip *)(dev->priv);
+#if 0
     struct in_device *in_dev = dev->ip_ptr;
+#endif
 
     if (strip_info->tty == NULL)
         return(-ENODEV);
@@ -2488,12 +2514,17 @@ static int strip_open_low(struct net_device *dev)
     strip_info->next_command   = CompatibilityCommand;
     strip_info->user_baud      = get_baud(strip_info->tty);
 
+#if 0
     /*
      * Needed because address '0' is special
+     *
+     * --ANK Needed it or not needed, it does not matter at all.
+     *	     Make it at user level, guys.
      */
 
     if (in_dev->ifa_list->ifa_address == 0)
         in_dev->ifa_list->ifa_address = ntohl(0xC0A80001);
+#endif
     dev->tbusy  = 0;
     dev->start  = 1;
 

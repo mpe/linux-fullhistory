@@ -58,8 +58,6 @@ struct dn_ifaddr {
  * down() - Called to turn device off when it goes down
  * timer1() - Called when timer 1 goes off
  * timer3() - Called when timer 3 goes off
- * setsrc() - Called for each incomming frame to set previous hop info
- * neigh_setup() - Called to do device specific setup of neighbours
  * 
  * sysctl - Hook for sysctl things
  *
@@ -83,8 +81,6 @@ struct dn_dev_parms {
 	void (*down)(struct net_device *);
 	void (*timer1)(struct net_device *);
 	void (*timer3)(struct net_device *);
-	int (*setsrc)(struct sk_buff *skb);
-	int (*neigh_setup)(struct neighbour *);
 	void *sysctl;
 };
 

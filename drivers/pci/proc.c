@@ -47,8 +47,6 @@ proc_bus_pci_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 	struct proc_dir_entry *dp = ino->u.generic_ip;
 	struct pci_dev *dev = dp->data;
 	int pos = *ppos;
-	unsigned char bus = dev->bus->number;
-	unsigned char dfn = dev->devfn;
 	int cnt, size;
 
 	/*
@@ -77,7 +75,7 @@ proc_bus_pci_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 
 	if ((pos & 1) && cnt) {
 		unsigned char val;
-		pcibios_read_config_byte(bus, dfn, pos, &val);
+		pci_read_config_byte(dev, pos, &val);
 		__put_user(val, buf);
 		buf++;
 		pos++;
@@ -86,7 +84,7 @@ proc_bus_pci_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 
 	if ((pos & 3) && cnt > 2) {
 		unsigned short val;
-		pcibios_read_config_word(bus, dfn, pos, &val);
+		pci_read_config_word(dev, pos, &val);
 		__put_user(cpu_to_le16(val), (unsigned short *) buf);
 		buf += 2;
 		pos += 2;
@@ -95,7 +93,7 @@ proc_bus_pci_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 
 	while (cnt >= 4) {
 		unsigned int val;
-		pcibios_read_config_dword(bus, dfn, pos, &val);
+		pci_read_config_dword(dev, pos, &val);
 		__put_user(cpu_to_le32(val), (unsigned int *) buf);
 		buf += 4;
 		pos += 4;
@@ -104,7 +102,7 @@ proc_bus_pci_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 
 	if (cnt >= 2) {
 		unsigned short val;
-		pcibios_read_config_word(bus, dfn, pos, &val);
+		pci_read_config_word(dev, pos, &val);
 		__put_user(cpu_to_le16(val), (unsigned short *) buf);
 		buf += 2;
 		pos += 2;
@@ -113,7 +111,7 @@ proc_bus_pci_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 
 	if (cnt) {
 		unsigned char val;
-		pcibios_read_config_byte(bus, dfn, pos, &val);
+		pci_read_config_byte(dev, pos, &val);
 		__put_user(val, buf);
 		buf++;
 		pos++;
@@ -131,8 +129,6 @@ proc_bus_pci_write(struct file *file, const char *buf, size_t nbytes, loff_t *pp
 	struct proc_dir_entry *dp = ino->u.generic_ip;
 	struct pci_dev *dev = dp->data;
 	int pos = *ppos;
-	unsigned char bus = dev->bus->number;
-	unsigned char dfn = dev->devfn;
 	int cnt;
 
 	if (pos >= PCI_CFG_SPACE_SIZE)
@@ -149,7 +145,7 @@ proc_bus_pci_write(struct file *file, const char *buf, size_t nbytes, loff_t *pp
 	if ((pos & 1) && cnt) {
 		unsigned char val;
 		__get_user(val, buf);
-		pcibios_write_config_byte(bus, dfn, pos, val);
+		pci_write_config_byte(dev, pos, val);
 		buf++;
 		pos++;
 		cnt--;
@@ -158,7 +154,7 @@ proc_bus_pci_write(struct file *file, const char *buf, size_t nbytes, loff_t *pp
 	if ((pos & 3) && cnt > 2) {
 		unsigned short val;
 		__get_user(val, (unsigned short *) buf);
-		pcibios_write_config_word(bus, dfn, pos, le16_to_cpu(val));
+		pci_write_config_word(dev, pos, le16_to_cpu(val));
 		buf += 2;
 		pos += 2;
 		cnt -= 2;
@@ -167,7 +163,7 @@ proc_bus_pci_write(struct file *file, const char *buf, size_t nbytes, loff_t *pp
 	while (cnt >= 4) {
 		unsigned int val;
 		__get_user(val, (unsigned int *) buf);
-		pcibios_write_config_dword(bus, dfn, pos, le32_to_cpu(val));
+		pci_write_config_dword(dev, pos, le32_to_cpu(val));
 		buf += 4;
 		pos += 4;
 		cnt -= 4;
@@ -176,7 +172,7 @@ proc_bus_pci_write(struct file *file, const char *buf, size_t nbytes, loff_t *pp
 	if (cnt >= 2) {
 		unsigned short val;
 		__get_user(val, (unsigned short *) buf);
-		pcibios_write_config_word(bus, dfn, pos, le16_to_cpu(val));
+		pci_write_config_word(dev, pos, le16_to_cpu(val));
 		buf += 2;
 		pos += 2;
 		cnt -= 2;
@@ -185,7 +181,7 @@ proc_bus_pci_write(struct file *file, const char *buf, size_t nbytes, loff_t *pp
 	if (cnt) {
 		unsigned char val;
 		__get_user(val, buf);
-		pcibios_write_config_byte(bus, dfn, pos, val);
+		pci_write_config_byte(dev, pos, val);
 		buf++;
 		pos++;
 		cnt--;
@@ -232,6 +228,12 @@ static struct inode_operations proc_bus_pci_inode_operations = {
 	NULL			/* revalidate */
 };
 
+#if BITS_PER_LONG == 32
+#define LONG_FORMAT "\t%08lx"
+#else
+#define LONG_FORMAT "\t%16lx"
+#endif
+
 int
 get_pci_dev_info(char *buf, char **start, off_t pos, int count, int wr)
 {
@@ -247,22 +249,13 @@ get_pci_dev_info(char *buf, char **start, off_t pos, int count, int wr)
 			dev->vendor,
 			dev->device,
 			dev->irq);
-		for(i=0; i<6; i++) {
-			len += sprintf(buf+len,
-#if BITS_PER_LONG == 32
-						"\t%08lx",
-#else
-						"\t%016lx",
-#endif
-					dev->resource[i].start | (dev->resource[i].flags & 0xf));
-		}
-		len += sprintf(buf+len,
-#if BITS_PER_LONG == 32
-					"\t%08lx",
-#else
-					"\t%016lx",
-#endif
-			       dev->rom_address);
+		/* Here should be 7 and not PCI_NUM_RESOURCES as we need to preserve compatibility */
+		for(i=0; i<7; i++)
+			len += sprintf(buf+len, LONG_FORMAT,
+				       dev->resource[i].start | (dev->resource[i].flags & PCI_REGION_FLAG_MASK));
+		for(i=0; i<7; i++)
+			len += sprintf(buf+len, LONG_FORMAT, dev->resource[i].start < dev->resource[i].end ?
+				       dev->resource[i].end - dev->resource[i].start + 1 : 0);
 		buf[len++] = '\n';
 		at += len;
 		if (at >= pos) {
@@ -334,6 +327,10 @@ void __init proc_bus_pci_add(struct pci_bus *bus)
 		bus = bus->next;
 	}
 }
+
+/*
+ *  Backward compatible /proc/pci interface.
+ */
 
 static const char *pci_strclass (unsigned int class)
 {
@@ -557,14 +554,7 @@ int get_pci_list(char *buf)
 {
 	int nprinted, len, size;
 	struct pci_dev *dev;
-	static int complained = 0;
 #	define MSG "\nwarning: page-size limit reached!\n"
-
-	if (!complained) {
-		complained++;
-		printk(KERN_INFO "%s uses obsolete /proc/pci interface\n",
-			current->comm);
-	}
 
 	/* reserve same for truncation warning message: */
 	size  = PAGE_SIZE - (strlen(MSG) + 1);
@@ -591,7 +581,7 @@ static int __init pci_proc_init(void)
 	if (pci_present()) {
 		proc_bus_pci_dir = create_proc_entry("pci", S_IFDIR, proc_bus);
 		proc_register(proc_bus_pci_dir, &proc_pci_devices);
-		proc_bus_pci_add(&pci_root);
+		proc_bus_pci_add(pci_root);
 		proc_register(&proc_root, &proc_old_pci);
 	}
 	return 0;

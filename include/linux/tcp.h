@@ -87,4 +87,27 @@ enum {
   TCPF_CLOSING   = (1 << 11) 
 };
 
+/*
+ *	The union cast uses a gcc extension to avoid aliasing problems
+ *  (union is compatible to any of its members)
+ *  This means this part of the code is -fstrict-aliasing safe now.
+ */
+union tcp_word_hdr { 
+	struct tcphdr hdr;
+	__u32 		  words[5];
+}; 
+
+#define tcp_flag_word(tp) ( ((union tcp_word_hdr *)(tp))->words [3]) 
+
+enum { 
+	TCP_FLAG_URG = __constant_htonl(0x00200000), 
+	TCP_FLAG_ACK = __constant_htonl(0x00100000), 
+	TCP_FLAG_PSH = __constant_htonl(0x00080000), 
+	TCP_FLAG_RST = __constant_htonl(0x00040000), 
+	TCP_FLAG_SYN = __constant_htonl(0x00020000), 
+	TCP_FLAG_FIN = __constant_htonl(0x00010000),
+	TCP_RESERVED_BITS = __constant_htonl(0x0FC00000),
+	TCP_DATA_OFFSET = __constant_htonl(0xF0000000)
+}; 
+
 #endif	/* _LINUX_TCP_H */

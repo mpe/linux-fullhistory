@@ -105,9 +105,9 @@ struct sem_undo {
 	short *			semadj;		/* array of adjustments, one per semaphore */
 };
 
-asmlinkage int sys_semget (key_t key, int nsems, int semflg);
-asmlinkage int sys_semop (int semid, struct sembuf *sops, unsigned nsops);
-asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg);
+asmlinkage long sys_semget (key_t key, int nsems, int semflg);
+asmlinkage long sys_semop (int semid, struct sembuf *sops, unsigned nsops);
+asmlinkage long sys_semctl (int semid, int semnum, int cmd, union semun arg);
 
 #endif /* __KERNEL__ */
 

@@ -38,7 +38,7 @@
 #include <linux/notifier.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
-#include <linux/firewall.h>
+#include <linux/netfilter.h>
 #include <linux/module.h>
 #include <linux/lapb.h>
 #include <linux/init.h>
@@ -436,7 +436,7 @@ static int lapbeth_new_device(struct net_device *dev)
 
 		sprintf(buf, "lapb%d", k);
 
-		if ((odev = dev_get(buf)) == NULL || lapbeth_check_devices(odev))
+		if ((odev = __dev_get_by_name(buf)) == NULL || lapbeth_check_devices(odev))
 			break;
 	}
 

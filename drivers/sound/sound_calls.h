@@ -157,6 +157,7 @@ void gus_midi_interrupt(int dummy);
 /*	From mpu401.c */
 void attach_mpu401(struct address_info * hw_config);
 int probe_mpu401(struct address_info *hw_config);
+int intchk_mpu401(void *dev_id);
 void mpuintr(int irq, void *dev_id, struct pt_regs * dummy);
 
 /*	From uart6850.c */

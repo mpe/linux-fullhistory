@@ -135,7 +135,7 @@ out:
  *
  * Also note that we take the address to load from from the file itself.
  */
-asmlinkage int sys_uselib(const char * library)
+asmlinkage long sys_uselib(const char * library)
 {
 	int fd, retval;
 	struct file * file;

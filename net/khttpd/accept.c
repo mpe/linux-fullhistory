@@ -63,13 +63,10 @@ int AcceptConnections(const int CPUNR, struct socket *Socket)
 	   the allocation of a new socket. (Which doesn't seem to be 
 	   used anyway)
 	*/
-	lock_sock(Socket->sk);
    	if (Socket->sk->tp_pinfo.af_tcp.syn_wait_queue==NULL)
 	{
-	  	release_sock(Socket->sk);
 		return 0;
 	}
-	release_sock(Socket->sk);
 	
 	error = 0;	
 	while (error>=0)
@@ -78,31 +75,25 @@ int AcceptConnections(const int CPUNR, struct socket *Socket)
 		if (NewSock==NULL)
 			break;
 			
-		lock_kernel(); 	/* Required for the TCPIP-stack in 2.3.13 */
-				/* This is actually bogus, since accept() releases
-				   it immediatly again. This will be fixed
-				   eventually though. */
-			
 			
 		NewSock->type = Socket->type;
-		(void)Socket->ops->dup(NewSock,Socket);
+		NewSock->ops = Socket->ops;
 		
 		
 		error = Socket->ops->accept(Socket,NewSock,O_NONBLOCK);
 		
-		unlock_kernel();
 
-		if ((error<0)&&(NewSock!=NULL))
+		if (error<0)
 		{
 			sock_release(NewSock);
 			break;
 		}
-		
-			
-		if (NewSock==NULL)
-			break;
-		
-		
+
+		if (NewSock->sk->state==TCP_CLOSE)
+		{
+			sock_release(NewSock);
+			continue;
+		}
 		
 		/* Allocate a request-entry for the connection */
 		NewRequest = kmalloc(sizeof(struct http_request),(int)GFP_KERNEL); 
@@ -111,7 +102,6 @@ int AcceptConnections(const int CPUNR, struct socket *Socket)
 		{
 			Send50x(NewSock); 	/* Service not available. Try again later */
 			sock_release(NewSock);
-			error = -1;
 			break;
 		}
 		memset(NewRequest,0,sizeof(struct http_request));  

@@ -440,9 +440,12 @@ int sk_attach_filter(struct sock_fprog *fprog, struct sock *sk)
 	fp->len = fprog->len;
 
 	if ((err = sk_chk_filter(fp->insns, fp->len))==0) {
-		struct sk_filter *old_fp = sk->filter;
+		struct sk_filter *old_fp;
+
+		spin_lock_bh(&sk->lock.slock);
+		old_fp = sk->filter;
 		sk->filter = fp;
-		synchronize_bh();
+		spin_unlock_bh(&sk->lock.slock);
 		fp = old_fp;
 	}
 

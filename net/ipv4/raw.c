@@ -5,7 +5,7 @@
  *
  *		RAW - implementation of IP "raw" sockets.
  *
- * Version:	$Id: raw.c,v 1.42 1999/07/02 11:26:26 davem Exp $
+ * Version:	$Id: raw.c,v 1.43 1999/08/20 11:05:57 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -60,19 +60,17 @@
 #include <net/icmp.h>
 #include <net/udp.h>
 #include <net/raw.h>
+#include <net/inet_common.h>
 #include <net/checksum.h>
 
-#ifdef CONFIG_IP_MROUTE
-struct sock *mroute_socket=NULL;
-#endif
-
 struct sock *raw_v4_htable[RAWV4_HTABLE_SIZE];
+rwlock_t raw_v4_lock = RW_LOCK_UNLOCKED;
 
 static void raw_v4_hash(struct sock *sk)
 {
 	struct sock **skp = &raw_v4_htable[sk->num & (RAWV4_HTABLE_SIZE - 1)];
 
-	SOCKHASH_LOCK_WRITE();
+	write_lock_bh(&raw_v4_lock);
 	if ((sk->next = *skp) != NULL)
 		(*skp)->pprev = &sk->next;
 	*skp = sk;
@@ -80,48 +78,38 @@ static void raw_v4_hash(struct sock *sk)
 	sk->prot->inuse++;
 	if(sk->prot->highestinuse < sk->prot->inuse)
 		sk->prot->highestinuse = sk->prot->inuse;
-	SOCKHASH_UNLOCK_WRITE();
+ 	sock_hold(sk);
+	write_unlock_bh(&raw_v4_lock);
 }
 
 static void raw_v4_unhash(struct sock *sk)
 {
-	SOCKHASH_LOCK_WRITE();
+ 	write_lock_bh(&raw_v4_lock);
 	if (sk->pprev) {
 		if (sk->next)
 			sk->next->pprev = sk->pprev;
 		*sk->pprev = sk->next;
 		sk->pprev = NULL;
 		sk->prot->inuse--;
+		__sock_put(sk);
 	}
-	SOCKHASH_UNLOCK_WRITE();
+	write_unlock_bh(&raw_v4_lock);
 }
 
-static __inline__ struct sock *__raw_v4_lookup(struct sock *sk, unsigned short num,
-					       unsigned long raddr, unsigned long laddr,
-					       int dif)
+struct sock *__raw_v4_lookup(struct sock *sk, unsigned short num,
+			     unsigned long raddr, unsigned long laddr,
+			     int dif)
 {
 	struct sock *s = sk;
 
 	for(s = sk; s; s = s->next) {
 		if((s->num == num) 				&&
-		   !(s->dead && (s->state == TCP_CLOSE))	&&
 		   !(s->daddr && s->daddr != raddr) 		&&
 		   !(s->rcv_saddr && s->rcv_saddr != laddr)	&&
 		   !(s->bound_dev_if && s->bound_dev_if != dif))
 			break; /* gotcha */
 	}
 	return s;
-}
-
-struct sock *raw_v4_lookup(struct sock *sk, unsigned short num,
-			   unsigned long raddr, unsigned long laddr,
-			   int dif)
-{
-	SOCKHASH_LOCK_READ();
-	sk = __raw_v4_lookup(sk, num, raddr, laddr, dif);
-	SOCKHASH_UNLOCK_READ();
-
-	return sk;
 }
 
 /*
@@ -151,17 +139,17 @@ struct sock *raw_v4_input(struct sk_buff *skb, struct iphdr *iph, int hash)
 {
 	struct sock *sk;
 
-	SOCKHASH_LOCK_READ_BH();
+	read_lock(&raw_v4_lock);
 	if ((sk = raw_v4_htable[hash]) == NULL)
 		goto out;
 	sk = __raw_v4_lookup(sk, iph->protocol,
 			     iph->saddr, iph->daddr,
 			     skb->dev->ifindex);
+
 	while(sk != NULL) {
 		struct sock *sknext = __raw_v4_lookup(sk->next, iph->protocol,
 						      iph->saddr, iph->daddr,
 						      skb->dev->ifindex);
-
 		if (iph->protocol != IPPROTO_ICMP ||
 		    ! icmp_filter(sk, skb)) {
 			struct sk_buff *clone;
@@ -169,16 +157,16 @@ struct sock *raw_v4_input(struct sk_buff *skb, struct iphdr *iph, int hash)
 			if(sknext == NULL)
 				break;
 			clone = skb_clone(skb, GFP_ATOMIC);
-			if(clone) {
-				SOCKHASH_UNLOCK_READ_BH();
+			/* Not releasing hash table! */
+			if(clone)
 				raw_rcv(sk, clone);
-				SOCKHASH_LOCK_READ_BH();
-			}
 		}
 		sk = sknext;
 	}
 out:
-	SOCKHASH_UNLOCK_READ_BH();
+	if (sk)
+		sock_hold(sk);
+	read_unlock(&raw_v4_lock);
 
 	return sk;
 }
@@ -196,7 +184,7 @@ void raw_err (struct sock *sk, struct sk_buff *skb)
 	   2. Socket is connected (otherwise the error indication
 	      is useless without ip_recverr and error is hard.
 	 */
-	if (!sk->ip_recverr && sk->state != TCP_ESTABLISHED)
+	if (!sk->protinfo.af_inet.recverr && sk->state != TCP_ESTABLISHED)
 		return;
 
 	switch (type) {
@@ -218,16 +206,16 @@ void raw_err (struct sock *sk, struct sk_buff *skb)
 		err = icmp_err_convert[code].errno;
 		harderr = icmp_err_convert[code].fatal;
 		if (code == ICMP_FRAG_NEEDED) {
-			harderr = (sk->ip_pmtudisc != IP_PMTUDISC_DONT);
+			harderr = (sk->protinfo.af_inet.pmtudisc != IP_PMTUDISC_DONT);
 			err = EMSGSIZE;
 			info = ntohs(skb->h.icmph->un.frag.mtu);
 		}
 	}
 
-	if (sk->ip_recverr)
+	if (sk->protinfo.af_inet.recverr)
 		ip_icmp_error(sk, skb, err, 0, info, (u8 *)(skb->h.icmph + 1));
 		
-	if (sk->ip_recverr || harderr) {
+	if (sk->protinfo.af_inet.recverr || harderr) {
 		sk->err = err;
 		sk->error_report(sk);
 	}
@@ -345,9 +333,6 @@ static int raw_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	if (msg->msg_flags & MSG_OOB)		/* Mirror BSD error message compatibility */
 		return -EOPNOTSUPP;
 			 
-	if (msg->msg_flags & ~(MSG_DONTROUTE|MSG_DONTWAIT))
-		return(-EINVAL);
-
 	/*
 	 *	Get and verify the address. 
 	 */
@@ -390,14 +375,14 @@ static int raw_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	ipc.addr = daddr;
 
 	if (!ipc.opt)
-		ipc.opt = sk->opt;
+		ipc.opt = sk->protinfo.af_inet.opt;
 
 	if (ipc.opt) {
 		err = -EINVAL;
 		/* Linux does not mangle headers on raw sockets,
 		 * so that IP options + IP_HDRINCL is non-sense.
 		 */
-		if (sk->ip_hdrincl)
+		if (sk->protinfo.af_inet.hdrincl)
 			goto done;
 		if (ipc.opt->srr) {
 			if (!daddr)
@@ -405,15 +390,15 @@ static int raw_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 			daddr = ipc.opt->faddr;
 		}
 	}
-	tos = RT_TOS(sk->ip_tos) | sk->localroute;
+	tos = RT_TOS(sk->protinfo.af_inet.tos) | sk->localroute;
 	if (msg->msg_flags&MSG_DONTROUTE)
 		tos |= RTO_ONLINK;
 
 	if (MULTICAST(daddr)) {
 		if (!ipc.oif)
-			ipc.oif = sk->ip_mc_index;
+			ipc.oif = sk->protinfo.af_inet.mc_index;
 		if (!rfh.saddr)
-			rfh.saddr = sk->ip_mc_addr;
+			rfh.saddr = sk->protinfo.af_inet.mc_addr;
 	}
 
 	err = ip_route_output(&rt, daddr, rfh.saddr, tos, ipc.oif);
@@ -425,11 +410,15 @@ static int raw_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	if (rt->rt_flags&RTCF_BROADCAST && !sk->broadcast)
 		goto done;
 
+	if (msg->msg_flags&MSG_CONFIRM)
+		goto do_confirm;
+back_from_confirm:
+
 	rfh.iov = msg->msg_iov;
 	rfh.saddr = rt->rt_src;
 	if (!ipc.addr)
 		ipc.addr = rt->rt_dst;
-	err=ip_build_xmit(sk, sk->ip_hdrincl ? raw_getrawfrag : raw_getfrag,
+	err=ip_build_xmit(sk, sk->protinfo.af_inet.hdrincl ? raw_getrawfrag : raw_getfrag,
 			  &rfh, len, &ipc, rt, msg->msg_flags);
 
 done:
@@ -438,39 +427,23 @@ done:
 	ip_rt_put(rt);
 
 	return err<0 ? err : len;
+
+do_confirm:
+	dst_confirm(&rt->u.dst);
+	if (!(msg->msg_flags&MSG_PROBE) || len)
+		goto back_from_confirm;
+	err = 0;
+	goto done;
 }
 
 static void raw_close(struct sock *sk, long timeout)
 {
-	bh_lock_sock(sk);
-
-	/* Observation: when raw_close is called, processes have
-	   no access to socket anymore. But net still has.
-	   Step one, detach it from networking:
-
-	   A. Remove from hash tables.
-	 */
-	sk->state = TCP_CLOSE;
-	raw_v4_unhash(sk);
         /*
-	   B. Raw sockets may have direct kernel refereneces. Kill them.
+	 * Raw sockets may have direct kernel refereneces. Kill them.
 	 */
 	ip_ra_control(sk, 0, NULL);
 
-	/* In this point socket cannot receive new packets anymore */
-
-
-	/* But we still have packets pending on receive
-	   queue and probably, our own packets waiting in device queues.
-	   sock_destroy will drain receive queue, but transmitted
-	   packets will delay socket destruction.
-	   Set sk->dead=1 in order to prevent wakeups, when these
-	   packet will be freed.
-	 */
-	sk->dead=1;
-	destroy_sock(sk);
-
-	/* That's all. No races here. */
+	inet_sock_release(sk);
 }
 
 /* This gets rid of all the nasties in af_inet. -DaveM */
@@ -483,17 +456,12 @@ static int raw_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		return -EINVAL;
 	chk_addr_ret = inet_addr_type(addr->sin_addr.s_addr);
 	if(addr->sin_addr.s_addr != 0 && chk_addr_ret != RTN_LOCAL &&
-	   chk_addr_ret != RTN_MULTICAST && chk_addr_ret != RTN_BROADCAST) {
-#ifdef CONFIG_IP_TRANSPARENT_PROXY
-		/* Superuser may bind to any address to allow transparent proxying. */
-		if(chk_addr_ret != RTN_UNICAST || !capable(CAP_NET_ADMIN))
-#endif
-			return -EADDRNOTAVAIL;
-	}
+	   chk_addr_ret != RTN_MULTICAST && chk_addr_ret != RTN_BROADCAST)
+		return -EADDRNOTAVAIL;
 	sk->rcv_saddr = sk->saddr = addr->sin_addr.s_addr;
 	if(chk_addr_ret == RTN_MULTICAST || chk_addr_ret == RTN_BROADCAST)
 		sk->saddr = 0;  /* Use device */
-	dst_release(xchg(&sk->dst_cache, NULL));
+	sk_dst_reset(sk);
 	return 0;
 }
 
@@ -541,7 +509,7 @@ int raw_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 		sin->sin_family = AF_INET;
 		sin->sin_addr.s_addr = skb->nh.iph->saddr;
 	}
-	if (sk->ip_cmsg_flags)
+	if (sk->protinfo.af_inet.cmsg_flags)
 		ip_cmsg_recv(msg, skb);
 done:
 	skb_free_datagram(sk, skb);
@@ -621,17 +589,18 @@ static void get_raw_sock(struct sock *sp, char *tmpbuf, int i)
 
 	dest  = sp->daddr;
 	src   = sp->rcv_saddr;
-	destp = ntohs(sp->dport);
-	srcp  = ntohs(sp->sport);
+	destp = 0;
+	srcp  = sp->num;
 	timer_active = (sp->timer.prev != NULL) ? 2 : 0;
 	timer_expires = (timer_active == 2 ? sp->timer.expires : jiffies);
 	sprintf(tmpbuf, "%4d: %08X:%04X %08X:%04X"
-		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %ld",
+		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %ld %d %p",
 		i, src, srcp, dest, destp, sp->state, 
 		atomic_read(&sp->wmem_alloc), atomic_read(&sp->rmem_alloc),
 		timer_active, timer_expires-jiffies, 0,
-		sp->socket->inode->i_uid, timer_active ? sp->timeout : 0,
-		sp->socket ? sp->socket->inode->i_ino : 0);
+		sp->socket->inode->i_uid, 0,
+		sp->socket ? sp->socket->inode->i_ino : 0,
+		atomic_read(&sp->refcnt), sp);
 }
 
 int raw_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
@@ -646,7 +615,7 @@ int raw_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 			       "  sl  local_address rem_address   st tx_queue "
 			       "rx_queue tr tm->when retrnsmt   uid  timeout inode");
 	pos = 128;
-	SOCKHASH_LOCK_READ();
+	read_lock(&raw_v4_lock);
 	for (i = 0; i < RAWV4_HTABLE_SIZE; i++) {
 		struct sock *sk;
 
@@ -663,7 +632,7 @@ int raw_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 		}
 	}
 out:
-	SOCKHASH_UNLOCK_READ();
+	read_unlock(&raw_v4_lock);
 	begin = len - (pos - offset);
 	*start = buffer + begin;
 	len -= begin;
@@ -677,6 +646,7 @@ out:
 struct proto raw_prot = {
 	raw_close,			/* close */
 	udp_connect,			/* connect */
+	udp_disconnect,			/* disconnect */
 	NULL,				/* accept */
 	NULL,				/* retransmit */
 	NULL,				/* write_wakeup */

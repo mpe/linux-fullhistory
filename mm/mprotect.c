@@ -194,7 +194,7 @@ static int mprotect_fixup(struct vm_area_struct * vma,
 	return 0;
 }
 
-asmlinkage int sys_mprotect(unsigned long start, size_t len, unsigned long prot)
+asmlinkage long sys_mprotect(unsigned long start, size_t len, unsigned long prot)
 {
 	unsigned long nstart, end, tmp;
 	struct vm_area_struct * vma, * next;

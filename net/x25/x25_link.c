@@ -39,7 +39,6 @@
 #include <linux/fcntl.h>
 #include <linux/mm.h>
 #include <linux/interrupt.h>
-#include <linux/firewall.h>
 #include <net/x25.h>
 
 static struct x25_neigh *x25_neigh_list = NULL;
@@ -224,11 +223,6 @@ void x25_transmit_clear_request(struct x25_neigh *neigh, unsigned int lci, unsig
 
 void x25_transmit_link(struct sk_buff *skb, struct x25_neigh *neigh)
 {
-	if (call_fw_firewall(PF_X25, skb->dev, skb->data, NULL, &skb) != FW_ACCEPT) {
-		kfree_skb(skb);
-		return;
-	}
-
 	switch (neigh->state) {
 		case X25_LINK_STATE_0:
 			skb_queue_tail(&neigh->queue, skb);
@@ -378,8 +372,11 @@ int x25_subscr_ioctl(unsigned int cmd, void *arg)
 		case SIOCX25GSUBSCRIP:
 			if ((dev = x25_dev_get(x25_subscr.device)) == NULL)
 				return -EINVAL;
-			if ((x25_neigh = x25_get_neigh(dev)) == NULL)
+			if ((x25_neigh = x25_get_neigh(dev)) == NULL) {
+				dev_put(dev);
 				return -EINVAL;
+			}
+			dev_put(dev);
 			x25_subscr.extended = x25_neigh->extended;
 			if (copy_to_user(arg, &x25_subscr, sizeof(struct x25_subscrip_struct)))
 				return -EFAULT;
@@ -390,8 +387,11 @@ int x25_subscr_ioctl(unsigned int cmd, void *arg)
 				return -EFAULT;
 			if ((dev = x25_dev_get(x25_subscr.device)) == NULL)
 				return -EINVAL;
-			if ((x25_neigh = x25_get_neigh(dev)) == NULL)
+			if ((x25_neigh = x25_get_neigh(dev)) == NULL) {
+				dev_put(dev);
 				return -EINVAL;
+			}
+			dev_put(dev);
 			if (x25_subscr.extended != 0 && x25_subscr.extended != 1)
 				return -EINVAL;
 			x25_neigh->extended = x25_subscr.extended;

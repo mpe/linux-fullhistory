@@ -85,7 +85,6 @@ http://members.xoom.com/yar/synthgm.sbk.gz. Copy it to /usr and gunzip it there.
 
 7) Edit /etc/conf.modules, inserting at the end of the file:
 
-alias sound sb
 alias midi awe_wave
 post-install awe_wave /usr/bin/sfxload /usr/synthfm.sbk
 options sb io=0x220 irq=5 dma=1 dma16=5 mpu_io=0x330

@@ -81,7 +81,6 @@
 #include <linux/atalk.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
-#include <linux/firewall.h>
 #include <linux/init.h>
 
 
@@ -793,7 +792,7 @@ int atif_ioctl(int cmd, void *arg)
 	if(copy_from_user(&atreq,arg,sizeof(atreq)))
 		return (-EFAULT);
 
-	if((dev = dev_get(atreq.ifr_name)) == NULL)
+	if((dev = __dev_get_by_name(atreq.ifr_name)) == NULL)
 		return (-ENODEV);
 
 	sa=(struct sockaddr_at*)&atreq.ifr_addr;
@@ -1027,7 +1026,7 @@ static int atrtr_ioctl(unsigned int cmd, void *arg)
 		case SIOCADDRT:
 			/* FIX ME: the name of the device is still in user space, isn't it? */
 			if (rt.rt_dev != NULL)
-				if ((dev = dev_get(rt.rt_dev)) == NULL)
+				if ((dev = __dev_get_by_name(rt.rt_dev)) == NULL)
 					return -(ENODEV);
 			
 			return (atrtr_create(&rt, dev));
@@ -1201,7 +1200,7 @@ static int atalk_create(struct socket *sock, int protocol)
 /*
  * Free a socket. No work needed
  */
-static int atalk_release(struct socket *sock, struct socket *peer)
+static int atalk_release(struct socket *sock)
 {
 	struct sock *sk=sock->sk;
 
@@ -1366,12 +1365,6 @@ static int atalk_connect(struct socket *sock, struct sockaddr *uaddr,
  */
 static int atalk_accept(struct socket *sock, struct socket *newsock, int flags)
 {
-	if(newsock->sk)
-	{
-		sk_free(newsock->sk);
-		MOD_DEC_USE_COUNT;
-	}
-
 	return (-EOPNOTSUPP);
 }
 
@@ -1480,12 +1473,6 @@ static int atalk_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_
 		return (0);
 	}
 
-	if(call_in_firewall(PF_APPLETALK, skb->dev, ddp, NULL,&skb)!=FW_ACCEPT)
-	{
-		kfree_skb(skb);
-		return (0);
-	}
-
 	/* Check the packet is aimed at us */
 
 	if(ddp->deh_dnet == 0)	/* Net 0 is 'this network' */
@@ -1514,15 +1501,6 @@ static int atalk_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_
 			if (dev->type == ARPHRD_PPP)
 				printk(KERN_DEBUG "AppleTalk: didn't forward broadcast packet received from PPP iface\n");
 			
-			kfree_skb(skb);
-			return (0);
-		}
-
-		/*
-		 * Check firewall allows this routing
-		 */
-		if(call_fw_firewall(PF_APPLETALK, skb->dev, ddp, NULL, &skb) != FW_ACCEPT)
-		{
 			kfree_skb(skb);
 			return (0);
 		}
@@ -1596,7 +1574,7 @@ static int atalk_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_
                 struct net_device *dev;
 
 		/* This needs to be able to handle ipddp"N" devices */
-                if((dev = dev_get("ipddp0")) == NULL)
+                if((dev = __dev_get_by_name("ipddp0")) == NULL)
                         return (-ENODEV);
 
                 skb->protocol = htons(ETH_P_IP);
@@ -1832,12 +1810,6 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	else
 		ddp->deh_sum = atalk_checksum(ddp, len + sizeof(*ddp));
 
-	if(call_out_firewall(PF_APPLETALK, skb->dev, ddp, NULL, &skb) != FW_ACCEPT)
-	{
-		kfree_skb(skb);
-		return (-EPERM);
-	}
-
 	/*
 	 * Loopback broadcast packets to non gateway targets (ie routes
 	 * to group we are in)
@@ -2049,11 +2021,10 @@ static struct net_proto_family atalk_family_ops=
 	atalk_create
 };
 
-static struct proto_ops atalk_dgram_ops=
+static struct proto_ops SOCKOPS_WRAPPED(atalk_dgram_ops)=
 {
 	PF_APPLETALK,
 
-	sock_no_dup,
 	atalk_release,
 	atalk_bind,
 	atalk_connect,
@@ -2068,8 +2039,12 @@ static struct proto_ops atalk_dgram_ops=
 	sock_no_getsockopt,
 	sock_no_fcntl,
 	atalk_sendmsg,
-	atalk_recvmsg
+	atalk_recvmsg,
+	sock_no_mmap
 };
+
+#include <linux/smp_lock.h>
+SOCKOPS_WRAP(atalk_dgram, PF_APPLETALK);
 
 static struct notifier_block ddp_notifier=
 {

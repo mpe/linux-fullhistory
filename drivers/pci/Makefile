@@ -15,20 +15,16 @@ L_TARGET := pci.a
 ifeq ($(CONFIG_MODULES),y)
 O_TARGET = pci_syms.o
 OX_OBJS  = pcisyms.o
-O_OBJS   = pci.o names.o
+O_OBJS   = pci.o
 L_OBJS   := pci_syms.o
 else
-L_OBJS   := pci.o names.o
+L_OBJS   := pci.o
 endif
 
 ifdef CONFIG_PROC_FS
 L_OBJS   += proc.o
 endif
 
-ifdef CONFIG_PCI_QUIRKS
-L_OBJS   += quirks.o
-endif
-
-L_OBJS   += compat.o
+L_OBJS   += compat.o quirks.o names.o
 
 include $(TOPDIR)/Rules.make

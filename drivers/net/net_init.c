@@ -38,6 +38,7 @@
 #include <linux/fddidevice.h>
 #include <linux/hippidevice.h>
 #include <linux/trdevice.h>
+#include <linux/fcdevice.h>
 #include <linux/if_arp.h>
 #include <linux/if_ltalk.h>
 #include <linux/rtnetlink.h>
@@ -83,7 +84,7 @@ init_etherdev(struct net_device *dev, int sizeof_priv)
 
 	/* Use an existing correctly named device in Space.c:dev_base. */
 	if (dev == NULL) {
-		int alloc_size = sizeof(struct net_device) + sizeof("eth%d  ")
+		int alloc_size = sizeof(struct net_device) + IFNAMSIZ
 			+ sizeof_priv + 3;
 		struct net_device *cur_dev;
 		char pname[8];		/* Putative name for the device.  */
@@ -207,7 +208,7 @@ struct net_device *init_hippi_dev(struct net_device *dev, int sizeof_priv)
 
 	/* Use an existing correctly named device in Space.c:dev_base. */
 	if (dev == NULL) {
-		int alloc_size = sizeof(struct net_device) + sizeof("hip%d  ")
+		int alloc_size = sizeof(struct net_device) + IFNAMSIZ
 			+ sizeof_priv + 3;
 		struct net_device *cur_dev;
 		char pname[8];
@@ -540,7 +541,7 @@ struct net_device *init_trdev(struct net_device *dev, int sizeof_priv)
 
 	/* Use an existing correctly named device in Space.c:dev_base. */
 	if (dev == NULL) {
-		int alloc_size = sizeof(struct net_device) + sizeof("tr%d  ")
+		int alloc_size = sizeof(struct net_device) + IFNAMSIZ
 			+ sizeof_priv + 3;
 		struct net_device *cur_dev;
 		char pname[8];		/* Putative name for the device.  */
@@ -657,7 +658,130 @@ void unregister_trdev(struct net_device *dev)
 }
 #endif
 
-
+
+#ifdef CONFIG_NET_FC
+
+#define MAX_FC_CARDS 2
+static struct net_device *fcdev_index[MAX_FC_CARDS];
+ 
+void fc_setup(struct net_device *dev)
+{
+int i;
+
+        /* register boot-defined "fc" devices */
+        if (dev->name && (strncmp(dev->name, "fc", 2) == 0)) {
+                i = simple_strtoul(dev->name + 2, NULL, 0);
+                if (fcdev_index[i] == NULL) {
+                        fcdev_index[i] = dev;
+                }
+                else if (dev != fcdev_index[i]) {
+                        /* Really shouldn't happen! */
+                        printk("fc_setup: Ouch! Someone else took %s\n",
+                                dev->name);
+                }
+        }
+		
+	dev->hard_header        =        fc_header;
+        dev->rebuild_header  	=        fc_rebuild_header;
+                
+        dev->type               =        ARPHRD_IEEE802;
+	dev->hard_header_len    =        FC_HLEN;
+        dev->mtu                =        2024;
+        dev->addr_len           =        FC_ALEN;
+        dev->tx_queue_len       =        100; /* Long queues on fc */
+
+        memset(dev->broadcast,0xFF, FC_ALEN);
+
+        /* New-style flags. */
+        dev->flags              =        IFF_BROADCAST;
+		dev_init_buffers(dev);
+        return;
+}
+
+
+struct net_device *init_fcdev(struct net_device *dev, int sizeof_priv)
+{
+int new_device = 0;
+int i;
+	/* Use an existing correctly named device in Space.c:dev_base. */
+     if (dev == NULL) {
+     int alloc_size = sizeof(struct net_device) + sizeof("fc%d  ") + sizeof_priv + 3; 
+     struct net_device *cur_dev;
+     char pname[8];          /* Putative name for the device.  */
+                 
+      	for (i = 0; i < MAX_FC_CARDS; ++i)
+        	if (fcdev_index[i] == NULL) {
+            	sprintf(pname, "fc%d", i);
+                for (cur_dev = dev_base; cur_dev; cur_dev = cur_dev->next)
+                	if (strcmp(pname, cur_dev->name) == 0) {
+                        dev = cur_dev;
+                        dev->init = NULL;
+                        sizeof_priv = (sizeof_priv + 3) &~3;
+                        dev->priv = sizeof_priv 
+								? kmalloc(sizeof_priv, GFP_KERNEL)
+                                : NULL;
+                        if (dev->priv) memset(dev->priv, 0, sizeof_priv);
+                        goto fcfound;
+                     }
+               }
+
+        alloc_size &= ~3;               /* Round to dword boundary. */
+        dev = (struct net_device *)kmalloc(alloc_size, GFP_KERNEL);
+		memset(dev, 0, alloc_size);
+        if (sizeof_priv)
+        	dev->priv = (void *) (dev + 1);
+        dev->name = sizeof_priv + (char *)(dev + 1);
+        new_device = 1;
+      }        
+
+fcfound:                       /* From the double loop */
+                                
+        for (i = 0; i < MAX_FC_CARDS; ++i)
+                if (fcdev_index[i] == NULL) {
+                        sprintf(dev->name, "fc%d", i);
+                        fcdev_index[i] = dev;
+                        break;
+                }
+                                                
+        fc_setup(dev);                                 
+        if (new_device)                 
+                register_netdevice(dev);  
+                
+        return dev;
+}
+
+void fc_freedev(struct net_device *dev)
+{                                               
+int i;
+	for (i = 0; i < MAX_FC_CARDS; ++i) {
+		if (fcdev_index[i] == dev) {
+			fcdev_index[i] = NULL;
+			break;
+		}
+	}
+}
+
+
+int register_fcdev(struct net_device *dev)
+{
+        dev_init_buffers(dev);
+        if (dev->init && dev->init(dev) != 0) {
+                unregister_fcdev(dev);
+                return -EIO;
+        }
+        return 0;
+}                                               
+        
+void unregister_fcdev(struct net_device *dev)
+{
+        rtnl_lock();
+		unregister_netdevice(dev);
+        rtnl_unlock();
+        fc_freedev(dev);
+}
+
+#endif /* CONFIG_NET_FC */
+
 /*
  * Local variables:
  *  compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -m486 -c net_init.c"

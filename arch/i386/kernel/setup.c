@@ -584,6 +584,19 @@ static int __init amd_model(struct cpuinfo_x86 *c)
 				break;
 			}
 			break;
+		case 6:	/* An Athlon. We can trust the BIOS probably */
+		{
+			
+			u32 ecx, edx, dummy;
+			cpuid(0x80000005, &dummy, &dummy, &ecx, &edx);
+			printk("L1 I Cache: %dK  L1 D Cache: %dK\n",
+				ecx>>24, edx>>24);
+			cpuid(0x80000006, &dummy, &dummy, &ecx, &edx);
+			printk("L2 Cache: %dK\n", ecx>>16);
+			c->x86_cache_size = ecx>>16;
+			break;
+		}
+		
 	}
 	return r;
 }
@@ -805,6 +818,11 @@ static struct cpu_model_info cpu_models[] __initdata = {
 	    "K5", "K5", NULL, NULL,
 	    "K6", "K6", "K6-2",
 	    "K6-3", NULL, NULL, NULL, NULL, NULL, NULL }},
+	{ X86_VENDOR_AMD,	6,
+	  { "Athlon", "Athlon",
+	    NULL, NULL, NULL, NULL,
+	    NULL, NULL, NULL,
+	    NULL, NULL, NULL, NULL, NULL, NULL, NULL }},
 	{ X86_VENDOR_UMC,	4,
 	  { NULL, "U5D", "U5S", NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 	    NULL, NULL, NULL, NULL, NULL, NULL }},

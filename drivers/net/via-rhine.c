@@ -86,6 +86,9 @@ static const int multicast_filter_limit = 32;
 #if defined(__i386__)  &&  !defined(VIA_USE_MEMORY)
 #define VIA_USE_IO
 #endif
+#if defined(__alpha__)
+#define VIA_USE_IO
+#endif
 #ifdef VIA_USE_IO
 #undef readb
 #undef readw

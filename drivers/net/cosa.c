@@ -1,10 +1,7 @@
-/* $Id: cosa.c,v 1.24 1999/05/28 17:28:34 kas Exp $ */
+/* $Id: cosa.c,v 1.26 1999/07/09 15:02:37 kas Exp $ */
 
 /*
  *  Copyright (C) 1995-1997  Jan "Yenya" Kasprzak <kas@fi.muni.cz>
- * 
- * 	5/25/1999 : Marcelo Tosatti <marcelo@conectiva.com.br>
- * 		fixed a deadlock in cosa_sppp_open 
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -104,6 +101,13 @@
 
 #include "syncppp.h"
 #include "cosa.h"
+
+/* Linux version stuff */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,1)
+typedef struct wait_queue *wait_queue_head_t;
+#define DECLARE_WAITQUEUE(wait, current) \
+	struct wait_queue wait = { current, NULL }
+#endif
 
 /* Maximum length of the identification string. */
 #define COSA_MAX_ID_STRING	128
@@ -366,7 +370,7 @@ static int __init cosa_init(void)
 #endif
 {
 	int i;
-	printk(KERN_INFO "cosa v1.04 (c) 1997-8 Jan Kasprzak <kas@fi.muni.cz>\n");
+	printk(KERN_INFO "cosa v1.06 (c) 1997-8 Jan Kasprzak <kas@fi.muni.cz>\n");
 #ifdef __SMP__
 	printk(KERN_INFO "cosa: SMP found. Please mail any success/failure reports to the author.\n");
 #endif
@@ -1269,10 +1273,8 @@ static void put_driver_status(struct cosa_data *cosa)
 			debug_status_out(cosa, 0);
 #endif
 		}
-		cosa_putdata8(cosa, 0);
 		cosa_putdata8(cosa, status);
 #ifdef DEBUG_IO
-		debug_data_cmd(cosa, 0);
 		debug_data_cmd(cosa, status);
 #endif
 	}
@@ -1647,6 +1649,14 @@ static int puthexnumber(struct cosa_data *cosa, int number)
  * use the round-robin approach. The newer COSA firmwares have a simple
  * flow-control - in the status word has bits 2 and 3 set to 1 means that the
  * channel 0 or 1 doesn't want to receive data.
+ *
+ * It seems there is a bug in COSA firmware (need to trace it further):
+ * When the driver status says that the kernel has no more data for transmit
+ * (e.g. at the end of TX DMA) and then the kernel changes its mind
+ * (e.g. new packet is queued to hard_start_xmit()), the card issues
+ * the TX interrupt but does not mark the channel as ready-to-transmit.
+ * The fix seems to be to push the packet to COSA despite its request.
+ * We first try to obey the card's opinion, and then fall back to forced TX.
  */
 static inline void tx_interrupt(struct cosa_data *cosa, int status)
 {
@@ -1658,23 +1668,35 @@ static inline void tx_interrupt(struct cosa_data *cosa, int status)
 	spin_lock_irqsave(&cosa->lock, flags);
 	set_bit(TXBIT, &cosa->rxtx);
 	if (!test_bit(IRQBIT, &cosa->rxtx)) {
-		/* flow control */
+		/* flow control, see the comment above */
 		int i=0;
-		do {
-			if (i++ > cosa->nchannels) {
-				printk(KERN_WARNING
-					"%s: No channel wants data in TX IRQ\n",
-					cosa->name);
-				put_driver_status_nolock(cosa);
-				clear_bit(TXBIT, &cosa->rxtx);
-				spin_unlock_irqrestore(&cosa->lock, flags);
-				return;
-			}
+		if (!cosa->txbitmap) {
+			printk(KERN_WARNING "%s: No channel wants data "
+				"in TX IRQ. Expect DMA timeout.",
+				cosa->name);
+			put_driver_status_nolock(cosa);
+			clear_bit(TXBIT, &cosa->rxtx);
+			spin_unlock_irqrestore(&cosa->lock, flags);
+			return;
+		}
+		while(1) {
 			cosa->txchan++;
+			i++;
 			if (cosa->txchan >= cosa->nchannels)
 				cosa->txchan = 0;
-		} while ((!(cosa->txbitmap & (1<<cosa->txchan)))
-			|| status & (1<<(cosa->txchan+DRIVER_TXMAP_SHIFT)));
+			if (!(cosa->txbitmap & (1<<cosa->txchan)))
+				continue;
+			if (~status & (1 << (cosa->txchan+DRIVER_TXMAP_SHIFT)))
+				break;
+			/* in second pass, accept first ready-to-TX channel */
+			if (i > cosa->nchannels) {
+				/* Can be safely ignored */
+				printk(KERN_DEBUG "%s: Forcing TX "
+					"to not-ready channel %d\n",
+					cosa->name, cosa->txchan);
+				break;
+			}
+		}
 
 		cosa->txsize = cosa->chan[cosa->txchan].txsize;
 		if (cosa_dma_able(cosa->chan+cosa->txchan,
@@ -1784,6 +1806,7 @@ static inline void rx_interrupt(struct cosa_data *cosa, int status)
 	if (is_8bit(cosa)) {
 		if (!test_bit(IRQBIT, &cosa->rxtx)) {
 			set_bit(IRQBIT, &cosa->rxtx);
+			put_driver_status_nolock(cosa);
 			cosa->rxsize = cosa_getdata8(cosa) <<8;
 #ifdef DEBUG_IO
 			debug_data_in(cosa, cosa->rxsize >> 8);

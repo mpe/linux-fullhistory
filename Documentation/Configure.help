@@ -1379,42 +1379,27 @@ CONFIG_FILTER
   file linux/Documentation/networking/filter.txt for more information.
   If unsure, say N.
 
-Network firewalls
-CONFIG_FIREWALL
-  A firewall is a computer which protects a local network from the
-  rest of the world: all traffic to and from computers on the local
-  net is inspected by the firewall first, and sometimes blocked or
-  modified. The type of firewall you'll get if you say Y here is
-  called a "packet filter": it can block network traffic based on
-  type, origin and destination. By contrast, "proxy-based" firewalls
-  are more secure but more intrusive and more bothersome to set up;
-  they inspect the network traffic much more closely, modify it and
-  have knowledge about the higher level protocols, which packet
-  filters lack. They also often require changes in the programs
-  running on the local clients. Proxy-based firewalls don't need
-  support by the kernel, but they are often combined with packet
-  filters, which only works if you say Y here.
-
-  If you want to configure your Linux box as a packet filter firewall
-  for a local network, say Y here. If your local network is TCP/IP
-  based, you will then also have to say Y to "IP: firewalling", below.
-
-  You also need to say Y here and to "IP firewalling" below in order
-  to be able to use IP masquerading (i.e. local computers can chat
-  with an outside host, but that outside host is made to think that it
-  is talking to the firewall box -- makes the local network completely
-  invisible to the outside world and avoids the need to allocate
-  globally valid IP host addresses for the machines on the local net)
-  and IP transparent proxying (makes the computers on the local
-  network think they're talking to a remote computer, while in reality
-  the traffic is redirected by your Linux firewall to a local proxy
-  server).
+Network packet filtering
+CONFIG_NETFILTER
+  Netfilter is a framework for filtering and mangling packets.
+  Various modules exist for netfilter which replace the previous
+  masquerading (ipmasqadm), packet filtering (ipchains), transparent
+  proxying, and portforwarding mechanisms.  Enabling this option
+  makes minor alterations to allow these modules to hook into the
+  packet stream.  More information is available from 
+  http://netfilter.kernelnotes.org (to browse the WWW, you need
+  to have access to a machine on the Internet that has a program like
+  lynx or netscape).
 
   Make sure to say N to "Fast switching" below if you intend to say Y
-  here.
+  here, as Fast switching currently bypasses netfilter.
 
   Chances are that you should say Y here for every machine which is
   run as a router and N for every regular host. If unsure, say N.
+
+Network packet filtering debugging
+CONFIG_NETFILTER_DEBUG
+  Say Y to make sure packets aren't leaking.
 
 SYN flood protection
 CONFIG_SYN_COOKIES
@@ -1636,32 +1621,6 @@ CONFIG_PCI_GOBIOS
   "Direct", the BIOS won't be used, and if you choose "Any", the
   kernel will try the direct access method and falls back to the BIOS
   if that doesn't work. If unsure, go with the default.
-
-PCI quirks
-CONFIG_PCI_QUIRKS
-  If you have a broken BIOS, it may fail to set up the PCI bus in a
-  correct or optimal fashion. Saying Y here will correct that problem.
-  If your BIOS is fine you can say N here for a very slightly smaller
-  kernel. If unsure, say Y.
-
-PCI bridge optimization (experimental)
-CONFIG_PCI_OPTIMIZE
-  This can improve access times for some hardware devices if you have
-  a really broken BIOS and your computer uses a PCI bus system. Say Y
-  if you think it might help, but try turning it off if you experience
-  any problems with the PCI bus. N is the safe answer.
-
-Backward-compatible /proc/pci
-CONFIG_PCI_OLD_PROC
-  Older kernels supported a /proc/pci file containing brief textual
-  descriptions of all PCI devices in the system. Several programs
-  tried to parse this file, so it became almost impossible to add new
-  fields without breaking compatibility. So a new /proc interface to
-  PCI (/proc/bus/pci) has been implemented and the old one is
-  supported for compatibility reasons only; you'll get the old one (in
-  addition to the new one) if you say Y here and to "/proc filesystem
-  support", below. If unsure, say Y. If you say N, you'll only get the
-  new /proc/bus/pci interface.
 
 MCA support
 CONFIG_MCA
@@ -2609,64 +2568,6 @@ CONFIG_IP_ROUTER
 
   If unsure, say N here.
 
-IP: firewalling
-CONFIG_IP_FIREWALL
-  If you want to configure your Linux box as a packet filter firewall
-  for a local TCP/IP based network, say Y here. You may want to read
-  the FIREWALL-HOWTO, available via FTP (user: anonymous) in
-  ftp://metalab.unc.edu/pub/Linux/docs/HOWTO.
-
-  Also, you will need the ipchains tool (available on the WWW at
-  http://www.rustcorp.com/linux/ipchains/) to allow selective blocking
-  of Internet traffic based on type, origin and destination. 
-  Note that the Linux firewall code has changed and the old program
-  called ipfwadm won't work anymore. Please read the IPCHAINS-HOWTO.
-
-  The type of firewall provided by ipchains and this kernel support is
-  called a "packet filter". The other type of firewall, a
-  "proxy-based" one, is more secure but more intrusive and more
-  bothersome to set up; it inspects the network traffic much more
-  closely, modifies it and has knowledge about the higher level
-  protocols, which a packet filter lacks. Moreover, proxy-based
-  firewalls often require changes to the programs running on the local
-  clients. Proxy-based firewalls don't need support by the kernel, but
-  they are often combined with a packet filter, which only works if
-  you say Y here.
-
-  The firewalling code will only work if IP forwarding is enabled in
-  your kernel. You can do that by saying Y to "/proc filesystem
-  support" and "Sysctl support" below and executing the line
-
-    echo "1" > /proc/sys/net/ipv4/ip_forward
-
-  at boot time after the /proc filesystem has been mounted. 
-
-  You need to say Y to "IP firewalling" in order to be able to use IP
-  masquerading (masquerading means that local computers can chat with
-  an outside host, but that outside host is made to think that it is
-  talking to the firewall box -- makes the local network completely
-  invisible to the outside world and avoids the need to allocate
-  globally valid IP host addresses for the machines on the local net)
-  and IP packet logging and accounting (keeping track of what is using
-  all your network bandwidth) and IP transparent proxying (makes the
-  computers on the local network think they're talking to a remote
-  computer, while in reality the traffic is redirected by your Linux
-  firewall to a local proxy server).
-
-  If in doubt, say N here.
-
-IP: firewall packet netlink device
-CONFIG_IP_FIREWALL_NETLINK
-  If you say Y here, you can use the ipchains tool to copy all or part
-  of any packet you specify that hits your Linux firewall to optional
-  user space monitoring software that can then look for attacks and
-  take actions such as paging the administrator of the site.
-
-  To use this, you need to create a character special file under /dev
-  with major number 36 and minor number 3 using mknod ("man mknod"),
-  and you need (to write) a program that reads from that device and
-  takes appropriate action.
-
 IP: kernel level autoconfiguration
 CONFIG_IP_PNP
   This enables automatic configuration of IP addresses of devices and
@@ -2735,175 +2636,6 @@ CONFIG_NET_IPGRE_BROADCAST
   Network), which looks like a normal Ethernet LAN (Local Area
   Network), but can be distributed all over the Internet. If you want
   to do that, say Y here and to "IP: multicast routing" below.
-
-IP: transparent proxying
-CONFIG_IP_TRANSPARENT_PROXY
-  This enables your Linux firewall to transparently redirect any
-  network traffic originating from the local network and destined
-  for a remote host to a local server, called a "transparent proxy
-  server". This makes the local computers think they are talking to
-  the remote end, while in fact they are connected to the local
-  proxy. Redirection is activated by defining special input firewall
-  rules (using the ipchains utility) and/or by doing an appropriate
-  bind() system call.
-
-IP: masquerading
-CONFIG_IP_MASQUERADE
-  If one of the computers on your local network for which your Linux
-  box acts as a firewall wants to send something to the outside, your
-  box can "masquerade" as that computer, i.e. it forwards the traffic
-  to the intended outside destination, but makes it look like it came
-  from the firewall box itself. It works both ways: if the outside
-  host replies, the Linux firewall will silently forward the traffic
-  to the corresponding local computer. This way, the computers on your
-  local net are completely invisible to the outside world, even though
-  they can reach the outside and can receive replies. This makes it
-  possible to have the computers on the local network participate on
-  the Internet even if they don't have officially registered IP
-  addresses. (This last problem can also be solved by connecting the
-  Linux box to the Internet using SLiRP [SLiRP is a SLIP/PPP emulator
-  that works if you have a regular dial up shell account on some UNIX
-  computer; get it via FTP (user: anonymous) from
-  ftp://metalab.unc.edu/pub/Linux/system/network/serial/ ].) 
-
-  The IP masquerading code will only work if IP forwarding is enabled
-  in your kernel; you can do this by saying Y to "/proc
-  filesystem support" and "Sysctl support" below and then executing a
-  line like
-
-    echo "1" > /proc/sys/net/ipv4/ip_forward
-
-  from a boot time script after the /proc filesystem has been mounted.
-
-  Details on how to set things up are contained in the IP Masquerade
-  mini-HOWTO, available via FTP (user: anonymous) from
-  ftp://metalab.unc.edu/pub/Linux/docs/HOWTO/mini; there's also some
-  information on the WWW at
-  http://www.tor.shaw.wave.ca/~ambrose/kernel21.html. 
-
-  If you say Y here, then the modules ip_masq_ftp.o (for ftp file
-  transfers), ip_masq_irc.o (for irc chats), ip_masq_quake.o (you
-  guessed it), ip_masq_vdolive.o (for VDOLive video connections),
-  ip_masq_cuseeme.o (for CU-SeeMe broadcasts) and ip_masq_raudio.o
-  (for RealAudio downloads) will automatically be compiled. They are
-  needed to make masquerading for these protocols work. Modules are
-  pieces of code which can be inserted in and removed from the running
-  kernel whenever you want; read Documentation/modules.txt for
-  details.
-
-IP: ICMP masquerading
-CONFIG_IP_MASQUERADE_ICMP
-  The basic masquerade code described for "IP: masquerading" above
-  only handles TCP or UDP packets (and ICMP errors for existing
-  connections). This option adds additional support for masquerading
-  ICMP packets, such as ping or the probes used by the Windows 95
-  tracert program.
-
-  If you want this, say Y. 
-
-IP: masquerading special modules support
-CONFIG_IP_MASQUERADE_MOD
-  This provides support for special modules that can modify the
-  rewriting rules used when masquerading. Please note that this
-  feature adds a little overhead in the input packet processing chain.
-
-  Examples of such modules are ipautofw (allowing the masquerading of
-  protocols which don't have their own protocol helpers) and port
-  forwarding (making an incoming port of a local computer visible
-  through the masquerading host).
-
-  You will need the user space program "ipmasqadm" to use these
-  additional modules; you can download it from
-  http://juanjox.linuxhq.com/
-
-  All this additional code is still under development and so is
-  currently marked EXPERIMENTAL.
-  
-  If you want to try, for example, PORT FORWARDING, say Y.
-
-IP: ipautofw masquerade support (Experimental)
-CONFIG_IP_MASQUERADE_IPAUTOFW
-  ipautofw is a program which allows the masquerading of protocols
-  which do not (as yet) have their own protocol helpers. Information
-  and source for ipautofw is available via FTP (user: anonymous) from
-  ftp://ftp.netis.com/pub/members/rlynch/
-
-  You will also need the ipmasqadm tool available from
-  http://juanjox.linuxhq.com/ .
-
-  The ipautofw code is still under development and so is currently
-  marked EXPERIMENTAL. If you want to try it, say Y.
-
-  This code is also available as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want).
-  The module will be called ip_masq_autofw.o. If you want to compile
-  it as a module, say M here and read Documentation/modules.txt.
-
-IP: ipportfw masquerade support
-CONFIG_IP_MASQUERADE_IPPORTFW
-  Port Forwarding is an addition to IP Masquerading which allows some
-  forwarding of packets from outside to inside a firewall on given
-  ports. This could be useful if, for example, you want to run a web
-  server behind the firewall or masquerading host and that web server
-  should be accessible from the outside world. An external client
-  sends a request to port 80 of the firewall, the firewall forwards
-  this request to the web server, the web server handles the request
-  and the results are sent through the firewall to the original
-  client. The client thinks that the firewall machine itself is
-  running the web server. This can also be used for load balancing if
-  you have a farm of identical web servers behind the firewall.
-
-  Information about this feature is available from
-  http://www.monmouth.demon.co.uk/ipsubs/portforwarding.html (to
-  browse the WWW, you need to have access to a machine on the Internet
-  that has a program like lynx or netscape). For general info, please
-  see ftp://ftp.compsoc.net/users/steve/ipportfw/linux21/
-
-  You will need the user space program "ipmasqadm" which can be
-  downloaded from http://juanjox.linuxhq.com/
-
-  The portfw code is still under development and so is currently
-  marked EXPERIMENTAL. If you want to try it, say Y.
-
-  This code is also available as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want).
-  The module will be called ip_masq_portfw.o. If you want to compile
-  it as a module, say M here and read Documentation/modules.txt.
-
-IP: ipmarkfw masquerade support
-CONFIG_IP_MASQUERADE_MFW
-  Firewall Mark Forwarding provides functionality similar to port
-  forwarding (see "IP: ipportfw masquerade support", above), the
-  difference being that Firewall Mark Forwarding uses "firewalling
-  mark" to select which packets must be forwarded (see ipchains(8),
-  "-m" argument).
-
-  This code is still under development and so is currently marked
-  EXPERIMENTAL. If you want to try it, say Y.
-
-  This code is also available as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want).
-  The module will be called ip_masq_markfw.o. If you want to compile
-  it as a module, say M here and read Documentation/modules.txt.
-
-IP: always defragment (required for masquerading)
-CONFIG_IP_ALWAYS_DEFRAG
-  If you say Y here, then all incoming fragments (parts of IP packets
-  that arose when some host between origin and destination decided
-  that the packets were too large and cut them into pieces) will be
-  reassembled (defragmented) before being processed, even if they are
-  about to be forwarded.
-
-  You must say Y here if you want to enable "IP: masquerading" or "IP:
-  transparent proxying".
-
-  When using "IP: firewalling" support, you might also want to say Y
-  here, to have a more reliable firewall (otherwise second and further
-  fragments must be dealt with by the firewall, which can be tricky).
-
-  Only say Y here if running either a firewall that is the sole link
-  to your network or a transparent proxy; never ever say Y here for a
-  normal router or host.
 
 IP: aliasing support
 CONFIG_IP_ALIAS
@@ -3081,8 +2813,8 @@ CONFIG_IPV6
   IPv6, see http://playground.sun.com/pub/ipng/html/ipng-main.html (to
   browse the WWW, you need to have access to a machine on the Internet
   that has a program like lynx or netscape); for specific information
-  about IPv6 under Linux read the HOWTO at http://www.terra.net/ipv6/
-  and the file net/ipv6/README in the kernel source. 
+  about IPv6 under Linux read http://www.bieringer.de/linux/IPv6/ and 
+  the file net/ipv6/README in the kernel source. 
 
   If you want to use IPv6, please upgrade to the newest net-tools as
   given in Documentation/Changes. You will still be able to do regular
@@ -3807,14 +3539,12 @@ CONFIG_NETLINK
   able to read from and write to character special files in the /dev
   directory having major mode 36. So far, the kernel uses it to
   publish some network related information if you say Y to "Routing
-  messages", below. It is also used by the firewall code to publish
-  information about possible attacks if you say Y to "IP: firewall
-  packet netlink device" further down. You also need to say Y here if
-  you want to use arpd, a daemon that helps keep the internal ARP
-  cache (a mapping between IP addresses and hardware addresses on the
-  local network) small. The ethertap device, which lets user space
-  programs read and write raw Ethernet frames, also needs the network
-  link driver. If unsure, say Y.
+  messages", below.  You also need to say Y here if you want to use
+  arpd, a daemon that helps keep the internal ARP cache (a mapping
+  between IP addresses and hardware addresses on the local network)
+  small. The ethertap device, which lets user space programs read and
+  write raw Ethernet frames, also needs the network link driver. If
+  unsure, say Y.
 
 Routing messages
 CONFIG_RTNETLINK
@@ -3828,6 +3558,198 @@ Netlink device emulation
 CONFIG_NETLINK_DEV
   This is a backward compatibility option, choose Y for now.
   This option will be removed soon.
+
+Asynchronous Transfer Mode (ATM)
+CONFIG_ATM
+  Kernel support for ATM. Note that you need a set of user-space programs
+  to actually make use of ATM. See http://lrcwww.epfl.ch/linux-atm/ for
+  further details.
+
+Classical IP over ATM
+CONFIG_ATM_CLIP
+  Classical IP over ATM for PVCs and SVCs, supporting InARP and ATMARP.
+  Typically you will either use LAN Emulation (LANE) or Classical IP to
+  communicate with other IP hosts on your ATM network.
+
+Do NOT send ICMP if no neighbour
+CONFIG_ATM_CLIP_NO_ICMP
+  Normally, an ICMP host unreachable message is sent if a neighbour cannot
+  be reached because there is no VC to it in the kernel's ATMARP table.
+  This may cause problems when ATMARP table entries are briefly removed
+  during revalidation. If this configuration option is set to "yes",
+  packets to such neighbours are silently discarded instead.
+
+LAN Emulation (LANE) support
+CONFIG_ATM_LANE
+  LAN Emulation emulates services of existing LANs across an ATM network.
+  Besides operating as a normal ATM end station client, Linux LANE client
+  can also act as an proxy client bridging packets between ELAN and
+  Ethernet segments. You need LANE if you want to try MPOA.
+
+Multi-Protocol Over ATM (MPOA) support
+CONFIG_ATM_MPOA
+  Multi-Protocol Over ATM allows ATM edge devices such as routers,
+  bridges and ATM attached hosts establish direct ATM VCs across
+  subnetwork boundaries. These shortcut connections bypass routers
+  enhancing overall network performance.
+
+
+Application REQUested IP over ATM
+CONFIG_AREQUIPA
+  Arequipa is a mechanism to create ATM connections under application
+  control for IP traffic. See RFC2170 for details.
+
+ATM over TCP
+CONFIG_ATM_TCP
+  ATM over TCP driver. Useful mainly for development and for experiments.
+
+Efficient Networks ENI155P
+CONFIG_ATM_ENI
+  Driver for the Efficient Networks ENI155p series and SMC ATM Power155
+  155 Mbps ATM adapters. Both, the versions with 512kB and 2MB on-board
+  RAM (Efficient calls them "C" and "S", respectively), and the FPGA and
+  the ASIC Tonga versions of the board are supported. The driver works
+  with MMF (-MF or ...F) and UTP-5 (-U5 or ...D) adapters.
+
+Enable extended debugging
+CONFIG_ATM_ENI_DEBUG
+  Extended debugging records various events and displays that list when
+  an inconsistency is detected. This mechanism is faster than generally
+  using printks, but still has some impact on performance. Note that
+  extended debugging may create certain race conditions itself. Enable
+  this ONLY if you suspect problems with the driver.
+
+Fine-tune burst settings
+CONFIG_ATM_ENI_TUNE_BURST
+  In order to obtain good throughput, the ENI NIC can transfer multiple
+  words of data per PCI bus access cycle. Such a multi-word transfer is
+  called a burst.
+
+  The default settings for the burst sizes are suitable for most PCI
+  chipsets. However, in some cases, large bursts may overrun buffers in
+  the PCI chipset and cause data corruption. In such cases, large bursts
+  must be disabled and only (slower) small bursts can be used. The burst
+  sizes can be set independently in the send (TX) and receive (RX)
+  direction.
+
+  Note that enabling many different burst sizes in the same direction
+  may increase the cost of setting up a transfer such that the resulting
+  throughput is lower than when using only the largest available burst
+  size.
+
+  Also, sometimes larger bursts lead to lower throughput, e.g. on an
+  Intel 440FX board, a drop from 135 Mbps to 103 Mbps was observed when
+  going from 8W to 16W bursts.
+
+Enable 16W TX bursts (discouraged)
+CONFIG_ATM_ENI_BURST_TX_16W
+  Burst sixteed words at once in the send direction. This may work with
+  recent PCI chipsets, but is known to fail with older chipsets.
+
+Enable 8W TX bursts (recommended)
+CONFIG_ATM_ENI_BURST_TX_8W
+  Burst eight words at once in the send direction. This is the default
+  setting.
+
+Enable 4W TX bursts (optional)
+CONFIG_ATM_ENI_BURST_TX_4W
+  Burst four words at once in the send direction. You may want to try this
+  if you have disabled 8W bursts. Enabling 4W if 8W is also set may or may
+  not improve throughput.
+  
+Enable 2W TX bursts (optional)
+CONFIG_ATM_ENI_BURST_TX_2W
+  Burst two words at once in the send direction. You may want to try this
+  if you have disabled 4W and 8W bursts. Enabling 2W if 4W or 8W are also
+  set may or may not improve throughput.
+
+Enable 16W RX bursts (discouraged)
+CONFIG_ATM_ENI_BURST_RX_16W
+  Burst sixteen words at once in the receive direction. This may work with
+  recent PCI chipsets, but is known to fail with older chipsets.
+
+Enable 8W RX bursts (discouraged)
+CONFIG_ATM_ENI_BURST_RX_8W
+  Burst eight words at once in the receive direction. This may work with
+  recent PCI chipsets, but is known to fail with older chipsets, such as
+  the Intel Neptune series.
+
+Enable 4W RX bursts (recommended)
+CONFIG_ATM_ENI_BURST_RX_4W
+  Burst four words at once in the receive direction. This is the default
+  setting. Enabling 4W if 8W is also set may or may not improve throughput.
+
+Enable 2W RX bursts (optional)
+CONFIG_ATM_ENI_BURST_RX_2W
+  Burst two words at once in the receive direction. You may want to try
+  this if you have disabled 4W and 8W bursts. Enabling 2W if 4W or 8W are
+  also set may or may not improve throughput.
+
+ZeitNet ZN1221/ZN1225
+CONFIG_ATM_ZATM
+  Driver for the ZeitNet ZN1221 (MMF) and ZN1225 (UTP-5) 155 Mbps ATM
+  adapters.
+
+Enable extended debugging
+CONFIG_ATM_ZATM_DEBUG
+  Extended debugging records various events and displays that list when
+  an inconsistency is detected. This mechanism is faster than generally
+  using printks, but still has some impact on performance. Note that
+  extended debugging may create certain race conditions itself. Enable
+  this ONLY if you suspect problems with the driver.
+
+Enable usec resolution timestamps
+CONFIG_ATM_ZATM_EXACT_TS
+  The uPD98401 SAR chip supports a high-resolution timer (approx. 30 MHz)
+  that is used for very accurate reception timestamps. Because that timer
+  overflows after 140 seconds, and also to avoid timer drift, time
+  measurements need to be periodically synchronized with the normal
+  system time. Enabling this feature will add some general overhead for
+  timer synchronization and also per-packet overhead for time conversion.
+
+IDT 77201 (NICStAR)
+CONFIG_ATM_NICSTAR
+  The NICStAR chipset family is used in a large number of ATM NICs for
+  25 and for 155 Mbps, including IDT cards and the Fore ForeRunnerLE
+  series.
+
+Madge Ambassador (Collage PCI 155 Server)
+CONFIG_ATM_AMBASSADOR
+  This is a driver for ATMizer based ATM card produced by Madge
+  Networks Ltd. Say Y (or M to compile as a module named ambassador.o)
+  here if you have one of these cards.
+
+Enable debugging messages
+CONFIG_ATM_AMBASSADOR_DEBUG
+  Somewhat useful debugging messages are available. The choice of
+  messages is controlled by a bitmap. This may be specified as a
+  module argument (kernel command line argument as well?), changed
+  dynamically using an ioctl (not yet) or changed by sending the
+  string "Dxxxx" to VCI 1023 (where x is a hex digit). See the file
+  drivers/atm/ambassador.h for the meanings of the bits in the mask.
+
+  When active, these messages can have a significant impact on the
+  speed of the driver, and the size of your syslog files! When
+  inactive, they will have only a modest impact on performance.
+
+Madge Horizon [Ultra] (Collage PCI 25 and Collage PCI 155 Client)
+CONFIG_ATM_HORIZON
+  This is a driver for the Horizon chipset ATM adapter cards once
+  produced by Madge Networks Ltd. Say Y (or M to compile as a module
+  named horizon.o) here if you have one of these cards.
+
+Enable debugging messages
+CONFIG_ATM_HORIZON_DEBUG
+  Somewhat useful debugging messages are available. The choice of
+  messages is controlled by a bitmap. This may be specified as a
+  module argument (kernel command line argument as well?), changed
+  dynamically using an ioctl (not yet) or changed by sending the
+  string "Dxxxx" to VCI 1023 (where x is a hex digit). See the file
+  drivers/atm/horizon.h for the meanings of the bits in the mask.
+
+  When active, these messages can have a significant impact on the
+  speed of the driver, and the size of your syslog files! When
+  inactive, they will have only a modest impact on performance.
 
 SCSI support?
 CONFIG_SCSI
@@ -5549,7 +5471,7 @@ CONFIG_NET_FASTROUTE
   Card) data transfers, which is fast.
 
     *** This option is NOT COMPATIBLE with several important ***
-    *** networking options: especially CONFIG*FIREWALL.      ***
+    *** networking options: especially CONFIG_NETFILTER.     ***
     *** Say N here if you intend to use Linux as a firewall. ***
 
   However, it will work with all options in CONFIG_IP_ADVANCED_ROUTER
@@ -10153,6 +10075,15 @@ CONFIG_SOUND_ES1371_GAMEPORT
   Leave the default 200 unless you have a joystick not attached
   to your sound card.
 
+ESS Solo1 based PCI sound cards (eg. SC1938)
+CONFIG_SOUND_ESSSOLO1
+  Say Y or M if you have a PCI sound card utilizing the ESS Technology
+  Solo1 chip. To find out if your sound card uses a
+  Solo1 chip without removing your computer's cover, use
+  lspci -n and look for the PCI ID 125D:1969. This driver 
+  differs slightly from OSS/Free, so PLEASE READ
+  Documentation/sound/solo1.
+
 S3 SonicVibes based PCI sound cards
 CONFIG_SOUND_SONICVIBES
   Say Y or M if you have a PCI sound card utilizing the S3
@@ -12078,7 +12009,7 @@ CONFIG_PPDEV
   It is safe to say N to this -- it is not needed for normal printing
   or parallel port CD-ROM/disk support.
 
-Kernel httpd acceleration (expirimental)
+Kernel httpd acceleration (experimental)
 CONFIG_KHTTPD
   The kernel httpd acceleration daemon (kHTTPd) is a (limited) 
   webserver build into the kernel. It is limited since it can only
@@ -12089,7 +12020,7 @@ CONFIG_KHTTPD
 
   Before using this, read the README in /usr/src/linux/net/khttpd !
 
-  The kHTTPd is expirimental. Be careful when using it on a production
+  The kHTTPd is experimental. Be careful when using it on a production
   machine. Also note that kHTTPd doesn't support virtual servers yet.
 
 

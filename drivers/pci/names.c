@@ -10,12 +10,7 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>
-#include <linux/string.h>
-#include <linux/sched.h>
 #include <linux/init.h>
-#include <linux/proc_fs.h>
-
-#include <asm/page.h>
 
 struct pci_device_info {
 	unsigned short device;
@@ -56,19 +51,22 @@ static const struct pci_vendor_info __initdata pci_vendor_list[] = {
 
 #define VENDORS (sizeof(pci_vendor_list)/sizeof(struct pci_vendor_info))
 
-void __init pci_namedevice(struct pci_dev *dev)
+void __init pci_name_device(struct pci_dev *dev)
 {
 	const struct pci_vendor_info *vendor_p = pci_vendor_list;
 	int i = VENDORS;
-	
+	char *name = dev->name;
+
+	name += sprintf(name, "PCI<%02x:%02x.%d>", dev->bus->number, PCI_SLOT(dev->devfn), PCI_FUNC(dev->devfn));
+
 	do {
 		if (vendor_p->vendor == dev->vendor)
 			goto match_vendor;
 		vendor_p++;
 	} while (--i);
 
-	/* Coulding find either the vendor nor the device */
-	sprintf(dev->name, "PCI<%d:%04x> %04x:%04x", dev->bus->number, dev->devfn, dev->vendor, dev->device);
+	/* Couldn't find either the vendor nor the device */
+	sprintf(name, " %04x:%04x", dev->vendor, dev->device);
 	return;
 
 	match_vendor: {
@@ -83,12 +81,12 @@ void __init pci_namedevice(struct pci_dev *dev)
 		}
 
 		/* Ok, found the vendor, but unknown device */
-		sprintf(dev->name, "PCI<%d:%04x> %04x:%04x (%s)", dev->bus->number, dev->devfn, dev->vendor, dev->device, vendor_p->name);
+		sprintf(name, " %04x:%04x (%s)", dev->vendor, dev->device, vendor_p->name);
 		return;
 
 		/* Full match */
 		match_device: {
-			char *n = dev->name + sprintf(dev->name, "%s %s", vendor_p->name, device_p->name);
+			char *n = name + sprintf(name, " %s %s", vendor_p->name, device_p->name);
 			int nr = device_p->seen + 1;
 			device_p->seen = nr;
 			if (nr > 1)

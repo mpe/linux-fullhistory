@@ -237,7 +237,7 @@ out:
 #define MAX_SELECT_SECONDS \
 	((unsigned long) (MAX_SCHEDULE_TIMEOUT / HZ)-1)
 
-asmlinkage int
+asmlinkage long
 sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 {
 	fd_set_bits fds;
@@ -371,7 +371,7 @@ static int do_poll(unsigned int nfds, struct pollfd *fds, poll_table *wait,
 	return count;
 }
 
-asmlinkage int sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
+asmlinkage long sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
 {
 	int i, fdcount, err, size;
 	struct pollfd * fds, *fds1;

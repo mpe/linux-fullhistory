@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *	Alexey Kuznetsov	<kuznet@ms2.inr.ac.ru>
  *
- *	$Id: sit.c,v 1.31 1999/03/25 10:04:55 davem Exp $
+ *	$Id: sit.c,v 1.33 1999/08/20 11:06:29 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -70,6 +70,8 @@ static struct ip_tunnel *tunnels_l[HASH_SIZE];
 static struct ip_tunnel *tunnels_wc[1];
 static struct ip_tunnel **tunnels[4] = { tunnels_wc, tunnels_l, tunnels_r, tunnels_r_l };
 
+static rwlock_t ipip6_lock = RW_LOCK_UNLOCKED;
+
 static struct ip_tunnel * ipip6_tunnel_lookup(u32 remote, u32 local)
 {
 	unsigned h0 = HASH(remote);
@@ -118,8 +120,9 @@ static void ipip6_tunnel_unlink(struct ip_tunnel *t)
 
 	for (tp = ipip6_bucket(t); *tp; tp = &(*tp)->next) {
 		if (t == *tp) {
+			write_lock_bh(&ipip6_lock);
 			*tp = t->next;
-			synchronize_bh();
+			write_unlock_bh(&ipip6_lock);
 			break;
 		}
 	}
@@ -129,8 +132,9 @@ static void ipip6_tunnel_link(struct ip_tunnel *t)
 {
 	struct ip_tunnel **tp = ipip6_bucket(t);
 
+	write_lock_bh(&ipip6_lock);
 	t->next = *tp;
-	wmb();
+	write_unlock_bh(&ipip6_lock);
 	*tp = t;
 }
 
@@ -170,12 +174,13 @@ struct ip_tunnel * ipip6_tunnel_locate(struct ip_tunnel_parm *parms, int create)
 	nt->dev = dev;
 	dev->name = nt->parms.name;
 	dev->init = ipip6_tunnel_init;
+	dev->new_style = 1;
 	memcpy(&nt->parms, parms, sizeof(*parms));
 	if (dev->name[0] == 0) {
 		int i;
 		for (i=1; i<100; i++) {
 			sprintf(dev->name, "sit%d", i);
-			if (dev_get(dev->name) == NULL)
+			if (__dev_get_by_name(dev->name) == NULL)
 				break;
 		}
 		if (i==100)
@@ -185,6 +190,7 @@ struct ip_tunnel * ipip6_tunnel_locate(struct ip_tunnel_parm *parms, int create)
 	if (register_netdevice(dev) < 0)
 		goto failed;
 
+	dev_hold(dev);
 	ipip6_tunnel_link(nt);
 	/* Do not decrement MOD_USE_COUNT here. */
 	return nt;
@@ -195,18 +201,26 @@ failed:
 	return NULL;
 }
 
-static void ipip6_tunnel_destroy(struct net_device *dev)
+static void ipip6_tunnel_destructor(struct net_device *dev)
 {
-	if (dev == &ipip6_fb_tunnel_dev) {
-		tunnels_wc[0] = NULL;
-		synchronize_bh();
-		return;
-	} else {
-		ipip6_tunnel_unlink((struct ip_tunnel*)dev->priv);
-		kfree(dev);
+	if (dev != &ipip6_fb_tunnel_dev) {
 		MOD_DEC_USE_COUNT;
 	}
 }
+
+static void ipip6_tunnel_uninit(struct net_device *dev)
+{
+	if (dev == &ipip6_fb_tunnel_dev) {
+		write_lock_bh(&ipip6_lock);
+		tunnels_wc[0] = NULL;
+		write_unlock_bh(&ipip6_lock);
+		dev_put(dev);
+	} else {
+		ipip6_tunnel_unlink((struct ip_tunnel*)dev->priv);
+		dev_put(dev);
+	}
+}
+
 
 void ipip6_err(struct sk_buff *skb, unsigned char *dp, int len)
 {
@@ -252,17 +266,20 @@ void ipip6_err(struct sk_buff *skb, unsigned char *dp, int len)
 		break;
 	}
 
+	read_lock(&ipip6_lock);
 	t = ipip6_tunnel_lookup(iph->daddr, iph->saddr);
 	if (t == NULL || t->parms.iph.daddr == 0)
-		return;
+		goto out;
 	if (t->parms.iph.ttl == 0 && type == ICMP_TIME_EXCEEDED)
-		return;
+		goto out;
 
 	if (jiffies - t->err_time < IPTUNNEL_ERR_TIMEO)
 		t->err_count++;
 	else
 		t->err_count = 1;
 	t->err_time = jiffies;
+out:
+	read_unlock(&ipip6_lock);
 	return;
 #else
 	struct iphdr *iph = (struct iphdr*)dp;
@@ -358,6 +375,7 @@ int ipip6_rcv(struct sk_buff *skb, unsigned short len)
 
 	iph = skb->nh.iph;
 
+	read_lock(&ipip6_lock);
 	if ((tunnel = ipip6_tunnel_lookup(iph->saddr, iph->daddr)) != NULL) {
 		skb->mac.raw = skb->nh.raw;
 		skb->nh.raw = skb_pull(skb, skb->h.raw - skb->data);
@@ -371,11 +389,13 @@ int ipip6_rcv(struct sk_buff *skb, unsigned short len)
 		dst_release(skb->dst);
 		skb->dst = NULL;
 		netif_rx(skb);
+		read_unlock(&ipip6_lock);
 		return 0;
 	}
 
 	icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PROT_UNREACH, 0);
 	kfree_skb(skb);
+	read_unlock(&ipip6_lock);
 	return 0;
 }
 
@@ -602,14 +622,12 @@ ipip6_tunnel_ioctl (struct net_device *dev, struct ifreq *ifr, int cmd)
 					break;
 				}
 				t = (struct ip_tunnel*)dev->priv;
-				start_bh_atomic();
 				ipip6_tunnel_unlink(t);
 				t->parms.iph.saddr = p.iph.saddr;
 				t->parms.iph.daddr = p.iph.daddr;
 				memcpy(dev->dev_addr, &p.iph.saddr, 4);
 				memcpy(dev->broadcast, &p.iph.daddr, 4);
 				ipip6_tunnel_link(t);
-				end_bh_atomic();
 				netdev_state_change(dev);
 			}
 		}
@@ -671,7 +689,8 @@ static void ipip6_tunnel_init_gen(struct net_device *dev)
 {
 	struct ip_tunnel *t = (struct ip_tunnel*)dev->priv;
 
-	dev->destructor		= ipip6_tunnel_destroy;
+	dev->destructor		= ipip6_tunnel_destructor;
+	dev->uninit		= ipip6_tunnel_uninit;
 	dev->hard_start_xmit	= ipip6_tunnel_xmit;
 	dev->get_stats		= ipip6_tunnel_get_stats;
 	dev->do_ioctl		= ipip6_tunnel_ioctl;
@@ -710,7 +729,7 @@ static int ipip6_tunnel_init(struct net_device *dev)
 	}
 
 	if (!tdev && tunnel->parms.link)
-		tdev = dev_get_by_index(tunnel->parms.link);
+		tdev = __dev_get_by_index(tunnel->parms.link);
 
 	if (tdev) {
 		dev->hard_header_len = tdev->hard_header_len + sizeof(struct iphdr);
@@ -753,6 +772,7 @@ __initfunc(int ipip6_fb_tunnel_init(struct net_device *dev))
 	iph->ihl		= 5;
 	iph->ttl		= 64;
 
+	dev_hold(dev);
 	tunnels_wc[0]		= &ipip6_fb_tunnel;
 	return 0;
 }

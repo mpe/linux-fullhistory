@@ -256,16 +256,26 @@ struct rta_cacheinfo
 enum
 {
 	RTAX_UNSPEC,
+#define RTAX_UNSPEC RTAX_UNSPEC
 	RTAX_LOCK,
+#define RTAX_LOCK RTAX_LOCK
 	RTAX_MTU,
+#define RTAX_MTU RTAX_MTU
 	RTAX_WINDOW,
+#define RTAX_WINDOW RTAX_WINDOW
 	RTAX_RTT,
-	RTAX_HOPS,
+#define RTAX_RTT RTAX_RTT
+	RTAX_RTTVAR,
+#define RTAX_RTTVAR RTAX_RTTVAR
 	RTAX_SSTHRESH,
+#define RTAX_SSTHRESH RTAX_SSTHRESH
 	RTAX_CWND,
+#define RTAX_CWND RTAX_CWND
+	RTAX_ADVMSS,
+#define RTAX_ADVMSS RTAX_ADVMSS
 };
 
-#define RTAX_MAX RTAX_CWND
+#define RTAX_MAX RTAX_ADVMSS
 
 
 
@@ -535,6 +545,7 @@ struct rtnetlink_link
 extern struct rtnetlink_link * rtnetlink_links[NPROTO];
 extern int rtnetlink_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb);
 extern int rtnetlink_send(struct sk_buff *skb, u32 pid, u32 group, int echo);
+extern int rtnetlink_put_metrics(struct sk_buff *skb, unsigned *metrics);
 
 extern void __rta_fill(struct sk_buff *skb, int attrtype, int attrlen, const void *data);
 
@@ -565,6 +576,10 @@ extern void rtnl_lock(void);
 extern void rtnl_unlock(void);
 extern void rtnetlink_init(void);
 
+#define ASSERT_RTNL() do { if (down_trylock(&rtnl_sem) == 0)  { up(&rtnl_sem); \
+printk("RTNL: assertion failed at " __FILE__ "(%d):" __FUNCTION__ "\n", __LINE__); } \
+		   } while(0);
+#define BUG_TRAP(x) if (!(x)) { printk("KERNEL: assertion (" #x ") failed at " __FILE__ "(%d):" __FUNCTION__ "\n", __LINE__); }
 
 
 #endif /* __KERNEL__ */

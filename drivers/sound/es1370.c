@@ -107,6 +107,7 @@
  *                     added kernel command line option "es1370=joystick[,lineout[,micbias]]"
  *                     removed CONFIG_SOUND_ES1370_JOYPORT_BOOT kludge
  *    12.08.99   0.27  module_init/__setup fixes
+ *    19.08.99   0.28  SOUND_MIXER_IMIX fixes, reported by Gianluca <gialluca@mail.tiscalinet.it>
  *
  * some important things missing in Ensoniq documentation:
  *
@@ -793,10 +794,36 @@ static const struct {
 	[SOUND_MIXER_OGAIN]  = { 9, 0xf, 0x0, 0, 0x0000, 1 }    /* mono out */
 };
 
+static void set_recsrc(struct es1370_state *s, unsigned int val)
+{
+	unsigned int i, j;
+
+	for (j = i = 0; i < SOUND_MIXER_NRDEVICES; i++) {
+		if (!(val & (1 << i)))
+			continue;
+		if (!mixtable[i].recmask) {
+			val &= ~(1 << i);
+			continue;
+		}
+		j |= mixtable[i].recmask;
+	}
+	s->mix.recsrc = val;
+	wrcodec(s, 0x12, j & 0xd5);
+	wrcodec(s, 0x13, j & 0xaa);
+	wrcodec(s, 0x14, (j >> 8) & 0x17);
+	wrcodec(s, 0x15, (j >> 8) & 0x0f);
+	i = (j & 0x37f) | ((j << 1) & 0x3000) | 0xc60;
+	if (!s->mix.imix) {
+		i &= 0xff60;  /* mute record and line monitor */
+	}
+	wrcodec(s, 0x10, i);
+	wrcodec(s, 0x11, i >> 8);
+}
+
 static int mixer_ioctl(struct es1370_state *s, unsigned int cmd, unsigned long arg)
 {
 	unsigned long flags;
-	int i, val, j;
+	int i, val;
 	unsigned char l, r, rl, rr;
 
 	VALIDATE_STATE(s);
@@ -901,34 +928,13 @@ static int mixer_ioctl(struct es1370_state *s, unsigned int cmd, unsigned long a
 	switch (_IOC_NR(cmd)) {
 
 	case SOUND_MIXER_IMIX:
-		if (arg == 0) 
-			return -EFAULT;
-		get_user_ret(s->mix.imix,(int *)arg, -EFAULT);
-		val = s->mix.recsrc;
-		/* fall through */
+		get_user_ret(s->mix.imix, (int *)arg, -EFAULT);
+		set_recsrc(s, s->mix.recsrc);
+		return 0;
 
 	case SOUND_MIXER_RECSRC: /* Arg contains a bit for each recording source */
 		get_user_ret(val, (int *)arg, -EFAULT);
-		for (j = i = 0; i < SOUND_MIXER_NRDEVICES; i++) {
-			if (!(val & (1 << i)))
-				continue;
-			if (!mixtable[i].recmask) {
-				val &= ~(1 << i);
-				continue;
-			}
-			j |= mixtable[i].recmask;
-		}
-		s->mix.recsrc = val;
-		wrcodec(s, 0x12, j & 0xd5);
-		wrcodec(s, 0x13, j & 0xaa);
-		wrcodec(s, 0x14, (j >> 8) & 0x17);
-		wrcodec(s, 0x15, (j >> 8) & 0x0f);
-		i = (j & 0x37f) | ((j << 1) & 0x3000) | 0xc60;
-		if (!s->mix.imix) {
-		     i &= 0xff60;  /* mute record and line monitor */
-		}
-		wrcodec(s, 0x10, i);
-		wrcodec(s, 0x11, i >> 8);
+		set_recsrc(s, val);
 		return 0;
 
 	default:
@@ -2340,7 +2346,7 @@ static int __init init_es1370(void)
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1370: version v0.27 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "es1370: version v0.28 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1370, pcidev))) {
 		if (pcidev->resource[0].flags == 0 || 

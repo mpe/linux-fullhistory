@@ -69,11 +69,9 @@ int DataSending(const int CPUNR)
 		  
 		
 		Space=4096;
-		if (CurrentRequest->sock->sk!=NULL)
+		if (CurrentRequest->sock->sk!=NULL) /* It's impossible */
 		{
-			lock_sock(CurrentRequest->sock->sk);
 			Space = sock_wspace(CurrentRequest->sock->sk);
-			release_sock(CurrentRequest->sock->sk);
 		}
 		
 		ReadSize = min(4096,CurrentRequest->FileLength - CurrentRequest->BytesSent);
@@ -84,6 +82,8 @@ int DataSending(const int CPUNR)
 			/* This part does a redundant data-copy. To bad for now. 
 			   In the future, we might want to nick the data right out
 			   of the page-cache
+
+			   WHY DO YOU NOT USE SENDFILE?
 			*/
 		
 			CurrentRequest->filp->f_pos = CurrentRequest->BytesSent;
@@ -104,29 +104,26 @@ int DataSending(const int CPUNR)
 			}
 		
 		}
-		lock_sock(CurrentRequest->sock->sk);
 		
 		/* 
 		   If end-of-file or closed connection: Finish this request 
 		   by moving it to the "logging" queue. 
 		*/
 		if ((CurrentRequest->BytesSent>=CurrentRequest->FileLength)||
-		   (CurrentRequest->sock->sk->state !=TCP_ESTABLISHED))
+		    (CurrentRequest->sock->sk->state!=TCP_ESTABLISHED
+		     && CurrentRequest->sock->sk->state!=TCP_CLOSE_WAIT))
 		{
 			struct http_request *Next;
 			Next = CurrentRequest->Next;
-						
-			if  (CurrentRequest->sock->sk->state ==TCP_ESTABLISHED)
+
+			lock_sock(CurrentRequest->sock->sk);
+			if  (CurrentRequest->sock->sk->state == TCP_ESTABLISHED ||
+			     CurrentRequest->sock->sk->state == TCP_CLOSE_WAIT)
 			{
-			
 				CurrentRequest->sock->sk->nonagle = 0;
-				CurrentRequest->sock->sk->linger = 0;
 				tcp_push_pending_frames(CurrentRequest->sock->sk,&(CurrentRequest->sock->sk->tp_pinfo.af_tcp));
 			}
-			
 			release_sock(CurrentRequest->sock->sk);
-
-
 
 			(*Prev) = CurrentRequest->Next;
 			
@@ -137,7 +134,6 @@ int DataSending(const int CPUNR)
 			continue;
 		
 		}
-		release_sock(CurrentRequest->sock->sk);
 		
 
 		Prev = &(CurrentRequest->Next);	

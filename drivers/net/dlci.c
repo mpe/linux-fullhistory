@@ -421,7 +421,7 @@ int dlci_add(struct dlci_add *dlci)
 	char			buf[10];
 
 	/* validate slave device */
-	slave = dev_get(dlci->devname);
+	slave = __dev_get_by_name(dlci->devname);
 	if (!slave)
 		return(-ENODEV);
 
@@ -504,7 +504,7 @@ int dlci_del(struct dlci_add *dlci)
 	int			i, err;
 
 	/* validate slave device */
-	master = dev_get(dlci->devname);
+	master = __dev_get_by_name(dlci->devname);
 	if (!master)
 		return(-ENODEV);
 

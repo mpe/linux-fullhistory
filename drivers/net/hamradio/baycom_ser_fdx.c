@@ -45,7 +45,10 @@
  *
  *  Command line options (insmod command line)
  *
- *  mode     * enables software DCD.
+ *  mode     ser#    hardware DCD
+ *           ser#*   software DCD
+ *           ser#+   hardware DCD, inverted signal at DCD pin
+ *           '#' denotes the baud rate / 100, eg. ser12* is '1200 baud, soft DCD'
  *  iobase   base address of the port; common values are 0x3f8, 0x2f8, 0x3e8, 0x2e8
  *  baud     baud rate (between 300 and 4800)
  *  irq      interrupt line of the port; common values are 4,3
@@ -61,6 +64,7 @@
  *                  reduced interrupt load in transmit case
  *                  reworked receiver
  *   0.7  03.08.99  adapt to Linus' new __setup/__initcall
+ *   0.8  10.08.99  use module_init/module_exit
  */
 
 /*****************************************************************************/
@@ -78,11 +82,6 @@
 /* --------------------------------------------------------------------- */
 
 #define BAYCOM_DEBUG
-
-/*
- * modem options; bit mask
- */
-#define BAYCOM_OPTIONS_SOFTDCD  1
 
 /* --------------------------------------------------------------------- */
 
@@ -122,7 +121,7 @@ struct baycom_state {
 	struct hdlcdrv_state hdrv;
 
 	unsigned int baud, baud_us, baud_arbdiv, baud_uartdiv, baud_dcdtimeout;
-	unsigned int options;
+	int opt_dcd;
 
 	struct modem_state {
 		unsigned char flags;
@@ -251,7 +250,7 @@ static __inline__ void ser12_rx(struct net_device *dev, struct baycom_state *bc,
 		bc->modem.shreg >>= 1;
 	}
 	if (bc->modem.ser12.dcd_time <= 0) {
-		if (bc->options & BAYCOM_OPTIONS_SOFTDCD)
+		if (!bc->opt_dcd)
 			hdlcdrv_setdcd(&bc->hdrv, (bc->modem.ser12.dcd_sum0 + 
 						   bc->modem.ser12.dcd_sum1 + 
 						   bc->modem.ser12.dcd_sum2) < 0);
@@ -300,8 +299,8 @@ static void ser12_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	do_gettimeofday(&tv);
 	msr = inb(MSR(dev->base_addr));
 	/* delta DCD */
-	if ((msr & 8) && !(bc->options & BAYCOM_OPTIONS_SOFTDCD)) 
-		hdlcdrv_setdcd(&bc->hdrv, !(msr & 0x80));
+	if ((msr & 8) && bc->opt_dcd)
+		hdlcdrv_setdcd(&bc->hdrv, !((msr ^ bc->opt_dcd) & 0x80));
 	do {
 		switch (iir & 6) {
 		case 6:
@@ -334,8 +333,8 @@ static void ser12_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		default:
 			msr = inb(MSR(dev->base_addr));
 			/* delta DCD */
-			if ((msr & 8) && !(bc->options & BAYCOM_OPTIONS_SOFTDCD)) 
-				hdlcdrv_setdcd(&bc->hdrv, !(msr & 0x80));
+			if ((msr & 8) && bc->opt_dcd) 
+				hdlcdrv_setdcd(&bc->hdrv, !((msr ^ bc->opt_dcd) & 0x80));
 			break;
 		}
 		iir = inb(IIR(dev->base_addr));
@@ -455,9 +454,8 @@ static int ser12_open(struct net_device *dev)
 	 */
 	outb(0x00, THR(dev->base_addr));
 	hdlcdrv_setdcd(&bc->hdrv, 0);
-	printk(KERN_INFO "%s: ser_fdx at iobase 0x%lx irq %u options "
-	       "0x%x baud %u uart %s\n", bc_drvname, dev->base_addr, dev->irq,
-	       bc->options, bc->baud, uart_str[u]);
+	printk(KERN_INFO "%s: ser_fdx at iobase 0x%lx irq %u baud %u uart %s\n",
+	       bc_drvname, dev->base_addr, dev->irq, bc->baud, uart_str[u]);
 	MOD_INC_USE_COUNT;
 	return 0;
 }
@@ -514,7 +512,12 @@ static int baycom_setmode(struct baycom_state *bc, const char *modestr)
 		if (baud >= 3 && baud <= 48)
 			bc->baud = baud*100;
 	}
-	bc->options = !!strchr(modestr, '*');
+	if (strchr(modestr, '*'))
+		bc->opt_dcd = 0;
+	else if (strchr(modestr, '+'))
+		bc->opt_dcd = -1;
+	else
+		bc->opt_dcd = 1;
 	return 0;
 }
 
@@ -544,8 +547,8 @@ static int baycom_ioctl(struct net_device *dev, struct ifreq *ifr,
 
 	case HDLCDRVCTL_GETMODE:
 		sprintf(hi->data.modename, "ser%u", bc->baud / 100);
-		if (bc->options & 1)
-			strcat(hi->data.modename, "*");
+		if (bc->opt_dcd <= 0)
+			strcat(hi->data.modename, (!bc->opt_dcd) ? "*" : "+");
 		if (copy_to_user(ifr->ifr_data, hi, sizeof(struct hdlcdrv_ioctl)))
 			return -EFAULT;
 		return 0;
@@ -598,12 +601,21 @@ static int iobase[NR_PORTS] = { 0x3f8, };
 static int irq[NR_PORTS] = { 4, };
 static int baud[NR_PORTS] = { [0 ... NR_PORTS-1] = 1200 };
 
+MODULE_PARM(mode, "1-" __MODULE_STRING(NR_PORTS) "s");
+MODULE_PARM_DESC(mode, "baycom operating mode; * for software DCD");
+MODULE_PARM(iobase, "1-" __MODULE_STRING(NR_PORTS) "i");
+MODULE_PARM_DESC(iobase, "baycom io base address");
+MODULE_PARM(irq, "1-" __MODULE_STRING(NR_PORTS) "i");
+MODULE_PARM_DESC(irq, "baycom irq number");
+MODULE_PARM(baud, "1-" __MODULE_STRING(NR_PORTS) "i");
+MODULE_PARM_DESC(baud, "baycom baud rate (300 to 4800)");
+
+MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
+MODULE_DESCRIPTION("Baycom ser12 full duplex amateur radio modem driver");
+
 /* --------------------------------------------------------------------- */
 
-#ifndef MODULE
-static
-#endif
-int __init init_module(void)
+static int __init init_baycomserfdx(void)
 {
 	int i, j, found = 0;
 	char set_hw = 1;
@@ -641,23 +653,7 @@ int __init init_module(void)
 	return 0;
 }
 
-/* --------------------------------------------------------------------- */
-
-#ifdef MODULE
-
-MODULE_PARM(mode, "1-" __MODULE_STRING(NR_PORTS) "s");
-MODULE_PARM_DESC(mode, "baycom operating mode; * for software DCD");
-MODULE_PARM(iobase, "1-" __MODULE_STRING(NR_PORTS) "i");
-MODULE_PARM_DESC(iobase, "baycom io base address");
-MODULE_PARM(irq, "1-" __MODULE_STRING(NR_PORTS) "i");
-MODULE_PARM_DESC(irq, "baycom irq number");
-MODULE_PARM(baud, "1-" __MODULE_STRING(NR_PORTS) "i");
-MODULE_PARM_DESC(baud, "baycom baud rate (300 to 4800)");
-
-MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
-MODULE_DESCRIPTION("Baycom ser12 full duplex amateur radio modem driver");
-
-void cleanup_module(void)
+static void __exit cleanup_baycomserfdx(void)
 {
 	int i;
 
@@ -675,22 +671,29 @@ void cleanup_module(void)
 	}
 }
 
-#else /* MODULE */
+module_init(init_baycomserfdx);
+module_exit(cleanup_baycomserfdx);
+
+/* --------------------------------------------------------------------- */
+
+#ifndef MODULE
 
 /*
  * format: baycom_ser_fdx=io,irq,mode
- * mode: [*]
- * * indicates sofware DCD
+ * mode: ser#    hardware DCD
+ *       ser#*   software DCD
+ *       ser#+   hardware DCD, inverted signal at DCD pin
+ * '#' denotes the baud rate / 100, eg. ser12* is '1200 baud, soft DCD'
  */
 
 static int __init baycom_ser_fdx_setup(char *str)
 {
         static unsigned __initdata nr_dev = 0;
-        int ints[11];
+        int ints[4];
 
         if (nr_dev >= NR_PORTS)
                 return 0;
-        str = get_options(str, ints);
+        str = get_options(str, 4, ints);
         if (ints[0] < 2)
                 return 0;
         mode[nr_dev] = str;
@@ -703,7 +706,6 @@ static int __init baycom_ser_fdx_setup(char *str)
 }
 
 __setup("baycom_ser_fdx=", baycom_ser_fdx_setup);
-__initcall(init_module);
 
 #endif /* MODULE */
 /* --------------------------------------------------------------------- */

@@ -144,7 +144,7 @@ found:
 
 int shmmax = SHMMAX;
 
-asmlinkage int sys_shmget (key_t key, int size, int shmflg)
+asmlinkage long sys_shmget (key_t key, int size, int shmflg)
 {
 	struct shmid_kernel *shp;
 	int err, id = 0;
@@ -222,7 +222,7 @@ static void killseg (int id)
 	return;
 }
 
-asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
+asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 {
 	struct shmid_ds tbuf;
 	struct shmid_kernel *shp;
@@ -428,7 +428,7 @@ static int shm_map (struct vm_area_struct *shmd)
 /*
  * Fix shmaddr, allocate descriptor, map shm, add attach descriptor to lists.
  */
-asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
+asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 {
 	struct shmid_kernel *shp;
 	struct vm_area_struct *shmd;
@@ -589,7 +589,7 @@ static void shm_close (struct vm_area_struct *shmd)
  * detach and kill segment if marked destroyed.
  * The work is done in shm_close.
  */
-asmlinkage int sys_shmdt (char *shmaddr)
+asmlinkage long sys_shmdt (char *shmaddr)
 {
 	struct vm_area_struct *shmd, *shmdnext;
 

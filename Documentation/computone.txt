@@ -1,0 +1,343 @@
+
+Computone Intelliport II/Plus Multiport Serial Driver
+-----------------------------------------------------
+
+Release Notes For Linux Kernel 2.2 and higher.
+These notes are for the drivers which have already been integrated into the
+kernel and have been tested on Linux kernels 2.0, 2.2, and 2.3.
+
+Version: 1.2.4
+Date: 08/04/99
+Author: Andrew Manison <amanison@america.net>
+Testing: larryg@computone.com
+Support: support@computone.com
+Fixes and Updates: Doug McNash <dmcnash@computone.com>
+Proc Filesystem and Kernel Integration: Mike Warfield <mhw@wittsend.com>
+
+
+This file assumes that you are using the Computone drivers which are
+integrated into the kernel sources.  For updating the drivers or installing
+drivers into kernels which do not already have Computone drivers, please
+refer to the instructions in the README.computone file in the driver patch.
+
+
+1. INTRODUCTION
+
+This driver supports the entire family of Intelliport II/Plus controllers
+with the exception of the MicroChannel controllers.  It does not support
+products previous to the Intelliport II.
+
+This driver was developed on the v2.0.x Linux tree and has been tested up
+to v2.2.9; it will probably not work with earlier v1.X kernels,.
+
+
+2. QUICK INSTALLATION
+
+Hardware - If you have an ISA card, find a free interrupt and io port. 
+		   List those in use with `cat /proc/interrupts` and 
+		   `cat /proc/ioports`.  Set the card dip switches to a free 
+		   address.  You may need to configure your BIOS to reserve an
+		   irq for an ISA card.  PCI and EISA parameters are set
+		   automagically.  Insert card into computer with the power off 
+		   before or after drivers installation.
+
+	Note the hardware address from the Computone ISA cards installed into
+		the system.  These are required for editing ip2.h or editing
+		/etc/config.modules, or for specification on the modprobe
+		command line.
+
+Software -
+
+Module installation:
+
+a) Obtain driver-kernel patch file
+b) Copy to the linux source tree root, Run ip2build (if not patch)
+c) Determine free irq/address to use if any (configure BIOS if need be)
+d) Run "make config" or "make menuconfig" or "make xconfig"
+   Select (m) module for CONFIG_COMPUTONE under character
+   devices.  CONFIG_PCI and CONFIG_MODULES also may need to be set.
+e) Set address on ISA cards then:
+   edit /usr/src/linux/drivers/char/ip2/ip2.h if needed 
+	or
+   edit /etc/conf.modules (or /etc/modules.conf) if needed (module).
+	or both to match this setting.
+f) Run "make dep"
+g) Run "make modules"
+h) Run "make modules_install"
+i) Run "/sbin/depmod -a"
+j) install driver using `modprobe ip2 <options>` (options listed below)
+k) run ip2mkdev (either the script below or the binary version)
+
+
+Kernel installation:
+
+a) Obtain driver-kernel patch file
+b) Copy to the linux source tree root, Run ip2build (if not patch)
+c) Determine free irq/address to use if any (configure BIOS if need be)
+d) Run "make config" or "make menuconfig" or "make xconfig"
+   Select (y) kernel for CONFIG_COMPUTONE under character
+   devices.  CONFIG_PCI may need to be set if you have PCI bus.
+e) Set address on ISA cards then:
+	   edit /usr/src/linux/drivers/char/ip2/ip2.h  
+f) Run "make dep"
+g) Run "make zImage" or whatever target you prefer.
+h) mv /usr/src/linux/arch/i386/boot/zImage to /boot.
+i) Add new config for this kernel into /etc/lilo.conf, run "lilo"
+	or copy to a floppy disk and boot from that floppy disk.
+j) Reboot using this kernel
+k) run ip2mkdev (either the script below or the binary version)
+
+
+3. INSTALLATION
+
+Previously, the driver sources were packaged with a set of patch files
+to update the character drivers' makefile and configuration file, and other 
+kernel source files. A build script (ip2build) was included which applies 
+the patches if needed, and build any utilities needed.
+What you recieve may be a single patch file in conventional kernel
+patch format build script. That form can also be applied by
+running patch -p1 < ThePatchFile.  Otherwise run ip2build.
+ 
+The driver can be installed as a module (recommended) or built into the 
+kernel. This is selected as for other drivers through the `make config`
+command from the root of the Linux source tree. If the driver is built 
+into the kernel you will need to edit the file ip2.h to match the boards 
+you are installing. See that file for instructions. If the driver is 
+installed as a module the configuration can also be specified on the
+modprobe command line as follows:
+
+	modprobe ip2 irq=irq1,irq2,irq3,irq4 io=addr1,addr2,addr3,addr4
+
+where irqnum is one of the valid Intelliport II interrupts (3,4,5,7,10,11,
+12,15) and addr1-4 are the base addresses for up to four controllers. If 
+the irqs are not specified the driver uses the default in ip2/ip2.h (which 
+selects polled mode). If no base addresses are specified the defaults in 
+ip2.h are used. If you are autoloading the driver module with kerneld or
+kmod the base addresses and interrupt number must also be set in ip2/ip2.h
+and recompile or just insert and options line in /etc/modules.conf or both. 
+The options line is equivalent to the command line and takes precidence over 
+what is in ip2.h. 
+
+/etc/modules.conf sample:
+	options ip2 io=1,0x328 irq=1,10
+	alias char-major-71 ip2
+	alias char-major-72 ip2
+	alias char-major-73 ip2
+
+equivelant ip2.h:
+static ip2config_t ip2config =
+{
+	{1,10,0,0},
+	{
+		0x0001,    // Board 0, ttyF0   - ttyF63		/* PCI card */
+		0x0328,    // Board 1, ttyF64  - ttyF127	/* ISA card */
+		0x0000,    // Board 2, ttyF128 - ttyF191	/* empty */
+		0x0000     // Board 3, ttyF192 - ttyF255	/* empty */
+	}
+};
+
+
+Note:	Both io and irq should be updated to reflect YOUR system.  An "io"
+	address of "1/2" indicates a PCI/EISA card in the board table.  The
+	PCI or EISA irq will be assigned automatically.
+
+Specifying an invalid or in-use irq will default the driver into
+running in polled mode for that card.  If all irq entries are 0 then
+all cards will operate in polled mode.
+
+If you select the driver as part of the kernel run :
+
+	make depend
+	make zlilo (or whatever you do to create a bootable kernel)
+
+If you selected a module run :
+
+	make modules && make modules_install
+
+The utility ip2mkdev (see 5 and 7 below) creates all the device nodes
+required by the driver.  For a device to be created it must be configured
+in the driver and the board must be installed. Only devices corresponding
+to real IntelliPort II ports are created. With multiple boards and expansion
+boxes this will leave gaps in the sequence of device names. ip2mkdev uses
+Linux tty naming conventions: ttyF0 - ttyF255 for normal devices, and
+cuf0 - cuf255 for callout devices.
+
+
+4. USING THE DRIVERS
+
+As noted above, the driver implements the ports in accordance with Linux
+conventions, and the devices should be interchangeable with the standard
+serial devices. (This is a key point for problem reporting: please make
+sure that what you are trying do works on the ttySx/cuax ports first; then 
+tell us what went wrong with the ip2 ports!)
+
+Higher speeds can be obtained using the setserial utility which remaps 
+38,400 bps (extb) to 57,600 bps, 115,200 bps, or a custom speed. 
+Intelliport II installations using the PowerPort expansion module can
+use the custom speed setting to select the highest speeds: 153,600 bps,
+230,400 bps, 307,200 bps, 460,800bps and 921,600 bps. The base for
+custom baud rate configuration is fixed at 921,600 for cards/expantion
+modules with ST654's and 115200 for those with Cirrus CD1400's.  This
+corresponds to the maximum bit rates those chips are capable.  
+For example if the baud base is 921600 and the baud divisor is 18 then
+the custom rate is 921600/18 = 51200 bps.  See the setserial man page for
+complete details. Of course if stty accepts the higher rates now you can
+use that as well as the standard ioctls().
+
+
+5. ip2mkdev and assorted utilities...
+
+Several utilities, including the source for a binary ip2mkdev utility are
+available under .../drivers/char/ip2.  These can be build by changing to
+that directory and typing "make" after the kernel has be built.  If you do
+not wish to compile the binary utilities, the shell script below can be
+cut out and run as "ip2mkdev" to create the necessary device files.  To
+use the ip2mkdev script, you must have procfs enabled and the proc file
+system mounted on /proc.
+
+6. NOTES
+
+This is a release version of the driver, but it is impossible to test it
+in all configurations of Linux. If there is any anomalous behaviour that 
+does not match the standard serial port's behaviour please let us know.
+
+
+7. ip2mkdev shell script
+
+===== Cut Here ===== 
+#!/bin/sh -
+
+#	ip2mkdev
+#
+#	Make or remove devices as needed for Computone Intelliport drivers
+#
+#	First rule!  If the dev file exists and you need it, don't mess
+#	with it.  That prevents us from screwing up open ttys, ownership
+#	and permissions on a running system!
+#
+#	This script will NOT remove devices that no longer exist because
+#	their board or interface box has been removed.  If you want to get
+#	rid of them, you can manually do an "rm -f /dev/ttyF* /dev/cuaf*"
+#	before running this script, which will then recreate all the valid
+#	devices
+#
+#	=mhw=
+#	Michael H. Warfield
+#	mhw@wittsend.com
+#
+if test ! -f /proc/tty/drivers
+then
+	echo "\
+Unable to check driver status.
+Make sure proc file system is mounted."
+
+	exit 255
+fi
+
+if test ! -f /proc/tty/driver/ip2
+then
+	echo "\
+Unable to locate ip2 proc file.
+Attempting to load driver"
+
+	if insmod ip2
+	then
+		if test ! -f /proc/tty/driver/ip2
+		then
+			echo "\
+Unable to locate ip2 proc file after loading driver.
+Driver initialization failure or driver version error.
+"
+		exit 255
+		fi
+	else
+		echo "Unable to load ip2 driver."
+		exit 255
+	fi
+fi
+
+# Ok...  So we got the driver loaded and we can locate the procfs files.
+# Next we need our major numbers.
+
+TTYMAJOR=`sed -e '/^ip2/!d' -e '/\/dev\/tty/!d' -e 's/.*tty.[ 	]*\([0-9]*\)[ 	]*.*/\1/' < /proc/tty/drivers`
+CUAMAJOR=`sed -e '/^ip2/!d' -e '/\/dev\/cu/!d' -e 's/.*cu.[ 	]*\([0-9]*\)[ 	]*.*/\1/' < /proc/tty/drivers`
+BRDMAJOR=`sed -e '/^Driver: /!d' -e 's/.*IMajor=\([0-9]*\)[ 	]*.*/\1/' < /proc/tty/driver/ip2`
+
+echo "\
+TTYMAJOR = $TTYMAJOR
+CUAMAJOR = $CUAMAJOR
+BRDMAJOR = $BRDMAJOR
+"
+
+# Ok...  Now we should know our major numbers, if appropriate...
+# Now we need our boards and start the device loops.
+
+grep '^Board [0-9]:' /proc/tty/driver/ip2 | while read token number type alltherest
+do
+	# The test for blank "type" will catch the stats lead-in lines
+	# if they exist in the file
+	if test "$type" = "vacant" -o "$type" = "Vacant" -o "$type" = ""
+	then
+		continue
+	fi
+
+	BOARDNO=`expr "$number" : '\([0-9]\):'`
+	PORTS=`expr "$alltherest" : '.*ports=\([0-9]*\)' | tr ',' ' '`
+	MINORS=`expr "$alltherest" : '.*minors=\([0-9,]*\)' | tr ',' ' '`
+
+	if test "$BOARDNO" = "" -o "$PORTS" = ""
+	then
+#	This may be a bug.  We should at least get this much information
+		echo "Unable to process board line"
+		continue
+	fi
+
+	if test "$MINORS" = ""
+	then
+#	Silently skip this one.  This board seems to have no boxes
+		continue
+	fi
+
+	echo "board $BOARDNO: $type ports = $PORTS; port numbers = $MINORS"
+
+	if test "$BRDMAJOR" != ""
+	then
+		BRDMINOR=`expr $BOARDNO \* 4`
+		STSMINOR=`expr $BRDMINOR + 1`
+		if test ! -c /dev/ip2ipl$BOARDNO ; then
+			mknod /dev/ip2ipl$BOARDNO c $BRDMAJOR $BRDMINOR
+		fi
+		if test ! -c /dev/ip2stat$BOARDNO ; then
+			mknod /dev/ip2stat$BOARDNO c $BRDMAJOR $STSMINOR
+		fi
+	fi
+
+	if test "$TTYMAJOR" != ""
+	then
+		PORTNO=$BOARDBASE
+
+		for PORTNO in $MINORS
+		do
+			if test ! -c /dev/ttyF$PORTNO ; then
+				# We got the harware but no device - make it
+				mknod /dev/ttyF$PORTNO c $TTYMAJOR $PORTNO
+			fi	
+		done
+	fi
+
+	if test "$CUAMAJOR" != ""
+	then
+		PORTNO=$BOARDBASE
+
+		for PORTNO in $MINORS
+		do
+			if test ! -c /dev/cuf$PORTNO ; then
+				# We got the harware but no device - make it
+				mknod /dev/cuf$PORTNO c $CUAMAJOR $PORTNO
+			fi	
+		done
+	fi
+done
+
+exit 0
+===== Cut Here ===== 

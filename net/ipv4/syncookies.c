@@ -9,7 +9,7 @@
  *      as published by the Free Software Foundation; either version
  *      2 of the License, or (at your option) any later version.
  * 
- *  $Id: syncookies.c,v 1.7 1999/03/17 02:34:57 davem Exp $
+ *  $Id: syncookies.c,v 1.9 1999/08/23 06:30:34 davem Exp $
  *
  *  Missing: IPv6 support. 
  */
@@ -104,12 +104,20 @@ get_cookie_sock(struct sock *sk, struct sk_buff *skb, struct open_request *req,
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 
+	/* Oops! It was missing, syn_recv_sock decreases it. */
+	tp->syn_backlog++;
+
 	sk = tp->af_specific->syn_recv_sock(sk, skb, req, dst);
-	req->sk = sk; 
-	
-	/* Queue up for accept() */
-	tcp_synq_queue(tp, req);
-	
+	if (sk) {
+		req->sk = sk; 
+
+		/* Queue up for accept() */
+		tcp_synq_queue(tp, req);
+	} else {
+		tp->syn_backlog--;
+		req->class->destructor(req);
+		tcp_openreq_free(req); 
+	}
 	return sk; 
 }
 
@@ -179,7 +187,7 @@ cookie_v4_check(struct sock *sk, struct sk_buff *skb, struct ip_options *opt)
 			    opt && 
 			    opt->srr ? opt->faddr : req->af.v4_req.rmt_addr,
 			    req->af.v4_req.loc_addr,
-			    sk->ip_tos | RTO_CONN,
+			    sk->protinfo.af_inet.tos | RTO_CONN,
 			    0)) { 
 	    tcp_openreq_free(req);
 	    return NULL; 
@@ -187,7 +195,7 @@ cookie_v4_check(struct sock *sk, struct sk_buff *skb, struct ip_options *opt)
 
 	/* Try to redo what tcp_v4_send_synack did. */
 	req->window_clamp = rt->u.dst.window;  
-	tcp_select_initial_window(sock_rspace(sk)/2,req->mss,
+	tcp_select_initial_window(tcp_full_space(sk),req->mss,
 				  &req->rcv_wnd, &req->window_clamp, 
 				  0, &rcv_wscale);
 	req->rcv_wscale = rcv_wscale; 

@@ -246,7 +246,10 @@ static int pcwd_ioctl(struct inode *inode, struct file *file,
 		return i ? -EFAULT : 0;
 
 	case WDIOC_GETSTATUS:
+		if (revision == PCWD_REVISION_A) 
 		cdat = inb(current_readport);
+		else
+			cdat = inb(current_readport + 1 );
 		rv = 0;
 
 		if (revision == PCWD_REVISION_A) 
