@@ -98,6 +98,9 @@ static int set_termios(struct tty_struct * tty, unsigned long arg, int opt)
 		return retval;
 
 	if (opt & TERMIOS_TERMIO) {
+		retval = verify_area(VERIFY_READ, (void *) arg, sizeof(struct termio));
+		if (retval)
+			return retval;
 		tmp_termios = *tty->termios;
 		memcpy_fromfs(&tmp_termio, (struct termio *) arg,
 			      sizeof (struct termio));
@@ -109,9 +112,13 @@ static int set_termios(struct tty_struct * tty, unsigned long arg, int opt)
 		SET_LOW_BITS(tmp_termios.c_lflag, tmp_termio.c_lflag);
 		memcpy(&tmp_termios.c_cc, &tmp_termio.c_cc, NCC);
 #undef SET_LOW_BITS
-	} else
+	} else {
+		retval = verify_area(VERIFY_READ, (void *) arg, sizeof(struct termios));
+		if (retval)
+			return retval;
 		memcpy_fromfs(&tmp_termios, (struct termios *) arg,
 			      sizeof (struct termios));
+	}
 
 	if ((opt & TERMIOS_FLUSH) && tty->ldisc.flush_buffer)
 		tty->ldisc.flush_buffer(tty);
@@ -307,6 +314,10 @@ int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 					    (unsigned long *) arg);
 			return 0;
 		case TIOCGLCKTRMIOS:
+			retval = verify_area(VERIFY_READ, (void *) arg,
+					     sizeof (unsigned long));
+			if (retval)
+				return retval;
 			arg = get_fs_long((unsigned long *) arg);
 			retval = verify_area(VERIFY_WRITE, (void *) arg,
 					     sizeof (struct termios));
@@ -319,7 +330,15 @@ int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 		case TIOCSLCKTRMIOS:
 			if (!suser())
 				return -EPERM;
+			retval = verify_area(VERIFY_READ, (void *) arg,
+					     sizeof (unsigned long));
+			if (retval)
+				return retval;
 			arg = get_fs_long((unsigned long *) arg);
+			retval = verify_area(VERIFY_READ, (void *) arg,
+					     sizeof (struct termios));
+			if (retval)
+				return retval;
 			memcpy_fromfs(&real_tty->termios_locked,
 				      (struct termios *) arg,
 				      sizeof (struct termios));

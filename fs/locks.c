@@ -109,7 +109,7 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 
 	if (fd >= NR_OPEN || !(filp = current->files->fd[fd]))
 		return -EBADF;
-	error = verify_area(VERIFY_WRITE, l, sizeof(*l));
+	error = verify_area(VERIFY_READ, l, sizeof(*l));
 	if (error)
 		return error;
 	memcpy_fromfs(&flock, l, sizeof(flock));

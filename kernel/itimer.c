@@ -112,15 +112,24 @@ asmlinkage int sys_setitimer(int which, struct itimerval *value, struct itimerva
 	int error;
 	struct itimerval set_buffer, get_buffer;
 
-	if (!value)
-		memset((char *) &set_buffer, 0, sizeof(set_buffer));
-	else
+	if (value) {
+		error = verify_area(VERIFY_READ, value, sizeof(*value));
+		if (error)
+			return error;
 		memcpy_fromfs(&set_buffer, value, sizeof(set_buffer));
+	} else
+		memset((char *) &set_buffer, 0, sizeof(set_buffer));
+
+	if (ovalue) {
+		error = verify_area(VERIFY_WRITE, ovalue, sizeof(struct itimerval));
+		if (error)
+			return error;
+	}
+
 	error = _setitimer(which, &set_buffer, ovalue ? &get_buffer : 0);
 	if (error || !ovalue)
 		return error;
-	error = verify_area(VERIFY_WRITE, ovalue, sizeof(struct itimerval));
-	if (!error)
-		memcpy_tofs(ovalue, &get_buffer, sizeof(get_buffer));
+
+	memcpy_tofs(ovalue, &get_buffer, sizeof(get_buffer));
 	return error;
 }

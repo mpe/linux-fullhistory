@@ -22,6 +22,7 @@
 
 #define RAMDISK_MINOR	1
 
+extern void wait_for_keypress(void);
 
 char	*rd_start;
 int	rd_length = 0;
@@ -102,7 +103,7 @@ static void do_load(void)
 	int		i = 1;
 	int		nblocks;
 	char		*cp;
-
+	
 	/*
 	 * Check for a super block on the diskette.
 	 * The old-style boot/root diskettes had their RAM image
@@ -164,9 +165,6 @@ static void do_load(void)
 	}
 }
 
-int floppy_grab_irq_and_dma(void);
-void floppy_release_irq_and_dma(void);
-
 /*
  * If the root device is the RAM disk, try to load it.
  * In order to do this, the root device is originally set to the
@@ -174,6 +172,9 @@ void floppy_release_irq_and_dma(void);
  */
 void rd_load(void)
 {
+	struct inode inode;
+	struct file filp;
+
 	/* If no RAM disk specified, give up early. */
 	if (!rd_length)
 		return;
@@ -184,12 +185,18 @@ void rd_load(void)
 	if (MAJOR(ROOT_DEV) != FLOPPY_MAJOR)
 		return;
 
-/* ugly, ugly */
-	if (floppy_grab_irq_and_dma()) {
-		printk("Unable to grab floppy IRQ/DMA for loading ramdisk image\n");
-		return;
+	/* for Slackware install disks */
+	printk(KERN_NOTICE "VFS: Insert ramdisk floppy and press ENTER\n");
+	wait_for_keypress();
+
+	memset(&filp, 0, sizeof(filp));
+	memset(&inode, 0, sizeof(inode));
+	inode.i_rdev = ROOT_DEV;
+	filp.f_mode = 1; /* read only */
+	filp.f_inode = &inode;
+	if(blkdev_open(&inode, &filp) == 0 ){
+		do_load();
+		if(filp.f_op && filp.f_op->release)
+			filp.f_op->release(&inode,&filp);
 	}
-	check_disk_change(ROOT_DEV);
-	do_load();
-	floppy_release_irq_and_dma();
 }

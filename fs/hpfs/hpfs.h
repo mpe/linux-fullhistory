@@ -92,7 +92,11 @@ struct hpfs_spare_block
 {
   unsigned magic;			/* f991 1849 */
   unsigned magic1;			/* fa52 29c5, more magic? */
-  unsigned dirty;			/* 0 clean, 1 "improperly stopped" */
+
+  unsigned dirty: 1;			/* 0 clean, 1 "improperly stopped" */
+  unsigned flag1234: 4;			/* unknown flags */
+  unsigned fast: 1;			/* partition was fast formatted */
+  unsigned flag6to31: 26;		/* unknown flags */
 
   secno hotfix_map;			/* info about remapped bad sectors */
   unsigned n_spares_used;		/* number of hotfixes */

@@ -147,6 +147,7 @@ static int sync_buffers(dev_t dev, int wait)
 	   2) wait for completion by waiting for all buffers to unlock. */
  repeat:
 	retry = 0;
+ repeat2:
 	ncount = 0;
 	/* We search all lists as a failsafe mechanism, not because we expect
 	   there to be dirty buffers on any of the other lists. */
@@ -170,6 +171,7 @@ static int sync_buffers(dev_t dev, int wait)
 					  continue;
 				  }
 				  wait_on_buffer (bh);
+				  goto repeat2;
 			  }
 			 /* If an unlocked buffer is not uptodate, there has
 			     been an IO error. Skip it. */
@@ -183,6 +185,9 @@ static int sync_buffers(dev_t dev, int wait)
 			    on the third pass. */
 			 if (!bh->b_dirt || pass>=2)
 				  continue;
+			 /* don't bother about locked buffers */
+			 if (bh->b_lock)
+				 continue;
 			 bh->b_count++;
 			 bh->b_flushtime = 0;
 			 ll_rw_block(WRITE, 1, &bh);
@@ -1735,31 +1740,37 @@ asmlinkage int sys_bdflush(int func, int data)
 	int ncount;
 	struct buffer_head * bh, *next;
 
-	if(!suser()) return -EPERM;
+	if (!suser())
+		return -EPERM;
 
-	if(func == 1)
+	if (func == 1)
 		 return sync_old_buffers();
 
 	/* Basically func 0 means start, 1 means read param 1, 2 means write param 1, etc */
-	if(func >= 2){
+	if (func >= 2) {
 		i = (func-2) >> 1;
-		if (i < 0 || i >= N_PARAM) return -EINVAL;
+		if (i < 0 || i >= N_PARAM)
+			return -EINVAL;
 		if((func & 1) == 0) {
 			error = verify_area(VERIFY_WRITE, (void *) data, sizeof(int));
-			if(error) return error;
+			if (error)
+				return error;
 			put_fs_long(bdf_prm.data[i], data);
 			return 0;
 		};
-		if(data < bdflush_min[i] || data > bdflush_max[i]) return -EINVAL;
+		if (data < bdflush_min[i] || data > bdflush_max[i])
+			return -EINVAL;
 		bdf_prm.data[i] = data;
 		return 0;
 	};
 	
-	if(bdflush_running++) return -EBUSY; /* Only one copy of this running at one time */
+	if (bdflush_running)
+		return -EBUSY; /* Only one copy of this running at one time */
+	bdflush_running++;
 	
 	/* OK, from here on is the daemon */
 	
-	while(1==1){
+	for (;;) {
 #ifdef DEBUG
 		printk("bdflush() activated...");
 #endif

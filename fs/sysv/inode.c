@@ -306,6 +306,10 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 		for (i = 0; i < sizeof(offsets)/sizeof(offsets[0]); i++)
 			if ((bh = bread(dev, offsets[i], BLOCK_SIZE)) != NULL) {
 				/* Try to recognize SystemV superblock */
+				if ((found = detect_sysv4(sb,bh)) != NULL) {
+					sb->sv_block_base = offsets[i];
+					goto ok;
+				}
 				if ((found = detect_sysv2(sb,bh)) != NULL) {
 					sb->sv_block_base = offsets[i];
 					goto ok;

@@ -453,6 +453,8 @@ static inline void n_tty_receive_char(struct tty_struct *tty, unsigned char c)
 			goto handle_newline;
 		}
 		if (c == EOF_CHAR(tty)) {
+		        if (tty->canon_head != tty->read_head)
+			        set_bit(TTY_PUSH, &tty->flags);
 			c = __DISABLED_CHAR;
 			goto handle_newline;
 		}
@@ -718,24 +720,6 @@ static inline void copy_from_read_buf(struct tty_struct *tty,
 	*nr -= n;
 }
 
-/*
- * Called to gobble up an immediately following EOF when there is no
- * more room in buf (this can happen if the user "pushes" some
- * characters using ^D).  This prevents the next read() from falsely
- * returning EOF.
- */
-static inline void gobble_eof(struct tty_struct *tty)
-{
-	cli();
-	if ((tty->read_cnt) &&
-	    (tty->read_buf[tty->read_tail] == __DISABLED_CHAR) &&
-	    clear_bit(tty->read_tail, &tty->read_flags)) {
-		tty->read_tail = (tty->read_tail+1) & (N_TTY_BUF_SIZE-1);
-		tty->read_cnt--;
-	}
-	sti();
-}
-
 static int read_chan(struct tty_struct *tty, struct file *file,
 		     unsigned char *buf, unsigned int nr)
 {
@@ -744,6 +728,9 @@ static int read_chan(struct tty_struct *tty, struct file *file,
 	unsigned char *b = buf;
 	int minimum, time;
 	int retval = 0;
+	int size;
+
+do_it_again:
 
 	if (!tty->read_buf) {
 		printk("n_tty_read_chan: called with read_buf == NULL?!?\n");
@@ -858,7 +845,6 @@ static int read_chan(struct tty_struct *tty, struct file *file,
 					put_fs_byte(c, b++);
 					if (--nr)
 						continue;
-					gobble_eof(tty);
 					break;
 				}
 				if (--tty->canon_data < 0) {
@@ -896,7 +882,14 @@ static int read_chan(struct tty_struct *tty, struct file *file,
 
 	current->state = TASK_RUNNING;
 	current->timeout = 0;
-	return (b - buf) ? b - buf : retval;
+	size = b - buf;
+	if (size && nr)
+	        clear_bit(TTY_PUSH, &tty->flags);
+        if (!size && clear_bit(TTY_PUSH, &tty->flags))
+                goto do_it_again;
+	if (!size && !retval)
+	        clear_bit(TTY_PUSH, &tty->flags);
+        return (size ? size : retval);
 }
 
 static int write_chan(struct tty_struct * tty, struct file * file,

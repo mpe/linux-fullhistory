@@ -25,6 +25,7 @@
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/tqueue.h>
+#include <linux/resource.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -675,6 +676,16 @@ static void do_timer(struct pt_regs * regs)
 		}
 #endif
 	}
+	/*
+	 * check the cpu time limit on the process.
+	 */
+	if ((current->rlim[RLIMIT_CPU].rlim_cur != RLIM_INFINITY) &&
+	    (((current->stime + current->utime) / HZ) >= current->rlim[RLIMIT_CPU].rlim_cur))
+		send_sig(SIGXCPU, current, 1);
+	if ((current->rlim[RLIMIT_CPU].rlim_max != RLIM_INFINITY) &&
+	    (((current->stime + current->utime) / HZ) >= current->rlim[RLIMIT_CPU].rlim_max))
+		send_sig(SIGKILL, current, 1);
+
 	if (current != task[0] && 0 > --current->counter) {
 		current->counter = 0;
 		need_resched = 1;

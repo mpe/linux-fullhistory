@@ -80,7 +80,7 @@ static int hd_error = 0;
 struct hd_i_struct {
 	unsigned int head,sect,cyl,wpcom,lzone,ctl;
 	};
-static struct hd_driveid *hd_ident_info[MAX_HD];
+static struct hd_driveid *hd_ident_info[MAX_HD] = {0, };
 	
 #ifdef HD_TYPE
 static struct hd_i_struct hd_info[] = { HD_TYPE };
@@ -275,16 +275,21 @@ static void identify_intr(void)
 {
 	unsigned int dev = DEVICE_NR(CURRENT->dev);
 	unsigned short stat = inb_p(HD_STATUS);
-	struct hd_driveid id;
+	struct hd_driveid *id = hd_ident_info[dev];
 
 	if (unmask_intr[dev])
 		sti();
-	if (stat & (BUSY_STAT|ERR_STAT))
-		printk ("  hd%c: identity unknown\n", dev+'a');
-	else {
-		insw(HD_DATA, (char *)&id, sizeof(id)/2); /* get ID bytes */
-		max_mult[dev] = id.max_multsect;
-		if ((id.cur_valid&1) && id.cur_cyls && id.cur_heads && (id.cur_heads <= 16) && id.cur_sectors) {
+	if (stat & (BUSY_STAT|ERR_STAT)) {
+		printk ("  hd%c: non-IDE device, CHS=%d%d%d\n", dev+'a',
+			hd_info[dev].cyl, hd_info[dev].head, hd_info[dev].sect);
+		if (id != NULL) {
+			hd_ident_info[dev] = NULL;
+			kfree_s (id, 512);
+		}
+	} else {
+		insw(HD_DATA, id, 256); /* get ID info */
+		max_mult[dev] = id->max_multsect;
+		if ((id->field_valid&1) && id->cur_cyls && id->cur_heads && (id->cur_heads <= 16) && id->cur_sectors) {
 			/*
 			 * Extract the physical drive geometry for our use.
 			 * Note that we purposely do *not* update the bios_info.
@@ -292,31 +297,24 @@ static void identify_intr(void)
 			 * still have the same logical view as the BIOS does,
 			 * which keeps the partition table from being screwed.
 			 */
-			hd_info[dev].cyl  = id.cur_cyls;
-			hd_info[dev].head = id.cur_heads;
-			hd_info[dev].sect = id.cur_sectors; 
+			hd_info[dev].cyl  = id->cur_cyls;
+			hd_info[dev].head = id->cur_heads;
+			hd_info[dev].sect = id->cur_sectors; 
 		}
-		fixstring (id.serial_no, sizeof(id.serial_no));
-		fixstring (id.fw_rev, sizeof(id.fw_rev));
-		fixstring (id.model, sizeof(id.model));
+		fixstring (id->serial_no, sizeof(id->serial_no));
+		fixstring (id->fw_rev, sizeof(id->fw_rev));
+		fixstring (id->model, sizeof(id->model));
 		printk ("  hd%c: %.40s, %dMB w/%dKB Cache, CHS=%d/%d/%d, MaxMult=%d\n",
-			dev+'a', id.model, id.cyls*id.heads*id.sectors/2048,
-			id.buf_size/2, hd_info[dev].cyl, hd_info[dev].head,
-			hd_info[dev].sect, id.max_multsect);
-		/* save drive info for later query via HDIO_GETIDENTITY */
-		if (NULL != (hd_ident_info[dev] = (struct hd_driveid *)kmalloc(sizeof(id),GFP_ATOMIC)))
-			*hd_ident_info[dev] = id;
-		
-		/* Quantum drives go weird at this point, so reset them! */
-		/* In fact, we should probably do a reset in any case in */
-		/* case we changed the geometry */
-		if (!strncmp(id.model, "QUANTUM", 7))
-			reset = 1;
-
-		/* flush remaining 384 (reserved/undefined) ID bytes: */
-		insw(HD_DATA,(char *)&id,sizeof(id)/2);
-		insw(HD_DATA,(char *)&id,sizeof(id)/2);
-		insw(HD_DATA,(char *)&id,sizeof(id)/2);
+			dev+'a', id->model, id->cyls*id->heads*id->sectors/2048,
+			id->buf_size/2, hd_info[dev].cyl, hd_info[dev].head,
+			hd_info[dev].sect, id->max_multsect);
+		/*
+		 * Early model Quantum drives go weird at this point,
+		 *   but doing a recalibrate seems to "fix" them.
+		 * (Doing a full reset confuses some newer model Quantums)
+		 */
+		if (!strncmp(id->model, "QUANTUM", 7))
+			special_op[dev] = recalibrate[dev] = 1;
 	}
 #if (HD_DELAY > 0)
 	last_req = read_timer();
@@ -1040,7 +1038,7 @@ static void hd_geninit(void)
 		}
 		hd[i<<6].nr_sects = bios_info[i].head *
 				bios_info[i].sect * bios_info[i].cyl;
-		hd_ident_info[i] = NULL;
+		hd_ident_info[i] = (struct hd_driveid *) kmalloc(512,GFP_KERNEL);
 		special_op[i] = 1;
 	}
 	if (NR_HD) {

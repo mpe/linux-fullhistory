@@ -97,6 +97,7 @@ void time_init(void)
 	if ((year += 1900) < 1970)
 		year += 100;
 	xtime.tv_sec = mktime(year, mon, day, hour, min, sec);
+	xtime.tv_usec = 0;
 }
 /* 
  * The timezone where the local system is located.  Used as a default by some
@@ -118,12 +119,19 @@ asmlinkage int sys_time(long * tloc)
 	return i;
 }
 
-asmlinkage int sys_stime(long * tptr)
+asmlinkage int sys_stime(unsigned long * tptr)
 {
+	int error;
+	unsigned long value;
+
 	if (!suser())
 		return -EPERM;
+	error = verify_area(VERIFY_READ, tptr, sizeof(*tptr));
+	if (error)
+		return error;
+	value = get_fs_long(tptr);
 	cli();
-	xtime.tv_sec = get_fs_long((unsigned long *) tptr);
+	xtime.tv_sec = value;
 	xtime.tv_usec = 0;
 	time_status = TIME_BAD;
 	time_maxerror = 0x70000000;
@@ -266,12 +274,25 @@ inline static void warp_clock(void)
 asmlinkage int sys_settimeofday(struct timeval *tv, struct timezone *tz)
 {
 	static int	firsttime = 1;
+	struct timeval	new_tv;
+	struct timezone new_tz;
 
 	if (!suser())
 		return -EPERM;
+	if (tv) {
+		int error = verify_area(VERIFY_READ, tv, sizeof(*tv));
+		if (error)
+			return error;
+		memcpy_fromfs(&new_tv, tv, sizeof(*tv));
+	}
 	if (tz) {
-		sys_tz.tz_minuteswest = get_fs_long((unsigned long *) tz);
-		sys_tz.tz_dsttime = get_fs_long(((unsigned long *) tz)+1);
+		int error = verify_area(VERIFY_READ, tz, sizeof(*tz));
+		if (error)
+			return error;
+		memcpy_fromfs(&new_tz, tz, sizeof(*tz));
+	}
+	if (tz) {
+		sys_tz = new_tz;
 		if (firsttime) {
 			firsttime = 0;
 			if (!tv)
@@ -279,11 +300,6 @@ asmlinkage int sys_settimeofday(struct timeval *tv, struct timezone *tz)
 		}
 	}
 	if (tv) {
-		int sec, usec;
-
-		sec = get_fs_long((unsigned long *)tv);
-		usec = get_fs_long(((unsigned long *)tv)+1);
-	
 		cli();
 		/* This is revolting. We need to set the xtime.tv_usec
 		 * correctly. However, the value in this location is
@@ -291,15 +307,14 @@ asmlinkage int sys_settimeofday(struct timeval *tv, struct timezone *tz)
 		 * Discover what correction gettimeofday
 		 * would have done, and then undo it!
 		 */
-		usec -= do_gettimeoffset();
+		new_tv.tv_usec -= do_gettimeoffset();
 
-		if (usec < 0)
-		{
-			usec += 1000000;
-			sec--;
+		if (new_tv.tv_usec < 0) {
+			new_tv.tv_usec += 1000000;
+			new_tv.tv_sec--;
 		}
-		xtime.tv_sec = sec;
-		xtime.tv_usec = usec;
+
+		xtime = new_tv;
 		time_status = TIME_BAD;
 		time_maxerror = 0x70000000;
 		time_esterror = 0x70000000;

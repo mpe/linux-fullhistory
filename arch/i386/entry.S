@@ -541,5 +541,4 @@ _sys_call_table:
 	.long _sys_setfsuid
 	.long _sys_setfsgid
 	.long _sys_llseek		/* 140 */
-	.space (NR_syscalls-139)*4
 	.space (NR_syscalls-140)*4

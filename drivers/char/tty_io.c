@@ -1242,6 +1242,9 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 		case TIOCSTI:
 			if ((current->tty != tty) && !suser())
 				return -EPERM;
+			retval = verify_area(VERIFY_READ, (void *) arg, 1);
+			if (retval)
+				return retval;
 			ch = get_fs_byte((char *) arg);
 			tty->ldisc.receive_buf(tty, &ch, &mbz, 1);
 			return 0;
@@ -1254,6 +1257,10 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 				    sizeof (struct winsize));
 			return 0;
 		case TIOCSWINSZ:
+			retval = verify_area(VERIFY_READ, (void *) arg,
+					     sizeof (struct winsize));
+			if (retval)
+				return retval;			
 			memcpy_fromfs(&tmp_ws, (struct winsize *) arg,
 				      sizeof (struct winsize));
 			if (memcmp(&tmp_ws, &tty->winsize,
@@ -1279,6 +1286,9 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 			redirect = real_tty;
 			return 0;
 		case FIONBIO:
+			retval = verify_area(VERIFY_READ, (void *) arg, sizeof(long));
+			if (retval)
+				return retval;
 			arg = get_fs_long((unsigned long *) arg);
 			if (arg)
 				file->f_flags |= O_NONBLOCK;
@@ -1371,6 +1381,9 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 			arg = get_fs_long((unsigned long *) arg);
 			return tty_set_ldisc(tty, arg);
 		case TIOCLINUX:
+			retval = verify_area(VERIFY_READ, (void *) arg, 1);
+			if (retval)
+				return retval;
 			switch (get_fs_byte((char *)arg))
 			{
 				case 0: 

@@ -728,10 +728,10 @@ restart_interp:
 		if (!fn)
 			break;
 		retval = fn(&bprm, regs);
-		if (retval == 0) {
+		if (retval >= 0) {
 			iput(bprm.inode);
 			current->did_exec = 1;
-			return 0;
+			return retval;
 		}
 		if (retval != -ENOEXEC)
 			break;

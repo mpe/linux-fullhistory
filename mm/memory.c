@@ -734,8 +734,12 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 	if (!(from & PAGE_PRESENT))
 		return 0;
 /* if it is private, it must be clean to be shared */
-	if ((from_area->vm_page_prot & PAGE_COW) && (from & PAGE_DIRTY))
-		return 0;
+	if (from & PAGE_DIRTY) {
+		if (from_area->vm_page_prot & PAGE_COW)
+			return 0;
+		if (!(from_area->vm_page_prot & PAGE_RW))
+			return 0;
+	}		
 /* is the page reasonable at all? */
 	if (from >= high_memory)
 		return 0;
@@ -754,6 +758,8 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 		if (in_swap_cache(from)) { /* implies PAGE_DIRTY */
 			if (from_area->vm_page_prot & PAGE_COW)
 				return 0;
+			if (!(from_area->vm_page_prot & PAGE_RW))
+				return 0;
 		}
 		copy_page((from & PAGE_MASK), newpage);
 		*(unsigned long *) to_page = newpage | to_area->vm_page_prot;
@@ -762,6 +768,8 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 /* do a final swap-cache test before sharing them.. */
 	if (in_swap_cache(from)) {
 		if (from_area->vm_page_prot & PAGE_COW)
+			return 0;
+		if (!(from_area->vm_page_prot & PAGE_RW))
 			return 0;
 		from |= PAGE_DIRTY;
 		*(unsigned long *) from_page = from;

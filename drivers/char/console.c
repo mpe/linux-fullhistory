@@ -2100,7 +2100,8 @@ static void clear_selection()
  */
 
 #define colourmap ((char *)0xa0000)
-#define blackwmap ((char *)0xb0000)
+/* Pauline Middelink reports that we should use 0xA0000 for the bwmap as well.. */
+#define blackwmap ((char *)0xa0000)
 #define cmapsz 8192
 #define seq_port_reg (0x3c4)
 #define seq_port_val (0x3c5)

@@ -232,11 +232,13 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 {
 	off_t pos;
 	int written, c;
-	struct buffer_head * bh;
+	struct buffer_head * bh, *bufferlist[NBUF];
 	char * p;
 	struct super_block * sb;
 	int err;
+	int i,buffercount,write_error;
 
+	write_error = buffercount = 0;
 	if (!inode) {
 		printk("ext2_file_write: inode = NULL\n");
 		return -EINVAL;
@@ -294,12 +296,32 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 		buf += c;
 		bh->b_uptodate = 1;
 		mark_buffer_dirty(bh, 0);
-		if (filp->f_flags & O_SYNC) {
-			ll_rw_block (WRITE, 1, &bh);
-			wait_on_buffer (bh);
+		if (filp->f_flags & O_SYNC)
+			bufferlist[buffercount++] = bh;
+		else
+			brelse(bh);
+		if (buffercount == NBUF){
+			ll_rw_block(WRITE, buffercount, bufferlist);
+			for(i=0; i<buffercount; i++){
+				wait_on_buffer(bufferlist[i]);
+				if (!bufferlist[i]->b_uptodate)
+					write_error=1;
+				brelse(bufferlist[i]);
+			}
+			buffercount=0;
 		}
-		brelse (bh);
+		if(write_error)
+			break;
 	}
+	if ( buffercount ){
+		ll_rw_block(WRITE, buffercount, bufferlist);
+		for(i=0; i<buffercount; i++){
+			wait_on_buffer(bufferlist[i]);
+			if (!bufferlist[i]->b_uptodate)
+				write_error=1;
+			brelse(bufferlist[i]);
+		}
+	}		
 	if (pos > inode->i_size)
 		inode->i_size = pos;
 	if (filp->f_flags & O_SYNC)

@@ -325,7 +325,7 @@ void ip_rt_add(short flags, unsigned long dst, unsigned long mask,
 	 *	Update the loopback route
 	 */
 	 
-	if (rt->rt_dev->flags & IFF_LOOPBACK)
+	if ((rt->rt_dev->flags & IFF_LOOPBACK) && !rt_loopback)
 		rt_loopback = rt;
 		
 	/*

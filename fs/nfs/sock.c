@@ -11,6 +11,11 @@
  *
  * An xid mismatch no longer causes the request to be trashed.
  *
+ * Peter Eriksson - incorrect XID used to confuse Linux
+ * Florian La Roche - use the correct max size, if reading a packet and
+ *                    also verify, if the whole packet has been read...
+ *                    more checks should be done in proc.c...
+ *
  */
 
 #include <linux/config.h>
@@ -44,7 +49,7 @@ extern struct socket *socki_lookup(struct inode *inode);
  * to the server socket.
  */
 
-static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end)
+static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end, int size)
 {
 	struct file *file;
 	struct inode *inode;
@@ -192,26 +197,23 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end)
 #if 0
 		printk("nfs_rpc_call: XID mismatch\n");
 #endif
+		goto re_select;
 	}
 	/* JEJB/JSP 2/7/94
 	 *
 	 * we have the correct xid, so read into the correct place and
 	 * return it
 	 *
-	 * Here we need to know the size given to alloc, server->wsize for
-	 * writes or server->rsize for reads.  In practice these are the
-	 * same. 
-	 *
-	 * If they are not the same then a reply to a write request will be
-	 * a small acknowledgment, so even if wsize < rsize we should never
-	 * cause data to be written past the end of the buffer (unless some
-	 * brain damaged implementation sends out a large write acknowledge).
-	 *
-	 * FIXME:  I should really know how big a packet was alloc'd --
-	 *         should pass it to do_nfs_rpc. */
+	 */
 	result=sock->ops->recvfrom(sock, (void *)start, 
-				  server->rsize + NFS_SLACK_SPACE, 1, 0, NULL,
+				  size + 1024, 1, 0, NULL,
+			/* Here is NFS_SLACK_SPACE..., hack */
 				  &addrlen);
+	if (result < addrlen) {
+		printk("NFS: just caught a too small read memory size..., email to NET channel\n");
+		printk("NFS: result=%d,addrlen=%d\n", result, addrlen);
+		result = -EIO;
+	}
 	current->blocked = old_mask;
 	set_fs(fs);
 	return result;
@@ -223,14 +225,14 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end)
  * RPC replies.
  */
 
-int nfs_rpc_call(struct nfs_server *server, int *start, int *end)
+int nfs_rpc_call(struct nfs_server *server, int *start, int *end, int size)
 {
 	int result;
 
 	while (server->lock)
 		sleep_on(&server->wait);
 	server->lock = 1;
-	result = do_nfs_rpc_call(server, start, end);
+	result = do_nfs_rpc_call(server, start, end, size);
 	server->lock = 0;
 	wake_up(&server->wait);
 	return result;

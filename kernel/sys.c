@@ -697,12 +697,15 @@ asmlinkage int sys_getrlimit(unsigned int resource, struct rlimit *rlim)
 asmlinkage int sys_setrlimit(unsigned int resource, struct rlimit *rlim)
 {
 	struct rlimit new_rlim, *old_rlim;
+	int err;
 
 	if (resource >= RLIM_NLIMITS)
 		return -EINVAL;
+	err = verify_area(VERIFY_READ, rlim, sizeof(*rlim));
+	if (err)
+		return err;
+	memcpy_fromfs(&new_rlim, rlim, sizeof(*rlim));
 	old_rlim = current->rlim + resource;
-	new_rlim.rlim_cur = get_fs_long((unsigned long *) rlim);
-	new_rlim.rlim_max = get_fs_long(((unsigned long *) rlim)+1);
 	if (((new_rlim.rlim_cur > old_rlim->rlim_max) ||
 	     (new_rlim.rlim_max > old_rlim->rlim_max)) &&
 	    !suser())
@@ -723,7 +726,6 @@ int getrusage(struct task_struct *p, int who, struct rusage *ru)
 {
 	int error;
 	struct rusage r;
-	unsigned long	*lp, *lpend, *dest;
 
 	error = verify_area(VERIFY_WRITE, ru, sizeof *ru);
 	if (error)
@@ -755,11 +757,7 @@ int getrusage(struct task_struct *p, int who, struct rusage *ru)
 			r.ru_majflt = p->mm->maj_flt + p->mm->cmaj_flt;
 			break;
 	}
-	lp = (unsigned long *) &r;
-	lpend = (unsigned long *) (&r+1);
-	dest = (unsigned long *) ru;
-	for (; lp < lpend; lp++, dest++) 
-		put_fs_long(*lp, dest);
+	memcpy_tofs(ru, &r, sizeof(r));
 	return 0;
 }
 

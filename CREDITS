@@ -7,6 +7,10 @@
 			Linus
 ----------
 
+N: Werner Almesberger
+E: almesber@bernina.ethz.ch
+D: dosfs, LILO, some fd features, various other hacks here and there
+
 N: Krishna Balasubramanian
 E: balasub@cis.ohio-state.edu
 D: Wrote SYS V IPC (part of standard kernel since 0.99.10)
@@ -38,8 +42,9 @@ E: becker@cesdis.gsfc.nasa.gov
 D: General low-level networking hacker
 D: Most of the ethercard drivers
 D: Original author of the NFS server
-S: 17100 Science Drive
-S: Bowie, Maryland 20715
+S: USRA Center of Excellence in Space Data and Information Sciences
+S: Code 930.5, Goddard Space Flight Center
+S: Greenbelt, Maryland 20771
 S: USA
 
 N: Stephen R. van den Berg (AKA BuGless)
@@ -48,11 +53,11 @@ D: General kernel, gcc, and libc hacker
 D: Specialisation: tweaking, ensuring portability, tweaking, cleaning,
 D: tweaking and occasionally debugging :-)
 S: Bouwensstraat 22
-S: 6369 BG  Simpelveld
+S: 6369 BG Simpelveld
 S: The Netherlands
 
 N: Hennus Bergman
-E: hennus@sky.nl.mugnet.org  [My uucp-fed Linux box at home]
+E: hennus@sky.nl.mugnet.org [My uucp-fed Linux box at home]
 D: Author and maintainer of the QIC-02 tape driver
 S: The Netherlands
 
@@ -72,7 +77,7 @@ N: John Boyd
 E: boyd@cis.ohio-state.edu
 D: Co-author of wd7000 SCSI driver
 S: 101 Curl Drive #591
-S: Columbus, Ohio 43210 
+S: Columbus, Ohio 43210
 S: USA
 
 N: Andries Brouwer
@@ -82,12 +87,21 @@ S: Bessemerstraat 21
 S: Amsterdam
 S: The Netherlands
 
+N: Michael Callahan
+E: callahan@maths.ox.ac.uk
+D: PPP for Linux
+S: The Mathematical Institute
+S: 25-29 St Giles
+S: Oxford
+S: United Kingdom
+
 N: Remy Card
 E: Remy.Card@masi.ibp.fr
 D: Extended file system designer and developer
 D: Second extended file system designer and developer
 S: Institut Blaise Pascal
-S: 4 Place Jussieu, 75252 Paris Cedex 05
+S: 4 Place Jussieu
+S: 75252 Paris Cedex 05
 S: France
 
 N: Ed Carp
@@ -95,14 +109,14 @@ E: ecarp@netcom.com
 D: uucp, elm, pine, pico port
 D: cron, at(1) developer
 S: 48287 Sawleaf
-S: Fremont, California  94539
+S: Fremont, California 94539
 S: USA
 
 N: Raymond Chen
 E: raymondc@microsoft.com
 D: Author of Configure script
-S: 14509 NE 39th St, #1096
-S: Bellevue WA 98007
+S: 14509 NE 39th Street #1096
+S: Bellevue, Washington 98007
 S: USA
 
 N: Alan Cox
@@ -113,7 +127,6 @@ E: GW4PTS@GB7SWN (packet radio)
 D: NET2Debugged author
 D: Network layer debugging
 D: AX.25 & IPX alpha releases
-S: <No>
 
 N: Laurence Culhane
 E: loz@holmes.demon.co.uk
@@ -121,11 +134,20 @@ D: Wrote the initial alpha SLIP code
 S: 81 Hood Street
 S: Northampton
 S: NN1 3QT
-S: England
+S: United Kingdom
 
 N: Wayne Davison
 E: davison@borland.com
 D: Second extended file system co-designer
+
+N: Todd J. Derr
+E: tjd@cs.pitt.edu
+D: maintainer of dual-monitor patches for 1.0+
+D: MouseMan driver for selection
+S: Department of Computer Science
+S: University of Pittsburgh
+S: Pittsburgh, Pennsylvania 15260
+S: USA
 
 N: Thomas Dunbar
 E: tdunbar@vtaix.cc.vt.edu
@@ -144,19 +166,20 @@ S: 47807 Krefeld
 S: Germany
 
 N: Drew Eckhardt
-E: drew@cs.Colorado.EDU
+E: drew@Colorado.EDU
 D: SCSI code
 D: Assorted snippets elsewhere
 D: Boot sector "..." printing
-S: 538 West Laurell Court
-S: Louisville, Colorado 80027
+S: 2255 Spruce
+S: Boulder, Colorado 80302
 S: USA
 
 N: Bjorn Ekwall
 E: bj0rn@blox.se
-D: Driver for the D-Link parallel port Ethernet adapter
+D: Extended support for loadable modules
+D: D-Link pocket adapter drivers
 S: Myrstuguv. 83
-S: S-143 32  VARBY
+S: S-143 32 VARBY
 S: Sweden
 
 N: Doug Evans
@@ -189,9 +212,15 @@ D: The Linux Support Team Erlangen
 N: Lawrence Foard
 E: entropy@world.std.com
 D: Floppy track reading, fs code
-S: Suite #108 
-S: 217 Park Ave.
-S: Worcester Ma 01609
+S: 217 Park Avenue, Suite 108
+S: Worcester, Massachusetts 01609
+S: USA
+
+N: Karl Fogel
+E: kfogel@cs.oberlin.edu
+D: Contributor, Linux User's Guide
+S: 1123 North Oak Park Avenue
+S: Oak Park, Illinois 60302
 S: USA
 
 N: Nigel Gamble
@@ -201,12 +230,19 @@ S: 301 Norwood Terrace, Apartment N226
 S: Boca Raton, Florida 33431-6588
 S: USA
 
+N: Jacques Gelinas
+E: jacques@solucorp.qc.ca
+D: Author of the Umsdos file system
+S: 1326 De Val-Brillant
+S: Laval, Quebec
+S: Canada H7Y 1V9
+
 N: David Gentzel
 E: gentzel@nova.enet.dec.com
 D: BusLogic driver and original UltraStor driver
 S: Whitfield Software Services
 S: 631 Idlewood Avenue
-S: Carnegie, Pennsylvania   15106-1126
+S: Carnegie, Pennsylvania 15106-1126
 S: USA
 
 N: Philip Gladstone
@@ -220,13 +256,21 @@ S: Augartenstrasse 40
 S: D - 76137 Karlsruhe
 S: Germany
 
+N: Greg Hankins
+E: gregh@cc.gatech.edu
+D: fixed keyboard driver to separate LED and locking status
+S: 25360 Georgia Tech Station
+S: Atlanta, Georgia 30332
+S: USA
+
 N: Andrew Haylett
 E: ajh@gec-mrc.co.uk
 D: Selection mechanism
 S: GEC-Marconi Research Centre
 S: West Hanningfield Road
-S: Great Baddow, Essex CM2 8HN
-S: UK
+S: Great Baddow
+S: CM2 8HN
+S: United Kingdom
 
 N: Michael Hipp
 E: mhipp@student.uni-tuebingen.de
@@ -236,11 +280,12 @@ S: D - 72072 Tuebingen
 S: Germany
 
 N: Dirk Hohndel
-E: hohndel@informatik.uni-wuerzburg.de
-D: XFree86
-S: Universit"at W"urzburg, LS Informatik I
-S: Am Hubland, 97218 W"urzburg
-S: Germany
+E: hohndel@aib.com
+D: The XFree86[tm] Project
+S: AIB Software Corporation
+S: 46030 Manekin Plaza, Suite 160
+S: Dulles, Virginia 20166
+S: USA
 
 N: Nick Holloway
 E: alfie@dcs.warwick.ac.uk
@@ -250,7 +295,7 @@ S: Department of Computer Science
 S: University of Warwick
 S: Coventry
 S: CV4 7AL
-S: UK
+S: United Kingdom
 
 N: Ron Holt
 E: ron@novell.com
@@ -270,6 +315,31 @@ S: Panoramastrasse 18
 S: D-69126 Heidelberg
 S: Germany
 
+N: Ian Jackson
+E: iwj10@cus.cam.ac.uk
+E: ijackson@nyx.cs.du.edu
+D: FAQ maintainer and poster of the daily postings
+D: FSSTND group member
+D: Debian core team member and maintainer of several Debian packages
+S: 2 Lexington Close
+S: Cambridge
+S: CB3 0DS
+S: United Kingdom
+
+N: Mike Jagdis
+E: jaggy@purplet.demon.co.uk
+E: Mike.Jagdis@purplet.demon.co.uk
+D: iBCS personalities, socket and X interfaces, x.out loader, syscalls...
+D: Purple Distribution maintainer
+D: UK FidoNet support
+D: ISODE && PP
+D: Kernel and device driver hacking
+S: 280 Silverdale Road
+S: Earley
+S: Reading
+S: RG6 2NU
+S: United Kingdom
+
 N: Michael K. Johnson
 E: johnsonm@sunsite.unc.edu
 D: The Linux Documentation Project
@@ -288,7 +358,7 @@ D: NET-2
 D: Drivers
 D: Kernel cleanups
 S: Hoefbladhof 27
-S: 2215 DV  Voorhout
+S: 2215 DV Voorhout
 S: The Netherlands
 
 N: Olaf Kirch
@@ -313,13 +383,28 @@ N: Bas Laarhoven
 E: bas@vimec.nl
 D: Loadable modules and ftape driver
 S: Mr. v. Boemellaan 39
-S: NL-5237 KA  's-Hertogenbosch
+S: NL-5237 KA 's-Hertogenbosch
 S: The Netherlands
+
+N: Kevin Lentin
+E: kevinl@cs.monash.edu.au
+D: NCR53C400/T130B SCSI extension to NCR5380 driver.
+S: 18 Board Street
+S: Doncaster VIC 3108
+S: Australia
+
+N: Mark Lord
+E: mlord@bnr.ca
+E: mlord@achilles.net
+D: IDE drive support in hd.c
+S: 33 Ridgefield Cr
+S: Nepean, Ontario
+S: Canada K2H 6S3
 
 N: Warner Losh
 E: imp@boulder.parcplace.com
 D: Provided OI/OB for Linux, general hacker
-S: 4909 Pearl East Circle Suite 200
+S: 4909 Pearl East Circle, Suite 200
 S: Boulder, Colorado 80303
 S: USA
 
@@ -352,8 +437,8 @@ E: pat@it.com.au
 D: 8 bit XT hard disk driver
 D: Miscellaneous ST0x, TMC-8xx and other SCSI hacking
 S: 25 McMillan Street
-S: Victoria Park, 6100
-S: Western Australia
+S: Victoria Park 6100
+S: Australia
 
 N: John A. Martin
 E: jmartin@csc.com
@@ -365,6 +450,15 @@ S: Computer Sciences Corporation
 S: 1100 West Street
 S: Laurel, Maryland 20707-3587
 S: USA
+
+N: Kevin E. Martin
+E: martin@cs.unc.edu
+D: Developed original accelerated X servers included in XFree86
+D: XF86_Mach64 (forthcoming -- please don't ask when)
+D: XF86_Mach32
+D: XF86_Mach8
+D: XF86_8514
+D: cfdisk (curses based disk partitioning program)
 
 N: Bradley McLean
 E: brad@bradpc.gaylord.com
@@ -411,7 +505,9 @@ D: Linux Projects Map, Linux Commercial-HOWTO
 D: general Linux publicity in Germany, vacation port
 D: UUCP and CNEWS binary packages for LST
 S: Editorial Board iX Mag
-S: Helstorfer Str. 7, D-30625 Hannover
+S: Helstorfer Str. 7
+S: D-30625 Hannover
+S: Germany
 
 N: Corey Minyard
 E: minyard@wf-rch.cirr.com
@@ -431,7 +527,7 @@ N: Ian A. Murdock
 E: imurdock@gnu.ai.mit.edu
 D: Creator of Debian distribution
 S: 30 White Tail Lane
-S: Lafayette, Indiana 47906
+S: Lafayette, Indiana 47905
 S: USA
 
 N: Johan Myreen
@@ -442,12 +538,23 @@ S: FIN-00330 Helsingfors
 S: Finland
 
 N: David C. Niemi
+E: niemidc@clark.net
 E: niemidc@slma.com
 D: FSSTND, The XFree86 Project
 D: DMA memory support, floppy driver
 S: 2364 Old Trail Drive
 S: Reston, Virginia 22091
 S: USA
+
+N: Michael O'Reilly
+E: michael@iinet.com.au
+E: oreillym@tartarus.uwa.edu.au
+D: Wrote the original dynamic sized disk cache stuff. I think the only
+D: part that remains is the GFP_KERNEL et al #defines. :)
+S: 192 Nichsolson Road
+S: Subiaco, 6008
+S: Perth, Western Australia
+S: Australia
 
 N: Kai Petzke
 E: wpp@marie.physik.tu-berlin.de
@@ -463,11 +570,10 @@ E: snprobst@immd4.informatik.uni-erlangen.de
 D: The Linux Support Team Erlangen
 
 N: Daniel Quinlan
-E: quinlan@bucknell.edu
+E: quinlan@yggdrasil.com
 D: FSSTND Coordinator
-S: Box C3529
-S: Bucknell University
-S: Lewisburg, Pennsylvania 17837
+S: 816 Saratoga Avenue, Apartment M208
+S: San Jose, California 95129
 S: USA
 
 N: Florian La Roche
@@ -481,7 +587,7 @@ S: Germany
 N: Stephen Rothwell
 E: sfr@pdact.pd.necisa.oz.au
 D: Boot/setup/build work for setup > 2K
-S: 59 Bugden Ave
+S: 59 Bugden Avenue
 S: Gowrie ACT 2904
 S: Australia
 
@@ -510,6 +616,15 @@ S: 620 Park View Drive #206
 S: Santa Clara, California 95054
 S: USA
 
+N: Rick Sladkey
+E: jrs@world.std.com
+D: utility hacker: Emacs, NFS server, mount, kmem-ps, UPS debugger, strace, GDB
+D: library hacker: RPC, profil(3), realpath(3), regexp.h
+D: kernel hacker: unnamed block devs, NFS client, fast select, precision timer
+S: 24 Avon Place
+S: Arlington, Massachusetts 02174
+S: USA
+
 N: Chris Smith
 E: csmith@convex.com
 D: HPFS filesystem
@@ -521,7 +636,7 @@ E: drew@lethe.north.net
 D: iBCS2 developer
 S: 22 Irvington Cres.
 S: Willowdale, Ontario
-S: Canada, M2N 2Z1
+S: Canada M2N 2Z1
 
 N: Tommy Thorn
 E: Tommy.Thorn@daimi.aau.dk
@@ -579,8 +694,9 @@ S: Dept. of Computer Science
 S: University of Edinburgh
 S: JCMB, The King's Buildings
 S: Mayfield Road
-S: Edinburgh EH9 3JZ
-S: Scotland, UK
+S: Edinburgh 
+S: EH9 3JZ
+S: United Kingdom
 
 N: Thomas Uhl
 E: uhl@sun1.rz.fh-heilbronn.de
@@ -591,12 +707,22 @@ S: Obere Heerbergstrasse 17
 S: 97078 Wuerzburg
 S: Germany
 
+N: Jeffrey A. Uphoff
+E: juphoff@nrao.edu
+E: jeff.uphoff@linux.org
+D: 'dip' contributor.
+D: AIPS port, astronomical community support.
+S: National Radio Astronomy Observatory
+S: 520 Edgemont Road
+S: Charlottesville, Virginia 22903
+S: USA
+
 N: Patrick Volkerding
 E: volkerdi@ftp.cdrom.com
 D: Produced the Slackware distribution, updated the SVGAlib
 D: patches for ghostscript, worked on color 'ls', etc.
 S: 301 15th Street S.
-S: Moorhead, MN 56560
+S: Moorhead, Minnesota 56560
 S: USA 
 
 N: Juergen Weigert
@@ -611,7 +737,7 @@ D: HOWTO coordinator and writer
 D: Maintainer of sunsite.unc.edu Linux doc archives
 D: Moderator, comp.os.linux.announce
 S: 205 Gray Street NE
-S: Wilson, North Carolina 27893 
+S: Wilson, North Carolina 27893
 S: USA
 
 
@@ -635,7 +761,7 @@ E: gunter@mbfys.kun.nl
 D: Some bug fixes in the polling printer driver (lp.c)
 S: University of Nijmegen
 S: Geert-Grooteplein Noord 21
-S: 6525 EZ  Nijmegen
+S: 6525 EZ Nijmegen
 S: The Netherlands
 
 N: Lars Wirzenius
@@ -655,8 +781,8 @@ S: Finland
 N: Roger E. Wolff
 E: wolff@dutecai.et.tudelft.nl
 D: Written kmalloc/kfree
-S: Oosterstraat 23 
-S: 2611 TT  Delft
+S: Oosterstraat 23
+S: 2611 TT Delft
 S: The Netherlands
 
 N: Frank Xia
@@ -668,15 +794,14 @@ S: USA
 
 N: Eric Youngdale
 E: ericy@cais.com
-E: eric@tantalus.nrl.navy.mil
 D: General kernel hacker
-D: SCSI, iso9660, ELF, ibcs2, clustering in buffer cache, generalized mmap.
+D: SCSI iso9660 and ELF
 S: 17 Canterbury Square #101
 S: Alexandria, Virginia 22304
 S: USA
 
 N: Orest Zborowski
-E: orestz@microsoft.com
+E: orestz@eskimo.com
 D: XFree86 and kernel development
 S: 1507 145th Place SE #B5
 S: Bellevue, Washington 98007

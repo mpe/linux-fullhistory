@@ -90,19 +90,6 @@ struct lp_struct {
 	char *lp_buffer;
 };
 
-/* the BIOS manuals say there can be up to 4 lpt devices
- * but I have not seen a board where the 4th address is listed
- * if you have different hardware change the table below 
- * please let me know if you have different equipment
- * if you have more than 3 printers, remember to increase LP_NO
- */
-struct lp_struct lp_table[] = {
-	{ 0x3bc, 0, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT, NULL, NULL, },
-	{ 0x378, 0, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT, NULL, NULL, },
-	{ 0x278, 0, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT, NULL, NULL, },
-}; 
-#define LP_NO 3
-
 /* 
  * bit defines for 8255 status port
  * base + 1

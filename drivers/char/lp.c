@@ -4,6 +4,7 @@
  * - Thanks much to Gunter Windau for pointing out to me where the error
  *   checking ought to be.
  * Copyright (C) 1993 by Nigel Gamble (added interrupt code)
+ * Copyright (C) 1994 by Alan Cox (Modularised it)
  */
 
 #include <linux/errno.h>
@@ -16,6 +17,24 @@
 #include <asm/io.h>
 #include <asm/segment.h>
 #include <asm/system.h>
+
+/* the BIOS manuals say there can be up to 4 lpt devices
+ * but I have not seen a board where the 4th address is listed
+ * if you have different hardware change the table below 
+ * please let me know if you have different equipment
+ * if you have more than 3 printers, remember to increase LP_NO
+ */
+struct lp_struct lp_table[] = {
+	{ 0x3bc, 0, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT, NULL, NULL, },
+	{ 0x378, 0, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT, NULL, NULL, },
+	{ 0x278, 0, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT, NULL, NULL, },
+}; 
+#define LP_NO 3
+
+#ifdef MODULE
+#include <linux/module.h>
+#include "../../tools/version.h"
+#endif
 
 /* 
  * All my debugging code assumes that you debug with only one printer at
@@ -305,7 +324,9 @@ static int lp_open(struct inode * inode, struct file * file)
 	}
 
 	LP_F(minor) |= LP_BUSY;
-
+#ifdef MODULE
+	MOD_INC_USE_COUNT;
+#endif	
 	return 0;
 }
 
@@ -321,6 +342,9 @@ static void lp_release(struct inode * inode, struct file * file)
 	}
 
 	LP_F(minor) &= ~LP_BUSY;
+#ifdef MODULE
+	MOD_DEC_USE_COUNT;
+#endif		
 }
 
 
@@ -418,6 +442,8 @@ static struct file_operations lp_fops = {
 	lp_release
 };
 
+#ifndef MODULE
+
 long lp_init(long kmem_start)
 {
 	int offset = 0;
@@ -450,3 +476,42 @@ long lp_init(long kmem_start)
 		printk("lp_init: no lp devices found\n");
 	return kmem_start;
 }
+
+#else
+
+char kernel_version[]= UTS_RELEASE;
+
+int init_module(void)
+{
+	int offset = 0;
+	unsigned int testvalue = 0;
+	int count = 0;
+
+	if (register_chrdev(LP_MAJOR,"lp",&lp_fops)) {
+		printk("unable to get major %d for line printer\n", LP_MAJOR);
+		return -EIO;
+	}
+	/* take on all known port values */
+	for (offset = 0; offset < LP_NO; offset++) {
+		/* write to port & read back to check */
+		outb_p( LP_DUMMY, LP_B(offset));
+		for (testvalue = 0 ; testvalue < LP_DELAY ; testvalue++)
+			;
+		testvalue = inb_p(LP_B(offset));
+		if (testvalue == LP_DUMMY) {
+			LP_F(offset) |= LP_EXIST;
+			lp_reset(offset);
+			printk("lp_init: lp%d exists, ", offset);
+			if (LP_IRQ(offset))
+				printk("using IRQ%d\n", LP_IRQ(offset));
+			else
+				printk("using polling driver\n");
+			count++;
+		}
+	}
+	if (count == 0)
+		printk("lp_init: no lp devices found\n");
+	return 0;
+}
+
+#endif

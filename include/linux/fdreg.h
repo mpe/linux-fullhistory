@@ -89,6 +89,8 @@
 #define FD_READID		0xEA	/* prints the header of a sector */
 #define FD_UNLOCK		0x14	/* Fifo config unlock */
 #define FD_LOCK			0x94	/* Fifo config lock */
+#define FD_RSEEK_OUT		0x8f	/* seek out (i.e. to lower tracks) */
+#define FD_RSEEK_IN		0xcf	/* seek in (i.e. to higher tracks) */
 
 /* DMA commands */
 #define DMA_READ	0x46

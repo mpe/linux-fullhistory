@@ -209,7 +209,7 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, struct device *dev)
 	/*
 	 *	Send it and free it once sent.
 	 */
-	ip_queue_xmit(NULL, dev, skb, 1);
+	ip_queue_xmit(NULL, ndev, skb, 1);
 }
 
 

@@ -228,10 +228,12 @@ struct floppy_raw_cmd {
 /* flags */
 #define FD_RAW_READ 1
 #define FD_RAW_WRITE 2
+#define FD_RAW_NO_MOTOR 4
+#define FD_RAW_DISK_CHANGE 4
 #define FD_RAW_INTR 8
 #define FD_RAW_SPIN 16
+#define FD_RAW_NO_MOTOR_AFTER 32
 #define FD_RAW_NEED_DISK 64
 #define FD_RAW_NEED_SEEK 128
-#define FD_RAW_USER_SUPPLIED 256
 
 #endif

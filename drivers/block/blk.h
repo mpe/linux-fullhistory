@@ -75,14 +75,13 @@ extern unsigned long xd_init(unsigned long mem_start, unsigned long mem_end);
 
 #elif (MAJOR_NR == FLOPPY_MAJOR)
 
-static void floppy_on(unsigned int nr);
 static void floppy_off(unsigned int nr);
 
 #define DEVICE_NAME "floppy"
 #define DEVICE_INTR do_floppy
 #define DEVICE_REQUEST do_fd_request
 #define DEVICE_NR(device) ( ((device) & 3) | (((device) & 0x80 ) >> 5 ))
-#define DEVICE_ON(device) floppy_on(DEVICE_NR(device))
+#define DEVICE_ON(device)
 #define DEVICE_OFF(device) floppy_off(DEVICE_NR(device))
 
 #elif (MAJOR_NR == HD_MAJOR)

@@ -54,7 +54,7 @@ static unsigned long nfs_file_mmap_nopage(struct vm_area_struct * area,
 		if (hunk > n)
 			hunk = n;
 		result = nfs_proc_read(NFS_SERVER(inode), NFS_FH(inode),
-			pos, hunk, (char *) (page + i), &fattr);
+			pos, hunk, (char *) (page + i), &fattr, 0);
 		if (result < 0)
 			break;
 		pos += result;

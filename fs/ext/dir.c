@@ -72,7 +72,7 @@ static int ext_readdir(struct inode * inode, struct file * filp,
 
 	if (!inode || !S_ISDIR(inode->i_mode))
 		return -EBADF;
-	if (filp->f_pos % 8 != 0)
+	if ((filp->f_pos & 7) != 0)
 		return -EBADF;
 	while (filp->f_pos < inode->i_size) {
 		offset = filp->f_pos & 1023;

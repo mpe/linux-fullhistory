@@ -78,6 +78,7 @@ make one yourself.  The wiring is:
 #include <netinet/in.h>
 #include <errno.h>
 #include <linux/delay.h>
+#include <linux/lp.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -196,7 +197,7 @@ plip_init(struct device *dev)
     struct net_local *pl;
 
     /* Check that there is something at base_addr. */
-    outb(0x00, PAR_CONTROL(dev));
+    outb(LP_PINITP, PAR_CONTROL(dev));
     outb(0x00, PAR_DATA(dev));
     if (inb(PAR_DATA(dev)) != 0x00)
 	return -ENODEV;
@@ -212,9 +213,9 @@ plip_init(struct device *dev)
 	printk("%s: configured for parallel port at %#3x",
 	       dev->name, dev->base_addr);
 	autoirq_setup(0);
-	outb(0x00, PAR_CONTROL(dev));
-	outb(0x10, PAR_CONTROL(dev));
-	outb(0x00, PAR_CONTROL(dev));
+	outb(LP_PINITP|LP_PSELECP, PAR_CONTROL(dev));
+	outb(LP_PINITP|LP_PSELECP|LP_PINTEN, PAR_CONTROL(dev));
+	outb(LP_PINITP|LP_PSELECP, PAR_CONTROL(dev));
 	dev->irq = autoirq_report(1);
 	if (dev->irq)
 	    printk(", probed IRQ %d.\n", dev->irq);
@@ -368,7 +369,7 @@ plip_open(struct device *dev)
     irq2dev_map[dev->irq] = dev;
     sti();
     /* enable rx interrupt. */
-    outb(0x10, PAR_CONTROL(dev));
+    outb(LP_PINITP|LP_PSELECP|LP_PINTEN, PAR_CONTROL(dev));
     plip_device_clear(dev);
     dev->start = 1;
 #ifdef MODULE
@@ -393,7 +394,7 @@ plip_close(struct device *dev)
     /* make sure that we don't register the timer */
     del_timer(&lp->tl);
     /* release the interrupt. */
-    outb(0x00, PAR_CONTROL(dev));
+    outb(LP_PINITP|LP_PSELECP, PAR_CONTROL(dev));
 #ifdef MODULE
     MOD_DEC_USE_COUNT;
 #endif        

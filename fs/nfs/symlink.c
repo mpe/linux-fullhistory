@@ -3,6 +3,8 @@
  *
  *  Copyright (C) 1992  Rick Sladkey
  *
+ *  Optimization changes Copyright (C) 1994 Florian La Roche
+ *
  *  nfs symlink handling code
  */
 
@@ -14,6 +16,7 @@
 #include <linux/stat.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
+#include <linux/string.h>
 
 static int nfs_readlink(struct inode *, char *, int);
 static int nfs_follow_link(struct inode *, struct inode *, int, int,
@@ -43,8 +46,9 @@ struct inode_operations nfs_symlink_inode_operations = {
 static int nfs_follow_link(struct inode *dir, struct inode *inode,
 			   int flag, int mode, struct inode **res_inode)
 {
-	int error;
-	char *res;
+	int error, *mem;
+	unsigned int len;
+	char *res, *res2;
 
 	*res_inode = NULL;
 	if (!dir) {
@@ -65,27 +69,33 @@ static int nfs_follow_link(struct inode *dir, struct inode *inode,
 		iput(dir);
 		return -ELOOP;
 	}
-	res = (char *) kmalloc(NFS_MAXPATHLEN + 1, GFP_KERNEL);
-	error = nfs_proc_readlink(NFS_SERVER(inode), NFS_FH(inode), res);
+	error = nfs_proc_readlink(NFS_SERVER(inode), NFS_FH(inode), &mem,
+		&res, &len, NFS_MAXPATHLEN);
+	if ((res2 = (char *) kmalloc(NFS_MAXPATHLEN + 1, GFP_KERNEL)) == NULL) {
+		printk("NFS: no memory in nfs_follow_link\n");
+		error = -EIO;
+	}
 	if (error) {
 		iput(inode);
 		iput(dir);
-		kfree_s(res, NFS_MAXPATHLEN + 1);
+		kfree(mem);
 		return error;
 	}
+	memcpy(res2, res, len);
+	res2[len] = '\0';
+	kfree(mem);
 	iput(inode);
 	current->link_count++;
-	error = open_namei(res, flag, mode, res_inode, dir);
+	error = open_namei(res2, flag, mode, res_inode, dir);
 	current->link_count--;
-	kfree_s(res, NFS_MAXPATHLEN + 1);
+	kfree_s(res2, NFS_MAXPATHLEN + 1);
 	return error;
 }
 
 static int nfs_readlink(struct inode *inode, char *buffer, int buflen)
 {
-	int i;
-	char c;
-	int error;
+	int error, *mem;
+	unsigned int len;
 	char *res;
 
 	if (!S_ISLNK(inode->i_mode)) {
@@ -94,15 +104,14 @@ static int nfs_readlink(struct inode *inode, char *buffer, int buflen)
 	}
 	if (buflen > NFS_MAXPATHLEN)
 		buflen = NFS_MAXPATHLEN;
-	res = (char *) kmalloc(buflen + 1, GFP_KERNEL);
-	error = nfs_proc_readlink(NFS_SERVER(inode), NFS_FH(inode), res);
+	error = nfs_proc_readlink(NFS_SERVER(inode), NFS_FH(inode), &mem,
+		&res, &len, buflen);
 	iput(inode);
-	if (error) {
-		kfree_s(res, buflen + 1);
-		return error;
+	if (! error) {
+		memcpy_tofs(buffer, res, len);
+		put_fs_byte('\0', buffer + len);
+		error = len;
 	}
-	for (i = 0; i < buflen && (c = res[i]); i++)
-		put_fs_byte(c,buffer++);
-	kfree_s(res, buflen + 1);
-	return i;
+	kfree(mem);
+	return error;
 }
