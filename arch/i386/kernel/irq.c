@@ -61,7 +61,11 @@ atomic_t nmi_counter;
  *
  * (0x0000ffff for NR_IRQS==16, 0x00ffffff for NR_IRQS=24)
  */
-unsigned int cached_irq_mask = (1<<NR_IRQS)-1;
+#if NR_IRQS == 64
+unsigned long long cached_irq_mask = -1;
+#else
+unsigned long long cached_irq_mask = (((unsigned long long) 1)<<NR_IRQS)-1;
+#endif
 
 #define cached_21	((cached_irq_mask | io_apic_irqs) & 0xff)
 #define cached_A1	(((cached_irq_mask | io_apic_irqs) >> 8) & 0xff)
@@ -84,7 +88,7 @@ spinlock_t irq_controller_lock;
  * To get IO-APIC interrupts we turn some of them into IO-APIC
  * interrupts during boot.
  */
-unsigned int io_apic_irqs = 0;
+unsigned long long io_apic_irqs = 0;
 
 static void do_8259A_IRQ (unsigned int irq, int cpu, struct pt_regs * regs);
 static void enable_8259A_irq (unsigned int irq);
@@ -113,8 +117,10 @@ static struct hw_interrupt_type i8259A_irq_type = {
 
 irq_desc_t irq_desc[NR_IRQS] = {
 	[0 ... 15] = { 0, 0, 0, &i8259A_irq_type, },	/* default to standard ISA IRQs */
-	[16 ... 23] = { 0, 0, 0, &no_irq_type, },	/* 'high' PCI IRQs filled in on demand */
+	[16 ... 63] = { 0, 0, 0, &no_irq_type, },	/* 'high' PCI IRQs filled in on demand */
 };
+
+int irq_vector[NR_IRQS] = { IRQ0_TRAP_VECTOR , 0 };
 
 
 /*
@@ -207,6 +213,16 @@ BUILD_IRQ(22)
  */
 BUILD_IRQ(23)
 
+BUILD_IRQ(24)
+BUILD_IRQ(25) BUILD_IRQ(26) BUILD_IRQ(27) BUILD_IRQ(28) BUILD_IRQ(29)
+BUILD_IRQ(30) BUILD_IRQ(31) BUILD_IRQ(32) BUILD_IRQ(33) BUILD_IRQ(34)
+BUILD_IRQ(35) BUILD_IRQ(36) BUILD_IRQ(37) BUILD_IRQ(38) BUILD_IRQ(39)
+BUILD_IRQ(40) BUILD_IRQ(41) BUILD_IRQ(42) BUILD_IRQ(43) BUILD_IRQ(44)
+BUILD_IRQ(45) BUILD_IRQ(46) BUILD_IRQ(47) BUILD_IRQ(48) BUILD_IRQ(49)
+BUILD_IRQ(50) BUILD_IRQ(51) BUILD_IRQ(52) BUILD_IRQ(53) BUILD_IRQ(54)
+BUILD_IRQ(55) BUILD_IRQ(56) BUILD_IRQ(57) BUILD_IRQ(58) BUILD_IRQ(59)
+BUILD_IRQ(60) BUILD_IRQ(61) BUILD_IRQ(62) BUILD_IRQ(63)
+
 /*
  * The following vectors are part of the Linux architecture, there
  * is no hardware IRQ pin equivalent for them, they are triggered
@@ -236,7 +252,19 @@ static void (*interrupt[NR_IRQS])(void) = {
 	IRQ12_interrupt, IRQ13_interrupt, IRQ14_interrupt, IRQ15_interrupt
 #ifdef __SMP__
 	,IRQ16_interrupt, IRQ17_interrupt, IRQ18_interrupt, IRQ19_interrupt,
-	IRQ20_interrupt, IRQ21_interrupt, IRQ22_interrupt, IRQ23_interrupt
+	IRQ20_interrupt, IRQ21_interrupt, IRQ22_interrupt, IRQ23_interrupt,
+	IRQ24_interrupt, IRQ25_interrupt, IRQ26_interrupt, IRQ27_interrupt,
+	IRQ28_interrupt, IRQ29_interrupt,
+	IRQ30_interrupt, IRQ31_interrupt, IRQ32_interrupt, IRQ33_interrupt,
+	IRQ34_interrupt, IRQ35_interrupt, IRQ36_interrupt, IRQ37_interrupt,
+	IRQ38_interrupt, IRQ39_interrupt,
+	IRQ40_interrupt, IRQ41_interrupt, IRQ42_interrupt, IRQ43_interrupt,
+	IRQ44_interrupt, IRQ45_interrupt, IRQ46_interrupt, IRQ47_interrupt,
+	IRQ48_interrupt, IRQ49_interrupt,
+	IRQ50_interrupt, IRQ51_interrupt, IRQ52_interrupt, IRQ53_interrupt,
+	IRQ54_interrupt, IRQ55_interrupt, IRQ56_interrupt, IRQ57_interrupt,
+	IRQ58_interrupt, IRQ59_interrupt,
+	IRQ60_interrupt, IRQ61_interrupt, IRQ62_interrupt, IRQ63_interrupt
 #endif
 };
 
@@ -817,12 +845,6 @@ int setup_x86_irq(unsigned int irq, struct irqaction * new)
 	if (!shared) {
 #ifdef __SMP__
 		if (IO_APIC_IRQ(irq)) {
-			if (IO_APIC_VECTOR(irq) > 0xfe)
-				/*
-				 * break visibly for now, FIXME
-				 */
-				panic("ayiee, tell mingo");
-
 			/*
 			 * First disable it in the 8259A:
 			 */
@@ -991,9 +1013,11 @@ __initfunc(void init_IRQ(void))
 
 #ifdef __SMP__	
 
-	for (i = 0; i < NR_IRQS ; i++)
-		if (IO_APIC_VECTOR(i) <= 0xfe)  /* hack -- mingo */
-			set_intr_gate(IO_APIC_VECTOR(i),interrupt[i]);
+	/*
+	  IRQ0 must be given a fixed assignment and initialized
+	  before init_IRQ_SMP.
+	*/
+	set_intr_gate(IRQ0_TRAP_VECTOR, interrupt[0]);
 
 	/*
 	 * The reschedule interrupt slowly changes it's functionality,
@@ -1029,3 +1053,14 @@ __initfunc(void init_IRQ(void))
 	setup_x86_irq(13, &irq13);
 } 
 
+#ifdef __SMP__	
+
+__initfunc(void init_IRQ_SMP(void))
+{
+	int i;
+	for (i = 0; i < NR_IRQS ; i++)
+		if (IO_APIC_VECTOR(i) > 0)
+			set_intr_gate(IO_APIC_VECTOR(i), interrupt[i]);
+}
+
+#endif

@@ -232,22 +232,24 @@ __initfunc(static void check_pentium_f00f(void))
 }
 
 /*
- * perform the Cyrix 5/2 test (!0 means it's a Cyrix)
+ * Perform the Cyrix 5/2 test. A Cyrix won't change
+ * the flags, while other 486 chips will.
  */
 
 static inline int test_cyrix_52div(void)
 {
-	int test;
+	unsigned int test;
 
-	__asm__ __volatile__("xor %%eax,%%eax\n\t"
-	     "sahf\n\t"
-	     "movb $5,%%al\n\t"
-	     "movb $2,%%bl\n\t"
-	     "div %%bl\n\t"
-	     "lahf\n\t"
-	     "andl $0x200,%%eax": "=a" (test) : : "bx", "cc");
+	__asm__ __volatile__(
+	     "sahf\n\t"		/* clear flags (%eax = 0x0005) */
+	     "div %b2\n\t"	/* divide 5 by 2 */
+	     "lahf"		/* store flags into %ah */
+	     : "=a" (test)
+	     : "0" (5), "q" (2)
+	     : "cc");
 
-	return test;
+	/* AH is 0x02 on Cyrix after the divide.. */
+	return (unsigned char) (test >> 8) == 0x02;
 }
 
 /*
@@ -258,10 +260,10 @@ static inline int test_cyrix_52div(void)
 
 __initfunc(static void check_cyrix_cpu(void))
 {
-	if (boot_cpu_data.cpuid_level == -1 && boot_cpu_data.x86 == 4
+	if ((boot_cpu_data.cpuid_level == -1) && (boot_cpu_data.x86 == 4)
 	    && test_cyrix_52div()) {
 
-		/* default to an unknown Cx486, (we will diferentiate later) */
+		/* default to an unknown Cx486, (we will differentiate later) */
 		/* NOTE:  using 0xff since 0x00 is a valid DIR0 value */
 		strcpy(boot_cpu_data.x86_vendor_id, "CyrixInstead");
 		boot_cpu_data.x86_model = 0xff;
@@ -270,7 +272,7 @@ __initfunc(static void check_cyrix_cpu(void))
 }
 
 /*
- * Fix two problems with the Cyrix 686 and 686L:
+ * Fix two problems with the Cyrix 6x86 and 6x86L:
  *   -- the cpuid is disabled on power up, enable it, use it.
  *   -- the SLOP bit needs resetting on some motherboards due to old BIOS,
  *      so that the udelay loop calibration works well.  Recalibrate.
@@ -281,7 +283,7 @@ extern void calibrate_delay(void) __init;
 __initfunc(static void check_cx686_cpuid_slop(void))
 {
 	if (boot_cpu_data.x86_vendor == X86_VENDOR_CYRIX &&
-	    (boot_cpu_data.x86_model & 0xf0) == 0x30) {  /* 686(L) */
+	    (boot_cpu_data.x86_model & 0xf0) == 0x30) {  /* 6x86(L) */
 		int dummy;
 		unsigned char ccr3, ccr5;
 

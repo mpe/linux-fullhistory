@@ -827,7 +827,7 @@ struct super_block * ntfs_read_super(struct super_block *sb,
 
 	/* Inform the kernel that a device block is a NTFS cluster */
 	sb->s_blocksize=vol->clustersize;
-	for(i=sb->s_blocksize,sb->s_blocksize_bits=0;i;i>>=1)
+	for(i=sb->s_blocksize,sb->s_blocksize_bits=0;i != 1;i>>=1)
 		sb->s_blocksize_bits++;
 	set_blocksize(sb->s_dev,sb->s_blocksize);
 	ntfs_debug(DEBUG_OTHER, "set_blocksize\n");

@@ -126,7 +126,7 @@ volatile unsigned long smp_invalidate_needed;		/* Used for the invalidate map th
 volatile unsigned long kstack_ptr;			/* Stack vector for booting CPUs			*/
 struct cpuinfo_x86 cpu_data[NR_CPUS];			/* Per CPU bogomips and other parameters 		*/
 static unsigned int num_processors = 1;			/* Internal processor count				*/
-static unsigned long io_apic_addr = 0xFEC00000;		/* Address of the I/O apic (not yet used) 		*/
+unsigned long mp_ioapic_addr = 0xFEC00000;		/* Address of the I/O apic (not yet used) 		*/
 unsigned char boot_cpu_id = 0;				/* Processor that is doing the boot up 			*/
 static int smp_activated = 0;				/* Tripped once we need to start cross invalidating 	*/
 int apic_version[NR_CPUS];				/* APIC version number					*/
@@ -363,7 +363,7 @@ __initfunc(static int smp_read_mpc(struct mp_config_table *mpc))
 					printk("I/O APIC #%d Version %d at 0x%lX.\n",
 						m->mpc_apicid,m->mpc_apicver,
 						m->mpc_apicaddr);
-					io_apic_addr = m->mpc_apicaddr;
+					mp_ioapic_addr = m->mpc_apicaddr;
 				}
 				mpt+=sizeof(*m);
 				count+=sizeof(*m);

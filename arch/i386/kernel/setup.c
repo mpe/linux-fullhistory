@@ -147,6 +147,8 @@ __initfunc(void setup_arch(char **cmdline_p,
 			memory_end = memory_alt_end;
 	}
 #endif
+	if (memory_end > (1024-64)*1024*1024)
+		memory_end = (1024-64)*1024*1024;
 	memory_end &= PAGE_MASK;
 #ifdef CONFIG_BLK_DEV_RAM
 	rd_image_start = RAMDISK_FLAGS & RAMDISK_IMAGE_START_MASK;
@@ -436,8 +438,9 @@ static struct cpu_model_info cpu_models[] __initdata = {
 	    NULL, "Pentium II (Deschutes)", NULL, NULL, NULL, NULL, NULL, NULL,
 	    NULL, NULL, NULL, NULL }},
 	{ X86_VENDOR_AMD,	4,
-	  { NULL, NULL, NULL, "DX/2", NULL, NULL, NULL, "DX/2-WB", "DX/4",
-	    "DX/4-WB", NULL, NULL, NULL, NULL, "Am5x86-WT", "Am5x86-WB" }},
+	  { NULL, NULL, NULL, "486 DX/2", NULL, NULL, NULL, "486 DX/2-WB",
+	    "486 DX/4", "486 DX/4-WB", NULL, NULL, NULL, NULL, "Am5x86-WT",
+	    "Am5x86-WB" }},
 	{ X86_VENDOR_AMD,	5,
 	  { "K5/SSA5 (PR75, PR90, PR100)", "K5 (PR120, PR133)",
 	    "K5 (PR166)", "K5 (PR200)", NULL, NULL,

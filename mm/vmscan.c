@@ -533,7 +533,6 @@ int kswapd(void *unused)
 	add_wait_queue(&kswapd_wait, &wait);
 	while (1) {
 		int tries;
-		int tried = 0;
 
 		current->state = TASK_INTERRUPTIBLE;
 		flush_signals(current);

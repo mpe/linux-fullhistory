@@ -74,18 +74,19 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 		return;
 	}
 	if (p->swap_map && !p->swap_map[offset]) {
-		printk("Hmm.. Trying to %s unallocated swap (%08lx)\n", 
-		       (rw == READ) ? "read" : "write", 
-		       entry);
+		printk(KERN_ERR "rw_swap_page: "
+			"Trying to %s unallocated swap (%08lx)\n", 
+			(rw == READ) ? "read" : "write", entry);
 		return;
 	}
 	if (!(p->flags & SWP_USED)) {
-		printk("Trying to swap to unused swap-device\n");
+		printk(KERN_ERR "rw_swap_page: "
+			"Trying to swap to unused swap-device\n");
 		return;
 	}
 
 	if (!PageLocked(page)) {
-		printk("VM: swap page is unlocked\n");
+		printk(KERN_ERR "VM: swap page is unlocked\n");
 		return;
 	}
 	
@@ -111,11 +112,11 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 	 * hashing for locked pages.
 	 */
 	if (!PageSwapCache(page)) {
-		printk("VM: swap page is not in swap cache\n");
+		printk(KERN_ERR "VM: swap page is not in swap cache\n");
 		return;
 	}
 	if (page->offset != entry) {
-		printk ("swap entry mismatch");
+		printk (KERN_ERR "VM: swap entry mismatch\n");
 		return;
 	}
 
@@ -179,11 +180,14 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 		clear_bit(PG_locked, &page->flags);
 		wake_up(&page->wait);
 	} else
-		printk("rw_swap_page: no swap file or device\n");
+		printk(KERN_ERR "rw_swap_page: no swap file or device\n");
 
+	/* This shouldn't happen, but check to be sure. */
+	if (atomic_read(&page->count) == 1)
+		printk(KERN_ERR "rw_swap_page: page unused while waiting!\n");
 	atomic_dec(&page->count);
 	if (offset && !test_and_clear_bit(offset,p->swap_lockmap))
-		printk("rw_swap_page: lock already cleared\n");
+		printk(KERN_ERR "rw_swap_page: lock already cleared\n");
 	wake_up(&lock_queue);
 #ifdef DEBUG_SWAP
 	printk ("DebugVM: %s_swap_page finished on page %p (count %d)\n",

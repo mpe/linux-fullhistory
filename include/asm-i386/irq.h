@@ -17,7 +17,7 @@
  * Right now the APIC is only used for SMP, but this
  * may change.
  */
-#define NR_IRQS 24
+#define NR_IRQS 64
 
 static __inline__ int irq_cannonicalize(int irq)
 {

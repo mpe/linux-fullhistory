@@ -39,8 +39,12 @@ typedef struct {
 	unsigned int unused[3];
 } irq_desc_t;
 
-extern irq_desc_t irq_desc[NR_IRQS];
+#define IRQ0_TRAP_VECTOR 0x51
 
+extern irq_desc_t irq_desc[NR_IRQS];
+extern int irq_vector[NR_IRQS];
+
+extern void init_IRQ_SMP(void);
 extern int handle_IRQ_event(unsigned int, struct pt_regs *);
 
 /*
@@ -68,10 +72,10 @@ void send_IPI (int dest, int vector);
 void init_pic_mode (void);
 void print_IO_APIC (void);
 
-extern unsigned int io_apic_irqs;
-extern unsigned int cached_irq_mask;
+extern unsigned long long io_apic_irqs;
+extern unsigned long long cached_irq_mask;
 
-#define IO_APIC_VECTOR(irq)	(0x51+((irq)<<3))
+#define IO_APIC_VECTOR(irq)	irq_vector[irq]
 
 #define MAX_IRQ_SOURCES 128
 #define MAX_MP_BUSSES 32

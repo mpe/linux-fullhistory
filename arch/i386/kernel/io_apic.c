@@ -525,6 +525,22 @@ int IO_APIC_irq_trigger (int irq)
 	return 0;
 }
 
+__initfunc(static int assign_irq_vector(int irq))
+{
+	static int current_vector = IRQ0_TRAP_VECTOR, offset = 0;
+	if (IO_APIC_VECTOR(irq) > 0)
+		return IO_APIC_VECTOR(irq);
+	current_vector += 8;
+	if (current_vector > 0xFE) {
+		offset++;
+		current_vector = IRQ0_TRAP_VECTOR + offset;
+		printk("WARNING: ASSIGN_IRQ_VECTOR wrapped back to %02X\n",
+		       current_vector);
+	}
+	IO_APIC_VECTOR(irq) = current_vector;
+	return current_vector;
+}
+
 __initfunc(void setup_IO_APIC_irqs (void))
 {
 	struct IO_APIC_route_entry entry;
@@ -563,7 +579,7 @@ __initfunc(void setup_IO_APIC_irqs (void))
 		if (!IO_APIC_IRQ(irq))
 			continue;
 
-		entry.vector = IO_APIC_VECTOR(irq);
+		entry.vector = assign_irq_vector(irq);
 
 		bus = mp_irqs[idx].mpc_srcbus;
 
@@ -592,7 +608,7 @@ __initfunc(void setup_IO_APIC_irq_ISA_default (unsigned int irq))
 	entry.mask = 0;					/* unmask IRQ now */
 	entry.dest.logical.logical_dest = 0xff;		/* all CPUs */
 
-	entry.vector = IO_APIC_VECTOR(irq);
+	entry.vector = assign_irq_vector(irq);
 
 	entry.polarity=0;
 	entry.trigger=0;
@@ -618,7 +634,7 @@ __initfunc(void setup_ExtINT_pin (unsigned int pin))
 	entry.mask = 0;					/* unmask IRQ now */
 	entry.dest.logical.logical_dest = 0x01;		/* all CPUs */
 
-	entry.vector = IO_APIC_VECTOR(pin);		/* it's ignored */
+	entry.vector = 0;				/* it's ignored */
 
 	entry.polarity=0;
 	entry.trigger=0;
@@ -1109,8 +1125,7 @@ void init_IO_APIC_traps(void)
 	 * 0x80, because int 0x80 is hm, kind of importantish. ;)
 	 */
 	for (i = 0; i < NR_IRQS ; i++) {
-		if ((IO_APIC_VECTOR(i) <= 0xfe)  /* HACK */ &&
-		    (IO_APIC_IRQ(i))) {
+		if (IO_APIC_IRQ(i)) {
 			if (IO_APIC_irq_trigger(i))
 				irq_desc[i].handler = &ioapic_level_irq_type;
 			else
@@ -1217,6 +1232,7 @@ __initfunc(void setup_IO_APIC (void))
 	 * mptable:
 	 */
 	setup_IO_APIC_irqs ();
+	init_IRQ_SMP();
 	check_timer();
  
 	print_IO_APIC();

@@ -580,7 +580,7 @@ unsigned int tcp_poll(struct file * file, struct socket *sock, poll_table *wait)
 		/* Always wake the user up when an error occurred */
 		if (sock_wspace(sk) >= space || sk->err)
 			mask |= POLLOUT | POLLWRNORM;
-		if (tp->urg_data)
+		if (tp->urg_data & URG_VALID)
 		    	mask |= POLLPRI;
 	}
 	return mask;

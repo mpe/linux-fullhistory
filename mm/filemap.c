@@ -117,12 +117,98 @@ repeat:
 	}
 }
 
+/*
+ * Remove a page from the page cache and free it.
+ */
+void remove_inode_page(struct page *page)
+{
+	remove_page_from_hash_queue(page);
+	remove_page_from_inode_queue(page);
+	__free_page(page);
+}
+
+/*
+ * Check whether we can free this page.
+ */
+static inline int shrink_one_page(struct page *page, int gfp_mask)
+{
+	struct buffer_head *tmp, *bh;
+
+	if (PageLocked(page))
+		goto next;
+	if ((gfp_mask & __GFP_DMA) && !PageDMA(page))
+		goto next;
+	/* First of all, regenerate the page's referenced bit
+         * from any buffers in the page
+	 */
+	bh = page->buffers;
+	if (bh) {
+		tmp = bh;
+		do {
+			if (buffer_touched(tmp)) {
+				clear_bit(BH_Touched, &tmp->b_state);
+				set_bit(PG_referenced, &page->flags);
+			}
+			tmp = tmp->b_this_page;
+		} while (tmp != bh);
+
+		/* Refuse to swap out all buffer pages */
+		if ((buffermem >> PAGE_SHIFT) * 100 < (buffer_mem.min_percent * num_physpages))
+			goto next;
+	}
+
+	/* We can't throw away shared pages, but we do mark
+	   them as referenced.  This relies on the fact that
+	   no page is currently in both the page cache and the
+	   buffer cache; we'd have to modify the following
+	   test to allow for that case. */
+
+	switch (atomic_read(&page->count)) {
+	case 1:
+		/* is it a swap-cache or page-cache page? */
+		if (page->inode) {
+			if (test_and_clear_bit(PG_referenced, &page->flags)) {
+				touch_page(page);
+				break;
+			}
+			age_page(page);
+			if (page->age)
+				break;
+			if (page_cache_size * 100 < (page_cache.min_percent * num_physpages))
+				break;
+			if (PageSwapCache(page)) {
+				delete_from_swap_cache(page);
+				return 1;
+			}
+			remove_inode_page(page);
+			return 1;
+		}
+		/* It's not a cache page, so we don't do aging.
+		 * If it has been referenced recently, don't free it */
+		if (test_and_clear_bit(PG_referenced, &page->flags))
+			break;
+
+		/* is it a buffer cache page? */
+		if ((gfp_mask & __GFP_IO) && bh && try_to_free_buffer(bh, &bh, 6))
+			return 1;
+		break;
+
+	default:
+		/* more than one user: we can't throw it away */
+		set_bit(PG_referenced, &page->flags);
+		/* fall through */
+	case 0:
+		/* nothing */
+	}
+next:
+	return 0;
+}
+
 int shrink_mmap(int priority, int gfp_mask)
 {
 	static unsigned long clock = 0;
-	struct page * page;
 	unsigned long limit = num_physpages;
-	struct buffer_head *tmp, *bh;
+	struct page * page;
 	int count_max, count_min;
 
 	count_max = (limit<<2) >> (priority>>1);
@@ -130,76 +216,11 @@ int shrink_mmap(int priority, int gfp_mask)
 
 	page = mem_map + clock;
 	do {
+		if (shrink_one_page(page, gfp_mask))
+			return 1;
 		count_max--;
 		if (page->inode || page->buffers)
 			count_min--;
-
-		if (PageLocked(page))
-			goto next;
-		if ((gfp_mask & __GFP_DMA) && !PageDMA(page))
-			goto next;
-		/* First of all, regenerate the page's referenced bit
-                   from any buffers in the page */
-		bh = page->buffers;
-		if (bh) {
-			tmp = bh;
-			do {
-				if (buffer_touched(tmp)) {
-					clear_bit(BH_Touched, &tmp->b_state);
-					set_bit(PG_referenced, &page->flags);
-				}
-				tmp = tmp->b_this_page;
-			} while (tmp != bh);
-
-			/* Refuse to swap out all buffer pages */
-			if ((buffermem >> PAGE_SHIFT) * 100 < (buffer_mem.min_percent * num_physpages))
-				goto next;
-		}
-
-		/* We can't throw away shared pages, but we do mark
-		   them as referenced.  This relies on the fact that
-		   no page is currently in both the page cache and the
-		   buffer cache; we'd have to modify the following
-		   test to allow for that case. */
-
-		switch (atomic_read(&page->count)) {
-			case 1:
-				/* is it a swap-cache or page-cache page? */
-				if (page->inode) {
-					if (test_and_clear_bit(PG_referenced, &page->flags)) {
-						touch_page(page);
-						break;
-					}
-					age_page(page);
-					if (page->age || page_cache_size * 100 < (page_cache.min_percent * num_physpages))
-						break;
-					if (PageSwapCache(page)) {
-						delete_from_swap_cache(page);
-						return 1;
-					}
-					remove_page_from_hash_queue(page);
-					remove_page_from_inode_queue(page);
-					__free_page(page);
-					return 1;
-				}
-				/* It's not a cache page, so we don't do aging.
-				 * If it has been referenced recently, don't free it */
-				if (test_and_clear_bit(PG_referenced, &page->flags))
-					break;
-
-				/* is it a buffer cache page? */
-				if ((gfp_mask & __GFP_IO) && bh && try_to_free_buffer(bh, &bh, 6))
-					return 1;
-				break;
-
-			default:
-				/* more than one users: we can't throw it away */
-				set_bit(PG_referenced, &page->flags);
-				/* fall through */
-			case 0:
-				/* nothing */
-		}
-next:
 		page++;
 		clock++;
 		if (clock >= limit) {
@@ -226,9 +247,7 @@ unsigned long page_unuse(struct page * page)
 		return count;
 	if (PageSwapCache(page))
 		panic ("Doing a normal page_unuse of a swap cache page");
-	remove_page_from_hash_queue(page);
-	remove_page_from_inode_queue(page);
-	__free_page(page);
+	remove_inode_page(page);
 	return 1;
 }
 

@@ -296,6 +296,7 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 #ifdef __SMP__
 {
 	extern unsigned long mp_lapic_addr;
+	extern unsigned long mp_ioapic_addr;
 	pte_t pte;
 	unsigned long apic_area = (unsigned long)APIC_BASE;
 
@@ -320,7 +321,7 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 		 */
 		apic_area = 0xFEC00000; /*(unsigned long)IO_APIC_BASE;*/
 		pg_table = pte_offset((pmd_t *)pg_dir, apic_area);
-		pte = mk_pte_phys(apic_area, PAGE_KERNEL);
+		pte = mk_pte_phys(mp_ioapic_addr, PAGE_KERNEL);
 		set_pte(pg_table, pte);
 	} else {
 		/*
