@@ -38,7 +38,7 @@ timespec_to_sample(clockid_t which_clock, const struct timespec *tp)
 	if (CPUCLOCK_WHICH(which_clock) == CPUCLOCK_SCHED) {
 		ret.sched = tp->tv_sec * NSEC_PER_SEC + tp->tv_nsec;
 	} else {
-		ret.cpu = timespec_to_jiffies(tp);
+		ret.cpu = timespec_to_cputime(tp);
 	}
 	return ret;
 }
@@ -94,28 +94,46 @@ static inline union cpu_time_count cpu_time_sub(clockid_t which_clock,
 static inline void bump_cpu_timer(struct k_itimer *timer,
 				  union cpu_time_count now)
 {
+	int i;
+
 	if (timer->it.cpu.incr.sched == 0)
 		return;
 
 	if (CPUCLOCK_WHICH(timer->it_clock) == CPUCLOCK_SCHED) {
-		long long delta;
-		delta = now.sched - timer->it.cpu.expires.sched;
-		if (delta >= 0) {
-			do_div(delta, timer->it.cpu.incr.sched);
-			delta++;
-			timer->it.cpu.expires.sched +=
-				delta * timer->it.cpu.incr.sched;
-			timer->it_overrun += (int) delta;
+		unsigned long long delta, incr;
+
+		if (now.sched < timer->it.cpu.expires.sched)
+			return;
+		incr = timer->it.cpu.incr.sched;
+		delta = now.sched + incr - timer->it.cpu.expires.sched;
+		/* Don't use (incr*2 < delta), incr*2 might overflow. */
+		for (i = 0; incr < delta - incr; i++)
+			incr = incr << 1;
+		for (; i >= 0; incr >>= 1, i--) {
+			if (delta <= incr)
+				continue;
+			timer->it.cpu.expires.sched += incr;
+			timer->it_overrun += 1 << i;
+			delta -= incr;
 		}
-	} else if (cputime_le(now.cpu, timer->it.cpu.expires.cpu)) {
-		cputime_t delta = cputime_sub(now.cpu,
-					      timer->it.cpu.expires.cpu);
-		if (cputime_ge(delta, cputime_zero)) {
-			long orun = 1 + (delta / timer->it.cpu.incr.cpu);
+	} else {
+		cputime_t delta, incr;
+
+		if (cputime_lt(now.cpu, timer->it.cpu.expires.cpu))
+			return;
+		incr = timer->it.cpu.incr.cpu;
+		delta = cputime_sub(cputime_add(now.cpu, incr),
+				    timer->it.cpu.expires.cpu);
+		/* Don't use (incr*2 < delta), incr*2 might overflow. */
+		for (i = 0; cputime_lt(incr, cputime_sub(delta, incr)); i++)
+			     incr = cputime_add(incr, incr);
+		for (; i >= 0; incr = cputime_halve(incr), i--) {
+			if (cputime_le(delta, incr))
+				continue;
 			timer->it.cpu.expires.cpu =
-				cputime_add(timer->it.cpu.expires.cpu,
-					    orun * timer->it.cpu.incr.cpu);
-			timer->it_overrun += orun;
+				cputime_add(timer->it.cpu.expires.cpu, incr);
+			timer->it_overrun += 1 << i;
+			delta = cputime_sub(delta, incr);
 		}
 	}
 }
@@ -479,8 +497,8 @@ static void process_timer_rebalance(struct task_struct *p,
 		BUG();
 		break;
 	case CPUCLOCK_PROF:
-		left = cputime_sub(expires.cpu, val.cpu)
-			/ nthreads;
+		left = cputime_div(cputime_sub(expires.cpu, val.cpu),
+				   nthreads);
 		do {
 			if (!unlikely(t->exit_state)) {
 				ticks = cputime_add(prof_ticks(t), left);
@@ -494,8 +512,8 @@ static void process_timer_rebalance(struct task_struct *p,
 		} while (t != p);
 		break;
 	case CPUCLOCK_VIRT:
-		left = cputime_sub(expires.cpu, val.cpu)
-			/ nthreads;
+		left = cputime_div(cputime_sub(expires.cpu, val.cpu),
+				   nthreads);
 		do {
 			if (!unlikely(t->exit_state)) {
 				ticks = cputime_add(virt_ticks(t), left);
@@ -587,17 +605,25 @@ static void arm_timer(struct k_itimer *timer, union cpu_time_count now)
 			switch (CPUCLOCK_WHICH(timer->it_clock)) {
 			default:
 				BUG();
-#define UPDATE_CLOCK(WHICH, c, n)			      		      \
-			case CPUCLOCK_##WHICH: 				      \
-				if (p->it_##c##_expires == 0 ||		      \
-				    p->it_##c##_expires > nt->expires.n) {    \
-					p->it_##c##_expires = nt->expires.n;  \
-				}					      \
-				break
-			UPDATE_CLOCK(PROF, prof, cpu);
-			UPDATE_CLOCK(VIRT, virt, cpu);
-			UPDATE_CLOCK(SCHED, sched, sched);
-#undef UPDATE_CLOCK
+			case CPUCLOCK_PROF:
+				if (cputime_eq(p->it_prof_expires,
+					       cputime_zero) ||
+				    cputime_gt(p->it_prof_expires,
+					       nt->expires.cpu))
+					p->it_prof_expires = nt->expires.cpu;
+				break;
+			case CPUCLOCK_VIRT:
+				if (cputime_eq(p->it_virt_expires,
+					       cputime_zero) ||
+				    cputime_gt(p->it_virt_expires,
+					       nt->expires.cpu))
+					p->it_virt_expires = nt->expires.cpu;
+				break;
+			case CPUCLOCK_SCHED:
+				if (p->it_sched_expires == 0 ||
+				    p->it_sched_expires > nt->expires.sched)
+					p->it_sched_expires = nt->expires.sched;
+				break;
 			}
 		} else {
 			/*
@@ -934,7 +960,7 @@ static void check_thread_timers(struct task_struct *tsk,
 {
 	struct list_head *timers = tsk->cpu_timers;
 
-	tsk->it_prof_expires = 0;
+	tsk->it_prof_expires = cputime_zero;
 	while (!list_empty(timers)) {
 		struct cpu_timer_list *t = list_entry(timers->next,
 						      struct cpu_timer_list,
@@ -948,7 +974,7 @@ static void check_thread_timers(struct task_struct *tsk,
 	}
 
 	++timers;
-	tsk->it_virt_expires = 0;
+	tsk->it_virt_expires = cputime_zero;
 	while (!list_empty(timers)) {
 		struct cpu_timer_list *t = list_entry(timers->next,
 						      struct cpu_timer_list,
@@ -1044,7 +1070,7 @@ static void check_process_timers(struct task_struct *tsk,
 	}
 
 	++timers;
-	sched_expires = cputime_zero;
+	sched_expires = 0;
 	while (!list_empty(timers)) {
 		struct cpu_timer_list *t = list_entry(timers->next,
 						      struct cpu_timer_list,
@@ -1132,9 +1158,11 @@ static void check_process_timers(struct task_struct *tsk,
 		unsigned long long sched_left, sched;
 		const unsigned int nthreads = atomic_read(&sig->live);
 
-		prof_left = cputime_sub(prof_expires,
-					cputime_add(utime, stime)) / nthreads;
-		virt_left = cputime_sub(virt_expires, utime) / nthreads;
+		prof_left = cputime_sub(prof_expires, utime);
+		prof_left = cputime_sub(prof_left, stime);
+		prof_left = cputime_div(prof_left, nthreads);
+		virt_left = cputime_sub(virt_expires, utime);
+		virt_left = cputime_div(virt_left, nthreads);
 		if (sched_expires) {
 			sched_left = sched_expires - sched_time;
 			do_div(sched_left, nthreads);
@@ -1245,7 +1273,7 @@ void run_posix_cpu_timers(struct task_struct *tsk)
 	BUG_ON(!irqs_disabled());
 
 #define UNEXPIRED(clock) \
-		(tsk->it_##clock##_expires == 0 || \
+		(cputime_eq(tsk->it_##clock##_expires, cputime_zero) || \
 		 cputime_lt(clock##_ticks(tsk), tsk->it_##clock##_expires))
 
 	if (UNEXPIRED(prof) && UNEXPIRED(virt) &&
