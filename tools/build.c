@@ -212,14 +212,16 @@ int main(int argc, char ** argv)
 				fprintf(stderr, "Unexpected EOF\n");
 			die("Can't read 'system'");
 		}
-		write(1, buf, l);
+		if (write(1, buf, l) != l)
+			die("Write failed");
 		sz -= l;
 	}
 	close(id);
 	if (lseek(1,500,0) == 500) {
 		buf[0] = (sys_size & 0xff);
 		buf[1] = ((sys_size >> 8) & 0xff);
-		write(1, buf, 2);
+		if (write(1, buf, 2) != 2)
+			die("Write failed");
 	}
 	return(0);
 }

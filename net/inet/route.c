@@ -112,6 +112,16 @@ void rt_flush(struct device *dev)
 
 /*
  * Used by 'rt_add()' when we can't get the netmask from the device..
+ *
+ * If the lower byte or two are zero, we guess the mask based on the
+ * number of zero 8-bit net numbers, otherwise we use the "default"
+ * masks judging by the destination address.
+ *
+ * We should really use masks everywhere, but the current system
+ * interface for adding routes doesn't even contain a netmask field.
+ * Similarly, ICMP redirect messages contain only the address to
+ * redirect.. Anyway, this function should give reasonable values
+ * for almost anything.
  */
 static unsigned long guess_mask(unsigned long dst)
 {
@@ -119,7 +129,29 @@ static unsigned long guess_mask(unsigned long dst)
 
 	while (mask & dst)
 		mask <<= 8;
-	return ~mask;
+	if (mask)
+		return ~mask;
+	dst = ntohl(dst);
+	if (IN_CLASSA(dst))
+		return htonl(IN_CLASSA_NET);
+	if (IN_CLASSB(dst))
+		return htonl(IN_CLASSB_NET);
+	return htonl(IN_CLASSC_NET);
+}
+
+static inline struct device * get_gw_dev(unsigned long gw)
+{
+	struct rtable * rt;
+
+	for (rt = rt_base ; rt ; rt = rt->rt_next) {
+		if ((gw ^ rt->rt_dst) & rt->rt_mask)
+			continue;
+		/* gateways behind gateways are a no-no */
+		if (rt->rt_flags & RTF_GATEWAY)
+			return NULL;
+		return rt->rt_dev;
+	}
+	return NULL;
 }
 
 /*
@@ -133,42 +165,40 @@ rt_add(short flags, unsigned long dst, unsigned long gw, struct device *dev)
 	unsigned long mask;
 	unsigned long cpuflags;
 
+	if (flags & RTF_HOST) {
+		mask = 0xffffffff;
+	} else {
+		if (!((dst ^ dev->pa_addr) & dev->pa_mask)) {
+			mask = dev->pa_mask;
+			dst &= mask;
+			flags &= ~RTF_GATEWAY;
+			if (flags & RTF_DYNAMIC) {
+				/*printk("Dynamic route to my own net rejected\n");*/
+				return;
+			}
+		} else
+			mask = guess_mask(dst);
+	}
+	if (gw == dev->pa_addr)
+		flags &= ~RTF_GATEWAY;
+	if (flags & RTF_GATEWAY) {
+		/* don't try to add a gateway we can't reach.. */
+		if (dev != get_gw_dev(gw))
+			return;
+		flags |= RTF_GATEWAY;
+	} else
+		gw = 0;
 	/* Allocate an entry. */
 	rt = (struct rtable *) kmalloc(sizeof(struct rtable), GFP_ATOMIC);
 	if (rt == NULL) {
 		DPRINTF((DBG_RT, "RT: no memory for new route!\n"));
 		return;
 	}
-	/* Fill in the fields. */
 	memset(rt, 0, sizeof(struct rtable));
-	rt->rt_flags = (flags | RTF_UP);
-  	/*
-	 * Gateway to our own interface is really direct
-	 */
-	if (gw == dev->pa_addr || gw == dst) {
-		gw=0;
-		rt->rt_flags&=~RTF_GATEWAY;
-	}
-	if (gw != 0) 
-		rt->rt_flags |= RTF_GATEWAY;
+	rt->rt_flags = flags | RTF_UP;
+	rt->rt_dst = dst;
 	rt->rt_dev = dev;
 	rt->rt_gateway = gw;
-	if (flags & RTF_HOST) {
-		mask = 0xffffffff;
-		rt->rt_dst = dst;
-	} else {
-		if (!((dst ^ dev->pa_addr) & dev->pa_mask)) {
-			mask = dev->pa_mask;
-			dst &= mask;
-			if (flags & RTF_DYNAMIC) {
-				kfree_s(rt, sizeof(struct rtable));
-				/*printk("Dynamic route to my own net rejected\n");*/
-				return;
-			}
-		} else
-			mask = guess_mask(dst);
-		rt->rt_dst = dst;
-	}
 	rt->rt_mask = mask;
 	rt_print(rt);
 	/*
@@ -181,11 +211,11 @@ rt_add(short flags, unsigned long dst, unsigned long gw, struct device *dev)
 	/* remove old route if we are getting a duplicate. */
 	rp = &rt_base;
 	while ((r = *rp) != NULL) {
-	  	if (r->rt_dst != dst) {
-  			rp = &r->rt_next;
-  			continue;
-	  	}
-  		*rp = r->rt_next;
+		if (r->rt_dst != dst) {
+			rp = &r->rt_next;
+			continue;
+		}
+		*rp = r->rt_next;
 		kfree_s(r, sizeof(struct rtable));
 	}
 	/* add the new route */
@@ -206,7 +236,6 @@ static int
 rt_new(struct rtentry *r)
 {
   struct device *dev;
-  struct rtable *rt;
 
   if ((r->rt_dst.sa_family != AF_INET) ||
       (r->rt_gateway.sa_family != AF_INET)) {
@@ -226,11 +255,7 @@ rt_new(struct rtentry *r)
   if (!(r->rt_flags & RTF_GATEWAY))
 	dev = dev_check(((struct sockaddr_in *) &r->rt_dst)->sin_addr.s_addr);
   else
-	if ((rt = rt_route(((struct sockaddr_in *) &r->rt_gateway)->sin_addr.
-			   s_addr,NULL)))
-	    dev = rt->rt_dev;
-	else
-	    dev = NULL;
+	dev = get_gw_dev(((struct sockaddr_in *) &r->rt_gateway)->sin_addr.s_addr);
 
   DPRINTF((DBG_RT, "RT: dev for %s gw ",
 	in_ntoa((*(struct sockaddr_in *)&r->rt_dst).sin_addr.s_addr)));
@@ -269,13 +294,14 @@ rt_get_info(char *buffer)
   pos = buffer;
 
   pos += sprintf(pos,
-		 "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\n");
+		 "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\n");
   
   /* This isn't quite right -- r->rt_dst is a struct! */
   for (r = rt_base; r != NULL; r = r->rt_next) {
-        pos += sprintf(pos, "%s\t%08lX\t%08lX\t%02X\t%d\t%lu\t%d\n",
+        pos += sprintf(pos, "%s\t%08lX\t%08lX\t%02X\t%d\t%lu\t%d\t%08lX\n",
 		r->rt_dev->name, r->rt_dst, r->rt_gateway,
-		r->rt_flags, r->rt_refcnt, r->rt_use, r->rt_metric);
+		r->rt_flags, r->rt_refcnt, r->rt_use, r->rt_metric,
+		r->rt_mask);
   }
   return(pos - buffer);
 }

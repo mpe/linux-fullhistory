@@ -23,10 +23,11 @@ static void killseg (int id);
 static int shm_tot = 0;  /* total number of shared memory pages */
 static int shm_rss = 0; /* number of shared memory pages that are in memory */
 static int shm_swp = 0; /* number of shared memory pages that are in swap */
-static int shm_seq = 0; /* is incremented, for recognizing stale ids */
 static int max_shmid = 0; /* every used id is <= max_shmid */
 static struct wait_queue *shm_lock = NULL;
 static struct shmid_ds *shm_segs[SHMMNI];
+
+static unsigned short shm_seq = 0; /* incremented, for recognizing stale ids */
 
 /* some statistics */
 static ulong swap_attempts = 0;
@@ -119,7 +120,7 @@ found:
 	used_segs++;
 	if (shm_lock)
 		wake_up (&shm_lock);
-	return id + shm_seq*SHMMNI;
+	return id + (int)shm_seq*SHMMNI;
 }
 
 int sys_shmget (key_t key, int size, int shmflg)
@@ -165,8 +166,7 @@ static void killseg (int id)
 	}
 	shp->shm_perm.seq++;     /* for shmat */
 	numpages = shp->shm_npages; 
-	if ((int)((++shm_seq + 1) * SHMMNI) < 0)
-		shm_seq = 0;
+	shm_seq++;
 	shm_segs[id] = (struct shmid_ds *) IPC_UNUSED;
 	used_segs--;
 	if (id == max_shmid) 

@@ -80,7 +80,7 @@ asmlinkage int sys_syslog(int type, char * buf, int len)
 					sti();
 					return -ERESTARTSYS;
 				}
-					interruptible_sleep_on(&log_wait);
+				interruptible_sleep_on(&log_wait);
 			}
 			i = 0;
 			while (log_size && i < len) {
@@ -88,9 +88,11 @@ asmlinkage int sys_syslog(int type, char * buf, int len)
 				log_start++;
 				log_size--;
 				log_start &= LOG_BUF_LEN-1;
+				sti();
 				put_fs_byte(c,buf);
 				buf++;
 				i++;
+				cli();
 			}
 			sti();
 			return i;

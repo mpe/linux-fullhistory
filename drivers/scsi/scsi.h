@@ -192,6 +192,7 @@ extern const unsigned char scsi_command_size[8];
 #define SUGGEST_REMAP		0x30
 #define SUGGEST_DIE		0x40
 #define SUGGEST_SENSE		0x80
+#define SUGGEST_IS_OK		0xff
 
 #define DRIVER_SENSE		0x08
 

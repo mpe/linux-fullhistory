@@ -922,8 +922,12 @@ static int check_sense (Scsi_Cmnd * SCpnt)
 		switch (SCpnt->sense_buffer[2] & 0xf)
 		{
 		case NO_SENSE:
-		case RECOVERED_ERROR:
 			return 0;
+		case RECOVERED_ERROR:
+			if (scsi_devices[SCpnt->index].type == TYPE_TAPE)
+			  return SUGGEST_IS_OK;
+			else
+			  return 0;
 
 		case ABORTED_COMMAND:
 			return SUGGEST_RETRY;	
@@ -1040,6 +1044,8 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 
 						update_timeout(SCpnt, oldto);
 						status = REDO;
+						break;
+      					case SUGGEST_IS_OK:
 						break;
 					case SUGGEST_REMAP:			
 					case SUGGEST_RETRY: 

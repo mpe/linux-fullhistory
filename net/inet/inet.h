@@ -59,7 +59,7 @@
 #ifdef	INET_DEBUG
 #  define	DPRINTF(x)	dprintf x 
 #else
-#   define	DPRINTF(x)	/*zilch*/
+#   define	DPRINTF(x)	do ; while (0)
 #endif
 
 /* Debug levels. One per module. */

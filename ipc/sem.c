@@ -20,8 +20,9 @@ static void freeary (int id);
 static struct semid_ds *semary[SEMMNI];
 static int used_sems = 0, used_semids = 0;                    
 static struct wait_queue *sem_lock = NULL;
-static int sem_seq = 0;
 static int max_semid = 0;
+
+static unsigned short sem_seq = 0;
 
 void sem_init (void)
 {
@@ -95,7 +96,7 @@ found:
 	semary[id] = sma;
 	if (sem_lock)
 		wake_up (&sem_lock);
-	return sem_seq * SEMMNI + id;
+	return (int) sem_seq * SEMMNI + id;
 }
 
 int sys_semget (key_t key, int nsems, int semflg)
@@ -128,8 +129,7 @@ static void freeary (int id)
 	struct sem_undo *un;
 
 	sma->sem_perm.seq++;
-	if ((int)((++sem_seq + 1) * SEMMNI) < 0)
-		sem_seq = 0;
+	sem_seq++;
 	used_sems -= sma->sem_nsems;
 	if (id == max_semid)
 		while (max_semid && (semary[--max_semid] == IPC_UNUSED));

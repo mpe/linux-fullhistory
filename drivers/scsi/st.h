@@ -18,6 +18,7 @@ typedef struct {
   int read_pointer;
   int writing;
   int last_result;
+  int last_result_fatal;
   unsigned char b_data[1];
 } ST_buffer;
 
@@ -37,9 +38,20 @@ typedef struct {
   int block_size;
   int min_block;
   int max_block;
+  int recover_count;
   Scsi_Cmnd SCpnt;
 } Scsi_Tape;
 
+/* Values of eof */
+#define	ST_NOEOF	0
+#define	ST_FM		1
+#define	ST_EOM_OK	2
+#define ST_EOM_ERROR	3
+
+/* Values of rw */
+#define	ST_IDLE		0
+#define	ST_READING	1
+#define	ST_WRITING	2
 
 /* Positioning SCSI-commands for Tandberg, etc. drives */
 #define	QFA_REQUEST_BLOCK	0x02

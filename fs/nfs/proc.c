@@ -27,20 +27,37 @@
 #include <linux/in.h>
 
 #ifdef NFS_PROC_DEBUG
-static int proc_debug = 0;
-#define PRINTK if (proc_debug) printk
-#else
-#define PRINTK if (0) printk
-#endif
 
-#define PREP_PAGE_RPC(code)	\
-  if (!(p0 = (int*)__get_free_page(GFP_KERNEL)))\
-	return NFSERR_IO;\
-  p=nfs_rpc_header(p0,code)
+static int proc_debug = 0;
+#define PRINTK(format, args...) \
+	do {						\
+		if (proc_debug)				\
+			printk(format , ## args);	\
+	} while (0)
+
+#else /* !NFS_PROC_DEBUG */
+
+#define PRINTK(format, args...) do ; while (0)
+
+#endif /* !NFS_PROC_DEBUG */
 
 static int *nfs_rpc_header(int *p, int procedure);
 static int *nfs_rpc_verify(int *p);
 static int nfs_stat_to_errno(int stat);
+
+/*
+ * Our memory allocation and release functions.
+ */
+
+static inline int *nfs_rpc_alloc(void)
+{
+	return (int *) __get_free_page(GFP_KERNEL);
+}
+
+static inline void nfs_rpc_free(int *p)
+{
+	free_page((long) p);
+}
 
 /*
  * Here are a bunch of xdr encode/decode functions that convert
@@ -166,6 +183,10 @@ static int *xdr_decode_fsinfo(int *p, struct nfs_fsinfo *res)
 	return p;
 }
 
+/*
+ * One function for each procedure in the NFS protocol.
+ */
+
 int nfs_proc_getattr(struct nfs_server *server, struct nfs_fh *fhandle,
 		     struct nfs_fattr *fattr)
 {
@@ -173,10 +194,12 @@ int nfs_proc_getattr(struct nfs_server *server, struct nfs_fh *fhandle,
 	int status;
 
 	PRINTK("NFS call  getattr\n");
-	PREP_PAGE_RPC(NFSPROC_GETATTR);
+	if (!(p0 = nfs_rpc_alloc()))
+		return -EIO;
+	p = nfs_rpc_header(p0, NFSPROC_GETATTR);
 	p = xdr_encode_fhandle(p, fhandle);
 	if ((status = nfs_rpc_call(server, p0, p)) < 0) {
-		free_page((long) p0);
+		nfs_rpc_free(p0);
 		return status;
 	}
 	if (!(p = nfs_rpc_verify(p0)))
@@ -187,7 +210,7 @@ int nfs_proc_getattr(struct nfs_server *server, struct nfs_fh *fhandle,
 	}
 	else
 		PRINTK("NFS reply getattr failed = %d\n", status);
-	free_page((long) p0);
+	nfs_rpc_free(p0);
 	return -nfs_stat_to_errno(status);
 }
 
@@ -198,11 +221,13 @@ int nfs_proc_setattr(struct nfs_server *server, struct nfs_fh *fhandle,
 	int status;
 
 	PRINTK("NFS call  setattr\n");
-	PREP_PAGE_RPC(NFSPROC_SETATTR);
+	if (!(p0 = nfs_rpc_alloc()))
+		return -EIO;
+	p = nfs_rpc_header(p0, NFSPROC_SETATTR);
 	p = xdr_encode_fhandle(p, fhandle);
 	p = xdr_encode_sattr(p, sattr);
 	if ((status = nfs_rpc_call(server, p0, p)) < 0) {
-		free_page((long) p0);
+		nfs_rpc_free(p0);
 		return status;
 	}
 	if (!(p = nfs_rpc_verify(p0)))
@@ -213,7 +238,7 @@ int nfs_proc_setattr(struct nfs_server *server, struct nfs_fh *fhandle,
 	}
 	else
 		PRINTK("NFS reply setattr failed = %d\n", status);
-	free_page((long) p0);
+	nfs_rpc_free(p0);
 	return -nfs_stat_to_errno(status);
 }
 
@@ -228,11 +253,13 @@ int nfs_proc_lookup(struct nfs_server *server, struct nfs_fh *dir, const char *n
 	if (!strcmp(name, "xyzzy"))
 		proc_debug = 1 - proc_debug;
 #endif
-	PREP_PAGE_RPC(NFSPROC_LOOKUP);
+	if (!(p0 = nfs_rpc_alloc()))
+		return -EIO;
+	p = nfs_rpc_header(p0, NFSPROC_LOOKUP);
 	p = xdr_encode_fhandle(p, dir);
 	p = xdr_encode_string(p, name);
 	if ((status = nfs_rpc_call(server, p0, p)) < 0) {
-		free_page((long) p0);
+		nfs_rpc_free(p0);
 		return status;
 	}
 	if (!(p = nfs_rpc_verify(p0)))
@@ -244,7 +271,7 @@ int nfs_proc_lookup(struct nfs_server *server, struct nfs_fh *dir, const char *n
 	}
 	else
 		PRINTK("NFS reply lookup failed = %d\n", status);
-	free_page((long) p0);
+	nfs_rpc_free(p0);
 	return -nfs_stat_to_errno(status);
 }
 
@@ -255,10 +282,12 @@ int nfs_proc_readlink(struct nfs_server *server, struct nfs_fh *fhandle,
 	int status;
 
 	PRINTK("NFS call  readlink\n");
-	PREP_PAGE_RPC(NFSPROC_READLINK);
+	if (!(p0 = nfs_rpc_alloc()))
+		return -EIO;
+	p = nfs_rpc_header(p0, NFSPROC_READLINK);
 	p = xdr_encode_fhandle(p, fhandle);
 	if ((status = nfs_rpc_call(server, p0, p)) < 0) {
-		free_page((long) p0);
+		nfs_rpc_free(p0);
 		return status;
 	}
 	if (!(p = nfs_rpc_verify(p0)))
@@ -273,7 +302,7 @@ int nfs_proc_readlink(struct nfs_server *server, struct nfs_fh *fhandle,
 	}
 	else
 		PRINTK("NFS reply readlink failed = %d\n", status);
-	free_page((long) p0);
+	nfs_rpc_free(p0);
 	return -nfs_stat_to_errno(status);
 }
 
@@ -285,13 +314,15 @@ int nfs_proc_read(struct nfs_server *server, struct nfs_fh *fhandle,
 	int len = 0; /* = 0 is for gcc */
 
 	PRINTK("NFS call  read %d @ %d\n", count, offset);
-	PREP_PAGE_RPC(NFSPROC_READ);
+	if (!(p0 = nfs_rpc_alloc()))
+		return -EIO;
+	p = nfs_rpc_header(p0, NFSPROC_READ);
 	p = xdr_encode_fhandle(p, fhandle);
 	*p++ = htonl(offset);
 	*p++ = htonl(count);
 	*p++ = htonl(count); /* traditional, could be any value */
 	if ((status = nfs_rpc_call(server, p0, p)) < 0) {
-		free_page((long) p0);
+		nfs_rpc_free(p0);
 		return status;
 	}
 	if (!(p = nfs_rpc_verify(p0)))
@@ -307,7 +338,7 @@ int nfs_proc_read(struct nfs_server *server, struct nfs_fh *fhandle,
 	}
 	else
 		PRINTK("NFS reply read failed = %d\n", status);
-	free_page((long) p0);
+	nfs_rpc_free(p0);
 	return (status == NFS_OK) ? len : -nfs_stat_to_errno(status);
 }
 
@@ -318,14 +349,16 @@ int nfs_proc_write(struct nfs_server *server, struct nfs_fh *fhandle,
 	int status;
 
 	PRINTK("NFS call  write %d @ %d\n", count, offset);
-	PREP_PAGE_RPC(NFSPROC_WRITE);
+	if (!(p0 = nfs_rpc_alloc()))
+		return -EIO;
+	p = nfs_rpc_header(p0, NFSPROC_WRITE);
 	p = xdr_encode_fhandle(p, fhandle);
 	*p++ = htonl(offset); /* traditional, could be any value */
 	*p++ = htonl(offset);
 	*p++ = htonl(count); /* traditional, could be any value */
 	p = xdr_encode_data(p, data, count);
 	if ((status = nfs_rpc_call(server, p0, p)) < 0) {
-		free_page((long) p0);
+		nfs_rpc_free(p0);
 		return status;
 	}
 	if (!(p = nfs_rpc_verify(p0)))
@@ -336,7 +369,7 @@ int nfs_proc_write(struct nfs_server *server, struct nfs_fh *fhandle,
 	}
 	else
 		PRINTK("NFS reply write failed = %d\n", status);
-	free_page((long) p0);
+	nfs_rpc_free(p0);
 	return -nfs_stat_to_errno(status);
 }
 
@@ -348,12 +381,14 @@ int nfs_proc_create(struct nfs_server *server, struct nfs_fh *dir,
 	int status;
 
 	PRINTK("NFS call  create %s\n", name);
-	PREP_PAGE_RPC(NFSPROC_CREATE);
+	if (!(p0 = nfs_rpc_alloc()))
+		return -EIO;
+	p = nfs_rpc_header(p0, NFSPROC_CREATE);
 	p = xdr_encode_fhandle(p, dir);
 	p = xdr_encode_string(p, name);
 	p = xdr_encode_sattr(p, sattr);
 	if ((status = nfs_rpc_call(server, p0, p)) < 0) {
-		free_page((long) p0);
+		nfs_rpc_free(p0);
 		return status;
 	}
 	if (!(p = nfs_rpc_verify(p0)))
@@ -365,7 +400,7 @@ int nfs_proc_create(struct nfs_server *server, struct nfs_fh *dir,
 	}
 	else
 		PRINTK("NFS reply create failed = %d\n", status);
-	free_page((long) p0);
+	nfs_rpc_free(p0);
 	return -nfs_stat_to_errno(status);
 }
 
@@ -375,11 +410,13 @@ int nfs_proc_remove(struct nfs_server *server, struct nfs_fh *dir, const char *n
 	int status;
 
 	PRINTK("NFS call  remove %s\n", name);
-	PREP_PAGE_RPC(NFSPROC_REMOVE);
+	if (!(p0 = nfs_rpc_alloc()))
+		return -EIO;
+	p = nfs_rpc_header(p0, NFSPROC_REMOVE);
 	p = xdr_encode_fhandle(p, dir);
 	p = xdr_encode_string(p, name);
 	if ((status = nfs_rpc_call(server, p0, p)) < 0) {
-		free_page((long) p0);
+		nfs_rpc_free(p0);
 		return status;
 	}
 	if (!(p = nfs_rpc_verify(p0)))
@@ -389,7 +426,7 @@ int nfs_proc_remove(struct nfs_server *server, struct nfs_fh *dir, const char *n
 	}
 	else
 		PRINTK("NFS reply remove failed = %d\n", status);
-	free_page((long) p0);
+	nfs_rpc_free(p0);
 	return -nfs_stat_to_errno(status);
 }
 
@@ -401,13 +438,15 @@ int nfs_proc_rename(struct nfs_server *server,
 	int status;
 
 	PRINTK("NFS call  rename %s -> %s\n", old_name, new_name);
-	PREP_PAGE_RPC(NFSPROC_RENAME);
+	if (!(p0 = nfs_rpc_alloc()))
+		return -EIO;
+	p = nfs_rpc_header(p0, NFSPROC_RENAME);
 	p = xdr_encode_fhandle(p, old_dir);
 	p = xdr_encode_string(p, old_name);
 	p = xdr_encode_fhandle(p, new_dir);
 	p = xdr_encode_string(p, new_name);
 	if ((status = nfs_rpc_call(server, p0, p)) < 0) {
-		free_page((long) p0);
+		nfs_rpc_free(p0);
 		return status;
 	}
 	if (!(p = nfs_rpc_verify(p0)))
@@ -417,7 +456,7 @@ int nfs_proc_rename(struct nfs_server *server,
 	}
 	else
 		PRINTK("NFS reply rename failed = %d\n", status);
-	free_page((long) p0);
+	nfs_rpc_free(p0);
 	return -nfs_stat_to_errno(status);
 }
 
@@ -428,12 +467,14 @@ int nfs_proc_link(struct nfs_server *server, struct nfs_fh *fhandle,
 	int status;
 
 	PRINTK("NFS call  link %s\n", name);
-	PREP_PAGE_RPC(NFSPROC_LINK);
+	if (!(p0 = nfs_rpc_alloc()))
+		return -EIO;
+	p = nfs_rpc_header(p0, NFSPROC_LINK);
 	p = xdr_encode_fhandle(p, fhandle);
 	p = xdr_encode_fhandle(p, dir);
 	p = xdr_encode_string(p, name);
 	if ((status = nfs_rpc_call(server, p0, p)) < 0) {
-		free_page((long) p0);
+		nfs_rpc_free(p0);
 		return status;
 	}
 	if (!(p = nfs_rpc_verify(p0)))
@@ -443,7 +484,7 @@ int nfs_proc_link(struct nfs_server *server, struct nfs_fh *fhandle,
 	}
 	else
 		PRINTK("NFS reply link failed = %d\n", status);
-	free_page((long) p0);
+	nfs_rpc_free(p0);
 	return -nfs_stat_to_errno(status);
 }
 
@@ -454,13 +495,15 @@ int nfs_proc_symlink(struct nfs_server *server, struct nfs_fh *dir,
 	int status;
 
 	PRINTK("NFS call  symlink %s -> %s\n", name, path);
-	PREP_PAGE_RPC(NFSPROC_SYMLINK);
+	if (!(p0 = nfs_rpc_alloc()))
+		return -EIO;
+	p = nfs_rpc_header(p0, NFSPROC_SYMLINK);
 	p = xdr_encode_fhandle(p, dir);
 	p = xdr_encode_string(p, name);
 	p = xdr_encode_string(p, path);
 	p = xdr_encode_sattr(p, sattr);
 	if ((status = nfs_rpc_call(server, p0, p)) < 0) {
-		free_page((long) p0);
+		nfs_rpc_free(p0);
 		return status;
 	}
 	if (!(p = nfs_rpc_verify(p0)))
@@ -470,7 +513,7 @@ int nfs_proc_symlink(struct nfs_server *server, struct nfs_fh *dir,
 	}
 	else
 		PRINTK("NFS reply symlink failed = %d\n", status);
-	free_page((long) p0);
+	nfs_rpc_free(p0);
 	return -nfs_stat_to_errno(status);
 }
 
@@ -482,12 +525,14 @@ int nfs_proc_mkdir(struct nfs_server *server, struct nfs_fh *dir,
 	int status;
 
 	PRINTK("NFS call  mkdir %s\n", name);
-	PREP_PAGE_RPC(NFSPROC_MKDIR);
+	if (!(p0 = nfs_rpc_alloc()))
+		return -EIO;
+	p = nfs_rpc_header(p0, NFSPROC_MKDIR);
 	p = xdr_encode_fhandle(p, dir);
 	p = xdr_encode_string(p, name);
 	p = xdr_encode_sattr(p, sattr);
 	if ((status = nfs_rpc_call(server, p0, p)) < 0) {
-		free_page((long) p0);
+		nfs_rpc_free(p0);
 		return status;
 	}
 	if (!(p = nfs_rpc_verify(p0)))
@@ -499,7 +544,7 @@ int nfs_proc_mkdir(struct nfs_server *server, struct nfs_fh *dir,
 	}
 	else
 		PRINTK("NFS reply mkdir failed = %d\n", status);
-	free_page((long) p0);
+	nfs_rpc_free(p0);
 	return -nfs_stat_to_errno(status);
 }
 
@@ -509,11 +554,13 @@ int nfs_proc_rmdir(struct nfs_server *server, struct nfs_fh *dir, const char *na
 	int status;
 
 	PRINTK("NFS call  rmdir %s\n", name);
-	PREP_PAGE_RPC(NFSPROC_RMDIR);
+	if (!(p0 = nfs_rpc_alloc()))
+		return -EIO;
+	p = nfs_rpc_header(p0, NFSPROC_RMDIR);
 	p = xdr_encode_fhandle(p, dir);
 	p = xdr_encode_string(p, name);
 	if ((status = nfs_rpc_call(server, p0, p)) < 0) {
-		free_page((long) p0);
+		nfs_rpc_free(p0);
 		return status;
 	}
 	if (!(p = nfs_rpc_verify(p0)))
@@ -523,7 +570,7 @@ int nfs_proc_rmdir(struct nfs_server *server, struct nfs_fh *dir, const char *na
 	}
 	else
 		PRINTK("NFS reply rmdir failed = %d\n", status);
-	free_page((long) p0);
+	nfs_rpc_free(p0);
 	return -nfs_stat_to_errno(status);
 }
 
@@ -538,12 +585,14 @@ int nfs_proc_readdir(struct nfs_server *server, struct nfs_fh *fhandle,
 
 	PRINTK("NFS call  readdir %d @ %d\n", count, cookie);
 	size = server->rsize;
-	PREP_PAGE_RPC(NFSPROC_READDIR);
+	if (!(p0 = nfs_rpc_alloc()))
+		return -EIO;
+	p = nfs_rpc_header(p0, NFSPROC_READDIR);
 	p = xdr_encode_fhandle(p, fhandle);
 	*p++ = htonl(cookie);
 	*p++ = htonl(size);
 	if ((status = nfs_rpc_call(server, p0, p)) < 0) {
-		free_page((long) p0);
+		nfs_rpc_free(p0);
 		return status;
 	}
 	if (!(p = nfs_rpc_verify(p0)))
@@ -568,7 +617,7 @@ int nfs_proc_readdir(struct nfs_server *server, struct nfs_fh *fhandle,
 	}
 	else
 		PRINTK("NFS reply readdir failed = %d\n", status);
-	free_page((long) p0);
+	nfs_rpc_free(p0);
 	return (status == NFS_OK) ? i : -nfs_stat_to_errno(status);
 }
 
@@ -579,10 +628,12 @@ int nfs_proc_statfs(struct nfs_server *server, struct nfs_fh *fhandle,
 	int status;
 
 	PRINTK("NFS call  statfs\n");
-	PREP_PAGE_RPC(NFSPROC_STATFS);
+	if (!(p0 = nfs_rpc_alloc()))
+		return -EIO;
+	p = nfs_rpc_header(p0, NFSPROC_STATFS);
 	p = xdr_encode_fhandle(p, fhandle);
 	if ((status = nfs_rpc_call(server, p0, p)) < 0) {
-		free_page((long) p0);
+		nfs_rpc_free(p0);
 		return status;
 	}
 	if (!(p = nfs_rpc_verify(p0)))
@@ -593,7 +644,7 @@ int nfs_proc_statfs(struct nfs_server *server, struct nfs_fh *fhandle,
 	}
 	else
 		PRINTK("NFS reply statfs failed = %d\n", status);
-	free_page((long) p0);
+	nfs_rpc_free(p0);
 	return -nfs_stat_to_errno(status);
 }
 
