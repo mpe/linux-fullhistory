@@ -275,7 +275,7 @@ unsigned long CrcTable[256] =
 };
 
 /* function declaration ------------------------------------- */
-int dmfe_reg_board(struct net_device *);
+int dmfe_reg_board(void);
 static int dmfe_open(struct net_device *);
 static int dmfe_start_xmit(struct sk_buff *, struct net_device *);
 static int dmfe_stop(struct net_device *);
@@ -309,7 +309,7 @@ static unsigned long cal_CRC(unsigned char *, unsigned int);
  *	Search DM910X board, allocate space and register it
  */
  
-int dmfe_reg_board(struct net_device *dev)
+int __init dmfe_reg_board(void)
 {
 	u32 pci_iobase;
 	u16 dm9102_count = 0;
@@ -318,6 +318,7 @@ int dmfe_reg_board(struct net_device *dev)
 	struct dmfe_board_info *db;	/* Point a board information structure */
 	int i;
 	struct pci_dev *net_dev = NULL;
+	struct net_device *dev;
 
 	DMFE_DBUG(0, "dmfe_reg_board()", 0);
 
@@ -365,7 +366,7 @@ int dmfe_reg_board(struct net_device *dev)
 		dm9102_count++;	/* Found a DM9102 card */
 
 		/* Init network device */
-		dev = init_etherdev(dev, 0);
+		dev = init_etherdev(NULL, 0);
 
 		/* Allocated board information structure */
 		db = (void *) (kmalloc(sizeof(*db), GFP_KERNEL | GFP_DMA));
@@ -402,7 +403,6 @@ int dmfe_reg_board(struct net_device *dev)
 		for (i = 0; i < 6; i++)
 			dev->dev_addr[i] = db->srom[20 + i];
 
-		dev = 0;	/* NULL device */
 	}
 
 #ifdef MODULE
@@ -1488,7 +1488,7 @@ int init_module(void)
 		break;
 	}
 
-	return dmfe_reg_board(0);	/* search board and register */
+	return dmfe_reg_board();	/* search board and register */
 }
 
 /*

@@ -248,12 +248,10 @@ struct pci_id_info {
 	const char *name;
 	u16	vendor_id, device_id, device_id_mask, flags;
 	int io_size;
-	struct net_device *(*probe1)(int pci_bus, int pci_devfn, struct net_device *dev,
-							 long ioaddr, int irq, int chip_idx, int fnd_cnt);
+	struct net_device *(*probe1)(int pci_bus, int pci_devfn, long ioaddr, int irq, int chip_idx, int fnd_cnt);
 };
 
-static struct net_device *via_probe1(int pci_bus, int pci_devfn,
-								 struct net_device *dev, long ioaddr, int irq,
+static struct net_device *via_probe1(int pci_bus, int pci_devfn, long ioaddr, int irq,
 								 int chp_idx, int fnd_cnt);
 
 static struct pci_id_info pci_tbl[] = {
@@ -393,11 +391,12 @@ static struct net_device *root_net_dev = NULL;
    well when dynamically adding drivers.  So instead we detect just the
    cards we know about in slot order. */
 
-static int pci_etherdev_probe(struct net_device *dev, struct pci_id_info pci_tbl[])
+static int pci_etherdev_probe(struct pci_id_info pci_tbl[])
 {
 	int cards_found = 0;
 	int pci_index = 0;
 	unsigned char pci_bus, pci_device_fn;
+	struct net_device *dev;
 
 	if ( ! pcibios_present())
 		return -ENODEV;
@@ -478,7 +477,7 @@ static int pci_etherdev_probe(struct net_device *dev, struct pci_id_info pci_tbl
 									  PCI_COMMAND, new_command);
 		}
 
-		dev = pci_tbl[chip_idx].probe1(pci_bus, pci_device_fn, dev, ioaddr,
+		dev = pci_tbl[chip_idx].probe1(pci_bus, pci_device_fn, ioaddr,
 									   irq, chip_idx, cards_found);
 
 		if (dev  && (pci_tbl[chip_idx].flags & PCI_COMMAND_MASTER)) {
@@ -501,21 +500,24 @@ static int pci_etherdev_probe(struct net_device *dev, struct pci_id_info pci_tbl
 }
 
 #ifndef MODULE
-int via_rhine_probe(struct net_device *dev)
+int via_rhine_probe(void)
 {
 	printk(KERN_INFO "%s" KERN_INFO "%s", versionA, versionB);
-	return pci_etherdev_probe(dev, pci_tbl);
+	return pci_etherdev_probe(pci_tbl);
 }
 #endif
 
 static struct net_device *via_probe1(int pci_bus, int pci_devfn,
-								 struct net_device *dev, long ioaddr, int irq,
+								 long ioaddr, int irq,
 								 int chip_id, int card_idx)
 {
+	struct net_device *dev;
 	struct netdev_private *np;
 	int i, option = card_idx < MAX_UNITS ? options[card_idx] : 0;
 
-	dev = init_etherdev(dev, 0);
+	dev = init_etherdev(NULL, 0);
+	if(dev==NULL)
+		return NULL;
 
 	printk(KERN_INFO "%s: %s at 0x%lx, ",
 		   dev->name, pci_tbl[chip_id].name, ioaddr);
@@ -539,6 +541,7 @@ static struct net_device *via_probe1(int pci_bus, int pci_devfn,
 
 	/* Make certain the descriptor lists are cache-aligned. */
 	np = (void *)(((long)kmalloc(sizeof(*np), GFP_KERNEL) + 31) & ~31);
+	/* FIXME! check return !!! */		
 	memset(np, 0, sizeof(*np));
 	dev->priv = np;
 
@@ -1264,7 +1267,7 @@ int init_module(void)
 	register_driver(&etherdev_ops);
 	return 0;
 #else
-	return pci_etherdev_probe(NULL, pci_tbl);
+	return pci_etherdev_probe(pci_tbl);
 #endif
 }
 

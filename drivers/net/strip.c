@@ -2831,9 +2831,6 @@ static int strip_ioctl(struct tty_struct *tty, struct file *file,
  * STRIP driver
  */
 
-#ifdef MODULE
-static
-#endif
 int strip_init_ctrl_dev(struct net_device *dummy)
 {
     static struct tty_ldisc strip_ldisc;

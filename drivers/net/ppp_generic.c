@@ -554,8 +554,7 @@ static struct file_operations ppp_device_fops = {
 
 /* Called at boot time if ppp is compiled into the kernel,
    or at module load time (from init_module) if compiled as a module. */
-int
-ppp_init(struct net_device *dev)
+int __init ppp_init(void)
 {
 	int err;
 #ifndef MODULE
@@ -1614,7 +1613,7 @@ ppp_find_unit(int unit)
 int
 init_module(void)
 {
-	ppp_init(0);
+	ppp_init();
 	return 0;
 }
 

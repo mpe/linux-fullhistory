@@ -268,8 +268,8 @@ struct pcnet32_private {
 #endif    
 };
 
-int  pcnet32_probe(struct net_device *);
-static int  pcnet32_probe1(struct net_device *, unsigned long, unsigned char, int, int);
+int  pcnet32_probe(void);
+static int  pcnet32_probe1(unsigned long, unsigned char, int, int);
 static int  pcnet32_open(struct net_device *);
 static int  pcnet32_init_ring(struct net_device *);
 static int  pcnet32_start_xmit(struct sk_buff *, struct net_device *);
@@ -291,7 +291,7 @@ struct pcnet32_pci_id_info {
     const char *name;
     u16 vendor_id, device_id, svid, sdid, flags;
     int io_size;
-    int (*probe1) (struct net_device *, unsigned long, unsigned char, int, int);
+    int (*probe1) (unsigned long, unsigned char, int, int);
 };
 
 static struct pcnet32_pci_id_info pcnet32_tbl[] = {
@@ -419,10 +419,10 @@ static struct pcnet32_access pcnet32_dwio = {
 
 
 
-int __init pcnet32_probe (struct net_device *dev)
+int __init pcnet32_probe(void)
 {
-    unsigned long ioaddr = dev ? dev->base_addr: 0;
-    unsigned int  irq_line = dev ? dev->irq : 0;
+    unsigned long ioaddr = 0; // FIXME dev ? dev->base_addr: 0;
+    unsigned int  irq_line = 0; // FIXME dev ? dev->irq : 0;
     int *port;
     int cards_found = 0;
     
@@ -430,7 +430,7 @@ int __init pcnet32_probe (struct net_device *dev)
 #ifndef __powerpc__
     if (ioaddr > 0x1ff) {
 	if (check_region(ioaddr, PCNET32_TOTAL_SIZE) == 0)
-	    return pcnet32_probe1(dev, ioaddr, irq_line, 0, 0);
+	    return pcnet32_probe1(ioaddr, irq_line, 0, 0);
 	else
 	    return ENODEV;
     } else
@@ -481,9 +481,8 @@ int __init pcnet32_probe (struct net_device *dev)
 	    }
 	    printk("Found PCnet/PCI at %#lx, irq %d.\n", ioaddr, irq_line);
 	    
-	    if (pcnet32_tbl[chip_idx].probe1(dev, ioaddr, irq_line, 1, cards_found) == 0) {
+	    if (pcnet32_tbl[chip_idx].probe1(ioaddr, irq_line, 1, cards_found) == 0) {
 		cards_found++;
-		dev = NULL;
 	    }
 	}
     } else 
@@ -497,7 +496,7 @@ int __init pcnet32_probe (struct net_device *dev)
     	    /* check if there is really a pcnet chip on that ioaddr */
     	    if ((inb(ioaddr + 14) == 0x57) &&
 		(inb(ioaddr + 15) == 0x57) &&
-	        (pcnet32_probe1(dev, ioaddr, 0, 0, 0) == 0))
+	        (pcnet32_probe1(ioaddr, 0, 0, 0) == 0))
 		cards_found++;
 	}
     }
@@ -507,13 +506,14 @@ int __init pcnet32_probe (struct net_device *dev)
 
 /* pcnet32_probe1 */
 static int __init
-pcnet32_probe1(struct net_device *dev, unsigned long ioaddr, unsigned char irq_line, int shared, int card_idx)
+pcnet32_probe1(unsigned long ioaddr, unsigned char irq_line, int shared, int card_idx)
 {
     struct pcnet32_private *lp;
     int i,media,fdx = 0, mii = 0, fset = 0;
     int chip_version;
     char *chipname;
     char *priv;
+    struct net_device *dev;
     struct pcnet32_access *a;
 
     /* reset the chip */
@@ -602,7 +602,9 @@ pcnet32_probe1(struct net_device *dev, unsigned long ioaddr, unsigned char irq_l
 	a->write_csr(ioaddr, 80, a->read_csr(ioaddr, 80) | 0x0c00);
     }
     
-    dev = init_etherdev(dev, 0);
+    dev = init_etherdev(NULL, 0);
+    if(dev==NULL)
+    	return ENOMEM;
 
     printk(KERN_INFO "%s: %s at %#3lx,", dev->name, chipname, ioaddr);
 
@@ -1399,7 +1401,7 @@ init_module(void)
 	pcnet32_debug = debug;
     
     pcnet32_dev = NULL;
-    return pcnet32_probe(NULL);
+    return pcnet32_probe();
 }
 
 void

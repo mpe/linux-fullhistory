@@ -354,14 +354,18 @@ struct net_device *dev_getbyhwaddr(unsigned short type, char *ha)
 int dev_alloc_name(struct net_device *dev, const char *name)
 {
 	int i;
+	char buf[32];
 	/*
 	 *	If you need over 100 please also fix the algorithm...
 	 */
 	for(i=0;i<100;i++)
 	{
-		sprintf(dev->name,name,i);
-		if(__dev_get_by_name(dev->name)==NULL)
+		sprintf(buf,name,i);
+		if(__dev_get_by_name(buf)==NULL)
+		{
+			strcpy(dev->name, buf);
 			return i;
+		}
 	}
 	return -ENFILE;	/* Over 100 of the things .. bail out! */
 }
@@ -1994,19 +1998,8 @@ int unregister_netdevice(struct net_device *dev)
  *	present) and leaves us with a valid list of present and active devices.
  *
  */
-extern int lance_init(void);
-extern int bpq_init(void);
-extern int scc_init(void);
-extern void sdla_setup(void);
-extern void dlci_setup(void);
-extern int dmascc_init(void);
 
-extern int lapbeth_init(void);
-extern void arcnet_init(void);
 extern void ip_auto_config(void);
-#ifdef CONFIG_8xx
-extern int cpm_enet_init(void);
-#endif /* CONFIG_8xx */
 
 int __init net_dev_init(void)
 {
@@ -2030,51 +2023,6 @@ int __init net_dev_init(void)
 	br_init();
 #endif	
 	
-	/*
-	 * This is Very Ugly(tm).
-	 *
-	 * Some devices want to be initialized early..
-	 */
-
-#if defined(CONFIG_SCC)
-	scc_init();
-#endif
-#if defined(CONFIG_DMASCC)
-	dmascc_init();
-#endif	
-#if defined(CONFIG_BPQETHER)
-	bpq_init();
-#endif
-#if defined(CONFIG_DLCI)
-	dlci_setup();
-#endif
-#if defined(CONFIG_SDLA)
-	sdla_setup();
-#endif
-#if defined(CONFIG_LAPBETHER)
-	lapbeth_init();
-#endif
-#if defined(CONFIG_PLIP)
-	plip_init();
-#endif
-#if defined(CONFIG_ARCNET)
-	arcnet_init();
-#endif
-#if defined(CONFIG_8xx)
-        cpm_enet_init();
-#endif
-	/*
-	 *	SLHC if present needs attaching so other people see it
-	 *	even if not opened.
-	 */
-	 
-#ifdef CONFIG_INET	 
-#if (defined(CONFIG_SLIP) && defined(CONFIG_SLIP_COMPRESSED)) \
-	 || defined(CONFIG_PPP) \
-    || (defined(CONFIG_ISDN) && defined(CONFIG_ISDN_PPP))
-	slhc_install();
-#endif	
-#endif
 
 #ifdef CONFIG_NET_PROFILE
 	net_profile_init();
@@ -2101,6 +2049,12 @@ int __init net_dev_init(void)
 		dev->xmit_lock_owner = -1;
 		dev->iflink = -1;
 		dev_hold(dev);
+		/*
+		 *	We can allocate the name ahead of time. If the
+		 *	init fails the name will be reissued correctly.
+		 */
+		if (strchr(dev->name, '%'))
+			dev_alloc_name(dev, dev->name);
 		if (dev->init && dev->init(dev)) {
 			/*
 			 *	It failed to come up. Unhook it.
@@ -2135,6 +2089,12 @@ int __init net_dev_init(void)
 
 	dst_init();
 	dev_mcast_init();
+
+	/*
+	 *	Initialise network devices
+	 */
+	 
+	net_device_init();
 
 #ifdef CONFIG_IP_PNP
 	ip_auto_config();

@@ -70,68 +70,13 @@
 #include <linux/kernel.h>
 #include <linux/proc_fs.h>
 
+#include <linux/version.h>
+#include <asm/uaccess.h>
+#include <linux/init.h>
+
 #include <linux/yam.h>
 #include "yam9600.h"
 #include "yam1200.h"
-
-/* --------------------------------------------------------------------- */
-
-/*
- * currently this module is supposed to support both module styles, i.e.
- * the old one present up to about 2.1.9, and the new one functioning
- * starting with 2.1.21. The reason is I have a kit allowing to compile
- * this module also under 2.0.x which was requested by several people.
- * This will go in 2.2
- */
-#include <linux/version.h>
-
-#if LINUX_VERSION_CODE >= 0x20100
-#include <asm/uaccess.h>
-#else
-#include <asm/segment.h>
-#include <linux/mm.h>
-
-#undef put_user
-#undef get_user
-
-#define put_user(x,ptr) ({ __put_user((unsigned long)(x),(ptr),sizeof(*(ptr))); 0; })
-#define get_user(x,ptr) ({ x = ((__typeof__(*(ptr)))__get_user((ptr),sizeof(*(ptr)))); 0; })
-
-extern inline int copy_from_user(void *to, const void *from, unsigned long n)
-{
-	int i = verify_area(VERIFY_READ, from, n);
-	if (i)
-		return i;
-	memcpy_fromfs(to, from, n);
-	return 0;
-}
-
-extern inline int copy_to_user(void *to, const void *from, unsigned long n)
-{
-	int i = verify_area(VERIFY_WRITE, to, n);
-	if (i)
-		return i;
-	memcpy_tofs(to, from, n);
-	return 0;
-}
-#endif
-
-#if LINUX_VERSION_CODE < 0x20115
-extern __inline__ void dev_init_buffers(struct net_device *dev)
-{
-	int i;
-	for (i = 0; i < DEV_NUMBUFFS; i++) {
-		skb_queue_head_init(&dev->buffs[i]);
-	}
-}
-#endif
-
-#if LINUX_VERSION_CODE >= 0x20123
-#include <linux/init.h>
-#else
-#define __init
-#define __initdata
-#endif
 
 /* --------------------------------------------------------------------- */
 
@@ -177,11 +122,8 @@ struct yam_port {
 
 	/* Stats section */
 
-#if LINUX_VERSION_CODE < 0x20119
-	struct enet_statistics stats;
-#else
 	struct net_device_stats stats;
-#endif
+
 	int nb_rxint;
 	int nb_mdint;
 
@@ -907,13 +849,7 @@ static int yam_net_get_info(char *buffer, char **start, off_t offset, int length
 
 /* --------------------------------------------------------------------- */
 
-#if LINUX_VERSION_CODE >= 0x20119
-static struct net_device_stats *
- yam_get_stats(struct net_device *dev)
-#else
-static struct enet_statistics *
- yam_get_stats(struct net_device *dev)
-#endif
+static struct net_device_stats *yam_get_stats(struct net_device *dev)
 {
 	struct yam_port *yp;
 
@@ -1195,8 +1131,9 @@ static int yam_probe(struct net_device *dev)
 
 /* --------------------------------------------------------------------- */
 
-int __init yam_init(struct net_device *dev)
+int __init yam_init(void)
 {
+	struct net_device *dev;
 	int i;
 
 	printk(yam_drvinfo);
@@ -1241,8 +1178,6 @@ int __init yam_init(struct net_device *dev)
 	add_timer(&yam_timer);
 
 	yam_net_procfs_init();
-
-	/* do not keep this device */
 	return 1;
 }
 
@@ -1254,16 +1189,13 @@ int __init yam_init(struct net_device *dev)
  * command line settable parameters
  */
 
-#if LINUX_VERSION_CODE >= 0x20115
 
 MODULE_AUTHOR("Frederic Rible F1OAT frible@teaser.fr");
 MODULE_DESCRIPTION("Yam amateur radio modem driver");
 
-#endif
-
 int init_module(void)
 {
-	int ret = yam_init(NULL);
+	int ret = yam_init();
 
 	return (ret == 1) ? 0 : ret;
 }

@@ -32,9 +32,6 @@ static unsigned char proc_alloc_map[PROC_NDYNAMIC / 8] = {0};
  * These are the generic /proc directory operations. They
  * use the in-memory "struct proc_dir_entry" tree to parse
  * the /proc directory.
- *
- * NOTE! The /proc/scsi directory currently does not correctly
- * build up the proc_dir_entry tree, and will show up empty.
  */
 static struct file_operations proc_dir_operations = {
 	NULL,			/* lseek - default */
@@ -96,7 +93,7 @@ struct proc_dir_entry proc_root = {
 	&proc_root, NULL
 };
 
-struct proc_dir_entry *proc_net, *proc_scsi, *proc_bus, *proc_sysvipc,
+struct proc_dir_entry *proc_net, *proc_bus, *proc_sysvipc,
 		      *proc_root_fs, *proc_root_driver;
 
 #ifdef CONFIG_MCA
@@ -452,7 +449,6 @@ void __init proc_root_init(void)
 	proc_misc_init();
 	proc_register(&proc_root, &proc_root_self);
 	proc_net = create_proc_entry("net", S_IFDIR, 0);
-	proc_scsi = create_proc_entry("scsi", S_IFDIR, 0);
 #ifdef CONFIG_SYSVIPC
 	proc_sysvipc = create_proc_entry("sysvipc", S_IFDIR, 0);
 #endif

@@ -36,8 +36,6 @@
 #endif
 
 #ifdef CONFIG_PROC_FS
-extern int scsi_proc_info(char *, char **, off_t, int, int, int);
-
 struct scsi_dir {
 	struct proc_dir_entry entry;
 	char name[4];
@@ -79,18 +77,11 @@ int generic_proc_info(char *buffer, char **start, off_t offset,
 /* dispatch_scsi_info is the central dispatcher 
  * It is the interface between the proc-fs and the SCSI subsystem code
  */
-extern int dispatch_scsi_info(int ino, char *buffer, char **start,
+int dispatch_scsi_info(int ino, char *buffer, char **start,
 			      off_t offset, int length, int func)
 {
 	struct Scsi_Host *hpnt = scsi_hostlist;
 
-	if (ino == PROC_SCSI_SCSI) {
-		/*
-		 * This is for the scsi core, rather than any specific
-		 * lowlevel driver.
-		 */
-		return (scsi_proc_info(buffer, start, offset, length, 0, func));
-	}
 	while (hpnt) {
 		if (ino == (hpnt->host_no + PROC_SCSI_FILE)) {
 			if (hpnt->hostt->proc_info == NULL)
@@ -104,6 +95,7 @@ extern int dispatch_scsi_info(int ino, char *buffer, char **start,
 		}
 		hpnt = hpnt->next;
 	}
+
 	return (-EBADF);
 }
 
@@ -178,15 +170,13 @@ typedef struct {
 	 cmdNum;		/* cmd number      */
 } parseHandle;
 
-
 inline int parseFree(parseHandle * handle)
 {				/* free memory     */
 	kfree(handle->cmdPos);
 	kfree(handle);
 
-	return (-1);
+	return -1;
 }
-
 
 parseHandle *parseInit(char *buf, char *cmdList, int cmdNum)
 {
@@ -194,12 +184,14 @@ parseHandle *parseInit(char *buf, char *cmdList, int cmdNum)
 	parseHandle *handle;	/* new handle      */
 
 	if (!buf || !cmdList)	/* bad input ?     */
-		return (NULL);
-	if ((handle = (parseHandle *) kmalloc(sizeof(parseHandle), GFP_KERNEL)) == 0)
-		return (NULL);	/* out of memory   */
-	if ((handle->cmdPos = (char **) kmalloc(sizeof(int) * cmdNum, GFP_KERNEL)) == 0) {
+		return NULL;
+	handle = (parseHandle *) kmalloc(sizeof(parseHandle), GFP_KERNEL);
+	if (!handle)
+		return NULL;	/* out of memory   */
+	handle->cmdPos = (char **) kmalloc(sizeof(int) * cmdNum, GFP_KERNEL);
+	if (!handle->cmdPos) {
 		kfree(handle);
-		return (NULL);	/* out of memory   */
+		return NULL;	/* out of memory   */
 	}
 	handle->buf = handle->bufPos = buf;	/* init handle     */
 	handle->cmdList = cmdList;
@@ -212,9 +204,8 @@ parseHandle *parseInit(char *buf, char *cmdList, int cmdNum)
 			handle->cmdPos[++cmdNum] = ptr++;
 		}
 	}
-	return (handle);
+	return handle;
 }
-
 
 int parseOpt(parseHandle * handle, char **param)
 {
@@ -303,6 +294,177 @@ void proc_print_scsidevice(Scsi_Device * scd, char *buffer, int *size, int len)
 
 void proc_print_scsidevice(Scsi_Device * scd, char *buffer, int *size, int len)
 {
+}
+
+/* forward references */
+static ssize_t proc_readscsi(struct file * file, char * buf,
+                             size_t count, loff_t *ppos);
+static ssize_t proc_writescsi(struct file * file, const char * buf,
+                              size_t count, loff_t *ppos);
+static long long proc_scsilseek(struct file *, long long, int);
+
+extern void build_proc_dir_hba_entries(uint);
+
+/* the *_get_info() functions are in the respective scsi driver code */
+int (* dispatch_scsi_info_ptr) (int ino, char *buffer, char **start,
+				off_t offset, int length, int inout) = 0;
+
+static struct file_operations proc_scsi_operations = {
+    proc_scsilseek,	/* lseek   */
+    proc_readscsi,	/* read	   */
+    proc_writescsi,	/* write   */
+    proc_readdir,	/* readdir */
+    NULL,		/* poll    */
+    NULL,		/* ioctl   */
+    NULL,		/* mmap	   */
+    NULL,		/* no special open code	   */
+    NULL,		/* flush */
+    NULL,		/* no special release code */
+    NULL		/* can't fsync */
+};
+
+/*
+ * proc directories can do almost nothing..
+ */
+struct inode_operations proc_scsi_inode_operations = {
+	&proc_scsi_operations,  /* default scsi directory file-ops */
+	NULL,			/* create */
+	proc_lookup,		/* lookup */
+	NULL,	    		/* link */
+	NULL,	    		/* unlink */
+	NULL,	    		/* symlink */
+	NULL,	    		/* mkdir */
+	NULL,	    		/* rmdir */
+	NULL,	    		/* mknod */
+	NULL,	    		/* rename */
+	NULL,	    		/* readlink */
+	NULL,	    		/* follow_link */
+	NULL,			/* get_block */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
+	NULL,			/* flushpage */
+	NULL,			/* truncate */
+	NULL,			/* permission */
+	NULL,			/* smap */
+	NULL			/* revalidate */
+};
+
+static int get_not_present_info(char *buffer, char **start, off_t offset, int length)
+{
+    int len, pos, begin;
+    
+    begin = 0;
+    pos = len = sprintf(buffer, 
+			"No low-level scsi modules are currently present\n");
+    if(pos < offset) {
+	len = 0;
+	begin = pos;
+    }
+    
+    *start = buffer + (offset - begin);	  /* Start of wanted data */
+    len -= (offset - begin);
+    if(len > length)
+	len = length;
+    
+    return(len);
+}
+
+#define PROC_BLOCK_SIZE (3*1024)     /* 4K page size, but our output routines 
+				      * use some slack for overruns 
+				      */
+
+static ssize_t proc_readscsi(struct file * file, char * buf,
+                             size_t count, loff_t *ppos)
+{
+    struct inode * inode = file->f_dentry->d_inode; 
+    ssize_t length;
+    ssize_t bytes = count;
+    ssize_t copied = 0;
+    ssize_t thistime;
+    char * page;
+    char * start;
+    
+    if (!(page = (char *) __get_free_page(GFP_KERNEL)))
+	return(-ENOMEM);
+    
+    while (bytes > 0) {	
+	thistime = bytes;
+	if(bytes > PROC_BLOCK_SIZE)
+	    thistime = PROC_BLOCK_SIZE;
+	
+	if(dispatch_scsi_info_ptr)
+	    length = dispatch_scsi_info_ptr(inode->i_ino, page, &start, 
+					    *ppos, thistime, 0);
+	else
+	    length = get_not_present_info(page, &start, *ppos, thistime);
+	if(length < 0) {
+	    free_page((ulong) page);
+	    return(length);
+	}
+	
+	/*
+	 *  We have been given a non page aligned block of
+	 *  the data we asked for + a bit. We have been given
+	 *  the start pointer and we know the length.. 
+	 */
+	if (length <= 0)
+	    break;
+	/*
+	 *  Copy the bytes
+	 */
+	copy_to_user(buf + copied, start, length);
+	*ppos += length;	/* Move down the file */
+	bytes -= length;
+	copied += length;
+	
+	if(length < thistime)
+	    break;  /* End of file */
+	
+    }
+    
+    free_page((ulong) page);
+    return(copied);
+}
+
+
+static ssize_t proc_writescsi(struct file * file, const char * buf,
+                              size_t count, loff_t *ppos)
+{
+    struct inode * inode = file->f_dentry->d_inode;
+    ssize_t ret = 0;
+    char * page;
+    
+    if(count > PROC_BLOCK_SIZE) {
+	return(-EOVERFLOW);
+    }
+
+    if(dispatch_scsi_info_ptr != NULL) {
+        if (!(page = (char *) __get_free_page(GFP_KERNEL)))
+            return(-ENOMEM);
+	copy_from_user(page, buf, count);
+	ret = dispatch_scsi_info_ptr(inode->i_ino, page, 0, 0, count, 1);
+    } else 
+	return(-ENOPKG);	  /* Nothing here */
+    
+    free_page((ulong) page);
+    return(ret);
+}
+
+
+static long long proc_scsilseek(struct file * file, long long offset, int orig)
+{
+    switch (orig) {
+    case 0:
+	file->f_pos = offset;
+	return(file->f_pos);
+    case 1:
+	file->f_pos += offset;
+	return(file->f_pos);
+    case 2:
+	return(-EINVAL);
+    default:
+	return(-EINVAL);
+    }
 }
 
 #endif				/* CONFIG_PROC_FS */

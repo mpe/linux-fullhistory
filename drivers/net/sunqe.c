@@ -926,8 +926,9 @@ qec_free_devs:
 	return res;
 }
 
-int __init qec_probe(struct net_device *dev)
+int __init qec_probe(void)
 {
+	struct net_device *dev = NULL;
 	struct linux_sbus *bus;
 	struct linux_sbus_device *sdev = 0;
 	static int called = 0;
@@ -969,7 +970,7 @@ int
 init_module(void)
 {
 	root_qec_dev = NULL;
-	return qec_probe(NULL);
+	return qec_probe();
 }
 
 void

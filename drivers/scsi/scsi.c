@@ -70,6 +70,10 @@
 
 #undef USE_STATIC_SCSI_MEMORY
 
+struct proc_dir_entry *proc_scsi = NULL;
+static int scsi_proc_info(char *buffer, char **start, off_t offset,
+			  int length, int inout);
+
 /*
    static const char RCSid[] = "$Header: /vger/u4/cvs/linux/drivers/scsi/scsi.c,v 1.38 1997/01/19 23:07:18 davem Exp $";
  */
@@ -141,21 +145,6 @@ unsigned int scsi_logging_level = 0;
 
 volatile struct Scsi_Host *host_active = NULL;
 
-#if CONFIG_PROC_FS
-/* 
- * This is the pointer to the /proc/scsi code.
- * It is only initialized to !=0 if the scsi code is present
- */
-struct proc_dir_entry proc_scsi_scsi =
-{
-	PROC_SCSI_SCSI, 4, "scsi",
-	S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0, 0,
-	NULL,
-	NULL, NULL,
-	NULL, NULL, NULL
-};
-#endif
-
 
 const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE] =
 {
@@ -193,13 +182,6 @@ static int scsi_unregister_device(struct Scsi_Device_Template *tpnt);
  */
 extern void scsi_old_done(Scsi_Cmnd * SCpnt);
 extern void scsi_old_times_out(Scsi_Cmnd * SCpnt);
-
-#if CONFIG_PROC_FS
-extern int (*dispatch_scsi_info_ptr) (int ino, char *buffer, char **start,
-				    off_t offset, int length, int inout);
-extern int dispatch_scsi_info(int ino, char *buffer, char **start,
-			      off_t offset, int length, int inout);
-#endif
 
 #define SCSI_BLOCK(DEVICE, HOST)                                                \
                 ((HOST->block && host_active && HOST != host_active)            \
@@ -1997,17 +1979,22 @@ int __init scsi_dev_init(void)
 #endif
 
 	/* Yes we're here... */
+
+	/*
+	 * This makes /proc/scsi and /proc/scsi/scsi visible.
+	 */
 #if CONFIG_PROC_FS
-	dispatch_scsi_info_ptr = dispatch_scsi_info;
+	proc_scsi = create_proc_entry ("scsi", S_IFDIR, 0);
+	if (!proc_scsi) {
+		printk (KERN_ERR "cannot init /proc/scsi\n");
+		return -ENOMEM;
+	}
+	
+	create_proc_info_entry ("scsi/scsi", 0, 0, scsi_proc_info);
 #endif
 
 	/* Init a few things so we can "malloc" memory. */
 	scsi_loadable_module_flag = 0;
-
-	/* Register the /proc/scsi/scsi entry */
-#if CONFIG_PROC_FS
-	proc_scsi_register(0, &proc_scsi_scsi);
-#endif
 
 	/* initialize all hosts */
 	scsi_init();
@@ -2114,8 +2101,8 @@ static void print_inquiry(unsigned char *data)
 
 
 #ifdef CONFIG_PROC_FS
-int scsi_proc_info(char *buffer, char **start, off_t offset, int length,
-		   int hostno, int inout)
+static int scsi_proc_info(char *buffer, char **start, off_t offset,
+			  int length, int inout)
 {
 	Scsi_Cmnd *SCpnt;
 	struct Scsi_Device_Template *SDTpnt;
@@ -3257,18 +3244,18 @@ int init_module(void)
 	int has_space = 0;
 
 	/*
-	 * This makes /proc/scsi visible.
+	 * This makes /proc/scsi and /proc/scsi/scsi visible.
 	 */
 #if CONFIG_PROC_FS
-	dispatch_scsi_info_ptr = dispatch_scsi_info;
+	proc_scsi = create_proc_entry ("scsi", S_IFDIR, 0);
+	if (!proc_scsi) {
+		printk (KERN_ERR "cannot init /proc/scsi\n");
+		return -ENOMEM;
+	}
+	create_proc_info_entry ("scsi/scsi", 0, 0, scsi_proc_info);
 #endif
 
 	scsi_loadable_module_flag = 1;
-
-	/* Register the /proc/scsi/scsi entry */
-#if CONFIG_PROC_FS
-	proc_scsi_register(0, &proc_scsi_scsi);
-#endif
 
 	dma_sectors = PAGE_SIZE / SECTOR_SIZE;
 	scsi_dma_free_sectors = dma_sectors;
@@ -3317,12 +3304,11 @@ void cleanup_module(void)
 	remove_bh(SCSI_BH);
 
 #if CONFIG_PROC_FS
-	proc_scsi_unregister(0, PROC_SCSI_SCSI);
-
 	/* No, we're not here anymore. Don't show the /proc/scsi files. */
-	dispatch_scsi_info_ptr = 0L;
+	remove_proc_entry ("scsi/scsi", 0);
+	remove_proc_entry ("scsi", 0);
 #endif
-
+	
 	/*
 	 * Free up the DMA pool.
 	 */

@@ -49,7 +49,7 @@ else
 endif
 
 ifeq ($(CONFIG_NET),y)
-L_OBJS += Space.o net_init.o loopback.o
+L_OBJS += Space.o setup.o net_init.o loopback.o
 endif
 
 ifeq ($(CONFIG_SEEQ8005),y)

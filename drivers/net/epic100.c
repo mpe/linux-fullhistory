@@ -151,9 +151,8 @@ IVc. Errata
 
 /* The rest of these values should never change. */
 
-static struct net_device *epic_probe1(int pci_bus, int pci_devfn,
-								  struct net_device *dev, long ioaddr, int irq,
-								  int chip_id, int card_idx);
+static struct net_device *epic_probe1(int pci_bus, int pci_devfn, long ioaddr, int irq,
+					  int chip_id, int card_idx);
 
 enum pci_flags_bit {
 	PCI_USES_IO=1, PCI_USES_MEM=2, PCI_USES_MASTER=4,
@@ -164,7 +163,7 @@ struct chip_info {
 	const char *name;
 	u16	vendor_id, device_id, device_id_mask, pci_flags;
 	int io_size, min_latency;
-	struct net_device *(*probe1)(int pci_bus, int pci_devfn, struct net_device *dev,
+	struct net_device *(*probe1)(int pci_bus, int pci_devfn,
 							 long ioaddr, int irq, int chip_idx, int fnd_cnt);
 } chip_tbl[] = {
 	{"SMSC EPIC/100 83c170", 0x10B8, 0x0005, 0x7fff,
@@ -274,12 +273,13 @@ static void set_rx_mode(struct net_device *dev);
 static struct net_device *root_epic_dev = NULL;
 
 #ifndef CARDBUS
-int epic100_probe(struct net_device *dev)
+int epic100_probe(void)
 {
 	int cards_found = 0;
 	int chip_idx, irq;
 	u16 pci_command, new_command;
 	unsigned char pci_bus, pci_device_fn;
+	struct net_device *dev;
 
 #ifdef PCI_SUPPORT_VER2
 	struct pci_dev *pcidev = NULL;
@@ -356,7 +356,7 @@ int epic100_probe(struct net_device *dev)
 									  PCI_COMMAND, new_command);
 		}
 
-		dev = chip_tbl[chip_idx].probe1(pci_bus, pci_device_fn, dev, pci_ioaddr,
+		dev = chip_tbl[chip_idx].probe1(pci_bus, pci_device_fn, pci_ioaddr,
 									   irq, chip_idx, cards_found);
 
 		/* Check the latency timer. */
@@ -381,24 +381,26 @@ int epic100_probe(struct net_device *dev)
 }
 #endif  /* not CARDBUS */
 
-static struct net_device *epic_probe1(int pci_bus, int pci_devfn,
-								  struct net_device *dev, long ioaddr, int irq,
+static struct net_device *epic_probe1(int pci_bus, int pci_devfn, long ioaddr, int irq,
 								  int chip_idx, int card_idx)
 {
 	struct epic_private *ep;
 	int i, option = 0, duplex = 0;
+	struct net_device *dev;
 
-	if (dev && dev->mem_start) {
-		option = dev->mem_start;
-		duplex = (dev->mem_start & 16) ? 1 : 0;
-	} else if (card_idx >= 0  &&  card_idx < MAX_UNITS) {
+// FIXME	if (dev && dev->mem_start) {
+//		option = dev->mem_start;
+//		duplex = (dev->mem_start & 16) ? 1 : 0;
+//	}
+//	else 
+	if (card_idx >= 0  &&  card_idx < MAX_UNITS) {
 		if (options[card_idx] >= 0)
 			option = options[card_idx];
 		if (full_duplex[card_idx] >= 0)
 			duplex = full_duplex[card_idx];
 	}
 
-	dev = init_etherdev(dev, 0);
+	dev = init_etherdev(NULL, 0);
 
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
@@ -1343,7 +1345,7 @@ static dev_node_t *epic_attach(dev_locator_t *loc)
 			   io == 0 ? "I/O address" : "IRQ");
 		return NULL;
 	}
-	dev = epic_probe1(bus, devfn, NULL, io, irq, 2, -1);
+	dev = epic_probe1(bus, devfn, io, irq, 2, -1);
 	if (dev) {
 		dev_node_t *node = kmalloc(sizeof(dev_node_t), GFP_KERNEL);
 		strcpy(node->dev_name, dev->name);
@@ -1417,7 +1419,7 @@ int init_module(void)
 	register_driver(&epic_ops);
 	return 0;
 #else
-	return epic100_probe(0);
+	return epic100_probe();
 #endif
 }
 

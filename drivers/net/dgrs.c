@@ -1241,7 +1241,6 @@ dgrs_initclone(struct net_device *dev)
 
 static int __init 
 dgrs_found_device(
-	struct net_device	*dev,
 	int		io,
 	ulong		mem,
 	int		irq,
@@ -1250,108 +1249,74 @@ dgrs_found_device(
 )
 {
 	DGRS_PRIV	*priv;
+	struct net_device *dev;
 
-	#ifdef MODULE
+	/* Allocate and fill new device structure. */
+	int dev_size = sizeof(struct net_device) + sizeof(DGRS_PRIV);
+	int i;
+
+	dev = (struct net_device *) kmalloc(dev_size, GFP_KERNEL);
+	memset(dev, 0, dev_size);
+	dev->priv = ((void *)dev) + sizeof(struct net_device);
+	priv = (DGRS_PRIV *)dev->priv;
+
+	dev->name = priv->devname; /* An empty string. */
+	dev->base_addr = io;
+	dev->mem_start = mem;
+	dev->mem_end = mem + 2048 * 1024 - 1;
+	dev->irq = irq;
+	priv->plxreg = plxreg;
+	priv->plxdma = plxdma;
+	priv->vplxdma = NULL;
+
+	priv->chan = 1;
+	priv->devtbl[0] = dev;
+
+	dev->init = dgrs_probe1;
+	ether_setup(dev);
+	priv->next_dev = dgrs_root_dev;
+	dgrs_root_dev = dev;
+	if (register_netdev(dev) != 0)
+		return -EIO;
+
+	if ( !dgrs_nicmode )
+		return (0);	/* Switch mode, we are done */
+
+	/*
+	 * Operating card as N separate NICs
+	 */
+
+	priv->nports = priv->bcomm->bc_nports;
+
+	for (i = 1; i < priv->nports; ++i)
 	{
-		/* Allocate and fill new device structure. */
-		int dev_size = sizeof(struct net_device) + sizeof(DGRS_PRIV);
-		int i;
-
-		dev = (struct net_device *) kmalloc(dev_size, GFP_KERNEL);
-		memset(dev, 0, dev_size);
-		dev->priv = ((void *)dev) + sizeof(struct net_device);
-		priv = (DGRS_PRIV *)dev->priv;
-
-		dev->name = priv->devname; /* An empty string. */
-		dev->base_addr = io;
-		dev->mem_start = mem;
-		dev->mem_end = mem + 2048 * 1024 - 1;
-		dev->irq = irq;
-		priv->plxreg = plxreg;
-		priv->plxdma = plxdma;
-		priv->vplxdma = NULL;
-
-		priv->chan = 1;
-		priv->devtbl[0] = dev;
-
-		dev->init = dgrs_probe1;
-
-		ether_setup(dev);
-		priv->next_dev = dgrs_root_dev;
-		dgrs_root_dev = dev;
-		if (register_netdev(dev) != 0)
-			return -EIO;
-
-		if ( !dgrs_nicmode )
-			return (0);	/* Switch mode, we are done */
-
-		/*
-		 * Operating card as N separate NICs
-		 */
-		priv->nports = priv->bcomm->bc_nports;
-		for (i = 1; i < priv->nports; ++i)
-		{
-			struct net_device	*devN;
-			DGRS_PRIV	*privN;
-
+		struct net_device	*devN;
+		DGRS_PRIV	*privN;
 			/* Allocate new dev and priv structures */
-			devN = (struct net_device *) kmalloc(dev_size, GFP_KERNEL);
-
+		devN = (struct net_device *) kmalloc(dev_size, GFP_KERNEL);
 			/* Make it an exact copy of dev[0]... */
-			memcpy(devN, dev, dev_size);
-			devN->priv = ((void *)devN) + sizeof(struct net_device);
-			privN = (DGRS_PRIV *)devN->priv;
-
+		memcpy(devN, dev, dev_size);
+		devN->priv = ((void *)devN) + sizeof(struct net_device);
+		privN = (DGRS_PRIV *)devN->priv;
 			/* ... but seset devname to a NULL string */
-			privN->devname[0] = 0;
-			devN->name = privN->devname;
-
+		privN->devname[0] = 0;
+		devN->name = privN->devname;
 			/* ... and zero out VM areas */
-			privN->vmem = 0;
-			privN->vplxdma = 0;
-
+		privN->vmem = 0;
+		privN->vplxdma = 0;
 			/* ... and zero out IRQ */
-			devN->irq = 0;
-
+		devN->irq = 0;
 			/* ... and base MAC address off address of 1st port */
-			devN->dev_addr[5] += i;
-			privN->chan = i+1;
-
-			priv->devtbl[i] = devN;
-
-			devN->init = dgrs_initclone;
-			ether_setup(devN);
-			privN->next_dev = dgrs_root_dev;
-			dgrs_root_dev = devN;
-			if (register_netdev(devN) != 0)
-				return -EIO;
-		}
+		devN->dev_addr[5] += i;
+		privN->chan = i+1;
+		priv->devtbl[i] = devN;
+		devN->init = dgrs_initclone;
+		ether_setup(devN);
+		privN->next_dev = dgrs_root_dev;
+		dgrs_root_dev = devN;
+		if (register_netdev(devN) != 0)
+			return -EIO;
 	}
-	#else
-	{
-		if (dev)
-		{
-			dev->priv = kmalloc(sizeof (DGRS_PRIV), GFP_KERNEL);
-			memset(dev->priv, 0, sizeof (DGRS_PRIV));
-		}
-		dev = init_etherdev(dev, sizeof(DGRS_PRIV));
-		priv = (DGRS_PRIV *)dev->priv;
-
-		dev->base_addr = io;
-		dev->mem_start = mem;
-		dev->mem_end = mem + 2048 * 1024;
-		dev->irq = irq;
-		priv->plxreg = plxreg;
-		priv->plxdma = plxdma;
-		priv->vplxdma = NULL;
-
-		priv->chan = 1;
-		priv->devtbl[0] = dev;
-
-		dgrs_probe1(dev);
-	}
-	#endif
-
 	return (0);
 }
 
@@ -1360,8 +1325,7 @@ dgrs_found_device(
  */
 static int is2iv[8] __initdata = { 0, 3, 5, 7, 10, 11, 12, 15 };
 
-static int __init 
-dgrs_scan(struct net_device *dev)
+static int __init  dgrs_scan(void)
 {
 	int	cards_found = 0;
 	uint	io;
@@ -1452,9 +1416,8 @@ dgrs_scan(struct net_device *dev)
 						PCI_LATENCY_TIMER, 255);
 			}
 
-			dgrs_found_device(dev, io, mem, irq, plxreg, plxdma);
+			dgrs_found_device(io, mem, irq, plxreg, plxdma);
 
-			dev = 0;
 			cards_found++;
 		}
 	}
@@ -1479,9 +1442,8 @@ dgrs_scan(struct net_device *dev)
 
 			irq = is2iv[ inb(io+ES4H_IS) & ES4H_IS_INTMASK ];
 
-			dgrs_found_device(dev, io, mem, irq, 0L, 0L);
+			dgrs_found_device(io, mem, irq, 0L, 0L);
 
-			dev = 0;
 			++cards_found;
 		}
 	}
@@ -1564,7 +1526,7 @@ init_module(void)
 	 *	Find and configure all the cards
 	 */
 	dgrs_root_dev = NULL;
-	cards_found = dgrs_scan(0);
+	cards_found = dgrs_scan();
 
 	return cards_found ? 0 : -ENODEV;
 }
@@ -1605,7 +1567,7 @@ dgrs_probe(struct net_device *dev)
 {
 	int	cards_found;
 
-	cards_found = dgrs_scan(dev);
+	cards_found = dgrs_scan();
 	if (dgrs_debug && cards_found)
 		printk("dgrs: SW=%s FW=Build %d %s\n",
 			version, dgrs_firmnum, dgrs_firmdate);

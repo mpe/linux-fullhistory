@@ -316,8 +316,7 @@ MODULE_PARM(full_duplex, "1-" __MODULE_STRING(MAX_UNITS) "i");
 
 #endif
 
-static struct net_device *yellowfin_probe1(struct net_device *dev, long ioaddr,
-									   int irq, int chip_id, int options);
+static struct net_device *yellowfin_probe1(long ioaddr, int irq, int chip_id, int options);
 static int read_eeprom(long ioaddr, int location);
 static int mdio_read(long ioaddr, int phy_id, int location);
 static void mdio_write(long ioaddr, int phy_id, int location, int value);
@@ -341,7 +340,7 @@ static void set_rx_mode(struct net_device *dev);
 /* A list of all installed Yellowfin devices, for removing the driver module. */
 static struct net_device *root_yellowfin_dev = NULL;
 
-int yellowfin_probe(struct net_device *dev)
+int yellowfin_probe(void)
 {
 	int cards_found = 0;
 	int pci_index = 0;
@@ -400,9 +399,8 @@ int yellowfin_probe(struct net_device *dev)
 									  PCI_COMMAND, new_command);
 		}
 
-		dev = yellowfin_probe1(dev, ioaddr, irq, chip_idx, cards_found);
-
-		if (dev) {
+		if(yellowfin_probe1(ioaddr, irq, chip_idx, cards_found))
+		{
 			/* Get and check the bus-master and latency values. */
 			pcibios_read_config_byte(pci_bus, pci_device_fn,
 									 PCI_LATENCY_TIMER, &pci_latency);
@@ -415,7 +413,6 @@ int yellowfin_probe(struct net_device *dev)
 			} else if (yellowfin_debug > 1)
 				printk(KERN_INFO "  PCI latency timer (CFLT) is %#x.\n",
 					   pci_latency);
-			dev = 0;
 			cards_found++;
 		}
 	}
@@ -423,17 +420,17 @@ int yellowfin_probe(struct net_device *dev)
 	return cards_found ? 0 : -ENODEV;
 }
 
-static struct net_device *yellowfin_probe1(struct net_device *dev, long ioaddr,
-									   int irq, int chip_id, int card_idx)
+static struct net_device *yellowfin_probe1(long ioaddr, int irq, int chip_id, int card_idx)
 {
 	static int did_version = 0;			/* Already printed version info. */
 	struct yellowfin_private *yp;
 	int option, i;
+	struct net_device *dev;
 
 	if (yellowfin_debug > 0  &&  did_version++ == 0)
 		printk(version);
 
-	dev = init_etherdev(dev, sizeof(struct yellowfin_private));
+	dev = init_etherdev(NULL, sizeof(struct yellowfin_private));
 
 	printk(KERN_INFO "%s: %s type %8x at 0x%lx, ",
 		   dev->name, chip_tbl[chip_id].name, inl(ioaddr + ChipRev), ioaddr);
@@ -1372,7 +1369,7 @@ int init_module(void)
 	if (debug >= 0)
 		yellowfin_debug = debug;
 
-	return yellowfin_probe(0);
+	return yellowfin_probe();
 }
 
 void cleanup_module(void)

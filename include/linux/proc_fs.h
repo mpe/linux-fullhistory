@@ -23,8 +23,7 @@ enum {
 };
 
 enum scsi_directory_inos {
-	PROC_SCSI_SCSI = 256,
-	PROC_SCSI_ADVANSYS,
+	PROC_SCSI_ADVANSYS = 256,
 	PROC_SCSI_PCI2000,
 	PROC_SCSI_PCI2220I,
 	PROC_SCSI_PSI240I,
@@ -155,8 +154,11 @@ struct proc_dir_entry {
 	int deleted;		/* delete flag */
 };
 
+#if 0 /* FIXME! /proc/scsi is broken right now */
 extern int (* dispatch_scsi_info_ptr) (int ino, char *buffer, char **start,
 				off_t offset, int length, int inout);
+extern struct inode_operations proc_scsi_inode_operations;
+#endif
 
 #define PROC_INODE_PROPER(inode) ((inode)->i_ino & ~0xffff)
 #define PROC_INODE_OPENPROM(inode) \
@@ -179,8 +181,6 @@ extern struct proc_dir_entry *proc_sysvipc;
 extern struct proc_dir_entry *proc_root_driver;
 extern struct proc_dir_entry proc_root_kcore;
 
-extern struct inode_operations proc_scsi_inode_operations;
-
 extern void proc_root_init(void);
 extern void proc_misc_init(void);
 
@@ -199,7 +199,9 @@ extern void remove_proc_entry(const char *name, struct proc_dir_entry *parent);
 extern inline int proc_scsi_register(struct proc_dir_entry *driver, 
 				     struct proc_dir_entry *x)
 {
+#if 0 /* FIXME! */
     x->ops = &proc_scsi_inode_operations;
+#endif
     if(x->low_ino < PROC_SCSI_FILE){
 	return(proc_register(proc_scsi, x));
     }else{

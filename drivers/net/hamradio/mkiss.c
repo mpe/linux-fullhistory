@@ -972,15 +972,7 @@ int __init mkiss_init_ctrl_dev(void)
 
 	mkiss_init();
 
-#ifdef MODULE
 	return status;
-#else
-	/*
-	 * Return "not found", so that dev_init() will unlink
-	 * the placeholder device entry for us.
-	 */
-	return ENODEV;
-#endif
 }
 
 

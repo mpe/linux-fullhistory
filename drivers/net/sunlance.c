@@ -1157,7 +1157,7 @@ find_ledma (struct linux_sbus_device *dev)
 #include <asm/sun4paddr.h>
 
 /* Find all the lance cards on the system and initialize them */
-int __init sparc_lance_probe (struct net_device *dev)
+int __init sparc_lance_probe(void)
 {
 	static struct linux_sbus_device sdev;
 	static int called = 0;
@@ -1171,7 +1171,7 @@ int __init sparc_lance_probe (struct net_device *dev)
 		memset (&sdev, 0, sizeof(sdev));
 		sdev.reg_addrs[0].phys_addr = sun4_eth_physaddr;
 		sdev.irqs[0] = 6;
-		return sparc_lance_init(dev, &sdev, 0, 0);
+		return sparc_lance_init(NULL, &sdev, 0, 0);
 	}
 	return ENODEV;
 }
@@ -1179,10 +1179,11 @@ int __init sparc_lance_probe (struct net_device *dev)
 #else /* !CONFIG_SUN4 */
 
 /* Find all the lance cards on the system and initialize them */
-int __init sparc_lance_probe (struct net_device *dev)
+int __init sparc_lance_probe (void)
 {
 	struct linux_sbus *bus;
 	struct linux_sbus_device *sdev = 0;
+	struct net_device *dev = NULL;
 	struct Linux_SBus_DMA *ledma = 0;
 	static int called = 0;
 	int cards = 0, v;
@@ -1229,7 +1230,7 @@ int
 init_module(void)
 {
 	root_lance_dev = NULL;
-	return sparc_lance_probe(NULL);
+	return sparc_lance_probe();
 }
 
 void

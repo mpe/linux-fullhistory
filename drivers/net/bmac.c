@@ -1256,14 +1256,14 @@ static int bmac_reset_and_enable(struct net_device *dev, int enable)
 	return 1;
 }
 
-int
-bmac_probe(struct net_device *dev)
+int bmac_probe(void)
 {
 	int j, rev;
 	struct bmac_data *bp;
 	struct device_node *bmacs;
 	unsigned char *addr;
 	static struct device_node *all_bmacs = NULL, *next_bmac;
+	struct net_device *dev = NULL;
 
 	if (all_bmacs == NULL) {
 		all_bmacs = find_devices("bmac");
@@ -1292,14 +1292,8 @@ bmac_probe(struct net_device *dev)
 		return -EINVAL;
 	}
 
-	if (dev == NULL) {
-		dev = init_etherdev(NULL, PRIV_BYTES);
-		bmac_devs = dev;  /*KLUDGE!!*/
-	} else {
-		/* XXX this doesn't look right (but it's never used :-) */
-		dev->priv = kmalloc(PRIV_BYTES, GFP_KERNEL);
-		if (dev->priv == 0) return -ENOMEM;
-	}
+	dev = init_etherdev(NULL, PRIV_BYTES);
+	bmac_devs = dev;  /*KLUDGE!!*/
 
 #ifdef MODULE
 	bmac_devs = dev;
@@ -1610,7 +1604,7 @@ int init_module(void)
    
     if(bmac_devs != NULL)
         return -EBUSY;
-    res = bmac_probe(NULL);
+    res = bmac_probe();
     return res;
 }
 

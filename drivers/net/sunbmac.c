@@ -1492,8 +1492,9 @@ fail_and_cleanup:
 	return res;	/* Return error code. */
 }
 
-int __init bigmac_probe(struct net_device *dev)
+int __init bigmac_probe(void)
 {
+	struct net_device *dev = NULL;
 	struct linux_sbus *bus;
 	struct linux_sbus_device *sdev = 0;
 	static int called = 0;
@@ -1529,7 +1530,7 @@ int
 init_module(void)
 {
 	root_bigmac_dev = NULL;
-	return bigmac_probe(NULL);
+	return bigmac_probe();
 }
 
 void

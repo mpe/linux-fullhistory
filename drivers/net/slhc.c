@@ -759,6 +759,7 @@ void __init slhc_install(void)
 #endif /* MODULE */
 #else /* CONFIG_INET */
 
+
 int
 slhc_toss(struct slcompress *comp)
 {

@@ -213,12 +213,10 @@ struct pci_id_info {
 	const char *name;
 	u16	vendor_id, device_id, device_id_mask, flags;
 	int io_size;
-	struct net_device *(*probe1)(int pci_bus, int pci_devfn, struct net_device *dev,
-								 long ioaddr, int irq, int chip_idx, int fnd_cnt);
+	struct net_device *(*probe1)(int pci_bus, int pci_devfn, long ioaddr, int irq, int chip_idx, int fnd_cnt);
 };
 
-static struct net_device *starfire_probe1(int pci_bus, int pci_devfn,
-									  struct net_device *dev, long ioaddr,
+static struct net_device *starfire_probe1(int pci_bus, int pci_devfn, long ioaddr,
 									  int irq, int chp_idx, int fnd_cnt);
 
 #if 0
@@ -392,11 +390,12 @@ static struct net_device *root_net_dev = NULL;
    well when dynamically adding drivers.  So instead we detect just the
    cards we know about in slot order. */
 
-static int pci_etherdev_probe(struct net_device *dev, struct pci_id_info pci_tbl[])
+static int pci_etherdev_probe(struct pci_id_info pci_tbl[])
 {
 	int cards_found = 0;
 	int pci_index = 0;
 	unsigned char pci_bus, pci_device_fn;
+	struct net_device *dev;
 
 	if ( ! pcibios_present())
 		return -ENODEV;
@@ -459,7 +458,7 @@ static int pci_etherdev_probe(struct net_device *dev, struct pci_id_info pci_tbl
 									  PCI_COMMAND, new_command);
 		}
 
-		dev = pci_tbl[chip_idx].probe1(pci_bus, pci_device_fn, dev, ioaddr,
+		dev = pci_tbl[chip_idx].probe1(pci_bus, pci_device_fn, ioaddr,
 									   irq, chip_idx, cards_found);
 
 		if (dev  && (pci_tbl[chip_idx].flags & PCI_COMMAND_MASTER)) {
@@ -474,16 +473,15 @@ static int pci_etherdev_probe(struct net_device *dev, struct pci_id_info pci_tbl
 										  PCI_LATENCY_TIMER, min_pci_latency);
 			}
 		}
-		dev = 0;
 		cards_found++;
 	}
 
 	return cards_found ? 0 : -ENODEV;
 }
 
-int starfire_probe(struct net_device *dev)
+int starfire_probe(void)
 {
-	if (pci_etherdev_probe(dev, pci_tbl) < 0)
+	if (pci_etherdev_probe(pci_tbl) < 0)
 		return -ENODEV;
 	printk(KERN_INFO "%s" KERN_INFO "%s", versionA, versionB);
 	return 0;
@@ -491,13 +489,11 @@ int starfire_probe(struct net_device *dev)
 
 
 static struct net_device *
-starfire_probe1(int pci_bus, int pci_devfn, struct net_device *dev,
-				long ioaddr, int irq, int chip_id, int card_idx)
+starfire_probe1(int pci_bus, int pci_devfn, long ioaddr, int irq, int chip_id, int card_idx)
 {
 	struct netdev_private *np;
 	int i, option = card_idx < MAX_UNITS ? options[card_idx] : 0;
-
-	dev = init_etherdev(dev, sizeof(struct netdev_private));
+	struct net_device *dev = init_etherdev(NULL, sizeof(struct netdev_private));
 
 	printk(KERN_INFO "%s: %s at 0x%lx, ",
 		   dev->name, skel_netdrv_tbl[chip_id].chip_name, ioaddr);
@@ -1388,7 +1384,7 @@ int init_module(void)
 	register_driver(&etherdev_ops);
 	return 0;
 #else
-	if (pci_etherdev_probe(NULL, pci_tbl)) {
+	if (pci_etherdev_probe(pci_tbl)) {
 		printk(KERN_INFO " No Starfire adapters detected, driver not loaded.\n");
 		return -ENODEV;
 	}

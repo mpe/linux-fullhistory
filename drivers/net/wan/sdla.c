@@ -1666,10 +1666,11 @@ int __init sdla_init(struct net_device *dev)
 	return(0);
 }
 
-void __init sdla_setup(void)
+int __init sdla_setup(void)
 {
 	printk("%s.\n", version);
 	register_frad(devname);
+	return 0;
 }
 
 #ifdef MODULE

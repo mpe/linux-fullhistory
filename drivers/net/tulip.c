@@ -410,7 +410,6 @@ struct tulip_private {
 };
 
 static struct net_device *tulip_probe1(int pci_bus, int pci_devfn,
-								   struct net_device *dev,
 								   int chip_id, int options);
 static void parse_eeprom(struct net_device *dev);
 static int read_eeprom(long ioaddr, int location);
@@ -446,7 +445,7 @@ static struct net_device *root_tulip_dev = NULL;
    This allows the probe routine to use the old driver initialization
    interface. */
 
-int tulip_probe(struct net_device *dev)
+int tulip_probe(void)
 {
 	int cards_found = 0;
 	static int pci_index = 0;	/* Static, for multiple probe calls. */
@@ -523,10 +522,9 @@ int tulip_probe(struct net_device *dev)
 									  PCI_COMMAND, new_command);
 		}
 
-		dev = tulip_probe1(pci_bus, pci_device_fn, dev, chip_idx, cards_found);
-
-		/* Get and check the bus-master and latency values. */
-		if (dev) {
+		if(tulip_probe1(pci_bus, pci_device_fn, chip_idx, cards_found))
+		{
+			/* Get and check the bus-master and latency values. */
 			unsigned char pci_latency;
 			pcibios_read_config_byte(pci_bus, pci_device_fn,
 									 PCI_LATENCY_TIMER, &pci_latency);
@@ -544,7 +542,6 @@ int tulip_probe(struct net_device *dev)
 			if (device == PCI_DEVICE_ID_DEC_TULIP_21142)
 				pcibios_write_config_dword(pci_bus, pci_device_fn,
 										   0x40, 0x40000000);
-			dev = 0;
 			cards_found++;
 		}
 	}
@@ -553,9 +550,9 @@ int tulip_probe(struct net_device *dev)
 }
 
 static struct net_device *tulip_probe1(int pci_bus, int pci_device_fn,
-								   struct net_device *dev,
 								   int chip_id, int board_idx)
 {
+	struct net_device *dev;
 	static int did_version = 0;			/* Already printed version info. */
 	struct tulip_private *tp;
 	long ioaddr;
@@ -570,7 +567,7 @@ static struct net_device *tulip_probe1(int pci_bus, int pci_device_fn,
 	if (tulip_debug > 0  &&  did_version++ == 0)
 		printk(KERN_INFO "%s", version);
 
-	dev = init_etherdev(dev, 0);
+	dev = init_etherdev(NULL, 0);
 
 	irq = pci_find_slot(pci_bus, pci_device_fn)->irq;
 	ioaddr = pci_find_slot(pci_bus, pci_device_fn)->resource[0].start;
@@ -2745,7 +2742,7 @@ static dev_node_t *tulip_attach(dev_locator_t *loc)
 	pcibios_read_config_dword(bus, devfn, PCI_BASE_ADDRESS_0, &io);
 	pcibios_read_config_word(bus, devfn, PCI_DEVICE_ID, &dev_id);
 	io &= ~3;
-	dev = tulip_probe1(bus, devfn, NULL, DC21142, -1);
+	dev = tulip_probe1(bus, devfn, DC21142, -1);
 	if (dev) {
 		dev_node_t *node = kmalloc(sizeof(dev_node_t), GFP_KERNEL);
 		strcpy(node->dev_name, dev->name);
@@ -2806,7 +2803,7 @@ init_module(void)
 	register_driver(&tulip_ops);
 	return 0;
 #else
-	return tulip_probe(NULL);
+	return tulip_probe();
 #endif
 }
 

@@ -813,11 +813,8 @@ static int x25_asy_open_dev(struct net_device *dev)
 }
 
 /* Initialize X.25 control device -- register X.25 line discipline */
-#ifdef MODULE
-static int x25_asy_init_ctrl_dev(void)
-#else	/* !MODULE */
-int __init x25_asy_init_ctrl_dev(struct net_device *dummy)
-#endif	/* !MODULE */
+
+int __init x25_asy_init_ctrl_dev(void)
 {
 	int status;
 
@@ -854,15 +851,8 @@ int __init x25_asy_init_ctrl_dev(struct net_device *dummy)
 		printk("X.25 async: can't register line discipline (err = %d)\n", status);
 	}
 
-#ifdef MODULE
 	return status;
-#else
-	/* Return "not found", so that dev_init() will unlink
-	 * the placeholder device entry for us.
-	 */
-	return ENODEV;
-#endif
-      }
+}
 
 
 /* Initialise the X.25 driver.  Called by the device init code */

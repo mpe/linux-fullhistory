@@ -72,10 +72,11 @@ extern __u32 sysctl_rmem_max;
 
 static int probed __initdata = 0;
 
-int __init rr_hippi_probe (struct net_device *dev)
+int __init rr_hippi_probe (void)
 {
 	int boards_found = 0;
 	int version_disp;	/* was version info already displayed? */
+	struct net_device *dev;
 	struct pci_dev *pdev = NULL;
 	struct pci_dev *opdev = NULL;
 	u8 pci_latency;
@@ -101,7 +102,7 @@ int __init rr_hippi_probe (struct net_device *dev)
 		 * So we found our HIPPI ... time to tell the system.
 		 */
 
-		dev = init_hippi_dev(dev, sizeof(struct rr_private));
+		dev = init_hippi_dev(NULL, sizeof(struct rr_private));
 
 		if (!dev)
 			break;
@@ -192,14 +193,7 @@ int __init rr_hippi_probe (struct net_device *dev)
 	 * 1 or more boards. Otherwise, return failure (-ENODEV).
 	 */
 
-#ifdef MODULE
 	return boards_found;
-#else
-	if (boards_found > 0)
-		return 0;
-	else
-		return -ENODEV;
-#endif
 }
 
 static struct net_device *root_dev = NULL;
@@ -213,12 +207,7 @@ MODULE_DESCRIPTION("Essential RoadRunner HIPPI driver");
 
 int init_module(void)
 {
-	int cards;
-
-	root_dev = NULL;
-
-	cards = rr_hippi_probe(NULL);
-	return cards ? 0 : -ENODEV;
+	return rr_hippi_probe()? 0 : -ENODEV;
 }
 
 void cleanup_module(void)

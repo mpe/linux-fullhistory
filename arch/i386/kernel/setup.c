@@ -583,6 +583,7 @@ void __init setup_arch(char **cmdline_p)
 #define VMALLOC_RESERVE	(unsigned long)(128 << 20)
 #define MAXMEM		(unsigned long)(-PAGE_OFFSET-VMALLOC_RESERVE)
 #define MAXMEM_PFN	PFN_DOWN(MAXMEM)
+#define MAX_NONPAE_PFN	(1 << 20)
 
 	/*
 	 * partially used pages are not usable - thus
@@ -608,8 +609,26 @@ void __init setup_arch(char **cmdline_p)
 	 * Determine low and high memory ranges:
 	 */
 	max_low_pfn = max_pfn;
-	if (max_low_pfn > MAXMEM_PFN)
+	if (max_low_pfn > MAXMEM_PFN) {
 		max_low_pfn = MAXMEM_PFN;
+#ifndef CONFIG_HIGHMEM
+		/* Maximum memory usable is what is directly addressable */
+		printk(KERN_WARNING "Warning only %ldMB will be used.\n",
+					MAXMEM>>20);
+		if (max_pfn > MAX_NONPAE_PFN)
+			printk(KERN_WARNING "Use a PAE enabled kernel.\n");
+		else
+			printk(KERN_WARNING "Use a HIGHMEM enabled kernel.\n");
+#else /* !CONFIG_HIGHMEM */
+#ifndef CONFIG_X86_PAE
+		if (max_pfn > MAX_NONPAE_PFN) {
+			max_pfn = MAX_NONPAE_PFN;
+			printk(KERN_WARNING "Warning only 4GB will be used.\n");
+			printk(KERN_WARNING "Use a PAE enabled kernel.\n");
+		}
+#endif /* !CONFIG_X86_PAE */
+#endif /* !CONFIG_HIGHMEM */
+	}
 
 #ifdef CONFIG_HIGHMEM
 	highstart_pfn = highend_pfn = max_pfn;

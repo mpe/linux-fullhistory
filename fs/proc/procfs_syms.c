@@ -3,14 +3,6 @@
 #include <linux/fs.h>
 #include <linux/proc_fs.h>
 
-/*
- * This is all required so that if we load all of scsi as a module,
- * that the scsi code will be able to talk to the /proc/scsi handling
- * in the procfs.
- */
-extern int (* dispatch_scsi_info_ptr) (int ino, char *buffer, char **start,
-				       off_t offset, int length, int inout);
-extern struct inode_operations proc_scsi_inode_operations;
 extern struct proc_dir_entry *proc_sys_root;
 
 #ifdef CONFIG_SYSCTL
@@ -26,14 +18,6 @@ EXPORT_SYMBOL(proc_get_inode);
 EXPORT_SYMBOL(proc_dir_inode_operations);
 EXPORT_SYMBOL(proc_net);
 EXPORT_SYMBOL(proc_bus);
-
-/*
- * This is required so that if we load scsi later, that the
- * scsi code can attach to /proc/scsi in the correct manner.
- */
-EXPORT_SYMBOL(proc_scsi);
-EXPORT_SYMBOL(proc_scsi_inode_operations);
-EXPORT_SYMBOL(dispatch_scsi_info_ptr);
 
 #if defined(CONFIG_SUN_OPENPROMFS_MODULE)
 EXPORT_SYMBOL(proc_openprom_register);

@@ -1074,8 +1074,9 @@ static inline int myri_ether_init(struct net_device *dev, struct linux_sbus_devi
 	return 0;
 }
 
-int __init myri_sbus_probe(struct net_device *dev)
+int __init myri_sbus_probe(void)
 {
+	struct net_device *dev = NULL;
 	struct linux_sbus *bus;
 	struct linux_sbus_device *sdev = 0;
 	static int called = 0;
@@ -1108,7 +1109,7 @@ int
 init_module(void)
 {
 	root_myri_dev = NULL;
-	return myri_sbus_probe(NULL);
+	return myri_sbus_probe();
 }
 
 void

@@ -329,7 +329,7 @@ endif
 modules: $(patsubst %, _mod_%, $(SUBDIRS))
 
 modules/MARKER:
-	mkdir modules
+	mkdir -p modules
 	touch modules/MARKER
 
 $(patsubst %, _mod_%, $(SUBDIRS)) : include/linux/version.h include/config/MARKER modules/MARKER

@@ -73,6 +73,8 @@ EXPORT_SYMBOL(scsi_logging_level);
 EXPORT_SYMBOL(scsi_sleep);
 
 EXPORT_SYMBOL(proc_print_scsidevice);
+EXPORT_SYMBOL(proc_scsi);
+
 /*
  * These are here only while I debug the rest of the scsi stuff.
  */

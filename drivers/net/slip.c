@@ -1318,11 +1318,8 @@ static int sl_ioctl(struct net_device *dev,struct ifreq *rq,int cmd)
 /* VSV changes end */
 
 /* Initialize SLIP control device -- register SLIP line discipline */
-#ifdef MODULE
-static int slip_init_ctrl_dev(void)
-#else	/* !MODULE */
-int __init slip_init_ctrl_dev(struct net_device *dummy)
-#endif	/* !MODULE */
+
+int __init slip_init_ctrl_dev(void)
 {
 	int status;
 
@@ -1371,15 +1368,8 @@ int __init slip_init_ctrl_dev(struct net_device *dummy)
 	}
 
 
-#ifdef MODULE
 	return status;
-#else
-	/* Return "not found", so that dev_init() will unlink
-	 * the placeholder device entry for us.
-	 */
-	return ENODEV;
-#endif
-      }
+}
 
 
 

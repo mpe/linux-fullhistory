@@ -165,12 +165,10 @@ struct pci_id_info {
 	const char *name;
 	u16	vendor_id, device_id, device_id_mask, flags;
 	int io_size;
-	struct net_device *(*probe1)(int pci_bus, int pci_devfn, struct net_device *dev,
-							 long ioaddr, int irq, int chip_idx, int fnd_cnt);
+	struct net_device *(*probe1)(int pci_bus, int pci_devfn, long ioaddr, int irq, int chip_idx, int fnd_cnt);
 };
 
-static struct net_device * rtl8129_probe1(int pci_bus, int pci_devfn,
-									  struct net_device *dev, long ioaddr,
+static struct net_device * rtl8129_probe1(int pci_bus, int pci_devfn, long ioaddr,
 									  int irq, int chp_idx, int fnd_cnt);
 
 static struct pci_id_info pci_tbl[] =
@@ -319,11 +317,12 @@ static struct net_device *root_rtl8129_dev = NULL;
    well when dynamically adding drivers.  So instead we detect just the
    Rtl81*9 cards in slot order. */
 
-int rtl8139_probe(struct net_device *dev)
+int rtl8139_probe(void)
 {
 	int cards_found = 0;
 	int pci_index = 0;
 	unsigned char pci_bus, pci_device_fn;
+	struct net_device *dev;
 
 	if ( ! pcibios_present())
 		return -ENODEV;
@@ -383,8 +382,7 @@ int rtl8139_probe(struct net_device *dev)
 									  PCI_COMMAND, new_command);
 		}
 
-		dev = pci_tbl[chip_idx].probe1(pci_bus, pci_device_fn, dev, ioaddr,
-									   irq, chip_idx, cards_found);
+		dev = pci_tbl[chip_idx].probe1(pci_bus, pci_device_fn, ioaddr, irq, chip_idx, cards_found);
 
 		if (dev  && (pci_tbl[chip_idx].flags & PCI_COMMAND_MASTER)) {
 			u8 pci_latency;
@@ -405,18 +403,18 @@ int rtl8139_probe(struct net_device *dev)
 	return cards_found ? 0 : -ENODEV;
 }
 
-static struct net_device *rtl8129_probe1(int pci_bus, int pci_devfn,
-									 struct net_device *dev, long ioaddr,
+static struct net_device *rtl8129_probe1(int pci_bus, int pci_devfn, long ioaddr,
 									 int irq, int chip_idx, int found_cnt)
 {
 	static int did_version = 0;			/* Already printed version info. */
 	struct rtl8129_private *tp;
 	int i, option = found_cnt < MAX_UNITS ? options[found_cnt] : 0;
+	struct net_device *dev;
 
 	if (rtl8129_debug > 0  &&  did_version++ == 0)
 		printk(KERN_INFO "%s", version);
 
-	dev = init_etherdev(dev, 0);
+	dev = init_etherdev(NULL, 0);
 
 	printk(KERN_INFO "%s: %s at %#lx, IRQ %d, ",
 		   dev->name, pci_tbl[chip_idx].name, ioaddr, irq);
@@ -1429,7 +1427,7 @@ static void set_rx_mode(struct net_device *dev)
 #ifdef MODULE
 int init_module(void)
 {
-	return rtl8139_probe(0);
+	return rtl8139_probe();
 }
 
 void

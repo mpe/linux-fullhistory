@@ -158,8 +158,8 @@ static PDPA  PCIAdapters[MAX_ADAPTERS] =
 
 
 static int RCinit(struct net_device *dev);
-static int RCscan(struct net_device *dev);
-static int RCfound_device(struct net_device *, int, int, int, int, int, int);
+static int RCscan(void);
+static int RCfound_device(int, int, int, int, int, int);
 
 static int RCopen(struct net_device *);
 static int RC_xmit_packet(struct sk_buff *, struct net_device *);
@@ -181,22 +181,18 @@ static struct net_device *root_RCdev = NULL;
 #ifdef MODULE
 int init_module(void)
 #else
-int rcpci_probe(struct net_device *dev)
+int rcpci_probe(void)
 #endif
 {
     int cards_found;
 
-#ifdef MODULE
-    cards_found = RCscan(NULL);
-#else
-    cards_found = RCscan(dev);
-#endif
+    cards_found = RCscan();
     if (cards_found)
         printk(version);
     return cards_found ? 0 : -ENODEV;
 }
 
-static int RCscan(struct net_device *dev)
+static int RCscan(void)
 {
     int cards_found = 0;
     static int pci_index = 0;
@@ -237,13 +233,10 @@ static int RCscan(struct net_device *dev)
 
 	pci_set_master(pdev);
 
-        if (!RCfound_device(dev, pci_ioaddr, pci_irq_line,
+        if (!RCfound_device(pci_ioaddr, pci_irq_line,
                           pci_bus, pci_device_fn,
                           board_index++, cards_found))
-        {
-            dev = 0;
             cards_found++;
-        }
     }
 #ifdef RCDEBUG
     printk("rc: found %d cards \n", cards_found);
@@ -263,7 +256,7 @@ static int RCinit(struct net_device *dev)
 }
 
 static int
-RCfound_device(struct net_device *dev, int memaddr, int irq, 
+RCfound_device(int memaddr, int irq, 
                int bus, int function, int product_index, int card_idx)
 {
     int dev_size = 32768;        
@@ -271,6 +264,8 @@ RCfound_device(struct net_device *dev, int memaddr, int irq,
     PDPA pDpa;
     int init_status;
 
+    struct net_device *dev;
+    
     /* 
      * Allocate and fill new device structure. 
      * We need enough for struct net_device plus DPA plus the LAN API private
@@ -280,7 +275,6 @@ RCfound_device(struct net_device *dev, int memaddr, int irq,
      * the LAN API layer.
      */
 
-#ifdef MODULE
     dev = (struct net_device *) kmalloc(dev_size, GFP_DMA | GFP_KERNEL |GFP_ATOMIC);
     if (!dev)
     {
@@ -292,16 +286,6 @@ RCfound_device(struct net_device *dev, int memaddr, int irq,
      * dev->priv will point to the start of DPA.
      */
     dev->priv = (void *)(((long)dev + sizeof(struct net_device) + 15) & ~15);
-#else
-    dev->priv = 0;
-    dev->priv = (struct net_device *) kmalloc(dev_size, GFP_DMA | GFP_KERNEL |GFP_ATOMIC);
-    if (!dev->priv)
-    {
-        printk("rc: unable to kmalloc private area\n");
-        return 1;  
-    }
-    memset(dev->priv, 0, dev_size);
-#endif
 
 #ifdef RCDEBUG
     printk("rc: dev = 0x%x, dev->priv = 0x%x\n", (uint)dev, (uint)dev->priv);
@@ -386,7 +370,6 @@ RCfound_device(struct net_device *dev, int memaddr, int irq,
     pDpa->next = root_RCdev;
     root_RCdev = dev;
 
-#ifdef MODULE
     if (register_netdev(dev) != 0) /* linux kernel interface */
     {
         printk("rc: unable to register device \n");
@@ -395,9 +378,6 @@ RCfound_device(struct net_device *dev, int memaddr, int irq,
         kfree(dev);
         return 1;
     }
-#else
-    RCinit(dev);
-#endif
     printk("%s: RedCreek Communications IPSEC VPN adapter\n",
         dev->name);
 

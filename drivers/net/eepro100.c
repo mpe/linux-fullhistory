@@ -284,9 +284,7 @@ having to sign an Intel NDA when I'm helping Intel sell their own product!
 */
 
 /* This table drives the PCI probe routines. */
-static struct net_device *
-speedo_found1(int pci_bus, int pci_devfn, struct net_device *dev,
-			  long ioaddr, int irq, int chip_idx, int fnd_cnt);
+static struct net_device *speedo_found1(int pci_bus, int pci_devfn, long ioaddr, int irq, int chip_idx, int fnd_cnt);
 
 #ifdef USE_IO
 #define SPEEDO_IOTYPE   PCI_USES_MASTER|PCI_USES_IO|PCI_ADDR1
@@ -312,8 +310,7 @@ struct pci_id_info {
 	const char *name;
 	u16	vendor_id, device_id, device_id_mask, flags;
 	int io_size;
-	struct net_device *(*probe1)(int pci_bus, int pci_devfn, struct net_device *dev,
-							 long ioaddr, int irq, int chip_idx, int fnd_cnt);
+	struct net_device *(*probe1)(int pci_bus, int pci_devfn, long ioaddr, int irq, int chip_idx, int fnd_cnt);
 } static pci_tbl[] = {
 	{ "Intel PCI EtherExpress Pro100",
 	  0x8086, 0x1229, 0xffff, PCI_USES_IO|PCI_USES_MASTER, 32, speedo_found1 },
@@ -534,7 +531,7 @@ static int mii_ctrl[8] = { 0x3300, 0x3100, 0x0000, 0x0100,
 static struct net_device *root_speedo_dev = NULL;
 
 #if ! defined(HAS_PCI_NETIF)
-int eepro100_init(struct net_device *dev)
+int eepro100_init(void)
 {
 	int cards_found = 0;
 	static int pci_index = 0;
@@ -616,19 +613,18 @@ int eepro100_init(struct net_device *dev)
 		} else if (speedo_debug > 1)
 			printk("  PCI latency timer (CFLT) is %#x.\n", pci_latency);
 
-		speedo_found1(pci_bus, pci_device_fn, dev, ioaddr, irq, 0,cards_found);
-		dev = NULL;
-		cards_found++;
+		if(speedo_found1(pci_bus, pci_device_fn, ioaddr, irq, 0,cards_found))
+			cards_found++;
 	}
 
 	return cards_found;
 }
 #endif
 
-static struct net_device *
-speedo_found1(int pci_bus, int pci_devfn, struct net_device *dev,
+static struct net_device *speedo_found1(int pci_bus, int pci_devfn, 
 			  long ioaddr, int irq, int chip_idx, int card_idx)
 {
+	struct net_device *dev;
 	struct speedo_private *sp;
 	const char *product;
 	int i, option;
@@ -640,7 +636,7 @@ speedo_found1(int pci_bus, int pci_devfn, struct net_device *dev,
 		printk(version);
 #endif
 
-	dev = init_etherdev(dev, sizeof(struct speedo_private));
+	dev = init_etherdev(NULL, sizeof(struct speedo_private));
 
 	if (dev->mem_start > 0)
 		option = dev->mem_start;
@@ -1837,12 +1833,12 @@ int init_module(void)
 		printk(KERN_INFO "%s", version);
 
 #if defined(HAS_PCI_NETIF)
-	cards_found = netif_pci_probe(pci_tbl, NULL);
+	cards_found = netif_pci_probe(pci_tbl);
 	if (cards_found < 0)
 		printk(KERN_INFO "eepro100: No cards found, driver not installed.\n");
 	return cards_found;
 #else
-	cards_found = eepro100_init(NULL);
+	cards_found = eepro100_init();
 	if (cards_found <= 0) {
 		printk(KERN_INFO "eepro100: No cards found, driver not installed.\n");
 		return -ENODEV;
@@ -1877,11 +1873,11 @@ void cleanup_module(void)
 
 #else   /* not MODULE */
 
-int eepro100_probe(struct net_device *dev)
+int eepro100_probe(void)
 {
 	int cards_found = 0;
 
-	cards_found = eepro100_init(dev);
+	cards_found = eepro100_init();
 
 	/* Only emit the version if the driver is being used. */
 	if (speedo_debug > 0  &&  cards_found)

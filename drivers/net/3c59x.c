@@ -229,15 +229,13 @@ struct pci_id_info {
 	const char *name;
 	u16	vendor_id, device_id, device_id_mask, flags;
 	int drv_flags, io_size;
-	struct net_device *(*probe1)(int pci_bus, int pci_devfn, struct net_device *dev,
-							 long ioaddr, int irq, int chip_idx, int fnd_cnt);
+	struct net_device *(*probe1)(int pci_bus, int pci_devfn, long ioaddr, int irq, int chip_idx, int fnd_cnt);
 };
 
 enum { IS_VORTEX=1, IS_BOOMERANG=2, IS_CYCLONE=4,
 	   HAS_PWR_CTRL=0x10, HAS_MII=0x20, HAS_NWAY=0x40, HAS_CB_FNS=0x80, };
-static struct net_device *vortex_probe1(int pci_bus, int pci_devfn,
-									struct net_device *dev, long ioaddr,
-									int irq, int dev_id, int card_idx);
+static struct net_device *vortex_probe1(int pci_bus, int pci_devfn, long ioaddr, int irq, int dev_id, int card_idx);
+
 static struct pci_id_info pci_tbl[] = {
 	{"3c590 Vortex 10Mbps",			0x10B7, 0x5900, 0xffff,
 	 PCI_USES_IO|PCI_USES_MASTER, IS_VORTEX, 32, vortex_probe1},
@@ -493,7 +491,7 @@ static struct media_table {
 };
 
 #ifndef CARDBUS
-static int vortex_scan(struct net_device *dev, struct pci_id_info pci_tbl[]);
+static int vortex_scan(struct pci_id_info pci_tbl[]);
 #endif
 static int vortex_open(struct net_device *dev);
 static void mdio_sync(long ioaddr, int bits);
@@ -563,7 +561,7 @@ static dev_node_t *vortex_attach(dev_locator_t *loc)
 			   "vortex_attach().\n", vendor_id, dev_id);
 		return NULL;
 	}
-	dev = vortex_probe1(bus, devfn, NULL, io, irq, chip_idx, MAX_UNITS+1);
+	dev = vortex_probe1(bus, devfn, io, irq, chip_idx, MAX_UNITS+1);
 	if (dev) {
 		dev_node_t *node = kmalloc(sizeof(dev_node_t), GFP_KERNEL);
 		strcpy(node->dev_name, dev->name);
@@ -614,25 +612,26 @@ int init_module(void)
 	register_driver(&vortex_ops);
 	return 0;
 #else
-	return vortex_scan(0, pci_tbl);
+	return vortex_scan(pci_tbl);
 #endif
 }
 
 #else
-int tc59x_probe(struct net_device *dev)
+int tc59x_probe(void)
 {
 	static int scanned=0;
 	if(scanned++)
 		return -ENODEV;
 	printk(KERN_INFO "%s", version);
-	return vortex_scan(dev, pci_tbl);
+	return vortex_scan(pci_tbl);
 }
 #endif  /* not MODULE */
 
 #ifndef CARDBUS
-static int vortex_scan(struct net_device *dev, struct pci_id_info pci_tbl[])
+static int vortex_scan(struct pci_id_info pci_tbl[])
 {
 	int cards_found = 0;
+	struct net_device *dev;
 
 	/* Allow an EISA-only driver. */
 #if defined(CONFIG_PCI) || (defined(MODULE) && !defined(NO_PCI))
@@ -712,7 +711,7 @@ static int vortex_scan(struct net_device *dev, struct pci_id_info pci_tbl[])
 										  PCI_COMMAND, new_command);
 			}
 
-			dev = vortex_probe1(pci_bus, pci_device_fn, dev, ioaddr, irq,
+			dev = vortex_probe1(pci_bus, pci_device_fn, ioaddr, irq,
 								chip_idx, cards_found);
 
 			if (dev) {
@@ -753,9 +752,8 @@ static int vortex_scan(struct net_device *dev, struct pci_id_info pci_tbl[])
 			device_id = (inb(ioaddr + 0xC82)<<8) + inb(ioaddr + 0xC83);
 			if ((device_id & 0xFF00) != 0x5900)
 				continue;
-			vortex_probe1(0, 0, dev, ioaddr, inw(ioaddr + 0xC88) >> 12,
+			vortex_probe1(0, 0, ioaddr, inw(ioaddr + 0xC88) >> 12,
 						  4, cards_found);
-			dev = 0;
 			cards_found++;
 		}
 	}
@@ -763,7 +761,7 @@ static int vortex_scan(struct net_device *dev, struct pci_id_info pci_tbl[])
 #ifdef MODULE
 	/* Special code to work-around the Compaq PCI BIOS32 problem. */
 	if (compaq_ioaddr) {
-		vortex_probe1(0, 0, dev, compaq_ioaddr, compaq_irq,
+		vortex_probe1(0, 0, compaq_ioaddr, compaq_irq,
 					  compaq_device_id, cards_found++);
 		dev = 0;
 	}
@@ -774,15 +772,15 @@ static int vortex_scan(struct net_device *dev, struct pci_id_info pci_tbl[])
 #endif  /* ! Cardbus */
 
 static struct net_device *vortex_probe1(int pci_bus, int pci_devfn,
-									struct net_device *dev, long ioaddr,
-									int irq, int chip_idx, int card_idx)
+					long ioaddr, int irq, int chip_idx, int card_idx)
 {
 	struct vortex_private *vp;
 	int option;
 	unsigned int eeprom[0x40], checksum = 0;		/* EEPROM contents */
 	int i;
+	struct net_device *dev;
 
-	dev = init_etherdev(dev, 0);
+	dev = init_etherdev(NULL, 0);
 
 	printk(KERN_INFO "%s: 3Com %s at 0x%lx, ",
 		   dev->name, pci_tbl[chip_idx].name, ioaddr);

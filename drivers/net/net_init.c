@@ -23,6 +23,10 @@
 	
 	14/06/96 - Paul Gortmaker:	Add generic eth_change_mtu() function. 
 	24/09/96 - Paul Norton: Add token-ring variants of the netdev functions. 
+	
+	08/11/99 - Alan Cox: Got fed up of the mess in this file and cleaned it
+			up. We now share common code and have regularised name
+			allocation setups. Abolished the 16 card limits.
 */
 
 #include <linux/config.h>
@@ -61,10 +65,74 @@
 	and a space waste]
 */
 
-/* The list of used and available "eth" slots (for "eth0", "eth1", etc.) */
-#define MAX_ETH_CARDS 16
-static struct net_device *ethdev_index[MAX_ETH_CARDS];
 
+static struct net_device *init_alloc_dev(int sizeof_priv)
+{
+	struct net_device *dev;
+	int alloc_size = sizeof(struct net_device) + IFNAMSIZ
+		+ sizeof_priv + 3;
+	alloc_size &= ~3;		/* Round to dword boundary. */
+	dev = (struct net_device *)kmalloc(alloc_size, GFP_KERNEL);
+	if(dev==NULL)
+	{
+		printk(KERN_ERR "alloc_dev: Unable to allocate device memory.\n");
+		return NULL;
+	}
+	memset(dev, 0, alloc_size);
+	if (sizeof_priv)
+		dev->priv = (void *) (dev + 1);
+	dev->name = sizeof_priv + (char *)(dev + 1);
+	return dev;
+}
+
+/* 
+ *	Create and name a device from a prototype, then perform any needed
+ *	setup.
+ */
+
+static struct net_device *init_netdev(struct net_device *dev, int sizeof_priv, char *mask, void (*setup)(struct net_device *))
+{
+	int new_device = 0;
+
+	/*
+	 *	Allocate a device if one is not provided.
+	 */
+	 
+	if (dev == NULL) {
+		dev=init_alloc_dev(sizeof_priv);
+		if(dev==NULL)
+			return NULL;
+		new_device = 1;
+	}
+
+	/*
+	 *	Allocate a name
+	 */
+	 
+	if (dev->name && (dev->name[0] == '\0' || dev->name[0] == ' '))
+	{
+		if(dev_alloc_name(dev, mask)<0)
+		{
+			if(new_device)
+				kfree(dev);
+			return NULL;
+		}
+	}
+	
+	/*
+	 *	Configure via the caller provided setup function then
+	 *	register if needed.
+	 */
+	
+	setup(dev);
+	
+	if (new_device) {
+		rtnl_lock();
+		register_netdevice(dev);
+		rtnl_unlock();
+	}
+	return dev;
+}
 
 /* Fill in the fields of the device structure with ethernet-generic values.
 
@@ -76,71 +144,9 @@ static struct net_device *ethdev_index[MAX_ETH_CARDS];
    long.
  */
 
-struct net_device *
-init_etherdev(struct net_device *dev, int sizeof_priv)
+struct net_device *init_etherdev(struct net_device *dev, int sizeof_priv)
 {
-	int new_device = 0;
-	int i;
-
-	/* Use an existing correctly named device in Space.c:dev_base. */
-	if (dev == NULL) {
-		int alloc_size = sizeof(struct net_device) + IFNAMSIZ
-			+ sizeof_priv + 3;
-		struct net_device *cur_dev;
-		char pname[8];		/* Putative name for the device.  */
-
-		for (i = 0; i < MAX_ETH_CARDS; ++i)
-			if (ethdev_index[i] == NULL) {
-				sprintf(pname, "eth%d", i);
-				read_lock_bh(&dev_base_lock);
-				for (cur_dev = dev_base; cur_dev; cur_dev = cur_dev->next) {
-					if (strcmp(pname, cur_dev->name) == 0) {
-						dev = cur_dev;
-						read_unlock_bh(&dev_base_lock);
-						dev->init = NULL;
-						sizeof_priv = (sizeof_priv + 3) & ~3;
-						dev->priv = sizeof_priv
-							  ? kmalloc(sizeof_priv, GFP_KERNEL)
-							  :	NULL;
-						if (dev->priv) memset(dev->priv, 0, sizeof_priv);
-						goto found;
-					}
-				}
-				read_unlock_bh(&dev_base_lock);
-			}
-
-		alloc_size &= ~3;		/* Round to dword boundary. */
-
-		dev = (struct net_device *)kmalloc(alloc_size, GFP_KERNEL);
-		if(dev==NULL)
-			return NULL;
-		memset(dev, 0, alloc_size);
-		if (sizeof_priv)
-			dev->priv = (void *) (dev + 1);
-		dev->name = sizeof_priv + (char *)(dev + 1);
-		new_device = 1;
-	}
-
-found:						/* From the double loop above. */
-
-	if (dev->name &&
-		((dev->name[0] == '\0') || (dev->name[0] == ' '))) {
-		for (i = 0; i < MAX_ETH_CARDS; ++i)
-			if (ethdev_index[i] == NULL) {
-				sprintf(dev->name, "eth%d", i);
-				ethdev_index[i] = dev;
-				break;
-			}
-	}
-
-	ether_setup(dev); 	/* Hmmm, should this be called here? */
-	
-	if (new_device) {
-		rtnl_lock();
-		register_netdevice(dev);
-		rtnl_unlock();
-	}
-	return dev;
+	return init_netdev(dev, sizeof_priv, "eth%d", ether_setup);
 }
 
 
@@ -174,8 +180,6 @@ static int fddi_change_mtu(struct net_device *dev, int new_mtu)
 #endif
 
 #ifdef CONFIG_HIPPI
-#define MAX_HIP_CARDS	4
-static struct net_device *hipdev_index[MAX_HIP_CARDS];
 
 static int hippi_change_mtu(struct net_device *dev, int new_mtu)
 {
@@ -205,82 +209,14 @@ static int hippi_mac_addr(struct net_device *dev, void *p)
 
 struct net_device *init_hippi_dev(struct net_device *dev, int sizeof_priv)
 {
-	int new_device = 0;
-	int i;
-
-	/* Use an existing correctly named device in Space.c:dev_base. */
-	if (dev == NULL) {
-		int alloc_size = sizeof(struct net_device) + IFNAMSIZ
-			+ sizeof_priv + 3;
-		struct net_device *cur_dev;
-		char pname[8];
-
-		for (i = 0; i < MAX_HIP_CARDS; ++i)
-			if (hipdev_index[i] == NULL) {
-				sprintf(pname, "hip%d", i);
-				read_lock_bh(&dev_base_lock);
-				for (cur_dev = dev_base; cur_dev; cur_dev = cur_dev->next) {
-					if (strcmp(pname, cur_dev->name) == 0) {
-						dev = cur_dev;
-						read_unlock_bh(&dev_base_lock);
-						dev->init = NULL;
-						sizeof_priv = (sizeof_priv + 3) & ~3;
-						dev->priv = sizeof_priv
-							  ? kmalloc(sizeof_priv, GFP_KERNEL)
-							  :	NULL;
-						if (dev->priv) memset(dev->priv, 0, sizeof_priv);
-						goto hipfound;
-					}
-				}
-				read_unlock_bh(&dev_base_lock);
-			}
-
-		alloc_size &= ~3;		/* Round to dword boundary. */
-
-		dev = (struct net_device *)kmalloc(alloc_size, GFP_KERNEL);
-		if(dev==NULL)
-			return NULL;
-		memset(dev, 0, alloc_size);
-		if (sizeof_priv)
-			dev->priv = (void *) (dev + 1);
-		dev->name = sizeof_priv + (char *)(dev + 1);
-		new_device = 1;
-	}
-
-hipfound:				/* From the double loop above. */
-
-	if (dev->name &&
-		((dev->name[0] == '\0') || (dev->name[0] == ' '))) {
-		for (i = 0; i < MAX_HIP_CARDS; ++i)
-			if (hipdev_index[i] == NULL) {
-				sprintf(dev->name, "hip%d", i);
-				hipdev_index[i] = dev;
-				break;
-			}
-	}
-
-	hippi_setup(dev);
-	
-	if (new_device) {
-		rtnl_lock();
-		register_netdevice(dev);
-		rtnl_unlock();
-	}
-	return dev;
+	return init_netdev(dev, sizeof_priv, "hip%d", hippi_setup);
 }
 
 
 void unregister_hipdev(struct net_device *dev)
 {
-	int i;
 	rtnl_lock();
 	unregister_netdevice(dev);
-	for (i = 0; i < MAX_HIP_CARDS; ++i) {
-		if (hipdev_index[i] == dev) {
-			hipdev_index[i] = NULL;
-			break;
-		}
-	}
 	rtnl_unlock();
 }
 
@@ -303,23 +239,9 @@ static int hippi_neigh_setup_dev(struct net_device *dev, struct neigh_parms *p)
 
 void ether_setup(struct net_device *dev)
 {
-	int i;
 	/* Fill in the fields of the device structure with ethernet-generic values.
 	   This should be in a common file instead of per-driver.  */
 	
-	/* register boot-defined "eth" devices */
-	if (dev->name && (strncmp(dev->name, "eth", 3) == 0)) {
-		i = simple_strtoul(dev->name + 3, NULL, 0);
-		if (ethdev_index[i] == NULL) {
-			ethdev_index[i] = dev;
-		}
-		else if (dev != ethdev_index[i]) {
-			/* Really shouldn't happen! */
-			printk("ether_setup: Ouch! Someone else took %s\n",
-				dev->name);
-		}
-	}
-
 	dev->change_mtu		= eth_change_mtu;
 	dev->hard_header	= eth_header;
 	dev->rebuild_header 	= eth_rebuild_header;
@@ -376,19 +298,6 @@ void fddi_setup(struct net_device *dev)
 #ifdef CONFIG_HIPPI
 void hippi_setup(struct net_device *dev)
 {
-	int i;
-
-	if (dev->name && (strncmp(dev->name, "hip", 3) == 0)) {
-		i = simple_strtoul(dev->name + 3, NULL, 0);
-		if (hipdev_index[i] == NULL) {
-			hipdev_index[i] = dev;
-		}
-		else if (dev != hipdev_index[i]) {
-			printk("hippi_setup: Ouch! Someone else took %s\n",
-				dev->name);
-		}
-	}
-
 	dev->set_multicast_list	= NULL;
 	dev->change_mtu			= hippi_change_mtu;
 	dev->hard_header		= hippi_header;
@@ -478,45 +387,33 @@ int ether_config(struct net_device *dev, struct ifmap *map)
 	return 0;
 }
 
-static int etherdev_get_index(struct net_device *dev)
-{
-	int i=MAX_ETH_CARDS;
-
-	for (i = 0; i < MAX_ETH_CARDS; ++i)	{
-		if (ethdev_index[i] == NULL) {
-			sprintf(dev->name, "eth%d", i);
-/*			printk("loading device '%s'...\n", dev->name);*/
-			ethdev_index[i] = dev;
-			return i;
-		}
-	}
-	return -1;
-}
-
-static void etherdev_put_index(struct net_device *dev)
-{
-	int i;
-	for (i = 0; i < MAX_ETH_CARDS; ++i) {
-		if (ethdev_index[i] == dev) {
-			ethdev_index[i] = NULL;
-			break;
-		}
-	}
-}
-
 int register_netdev(struct net_device *dev)
 {
-	int i=-1;
-
 	rtnl_lock();
 
-	if (dev->name &&
-	    (dev->name[0] == '\0' || dev->name[0] == ' '))
-		i = etherdev_get_index(dev);
-
+	/*
+	 *	If the name is a format string the caller wants us to
+	 *	do a name allocation
+	 */
+	 
+	if (dev->name && strchr(dev->name, '%'))
+	{
+		if(dev_alloc_name(dev, dev->name)<0)
+			return -EBUSY;
+	}
+	
+	/*
+	 *	Back compatibility hook. Kill this one in 2.5
+	 */
+	
+	if (dev->name && (dev->name[0]==0 || dev->name[0]==' '))
+	{
+		if(dev_alloc_name(dev, "eth%d")<0)
+			return -EBUSY;
+	}
+		
+		
 	if (register_netdevice(dev)) {
-		if (i >= 0)
-			etherdev_put_index(dev);
 		rtnl_unlock();
 		return -EIO;
 	}
@@ -528,120 +425,40 @@ void unregister_netdev(struct net_device *dev)
 {
 	rtnl_lock();
 	unregister_netdevice(dev);
-	etherdev_put_index(dev);
 	rtnl_unlock();
 }
 
 
 #ifdef CONFIG_TR
-/* The list of used and available "tr" slots */
-#define MAX_TR_CARDS 16
-static struct net_device *trdev_index[MAX_TR_CARDS];
 
-struct net_device *init_trdev(struct net_device *dev, int sizeof_priv)
+static void tr_configure(struct net_device *dev)
 {
-	int new_device = 0;
-	int i;
+	/*
+	 *	Configure and register
+	 */
+	
+	dev->hard_header	= tr_header;
+	dev->rebuild_header	= tr_rebuild_header;
 
-	/* Use an existing correctly named device in Space.c:dev_base. */
-	if (dev == NULL) {
-		int alloc_size = sizeof(struct net_device) + IFNAMSIZ
-			+ sizeof_priv + 3;
-		struct net_device *cur_dev;
-		char pname[8];		/* Putative name for the device.  */
-
-		for (i = 0; i < MAX_TR_CARDS; ++i)
-			if (trdev_index[i] == NULL) {
-				sprintf(pname, "tr%d", i);
-				read_lock_bh(&dev_base_lock);
-				for (cur_dev = dev_base; cur_dev; cur_dev = cur_dev->next) {
-					if (strcmp(pname, cur_dev->name) == 0) {
-						dev = cur_dev;
-						read_unlock_bh(&dev_base_lock);
-						dev->init = NULL;
-						sizeof_priv = (sizeof_priv + 3) & ~3;
-						dev->priv = sizeof_priv
-							  ? kmalloc(sizeof_priv, GFP_KERNEL)
-							  :	NULL;
-						if (dev->priv) memset(dev->priv, 0, sizeof_priv);
-						goto trfound;
-					}
-				}
-				read_unlock_bh(&dev_base_lock);
-			}
-
-		alloc_size &= ~3;		/* Round to dword boundary. */
-		dev = (struct net_device *)kmalloc(alloc_size, GFP_KERNEL);
-		if(dev==NULL)
-			return NULL;
-		memset(dev, 0, alloc_size);
-		if (sizeof_priv)
-			dev->priv = (void *) (dev + 1);
-		dev->name = sizeof_priv + (char *)(dev + 1);
-		new_device = 1;
-	}
-
-trfound:						/* From the double loop above. */
-
-	for (i = 0; i < MAX_TR_CARDS; ++i)
-		if (trdev_index[i] == NULL) {
-			sprintf(dev->name, "tr%d", i);
-			trdev_index[i] = dev;
-			break;
-		}
-
-
-	dev->hard_header	 = tr_header;
-	dev->rebuild_header  = tr_rebuild_header;
-
-	dev->type		     = ARPHRD_IEEE802;
-	dev->hard_header_len = TR_HLEN;
-	dev->mtu		     = 2000; /* bug in fragmenter...*/
-	dev->addr_len		 = TR_ALEN;
-	dev->tx_queue_len	 = 100;	/* Long queues on tr */
+	dev->type		= ARPHRD_IEEE802_TR;
+	dev->hard_header_len	= TR_HLEN;
+	dev->mtu		= 2000;
+	dev->addr_len		= TR_ALEN;
+	dev->tx_queue_len	= 100;	/* Long queues on tr */
 	
 	memset(dev->broadcast,0xFF, TR_ALEN);
 
 	/* New-style flags. */
-	dev->flags		= IFF_BROADCAST;
+	dev->flags		= IFF_BROADCAST | IFF_MULTICAST ;
+}
 
-	if (new_device) {
-		rtnl_lock();
-		register_netdevice(dev);
-		rtnl_unlock();
-	}
-	return dev;
+struct net_device *init_trdev(struct net_device *dev, int sizeof_priv)
+{
+	return init_netdev(dev, sizeof_priv, "tr%d", tr_configure);
 }
 
 void tr_setup(struct net_device *dev)
 {
-	int i;
-
-	/* register boot-defined "tr" devices */
-	if (dev->name && (strncmp(dev->name, "tr", 2) == 0)) {
-		i = simple_strtoul(dev->name + 2, NULL, 0);
-		if (trdev_index[i] == NULL) {
-			trdev_index[i] = dev;
-		}
-		else if (dev != trdev_index[i]) {
-			/* Really shouldn't happen! */
-			printk("tr_setup: Ouch! Someone else took %s\n",
-				dev->name);
-		}
-	}
-}
-
-void tr_freedev(struct net_device *dev)
-{
-	int i;
-	for (i = 0; i < MAX_TR_CARDS; ++i) 
-	{
-		if (trdev_index[i] == dev) 
-		{
-			trdev_index[i] = NULL;
-			break;
-		}
-	}
 }
 
 int register_trdev(struct net_device *dev)
@@ -660,33 +477,14 @@ void unregister_trdev(struct net_device *dev)
 	rtnl_lock();
 	unregister_netdevice(dev);
 	rtnl_unlock();
-	tr_freedev(dev);
 }
 #endif
 
 
 #ifdef CONFIG_NET_FC
 
-#define MAX_FC_CARDS 2
-static struct net_device *fcdev_index[MAX_FC_CARDS];
- 
 void fc_setup(struct net_device *dev)
 {
-int i;
-
-        /* register boot-defined "fc" devices */
-        if (dev->name && (strncmp(dev->name, "fc", 2) == 0)) {
-                i = simple_strtoul(dev->name + 2, NULL, 0);
-                if (fcdev_index[i] == NULL) {
-                        fcdev_index[i] = dev;
-                }
-                else if (dev != fcdev_index[i]) {
-                        /* Really shouldn't happen! */
-                        printk("fc_setup: Ouch! Someone else took %s\n",
-                                dev->name);
-                }
-        }
-		
 	dev->hard_header        =        fc_header;
         dev->rebuild_header  	=        fc_rebuild_header;
                 
@@ -700,75 +498,15 @@ int i;
 
         /* New-style flags. */
         dev->flags              =        IFF_BROADCAST;
-		dev_init_buffers(dev);
+	dev_init_buffers(dev);
         return;
 }
 
 
 struct net_device *init_fcdev(struct net_device *dev, int sizeof_priv)
 {
-int new_device = 0;
-int i;
-	/* Use an existing correctly named device in Space.c:dev_base. */
-     if (dev == NULL) {
-     int alloc_size = sizeof(struct net_device) + sizeof("fc%d  ") + sizeof_priv + 3; 
-     struct net_device *cur_dev;
-     char pname[8];          /* Putative name for the device.  */
-                 
-      	for (i = 0; i < MAX_FC_CARDS; ++i)
-        	if (fcdev_index[i] == NULL) {
-            	sprintf(pname, "fc%d", i);
-                for (cur_dev = dev_base; cur_dev; cur_dev = cur_dev->next)
-                	if (strcmp(pname, cur_dev->name) == 0) {
-                        dev = cur_dev;
-                        dev->init = NULL;
-                        sizeof_priv = (sizeof_priv + 3) &~3;
-                        dev->priv = sizeof_priv 
-								? kmalloc(sizeof_priv, GFP_KERNEL)
-                                : NULL;
-                        if (dev->priv) memset(dev->priv, 0, sizeof_priv);
-                        goto fcfound;
-                     }
-               }
-
-        alloc_size &= ~3;               /* Round to dword boundary. */
-        dev = (struct net_device *)kmalloc(alloc_size, GFP_KERNEL);
-		memset(dev, 0, alloc_size);
-        if (sizeof_priv)
-        	dev->priv = (void *) (dev + 1);
-        dev->name = sizeof_priv + (char *)(dev + 1);
-        new_device = 1;
-      }        
-
-fcfound:                       /* From the double loop */
-                                
-        for (i = 0; i < MAX_FC_CARDS; ++i)
-                if (fcdev_index[i] == NULL) {
-                        sprintf(dev->name, "fc%d", i);
-                        fcdev_index[i] = dev;
-                        break;
-                }
-                                                
-        fc_setup(dev);                                 
-        if (new_device) {
-		rtnl_lock();
-                register_netdevice(dev);  
-		rtnl_unlock();
-	}                
-        return dev;
+	return init_netdev(dev, sizeof_priv, "fc%d", fc_setup);
 }
-
-void fc_freedev(struct net_device *dev)
-{                                               
-int i;
-	for (i = 0; i < MAX_FC_CARDS; ++i) {
-		if (fcdev_index[i] == dev) {
-			fcdev_index[i] = NULL;
-			break;
-		}
-	}
-}
-
 
 int register_fcdev(struct net_device *dev)
 {
@@ -785,7 +523,6 @@ void unregister_fcdev(struct net_device *dev)
         rtnl_lock();
 	unregister_netdevice(dev);
         rtnl_unlock();
-        fc_freedev(dev);
 }
 
 #endif /* CONFIG_NET_FC */

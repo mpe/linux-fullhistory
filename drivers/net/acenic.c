@@ -295,12 +295,13 @@ static struct net_device *root_dev = NULL;
 static int probed __initdata = 0;
 
 
-int __init acenic_probe (struct net_device *dev)
+int __init acenic_probe(void)
 {
 	int boards_found = 0;
 	int version_disp;
 	struct ace_private *ap;
 	struct pci_dev *pdev = NULL;
+	struct net_device *dev;
 
 	if (probed)
 		return -ENODEV;
@@ -312,7 +313,6 @@ int __init acenic_probe (struct net_device *dev)
 	version_disp = 0;
 
 	while ((pdev = pci_find_class(PCI_CLASS_NETWORK_ETHERNET<<8, pdev))){
-		dev = NULL;
 
 		if (!((pdev->vendor == PCI_VENDOR_ID_ALTEON) &&
 		      (pdev->device == PCI_DEVICE_ID_ALTEON_ACENIC)) &&
@@ -330,10 +330,10 @@ int __init acenic_probe (struct net_device *dev)
 		      (pdev->device == PCI_DEVICE_ID_SGI_ACENIC)))
 			continue;
 
-		dev = init_etherdev(dev, sizeof(struct ace_private));
+		dev = init_etherdev(NULL, sizeof(struct ace_private));
 
 		if (dev == NULL){
-			printk(KERN_ERR "Unable to allocate etherdev "
+			printk(KERN_ERR "acenic: Unable to allocate net_device "
 			       "structure!\n");
 			break;
 		}
@@ -341,8 +341,10 @@ int __init acenic_probe (struct net_device *dev)
 		if (!dev->priv)
 			dev->priv = kmalloc(sizeof(*ap), GFP_KERNEL);
 		if (!dev->priv)
+		{
+			printk(KERN_ERR "acenic: Unable to allocate memory.\n");
 			return -ENOMEM;
-
+		}
 		ap = dev->priv;
 		ap->pdev = pdev;
 
@@ -487,7 +489,7 @@ int init_module(void)
 
 	root_dev = NULL;
 
-	cards = acenic_probe(NULL);
+	cards = acenic_probe();
 	return cards ? 0 : -ENODEV;
 }
 

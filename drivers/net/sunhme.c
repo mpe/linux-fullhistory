@@ -3459,8 +3459,9 @@ static int __init happy_meal_pci_init(struct net_device *dev, struct pci_dev *pd
 }
 #endif
 
-int __init happy_meal_probe(struct net_device *dev)
+int __init happy_meal_probe(void)
 {
+	struct net_device *dev = NULL;
 	struct linux_sbus *bus;
 	struct linux_sbus_device *sdev = 0;
 	static int called = 0;

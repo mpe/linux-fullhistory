@@ -104,9 +104,8 @@ pci_clone_list[] __initdata = {
 #define NESM_START_PG	0x40	/* First page of TX buffer */
 #define NESM_STOP_PG	0x80	/* Last page +1 of RX ring */
 
-int ne2k_pci_probe(struct net_device *dev);
-static struct net_device *ne2k_pci_probe1(struct net_device *dev, long ioaddr, int irq,
-									  int chip_idx);
+int ne2k_pci_probe(void);
+static struct net_device *ne2k_pci_probe1(long ioaddr, int irq, int chip_idx);
 
 static int ne2k_pci_open(struct net_device *dev);
 static int ne2k_pci_close(struct net_device *dev);
@@ -139,7 +138,7 @@ init_module(void)
 	if (debug)
 		printk(KERN_INFO "%s", version);
 
-	if (ne2k_pci_probe(0)) {
+	if (ne2k_pci_probe()) {
 		printk(KERN_NOTICE "ne2k-pci.c: No useable cards found, driver NOT installed.\n");
 		return -ENODEV;
 	}
@@ -186,11 +185,12 @@ struct netdev_entry netcard_drv =
 {"ne2k_pci", ne2k_pci_probe1, NE_IO_EXTENT, 0};
 #endif
 
-int __init ne2k_pci_probe(struct net_device *dev)
+int __init ne2k_pci_probe(void)
 {
 	struct pci_dev *pdev = NULL;
 	int cards_found = 0;
 	int i;
+	struct net_device *dev;
 
 	if ( ! pci_present())
 		return -ENODEV;
@@ -241,7 +241,7 @@ int __init ne2k_pci_probe(struct net_device *dev)
 #endif
 		printk("ne2k-pci.c: PCI NE2000 clone '%s' at I/O %#lx, IRQ %d.\n",
 			   pci_clone_list[i].name, pci_ioaddr, pci_irq_line);
-		dev = ne2k_pci_probe1(dev, pci_ioaddr, pci_irq_line, i);
+		dev = ne2k_pci_probe1(pci_ioaddr, pci_irq_line, i);
 		if (dev == 0) {
 			/* Should not happen. */
 			printk(KERN_ERR "ne2k-pci: Probe of PCI card at %#lx failed.\n",
@@ -255,7 +255,6 @@ int __init ne2k_pci_probe(struct net_device *dev)
 			ne2k_card->dev = dev;
 			ne2k_card->pci_dev = pdev;
 		}
-		dev = 0;
 
 		cards_found++;
 	}
@@ -263,8 +262,9 @@ int __init ne2k_pci_probe(struct net_device *dev)
 	return cards_found ? 0 : -ENODEV;
 }
 
-static struct net_device __init *ne2k_pci_probe1(struct net_device *dev, long ioaddr, int irq, int chip_idx)
+static struct net_device __init *ne2k_pci_probe1(long ioaddr, int irq, int chip_idx)
 {
+	struct net_device *dev;
 	int i;
 	unsigned char SA_prom[32];
 	int start_page, stop_page;
@@ -288,7 +288,7 @@ static struct net_device __init *ne2k_pci_probe1(struct net_device *dev, long io
 		}
 	}
 
-	dev = init_etherdev(dev, 0);
+	dev = init_etherdev(NULL, 0);
 
 	/* Reset card. Who knows what dain-bramaged state it was left in. */
 	{

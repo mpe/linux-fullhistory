@@ -134,8 +134,7 @@ static int ncr885e_open( struct net_device *dev );
 static int ncr885e_close( struct net_device *dev );
 static void ncr885e_rx( struct net_device *dev );
 static void ncr885e_tx( struct net_device *dev );
-static int ncr885e_probe1( struct net_device *dev, unsigned long ioaddr,
-			   unsigned char irq );
+static int ncr885e_probe1( unsigned long ioaddr, unsigned char irq );
 static int ncr885e_xmit_start( struct sk_buff *skb, struct net_device *dev );
 static struct net_device_stats *ncr885e_stats( struct net_device *dev );
 static void ncr885e_set_multicast( struct net_device *dev );
@@ -1162,15 +1161,16 @@ ncr885e_stats( struct net_device *dev )
  */
 
 static int
-ncr885e_probe1( struct net_device *dev, unsigned long ioaddr, unsigned char irq )
+ncr885e_probe1(unsigned long ioaddr, unsigned char irq )
 
 {
+	struct net_device *dev;
 	struct ncr885e_private *sp;
 	unsigned short station_addr[3], val;
 	unsigned char *p;
 	int  i;
 
-	dev = init_etherdev( dev, 0 );
+	dev = init_etherdev(NULL, 0 );
 
 	/* construct private data for the 885 ethernet */
 	dev->priv = kmalloc( sizeof( struct ncr885e_private ), GFP_KERNEL );
@@ -1227,7 +1227,7 @@ ncr885e_probe1( struct net_device *dev, unsigned long ioaddr, unsigned char irq 
  *  worry about the rest.
  */
 
-int __init ncr885e_probe( struct net_device *dev )
+int __init ncr885e_probe(void)
 {
 	struct pci_dev *pdev = NULL;
 	unsigned int ioaddr, chips = 0;
@@ -1257,7 +1257,7 @@ int __init ncr885e_probe( struct net_device *dev )
 			continue;
 
 		/* finish off the probe */
-		if ( !(ncr885e_probe1( dev, ioaddr, irq ))) {
+		if ( !(ncr885e_probe1(ioaddr, irq ))) {
 
 			chips++;
 
@@ -1432,7 +1432,7 @@ init_module(void)
 	if ( debug >= 0)
 		ncr885e_debug = debug;
 
-	return ncr885e_probe( NULL );
+	return ncr885e_probe();
 }
 
 void
