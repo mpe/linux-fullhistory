@@ -81,12 +81,37 @@ static struct kobj_type ktype_acpi_ns = {
 	.release	= acpi_device_release,
 };
 
+static int namespace_hotplug(struct kset *kset, struct kobject *kobj,
+			     char **envp, int num_envp, char *buffer,
+			     int buffer_size)
+{
+	struct acpi_device *dev = to_acpi_device(kobj);
+	int i = 0;
+	int len = 0;
+
+	if (!dev->driver)
+		return 0;
+
+	if (add_hotplug_env_var(envp, num_envp, &i, buffer, buffer_size, &len,
+				"PHYSDEVDRIVER=%s", dev->driver->name))
+		return -ENOMEM;
+
+	envp[i] = NULL;
+
+	return 0;
+}
+
+static struct kset_hotplug_ops namespace_hotplug_ops = {
+	.hotplug = &namespace_hotplug,
+};
+
 static struct kset acpi_namespace_kset = {
 	.kobj		= { 
 		.name = "namespace",
 	},
 	.subsys = &acpi_subsys,
 	.ktype	= &ktype_acpi_ns,
+	.hotplug_ops = &namespace_hotplug_ops,
 };
 
 
