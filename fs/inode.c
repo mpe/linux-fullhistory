@@ -38,10 +38,10 @@
  * for low-overhead inode sync() operations.
  */
 
-LIST_HEAD(inode_in_use);
-LIST_HEAD(inode_dirty);
-LIST_HEAD(inode_unused);
-struct list_head inode_hashtable[HASH_SIZE];
+static LIST_HEAD(inode_in_use);
+static LIST_HEAD(inode_dirty);
+static LIST_HEAD(inode_unused);
+static struct list_head inode_hashtable[HASH_SIZE];
 
 /*
  * A simple spinlock to protect the list manipulations

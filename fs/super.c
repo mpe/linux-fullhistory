@@ -588,8 +588,8 @@ static void d_mount(struct dentry *covers, struct dentry *dentry)
 		printk("VFS: mount - already mounted\n");
 		return;
 	}
-	covers->d_mounts = dentry;
-	dentry->d_covers = covers;
+	covers->d_mounts = dget(dentry);
+	dentry->d_covers = dget(covers);
 }
 
 static int do_umount(kdev_t dev,int unmount_root)

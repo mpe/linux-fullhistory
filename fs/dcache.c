@@ -29,19 +29,12 @@
 #define D_HASHBITS     10
 #define D_HASHSIZE     (1UL << D_HASHBITS)
 #define D_HASHMASK     (D_HASHSIZE-1)
-struct list_head dentry_hashtable[D_HASHSIZE];
 
-void d_free(struct dentry *dentry)
-{
-	if (dentry) {
-		kfree(dentry->d_name.name);
-		kfree(dentry);
-	}
-}
+static struct list_head dentry_hashtable[D_HASHSIZE];
+static LIST_HEAD(dentry_unused);
 
 void dput(struct dentry *dentry)
 {
-repeat:
 	if (dentry) {
 		dentry->d_count--;
 		if (dentry->d_count < 0) {
@@ -49,67 +42,120 @@ repeat:
 				dentry->d_count, dentry->d_name.name);
 			return;
 		}
-		/*
-		 * This is broken right now: we should really put
-		 * the dentry on a free list to be reclaimed later
-		 * when we think we should throw it away.
-		 *
-		 * Instead we free it completely if the inode count
-		 * indicates that we're the only ones holding onto
-		 * the inode - if not we just fall back on the old
-		 * (broken) behaviour of not reclaiming it at all.
-		 */
-		if (!dentry->d_count && (!dentry->d_inode || atomic_read(&dentry->d_inode->i_count) == 1)) {
-			struct dentry *parent = dentry->d_parent;
-
-			if (parent != dentry) {
-				struct inode * inode = dentry->d_inode;
-
-				if (inode) {
-					list_del(&dentry->d_list);
-					iput(inode);
-					dentry->d_inode = NULL;
-				}
-				list_del(&dentry->d_hash);
-				d_free(dentry);
-				dentry = parent;
-				goto repeat;
-			}
+		if (!dentry->d_count) {
+			list_del(&dentry->d_lru);
+			list_add(&dentry->d_lru, &dentry_unused);
 		}
 	}
+}
+
+void d_free(struct dentry *dentry)
+{
+	kfree(dentry->d_name.name);
+	kfree(dentry);
+}
+
+/*
+ * Note! This tries to free the last entry on the dentry
+ * LRU list. The dentries are put on the LRU list when
+ * they are free'd, but that doesn't actually mean that
+ * all LRU entries have d_count == 0 - it might have been
+ * re-allocated. If so we delete it from the LRU list
+ * here.
+ *
+ * Rationale:
+ * - keep "dget()" extremely simple
+ * - if there have been a lot of lookups in the LRU list
+ *   we want to make freeing more unlikely anyway, and
+ *   keeping used dentries on the LRU list in that case
+ *   will make the algorithm less likely to free an entry.
+ */
+static inline struct dentry * free_one_dentry(struct dentry * dentry)
+{
+	struct dentry * parent;
+
+	list_del(&dentry->d_hash);
+	parent = dentry->d_parent;
+	if (parent != dentry)
+		dput(parent);
+	return dentry;
+}
+
+static inline struct dentry * try_free_one_dentry(struct dentry * dentry)
+{
+	struct inode * inode = dentry->d_inode;
+
+	if (inode) {
+		if (atomic_read(&inode->i_count) != 1) {
+			list_add(&dentry->d_lru, &dentry_unused);
+			return NULL;
+		}
+		list_del(&dentry->d_alias);
+		iput(inode);
+		dentry->d_inode = NULL;
+	}
+	return free_one_dentry(dentry);
+}
+
+static struct dentry * try_free_dentries(void)
+{
+	struct list_head * tmp = dentry_unused.next;
+
+	if (tmp != &dentry_unused) {
+		struct dentry * dentry;
+
+		list_del(tmp);
+		dentry = list_entry(tmp, struct dentry, d_lru);
+		if (dentry->d_count == 0)
+			return try_free_one_dentry(dentry);
+	}
+	return NULL;
 }
 
 #define NAME_ALLOC_LEN(len)	((len+16) & ~15)
 
 struct dentry * d_alloc(struct dentry * parent, const struct qstr *name)
 {
-	char *str;
-	struct dentry *res;
+	int len;
+	char * str;
+	struct dentry *dentry;
 
-	res = kmalloc(sizeof(struct dentry), GFP_KERNEL);
-	if (!res)
-		return NULL;
-
-	str = kmalloc(NAME_ALLOC_LEN(name->len), GFP_KERNEL);
+	dentry = try_free_dentries();
+	len = NAME_ALLOC_LEN(name->len);
+	if (dentry) {
+		str = (char *) dentry->d_name.name;
+		if (len == NAME_ALLOC_LEN(dentry->d_name.len))
+			goto right_size;
+		kfree(dentry->d_name.name);
+	} else {
+		dentry = kmalloc(sizeof(struct dentry), GFP_KERNEL);
+		if (!dentry)
+			return NULL;
+	}
+	str = kmalloc(len, GFP_KERNEL);
 	if (!str) {
-		kfree(res);
+		kfree(dentry);
 		return NULL;
 	}
-	
-	memcpy(str, name->name, name->len);
-	str[name->len] = 0;
+right_size:
+	len = name->len;
+	memcpy(str, name->name, len);
+	str[len] = 0;
 
-	memset(res, 0, sizeof(struct dentry));
+	dentry->d_count = 0;
+	dentry->d_flags = 0;
+	dentry->d_inode = NULL;
+	dentry->d_parent = parent;
+	dentry->d_mounts = dentry;
+	dentry->d_covers = dentry;
+	INIT_LIST_HEAD(&dentry->d_hash);
+	INIT_LIST_HEAD(&dentry->d_alias);
+	INIT_LIST_HEAD(&dentry->d_lru);
 
-	res->d_parent = parent;
-	res->d_mounts = res;
-	res->d_covers = res;
-	res->d_flags = 0;
-
-	res->d_name.name = str;
-	res->d_name.len = name->len;
-	res->d_name.hash = name->hash;
-	return res;
+	dentry->d_name.name = str;
+	dentry->d_name.len = name->len;
+	dentry->d_name.hash = name->hash;
+	return dentry;
 }
 
 /*
@@ -125,7 +171,7 @@ struct dentry * d_alloc(struct dentry * parent, const struct qstr *name)
 void d_instantiate(struct dentry *entry, struct inode * inode)
 {
 	if (inode)
-		list_add(&entry->d_list, &inode->i_dentry);
+		list_add(&entry->d_alias, &inode->i_dentry);
 
 	entry->d_inode = inode;
 }
@@ -137,6 +183,7 @@ struct dentry * d_alloc_root(struct inode * root_inode, struct dentry *old_root)
 	if (root_inode) {
 		res = d_alloc(NULL, &(const struct qstr) { "/", 1, 0 });
 		res->d_parent = res;
+		res->d_count = 2;
 		d_instantiate(res, root_inode);
 	}
 	return res;

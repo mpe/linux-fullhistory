@@ -45,8 +45,9 @@ struct dentry {
 	struct dentry * d_parent;	/* parent directory */
 	struct dentry * d_mounts;	/* mount information */
 	struct dentry * d_covers;
-	struct list_head d_list;	/* hardlink aliasname / empty list */
-	struct list_head d_hash;
+	struct list_head d_hash;	/* lookup hash list */
+	struct list_head d_alias;	/* inode alias list */
+	struct list_head d_lru;		/* d_count = 0 LRU list */
 	struct qstr d_name;
 };
 
@@ -97,9 +98,9 @@ extern void dput(struct dentry *);
 /*
  * This is ugly. The inode:dentry relationship is a 1:n
  * relationship, so we have to return one (random) dentry
- * from the list. We select the first one..
+ * from the alias list. We select the first one..
  */
 #define i_dentry(inode) \
-	list_entry((inode)->i_dentry.next, struct dentry, d_list)
+	list_entry((inode)->i_dentry.next, struct dentry, d_alias)
 
 #endif	/* __LINUX_DCACHE_H */

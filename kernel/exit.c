@@ -368,8 +368,11 @@ static inline void close_files(struct files_struct * files)
 			break;
 		while (set) {
 			if (set & 1) {
-				close_fp(files->fd[i]);
-				files->fd[i] = NULL;
+				struct file * file = files->fd[i];
+				if (file) {
+					files->fd[i] = NULL;
+					close_fp(file);
+				}
 			}
 			i++;
 			set >>= 1;
