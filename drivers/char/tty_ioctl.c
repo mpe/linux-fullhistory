@@ -210,7 +210,7 @@ static unsigned long inq_canon(struct tty_struct * tty)
 
 #ifdef TIOCGETP
 /*
- * These are depracated, but there is limited support..
+ * These are deprecated, but there is limited support..
  *
  * The "sg_flags" translation is a joke..
  */

@@ -1,3 +1,11 @@
+Wed Aug  9 22:37:04 1995  Andries Brouwer  <aeb@cwi.nl>
+
+	As a preparation for new device code, separated the various
+	functions the request->dev field had into the device proper,
+	request->rq_dev and a status field request->rq_status.
+
+	The 2nd argument of bios_param is now a kdev_t.
+
 Wed Jul 19 10:43:15 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
 
         * scsi.c (scsi_proc_info): /proc/scsi/scsi now also lists all

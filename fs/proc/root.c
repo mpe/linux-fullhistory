@@ -129,8 +129,7 @@ struct proc_dir_entry proc_scsi = {
 	S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
 	0, &proc_dir_inode_operations,
 	NULL, NULL,
-	NULL,
-	&proc_root, NULL
+	NULL, &proc_root, NULL
 };
 
 int proc_register(struct proc_dir_entry * dir, struct proc_dir_entry * dp)
@@ -249,7 +248,9 @@ void proc_root_init(void)
 		64, &proc_self_inode_operations,
 	});
 	proc_register(&proc_root, &proc_net);
+
 	proc_register(&proc_root, &proc_scsi);
+
 #ifdef CONFIG_DEBUG_MALLOC
 	proc_register(&proc_root, &(struct proc_dir_entry) {
 		PROC_MALLOC, 6, "malloc",

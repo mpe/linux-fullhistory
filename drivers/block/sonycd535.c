@@ -286,7 +286,7 @@ static struct wait_queue *cdu535_irq_wait = NULL;
  * check or 0 if it hasn't.  Setting flag to 0 resets the changed flag.
  */
 static int
-cdu535_check_media_change(dev_t full_dev)
+cdu535_check_media_change(kdev_t full_dev)
 {
 	int retval;
 
@@ -832,11 +832,11 @@ do_cdu535_request(void)
 		 * The beginning here is stolen from the hard disk driver.  I hope
 		 * it's right.
 		 */
-		if (!(CURRENT) || CURRENT->dev < 0) {
+		if (!(CURRENT) || CURRENT->rq_status == RQ_INACTIVE) {
 			return;
 		}
 		INIT_REQUEST;
-		dev = MINOR(CURRENT->dev);
+		dev = MINOR(CURRENT->rq_dev);
 		block = CURRENT->sector;
 		nsect = CURRENT->nr_sectors;
 		if (dev != 0) {

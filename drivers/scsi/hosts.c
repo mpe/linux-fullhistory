@@ -360,14 +360,14 @@ unsigned int scsi_init()
 	    }
 	    tpnt->next = scsi_hosts;
 	    scsi_hosts = tpnt;
+
+            /* Add the driver to /proc/scsi */
+#if CONFIG_PROC_FS 
+            build_proc_dir_entries(tpnt);    
+#endif
 	}
     }
-    
-    /* Add the drivers to /proc/scsi */
-#if CONFIG_PROC_FS 
-    build_proc_dir_entries();    
-#endif
-    
+        
     for(shpnt=scsi_hostlist; shpnt; shpnt = shpnt->next)
     {
 	if(shpnt->hostt->info)

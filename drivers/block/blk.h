@@ -19,7 +19,7 @@
  */
 #define IN_ORDER(s1,s2) \
 ((s1)->cmd < (s2)->cmd || ((s1)->cmd == (s2)->cmd && \
-((s1)->dev < (s2)->dev || (((s1)->dev == (s2)->dev && \
+((s1)->rq_dev < (s2)->rq_dev || (((s1)->rq_dev == (s2)->rq_dev && \
 (s1)->sector < (s2)->sector)))))
 
 /*
@@ -30,8 +30,8 @@
 #define SECTOR_MASK ((BLOCK_SIZE >> 9) - 1)
 #else
 #define SECTOR_MASK (blksize_size[MAJOR_NR] &&     \
-	blksize_size[MAJOR_NR][MINOR(CURRENT->dev)] ? \
-	((blksize_size[MAJOR_NR][MINOR(CURRENT->dev)] >> 9) - 1) :  \
+	blksize_size[MAJOR_NR][MINOR(CURRENT->rq_dev)] ? \
+	((blksize_size[MAJOR_NR][MINOR(CURRENT->rq_dev)] >> 9) - 1) :  \
 	((BLOCK_SIZE >> 9)  -  1))
 #endif /* IDE_DRIVER */
 
@@ -73,7 +73,7 @@ extern unsigned long hd_init(unsigned long mem_start, unsigned long mem_end);
 #ifdef CONFIG_BLK_DEV_IDE
 extern unsigned long ide_init(unsigned long mem_start, unsigned long mem_end);
 #endif
-extern void set_device_ro(int dev,int flag);
+extern void set_device_ro(kdev_t dev,int flag);
 
 extern int floppy_init(void);
 extern void rd_load(void);
@@ -107,7 +107,7 @@ extern unsigned long xd_init(unsigned long mem_start, unsigned long mem_end);
 /* ram disk */
 #define DEVICE_NAME "ramdisk"
 #define DEVICE_REQUEST do_rd_request
-#define DEVICE_NR(device) ((device) & 7)
+#define DEVICE_NR(device) (MINOR(device) & 7)
 #define DEVICE_ON(device) 
 #define DEVICE_OFF(device)
 
@@ -118,7 +118,7 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_NAME "floppy"
 #define DEVICE_INTR do_floppy
 #define DEVICE_REQUEST do_fd_request
-#define DEVICE_NR(device) ( ((device) & 3) | (((device) & 0x80 ) >> 5 ))
+#define DEVICE_NR(device) ( (MINOR(device) & 3) | ((MINOR(device) & 0x80 ) >> 5 ))
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device) floppy_off(DEVICE_NR(device))
 
@@ -283,7 +283,7 @@ static void floppy_off(unsigned int nr);
 #define CURRENT (blk_dev[MAJOR_NR].current_request)
 #endif
 
-#define CURRENT_DEV DEVICE_NR(CURRENT->dev)
+#define CURRENT_DEV DEVICE_NR(CURRENT->rq_dev)
 
 #ifdef DEVICE_INTR
 void (*DEVICE_INTR)(void) = NULL;
@@ -322,7 +322,7 @@ static void (DEVICE_REQUEST)(void);
 		CLEAR_INTR; \
 		return; \
 	} \
-	if (MAJOR(CURRENT->dev) != MAJOR_NR) \
+	if (MAJOR(CURRENT->rq_dev) != MAJOR_NR) \
 		panic(DEVICE_NAME ": request list destroyed"); \
 	if (CURRENT->bh) { \
 		if (!CURRENT->bh->b_lock) \
@@ -351,8 +351,8 @@ static void end_request(int uptodate) {
 
 	req->errors = 0;
 	if (!uptodate) {
-		printk("end_request: I/O error, dev %04lX, sector %lu\n",
-		       (unsigned long)req->dev, req->sector);
+		printk("end_request: I/O error, dev %s, sector %lu\n",
+			kdevname(req->rq_dev), req->sector);
 		req->nr_sectors--;
 		req->nr_sectors &= ~SECTOR_MASK;
 		req->sector += (BLOCK_SIZE / 512);
@@ -378,12 +378,12 @@ static void end_request(int uptodate) {
 #ifdef IDE_DRIVER
 	hwgroup->rq = NULL;
 #else
-	DEVICE_OFF(req->dev);
+	DEVICE_OFF(req->rq_dev);
 	CURRENT = req->next;
 #endif /* IDE_DRIVER */
 	if (req->sem != NULL)
 		up(req->sem);
-	req->dev = -1;
+	req->rq_status = RQ_INACTIVE;
 	wake_up(&wait_for_request);
 }
 #endif /* ndef _IDE_CD_C */

@@ -126,7 +126,8 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 {
 	struct buffer_head *bh;
 	struct minix_super_block *ms;
-	int i,dev=s->s_dev,block;
+	int i, block;
+	kdev_t dev = s->s_dev;
 
 	if (32 != sizeof (struct minix_inode))
 		panic("bad i-node size");
@@ -134,7 +135,7 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 	lock_super(s);
 	set_blocksize(dev, BLOCK_SIZE);
 	if (!(bh = bread(dev,1,BLOCK_SIZE))) {
-		s->s_dev=0;
+		s->s_dev = 0;
 		unlock_super(s);
 		printk("MINIX-fs: unable to read superblock\n");
 		MOD_DEC_USE_COUNT;
@@ -165,7 +166,8 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 		unlock_super(s);
 		brelse(bh);
 		if (!silent)
-			printk("VFS: Can't find a minix filesystem on dev 0x%04x.\n", dev);
+			printk("VFS: Can't find a minix filesystem on dev "
+			       "%s.\n", kdevname(dev));
 		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
@@ -189,7 +191,7 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 			brelse(s->u.minix_sb.s_imap[i]);
 		for(i=0;i<MINIX_Z_MAP_SLOTS;i++)
 			brelse(s->u.minix_sb.s_zmap[i]);
-		s->s_dev=0;
+		s->s_dev = 0;
 		unlock_super(s);
 		brelse(bh);
 		printk("MINIX-fs: bad superblock or unable to read bitmaps\n");
@@ -416,16 +418,17 @@ void minix_read_inode(struct inode * inode)
 	inode->i_op = NULL;
 	inode->i_mode = 0;
 	if (!ino || ino >= inode->i_sb->u.minix_sb.s_ninodes) {
-		printk("Bad inode number on dev 0x%04x: %d is out of range\n",
-			inode->i_dev, ino);
+		printk("Bad inode number on dev %s"
+		       ": %d is out of range\n",
+			kdevname(inode->i_dev), ino);
 		return;
 	}
 	block = 2 + inode->i_sb->u.minix_sb.s_imap_blocks +
 		    inode->i_sb->u.minix_sb.s_zmap_blocks +
 		    (ino-1)/MINIX_INODES_PER_BLOCK;
 	if (!(bh=bread(inode->i_dev,block, BLOCK_SIZE))) {
-		printk("Major problem: unable to read inode from dev 0x%04x\n",
-			inode->i_dev);
+		printk("Major problem: unable to read inode from dev "
+		       "%s\n", kdevname(inode->i_dev));
 		return;
 	}
 	raw_inode = ((struct minix_inode *) bh->b_data) +
@@ -438,7 +441,7 @@ void minix_read_inode(struct inode * inode)
 	inode->i_mtime = inode->i_atime = inode->i_ctime = raw_inode->i_time;
 	inode->i_blocks = inode->i_blksize = 0;
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
-		inode->i_rdev = raw_inode->i_zone[0];
+		inode->i_rdev = to_kdev_t(raw_inode->i_zone[0]);
 	else for (block = 0; block < 9; block++)
 		inode->u.minix_i.i_data[block] = raw_inode->i_zone[block];
 	brelse(bh);
@@ -464,8 +467,9 @@ static struct buffer_head * minix_update_inode(struct inode * inode)
 
 	ino = inode->i_ino;
 	if (!ino || ino >= inode->i_sb->u.minix_sb.s_ninodes) {
-		printk("Bad inode number on dev 0x%04x: %d is out of range\n",
-			inode->i_dev, ino);
+		printk("Bad inode number on dev %s"
+		       ": %d is out of range\n",
+			kdevname(inode->i_dev), ino);
 		inode->i_dirt = 0;
 		return 0;
 	}
@@ -485,7 +489,7 @@ static struct buffer_head * minix_update_inode(struct inode * inode)
 	raw_inode->i_size = inode->i_size;
 	raw_inode->i_time = inode->i_mtime;
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
-		raw_inode->i_zone[0] = inode->i_rdev;
+		raw_inode->i_zone[0] = kdev_t_to_nr(inode->i_rdev);
 	else for (block = 0; block < 9; block++)
 		raw_inode->i_zone[block] = inode->u.minix_i.i_data[block];
 	inode->i_dirt=0;
@@ -512,8 +516,9 @@ int minix_sync_inode(struct inode * inode)
 		wait_on_buffer(bh);
 		if (bh->b_req && !bh->b_uptodate)
 		{
-			printk ("IO error syncing minix inode [%04x:%08lx]\n",
-				inode->i_dev, inode->i_ino);
+			printk ("IO error syncing minix inode ["
+				"%s:%08lx]\n",
+				kdevname(inode->i_dev), inode->i_ino);
 			err = -1;
 		}
 	}

@@ -29,6 +29,7 @@
 #include <linux/fcntl.h>
 #include <linux/in.h>
 #include <linux/if_ether.h>	/* For the statistics structure. */
+#include <linux/if_arp.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -41,7 +42,6 @@
 
 #include <net/ip.h>
 #include <net/arp.h>
-#include <linux/if_arp.h>
 
 #include <net/ax25.h>
 #include <net/netrom.h>

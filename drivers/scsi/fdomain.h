@@ -31,13 +31,14 @@ int        fdomain_16x0_abort( Scsi_Cmnd * );
 const char *fdomain_16x0_info( struct Scsi_Host * );
 int        fdomain_16x0_reset( Scsi_Cmnd * ); 
 int        fdomain_16x0_queue( Scsi_Cmnd *, void (*done)(Scsi_Cmnd *) );
-int        fdomain_16x0_biosparam( Disk *, int, int * );
+int        fdomain_16x0_biosparam( Disk *, kdev_t, int * );
+
+extern struct proc_dir_entry proc_scsi_fdomain;
 
 #define FDOMAIN_16X0 { NULL,                             \
 		       NULL,                             \
 		       NULL,		                 \
-		       "fdomain",                        \
-		       PROC_SCSI_FUTURE_DOMAIN,          \
+		       NULL,		                 \
 		       NULL,				 \
 		       fdomain_16x0_detect,              \
 		       NULL,				 \

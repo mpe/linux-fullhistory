@@ -181,7 +181,7 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 
 	/* Used for mutex if loading devices after boot */
 	scmd.request.sem = NULL;
-	scmd.request.dev = 0xffff; /* Mark busy */
+	scmd.request.rq_status = RQ_SCSI_BUSY;
 	
 	scsi_do_cmd (&scmd, cmnd, buff + 0x144, 0x66,  
 		     eata_scsi_done, 1 * HZ, 1);
@@ -190,16 +190,17 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 	 * booting, else do it right and use a mutex
 	 */	
 	if (current->pid == 0) {
-	    while (scmd.request.dev != 0xfffe)
+	    while (scmd.request.rq_status != RQ_SCSI_DONE)
 		barrier();
-	} else if (scmd.request.dev != 0xfffe) {
+	} else if (scmd.request.rq_status != RQ_SCSI_DONE) {
 	    struct semaphore sem = MUTEX_LOCKED;
 	    
 	    scmd.request.sem = &sem;
 	    down(&sem);
 	    
 	    /* Hmm.. Have to ask about this one */
-	    while (scmd.request.dev != 0xfffe) schedule();
+	    while (scmd.request.rq_status != RQ_SCSI_DONE)
+	      schedule();
 	}
 
 	size = sprintf(buffer + len, "IRQ: %2d, %s triggered\n", cc->interrupt,
@@ -320,7 +321,7 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 
 	/* Used for mutex if loading devices after boot */
 	scmd.request.sem = NULL;
-	scmd.request.dev = 0xffff; /* Mark busy */
+	scmd.request.rq_status = RQ_SCSI_BUSY; /* Mark busy */
 	
 	scsi_do_cmd (&scmd, cmnd, buff2, 0x144,  
 		     eata_scsi_done, 1 * HZ, 1);
@@ -329,16 +330,17 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 	 * booting, else do it right and use a mutex
 	 */	
 	if (current->pid == 0)
-	    while (scmd.request.dev != 0xfffe)
+	    while (scmd.request.rq_status != RQ_SCSI_DONE)
 		barrier();
-	else if (scmd.request.dev != 0xfffe) {
+	else if (scmd.request.rq_status != RQ_SCSI_DONE) {
 	    struct semaphore sem = MUTEX_LOCKED;
 	    
 	    scmd.request.sem = &sem;
 	    down(&sem);
 	    
 	    /* Hmm.. Have to ask about this one */
-	    while (scmd.request.dev != 0xfffe) schedule();
+	    while (scmd.request.rq_status != RQ_SCSI_DONE)
+	      schedule();
 	}
 	
 	swap_statistics(buff2);

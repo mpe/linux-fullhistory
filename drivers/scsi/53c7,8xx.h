@@ -59,7 +59,6 @@
 
 #endif
 
-
 /* 
  * Prevent name space pollution in hosts.c, and only provide the 
  * define we need to get the NCR53c7x0 driver into the host template
@@ -68,6 +67,7 @@
 
 #if defined(HOSTS_C) || defined(MODULE)
 #include <linux/scsicam.h>
+
 extern int NCR53c7xx_abort(Scsi_Cmnd *);
 extern int NCR53c7xx_detect(Scsi_Host_Template *tpnt);
 extern int NCR53c7xx_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
@@ -78,13 +78,13 @@ extern int NCR53c7xx_release(struct Scsi_Host *);
 #define NCR53c7xx_release NULL
 #endif
 
-#define NCR53c7xx {NULL, NULL, NULL, "NCR53c7xx",          \
- 	PROC_SCSI_NCR53C7xx, "NCR53c{7,8}xx (rel 4)", NCR53c7xx_detect, \
-    	NULL, /* info */ NULL, /* command, deprecated */ NULL, 		\
-	NCR53c7xx_queue_command, NCR53c7xx_abort, NCR53c7xx_reset,	\
-	NULL /* slave attach */, scsicam_bios_param, /* can queue */ 1, \
-	/* id */ 7, 127 /* old SG_ALL */, /* cmd per lun */ 1 , 	\
-	/* present */ 0, /* unchecked isa dma */ 0, DISABLE_CLUSTERING} 
+#define NCR53c7xx {NULL, NULL, NULL, NULL,     \
+        "NCR53c{7,8}xx (rel 4)", NCR53c7xx_detect,                      \
+        NULL, /* info */ NULL, /* command, deprecated */ NULL,          \
+        NCR53c7xx_queue_command, NCR53c7xx_abort, NCR53c7xx_reset,      \
+        NULL /* slave attach */, scsicam_bios_param, /* can queue */ 1, \
+        /* id */ 7, 127 /* old SG_ALL */, /* cmd per lun */ 1 ,         \
+        /* present */ 0, /* unchecked isa dma */ 0, DISABLE_CLUSTERING} 
 #endif /* defined(HOSTS_C) || defined(MODULE) */ 
 
 #ifndef HOSTS_C

@@ -128,13 +128,20 @@ static int proc_follow_link(struct inode * dir, struct inode * inode,
 	new_inode = NULL;
 	switch (ino) {
 		case PROC_PID_CWD:
+			if (!p->fs)
+				break;
 			new_inode = p->fs->pwd;
 			break;
 		case PROC_PID_ROOT:
+			if (!p->fs)
+				break;
 			new_inode = p->fs->root;
 			break;
 		case PROC_PID_EXE: {
-			struct vm_area_struct * vma = p->mm->mmap;
+			struct vm_area_struct * vma;
+			if (!p->mm)
+				break;
+			vma = p->mm->mmap;
 			while (vma) {
 				if (vma->vm_flags & VM_EXECUTABLE) {
 					new_inode = vma->vm_inode;
@@ -147,6 +154,8 @@ static int proc_follow_link(struct inode * dir, struct inode * inode,
 		default:
 			switch (ino >> 8) {
 			case PROC_PID_FD_DIR:
+				if (!p->files)
+					break;
 				ino &= 0xff;
 				if (ino < NR_OPEN && p->files->fd[ino]) {
 #ifdef PLAN9_SEMANTICS
@@ -183,7 +192,7 @@ static int proc_readlink(struct inode * inode, char * buffer, int buflen)
 		return i;
 	if (!inode)
 		return -EIO;
-	dev = inode->i_dev;
+	dev = kdev_t_to_nr(inode->i_dev);
 	ino = inode->i_ino;
 	iput(inode);
 	i = sprintf(buf,"[%04x]:%u", dev, ino);

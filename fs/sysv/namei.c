@@ -279,7 +279,7 @@ int sysv_mknod(struct inode * dir, const char * name, int len, int mode, int rde
 	else if (S_ISFIFO(inode->i_mode))
 		init_fifo(inode);
 	if (S_ISBLK(mode) || S_ISCHR(mode))
-		inode->i_rdev = rdev;
+		inode->i_rdev = to_kdev_t(rdev);
 	inode->i_dirt = 1;
 	error = sysv_add_entry(dir, name, len, &bh, &de);
 	if (error) {
@@ -418,7 +418,8 @@ static int empty_dir(struct inode * inode)
 	return 1;
 bad_dir:
 	brelse(bh);
-	printk("Bad directory on device %04x\n",inode->i_dev);
+	printk("Bad directory on device %s\n",
+	       kdevname(inode->i_dev));
 	return 1;
 }
 
@@ -512,8 +513,9 @@ repeat:
 		goto end_unlink;
 	}
 	if (!inode->i_nlink) {
-		printk("Deleting nonexistent file (%04x:%lu), %d\n",
-			inode->i_dev,inode->i_ino,inode->i_nlink);
+		printk("Deleting nonexistent file (%s:%lu), %d\n",
+		       kdevname(inode->i_dev),
+		       inode->i_ino, inode->i_nlink);
 		inode->i_nlink=1;
 	}
 	de->inode = 0;

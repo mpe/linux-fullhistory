@@ -184,7 +184,7 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
         struct smb_sb_info *smb_sb;
 	unsigned int fd;
 	struct file *filp;
-	dev_t dev = sb->s_dev;
+	kdev_t dev = sb->s_dev;
 	int error;
 
 	if (!data) {

@@ -18,7 +18,7 @@
  * 	This routine is called when a particular tty device is closed.
  *
  * int (*write)(struct tty_struct * tty, int from_user,
- * 		 unsigned char *buf, int count);
+ * 		 const unsigned char *buf, int count);
  *
  * 	This routine is called by the kernel to write a series of
  * 	characters to the tty device.  The characters may come from

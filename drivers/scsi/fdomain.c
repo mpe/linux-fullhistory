@@ -1,10 +1,10 @@
 /* fdomain.c -- Future Domain TMC-16x0 SCSI driver
  * Created: Sun May  3 18:53:19 1992 by faith@cs.unc.edu
- * Revised: Tue Jul  4 13:58:47 1995 by r.faith@ieee.org
+ * Revised: Sun Sep 17 00:23:26 1995 by r.faith@ieee.org
  * Author: Rickard E. Faith, faith@cs.unc.edu
  * Copyright 1992, 1993, 1994, 1995 Rickard E. Faith
  *
- * $Id: fdomain.c,v 5.33 1995/07/04 18:59:49 faith Exp $
+ * $Id: fdomain.c,v 5.36 1995/09/17 04:23:42 root Exp $
 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -137,9 +137,10 @@
  Thanks for Stephen Henson (shenson@nyx10.cs.du.edu) for providing the
  patch for the Quantum ISA-200S SCSI adapter.
  
- Thanks to Adam Bowen for the signature to the 1610M/MER/MEX scsi cards,
- and to Martin Andrews (andrewm@ccfadm.eeg.ccf.org) for the signature to
- some random TMC-1680 repackaged by IBM.
+ Thanks to Adam Bowen for the signature to the 1610M/MER/MEX scsi cards, to
+ Martin Andrews (andrewm@ccfadm.eeg.ccf.org) for the signature to some
+ random TMC-1680 repackaged by IBM; and to Mintak Ng (mintak@panix.com) for
+ the version 3.61 BIOS siganture.
 
  Thanks for Mark Singer (elf@netcom.com) and Richard Simpson
  (rsimpson@ewrcsdra.demon.co.uk) for more Quantum signatures and detective
@@ -149,6 +150,9 @@
  providing patches for proper PCI BIOS32-mediated detection of the TMC-3260
  card (a PCI bus card with the 36C70 chip).  Please send James PCI-related
  bug reports.
+
+ Thanks to Tom Cavin (tec@usa1.com) for preliminary command-line option
+ patches.
  
  All of the alpha testers deserve much thanks.
 
@@ -205,8 +209,14 @@
 #include <linux/proc_fs.h>
 #include <linux/bios32.h>
 #include <linux/pci.h>
+#include<linux/stat.h>
+
+struct proc_dir_entry proc_scsi_fdomain = {
+    PROC_SCSI_FDOMAIN, 7, "fdomain",
+    S_IFDIR | S_IRUGO | S_IXUGO, 2
+};
   
-#define VERSION          "$Revision: 5.33 $"
+#define VERSION          "$Revision: 5.36 $"
 
 /* START OF USER DEFINABLE OPTIONS */
 
@@ -302,7 +312,10 @@ static int               interrupt_level   = 0;
 static volatile int      in_command        = 0;
 static Scsi_Cmnd         *current_SC       = NULL;
 static enum chip_type    chip              = unknown;
-static int               adapter_mask      = 0x40;
+static int               adapter_mask      = 0;
+static int               this_id           = 0;
+static int               setup_called      = 0;
+
 #if DEBUG_RACE
 static volatile int      in_interrupt_flag = 0;
 #endif
@@ -391,6 +404,7 @@ struct signature {
    { "Future Domain Corp. V2.0108/18/93",                   5, 33,  3,  5, 0 },
    { "FUTURE DOMAIN CORP.  V3.5008/18/93",                  5, 34,  3,  5, 0 },
    { "FUTURE DOMAIN 18c30/18c50/1800 (C) 1994 V3.5",        5, 44,  3,  5, 0 },
+   { "FUTURE DOMAIN CORP.  V3.6108/18/93",                  5, 34,  3,  6, 0 },
    { "FUTURE DOMAIN TMC-18XX",                              5, 22, -1, -1, 0 },
 
    /* READ NOTICE ABOVE *BEFORE* YOU WASTE YOUR TIME ADDING A SIGNATURE
@@ -411,17 +425,22 @@ struct signature {
 static void print_banner( struct Scsi_Host *shpnt )
 {
    if (!shpnt) return;		/* This won't ever happen */
-   
-   printk( "scsi%d <fdomain>: BIOS version ", shpnt->host_no );
 
-   if (bios_major >= 0) printk( "%d.", bios_major );
-   else                 printk( "?." );
+   if (bios_major < 0 && bios_minor < 0) {
+      printk( "scsi%d <fdomain>: No BIOS; using scsi id %d\n",
+	      shpnt->host_no, shpnt->this_id );
+   } else {
+      printk( "scsi%d <fdomain>: BIOS version ", shpnt->host_no );
 
-   if (bios_minor >= 0) printk( "%d", bios_minor );
-   else                 printk( "?." );
+      if (bios_major >= 0) printk( "%d.", bios_major );
+      else                 printk( "?." );
+
+      if (bios_minor >= 0) printk( "%d", bios_minor );
+      else                 printk( "?." );
    
-   printk( " at 0x%x using scsi id %d\n",
-	   (unsigned)bios_base, shpnt->this_id );
+      printk( " at 0x%x using scsi id %d\n",
+	      (unsigned)bios_base, shpnt->this_id );
+   }
 
 				/* If this driver works for later FD PCI
 				   boards, we will have to modify banner
@@ -441,6 +460,21 @@ static void print_banner( struct Scsi_Host *shpnt )
 
    printk( "\n" );
 }
+
+void fdomain_setup( char *str, int *ints )
+{
+   if (setup_called++ || ints[0] < 2 || ints[0] > 3) {
+      printk( "fdomain: usage: fdomain=<PORT_BASE>,<IRQ>[,<ADAPTER_ID>]\n" );
+      printk( "fdomain: bad LILO parameters?\n" );
+   }
+
+   port_base       = ints[0] >= 1 ? ints[1]        : 0;
+   interrupt_level = ints[0] >= 2 ? ints[2]        : 0;
+   adapter_mask    = ints[0] >= 3 ? (1 << ints[3]) : 0;
+   
+   bios_major = bios_minor = -1; /* Use geometry for BIOS version >= 3.4 */
+}
+
 
 static void do_pause( unsigned amount )	/* Pause for amount*10 milliseconds */
 {
@@ -814,7 +848,6 @@ static int fdomain_pci_bios_detect( int *irq, int *iobase )
 int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
 {
    int              i, j;
-   int              flag = 0;
    int              retcode;
    struct Scsi_Host *shpnt;
 #if DO_DETECT
@@ -830,49 +863,65 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
 #if DEBUG_DETECT
    printk( "fdomain_16x0_detect()," );
 #endif
+   tpnt->proc_dir = &proc_scsi_fdomain;
 
-   for (i = 0; !bios_base && i < ADDRESS_COUNT; i++) {
+   if (setup_called) {
 #if DEBUG_DETECT
-      printk( " %x(%x),", (unsigned)addresses[i], (unsigned)bios_base );
+      printk( "no BIOS, using port_base = 0x%x, irq = %d\n",
+	      port_base, interrupt_level );
 #endif
-      for (j = 0; !bios_base && j < SIGNATURE_COUNT; j++) {
-	 if (!memcmp( ((char *)addresses[i] + signatures[j].sig_offset),
-		      signatures[j].signature, signatures[j].sig_length )) {
-	    bios_major = signatures[j].major_bios_version;
-	    bios_minor = signatures[j].minor_bios_version;
-	    PCI_bus    = (signatures[j].flag == 1);
-	    Quantum    = (signatures[j].flag > 1) ? signatures[j].flag : 0;
-	    bios_base  = addresses[i];
+      if (!fdomain_is_valid_port( port_base )) {
+	 printk( "fdomain: cannot locate chip at port base 0x%x\n",
+		 port_base );
+	 printk( "fdomain: bad LILO parameters?\n" );
+	 return 0;
+      }
+   } else {
+      int flag = 0;
+      
+      for (i = 0; !bios_base && i < ADDRESS_COUNT; i++) {
+#if DEBUG_DETECT
+	 printk( " %x(%x),", (unsigned)addresses[i], (unsigned)bios_base );
+#endif
+	 for (j = 0; !bios_base && j < SIGNATURE_COUNT; j++) {
+	    if (!memcmp( ((char *)addresses[i] + signatures[j].sig_offset),
+			 signatures[j].signature, signatures[j].sig_length )) {
+	       bios_major = signatures[j].major_bios_version;
+	       bios_minor = signatures[j].minor_bios_version;
+	       PCI_bus    = (signatures[j].flag == 1);
+	       Quantum    = (signatures[j].flag > 1) ? signatures[j].flag : 0;
+	       bios_base  = addresses[i];
+	    }
 	 }
       }
-   }
 
-   if (!bios_base) {
+      if (!bios_base) {
 #if DEBUG_DETECT
-      printk( " FAILED: NO BIOS\n" );
+	 printk( " FAILED: NO BIOS\n" );
 #endif
-      return 0;
-   }
+	 return 0;
+      }
 
-   if (!PCI_bus) {
-      flag = fdomain_isa_detect( &interrupt_level, &port_base );
-   } else {
+      if (!PCI_bus) {
+	 flag = fdomain_isa_detect( &interrupt_level, &port_base );
+      } else {
 #ifdef CONFIG_PCI
-      flag = fdomain_pci_bios_detect( &interrupt_level, &port_base );
+	 flag = fdomain_pci_bios_detect( &interrupt_level, &port_base );
 #else
-      flag = fdomain_pci_nobios_detect( &interrupt_level, &port_base );
+	 flag = fdomain_pci_nobios_detect( &interrupt_level, &port_base );
 #endif
-   }
+      }
 	 
-   if (!flag) {
+      if (!flag) {
 #if DEBUG_DETECT
-      printk( " FAILED: NO PORT\n" );
+	 printk( " FAILED: NO PORT\n" );
 #endif
 #ifdef CONFIG_PCI
-      printk( "\nTMC-3260 36C70 PCI scsi chip detection failed.\n" );
-      printk( "Send mail to mckinley@msupa.pa.msu.edu.\n" );
+	 printk( "\nTMC-3260 36C70 PCI scsi chip detection failed.\n" );
+	 printk( "Send mail to mckinley@msupa.pa.msu.edu.\n" );
 #endif
-      return 0;		/* Cannot find valid set of ports */
+	 return 0;		/* Cannot find valid set of ports */
+      }
    }
 
    SCSI_Mode_Cntl_port   = port_base + SCSI_Mode_Cntl;
@@ -895,12 +944,25 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
 #if DEBUG_DETECT
       printk( "fdomain: LOOPBACK TEST FAILED, FAILING DETECT!\n" );
 #endif
+      if (setup_called) {
+	 printk( "fdomain: loopback test failed at port base 0x%x\n",
+		 port_base );
+	 printk( "fdomain: bad LILO parameters?\n" );
+      }
       return 0;
    }
 
-   if ((bios_major == 3 && bios_minor >= 2) || bios_major < 0) {
-      adapter_mask = 0x80;
-      tpnt->this_id = 7;
+   if (this_id) {
+      tpnt->this_id = (this_id & 0x7);
+      adapter_mask  = (1 << tpnt->this_id);
+   } else {
+      if ((bios_major == 3 && bios_minor >= 2) || bios_major < 0) {
+	 tpnt->this_id = 7;
+	 adapter_mask  = 0x80;
+      } else {
+	 tpnt->this_id = 6;
+	 adapter_mask  = 0x40;
+      }
    }
 
 				/* Print out a banner here in case we can't
@@ -1015,6 +1077,33 @@ const char *fdomain_16x0_info( struct Scsi_Host *ignore )
    return buffer;
 }
 
+#if 0
+				/* First pass at /proc information routine. */
+/*
+ * inout : decides on the direction of the dataflow and the meaning of the 
+ *         variables
+ * buffer: If inout==FALSE data is beeing written to it else read from it
+ * *start: If inout==FALSE start of the valid data in the buffer
+ * offset: If inout==FALSE offset from the beginning of the imaginary file 
+ *         from which we start writing into the buffer
+ * length: If inout==FALSE max number of bytes to be written into the buffer 
+ *         else number of bytes in the buffer
+ */
+int fdomain_16x0_proc_info( char *buffer, char **start, off_t offset,
+			    int length, int hostno, int inout )
+{
+   int        len   = 0;
+   const char *info = fdomain_16x0_info( NULL );
+   
+   if (inout) return -ENOSYS;
+
+   strcpy( buffer, info );
+   len += strlen( info );
+
+   return( len );
+}
+#endif
+   
 #if 0
 static int fdomain_arbitrate( void )
 {
@@ -1697,7 +1786,7 @@ int fdomain_16x0_abort( Scsi_Cmnd *SCpnt)
 #endif
       restore_flags( flags );
       return SCSI_ABORT_NOT_RUNNING;
-   }
+   } else printk( "\n" );
 
 #if DEBUG_ABORT
    print_info( SCpnt );
@@ -1749,7 +1838,7 @@ int fdomain_16x0_reset( Scsi_Cmnd *SCpnt )
 #include "sd.h"
 #include "scsi_ioctl.h"
 
-int fdomain_16x0_biosparam( Scsi_Disk *disk, int dev, int *info_array )
+int fdomain_16x0_biosparam( Scsi_Disk *disk, kdev_t dev, int *info_array )
 {
    int              drive;
    unsigned char    buf[512 + sizeof( int ) * 2];

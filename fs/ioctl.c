@@ -50,7 +50,7 @@ static int file_ioctl(struct file *filp,unsigned int cmd,unsigned long arg)
 			return 0;
 	}
 	if (filp->f_op && filp->f_op->ioctl)
-		return filp->f_op->ioctl(filp->f_inode, filp, cmd,arg);
+		return filp->f_op->ioctl(filp->f_inode, filp, cmd, arg);
 	return -EINVAL;
 }
 
@@ -72,7 +72,7 @@ asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			return 0;
 
 		case FIONBIO:
-			on = get_fs_long((unsigned long *) arg);
+			on = get_user((unsigned int *) arg);
 			if (on)
 				filp->f_flags |= O_NONBLOCK;
 			else
@@ -81,7 +81,7 @@ asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 
 		case FIOASYNC: /* O_SYNC is not yet implemented,
 				  but it's here for completeness. */
-			on = get_fs_long ((unsigned long *) arg);
+			on = get_user ((unsigned int *) arg);
 			if (on)
 				filp->f_flags |= O_SYNC;
 			else
@@ -90,10 +90,10 @@ asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 
 		default:
 			if (filp->f_inode && S_ISREG(filp->f_inode->i_mode))
-				return file_ioctl(filp,cmd,arg);
+				return file_ioctl(filp, cmd, arg);
 
 			if (filp->f_op && filp->f_op->ioctl)
-				return filp->f_op->ioctl(filp->f_inode, filp, cmd,arg);
+				return filp->f_op->ioctl(filp->f_inode, filp, cmd, arg);
 
 			return -EINVAL;
 	}

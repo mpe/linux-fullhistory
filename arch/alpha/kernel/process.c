@@ -168,16 +168,3 @@ asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
 	putname(filename);
 	return error;
 }
-
-/*
- * This doesn't actually work correctly like this: we need to do the
- * same stack setups that fork() does first.
- */
-asmlinkage int sys_clone(unsigned long clone_flags, unsigned long newsp, unsigned long a2,
-	unsigned long a3, unsigned long a4, unsigned long a5,
-	struct pt_regs regs)
-{
-	if (!newsp)
-		newsp = rdusp();
-	return do_fork(clone_flags, newsp, &regs);
-}

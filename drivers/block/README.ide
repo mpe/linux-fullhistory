@@ -29,26 +29,27 @@ NEW!		  (both are now probed for)
 	- can co-exist with hd.c controlling the first interface
 	- run-time selectable 32bit interface support (using hdparm-2.3)
 NEW!	- support for reliable operation of buggy RZ1000 interfaces
-NEW!		- PCI support is automatic
+		- PCI support is automatic
 NEW!	- support for reliable operation of buggy CMD-640 interfaces
-NEW!		- PCI support is automatic
-NEW!		- for VLB, use kernel command line option:   ide0=cmd640_vlb
-NEW!		- this support also enables the secondary i/f on most cards
+		- PCI support is automatic
+		- for VLB, use kernel command line option:   ide0=cmd640_vlb
+		- this support also enables the secondary i/f on most cards
 NEW!	- support for secondary interface on the FGI/Holtek HT-6560B VLB i/f
-NEW!		- use kernel command line option:   ide1=ht6560
+		- use kernel command line option:   ide1=ht6560
 NEW!	- experimental support for DTC-2278D interfaces
-NEW!		- use kernel command line option:   ide1=dtc2278
+		- use kernel command line option:   ide1=dtc2278
 NEW!	- support for drives with a stuck WRERR_STAT bit
 NEW!	- support for removeable devices, including door lock/unlock
 NEW!	- transparent support for DiskManager 6.0x and "Dynamic Disk Overlay"
-NEW!		- works with Linux fdisk, LILO, loadlin, bootln, etc..
-NEW!		- should work for for EZ-Drive disks as well (not verified)
+	- works with Linux fdisk, LILO, loadlin, bootln, etc..
+NEW!	- mostly transparent support for EZ-Drive
+		- LILO is incompatible (also harmless) with EZ-Drive
 NEW!	- ide-cd.c now compiles separate from ide.c
 NEW!	- Bus-Master DMA support for Intel PCI Triton chipset IDE interfaces
-NEW!		- for details, see comments at top of triton.c
+		- for details, see comments at top of triton.c
 NEW!    - ide-cd.c now supports door locking and auto-loading.
-NEW!            Also preliminary support for multisession and direct
-NEW!            reads of audio data.
+		- Also preliminary support for multisession
+		  and direct reads of audio data.
 
 For work in progress, see the comments in ide.c, ide-cd.c, and triton.c.
 
@@ -451,3 +452,27 @@ Triblet@Almaden.IBM.Com
 San Jose, CA
  
 Silicon Valley - best day job in the world
+
+================================================================================
+
+ from:       'delman@mipg.upenn.edu'
+ subject:    rz1000
+
+Hi Mark! Looks like you managed to get the info from Intel to disable
+the read-ahead feature of the RZ1000. My encounter with
+Zeos (subsidiary of Micron which owns PCTech) has not been as
+successful --- one guy needs to ask his supervisors about NDA, another
+guy thinks that there is too much of a performance hit with read-ahead
+disabled.
+
+Did the following benchmark to see how true the claim is.
+With Linux 1.2.13, average of 10 "hdparm -t" in MB/s:
+
+                       hdparm -c0        hdparm -c1
+read-ahead enabled        4.28              4.25
+read-ahead disabled       3.58              4.30
+
+Maybe -c1 should be the default for the RZ1000, or as a suggestion in
+the README for people with the RZ1000.
+
+Cheers, Delman.

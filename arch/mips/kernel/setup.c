@@ -75,7 +75,7 @@ void setup_arch(char **cmdline_p,
 	int len = 0;
 
 #if 0
- 	ROOT_DEV = ORIG_ROOT_DEV;
+ 	ROOT_DEV = to_kdev_t(ORIG_ROOT_DEV);
 #endif
  	drive_info = DRIVE_INFO;
  	screen_info = SCREEN_INFO;

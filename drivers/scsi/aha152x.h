@@ -16,7 +16,7 @@ int        aha152x_command(Scsi_Cmnd *);
 int        aha152x_queue(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int        aha152x_abort(Scsi_Cmnd *);
 int        aha152x_reset(Scsi_Cmnd *);
-int        aha152x_biosparam(Disk *, int, int*);
+int        aha152x_biosparam(Disk *, kdev_t, int*);
 
 /* number of queueable commands
    (unless we support more than 1 cmd_per_lun this should do) */
@@ -24,12 +24,13 @@ int        aha152x_biosparam(Disk *, int, int*);
 
 #define AHA152X_REVID "Adaptec 152x SCSI driver; $Revision: 1.9 $"
 
+extern struct proc_dir_entry proc_scsi_aha152x;
+
 /* Initial value of Scsi_Host entry */
 #define AHA152X       { /* next */		NULL,			    \
 			/* usage_count */  	NULL,			    \
-						NULL,		            \
-						"aha152x",                  \
-						PROC_SCSI_AHA152X,          \
+			                        &proc_scsi_aha152x,         \
+						NULL,                       \
 			/* name */		AHA152X_REVID, 		    \
 			/* detect */		aha152x_detect,             \
 			/* release */		NULL,			    \

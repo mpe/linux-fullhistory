@@ -7,7 +7,7 @@ int qlogic_command(Scsi_Cmnd *);
 int qlogic_queuecommand(Scsi_Cmnd *, void (* done)(Scsi_Cmnd *));
 int qlogic_abort(Scsi_Cmnd *);
 int qlogic_reset(Scsi_Cmnd *);
-int qlogic_biosparam(Disk *,int,int[]);
+int qlogic_biosparam(Disk *, kdev_t, int[]);
 
 #ifndef NULL
 #define NULL (0)
@@ -16,9 +16,8 @@ int qlogic_biosparam(Disk *,int,int[]);
 #define QLOGIC {		\
 	NULL,			\
 	NULL,			\
+	NULL,			\
 	NULL,		        \
-	"qlogic",               \
-	PROC_SCSI_QLOGIC,       \
 	NULL,			\
 	qlogic_detect,		\
 	NULL,			\

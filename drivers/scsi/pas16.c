@@ -120,6 +120,12 @@
 #include "constants.h"
 #include "sd.h"
 
+#include<linux/stat.h>
+
+struct proc_dir_entry proc_scsi_pas16 = {
+    PROC_SCSI_PAS16, 5, "pas16",
+    S_IFDIR | S_IRUGO | S_IXUGO, 2
+};
 
 int scsi_irq_translate[] =
 	{ 0,  0,  1,  2,  3,  4,  5,  6, 0,  0,  7,  8,  9,  0, 10, 11 };
@@ -350,6 +356,8 @@ int pas16_detect(Scsi_Host_Template * tpnt) {
     unsigned short io_port;
     int  count;
 
+    tpnt->proc_dir = &proc_scsi_pas16;
+
     for (count = 0; current_override < NO_OVERRIDES; ++current_override) {
 	io_port = 0;
 
@@ -429,7 +437,7 @@ int pas16_detect(Scsi_Host_Template * tpnt) {
 }
 
 /*
- * Function : int pas16_biosparam(Disk *disk, int dev, int *ip)
+ * Function : int pas16_biosparam(Disk *disk, kdev_t dev, int *ip)
  *
  * Purpose : Generates a BIOS / DOS compatible H-C-S mapping for 
  *	the specified device / size.
@@ -448,7 +456,7 @@ int pas16_detect(Scsi_Host_Template * tpnt) {
  * and matching the H_C_S coordinates to what DOS uses.
  */
 
-int pas16_biosparam(Disk * disk, int dev, int * ip)
+int pas16_biosparam(Disk * disk, kdev_t dev, int * ip)
 {
   int size = disk->capacity;
   ip[0] = 64;

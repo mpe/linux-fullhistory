@@ -56,7 +56,7 @@ static int proc_sel(struct task_struct *p, int which, int who)
 
 asmlinkage int sys_setpriority(int which, int who, int niceval)
 {
-	struct task_struct **p;
+	struct task_struct *p;
 	int error = ESRCH;
 	int priority;
 
@@ -66,39 +66,39 @@ asmlinkage int sys_setpriority(int which, int who, int niceval)
 	if ((priority = PZERO - niceval) <= 0)
 		priority = 1;
 
-	for(p = &LAST_TASK; p > &FIRST_TASK; --p) {
-		if (!*p || !proc_sel(*p, which, who))
+	for_each_task(p) {
+		if (!proc_sel(p, which, who))
 			continue;
-		if ((*p)->uid != current->euid &&
-			(*p)->uid != current->uid && !suser()) {
+		if (p->uid != current->euid &&
+			p->uid != current->uid && !suser()) {
 			error = EPERM;
 			continue;
 		}
 		if (error == ESRCH)
 			error = 0;
-		if (priority > (*p)->priority && !suser())
+		if (priority > p->priority && !suser())
 			error = EACCES;
 		else
-			(*p)->priority = priority;
+			p->priority = priority;
 	}
 	return -error;
 }
 
 asmlinkage int sys_getpriority(int which, int who)
 {
-	struct task_struct **p;
-	int max_prio = 0;
+	struct task_struct *p;
+	int max_prio = -ESRCH;
 
 	if (which > 2 || which < 0)
 		return -EINVAL;
 
-	for(p = &LAST_TASK; p > &FIRST_TASK; --p) {
-		if (!*p || !proc_sel(*p, which, who))
+	for_each_task (p) {
+		if (!proc_sel(p, which, who))
 			continue;
-		if ((*p)->priority > max_prio)
-			max_prio = (*p)->priority;
+		if (p->priority > max_prio)
+			max_prio = p->priority;
 	}
-	return(max_prio ? max_prio : -ESRCH);
+	return max_prio;
 }
 
 asmlinkage int sys_profil(void)

@@ -130,6 +130,12 @@
 #include <asm/irq.h>
 #include "linux/in.h"
 #include "eata.h"
+#include<linux/stat.h>
+
+struct proc_dir_entry proc_scsi_eata2x = {
+    PROC_SCSI_EATA2X, 6, "eata2x",
+    S_IFDIR | S_IRUGO | S_IXUGO, 2
+};
 
 /* Subversion values */
 #define ISA  0
@@ -554,6 +560,8 @@ int eata2x_detect (Scsi_Host_Template * tpnt) {
       };
 
    ushort *port_base = io_port;
+
+   tpnt->proc_dir = &proc_scsi_eata2x;
 
    save_flags(flags);
    cli();

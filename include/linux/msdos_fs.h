@@ -21,6 +21,9 @@
 
 #define FAT_CACHE    8 /* FAT cache size */
 
+#define MSDOS_MAX_EXTRA	3 /* tolerate up to that number of clusters which are
+			     inaccessible because the FAT is too short */
+
 #define ATTR_RO      1  /* read-only */
 #define ATTR_HIDDEN  2  /* hidden */
 #define ATTR_SYS     4  /* system */
@@ -88,7 +91,7 @@ struct msdos_dir_entry {
 };
 
 struct fat_cache {
-	int device; /* device number. 0 means unused. */
+	kdev_t device; /* device number. 0 means unused. */
 	int ino; /* inode number. */
 	int file_cluster; /* cluster number in the file. */
 	int disk_cluster; /* cluster number on disk. */
@@ -137,7 +140,7 @@ extern void cache_init(void);
 void cache_lookup(struct inode *inode,int cluster,int *f_clu,int *d_clu);
 void cache_add(struct inode *inode,int f_clu,int d_clu);
 void cache_inval_inode(struct inode *inode);
-void cache_inval_dev(int device);
+void cache_inval_dev(kdev_t device);
 int get_cluster(struct inode *inode,int cluster);
 
 /* namei.c */

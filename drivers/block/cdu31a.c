@@ -352,7 +352,7 @@ static int abort_read_started = 0;
  * check or 0 if it hasn't.
  */
 static int
-scd_disk_change(dev_t full_dev)
+scd_disk_change(kdev_t full_dev)
 {
    int retval;
 
@@ -1483,7 +1483,7 @@ do_cdu31a_request(void)
       if (current->signal & ~current->blocked)
       {
          restore_flags(flags);
-         if (CURRENT && (CURRENT->dev > 0))
+         if (CURRENT && CURRENT->rq_status != RQ_INACTIVE)
          {
             end_request(0);
          }
@@ -1513,7 +1513,7 @@ cdu31a_request_startover:
        * The beginning here is stolen from the hard disk driver.  I hope
        * it's right.
        */
-      if (!(CURRENT) || CURRENT->dev < 0)
+      if (!(CURRENT) || CURRENT->rq_status == RQ_INACTIVE)
       {
          goto end_do_cdu31a_request;
       }
@@ -1525,14 +1525,14 @@ cdu31a_request_startover:
          /* This is a kludge to get a valid dev in an inode that
             scd_open can take.  That's the only thing scd_open()
             uses the inode for. */
-         in.i_rdev = CURRENT->dev;
+         in.i_rdev = CURRENT->rq_dev;
          scd_open(&in,NULL);
       }
 
       /* I don't use INIT_REQUEST because it calls return, which would
          return without unlocking the device.  It shouldn't matter,
          but just to be safe... */
-      if (MAJOR(CURRENT->dev) != MAJOR_NR)
+      if (MAJOR(CURRENT->rq_dev) != MAJOR_NR)
       {
 	 panic(DEVICE_NAME ": request list destroyed");
       }

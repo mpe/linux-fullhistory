@@ -633,6 +633,8 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 #ifdef LOW_ELF_STACK
 	current->start_stack = p = elf_stack - 4;
 #endif
+	current->suid = current->euid = current->fsuid = bprm->e_uid;
+	current->sgid = current->egid = current->fsgid = bprm->e_gid;
 	bprm->p -= MAX_ARG_PAGES*PAGE_SIZE;
 	bprm->p = (unsigned long) 
 	  create_elf_tables((char *)bprm->p,
@@ -649,8 +651,6 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	current->mm->start_code = start_code;
 	current->mm->end_data = end_data;
 	current->mm->start_stack = bprm->p;
-	current->suid = current->euid = current->fsuid = bprm->e_uid;
-	current->sgid = current->egid = current->fsgid = bprm->e_gid;
 
 	/* Calling sys_brk effectively mmaps the pages that we need for the bss and break
 	   sections */

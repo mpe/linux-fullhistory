@@ -347,7 +347,7 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 {
 	struct buffer_head *bh;
 	const char *found;
-	int dev = sb->s_dev;
+	kdev_t dev = sb->s_dev;
 
 	if (1024 != sizeof (struct xenix_super_block))
 		panic("Xenix FS: bad super-block size");
@@ -397,10 +397,11 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 				brelse(bh);
 			}
 	}
-	sb->s_dev=0;
+	sb->s_dev = 0;
 	unlock_super(sb);
 	if (!silent)
-		printk("VFS: unable to read Xenix/SystemV/Coherent superblock on device %d/%d\n",MAJOR(dev),MINOR(dev));
+		printk("VFS: unable to read Xenix/SystemV/Coherent superblock on device "
+		       "%s\n", kdevname(dev));
 	failed:
 	MOD_DEC_USE_COUNT;
 	return NULL;
@@ -477,7 +478,8 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 	}
 	sb->sv_ninodes = (sb->sv_firstdatazone - sb->sv_firstinodezone) << sb->sv_inodes_per_block_bits;
 	if (!silent)
-		printk("VFS: Found a %s FS (block size = %d) on device %d/%d\n",found,sb->sv_block_size,MAJOR(dev),MINOR(dev));
+		printk("VFS: Found a %s FS (block size = %d) on device %s\n",
+		       found, sb->sv_block_size, kdevname(dev));
 	sb->s_magic = SYSV_MAGIC_BASE + sb->sv_type;
 	/* The buffer code now supports block size 512 as well as 1024. */
 	sb->s_blocksize = sb->sv_block_size;
@@ -811,14 +813,16 @@ void sysv_read_inode(struct inode * inode)
 	inode->i_op = NULL;
 	inode->i_mode = 0;
 	if (!ino || ino > sb->sv_ninodes) {
-		printk("Bad inode number on dev 0x%04x: %d is out of range\n",
-			inode->i_dev, ino);
+		printk("Bad inode number on dev %s"
+		       ": %d is out of range\n",
+		       kdevname(inode->i_dev), ino);
 		return;
 	}
 	block = sb->sv_firstinodezone + ((ino-1) >> sb->sv_inodes_per_block_bits);
 	if (!(bh = sv_bread(sb,inode->i_dev,block))) {
-		printk("Major problem: unable to read inode from dev 0x%04x\n",
-			inode->i_dev);
+		printk("Major problem: unable to read inode from dev "
+		       "%s\n",
+		       kdevname(inode->i_dev));
 		return;
 	}
 	raw_inode = (struct sysv_inode *) bh->b_data + ((ino-1) & sb->sv_inodes_per_block_1);
@@ -843,7 +847,7 @@ void sysv_read_inode(struct inode * inode)
 	}
 	inode->i_blocks = inode->i_blksize = 0;
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
-		inode->i_rdev = raw_inode->i_a.i_rdev;
+		inode->i_rdev = to_kdev_t(raw_inode->i_a.i_rdev);
 	else
 	if (sb->sv_convert)
 		for (block = 0; block < 10+1+1+1; block++)
@@ -896,8 +900,9 @@ static struct buffer_head * sysv_update_inode(struct inode * inode)
 
 	ino = inode->i_ino;
 	if (!ino || ino > sb->sv_ninodes) {
-		printk("Bad inode number on dev 0x%04x: %d is out of range\n",
-			inode->i_dev, ino);
+		printk("Bad inode number on dev %s"
+		       ": %d is out of range\n",
+		       kdevname(inode->i_dev), ino);
 		inode->i_dirt = 0;
 		return 0;
 	}
@@ -927,7 +932,7 @@ static struct buffer_head * sysv_update_inode(struct inode * inode)
 		raw_inode->i_ctime = inode->i_ctime;
 	}
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
-		raw_inode->i_a.i_rdev = inode->i_rdev; /* write 2 or 3 bytes ?? */
+		raw_inode->i_a.i_rdev = kdev_t_to_nr(inode->i_rdev); /* write 2 or 3 bytes ?? */
 	else
 	if (sb->sv_convert)
 		for (block = 0; block < 10+1+1+1; block++)
@@ -958,8 +963,9 @@ int sysv_sync_inode(struct inode * inode)
                 wait_on_buffer(bh);
                 if (bh->b_req && !bh->b_uptodate)
                 {
-                        printk ("IO error syncing sysv inode [%04x:%08lx]\n",
-                                inode->i_dev, inode->i_ino);
+                        printk ("IO error syncing sysv inode ["
+				"%s:%08lx]\n",
+                                kdevname(inode->i_dev), inode->i_ino);
                         err = -1;
                 }
         }

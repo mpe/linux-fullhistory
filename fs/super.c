@@ -35,7 +35,7 @@ struct super_block super_blocks[NR_SUPER];
 static int do_remount_sb(struct super_block *sb, int flags, char * data);
 
 /* this is initialized in init/main.c */
-dev_t ROOT_DEV = 0;
+kdev_t ROOT_DEV;
 
 static struct file_system_type * file_systems = NULL;
 
@@ -197,7 +197,7 @@ repeat:
 	current->state = TASK_RUNNING;
 }
 
-void sync_supers(dev_t dev)
+void sync_supers(kdev_t dev)
 {
 	struct super_block * sb;
 
@@ -216,7 +216,7 @@ void sync_supers(dev_t dev)
 	}
 }
 
-static struct super_block * get_super(dev_t dev)
+static struct super_block * get_super(kdev_t dev)
 {
 	struct super_block * s;
 
@@ -234,20 +234,20 @@ static struct super_block * get_super(dev_t dev)
 	return NULL;
 }
 
-void put_super(dev_t dev)
+void put_super(kdev_t dev)
 {
 	struct super_block * sb;
 
 	if (dev == ROOT_DEV) {
-		printk("VFS: Root device %d/%d: prepare for armageddon\n",
-							MAJOR(dev), MINOR(dev));
+		printk("VFS: Root device %s: prepare for armageddon\n",
+		       kdevname(dev));
 		return;
 	}
 	if (!(sb = get_super(dev)))
 		return;
 	if (sb->s_covered) {
-		printk("VFS: Mounted device %d/%d - tssk, tssk\n",
-						MAJOR(dev), MINOR(dev));
+		printk("VFS: Mounted device %s - tssk, tssk\n",
+		       kdevname(dev));
 		return;
 	}
 	if (sb->s_op && sb->s_op->put_super)
@@ -262,7 +262,7 @@ asmlinkage int sys_ustat(dev_t dev, struct ustat * ubuf)
         unsigned long old_fs;
         int error;
 
-        s = get_super(dev);
+        s = get_super(to_kdev_t(dev));
         if (s == NULL)
                 return -EINVAL;
 
@@ -286,7 +286,7 @@ asmlinkage int sys_ustat(dev_t dev, struct ustat * ubuf)
         return 0;
 }
 
-static struct super_block * read_super(dev_t dev,const char *name,int flags,
+static struct super_block * read_super(kdev_t dev,const char *name,int flags,
 				       void *data, int silent)
 {
 	struct super_block * s;
@@ -299,14 +299,14 @@ static struct super_block * read_super(dev_t dev,const char *name,int flags,
 	if (s)
 		return s;
 	if (!(type = get_fs_type(name))) {
-		printk("VFS: on device %d/%d: get_fs_type(%s) failed\n",
-						MAJOR(dev), MINOR(dev), name);
+		printk("VFS: on device %s: get_fs_type(%s) failed\n",
+		       kdevname(dev), name);
 		return NULL;
 	}
 	for (s = 0+super_blocks ;; s++) {
 		if (s >= NR_SUPER+super_blocks)
 			return NULL;
-		if (!s->s_dev)
+		if (!(s->s_dev))
 			break;
 	}
 	s->s_dev = dev;
@@ -330,29 +330,29 @@ static struct super_block * read_super(dev_t dev,const char *name,int flags,
 
 static char unnamed_dev_in_use[256/8] = { 0, };
 
-dev_t get_unnamed_dev(void)
+kdev_t get_unnamed_dev(void)
 {
 	int i;
 
 	for (i = 1; i < 256; i++) {
 		if (!set_bit(i,unnamed_dev_in_use))
-			return (UNNAMED_MAJOR << 8) | i;
+			return MKDEV(UNNAMED_MAJOR, i);
 	}
 	return 0;
 }
 
-void put_unnamed_dev(dev_t dev)
+void put_unnamed_dev(kdev_t dev)
 {
 	if (!dev)
 		return;
 	if (MAJOR(dev) == UNNAMED_MAJOR &&
 	    clear_bit(MINOR(dev), unnamed_dev_in_use))
 		return;
-	printk("VFS: put_unnamed_dev: freeing unused device %d/%d\n",
-			MAJOR(dev), MINOR(dev));
+	printk("VFS: put_unnamed_dev: freeing unused device %s\n",
+			kdevname(dev));
 }
 
-static int do_umount(dev_t dev)
+static int do_umount(kdev_t dev)
 {
 	struct super_block * sb;
 	int retval;
@@ -373,8 +373,8 @@ static int do_umount(dev_t dev)
 	if (!(sb=get_super(dev)) || !(sb->s_covered))
 		return -ENOENT;
 	if (!sb->s_covered->i_mount)
-		printk("VFS: umount(%d/%d): mounted inode has i_mount=NULL\n",
-							MAJOR(dev), MINOR(dev));
+		printk("VFS: umount(%s): mounted inode has i_mount=NULL\n",
+		       kdevname(dev));
 	if (!fs_may_umount(dev, sb->s_mounted))
 		return -EBUSY;
 	sb->s_covered->i_mount = NULL;
@@ -402,7 +402,7 @@ static int do_umount(dev_t dev)
 asmlinkage int sys_umount(char * name)
 {
 	struct inode * inode;
-	dev_t dev;
+	kdev_t dev;
 	int retval;
 	struct inode dummy_inode;
 	struct file_operations * fops;
@@ -460,7 +460,7 @@ asmlinkage int sys_umount(char * name)
  * We also have to flush all inode-data for this device, as the new mount
  * might need new info.
  */
-int do_mount(dev_t dev, const char * dir, const char * type, int flags, void * data)
+int do_mount(kdev_t dev, const char * dir, const char * type, int flags, void * data)
 {
 	struct inode * dir_i;
 	struct super_block * sb;
@@ -506,7 +506,7 @@ static int do_remount_sb(struct super_block *sb, int flags, char *data)
 {
 	int retval;
 	
-	if (!(flags & MS_RDONLY ) && sb->s_dev && is_read_only(sb->s_dev))
+	if (!(flags & MS_RDONLY) && sb->s_dev && is_read_only(sb->s_dev))
 		return -EACCES;
 		/*flags |= MS_RDONLY;*/
 	/* If we are remounting RDONLY, make sure there are no rw files open */
@@ -584,7 +584,7 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 	struct file_system_type * fstype;
 	struct inode * inode;
 	struct file_operations * fops;
-	dev_t dev;
+	kdev_t dev;
 	int retval;
 	const char * t;
 	unsigned long flags = 0;
@@ -718,6 +718,6 @@ void mount_root(void)
 			return;
 		}
 	}
-	panic("VFS: Unable to mount root fs on %02x:%02x",
-		MAJOR(ROOT_DEV), MINOR(ROOT_DEV));
+	panic("VFS: Unable to mount root fs on %s",
+		kdevname(ROOT_DEV));
 }

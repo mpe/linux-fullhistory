@@ -19,10 +19,8 @@
  * 1995-03-26    Markus Kuhn
  *      fixed 500 ms bug at call to set_rtc_mmss, fixed DS12887
  *      precision CMOS clock update
- *
- * to do: adjtimex() has to be updated to recent (1994-12-13) revision
- *        of David Mill's kernel clock model. For more information, check
- *        <ftp://louie.udel.edu/pub/ntp/kernel.tar.Z>. 
+ * 1995-08-13    Torsten Duwe
+ *      kernel PLL updated to 1994-12-13 specs (rfc-1489)
  */
 
 #include <linux/errno.h>
@@ -150,7 +148,7 @@ asmlinkage int sys_stime(int * tptr)
 	cli();
 	xtime.tv_sec = value;
 	xtime.tv_usec = 0;
-	time_status = TIME_BAD;
+	time_state = TIME_BAD;
 	time_maxerror = 0x70000000;
 	time_esterror = 0x70000000;
 	sti();
@@ -330,13 +328,31 @@ asmlinkage int sys_settimeofday(struct timeval *tv, struct timezone *tz)
 		}
 
 		xtime = new_tv;
-		time_status = TIME_BAD;
+		time_state = TIME_BAD;
 		time_maxerror = 0x70000000;
 		time_esterror = 0x70000000;
 		sti();
 	}
 	return 0;
 }
+
+long pps_offset = 0;		/* pps time offset (us) */
+long pps_jitter = MAXTIME;	/* time dispersion (jitter) (us) */
+
+long pps_freq = 0;		/* frequency offset (scaled ppm) */
+long pps_stabil = MAXFREQ;	/* frequency dispersion (scaled ppm) */
+
+long pps_valid = PPS_VALID;	/* pps signal watchdog counter */
+
+int pps_shift = PPS_SHIFT;	/* interval duration (s) (shift) */
+
+long pps_jitcnt = 0;		/* jitter limit exceeded */
+long pps_calcnt = 0;		/* calibration intervals */
+long pps_errcnt = 0;		/* calibration errors */
+long pps_stbcnt = 0;		/* stability limit exceeded */
+
+/* hook for a loadable hardpps kernel module */
+void (*hardpps_ptr)(struct timeval *) = (void (*)(struct timeval *))0;
 
 /* adjtimex mainly allows reading (and writing, if superuser) of
  * kernel time-keeping variables. used by xntpd.
@@ -360,25 +376,19 @@ asmlinkage int sys_adjtimex(struct timex *txc_p)
 	memcpy_fromfs(&txc, txc_p, sizeof(struct timex));
 
 	/* In order to modify anything, you gotta be super-user! */
-	if (txc.mode && !suser())
+	if (txc.modes && !suser())
 		return -EPERM;
 
 	/* Now we validate the data before disabling interrupts
 	 */
 
-	if (txc.mode != ADJ_OFFSET_SINGLESHOT && (txc.mode & ADJ_OFFSET))
-	  /* Microsec field limited to -131000 .. 131000 usecs */
-	  if (txc.offset <= -(1 << (31 - SHIFT_UPDATE))
-	      || txc.offset >= (1 << (31 - SHIFT_UPDATE)))
-	    return -EINVAL;
-
-	/* time_status must be in a fairly small range */
-	if (txc.mode & ADJ_STATUS)
-	  if (txc.status < TIME_OK || txc.status > TIME_BAD)
+	if (txc.modes != ADJ_OFFSET_SINGLESHOT && (txc.modes & ADJ_OFFSET))
+	  /* adjustment Offset limited to +- .512 seconds */
+	  if (txc.offset <= - MAXPHASE || txc.offset >= MAXPHASE )
 	    return -EINVAL;
 
 	/* if the quartz is off by more than 10% something is VERY wrong ! */
-	if (txc.mode & ADJ_TICK)
+	if (txc.modes & ADJ_TICK)
 	  if (txc.tick < 900000/HZ || txc.tick > 1100000/HZ)
 	    return -EINVAL;
 
@@ -388,72 +398,118 @@ asmlinkage int sys_adjtimex(struct timex *txc_p)
 	save_adjust = time_adjust;
 
 	/* If there are input parameters, then process them */
-	if (txc.mode)
+	if (txc.modes)
 	{
-	    if (time_status == TIME_BAD)
-		time_status = TIME_OK;
+	    if (time_state == TIME_BAD)
+		time_state = TIME_OK;
 
-	    if (txc.mode & ADJ_STATUS)
+	    if (txc.modes & ADJ_STATUS)
 		time_status = txc.status;
 
-	    if (txc.mode & ADJ_FREQUENCY)
-		time_freq = txc.frequency << (SHIFT_KF - 16);
+	    if (txc.modes & ADJ_FREQUENCY)
+		time_freq = txc.freq;
 
-	    if (txc.mode & ADJ_MAXERROR)
+	    if (txc.modes & ADJ_MAXERROR)
 		time_maxerror = txc.maxerror;
 
-	    if (txc.mode & ADJ_ESTERROR)
+	    if (txc.modes & ADJ_ESTERROR)
 		time_esterror = txc.esterror;
 
-	    if (txc.mode & ADJ_TIMECONST)
-		time_constant = txc.time_constant;
+	    if (txc.modes & ADJ_TIMECONST)
+		time_constant = txc.constant;
 
-	    if (txc.mode & ADJ_OFFSET)
-	      if (txc.mode == ADJ_OFFSET_SINGLESHOT)
+	    if (txc.modes & ADJ_OFFSET)
+	      if ((txc.modes == ADJ_OFFSET_SINGLESHOT)
+		  || !(time_status & STA_PLL))
 		{
 		  time_adjust = txc.offset;
 		}
-	      else /* XXX should give an error if other bits set */
+	      else if ((time_status & STA_PLL)||(time_status & STA_PPSTIME))
 		{
-		  time_offset = txc.offset << SHIFT_UPDATE;
+		  ltemp = (time_status & STA_PPSTIME &&
+			   time_status & STA_PPSSIGNAL) ?
+		    pps_offset : txc.offset;
+
+		  /*
+		   * Scale the phase adjustment and
+		   * clamp to the operating range.
+		   */
+		  if (ltemp > MAXPHASE)
+		    time_offset = MAXPHASE << SHIFT_UPDATE;
+		  else if (ltemp < -MAXPHASE)
+		    time_offset = -(MAXPHASE << SHIFT_UPDATE);
+		  else
+		    time_offset = ltemp << SHIFT_UPDATE;
+
+		  /*
+		   * Select whether the frequency is to be controlled and in which
+		   * mode (PLL or FLL). Clamp to the operating range. Ugly
+		   * multiply/divide should be replaced someday.
+		   */
+
+		  if (time_status & STA_FREQHOLD || time_reftime == 0)
+		    time_reftime = xtime.tv_sec;
 		  mtemp = xtime.tv_sec - time_reftime;
 		  time_reftime = xtime.tv_sec;
-		  if (mtemp > (MAXSEC+2) || mtemp < 0)
-		    mtemp = 0;
-
-		  if (txc.offset < 0)
-		    time_freq -= (-txc.offset * mtemp) >>
-		      (time_constant + time_constant);
-		  else
-		    time_freq += (txc.offset * mtemp) >>
-		      (time_constant + time_constant);
-
-		  ltemp = time_tolerance << SHIFT_KF;
-
-		  if (time_freq > ltemp)
-		    time_freq = ltemp;
-		  else if (time_freq < -ltemp)
-		    time_freq = -ltemp;
+		  if (time_status & STA_FLL)
+		    {
+		      if (mtemp >= MINSEC)
+			{
+			  ltemp = ((time_offset / mtemp) << (SHIFT_USEC -
+							     SHIFT_UPDATE));
+			  if (ltemp < 0)
+			    time_freq -= -ltemp >> SHIFT_KH;
+			  else
+			    time_freq += ltemp >> SHIFT_KH;
+			}
+		    } 
+		  else 
+		    {
+		      if (mtemp < MAXSEC)
+			{
+			  ltemp *= mtemp;
+			  if (ltemp < 0)
+			    time_freq -= -ltemp >> (time_constant +
+						    time_constant + SHIFT_KF -
+						    SHIFT_USEC);
+			  else
+			    time_freq += ltemp >> (time_constant +
+						   time_constant + SHIFT_KF -
+						   SHIFT_USEC);
+			}
+		    }
+		  if (time_freq > time_tolerance)
+		    time_freq = time_tolerance;
+		  else if (time_freq < -time_tolerance)
+		    time_freq = -time_tolerance;
 		}
-	    if (txc.mode & ADJ_TICK)
+	    if (txc.modes & ADJ_TICK)
 	      tick = txc.tick;
 
 	}
 	txc.offset	   = save_adjust;
-	txc.frequency	   = ((time_freq+1) >> (SHIFT_KF - 16));
+	txc.freq	   = time_freq;
 	txc.maxerror	   = time_maxerror;
 	txc.esterror	   = time_esterror;
 	txc.status	   = time_status;
-	txc.time_constant  = time_constant;
+	txc.constant	   = time_constant;
 	txc.precision	   = time_precision;
 	txc.tolerance	   = time_tolerance;
 	txc.time	   = xtime;
 	txc.tick	   = tick;
+	txc.ppsfreq	   = pps_freq;
+	txc.jitter	   = pps_jitter;
+	txc.shift	   = pps_shift;
+	txc.stabil	   = pps_stabil;
+	txc.jitcnt	   = pps_jitcnt;
+	txc.calcnt	   = pps_calcnt;
+	txc.errcnt	   = pps_errcnt;
+	txc.stbcnt	   = pps_stbcnt;
 
 	sti();
 
 	memcpy_tofs(txc_p, &txc, sizeof(struct timex));
-	return time_status;
+	return time_state;
 }
 
 /*

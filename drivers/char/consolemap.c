@@ -157,9 +157,13 @@ static unsigned short translations[][256] = {
   }
 };
 
-/* the above mappings are not invertible - this is just a best effort */
+/* The standard kernel character-to-font mappings are not invertible
+   -- this is just a best effort. */
+
+#define MAX_GLYPH 512		/* Max possible glyph value */
+
 static unsigned char * inv_translate = NULL;
-static unsigned char inv_norm_transl[E_TABSZ];
+static unsigned char inv_norm_transl[MAX_GLYPH];
 static unsigned char * inverse_translations[4] = { NULL, NULL, NULL, NULL };
 
 static void set_inverse_transl(int i)
@@ -172,16 +176,20 @@ static void set_inverse_transl(int i)
 		/* slightly messy to avoid calling kmalloc too early */
 		q = inverse_translations[i] = ((i == LAT1_MAP)
 			? inv_norm_transl
-			: (unsigned char *) kmalloc(E_TABSZ, GFP_KERNEL));
+			: (unsigned char *) kmalloc(MAX_GLYPH, GFP_KERNEL));
 		if (!q)
 			return;
 	}
-	for (j=0; j<E_TABSZ; j++)
+	for (j=0; j<MAX_GLYPH; j++)
 		q[j] = 0;
-	for (j=0; j<E_TABSZ; j++)
-		if (q[glyph = conv_uni_to_pc(p[j])] < 32) 
-		  /* prefer '-' above SHY etc. */
-		  q[glyph] = j;
+
+	for (j=0; j<E_TABSZ; j++) {
+		glyph = conv_uni_to_pc(p[j]);
+		if (glyph >= 0 && glyph < MAX_GLYPH && q[glyph] < 32) {
+			/* prefer '-' above SHY etc. */
+		  	q[glyph] = j;
+		}
+	}
 }
 
 unsigned short *set_translate(int m)
@@ -194,13 +202,18 @@ unsigned short *set_translate(int m)
 
 /*
  * Inverse translation is impossible for several reasons:
- * 1. The translation maps are not 1-1
+ * 1. The font<->character maps are not 1-1.
  * 2. The text may have been written while a different translation map
- *    was active
+ *    was active, or using Unicode.
  * Still, it is now possible to a certain extent to cut and paste non-ASCII.
  */
-unsigned char inverse_translate(unsigned char c) {
-	return ((inv_translate && inv_translate[c]) ? inv_translate[c] : c);
+unsigned char inverse_translate(int glyph) {
+	if ( glyph < 0 || glyph >= MAX_GLYPH )
+		return 0;
+	else
+		return ((inv_translate && inv_translate[glyph])
+			? inv_translate[glyph]
+			: (unsigned char)(glyph & 0xff));
 }
 
 /*
@@ -209,7 +222,7 @@ unsigned char inverse_translate(unsigned char c) {
  *
  * The "old" variants are for translation directly to font (using the
  * 0xf000-0xf0ff "transparent" Unicodes) whereas the "new" variants set
- * unicodes explictly.
+ * Unicodes explictly.
  */
 int con_set_trans_old(unsigned char * arg)
 {
@@ -243,6 +256,7 @@ int con_get_trans_old(unsigned char * arg)
 	  }
 	return 0;
 }
+
 int con_set_trans_new(ushort * arg)
 {
 	int i;
@@ -280,128 +294,189 @@ int con_get_trans_new(ushort * arg)
  * Unicode -> current font conversion 
  *
  * A font has at most 512 chars, usually 256.
- * But one font position may represent several Unicode chars
- * (and moreover, hashtables work best when they are not too full),
- * so pick HASHSIZE somewhat larger than 512.
- * Since there are likely to be long consecutive stretches
- * (like U+0000 to U+00FF), HASHSTEP should not be too small.
- * Searches longer than MAXHASHLEVEL steps are refused, unless
- * requested explicitly.
- *
- * Note: no conversion tables are compiled in, so the user
- * must supply an explicit mapping herself. See kbd-0.90 (or an
- * earlier kernel version) for the default Unicode-to-PC mapping.
- * Usually, the mapping will be loaded simultaneously with the font.
+ * But one font position may represent several Unicode chars.
+ * A hashtable is somewhat of a pain to deal with, so use a
+ * "paged table" instead.  Simulation has shown the memory cost of
+ * this 3-level paged table scheme to be comparable to a hash table.
  */
 
 #include "uni_hash.tbl"		/* Include hash tables & parameters */
 
-int hashtable_contents_valid = 1;
+int hashtable_contents_valid = 0; /* Use ASCII-only mode for bootup*/
 
+static u16 **uni_pagedir[32] =
+{
+  NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+  NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+  NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+  NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
+};
+
+static int
+con_insert_unipair(u_short unicode, u_short fontpos)
+{
+  int i, n;
+  u16 **p1, *p2;
+
+  if ( !(p1 = uni_pagedir[n = unicode >> 11]) )
+    {
+      p1 = uni_pagedir[n] = kmalloc(32*sizeof(u16 *), GFP_KERNEL);
+      if ( !p1 )
+	return -ENOMEM;
+
+      for ( i = 0 ; i < 32 ; i++ )
+	p1[i] = NULL;
+    }
+
+  if ( !(p2 = p1[n = (unicode >> 6) & 0x1f]) )
+    {
+      p2 = p1[n] = kmalloc(64*sizeof(u16), GFP_KERNEL);
+      if ( !p2 )
+	return -ENOMEM;
+
+      for ( i = 0 ; i < 64 ; i++ )
+	p2[i] = 0xffff;		/* No glyph for this character (yet) */
+    }
+
+  p2[unicode & 0x3f] = fontpos;
+  
+  return 0;
+}
+  
+/* ui is a leftover from using a hashtable, but might be used again */
 void
-con_clear_unimap(struct unimapinit *ui) {
-	int i;
+con_clear_unimap(struct unimapinit *ui)
+{
+  int i, j;
+  u16 **p1;
+  
+  for ( i = 0 ; i < 32 ; i++ )
+    {
+      if ( (p1 = uni_pagedir[i]) != NULL )
+	{
+	  for ( j = 0 ; j < 32 ; j++ )
+	    {
+	      if ( p1[j] )
+		kfree(p1[j]);
+	    }
+	  kfree(p1);
+	}
+      uni_pagedir[i] = NULL;
+    }
 
-	/* read advisory values for hash algorithm */
-	hashsize = ui->advised_hashsize;
-	if (hashsize < 256 || hashsize > HASHSIZE)
-	  hashsize = HASHSIZE;
-	hashstep = (ui->advised_hashstep % hashsize);
-	if (hashstep < 64)
-	  hashstep = HASHSTEP;
-	maxhashlevel = ui->advised_hashlevel;
-	if (!maxhashlevel)
-	  maxhashlevel = MAXHASHLEVEL;
-	if (maxhashlevel > hashsize)
-	  maxhashlevel = hashsize;
-
-	/* initialize */
-	hashlevel = 0;
-	for (i=0; i<hashsize; i++)
-	  hashtable[i].unicode = 0xffff;
-	hashtable_contents_valid = 1;
+  hashtable_contents_valid = 1;
 }
 
 int
-con_set_unimap(ushort ct, struct unipair *list){
-	int i, lct;
-	ushort u, hu;
-	struct unimapinit hashdefaults = { 0, 0, 0 };
+con_set_unimap(ushort ct, struct unipair *list)
+{
+  int err = 0, err1, i;
 
-	if (!hashtable_contents_valid)
-	  con_clear_unimap(&hashdefaults);
-	while(ct) {
-	    u = get_user(&list->unicode);
-	    i = u % hashsize;
-	    lct = 1;
-	    while ((hu = hashtable[i].unicode) != 0xffff && hu != u) {
-		if (lct++ >=  maxhashlevel)
-		  return -ENOMEM;
-		i += hashstep;
-		if (i >= hashsize)
-		  i -= hashsize;
-	    }
-	    if (lct > hashlevel)
-	      hashlevel = lct;
-	    hashtable[i].unicode = u;
-	    hashtable[i].fontpos = get_user(&list->fontpos);
-	    list++;
-	    ct--;
-	}
+  while( ct-- )
+    {
+      if ( (err1 = con_insert_unipair(get_user(&list->unicode),
+				      get_user(&list->fontpos))) != 0 )
+	err = err1;
+      list++;
+    }
 
-	for ( i = 0 ; i <= 3 ; i++ )
-	  set_inverse_transl(i); /* Update all inverse translations */
+  for ( i = 0 ; i <= 3 ; i++ )
+    set_inverse_transl(i); /* Update all inverse translations */
+  
+  return err;
+}
 
-	return 0;
+/* Loads the unimap for the hardware font, as defined in uni_hash.tbl.
+   The representation used was the most compact I could come up
+   with.  This routine is executed at sys_setup time, and when the
+   PIO_FONTRESET ioctl is called. */
+
+void
+con_set_default_unimap(void)
+{
+  int i, j;
+  u16 *p;
+
+  /* The default font is always 256 characters */
+
+  con_clear_unimap(NULL);
+
+  p = dfont_unitable;
+  for ( i = 0 ; i < 256 ; i++ )
+    for ( j = dfont_unicount[i] ; j ; j-- )
+      con_insert_unipair(*(p++), i);
+
+  for ( i = 0 ; i <= 3 ; i++ )
+    set_inverse_transl(i);	/* Update all inverse translations */
 }
 
 int
 con_get_unimap(ushort ct, ushort *uct, struct unipair *list){
-	int i, ect;
+	int i, j, k, ect;
+	u16 **p1, *p2;
 
 	ect = 0;
 	if (hashtable_contents_valid)
-	  for (i = 0; i<hashsize; i++)
-	    if (hashtable[i].unicode != 0xffff) {
-		if (ect++ < ct) {
-		    put_user(hashtable[i].unicode, &list->unicode);
-		    put_user(hashtable[i].fontpos, &list->fontpos);
-		    list++;
-		}
-	    }
+	  {
+	    for ( i = 0 ; i < 32 ; i++ )
+	      if ( (p1 = uni_pagedir[i]) != NULL )
+		for ( j = 0 ; j < 32 ; j++ )
+		  if ( (p2 = *(p1++)) != NULL )
+		    for ( k = 0 ; k < 64 ; k++ )
+		      {
+			if ( *p2 < MAX_GLYPH && ect++ < ct )
+			  {
+			    put_user((u_short)((i<<11)+(j<<6)+k),
+				     &list->unicode);
+			    put_user((u_short) *p2, &list->fontpos);
+			    list++;
+			  }
+			p2++;
+		      }
+	  }
 	put_user(ect, uct);
 	return ((ect <= ct) ? 0 : -ENOMEM);
 }
 
 int
-conv_uni_to_pc(long ucs) {
-      int i, h;
-      
-      /* Only 16-bit codes supported at this time */
-      if (ucs > 0xffff)
-	ucs = 0xfffd;		/* U+FFFD: REPLACEMENT CHARACTER */
-      else if (ucs < 0x20 || ucs >= 0xfffe)
-	return -1;		/* Not a printable character */
-      else if (ucs == 0xfeff || (ucs >= 0x200a && ucs <= 0x200f))
-	return -2;		/* Zero-width space */
-      /*
-       * UNI_DIRECT_BASE indicates the start of the region in the User Zone
-       * which always has a 1:1 mapping to the currently loaded font.  The
-       * UNI_DIRECT_MASK indicates the bit span of the region.
-       */
-      else if ( (ucs & ~UNI_DIRECT_MASK) == UNI_DIRECT_BASE )
-	return ucs & UNI_DIRECT_MASK;
+conv_uni_to_pc(long ucs) 
+{
+  int h;
+  u16 **p1, *p2;
+  
+  /* Only 16-bit codes supported at this time */
+  if (ucs > 0xffff)
+    ucs = 0xfffd;		/* U+FFFD: REPLACEMENT CHARACTER */
+  else if (ucs < 0x20 || ucs >= 0xfffe)
+    return -1;		/* Not a printable character */
+  else if (ucs == 0xfeff || (ucs >= 0x200a && ucs <= 0x200f))
+    return -2;			/* Zero-width space */
+  /*
+   * UNI_DIRECT_BASE indicates the start of the region in the User Zone
+   * which always has a 1:1 mapping to the currently loaded font.  The
+   * UNI_DIRECT_MASK indicates the bit span of the region.
+   */
+  else if ( (ucs & ~UNI_DIRECT_MASK) == UNI_DIRECT_BASE )
+    return ucs & UNI_DIRECT_MASK;
+  
+  if (!hashtable_contents_valid)
+    return -3;
+  
+  if ( (p1 = uni_pagedir[ucs >> 11]) &&
+      (p2 = p1[(ucs >> 6) & 0x1f]) &&
+      (h = p2[ucs & 0x3f]) < MAX_GLYPH )
+    return h;
 
-      if (!hashtable_contents_valid)
-	return -3;
-      
-      h = ucs % hashsize;
-      for (i = 0; i < hashlevel; i++) {
-	  if (hashtable[h].unicode == ucs)
-	    return hashtable[h].fontpos;
-	  if ((h += hashstep) >= hashsize)
-	    h -= hashsize;
-      }
+  return -4;		/* not found */
+}
 
-      return -4;		/* not found */
+/*
+ * This is called at sys_setup time, after memory and the console are
+ * initialized.  It must be possible to call kmalloc(..., GFP_KERNEL)
+ * from this function, hence the call from sys_setup.
+ */
+void
+console_map_init(void)
+{
+  con_set_default_unimap();
 }

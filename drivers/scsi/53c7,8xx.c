@@ -178,6 +178,12 @@
 #include "53c7,8xx.h"
 #include "constants.h"
 #include "sd.h"
+#include<linux/stat.h>
+
+struct proc_dir_entry proc_scsi_ncr53c7xx = {
+    PROC_SCSI_NCR53C7xx, 9, "ncr53c7xx",
+    S_IFDIR | S_IRUGO | S_IXUGO, 2
+};
 
 static void abnormal_finished (struct NCR53c7x0_cmd *cmd, int result);
 static int NCR53c8xx_run_tests (struct Scsi_Host *host);
@@ -987,7 +993,6 @@ int NCR53c7xx_detect(Scsi_Host_Template *tpnt) {
     int count;			/* Number of boards detected */
     unsigned char pci_bus, pci_device_fn;
     static short pci_index=0;	/* Device index to PCI BIOS calls */
-    
 
     for (current_override = count = 0; current_override < OVERRIDE_LIMIT; 
 	 ++current_override) {
@@ -1115,6 +1120,7 @@ NCR53c8x0_init_fixup (struct Scsi_Host *host) {
      * SCRIPTS.
      */
     
+    tpnt->proc_dir = &proc_scsi_ncr53c7xx;
 
     patch_abs_rwri_data (hostdata->script, 0, dmode_memory_to_memory, tmp);
     patch_abs_rwri_data (hostdata->script, 0, dmode_memory_to_ncr, memory_to_ncr);

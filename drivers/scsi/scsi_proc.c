@@ -7,7 +7,7 @@
  * information directly to the lowlevel driver.
  *
  * (c) 1995 Michael Neuffer neuffer@goofy.zdv.uni-mainz.de 
- * Version: 0.99.7   last change: 95/07/18
+ * Version: 0.99.8   last change: 95/09/13
  * 
  * generic command parser provided by: 
  * Andreas Heilwagen <crashcar@informatik.uni-koblenz.de>
@@ -32,6 +32,7 @@
 #include <linux/malloc.h>
 #include <linux/proc_fs.h>
 #include <linux/errno.h>
+#include <linux/stat.h>
 #include "../block/blk.h"
 #include "scsi.h"
 #include "hosts.h"
@@ -41,36 +42,13 @@
 #define FALSE 0
 #endif
 
-extern struct proc_dir_entry scsi_dir[];
-extern struct proc_dir_entry scsi_hba_dir[];
 extern int scsi_proc_info(char *, char **, off_t, int, int, int);
  
+struct scsi_dir {
+    struct proc_dir_entry entry;
+    char name[4];
+};
 
-int get_hba_index(int ino)
-{
-    Scsi_Host_Template *tpnt = scsi_hosts;
-    struct Scsi_Host *hpnt = scsi_hostlist;
-    uint x = 0;
-
-    /*
-     * Danger - this has massive race conditions in it.
-     * If the someone adds/removes entries from the scsi chain
-     * while someone else is looking at /proc/scsi, unpredictable
-     * results will be obtained.
-     */
-    while (tpnt) {
-	if (ino == tpnt->low_ino) 
-		return(x);
-	x += 3;
-	while (hpnt) {
-            if(hpnt->hostt == tpnt) /* This gives us the correct index */
-                x++;
-	    hpnt = hpnt->next;
-	}
-	tpnt = tpnt->next;
-    }
-    return(0);
-}
 
 /* generic_proc_info
  * Used if the driver currently has no own support for /proc/scsi
@@ -106,117 +84,54 @@ extern int dispatch_scsi_info(int ino, char *buffer, char **start,
 			      off_t offset, int length, int func)
 {
     struct Scsi_Host *hpnt = scsi_hostlist;
-
-    if(func != 2) {    
-	if(ino == PROC_SCSI_SCSI) {            
-            /*
-             * This is for the scsi core, rather than any specific
-             * lowlevel driver.
-             */
-            return(scsi_proc_info(buffer, start, offset, length, 0, func));
+    
+    if(ino == PROC_SCSI_SCSI) {            
+        /*
+         * This is for the scsi core, rather than any specific
+         * lowlevel driver.
+         */
+        return(scsi_proc_info(buffer, start, offset, length, 0, func));
+    }
+    
+    while(hpnt) {
+        if (ino == (hpnt->host_no + PROC_SCSI_FILE)) {
+            if(hpnt->hostt->proc_info == NULL)
+                return generic_proc_info(buffer, start, offset, length, 
+                                         hpnt->host_no, func);
+            else
+                return(hpnt->hostt->proc_info(buffer, start, offset, 
+                                              length, hpnt->host_no, func));
         }
-
-	while(hpnt) {
-	    if (ino == (hpnt->host_no + PROC_SCSI_FILE)) {
-                if(hpnt->hostt->proc_info == NULL)
-                    return generic_proc_info(buffer, start, offset, length, 
-                                             hpnt->host_no, func);
-                else
-                    return(hpnt->hostt->proc_info(buffer, start, offset, 
-                                                  length, hpnt->host_no, func));
-            }
-	    hpnt = hpnt->next;
-	}
-	return(-EBADF);
-    } else
-	return(get_hba_index(ino));
-}
-
-inline uint count_templates(void)
-{
-    Scsi_Host_Template *tpnt = scsi_hosts;
-    uint x = 0;
-    
-    while (tpnt) {
-	tpnt = tpnt->next;
-	x++;
+        hpnt = hpnt->next;
     }
-    return (x);
+    return(-EBADF);
 }
 
-void build_proc_dir_hba_entries(void)
+void build_proc_dir_entries(Scsi_Host_Template *tpnt)
 {
-    Scsi_Host_Template *tpnt = scsi_hosts;
     struct Scsi_Host *hpnt;
-    uint x, y;
 
-    /* namespace for 16 HBAs with host_no 0-999 
-     * I don't think we'll need more. Having more than 2 
-     * HBAs in one system is already highly unusual 
-     */
-    static char names[PROC_SCSI_LAST - PROC_SCSI_FILE][4];
+    struct scsi_dir *scsi_hba_dir;
+
+    proc_scsi_register(0, tpnt->proc_dir);
     
-    x = y = 0;
-
-    while (tpnt) {
-	scsi_hba_dir[x].low_ino = tpnt->low_ino;
-	scsi_hba_dir[x].namelen = 1;
-	scsi_hba_dir[x++].name = ".";
-	scsi_hba_dir[x].low_ino = PROC_SCSI;
-	scsi_hba_dir[x].namelen = 2;
-	scsi_hba_dir[x++].name = "..";
-
-        hpnt = scsi_hostlist;
-        while (hpnt) {
-	    if (tpnt == hpnt->hostt) {
-		scsi_hba_dir[x].low_ino = PROC_SCSI_FILE + hpnt->host_no;
-		scsi_hba_dir[x].namelen = sprintf(names[y],"%d",hpnt->host_no);
-		scsi_hba_dir[x].name = names[y];
-		y++;
-		x++;
-	    }
-	    hpnt = hpnt->next;
-	}
-
-        scsi_hba_dir[x].low_ino = 0;
-	scsi_hba_dir[x].namelen = 0;
-	scsi_hba_dir[x++].name = NULL;
-	tpnt = tpnt->next;
-    }    
-}
-
-void build_proc_dir_entries(void)
-{
-    Scsi_Host_Template *tpnt = scsi_hosts;
-    
-    uint newnum; 
-    uint x;
-    
-    newnum = count_templates();
-    
-    scsi_dir[0].low_ino = PROC_SCSI;
-    scsi_dir[0].namelen = 1;
-    scsi_dir[0].name = ".";
-    scsi_dir[1].low_ino = PROC_ROOT_INO;
-    scsi_dir[1].namelen = 2;
-    scsi_dir[1].name = "..";
-    scsi_dir[2].low_ino = PROC_SCSI_SCSI;
-    scsi_dir[2].namelen = 4;
-    scsi_dir[2].name = "scsi";
-
-    for(x = 3; x < newnum + 3; x++, tpnt = tpnt->next) { 
-	scsi_dir[x].low_ino = tpnt->low_ino;
-	scsi_dir[x].namelen = strlen(tpnt->procname);
-	scsi_dir[x].name = tpnt->procname;
+    hpnt = scsi_hostlist;
+    while (hpnt) {
+        if (tpnt == hpnt->hostt) {
+            scsi_hba_dir = scsi_init_malloc(sizeof(struct scsi_dir), GFP_KERNEL);
+            if(scsi_hba_dir == NULL)
+                panic("Not enough memory to register SCSI HBA in /proc/scsi !\n");
+            memset(scsi_hba_dir, 0, sizeof(struct scsi_dir));
+            scsi_hba_dir->entry.low_ino = PROC_SCSI_FILE + hpnt->host_no;
+            scsi_hba_dir->entry.namelen = sprintf(scsi_hba_dir->name,"%d",
+                                                    hpnt->host_no);
+            scsi_hba_dir->entry.name = scsi_hba_dir->name;
+            scsi_hba_dir->entry.mode = S_IFREG | S_IRUGO | S_IWUSR;
+            proc_scsi_register(tpnt->proc_dir, &scsi_hba_dir->entry);
+        }
+        hpnt = hpnt->next;
     }
-
-    scsi_dir[x].low_ino = 0;
-    scsi_dir[x].namelen = 0;
-    scsi_dir[x].name = NULL;
-    
-    build_proc_dir_hba_entries();
 }
-
 
 /*
  *  parseHandle *parseInit(char *buf, char *cmdList, int cmdNum); 

@@ -220,6 +220,12 @@
 #include <linux/proc_fs.h>
 
 #include "aha152x.h"
+#include<linux/stat.h>
+
+struct proc_dir_entry proc_scsi_aha152x = {
+    PROC_SCSI_AHA152X, 7, "aha152x",
+    S_IFDIR | S_IRUGO | S_IXUGO, 2
+};
 
 /* DEFINES */
 
@@ -568,6 +574,8 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
   int                 interrupt_level;
   struct Scsi_Host    *hreg;
   
+  tpnt->proc_dir = &proc_scsi_aha152x;
+
   if(setup_called)
     {
       printk("aha152x: processing commandline: ");
@@ -1108,13 +1116,14 @@ int aha152x_reset(Scsi_Cmnd * __unused)
 /*
  * Return the "logical geometry"
  */
-int aha152x_biosparam(Scsi_Disk * disk, int dev, int *info_array )
+int aha152x_biosparam(Scsi_Disk * disk, kdev_t dev, int *info_array )
 {
   int size = disk->capacity;
 
 #if defined(DEBUG_BIOSPARAM)
   if(aha152x_debug & debug_biosparam)
-    printk("aha152x_biosparam: dev=%x, size=%d, ", dev, size);
+    printk("aha152x_biosparam: dev=%s, size=%d, ",
+	   kdevname(dev), size);
 #endif
   
 /* I took this from other SCSI drivers, since it provides

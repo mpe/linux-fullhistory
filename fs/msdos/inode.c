@@ -168,7 +168,7 @@ struct super_block *msdos_read_super(struct super_block *sb,void *data,
 {
 	struct buffer_head *bh;
 	struct msdos_boot_sector *b;
-	int data_sectors,logical_sector_size,sector_mult;
+	int data_sectors,logical_sector_size,sector_mult,fat_clusters=0;
 	int debug,error,fat,quiet;
 	char check,conversion;
 	uid_t uid;
@@ -246,11 +246,12 @@ struct super_block *msdos_read_super(struct super_block *sb,void *data,
 		    b->cluster_size/sector_mult : 0;
 		MSDOS_SB(sb)->fat_bits = fat ? fat : MSDOS_SB(sb)->clusters >
 		    MSDOS_FAT12 ? 16 : 12;
+		fat_clusters = MSDOS_SB(sb)->fat_length*SECTOR_SIZE*8/
+		    MSDOS_SB(sb)->fat_bits;
 		error = !MSDOS_SB(sb)->fats || (MSDOS_SB(sb)->dir_entries &
-		    (MSDOS_DPS-1)) || MSDOS_SB(sb)->clusters+2 > MSDOS_SB(sb)->
-		    fat_length*SECTOR_SIZE*8/MSDOS_SB(sb)->fat_bits ||
-		    (logical_sector_size & (SECTOR_SIZE-1)) || !b->secs_track ||
-		    !b->heads;
+		    (MSDOS_DPS-1)) || MSDOS_SB(sb)->clusters+2 > fat_clusters+
+		    MSDOS_MAX_EXTRA || (logical_sector_size & (SECTOR_SIZE-1))
+		    || !b->secs_track || !b->heads;
 	}
 	brelse(bh);
 	/*
@@ -276,10 +277,12 @@ struct super_block *msdos_read_super(struct super_block *sb,void *data,
 		    sectors),(unsigned long)b->total_sect,logical_sector_size);
 		printk ("Transaction block size = %d\n",blksize);
 	}
+	if (MSDOS_SB(sb)->clusters+2 > fat_clusters)
+		MSDOS_SB(sb)->clusters = fat_clusters-2;
 	if (error) {
 		if (!silent)
-			printk("VFS: Can't find a valid MSDOS filesystem on dev 0x%04x.\n",
-				   sb->s_dev);
+			printk("VFS: Can't find a valid MSDOS filesystem on dev "
+			       "%s.\n", kdevname(sb->s_dev));
 		sb->s_dev = 0;
 		MOD_DEC_USE_COUNT;
 		return NULL;
@@ -382,7 +385,8 @@ void msdos_read_inode(struct inode *inode)
 	}
 	if (!(bh = bread(inode->i_dev,inode->i_ino >> MSDOS_DPB_BITS,
 	    SECTOR_SIZE))) {
-		printk("dev = 0x%04X, ino = %ld\n",inode->i_dev,inode->i_ino);
+		printk("dev = %s, ino = %ld\n",
+		       kdevname(inode->i_dev), inode->i_ino);
 		panic("msdos_read_inode: unable to read i-node block");
 	}
 	raw_entry = &((struct msdos_dir_entry *) (bh->b_data))
@@ -446,7 +450,8 @@ void msdos_write_inode(struct inode *inode)
 	if (inode->i_ino == MSDOS_ROOT_INO || !inode->i_nlink) return;
 	if (!(bh = bread(inode->i_dev,inode->i_ino >> MSDOS_DPB_BITS,
 	    SECTOR_SIZE))) {
-		printk("dev = 0x%04X, ino = %ld\n",inode->i_dev,inode->i_ino);
+		printk("dev = %s, ino = %ld\n",
+		       kdevname(inode->i_dev), inode->i_ino);
 		panic("msdos_write_inode: unable to read i-node block");
 	}
 	raw_entry = &((struct msdos_dir_entry *) (bh->b_data))

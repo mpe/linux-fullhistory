@@ -292,7 +292,6 @@ void ide_init_triton (byte bus, byte fn)
 	unsigned int timings;
 	extern ide_hwif_t ide_hwifs[];
 
-	++fn;	/* IDE interface is 2nd function on this device */
 	/*
 	 * See if IDE and BM-DMA features are enabled:
 	 */

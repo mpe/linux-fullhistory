@@ -8,6 +8,16 @@
  */
 
 #include <linux/linkage.h>
+#include <linux/config.h>
+
+#if defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB66P)
+# define NR_IRQS	33
+#elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P)
+# define NR_IRQS	32
+#else
+# define NR_IRQS	16
+#endif
+
 
 extern void disable_irq(unsigned int);
 extern void enable_irq(unsigned int);

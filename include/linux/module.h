@@ -90,7 +90,7 @@ extern int register_symtab(struct symbol_table *);
  * define the count variable, and usage macros.
  */
 
-extern int mod_use_count_;
+extern long mod_use_count_;
 #if defined(CONFIG_MODVERSIONS) && defined(MODULE) && !defined(__GENKSYMS__)
 int Using_Versions; /* gcc will handle this global (used as a flag) correctly */
 #endif

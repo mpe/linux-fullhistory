@@ -134,7 +134,7 @@ repeat:
    We will ultimately want to put these in a separate list, but for
    now we search all of the lists for dirty buffers */
 
-static int sync_buffers(dev_t dev, int wait)
+static int sync_buffers(kdev_t dev, int wait)
 {
 	int i, retry, pass = 0, err = 0;
 	int nlist, ncount;
@@ -177,7 +177,9 @@ static int sync_buffers(dev_t dev, int wait)
 			 if (wait && bh->b_req && !bh->b_lock &&
 			     !bh->b_dirt && !bh->b_uptodate) {
 				  err = 1;
-				  printk("Weird - unlocked, clean and not uptodate buffer on list %d %x %lu\n", nlist, bh->b_dev, bh->b_blocknr);
+				  printk("Weird - unlocked, clean and not "
+				    "uptodate buffer on list %d %s %lu\n",
+				    nlist, kdevname(bh->b_dev), bh->b_blocknr);
 				  continue;
 			  }
 			 /* Don't write clean buffers.  Don't write ANY buffers
@@ -192,14 +194,16 @@ static int sync_buffers(dev_t dev, int wait)
 			 ll_rw_block(WRITE, 1, &bh);
 
 			 if(nlist != BUF_DIRTY) { 
-				 printk("[%d %x %ld] ", nlist, bh->b_dev, bh->b_blocknr);
+				 printk("[%d %s %ld] ", nlist,
+					kdevname(bh->b_dev), bh->b_blocknr);
 				 ncount++;
 			 };
 			 bh->b_count--;
 			 retry = 1;
 		 }
 	 }
-	if (ncount) printk("sys_sync: %d dirty buffers not on dirty list\n", ncount);
+	if (ncount)
+	  printk("sys_sync: %d dirty buffers not on dirty list\n", ncount);
 	
 	/* If we are waiting for the sync to succeed, and if any dirty
 	   blocks were written, then repeat; on the second pass, only
@@ -210,7 +214,7 @@ static int sync_buffers(dev_t dev, int wait)
 	return err;
 }
 
-void sync_dev(dev_t dev)
+void sync_dev(kdev_t dev)
 {
 	sync_buffers(dev, 0);
 	sync_supers(dev);
@@ -218,7 +222,7 @@ void sync_dev(dev_t dev)
 	sync_buffers(dev, 0);
 }
 
-int fsync_dev(dev_t dev)
+int fsync_dev(kdev_t dev)
 {
 	sync_buffers(dev, 0);
 	sync_supers(dev);
@@ -251,7 +255,7 @@ asmlinkage int sys_fsync(unsigned int fd)
 	return 0;
 }
 
-void invalidate_buffers(dev_t dev)
+void invalidate_buffers(kdev_t dev)
 {
 	int i;
 	int nlist;
@@ -273,7 +277,7 @@ void invalidate_buffers(dev_t dev)
 	}
 }
 
-#define _hashfn(dev,block) (((unsigned)(dev^block))%nr_hash)
+#define _hashfn(dev,block) (((unsigned)(HASHDEV(dev)^block))%nr_hash)
 #define hash(dev,block) hash_table[_hashfn(dev,block)]
 
 static inline void remove_from_hash_queue(struct buffer_head * bh)
@@ -291,7 +295,8 @@ static inline void remove_from_lru_list(struct buffer_head * bh)
 {
 	if (!(bh->b_prev_free) || !(bh->b_next_free))
 		panic("VFS: LRU block list corrupted");
-	if (bh->b_dev == 0xffff) panic("LRU list corrupted");
+	if (bh->b_dev == B_FREE)
+		panic("LRU list corrupted");
 	bh->b_prev_free->b_next_free = bh->b_next_free;
 	bh->b_next_free->b_prev_free = bh->b_prev_free;
 
@@ -307,9 +312,10 @@ static inline void remove_from_free_list(struct buffer_head * bh)
         int isize = BUFSIZE_INDEX(bh->b_size);
 	if (!(bh->b_prev_free) || !(bh->b_next_free))
 		panic("VFS: Free block list corrupted");
-	if(bh->b_dev != 0xffff) panic("Free list corrupted");
+	if(bh->b_dev != B_FREE)
+		panic("Free list corrupted");
 	if(!free_list[isize])
-		 panic("Free list empty");
+		panic("Free list empty");
 	nr_free[isize]--;
 	if(bh->b_next_free == bh)
 		 free_list[isize] = NULL;
@@ -324,7 +330,7 @@ static inline void remove_from_free_list(struct buffer_head * bh)
 
 static inline void remove_from_queues(struct buffer_head * bh)
 {
-        if(bh->b_dev == 0xffff) {
+        if(bh->b_dev == B_FREE) {
 		remove_from_free_list(bh); /* Free list entries should not be
 					      in the hash queue */
 		return;
@@ -343,7 +349,8 @@ static inline void put_last_lru(struct buffer_head * bh)
 		lru_list[bh->b_list] = bh->b_next_free;
 		return;
 	}
-	if(bh->b_dev == 0xffff) panic("Wrong block for lru list");
+	if(bh->b_dev == B_FREE)
+		panic("Wrong block for lru list");
 	remove_from_lru_list(bh);
 /* add to back of free list */
 
@@ -365,7 +372,7 @@ static inline void put_last_free(struct buffer_head * bh)
 		return;
 
 	isize = BUFSIZE_INDEX(bh->b_size);	
-	bh->b_dev = 0xffff;  /* So it is obvious we are on the free list */
+	bh->b_dev = B_FREE;  /* So it is obvious we are on the free list */
 /* add to back of free list */
 
 	if(!free_list[isize]) {
@@ -384,7 +391,7 @@ static inline void insert_into_queues(struct buffer_head * bh)
 {
 /* put at end of free list */
 
-        if(bh->b_dev == 0xffff) {
+        if(bh->b_dev == B_FREE) {
 		put_last_free(bh);
 		return;
 	};
@@ -402,7 +409,7 @@ static inline void insert_into_queues(struct buffer_head * bh)
 /* put the buffer in new hash-queue if it has a device */
 	bh->b_prev = NULL;
 	bh->b_next = NULL;
-	if (!bh->b_dev)
+	if (!(bh->b_dev))
 		return;
 	bh->b_next = hash(bh->b_dev,bh->b_blocknr);
 	hash(bh->b_dev,bh->b_blocknr) = bh;
@@ -410,17 +417,17 @@ static inline void insert_into_queues(struct buffer_head * bh)
 		bh->b_next->b_prev = bh;
 }
 
-static struct buffer_head * find_buffer(dev_t dev, int block, int size)
+static struct buffer_head * find_buffer(kdev_t dev, int block, int size)
 {		
 	struct buffer_head * tmp;
 
 	for (tmp = hash(dev,block) ; tmp != NULL ; tmp = tmp->b_next)
-		if (tmp->b_dev==dev && tmp->b_blocknr==block)
+		if (tmp->b_dev == dev && tmp->b_blocknr == block)
 			if (tmp->b_size == size)
 				return tmp;
 			else {
-				printk("VFS: Wrong blocksize on device %d/%d\n",
-							MAJOR(dev), MINOR(dev));
+				printk("VFS: Wrong blocksize on device %s\n",
+					kdevname(dev));
 				return NULL;
 			}
 	return NULL;
@@ -433,7 +440,7 @@ static struct buffer_head * find_buffer(dev_t dev, int block, int size)
  * will force it bad). This shouldn't really happen currently, but
  * the code is ready.
  */
-struct buffer_head * get_hash_table(dev_t dev, int block, int size)
+struct buffer_head * get_hash_table(kdev_t dev, int block, int size)
 {
 	struct buffer_head * bh;
 
@@ -443,13 +450,14 @@ struct buffer_head * get_hash_table(dev_t dev, int block, int size)
 		bh->b_reuse=0;
 		bh->b_count++;
 		wait_on_buffer(bh);
-		if (bh->b_dev == dev && bh->b_blocknr == block && bh->b_size == size)
+		if (bh->b_dev == dev && bh->b_blocknr == block
+		                             && bh->b_size == size)
 			return bh;
 		bh->b_count--;
 	}
 }
 
-void set_blocksize(dev_t dev, int size)
+void set_blocksize(kdev_t dev, int size)
 {
 	int i, nlist;
 	struct buffer_head * bh, *bhnext;
@@ -610,9 +618,10 @@ repeat0:
 			 panic("Shared buffer in candidate list\n");
 		if (BADNESS(bh)) panic("Buffer in candidate list with BADNESS != 0\n");
 		
-		if(bh->b_dev == 0xffff) panic("Wrong list");
+		if(bh->b_dev == B_FREE)
+			panic("Wrong list");
 		remove_from_queues(bh);
-		bh->b_dev = 0xffff;
+		bh->b_dev = B_FREE;
 		put_last_free(bh);
 		needed -= bh->b_size;
 		buffers[i]--;
@@ -687,7 +696,7 @@ repeat0:
  * 14.02.92: changed it to sync dirty buffers a bit: better performance
  * when the filesystem starts to get full of dirty blocks (I hope).
  */
-struct buffer_head * getblk(dev_t dev, int block, int size)
+struct buffer_head * getblk(kdev_t dev, int block, int size)
 {
 	struct buffer_head * bh;
         int isize = BUFSIZE_INDEX(size);
@@ -748,7 +757,8 @@ void set_writetime(struct buffer_head * buf, int flag)
 
 void refile_buffer(struct buffer_head * buf){
 	int dispose;
-	if(buf->b_dev == 0xffff) panic("Attempt to refile free buffer\n");
+	if(buf->b_dev == B_FREE)
+		panic("Attempt to refile free buffer\n");
 	if (buf->b_dirt)
 		dispose = BUF_DIRTY;
 	else if (mem_map[MAP_NR((unsigned long) buf->b_data)] > 1)
@@ -794,9 +804,10 @@ void brelse(struct buffer_head * buf)
 		if (buf->b_reuse) {
 			buf->b_reuse = 0;
 			if (!buf->b_lock && !buf->b_dirt && !buf->b_wait) {
-				if(buf->b_dev == 0xffff) panic("brelse: Wrong list");
+				if(buf->b_dev == B_FREE)
+					panic("brelse: Wrong list");
 				remove_from_queues(buf);
-				buf->b_dev = 0xffff;
+				buf->b_dev = B_FREE;
 				put_last_free(buf);
 			}
 		}
@@ -810,13 +821,13 @@ void brelse(struct buffer_head * buf)
  * bread() reads a specified block and returns the buffer that contains
  * it. It returns NULL if the block was unreadable.
  */
-struct buffer_head * bread(dev_t dev, int block, int size)
+struct buffer_head * bread(kdev_t dev, int block, int size)
 {
 	struct buffer_head * bh;
 
 	if (!(bh = getblk(dev, block, size))) {
-		printk("VFS: bread: READ error on device %d/%d\n",
-						MAJOR(dev), MINOR(dev));
+		printk("VFS: bread: READ error on device %s\n",
+			kdevname(dev));
 		return NULL;
 	}
 	if (bh->b_uptodate)
@@ -837,7 +848,7 @@ struct buffer_head * bread(dev_t dev, int block, int size)
 
 #define NBUF 16
 
-struct buffer_head * breada(dev_t dev, int block, int bufsize,
+struct buffer_head * breada(kdev_t dev, int block, int bufsize,
 	unsigned int pos, unsigned int filesize)
 {
 	struct buffer_head * bhlist[NBUF];
@@ -958,7 +969,7 @@ static struct buffer_head * create_buffers(unsigned long page, unsigned long siz
 		head = bh;
 		bh->b_data = (char *) (page+offset);
 		bh->b_size = size;
-		bh->b_dev = 0xffff;  /* Flag as unused */
+		bh->b_dev = B_FREE;  /* Flag as unused */
 	}
 	return head;
 /*
@@ -1010,7 +1021,7 @@ static unsigned long try_to_align(struct buffer_head ** bh, int nrbuf,
 }
 
 static unsigned long check_aligned(struct buffer_head * first, unsigned long address,
-	dev_t dev, int *b, int size)
+	kdev_t dev, int *b, int size)
 {
 	struct buffer_head * bh[MAX_BUF_PER_PAGE];
 	unsigned long page;
@@ -1051,7 +1062,7 @@ no_go:
 }
 
 static unsigned long try_to_load_aligned(unsigned long address,
-	dev_t dev, int b[], int size)
+	kdev_t dev, int b[], int size)
 {
 	struct buffer_head * bh, * tmp, * arr[MAX_BUF_PER_PAGE];
 	unsigned long offset;
@@ -1122,7 +1133,7 @@ not_aligned:
  * demand-loadable executables).
  */
 static inline unsigned long try_to_share_buffers(unsigned long address,
-	dev_t dev, int *b, int size)
+	kdev_t dev, int *b, int size)
 {
 	struct buffer_head * bh;
 	int block;
@@ -1143,7 +1154,7 @@ static inline unsigned long try_to_share_buffers(unsigned long address,
  * etc. This also allows us to optimize memory usage by sharing code pages
  * and filesystem buffers..
  */
-unsigned long bread_page(unsigned long address, dev_t dev, int b[], int size, int no_share)
+unsigned long bread_page(unsigned long address, kdev_t dev, int b[], int size, int no_share)
 {
 	struct buffer_head * bh[MAX_BUF_PER_PAGE];
 	unsigned long where;
@@ -1178,7 +1189,7 @@ unsigned long bread_page(unsigned long address, dev_t dev, int b[], int size, in
  * bwrite_page writes a page out to the buffer cache and/or the physical device.
  * It's used for mmap writes (the same way bread_page() is used for mmap reads).
  */
-void bwrite_page(unsigned long address, dev_t dev, int b[], int size)
+void bwrite_page(unsigned long address, kdev_t dev, int b[], int size)
 {
 	struct buffer_head * bh[MAX_BUF_PER_PAGE];
 	int i, j;
@@ -1486,7 +1497,7 @@ void show_buffers(void)
  * are unused, and reassign to a new cluster them if this is true.
  */
 static inline int try_to_reassign(struct buffer_head * bh, struct buffer_head ** bhp,
-			   dev_t dev, unsigned int starting_block)
+			   kdev_t dev, unsigned int starting_block)
 {
 	unsigned long page;
 	struct buffer_head * tmp, * p;
@@ -1515,10 +1526,10 @@ static inline int try_to_reassign(struct buffer_head * bh, struct buffer_head **
 		p = tmp;
 		tmp = tmp->b_this_page;
 		remove_from_queues(p);
-		p->b_dev=dev;
+		p->b_dev = dev;
 		p->b_uptodate = 0;
 		p->b_req = 0;
-		p->b_blocknr=starting_block++;
+		p->b_blocknr = starting_block++;
 		insert_into_queues(p);
 	} while (tmp != bh);
 	return 1;
@@ -1538,7 +1549,7 @@ static inline int try_to_reassign(struct buffer_head * bh, struct buffer_head **
  * be expiring data prematurely.  For now we only cannibalize buffers
  * of the same size to keep the code simpler.
  */
-static int reassign_cluster(dev_t dev, 
+static int reassign_cluster(kdev_t dev, 
 		     unsigned int starting_block, int size)
 {
 	struct buffer_head *bh;
@@ -1565,7 +1576,7 @@ static int reassign_cluster(dev_t dev,
  * from a new page in memory.  We should only do this if we have
  * not expanded the buffer cache to the maximum size that we allow.
  */
-static unsigned long try_to_generate_cluster(dev_t dev, int block, int size)
+static unsigned long try_to_generate_cluster(kdev_t dev, int block, int size)
 {
 	struct buffer_head * bh, * tmp, * arr[MAX_BUF_PER_PAGE];
         int isize = BUFSIZE_INDEX(size);
@@ -1622,7 +1633,7 @@ not_aligned:
 	return 0;
 }
 
-unsigned long generate_cluster(dev_t dev, int b[], int size)
+unsigned long generate_cluster(kdev_t dev, int b[], int size)
 {
 	int i, offset;
 	

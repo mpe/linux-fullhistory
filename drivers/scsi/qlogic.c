@@ -131,6 +131,12 @@
 #include "sd.h"
 #include "hosts.h"
 #include "qlogic.h"
+#include<linux/stat.h>
+
+struct proc_dir_entry proc_scsi_qlogic = {
+    PROC_SCSI_QLOGIC, 6, "qlogic",
+    S_IFDIR | S_IRUGO | S_IXUGO, 2
+};
 
 /*----------------------------------------------------------------*/
 /* driver state info, local to driver */
@@ -537,6 +543,8 @@ int	qltyp;			/* type of chip */
 struct	Scsi_Host	*hreg;	/* registered host structure */
 unsigned long	flags;
 
+tpnt->proc_dir =  &proc_scsi_qlogic;
+
 /* Qlogic Cards only exist at 0x230 or 0x330 (the chip itself decodes the
    address - I check 230 first since MIDI cards are typically at 330
 
@@ -624,7 +632,7 @@ unsigned long	flags;
 
 /*----------------------------------------------------------------*/
 /* return bios parameters */
-int	qlogic_biosparam(Disk * disk, int dev, int ip[])
+int	qlogic_biosparam(Disk * disk, kdev_t dev, int ip[])
 {
 /* This should mimic the DOS Qlogic driver's behavior exactly */
 	ip[0] = 0x40;

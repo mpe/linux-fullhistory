@@ -9,7 +9,8 @@
  *        Set up on-board DMA controller, such that we do not have to
  *        have the bios enabled to use the aha1542.
  *  Modified by David Gentzel
- *	  Don't call request_dma if dma mask is 0 (for BusLogic BT-445S VL-Bus controller).
+ *	  Don't call request_dma if dma mask is 0 (for BusLogic BT-445S VL-Bus
+ *        controller).
  *  Modified by Matti Aarnio
  *        Accept parameters from LILO cmd-line. -- 1-Oct-94
  */
@@ -36,6 +37,13 @@
 
 
 #include "aha1542.h"
+
+#include<linux/stat.h>
+
+struct proc_dir_entry proc_scsi_aha1542 = {
+    PROC_SCSI_AHA1542, 7, "aha1542",
+    S_IFDIR | S_IRUGO | S_IXUGO, 2
+};
 
 #ifdef DEBUG
 #define DEB(x) x
@@ -928,6 +936,8 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
 
     DEB(printk("aha1542_detect: \n"));
 
+    tpnt->proc_dir = &proc_scsi_aha1542;
+
     for(indx = 0; indx < sizeof(bases)/sizeof(bases[0]); indx++)
 	    if(bases[indx] != 0 && !check_region(bases[indx], 4)) { 
 		    shpnt = scsi_register(tpnt,
@@ -1065,6 +1075,7 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
 		    continue;
 		    
 	    };
+	
     return count;
 }
 
@@ -1137,13 +1148,15 @@ int aha1542_abort(Scsi_Cmnd * SCpnt)
    if(HOSTDATA(SCpnt->host)->SCint[i])
      {
        if(HOSTDATA(SCpnt->host)->SCint[i] == SCpnt) {
-	 printk("Timed out command pending for %4.4x\n", SCpnt->request.dev);
+	 printk("Timed out command pending for %s\n",
+		kdevname(SCpnt->request.rq_dev));
 	 if (HOSTDATA(SCpnt->host)->mb[i].status) {
 	   printk("OGMB still full - restarting\n");
 	   aha1542_out(SCpnt->host->io_port, &ahacmd, 1);
 	 };
        } else
-	 printk("Other pending command %4.4x\n", SCpnt->request.dev);
+	 printk("Other pending command %s\n",
+		kdevname(SCpnt->request.rq_dev));
      }
 
 #endif
@@ -1259,7 +1272,7 @@ int aha1542_reset(Scsi_Cmnd * SCpnt)
 
 #include "sd.h"
 
-int aha1542_biosparam(Scsi_Disk * disk, int dev, int * ip)
+int aha1542_biosparam(Scsi_Disk * disk, kdev_t dev, int * ip)
 {
   int translation_algorithm;
   int size = disk->capacity;

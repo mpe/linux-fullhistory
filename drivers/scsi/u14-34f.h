@@ -8,7 +8,7 @@ int u14_34f_detect(Scsi_Host_Template *);
 int u14_34f_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int u14_34f_abort(Scsi_Cmnd *);
 int u14_34f_reset(Scsi_Cmnd *);
-int u14_34f_biosparam(Disk *, int, int *);
+int u14_34f_biosparam(Disk *, kdev_t, int *);
 
 #define U14_34F_VERSION "2.01.00"
 
@@ -16,8 +16,7 @@ int u14_34f_biosparam(Disk *, int, int *);
 		NULL, /* Ptr for modules */                           \
 		NULL, /* usage count for modules */		      \
 		NULL,		                                      \
-		"u14_34f",                                            \
-		PROC_SCSI_U14_34F,                                    \
+		NULL,		                                      \
 		"UltraStor 14F/34F rev. " U14_34F_VERSION " ",        \
 		u14_34f_detect,                                       \
 		NULL, /* Release */                                   \

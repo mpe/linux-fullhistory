@@ -115,7 +115,7 @@
 
 #ifndef ASM
 int pas16_abort(Scsi_Cmnd *);
-int pas16_biosparam(Disk *, int, int*);
+int pas16_biosparam(Disk *, kdev_t, int*);
 int pas16_detect(Scsi_Host_Template *);
 int pas16_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int pas16_reset(Scsi_Cmnd *);
@@ -140,7 +140,7 @@ int pas16_reset(Scsi_Cmnd *);
 
 #ifdef HOSTS_C
 
-#define MV_PAS16 {NULL, NULL, NULL, "pas16",  PROC_SCSI_PAS16, \
+#define MV_PAS16 {NULL, NULL, NULL, NULL, \
 	"Pro Audio Spectrum-16 SCSI", 		\
 	pas16_detect, NULL, NULL,					\
 	NULL, pas16_queue_command, pas16_abort, pas16_reset, NULL, 	\

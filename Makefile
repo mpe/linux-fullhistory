@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 27
+SUBLEVEL = 28
 
 ARCH = i386
 
@@ -98,7 +98,7 @@ ifdef CONFIG_SCSI
 DRIVERS := $(DRIVERS) drivers/scsi/scsi.a
 endif
 
-ifdef CONFIG_SOUND
+ifeq ($(CONFIG_SOUND),y)
 DRIVERS := $(DRIVERS) drivers/sound/sound.a
 endif
 

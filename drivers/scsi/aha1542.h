@@ -32,6 +32,7 @@
  */
 
 #include <linux/types.h>
+#include <linux/kdev_t.h>
 
 /* I/O Port interface 4.2 */
 /* READ */
@@ -134,7 +135,7 @@ int aha1542_command(Scsi_Cmnd *);
 int aha1542_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int aha1542_abort(Scsi_Cmnd *);
 int aha1542_reset(Scsi_Cmnd *);
-int aha1542_biosparam(Disk *, int, int*);
+int aha1542_biosparam(Disk *, kdev_t, int*);
 
 #define AHA1542_MAILBOXES 8
 #define AHA1542_SCATTER 16
@@ -144,10 +145,11 @@ int aha1542_biosparam(Disk *, int, int*);
 	#define NULL 0
 #endif
 
+extern struct proc_dir_entry proc_scsi_aha1542;
+
 #define AHA1542 {  NULL, NULL,				\
+                     &proc_scsi_aha1542,/* proc_dir_entry */ \
 		     NULL,		                \
-		     "aha1542",                         \
-		     PROC_SCSI_AHA1542,                 \
 		     "Adaptec 1542", 			\
 		     aha1542_detect,			\
 		     NULL,				\

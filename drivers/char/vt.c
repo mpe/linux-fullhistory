@@ -71,6 +71,7 @@ extern int con_get_trans_new(unsigned short * table);
 extern void con_clear_unimap(struct unimapinit *ui);
 extern int con_set_unimap(ushort ct, struct unipair *list);
 extern int con_get_unimap(ushort ct, ushort *uct, struct unipair *list);
+extern void con_set_default_unimap(void);
 extern int con_set_font(char * fontmap, int ch512);
 extern int con_get_font(char * fontmap);
 extern int con_set_cmap(unsigned char *cmap);
@@ -80,6 +81,7 @@ extern int con_adjust_height(unsigned long fontheight);
 
 extern int video_mode_512ch;
 extern unsigned long video_font_height;
+extern unsigned long default_font_height;
 extern unsigned long video_scan_lines;
 
 /*
@@ -974,6 +976,23 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 			return (i <= 0) ? i : kd_size_changed(i, 0);
 		} else
 			return -EINVAL;
+	}
+
+	case PIO_FONTRESET:
+	{
+		if (!perm)
+			return -EPERM;
+		if (vt_cons[fg_console]->vc_mode != KD_TEXT)
+			return -EINVAL;
+
+		i = con_set_font(NULL, 0);	/* Set font to default */
+		if (i) return i;
+
+		i = con_adjust_height(default_font_height);
+		if ( i > 0 ) kd_size_changed(i, 0);
+		con_set_default_unimap();
+
+		return 0;
 	}
 
 	case GIO_FONTX:

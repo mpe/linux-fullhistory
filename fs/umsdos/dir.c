@@ -346,7 +346,7 @@ void umsdos_lookup_patch (
 			*/
 			if (S_ISREG(entry->mode)) entry->mtime = inode->i_mtime;
 			inode->i_mode  = entry->mode;
-			inode->i_rdev  = entry->rdev;
+			inode->i_rdev  = to_kdev_t(entry->rdev);
 			inode->i_atime = entry->atime;
 			inode->i_ctime = entry->ctime;
 			inode->i_mtime = entry->mtime;

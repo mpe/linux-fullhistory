@@ -12,6 +12,7 @@
 		 email Kai.Makisara@metla.fi
 
   Last modified: Sun Sep 10 20:33:24 1995 by makisara@kai.makisara.fi
+  Some small formal changes - aeb, 950809
 */
 #ifdef MODULE
 #include <linux/autoconf.h>
@@ -70,6 +71,8 @@ static int debugging = 1;
 #define ST_TIMEOUT (900 * HZ)
 #define ST_LONG_TIMEOUT (2000 * HZ)
 
+#define TAPE_NR(x) (MINOR(x) & 127)
+
 static int st_nbr_buffers;
 static int st_req_nbr_buffers;
 static ST_buffer **st_buffers;
@@ -99,7 +102,7 @@ static int st_int_ioctl(struct inode * inode,struct file * file,
 	static int
 st_chk_result(Scsi_Cmnd * SCpnt)
 {
-  int dev = SCpnt->request.dev;
+  int dev = TAPE_NR(SCpnt->request.rq_dev);
   int result = SCpnt->result;
   unsigned char * sense = SCpnt->sense_buffer, scode;
   const char *stp;
@@ -158,10 +161,11 @@ st_chk_result(Scsi_Cmnd * SCpnt)
 	static void
 st_sleep_done (Scsi_Cmnd * SCpnt)
 {
-  int st_nbr, remainder;
+  unsigned int st_nbr;
+  int remainder;
   Scsi_Tape * STp;
 
-  if ((st_nbr = SCpnt->request.dev) < st_template.nr_dev && st_nbr >= 0) {
+  if ((st_nbr = TAPE_NR(SCpnt->request.rq_dev)) < st_template.nr_dev) {
     STp = &(scsi_tapes[st_nbr]);
     if ((STp->buffer)->writing &&
 	(SCpnt->sense_buffer[0] & 0x70) == 0x70 &&
@@ -183,9 +187,9 @@ st_sleep_done (Scsi_Cmnd * SCpnt)
       (STp->buffer)->last_result = SCpnt->result;
     (STp->buffer)->last_result_fatal = st_chk_result(SCpnt);
     if ((STp->buffer)->writing)
-      SCpnt->request.dev = -1;
+      SCpnt->request.rq_status = RQ_INACTIVE;
     else
-      SCpnt->request.dev = 0xffff;
+      SCpnt->request.rq_status = RQ_SCSI_BUSY;
     if (!(STp->buffer)->writing || STp->write_pending)
       wake_up( &(STp->waiting) );
     STp->write_pending = 0;
@@ -199,8 +203,9 @@ st_sleep_done (Scsi_Cmnd * SCpnt)
 
 /* Handle the write-behind checking */
 	static void
-write_behind_check(int dev)
+write_behind_check(kdev_t devt)
 {
+  int dev = TAPE_NR(devt);
   Scsi_Tape * STp;
   ST_buffer * STbuffer;
   unsigned long flags;
@@ -243,8 +248,9 @@ write_behind_check(int dev)
 /* Back over EOF if it has been inadvertently crossed (ioctl not used because
    it messes up the block number). */
 	static int
-back_over_eof(int dev)
+back_over_eof(kdev_t devt)
 {
+  int dev = TAPE_NR(devt);
   Scsi_Cmnd *SCpnt;
   Scsi_Tape *STp = &(scsi_tapes[dev]);
   unsigned char cmd[10];
@@ -256,7 +262,8 @@ back_over_eof(int dev)
   cmd[2] = cmd[3] = cmd[4] = 0xff;  /* -1 filemarks */
   cmd[5] = 0;
 
-  SCpnt->request.dev = dev;
+  SCpnt->request.rq_status = RQ_ACTIVE;
+  SCpnt->request.rq_dev = devt;
   scsi_do_cmd(SCpnt,
 	      (void *) cmd, (void *) (STp->buffer)->b_data, 0,
 	      st_sleep_done, ST_TIMEOUT, MAX_RETRIES);
@@ -264,10 +271,11 @@ back_over_eof(int dev)
   /* need to do the check with interrupts off. -RAB */
   save_flags(flags);
   cli();
-  if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+  if (TAPE_NR(SCpnt->request.rq_dev) == dev)
+    sleep_on( &(STp->waiting) );
   restore_flags(flags);
   
-  SCpnt->request.dev = -1;
+  SCpnt->request.rq_status = RQ_INACTIVE;
   if ((STp->buffer)->last_result != 0) {
     printk("st%d: Backing over filemark failed.\n", dev);
     if ((STp->mt_status)->mt_fileno >= 0)
@@ -281,8 +289,9 @@ back_over_eof(int dev)
 
 /* Flush the write buffer (never need to write if variable blocksize). */
 	static int
-flush_write_buffer(int dev)
+flush_write_buffer(kdev_t devt)
 {
+  int dev = TAPE_NR(devt);
   int offset, transfer, blks;
   int result;
   unsigned int flags;
@@ -291,7 +300,7 @@ flush_write_buffer(int dev)
   Scsi_Tape *STp = &(scsi_tapes[dev]);
 
   if ((STp->buffer)->writing) {
-    write_behind_check(dev);
+    write_behind_check(devt);
     if ((STp->buffer)->last_result_fatal) {
 #if DEBUG
       if (debugging)
@@ -327,7 +336,8 @@ flush_write_buffer(int dev)
     cmd[2] = blks >> 16;
     cmd[3] = blks >> 8;
     cmd[4] = blks;
-    SCpnt->request.dev = dev;
+    SCpnt->request.rq_status = RQ_ACTIVE;
+    SCpnt->request.rq_dev = devt;
     scsi_do_cmd (SCpnt,
 		 (void *) cmd, (STp->buffer)->b_data, transfer,
 		 st_sleep_done, ST_TIMEOUT, MAX_WRITE_RETRIES);
@@ -335,7 +345,8 @@ flush_write_buffer(int dev)
     /* this must be done with interrupts off */
     save_flags (flags);
     cli();
-    if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+    if (TAPE_NR(SCpnt->request.rq_dev) == dev)
+      sleep_on( &(STp->waiting) );
     restore_flags(flags);
  
     if ((STp->buffer)->last_result_fatal != 0) {
@@ -357,7 +368,7 @@ flush_write_buffer(int dev)
       STp->dirty = 0;
       (STp->buffer)->buffer_bytes = 0;
     }
-    SCpnt->request.dev = -1;  /* Mark as not busy */
+    SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
   }
   return result;
 }
@@ -368,12 +379,12 @@ flush_write_buffer(int dev)
 	static int
 flush_buffer(struct inode * inode, struct file * filp, int seek_next)
 {
-  int dev;
   int backspace, result;
   Scsi_Tape * STp;
   ST_buffer * STbuffer;
+  kdev_t devt = inode->i_rdev;
+  int dev = TAPE_NR(devt);
 
-  dev = MINOR(inode->i_rdev) & 127;
   STp = &(scsi_tapes[dev]);
   STbuffer = STp->buffer;
 
@@ -389,7 +400,7 @@ flush_buffer(struct inode * inode, struct file * filp, int seek_next)
     return 0;
 
   if (STp->rw == ST_WRITING)  /* Writing */
-    return flush_write_buffer(dev);
+    return flush_write_buffer(devt);
 
   if (STp->block_size == 0)
     return 0;
@@ -403,7 +414,7 @@ flush_buffer(struct inode * inode, struct file * filp, int seek_next)
   result = 0;
   if (!seek_next) {
     if ((STp->eof == ST_FM) && !STp->eof_hit) {
-      result = back_over_eof(dev); /* Back over the EOF hit */
+      result = back_over_eof(devt); /* Back over the EOF hit */
       if (!result) {
 	STp->eof = ST_NOEOF;
 	STp->eof_hit = 0;
@@ -421,15 +432,16 @@ flush_buffer(struct inode * inode, struct file * filp, int seek_next)
 	static int
 scsi_tape_open(struct inode * inode, struct file * filp)
 {
-    int dev;
     unsigned short flags;
     unsigned int processor_flags;
     int i;
     unsigned char cmd[10];
     Scsi_Cmnd * SCpnt;
     Scsi_Tape * STp;
+    kdev_t devt = inode->i_rdev;
+    int dev;
 
-    dev = MINOR(inode->i_rdev) & 127;
+    dev = TAPE_NR(devt);
     if (dev >= st_template.dev_max || !scsi_tapes[dev].device)
       return (-ENXIO);
     STp = &(scsi_tapes[dev]);
@@ -475,7 +487,8 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     memset ((void *) &cmd[0], 0, 10);
     cmd[0] = TEST_UNIT_READY;
     cmd[1] = (SCpnt->lun << 5) & 0xe0;
-    SCpnt->request.dev = dev;
+    SCpnt->request.rq_status = RQ_ACTIVE;
+    SCpnt->request.rq_dev = devt;
     scsi_do_cmd(SCpnt,
 		(void *) cmd, (void *) (STp->buffer)->b_data,
 		0, st_sleep_done, ST_LONG_TIMEOUT,
@@ -484,7 +497,8 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     /* this must be done with interrupts off */
     save_flags (processor_flags);
     cli();
-    if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+    if (TAPE_NR(SCpnt->request.rq_dev) == dev)
+      sleep_on( &(STp->waiting) );
     restore_flags(processor_flags);
 
     if ((SCpnt->sense_buffer[0] & 0x70) == 0x70 &&
@@ -493,7 +507,8 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       memset ((void *) &cmd[0], 0, 10);
       cmd[0] = TEST_UNIT_READY;
       cmd[1] = (SCpnt->lun << 5) & 0xe0;
-      SCpnt->request.dev = dev;
+      SCpnt->request.rq_status = RQ_ACTIVE;
+      SCpnt->request.rq_dev = devt;
       scsi_do_cmd(SCpnt,
 		  (void *) cmd, (void *) (STp->buffer)->b_data,
 		  0, st_sleep_done, ST_LONG_TIMEOUT,
@@ -502,7 +517,8 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       /* this must be done with interrupts off */
       save_flags (processor_flags);
       cli();
-      if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+      if (TAPE_NR(SCpnt->request.rq_dev) == dev)
+	sleep_on( &(STp->waiting) );
       restore_flags(processor_flags);
 
       (STp->mt_status)->mt_fileno = STp->drv_block = 0;
@@ -519,8 +535,8 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 	(STp->mt_status)->mt_fileno = STp->drv_block = (-1);
 	STp->ready = ST_NOT_READY;
       }
-      SCpnt->request.dev = -1;  /* Mark as not busy */
-      STp->density = 0;   /* Clear the erroneous "residue" */
+      SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+      STp->density = 0;   	/* Clear the erroneous "residue" */
       STp->write_prot = 0;
       STp->block_size = 0;
       STp->eof = ST_NOEOF;
@@ -535,7 +551,8 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     memset ((void *) &cmd[0], 0, 10);
     cmd[0] = READ_BLOCK_LIMITS;
     cmd[1] = (SCpnt->lun << 5) & 0xe0;
-    SCpnt->request.dev = dev;
+    SCpnt->request.rq_status = RQ_ACTIVE;
+    SCpnt->request.rq_dev = devt;
     scsi_do_cmd(SCpnt,
 		(void *) cmd, (void *) (STp->buffer)->b_data,
 		6, st_sleep_done, ST_TIMEOUT, MAX_READY_RETRIES);
@@ -543,7 +560,8 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     /* this must be done with interrupts off */
     save_flags (processor_flags);
     cli();
-    if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+    if (TAPE_NR(SCpnt->request.rq_dev) == dev)
+      sleep_on( &(STp->waiting) );
     restore_flags(processor_flags);
 
     if (!SCpnt->result && !SCpnt->sense_buffer[0]) {
@@ -569,7 +587,8 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     cmd[0] = MODE_SENSE;
     cmd[1] = (SCpnt->lun << 5) & 0xe0;
     cmd[4] = 12;
-    SCpnt->request.dev = dev;
+    SCpnt->request.rq_status = RQ_ACTIVE;
+    SCpnt->request.rq_dev = devt;
     scsi_do_cmd(SCpnt,
 		(void *) cmd, (void *) (STp->buffer)->b_data,
 		12, st_sleep_done, ST_TIMEOUT, MAX_READY_RETRIES);
@@ -577,7 +596,8 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     /* this must be done with interrupts off */
     save_flags (processor_flags);
     cli();
-    if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+    if (TAPE_NR(SCpnt->request.rq_dev) == dev)
+      sleep_on( &(STp->waiting) );
     restore_flags(processor_flags);
 
     if ((STp->buffer)->last_result_fatal != 0) {
@@ -619,7 +639,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 	return (-EIO);
       }
     }
-    SCpnt->request.dev = -1;  /* Mark as not busy */
+    SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
 
     if (STp->block_size > 0) {
       (STp->buffer)->buffer_blocks = st_buffer_size / STp->block_size;
@@ -666,22 +686,23 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 	static void
 scsi_tape_close(struct inode * inode, struct file * filp)
 {
-    int dev;
     int result;
     int rewind;
     static unsigned char cmd[10];
     Scsi_Cmnd * SCpnt;
     Scsi_Tape * STp;
     unsigned int flags;
-   
-    dev = MINOR(inode->i_rdev);
-    rewind = (dev & 0x80) == 0;
-    dev = dev & 127;
+    kdev_t devt = inode->i_rdev;
+    int dev;
+
+    dev = TAPE_NR(devt);
+    rewind = (MINOR(devt) & 0x80) == 0;
+
     STp = &(scsi_tapes[dev]);
 
     if ( STp->rw == ST_WRITING) {
 
-      result = flush_write_buffer(dev);
+      result = flush_write_buffer(devt);
 
 #if DEBUG
       if (debugging) {
@@ -698,7 +719,8 @@ scsi_tape_close(struct inode * inode, struct file * filp)
 	cmd[0] = WRITE_FILEMARKS;
 	cmd[1] = (SCpnt->lun << 5) & 0xe0;
 	cmd[4] = 1 + STp->two_fm;
-	SCpnt->request.dev = dev;
+	SCpnt->request.rq_status = RQ_ACTIVE;
+	SCpnt->request.rq_dev = devt;
 	scsi_do_cmd( SCpnt,
 		    (void *) cmd, (void *) (STp->buffer)->b_data,
 		    0, st_sleep_done, ST_TIMEOUT, MAX_WRITE_RETRIES);
@@ -706,20 +728,21 @@ scsi_tape_close(struct inode * inode, struct file * filp)
 	/* this must be done with interrupts off */
 	save_flags (flags);
 	cli();
-	if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+	if (TAPE_NR(SCpnt->request.rq_dev) == dev)
+	  sleep_on( &(STp->waiting) );
 	restore_flags(flags);
 
 	if ((STp->buffer)->last_result_fatal != 0) {
-	  SCpnt->request.dev = -1;  /* Mark as not busy */
+	  SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
 	  printk("st%d: Error on write filemark.\n", dev);
 	}
 	else {
-	  SCpnt->request.dev = -1;  /* Mark as not busy */
+	  SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
 	  if ((STp->mt_status)->mt_fileno >= 0)
 	      (STp->mt_status)->mt_fileno++ ;
 	  STp->drv_block = 0;
 	  if (STp->two_fm)
-	    back_over_eof(dev);
+	    back_over_eof(devt);
 	}
 
       }
@@ -734,7 +757,7 @@ scsi_tape_close(struct inode * inode, struct file * filp)
       flush_buffer(inode, filp, 0);
 #else
       if ((STp->eof == ST_FM) && !STp->eof_hit)
-	back_over_eof(dev);
+	back_over_eof(devt);
 #endif
     }
 
@@ -760,7 +783,6 @@ scsi_tape_close(struct inode * inode, struct file * filp)
 	static int
 st_write(struct inode * inode, struct file * filp, const char * buf, int count)
 {
-    int dev;
     int total, do_count, blks, retval, transfer;
     int write_threshold;
     int doing_write = 0;
@@ -769,8 +791,10 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
     Scsi_Cmnd * SCpnt;
     Scsi_Tape * STp;
     unsigned int flags;
+    kdev_t devt = inode->i_rdev;
+    int dev;
 
-    dev = MINOR(inode->i_rdev) & 127;
+    dev = TAPE_NR(devt);
     STp = &(scsi_tapes[dev]);
     if (STp->ready != ST_READY)
       return (-EIO);
@@ -810,7 +834,7 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
       STp->moves_after_eof++;
 
     if ((STp->buffer)->writing) {
-      write_behind_check(dev);
+      write_behind_check(devt);
       if ((STp->buffer)->last_result_fatal) {
 #if DEBUG
 	if (debugging)
@@ -878,7 +902,8 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
       cmd[2] = blks >> 16;
       cmd[3] = blks >> 8;
       cmd[4] = blks;
-      SCpnt->request.dev = dev;
+      SCpnt->request.rq_status = RQ_ACTIVE;
+      SCpnt->request.rq_dev = devt;
       scsi_do_cmd (SCpnt,
 		   (void *) cmd, (STp->buffer)->b_data, transfer,
 		   st_sleep_done, ST_TIMEOUT, MAX_WRITE_RETRIES);
@@ -886,7 +911,8 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
       /* this must be done with interrupts off */
       save_flags (flags);
       cli();
-      if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+      if (TAPE_NR(SCpnt->request.rq_dev) == dev)
+	sleep_on( &(STp->waiting) );
       restore_flags(flags);
 
       if ((STp->buffer)->last_result_fatal != 0) {
@@ -939,7 +965,7 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
 	  retval = (-EIO);
 	}
 
-	SCpnt->request.dev = -1;  /* Mark as not busy */
+	SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
 	(STp->buffer)->buffer_bytes = 0;
 	STp->dirty = 0;
 	if (count < total)
@@ -969,7 +995,7 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
     }
 
     if (doing_write && (STp->buffer)->last_result_fatal != 0) {
-      SCpnt->request.dev = -1;
+      SCpnt->request.rq_status = RQ_INACTIVE;
       return (STp->buffer)->last_result_fatal;
     }
 
@@ -992,7 +1018,8 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
       cmd[2] = blks >> 16;
       cmd[3] = blks >> 8;
       cmd[4] = blks;
-      SCpnt->request.dev = dev;
+      SCpnt->request.rq_status = RQ_ACTIVE;
+      SCpnt->request.rq_dev = devt;
       STp->write_pending = 1;
       scsi_do_cmd (SCpnt,
 		   (void *) cmd, (STp->buffer)->b_data,
@@ -1000,7 +1027,7 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
 		   st_sleep_done, ST_TIMEOUT, MAX_WRITE_RETRIES);
     }
     else
-      SCpnt->request.dev = -1;  /* Mark as not busy */
+      SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
 
     STp->at_sm &= (total != 0);
     return( total);
@@ -1011,15 +1038,16 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
 	static int
 st_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
-    int dev;
     int total;
     int transfer, blks, bytes;
     static unsigned char cmd[10];
     Scsi_Cmnd * SCpnt;
     Scsi_Tape * STp;
     unsigned int flags;
+    kdev_t devt = inode->i_rdev;
+    int dev;
 
-    dev = MINOR(inode->i_rdev) & 127;
+    dev = TAPE_NR(devt);
     STp = &(scsi_tapes[dev]);
     if (STp->ready != ST_READY)
       return (-EIO);
@@ -1090,7 +1118,8 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 	cmd[3] = blks >> 8;
 	cmd[4] = blks;
 
-	SCpnt->request.dev = dev;
+	SCpnt->request.rq_status = RQ_ACTIVE;
+	SCpnt->request.rq_dev = devt;
 	scsi_do_cmd (SCpnt,
 		     (void *) cmd, (STp->buffer)->b_data,
 		     bytes, st_sleep_done, ST_TIMEOUT, MAX_RETRIES);
@@ -1098,7 +1127,8 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 	/* this must be done with interrupts off */
 	save_flags (flags);
 	cli();
-	if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+	if (TAPE_NR(SCpnt->request.rq_dev) == dev)
+	  sleep_on( &(STp->waiting) );
 	restore_flags(flags);
 
 	(STp->buffer)->read_pointer = 0;
@@ -1136,7 +1166,7 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 		}
 		else {
 		  printk("st%d: Incorrect block size.\n", dev);
-		  SCpnt->request.dev = -1;  /* Mark as not busy */
+		  SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
 		  return (-EIO);
 		}
 	      }
@@ -1173,7 +1203,7 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 	      if (debugging)
 		printk("st%d: Tape error while reading.\n", dev);
 #endif
-	      SCpnt->request.dev = -1;
+	      SCpnt->request.rq_status = RQ_INACTIVE;
 	      STp->drv_block = (-1);
 	      if (total)
 		return total;
@@ -1193,7 +1223,7 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 	  } /* End of extended sense test */
 	  else {
 	    transfer = (STp->buffer)->last_result_fatal;
-	    SCpnt->request.dev = -1;  /* Mark as not busy */
+	    SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
 	    return transfer;
 	  }
 	} /* End of error handling */
@@ -1228,7 +1258,7 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
       }
       else if (STp->eof != ST_NOEOF) {
 	STp->eof_hit = 1;
-	SCpnt->request.dev = -1;  /* Mark as not busy */
+	SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
 	if (total == 0 && STp->eof == ST_FM) {
 	  STp->eof = ST_NOEOF;
 	  STp->drv_block = 0;
@@ -1247,7 +1277,7 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 
     } /* for (total = 0; total < count; ) */
 
-    SCpnt->request.dev = -1;  /* Mark as not busy */
+    SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
 
     return total;
 }
@@ -1258,10 +1288,12 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 	static int
 st_set_options(struct inode * inode, long options)
 {
-  int dev, value;
+  int value;
   Scsi_Tape *STp;
+  kdev_t devt = inode->i_rdev;
+  int dev;
 
-  dev = MINOR(inode->i_rdev) & 127;
+  dev = TAPE_NR(devt);
   STp = &(scsi_tapes[dev]);
   if ((options & MT_ST_OPTIONS) == MT_ST_BOOLEANS) {
     STp->do_buffer_writes = (options & MT_ST_BUFFER_WRITES) != 0;
@@ -1305,7 +1337,6 @@ st_set_options(struct inode * inode, long options)
 st_int_ioctl(struct inode * inode,struct file * file,
 	     unsigned int cmd_in, unsigned long arg)
 {
-   int dev = MINOR(inode->i_rdev);
    int timeout = ST_LONG_TIMEOUT;
    long ltmp;
    int ioctl_result;
@@ -1314,8 +1345,9 @@ st_int_ioctl(struct inode * inode,struct file * file,
    Scsi_Tape * STp;
    int fileno, blkno, at_sm, undone, datalen;
    unsigned int flags;
+   kdev_t devt = inode->i_rdev;
+   int dev = TAPE_NR(devt);
 
-   dev = dev & 127;
    STp = &(scsi_tapes[dev]);
    if (STp->ready != ST_READY && cmd_in != MTLOAD)
      return (-EIO);
@@ -1656,7 +1688,8 @@ st_int_ioctl(struct inode * inode,struct file * file,
 
    SCpnt = allocate_device(NULL, STp->device, 1);
    cmd[1] |= (SCpnt->lun << 5) & 0xe0;
-   SCpnt->request.dev = dev;
+   SCpnt->request.rq_status = RQ_ACTIVE;
+   SCpnt->request.rq_dev = devt;
    scsi_do_cmd(SCpnt,
 	       (void *) cmd, (void *) (STp->buffer)->b_data, datalen,
 	       st_sleep_done, timeout, MAX_RETRIES);
@@ -1664,12 +1697,13 @@ st_int_ioctl(struct inode * inode,struct file * file,
    /* this must be done with interrupts off */
    save_flags (flags);
    cli();
-   if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+   if (TAPE_NR(SCpnt->request.rq_dev) == dev)
+     sleep_on( &(STp->waiting) );
    restore_flags(flags);
 
    ioctl_result = (STp->buffer)->last_result_fatal;
 
-   SCpnt->request.dev = -1;  /* Mark as not busy */
+   SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
 
    if (cmd_in == MTFSF)
      STp->moves_after_eof = 0;
@@ -1789,7 +1823,6 @@ st_int_ioctl(struct inode * inode,struct file * file,
 st_ioctl(struct inode * inode,struct file * file,
 	 unsigned int cmd_in, unsigned long arg)
 {
-   int dev = MINOR(inode->i_rdev);
    int i, cmd, result;
    struct mtop mtc;
    struct mtpos mt_pos;
@@ -1797,8 +1830,9 @@ st_ioctl(struct inode * inode,struct file * file,
    Scsi_Cmnd *SCpnt;
    Scsi_Tape *STp;
    unsigned int flags;
+   kdev_t devt = inode->i_rdev;
+   int dev = TAPE_NR(devt);
 
-   dev = dev & 127;
    STp = &(scsi_tapes[dev]);
 #if DEBUG
    if (debugging && !STp->in_use) {
@@ -1946,7 +1980,8 @@ st_ioctl(struct inode * inode,struct file * file,
        scmd[0] = READ_POSITION;
        scmd[1] = 1;
      }
-     SCpnt->request.dev = dev;
+     SCpnt->request.rq_status = RQ_ACTIVE;
+     SCpnt->request.rq_dev = devt;
      scmd[1] |= (SCpnt->lun << 5) & 0xe0;
      scsi_do_cmd(SCpnt,
 		 (void *) scmd, (void *) (STp->buffer)->b_data,
@@ -1955,7 +1990,8 @@ st_ioctl(struct inode * inode,struct file * file,
      /* this must be done with interrupts off */
      save_flags (flags);
      cli();
-     if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+     if (TAPE_NR(SCpnt->request.rq_dev) == dev)
+       sleep_on( &(STp->waiting) );
      restore_flags(flags);
 
      if ((STp->buffer)->last_result_fatal != 0) {
@@ -1980,7 +2016,7 @@ st_ioctl(struct inode * inode,struct file * file,
 
      }
 
-     SCpnt->request.dev = -1;  /* Mark as not busy */
+     SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
 
      memcpy_tofs((char *)arg, (char *) (&mt_pos), sizeof(struct mtpos));
      return result;

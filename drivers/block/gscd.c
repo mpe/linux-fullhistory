@@ -95,7 +95,7 @@ static void do_gscd_request       (void);
 static int  gscd_ioctl            (struct inode *, struct file *, unsigned int, unsigned long);
 static int  gscd_open             (struct inode *, struct file *);
 static void gscd_release          (struct inode *, struct file *);
-static int  check_gscd_med_chg    (dev_t);
+static int  check_gscd_med_chg    (kdev_t);
 
 /*      GoldStar Funktionen    */
 
@@ -177,7 +177,7 @@ static struct file_operations gscd_fops = {
  * Checking if the media has been changed
  * (not yet implemented)
  */
-static int check_gscd_med_chg (dev_t full_dev)
+static int check_gscd_med_chg (kdev_t full_dev)
 {
    int target;
 
@@ -270,9 +270,9 @@ unsigned int block,dev;
 unsigned int nsect;
 
 repeat:
-	if (!(CURRENT) || CURRENT->dev < 0) return;
+	if (!(CURRENT) || CURRENT->rq_status == RQ_INACTIVE) return;
 	INIT_REQUEST;
-	dev = MINOR(CURRENT->dev);
+	dev = MINOR(CURRENT->rq_dev);
 	block = CURRENT->sector;
 	nsect = CURRENT->nr_sectors;
 
@@ -286,7 +286,7 @@ repeat:
 		goto repeat;
 	}
 
-	if (MINOR(CURRENT -> dev) != 0)
+	if (MINOR(CURRENT -> rq_dev) != 0)
 	{
 		printk("GSCD: this version supports only one device\n");
 		end_request(0);

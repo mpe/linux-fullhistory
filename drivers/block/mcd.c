@@ -139,7 +139,7 @@ static int mcdPresent = 0;
 /* #define DOUBLE_QUICK_ONLY */
 
 #define CURRENT_VALID \
-  (CURRENT && MAJOR(CURRENT -> dev) == MAJOR_NR && CURRENT -> cmd == READ \
+  (CURRENT && MAJOR(CURRENT -> rq_dev) == MAJOR_NR && CURRENT -> cmd == READ \
    && CURRENT -> sector != -1)
 #define MFL_STATUSorDATA (MFL_STATUS | MFL_DATA)
 #define MCD_BUF_SIZ 16
@@ -213,7 +213,7 @@ void mcd_setup(char *str, int *ints)
 
  
 static int
-check_mcd_change(dev_t full_dev)
+check_mcd_change(kdev_t full_dev)
 {
    int retval, target;
 

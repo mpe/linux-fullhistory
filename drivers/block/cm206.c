@@ -638,7 +638,7 @@ int try_adapter(int sector)
 }
 
 /* This is not a very smart implementation. We could optimize for 
-   consecutive block numbers. I'm not conviced this would really
+   consecutive block numbers. I'm not convinced this would really
    bring down the processor load. */
 static void do_cm206_request(void)
 {
@@ -648,7 +648,8 @@ static void do_cm206_request(void)
   
   while(1) {	 /* repeat until all requests have been satisfied */
     INIT_REQUEST;
-    if (CURRENT == NULL || CURRENT->dev == -1) return;
+    if (CURRENT == NULL || CURRENT->rq_status == RQ_INACTIVE)
+      return;
     if (CURRENT->cmd != READ) {
       debug(("Non-read command %d on cdrom\n", CURRENT->cmd));
       end_request(0);

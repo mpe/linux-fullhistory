@@ -12,6 +12,7 @@
 #include <linux/types.h>
 #include <linux/vfs.h>
 #include <linux/net.h>
+#include <linux/kdev_t.h>
 
 /*
  * It's silly to have NR_OPEN bigger than NR_FILE, but I'll fix
@@ -39,16 +40,6 @@
 #define WRITE 1
 #define READA 2		/* read-ahead - don't pause */
 #define WRITEA 3	/* "write-ahead" - silly, but somewhat useful */
-
-extern void buffer_init(void);
-extern unsigned long inode_init(unsigned long start, unsigned long end);
-extern unsigned long file_table_init(unsigned long start, unsigned long end);
-extern unsigned long name_cache_init(unsigned long start, unsigned long end);
-
-#define MAJOR(a) (int)((unsigned short)(a) >> 8)
-#define MINOR(a) (int)((unsigned short)(a) & 0xFF)
-#define MKDEV(a,b) ((int)((((a) & 0xff) << 8) | ((b) & 0xff)))
-#define NODEV MKDEV(0,0)
 
 #ifndef NULL
 #define NULL ((void *) 0)
@@ -115,13 +106,20 @@ extern unsigned long name_cache_init(unsigned long start, unsigned long end);
 #define FIBMAP	   1	/* bmap access */
 #define FIGETBSZ   2	/* get the block size used for bmap */
 
+#ifdef __KERNEL__
+extern void buffer_init(void);
+extern unsigned long inode_init(unsigned long start, unsigned long end);
+extern unsigned long file_table_init(unsigned long start, unsigned long end);
+extern unsigned long name_cache_init(unsigned long start, unsigned long end);
+
 typedef char buffer_block[BLOCK_SIZE];
 
 struct buffer_head {
 	char * b_data;			/* pointer to data block (1024 bytes) */
 	unsigned long b_size;		/* block size */
 	unsigned long b_blocknr;	/* block number */
-	dev_t b_dev;			/* device (0 = free) */
+	kdev_t b_dev;			/* device (B_FREE = free) */
+
 	unsigned short b_count;		/* users using this block */
 	unsigned char b_uptodate;
 	unsigned char b_dirt;		/* 0-clean,1-dirty */
@@ -151,8 +149,6 @@ struct buffer_head {
 #include <linux/nfs_fs_i.h>
 #include <linux/xia_fs_i.h>
 #include <linux/sysv_fs_i.h>
-
-#ifdef __KERNEL__
 
 /*
  * Attribute flags.  These should be or-ed together to figure out what
@@ -189,13 +185,13 @@ struct iattr {
 };
 
 struct inode {
-	dev_t		i_dev;
+	kdev_t		i_dev;
 	unsigned long	i_ino;
 	umode_t		i_mode;
 	nlink_t		i_nlink;
 	uid_t		i_uid;
 	gid_t		i_gid;
-	dev_t		i_rdev;
+	kdev_t		i_rdev;
 	off_t		i_size;
 	time_t		i_atime;
 	time_t		i_mtime;
@@ -288,7 +284,7 @@ extern int fasync_helper(struct inode *, struct file *, int, struct fasync_struc
 #include <linux/sysv_fs_sb.h>
 
 struct super_block {
-	dev_t s_dev;
+	kdev_t s_dev;
 	unsigned long s_blocksize;
 	unsigned char s_blocksize_bits;
 	unsigned char s_lock;
@@ -336,8 +332,8 @@ struct file_operations {
 	void (*release) (struct inode *, struct file *);
 	int (*fsync) (struct inode *, struct file *);
 	int (*fasync) (struct inode *, struct file *, int);
-	int (*check_media_change) (dev_t dev);
-	int (*revalidate) (dev_t dev);
+	int (*check_media_change) (kdev_t dev);
+	int (*revalidate) (kdev_t dev);
 };
 
 struct inode_operations {
@@ -412,9 +408,9 @@ extern struct file_operations rdwr_pipe_fops;
 
 extern struct file_system_type *get_fs_type(const char *name);
 
-extern int fs_may_mount(dev_t dev);
-extern int fs_may_umount(dev_t dev, struct inode * mount_root);
-extern int fs_may_remount_ro(dev_t dev);
+extern int fs_may_mount(kdev_t dev);
+extern int fs_may_umount(kdev_t dev, struct inode * mount_root);
+extern int fs_may_remount_ro(kdev_t dev);
 
 extern struct file *first_file;
 extern int nr_files;
@@ -456,14 +452,14 @@ extern inline void mark_buffer_dirty(struct buffer_head * bh, int flag)
 }
 
 
-extern int check_disk_change(dev_t dev);
-extern void invalidate_inodes(dev_t dev);
-extern void invalidate_buffers(dev_t dev);
+extern int check_disk_change(kdev_t dev);
+extern void invalidate_inodes(kdev_t dev);
+extern void invalidate_buffers(kdev_t dev);
 extern int floppy_is_wp(int minor);
-extern void sync_inodes(dev_t dev);
-extern void sync_dev(dev_t dev);
-extern int fsync_dev(dev_t dev);
-extern void sync_supers(dev_t dev);
+extern void sync_inodes(kdev_t dev);
+extern void sync_dev(kdev_t dev);
+extern int fsync_dev(kdev_t dev);
+extern void sync_supers(kdev_t dev);
 extern int bmap(struct inode * inode,int block);
 extern int notify_change(struct inode *, struct iattr *);
 extern int namei(const char * pathname, struct inode ** res_inode);
@@ -483,22 +479,22 @@ extern void clear_inode(struct inode *);
 extern struct inode * get_pipe_inode(void);
 extern struct file * get_empty_filp(void);
 extern int close_fp(struct file *filp);
-extern struct buffer_head * get_hash_table(dev_t dev, int block, int size);
-extern struct buffer_head * getblk(dev_t dev, int block, int size);
+extern struct buffer_head * get_hash_table(kdev_t dev, int block, int size);
+extern struct buffer_head * getblk(kdev_t dev, int block, int size);
 extern void ll_rw_block(int rw, int nr, struct buffer_head * bh[]);
-extern void ll_rw_page(int rw, int dev, unsigned long nr, char * buffer);
-extern void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buffer);
-extern int is_read_only(int dev);
+extern void ll_rw_page(int rw, kdev_t dev, unsigned long nr, char * buffer);
+extern void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buffer);
+extern int is_read_only(kdev_t dev);
 extern void brelse(struct buffer_head * buf);
-extern void set_blocksize(dev_t dev, int size);
-extern struct buffer_head * bread(dev_t dev, int block, int size);
-extern unsigned long bread_page(unsigned long addr,dev_t dev,int b[],int size,int no_share);
-extern void bwrite_page(unsigned long addr,dev_t dev,int b[],int size);
-extern struct buffer_head * breada(dev_t dev,int block, int size, 
+extern void set_blocksize(kdev_t dev, int size);
+extern struct buffer_head * bread(kdev_t dev, int block, int size);
+extern unsigned long bread_page(unsigned long addr,kdev_t dev,int b[],int size,int no_share);
+extern void bwrite_page(unsigned long addr,kdev_t dev,int b[],int size);
+extern struct buffer_head * breada(kdev_t dev,int block, int size, 
 				   unsigned int pos, unsigned int filesize);
-extern void put_super(dev_t dev);
-unsigned long generate_cluster(dev_t dev, int b[], int size);
-extern dev_t ROOT_DEV;
+extern void put_super(kdev_t dev);
+unsigned long generate_cluster(kdev_t dev, int b[], int size);
+extern kdev_t ROOT_DEV;
 
 extern void show_buffers(void);
 extern void mount_root(void);

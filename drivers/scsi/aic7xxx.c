@@ -64,6 +64,12 @@
 #include "scsi.h"
 #include "hosts.h"
 #include "aic7xxx.h"
+#include<linux/stat.h>
+
+struct proc_dir_entry proc_scsi_aic7xxx = {
+    PROC_SCSI_AIC7XXX, 7, "aic7xxx",
+    S_IFDIR | S_IRUGO | S_IXUGO, 2
+};
 
 #define AIC7XXX_C_VERSION  "$Revision: 2.0 $"
 
@@ -3204,6 +3210,8 @@ aic7xxx_detect(Scsi_Host_Template *template)
   unsigned char irq = 0;
   int i;
 
+  template->proc_dir = &proc_scsi_aic7xxx;
+
   /*
    * Since we may allow sharing of IRQs, it is imperative
    * that we "null-out" the aic7xxx_boards array. It is
@@ -3995,7 +4003,7 @@ aic7xxx_reset(Scsi_Cmnd *cmd)
  *   Return the disk geometry for the given SCSI device.
  *-F*************************************************************************/
 int
-aic7xxx_biosparam(Disk *disk, int devno, int geom[])
+aic7xxx_biosparam(Disk *disk, kdev_t dev, int geom[])
 {
   int heads, sectors, cylinders;
   struct aic7xxx_host *p;

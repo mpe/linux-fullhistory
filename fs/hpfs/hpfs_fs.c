@@ -245,7 +245,7 @@ static int zerop(void *addr, unsigned len);
 static void count_dnodes(struct inode *inode, dnode_secno dno,
 			 unsigned *n_dnodes, unsigned *n_subdirs);
 static unsigned count_bitmap(struct super_block *s);
-static unsigned count_one_bitmap(dev_t dev, secno secno);
+static unsigned count_one_bitmap(kdev_t dev, secno secno);
 static secno bplus_lookup(struct inode *inode, struct bplus_header *b,
 			  secno file_secno, struct buffer_head **bhp);
 static struct hpfs_dirent *map_dirent(struct inode *inode, dnode_secno dno,
@@ -254,21 +254,21 @@ static struct hpfs_dirent *map_dirent(struct inode *inode, dnode_secno dno,
 static struct hpfs_dirent *map_pos_dirent(struct inode *inode, loff_t *posp,
 					  struct quad_buffer_head *qbh);
 static dnode_secno dir_subdno(struct inode *inode, unsigned pos);
-static struct hpfs_dirent *map_nth_dirent(dev_t dev, dnode_secno dno,
+static struct hpfs_dirent *map_nth_dirent(kdev_t dev, dnode_secno dno,
 					  int n,
 					  struct quad_buffer_head *qbh);
 static unsigned choose_conv(unsigned char *p, unsigned len);
 static unsigned convcpy_tofs(unsigned char *out, unsigned char *in,
 			     unsigned len);
-static dnode_secno fnode_dno(dev_t dev, ino_t ino);
-static struct fnode *map_fnode(dev_t dev, ino_t ino,
+static dnode_secno fnode_dno(kdev_t dev, ino_t ino);
+static struct fnode *map_fnode(kdev_t dev, ino_t ino,
 			       struct buffer_head **bhp);
-static struct anode *map_anode(dev_t dev, unsigned secno,
+static struct anode *map_anode(kdev_t dev, unsigned secno,
 			       struct buffer_head **bhp);
-static struct dnode *map_dnode(dev_t dev, unsigned secno,
+static struct dnode *map_dnode(kdev_t dev, unsigned secno,
 			       struct quad_buffer_head *qbh);
-static void *map_sector(dev_t dev, unsigned secno, struct buffer_head **bhp);
-static void *map_4sectors(dev_t dev, unsigned secno,
+static void *map_sector(kdev_t dev, unsigned secno, struct buffer_head **bhp);
+static void *map_4sectors(kdev_t dev, unsigned secno,
 			  struct quad_buffer_head *qbh);
 static void brelse4(struct quad_buffer_head *qbh);
 
@@ -343,7 +343,7 @@ struct super_block *hpfs_read_super(struct super_block *s,
 	struct buffer_head *bh0, *bh1, *bh2;
 	struct quad_buffer_head qbh;
 	dnode_secno root_dno;
-	dev_t dev;
+	kdev_t dev;
 	uid_t uid;
 	gid_t gid;
 	umode_t umask;
@@ -850,7 +850,7 @@ static unsigned count_bitmap(struct super_block *s)
  * Read in one bit map, count the bits, return the count.
  */
 
-static unsigned count_one_bitmap(dev_t dev, secno secno)
+static unsigned count_one_bitmap(kdev_t dev, secno secno)
 {
 	struct quad_buffer_head qbh;
 	char *bits;
@@ -1554,7 +1554,7 @@ static dnode_secno dir_subdno(struct inode *inode, unsigned pos)
  * Return the dir entry at index n in dnode dno, or 0 if there isn't one
  */
 
-static struct hpfs_dirent *map_nth_dirent(dev_t dev, dnode_secno dno,
+static struct hpfs_dirent *map_nth_dirent(kdev_t dev, dnode_secno dno,
 					  int n,
 					  struct quad_buffer_head *qbh)
 {
@@ -1584,7 +1584,7 @@ static int hpfs_dir_read(struct inode *inode, struct file *filp,
 
 /* Return the dnode pointer in a directory fnode */
 
-static dnode_secno fnode_dno(dev_t dev, ino_t ino)
+static dnode_secno fnode_dno(kdev_t dev, ino_t ino)
 {
 	struct buffer_head *bh;
 	struct fnode *fnode;
@@ -1601,7 +1601,7 @@ static dnode_secno fnode_dno(dev_t dev, ino_t ino)
 
 /* Map an fnode into a buffer and return pointers to it and to the buffer. */
 
-static struct fnode *map_fnode(dev_t dev, ino_t ino, struct buffer_head **bhp)
+static struct fnode *map_fnode(kdev_t dev, ino_t ino, struct buffer_head **bhp)
 {
 	struct fnode *fnode;
 
@@ -1622,7 +1622,7 @@ static struct fnode *map_fnode(dev_t dev, ino_t ino, struct buffer_head **bhp)
 
 /* Map an anode into a buffer and return pointers to it and to the buffer. */
 
-static struct anode *map_anode(dev_t dev, unsigned secno,
+static struct anode *map_anode(kdev_t dev, unsigned secno,
 			       struct buffer_head **bhp)
 {
 	struct anode *anode;
@@ -1644,7 +1644,7 @@ static struct anode *map_anode(dev_t dev, unsigned secno,
 
 /* Map a dnode into a buffer and return pointers to it and to the buffer. */
 
-static struct dnode *map_dnode(dev_t dev, unsigned secno,
+static struct dnode *map_dnode(kdev_t dev, unsigned secno,
 			       struct quad_buffer_head *qbh)
 {
 	struct dnode *dnode;
@@ -1666,7 +1666,7 @@ static struct dnode *map_dnode(dev_t dev, unsigned secno,
 
 /* Map a sector into a buffer and return pointers to it and to the buffer. */
 
-static void *map_sector(dev_t dev, unsigned secno, struct buffer_head **bhp)
+static void *map_sector(kdev_t dev, unsigned secno, struct buffer_head **bhp)
 {
 	struct buffer_head *bh;
 
@@ -1680,7 +1680,7 @@ static void *map_sector(dev_t dev, unsigned secno, struct buffer_head **bhp)
 
 /* Map 4 sectors into a 4buffer and return pointers to it and to the buffer. */
 
-static void *map_4sectors(dev_t dev, unsigned secno,
+static void *map_4sectors(kdev_t dev, unsigned secno,
 			  struct quad_buffer_head *qbh)
 {
 	struct buffer_head *bh;

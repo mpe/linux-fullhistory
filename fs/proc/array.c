@@ -185,7 +185,7 @@ static int get_kstat(char * buffer)
 	int i, len;
 	unsigned sum = 0;
 
-	for (i = 0 ; i < 16 ; i++)
+	for (i = 0 ; i < NR_IRQS ; i++)
 		sum += kstat.interrupts[i];
 	len = sprintf(buffer,
 		"cpu  %u %u %u %lu\n"
@@ -206,7 +206,7 @@ static int get_kstat(char * buffer)
 		kstat.pswpin,
 		kstat.pswpout,
 		sum);
-	for (i = 0 ; i < 16 ; i++)
+	for (i = 0 ; i < NR_IRQS ; i++)
 		len += sprintf(buffer + len, " %u", kstat.interrupts[i]);
 	len += sprintf(buffer + len,
 		"\nctxt %u\n"
@@ -446,7 +446,7 @@ static int get_stat(int pid, char * buffer)
 		tsk->p_pptr->pid,
 		tsk->pgrp,
 		tsk->session,
-	        tsk->tty ? tsk->tty->device : 0,
+	        tsk->tty ? kdev_t_to_nr(tsk->tty->device) : 0,
 		tty_pgrp,
 		tsk->flags,
 		tsk->min_flt,
@@ -641,7 +641,7 @@ static int read_maps (int pid, struct file * file, char * buf, int count)
 		char line[MAPS_LINE_MAX+1];
 		char str[5], *cp = str;
 		int flags;
-		dev_t dev;
+		kdev_t dev;
 		unsigned long ino;
 		int len;
 

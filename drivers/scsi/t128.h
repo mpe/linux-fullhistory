@@ -92,7 +92,7 @@
 
 #ifndef ASM
 int t128_abort(Scsi_Cmnd *);
-int t128_biosparam(Disk *, int, int*);
+int t128_biosparam(Disk *, kdev_t, int*);
 int t128_detect(Scsi_Host_Template *);
 int t128_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int t128_reset(Scsi_Cmnd *);
@@ -117,7 +117,7 @@ int t128_reset(Scsi_Cmnd *);
 
 #ifdef HOSTS_C
 
-#define TRANTOR_T128 {NULL, NULL, NULL, "t128", PROC_SCSI_T128, \
+#define TRANTOR_T128 {NULL, NULL, NULL, NULL, \
 	"Trantor T128/T128F/T228", t128_detect, NULL,  \
 	NULL,							\
 	NULL, t128_queue_command, t128_abort, t128_reset, NULL, 	\

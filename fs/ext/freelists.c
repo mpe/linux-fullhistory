@@ -179,7 +179,7 @@ void ext_free_inode(struct inode * inode)
 	struct super_block * sb;
 	unsigned long block;
 	unsigned long ino;
-	dev_t dev;
+	kdev_t dev;
 
 	if (!inode)
 		return;

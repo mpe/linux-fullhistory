@@ -92,7 +92,7 @@ static struct nfs_entry *c_entry = NULL;
 static int nfs_readdir(struct inode *inode, struct file *filp,
 		       void *dirent, filldir_t filldir)
 {
-	static int c_dev = 0;
+	static kdev_t c_dev = 0;
 	static int c_ino;
 	static int c_size;
 
@@ -215,7 +215,7 @@ void nfs_kfree_cache(void)
  */
 
 static struct nfs_lookup_cache_entry {
-	int dev;
+	kdev_t dev;
 	int inode;
 	char filename[NFS_MAXNAMLEN + 1];
 	struct nfs_fh fhandle;
@@ -231,7 +231,8 @@ static struct nfs_lookup_cache_entry *nfs_lookup_cache_index(struct inode *dir,
 
 	for (i = 0; i < NFS_LOOKUP_CACHE_SIZE; i++) {
 		entry = nfs_lookup_cache + i;
-		if (entry->dev == dir->i_dev && entry->inode == dir->i_ino
+		if (entry->dev == dir->i_dev
+		    && entry->inode == dir->i_ino
 		    && !strncmp(filename, entry->filename, NFS_MAXNAMLEN))
 			return entry;
 	}
@@ -291,7 +292,7 @@ static void nfs_lookup_cache_remove(struct inode *dir, struct inode *inode,
 				    const char *filename)
 {
 	struct nfs_lookup_cache_entry *entry;
-	int dev;
+	kdev_t dev;
 	int fileid;
 	int i;
 
@@ -316,7 +317,7 @@ static void nfs_lookup_cache_refresh(struct inode *file,
 				     struct nfs_fattr *fattr)
 {
 	struct nfs_lookup_cache_entry *entry;
-	int dev = file->i_dev;
+	kdev_t dev = file->i_dev;
 	int fileid = file->i_ino;
 	int i;
 
@@ -621,7 +622,7 @@ void nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr)
 	inode->i_size = fattr->size;
 	inode->i_blksize = fattr->blocksize;
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
-		inode->i_rdev = fattr->rdev;
+		inode->i_rdev = to_kdev_t(fattr->rdev);
 	else
 		inode->i_rdev = 0;
 	inode->i_blocks = fattr->blocks;

@@ -150,6 +150,8 @@ static int proc_readfd(struct inode * inode, struct file * filp,
 	}
 
 	for (fd -= 2 ; fd < NR_OPEN; fd++, filp->f_pos++) {
+		if (!p->files)
+			break;
 		if (!p->files->fd[fd] || !p->files->fd[fd]->f_inode)
 			continue;
 

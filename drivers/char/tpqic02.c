@@ -287,7 +287,7 @@ static volatile unsigned long dma_bytes_done;
 static volatile unsigned dma_mode = 0;		/* !=0 also means DMA in use */
 static 		flag need_rewind = YES;
 
-static dev_t current_tape_dev = MKDEV(QIC02_TAPE_MAJOR, 0);
+static kdev_t current_tape_dev;
 static int extra_blocks_left = BLOCKS_BEYOND_EW;
 
 
@@ -1918,7 +1918,7 @@ static int qic02_tape_lseek(struct inode * inode, struct file * file, off_t offs
 static int qic02_tape_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
 	int error;
-	dev_t dev = inode->i_rdev;
+	kdev_t dev = inode->i_rdev;
 	unsigned short flags = filp->f_flags;
 	unsigned long bytes_todo, bytes_done, total_bytes_done = 0;
 	int stat;
@@ -2093,7 +2093,7 @@ static int qic02_tape_read(struct inode * inode, struct file * filp, char * buf,
 static int qic02_tape_write(struct inode * inode, struct file * filp, const char * buf, int count)
 {
 	int error;
-	dev_t dev = inode->i_rdev;
+	kdev_t dev = inode->i_rdev;
 	unsigned short flags = filp->f_flags;
 	unsigned long bytes_todo, bytes_done, total_bytes_done = 0;
 
@@ -2244,14 +2244,15 @@ static int qic02_tape_write(struct inode * inode, struct file * filp, const char
  */
 static int qic02_tape_open(struct inode * inode, struct file * filp)
 {
-	dev_t dev = inode->i_rdev;
+	kdev_t dev = inode->i_rdev;
 	unsigned short flags = filp->f_flags;
 	unsigned short dens = 0;
 	int s;
 
 
 	if (TP_DIAGS(dev)) {
-		printk("qic02_tape_open: dev=%x, flags=%x     ", dev, flags);
+		printk("qic02_tape_open: dev=%s, flags=%x     ",
+		       kdevname(dev), flags);
 	}
 
 	if (MINOR(dev)==255)	/* special case for resetting */
@@ -2419,7 +2420,7 @@ static int qic02_tape_open(struct inode * inode, struct file * filp)
 	}
 	if (s != 0) {
 		status_dead = YES;	/* force reset */
-		current_tape_dev = 0xff80;
+		current_tape_dev = 0; /* earlier 0xff80 */
 		return -EIO;
 	}
 
@@ -2429,10 +2430,11 @@ static int qic02_tape_open(struct inode * inode, struct file * filp)
 
 static void qic02_tape_release(struct inode * inode, struct file * filp)
 {
-	dev_t dev = inode->i_rdev;
+	kdev_t dev = inode->i_rdev;
 
 	if (TP_DIAGS(dev))
-		printk("qic02_tape_release: dev=%x\n", dev);
+		printk("qic02_tape_release: dev=%s\n",
+		       kdevname(dev));
 
 	if (status_zombie==YES)		/* don't rewind in zombie mode */
 		return;
@@ -2868,7 +2870,6 @@ static int qic02_get_resources(void)
 } /* qic02_get_resources */
 
 
-
 long qic02_tape_init(long kmem_start)
 	/* Shouldn't this be a caddr_t ? */
 {
@@ -2883,6 +2884,8 @@ long qic02_tape_init(long kmem_start)
 	}
 
 	QIC02_TAPE_DEBUG = TPQD_DEFAULT_FLAGS;
+
+	current_tape_dev = MKDEV(QIC02_TAPE_MAJOR, 0);
 
 #ifndef CONFIG_QIC02_DYNCONF
 	printk(TPQIC02_NAME ": IRQ %d, DMA %d, IO 0x%x, IFC %s, %s, %s\n",

@@ -32,6 +32,7 @@
 #define OPTIMIZE_FLAG_TIME  ((HZ * 3)/2)	/* */
 #define CHECK_CHARACTERS
 
+#include <linux/config.h>
 #ifdef MODULE
 #include <linux/module.h>
 #include <linux/version.h>

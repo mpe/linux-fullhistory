@@ -55,7 +55,7 @@ static char command_line[COMMAND_LINE_SIZE] = { 0, };
  * code think we're on a VGA color display.
  */
 struct screen_info screen_info = {
-	0, 0,			/* orig-x, orig-y */
+	0, 25,			/* orig-x, orig-y */
 	{ 0, 0 },		/* unused */
 	0,			/* orig-video-page */
 	0,			/* orig-video-mode */
@@ -97,7 +97,7 @@ void setup_arch(char **cmdline_p,
 	set_hae(hae.cache);	/* sync HAE register w/hae_cache */
 	wrmces(0x7);		/* reset enable correctable error reports */
 
-	ROOT_DEV = 0x0802;		/* sda2 */
+	ROOT_DEV = to_kdev_t(0x0802);		/* sda2 */
 	command_line[COMMAND_LINE_SIZE - 1] = '\0';
 	strcpy(command_line, COMMAND_LINE);
 

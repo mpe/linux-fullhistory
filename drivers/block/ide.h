@@ -29,6 +29,9 @@
 #ifndef OK_TO_RESET_CONTROLLER		/* 1 needed for good error recovery */
 #define OK_TO_RESET_CONTROLLER	1	/* 0 for use with AH2372A/B interface */
 #endif
+#ifndef FAKE_FDISK_FOR_EZDRIVE		/* 1 to help linux fdisk with EZDRIVE */
+#define FAKE_FDISK_FOR_EZDRIVE 	1	/* 0 to reduce kernel size */
+#endif
 #ifndef SUPPORT_RZ1000			/* 1 to support RZ1000 chipset */
 #define SUPPORT_RZ1000		1	/* 0 to reduce kernel size */
 #endif
@@ -248,6 +251,9 @@ typedef union {
 
 typedef struct ide_drive_s {
 	special_t	special;	/* special action flags */
+#if FAKE_FDISK_FOR_EZDRIVE
+	unsigned ezdrive	: 1;	/* flag: partitioned with ezdrive */
+#endif /* FAKE_FDISK_FOR_EZDRIVE */
 	unsigned present	: 1;	/* drive is physically present */
 	unsigned noprobe 	: 1;	/* from:  hdx=noprobe */
 	unsigned keep_settings  : 1;	/* restore settings after drive reset */
@@ -405,7 +411,7 @@ int ide_wait_stat (ide_drive_t *drive, byte good, byte bad, unsigned long timeou
 /*
  * This is called from genhd.c to correct DiskManager/EZ-Drive geometries
  */
-int ide_xlate_1024(dev_t, int, const char *);
+int ide_xlate_1024(kdev_t, int, const char *);
 
 /*
  * Start a reset operation for an IDE interface.
@@ -432,7 +438,7 @@ void *ide_alloc (unsigned long bytecount, unsigned long within_area);
  *
  * The value of arg is passed to the internal handler as rq->buffer.
  */
-int ide_do_drive_cmd(int rdev, char *args);
+int ide_do_drive_cmd(kdev_t rdev, char *args);
 
 
 #ifdef CONFIG_BLK_DEV_IDECD

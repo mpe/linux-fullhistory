@@ -14,12 +14,12 @@ int eata2x_reset(Scsi_Cmnd *);
 
 #define EATA_VERSION "2.01.00"
 
+
 #define EATA {                                                 \
 		NULL, /* Ptr for modules */                    \
 		NULL, /* usage count for modules */	       \
 		NULL,                                          \
-		"eata2x",                                      \
-		PROC_SCSI_EATA2X,                              \
+		NULL,                                          \
 		"EATA/DMA 2.0x rev. " EATA_VERSION " ",        \
 		eata2x_detect,				       \
 		NULL, /* Release */     		       \

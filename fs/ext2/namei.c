@@ -445,7 +445,7 @@ int ext2_mknod (struct inode * dir, const char * name, int len, int mode,
 	else if (S_ISFIFO(inode->i_mode)) 
 		init_fifo(inode);
 	if (S_ISBLK(mode) || S_ISCHR(mode))
-		inode->i_rdev = rdev;
+		inode->i_rdev = to_kdev_t(rdev);
 	inode->i_dirt = 1;
 	bh = ext2_add_entry (dir, name, len, &de, &err);
 	if (!bh) {

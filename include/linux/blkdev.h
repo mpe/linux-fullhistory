@@ -12,7 +12,14 @@
  * for read/write completion.
  */
 struct request {
-	int dev;		/* -1 if no request */
+	volatile int rq_status;	/* should split this into a few status bits */
+#define RQ_INACTIVE		(-1)
+#define RQ_ACTIVE		1
+#define RQ_SCSI_BUSY		0xffff
+#define RQ_SCSI_DONE		0xfffe
+#define RQ_SCSI_DISCONNECTING	0xffe0
+
+	kdev_t rq_dev;
 	int cmd;		/* READ or WRITE */
 	int errors;
 	unsigned long sector;

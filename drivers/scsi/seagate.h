@@ -24,10 +24,11 @@ int seagate_st0x_reset(Scsi_Cmnd *);
 	#define NULL 0
 #endif
 
-int seagate_st0x_biosparam(Disk *, int, int*);
+#include <linux/kdev_t.h>
+int seagate_st0x_biosparam(Disk *, kdev_t, int*);
 
-#define SEAGATE_ST0X  {  NULL, NULL, NULL, "seagate", \
-			 PROC_SCSI_SEAGATE, NULL, seagate_st0x_detect, 	\
+#define SEAGATE_ST0X  {  NULL, NULL, NULL, NULL, \
+			 NULL, seagate_st0x_detect, 	\
 			 NULL, 						\
 			 seagate_st0x_info, seagate_st0x_command,  	\
 			 seagate_st0x_queue_command, seagate_st0x_abort, \

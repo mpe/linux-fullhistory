@@ -170,7 +170,7 @@ struct opt_Toc {
 
 
 #define CURRENT_VALID \
-	(CURRENT && MAJOR(CURRENT -> dev) == MAJOR_NR \
+	(CURRENT && MAJOR(CURRENT -> rq_dev) == MAJOR_NR \
 	 && CURRENT -> cmd == READ && CURRENT -> sector != -1)
 
 

@@ -33,8 +33,7 @@
 	NULL,							\
 	NULL,							\
 	NULL,							\
-	"aic7xxx",						\
-	PROC_SCSI_AIC7XXX,					\
+	NULL,							\
 	NULL,							\
 	aic7xxx_detect,						\
 	NULL,							\
@@ -55,7 +54,7 @@
 }
 
 extern int aic7xxx_queue(Scsi_Cmnd *, void (*)(Scsi_Cmnd *));
-extern int aic7xxx_biosparam(Disk *, int, int[]);
+extern int aic7xxx_biosparam(Disk *, kdev_t, int[]);
 extern int aic7xxx_detect(Scsi_Host_Template *);
 extern int aic7xxx_command(Scsi_Cmnd *);
 extern int aic7xxx_abort(Scsi_Cmnd *);

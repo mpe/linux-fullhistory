@@ -434,7 +434,7 @@ static void sbp_read_cmd(void);
 static int sbp_data(void);
 static int cmd_out(void);
 static int DiskInfo(void);
-static int sbpcd_chk_disk_change(dev_t);
+static int sbpcd_chk_disk_change(kdev_t);
 
 /*==========================================================================*/
 
@@ -4340,7 +4340,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		
 	case BLKRASET:
 		if(!suser())  return -EACCES;
-		if(!inode->i_rdev) return -EINVAL;
+		if(!(inode->i_rdev)) return -EINVAL;
 		if(arg > 0xff) return -EINVAL;
 		read_ahead[MAJOR(inode->i_rdev)] = arg;
 		return (0);
@@ -4383,17 +4383,20 @@ static void DO_SBPCD_REQUEST(void)
 	INIT_REQUEST;
 	sti();
 	
-	if ((CURRENT==NULL)||(CURRENT->dev<0)) goto err_done;
-	if (CURRENT -> sector == -1) goto err_done;
+	if ((CURRENT == NULL) || CURRENT->rq_status == RQ_INACTIVE)
+		goto err_done;
+	if (CURRENT -> sector == -1)
+		goto err_done;
 	if (CURRENT->cmd != READ)
 	{
 		msg(DBG_INF, "bad cmd %d\n", CURRENT->cmd);
 		goto err_done;
 	}
-	i = MINOR(CURRENT->dev);
+	i = MINOR(CURRENT->rq_dev);
 	if ( (i<0) || (i>=NR_SBPCD) || (D_S[i].drv_id==-1))
 	{
-		msg(DBG_INF, "do_request: bad device: %04X\n", CURRENT->dev);
+		msg(DBG_INF, "do_request: bad device: %s\n",
+			kdevname(CURRENT->rq_dev));
 		goto err_done;
 	}
 	while (busy_audio) sbp_sleep(HZ); /* wait a bit */
@@ -5358,7 +5361,7 @@ void cleanup_module(void)
  * used externally (isofs/inode.c, fs/buffer.c)
  * Currently disabled (has to get "synchronized").
  */
-static int sbpcd_chk_disk_change(dev_t full_dev)
+static int sbpcd_chk_disk_change(kdev_t full_dev)
 {
 	int i, st;
 	

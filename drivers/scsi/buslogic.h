@@ -10,12 +10,12 @@ int buslogic_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int buslogic_abort(Scsi_Cmnd *);
 const char *buslogic_info(struct Scsi_Host *);
 int buslogic_reset(Scsi_Cmnd *);
-int buslogic_biosparam(Disk *, int, int *);
+int buslogic_biosparam(Disk *, kdev_t, int *);
+
 
 #define BUSLOGIC { NULL, NULL,			\
 		   NULL,		        \
-		   "buslogic",                  \
-		   PROC_SCSI_BUSLOGIC,          \
+		   NULL,		        \
 		   "BusLogic",			\
 		   buslogic_detect,		\
 		   0,	/* no release func */	\

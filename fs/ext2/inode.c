@@ -552,7 +552,7 @@ void ext2_read_inode (struct inode * inode)
 		ext2_error (inode->i_sb, "ext2_read_inode",
 			    "New inode has non-zero prealloc count!");
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
-		inode->i_rdev = raw_inode->i_block[0];
+		inode->i_rdev = to_kdev_t(raw_inode->i_block[0]);
 	else for (block = 0; block < EXT2_N_BLOCKS; block++)
 		inode->u.ext2_i.i_data[block] = raw_inode->i_block[block];
 	brelse (bh);
@@ -634,7 +634,7 @@ static struct buffer_head * ext2_update_inode (struct inode * inode)
 	raw_inode->i_dir_acl = inode->u.ext2_i.i_dir_acl;
 	raw_inode->i_version = inode->u.ext2_i.i_version;
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
-		raw_inode->i_block[0] = inode->i_rdev;
+		raw_inode->i_block[0] = kdev_t_to_nr(inode->i_rdev);
 	else for (block = 0; block < EXT2_N_BLOCKS; block++)
 		raw_inode->i_block[block] = inode->u.ext2_i.i_data[block];
 	mark_buffer_dirty(bh, 1);
@@ -661,8 +661,9 @@ int ext2_sync_inode (struct inode *inode)
 		wait_on_buffer (bh);
 		if (bh->b_req && !bh->b_uptodate)
 		{
-			printk ("IO error syncing ext2 inode [%04x:%08lx]\n",
-				inode->i_dev, inode->i_ino);
+			printk ("IO error syncing ext2 inode ["
+				"%s:%08lx]\n",
+				kdevname(inode->i_dev), inode->i_ino);
 			err = -1;
 		}
 	}

@@ -20,13 +20,13 @@ static void cp_old_stat(struct inode * inode, struct old_stat * statbuf)
 
 	printk("VFS: Warning: %s using old stat() call. Recompile your binary.\n",
 		current->comm);
-	tmp.st_dev = inode->i_dev;
+	tmp.st_dev = kdev_t_to_nr(inode->i_dev);
 	tmp.st_ino = inode->i_ino;
 	tmp.st_mode = inode->i_mode;
 	tmp.st_nlink = inode->i_nlink;
 	tmp.st_uid = inode->i_uid;
 	tmp.st_gid = inode->i_gid;
-	tmp.st_rdev = inode->i_rdev;
+	tmp.st_rdev = kdev_t_to_nr(inode->i_rdev);
 	tmp.st_size = inode->i_size;
 	if (inode->i_pipe)
 		tmp.st_size = PIPE_SIZE(*inode);
@@ -42,13 +42,13 @@ static void cp_new_stat(struct inode * inode, struct new_stat * statbuf)
 	unsigned int blocks, indirect;
 
 	memset(&tmp, 0, sizeof(tmp));
-	tmp.st_dev = inode->i_dev;
+	tmp.st_dev = kdev_t_to_nr(inode->i_dev);
 	tmp.st_ino = inode->i_ino;
 	tmp.st_mode = inode->i_mode;
 	tmp.st_nlink = inode->i_nlink;
 	tmp.st_uid = inode->i_uid;
 	tmp.st_gid = inode->i_gid;
-	tmp.st_rdev = inode->i_rdev;
+	tmp.st_rdev = kdev_t_to_nr(inode->i_rdev);
 	tmp.st_size = inode->i_size;
 	if (inode->i_pipe)
 		tmp.st_size = PIPE_SIZE(*inode);

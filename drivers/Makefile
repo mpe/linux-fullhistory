@@ -20,11 +20,9 @@ SUB_DIRS += scsi
 MOD_SUB_DIRS += scsi
 endif
 
-# I think this should have an else clause for modules, but the original
-# makefile did not, so I am not adding it.
-# -jln 12 Aug 1995
 ifdef CONFIG_SOUND
 SUB_DIRS += sound
+MOD_SUB_DIRS += sound
 endif
 
 include $(TOPDIR)/Rules.make

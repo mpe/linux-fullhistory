@@ -81,7 +81,7 @@ struct super_block *nfs_read_super(struct super_block *sb, void *raw_data,
 	unsigned int fd;
 	struct file *filp;
 
-	dev_t dev = sb->s_dev;
+	kdev_t dev = sb->s_dev;
 
 	MOD_INC_USE_COUNT;
 	if (!data) {

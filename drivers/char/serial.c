@@ -204,20 +204,20 @@ static unsigned char *tmp_buf = 0;
 static struct semaphore tmp_buf_sem = MUTEX;
 
 static inline int serial_paranoia_check(struct async_struct *info,
-					dev_t device, const char *routine)
+					kdev_t device, const char *routine)
 {
 #ifdef SERIAL_PARANOIA_CHECK
 	static const char *badmagic =
-		"Warning: bad magic number for serial struct (%d, %d) in %s\n";
+		"Warning: bad magic number for serial struct (%s) in %s\n";
 	static const char *badinfo =
-		"Warning: null async_struct for (%d, %d) in %s\n";
+		"Warning: null async_struct for (%s) in %s\n";
 
 	if (!info) {
-		printk(badinfo, MAJOR(device), MINOR(device), routine);
+		printk(badinfo, kdevname(device), routine);
 		return 1;
 	}
 	if (info->magic != SERIAL_MAGIC) {
-		printk(badmagic, MAJOR(device), MINOR(device), routine);
+		printk(badmagic, kdevname(device), routine);
 		return 1;
 	}
 #endif

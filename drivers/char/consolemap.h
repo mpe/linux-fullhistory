@@ -9,6 +9,6 @@
 #define USER_MAP 3
 
 extern int hashtable_contents_valid;
-extern unsigned char inverse_translate(unsigned char c);
+extern unsigned char inverse_translate(int glyph);
 extern unsigned short *set_translate(int m);
 extern int conv_uni_to_pc(long ucs);

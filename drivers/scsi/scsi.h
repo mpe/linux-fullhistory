@@ -21,6 +21,7 @@
  */
 #include <linux/scsi.h>
 
+
 /*
  * Some defs, in case these are not defined elsewhere.
  */
@@ -188,6 +189,8 @@ typedef struct scsi_device {
                                        one of the luns for the device at a time. */
     unsigned was_reset:1;	/* There was a bus reset on the bus for this
                                    device */
+    unsigned expecting_cc_ua:1;    /* Expecting a CHECK_CONDITION/UNIT_ATTN
+                                      because we did a bus reset. */
 } Scsi_Device;
 
 /*
@@ -440,12 +443,10 @@ extern int scsi_reset (Scsi_Cmnd *, int);
 
 extern int max_scsi_hosts;
 
-extern void build_proc_dir_entries(void);
 extern void proc_print_scsidevice(Scsi_Device *, char *, int *, int);
 
-
 extern void print_command(unsigned char *);
-extern void print_sense(const char *,	 Scsi_Cmnd *);
+extern void print_sense(const char *, Scsi_Cmnd *);
 
 
 #if defined(MAJOR_NR) && (MAJOR_NR != SCSI_TAPE_MAJOR)
@@ -459,8 +460,8 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
     req = &SCpnt->request;
     req->errors = 0;
     if (!uptodate) {
-	printk(DEVICE_NAME " I/O error: dev %04x, sector %lu\n",
-	       req->dev,req->sector);
+	printk(DEVICE_NAME " I/O error: dev %s, sector %lu\n",
+	       kdevname(req->rq_dev), req->sector);
     }
     
     do {
@@ -485,7 +486,7 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
 	req->buffer = bh->b_data;
 	return SCpnt;
     };
-    DEVICE_OFF(req->dev);
+    DEVICE_OFF(req->rq_dev);
     if (req->sem != NULL) {
 	up(req->sem);
     }
@@ -498,7 +499,7 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
 	    wake_up(&next->host_wait);
     }
     
-    req->dev = -1;
+    req->rq_status = RQ_INACTIVE;
     wake_up(&wait_for_request);
     wake_up(&SCpnt->device->device_wait);
     return NULL;
@@ -515,7 +516,7 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
 	restore_flags(flags);	\
 	return; \
     } \
-    if (MAJOR(CURRENT->dev) != MAJOR_NR) \
+    if (MAJOR(CURRENT->rq_dev) != MAJOR_NR) \
 	panic(DEVICE_NAME ": request list destroyed"); \
     if (CURRENT->bh) { \
 	if (!CURRENT->bh->b_lock) \

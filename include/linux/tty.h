@@ -203,7 +203,7 @@ struct tty_struct {
 	struct termios *termios, *termios_locked;
 	int pgrp;
 	int session;
-	dev_t	device;
+	kdev_t	device;
 	unsigned long flags;
 	int count;
 	struct winsize winsize;
@@ -288,7 +288,7 @@ extern long stl_init(long);
 extern long stli_init(long);
 #endif
 
-extern int tty_paranoia_check(struct tty_struct *tty, dev_t device,
+extern int tty_paranoia_check(struct tty_struct *tty, kdev_t device,
 			      const char *routine);
 extern char *_tty_name(struct tty_struct *tty, char *buf);
 extern char *tty_name(struct tty_struct *tty);

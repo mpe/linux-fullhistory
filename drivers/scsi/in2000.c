@@ -73,6 +73,12 @@
 #include "sd.h"
 
 #include "in2000.h"
+#include<linux/stat.h>
+
+struct proc_dir_entry proc_scsi_in2000 = {
+    PROC_SCSI_IN2000, 6, "in2000",
+    S_IFDIR | S_IRUGO | S_IXUGO, 2
+};
 
 /*#define FAST_FIFO_IO*/
 
@@ -582,7 +588,9 @@ int in2000_detect(Scsi_Host_Template * tpnt)
     int loop, tmp;
 
     DEB(printk("in2000_detect: \n"));
-    
+
+    tpnt->proc_dir = &proc_scsi_in2000;
+
     for ( loop=0; loop < 4; loop++ )
     {
 	base = base_tab[loop];
@@ -684,7 +692,7 @@ int in2000_reset(Scsi_Cmnd * SCpnt)
 #endif
 }
 
-int in2000_biosparam(Disk * disk, int dev, int* iinfo)
+int in2000_biosparam(Disk * disk, kdev_t dev, int* iinfo)
 	{
 	  int size = disk->capacity;
     DEB(printk("in2000_biosparam\n"));

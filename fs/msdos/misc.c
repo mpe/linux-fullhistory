@@ -20,15 +20,16 @@
 
 #define PRINTK(x)
 #define Printk(x)	printk x
-/* Well-known binary file extensions */
+
+/* Well-known binary file extensions - of course there are many more */
 
 static char bin_extensions[] =
-  "EXECOMBINAPPSYSDRVOVLOVROBJLIBDLLPIF"	/* program code */
-  "ARCZIPLHALZHZOOTARZ  ARJ"	/* common archivers */
-  "TZ TAZTZPTPZ"		/* abbreviations of tar.Z and tar.zip */
-  "GZ TGZDEB"			/* .gz, .tar.gz and Debian packages   */
-  "GIFBMPTIFGL JPGPCX"		/* graphics */
-  "TFMVF GF PK PXLDVI";		/* TeX */
+  "EXE" "COM" "BIN" "APP" "SYS" "DRV" "OVL" "OVR" "OBJ" "LIB" "DLL" "PIF" /* program code */
+  "ARC" "ZIP" "LHA" "LZH" "ZOO" "TAR" "Z  " "ARJ"	/* common archivers */
+  "TZ " "TAZ" "TZP" "TPZ"		/* abbreviations of tar.Z and tar.zip */
+  "GZ " "TGZ" "DEB"			/* .gz, .tar.gz and Debian packages   */
+  "GIF" "BMP" "TIF" "GL " "JPG" "PCX"	/* graphics */
+  "TFM" "VF " "GF " "PK " "PXL" "DVI";	/* TeX */
 
 
 /*
@@ -42,8 +43,9 @@ void fs_panic(struct super_block *s,const char *msg)
 
 	not_ro = !(s->s_flags & MS_RDONLY);
 	if (not_ro) s->s_flags |= MS_RDONLY;
-	printk("Filesystem panic (dev 0x%04X, mounted on 0x%04X:%ld)\n  %s\n",
-	    s->s_dev,s->s_covered->i_dev,s->s_covered->i_ino,msg);
+	printk("Filesystem panic (dev %s, ", kdevname(s->s_dev));
+	printk("mounted on %s:%ld)\n  %s\n", /* note: kdevname returns & static char[] */
+	       kdevname(s->s_covered->i_dev), s->s_covered->i_ino, msg);
 	if (not_ro)
 		printk("  File system has been set read-only\n");
 }

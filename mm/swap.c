@@ -41,7 +41,7 @@ static struct {
 
 static struct swap_info_struct {
 	unsigned int flags;
-	unsigned int swap_device;
+	kdev_t swap_device;
 	struct inode * swap_file;
 	unsigned char * swap_map;
 	unsigned char * swap_lockmap;
@@ -707,7 +707,8 @@ static inline void check_free_buffers(unsigned long addr)
 	if (bh) {
 		struct buffer_head *tmp = bh;
 		do {
-			if (tmp->b_list == BUF_SHARED && tmp->b_dev != 0xffff)
+			if (tmp->b_list == BUF_SHARED
+			    && tmp->b_dev != B_FREE)
 				refile_buffer(tmp);
 			tmp = tmp->b_this_page;
 		} while (tmp != bh);

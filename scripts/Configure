@@ -125,6 +125,36 @@ function tristate () {
 }
 
 #
+# dep_tristate processes a tristate argument
+#
+#	tristate question define default that depends upon
+#	another option.  If the option we depend upon is a module,
+#	then the only allowable options are M or N.  If Y, then
+#	this is a normal tristate.  This is used in cases where modules
+#	are nested, and one module requires the presence of something
+#	else in the kernel.
+#
+function dep_tristate () {
+	if [ "$4" != "m" ]; then
+		tristate "$1" "$2" "$3"
+	else
+		ans=""
+		def=$(eval echo "\${$2:-$3}")
+	        case "$def" in
+        	 "y" | "m") defprompt="M/n"
+		      def="m"
+        	      ;;
+        	 "n") defprompt="N/m"
+        	      ;;
+	        esac
+		while [ "$ans" != "n" -a "$ans" != "m" ]; do
+			readln "$1 ($2) [$defprompt] " "$def"
+		done
+		define_bool "$2" "$ans"
+	fi
+}
+
+#
 # define_int sets the value of a integer argument
 #
 #	define_int define value
@@ -248,9 +278,9 @@ if [ -f ./.config ] ; then
 fi
 . $CONFIG_IN
 
-if [ "$CONFIG_SOUND" = "y" ] ; then
-	$MAKE -C drivers/sound config || exit 1
-fi
+case "$CONFIG_SOUND" in
+	[YyMm] )	$MAKE -C drivers/sound config || exit 1 ;;
+esac
 
 rm -f .config.old
 if [ -f .config ]; then

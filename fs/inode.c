@@ -21,12 +21,12 @@ static struct inode * first_inode;
 static struct wait_queue * inode_wait = NULL;
 static int nr_inodes = 0, nr_free_inodes = 0;
 
-static inline int const hashfn(dev_t dev, unsigned int i)
+static inline int const hashfn(kdev_t dev, unsigned int i)
 {
-	return (dev ^ i) % NR_IHASH;
+	return (HASHDEV(dev) ^ i) % NR_IHASH;
 }
 
-static inline struct inode_hash_entry * const hash(dev_t dev, int i)
+static inline struct inode_hash_entry * const hash(kdev_t dev, int i)
 {
 	return hash_table + hashfn(dev, i);
 }
@@ -159,7 +159,7 @@ void clear_inode(struct inode * inode)
 	insert_inode_free(inode);
 }
 
-int fs_may_mount(dev_t dev)
+int fs_may_mount(kdev_t dev)
 {
 	struct inode * inode, * next;
 	int i;
@@ -177,7 +177,7 @@ int fs_may_mount(dev_t dev)
 	return 1;
 }
 
-int fs_may_umount(dev_t dev, struct inode * mount_root)
+int fs_may_umount(kdev_t dev, struct inode * mount_root)
 {
 	struct inode * inode;
 	int i;
@@ -193,7 +193,7 @@ int fs_may_umount(dev_t dev, struct inode * mount_root)
 	return 1;
 }
 
-int fs_may_remount_ro(dev_t dev)
+int fs_may_remount_ro(kdev_t dev)
 {
 	struct file * file;
 	int i;
@@ -336,7 +336,7 @@ int bmap(struct inode * inode, int block)
 	return 0;
 }
 
-void invalidate_inodes(dev_t dev)
+void invalidate_inodes(kdev_t dev)
 {
 	struct inode * inode, * next;
 	int i;
@@ -348,14 +348,15 @@ void invalidate_inodes(dev_t dev)
 		if (inode->i_dev != dev)
 			continue;
 		if (inode->i_count || inode->i_dirt || inode->i_lock) {
-			printk("VFS: inode busy on removed device %d/%d\n", MAJOR(dev), MINOR(dev));
+			printk("VFS: inode busy on removed device %s\n",
+			       kdevname(dev));
 			continue;
 		}
 		clear_inode(inode);
 	}
 }
 
-void sync_inodes(dev_t dev)
+void sync_inodes(kdev_t dev)
 {
 	int i;
 	struct inode * inode;
@@ -377,9 +378,8 @@ void iput(struct inode * inode)
 	wait_on_inode(inode);
 	if (!inode->i_count) {
 		printk("VFS: iput: trying to free free inode\n");
-		printk("VFS: device %d/%d, inode %lu, mode=0%07o\n",
-			MAJOR(inode->i_rdev), MINOR(inode->i_rdev),
-					inode->i_ino, inode->i_mode);
+		printk("VFS: device %s, inode %lu, mode=0%07o\n",
+			kdevname(inode->i_rdev), inode->i_ino, inode->i_mode);
 		return;
 	}
 	if (inode->i_pipe)
@@ -407,8 +407,8 @@ repeat:
 	}
 	inode->i_count--;
 	if (inode->i_mmap) {
-		printk("iput: inode %lu on device %d/%d still has mappings.\n",
-			inode->i_ino, MAJOR(inode->i_dev), MINOR(inode->i_dev));
+		printk("iput: inode %lu on device %s still has mappings.\n",
+			inode->i_ino, kdevname(inode->i_dev));
 		inode->i_mmap = NULL;
 	}
 	nr_free_inodes++;
@@ -463,7 +463,7 @@ repeat:
 	inode->i_version = ++event;
 	inode->i_sem.count = 1;
 	inode->i_ino = ++ino;
-	inode->i_dev = -1;
+	inode->i_dev = 0;
 	nr_free_inodes--;
 	if (nr_free_inodes < 0) {
 		printk ("VFS: get_empty_inode: bad free inode count.\n");

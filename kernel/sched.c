@@ -50,7 +50,8 @@ DECLARE_TASK_QUEUE(tq_scheduler);
 /*
  * phase-lock loop variables
  */
-int time_status = TIME_BAD;     /* clock synchronization status */
+int time_state = TIME_BAD;     /* clock synchronization status */
+int time_status = STA_UNSYNC;	/* clock status bits */
 long time_offset = 0;           /* time adjustment (us) */
 long time_constant = 0;         /* pll time constant */
 long time_tolerance = MAXFREQ;  /* frequency tolerance (ppm) */
@@ -474,57 +475,117 @@ static inline void calc_load(void)
  * They were originally developed for SUN and DEC kernels.
  * All the kudos should go to Dave for this stuff.
  *
- * These were ported to Linux by Philip Gladstone.
  */
 static void second_overflow(void)
 {
-	long ltemp;
+    long ltemp;
 
-	/* Bump the maxerror field */
-	time_maxerror = (0x70000000-time_maxerror < time_tolerance) ?
-	  0x70000000 : (time_maxerror + time_tolerance);
+    /* Bump the maxerror field */
+    time_maxerror = (0x70000000-time_maxerror <
+		     time_tolerance >> SHIFT_USEC) ?
+	0x70000000 : (time_maxerror + (time_tolerance >> SHIFT_USEC));
 
-	/* Run the PLL */
-	if (time_offset < 0) {
-		ltemp = (-(time_offset+1) >> (SHIFT_KG + time_constant)) + 1;
-		time_adj = ltemp << (SHIFT_SCALE - SHIFT_HZ - SHIFT_UPDATE);
-		time_offset += (time_adj * HZ) >> (SHIFT_SCALE - SHIFT_UPDATE);
-		time_adj = - time_adj;
-	} else if (time_offset > 0) {
-		ltemp = ((time_offset-1) >> (SHIFT_KG + time_constant)) + 1;
-		time_adj = ltemp << (SHIFT_SCALE - SHIFT_HZ - SHIFT_UPDATE);
-		time_offset -= (time_adj * HZ) >> (SHIFT_SCALE - SHIFT_UPDATE);
-	} else {
-		time_adj = 0;
+    /*
+     * Leap second processing. If in leap-insert state at
+     * the end of the day, the system clock is set back one
+     * second; if in leap-delete state, the system clock is
+     * set ahead one second. The microtime() routine or
+     * external clock driver will insure that reported time
+     * is always monotonic. The ugly divides should be
+     * replaced.
+     */
+    switch (time_state) {
+
+    case TIME_OK:
+	if (time_status & STA_INS)
+	    time_state = TIME_INS;
+	else if (time_status & STA_DEL)
+	    time_state = TIME_DEL;
+	break;
+
+    case TIME_INS:
+	if (xtime.tv_sec % 86400 == 0) {
+	    xtime.tv_sec--;
+	    time_state = TIME_OOP;
+	    printk("Clock: inserting leap second 23:59:60 UTC\n");
 	}
+	break;
 
-	time_adj += (time_freq >> (SHIFT_KF + SHIFT_HZ - SHIFT_SCALE))
-	    + FINETUNE;
-
-	/* Handle the leap second stuff */
-	switch (time_status) {
-		case TIME_INS:
-		/* ugly divide should be replaced */
-		if (xtime.tv_sec % 86400 == 0) {
-			xtime.tv_sec--; /* !! */
-			time_status = TIME_OOP;
-			printk("Clock: inserting leap second 23:59:60 UTC\n");
-		}
-		break;
-
-		case TIME_DEL:
-		/* ugly divide should be replaced */
-		if (xtime.tv_sec % 86400 == 86399) {
-			xtime.tv_sec++;
-			time_status = TIME_OK;
-			printk("Clock: deleting leap second 23:59:59 UTC\n");
-		}
-		break;
-
-		case TIME_OOP:
-		time_status = TIME_OK;
-		break;
+    case TIME_DEL:
+	if ((xtime.tv_sec + 1) % 86400 == 0) {
+	    xtime.tv_sec++;
+	    time_state = TIME_WAIT;
+	    printk("Clock: deleting leap second 23:59:59 UTC\n");
 	}
+	break;
+
+    case TIME_OOP:
+	time_state = TIME_WAIT;
+	break;
+
+    case TIME_WAIT:
+	if (!(time_status & (STA_INS | STA_DEL)))
+	    time_state = TIME_OK;
+    }
+
+    /*
+     * Compute the phase adjustment for the next second. In
+     * PLL mode, the offset is reduced by a fixed factor
+     * times the time constant. In FLL mode the offset is
+     * used directly. In either mode, the maximum phase
+     * adjustment for each second is clamped so as to spread
+     * the adjustment over not more than the number of
+     * seconds between updates.
+     */
+    if (time_offset < 0) {
+	ltemp = -time_offset;
+	if (!(time_status & STA_FLL))
+	    ltemp >>= SHIFT_KG + time_constant;
+	if (ltemp > (MAXPHASE / MINSEC) << SHIFT_UPDATE)
+	    ltemp = (MAXPHASE / MINSEC) <<
+		SHIFT_UPDATE;
+	time_offset += ltemp;
+	time_adj = -ltemp << (SHIFT_SCALE - SHIFT_HZ -
+			      SHIFT_UPDATE);
+    } else {
+	ltemp = time_offset;
+	if (!(time_status & STA_FLL))
+	    ltemp >>= SHIFT_KG + time_constant;
+	if (ltemp > (MAXPHASE / MINSEC) << SHIFT_UPDATE)
+	    ltemp = (MAXPHASE / MINSEC) <<
+		SHIFT_UPDATE;
+	time_offset -= ltemp;
+	time_adj = ltemp << (SHIFT_SCALE - SHIFT_HZ -
+			     SHIFT_UPDATE);
+    }
+
+    /*
+     * Compute the frequency estimate and additional phase
+     * adjustment due to frequency error for the next
+     * second. When the PPS signal is engaged, gnaw on the
+     * watchdog counter and update the frequency computed by
+     * the pll and the PPS signal.
+     */
+    pps_valid++;
+    if (pps_valid == PPS_VALID) {
+	pps_jitter = MAXTIME;
+	pps_stabil = MAXFREQ;
+	time_status &= ~(STA_PPSSIGNAL | STA_PPSJITTER |
+			 STA_PPSWANDER | STA_PPSERROR);
+    }
+    ltemp = time_freq + pps_freq;
+    if (ltemp < 0)
+	time_adj -= -ltemp >>
+	    (SHIFT_USEC + SHIFT_HZ - SHIFT_SCALE);
+    else
+	time_adj += ltemp >>
+	    (SHIFT_USEC + SHIFT_HZ - SHIFT_SCALE);
+
+    /* compensate for (HZ==100) != 128. Add 25% to get 125; => only 3% error */
+    if (time_adj < 0)
+	time_adj -= -time_adj >> 2;
+    else
+	time_adj += time_adj >> 2;
 }
 
 /*
@@ -592,12 +653,12 @@ static void do_timer(int irq, struct pt_regs * regs)
 	 * advance the tick more.
 	 */
 	time_phase += time_adj;
-	if (time_phase < -FINEUSEC) {
+	if (time_phase <= -FINEUSEC) {
 		ltemp = -time_phase >> SHIFT_SCALE;
 		time_phase += ltemp << SHIFT_SCALE;
 		xtime.tv_usec += tick + time_adjust_step - ltemp;
 	}
-	else if (time_phase > FINEUSEC) {
+	else if (time_phase >= FINEUSEC) {
 		ltemp = time_phase >> SHIFT_SCALE;
 		time_phase -= ltemp << SHIFT_SCALE;
 		xtime.tv_usec += tick + time_adjust_step + ltemp;
@@ -638,7 +699,7 @@ static void do_timer(int irq, struct pt_regs * regs)
 	 * CMOS clock accordingly every ~11 minutes. Set_rtc_mmss() has to be
 	 * called as close as possible to 500 ms before the new second starts.
 	 */
-	if (time_status != TIME_BAD && xtime.tv_sec > last_rtc_update + 660 &&
+	if (time_state != TIME_BAD && xtime.tv_sec > last_rtc_update + 660 &&
 	    xtime.tv_usec > 500000 - (tick >> 1) &&
 	    xtime.tv_usec < 500000 + (tick >> 1))
 	  if (set_rtc_mmss(xtime.tv_sec) == 0)

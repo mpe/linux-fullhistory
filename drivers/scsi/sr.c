@@ -67,7 +67,7 @@ static void get_sectorsize(int);
 extern int sr_ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 
 void requeue_sr_request (Scsi_Cmnd * SCpnt);
-static int check_cdrom_media_change(dev_t);
+static int check_cdrom_media_change(kdev_t);
 
 static void sr_release(struct inode * inode, struct file * file)
 {
@@ -87,7 +87,7 @@ static struct file_operations sr_fops =
 {
 	NULL,			/* lseek - default */
 	block_read,		/* read - general block-dev read */
-	block_write,	/* write - general block-dev write */
+	block_write,		/* write - general block-dev write */
 	NULL,			/* readdir - bad */
 	NULL,			/* select */
 	sr_ioctl,		/* ioctl */
@@ -110,7 +110,7 @@ static struct file_operations sr_fops =
  * an inode for that to work, and we do not always have one.
  */
 
-int check_cdrom_media_change(dev_t full_dev){
+int check_cdrom_media_change(kdev_t full_dev){
 	int retval, target;
 	struct inode inode;
 	int flag = 0;
@@ -245,9 +245,9 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 				/* detected disc change.  set a bit and quietly refuse 
 				 * further access.	*/
 		
-				scsi_CDs[DEVICE_NR(SCpnt->request.dev)].device->changed = 1;
+				scsi_CDs[DEVICE_NR(SCpnt->request.rq_dev)].device->changed = 1;
 				SCpnt = end_scsi_request(SCpnt, 0, this_count);
-		requeue_sr_request(SCpnt);
+				requeue_sr_request(SCpnt);
 				return;
 			}
 		}
@@ -257,15 +257,15 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 			print_sense("sr", SCpnt);
 			printk("command was: ");
 			print_command(SCpnt->cmnd);
-			if (scsi_CDs[DEVICE_NR(SCpnt->request.dev)].ten) {
-				scsi_CDs[DEVICE_NR(SCpnt->request.dev)].ten = 0;
+			if (scsi_CDs[DEVICE_NR(SCpnt->request.rq_dev)].ten) {
+				scsi_CDs[DEVICE_NR(SCpnt->request.rq_dev)].ten = 0;
 				requeue_sr_request(SCpnt);
 				result = 0;
 				return;
 			} else {
-		SCpnt = end_scsi_request(SCpnt, 0, this_count);
-		requeue_sr_request(SCpnt); /* Do next request */
-		return;
+				SCpnt = end_scsi_request(SCpnt, 0, this_count);
+				requeue_sr_request(SCpnt); /* Do next request */
+				return;
 			}
 	    
 		}
@@ -281,9 +281,9 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 	/* We only get this far if we have an error we have not recognized */
 	if(result) {
 	printk("SCSI CD error : host %d id %d lun %d return code = %03x\n", 
-	       scsi_CDs[DEVICE_NR(SCpnt->request.dev)].device->host->host_no, 
-	       scsi_CDs[DEVICE_NR(SCpnt->request.dev)].device->id,
-	       scsi_CDs[DEVICE_NR(SCpnt->request.dev)].device->lun,
+	       scsi_CDs[DEVICE_NR(SCpnt->request.rq_dev)].device->host->host_no, 
+	       scsi_CDs[DEVICE_NR(SCpnt->request.rq_dev)].device->id,
+	       scsi_CDs[DEVICE_NR(SCpnt->request.rq_dev)].device->lun,
 	       result);
 	    
 	if (status_byte(result) == CHECK_CONDITION)
@@ -533,7 +533,7 @@ static int sr_open(struct inode * inode, struct file * filp)
 	/* If this device did not have media in the drive at boot time, then
 	 * we would have been unable to get the sector size.  Check to see if
 	 * this is the case, and try again.
-     */
+	 */
     
 	if(scsi_CDs[MINOR(inode->i_rdev)].needs_sector_size)
 	get_sectorsize(MINOR(inode->i_rdev));
@@ -559,14 +559,14 @@ static void do_sr_request (void)
     while (1==1){
 	save_flags(flags);
 	cli();
-	if (CURRENT != NULL && CURRENT->dev == -1) {
+	if (CURRENT != NULL && CURRENT->rq_status == RQ_INACTIVE) {
 	    restore_flags(flags);
 	    return;
 	};
 	
 	INIT_SCSI_REQUEST;
  
-        SDev = scsi_CDs[DEVICE_NR(MINOR(CURRENT->dev))].device;
+        SDev = scsi_CDs[DEVICE_NR(CURRENT->rq_dev)].device;
         
         /*
          * I am not sure where the best place to do this is.  We need
@@ -590,7 +590,7 @@ static void do_sr_request (void)
         
 	if (flag++ == 0)
 	    SCpnt = allocate_device(&CURRENT,
-				    scsi_CDs[DEVICE_NR(MINOR(CURRENT->dev))].device, 0); 
+				    scsi_CDs[DEVICE_NR(CURRENT->rq_dev)].device, 0); 
 	else SCpnt = NULL;
 	restore_flags(flags);
 	
@@ -609,12 +609,12 @@ static void do_sr_request (void)
 	    req = CURRENT;
 	    while(req){
 		SCpnt = request_queueable(req,
-					  scsi_CDs[DEVICE_NR(MINOR(req->dev))].device);
+					  scsi_CDs[DEVICE_NR(req->rq_dev)].device);
 		if(SCpnt) break;
 		req1 = req;
 		req = req->next;
 	    };
-	    if (SCpnt && req->dev == -1) {
+	    if (SCpnt && req->rq_status == RQ_INACTIVE) {
 		if (req == CURRENT) 
 		    CURRENT = CURRENT->next;
 		else
@@ -642,34 +642,31 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 	tries = 2;
     
  repeat:
-	if(!SCpnt || SCpnt->request.dev <= 0) {
-	do_sr_request();
-	return;
+	if(!SCpnt || SCpnt->request.rq_status == RQ_INACTIVE) {
+		do_sr_request();
+		return;
 	}
     
-	dev =  MINOR(SCpnt->request.dev);
+	dev =  MINOR(SCpnt->request.rq_dev);
 	block = SCpnt->request.sector;	
 	buffer = NULL;
 	this_count = 0;
     
-	if (dev >= sr_template.nr_dev)
-    {
+	if (dev >= sr_template.nr_dev) {
 		/* printk("CD-ROM request error: invalid device.\n");			*/
 		SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
 		tries = 2;
 		goto repeat;
-    }
+	}
     
-	if (!scsi_CDs[dev].use)
-    {
+	if (!scsi_CDs[dev].use) {
 		/* printk("CD-ROM request error: device marked not in use.\n");		*/
 		SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
 		tries = 2;
 		goto repeat;
-    }
+	}
     
-	if (scsi_CDs[dev].device->changed)
-    {
+	if (scsi_CDs[dev].device->changed) {
 	/* 
 	 * quietly refuse to do anything to a changed disc 
 	 * until the changed bit has been reset
@@ -678,7 +675,7 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 		SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
 		tries = 2;
 		goto repeat;
-    }
+	}
 	
 	switch (SCpnt->request.cmd)
     {
@@ -697,19 +694,20 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
     
     /*
      * Now do the grungy work of figuring out which sectors we need, and
-	 * where in memory we are going to put them.
+     * where in memory we are going to put them.
      * 
-	 * The variables we need are:
+     * The variables we need are:
      * 
-	 * this_count= number of 512 byte sectors being read 
-	 * block     = starting cdrom sector to read.
-	 * realcount = # of cdrom sectors to read
+     * this_count= number of 512 byte sectors being read 
+     * block     = starting cdrom sector to read.
+     * realcount = # of cdrom sectors to read
      * 
-	 * The major difference between a scsi disk and a scsi cdrom
+     * The major difference between a scsi disk and a scsi cdrom
      * is that we will always use scatter-gather if we can, because we can
      * work around the fact that the buffer cache has a block size of 1024,
      * and we have 2048 byte sectors.  This code should work for buffers that
-     * are any multiple of 512 bytes long.  */
+     * are any multiple of 512 bytes long.
+     */
     
 	SCpnt->use_sg = 0;
     
@@ -963,7 +961,7 @@ static void sr_init_done (Scsi_Cmnd * SCpnt)
     struct request * req;
     
     req = &SCpnt->request;
-    req->dev = 0xfffe; /* Busy, but indicate request done */
+    req->rq_status = RQ_SCSI_DONE; /* Busy, but indicate request done */
     
     if (req->sem != NULL) {
 	up(req->sem);
@@ -984,7 +982,7 @@ static void get_sectorsize(int i){
 	cmd[0] = READ_CAPACITY;
 	cmd[1] = (scsi_CDs[i].device->lun << 5) & 0xe0;
 	memset ((void *) &cmd[2], 0, 8);
-	SCpnt->request.dev = 0xffff;  /* Mark as really busy */
+	SCpnt->request.rq_status = RQ_SCSI_BUSY;  /* Mark as really busy */
 	SCpnt->cmd_len = 0;
 	
 	memset(buffer, 0, 8);
@@ -995,15 +993,16 @@ static void get_sectorsize(int i){
 		     MAX_RETRIES);
 	
 	if (current->pid == 0)
-	    while(SCpnt->request.dev != 0xfffe)
+	    while(SCpnt->request.rq_status != RQ_SCSI_DONE)
 		barrier();
 	else
-	    if (SCpnt->request.dev != 0xfffe){
+	    if (SCpnt->request.rq_status != RQ_SCSI_DONE){
 		struct semaphore sem = MUTEX_LOCKED;
 		SCpnt->request.sem = &sem;
 		down(&sem);
 		/* Hmm.. Have to ask about this */
-		while (SCpnt->request.dev != 0xfffe) schedule();
+		while (SCpnt->request.rq_status != RQ_SCSI_DONE)
+		    schedule();
 	    };
 	
 	the_result = SCpnt->result;
@@ -1011,7 +1010,7 @@ static void get_sectorsize(int i){
 	
     } while(the_result && retries);
     
-    SCpnt->request.dev = -1;  /* Mark as not busy */
+    SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
     
     wake_up(&SCpnt->device->device_wait); 
     
@@ -1114,18 +1113,18 @@ void sr_finish()
 static void sr_detach(Scsi_Device * SDp)
 {
     Scsi_CD * cpnt;
-    int i, major;
-    
-    major = MAJOR_NR << 8;
+    int i;
     
     for(cpnt = scsi_CDs, i=0; i<sr_template.dev_max; i++, cpnt++) 
 	if(cpnt->device == SDp) {
+	    kdev_t devi = MKDEV(MAJOR_NR, i);
+
 	    /*
 	     * Since the cdrom is read-only, no need to sync the device.
 	     * We should be kind to our buffer cache, however.
 	     */
-	    invalidate_inodes(major | i);
-	    invalidate_buffers(major | i);
+	    invalidate_inodes(devi);
+	    invalidate_buffers(devi);
 	    
 	    /*
 	     * Reset things back to a sane state so that one can re-load a new

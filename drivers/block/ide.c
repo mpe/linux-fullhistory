@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.13b  Sep 9, 1995
+ *  linux/drivers/block/ide.c	Version 5.14  Sep 14, 1995
  *
  *  Copyright (C) 1994, 1995  Linus Torvalds & authors (see below)
  */
@@ -141,11 +141,15 @@
  *  Version 5.13	fixed typo ('B'), thanks to houston@boyd.geog.mcgill.ca
  *			fixed ht6560b support
  *  Version 5.13b (sss)	fix problem in calling ide_cdrom_setup()
- *                      don't bother invalidating nonexistent partitions
+ *			don't bother invalidating nonexistent partitions
+ *  Version 5.14	fixes to cmd640 support.. maybe it works now(?)
+ *			added & tested full EZ-DRIVE support -- don't use LILO!
+ *			don't enable 2nd CMD640 PCI port during init - conflict
  *
  *  Driver compile-time options are in ide.h
  *
  *  To do, in likely order of completion:
+ *	- figure out why Mitsumi ATAPI cdroms are having trouble..
  *	- add ioctls to get/set interface timings on cmd640, ht6560b, triton
  *	- modify kernel to obtain BIOS geometry for drives on 2nd/3rd/4th i/f
  *	- improved CMD support:  probably handing this off to someone else
@@ -1318,10 +1322,11 @@ static inline void do_request (ide_hwif_t *hwif, struct request *rq)
 #ifdef DEBUG
 	printk("%s: ide_do_request: current=0x%08lx\n", hwif->name, (unsigned long) rq);
 #endif
-	minor = MINOR(rq->dev);
+	minor = MINOR(rq->rq_dev);
 	unit = minor >> PARTN_BITS;
-	if (MAJOR(rq->dev) != hwif->major || unit >= MAX_DRIVES) {
-		printk("%s: bad device number: 0x%04x\n", hwif->name, rq->dev);
+	if (MAJOR(rq->rq_dev) != hwif->major || unit >= MAX_DRIVES) {
+		printk("%s: bad device number: %s\n",
+		       hwif->name, kdevname(rq->rq_dev));
 		goto kill_rq;
 	}
 	drive = &hwif->drives[unit];
@@ -1339,6 +1344,12 @@ static inline void do_request (ide_hwif_t *hwif, struct request *rq)
 		goto kill_rq;
 	}
 	block += drive->part[minor&PARTN_MASK].start_sect + drive->sect0;
+#if FAKE_FDISK_FOR_EZDRIVE
+	if (block == 0 && drive->ezdrive) {
+		block = 1;
+		printk("%s: [EZD] accessing sector 1 instead of sector 0\n", drive->name);
+	}
+#endif /* FAKE_FDISK_FOR_EZDRIVE */
 	((ide_hwgroup_t *)hwif->hwgroup)->drive = drive;
 #if (DISK_RECOVERY_TIME > 0)
 	while ((read_timer() - hwif->last_time) < DISK_RECOVERY_TIME);
@@ -1407,7 +1418,7 @@ void ide_do_request (ide_hwgroup_t *hwgroup)
 			hwgroup->drive = NULL;	/* paranoia */
 			do {
 				rq = blk_dev[hwif->major].current_request;
-				if (rq != NULL && rq->dev != -1)
+				if (rq != NULL && rq->rq_status != RQ_INACTIVE)
 					goto got_rq;
 			} while ((hwif = hwif->next) != hwgroup->hwif);
 			return;		/* no work left for this hwgroup */
@@ -1575,7 +1586,7 @@ static void ide_intr (int irq, struct pt_regs *regs)
  * get_info_ptr() returns the (ide_drive_t *) for a given device number.
  * It returns NULL if the given device number does not match any present drives.
  */
-static ide_drive_t *get_info_ptr (int i_rdev)
+static ide_drive_t *get_info_ptr (kdev_t i_rdev)
 {
 	int		major = MAJOR(i_rdev);
 	unsigned int	h;
@@ -1605,7 +1616,7 @@ static ide_drive_t *get_info_ptr (int i_rdev)
  * If arg is NULL, it goes through all the motions,
  * but without actually sending a command to the drive.
  */
-int ide_do_drive_cmd(int rdev, char *args)
+int ide_do_drive_cmd(kdev_t rdev, char *args)
 {
 	unsigned long flags;
 	unsigned int major = MAJOR(rdev);
@@ -1624,7 +1635,8 @@ int ide_do_drive_cmd(int rdev, char *args)
 	rq.bh = NULL;
 	rq.bhtail = NULL;
 	rq.next = NULL;
-	rq.dev = rdev;
+	rq.rq_status = RQ_ACTIVE;
+	rq.rq_dev = rdev;
 	bdev = &blk_dev[major];
 
 	save_flags(flags);
@@ -1701,7 +1713,7 @@ static void ide_release(struct inode * inode, struct file * file)
  * usage == 1 (we need an open channel to use an ioctl :-), so this
  * is our limit.
  */
-static int revalidate_disk(dev_t  i_rdev)
+static int revalidate_disk(kdev_t i_rdev)
 {
 	ide_drive_t *drive;
 	unsigned int p, major, minor;
@@ -1710,7 +1722,7 @@ static int revalidate_disk(dev_t  i_rdev)
 	if ((drive = get_info_ptr(i_rdev)) == NULL)
 		return -ENODEV;
 
-	major = MAJOR(i_rdev) << 8;
+	major = MAJOR(i_rdev);
 	minor = drive->select.b.unit << PARTN_BITS;
 	save_flags(flags);
 	cli();
@@ -1723,9 +1735,10 @@ static int revalidate_disk(dev_t  i_rdev)
 
 	for (p = 0; p < (1<<PARTN_BITS); ++p) {
 		if (drive->part[p].nr_sects > 0) {
-			sync_dev           (major | (minor + p));
-			invalidate_inodes  (major | (minor + p));
-			invalidate_buffers (major | (minor + p));
+			kdev_t devp = MKDEV(major, minor+p);
+			sync_dev           (devp);
+			invalidate_inodes  (devp);
+			invalidate_buffers (devp);
 		}
 		drive->part[p].start_sect = 0;
 		drive->part[p].nr_sects   = 0;
@@ -1760,7 +1773,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 	ide_drive_t *drive;
 	unsigned long flags;
 
-	if (!inode || !inode->i_rdev)
+	if (!inode || !(inode->i_rdev))
 		return -EINVAL;
 	if ((drive = get_info_ptr(inode->i_rdev)) == NULL)
 		return -ENODEV;
@@ -1772,7 +1785,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			put_user(drive->bios_head, (byte *) &loc->heads);
 			put_user(drive->bios_sect, (byte *) &loc->sectors);
 			put_user(drive->bios_cyl, (unsigned short *) &loc->cylinders);
-			put_user((unsigned)drive->part[inode->i_rdev&PARTN_MASK].start_sect,
+			put_user((unsigned)drive->part[MINOR(inode->i_rdev)&PARTN_MASK].start_sect,
 				(unsigned long *) &loc->start);
 			return 0;
 
@@ -1792,7 +1805,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			return write_fs_long(arg, read_ahead[MAJOR(inode->i_rdev)]);
 
          	case BLKGETSIZE:   /* Return device size */
-			return write_fs_long(arg, drive->part[inode->i_rdev&PARTN_MASK].nr_sects);
+			return write_fs_long(arg, drive->part[MINOR(inode->i_rdev)&PARTN_MASK].nr_sects);
 		case BLKRRPART: /* Re-read partition tables */
 			return revalidate_disk(inode->i_rdev);
 
@@ -1812,7 +1825,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			return write_fs_long(arg, drive->mult_count);
 
 		case HDIO_GET_IDENTITY:
-			if (!arg || (inode->i_rdev & PARTN_MASK))
+			if (!arg || (MINOR(inode->i_rdev) & PARTN_MASK))
 				return -EINVAL;
 			if (drive->id == NULL)
 				return -ENOMSG;
@@ -1837,7 +1850,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 		case HDIO_SET_CHIPSET:
 			if (!suser())
 				return -EACCES;
-			if ((inode->i_rdev & PARTN_MASK))
+			if ((MINOR(inode->i_rdev) & PARTN_MASK))
 				return -EINVAL;
 			save_flags(flags);
 			cli();
@@ -1874,7 +1887,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 		case HDIO_SET_MULTCOUNT:
 			if (!suser())
 				return -EACCES;
-			if (inode->i_rdev & PARTN_MASK)
+			if (MINOR(inode->i_rdev) & PARTN_MASK)
 				return -EINVAL;
 			if ((drive->id != NULL) && (arg > drive->id->max_multsect))
 				return -EINVAL;
@@ -1920,7 +1933,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 	}
 }
 
-static int ide_check_media_change (dev_t i_rdev)
+static int ide_check_media_change (kdev_t i_rdev)
 {
 	ide_drive_t *drive;
 
@@ -2302,7 +2315,7 @@ static void probe_for_drives (ide_hwif_t *hwif)
 #ifdef CONFIG_BLK_DEV_IDECD
 			if (drive->present && drive->media == cdrom)
 				ide_cdrom_setup(drive);
-#endif	/* CONFIG_BLK_DEV_IDECD */
+#endif /* CONFIG_BLK_DEV_IDECD */
 		}
 		for (unit = 0; unit < MAX_DRIVES; ++unit) {
 			ide_drive_t *drive = &hwif->drives[unit];
@@ -2422,6 +2435,7 @@ void init_cmd640_vlb (void)
 		}
 	}
 	write_cmd640_vlb(port, 0x51, read_cmd640_vlb(port, 0x51)|0xc8);
+	write_cmd640_vlb(port, 0x57, read_cmd640_vlb(port, 0x57)|0x0c);
 	printk("disabled read-ahead, enabled secondary\n");
 
 }
@@ -2642,7 +2656,7 @@ done:
  * to "convert" a drive to a logical geometry with fewer than 1024 cyls
  * It mimics the method used by Ontrack Disk Manager.
  */
-int ide_xlate_1024 (dev_t i_rdev, int need_offset, const char *msg)
+int ide_xlate_1024 (kdev_t i_rdev, int offset, const char *msg)
 {
 	ide_drive_t *drive;
 	static const byte head_vals[] = {4, 8, 16, 32, 64, 128, 255, 0};
@@ -2665,12 +2679,19 @@ int ide_xlate_1024 (dev_t i_rdev, int need_offset, const char *msg)
 		if (0 == *++heads)
 			break;
 	}
-	if (need_offset) {
-		drive->sect0 = 63;
-		drive->bios_cyl = (tracks - 1) / drive->bios_head;
+	if (offset) {
+#if FAKE_FDISK_FOR_EZDRIVE
+		if (offset == -1)
+			drive->ezdrive = 1;
+		else
+#endif /* FAKE_FDISK_FOR_EZDRIVE */
+		{
+			drive->sect0 = 63;
+			drive->bios_cyl = (tracks - 1) / drive->bios_head;
+		}
 	}
 	drive->part[0].nr_sects = current_capacity(drive);
-	printk("%s [+%d,%d/%d/%d]", msg, drive->sect0, drive->bios_cyl, drive->bios_head, drive->bios_sect);
+	printk("%s [%d/%d/%d]", msg, drive->bios_cyl, drive->bios_head, drive->bios_sect);
 	return 1;
 }
 
@@ -2824,11 +2845,17 @@ void init_rz1000 (byte bus, byte fn)
 	unsigned short reg;
 
 	printk("ide: buggy RZ1000 interface: ");
-	if ((rc = pcibios_read_config_word(bus, fn, 0x40, &reg))
-	 || (rc =  pcibios_write_config_word(bus, fn, 0x40, reg & 0xdfff)))
-		buggy_interface_fallback (rc);
-	else
-		printk("disabled read-ahead\n");
+	if ((rc = pcibios_read_config_word (bus, fn, PCI_COMMAND, &reg))) {
+		ide_pci_access_error (rc);
+	} else if (!(reg & 1)) {
+		printk("not enabled\n");
+	} else {
+		if ((rc = pcibios_read_config_word(bus, fn, 0x40, &reg))
+		 || (rc =  pcibios_write_config_word(bus, fn, 0x40, reg & 0xdfff)))
+			buggy_interface_fallback (rc);
+		else
+			printk("disabled read-ahead\n");
+	}
 }
 #endif /* SUPPORT_RZ1000 */
 
@@ -2840,11 +2867,34 @@ void init_cmd640 (byte bus, byte fn)
 
 	single_threaded = 1;
 	printk("ide: buggy CMD640 interface: ");
+
+#if 0	/* funny.. the cmd640b I tried this on claimed to not be enabled.. */
+	unsigned short sreg;
+	if ((rc = pcibios_read_config_word (bus, fn, PCI_COMMAND, &sreg))) {
+		ide_pci_access_error (rc);
+	} else if (!(sreg & 1)) {
+		printk("not enabled\n");
+	} else {
+#endif /* 0 */
+
+	/*
+	 * The first part is undocumented magic from the DOS driver.
+	 * According to the datasheet, there is no port 0x5b on the cmd640.
+	 */
+	(void) pcibios_write_config_byte(bus, fn, 0x5b, 0xbd);
+	if (pcibios_write_config_byte(bus, fn, 0x5b, 0xbd) != 0xbd)
+		printk("init_cmd640: huh? 0x5b read back wrong\n");
+	(void) pcibios_write_config_byte(bus, fn, 0x5b, 0);
+	/*
+	 * The rest is from the cmd640b datasheet.
+	 */
 	if ((rc = pcibios_read_config_byte(bus, fn, 0x51, &reg))
-	 || (rc =  pcibios_write_config_byte(bus, fn, 0x51, reg | 0xc8)))
+	 || (rc =  pcibios_write_config_byte(bus, fn, 0x51, reg | 0xc0)) /* 0xc8 to enable 2nd i/f */
+	 || (rc =  pcibios_read_config_byte(bus, fn, 0x57, &reg))
+	 || (rc =  pcibios_write_config_byte(bus, fn, 0x57, reg | 0x0c)))
 		buggy_interface_fallback (rc);
 	else
-		printk("serialized, disabled read-ahead, enabled secondary\n");
+		printk("serialized, disabled read-ahead\n");
 }
 #endif /* SUPPORT_CMD640 */
 
@@ -2857,19 +2907,13 @@ typedef void (ide_pci_init_proc_t)(byte, byte);
 static void ide_probe_pci (unsigned short vendor, unsigned short device, ide_pci_init_proc_t *init)
 {
 	unsigned long flags;
-	unsigned index = 0;
+	unsigned index;
 	byte fn, bus;
-	int rc;
 
 	save_flags(flags);
 	cli();
 	for (index = 0; !pcibios_find_device (vendor, device, index, &bus, &fn); ++index) {
-		unsigned short command;
-		if ((rc = pcibios_read_config_word (bus, fn, PCI_COMMAND, &command))) {
-			ide_pci_access_error (rc);
-		} else if (command & 1) {	/* is device enabled? */
-			init (bus, fn);
-		}
+		init (bus, fn);
 	}
 	restore_flags(flags);
 }
@@ -2889,7 +2933,7 @@ static void ide_init_pci (void)
 	ide_probe_pci (PCI_VENDOR_ID_CMD, PCI_DEVICE_ID_CMD_640, &init_cmd640);
 #endif
 #ifdef CONFIG_BLK_DEV_TRITON
-	ide_probe_pci (PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371, &ide_init_triton);
+	ide_probe_pci (PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371_1, &ide_init_triton);
 #endif
 }
 #endif /* CONFIG_PCI */

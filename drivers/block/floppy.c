@@ -105,7 +105,7 @@ static int print_unex=1;
 
 #include <linux/module.h>
 /*
- * NB. we must include the kernel idenfication string in to install the module.
+ * NB. we must include the kernel identification string to install the module.
  */
 #include <linux/version.h>
 char kernel_version[] = UTS_RELEASE;
@@ -208,8 +208,19 @@ static int initialising=1;
 #define N_FDC 2
 #define N_DRIVE 8
 
-#define TYPE(x) ( ((x)>>2) & 0x1f )
-#define DRIVE(x) ( ((x)&0x03) | (((x)&0x80 ) >> 5))
+static inline int ITYPE(int x) {
+	return  (x>>2) & 0x1f;
+}
+static inline int XTYPE(int x) { /* called with a fd_device field as arg */
+	return  ITYPE(x);
+}
+static inline int TYPE(kdev_t x) {
+	return  (MINOR(x)>>2) & 0x1f;
+}
+static inline int DRIVE(kdev_t x) {
+	return (MINOR(x)&0x03) | ((MINOR(x)&0x80 ) >> 5);
+}
+#define TOMINOR(x) ((x & 3) | ((x & 4) << 5))
 #define UNIT(x) ( (x) & 0x03 )		/* drive on fdc */
 #define FDC(x) ( ((x) & 0x04) >> 2 )  /* fdc of drive */
 #define REVDRIVE(fdc, unit) ( (unit) + ((fdc) << 2 ))
@@ -683,7 +694,7 @@ static int disk_change(int drive)
 					DPRINT("Disk type is undefined after "
 					       "disk change\n");
 				current_type[drive] = NULL;
-				floppy_sizes[DRIVE(current_drive) + (FDC(current_drive) << 7)] = MAX_DISK_SIZE;
+				floppy_sizes[TOMINOR(current_drive)] = MAX_DISK_SIZE;
 			}
 		}
 		/*USETF(FD_DISK_NEWCHANGE);*/
@@ -1969,7 +1980,7 @@ static void bad_flp_intr(void)
 		DRS->track = NEED_2_RECAL;
 }
 
-static void set_floppy(int device)
+static void set_floppy(kdev_t device)
 {
 	if (TYPE(device))
 		floppy = TYPE(device) + floppy_type;
@@ -2072,7 +2083,7 @@ static struct cont_t format_cont={
 	bad_flp_intr,
 	generic_done };
 
-static int do_format(int device, struct format_descr *tmp_format_req)
+static int do_format(kdev_t device, struct format_descr *tmp_format_req)
 {
 	int ret;
 	int drive=DRIVE(device);
@@ -2208,8 +2219,7 @@ static void rw_interrupt(void)
 			return;
 		}
 		current_type[current_drive] = floppy;
-		floppy_sizes[DRIVE(current_drive) + (FDC(current_drive) << 7)] =
-			floppy->size >> 1;
+		floppy_sizes[TOMINOR(current_drive)] = floppy->size >> 1;
 		break;
 	}
 
@@ -2218,8 +2228,7 @@ static void rw_interrupt(void)
 			DPRINT2("Auto-detected floppy type %s in fd%d\n",
 				floppy->name,current_drive);
 		current_type[current_drive] = floppy;
-		floppy_sizes[DRIVE(current_drive) + (FDC(current_drive) << 7)] =
-			floppy->size >> 1;
+		floppy_sizes[TOMINOR(current_drive)] = floppy->size >> 1;
 		probing = 0;
 	}
 
@@ -2381,7 +2390,7 @@ static int make_raw_rw_request(void)
 	int aligned_sector_t;
 	int max_sector, max_size, tracksize, ssize;
 
-	set_fdc(DRIVE(CURRENT->dev));
+	set_fdc(DRIVE(CURRENT->rq_dev));
 
 	raw_cmd.flags = FD_RAW_SPIN | FD_RAW_NEED_DISK | FD_RAW_NEED_DISK |
 		FD_RAW_NEED_SEEK;
@@ -2616,18 +2625,18 @@ static int make_raw_rw_request(void)
 static void redo_fd_request(void)
 {
 #define REPEAT {request_done(0); continue; }
-	int device;
+	kdev_t device;
 	int tmp;
-	int error;
+#if 0
+	kdev_t error = 0;
+#endif
 
-
-	error = -1;
 	lastredo = jiffies;
 	if (current_drive < N_DRIVE)
 		floppy_off(current_drive);
 
-	if (CURRENT && CURRENT->dev < 0){
-		DPRINT("current dev < 0!\n");
+	if (CURRENT && CURRENT->rq_status == RQ_INACTIVE){
+		DPRINT("current not active!\n");
 		return;
 	}
 
@@ -2637,20 +2646,20 @@ static void redo_fd_request(void)
 			unlock_fdc();
 			return;
 		}
-		if (MAJOR(CURRENT->dev) != MAJOR_NR)
+		if (MAJOR(CURRENT->rq_dev) != MAJOR_NR)
 			panic(DEVICE_NAME ": request list destroyed");
 		if (CURRENT->bh && !CURRENT->bh->b_lock)
 			panic(DEVICE_NAME ": block not locked");
 #if 0
 		if (!CURRENT->bh->b_count && 
-		    (CURRENT->errors || error == CURRENT->dev)){
-			error=CURRENT->dev;
+		    (CURRENT->errors || error == CURRENT->rq_dev)){
+			error = CURRENT->rq_dev;
 			DPRINT("skipping read ahead buffer\n");
 			REPEAT;
 		}
+		error = 0;
 #endif
-		error=-1;
-		device = CURRENT->dev;
+		device = CURRENT->rq_dev;
 		set_fdc( DRIVE(device));
 		reschedule_timeout(CURRENTD, "redo fd request", 0);
 
@@ -2904,7 +2913,7 @@ static int raw_cmd_ioctl(void *param)
 	return COPYOUT(raw_cmd);
 }
 
-static int invalidate_drive(int rdev)
+static int invalidate_drive(kdev_t rdev)
 {
 	/* invalidate the buffer track to force a reread */
 	set_bit( DRIVE(rdev), &fake_change);
@@ -2922,7 +2931,8 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 
 	struct floppy_struct newparams;
 	struct format_descr tmp_format_req;
-	int i,device,drive,type,cnt;
+	int i,drive,type,cnt;
+	kdev_t device;
 	struct floppy_struct *this_floppy;
 	const char *name;
 
@@ -3021,7 +3031,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 				return -EPERM;
 			LOCK_FDC(drive,1);
 			for ( cnt = 0; cnt < N_DRIVE; cnt++){
-				if (TYPE(drive_state[cnt].fd_device) == type &&
+				if (XTYPE(drive_state[cnt].fd_device) == type &&
 				    drive_state[cnt].fd_ref)
 					set_bit(drive, &fake_change);
 			}
@@ -3035,10 +3045,9 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 						floppy_type[type].size>>1;
 			process_fd_request();
 			for ( cnt = 0; cnt < N_DRIVE; cnt++){
-				if (TYPE(drive_state[cnt].fd_device) == type &&
-				    drive_state[cnt].fd_ref)
-					check_disk_change(drive_state[cnt].
-							  fd_device);
+			    if (XTYPE(drive_state[cnt].fd_device) == type &&
+				drive_state[cnt].fd_ref)
+			      check_disk_change(to_kdev_t(drive_state[cnt].fd_device));
 			}
 			return 0;
 		}
@@ -3203,7 +3212,7 @@ static void floppy_release(struct inode * inode, struct file * filp)
 static int floppy_open(struct inode * inode, struct file * filp)
 {
 	int drive;
-	int old_dev;
+	kdev_t old_dev;
 	int try;
 	char *tmp;
 
@@ -3221,7 +3230,7 @@ static int floppy_open(struct inode * inode, struct file * filp)
 
 	if (TYPE(inode->i_rdev) >= NUMBER(floppy_type))
 		return -ENXIO;
-	old_dev = UDRS->fd_device;
+	old_dev = to_kdev_t(UDRS->fd_device);
 	if (UDRS->fd_ref && old_dev != inode->i_rdev)
 		return -EBUSY;
 
@@ -3269,7 +3278,7 @@ static int floppy_open(struct inode * inode, struct file * filp)
 		}
 	}
 
-	UDRS->fd_device = inode->i_rdev;
+	UDRS->fd_device = kdev_t_to_nr(inode->i_rdev);
 
 	if (old_dev && old_dev != inode->i_rdev) {
 		if (buffer_drive == drive)
@@ -3303,7 +3312,7 @@ static int floppy_open(struct inode * inode, struct file * filp)
 /*
  * Check if the disk has been changed or if a change has been faked.
  */
-static int check_floppy_change(dev_t dev)
+static int check_floppy_change(kdev_t dev)
 {
 	int drive = DRIVE( dev );
 
@@ -3333,7 +3342,7 @@ static int check_floppy_change(dev_t dev)
  * the bootblock (block 0). "Autodetection" is also needed to check whether
  * there is a disk in the drive at all... Thus we also do it for fixed
  * geometry formats */
-static int floppy_revalidate(dev_t dev)
+static int floppy_revalidate(kdev_t dev)
 {
 #define NO_GEOM (!current_type[drive] && !TYPE(dev))
 	struct buffer_head * bh;
@@ -3582,8 +3591,8 @@ int floppy_init(void)
 	}
 
 	for(i=0; i<256; i++)
-		if ( TYPE(i))
-			floppy_sizes[i] = floppy_type[TYPE(i)].size >> 1;
+		if ( ITYPE(i))
+			floppy_sizes[i] = floppy_type[ITYPE(i)].size >> 1;
 		else
 			floppy_sizes[i] = MAX_DISK_SIZE;
 

@@ -155,6 +155,12 @@
 #include <asm/dma.h>
 #include <asm/irq.h>
 #include "u14-34f.h"
+#include<linux/stat.h>
+
+struct proc_dir_entry proc_scsi_u14_34f = {
+    PROC_SCSI_U14_34F, 6, "u14_34f",
+    S_IFDIR | S_IRUGO | S_IXUGO, 2
+};
 
 /* Values for the PRODUCT_ID ports for the 14/34F */
 #define PRODUCT_ID1  0x56
@@ -514,6 +520,8 @@ int u14_34f_detect (Scsi_Host_Template * tpnt) {
 
    ushort *port_base = io_port;
 
+   tpnt->proc_dir = &proc_scsi_u14_34f;
+
    save_flags(flags);
    cli();
 
@@ -820,7 +828,7 @@ int u14_34f_reset(Scsi_Cmnd * SCarg) {
       }
 }
 
-int u14_34f_biosparam(Disk * disk, int dev, int * dkinfo) {
+int u14_34f_biosparam(Disk * disk, kdev_t dev, int * dkinfo) {
    unsigned int j = 0;
    int size = disk->capacity;
 

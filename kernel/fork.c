@@ -31,34 +31,34 @@ long last_pid=0;
 
 static int find_empty_process(void)
 {
-	int free_task;
-	int i, tasks_free;
+	int i;
 	int this_user_tasks;
+	struct task_struct *p;
 
+	if (nr_tasks >= NR_TASKS - MIN_TASKS_LEFT_FOR_ROOT) {
+		if (current->uid)
+			return -EAGAIN;
+	}
 repeat:
 	if ((++last_pid) & 0xffff8000)
 		last_pid=1;
 	this_user_tasks = 0;
-	tasks_free = 0;
-	free_task = -EAGAIN;
-	i = NR_TASKS;
-	while (--i > 0) {
-		if (!task[i]) {
-			free_task = i;
-			tasks_free++;
-			continue;
-		}
-		if (task[i]->uid == current->uid)
+	for_each_task (p) {
+		if (p->uid == current->uid)
 			this_user_tasks++;
-		if (task[i]->pid == last_pid || task[i]->pgrp == last_pid ||
-		    task[i]->session == last_pid)
+		if (p->pid == last_pid ||
+		    p->pgrp == last_pid ||
+		    p->session == last_pid)
 			goto repeat;
 	}
-	if (tasks_free <= MIN_TASKS_LEFT_FOR_ROOT ||
-	    this_user_tasks > current->rlim[RLIMIT_NPROC].rlim_cur)
+	if (this_user_tasks > current->rlim[RLIMIT_NPROC].rlim_cur)
 		if (current->uid)
 			return -EAGAIN;
-	return free_task;
+	for (i = 0 ; i < NR_TASKS ; i++) {
+		if (!task[i])
+			return i;
+	}
+	return -EAGAIN;
 }
 
 static int dup_mmap(struct mm_struct * mm)

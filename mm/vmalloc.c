@@ -31,8 +31,11 @@ static inline void set_pgdir(unsigned long address, pgd_t entry)
 {
 	struct task_struct * p;
 
-	for_each_task(p)
+	for_each_task(p) {
+		if (!p->mm)
+			continue;
 		*pgd_offset(p->mm,address) = entry;
+	}
 }
 
 static inline void free_area_pte(pmd_t * pmd, unsigned long address, unsigned long size)

@@ -195,7 +195,7 @@ static int aztPresent = 0;
 #endif
 
 #define CURRENT_VALID \
-  (CURRENT && MAJOR(CURRENT -> dev) == MAJOR_NR && CURRENT -> cmd == READ \
+  (CURRENT && MAJOR(CURRENT -> rq_dev) == MAJOR_NR && CURRENT -> cmd == READ \
    && CURRENT -> sector != -1)
 
 #define AFL_STATUSorDATA (AFL_STATUS | AFL_DATA)
@@ -547,7 +547,7 @@ static int aztSetDiskType(int type)
 /* 
  * Checking if the media has been changed not yet implemented
 */
-static int check_aztcd_media_change(dev_t full_dev)
+static int check_aztcd_media_change(kdev_t full_dev)
 { return 0;
 }
 

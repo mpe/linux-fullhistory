@@ -17,7 +17,13 @@ OBJS   = soundcard.o audio.o dmabuf.o sb_dsp.o dev_table.o \
 	 sys_timer.o ics2101.o ad1848.o pss.o sscape.o trix.o aedsp16.o \
 	 mad16.o
 
+# Don't compile the sound driver during a normal kernel build if we have
+# configured for a module build instead.
+ifeq ($(CONFIG_SOUND),y)
 all:	local.h sound.a
+else
+all:
+endif
 
 sound.a: $(OBJS) 
 	-rm -f sound.a
@@ -59,9 +65,9 @@ dep:
 setup-linux:
 	@echo Compiling Sound Driver v $(VERSION) for Linux
 
-sound.o: $(OBJS) 
+sound.o: sound.a
 	-rm -f sound.o
-	$(LD) -r -o sound.o $(OBJS)
+	$(LD) -r -o sound.o soundcard.o sound.a
 
 modules: sound.o
 	(cd ../../modules; ln -fs ../drivers/sound/sound.o .)

@@ -105,6 +105,13 @@
 # define BUSLOGIC_DEBUG 0
 #endif
 
+#include<linux/stat.h>
+
+struct proc_dir_entry proc_scsi_buslogic = {
+    PROC_SCSI_BUSLOGIC, 8, "buslogic",
+    S_IFDIR | S_IRUGO | S_IXUGO, 2
+};
+
 /* ??? Until kmalloc actually implements GFP_DMA, we can't depend on it... */
 #undef GFP_DMA
 
@@ -1121,6 +1128,7 @@ int buslogic_detect(Scsi_Host_Template *tpnt)
     buslogic_printk("called\n");
 #endif
 
+    tpnt->proc_dir = &proc_scsi_buslogic; 
     tpnt->can_queue = BUSLOGIC_MAILBOXES;
     for (indx = 0; bases[indx] != 0; indx++)
 	if (!check_region(bases[indx], 4)) {
@@ -1395,15 +1403,15 @@ int buslogic_abort(Scsi_Cmnd *scpnt)
     for (i = 0; i < BUSLOGIC_MAILBOXES; i++)
 	if (HOSTDATA(scpnt->host)->sc[i]) {
 	    if (HOSTDATA(scpnt->host)->sc[i] == scpnt) {
-		buslogic_printk("timed out command pending for %4.4X.\n",
-				scpnt->request.dev);
+		buslogic_printk("timed out command pending for %s.\n",
+			kdevname(scpnt->request.rq_dev));
 		if (HOSTDATA(scpnt->host)->mb[i].status != MBX_NOT_IN_USE) {
 		    buslogic_printk("OGMB still full - restarting...\n");
 		    buslogic_out(scpnt->host->io_port, buscmd, sizeof buscmd);
 		}
 	    } else
-		buslogic_printk("other pending command: %4.4X\n",
-				scpnt->request.dev);
+		buslogic_printk("other pending command: %s\n",
+			kdevname(scpnt->request.rq_dev));
 	}
 #endif
 
@@ -1498,7 +1506,7 @@ int buslogic_reset(Scsi_Cmnd *scpnt)
    CMD_READ_FW_LOCAL_RAM command to check for the particular drive being
    queried.  Note that series "C" boards can be differentiated by having
    HOSTDATA(disk->device->host)->firmware_rev[0] >= '4'. */
-int buslogic_biosparam(Disk *disk, int dev, int *ip)
+int buslogic_biosparam(Disk *disk, kdev_t dev, int *ip)
 {
     unsigned int size = disk->capacity;
 

@@ -67,6 +67,12 @@
 #include "g_NCR5380.h"
 #include "NCR5380.h"
 #include "constants.h"
+#include<linux/stat.h>
+
+struct proc_dir_entry proc_scsi_g_ncr5380 = {
+    PROC_SCSI_GENERIC_NCR5380, 9, "g_NCR5380",
+    S_IFDIR | S_IRUGO | S_IXUGO, 2
+};
 
 static struct override {
     int port;
@@ -120,6 +126,8 @@ int generic_NCR5380_detect(Scsi_Host_Template * tpnt) {
     static int current_override = 0;
     int count;
     struct Scsi_Host *instance;
+
+    tpnt->proc_dir = &proc_scsi_g_ncr5380;
 
     for (count = 0; current_override < NO_OVERRIDES; ++current_override) {
 	if (!(overrides[current_override].port))

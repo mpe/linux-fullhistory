@@ -194,7 +194,7 @@ struct s_drive_stuff {
 unsigned long mcdx_init(unsigned long mem_start, unsigned long mem_end);
 void do_mcdx_request(void);
 
-int check_mcdx_media_change(dev_t);
+int check_mcdx_media_change(kdev_t);
 
 /* already declared in init/main */
 void mcdx_setup(char *, int *);
@@ -546,19 +546,20 @@ void do_mcdx_request()
 
 	TRACE((REQUEST, "do_request()\n"));
 
-	if ((CURRENT == NULL) || (CURRENT->dev < 0))  {
+	if ((CURRENT == NULL) || (CURRENT->rq_status == RQ_INACTIVE))  {
 		TRACE((REQUEST, "do_request() done\n"));
 		return;
 	}
 
-    stuffp = mcdx_stuffp[MINOR(CURRENT->dev)];
+    stuffp = mcdx_stuffp[MINOR(CURRENT->rq_dev)];
 	TRACE((REQUEST, "do_request() stuffp = %p\n", stuffp));
 
     INIT_REQUEST;
-    dev = MINOR(CURRENT->dev);
+    dev = MINOR(CURRENT->rq_dev);
 
 	if ((dev < 0) || (dev >= MCDX_NDRIVES) || (!stuffp->present)) {
-		WARN(("do_request(): bad device: 0x%04x\n", CURRENT->dev));
+		WARN(("do_request(): bad device: %s\n",
+		      kdevname(CURRENT->rq_dev)));
 		end_request(0);
 		goto again;
     }
@@ -767,14 +768,15 @@ mcdx_close(struct inode *ip, struct file *fp)
     return;
 }
 
-int check_mcdx_media_change(dev_t full_dev)
+int check_mcdx_media_change(kdev_t full_dev)
 /*	Return: 1 if media changed since last call to 
 			  this function
 			0 else
 	Setting flag to 0 resets the changed state. */
 
 {
-    INFO(("check_mcdx_media_change(0x%x) called\n"));
+    INFO(("check_mcdx_media_change called for device %s\n",
+	  kdevname(full_dev)));
     return 0;
 }
 
@@ -1053,7 +1055,7 @@ unsigned long mcdx_init(unsigned long mem_start, unsigned long mem_end)
 		}
 #else
         TRACE((INIT, "adjust mem_start\n"));
-        stuffp = mem_start;
+        stuffp = (struct s_drive_stuff *) mem_start;
         mem_start += size;
 #endif
 

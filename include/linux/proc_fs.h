@@ -3,6 +3,7 @@
 
 #include <linux/config.h>
 #include <linux/fs.h>
+#include <linux/malloc.h>
 
 /*
  * The proc filesystem constants/structures
@@ -97,7 +98,7 @@ enum scsi_directory_inos {
 	PROC_SCSI_AIC7XXX,
 	PROC_SCSI_BUSLOGIC,
 	PROC_SCSI_U14_34F,
-	PROC_SCSI_FUTURE_DOMAIN,
+	PROC_SCSI_FDOMAIN,
 	PROC_SCSI_GENERIC_NCR5380,
 	PROC_SCSI_IN2000,
 	PROC_SCSI_PAS16,
@@ -152,6 +153,8 @@ extern struct proc_dir_entry proc_scsi;
 extern struct proc_dir_entry proc_pid;
 extern struct proc_dir_entry proc_pid_fd;
 
+extern struct inode_operations proc_scsi_inode_operations;
+
 extern void proc_root_init(void);
 extern void proc_base_init(void);
 extern void proc_net_init(void);
@@ -167,6 +170,38 @@ static inline int proc_net_register(struct proc_dir_entry * x)
 static inline int proc_net_unregister(int x)
 {
 	return proc_unregister(&proc_net, x);
+}
+
+static inline int proc_scsi_register(struct proc_dir_entry *driver, 
+				     struct proc_dir_entry *x)
+{
+    x->ops = &proc_scsi_inode_operations;
+    if(x->low_ino < PROC_SCSI_FILE){
+	return(proc_register(&proc_scsi, x));
+    }else{
+	return(proc_register(driver, x));
+    }
+}
+
+static inline int proc_scsi_unregister(struct proc_dir_entry *driver, int x)
+{
+    extern void scsi_init_free(char *ptr, unsigned int size);
+
+    if(x <= PROC_SCSI_FILE)
+	return(proc_unregister(&proc_scsi, x));
+    else {
+	struct proc_dir_entry **p = &driver->subdir, *dp;
+	int ret;
+
+	while ((dp = *p) != NULL) {
+		if (dp->low_ino == x) 
+		    break;
+		p = &dp->next;
+	}
+	ret = proc_unregister(driver, x);
+	scsi_init_free((char *) dp, sizeof(struct proc_dir_entry) + 4);
+	return(ret);
+    }
 }
 
 extern struct super_block *proc_read_super(struct super_block *,void *,int);

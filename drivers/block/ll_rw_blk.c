@@ -108,7 +108,7 @@ static void plug_device(struct blk_dev_struct * dev, struct request * plug)
 {
 	unsigned long flags;
 
-	plug->dev = -1;
+	plug->rq_status = RQ_INACTIVE;
 	plug->cmd = -1;
 	plug->next = NULL;
 	save_flags(flags);
@@ -129,7 +129,7 @@ static void unplug_device(struct blk_dev_struct * dev)
 	save_flags(flags);
 	cli();
 	req = dev->current_request;
-	if (req && req->dev == -1 && req->cmd == -1) {
+	if (req && req->rq_status == RQ_INACTIVE && req->cmd == -1) {
 		dev->current_request = req->next;
 		(dev->request_fn)();
 	}
@@ -141,7 +141,7 @@ static void unplug_device(struct blk_dev_struct * dev)
  * NOTE: interrupts must be disabled on the way in, and will still
  *       be disabled on the way out.
  */
-static inline struct request * get_request(int n, int dev)
+static inline struct request * get_request(int n, kdev_t dev)
 {
 	static struct request *prev_found = NULL, *prev_limit = NULL;
 	register struct request *req, *limit;
@@ -157,20 +157,21 @@ static inline struct request * get_request(int n, int dev)
 	req = prev_found;
 	for (;;) {
 		req = ((req > all_requests) ? req : limit) - 1;
-		if (req->dev < 0)
+		if (req->rq_status == RQ_INACTIVE)
 			break;
 		if (req == prev_found)
 			return NULL;
 	}
 	prev_found = req;
-	req->dev = dev;
+	req->rq_status = RQ_ACTIVE;
+	req->rq_dev = dev;
 	return req;
 }
 
 /*
  * wait until a free request in the first N entries is available.
  */
-static struct request * __get_request_wait(int n, int dev)
+static struct request * __get_request_wait(int n, kdev_t dev)
 {
 	register struct request *req;
 	struct wait_queue wait = { current, NULL };
@@ -191,7 +192,7 @@ static struct request * __get_request_wait(int n, int dev)
 	return req;
 }
 
-static inline struct request * get_request_wait(int n, int dev)
+static inline struct request * get_request_wait(int n, kdev_t dev)
 {
 	register struct request *req;
 
@@ -207,7 +208,7 @@ static inline struct request * get_request_wait(int n, int dev)
 
 static long ro_bits[MAX_BLKDEV][8];
 
-int is_read_only(int dev)
+int is_read_only(kdev_t dev)
 {
 	int minor,major;
 
@@ -217,7 +218,7 @@ int is_read_only(int dev)
 	return ro_bits[major][minor >> 5] & (1 << (minor & 31));
 }
 
-void set_device_ro(int dev,int flag)
+void set_device_ro(kdev_t dev,int flag)
 {
 	int minor,major;
 
@@ -238,18 +239,22 @@ static void add_request(struct blk_dev_struct * dev, struct request * req)
 	struct request * tmp;
 	short		 disk_index;
 
-	switch (MAJOR(req->dev)) {
-		case SCSI_DISK_MAJOR:	disk_index = (MINOR(req->dev) & 0x0070) >> 4;
-					if (disk_index < 4)
-						kstat.dk_drive[disk_index]++;
-					break;
+	switch (MAJOR(req->rq_dev)) {
+		case SCSI_DISK_MAJOR:
+			disk_index = (MINOR(req->rq_dev) & 0x0070) >> 4;
+			if (disk_index < 4)
+				kstat.dk_drive[disk_index]++;
+			break;
 		case IDE0_MAJOR:	/* same as HD_MAJOR */
-		case XT_DISK_MAJOR:	disk_index = (MINOR(req->dev) & 0x0040) >> 6;
-					kstat.dk_drive[disk_index]++;
-					break;
-		case IDE1_MAJOR:	disk_index = ((MINOR(req->dev) & 0x0040) >> 6) + 2;
-					kstat.dk_drive[disk_index]++;
-		default:		break;
+		case XT_DISK_MAJOR:
+			disk_index = (MINOR(req->rq_dev) & 0x0040) >> 6;
+			kstat.dk_drive[disk_index]++;
+			break;
+		case IDE1_MAJOR:
+			disk_index = ((MINOR(req->rq_dev) & 0x0040) >> 6) + 2;
+			kstat.dk_drive[disk_index]++;
+		default:
+			break;
 	}
 
 	req->next = NULL;
@@ -272,7 +277,7 @@ static void add_request(struct blk_dev_struct * dev, struct request * req)
 	tmp->next = req;
 
 /* for SCSI devices, call request_fn unconditionally */
-	if (scsi_major(MAJOR(req->dev)))
+	if (scsi_major(MAJOR(req->rq_dev)))
 		(dev->request_fn)();
 
 	sti();
@@ -347,7 +352,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 #endif CONFIG_BLK_DEV_HD
 			req = req->next;
 		while (req) {
-			if (req->dev == bh->b_dev &&
+			if (req->rq_dev == bh->b_dev &&
 			    !req->sem &&
 			    req->cmd == rw &&
 			    req->sector + req->nr_sectors == sector &&
@@ -361,7 +366,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 				return;
 			}
 
-			if (req->dev == bh->b_dev &&
+			if (req->rq_dev == bh->b_dev &&
 			    !req->sem &&
 			    req->cmd == rw &&
 			    req->sector - count == sector &&
@@ -409,7 +414,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	add_request(major+blk_dev,req);
 }
 
-void ll_rw_page(int rw, int dev, unsigned long page, char * buffer)
+void ll_rw_page(int rw, kdev_t dev, unsigned long page, char * buffer)
 {
 	struct request * req;
 	unsigned int major = MAJOR(dev);
@@ -417,13 +422,15 @@ void ll_rw_page(int rw, int dev, unsigned long page, char * buffer)
 	struct semaphore sem = MUTEX_LOCKED;
 
 	if (major >= MAX_BLKDEV || !(blk_dev[major].request_fn)) {
-		printk("Trying to read nonexistent block-device %04x (%ld)\n",dev,sector);
+		printk("Trying to read nonexistent block-device %s (%ld)\n",
+		       kdevname(dev), sector);
 		return;
 	}
 	if (rw!=READ && rw!=WRITE)
 		panic("Bad block dev command, must be R/W");
 	if (rw == WRITE && is_read_only(dev)) {
-		printk("Can't page to read-only device 0x%X\n",dev);
+		printk("Can't page to read-only device %s\n",
+		       kdevname(dev));
 		return;
 	}
 	req = get_request_wait(NR_REQUEST, dev);
@@ -465,8 +472,8 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 		dev = blk_dev + major;
 	if (!dev || !dev->request_fn) {
 		printk(
-	"ll_rw_block: Trying to read nonexistent block-device %04lX (%ld)\n",
-		       (unsigned long) bh[0]->b_dev, bh[0]->b_blocknr);
+	"ll_rw_block: Trying to read nonexistent block-device %s (%ld)\n",
+		kdevname(bh[0]->b_dev), bh[0]->b_blocknr);
 		goto sorry;
 	}
 
@@ -489,7 +496,8 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 	}
 
 	if ((rw == WRITE || rw == WRITEA) && is_read_only(bh[0]->b_dev)) {
-		printk("Can't write to read-only device 0x%X\n",bh[0]->b_dev);
+		printk("Can't write to read-only device %s\n",
+		       kdevname(bh[0]->b_dev));
 		goto sorry;
 	}
 
@@ -521,7 +529,7 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 	return;
 }
 
-void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buf)
+void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
 {
 	int i, j;
 	int buffersize;
@@ -534,12 +542,13 @@ void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buf)
 		return;
 	}
 
-	if (rw!=READ && rw!=WRITE) {
+	if (rw != READ && rw != WRITE) {
 		printk("ll_rw_swap: bad block dev command, must be R/W");
 		return;
 	}
 	if (rw == WRITE && is_read_only(dev)) {
-		printk("Can't swap to read-only device 0x%X\n",dev);
+		printk("Can't swap to read-only device %s\n",
+		       kdevname(dev));
 		return;
 	}
 	
@@ -582,7 +591,7 @@ long blk_dev_init(long mem_start, long mem_end)
 
 	req = all_requests + NR_REQUEST;
 	while (--req >= all_requests) {
-		req->dev = -1;
+		req->rq_status = RQ_INACTIVE;
 		req->next = NULL;
 	}
 	memset(ro_bits,0,sizeof(ro_bits));

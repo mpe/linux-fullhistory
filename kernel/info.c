@@ -18,7 +18,6 @@ asmlinkage int sys_sysinfo(struct sysinfo *info)
 {
 	int error;
 	struct sysinfo val;
-	struct task_struct **p;
 
 	error = verify_area(VERIFY_WRITE, info, sizeof(struct sysinfo));
 	if (error)
@@ -31,8 +30,7 @@ asmlinkage int sys_sysinfo(struct sysinfo *info)
 	val.loads[1] = avenrun[1] << (SI_LOAD_SHIFT - FSHIFT);
 	val.loads[2] = avenrun[2] << (SI_LOAD_SHIFT - FSHIFT);
 
-	for (p = &LAST_TASK; p > &FIRST_TASK; p--)
-		if (*p) val.procs++;
+	val.procs = nr_tasks-1;
 
 	si_meminfo(&val);
 	si_swapinfo(&val);

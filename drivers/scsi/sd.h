@@ -23,12 +23,6 @@
 #include <linux/genhd.h>
 #endif
 
-/*
- *  This is an arbitrary constant, and may be changed to whatever
- *  suits your purposes.  Note that smaller will get you a few bytes
- *  more in kernel space if that is your thing.
- */
-
 extern struct hd_struct * sd;
 
 typedef struct scsi_disk {
@@ -43,6 +37,8 @@ typedef struct scsi_disk {
 } Scsi_Disk;
 
 extern Scsi_Disk * rscsi_disks;
+
+extern int revalidate_scsidisk(kdev_t dev, int maxusage);
 
 #endif
 

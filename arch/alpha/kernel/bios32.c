@@ -401,7 +401,7 @@ static inline void enable_ide(long ide_base)
  */
 static inline void common_fixup(long min_idsel, long max_idsel, long irqs_per_slot,
 				char irq_tab[max_idsel - min_idsel + 1][irqs_per_slot],
-			 long ide_base)
+				long ide_base)
 {
 	struct pci_dev *dev;
 	unsigned char pin;

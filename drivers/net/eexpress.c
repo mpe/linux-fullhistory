@@ -340,7 +340,7 @@ express_probe(struct device *dev)
 			return 0;
 	}
 
-	return ENODEV;			/* ENODEV would be more accurate. */
+	return ENODEV;
 }
 
 int eexp_probe1(struct device *dev, short ioaddr)

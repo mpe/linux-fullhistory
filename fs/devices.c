@@ -139,7 +139,7 @@ int unregister_blkdev(unsigned int major, const char * name)
  * People changing diskettes in the middle of an operation deserve
  * to loose :-)
  */
-int check_disk_change(dev_t dev)
+int check_disk_change(kdev_t dev)
 {
 	int i;
 	struct file_operations * fops;
@@ -152,8 +152,8 @@ int check_disk_change(dev_t dev)
 	if (!fops->check_media_change(dev))
 		return 0;
 
-	printk(KERN_DEBUG "VFS: Disk change detected on device %d/%d\n",
-					MAJOR(dev), MINOR(dev));
+	printk(KERN_DEBUG "VFS: Disk change detected on device %s\n",
+		kdevname(dev));
 	for (i=0 ; i<NR_SUPER ; i++)
 		if (super_blocks[i].s_dev == dev)
 			put_super(super_blocks[i].s_dev);
@@ -266,3 +266,15 @@ struct inode_operations chrdev_inode_operations = {
 	NULL,			/* truncate */
 	NULL			/* permission */
 };
+
+/*
+ * Print device name (in decimal, hexadecimal or symbolic) -
+ * at present hexadecimal only.
+ * Note: returns pointer to static data!
+ */
+char * kdevname(kdev_t dev)
+{
+	static char buffer[32];
+	sprintf(buffer, "%02x:%02x", MAJOR(dev), MINOR(dev));
+	return buffer;
+}

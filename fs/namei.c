@@ -122,14 +122,14 @@ int permission(struct inode * inode,int mask)
  */
 int get_write_access(struct inode * inode)
 {
-	struct task_struct ** p;
+	struct task_struct * p;
 
 	if ((inode->i_count > 1) && S_ISREG(inode->i_mode)) /* shortcut */
-		for (p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
+		for_each_task(p) {
 		        struct vm_area_struct * mpnt;
-			if (!*p)
+			if (!p->mm)
 				continue;
-			for(mpnt = (*p)->mm->mmap; mpnt; mpnt = mpnt->vm_next) {
+			for(mpnt = p->mm->mmap; mpnt; mpnt = mpnt->vm_next) {
 				if (inode != mpnt->vm_inode)
 					continue;
 				if (mpnt->vm_flags & VM_DENYWRITE)

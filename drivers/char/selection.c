@@ -38,7 +38,7 @@ static int sel_end;
 static int sel_buffer_lth = 0;
 static char *sel_buffer = NULL;
 
-#define sel_pos(n)	inverse_translate(screen_word(sel_cons, n, 1) & 0xff)
+#define sel_pos(n)   inverse_translate(scrw2glyph(screen_word(sel_cons, n, 1)))
 
 /* clear_selection, highlight and highlight_pointer can be called
    from interrupt (via scrollback/front) */

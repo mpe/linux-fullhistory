@@ -412,29 +412,29 @@ static void show_status(int);
 
 static inline int
 serial_paranoia_check(struct cyclades_port *info,
-			dev_t device, const char *routine)
+			kdev_t device, const char *routine)
 {
 #ifdef SERIAL_PARANOIA_CHECK
     static const char *badmagic =
-	"Warning: bad magic number for serial struct (%d, %d) in %s\n";
+	"Warning: bad magic number for serial struct (%s) in %s\n";
     static const char *badinfo =
-	"Warning: null cyclades_port for (%d, %d) in %s\n";
+	"Warning: null cyclades_port for (%s) in %s\n";
     static const char *badrange =
-	"Warning: cyclades_port out of range for (%d, %d) in %s\n";
+	"Warning: cyclades_port out of range for (%s) in %s\n";
 
     if (!info) {
-	printk(badinfo, MAJOR(device), MINOR(device), routine);
+	printk(badinfo, kdevname(device), routine);
 	return 1;
     }
 
     if( (long)info < (long)(&cy_port[0])
     || (long)(&cy_port[NR_PORTS]) < (long)info ){
-	printk(badrange, MAJOR(device), MINOR(device), routine);
+	printk(badrange, kdevname(device), routine);
 	return 1;
     }
 
     if (info->magic != CYCLADES_MAGIC) {
-	printk(badmagic, MAJOR(device), MINOR(device), routine);
+	printk(badmagic, kdevname(device), routine);
 	return 1;
     }
 #endif
@@ -1585,7 +1585,7 @@ cy_flush_chars(struct tty_struct *tty)
  */
 static int
 cy_write(struct tty_struct * tty, int from_user,
-           unsigned char *buf, int count)
+           const unsigned char *buf, int count)
 {
   struct cyclades_port *info = (struct cyclades_port *)tty->driver_data;
   unsigned long flags;
@@ -2968,7 +2968,7 @@ cy_detect_pci()
   unsigned char		cyy_bus, cyy_dev_fn, cyy_rev_id;
   unsigned long		pci_intr_ctrl;
   unsigned char		cy_pci_irq;
-  unsigned long		cy_pci_address,cy_pci_io;
+  unsigned int		cy_pci_address, cy_pci_io;
   unsigned short	i,j,cy_pci_nchan;
 
 #ifndef CONFIG_PCI

@@ -75,7 +75,7 @@ static void add_partition (struct gendisk *hd, int minor, int start, int size)
  * only for the actual data partitions.
  */
 
-static void extended_partition(struct gendisk *hd, int dev)
+static void extended_partition(struct gendisk *hd, kdev_t dev)
 {
 	struct buffer_head *bh;
 	struct partition *p;
@@ -150,18 +150,19 @@ static void extended_partition(struct gendisk *hd, int dev)
 		hd->part[current_minor].nr_sects = p->nr_sects;
 		hd->part[current_minor].start_sect = first_sector + p->start_sect;
 		this_sector = first_sector + p->start_sect;
-		dev = ((hd->major) << 8) | current_minor;
+		dev = MKDEV(hd->major, current_minor);
 		brelse(bh);
 	}
 done:
 	brelse(bh);
 }
 
-static int msdos_partition(struct gendisk *hd, unsigned int dev, unsigned long first_sector)
+static int msdos_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector)
 {
 	int i, minor = current_minor;
 	struct buffer_head *bh;
 	struct partition *p;
+	unsigned char *data;
 	int mask = (1 << hd->minor_shift) - 1;
 #ifdef CONFIG_BLK_DEV_IDE
 	int tested_for_dm6 = 0;
@@ -172,21 +173,40 @@ read_mbr:
 		printk(" unable to read partition table\n");
 		return -1;
 	}
-	if (*(unsigned short *)  (0x1fe + bh->b_data) != 0xAA55) {
+	data = bh->b_data;
+	bh->b_dirt = 0;		/* In some cases we modify the geometry    */
+	bh->b_uptodate = 0;	/*  of the drive (below), so ensure that   */
+	bh->b_req = 0;		/*  nobody else tries to re-use this data. */
+#ifdef CONFIG_BLK_DEV_IDE
+check_table:
+#endif
+	if (*(unsigned short *)  (0x1fe + data) != 0xAA55) {
 		brelse(bh);
 		return 0;
 	}
-	p = (struct partition *) (0x1be + bh->b_data);
+	p = (struct partition *) (0x1be + data);
 
 #ifdef CONFIG_BLK_DEV_IDE
 	/*
 	 *  Check for Disk Manager v6.0x (or EZ-DRIVE) with geometry translation
 	 */
 	if (!tested_for_dm6++) {	/* only check for DM6 *once* */
-		extern int ide_xlate_1024(dev_t, int, const char *);
-		/* check for DM6 with Dynamic Drive Overlay (DDO) */
-		if (p->sys_ind == DM6_PARTITION || p->sys_ind == EZD_PARTITION) {
-			const char *label = (p->sys_ind == DM6_PARTITION)?" [DM6:DDO]":" [EZDRIVE]";
+		extern int ide_xlate_1024(kdev_t, int, const char *);
+		/* check for various "disk managers" which do strange things */
+		if (p->sys_ind == EZD_PARTITION) {
+			/*
+			 * The remainder of the disk must be accessed using
+			 * a translated geometry that reduces the number of 
+			 * apparent cylinders to less than 1024 if possible.
+			 *
+			 * ide_xlate_1024() will take care of the necessary
+			 * adjustments to fool fdisk/LILO and partition check.
+			 */
+			if (ide_xlate_1024(dev, -1, " [EZD]")) {
+				data += 512;
+				goto check_table;
+			}
+		} else if (p->sys_ind == DM6_PARTITION) {
 
 			/*
 			 * Everything on the disk is offset by 63 sectors,
@@ -198,19 +218,16 @@ read_mbr:
 			 * ide_xlate_1024() will take care of the necessary
 			 * adjustments to fool fdisk/LILO and partition check.
 			 */
-			if (ide_xlate_1024(dev, 1, label)) {
-				bh->b_dirt = 0;	/* force re-read of MBR block */
-				bh->b_uptodate = 0;
-				bh->b_req = 0;
+			if (ide_xlate_1024(dev, 1, " [DM6:DDO]")) {
 				brelse(bh);
 				goto read_mbr;	/* start over with new MBR */
 			}
 		} else {
 			/* look for DM6 signature in MBR, courtesy of OnTrack */
-			unsigned int sig = *(unsigned short *)(bh->b_data + 2);
+			unsigned int sig = *(unsigned short *)(data + 2);
 			if (sig <= 0x1ae
-			 && *(unsigned short *)(bh->b_data + sig) == 0x55AA
-			 && (1 & *(unsigned char *)(bh->b_data + sig + 2)) ) 
+			 && *(unsigned short *)(data + sig) == 0x55AA
+			 && (1 & *(unsigned char *)(data + sig + 2)) ) 
 			{
 				(void) ide_xlate_1024 (dev, 0, " [DM6:MBR]");
 			} else {
@@ -218,7 +235,7 @@ read_mbr:
 				if (p->sys_ind == DM6_AUX1PARTITION
 				 || p->sys_ind == DM6_AUX3PARTITION)
 				{
-					(void)ide_xlate_1024(dev,0," [DM6:AUX]");
+					(void)ide_xlate_1024(dev, 0, " [DM6:AUX]");
 				}
 			}
 		}
@@ -242,7 +259,7 @@ read_mbr:
 			 */
 			hd->sizes[minor] = hd->part[minor].nr_sects 
 			  	>> (BLOCK_SIZE_BITS - 9);
-			extended_partition(hd, (hd->major << 8) | minor);
+			extended_partition(hd, MKDEV(hd->major, minor));
 			printk(" >");
 			/* prevent someone doing mkfs or mkswap on
 			   an extended partition */
@@ -252,8 +269,8 @@ read_mbr:
 	/*
 	 *  Check for old-style Disk Manager partition table
 	 */
-	if (*(unsigned short *) (bh->b_data+0xfc) == 0x55AA) {
-		p = (struct partition *) (0x1be + bh->b_data);
+	if (*(unsigned short *) (data+0xfc) == 0x55AA) {
+		p = (struct partition *) (0x1be + data);
 		for (i = 4 ; i < 16 ; i++, current_minor++) {
 			p--;
 			if ((current_minor & mask) >= mask-2)
@@ -340,7 +357,7 @@ static int osf_partition(struct gendisk *hd, unsigned int dev, unsigned long fir
 
 #endif /* CONFIG_OSF_PARTITION */
 
-static void check_partition(struct gendisk *hd, unsigned int dev)
+static void check_partition(struct gendisk *hd, kdev_t dev)
 {
 	static int first_time = 1;
 	unsigned long first_sector;
@@ -352,7 +369,7 @@ static void check_partition(struct gendisk *hd, unsigned int dev)
 
 	/*
 	 * This is a kludge to allow the partition check to be
-	 * skipped for specific drives (ie. IDE cd-rom drives)
+	 * skipped for specific drives (e.g. IDE cd-rom drives)
 	 */
 	if ((int)first_sector == -1) {
 		hd->part[MINOR(dev)].start_sect = 0;
@@ -384,13 +401,12 @@ can start using the device while this function is being executed. */
 void resetup_one_dev(struct gendisk *dev, int drive)
 {
 	int i;
-	int major	= dev->major << 8;
 	int first_minor	= drive << dev->minor_shift;
 	int end_minor	= first_minor + dev->max_p;
 
 	blk_size[dev->major] = NULL;
 	current_minor = 1 + first_minor;
-	check_partition(dev, major + first_minor);
+	check_partition(dev, MKDEV(dev->major, first_minor));
 
  	/*
  	 * We need to set the sizes array before we will be able to access
@@ -406,7 +422,6 @@ void resetup_one_dev(struct gendisk *dev, int drive)
 static void setup_dev(struct gendisk *dev)
 {
 	int i, drive;
-	int major	= dev->major << 8;
 	int end_minor	= dev->max_nr * dev->max_p;
 
 	blk_size[dev->major] = NULL;
@@ -418,7 +433,7 @@ static void setup_dev(struct gendisk *dev)
 	for (drive = 0 ; drive < dev->nr_real ; drive++) {
 		int first_minor	= drive << dev->minor_shift;
 		current_minor = 1 + first_minor;
-		check_partition(dev, major + first_minor);
+		check_partition(dev, MKDEV(dev->major, first_minor));
 	}
 	if (dev->sizes != NULL) {	/* optional safeguard in ll_rw_blk.c */
 		for (i = 0; i < end_minor; i++)
@@ -426,11 +441,14 @@ static void setup_dev(struct gendisk *dev)
 		blk_size[dev->major] = dev->sizes;
 	}
 }
-	
+
 void device_setup(void)
 {
+	extern void console_map_init(void);
 	struct gendisk *p;
 	int nr=0;
+
+	console_map_init();
 
 	for (p = gendisk_head ; p ; p=p->next) {
 		setup_dev(p);

@@ -79,6 +79,12 @@
 #include "eata_dma.h"
 #include "eata_dma_proc.h" 
 
+#include<linux/stat.h>
+
+struct proc_dir_entry proc_scsi_eata_dma = {
+    PROC_SCSI_EATA, 8, "eata_dma",
+    S_IFDIR | S_IRUGO | S_IXUGO, 2
+};
 
 static u32 ISAbases[] =
 {0x1F0, 0x170, 0x330, 0x230};
@@ -103,7 +109,7 @@ static ulong queue_counter = 0;
 
 void eata_scsi_done (Scsi_Cmnd * scmd)
 {
-    scmd->request.dev = 0xfffe;
+    scmd->request.rq_status = RQ_SCSI_DONE;
 
     if (scmd->request.sem != NULL)
 	up(scmd->request.sem);
@@ -360,15 +366,31 @@ int eata_queue(Scsi_Cmnd * cmd, void (* done) (Scsi_Cmnd *))
     }
     
     hd->last_ccb = y;
-    
-    if (x == sh->can_queue) { 
-	DBG(DBG_QUEUE, printk("can_queue %d, x %d, y %d\n", 
-			      sh->can_queue, x, y));
+
+    if (x >= sh->can_queue) { 
+	uint z;
 	
-	panic("eata_dma: run out of queue slots cmdno:%ld intrno: %ld\n", 
-	      queue_counter, int_counter);
+	printk(KERN_EMERG "eata_dma: run out of queue slots cmdno:%ld"
+	       " intrno: %ld, can_queue: %d, x: %d, y: %d\n", 
+	       queue_counter, int_counter, sh->can_queue, x, y);
+	printk(KERN_EMERG "List of free queueslots:");
+	for(z = 0; z < sh->can_queue; z +=2) {
+	    switch(hd->ccb[z].status) {
+	    case FREE:
+		printk(KERN_EMERG "Slot %2d is FREE  \t", z);
+		break;
+	    case USED:
+		printk(KERN_EMERG "Slot %2d is USED  \t", z);
+		break;
+	    case LOCKED:
+		printk(KERN_EMERG "Slot %2d is LOCKED\t", z);
+		break;
+	    default:
+		printk(KERN_EMERG "Slot %2d is UNKNOWN\t", z);
+	    }
+	    panic("\nSystem halted.\n");
+	}
     }
-    
     cp = &hd->ccb[y];
     
     memset(cp, 0, sizeof(struct eata_ccb) - sizeof(struct eata_sg_list *));
@@ -405,7 +427,8 @@ int eata_queue(Scsi_Cmnd * cmd, void (* done) (Scsi_Cmnd *))
 		x = ntohl(*lon)/2;	      
 		break;
 	    }
-	    for(z = 0; z <= 11, x > (1 << z); z++) 
+
+	    for(z = 0; (x > (1 << z)) && (z <= 11); z++) 
 		/* nothing */;
 	    cp->sizeindex = z;
 	    if (cmd->cmnd[0] ==	WRITE_6 || cmd->cmnd[0] == WRITE_10 || 
@@ -484,9 +507,8 @@ int eata_queue(Scsi_Cmnd * cmd, void (* done) (Scsi_Cmnd *))
 	cmd->result = DID_ERROR << 16;
 	printk("eata_queue target %d, pid %ld, HBA busy, returning DID_ERROR,"
 	       " done.\n", cmd->target, cmd->pid);
-
-	restore_flags(flags);
 	done(cmd);
+	restore_flags(flags);
 	return(0);
     }
     DBG(DBG_QUEUE,printk("Queued base %#.4x pid: %ld target: %x lun: %x "
@@ -921,7 +943,7 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
 			       * ntohs(gc->queuesiz));
 
     DBG(DBG_REGISTER, printk("scsi_register size: %ld\n", size));
-    
+
     sh = scsi_register(tpnt, size);
     
     if(sh == NULL) {
@@ -1250,6 +1272,8 @@ int eata_detect(Scsi_Host_Template * tpnt)
     
     DBG((DBG_PROBE && DBG_DELAY) || DPT_DEBUG,
 	printk("Using lots of delays to let you read the debugging output\n"));
+
+    tpnt->proc_dir = &proc_scsi_eata_dma;
 
     status = scsi_init_malloc(512, GFP_ATOMIC | GFP_DMA);
     dma_scratch = scsi_init_malloc(512, GFP_ATOMIC | GFP_DMA);

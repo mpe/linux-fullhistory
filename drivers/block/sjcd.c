@@ -427,7 +427,7 @@ static void sjcd_get_status( void ){
 /*
  * Check the drive if the disk is changed.
  */
-static int sjcd_disk_change( dev_t full_dev ){
+static int sjcd_disk_change( kdev_t full_dev ){
 #if 0
   printk( "sjcd_disk_change( 0x%x )\n", full_dev );
 #endif
@@ -908,7 +908,7 @@ static void sjcd_invalidate_buffers( void ){
  */
 
 #define CURRENT_IS_VALID                                      \
-    ( CURRENT != NULL && MAJOR( CURRENT->dev ) == MAJOR_NR && \
+    ( CURRENT != NULL && MAJOR( CURRENT->rq_dev ) == MAJOR_NR && \
       CURRENT->cmd == READ && CURRENT->sector != -1 )
 
 static void sjcd_transfer( void ){

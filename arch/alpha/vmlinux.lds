@@ -40,6 +40,7 @@ SECTIONS
   .sbss : {
     *(.sbss)
     *(.scommon)
+    . = ALIGN(16);
   }
   .bss : {
     *(.bss)

@@ -192,7 +192,7 @@ static void xd_geninit (struct gendisk *ignored)
 /* xd_open: open a device */
 static int xd_open (struct inode *inode,struct file *file)
 {
-	int dev = DEVICE_NR(MINOR(inode->i_rdev));
+	int dev = DEVICE_NR(inode->i_rdev);
 
 	if (dev < xd_drives) {
 		while (!xd_valid[dev])
@@ -216,8 +216,10 @@ static void do_xd_request (void)
 	while (code = 0, CURRENT) {
 		INIT_REQUEST;	/* do some checking on the request structure */
 
-		if (CURRENT_DEV < xd_drives && CURRENT->sector + CURRENT->nr_sectors <= xd[MINOR(CURRENT->dev)].nr_sects) {
-			block = CURRENT->sector + xd[MINOR(CURRENT->dev)].start_sect;
+		if (CURRENT_DEV < xd_drives
+		    && CURRENT->sector + CURRENT->nr_sectors
+		         <= xd[MINOR(CURRENT->rq_dev)].nr_sects) {
+			block = CURRENT->sector + xd[MINOR(CURRENT->rq_dev)].start_sect;
 			count = CURRENT->nr_sectors;
 
 			switch (CURRENT->cmd) {
@@ -238,7 +240,7 @@ static void do_xd_request (void)
 static int xd_ioctl (struct inode *inode,struct file *file,u_int cmd,u_long arg)
 {
 	XD_GEOMETRY *geometry = (XD_GEOMETRY *) arg;
-	int dev = DEVICE_NR(MINOR(inode->i_rdev)),err;
+	int dev = DEVICE_NR(inode->i_rdev),err;
 
 	if (inode && (dev < xd_drives))
 		switch (cmd) {
@@ -255,11 +257,14 @@ static int xd_ioctl (struct inode *inode,struct file *file,u_int cmd,u_long arg)
 				}
 				break;
 			case BLKRASET:
-			  if(!suser())  return -EACCES;
-			  if(!inode->i_rdev) return -EINVAL;
-			  if(arg > 0xff) return -EINVAL;
-			  read_ahead[MAJOR(inode->i_rdev)] = arg;
-			  return 0;
+				if(!suser())
+					return -EACCES;
+				if(!(inode->i_rdev))
+					return -EINVAL;
+				if(arg > 0xff)
+					return -EINVAL;
+				read_ahead[MAJOR(inode->i_rdev)] = arg;
+				return 0;
 			case BLKGETSIZE:
 				if (arg) {
 					if ((err = verify_area(VERIFY_WRITE,(long *) arg,sizeof(long))))
@@ -271,7 +276,8 @@ static int xd_ioctl (struct inode *inode,struct file *file,u_int cmd,u_long arg)
 				break;
 			case BLKFLSBUF:
 				if(!suser())  return -EACCES;
-				if(!inode->i_rdev) return -EINVAL;
+				if(!(inode->i_rdev))
+					return -EINVAL;
 				fsync_dev(inode->i_rdev);
 				invalidate_buffers(inode->i_rdev);
 				return 0;
@@ -286,29 +292,33 @@ static int xd_ioctl (struct inode *inode,struct file *file,u_int cmd,u_long arg)
 /* xd_release: release the device */
 static void xd_release (struct inode *inode, struct file *file)
 {
-	int dev = DEVICE_NR(MINOR(inode->i_rdev));
+	int dev = DEVICE_NR(inode->i_rdev);
 
 	if (dev < xd_drives) {
-		sync_dev(dev);
+		sync_dev(inode->i_rdev);
 		xd_access[dev]--;
 	}
 }
 
 /* xd_reread_partitions: rereads the partition table from a drive */
-static int xd_reread_partitions(int dev)
+static int xd_reread_partitions(kdev_t dev)
 {
-	int target = DEVICE_NR(MINOR(dev)),start = target << xd_gendisk.minor_shift,partition;
+	int target = DEVICE_NR(dev);
+	int start = target << xd_gendisk.minor_shift;
+	int partition;
 
 	cli(); xd_valid[target] = (xd_access[target] != 1); sti();
 	if (xd_valid[target])
 		return (-EBUSY);
 
 	for (partition = xd_gendisk.max_p - 1; partition >= 0; partition--) {
-		sync_dev(MAJOR_NR << 8 | start | partition);
-		invalidate_inodes(MAJOR_NR << 8 | start | partition);
-		invalidate_buffers(MAJOR_NR << 8 | start | partition);
-		xd_gendisk.part[start + partition].start_sect = 0;
-		xd_gendisk.part[start + partition].nr_sects = 0;
+		int minor = (start | partition);
+		kdev_t devp = MKDEV(MAJOR_NR, minor);
+		sync_dev(devp);
+		invalidate_inodes(devp);
+		invalidate_buffers(devp);
+		xd_gendisk.part[minor].start_sect = 0;
+		xd_gendisk.part[minor].nr_sects = 0;
 	};
 
 	xd_gendisk.part[start].nr_sects = xd_info[target].heads * xd_info[target].cylinders * xd_info[target].sectors;

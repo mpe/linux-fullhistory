@@ -31,13 +31,9 @@ static unsigned char cache_A1 = 0xff;
   static unsigned char cache_804 = 0xef;
   static unsigned char cache_805 = 0xff;
   static unsigned char cache_806 = 0xff;
-# define NUM_IRQS	33
 #elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P)
   static unsigned char cache_26 = 0xdf;
   static unsigned char cache_27 = 0xff;
-# define NUM_IRQS	32
-#else
-# define NUM_IRQS	16
 #endif
 
 void disable_irq(unsigned int irq_nr)
@@ -103,7 +99,7 @@ void enable_irq(unsigned int irq_nr)
 		cache_806 &= mask;
 		outb(cache_806, 0x806);
 #elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P)
-	} else if if (irq_nr < 24) {
+	} else if (irq_nr < 24) {
 		cache_26 &= mask;
 		outb(cache_26, 0x26);
 	} else {
@@ -124,14 +120,14 @@ struct irqaction {
 	const char *name;
 };
 
-static struct irqaction irq_action[NUM_IRQS];
+static struct irqaction irq_action[NR_IRQS];
 
 int get_irq_list(char *buf)
 {
 	int i, len = 0;
 	struct irqaction * action = irq_action;
 
-	for (i = 0 ; i < NUM_IRQS ; i++, action++) {
+	for (i = 0 ; i < NR_IRQS ; i++, action++) {
 		if (!action->handler)
 			continue;
 		len += sprintf(buf+len, "%2d: %8d %c %s\n",
@@ -225,7 +221,7 @@ int request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
 	struct irqaction * action;
 	unsigned long flags;
 
-	if (irq >= NUM_IRQS)
+	if (irq >= NR_IRQS)
 		return -EINVAL;
 	action = irq + irq_action;
 	if (action->handler)
@@ -251,7 +247,7 @@ void free_irq(unsigned int irq)
 	struct irqaction * action = irq + irq_action;
 	unsigned long flags;
 
-	if (irq >= NUM_IRQS) {
+	if (irq >= NR_IRQS) {
 		printk("Trying to free IRQ%d\n", irq);
 		return;
 	}
@@ -310,7 +306,7 @@ static inline void device_interrupt(int irq, int ack, struct pt_regs * regs)
 {
 	struct irqaction * action;
 
-	if ((unsigned) irq > NUM_IRQS) {
+	if ((unsigned) irq > NR_IRQS) {
 		printk("device_interrupt: unexpected interrupt %d\n", irq);
 		return;
 	}
@@ -473,7 +469,7 @@ static inline void srm_device_interrupt(unsigned long vector, struct pt_regs * r
 	device_interrupt(irq, ack, regs);
 }
 
-#if NUM_IRQS > 64
+#if NR_IRQS > 64
 #  error Number of irqs limited to 64 due to interrupt-probing.
 #endif
 
@@ -486,7 +482,7 @@ unsigned long probe_irq_on(void)
 	unsigned long delay;
 	unsigned int i;
 
-	for (i = NUM_IRQS - 1; i > 0; i--) {
+	for (i = NR_IRQS - 1; i > 0; i--) {
 		if (!irq_action[i].handler) {
 			enable_irq(i);
 			irqs |= (1 << i);
@@ -505,7 +501,7 @@ unsigned long probe_irq_on(void)
 		    (((unsigned long)cache_806)<<24));
 #elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P)
 	irqmask |= ((((unsigned long)cache_26)<<16) |
-		    (((unsigned long)cache_27)<<24);
+		    (((unsigned long)cache_27)<<24));
 #endif
 	irqs &= ~irqmask;
 	return irqs;
@@ -528,7 +524,7 @@ int probe_irq_off(unsigned long irqs)
 		    (((unsigned long)cache_806)<<24));
 #elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P)
 	irqmask |= ((((unsigned long)cache_26)<<16) |
-		    (((unsigned long)cache_27)<<24);
+		    (((unsigned long)cache_27)<<24));
 #endif
 	irqs &= irqmask;
 	if (!irqs)

@@ -184,7 +184,7 @@ struct floppy_drive_struct {
 
   /* Prevent "aliased" accesses. */
   int fd_ref;
-  int fd_device;
+  int fd_device;    /* should be a kdev_t but is externally visible */
   int last_checked; /* when was the drive last checked for a disk change? */
 
   char *dmabuf;

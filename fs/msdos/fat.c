@@ -125,13 +125,14 @@ void cache_lookup(struct inode *inode,int cluster,int *f_clu,int *d_clu)
 	struct fat_cache *walk;
 
 #ifdef DEBUG
-printk("cache lookup: <%d,%d> %d (%d,%d) -> ",inode->i_dev,inode->i_ino,cluster,
-    *f_clu,*d_clu);
+printk("cache lookup: <%s,%d> %d (%d,%d) -> ", kdevname(inode->i_dev),
+       inode->i_ino, cluster, *f_clu, *d_clu);
 #endif
 	for (walk = fat_cache; walk; walk = walk->next)
-		if (inode->i_dev == walk->device && walk->ino == inode->i_ino &&
-		    walk->file_cluster <= cluster && walk->file_cluster >
-		    *f_clu) {
+		if (inode->i_dev == walk->device
+		    && walk->ino == inode->i_ino
+		    && walk->file_cluster <= cluster
+		    && walk->file_cluster > *f_clu) {
 			*d_clu = walk->disk_cluster;
 #ifdef DEBUG
 printk("cache hit: %d (%d)\n",walk->file_cluster,*d_clu);
@@ -151,8 +152,8 @@ static void list_cache(void)
 
 	for (walk = fat_cache; walk; walk = walk->next) {
 		if (walk->device)
-			printk("<%d,%d>(%d,%d) ",walk->device,walk->ino,
-			    walk->file_cluster,walk->disk_cluster);
+			printk("<%s,%d>(%d,%d) ", kdevname(walk->device),
+			       walk->ino, walk->file_cluster, walk->disk_cluster);
 		else printk("-- ");
 	}
 	printk("\n");
@@ -165,12 +166,14 @@ void cache_add(struct inode *inode,int f_clu,int d_clu)
 	struct fat_cache *walk,*last;
 
 #ifdef DEBUG
-printk("cache add: <%d,%d> %d (%d)\n",inode->i_dev,inode->i_ino,f_clu,d_clu);
+printk("cache add: <%s,%d> %d (%d)\n", kdevname(inode->i_dev),
+       inode->i_ino, f_clu, d_clu);
 #endif
 	last = NULL;
 	for (walk = fat_cache; walk->next; walk = (last = walk)->next)
-		if (inode->i_dev == walk->device && walk->ino == inode->i_ino &&
-		    walk->file_cluster == f_clu) {
+		if (inode->i_dev == walk->device
+		    && walk->ino == inode->i_ino
+		    && walk->file_cluster == f_clu) {
 			if (walk->disk_cluster != d_clu) {
 				printk("FAT cache corruption");
 				cache_inval_inode(inode);
@@ -207,17 +210,19 @@ void cache_inval_inode(struct inode *inode)
 	struct fat_cache *walk;
 
 	for (walk = fat_cache; walk; walk = walk->next)
-		if (walk->device == inode->i_dev && walk->ino == inode->i_ino)
+		if (walk->device == inode->i_dev
+		    && walk->ino == inode->i_ino)
 			walk->device = 0;
 }
 
 
-void cache_inval_dev(int device)
+void cache_inval_dev(kdev_t device)
 {
 	struct fat_cache *walk;
 
 	for (walk = fat_cache; walk; walk = walk->next)
-		if (walk->device == device) walk->device = 0;
+		if (walk->device == device)
+			walk->device = 0;
 }
 
 

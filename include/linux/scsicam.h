@@ -12,5 +12,6 @@
 
 #ifndef SCSICAM_H
 #define SCSICAM_H
-extern int scsicam_bios_param (Disk *disk, int dev, int *ip);
+#include <linux/kdev_t.h>
+extern int scsicam_bios_param (Disk *disk, kdev_t dev, int *ip);
 #endif /* def SCSICAM_H */

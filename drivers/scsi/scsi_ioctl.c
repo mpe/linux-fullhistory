@@ -100,7 +100,7 @@ static void scsi_ioctl_done (Scsi_Cmnd * SCpnt)
     struct request * req;
     
     req = &SCpnt->request;
-    req->dev = 0xfffe; /* Busy, but indicate request done */
+    req->rq_status = RQ_SCSI_DONE; /* Busy, but indicate request done */
     
     if (req->sem != NULL) {
 	up(req->sem);
@@ -117,12 +117,13 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd)
 		scsi_ioctl_done,  MAX_TIMEOUT,
 		MAX_RETRIES);
     
-    if (SCpnt->request.dev != 0xfffe){
+    if (SCpnt->request.rq_status != RQ_SCSI_DONE){
 	struct semaphore sem = MUTEX_LOCKED;
 	SCpnt->request.sem = &sem;
 	down(&sem);
 	/* Hmm.. Have to ask about this one */
-	while (SCpnt->request.dev != 0xfffe) schedule();
+	while (SCpnt->request.rq_status != RQ_SCSI_DONE)
+	    schedule();
     };
     
     if(driver_byte(SCpnt->result) != 0)
@@ -157,7 +158,7 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd)
 	};
     
     result = SCpnt->result;
-    SCpnt->request.dev = -1;
+    SCpnt->request.rq_status = RQ_INACTIVE;
     wake_up(&SCpnt->device->device_wait);
     return result;
 }
@@ -251,12 +252,13 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
     scsi_do_cmd(SCpnt,  cmd,  buf, needed,  scsi_ioctl_done,  MAX_TIMEOUT, 
 		MAX_RETRIES);
     
-    if (SCpnt->request.dev != 0xfffe){
+    if (SCpnt->request.rq_status != RQ_SCSI_DONE){
 	struct semaphore sem = MUTEX_LOCKED;
 	SCpnt->request.sem = &sem;
 	down(&sem);
 	/* Hmm.. Have to ask about this one */
-	while (SCpnt->request.dev != 0xfffe) schedule();
+	while (SCpnt->request.rq_status != RQ_SCSI_DONE)
+	    schedule();
     }
     
     
@@ -277,7 +279,9 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
         memcpy_tofs ((void *) cmd_in,  buf,  outlen);
     }
     result = SCpnt->result;
-    SCpnt->request.dev = -1;  /* Mark as not busy */
+
+    SCpnt->request.rq_status = RQ_INACTIVE;
+
     if (buf) scsi_free(buf, buf_needed);
     
     if(SCpnt->device->scsi_request_fn)
@@ -324,7 +328,7 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
 	put_user(dev->id 
                  + (dev->lun << 8) 
                  + (dev->channel << 16)
-                 + ((dev->host->hostt->low_ino & 0xff) << 24),
+                 + ((dev->host->hostt->proc_dir->low_ino & 0xff) << 24),
 		    (unsigned long *) arg);
         put_user( dev->host->unique_id, (unsigned long *) arg+1);
 	return 0;

@@ -368,7 +368,8 @@ int msdos_rmdir(struct inode *dir,const char *name,int len)
 	res = -ENOTDIR;
 	if (!S_ISDIR(inode->i_mode)) goto rmdir_done;
 	res = -EBUSY;
-	if (dir->i_dev != inode->i_dev || dir == inode) goto rmdir_done;
+	if (dir->i_dev != inode->i_dev || dir == inode)
+	  goto rmdir_done;
 	res = msdos_empty(inode);
 	if (res)
 		goto rmdir_done;

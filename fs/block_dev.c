@@ -31,7 +31,7 @@ int block_write(struct inode * inode, struct file * filp, const char * buf, int 
 	struct buffer_head * bhlist[NBUF];
 	int blocks_per_cluster;
 	unsigned int size;
-	unsigned int dev;
+	kdev_t dev;
 	struct buffer_head * bh, *bufferlist[NBUF];
 	register char * p;
 	int excess;
@@ -172,7 +172,7 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 	struct buffer_head * bhreq[NBUF];
 	unsigned int chars;
 	loff_t size;
-	unsigned int dev;
+	kdev_t dev;
 	int read;
 	int excess;
 

@@ -1685,21 +1685,22 @@ z8530_init(void)
 
 /* scc_paranoia_check(): warn user if something went wrong		*/
 
-static inline int scc_paranoia_check(struct scc_channel *scc, dev_t device, const char *routine)
+static inline int scc_paranoia_check(struct scc_channel *scc, kdev_t device,
+				     const char *routine)
 {
 #ifdef SCC_PARANOIA_CHECK
 	static const char *badmagic =
-		"Warning: bad magic number for Z8530 SCC struct (%d, %d) in %s\n";
+		"Warning: bad magic number for Z8530 SCC struct (%s) in %s\n";
         static const char *badinfo =
-                "Warning: Z8530 not found for (%d, %d) in %s\n";
+                "Warning: Z8530 not found for (%s) in %s\n";
        
 	if (!scc->init) 
 	{
-        	printk(badinfo, MAJOR(device), MINOR(device), routine);
+        	printk(badinfo, kdevname(device), routine);
                 return 1;
         }
         if (scc->magic != SCC_MAGIC) {
-        	printk(badmagic, MAJOR(device), MINOR(device), routine);
+        	printk(badmagic, kdevname(device), routine);
                 return 1;
         }
 #endif
@@ -1729,7 +1730,9 @@ int scc_open(struct tty_struct *tty, struct file * filp)
 	
 	if (scc->magic != SCC_MAGIC)
 	{
-		printk("ERROR: scc_open(): bad magic number for device (%d, %d)", MAJOR(tty->device), MINOR(tty->device));
+		printk("ERROR: scc_open(): bad magic number for device ("
+		       "%s)",
+		       kdevname(tty->device));
 		return -ENODEV;
 	}		
 	
@@ -1838,8 +1841,8 @@ scc_ioctl(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned
 
         if (scc->magic != SCC_MAGIC) 
         {
-		printk("ERROR: scc_ioctl(): bad magic number for device %d,%d", 
-			MAJOR(tty->device), MINOR(tty->device));
+		printk("ERROR: scc_ioctl(): bad magic number for device %s", 
+			kdevname(tty->device));
 			
                 return -ENODEV;
         }

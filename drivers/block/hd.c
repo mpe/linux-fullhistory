@@ -44,7 +44,7 @@
 #define MAJOR_NR HD_MAJOR
 #include "blk.h"
 
-static int revalidate_hddisk(int, int);
+static int revalidate_hddisk(kdev_t, int);
 
 #define	HD_DELAY	0
 
@@ -131,7 +131,7 @@ static void dump_status (const char *msg, unsigned int stat)
 	unsigned long flags;
 	char devc;
 
-	devc = CURRENT ? 'a' + DEVICE_NR(CURRENT->dev) : '?';
+	devc = CURRENT ? 'a' + DEVICE_NR(CURRENT->rq_dev) : '?';
 	save_flags (flags);
 	sti();
 	printk("hd%c: %s: status=0x%02x { ", devc, msg, stat & 0xff);
@@ -280,7 +280,7 @@ static void fixstring (unsigned char *s, int bytecount)
 
 static void identify_intr(void)
 {
-	unsigned int dev = DEVICE_NR(CURRENT->dev);
+	unsigned int dev = DEVICE_NR(CURRENT->rq_dev);
 	unsigned short stat = inb_p(HD_STATUS);
 	struct hd_driveid *id = hd_ident_info[dev];
 
@@ -333,7 +333,7 @@ static void identify_intr(void)
 
 static void set_multmode_intr(void)
 {
-	unsigned int dev = DEVICE_NR(CURRENT->dev), stat = inb_p(HD_STATUS);
+	unsigned int dev = DEVICE_NR(CURRENT->rq_dev), stat = inb_p(HD_STATUS);
 
 	if (unmask_intr[dev])
 		sti();
@@ -447,7 +447,7 @@ static void bad_rw_intr(void)
 
 	if (!CURRENT)
 		return;
-	dev = DEVICE_NR(CURRENT->dev);
+	dev = DEVICE_NR(CURRENT->rq_dev);
 	if (++CURRENT->errors >= MAX_ERRORS || (hd_error & BBD_ERR)) {
 		end_request(0);
 		special_op[dev] = recalibrate[dev] = 1;
@@ -471,7 +471,7 @@ static inline int wait_DRQ(void)
 
 static void read_intr(void)
 {
-	unsigned int dev = DEVICE_NR(CURRENT->dev);
+	unsigned int dev = DEVICE_NR(CURRENT->rq_dev);
 	int i, retries = 100000, msect = mult_count[dev], nsect;
 
 	if (unmask_intr[dev])
@@ -546,7 +546,7 @@ static inline void multwrite (unsigned int dev)
 static void multwrite_intr(void)
 {
 	int i;
-	unsigned int dev = DEVICE_NR(WCURRENT.dev);
+	unsigned int dev = DEVICE_NR(WCURRENT.rq_dev);
 
 	if (unmask_intr[dev])
 		sti();
@@ -582,7 +582,7 @@ static void write_intr(void)
 	int i;
 	int retries = 100000;
 
-	if (unmask_intr[DEVICE_NR(WCURRENT.dev)])
+	if (unmask_intr[DEVICE_NR(WCURRENT.rq_dev)])
 		sti();
 	do {
 		i = (unsigned) inb_p(HD_STATUS);
@@ -640,7 +640,7 @@ static void hd_times_out(void)
 	disable_irq(HD_IRQ);
 	sti();
 	reset = 1;
-	dev = DEVICE_NR(CURRENT->dev);
+	dev = DEVICE_NR(CURRENT->rq_dev);
 	printk("hd%c: timeout\n", dev+'a');
 	if (++CURRENT->errors >= MAX_ERRORS) {
 #ifdef DEBUG
@@ -695,7 +695,7 @@ static void hd_request(void)
 {
 	unsigned int dev, block, nsect, sec, track, head, cyl;
 
-	if (CURRENT && CURRENT->dev < 0) return;
+	if (CURRENT && CURRENT->rq_status == RQ_INACTIVE) return;
 	if (DEVICE_INTR)
 		return;
 repeat:
@@ -707,16 +707,17 @@ repeat:
 		reset_hd();
 		return;
 	}
-	dev = MINOR(CURRENT->dev);
+	dev = MINOR(CURRENT->rq_dev);
 	block = CURRENT->sector;
 	nsect = CURRENT->nr_sectors;
 	if (dev >= (NR_HD<<6) || block >= hd[dev].nr_sects || ((block+nsect) > hd[dev].nr_sects)) {
 #ifdef DEBUG
 		if (dev >= (NR_HD<<6))
-			printk("hd: bad minor number: device=0x%04x\n", CURRENT->dev);
+			printk("hd: bad minor number: device=%s\n",
+			       kdevname(CURRENT->rq_dev));
 		else
 			printk("hd%c: bad access: block=%d, count=%d\n",
-				(CURRENT->dev>>6)+'a', block, nsect);
+				(MINOR(CURRENT->rq_dev)>>6)+'a', block, nsect);
 #endif
 		end_request(0);
 		goto repeat;
@@ -781,7 +782,7 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 	int dev, err;
 	unsigned long flags;
 
-	if ((!inode) || (!inode->i_rdev))
+	if ((!inode) || !(inode->i_rdev))
 		return -EINVAL;
 	dev = DEVICE_NR(inode->i_rdev);
 	if (dev >= NR_HD)
@@ -1076,16 +1077,16 @@ unsigned long hd_init(unsigned long mem_start, unsigned long mem_end)
  * usage == 1 (we need an open channel to use an ioctl :-), so this
  * is our limit.
  */
-static int revalidate_hddisk(int dev, int maxusage)
+static int revalidate_hddisk(kdev_t dev, int maxusage)
 {
-	int target, major;
+	int target;
 	struct gendisk * gdev;
 	int max_p;
 	int start;
 	int i;
 	long flags;
 
-	target =  DEVICE_NR(dev);
+	target = DEVICE_NR(dev);
 	gdev = &GENDISK_STRUCT;
 
 	save_flags(flags);
@@ -1099,14 +1100,15 @@ static int revalidate_hddisk(int dev, int maxusage)
 
 	max_p = gdev->max_p;
 	start = target << gdev->minor_shift;
-	major = MAJOR_NR << 8;
 
 	for (i=max_p - 1; i >=0 ; i--) {
-		sync_dev(major | start | i);
-		invalidate_inodes(major | start | i);
-		invalidate_buffers(major | start | i);
-		gdev->part[start+i].start_sect = 0;
-		gdev->part[start+i].nr_sects = 0;
+		int minor = start + i;
+		kdev_t devi = MKDEV(MAJOR_NR, minor);
+		sync_dev(devi);
+		invalidate_inodes(devi);
+		invalidate_buffers(devi);
+		gdev->part[minor].start_sect = 0;
+		gdev->part[minor].nr_sects = 0;
 	};
 
 #ifdef MAYBE_REINIT

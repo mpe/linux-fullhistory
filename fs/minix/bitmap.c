@@ -74,7 +74,8 @@ void minix_free_block(struct super_block * sb, int block)
 		return;
 	}
 	if (!clear_bit(bit,bh->b_data))
-		printk("free_block (%04x:%d): bit already cleared\n",sb->s_dev,block);
+		printk("free_block (%s:%d): bit already cleared\n",
+		       kdevname(sb->s_dev), block);
 	mark_buffer_dirty(bh, 1);
 	return;
 }

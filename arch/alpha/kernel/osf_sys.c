@@ -32,14 +32,14 @@
 #include <asm/system.h>
 #include <asm/io.h>
 
-extern int do_mount(dev_t, const char *, char *, int, void *);
+extern int do_mount(kdev_t, const char *, char *, int, void *);
 extern int do_pipe(int *);
 
 extern struct file_operations * get_blkfops(unsigned int);
 extern struct file_operations * get_chrfops(unsigned int);
 
-extern dev_t get_unnamed_dev(void);
-extern void put_unnamed_dev(dev_t);
+extern kdev_t get_unnamed_dev(void);
+extern void put_unnamed_dev(kdev_t);
 
 extern asmlinkage int sys_umount(char *);
 extern asmlinkage int sys_swapon(const char *specialfile, int swap_flags);
@@ -240,7 +240,7 @@ struct procfs_args {
 
 static int getdev(const char * name, int rdonly, struct inode ** ino)
 {
-	dev_t dev;
+	kdev_t dev;
 	struct inode * inode;
 	struct file_operations * fops;
 	int retval;
@@ -337,7 +337,7 @@ static int osf_cdfs_mount(char * dirname, struct cdfs_args * args, int flags)
 
 static int osf_procfs_mount(char * dirname, struct procfs_args * args, int flags)
 {
-	dev_t dev;
+	kdev_t dev;
 	int retval;
 	struct procfs_args tmp;
 

@@ -337,21 +337,21 @@ struct sysv_dir_entry {
 
 /* sv_get_hash_table(sb,dev,block) is equivalent to  get_hash_table(dev,block,block_size)  */
 static inline struct buffer_head *
-sv_get_hash_table (struct super_block *sb, int dev, unsigned int block)
+sv_get_hash_table (struct super_block *sb, kdev_t dev, unsigned int block)
 {
 	return get_hash_table (dev, block + sb->sv_block_base, sb->sv_block_size);
 }
 
 /* sv_getblk(sb,dev,block) is equivalent to  getblk(dev,block,block_size)  */
 static inline struct buffer_head *
-sv_getblk (struct super_block *sb, int dev, unsigned int block)
+sv_getblk (struct super_block *sb, kdev_t dev, unsigned int block)
 {
 	return getblk (dev, block + sb->sv_block_base, sb->sv_block_size);
 }
 
 /* sv_bread(sb,dev,block) is equivalent to  bread(dev,block,block_size)  */
 static inline struct buffer_head *
-sv_bread (struct super_block *sb, int dev, unsigned int block)
+sv_bread (struct super_block *sb, kdev_t dev, unsigned int block)
 {
 	return bread (dev, block + sb->sv_block_base, sb->sv_block_size);
 }

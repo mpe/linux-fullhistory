@@ -26,21 +26,22 @@ CFLAGS = -D__KERNEL__=1 \
 
 include ../../.config
 
-SYMTAB_OBJS = scsi_syms.o
-
 TOPDIR = ../..
-include ../../versions.mk
 
 endif
 
-ifdef CONFIG_SCSI
+ifeq ($(CONFIG_SCSI),y)
 L_OBJS += hosts.o scsi.o scsi_ioctl.o constants.o scsicam.o scsi_proc.o
 else
-ifdef CONFIG_MODVERSIONS
-# Create this before we build anything else.
-SCSI_MODULE_VER := scsi_syms.ver
-endif
-M_OBJS += scsi_mod.o
+  ifeq ($(CONFIG_SCSI),m)
+    ifdef CONFIG_MODVERSIONS
+      # Create this before we build anything else.
+      SCSI_MODULE_VER := scsi_syms.ver
+      SYMTAB_OBJS := scsi_syms.o
+      include ../../versions.mk
+      endif
+    M_OBJS += scsi_mod.o
+  endif
 endif
 
 ifeq ($(CONFIG_CHR_DEV_ST),y)

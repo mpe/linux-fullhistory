@@ -5137,7 +5137,10 @@ static void tcp_write_wakeup(struct sock *sk)
 	    	struct iphdr *iph;
 	    	struct tcphdr *th;
 	    	struct tcphdr *nth;
-	    	unsigned long win_size, ow_size;
+	    	unsigned long win_size;
+#if 0
+		unsigned long ow_size;
+#endif
 	    	void * tcp_data_start;
 	
 		/*

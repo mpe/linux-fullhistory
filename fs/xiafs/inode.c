@@ -70,16 +70,17 @@ struct super_block *xiafs_read_super(struct super_block *s, void *data,
 {
     struct buffer_head *bh;
     struct xiafs_super_block *sp;
-    int i, z, dev;
+    int i, z;
+    kdev_t dev;
 
     MOD_INC_USE_COUNT;
-    dev=s->s_dev;
+    dev = s->s_dev;
     lock_super(s);
 
     set_blocksize(dev, BLOCK_SIZE);
 
     if (!(bh = bread(dev, 0, BLOCK_SIZE))) {
-        s->s_dev=0;
+        s->s_dev = 0;
 	unlock_super(s);
 	printk("XIA-FS: read super_block failed (%s %d)\n", WHERE_ERR);
 	MOD_DEC_USE_COUNT;
@@ -92,8 +93,8 @@ struct super_block *xiafs_read_super(struct super_block *s, void *data,
 	unlock_super(s);
 	brelse(bh);
 	if (!silent)
-		printk("VFS: Can't find a xiafs filesystem on dev 0x%04x.\n",
-		   dev);
+		printk("VFS: Can't find a xiafs filesystem on dev "
+		       "%s.\n", kdevname(dev));
 	MOD_DEC_USE_COUNT;
 	return NULL;
     }
@@ -164,7 +165,7 @@ xiafs_read_super_fail:
         brelse(s->u.xiafs_sb.s_imap_buf[i]);
     for(i=0; i < _XIAFS_ZMAP_SLOTS; i++)
         brelse(s->u.xiafs_sb.s_zmap_buf[i]);
-    s->s_dev=0;
+    s->s_dev = 0;
     unlock_super(s);
     printk("XIA-FS: read bitmaps failed (%s %d)\n", WHERE_ERR);
     MOD_DEC_USE_COUNT;
@@ -408,7 +409,7 @@ void xiafs_read_inode(struct inode * inode)
     inode->i_blksize = XIAFS_ZSIZE(inode->i_sb);
     if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode)) {
         inode->i_blocks=0;
-        inode->i_rdev = raw_inode->i_zone[0];
+        inode->i_rdev = to_kdev_t(raw_inode->i_zone[0]);
     } else {
         XIAFS_GET_BLOCKS(raw_inode, inode->i_blocks);
         for (zone = 0; zone < 8; zone++)
@@ -469,7 +470,7 @@ static struct buffer_head *  xiafs_update_inode(struct inode * inode)
     raw_inode->i_ctime = inode->i_ctime;
     raw_inode->i_mtime = inode->i_mtime;
     if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
-        raw_inode->i_zone[0] = inode->i_rdev;
+        raw_inode->i_zone[0] = kdev_t_to_nr(inode->i_rdev);
     else {
         XIAFS_PUT_BLOCKS(raw_inode, inode->i_blocks);
         for (zone = 0; zone < 8; zone++)
@@ -505,8 +506,8 @@ int xiafs_sync_inode (struct inode *inode)
     	wait_on_buffer(bh);
     	if (bh->b_req && !bh->b_uptodate)
     	{
-    	    printk ("IO error syncing xiafs inode [%04X:%lu]\n",
-		    inode->i_dev, inode->i_ino);
+    	    printk ("IO error syncing xiafs inode [%s:%lu]\n",
+		    kdevname(inode->i_dev), inode->i_ino);
     	    err = -1;
     	}
     }

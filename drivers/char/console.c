@@ -71,7 +71,8 @@
  * Code for xterm like mouse click reporting by Peter Orbaek 20-Jul-94
  * <poe@daimi.aau.dk>
  *
- * Improved loadable font/UTF-8 support by H. Peter Anvin, Feb 1995
+ * Improved loadable font/UTF-8 support by H. Peter Anvin 
+ * Feb-Sep 1995 <peter.anvin@linux.org>
  *
  * improved scrollback, plus colour palette handling, by Simon Tatham
  * 17-Jun-95 <sgt20@cam.ac.uk>
@@ -154,8 +155,8 @@ extern void register_console(void (*proc)(const char *));
 extern void vesa_blank(void);
 extern void vesa_unblank(void);
 extern void compute_shiftstate(void);
-extern void reset_palette (int currcons) ;
-extern void set_palette (void) ;
+extern void reset_palette(int currcons);
+extern void set_palette(void);
 
 /* Description of the hardware situation */
 static unsigned char	video_type;		/* Type of display being used	*/
@@ -172,10 +173,12 @@ static unsigned char	video_page;		/* Initial video page (unused)  */
 static unsigned long	video_screen_size;
 static int can_do_color = 0;
 static int printable = 0;			/* Is console ready for printing? */
-	/* these two also used in in vt.c */
+	/* these also used in in vt.c */
        int		video_mode_512ch = 0;	/* 512-character mode */
        unsigned long	video_font_height;	/* Height of current screen font */
        unsigned long	video_scan_lines;	/* Number of scan lines on screen */
+       unsigned long    default_font_height;    /* Height of default screen font */
+static int              video_font_is_default = 1;
 static unsigned short console_charmask = 0x0ff;
 
 static unsigned short *vc_scrbuf[MAX_NR_CONSOLES];
@@ -1100,6 +1103,14 @@ void complement_pos(int currcons, int offset)
 unsigned short screen_word(int currcons, int offset, int viewed)
 {
 	return scr_readw(screenpos(currcons, offset, viewed));
+}
+
+/* used by selection - convert a screen word to a glyph number */
+int scrw2glyph(unsigned short scr_word)
+{
+	return ( video_mode_512ch )
+		? ((scr_word & 0x0800) >> 3) + (scr_word & 0x00ff)
+		: scr_word & 0x00ff;
 }
 
 /* used by vcs - note the word offset */
@@ -2152,7 +2163,6 @@ long con_init(long kmem_start)
 	set_origin(currcons);
 	csi_J(currcons, 0);
 
-
 	/* Figure out the size of the screen and screen font so we
 	   can figure out the appropriate screen size should we load
 	   a different font */
@@ -2161,9 +2171,10 @@ long con_init(long kmem_start)
 	if ( video_type == VIDEO_TYPE_VGAC || video_type == VIDEO_TYPE_EGAC
 	    || video_type == VIDEO_TYPE_EGAM )
 	{
-		video_font_height = ORIG_VIDEO_POINTS;
+		default_font_height = video_font_height = ORIG_VIDEO_POINTS;
 		/* This may be suboptimal but is a safe bet - go with it */
 		video_scan_lines = video_font_height * video_num_lines;
+
 		printk("Console: %ld point font, %ld scans\n",
 		       video_font_height, video_scan_lines);
 	}
@@ -2396,6 +2407,7 @@ static int set_get_font(char * arg, int set, int ch512)
 	char *charmap;
 	int beg;
 	unsigned short video_port_status = video_port_reg + 6;
+	int font_select = 0x00;
 
 	/* no use to "load" CGA... */
 
@@ -2411,11 +2423,30 @@ static int set_get_font(char * arg, int set, int ch512)
 		beg = 0x0a;
 	} else
 		return -EINVAL;
+	
+	if (arg)
+	  {
+	    i = verify_area(set ? VERIFY_READ : VERIFY_WRITE, (void *)arg,
+			    ch512 ? 2*cmapsz : cmapsz);
+	    if (i)
+	      return i;
+	  }
+	else
+	  ch512 = 0;		/* Default font is always 256 */
 
-	i = verify_area(set ? VERIFY_READ : VERIFY_WRITE, (void *)arg,
-			ch512 ? 2*cmapsz : cmapsz);
-	if (i)
-		return i;
+	/*
+	 * The default font is kept in slot 0 and is never touched.
+	 * A custom font is loaded in slot 2 (256 ch) or 2:3 (512 ch)
+	 */
+
+	if (set)
+	  {
+	    video_font_is_default = !arg;
+	    font_select = arg ? (ch512 ? 0x0e : 0x0a) : 0x00;
+	  }
+
+	if ( !video_font_is_default )
+	  charmap += 4*cmapsz;
 
 	cli();
 	outb_p( 0x00, seq_port_reg );   /* First, the sequencer */
@@ -2434,31 +2465,35 @@ static int set_get_font(char * arg, int set, int ch512)
 	outb_p( 0x06, gr_port_reg );
 	outb_p( 0x00, gr_port_val );    /* map start at A000:0000 */
 	sti();
-
-	if (set)
-		for (i=0; i<cmapsz ; i++)
-			scr_writeb(get_user(arg + i), charmap + i);
-	else
-		for (i=0; i<cmapsz ; i++)
-			put_user(scr_readb(charmap + i), arg + i);
-
+	
+	if (arg)
+	  {
+	    if (set)
+	      for (i=0; i<cmapsz ; i++)
+		scr_writeb(get_user(arg + i), charmap + i);
+	    else
+	      for (i=0; i<cmapsz ; i++)
+		put_user(scr_readb(charmap + i), arg + i);
+	    
+	    
 	/*
 	 * In 512-character mode, the character map is not contiguous if
 	 * we want to remain EGA compatible -- which we do
 	 */
 
-	if (ch512)
-	  {
-	    charmap += 2*cmapsz;
-	    arg += cmapsz;
-	    if (set)
-	      for (i=0; i<cmapsz ; i++)
-		*(charmap+i) = get_user(arg+i);
-	    else
-	      for (i=0; i<cmapsz ; i++)
-		put_user(*(charmap+i), arg+i);
-	  };
-
+	    if (ch512)
+	      {
+		charmap += 2*cmapsz;
+		arg += cmapsz;
+		if (set)
+		  for (i=0; i<cmapsz ; i++)
+		    *(charmap+i) = get_user(arg+i);
+		else
+		  for (i=0; i<cmapsz ; i++)
+		    put_user(*(charmap+i), arg+i);
+	      }
+	  }
+	
 	cli();
 	outb_p( 0x00, seq_port_reg );   /* First, the sequencer */
 	outb_p( 0x01, seq_port_val );   /* Synchronous reset */
@@ -2469,7 +2504,7 @@ static int set_get_font(char * arg, int set, int ch512)
 	if (set)
 	  {
 	    outb_p( 0x03, seq_port_reg ); /* Character Map Select */
-	    outb_p( ch512 ? 0x04 : 0x00, seq_port_val );
+	    outb_p( font_select, seq_port_val );
 	  }
 	outb_p( 0x00, seq_port_reg );
 	outb_p( 0x03, seq_port_val );   /* clear synchronous reset */

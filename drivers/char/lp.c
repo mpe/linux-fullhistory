@@ -528,8 +528,37 @@ static struct file_operations lp_fops = {
 	lp_release
 };
 
+static int lp_probe(int offset)
+{
+	int base, size;
+	unsigned int testvalue;
+
+	base = LP_B(offset);
+	size = (base == 0x3bc)? 3 : 8;
+	if (check_region(base, size) < 0)
+		return -1;
+	/* write to port & read back to check */
+	outb_p(LP_DUMMY, base);
+	udelay(LP_DELAY);
+	testvalue = inb_p(base);
+	if (testvalue == LP_DUMMY) {
+		LP_F(offset) |= LP_EXIST;
+		lp_reset(offset);
+		printk("lp%d at 0x%04x, ", offset, base);
+		request_region(base, size, "lp");
+		if (LP_IRQ(offset))
+			printk("(irq = %d)\n", LP_IRQ(offset));
+		else
+			printk("(polling)\n");
+		return 1;
+	} else
+		return 0;
+}
+
 #ifdef MODULE
 char kernel_version[]=UTS_RELEASE;
+int io[] = {0, 0, 0};
+int irq[] = {0, 0, 0};
 
 int init_module(void)
 #else
@@ -537,9 +566,7 @@ long lp_init(long kmem_start)
 #endif
 {
 	int offset = 0;
-	unsigned int testvalue;
 	int count = 0;
-	int base,size;
 
 	if (register_chrdev(LP_MAJOR,"lp",&lp_fops)) {
 		printk("lp: unable to get major %d\n", LP_MAJOR);
@@ -549,31 +576,39 @@ long lp_init(long kmem_start)
 		return kmem_start;
 #endif
 	}
+#ifdef MODULE
+	/* When user feeds parameters, use them */
+	for (offset=0; offset < LP_NO; offset++) {
+		int specified=0;
+
+		if (io[offset] != 0) {
+			LP_B(offset) = io[offset];
+			specified++;
+		}
+		if (irq[offset] != 0) {
+			LP_IRQ(offset) = irq[offset];
+			specified++;
+		}
+		if (specified) {
+			if (lp_probe(offset) <= 0) {
+				printk(KERN_INFO "lp%d: Not found\n", offset);
+				return -EIO;
+			} else
+				count++;
+		}
+	}
+	if (count)
+		return 0;
+#endif
 	/* take on all known port values */
 	for (offset = 0; offset < LP_NO; offset++) {
-		base = LP_B(offset);
-		size = (base == 0x3bc)? 3 : 8;
-		if (check_region(base, size))
+		int ret = lp_probe(offset);
+		if (ret < 0)
 			continue;
-		/* write to port & read back to check */
-		outb_p( LP_DUMMY, base);
-		udelay(LP_DELAY);
-		testvalue = inb_p(base);
-		if (testvalue == LP_DUMMY) {
-			LP_F(offset) |= LP_EXIST;
-			lp_reset(offset);
-			printk("lp%d at 0x%04x, ", offset,base);
-			request_region(base, size, "lp");
-			if (LP_IRQ(offset))
-				printk("(irq = %d)\n", LP_IRQ(offset));
-			else
-				printk("(polling)\n");
-			count++;
-		}
+		count += ret;
 	}
 	if (count == 0)
 		printk("lp: Driver configured but no interfaces found.\n");
-
 
 #ifdef MODULE
 	return 0;
@@ -581,17 +616,12 @@ long lp_init(long kmem_start)
 	return kmem_start;
 #endif
 }
-	int base,size;
 
 #ifdef MODULE
 void cleanup_module(void)
 {
 	int offset;
 
-	if(MOD_IN_USE) {
-	       printk("lp: busy - remove delayed\n");
-	       return;
-	}
 	unregister_chrdev(LP_MAJOR,"lp");
 	for (offset = 0; offset < LP_NO; offset++) {
 		int base, size;
@@ -601,5 +631,4 @@ void cleanup_module(void)
 			release_region(LP_B(offset),size);
 	}
 }
-
 #endif

@@ -35,6 +35,8 @@
 
 #if !defined(EXCLUDE_AUDIO) || !defined(EXCLUDE_GUS)
 
+static int space_in_queue (int dev);
+
 DEFINE_WAIT_QUEUES (dev_sleeper[MAX_AUDIO_DEV], dev_sleep_flag[MAX_AUDIO_DEV]);
 
 static struct dma_buffparms dmaps[MAX_AUDIO_DEV] =

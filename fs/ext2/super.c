@@ -55,10 +55,10 @@ void ext2_error (struct super_block * sb, const char * function,
 	if (test_opt (sb, ERRORS_PANIC) ||
 	    (sb->u.ext2_sb.s_es->s_errors == EXT2_ERRORS_PANIC &&
 	     !test_opt (sb, ERRORS_CONT) && !test_opt (sb, ERRORS_RO)))
-		panic ("EXT2-fs panic (device %d/%d): %s: %s\n",
-		       MAJOR(sb->s_dev), MINOR(sb->s_dev), function, error_buf);
-	printk (KERN_CRIT "EXT2-fs error (device %d/%d): %s: %s\n",
-		MAJOR(sb->s_dev), MINOR(sb->s_dev), function, error_buf);
+		panic ("EXT2-fs panic (device %s): %s: %s\n",
+		       kdevname(sb->s_dev), function, error_buf);
+	printk (KERN_CRIT "EXT2-fs error (device %s): %s: %s\n",
+		kdevname(sb->s_dev), function, error_buf);
 	if (test_opt (sb, ERRORS_RO) ||
 	    (sb->u.ext2_sb.s_es->s_errors == EXT2_ERRORS_RO &&
 	     !test_opt (sb, ERRORS_CONT) && !test_opt (sb, ERRORS_PANIC))) {
@@ -81,8 +81,8 @@ NORET_TYPE void ext2_panic (struct super_block * sb, const char * function,
 	va_start (args, fmt);
 	vsprintf (error_buf, fmt, args);
 	va_end (args);
-	panic ("EXT2-fs panic (device %d/%d): %s: %s\n",
-	       MAJOR(sb->s_dev), MINOR(sb->s_dev), function, error_buf);
+	panic ("EXT2-fs panic (device %s): %s: %s\n",
+	       kdevname(sb->s_dev), function, error_buf);
 }
 
 void ext2_warning (struct super_block * sb, const char * function,
@@ -93,8 +93,8 @@ void ext2_warning (struct super_block * sb, const char * function,
 	va_start (args, fmt);
 	vsprintf (error_buf, fmt, args);
 	va_end (args);
-	printk (KERN_WARNING "EXT2-fs warning (device %d/%d): %s: %s\n",
-		MAJOR(sb->s_dev), MINOR(sb->s_dev), function, error_buf);
+	printk (KERN_WARNING "EXT2-fs warning (device %s): %s: %s\n",
+		kdevname(sb->s_dev), function, error_buf);
 }
 
 void ext2_put_super (struct super_block * sb)
@@ -367,7 +367,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	unsigned short resuid = EXT2_DEF_RESUID;
 	unsigned short resgid = EXT2_DEF_RESGID;
 	unsigned long logic_sb_block = 1;
-	int dev = sb->s_dev;
+	kdev_t dev = sb->s_dev;
 	int db_count;
 	int i, j;
 
@@ -400,8 +400,8 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		unlock_super (sb);
 		brelse (bh);
 		if (!silent)
-			printk ("VFS: Can't find an ext2 filesystem on dev %d/%d.\n",
-				MAJOR(dev), MINOR(dev));
+			printk ("VFS: Can't find an ext2 filesystem on dev "
+				"%s.\n", kdevname(dev));
 		return NULL;
 	}
 	sb->s_blocksize_bits = sb->u.ext2_sb.s_es->s_log_block_size + 10;
@@ -470,9 +470,9 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		unlock_super (sb);
 		brelse (bh);
 		if (!silent)
-			printk ("VFS: Can't find an ext2 filesystem on dev %d/%d.\n",
-				MAJOR(dev), MINOR(dev));
-
+			printk ("VFS: Can't find an ext2 filesystem on dev "
+				"%s.\n",
+				kdevname(dev));
 		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
@@ -481,8 +481,8 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		unlock_super (sb);
 		brelse (bh);
 		if (!silent)
-			printk ("VFS: Unsupported blocksize on dev 0x%04x.\n",
-				dev);
+			printk ("VFS: Unsupported blocksize on dev "
+				"%s.\n", kdevname(dev));
 		MOD_DEC_USE_COUNT;
 		return NULL;
 	}

@@ -63,6 +63,12 @@
 #include "hosts.h"
 #include "seagate.h"
 #include "constants.h"
+#include<linux/stat.h>
+
+struct proc_dir_entry proc_scsi_seagate = {
+    PROC_SCSI_SEAGATE, 7, "seagate",
+    S_IFDIR | S_IRUGO | S_IXUGO, 2
+};
 
 
 #ifndef IRQ
@@ -284,6 +290,7 @@ int seagate_st0x_detect (Scsi_Host_Template * tpnt)
 	int i,j;
 #endif 
 
+     tpnt->proc_dir = &proc_scsi_seagate;
 /*
  *	First, we try for the manual override.
  */
@@ -1600,7 +1607,7 @@ int seagate_st0x_reset (Scsi_Cmnd * SCpnt)
 #include "sd.h"
 #include "scsi_ioctl.h"
 
-int seagate_st0x_biosparam(Disk * disk, int dev, int* ip) {
+int seagate_st0x_biosparam(Disk * disk, kdev_t dev, int* ip) {
   unsigned char buf[256 + sizeof(int) * 2], cmd[6], *data, *page;
   int *sizes, result, formatted_sectors, total_sectors;
   int cylinders, heads, sectors;

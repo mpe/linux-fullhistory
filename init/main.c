@@ -62,6 +62,7 @@ extern void aha152x_setup(char *str, int *ints);
 extern void aha1542_setup(char *str, int *ints);
 extern void aic7xxx_setup(char *str, int *ints);
 extern void buslogic_setup(char *str, int *ints);
+extern void fdomain_setup(char *str, int *ints);
 extern void scsi_luns_setup(char *str, int *ints);
 extern void sound_setup(char *str, int *ints);
 #ifdef CONFIG_CDU31A
@@ -204,6 +205,9 @@ struct {
 #endif
 #ifdef CONFIG_SCSI_BUSLOGIC
 	{ "buslogic=", buslogic_setup},
+#endif
+#ifdef CONFIG_SCSI_FUTURE_DOMAIN
+	{ "fdomain=", fdomain_setup},
 #endif
 #ifdef CONFIG_BLK_DEV_XD
 	{ "xd=", xd_setup },
@@ -359,14 +363,16 @@ static void parse_options(char *line)
 			int n;
 			line += 5;
 			if (strncmp(line,"/dev/",5)) {
-				ROOT_DEV = simple_strtoul(line,NULL,16);
+				ROOT_DEV = to_kdev_t(
+					     simple_strtoul(line,NULL,16));
 				continue;
 			}
 			line += 5;
 			for (n = 0 ; devnames[n] ; n++) {
 				int len = strlen(devnames[n]);
 				if (!strncmp(line,devnames[n],len)) {
-					ROOT_DEV = devnums[n]+simple_strtoul(line+len,NULL,0);
+					ROOT_DEV = to_kdev_t(devnums[n]+
+					     simple_strtoul(line+len,NULL,0));
 					break;
 				}
 			}

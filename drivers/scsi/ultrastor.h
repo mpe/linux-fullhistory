@@ -12,13 +12,14 @@
 
 #ifndef _ULTRASTOR_H
 #define _ULTRASTOR_H
+#include <linux/kdev_t.h>
 
 int ultrastor_detect(Scsi_Host_Template *);
 const char *ultrastor_info(struct Scsi_Host * shpnt);
 int ultrastor_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int ultrastor_abort(Scsi_Cmnd *);
 int ultrastor_reset(Scsi_Cmnd *);
-int ultrastor_biosparam(Disk *, int, int *);
+int ultrastor_biosparam(Disk *, kdev_t, int *);
 
 
 #define ULTRASTOR_14F_MAX_SG 16
@@ -32,8 +33,7 @@ int ultrastor_biosparam(Disk *, int, int *);
 
 #define ULTRASTOR_14F { NULL, NULL, /* Ptr for modules*/ \
 			  NULL,                         \
-			  "ultrastor",                  \
-			  PROC_SCSI_ULTRASTOR,          \
+			  NULL,                         \
 			  "UltraStor 14F/24F/34F", 	\
 			  ultrastor_detect, 		\
 			  NULL,	/* Release */		\

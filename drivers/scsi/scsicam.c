@@ -49,13 +49,14 @@ static int setsize(unsigned long capacity,unsigned int *cyls,unsigned int *hds,
  */
 
 int scsicam_bios_param (Disk *disk, /* SCSI disk */
-	int dev,		/* Device major, minor */
+	kdev_t dev,		/* Device major, minor */
     	int *ip			/* Heads, sectors, cylinders in that order */) {
+
     struct buffer_head *bh;
     int ret_code;
     int size = disk->capacity;
 
-    if (!(bh = bread(dev & ~0xf,0,1024)))
+    if (!(bh = bread(MKDEV(MAJOR(dev), MINOR(dev)&~0xf), 0, 1024)))
 	return -1;
 
 #ifdef DEBUG

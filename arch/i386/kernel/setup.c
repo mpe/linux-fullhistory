@@ -83,7 +83,7 @@ void setup_arch(char **cmdline_p,
 	char c = ' ', *to = command_line, *from = COMMAND_LINE;
 	int len = 0;
 
- 	ROOT_DEV = ORIG_ROOT_DEV;
+ 	ROOT_DEV = to_kdev_t(ORIG_ROOT_DEV);
  	drive_info = DRIVE_INFO;
  	screen_info = SCREEN_INFO;
 	aux_device_present = AUX_DEVICE_INFO;

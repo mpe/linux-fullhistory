@@ -40,6 +40,7 @@
  *	-- ctm@ardi.com, 9Sep95
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/major.h>
 #include <linux/errno.h>
@@ -55,7 +56,6 @@
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/malloc.h>
-#include <linux/config.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -134,21 +134,21 @@ char *tty_name(struct tty_struct *tty)
 	return(_tty_name(tty, buf));
 }
 
-inline int tty_paranoia_check(struct tty_struct *tty, dev_t device,
+inline int tty_paranoia_check(struct tty_struct *tty, kdev_t device,
 			      const char *routine)
 {
 #ifdef TTY_PARANOIA_CHECK
 	static const char *badmagic =
-		"Warning: bad magic number for tty struct (%d, %d) in %s\n";
+		"Warning: bad magic number for tty struct (%s) in %s\n";
 	static const char *badtty =
-		"Warning: null TTY for (%d, %d) in %s\n";
+		"Warning: null TTY for (%s) in %s\n";
 
 	if (!tty) {
-		printk(badtty, MAJOR(device), MINOR(device), routine);
+		printk(badtty, kdevname(device), routine);
 		return 1;
 	}
 	if (tty->magic != TTY_MAGIC) {
-		printk(badmagic, MAJOR(device), MINOR(device), routine);
+		printk(badmagic, kdevname(device), routine);
 		return 1;
 	}
 #endif
@@ -173,9 +173,8 @@ static int check_tty_count(struct tty_struct *tty, const char *routine)
 	    tty->link && tty->link->count)
 		count++;
 	if (tty->count != count) {
-		printk("Warning: dev (%d, %d) tty->count(%d) != #fd's(%d) in %s\n",
-		       MAJOR(tty->device), MINOR(tty->device), tty->count,
-		       count, routine);
+		printk("Warning: dev (%s) tty->count(%d) != #fd's(%d) in %s\n",
+		       kdevname(tty->device), tty->count, count, routine);
 		return count;
        }	
 #endif
@@ -246,7 +245,7 @@ static int tty_set_ldisc(struct tty_struct *tty, int ldisc)
 /*
  * This routine returns a tty driver structure, given a device number
  */
-struct tty_driver *get_tty_driver(dev_t device)
+struct tty_driver *get_tty_driver(kdev_t device)
 {
 	int	major, minor;
 	struct tty_driver *p;
@@ -357,7 +356,8 @@ void do_tty_hangup(struct tty_struct * tty, struct file_operations *fops)
 			continue;
 		if (filp->private_data != tty)
 			continue;
-		if (filp->f_inode && filp->f_inode->i_rdev == CONSOLE_DEV)
+		if (filp->f_inode
+		    && filp->f_inode->i_rdev == CONSOLE_DEV)
 			continue;
 		if (filp->f_op != &tty_fops)
 			continue;
@@ -763,7 +763,7 @@ static int tty_write(struct inode * inode, struct file * file, const char * buf,
  * unless you know exactly what you are doing. All the changes have to be
  * made atomically, or there may be incorrect pointers all over the place.
  */
-static int init_dev(dev_t device, struct tty_struct **ret_tty)
+static int init_dev(kdev_t device, struct tty_struct **ret_tty)
 {
 	struct tty_struct *tty, **tty_loc, *o_tty, **o_tty_loc;
 	struct termios *tp, **tp_loc, *o_tp, **o_tp_loc;
@@ -824,7 +824,7 @@ repeat:
 		o_ltp_loc = &driver->other->termios_locked[idx];
 
 		if (!*o_tty_loc && !o_tty) {
-			dev_t 	o_device;
+			kdev_t 	o_device;
 			
 			o_tty = (struct tty_struct *)
 				get_free_page(GFP_KERNEL);
@@ -962,23 +962,25 @@ static void release_dev(struct file * filp)
 	idx = MINOR(tty->device) - tty->driver.minor_start;
 #ifdef TTY_PARANOIA_CHECK
 	if (idx < 0 || idx >= tty->driver.num) {
-		printk("release_dev: bad idx when trying to free (%d, %d)\n",
-		       MAJOR(tty->device), MINOR(tty->device));
+		printk("release_dev: bad idx when trying to free (%s)\n",
+		       kdevname(tty->device));
 		return;
 	}
 	if (tty != tty->driver.table[idx]) {
-		printk("release_dev: driver.table[%d] not tty for (%d, %d)\n",
-		       idx, MAJOR(tty->device), MINOR(tty->device));
+		printk("release_dev: driver.table[%d] not tty for (%s)\n",
+		       idx, kdevname(tty->device));
 		return;
 	}
 	if (tp != tty->driver.termios[idx]) {
-		printk("release_dev: driver.termios[%d] not termios for (%d, %d)\n",
-		       idx, MAJOR(tty->device), MINOR(tty->device));
+		printk("release_dev: driver.termios[%d] not termios for ("
+		       "%s)\n",
+		       idx, kdevname(tty->device));
 		return;
 	}
 	if (ltp != tty->driver.termios_locked[idx]) {
-		printk("release_dev: driver.termios_locked[%d] not termios_locked for (%d, %d)\n",
-		       idx, MAJOR(tty->device), MINOR(tty->device));
+		printk("release_dev: driver.termios_locked[%d] not termios_locked for ("
+		       "%s)\n",
+		       idx, kdevname(tty->device));
 		return;
 	}
 #endif
@@ -995,18 +997,21 @@ static void release_dev(struct file * filp)
 #ifdef TTY_PARANOIA_CHECK
 	if (tty->driver.other) {
 		if (o_tty != tty->driver.other->table[idx]) {
-			printk("release_dev: other->table[%d] not o_tty for (%d, %d)\n",
-			       idx, MAJOR(tty->device), MINOR(tty->device));
+			printk("release_dev: other->table[%d] not o_tty for ("
+			       "%s)\n",
+			       idx, kdevname(tty->device));
 			return;
 		}
 		if (o_tp != tty->driver.other->termios[idx]) {
-			printk("release_dev: other->termios[%d] not o_termios for (%d, %d)\n",
-			       idx, MAJOR(tty->device), MINOR(tty->device));
+			printk("release_dev: other->termios[%d] not o_termios for ("
+			       "%s)\n",
+			       idx, kdevname(tty->device));
 			return;
 		}
 		if (o_ltp != tty->driver.other->termios_locked[idx]) {
-			printk("release_dev: other->termios_locked[%d] not o_termios_locked for (%d, %d)\n",
-			       idx, MAJOR(tty->device), MINOR(tty->device));
+			printk("release_dev: other->termios_locked[%d] not o_termios_locked for ("
+			       "%s)\n",
+			       idx, kdevname(tty->device));
 			return;
 		}
 
@@ -1132,7 +1137,7 @@ static int tty_open(struct inode * inode, struct file * filp)
 	struct tty_struct *tty;
 	int minor;
 	int noctty, retval;
-	dev_t device;
+	kdev_t device;
 
 retry_open:
 	noctty = filp->f_flags & O_NOCTTY;

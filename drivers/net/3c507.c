@@ -324,7 +324,7 @@ el16_probe(struct device *dev)
 			return 0;
 	}
 
-	return ENODEV;			/* ENODEV would be more accurate. */
+	return ENODEV;
 }
 
 int el16_probe1(struct device *dev, int ioaddr)

@@ -63,8 +63,7 @@ int send_sig(unsigned long sig,struct task_struct * p,int priv)
 		p->signal &= ~( (1<<(SIGSTOP-1)) | (1<<(SIGTSTP-1)) |
 				(1<<(SIGTTIN-1)) | (1<<(SIGTTOU-1)) );
 	}
-	/* Depends on order SIGSTOP, SIGTSTP, SIGTTIN, SIGTTOU */
-	if ((sig >= SIGSTOP) && (sig <= SIGTTOU)) 
+	if (sig == SIGSTOP || sig == SIGTSTP || sig == SIGTTIN || sig == SIGTTOU)
 		p->signal &= ~(1<<(SIGCONT-1));
 	/* Actually generate the signal */
 	generate(sig,p);

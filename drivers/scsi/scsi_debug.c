@@ -36,6 +36,14 @@
 
 #include "sd.h"
 
+#include<linux/stat.h>
+
+struct proc_dir_entry proc_scsi_scsi_debug = {
+    PROC_SCSI_SCSI_DEBUG, 10, "scsi_debug",
+    S_IFDIR | S_IRUGO | S_IXUGO, 2
+};
+
+
 /* A few options that we want selected */
 
 /* Do not attempt to use a timer to simulate a real disk with latency */
@@ -76,31 +84,22 @@ static int npart = 0;
 #define VERIFY1_DEBUG(RW)                           \
     if (bufflen != 1024) {printk("%d", bufflen); panic("(1)Bad bufflen");};         \
     start = 0;                          \
-    if ((SCpnt->request.dev & 0xf) != 0) start = starts[(SCpnt->request.dev & 0xf) - 1];        \
+    if ((MINOR(SCpnt->request.rq_dev) & 0xf) != 0) start = starts[(MINOR(SCpnt->request.rq_dev) & 0xf) - 1];        \
     if (bh){                            \
 	if (bh->b_size != 1024) panic ("Wrong bh size");    \
 	if ((bh->b_blocknr << 1) + start != block)          \
 	{   printk("Wrong bh block# %d %d ",bh->b_blocknr, block);  \
 	    panic ("Wrong bh block#"); \
 	};  \
-	if (bh->b_dev != SCpnt->request.dev) panic ("Bad bh target");\
+	if (bh->b_dev != SCpnt->request.rq_dev)  \
+	    panic ("Bad bh target"); \
     };
-
-#if 0
-/* This had been in the VERIFY_DEBUG macro, but it fails if there is already
- * a disk on the system */
-    if ((SCpnt->request.dev & 0xfff0) != ((target + NR_REAL) << 4) +(MAJOR_NR << 8)){   \
-	printk("Dev #s %x %x ",SCpnt->request.dev, target);         \
-	panic ("Bad target");\
-    };                      \
-
-#endif
 
 #define VERIFY_DEBUG(RW)                            \
     if (bufflen != 1024 && (!SCpnt->use_sg)) {printk("%x %d\n ",bufflen, SCpnt->use_sg); panic("Bad bufflen");};    \
     start = 0;                          \
-    if ((SCpnt->request.dev & 0xf) > npart) panic ("Bad partition");    \
-    if ((SCpnt->request.dev & 0xf) != 0) start = starts[(SCpnt->request.dev & 0xf) - 1];        \
+    if ((MINOR(SCpnt->request.rq_dev) & 0xf) > npart) panic ("Bad partition");    \
+    if ((MINOR(SCpnt->request.rq_dev) & 0xf) != 0) start = starts[(MINOR(SCpnt->request.rq_dev) & 0xf) - 1];        \
     if (SCpnt->request.cmd != RW) panic ("Wrong  operation");       \
     if (SCpnt->request.sector + start != block) panic("Wrong block.");  \
     if (SCpnt->request.current_nr_sectors != 2 && (!SCpnt->use_sg)) panic ("Wrong # blocks");   \
@@ -110,7 +109,8 @@ static int npart = 0;
 	{   printk("Wrong bh block# %d %d ",SCpnt->request.bh->b_blocknr, block);  \
 	    panic ("Wrong bh block#"); \
 	};  \
-	if (SCpnt->request.bh->b_dev != SCpnt->request.dev) panic ("Bad bh target");\
+	if (SCpnt->request.bh->b_dev != SCpnt->request.rq_dev) \
+	    panic ("Bad bh target");\
     };
 #endif
 
@@ -251,7 +251,7 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	break;
     case READ_CAPACITY:
 	printk("Read Capacity\n");
-	if(NR_REAL < 0) NR_REAL = (SCpnt->request.dev >> 4) & 0x0f;
+	if(NR_REAL < 0) NR_REAL = (MINOR(SCpnt->request.rq_dev) >> 4) & 0x0f;
 	memset(buff, 0, bufflen);
 	buff[0] = (CAPACITY >> 24);
 	buff[1] = (CAPACITY >> 16) & 0xff;
@@ -555,6 +555,7 @@ static void scsi_debug_intr_handle(void)
 
 int scsi_debug_detect(Scsi_Host_Template * tpnt)
 {
+    tpnt->proc_dir = &proc_scsi_scsi_debug;
 #ifndef IMMEDIATE
     timer_table[SCSI_DEBUG_TIMER].fn = scsi_debug_intr_handle;
     timer_table[SCSI_DEBUG_TIMER].expires = 0;
@@ -587,7 +588,7 @@ int scsi_debug_abort(Scsi_Cmnd * SCpnt)
     return SCSI_ABORT_SNOOZE;
 }
 
-int scsi_debug_biosparam(Disk * disk, int dev, int* info){
+int scsi_debug_biosparam(Disk * disk, kdev_t dev, int* info){
     int size = disk->capacity;
     info[0] = 32;
     info[1] = 64;

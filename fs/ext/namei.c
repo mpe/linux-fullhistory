@@ -118,8 +118,10 @@ static struct buffer_head * ext_find_entry(struct inode * dir,
 		    de->rec_len < de->name_len + 8 ||
 		    (((char *) de) + de->rec_len-1 >= BLOCK_SIZE+bh->b_data)) {
 			printk ("ext_find_entry: bad dir entry\n");
-			printk ("dev=%d, dir=%ld, offset=%ld, rec_len=%d, name_len=%d\n",
-				dir->i_dev, dir->i_ino, offset, de->rec_len, de->name_len);
+			printk ("dev=%s, dir=%ld, offset=%ld, "
+				"rec_len=%d, name_len=%d\n",
+				kdevname(dir->i_dev), dir->i_ino, offset,
+				de->rec_len, de->name_len);
 			de = (struct ext_dir_entry *) (bh->b_data+BLOCK_SIZE);
 			offset = ((offset / BLOCK_SIZE) + 1) * BLOCK_SIZE;
 			continue;
@@ -266,8 +268,10 @@ printk ("ext_add_entry : creating next block\n");
 		    de->rec_len < de->name_len + 8 ||
 		    (((char *) de) + de->rec_len-1 >= BLOCK_SIZE+bh->b_data)) {
 			printk ("ext_addr_entry: bad dir entry\n");
-			printk ("dev=%d, dir=%ld, offset=%ld, rec_len=%d, name_len=%d\n",
-				dir->i_dev, dir->i_ino, offset, de->rec_len, de->name_len);
+			printk ("dev=%s, dir=%ld, offset=%ld, "
+				"rec_len=%d, name_len=%d\n",
+				kdevname(dir->i_dev), dir->i_ino, offset,
+				de->rec_len, de->name_len);
 			brelse (bh);
 			return NULL;
 		}
@@ -372,7 +376,7 @@ int ext_mknod(struct inode * dir, const char * name, int len, int mode, int rdev
 	else if (S_ISFIFO(inode->i_mode))
 		init_fifo(inode);
 	if (S_ISBLK(mode) || S_ISCHR(mode))
-		inode->i_rdev = rdev;
+		inode->i_rdev = to_kdev_t(rdev);
 #if 0
 	inode->i_mtime = inode->i_atime = CURRENT_TIME;
 #endif
@@ -471,14 +475,16 @@ static int empty_dir(struct inode * inode)
 	struct ext_dir_entry * de, * de1;
 
 	if (inode->i_size < 2 * 12 || !(bh = ext_bread(inode,0,0))) {
-	    	printk("warning - bad directory on dev %04x\n",inode->i_dev);
+	    	printk("warning - bad directory on dev %s\n",
+		       kdevname(inode->i_dev));
 		return 1;
 	}
 	de = (struct ext_dir_entry *) bh->b_data;
 	de1 = (struct ext_dir_entry *) ((char *) de + de->rec_len);
 	if (de->inode != inode->i_ino || !de1->inode || 
 	    strcmp(".",de->name) || strcmp("..",de1->name)) {
-	    	printk("warning - bad directory on dev %04x\n",inode->i_dev);
+	    	printk("warning - bad directory on dev %s\n",
+		       kdevname(inode->i_dev));
 		return 1;
 	}
 	offset = de->rec_len + de1->rec_len;
@@ -496,8 +502,10 @@ static int empty_dir(struct inode * inode)
 		if (de->rec_len < 8 || de->rec_len %4 != 0 ||
 		    de->rec_len < de->name_len + 8) {
 			printk ("empty_dir: bad dir entry\n");
-			printk ("dev=%d, dir=%ld, offset=%ld, rec_len=%d, name_len=%d\n",
-				inode->i_dev, inode->i_ino, offset, de->rec_len, de->name_len);
+			printk ("dev=%s, dir=%ld, offset=%ld, "
+				"rec_len=%d, name_len=%d\n",
+				kdevname(inode->i_dev), inode->i_ino,
+				offset, de->rec_len, de->name_len);
 			brelse (bh);
 			return 1;
 		}
@@ -597,8 +605,9 @@ int ext_unlink(struct inode * dir, const char * name, int len)
 	if (S_ISDIR(inode->i_mode))
 		goto end_unlink;
 	if (!inode->i_nlink) {
-		printk("Deleting nonexistent file (%04x:%ld), %d\n",
-			inode->i_dev,inode->i_ino,inode->i_nlink);
+		printk("Deleting nonexistent file (%s:%ld), %d\n",
+		       kdevname(inode->i_dev), inode->i_ino,
+		       inode->i_nlink);
 		inode->i_nlink=1;
 	}
 	de->inode = 0;

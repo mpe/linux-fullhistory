@@ -117,7 +117,12 @@
 #include "NCR5380.h"
 #include "constants.h"
 #include "sd.h"
+#include<linux/stat.h>
 
+struct proc_dir_entry proc_scsi_t128 = {
+    PROC_SCSI_T128, 4, "t128",
+    S_IFDIR | S_IRUGO | S_IXUGO, 2
+};
 
 
 static struct override {
@@ -197,6 +202,8 @@ int t128_detect(Scsi_Host_Template * tpnt) {
     unsigned char *base;
     int sig, count;
 
+    tpnt->proc_dir = &proc_scsi_t128;
+
     for (count = 0; current_override < NO_OVERRIDES; ++current_override) {
 	base = NULL;
 
@@ -270,7 +277,7 @@ int t128_detect(Scsi_Host_Template * tpnt) {
 }
 
 /*
- * Function : int t128_biosparam(Disk * disk, int dev, int *ip)
+ * Function : int t128_biosparam(Disk * disk, kdev_t dev, int *ip)
  *
  * Purpose : Generates a BIOS / DOS compatible H-C-S mapping for 
  *	the specified device / size.
@@ -289,7 +296,7 @@ int t128_detect(Scsi_Host_Template * tpnt) {
  * and matching the H_C_S coordinates to what DOS uses.
  */
 
-int t128_biosparam(Disk * disk, int dev, int * ip)
+int t128_biosparam(Disk * disk, kdev_t dev, int * ip)
 {
   int size = disk->capacity;
   ip[0] = 64;

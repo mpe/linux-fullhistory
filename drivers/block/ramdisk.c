@@ -40,7 +40,7 @@ repeat:
 	addr = rd_start + (CURRENT->sector << 9);
 	len = CURRENT->current_nr_sectors << 9;
 
-	if ((MINOR(CURRENT->dev) != RAMDISK_MINOR) ||
+	if ((MINOR(CURRENT->rq_dev) != RAMDISK_MINOR) ||
 	    (addr+len > rd_start+rd_length)) {
 		end_request(0);
 		goto repeat;
@@ -190,7 +190,7 @@ static void do_load(void)
 		printk("\ndone\n");
 
 		/* We loaded the file system image.  Prepare for mounting it. */
-		ROOT_DEV = ((MEM_MAJOR << 8) | RAMDISK_MINOR);
+		ROOT_DEV = MKDEV(MEM_MAJOR, RAMDISK_MINOR);
 		return;
 	}
 }

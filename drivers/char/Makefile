@@ -114,4 +114,4 @@ conmakehash: conmakehash.c
 	$(HOSTCC) -o conmakehash conmakehash.c
 
 uni_hash.tbl: $(FONTMAPFILE) conmakehash
-	./conmakehash $(FONTMAPFILE) 641 283 6 > uni_hash.tbl
+	./conmakehash $(FONTMAPFILE) > uni_hash.tbl

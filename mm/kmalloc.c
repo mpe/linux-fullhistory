@@ -87,7 +87,7 @@ struct size_descriptor {
 };
 
 /*
- * For now it is unsafe to allocate bucket sizes between n & n=16 where n is
+ * For now it is unsafe to allocate bucket sizes between n and n-16 where n is
  * 4096 * any power of two
  */
 #if PAGE_SIZE == 4096
@@ -293,7 +293,7 @@ void kfree(void *ptr)
 	}
 
 	if ((order < 0) ||
-	    (order > sizeof(sizes) / sizeof(sizes[0])) ||
+	    (order >= sizeof(sizes) / sizeof(sizes[0])) ||
 	    (((long) (page->next)) & ~PAGE_MASK) ||
 	    (p->bh_flags != MF_USED)) {
 		printk("kfree of non-kmalloced memory: %p, next= %p, order=%d\n",

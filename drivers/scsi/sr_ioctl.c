@@ -29,7 +29,7 @@ static void sr_ioctl_done(Scsi_Cmnd * SCpnt)
     struct request * req;
     
     req = &SCpnt->request;
-    req->dev = 0xfffe; /* Busy, but indicate request done */
+    req->rq_status = RQ_SCSI_DONE; /* Busy, but indicate request done */
     
     if (req->sem != NULL) {
 	up(req->sem);
@@ -51,12 +51,13 @@ static int do_ioctl(int target, unsigned char * sr_cmd, void * buffer, unsigned 
 		IOCTL_TIMEOUT, IOCTL_RETRIES);
     
     
-    if (SCpnt->request.dev != 0xfffe){
+    if (SCpnt->request.rq_status != RQ_SCSI_DONE){
 	struct semaphore sem = MUTEX_LOCKED;
 	SCpnt->request.sem = &sem;
 	down(&sem);
 	/* Hmm.. Have to ask about this */
-	while (SCpnt->request.dev != 0xfffe) schedule();
+	while (SCpnt->request.rq_status != RQ_SCSI_DONE)
+	  schedule();
     };
     
     result = SCpnt->result;
@@ -88,7 +89,7 @@ static int do_ioctl(int target, unsigned char * sr_cmd, void * buffer, unsigned 
 	};
     
     result = SCpnt->result;
-    SCpnt->request.dev = -1; /* Deallocate */
+    SCpnt->request.rq_status = RQ_INACTIVE; /* Deallocate */
     wake_up(&SCpnt->device->device_wait);
     /* Wake up a process waiting for device*/
     return result;
@@ -98,7 +99,7 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 {
     u_char  sr_cmd[10];
     
-    int dev = inode->i_rdev;
+    kdev_t dev = inode->i_rdev;
     int result, target, err;
     
     target = MINOR(dev);
@@ -445,7 +446,7 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	
     case BLKRASET:
 	if(!suser())  return -EACCES;
-	if(!inode->i_rdev) return -EINVAL;
+	if(!(inode->i_rdev)) return -EINVAL;
 	if(arg > 0xff) return -EINVAL;
 	read_ahead[MAJOR(inode->i_rdev)] = arg;
 	return 0;

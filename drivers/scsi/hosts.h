@@ -23,6 +23,7 @@
     $Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/hosts.h,v 1.3 1993/09/24 12:21:00 drew Exp drew $
 */
 
+#include <linux/proc_fs.h>
 
 /* It is senseless to set SG_ALL any higher than this - the performance
  *  does not get any better, and it wastes memory 
@@ -59,19 +60,16 @@ typedef struct	SHT
     /* Used with loadable modules so that we know when it is safe to unload */
     int * usage_count;
     
+    /* The pointer to the /proc/scsi directory entry */
+    struct proc_dir_entry *proc_dir;
+
     /* proc-fs info function.
      * Can be used to export driver statistics and other infos to the world 
      * outside the kernel ie. userspace and it also provides an interface
-     * to feed the driver with information. Check eata_dma_proc.c for reference.
+     * to feed the driver with information. Check eata_dma_proc.c for reference
      */
     int (*proc_info)(char *, char **, off_t, int, int, int);
-    
-    /* driver name that will appear in the /proc/scsi directory */
-    const char *procname;
-    
-    /* low_ino of the drivers /proc/scsi entry. Defined in proc_fs.h */
-    unsigned short low_ino;
-    
+
     /*
      * The name pointer is a pointer to the name of the SCSI
      * device detected.
@@ -173,7 +171,7 @@ typedef struct	SHT
      * the host adapter.  Parameters:
      * size, device number, list (heads, sectors, cylinders)
      */ 
-    int (* bios_param)(Disk *, int, int []);
+    int (* bios_param)(Disk *, kdev_t, int []);
     
     /*
      * This determines if we will use a non-interrupt driven
@@ -323,6 +321,9 @@ extern struct Scsi_Device_Template * scsi_devicelist;
 
 extern Scsi_Host_Template * scsi_hosts;
 
+extern void build_proc_dir_entries(Scsi_Host_Template  *);
+
+
 /*
  *  scsi_init initializes the scsi hosts.
  */
@@ -336,9 +337,6 @@ extern Scsi_Host_Template * scsi_hosts;
 
 extern void * scsi_init_malloc(unsigned int size, int priority);
 extern void scsi_init_free(char * ptr, unsigned int size);
-
-void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
-	 unchar hchannel, unchar hid, unchar hlun);
 
 extern int next_scsi_host;
 

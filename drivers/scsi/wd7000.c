@@ -126,6 +126,13 @@
 
 #include "wd7000.h"
 
+#include<linux/stat.h>
+
+struct proc_dir_entry proc_scsi_wd7000 = {
+    PROC_SCSI_7000FASST, 6, "wd7000",
+    S_IFDIR | S_IRUGO | S_IXUGO, 2
+};
+
 
 /*
  *  Mailbox structure sizes.
@@ -988,7 +995,7 @@ int wd7000_diagnostics( Adapter *host, int code )
 int wd7000_init( Adapter *host )
 {
     InitCmd init_cmd = {
-	INITIALIZATION, 7, BUS_ON, BUS_OFF, 0, 0,0,0, OGMB_CNT, ICMB_CNT
+	INITIALIZATION, 7, BUS_ON, BUS_OFF, 0, {0,0,0}, OGMB_CNT, ICMB_CNT
     };
     int diag;
 
@@ -1104,6 +1111,8 @@ int wd7000_detect(Scsi_Host_Template * tpnt)
     Adapter *host = NULL;
     struct Scsi_Host *sh;
 
+    tpnt->proc_dir = &proc_scsi_wd7000;
+
     /* Set up SCB free list, which is shared by all adapters */
     init_scbs();
 
@@ -1210,7 +1219,7 @@ int wd7000_reset(Scsi_Cmnd * SCpnt)
  *  this way, so I think it will work OK.  Someone who is ambitious can
  *  borrow a newer or more complete version from another driver.
  */
-int wd7000_biosparam(Disk * disk, int dev, int* ip)
+int wd7000_biosparam(Disk * disk, kdev_t dev, int* ip)
 {
   int size = disk->capacity;
   ip[0] = 64;

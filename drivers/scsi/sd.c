@@ -65,7 +65,6 @@
 				SC->device->type != TYPE_MOD)
 
 struct hd_struct * sd;
-int revalidate_scsidisk(int dev, int maxusage);
 
 Scsi_Disk * rscsi_disks = NULL;
 static int * sd_sizes;
@@ -74,8 +73,8 @@ static int * sd_hardsizes;              /* Hardware sector size */
 
 extern int sd_ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 
-static int check_scsidisk_media_change(dev_t);
-static int fop_revalidate_scsidisk(dev_t);
+static int check_scsidisk_media_change(kdev_t);
+static int fop_revalidate_scsidisk(kdev_t);
 
 static sd_init_onedisk(int);
 
@@ -97,7 +96,7 @@ struct Scsi_Device_Template sd_template =
 static int sd_open(struct inode * inode, struct file * filp)
 {
     int target;
-    target =  DEVICE_NR(MINOR(inode->i_rdev));
+    target =  DEVICE_NR(inode->i_rdev);
     
     if(target >= sd_template.dev_max || !rscsi_disks[target].device)
 	return -ENXIO;   /* No such device */
@@ -136,7 +135,7 @@ static void sd_release(struct inode * inode, struct file * file)
     int target;
     sync_dev(inode->i_rdev);
     
-    target =  DEVICE_NR(MINOR(inode->i_rdev));
+    target =  DEVICE_NR(inode->i_rdev);
     
     rscsi_disks[target].device->access_count--;
     if (rscsi_disks[target].device->host->hostt->usage_count)
@@ -206,7 +205,7 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
     int this_count = SCpnt->bufflen >> 9;
     
 #ifdef DEBUG
-    printk("sd%c : rw_intr(%d, %d)\n", 'a' + MINOR(SCpnt->request.dev), 
+    printk("sd%c : rw_intr(%d, %d)\n", 'a' + MINOR(SCpnt->request.rq_dev), 
 	   SCpnt->host->host_no, result);
 #endif
     
@@ -219,7 +218,7 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
     if (!result) {
 	
 #ifdef DEBUG
-	printk("sd%c : %d sectors remain.\n", 'a' + MINOR(SCpnt->request.dev),
+	printk("sd%c : %d sectors remain.\n", 'a' + MINOR(SCpnt->request.rq_dev),
 	       SCpnt->request.nr_sectors);
 	printk("use_sg is %d\n ",SCpnt->use_sg);
 #endif
@@ -267,7 +266,7 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 	    {
 #ifdef DEBUG
 		printk("sd%c : handling page request, no buffer\n",
-		       'a' + MINOR(SCpnt->request.dev));
+		       'a' + MINOR(SCpnt->request.rq_dev));
 #endif
 		/*
 		 * The SCpnt->request.nr_sectors field is always done in 
@@ -319,7 +318,7 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 	     * Not yet implemented.  A read will fail after being remapped,
 	     * a write will call the strategy routine again.
 	     */
-	    if rscsi_disks[DEVICE_NR(SCpnt->request.dev)].remap
+	    if rscsi_disks[DEVICE_NR(SCpnt->request.rq_dev)].remap
 	    {
 		result = 0;
 	    }
@@ -329,11 +328,11 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 	
 	if ((SCpnt->sense_buffer[0] & 0x7f) == 0x70) {
 	    if ((SCpnt->sense_buffer[2] & 0xf) == UNIT_ATTENTION) {
-		if(rscsi_disks[DEVICE_NR(SCpnt->request.dev)].device->removable) {
+		if(rscsi_disks[DEVICE_NR(SCpnt->request.rq_dev)].device->removable) {
 		    /* detected disc change.  set a bit and quietly refuse
 		     * further access.
 		     */  
-		    rscsi_disks[DEVICE_NR(SCpnt->request.dev)].device->changed = 1;
+		    rscsi_disks[DEVICE_NR(SCpnt->request.rq_dev)].device->changed = 1;
 		    SCpnt = end_scsi_request(SCpnt, 0, this_count);
 		    requeue_sd_request(SCpnt);
 		    return;
@@ -360,8 +359,8 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 	 */
 
 	if (SCpnt->sense_buffer[2] == ILLEGAL_REQUEST) {
-	    if (rscsi_disks[DEVICE_NR(SCpnt->request.dev)].ten) {
-		rscsi_disks[DEVICE_NR(SCpnt->request.dev)].ten = 0;
+	    if (rscsi_disks[DEVICE_NR(SCpnt->request.rq_dev)].ten) {
+		rscsi_disks[DEVICE_NR(SCpnt->request.rq_dev)].ten = 0;
 		requeue_sd_request(SCpnt);
 		result = 0;
 	    } else {
@@ -371,10 +370,10 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
     }  /* driver byte != 0 */
     if (result) {
 	printk("SCSI disk error : host %d channel %d id %d lun %d return code = %x\n",
-	       rscsi_disks[DEVICE_NR(SCpnt->request.dev)].device->host->host_no,
-	       rscsi_disks[DEVICE_NR(SCpnt->request.dev)].device->channel,
-	   rscsi_disks[DEVICE_NR(SCpnt->request.dev)].device->id,
-	     rscsi_disks[DEVICE_NR(SCpnt->request.dev)].device->lun, result);
+	       rscsi_disks[DEVICE_NR(SCpnt->request.rq_dev)].device->host->host_no,
+	       rscsi_disks[DEVICE_NR(SCpnt->request.rq_dev)].device->channel,
+	   rscsi_disks[DEVICE_NR(SCpnt->request.rq_dev)].device->id,
+	     rscsi_disks[DEVICE_NR(SCpnt->request.rq_dev)].device->lun, result);
 	
 	if (driver_byte(result) & DRIVER_SENSE)
 	    print_sense("sd", SCpnt);
@@ -401,13 +400,13 @@ static void do_sd_request (void)
     save_flags(flags);
     while (1==1){
 	cli();
-	if (CURRENT != NULL && CURRENT->dev == -1) {
+	if (CURRENT != NULL && CURRENT->rq_status == RQ_INACTIVE) {
 	    restore_flags(flags);
 	    return;
 	};
 	
 	INIT_SCSI_REQUEST;
-        SDev = rscsi_disks[DEVICE_NR(MINOR(CURRENT->dev))].device;
+        SDev = rscsi_disks[DEVICE_NR(CURRENT->rq_dev)].device;
         
         /*
          * I am not sure where the best place to do this is.  We need
@@ -444,7 +443,7 @@ static void do_sd_request (void)
 
 	if (flag++ == 0)
 	    SCpnt = allocate_device(&CURRENT,
-				    rscsi_disks[DEVICE_NR(MINOR(CURRENT->dev))].device, 0); 
+				    rscsi_disks[DEVICE_NR(CURRENT->rq_dev)].device, 0); 
 	else SCpnt = NULL;
 	
 	/*
@@ -469,12 +468,12 @@ static void do_sd_request (void)
 	    cli();
 	    req = CURRENT;
 	    while(req){
-		SCpnt = request_queueable(req, rscsi_disks[DEVICE_NR(MINOR(req->dev))].device);
+		SCpnt = request_queueable(req, rscsi_disks[DEVICE_NR(req->rq_dev)].device);
 		if(SCpnt) break;
 		req1 = req;
 		req = req->next;
 	    };
-	    if (SCpnt && req->dev == -1) {
+	    if (SCpnt && req->rq_status == RQ_INACTIVE) {
 		if (req == CURRENT) 
 		    CURRENT = CURRENT->next;
 		else
@@ -492,7 +491,7 @@ static void do_sd_request (void)
 
 static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 {
-    int dev, block, this_count;
+    int dev, devm, block, this_count;
     unsigned char cmd[10];
     int bounce_size, contiguous;
     int max_sg;
@@ -501,29 +500,30 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
     
  repeat:
     
-    if(!SCpnt || SCpnt->request.dev <= 0) {
+    if(!SCpnt || SCpnt->request.rq_status == RQ_INACTIVE) {
 	do_sd_request();
 	return;
     }
     
-    dev =  MINOR(SCpnt->request.dev);
+    devm =  MINOR(SCpnt->request.rq_dev);
+    dev = DEVICE_NR(SCpnt->request.rq_dev);
+
     block = SCpnt->request.sector;
     this_count = 0;
 
 #ifdef DEBUG
-    printk("Doing sd request, dev = %d, block = %d\n", dev, block);
+    printk("Doing sd request, dev = %d, block = %d\n", devm, block);
 #endif
     
-    if (dev >= (sd_template.dev_max << 4) || 
-	!rscsi_disks[DEVICE_NR(dev)].device ||
-	block + SCpnt->request.nr_sectors > sd[dev].nr_sects)
+    if (devm >= (sd_template.dev_max << 4) || 
+	!rscsi_disks[dev].device ||
+	block + SCpnt->request.nr_sectors > sd[devm].nr_sects)
     {
 	SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
 	goto repeat;
     }
     
-    block += sd[dev].start_sect;
-    dev = DEVICE_NR(dev);
+    block += sd[devm].start_sect;
     
     if (rscsi_disks[dev].device->changed)
     {
@@ -538,7 +538,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
     
 #ifdef DEBUG
     printk("sd%c : real dev = /dev/sd%c, block = %d\n", 
-	   'a' + MINOR(SCpnt->request.dev), dev, block);
+	   'a' + devm, dev, block);
 #endif
     
     /*
@@ -819,7 +819,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
     };
 #ifdef DEBUG
     printk("sd%c : %s %d/%d 512 byte blocks.\n", 
-	   'a' + MINOR(SCpnt->request.dev),
+	   'a' + devm,
 	   (SCpnt->request.cmd == WRITE) ? "writing" : "reading",
 	   this_count, SCpnt->request.nr_sectors);
 #endif
@@ -880,13 +880,13 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 		 MAX_RETRIES);
 }
 
-static int check_scsidisk_media_change(dev_t full_dev){
+static int check_scsidisk_media_change(kdev_t full_dev){
     int retval;
     int target;
     struct inode inode;
     int flag = 0;
     
-    target =  DEVICE_NR(MINOR(full_dev));
+    target =  DEVICE_NR(full_dev);
     
     if (target >= sd_template.dev_max ||
 	!rscsi_disks[target].device) {
@@ -919,7 +919,7 @@ static void sd_init_done (Scsi_Cmnd * SCpnt)
     struct request * req;
     
     req = &SCpnt->request;
-    req->dev = 0xfffe; /* Busy, but indicate request done */
+    req->rq_status = RQ_SCSI_DONE; /* Busy, but indicate request done */
     
     if (req->sem != NULL) {
 	up(req->sem);
@@ -953,7 +953,7 @@ static int sd_init_onedisk(int i)
 		cmd[0] = TEST_UNIT_READY;
 		cmd[1] = (rscsi_disks[i].device->lun << 5) & 0xe0;
 		memset ((void *) &cmd[2], 0, 8);
-		SCpnt->request.dev = 0xffff;  /* Mark as really busy again */
+		SCpnt->request.rq_status = RQ_SCSI_BUSY;  /* Mark as really busy again */
 		SCpnt->cmd_len = 0;
 		SCpnt->sense_buffer[0] = 0;
 		SCpnt->sense_buffer[2] = 0;
@@ -963,7 +963,7 @@ static int sd_init_onedisk(int i)
 			     512, sd_init_done,  SD_TIMEOUT,
 			     MAX_RETRIES);
 		
-		while(SCpnt->request.dev != 0xfffe) barrier();
+		while(SCpnt->request.rq_status != RQ_SCSI_DONE) barrier();
 		
 		the_result = SCpnt->result;
 		retries++;
@@ -985,7 +985,7 @@ static int sd_init_onedisk(int i)
 		    memset ((void *) &cmd[2], 0, 8);
 		    cmd[4] = 1; /* Start spin cycle */
 		    /* Mark as really busy again */
-		    SCpnt->request.dev = 0xffff; 
+		    SCpnt->request.rq_status = RQ_SCSI_BUSY; 
 		    SCpnt->cmd_len = 0;
 		    SCpnt->sense_buffer[0] = 0;
 		    SCpnt->sense_buffer[2] = 0;
@@ -995,8 +995,8 @@ static int sd_init_onedisk(int i)
 				 512, sd_init_done,  SD_TIMEOUT,
 				 MAX_RETRIES);
 		    
-		    while(SCpnt->request.dev != 0xfffe)
-	    barrier();
+		    while(SCpnt->request.rq_status != RQ_SCSI_DONE)
+		      barrier();
 		    
 		    spintime = jiffies;
 		};
@@ -1021,7 +1021,7 @@ static int sd_init_onedisk(int i)
 	cmd[1] = (rscsi_disks[i].device->lun << 5) & 0xe0;
 	memset ((void *) &cmd[2], 0, 8);
 	memset ((void *) buffer, 0, 8);
-	SCpnt->request.dev = 0xffff;  /* Mark as really busy again */
+	SCpnt->request.rq_status = RQ_SCSI_BUSY;  /* Mark as really busy again */
 	SCpnt->cmd_len = 0;
 	SCpnt->sense_buffer[0] = 0;
 	SCpnt->sense_buffer[2] = 0;
@@ -1031,25 +1031,26 @@ static int sd_init_onedisk(int i)
 		     8, sd_init_done,  SD_TIMEOUT,
 		     MAX_RETRIES);
 	
-	if (current->pid == 0)
-	    while(SCpnt->request.dev != 0xfffe)
-	barrier();
-	else
-	    if (SCpnt->request.dev != 0xfffe){
+	if (current->pid == 0) {
+	    while(SCpnt->request.rq_status != RQ_SCSI_DONE)
+	      barrier();
+	} else {
+	    if (SCpnt->request.rq_status != RQ_SCSI_DONE){
 		struct semaphore sem = MUTEX_LOCKED;
 		SCpnt->request.sem = &sem;
 		down(&sem);
 		/* Hmm.. Have to ask about this one.. */
-		while (SCpnt->request.dev != 0xfffe) 
-	    schedule();
-	    };
+		while (SCpnt->request.rq_status != RQ_SCSI_DONE) 
+		  schedule();
+	    }
+	}
 	
 	the_result = SCpnt->result;
 	retries--;
 	
     } while(the_result && retries);
     
-    SCpnt->request.dev = -1;  /* Mark as not busy */
+    SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
     
     wake_up(&SCpnt->device->device_wait); 
     
@@ -1224,7 +1225,7 @@ static void sd_finish()
 	    if (MODULE_FLAG
 		&& !rscsi_disks[i].has_part_table) {
 		sd_sizes[i << 4] = rscsi_disks[i].capacity;
-		revalidate_scsidisk(i << 4, 0);
+		revalidate_scsidisk(MKDEV(MAJOR_NR, i << 4), 0);
 	    }
 	    rscsi_disks[i].has_part_table = 1;
 	}
@@ -1288,15 +1289,15 @@ static int sd_attach(Scsi_Device * SDp){
  * usage == 1 (we need an open channel to use an ioctl :-), so this
  * is our limit.
  */
-int revalidate_scsidisk(int dev, int maxusage){
-    int target, major;
+int revalidate_scsidisk(kdev_t dev, int maxusage){
+    int target;
     struct gendisk * gdev;
     unsigned long flags;
     int max_p;
     int start;
     int i;
     
-    target =  DEVICE_NR(MINOR(dev));
+    target =  DEVICE_NR(dev);
     gdev = &GENDISK_STRUCT;
     
     save_flags(flags);
@@ -1311,14 +1312,15 @@ int revalidate_scsidisk(int dev, int maxusage){
     
     max_p = gdev->max_p;
     start = target << gdev->minor_shift;
-    major = MAJOR_NR << 8;
     
     for (i=max_p - 1; i >=0 ; i--) {
-	sync_dev(major | start | i);
-	invalidate_inodes(major | start | i);
-	invalidate_buffers(major | start | i);
-	gdev->part[start+i].start_sect = 0;
-	gdev->part[start+i].nr_sects = 0;
+	int minor = start+i;
+	kdev_t devi = MKDEV(MAJOR_NR, minor);
+	sync_dev(devi);
+	invalidate_inodes(devi);
+	invalidate_buffers(devi);
+	gdev->part[minor].start_sect = 0;
+	gdev->part[minor].nr_sects = 0;
         /*
          * Reset the blocksize for everything so that we can read
          * the partition table.
@@ -1337,7 +1339,7 @@ int revalidate_scsidisk(int dev, int maxusage){
     return 0;
 }
 
-static int fop_revalidate_scsidisk(dev_t dev){
+static int fop_revalidate_scsidisk(kdev_t dev){
     return revalidate_scsidisk(dev, 0);
 }
 
@@ -1347,7 +1349,6 @@ static void sd_detach(Scsi_Device * SDp)
     Scsi_Disk * dpnt;
     int i;
     int max_p;
-    int major;
     int start;
     
     for(dpnt = rscsi_disks, i=0; i<sd_template.dev_max; i++, dpnt++) 
@@ -1357,15 +1358,16 @@ static void sd_detach(Scsi_Device * SDp)
 	     * everything */
 	    max_p = sd_gendisk.max_p;
 	    start = i << sd_gendisk.minor_shift;
-	    major = MAJOR_NR << 8;
 	    
 	    for (i=max_p - 1; i >=0 ; i--) {
-		sync_dev(major | start | i);
-		invalidate_inodes(major | start | i);
-		invalidate_buffers(major | start | i);
-		sd_gendisk.part[start+i].start_sect = 0;
-		sd_gendisk.part[start+i].nr_sects = 0;
-		sd_sizes[start+i] = 0;
+		int minor = start+i;
+		kdev_t devi = MKDEV(MAJOR_NR, minor);
+		sync_dev(devi);
+		invalidate_inodes(devi);
+		invalidate_buffers(devi);
+		sd_gendisk.part[minor].start_sect = 0;
+		sd_gendisk.part[minor].nr_sects = 0;
+		sd_sizes[minor] = 0;
 	    };
 	    
 	    dpnt->has_part_table = 0;

@@ -58,14 +58,13 @@ sound_read (struct inode *inode, struct file *file, char *buf, int count)
 {
   int             dev;
 
-  dev = inode->i_rdev;
-  dev = MINOR (dev);
+  dev = MINOR(inode->i_rdev);
 
   return sound_read_sw (dev, &files[dev], buf, count);
 }
 
 static int
-sound_write (struct inode *inode, struct file *file, char *buf, int count)
+sound_write (struct inode *inode, struct file *file, const char *buf, int count)
 {
   int             dev;
 
@@ -74,8 +73,7 @@ sound_write (struct inode *inode, struct file *file, char *buf, int count)
 
 #endif
 
-  dev = inode->i_rdev;
-  dev = MINOR (dev);
+  dev = MINOR(inode->i_rdev);
 
   return sound_write_sw (dev, &files[dev], buf, count);
 }
@@ -92,8 +90,7 @@ sound_open (struct inode *inode, struct file *file)
   int             dev, retval;
   struct fileinfo tmp_file;
 
-  dev = inode->i_rdev;
-  dev = MINOR (dev);
+  dev = MINOR(inode->i_rdev);
 
   if (!soundcard_configured && dev != SND_DEV_CTL && dev != SND_DEV_STATUS)
     {
@@ -127,8 +124,7 @@ sound_release (struct inode *inode, struct file *file)
 {
   int             dev;
 
-  dev = inode->i_rdev;
-  dev = MINOR (dev);
+  dev = MINOR(inode->i_rdev);
 
   sound_release_sw (dev, &files[dev]);
 #ifdef MODULE
@@ -142,8 +138,7 @@ sound_ioctl (struct inode *inode, struct file *file,
 {
   int             dev;
 
-  dev = inode->i_rdev;
-  dev = MINOR (dev);
+  dev = MINOR(inode->i_rdev);
 
   if (cmd & IOC_INOUT)
     {
@@ -176,8 +171,7 @@ sound_select (struct inode *inode, struct file *file, int sel_type, select_table
 {
   int             dev;
 
-  dev = inode->i_rdev;
-  dev = MINOR (dev);
+  dev = MINOR(inode->i_rdev);
 
   DEB (printk ("sound_select(dev=%d, type=0x%x)\n", dev, sel_type));
 
@@ -438,6 +432,7 @@ module_sound_mem_init (void)
   int             dev, ret = 0;
   unsigned long   dma_pagesize;
   char           *start_addr, *end_addr;
+  int		  order, size;
   struct dma_buffparms *dmap;
 
   for (dev = 0; dev < num_audiodevs; dev++)
@@ -497,8 +492,10 @@ module_sound_mem_init (void)
 		  }
 	      }
 #else
-	    start_addr = kmalloc (audio_devs[dev]->buffsize,
-				  GFP_DMA | GFP_KERNEL);
+	    for (order = 0, size = PAGE_SIZE;
+		 size < audio_devs[dev]->buffsize;
+		 order++, size <<= 1);
+	    start_addr = (char *) __get_free_pages(GFP_KERNEL, order, MAX_DMA_ADDRESS);
 #endif
 	    if (start_addr == NULL)
 	      ret = -ENOMEM;	/* Can't stop the loop in this case, because
@@ -545,8 +542,12 @@ module_sound_mem_release (void)
     }
 #else
   int             dev, i;
+  int		  order, size;
 
-  for (dev = 0; dev < num_audiodevs; dev++)
+  for (dev = 0; dev < num_audiodevs; dev++) {
+    for (order = 0, size = PAGE_SIZE;
+	 size < audio_devs[dev]->buffsize;
+	 order++, size <<= 1);
     if (audio_devs[dev]->buffcount > 0 && audio_devs[dev]->dmachan >= 0)
       {
 	for (i = 0; i < audio_devs[dev]->buffcount; i++)
@@ -555,9 +556,11 @@ module_sound_mem_release (void)
 	      if (debugmem)
 		printk ("sound: freeing 0x%lx\n",
 			(long) (audio_devs[dev]->dmap->raw_buf[i]));
-	      kfree (audio_devs[dev]->dmap->raw_buf[i]);
+	      free_pages((unsigned long) audio_devs[dev]->dmap->raw_buf[i], 
+			 order);
 	    }
       }
+  }
 #endif
 }
 

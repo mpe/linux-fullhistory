@@ -57,6 +57,12 @@
 #include "scsi.h"
 #include "sd.h"
 
+#include<linux/stat.h>
+struct proc_dir_entry proc_scsi_eata_pio = {
+    PROC_SCSI_EATA_PIO, 9, "eata_pio",
+    S_IFDIR | S_IRUGO | S_IXUGO, 2
+};
+
 static uint ISAbases[MAXISA] =
 {0x1F0, 0x170, 0x330, 0x230};
 static uint ISAirqs[MAXISA] =
@@ -972,6 +978,7 @@ int eata_pio_detect(Scsi_Host_Template * tpnt)
     DBG((DBG_PROBE && DBG_DELAY) || DPT_DEBUG,
 	printk("Using lots of delays to let you read the debugging output\n"));
     
+    tpnt->proc_dir = &proc_scsi_eata_pio;
 
     find_pio_PCI(&gc, tpnt);
 

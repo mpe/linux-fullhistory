@@ -204,6 +204,7 @@ static int sg_read(struct inode *inode,struct file *filp,char *buf,int count)
 {
     int dev=MINOR(inode->i_rdev);
     int i;
+    unsigned long flags;
     struct scsi_generic *device=&scsi_generics[dev];
     if ((i=verify_area(VERIFY_WRITE,buf,count)))
 	return i;
@@ -211,14 +212,23 @@ static int sg_read(struct inode *inode,struct file *filp,char *buf,int count)
     /*
      * Wait until the command is actually done.
      */
+    save_flags(flags);
+    cli();
     while(!device->pending || !device->complete)
     {
 	if (filp->f_flags & O_NONBLOCK)
+	{
+	    restore_flags(flags);
 	    return -EWOULDBLOCK;
+	}
 	interruptible_sleep_on(&device->read_wait);
 	if (current->signal & ~current->blocked)
+	{
+	    restore_flags(flags);
 	    return -ERESTARTSYS;
+	}
     }
+    restore_flags(flags);
 
     /*
      * Now copy the result back to the user buffer.
@@ -256,12 +266,12 @@ static int sg_read(struct inode *inode,struct file *filp,char *buf,int count)
  */
 static void sg_command_done(Scsi_Cmnd * SCpnt)
 {
-    int dev=SCpnt->request.dev;
-    struct scsi_generic *device=&scsi_generics[dev];
+    int dev = MINOR(SCpnt->request.rq_dev);
+    struct scsi_generic *device = &scsi_generics[dev];
     if (!device->pending)
     {
 	printk("unexpected done for sg %d\n",dev);
-	SCpnt->request.dev=-1;
+	SCpnt->request.rq_status = RQ_INACTIVE;
 	return;
     }
 
@@ -282,7 +292,7 @@ static void sg_command_done(Scsi_Cmnd * SCpnt)
      * result.
      */
     device->complete=1;
-    SCpnt->request.dev=-1;
+    SCpnt->request.rq_status = RQ_INACTIVE;
     wake_up(&scsi_generics[dev].read_wait);
 }
 
@@ -293,7 +303,8 @@ static int sg_write(struct inode *inode,struct file *filp,const char *buf,int co
 {
     int			  bsize,size,amt,i;
     unsigned char	  cmnd[MAX_COMMAND_SIZE];
-    int			  dev=MINOR(inode->i_rdev);
+    kdev_t		  devt = inode->i_rdev;
+    int			  dev = MINOR(devt);
     struct scsi_generic   * device=&scsi_generics[dev];
     int			  direction;
     unsigned char	  opcode;
@@ -394,7 +405,8 @@ static int sg_write(struct inode *inode,struct file *filp,const char *buf,int co
     /*
      * Now we need to grab the command itself from the user's buffer.
      */
-    SCpnt->request.dev=dev;
+    SCpnt->request.rq_dev = devt;
+    SCpnt->request.rq_status = RQ_ACTIVE;
     SCpnt->sense_buffer[0]=0;
     opcode = get_user(buf);
     size=COMMAND_SIZE(opcode);
@@ -462,7 +474,6 @@ static int sg_write(struct inode *inode,struct file *filp,const char *buf,int co
 static int sg_select(struct inode *inode, struct file *file, int sel_type, select_table * wait)
 {
     int dev=MINOR(inode->i_rdev);
-    int i;
     int r = 0;
     struct scsi_generic *device=&scsi_generics[dev];
 

@@ -15,9 +15,9 @@
  *	     registered HBA as a single file. 
  *  95/05/30 Added rudimentary write support for parameter passing
  *  95/07/04 Fixed bugs in directory handling
+ *  95/09/13 Update to support the new proc-dir tree
  *
  *  TODO: Improve support to write to the driver files
- *	  Optimize directory handling 
  *	  Add some more comments
  */
 #include <linux/autoconf.h>
@@ -34,10 +34,8 @@ static int proc_readscsi(struct inode * inode, struct file * file,
 			 char * buf, int count);
 static int proc_writescsi(struct inode * inode, struct file * file,
 			 const char * buf, int count);
-static int proc_lookupscsi(struct inode *,const char *,int,struct inode **);
 static int proc_scsilseek(struct inode *, struct file *, off_t, int);
 
-extern uint count_templates(void);
 extern void build_proc_dir_hba_entries(uint);
 
 /* the *_get_info() functions are in the respective scsi driver code */
@@ -48,7 +46,7 @@ static struct file_operations proc_scsi_operations = {
     proc_scsilseek,	/* lseek   */
     proc_readscsi,	/* read	   */
     proc_writescsi,	/* write   */
-    NULL,		/* readdir */
+    proc_readdir,	/* readdir */
     NULL,		/* select  */
     NULL,		/* ioctl   */
     NULL,		/* mmap	   */
@@ -63,7 +61,7 @@ static struct file_operations proc_scsi_operations = {
 struct inode_operations proc_scsi_inode_operations = {
     &proc_scsi_operations,  /* default scsi directory file-ops */
     NULL,	    /* create	   */
-    proc_lookupscsi,/* lookup	   */
+    proc_lookup,    /* lookup	   */
     NULL,	    /* link	   */
     NULL,	    /* unlink	   */
     NULL,	    /* symlink	   */
@@ -77,94 +75,6 @@ struct inode_operations proc_scsi_inode_operations = {
     NULL,	    /* truncate	   */
     NULL	    /* permission  */
 };
-
-struct proc_dir_entry scsi_dir[PROC_SCSI_FILE - PROC_SCSI_SCSI + 3]; 
-struct proc_dir_entry scsi_hba_dir[(PROC_SCSI_LAST - PROC_SCSI_FILE) * 4]; 
-
-static struct proc_dir_entry scsi_dir2[] = {
-    { PROC_SCSI,		 1, "." },
-    { PROC_ROOT_INO,		 2, ".." },
-    { PROC_SCSI_NOT_PRESENT,	11, "not.present" },
-    { 0,			 0, NULL }
-};
-
-inline static uint count_dir_entries(uint inode, uint *num)
-{
-    struct proc_dir_entry *dir;
-    uint index, flag;
-
-    (uint) *num = flag = index = 0;    
-    
-    if(dispatch_scsi_info_ptr) {
-	if (inode == PROC_SCSI) { 
-	    dir = scsi_dir;
-            while(dir[(uint)*num].low_ino)
-                (*num)++;
-        } else {
-            /* Here we do not simply count the entries. Since the array
-             * contains the directories of all drivers, we need to return
-             * a pointer to the beginning of the directory information
-             * and its length.
-             */
-	    dir = scsi_hba_dir;
-            while(dir[index].low_ino || dir[index].low_ino <= PROC_SCSI_LAST) {
-                if(dir[index].low_ino == inode)
-                    flag = 1;
-                if(dir[index].low_ino == 0) {
-                    if(flag == 1)
-                        break;
-                    else
-                        *num = 0;
-                } else {
-                    (*num)++;
-                }
-                index++;
-            }
-            return(index - (*num));
-        }
-    }
-    else {
-        dir = scsi_dir2;
-        while(dir[(uint)*num].low_ino)
-            (*num)++;
-    }   
-    return(0);
-}
-
-static int proc_lookupscsi(struct inode * dir, const char * name, int len,
-			   struct inode ** result)
-{
-    struct proc_dir_entry *de = NULL;
-
-    *result = NULL;
-    if (!dir)
-	return(-ENOENT);
-    if (!S_ISDIR(dir->i_mode)) {
-	iput(dir);
-	return(-ENOENT);
-    }
-    if (dispatch_scsi_info_ptr != NULL) {
-	if (dir->i_ino <= PROC_SCSI_SCSI)
-	    de = scsi_dir;
-	else {
-	    de = &scsi_hba_dir[dispatch_scsi_info_ptr(dir->i_ino, 0, 0, 0, 0, 2)];
-	}
-    }
-    else
-	de = scsi_dir2;
-    
-    for (; de->name ; de++) {
-	if (!proc_match(len, name, de))
-	    continue;
-	*result = proc_get_inode(dir->i_sb, de->low_ino, de);
-	iput(dir);
-	if (!*result)
-	    return(-ENOENT);
-	return(0);
-    }
-    iput(dir);
-    return(-ENOENT);
-}
 
 int get_not_present_info(char *buffer, char **start, off_t offset, int length)
 {
@@ -255,20 +165,17 @@ static int proc_writescsi(struct inode * inode, struct file * file,
     int ret = 0;
     char * page;
     
-    if (!(page = (char *) __get_free_page(GFP_KERNEL)))
-	return(-ENOMEM);
-
     if(count > PROC_BLOCK_SIZE) {
 	return(-EOVERFLOW);
     }
 
     if(dispatch_scsi_info_ptr != NULL) {
+        if (!(page = (char *) __get_free_page(GFP_KERNEL)))
+            return(-ENOMEM);
 	memcpy_fromfs(page, buf, count);
 	ret = dispatch_scsi_info_ptr(inode->i_ino, page, 0, 0, count, 1);
-    } else {
-	free_page((ulong) page);   
+    } else 
 	return(-ENOPKG);	  /* Nothing here */
-    }
     
     free_page((ulong) page);
     return(ret);

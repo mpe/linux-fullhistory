@@ -156,7 +156,7 @@ static int parse_options(char *options, struct iso9660_options * popt)
 /*
  * look if the driver can tell the multi session redirection value
  */
-static unsigned int isofs_get_last_session(int dev)
+static unsigned int isofs_get_last_session(kdev_t dev)
 {
   struct cdrom_multisession ms_info;
   unsigned int vol_desc_start;
@@ -195,7 +195,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	int iso_blknum;
 	unsigned int blocksize_bits;
 	int high_sierra;
-	int dev=s->s_dev;
+	kdev_t dev = s->s_dev;
 	unsigned int vol_desc_start;
 
 	struct iso_volume_descriptor *vdp;
@@ -248,9 +248,10 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	        printk("isofs.inode: iso_blknum=%d\n", iso_blknum);
 #endif 0
 		if (!(bh = bread(dev, iso_blknum << (ISOFS_BLOCK_BITS-blocksize_bits), opt.blocksize))) {
-			s->s_dev=0;
-			printk("isofs_read_super: bread failed, dev 0x%x iso_blknum %d\n",
-			       dev, iso_blknum);
+			s->s_dev = 0;
+			printk("isofs_read_super: bread failed, dev "
+			       "%s iso_blknum %d\n",
+			       kdevname(dev), iso_blknum);
 			unlock_super(s);
 			MOD_DEC_USE_COUNT;
 			return NULL;
@@ -374,7 +375,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	unlock_super(s);
 
 	if (!(s->s_mounted)) {
-		s->s_dev=0;
+		s->s_dev = 0;
 		printk("get root inode failed\n");
 		MOD_DEC_USE_COUNT;
 		return NULL;

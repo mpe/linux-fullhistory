@@ -10,6 +10,8 @@
 #include <linux/linkage.h>
 #include <asm/segment.h>
 
+#define NR_IRQS 16
+
 extern void disable_irq(unsigned int);
 extern void enable_irq(unsigned int);
 

@@ -24,7 +24,7 @@
  ************************************************************************/
 
 #define CHECKPAL        0        /* EISA pal checking on/off            */
-#define NEWSTUFF        1        /* Some changes for ISA/EISA boards    */
+#define NEWSTUFF        0        /* Some changes for ISA/EISA boards    */
 
 /************************************************************************
  * Debug options.                                                       * 
@@ -74,13 +74,12 @@ int eata_release(struct Scsi_Host *);
 #endif
 
 #define EATA_DMA {                   \
-	NULL, NULL,                  \
-	eata_proc_info,/* procinfo       */      \
-	"eata_dma",    /* proc dir entry */      \
-	PROC_SCSI_EATA,/* proc dir inode */      \
-	"EATA (Extended Attachment) HBA driver", \
-	eata_detect,                 \
-	eata_release,                \
+        NULL, NULL,                  \
+        NULL,               /* proc_dir_entry */ \
+        eata_proc_info,     /* procinfo       */ \
+        "EATA (Extended Attachment) HBA driver", \
+        eata_detect,                 \
+        eata_release,                \
 	NULL, NULL,                  \
 	eata_queue,                  \
 	eata_abort,                  \

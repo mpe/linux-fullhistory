@@ -31,6 +31,7 @@
 
 #include "../block/blk.h"
 #include "scsi.h"
+#include "scsi_ioctl.h"
 #include "hosts.h"
 #include "constants.h"
 
@@ -39,15 +40,18 @@
  * This source file contains the symbol table used by scsi loadable
  * modules.
  */
+extern int scsicam_bios_param (Disk * disk,
+                               int dev,	int *ip	); 
+
 
 extern void print_command (unsigned char *command);
-extern void print_sense(char * devclass, Scsi_Cmnd * SCpnt);
+extern void print_sense(const char * devclass, Scsi_Cmnd * SCpnt);
 
 struct symbol_table scsi_symbol_table = {
 #include <linux/symtab_begin.h>
 #ifdef CONFIG_MODVERSIONS
     { (void *)1 /* Version version :-) */, 
-	SYMBOL_NAME_STR("Using_Versions") },
+	SYMBOL_NAME_STR(Using_Versions) },
 #endif
     X(scsi_register_module),
     X(scsi_unregister_module),

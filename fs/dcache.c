@@ -41,7 +41,7 @@ struct hash_list {
  */
 struct dir_cache_entry {
 	struct hash_list h;
-	unsigned long dev;
+	kdev_t dc_dev;
 	unsigned long dir;
 	unsigned long version;
 	unsigned long ino;
@@ -52,8 +52,8 @@ struct dir_cache_entry {
 };
 
 #define COPYDATA(de, newde) \
-memcpy((void *) &newde->dev, (void *) &de->dev, \
-4*sizeof(unsigned long) + 1 + DCACHE_NAME_LEN)
+memcpy((void *) &newde->dc_dev, (void *) &de->dc_dev, \
+sizeof(kdev_t) + 3*sizeof(unsigned long) + 1 + DCACHE_NAME_LEN)
 
 static struct dir_cache_entry level1_cache[DCACHE_SIZE];
 static struct dir_cache_entry level2_cache[DCACHE_SIZE];
@@ -70,7 +70,7 @@ static struct dir_cache_entry * level2_head;
  * itself on the doubly-linked list, not just a pointer to the first entry.
  */
 #define DCACHE_HASH_QUEUES 19
-#define hash_fn(dev,dir,namehash) (((dev) ^ (dir) ^ (namehash)) % DCACHE_HASH_QUEUES)
+#define hash_fn(dev,dir,namehash) ((HASHDEV(dev) ^ (dir) ^ (namehash)) % DCACHE_HASH_QUEUES)
 
 static struct hash_list hash_table[DCACHE_HASH_QUEUES];
 
@@ -135,7 +135,7 @@ static struct dir_cache_entry * find_entry(struct inode * dir, const char * name
 	struct dir_cache_entry * de = hash->next;
 
 	for (de = hash->next ; de != (struct dir_cache_entry *) hash ; de = de->h.next) {
-		if (de->dev != dir->i_dev)
+		if (de->dc_dev != dir->i_dev)
 			continue;
 		if (de->dir != dir->i_ino)
 			continue;
@@ -201,7 +201,7 @@ void dcache_add(struct inode * dir, const char * name, int len, unsigned long in
 	de = level1_head;
 	level1_head = de->next_lru;
 	remove_hash(de);
-	de->dev = dir->i_dev;
+	de->dc_dev = dir->i_dev;
 	de->dir = dir->i_ino;
 	de->version = dir->i_version;
 	de->ino = ino;

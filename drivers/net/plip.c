@@ -1,4 +1,4 @@
-/* $Id: plip.c,v 1.12 1995/02/11 10:26:05 gniibe Exp $ */
+/* $Id: plip.c,v 1.14 1995/09/18 04:57:24 gniibe Exp $ */
 /* PLIP: A parallel port "network" driver for Linux. */
 /* This driver is for parallel port with 5-bit cable (LapLink (R) cable). */
 /*
@@ -11,6 +11,19 @@
  *
  *		Modularization and ifreq/ifmap support by Alan Cox.
  *		Rewritten by Niibe Yutaka.
+ *
+ * Fixes:
+ *		9-Sep-95 Philip Blundell <pjb27@cam.ac.uk>
+ *		  - only claim 3 bytes of I/O space for port at 0x3bc
+ *		  - treat NULL return from register_netdev() as success in
+ *		    init_module()
+ *		  - added message if driver loaded as a module but no
+ *		    interfaces present.
+ *		  - release claimed I/O ports if malloc() fails during init.
+ *		
+ *		Niibe Yutaka
+ *		  - Module initialization.  You can specify I/O addr and IRQ:
+ *			# insmod plip.o io=0x3bc irq=7
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -32,7 +45,7 @@
  *     So, this PLIP can't communicate the PLIP of Linux v1.0.
  */
 
-static const char *version = "NET3 PLIP version 2.0 gniibe@mri.co.jp\n";
+static const char *version = "NET3 PLIP version 2.1 gniibe@mri.co.jp\n";
 
 /*
   Sources:
@@ -205,9 +218,10 @@ int
 plip_init(struct device *dev)
 {
 	struct net_local *nl;
+	int iosize = (PAR_DATA(dev) == 0x3bc) ? 3 : 8;
 
 	/* Check region before the probe */
-	if (check_region(PAR_DATA(dev), (PAR_DATA(dev) == 0x3bc)? 4 : 8) < 0)
+	if (check_region(PAR_DATA(dev), iosize) < 0)
 		return -ENODEV;
 
 	/* Check that there is something at base_addr. */
@@ -244,7 +258,7 @@ plip_init(struct device *dev)
 			       " Please set IRQ by ifconfig.\n", irq);
 	}
 
-	request_region(PAR_DATA(dev), (PAR_DATA(dev) == 0x3bc)? 4 : 8, dev->name);
+	request_region(PAR_DATA(dev), iosize, dev->name);
 
 	/* Fill in the generic fields of the device structure. */
 	ether_setup(dev);
@@ -260,8 +274,11 @@ plip_init(struct device *dev)
 
 	/* Set the private structure */
 	dev->priv = kmalloc(sizeof (struct net_local), GFP_KERNEL);
-	if (dev->priv == NULL)
+	if (dev->priv == NULL) {
+		printk(KERN_ERR "%s: out of memory\n", dev->name);
+		release_region(PAR_DATA(dev), iosize);
 		return -ENOMEM;
+	}
 	memset(dev->priv, 0, sizeof(struct net_local));
 	nl = (struct net_local *) dev->priv;
 
@@ -467,12 +484,10 @@ plip_receive(unsigned short nibble_timeout, unsigned short status_addr,
 		outb(0x00, --status_addr); /* send ACK */
 		status_addr++;
 		*ns_p = PLIP_NB_BEGIN;
-		return OK;
-
 	case PLIP_NB_2:
 		break;
 	}
-	return TIMEOUT; /* XX: ?? */
+	return OK;
 }
 
 /* PLIP_RECEIVE_PACKET --- receive a packet */
@@ -634,7 +649,7 @@ plip_send(unsigned short nibble_timeout, unsigned short data_addr,
 		*ns_p = PLIP_NB_BEGIN;
 		return OK;
 	}
-	return TIMEOUT;
+	return OK;
 }
 
 /* PLIP_SEND_PACKET --- send a packet */
@@ -1036,67 +1051,84 @@ plip_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+int io[] = {0, 0, 0};
+int irq[] = {0, 0, 0};
 
-static struct device dev_plip0 = 
-{
-	"plip0" /*"plip"*/,
-	0, 0, 0, 0,		/* memory */
-	0x3BC, 5,		/* base, irq */
-	0, 0, 0, NULL, plip_init 
-};
-
-static struct device dev_plip1 = 
-{
-	"plip1" /*"plip"*/,
-	0, 0, 0, 0,		/* memory */
-	0x378, 7,		/* base, irq */
-	0, 0, 0, NULL, plip_init 
-};
-
-static struct device dev_plip2 = 
-{
-	"plip2" /*"plip"*/,
-	0, 0, 0, 0,		/* memory */
-	0x278, 2,		/* base, irq */
-	0, 0, 0, NULL, plip_init 
+static struct device dev_plip[] = {
+	{
+		"plip0",
+		0, 0, 0, 0,		/* memory */
+		0x3BC, 5,		/* base, irq */
+		0, 0, 0, NULL, plip_init 
+	},
+	{
+		"plip1",
+		0, 0, 0, 0,		/* memory */
+		0x378, 7,		/* base, irq */
+		0, 0, 0, NULL, plip_init 
+	},
+	{
+		"plip2",
+		0, 0, 0, 0,		/* memory */
+		0x278, 2,		/* base, irq */
+		0, 0, 0, NULL, plip_init 
+	}
 };
 
 int
 init_module(void)
 {
+	int no_parameters=1;
 	int devices=0;
+	int i;
 
-	if (register_netdev(&dev_plip0) != 0)
-		devices++;
-	if (register_netdev(&dev_plip1) != 0)
-		devices++;
-	if (register_netdev(&dev_plip2) != 0)
-		devices++;
-	if (devices == 0)
+	/* When user feeds parameters, use them */
+	for (i=0; i < 3; i++) {
+		int specified=0;
+
+		if (io[i] != 0) {
+			dev_plip[i].base_addr = io[i];
+			specified++;
+		}
+		if (irq[i] != 0) {
+			dev_plip[i].irq = irq[i];
+			specified++;
+		}
+		if (specified) {
+			if (register_netdev(&dev_plip[i]) != 0) {
+				printk(KERN_INFO "plip%d: Not found\n", i);
+				return -EIO;
+			}
+			no_parameters = 0;
+		}
+	}
+	if (!no_parameters)
+		return 0;
+
+	/* No parameters.  Default action is probing all interfaces. */
+	for (i=0; i < 3; i++) { 
+		if (register_netdev(&dev_plip[i]) == 0)
+			devices++;
+	}
+	if (devices == 0) {
+		printk(KERN_INFO "plip: no interfaces found\n");
 		return -EIO;
+	}
 	return 0;
 }
 
 void
 cleanup_module(void)
 {
-	if (dev_plip0.priv) {
-		unregister_netdev(&dev_plip0);
-		release_region(PAR_DATA(&dev_plip0), (PAR_DATA(&dev_plip0) == 0x3bc)? 4 : 8);
-		kfree_s(dev_plip0.priv, sizeof(struct net_local));
-		dev_plip0.priv = NULL;
-	}
-	if (dev_plip1.priv) {
-		unregister_netdev(&dev_plip1);
-		release_region(PAR_DATA(&dev_plip1), (PAR_DATA(&dev_plip1) == 0x3bc)? 4 : 8);
-		kfree_s(dev_plip1.priv, sizeof(struct net_local));
-		dev_plip1.priv = NULL;
-	}
-	if (dev_plip2.priv) {
-		unregister_netdev(&dev_plip2);
-		release_region(PAR_DATA(&dev_plip2), (PAR_DATA(&dev_plip2) == 0x3bc)? 4 : 8);
-		kfree_s(dev_plip2.priv, sizeof(struct net_local));
-		dev_plip2.priv = NULL;
+	int i;
+
+	for (i=0; i < 3; i++) {
+		if (dev_plip[i].priv) {
+			unregister_netdev(&dev_plip[i]);
+			release_region(PAR_DATA(&dev_plip[i]), (PAR_DATA(&dev_plip[i]) == 0x3bc)? 3 : 8);
+			kfree_s(dev_plip[i].priv, sizeof(struct net_local));
+			dev_plip[i].priv = NULL;
+		}
 	}
 }
 #endif /* MODULE */

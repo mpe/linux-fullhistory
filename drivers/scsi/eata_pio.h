@@ -26,7 +26,7 @@
  ************************************************************************/
 
 #define VERBOSE_SETUP			/* show startup screen of 2001 */
-#define ALLOW_DMA_BOARDS 0
+#define ALLOW_DMA_BOARDS 1
 
 /************************************************************************
  * Debug options.							* 
@@ -74,12 +74,11 @@ int eata_pio_release(struct Scsi_Host *);
 #endif
 
 
-#define EATA_PIO {		     \
-    NULL, NULL,			 \
-    eata_pio_proc_info,/* procinfo	 */  \
-    "eata_pio",	       /* proc dir entry */  \
-    PROC_SCSI_EATA_PIO,/* proc dir inode */  \
-     "EATA (Extended Attachment) PIO driver",\
+#define EATA_PIO {	         \
+    NULL, NULL,                  \
+    NULL,               /* proc_dir_entry */ \
+    eata_pio_proc_info, /* procinfo	  */ \
+    "EATA (Extended Attachment) PIO driver", \
     eata_pio_detect,		 \
     eata_pio_release,		 \
     NULL, NULL,			 \
