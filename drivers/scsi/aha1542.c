@@ -646,7 +646,7 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
       any2scsi(ccb[mbo].dataptr, buff);
     };
     ccb[mbo].idlun = (target&7)<<5 | direction | (lun & 7); /*SCSI Target Id*/
-    ccb[mbo].rsalen = 12;
+    ccb[mbo].rsalen = 16;
     ccb[mbo].linkptr[0] = ccb[mbo].linkptr[1] = ccb[mbo].linkptr[2] = 0;
     ccb[mbo].commlinkid = 0;
 

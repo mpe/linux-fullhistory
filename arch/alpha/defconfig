@@ -7,6 +7,7 @@
 #
 CONFIG_MODULES=y
 # CONFIG_MODVERSIONS is not set
+# CONFIG_KERNELD is not set
 
 #
 # General setup
@@ -130,10 +131,11 @@ CONFIG_NETDEVICES=y
 CONFIG_DUMMY=m
 # CONFIG_SLIP is not set
 # CONFIG_PPP is not set
+# CONFIG_STRIP is not set
 # CONFIG_SCC is not set
 # CONFIG_PLIP is not set
 # CONFIG_EQUALIZER is not set
-# CONFIG_FRAD is not set
+# CONFIG_DLCI is not set
 # CONFIG_NET_ALPHA is not set
 # CONFIG_NET_VENDOR_SMC is not set
 # CONFIG_LANCE is not set
@@ -184,6 +186,7 @@ CONFIG_PSMOUSE=y
 # CONFIG_82C710_MOUSE is not set
 # CONFIG_MS_BUSMOUSE is not set
 # CONFIG_ATIXL_BUSMOUSE is not set
+# CONFIG_UMISC is not set
 # CONFIG_QIC02_TAPE is not set
 # CONFIG_FTAPE is not set
 # CONFIG_APM is not set

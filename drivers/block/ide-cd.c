@@ -2105,6 +2105,14 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 	return 0;
       }
 
+    case CDROMCLOSETRAY:
+      {
+        if (drive->usage > 1)
+          return -EBUSY;
+
+        return cdrom_eject (drive, 1, NULL);
+      }
+
     case CDROMPAUSE:
       return cdrom_pause (drive, 1, NULL);
 

@@ -1439,6 +1439,17 @@ static int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 			break;
 
 		/*
+		 * We need to check signals first, to get correct SIGURG
+		 * handling.
+		 */
+		if (current->signal & ~current->blocked) {
+			if (copied)
+				break;
+			copied = -ERESTARTSYS;
+			break;
+		}
+
+		/*
 		 *	Next get a buffer.
 		 */
 		 
@@ -1502,12 +1513,6 @@ static int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 		schedule();
 		sk->socket->flags &= ~SO_WAITDATA;
 		lock_sock(sk);
-
-		if (current->signal & ~current->blocked) 
-		{
-			copied = -ERESTARTSYS;
-			break;
-		}
 		continue;
 
 	found_ok_skb:

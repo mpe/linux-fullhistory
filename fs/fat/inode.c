@@ -502,7 +502,7 @@ int fat_notify_change(struct inode * inode,struct iattr * attr)
 
 	error = inode_change_ok(inode, attr);
 	if (error)
-		return error;
+		return MSDOS_SB(inode->i_sb)->options.quiet ? 0 : error;
 
 	if (((attr->ia_valid & ATTR_UID) && 
 	     (attr->ia_uid != MSDOS_SB(inode->i_sb)->options.fs_uid)) ||

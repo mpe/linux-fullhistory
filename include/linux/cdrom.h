@@ -149,6 +149,10 @@ struct cdrom_subchnl
 	union cdrom_addr cdsc_reladdr;
 };
 
+struct cdrom_mcn {
+  u_char medium_catalog_number[14]; /* 13 ASCII digits, null-terminated */
+};
+
 /*
  * audio states (from SCSI-2, but seen with other drives, too)
  */

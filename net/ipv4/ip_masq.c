@@ -346,7 +346,7 @@ struct ip_masq * ip_masq_new(struct device *dev, int proto, __u32 saddr, __u16 s
                         save_flags(flags);
                         cli();
                 
-                        if (ip_masq_free_ports == 0) {
+                        if (*free_ports_p == 0) {
                                 restore_flags(flags);
                                 break;
                         }

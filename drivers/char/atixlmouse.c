@@ -207,7 +207,7 @@ int atixl_busmouse_init(void)
 	b = inb( ATIXL_MSE_SIGNATURE_PORT );
 	c = inb( ATIXL_MSE_SIGNATURE_PORT );
 	if (( a != b ) && ( a == c ))
-		printk("\nATI Inport ");
+		printk(KERN_INFO "\nATI Inport ");
 	else{
 		mouse.present = 0;
 		return -EIO;

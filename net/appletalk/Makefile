@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := appletalk.o
-O_OBJS	 := aarp.o ddp.o
+O_OBJS	 := aarp.o ddp.o sysctl_net_atalk.o
 M_OBJS   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

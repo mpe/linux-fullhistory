@@ -389,6 +389,7 @@ static inline int remap_request (int minor, struct request *req)
 static void do_md_request (void)
 {
   int minor;
+  long flags;
   struct request *req;
     
   while (1)
@@ -396,12 +397,13 @@ static void do_md_request (void)
 #ifdef MD_COUNT_SIZE
     int reqsize, chunksize;
 #endif
-    
+
+    save_flags (flags);
     cli ();
     req = blk_dev[MD_MAJOR].current_request;
     if (!req || (req->rq_status == RQ_INACTIVE))
     {
-      sti ();
+      restore_flags (flags);
       return;
     }
     
@@ -414,7 +416,7 @@ static void do_md_request (void)
 #endif
     
     blk_dev[MD_MAJOR].current_request = req->next;
-    sti ();
+    restore_flags (flags);
 
     minor = MINOR(req->rq_dev);
     if ((MAJOR(req->rq_dev) != MD_MAJOR) || (minor >= MAX_REAL))
@@ -486,7 +488,7 @@ void make_md_request (struct request *pending, int n)
 
       while (req && !found)
       {
-	if (req->rq_status!=RQ_ACTIVE)
+	if (req->rq_status!=RQ_ACTIVE && &blk_dev[major].plug!=req)
 	  printk ("Saw bad status request !\n");
 
 	if (req->rq_dev == dev &&

@@ -69,6 +69,33 @@ struct __sysctl_args {
 
 /* CTL_NET names: */
 
+/* /proc/sys/net/core */
+#define NET_CORE		0x01000000
+
+/* /proc/sys/net/ethernet */
+#define NET_ETHER		0x02000000
+
+/* /proc/sys/net/802 */
+#define NET_802         	0x03000000
+
+/* /proc/sys/net/unix */
+#define NET_UNIX		0x04000000
+
+/* /proc/sys/net/ipv4 */
+#define NET_IPV4		0x05000000
+
+/* /proc/sys/net/ipx */
+#define NET_IPX			0x06000000
+
+/* /proc/sys/net/appletalk */
+#define NET_ATALK		0x07000000
+
+/* /proc/sys/net/netrom */
+#define NET_NETROM		0x08000000
+
+/* /proc/sys/net/ax25 */
+#define NET_AX25		0x09000000
+
 /* CTL_PROC names: */
 
 /* CTL_FS names: */

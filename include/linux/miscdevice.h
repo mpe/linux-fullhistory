@@ -17,7 +17,7 @@ struct miscdevice
 	struct miscdevice * next, * prev;
 };
 
-extern int mouse_register(struct miscdevice * misc);
-extern int mouse_deregister(struct miscdevice * misc);
+extern int misc_register(struct miscdevice * misc);
+extern int misc_deregister(struct miscdevice * misc);
 
 #endif

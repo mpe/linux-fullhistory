@@ -620,10 +620,10 @@ ppp_changedmtu (struct ppp *ppp, int new_mtu, int new_mru)
 
 	ppp->rbuf->size -= 80;	/* reserve space for vj header expansion */
 
-	dev->mem_start	= (__u32) buf_base (new_wbuf);
-	dev->mem_end	= (__u32) (dev->mem_start + mtu);
-	dev->rmem_start = (__u32) buf_base (new_rbuf);
-	dev->rmem_end	= (__u32) (dev->rmem_start + mru);
+	dev->mem_start	= (unsigned long) buf_base (new_wbuf);
+	dev->mem_end	= (unsigned long) (dev->mem_start + mtu);
+	dev->rmem_start = (unsigned long) buf_base (new_rbuf);
+	dev->rmem_end	= (unsigned long) (dev->rmem_start + mru);
 /*
  *  Update the parameters for the new buffer sizes
  */

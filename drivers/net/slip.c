@@ -1201,7 +1201,7 @@ int slip_init_ctrl_dev(struct device *dummy)
 
 	if (slip_maxdev < 4) slip_maxdev = 4; /* Sanity */
 
-	printk("SLIP: version %s (dynamic channels, max=%d)"
+	printk(KERN_INFO "SLIP: version %s (dynamic channels, max=%d)"
 #ifdef CONFIG_SLIP_MODE_SLIP6
 	       " (6 bit encapsulation enabled)"
 #endif
@@ -1211,10 +1211,10 @@ int slip_init_ctrl_dev(struct device *dummy)
 	printk("CSLIP: code copyright 1989 Regents of the University of California.\n");
 #endif
 #ifdef CONFIG_AX25
-	printk("AX25: KISS encapsulation enabled.\n");
+	printk(KERN_INFO "AX25: KISS encapsulation enabled.\n");
 #endif
 #ifdef CONFIG_SLIP_SMART
-	printk("SLIP linefill/keepalive option.\n");
+	printk(KERN_INFO "SLIP linefill/keepalive option.\n");
 #endif	
 
 	slip_ctrls = (slip_ctrl_t **) kmalloc(sizeof(void*)*slip_maxdev, GFP_KERNEL);

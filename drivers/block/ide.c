@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.35  Mar 23, 1996
+ *  linux/drivers/block/ide.c	Version 5.36  Mar 30, 1996
  *
  *  Copyright (C) 1994-1996  Linus Torvalds & authors (see below)
  */
@@ -223,6 +223,7 @@
  *			fix cdrom ioctl problem from 5.33
  * Version 5.35		cosmetic changes
  *			fix cli() problem in try_to_identify()
+ * Version 5.36		fixes to optional PCMCIA support
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -3233,7 +3234,7 @@ int ide_register(int io_base, int ctl_port, int irq)
 		hwif = &ide_hwifs[index];
 		if (hwif->present) {
 			if (hwif->io_base == io_base || hwif->ctl_port == ctl_port)
-				break;
+				break; /* this ide port already exists */
 		} else {
 			hwif->io_base = io_base;
 			hwif->ctl_port = ctl_port;
@@ -3241,10 +3242,10 @@ int ide_register(int io_base, int ctl_port, int irq)
 			hwif->noprobe = 0;
 			if (!hwif_init(index))
 				break;
-			hwif->gd->real_devices = hwif->drives[0].name;
 			for (i = 0; i < hwif->gd->nr_real; i++)
 				revalidate_disk(MKDEV(hwif->major, i<<PARTN_BITS));
 			rc = index;
+			break;
 		}
 	}
 	restore_flags(flags);
@@ -3253,7 +3254,7 @@ int ide_register(int io_base, int ctl_port, int irq)
 
 void ide_unregister (unsigned int index)
 {
-	struct gendisk *prev_gd, *gd;
+	struct gendisk *gd, **gdp;
 	ide_hwif_t *hwif, *g;
 	ide_hwgroup_t *hwgroup;
 	int irq_count = 0;
@@ -3284,6 +3285,14 @@ void ide_unregister (unsigned int index)
 		free_irq(hwif->irq, hwgroup);
 
 	/*
+	 * Note that we only release the standard ports,
+	 * and do not even try to handle any extra ports
+	 * allocated for weird IDE interface chipsets.
+	 */
+	release_region(hwif->io_base, 8);
+	release_region(hwif->ctl_port, 1);
+
+	/*
 	 * Remove us from the hwgroup, and free
 	 * the hwgroup if we were the only member
 	 */
@@ -3304,18 +3313,13 @@ void ide_unregister (unsigned int index)
 	kfree(blksize_size[hwif->major]);
 	blk_dev[hwif->major].request_fn = NULL;
 	blksize_size[hwif->major] = NULL;
-	gd = gendisk_head; prev_gd = NULL;
-	while (gd && (gd != hwif->gd)) {
-		prev_gd = gd;
-		gd = gd->next;
-	}
-	if (gd != hwif->gd)
+	for (gdp = &gendisk_head; *gdp; gdp = &((*gdp)->next))
+		if (*gdp == hwif->gd)
+			break;
+	if (*gdp == NULL)
 		printk("gd not in disk chain!\n");
 	else {
-		if (prev_gd != NULL)
-			prev_gd->next = gd->next;
-		else
-			gendisk_head = gd->next;
+		gd = *gdp; *gdp = gd->next;
 		kfree(gd->sizes);
 		kfree(gd->part);
 		kfree(gd);

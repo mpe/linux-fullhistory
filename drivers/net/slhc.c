@@ -750,7 +750,7 @@ static void export_slhc_syms(void)
 
 int init_module(void)
 {
-	printk("CSLIP: code copyright 1989 Regents of the University of California\n");
+	printk(KERN_INFO "CSLIP: code copyright 1989 Regents of the University of California\n");
 	export_slhc_syms();
 	return 0;
 }

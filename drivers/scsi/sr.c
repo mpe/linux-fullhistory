@@ -58,7 +58,8 @@ static int * sr_sizes;
 static int * sr_blocksizes;
 
 static int sr_open(struct inode *, struct file *);
-static void get_sectorsize(int);
+void get_sectorsize(int);
+void sr_photocd(struct inode *);
 
 extern int sr_ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 
@@ -291,9 +292,10 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 }
 
 /*
- * Here I tried to implement better support for PhotoCD's.
+ * Here I tried to implement support for multisession-CD's
  * 
- * Much of this has do be done with vendor-specific SCSI-commands.
+ * Much of this has do be done with vendor-specific SCSI-commands, becauce
+ * multisession is newer than the SCSI-II standard.
  * So I have to complete it step by step. Useful information is welcome.
  *
  * Actually works:
@@ -304,17 +306,17 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
  *              work now without running the program "set_density"
  *              Multisession CD's are supported too.
  *
- *   kraxel@cs.tu-berlin.de (Gerd Knorr)
+ *   Gerd Knorr <kraxel@cs.tu-berlin.de> 
  */
 /*
  * 19950704 operator@melchior.cuivre.fdn.fr (Thomas Quinot)
  *
  *   - SONY:	Same as Nec.
  *
- *   - PIONEER: works with SONY code
+ *   - PIONEER: works with SONY code (may be others too ?)
  */
 
-static void sr_photocd(struct inode *inode)
+void sr_photocd(struct inode *inode)
 {
     unsigned long   sector,min,sec,frame;
     unsigned char   buf[40];    /* the buffer for the ioctl */
@@ -325,17 +327,17 @@ static void sr_photocd(struct inode *inode)
     
     if (scsi_CDs[MINOR(inode->i_rdev)].xa_flags & 0x02) {
 #ifdef DEBUG
-	printk("sr_photocd: CDROM and/or the driver does not support multisession CD's");
+	printk(KERN_DEBUG "sr_photocd: CDROM and/or driver do not support multisession CD's");
 #endif
 	return;
     }
     
     if (!suser()) {
-	/* I'm not the superuser, so SCSI_IOCTL_SEND_COMMAND isn't allowed for me.
-	 * That's why mpcd_sector will be initialized with zero, because I'm not
-	 * able to get the right value. Necessary only if access_count is 1, else
-	 * no disk change happened since the last call of this function and we can
-	 * keep the old value.
+	/* I'm not the superuser, so SCSI_IOCTL_SEND_COMMAND isn't allowed
+         * for me. That's why mpcd_sector will be initialized with zero,
+         * because I'm not able to get the right value. Necessary only if
+         * access_count is 1, else no disk change happened since the last
+         * call of this function and we can keep the old value.
 	 */
 	if (1 == scsi_CDs[MINOR(inode->i_rdev)].device->access_count) {
 	    scsi_CDs[MINOR(inode->i_rdev)].mpcd_sector = 0;
@@ -353,7 +355,7 @@ static void sr_photocd(struct inode *inode)
 	
     case SCSI_MAN_NEC:
 #ifdef DEBUG
-	printk("sr_photocd: use NEC code\n");
+	printk(KERN_DEBUG "sr_photocd: use NEC code\n");
 #endif
 	memset(buf,0,40);
 	*((unsigned long*)buf)   = 0x0;   /* we send nothing...     */
@@ -364,11 +366,12 @@ static void sr_photocd(struct inode *inode)
 	rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
 			   SCSI_IOCTL_SEND_COMMAND, buf);
 	if (rc != 0) {
-	    printk("sr_photocd: ioctl error (NEC): 0x%x\n",rc);
+            if (rc != 0x28000002) /* drop "not ready" */
+                printk(KERN_WARNING"sr_photocd: ioctl error (NEC): 0x%x\n",rc);
 	    break;
 	}
 	if (rec[14] != 0 && rec[14] != 0xb0) {
-	    printk("sr_photocd: (NEC) Hmm, seems the CDROM doesn't support multisession CD's\n");
+	    printk(KERN_INFO"sr_photocd: (NEC) Hmm, seems the CDROM doesn't support multisession CD's\n");
 	    no_multi = 1;
 	    break;
 	}
@@ -379,14 +382,14 @@ static void sr_photocd(struct inode *inode)
 	is_xa  = (rec[14] == 0xb0);
 #ifdef DEBUG
 	if (sector) {
-	    printk("sr_photocd: multisession CD detected. start: %lu\n",sector);
+	    printk(KERN_DEBUG "sr_photocd: multisession CD detected. start: %lu\n",sector);
 	}
 #endif
 	break;
 	
     case SCSI_MAN_TOSHIBA:
 #ifdef DEBUG
-	printk("sr_photocd: use TOSHIBA code\n");
+	printk(KERN_DEBUG "sr_photocd: use TOSHIBA code\n");
 #endif
 	
 	/* we request some disc information (is it a XA-CD ?,
@@ -402,16 +405,15 @@ static void sr_photocd(struct inode *inode)
 	    if (rc == 0x28000002) {
 		/* Got a "not ready" - error. No chance to find out if this is
 		 * because there is no CD in the drive or because the drive
-		 * don't knows multisession CD's. So I need to do an extra check... */
-		if (kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
-				      SCSI_IOCTL_TEST_UNIT_READY, NULL)) {
-		    printk("sr_photocd: drive not ready\n");
-		} else {
-		    printk("sr_photocd: (TOSHIBA) Hmm, seems the CDROM doesn't support multisession CD's\n");
+		 * don't knows multisession CD's. So I need to do an extra
+                 * check... */
+		if (!kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
+				       SCSI_IOCTL_TEST_UNIT_READY, NULL)) {
+		    printk(KERN_INFO "sr_photocd: (TOSHIBA) Hmm, seems the CDROM doesn't support multisession CD's\n");
 		    no_multi = 1;
 		}
 	    } else
-		printk("sr_photocd: ioctl error (TOSHIBA #1): 0x%x\n",rc);
+		printk(KERN_WARNING"sr_photocd: ioctl error (TOSHIBA #1): 0x%x\n",rc);
 	    break; /* if the first ioctl fails, we don't call the second one */
 	}
 	is_xa  = (rec[0] == 0x20);
@@ -422,7 +424,7 @@ static void sr_photocd(struct inode *inode)
 	if (sector) {
 	    sector -= CD_BLOCK_OFFSET;
 #ifdef DEBUG
-	    printk("sr_photocd: multisession CD detected: start: %lu\n",sector);
+	    printk(KERN_DEBUG "sr_photocd: multisession CD detected: start: %lu\n",sector);
 #endif
 	}
 	
@@ -436,17 +438,17 @@ static void sr_photocd(struct inode *inode)
 	rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
 			       SCSI_IOCTL_SEND_COMMAND, buf);
 	if (rc != 0) {
-	    printk("sr_photocd: ioctl error (TOSHIBA #2): 0x%x\n",rc);
+	    printk(KERN_WARNING "sr_photocd: ioctl error (TOSHIBA #2): 0x%x\n",rc);
 	    break;
 	}
 #ifdef DEBUG
-	printk("sr_photocd: get_density: 0x%x\n",rec[4]);
+	printk(KERN_DEBUG "sr_photocd: get_density: 0x%x\n",rec[4]);
 #endif
 	
 	/* ...and only if necessary a set_density */
 	if ((rec[4] != 0x81 && is_xa) || (rec[4] != 0 && !is_xa)) {
 #ifdef DEBUG
-	    printk("sr_photocd: doing set_density\n");
+	    printk(KERN_DEBUG "sr_photocd: doing set_density\n");
 #endif
 	    memset(buf,0,40);
 	    *((unsigned long*)buf)   = 12;  /* sending 12 bytes... */
@@ -454,16 +456,17 @@ static void sr_photocd(struct inode *inode)
 	    cmd[0] = 0x15;
 	    cmd[1] = (1 << 4);
 	    cmd[4] = 12;
-	    send = &cmd[6];                 /* this is a 6-Byte command          */
-	    send[ 3] = 0x08;                /* the data for the command          */
-	    send[ 4] = (is_xa) ? 0x81 : 0;  /* density 0x81 for XA-CD's, 0 else  */
+	    send = &cmd[6];                 /* this is a 6-Byte command    */
+	    send[ 3] = 0x08;                /* the data for the command    */
+	    send[ 4] = (is_xa) ? 0x81 : 0;  /* density 0x81 for XA, 0 else */
 	    send[10] = 0x08;
 	    rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
 				   SCSI_IOCTL_SEND_COMMAND, buf);
 	    if (rc != 0) {
-		printk("sr_photocd: ioctl error (TOSHIBA #3): 0x%x\n",rc);
+		printk(KERN_WARNING "sr_photocd: ioctl error (TOSHIBA #3): 0x%x\n",rc);
 	    }
-	    /* The set_density command may have changed the sector size or capacity. */
+	    /* The set_density command may have changed the
+             * sector size or capacity. */
 	    scsi_CDs[MINOR(inode->i_rdev)].needs_sector_size = 1;
 	}
 	break;
@@ -471,7 +474,7 @@ static void sr_photocd(struct inode *inode)
     case SCSI_MAN_SONY: /* Thomas QUINOT <thomas@melchior.cuivre.fdn.fr> */
     case SCSI_MAN_PIONEER:
 #ifdef DEBUG
-	printk("sr_photocd: use SONY/PIONEER code\n");
+	printk(KERN_DEBUG "sr_photocd: use SONY/PIONEER code\n");
 #endif
 	memset(buf,0,40);
 	*((unsigned long*)buf)   = 0x0;   /* we send nothing...     */
@@ -483,11 +486,12 @@ static void sr_photocd(struct inode *inode)
 			       SCSI_IOCTL_SEND_COMMAND, buf);
 	
 	if (rc != 0) {
-	    printk("sr_photocd: ioctl error (SONY): 0x%x\n",rc);
+            if (rc != 0x28000002) /* drop "not ready" */
+                printk(KERN_WARNING "sr_photocd: ioctl error (SONY): 0x%x\n",rc);
 	    break;
 	}
 	if ((rec[0] << 8) + rec[1] != 0x0a) {
-	    printk("sr_photocd: (SONY) Hmm, seems the CDROM doesn't support multisession CD's\n");
+	    printk(KERN_INFO "sr_photocd: (SONY) Hmm, seems the CDROM doesn't support multisession CD's\n");
 	    no_multi = 1;
 	    break;
 	}
@@ -495,7 +499,7 @@ static void sr_photocd(struct inode *inode)
 	is_xa = !!sector;
 #ifdef DEBUG
 	if (sector)
-	    printk ("sr_photocd: multisession CD detected. start: %lu\n",sector);
+	    printk (KERN_DEBUG "sr_photocd: multisession CD detected. start: %lu\n",sector);
 #endif
 	break;
 		
@@ -972,7 +976,7 @@ static void sr_init_done (Scsi_Cmnd * SCpnt)
     }
 }
 
-static void get_sectorsize(int i){
+void get_sectorsize(int i){
     unsigned char cmd[10];
     unsigned char *buffer;
     int the_result, retries;

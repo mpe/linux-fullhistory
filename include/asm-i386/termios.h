@@ -51,6 +51,7 @@ struct termio {
 #define N_SLIP		1
 #define N_MOUSE		2
 #define N_PPP		3
+#define N_STRIP		4
 
 #ifdef __KERNEL__
 

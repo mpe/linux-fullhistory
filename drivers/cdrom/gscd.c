@@ -967,7 +967,7 @@ long err;
      }
      else
      {
-        printk ( "Happy GoldStar !\n" );
+        printk (KERN_INFO "Happy GoldStar !\n" );
         return 0;
      }    
 }
@@ -982,7 +982,7 @@ void cleanup_module (void)
    }
 
    release_region (gscd_port,4);
-   printk( "GoldStar-module released.\n" );
+   printk(KERN_INFO "GoldStar-module released.\n" );
 }
 #endif
 
@@ -1001,8 +1001,8 @@ int my_gscd_init (void)
 int i;
 int result;
 
-        printk ("GSCD: version %s\n", GSCD_VERSION);
-        printk ("GSCD: Trying to detect a Goldstar R420 CD-ROM drive at 0x%X.\n", gscd_port);
+        printk (KERN_INFO "GSCD: version %s\n", GSCD_VERSION);
+        printk (KERN_INFO "GSCD: Trying to detect a Goldstar R420 CD-ROM drive at 0x%X.\n", gscd_port);
 
         if (check_region(gscd_port, 4)) 
         {
@@ -1041,7 +1041,7 @@ int result;
         while ( drv_states[i] != 0 )
         {
            curr_drv_state = drv_states[i];
-           printk ( "GSCD: Reset unit %d ... ",i );
+           printk (KERN_INFO "GSCD: Reset unit %d ... ",i );
            cc_Reset ();
            printk ( "done\n" );
            i++;
@@ -1062,7 +1062,7 @@ int result;
 
 	request_region(gscd_port, 4, "gscd");
 
-        printk ( "GSCD: GoldStar CD-ROM Drive found.\n" );
+        printk (KERN_INFO "GSCD: GoldStar CD-ROM Drive found.\n" );
 	return 0;
 }
 

@@ -2592,7 +2592,8 @@ static void redo_fd_request(void)
 		floppy_off(current_drive);
 
 	if (CURRENT && CURRENT->rq_status == RQ_INACTIVE){
-		DPRINT("current not active!\n");
+		CLEAR_INTR;
+		unlock_fdc();
 		return;
 	}
 
@@ -3335,7 +3336,7 @@ static void config_types(void)
 			       sizeof(struct floppy_drive_params));
 		if (UDP->cmos){
 			if (first)
-				printk("Floppy drive(s): ");
+				printk(KERN_INFO "Floppy drive(s): ");
 			else
 				printk(", ");
 			first=0;
@@ -3622,7 +3623,7 @@ static char get_fdc_version(void)
 	if ((r = result()) <= 0x00)
 		return FDC_NONE;	/* No FDC present ??? */
 	if ((r==1) && (reply_buffer[0] == 0x80)){
-		printk("FDC %d is a 8272A\n",fdc);
+		printk(KERN_INFO "FDC %d is a 8272A\n",fdc);
 		return FDC_8272A;	/* 8272a/765 don't know DUMPREGS */
 	}
 	if (r != 10) {
@@ -3633,7 +3634,7 @@ static char get_fdc_version(void)
 	output_byte(FD_VERSION);
 	r = result();
 	if ((r == 1) && (reply_buffer[0] == 0x80)){
-		printk("FDC %d is a 82072\n",fdc);
+		printk(KERN_INFO "FDC %d is a 82072\n",fdc);
 		return FDC_82072;		/* 82072 doesn't know VERSION */
 	}
 	if ((r != 1) || (reply_buffer[0] != 0x90)) {
@@ -3644,7 +3645,7 @@ static char get_fdc_version(void)
 	output_byte(FD_UNLOCK);
 	r = result();
 	if ((r == 1) && (reply_buffer[0] == 0x80)){
-		printk("FDC %d is a pre-1991 82077\n", fdc);
+		printk(KERN_INFO "FDC %d is a pre-1991 82077\n", fdc);
 		return FDC_82077_ORIG;	/* Pre-1991 82077 doesn't know LOCK/UNLOCK */
 	}
 	if ((r != 1) || (reply_buffer[0] != 0x00)) {
@@ -3660,7 +3661,7 @@ static char get_fdc_version(void)
 		return FDC_UNKNOWN;
 	}
 	if (reply_buffer[0] == 0x80) {
-		printk("FDC %d is a post-1991 82077\n",fdc);
+		printk(KERN_INFO "FDC %d is a post-1991 82077\n",fdc);
 		return FDC_82077;	/* Revised 82077AA passes all the tests */
 	}
 	switch (reply_buffer[0] >> 5) {
@@ -3672,23 +3673,23 @@ static char get_fdc_version(void)
 				return FDC_UNKNOWN;
 			}
 			if (!(reply_buffer[0] & 0x40)) {
-				printk("FDC %d is a 3Volt 82078SL.\n",fdc);
+				printk(KERN_INFO "FDC %d is a 3Volt 82078SL.\n",fdc);
 				return FDC_82078;
 			}
 			/* Either a 82078-1 or a 82078SL running at 5Volt */
-			printk("FDC %d is a 82078-1.\n",fdc);
+			printk(KERN_INFO "FDC %d is a 82078-1.\n",fdc);
 			return FDC_82078_1;
 		case 0x1:
-			printk("FDC %d is a 44pin 82078\n",fdc);
+			printk(KERN_INFO "FDC %d is a 44pin 82078\n",fdc);
 			return FDC_82078;
 		case 0x2:
-			printk("FDC %d is a S82078B\n", fdc);
+			printk(KERN_INFO "FDC %d is a S82078B\n", fdc);
 			return FDC_S82078B;
 		case 0x3:
-			printk("FDC %d is a National Semiconductor PC87306\n", fdc);
+			printk(KERN_INFO "FDC %d is a National Semiconductor PC87306\n", fdc);
 			return FDC_87306;
 		default:
-			printk("FDC %d init: 82077 variant with PARTID=%d.\n",
+			printk(KERN_INFO "FDC %d init: 82077 variant with PARTID=%d.\n",
 			       fdc, reply_buffer[0] >> 5);
 			return FDC_82077_UNKN;
 	}
@@ -4061,7 +4062,7 @@ extern "C" {
 #endif
 int init_module(void)
 {
-	printk("inserting floppy driver for %s\n", kernel_version);
+	printk(KERN_INFO "inserting floppy driver for %s\n", kernel_version);
 		
 	mod_setup("floppy=", floppy_setup);
 		

@@ -434,6 +434,54 @@ void calibrate_delay(void)
 		((loops_per_sec+2500)/5000) % 100);
 }
 
+static void parse_root_dev(char * line)
+{
+	int base = 0;
+	static struct dev_name_struct {
+		const char *name;
+		const int num;
+	} devices[] = {
+		{ "nfs",     0x00ff },
+		{ "hda",     0x0300 },
+		{ "hdb",     0x0340 },
+		{ "hdc",     0x1600 },
+		{ "hdd",     0x1640 },
+		{ "sda",     0x0800 },
+		{ "sdb",     0x0810 },
+		{ "sdc",     0x0820 },
+		{ "sdd",     0x0830 },
+		{ "sde",     0x0840 },
+		{ "fd",      0x0200 },
+		{ "xda",     0x0d00 },
+		{ "xdb",     0x0d40 },
+		{ "ram",     0x0100 },
+		{ "scd",     0x0b00 },
+		{ "mcd",     0x1700 },
+		{ "cdu535",  0x1800 },
+		{ "aztcd",   0x1d00 },
+		{ "cm206cd", 0x2000 },
+		{ "gscd",    0x1000 },
+		{ "sbpcd",   0x1900 },
+		{ "sonycd",  0x1800 },
+		{ NULL, 0 }
+	};
+
+	if (strncmp(line,"/dev/",5) == 0) {
+		struct dev_name_struct *dev = devices;
+		line += 5;
+		do {
+			int len = strlen(dev->name);
+			if (strncmp(line,dev->name,len) == 0) {
+				line += len;
+				base = dev->num;
+				break;
+			}
+			dev++;
+		} while (dev->name);
+	}
+	ROOT_DEV = to_kdev_t(base + simple_strtoul(line,NULL,base?10:16));
+}
+
 /*
  * This is a simple kernel command line parsing function: it parses
  * the command line, and fills in the arguments/environment to init
@@ -447,11 +495,8 @@ void calibrate_delay(void)
 static void parse_options(char *line)
 {
 	char *next;
-	char *devnames[] = { "nfs", "hda", "hdb", "hdc", "hdd", "sda", "sdb",
-		"sdc", "sdd", "sde", "fd", "xda", "xdb", "ram", NULL };
-	int devnums[]    = { 0x0FF, 0x300, 0x340, 0x1600, 0x1640, 0x800,
-		0x810, 0x820, 0x830, 0x840, 0x200, 0xD00, 0xD40, 0x100, 0};
 	int args, envs;
+
 	if (!*line)
 		return;
 	args = 0;
@@ -464,22 +509,7 @@ static void parse_options(char *line)
 		 * check for kernel options first..
 		 */
 		if (!strncmp(line,"root=",5)) {
-			int n;
-			line += 5;
-			if (strncmp(line,"/dev/",5)) {
-				ROOT_DEV = to_kdev_t(
-					     simple_strtoul(line,NULL,16));
-				continue;
-			}
-			line += 5;
-			for (n = 0 ; devnames[n] ; n++) {
-				int len = strlen(devnames[n]);
-				if (!strncmp(line,devnames[n],len)) {
-					ROOT_DEV = to_kdev_t(devnums[n]+
-					     simple_strtoul(line+len,NULL,0));
-					break;
-				}
-			}
+			parse_root_dev(line+5);
 			continue;
 		}
 #ifdef CONFIG_ROOT_NFS

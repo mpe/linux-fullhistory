@@ -16,12 +16,6 @@
 #include <asm/bitops.h>
 #include <asm/system.h>
 
-#ifdef INCLUDE_INLINE_FUNCS
-#define _INLINE_ extern
-#else
-#define _INLINE_ extern __inline__
-#endif
-
 /*
  * New proposed "bottom half" handlers:
  * (C) 1994 Kai Petzke, wpp@marie.physik.tu-berlin.de
@@ -54,22 +48,15 @@ struct tq_struct {
 
 typedef struct tq_struct * task_queue;
 
-#define DECLARE_TASK_QUEUE(q)  task_queue q = &tq_last
+#define DECLARE_TASK_QUEUE(q)  task_queue q = NULL
 
-extern struct tq_struct tq_last;
 extern task_queue tq_timer, tq_immediate, tq_scheduler;
-
-#ifdef INCLUDE_INLINE_FUNCS
-struct tq_struct tq_last = {
-	&tq_last, 0, 0, 0
-};
-#endif
 
 /*
  * To implement your own list of active bottom halfs, use the following
  * two definitions:
  *
- * struct tq_struct *my_bh = &tq_last;
+ * struct tq_struct *my_bh = NULL;
  * struct tq_struct run_my_bh = {
  *	0, 0, (void *)(void *) run_task_queue, &my_bh
  * };
@@ -92,7 +79,7 @@ struct tq_struct tq_last = {
  * "bh_list".  You may call this function only from an interrupt
  * handler or a bottom half handler.
  */
-_INLINE_ void queue_task_irq(struct tq_struct *bh_pointer,
+extern __inline__ void queue_task_irq(struct tq_struct *bh_pointer,
 			       task_queue *bh_list)
 {
 	if (!set_bit(0,&bh_pointer->sync)) {
@@ -105,7 +92,7 @@ _INLINE_ void queue_task_irq(struct tq_struct *bh_pointer,
  * queue_task_irq_off: put the bottom half handler "bh_pointer" on the list
  * "bh_list".  You may call this function only when interrupts are off.
  */
-_INLINE_ void queue_task_irq_off(struct tq_struct *bh_pointer,
+extern __inline__ void queue_task_irq_off(struct tq_struct *bh_pointer,
 				 task_queue *bh_list)
 {
 	if (!(bh_pointer->sync & 1)) {
@@ -119,7 +106,7 @@ _INLINE_ void queue_task_irq_off(struct tq_struct *bh_pointer,
 /*
  * queue_task: as queue_task_irq, but can be called from anywhere.
  */
-_INLINE_ void queue_task(struct tq_struct *bh_pointer,
+extern __inline__ void queue_task(struct tq_struct *bh_pointer,
 			   task_queue *bh_list)
 {
 	if (!set_bit(0,&bh_pointer->sync)) {
@@ -135,16 +122,15 @@ _INLINE_ void queue_task(struct tq_struct *bh_pointer,
 /*
  * Call all "bottom halfs" on a given list.
  */
-_INLINE_ void run_task_queue(task_queue *list)
+extern __inline__ void run_task_queue(task_queue *list)
 {
-	register struct tq_struct *p;
+	struct tq_struct *p;
 
-	p = xchg(list,&tq_last);
-
-	while (p != &tq_last) {
+	p = xchg(list,NULL);
+	while (p) {
 		void *arg;
 		void (*f) (void *);
-		register struct tq_struct *save_p;
+		struct tq_struct *save_p;
 		arg    = p -> data;
 		f      = p -> routine;
 		save_p = p;
@@ -153,7 +139,5 @@ _INLINE_ void run_task_queue(task_queue *list)
 		(*f)(arg);
 	}
 }
-
-#undef _INLINE_
 
 #endif /* _LINUX_TQUEUE_H */

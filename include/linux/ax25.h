@@ -65,6 +65,7 @@ struct ax25_bpqaddr_struct
 #define	AX25_HDRINCL	8
 #define AX25_IDLE	9
 #define AX25_PACLEN	10
+#define AX25_IPMAXQUEUE 11
 
 #define AX25_KILL	99
 
@@ -109,6 +110,7 @@ struct ax25_bpqaddr_struct
 #define	AX25_VALUES_DIGI	12	/* Digipeat mode */
 #define AX25_VALUES_IDLE	13	/* mode vc idle timer */
 #define AX25_VALUES_PACLEN	14	/* AX.25 MTU */
+#define AX25_VALUES_IPMAXQUEUE  15	/* Maximum number of buffers enqueued */
 #define	AX25_MAX_VALUES		20
 
 struct ax25_parms_struct

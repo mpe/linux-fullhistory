@@ -263,27 +263,28 @@ int get_smp_prof_list(char *buf) {
 	unsigned long sum_spins_sys_idle = 0;
 	unsigned long sum_smp_idle_count = 0;
 
-	for (i=0;i<=smp_num_cpus;i++) {
-		sum_spins+=smp_spins[i];
-		sum_spins_syscall+=smp_spins_syscall[i];
-		sum_spins_sys_idle+=smp_spins_sys_idle[i];
-		sum_smp_idle_count+=smp_idle_count[i];
+	for (i=0;i<smp_num_cpus;i++) {
+		int cpunum = cpu_logical_map[i];
+		sum_spins+=smp_spins[cpunum];
+		sum_spins_syscall+=smp_spins_syscall[cpunum];
+		sum_spins_sys_idle+=smp_spins_sys_idle[cpunum];
+		sum_smp_idle_count+=smp_idle_count[cpunum];
 	}
 
-	len += sprintf(buf+len,"CPUS: %10i \n", 
-		0==smp_num_cpus?1:smp_num_cpus);
+	len += sprintf(buf+len,"CPUS: %10i \n", smp_num_cpus);
 	len += sprintf(buf+len,"            SUM ");
 	for (i=0;i<smp_num_cpus;i++)
-		len += sprintf(buf+len,"        P%1d ",i);
+		len += sprintf(buf+len,"        P%1d ",cpu_logical_map[i]);
 	len += sprintf(buf+len,"\n");
 	for (i = 0 ; i < NR_IRQS ; i++) {
 		action = *(i + irq_action);
-		if (!action->handler)
+		if (!action || !action->handler)
 			continue;
 		len += sprintf(buf+len, "%3d: %10d ",
 			i, kstat.interrupts[i]);
 		for (j=0;j<smp_num_cpus;j++)
-			len+=sprintf(buf+len, "%10d ",int_count[j][i]);
+			len+=sprintf(buf+len, "%10d ",
+				int_count[cpu_logical_map[j]][i]);
 		len += sprintf(buf+len, "%c %s\n",
 			(action->flags & SA_INTERRUPT) ? '+' : ' ',
 			action->name);
@@ -297,7 +298,7 @@ int get_smp_prof_list(char *buf) {
 		sum_spins);
 
 	for (i=0;i<smp_num_cpus;i++)
-		len+=sprintf(buf+len," %10lu",smp_spins[i]);
+		len+=sprintf(buf+len," %10lu",smp_spins[cpu_logical_map[i]]);
 
 	len +=sprintf(buf+len,"   spins from int\n");
 
@@ -305,7 +306,7 @@ int get_smp_prof_list(char *buf) {
 		sum_spins_syscall);
 
 	for (i=0;i<smp_num_cpus;i++)
-		len+=sprintf(buf+len," %10lu",smp_spins_syscall[i]);
+		len+=sprintf(buf+len," %10lu",smp_spins_syscall[cpu_logical_map[i]]);
 
 	len +=sprintf(buf+len,"   spins from syscall\n");
 
@@ -313,13 +314,13 @@ int get_smp_prof_list(char *buf) {
 		sum_spins_sys_idle);
 
 	for (i=0;i<smp_num_cpus;i++)
-		len+=sprintf(buf+len," %10lu",smp_spins_sys_idle[i]);
+		len+=sprintf(buf+len," %10lu",smp_spins_sys_idle[cpu_logical_map[i]]);
 
 	len +=sprintf(buf+len,"   spins from sysidle\n");
 	len+=sprintf(buf+len,"IDLE %10lu",sum_smp_idle_count);
 
 	for (i=0;i<smp_num_cpus;i++)
-		len+=sprintf(buf+len," %10lu",smp_idle_count[i]);
+		len+=sprintf(buf+len," %10lu",smp_idle_count[cpu_logical_map[i]]);
 
 	len +=sprintf(buf+len,"   idle ticks\n");
 

@@ -126,6 +126,7 @@
 #define	AX25_DEF_N2		10
 #define AX25_DEF_IDLE		20
 #define AX25_DEF_PACLEN		256
+#define AX25_DEF_IPMAXQUEUE	1		/* 1 * ax25->window */
 #define	AX25_DEF_DIGI		(AX25_DIGI_INBAND|AX25_DIGI_XBAND)
 
 typedef struct ax25_uid_assoc {
@@ -153,6 +154,7 @@ typedef struct ax25_cb {
 	unsigned short		t1, t2, t3, idle, rtt;
 	unsigned short		t1timer, t2timer, t3timer, idletimer;
 	unsigned short		paclen;
+	unsigned short		maxqueue;
 	unsigned short		fragno, fraglen;
 	ax25_digi		*digipeat;
 	struct sk_buff_head	write_queue;
@@ -235,6 +237,7 @@ extern int  build_ax25_addr(unsigned char *, ax25_address *, ax25_address *,
 extern int  size_ax25_addr(ax25_digi *);
 extern void ax25_digi_invert(ax25_digi *, ax25_digi *);
 extern void ax25_return_dm(struct device *, ax25_address *, ax25_address *, ax25_digi *);
+extern int  ax25_queue_length(ax25_cb *, struct sk_buff *); /* dl1bke 960327 */
 extern void ax25_dama_on(ax25_cb *);	/* dl1bke 951121 */
 extern void ax25_dama_off(ax25_cb *);	/* dl1bke 951121 */
 

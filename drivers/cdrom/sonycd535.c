@@ -1512,7 +1512,7 @@ sony535_init(void)
 	sony535_irq_used = 0;
 
 #if DEBUG > 0
-	printk(CDU535_MESSAGE_NAME ": probing base address %03X\n",
+	printk(KERN_INFO CDU535_MESSAGE_NAME ": probing base address %03X\n",
 			sony535_cd_base_io);
 #endif
 	if (check_region(sony535_cd_base_io,4)) {
@@ -1579,7 +1579,7 @@ sony535_init(void)
 				sony_buffer_size = SONY535_BUFFER_SIZE;
 				sony_buffer_sectors = sony_buffer_size / 2048;
 
-				printk(CDU535_MESSAGE_NAME " I/F CDROM : %8.8s %16.16s %4.4s",
+				printk(KERN_INFO CDU535_MESSAGE_NAME " I/F CDROM : %8.8s %16.16s %4.4s",
 					   drive_config.vendor_id,
 					   drive_config.product_id,
 					   drive_config.product_rev_level);
@@ -1684,6 +1684,6 @@ cleanup_module(void)
 	if (unregister_blkdev(MAJOR_NR, CDU535_HANDLE) == -EINVAL)
 		printk("Uh oh, couldn't unregister " CDU535_HANDLE "\n");
 	else
-		printk(CDU535_HANDLE " module released\n");
+		printk(KERN_INFO CDU535_HANDLE " module released\n");
 }
 #endif	/* MODULE */

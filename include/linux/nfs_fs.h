@@ -92,13 +92,20 @@ extern int nfs_proc_readdir(struct nfs_server *server, struct nfs_fh *fhandle,
 			    int cookie, int count, struct nfs_entry *entry);
 extern int nfs_proc_statfs(struct nfs_server *server, struct nfs_fh *fhandle,
 			    struct nfs_fsinfo *res);
+extern int nfs_proc_read_request(struct rpc_ioreq *, struct nfs_server *,
+				 struct nfs_fh *, unsigned long offset,
+				 unsigned long count, __u32 *buf);
+extern int nfs_proc_read_reply(struct rpc_ioreq *);
 extern int *rpc_header(int *p, int procedure, int program, int version,
 				int uid, int gid, int *groups);
 extern int *rpc_verify(int *p);
 
 /* linux/fs/nfs/sock.c */
 
-extern int nfs_rpc_call(struct nfs_server *server, int *start, int *end, int size);
+extern int nfs_rpc_call(struct nfs_server *server, int *start,
+				int *end, int size);
+extern int nfs_rpc_doio(struct nfs_server *server, struct rpc_ioreq *,
+				int async);
 
 /* linux/fs/nfs/inode.c */
 
@@ -125,6 +132,10 @@ extern struct inode_operations nfs_symlink_inode_operations;
 /* linux/fs/nfs/mmap.c */
 
 extern int nfs_mmap(struct inode * inode, struct file * file, struct vm_area_struct * vma);
+
+/* linux/fs/nfs/bio.c */
+
+extern int nfs_readpage(struct inode *, struct page *);
 
 /* NFS root */
 

@@ -1119,7 +1119,7 @@ int cm206_init(void)
   uch e=0;
   long int size=sizeof(struct cm206_struct);
 
-  printk("cm206: v" VERSION);
+  printk(KERN_INFO "cm206: v" VERSION);
   cm206_base = probe_base_port(auto_probe ? 0 : cm206_base);
   if (!cm206_base) {
     printk(" can't find adapter!\n");
@@ -1151,7 +1151,7 @@ int cm206_init(void)
       return -EIO;
     }
   e = send_receive_polled(c_gimme);
-  printk("Firmware revision %d", e & dcf_revision_code);
+  printk(KERN_INFO "Firmware revision %d", e & dcf_revision_code);
   if (e & dcf_transfer_rate) printk(" double");
   else printk(" single");
   printk(" speed drive");
@@ -1176,7 +1176,7 @@ int cm206_init(void)
   cd->adapter_last = -1;
   cd->timer.function = cm206_timeout;
   cd->max_sectors = (inw(r_data_status) & ds_ram_size) ? 24 : 97;
-  printk("%d kB adapter memory available, "  
+  printk(KERN_INFO "%d kB adapter memory available, "  
 	 " %ld bytes kernel memory used.\n", cd->max_sectors*2, size);
   return 0;
 }
@@ -1212,7 +1212,7 @@ int init_module(void)
 void cleanup_module(void)
 {
   cleanup(4);
-  printk("cm206 removed\n");
+  printk(KERN_INFO "cm206 removed\n");
 }
       
 #else /* !MODULE */

@@ -1,13 +1,13 @@
-$Id: README.aztcd,v 2.10 1995/12/03 11:55:14 root Exp root $
+$Id: README.aztcd,v 2.20 1996/03/12 18:31:33 root Exp root $
           Readme-File /usr/src/Documentation/cdrom/aztcd
            for Aztech CD-ROM CDA268-01A, ORCHID CD-3110,
                   OKANO/WEARNES CDD110, Conrad TXC
                            CD-ROM Driver 
-                       Version 2.0 and newer
+                       Version 2.2 and newer
                    (for other drives see 6.-8.)
 
 NOTE: THIS DRIVER WILL WORK WITH THE CD-ROM DRIVES LISTED, WHICH HAVE
-      A PROPRIETARY INTERFACE (implemented on a sound card or on a
+      A PROPRIETARY INTERFACE (implemented on a sound card or on an
       ISA-AT-bus card). 
       IT WILL DEFINITELY NOT WORK WITH CD-ROM DRIVES WITH *IDE*-INTERFACE,
       such as the Aztech CDA269-031SE !!! IF YOU'RE USING A CD-ROM DRIVE
@@ -40,9 +40,9 @@ Contents of this file:
 1. NOTE 
 This software has been successfully in alpha and beta test and is part of
 the standard kernel since kernel 1.1.8x since December 1994. It works with
-time with AZTECH CDA268-01A, ORCHID CDS-3110, ORCHID/WEARNES CDD110 and
+with AZTECH CDA268-01A, ORCHID CDS-3110, ORCHID/WEARNES CDD110 and
 CONRAD TXC (Nr.99 31 23 -series 04) and has proven to be stable with kernel 
-versions 1.0.9 to 1.3.35. But with any software there still may be bugs in it. 
+versions 1.0.9 to 1.3.72. But with any software there still may be bugs in it. 
 So if you encounter problems, you are invited to help us improve this software. 
 Please send me a detailed bug report (see chapter BUG REPORTS). You are also 
 invited in helping us to increase the number of drives, which are supported.
@@ -84,7 +84,7 @@ If the message looks correct, as user 'root' you should be able to mount the
 drive by
           mount -t iso9660 -r /dev/aztcd0 /mnt
 and use it as any other filesystem. (If this does not work, check if
-  /dev/aztcd0 and /mnt do exist and create them, if necessary by doing
+/dev/aztcd0 and /mnt do exist and create them, if necessary by doing
       mknod /dev/aztcd0 b 29 0
       mkdir /mnt                       
 
@@ -108,7 +108,7 @@ filesystem, you have to recompile your kernel:
   CD268, an ORCHID CD-3110 or ORCHID/WEARNES CDD110 that's the only item you 
   have to set up. If you have a soundcard, read chapter 4.2.
   Users of other drives should read chapter OTHER DRIVES of this file.
-  You also can configure that address by LILO boot parameter aztcd=... 
+  You also can configure that address by kernel boot parameter aztcd=... 
 - There are some other points, which may be configured, e.g. auto-eject the
   CD when umounting a drive, tray locking etc., see aztcd.h for details.
 - Build a new kernel, configure it for 'Aztech/Orchid/Okano/Wearnes support' 
@@ -116,7 +116,7 @@ filesystem, you have to recompile your kernel:
   'Aztech... support', if you want to use aztcd as a run time loadable module. 
   But in any case you must have the ISO9660-filesystem included in your
   kernel.
-- Activate the new kernel, normally this is done by running lilo (don't for-
+- Activate the new kernel, normally this is done by running LILO (don't for-
   get to configure it before and to keep a copy of your old kernel in case
   something goes wrong!).
 - Reboot
@@ -254,7 +254,7 @@ CD-ROMs to the volunteers, who provided the CD-ROM support for Linux. My
 snail mail address for such 'stuff' is
            Prof. Dr. W. Zimmermann
            Fachhochschule fuer Technik Esslingen
-           Fachbereich NT
+           Fachbereich IT
            Flandernstrasse 101
            D-73732 Esslingen
            Germany
@@ -460,8 +460,8 @@ and also were very patient with the problems which occurred.
 Reinhard Max delivered the information for the CDROM-interface of the
 SoundWave32 soundcards.
 
-Jochen Koch and Olaf Kaluza delivered the information for supporting Conrad's TXC
-drive.
+Jochen Kunz and Olaf Kaluza delivered the information for supporting Conrad's 
+TXC drive.
 
 Anybody, who is interested in these items should have a look at 'ftp.gwdg.de',
 directory 'pub/linux/cdrom' and at 'ftp.cdrom.com', directory 'pub/cdrom'.
@@ -472,11 +472,9 @@ an example on how to do this, you will find a tiny CD Player for audio CDs
 named 'cdplay.c'. It allows you to play audio CDs. You can play a specified 
 track, pause and resume or skip tracks forward and backwards. If you quit the 
 program without stopping the  drive, playing is continued. You can also 
-(mis)use cdplay to read and hexdump data disks.
-'cdplay.c' can be found as a separate file in package AZTECH.CDROM.Vxx.tgz.
-If you don't have it, you can find the code in the APPENDIX of this file,
-which you should cut out with an editor and store in a separate file
-'cdplay.c'. To compile it and make it executable, do
+(mis)use cdplay to read and hexdump data disks. You can find the code in the 
+APPENDIX of this file, which you should cut out with an editor and store in a 
+separate file 'cdplay.c'. To compile it and make it executable, do
   gcc -s -Wall -O2 -L/usr/lib cdplay.c -o /usr/local/bin/cdplay # compiles it
   chmod +755 /usr/local/bin/cdplay                              # makes it executable
   ln -s /dev/aztcd0 /dev/cdrom                                  # creates a link
@@ -503,18 +501,21 @@ as always when you are doing systems programming and kernel hacking, you
 should have a backup copy of your system in a safe place (and you also
 should try before, how to restore from a backup copy)!
 
+A reworked and improved version called 'cdtester.c', which has yet more
+features for testing CDROM-drives can be found in
+/usr/src/linux/Documentation/cdrom/sbpcd, written by E.Moenkeberg.
 
 Werner Zimmermann
 Fachhochschule fuer Technik Esslingen
 (EMail: zimmerma@rz.fht-esslingen.de)
-October 21, 1995
+Maerz 16, 1995
 
 ---------------------------------------------------------------------------
 APPENDIX: Source code of cdplay.c
 
 /* Tiny Audio CD Player
 
-   Copyright 1994, 1995 Werner Zimmermann (zimmerma@rz.fht-esslingen.de)
+   Copyright 1994, 1995, 1996 Werner Zimmermann (zimmerma@rz.fht-esslingen.de)
 
 This program originally was written to test the audio functions of the
 AZTECH.CDROM-driver, but it should work with every CD-ROM drive. Before 
@@ -564,7 +565,7 @@ int main(void)
          } azt;
   struct cdrom_volctrl  volctrl;
 
-  printf("\nMini-Audio CD-Player V0.71   (C) 1994,1995  W.Zimmermann\n");
+  printf("\nMini-Audio CD-Player V0.72   (C) 1994,1995,1996  W.Zimmermann\n");
   handle=open("/dev/cdrom",O_RDWR);
   ioctl(handle,CDROMRESUME);
   

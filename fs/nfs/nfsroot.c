@@ -38,6 +38,11 @@
  *				Linus so that I don' always have to cleanup
  *				_afterwards_ - thanks)
  *	Gero Kuhlmann	:	Last changes of Martin Mares undone.
+ *	Gero Kuhlmann	: 	RARP replies are tested for specified server
+ *				again. However, it's now possible to have
+ *				different RARP and NFS servers.
+ *	Gero Kuhlmann	:	"0.0.0.0" addresses from command line are
+ *				now mapped to INADDR_NONE.
  *
  */
 
@@ -116,6 +121,7 @@ static int bootp_flag;			/* User said: Use BOOTP! */
 static int rarp_flag;			/* User said: Use RARP! */
 static int bootp_dev_count = 0;		/* Number of devices allowing BOOTP */
 static int rarp_dev_count = 0;		/* Number of devices allowing RARP */
+static struct sockaddr_in rarp_serv;	/* IP address of RARP server */
 
 #if defined(CONFIG_RNFS_BOOTP) || defined(CONFIG_RNFS_RARP)
 #define CONFIG_RNFS_DYNAMIC		/* Enable dynamic IP config */
@@ -312,8 +318,8 @@ static int root_rarp_recv(struct sk_buff *skb, struct device *dev, struct packet
 	}
 	/* Discard packets which are not from specified server. */
 	if (rarp_flag && !bootp_flag &&
-	    server.sin_addr.s_addr != INADDR_NONE &&
-	    server.sin_addr.s_addr != sip) {
+	    rarp_serv.sin_addr.s_addr != INADDR_NONE &&
+	    rarp_serv.sin_addr.s_addr != sip) {
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}
@@ -1167,9 +1173,9 @@ static void root_nfs_addrs(char *addrs)
 	int num = 0;
 
 	/* Clear all addresses and strings */
-	myaddr.sin_family = server.sin_family =
+	myaddr.sin_family = server.sin_family = rarp_serv.sin_family =
 	    gateway.sin_family = netmask.sin_family = AF_INET;
-	myaddr.sin_addr.s_addr = server.sin_addr.s_addr =
+	myaddr.sin_addr.s_addr = server.sin_addr.s_addr = rarp_serv.sin_addr.s_addr =
 	    gateway.sin_addr.s_addr = netmask.sin_addr.s_addr = INADDR_NONE;
 	system_utsname.nodename[0] = '\0';
 	system_utsname.domainname[0] = '\0';
@@ -1199,16 +1205,20 @@ static void root_nfs_addrs(char *addrs)
 #endif
 			switch (num) {
 			case 0:
-				myaddr.sin_addr.s_addr = in_aton(ip);
+				if ((myaddr.sin_addr.s_addr = in_aton(ip)) == INADDR_ANY)
+					myaddr.sin_addr.s_addr = INADDR_NONE;
 				break;
 			case 1:
-				server.sin_addr.s_addr = in_aton(ip);
+				if ((server.sin_addr.s_addr = in_aton(ip)) == INADDR_ANY)
+					server.sin_addr.s_addr = INADDR_NONE;
 				break;
 			case 2:
-				gateway.sin_addr.s_addr = in_aton(ip);
+				if ((gateway.sin_addr.s_addr = in_aton(ip)) == INADDR_ANY)
+					gateway.sin_addr.s_addr = INADDR_NONE;
 				break;
 			case 3:
-				netmask.sin_addr.s_addr = in_aton(ip);
+				if ((netmask.sin_addr.s_addr = in_aton(ip)) == INADDR_ANY)
+					netmask.sin_addr.s_addr = INADDR_NONE;
 				break;
 			case 4:
 				if ((dp = strchr(ip, '.'))) {
@@ -1238,6 +1248,7 @@ static void root_nfs_addrs(char *addrs)
 		ip = cp;
 		num++;
 	}
+	rarp_serv = server;
 }
 
 

@@ -1023,6 +1023,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 #endif
 		case ARPHRD_ETHER:
 		case ARPHRD_ARCNET:
+		case ARPHRD_METRICOM:
 			if(arp->ar_pro != htons(ETH_P_IP))
 			{
 				kfree_skb(skb, FREE_READ);

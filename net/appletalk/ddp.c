@@ -219,7 +219,7 @@ static void atalk_destroy_socket(atalk_socket *sk)
 	
 	if(sk->wmem_alloc == 0 && sk->rmem_alloc == 0 && sk->dead)
 	{
-		kfree_s(sk,sizeof(*sk));
+		sk_free(sk);
 		MOD_DEC_USE_COUNT;
 	}
 	else
@@ -1125,7 +1125,7 @@ static void def_callback2(struct sock *sk, int len)
 static int atalk_create(struct socket *sock, int protocol)
 {
 	atalk_socket *sk;
-	sk=(atalk_socket *)kmalloc(sizeof(*sk),GFP_KERNEL);
+	sk=(atalk_socket *)sk_alloc(GFP_KERNEL);
 	if(sk==NULL)
 		return(-ENOMEM);
 	switch(sock->type)
@@ -1137,7 +1137,7 @@ static int atalk_create(struct socket *sock, int protocol)
 		case SOCK_DGRAM:
 			break;
 		default:
-			kfree_s((void *)sk,sizeof(*sk));
+			sk_free((void *)sk);
 			return(-ESOCKTNOSUPPORT);
 	}
 
@@ -1364,7 +1364,7 @@ static int atalk_socketpair(struct socket *sock1, struct socket *sock2)
 static int atalk_accept(struct socket *sock, struct socket *newsock, int flags)
 {
 	if(newsock->data)
-		kfree_s(newsock->data,sizeof(atalk_socket));
+		sk_free(newsock->data);
 	return -EOPNOTSUPP;
 }
 
@@ -2064,7 +2064,7 @@ void atalk_proto_init(struct net_proto *pro)
 		atalk_if_get_info
 	});
 
-	printk("Appletalk 0.17 for Linux NET3.034\n");
+	printk(KERN_INFO "Appletalk 0.17 for Linux NET3.034\n");
 }
 
 #ifdef MODULE

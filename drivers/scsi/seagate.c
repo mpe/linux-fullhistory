@@ -1718,7 +1718,7 @@ printk("scsi%d : heads = %d cylinders = %d sectors = %d total = %d formatted = %
  * 256 heads * 64 sectors. 
  */
 
-      if ((cylinders > 1024) || (sectors > 64)) 
+      if ((cylinders > 1024) || (sectors > 64)) {
 	/* The Seagate's seem to have some mapping
 	 * Multiple heads * sectors * cyl to get capacity
 	 * Then start rounding down. */
@@ -1730,7 +1730,7 @@ printk("scsi%d : heads = %d cylinders = %d sectors = %d total = %d formatted = %
 	{
 		heads *= 2;	/* For some reason, they go in multiples */
 		cylinders = capacity / heads;
-	};
+	}
       }
       ip[0] = heads;
       ip[1] = sectors;

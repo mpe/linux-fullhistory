@@ -30,35 +30,49 @@
 
 #include <asm/segment.h>
 
-/* JEJB/JSP 2/7/94
- * this must match the value of NFS_SLACK_SPACE in linux/fs/nfs/proc.c 
- * ***FIXME*** should probably put this in nfs_fs.h */
-#define NFS_SLACK_SPACE 1024
-
 #define _S(nr) (1<<((nr)-1))
 
 /*
- * We violate some modularity principles here by poking around
- * in some socket internals.  Besides having to call socket
- * functions from kernel-space instead of user space, the socket
- * interface does not lend itself well to being cleanly called
- * without a file descriptor.  Since the nfs calls can run on
- * behalf of any process, the superblock maintains a file pointer
- * to the server socket.
+ * Place a synchronous call to the NFS server, meaning that the process
+ * sleeps in rpc_call until it either receives a reply or a major timeout
+ * occurs.
+ * This is now merely a front-end to nfs_rpc_doio.
  */
-
 int
 nfs_rpc_call(struct nfs_server *server, int *start, int *end, int size)
+{
+	struct rpc_ioreq	req;
+
+	size += 1024;		/* account for NFS slack space. ugly */
+
+	req.rq_addr = &server->toaddr;
+	req.rq_alen = sizeof(server->toaddr);
+	req.rq_slot = NULL;
+
+	req.rq_svec[0].iov_base = start;
+	req.rq_svec[0].iov_len = (end - start) << 2;
+	req.rq_slen = (end - start) << 2;
+	req.rq_snr = 1;
+	req.rq_rvec[0].iov_base = start;
+	req.rq_rvec[0].iov_len = size;
+	req.rq_rlen = size;
+	req.rq_rnr = 1;
+
+	return nfs_rpc_doio(server, &req, 0);
+}
+
+int
+nfs_rpc_doio(struct nfs_server *server, struct rpc_ioreq *req, int async)
 {
 	struct rpc_timeout	timeout;
 	unsigned long		maxtimeo;
 	unsigned long		oldmask;
 	int			major_timeout_seen, result;
 
-	timeout.init_timeout = server->timeo;
-	timeout.max_timeout = maxtimeo = NFS_MAX_RPC_TIMEOUT*HZ/10;
-	timeout.retries = server->retrans;
-	timeout.exponential = 1;
+	timeout.to_initval = server->timeo;
+	timeout.to_maxval = NFS_MAX_RPC_TIMEOUT*HZ/10;
+	timeout.to_retries = server->retrans;
+	timeout.to_exponential = 1;
 
 	oldmask = current->blocked;
 	current->blocked |= ~(_S(SIGKILL)
@@ -68,17 +82,19 @@ nfs_rpc_call(struct nfs_server *server, int *start, int *end, int size)
 		| (current->sig->action[SIGQUIT - 1].sa_handler == SIG_DFL
 			? _S(SIGQUIT) : 0))
 		: 0));
+
 	major_timeout_seen = 0;
+	maxtimeo = timeout.to_maxval;
 
 	do {
-		result = rpc_call(server->rsock, 
-				&server->toaddr, sizeof(server->toaddr),
-				start, ((char *) end) - ((char *) start),
-				start, size + 1024,
-				&timeout, 1);
+		result = rpc_doio(server->rsock, req, &timeout, async);
+		rpc_release(server->rsock, req);	/* Release slot */
+
 		if (current->signal & ~current->blocked)
 			result = -ERESTARTSYS;
 		if (result == -ETIMEDOUT) {
+			if (async)
+				break;
 			if (server->flags & NFS_MOUNT_SOFT) {
 				printk("NFS server %s not responding, "
 					"timed out.\n", server->hostname);
@@ -90,8 +106,9 @@ nfs_rpc_call(struct nfs_server *server, int *start, int *end, int size)
 					"still trying.\n", server->hostname);
 				major_timeout_seen = 1;
 			}
-			if ((timeout.init_timeout <<= 1) >= maxtimeo)
-				timeout.init_timeout = maxtimeo;
+			if ((timeout.to_initval <<= 1) >= maxtimeo) {
+				timeout.to_initval = maxtimeo;
+			}
 		} else if (result < 0 && result != -ERESTARTSYS) {
 			printk("NFS: notice message: result = %d.\n", result);
 		}

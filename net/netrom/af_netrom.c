@@ -266,7 +266,7 @@ void nr_destroy_socket(struct sock *sk)	/* Not static as its used by the timer *
 		add_timer(&sk->timer);
 	} else {
 		kfree_s(sk->nr, sizeof(*sk->nr));
-		kfree_s(sk, sizeof(*sk));
+		sk_free(sk);
 	}
 
 	restore_flags(flags);
@@ -415,11 +415,11 @@ static int nr_create(struct socket *sock, int protocol)
 	if (sock->type != SOCK_SEQPACKET || protocol != 0)
 		return -ESOCKTNOSUPPORT;
 
-	if ((sk = (struct sock *)kmalloc(sizeof(*sk), GFP_ATOMIC)) == NULL)
+	if ((sk = sk_alloc(GFP_ATOMIC)) == NULL)
 		return -ENOMEM;
 
 	if ((nr = (nr_cb *)kmalloc(sizeof(*nr), GFP_ATOMIC)) == NULL) {
-		kfree_s(sk, sizeof(*sk));
+		sk_free(sk);
 		return -ENOMEM;
 	}
 
@@ -516,11 +516,11 @@ static struct sock *nr_make_new(struct sock *osk)
 	if (osk->type != SOCK_SEQPACKET)
 		return NULL;
 
-	if ((sk = (struct sock *)kmalloc(sizeof(*sk), GFP_ATOMIC)) == NULL)
+	if ((sk = (struct sock *)sk_alloc(GFP_ATOMIC)) == NULL)
 		return NULL;
 
 	if ((nr = (nr_cb *)kmalloc(sizeof(*nr), GFP_ATOMIC)) == NULL) {
-		kfree_s(sk, sizeof(*sk));
+		sk_free(sk);
 		return NULL;
 	}
 
@@ -814,7 +814,7 @@ static int nr_accept(struct socket *sock, struct socket *newsock, int flags)
 	struct sk_buff *skb;
 
 	if (newsock->data)
-		kfree_s(newsock->data, sizeof(struct sock));
+		sk_free(newsock->data);
 
 	newsock->data = NULL;
 	

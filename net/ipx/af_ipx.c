@@ -42,6 +42,7 @@
  *	Revision 0.33:	Internal network support, routing changes, uses a
  *			protocol private area for ipx data.
  *	Revision 0.34:	Module support. <Jim Freeman>
+ *	Revision 0.35:  Checksum support. <Neil Turton>, hooked in by <Alan Cox>
  *
  * 	Portions Copyright (c) 1995 Caldera, Inc. <greg@caldera.com>
  *	Neither Greg Page nor Caldera, Inc. admit liability nor provide 
@@ -193,7 +194,7 @@ ipx_destroy_socket(ipx_socket *sk)
 		kfree_skb(skb,FREE_READ);
 	}
 	
-	kfree_s(sk,sizeof(*sk));
+	sk_free(sk);
 	MOD_DEC_USE_COUNT;
 }
 	
@@ -907,8 +908,8 @@ ipxitf_create(ipx_interface_definition *idef)
 	if(dev->addr_len>IPX_NODE_LEN)
 		return -EINVAL;
 
-	if ((intrfc = ipxitf_find_using_phys(dev, dlink_type)) == NULL) {
-
+	if ((intrfc = ipxitf_find_using_phys(dev, dlink_type)) == NULL) 
+	{
 		/* Ok now create */
 		intrfc=(ipx_interface *)kmalloc(sizeof(ipx_interface),GFP_ATOMIC);
 		if (intrfc==NULL)
@@ -924,9 +925,14 @@ ipxitf_create(ipx_interface_definition *idef)
 			ipx_primary_net = intrfc;
 		intrfc->if_internal = 0;
 		intrfc->if_ipx_offset = dev->hard_header_len + datalink->header_length;
-		memset(intrfc->if_node, 0, IPX_NODE_LEN);
-		memcpy((char *)&(intrfc->if_node[IPX_NODE_LEN-dev->addr_len]), dev->dev_addr, dev->addr_len);
-
+		if(memcmp(idef->ipx_node, "\000\000\000\000\000\000", IPX_NODE_LEN)==0)
+		{
+			memset(intrfc->if_node, 0, IPX_NODE_LEN);
+			memcpy((char *)&(intrfc->if_node[IPX_NODE_LEN-dev->addr_len]), 
+				dev->dev_addr, dev->addr_len);
+		}
+		else
+			memcpy(intrfc->if_node, idef->ipx_node, IPX_NODE_LEN);
 		ipxitf_insert(intrfc);
 	}
 
@@ -1172,6 +1178,65 @@ ipxrtr_delete(long net)
 }
 
 /*
+ *	Checksum routine for IPX
+ */
+ 
+/* Note: We assume ipx_tctrl==0 and htons(length)==ipx_pktsize */
+
+static __u16 ipx_set_checksum(ipx_packet *packet,int length) 
+{
+	/* 
+	 *	NOTE: sum is a net byte order quantity, which optimizes the 
+	 *	loop. This only works on big and little endian machines. (I
+	 *	don't know of a machine that isn't.)
+	 */
+
+	__u32 sum=0;
+
+	/*
+	 *	Pointer to second word - We skip the checksum field
+	 */
+
+	__u16 *p=(__u16 *)&packet->ipx_pktsize;
+
+	/*
+	 *	Number of complete words 
+	 */
+
+	__u32 i=length>>1;
+
+	/*
+	 *	Loop through all complete words except the checksum field 
+	 */
+
+	while(--i)
+		sum+=*p++;
+
+	/*
+	 *	Add on the last part word if it exists 
+	 */
+
+	if(packet->ipx_pktsize&htons(1))
+		sum+=ntohs(0xff00)&*p;
+
+	/*
+	 *	Do final fixup 
+	 */
+	 
+	sum=(sum&0xffff)+(sum>>16);
+
+	/*
+	 *	It's a pitty there's no concept of carry in C 
+	 */
+
+	if(sum>=0x10000)
+		sum++;
+		
+	return ~sum;
+};
+
+ 
+/*
  *	Route an outgoing frame from a socket.
  */
 
@@ -1215,7 +1280,6 @@ static int ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, struc
 
 	/* Fill in IPX header */
 	ipx=(ipx_packet *)skb_put(skb,sizeof(ipx_packet));
-	ipx->ipx_checksum=0xFFFF;
 	ipx->ipx_pktsize=htons(len+sizeof(ipx_packet));
 	ipx->ipx_tctrl=0;
 	ipx->ipx_type=usipx->sipx_type;
@@ -1243,6 +1307,15 @@ static int ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, struc
 	ipx->ipx_dest.sock=usipx->sipx_port;
 
 	memcpy_fromiovec(skb_put(skb,len),iov,len);
+
+	/*
+	 *	Apply checksum. Not allowed on 802.3 links.
+	 */
+	 
+	if(sk->no_check || intrfc->if_dlink_type!=IPX_FRAME_8023)
+		ipx->ipx_checksum=0xFFFF;
+	else
+		ipx->ipx_checksum=ipx_set_checksum(ipx, len+sizeof(ipx_packet));
 
 #ifdef CONFIG_FIREWALL	
 	if(call_out_firewall(PF_IPX, skb, ipx)!=FW_ACCEPT)
@@ -1608,11 +1681,10 @@ static void def_callback2(struct sock *sk, int len)
 	}
 }
 
-static int 
-ipx_create(struct socket *sock, int protocol)
+static int ipx_create(struct socket *sock, int protocol)
 {
 	ipx_socket *sk;
-	sk=(ipx_socket *)kmalloc(sizeof(*sk),GFP_KERNEL);
+	sk=(ipx_socket *)sk_alloc(GFP_KERNEL);
 	if(sk==NULL)
 		return(-ENOMEM);
 	switch(sock->type)
@@ -1623,17 +1695,9 @@ ipx_create(struct socket *sock, int protocol)
 			kfree_s((void *)sk,sizeof(*sk));
 			return(-ESOCKTNOSUPPORT);
 	}
-	sk->dead=0;
-	sk->next=NULL;
-	sk->broadcast=0;
 	sk->rcvbuf=SK_RMEM_MAX;
 	sk->sndbuf=SK_WMEM_MAX;
-	sk->wmem_alloc=0;
-	sk->rmem_alloc=0;
-	sk->users=0;
-	sk->shutdown=0;
 	sk->prot=NULL;	/* So we use default free mechanisms */
-	sk->err=0;
 	skb_queue_head_init(&sk->receive_queue);
 	skb_queue_head_init(&sk->write_queue);
 	sk->send_head=NULL;
@@ -1641,15 +1705,8 @@ ipx_create(struct socket *sock, int protocol)
 	sk->state=TCP_CLOSE;
 	sk->socket=sock;
 	sk->type=sock->type;
-	sk->protinfo.af_ipx.type=0;		/* General user level IPX */
-	sk->debug=0;
-	sk->protinfo.af_ipx.intrfc = NULL;
-	memset(&sk->protinfo.af_ipx.dest_addr,'\0',
-		sizeof(sk->protinfo.af_ipx.dest_addr));
-	sk->protinfo.af_ipx.port = 0;
-	sk->protinfo.af_ipx.ncp_server = 0;
 	sk->mtu=IPX_MTU;
-	
+	sk->no_check = 1;		/* Checksum off by default */	
 	if(sock!=NULL)
 	{
 		sock->data=(void *)sk;
@@ -1965,23 +2022,26 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	
 	ipx=(ipx_packet *)skb->h.raw;
 	
-	if(ipx->ipx_checksum!=IPX_NO_CHECKSUM) {
-		/* We don't do checksum options. We can't really. Novell don't seem to have documented them.
-		   If you need them try the XNS checksum since IPX is basically XNS in disguise. It might be
-		   the same... */
+	/* Too small */
+	
+	if(ntohs(ipx->ipx_pktsize)<sizeof(ipx_packet)) {
 		kfree_skb(skb,FREE_READ);
 		return 0;
 	}
 	
-	/* Too small */
-	if(htons(ipx->ipx_pktsize)<sizeof(ipx_packet)) {
-		kfree_skb(skb,FREE_READ);
-		return 0;
+	if(ipx->ipx_checksum!=IPX_NO_CHECKSUM) 
+	{
+		if(ipx_set_checksum(ipx, ntohs(ipx->ipx_pktsize))!=ipx->ipx_checksum)
+		{
+			kfree_skb(skb,FREE_READ);
+			return 0;
+		}
 	}
 	
 	/* Determine what local ipx endpoint this is */
 	intrfc = ipxitf_find_using_phys(dev, pt->type);
-	if (intrfc == NULL) {
+	if (intrfc == NULL) 
+	{
 		if (ipxcfg_auto_create_interfaces) {
 			intrfc = ipxitf_auto_create(dev, pt->type);
 		}
@@ -2004,8 +2064,10 @@ static int ipx_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nob
 	struct sockaddr_ipx local_sipx;
 	int retval;
 
-	if (sk->zapped) return -EIO; /* Socket not bound */
-	if(flags) return -EINVAL;
+	if (sk->zapped) 
+		return -EIO; /* Socket not bound */
+	if(flags) 
+		return -EINVAL;
 		
 	if(usipx) 
 	{
@@ -2043,7 +2105,8 @@ static int ipx_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nob
 	}
 	
 	retval = ipxrtr_route_packet(sk, usipx, msg->msg_iov, len);
-	if (retval < 0) return retval;
+	if (retval < 0) 
+		return retval;
 
 	return len;
 }
@@ -2278,8 +2341,8 @@ ipx_proto_init(struct net_proto *pro)
 	proc_net_register(&ipx_if_procinfo);
 	proc_net_register(&ipx_rt_procinfo);
 		
-	printk("Swansea University Computer Society IPX 0.34 for NET3.034\n");
-	printk("IPX Portions Copyright (c) 1995 Caldera, Inc.\n");
+	printk(KERN_INFO "Swansea University Computer Society IPX 0.34 for NET3.034\n");
+	printk(KERN_INFO "IPX Portions Copyright (c) 1995 Caldera, Inc.\n");
 }
 
 #ifdef MODULE

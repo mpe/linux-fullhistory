@@ -68,6 +68,8 @@
  *		Alan Cox	:	Allocator for a socket is settable.
  *		Alan Cox	:	SO_ERROR includes soft errors.
  *		Alan Cox	:	Allow NULL arguments on some SO_ opts
+ *		Alan Cox	: 	Generic socket allocation to make hooks
+ *					easier (suggested by Craig Metz).
  *
  * To Fix:
  *
@@ -324,6 +326,21 @@ int sock_getsockopt(struct sock *sk, int level, int optname,
   	return(0);
 }
 
+struct sock *sk_alloc(int priority)
+{
+	struct sock *sk=(struct sock *)kmalloc(sizeof(*sk), priority);
+	if(!sk)
+		return NULL;
+	memset(sk, 0, sizeof(*sk));
+	return sk;
+}
+
+void sk_free(struct sock *sk)
+{
+	kfree_s(sk,sizeof(*sk));
+}
+
+
 struct sk_buff *sock_wmalloc(struct sock *sk, unsigned long size, int force, int priority)
 {
 	if (sk) {
@@ -393,9 +410,9 @@ void sock_wfree(struct sock *sk, struct sk_buff *skb)
 	kfree_skbmem(skb);
 	if (sk) 
 	{
-		atomic_sub(s, &sk->wmem_alloc);
 		/* In case it might be waiting for more memory. */
 		sk->write_space(sk);
+		atomic_sub(s, &sk->wmem_alloc);
 	}
 }
 

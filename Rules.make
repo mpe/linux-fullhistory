@@ -150,7 +150,7 @@ $(MODINCL)/%.ver: %.c
 	@if [ ! -x /sbin/genksyms ]; then echo "Please read: README.modules"; fi
 	$(CC) $(CFLAGS) -E -D__GENKSYMS__ $< | /sbin/genksyms -w $(MODINCL)
 
-$(SYMTAB_OBJS:.o=.ver): $(TOPDIR)/include/linux/autoconf.h
+$(addprefix $(MODINCL)/,$(SYMTAB_OBJS:.o=.ver)): $(TOPDIR)/include/linux/autoconf.h
 
 $(TOPDIR)/include/linux/modversions.h: $(addprefix $(MODINCL)/,$(SYMTAB_OBJS:.o=.ver))
 	@echo updating $(TOPDIR)/include/linux/modversions.h

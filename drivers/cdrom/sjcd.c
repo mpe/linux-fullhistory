@@ -1447,7 +1447,7 @@ static struct {
 int sjcd_init( void ){
   int i;
 
-  printk("SJCD: Sanyo CDR-H94A cdrom driver version %d.%d.\n", SJCD_VERSION_MAJOR,
+  printk(KERN_INFO "SJCD: Sanyo CDR-H94A cdrom driver version %d.%d.\n", SJCD_VERSION_MAJOR,
     SJCD_VERSION_MINOR);
 
 #if defined( SJCD_TRACE )
@@ -1473,7 +1473,7 @@ int sjcd_init( void ){
    * Check for card. Since we are booting now, we can't use standard
    * wait algorithm.
    */
-  printk( "SJCD: Resetting: " );
+  printk(KERN_INFO "SJCD: Resetting: " );
   sjcd_send_cmd( SCMD_RESET );
   for( i = 1000; i > 0 && !sjcd_status_valid; --i ){
     unsigned long timer;
@@ -1494,7 +1494,7 @@ int sjcd_init( void ){
   /*
    * Get and print out cdrom version.
    */
-  printk( "SJCD: Getting version: " );
+  printk(KERN_INFO "SJCD: Getting version: " );
   sjcd_send_cmd( SCMD_GET_VERSION );
   for( i = 1000; i > 0 && !sjcd_status_valid; --i ){
     unsigned long timer;
@@ -1525,7 +1525,7 @@ int sjcd_init( void ){
    * Check and print out the tray state. (if it is needed?).
    */
   if( !sjcd_status_valid ){
-    printk( "SJCD: Getting status: " );
+    printk(KERN_INFO "SJCD: Getting status: " );
     sjcd_send_cmd( SCMD_GET_STATUS );
     for( i = 1000; i > 0 && !sjcd_status_valid; --i ){
       unsigned long timer;
@@ -1544,7 +1544,7 @@ int sjcd_init( void ){
     } else printk( "\n" );
   }
 
-  printk("SJCD: Status: port=0x%x.\n", sjcd_base);
+  printk(KERN_INFO "SJCD: Status: port=0x%x.\n", sjcd_base);
 
   sjcd_present++;
   return( 0 );
@@ -1573,6 +1573,6 @@ void cleanup_module(void)
   if ( sjcd_cleanup() )
     printk( "SJCD: module: cannot be removed.\n" );
   else
-    printk( "SJCD: module: removed.\n");
+    printk(KERN_INFO "SJCD: module: removed.\n");
 }
 #endif

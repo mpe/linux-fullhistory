@@ -290,15 +290,15 @@ asmlinkage void schedule(void)
 
 /* check alarm, wake up any interruptible tasks that have got a signal */
 
-	if (intr_count) {
-		printk("Aiee: scheduling in interrupt\n");
-		return;
-	}
+	if (intr_count)
+		goto scheduling_in_interrupt;
+
 	if (bh_active & bh_mask) {
 		intr_count = 1;
 		do_bottom_half();
 		intr_count = 0;
 	}
+
 	run_task_queue(&tq_scheduler);
 
 	need_resched = 0;
@@ -393,6 +393,10 @@ asmlinkage void schedule(void)
 		if (timeout)
 			del_timer(&timer);
 	}
+	return;
+
+scheduling_in_interrupt:
+	printk("Aiee: scheduling in interrupt\n");
 }
 
 #ifndef __alpha__
@@ -1028,7 +1032,7 @@ void do_timer(struct pt_regs * regs)
 				prof_buffer[ip]++;
 		}
 	}
-	if (tq_timer != &tq_last)
+	if (tq_timer)
 		mark_bh(TQUEUE_BH);
 }
 

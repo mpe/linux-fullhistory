@@ -407,7 +407,7 @@ void destroy_sock(struct sock *sk)
 		 *	later once I know the bug is buried.
 		 */
 		tcp_cache_zap();
-		kfree_s((void *)sk,sizeof(*sk));
+		sk_free(sk);
 	} 
 	else 
 	{
@@ -578,7 +578,7 @@ static int inet_create(struct socket *sock, int protocol)
 	struct proto *prot;
 	int err;
 
-	sk = (struct sock *) kmalloc(sizeof(*sk), GFP_KERNEL);
+	sk = sk_alloc(GFP_KERNEL);
 	if (sk == NULL) 
 		return(-ENOBUFS);
 	memset(sk,0,sizeof(*sk));	/* Efficient way to set most fields to zero */
@@ -591,7 +591,7 @@ static int inet_create(struct socket *sock, int protocol)
 		case SOCK_SEQPACKET:
 			if (protocol && protocol != IPPROTO_TCP) 
 			{
-				kfree_s((void *)sk, sizeof(*sk));
+				sk_free(sk);
 				return(-EPROTONOSUPPORT);
 			}
 			protocol = IPPROTO_TCP;
@@ -602,7 +602,7 @@ static int inet_create(struct socket *sock, int protocol)
 		case SOCK_DGRAM:
 			if (protocol && protocol != IPPROTO_UDP) 
 			{
-				kfree_s((void *)sk, sizeof(*sk));
+				sk_free(sk);
 				return(-EPROTONOSUPPORT);
 			}
 			protocol = IPPROTO_UDP;
@@ -613,12 +613,12 @@ static int inet_create(struct socket *sock, int protocol)
 		case SOCK_RAW:
 			if (!suser()) 
 			{
-				kfree_s((void *)sk, sizeof(*sk));
+				sk_free(sk);
 				return(-EPERM);
 			}
 			if (!protocol) 
 			{
-				kfree_s((void *)sk, sizeof(*sk));
+				sk_free(sk);
 				return(-EPROTONOSUPPORT);
 			}
 			prot = &raw_prot;
@@ -629,12 +629,12 @@ static int inet_create(struct socket *sock, int protocol)
 		case SOCK_PACKET:
 			if (!suser()) 
 			{
-				kfree_s((void *)sk, sizeof(*sk));
+				sk_free(sk);
 				return(-EPERM);
 			}
 			if (!protocol) 
 			{
-				kfree_s((void *)sk, sizeof(*sk));
+				sk_free(sk);
 				return(-EPROTONOSUPPORT);
 			}
 			prot = &packet_prot;
@@ -643,7 +643,7 @@ static int inet_create(struct socket *sock, int protocol)
 			break;
 
 		default:
-			kfree_s((void *)sk, sizeof(*sk));
+			sk_free(sk);
 			return(-ESOCKTNOSUPPORT);
 	}
 	sk->socket = sock;
@@ -655,7 +655,6 @@ static int inet_create(struct socket *sock, int protocol)
 	sk->allocation = GFP_KERNEL;
 	sk->sndbuf = SK_WMEM_MAX;
 	sk->rcvbuf = SK_RMEM_MAX;
-	sk->ato = HZ/3;
 	sk->rto = TCP_TIMEOUT_INIT;		/*TCP_WRITE_TIME*/
 	sk->cong_window = 1; /* start with only sending one packet at a time. */
 	sk->priority = 1;

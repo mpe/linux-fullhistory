@@ -398,7 +398,6 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	newsk->send_tail = NULL;
 	skb_queue_head_init(&newsk->back_log);
 	newsk->rtt = 0;		/*TCP_CONNECT_TIME<<3*/
-	newsk->ato = HZ/3;
 	newsk->rto = TCP_TIMEOUT_INIT;
 	newsk->mdev = 0;
 	newsk->max_window = 0;

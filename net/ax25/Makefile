@@ -9,7 +9,7 @@
 
 
 O_TARGET := ax25.o
-O_OBJS	 := af_ax25.o
+O_OBJS	 := af_ax25.o sysctl_net_ax25.o
 
 ifdef CONFIG_AX25
 O_OBJS	+= ax25_in.o ax25_out.o ax25_route.o ax25_subr.o ax25_timer.o

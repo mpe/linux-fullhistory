@@ -15,6 +15,7 @@ bool 'Enable loadable module support' CONFIG_MODULES
 if [ "$CONFIG_MODULES" = "y" ]; then
   MODULES=y
   bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
+  bool 'Kernel daemon support (e.g. autoload of modules)' CONFIG_KERNELD
 fi
 endmenu
 

@@ -42,7 +42,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@zytor.com$>$}
-\date{Last revised: March 9, 1996}
+\date{Last revised: April 1, 1996}
 \maketitle
 %
 \noindent
@@ -158,7 +158,8 @@ an unreasonable effort.
 \major{45}{}{char }{isdn4linux ISDN BRI driver}
 \major{46}{}{char }{Comtrol Rocketport serial card}
 \major{47}{}{char }{Comtrol Rocketport serial card -- alternate devices}
-\major{48}{--59}{}{Unallocated}
+\major{48}{}{char }{Matter replicator}
+\major{49}{--59}{}{Unallocated}
 \major{60}{--63}{}{Local/experimental use}
 \major{64}{--119}{}{Unallocated}
 \major{120}{--127}{}{Local/experimental use}
@@ -411,6 +412,7 @@ physical disks.
 	\minor{131}{/dev/temperature}{Machine internal temperature}
 	\minor{132}{/dev/hwtrap}{Hardware fault trap}
 	\minor{133}{/dev/exttrp}{External device trap}
+	\minor{134}{/dev/apm_bios}{Advanced Power Management BIOS}
 \end{devicelist}
 
 \noindent
@@ -980,7 +982,15 @@ driver with this number should not cause ill effects to the system
 \end{devicelist}
 
 \begin{devicelist}
-\major{48}{--59}{}{Unallocated}
+\major{48}{}{char }{Matter replicator}
+	\minor{0}{/dev/replicator}{Matter replicator}
+\end{devicelist}
+
+\noindent
+See RFC 1437 for the data format accepted by this device.
+
+\begin{devicelist}
+\major{49}{--59}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}

@@ -23,25 +23,28 @@ extern void kerneld_exit(void);
 
 int getrusage(struct task_struct *, int, struct rusage *);
 
-static int generate(unsigned long sig, struct task_struct * p)
+static inline void generate(unsigned long sig, struct task_struct * p)
 {
 	unsigned long mask = 1 << (sig-1);
 	struct sigaction * sa = sig + p->sig->action - 1;
 
-	/* always generate signals for traced processes ??? */
-	if (!(p->flags & PF_PTRACED)) {
+	/*
+	 * Optimize away the signal, if it's a signal that can
+	 * be handled immediately (ie non-blocked and untraced)
+	 * and that is ignored (either explicitly or by default)
+	 */
+	if (!(mask & p->blocked) && !(p->flags & PF_PTRACED)) {
 		/* don't bother with ignored signals (but SIGCHLD is special) */
 		if (sa->sa_handler == SIG_IGN && sig != SIGCHLD)
-			return 0;
+			return;
 		/* some signals are ignored by default.. (but SIGCONT already did its deed) */
 		if ((sa->sa_handler == SIG_DFL) &&
 		    (sig == SIGCONT || sig == SIGCHLD || sig == SIGWINCH || sig == SIGURG))
-			return 0;
+			return;
 	}
 	p->signal |= mask;
 	if (p->state == TASK_INTERRUPTIBLE && (p->signal & ~p->blocked))
 		wake_up_process(p);
-	return 1;
 }
 
 int send_sig(unsigned long sig,struct task_struct * p,int priv)

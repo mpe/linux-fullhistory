@@ -29,7 +29,7 @@
  *					Added arbitrary protocol id support.
  *	AX.25 031	Joerg(DL1BKE)	Added DAMA support
  *			HaJo(DD8NE)	Added Idle Disc Timer T5
- *			Joerg(DL1BKE)   renamed it to "IDLE" with a slightly
+ *			Joerg(DL1BKE)   Renamed it to "IDLE" with a slightly
  *					different behaviour. Fixed defrag
  *					routine (I hope)
  */

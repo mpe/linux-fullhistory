@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := 802.o
-O_OBJS	  = p8023.o
+O_OBJS	  = p8023.o sysctl_net_802.o
 
 ifdef CONFIG_TR
 O_OBJS += tr.o

@@ -178,6 +178,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_STRIP),y)
+L_OBJS += strip.o
+else
+  ifeq ($(CONFIG_STRIP),m)
+  M_OBJS += strip.o
+  endif
+endif
+
 ifeq ($(CONFIG_DE650),y)
 ETDRV_OBJS := $(L_OBJS) de650.o
 CONFIG_8390_BUILTIN = y
@@ -217,6 +225,9 @@ endif
 
 ifeq ($(CONFIG_LANCE),y)
 L_OBJS += lance.o
+  ifeq ($(CONFIG_LANCE32),y)
+  L_OBJS += lance32.o
+  endif
 endif
 
 ifeq ($(CONFIG_AT1700),y)
@@ -431,10 +442,10 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_FRAD),y)
+ifeq ($(CONFIG_DLCI),y)
 L_OBJS += dlci.o 
 else
-  ifeq ($(CONFIG_FRAD),m)
+  ifeq ($(CONFIG_DLCI),m)
   M_OBJS += dlci.o
   endif
 endif
@@ -480,6 +491,9 @@ plip.o:	plip.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(PLIP_OPTS) -c $<
 
 slip.o:	slip.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
+
+strip.o: strip.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
 
 dummy.o: dummy.c CONFIG

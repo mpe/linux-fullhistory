@@ -3092,11 +3092,11 @@ cdu31a_init(void)
 	 }
       }
       
-      printk("Sony I/F CDROM : %8.8s %16.16s %8.8s\n",
+      printk(KERN_INFO "Sony I/F CDROM : %8.8s %16.16s %8.8s\n",
 	     drive_config.vendor_id,
 	     drive_config.product_id,
 	     drive_config.product_rev_level);
-      printk("  Capabilities: %s",
+      printk(KERN_INFO "  Capabilities: %s",
 	     load_mech[SONY_HWC_GET_LOAD_MECH(drive_config)]);
       if (SONY_HWC_AUDIO_PLAYBACK(drive_config))
       {
@@ -3173,6 +3173,6 @@ cleanup_module(void)
       free_irq(cdu31a_irq, NULL);
 
    release_region(cdu31a_port,4);
-   printk("cdu31a module released.\n");
+   printk(KERN_INFO "cdu31a module released.\n");
 }   
 #endif MODULE

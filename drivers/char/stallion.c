@@ -580,7 +580,7 @@ void cleanup_module()
 	printk("cleanup_module()\n");
 #endif
 
-	printk("Unloading %s: version %s\n", stl_drvname, stl_drvversion);
+	printk(KERN_INFO "Unloading %s: version %s\n", stl_drvname, stl_drvversion);
 
 	save_flags(flags);
 	cli();
@@ -3131,7 +3131,7 @@ static int stl_memioctl(struct inode *ip, struct file *fp, unsigned int cmd, uns
 
 int stl_init(void)
 {
-	printk("%s: version %s\n", stl_drvname, stl_drvversion);
+	printk(KERN_INFO "%s: version %s\n", stl_drvname, stl_drvversion);
 
 	stl_initbrds();
 

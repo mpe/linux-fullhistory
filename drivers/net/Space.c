@@ -198,7 +198,7 @@ ethif_probe(struct device *dev)
 
 /* This must be AFTER the various FRADs so it initializes FIRST! */
 	
-#ifdef CONFIG_FRAD
+#ifdef CONFIG_DLCI
     extern int dlci_init(struct device *);
     static struct device dlci_dev = { "dlci", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, dlci_init, };
 #   undef NEXT_DEV
@@ -279,6 +279,14 @@ static struct device slip_bootstrap = {
 #define NEXT_DEV (&slip_bootstrap)
 #endif	/* SLIP */
   
+#if defined(CONFIG_STRIP)
+extern int strip_init_ctrl_dev(struct device *);
+static struct device strip_bootstrap = {
+    "strip_proto", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, strip_init_ctrl_dev, };
+#undef NEXT_DEV
+#define NEXT_DEV (&strip_bootstrap)
+#endif   /* STRIP */
+    
 #if defined(CONFIG_PPP)
 extern int ppp_init(struct device *);
 static struct device ppp_bootstrap = {

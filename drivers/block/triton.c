@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/triton.c	Version 1.08  Mar 13, 1996
+ *  linux/drivers/block/triton.c	Version 1.09  Mar 31, 1996
  *
  *  Copyright (c) 1995-1996  Mark Lord
  *  May be copied or modified under the terms of the GNU General Public License
@@ -121,7 +121,7 @@
  * known to work fine with this interface under Linux.
  */
 const char *good_dma_drives[] = {"Micropolis 2112A",
-				 "Maxtor 71260 AT",
+				 /* "Maxtor 71260 AT", known-bad! */
 				 "CONNER CTMA 4000"};
 
 /*

@@ -11,15 +11,16 @@ tristate 'PPP (point-to-point) support' CONFIG_PPP
 if [ ! "$CONFIG_PPP" = "n" ]; then
   comment 'CCP compressors for PPP are only built as modules.'
 fi
+tristate 'STRIP (Metricom starmode radio IP)' CONFIG_STRIP
 tristate 'Z8530 SCC kiss emulation driver for AX.25' CONFIG_SCC
 tristate 'PLIP (parallel port) support' CONFIG_PLIP
 tristate 'EQL (serial line load balancing) support' CONFIG_EQUALIZER
 
-tristate 'FRAD (Frame Relay Access Device) support' CONFIG_FRAD
-if [ "$CONFIG_FRAD" = "y" -o "$CONFIG_FRAD" = "m" ]; then
+tristate 'DLCI (Frame relay) support' CONFIG_DLCI
+if [ "$CONFIG_DLCI" = "y" -o "$CONFIG_DLCI" = "m" ]; then
   int '  Max open DLCI' CONFIG_DLCI_COUNT 24
   int '  Max DLCI per device' CONFIG_DLCI_MAX 8
-  tristate '  Sangoma S502A FRAD support' CONFIG_SDLA
+  tristate '  SDLA (Sangoma S502/S508) support' CONFIG_SDLA
 fi
 
 bool 'Do you want to be offered ALPHA test drivers' CONFIG_NET_ALPHA
@@ -30,6 +31,9 @@ if [ "$CONFIG_NET_VENDOR_SMC" = "y" ]; then
   tristate 'SMC 9194 support' CONFIG_SMC9194
 fi
 bool 'AMD LANCE and PCnet (AT1500 and NE2100) support' CONFIG_LANCE
+if [ "$CONFIG_LANCE" = "y" ]; then
+  bool 'AMD PCInet32 (VLB and PCI) support' CONFIG_LANCE32
+fi  
 bool '3COM cards' CONFIG_NET_VENDOR_3COM
 if [ "$CONFIG_NET_VENDOR_3COM" = "y" ]; then
   tristate '3c501 support' CONFIG_EL1
@@ -97,3 +101,4 @@ if [ "$CONFIG_ARCNET" != "n" ]; then
   bool '  Enable arc0e (ARCnet "Ether-Encap" packet format)' CONFIG_ARCNET_ETH
   bool '  Enable arc0s (ARCnet RFC1051 packet format)' CONFIG_ARCNET_1051
 fi
+

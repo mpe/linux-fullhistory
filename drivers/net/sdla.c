@@ -393,6 +393,12 @@ static void sdla_errors(struct device *dev, int cmd, int dlci, int ret, int len,
          printk(KERN_ERR "%s: Command timed out!\n", dev->name);
          break;
 
+      case SDLA_RET_CHANNEL_INACTIVE:
+      case SDLA_RET_DLCI_INACTIVE:
+      case SDLA_RET_NO_BUFF:
+         if (cmd == SDLA_INFORMATION_WRITE)
+            break;
+
       default: 
          /*
           * Further processing could be done here 

@@ -290,12 +290,12 @@ plip_init(struct device *dev)
 	nl->nibble	= PLIP_NIBBLE_WAIT;
 
 	/* Initialize task queue structures */
-	nl->immediate.next = &tq_last;
+	nl->immediate.next = NULL;
 	nl->immediate.sync = 0;
 	nl->immediate.routine = (void *)(void *)plip_bh;
 	nl->immediate.data = dev;
 
-	nl->deferred.next = &tq_last;
+	nl->deferred.next = NULL;
 	nl->deferred.sync = 0;
 	nl->deferred.routine = (void *)(void *)plip_kick_bh;
 	nl->deferred.data = dev;

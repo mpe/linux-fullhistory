@@ -88,10 +88,11 @@ CONFIG_NETDEVICES=y
 CONFIG_DUMMY=m
 # CONFIG_SLIP is not set
 # CONFIG_PPP is not set
+# CONFIG_STRIP is not set
 # CONFIG_SCC is not set
 # CONFIG_PLIP is not set
 # CONFIG_EQUALIZER is not set
-# CONFIG_FRAD is not set
+# CONFIG_DLCI is not set
 # CONFIG_NET_ALPHA is not set
 # CONFIG_NET_VENDOR_SMC is not set
 # CONFIG_LANCE is not set

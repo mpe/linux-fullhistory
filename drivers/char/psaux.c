@@ -491,7 +491,7 @@ int psaux_init(void)
 
 #ifdef CONFIG_82C710_MOUSE
 	if ((qp_found = probe_qp())) {
-		printk("82C710 type pointing device detected -- driver installed.\n");
+		printk(KERN_INFO "82C710 type pointing device detected -- driver installed.\n");
 /*		printk("82C710 address = %x (should be 0x310)\n", qp_data); */
 		qp_present = 1;
 		psaux_fops.write = write_qp;
@@ -500,7 +500,7 @@ int psaux_init(void)
 	} else
 #endif
 	if (aux_device_present == 0xaa) {
-		printk("PS/2 auxiliary pointing device detected -- driver installed.\n");
+		printk(KERN_INFO "PS/2 auxiliary pointing device detected -- driver installed.\n");
 	 	aux_present = 1;
 		kbd_read_mask = AUX_OBUF_FULL;
 	} else {

@@ -553,7 +553,7 @@ static int lp_probe(int offset)
 	if (testvalue == LP_DUMMY) {
 		LP_F(offset) |= LP_EXIST;
 		lp_reset(offset);
-		printk("lp%d at 0x%04x, ", offset, base);
+		printk(KERN_INFO "lp%d at 0x%04x, ", offset, base);
 		request_region(base, size, "lp");
 		if (LP_IRQ(offset))
 			printk("(irq = %d)\n", LP_IRQ(offset));

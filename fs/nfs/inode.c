@@ -17,15 +17,21 @@
 
 #include <linux/sched.h>
 #include <linux/nfs_fs.h>
+#include <linux/nfsiod.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/stat.h>
 #include <linux/errno.h>
 #include <linux/locks.h>
+#include <linux/smp.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
+
+/* This is for kernel_thread */
+#define __KERNEL_SYSCALLS__
+#include <linux/unistd.h>
 
 extern int close_fp(struct file *filp);
 
@@ -307,8 +313,39 @@ static struct file_system_type nfs_fs_type = {
 	nfs_read_super, "nfs", 0, NULL
 };
 
+/*
+ * Start up an nfsiod process. This is an awful hack, because when running
+ * as a module, we will keep insmod's memory. Besides, the current->comm
+ * hack won't work in this case
+ * The best would be to have a syscall for nfs client control that (among
+ * other things) forks biod's.
+ * Alternatively, we might want to have the idle task spawn biod's on demand.
+ */
+static int run_nfsiod(void *dummy)
+{
+	int	ret;
+
+#ifdef __SMP__
+	lock_kernel();
+	syscall_count++;
+#endif
+
+	MOD_INC_USE_COUNT;
+	current->session = 1;
+	current->pgrp = 1;
+	sprintf(current->comm, "nfsiod");
+	ret = nfsiod();
+	MOD_DEC_USE_COUNT;
+	return ret;
+}
+
 int init_nfs_fs(void)
 {
+	/* Fork four biod's */
+	kernel_thread(run_nfsiod, NULL, 0);
+	kernel_thread(run_nfsiod, NULL, 0);
+	kernel_thread(run_nfsiod, NULL, 0);
+	kernel_thread(run_nfsiod, NULL, 0);
         return register_filesystem(&nfs_fs_type);
 }
 

@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := unix.o
-O_OBJS	 := af_unix.o garbage.o
+O_OBJS	 := af_unix.o garbage.o sysctl_net_unix.o
 
 include $(TOPDIR)/Rules.make
 

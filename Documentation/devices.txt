@@ -2,7 +2,7 @@
 
 	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		     Last revised: March 9, 1996
+		     Last revised: April 1, 1996
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he got busy with other things in 1993.  It
@@ -237,6 +237,7 @@ an unreasonable effort.
 		131 = /dev/temperature	Machine internal temperature
 		132 = /dev/hwtrap	Hardware fault trap
 		133 = /dev/exttrp	External device trap
+		134 = /dev/apm_bios	Advanced Power Management BIOS
 
  11 char	Raw keyboard device
 		  0 = /dev/kbd		Raw keyboard device
@@ -672,7 +673,12 @@ an unreasonable effort.
 		  1 = /dev/cur1		Callout device corresponding to ttyR1
 		      ...
 
- 48-59		UNALLOCATED
+ 48 char	Matter replicator
+		  0 = /dev/replicator	Matter replicator
+
+		See RFC 1437 for the data format accepted by this device.
+
+ 49-59		UNALLOCATED
 
  60-63		LOCAL/EXPERIMENTAL USE
 		Allocated for local/experimental use.  For devices not

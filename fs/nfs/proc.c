@@ -29,7 +29,7 @@
  * filesystem and type 'ls xyzzy' to turn on debugging.
  */
 
-#if 0
+#if 1
 #define NFS_PROC_DEBUG
 #endif
 
@@ -409,6 +409,80 @@ retry:
 			ruid = 1;
 			goto retry;
 		}
+		PRINTK("NFS reply read failed = %d\n", status);
+		status = -nfs_stat_to_errno(status);
+	}
+	nfs_rpc_free(p0);
+	return status;
+}
+
+int
+nfs_proc_read_request(struct rpc_ioreq *req, struct nfs_server *server,
+			struct nfs_fh *fh, unsigned long offset,
+			unsigned long count, __u32 *buf)
+{
+	__u32	*p, *p0;
+	int	len;
+
+	PRINTK("NFS reqst read %ld @ %ld\n", count, offset);
+	if (!(p0 = nfs_rpc_alloc(NFS_SLACK_SPACE)))
+		return -EIO;
+
+	p = nfs_rpc_header(p0, NFSPROC_READ, 0);
+	p = xdr_encode_fhandle(p, fh);
+	*p++ = htonl(offset);
+	*p++ = htonl(count);
+	*p++ = htonl(count); /* traditional, could be any value */
+	req->rq_svec[0].iov_base = p0;
+	req->rq_svec[0].iov_len  = (p - p0) << 2;
+	req->rq_slen = (p - p0) << 2;
+	req->rq_snr = 1;
+
+	len = (6 + 1 + 17 + 1);		/* standard READ reply header */
+	req->rq_rvec[0].iov_base = p0;
+	req->rq_rvec[0].iov_len  = len << 2;
+	req->rq_rvec[1].iov_base = buf;
+	req->rq_rvec[1].iov_len  = count;
+	req->rq_rvec[2].iov_base = p0 + len;		/* spill buffer */
+	req->rq_rvec[2].iov_len  = (NFS_SLACK_SPACE - len) << 2;
+	req->rq_rlen = count + NFS_SLACK_SPACE;
+	req->rq_rnr = 3;
+
+	req->rq_addr = &server->toaddr;
+	req->rq_alen = sizeof(server->toaddr);
+
+	return 0;
+}
+
+int
+nfs_proc_read_reply(struct rpc_ioreq *req)
+{
+	struct nfs_fattr fattr;
+	int		status;
+	__u32		*p0, *p;
+	int		count;
+
+	p0 = (__u32 *) req->rq_rvec[0].iov_base;
+
+	if (!(p = nfs_rpc_verify(p0))) {
+		status = -errno_NFSERR_IO;
+	} else if ((status = ntohl(*p++)) == NFS_OK) {
+		p = xdr_decode_fattr(p, &fattr);
+		count = ntohl(*p++);
+		if (p != req->rq_rvec[2].iov_base) {
+			/* unexpected RPC reply header size. punt.
+			 * fixme: move iovec contents to align data
+			 * on page boundary and adjust RPC header size
+			 * guess. */
+			status = -errno_NFSERR_IO;
+			PRINTK("NFS reply read odd header size %d\n",
+					(p - p0) << 2);
+		} else {
+			status = count;
+			PRINTK("NFS reply read %d\n", count);
+		}
+	}
+	else {
 		PRINTK("NFS reply read failed = %d\n", status);
 		status = -nfs_stat_to_errno(status);
 	}
@@ -870,7 +944,7 @@ int *rpc_verify(int *p)
 
 	p++;
 	if ((n = ntohl(*p++)) != RPC_REPLY) {
-		printk("nfs_rpc_verify: not an RPC reply: %d\n", n);
+		printk("nfs_rpc_verify: not an RPC reply: %x\n", n);
 		return NULL;
 	}
 	if ((n = ntohl(*p++)) != RPC_MSG_ACCEPTED) {

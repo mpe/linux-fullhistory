@@ -628,9 +628,9 @@ void kfree_skb(struct sk_buff *skb, int rw)
 			if (rw)
 				atomic_sub(skb->truesize, &sk->rmem_alloc);
 			else {
-				atomic_sub(skb->truesize, &sk->wmem_alloc);
 				if(!sk->dead)
 					sk->write_space(sk);
+				atomic_sub(skb->truesize, &sk->wmem_alloc);
 			}
 			kfree_skbmem(skb);
 		}

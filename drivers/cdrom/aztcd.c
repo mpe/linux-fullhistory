@@ -1,8 +1,8 @@
-#define AZT_VERSION "2.1"
-/*      $Id: aztcd.c,v 2.10 1995/12/03 11:55:09 root Exp root $
+#define AZT_VERSION "2.2"
+/*      $Id: aztcd.c,v 2.20 1996/03/12 18:31:23 root Exp root $
 	linux/drivers/block/aztcd.c - AztechCD268 CDROM driver
 
-	Copyright (C) 1994,1995 Werner Zimmermann (zimmerma@rz.fht-esslingen.de)
+	Copyright (C) 1994,95,96 Werner Zimmermann(zimmerma@rz.fht-esslingen.de)
 
 	based on Mitsumi CDROM driver by  Martin Hariss and preworks by
 	Eberhard Moenkeberg; contains contributions by Joe Nardone and Robby 
@@ -134,7 +134,7 @@
                 with kernel 1.3.33. Will definitely not work with older kernels.
                 Programming done by Linus himself.
                 Werner Zimmermann, October 11, 1995
-	V1.90   Support for Conrad TXC drives, thank's to Jochen Koch and Olaf Kaluza.
+	V1.90   Support for Conrad TXC drives, thank's to Jochen Kunz and Olaf Kaluza.
 	        Werner Zimmermann, October 21, 1995
         V2.00   Changed #include "blk.h" to <linux/blk.h> as the directory
                 structure was changed. README.aztcd is now /usr/src/docu-
@@ -1545,7 +1545,7 @@ int aztcd_init(void)
 	  printk("aztcd: no Aztech CD-ROM Initialization");
           return -EIO;
 	}
-	printk("aztcd: Aztech,Orchid,Okano,Wearnes,TXC CD-ROM Driver (C) 1994,1995 W.Zimmermann\n");
+	printk("aztcd: Aztech,Orchid,Okano,Wearnes,Txc CD-ROM Driver (C) 1994,95,96 W.Zimmermann\n");
 	printk("aztcd: DriverVersion=%s BaseAddress=0x%x  For IDE/ATAPI-drives use ide-cd.c\n",AZT_VERSION,azt_port);
 	printk("aztcd: If you have problems, read /usr/src/linux/Documentation/cdrom/aztcd\n");
 
@@ -1562,7 +1562,7 @@ int aztcd_init(void)
                  return -EIO;
 	   }
         else                
-           { printk("aztcd: Soundwave32 card detected at %x  Version %x\n",
+           { printk(KERN_INFO "aztcd: Soundwave32 card detected at %x  Version %x\n",
 	 	 AZT_SW32_BASE_ADDR, inw(AZT_SW32_ID_REG));
 	     outw(AZT_SW32_INIT,AZT_SW32_CONFIG_REG);
 	     for (count=0;count<10000;count++);          /*delay a bit*/    	 
@@ -1643,7 +1643,7 @@ int aztcd_init(void)
 	 }
 	if (count>30) max_count=30;  /*print max.30 chars of the version string*/
 	else          max_count=count;
-	printk("aztcd: FirmwareVersion=");
+	printk(KERN_INFO "aztcd: FirmwareVersion=");
 	for (count=1;count<max_count;count++) printk("%c",result[count]);
 	printk("<<>> ");
 
@@ -2098,6 +2098,6 @@ void cleanup_module(void)
       return;
     }
    release_region(azt_port,4);
-   printk("aztcd module released.\n");
+   printk(KERN_INFO "aztcd module released.\n");
 }   
 #endif MODULE

@@ -2059,7 +2059,7 @@ int optcd_init(void)
 	read_ahead[MAJOR_NR] = 4;
 	request_region(optcd_port, 4, "optcd");
 
-	printk("optcd: DOLPHIN 8000 AT CDROM at 0x%x\n", optcd_port);
+	printk(KERN_INFO "optcd: DOLPHIN 8000 AT CDROM at 0x%x\n", optcd_port);
 	return 0;
 }
 
@@ -2078,6 +2078,6 @@ void cleanup_module(void)
 		return;
 	}
 	release_region(optcd_port, 4);
-	printk("optcd: module released.\n");
+	printk(KERN_INFO "optcd: module released.\n");
 }
 #endif MODULE

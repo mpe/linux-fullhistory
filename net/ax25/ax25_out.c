@@ -26,8 +26,10 @@
  *					Added support for extended AX.25.
  *	AX.25 031	Joerg(DL1BKE)	Added DAMA support
  *
- *			Joerg(DL1BKE)	modified fragmenter to fragment vanilla 
+ *			Joerg(DL1BKE)	Modified fragmenter to fragment vanilla 
  *					AX.25 I-Frames. Added PACLEN parameter.
+ *			Joerg(DL1BKE)	Fixed a problem with buffer allocation
+ *					for fragments.
  */
 
 #include <linux/config.h>
@@ -61,7 +63,8 @@ void ax25_output(ax25_cb *ax25, struct sk_buff *skb)
 {
 	struct sk_buff *skbn;
 	unsigned char *p;
-	int err, frontlen, mtu, len, fragno, ka9qfrag, first = 1;
+	int frontlen, mtu, len, fragno, ka9qfrag, first = 1;
+	long flags;
 	
 	/*
 	 * dl1bke 960301: We use the new PACLEN parameter as MTU of the AX.25 layer.
@@ -97,15 +100,28 @@ void ax25_output(ax25_cb *ax25, struct sk_buff *skb)
 		frontlen = skb_headroom(skb);	/* Address space + CTRL */
 
 		while (skb->len > 0) {
-			if (skb->sk != NULL) {
-				if ((skbn = sock_alloc_send_skb(skb->sk, mtu + 2 + frontlen, 0, 0, &err)) == NULL)
-					return;
-			} else {
-				if ((skbn = alloc_skb(mtu + 2 + frontlen, GFP_ATOMIC)) == NULL)
-					return;
+			save_flags(flags); 
+			cli();
+			/* 
+			 * do _not_ use sock_alloc_send_skb, our socket may have
+			 * sk->shutdown set...
+			 *
+			 */
+			if ((skbn = alloc_skb(mtu + 2 + frontlen, GFP_ATOMIC)) == NULL) {
+				restore_flags(flags);
+				printk("ax25_output(): alloc_skb returned NULL\n");
+				if (skb_device_locked(skb))
+					skb_device_unlock(skb);
+				return;
 			}
 
 			skbn->sk   = skb->sk;
+			
+			if (skbn->sk)
+				atomic_add(skbn->truesize, &skbn->sk->wmem_alloc);
+			
+			restore_flags(flags);
+			
 			skbn->free = 1;
 			skbn->arp  = 1;
 
@@ -437,7 +453,7 @@ void dama_establish_data_link(ax25_cb *ax25)
 	ax25->condition = 0x00;
 	ax25->n2count   = 0;
 
-	ax25->t3timer = 0;
+	ax25->t3timer = ax25->t3;
 	ax25->t2timer = 0;
 	ax25->t1timer = ax25->t1 = ax25_calculate_t1(ax25);
 }

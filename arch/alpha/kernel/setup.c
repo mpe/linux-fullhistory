@@ -174,7 +174,8 @@ int get_cpuinfo(char *buffer)
 		"ADU", "Cobra", "Ruby", "Flamingo", "5", "Jensen",
 		"Pelican", "8", "Sable", "AXPvme", "Noname",
 		"Turbolaser", "Avanti", "Mustang", "Alcor", "16",
-		"Mikasa", "18", "EB66", "EB64+"
+		"Mikasa", "18", "EB66", "EB64+", "21", "22", "23",
+		"24", "25", "EB164"
 	};
 	struct percpu_struct *cpu;
 	unsigned int cpu_index;

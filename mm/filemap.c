@@ -367,9 +367,12 @@ found_page:
 			while (ahead < max_ahead) {
 				ahead += PAGE_SIZE;
 				page_cache = try_to_read_ahead(inode, pos + ahead, page_cache);
+				if (!page->locked)
+					goto unlocked_page;
 			}
 			__wait_on_page(page);
 		}
+unlocked_page:
 		if (!page->uptodate)
 			goto read_page;
 		if (nr > inode->i_size - pos)
@@ -439,14 +442,11 @@ static inline unsigned long fill_page(struct inode * inode, unsigned long offset
 
 	page = find_page(inode, offset);
 	if (page)
-		goto found_page;
+		goto found_page_dont_free;
 	new_page = __get_free_page(GFP_KERNEL);
 	page = find_page(inode, offset);
-	if (page) {
-		if (new_page)
-			free_page(new_page);
+	if (page)
 		goto found_page;
-	}
 	if (!new_page)
 		return 0;
 	page = mem_map + MAP_NR(new_page);
@@ -458,7 +458,12 @@ static inline unsigned long fill_page(struct inode * inode, unsigned long offset
 	add_page_to_inode_queue(inode, page);
 	add_page_to_hash_queue(inode, page);
 	inode->i_op->readpage(inode, page);
+	if (page->locked)
+		new_page = try_to_read_ahead(inode, offset + PAGE_SIZE, 0);
 found_page:
+	if (new_page)
+		free_page(new_page);
+found_page_dont_free:
 	wait_on_page(page);
 	return page_address(page);
 }

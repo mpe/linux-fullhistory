@@ -148,7 +148,7 @@ static void unix_destroy_timer(unsigned long data)
 	{
 		if(sk->protinfo.af_unix.name)
 			kfree(sk->protinfo.af_unix.name);
-		kfree_s(sk,sizeof(*sk));
+		sk_free(sk);
 		return;
 	}
 	
@@ -202,7 +202,7 @@ static void unix_destroy_socket(unix_socket *sk)
 	{
 		if(sk->protinfo.af_unix.name)
 			kfree(sk->protinfo.af_unix.name);
-		kfree_s(sk,sizeof(*sk));
+		sk_free(sk);
 	}
 	else
 	{
@@ -281,7 +281,7 @@ static int unix_create(struct socket *sock, int protocol)
 	unix_socket *sk;
 	if(protocol && protocol != PF_UNIX)
 		return -EPROTONOSUPPORT;
-	sk=(unix_socket *)kmalloc(sizeof(*sk),GFP_KERNEL);
+	sk=(unix_socket *)sk_alloc(GFP_KERNEL);
 	if(sk==NULL)
 		return -ENOMEM;
 	switch(sock->type)
@@ -297,7 +297,7 @@ static int unix_create(struct socket *sock, int protocol)
 		case SOCK_DGRAM:
 			break;
 		default:
-			kfree_s(sk,sizeof(*sk));
+			sk_free(sk);
 			return -ESOCKTNOSUPPORT;
 	}
 	sk->type=sock->type;

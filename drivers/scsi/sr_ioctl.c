@@ -4,6 +4,7 @@
 #include <linux/fs.h>
 #include <asm/segment.h>
 #include <linux/errno.h>
+#include <linux/string.h>
 
 #include <linux/blk.h>
 #include "scsi.h"
@@ -12,6 +13,9 @@
 #include "scsi_ioctl.h"
 
 #include <linux/cdrom.h>
+
+extern void get_sectorsize(int);
+extern void sr_photocd(struct inode *);
 
 #define IOCTL_RETRIES 3
 /* The CDROM is fairly slow, so we need a little extra time */
@@ -203,7 +207,7 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	char * buffer;
 	
 	sr_cmd[0] = SCMD_READ_TOC;
-	sr_cmd[1] = ((scsi_CDs[target].device->lun) << 5) | 0x02;    /* MSF format */
+	sr_cmd[1] = ((scsi_CDs[target].device->lun) << 5);
 	sr_cmd[2] = sr_cmd[3] = sr_cmd[4] = sr_cmd[5] = 0;
 	sr_cmd[6] = 0;
 	sr_cmd[7] = 0;              /* MSB of length (12) */
@@ -231,7 +235,7 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
     case CDROMREADTOCENTRY:
     {
 	struct cdrom_tocentry tocentry;
-	char * buffer;
+	unsigned char * buffer;
 	
         err = verify_area (VERIFY_READ, (void *) arg, sizeof (struct cdrom_tocentry));
         if (err) return err;
@@ -239,7 +243,8 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	memcpy_fromfs (&tocentry, (void *) arg, sizeof (struct cdrom_tocentry));
 	
 	sr_cmd[0] = SCMD_READ_TOC;
-	sr_cmd[1] = ((scsi_CDs[target].device->lun) << 5) | 0x02;    /* MSF format */
+	sr_cmd[1] = ((scsi_CDs[target].device->lun) << 5) |
+          (tocentry.cdte_format == CDROM_MSF ? 0x02 : 0);
 	sr_cmd[2] = sr_cmd[3] = sr_cmd[4] = sr_cmd[5] = 0;
 	sr_cmd[6] = tocentry.cdte_track;
 	sr_cmd[7] = 0;             /* MSB of length (12)  */
@@ -251,14 +256,17 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	
 	result = do_ioctl (target, sr_cmd, buffer, 12);
 	
+        tocentry.cdte_ctrl = buffer[5] & 0xf;	
+        tocentry.cdte_adr = buffer[5] >> 4;
+        tocentry.cdte_datamode = (tocentry.cdte_ctrl & 0x04) ? 1 : 0;
 	if (tocentry.cdte_format == CDROM_MSF) {
 	    tocentry.cdte_addr.msf.minute = buffer[9];
 	    tocentry.cdte_addr.msf.second = buffer[10];
 	    tocentry.cdte_addr.msf.frame = buffer[11];
-	    tocentry.cdte_ctrl = buffer[5] & 0xf;
 	}
 	else
-	    tocentry.cdte_addr.lba = (int) buffer[0];
+	    tocentry.cdte_addr.lba = (((((buffer[8] << 8) + buffer[9]) << 8)
+                                       + buffer[10]) << 8) + buffer[11];
 	
 	scsi_free(buffer, 512);
 	
@@ -288,6 +296,25 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	result = do_ioctl(target, sr_cmd, NULL, 255);
 	return result;
 	
+    case CDROMCLOSETRAY:
+	sr_cmd[0] = START_STOP;
+	sr_cmd[1] = ((scsi_CDs[target].device -> lun) << 5);
+	sr_cmd[2] = sr_cmd[3] = sr_cmd[5] = 0;
+	sr_cmd[4] = 0x03;
+	
+        if ((result = do_ioctl(target, sr_cmd, NULL, 255)))
+          return result;
+
+        /* Gather information about newly inserted disc */
+        check_disk_change (inode->i_rdev);
+        sr_ioctl (inode, NULL, SCSI_IOCTL_DOORLOCK, 0);
+        sr_photocd (inode);
+
+        if (scsi_CDs[MINOR(inode->i_rdev)].needs_sector_size)
+          get_sectorsize (MINOR(inode->i_rdev));
+
+        return 0;
+
     case CDROMEJECT:
         /*
          * Allow 0 for access count for auto-eject feature.
@@ -455,6 +482,38 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	if (err)
 	    return err;
 	memcpy_tofs ((void *) arg, &subchnl, sizeof (struct cdrom_subchnl));
+	return result;
+    }
+	
+    case CDROM_GET_UPC:
+    {
+	struct cdrom_mcn mcn;
+	char * buffer;
+	
+	sr_cmd[0] = SCMD_READ_SUBCHANNEL;
+	sr_cmd[1] = ((scsi_CDs[target].device->lun) << 5);
+	sr_cmd[2] = 0x40;    /* I do want the subchannel info */
+	sr_cmd[3] = 0x02;    /* Give me medium catalog number info */
+	sr_cmd[4] = sr_cmd[5] = 0;
+	sr_cmd[6] = 0;
+	sr_cmd[7] = 0;
+	sr_cmd[8] = 24;
+	sr_cmd[9] = 0;
+	
+	buffer = (unsigned char*) scsi_malloc(512);
+	if(!buffer) return -ENOMEM;
+	
+	result = do_ioctl(target, sr_cmd, buffer, 24);
+	
+	memcpy (mcn.medium_catalog_number, buffer + 9, 13);
+        mcn.medium_catalog_number[13] = 0;
+
+	scsi_free(buffer, 512);
+	
+	err = verify_area (VERIFY_WRITE, (void *) arg, sizeof (struct cdrom_mcn));
+	if (err)
+	    return err;
+	memcpy_tofs ((void *) arg, &mcn, sizeof (struct cdrom_mcn));
 	return result;
     }
 	

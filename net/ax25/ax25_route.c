@@ -31,10 +31,10 @@
  *			Joerg(DL1BKE)	ax25_rt_build_path() find digipeater list and device by 
  *					destination call. Needed for IP routing via digipeater
  *			Jonathan(G4KLX)	Added routing for IP datagram packets.
- *			Joerg(DL1BKE)	changed routing for IP datagram and VC to use a default
+ *			Joerg(DL1BKE)	Changed routing for IP datagram and VC to use a default
  *					route if available. Does not overwrite default routes
  *					on route-table overflow anymore.
- *			Joerg(DL1BKE)	fixed AX.25 routing of IP datagram and VC, new ioctl()
+ *			Joerg(DL1BKE)	Fixed AX.25 routing of IP datagram and VC, new ioctl()
  *					"SIOCAX25OPTRT" to set IP mode and a 'permanent' flag
  *					on routes.
  */
@@ -584,7 +584,8 @@ void ax25_dg_build_path(struct sk_buff *skb, ax25_address *addr, struct device *
 	ax25_address src, dest;
 	unsigned char *bp;
 	int len;
-	
+
+	skb_pull(skb, 1);	/* skip KISS command */
 
 	ax25_rt = ax25_find_route(addr);
 	if (ax25_rt == NULL || ax25_rt->digipeat == NULL)
@@ -597,16 +598,14 @@ void ax25_dg_build_path(struct sk_buff *skb, ax25_address *addr, struct device *
 	len = ax25_rt->digipeat->ndigi * AX25_ADDR_LEN;
 		
 	if (skb_headroom(skb) < len) {
-		printk("ax25_dg_build_path: not enough headroom for in skb\n");
+		printk("ax25_dg_build_path: not enough headroom for digis in skb\n");
 		return;
 	}
-
-	memcpy(&dest, skb->data + 1, AX25_ADDR_LEN);
-	memcpy(&src,  skb->data + 8, AX25_ADDR_LEN);
 	
+	memcpy(&dest, skb->data    , AX25_ADDR_LEN);
+	memcpy(&src,  skb->data + 7, AX25_ADDR_LEN);
 
 	bp = skb_push(skb, len);
-	*bp++ = 0x00;		/* KISS Data */
 
 	build_ax25_addr(bp, &src, &dest, ax25_rt->digipeat, C_COMMAND, MODULUS);
 }
@@ -696,6 +695,7 @@ void ax25_dev_device_up(struct device *dev)
 	ax25_dev->values[AX25_VALUES_N2]        = AX25_DEF_N2;
 	ax25_dev->values[AX25_VALUES_DIGI]      = AX25_DEF_DIGI;
 	ax25_dev->values[AX25_VALUES_PACLEN]	= AX25_DEF_PACLEN;
+	ax25_dev->values[AX25_VALUES_IPMAXQUEUE]= AX25_DEF_IPMAXQUEUE;
 
 	save_flags(flags);
 	cli();
@@ -784,10 +784,12 @@ int ax25_dev_ioctl(unsigned int cmd, void *arg)
 			if (ax25_parms.values[AX25_VALUES_N2] < 1 ||
 			    ax25_parms.values[AX25_VALUES_N2] > 31)
 				return -EINVAL;
-			if (ax25_parms.values[AX25_VALUES_PACLEN] < 16)
+			if (ax25_parms.values[AX25_VALUES_PACLEN] < 22)
 				return -EINVAL;
 			if ((ax25_parms.values[AX25_VALUES_DIGI] &
 			    ~(AX25_DIGI_INBAND | AX25_DIGI_XBAND)) != 0)
+				return -EINVAL;
+			if (ax25_parms.values[AX25_VALUES_IPMAXQUEUE] < 1)
 				return -EINVAL;
 			memcpy(ax25_dev->values, ax25_parms.values, AX25_MAX_VALUES * sizeof(short));
 			ax25_dev->values[AX25_VALUES_T1] *= PR_SLOWHZ;

@@ -18,6 +18,7 @@
  *					sock structure.
  *	AX.25 029	Alan(GW4PTS)	Switched to KA9Q constant names.
  *	AX.25 031	Joerg(DL1BKE)	Added DAMA support
+ *	AX.25 032	Joerg(DL1BKE)	Fixed DAMA timeout bug
  */
 
 #include <linux/config.h>
@@ -180,8 +181,12 @@ static void ax25_timer(unsigned long param)
 		ax25_clear_queues(ax25);
 
 		ax25->n2count = 0;
-		if (!ax25->dama_slave)
+		if (!ax25->dama_slave) {
+			ax25->t3timer = 0;
 			ax25_send_control(ax25, DISC, POLLON, C_COMMAND);
+		} else {
+			ax25->t3timer = ax25->t3;
+		}
 		
 		/* state 1 or 2 should not happen, but... */
 		
@@ -190,7 +195,6 @@ static void ax25_timer(unsigned long param)
 		else
 			ax25->state = AX25_STATE_2;
 
-		ax25->t3timer = 0;
 		ax25->t1timer = ax25->t1 = ax25_calculate_t1(ax25);
 
 		if (ax25->sk != NULL)

@@ -4,6 +4,7 @@
  * Begun 24 March 1995, Stephen Tweedie
  * Added /proc support, Dec 1995
  * Added bdflush entry and intvec min/max checking, 2/23/96, Tom Dyas.
+ * Added hooks for /proc/sys/net (minor, minor patch), 96/4/1, Mike Shaver.
  */
 
 #include <linux/config.h>
@@ -38,6 +39,7 @@ static int parse_table(int *, int, void *, size_t *, void *, size_t,
 
 static ctl_table kern_table[];
 static ctl_table vm_table[];
+extern ctl_table net_table[];
 
 /* /proc declarations: */
 
@@ -100,6 +102,7 @@ static int do_securelevel_strategy (ctl_table *, int *, int, void *, size_t *,
 static ctl_table root_table[] = {
 	{CTL_KERN, "kernel", NULL, 0, 0555, kern_table},
 	{CTL_VM, "vm", NULL, 0, 0555, vm_table},
+	{CTL_NET, "net", NULL, 0, 0555, net_table},
 	{0}
 };
 

@@ -642,13 +642,13 @@ CONFIG_MODVERSIONS
 
 Kernel daemon support
 CONFIG_KERNELD
-  Normally when you have selected some drivers and/or filesystems
-  to be created as loadable modules, you also have the responsibility
-  to load the corresponding module (via insmod/modprobe) before you
-  use it.  If you select Y here, the kernel will take care of this
-  all by itself, together with a user level daemon; "kerneld".
-  Note that "kerneld" will also automatically unload all unused
-  modules, so you don't have to use "rmmod" either.
+  Normally when you have selected some drivers and/or filesystems to
+  be created as loadable modules, you also have the responsibility to
+  load the corresponding module (via insmod/modprobe) before you can
+  use it.  If you select Y here, the kernel will take care of this all
+  by itself, together with the user level daemon "kerneld".  Note that
+  "kerneld" will also automatically unload all unused modules, so you
+  don't have to use "rmmod" either.
   There are some other "kernel callouts" that will be available
   later on, such as a user level "beeper" and a generic screen blanker.
   The "kerneld" daemon is included in "modules-1.2.8" and later.
@@ -882,7 +882,10 @@ CONFIG_NO_PATH_MTU_DISCOVERY
   over the net. "Path MTU Discovery" means that, instead of always
   sending very small chunks, we start out sending big ones and if we
   then discover that some host along the way likes its chunks smaller,
-  we adjust to a smaller size. This is good, so say N.
+  we adjust to a smaller size. This is good, so most people say
+  N. However, some versions of DOS NCSA telnet (and other software)
+  are broken and can only connect to your Linux machine if you say Y
+  here.
 
 Disable NAGLE algorithm (normally enabled)
 CONFIG_TCP_NAGLE_OFF
@@ -1386,18 +1389,20 @@ CONFIG_SCSI_AM53C974
 
 IOMEGA Parallel Port ZIP drive SCSI support
 CONFIG_SCSI_PPA
-  This driver supports the parallel port version of IOMEGA's ZIP
-  drive (a 100Mb removable media device).  For more information 
-  about this driver and how to use it you should read the file
-  drivers/scsi/README.ppa.  You should also read the SCSI-HOWTO,
-  which is available via anonymous ftp from sunsite.unc.edu in
-  the directory /pub/Linux/docs/HOWTO.  This driver is also available
-  as a module which can be inserted in and removed from the
-  running kernel whenever you want. If you want to compile it as a
-  module, say M here and read Documentation/modules.txt. Note that 
-  you can say N here if you have the SCSI version of the ZIP drive: 
-  it will be supported automatically if you enabled the generic
-  "SCSI disk support", above.
+  This driver supports the parallel port version of IOMEGA's ZIP drive
+  (a 100Mb removable media device).  For more information about this
+  driver and how to use it you should read the file
+  drivers/scsi/README.ppa.  You should also read the SCSI-HOWTO, which
+  is available via anonymous ftp from sunsite.unc.edu in the directory
+  /pub/Linux/docs/HOWTO.  This driver is also available as a module
+  which can be inserted in and removed from the running kernel
+  whenever you want. If you want to use any two of a parallel port ZIP
+  drive, a parallel printer or PLIP on the same parallel port, you
+  should compile the drivers as modules and only insert them as
+  needed. To compile this driver as a module, say M here and read
+  Documentation/modules.txt. Note that you can say N here if you have
+  the SCSI version of the ZIP drive: it will be supported
+  automatically if you enabled the generic "SCSI disk support", above.
 
 Network device support?
 CONFIG_NETDEVICES
@@ -1523,6 +1528,21 @@ CONFIG_PPP_LOTS
   running in parallel. This is mainly useful if you intend your linux
   box to act as a dial-in PPP server. Most people can say N.
 
+STRIP (Starmode Radio IP) support
+CONFIG_STRIP
+  Say Y if you have a Metricom radio and intend to use Starmode Radio IP.
+  STRIP is a radio protocol developed for the MosquitoNet project
+  (http://mosquitonet.stanford.edu/) to send Internet traffic using Metricom
+  radios.  Metricom radios are small, battery powered, 100kbit/sec packet
+  radio transceivers, about the size and weight of a cellular telephone.
+  (You may also have heard them called "Metricom modems" but we avoid the
+  term "modem" because it misleads many people into thinking that you can
+  plug a Metricom modem into a phone line and use it as a modem.)
+  You can use STRIP on any Linux machine with a serial port, although
+  it is obviously most useful for people with laptop computers. If you
+  think you might get a Metricom radio in the future, there is no harm in
+  saying yes to STRIP now, except that it makes the kernel a bit bigger.
+
 Z8530 SCC kiss emulation driver for AX.2
 CONFIG_SCC
   These cards are used to connect your Linux box to an amateur radio
@@ -1573,14 +1593,15 @@ CONFIG_EQUALIZER
   from the running kernel whenever you want). If you want to compile
   it as a module, say M here and read Documentation/modules.txt.
 
-FRAD (Frame Relay Access Device) support
-CONFIG_FRAD
+Frame Relay (DLCI) support
+CONFIG_DLCI
   This is support for the frame relay protocol; frame relay is a fast
   low-cost way to connect to a remote internet access provider or to
-  form a private wide area network. The one physical line to your
-  local entry point or "switch" carries several logical
-  point-to-point connections to other sites connected to the frame
-  relay network. For a general explanation of the protocol, check out
+  form a private wide area network. The one physical line from your
+  box to the local "switch" (i.e. the entry point to the frame relay
+  network) can carry several logical point-to-point connections to
+  other computers connected to the frame relay network. For a general
+  explanation of the protocol, check out
   http://frame-relay.indiana.edu/4000/4000index.html on the WWW. (To
   browse the WWW, you need to have access to a machine on the Internet
   that has one of the programs lynx, netscape or Mosaic.) To use frame
@@ -2525,7 +2546,7 @@ CONFIG_UMSDOS_FS
 /proc filesystem support
 CONFIG_PROC_FS
   This is a virtual filesystem providing information about the status
-  of the system. "Virtual" means that it doesn't take any space on
+  of the system. "Virtual" means that it doesn't take up any space on
   your harddisk: the files are created on the fly when you access
   them. Also, you cannot read the files with less: you need to use
   more or cat. The filesystem is explained in the Kernel Hacker's
@@ -2683,15 +2704,15 @@ CONFIG_NCP_FS
 
 Standard/generic serial support
 CONFIG_SERIAL
-  This selects whether you want to include the driver for the
-  standard (0x3F8, 0x2F8, etc.) serial ports. Most people will
-  say "y" here, so that they can use serial mice, modems and
-  similar devices. People who might say "n" here are those that
-  are setting up dedicated ethernet WWW/ftp servers, or users
-  that have one of the various bus mice instead of a serial mouse.
-  Note that the Cyclades and Stallion drivers do not need this
-  driver built in for them to work. They are completely independent
-  of each other.
+  This selects whether you want to include the driver for the standard
+  serial ports.  People who might say N here are those that are
+  setting up dedicated ethernet WWW/ftp servers, or users that have
+  one of the various bus mice instead of a serial mouse.  Note that
+  the Cyclades and Stallion drivers do not need this driver to be
+  built in for them to work. They are completely independent of each
+  other. Most people will say Y here however, so that they can use
+  serial mice, modems and similar devices connecting to the standard
+  serial ports.
 
 Cyclades async mux support
 CONFIG_CYCLADES

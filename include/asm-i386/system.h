@@ -192,9 +192,9 @@ __asm__ __volatile__ ( \
 #define tas(ptr) (xchg((ptr),1))
 
 struct __xchg_dummy { unsigned long a[100]; };
-#define __xg(x) ((volatile struct __xchg_dummy *)(x))
+#define __xg(x) ((struct __xchg_dummy *)(x))
 
-static inline unsigned long __xchg(unsigned long x, volatile void * ptr, int size)
+static inline unsigned long __xchg(unsigned long x, void * ptr, int size)
 {
 	switch (size) {
 		case 1:

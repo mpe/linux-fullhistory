@@ -29,7 +29,9 @@
  *					Thus we have ax25_kiss_cmd() now... ;-)
  *			Dave Brown(N2RJT)
  *					Killed a silly bug in the DAMA code.
- *			Joerg(DL1BKE)	found the real bug in ax25.h --- sorry.
+ *			Joerg(DL1BKE)	Found the real bug in ax25.h, sri.
+ *	AX.25 032	Joerg(DL1BKE)	Added ax25_queue_length to count the number of
+ *					enqeued buffers of a socket..
  */
 
 #include <linux/config.h>
@@ -471,6 +473,46 @@ void ax25_digi_invert(ax25_digi *in, ax25_digi *out)
 
 	/* Finish off */
 	out->lastrepeat = 0;
+}
+
+/*
+ *	count the number of buffers on a list belonging to the same
+ *	socket as skb
+ */
+
+static int ax25_list_length(struct sk_buff_head *list, struct sk_buff *skb)
+{
+	int count = 0;
+	long flags;
+	struct sk_buff *skbq;
+
+	save_flags(flags);
+	cli();
+
+	if (list == NULL) {
+		restore_flags(flags);
+                return 0;
+        }
+
+	skbq = (struct sk_buff *) list->next;
+
+	while (skbq != list) {
+		if (skb->sk == skbq->sk)
+			count++;
+		skbq = skbq->next;
+	}
+
+        restore_flags(flags);
+        return count;
+}
+
+/*
+ *	count the number of buffers of one socket on the write/ack-queue
+ */
+
+int ax25_queue_length(ax25_cb *ax25, struct sk_buff *skb)
+{
+	return ax25_list_length(&ax25->write_queue, skb)+ax25_list_length(&ax25->ack_queue, skb);
 }
 
 /*

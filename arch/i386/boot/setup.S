@@ -114,10 +114,12 @@ start_of_setup:
 	mov	dl,#0x81
 	int	0x13
 
+#ifdef SAFE_RESET_DISK_CONTROLLER
 ! Reset the disk controller.
 	mov	ax,#0x0000
 	mov	dl,#0x80
 	int	0x13
+#endif
 
 ! set DS=CS, we know that SETUPSEG == CS at this point
 	mov	ax,cs		! aka #SETUPSEG

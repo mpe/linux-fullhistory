@@ -270,7 +270,7 @@ int bus_mouse_init(void)
 	mouse.dx = 0;
 	mouse.dy = 0;
 	mouse.wait = NULL;
-	printk("Logitech bus mouse detected, using IRQ %d.\n",
+	printk(KERN_INFO "Logitech bus mouse detected, using IRQ %d.\n",
 	       mouse_irq);
 	misc_register(&bus_mouse);
 	return 0;

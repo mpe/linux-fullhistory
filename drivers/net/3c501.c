@@ -559,8 +559,9 @@ static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			 *	FIXME: is there a logic to whether to keep on trying or
 			 *	reset immediately ?
 			 */
-			printk("%s: Unusual interrupt during Tx, txsr=%02x axsr=%02x"
-			   " gp=%03x rp=%03x.\n", dev->name, txsr, axsr,
+			if(el_debug>1)
+				printk("%s: Unusual interrupt during Tx, txsr=%02x axsr=%02x"
+			  		" gp=%03x rp=%03x.\n", dev->name, txsr, axsr,
 			inw(ioaddr + EL1_DATAPTR), inw(ioaddr + EL1_RXPTR));
 			dev->tbusy = 0;
 			mark_bh(NET_BH);

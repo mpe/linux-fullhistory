@@ -204,7 +204,7 @@ int ms_bus_mouse_init(void)
 		return -EIO;
 	MS_MSE_INT_OFF();
 	request_region(MS_MSE_CONTROL_PORT, 0x04, "MS Busmouse");
-	printk("Microsoft BusMouse detected and installed.\n");
+	printk(KERN_INFO "Microsoft BusMouse detected and installed.\n");
 	misc_register(&ms_bus_mouse);
 	return 0;
 }

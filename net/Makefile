@@ -41,7 +41,7 @@ SUB_DIRS += ax25
 endif
 
 L_TARGET     := network.a
-L_OBJS	     := socket.o protocols.o $(join $(SUB_DIRS),$(SUB_DIRS:%=/%.o))
+L_OBJS	     := socket.o protocols.o sysctl_net.o $(join $(SUB_DIRS),$(SUB_DIRS:%=/%.o))
 ifeq ($(CONFIG_MODULES),y)
 LX_OBJS = netsyms.o
 endif

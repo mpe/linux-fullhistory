@@ -19,6 +19,10 @@
  *
  *  Native multichannel and wide scsi support added 
  *  by Michael Neuffer neuffer@goofy.zdv.uni-mainz.de
+ *
+ *  Added request_module("scsi_hostadapter") for kerneld:
+ *  (Put an "alias scsi_hostadapter your_hostadapter" in /etc/conf.modules)
+ *  Bjorn Ekwall  <bj0rn@blox.se>
  */
 
 /*
@@ -26,6 +30,8 @@
  * symbol tables.
  */
 #define _SCSI_SYMS_VER_
+
+#include <linux/config.h>
 #include <linux/module.h>
 
 #include <asm/system.h>
@@ -44,7 +50,9 @@
 #include "hosts.h"
 #include "constants.h"
 
-#include <linux/config.h>
+#ifdef CONFIG_KERNELD
+#include <linux/kerneld.h>
+#endif
 
 #undef USE_STATIC_SCSI_MEMORY
 
@@ -606,6 +614,15 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
 
   if (SCpnt->result)
     return 0;     /* assume no peripheral if any sort of error */
+
+  /*
+   * Check the peripheral qualifier field - this tells us whether LUNS
+   * are supported here or not.
+   */
+  if( (scsi_result[0] >> 5) == 3 )
+    {
+      return 0;     /* assume no peripheral if any sort of error */
+    }
 
   /*
    * It would seem some TOSHIBA CDROM gets things wrong
@@ -3058,6 +3075,10 @@ int scsi_register_module(int module_type, void * ptr)
 	
 	/* Load upper level device handler of some kind */
     case MODULE_SCSI_DEV:
+#ifdef CONFIG_KERNELD
+	if (scsi_hosts == NULL)
+		request_module("scsi_hostadapter");
+#endif
 	return scsi_register_device_module((struct Scsi_Device_Template *) ptr);
 	/* The rest of these are not yet implemented */
 	

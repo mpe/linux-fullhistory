@@ -237,7 +237,7 @@ struct sock
  */
  
 	volatile unsigned short	backoff;
-	volatile int		err, err_soft;	/* Soft holds errors that don't
+	int			err, err_soft;	/* Soft holds errors that don't
 						   cause failure but are the cause
 						   of a persistent failure not just
 						   'timed out' */
@@ -441,6 +441,8 @@ here:
 }
 
 
+extern struct sock *		sk_alloc(int priority);
+extern void			sk_free(struct sock *sk);
 extern void			destroy_sock(struct sock *sk);
 extern unsigned short		get_new_socknum(struct proto *,
 						unsigned short);

@@ -244,7 +244,6 @@ struct symbol_table symbol_table = {
 	X(tq_timer),
 	X(tq_immediate),
 	X(tq_scheduler),
-	X(tq_last),
 	X(timer_active),
 	X(timer_table),
  	X(intr_count),

@@ -93,7 +93,7 @@ isp16_init(void)
 {
   u_char expected_drive;
 
-  printk("ISP16: configuration cdrom interface, version %d.%d.\n", ISP16_VERSION_MAJOR,
+  printk(KERN_INFO "ISP16: configuration cdrom interface, version %d.%d.\n", ISP16_VERSION_MAJOR,
     ISP16_VERSION_MINOR);
 
   if ( !strcmp(isp16_cdrom_type, "noisp16") ) {
@@ -111,7 +111,7 @@ isp16_init(void)
     return(-EIO);
   }
 
-  printk("ISP16: cdrom interface (with OPTi 82C92%d chip) detected.\n",
+  printk(KERN_INFO "ISP16: cdrom interface (with OPTi 82C92%d chip) detected.\n",
     (isp16_type==2) ? 9 : 8);
 
   if ( !strcmp(isp16_cdrom_type, "Sanyo") )
@@ -132,7 +132,7 @@ isp16_init(void)
     printk("ISP16: cdrom interface has not been properly configured.\n");
     return(-EIO);
   }
-  printk("ISP16: cdrom interface set up with io base 0x%03X, irq %d, dma %d,"
+  printk(KERN_INFO "ISP16: cdrom interface set up with io base 0x%03X, irq %d, dma %d,"
     " type %s.\n", isp16_cdrom_base, isp16_cdrom_irq, isp16_cdrom_dma,
     isp16_cdrom_type);
   return(0);
@@ -310,6 +310,6 @@ int init_module(void)
 void cleanup_module(void)
 {
 	release_region(ISP16_IO_BASE, ISP16_IO_SIZE);
-	printk("ISP16: module released.\n");
+	printk(KERN_INFO "ISP16: module released.\n");
 }
 #endif /* MODULE */

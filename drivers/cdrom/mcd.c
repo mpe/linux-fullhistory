@@ -1172,7 +1172,7 @@ int mcd_init(void)
           return -EIO;
 	}
 
-	printk("mcd=0x%x,%d: ", mcd_port, mcd_irq);
+	printk(KERN_INFO "mcd=0x%x,%d: ", mcd_port, mcd_irq);
 
 	if (register_blkdev(MAJOR_NR, "mcd", &mcd_fops) != 0)
 	{
@@ -1627,6 +1627,6 @@ void cleanup_module(void)
      }
   release_region(mcd_port,4);
   free_irq(mcd_irq, NULL);
-  printk("mcd module released.\n");
+  printk(KERN_INFO "mcd module released.\n");
 }
 #endif MODULE

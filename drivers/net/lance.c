@@ -32,7 +32,7 @@
                                                           SAW
 */
 
-static const char *version = "lance.c:v1.08.01 Mar 6 1996 saw@shade.msu.ru\n";
+static const char *version = "lance.c:v1.08.02 Mar 17 1996 tsbogend@bigbug.franken.de\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -159,6 +159,14 @@ tx_full and tbusy flags.
 #define LANCE_KMALLOC(x) \
 	((void *) (((unsigned long)kmalloc((x)+7, GFP_DMA | GFP_KERNEL)+7) & ~7))
 
+/*
+ * Changes:
+ *	Thomas Bogendoerfer (tsbogend@bigbug.franken.de):
+ *	- added support for Linux/Alpha, but removed most of it, because
+ *        it worked only for the PCI chip. 
+ *      - added hook for the 32bit lance driver
+ */
+
 /* Set the number of Tx and Rx buffers, using Log_2(# buffers).
    Reasonable default values are 16 Tx buffers, and 16 Rx buffers.
    That translates to 4 and 4 (16 == 2^^4). */
@@ -186,25 +194,25 @@ tx_full and tbusy flags.
 
 /* The LANCE Rx and Tx ring descriptors. */
 struct lance_rx_head {
-	int base;
-	short buf_length;			/* This length is 2s complement (negative)! */
-	short msg_length;			/* This length is "normal". */
+	s32 base;
+	s16 buf_length;			/* This length is 2s complement (negative)! */
+	s16 msg_length;			/* This length is "normal". */
 };
 
 struct lance_tx_head {
-	int	  base;
-	short length;				/* Length is 2s complement (negative)! */
-	short misc;
+	s32 base;
+	s16 length;				/* Length is 2s complement (negative)! */
+	s16 misc;
 };
 
 /* The LANCE initialization block, described in databook. */
 struct lance_init_block {
-	unsigned short mode;		/* Pre-set mode (reg. 15) */
-	unsigned char phys_addr[6]; /* Physical ethernet address */
-	unsigned filter[2];			/* Multicast filter (unused). */
+	u16 mode;		/* Pre-set mode (reg. 15) */
+	u8  phys_addr[6]; /* Physical ethernet address */
+	u32 filter[2];			/* Multicast filter (unused). */
 	/* Receive and transmit ring base, along with extra bits. */
-	unsigned rx_ring;			/* Tx and Rx ring base pointers */
-	unsigned tx_ring;
+	u32  rx_ring;			/* Tx and Rx ring base pointers */
+	u32  tx_ring;
 };
 
 struct lance_private {
@@ -224,7 +232,7 @@ struct lance_private {
 	struct enet_statistics stats;
 	unsigned char chip_version;	/* See lance_chip_type. */
 	char tx_full;
-	char lock;
+	unsigned long lock;
 };
 
 #define LANCE_MUST_PAD          0x00000001
@@ -290,7 +298,9 @@ static void set_multicast_list(struct device *dev);
 
 int lance_init(void)
 {
+#ifndef __alpha__    
 	int *port;
+#endif    
 
 	if (high_memory <= 16*1024*1024)
 		lance_need_isa_bounce_buffers = 0;
@@ -334,6 +344,8 @@ int lance_init(void)
 	}
 #endif  /* defined(CONFIG_PCI) */
 
+/* On the Alpha don't look for PCnet chips on the ISA bus */
+#ifndef __alpha__
 	for (port = lance_portlist; *port; port++) {
 		int ioaddr = *port;
 
@@ -347,6 +359,7 @@ int lance_init(void)
 				lance_probe1(ioaddr);
 		}
 	}
+#endif
 
 	return 0;
 }
@@ -363,6 +376,7 @@ void lance_probe1(int ioaddr)
 	int hp_builtin = 0;					/* HP on-board ethernet. */
 	static int did_version = 0;			/* Already printed version info. */
 
+#ifndef __alpha__
 	/* First we look for special cases.
 	   Check for HP's on-board ethernet by looking for 'HP' in the BIOS.
 	   There are two HP versions, check the BIOS for the configuration port.
@@ -379,6 +393,7 @@ void lance_probe1(int ioaddr)
 	/* We also recognize the HP Vectra on-board here, but check below. */
 	hpJ2405A = (inb(ioaddr) == 0x08 && inb(ioaddr+1) == 0x00
 				&& inb(ioaddr+2) == 0x09);
+#endif
 
 	/* Reset the LANCE.	 */
 	reset_val = inw(ioaddr+LANCE_RESET); /* Reset the LANCE */
@@ -423,6 +438,15 @@ void lance_probe1(int ioaddr)
 	dev->base_addr = ioaddr;
 	request_region(ioaddr, LANCE_TOTAL_SIZE, chip_table[lance_version].name);
 
+#ifdef CONFIG_LANCE32
+        /* look if it's a PCI or VLB chip */
+        if (lance_version == PCNET_PCI || lance_version == PCNET_VLB) {
+	    extern void lance32_probe1 (struct device *dev, const char *chipname, int pci_irq_line);
+	    
+	    lance32_probe1 (dev, chipname, pci_irq_line);
+	    return;
+	}
+#endif    
 	/* Make certain the data structures used by the LANCE are aligned and DMAble. */
 	lp = (struct lance_private *) LANCE_KMALLOC(sizeof(*lp));
 	if (lance_debug > 6) printk(" (#0x%05lx)", (unsigned long)lp);
@@ -442,15 +466,15 @@ void lance_probe1(int ioaddr)
 		lp->init_block.phys_addr[i] = dev->dev_addr[i];
 	lp->init_block.filter[0] = 0x00000000;
 	lp->init_block.filter[1] = 0x00000000;
-	lp->init_block.rx_ring = (int)lp->rx_ring | RX_RING_LEN_BITS;
-	lp->init_block.tx_ring = (int)lp->tx_ring | TX_RING_LEN_BITS;
+	lp->init_block.rx_ring = ((u32)virt_to_bus(lp->rx_ring) & 0xffffff) | RX_RING_LEN_BITS;
+	lp->init_block.tx_ring = ((u32)virt_to_bus(lp->tx_ring) & 0xffffff) | TX_RING_LEN_BITS;
 
 	outw(0x0001, ioaddr+LANCE_ADDR);
 	inw(ioaddr+LANCE_ADDR);
-	outw((short) (int) &lp->init_block, ioaddr+LANCE_DATA);
+	outw((short) (u32) virt_to_bus(&lp->init_block), ioaddr+LANCE_DATA);
 	outw(0x0002, ioaddr+LANCE_ADDR);
 	inw(ioaddr+LANCE_ADDR);
-	outw(((int)&lp->init_block) >> 16, ioaddr+LANCE_DATA);
+	outw(((u32)virt_to_bus(&lp->init_block)) >> 16, ioaddr+LANCE_DATA);
 	outw(0x0000, ioaddr+LANCE_ADDR);
 	inw(ioaddr+LANCE_ADDR);
 
@@ -617,15 +641,17 @@ lance_open(struct device *dev)
 
 	if (lance_debug > 1)
 		printk("%s: lance_open() irq %d dma %d tx/rx rings %#x/%#x init %#x.\n",
-			   dev->name, dev->irq, dev->dma, (int) lp->tx_ring, (int) lp->rx_ring,
-			   (int) &lp->init_block);
+			   dev->name, dev->irq, dev->dma,
+		           (u32) virt_to_bus(lp->tx_ring),
+		           (u32) virt_to_bus(lp->rx_ring),
+			   (u32) virt_to_bus(&lp->init_block));
 
 	lance_init_ring(dev);
 	/* Re-initialize the LANCE, and start it when done. */
 	outw(0x0001, ioaddr+LANCE_ADDR);
-	outw((short) (int) &lp->init_block, ioaddr+LANCE_DATA);
+	outw((short) (u32) virt_to_bus(&lp->init_block), ioaddr+LANCE_DATA);
 	outw(0x0002, ioaddr+LANCE_ADDR);
-	outw(((int)&lp->init_block) >> 16, ioaddr+LANCE_DATA);
+	outw(((u32)virt_to_bus(&lp->init_block)) >> 16, ioaddr+LANCE_DATA);
 
 	outw(0x0004, ioaddr+LANCE_ADDR);
 	outw(0x0915, ioaddr+LANCE_DATA);
@@ -648,7 +674,7 @@ lance_open(struct device *dev)
 
 	if (lance_debug > 2)
 		printk("%s: LANCE open after %d ticks, init block %#x csr0 %4.4x.\n",
-			   dev->name, i, (int) &lp->init_block, inw(ioaddr+LANCE_DATA));
+			   dev->name, i, (u32) virt_to_bus(&lp->init_block), inw(ioaddr+LANCE_DATA));
 
 	return 0;					/* Always succeed */
 }
@@ -692,7 +718,7 @@ lance_init_ring(struct device *dev)
 	lp->dirty_rx = lp->dirty_tx = 0;
 
 	for (i = 0; i < RX_RING_SIZE; i++) {
-		lp->rx_ring[i].base = (lp->rx_buffs + i*PKT_BUF_SZ) | 0x80000000;
+		lp->rx_ring[i].base = (u32)virt_to_bus((char *)lp->rx_buffs + i*PKT_BUF_SZ) | 0x80000000;
 		lp->rx_ring[i].buf_length = -PKT_BUF_SZ;
 	}
 	/* The Tx buffer address is filled in as needed, but we do need to clear
@@ -706,8 +732,8 @@ lance_init_ring(struct device *dev)
 		lp->init_block.phys_addr[i] = dev->dev_addr[i];
 	lp->init_block.filter[0] = 0x00000000;
 	lp->init_block.filter[1] = 0x00000000;
-	lp->init_block.rx_ring = (int)lp->rx_ring | RX_RING_LEN_BITS;
-	lp->init_block.tx_ring = (int)lp->tx_ring | TX_RING_LEN_BITS;
+	lp->init_block.rx_ring = ((u32)virt_to_bus(lp->rx_ring) & 0xffffff) | RX_RING_LEN_BITS;
+	lp->init_block.tx_ring = ((u32)virt_to_bus(lp->tx_ring) & 0xffffff) | TX_RING_LEN_BITS;
 }
 
 static void
@@ -815,17 +841,17 @@ lance_start_xmit(struct sk_buff *skb, struct device *dev)
 
 	/* If any part of this buffer is >16M we must copy it to a low-memory
 	   buffer. */
-	if ((int)(skb->data) + skb->len > 0x01000000) {
+	if ((u32)virt_to_bus(skb->data) + skb->len > 0x01000000) {
 		if (lance_debug > 5)
 			printk("%s: bouncing a high-memory packet (%#x).\n",
-				   dev->name, (int)(skb->data));
+				   dev->name, (u32)virt_to_bus(skb->data));
 		memcpy(&lp->tx_bounce_buffs[entry], skb->data, skb->len);
 		lp->tx_ring[entry].base =
-			(int)(lp->tx_bounce_buffs + entry) | 0x83000000;
+			((u32)virt_to_bus((lp->tx_bounce_buffs + entry)) & 0xffffff) | 0x83000000;
 		dev_kfree_skb (skb, FREE_WRITE);
 	} else {
 		lp->tx_skbuff[entry] = skb;
-		lp->tx_ring[entry].base = (int)(skb->data) | 0x83000000;
+		lp->tx_ring[entry].base = ((u32)virt_to_bus(skb->data) & 0xffffff) | 0x83000000;
 	}
 	lp->cur_tx++;
 
@@ -1033,7 +1059,7 @@ lance_rx(struct device *dev)
 				skb_reserve(skb,2);	/* 16 byte align */
 				skb_put(skb,pkt_len);	/* Make room */
 				eth_copy_and_sum(skb,
-					(unsigned char *)(lp->rx_ring[entry].base & 0x00ffffff),
+					(unsigned char *)bus_to_virt((lp->rx_ring[entry].base & 0x00ffffff)),
 					pkt_len,0);
 				skb->protocol=eth_type_trans(skb,dev);
 				netif_rx(skb);

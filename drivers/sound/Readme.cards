@@ -16,8 +16,9 @@ http://personal.eunet.fi/pp/voxware for latest news. Please don't
 mail me and ask about these cards. The unsupported cards are:
 
 	- All PnP soundcards (SB PnP, GUS PnP, Soundscape PnP etc.)
-		(SB PnP in first 3.6-alpha version (Apr?), GUS PnP bit later,
-		Soundscape PnP propably much later, others ???).
+		(SB PnP in first 3.6-alpha version (Apr 96?), GUS PnP bit later,
+		Soundscape PnP propably much later, others ???). See
+	 	"Configuring PnP soundcards" below for some hints.
 	- Mwave soundcards and motherboards
 		(Version 3.6 or 3.7. Depends on how fast I get a Mwave
 		card and suitable documents for it).
@@ -36,6 +37,59 @@ mail me and ask about these cards. The unsupported cards are:
 		(3.6-alpha versions. Can't promise the waverider synth).
 	- Yamaha OPL4 (on cards having _RAM_ for samples)
 		(Late 96?. Works as OPL3 with current driver versions)
+
+How to use sound without recompiling kernel and/or sound driver
+---------------------------------------------------------------
+
+There is commercial sound driver which should be released during Apr 96.
+It comes in precompiled form and doesn't require recompiling of kernel. See
+http://www.4Front-tech.com/uss.html for more info.
+
+Configuring PnP cards
+---------------------
+
+New versions of most soundcards use so called ISA PnP protocol for
+soft configuring their I/O, IRQ, DMA and shared memory resources.
+Currently at least cards made by Creative Technology (SB32 and SB32AWE
+PnP), Gravis (GUS PnP and GUS PnP Pro), Ensoniq (Soundscape PnP) and
+Aztech (some Sound Galazy models) use PnP technology. The CS4232 audio
+chip by Crystal Semiconductor (Intel Atlantis, HP Pavillon and many other
+motherboards) is also based on PnP technology but there is a "native" driver
+available for it (see information about CS4232 later in this document).
+
+PnP soundcards (as well as most other PnP ISA cards) are not supported
+by version 3.5 of this driver (Linux 1.3.xx and Linux 2.0.x). Proper
+support for them should be released during spring 96 
+(see http://personal.eunet.fi/pp/voxware for latest info).
+
+There is a method to get most of the PnP cards to work. The basic method
+is the following:
+
+1) Boot DOS so that card's DOS drivers have chance to initialize the
+card.
+2) _Cold_ boot to Linux by using "loadlin.exe". Hitting ctrl-alt-del
+works with older machines but causes hard reset of all cards on latest
+(Pentium) machines.
+3) If you have sound driver in Linux configured properly, the card should work
+now. "Proper" means here that I/O, IRQ and DMA settings are the same than in
+DOS. The hard part is to find which settings were used. See documentation of
+your card for more info.
+
+Windows 95 could work as well as DOS but running loadlin may be somehow 
+difficult. Propably you should "shut down" your machine to MS-DOS mode
+before running it.
+
+Some machines have BIOS utility for setting PnP resources. This is a good
+way to configure some cards. In this case you don't need to boot DOS/Win95
+prior starting Linux.
+Another way to initialize PnP cards without DOS/Win95 is a Linux based
+PnP isolation tool. When writing this there is a pre alpha test version
+of such tool available from ftp://ftp.demon.co.uk/pub/unix/linux/utils. The
+file is called isapnptools-*. Please note that this tool is just a temporary
+solution which may be incompatible with future kernel versions having proper
+support for PnP cards.
+These two methods don't work with GUS PnP which requires some additional
+initialization (cards DOS/Win95 driver does it). 
 
 Read this before trying to configure the driver
 -----------------------------------------------
@@ -805,8 +859,8 @@ models are based on the MAD16 chip which is supported by the driver.
 Audio Excel DSP16
 -----------------
 
-See comments in aedsp16.c.
-
+Support for this card is currently not functional. A new driver for it
+should be available later this year.
 
 PCMCIA cards
 ------------
@@ -836,8 +890,10 @@ Cards not supported yet
 
 First of all. There is an easy way to make most soundcards to work
 with Linux. Just use the DOS based driver to initialize the card
-to a _known_ state. Then ctrl-alt-del to Linux. If Linux is configured
+to a _known_ state. Then use loadlin.exe to boot Linux. If Linux is configured
 to use the sama I/O, IRQ and DMA numbers than DOS, the card could work.
+(ctrl-alt-del can be used in place of loadlin.exe but it doesn't work with
+new motherboards). This method works also with all/most PnP soundcards.
 
 Don't get fooled with SB compatibility. Most cards are compatible with
 SB but that may require a TSR which is not possible with Linux. If
@@ -852,9 +908,9 @@ required in maintaining the driver (some changes need to be done
 to all low level drivers and be tested too, maybe with multiple
 operating systems). For this reason I have made a desicion to not support
 obsolete cards. It's possible that someone else makes a separately 
-distributed driver (diffs) for the card. Version v4.0 will be much more
+distributed driver (diffs) for the card. Version v3.6 will be much more
 modular so making separately distributed drivers will be easier with it.
-(The bad news is that v4.0 will not be available before late -96).
+(The bad news is that v3.6 will not be available before summer -96).
 
 Writing a driver for a new card is not possible if there are no 
 programming information available about the card. If you don't
@@ -864,42 +920,24 @@ manufacturer of the card and ask if they have (or are willing to)
 released technical details of the card. Do this before contacting me. I
 can only answer 'no' if there are no programming information available.
 
-Some companies don't give low level technical information about their
-products to public or at least their require signing a NDA.
-
-I have also made decicion to not accept code based on reverse engineering
+I have made decicion to not accept code based on reverse engineering
 to the driver. There are three main reasons: First I don't want to break
 relationships to sound card manufacturers. The second reason is that
-maintaining and supporting a driver withoun any specs will be a pain. The
-third reason is that why shoud we help such companies in selling their
-products to Linux users when they don't want to sell to Linux users
-at all?
+maintaining and supporting a driver withoun any specs will be a pain.
+The third reason is that companies have freedom to refuse selling their
+products to other than Windows useres.
 
-Unfortunately many of the leading soundcard manufacturers are not willing
-to co-operate with Linux/Unix community. For example: Creative Technology 
-doesn't give information about the ASP chip and the Emu synth chip of AWE32
-and SB32. Turtle Beach don't give information about any of their
-products. MediaVision requires NDA before they are willing to
-give information about the Jazz16 chip (fortunately Logitech gave
-the info about SM Wave).
-
-So at least the above three companies are out until they are willing to 
-release documentation about their products (the situation is the
-same with many DOS based freeware/shareware games and utilities). If
-you want to use Linux/Unix with their cards, please don't try to push
-me. It's a better idea to contact the manufacturer and explain that
-you want to use your card with Linux/Unix. You could also try to sell
-your card to somebody else and then buy a card that is supported by the driver.
-
-However it's possible that things change and a driver gets written
-for some of the banned cards. Please, don't send me messages asking if
-there is any plans to write a driver for the cards mentioned above. I 
-will put any news to sound driver's www home page (see below).
+Some companies don't give low level technical information about their
+products to public or at least their require signing a NDA. It's not
+possible to implement a freeware driver for them. However it's possible
+that support for such cards become available in the commercial version
+of this driver (see http://www.4Front-tech.com/uss.html for more info).
 
 There are some common audio chipsets that are not supported yet. For example
 Sierra Aria and IBM Mwave. It's possible that these architectures
 get some support in future but I can't make any promises. Just look
-at the home page for latest info.
+at the home page (http://personal.eunet.fi/pp/voxware/new_cards.html)
+for latest info.
 
 Information about unsupported soundcards and chipsets is welcome as well
 as free copies of soundcards, SDKs and operating systems.
@@ -909,4 +947,5 @@ If you have any corrections and/or comments, please contact me.
 Hannu Savolainen
 hannu@voxware.pp.fi
 Sound driver's www home page: http://personal.eunet.fi/pp/voxware
+                   US mirror: http://www.4Front-Tech.com/usslite
 

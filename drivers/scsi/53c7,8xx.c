@@ -62,8 +62,15 @@
  *  the fourth byte from 50 to 25.
  */
 
+#include <linux/config.h>
+
+#ifdef CONFIG_SCSI_NCR53C7xx_sync
+#define PERM_OPTIONS (OPTION_IO_MAPPED|OPTION_DEBUG_TEST1|OPTION_DISCONNECT|\
+	OPTION_SYNCHRONOUS|OPTION_ALWAYS_SYNCHRONOUS)
+#else
 #define PERM_OPTIONS (OPTION_IO_MAPPED|OPTION_DEBUG_TEST1|OPTION_DISCONNECT|\
 	OPTION_SYNCHRONOUS)
+#endif
 
 /*
  * Sponsored by 
@@ -635,7 +642,11 @@ setup_wrapper(825)
 /* Template for "preferred" synchronous transfer parameters. */
 
 static const unsigned char sdtr_message[] = {
+#ifdef CONFIG_SCSI_NCR53C7xx_FAST
+    EXTENDED_MESSAGE, 3 /* length */, EXTENDED_SDTR, 25 /* *4ns */, 8 /* off */ 
+#else
     EXTENDED_MESSAGE, 3 /* length */, EXTENDED_SDTR, 50 /* *4ns */, 8 /* off */ 
+#endif
 };
 
 /* Template to request asynchronous transfers */

@@ -72,12 +72,15 @@
  *			Joerg(DL1BKE)		Added DAMA support, fixed (?) digipeating, fixed buffer locking
  *						for "virtual connect" mode... Result: Probably the
  *						"Most Buggiest Code You've Ever Seen" (TM)
- *			HaJo(DD8NE)		implementation of a T5 (idle) timer
- *			Joerg(DL1BKE)		renamed T5 to IDLE and changed behaviour:
+ *			HaJo(DD8NE)		Implementation of a T5 (idle) timer
+ *			Joerg(DL1BKE)		Renamed T5 to IDLE and changed behaviour:
  *						the timer gets reloaded on every received or transmited
  *						I frame for IP or NETROM. The idle timer is not active
  *						on "vanilla AX.25" connections. Furthermore added PACLEN
  *						to provide AX.25-layer based fragmentation (like WAMPES)
+ *      AX.25 032	Joerg(DL1BKE)		Fixed DAMA timeout error.
+ *						ax25_send_frame() limits the number of enqueued
+ *						datagrams per socket.
  *
  *	To do:
  *		Restructure the ax25_rcv code to be cleaner/faster and
@@ -634,6 +637,12 @@ static int ax25_ctl_ioctl(const unsigned int cmd, const unsigned long arg)
 	  			printk("ax25_ctl_ioctl(): Warning --- huge paclen %d", (int) ax25_ctl.arg);
 	  		ax25->paclen = ax25_ctl.arg;
 	  		break;
+	  	case AX25_IPMAXQUEUE:
+	  		if (ax25_ctl.arg < 1)
+	  			return -EINVAL;
+	  			
+	  		ax25->maxqueue = ax25_ctl.arg;
+	  		break;
 	  	default:
 	  		return -EINVAL;
 	  }
@@ -667,6 +676,7 @@ static ax25_cb *ax25_create_cb(void)
 	ax25->t3      = AX25_DEF_T3 * PR_SLOWHZ;
 	ax25->n2      = AX25_DEF_N2;
 	ax25->paclen  = AX25_DEF_PACLEN;
+	ax25->maxqueue= AX25_DEF_IPMAXQUEUE;
 	ax25->idle    = 0;
 
 	ax25->modulus   = AX25_DEF_AXDEFMODE;
@@ -729,14 +739,15 @@ int ax25_dev_is_dama_slave(struct device *dev)
  */
 static void ax25_fillin_cb(ax25_cb *ax25, struct device *dev)
 {
-	ax25->device = dev;
+	ax25->device  = dev;
 
-	ax25->rtt    = ax25_dev_get_value(dev, AX25_VALUES_T1);
-	ax25->t1     = ax25_dev_get_value(dev, AX25_VALUES_T1);
-	ax25->t2     = ax25_dev_get_value(dev, AX25_VALUES_T2);
-	ax25->t3     = ax25_dev_get_value(dev, AX25_VALUES_T3);
-	ax25->n2     = ax25_dev_get_value(dev, AX25_VALUES_N2);
-	ax25->paclen = ax25_dev_get_value(dev, AX25_VALUES_PACLEN);
+	ax25->rtt      = ax25_dev_get_value(dev, AX25_VALUES_T1);
+	ax25->t1       = ax25_dev_get_value(dev, AX25_VALUES_T1);
+	ax25->t2       = ax25_dev_get_value(dev, AX25_VALUES_T2);
+	ax25->t3       = ax25_dev_get_value(dev, AX25_VALUES_T3);
+	ax25->n2       = ax25_dev_get_value(dev, AX25_VALUES_N2);
+	ax25->paclen   = ax25_dev_get_value(dev, AX25_VALUES_PACLEN);
+	ax25->maxqueue = ax25_dev_get_value(dev, AX25_VALUES_IPMAXQUEUE);
 
 	ax25->dama_slave = 0;
 	ax25->idle = 0;
@@ -768,7 +779,11 @@ int ax25_send_frame(struct sk_buff *skb, ax25_address *src, ax25_address *dest,
 			continue;
 
 		if (ax25cmp(&ax25->source_addr, src) == 0 && ax25cmp(&ax25->dest_addr, dest) == 0 && ax25->device == dev) {
-			ax25_output(ax25, skb);
+			if (ax25_queue_length(ax25, skb) > ax25->maxqueue * ax25->window) {
+				kfree_skb(skb, FREE_WRITE);
+			} else {
+				ax25_output(ax25, skb);
+			}
 			ax25->idletimer = ax25->idle;	/* dl1bke 960228 */
 			return 1;		/* It already existed */
 		}
@@ -1075,11 +1090,11 @@ static int ax25_create(struct socket *sock, int protocol)
 			return -ESOCKTNOSUPPORT;
 	}
 
-	if ((sk = (struct sock *)kmalloc(sizeof(*sk), GFP_ATOMIC)) == NULL)
+	if ((sk = sk_alloc(GFP_ATOMIC)) == NULL)
 		return -ENOMEM;
 
 	if ((ax25 = ax25_create_cb()) == NULL) {
-		kfree_s(sk, sizeof(*sk));
+		sk_free(sk);
 		return -ENOMEM;
 	}
 
@@ -1133,11 +1148,11 @@ static struct sock *ax25_make_new(struct sock *osk, struct device *dev)
 	struct sock *sk;
 	ax25_cb *ax25;
 
-	if ((sk = (struct sock *)kmalloc(sizeof(*sk), GFP_ATOMIC)) == NULL)
+	if ((sk = sk_alloc(GFP_ATOMIC)) == NULL)
 		return NULL;
 
 	if ((ax25 = ax25_create_cb()) == NULL) {
-		kfree_s(sk, sizeof(*sk));
+		sk_free(sk);
 		return NULL;
 	}
 
@@ -1152,7 +1167,7 @@ static struct sock *ax25_make_new(struct sock *osk, struct device *dev)
 		case SOCK_SEQPACKET:
 			break;
 		default:
-			kfree_s((void *)sk, sizeof(*sk));
+			sk_free(sk);
 			kfree_s((void *)ax25, sizeof(*ax25));
 			return NULL;
 	}
@@ -1206,7 +1221,7 @@ static struct sock *ax25_make_new(struct sock *osk, struct device *dev)
 	
 	if (osk->ax25->digipeat != NULL) {
 		if ((ax25->digipeat = (ax25_digi *)kmalloc(sizeof(ax25_digi), GFP_ATOMIC)) == NULL) {
-			kfree_s(sk, sizeof(*sk));
+			sk_free(sk);
 			kfree_s(ax25, sizeof(*ax25));
 			return NULL;
 		}
@@ -1268,9 +1283,12 @@ static int ax25_release(struct socket *sock, struct socket *peer)
 			case AX25_STATE_4:
 				ax25_clear_queues(sk->ax25);
 				sk->ax25->n2count = 0;
-				if (!sk->ax25->dama_slave)
+				if (!sk->ax25->dama_slave) {
 					ax25_send_control(sk->ax25, DISC, POLLON, C_COMMAND);
-				sk->ax25->t3timer = 0;
+					sk->ax25->t3timer = 0;
+				} else {
+					sk->ax25->t3timer = sk->ax25->t3;	/* DAMA slave timeout */
+				}
 				sk->ax25->t1timer = sk->ax25->t1 = ax25_calculate_t1(sk->ax25);
 				sk->ax25->state   = AX25_STATE_2;
 				sk->state         = TCP_CLOSE;
@@ -1501,7 +1519,7 @@ static int ax25_accept(struct socket *sock, struct socket *newsock, int flags)
 	struct sk_buff *skb;
 
 	if (newsock->data)
-		kfree_s(newsock->data, sizeof(struct sock));
+		sk_free(newsock->data);
 
 	newsock->data = NULL;
 	
@@ -2441,11 +2459,10 @@ void ax25_proto_init(struct net_proto *pro)
 void ax25_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 {
 	unsigned char *ptr;
-	int was_locked;
 	
 #ifdef CONFIG_FIREWALL
 	if (call_out_firewall(PF_AX25, skb, skb->data) != FW_ACCEPT) {
-		kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb, FREE_WRITE);
 		return;
 	}
 #endif	
@@ -2459,8 +2476,7 @@ void ax25_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 
 		if(skb_headroom(skb) < AX25_BPQ_HEADER_LEN) {
 			printk("ax25_queue_xmit: not enough space to add BPQ Ether header\n");
-			skb->free = 1;
-			kfree_skb(skb, FREE_WRITE);
+			dev_kfree_skb(skb, FREE_WRITE);
 			return;
 		}
 
@@ -2472,32 +2488,14 @@ void ax25_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 		*ptr++ = (size + 5) / 256;
 
 		dev->hard_header(skb, dev, ETH_P_BPQ, bcast_addr, NULL, 0);
-
-		/* dl1bke 960201: see below. Note that the device driver should 
-		 * 		  copy the data into its own buffers, or strange
-		 *                things will happen again.
-		 */
-
-		was_locked = skb_device_locked(skb);
 		dev_queue_xmit(skb, dev, pri);
-		if (was_locked) skb_device_unlock(skb);
-
 		return;
 	} 
 #endif
 
 	ptr = skb_push(skb, 1);
 	*ptr++ = 0;			/* KISS */
-
-/* dl1bke 960201: dev_queue_xmit() will free the skb if it's not locked, so
- *                we need an additional variable to store its status.
- *		  sl_xmit() copies the data before returning, we can
- *		  remove the lock savely.
- */
-
-	was_locked = skb_device_locked(skb);
 	dev_queue_xmit(skb, dev, pri);
-	if (was_locked) skb_device_unlock(skb);
 }
 
 /*
@@ -2584,9 +2582,17 @@ int ax25_rebuild_header(unsigned char *bp, struct device *dev, unsigned long des
 			 *	freeing it).
 			 */
 			struct sk_buff *ourskb=skb_clone(skb, GFP_ATOMIC);
+
+			if(ourskb==NULL) {
+				dev_kfree_skb(skb, FREE_WRITE);
+				return 1;
+			}
+
+			ourskb->sk = skb->sk;
+			if (ourskb->sk != NULL)
+				atomic_add(ourskb->truesize, &ourskb->sk->wmem_alloc);
+
 			dev_kfree_skb(skb, FREE_WRITE);
-			if(ourskb==NULL)
-				return 1;			
 			skb_pull(ourskb, AX25_HEADER_LEN - 1);	/* Keep PID */
 			ax25_send_frame(ourskb, (ax25_address *)(bp + 8), (ax25_address *)(bp + 1), NULL, dev);
 			return 1;
@@ -2600,10 +2606,16 @@ int ax25_rebuild_header(unsigned char *bp, struct device *dev, unsigned long des
   	bp[14] &= ~LAPB_C;
   	bp[14] |= LAPB_E;
   	bp[14] |= SSSID_SPARE;
+  	
+  	/*
+  	 * dl1bke 960317: we use ax25_queue_xmit here to allow mode datagram
+  	 *		  over ethernet. I don't know if this is valid, though.
+  	 */
 
 	ax25_dg_build_path(skb, (ax25_address *)(bp + 1), dev);
+	ax25_queue_xmit(skb, dev, SOPRI_NORMAL);
 
-  	return 0;
+  	return 1;
 }	
 
 #endif

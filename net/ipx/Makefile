@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := ipx.o
-O_OBJS   := af_ipx.o
+O_OBJS   := af_ipx.o sysctl_net_ipx.o
 M_OBJS   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

@@ -20,15 +20,20 @@
  *
  * Dynamic minors and /proc/mice by Alessandro Rubini. 26-Mar-96
  *
- * Renamed to misc and miscdevice to be more accurate. Alan Cox 26-May-96
+ * Renamed to misc and miscdevice to be more accurate. Alan Cox 26-Mar-96
+ *
+ * Handling of mouse minor numbers for kerneld:
+ *  Idea by Jacques Gelinas <jack@solucorp.qc.ca>,
+ *  adapted by Bjorn Ekwall <bj0rn@blox.se>
+ *  corrected by Alan Cox <alan@lxorguk.ukuu.org.uk>
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/fs.h>
 #include <linux/errno.h>
 #include <linux/miscdevice.h>
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/major.h>
 #include <linux/malloc.h>
@@ -37,6 +42,9 @@
 
 #include <linux/tty.h> /* needed by selection.h */
 #include "selection.h" /* export its symbols */
+#ifdef CONFIG_KERNELD
+#include <linux/kerneld.h>
+#endif
 
 /*
  * Head entry for the doubly linked miscdevice list
@@ -76,17 +84,25 @@ static int misc_open(struct inode * inode, struct file * file)
 	struct miscdevice *c = misc_list.next;
 	file->f_op = NULL;
 
-	while (c != &misc_list) {
-		if (c->minor == minor) {
-			file->f_op = c->fops;
-			break;
-		}
+	while ((c != &misc_list) && (c->minor != minor))
 		c = c->next;
+	if (c == &misc_list) {
+#ifdef CONFIG_KERNELD
+		char modname[20];
+		sprintf(modname, "char-major-%d-%d", MISC_MAJOR, minor);
+		request_module(modname);
+		c = misc_list.next;
+		while ((c != &misc_list) && (c->minor != minor))
+			c = c->next;
+		if (c == &misc_list)
+#endif
+			return -ENODEV;
 	}
 
-	if (file->f_op == NULL)
+	if ((file->f_op = c->fops))
+		return file->f_op->open(inode,file);
+	else
 		return -ENODEV;
-        return file->f_op->open(inode,file);
 }
 
 static struct file_operations misc_fops = {
@@ -145,7 +161,7 @@ int misc_deregister(struct miscdevice * misc)
 
 void cleanup_module(void)
 {
-	unregister_chrdev(MOUSE_MAJOR, "misc");
+	unregister_chrdev(MISC_MAJOR, "misc");
 }
 
 #endif
