@@ -1,4 +1,4 @@
-u32 SCRIPT[] = {
+static u32 SCRIPT[] = {
 /*
 
 
@@ -1776,12 +1776,12 @@ at 0x0000032c : */	0x98080000,0xab930018,
 };
 
 #define A_dsa_cmnd	0x00000010
-u32 A_dsa_cmnd_used[] = {
+static u32 A_dsa_cmnd_used[] __attribute((unused)) = {
 	0x0000001d,
 };
 
 #define A_dsa_datain	0x00000028
-u32 A_dsa_datain_used[] = {
+static u32 A_dsa_datain_used[] __attribute((unused)) = {
 	0x0000003d,
 	0x0000003f,
 	0x00000041,
@@ -1913,7 +1913,7 @@ u32 A_dsa_datain_used[] = {
 };
 
 #define A_dsa_dataout	0x00000428
-u32 A_dsa_dataout_used[] = {
+static u32 A_dsa_dataout_used[] __attribute((unused)) = {
 	0x00000143,
 	0x00000145,
 	0x00000147,
@@ -2045,12 +2045,12 @@ u32 A_dsa_dataout_used[] = {
 };
 
 #define A_dsa_msgin	0x00000020
-u32 A_dsa_msgin_used[] = {
+static u32 A_dsa_msgin_used[] __attribute((unused)) = {
 	0x0000002f,
 };
 
 #define A_dsa_msgout	0x00000008
-u32 A_dsa_msgout_used[] = {
+static u32 A_dsa_msgout_used[] __attribute((unused)) = {
 	0x00000013,
 	0x00000285,
 	0x000002c5,
@@ -2058,50 +2058,50 @@ u32 A_dsa_msgout_used[] = {
 };
 
 #define A_dsa_select	0x00000000
-u32 A_dsa_select_used[] = {
+static u32 A_dsa_select_used[] __attribute((unused)) = {
 	0x00000006,
 };
 
 #define A_dsa_size	0x00000828
-u32 A_dsa_size_used[] = {
+static u32 A_dsa_size_used[] __attribute((unused)) = {
 };
 
 #define A_dsa_status	0x00000018
-u32 A_dsa_status_used[] = {
+static u32 A_dsa_status_used[] __attribute((unused)) = {
 	0x0000002b,
 };
 
 #define A_had_cmdout	0x00000004
-u32 A_had_cmdout_used[] = {
+static u32 A_had_cmdout_used[] __attribute((unused)) = {
 	0x0000001a,
 };
 
 #define A_had_datain	0x00000008
-u32 A_had_datain_used[] = {
+static u32 A_had_datain_used[] __attribute((unused)) = {
 	0x00000038,
 };
 
 #define A_had_dataout	0x00000010
-u32 A_had_dataout_used[] = {
+static u32 A_had_dataout_used[] __attribute((unused)) = {
 	0x0000013e,
 };
 
 #define A_had_extmsg	0x00000080
-u32 A_had_extmsg_used[] = {
+static u32 A_had_extmsg_used[] __attribute((unused)) = {
 	0x0000025a,
 	0x0000029a,
 	0x000002da,
 };
 
 #define A_had_msgin	0x00000040
-u32 A_had_msgin_used[] = {
+static u32 A_had_msgin_used[] __attribute((unused)) = {
 	0x00000248,
 	0x00000288,
 	0x000002c8,
 };
 
 #define A_had_msgout	0x00000002
-u32 A_had_msgout_used[] = {
+static u32 A_had_msgout_used[] __attribute((unused)) = {
 	0x00000010,
 	0x00000282,
 	0x000002c2,
@@ -2109,161 +2109,161 @@ u32 A_had_msgout_used[] = {
 };
 
 #define A_had_select	0x00000001
-u32 A_had_select_used[] = {
+static u32 A_had_select_used[] __attribute((unused)) = {
 	0x0000000c,
 };
 
 #define A_had_status	0x00000020
-u32 A_had_status_used[] = {
+static u32 A_had_status_used[] __attribute((unused)) = {
 };
 
 #define A_int_bad_extmsg1a	0xab930000
-u32 A_int_bad_extmsg1a_used[] = {
+static u32 A_int_bad_extmsg1a_used[] __attribute((unused)) = {
 	0x00000263,
 };
 
 #define A_int_bad_extmsg1b	0xab930001
-u32 A_int_bad_extmsg1b_used[] = {
+static u32 A_int_bad_extmsg1b_used[] __attribute((unused)) = {
 	0x0000026b,
 };
 
 #define A_int_bad_extmsg2a	0xab930002
-u32 A_int_bad_extmsg2a_used[] = {
+static u32 A_int_bad_extmsg2a_used[] __attribute((unused)) = {
 	0x000002a3,
 };
 
 #define A_int_bad_extmsg2b	0xab930003
-u32 A_int_bad_extmsg2b_used[] = {
+static u32 A_int_bad_extmsg2b_used[] __attribute((unused)) = {
 	0x000002ab,
 };
 
 #define A_int_bad_extmsg3a	0xab930004
-u32 A_int_bad_extmsg3a_used[] = {
+static u32 A_int_bad_extmsg3a_used[] __attribute((unused)) = {
 	0x000002e3,
 };
 
 #define A_int_bad_extmsg3b	0xab930005
-u32 A_int_bad_extmsg3b_used[] = {
+static u32 A_int_bad_extmsg3b_used[] __attribute((unused)) = {
 	0x000002eb,
 };
 
 #define A_int_bad_msg1	0xab930006
-u32 A_int_bad_msg1_used[] = {
+static u32 A_int_bad_msg1_used[] __attribute((unused)) = {
 	0x00000255,
 };
 
 #define A_int_bad_msg2	0xab930007
-u32 A_int_bad_msg2_used[] = {
+static u32 A_int_bad_msg2_used[] __attribute((unused)) = {
 	0x00000295,
 };
 
 #define A_int_bad_msg3	0xab930008
-u32 A_int_bad_msg3_used[] = {
+static u32 A_int_bad_msg3_used[] __attribute((unused)) = {
 	0x000002d5,
 };
 
 #define A_int_cmd_bad_phase	0xab930009
-u32 A_int_cmd_bad_phase_used[] = {
+static u32 A_int_cmd_bad_phase_used[] __attribute((unused)) = {
 	0x00000027,
 };
 
 #define A_int_cmd_complete	0xab93000a
-u32 A_int_cmd_complete_used[] = {
+static u32 A_int_cmd_complete_used[] __attribute((unused)) = {
 	0x00000037,
 };
 
 #define A_int_data_bad_phase	0xab93000b
-u32 A_int_data_bad_phase_used[] = {
+static u32 A_int_data_bad_phase_used[] __attribute((unused)) = {
 	0x00000247,
 };
 
 #define A_int_disc1	0xab930019
-u32 A_int_disc1_used[] = {
+static u32 A_int_disc1_used[] __attribute((unused)) = {
 	0x00000277,
 };
 
 #define A_int_disc2	0xab93001a
-u32 A_int_disc2_used[] = {
+static u32 A_int_disc2_used[] __attribute((unused)) = {
 	0x000002b7,
 };
 
 #define A_int_disc3	0xab93001b
-u32 A_int_disc3_used[] = {
+static u32 A_int_disc3_used[] __attribute((unused)) = {
 	0x000002f7,
 };
 
 #define A_int_msg_sdtr1	0xab93000c
-u32 A_int_msg_sdtr1_used[] = {
+static u32 A_int_msg_sdtr1_used[] __attribute((unused)) = {
 	0x00000271,
 };
 
 #define A_int_msg_sdtr2	0xab93000d
-u32 A_int_msg_sdtr2_used[] = {
+static u32 A_int_msg_sdtr2_used[] __attribute((unused)) = {
 	0x000002b1,
 };
 
 #define A_int_msg_sdtr3	0xab93000e
-u32 A_int_msg_sdtr3_used[] = {
+static u32 A_int_msg_sdtr3_used[] __attribute((unused)) = {
 	0x000002f1,
 };
 
 #define A_int_no_msgout1	0xab93000f
-u32 A_int_no_msgout1_used[] = {
+static u32 A_int_no_msgout1_used[] __attribute((unused)) = {
 	0x00000281,
 };
 
 #define A_int_no_msgout2	0xab930010
-u32 A_int_no_msgout2_used[] = {
+static u32 A_int_no_msgout2_used[] __attribute((unused)) = {
 	0x000002c1,
 };
 
 #define A_int_no_msgout3	0xab930011
-u32 A_int_no_msgout3_used[] = {
+static u32 A_int_no_msgout3_used[] __attribute((unused)) = {
 	0x00000301,
 };
 
 #define A_int_not_cmd_complete	0xab930012
-u32 A_int_not_cmd_complete_used[] = {
+static u32 A_int_not_cmd_complete_used[] __attribute((unused)) = {
 	0x00000031,
 };
 
 #define A_int_not_rej	0xab93001c
-u32 A_int_not_rej_used[] = {
+static u32 A_int_not_rej_used[] __attribute((unused)) = {
 	0x0000030d,
 };
 
 #define A_int_resel_not_msgin	0xab930016
-u32 A_int_resel_not_msgin_used[] = {
+static u32 A_int_resel_not_msgin_used[] __attribute((unused)) = {
 	0x00000317,
 };
 
 #define A_int_reselected	0xab930017
-u32 A_int_reselected_used[] = {
+static u32 A_int_reselected_used[] __attribute((unused)) = {
 	0x0000031b,
 };
 
 #define A_int_sel_no_ident	0xab930013
-u32 A_int_sel_no_ident_used[] = {
+static u32 A_int_sel_no_ident_used[] __attribute((unused)) = {
 	0x0000000f,
 };
 
 #define A_int_sel_not_cmd	0xab930014
-u32 A_int_sel_not_cmd_used[] = {
+static u32 A_int_sel_not_cmd_used[] __attribute((unused)) = {
 	0x00000019,
 };
 
 #define A_int_selected	0xab930018
-u32 A_int_selected_used[] = {
+static u32 A_int_selected_used[] __attribute((unused)) = {
 	0x0000032d,
 };
 
 #define A_int_status_not_msgin	0xab930015
-u32 A_int_status_not_msgin_used[] = {
+static u32 A_int_status_not_msgin_used[] __attribute((unused)) = {
 	0x0000002d,
 };
 
 #define A_msgin_buf	0x00000000
-u32 A_msgin_buf_used[] = {
+static u32 A_msgin_buf_used[] __attribute((unused)) = {
 	0x0000024b,
 	0x0000025f,
 	0x00000267,
@@ -2280,7 +2280,7 @@ u32 A_msgin_buf_used[] = {
 };
 
 #define A_reselected_identify	0x00000000
-u32 A_reselected_identify_used[] = {
+static u32 A_reselected_identify_used[] __attribute((unused)) = {
 	0x00000319,
 };
 
@@ -2304,7 +2304,7 @@ u32 A_reselected_identify_used[] = {
 #define Ent_wait_disc2	0x00000ad0
 #define Ent_wait_disc3	0x00000bd0
 #define Ent_wait_disc_complete	0x000000d0
-u32 LABELPATCHES[] = {
+static u32 LABELPATCHES[] __attribute((unused)) = {
 	0x00000007,
 	0x00000009,
 	0x00000015,
@@ -2349,12 +2349,12 @@ u32 LABELPATCHES[] = {
 	0x0000032b,
 };
 
-struct {
+static struct {
 	u32	offset;
 	void		*address;
-} EXTERNAL_PATCHES[] = {
+} EXTERNAL_PATCHES[] __attribute((unused)) = {
 };
 
-u32 INSTRUCTIONS	= 407;
-u32 PATCHES	= 42;
-u32 EXTERNAL_PATCHES_LEN	= 0;
+static u32 INSTRUCTIONS __attribute((unused))	= 407;
+static u32 PATCHES __attribute((unused))	= 42;
+static u32 EXTERNAL_PATCHES_LEN __attribute((unused))	= 0;

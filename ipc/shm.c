@@ -27,7 +27,7 @@
 
 extern int ipcperms (struct ipc_perm *ipcp, short shmflg);
 static int findkey (key_t key);
-static int newseg (key_t key, int shmflg, int size);
+static int newseg (key_t key, int shmflg, size_t size);
 static int shm_map (struct vm_area_struct *shmd);
 static void killseg (int id);
 static void shm_open (struct vm_area_struct *shmd);
@@ -100,7 +100,7 @@ static int findkey (key_t key)
 /*
  * allocate new shmid_kernel and pgtable. protected by shm_segs[id] = NOID.
  */
-static int newseg (key_t key, int shmflg, int size)
+static int newseg (key_t key, int shmflg, size_t size)
 {
 	struct shmid_kernel *shp;
 	int numpages = (size + PAGE_SIZE -1) >> PAGE_SHIFT;
@@ -164,16 +164,16 @@ found:
 	return (unsigned int) shp->u.shm_perm.seq * SHMMNI + id;
 }
 
-int shmmax = SHMMAX;
+size_t shmmax = SHMMAX;
 
-asmlinkage long sys_shmget (key_t key, int size, int shmflg)
+asmlinkage long sys_shmget (key_t key, size_t size, int shmflg)
 {
 	struct shmid_kernel *shp;
 	int err, id = 0;
 
 	down(&current->mm->mmap_sem);
 	spin_lock(&shm_lock);
-	if (size < 0 || size > shmmax) {
+	if (size > shmmax) {
 		err = -EINVAL;
 	} else if (key == IPC_PRIVATE) {
 		err = newseg(key, shmflg, size);
@@ -490,7 +490,7 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 		err = -ENOMEM;
 		addr = 0;
 	again:
-		if (!(addr = get_unmapped_area(addr, shp->u.shm_segsz)))
+		if (!(addr = get_unmapped_area(addr, (unsigned long)shp->u.shm_segsz)))
 			goto out;
 		if(addr & (SHMLBA - 1)) {
 			addr = (addr + (SHMLBA - 1)) & ~(SHMLBA - 1);
@@ -516,7 +516,7 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	if (addr < current->mm->start_stack &&
 	    addr > current->mm->start_stack - PAGE_SIZE*(shp->shm_npages + 4))
 		goto out;
-	if (!(shmflg & SHM_REMAP) && find_vma_intersection(current->mm, addr, addr + shp->u.shm_segsz))
+	if (!(shmflg & SHM_REMAP) && find_vma_intersection(current->mm, addr, addr + (unsigned long)shp->u.shm_segsz))
 		goto out;
 
 	err = -EACCES;
@@ -867,7 +867,15 @@ static int sysvipc_shm_read_proc(char *buffer, char **start, off_t offset, int l
 	spin_lock(&shm_lock);
     	for(i = 0; i < SHMMNI; i++)
 		if(shm_segs[i] != IPC_UNUSED) {
-	    		len += sprintf(buffer + len, "%10d %10d  %4o %10d %5u %5u  %5d %5u %5u %5u %5u %10lu %10lu %10lu\n",
+#define SMALL_STRING "%10d %10d  %4o %10u %5u %5u  %5d %5u %5u %5u %5u %10lu %10lu %10lu\n"
+#define BIG_STRING   "%10d %10d  %4o %21u %5u %5u  %5d %5u %5u %5u %5u %10lu %10lu %10lu\n"
+			char *format;
+
+			if (sizeof(size_t) <= sizeof(int))
+				format = SMALL_STRING;
+			else
+				format = BIG_STRING;
+	    		len += sprintf(buffer + len, format,
 			shm_segs[i]->u.shm_perm.key,
 			shm_segs[i]->u.shm_perm.seq * SHMMNI + i,
 			shm_segs[i]->u.shm_perm.mode,

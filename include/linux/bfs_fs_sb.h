@@ -17,7 +17,6 @@ struct bfs_sb_info {
 	__u32 si_lf_sblk;
 	__u32 si_lf_eblk;
 	__u32 si_lasti;
-	__u32 si_imap_len;
 	__u8 *si_imap;
 	struct buffer_head * si_sbh;		/* buffer header w/superblock */
 	struct bfs_super_block * si_bfs_sb;	/* superblock in si_sbh->b_data */

@@ -250,9 +250,6 @@ vmlinux: $(CONFIGURATION) init/main.o init/version.o linuxsubdirs
 symlinks:
 	rm -f include/asm
 	( cd include ; ln -sf asm-$(ARCH) asm)
-	@if [ ! -d modules ]; then \
-		mkdir modules; \
-	fi
 	@if [ ! -d include/linux/modules ]; then \
 		mkdir include/linux/modules; \
 	fi
@@ -331,7 +328,11 @@ endif
 
 modules: $(patsubst %, _mod_%, $(SUBDIRS))
 
-$(patsubst %, _mod_%, $(SUBDIRS)) : include/linux/version.h include/config/MARKER
+modules/MARKER:
+	mkdir modules
+	touch modules/MARKER
+
+$(patsubst %, _mod_%, $(SUBDIRS)) : include/linux/version.h include/config/MARKER modules/MARKER
 	$(MAKE) -C $(patsubst _mod_%, %, $@) CFLAGS="$(CFLAGS) $(MODFLAGS)" MAKING_MODULES=1 modules
 
 modules_install:

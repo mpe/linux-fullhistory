@@ -18,6 +18,8 @@
 
 #include "map.h"
  
+#define SIZE(x) (sizeof(x) / sizeof(x[0]))
+
 /*    Logical    Physical
  * 0xffff1000	0x00100000	DMA registers
  * 0xffff2000	0x00200000	MPEG
@@ -54,6 +56,4 @@ const struct map_desc io_desc[] __initdata = {
  	{ 0xffffe000, 0x00e00000, 0x00001000, DOMAIN_IO, 0, 1, 0, 0 }
 };
 
-#define SIZEOFMAP (sizeof(mapping) / sizeof(mapping[0]))
-
-unsigned int __initdata io_desc_size = SIZEOFMAP;
+unsigned int __initdata io_desc_size = SIZE(io_desc);

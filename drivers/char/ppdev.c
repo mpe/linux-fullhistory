@@ -509,6 +509,7 @@ static int pp_open (struct inode * inode, struct file * file)
 	if (!pp)
 		return -ENOMEM;
 
+	memset (pp, 0, sizeof (struct pp_struct));
 	pp->state.mode = IEEE1284_MODE_COMPAT;
 	pp->state.phase = init_phase (pp->state.mode);
 	pp->flags = 0;

@@ -173,8 +173,8 @@ vol2io(struct ncp_server *server, char *name, int case_trans)
 #endif /* CONFIG_NCPFS_NLS */
 
 #define NCP_GET_AGE(dentry)	(jiffies - (dentry)->d_time)
-#define NCP_MAX_AGE		(server->dentry_ttl)
-#define NCP_TEST_AGE(server,dentry)	(NCP_GET_AGE(dentry) < NCP_MAX_AGE)
+#define NCP_MAX_AGE(server)	((server)->dentry_ttl)
+#define NCP_TEST_AGE(server,dentry)	(NCP_GET_AGE(dentry) < NCP_MAX_AGE(server))
 
 static inline void
 ncp_age_dentry(struct ncp_server* server, struct dentry* dentry)
@@ -188,21 +188,64 @@ ncp_new_dentry(struct dentry* dentry)
 	dentry->d_time = jiffies;
 }
 
-#define NCP_FPOS_EMPTY	0	/* init value for fpos variables. */
+static inline void
+ncp_renew_dentries(struct dentry *parent)
+{
+	struct ncp_server *server = NCP_SERVER(parent->d_inode);
+	struct list_head *next = parent->d_subdirs.next;
+	struct dentry *dentry;
 
-struct ncp_cache_control {
-	struct nw_search_sequence seq;
-	int		firstcache;
-	int		currentpos;
-	int		cachehead;
-	int		cachetail;
-	int		eof;
+	while (next != &parent->d_subdirs) {
+		dentry = list_entry(next, struct dentry, d_child);
+
+		if (dentry->d_fsdata == NULL)
+			ncp_age_dentry(server, dentry);
+		else
+			ncp_new_dentry(dentry);
+
+		next = next->next;
+	}
+}
+
+static inline void
+ncp_invalidate_dircache_entries(struct dentry *parent)
+{
+	struct ncp_server *server = NCP_SERVER(parent->d_inode);
+	struct list_head *next = parent->d_subdirs.next;
+	struct dentry *dentry;
+
+	while (next != &parent->d_subdirs) {
+		dentry = list_entry(next, struct dentry, d_child);
+		dentry->d_fsdata = NULL;
+		ncp_age_dentry(server, dentry);
+		next = next->next;
+	}
+}
+
+struct ncp_cache_head {
+	unsigned long			time;	/* cache age */
+	unsigned long			end;	/* last valid fpos in cache */
+	int				eof;
 };
 
-#define NCP_DIRCACHE_SIZE	(PAGE_CACHE_SIZE-sizeof(struct ncp_cache_control))
-struct ncp_seq_cache {
-	struct ncp_cache_control ctl;
-	unsigned char cache[NCP_DIRCACHE_SIZE];
+#define NCP_DIRCACHE_SIZE	((int)(PAGE_CACHE_SIZE/sizeof(struct dentry *)))
+union ncp_dir_cache {
+	struct ncp_cache_head head;
+	struct dentry *dentry[NCP_DIRCACHE_SIZE];
+};
+
+#define NCP_FIRSTCACHE_SIZE	((int)((NCP_DIRCACHE_SIZE * \
+	sizeof(struct dentry *) - sizeof(struct ncp_cache_head)) / \
+	sizeof(struct dentry *)))
+
+#define NCP_DIRCACHE_START	(NCP_DIRCACHE_SIZE - NCP_FIRSTCACHE_SIZE)
+
+struct ncp_cache_control {
+	struct	ncp_cache_head		head;
+	struct	page			*page;
+	union	ncp_dir_cache		*cache;
+	unsigned long			fpos, ofs;
+	int				filled, valid, idx;
 };
 
 #endif /* _NCPLIB_H */

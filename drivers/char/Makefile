@@ -261,7 +261,7 @@ O_OBJS += softdog.o
 else
   ifeq ($(CONFIG_SOFT_WATCHDOG),m)
   M_OBJS += softdog.o
-  endif   
+  endif
 endif
 
 ifeq ($(CONFIG_PCWATCHDOG),y)
@@ -452,23 +452,7 @@ else
   ifeq ($(CONFIG_RADIO_AZTECH),m)
   M_OBJS += radio-aztech.o
   endif
-endif                                             
-
-ifeq ($(CONFIG_RADIO_SF16FMI),y)
-O_OBJS += radio-sf16fmi.o
-else
-  ifeq ($(CONFIG_RADIO_SF16FMI),m)
-  M_OBJS += radio-sf16fmi.o
-  endif
-endif                                             
-
-ifeq ($(CONFIG_RADIO_RTRACK),y)
-O_OBJS += radio-aimslab.o
-else
-  ifeq ($(CONFIG_RADIO_RTRACK),m)
-  M_OBJS += radio-aimslab.o
-  endif
-endif                                             
+endif
 
 ifeq ($(CONFIG_RADIO_RTRACK2),y)
 O_OBJS += radio-rtrack2.o
@@ -476,23 +460,15 @@ else
   ifeq ($(CONFIG_RADIO_RTRACK2),m)
   M_OBJS += radio-rtrack2.o
   endif
-endif                                             
+endif
 
-ifeq ($(CONFIG_RADIO_TYPHOON),y)
-O_OBJS += radio-typhoon.o
+ifeq ($(CONFIG_RADIO_SF16FMI),y)
+O_OBJS += radio-sf16fmi.o
 else
-  ifeq ($(CONFIG_RADIO_TYPHOON),m)
-  M_OBJS += radio-typhoon.o
+  ifeq ($(CONFIG_RADIO_SF16FMI),m)
+  M_OBJS += radio-sf16fmi.o
   endif
-endif                                             
-
-ifeq ($(CONFIG_RADIO_ZOLTRIX),y)
-O_OBJS += radio-zoltrix.o
-else
-  ifeq ($(CONFIG_RADIO_ZOLTRIX),m)
-  M_OBJS += radio-zoltrix.o
-  endif
-endif                                             
+endif
 
 ifeq ($(CONFIG_RADIO_CADET),y)
 O_OBJS += radio-cadet.o
@@ -500,7 +476,39 @@ else
   ifeq ($(CONFIG_RADIO_CADET),m)
   M_OBJS += radio-cadet.o
   endif
-endif                                             
+endif
+
+ifeq ($(CONFIG_RADIO_TYPHOON),y)
+O_OBJS += radio-typhoon.o
+else
+  ifeq ($(CONFIG_RADIO_TYPHOON),m)
+  M_OBJS += radio-typhoon.o
+  endif
+endif
+
+ifeq ($(CONFIG_RADIO_TERRATEC),y)
+O_OBJS += radio-terratec.o
+else
+  ifeq ($(CONFIG_RADIO_TERRATEC),m)
+  M_OBJS += radio-terratec.o
+  endif
+endif
+
+ifeq ($(CONFIG_RADIO_RTRACK),y)
+O_OBJS += radio-aimslab.o
+else
+  ifeq ($(CONFIG_RADIO_RTRACK),m)
+  M_OBJS += radio-aimslab.o
+  endif
+endif
+
+ifeq ($(CONFIG_RADIO_ZOLTRIX),y)
+O_OBJS += radio-zoltrix.o
+else
+  ifeq ($(CONFIG_RADIO_ZOLTRIX),m)
+  M_OBJS += radio-zoltrix.o
+  endif
+endif
 
 ifeq ($(CONFIG_RADIO_MIROPCM20),y)
 O_OBJS += radio-miropcm20.o
@@ -516,13 +524,13 @@ else
   ifeq ($(CONFIG_RADIO_GEMTEK),m)
   M_OBJS += radio-gemtek.o
   endif
-endif                                             
+endif
 
-ifeq ($(CONFIG_RADIO_TERRATEC),y)
-O_OBJS += radio-terratec.o
+ifeq ($(CONFIG_RADIO_TRUST),y)
+O_OBJS += radio-trust.o
 else
-  ifeq ($(CONFIG_RADIO_TERRATEC),m)
-  M_OBJS += radio-terratec.o
+  ifeq ($(CONFIG_RADIO_TRUST),m)
+  M_OBJS += radio-trust.o
   endif
 endif
 

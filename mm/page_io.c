@@ -132,7 +132,7 @@ void rw_swap_page(int rw, struct page *page, int wait)
 {
 	swp_entry_t entry;
 
-	entry.val = page->pg_offset;
+	entry.val = page->index;
 
 	if (!PageLocked(page))
 		PAGE_BUG(page);

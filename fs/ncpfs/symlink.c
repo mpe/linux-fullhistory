@@ -80,7 +80,7 @@ static struct dentry *ncp_follow_link(struct dentry *dentry,
 	char *link;
 
 #ifdef DEBUG
-	printk("ncp_follow_link(dentry=%p,base=%p,follow=%u)\n",dentry,base,follow);
+	PRINTK("ncp_follow_link(dentry=%p,base=%p,follow=%u)\n",dentry,base,follow);
 #endif
 
 	if(!S_ISLNK(inode->i_mode)) {
@@ -131,7 +131,7 @@ static int ncp_readlink(struct dentry * dentry, char * buffer, int buflen)
 	int length,error;
 
 #ifdef DEBUG
-	printk("ncp_readlink(dentry=%p,buffer=%p,buflen=%d)\n",dentry,buffer,buflen);
+	PRINTK("ncp_readlink(dentry=%p,buffer=%p,buflen=%d)\n",dentry,buffer,buflen);
 #endif
 
 	if(!S_ISLNK(inode->i_mode))
@@ -173,7 +173,7 @@ int ncp_symlink(struct inode *dir, struct dentry *dentry, const char *symname) {
 	char *link;
 
 #ifdef DEBUG
-	printk("ncp_symlink(dir=%p,dentry=%p,symname=%s)\n",dir,dentry,symname);
+	PRINTK("ncp_symlink(dir=%p,dentry=%p,symname=%s)\n",dir,dentry,symname);
 #endif
 
 	if (!(NCP_SERVER(dir)->m.flags & NCP_MOUNT_SYMLINKS))

@@ -125,3 +125,15 @@ out:
 	unlock_kernel();
 	return ret;
 }
+
+int get_exec_domain_list(char * page)
+{
+	int len = 0;
+	struct exec_domain * e;
+
+	for (e=exec_domains; e && len < PAGE_SIZE - 80; e=e->next)
+		len += sprintf(page+len, "%d-%d\t%-16s\t[%s]\n",
+			e->pers_low, e->pers_high, e->name,
+			e->module ? e->module->name : "kernel");
+	return len;
+}

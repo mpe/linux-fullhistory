@@ -99,7 +99,7 @@ static int coda_readpage(struct file * coda_file, struct page * page)
 			      &cont_file, &cont_dentry);
 
         CDEBUG(D_INODE, "coda ino: %ld, cached ino %ld, page offset: %lx\n", 
-	       coda_inode->i_ino, cii->c_ovp->i_ino, page->offset);
+	       coda_inode->i_ino, cii->c_ovp->i_ino, page->index);
 
         block_read_full_page(&cont_file, page);
         EXIT;

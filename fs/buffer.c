@@ -1293,13 +1293,15 @@ static void create_empty_buffers(struct page *page, struct inode *inode, unsigne
 static void unmap_underlying_metadata(struct buffer_head * bh)
 {
 #if 0
-	bh = get_hash_table(bh->b_dev, bh->b_blocknr, bh->b_size);
-	if (bh) {
-		unmap_buffer(bh);
-		/* Here we could run brelse or bforget. We use
-		   bforget because it will try to put the buffer
-		   in the freelist. */
-		__bforget(bh);
+	if (buffer_new(bh)) {
+		struct old_bh = get_hash_table(bh->b_dev, bh->b_blocknr, bh->b_size);
+		if (old_bh) {
+			unmap_buffer(old_bh);
+			/* Here we could run brelse or bforget. We use
+			   bforget because it will try to put the buffer
+			   in the freelist. */
+			__bforget(old_bh);
+		}
 	}
 #endif
 }
@@ -1326,7 +1328,7 @@ int block_write_full_page(struct file *file, struct page *page)
 	/* The page cache is now PAGE_CACHE_SIZE aligned, period.  We handle old a.out
 	 * and others via unaligned private mappings.
 	 */
-	block = page->pg_offset << (PAGE_CACHE_SHIFT - inode->i_sb->s_blocksize_bits);
+	block = page->index << (PAGE_CACHE_SHIFT - inode->i_sb->s_blocksize_bits);
 
 	bh = head;
 	i = 0;
@@ -1387,7 +1389,7 @@ int block_write_partial_page(struct file *file, struct page *page, unsigned long
 	head = page->buffers;
 
 	bbits = inode->i_sb->s_blocksize_bits;
-	block = page->pg_offset << (PAGE_CACHE_SHIFT - bbits);
+	block = page->index << (PAGE_CACHE_SHIFT - bbits);
 	blocks = PAGE_CACHE_SIZE >> bbits;
 	start_block = offset >> bbits;
 	end_block = (offset + bytes - 1) >> bbits;
@@ -1532,8 +1534,8 @@ int block_write_cont_page(struct file *file, struct page *page, unsigned long of
 	unsigned long data_offset = offset;
 	int need_balance_dirty;
 
-	offset = inode->i_size - (page->pg_offset << PAGE_CACHE_SHIFT);
-	if (page->pg_offset > (inode->i_size >> PAGE_CACHE_SHIFT))
+	offset = inode->i_size - (page->index << PAGE_CACHE_SHIFT);
+	if (page->index > (inode->i_size >> PAGE_CACHE_SHIFT))
 		offset = 0;
 	else if (offset >= data_offset)
 		offset = data_offset;
@@ -1551,7 +1553,7 @@ int block_write_cont_page(struct file *file, struct page *page, unsigned long of
 	head = page->buffers;
 
 	bbits = inode->i_sb->s_blocksize_bits;
-	block = page->pg_offset << (PAGE_CACHE_SHIFT - bbits);
+	block = page->index << (PAGE_CACHE_SHIFT - bbits);
 	blocks = PAGE_CACHE_SIZE >> bbits;
 	start_block = offset >> bbits;
 	end_block = (offset + bytes - 1) >> bbits;
@@ -2008,7 +2010,7 @@ int block_read_full_page(struct file * file, struct page * page)
 	head = page->buffers;
 
 	blocks = PAGE_CACHE_SIZE >> inode->i_sb->s_blocksize_bits;
-	iblock = page->pg_offset << (PAGE_CACHE_SHIFT - inode->i_sb->s_blocksize_bits);
+	iblock = page->index << (PAGE_CACHE_SHIFT - inode->i_sb->s_blocksize_bits);
 	bh = head;
 	nr = 0;
 

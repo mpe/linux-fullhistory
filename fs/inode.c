@@ -518,8 +518,7 @@ static struct inode * get_new_inode(struct super_block *sb, unsigned long ino, s
 		spin_lock(&inode_lock);
 		/* We released the lock, so.. */
 		old = find_inode(sb, ino, head, find_actor, opaque);
-		if (!old)
-		{
+		if (!old) {
 			list_add(&inode->i_list, &inode_in_use);
 			list_add(&inode->i_hash, head);
 			inode->i_sb = sb;
@@ -546,7 +545,13 @@ static struct inode * get_new_inode(struct super_block *sb, unsigned long ino, s
 
 			return inode;
 		}
-		__iget(inode);
+
+		/*
+		 * Uhhuh, somebody else created the same inode under
+		 * us. Use the old inode instead of the one we just
+		 * allocated.
+		 */
+		__iget(old);
 		spin_unlock(&inode_lock);
 		destroy_inode(inode);
 		inode = old;

@@ -415,8 +415,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 
 	retval = -ENOEXEC;
 	/* First of all, some simple consistency checks */
-	if (elf_ex.e_ident[0] != 0x7f ||
-	    strncmp(&elf_ex.e_ident[1], "ELF", 3) != 0)
+	if (memcmp(elf_ex.e_ident, ELFMAG, SELFMAG) != 0)
 		goto out;
 
 	if (elf_ex.e_type != ET_EXEC && elf_ex.e_type != ET_DYN)
@@ -538,8 +537,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		    (N_MAGIC(interp_ex) != QMAGIC))
 			interpreter_type = INTERPRETER_ELF;
 
-		if (interp_elf_ex.e_ident[0] != 0x7f ||
-		    strncmp(&interp_elf_ex.e_ident[1], "ELF", 3) != 0)
+		if (memcmp(interp_elf_ex.e_ident, ELFMAG, SELFMAG) != 0)
 			interpreter_type &= ~INTERPRETER_ELF;
 
 		retval = -ELIBBAD;
@@ -823,8 +821,7 @@ do_load_elf_library(int fd)
 	if (retval != sizeof(elf_ex))
 		goto out_putf;
 
-	if (elf_ex.e_ident[0] != 0x7f ||
-	    strncmp(&elf_ex.e_ident[1], "ELF", 3) != 0)
+	if (memcmp(elf_ex.e_ident, ELFMAG, SELFMAG) != 0)
 		goto out_putf;
 
 	/* First of all, some simple consistency checks */

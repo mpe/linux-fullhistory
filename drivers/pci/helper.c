@@ -13,11 +13,12 @@
 #include <linux/pci.h>
 
 
-int pci_simple_probe (struct pci_simple_probe_entry *list, size_t match_limit,
-		      pci_simple_probe_callback cb, void *drvr_data)
+int pci_simple_probe (const struct pci_simple_probe_entry *list,
+		      size_t match_limit, pci_simple_probe_callback cb,
+		      void *drvr_data)
 {
 	struct pci_dev *dev;
-	struct pci_simple_probe_entry *ent;
+	const struct pci_simple_probe_entry *ent;
 	size_t matches = 0;
 	unsigned short vendor, device;
 	int rc;

@@ -37,9 +37,6 @@ flash_mmap(struct file *file, struct vm_area_struct *vma)
 	unsigned long addr;
 	unsigned long size;
 
-	if (vma->vm_offset & ~(PAGE_MASK))
-		return -ENXIO;
-
 	if (flash.read_base == flash.write_base) {
 		addr = flash.read_base;
 		size = flash.read_size;

@@ -361,7 +361,7 @@ hpp_mem_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring
 
 	outw((ring_page<<8), ioaddr + HPP_IN_ADDR);
 	outw(option_reg & ~(MemDisable + BootROMEnb), ioaddr + HPP_OPTION);
-	memcpy_fromio(hdr, dev->mem_start, sizeof(struct e8390_pkt_hdr));
+	isa_memcpy_fromio(hdr, dev->mem_start, sizeof(struct e8390_pkt_hdr));
 	outw(option_reg, ioaddr + HPP_OPTION);
 	hdr->count = (hdr->count + 3) & ~3;	/* Round up allocation. */
 }
@@ -380,7 +380,7 @@ hpp_mem_block_input(struct net_device *dev, int count, struct sk_buff *skb, int 
 	   Also note that we *can't* use eth_io_copy_and_sum() because
 	   it will not always copy "count" bytes (e.g. padded IP).  */
 
-	memcpy_fromio(skb->data, dev->mem_start, count);
+	isa_memcpy_fromio(skb->data, dev->mem_start, count);
 	outw(option_reg, ioaddr + HPP_OPTION);
 }
 
@@ -405,7 +405,7 @@ hpp_mem_block_output(struct net_device *dev, int count,
 
 	outw(start_page << 8, ioaddr + HPP_OUT_ADDR);
 	outw(option_reg & ~(MemDisable + BootROMEnb), ioaddr + HPP_OPTION);
-	memcpy_toio(dev->mem_start, buf, (count + 3) & ~3);
+	isa_memcpy_toio(dev->mem_start, buf, (count + 3) & ~3);
 	outw(option_reg, ioaddr + HPP_OPTION);
 
 	return;

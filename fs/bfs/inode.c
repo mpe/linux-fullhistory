@@ -7,7 +7,8 @@
 
 #include <linux/config.h>
 #include <linux/module.h>
-#include <linux/malloc.h>
+#include <linux/mm.h>
+#include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/locks.h>
 #include <linux/bfs_fs.h>
@@ -237,19 +238,21 @@ static struct super_operations bfs_sops = {
 void dump_imap(const char *prefix, struct super_block * s)
 {
 #if 0
-	int i, hibit = 8 * (s->su_imap_len) - 1;
-	char tmpbuf[400];
+	int i;
+	char *tmpbuf = (char *)get_free_page(GFP_KERNEL);
 
+	if (!tmpbuf)
+		return;
 	memset(tmpbuf, 0, 400);
-	for (i=hibit; i>=0; i--) {
-		if (i>390) break;
+	for (i=s->su_lasti; i>=0; i--) {
+		if (i>PAGE_SIZE-100) break;
 		if (test_bit(i, s->su_imap))
 			strcat(tmpbuf, "1");
 		else
 			strcat(tmpbuf, "0");
 	}
-	printk(KERN_ERR "BFS-fs: %s: lasti=%d <%s> (%d*8 bits)\n", 
-		prefix, s->su_lasti, tmpbuf, s->su_imap_len);
+	printk(KERN_ERR "BFS-fs: %s: lasti=%d <%s>\n", prefix, s->su_lasti, tmpbuf);
+	free_page((unsigned long)tmpbuf);
 #endif
 }
 
@@ -260,7 +263,7 @@ static struct super_block * bfs_read_super(struct super_block * s,
 	struct buffer_head * bh;
 	struct bfs_super_block * bfs_sb;
 	struct inode * inode;
-	unsigned long i;
+	int i, imap_len;
 
 	MOD_INC_USE_COUNT;
 	lock_super(s);
@@ -292,11 +295,11 @@ static struct super_block * bfs_read_super(struct super_block * s,
 	s->su_lasti = (bfs_sb->s_start - BFS_BSIZE)/sizeof(struct bfs_inode) 
 			+ BFS_ROOT_INO - 1;
 
-	s->su_imap_len = s->su_lasti/8 + 1; /* 1 byte is 8 bit */
-	s->su_imap = kmalloc(s->su_imap_len, GFP_KERNEL);
+	imap_len = s->su_lasti/8 + 1;
+	s->su_imap = kmalloc(imap_len, GFP_KERNEL);
 	if (!s->su_imap)
 		goto out;
-	memset(s->su_imap, 0, s->su_imap_len);
+	memset(s->su_imap, 0, imap_len);
 	for (i=0; i<BFS_ROOT_INO; i++)
 		set_bit(i, s->su_imap);
 

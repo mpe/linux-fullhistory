@@ -72,11 +72,13 @@ static void change_protection(unsigned long start, unsigned long end, pgprot_t n
 	flush_cache_range(current->mm, beg, end);
 	if (start >= end)
 		BUG();
+	spin_lock(&current->mm->page_table_lock);
 	do {
 		change_pmd_range(dir, start, end - start, newprot);
 		start = (start + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	} while (start && (start < end));
+	spin_unlock(&current->mm->page_table_lock);
 	flush_tlb_range(current->mm, beg, end);
 	return;
 }

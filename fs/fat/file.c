@@ -118,8 +118,8 @@ static int fat_write_partial_page(struct file *file, struct page *page, unsigned
 	struct page *page_cache = NULL;
 	long status;
 
-	pgpos = MSDOS_I(inode)->i_realsize & PAGE_CACHE_MASK;
-	while (pgpos < page->offset) {
+	pgpos = MSDOS_I(inode)->i_realsize >> PAGE_CACHE_SHIFT;
+	while (pgpos < page->index) {
 		hash = page_hash(&inode->i_data, pgpos);
 repeat_find:	new_page = __find_lock_page(&inode->i_data, pgpos, hash);
 		if (!new_page) {
@@ -140,7 +140,7 @@ repeat_find:	new_page = __find_lock_page(&inode->i_data, pgpos, hash);
 		page_cache_release(new_page);
 		if (status < 0)
 			goto out;
-		pgpos = MSDOS_I(inode)->i_realsize & PAGE_CACHE_MASK;
+		pgpos = MSDOS_I(inode)->i_realsize >> PAGE_CACHE_SHIFT;
 	}
 	status = block_write_cont_page(file, page, offset, bytes, buf);
 out:

@@ -829,16 +829,16 @@ static int ewrk3_queue_pkt(struct sk_buff *skb, struct net_device *dev)
 							writeb(0x04, (char *) buf);	/* index byte */
 							buf += 1;
 							writeb(0x00, (char *) (buf + skb->len));	/* Write the XCT flag */
-							memcpy_toio(buf, skb->data, PRELOAD);	/* Write PRELOAD bytes */
+							isa_memcpy_toio(buf, skb->data, PRELOAD);	/* Write PRELOAD bytes */
 							outb(page, EWRK3_TQ);	/* Start sending pkt */
-							memcpy_toio(buf + PRELOAD, skb->data + PRELOAD, skb->len - PRELOAD);
+							isa_memcpy_toio(buf + PRELOAD, skb->data + PRELOAD, skb->len - PRELOAD);
 							writeb(0xff, (char *) (buf + skb->len));	/* Write the XCT flag */
 						} else {
 							writeb((char) ((skb->len >> 8) & 0xff), (char *) buf);
 							buf += 1;
 							writeb(0x04, (char *) buf);	/* index byte */
 							buf += 1;
-							memcpy_toio((char *) buf, skb->data, skb->len);		/* Write data bytes */
+							isa_memcpy_toio(buf, skb->data, skb->len);		/* Write data bytes */
 							outb(page, EWRK3_TQ);	/* Start sending pkt */
 						}
 					}
@@ -1012,7 +1012,7 @@ static int ewrk3_rx(struct net_device *dev)
 								*p++ = inb(EWRK3_DATA);
 							}
 						} else {
-							memcpy_fromio(p, buf, pkt_len);
+							isa_memcpy_fromio(p, buf, pkt_len);
 						}
 
 						/*
@@ -1737,7 +1737,7 @@ static int ewrk3_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 				}
 			} else {
 				outb(0, EWRK3_MPR);
-				memcpy_fromio(tmp.addr, (char *) (lp->shmem_base + PAGE0_HTE), (HASH_TABLE_LEN >> 3));
+				isa_memcpy_fromio(tmp.addr, lp->shmem_base + PAGE0_HTE, (HASH_TABLE_LEN >> 3));
 			}
 			ioc->len = (HASH_TABLE_LEN >> 3);
 			if (copy_to_user(ioc->data, tmp.addr, ioc->len)) {

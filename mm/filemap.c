@@ -140,7 +140,7 @@ repeat:
 		page = list_entry(curr, struct page, list);
 		curr = curr->next;
 
-		offset = page->pg_offset;
+		offset = page->index;
 
 		/* page wholly truncated - free it */
 		if (offset >= start) {
@@ -369,7 +369,7 @@ inside:
 			goto not_found;
 		if (page->mapping != mapping)
 			continue;
-		if (page->pg_offset == offset)
+		if (page->index == offset)
 			break;
 	}
 	set_bit(PG_referenced, &page->flags);
@@ -427,9 +427,9 @@ static int do_buffer_fdatasync(struct inode *inode, unsigned long start, unsigne
 		curr = curr->next;
 		if (!page->buffers)
 			continue;
-		if (page->pg_offset >= end)
+		if (page->index >= end)
 			continue;
-		if (page->pg_offset < start)
+		if (page->index < start)
 			continue;
 
 		get_page(page);
@@ -479,7 +479,7 @@ static inline void __add_to_page_cache(struct page * page,
 	flags = page->flags & ~((1 << PG_uptodate) | (1 << PG_error) | (1 << PG_referenced));
 	page->flags = flags | (1 << PG_locked);
 	get_page(page);
-	page->pg_offset = offset;
+	page->index = offset;
 	add_page_to_inode_queue(mapping, page);
 	__add_page_to_hash_queue(page, hash);
 	lru_cache_add(page);
@@ -1475,7 +1475,7 @@ static int filemap_write_page(struct file *file,
 extern void wakeup_bdflush(int);
 int filemap_swapout(struct page * page, struct file * file)
 {
-	int retval = filemap_write_page(file, page->pg_offset, page, 0);
+	int retval = filemap_write_page(file, page->index, page, 0);
 	wakeup_bdflush(0);
 	return retval;
 }
@@ -1519,9 +1519,9 @@ static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 		BUG();
 	pgoff = (address - vma->vm_start) >> PAGE_CACHE_SHIFT;
 	pgoff += vma->vm_pgoff;
-	if (page->pg_offset != pgoff) {
-		printk("weirdness: pgoff=%lu pg_offset=%lu address=%lu vm_start=%lu vm_pgoff=%lu\n",
-			pgoff, page->pg_offset, address, vma->vm_start, vma->vm_pgoff);
+	if (page->index != pgoff) {
+		printk("weirdness: pgoff=%lu index=%lu address=%lu vm_start=%lu vm_pgoff=%lu\n",
+			pgoff, page->index, address, vma->vm_start, vma->vm_pgoff);
 	}
 	error = filemap_write_page(vma->vm_file, pgoff, page, 1);
 	page_cache_free(page);

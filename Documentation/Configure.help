@@ -13049,7 +13049,7 @@ CONFIG_KHTTPD
 # LocalWords:  EBSA chattr RiscOS Winmodem AGP Atomwide DUALSP pcsp robinson CT
 # LocalWords:  SGALAXY Waverider DSPxxx TRXPRO AudioTrix OSWF MOT CFB DSY kbps
 # LocalWords:  tuwien kkudielk LVD mega lun MAXTAGS Gbps arcnet Olicom SKTR SNA
-# LocalWords:  SysKonnect sktr sna etherboot ufs NetBEUI MultiSound MSNDCLAS GX
+# LocalWords:  SysKonnect tms380tr sna etherboot ufs NetBEUI MultiSound MSNDCLAS GX
 # LocalWords:  MSNDINIT MSNDPERM MSNDPIN PNDSPINI PNDSPERM Ensoniq's RetinaZ SS
 # LocalWords:  AudioPCI lspci SonicVibes sonicvibes SPARCs roadrunner CLgen UPA
 # LocalWords:  swansea shtml Zoltrix zoltrix BINUTILS EGCS binutils VIDC DACs

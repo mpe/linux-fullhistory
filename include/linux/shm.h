@@ -7,7 +7,7 @@
 
 struct shmid_ds {
 	struct ipc_perm		shm_perm;	/* operation perms */
-	int			shm_segsz;	/* size of segment (bytes) */
+	size_t			shm_segsz;	/* size of segment (bytes) */
 	__kernel_time_t		shm_atime;	/* last attach time */
 	__kernel_time_t		shm_dtime;	/* last detach time */
 	__kernel_time_t		shm_ctime;	/* last change time */
@@ -46,7 +46,7 @@ struct shmid_kernel
 #define SHM_INFO 	14
 
 struct	shminfo {
-	int shmmax;
+	size_t shmmax;
 	int shmmin;
 	int shmmni;
 	int shmseg;
@@ -68,7 +68,7 @@ struct shm_info {
 #define	SHM_DEST	01000	/* segment will be destroyed on last detach */
 #define SHM_LOCKED      02000   /* segment will not be swapped */
 
-asmlinkage long sys_shmget (key_t key, int size, int flag);
+asmlinkage long sys_shmget (key_t key, size_t size, int flag);
 asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, unsigned long *addr);
 asmlinkage long sys_shmdt (char *shmaddr);
 asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf);

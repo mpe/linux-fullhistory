@@ -314,9 +314,9 @@ static void ultra32_get_8390_hdr(struct net_device *dev,
 
 #ifdef notdef
 	/* Officially this is what we are doing, but the readl() is faster */
-	memcpy_fromio(hdr, hdr_start, sizeof(struct e8390_pkt_hdr));
+	isa_memcpy_fromio(hdr, hdr_start, sizeof(struct e8390_pkt_hdr));
 #else
-	((unsigned int*)hdr)[0] = readl(hdr_start);
+	((unsigned int*)hdr)[0] = isa_readl(hdr_start);
 #endif
 }
 
@@ -335,21 +335,21 @@ static void ultra32_block_input(struct net_device *dev,
 
 	if ((ring_offset & ~0x1fff) != ((ring_offset + count - 1) & ~0x1fff)) {
 		int semi_count = 8192 - (ring_offset & 0x1FFF);
-		memcpy_fromio(skb->data, xfer_start, semi_count);
+		isa_memcpy_fromio(skb->data, xfer_start, semi_count);
 		count -= semi_count;
 		if (ring_offset < 96*256) {
 			/* Select next 8KB Window. */
 			ring_offset += semi_count;
 			outb(ei_status.reg0 | ((ring_offset & 0x6000) >> 13), RamReg);
-			memcpy_fromio(skb->data + semi_count, dev->mem_start, count);
+			isa_memcpy_fromio(skb->data + semi_count, dev->mem_start, count);
 		} else {
 			/* Select first 8KB Window. */
 			outb(ei_status.reg0, RamReg);
-			memcpy_fromio(skb->data + semi_count, dev->rmem_start, count);
+			isa_memcpy_fromio(skb->data + semi_count, dev->rmem_start, count);
 		}
 	} else {
 		/* Packet is in one chunk -- we can copy + cksum. */
-		eth_io_copy_and_sum(skb, xfer_start, count, 0);
+		isa_eth_io_copy_and_sum(skb, xfer_start, count, 0);
 	}
 }
 
@@ -364,7 +364,7 @@ static void ultra32_block_output(struct net_device *dev,
 	/* Select first 8KB Window. */
 	outb(ei_status.reg0, RamReg);
 
-	memcpy_toio(xfer_start, buf, count);
+	isa_memcpy_toio(xfer_start, buf, count);
 }
 
 #ifdef MODULE

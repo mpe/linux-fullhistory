@@ -306,7 +306,7 @@ static void InitDscrs(struct net_device *dev)
       descr.Flags = 0;
       descr.Len = 0xf000;
       descr.Status = 0;
-      memcpy_toio(dev->mem_start + RAM_TXBASE + (z * sizeof(LANCE_TxDescr)),
+      isa_memcpy_toio(dev->mem_start + RAM_TXBASE + (z * sizeof(LANCE_TxDescr)),
                   &descr, sizeof(LANCE_TxDescr));
       memset_io(dev->mem_start + bufaddr, 0, RAM_BUFSIZE);
       bufaddr += RAM_BUFSIZE;
@@ -325,9 +325,9 @@ static void InitDscrs(struct net_device *dev)
       descr.Flags = RXDSCR_FLAGS_OWN;
       descr.MaxLen = -RAM_BUFSIZE;
       descr.Len = 0;
-      memcpy_toio(dev->mem_start + RAM_RXBASE + (z * sizeof(LANCE_RxDescr)),
+      isa_memcpy_toio(dev->mem_start + RAM_RXBASE + (z * sizeof(LANCE_RxDescr)),
                   &descr, sizeof(LANCE_RxDescr));
-      memset_io(dev->mem_start + bufaddr, 0, RAM_BUFSIZE);
+      isa_memset_io(dev->mem_start + bufaddr, 0, RAM_BUFSIZE);
       bufaddr += RAM_BUFSIZE;
     }
   }
@@ -450,7 +450,7 @@ static void InitBoard(struct net_device *dev)
   block.RdrP = (RAM_RXBASE & 0xffffff) | (LRXCOUNT << 29);
   block.TdrP = (RAM_TXBASE & 0xffffff) | (LTXCOUNT << 29);
 
-  memcpy_toio(dev->mem_start + RAM_INITBASE, &block, sizeof(block));
+  isa_memcpy_toio(dev->mem_start + RAM_INITBASE, &block, sizeof(block));
 
   /* initialize LANCE. Implicitly sets up other structures in RAM. */
 
@@ -507,7 +507,7 @@ static u16 irqrx_handler(struct net_device *dev, u16 oldcsr0)
   while (1)
   {
     /* read descriptor */
-    memcpy_fromio(&descr, dev->mem_start + descraddr, sizeof(LANCE_RxDescr));
+    isa_memcpy_fromio(&descr, dev->mem_start + descraddr, sizeof(LANCE_RxDescr));
  
     /* if we reach a descriptor we do not own, we're done */
     if ((descr.Flags & RXDSCR_FLAGS_OWN) != 0)
@@ -539,7 +539,7 @@ static u16 irqrx_handler(struct net_device *dev, u16 oldcsr0)
         priv->stat.rx_dropped++;
       else
       {
-        memcpy_fromio(skb_put(skb, descr.Len),
+        isa_memcpy_fromio(skb_put(skb, descr.Len),
                       dev->mem_start + descr.LowAddr, descr.Len);
         skb->dev = dev;
         skb->protocol = eth_type_trans(skb, dev);
@@ -557,7 +557,7 @@ static u16 irqrx_handler(struct net_device *dev, u16 oldcsr0)
     descr.Flags |= RXDSCR_FLAGS_OWN;
 
     /* update descriptor in shared RAM */
-    memcpy_toio(dev->mem_start + descraddr, &descr, sizeof(LANCE_RxDescr));
+    isa_memcpy_toio(dev->mem_start + descraddr, &descr, sizeof(LANCE_RxDescr));
 
     /* go to next descriptor */
     priv->nextrx++; descraddr += sizeof(LANCE_RxDescr);
@@ -588,7 +588,7 @@ static u16 irqtx_handler(struct net_device *dev, u16 oldcsr0)
   while (priv->txbusy > 0)
   {
     /* read descriptor */
-    memcpy_fromio(&descr, dev->mem_start + descraddr, sizeof(LANCE_TxDescr));
+    isa_memcpy_fromio(&descr, dev->mem_start + descraddr, sizeof(LANCE_TxDescr));
 
     /* if the LANCE still owns this one, we've worked out all sent packets */
     if ((descr.Flags & TXDSCR_FLAGS_OWN) != 0)
@@ -798,7 +798,7 @@ static int skmca_tx(struct sk_buff *skb, struct net_device *dev)
 
   /* get TX descriptor */
   address = RAM_TXBASE + (priv->nexttxput * sizeof(LANCE_TxDescr));
-  memcpy_fromio(&descr, dev->mem_start + address, sizeof(LANCE_TxDescr));
+  isa_memcpy_fromio(&descr, dev->mem_start + address, sizeof(LANCE_TxDescr));
 
   /* enter packet length as 2s complement - assure minimum length */
   tmplen = skb->len;
@@ -816,13 +816,13 @@ static int skmca_tx(struct sk_buff *skb, struct net_device *dev)
 
     while (destoffs < tmplen)
     {
-      memcpy_toio(dev->mem_start + descr.LowAddr + destoffs, fill, l);
+      isa_memcpy_toio(dev->mem_start + descr.LowAddr + destoffs, fill, l);
       destoffs += l;
     }
   }
 
   /* do the real data copying */
-  memcpy_toio(dev->mem_start + descr.LowAddr, skb->data, skb->len);
+  isa_memcpy_toio(dev->mem_start + descr.LowAddr, skb->data, skb->len);
 
   /* hand descriptor over to LANCE - this is the first and last chunk */
   descr.Flags = TXDSCR_FLAGS_OWN | TXDSCR_FLAGS_STP | TXDSCR_FLAGS_ENP;
@@ -841,7 +841,7 @@ static int skmca_tx(struct sk_buff *skb, struct net_device *dev)
   dev->tbusy = (priv->txbusy >= TXCOUNT);
 
   /* write descriptor back to RAM */
-  memcpy_toio(dev->mem_start + address, &descr, sizeof(LANCE_TxDescr));
+  isa_memcpy_toio(dev->mem_start + address, &descr, sizeof(LANCE_TxDescr));
 
   /* if no descriptors were active, give the LANCE a hint to read it
      immediately */
@@ -891,7 +891,7 @@ static void skmca_set_multicast_list(struct net_device *dev)
   StopLANCE(dev);
 
   /* ...then modify the initialization block... */
-  memcpy_fromio(&block, dev->mem_start + RAM_INITBASE, sizeof(block));
+  isa_memcpy_fromio(&block, dev->mem_start + RAM_INITBASE, sizeof(block));
   if (dev->flags & IFF_PROMISC)
     block.Mode |= LANCE_INIT_PROM;
   else
@@ -914,7 +914,7 @@ static void skmca_set_multicast_list(struct net_device *dev)
     }
   }
 
-  memcpy_toio(dev->mem_start + RAM_INITBASE, &block, sizeof(block));
+  isa_memcpy_toio(dev->mem_start + RAM_INITBASE, &block, sizeof(block));
 
   /* ...then reinit LANCE with the correct flags */
   InitLANCE(dev);

@@ -12,7 +12,6 @@ extern unsigned char nvram_read_byte( int i );
 extern void nvram_write_byte( unsigned char c, int i );
 extern int nvram_check_checksum( void );
 extern void nvram_set_checksum( void );
-extern int nvram_init( void );
 #endif
 
 #endif  /* _LINUX_NVRAM_H */

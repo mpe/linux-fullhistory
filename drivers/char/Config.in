@@ -148,6 +148,10 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
   if [ "$CONFIG_RADIO_TERRATEC" = "y" ]; then
     hex '  Terratec i/o port (normally 0x590)' CONFIG_RADIO_TERRATEC_PORT 590
   fi
+  dep_tristate 'Trust FM radio card' CONFIG_RADIO_TRUST $CONFIG_VIDEO_DEV
+  if [ "$CONFIG_RADIO_TRUST" = "y" ]; then
+    hex '  Trust i/o port (usually 0x350 or 0x358)' CONFIG_RADIO_TRUST_PORT 350
+  fi
   if [ "$CONFIG_PCI" != "n" ]; then
     dep_tristate 'BT848 Video For Linux' CONFIG_VIDEO_BT848 $CONFIG_VIDEO_DEV
   fi

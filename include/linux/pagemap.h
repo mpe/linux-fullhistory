@@ -48,42 +48,42 @@ extern void page_cache_init(unsigned long);
 /*
  * We use a power-of-two hash table to avoid a modulus,
  * and get a reasonable hash by knowing roughly how the
- * inode pointer and offsets are distributed (ie, we
+ * inode pointer and indexes are distributed (ie, we
  * roughly know which bits are "significant")
  *
  * For the time being it will work for struct address_space too (most of
  * them sitting inside the inodes). We might want to change it later.
  */
-extern inline unsigned long _page_hashfn(struct address_space * mapping, unsigned long offset)
+extern inline unsigned long _page_hashfn(struct address_space * mapping, unsigned long index)
 {
 #define i (((unsigned long) mapping)/(sizeof(struct inode) & ~ (sizeof(struct inode) - 1)))
 #define s(x) ((x)+((x)>>PAGE_HASH_BITS))
-	return s(i+offset) & (PAGE_HASH_SIZE-1);
+	return s(i+index) & (PAGE_HASH_SIZE-1);
 #undef i
 #undef o
 #undef s
 }
 
-#define page_hash(mapping,offset) (page_hash_table+_page_hashfn(mapping,offset))
+#define page_hash(mapping,index) (page_hash_table+_page_hashfn(mapping,index))
 
 extern struct page * __find_get_page (struct address_space *mapping,
-				unsigned long offset, struct page **hash);
-#define find_get_page(mapping, offset) \
-		__find_get_page(mapping, offset, page_hash(mapping, offset))
+				unsigned long index, struct page **hash);
+#define find_get_page(mapping, index) \
+		__find_get_page(mapping, index, page_hash(mapping, index))
 extern struct page * __find_lock_page (struct address_space * mapping,
-				unsigned long offset, struct page **hash);
+				unsigned long index, struct page **hash);
 extern void lock_page(struct page *page);
-#define find_lock_page(mapping, offset) \
-		__find_lock_page(mapping, offset, page_hash(mapping, offset))
+#define find_lock_page(mapping, index) \
+		__find_lock_page(mapping, index, page_hash(mapping, index))
 
 extern void __add_page_to_hash_queue(struct page * page, struct page **p);
 
-extern void add_to_page_cache(struct page * page, struct address_space *mapping, unsigned long offset);
-extern int add_to_page_cache_unique(struct page * page, struct address_space *mapping, unsigned long offset, struct page **hash);
+extern void add_to_page_cache(struct page * page, struct address_space *mapping, unsigned long index);
+extern int add_to_page_cache_unique(struct page * page, struct address_space *mapping, unsigned long index, struct page **hash);
 
-extern inline void add_page_to_hash_queue(struct page * page, struct inode * inode, unsigned long offset)
+extern inline void add_page_to_hash_queue(struct page * page, struct inode * inode, unsigned long index)
 {
-	__add_page_to_hash_queue(page, page_hash(&inode->i_data,offset));
+	__add_page_to_hash_queue(page, page_hash(&inode->i_data,index));
 }
 
 extern inline void add_page_to_inode_queue(struct address_space *mapping, struct page * page)

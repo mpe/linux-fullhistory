@@ -72,10 +72,9 @@ void ncp_update_inode(struct inode *inode, struct ncp_entry_info *nwinfo)
 	NCP_FINFO(inode)->server_file_handle = nwinfo->server_file_handle;
 	memcpy(NCP_FINFO(inode)->file_handle, nwinfo->file_handle,
 			sizeof(nwinfo->file_handle));
-#ifdef NCPFS_DEBUG_VERBOSE
-printk(KERN_DEBUG "ncp_update_inode: updated %s, volnum=%d, dirent=%u\n",
-nwinfo->i.entryName, NCP_FINFO(inode)->volNumber, NCP_FINFO(inode)->dirEntNum);
-#endif
+	DPRINTK("ncp_update_inode: updated %s, volnum=%d, dirent=%u\n",
+		nwinfo->i.entryName, NCP_FINFO(inode)->volNumber,
+		NCP_FINFO(inode)->dirEntNum);
 }
 
 void ncp_update_inode2(struct inode* inode, struct ncp_entry_info *nwinfo)
@@ -163,8 +162,8 @@ static void ncp_set_attr(struct inode *inode, struct ncp_entry_info *nwinfo)
 			switch (nwi->attributes & (aHIDDEN|aSYSTEM)) {
 				case aHIDDEN:
 					if (server->m.flags & NCP_MOUNT_SYMLINKS) {
-						if ((inode->i_size >= NCP_MIN_SYMLINK_SIZE)
-						 && (inode->i_size <= NCP_MAX_SYMLINK_SIZE)) {
+						if (/* (inode->i_size >= NCP_MIN_SYMLINK_SIZE)
+						 && */ (inode->i_size <= NCP_MAX_SYMLINK_SIZE)) {
 							inode->i_mode = (inode->i_mode & ~S_IFMT) | S_IFLNK;
 							break;
 						}
@@ -188,7 +187,7 @@ static void ncp_set_attr(struct inode *inode, struct ncp_entry_info *nwinfo)
 	}
 	if (nwi->attributes & aRONLY) inode->i_mode &= ~0222;
 
-	DDPRINTK(KERN_DEBUG "ncp_read_inode: inode->i_mode = %u\n", inode->i_mode);
+	DDPRINTK("ncp_read_inode: inode->i_mode = %u\n", inode->i_mode);
 
 	inode->i_nlink = 1;
 	inode->i_uid = server->m.uid;
@@ -255,7 +254,7 @@ static void
 ncp_delete_inode(struct inode *inode)
 {
 	if (S_ISDIR(inode->i_mode)) {
-		DDPRINTK(KERN_DEBUG "ncp_delete_inode: put directory %ld\n", inode->i_ino);
+		DDPRINTK("ncp_delete_inode: put directory %ld\n", inode->i_ino);
 	}
 
 	if (NCP_FINFO(inode)->opened && ncp_make_closed(inode) != 0) {
@@ -323,10 +322,11 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 	server->m = *data;
 	/* Althought anything producing this is buggy, it happens
 	   now because of PATH_MAX changes.. */
-	if (server->m.time_out < 10) {
+	if (server->m.time_out < 1) {
 		server->m.time_out = 10;
 		printk(KERN_INFO "You need to recompile your ncpfs utils..\n");
 	}
+	server->m.time_out = server->m.time_out * HZ / 100;
 	server->m.file_mode = (server->m.file_mode &
 			       (S_IRWXU | S_IRWXG | S_IRWXO)) | S_IFREG;
 	server->m.dir_mode = (server->m.dir_mode &
@@ -350,7 +350,7 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 	ncp_unlock_server(server);
 	if (error < 0)
 		goto out_no_connect;
-	DPRINTK(KERN_DEBUG "ncp_read_super: NCP_SBP(sb) = %x\n", (int) NCP_SBP(sb));
+	DPRINTK("ncp_read_super: NCP_SBP(sb) = %x\n", (int) NCP_SBP(sb));
 
 #ifdef CONFIG_NCPFS_PACKET_SIGNING
 	if (ncp_negotiate_size_and_options(server, NCP_DEFAULT_BUFSIZE,
@@ -375,7 +375,7 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 	if (ncp_negotiate_buffersize(server, NCP_DEFAULT_BUFSIZE,
   				     &(server->buffer_size)) != 0)
 		goto out_no_bufsize;
-	DPRINTK(KERN_DEBUG "ncpfs: bufsize = %d\n", server->buffer_size);
+	DPRINTK("ncpfs: bufsize = %d\n", server->buffer_size);
 
 	memset(&finfo, 0, sizeof(finfo));
 	finfo.i.attributes	= aDIR;
@@ -402,7 +402,7 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
         root_inode = ncp_iget(sb, &finfo);
         if (!root_inode)
 		goto out_no_root;
-	DPRINTK(KERN_DEBUG "ncp_read_super: root vol=%d\n", NCP_FINFO(root_inode)->volNumber);
+	DPRINTK("ncp_read_super: root vol=%d\n", NCP_FINFO(root_inode)->volNumber);
 	sb->s_root = d_alloc_root(root_inode);
         if (!sb->s_root)
 		goto out_no_root;
@@ -650,7 +650,7 @@ int ncp_notify_change(struct dentry *dentry, struct iattr *attr)
 	if ((attr->ia_valid & ATTR_SIZE) != 0) {
 		int written;
 
-		DPRINTK(KERN_DEBUG "ncpfs: trying to change size to %ld\n",
+		DPRINTK("ncpfs: trying to change size to %ld\n",
 			attr->ia_size);
 
 		if ((result = ncp_make_open(inode, O_RDWR)) < 0) {
@@ -689,7 +689,7 @@ EXPORT_NO_SYMBOLS;
 
 int init_module(void)
 {
-	DPRINTK(KERN_DEBUG "ncpfs: init_module called\n");
+	DPRINTK("ncpfs: init_module called\n");
 
 #ifdef DEBUG_NCP_MALLOC
 	ncp_malloced = 0;
@@ -700,11 +700,11 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	DPRINTK(KERN_DEBUG "ncpfs: cleanup_module called\n");
+	DPRINTK("ncpfs: cleanup_module called\n");
 	unregister_filesystem(&ncp_fs_type);
 #ifdef DEBUG_NCP_MALLOC
-	printk(KERN_DEBUG "ncp_malloced: %d\n", ncp_malloced);
-	printk(KERN_DEBUG "ncp_current_malloced: %d\n", ncp_current_malloced);
+	PRINTK("ncp_malloced: %d\n", ncp_malloced);
+	PRINTK("ncp_current_malloced: %d\n", ncp_current_malloced);
 #endif
 }
 

@@ -93,7 +93,7 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 		else
 			result = server->reply_size;
 		ncp_unlock_server(server);
-		DPRINTK(KERN_DEBUG "ncp_ioctl: copy %d bytes\n",
+		DPRINTK("ncp_ioctl: copy %d bytes\n",
 			result);
 		if (result >= 0)
 			if (copy_to_user(request.data, bouncebuffer, result))
@@ -124,7 +124,7 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 		copy_from_user(&info, (struct ncp_fs_info *) arg, sizeof(info));
 
 		if (info.version != NCP_GET_FS_INFO_VERSION) {
-			DPRINTK(KERN_DEBUG "info.version invalid: %d\n", info.version);
+			DPRINTK("info.version invalid: %d\n", info.version);
 			return -EINVAL;
 		}
 		/* TODO: info.addr = server->m.serv_addr; */
@@ -171,9 +171,9 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 						sr.dirEntNum = NCP_FINFO(inode)->dirEntNum;
 						sr.namespace = server->name_space[sr.volNumber];
 					} else
-						DPRINTK(KERN_DEBUG "ncpfs: s_root->d_inode==NULL\n");
+						DPRINTK("ncpfs: s_root->d_inode==NULL\n");
 				} else
-					DPRINTK(KERN_DEBUG "ncpfs: s_root==NULL\n");
+					DPRINTK("ncpfs: s_root==NULL\n");
 			} else {
 				sr.volNumber = -1;
 				sr.namespace = 0;
@@ -221,9 +221,9 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 					NCP_FINFO(inode)->dirEntNum = i.dirEntNum;
 					NCP_FINFO(inode)->DosDirNum = i.DosDirNum;
 				} else
-					DPRINTK(KERN_DEBUG "ncpfs: s_root->d_inode==NULL\n");
+					DPRINTK("ncpfs: s_root->d_inode==NULL\n");
 			} else
-				DPRINTK(KERN_DEBUG "ncpfs: s_root==NULL\n");
+				DPRINTK("ncpfs: s_root==NULL\n");
 
 			return 0;
 		}

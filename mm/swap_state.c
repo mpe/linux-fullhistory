@@ -111,7 +111,7 @@ int swap_count(struct page *page)
 	swp_entry_t entry;
 	int retval = 0;
 
-	entry.val = page->pg_offset;
+	entry.val = page->index;
 	if (!entry.val)
 		goto bad_entry;
 	type = SWP_TYPE(entry);
@@ -164,7 +164,7 @@ void __delete_from_swap_cache(struct page *page)
 {
 	swp_entry_t entry;
 
-	entry.val = page->pg_offset;
+	entry.val = page->index;
 
 #ifdef SWAP_CACHE_INFO
 	swap_cache_del_total++;

@@ -889,6 +889,25 @@ asmlinkage long sys_getrlimit(unsigned int resource, struct rlimit *rlim)
 			? -EFAULT : 0;
 }
 
+/*
+ *	Back compatibility for getrlimit. Needed for some apps.
+ */
+ 
+asmlinkage long sys_old_getrlimit(unsigned int resource, struct rlimit *rlim)
+{
+	struct rlimit x;
+	if (resource >= RLIM_NLIMITS)
+		return -EINVAL;
+
+	memcpy(&x, current->rlim + resource, sizeof(*rlim));
+	if(x.rlim_cur > 0x7FFFFFFF)
+		x.rlim_cur = 0x7FFFFFFF;
+	if(x.rlim_max > 0x7FFFFFFF)
+		x.rlim_max = 0x7FFFFFFF;
+	return copy_to_user(rlim, &x, sizeof(x))?-EFAULT:0;
+}
+
+
 asmlinkage long sys_setrlimit(unsigned int resource, struct rlimit *rlim)
 {
 	struct rlimit new_rlim, *old_rlim;

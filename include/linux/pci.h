@@ -489,8 +489,9 @@ struct pci_simple_probe_entry {
 	void *dev_data;		/* driver-private, entry-specific data */
 };
 
-int pci_simple_probe (struct pci_simple_probe_entry *list, size_t match_limit,
-		      pci_simple_probe_callback cb, void *drvr_data);
+int pci_simple_probe (const struct pci_simple_probe_entry *list,
+		      size_t match_limit, pci_simple_probe_callback cb,
+		      void *drvr_data);
 
 
 

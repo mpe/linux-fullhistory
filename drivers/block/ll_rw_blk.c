@@ -388,9 +388,12 @@ out:
 /*
  * Has to be called with the request spinlock aquired
  */
-static inline void attempt_merge (struct request *req, int max_sectors)
+static inline void attempt_merge (struct request *req,
+				int max_sectors,
+				int max_segments)
 {
 	struct request *next = req->next;
+	int total_segments;
 
 	if (!next)
 		return;
@@ -398,9 +401,15 @@ static inline void attempt_merge (struct request *req, int max_sectors)
 		return;
 	if (next->sem || req->cmd != next->cmd || req->rq_dev != next->rq_dev || req->nr_sectors + next->nr_sectors > max_sectors)
 		return;
+	total_segments = req->nr_segments + next->nr_segments;
+	if (req->bhtail->b_data + req->bhtail->b_size == next->bh->b_data)
+		total_segments--;
+	if (total_segments > max_segments)
+		return;
 	req->bhtail->b_reqnext = next->bh;
 	req->bhtail = next->bhtail;
 	req->nr_sectors += next->nr_sectors;
+	req->nr_segments = total_segments;
 	next->rq_status = RQ_INACTIVE;
 	req->next = next->next;
 	wake_up (&wait_for_request);
@@ -410,7 +419,7 @@ void make_request(int major,int rw, struct buffer_head * bh)
 {
 	unsigned int sector, count;
 	struct request * req;
-	int rw_ahead, max_req, max_sectors;
+	int rw_ahead, max_req, max_sectors, max_segments;
 	unsigned long flags;
 
 	count = bh->b_size >> 9;
@@ -493,6 +502,7 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	 * Try to coalesce the new request with old requests
 	 */
 	max_sectors = get_max_sectors(bh->b_rdev);
+	max_segments = get_max_segments(bh->b_rdev);
 
 	/*
 	 * Now we acquire the request spinlock, we have to be mega careful
@@ -572,14 +582,26 @@ void make_request(int major,int rw, struct buffer_head * bh)
 				continue;
 			/* Can we add it to the end of this request? */
 			if (req->sector + req->nr_sectors == sector) {
+				if (req->bhtail->b_data + req->bhtail->b_size
+				    != bh->b_data) {
+					if (req->nr_segments < max_segments)
+						req->nr_segments++;
+					else continue;
+				}
 				req->bhtail->b_reqnext = bh;
 				req->bhtail = bh;
 			    	req->nr_sectors += count;
 				drive_stat_acct(req, count, 0);
 				/* Can we now merge this req with the next? */
-				attempt_merge(req, max_sectors);
+				attempt_merge(req, max_sectors, max_segments);
 			/* or to the beginning? */
 			} else if (req->sector - count == sector) {
+				if (bh->b_data + bh->b_size
+				    != req->bh->b_data) {
+					if (req->nr_segments < max_segments)
+						req->nr_segments++;
+					else continue;
+				}
 			    	bh->b_reqnext = req->bh;
 			    	req->bh = bh;
 			    	req->buffer = bh->b_data;
@@ -613,6 +635,7 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	req->errors = 0;
 	req->sector = sector;
 	req->nr_sectors = count;
+	req->nr_segments = 1;
 	req->current_nr_sectors = count;
 	req->buffer = bh->b_data;
 	req->sem = NULL;

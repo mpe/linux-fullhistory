@@ -1698,7 +1698,7 @@ static int packet_mmap(struct file *file, struct socket *sock, struct vm_area_st
 	int err = -EINVAL;
 	int i;
 
-	if (vma->vm_offset)
+	if (vma->vm_pgoff)
 		return -EINVAL;
 
 	size = vma->vm_end - vma->vm_start;

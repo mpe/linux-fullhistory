@@ -2165,6 +2165,6 @@ void __init ip_rt_init(void)
 
 	proc_net_create ("rt_cache", 0, rt_cache_get_info);
 #ifdef CONFIG_NET_CLS_ROUTE
-	create_proc_read_entry("net/rt_acct", 0, 0, ip_rt_acct_read);
+	create_proc_read_entry("net/rt_acct", 0, 0, ip_rt_acct_read, NULL);
 #endif
 }

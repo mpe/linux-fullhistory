@@ -136,18 +136,28 @@ struct ncp_nls_ioctl
 
 #include <linux/config.h>
 
+/* undef because public define in umsdos_fs.h (ncp_fs.h isn't public) */
+#undef PRINTK
+/* define because it is easy to change PRINTK to {*}PRINTK */
+#define PRINTK(format, args...) printk(KERN_DEBUG format , ## args)
+
 #undef NCPFS_PARANOIA
+#ifdef NCPFS_PARANOIA
+#define PPRINTK(format, args...) PRINTK(format , ## args)
+#else
+#define PPRINTK(format, args...)
+#endif
+
 #ifndef DEBUG_NCP
 #define DEBUG_NCP 0
 #endif
 #if DEBUG_NCP > 0
-#define DPRINTK(format, args...) printk(format , ## args)
+#define DPRINTK(format, args...) PRINTK(format , ## args)
 #else
 #define DPRINTK(format, args...)
 #endif
-
 #if DEBUG_NCP > 1
-#define DDPRINTK(format, args...) printk(format , ## args)
+#define DDPRINTK(format, args...) PRINTK(format , ## args)
 #else
 #define DDPRINTK(format, args...)
 #endif

@@ -119,7 +119,7 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 	return -ENOSYS;
 }
 
-void shm_unuse(pte_t entry, struct page *page)
+void shm_unuse(swp_entry_t entry, struct page *page)
 {
 }
 

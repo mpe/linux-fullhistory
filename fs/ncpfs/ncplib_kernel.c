@@ -17,10 +17,10 @@ static inline int min(int a, int b)
 	return a < b ? a : b;
 }
 
-static void assert_server_locked(struct ncp_server *server)
+static inline void assert_server_locked(struct ncp_server *server)
 {
 	if (server->lock == 0) {
-		DPRINTK(KERN_DEBUG "ncpfs: server not locked!\n");
+		DPRINTK("ncpfs: server not locked!\n");
 	}
 }
 
@@ -69,7 +69,7 @@ static void ncp_add_pstring(struct ncp_server *server, const char *s)
 	int len = strlen(s);
 	assert_server_locked(server);
 	if (len > 255) {
-		DPRINTK(KERN_DEBUG "ncpfs: string too long: %s\n", s);
+		DPRINTK("ncpfs: string too long: %s\n", s);
 		len = 255;
 	}
 	ncp_add_byte(server, len);
@@ -77,7 +77,7 @@ static void ncp_add_pstring(struct ncp_server *server, const char *s)
 	return;
 }
 
-static void ncp_init_request(struct ncp_server *server)
+static inline void ncp_init_request(struct ncp_server *server)
 {
 	ncp_lock_server(server);
 
@@ -95,7 +95,7 @@ static void ncp_init_request_s(struct ncp_server *server, int subfunction)
 	server->has_subfunction = 1;
 }
 
-static char *
+static inline char *
  ncp_reply_data(struct ncp_server *server, int offset)
 {
 	return &(server->packet[sizeof(struct ncp_reply_header) + offset]);
@@ -196,7 +196,7 @@ ncp_get_volume_info_with_number(struct ncp_server *server, int n,
 	result = -EIO;
 	len = ncp_reply_byte(server, 29);
 	if (len > NCP_VOLNAME_LEN) {
-		DPRINTK(KERN_DEBUG "ncpfs: volume name too long: %d\n", len);
+		DPRINTK("ncpfs: volume name too long: %d\n", len);
 		goto out;
 	}
 	memcpy(&(target->volume_name), ncp_reply_data(server, 30), len);
@@ -229,11 +229,11 @@ ncp_make_closed(struct inode *inode)
 	int err;
 	NCP_FINFO(inode)->opened = 0;
 	err = ncp_close_file(NCP_SERVER(inode), NCP_FINFO(inode)->file_handle);
-#ifdef NCPFS_PARANOIA
-if (!err)
-printk(KERN_DEBUG "ncp_make_closed: volnum=%d, dirent=%u, error=%d\n",
-NCP_FINFO(inode)->volNumber, NCP_FINFO(inode)->dirEntNum, err);
-#endif
+
+	if (!err)
+		PPRINTK("ncp_make_closed: volnum=%d, dirent=%u, error=%d\n",
+			NCP_FINFO(inode)->volNumber,
+			NCP_FINFO(inode)->dirEntNum, err);
 	return err;
 }
 
@@ -350,7 +350,7 @@ ncp_get_known_namespace(struct ncp_server *server, __u8 volume)
 	namespace = ncp_reply_data(server, 2);
 
 	while (no_namespaces > 0) {
-		DPRINTK(KERN_DEBUG "get_namespaces: found %d on %d\n", *namespace, volume);
+		DPRINTK("get_namespaces: found %d on %d\n", *namespace, volume);
 
 #ifdef CONFIG_NCPFS_NFS_NS
 		if ((*namespace == NW_NS_NFS) && !(server->m.flags&NCP_MOUNT_NO_NFS)) 
@@ -436,7 +436,7 @@ ncp_lookup_volume(struct ncp_server *server, char *volname,
 	int result;
 	int volnum;
 
-	DPRINTK(KERN_DEBUG "ncp_lookup_volume: looking up vol %s\n", volname);
+	DPRINTK("ncp_lookup_volume: looking up vol %s\n", volname);
 
 	ncp_init_request(server);
 	ncp_add_byte(server, 22);	/* Subfunction: Generate dir handle */
@@ -462,7 +462,7 @@ ncp_lookup_volume(struct ncp_server *server, char *volname,
 
 	server->name_space[volnum] = ncp_get_known_namespace(server, volnum);
 
-	DPRINTK(KERN_DEBUG "lookup_vol: namespace[%d] = %d\n",
+	DPRINTK("lookup_vol: namespace[%d] = %d\n",
 		volnum, server->name_space[volnum]);
 
 	target->nameLen = strlen(volname);
@@ -537,7 +537,7 @@ ncp_del_file_or_subdir2(struct ncp_server *server,
 
 	if (!inode) {
 #if CONFIG_NCPFS_DEBUGDENTRY
-		printk(KERN_DEBUG "ncpfs: ncpdel2: dentry->d_inode == NULL\n");
+		PRINTK("ncpfs: ncpdel2: dentry->d_inode == NULL\n");
 #endif
 		return 0xFF;	/* Any error */
 	}

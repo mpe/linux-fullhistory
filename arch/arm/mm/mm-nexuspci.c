@@ -18,6 +18,8 @@
 
 #include "map.h"
  
+#define SIZE(x) (sizeof(x) / sizeof(x[0]))
+
 const struct map_desc io_desc[] __initdata = {
  	{ 0xfff00000, 0x10000000, 0x00001000, DOMAIN_IO, 0, 1, 0, 0 },
  	{ 0xffe00000, 0x20000000, 0x00001000, DOMAIN_IO, 0, 1, 0, 0 },
@@ -26,6 +28,4 @@ const struct map_desc io_desc[] __initdata = {
  	{ 0xfd000000, 0x88000000, 0x00100000, DOMAIN_IO, 0, 1, 0, 0 }
 };
 
-#define SIZEOFMAP (sizeof(mapping) / sizeof(mapping[0]))
-
-unsigned int __initdata io_desc_size = SIZEOFMAP;
+unsigned int __initdata io_desc_size = SIZE(io_desc);

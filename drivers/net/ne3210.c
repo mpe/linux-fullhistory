@@ -307,7 +307,7 @@ static void
 ne3210_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
 	unsigned long hdr_start = dev->mem_start + ((ring_page - NE3210_START_PG)<<8);
-	memcpy_fromio(hdr, hdr_start, sizeof(struct e8390_pkt_hdr));
+	isa_memcpy_fromio(hdr, hdr_start, sizeof(struct e8390_pkt_hdr));
 	hdr->count = (hdr->count + 3) & ~3;     /* Round up allocation. */
 }
 
@@ -325,12 +325,12 @@ static void ne3210_block_input(struct net_device *dev, int count, struct sk_buff
 	if (xfer_start + count > dev->rmem_end) {
 		/* Packet wraps over end of ring buffer. */
 		int semi_count = dev->rmem_end - xfer_start;
-		memcpy_fromio(skb->data, xfer_start, semi_count);
+		isa_memcpy_fromio(skb->data, xfer_start, semi_count);
 		count -= semi_count;
-		memcpy_fromio(skb->data + semi_count, dev->rmem_start, count);
+		isa_memcpy_fromio(skb->data + semi_count, dev->rmem_start, count);
 	} else {
 		/* Packet is in one chunk. */
-		memcpy_fromio(skb->data, xfer_start, count);
+		isa_memcpy_fromio(skb->data, xfer_start, count);
 	}
 }
 
@@ -340,7 +340,7 @@ static void ne3210_block_output(struct net_device *dev, int count,
 	unsigned long shmem = dev->mem_start + ((start_page - NE3210_START_PG)<<8);
 
 	count = (count + 3) & ~3;     /* Round up to doubleword */
-	memcpy_toio(shmem, buf, count);
+	isa_memcpy_toio(shmem, buf, count);
 }
 
 static int ne3210_open(struct net_device *dev)

@@ -111,7 +111,7 @@ struct vm_operations_struct {
 
 /*
  * A swap entry has to fit into a "unsigned long", as
- * the entry is hidden in the "pg_offset" field of the
+ * the entry is hidden in the "index" field of the
  * swapper address space.
  */
 typedef struct {
@@ -130,7 +130,7 @@ typedef struct page {
 	/* these must be first (free area handling) */
 	struct list_head list;
 	struct address_space *mapping;
-	unsigned long pg_offset;
+	unsigned long index;
 	struct page *next_hash;
 	atomic_t count;
 	unsigned long flags;	/* atomic flags, some possibly updated asynchronously */

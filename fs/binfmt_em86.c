@@ -30,20 +30,17 @@ static int do_load_em86(struct linux_binprm *bprm,struct pt_regs *regs)
 	/* Make sure this is a Linux/Intel ELF executable... */
 	elf_ex = *((struct elfhdr *)bprm->buf);
 
-        if (elf_ex.e_ident[0] != 0x7f ||
-            strncmp(&elf_ex.e_ident[1], "ELF",3) != 0) {
-                return  -ENOEXEC;
-        }
+	if (memcmp(elf_ex.e_ident, ELFMAG, SELFMAG) != 0)
+		return  -ENOEXEC;
 
-
-        /* First of all, some simple consistency checks */
-        if ((elf_ex.e_type != ET_EXEC &&
-            elf_ex.e_type != ET_DYN) ||
-           (!((elf_ex.e_machine == EM_386) || (elf_ex.e_machine == EM_486))) ||
-           (!bprm->dentry->d_inode->i_op || !bprm->dentry->d_inode->i_op->default_file_ops ||
-            !bprm->dentry->d_inode->i_op->default_file_ops->mmap)){
-                return -ENOEXEC;
-        }
+	/* First of all, some simple consistency checks */
+	if ((elf_ex.e_type != ET_EXEC && elf_ex.e_type != ET_DYN) ||
+		(!((elf_ex.e_machine == EM_386) || (elf_ex.e_machine == EM_486))) ||
+		(!bprm->dentry->d_inode->i_op || 
+		!bprm->dentry->d_inode->i_op->default_file_ops ||
+		!bprm->dentry->d_inode->i_op->default_file_ops->mmap)) {
+			return -ENOEXEC;
+	}
 
 	bprm->sh_bang++;	/* Well, the bang-shell is implicit... */
 	dput(bprm->dentry);

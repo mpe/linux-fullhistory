@@ -106,8 +106,8 @@ static int bfs_create(struct inode * dir, struct dentry * dentry, int mode)
 	if (!inode)
 		return -ENOSPC;
 	inode->i_sb = s;
-	ino = find_first_zero_bit(s->su_imap, s->su_imap_len);
-	if (ino >= s->su_lasti) {
+	ino = find_first_zero_bit(s->su_imap, s->su_lasti);
+	if (ino > s->su_lasti) {
 		iput(inode);
 		return -ENOSPC;
 	}

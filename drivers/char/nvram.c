@@ -349,10 +349,9 @@ static int nvram_release( struct inode *inode, struct file *file )
 }
 
 
-#ifdef CONFIG_PROC_FS
+#ifndef CONFIG_PROC_FS
 static int nvram_read_proc( char *buffer, char **start, off_t offset,
-							int size, int *eof,
-							void *data) {}
+			    int size, int *eof, void *data) { return 0; }
 #else
 
 static int nvram_read_proc( char *buffer, char **start, off_t offset,

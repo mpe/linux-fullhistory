@@ -73,7 +73,7 @@ static int try_to_swap_out(struct vm_area_struct* vma, unsigned long address, pt
 	 * memory, and we should just continue our scan.
 	 */
 	if (PageSwapCache(page)) {
-		entry.val = page->pg_offset;
+		entry.val = page->index;
 		swap_duplicate(entry);
 		set_pte(page_table, swp_entry_to_pte(entry));
 drop_pte:

@@ -57,7 +57,8 @@ extern int get_ksyms_list(char *, char **, off_t, int);
 extern int get_device_list(char *);
 extern int get_partition_list(char *);
 extern int get_filesystem_list(char *);
-extern int get_filesystem_info( char * );
+extern int get_filesystem_info(char *);
+extern int get_exec_domain_list(char *);
 extern int get_irq_list(char *);
 extern int get_dma_list(char *);
 extern int get_rtc_status (char *);
@@ -496,6 +497,18 @@ static int mounts_read_proc(char *page, char **start, off_t off,
 	return len;
 }
 
+static int execdomains_read_proc(char *page, char **start, off_t off,
+				 int count, int *eof, void *data)
+{
+	int len = get_exec_domain_list(page);
+	if (len <= off+count) *eof = 1;
+	*start = page + off;
+	len -= off;
+	if (len>count) len = count;
+	if (len<0) len = 0;
+	return len;
+}
+
 static int swaps_read_proc(char *page, char **start, off_t off,
 				 int count, int *eof, void *data)
 {
@@ -591,6 +604,7 @@ void proc_misc_init(void)
 		{"swaps",	swaps_read_proc},
 		{"slabinfo",	slabinfo_read_proc},
 		{"iomem",	memory_read_proc},
+		{"execdomains",	execdomains_read_proc},
 		{NULL,NULL}
 	};
 	for(p=simple_ones;p->name;p++)

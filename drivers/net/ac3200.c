@@ -293,7 +293,7 @@ static void
 ac_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
 	unsigned long hdr_start = dev->mem_start + ((ring_page - AC_START_PG)<<8);
-	memcpy_fromio(hdr, hdr_start, sizeof(struct e8390_pkt_hdr));
+	isa_memcpy_fromio(hdr, hdr_start, sizeof(struct e8390_pkt_hdr));
 }
 
 /*  Block input and output are easy on shared memory ethercards, the only
@@ -307,12 +307,12 @@ static void ac_block_input(struct net_device *dev, int count, struct sk_buff *sk
 	if (xfer_start + count > dev->rmem_end) {
 		/* We must wrap the input move. */
 		int semi_count = dev->rmem_end - xfer_start;
-		memcpy_fromio(skb->data, xfer_start, semi_count);
+		isa_memcpy_fromio(skb->data, xfer_start, semi_count);
 		count -= semi_count;
-		memcpy_fromio(skb->data + semi_count, dev->rmem_start, count);
+		isa_memcpy_fromio(skb->data + semi_count, dev->rmem_start, count);
 	} else {
 		/* Packet is in one chunk -- we can copy + cksum. */
-		eth_io_copy_and_sum(skb, xfer_start, count, 0);
+		isa_eth_io_copy_and_sum(skb, xfer_start, count, 0);
 	}
 }
 
@@ -321,7 +321,7 @@ static void ac_block_output(struct net_device *dev, int count,
 {
 	unsigned long shmem = dev->mem_start + ((start_page - AC_START_PG)<<8);
 
-	memcpy_toio(shmem, buf, count);
+	isa_memcpy_toio(shmem, buf, count);
 }
 
 static int ac_close_card(struct net_device *dev)

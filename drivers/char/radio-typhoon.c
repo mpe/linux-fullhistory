@@ -72,8 +72,8 @@ static int typhoon_ioctl(struct video_device *dev, unsigned int cmd, void *arg);
 static int typhoon_open(struct video_device *dev, int flags);
 static void typhoon_close(struct video_device *dev);
 #ifdef CONFIG_RADIO_TYPHOON_PROC_FS
-static int typhoon_read_proc(char *buf, char **start, off_t offset, int len,
-	                     int unused);
+static int typhoon_get_info(char *buf, char **start, off_t offset, int len,
+	                    int unused);
 #endif
 
 static void typhoon_setvol_generic(struct typhoon_device *dev, int vol)
@@ -299,8 +299,8 @@ static struct video_device typhoon_radio =
 
 #ifdef CONFIG_RADIO_TYPHOON_PROC_FS
 
-static int typhoon_read_proc(char *buf, char **start, off_t offset, int len,
-	              int unused)
+static int typhoon_get_info(char *buf, char **start, off_t offset, int len,
+	              	    int unused)
 {
 	#ifdef MODULE
 	    #define MODULEPROCSTRING "Driver loaded as a module"
@@ -386,8 +386,8 @@ static int __init typhoon_init(void)
 	typhoon_mute(&typhoon_unit);
 
 #ifdef CONFIG_RADIO_TYPHOON_PROC_FS
-	if (!create_proc_read_entry("driver/radio-typhoon", 0, NULL,
-					typhoon_read_proc, NULL)) 
+	if (!create_proc_info_entry("driver/radio-typhoon", 0, NULL,
+				    typhoon_get_info)) 
 	    	printk(KERN_ERR "radio-typhoon: registering /proc/driver/radio-typhoon failed\n");
 #endif
 
@@ -398,7 +398,7 @@ static void __exit typhoon_cleanup_module(void)
 {
 
 #ifdef CONFIG_RADIO_TYPHOON_PROC_FS
-	remove_proc_entry("driver/radio-typhoon");
+	remove_proc_entry("driver/radio-typhoon", NULL);
 #endif
 
 	video_unregister_device(&typhoon_radio);

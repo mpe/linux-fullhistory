@@ -186,9 +186,9 @@ swp_entry_t acquire_swap_entry(struct page *page)
 		goto new_swap_entry;
 
 	/* We have the old entry in the page offset still */
-	if (!page->pg_offset)
+	if (!page->index)
 		goto new_swap_entry;
-	entry.val = page->pg_offset;
+	entry.val = page->index;
 	type = SWP_TYPE(entry);
 	if (type & SHM_SWP_TYPE)
 		goto new_swap_entry;

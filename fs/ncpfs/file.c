@@ -46,7 +46,7 @@ int ncp_make_open(struct inode *inode, int right)
 		goto out;
 	}
 
-	DPRINTK(KERN_DEBUG "ncp_make_open: opened=%d, volume # %u, dir entry # %u\n",
+	DPRINTK("ncp_make_open: opened=%d, volume # %u, dir entry # %u\n",
 		NCP_FINFO(inode)->opened, 
 		NCP_FINFO(inode)->volNumber, 
 		NCP_FINFO(inode)->dirEntNum);
@@ -67,9 +67,7 @@ int ncp_make_open(struct inode *inode, int right)
 					NULL, NULL, OC_MODE_OPEN,
 					0, AR_READ, &finfo);
 		if (result) {
-#ifdef NCPFS_PARANOIA
-printk(KERN_DEBUG "ncp_make_open: failed, result=%d\n", result);
-#endif
+			PPRINTK("ncp_make_open: failed, result=%d\n", result);
 			goto out_unlock;
 		}
 		/*
@@ -80,9 +78,7 @@ printk(KERN_DEBUG "ncp_make_open: failed, result=%d\n", result);
 	}
 
 	access = NCP_FINFO(inode)->access;
-#ifdef NCPFS_PARANOIA
-printk(KERN_DEBUG "ncp_make_open: file open, access=%x\n", access);
-#endif
+	PPRINTK("ncp_make_open: file open, access=%x\n", access);
 	if (access == right || access == O_RDWR)
 		error = 0;
 
@@ -104,12 +100,12 @@ ncp_file_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 	void* freepage;
 	size_t freelen;
 
-	DPRINTK(KERN_DEBUG "ncp_file_read: enter %s/%s\n",
+	DPRINTK("ncp_file_read: enter %s/%s\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name);
 
 	error = -EINVAL;
 	if (inode == NULL) {
-		DPRINTK(KERN_DEBUG "ncp_file_read: inode = NULL\n");
+		DPRINTK("ncp_file_read: inode = NULL\n");
 		goto out;
 	}
 	error = -EIO;
@@ -117,7 +113,7 @@ ncp_file_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 		goto out;
 	error = -EINVAL;
 	if (!S_ISREG(inode->i_mode)) {
-		DPRINTK(KERN_DEBUG "ncp_file_read: read from non-file, mode %07o\n",
+		DPRINTK("ncp_file_read: read from non-file, mode %07o\n",
 			inode->i_mode);
 		goto out;
 	}
@@ -177,7 +173,7 @@ ncp_file_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 		inode->i_atime = CURRENT_TIME;
 	}
 	
-	DPRINTK(KERN_DEBUG "ncp_file_read: exit %s/%s\n",
+	DPRINTK("ncp_file_read: exit %s/%s\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name);
 out:
 	return already_read ? already_read : error;
@@ -194,17 +190,17 @@ ncp_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 	int errno;
 	void* bouncebuffer;
 
-	DPRINTK(KERN_DEBUG "ncp_file_write: enter %s/%s\n",
+	DPRINTK("ncp_file_write: enter %s/%s\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name);
 	if (inode == NULL) {
-		DPRINTK(KERN_DEBUG "ncp_file_write: inode = NULL\n");
+		DPRINTK("ncp_file_write: inode = NULL\n");
 		return -EINVAL;
 	}
 	errno = -EIO;
 	if (!ncp_conn_valid(NCP_SERVER(inode)))
 		goto out;
 	if (!S_ISREG(inode->i_mode)) {
-		DPRINTK(KERN_DEBUG "ncp_file_write: write to non-file, mode %07o\n",
+		DPRINTK("ncp_file_write: write to non-file, mode %07o\n",
 			inode->i_mode);
 		return -EINVAL;
 	}
@@ -260,7 +256,7 @@ ncp_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 	if (pos > inode->i_size) {
 		inode->i_size = pos;
 	}
-	DPRINTK(KERN_DEBUG "ncp_file_write: exit %s/%s\n",
+	DPRINTK("ncp_file_write: exit %s/%s\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name);
 out:
 	return already_written ? already_written : errno;
