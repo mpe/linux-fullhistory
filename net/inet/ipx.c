@@ -551,7 +551,8 @@ ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 
 	/* See if we should update our network number */
 	if ((intrfc->if_netnum == 0L) && 
-		(ipx->ipx_source.net == ipx->ipx_dest.net)) {
+		(ipx->ipx_source.net == ipx->ipx_dest.net) &&
+		(ipx->ipx_source.net != 0L)) {
 		/* NB: NetWare servers lie about their hop count so we
 		 * dropped the test based on it.  This is the best way
 		 * to determine this is a 0 hop count packet.

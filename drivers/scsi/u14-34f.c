@@ -1,6 +1,13 @@
 /*
  *      u14-34f.c - Low-level driver for UltraStor 14F/34F SCSI host adapters.
  *
+ *      11 Mar 1995 rev. 2.00 for linux 1.2.0
+ *          Fixed a bug which prevented media change detection for removable
+ *          disk drives.
+ *
+ *      23 Feb 1995 rev. 1.18 for linux 1.1.94
+ *          Added a check for scsi_register returning NULL.
+ *
  *      11 Feb 1995 rev. 1.17 for linux 1.1.91
  *          U14F qualified to run with 32 sglists.
  *          Now DEBUG_RESET is disabled by default.
@@ -398,6 +405,17 @@ static inline int port_detect(ushort *port_base, unsigned int j,
       }
 
    sh[j] = scsi_register(tpnt, sizeof(struct hostdata));
+
+   if (sh[j] == NULL) {
+      printk("%s: unable to register host, detaching.\n", name);
+
+      if (irqlist[irq] == NO_IRQ) free_irq(irq);
+
+      if (subversion == ISA) free_dma(dma_channel);
+
+      return FALSE;
+      }
+
    sh[j]->io_port = *port_base;
    sh[j]->n_io_port = REGION_SIZE;
    sh[j]->base = bios_segment_table[config_1.bios_segment];
@@ -895,11 +913,6 @@ static void u14_34f_interrupt_handler(int irq, struct pt_regs * regs) {
                         && (SCpnt->sense_buffer[2] & 0xf) == RECOVERED_ERROR)
                   status = DID_BUS_BUSY << 16;
 
-               else if (tstatus == CHECK_CONDITION
-                        && SCpnt->device->type == TYPE_DISK
-                        && (SCpnt->sense_buffer[2] & 0xf) == UNIT_ATTENTION)
-                  status = DID_ERROR << 16;
-   
                else
                   status = DID_OK << 16;
 

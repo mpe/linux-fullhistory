@@ -86,7 +86,7 @@ struct cyclades_port {
 
 
 
-#define CyMaxChipsPerCard 4
+#define CyMaxChipsPerCard 8
 
 /**** CD1400 registers ****/
 

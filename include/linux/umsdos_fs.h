@@ -4,15 +4,18 @@
 #define UMSDOS_VERSION	0
 #define UMSDOS_RELEASE	4
 
-#ifndef LINUX_FS_H
-#include <linux/fs.h>
-#endif
-
 /* This is the file acting as a directory extension */
 #define UMSDOS_EMD_FILE		"--linux-.---"
 #define UMSDOS_EMD_NAMELEN	12
 #define UMSDOS_PSDROOT_NAME	"linux"
 #define UMSDOS_PSDROOT_LEN	5
+
+#ifndef _LINUX_TYPES_H
+#include <linux/types.h>
+#endif
+#ifndef _LINUX_DIRENT_H
+#include <linux/dirent.h>
+#endif
 
 struct umsdos_fake_info {
 	char fname[13];
@@ -81,7 +84,6 @@ struct umsdos_info{
 
 #define UMSDOS_RENAME_DOS	1244	/* rename a file/directory in the DOS */
 									/* directory only */
-
 struct umsdos_ioctl{
 	struct dirent dos_dirent;
 	struct umsdos_dirent umsdos_dirent;
@@ -121,6 +123,10 @@ struct umsdos_ioctl{
 #define EDM_ENTRY_ISUSED(e) ((e)->name_len!=0)
 
 #ifdef __KERNEL__
+
+#ifndef LINUX_FS_H
+#include <linux/fs.h>
+#endif
 
 extern struct inode_operations umsdos_dir_inode_operations;
 extern struct file_operations  umsdos_file_operations;

@@ -1,9 +1,10 @@
 /*
  *  linux/fs/ext2/super.c
  *
- *  Copyright (C) 1992, 1993, 1994  Remy Card (card@masi.ibp.fr)
- *                                  Laboratoire MASI - Institut Blaise Pascal
- *                                  Universite Pierre et Marie Curie (Paris VI)
+ * Copyright (C) 1992, 1993, 1994, 1995
+ * Remy Card (card@masi.ibp.fr)
+ * Laboratoire MASI - Institut Blaise Pascal
+ * Universite Pierre et Marie Curie (Paris VI)
  *
  *  from
  *
@@ -26,10 +27,11 @@
 #include <linux/string.h>
 #include <linux/locks.h>
 
+static char error_buf[1024];
+
 void ext2_error (struct super_block * sb, const char * function,
 		 const char * fmt, ...)
 {
-	char buf[1024];
 	va_list args;
 
 	if (!(sb->s_flags & MS_RDONLY)) {
@@ -39,15 +41,15 @@ void ext2_error (struct super_block * sb, const char * function,
 		sb->s_dirt = 1;
 	}
 	va_start (args, fmt);
-	vsprintf (buf, fmt, args);
+	vsprintf (error_buf, fmt, args);
 	va_end (args);
 	if (test_opt (sb, ERRORS_PANIC) ||
 	    (sb->u.ext2_sb.s_es->s_errors == EXT2_ERRORS_PANIC &&
 	     !test_opt (sb, ERRORS_CONT) && !test_opt (sb, ERRORS_RO)))
 		panic ("EXT2-fs panic (device %d/%d): %s: %s\n",
-		       MAJOR(sb->s_dev), MINOR(sb->s_dev), function, buf);
+		       MAJOR(sb->s_dev), MINOR(sb->s_dev), function, error_buf);
 	printk (KERN_CRIT "EXT2-fs error (device %d/%d): %s: %s\n",
-		MAJOR(sb->s_dev), MINOR(sb->s_dev), function, buf);
+		MAJOR(sb->s_dev), MINOR(sb->s_dev), function, error_buf);
 	if (test_opt (sb, ERRORS_RO) ||
 	    (sb->u.ext2_sb.s_es->s_errors == EXT2_ERRORS_RO &&
 	     !test_opt (sb, ERRORS_CONT) && !test_opt (sb, ERRORS_PANIC))) {
@@ -59,7 +61,6 @@ void ext2_error (struct super_block * sb, const char * function,
 NORET_TYPE void ext2_panic (struct super_block * sb, const char * function,
 			    const char * fmt, ...)
 {
-	char buf[1024];
 	va_list args;
 
 	if (!(sb->s_flags & MS_RDONLY)) {
@@ -69,23 +70,22 @@ NORET_TYPE void ext2_panic (struct super_block * sb, const char * function,
 		sb->s_dirt = 1;
 	}
 	va_start (args, fmt);
-	vsprintf (buf, fmt, args);
+	vsprintf (error_buf, fmt, args);
 	va_end (args);
 	panic ("EXT2-fs panic (device %d/%d): %s: %s\n",
-	       MAJOR(sb->s_dev), MINOR(sb->s_dev), function, buf);
+	       MAJOR(sb->s_dev), MINOR(sb->s_dev), function, error_buf);
 }
 
 void ext2_warning (struct super_block * sb, const char * function,
 		   const char * fmt, ...)
 {
-	char buf[1024];
 	va_list args;
 
 	va_start (args, fmt);
-	vsprintf (buf, fmt, args);
+	vsprintf (error_buf, fmt, args);
 	va_end (args);
 	printk (KERN_WARNING "EXT2-fs warning (device %d/%d): %s: %s\n",
-		MAJOR(sb->s_dev), MINOR(sb->s_dev), function, buf);
+		MAJOR(sb->s_dev), MINOR(sb->s_dev), function, error_buf);
 }
 
 void ext2_put_super (struct super_block * sb)
@@ -550,6 +550,31 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		brelse (bh);
 		printk ("EXT2-fs: fragsize %lu != blocksize %lu (not supported yet)\n",
 			sb->u.ext2_sb.s_frag_size, sb->s_blocksize);
+		return NULL;
+	}
+
+	if (sb->u.ext2_sb.s_blocks_per_group > sb->s_blocksize * 8) {
+		sb->s_dev = 0;
+		unlock_super (sb);
+		brelse (bh);
+		printk ("EXT2-fs: #blocks per group too big: %lu\n",
+			sb->u.ext2_sb.s_blocks_per_group);
+		return NULL;
+	}
+	if (sb->u.ext2_sb.s_frags_per_group > sb->s_blocksize * 8) {
+		sb->s_dev = 0;
+		unlock_super (sb);
+		brelse (bh);
+		printk ("EXT2-fs: #fragments per group too big: %lu\n",
+			sb->u.ext2_sb.s_frags_per_group);
+		return NULL;
+	}
+	if (sb->u.ext2_sb.s_inodes_per_group > sb->s_blocksize * 8) {
+		sb->s_dev = 0;
+		unlock_super (sb);
+		brelse (bh);
+		printk ("EXT2-fs: #inodes per group too big: %lu\n",
+			sb->u.ext2_sb.s_inodes_per_group);
 		return NULL;
 	}
 

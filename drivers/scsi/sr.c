@@ -309,7 +309,7 @@ static void sr_photocd(struct inode *inode)
 
   if (scsi_CDs[MINOR(inode->i_rdev)].xa_flags & 0x02) {
 #ifdef DEBUG
-    printk("sr_photocd: drive does not support multisession CD's");
+    printk("sr_photocd: CDROM and/or the driver does not support multisession CD's");
 #endif
     return;
   }
@@ -452,11 +452,11 @@ static void sr_photocd(struct inode *inode)
     }
     break;
 
+  case SCSI_MAN_NEC_OLDCDR:
   case SCSI_MAN_UNKNOWN:
   default:
-#ifdef DEBUG
-    printk("sr_photocd: unknown drive, no special multisession code\n");
-#endif
+    sector = 0;
+    no_multi = 1;
     break; }
 
   scsi_CDs[MINOR(inode->i_rdev)].mpcd_sector = sector;

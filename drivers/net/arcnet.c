@@ -15,7 +15,10 @@
          
 	**********************
 
-
+	v1.01 (95/03/24)
+	  - Fixed some IPX-related bugs. (Thanks to Tomasz Motylewski
+            <motyl@tichy.ch.uj.edu.pl> for the patches to make arcnet work
+            with dosemu!)
 	v1.0 (95/02/15)
 	  - Initial non-alpha release.
 	
@@ -25,15 +28,12 @@
          - Test in systems with NON-ARCnet network cards, just to see if
            autoprobe kills anything.  With any luck, it won't.  (It's pretty
            careful.)
-           	- Except some unfriendly NE2000's die. (0.40)
+           	- Except some unfriendly NE2000's die. (as of 0.40-ALPHA)
          - cards with shared memory that can be "turned off?"
          - NFS mount freezes after several megabytes to SOSS for DOS. 
  	   unmount/remount works.  Is this arcnet-specific?  I don't know.
  	 - Add support for the various stupid bugs ("I didn't read the RFC"
- 	   syndrome) in MS Windows for Workgroups and LanMan.
- 	   
- 	 - get the net people to probe last for arcnet, and first for ne2000
- 	   in Space.c...  
+           syndrome) in Windows for Workgroups and LanMan.
  */
  
 /**************************************************************************/
@@ -87,7 +87,7 @@
 /**************************************************************************/
  
 static char *version =
- "arcnet.c:v1.00 95/02/15 Avery Pennarun <apenwarr@tourism.807-city.on.ca>\n";
+ "arcnet.c:v1.01 95/03/24 Avery Pennarun <apenwarr@tourism.807-city.on.ca>\n";
 
 /*
   Sources:
@@ -140,6 +140,7 @@ static char *version =
  * D_NORMAL	verification
  * D_INIT	show init/detect messages
  * D_DURING	show messages during normal use (ie interrupts)
+ * D_DATA   show packets data from skb's, not on Arcnet card
  * D_TX		show tx packets
  * D_RX		show tx+rx packets
  */
@@ -148,8 +149,9 @@ static char *version =
 #define	D_INIT		2
 #define D_EXTRA		3
 #define D_DURING	4
-#define D_TX		5
-#define D_RX		6
+#define D_DATA		6
+#define D_TX		8
+#define D_RX		9
 
 #ifndef NET_DEBUG
 #define NET_DEBUG 	D_INIT
@@ -289,7 +291,7 @@ struct ClientData
 				 *   but WE MUST GET RID OF IT BEFORE SENDING A
 				 *   PACKET!!
 				 */
-	u_char  stupid;		/* filler to make struct an even # of bytes */
+	u_char  saddr;		/* Source address - neccesary for IPX protocol */
 	
 	/* data that IS part of real packet */
 	u_char	protocol_id,	/* ARC_P_IP, ARC_P_ARP, or ARC_P_RARP */
@@ -446,9 +448,12 @@ arcnet_probe(struct device *dev)
 		printk(version);
 		printk("arcnet: ***\n");
 		printk("arcnet: * Read linux/drivers/net/README.arcnet for important release notes!\n");
+		printk("arcnet: *\n");
+		printk("arcnet: * This version should be stable, but e-mail me if you have any\n");
+		printk("arcnet: * questions, comments, or bug reports!\n");
 		printk("arcnet: ***\n");
 	}
-	
+
 	BUGLVL(D_INIT)
 		printk("arcnet: given: base %lXh, IRQ %Xh, shmem %lXh\n",
 			dev->base_addr,dev->irq,dev->mem_start);
@@ -1003,6 +1008,15 @@ arcnet_send_packet(struct sk_buff *skb, struct device *dev)
 		out->length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
 		out->hdr=(struct ClientData*)skb->data;
 		out->skb=skb;
+		BUGLVL( D_DATA ) {
+			short i;
+			for( i=0; i< skb->len; i++)
+			{
+				if( i%16 == 0 ) printk("\n[%04hX] ",i);
+				printk("%02hX ",((unsigned char*)skb->data)[i]);
+			}
+			printk("\n");
+		}
 
 #ifdef IRQ_XMIT
 		if (lp->txready && inb(STATUS)&TXFREEflag)
@@ -1566,7 +1580,7 @@ arcnet_rx(struct device *dev,int recbuf)
 		BUGLVL(D_RX) printk("arcnet: incoming is not split (splitflag=%d)\n",
 			arcsoft->split_flag);
 			
-        	if (in->skb)	/* already assembling one! */
+        if (in->skb)	/* already assembling one! */
         	{
         		BUGLVL(D_INIT) printk("arcnet: aborting assembly (seq=%d) for unsplit packet (splitflag=%d, seq=%d)\n",
         			in->sequence,arcsoft->split_flag,
@@ -1593,6 +1607,7 @@ arcnet_rx(struct device *dev,int recbuf)
          		(u_char *)arcsoft+EXTRA_CLIENTDATA,
          		length-EXTRA_CLIENTDATA);
          	soft->daddr=daddr;
+         	soft->saddr=saddr;
          	
          	BUGLVL(D_DURING)
          		printk("arcnet: received packet from %02Xh to %02Xh (%d bytes, type=%d)\n",
@@ -1648,7 +1663,15 @@ arcnet_rx(struct device *dev,int recbuf)
          				arp->ar_hln,arp->ar_pln);
          		}
          	}
-
+		BUGLVL( D_DATA ) {
+	            short i;
+	               	for( i=0; i< skb->len; i++)
+               		{
+                       		if( i%16 == 0 ) printk("\n[%04hX] ",i);
+                       		printk("%02hX ",((unsigned char*)skb->data)[i]);
+               		}
+               		printk("\n");
+            	}
          	netif_rx(skb);
          	lp->stats.rx_packets++;
          }
@@ -1725,13 +1748,6 @@ arcnet_rx(struct device *dev,int recbuf)
 	                 */
 	                skb->free=1;
 	                
-                	if (skb==NULL)
-                	{
-                		printk("%s: Memory squeeze, dropping packet.\n", 
-                			dev->name);
-                		lp->stats.rx_dropped++;
-                		return;
-                	}
                 	soft=(struct ClientData *)skb->data;
                 	
                 	skb->len=sizeof(struct ClientData);
@@ -1789,6 +1805,7 @@ arcnet_rx(struct device *dev,int recbuf)
          	skb->len+=length-sizeof(struct ClientData);
          	
          	soft->daddr=daddr;
+         	soft->saddr=saddr;
          	
          	BUGLVL(D_DURING)
          		printk("arcnet: received packet from %02Xh to %02Xh (%d bytes, type=%d)\n",
@@ -1818,6 +1835,15 @@ arcnet_rx(struct device *dev,int recbuf)
          				skb,in->skb);
          		in->skb=NULL;
          		in->lastpacket=in->numpackets=0;
+			BUGLVL( D_DATA ) {
+	        	    short i;
+	        	       	for( i=0; i< skb->len; i++)
+               			{
+                	       		if( i%16 == 0 ) printk("\n[%04hX] ",i);
+                	       		printk("%02hX ",((unsigned char*)skb->data)[i]);
+               			}
+               			printk("\n");
+            		}
 	         	netif_rx(skb);
         	 	lp->stats.rx_packets++;
         	}
@@ -1980,22 +2006,26 @@ int arc_header(unsigned char *buff,struct device *dev,unsigned short type,
 	case ETH_P_IPX:
 		head->protocol_id=ARC_P_IPX;
 		break;
+	case ETH_P_ATALK:
+		head->protocol_id=ARC_P_ATALK;
+		break;
 	default:
 		printk("arcnet: I don't understand protocol %d (%Xh)\n",
 			type,type);
 		return 0;
 	}	
 
-#if 0
+#if 1
 	/*
 	 *	Set the source hardware address.
 	 *	AVE: we can't do this, so we don't.  Code below is directly
 	 *	     stolen from eth.c driver and won't work.
+	 ** TM: but for debugging I would like to have saddr in the header
 	 */
 	if(saddr)
-		memcpy(eth->h_source,saddr,dev->addr_len);
+		head->saddr=((u_char*)saddr)[0];
 	else
-		memcpy(eth->h_source,dev->dev_addr,dev->addr_len);
+		head->saddr=((u_char*)(dev->dev_addr))[0];
 #endif
 
 #if 0
@@ -2007,7 +2037,7 @@ int arc_header(unsigned char *buff,struct device *dev,unsigned short type,
 	 */
 	if (dev->flags & IFF_LOOPBACK) 
 	{
-		memset(eth->h_dest, 0, dev->addr_len);
+		head->daddr=0;
 		return(dev->hard_header_len);
 	}
 #endif
@@ -2098,8 +2128,8 @@ unsigned short arc_type_trans(struct sk_buff *skb,struct device *dev)
 	case ARC_P_ARP:		return htons(ETH_P_ARP);
 	case ARC_P_RARP:	return htons(ETH_P_RARP);
 	case ARC_P_IPX:		return htons(ETH_P_IPX);
+	case ARC_P_ATALK:   return htons(ETH_P_ATALK); /* appletalk, not tested */
 	case ARC_P_LANSOFT: /* don't understand.  fall through. */
-	case ARC_P_ATALK:   /* appletalk - don't understand.  fall through. */
 	default:
 		BUGLVL(D_DURING)
 			printk("arcnet: received packet of unknown protocol id %d (%Xh)\n",

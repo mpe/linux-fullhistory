@@ -1,7 +1,7 @@
                        Readme-File README.aztcd
    for Aztech CD-ROM CDA268-01A, ORCHID CD-3110, OKANO/WEARNES CDD110 
                           CD-ROM  Driver 
-                    BETA-Version 0.6 and newer
+                       Version 1.0 and newer
                    (for other drives see 6.-8.)
 
 NOTE: THIS DRIVER WILL WORK WITH THE CD-ROM DRIVES LISTED, WHICH HAVE
@@ -28,15 +28,13 @@ Contents of this file:
 ----------------------------------------------------------------------------
 
 1. NOTE 
-This software has now been tested in some different machines with AZTECH
-CDA268-01A, ORCHID CDS-3110 and ORCHID/WEARNES CDD110 and has proven to be 
-pretty stable with kernel versions 1.0.0 to 1.1.75. Nevertheless I'd only
-assign BETA status to the software, as the number of known users is still 
-small. So when in 'day to day' use or when used with different firmware
-versions of the CD-ROM drives, there still may be some problems. So I'm 
-quite sure I'll see some bug reports (see chapter BUG REPORTS) and you are
-invited in helping us to increase the number of drives, which are supported,
-and in debugging this software (see chapters OTHER DRIVES and DEBUGGING).
+This software has been successfully in alpha and beta test for quite a long
+time with AZTECH CDA268-01A, ORCHID CDS-3110 and ORCHID/WEARNES CDD110 
+and has proven to be stable with kernel versions 1.0.9 to 1.2.0. But with
+any software there still may be bugs in it. So if you encounter problems,
+you are invited to help us improve this software. Please send me a detailed
+bug report (see chapter BUG REPORTS). You are also invited in helping us to 
+increase the number of drives, which are supported.
 
 Please read the README-files carefully and always keep a backup copy of your 
 old kernel, in order to reboot if something goes wrong!
@@ -54,7 +52,7 @@ device with major number 29 and reside in directory /dev. To mount a CD-ROM,
 your kernel needs to have the ISO9660-filesystem support included.
 
 
-3. CONFIGURING YOUR KERNEL
+3.  CONFIGURING YOUR KERNEL
 If your kernel is already configured for using the AZTECH driver you will
 see the following message while Linux boots:
     Aztech CD-ROM Init: DriverVersion=<version number> BaseAddress=<baseaddress>
@@ -88,6 +86,7 @@ Joe Nardone has compiled a boot disk with the Aztech driver for installing
 Slackware from CDROM. You can find the disk images at 'sunsite.unc.edu'; 
 see file 'aztech.gz.README' for instructions on how to use it.
 
+
 4. RECOMPILING YOUR KERNEL
 If your kernel is not yet configured for the AZTECH driver and the ISO9660-
 filesystem, you have to recompile your kernel: 
@@ -99,16 +98,22 @@ filesystem, you have to recompile your kernel:
   Users of other drives should read chapter OTHER DRIVES of this file.
   You also can configure that address by LILO boot parameter aztcd=... 
 - Build a new kernel, configure it for 'Aztech/Orchid/Okano/Wearnes support' 
-  and include the ISO9660-filesystem. 
+  (if you want aztcd to be part of the kernel). Do not configure it for
+  'Aztech... support', if you want to use aztcd as a run time loadable module. 
+  But in any case you must have the ISO9660-filesystem included in your
+  kernel.
 - Activate the new kernel, normally this is done by running lilo (don't for-
   get to configure it before and to keep a copy of your old kernel in case
   something goes wrong!).
 - Reboot
-- You now should see during boot some messages like
+- If you've included aztcd in your kernel, you now should see during boot 
+  some messages like
     Aztech CD-ROM Init: DriverVersion=<version number> BaseAddress=<baseaddress>
     Aztech CD-ROM Init: FirmwareVersion=<firmware version id of your I/O-card>
     Aztech CD-ROM Init: <drive type> detected
     Aztech CD-ROM Init: End
+- If you have not included aztcd in your kernel, but want to load aztcd as a 
+  run time loadable module see 4.1. 
 - If the message looks correct, as user 'root' you should be able to mount 
   the drive by
           mount -t iso9660 -r /dev/aztcd0 /mnt
@@ -117,6 +122,26 @@ filesystem, you have to recompile your kernel:
       mknod /dev/aztcd0 b 29 0
       mkdir /mnt                       
 - If this still does not help, see chapters OTHER DRIVES and DEBUGGING.
+
+4.1 AZTCD AS A RUN-TIME LOADABLE MODULE
+If you do not need aztcd permanently, you can also load and remove the driver
+during runtime via insmod and rmmod. To build aztcd as a loadable module you 
+must *not* configure your kernel for AZTECH support. But you need to have
+the ISO9660-filesystem included! So rebuild your kernel, if necessary.
+
+Now edit the base adress of your AZTECH interface card in
+/usr/src/linux/include/linux/aztcd.h to the appropriate value. Then change
+to /usr/src/linux and do a 
+                    make modules  
+	            make modules_install
+After that you can run-time load the driver via
+                    insmod /lib/modules/X.X.X/misc/aztcd.o
+and remove it via   rmmod  aztcd.
+If you have not configured the correct base address, you can also supply the
+base address when loading the driver via
+                    insmod /lib/modules/X.X.X/misc/aztcd.o aztcd=<base address>
+In all commands 'X.X.X' is the current linux kernel version number. For details
+see file README.modules in /usr/src/linux.
 
 
 5. KNOWN PROBLEMS, FUTURE DEVELOPMENTS
@@ -185,9 +210,7 @@ In some installations, it seems necessary to initialize the drive with the DOS
 driver before (especially if combined with a sound card) and then do a warm 
 boot (CTRL-ALT-RESET) or start Linux from DOS, e.g. with 'loadlin'.
 
-Please give me positive or negative feedback, if you have tried it. Especially
-you should tell me, how the version string reads during initialization. If you
-don't succeed, read chapter DEBUGGING. Thanks in advance!
+If you do not succeed, read chapter DEBUGGING. Thanks in advance!
 
 Sorry for the inconvenience, but it is difficult to develop for hardware, 
 which you don't have available for testing. So if you like, please help us.
@@ -412,7 +435,7 @@ should try before, how to restore from a backup copy)!
 Werner Zimmermann
 Fachhochschule fuer Technik Esslingen
 (EMail: zimmerma@rz.fht-esslingen.de)
-Jan. 8, 1994
+Mar 24, 1995
 
 ---------------------------------------------------------------------------
 APPENDIX: Source code of cdplay.c

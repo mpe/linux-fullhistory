@@ -19,6 +19,7 @@
 #include "msbuffer.h"
 
 #define PRINTK(x)
+#define Printk(x)	printk x
 /* Well-known binary file extensions */
 
 static char bin_extensions[] =
@@ -117,7 +118,7 @@ void unlock_fat(struct super_block *sb)
 int msdos_add_cluster(struct inode *inode)
 {
 	struct super_block *sb = inode->i_sb;
-	int count,nr,limit,last,current,sector,last_sector;
+	int count,nr,limit,last,current,sector,last_sector,file_cluster;
 	struct buffer_head *bh;
 	int cluster_size = MSDOS_SB(inode->i_sb)->cluster_size;
 
@@ -130,6 +131,7 @@ int msdos_add_cluster(struct inode *inode)
 		nr = ((count+MSDOS_SB(inode->i_sb)->prev_free) % limit)+2;
 		if (fat_access(inode->i_sb,nr,-1) == 0) break;
 	}
+	PRINTK (("cnt = %d --",count));
 #ifdef DEBUG
 printk("free cluster: %d\n",nr);
 #endif
@@ -149,14 +151,30 @@ printk("free cluster: %d\n",nr);
 printk("set to %x\n",fat_access(inode->i_sb,nr,-1));
 #endif
 	last = 0;
+	/* We must locate the last cluster of the file to add this
+	   new one (nr) to the end of the link list (the FAT).
+	   
+	   Here file_cluster will be the number of the last cluster of the
+	   file (before we add nr).
+	   
+	   last is the corresponding cluster number on the disk. We will
+	   use last to plug the nr cluster. We will use file_cluster to
+	   update the cache.
+	*/
+	file_cluster = 0;
 	if ((current = MSDOS_I(inode)->i_start) != 0) {
 		cache_lookup(inode,INT_MAX,&last,&current);
-		while (current && current != -1)
+		file_cluster = last;
+		while (current && current != -1){
+			PRINTK (("."));
+			file_cluster++;
 			if (!(current = fat_access(inode->i_sb,
 			    last = current,-1))) {
 				fs_panic(inode->i_sb,"File without EOF");
 				return -ENOSPC;
 			}
+		}
+		PRINTK ((" --  "));
 	}
 #ifdef DEBUG
 printk("last = %d\n",last);
@@ -183,6 +201,12 @@ if (last) printk("next set to %d\n",fat_access(inode->i_sb,last,-1));
 			mark_buffer_dirty(bh, 1);
 			brelse(bh);
 		}
+	}
+	if (file_cluster != inode->i_blocks/cluster_size){
+		printk ("file_cluster badly computed!!! %d <> %ld\n"
+			,file_cluster,inode->i_blocks/cluster_size);
+	}else{
+		cache_add(inode,file_cluster,nr);
 	}
 	inode->i_blocks += cluster_size;
 	if (S_ISDIR(inode->i_mode)) {

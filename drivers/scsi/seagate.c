@@ -181,6 +181,7 @@ static const Signature signatures[] = {
 {"FUTURE DOMAIN CORP. (C) 1986-1990 V6.0209/18/90",5, 47, FD},
 {"FUTURE DOMAIN CORP. (C) 1986-1990 V7.009/18/90", 5, 46, FD},
 {"FUTURE DOMAIN CORP. (C) 1992 V8.00.004/02/92",   5, 44, FD},
+{"IBM F1 BIOS V1.1004/30/92",			   5, 25, FD},
 {"FUTURE DOMAIN TMC-950",                        5, 21, FD},
 #endif /* CONFIG_SCSI_SEAGATE */
 }

@@ -454,11 +454,16 @@ void scan_scsis (struct Scsi_Host * shpnt)
 			scsi_result[1] |= 0x80;  /* removable */
 		}
 
-	      SDpnt->manufacturer = SCSI_MAN_UNKNOWN;
-	      if (!strncmp(scsi_result+8,"NEC",3))
-		SDpnt->manufacturer = SCSI_MAN_NEC;
-	      if (!strncmp(scsi_result+8,"TOSHIBA",7))
-		SDpnt->manufacturer = SCSI_MAN_TOSHIBA;
+	      if (!strncmp(scsi_result+8,"NEC",3)) {
+		  if (!strncmp(scsi_result+16,"CD-ROM DRIVE:84 ",16) ||
+		      !strncmp(scsi_result+16,"CD-ROM DRIVE:25",15))
+		      SDpnt->manufacturer = SCSI_MAN_NEC_OLDCDR;
+		  else
+		      SDpnt->manufacturer = SCSI_MAN_NEC;
+	      } else if (!strncmp(scsi_result+8,"TOSHIBA",7))
+		  SDpnt->manufacturer = SCSI_MAN_TOSHIBA;
+	      else
+		  SDpnt->manufacturer = SCSI_MAN_UNKNOWN;
 
 	      SDpnt->removable = (0x80 &
 				  scsi_result[1]) >> 7;

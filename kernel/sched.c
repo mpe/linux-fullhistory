@@ -426,9 +426,6 @@ static inline void calc_load(void)
 static void second_overflow(void)
 {
 	long ltemp;
-	/* last time the cmos clock got updated */
-	static long last_rtc_update=0;
-	extern int set_rtc_mmss(unsigned long);
 
 	/* Bump the maxerror field */
 	time_maxerror = (0x70000000-time_maxerror < time_tolerance) ?
@@ -458,7 +455,7 @@ static void second_overflow(void)
 		if (xtime.tv_sec % 86400 == 0) {
 			xtime.tv_sec--; /* !! */
 			time_status = TIME_OOP;
-			printk("Clock: inserting leap second 23:59:60 GMT\n");
+			printk("Clock: inserting leap second 23:59:60 UTC\n");
 		}
 		break;
 
@@ -467,7 +464,7 @@ static void second_overflow(void)
 		if (xtime.tv_sec % 86400 == 86399) {
 			xtime.tv_sec++;
 			time_status = TIME_OK;
-			printk("Clock: deleting leap second 23:59:59 GMT\n");
+			printk("Clock: deleting leap second 23:59:59 UTC\n");
 		}
 		break;
 
@@ -475,11 +472,6 @@ static void second_overflow(void)
 		time_status = TIME_OK;
 		break;
 	}
-	if (time_status != TIME_BAD && xtime.tv_sec > last_rtc_update + 660)
-	  if (set_rtc_mmss(xtime.tv_sec) == 0)
-	    last_rtc_update = xtime.tv_sec;
-	  else
-	    last_rtc_update = xtime.tv_sec - 600; /* do it again in one min */
 }
 
 /*
@@ -537,6 +529,9 @@ static void do_timer(int irq, struct pt_regs * regs)
 {
 	unsigned long mask;
 	struct timer_struct *tp;
+	/* last time the cmos clock got updated */
+	static long last_rtc_update=0;
+	extern int set_rtc_mmss(unsigned long);
 
 	long ltemp, psecs;
 
@@ -585,6 +580,18 @@ static void do_timer(int irq, struct pt_regs * regs)
 	    xtime.tv_sec++;
 	    second_overflow();
 	}
+
+	/* If we have an externally synchronized Linux clock, then update
+	 * CMOS clock accordingly every ~11 minutes. Set_rtc_mmss() has to be
+	 * called as close as possible to 500 ms before the new second starts.
+	 */
+	if (time_status != TIME_BAD && xtime.tv_sec > last_rtc_update + 660 &&
+	    xtime.tv_usec > 500000 - (tick >> 1) &&
+	    xtime.tv_usec < 500000 + (tick >> 1))
+	  if (set_rtc_mmss(xtime.tv_sec) == 0)
+	    last_rtc_update = xtime.tv_sec;
+	  else
+	    last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
 
 	jiffies++;
 	calc_load();

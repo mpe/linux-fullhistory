@@ -1,9 +1,10 @@
 /*
  * linux/fs/ext2/acl.c
  *
- * Copyright (C) 1993, 1994  Remy Card (card@masi.ibp.fr)
- *                           Laboratoire MASI - Institut Blaise Pascal
- *                           Universite Pierre et Marie Curie (Paris VI)
+ * Copyright (C) 1993, 1994, 1995
+ * Remy Card (card@masi.ibp.fr)
+ * Laboratoire MASI - Institut Blaise Pascal
+ * Universite Pierre et Marie Curie (Paris VI)
  */
 
 /*

@@ -661,7 +661,7 @@ done:	/* pte_val(pte) == shp->shm_pages[idx] */
 }
 
 /*
- * Goes through counter = (shm_rss << prio) present shm pages.
+ * Goes through counter = (shm_rss >> prio) present shm pages.
  */
 static unsigned long swap_id = 0; /* currently being swapped */
 static unsigned long swap_idx = 0; /* next to swap */
@@ -672,7 +672,8 @@ int shm_swap (int prio)
 	struct shmid_ds *shp;
 	struct vm_area_struct *shmd;
 	unsigned int swap_nr;
-	unsigned long id, idx, invalid = 0;
+	unsigned long id, idx;
+	int loop = 0, invalid = 0;
 	int counter;
 
 	counter = shm_rss >> prio;
@@ -682,21 +683,22 @@ int shm_swap (int prio)
  check_id:
 	shp = shm_segs[swap_id];
 	if (shp == IPC_UNUSED || shp == IPC_NOID || shp->shm_perm.mode & SHM_LOCKED ) {
+		next_id:
 		swap_idx = 0;
-		if (++swap_id > max_shmid)
+		if (++swap_id > max_shmid) {
+			if (loop)
+				goto failed;
+			loop = 1;
 			swap_id = 0;
+		}
 		goto check_id;
 	}
 	id = swap_id;
 
  check_table:
 	idx = swap_idx++;
-	if (idx >= shp->shm_npages) {
-		swap_idx = 0;
-		if (++swap_id > max_shmid)
-			swap_id = 0;
-		goto check_id;
-	}
+	if (idx >= shp->shm_npages)
+		goto next_id;
 
 	pte_val(page) = shp->shm_pages[idx];
 	if (!pte_present(page))
@@ -704,6 +706,7 @@ int shm_swap (int prio)
 	swap_attempts++;
 
 	if (--counter < 0) { /* failed */
+		failed:
 		if (invalid)
 			invalidate();
 		swap_free (swap_nr);

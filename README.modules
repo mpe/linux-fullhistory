@@ -45,6 +45,9 @@ The set of modules is rapidly increasing, but so far these are known:
 	Some misc modules:
 		lp: line printer
 		binfmt_elf: elf loader
+                sbpcd:     CDROM-driver for Matsushita,Panasonic CR52x,CR56x
+                sonycd535: CDROM-driver for Sony CD535
+                aztcd:     CDROM-driver for Aztech,Orchid,Okano,Wearnes
 
 When you have made the kernel, you create the modules by doing:
 

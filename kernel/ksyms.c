@@ -62,6 +62,7 @@ extern char * ftape_big_buffer;
 #ifdef CONFIG_SCSI
 #include "../drivers/scsi/scsi.h"
 #include "../drivers/scsi/hosts.h"
+#include "../drivers/scsi/constants.h"
 #endif
 
 extern int sys_tz;
@@ -315,6 +316,7 @@ struct symbol_table symbol_table = {
 	X(scsi_register),
 	X(scsi_unregister),
 	X(scsicam_bios_param),
+	X(print_command),
 #endif
 	/* Added to make file system as module */
 	X(set_writetime),

@@ -652,7 +652,7 @@ int umsdos_hlink2inode (struct inode *hlink, struct inode **result)
 				if (*pt == '/') *pt++ = '\0';
 				if (dir->u.umsdos_i.i_emd_dir == 0){
 					/* This is a DOS directory */
-					ret = msdos_lookup(dir,start,len,result);
+					ret = umsdos_rlookup_x(dir,start,len,result,1);
 				}else{
 					ret = umsdos_lookup_x(dir,start,len,result,1);
 				}

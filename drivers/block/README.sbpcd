@@ -18,7 +18,7 @@ a soundcard).
 
 The quad-speed TEAC CD-55A drive uses the same interface types, but has a
 totally different command and flow control scheme. Support is under
-construction, but splitted: Greg Nowicki (nowicki@tardis.larc.nasa.gov)
+construction, but split: Greg Nowicki (nowicki@tardis.larc.nasa.gov)
 cares about the separate driver "teaccd". Please, do not mail him merely for
 asking "user questions" at the moment - the project is still a "baby".
 

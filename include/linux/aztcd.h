@@ -1,4 +1,4 @@
-/* $Id: aztcd.h,v 0.90 1995/02/02 18:14:28 root Exp $
+/* $Id: aztcd.h,v 1.0 1995/03/25 08:27:19 root Exp $
  * Definitions for a AztechCD268 CD-ROM interface
  *	Copyright (C) 1994, 1995  Werner Zimmermann
  *
@@ -24,6 +24,9 @@
 
 /* *** change this to set the I/O port address */
 #define AZT_BASE_ADDR		0x320
+
+/* Comment this out to prevent tray from locking */
+#define AZT_ALLOW_TRAY_LOCK	1
 
 /* use incompatible ioctls for reading in raw and cooked mode */
 #define AZT_PRIVATE_IOCTLS
@@ -72,6 +75,8 @@
 #define ACMD_GET_Q_CHANNEL      0x50		/* read info from q channel */
 #define ACMD_EJECT		0x60		/* eject/open tray */
 #define ACMD_CLOSE              0x61            /* close tray */
+#define ACMD_LOCK		0x71		/* lock tray closed */
+#define ACMD_UNLOCK		0x72		/* unlock tray */
 #define ACMD_PAUSE		0x80		/* pause */
 #define ACMD_STOP		0x81		/* stop play */
 #define ACMD_PLAY_AUDIO		0x90		/* play audio track */

@@ -62,6 +62,8 @@ endif
 ifdef CONFIG_SCSI_AHA152X
 SCSI_OBJS := $(SCSI_OBJS) aha152x.o
 SCSI_SRCS := $(SCSI_SRCS) aha152x.c
+else
+SCSI_MODULE_OBJS := $(SCSI_MODULE_OBJS) aha152x.o
 endif
 
 ifdef CONFIG_SCSI_AHA1542

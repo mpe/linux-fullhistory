@@ -1,0 +1,204 @@
+
+---------------------------------------------------------------------------
+NOTE:  See also README.arcnet-jumpers in this directory for jumper-setting
+information if you're like most of us and didn't happen to get a manual with
+your ARCnet card.
+---------------------------------------------------------------------------
+
+Since no one seems to listen to me otherwise, perhaps a poem will get your
+attention:
+			This is scary software
+			If it works I DO CARE.
+			
+Hmm, I think I'm allowed to call that a poem, even though it's only two
+lines.  Hey, I'm in Computer Science, not English.  Give me a break.
+
+The point is:  I REALLY REALLY REALLY REALLY REALLY want to hear from you if
+you test this and get it working.  Or if you don't.  Or anything.
+
+ARCnet 0.32 ALPHA first made it into the Linux kernel 1.1.80 - this was
+nice, but after that even FEWER people started writing to me because they
+didn't even have to install the patch.  <sigh>
+
+Come on, be a sport!  Send me a success report!
+
+(hey, that was even better than my original poem... this is getting bad!)
+
+Anyway, enough complaining.  Let's get started:
+
+---------------------------------------------------------------------------
+			
+These are the ARCnet drivers for Linux.
+
+This is the first non-ALPHA release, so please be careful, and send all
+possible success/failure reports to me.  If I don't know when/if/how it
+works, I won't be able to answer people's questions.  Do we want that?  Of
+course not.
+
+Once again:  DO send me success reports!  I want to know if this is working!
+(You know, it might be argued that I'm pushing this point a little too much. 
+If you think so, why not flame me in a quick little email?  Please also
+include the type of card(s) you're using, software, size of network, and
+whether it's working or not.)
+
+My e-mail address is:
+	apenwarr@tourism.807-city.on.ca
+
+
+Where do I discuss these drivers?
+---------------------------------
+
+As of the 0.22 release, we have a mailing list specifically for discussion
+of the ARCnet drivers for Linux, and anything you might want to interface
+them with (ie. DOS).  I'll also post new versions of the Linux-ARCnet
+distribution to the list in tar-gzip-uuencode format.
+
+To subscribe to the list, send a message to listserv@tourism.807-city.on.ca
+with the following line in the BODY (not the SUBJECT) of your message:
+	subscribe linux-arcnet YOUR REAL NAME
+Remember to remove your signature, or you'll get an error back.
+
+Send all bug (or success) reports to me or to the list.
+
+You're free to use the comp.os.linux.development newsgroup too, but I can't
+guarantee I'll see it there.  (Hopefully, if my news server stays sane, I
+will.)
+
+Also, SMC (one of the companies that makes ARCnet cards) has a WorldWideWeb
+site you might be interested in, which includes several drivers for various
+cards including ARCnet.  Try:
+	http://www.smc.com/
+	
+Novell makes a networking stack for DOS which includes ARCnet drivers.  Try
+ftp'ing to ftp.novell.com.
+
+You can get the Crynwr packet driver collection (including arcether.com, the
+one you'll want for arcnet cards) from oak.oakland.edu:/pub/msdos/pktdrvr. 
+It won't work perfectly on a 386+ without patches, though, and also doesn't
+like several cards.  Mail me if you want a fixed version.
+
+
+Last warning:  This driver may be extremely dangerous, crash your computer,
+or kill your dog!  (although I'm pretty sure that I've worked that one
+out...)
+
+
+Loadable Module Support
+-----------------------
+
+This is a new feature as of 0.42 ALPHA.
+
+Configure and rebuild Linux.  When asked, say NO to "arcnet support" if you
+want loadable module support.
+
+	make config
+	make dep
+	make clean	
+	make zImage
+	make modules
+	
+	
+Booting into your "ARCnet" Kernel
+---------------------------------
+
+If you're using a loadable module, you need to use insmod to load the
+module, and you need to specify various characteristics of your card on the
+command line.  For example:
+	cd /usr/src/linux/modules
+	insmod arcnet.o io=0x300 irqnum=2 shmem=0xd0000
+You can also add a num=1, num=2 etc for additional arcnet cards that will
+use arc1, arc2 etc for their device names (instead of the default, arc0).
+	
+Otherwise the driver will load and probe for your card automatically.
+	
+Now go read the NET-2-HOWTO and ETHERNET-HOWTO for Linux; they should be
+available where you picked up this driver.  Think of your ARCnet as a
+souped-up (or down, as the case may be) ethernet card.
+
+By the way, be sure to change all references from "eth0" to "arc0" in the
+HOWTOs.  Remember that ARCnet isn't a "true" ethernet, and the device name
+is DIFFERENT.
+
+
+How do I get it to work with...?
+--------------------------------
+
+NFS: Should be fine linux->linux, just pretend you're using ethernet cards. 
+        oak.oakland.edu:/pub/msdos/nfs has some nice DOS clients.  I can't
+        get SOSS (dos-based server) to work, although someone has and can't
+        figure out why it won't work for me.
+
+DOS: If you're using the freeware arcether.com, you might want to install
+        the source code patch.  It helps with PC/TCP, and also can get
+        arcether to load if it timed out too quickly.  Mail me if you need a
+        precompiled version of arcether.com. (ie. you if don't have a DOS
+        assembler)
+	
+Windows:  See DOS :)
+
+OS2: May work okay.  Please e-mail me if you find a freeware TCP/IP stack
+        for OS/2.
+        
+LAN Manager and Windows for Workgroups: These programs use protocols that
+        are incompatible with ARCnet for Linux.  Rather than using the
+        internet-standard ARCnet protocol, they try to pretend the cards are
+        ethernet, and confuse everyone else on the network.
+        
+        An upcoming release of ARCnet for Linux may have workarounds for
+	this stupid behaviour.
+
+
+It works: what now?
+-------------------
+
+Send mail describing your setup, preferably including driver version, kernel
+version, ARCnet card model, CPU type, number of systems on your network, and
+list of software in use to me at the following address:
+	apenwarr@tourism.807-city.on.ca
+
+I do send (sometimes automated) replies to all messages I receive.  My mail
+host is quite weird, so if you don't get a reply within a reasonable time,
+please resend.
+
+
+It doesn't work: what now?
+--------------------------
+
+Do the same as above, but also include the output of the ifconfig and route
+commands, as well as any pertinent log entries (ie: anything that starts
+with "arcnet:" and has shown up since the last reboot) in your mail.
+
+If you want to try fixing it yourself (I highly recommend that you mail me
+about the problem first, since it might already have been solved) you may
+want to try some of the debug levels available.  For heavy testing on
+DEBUG_DURING or more, it would be a REALLY good idea to kill your klogd
+daemon first!  DEBUG_DURING displays 4-5 lines for each packet sent or
+received.  DEBUG_TX and RX actually DISPLAY each packet as it is sent or
+received, which is obviously quite big.
+
+You can run the arcdump shell script (available from me) as root to list the
+contents of the arcnet buffers at any time.  To make any sense at all out of
+this, you should grab the pertinent RFC's. (some are listed near the top of
+arcnet.c).  arcdump assumes your card is at 0xD0000.  If it isn't, edit the
+script.
+
+Buffers #0 and 1 are used for receiving, and Buffers #2 and 3 are for
+sending.  Ping-pong buffers are implemented both ways, just to confuse you.
+
+If your debug level is DEBUG_DURING or more, the buffers are cleared to a
+constant value of 0x42 every time the card is reset (which should only
+happen when you do an ifconfig up, or when Linux decides that the driver is
+broken).  This is to make it easier to figure out which bytes are being used
+by a packet.
+
+You can change the debug level without recompiling the kernel by typing:
+	ifconfig arc0 down metric 1x
+	/etc/rc.d/rc.inet1
+where "x" is the debug level you want.  For example, "metric 14" would put
+you at debug level 4.  Debug level 3 is the default (D_EXTRA).
+
+
+I want to send money: what now?
+-------------------------------
+
+Go take a nap or something.  You'll feel better in the morning.

@@ -132,6 +132,9 @@
  *		Alan Cox	:	Fixed the closing state machine to
  *					resemble the RFC.
  *		Alan Cox	:	More 'per spec' fixes.
+ *		Alan Cox	:	tcp_data() doesn't ack illegal PSH
+ *					only frames. At least one pc tcp stack
+ *					generates them.
  *
  *
  * To Fix:
@@ -3810,7 +3813,7 @@ extern __inline__ int tcp_data(struct sk_buff *skb, struct sock *sk,
 	   
 	sk->bytes_rcv += skb->len;
 	
-	if (skb->len == 0 && !th->fin && !th->urg && !th->psh) 
+	if (skb->len == 0 && !th->fin) 
 	{
 		/* 
 		 *	Don't want to keep passing ack's back and forth. 

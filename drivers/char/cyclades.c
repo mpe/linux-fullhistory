@@ -1,5 +1,5 @@
 static char rcsid[] =
-"$Revision: 1.36.1.1 $$Date: 1995/03/13 15:44:43 $";
+"$Revision: 1.36.1.3 $$Date: 1995/03/23 22:15:35 $";
 /*
  *  linux/kernel/cyclades.c
  *
@@ -18,6 +18,14 @@ static char rcsid[] =
  *   int  cy_open(struct tty_struct *tty, struct file *filp);
  *
  * $Log: cyclades.c,v $
+ * Revision 1.36.1.3  1995/03/23  22:15:35  bentson
+ * add missing break in modem control block in ioctl switch statement
+ * (discovered by Michael Edward Chastain <mec@jobe.shell.portal.com>);
+ *
+ * Revision 1.36.1.2  1995/03/22  19:16:22  bentson
+ * make sure CTS flow control is set as soon as possible (thanks
+ * to note from David Lambert <lambert@chesapeake.rps.slb.com>);
+ *
  * Revision 1.36.1.1  1995/03/13  15:44:43  bentson
  * initialize defaults for receive threshold and stale data timeout;
  * cosmetic changes;
@@ -26,7 +34,7 @@ static char rcsid[] =
  * added support of chips 4-7 in 32 port Cyclom-Ye;
  * fix cy_interrupt pointer dereference problem
  * (Joe Portman <baron@aa.net>);
- * give better error response if open is attempted on non-existant port
+ * give better error response if open is attempted on non-existent port
  * (Zachariah Vaum <jchryslr@netcom.com>);
  * correct command timeout (Kenneth Lerman <lerman@@seltd.newnet.com>);
  * conditional compilation for -16Y on systems with fast, noisy bus;
@@ -1386,15 +1394,27 @@ config_setup(struct cyclades_port * info)
     }
 	
     /* CTS flow control flag */
-    if (cflag & CRTSCTS)
+    if (cflag & CRTSCTS){
 	info->flags |= ASYNC_CTS_FLOW;
-    else
+	info->cor2 |= CyCtsAE;
+    }else{
 	info->flags &= ~ASYNC_CTS_FLOW;
+	info->cor2 &= ~CyCtsAE;
+    }
     if (cflag & CLOCAL)
 	info->flags &= ~ASYNC_CHECK_CD;
     else
 	info->flags |= ASYNC_CHECK_CD;
 
+     /***********************************************
+	The hardware option, CyRtsAO, presents RTS when
+	the chip has characters to send.  Since most modems
+	use RTS as reverse (inbound) flow control, this
+	option is not used.  If inbound flow control is
+	necessary, DTR can be programmed to provide the
+	appropriate signals for use with a non-standard
+	cable.  Contact Marcio Saito for details.
+     ***********************************************/
 
     card = info->card;
     channel = (info->line) - (cy_card[card].first_line);
@@ -1457,19 +1477,6 @@ config_setup(struct cyclades_port * info)
             printk("cyc: %d: raising DTR\n", __LINE__);
             printk("     status: 0x%x, 0x%x\n", base_addr[CyMSVR1], base_addr[CyMSVR2]);
 #endif
-	}
-
-	/* The hardware option, CyRtsAO, presents RTS when
-	   the chip has characters to send.  Since most modems
-	   use RTS as reverse (inbound) flow control, this
-	   option is not used.  If inbound flow control is
-	   necessary, DTR can be programmed to provide the
-	   appropriate signals.  Contact Marcio Saito for
-	   details. */
-	if (C_CRTSCTS(info->tty)) {
-	    info->cor2 |= CyCtsAE;
-	}else{
-	    info->cor2 &= ~CyCtsAE;
 	}
 
 	if (info->tty){
@@ -2155,6 +2162,7 @@ cy_ioctl(struct tty_struct *tty, struct file * file,
         case TIOCMBIC:
         case TIOCMSET:
             ret_val = set_modem_info(info, cmd, (unsigned int *) arg);
+            break;
 
 /* The following commands are incompletely implemented!!! */
         case TIOCGSOFTCAR:

@@ -20,10 +20,13 @@
  * General Public License for more details.
  
  *
- * $Id: aha152x.c,v 1.8 1995/01/21 22:07:19 root Exp root $
+ * $Id: aha152x.c,v 1.9 1995/03/18 09:20:24 root Exp root $
  *
 
  * $Log: aha152x.c,v $
+ * Revision 1.9  1995/03/18  09:20:24  root
+ * - patches for PCMCIA and modules
+ *
  * Revision 1.8  1995/01/21  22:07:19  root
  * - snarf_region => request_region
  * - aha152x_intr interface change
@@ -197,6 +200,11 @@
 
  **************************************************************************/
 
+#ifdef MODULE
+#include <linux/config.h>
+#include <linux/module.h>
+#endif
+
 #include <linux/sched.h>
 #include <asm/io.h>
 #include "../block/blk.h"
@@ -214,6 +222,10 @@
 
 /* DEFINES */
 
+/* For PCMCIA cards, always use AUTOCONF */
+#ifdef PCMCIA
+#define AUTOCONF
+#endif
 
 /* If auto configuration is disabled, IRQ, SCSI_ID and RECONNECT have to
    be predefined */
@@ -530,7 +542,7 @@ static int aha152x_porttest(int port_base)
 {
   int i;
 
-  if(check_region(port_base, TEST-SCSISEQ))
+  if(check_region(port_base, 0x20))
     return 0;
 
   SETPORT( DMACNTRL1, 0 );          /* reset stack pointer */
@@ -551,6 +563,7 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
   aha152x_config      conf;
 #endif
   int                 interrupt_level;
+  struct Scsi_Host    *hreg;
   
   if(setup_called)
     {
@@ -580,6 +593,7 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
       aha152x_debug   = setup_debug;
 #endif
 
+#ifndef PCMCIA
       for( i=0; i<PORT_COUNT && (port_base != ports[i]); i++)
         ;
 
@@ -588,13 +602,19 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
           printk("unknown portbase 0x%03x\n", port_base);
           panic("aha152x panics in line %d", __LINE__);
         }
+#endif
 
       if(!aha152x_porttest(port_base))
         {
           printk("portbase 0x%03x fails probe\n", port_base);
+#ifdef PCMCIA
+          return 0;
+#else
           panic("aha152x panics in line %d", __LINE__);
+#endif
         }
 
+#ifndef PCMCIA
       i=0;
       while(irqs[i] && (interrupt_level!=irqs[i]))
         i++;
@@ -603,7 +623,8 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
           printk("illegal IRQ %d\n", interrupt_level);
           panic("aha152x panics in line %d", __LINE__);
         }
-
+#endif
+      
       if( (this_host < 0) || (this_host > 7) )
         {
           printk("illegal SCSI ID %d\n", this_host);
@@ -735,7 +756,12 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
          can_disconnect ? "enabled" : "disabled",
          can_doparity ? "enabled" : "disabled");
 
-  request_region(port_base, TEST-SCSISEQ, "aha152x");        /* Register */
+  request_region(port_base, 0x20, "aha152x");        /* Register */
+
+  hreg = scsi_register(tpnt, 0);
+  hreg->io_port = port_base;
+  hreg->n_io_port = 0x20;
+  hreg->irq = interrupt_level;
   
   /* not expecting any interrupts */
   SETPORT(SIMODE0, 0);

@@ -43,6 +43,8 @@ endif
 ifdef CONFIG_AZTCD
 OBJS := $(OBJS) aztcd.o
 SRCS := $(SRCS) aztcd.c
+else
+BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) aztcd.o
 endif
 
 ifdef CONFIG_SBPCD

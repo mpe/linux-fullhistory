@@ -66,11 +66,18 @@ static int UMSDOS_rreaddir (
 	return ret;
 }
 
-int UMSDOS_rlookup(
+/*
+	Lookup into a non promoted directory.
+	If the result is a directory, make sure we find out if it is
+	a promoted one or not (calling umsdos_setup_dir_inode(inode)).
+*/
+int umsdos_rlookup_x(
 	struct inode *dir,
 	const char *name,
 	int len,
-	struct inode **result)	/* Will hold inode of the file, if successful */
+	struct inode **result,	/* Will hold inode of the file, if successful */
+	int nopseudo)			/* Don't care about pseudo root mode */
+							/* so locating "linux" will work */
 {
 	int ret;
 	if (pseudo_root != NULL
@@ -90,7 +97,7 @@ int UMSDOS_rlookup(
 		ret = umsdos_real_lookup (dir,name,len,result);
 		if (ret == 0){
 			struct inode *inode = *result;
-			if (inode == pseudo_root){
+			if (inode == pseudo_root && !nopseudo){
 				/* #Specification: pseudo root / DOS/linux
 					Even in the real root directory (c:\), the directory
 					/linux won't show
@@ -107,6 +114,14 @@ int UMSDOS_rlookup(
 	}
 	iput (dir);
 	return ret;
+}
+int UMSDOS_rlookup(
+	struct inode *dir,
+	const char *name,
+	int len,
+	struct inode **result)	/* Will hold inode of the file, if successful */
+{
+	return umsdos_rlookup_x(dir,name,len,result,0);
 }
 
 static int UMSDOS_rrmdir (

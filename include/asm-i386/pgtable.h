@@ -146,7 +146,6 @@ extern inline int pmd_inuse(pmd_t *pmdp)	{ return 0; }
 extern inline void pmd_clear(pmd_t * pmdp)	{ pmd_val(*pmdp) = 0; }
 extern inline void pmd_reuse(pmd_t * pmdp)	{ }
 
-#ifdef THREE_LEVEL
 /*
  * The "pgd_xxx()" functions here are trivial for a folded two-level
  * setup: the pgd is never bad, and a pmd always exists (as it's folded
@@ -162,16 +161,6 @@ extern inline void pgd_reuse(pgd_t * pgdp)
 	if (!(mem_map[MAP_NR(pgdp)] & MAP_PAGE_RESERVED))
 		mem_map[MAP_NR(pgdp)]++;
 }
-#else
-/*
- * These are the old (and incorrect) ones needed for code that doesn't
- * know about three-level yet..
- */
-extern inline int pgd_none(pgd_t pgd)		{ return !pgd_val(pgd); }
-extern inline int pgd_bad(pgd_t pgd)		{ return (pgd_val(pgd) & ~PAGE_MASK) != _PAGE_TABLE || pgd_val(pgd) > high_memory; }
-extern inline int pgd_present(pgd_t pgd)	{ return pgd_val(pgd) & _PAGE_PRESENT; }
-extern inline void pgd_clear(pgd_t * pgdp)	{ pgd_val(*pgdp) = 0; }
-#endif
 
 /*
  * The following only work if pte_present() is true.
@@ -212,21 +201,6 @@ extern inline unsigned long pte_page(pte_t pte)
 
 extern inline unsigned long pmd_page(pmd_t pmd)
 { return pmd_val(pmd) & PAGE_MASK; }
-
-#ifndef THREE_LEVEL
-
-extern inline unsigned long pgd_page(pgd_t pgd)
-{ return pgd_val(pgd) & PAGE_MASK; }
-
-extern inline void pgd_set(pgd_t * pgdp, pte_t * ptep)
-{ pgd_val(*pgdp) = _PAGE_TABLE | (unsigned long) ptep; }
-
-#define PAGE_DIR_OFFSET(tsk,address) pgd_offset((tsk),(address))
-
-/* the no. of pointers that fit on a page: this will go away */
-#define PTRS_PER_PAGE	(PAGE_SIZE/sizeof(void*))
-
-#endif
 
 /* to find an entry in a page-table-directory */
 extern inline pgd_t * pgd_offset(struct task_struct * tsk, unsigned long address)

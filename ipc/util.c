@@ -132,7 +132,9 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 				put_fs_long (raddr, (ulong *) third);
 				return 0;
 				}
-			case 1:
+			case 1:	/* iBCS2 emulator entry point */
+				if (get_fs() != get_ds())
+					return -EINVAL;
 				return sys_shmat (first, (char *) ptr, second, (ulong *) third);
 			}
 		case SHMDT: 

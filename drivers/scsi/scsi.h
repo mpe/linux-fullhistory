@@ -270,6 +270,7 @@ extern const unsigned char scsi_command_size[8];
 #define SCSI_MAN_UNKNOWN     0
 #define SCSI_MAN_NEC         1
 #define SCSI_MAN_TOSHIBA     2
+#define SCSI_MAN_NEC_OLDCDR  3
 
 /*
 	The scsi_device struct contains what we know about each given scsi

@@ -228,17 +228,17 @@
 #endif SBPCD_ISSUE
 
 #include <linux/config.h>
-#include <linux/errno.h>
 
 #ifdef MODULE
-#include <linux/malloc.h>
 #include <linux/module.h>
 #include <linux/version.h>
+#include <linux/malloc.h>
 #ifndef CONFIG_MODVERSIONS
 char kernel_version[]=UTS_RELEASE;
 #endif
 #endif MODULE
 
+#include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/timer.h>
@@ -1081,7 +1081,7 @@ static int ResponseStatus(void)
   i=inb(CDi_info);
   DPRINTF((DBG_STA,"SBPCD: ResponseStatus: response %2X.\n", i));
   EvaluateStatus(i);
-  return (0);
+  return (i);
 }
 /*==========================================================================*/
 static void xx_ReadStatus(void)

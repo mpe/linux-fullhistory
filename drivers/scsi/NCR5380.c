@@ -538,7 +538,7 @@ static int NCR5380_set_timer (struct Scsi_Host *instance) {
     *prev = instance;
     timer_table[NCR5380_TIMER].expires = expires_first->time_expires;
     timer_active |= 1 << NCR5380_TIMER;
-    sti;
+    sti();
     return 0;
 }    
 

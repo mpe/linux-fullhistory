@@ -69,26 +69,34 @@ asmlinkage struct pt_regs * save_v86_state(struct vm86_regs * regs)
 
 static void mark_screen_rdonly(struct task_struct * tsk)
 {
-	pgd_t *pg_dir;
+	pgd_t *pgd;
+	pmd_t *pmd;
+	pte_t *pte;
+	int i;
 
-	pg_dir = PAGE_DIR_OFFSET(tsk, 0);
-	if (!pgd_none(*pg_dir)) {
-		pte_t *pg_table;
-		int i;
-
-		if (pgd_bad(*pg_dir)) {
-			printk("vm86: bad page table directory entry %08lx\n", pgd_val(*pg_dir));
-			pgd_clear(pg_dir);
-			return;
-		}
-		pg_table = (pte_t *) pgd_page(*pg_dir);
-		pg_table += 0xA0000 >> PAGE_SHIFT;
-		for (i = 0 ; i < 32 ; i++) {
-			if (pte_present(*pg_table))
-				*pg_table = pte_wrprotect(*pg_table);
-			pg_table++;
-		}
+	pgd = pgd_offset(tsk, 0xA0000);
+	if (pgd_none(*pgd))
+		return;
+	if (pgd_bad(*pgd)) {
+		printk("vm86: bad pgd entry [%p]:%08lx\n", pgd, pgd_val(*pgd));
+		pgd_clear(pgd);
+		return;
 	}
+	pmd = pmd_offset(pgd, 0xA0000);
+	if (pmd_none(*pmd))
+		return;
+	if (pmd_bad(*pmd)) {
+		printk("vm86: bad pmd entry [%p]:%08lx\n", pmd, pmd_val(*pmd));
+		pmd_clear(pmd);
+		return;
+	}
+	pte = pte_offset(pmd, 0xA0000);
+	for (i = 0; i < 32; i++) {
+		if (pte_present(*pte))
+			*pte = pte_wrprotect(*pte);
+		pte++;
+	}
+	invalidate();
 }
 
 asmlinkage int sys_vm86(struct vm86_struct * v86)

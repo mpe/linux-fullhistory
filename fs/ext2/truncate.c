@@ -1,9 +1,10 @@
 /*
  *  linux/fs/ext2/truncate.c
  *
- *  Copyright (C) 1992, 1993, 1994  Remy Card (card@masi.ibp.fr)
- *                                  Laboratoire MASI - Institut Blaise Pascal
- *                                  Universite Pierre et Marie Curie (Paris VI)
+ * Copyright (C) 1992, 1993, 1994, 1995
+ * Remy Card (card@masi.ibp.fr)
+ * Laboratoire MASI - Institut Blaise Pascal
+ * Universite Pierre et Marie Curie (Paris VI)
  *
  *  from
  *
@@ -320,6 +321,9 @@ repeat:
 void ext2_truncate (struct inode * inode)
 {
 	int retry;
+	struct buffer_head * bh;
+	int err;
+	int offset;
 
 	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
 	    S_ISLNK(inode->i_mode)))
@@ -343,6 +347,23 @@ void ext2_truncate (struct inode * inode)
 			ext2_sync_inode (inode);
 		current->counter = 0;
 		schedule ();
+	}
+	/*
+	 * If the file is not being truncated to a block boundary, the
+	 * contents of the partial block following the end of the file must be
+	 * zero'ed in case it ever become accessible again because of
+	 * subsequent file growth.
+	 */
+	offset = inode->i_size % inode->i_sb->s_blocksize;
+	if (offset) {
+		bh = ext2_bread (inode, inode->i_size / inode->i_sb->s_blocksize,
+				 0, &err);
+		if (bh) {
+			memset (bh->b_data + offset, 0,
+				inode->i_sb->s_blocksize - offset);
+			mark_buffer_dirty (bh, 0);
+			brelse (bh);
+		}
 	}
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 	inode->i_dirt = 1;

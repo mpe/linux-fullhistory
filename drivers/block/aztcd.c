@@ -1,5 +1,5 @@
-#define AZT_VERSION "V0.9"
-/*      $Id: aztcd.c,v 0.90 1995/02/02 18:14:17 root Exp $
+#define AZT_VERSION "V1.0"
+/*      $Id: aztcd.c,v 1.0 1995/03/25 08:27:11 root Exp $
 	linux/drivers/block/aztcd.c - AztechCD268 CDROM driver
 
 	Copyright (C) 1994,1995 Werner Zimmermann (zimmerma@rz.fht-esslingen.de)
@@ -99,11 +99,24 @@
                 the channels on and off. If it works better with your drive, 
                 please mail me. Also implemented ACMD_CLOSE for CDROMSTART.
                 W.Zimmermann, Jan. 24, 1995
+        V1.00   Implemented close and lock tray commands. Patches supplied by
+		Frank Racis        
+                Added support for loadable MODULEs, so aztcd can now also be
+                loaded by insmod and removed by rmmod during run time
+                Werner Zimmermann, Mar. 24, 95
 	NOTE: 
 	Points marked with ??? are questionable !
 */
 #include <linux/major.h>
 #include <linux/config.h>
+
+#ifdef MODULE
+# include <linux/module.h>
+# include <linux/version.h>
+# ifndef CONFIG_MODVERSIONS
+    char kernel_version[]= UTS_RELEASE;
+# endif
+#endif
 
 #include <linux/errno.h>
 #include <linux/sched.h>
@@ -121,7 +134,14 @@
 
 #define MAJOR_NR AZTECH_CDROM_MAJOR 
 
-#include "blk.h"
+#ifdef MODULE
+# include "/usr/src/linux/drivers/block/blk.h"
+#else
+# include "blk.h"
+# define MOD_INC_USE_COUNT
+# define MOD_DEC_USE_COUNT
+#endif
+
 #include <linux/aztcd.h>
 
 static int aztPresent = 0;
@@ -174,7 +194,9 @@ static volatile int azt_read_count = 1;
 
 #define READ_TIMEOUT 3000
 
+#define azt_port aztcd  /*needed for the modutils*/
 static short azt_port = AZT_BASE_ADDR;
+
 static char  azt_cont = 0;
 static char  azt_init_end = 0;
 
@@ -208,6 +230,9 @@ static int  aztGetDiskInfo(void);
 static int  aztGetToc(void);
 static int  aztGetValue(unsigned char *result);
 static void aztStatTimer(void);
+static void aztCloseDoor(void);
+static void aztLockDoor(void);
+static void aztUnlockDoor(void);
 
 static unsigned char aztIndatum;
 static unsigned long aztTimeOutCount;
@@ -298,6 +323,36 @@ void aztcd_setup(char *str, int *ints)
       azt_port = ints[1];
    if (ints[0] > 1)
       azt_cont = ints[2];
+}
+
+/*
+ * Subroutines to automatically close the door (tray) and 
+ * lock it closed when the cd is mounted.  Leave the tray
+ * locking as an option
+ */
+static void aztCloseDoor(void)
+{
+  aztSendCmd(ACMD_CLOSE);
+  STEN_LOW;
+  return;
+}
+
+static void aztLockDoor(void)
+{
+#ifdef AZT_ALLOW_TRAY_LOCK
+  aztSendCmd(ACMD_LOCK);
+  STEN_LOW;
+#endif
+  return;
+}
+
+static void aztUnlockDoor(void)
+{
+#ifdef AZT_ALLOW_TRAY_LOCK
+  aztSendCmd(ACMD_UNLOCK);
+  STEN_LOW;
+#endif
+  return;
 }
 
 /* 
@@ -653,6 +708,7 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
                 STEN_LOW_WAIT;
                 break;
 	case CDROMEJECT:
+                aztUnlockDoor(); /* Assume user knows what they're doing */
 	       /* all drives can at least stop! */
 		if (aztAudioStatus == CDROM_AUDIO_PLAY) 
 		{ if (aztSendCmd(ACMD_STOP)) return -1;
@@ -1193,8 +1249,15 @@ int aztcd_open(struct inode *ip, struct file *fp)
 	if (st == -1)
 		return -EIO;                    /* drive doesn't respond */
 
+        if (st&AST_DOOR_OPEN)
+          {
+            /* close door, then get the status again. */
+            aztCloseDoor();     
+            st = getAztStatus();
+          }        
+
 	if ((st&AST_DOOR_OPEN)||(st&AST_NOT_READY)) /* no disk in drive or door open*/
-	{       /*???*/
+	{       /* Door should be closed, probably no disk in drive */
 		printk("aztcd: no disk in drive or door open\n");
 		return -EIO;
 	}
@@ -1204,6 +1267,8 @@ int aztcd_open(struct inode *ip, struct file *fp)
 
 	}
 	++azt_open_count;
+        MOD_INC_USE_COUNT;
+	aztLockDoor();
 #ifdef AZT_DEBUG
 	printk("aztcd: exiting aztcd_open\n");
 #endif
@@ -1220,10 +1285,12 @@ static void aztcd_release(struct inode * inode, struct file * file)
   printk("aztcd: executing aztcd_release\n");
   printk("inode: %p, inode->i_rdev: %x    file: %p\n",inode,inode->i_rdev,file);
 #endif
+  MOD_DEC_USE_COUNT;
   if (!--azt_open_count) {
 	azt_invalidate_buffers();
 	sync_dev(inode->i_rdev);             /*??? isn't it a read only dev?*/
 	invalidate_buffers(inode -> i_rdev);
+	aztUnlockDoor();
         CLEAR_TIMER;
   }
   return;
@@ -1249,14 +1316,22 @@ static struct file_operations azt_fops = {
 /*
  * Test for presence of drive and initialize it.  Called at boot time.
  */
+#ifndef MODULE 
 unsigned long aztcd_init(unsigned long mem_start, unsigned long mem_end)
+#else
+int init_module(void)
+#endif
 {       long int count, max_count;
 	unsigned char result[50];
 	int st;
 
 	if (azt_port <= 0) {
 	  printk("aztcd: no Aztech CD-ROM Initialization");
+#ifndef MODULE
 	  return (mem_start);
+#else
+          return -EIO;
+#endif	  
 	}
 	printk("Aztech CD-ROM Init: Aztech, Orchid, Okano, Wearnes CD-ROM Driver\n");
 	printk("Aztech CD-ROM Init: (C) 1994,1995 Werner Zimmermann\n");
@@ -1265,7 +1340,11 @@ unsigned long aztcd_init(unsigned long mem_start, unsigned long mem_end)
 	if (check_region(azt_port, 4)) {
 	  printk("aztcd: conflict, I/O port (%X) already used\n",
 		 azt_port);
+#ifndef MODULE
 	  return (mem_start);
+#else
+          return -EIO;
+#endif	  
 	}
 
 	/* check for card */
@@ -1287,12 +1366,20 @@ unsigned long aztcd_init(unsigned long mem_start, unsigned long mem_end)
 	   STEN_LOW;
 	   if (inb(DATA_PORT)!=AFL_OP_OK)    /*OP_OK?*/
 	    { printk("aztcd: no AZTECH CD-ROM drive found\n");
+#ifndef MODULE
 	      return (mem_start);
+#else
+              return -EIO;
+#endif	     
 	    } 
 	   for (count = 0; count < AZT_TIMEOUT; count++);  /* delay a bit */
 	   if ((st=getAztStatus())==-1)
 	    { printk("aztcd: Drive Status Error Status=%x\n",st);
+#ifndef MODULE
 	      return (mem_start);
+#else
+              return -EIO;
+#endif	      
 	    }
 #ifdef AZT_DEBUG
 	   printk("aztcd: Status = %x\n",st);
@@ -1337,14 +1424,22 @@ unsigned long aztcd_init(unsigned long mem_start, unsigned long mem_end)
 	       for (count=1;count<5;count++) printk("%c",result[count]);
 	       printk("\n");
 	       printk("Aztech CD-ROM Init: Aborted\n");
-	       return (mem_start);   
+#ifndef MODULE
+	       return (mem_start);
+#else
+               return -EIO;
+#endif 	          
 	     }
 	 }
 	if (register_blkdev(MAJOR_NR, "aztcd", &azt_fops) != 0)
 	{
 		printk("aztcd: Unable to get major %d for Aztech CD-ROM\n",
 		       MAJOR_NR);
+#ifndef MODULE		       
 		return (mem_start);
+#else
+                return -EIO;
+#endif		
 	}
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 	read_ahead[MAJOR_NR] = 4;
@@ -1353,8 +1448,13 @@ unsigned long aztcd_init(unsigned long mem_start, unsigned long mem_end)
 
 	azt_invalidate_buffers();
 	aztPresent = 1;
+	aztCloseDoor();
 	printk("Aztech CD-ROM Init: End\n");
+#ifndef MODULE
 	return (mem_start);
+#else
+        return (0);
+#endif
 }
 
 
@@ -1552,8 +1652,10 @@ static int aztGetToc()
 
 	i = DiskInfo.last + 3;
 
+/* Is there a good reason to stop motor before TOC read?
 	if (aztSendCmd(ACMD_STOP)) return -1;
 	STEN_LOW_WAIT;
+*/
 
 	azt_mode = 0x05;
 	if (aztSendCmd(ACMD_SEEK_TO_LEADIN)) return -1; /*???*/
@@ -1595,3 +1697,17 @@ Toc[i].diskTime.min, Toc[i].diskTime.sec, Toc[i].diskTime.frame);
 	return limit > 0 ? 0 : -1;
 }
 
+#ifdef MODULE
+void cleanup_module(void)
+{ if (MOD_IN_USE)
+    { printk("aztcd module in use - can't remove it.\n");
+      return;
+    }
+  if ((unregister_blkdev(MAJOR_NR, "aztcd") == -EINVAL))    
+    { printk("What's that: can't unregister aztcd\n");
+      return;
+    }
+   release_region(azt_port,4);
+   printk("aztcd module released.\n");
+}   
+#endif MODULE

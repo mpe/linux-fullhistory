@@ -170,6 +170,14 @@ static struct device atp_dev = {
 #   define NEXT_DEV	(&atp_dev)
 #endif
 
+#ifdef CONFIG_ARCNET
+    extern int arcnet_probe(struct device *dev);
+    static struct device arcnet_dev = {
+	"arc0", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, arcnet_probe, };
+#   undef	NEXT_DEV
+#   define	NEXT_DEV	(&arcnet_dev)
+#endif
+
 /* The first device defaults to I/O base '0', which means autoprobe. */
 #ifndef ETH0_ADDR
 # define ETH0_ADDR 0
@@ -292,14 +300,6 @@ static struct device ppp0_dev = {
 #undef NEXT_DEV
 #define NEXT_DEV (&ppp0_dev)
 #endif   /* PPP */
-
-#ifdef CONFIG_ARCNET
-    extern int arcnet_probe(struct device *dev);
-    static struct device arcnet_dev = {
-	"arc0", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, arcnet_probe, };
-#   undef	NEXT_DEV
-#   define	NEXT_DEV	(&arcnet_dev)
-#endif
 
 #ifdef CONFIG_DUMMY
     extern int dummy_init(struct device *dev);

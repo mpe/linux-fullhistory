@@ -468,6 +468,11 @@ static int swap_out_vma(struct vm_area_struct * vma, pgd_t *pgdir,
 {
 	unsigned long end;
 
+	/* Don't swap out areas like shared memory which have their
+	    own separate swapping mechanism. */
+	if (vma->vm_flags & VM_SHM)
+		return 0;
+
 	end = vma->vm_end;
 	while (start < end) {
 		int result = swap_out_pgd(vma, pgdir, start, end);
