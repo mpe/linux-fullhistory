@@ -20,7 +20,7 @@
  * to on-chip I/O register to not complete fully. What this means is
  * that if you have a write to on-chip I/O followed by a back-to-back
  * read or write, the first write will happen twice. OR...if it's
- * not a back-to-back trasaction, the read or write will generate 
+ * not a back-to-back transaction, the read or write will generate
  * incorrect data.
  *
  * The official work around for this is to set the on-chip I/O regions

@@ -24,13 +24,17 @@
 #define ___io(p)		((void __iomem *)((p)+IXP2000_PCI_IO_VIRT_BASE))
 
 /*
- * IXP2000 does not do proper byte-lane conversion for PCI addresses,
- * so we need to override standard functions.
+ * The IXP2400 before revision B0 asserts byte lanes for PCI I/O
+ * transactions the other way round (MEM transactions don't have this
+ * issue), so we need to override the standard functions.  B0 and later
+ * have a bit that can be set to 1 to get the 'proper' behavior, but
+ * since that isn't available on the A? revisions we just keep doing
+ * things manually.
  */
-#define alignb(addr)		(void __iomem *)(((unsigned long)addr & ~3) + (3 - ((unsigned long)addr & 3)))
-#define alignw(addr)		(void __iomem *)(((unsigned long)addr & ~2) + (2 - ((unsigned long)addr & 2)))
+#define alignb(addr)		(void __iomem *)((unsigned long)addr ^ 3)
+#define alignw(addr)		(void __iomem *)((unsigned long)addr ^ 2)
 
-#define outb(v,p)		__raw_writeb(v,alignb(___io(p)))
+#define outb(v,p)		__raw_writeb((v),alignb(___io(p)))
 #define outw(v,p)		__raw_writew((v),alignw(___io(p)))
 #define outl(v,p)		__raw_writel((v),___io(p))
 

@@ -148,7 +148,7 @@ void __init nexcoder_map_io(void)
 
 MACHINE_START(NEXCODER_2440, "NexVision - Nexcoder 2440")
      MAINTAINER("Guillaume GOURAT <guillaume.gourat@nexvision.tv>")
-     BOOT_MEM(S3C2410_SDRAM_PA, S3C2410_PA_UART, S3C24XX_VA_UART)
+     BOOT_MEM(S3C2410_SDRAM_PA, S3C2410_PA_UART, (u32)S3C24XX_VA_UART)
      BOOT_PARAMS(S3C2410_SDRAM_PA + 0x100)
 	.map_io		= nexcoder_map_io,
 	.init_irq	= s3c24xx_init_irq,

@@ -134,7 +134,28 @@
 #define S3C2410_BANKCON_Tacs4		(0x3 << 13)
 
 #define S3C2410_BANKCON_SRAM		(0x0 << 15)
+#define S3C2400_BANKCON_EDODRAM		(0x2 << 15)
 #define S3C2410_BANKCON_SDRAM		(0x3 << 15)
+
+/* next bits only for EDO DRAM in 6,7 */
+#define S3C2400_BANKCON_EDO_Trdc1      (0x00 << 4)
+#define S3C2400_BANKCON_EDO_Trdc2      (0x01 << 4)
+#define S3C2400_BANKCON_EDO_Trdc3      (0x02 << 4)
+#define S3C2400_BANKCON_EDO_Trdc4      (0x03 << 4)
+
+/* CAS pulse width */
+#define S3C2400_BANKCON_EDO_PULSE1     (0x00 << 3)
+#define S3C2400_BANKCON_EDO_PULSE2     (0x01 << 3)
+
+/* CAS pre-charge */
+#define S3C2400_BANKCON_EDO_TCP1       (0x00 << 2)
+#define S3C2400_BANKCON_EDO_TCP2       (0x01 << 2)
+
+/* control column address select */
+#define S3C2400_BANKCON_EDO_SCANb8     (0x00 << 0)
+#define S3C2400_BANKCON_EDO_SCANb9     (0x01 << 0)
+#define S3C2400_BANKCON_EDO_SCANb10    (0x02 << 0)
+#define S3C2400_BANKCON_EDO_SCANb11    (0x03 << 0)
 
 /* next bits only for SDRAM in 6,7 */
 #define S3C2410_BANKCON_Trdc2		(0x00 << 2)
