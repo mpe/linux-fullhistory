@@ -325,7 +325,7 @@ static int initiate_cifs_search(const int xid, struct file *file)
 
 	/* test for Unix extensions */
 	if (pTcon->ses->capabilities & CAP_UNIX) {
-		cifsFile->srch_inf.info_level = SMB_FIND_FILE_UNIX;
+		cifsFile->srch_inf.info_level = SMB_FIND_FILE_UNIX; 
 	} else if (cifs_sb->mnt_cifs_flags & CIFS_MOUNT_SERVER_INUM) {
 		cifsFile->srch_inf.info_level = SMB_FIND_FILE_ID_FULL_DIR_INFO;
 	} else /* not srvinos - BB fixme add check for backlevel? */ {
@@ -543,11 +543,12 @@ static int find_cifs_entry(const int xid, struct cifsTconInfo *pTcon,
 /* inode num, inode type and filename returned */
 static int cifs_get_name_from_search_buf(struct qstr *pqst,
 	char *current_entry, __u16 level, unsigned int unicode,
-	struct nls_table *nlt, ino_t *pinum)
+	struct cifs_sb_info * cifs_sb, ino_t *pinum)
 {
 	int rc = 0;
 	unsigned int len = 0;
 	char * filename;
+	struct nls_table * nlt = cifs_sb->local_nls;
 
 	*pinum = 0;
 
@@ -563,7 +564,8 @@ static int cifs_get_name_from_search_buf(struct qstr *pqst,
 		}
 
 		/* BB fixme - hash low and high 32 bits if not 64 bit arch BB fixme */
-		*pinum = pFindData->UniqueId;
+		if(cifs_sb->mnt_cifs_flags & CIFS_MOUNT_SERVER_INUM)
+			*pinum = pFindData->UniqueId;
 	} else if(level == SMB_FIND_FILE_DIRECTORY_INFO) {
 		FILE_DIRECTORY_INFO * pFindData = 
 			(FILE_DIRECTORY_INFO *)current_entry;
@@ -633,7 +635,7 @@ static int cifs_filldir(char *pfindEntry, struct file *file,
 	qstring.name = scratch_buf;
 	rc = cifs_get_name_from_search_buf(&qstring,pfindEntry,
 			pCifsF->srch_inf.info_level,
-			pCifsF->srch_inf.unicode,cifs_sb->local_nls,
+			pCifsF->srch_inf.unicode,cifs_sb,
 			&inum /* returned */);
 
 	if(rc)

@@ -5,7 +5,13 @@ transact response for an SMB request and search entry split across two frames.
 Fix updates of DOS attributes and time fields so that files on NT4 servers
 do not get marked delete on close. Display sizes of cifs buffer pools in
 cifs stats. Fix oops in unmount when cifsd thread being killed by 
-shutdown. Add generic readv/writev and aio support.
+shutdown. Add generic readv/writev and aio support. Report inode numbers 
+consistently in readdir and lookup (when serverino mount option is
+specified use the inode number that the server reports - for both lookup
+and readdir, otherwise by default the locally generated inode number is used
+for inodes created in either path since servers are not always able to 
+provide unique inode numbers when exporting multiple volumes from under one
+sharename).
 
 Version 1.30
 ------------

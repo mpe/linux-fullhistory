@@ -246,21 +246,36 @@ int cifs_get_inode_info(struct inode **pinode,
 			*pinode = new_inode(sb);
 			if (*pinode == NULL)
 				return -ENOMEM;
-			/* Is an i_ino of zero legal? */
-			/* Are there sanity checks we can use to ensure that
+			/* Is an i_ino of zero legal? Can we use that to check
+			   if the server supports returning inode numbers?  Are
+			   there other sanity checks we can use to ensure that
 			   the server is really filling in that field? */
 
-			/* We can not use the IndexNumber from either Windows
-			   or Samba as it is frequently set to zero */
+			/* We can not use the IndexNumber field by default from
+			   Windows or Samba (in ALL_INFO buf) but we can request
+			   it explicitly.  It may not be unique presumably if
+			   the server has multiple devices mounted under one
+			   share */
+
 			/* There may be higher info levels that work but are
 			   there Windows server or network appliances for which
 			   IndexNumber field is not guaranteed unique? */
-		
-			/* if(cifs_sb->mnt_cifs_flags & CIFS_MOUNT_SERVER_INUM){
-				(*pinode)->i_ino = 
-					(unsigned long)pfindData->IndexNumber;
-			} */ /*NB: ino incremented to unique num in new_inode*/
 
+#ifdef CONFIG_CIFS_EXPERIMENTAL		
+			if(cifs_sb->mnt_cifs_flags & CIFS_MOUNT_SERVER_INUM){
+				int rc1 = 0;
+				__u64 inode_num;
+
+				rc1 = CIFSGetSrvInodeNumber(xid, pTcon, 
+					search_path, &inode_num, 
+					cifs_sb->local_nls);
+				if(rc1) {
+					cFYI(1,("GetSrvInodeNum rc %d", rc1));
+					/* BB EOPNOSUPP disable SERVER_INUM? */
+				} else /* do we need cast or hash to ino? */
+					(*pinode)->i_ino = inode_num;
+			} /* else ino incremented to unique num in new_inode*/
+#endif /* CIFS_EXPERIMENTAL */
 			insert_inode_hash(*pinode);
 		}
 		inode = *pinode;
@@ -677,7 +692,7 @@ int cifs_rename(struct inode *source_inode, struct dentry *source_direntry,
 	}
 
 	if (rc) {
-		cFYI(1, ("rename rc %d", rc)); /* BB removeme BB */
+		cFYI(1, ("rename rc %d", rc));
 	}
 
 	if ((rc == -EIO) || (rc == -EEXIST)) {
