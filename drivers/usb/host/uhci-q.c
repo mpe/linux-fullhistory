@@ -264,7 +264,6 @@ static void uhci_remove_qh(struct uhci_hcd *uhci, struct uhci_qh *qh)
 {
 	struct uhci_qh *pqh;
 	__le32 newlink;
-	unsigned int age;
 
 	if (!qh)
 		return;
@@ -310,10 +309,10 @@ static void uhci_remove_qh(struct uhci_hcd *uhci, struct uhci_qh *qh)
 	list_del_init(&qh->urbp->queue_list);
 	qh->urbp = NULL;
 
-	age = uhci_get_current_frame_number(uhci);
-	if (age != uhci->qh_remove_age) {
+	uhci_get_current_frame_number(uhci);
+	if (uhci->frame_number + uhci->is_stopped != uhci->qh_remove_age) {
 		uhci_free_pending_qhs(uhci);
-		uhci->qh_remove_age = age;
+		uhci->qh_remove_age = uhci->frame_number;
 	}
 
 	/* Check to see if the remove list is empty. Set the IOC bit */
@@ -492,7 +491,6 @@ static void uhci_destroy_urb_priv(struct uhci_hcd *uhci, struct urb *urb)
 {
 	struct uhci_td *td, *tmp;
 	struct urb_priv *urbp;
-	unsigned int age;
 
 	urbp = (struct urb_priv *)urb->hcpriv;
 	if (!urbp)
@@ -502,10 +500,10 @@ static void uhci_destroy_urb_priv(struct uhci_hcd *uhci, struct urb *urb)
 		dev_warn(uhci_dev(uhci), "urb %p still on uhci->urb_list "
 				"or uhci->remove_list!\n", urb);
 
-	age = uhci_get_current_frame_number(uhci);
-	if (age != uhci->td_remove_age) {
+	uhci_get_current_frame_number(uhci);
+	if (uhci->frame_number + uhci->is_stopped != uhci->td_remove_age) {
 		uhci_free_pending_tds(uhci);
-		uhci->td_remove_age = age;
+		uhci->td_remove_age = uhci->frame_number;
 	}
 
 	/* Check to see if the remove list is empty. Set the IOC bit */
@@ -1063,11 +1061,11 @@ static int isochronous_find_start(struct uhci_hcd *uhci, struct urb *urb)
 	limits = isochronous_find_limits(uhci, urb, &start, &end);
 
 	if (urb->transfer_flags & URB_ISO_ASAP) {
-		if (limits)
-			urb->start_frame =
-					(uhci_get_current_frame_number(uhci) +
-						10) & (UHCI_NUMFRAMES - 1);
-		else
+		if (limits) {
+			uhci_get_current_frame_number(uhci);
+			urb->start_frame = (uhci->frame_number + 10)
+					& (UHCI_NUMFRAMES - 1);
+		} else
 			urb->start_frame = end;
 	} else {
 		urb->start_frame &= (UHCI_NUMFRAMES - 1);
@@ -1371,7 +1369,6 @@ static int uhci_urb_dequeue(struct usb_hcd *hcd, struct urb *urb)
 	struct uhci_hcd *uhci = hcd_to_uhci(hcd);
 	unsigned long flags;
 	struct urb_priv *urbp;
-	unsigned int age;
 
 	spin_lock_irqsave(&uhci->lock, flags);
 	urbp = urb->hcpriv;
@@ -1381,10 +1378,10 @@ static int uhci_urb_dequeue(struct usb_hcd *hcd, struct urb *urb)
 
 	uhci_unlink_generic(uhci, urb);
 
-	age = uhci_get_current_frame_number(uhci);
-	if (age != uhci->urb_remove_age) {
+	uhci_get_current_frame_number(uhci);
+	if (uhci->frame_number + uhci->is_stopped != uhci->urb_remove_age) {
 		uhci_remove_pending_urbps(uhci);
-		uhci->urb_remove_age = age;
+		uhci->urb_remove_age = uhci->frame_number;
 	}
 
 	/* If we're the first, set the next interrupt bit */

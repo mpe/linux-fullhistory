@@ -366,7 +366,9 @@ struct uhci_hcd {
 	enum uhci_state state;			/* FIXME: needs a spinlock */
 	unsigned long state_end;		/* Time of next transition */
 	int resume_detect;			/* Need a Global Resume */
-	unsigned int saved_framenumber;		/* Save during PM suspend */
+	unsigned int frame_number;		/* As of last check */
+	unsigned int is_stopped;
+#define UHCI_IS_STOPPED		9999		/* Larger than a frame # */
 
 	/* Support for port suspend/resume/reset */
 	unsigned long port_c_suspend;		/* Bit-arrays of ports */
