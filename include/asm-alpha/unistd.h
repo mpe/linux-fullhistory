@@ -100,6 +100,7 @@
 #define __NR_getrlimit		144
 #define __NR_setrlimit		145
 #define __NR_setsid		147
+#define __NR_quotactl		148
 #define __NR_getsockname	150
 #define __NR_sigaction		156
 #define __NR_msgctl		200

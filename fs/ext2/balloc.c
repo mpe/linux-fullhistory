@@ -165,7 +165,7 @@ static inline int load_block_bitmap (struct super_block * sb,
 	return load__block_bitmap (sb, block_group);
 }
 
-void ext2_free_blocks (struct super_block * sb, unsigned long block,
+void ext2_free_blocks (const struct inode * inode, unsigned long block,
 		       unsigned long count)
 {
 	struct buffer_head * bh;
@@ -174,9 +174,11 @@ void ext2_free_blocks (struct super_block * sb, unsigned long block,
 	unsigned long bit;
 	unsigned long i;
 	int bitmap_nr;
+	struct super_block * sb;
 	struct ext2_group_desc * gdp;
 	struct ext2_super_block * es;
 
+	sb = inode->i_sb;
 	if (!sb) {
 		printk ("ext2_free_blocks: nonexistent device");
 		return;
@@ -224,6 +226,8 @@ void ext2_free_blocks (struct super_block * sb, unsigned long block,
 				      "bit already cleared for block %lu", 
 				      block);
 		else {
+			if (sb->dq_op)
+				sb->dq_op->free_block(inode, fs_to_dq_blocks(1, inode->i_blksize));
 			gdp->bg_free_blocks_count++;
 			es->s_free_blocks_count++;
 		}
@@ -249,21 +253,23 @@ void ext2_free_blocks (struct super_block * sb, unsigned long block,
  * each block group the search first looks for an entire free byte in the block
  * bitmap, and then for any free bit if that fails.
  */
-int ext2_new_block (struct super_block * sb, unsigned long goal,
-		    u32 * prealloc_count,
-		    u32 * prealloc_block)
+int ext2_new_block (const struct inode * inode, unsigned long goal,
+		    u32 * prealloc_count, u32 * prealloc_block, int * err)
 {
 	struct buffer_head * bh;
 	struct buffer_head * bh2;
 	char * p, * r;
 	int i, j, k, tmp;
 	int bitmap_nr;
+	struct super_block * sb;
 	struct ext2_group_desc * gdp;
 	struct ext2_super_block * es;
 
+	*err = -ENOSPC;
 #ifdef EXT2FS_DEBUG
 	static int goal_hits = 0, goal_attempts = 0;
 #endif
+	sb = inode->i_sb;
 	if (!sb) {
 		printk ("ext2_new_block: nonexistent device");
 		return 0;
@@ -394,6 +400,16 @@ got_block:
 
 	ext2_debug ("using block group %d(%d)\n", i, gdp->bg_free_blocks_count);
 
+	/*
+	 * Check quota for allocation of this block.
+	 */
+	if (sb->dq_op)
+		if (sb->dq_op->alloc_block (inode, fs_to_dq_blocks(1, inode->i_blksize))) {
+			unlock_super (sb);
+			*err = -EDQUOT;
+			return 0;
+		}
+
 	tmp = j + i * EXT2_BLOCKS_PER_GROUP(sb) + es->s_first_data_block;
 
 	if (test_opt (sb, CHECK_STRICT) &&
@@ -407,6 +423,8 @@ got_block:
 	if (set_bit (j, bh->b_data)) {
 		ext2_warning (sb, "ext2_new_block",
 			      "bit already set for block %d", j);
+		if (sb->dq_op)
+			sb->dq_op->free_block(inode, fs_to_dq_blocks(1, inode->i_blksize));
 		goto repeat;
 	}
 
@@ -421,8 +439,14 @@ got_block:
 		*prealloc_block = tmp + 1;
 		for (k = 1;
 		     k < 8 && (j + k) < EXT2_BLOCKS_PER_GROUP(sb); k++) {
-			if (set_bit (j + k, bh->b_data))
+			if (sb->dq_op)
+				if (sb->dq_op->alloc_block(inode, fs_to_dq_blocks(1, inode->i_blksize)))
+					break;
+			if (set_bit (j + k, bh->b_data)) {
+				if (sb->dq_op)
+					sb->dq_op->free_block(inode, fs_to_dq_blocks(1, inode->i_blksize));
 				break;
+			}
 			(*prealloc_count)++;
 		}	
 		gdp->bg_free_blocks_count -= *prealloc_count;
@@ -466,6 +490,7 @@ got_block:
 	mark_buffer_dirty(sb->u.ext2_sb.s_sbh, 1);
 	sb->s_dirt = 1;
 	unlock_super (sb);
+	*err = 0;
 	return j;
 }
 

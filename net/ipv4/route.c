@@ -37,6 +37,8 @@
  *		Alan Cox	:	Faster /proc handling
  *	Alexey Kuznetsov	:	Massive rework to support tree based routing,
  *					routing caches and better behaviour.
+ *		
+ *		Olaf Erb	:	irtt wasnt being copied right.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -496,6 +498,7 @@ static struct fib_info * fib_create_info(__u32 gw, struct device * dev,
 	fi->fib_refcnt++;
 	fi->fib_next = fib_info_list;
 	fi->fib_prev = NULL;
+	fi->fib_irtt = irtt;
 	if (fib_info_list)
 		fib_info_list->fib_prev = fi;
 	fib_info_list = fi;

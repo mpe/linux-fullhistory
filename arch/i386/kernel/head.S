@@ -12,6 +12,7 @@
 #include <linux/tasks.h>
 #include <linux/linkage.h>
 #include <asm/segment.h>
+#include <linux/config.h>
 
 #define CL_MAGIC_ADDR	0x90020
 #define CL_MAGIC	0xA33F
@@ -382,7 +383,11 @@ ENTRY(idt)
 	ALIGN
 .word 0
 gdt_descr:
+#ifdef CONFIG_APM
+	.word (11+2*NR_TASKS)*8-1
+#else
 	.word (8+2*NR_TASKS)*8-1
+#endif
 	.long 0xc0000000+SYMBOL_NAME(gdt)
 
 /*
@@ -399,3 +404,8 @@ ENTRY(gdt)
 	.quad 0x0000000000000000	/* not used */
 	.quad 0x0000000000000000	/* not used */
 	.fill 2*NR_TASKS,8,0		/* space for LDT's and TSS's etc */
+#ifdef CONFIG_APM
+	.quad 0x00c09a0000000000	/* APM CS    code */
+	.quad 0x00809a0000000000	/* APM CS 16 code (16 bit) */
+	.quad 0x00c0920000000000	/* APM DS    data */
+#endif

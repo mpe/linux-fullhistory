@@ -90,7 +90,7 @@ static int netlink_read(struct inode * inode, struct file * file, char * buf, in
 		if(file->f_flags&O_NONBLOCK)
 		{
 			sti();
-			return -EWOULDBLOCK;
+			return -EAGAIN;
 		}
 		interruptible_sleep_on(&read_space_wait[minor]);
 		if(current->signal & ~current->blocked)
@@ -199,7 +199,7 @@ int netlink_post(int unit, struct sk_buff *skb)
 		save_flags(flags);
 		cli();
 		if(rdq_size[unit]+skb->len>MAX_QBYTES)
-			ret=-EWOULDBLOCK;
+			ret=-EAGAIN;
 		else
 		{	
 			skb_queue_tail(&skb_queue_rd[unit], skb);

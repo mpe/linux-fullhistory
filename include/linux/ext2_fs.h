@@ -404,9 +404,9 @@ struct ext2_dir_entry {
 extern int ext2_permission (struct inode *, int);
 
 /* balloc.c */
-extern int ext2_new_block (struct super_block *, unsigned long,
-			   __u32 *, __u32 *);
-extern void ext2_free_blocks (struct super_block *, unsigned long,
+extern int ext2_new_block (const struct inode *, unsigned long,
+			   __u32 *, __u32 *, int *);
+extern void ext2_free_blocks (const struct inode *, unsigned long,
 			      unsigned long);
 extern unsigned long ext2_count_free_blocks (struct super_block *);
 extern void ext2_check_blocks_bitmap (struct super_block *);
@@ -427,7 +427,7 @@ extern int ext2_write (struct inode *, struct file *, char *, int);
 extern int ext2_sync_file (struct inode *, struct file *);
 
 /* ialloc.c */
-extern struct inode * ext2_new_inode (const struct inode *, int);
+extern struct inode * ext2_new_inode (const struct inode *, int, int *);
 extern void ext2_free_inode (struct inode *);
 extern unsigned long ext2_count_free_inodes (struct super_block *);
 extern void ext2_check_inodes_bitmap (struct super_block *);

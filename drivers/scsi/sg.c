@@ -215,7 +215,7 @@ static int sg_read(struct inode *inode,struct file *filp,char *buf,int count)
 	if (filp->f_flags & O_NONBLOCK)
 	{
 	    restore_flags(flags);
-	    return -EWOULDBLOCK;
+	    return -EAGAIN;
 	}
 	interruptible_sleep_on(&device->read_wait);
 	if (current->signal & ~current->blocked)
@@ -323,7 +323,7 @@ static int sg_write(struct inode *inode,struct file *filp,const char *buf,int co
     while(device->pending)
     {
 	if (filp->f_flags & O_NONBLOCK)
-	    return -EWOULDBLOCK;
+	    return -EAGAIN;
 #ifdef DEBUG
 	printk("sg_write: sleeping on pending request\n");
 #endif     
@@ -392,7 +392,7 @@ static int sg_write(struct inode *inode,struct file *filp,const char *buf,int co
 	wake_up(&device->write_wait);
 	sg_free(device->buff,device->buff_len);
 	device->buff = NULL;
-	return -EWOULDBLOCK;
+	return -EAGAIN;
     } 
 #ifdef DEBUG
     printk("device allocated\n");

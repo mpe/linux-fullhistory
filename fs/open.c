@@ -122,7 +122,7 @@ asmlinkage int sys_ftruncate(unsigned int fd, unsigned long length)
 		return -EBADF;
 	if (!(inode = file->f_inode))
 		return -ENOENT;
-	if (S_ISDIR(inode->i_mode) || !(file->f_mode & 2))
+	if (S_ISDIR(inode->i_mode) || !(file->f_mode & FMODE_WRITE))
 		return -EACCES;
 	if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
 		return -EPERM;
@@ -481,7 +481,7 @@ int do_open(const char * filename,int flags,int mode)
 	error = open_namei(filename,flag,mode,&inode,NULL);
 	if (error)
 		goto cleanup_file;
-	if (f->f_mode & 2) {
+	if (f->f_mode & FMODE_WRITE) {
 		error = get_write_access(inode);
 		if (error)
 			goto cleanup_inode;
@@ -516,7 +516,7 @@ int do_open(const char * filename,int flags,int mode)
 	if (f->f_op && f->f_op->release)
 		f->f_op->release(inode,f);
 cleanup_all:
-	if (f->f_mode & 2)
+	if (f->f_mode & FMODE_WRITE)
 		put_write_access(inode);
 cleanup_inode:
 	iput(inode);
@@ -562,7 +562,8 @@ int close_fp(struct file *filp)
 		filp->f_op->release(inode,filp);
 	filp->f_count--;
 	filp->f_inode = NULL;
-	if (filp->f_mode & 2) put_write_access(inode);
+	if (filp->f_mode & FMODE_WRITE)
+		put_write_access(inode);
 	iput(inode);
 	return 0;
 }

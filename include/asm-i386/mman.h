@@ -24,4 +24,8 @@
 #define MCL_CURRENT	1		/* lock all current mappings */
 #define MCL_FUTURE	2		/* lock all future mappings */
 
+/* compatibility flags */
+#define MAP_ANON	MAP_ANONYMOUS
+#define MAP_FILE	0
+
 #endif /* __I386_MMAN_H__ */

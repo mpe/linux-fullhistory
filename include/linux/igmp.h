@@ -2,7 +2,7 @@
  *	Linux NET3:	Internet Gateway Management Protocol  [IGMP]
  *
  *	Authors:
- *		Alan Cox <Alan.Cox@linux.org>	
+ *		Alan Cox <Alan.Cox@linux.org>
  *
  *	Extended to talk the BSD extended IGMP protocol of mrouted 3.6
  *
@@ -65,8 +65,8 @@ struct igmphdr
 						/* specifies time in 10th of seconds	 */
 
 #define IGMP_AGE_THRESHOLD		540	/* If this host don't hear any IGMP V1	*/
-						/* message in this period of time, revert */
-						/* to IGMP v2 router */
+						/* message in this period of time,	*/
+						/* revert to IGMP v2 router.		*/
 
 #define IGMP_ALL_HOSTS		htonl(0xE0000001L)
 #define IGMP_ALL_ROUTER 	htonl(0xE0000002L)
@@ -94,12 +94,13 @@ struct ip_mc_list
 	int users;
 };
 
-struct router_info
+struct ip_router_info
 {
 	struct device *dev;
-	int    type; /* type of router which is querier on this interface */
-	int    time; /* # of slow timeouts since last old query */
-	struct router_info *next;
+	int    type;	/* type of router which is querier on this interface */
+	int    time;	/* # of slow timeouts since last old query */
+	struct timer_list timer;
+	struct ip_router_info *next;
 };
 
 extern struct ip_mc_list *ip_mc_head;

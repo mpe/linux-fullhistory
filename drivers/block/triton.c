@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/triton.c	Version 1.03  Nov 16, 1995
+ *  linux/drivers/block/triton.c	Version 1.04  Dec 1, 1995
  *
  *  Copyright (c) 1995  Mark Lord
  *  May be copied or modified under the terms of the GNU General Public License
@@ -73,6 +73,13 @@
  *
  * If you have any drive models to add, email your results to:  mlord@bnr.ca
  * Keep an eye on /var/adm/messages for "DMA disabled" messages.
+ *
+ * Some people have reported trouble with Intel Zappa motherboards.
+ * This can be fixed by upgrading the AMI BIOS to version 1.00.04.BS0,
+ * available from ftp://ftp.intel.com/pub/bios/10004bs0.exe
+ * (thanks to Glen Morrell <glen@spin.Stanford.edu> for researching this).
+ *
+ * And, yes, Intel Zappa boards really *do* use the Triton IDE ports.
  */
 #define _TRITON_C
 #include <linux/config.h>
@@ -141,14 +148,12 @@ static void dma_intr (ide_drive_t *drive)
 				i -= rq->current_nr_sectors;
 				ide_end_request(1, HWGROUP(drive));
 			}
-			IDE_DO_REQUEST;
 			return;
 		}
 		printk("%s: bad DMA status: 0x%02x\n", drive->name, dma_stat);
 	}
 	sti();
-	if (!ide_error(drive, "dma_intr", stat))
-		IDE_DO_REQUEST;
+	ide_error(drive, "dma_intr", stat);
 }
 
 /*
@@ -269,7 +274,7 @@ static int triton_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	outl(virt_to_bus (HWIF(drive)->dmatable), dma_base + 4); /* PRD table */
 	outb(reading, dma_base);			/* specify r/w */
 	outb(0x26, dma_base+2);				/* clear status bits */
-	ide_set_handler (drive, &dma_intr);		/* issue cmd to drive */
+	ide_set_handler (drive, &dma_intr, WAIT_CMD);	/* issue cmd to drive */
 	OUT_BYTE(reading ? WIN_READDMA : WIN_WRITEDMA, IDE_COMMAND_REG);
 	outb(inb(dma_base)|1, dma_base);		/* begin DMA */
 	return 0;
@@ -307,7 +312,7 @@ void ide_init_triton (byte bus, byte fn)
 	int rc = 0, h;
 	unsigned short bmiba, pcicmd;
 	unsigned int timings;
-	unsigned char *dmatable = NULL;
+	unsigned long dmatable = 0;
 	extern ide_hwif_t ide_hwifs[];
 
 	/*
@@ -331,7 +336,7 @@ void ide_init_triton (byte bus, byte fn)
 	if ((rc = pcibios_read_config_dword(bus, fn, 0x40, &timings)))
 		goto quit;
 	if (!(timings & 0x80008000)) {
-		printk("ide: Triton IDE ports are not enabled\n");
+		printk("ide: neither Triton IDE port is enabled\n");
 		goto quit;
 	}
 	printk("ide: Triton BM-IDE on PCI bus %d function %d\n", bus, fn);
@@ -363,15 +368,15 @@ void ide_init_triton (byte bus, byte fn)
 		} else {
 			request_region(base, 8, hwif->name);
 			hwif->dma_base = base;
-			if (dmatable == NULL) {
+			if (!dmatable) {
 				/*
 				 * Since we know we are on a PCI bus, we could
 				 * actually use __get_free_pages() here instead
 				 * of __get_dma_pages() -- no ISA limitations.
 				 */
-				dmatable = (void *) __get_dma_pages(GFP_KERNEL, 0);
+				dmatable = __get_dma_pages(GFP_KERNEL, 0);
 			}
-			if (dmatable != NULL) {
+			if (dmatable) {
 				hwif->dmatable = (unsigned long *) dmatable;
 				dmatable += (PRD_ENTRIES * PRD_BYTES);
 				outl(virt_to_bus(hwif->dmatable), base + 4);

@@ -1,4 +1,4 @@
-$Id: README.aztcd,v 2.0 1995/11/10 19:37:18 root Exp root $
+$Id: README.aztcd,v 2.10 1995/12/03 11:55:14 root Exp root $
           Readme-File /usr/src/Documentation/cdrom/aztcd
            for Aztech CD-ROM CDA268-01A, ORCHID CD-3110,
                   OKANO/WEARNES CDD110, Conrad TXC
@@ -460,7 +460,7 @@ and also were very patient with the problems which occurred.
 Reinhard Max delivered the information for the CDROM-interface of the
 SoundWave32 soundcards.
 
-Jochen Koch and Olaf Koluza delivered the information for supporting Conrad's TXC
+Jochen Koch and Olaf Kaluza delivered the information for supporting Conrad's TXC
 drive.
 
 Anybody, who is interested in these items should have a look at 'ftp.gwdg.de',

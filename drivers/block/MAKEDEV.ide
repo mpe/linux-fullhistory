@@ -27,3 +27,19 @@ makedevs hde 33 0
 makedevs hdf 33 64
 makedevs hdg 34 0
 makedevs hdh 34 64
+
+# Create the ide-tape rewinding character device.
+
+rm -f /dev/ht0
+echo mknod /dev/ht0 c 37 0
+     mknod /dev/ht0 c 37 0
+chown root:disk /dev/ht0
+chmod 660 /dev/ht0
+
+# Create the ide-tape non rewinding character device.
+
+rm -f /dev/nht0
+echo mknod /dev/nht0 c 37 128
+     mknod /dev/nht0 c 37 128
+chown root:disk /dev/nht0
+chmod 660 /dev/nht0

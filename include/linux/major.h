@@ -99,6 +99,7 @@
 #define IDE2_MAJOR	33
 #define IDE3_MAJOR	34
 #define NETLINK_MAJOR	36
+#define IDETAPE_MAJOR	37
 
 /*
  * Tests for SCSI devices.

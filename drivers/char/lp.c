@@ -503,6 +503,16 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 					memset(&LP_STAT(minor), 0, sizeof(struct lp_stats));
 			}
 			break;
+ 		case LPGETFLAGS:
+ 			retval = verify_area(VERIFY_WRITE, (void *) arg,
+ 			    sizeof(int));
+ 		    	if (retval)
+ 		    		return retval;
+ 			else {
+ 				int status = LP_F(minor);
+				memcpy_tofs((int *) arg, &status, sizeof(int));
+			}
+			break;
 		default:
 			retval = -EINVAL;
 	}

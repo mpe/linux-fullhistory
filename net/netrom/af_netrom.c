@@ -1368,7 +1368,7 @@ void nr_proto_init(struct net_proto *pro)
 {
 	sock_register(nr_proto_ops.family, &nr_proto_ops);
 	register_netdevice_notifier(&nr_dev_notifier);
-	printk("G4KLX NET/ROM for Linux. Version 0.3 ALPHA for AX25.030 Linux 1.3.35\n");
+	printk("G4KLX NET/ROM for Linux. Version 0.4 ALPHA for AX25.030 Linux 1.3.45\n");
 
 	nr_default.quality    = NR_DEFAULT_QUAL;
 	nr_default.obs_count  = NR_DEFAULT_OBS;

@@ -13,7 +13,7 @@ O_TARGET := fs.o
 O_OBJS    = open.o read_write.o inode.o devices.o file_table.o buffer.o \
 		super.o  block_dev.o stat.o exec.o pipe.o namei.o fcntl.o \
 		ioctl.o readdir.o select.o fifo.o locks.o filesystems.o \
-		dcache.o $(BINFMTS) 
+		dcache.o dquot.o $(BINFMTS) 
 
 MOD_LIST_NAME := FS_MODULES
 ALL_SUB_DIRS = minix ext ext2 msdos proc isofs nfs xiafs umsdos hpfs sysv smbfs

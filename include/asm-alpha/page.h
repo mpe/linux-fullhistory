@@ -48,24 +48,6 @@ typedef unsigned long pgprot_t;
 
 #endif
 
-#define invalidate_all() \
-__asm__ __volatile__( \
-	"lda $16,-2($31)\n\t" \
-	".long 51" \
-	: : :"$1", "$16", "$17", "$22","$23","$24","$25")
-
-#define invalidate() \
-__asm__ __volatile__( \
-	"lda $16,-1($31)\n\t" \
-	".long 51" \
-	: : :"$1", "$16", "$17", "$22","$23","$24","$25")
-
-/* Certain architectures need to do special things when pte's
- * within a page table are directly modified.  Thus, the following
- * hook is made available.
- */
-#define set_pte(pteptr, pteval) ((*(pteptr)) = (pteval))
-
 /* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr)		(((addr)+PAGE_SIZE-1)&PAGE_MASK)
 

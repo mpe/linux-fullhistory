@@ -1,4 +1,4 @@
-README.ide -- Information regarding ide.c and ide-cd.c (IDE driver in 1.3.x)
+README.ide -- Information regarding ide.c and ide-cd.c (IDE driver in 1.3.xx)
 ================================================================================
 Supported by:  mlord@bnr.ca           -- disks, interfaces, probing
                snyder@fnald0.fnal.gov -- cdroms, ATAPI, audio

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/cmd640.c	Version 0.01  Nov 16, 1995
+ *  linux/drivers/block/cmd640.c	Version 0.02  Nov 30, 1995
  *
  *  Copyright (C) 1995  Linus Torvalds & author (see below)
  */
@@ -13,7 +13,55 @@
  *  Version 0.01	Initial version, hacked out of ide.c,
  *			and #include'd rather than compiled separately.
  *			This will get cleaned up in a subsequent release.
+ *
+ *  Version 0.02	Fixes for vlb initialization code, enable
+ *			read-ahead for versions 'B' and 'C' of chip by
+ *			default, some code cleanup.
+ *
  */
+
+/*
+ * CMD640 specific registers definition.
+ */
+
+#define VID		0x00
+#define DID		0x02
+#define PCMD		0x04
+#define PSTTS		0x06
+#define REVID		0x08
+#define PROGIF		0x09
+#define SUBCL		0x0a
+#define BASCL		0x0b
+#define BaseA0		0x10
+#define BaseA1		0x14
+#define BaseA2		0x18
+#define BaseA3		0x1c
+#define INTLINE		0x3c
+#define INPINE		0x3d
+
+#define	CFR		0x50
+#define   CFR_DEVREV		0x03
+#define   CFR_IDE01INTR		0x04
+#define	  CFR_DEVID		0x18
+#define	  CFR_AT_VESA_078h	0x20
+#define	  CFR_DSA1		0x40
+#define	  CFR_DSA0		0x80
+
+#define CNTRL		0x51
+#define	  CNTRL_DIS_RA0		0x40
+#define   CNTRL_DIS_RA1		0x80
+#define	  CNTRL_ENA_2ND		0x08
+
+#define	CMDTIM		0x52
+#define	ARTTIM0		0x53
+#define	DRWTIM0		0x54
+#define ARTTIM1 	0x55
+#define DRWTIM1		0x56
+#define ARTTIM23	0x57
+#define   DIS_RA2		0x04
+#define   DIS_RA3		0x08
+#define DRWTIM23	0x58
+#define BRST		0x59
 
 /* Interface to access cmd640x registers */
 static void (*put_cmd640_reg)(int key, int reg_no, int val);
@@ -24,6 +72,7 @@ static int	bus_type = none;
 static int	cmd640_chip_version;
 static int	cmd640_key;
 static byte	is_cmd640[MAX_HWIFS];
+static int 	bus_speed; /* MHz */
 
 /*
  * For some unknown reasons pcibios functions which read and write registers
@@ -51,7 +100,7 @@ static byte get_cmd640_reg_pci1(int key, int reg_no)
 	save_flags(flags);
 	cli();
 	outl_p((reg_no & 0xfc) | key, 0xcf8);
-	b = inb(0xcfc + (reg_no & 3));
+	b = inb_p(0xcfc + (reg_no & 3));
 	restore_flags(flags);
 	return b;
 }
@@ -78,7 +127,7 @@ static byte get_cmd640_reg_pci2(int key, int reg_no)
 	save_flags(flags);
 	cli();
 	outb_p(0x10, 0xcf8);
-	b = inb(key + reg_no);
+	b = inb_p(key + reg_no);
 	outb_p(0, 0xcf8);
 	restore_flags(flags);
 	return b;
@@ -92,8 +141,8 @@ static void put_cmd640_reg_vlb(int key, int reg_no, int val)
 
 	save_flags(flags);
 	cli();
-	outb(reg_no, key + 8);
-	outb(val, key + 0xc);
+	outb_p(reg_no, key + 8);
+	outb_p(val, key + 0xc);
 	restore_flags(flags);
 }
 
@@ -104,8 +153,8 @@ static byte get_cmd640_reg_vlb(int key, int reg_no)
 
 	save_flags(flags);
 	cli();
-	outb(reg_no, key + 8);
-	b = inb(key + 0xc);
+	outb_p(reg_no, key + 8);
+	b = inb_p(key + 0xc);
 	restore_flags(flags);
 	return b;
 }
@@ -164,12 +213,12 @@ static int probe_for_cmd640_pci2(void)
 static int probe_for_cmd640_vlb(void) {
 	byte b;
 
-	outb(0x50, 0x178);
+	outb(CFR, 0x178);
 	b = inb(0x17c);
-	if (b == 0xff || b == 0 || (b & 0x20)) {
-		outb(0x50, 0xc78);
+	if (b == 0xff || b == 0 || (b & CFR_AT_VESA_078h)) {
+		outb(CFR, 0x78);
 		b = inb(0x7c);
-		if (b == 0xff || b == 0 || !(b & 0x20))
+		if (b == 0xff || b == 0 || !(b & CFR_AT_VESA_078h))
 			return 0;
 		cmd640_key = 0x70;
 	} else {
@@ -186,7 +235,10 @@ static int probe_for_cmd640_vlb(void) {
 
 int ide_probe_for_cmd640x(void)
 {
-	int i;
+	int  i;
+	int  second_port;
+	int  read_ahead;
+	byte b;
 
 	for (i = 0; i < MAX_HWIFS; i++)
 		is_cmd640[i] = 0;
@@ -217,19 +269,60 @@ int ide_probe_for_cmd640x(void)
 	 * Documented magic.
 	 */
 
-	cmd640_chip_version = get_cmd640_reg(cmd640_key, 0x50) & 3;
+	cmd640_chip_version = get_cmd640_reg(cmd640_key, CFR) & CFR_DEVREV;
 	if (cmd640_chip_version == 0) {
 		printk ("ide: wrong CMD640 version -- 0\n");
 		return 0;
 	}
 
-	put_cmd640_reg(cmd640_key, 0x51, get_cmd640_reg(cmd640_key, 0x51) | 0xc8);
-	put_cmd640_reg(cmd640_key, 0x57, 0);
-	put_cmd640_reg(cmd640_key, 0x57, get_cmd640_reg(cmd640_key, 0x57) | 0x0c);
+	/*
+	 * Do not initialize secondary controller for vlbus
+	 */
+	second_port = (bus_type != vlb);
+
+	/*
+	 * Set the maximum allowed bus speed (it is safest until we
+	 * 				      find how detect bus speed)
+	 * Normally PCI bus runs at 33MHz, but often works overclocked to 40
+	 */
+	bus_speed = (bus_type == vlb) ? 50 : 40; 
+
+#if 0	/* don't know if this is reliable yet */
+	/*
+	 * Enable readahead for versions above 'A'
+	 */
+	read_ahead = (cmd640_chip_version > 1);
+#else
+	read_ahead = 0;
+#endif
+	/*
+	 * Setup Control Register
+	 */
+	b = get_cmd640_reg(cmd640_key, CNTRL);	
+	if (second_port)
+		b |= CNTRL_ENA_2ND;
+	else
+		b &= ~CNTRL_ENA_2ND;
+	if (read_ahead)
+		b &= ~(CNTRL_DIS_RA0 | CNTRL_DIS_RA1);
+	else
+		b |= (CNTRL_DIS_RA0 | CNTRL_DIS_RA1);
+	put_cmd640_reg(cmd640_key, CNTRL, b);
+
+	/*
+	 * Initialize 2nd IDE port, if required
+	 */
+	if (second_port) {
+		/* We reset timings, and setup read-ahead */
+		b = read_ahead ? 0 : (DIS_RA2 | DIS_RA3);
+		put_cmd640_reg(cmd640_key, ARTTIM23, b);
+		put_cmd640_reg(cmd640_key, DRWTIM23, 0);
+	}
 
 	serialized = 1;
 
-	printk("ide: buggy CMD640 interface at ");
+	printk("ide: buggy CMD640%c interface at ", 
+	       'A' - 1 + cmd640_chip_version);
 	switch (bus_type) {
 		case vlb :
 			printk("local bus, port 0x%x", cmd640_key);
@@ -247,17 +340,17 @@ int ide_probe_for_cmd640x(void)
 	/*
 	 * Reset interface timings
 	 */
+	put_cmd640_reg(cmd640_key, CMDTIM, 0);
 
-	put_cmd640_reg(cmd640_key, 0x58, 0);
-	put_cmd640_reg(cmd640_key, 0x52, 0);
-
-	printk("\n ... serialized, disabled read-ahead, secondary interface enabled\n");
+	printk("\n ... serialized, %s read-ahead, secondary interface %s\n",
+	       read_ahead ? "enabled" : "disabled",
+	       second_port ? "enabled" : "disabled");
 
 	return 1;
 }
 
 static int as_clocks(int a) {
-	switch (a & 0xf0) {
+	switch (a & 0xc0) {
 		case 0 :	return 4;
 		case 0x40 :	return 2;
 		case 0x80 :	return 3;
@@ -274,41 +367,38 @@ static void cmd640_set_timing(int if_num, int dr_num, int r1, int r2) {
 	int  b_reg;
 	byte b;
 	int  r52;
+	static int a = 0;
 
-	b_reg = if_num ? 0x57 : dr_num ? 0x55 : 0x53;
+	b_reg = if_num ? ARTTIM23 : dr_num ? ARTTIM1 : ARTTIM0;
 
 	if (if_num == 0) {
 		put_cmd640_reg(cmd640_key, b_reg, r1);
 		put_cmd640_reg(cmd640_key, b_reg + 1, r2);
 	} else {
 		b = get_cmd640_reg(cmd640_key, b_reg);
-		if ((b&1) == 0) {
-			put_cmd640_reg(cmd640_key, b_reg, r1);
-		} else {
-			if (as_clocks(b) < as_clocks(r1))
-				put_cmd640_reg(cmd640_key, b_reg, r1);
-		}
-		b = get_cmd640_reg(cmd640_key, b_reg + 1);
-		if (b == 0) {
+		if (a == 0 || as_clocks(b) < as_clocks(r1))
+			put_cmd640_reg(cmd640_key, b_reg, (b & 0xc0) | r1);
+		
+		if (a == 0) {
 			put_cmd640_reg(cmd640_key, b_reg + 1, r2);
 		} else {
-			r52 = (b&0xf) < (r2&0xf) ? (r2&0xf) : (b&0xf);
+			b = get_cmd640_reg(cmd640_key, b_reg + 1);
+			r52 =  (b&0x0f) < (r2&0x0f) ? (r2&0x0f) : (b&0x0f);
 			r52 |= (b&0xf0) < (r2&0xf0) ? (r2&0xf0) : (b&0xf0);
 			put_cmd640_reg(cmd640_key, b_reg+1, r52);
 		}
+		a = 1;
 	}
 
-	b = get_cmd640_reg(cmd640_key, 0x52);
+	b = get_cmd640_reg(cmd640_key, CMDTIM);
 	if (b == 0) {
-		put_cmd640_reg(cmd640_key, 0x52, r2);
+		put_cmd640_reg(cmd640_key, CMDTIM, r2);
 	} else {
-		r52 = (b&0xf) < (r2&0xf) ? (r2&0xf) : (b&0xf);
+		r52  = (b&0x0f) < (r2&0x0f) ? (r2&0x0f) : (b&0x0f);
 		r52 |= (b&0xf0) < (r2&0xf0) ? (r2&0xf0) : (b&0xf0);
-		put_cmd640_reg(cmd640_key, 0x52, r52);
+		put_cmd640_reg(cmd640_key, CMDTIM, r52);
 	}
 }
-
-static int bus_speed = 33; /* MHz */
 
 struct pio_timing {
 	int	mc_time;	/* Minimal cycle time (ns) */
@@ -385,10 +475,10 @@ static void set_pio_mode(int if_num, int drv_num, int mode_num) {
 	int i;
 
 	p_base = if_num ? 0x170 : 0x1f0;
-	outb(3, p_base + 1);
-	outb(mode_num | 8, p_base + 2);
-	outb((drv_num | 0xa) << 4, p_base + 6);
-	outb(0xef, p_base + 7);
+	outb_p(3, p_base + 1);
+	outb_p(mode_num | 8, p_base + 2);
+	outb_p((drv_num | 0xa) << 4, p_base + 6);
+	outb_p(0xef, p_base + 7);
 	for (i = 0; (i < 100) && (inb (p_base + 7) & 0x80); i++)
 		delay_10ms();
 }
@@ -442,3 +532,4 @@ void cmd640_tune_drive(ide_drive_t* drive) {
 	cmd640_set_timing(interface_number, drive_number, r1, r2);
 	printk ("Mode and Timing set to PIO%d (0x%x 0x%x)\n", max_pio, r1, r2);
 }
+

@@ -62,6 +62,10 @@ static void scsi_done (Scsi_Cmnd *SCpnt);
 static int update_timeout (Scsi_Cmnd *, int);
 static void print_inquiry(unsigned char *data);
 static void scsi_times_out (Scsi_Cmnd * SCpnt, int pid);
+static int scan_scsis_single (int channel,int dev,int lun,int * max_scsi_dev ,
+                 Scsi_Device ** SDpnt, Scsi_Cmnd * SCpnt,
+                 struct Scsi_Host *shpnt, char * scsi_result);
+
 
 static unsigned char * dma_malloc_freelist = NULL;
 static int scsi_need_isa_bounce_buffers;
@@ -371,392 +375,365 @@ void scsi_luns_setup(char *str, int *ints) {
  *  lun address of all sequential devices to the tape driver, all random
  *  devices to the disk driver.
  */
-static
-void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded, 
-		 unchar hchannel, unchar hid, unchar hlun)
+static void scan_scsis (struct Scsi_Host *shpnt, unchar hardcoded,
+                 unchar hchannel, unchar hid, unchar hlun)
 {
-    int dev, lun, type, channel;
-    unsigned char scsi_cmd [12];
-    unsigned char scsi_result0 [256];
-    unsigned char * scsi_result;
-    Scsi_Device * SDpnt, *SDtail;
-    struct Scsi_Device_Template * sdtpnt;
-    int                 bflags;
-    int                 max_dev_lun = 0;
-    Scsi_Cmnd  *SCpnt;
-    
-    ++in_scan_scsis;
-    lun = 0;
-    type = -1;
-    SCpnt = (Scsi_Cmnd *) scsi_init_malloc(sizeof(Scsi_Cmnd), GFP_ATOMIC|GFP_DMA);
-    SDpnt = (Scsi_Device *) scsi_init_malloc(sizeof (Scsi_Device), GFP_ATOMIC);
-    SDtail = scsi_devices;
-    
-    if(scsi_devices) while(SDtail->next) SDtail = SDtail->next;
-    
-    /* Make sure we have something that is valid for DMA purposes */
-    scsi_result = ((!dma_malloc_freelist  || !shpnt->unchecked_isa_dma)
-		   ?  &scsi_result0[0] : scsi_malloc(512));
-    
-    if(scsi_result == NULL) {
-	printk("Unable to obtain scsi_result buffer\n");
-	goto leave;
-    }
-    
-    shpnt->host_queue = SCpnt; /* We need this so that commands can time out */
+  int dev, lun, channel;
+  unsigned char scsi_result0[256];
+  unsigned char *scsi_result;
+  Scsi_Device *SDpnt;
+  int max_dev_lun;
+  Scsi_Cmnd *SCpnt;
 
-    if(hardcoded == 1) {
-	channel = hchannel;
-	dev = hid;
-	lun = hlun;
-	goto crude; /* Anyone remember good ol' BASIC ?  :-) */
-    }
+  in_scan_scsis++;
+  SCpnt = (Scsi_Cmnd *) scsi_init_malloc (sizeof (Scsi_Cmnd), GFP_ATOMIC | GFP_DMA);
+  SDpnt = (Scsi_Device *) scsi_init_malloc (sizeof (Scsi_Device), GFP_ATOMIC);
 
-    for (channel = 0; channel <= shpnt->max_channel; channel++)
-    {
-	for (dev = 0; dev < shpnt->max_id; ++dev) {
-	    if (shpnt->this_id != dev) {
-		
-		/*
-		 * We need the for so our continue, etc. work fine.
-		 * We put this in a variable so that we can override
-		 * it during the scan if we detect a device *KNOWN*
-		 * to have multiple logical units.
-		 */
-		max_dev_lun = (max_scsi_luns < shpnt->max_lun ? 
-			       max_scsi_luns : shpnt->max_lun);
+  /* Make sure we have something that is valid for DMA purposes */
+  scsi_result = ((!dma_malloc_freelist || !shpnt->unchecked_isa_dma)
+                 ? &scsi_result0[0] : scsi_malloc (512));
 
-		for (lun = 0; lun < max_dev_lun; ++lun)
-		{
-		crude:
-		    memset(SDpnt, 0, sizeof(Scsi_Device));
-		    SDpnt->host = shpnt;
-		    SDpnt->id = dev;
-		    SDpnt->lun = lun;
-		    SDpnt->channel = channel;
+  if (scsi_result == NULL) {
+    printk ("Unable to obtain scsi_result buffer\n");
+    goto leave;
+  }
 
-		    /* Some low level driver could use device->type (DB) */
-		    SDpnt->type = -1;
-		    /*
-		     * Assume that the device will have handshaking problems, 
-		     * and then fix this field later if it turns out it doesn't
-		     */
-		    SDpnt->borken = 1;
-                    SDpnt->was_reset = 0;
-                    SDpnt->expecting_cc_ua = 0;
-		    
-		    scsi_cmd[0] = TEST_UNIT_READY;
-		    scsi_cmd[1] = lun << 5;
-		    scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[4] = scsi_cmd[5] = 0;
-		    
-		    memset(SCpnt, 0,  sizeof(Scsi_Cmnd));
-		    SCpnt->host = SDpnt->host;
-		    SCpnt->device = SDpnt;
-		    SCpnt->target = SDpnt->id;
-		    SCpnt->lun = SDpnt->lun;
-		    SCpnt->channel = SDpnt->channel;
+  shpnt->host_queue = SCpnt;    /* We need this so that commands can time out */
 
-		    {
-			/*
-			 * Do the actual command, and wait for it to finish
-			 */
-			struct semaphore sem = MUTEX_LOCKED;
-			SCpnt->request.sem = &sem;
-			SCpnt->request.rq_status = RQ_SCSI_BUSY;
-			scsi_do_cmd (SCpnt, (void *)  scsi_cmd, 
-				     (void *) scsi_result,
-				     256,  scan_scsis_done, SCSI_TIMEOUT + 4 * HZ, 5);
-			down(&sem);
-		    }
+  if (hardcoded == 1) {
+    channel = hchannel;
+    if(channel > shpnt->max_channel) goto leave;
+    dev = hid;
+    if(dev >= shpnt->max_id) goto leave;
+    lun = hlun;
+    if(lun >= shpnt->max_lun) goto leave;
+    scan_scsis_single (channel, dev, lun, &max_dev_lun,
+                   &SDpnt, SCpnt, shpnt, scsi_result);
+  }
+  else {
+    for (channel = 0; channel <= shpnt->max_channel; channel++) {
+      for (dev = 0; dev < shpnt->max_id; ++dev) {
+        if (shpnt->this_id != dev) {
+          /*
+           * We need the for so our continue, etc. work fine. We put this in
+           * a variable so that we can override it during the scan if we
+           * detect a device *KNOWN* to have multiple logical units.
+           */
+          max_dev_lun = (max_scsi_luns < shpnt->max_lun ?
+                         max_scsi_luns : shpnt->max_lun);
 
-#if defined(DEBUG) || defined(DEBUG_INIT)
-		    printk("scsi: scan SCSIS id %d lun %d\n", dev, lun);
-		    printk("scsi: return code %08x\n", SCpnt->result);
-#endif
+          for (lun = 0; lun < max_dev_lun; ++lun) {
 
-		    if(SCpnt->result) {
-			if (((driver_byte(SCpnt->result) & DRIVER_SENSE) ||
-			     (status_byte(SCpnt->result) & CHECK_CONDITION)) &&
-			    ((SCpnt->sense_buffer[0] & 0x70) >> 4) == 7) {
-			    if(((SCpnt->sense_buffer[2] & 0xf) != NOT_READY) &&
-			       ((SCpnt->sense_buffer[2] & 0xf) != UNIT_ATTENTION))
-				continue;
-			}
-			else
-			    break;
-		    }
-		    
-#if defined (DEBUG) || defined(DEBUG_INIT)
-		    printk("scsi: performing INQUIRY\n");
-#endif
+            if (!scan_scsis_single (channel, dev, lun, &max_dev_lun,
+                                    &SDpnt, SCpnt, shpnt, scsi_result))
+              break; /* break means don't probe for luns!=0 */
+          }                     /* for lun ends */
+        }                       /* if this_id != id ends */
+      }                         /* for dev ends */
+    }                           /* for channel ends */
 
-		    /*
-		     * Build an INQUIRY command block.
-		     */
-		    scsi_cmd[0] = INQUIRY;
-		    scsi_cmd[1] = (lun << 5) & 0xe0;
-		    scsi_cmd[2] = 0;
-		    scsi_cmd[3] = 0;
-		    scsi_cmd[4] = 255;
-		    scsi_cmd[5] = 0;
-		    
-		    SCpnt->cmd_len = 0;
+leave:
+    shpnt->host_queue = NULL;   /* No longer needed here */
 
-		    {
-			struct semaphore sem = MUTEX_LOCKED;
-			SCpnt->request.sem = &sem;
-			SCpnt->request.rq_status = RQ_SCSI_BUSY;
-			scsi_do_cmd (SCpnt, (void *)  scsi_cmd, 
-				 (void *) scsi_result,
-				 256,  scan_scsis_done, SCSI_TIMEOUT, 3);
-			down(&sem);
-		    }
-		    
-		    the_result = SCpnt->result;
-		    
-#if defined(DEBUG) || defined(DEBUG_INIT)
-		    if (!the_result)
-			printk("scsi: INQUIRY successful\n");
-		    else
-			printk("scsi: INQUIRY failed with code %08x\n", the_result);
-#endif
-		    
-		    if(the_result) break;
-		    
-		    /* skip other luns on this device */
-		    
-		    if (!the_result)
-		    {
-			/* It would seem some TOSHIBA CDROM 
-			 * gets things wrong 
-			 */
-			if (!strncmp(scsi_result+8,"TOSHIBA",7) &&
-			    !strncmp(scsi_result+16,"CD-ROM",6) &&
-			    scsi_result[0] == TYPE_DISK) {
-			    scsi_result[0] = TYPE_ROM;
-			    scsi_result[1] |= 0x80;  /* removable */
-			}
-			
-			if (!strncmp(scsi_result+8,"NEC",3)) {
-			    if (!strncmp(scsi_result+16,"CD-ROM DRIVE:84 ",16) || 
-				!strncmp(scsi_result+16,"CD-ROM DRIVE:25",15))
-				SDpnt->manufacturer = SCSI_MAN_NEC_OLDCDR;
-			    else
-				SDpnt->manufacturer = SCSI_MAN_NEC;
-			} else if (!strncmp(scsi_result+8,"TOSHIBA",7))
-			    SDpnt->manufacturer = SCSI_MAN_TOSHIBA;
-			else if (!strncmp(scsi_result+8,"SONY",4))
-			    SDpnt->manufacturer = SCSI_MAN_SONY;
-                        else if (!strncmp(scsi_result+8, "PIONEER", 7))
-                            SDpnt->manufacturer = SCSI_MAN_PIONEER;
-			else
-			    SDpnt->manufacturer = SCSI_MAN_UNKNOWN;
-			
-			memcpy(SDpnt->vendor, scsi_result+8, 8);
-			memcpy(SDpnt->model, scsi_result+16, 16);
-			memcpy(SDpnt->rev, scsi_result+32, 4);
- 
-			SDpnt->removable = (0x80 & scsi_result[1]) >> 7;
-			SDpnt->lockable = SDpnt->removable;
-			SDpnt->changed = 0;
-			SDpnt->access_count = 0;
-			SDpnt->busy = 0;
-			SDpnt->has_cmdblocks = 0;
-			/*
-			 * Currently, all sequential devices are assumed to be
-			 * tapes, all random devices disk, with the appropriate
-			 * read only flags set for ROM / WORM treated as RO.
-			 */
-			
-			switch (type = (scsi_result[0] & 0x1f))
-			{
-			case TYPE_TAPE :
-			case TYPE_DISK :
-			case TYPE_MOD :
-			case TYPE_PROCESSOR :
-			case TYPE_SCANNER :
-			    SDpnt->writeable = 1;
-			    break;
-			case TYPE_WORM :
-			case TYPE_ROM :
-			    SDpnt->writeable = 0;
-			    break;
-			default :
-#if 0
-#ifdef DEBUG
-			    printk("scsi: unknown type %d\n", type);
-			    print_inquiry(scsi_result);
-#endif
-			    type = -1;
-#endif
-			}
-			
-			SDpnt->single_lun = 0;
-			SDpnt->soft_reset =
-			    (scsi_result[7] & 1) && ((scsi_result[3] &7) == 2);
-			SDpnt->random = (type == TYPE_TAPE) ? 0 : 1;
-			SDpnt->type = (type & 0x1f);
-			
-			if (type != -1)
-			{
-			    print_inquiry(scsi_result);
-			    
-			    for(sdtpnt = scsi_devicelist; sdtpnt; 
-				sdtpnt = sdtpnt->next)
-				if(sdtpnt->detect) SDpnt->attached +=
-				    (*sdtpnt->detect)(SDpnt);
-			    
-			    SDpnt->scsi_level = scsi_result[2] & 0x07;
-			    if (SDpnt->scsi_level >= 2 ||
-				(SDpnt->scsi_level == 1 &&
-				 (scsi_result[3] & 0x0f) == 1))
-				SDpnt->scsi_level++;
-			    /*
-			     * Set the tagged_queue flag for SCSI-II devices 
-			     * that purport to support
-			     * tagged queuing in the INQUIRY data.
-			     */
-			    
-			    SDpnt->tagged_queue = 0;
-			    
-			    if ((SDpnt->scsi_level >= SCSI_2) &&
-				(scsi_result[7] & 2)) {
-				SDpnt->tagged_supported = 1;
-				SDpnt->current_tag = 0;
-			    }
-			    
-			    /*
-			     * Accommodate drivers that want to sleep when 
-			     * they should be in a polling loop.
-			     */
+     /* Last device block does not exist.  Free memory. */
+    if (SDpnt != NULL)
+      scsi_init_free ((char *) SDpnt, sizeof (Scsi_Device));
 
-			    SDpnt->disconnect = 0;
+    if (SCpnt != NULL)
+      scsi_init_free ((char *) SCpnt, sizeof (Scsi_Cmnd));
 
-			    /*
-			     * Get any flags for this device.
-			     */
-			    bflags = get_device_flags(scsi_result);
-
-			    
-			    /*
-			     * Some revisions of the Texel CD ROM drives have 
-			     * handshaking problems when used with the Seagate
-			     * controllers.  Before we know what type of device
-			     * we're talking to, we assume it's borken and then
-			     * change it here if it turns out that it isn't
-			     * a TEXEL drive.
-			     */
-			    if( (bflags & BLIST_BORKEN) == 0 )
-			    {
-				SDpnt->borken = 0;
-			    }
-			    
-			    
-			    /* These devices need this "key" to unlock the
-			     * devices so we can use it 
-			     */
-			    if( (bflags & BLIST_KEY) != 0 ) {
-				printk("Unlocked floptical drive.\n");
-				SDpnt->lockable = 0;
-				scsi_cmd[0] = MODE_SENSE;
-				scsi_cmd[1] = (lun << 5) & 0xe0;
-				scsi_cmd[2] = 0x2e;
-				scsi_cmd[3] = 0;
-				scsi_cmd[4] = 0x2a;
-				scsi_cmd[5] = 0;
-				
-				SCpnt->cmd_len = 0;
-				{
-				    struct semaphore sem = MUTEX_LOCKED;
-				    SCpnt->request.rq_status = RQ_SCSI_BUSY;
-				    SCpnt->request.sem = &sem;
-				    scsi_do_cmd (SCpnt, (void *)  scsi_cmd,
-					     (void *) scsi_result, 0x2a,  
-					     scan_scsis_done, SCSI_TIMEOUT, 3);
-				    down(&sem);
-				}
-			    }
-			    /* Add this device to the linked list at the end */
-			    if(SDtail)
-				SDtail->next = SDpnt;
-			    else
-				scsi_devices = SDpnt;
-			    SDtail = SDpnt;
-			    
-			    SDpnt = (Scsi_Device *) scsi_init_malloc(sizeof (Scsi_Device), GFP_ATOMIC);
-			    /* Some scsi devices cannot be polled for lun != 0
-			     * due to firmware bugs 
-			     */
-			    if(bflags & BLIST_NOLUN) break;
-
-			    /*
-			     * If we want to only allow I/O to one of the luns
-			     * attached to this device at a time, then we set 
-                             * this flag.
-			     */
-			    if(bflags & BLIST_SINGLELUN)
-			    {
-				SDpnt->single_lun = 1;
-			    }
-
-			    /*
-			     * If this device is known to support multiple 
-                             * units, override the other settings, and scan 
-                             * all of them.
-			     */
-			    if(bflags & BLIST_FORCELUN)
-			    {
-				/*
-				 * We probably want to make this a variable, 
-                                 * but this will do for now.
-				 */
-				max_dev_lun = 8;
-			    }
- 
-
-			    /* Old drives like the MAXTOR XT-3280 say vers=0 */
-			    if ((scsi_result[2] & 0x07) == 0)
-				break;
-			    /* Some scsi-1 peripherals do not handle lun != 0.
-			     * I am assuming that scsi-2 peripherals do better 
-			     */
-			    if((scsi_result[2] & 0x07) == 1 &&
-			       (scsi_result[3] & 0x0f) == 0) break;
-			}
-		    }       /* if result == DID_OK ends */
-
-		    /*
-		     * This might screw us up with multi-lun devices, but the 
-                     * user can scan for them too.
-		     */
-		    if(hardcoded == 1)
-			goto leave;
-		} /* for lun ends */
-	    } /* if this_id != id ends */
-	} /* for dev ends */
-    } /* for channel ends */
-    
- leave:
-    shpnt->host_queue = NULL;  /* No longer needed here */
-    
-    /* Last device block does not exist.  Free memory. */
-    if(SDpnt != NULL)
-	scsi_init_free((char *) SDpnt, sizeof(Scsi_Device));
-    
-    if(SCpnt != NULL)
-	scsi_init_free((char *) SCpnt, sizeof(Scsi_Cmnd));
-    
     /* If we allocated a buffer so we could do DMA, free it now */
-    if (scsi_result != &scsi_result0[0] && scsi_result != NULL) 
-	scsi_free(scsi_result, 512);
-    
-    in_scan_scsis = 0;
-}       /* scan_scsis  ends */
+    if (scsi_result != &scsi_result0[0] && scsi_result != NULL)
+      scsi_free (scsi_result, 512);
+
+    in_scan_scsis--;
+  }
+}
+
+/*
+ * The worker for scan_scsis.
+ * Returning 0 means Please don't ask further for lun!=0, 1 means OK go on.
+ * Global variables used : scsi_devices(linked list), the_result
+ */
+int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
+    Scsi_Device **SDpnt2, Scsi_Cmnd * SCpnt, struct Scsi_Host * shpnt, 
+    char *scsi_result)
+{
+  unsigned char scsi_cmd[12];
+  struct Scsi_Device_Template *sdtpnt;
+  Scsi_Device * SDtail, *SDpnt=*SDpnt2;
+  int bflags, type=-1;
+
+  SDtail = scsi_devices;
+  if (scsi_devices)
+    while (SDtail->next)
+      SDtail = SDtail->next;
+
+  memset (SDpnt, 0, sizeof (Scsi_Device));
+  SDpnt->host = shpnt;
+  SDpnt->id = dev;
+  SDpnt->lun = lun;
+  SDpnt->channel = channel;
+
+  /* Some low level driver could use device->type (DB) */
+  SDpnt->type = -1;
+
+  /*
+   * Assume that the device will have handshaking problems, and then fix this
+   * field later if it turns out it doesn't
+   */
+  SDpnt->borken = 1;
+  SDpnt->was_reset = 0;
+  SDpnt->expecting_cc_ua = 0;
+
+  scsi_cmd[0] = TEST_UNIT_READY;
+  scsi_cmd[1] = lun << 5;
+  scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[4] = scsi_cmd[5] = 0;
+
+  memset (SCpnt, 0, sizeof (Scsi_Cmnd));
+  SCpnt->host = SDpnt->host;
+  SCpnt->device = SDpnt;
+  SCpnt->target = SDpnt->id;
+  SCpnt->lun = SDpnt->lun;
+  SCpnt->channel = SDpnt->channel;
+  {
+    struct semaphore sem = MUTEX_LOCKED;
+    SCpnt->request.sem = &sem;
+    SCpnt->request.rq_status = RQ_SCSI_BUSY;
+    scsi_do_cmd (SCpnt, (void *) scsi_cmd,
+                 (void *) scsi_result,
+                 256, scan_scsis_done, SCSI_TIMEOUT + 4 * HZ, 5);
+    down (&sem);
+  }
+
+#if defined(DEBUG) || defined(DEBUG_INIT)
+  printk ("scsi: scan_scsis_single id %d lun %d. Return code %d\n",
+          dev, lun, SCpnt->result);
+#endif
+
+  if (SCpnt->result) {
+    if (((driver_byte (SCpnt->result) & DRIVER_SENSE) ||
+         (status_byte (SCpnt->result) & CHECK_CONDITION)) &&
+        ((SCpnt->sense_buffer[0] & 0x70) >> 4) == 7) {
+      if (((SCpnt->sense_buffer[2] & 0xf) != NOT_READY) &&
+          ((SCpnt->sense_buffer[2] & 0xf) != UNIT_ATTENTION))
+        return 1;
+    }
+    else
+      return 0;
+  }
+
+#if defined (DEBUG) || defined(DEBUG_INIT)
+  printk ("scsi: performing INQUIRY\n");
+#endif
+  /*
+   * Build an INQUIRY command block.
+   */
+  scsi_cmd[0] = INQUIRY;
+  scsi_cmd[1] = (lun << 5) & 0xe0;
+  scsi_cmd[2] = 0;
+  scsi_cmd[3] = 0;
+  scsi_cmd[4] = 255;
+  scsi_cmd[5] = 0;
+  SCpnt->cmd_len = 0;
+  {
+    struct semaphore sem = MUTEX_LOCKED;
+    SCpnt->request.sem = &sem;
+    SCpnt->request.rq_status = RQ_SCSI_BUSY;
+    scsi_do_cmd (SCpnt, (void *) scsi_cmd,
+                 (void *) scsi_result,
+                 256, scan_scsis_done, SCSI_TIMEOUT, 3);
+    down (&sem);
+  }
+
+  the_result = SCpnt->result;
+#if defined(DEBUG) || defined(DEBUG_INIT)
+  printk ("scsi: INQUIRY %s with code 0x%x\n",
+          the_result ? "failed" : "successful", the->result);
+#endif
+
+  if (the_result)
+    return 0;     /* assume no peripheral if any sort of error */
+
+  /*
+   * It would seem some TOSHIBA CDROM gets things wrong
+   */
+  if (!strncmp (scsi_result + 8, "TOSHIBA", 7) &&
+      !strncmp (scsi_result + 16, "CD-ROM", 6) &&
+      scsi_result[0] == TYPE_DISK) {
+    scsi_result[0] = TYPE_ROM;
+    scsi_result[1] |= 0x80;     /* removable */
+  }
+
+  if (!strncmp (scsi_result + 8, "NEC", 3)) {
+    if (!strncmp (scsi_result + 16, "CD-ROM DRIVE:84 ", 16) ||
+        !strncmp (scsi_result + 16, "CD-ROM DRIVE:25", 15))
+      SDpnt->manufacturer = SCSI_MAN_NEC_OLDCDR;
+    else
+      SDpnt->manufacturer = SCSI_MAN_NEC;
+  }
+  else if (!strncmp (scsi_result + 8, "TOSHIBA", 7))
+    SDpnt->manufacturer = SCSI_MAN_TOSHIBA;
+  else if (!strncmp (scsi_result + 8, "SONY", 4))
+    SDpnt->manufacturer = SCSI_MAN_SONY;
+  else if (!strncmp (scsi_result + 8, "PIONEER", 7))
+    SDpnt->manufacturer = SCSI_MAN_PIONEER;
+  else
+    SDpnt->manufacturer = SCSI_MAN_UNKNOWN;
+
+  memcpy (SDpnt->vendor, scsi_result + 8, 8);
+  memcpy (SDpnt->model, scsi_result + 16, 16);
+  memcpy (SDpnt->rev, scsi_result + 32, 4);
+
+  SDpnt->removable = (0x80 & scsi_result[1]) >> 7;
+  SDpnt->lockable = SDpnt->removable;
+  SDpnt->changed = 0;
+  SDpnt->access_count = 0;
+  SDpnt->busy = 0;
+  SDpnt->has_cmdblocks = 0;
+  /*
+   * Currently, all sequential devices are assumed to be tapes, all random
+   * devices disk, with the appropriate read only flags set for ROM / WORM
+   * treated as RO.
+   */
+  switch (type = (scsi_result[0] & 0x1f)) {
+  case TYPE_TAPE:
+  case TYPE_DISK:
+  case TYPE_MOD:
+  case TYPE_PROCESSOR:
+  case TYPE_SCANNER:
+    SDpnt->writeable = 1;
+    break;
+  case TYPE_WORM:
+  case TYPE_ROM:
+    SDpnt->writeable = 0;
+    break;
+  default:
+    printk ("scsi: unknown type %d\n", type);
+  }
+
+  SDpnt->single_lun = 0;
+  SDpnt->soft_reset =
+    (scsi_result[7] & 1) && ((scsi_result[3] & 7) == 2);
+  SDpnt->random = (type == TYPE_TAPE) ? 0 : 1;
+  SDpnt->type = (type & 0x1f);
+
+  print_inquiry (scsi_result);
+
+  for (sdtpnt = scsi_devicelist; sdtpnt;
+       sdtpnt = sdtpnt->next)
+    if (sdtpnt->detect)
+      SDpnt->attached +=
+        (*sdtpnt->detect) (SDpnt);
+
+  SDpnt->scsi_level = scsi_result[2] & 0x07;
+  if (SDpnt->scsi_level >= 2 ||
+      (SDpnt->scsi_level == 1 &&
+       (scsi_result[3] & 0x0f) == 1))
+    SDpnt->scsi_level++;
+
+  /*
+   * Set the tagged_queue flag for SCSI-II devices that purport to support
+   * tagged queuing in the INQUIRY data.
+   */
+  SDpnt->tagged_queue = 0;
+  if ((SDpnt->scsi_level >= SCSI_2) &&
+      (scsi_result[7] & 2)) {
+    SDpnt->tagged_supported = 1;
+    SDpnt->current_tag = 0;
+  }
+
+  /*
+   * Accommodate drivers that want to sleep when they should be in a polling
+   * loop.
+   */
+  SDpnt->disconnect = 0;
+
+  /*
+   * Get any flags for this device.
+   */
+  bflags = get_device_flags (scsi_result);
+
+  /*
+   * Some revisions of the Texel CD ROM drives have handshaking problems when
+   * used with the Seagate controllers.  Before we know what type of device
+   * we're talking to, we assume it's borken and then change it here if it
+   * turns out that it isn't a TEXEL drive.
+   */
+  if ((bflags & BLIST_BORKEN) == 0)
+    SDpnt->borken = 0;
+
+  /*
+   * These devices need this "key" to unlock the devices so we can use it
+   */
+  if ((bflags & BLIST_KEY) != 0) {
+    printk ("Unlocked floptical drive.\n");
+    SDpnt->lockable = 0;
+    scsi_cmd[0] = MODE_SENSE;
+    scsi_cmd[1] = (lun << 5) & 0xe0;
+    scsi_cmd[2] = 0x2e;
+    scsi_cmd[3] = 0;
+    scsi_cmd[4] = 0x2a;
+    scsi_cmd[5] = 0;
+    SCpnt->cmd_len = 0;
+    {
+      struct semaphore sem = MUTEX_LOCKED;
+      SCpnt->request.rq_status = RQ_SCSI_BUSY;
+      SCpnt->request.sem = &sem;
+      scsi_do_cmd (SCpnt, (void *) scsi_cmd,
+                   (void *) scsi_result, 0x2a,
+                   scan_scsis_done, SCSI_TIMEOUT, 3);
+      down (&sem);
+    }
+  }
+  /* Add this device to the linked list at the end */
+  if (SDtail)
+    SDtail->next = SDpnt;
+  else
+    scsi_devices = SDpnt;
+  SDtail = SDpnt;
+
+  SDpnt = (Scsi_Device *) scsi_init_malloc (sizeof (Scsi_Device), GFP_ATOMIC);
+  *SDpnt2=SDpnt;
+  if (!SDpnt)
+    printk ("scsi: scan_scsis_single: No memory\n");
+
+
+  /*
+   * Some scsi devices cannot be polled for lun != 0 due to firmware bugs
+   */
+  if (bflags & BLIST_NOLUN)
+    return 0;                   /* break; */
+
+  /*
+   * If we want to only allow I/O to one of the luns attached to this device
+   * at a time, then we set this flag.
+   */
+  if (bflags & BLIST_SINGLELUN)
+    SDpnt->single_lun = 1;
+
+  /*
+   * If this device is known to support multiple units, override the other
+   * settings, and scan all of them.
+   */
+  if (bflags & BLIST_FORCELUN)
+    *max_dev_lun = 8;
+  /*
+   * We assume the device can't handle lun!=0 if: - it reports scsi-0 (ANSI
+   * SCSI Revision 0) (old drives like MAXTOR XT-3280) or - it reports scsi-1
+   * (ANSI SCSI Revision 1) and Response Data Format 0
+   */
+  if (((scsi_result[2] & 0x07) == 0)
+      ||
+      ((scsi_result[2] & 0x07) == 1 &&
+       (scsi_result[3] & 0x0f) == 0))
+    return 0;
+  return 1;
+}
 
 /*
  *  Flag bits for the internal_timeout array
  */
-
 #define NORMAL_TIMEOUT 0
 #define IN_ABORT 1
 #define IN_RESET 2
@@ -1153,8 +1130,8 @@ inline void internal_cmnd (Scsi_Cmnd * SCpnt)
 #ifdef DEBUG_DELAY
 	clock = jiffies + 4 * HZ;
 	while (jiffies < clock);
-	printk("done(host = %d, result = %04x) : routine at %08x\n", 
-	       host->host_no, temp);
+	printk("done(host = %d, result = %04x) : routine at %p\n", 
+	       host->host_no, temp, host->hostt->command);
 #endif
 	scsi_done(SCpnt);
     }
@@ -2413,7 +2390,7 @@ int scsi_proc_info(char *buffer, char **start, off_t offset, int length,
     struct Scsi_Host *HBA_ptr;
     int  parameter[4];
     char *p;
-    int	  size, len = 0;
+    int	  i,size, len = 0;
     off_t begin = 0;
     off_t pos = 0;
 
@@ -2458,21 +2435,29 @@ int scsi_proc_info(char *buffer, char **start, off_t offset, int length,
 	return (len);     
     }
 
+    /*
+     * Usage: echo "scsi singledevice 0 1 2 3" >/proc/scsi/scsi
+     * with  "0 1 2 3" replaced by your "Host Channel Id Lun".
+     * Consider this feature ALPHA, as you can easily hang your
+     * scsi system (depending on your low level driver).
+     */
     if(!buffer || length < 25 || strncmp("scsi", buffer, 4))
 	return(-EINVAL);
 
     if(!strncmp("singledevice", buffer + 5, 12)) {
 	p = buffer + 17;
 
-	parameter[0] = simple_strtoul(p , &p, 0);
-	parameter[1] = simple_strtoul(p , &p, 0);
-	parameter[2] = simple_strtoul(p , &p, 0);
-	parameter[3] = simple_strtoul(p , &p, 0);
+	for(i=0; i<4; i++)	{
+	    p++;
+	    parameter[i] = simple_strtoul(p, &p, 0);
+	}
+	printk("scsi singledevice %d %d %d %d\n", parameter[0], parameter[1],
+			parameter[2], parameter[3]);
 
-	while(scd && scd->host->host_no != parameter[0] 
-	      && scd->channel != parameter[1] 
-	      && scd->id != parameter[2] 
-	      && scd->lun != parameter[3]) {
+	while(scd && (scd->host->host_no != parameter[0] 
+	      || scd->channel != parameter[1] 
+	      || scd->id != parameter[2] 
+	      || scd->lun != parameter[3])) {
 	    scd = scd->next;
 	}
 	if(scd)
@@ -2484,7 +2469,7 @@ int scsi_proc_info(char *buffer, char **start, off_t offset, int length,
 	    return(-ENXIO);
 
 	scan_scsis (HBA_ptr, 1, parameter[1], parameter[2], parameter[3]);
-	return(0);
+	return(length);
     }
     return(-EINVAL);
 }
@@ -3035,7 +3020,7 @@ scsi_dump_status(void)
 	for(SCpnt=shpnt->host_queue; SCpnt; SCpnt = SCpnt->next)
 	{
 	    /*  (0) 0:0:0:0 (802 123434 8 8 0) (3 3 2) (%d %d %d) %d %x      */
-	    printk("(%d) %d:%d:%d:%d (%s %ld %ld %ld %ld) (%d %d %x) (%d %d %d) %x %x %x\n",
+	    printk("(%d) %d:%d:%d:%d (%s %ld %ld %ld %d) (%d %d %x) (%d %d %d) %x %x %x\n",
 		   i++, SCpnt->host->host_no,
 		   SCpnt->channel,
 		   SCpnt->target,

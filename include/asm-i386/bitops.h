@@ -64,7 +64,7 @@ extern __inline__ int change_bit(int nr, void * addr)
  */
 extern __inline__ int test_bit(int nr, const void * addr)
 {
-	return 1UL & (((unsigned int *) addr)[nr >> 5] >> (nr & 31));
+	return 1UL & (((const unsigned int *) addr)[nr >> 5] >> (nr & 31));
 }
 
 /*

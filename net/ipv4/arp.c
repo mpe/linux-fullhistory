@@ -1603,6 +1603,7 @@ static void arp_run_bh()
 /*
  * Test if a hardware address is all zero
  */
+
 static inline int empty(unsigned char * addr, int len)
 {
 	while (len > 0) {
@@ -1628,12 +1629,7 @@ static int arp_req_set(struct arpreq *r, struct device * dev)
 	u32 ip;
 
 	/*
-	 * Find out about the hardware type.
-	 * We have to be compatible with BSD UNIX, so we have to
-	 * assume that a "not set" value (i.e. 0) means Ethernet.
-	 *
-	 * ANK: Hey, who wrote it? Do you really mean that BSD considers 
-	 *	ARPHRD_NETROM as ARPHRD_ETHER, or somthing another?
+	 *	Find out about the hardware type.
 	 */
 	
 	si = (struct sockaddr_in *) &r->arp_pa;

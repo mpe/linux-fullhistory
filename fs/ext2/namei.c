@@ -375,10 +375,10 @@ int ext2_create (struct inode * dir,const char * name, int len, int mode,
 	*result = NULL;
 	if (!dir)
 		return -ENOENT;
-	inode = ext2_new_inode (dir, mode);
+	inode = ext2_new_inode (dir, mode, &err);
 	if (!inode) {
 		iput (dir);
-		return -ENOSPC;
+		return err;
 	}
 	inode->i_op = &ext2_file_inode_operations;
 	inode->i_mode = mode;
@@ -421,10 +421,10 @@ int ext2_mknod (struct inode * dir, const char * name, int len, int mode,
 		iput (dir);
 		return -EEXIST;
 	}
-	inode = ext2_new_inode (dir, mode);
+	inode = ext2_new_inode (dir, mode, &err);
 	if (!inode) {
 		iput (dir);
-		return -ENOSPC;
+		return err;
 	}
 	inode->i_uid = current->fsuid;
 	inode->i_mode = mode;
@@ -488,10 +488,10 @@ int ext2_mkdir (struct inode * dir, const char * name, int len, int mode)
 		iput (dir);
 		return -EMLINK;
 	}
-	inode = ext2_new_inode (dir, S_IFDIR);
+	inode = ext2_new_inode (dir, S_IFDIR, &err);
 	if (!inode) {
 		iput (dir);
-		return -ENOSPC;
+		return err;
 	}
 	inode->i_op = &ext2_dir_inode_operations;
 	inode->i_size = inode->i_sb->s_blocksize;
@@ -622,6 +622,8 @@ repeat:
 	retval = -EPERM;
 	if (!(inode = iget (dir->i_sb, de->inode)))
 		goto end_rmdir;
+	if (inode->i_sb->dq_op)
+		inode->i_sb->dq_op->initialize (inode, -1);
 	if (inode->i_dev != dir->i_dev)
 		goto end_rmdir;
 	if (de->inode != inode->i_ino) {
@@ -702,6 +704,8 @@ repeat:
 		goto end_unlink;
 	if (!(inode = iget (dir->i_sb, de->inode)))
 		goto end_unlink;
+	if (inode->i_sb->dq_op)
+		inode->i_sb->dq_op->initialize (inode, -1);
 	retval = -EPERM;
 	if (S_ISDIR(inode->i_mode))
 		goto end_unlink;
@@ -757,9 +761,9 @@ int ext2_symlink (struct inode * dir, const char * name, int len,
 	int l;
 	char c;
 
-	if (!(inode = ext2_new_inode (dir, S_IFLNK))) {
+	if (!(inode = ext2_new_inode (dir, S_IFLNK, &err))) {
 		iput (dir);
-		return -ENOSPC;
+		return err;
 	}
 	inode->i_mode = S_IFLNK | S_IRWXUGO;
 	inode->i_op = &ext2_symlink_inode_operations;
@@ -795,6 +799,7 @@ int ext2_symlink (struct inode * dir, const char * name, int len,
 	}
 	inode->i_size = i;
 	inode->i_dirt = 1;
+
 	bh = ext2_find_entry (dir, name, len, &de);
 	if (bh) {
 		inode->i_nlink--;
@@ -967,6 +972,9 @@ start_up:
 		if (!new_inode) {
 			brelse (new_bh);
 			new_bh = NULL;
+		} else {
+			if (new_inode->i_sb->dq_op)
+				new_inode->i_sb->dq_op->initialize (new_inode, -1);
 		}
 	}
 	if (new_inode == old_inode) {

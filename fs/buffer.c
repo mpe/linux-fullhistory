@@ -222,6 +222,7 @@ void sync_dev(kdev_t dev)
 	sync_supers(dev);
 	sync_inodes(dev);
 	sync_buffers(dev, 0);
+	sync_dquots(dev, -1);
 }
 
 int fsync_dev(kdev_t dev)
@@ -229,6 +230,7 @@ int fsync_dev(kdev_t dev)
 	sync_buffers(dev, 0);
 	sync_supers(dev);
 	sync_inodes(dev);
+	sync_dquots(dev, -1);
 	return sync_buffers(dev, 1);
 }
 

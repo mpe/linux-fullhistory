@@ -71,6 +71,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( CIRRUS,		CIRRUS_5434_8,	"GD 5434"),
 	DEVICE( CIRRUS,		CIRRUS_6729,	"CL 6729"),
 	DEVICE( CIRRUS,		CIRRUS_7542,	"CL 7542"),
+	DEVICE( CIRRUS,		CIRRUS_7543,	"CL 7543"),
 	DEVICE( AMD,		AMD_LANCE,	"79C970"),
 	DEVICE( AMD,		AMD_SCSI,	"53C974"),
 	DEVICE( TRIDENT,	TRIDENT_9420,	"TG 9420"),
@@ -141,7 +142,8 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( ALLIANCE,	ALLIANCE_PROVIDEO, "Provideo"),
 	DEVICE( MUTECH,		MUTECH_MV1000,	"MV-1000"),
 	DEVICE( ZEITNET,	ZEITNET_1221,	"1221"),
-	DEVICE( HAL,		HAL_RIO,	"RIO host"),
+	DEVICE( SPECIALIX,	SPECIALIX_XIO,	"XIO/SIO host"),
+	DEVICE( SPECIALIX,	SPECIALIX_RIO,	"RIO host"),
 	DEVICE( CYCLADES,	CYCLADES_Y,	"Cyclome-Y"),
 	DEVICE( SYMPHONY,	SYMPHONY_101,	"82C101"),
 	DEVICE( TEKRAM,		TEKRAM_DC290,	"DC-290"),
@@ -422,7 +424,7 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_ALLIANCE:	return "Alliance";
 	      case PCI_VENDOR_ID_MUTECH:	return "Mutech";
 	      case PCI_VENDOR_ID_ZEITNET:	return "ZeitNet";
-	      case PCI_VENDOR_ID_HAL:		return "HAL";
+	      case PCI_VENDOR_ID_SPECIALIX:	return "Specialix";
 	      case PCI_VENDOR_ID_CYCLADES:	return "Cyclades";
 	      case PCI_VENDOR_ID_SYMPHONY:	return "Symphony";
 	      case PCI_VENDOR_ID_TEKRAM:	return "Tekram";
@@ -724,7 +726,7 @@ static unsigned int scan_bus(struct pci_bus *bus, unsigned long *mem_startp)
 		dev->device = (l >> 16) & 0xffff;
 
 		/*
-		 * Check to see if we now about this device and report
+		 * Check to see if we know about this device and report
 		 * a message at boot time.  This is the only way to
 		 * learn about new hardware...
 		 */

@@ -1,5 +1,5 @@
-#define AZT_VERSION "2.0"
-/*      $Id: aztcd.c,v 2.0 1995/11/10 19:33:41 root Exp root $
+#define AZT_VERSION "2.1"
+/*      $Id: aztcd.c,v 2.10 1995/12/03 11:55:09 root Exp root $
 	linux/drivers/block/aztcd.c - AztechCD268 CDROM driver
 
 	Copyright (C) 1994,1995 Werner Zimmermann (zimmerma@rz.fht-esslingen.de)
@@ -134,13 +134,15 @@
                 with kernel 1.3.33. Will definitely not work with older kernels.
                 Programming done by Linus himself.
                 Werner Zimmermann, October 11, 1995
-	V1.90   Support for Conrad TXC drives, thank's to Jochen Koch and Olaf Koluza.
+	V1.90   Support for Conrad TXC drives, thank's to Jochen Koch and Olaf Kaluza.
 	        Werner Zimmermann, October 21, 1995
         V2.00   Changed #include "blk.h" to <linux/blk.h> as the directory
                 structure was changed. README.aztcd is now /usr/src/docu-
                 mentation/cdrom/aztcd
                 Werner Zimmermann, November 10, 95
-
+        V2.10   Started to modify azt_poll to prevent reading beyond end of
+                tracks.
+                Werner Zimmermann, December 3, 95
 	NOTE: 
 	Points marked with ??? are questionable !
 */
@@ -258,6 +260,7 @@ static void azt_invalidate_buffers(void);
 static void do_aztcd_request(void);
 static void azt_hsg2msf(long hsg, struct msf *msf);
 static void azt_bin2bcd(unsigned char *p);
+static long azt_msf2hsg(struct msf *mp);
 static int  azt_bcd2bin(unsigned char bcd);
 static int  aztStatus(void);
 static int  getAztStatus(void);
@@ -604,10 +607,6 @@ static int aztPlay(struct azt_Play_msf *arg)
 }
 
 
-long azt_msf2hsg(struct msf *mp)
-{ return azt_bcd2bin(mp -> frame) + azt_bcd2bin(mp -> sec) * 75
-		                  + azt_bcd2bin(mp -> min) * 4500 - CD_BLOCK_OFFSET;
-}
 
 static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsigned long arg)
 {       int i, st;
@@ -1180,11 +1179,28 @@ static void azt_poll(void)
 
 	  if (CURRENT_VALID) {
 	    struct azt_Play_msf msf;
+	    int i;
 	    azt_next_bn = CURRENT -> sector / 4;
 	    azt_hsg2msf(azt_next_bn, &msf.start);
-	    azt_read_count=AZT_BUF_SIZ;    /*??? fast, because we read ahead*/
-/*          azt_read_count= CURRENT->nr_sectors;      slow
-*/
+	    i = 0;
+	    /* find out in which track we are */
+	    while (azt_msf2hsg(&msf.start)>azt_msf2hsg(&Toc[++i].trackTime)) {};
+	    if (azt_msf2hsg(&msf.start)<azt_msf2hsg(&Toc[i].trackTime)-AZT_BUF_SIZ)
+               { azt_read_count=AZT_BUF_SIZ;  /*fast, because we read ahead*/
+               /*azt_read_count=CURRENT->nr_sectors;    slow, no read ahead*/
+               }
+	    else /* don't read beyond end of track */           
+#if AZT_MULTISESSION 
+               { azt_read_count=(azt_msf2hsg(&Toc[i].trackTime)/4)*4-azt_msf2hsg(&msf.start);  
+                 if (azt_read_count < 0) azt_read_count=0;
+		 if (azt_read_count > AZT_BUF_SIZ) azt_read_count=AZT_BUF_SIZ;
+                 printk("aztcd: warning - trying to read beyond end of track\n");
+/*               printk("%i %i %li %li\n",i,azt_read_count,azt_msf2hsg(&msf.start),azt_msf2hsg(&Toc[i].trackTime));
+*/             }
+#else
+	       { azt_read_count=AZT_BUF_SIZ;
+	       }
+#endif
 	    msf.end.min = 0;
 	    msf.end.sec = 0;            
 	    msf.end.frame = azt_read_count ;/*Mitsumi here reads 0xffffff sectors*/
@@ -1629,26 +1645,26 @@ int aztcd_init(void)
 	else          max_count=count;
 	printk("aztcd: FirmwareVersion=");
 	for (count=1;count<max_count;count++) printk("%c",result[count]);
-	printk("<<<\n");
+	printk("<<>> ");
 
 	if ((result[1]=='A')&&(result[2]=='Z')&&(result[3]=='T'))
-	 { printk("aztcd: AZTECH drive detected\n"); /*AZTECH*/    
+	 { printk("AZTECH drive detected\n"); /*AZTECH*/    
 	 }
 	else if ((result[2]=='C')&&(result[3]=='D')&&(result[4]=='D'))
-	 { printk("aztcd: ORCHID or WEARNES drive detected\n"); /*ORCHID or WEARNES*/
+	 { printk("ORCHID or WEARNES drive detected\n"); /*ORCHID or WEARNES*/
 	 }
 	else if ((result[1]==0x03)&&(result[2]=='5'))
-	 { printk("aztcd: TXC drive detected\n"); /*Conrad TXC*/
+	 { printk("TXC drive detected\n"); /*Conrad TXC*/
 	 }
 	else                                               /*OTHERS or none*/
-	 { printk("aztcd: : unknown drive or firmware version detected\n");
-	   printk("                      azt may not run stable, if you want to try anyhow,\n");
-	   printk("                      boot with: aztcd=<BaseAddress>,0x79\n");
+	 { printk("\nunknown drive or firmware version detected\n");
+	   printk("aztcd may not run stable, if you want to try anyhow,\n");
+	   printk("boot with: aztcd=<BaseAddress>,0x79\n");
 	   if ((azt_cont!=0x79))     
 	     { printk("aztcd: FirmwareVersion=");
 	       for (count=1;count<5;count++) printk("%c",result[count]);
-	       printk("\n");
-	       printk("aztcd: Aborted\n");
+	       printk("<<>> ");
+	       printk("Aborted\n");
                return -EIO;
 	     }
 	 }
@@ -1666,8 +1682,8 @@ int aztcd_init(void)
 	azt_invalidate_buffers();
 	aztPresent = 1;
 	aztCloseDoor();
-	printk("aztcd: End Init\n");
-        return (0);
+/*	printk("aztcd: End Init\n");
+*/      return (0);
 }
 
 
@@ -1687,6 +1703,10 @@ static void azt_hsg2msf(long hsg, struct msf *msf)
 	azt_bin2bcd(&msf -> frame);
 }
 
+static long azt_msf2hsg(struct msf *mp)
+{ return azt_bcd2bin(mp -> frame) + azt_bcd2bin(mp -> sec) * 75
+		                  + azt_bcd2bin(mp -> min) * 4500 - CD_BLOCK_OFFSET;
+}
 
 static void azt_bin2bcd(unsigned char *p)
 {       int u, t;
@@ -1699,8 +1719,6 @@ static void azt_bin2bcd(unsigned char *p)
 static int azt_bcd2bin(unsigned char bcd)
 {       return (bcd >> 4) * 10 + (bcd & 0xF);
 }
-
-
 
 /*
  * Read a value from the drive.  Should return quickly, so a busy wait
@@ -2047,7 +2065,7 @@ static int aztGetToc(int multi)
       }
 
   Toc[DiskInfo.last + 1].diskTime = DiskInfo.diskLength;
-
+  Toc[DiskInfo.last].trackTime    = DiskInfo.diskLength;
 
 #ifdef AZT_DEBUG_MULTISESSION 
   printk("aztcd: exiting aztGetToc\n");

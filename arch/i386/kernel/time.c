@@ -23,6 +23,7 @@
 
 #include <linux/mc146818rtc.h>
 #include <linux/timex.h>
+#include <linux/config.h>
 
 #define TIMER_IRQ 0
 
@@ -313,9 +314,8 @@ static inline unsigned long mktime(unsigned int year, unsigned int mon,
 	  )*60 + sec; /* finally seconds */
 }
 
-void time_init(void)
+unsigned long get_cmos_time(void)
 {
-	void (*irq_handler)(int, struct pt_regs *);
 	unsigned int year, mon, day, hour, min, sec;
 	int i;
 
@@ -350,11 +350,21 @@ void time_init(void)
 	  }
 	if ((year += 1900) < 1970)
 		year += 100;
-	xtime.tv_sec = mktime(year, mon, day, hour, min, sec);
+	return mktime(year, mon, day, hour, min, sec);
+}
+
+void time_init(void)
+{
+	void (*irq_handler)(int, struct pt_regs *);
+	xtime.tv_sec = get_cmos_time();
 	xtime.tv_usec = 0;
 
 	/* If we have the CPU hardware time counters, use them */
-	irq_handler = timer_interrupt;	
+	irq_handler = timer_interrupt;
+#ifndef CONFIG_APM
+				/* Don't use them if a suspend/resume could
+                                   corrupt the timer value.  This problem
+                                   needs more debugging. */
 	if (x86_capability & 16) {
 		irq_handler = pentium_timer_interrupt;
 		do_gettimeoffset = do_fast_gettimeoffset;
@@ -363,6 +373,7 @@ void time_init(void)
 			:"=a" (((unsigned long *) &init_timer_cc)[0]),
 			 "=d" (((unsigned long *) &init_timer_cc)[1]));
 	}
+#endif
 	if (request_irq(TIMER_IRQ, irq_handler, 0, "timer") != 0)
 		panic("Could not allocate timer IRQ!");
 }

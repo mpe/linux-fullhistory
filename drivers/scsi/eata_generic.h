@@ -3,7 +3,7 @@
 * Linux EATA SCSI drivers				*
 * (c) 1993,94,95 Michael Neuffer			*
 *********************************************************
-* last change: 95/06/20					*
+* last change: 95/11/07					*
 ********************************************************/
 
 
@@ -64,7 +64,7 @@
 #define MAX_PCI_BUS	16	       /* Maximum # Of Busses Allowed	 */
 
 #define SG_SIZE		64 
-#define SG_SIZE_BIG	509	       /* max. 509 */
+#define SG_SIZE_BIG	509	       /* max. 509 elements, one 4k page */
 
 #define C_P_L_DIV	2 /* 1 <= C_P_L_DIV <= 8	    
 			   * You can use this parameter to fine-tune

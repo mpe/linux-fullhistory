@@ -1,32 +1,34 @@
 !
 !	setup.S		Copyright (C) 1991, 1992 Linus Torvalds
 !
-! This code performs all initialization procedures that should be done
-! before entering the protected mode. It's responsible for getting of all
-! system data offered by BIOS and for detection / selection of video
-! mode. All information is put in a "safe" place: 0x90000-0x901FF, i. e.
-! where the boot-block used to be.  It is then up to the protected mode
+! setup.s is responsible for getting the system data from the BIOS,
+! and putting them into the appropriate places in system memory.
+! both setup.s and system has been loaded by the bootblock.
+!
+! This code asks the bios for memory/disk/other parameters, and
+! puts them in a "safe" place: 0x90000-0x901FF, ie where the
+! boot-block used to be. It is then up to the protected mode
 ! system to read them from there before the area is overwritten
 ! for buffer-blocks.
 !
 ! Move PS/2 aux init code to psaux.c
 ! (troyer@saifr00.cfsat.Honeywell.COM) 03Oct92
 !
-! Some changes and additional features by Christoph Niemann,
+! some changes and additional features by Christoph Niemann,
 ! March 1993/June 1994 (Christoph.Niemann@linux.org)
 !
-! Completely new video-mode handling code, VESA mode detection, support
-! for new Cirrus Logic cards and some additional changes
-! by Martin Mares <mj@k332.feld.cvut.cz>, October 1995.
+! add APM BIOS checking by Stephen Rothwell, May 1994
+! (Stephen.Rothwell@pd.necisa.oz.au)
 !
 
-! NOTE! These had better be the same as in bootsect.S!
+! NOTE! These had better be the same as in bootsect.s!
 #define __ASSEMBLY__
 #include <linux/config.h>
 #include <asm/segment.h>
 
-! Uncomment this if you want the BIOS mode numbers to be listed
-!#define SHOW_BIOS_MODES
+#ifndef SVGA_MODE
+#define SVGA_MODE ASK_VGA
+#endif
 
 ! Signature words to ensure LILO loaded us right
 #define SIG1	0xAA55
@@ -47,7 +49,6 @@ begbss:
 
 entry start
 start:
-
 ! Bootlin depends on this being done early
 	mov	ax,#0x01500
 	mov	dl,#0x81
@@ -74,14 +75,12 @@ fin:	ret
 ! Part of above routine, this one just prints ascii al
 
 prnt1:	push	ax
-	push	bx
 	push	cx
 	xor	bh,bh
 	mov	cx,#0x01
 	mov	ah,#0x0e
 	int	0x10
 	pop	cx
-	pop	bx
 	pop	ax
 	ret
 
@@ -149,10 +148,43 @@ good_sig:
 	xor	bx,bx		! clear bx
 	int	0x16
 
-! Check for video adapter and its parameters
-! Video mode selection is also handled here
+! check for EGA/VGA and some config parameters
 
-	call	video
+	mov	ah,#0x12
+	mov	bl,#0x10
+	int	0x10
+	mov	[8],ax
+	mov	[10],bx
+	mov	[12],cx
+	mov	ax,#0x5019
+	cmp	bl,#0x10
+	je	novga
+	mov	ax,#0x1a00	! Added check for EGA/VGA discrimination
+	int	0x10
+	mov	bx,ax
+	mov	ax,#0x5019
+	movb	[15],#0		! by default, no VGA
+	cmp	bl,#0x1a	! 1a means VGA, anything else EGA or lower
+	jne	novga
+	movb	[15],#1		! we've detected a VGA
+	call	chsvga
+novga:	mov	[14],al
+	mov	ah,#0x03	! read cursor pos
+	xor	bh,bh		! clear bh
+	int	0x10		! save it in known place, con_init fetches
+	mov	[0],dx		! it from 0x90000.
+	
+! Get video-card data:
+	
+	mov	ah,#0x0f
+	int	0x10
+	mov	[4],bx		! bh = display page
+	mov	[6],ax		! al = video mode, ah = window width
+	xor	ax,ax
+	mov	es,ax		! Access low memory
+	seg es
+	mov	ax,[0x485]	! POINTS - Height of character matrix
+	mov	[16],ax
 
 ! Get hd0 data
 
@@ -209,6 +241,48 @@ is_disk1:
 	jz	no_psmouse
 	mov	[0x1ff],#0xaa	! device present
 no_psmouse:
+
+#ifdef CONFIG_APM
+! check for APM BIOS
+
+	mov	[64],#0		! version == 0 means no APM BIOS
+
+	mov	ax,#0x05300	! APM BIOS installation check
+	xor	bx,bx
+	int	0x15
+	jc	done_apm_bios	! error -> no APM BIOS
+
+	cmp	bx,#0x0504d	! check for "PM" signature
+	jne	done_apm_bios	! no signature -> no APM BIOS
+
+	mov	[64],ax		! record the APM BIOS version
+	mov	[76],cx		!	and flags
+	and	cx,#0x02	! Is 32 bit supported?
+	je	done_apm_bios	!	no ...
+
+	mov	ax,#0x05304	! Disconnect first just in case
+	xor	bx,bx
+	int	0x15		! ignore return code
+
+	mov	ax,#0x05303	! 32 bit connect
+	xor	bx,bx
+	int	0x15
+	jc	no_32_apm_bios	! error
+
+	mov	[66],ax		! BIOS code segment
+	mov	[68],ebx	! BIOS entry point offset
+	mov	[72],cx		! BIOS 16 bit code segment
+	mov	[74],dx		! BIOS data segment
+	mov	[78],si		! BIOS code segment length
+	mov	[80],di		! BIOS data segment length
+	jmp	done_apm_bios
+
+no_32_apm_bios:
+	and	[76], #0xfffd	! remove 32 bit support bit
+
+done_apm_bios:
+#endif
+
 ! now we want to move to protected mode ...
 
 	cli			! no interrupts allowed !
@@ -305,16 +379,17 @@ end_move:
 ! Well, now's the time to actually move into protected mode. To make
 ! things as simple as possible, we do no register set-up or anything,
 ! we let the gnu-compiled 32-bit programs do that. We just jump to
-! absolute address 0x10000, in 32-bit protected mode.
+! absolute address 0x00000, in 32-bit protected mode.
 !
 ! Note that the short jump isn't strictly needed, although there are
 ! reasons why it might be a good idea. It won't hurt in any case.
 !
-	mov	ax,#1		! protected mode (PE) bit
+	xor	ax,ax
+	inc	ax		! protected mode (PE) bit
 	lmsw	ax		! This is it!
 	jmp	flush_instr
 flush_instr:
-	xor	bx,bx		! Flag to indicate a boot
+	mov	bx,#0		! Flag to indicate a boot
 	jmpi	0x1000,KERNEL_CS	! jmp offset 1000 of segment 0x10 (cs)
 
 ! This routine checks that the keyboard command queue is empty
@@ -334,6 +409,61 @@ no_output:
 	test	al,#2		! is input buffer full?
 	jnz	empty_8042	! yes - loop
 	ret
+!
+! Read a key and return the (US-)ascii code in al, scan code in ah
+!
+getkey:
+	xor	ah,ah
+	int	0x16
+	ret
+
+!
+! Read a key with a timeout of 30 seconds. The cmos clock is used to get
+! the time.
+!
+getkt:
+	call	gettime
+	add	al,#30		! wait 30 seconds
+	cmp	al,#60
+	jl	lminute
+	sub	al,#60
+lminute:
+	mov	cl,al
+again:	mov	ah,#0x01
+	int	0x16
+	jnz	getkey		! key pressed, so get it
+	call	gettime
+	cmp	al,cl
+	jne	again
+	mov	al,#0x20	! timeout, return default char `space'
+	ret
+
+!
+! Flush the keyboard buffer
+!
+flush:	mov	ah,#0x01
+	int	0x16
+	jz	empty
+	xor	ah,ah
+	int	0x16
+	jmp	flush
+empty:	ret
+
+!
+! Read the cmos clock. Return the seconds in al
+!
+gettime:
+	push	cx
+	mov	ah,#0x02
+	int	0x1a
+	mov	al,dh			! dh contains the seconds
+	and	al,#0x0f
+	mov	ah,dh
+	mov	cl,#0x04
+	shr	ah,cl
+	aad
+	pop	cx
+	ret
 
 !
 ! Delay is needed after doing i/o
@@ -342,199 +472,43 @@ delay:
 	.word	0x00eb			! jmp $+2
 	ret
 
-!
-! Video card / mode detection. We do some hardware testing and build
-! a video mode list (placed directly after our code and data). Then we
-! choose the right mode given in the configuration or ask the user if
-! we are requested to do so. After all, all video parameters are stored
-! for later perusal by the kernel.
-!
+! Routine trying to recognize type of SVGA-board present (if any)
+! and if it recognize one gives the choices of resolution it offers.
+! If one is found the resolution chosen is given by al,ah (rows,cols).
 
-video:	movb	[15],#0		! Default is no VGA
+chsvga:	cld
+	push	ds
+	push	cs
 	mov	ax,[0x01fa]
-	push	ds
-	push	ds
-	pop	fs		! In this routine: FS=orig. DS
-	push	cs
-	pop	ds		! ES=DS=CS
-	push	cs
-	pop	es
+	pop	ds
 	mov	modesave,ax
-	lea	di,modelist	! ES:DI points to current item in our mode list
-	mov	eax,#0x50190000	! Store current mode: 80x25
-	cld
-	stosd
-
-	mov	ah,#0x12	! Check EGA/VGA
-	mov	bl,#0x10
-	int	0x10
-	seg	fs
-	mov	[10],bx		! Used for identification of VGA in the kernel
-	cmp	bl,#0x10	! Not EGA nor VGA -> 80x25 only
-	je	selmd1
-
-	mov	eax,#0x5032FFFF	! EGA or VGA: 80x50 supported
-	stosd
-
-	mov	ax,#0x1a00	! Added check for EGA/VGA discrimination
-	int	0x10
-	cmp	al,#0x1a	! 1a means VGA, anything else EGA
-	jne	selmd1
-	seg	fs
-	movb	[15],#1		! We've detected a VGA
-
-	mov	eax,#0x501cFFFE	! VGA: 80x28 supported
-	stosd
-
-	lea	si,vgatable	! Test all known SVGA adapters
-dosvga:	lodsw
-	mov	bp,ax		! Default mode table
-	or	ax,ax
-	jz	didsv
-	lodsw			! Pointer to test routine
-	push	si
-	push	di
-	push	es
-	mov	bx,#0xc000
-	mov	es,bx
-	call	ax		! Call test routine
-	pop	es
-	pop	di
-	pop	si
-	or	bp,bp
-	jz	dosvga
-	mov	si,bp		! Found, copy the modes
-	mov	ah,#0
-cpsvga:	lodsb
-	or	al,al
-	jz	didsv
-	stosw
-	movsw
-	jmp	cpsvga
-
-selmd1:	jmp	selmd
-
-didsv:	mov	ax,#0x4f00	! Fetch VESA information to ES:DI+0x400
-	add	di,#0x400
-	int	0x10
-	sub	di,#0x400
-	cmp	al,#0x4f
-	jne	selmd
-	lgs	bx,(di+0x40e)
-	cmp	(di+0x400),#0x4556
-	jne	selmd
-	cmp	(di+0x402),#0x4153
-	jne	selmd
-
-vesa1:	seg	gs
-	mov	cx,(bx)
-	add	bx,#2
-	cmp	cx,#0xffff
-	je	selmd
-	mov	ax,#0x4f01
-	add	di,#0xc00
-	int	0x10
-	sub	di,#0xc00
-	cmp	al,#0x4f
-	jne	selmd
-	testb	(di+0xc00),#0x10	! Is it a text mode?
-	jne	vesa1
-	testb	(di+0xc00),#0x08	! Has it colors?
-	je	vesa1
-	mov	dh,(di+0xc12)	! DX=dimensions, CX=mode
-	mov	dl,(di+0xc14)
-
-	lea	si,modelist	! Check if it's already on the list
-vesa2:	lodsw
-	lodsw
-	cmp	ax,dx
-	je	vesa1
-	cmp	si,di
-	jc	vesa2
-
-	mov	ax,cx		! New mode, store it
-	stosw
-	mov	ax,dx
-	stosw
-	jmp	vesa1
-
-!
-! Video mode table built. Determine the mode we should use and set it.
-!
-selmd:	mov	ax,modesave
-	cmp	ax,#NORMAL_VGA	! Current mode (80x25)
-	je	defmd1
-	cmp	ax,#EXTENDED_VGA ! 80x50 mode
-	je	try50
+	mov 	ax,#0xc000
+	mov	es,ax
+	mov	ax,modesave
+	cmp	ax,#NORMAL_VGA
+	je	defvga
+	cmp	ax,#EXTENDED_VGA
+	je	vga50
 	cmp	ax,#ASK_VGA
-	jne	usemd
-banner:	lea	si,keymsg
+	jne	svga
+	lea	si,msg1
 	call	prtstr
 	call	flush
 nokey:	call	getkt
-	cmp	al,#0x0d	! ENTER ?
-	je	listm		! yes - manual mode selection
-	cmp	al,#0x20	! SPACE ?
-	je	defmd1		! no - repeat
+	cmp	al,#0x0d		! enter ?
+	je	svga			! yes - svga selection
+	cmp	al,#0x20		! space ?
+	je	defvga			! no - repeat
 	call 	beep
 	jmp	nokey
-
-defmd1:	br	defmd
-
-listm:	call	listmodes	! List all available modes
-keymd:	call	getkey		! Get key representing mode ID
-	xor	ah,ah
-	sub	al,#0x30
-	jc	keymd
-	cmp	al,#10
-	jc	usemd
-	sub	al,#39
-	cmp	al,#10
-	jc	keymd
-	cmp	al,#26
-	jnc	keymd
-	jmp	usemd
-
-try50:	mov	ax,#1		! 80x50 is mode #1
-usemd:	shl	ax,#2		! We're requested to set mode in AX
-	lea	si,modelist
-	add	si,ax
-	cmp	si,di
-	jc	mdok
-	cmp	modesave,#ASK_VGA
-	je	keymd
-	lea	si,undefd
-	call	prtstr
-	jmp	banner
-
-mdok:	lodsw			! AX=mode number
-	cmp	ah,#0xff
-	jz	mdspec
-	or	ax,ax
-	jz	mdsetd
-	or	ah,ah
-	jz	mdset
-	mov	bx,ax
-	mov	ax,#0x4f02
-mdset:	int	0x10
-mdsetd:	lodsb			! AL=number of lines
-	jmp	getpar
-
-mdspec:	inc	ax		! Special modes
-	jz	m80x50
-
-m80x28: mov	ax,#0x1111	! Setting 80x28 (VGA with EGA font)
+defvga:	mov	ax,#0x5019
+	pop	ds
+	ret
+/* extended vga mode: 80x50 */
+vga50:
+	mov	ax,#0x1112
 	xor	bl,bl
-	int	0x10		! use 9x14 fontset (28 lines on VGA)
-	mov	ah,#0x01
-	mov	cx,#0x0b0c
-	int	0x10		! turn on cursor (scan lines 11 to 12)
-	mov	al,#28
-	jmp	getpar
-
-m80x50: mov	ax,#0x1112	! Setting 80x50 (EGA/VGA)
-	xor	bl,bl
-	int	0x10		! use 8x8 font set
+	int	0x10		! use 8x8 font set (50 lines on VGA)
 	mov	ax,#0x1200
 	mov	bl,#0x20
 	int	0x10		! use alternate print screen
@@ -544,65 +518,28 @@ m80x50: mov	ax,#0x1112	! Setting 80x50 (EGA/VGA)
 	mov	ah,#0x01
 	mov	cx,#0x0607
 	int	0x10		! turn on cursor (scan lines 6 to 7)
-	mov	al,#50
-	jmp	getpar
-
-defmd:	mov	al,#25		! Default is 25 lines
-
+	pop	ds
+	mov	ax,#0x5032	! return 80x50
+	ret
+/* extended vga mode: 80x28 */
+vga28:
+	pop	ax		! clean the stack
+	mov	ax,#0x1111
+	xor	bl,bl
+	int	0x10		! use 9x14 fontset (28 lines on VGA)
+	mov	ah, #0x01
+	mov	cx,#0x0b0c
+	int	0x10		! turn on cursor (scan lines 11 to 12)
+	pop	ds
+	mov	ax,#0x501c	! return 80x28
+	ret
+/* svga modes */
 !
-! Correct video mode set. Determine the remaining parameters.
+!	test for presence of an S3 VGA chip. The algorithm was taken
+!	from the SuperProbe package of XFree86 1.2.1
+!	report bugs to Christoph.Niemann@linux.org
 !
-
-getpar:	pop	ds		! Restore original DS
-	mov	[14],al		! Number of lines
-
-	mov	ah,#0x03	! read cursor pos
-	xor	bh,bh		! clear bh
-	int	0x10		! save it in known place, con_init fetches
-	mov	[0],dx		! it from 0x90000.
-	
-	mov	ah,#0x0f
-	int	0x10
-	mov	[4],bx		! bh = display page
-	mov	[6],ax		! al = video mode, ah = window width
-	xor	ax,ax
-	mov	es,ax		! Access low memory
-	seg es
-	mov	ax,[0x485]	! POINTS - Height of character matrix
-	mov	[16],ax
-
-	ret			! Well done...
-
-!
-! Table of all known SVGA cards. For each card, we store a pointer to
-! a table of video modes supported by the card and a pointer to a routine
-! used for testing of presence of the card.
-!
-
-vgatable:
-	.word	s3_md, s3_test
-	.word	ati_md, ati_test
-	.word	ahead_md, ahead_test
-	.word	chips_md, chips_test
-	.word	cirrus2_md, cirrus2_test
-	.word	cirrus1_md, cirrus1_test
-	.word	everex_md, everex_test
-	.word	genoa_md, genoa_test
-	.word	oak_md, oak_test
-	.word	paradise_md, paradise_test
-	.word	trident_md, trident_test
-	.word	tseng_md, tseng_test
-	.word	video7_md, video7_test
-	.word	0
-
-!
-! Test routines and mode tables:
-!
-
-! S3 - The test algorithm was taken from the SuperProbe package
-! for XFree86 1.2.1. Report bugs to Christoph.Niemann@linux.org
-
-s3_test:
+svga:   cld
 	mov	cx,#0x0f35	! we store some constants in cl/ch
 	mov	dx,#0x03d4
 	movb	al,#0x38
@@ -667,64 +604,29 @@ s3_1:	mov	ax,#0x4838	! allow writing to special regs by putting
 	repne
 	scasb
 	je	no_s31
+	lea 	si,dsc_S3	! table of descriptions of video modes for BIOS
+	lea	di,mo_S3	! table of sizes of video modes for my BIOS
 	movb	ah,bh
 	movb	al,#0x38
-	jmp	s3rest
+	call	outidx		! restore old value of CRT register 0x38
+	br	selmod		! go ask for video mode
 no_s3:	movb	al,#0x35	! restore CRT register 0x35
 	movb	ah,bl
 	call	outidx
-no_s31:	xor	bp,bp		! Detection failed
-s3rest:	movb	ah,bh
-	movb	al,#0x38	! restore old value of CRT register 0x38
-outidx:	out	dx,al		! Write to indexed VGA register
-	push	ax		! AL=index, AH=data, DX=index reg port
-	mov	al,ah
-	inc	dx
-	out	dx,al
-	dec	dx
-	pop	ax
-	ret
+no_s31:	movb	ah,bh
+	movb	al,#0x38
+	call	outidx		! restore old value of CRT register 0x38
 
-tstidx:	out	dx,ax		! OUT DX,AX and inidx
-inidx:	out	dx,al		! Read from indexed VGA register
-	inc	dx		! AL=index, DX=index reg port -> AL=data
-	in	al,dx
-	dec	dx
-	ret
-
-idS3:	.byte	0x81, 0x82, 0x90, 0x91, 0x92, 0x93, 0x94, 0x95
-	.byte	0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa8, 0xb0
-
-s3_md:	.byte	0x54, 0x2b, 0x84
-	.byte	0x55, 0x19, 0x84
-	.byte	0
-
-! ATI cards.
-
-ati_test:
-	lea 	si,idati
+	lea 	si,idati		! Check ATI 'clues'
 	mov	di,#0x31
 	mov 	cx,#0x09
 	repe
 	cmpsb
-	je	atiok
-	xor	bp,bp
-atiok:	ret
-
-idati:	.ascii	"761295520"
-
-ati_md:	.byte	0x23, 0x19, 0x84
-	.byte	0x33, 0x2c, 0x84
-	.byte	0x22, 0x1e, 0x64
-	.byte	0x21, 0x19, 0x64
-	.byte	0x58, 0x21, 0x50
-	.byte	0x5b, 0x1e, 0x50
-	.byte	0
-
-! AHEAD
-
-ahead_test:
-	mov	ax,#0x200f
+	jne	noati
+	lea	si,dscati
+	lea	di,moati
+	br	selmod
+noati:	mov	ax,#0x200f		! Check Ahead 'clues'
 	mov	dx,#0x3ce
 	out	dx,ax
 	inc	dx
@@ -732,23 +634,11 @@ ahead_test:
 	cmp	al,#0x20
 	je	isahed
 	cmp	al,#0x21
-	je	isahed
-	xor	bp,bp
-isahed:	ret
-
-ahead_md:
-	.byte	0x22, 0x2c, 0x84
-	.byte	0x23, 0x19, 0x84
-	.byte	0x24, 0x1c, 0x84
-	.byte	0x2f, 0x32, 0xa0
-	.byte	0x32, 0x22, 0x50
-	.byte	0x34, 0x42, 0x50
-	.byte	0
-
-! Chips & Tech.
-
-chips_test:
-	mov	dx,#0x3c3
+	jne	noahed
+isahed:	lea	si,dscahead
+	lea	di,moahead
+	br	selmod
+noahed:	mov	dx,#0x3c3		! Check Chips & Tech. 'clues'
 	in	al,dx
 	or	al,#0x10
 	out	dx,al
@@ -759,20 +649,12 @@ chips_test:
 	in	al,dx
 	and	al,#0xef
 	out	dx,al
-	cmp	bl,#0xa5
-	je	cantok
-	xor	bp,bp
-cantok:	ret
-
-chips_md:
-	.byte	0x60, 0x19, 0x84
-	.byte	0x61, 0x32, 0x84
-	.byte	0
-
-! Cirrus Logic 5X0
-
-cirrus1_test:
-	mov	dx,#0x3d4
+	cmp	bl,[idcandt]
+	jne	nocant
+	lea	si,dsccandt
+	lea	di,mocandt
+	br	selmod
+nocant:	mov	dx,#0x3d4		! Check Cirrus 'clues'
 	mov	al,#0x0c
 	out	dx,al
 	inc	dx
@@ -805,76 +687,19 @@ cirrus1_test:
 	out	dx,al
 	in	al,dx
 	cmp	al,#0x01
-	je	iscirr
-nocirr:	xor	bp,bp
-iscirr: mov	dx,#0x3d4
+	jne	nocirr
+	call	rst3d4	
+	lea	si,dsccirrus
+	lea	di,mocirrus
+	br	selmod
+rst3d4:	mov	dx,#0x3d4
 	mov	al,bl
 	xor	ah,ah
 	shl	ax,#8
 	add	ax,#0x0c
 	out	dx,ax
-	ret
-
-cirrus1_md:
-	.byte	0x1f, 0x19, 0x84
-	.byte	0x20, 0x2c, 0x84
-	.byte	0x22, 0x1e, 0x84
-	.byte	0x31, 0x25, 0x64
-	.byte	0
-
-! Cirrus Logic 54XX
-
-cirrus2_test:
-	mov	dx,#0x3c4
-	mov	al,#6
-	call	inidx
-	mov	bl,al			! BL=backup
-	mov	al,#6
-	xor	ah,ah
-	call	tstidx
-	cmp	al,#0x0f
-	jne	c2fail
-	mov	ax,#0x1206
-	call	tstidx
-	cmp	al,#0x12
-	jne	c2fail
-	mov	al,#0x1e
-	call	inidx
-	mov	bh,al
-	and	bh,#0xc0
-	mov	ah,bh
-	mov	al,#0x1e
-	call	tstidx
-	xor	al,bh
-	and	al,#0x3f
-	jne	c2xx
-	mov	al,#0x1e
-	mov	ah,bh
-	or	ah,#0x3f
-	call	tstidx
-	xor	al,bh
-	xor	al,#0x3f
-	and	al,#0x3f
-c2xx:	pushf
-	mov	al,#0x1e
-	mov	ah,bh
-	out	dx,ax
-	popf
-	je	c2done
-c2fail:	xor	bp,bp
-c2done:	mov	al,#6
-	mov	ah,bl
-	out	dx,ax
-	ret
-
-cirrus2_md:
-	.byte	0x14, 0x19, 0x84
-	.byte	0x54, 0x2b, 0x84
-	.byte	0
-
-! Everex / Trident
-
-everex_test:
+	ret	
+nocirr:	call	rst3d4			! Check Everex 'clues'
 	mov	ax,#0x7000
 	xor	bx,bx
 	int	0x10
@@ -882,32 +707,15 @@ everex_test:
 	jne	noevrx
 	shr	dx,#4
 	cmp	dx,#0x678
-	je	evtrid
+	je	istrid
 	cmp	dx,#0x236
-	jne	evrxok
-evtrid:	lea	bp,trident_md
-evrxok:	ret
-
-noevrx:	xor	bp,bp
-	ret
-
-everex_md:
-	.byte	0x03, 0x22, 0x50
-	.byte	0x04, 0x3c, 0x50
-	.byte	0x07, 0x2b, 0x64
-	.byte	0x08, 0x4b, 0x64
-	.byte	0x0a, 0x19, 0x84
-	.byte	0x0b, 0x2c, 0x84
-	.byte	0x16, 0x1e, 0x50
-	.byte	0x18, 0x1b, 0x64
-	.byte	0x21, 0x40, 0xa0
-	.byte	0x40, 0x1e, 0x84
-	.byte	0
-
-! Genoa.
-
-genoa_test:
-	lea	si,idgenoa		! Check Genoa 'clues'
+	je	istrid
+	lea	si,dsceverex
+	lea	di,moeverex
+	br	selmod
+istrid:	lea	cx,ev2tri
+	jmp	cx
+noevrx:	lea	si,idgenoa		! Check Genoa 'clues'
 	xor 	ax,ax
 	seg es
 	mov	al,[0x37]
@@ -923,72 +731,32 @@ l1:	inc	si
 	seg es
 	cmp	al,(di)
 l2:	loope 	l1
-	or	cx,cx
-	je	isgen
-	xor	bp,bp
-isgen:	ret
-
-idgenoa: .byte	0x77, 0x00, 0x99, 0x66
-
-genoa_md:
-	.byte	0x58, 0x20, 0x50
-	.byte	0x5a, 0x2a, 0x64
-	.byte	0x60, 0x19, 0x84
-	.byte	0x61, 0x1d, 0x84
-	.byte	0x62, 0x20, 0x84
-	.byte	0x63, 0x2c, 0x84
-	.byte	0x64, 0x3c, 0x84
-	.byte	0x6b, 0x4f, 0x64
-	.byte	0x72, 0x3c, 0x50
-	.byte	0x74, 0x42, 0x50
-	.byte	0x78, 0x4b, 0x64
-	.byte	0
-
-! OAK
-
-oak_test:
+	cmp	cx,#0x00
+	jne	nogen
+	lea	si,dscgenoa
+	lea	di,mogenoa
+	br	selmod
+nogen:	cld
 	lea	si,idoakvga
 	mov	di,#0x08
 	mov	cx,#0x08
 	repe
 	cmpsb
-	je	isoak
-	xor	bp,bp
-isoak:	ret
-
-idoakvga: .ascii  "OAK VGA "
-
-oak_md: .byte	0x4e, 0x3c, 0x50
-	.byte	0x4f, 0x3c, 0x84
-	.byte	0x50, 0x19, 0x84
-	.byte	0x51, 0x2b, 0x84
-	.byte	0
-
-! WD Paradise.
-
-paradise_test:
-	lea	si,idparadise
+	jne	nooak
+	lea	si,dscoakvga
+	lea	di,mooakvga
+	br	selmod
+nooak:	cld
+	lea	si,idparadise		! Check Paradise 'clues'
 	mov	di,#0x7d
 	mov	cx,#0x04
 	repe
 	cmpsb
-	je	ispara
-	xor	bp,bp
-ispara:	ret
-
-idparadise:	.ascii	"VGA="
-
-paradise_md:
-	.byte	0x41, 0x22, 0x50
-	.byte	0x47, 0x1c, 0x84
-	.byte	0x55, 0x19, 0x84
-	.byte	0x54, 0x2c, 0x84
-	.byte	0
-
-! Trident.
-
-trident_test:
-	mov	dx,#0x3c4
+	jne	nopara
+	lea	si,dscparadise
+	lea	di,moparadise
+	br	selmod
+nopara:	mov	dx,#0x3c4		! Check Trident 'clues'
 	mov	al,#0x0e
 	out	dx,al
 	inc	dx
@@ -1007,24 +775,11 @@ setb2:	or	al,#0x02	!
 clrb2:	out	dx,al
 	and	ah,#0x0f
 	cmp	ah,#0x02
-	je	istrid
-	xor	bp,bp
-istrid:	ret
-
-trident_md:
-	.byte	0x50, 0x1e, 0x50
-	.byte	0x51, 0x2b, 0x50
-	.byte	0x52, 0x3c, 0x50
-	.byte	0x57, 0x19, 0x84
-	.byte	0x58, 0x1e, 0x84
-	.byte	0x59, 0x2b, 0x84
-	.byte	0x5a, 0x3c, 0x84
-	.byte	0
-
-! Tseng.
-
-tseng_test:
-	mov	dx,#0x3cd
+	jne	notrid
+ev2tri:	lea	si,dsctrident
+	lea	di,motrident
+	jmp	selmod
+notrid:	mov	dx,#0x3cd		! Check Tseng 'clues'
 	in	al,dx			! Could things be this simple ! :-)
 	mov	bl,al
 	mov	al,#0x55
@@ -1034,22 +789,11 @@ tseng_test:
 	mov	al,bl
 	out	dx,al
 	cmp	ah,#0x55
- 	je	istsen
-	xor	bp,bp
-istsen:	ret
-
-tseng_md:
-	.byte	0x26, 0x3c, 0x50
-	.byte	0x2a, 0x28, 0x64
-	.byte	0x23, 0x19, 0x84
-	.byte	0x24, 0x1c, 0x84
-	.byte	0x22, 0x2c, 0x84
-	.byte	0
-
-! Video7.
-
-video7_test:
-	mov	dx,#0x3cc
+ 	jne	notsen
+	lea	si,dsctseng
+	lea	di,motseng
+	jmp	selmod
+notsen:	mov	dx,#0x3cc		! Check Video7 'clues'
 	in	al,dx
 	mov	dx,#0x3b4
 	and	al,#0x01
@@ -1078,78 +822,115 @@ even7:	mov	al,#0x0c
 	mov	al,#0x55
 	xor	al,#0xea
 	cmp	al,bh
-	je	isvid7
-	xor	bp,bp
-isvid7:	ret
-
-video7_md:
-	.byte	0x40, 0x2b, 0x50
-	.byte	0x43, 0x3c, 0x50
-	.byte	0x44, 0x3c, 0x64
-	.byte	0x41, 0x19, 0x84
-	.byte	0x42, 0x2c, 0x84
-	.byte	0x45, 0x1c, 0x84
-	.byte	0
-
-!
-! Displaying of the mode list.
-!
-
-listmodes:
-	lea	si,listhdr
+	jne	novid7
+	lea	si,dscvideo7
+	lea	di,movideo7
+	jmp	selmod
+novid7:	lea	si,dsunknown
+	lea	di,mounknown
+selmod:	xor	cx,cx
+	mov	cl,(di)
+	mov	ax,modesave
+	cmp	ax,#ASK_VGA
+	je	askmod
+	cmp	ax,#NORMAL_VGA
+	je	askmod
+	cmp	al,cl
+	jl	gotmode
+	push	si
+	lea	si,msg4
 	call	prtstr
-	lea	bx,modelist
-	mov	cl,#0x30
-listm1:	mov	modenr,cl
-	lea	si,modestring
+	pop	si
+askmod:	push	si
+	lea	si,msg2
 	call	prtstr
-	mov	al,(bx+3)
+	pop	si
+	push	si
+	push	cx
+tbl:	pop	bx
+	push	bx
+	mov	al,bl
+	sub	al,cl
+	call	modepr
+	lodsw
+	xchg	al,ah
 	call	dprnt
+	xchg	ah,al
+	push	ax
 	mov	al,#0x78
 	call	prnt1
-	mov	al,(bx+2)
-	call	dprnt
-#ifdef SHOW_BIOS_MODES
-	mov	al,#0x20
-	call	prnt1
-	mov	al,#0x28
-	call	prnt1
-	mov	al,(bx+1)
-	call	prthex
-	mov	al,(bx)
-	call	prthex
-	mov	al,#0x29
-	call	prnt1
-#endif
-	lea	si,crlf
-	call	prtstr
-	add	bx,#4
-	inc	cl
-	cmp	cl,#0x3a
-	jnz	listm2
-	mov	cl,#0x61
-listm2:	cmp	bx,di
-	jc	listm1
-	lea	si,prompt
-	br	prtstr
-
-! Routine to print a hexadecimal byte (AL) on screen.
-
-#ifdef SHOW_BIOS_MODES
-prthex:	push	ax
-	shr	al,#4
-	call	prth1
 	pop	ax
-prth1:	and	al,#15
-	cmp	al,#10
-	jc	prth2
-	add	al,#7
-prth2:	add	al,#0x30
-	br	prnt1
-#endif
+	call	dprnt
+	push	si
+	lea	si,crlf		! print CR+LF
+	call	prtstr
+	pop	si
+	loop	tbl
+	pop	cx
+	lea	si,msg3
+	call	prtstr
+	pop	si
+	add	cl,#0x30
+	jmp	nonum
+nonumb:	call	beep
+nonum:	call	getkey
+	cmp	al,#0x30	! ascii `0'
+	jb	nonumb
+	cmp	al,#0x3a	! ascii `9'
+	jbe	number
+	cmp	al,#0x61	! ascii `a'
+	jb	nonumb
+	cmp	al,#0x7a	! ascii `z'
+	ja	nonumb
+	sub	al,#0x27
+	cmp	al,cl
+	jae	nonumb
+	sub	al,#0x30
+	jmp	gotmode
+number: cmp	al,cl
+	jae	nonumb
+	sub	al,#0x30
+gotmode:	xor	ah,ah
+	or	al,al
+	beq	vga50
+	push	ax
+	dec	ax
+	beq	vga28
+	add	di,ax
+	mov	al,(di)
+	int 	0x10
+	pop	ax
+	shl	ax,#1
+	add	si,ax
+	lodsw
+	pop	ds
+	ret
+
+! Routine to write al into a VGA-register that is
+! accessed via an index register
+!
+! dx contains the address of the index register
+! al contains the index
+! ah contains the value to write to the data register (dx + 1)
+!
+! no registers are changed
+
+outidx:	out	dx,al
+	push	ax
+	mov	al,ah
+	inc	dx
+	out	dx,al
+	dec	dx
+	pop	ax
+	ret
+inidx:	out	dx,al
+	inc	dx
+	in	al,dx
+	dec	dx
+	ret
 
 ! Routine to print a decimal value on screen, the value to be
-! printed is put in AL (i.e 0-255). 
+! printed is put in al (i.e 0-255). 
 
 dprnt:	push	ax
 	push	cx
@@ -1170,64 +951,24 @@ skip10:	mov	al,ah
 	ret
 
 !
-! Read a key and return the (US-)ascii code in al, scan code in ah
+! Routine to print the mode number key on screen. Mode numbers
+! 0-9 print the ascii values `0' to '9', 10-35 are represented by
+! the letters `a' to `z'. This routine prints some spaces around the
+! mode no.
 !
-getkey:
-	xor	ah,ah
-	int	0x16
+
+modepr:	push	ax
+	cmp	al,#0x0a
+	jb	digit		! Here is no check for number > 35
+	add	al,#0x27
+digit:	add	al,#0x30
+	mov	modenr, al
+	push 	si
+	lea	si, modestring
+	call	prtstr
+	pop	si
+	pop	ax
 	ret
-
-!
-! Read a key with a timeout of 30 seconds. The cmos clock is used to get
-! the time.
-!
-getkt:
-	call	gettime
-	add	al,#30		! wait 30 seconds
-	cmp	al,#60
-	jl	lminute
-	sub	al,#60
-lminute:
-	mov	cl,al
-again:	mov	ah,#0x01
-	int	0x16
-	jnz	getkey		! key pressed, so get it
-	call	gettime
-	cmp	al,cl
-	jne	again
-	mov	al,#0x20	! timeout, return default char `space'
-	ret
-
-!
-! Flush the keyboard buffer
-!
-flush:	mov	ah,#0x01
-	int	0x16
-	jz	empty
-	xor	ah,ah
-	int	0x16
-	jmp	flush
-empty:	ret
-
-!
-! Read the cmos clock. Return the seconds in al
-!
-gettime:
-	push	cx
-	mov	ah,#0x02
-	int	0x1a
-	mov	al,dh			! dh contains the seconds
-	and	al,#0x0f
-	mov	ah,dh
-	mov	cl,#0x04
-	shr	ah,cl
-	aad
-	pop	cx
-	ret
-
-!
-! Descriptor table for our protected mode transition.
-!
 
 gdt:
 	.word	0,0,0,0		! dummy
@@ -1252,36 +993,68 @@ gdt_48:
 	.word	0x800		! gdt limit=2048, 256 GDT entries
 	.word	512+gdt,0x9	! gdt base = 0X9xxxx
 
-!
-! Assorted messages.
-!
-
-keymsg:		.ascii	"Press <RETURN> to see video modes available, <SPACE> to continue or wait 30 secs"
-		db	0x0d, 0x0a, 0x00
-listhdr:	.ascii	"Mode:  COLSxROWS:"
+msg1:		.ascii	"Press <RETURN> to see SVGA-modes available, <SPACE> to continue or wait 30 secs."
 		db	0x0d, 0x0a, 0x0a, 0x00
-prompt:		db	0x0d, 0x0a
+msg2:		.ascii	"Mode:  COLSxROWS:"
+		db	0x0d, 0x0a, 0x0a, 0x00
+msg3:		db	0x0d, 0x0a
 		.ascii	"Choose mode by pressing the corresponding number or letter."
 crlf:		db	0x0d, 0x0a, 0x00
-undefd:		.ascii	"You passed an undefined mode number to setup. Please choose a new mode."
+msg4:		.ascii	"You passed an undefined mode number to setup. Please choose a new mode."
 		db	0x0d, 0x0a, 0x0a, 0x07, 0x00
 modestring:	.ascii	"   "
 modenr:		db	0x00	! mode number
 		.ascii	":    "
 		db	0x00
+		
+idati:		.ascii	"761295520"
+idcandt:	.byte	0xa5
+idgenoa:	.byte	0x77, 0x00, 0x99, 0x66
+idparadise:	.ascii	"VGA="
+idoakvga:	.ascii  "OAK VGA "
+idS3:		.byte	0x81, 0x82, 0x90, 0x91, 0x92, 0x93, 0x94, 0x95
+		.byte	0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa8, 0xb0
 
-modesave:	.word	0	! Requsted mode ID.
+! Manufacturer:	  Numofmodes+2:	Mode:
+! Number of modes is the number of chip-specific svga modes plus the extended
+! modes available on any vga (currently 2)
+
+moati:		.byte	0x06,	0x23, 0x33, 0x22, 0x21
+moahead:	.byte	0x07,	0x22, 0x23, 0x24, 0x2f, 0x34
+mocandt:	.byte	0x04,	0x60, 0x61
+mocirrus:	.byte	0x06,	0x1f, 0x20, 0x22, 0x31
+moeverex:	.byte	0x0c,	0x03, 0x04, 0x07, 0x08, 0x0a, 0x0b, 0x16, 0x18, 0x21, 0x40
+mogenoa:	.byte	0x0c,	0x58, 0x5a, 0x60, 0x61, 0x62, 0x63, 0x64, 0x72, 0x74, 0x78
+moparadise:	.byte	0x04,	0x55, 0x54
+motrident:	.byte	0x09,	0x50, 0x51, 0x52, 0x57, 0x58, 0x59, 0x5a
+motseng:	.byte	0x07,	0x26, 0x2a, 0x23, 0x24, 0x22
+movideo7:	.byte	0x08,	0x40, 0x43, 0x44, 0x41, 0x42, 0x45
+mooakvga:	.byte   0x08,   0x00, 0x07, 0x4e, 0x4f, 0x50, 0x51
+mo_S3:		.byte	0x04,	0x54, 0x55
+mounknown:	.byte	0x02
+
+!			msb = Cols lsb = Rows:
+! The first two modes are standard vga modes available on any vga.
+! mode 0 is 80x50 and mode 1 is 80x28
+
+dscati:		.word	0x5032, 0x501c, 0x8419, 0x842c, 0x641e, 0x6419
+dscahead:	.word	0x5032, 0x501c, 0x842c, 0x8419, 0x841c, 0xa032, 0x5042
+dsccandt:	.word	0x5032, 0x501c, 0x8419, 0x8432
+dsccirrus:	.word	0x5032, 0x501c, 0x8419, 0x842c, 0x841e, 0x6425
+dsceverex:	.word	0x5032, 0x501c, 0x5022, 0x503c, 0x642b, 0x644b, 0x8419, 0x842c, 0x501e, 0x641b, 0xa040, 0x841e
+dscgenoa:	.word	0x5032, 0x501c, 0x5020, 0x642a, 0x8419, 0x841d, 0x8420, 0x842c, 0x843c, 0x503c, 0x5042, 0x644b
+dscparadise:	.word	0x5032, 0x501c, 0x8419, 0x842c
+dsctrident:	.word 	0x5032, 0x501c, 0x501e, 0x502b, 0x503c, 0x8419, 0x841e, 0x842b, 0x843c
+dsctseng:	.word	0x5032, 0x501c, 0x503c, 0x6428, 0x8419, 0x841c, 0x842c
+dscvideo7:	.word	0x5032, 0x501c, 0x502b, 0x503c, 0x643c, 0x8419, 0x842c, 0x841c
+dscoakvga:	.word   0x5032, 0x501c, 0x2819, 0x5019, 0x503c, 0x843c, 0x8419, 0x842b
+dsc_S3:		.word	0x5032, 0x501c, 0x842b, 0x8419
+dsunknown:	.word	0x5032, 0x501c
+modesave:	.word	SVGA_MODE
 
 ! This must be last
 setup_sig1:	.word	SIG1
 setup_sig2:	.word	SIG2
-
-! After our code and data, we'll store the mode list.
-! Mode record:	.word	modenr
-!		.byte	lines
-!		.byte	columns
-! Mode numbers used: 0=current, >=0x100=VESA, -1=80x50, -2=80x28
-modelist:
 
 .text
 endtext:

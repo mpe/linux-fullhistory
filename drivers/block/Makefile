@@ -44,6 +44,10 @@ ifeq ($(CONFIG_BLK_DEV_IDECD),y)
 L_OBJS += ide-cd.o
 endif
 
+ifeq ($(CONFIG_BLK_DEV_IDETAPE),y)
+L_OBJS += ide-tape.o
+endif
+
 ifeq ($(CONFIG_BLK_DEV_XD),y)
 L_OBJS += xd.o
 endif

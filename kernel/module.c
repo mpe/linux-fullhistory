@@ -547,8 +547,10 @@ int get_module_list(char *buf)
 			*p++ = *q++;
 		if (mp->state == MOD_UNINITIALIZED)
 			q = "  (uninitialized)";
-		else if (mp->state == MOD_RUNNING)
-			q = "";
+		else if (mp->state == MOD_RUNNING) {
+			sprintf(size,"\t%ld",GET_USE_COUNT(mp));
+			q=size;
+		}
 		else if (mp->state == MOD_DELETED)
 			q = "  (deleted)";
 		else

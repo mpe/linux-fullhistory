@@ -58,8 +58,15 @@ Where do I discuss these drivers?
 BOINGY - the linux-arcnet@807-city.on.ca mailing list is now so unstable
 that I can't recommend people even bother with it.  I no longer have an
 account on 807-CITY (though they still graciously forward my mail to me) so
-there's not much I can do.  If there's sufficient interest (e-mail me!) I
-will set one up at my new address, Foxnet.
+there's not much I can do.
+
+However, Tomasz Motylewski has been so kind as to set up a new and improved
+mailing list; subscribe by sending a message with the BODY "subscribe
+linux-arcnet YOUR REAL NAME" to listserv@tichy.ch.uj.edu.pl.  Then, to
+submit messages to the list, mail to linux-arcnet@tichy.ch.uj.edu.pl.
+
+There are mailing list archives at:
+	http://tichy.ch.uj.edu.pl/lists/linux-arcnet
 
 Send all bug (or success) reports to me, then, not the list, since (as I
 mentioned) the list doesn't work.

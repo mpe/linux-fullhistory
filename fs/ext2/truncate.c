@@ -96,14 +96,14 @@ repeat:
 		} else if (free_count > 0 && block_to_free == tmp - free_count)
 			free_count++;
 		else {
-			ext2_free_blocks (inode->i_sb, block_to_free, free_count);
+			ext2_free_blocks (inode, block_to_free, free_count);
 			block_to_free = tmp;
 			free_count = 1;
 		}
-/*		ext2_free_blocks (inode->i_sb, tmp, 1); */
+/*		ext2_free_blocks (inode, tmp, 1); */
 	}
 	if (free_count > 0)
-		ext2_free_blocks (inode->i_sb, block_to_free, free_count);
+		ext2_free_blocks (inode, block_to_free, free_count);
 	return retry;
 }
 
@@ -163,16 +163,16 @@ repeat:
 		} else if (free_count > 0 && block_to_free == tmp - free_count)
 			free_count++;
 		else {
-			ext2_free_blocks (inode->i_sb, block_to_free, free_count);
+			ext2_free_blocks (inode, block_to_free, free_count);
 			block_to_free = tmp;
 			free_count = 1;
 		}
-/*		ext2_free_blocks (inode->i_sb, tmp, 1); */
+/*		ext2_free_blocks (inode, tmp, 1); */
 		inode->i_blocks -= blocks;
 		inode->i_dirt = 1;
 	}
 	if (free_count > 0)
-		ext2_free_blocks (inode->i_sb, block_to_free, free_count);
+		ext2_free_blocks (inode, block_to_free, free_count);
 	ind = (u32 *) ind_bh->b_data;
 	for (i = 0; i < addr_per_block; i++)
 		if (*(ind++))
@@ -185,7 +185,7 @@ repeat:
 			*p = 0;
 			inode->i_blocks -= blocks;
 			inode->i_dirt = 1;
-			ext2_free_blocks (inode->i_sb, tmp, 1);
+			ext2_free_blocks (inode, tmp, 1);
 		}
 	if (IS_SYNC(inode) && buffer_dirty(ind_bh)) {
 		ll_rw_block (WRITE, 1, &ind_bh);
@@ -245,7 +245,7 @@ repeat:
 			*p = 0;
 			inode->i_blocks -= blocks;
 			inode->i_dirt = 1;
-			ext2_free_blocks (inode->i_sb, tmp, 1);
+			ext2_free_blocks (inode, tmp, 1);
 		}
 	if (IS_SYNC(inode) && buffer_dirty(dind_bh)) {
 		ll_rw_block (WRITE, 1, &dind_bh);
@@ -304,7 +304,7 @@ repeat:
 			*p = 0;
 			inode->i_blocks -= blocks;
 			inode->i_dirt = 1;
-			ext2_free_blocks (inode->i_sb, tmp, 1);
+			ext2_free_blocks (inode, tmp, 1);
 		}
 	if (IS_SYNC(inode) && buffer_dirty(tind_bh)) {
 		ll_rw_block (WRITE, 1, &tind_bh);

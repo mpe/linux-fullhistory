@@ -600,7 +600,7 @@ static int parse_opts(char *opts, uid_t *uid, gid_t *gid, umode_t *umask,
 				return 0;
 		}
 		else
-			return 0;
+			return 1;
 	}
 
 	return 1;

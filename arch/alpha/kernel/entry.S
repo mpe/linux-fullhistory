@@ -624,7 +624,7 @@ sys_call_table:
 	.quad sys_ftruncate, do_entSys, sys_setgid, sys_sendto, sys_shutdown
 	.quad sys_socketpair, sys_mkdir, sys_rmdir, sys_utimes, do_entSys
 	.quad do_entSys, sys_getpeername, do_entSys, do_entSys, sys_getrlimit
-	.quad sys_setrlimit, do_entSys, sys_setsid, do_entSys, do_entSys
+	.quad sys_setrlimit, do_entSys, sys_setsid, sys_quotactl, do_entSys
 /*150*/	.quad sys_getsockname, do_entSys, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, sys_sigaction, do_entSys, do_entSys, osf_getdirentries
 	.quad osf_statfs, osf_fstatfs, do_entSys, do_entSys, do_entSys

@@ -336,6 +336,7 @@ struct symbol_table symbol_table = {
 #endif	
 	X(jiffies),
 	X(xtime),
+	X(do_gettimeofday),
 	X(loops_per_sec),
 	X(need_resched),
 	X(kill_proc),

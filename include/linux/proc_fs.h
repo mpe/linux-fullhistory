@@ -34,6 +34,7 @@ enum root_directory_inos {
 	PROC_KSYMS,
 	PROC_DMA,	
 	PROC_IOPORTS,
+	PROC_APM,
 	PROC_PROFILE /* whether enabled or not */
 };
 
@@ -87,6 +88,7 @@ enum net_directory_inos {
 	PROC_NET_NR,
 	PROC_NET_SOCKSTAT,
 	PROC_NET_RTCACHE,
+	PROC_NET_AX25_BPQETHER,
 	PROC_NET_LAST
 };
 
@@ -111,6 +113,7 @@ enum scsi_directory_inos {
 	PROC_SCSI_ULTRASTOR,
 	PROC_SCSI_7000FASST,
 	PROC_SCSI_EATA2X,
+	PROC_SCSI_SSC,
 	PROC_SCSI_SCSI_DEBUG,	
 	PROC_SCSI_NOT_PRESENT,
 	PROC_SCSI_FILE,                        /* I'm asuming here that we */

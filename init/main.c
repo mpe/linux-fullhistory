@@ -29,6 +29,9 @@
 #include <linux/hdreg.h>
 #include <linux/mm.h>
 #include <linux/major.h>
+#ifdef CONFIG_APM
+#include <linux/apm_bios.h>
+#endif
 
 #include <asm/bugs.h>
 
@@ -126,6 +129,8 @@ char *execute_command = 0;
 char nfs_root_name[256] = { NFS_ROOT };
 char nfs_root_addrs[128] = { "" };
 #endif
+
+extern void dquot_init(void);
 
 static char * argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
 static char * envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
@@ -400,6 +405,7 @@ static void parse_options(char *line)
 		if (!strncmp(line, "nfsroot=", 8)) {
 			int n;
 			line += 8;
+			ROOT_DEV = MKDEV(UNNAMED_MAJOR, 255);
 			if (line[0] == '/' || (line[0] >= '0' && line[0] <= '9')) {
 				strncpy(nfs_root_name, line, sizeof(nfs_root_name));
 				nfs_root_name[sizeof(nfs_root_name)] = '\0';
@@ -580,6 +586,10 @@ asmlinkage void start_kernel(void)
 #ifdef CONFIG_SYSVIPC
 	ipc_init();
 #endif
+#ifdef CONFIG_APM
+	apm_bios_init();
+#endif
+	dquot_init();
 	sti();
 	check_bugs();
 

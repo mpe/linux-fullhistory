@@ -7,7 +7,6 @@
 #
 
 L_TARGET := lib.a
-L_OBJS   := ctype.o _exit.o open.o close.o errno.o write.o dup.o \
-            setsid.o execve.o wait.o string.o vsprintf.o
+L_OBJS   := errno.o ctype.o string.o vsprintf.o
 
 include $(TOPDIR)/Rules.make

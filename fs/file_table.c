@@ -119,3 +119,33 @@ struct file * get_empty_filp(void)
 
 	return NULL;
 }
+
+void add_dquot_ref(dev_t dev, short type)
+{
+	struct file *filp;
+	int cnt;
+
+	for (filp = first_file, cnt = 0; cnt < nr_files; cnt++, filp = filp->f_next) {
+		if (!filp->f_count || !filp->f_inode || filp->f_inode->i_dev != dev)
+			continue;
+		if (filp->f_mode & FMODE_WRITE && filp->f_inode->i_sb->dq_op) {
+			filp->f_inode->i_sb->dq_op->initialize(filp->f_inode, type);
+			filp->f_inode->i_flags |= S_WRITE;
+		}
+	}
+}
+
+void reset_dquot_ptrs(dev_t dev, short type)
+{
+	struct file *filp;
+	int cnt;
+
+	for (filp = first_file, cnt = 0; cnt < nr_files; cnt++, filp = filp->f_next) {
+		if (!filp->f_count || !filp->f_inode || filp->f_inode->i_dev != dev)
+			continue;
+		if (IS_WRITABLE(filp->f_inode)) {
+			filp->f_inode->i_dquot[type] = NODQUOT;
+			filp->f_inode->i_flags &= ~S_WRITE;
+		}
+	}
+}

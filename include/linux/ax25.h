@@ -32,6 +32,12 @@ struct ax25_routes_struct
 	ax25_address digi_addr[AX25_MAX_DIGIS];
 };
 
+struct ax25_bpqaddr_struct
+{
+	char dev[16];
+	ax25_address addr;
+};
+
 #define AX25_WINDOW	1
 #define AX25_T1		2
 #define AX25_N2		3
@@ -45,6 +51,7 @@ struct ax25_routes_struct
 #define SIOCAX25ADDUID		(SIOCPROTOPRIVATE+1)
 #define SIOCAX25DELUID		(SIOCPROTOPRIVATE+2)
 #define SIOCAX25NOUID		(SIOCPROTOPRIVATE+3)
+#define	SIOCAX25BPQADDR		(SIOCPROTOPRIVATE+4)
 #define	SIOCAX25GETPARMS	(SIOCPROTOPRIVATE+5)
 #define	SIOCAX25SETPARMS	(SIOCPROTOPRIVATE+6)
 

@@ -23,6 +23,9 @@
 #include <linux/ioport.h>
 #include <linux/delay.h>
 #include <linux/config.h>
+#ifdef CONFIG_APM
+#include <linux/apm_bios.h>
+#endif
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -54,6 +57,9 @@ int EISA_bus = 0;
  */
 struct drive_info_struct { char dummy[32]; } drive_info;
 struct screen_info screen_info;
+#ifdef CONFIG_APM
+struct apm_bios_info apm_bios_info;
+#endif
 
 unsigned char aux_device_present;
 extern int ramdisk_size;
@@ -67,6 +73,9 @@ extern char empty_zero_page[PAGE_SIZE];
  */
 #define PARAM	empty_zero_page
 #define EXT_MEM_K (*(unsigned short *) (PARAM+2))
+#ifdef CONFIG_APM
+#define APM_BIOS_INFO (*(struct apm_bios_info *) (PARAM+64))
+#endif
 #define DRIVE_INFO (*(struct drive_info_struct *) (PARAM+0x80))
 #define SCREEN_INFO (*(struct screen_info *) (PARAM+0))
 #define MOUNT_ROOT_RDONLY (*(unsigned short *) (PARAM+0x1F2))
@@ -95,6 +104,9 @@ void setup_arch(char **cmdline_p,
  	ROOT_DEV = to_kdev_t(ORIG_ROOT_DEV);
  	drive_info = DRIVE_INFO;
  	screen_info = SCREEN_INFO;
+#ifdef CONFIG_APM
+	apm_bios_info = APM_BIOS_INFO;
+#endif
 	aux_device_present = AUX_DEVICE_INFO;
 	memory_end = (1<<20) + (EXT_MEM_K<<10);
 	memory_end &= PAGE_MASK;

@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 45
+SUBLEVEL = 46
 
 ARCH = i386
 
@@ -171,9 +171,11 @@ symlinks:
 oldconfig: symlinks
 	$(CONFIG_SHELL) scripts/Configure -d arch/$(ARCH)/config.in
 
-xconfig: symlinks
-	( cd scripts ; make kconfig.tk)
-	./scripts/kconfig.tk
+xconfig: symlinks scripts/kconfig.tk
+	wish -f scripts/kconfig.tk
+
+scripts/kconfig.tk:
+	$(MAKE) -C scripts kconfig.tk
 
 config: symlinks
 	$(CONFIG_SHELL) scripts/Configure arch/$(ARCH)/config.in
@@ -294,7 +296,8 @@ mrproper: clean
 	rm -f $(TOPDIR)/include/linux/modules/*
 
 distclean: mrproper
-	rm -f core `find . -name '*.orig' -print`
+	rm -f core `find . \( -name '*.orig' -o -name '*~' -o -name '*.bak' \
+		-o -name '#*#' -o -name '.*.orig' \) -print`
 
 
 backup: mrproper

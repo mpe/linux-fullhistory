@@ -684,7 +684,7 @@ static void set_multicast_list(struct device *dev)
 		/* Log any net taps. */
 		printk("%s: Promiscuous mode enabled.\n", dev->name);
 	}
-	else if (dev->mc_count > 15 || (dev->mc_flags&IFF_ALLMULTI)) 
+	else if (dev->mc_count > 15 || (dev->flags&IFF_ALLMULTI)) 
 	{
 		/* Too many to filter perfectly -- accept all multicasts. */
 		outl(csr6 | 0x0080, ioaddr + CSR6);
@@ -727,11 +727,12 @@ static int
 set_mac_address(struct device *dev, void *addr)
 {
 	int i;
+	struct sockaddr *sa=(struct sockaddr *)addr;
 	if (dev->start)
 		return -EBUSY;
 	printk("%s: Setting MAC address to ", dev->name);
 	for (i = 0; i < 6; i++)
-		printk(" %2.2x", dev->dev_addr[i] = ((unsigned char *)addr)[i]);
+		printk(" %2.2x", dev->dev_addr[i] = sa->sa_data[i]);
 	printk(".\n");
 	return 0;
 }

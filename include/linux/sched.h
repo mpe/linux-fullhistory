@@ -133,6 +133,7 @@ struct fs_struct {
 struct mm_struct {
 	int count;
 	pgd_t * pgd;
+	unsigned long context;
 	unsigned long start_code, end_code, start_data, end_data;
 	unsigned long start_brk, brk, start_stack, start_mmap;
 	unsigned long arg_start, arg_end, env_start, env_end;
@@ -145,6 +146,7 @@ struct mm_struct {
 #define INIT_MM { \
 		1, \
 		swapper_pg_dir, \
+		0, \
 		0, 0, 0, 0, \
 		0, 0, 0, 0, \
 		0, 0, 0, 0, \

@@ -264,7 +264,7 @@ smb_verify(byte *packet, int command, int wct, int bcc)
 {
 	return (SMB_CMD(packet) == command &&
 		SMB_WCT(packet) >= wct &&
-		(bcc == -1 || SMB_BCC(packet) == bcc)) ? 0 : -EIO;
+		(bcc == -1 || SMB_BCC(packet) >= bcc)) ? 0 : -EIO;
 }
 
 static int
@@ -1139,7 +1139,8 @@ int
 smb_proc_readdir_long(struct smb_server *server, struct inode *dir, int fpos,
                       int cache_size, struct smb_dirent *entry)
 {
-        int max_matches = 512;
+        int max_matches = 64; /* this should actually be based on the 
+				 maxxmit */
   
         /* NT uses 260, OS/2 uses 2. Both accept 1. */
         int info_level = 1;
@@ -1600,6 +1601,10 @@ smb_proc_reconnect(struct smb_server *server)
 #ifdef LANMAN2
           { PROTOCOL_LANMAN2,"LM1.2X002"},
 #endif
+#ifdef NT1
+	  { PROTOCOL_NT1,"NT LM 0.12"},
+	  { PROTOCOL_NT1,"NT LANMAN 1.0"},
+#endif
           {-1, NULL} };
 	char dev[] = "A:";
 	int i, plength;
@@ -1712,29 +1717,70 @@ smb_proc_reconnect(struct smb_server *server)
                 DPRINTK("smb_proc_connect: blkmode = %d\n",
                         WVAL(server->packet, smb_vwv5));
 
-                server->maxxmt = WVAL(server->packet, smb_vwv2);
-                server->maxmux = WVAL(server->packet, smb_vwv3);
-                server->maxvcs = WVAL(server->packet, smb_vwv4);
-                server->blkmode= WVAL(server->packet, smb_vwv5);
-                server->sesskey= DVAL(server->packet, smb_vwv6);
+		if (server->protocol >= PROTOCOL_NT1) {
+			server->maxxmt = DVAL(server->packet,smb_vwv3+1);
+			server->maxmux = WVAL(server->packet, smb_vwv1+1);
+			server->maxvcs = WVAL(server->packet, smb_vwv2+1);
+			server->blkmode= DVAL(server->packet, smb_vwv9+1);
+			server->sesskey= DVAL(server->packet, smb_vwv7+1);
+		} else {
+			server->maxxmt = WVAL(server->packet, smb_vwv2);
+			server->maxmux = WVAL(server->packet, smb_vwv3);
+			server->maxvcs = WVAL(server->packet, smb_vwv4);
+			server->blkmode= WVAL(server->packet, smb_vwv5);
+			server->sesskey= DVAL(server->packet, smb_vwv6);
+		}
 
-                smb_setup_header(server, SMBsesssetupX, 10,
-                                 2 + userlen + passlen);
 
-                WSET(server->packet, smb_vwv0, 0x00ff);
-                WSET(server->packet, smb_vwv1, 0);
-                WSET(server->packet, smb_vwv2, given_max_xmit);
-                WSET(server->packet, smb_vwv3, 2);
-                WSET(server->packet, smb_vwv4, server->pid);
-                DSET(server->packet, smb_vwv5, server->sesskey);
-                WSET(server->packet, smb_vwv7, passlen + 1);
-                WSET(server->packet, smb_vwv8, 0);
-                WSET(server->packet, smb_vwv9, 0);
+		if (server->protocol >= PROTOCOL_NT1) {
+			char *workgroup = "WORKGROUP";
+			char *OS_id = "Unix";
+			char *client_id = "ksmbfs";
 
-                p = SMB_BUF(server->packet);
-                strcpy(p, server->m.password);
-                p += passlen + 1;
-                strcpy(p, server->m.username);
+			smb_setup_header(server, SMBsesssetupX, 13,
+					 5 + userlen + passlen +
+					 strlen(workgroup) + strlen(OS_id) +
+					 strlen(client_id));
+			
+			WSET(server->packet, smb_vwv0, 0x00ff);
+			WSET(server->packet, smb_vwv1, 0);
+			WSET(server->packet, smb_vwv2, given_max_xmit);
+			WSET(server->packet, smb_vwv3, 2);
+			WSET(server->packet, smb_vwv4, server->pid);
+			DSET(server->packet, smb_vwv5, server->sesskey);
+			WSET(server->packet, smb_vwv7, passlen + 1);
+			WSET(server->packet, smb_vwv8, 0);
+			WSET(server->packet, smb_vwv9, 0);
+
+			p = SMB_BUF(server->packet);
+			strcpy(p, server->m.password);
+			p += passlen + 1;
+			strcpy(p, server->m.username);
+			p += userlen + 1;
+			strcpy(p, workgroup);
+			p += strlen(p) + 1;
+			strcpy(p, OS_id);
+			p += strlen(p) + 1;
+			strcpy(p, client_id);
+		} else {
+			smb_setup_header(server, SMBsesssetupX, 10,
+					 2 + userlen + passlen);
+
+			WSET(server->packet, smb_vwv0, 0x00ff);
+			WSET(server->packet, smb_vwv1, 0);
+			WSET(server->packet, smb_vwv2, given_max_xmit);
+			WSET(server->packet, smb_vwv3, 2);
+			WSET(server->packet, smb_vwv4, server->pid);
+			DSET(server->packet, smb_vwv5, server->sesskey);
+			WSET(server->packet, smb_vwv7, passlen + 1);
+			WSET(server->packet, smb_vwv8, 0);
+			WSET(server->packet, smb_vwv9, 0);
+
+			p = SMB_BUF(server->packet);
+			strcpy(p, server->m.password);
+			p += passlen + 1;
+			strcpy(p, server->m.username);
+		}
 
                 if ((result = smb_request_ok(server,SMBsesssetupX,3,0)) < 0) {
                         DPRINTK("smb_proc_connect: SMBsessetupX failed\n");

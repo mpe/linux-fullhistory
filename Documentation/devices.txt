@@ -2,7 +2,7 @@
 
 	 Maintained by H. Peter Anvin <Peter.Anvin@linux.org>
 
-		   Last revised: September 20, 1995
+		    Last revised: December 4, 1995
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he lost network access in 1993.  It is a
@@ -31,7 +31,7 @@ that semantically altered versions are not distributed without
 permission of the author, assuming the author can be contacted without
 an unreasonable effort.
 
-  0 		Unnamed devices (NFS mounts, loopback devices)
+  0 		Unnamed devices (e.g. non-device mounts)
 		  0 = reserved as null device number
 
   1 char	Memory devices
@@ -46,8 +46,20 @@ an unreasonable effort.
 		  9 = /dev/urandom	Faster, less secure random number gen.
     block	RAM disk
 		  1 = /dev/ramdisk	RAM disk
+		    
+  2 char	Pseudo-TTY masters
+		  0 = /dev/ptyp0	First PTY master
+		  1 = /dev/ptyp1	Second PTY master
+		    ...
+		256 = /dev/ptyef	256th PTY master
 
-  2 char	Reserved for PTY's <tytso@athena.mit.edu>
+		Pseudo-tty's are named as follows:
+		* Masters are "pty", slaves are "tty";
+		* the fourth letter is one of pqrstuvwxyzabcde indicating
+		  the 1st through 16th series of 16 pseudo-ttys each, and
+		* the fifth letter is one of 0123456789abcdef indicating
+		  the position within the series.
+  
     block	Floppy disks
 		  0 = /dev/fd0		First floppy disk autodetect
 		  1 = /dev/fd1		Second floppy disk autodetect
@@ -100,7 +112,12 @@ an unreasonable effort.
 		and E for the 3.5" models have been deprecated, since
 		the drive type is insignificant for these devices.
 
-  3 char	Reserved for pty's <tytso@athena.mit.edu>
+  3 char	Pseudo-TTY slaves
+		  0 = /dev/ttyp0	First PTY slave
+		  1 = /dev/ttyp1	Second PTY slave
+		    ...
+		256 = /dev/ttyef	256th PTY slave
+
     block	First MFM, RLL and IDE hard disk/CD-ROM interface
     		  0 = /dev/hda		Master: whole disk (or CD-ROM)
 		 64 = /dev/hdb		Slave: whole disk (or CD-ROM)
@@ -133,12 +150,11 @@ an unreasonable effort.
 		      ...
 		255 = /dev/ttysf	64th pseudo-tty slave
 
-		Pseudo-tty's are named as follows:
-		* Masters are "pty", slaves are "tty";
-		* the fourth letter is one of p, q, r, s indicating
-		  the 1st, 2nd, 3rd, 4th series of 16 pseudo-ttys each, and
-		* the fifth letter is one of 0123456789abcdef indicating
-		  the position within the series.
+		For compatibility with previous versions of Linux, the
+		first 64 PTYs are replicated under this device
+		number.  This use will be obsolescent with the release
+		of Linux 1.4 and may be removed in a future version of
+		Linux.
 
   5 char	Alternate TTY devices
     		  0 = /dev/tty		Current TTY device
@@ -203,9 +219,10 @@ an unreasonable effort.
 		  5 = /dev/atarimouse	Atari Mouse (68k)
 		128 = /dev/beep		Fancy beep device
 		129 = /dev/modreq	Kernel module load request
-
-		The use of the suffix -mouse instead of -bm or -aux
-		has also been used.
+		130 = /dev/watchdog	Watchdog timer port
+		131 = /dev/temperature	Machine internal temperature
+		132 = /dev/hwtrap	Hardware fault trap
+		133 = /dev/exttrp	External device trap
 
  11 block	SCSI CD-ROM devices
     		  0 = /dev/sr0		First SCSI CD-ROM
@@ -533,7 +550,13 @@ an unreasonable effort.
 		Partitions are handled in the same way as IDE disks
 		(see major number 3).
 
- 37-41		UNALLOCATED
+ 37 char	IDE tape
+		  0 = /dev/ht0		First IDE tape
+		128 = /dev/nht0		First IDE tape, no rewind-on-close
+
+		Currently, only one IDE tape drive is supported.
+
+ 38-41		UNALLOCATED
 
  42		Demo/sample use
 

@@ -9,6 +9,24 @@
  * in <asm/page.h> (currently 8192).
  */
 
+#define invalidate_all() \
+__asm__ __volatile__( \
+	"lda $16,-2($31)\n\t" \
+	".long 51" \
+	: : :"$1", "$16", "$17", "$22","$23","$24","$25")
+
+#define invalidate() \
+__asm__ __volatile__( \
+	"lda $16,-1($31)\n\t" \
+	".long 51" \
+	: : :"$1", "$16", "$17", "$22","$23","$24","$25")
+
+/* Certain architectures need to do special things when pte's
+ * within a page table are directly modified.  Thus, the following
+ * hook is made available.
+ */
+#define set_pte(pteptr, pteval) ((*(pteptr)) = (pteval))
+
 /* PMD_SHIFT determines the size of the area a second-level page table can map */
 #define PMD_SHIFT	(PAGE_SHIFT + (PAGE_SHIFT-3))
 #define PMD_SIZE	(1UL << PMD_SHIFT)

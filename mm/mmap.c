@@ -95,7 +95,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 			return -EINVAL;
 		}
 		if (flags & MAP_DENYWRITE) {
-			if (file->f_inode->i_wcount > 0)
+			if (file->f_inode->i_writecount > 0)
 				return -ETXTBSY;
 		}
 	} else if ((flags & MAP_TYPE) != MAP_PRIVATE)

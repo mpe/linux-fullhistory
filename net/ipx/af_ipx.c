@@ -324,12 +324,12 @@ ipxitf_device_event(struct notifier_block *notifier, unsigned long event, void *
 	return NOTIFY_DONE;
 }
 
-static int
-ipxitf_def_skb_handler(struct sock *sock, struct sk_buff *skb)
+static int ipxitf_def_skb_handler(struct sock *sock, struct sk_buff *skb)
 {
 	int	retval;
 
-	if((retval = sock_queue_rcv_skb(sock, skb))<0) {
+	if((retval = sock_queue_rcv_skb(sock, skb))<0) 
+	{
 		/*
 	 	 *	We do a FREE_WRITE here because this indicates how
 	 	 *	to treat the socket with which the packet is 
@@ -343,8 +343,13 @@ ipxitf_def_skb_handler(struct sock *sock, struct sk_buff *skb)
 	return retval;
 }
 
-static int
-ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int copy) 
+/*
+ *	On input if skb->sk is set the buffer is a socket sending. We need to ensure the
+ *	accounting is kept right in these cases. At the moment the socket write queue is
+ *	charged for the memory.
+ */
+ 
+static int ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int copy) 
 {
 	ipx_packet	*ipx = (ipx_packet *)(skb->h.raw);
 	ipx_socket	*sock1 = NULL, *sock2 = NULL;
@@ -359,33 +364,42 @@ ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int copy)
 	 *	The *SPECIAL* socket list contains: 0x452(SAP), 0x453(RIP) and
 	 *	0x456(Diagnostic).
 	 */
-	if (ipx_primary_net && (intrfc != ipx_primary_net)) {
-		switch (ntohs(ipx->ipx_dest.sock)) {
-		case 0x452:
-		case 0x453:
-		case 0x456:
-			/*
-			 *	The appropriate thing to do here is to
-			 * 	dup the packet and route to the primary net
-			 *	interface via ipxitf_send; however, we'll cheat
-			 *	and just demux it here.
-			 */
-			sock2 = ipxitf_find_socket(ipx_primary_net, 
+	 
+	if (ipx_primary_net && (intrfc != ipx_primary_net)) 
+	{
+		switch (ntohs(ipx->ipx_dest.sock)) 
+		{
+			case 0x452:
+			case 0x453:
+			case 0x456:
+				/*
+				 *	The appropriate thing to do here is to
+				 * 	dup the packet and route to the primary net
+				 *	interface via ipxitf_send; however, we'll cheat
+				 *	and just demux it here.
+				 */
+				sock2 = ipxitf_find_socket(ipx_primary_net, 
 					ipx->ipx_dest.sock);
-			break;
-		default:
-			break;
+				break;
+			default:
+				break;
 		}
 	}
 
-	/* if there is nothing to do, return */
-	if ((sock1 == NULL) && (sock2 == NULL)) {
+	/* 
+	 *	if there is nothing to do, return. The kfree will
+	 *	cancel any charging.
+	 */
+	 
+	if (sock1 == NULL && sock2 == NULL) 
+	{
 		if (!copy) 
 			kfree_skb(skb,FREE_WRITE);
 		return 0;
 	}
 
-	/* This next segment of code is a little awkward, but it sets it up
+	/*
+	 * This next segment of code is a little awkward, but it sets it up
 	 * so that the appropriate number of copies of the SKB are made and 
 	 * that skb1 and skb2 point to it (them) so that it (they) can be 
 	 * demuxed to sock1 and/or sock2.  If we are unable to make enough
@@ -396,43 +410,48 @@ ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int copy)
 	 * this is ok as no socket owns an input buffer.
 	 */
 	 
-	if(skb->sk)
+	if(skb->sk && !copy)
 	{
 		skb->sk->wmem_alloc -= skb->truesize;	/* Adjust */
 		skb->sk=NULL;				/* Disown */
 	}
 
 	 
-	if (copy) {
+	if (copy) 
+	{
 		skb1 = skb_clone(skb, GFP_ATOMIC);
-		if (skb1 != NULL) {
+		if (skb1 != NULL) 
 			skb1->arp = skb1->free = 1;
-		}
-	} else {
+	} 
+	else 
+	{
 		skb1 = skb;
 	}
 	
-	if (skb1 == NULL) return -ENOMEM; 
+	if (skb1 == NULL) 
+		return -ENOMEM; 
 
-	/* Do we need 2 SKBs? */
-	if (sock1 && sock2) {
+	/*
+	 *	Do we need 2 SKBs? 
+	 */
+	 
+	if (sock1 && sock2) 
+	{
 		skb2 = skb_clone(skb1, GFP_ATOMIC);
-		if (skb2 != NULL) {
+		if (skb2 != NULL) 
 			skb2->arp = skb2->free = 1;
-		}
-	} else {
+	}
+	else 
 		skb2 = skb1;
-	}
 		
-	if (sock1) {
+	if (sock1)
 		(void) ipxitf_def_skb_handler(sock1, skb1);
-	}
 
-	if (skb2 == NULL) return -ENOMEM;
+	if (skb2 == NULL) 
+		return -ENOMEM;
 
-	if (sock2) {
+	if (sock2)
 		(void) ipxitf_def_skb_handler(sock2, skb2);
-	}
 
 	return 0;
 }
@@ -443,29 +462,13 @@ ipxitf_adjust_skbuff(ipx_interface *intrfc, struct sk_buff *skb)
 	struct sk_buff	*skb2;
 	int	in_offset = skb->h.raw - skb->head;
 	int	out_offset = intrfc->if_ipx_offset;
-#if 0
-	char	*oldraw;
-#endif	
 	int	len;
 
 	/* Hopefully, most cases */
 	if (in_offset >= out_offset) {
-/*		skb_push(skb,out_offset);*/
 		skb->arp = skb->free = 1;
 		return skb;
 	}
-
-#if 0
-	/* Existing SKB will work, just need to move things around a little */
-	if (in_offset > out_offset) {
-		oldraw = skb->h.raw;
-		skb->h.raw = &(skb->data[out_offset]);
-		memmove(skb->h.raw, oldraw, skb->len);
-		skb->len += out_offset;
-		skb->arp = skb->free = 1;
-		return skb;
-	}
-#endif	
 
 	/* Need new SKB */
 	len = skb->len + out_offset;
@@ -481,8 +484,7 @@ ipxitf_adjust_skbuff(ipx_interface *intrfc, struct sk_buff *skb)
 	return skb2;
 }
 
-static int
-ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
+static int ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 {
 	ipx_packet	*ipx = (ipx_packet *)(skb->h.raw);
 	struct device	*dev = intrfc->if_dev;
@@ -491,29 +493,51 @@ ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 	int		send_to_wire = 1;
 	int		addr_len;
 	
-	/* We need to know how many skbuffs it will take to send out this
-	 * packet to avoid unnecessary copies.
+	/* 
+	 *	We need to know how many skbuffs it will take to send out this
+	 *	packet to avoid unnecessary copies.
 	 */
+	 
 	if ((dl == NULL) || (dev == NULL) || (dev->flags & IFF_LOOPBACK)) 
 		send_to_wire = 0;
 
-	/* See if this should be demuxed to sockets on this interface */
-	if (ipx->ipx_dest.net == intrfc->if_netnum) {
+	/*
+	 *	See if this should be demuxed to sockets on this interface 
+	 *
+	 *	We want to ensure the original was eaten or that we only use
+	 *	up clones.
+	 */
+	 
+	if (ipx->ipx_dest.net == intrfc->if_netnum) 
+	{
+		/*
+		 *	To our own node, loop and free the original.
+		 */
 		if (memcmp(intrfc->if_node, node, IPX_NODE_LEN) == 0) 
 			return ipxitf_demux_socket(intrfc, skb, 0);
-		if (memcmp(ipx_broadcast_node, node, IPX_NODE_LEN) == 0) {
+		/*
+		 *	Broadcast, loop and possibly keep to send on.
+		 */
+		if (memcmp(ipx_broadcast_node, node, IPX_NODE_LEN) == 0) 
+		{
 			ipxitf_demux_socket(intrfc, skb, send_to_wire);
-			if (!send_to_wire) return 0;
+			if (!send_to_wire) 
+				return 0;
 		}
 	}
 
-	/* if the originating net is not equal to our net; this is routed */
-	if (ipx->ipx_source.net != intrfc->if_netnum) {
+	/*
+	 *	if the originating net is not equal to our net; this is routed 
+	 */
+	 
+	if (ipx->ipx_source.net != intrfc->if_netnum) 
+	{
 		if (++(ipx->ipx_tctrl) > ipxcfg_max_hops) 
 			send_to_wire = 0;
 	}
 
-	if (!send_to_wire) {
+	if (!send_to_wire) 
+	{
 		/*
 		 *	We do a FREE_WRITE here because this indicates how
 		 *	to treat the socket with which the packet is 
@@ -526,45 +550,47 @@ ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 		return 0;
 	}
 
-	/* determine the appropriate hardware address */
+	/*
+	 *	Determine the appropriate hardware address 
+	 */
+	 
 	addr_len = dev->addr_len;
-	if (memcmp(ipx_broadcast_node, node, IPX_NODE_LEN) == 0) {
+	if (memcmp(ipx_broadcast_node, node, IPX_NODE_LEN) == 0) 
 		memcpy(dest_node, dev->broadcast, addr_len);
-	} else {
+	else
 		memcpy(dest_node, &(node[IPX_NODE_LEN-addr_len]), addr_len);
-	}
 
-	/* make any compensation for differing physical/data link size */
+	/*
+	 *	Make any compensation for differing physical/data link size 
+	 */
+	 
 	skb = ipxitf_adjust_skbuff(intrfc, skb);
-	if (skb == NULL) return 0;
+	if (skb == NULL) 
+		return 0;
 
 	/* set up data link and physical headers */
 	skb->dev = dev;
 	dl->datalink_header(dl, skb, dest_node);
-#ifdef ALREADY_DONE_GUV
-	if (skb->sk != NULL) {
-		/* This is an outbound packet from this host.  We need to 
-		 * increment the write count.
-		 */
-		skb->sk->wmem_alloc += skb->truesize;
-	}
-#endif
 #if 0
-	/* Now log the packet just before transmission */
+	/* 
+	 *	Now log the packet just before transmission 
+	 */
+	 
 	dump_pkt("IPX snd:", (ipx_packet *)skb->h.raw);
 	dump_data("ETH hdr:", skb->data, skb->h.raw - skb->data);
 #endif
 
-	/* Send it out */
+	/*
+	 *	Send it out 
+	 */
+	 
 	dev_queue_xmit(skb, dev, SOPRI_NORMAL);
 	return 0;
 }
 
-static int
-ipxrtr_add_route(unsigned long, ipx_interface *, unsigned char *);
+static int ipxrtr_add_route(unsigned long, ipx_interface *, unsigned char *);
 
-static int
-ipxitf_add_local_route(ipx_interface *intrfc)
+static int ipxitf_add_local_route(ipx_interface *intrfc)
 {
 	return ipxrtr_add_route(intrfc->if_netnum, intrfc, NULL);
 }
@@ -1757,8 +1783,10 @@ static int ipx_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nob
 	if (sk->zapped) return -EIO; /* Socket not bound */
 	if(flags) return -EINVAL;
 		
-	if(usipx) {
-		if(sk->ipx_port == 0) {
+	if(usipx) 
+	{
+		if(sk->ipx_port == 0) 
+		{
 			struct sockaddr_ipx uaddr;
 			int ret;
 
@@ -1772,7 +1800,9 @@ static int ipx_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nob
 			return -EINVAL;
 		if(usipx->sipx_family != AF_IPX)
 			return -EINVAL;
-	} else {
+	}
+	else 
+	{
 		if(sk->state!=TCP_ESTABLISHED)
 			return -ENOTCONN;
 		usipx=&local_sipx;

@@ -20,6 +20,8 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/tty.h>
+#include <linux/tty_driver.h>
 
 #define LOG_BUF_LEN	4096
 
@@ -235,4 +237,17 @@ void register_console(void (*proc)(const char *))
 			msg_level = -1;
 		j = 0;
 	}
+}
+
+/*
+ * Write a message to a certain tty, not just the console. This is used for
+ * messages that need to be redirected to a specific tty.
+ * We don't put it into the syslog queue right now maybe in the future if
+ * really needed.
+ */
+void tty_write_message(struct tty_struct *tty, char *msg)
+{
+	if (tty && tty->driver.write)
+		tty->driver.write(tty, 0, msg, strlen(msg));
+	return;
 }

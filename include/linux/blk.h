@@ -336,7 +336,7 @@ static void (DEVICE_REQUEST)(void);
 
 #if ! SCSI_MAJOR(MAJOR_NR)
 
-#if defined(_IDE_CD_C) || defined(_TRITON_C) /* shares copy with ide.c */
+#if defined(_IDE_CD_C) || defined(_TRITON_C) || defined(_IDE_TAPE_C) /* shares copy with ide.c */
 void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup);
 #else
 
@@ -375,6 +375,7 @@ static void end_request(int uptodate) {
 		}
 	}
 #ifdef IDE_DRIVER
+	blk_dev[MAJOR(req->rq_dev)].current_request = req->next;
 	hwgroup->rq = NULL;
 #else
 	DEVICE_OFF(req->rq_dev);

@@ -29,3 +29,10 @@ if [ "$CONFIG_QIC02_TAPE" = "y" ]; then
     comment '>>> Which is available from ftp://ftp.funet.fi/pub/OS/Linux/BETA/QIC-02/'
 fi
 fi
+bool 'Advanced Power Management BIOS support' CONFIG_APM
+if [ "$CONFIG_APM" = "y" ]; then
+  bool '   Ignore USER SUSPEND' CONFIG_APM_IGNORE_USER_SUSPEND
+  bool '   Enable PM at boot time' CONFIG_APM_DO_ENABLE
+  bool '   Make CPU Idle calls when idle' CONFIG_APM_CPU_IDLE
+  bool '   Enable console blanking using APM' CONFIG_APM_DISPLAY_BLANK
+fi

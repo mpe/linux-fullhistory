@@ -19,6 +19,8 @@
 #include <linux/ldt.h>
 #include <linux/user.h>
 #include <linux/a.out.h>
+#include <linux/interrupt.h>
+#include <linux/config.h>
 
 #include <asm/segment.h>
 #include <asm/pgtable.h>
@@ -29,7 +31,14 @@
 
 asmlinkage void ret_from_sys_call(void) __asm__("ret_from_sys_call");
 
+#ifdef CONFIG_APM
+extern int  apm_do_idle(void);
+extern void apm_do_busy(void);
+#endif
+
 static int hlt_counter=0;
+
+#define HARD_IDLE_TIMEOUT (HZ / 3)
 
 void disable_hlt(void)
 {
@@ -41,11 +50,41 @@ void enable_hlt(void)
 	hlt_counter--;
 }
 
+static void hard_idle(void)
+{
+	while (!need_resched) {
+		if (hlt_works_ok && !hlt_counter) {
+#ifdef CONFIG_APM
+				/* If the APM BIOS is not enabled, or there
+				 is an error calling the idle routine, we
+				 should hlt if possible.  We need to check
+				 need_resched again because an interrupt
+				 may have occured in apm_do_idle(). */
+			start_bh_atomic();
+			if (!apm_do_idle() && !need_resched)
+				__asm__("hlt");
+			end_bh_atomic();
+#else
+			__asm__("hlt");
+#endif
+	        }
+ 		if (need_resched) break;
+		schedule();
+	}
+#ifdef CONFIG_APM
+	apm_do_busy();
+#endif
+}
+
 /*
  * The idle loop on a i386..
  */
 asmlinkage int sys_idle(void)
 {
+#ifndef __SMP__
+        unsigned long start_idle = 0;
+#endif
+		
 	if (current->pid != 0)
 	{
 	/*	printk("Wrong process idled\n");	SMP bug check */
@@ -78,10 +117,17 @@ asmlinkage int sys_idle(void)
 	for (;;) {
 #ifdef __SMP__
 		if (cpu_data[smp_processor_id()].hlt_works_ok && !hlt_counter && !need_resched)
-#else	
-		if (hlt_works_ok && !hlt_counter && !need_resched)
-#endif		
 			__asm__("hlt");
+#else	
+		if (!start_idle) start_idle = jiffies;
+		if (jiffies - start_idle > HARD_IDLE_TIMEOUT) {
+			hard_idle();
+		} else {
+			if (hlt_works_ok && !hlt_counter && !need_resched)
+		        	__asm__("hlt");
+		}
+		if (need_resched) start_idle = 0;
+#endif
 		schedule();
 	}
 }

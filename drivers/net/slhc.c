@@ -131,7 +131,7 @@ slhc_init(int rslots, int tslots)
 			kfree((unsigned char *)comp);
 			return NULL;
 		}
-		memset(comp->tstate, 0, rslots * sizeof(struct cstate));
+		memset(comp->tstate, 0, tslots * sizeof(struct cstate));
 		comp->tslot_limit = tslots - 1;
 	}
 

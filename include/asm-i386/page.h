@@ -50,41 +50,6 @@ typedef unsigned long pgprot_t;
 
 #endif
 
-/*
- * TLB invalidation:
- *
- *  - invalidate() invalidates the current task TLBs
- *  - invalidate_all() invalidates all processes TLBs
- *  - invalidate_task(task) invalidates the specified tasks TLB's
- *  - invalidate_page(task, vmaddr) invalidates one page
- *
- * ..but the i386 has somewhat limited invalidation capabilities.
- */
- 
-#ifndef __SMP__
-#define invalidate() \
-__asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3": : :"ax")
-
-#define invalidate_all() invalidate()
-#define invalidate_task(task) \
-do { if ((task)->mm == current->mm) invalidate(); } while (0)
-#define invalidate_page(task,addr) \
-do { if ((task)->mm == current->mm) invalidate(); } while (0)
-
-#else
-#include <asm/smp.h>
-#define local_invalidate() \
-__asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3": : :"ax")
-#define invalidate() \
-	smp_invalidate();
-#endif
-
-/* Certain architectures need to do special things when pte's
- * within a page table are directly modified.  Thus, the following
- * hook is made available.
- */
-#define set_pte(pteptr, pteval) ((*(pteptr)) = (pteval))
-
 /* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr)	(((addr)+PAGE_SIZE-1)&PAGE_MASK)
 

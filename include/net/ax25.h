@@ -203,6 +203,9 @@ extern unsigned short ax25_dev_get_value(struct device *, int);
 extern void ax25_dev_device_up(struct device *);
 extern void ax25_dev_device_down(struct device *);
 extern int  ax25_dev_ioctl(unsigned int, void *);
+extern int  ax25_bpq_get_info(char *, char **, off_t, int, int);
+extern ax25_address *ax25_bpq_get_addr(struct device *);
+extern int  ax25_bpq_ioctl(unsigned int, void *);
 
 /* ax25_subr.c */
 extern void ax25_clear_queues(ax25_cb *);

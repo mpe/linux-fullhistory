@@ -40,5 +40,6 @@
 /* linux-specific, might as well be the same as on i386 */
 #define SO_NO_CHECK	11
 #define SO_PRIORITY	12
+#define SO_BSDCOMPAT	14
 
 #endif /* _ASM_SOCKET_H */

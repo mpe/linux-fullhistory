@@ -515,7 +515,6 @@ void nr_rt_device_down(struct device *dev)
 static struct device *nr_ax25_dev_get(char *devname)
 {
 	struct device *dev;
-	ax25_address callsign;
 
 	if ((dev = dev_get(devname)) == NULL)
 		return NULL;
@@ -523,9 +522,11 @@ static struct device *nr_ax25_dev_get(char *devname)
 	if ((dev->flags & IFF_UP) && dev->type == ARPHRD_AX25)
 		return dev;
 
+#ifdef CONFIG_BPQETHER
 	if ((dev->flags & IFF_UP) && dev->type == ARPHRD_ETHER)
-		if (arp_query((unsigned char *)&callsign, dev->pa_addr, dev))
+		if (ax25_bpq_get_addr(dev) != NULL)
 			return dev;
+#endif
 	
 	return NULL;
 }

@@ -62,17 +62,17 @@ static int block_bmap (struct buffer_head * bh, int nr)
 void ext2_discard_prealloc (struct inode * inode)
 {
 #ifdef EXT2_PREALLOCATE
+	unsigned short total;
+
 	if (inode->u.ext2_i.i_prealloc_count) {
-		int i = inode->u.ext2_i.i_prealloc_count;
+		total = inode->u.ext2_i.i_prealloc_count;
 		inode->u.ext2_i.i_prealloc_count = 0;
-		ext2_free_blocks (inode->i_sb,
-				  inode->u.ext2_i.i_prealloc_block,
-				  i);
+		ext2_free_blocks (inode, inode->u.ext2_i.i_prealloc_block, total);
 	}
 #endif
 }
 
-static int ext2_alloc_block (struct inode * inode, unsigned long goal)
+static int ext2_alloc_block (struct inode * inode, unsigned long goal, int * err)
 {
 #ifdef EXT2FS_DEBUG
 	static unsigned long alloc_hits = 0, alloc_attempts = 0;
@@ -110,15 +110,14 @@ static int ext2_alloc_block (struct inode * inode, unsigned long goal)
 		ext2_debug ("preallocation miss (%lu/%lu).\n",
 			    alloc_hits, ++alloc_attempts);
 		if (S_ISREG(inode->i_mode))
-			result = ext2_new_block
-				(inode->i_sb, goal,
+			result = ext2_new_block (inode, goal,
 				 &inode->u.ext2_i.i_prealloc_count,
-				 &inode->u.ext2_i.i_prealloc_block);
+				 &inode->u.ext2_i.i_prealloc_block, err);
 		else
-			result = ext2_new_block (inode->i_sb, goal, 0, 0);
+			result = ext2_new_block (inode, goal, 0, 0, err);
 	}
 #else
-	result = ext2_new_block (inode->i_sb, goal, 0, 0);
+	result = ext2_new_block (inode, goal, 0, 0, err);
 #endif
 
 	return result;
@@ -225,12 +224,12 @@ repeat:
 
 	ext2_debug ("goal = %d.\n", goal);
 
-	tmp = ext2_alloc_block (inode, goal);
+	tmp = ext2_alloc_block (inode, goal, err);
 	if (!tmp)
 		return NULL;
 	result = getblk (inode->i_dev, tmp, inode->i_sb->s_blocksize);
 	if (*p) {
-		ext2_free_blocks (inode->i_sb, tmp, 1);
+		ext2_free_blocks (inode, tmp, 1);
 		brelse (result);
 		goto repeat;
 	}
@@ -297,14 +296,14 @@ repeat:
 		if (!goal)
 			goal = bh->b_blocknr;
 	}
-	tmp = ext2_alloc_block (inode, goal);
+	tmp = ext2_alloc_block (inode, goal, err);
 	if (!tmp) {
 		brelse (bh);
 		return NULL;
 	}
 	result = getblk (bh->b_dev, tmp, blocksize);
 	if (*p) {
-		ext2_free_blocks (inode->i_sb, tmp, 1);
+		ext2_free_blocks (inode, tmp, 1);
 		brelse (result);
 		goto repeat;
 	}

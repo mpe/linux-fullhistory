@@ -152,6 +152,10 @@ typedef unsigned char	byte;	/* used everywhere */
 #define WAIT_WORSTCASE	(30*HZ)	/* 30sec  - worst case when spinning up */
 #define WAIT_CMD	(10*HZ)	/* 10sec  - maximum wait for an IRQ to happen */
 
+#ifdef CONFIG_BLK_DEV_IDETAPE
+#include "ide-tape.h"
+#endif /* CONFIG_BLK_DEV_IDETAPE */
+
 #ifdef CONFIG_BLK_DEV_IDECD
 
 struct atapi_request_sense {
@@ -234,7 +238,8 @@ struct cdrom_info {
 /*
  * Now for the data we need to maintain per-drive:  ide_drive_t
  */
-typedef enum {disk, cdrom} media_t;
+
+typedef enum {ide_disk, ide_cdrom, ide_tape} ide_media_t;
 
 typedef union {
 	unsigned all			: 8;	/* all of the bits together */
@@ -271,7 +276,7 @@ typedef struct ide_drive_s {
 	unsigned removeable	: 1;	/* 1 if need to do check_media_change */
 	unsigned using_dma	: 1;	/* disk is using dma for read/write */
 	unsigned unmask		: 1;	/* flag: okay to unmask other irqs */
-	media_t		media;		/* disk, cdrom, tape */
+	ide_media_t	media;		/* disk, cdrom, tape */
 	select_t	select;		/* basic drive/head select reg value */
 	void		*hwif;		/* actually (ide_hwif_t *) */
 	byte		ctl;		/* "normal" value for IDE_CONTROL_REG */
@@ -295,6 +300,22 @@ typedef struct ide_drive_s {
 #ifdef CONFIG_BLK_DEV_IDECD
 	struct cdrom_info cdrom_info;	/* from ide-cd.c */
 #endif /* CONFIG_BLK_DEV_IDECD */
+
+#ifdef CONFIG_BLK_DEV_IDETAPE		/* ide-tape specific data */
+
+/*
+ *	Most of our global data which we need to save even as we leave the
+ *	driver due to an interrupt or a timer event is stored here.
+ *
+ *	Additional global variables which provide the link between the
+ *	character device interface to this structure are defined in
+ *	ide-tape.c
+ */
+
+	idetape_tape_t tape;
+
+#endif /* CONFIG_BLK_DEV_IDETAPE */
+
 	} ide_drive_t;
 
 /*
@@ -348,10 +369,7 @@ typedef struct hwgroup_s {
 	struct request		*rq;	/* current request */
 	struct timer_list	timer;	/* failsafe timer */
 	struct request		wrq;	/* local copy of current write rq */
-	unsigned long	reset_timeout;	/* timeout value during ide resets */
-#ifdef CONFIG_BLK_DEV_IDECD
-	int			doing_atapi_reset;
-#endif /* CONFIG_BLK_DEV_IDECD */
+	unsigned long		poll_timeout;	/* timeout value during long polls */
 	} ide_hwgroup_t;
 
 /*
@@ -368,16 +386,6 @@ void ide_set_recovery_timer (ide_hwif_t *);
 #endif
 
 /*
- * The main (re-)entry point for handling a new request is IDE_DO_REQUEST.
- * Note that IDE_DO_REQUEST should *only* ever be invoked from an interrupt
- * handler.  All others, such as a timer expiry handler, should call
- * do_hwgroup_request() instead (currently local to ide.c).
- */
-void ide_do_request (ide_hwgroup_t *);
-#define IDE_DO_REQUEST { SET_RECOVERY_TIMER(HWIF(drive)); ide_do_request(HWGROUP(drive)); }
-
-
-/*
  * This is used for (nearly) all data transfers from the IDE interface
  */
 void ide_input_data (ide_drive_t *drive, void *buffer, unsigned int wcount);
@@ -391,7 +399,7 @@ void ide_output_data (ide_drive_t *drive, void *buffer, unsigned int wcount);
  * This is used on exit from the driver, to designate the next irq handler
  * and also to start the safety timer.
  */
-void ide_set_handler (ide_drive_t *drive, ide_handler_t *handler);
+void ide_set_handler (ide_drive_t *drive, ide_handler_t *handler, unsigned int timeout);
 
 /*
  * Error reporting, in human readable form (luxurious, but a memory hog).
@@ -400,18 +408,15 @@ byte ide_dump_status (ide_drive_t *drive, const char *msg, byte stat);
 
 /*
  * ide_error() takes action based on the error returned by the controller.
- *
- * Returns 1 if an ide reset operation has been initiated, in which case
- * the caller MUST simply return from the driver (through however many levels).
- * Returns 0 otherwise.
+ * The calling function must return afterwards, to restart the request.
  */
-int ide_error (ide_drive_t *drive, const char *msg, byte stat);
+void ide_error (ide_drive_t *drive, const char *msg, byte stat);
 
 /*
  * This routine busy-waits for the drive status to be not "busy".
  * It then checks the status for all of the "good" bits and none
  * of the "bad" bits, and if all is okay it returns 0.  All other
- * cases return 1 after invoking ide_error()
+ * cases return 1 after invoking ide_error() -- caller should return.
  *
  */
 int ide_wait_stat (ide_drive_t *drive, byte good, byte bad, unsigned long timeout);
@@ -423,31 +428,51 @@ int ide_xlate_1024(kdev_t, int, const char *);
 
 /*
  * Start a reset operation for an IDE interface.
- * Returns 0 if the reset operation is still in progress,
- *  in which case the drive MUST return, to await completion.
- * Returns 1 if the reset is complete (success or failure).
+ * The caller should return immediately after invoking this.
  */
-int ide_do_reset (ide_drive_t *);
+void ide_do_reset (ide_drive_t *);
 
 /*
- * ide_alloc(): memory allocation for use *only* during driver initialization.
- * If "within_area" is non-zero, the memory will be allocated such that
- * it lies entirely within a "within_area" sized area (eg. 4096).  This is
- * needed for DMA stuff.  "within_area" must be a power of two (not validated).
- * All allocations are longword aligned.
+ * This function is intended to be used prior to invoking ide_do_drive_cmd().
  */
-void *ide_alloc (unsigned long bytecount, unsigned long within_area);
+void ide_init_drive_cmd (struct request *rq);
 
 /*
- * This function issues a specific IDE drive command onto the
- * tail of the request queue, and waits for it to be completed.
- * If arg is NULL, it goes through all the motions,
- * but without actually sending a command to the drive.
+ * "action" parameter type for ide_do_drive_cmd() below.
+ */
+typedef enum
+	{ide_wait,	/* insert rq at end of list, and wait for it */
+	 ide_next,	/* insert rq immediately after current request */
+	 ide_preempt}	/* insert rq in front of current request */
+ ide_action_t;
+
+/*
+ * This function issues a special IDE device request
+ * onto the request queue.
  *
- * The value of arg is passed to the internal handler as rq->buffer.
+ * If action is ide_wait, then then rq is queued at the end of
+ * the request queue, and the function sleeps until it has been
+ * processed.  This is for use when invoked from an ioctl handler.
+ *
+ * If action is ide_preempt, then the rq is queued at the head of
+ * the request queue, displacing the currently-being-processed
+ * request and this function returns immediately without waiting
+ * for the new rq to be completed.  This is VERY DANGEROUS, and is
+ * intended for careful use by the ATAPI tape/cdrom driver code.
+ *
+ * If action is ide_next, then the rq is queued immediately after
+ * the currently-being-processed-request (if any), and the function
+ * returns without waiting for the new rq to be completed.  As above,
+ * This is VERY DANGEROUS, and is intended for careful use by the 
+ * ATAPI tape/cdrom driver code.
  */
-int ide_do_drive_cmd(kdev_t rdev, char *args);
-
+int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t action);
+ 
+/*
+ * Clean up after success/failure of an explicit drive cmd.
+ * stat/err are used only when (HWGROUP(drive)->rq->cmd == IDE_DRIVE_CMD).
+ */
+void ide_end_drive_cmd (ide_drive_t *drive, byte stat, byte err);
 
 #ifdef CONFIG_BLK_DEV_IDECD
 /*
@@ -460,6 +485,57 @@ int ide_cdrom_open (struct inode *, struct file *, ide_drive_t *);
 void ide_cdrom_release (struct inode *, struct file *, ide_drive_t *);
 void ide_cdrom_setup (ide_drive_t *);
 #endif /* CONFIG_BLK_DEV_IDECD */
+
+#ifdef CONFIG_BLK_DEV_IDETAPE
+
+/*
+ *	Functions in ide-tape.c which are invoked from ide.c:
+ */
+
+/*
+ *	idetape_identify_device is called during device probing stage to
+ *	probe for an ide atapi tape drive and to initialize global variables
+ *	in ide-tape.c which provide the link between the character device
+ *	and the correspoding block device.
+ *
+ *	Returns 1 if an ide tape was detected and is supported.
+ *	Returns 0 otherwise.
+ */
+ 
+int idetape_identify_device (ide_drive_t *drive,struct hd_driveid *id);
+
+/*
+ *	idetape_setup is called a bit later than idetape_identify_device,
+ *	during the search for disk partitions, to initialize various tape
+ *	state variables in ide_drive_t *drive.
+ */
+ 
+void idetape_setup (ide_drive_t *drive);
+
+/*
+ *	idetape_do_request is our request function. It is called by ide.c
+ *	to process a new request.
+ */
+
+void idetape_do_request (ide_drive_t *drive, struct request *rq, unsigned long block);
+
+/*
+ *	Block device interface functions.
+ */
+  
+int idetape_blkdev_ioctl (ide_drive_t *drive, struct inode *inode, struct file *file,
+			unsigned int cmd, unsigned long arg);
+int idetape_blkdev_open (struct inode *inode, struct file *filp, ide_drive_t *drive);
+void idetape_blkdev_release (struct inode *inode, struct file *filp, ide_drive_t *drive);
+
+/*
+ *	idetape_register_chrdev initializes the character device interface to
+ *	the ide tape drive.
+ */
+ 
+void idetape_register_chrdev (void);
+
+#endif /* CONFIG_BLK_DEV_IDETAPE */
 
 #ifdef CONFIG_BLK_DEV_TRITON
 void ide_init_triton (byte, byte);

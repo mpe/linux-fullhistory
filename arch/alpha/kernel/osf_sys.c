@@ -32,7 +32,7 @@
 #include <asm/system.h>
 #include <asm/io.h>
 
-extern int do_mount(kdev_t, const char *, char *, int, void *);
+extern int do_mount(kdev_t, const char *, const char *, char *, int, void *);
 extern int do_pipe(int *);
 
 extern struct file_operations * get_blkfops(unsigned int);
@@ -308,7 +308,7 @@ static int osf_ufs_mount(char * dirname, struct ufs_args * args, int flags)
 	retval = getdev(tmp.devname, 0, &inode);
 	if (retval)
 		return retval;
-	retval = do_mount(inode->i_rdev, dirname, "ext2", flags, NULL);
+	retval = do_mount(inode->i_rdev, tmp.devname, dirname, "ext2", flags, NULL);
 	if (retval)
 		putdev(inode);
 	iput(inode);
@@ -328,7 +328,7 @@ static int osf_cdfs_mount(char * dirname, struct cdfs_args * args, int flags)
 	retval = getdev(tmp.devname, 1, &inode);
 	if (retval)
 		return retval;
-	retval = do_mount(inode->i_rdev, dirname, "iso9660", flags, NULL);
+	retval = do_mount(inode->i_rdev, tmp.devname, dirname, "iso9660", flags, NULL);
 	if (retval)
 		putdev(inode);
 	iput(inode);
@@ -348,7 +348,7 @@ static int osf_procfs_mount(char * dirname, struct procfs_args * args, int flags
 	dev = get_unnamed_dev();
 	if (!dev)
 		return -ENODEV;
-	retval = do_mount(dev, dirname, "proc", flags, NULL);
+	retval = do_mount(dev, "", dirname, "proc", flags, NULL);
 	if (retval)
 		put_unnamed_dev(dev);
 	return retval;

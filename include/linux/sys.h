@@ -27,10 +27,4 @@
  * These are system calls that haven't been implemented yet
  * but have an entry in the table for future expansion..
  */
-#ifdef __ELF__
-#define sys_quotactl	sys_ni_syscall
-#else
-#define _sys_quotactl	_sys_ni_syscall
-#endif
-
 #endif

@@ -1846,8 +1846,8 @@ ppp_tty_read (struct tty_struct *tty, struct file *file, u_char * buf,
 				if (ppp->flags & SC_DEBUG)
 					printk (KERN_DEBUG
 						"ppp_tty_read: no data "
-						"(EWOULDBLOCK)\n");
-				return -EWOULDBLOCK;
+						"(EAGAIN)\n");
+				return -EAGAIN;
 			}
 			current->timeout = 0;
 
@@ -3359,7 +3359,7 @@ ppp_alloc (void)
 
 		status = register_netdev (dev);
 		if (status == 0) {
-			printk ("registered device %s\n", dev->name);
+			printk (KERN_INFO "registered device %s\n", dev->name);
 			return (ppp);
 		}
 

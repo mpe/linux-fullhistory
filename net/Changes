@@ -277,8 +277,8 @@ o	Proper netlink device major(36)			[TESTED]
 o	First parts of the SKIP support			[IN, not useful]
 o	TCP ICMP (SOSS should work again)		[IN]
 o	IPFW support for TOS changing (Al Longyear)	[IN]
-o	DECNET PPP test code				[IN]
-o	NFS root					[IN]
+o	DECNET PPP test code [Steve]			[IN]
+o	NFS root	[Miguel/Gero]			[IN]
 o	Path MTU discovery [ANK]			[IN]
 
 -------->>>>> 1.3.44 <<<<<<--------
@@ -291,6 +291,14 @@ o	ARP ioctl() call fixes	[Bernd]			[IN]
 o	Fixes to the name set functions (maybe fixes
 	netrom)		[Steve]				[IN]
 o	Packet protocol labelling (not IPX yet)		[IN]
+o	Faster buffer copy/clone [Linus]		[IN]
+
+-------->>>>> 1.3.46 <<<<<<--------
+
+o	AX.25/NetROM fixes/changes [John Naylor]	[IN]
+o	Further attempts to fix the IPX memory bug	[IN]
+o	ARP fixes (Assorted)				[IN]
+o	Driver fixes for multicast lists		[IN]
 
 ---------- Things I thought Linus had for a while and not merged ----------------
 

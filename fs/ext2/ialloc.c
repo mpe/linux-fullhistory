@@ -252,7 +252,8 @@ void ext2_free_inode (struct inode * inode)
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
 	}
-
+	if (sb->dq_op)
+		sb->dq_op->free_inode (inode, 1);
 	sb->s_dirt = 1;
 	clear_inode (inode);
 	unlock_super (sb);
@@ -303,7 +304,7 @@ static void inc_inode_version (struct inode * inode,
  * For other inodes, search forward from the parent directory\'s block
  * group to find a free inode.
  */
-struct inode * ext2_new_inode (const struct inode * dir, int mode)
+struct inode * ext2_new_inode (const struct inode * dir, int mode, int * err)
 {
 	struct super_block * sb;
 	struct buffer_head * bh;
@@ -325,6 +326,7 @@ struct inode * ext2_new_inode (const struct inode * dir, int mode)
 repeat:
 	gdp = NULL; i=0;
 	
+	*err = -ENOSPC;
 	if (S_ISDIR(mode)) {
 		avefreei = es->s_free_inodes_count /
 			sb->u.ext2_sb.s_groups_count;
@@ -481,9 +483,21 @@ repeat:
 	insert_inode_hash(inode);
 	inc_inode_version (inode, gdp, mode);
 
+	unlock_super (sb);
+	if (sb->dq_op) {
+		sb->dq_op->initialize (inode, -1);
+		if (sb->dq_op->alloc_inode (inode, 1)) {
+			sb->dq_op->drop (inode);
+			inode->i_nlink = 0;
+			iput (inode);
+			*err = -EDQUOT;
+			return NULL;
+		}
+		inode->i_flags |= S_WRITE;
+	}
 	ext2_debug ("allocating inode %lu\n", inode->i_ino);
 
-	unlock_super (sb);
+	*err = 0;
 	return inode;
 }
 

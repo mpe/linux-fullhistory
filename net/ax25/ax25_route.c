@@ -593,4 +593,97 @@ int ax25_dev_ioctl(unsigned int cmd, void *arg)
 	return 0;
 }
 
+#ifdef CONFIG_BPQETHER
+static struct ax25_bpqdev {
+	struct ax25_bpqdev *next;
+	struct device *dev;
+	ax25_address callsign;
+} *ax25_bpqdev = NULL;
+
+int ax25_bpq_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+{
+	struct ax25_bpqdev *bpqdev;
+	int len     = 0;
+	off_t pos   = 0;
+	off_t begin = 0;
+  
+	cli();
+
+	len += sprintf(buffer, "dev  callsign\n");
+
+	for (bpqdev = ax25_bpqdev; bpqdev != NULL; bpqdev = bpqdev->next) {
+		len += sprintf(buffer + len, "%-4s %-9s\n",
+			bpqdev->dev ? bpqdev->dev->name : "???",
+			ax2asc(&bpqdev->callsign));
+
+		pos = begin + len;
+
+		if (pos < offset) {
+			len   = 0;
+			begin = pos;
+		}
+		
+		if (pos > offset + length)
+			break;
+	}
+
+	sti();
+
+	*start = buffer + (offset - begin);
+	len   -= (offset - begin);
+
+	if (len > length) len = length;
+
+	return len;
+} 
+
+ax25_address *ax25_bpq_get_addr(struct device *dev)
+{
+	struct ax25_bpqdev *bpqdev;
+	
+	for (bpqdev = ax25_bpqdev; bpqdev != NULL; bpqdev = bpqdev->next)
+		if (bpqdev->dev == dev)
+			return &bpqdev->callsign;
+
+	return NULL;
+}
+
+int ax25_bpq_ioctl(unsigned int cmd, void *arg)
+{
+	unsigned long flags;
+	struct ax25_bpqdev *bpqdev;
+	struct ax25_bpqaddr_struct bpqaddr;
+	struct device *dev;
+	int err;
+
+	switch (cmd) {
+		case SIOCAX25BPQADDR:
+			if ((err = verify_area(VERIFY_READ, arg, sizeof(bpqaddr))) != 0)
+				return err;
+			memcpy_fromfs(&bpqaddr, arg, sizeof(bpqaddr));
+			if ((dev = dev_get(bpqaddr.dev)) == NULL)
+				return -EINVAL;
+			for (bpqdev = ax25_bpqdev; bpqdev != NULL; bpqdev = bpqdev->next) {
+				if (bpqdev->dev == dev) {
+					bpqdev->callsign = bpqaddr.addr;
+					return 0;
+				}
+			}
+			if ((bpqdev = (struct ax25_bpqdev *)kmalloc(sizeof(struct ax25_bpqdev), GFP_ATOMIC)) == NULL)
+				return -ENOMEM;
+			bpqdev->dev      = dev;
+			bpqdev->callsign = bpqaddr.addr;
+			save_flags(flags);
+			cli();
+			bpqdev->next = ax25_bpqdev;
+			ax25_bpqdev  = bpqdev;
+			restore_flags(flags);
+			break;
+	}
+
+	return 0;
+}
+
+#endif
+
 #endif

@@ -28,9 +28,11 @@
  *					desired by mrouted, fixed the fact it has been
  *					broken since 1.3.6 and cleaned up a few minor
  *					points.
+ *
  *		Chih-Jen Chang	:	Tried to revise IGMP to Version 2
- *		Tsu-Sheng Tsao		chihjenc@scf.usc.edu and tsusheng@scf.usc.edu
- *					The enhancements are based on Steve Deering's ipmulti-3.5 code
+ *		Tsu-Sheng Tsao		E-mail: chihjenc@scf.usc.edu and tsusheng@scf.usc.edu
+ *					The enhancements are mainly based on Steve Deering's 
+ * 					ipmulti-3.5 source code.
  *		Chih-Jen Chang	:	Added the igmp_get_mrouter_info and
  *		Tsu-Sheng Tsao		igmp_set_mrouter_info to keep track of
  *					the mrouted version on that device.
@@ -38,6 +40,8 @@
  *		Tsu-Sheng Tsao		igmp_heard_query(). Using this parameter
  *					to identify the multicast router verion
  *					and do what the IGMP version 2 specified.
+ *		Chih-Jen Chang	:	Added a timer to revert to IGMP V2 router
+ *		Tsu-Sheng Tsao		if the specified time expired.
  */
 
 
@@ -66,20 +70,33 @@
 
 
 /*
+ *	If time expired, change the router type to IGMP_NEW_ROUTER.
+ */
+
+static void ip_router_timer_expire(unsigned long data)
+{
+	struct ip_router_info *i=(struct ip_router_info *)data;
+
+	del_timer(&i->timer);
+	i->type=IGMP_NEW_ROUTER;	/* Revert to new multicast router */
+	i->time=0;
+}
+
+/*
  *	Multicast router info manager
  */
 
-struct	router_info	*router_info_head=(struct router_info *)0;
+struct	ip_router_info	*ip_router_info_head=(struct ip_router_info *)0;
 
 /*
  *	Get the multicast router info on that device
  */
 
-static	struct	router_info	*igmp_get_mrouter_info(struct device *dev)
+static	struct	ip_router_info	*igmp_get_mrouter_info(struct device *dev)
 {
-	register struct router_info *i;
+	register struct ip_router_info *i;
 
-	for(i=router_info_head;i!=NULL;i=i->next)
+	for(i=ip_router_info_head;i!=NULL;i=i->next)
 	{
 		if (i->dev == dev)
 		{
@@ -90,12 +107,17 @@ static	struct	router_info	*igmp_get_mrouter_info(struct device *dev)
 	/*
 	 *  Not found. Create a new entry. The default is IGMP V2 router
 	 */
-	i=(struct router_info *)kmalloc(sizeof(*i), GFP_KERNEL);
+	i=(struct ip_router_info *)kmalloc(sizeof(*i), GFP_KERNEL);
 	i->dev = dev;
 	i->type = IGMP_NEW_ROUTER;
 	i->time = IGMP_AGE_THRESHOLD;
-	i->next = router_info_head;
-	router_info_head = i;
+	i->next = ip_router_info_head;
+	ip_router_info_head = i;
+
+	init_timer(&i->timer);
+	i->timer.data=(unsigned long)i;
+	i->timer.function=&ip_router_timer_expire;
+
 	return i;
 }
 
@@ -103,16 +125,27 @@ static	struct	router_info	*igmp_get_mrouter_info(struct device *dev)
  *	Set the multicast router info on that device
  */
 
-static	struct	router_info	*igmp_set_mrouter_info(struct device *dev,int type,int time)
+static	struct	ip_router_info	*igmp_set_mrouter_info(struct device *dev,int type,int time)
 {
-	register struct router_info *i;
+	register struct ip_router_info *i;
 
-	for(i=router_info_head;i!=NULL;i=i->next)
+	for(i=ip_router_info_head;i!=NULL;i=i->next)
 	{
 		if (i->dev == dev)
 		{
+			if(i->type==IGMP_OLD_ROUTER)
+			{
+				del_timer(&i->timer);
+			}
+
 			i->type = type;
 			i->time = time;
+
+			if(i->type==IGMP_OLD_ROUTER)
+			{
+				i->timer.expires=jiffies+i->time*HZ;
+				add_timer(&i->timer);
+			}
 			return i;
 		}
 	}
@@ -120,12 +153,22 @@ static	struct	router_info	*igmp_set_mrouter_info(struct device *dev,int type,int
 	/*
 	 *  Not found. Create a new entry.
 	 */
-	i=(struct router_info *)kmalloc(sizeof(*i), GFP_KERNEL);
+	i=(struct ip_router_info *)kmalloc(sizeof(*i), GFP_KERNEL);
 	i->dev = dev;
 	i->type = type;
 	i->time = time;
-	i->next = router_info_head;
-	router_info_head = i;
+	i->next = ip_router_info_head;
+	ip_router_info_head = i;
+
+	init_timer(&i->timer);
+	i->timer.data=(unsigned long)i;
+	i->timer.function=&ip_router_timer_expire;
+	if(i->type==IGMP_OLD_ROUTER)
+	{
+		i->timer.expires=jiffies+i->time*HZ;
+		add_timer(&i->timer);
+	}
+
 	return i;
 }
 
@@ -133,7 +176,6 @@ static	struct	router_info	*igmp_set_mrouter_info(struct device *dev,int type,int
 /*
  *	Timer management
  */
-
 
 static void igmp_stop_timer(struct ip_mc_list *im)
 {
@@ -197,7 +239,7 @@ static void igmp_send_report(struct device *dev, unsigned long address, int type
 static void igmp_timer_expire(unsigned long data)
 {
 	struct ip_mc_list *im=(struct ip_mc_list *)data;
-	struct router_info *r;
+	struct ip_router_info *r;
 	igmp_stop_timer(im);
 	r=igmp_get_mrouter_info(im->interface);
 	if(r->type==IGMP_NEW_ROUTER)
@@ -337,7 +379,7 @@ extern __inline__ void igmp_group_dropped(struct ip_mc_list *im)
 
 extern __inline__ void igmp_group_added(struct ip_mc_list *im)
 {
-	struct router_info *r;
+	struct ip_router_info *r;
 	igmp_init_timer(im);
 	ip_mc_filter_add(im->interface, im->multiaddr);
 	r=igmp_get_mrouter_info(im->interface);
@@ -462,20 +504,9 @@ void ip_mc_drop_device(struct device *dev)
 void ip_mc_allhost(struct device *dev)
 {
 	struct ip_mc_list *i;
-	/*
-	 *	Don't add to non multicast units
-	 */
-	if(!(dev->flags&IFF_MULTICAST))
-		return;
-	/*
-	 *	No duplicates
-	 */
 	for(i=dev->ip_mc_list;i!=NULL;i=i->next)
 		if(i->multiaddr==IGMP_ALL_HOSTS)
 			return;
-	/*
-	 *	Add it
-	 */
 	i=(struct ip_mc_list *)kmalloc(sizeof(*i), GFP_KERNEL);
 	if(!i)
 		return;

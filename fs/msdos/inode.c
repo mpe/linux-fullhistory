@@ -155,7 +155,7 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
 				printk ("MSDOS FS: Invalid blocksize (512 or 1024)\n");
 			}
 		}
-		else return 0;
+		else return 1;
 	}
 	return 1;
 }

@@ -3,10 +3,10 @@
  *
  *	Generic datagram handling routines. These are generic for all protocols. Possibly a generic IP version on top
  *	of these would make sense. Not tonight however 8-).
- *	This is used because UDP, RAW, PACKET and the to be released IPX layer all have identical select code and mostly
- *	identical recvfrom() code. So we share it here. The select was shared before but buried in udp.c so I moved it.
+ *	This is used because UDP, RAW, PACKET, DDP, IPX, AX.25 and NetROM layer all have identical select code and mostly
+ *	identical recvmsg() code. So we share it here. The select was shared before but buried in udp.c so I moved it.
  *
- *	Authors:	Alan Cox <iiitac@pyr.swan.ac.uk>. (datagram_select() from old udp.c code)
+ *	Authors:	Alan Cox <alan@cymru.net>. (datagram_select() from old udp.c code)
  *
  *	Fixes:
  *		Alan Cox	:	NULL return from skb_peek_copy() understood
@@ -19,9 +19,6 @@
  *		Linus Torvalds	:	BSD semantic fixes.
  *		Alan Cox	:	Datagram iovec handling
  *
- *	Note:
- *		A lot of this will change when the protocol/socket separation
- *	occurs. Using this will make things reasonably clean.
  */
 
 #include <linux/types.h>

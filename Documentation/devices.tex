@@ -42,7 +42,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@storm.net$>$}
-\date{Last revised: November 17, 1995}
+\date{Last revised: December 4, 1995}
 \maketitle
 %
 \noindent
@@ -77,12 +77,12 @@ an unreasonable effort.
 \section{Major numbers}
 
 \begin{devicelist}
-\major{ 0}{}{     }{Unnamed devices (NFS mounts, loopback devices)}
+\major{ 0}{}{     }{Unnamed devices (e.g. non-device mounts)}
 \major{ 1}{}{char }{Memory devices}
 \major{  }{}{block}{RAM disk}
-\major{ 2}{}{char }{Reserved for PTY's $<$tytso@athena.mit.edu$>$}
+\major{ 2}{}{char }{Pseudo-TTY masters}
 \major{  }{}{block}{Floppy disks}
-\major{ 3}{}{char }{Reserved for PTY's $<$tytso@athena.mit.edu$>$}
+\major{ 3}{}{char }{Pseudo-TTY slaves}
 \major{  }{}{block}{First MFM, RLL and IDE hard disk/CD-ROM interface}
 \major{ 4}{}{char }{TTY devices}
 \major{ 5}{}{char }{Alternate TTY devices}
@@ -142,7 +142,8 @@ an unreasonable effort.
 \major{  }{}{block}{Modular RAM disk}
 \major{36}{}{char }{Netlink support}
 \major{  }{}{block}{MCA ESDI hard disk}
-\major{37}{--41}{}{Unallocated}
+\major{37}{}{char }{IDE tape}
+\major{38}{--41}{}{Unallocated}
 \major{42}{}{}{Demo/sample use}
 \major{43}{--223}{}{Unallocated}
 \major{224}{--239}{}{SEE NOTE}
@@ -154,7 +155,7 @@ an unreasonable effort.
 
 
 \begin{devicelist}
-\major{0}{}{}{Unnamed devices (NFS mounts, loopback devices)}
+\major{0}{}{}{Unnamed devices (e.g. non-device mounts)}
 	\minor{0}{}{reserved as null device number}
 \end{devicelist}
 
@@ -175,7 +176,24 @@ an unreasonable effort.
 \end{devicelist}
 
 \begin{devicelist}
-\major{2}{}{char}{Reserved for PTY's $<$tytso@athena.mit.edu$>$}
+\major{2}{}{char}{Pseudo-TTY masters}
+	\minor{0}{/dev/ptyp0}{First PTY master}
+	\minor{1}{/dev/ptyp1}{Second PTY master}
+	\minordots
+	\minor{255}{/dev/ptyef}{256th PTY master}
+\end{devicelist}
+
+\noindent
+Pseudo-TTY's are named as follows:
+\begin{itemize}
+\item Masters are {\file pty}, slaves are {\file tty};
+\item the fourth letter is one of {\file pqrstuvwxyzabcde} indicating
+the 1st through 16th series of 16 pseudo-ttys each, and
+\item the fifth letter is one of {\file 0123456789abcdef} indicating
+the position within the series.
+\end{itemize}
+
+\begin{devicelist}
 \major{}{}{block}{Floppy disks}
 	\minor{0}{/dev/fd0}{Controller 1, drive 1 autodetect}
 	\minor{1}{/dev/fd1}{Controller 1, drive 2 autodetect}
@@ -235,7 +253,12 @@ letters {\file D}, {\file H}, or {\file E} for the 3.5" models have
 been deprecated, since the drive type is insignificant for these devices.
 
 \begin{devicelist}
-\major{3}{}{char}{Reserved for PTY's $<$tytso@athena.mit.edu$>$}
+\major{3}{}{char}{Pseudo-TTY slaves}
+	\minor{0}{/dev/ttyp0}{First PTY slave}
+	\minor{1}{/dev/ttyp1}{Second PTY slave}
+	\minordots
+	\minor{255}{/dev/ttyef}{256th PTY slave}
+\\
 \major{}{}{block}{First MFM, RLL and IDE hard disk/CD-ROM interface}
 	\minor{0}{/dev/hda}{Master: whole disk (or CD-ROM)}
 	\minor{64}{/dev/hdb}{Slave: whole disk (or CD-ROM)}
@@ -271,14 +294,10 @@ been deprecated, since the drive type is insignificant for these devices.
 \end{devicelist}
 
 \noindent
-Pseudo-tty's are named as follows:
-\begin{itemize}
-\item Masters are {\file pty}, slaves are {\file tty};
-\item the fourth letter is one of {\file pqrs} indicating
-the 1st, 2nd, 3rd, 4th series of 16 pseudo-ttys each, and
-\item the fifth letter is one of {\file 0123456789abcdef} indicating
-the position within the series.
-\end{itemize}
+For compatibility with previous versions of Linux, the first 64 PTYs
+are replicated under this device number.  This use will be obsolescent
+with the release of Linux 1.4 and may be removed in a future version
+of Linux.
 
 \begin{devicelist}
 \major{ 5}{}{char }{Alternate TTY devices}
@@ -358,6 +377,10 @@ physical disks.
 	\minor{5}{/dev/atarimouse}{Atari Mouse (68k)}
 	\minor{128}{/dev/beep}{Fancy beep device}
 	\minor{129}{/dev/modreq}{Kernel module load request}
+	\minor{130}{/dev/watchdog}{Watchdog timer port}
+	\minor{131}{/dev/temperature}{Machine internal temperature}
+	\minor{132}{/dev/hwtrap}{Hardware fault trap}
+	\minor{133}{/dev/exttrp}{External device trap}
 \end{devicelist}
 
 \begin{devicelist}
@@ -730,16 +753,16 @@ major number 3).
 
 \begin{devicelist}
 \major{34}{}{char }{Z8530 HDLC driver}
-	\minor{0}{/dev/sc1}{First Z8530, first port}
-	\minor{1}{/dev/sc2}{First Z8530, second port}
-	\minor{2}{/dev/sc3}{Second Z8530, first port}
-	\minor{3}{/dev/sc4}{Second Z8530, second port}
+	\minor{0}{/dev/scc0}{First Z8530, first port}
+	\minor{1}{/dev/scc1}{First Z8530, second port}
+	\minor{2}{/dev/scc2}{Second Z8530, first port}
+	\minor{3}{/dev/scc3}{Second Z8530, second port}
 	\minordots
 \end{devicelist}
 
 \noindent
-The author has indicated that the device names will change in a
-subsequent version; {\file /dev/sc1} will become {\file /dev/scc0} etc.
+In a previous version these files were named {\file /dev/sc1} for
+{\file /dev/scc0}, {\file /dev/sc2} for {\file /dev/scc1}, and so on.
 
 \begin{devicelist}
 \major{  }{}{block}{Fourth IDE hard disk/CD-ROM interface}
@@ -789,7 +812,16 @@ Partitions are handled the same way as for IDE disks (see major number
 3).
 
 \begin{devicelist}
-\major{37}{--41}{}{Unallocated}
+\major{37}{}{char }{IDE tape}
+	\minor{0}{/dev/ht0}{First IDE tape}
+	\minor{128}{/dev/nht0}{First IDE tape, no rewind-on-close}
+\end{devicelist}
+
+\noindent
+Currently, only one IDE tape drive is supported.
+
+\begin{devicelist}
+\major{38}{--41}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}

@@ -39,7 +39,8 @@ which makes it completely incompatible with so-called "Token Ring" cards,
 but which makes transfers much more reliable than with ethernet.  In fact,
 ARCnet will guarantee that a packet arrives safely at the destination, and
 even if it can't possibly be delivered properly (ie. because of a cable
-break) it will at least tell the sender about it.
+break, or because the destination computer does not exist) it will at least
+tell the sender about it.
 
 In addition, all known ARCnet cards have an (almost) identical programming
 interface.  This means that with one "arcnet" driver you can support any
@@ -54,9 +55,9 @@ One thing that makes ARCnet cards difficult to program for, however, is the
 limit on their packet sizes; standard ARCnet can only send packets that are
 up to 508 bytes in length.  This is smaller than the internet "bare minimum"
 of 576 bytes, let alone the ethernet MTU of 1500.  To compensate, an extra
-level of encapsulation is defined by RFC1201 called "packet splitting" which
-allows "virtual packets" to grow as large as 64K each, although they are
-generally kept down to the ethernet-style 1500 bytes.
+level of encapsulation is defined by RFC1201, which I call "packet
+splitting," which allows "virtual packets" to grow as large as 64K each,
+although they are generally kept down to the ethernet-style 1500 bytes.
 
 
 CABLING ARCNET NETWORKS
@@ -69,7 +70,7 @@ CABLING ARCNET NETWORKS
 
  - I, Avery Pennarun, tried to arrange it into something that makes sense
    when all put together.  All mistakes, then, are most likely my fault.
-   Bug me about them.
+   Bug me about them, and they will probably get fixed.
 
 Ideally, according to documentation, ARCnet networks should be connected
 with 93 Ohm cables with 93 Ohm resistors as terminators.  I use TV cable and
@@ -86,7 +87,9 @@ Koenig (slight touchups by me):
 		IBM Typ 3 100 Ohm up to 100 m
 		
 So you can see that while 93 Ohms is ideal, you can still go half a
-kilometer with 75 Ohm TV cable.
+kilometer with 75 Ohm TV cable.  A rule of thumb might be handy here, to
+help you remember:
+	Basically any coax cable, up to a ridiculously large distance.
 
 The above applies to all known ARCnet cards.  Specific to STAR cards,
 though, Stephen A. Wood has some information:
@@ -131,7 +134,7 @@ above:
 	
 According to Vojtech Pavlik, there shouldn't be more than one passive hub
 between two "active ends", an active end being an active hub or an ARCnet
-card.
+card.  That makes sense to me.
 	
 As for BUS cards, they're even easier (for more than two cards, anyway; you
 can't get much simpler than direct-connecting two STAR cards with a TV
@@ -195,18 +198,20 @@ SETTING THE JUMPERS
 All ARCnet cards should have a total of four or five different settings:
 
   - the I/O address:  this is the "port" your ARCnet card is on.  Probed
-    values, as of v0.14, are only from 0x200 through 0x3F0. (If your card
-    has additional ones, which is possible, please tell me.) This should not
-    be the same as any other device on your system.  According to a doc I
-    got from Novell, MS Windows prefers values of 0x300 or more, eating
-    netconnections on my system otherwise.
+    values in the Linux ARCnet driver are only from 0x200 through 0x3F0. (If
+    your card has additional ones, which is possible, please tell me.) This
+    should not be the same as any other device on your system.  According to
+    a doc I got from Novell, MS Windows prefers values of 0x300 or more,
+    eating netconnections on my system (at least) otherwise.  My guess is
+    this may be because, if your card is at 0x2E0, probing for a serial port
+    at 0x2E8 will reset the card and probably mess things up royally.
 	- Avery's favourite: 0x300.
 
-  - the IRQ:  on 8-bit cards, it might be 2 (9), 3, 4, 5, or 7.
+  - the IRQ: on  8-bit cards, it might be 2 (9), 3, 4, 5, or 7.
              on 16-bit cards, it might be 2 (9), 3, 4, 5, 7, or 10-15.  Make
     sure this is different from any other card on your system.  Note that
     IRQ2 is the same as IRQ9, as far as Linux is concerned.
-	- Avery's favourite: IRQ2.
+	- Avery's favourite: IRQ2 (actually IRQ9).
 
   - the memory address:  Unlike most cards, ARCnets use "shared memory" for
     copying buffers around.  Make SURE it doesn't conflict with any other
@@ -223,31 +228,33 @@ All ARCnet cards should have a total of four or five different settings:
 
   - the station address:  Every ARCnet card has its own "unique" network
     address from 0 to 255.  Unlike ethernet, you can set this address
-    yourself with a jumper.  Since it's only 8 bits, you can only have 254
-    ARCnet cards on a network.  DON'T use 0 or 255, since these are
-    reserved. (although neat stuff will probably happen if you DO use them). 
-    By the way, if you haven't already guessed, don't set this the same as
-    any other ARCnet on your network!
+    yourself with a jumper or switch (or on some cards, with special
+    software).  Since it's only 8 bits, you can only have 254 ARCnet cards
+    on a network.  DON'T use 0 or 255, since these are reserved. (although
+    neat stuff will probably happen if you DO use them).  By the way, if you
+    haven't already guessed, don't set this the same as any other ARCnet on
+    your network!
 	- Avery's favourite:  3 and 4.  Not that it matters.
 	
   - There may be ETS1 and ETS2 settings.  These may or may not make a
-    difference, but are used to change the delays used when powering up
-    a computer on the network.  This is only necessary when wiring VERY
-    long range ARCnet networks, on the order of 4km or so; in any case,
-    the only real requirement here is that all cards on the network with
-    ETS1 and ETS2 jumpers have them in the same position.
+    difference on your card, but are used to change the delays used when
+    powering up a computer on the network.  This is only necessary when
+    wiring VERY long range ARCnet networks, on the order of 4km or so; in
+    any case, the only real requirement here is that all cards on the
+    network with ETS1 and ETS2 jumpers have them in the same position.
 
 
 Here's the all the jumper information I could obtain for individual card
-types.  Unfortunately, there is a lot of duplicated information here. 
-Someday, I may get around to actually organizing it.  Until then... too much
-is better than too little, I say :)
+types.  The format of this list has changed somewhat; I finally got around
+to unduplicating some of the information and making a few other changes, but
+didn't get very far yet.  If you notice any problems with the info, it's now
+officially my fault :(
 
 The model # is listed right above specifics for that card, so you should be
 able to use your text viewer's "search" function to find the entry you want. 
 
-If your model isn't listed, and has different settings, PLEASE PLEASE tell
-me.  I had to figure mine out without the manual, and it WASN'T FUN!
+If your model isn't listed and/or has different settings, PLEASE PLEASE
+tell me.  I had to figure mine out without the manual, and it WASN'T FUN!
 
 Even if your ARCnet model isn't listed, but has the same jumpers as another
 model that is, please e-mail me to say so.
@@ -266,7 +273,7 @@ Cards Listed in this file (in this order, mostly):
 	SMC		PC550Longboard	16
 	SMC		PC600		16
 	SMC?		LCS-8830-T	16?
-	Puredata	PDI507		16
+	Puredata	PDI507		8
 	CNet Tech	CN120-Series	8
 	CNet Tech	CN160-Series	16
 	No Name		--		8/16
@@ -311,9 +318,6 @@ PC500, PC600 (16-bit cards)
     130, 500, and 600 all have the same switches as Avery's PC100. 
     PC500/600 have several extra, undocumented pins though. (?)
   - PC110 settings were verified by Stephen A. Wood <saw@cebaf.gov>
-  - On the other hand, John Edward Bauer <jbauer@badlands.NoDak.edu> said
-    the PC110 settings are all wrong.  In his case, you need to switch all
-    the 1's with 0's.  If you're having problems, try that.
   - Also, the JP- and S-numbers probably don't match your card exactly.  Try
     to find jumpers/switches with the same number of settings - it's
     probably more reliable.
@@ -323,12 +327,20 @@ PC500, PC600 (16-bit cards)
 (IRQ Setting)		      IRQ2  IRQ3 IRQ4 IRQ5 IRQ7
 		Put exactly one jumper on exactly one set of pins.
 
+
                           1  2   3  4  5  6   7  8  9 10
      S1                /----------------------------------\
 (I/O and Memory        |  1  1 * 0  0  0  0 * 1  1  0  1  |
  addresses)            \----------------------------------/
                           |--|   |--------|   |--------|
                           (a)       (b)           (m)
+                          
+                WARNING.  It's very important when setting these which way
+                you're holding the card, and which way you think is '1'!
+                
+                If you suspect that your settings are not being made
+		correctly, try reversing the direction or inverting the
+		switch positions.
 
 		a: The first digit of the I/O address.
 			Setting		Value
@@ -473,40 +485,8 @@ Setting the Node ID
 -------------------
 
 The eight switches in group S2 are used to set the node ID.
-Each node attached to the network must have an unique node ID which
-must be diffrent from 0.
-Switch 1 serves as the least significant bit (LSB).
-
-The node ID is the sum of the values of all switches set to "1"  
-These values are:
-    Switch | Value
-    -------|-------
-      1    |   1
-      2    |   2
-      3    |   4
-      4    |   8
-      5    |  16
-      6    |  32
-      7    |  64
-      8    | 128
-
-Some Examples:
-
-    Switch         | Hex     | Decimal 
-   8 7 6 5 4 3 2 1 | Node ID | Node ID
-   ----------------|---------|---------
-   0 0 0 0 0 0 0 0 |    not allowed
-   0 0 0 0 0 0 0 1 |    1    |    1 
-   0 0 0 0 0 0 1 0 |    2    |    2
-   0 0 0 0 0 0 1 1 |    3    |    3
-       . . .       |         |
-   0 1 0 1 0 1 0 1 |   55    |   85
-       . . .       |         |
-   1 0 1 0 1 0 1 0 |   AA    |  170
-       . . .       |         |  
-   1 1 1 1 1 1 0 1 |   FD    |  253
-   1 1 1 1 1 1 1 0 |   FE    |  254
-   1 1 1 1 1 1 1 1 |   FF    |  255
+These switches work in a way similar to the PC100-series cards; see that
+entry for more information.
 
 
 Setting the I/O Base Address
@@ -556,7 +536,7 @@ positions, determined by the offset, switches 7 and 8 of group S1.
    0 1 0  1 0 |  CD000  |  CE000
    0 1 0  1 1 |  CD800  |  CE000
               |         |
-   0 1 1  0 0 |  D0000  |  D2000  (Manufactor's default)
+   0 1 1  0 0 |  D0000  |  D2000  (Manufacturer's default)
    0 1 1  0 1 |  D0800  |  D2000
    0 1 1  1 0 |  D1000  |  D2000
    0 1 1  1 1 |  D1800  |  D2000
@@ -590,10 +570,9 @@ Setting the Timeouts and Interrupt
 
 The jumpers labeled EXT1 and EXT2 are used to determine the timeout 
 parameters. These two jumpers are normally left open.
-Refer to the COM9026 Data Sheet for alternate configurations.
 
 To select a hardware interrupt level set one (only one!) of the jumpers
-IRQ2, IRQ3, IRQ4, IRQ5, IRQ7. The Manufactor's default is IRQ2.
+IRQ2, IRQ3, IRQ4, IRQ5, IRQ7. The Manufacturer's default is IRQ2.
  
 
 Configuring the PC130E for Star or Bus Topology
@@ -658,7 +637,7 @@ and for connection to bus networks.
 
 The PC550 is equipped with two modular RJ11-type jacks for connection
 to twisted pair wiring.
-It can be used in a star or a daisy-chained network.
+It can be used in a star or a daisy-chained (BUS) network.
 
        1 
        0 9 8 7 6 5 4 3 2 1     6 5 4 3 2 1
@@ -847,7 +826,7 @@ board activity:
 ** Possibly SMC **
 LCS-8830-T (16-bit card)
 ------------------------
-	- from Mathias Katzer <mkatzer@HRZ.Uni-Bielefeld.DE>
+  - from Mathias Katzer <mkatzer@HRZ.Uni-Bielefeld.DE>
 	
 This is a LCS-8830-T made by SMC, I think ('SMC' only appears on one PLCC,
 nowhere else, not even on the few xeroxed sheets from the manual).
@@ -954,11 +933,9 @@ Switches        Ram           Rom
 *****************************************************************************
 
 ** PureData Corp **
-PDI507 (16-bit card)
+PDI507 (8-bit card)
 --------------------
-	- from Mark Rejhon <mdrejhon@magi.com> (slight modifications by
-	  Avery)
-	- Send questions/suggestions/etc about this text to Mark.
+  - from Mark Rejhon <mdrejhon@magi.com> (slight modifications by Avery)
 
 Jumpers:
 
@@ -1868,7 +1845,7 @@ Setting the Timeouts
 ** No Name **
 8-bit cards ("Made in Taiwan R.O.C.")
 -----------
- - from Vojtech Pavlik <vpav4328@diana.troja.mff.cuni.cz>
+  - from Vojtech Pavlik <vpav4328@diana.troja.mff.cuni.cz>
 
 I have named this ARCnet card "NONAME", since I got only the card with
 no manual at all and the only text identifying the manufacturer is 

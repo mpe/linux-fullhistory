@@ -39,6 +39,9 @@
 #define MAY_WRITE 2
 #define MAY_READ 4
 
+#define FMODE_READ 1
+#define FMODE_WRITE 2
+
 #define READ 0
 #define WRITE 1
 #define READA 2		/* read-ahead - don't pause */
@@ -56,15 +59,15 @@
 /*
  * These are the fs-independent mount-flags: up to 16 flags are supported
  */
-#define MS_RDONLY	 1 /* mount read-only */
-#define MS_NOSUID	 2 /* ignore suid and sgid bits */
-#define MS_NODEV	 4 /* disallow access to device special files */
-#define MS_NOEXEC	 8 /* disallow program execution */
-#define MS_SYNCHRONOUS	16 /* writes are synced at once */
-#define MS_REMOUNT	32 /* alter flags of a mounted FS */
-
-#define S_APPEND    256 /* append-only file */
-#define S_IMMUTABLE 512 /* immutable file */
+#define MS_RDONLY	 1	/* Mount read-only */
+#define MS_NOSUID	 2	/* Ignore suid and sgid bits */
+#define MS_NODEV	 4	/* Disallow access to device special files */
+#define MS_NOEXEC	 8	/* Disallow program execution */
+#define MS_SYNCHRONOUS	16	/* Writes are synced at once */
+#define MS_REMOUNT	32	/* Alter flags of a mounted FS */
+#define S_WRITE		128	/* Write on file/directory/symlink */
+#define S_APPEND	256	/* Append-only file */
+#define S_IMMUTABLE	512	/* Immutable file */
 
 /*
  * Flags that can be altered by MS_REMOUNT
@@ -74,8 +77,8 @@
 /*
  * Magic mount flag number. Has to be or-ed to the flag values.
  */
-#define MS_MGC_VAL 0xC0ED0000 /* magic flag number to indicate "new" flags */
-#define MS_MGC_MSK 0xffff0000 /* magic flag number mask */
+#define MS_MGC_VAL 0xC0ED0000	/* magic flag number to indicate "new" flags */
+#define MS_MGC_MSK 0xffff0000	/* magic flag number mask */
 
 /*
  * Note that read-only etc flags are inode-specific: setting some file-system
@@ -91,6 +94,7 @@
 #define IS_NOEXEC(inode) ((inode)->i_flags & MS_NOEXEC)
 #define IS_SYNC(inode) ((inode)->i_flags & MS_SYNCHRONOUS)
 
+#define IS_WRITABLE(inode) ((inode)->i_flags & S_WRITE)
 #define IS_APPEND(inode) ((inode)->i_flags & S_APPEND)
 #define IS_IMMUTABLE(inode) ((inode)->i_flags & S_IMMUTABLE)
 
@@ -222,6 +226,8 @@ struct iattr {
 	time_t		ia_ctime;
 };
 
+#include <linux/quota.h>
+
 struct inode {
 	kdev_t		i_dev;
 	unsigned long	i_ino;
@@ -238,17 +244,17 @@ struct inode {
 	unsigned long	i_blocks;
 	unsigned long	i_version;
 	struct semaphore i_sem;
-	struct inode_operations * i_op;
-	struct super_block * i_sb;
-	struct wait_queue * i_wait;
-	struct file_lock * i_flock;
-	struct vm_area_struct * i_mmap;
-	struct inode * i_next, * i_prev;
-	struct inode * i_hash_next, * i_hash_prev;
-	struct inode * i_bound_to, * i_bound_by;
-	struct inode * i_mount;
+	struct inode_operations *i_op;
+	struct super_block *i_sb;
+	struct wait_queue *i_wait;
+	struct file_lock *i_flock;
+	struct vm_area_struct *i_mmap;
+	struct dquot *i_dquot[MAXQUOTAS];
+	struct inode *i_next, *i_prev;
+	struct inode *i_hash_next, *i_hash_prev;
+	struct inode *i_bound_to, *i_bound_by;
+	struct inode *i_mount;
 	unsigned short i_count;
-	unsigned short i_wcount;
 	unsigned short i_flags;
 	unsigned char i_lock;
 	unsigned char i_dirt;
@@ -256,6 +262,7 @@ struct inode {
 	unsigned char i_sock;
 	unsigned char i_seek;
 	unsigned char i_update;
+	unsigned short i_writecount;
 	union {
 		struct pipe_inode_info pipe_i;
 		struct minix_inode_info minix_i;
@@ -330,6 +337,7 @@ struct super_block {
 	unsigned char s_dirt;
 	struct file_system_type *s_type;
 	struct super_operations *s_op;
+	struct dquot_operations *dq_op;
 	unsigned long s_flags;
 	unsigned long s_magic;
 	unsigned long s_time;
@@ -402,6 +410,16 @@ struct super_operations {
 	void (*write_super) (struct super_block *);
 	void (*statfs) (struct super_block *, struct statfs *, int);
 	int (*remount_fs) (struct super_block *, int *, char *);
+};
+
+struct dquot_operations {
+	void (*initialize) (struct inode *, short);
+	void (*drop) (struct inode *);
+	int (*alloc_block) (const struct inode *, unsigned long);
+	int (*alloc_inode) (const struct inode *, unsigned long);
+	void (*free_block) (const struct inode *, unsigned long);
+	void (*free_inode) (const struct inode *, unsigned long);
+	int (*transfer) (struct inode *, struct iattr *, char);
 };
 
 struct file_system_type {
@@ -510,8 +528,8 @@ extern int notify_change(struct inode *, struct iattr *);
 extern int namei(const char * pathname, struct inode ** res_inode);
 extern int lnamei(const char * pathname, struct inode ** res_inode);
 extern int permission(struct inode * inode,int mask);
-extern int get_write_access(struct inode * inode);
-extern void put_write_access(struct inode * inode);
+extern int get_write_access(struct inode *inode);
+extern void put_write_access(struct inode *inode);
 extern int open_namei(const char * pathname, int flag, int mode,
 	struct inode ** res_inode, struct inode * base);
 extern int do_mknod(const char * filename, int mode, dev_t dev);
@@ -575,7 +593,7 @@ extern void inode_setattr(struct inode *, struct iattr *);
 
 extern inline struct inode * iget(struct super_block * sb,int nr)
 {
-	return __iget(sb,nr,1);
+	return __iget(sb, nr, 1);
 }
 
 #endif /* __KERNEL__ */

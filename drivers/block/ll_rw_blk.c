@@ -232,20 +232,24 @@ void set_device_ro(kdev_t dev,int flag)
 static inline void drive_stat_acct(int cmd, unsigned long nr_sectors, short disk_index)
 {
 	kstat.dk_drive[disk_index]++;
-	if (cmd == READ || cmd == READA) {
+	if (cmd == READ) {
 		kstat.dk_drive_rio[disk_index]++;
 		kstat.dk_drive_rblk[disk_index] += nr_sectors;
 	}
-	else if (cmd == WRITE || cmd == WRITEA) {
+	else if (cmd == WRITE) {
 		kstat.dk_drive_wio[disk_index]++;
 		kstat.dk_drive_wblk[disk_index] += nr_sectors;
-	}
+	} else
+		printk("drive_stat_acct: cmd not R/W?\n");
 }
 
 /*
  * add-request adds a request to the linked list.
  * It disables interrupts so that it can muck with the
  * request-lists in peace.
+ *
+ * By this point, req->cmd is always either READ/WRITE, never READA/WRITEA,
+ * which is important for drive_stat_acct() above.
  */
 static void add_request(struct blk_dev_struct * dev, struct request * req)
 {
@@ -302,21 +306,6 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	struct request * req;
 	int rw_ahead, max_req;
 
-/* WRITEA/READA is special case - it is not really needed, so if the */
-/* buffer is locked, we just forget about it, else it's a normal read */
-	rw_ahead = (rw == READA || rw == WRITEA);
-	if (rw_ahead) {
-		if (buffer_locked(bh))
-			return;
-		if (rw == READA)
-			rw = READ;
-		else
-			rw = WRITE;
-	}
-	if (rw!=READ && rw!=WRITE) {
-		printk("Bad block dev command, must be R/W/RA/WA\n");
-		return;
-	}
 	count = bh->b_size >> 9;
 	sector = bh->b_blocknr * count;
 	if (blk_size[major])
@@ -330,21 +319,46 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 		return;
 	/* Maybe the above fixes it, and maybe it doesn't boot. Life is interesting */
 	lock_buffer(bh);
-	if ((rw == WRITE && !buffer_dirty(bh)) || (rw == READ && buffer_uptodate(bh))) {
-		unlock_buffer(bh);
-		return;
-	}
 
-/* we don't allow the write-requests to fill up the queue completely:
- * we want some room for reads: they take precedence. The last third
- * of the requests are only for reads.
- */
-	max_req = (rw == READ) ? NR_REQUEST : ((NR_REQUEST*2)/3);
+	rw_ahead = 0;	/* normal case; gets changed below for READA/WRITEA */
+	switch (rw) {
+		case READA:
+			rw_ahead = 1;
+			rw = READ;	/* drop into READ */
+		case READ:
+			if (buffer_uptodate(bh)) {
+				unlock_buffer(bh); /* Hmmph! Already have it */
+				return;
+			}
+			kstat.pgpgin++;
+			max_req = NR_REQUEST;	/* reads take precedence */
+			break;
+		case WRITEA:
+			rw_ahead = 1;
+			rw = WRITE;	/* drop into WRITE */
+		case WRITE:
+			if (!buffer_dirty(bh)) {
+				unlock_buffer(bh); /* Hmmph! Nothing to write */
+				return;
+			}
+			/* We don't allow the write-requests to fill up the
+			 * queue completely:  we want some room for reads,
+			 * as they take precedence. The last third of the
+			 * requests are only for reads.
+			 */
+			kstat.pgpgout++;
+			max_req = (NR_REQUEST * 2) / 3;
+			break;
+		default:
+			printk("make_request: bad block dev cmd, must be R/W/RA/WA\n");
+			unlock_buffer(bh);
+			return;
+	}
 
 /* look for a free request. */
 	cli();
 
-/* The scsi disk drivers and the IDE driver completely remove the request
+/* The scsi disk and cdrom drivers completely remove the request
  * from the queue when they start processing an entry.  For this reason
  * it is safe to continue to add links to the top entry for those devices.
  */
@@ -357,11 +371,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	     || major == IDE3_MAJOR)
 	    && (req = blk_dev[major].current_request))
 	{
-#ifdef CONFIG_BLK_DEV_HD
-	        if (major == HD_MAJOR || major == FLOPPY_MAJOR)
-#else
-		if (major == FLOPPY_MAJOR)
-#endif CONFIG_BLK_DEV_HD
+		if (major != SCSI_DISK_MAJOR && major != SCSI_CDROM_MAJOR)
 			req = req->next;
 		while (req) {
 			if (req->rq_dev == bh->b_dev &&
@@ -438,12 +448,18 @@ void ll_rw_page(int rw, kdev_t dev, unsigned long page, char * buffer)
 		       kdevname(dev), sector);
 		return;
 	}
-	if (rw!=READ && rw!=WRITE)
-		panic("Bad block dev command, must be R/W");
-	if (rw == WRITE && is_read_only(dev)) {
-		printk("Can't page to read-only device %s\n",
-		       kdevname(dev));
-		return;
+	switch (rw) {
+		case READ:
+			break;
+		case WRITE:
+			if (is_read_only(dev)) {
+				printk("Can't page to read-only device %s\n",
+					kdevname(dev));
+				return;
+			}
+			break;
+		default:
+			panic("ll_rw_page: bad block dev cmd, must be R/W");
 	}
 	req = get_request_wait(NR_REQUEST, dev);
 /* fill up the request-info, and add it to the queue */
@@ -524,10 +540,6 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 		if (bh[i]) {
 			set_bit(BH_Req, &bh[i]->b_state);
 			make_request(major, rw, bh[i]);
-			if (rw == READ || rw == READA)
-				kstat.pgpgin++;
-			else
-				kstat.pgpgout++;
 		}
 	}
 	unplug_device(dev);
@@ -555,17 +567,19 @@ void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
 		printk("ll_rw_swap_file: trying to swap nonexistent block-device\n");
 		return;
 	}
-
-	if (rw != READ && rw != WRITE) {
-		printk("ll_rw_swap: bad block dev command, must be R/W");
-		return;
+	switch (rw) {
+		case READ:
+			break;
+		case WRITE:
+			if (is_read_only(dev)) {
+				printk("Can't swap to read-only device %s\n",
+					kdevname(dev));
+				return;
+			}
+			break;
+		default:
+			panic("ll_rw_swap: bad block dev cmd, must be R/W");
 	}
-	if (rw == WRITE && is_read_only(dev)) {
-		printk("Can't swap to read-only device %s\n",
-		       kdevname(dev));
-		return;
-	}
-	
 	buffersize = PAGE_SIZE / nb;
 
 	for (j=0, i=0; i<nb;)

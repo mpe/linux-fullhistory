@@ -874,7 +874,6 @@ smb_unlink(struct inode *dir, const char *name, int len)
                 if ((error = smb_proc_unlink(SMB_SERVER(dir), path, len)) == 0)
                         smb_invalid_dir_cache(dir->i_ino);
         }
-
 	iput(dir);
 	return error;
 }

@@ -63,7 +63,7 @@ struct ext_dir_entry {
 extern int ext_open(struct inode * inode, struct file * filp);
 extern void ext_release(struct inode * inode, struct file * filp);
 extern int ext_lookup(struct inode * dir,const char * name, int len,
-	struct inode ** result);
+                      struct inode ** result);
 extern int ext_create(struct inode * dir,const char * name, int len, int mode,
 	struct inode ** result);
 extern int ext_mkdir(struct inode * dir, const char * name, int len, int mode);

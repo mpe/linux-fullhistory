@@ -142,7 +142,7 @@ static int parse_options(char *options, struct iso9660_options * popt)
 		    break;
 		  }
 		}
-		else return 0;
+		else return 1;
 	}
 	return 1;
 }

@@ -158,6 +158,10 @@ Scsi_Host_Template * scsi_hosts = NULL;
 
 static Scsi_Host_Template builtin_scsi_hosts[] =
 {
+/* BusLogic must come before aha1542.c */
+#ifdef CONFIG_SCSI_BUSLOGIC
+    BUSLOGIC,
+#endif
 #ifdef CONFIG_SCSI_U14_34F
     ULTRASTOR_14_34F,
 #endif
@@ -166,10 +170,6 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_AHA152X
     AHA152X,
-#endif
-/* BusLogic must come before aha1542.c */
-#ifdef CONFIG_SCSI_BUSLOGIC
-    BUSLOGIC,
 #endif
 #ifdef CONFIG_SCSI_AHA1542
     AHA1542,

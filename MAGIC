@@ -50,6 +50,7 @@ an ftp site, where 'X.Y.ZZ' is the kernel version for the ioctl list.
 
 Magic Name          Number  Structure            File
 ===========================================================================
+APM_BIOS_MAGIC      0x4101  struct apm_struct    include/linux/apm_bios.h
 CYCLADES_MAGIC      0x4359  struct cyclades_port include/linux/cyclades.h
 FASYNC_MAGIC        0x4601  struct fasync_struct include/linux/fs.h
 PTY_MAGIC           0x5001  struct pty_struct    drivers/char/pty.c
@@ -73,6 +74,7 @@ Ioctl	Include File		Comments
 0x06	linux/lp.h
 0x12	linux/fs.h
 0x20	linux/cm206.h
+'A'	linux/apm_bios.h
 'C'	linux/soundcard.h
 'K'	linux/kd.h
 'M'	linux/soundcard.h

@@ -149,6 +149,10 @@ void clear_inode(struct inode * inode)
 	struct wait_queue * wait;
 
 	wait_on_inode(inode);
+	if (IS_WRITABLE(inode)) {
+		if (inode->i_sb->dq_op)
+			inode->i_sb->dq_op->drop(inode);
+	}
 	remove_inode_hash(inode);
 	remove_inode_free(inode);
 	wait = ((volatile struct inode *) inode)->i_wait;
@@ -389,28 +393,38 @@ repeat:
 		inode->i_count--;
 		return;
 	}
+
 	wake_up(&inode_wait);
 	if (inode->i_pipe) {
 		unsigned long page = (unsigned long) PIPE_BASE(*inode);
 		PIPE_BASE(*inode) = NULL;
 		free_page(page);
 	}
+
 	if (inode->i_sb && inode->i_sb->s_op && inode->i_sb->s_op->put_inode) {
 		inode->i_sb->s_op->put_inode(inode);
 		if (!inode->i_nlink)
 			return;
 	}
+
 	if (inode->i_dirt) {
 		write_inode(inode);	/* we can sleep - so do again */
 		wait_on_inode(inode);
 		goto repeat;
 	}
+
 	inode->i_count--;
+	if (IS_WRITABLE(inode)) {
+		if (inode->i_sb->dq_op)
+			inode->i_sb->dq_op->drop(inode);
+	}
+
 	if (inode->i_mmap) {
 		printk("iput: inode %lu on device %s still has mappings.\n",
 			inode->i_ino, kdevname(inode->i_dev));
 		inode->i_mmap = NULL;
 	}
+
 	nr_free_inodes++;
 	return;
 }
@@ -499,7 +513,7 @@ struct inode * get_pipe_inode(void)
 	return inode;
 }
 
-struct inode * __iget(struct super_block * sb, int nr, int crossmntp)
+struct inode *__iget(struct super_block * sb, int nr, int crossmntp)
 {
 	static struct wait_queue * update_wait = NULL;
 	struct inode_hash_entry * h;
@@ -526,7 +540,6 @@ repeat:
 	inode->i_sb = sb;
 	inode->i_dev = sb->s_dev;
 	inode->i_ino = nr;
-	inode->i_flags = sb->s_flags;
 	put_last_free(inode);
 	insert_inode_hash(inode);
 	read_inode(inode);

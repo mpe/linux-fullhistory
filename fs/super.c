@@ -2,18 +2,22 @@
  *  linux/fs/super.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
- */
-
-/*
- * super.c contains code to handle the super-block tables.
+ *
+ *  super.c contains code to handle: - mount structures
+ *                                   - super-block tables.
+ *                                   - mount systemcall
+ *                                   - umount systemcall
  *
  * GK 2/5/95  -  Changed to support mounting the root fs via NFS
  */
+
 #include <stdarg.h>
 
 #include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
+#include <linux/mount.h>
+#include <linux/malloc.h>
 #include <linux/major.h>
 #include <linux/stat.h>
 #include <linux/errno.h>
@@ -32,8 +36,6 @@ extern void wait_for_keypress(void);
 
 extern int root_mountflags;
 
-struct super_block super_blocks[NR_SUPER];
-
 static int do_remount_sb(struct super_block *sb, int flags, char * data);
 
 #ifdef CONFIG_ROOT_NFS
@@ -43,24 +45,118 @@ extern int nfs_root_mount(struct super_block *sb);
 /* this is initialized in init/main.c */
 kdev_t ROOT_DEV;
 
-static struct file_system_type * file_systems = NULL;
+struct super_block super_blocks[NR_SUPER];
+static struct file_system_type *file_systems = (struct file_system_type *) NULL;
+static struct vfsmount *vfsmntlist = (struct vfsmount *) NULL,
+                       *vfsmnttail = (struct vfsmount *) NULL,
+                       *mru_vfsmnt = (struct vfsmount *) NULL;
+
+/* 
+ * This part handles the management of the list of mounted filesystems.
+ */
+struct vfsmount *lookup_vfsmnt(kdev_t dev)
+{
+	struct vfsmount *lptr;
+
+	if (vfsmntlist == (struct vfsmount *)NULL)
+		return ((struct vfsmount *)NULL);
+
+	if (mru_vfsmnt != (struct vfsmount *)NULL &&
+	    mru_vfsmnt->mnt_dev == dev)
+		return (mru_vfsmnt);
+
+	for (lptr = vfsmntlist;
+	     lptr != (struct vfsmount *)NULL;
+	     lptr = lptr->mnt_next)
+		if (lptr->mnt_dev == dev) {
+			mru_vfsmnt = lptr;
+			return (lptr);
+		}
+
+	return ((struct vfsmount *)NULL);
+	/* NOTREACHED */
+}
+
+struct vfsmount *add_vfsmnt(kdev_t dev, const char *dev_name, const char *dir_name)
+{
+	struct vfsmount *lptr;
+	char *tmp;
+
+	if ((lptr = (struct vfsmount *)
+	     kmalloc(sizeof(struct vfsmount), GFP_KERNEL)) == (struct vfsmount *)NULL)
+		return ((struct vfsmount *)NULL);
+	memset(lptr, 0, sizeof(struct vfsmount));
+
+	lptr->mnt_dev = dev;
+	lptr->mnt_sem.count = 1;
+	if (dev_name && !getname(dev_name, &tmp)) {
+		if ((lptr->mnt_devname =
+		    (char *) kmalloc(strlen(tmp), GFP_KERNEL)) != (char *)NULL)
+			strcpy(lptr->mnt_devname, tmp);
+		putname(tmp);
+	}
+	if (dir_name && !getname(dir_name, &tmp)) {
+		if ((lptr->mnt_dirname =
+		    (char *) kmalloc(strlen(tmp), GFP_KERNEL)) != (char *)NULL)
+			strcpy(lptr->mnt_dirname, tmp);
+		putname(tmp);
+	}
+
+	if (vfsmntlist == (struct vfsmount *)NULL) {
+		vfsmntlist = vfsmnttail = lptr;
+	} else {
+		vfsmnttail->mnt_next = lptr;
+		vfsmnttail = lptr;
+	}
+	return (lptr);
+}
+
+void remove_vfsmnt(kdev_t dev)
+{
+	struct vfsmount *lptr, *tofree;
+
+	if (vfsmntlist == (struct vfsmount *)NULL)
+		return;
+	lptr = vfsmntlist;
+	if (lptr->mnt_dev == dev) {
+		tofree = lptr;
+		vfsmntlist = lptr->mnt_next;
+		if (vfsmnttail->mnt_dev == dev)
+			vfsmnttail = vfsmntlist;
+	} else {
+		while (lptr->mnt_next != (struct vfsmount *)NULL) {
+			if (lptr->mnt_next->mnt_dev == dev)
+				break;
+			lptr = lptr->mnt_next;
+		}
+		tofree = lptr->mnt_next;
+		if (tofree == (struct vfsmount *)NULL)
+			return;
+		lptr->mnt_next = lptr->mnt_next->mnt_next;
+		if (vfsmnttail->mnt_dev == dev)
+			vfsmnttail = lptr;
+	}
+	kfree(tofree->mnt_devname);
+	kfree(tofree->mnt_dirname);
+	kfree_s(tofree, sizeof(struct vfsmount));
+}
 
 int register_filesystem(struct file_system_type * fs)
 {
-	struct file_system_type ** tmp;
+        struct file_system_type ** tmp;
 
-	if (!fs)
-		return -EINVAL;
-	if (fs->next)
-		return -EBUSY;
-	tmp = &file_systems;
-	while (*tmp) {
-		if (strcmp((*tmp)->name, fs->name) == 0)
-			return -EBUSY;
-		tmp = &(*tmp)->next;
-	}
-	*tmp = fs;
-	return 0;
+        if (!fs)
+                return -EINVAL;
+        if (fs->next)
+                return -EBUSY;
+        tmp = &file_systems;
+        while (*tmp) {
+                if (strcmp((*tmp)->name, fs->name) == 0)
+                        return -EBUSY;
+                tmp = &(*tmp)->next;
+        }
+        *tmp = fs;
+        return 0;
 }
 
 int unregister_filesystem(struct file_system_type * fs)
@@ -364,11 +460,20 @@ static int do_umount(kdev_t dev)
 	int retval;
 	
 	if (dev==ROOT_DEV) {
-		/* Special case for "unmounting" root.  We just try to remount
-		   it readonly, and sync() the device. */
+		/*
+		 * Special case for "unmounting" root. We just try to remount
+		 * it readonly, and sync() the device.
+		 */
 		if (!(sb=get_super(dev)))
 			return -ENOENT;
 		if (!(sb->s_flags & MS_RDONLY)) {
+			/*
+			 * Make sure all quotas are turned off on this device we need to mount
+			 * it readonly so no more writes by the quotasystem.
+			 * If later on the remount fails to bad there are no quotas running
+			 * anymore. Turn them on again by hand.
+			 */
+			quota_off(dev, -1);
 			fsync_dev(dev);
 			retval = do_remount_sb(sb, MS_RDONLY, 0);
 			if (retval)
@@ -381,6 +486,12 @@ static int do_umount(kdev_t dev)
 	if (!sb->s_covered->i_mount)
 		printk("VFS: umount(%s): mounted inode has i_mount=NULL\n",
 		       kdevname(dev));
+	/*
+	 * Before checking if the filesystem is still busy make sure the kernel
+	 * doesn't hold any quotafiles open on that device. If the umount fails
+	 * to bad there are no quotas running anymore. Turn them on again by hand.
+	 */
+	quota_off(dev, -1);
 	if (!fs_may_umount(dev, sb->s_mounted))
 		return -EBUSY;
 	sb->s_covered->i_mount = NULL;
@@ -391,6 +502,7 @@ static int do_umount(kdev_t dev)
 	if (sb->s_op && sb->s_op->write_super && sb->s_dirt)
 		sb->s_op->write_super(sb);
 	put_super(dev);
+	remove_vfsmnt(dev);
 	return 0;
 }
 
@@ -415,9 +527,9 @@ asmlinkage int sys_umount(char * name)
 
 	if (!suser())
 		return -EPERM;
-	retval = namei(name,&inode);
+	retval = namei(name, &inode);
 	if (retval) {
-		retval = lnamei(name,&inode);
+		retval = lnamei(name, &inode);
 		if (retval)
 			return retval;
 	}
@@ -466,13 +578,15 @@ asmlinkage int sys_umount(char * name)
  * We also have to flush all inode-data for this device, as the new mount
  * might need new info.
  */
-int do_mount(kdev_t dev, const char * dir, const char * type, int flags, void * data)
+
+int do_mount(kdev_t dev, const char * dev_name, const char * dir_name, const char * type, int flags, void * data)
 {
 	struct inode * dir_i;
 	struct super_block * sb;
+	struct vfsmount *vfsmnt;
 	int error;
 
-	error = namei(dir,&dir_i);
+	error = namei(dir_name, &dir_i);
 	if (error)
 		return error;
 	if (dir_i->i_count != 1 || dir_i->i_mount) {
@@ -496,6 +610,8 @@ int do_mount(kdev_t dev, const char * dir, const char * type, int flags, void * 
 		iput(dir_i);
 		return -EBUSY;
 	}
+	vfsmnt = add_vfsmnt(dev, dev_name, dir_name);
+	vfsmnt->mnt_sb = sb;
 	sb->s_covered = dir_i;
 	dir_i->i_mount = sb->s_mounted;
 	return 0;		/* we don't iput(dir_i) - see umount */
@@ -534,7 +650,7 @@ static int do_remount(const char *dir,int flags,char *data)
 	struct inode *dir_i;
 	int retval;
 
-	retval = namei(dir,&dir_i);
+	retval = namei(dir, &dir_i);
 	if (retval)
 		return retval;
 	if (dir_i != dir_i->i_sb->s_mounted) {
@@ -619,7 +735,7 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 	t = fstype->name;
 	fops = NULL;
 	if (fstype->requires_dev) {
-		retval = namei(dev_name,&inode);
+		retval = namei(dev_name, &inode);
 		if (retval)
 			return retval;
 		if (!S_ISBLK(inode->i_mode)) {
@@ -666,7 +782,7 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 			return retval;
 		}
 	}
-	retval = do_mount(dev,dir_name,t,flags,(void *) page);
+	retval = do_mount(dev,dev_name,dir_name,t,flags,(void *) page);
 	free_page(page);
 	if (retval && fops && fops->release)
 		fops->release(inode, NULL);
@@ -678,10 +794,11 @@ void mount_root(void)
 {
 	struct file_system_type * fs_type;
 	struct super_block * sb;
+	struct vfsmount *vfsmnt;
 	struct inode * inode, d_inode;
 	struct file filp;
 	int retval;
-
+  
 	memset(super_blocks, 0, sizeof(super_blocks));
 #ifdef CONFIG_ROOT_NFS
 	if (MAJOR(ROOT_DEV) == UNNAMED_MAJOR) {
@@ -737,9 +854,9 @@ void mount_root(void)
 	for (fs_type = file_systems ; fs_type ; fs_type = fs_type->next) {
 		if(retval)
 			break;
-		if (!fs_type->requires_dev)
-			continue;
-		sb = read_super(ROOT_DEV,fs_type->name,root_mountflags,NULL,1);
+  		if (!fs_type->requires_dev)
+  			continue;
+  		sb = read_super(ROOT_DEV,fs_type->name,root_mountflags,NULL,1);
 		if (sb) {
 			inode = sb->s_mounted;
 			inode->i_count += 3 ;	/* NOTE! it is logically used 4 times, not 1 */
@@ -750,6 +867,8 @@ void mount_root(void)
 			printk ("VFS: Mounted root (%s filesystem)%s.\n",
 				fs_type->name,
 				(sb->s_flags & MS_RDONLY) ? " readonly" : "");
+			vfsmnt = add_vfsmnt(ROOT_DEV, "rootfs", "/");
+			vfsmnt->mnt_sb = sb;
 			return;
 		}
 	}

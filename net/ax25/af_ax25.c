@@ -651,7 +651,6 @@ int ax25_send_frame(struct sk_buff *skb, ax25_address *src, ax25_address *dest,
 struct device *ax25rtr_get_dev(ax25_address *addr)
 {
 	struct device *dev;
-	ax25_address dev_addr;
 	
 	for (dev = dev_base; dev != NULL; dev = dev->next) {
 		if (dev->flags & IFF_UP) {
@@ -660,11 +659,16 @@ struct device *ax25rtr_get_dev(ax25_address *addr)
 					if (ax25cmp(addr, (ax25_address *)dev->dev_addr) == 0)
 						return dev;
 					break;
-				case ARPHRD_ETHER:
-					if (arp_query((unsigned char *)&dev_addr, dev->pa_addr, dev))
-						if (ax25cmp(addr, &dev_addr) == 0)
-							return dev;
+#ifdef CONFIG_BPQETHER
+				case ARPHRD_ETHER: {
+						ax25_address *dev_addr;
+
+						if ((dev_addr = ax25_bpq_get_addr(dev)) != NULL)
+							if (ax25cmp(addr, dev_addr) == 0)
+								return dev;
+					}
 					break;
+#endif
 				default:
 					break;
 			}
@@ -1659,17 +1663,18 @@ static int kiss_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 	return ax25_rcv(skb, dev, (ax25_address *)dev->dev_addr, ptype);
 }
 
+#ifdef CONFIG_BPQETHER
 /*
  *	Receive an AX.25 frame via an Ethernet interface.
  */
 static int bpq_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *ptype)
 {
-	ax25_address port_call;
+	ax25_address *port_call;
 	int len;
 
 	skb->sk = NULL;		/* Initially we don't know who its for */
 
-	if (!arp_query((unsigned char *)&port_call, dev->pa_addr, dev)) {
+	if ((port_call = ax25_bpq_get_addr(dev)) == NULL) {
 		kfree_skb(skb, FREE_READ);	/* We have no port callsign */
 		return 0;
 	}
@@ -1679,8 +1684,9 @@ static int bpq_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *
 	skb_pull(skb, 2);	/* Remove the length bytes */
 	skb_trim(skb, len);	/* Set the length of the data */
 
-	return ax25_rcv(skb, dev, &port_call, ptype);
+	return ax25_rcv(skb, dev, port_call, ptype);
 }
+#endif
 
 static int ax25_sendmsg(struct socket *sock, struct msghdr *msg, int len, int noblock, int flags)
 {
@@ -1970,6 +1976,13 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			ax25_uid_policy = amount;
 			return 0;
 
+#ifdef CONFIG_BPQETHER
+		case SIOCAX25BPQADDR:
+			if (!suser())
+				return -EPERM;
+			return ax25_bpq_ioctl(cmd, (void *)arg);
+#endif
+
 		case SIOCAX25GETPARMS:
 		case SIOCAX25SETPARMS:
 			return ax25_dev_ioctl(cmd, (void *)arg);
@@ -2097,6 +2110,7 @@ static struct packet_type ax25_packet_type =
 	NULL,
 };
 
+#ifdef CONFIG_BPQETHER
 static struct packet_type bpq_packet_type = 
 {
 	0,	/* MUTTER ntohs(ETH_P_BPQ),*/
@@ -2105,6 +2119,7 @@ static struct packet_type bpq_packet_type =
 	NULL,
 	NULL,
 };
+#endif
 
 static struct notifier_block ax25_dev_notifier = {
 	ax25_device_event,
@@ -2116,8 +2131,10 @@ void ax25_proto_init(struct net_proto *pro)
 	sock_register(ax25_proto_ops.family, &ax25_proto_ops);
 	ax25_packet_type.type = htons(ETH_P_AX25);
 	dev_add_pack(&ax25_packet_type);	
+#ifdef CONFIG_BPQETHER
 	bpq_packet_type.type  = htons(ETH_P_BPQ);
 	dev_add_pack(&bpq_packet_type);
+#endif
 	register_netdevice_notifier(&ax25_dev_notifier);
 			  
 	proc_net_register(&(struct proc_dir_entry) {
@@ -2140,6 +2157,17 @@ void ax25_proto_init(struct net_proto *pro)
 	});
 
 	printk("G4KLX/GW4PTS AX.25 for Linux. Version 0.30 BETA for Linux NET3.032 (Linux 1.3.35)\n");
+
+#ifdef CONFIG_BPQETHER
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_AX25_BPQETHER, 13, "ax25_bpqether",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		ax25_bpq_get_info
+	});
+
+	printk("G8BPQ Encapsulation of AX.25 frames enabled\n");
+#endif
 }
 
 /*
@@ -2149,9 +2177,7 @@ void ax25_proto_init(struct net_proto *pro)
 
 void ax25_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 {
-	static char bcast_addr[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 	unsigned char *ptr;
-	int size;
 	
 #ifdef CONFIG_FIREWALL
 
@@ -2163,10 +2189,12 @@ void ax25_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	
 #endif	
 	skb->protocol = htons (ETH_P_AX25);
-
-	if (dev->type == ARPHRD_ETHER) 
+#ifdef CONFIG_BPQETHER
+	if(dev->type == ARPHRD_ETHER)
 	{
-		if (skb_headroom(skb) < AX25_BPQ_HEADER_LEN) 
+		static char bcast_addr[6]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
+		int size;
+		if(skb_headroom(skb) < AX25_BPQ_HEADER_LEN)
 		{
 			printk("ax25_queue_xmit: not enough space to add BPQ Ether header\n");
 			skb->free = 1;
@@ -2182,12 +2210,15 @@ void ax25_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 		*ptr++ = (size + 5) / 256;
 
 		dev->hard_header(skb, dev, ETH_P_BPQ, bcast_addr, NULL, 0);
+
+		dev_queue_xmit(skb, dev, pri);
+
+		return;
 	} 
-	else 
-	{
-		ptr = skb_push(skb, 1);
-		*ptr++ = 0;			/* KISS */
-	}
+#endif
+
+	ptr = skb_push(skb, 1);
+	*ptr++ = 0;			/* KISS */
 
 	dev_queue_xmit(skb, dev, pri);
 }

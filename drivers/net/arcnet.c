@@ -17,6 +17,22 @@
          
 	**********************
 
+	v2.21 ALPHA (95/11/29)
+	  - "Unknown protocol ID" messages now also indicate the station
+	    which sent the unrecognized packet, to aid in debugging network
+	    confusion.  Also, if anyone knows why Novell servers send packets
+	    with protocol ID 0xEC, be sure to tell me.  For now they're
+	    ignored.
+	  - Rearranged ARC_P_* handling a bit, so it makes slightly more
+	    sense.
+	  - We were clearing irq2dev_map too soon, and causing spurious
+	    "irq %d for unknown device" messages.  Moved all the set/clear
+	    irq2dev_map operations to more intelligent places.
+	  - 1.2.x kernels really didn't work with 2.20 ALPHA.  Maybe this
+	    will fix it.
+	  - Fixed the setting of set_multicast_list.  Since we don't have
+	    multicast support, there's no point in using this at all.
+
 	v2.20 ALPHA (95/11/12)
 	  - Added a bit of protocol confusion to the arc0 code to allow
 	    trxnet-compatible IPX support - and the use of all that new
@@ -156,7 +172,7 @@
 */
 
 static const char *version =
- "arcnet.c: v2.20 ALPHA 95/11/12 Avery Pennarun <apenwarr@foxnet.net>\n";
+ "arcnet.c: v2.21 ALPHA 95/11/29 Avery Pennarun <apenwarr@foxnet.net>\n";
 
  
 
@@ -166,9 +182,20 @@ static const char *version =
 
 /* are we Linux 1.2.x? */
 #if LINUX_VERSION_CODE < 0x10300
-#define LINUX12
+# define LINUX12
 #endif
 
+/* for older kernels with older module.h */
+#ifdef LINUX12 
+# ifdef MODULE
+   char kernel_version[] = UTS_RELEASE;
+# else
+#  undef  MOD_INC_USE_COUNT
+#  define MOD_INC_USE_COUNT
+#  undef  MOD_DEC_USE_COUNT
+#  define MOD_DEC_USE_COUNT
+# endif
+#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -414,6 +441,7 @@ extern struct device *irq2dev_map[16];
 #define ARC_P_ARP	213		/* 0xD5 */
 #define ARC_P_RARP	214		/* 0xD6 */
 #define ARC_P_IPX	250		/* 0xFA */
+#define ARC_P_NOVELL_EC	236		/* 0xEC */
 
 	/* Old RFC1051 Protocol ID's */
 #define ARC_P_IP_RFC1051 240		/* 0xF0 */
@@ -575,8 +603,9 @@ static void arcnetS_rx(struct device *dev,u_char *buf,
 	int length,u_char saddr, u_char daddr);
 
 static struct enet_statistics *arcnet_get_stats(struct device *dev);
+/*
 static void set_multicast_list(struct device *dev);
-
+*/
 	/* functions for header/arp/etc building */
 #ifdef LINUX12
 int arcnetA_header(unsigned char *buff,struct device *dev,
@@ -745,8 +774,10 @@ arcnet_probe(struct device *dev)
 			printk("%6s: unable to get IRQ %d (irqval=%d).\n",
 				dev->name,dev->irq, irqval);
 			return EAGAIN;
-		 }
-	 }
+		}
+		
+		irq2dev_map[dev->irq]=dev;
+	}
 	 
 	/* Grab the region so we can find another board if autoIRQ fails. */
 	request_region(dev->base_addr, ARCNET_TOTAL_SIZE,"arcnet");
@@ -765,9 +796,7 @@ arcnet_probe(struct device *dev)
 	dev->stop=arcnet_close;
 	dev->hard_start_xmit=arcnetA_send_packet;
 	dev->get_stats=arcnet_get_stats;
-#ifdef HAVE_MULTICAST
-	dev->set_multicast_list = &set_multicast_list;
-#endif
+	/*dev->set_multicast_list = &set_multicast_list;*/
 
 	/* Fill in the fields of the device structure with generic
 	 * values.
@@ -1097,7 +1126,7 @@ static int arcnetS_init(struct device *dev)
 #ifdef LINUX12
 	dev->type_trans=arcnetS_type_trans;
 #endif
-	BUGMSG(D_EXTRA,"ARCnet RFC1051 (NetBsd, AmiTCP) protocol initialized.\n");
+	BUGMSG(D_EXTRA,"ARCnet RFC1051 (NetBSD, AmiTCP) protocol initialized.\n");
 
 	return 0;
 }
@@ -1131,8 +1160,6 @@ arcnet_open(struct device *dev)
 	}
 
 	BUGLVL(D_EXTRA) printk(version);
-
-	irq2dev_map[dev->irq] = dev;
 
 	BUGMSG(D_EXTRA,"arcnet_open: resetting card.\n");
 	
@@ -1198,11 +1225,7 @@ arcnet_close(struct device *dev)
 	
 	TBUSY=1;
 	START=0;
-	
-	/* very important! */
-	irq2dev_map[dev->irq] = NULL;
 
-	
 	/* Flush TX and disable RX */
 	outb(0,INTMASK);	/* no IRQ's (except RESET, of course) */
 	outb(NOTXcmd,COMMAND);  /* stop transmit */
@@ -1883,6 +1906,8 @@ static void
 arcnet_interrupt(int irq,struct pt_regs *regs)
 {
 	struct device *dev = (struct device *)(irq2dev_map[irq]);
+	
+	BUGMSG(D_DURING,"in arcnet_interrupt\n");
 
 	if (dev==NULL)
 	{
@@ -1915,8 +1940,8 @@ arcnet_inthandler(struct device *dev)
 	outb(0,INTMASK);
 	INTERRUPT = 1;
 
-	BUGMSG(D_DURING,"in net_interrupt (status=%Xh)\n",inb(STATUS));
-		
+	BUGMSG(D_DURING,"in arcnet_inthandler (status=%Xh)\n",inb(STATUS));
+
 #if 1 /* Whatever you do, don't set this to 0. */
 	do
 	{
@@ -2212,6 +2237,7 @@ arcnet_rx(struct device *dev,int recbuf)
 	case ARC_P_ARP:
 	case ARC_P_RARP:
 	case ARC_P_IPX:
+	case ARC_P_NOVELL_EC:
 		arcnetA_rx(lp->adev,arcsoft,length,saddr,daddr);
 		break;
 	case ARC_P_ETHER:
@@ -2221,9 +2247,10 @@ arcnet_rx(struct device *dev,int recbuf)
 	case ARC_P_ARP_RFC1051:
 		arcnetS_rx(lp->sdev,arcsoft,length,saddr,daddr);
 		break;
+	case ARC_P_LANSOFT: /* don't understand.  fall through. */
 	default:
-		printk("%6s: received unknown protocol %d (%Xh)\n",
-			dev->name,arcsoft[0],arcsoft[0]);
+		printk("%6s: received unknown protocol %d (%Xh) from station %d.\n",
+			dev->name,arcsoft[0],arcsoft[0],saddr);
 		lp->stats.rx_errors++;
 		lp->stats.rx_crc_errors++;
 		break;
@@ -2683,6 +2710,7 @@ arcnet_get_stats(struct device *dev)
 	return &lp->stats;
 }
 
+#if 0
 /* Set or clear the multicast filter for this adaptor.
  * num_addrs == -1	Promiscuous mode, receive all packets
  * num_addrs == 0	Normal mode, clear multicast list
@@ -2692,7 +2720,7 @@ arcnet_get_stats(struct device *dev)
 static void
 set_multicast_list(struct device *dev)
 {
-#if 0	  /* no promiscuous mode at all on most (all?) ARCnet models */
+#if 0	  /* no promiscuous mode at all on most ARCnet models */
 	struct arcnet_local *lp=(struct arcnet_local *)(dev->priv);
 
 	short ioaddr = dev->base_addr;
@@ -2702,6 +2730,7 @@ set_multicast_list(struct device *dev)
 		outw(99, ioaddr);		/* Disable promiscuous mode, use normal mode */
 #endif
 }
+#endif
 
 /* Create the ARCnet ClientData header for an arbitrary protocol layer
  *
@@ -2962,9 +2991,10 @@ unsigned short arcnetA_type_trans(struct sk_buff *skb,struct device *dev)
 	case ARC_P_IP:		return htons(ETH_P_IP);
 	case ARC_P_ARP:		return htons(ETH_P_ARP);
 	case ARC_P_RARP:	return htons(ETH_P_RARP);
-	case ARC_P_IPX:		return htons(ETH_P_802_3);
-	case ARC_P_ATALK:   return htons(ETH_P_ATALK); /* untested appletalk */
-	case ARC_P_LANSOFT: /* don't understand.  fall through. */
+
+	case ARC_P_IPX:
+	case ARC_P_NOVELL_EC:
+		return htons(ETH_P_802_3);
 	default:
 		BUGMSG(D_EXTRA,"received packet of unknown protocol id %d (%Xh)\n",
 				head->protocol_id,head->protocol_id);
@@ -3005,6 +3035,7 @@ unsigned short arcnetS_type_trans(struct sk_buff *skb,struct device *dev)
 	{
 	case ARC_P_IP_RFC1051:	return htons(ETH_P_IP);
 	case ARC_P_ARP_RFC1051:	return htons(ETH_P_ARP);
+	case ARC_P_ATALK:   return htons(ETH_P_ATALK); /* untested appletalk */
 	default:
 		BUGMSG(D_EXTRA,"received packet of unknown protocol id %d (%Xh)\n",
 				head->protocol_id,head->protocol_id);
@@ -3067,7 +3098,14 @@ void
 cleanup_module(void)
 {
 	if (thiscard.start) arcnet_close(&thiscard);
-	if (thiscard.irq) free_irq(thiscard.irq);
+	
+	if (thiscard.irq)
+	{
+		free_irq(thiscard.irq);
+		/* very important! */
+		irq2dev_map[thiscard.irq] = NULL;
+	}
+	
 	if (thiscard.base_addr) release_region(thiscard.base_addr,
 						ARCNET_TOTAL_SIZE);
 	unregister_netdev(&thiscard);

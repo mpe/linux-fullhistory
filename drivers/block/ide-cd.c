@@ -72,6 +72,7 @@
  * 3.03  Oct 27, 1995 -- Some Creative drives have an id of just `CD'.
  *                       `DCI-2S10' drives are broken too.
  * 3.04  Nov 20, 1995 -- So are Vertros drives.
+ * 3.05  Dec  1, 1995 -- Changes to go with overhaul of ide.c and ide-tape.c
  *
  * NOTE: Direct audio reads will only work on some types of drive.
  * So far, i've received reports of success for Sony and Toshiba drives.
@@ -202,7 +203,7 @@ void cdrom_in_bytes (ide_drive_t *drive, void *buffer, uint bytecount)
   ide_input_data (drive, buffer, bytecount / 4);
   if ((bytecount & 0x03) >= 2)
     {
-      insw (IDE_DATA_REG, buffer + (bytecount & ~0x03), 1);
+      insw (IDE_DATA_REG, ((byte *)buffer) + (bytecount & ~0x03), 1);
     }
 }
 
@@ -214,7 +215,7 @@ void cdrom_out_bytes (ide_drive_t *drive, void *buffer, uint bytecount)
   ide_output_data (drive, buffer, bytecount / 4);
   if ((bytecount & 0x03) >= 2)
     {
-      outsw (IDE_DATA_REG, buffer + (bytecount & ~0x03), 1);
+      outsw (IDE_DATA_REG, ((byte *)buffer) + (bytecount & ~0x03), 1);
     }
 }
 
@@ -501,26 +502,7 @@ static void cdrom_queue_request_sense (ide_drive_t *drive,
 {
   struct request *rq;
   struct packet_command *pc;
-  unsigned long flags;
   int len;
-
-  int major = HWIF(drive)->major;
-
-  save_flags (flags);
-  cli ();  /* safety */
-
-  rq = HWGROUP(drive)->rq;
-
-  /* If we're processing a request, put it back on the request queue. */
-  if (rq != NULL)
-    {
-      restore_request (rq);
-      rq->next = blk_dev[major].current_request;
-      blk_dev[major].current_request = rq;
-      HWGROUP(drive)->rq = NULL;
-    }
-
-  restore_flags (flags);
 
   /* If the request didn't explicitly specify where to put the sense data,
      use the statically allocated structure. */
@@ -544,29 +526,15 @@ static void cdrom_queue_request_sense (ide_drive_t *drive,
   pc->buffer = (char *)reqbuf;
   pc->buflen = len;
   pc->sense_data = (struct atapi_request_sense *)failed_command;
-  
+
+  /* stuff the sense request in front of our current request */
+
   rq = &HWIF(drive)->request_sense_request;
-  rq->rq_status = RQ_ACTIVE;
-  rq->rq_dev = MKDEV (major, (drive->select.b.unit) << PARTN_BITS);
+  ide_init_drive_cmd (rq);
   rq->cmd = REQUEST_SENSE_COMMAND;
-  rq->errors = 0;
-  rq->sector = 0;
-  rq->nr_sectors = 0;
-  rq->current_nr_sectors = 0;
   rq->buffer = (char *)pc;
   rq->sem = sem;
-  rq->bh = NULL;
-  rq->bhtail = NULL;
-  rq->next = NULL;
-
-  save_flags (flags);
-  cli ();  /* safety */
-
-  /* Stick it onto the front of the queue. */
-  rq->next = blk_dev[major].current_request;
-  blk_dev[major].current_request = rq;
-
-  restore_flags (flags);
+  (void) ide_do_drive_cmd (drive, rq, ide_preempt);
 }
 
 
@@ -638,8 +606,8 @@ static int cdrom_decode_status (ide_drive_t *drive, int good_stat, int *stat_ret
 	  struct packet_command *pc = (struct packet_command *)rq->buffer;
 	  pc->stat = 1;
 	  cdrom_end_request (1, drive);
-	  if (ide_error (drive, "request sense failure", stat))
-	    return 1;
+	  ide_error (drive, "request sense failure", stat);
+	  return 1;
 	}
 
       else if (cmd == PACKET_COMMAND)
@@ -734,8 +702,8 @@ static int cdrom_decode_status (ide_drive_t *drive, int good_stat, int *stat_ret
 	  /* If there were other errors, go to the default handler. */
 	  else if ((err & ~ABRT_ERR) != 0)
 	    {
-	      if (ide_error (drive, "cdrom_decode_status", stat))
-		return 1;
+	      ide_error (drive, "cdrom_decode_status", stat);
+	      return 1;
 	    }
 
 	  /* Else, abort if we've racked up too many retries. */
@@ -752,7 +720,6 @@ static int cdrom_decode_status (ide_drive_t *drive, int good_stat, int *stat_ret
     }
 
   /* Retry, or handle the next request. */
-  IDE_DO_REQUEST;
   return 1;
 }
 
@@ -781,7 +748,7 @@ static int cdrom_start_packet_command (ide_drive_t *drive, int xferlen,
 
   if (CDROM_CONFIG_FLAGS (drive)->drq_interrupt)
     {
-      ide_set_handler (drive, handler);
+      ide_set_handler (drive, handler, WAIT_CMD);
       OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG); /* packet command */
     }
   else
@@ -819,7 +786,7 @@ static int cdrom_transfer_packet_command (ide_drive_t *drive,
     }
 
   /* Arm the interrupt handler. */
-  ide_set_handler (drive, handler);
+  ide_set_handler (drive, handler, WAIT_CMD);
 
   /* Send the command to the device. */
   cdrom_out_bytes (drive, cmd_buf, cmd_len);
@@ -925,7 +892,6 @@ int cdrom_read_check_ireason (ide_drive_t *drive, int len, int ireason)
     }
 
   cdrom_end_request (0, drive);
-  IDE_DO_REQUEST;
   return -1;
 }
 
@@ -961,7 +927,6 @@ static void cdrom_read_intr (ide_drive_t *drive)
       else
         cdrom_end_request (1, drive);
 
-      IDE_DO_REQUEST;
       return;
     }
 
@@ -976,7 +941,6 @@ static void cdrom_read_intr (ide_drive_t *drive)
               drive->name, len);
       printk ("  This drive is not supported by this version of the driver\n");
       cdrom_end_request (0, drive);
-      IDE_DO_REQUEST;
       return;
     }
 
@@ -1040,7 +1004,7 @@ static void cdrom_read_intr (ide_drive_t *drive)
 
   /* Done moving data!
      Wait for another interrupt. */
-  ide_set_handler (drive, &cdrom_read_intr);
+  ide_set_handler (drive, &cdrom_read_intr, WAIT_CMD);
 }
 
 
@@ -1138,7 +1102,6 @@ static void cdrom_start_read_continuation (ide_drive_t *drive)
           printk ("%s: cdrom_start_read_continuation: buffer botch (%ld)\n",
                   drive->name, rq->current_nr_sectors);
           cdrom_end_request (0, drive);
-          IDE_DO_REQUEST;
           return;
         }
 
@@ -1252,7 +1215,6 @@ static void cdrom_pc_intr (ide_drive_t *drive)
           pc->stat = 1;
           cdrom_end_request (1, drive);
         }
-      IDE_DO_REQUEST;
       return;
     }
 
@@ -1327,7 +1289,7 @@ static void cdrom_pc_intr (ide_drive_t *drive)
     }
 
   /* Now we wait for another interrupt. */
-  ide_set_handler (drive, &cdrom_pc_intr);
+  ide_set_handler (drive, &cdrom_pc_intr, WAIT_CMD);
 }
 
 
@@ -1367,40 +1329,6 @@ void cdrom_sleep (int time)
   schedule ();
 }
 
-
-static
-void cdrom_queue_request (ide_drive_t *drive, struct request *req)
-{
-  unsigned long flags;
-  struct request **p, **pfirst;
-  int major = HWIF(drive)->major;
-  struct semaphore sem = MUTEX_LOCKED;
-
-  req->rq_dev = MKDEV (major, (drive->select.b.unit) << PARTN_BITS);
-  req->rq_status = RQ_ACTIVE;
-  req->sem = &sem;
-  req->errors = 0;
-  req->next = NULL;
-
-  save_flags (flags);
-  cli ();
-
-  p = &blk_dev[major].current_request;
-  pfirst = p;
-  while ((*p) != NULL)
-    {
-      p = &((*p)->next);
-    }
-  *p = req;
-  if (p == pfirst)
-    blk_dev[major].request_fn ();
-
-  down (&sem);
-
-  restore_flags (flags);
-}
- 
- 
 static
 int cdrom_queue_packet_command (ide_drive_t *drive, struct packet_command *pc)
 {
@@ -1416,15 +1344,10 @@ int cdrom_queue_packet_command (ide_drive_t *drive, struct packet_command *pc)
 
   /* Start of retry loop. */
   do {
+    ide_init_drive_cmd (&req);
     req.cmd = PACKET_COMMAND;
-    req.sector = 0;
-    req.nr_sectors = 0;
-    req.current_nr_sectors = 0;
     req.buffer = (char *)pc;
-    req.bh = NULL;
-    req.bhtail = NULL;
-
-    cdrom_queue_request (drive, &req);
+    (void) ide_do_drive_cmd (drive, &req, ide_wait);
 
     if (pc->stat != 0)
       {
@@ -1491,8 +1414,8 @@ void ide_do_rw_cdrom (ide_drive_t *drive, unsigned long block)
   else if (rq -> cmd == RESET_DRIVE_COMMAND)
     {
       cdrom_end_request (1, drive);
-      if (ide_do_reset (drive))
-	return;
+      ide_do_reset (drive);
+      return;
     }
 
   else if (rq -> cmd != READ)
@@ -2434,10 +2357,9 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
     case CDROMRESET:
       {
 	struct request req;
-	memset (&req, 0, sizeof (req));
+	ide_init_drive_cmd (&req);
 	req.cmd = RESET_DRIVE_COMMAND;
-	cdrom_queue_request (drive, &req);
-	return 0;
+	return ide_do_drive_cmd (drive, &req, ide_wait);
       }
 #endif
 

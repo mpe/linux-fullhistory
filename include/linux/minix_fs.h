@@ -82,7 +82,7 @@ struct minix_dir_entry {
 #ifdef __KERNEL__
 
 extern int minix_lookup(struct inode * dir,const char * name, int len,
-	struct inode ** result);
+                        struct inode ** result);
 extern int minix_create(struct inode * dir,const char * name, int len, int mode,
 	struct inode ** result);
 extern int minix_mkdir(struct inode * dir, const char * name, int len, int mode);

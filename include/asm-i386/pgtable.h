@@ -17,6 +17,48 @@
  * the i386 page table tree.
  */
 
+/*
+ * TLB invalidation:
+ *
+ *  - invalidate() invalidates the current mm struct TLBs
+ *  - invalidate_all() invalidates all processes TLBs
+ *  - invalidate_mm(mm) invalidates the specified mm context TLB's
+ *  - invalidate_page(mm, vmaddr) invalidates one page
+ *  - invalidate_range(mm, start, end) invalidates a range of pages
+ *
+ * ..but the i386 has somewhat limited invalidation capabilities.
+ */
+ 
+#ifndef __SMP__
+#define invalidate() \
+__asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3": : :"ax")
+#else
+#include <asm/smp.h>
+#define local_invalidate() \
+__asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3": : :"ax")
+#define invalidate() \
+	smp_invalidate();
+#endif
+
+/*
+ * We aren't very clever about this yet. On a 486+ we could actually do
+ * page-granularity invalidates for better performance in some cases.
+ * And SMP could certainly avoid some global invalidates..
+ */
+#define invalidate_all() invalidate()
+#define invalidate_mm(mm_struct) \
+do { if ((mm_struct) == current->mm) invalidate(); } while (0)
+#define invalidate_page(mm_struct,addr) \
+do { if ((mm_struct) == current->mm) invalidate(); } while (0)
+#define invalidate_range(mm_struct,start,end) \
+do { if ((mm_struct) == current->mm) invalidate(); } while (0)
+
+/* Certain architectures need to do special things when pte's
+ * within a page table are directly modified.  Thus, the following
+ * hook is made available.
+ */
+#define set_pte(pteptr, pteval) ((*(pteptr)) = (pteval))
+
 /* PMD_SHIFT determines the size of the area a second-level page table can map */
 #define PMD_SHIFT	22
 #define PMD_SIZE	(1UL << PMD_SHIFT)

@@ -2,7 +2,8 @@
 	contributed to the linux project.  It is sorted by name, and
 	formatted in a format that allows for easy grepping and
 	beautification by scripts.  The fields are: name (N), email (E),
-	description (D) and snail-mail address (S).  Thanks,
+	web-address (W), description (D) and snail-mail address (S).
+	Thanks,
 
 			Linus
 ----------
@@ -286,7 +287,10 @@ D: Wrote Xenix FS (part of standard kernel since 0.99.15)
 
 N: Rik Faith
 E: faith@cs.unc.edu
-D: Future Domain TMC-16x0 SCSI driver
+E: r.faith@ieee.org
+D: Author: Future Domain TMC-16x0 SCSI driver
+D: Debugging: SCSI code; Cyclades serial driver; APM driver
+D: Debugging: XFree86 Mach 32 server, accelerated server code
 
 N: Juergen Fischer
 E: fischer@server.et-inf.fho-emden.de
@@ -419,6 +423,13 @@ D: Some other hacks to get different kinds of programs to work for linux
 S: Panoramastrasse 18
 S: D-69126 Heidelberg
 S: Germany
+
+N: Miguel de Icaza Amozurrutia
+E: miguel@nuclecu.unam.mx
+D: Linux/SPARC team, Midnight Commander maintainer
+S: Avenida Copilco 162, 22-1003
+S: Mexico, DF
+S: Mexico
 
 N: Ian Jackson
 E: iwj10@cus.cam.ac.uk
@@ -794,6 +805,18 @@ S: 816 Saratoga Avenue, Apartment M208
 S: San Jose, California 95129
 S: USA
 
+N: Eric S. Raymond
+E: esr@thyrsus.com
+W: http://www.ccil.org/~esr/home.html
+S: 22 South Warren Avenue
+S: Malvern, PA 19355 USA
+D: ncurses library co-maintainer
+D: terminfo master file maintainer
+D: Distributions HOWTO editor
+D: Instigator, FHS standard
+D: Keeper of the Jargon File and curator of the Retrocomputing Museum
+D: Author, Emacs VC and GUD modes
+
 N: Florian La Roche
 E: rzsfl@rz.uni-sb.de
 E: flla@stud.uni-sb.de
@@ -803,8 +826,9 @@ S: 7000 Stuttgart 50
 S: Germany
 
 N: Stephen Rothwell
-E: sfr@pdact.pd.necisa.oz.au
+E: Stephen.Rothwell@nec.com.au
 D: Boot/setup/build work for setup > 2K
+D: Author, APM driver
 S: 59 Bugden Avenue
 S: Gowrie ACT 2904
 S: Australia
@@ -1098,4 +1122,22 @@ D: BusLogic SCSI driver
 D: Miscellaneous kernel fixes
 S: 3078 Sulphur Spring Court
 S: San Jose, California 95148
+S: USA
+
+N: Chih-Jen Chang     
+E: chihjenc@scf.usc.edu
+E: chihjen@iis.sinica.edu.tw
+D: IGMP(Internet Group Management Protocol) version 2
+S: 3F, 65 Tajen street
+S: Tamsui town, Taipei county,
+S: Taiwan 251, Republic of China
+
+N: Tsu-Sheng Tsao
+E: tsusheng@scf.usc.edu
+D: IGMP(Internet Group Management Protocol) version 2
+S: 2F 14 ALY 31 LN 166 SEC 1 SHIH-PEI RD
+S: Taipei 
+S: Taiwan 112, Republic of China
+S: 24335 Delta Drive
+S: Diamond Bar, CA 91765
 S: USA

@@ -666,7 +666,7 @@ restart_interp:
 		goto exec_error2;
 	}
 	/* better not execute files which are being written to */
-	if (bprm.inode->i_wcount > 0) {
+	if (bprm.inode->i_writecount > 0) {
 		retval = -ETXTBSY;
 		goto exec_error2;
 	}

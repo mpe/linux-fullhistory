@@ -13,6 +13,9 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <linux/config.h>
+#ifdef CONFIG_APM
+#include <linux/apm_bios.h>
+#endif
 
 /*
  * Offset of the first process in the /proc root directory..
@@ -293,7 +296,13 @@ void proc_root_init(void)
 		PROC_IOPORTS, 7, "ioports",
 		S_IFREG | S_IRUGO, 1, 0, 0,
 	});
-
+#ifdef CONFIG_APM
+	proc_register(&proc_root, &(struct proc_dir_entry) {
+	        PROC_APM, 3, "apm",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+	});
+#endif
+		   
 	if (prof_shift) {
 		proc_register(&proc_root, &(struct proc_dir_entry) {
 			PROC_PROFILE, 7, "profile",

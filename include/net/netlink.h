@@ -1,9 +1,9 @@
 #ifndef __NET_NETLINK_H
 #define __NET_NETLINK_H
 
-#define NET_MAJOR 18		/* Major 18 is reserved for networking 		*/
-#define MAX_LINKS 3		/* 18,0 for route updates, 18,1 for SKIP 	*/
-#define MAX_QBYTES 32768	/* Maximum bytes in the queue 			*/
+#define NET_MAJOR 36		/* Major 18 is reserved for networking 						*/
+#define MAX_LINKS 4		/* 18,0 for route updates, 18,1 for SKIP, 18,2 debug tap 18,3 PPP reserved 	*/
+#define MAX_QBYTES 32768	/* Maximum bytes in the queue 							*/
 
 #include <linux/config.h>
 

@@ -66,7 +66,7 @@ static int parse_options(char *options,uid_t *uid,gid_t *gid)
 			if (*value)
 				return 0;
 		}
-		else return 0;
+		else return 1;
 	}
 	return 1;
 }

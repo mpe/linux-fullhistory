@@ -362,7 +362,7 @@ sv_bread (struct super_block *sb, kdev_t dev, unsigned int block)
  */
 
 extern int sysv_lookup(struct inode * dir,const char * name, int len,
-	struct inode ** result);
+	               struct inode ** result);
 extern int sysv_create(struct inode * dir,const char * name, int len, int mode,
 	struct inode ** result);
 extern int sysv_mkdir(struct inode * dir, const char * name, int len, int mode);

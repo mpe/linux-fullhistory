@@ -29,6 +29,7 @@
  *		Alan Cox	:	BSD style RAW socket demultiplexing.
  *		Alan Cox	:	Beginnings of mrouted support.
  *		Alan Cox	:	Added IP_HDRINCL option.
+ *		Alan Cox	:	Skip broadcast check if BSDism set.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -228,7 +229,11 @@ static int raw_sendto(struct sock *sk, const unsigned char *from,
 	if (sin.sin_addr.s_addr == INADDR_ANY)
 		sin.sin_addr.s_addr = ip_my_addr();
 
-	if (sk->broadcast == 0 && ip_chk_addr(sin.sin_addr.s_addr)==IS_BROADCAST)
+	/*
+	 *	BSD raw sockets forget to check SO_BROADCAST ....
+	 */
+	 
+	if (!sk->bsdism && sk->broadcast == 0 && ip_chk_addr(sin.sin_addr.s_addr)==IS_BROADCAST)
 		return -EACCES;
 
 	if(sk->ip_hdrincl)

@@ -41,6 +41,9 @@
 #include <linux/ioport.h>
 #include <linux/config.h>
 #include <linux/mm.h>
+#ifdef CONFIG_APM
+#include <linux/apm_bios.h>
+#endif
 
 #include <asm/segment.h>
 #include <asm/pgtable.h>
@@ -457,7 +460,7 @@ static int get_stat(int pid, char * buffer)
 	if (tsk->state < 0 || tsk->state > 5)
 		state = '.';
 	else
-		state = "RSDZTD"[tsk->state];
+		state = "RSDZTW"[tsk->state];
 	vsize = eip = esp = 0;
 	if (tsk->mm) {
 		struct vm_area_struct *vma = tsk->mm->mmap;
@@ -820,6 +823,10 @@ static int get_root_array(char * page, int type, char **start, off_t offset, int
 
 		case PROC_IOPORTS:
 			return get_ioport_list(page);
+#ifdef CONFIG_APM
+		case PROC_APM:
+			return apm_proc(page);
+#endif
 	}
 	return -EBADF;
 }

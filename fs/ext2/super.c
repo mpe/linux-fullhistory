@@ -249,6 +249,12 @@ static int parse_options (char * options, unsigned long * sb_block,
 				return 0;
 			}
 		}
+		/* Silently ignore the quota options */
+		else if (!strcmp (this_char, "grpquota")
+		         || !strcmp (this_char, "noquota")
+		         || !strcmp (this_char, "quota")
+		         || !strcmp (this_char, "usrquota"))
+			/* Don't do anything ;-) */ ;
 		else {
 			printk ("EXT2-fs: Unrecognized mount option %s\n", this_char);
 			return 0;

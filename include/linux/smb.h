@@ -50,6 +50,7 @@ typedef unsigned long dword;
 
 #define LANMAN1
 #define LANMAN2
+#define NT1
 
 enum smb_protocol { 
 	PROTOCOL_NONE, 
