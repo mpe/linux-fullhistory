@@ -30,6 +30,7 @@
 #include <linux/string.h>
 #include <linux/locks.h>
 #include <linux/mm.h>
+#include <linux/fd.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -965,6 +966,7 @@ static void do_mount_root(void)
 
 #ifdef CONFIG_BLK_DEV_FD
 	if (MAJOR(ROOT_DEV) == FLOPPY_MAJOR) {
+		floppy_eject();
 		printk(KERN_NOTICE "VFS: Insert root floppy and press ENTER\n");
 		wait_for_keypress();
 	}

@@ -2448,7 +2448,7 @@ int rs_open(struct tty_struct *tty, struct file * filp)
  */
 static void show_serial_version(void)
 {
- 	printk("%s version %s with", serial_name, serial_version);
+ 	printk(KERN_INFO "%s version %s with", serial_name, serial_version);
 #ifdef CONFIG_HUB6
 	printk(" HUB-6");
 #define SERIAL_OPT
@@ -2797,7 +2797,7 @@ int rs_init(void)
 		autoconfig(info);
 		if (info->type == PORT_UNKNOWN)
 			continue;
-		printk("tty%02d%s at 0x%04x (irq = %d)", info->line, 
+		printk(KERN_INFO "tty%02d%s at 0x%04x (irq = %d)", info->line, 
 		       (info->flags & ASYNC_FOURPORT) ? " FourPort" : "",
 		       info->port, info->irq);
 		switch (info->type) {
@@ -2867,7 +2867,7 @@ int register_serial(struct serial_struct *req)
 		printk("register_serial(): autoconfig failed\n");
 		return -1;
 	}
-	printk("tty%02d at 0x%04x (irq = %d)", info->line, 
+	printk(KERN_INFO "tty%02d at 0x%04x (irq = %d)", info->line, 
 	       info->port, info->irq);
 	switch (info->type) {
 	case PORT_8250:
@@ -2895,7 +2895,7 @@ void unregister_serial(int line)
 	if (info->tty)
 		tty_hangup(info->tty);
 	info->type = PORT_UNKNOWN;
-	printk("tty%02d unloaded\n", info->line);
+	printk(KERN_INFO "tty%02d unloaded\n", info->line);
 	restore_flags(flags);
 }
 
@@ -2909,6 +2909,7 @@ void cleanup_module(void)
 {
 	unsigned long flags;
 	int e1, e2;
+	int i;
 
 	/* printk("Unloading %s: version %s\n", serial_name, serial_version); */
 	save_flags(flags);
@@ -2923,5 +2924,10 @@ void cleanup_module(void)
 		printk("SERIAL: failed to unregister callout driver (%d)\n", 
 		       e2);
 	restore_flags(flags);
+
+	for (i = 0; i < NR_PORTS; i++) {
+		if (rs_table[i].type != PORT_UNKNOWN)
+			release_region(rs_table[i].port, 8);
+	}
 }
 #endif /* MODULE */

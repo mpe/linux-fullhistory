@@ -2831,20 +2831,6 @@ CONFIG_SMD_DISKLABEL
   via a removable medium like magneto-optical or ZIP drives. If you
   don't know what all this is about, say N.
 
-AFFS filesystem support
-CONFIG_AFFS_FS
-  AFFS is the filesystem used on Commodore Amiga computers. People
-  running Linux on other systems can say N here.
-
-UFS filesystem support (read only)
-CONFIG_UFS_FS
-  UFS (Unix File System) is the way files are organized on Sun Solaris
-  harddisks and floppies. If you want to be able to read those, say Y
-  here. Note that this option is generally not needed for floppies,
-  since a good portable way to transport files and directories between
-  unixes (and even other operating systems) is given by the tar
-  program ("man tar").
-
 SMB filesystem support (to mount WfW shares etc..)
 CONFIG_SMB_FS
   SMB (Server Message Buffer) is the protocol Windows for Workgroups

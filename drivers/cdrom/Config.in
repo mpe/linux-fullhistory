@@ -14,7 +14,7 @@ if [ "$CONFIG_SBPCD" = "y" ]; then
     fi
   fi
 fi
-tristate 'Aztech/Orchid/Okano/Wearnes/TXC (non IDE) CDROM support' CONFIG_AZTCD
+tristate 'Aztech/Orchid/Okano/Wearnes/TXC/CyDROM  CDROM support' CONFIG_AZTCD
 tristate 'Sony CDU535 CDROM support' CONFIG_CDU535
 tristate 'Goldstar R420 CDROM support' CONFIG_GSCD
 tristate 'Philips/LMS CM206 CDROM support' CONFIG_CM206

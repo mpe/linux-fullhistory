@@ -2,13 +2,9 @@ This document contains a list of the latest releases of the most
 important packages for Linux as well as instructions for newcomers to
 the 1.3.x series of kernels.
 
-Last updated: Apr 27, 1996.
+Last updated: Apr 29, 1996.
 Author: Chris Ricker (gt1355b@prism.gatech.edu), based on the original by
-Alessandro Sigala (ssigala@globalnet.it.
-
-Note:  Due to time constraints, Alessandro is getting out of the Changes
-business and I'll be picking up the job.  Be gentle while I get my feet
-wet ;-).
+Alessandro Sigala (ssigala@globalnet.it).
 
 Current Releases
 ****************
@@ -18,7 +14,7 @@ Current Releases
 - Dynamic linker (ld.so) 1.7.14
 - GNU CC		 2.7.2
 - Binutils		 2.6.0.12
-- Linux C Library	 Stable:  5.2.18, Exp:  5.3.9, Alpha:  5.3.12
+- Linux C Library	 Stable:  5.2.18, Beta:  5.3.12
 - Linux C++ Library	 2.7.1.4
 - Termcap		 2.0.8
 - Procps		 0.99a
@@ -75,9 +71,9 @@ to this from 5.0.9 or earlier, be sure to read the `release.libc-5.2.18'
 file, since GNU make and a few other fairly important utils can be
 broken by the upgrade.
 
-   The current (beta) Linux C Library release is 5.3.9. In this release
-there are some important changes that may cause troubles to buggy
-programs (programs that call free() on a pointer not returned by
+   The current (beta) Linux C Library release is 5.3.12. In this
+release there are some important changes that may cause troubles to
+buggy programs (programs that call free() on a pointer not returned by
 malloc() work with previous libc, but not with this release) then read
 the `release.libc-5.3.9' file carefully!  In the latest libc releases a
 dirent bug, which erroneously defined d->reclen to d->namlen if USE_GNU
@@ -88,8 +84,8 @@ and recompile those programs (a patch for make is included in the file
 is at the end of this file).
 
    Also, the libc-5.3.x line has a known security hole relating to
-rlogin.  Unless you really need to upgrade for some reason, just stick
-with 5.2.18 for now.
+rlogin.  Libc-5.3.12 fixes this, so if you're going to run an
+experimental libc, be sure to upgrade to 5.3.12.
 
    If you're getting an error message that is something to the effect of
 
@@ -199,8 +195,18 @@ but I've never noticed any.
 
    The new named pipe behavior also causes problems with Hylafax.  If
 you're running the hylafax daemon, it will just keep eating up CPU time
-until you have no idle time free.  I'm not currently aware of any
-patches that eliminate this behavior.
+until you have no idle time free.  To fix this, edit port.h included
+with the Hylafax distribution and change the line
+
+   CONFIG_OPENFIFO="O_RDONLY"
+
+   to
+
+   CONFIG_OPENFIFO="O_RDWR"
+
+   A similar method (finding all named pipes opened read-only and
+changing them to read-write) will fix any program that broke because of
+this change.
 
 Uugetty
 =======
@@ -252,8 +258,8 @@ xntpd
 =====
 
    Older versions of xntpd will not work with the latest kernels.
-Upgrade to xntp3.5c.tar.Z, available from
-http://www.eecis.udel.edu/~ntp/.
+Upgrade to xntp3.5f.tar.Z, available from
+ftp://louie.udel.edu/pub/ntp/xntp3.5f.tar.Z.
 
 Sound driver
 ============
@@ -315,7 +321,8 @@ Quota
    Quota support has also been added.  You need to get quotas-1.51 from
 ftp://ftp.funet.fi/pub/Linux/PEOPLE/Linus/subsystems/quota/all.tar.gz.
 This will compile just fine after you copy its mntent.h over to
-/usr/include/mntent.h.
+/usr/include/mntent.h.  I've uploaded this to sunsite as
+ftp://sunsite.unc.edu/pub/Linux/system/Admin/quotas-1.51-tar.gz
 
 APM support
 ===========
@@ -376,20 +383,20 @@ ftp://sunsite.unc.edu/pub/Linux/GCC/release.gcc-2.7.2
 Linux C Library
 ===============
 
-The latest 5.3.9 release:
-ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.3.9.bin.tar.gz
-Installation notes:
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.3.9
+The stable 5.2.18 release:
+ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.2.18.bin.tar.gz
+Installation notes for 5.2.18:
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.2.18
+
+The latest 5.3.12 release:
+ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.3.12.bin.tar.gz
+Installation notes for 5.2.18:
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.3.12
 
 Patched make sources:
 ftp://sunsite.unc.edu/pub/Linux/devel/make/make-3.74.patched.tar.gz
 Patched make binary:
 ftp://sunsite.unc.edu/pub/Linux/devel/make/make-3.74-direntfix-elf.tgz
-
-The stable 5.2.18 release:
-ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.2.18.bin.tar.gz
-Installation notes:
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.2.18
 
 Linux C++ Library
 =================

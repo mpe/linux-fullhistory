@@ -713,7 +713,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		/* the frsig is ignored, so we set it to 0 */
 		vt_cons[console]->vt_mode.frsig = 0;
 		vt_cons[console]->vt_pid = current->pid;
-		vt_cons[console]->vt_newvt = 0;
+		/* no switch is required -- saw@shade.msu.ru */
+		vt_cons[console]->vt_newvt = -1; 
 		return 0;
 	}
 

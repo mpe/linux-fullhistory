@@ -1,16 +1,19 @@
-$Id: README.aztcd,v 2.20 1996/03/12 18:31:33 root Exp root $
+$Id: README.aztcd,v 2.30 1996/04/26 05:32:23 root Exp root $
           Readme-File /usr/src/Documentation/cdrom/aztcd
-           for Aztech CD-ROM CDA268-01A, ORCHID CD-3110,
-                  OKANO/WEARNES CDD110, Conrad TXC
-                           CD-ROM Driver 
-                       Version 2.2 and newer
+           			for 
+	     AZTECH CD-ROM CDA268-01A, ORCHID CD-3110,
+      OKANO/WEARNES CDD110, CONRAD TXC, CyCDROM CR520, CR540
+                           CD-ROM Drives 
+                       Version 2.3 and newer
                    (for other drives see 6.-8.)
 
 NOTE: THIS DRIVER WILL WORK WITH THE CD-ROM DRIVES LISTED, WHICH HAVE
       A PROPRIETARY INTERFACE (implemented on a sound card or on an
       ISA-AT-bus card). 
       IT WILL DEFINITELY NOT WORK WITH CD-ROM DRIVES WITH *IDE*-INTERFACE,
-      such as the Aztech CDA269-031SE !!! IF YOU'RE USING A CD-ROM DRIVE
+      such as the Aztech CDA269-031SE !!! (The only known exceptions are
+      'faked' IDE drives like the CyCDROM CR520ie which work with aztcd
+      under certain conditions, see 7.). IF YOU'RE USING A CD-ROM DRIVE
       WITH IDE-INTERFACE, SOMETIMES ALSO CALLED ATAPI-COMPATIBLE, PLEASE 
       USE THE ide-cd.c DRIVER, WRITTEN BY MARK LORD AND SCOTT SNYDER !
       THE STANDARD-KERNEL 1.2.x NOW ALSO SUPPORTS IDE-CDROM-DRIVES, SEE THE
@@ -267,9 +270,7 @@ they seem to use the same command codes. So it was quite simple to make the
 AZTECH driver work with these drives. 
 
 Unfortunately I do not have any of these drives available, so I couldn't test
-it myself. But I've got reports, that it works with ORCHID CDS3110 and Game-
-Wave32 sound cards and also with WEARNES CDD110 and Conrad TXC in some different
-combinations. In some installations, it seems necessary to initialize the drive 
+it myself. In some installations, it seems necessary to initialize the drive 
 with the DOS driver before (especially if combined with a sound card) and then 
 do a warm boot (CTRL-ALT-RESET) or start Linux from DOS, e.g. with 'loadlin'.
 
@@ -277,6 +278,12 @@ If you do not succeed, read chapter DEBUGGING. Thanks in advance!
 
 Sorry for the inconvenience, but it is difficult to develop for hardware, 
 which you don't have available for testing. So if you like, please help us.
+
+If you do have a CyCDROM CR520ie thanks to Hilmar Berger's help your chances
+are good, that it will work with aztcd. The CR520ie is sold as an IDE-drive
+and really is connected to the IDE interface (primary at 0x1F0 or secondary
+at 0x170, configured as slave, not as master). Nevertheless it is not ATAPI
+compatible but still uses Aztech's command codes.
 
 
 8. DEBUGGING : IF YOU DON'T SUCCEED, TRY THE FOLLOWING
@@ -290,9 +297,9 @@ which you don't have available for testing. So if you like, please help us.
  drive. By appropriately configuring the drive and the DOS driver you can
  check, whether your drive does operate in this mode correctly under DOS. If
  it does not operate under DOS, it won't under Linux.
- If your drive's base address is something like 0x170 or 0x1F0 you most
- likely are having a IDE/ATAPI-compatible drive, which is not supported by
- aztcd.c, use ide-cd.c instead.
+ If your drive's base address is something like 0x170 or 0x1F0 (and it is
+ not a CyCDROM CR520ie or CR 940ie) you most likely are having an IDE/ATAPI-
+ compatible drive, which is not supported by aztcd.c, use ide-cd.c instead.
  Make sure the Base Address is configured correctly in aztcd.h, also make
  sure, that /dev/aztcd0 exists with the correct major number (compare it with
  the entry in file /usr/include/linux/major.h for the Aztech drive). 
@@ -462,6 +469,8 @@ SoundWave32 soundcards.
 
 Jochen Kunz and Olaf Kaluza delivered the information for supporting Conrad's 
 TXC drive.
+
+Hilmar Berger delivered the patches for supporting CyCDROM CR520ie.
 
 Anybody, who is interested in these items should have a look at 'ftp.gwdg.de',
 directory 'pub/linux/cdrom' and at 'ftp.cdrom.com', directory 'pub/cdrom'.

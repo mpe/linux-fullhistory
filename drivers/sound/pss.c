@@ -520,10 +520,11 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 
     case SNDCTL_COPR_SENDMSG:
       {
+	/* send buf->len words from buf->data to DSP */
+
 	copr_msg       *buf;
 	unsigned long   flags;
 	unsigned short *data;
-	unsigned short  tmp;
 	int             i;
 
 	buf = (copr_msg *) kmalloc (sizeof (copr_msg), GFP_KERNEL);
@@ -534,19 +535,17 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 
 	data = (unsigned short *) (buf->data);
 
-	/* printk( "SNDCTL_COPR_SENDMSG: data = %d", data ); */
-
 	save_flags (flags);
 	cli ();
 
 	for (i = 0; i < buf->len; i++)
 	  {
-	    tmp = *data++;
-	    if (!pss_put_dspword (devc, tmp))
+	    if (!pss_put_dspword (devc, *data++))
 	      {
 		restore_flags (flags);
-		buf->len = i;	/* feed back number of WORDs sent */
-		memcpy_tofs ((&((char *) arg)[0]), &buf, sizeof (buf));
+		/* feed back number of WORDs sent */
+		memcpy_tofs( (char *)(&(((copr_msg *)arg)->len)),
+				(char *)(&i), sizeof(buf->len));
 		kfree (buf);
 		return -EIO;
 	      }
@@ -562,6 +561,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 
     case SNDCTL_COPR_RCVMSG:
       {
+	/* try to read as much words as possible from DSP into buf */
 	copr_msg       *buf;
 	unsigned long   flags;
 	unsigned short *data;
@@ -571,27 +571,31 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	buf = (copr_msg *) kmalloc (sizeof (copr_msg), GFP_KERNEL);
 	if (buf == NULL)
 	  return -ENOSPC;
-
+#if 0
 	memcpy_fromfs ((char *) buf, &(((char *) arg)[0]), sizeof (*buf));
+#endif
 
 	data = (unsigned short *) buf->data;
 
 	save_flags (flags);
 	cli ();
 
-	for (i = 0; i < buf->len; i++)
+	for (i = 0; i < sizeof(buf->data); i++)
 	  {
 	    if (!pss_get_dspword (devc, data++))
 	      {
 		buf->len = i;	/* feed back number of WORDs read */
-		err = -EIO;
+		err = (i==0)? -EIO : 0;	   /* EIO only if no word read */
 		break;
 	      }
 	  }
 
+	if( i==sizeof(buf->data) )
+		buf->len = i;
+
 	restore_flags (flags);
 
-	memcpy_tofs ((&((char *) arg)[0]), &buf, sizeof (buf));
+	memcpy_tofs ((&((char *) arg)[0]), buf, sizeof (*buf));
 	kfree (buf);
 
 	return err;

@@ -298,7 +298,7 @@ int NCR5380_abort (Scsi_Cmnd *cmd);
 #ifndef NCR5380_reset
 static
 #endif
-int NCR5380_reset (Scsi_Cmnd *cmd, unsigned int);
+int NCR5380_reset (Scsi_Cmnd *cmd, unsigned int reset_flags);
 #ifndef NCR5380_queue_command
 static 
 #endif

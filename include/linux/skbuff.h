@@ -18,6 +18,7 @@
 #include <linux/time.h>
 
 #include <asm/atomic.h>
+#include <asm/types.h>
 
 #define CONFIG_SKB_CHECK 0
 

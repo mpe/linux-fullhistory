@@ -1,4 +1,4 @@
-/* $Id: aztcd.h,v 2.20 1996/03/12 18:31:30 root Exp root $
+/* $Id: aztcd.h,v 2.30 1996/04/26 05:33:56 root Exp root $
  *
  * Definitions for a AztechCD268 CD-ROM interface
  *	Copyright (C) 1994, 1995  Werner Zimmermann
@@ -22,7 +22,6 @@
  *  History:	W.Zimmermann adaption to Aztech CD268-01A Version 1.3
  *		October 1994 Email: zimmerma@rz.fht-esslingen.de
  */
-
 
 /* *** change this to set the I/O port address of your CD-ROM drive*/
 #define AZT_BASE_ADDR		0x320

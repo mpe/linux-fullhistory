@@ -201,11 +201,12 @@
 			  <pchen@woodruffs121.residence.gatech.edu>.
 			  Add new multicasting code.
       0.421   22-Apr-96	  Fix alloc_device() bug <jari@markkus2.fimr.fi>
+      0.422   29-Apr-96	  Fix depca_hw_init() bug <jari@markkus2.fimr.fi>
 
     =========================================================================
 */
 
-static const char *version = "depca.c:v0.421 96/4/22 davies@wanton.lkg.dec.com\n";
+static const char *version = "depca.c:v0.422 96/4/29 davies@wanton.lkg.dec.com\n";
 
 #include <linux/module.h>
 
@@ -483,8 +484,8 @@ depca_hw_init(struct device *dev, u_long ioaddr)
 
   if (inw(DEPCA_DATA) == STOP) {
     if (mem == 0) {
-      for (; mem_base[mem_chkd]; mem_chkd++) {
-	mem_start = mem_base[mem_chkd];
+      while (mem_base[mem_chkd]) {
+	mem_start = mem_base[mem_chkd++];
 	DepcaSignature(name, mem_start);
 	if (*name != '\0') break;
       }

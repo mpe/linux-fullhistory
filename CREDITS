@@ -786,8 +786,8 @@ S: USA
 N: Dirk Melchers
 E: dirk@merlin.nbg.sub.org
 D: 8 bit XT hard disk driver for OMTI5520
-S: Branderweg 4
-S: D-91058 Erlangen
+S: Heidackerstrass 19
+S: D-91056 Erlangen
 S: Germany
 
 N: Michael Meskes
@@ -1306,7 +1306,7 @@ S: 6525 EZ Nijmegen
 S: The Netherlands
 
 N: Lars Wirzenius
-E: lars.wirzenius@helsinki.fi
+E: liw@iki.fi
 D: Linux System Administrator's Guide
 D: Co-moderator, comp.os.linux.announce
 D: Original sprintf in kernel
@@ -1316,8 +1316,8 @@ D: Linux News (electronic magazine)
 D: Meta-FAQ, originator
 D: INFO-SHEET, former maintainer
 D: Author of the longest-living linux bug
-S: Ohratie 16 C 198
-S: sf-01370 Vantaa
+S: Hernesaarenkatu 15 A 2
+S: Fin-00150 Helsinki
 S: Finland
 
 N: Roger E. Wolff

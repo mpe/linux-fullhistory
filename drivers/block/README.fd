@@ -27,7 +27,7 @@ of linux-72:
  If you give options both in the lilo config file and on the boot
 prompt, the option strings of both places are concatenated, the boot
 prompt options coming last. That's why there are also options to
-restore the default behaviour.
+restore the default behavior.
 
  If you use the floppy driver as a module, use the following syntax:
  insmod floppy floppy="<options>"
@@ -49,7 +49,7 @@ available: floppy="daring two_fdc" insmod floppy
 	Obsolete. Use the floppy=<drive>,<type>,cmos option instead
 
  floppy=asus_pci
-	Sets the bitmask to allow only units 0 and 1. (The default)
+	Sets the bit mask to allow only units 0 and 1. (The default)
 
  floppy=daring
 	Tells the floppy driver that you have a well behaved floppy controller.
@@ -81,34 +81,71 @@ available: floppy="daring two_fdc" insmod floppy
  floppy=nodma
 	Tells the floppy driver not to use Dma for data transfers.
 	This is needed on HP Omnibooks, which don't have a workable
-	DMA channel for the floppy driver.
-
+	DMA channel for the floppy driver. This option is also useful
+	if you frequently get "Unable to allocate DMA memory" messages.
+	Indeed, dma memory needs to be continuous in physical, and is
+	thus harder to find, whereas non-dma buffers may be allocated
+	in virtual memory. However, I advise against this if you have
+	an FDC without a FIFO (8272A or 82072). 82072A and later are
+	OK. You also need at least a 486 to use nodma.
+	If you use nodma mode, I suggest you also set the FIFO
+	threshold to 10 or lower, in order to limit the number of data
+	transfer interrupts.
+	
  floppy=dma
 	Tells the floppy driver that a workable DMA channel is available
 	(the default).
 
+floppy=nofifo
+	Disables the FIFO entirely. This is needed if you get "Bus
+	master arbitration error" messages from your ethernet card (or
+	from other devices) while accessing the foppy.
+
+floppy=fifo
+	Enables the FIFO (default)
+
+ floppy=<threshold>,fifo_depth
+	Sets the FIFO threshold. This is mostly relevant in DMA
+	mode. If this is higher, the floppy driver tolerates more
+	interrupt latency, but it triggers more interrupts (i.e. it
+	imposes more load on the rest of the system). If this is
+	lower, the interrupt latency should be lower too (faster
+	processor). The benefit of a lower threshold is less
+	interrupts.
+	To tune the fifo threshold, switch on over/underrun messages
+	using 'floppycontrol --messages'. Then access a floppy
+	disk. If you get a huge amount of "Over/Underrun - retrying"
+	messages, then the fifo threshold is too low. Try with a
+	higher value, until you only get an occasional Over/Underrun.
+	It is a good idea to compile the floppy driver as a module
+	when doing this tuning. Indeed, it allows to try different
+	fifo values whithout rebooting the machine for each test. Note
+	that you need to do 'floppycontrol --messages' every time you
+	re-inseert the module.
+	Usually, tuning the fifo threshold should not be needed, as
+	the default (0xa) is reasonable.
+
  floppy=<drive>,<type>,cmos
-	Sets the cmos type of <drive> to <type>. This is mandatory if
+	Sets the CMOS type of <drive> to <type>. This is mandatory if
 	you have more than two floppy drives (only two can be
-	described in the physical cmos), or if your BIOS uses
+	described in the physical CMOS), or if your BIOS uses
 	non-standard CMOS types. The CMOS types are:
-		0 - unknown or not installed
+		0 - Use the value of the physical CMOS
 		1 - 5 1/4 DD
 		2 - 5 1/4 HD
 		3 - 3 1/2 DD
 		4 - 3 1/2 HD
 		5 - 3 1/2 ED
 		6 - 3 1/2 ED
+	       16 - unknown or not installed
 	(Note: there are two valid types for ED drives. This is because 5 was
 	initially chosen to represent floppy *tapes*, and 6 for ED drives.
 	AMI ignored this, and used 5 for ED drives. That's why the floppy
 	driver handles both)
-	Setting the CMOS to 0 for the first two drives (default) makes the
-	floppy driver read the physical cmos for those drives.
 
  floppy=unexpected_interrupts
 	Print a warning message when an unexpected interrupt is received 
-	(default behaviour)
+	(default behavior)
 
  floppy=no_unexpected_interrupts
  floppy=L40SX

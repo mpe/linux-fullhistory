@@ -50,7 +50,7 @@
 
 /* 1992/9/20
  * Modifications for ``Sector Shifting'' by Rob Hooft (hooft@chem.ruu.nl)
- * modelled after the freeware MS/DOS program fdformat/88 V1.8 by
+ * modeled after the freeware MS-DOS program fdformat/88 V1.8 by
  * Christoph H. Hochst\"atter.
  * I have fixed the shift values to the ones I always use. Maybe a new
  * ioctl() should be created to be able to modify them.
@@ -132,7 +132,7 @@ static int allowed_drive_mask = 0x33;
 #include <linux/fd.h>
 
 
-#define OLDFDRAWCMD 0x020d /* send a raw command to the fdc */
+#define OLDFDRAWCMD 0x020d /* send a raw command to the FDC */
 
 struct old_floppy_raw_cmd {
   void *data;
@@ -164,8 +164,9 @@ struct old_floppy_raw_cmd {
 
 static int use_virtual_dma=0; /* virtual DMA for Intel */
 static unsigned short virtual_dma_port=0x3f0;
-static void floppy_interrupt(int irq, void *dev_id, struct pt_regs * regs);
+void floppy_interrupt(int irq, void *dev_id, struct pt_regs * regs);
 static int set_dor(int fdc, char mask, char data);
+static inline int __get_order(unsigned long size);
 #include <asm/floppy.h>
 
 
@@ -177,10 +178,6 @@ static int set_dor(int fdc, char mask, char data);
 
 #ifndef FLOPPY_MOTOR_MASK
 #define FLOPPY_MOTOR_MASK 0xf0
-#endif
-
-#ifndef fd_eject
-#define fd_eject(x) -EINVAL
 #endif
 
 #ifndef fd_get_dma_residue
@@ -203,12 +200,13 @@ static inline int __get_order(unsigned long size)
 	return order;
 }
 
-static unsigned long dma_mem_alloc(int size)
-{
-	int order = __get_order(size);
+#ifndef fd_dma_mem_free
+#define fd_dma_mem_free(addr, size) free_pages(addr, __get_order(size))
+#endif
 
-	return __get_dma_pages(GFP_KERNEL,order);
-}
+#ifndef fd_dma_mem_alloc
+#define fd_dma_mem_alloc(size) __get_dma_pages(GFP_KERNEL,__get_order(size))
+#endif
 
 /* End dma memory related stuff */
 
@@ -531,6 +529,22 @@ static struct floppy_struct *_floppy = floppy_type;
 static unsigned char current_drive = 0;
 static long current_count_sectors = 0;
 static unsigned char sector_t; /* sector in track */
+
+
+#ifndef fd_eject
+#ifdef __sparc__
+static int fd_eject(int drive)
+{
+	set_dor(0, ~0, 0x90);
+	udelay(500);
+	set_dor(0, ~0x80, 0);
+	udelay(500);
+}
+#else
+#define fd_eject(x) -EINVAL
+#endif
+#endif
+
 
 #ifdef DEBUGT
 static long unsigned debugtimer;
@@ -1163,7 +1177,8 @@ static inline void perpendicular_mode(void)
 	}
 } /* perpendicular_mode */
 
-static int fifo = 0xa;
+static int fifo_depth = 0xa;
+static int no_fifo = 0;
 
 static int fdc_configure(void)
 {
@@ -1176,10 +1191,9 @@ static int fdc_configure(void)
 	if(need_more_output() != MORE_OUTPUT)
 		return 0;
 	output_byte(0);
-	output_byte(0x10 | (fifo & 0xf)); /* FIFO on, polling off,
-					     10 byte threshold */
+	output_byte(0x10 | (no_fifo & 0x20) | (fifo_depth & 0xf));
 #endif
-	output_byte(0);	/* precompensation from track 
+	output_byte(0);	/* pre-compensation from track 
 			   0 upwards */
 	return 1;
 }	
@@ -1214,7 +1228,7 @@ static void fdc_specify(void)
 	int hlt_max_code = 0x7f;
 	int hut_max_code = 0xf;
 
-	if (FDCS->need_configure && FDCS->has_fifo) {
+	if (FDCS->need_configure && FDCS->version >= FDC_82072A) {
 		fdc_configure();
 		FDCS->need_configure = 0;
 		/*DPRINT("FIFO enabled\n");*/
@@ -1313,7 +1327,7 @@ static void tell_sector(void)
 
 
 /*
- * Ok, this error interpreting routine is called after a
+ * OK, this error interpreting routine is called after a
  * DMA read/write has succeeded
  * or failed, so we check the results, and copy any buffers.
  * hhb: Added better error reporting.
@@ -1392,7 +1406,7 @@ static int interpret_errors(void)
 
 /*
  * This routine is called when everything should be correctly set up
- * for the transfer (ie floppy motor is on, the correct floppy is
+ * for the transfer (i.e. floppy motor is on, the correct floppy is
  * selected, and the head is sitting on the right track).
  */
 static void setup_rw_floppy(void)
@@ -1648,6 +1662,7 @@ static void unexpected_floppy_interrupt(void)
 			for (i=0; i<inr; i++)
 				printk("%d %x\n", i, reply_buffer[i]);
 	}
+	FDCS->reset = 0;        /* Allow SENSEI to be sent. */
 	while(1){
 		output_byte(FD_SENSEI);
 		inr=result();
@@ -1666,7 +1681,7 @@ static struct tq_struct floppy_tq =
 { 0, 0, (void *) (void *) unexpected_floppy_interrupt, 0 };
 
 /* interrupt handler */
-static void floppy_interrupt(int irq, void *dev_id, struct pt_regs * regs)
+void floppy_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	void (*handler)(void) = DEVICE_INTR;
 
@@ -1719,6 +1734,9 @@ static void reset_interrupt(void)
 #ifdef DEBUGT
 	debugt("reset interrupt:");
 #endif
+#ifdef __sparc__
+	fdc_specify();  /* P3: It gives us "sector not found" without this. */
+#endif
 	result();		/* get the status ready for set_fdc */
 	if (FDCS->reset) {
 		printk("reset set in interrupt, calling %p\n", cont->error);
@@ -1728,8 +1746,8 @@ static void reset_interrupt(void)
 }
 
 /*
- * reset is done by pulling bit 2 of DOR low for a while (old FDC's),
- * or by setting the self clearing bit 7 of STATUS (newer FDC's)
+ * reset is done by pulling bit 2 of DOR low for a while (old FDCs),
+ * or by setting the self clearing bit 7 of STATUS (newer FDCs)
  */
 static void reset_fdc(void)
 {
@@ -1901,7 +1919,7 @@ static void floppy_start(void)
  * here ends the bottom half. Exported routines are:
  * floppy_start, floppy_off, floppy_ready, lock_fdc, unlock_fdc, set_fdc,
  * start_motor, reset_fdc, reset_fdc_info, interpret_errors.
- * Initialisation also uses output_byte, result, set_dor, floppy_interrupt
+ * Initialization also uses output_byte, result, set_dor, floppy_interrupt
  * and set_dor.
  * ========================================================================
  */
@@ -2970,8 +2988,8 @@ static void raw_cmd_free(struct floppy_raw_cmd **ptr)
 	*ptr = 0;
 	while(this) {
 		if (this->buffer_length) {
-			free_pages((unsigned long)this->kernel_data,
-				   __get_order(this->buffer_length));
+			fd_dma_mem_free((unsigned long)this->kernel_data,
+					this->buffer_length);
 			this->buffer_length = 0;
 		}
 		next = this->next;
@@ -3036,7 +3054,7 @@ static inline int raw_cmd_copyin(int cmd, char *param,
 		if (ptr->flags & (FD_RAW_READ | FD_RAW_WRITE)) {
 			if (ptr->length <= 0)
 				return -EINVAL;
-			ptr->kernel_data =(char*)dma_mem_alloc(ptr->length);
+			ptr->kernel_data =(char*)fd_dma_mem_alloc(ptr->length);
 			if (!ptr->kernel_data)
 				return -ENOMEM;
 			ptr->buffer_length = ptr->length;
@@ -3292,7 +3310,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 	/* convert compatibility eject ioctls into floppy eject ioctl.
 	 * We do this in order to provide a means to eject floppy disks before
 	 * installing the new fdutils package */
-	if(cmd == CDROMEJECT || /* CD-Rom eject */
+	if(cmd == CDROMEJECT || /* CD-ROM eject */
 	   cmd == 0x6470 /* SunOS floppy eject */) {
 		DPRINT("obsolete eject ioctl\n");
 		DPRINT("please use floppycontrol --eject\n");
@@ -3330,12 +3348,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 
 			/* do the actual eject. Fails on
 			 * non-Sparc architectures */
-			ret=fd_eject(UNIT(drive)); 
-
-			/* switch the motor off, in order to make the
-			 * cached DOR status match the hard DOS status
-			 */
-			motor_off_callback(drive);
+			ret=fd_eject(UNIT(drive));
 
 			USETF(FD_DISK_CHANGED);
 			USETF(FD_VERIFY);
@@ -3452,7 +3465,7 @@ static void config_types(void)
 	int first=1;
 	int drive;
 
-	/* read drive info out of physical cmos */
+	/* read drive info out of physical CMOS */
 	drive=0;
 	if (!UDP->cmos)
 		UDP->cmos= FLOPPY0_TYPE;
@@ -3464,6 +3477,8 @@ static void config_types(void)
 	/* additional physical CMOS drive detection should go here */
 
 	for (drive=0; drive < N_DRIVE; drive++){
+		if (UDP->cmos >= 16)
+			UDP->cmos = 0;
 		if (UDP->cmos >= 0 && UDP->cmos <= NUMBER(default_drive_params))
 			memcpy((char *) UDP,
 			       (char *) (&default_drive_params[(int)UDP->cmos].params),
@@ -3594,19 +3609,19 @@ static int floppy_open(struct inode * inode, struct file * filp)
 		else
 			try = 32; /* Only 24 actually useful */
 
-		tmp=(char *)dma_mem_alloc(1024 * try);
+		tmp=(char *)fd_dma_mem_alloc(1024 * try);
 		if (!tmp) {
 			try >>= 1; /* buffer only one side */
 			INFBOUND(try, 16);
-			tmp= (char *)dma_mem_alloc(1024*try);
+			tmp= (char *)fd_dma_mem_alloc(1024*try);
 		}
 		if (!tmp) {
 			DPRINT("Unable to allocate DMA memory\n");
 			RETERR(ENXIO);
 		}
-		if (floppy_track_buffer){
-			free_pages((unsigned long)tmp,__get_order(try*1024));
-		}else {
+		if (floppy_track_buffer)
+			fd_dma_mem_free((unsigned long)tmp,try*1024);
+		else {
 			buffer_min = buffer_max = -1;
 			floppy_track_buffer = tmp;
 			max_buffer_sectors = try;
@@ -3741,7 +3756,7 @@ static struct file_operations floppy_fops = {
 };
 
 /*
- * Floppy Driver initialisation
+ * Floppy Driver initialization
  * =============================
  */
 
@@ -3751,7 +3766,6 @@ static char get_fdc_version(void)
 {
 	int r;
 
-	FDCS->has_fifo = 0;
 	output_byte(FD_DUMPREGS);	/* 82072 and better know DUMPREGS */
 	if (FDCS->reset)
 		return FDC_NONE;
@@ -3766,18 +3780,12 @@ static char get_fdc_version(void)
 		       fdc, r);
 		return FDC_UNKNOWN;
 	}
-	output_byte(FD_VERSION);
-	r = result();
-	if ((r == 1) && (reply_buffer[0] == 0x80)){
+
+	if(!fdc_configure()) {
 		printk(KERN_INFO "FDC %d is an 82072\n",fdc);
-		return FDC_82072;		/* 82072 doesn't know VERSION */
+		return FDC_82072;      	/* 82072 doesn't know CONFIGURE */
 	}
-	if ((r != 1) || (reply_buffer[0] != 0x90)) {
-		printk("FDC %d init: VERSION: unexpected return of %d bytes.\n",
-		       fdc, r);
-		return FDC_UNKNOWN;
-	}
-	FDCS->has_fifo = fdc_configure();
+
 	output_byte(FD_PERPENDICULAR);
 	if(need_more_output() == MORE_OUTPUT) {
 		output_byte(0);
@@ -3889,7 +3897,8 @@ static void set_cmos(int *ints, int dummy)
 	}
 	if (current_drive >= 4 && !FDC2)
 		FDC2 = 0x370;
-	if (ints[2] <= 0 || ints[2] >= NUMBER(default_drive_params)){
+	if (ints[2] <= 0 || 
+	    (ints[2] >= NUMBER(default_drive_params) && ints[2] != 16)){
 		DPRINT1("bad cmos code %d\n", ints[2]);
 		return;
 	}
@@ -3918,7 +3927,9 @@ static struct param_table {
 	{ "omnibook", 0, &use_virtual_dma, 1 },
 	{ "dma", 0, &use_virtual_dma, 0 },
 
-	{ "fifo", 0, &fifo, 0xa },
+	{ "fifo_depth", 0, &fifo_depth, 0xa },
+	{ "nofifo", 0, &no_fifo, 0x20 },
+	{ "usefifo", 0, &no_fifo, 0 },
 
 	{ "cmos", set_cmos, 0, 0 },
 
@@ -4054,8 +4065,7 @@ int floppy_init(void)
 	if (have_no_fdc) {
 		DPRINT("no floppy controllers found\n");
 		unregister_blkdev(MAJOR_NR,"fd");
-	} else
-		virtual_dma_init();
+	}
 	return have_no_fdc;
 }
 
@@ -4103,7 +4113,7 @@ static void floppy_release_irq_and_dma(void)
 	int drive;
 #endif
 	long tmpsize;
-	void *tmpaddr;
+	unsigned long tmpaddr;
 
 	cli();
 	if (--usage_count){
@@ -4125,11 +4135,11 @@ static void floppy_release_irq_and_dma(void)
 
 	if (floppy_track_buffer && max_buffer_sectors) {
 		tmpsize = max_buffer_sectors*1024;
-		tmpaddr = (void *)floppy_track_buffer;
+		tmpaddr = (unsigned long)floppy_track_buffer;
 		floppy_track_buffer = 0;
 		max_buffer_sectors = 0;
 		buffer_min = buffer_max = -1;
-		free_pages((unsigned long)tmpaddr, __get_order(tmpsize));
+		fd_dma_mem_free(tmpaddr, tmpsize);
 	}
 
 #ifdef FLOPPY_SANITY_CHECK
@@ -4248,4 +4258,17 @@ void cleanup_module(void)
 }
 #endif
 
+#else
+/* eject the boot floppy (if we need the drive for a different root floppy) */
+/* This should only be called at boot time when we're sure that there's no
+ * resource contention. */
+void floppy_eject(void)
+{
+	int dummy;
+	floppy_grab_irq_and_dma();
+	lock_fdc(0,0);
+	dummy=fd_eject(0);
+	process_fd_request();
+	floppy_release_irq_and_dma();
+}
 #endif

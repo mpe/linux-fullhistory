@@ -151,6 +151,9 @@ static inline struct _fpstate * save_i387_hard(struct _fpstate * buf)
 
 static struct _fpstate * save_i387(struct _fpstate * buf)
 {
+	if (!current->used_math)
+		return NULL;
+
 #ifndef CONFIG_MATH_EMULATION
 	return save_i387_hard(buf);
 #else

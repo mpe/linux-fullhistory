@@ -652,6 +652,7 @@ isac_new_ph(struct IsdnCardState *sp)
 		  break;
 	  case (12):
 	  case (13):
+	  	  ph_command(sp, 8);
 		  sp->ph_active = 5;
 		  isac_sched_event(sp, ISAC_PHCHANGE);
 		  if (!sp->xmtibh)

@@ -37,12 +37,33 @@
 #define fd_free_irq()           free_irq(FLOPPY_IRQ, NULL);
 
 #define MAX_BUFFER_SECTORS 24
-#define virtual_dma_init()                                              \
-        if (boot_info.machtype == MACH_ACER_PICA_61 ||                  \
-            boot_info.machtype == MACH_MIPS_MAGNUM_4000 ||              \
-            boot_info.machtype == MACH_OLIVETTI_M700)                   \
-		vdma_alloc(PHYSADDR(floppy_track_buffer),               \
-			   512*2*MAX_BUFFER_SECTORS);
+
+static unsigned long mips_dma_mem_alloc(unsigned long size)
+{
+	int order = __get_order(size);
+	unsigned long mem;
+
+	mem = __get_dma_pages(GFP_KERNEL,order);
+	if(!mem)
+		return 0;
+        if (boot_info.machtype == MACH_ACER_PICA_61 ||
+            boot_info.machtype == MACH_MIPS_MAGNUM_4000 ||
+            boot_info.machtype == MACH_OLIVETTI_M700)
+		vdma_alloc(PHYSADDR(mem), size);
+	return mem;
+}
+
+static void mips_dma_mem_free(unsigned long addr, unsigned long size)
+{       
+        if (boot_info.machtype == MACH_ACER_PICA_61 ||
+            boot_info.machtype == MACH_MIPS_MAGNUM_4000 ||
+            boot_info.machtype == MACH_OLIVETTI_M700)
+		vdma_free(PHYSADDR(addr));
+	free_pages(addr, __get_order(size));	
+}
+
+#define fd_dma_mem_alloc(mem,size) mips_dma_mem_alloc(mem,size)
+#define fd_dma_mem_free(mem) mips_dma_mem_free(mem)
 
 /*
  * And on Mips's the CMOS info fails also ...

@@ -104,6 +104,7 @@ ufs_read_super(struct super_block * sb, void * data, int silent)
 	 *   and s_type when we return.
 	 */
 
+	MOD_INC_USE_COUNT;
 	lock_super (sb);
 
 	/* XXX - make everything read only for testing */
@@ -119,7 +120,8 @@ ufs_read_super(struct super_block * sb, void * data, int silent)
 	        }
 	        printk ("ufs_read_super: unable to read superblock\n");
 
-	        return 0;
+		MOD_DEC_USE_COUNT;
+	        return(NULL);
 	}
 	/* XXX - redo this so we can free it later... */
 	usb = (struct ufs_superblock *)__get_free_page(GFP_KERNEL); 
@@ -147,6 +149,7 @@ ufs_read_super(struct super_block * sb, void * data, int silent)
 	                printk ("ufs_read_super: bad magic number 0x%8.8x on dev %d/%d\n",
 	                        usb->fs_magic, MAJOR(sb->s_dev),
 	                        MINOR(sb->s_dev));
+		MOD_DEC_USE_COUNT;
 	        return(NULL);
 	}
 
@@ -238,7 +241,8 @@ ufs_read_super(struct super_block * sb, void * data, int silent)
 
        ufs_read_super_lose:
 	/* XXX - clean up */
-	return(0);
+	MOD_DEC_USE_COUNT;
+	return(NULL);
 }
 
 void ufs_put_super (struct super_block * sb)

@@ -46,7 +46,7 @@ int generic_NCR5380_abort(Scsi_Cmnd *);
 int generic_NCR5380_detect(Scsi_Host_Template *);
 int generic_NCR5380_release_resources(struct Scsi_Host *);
 int generic_NCR5380_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
-int generic_NCR5380_reset(Scsi_Cmnd *);
+int generic_NCR5380_reset(Scsi_Cmnd *, unsigned int);
 int notyet_generic_proc_info (char *buffer ,char **start, off_t offset,
                      int length, int hostno, int inout);
 const char* generic_NCR5380_info(struct Scsi_Host *);

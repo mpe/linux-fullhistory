@@ -33,6 +33,8 @@
 					       "floppy", NULL)
 #define fd_free_irq()		free_irq(FLOPPY_IRQ, NULL)
 #define fd_get_dma_residue()    SW._get_dma_residue(FLOPPY_DMA)
+#define fd_dma_mem_alloc(size)	SW._dma_mem_alloc(size)
+#define fd_dma_mem_free(addr,size)	SW._dma_mem_free(addr,size)
 
 static int virtual_dma_count=0;
 static int virtual_dma_residue=0;
@@ -193,6 +195,25 @@ static int vdma_request_irq(unsigned int irq,
 
 }
 
+static unsigned long dma_mem_alloc(unsigned long size)
+{
+	return __get_dma_pages(GFP_KERNEL,__get_order(size));
+}
+
+static void dma_mem_free(unsigned long addr, unsigned long size)
+{
+	free_pages(addr, __get_order(size));
+}
+
+static unsigned long vdma_mem_alloc(unsigned long size)
+{
+	return (unsigned long) vmalloc(size);
+}
+
+static void vdma_mem_free(unsigned long addr, unsigned long size)
+{
+	return vfree((void *)addr);
+}
 
 struct fd_routine_l {
 	void (*_enable_dma)(unsigned int dummy);
@@ -209,6 +230,8 @@ struct fd_routine_l {
 			   unsigned long flags, 
 			   const char *device,
 			   void *dev_id);
+	unsigned long (*_dma_mem_alloc) (unsigned long size);
+	void (*_dma_mem_free)(unsigned long addr, unsigned long size);
 } fd_routine[] = {
 	{
 		enable_dma,
@@ -221,6 +244,8 @@ struct fd_routine_l {
 		set_dma_count,
 		get_dma_residue,
 		request_irq,
+		dma_mem_alloc,
+		dma_mem_free
 	},
 	{
 		vdma_enable_dma,
@@ -232,7 +257,9 @@ struct fd_routine_l {
 		vdma_set_dma_addr,
 		vdma_set_dma_count,
 		vdma_get_dma_residue,
-		vdma_request_irq
+		vdma_request_irq,
+		vdma_mem_alloc,
+		vdma_mem_free
 	}
 };
 
@@ -258,6 +285,6 @@ static int FDC2 = -1;
  * driver otherwise. It doesn't matter much for performance anyway, as most
  * floppy accesses go through the track buffer.
  */
-#define CROSS_64KB(a,s) ((unsigned long)(a)/K_64 != ((unsigned long)(a) + (s) - 1) / K_64)
+#define CROSS_64KB(a,s) (((unsigned long)(a)/K_64 != ((unsigned long)(a) + (s) - 1) / K_64) && ! (use_virtual_dma & 1))
 
 #endif /* __ASM_I386_FLOPPY_H */

@@ -3224,7 +3224,7 @@ int NCR5380_abort (Scsi_Cmnd *cmd) {
 
 
 /* 
- * Function : int NCR5380_reset (Scsi_Cmnd *cmd)
+ * Function : int NCR5380_reset (Scsi_Cmnd *cmd, unsigned int reset_flags)
  * 
  * Purpose : reset the SCSI bus.
  *
@@ -3235,7 +3235,7 @@ int NCR5380_abort (Scsi_Cmnd *cmd) {
 #ifndef NCR5380_reset
 static
 #endif
-int NCR5380_reset (Scsi_Cmnd *cmd) {
+int NCR5380_reset (Scsi_Cmnd *cmd, unsigned int dummy) {
     NCR5380_local_declare();
     NCR5380_setup(cmd->host);
 

@@ -80,6 +80,7 @@ extern void aic7xxx_setup(char *str, int *ints);
 extern void AM53C974_setup(char *str, int *ints);
 extern void BusLogic_Setup(char *str, int *ints);
 extern void fdomain_setup(char *str, int *ints);
+extern void in2000_setup(char *str, int *ints);
 extern void NCR53c406a_setup(char *str, int *ints);
 extern void ppa_setup(char *str, int *ints);
 extern void scsi_luns_setup(char *str, int *ints);
@@ -307,6 +308,9 @@ struct {
 #endif
 #ifdef CONFIG_SCSI_FUTURE_DOMAIN
 	{ "fdomain=", fdomain_setup},
+#endif
+#ifdef CONFIG_SCSI_IN2000
+	{ "in2000=", in2000_setup},
 #endif
 #ifdef CONFIG_SCSI_PPA
         { "ppa=", ppa_setup },

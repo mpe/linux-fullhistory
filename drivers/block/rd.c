@@ -48,6 +48,7 @@
 #include <linux/mman.h>
 #include <linux/malloc.h>
 #include <linux/ioctl.h>
+#include <linux/fd.h>
 #include <linux/module.h>
 
 #include <asm/system.h>
@@ -90,11 +91,12 @@ static int rd_blocksizes[NUM_RAMDISKS];
  * architecture-specific setup routine (from the stored bootsector
  * information). 
  */
+int rd_size = 4096;		/* Size of the ramdisks */
+
 #ifndef MODULE
 int rd_doload = 0;		/* 1 = load ramdisk, 0 = don't load */
 int rd_prompt = 1;		/* 1 = prompt for ramdisk, 0 = don't prompt */
 int rd_image_start = 0;		/* starting block # of image */
-int rd_size = 4096;		/* Size of the ramdisks */
 #ifdef CONFIG_BLK_DEV_INITRD
 unsigned long initrd_start,initrd_end;
 int mount_initrd = 1;		/* zero if initrd should not be mounted */
@@ -489,7 +491,7 @@ static void rd_load_image(kdev_t device,int offset)
 		outfile.f_op->write(outfile.f_inode, &outfile, buf,
 				    BLOCK_SIZE);
 		if (!(i % 16)) {
-			printk(KERN_NOTICE "%c\b", rotator[rotate & 0x3]);
+			printk("%c\b", rotator[rotate & 0x3]);
 			rotate++;
 		}
 	}
@@ -515,6 +517,9 @@ void rd_load()
 	if (MAJOR(ROOT_DEV) != FLOPPY_MAJOR) return;
 
 	if (rd_prompt) {
+#ifdef CONFIG_BLK_DEV_FD
+		floppy_eject();
+#endif
 		printk(KERN_NOTICE
 		       "VFS: Insert root floppy disk to be loaded into ramdisk and press ENTER\n");
 		wait_for_keypress();

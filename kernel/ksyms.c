@@ -120,6 +120,7 @@ struct symbol_table symbol_table = {
 	X(do_munmap),
 	X(insert_vm_struct),
 	X(merge_segments),
+	X(exit_mm),
 
 	/* internal kernel memory management */
 	X(__get_free_pages),

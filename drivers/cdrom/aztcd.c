@@ -1,6 +1,6 @@
-#define AZT_VERSION "2.2"
-/*      $Id: aztcd.c,v 2.20 1996/03/12 18:31:23 root Exp root $
-	linux/drivers/block/aztcd.c - AztechCD268 CDROM driver
+#define AZT_VERSION "2.30"
+/*      $Id: aztcd.c,v 2.30 1996/04/26 05:32:15 root Exp root $
+	linux/drivers/block/aztcd.c - Aztech CD268 CDROM driver
 
 	Copyright (C) 1994,95,96 Werner Zimmermann(zimmerma@rz.fht-esslingen.de)
 
@@ -23,7 +23,7 @@
 	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 
 	HISTORY
-	V0.0    Adaption to Adaptec CD268-01A Version 1.3
+	V0.0    Adaption to Aztech CD268-01A Version 1.3
 		Version is PRE_ALPHA, unresolved points:
 		1. I use busy wait instead of timer wait in STEN_LOW,DTEN_LOW
 		   thus driver causes CPU overhead and is very slow 
@@ -143,8 +143,12 @@
         V2.10   Started to modify azt_poll to prevent reading beyond end of
                 tracks.
                 Werner Zimmermann, December 3, 95
-	NOTE: 
-	Points marked with ??? are questionable !
+        V2.20   Changed some comments
+                Werner Zimmermann, April 1, 96
+        V2.30   Implemented support for CyCDROM CR520, CR940, Code for CR520 
+        	delivered by H.Berger with preworks by E.Moenkeberg.
+                Werner Zimmermann, April 29, 96
+
 */
 #include <linux/module.h>
 #include <linux/errno.h>
@@ -177,6 +181,13 @@
                                 return value;}
 #define RETURN(message)        {printk("aztcd: Warning: %s failed\n",message);\
                                 return;}
+
+/* Macros to switch the IDE-interface to the slave device and back to the master*/
+#define SWITCH_IDE_SLAVE  outb_p(0xa0,azt_port+6); \
+	                  outb_p(0x10,azt_port+6); \
+	                  outb_p(0x00,azt_port+7); \
+	                  outb_p(0x10,azt_port+6); 
+#define SWITCH_IDE_MASTER outb_p(0xa0,azt_port+6);
 
 static int aztPresent = 0;
 
@@ -411,6 +422,10 @@ static int aztSendCmd(int cmd)
 #ifdef AZT_DEBUG
    printk("aztcd: Executing command %x\n",cmd);
 #endif
+
+   if ((azt_port==0x1f0)||(azt_port==0x170))  
+      SWITCH_IDE_SLAVE; /*switch IDE interface to slave configuration*/
+   
    aztCmd=cmd;
    outb(POLLED,MODE_PORT);
    do { if (inb(STATUS_PORT)&AFL_STATUS) break;
@@ -778,7 +793,7 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 		memcpy_fromfs(&entry, (void *) arg, sizeof entry);
 		if ((!aztTocUpToDate)||aztDiskChanged) aztUpdateToc();
 		if (entry.cdte_track == CDROM_LEADOUT)
-		  tocPtr = &Toc[DiskInfo.last + 1];   /* ??? */
+		  tocPtr = &Toc[DiskInfo.last + 1];
 		else if (entry.cdte_track > DiskInfo.last
 				|| entry.cdte_track < DiskInfo.first)
 		{ return -EINVAL;
@@ -866,7 +881,7 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 		  STEN_LOW_WAIT;
 		}
 		if (aztSendCmd(ACMD_EJECT)) RETURNM("azt_ioctl 11",-1);
-		STEN_LOW_WAIT; /*???*/
+		STEN_LOW_WAIT;
 		aztAudioStatus = CDROM_AUDIO_NO_STATUS;
 		break;
 	case CDROMEJECT_SW:
@@ -1041,7 +1056,7 @@ static void azt_poll(void)
     int loop_ctl = 1;
     int skip = 0;
 
-    if (azt_error) {                             /* ???*/
+    if (azt_error) {                            
 	if (aztSendCmd(ACMD_GET_ERROR)) RETURN("azt_poll 1");
 	STEN_LOW;
 	azt_error=inb(DATA_PORT)&0xFF;
@@ -1128,13 +1143,13 @@ static void azt_poll(void)
 	      end_request(0);
 	    return;
 	  }
-					/*???*/
+				
 /*	  if (aztSendCmd(ACMD_SET_MODE)) RETURN("azt_poll 3");
 	  outb(0x01, DATA_PORT);          
 	  PA_OK;
 	  STEN_LOW;
 */        if (aztSendCmd(ACMD_GET_STATUS)) RETURN("azt_poll 4");
-	  STEN_LOW; /*???*/
+	  STEN_LOW;
 	  azt_mode = 1;
 	  azt_state = AZT_S_READ;
 	  AztTimeout = 3000;
@@ -1234,7 +1249,7 @@ static void azt_poll(void)
 	  }
 #endif
 
-	  st = inb(STATUS_PORT) & AFL_STATUSorDATA;   /*???*/
+	  st = inb(STATUS_PORT) & AFL_STATUSorDATA; 
 
 	  switch (st) {
 
@@ -1341,7 +1356,7 @@ static void azt_poll(void)
 	      }
 	      AztTimeout = READ_TIMEOUT;   
 	      if (azt_read_count==0) {
-		azt_state = AZT_S_STOP;   /*???*/
+		azt_state = AZT_S_STOP; 
 		loop_ctl = 1;
 		break;           
 	      } 
@@ -1357,7 +1372,7 @@ static void azt_poll(void)
 	    printk("AZT_S_STOP\n");
 	  }
 #endif
-	  if (azt_read_count!=0) printk("aztcd: discard data=%x frames\n",azt_read_count);  /*???*/
+	  if (azt_read_count!=0) printk("aztcd: discard data=%x frames\n",azt_read_count);
 	  while (azt_read_count!=0) {
 	    int i;
 	    if ( !(inb(STATUS_PORT) & AFL_DATA) ) {
@@ -1545,13 +1560,17 @@ int aztcd_init(void)
 	  printk("aztcd: no Aztech CD-ROM Initialization");
           return -EIO;
 	}
-	printk("aztcd: Aztech,Orchid,Okano,Wearnes,Txc CD-ROM Driver (C) 1994,95,96 W.Zimmermann\n");
+	printk("aztcd: AZTECH, ORCHID, OKANO, WEARNES, TXC, CyDROM CD-ROM Driver\n"); 
+	printk("aztcd: (C) 1994-96 W.Zimmermann\n");
 	printk("aztcd: DriverVersion=%s BaseAddress=0x%x  For IDE/ATAPI-drives use ide-cd.c\n",AZT_VERSION,azt_port);
 	printk("aztcd: If you have problems, read /usr/src/linux/Documentation/cdrom/aztcd\n");
 
-	if (check_region(azt_port, 4)) {
-	  printk("aztcd: conflict, I/O port (%X) already used\n",
-		 azt_port);
+        if ((azt_port==0x1f0)||(azt_port==0x170))  
+          st = check_region(azt_port, 8);  /*IDE-interfaces need 8 bytes*/
+        else
+          st = check_region(azt_port, 4);  /*proprietary interfaces need 4 bytes*/
+	if (st) 
+	{ printk("aztcd: conflict, I/O port (%X) already used\n",azt_port);
           return -EIO;
 	}
 
@@ -1570,7 +1589,11 @@ int aztcd_init(void)
 #endif	
 
 	/* check for presence of drive */
-	outb(POLLED,MODE_PORT);                 /*???*/
+	
+        if ((azt_port==0x1f0)||(azt_port==0x170))  
+            SWITCH_IDE_SLAVE;  /*switch IDE interface to slave configuration*/
+
+	outb(POLLED,MODE_PORT);              
 	inb(CMD_PORT);
 	inb(CMD_PORT);
 	outb(ACMD_GET_VERSION,CMD_PORT); /*Try to get version info*/
@@ -1600,7 +1623,7 @@ int aztcd_init(void)
 	            { inb(STATUS_PORT);    /*removing all data from earlier tries*/
 	              inb(DATA_PORT);
 	            }
-	          outb(POLLED,MODE_PORT);           /*???*/
+	          outb(POLLED,MODE_PORT);          
 	          inb(CMD_PORT);
 	          inb(CMD_PORT);
 		  getAztStatus(); 		    /*trap errors*/
@@ -1621,7 +1644,7 @@ int aztcd_init(void)
 #ifdef AZT_DEBUG
 	          printk("aztcd: Status = %x\n",st);
 #endif
-	          outb(POLLED,MODE_PORT);              /*???*/
+	          outb(POLLED,MODE_PORT);            
 	          inb(CMD_PORT);
 	          inb(CMD_PORT);
 	          outb(ACMD_GET_VERSION,CMD_PORT); /*GetVersion*/
@@ -1654,9 +1677,9 @@ int aztcd_init(void)
 	 { printk("ORCHID or WEARNES drive detected\n"); /*ORCHID or WEARNES*/
 	 }
 	else if ((result[1]==0x03)&&(result[2]=='5'))
-	 { printk("TXC drive detected\n"); /*Conrad TXC*/
+	 { printk("TXC or CyCDROM drive detected\n"); /*Conrad TXC, CyCDROM*/
 	 }
-	else                                               /*OTHERS or none*/
+	else                                             /*OTHERS or none*/
 	 { printk("\nunknown drive or firmware version detected\n");
 	   printk("aztcd may not run stable, if you want to try anyhow,\n");
 	   printk("boot with: aztcd=<BaseAddress>,0x79\n");
@@ -1677,8 +1700,11 @@ int aztcd_init(void)
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 	read_ahead[MAJOR_NR] = 4;
 
-	request_region(azt_port, 4, "aztcd");
-
+        if ((azt_port==0x1f0)||(azt_port==0x170))  
+	   request_region(azt_port, 8, "aztcd");  /*IDE-interface*/
+        else
+	   request_region(azt_port, 4, "aztcd");  /*proprietary inferface*/
+        
 	azt_invalidate_buffers();
 	aztPresent = 1;
 	aztCloseDoor();
@@ -2038,7 +2064,7 @@ static int aztGetToc(int multi)
 
   if (!multi)
      { azt_mode = 0x05;
-       if (aztSendCmd(ACMD_SEEK_TO_LEADIN)) RETURNM("aztGetToc 2",-1); /*???*/
+       if (aztSendCmd(ACMD_SEEK_TO_LEADIN)) RETURNM("aztGetToc 2",-1);
        STEN_LOW_WAIT;
      }
   for (limit = 300; limit > 0; limit--)
@@ -2097,7 +2123,12 @@ void cleanup_module(void)
     { printk("What's that: can't unregister aztcd\n");
       return;
     }
-   release_region(azt_port,4);
-   printk(KERN_INFO "aztcd module released.\n");
+  if ((azt_port==0x1f0)||(azt_port==0x170))  
+    { SWITCH_IDE_MASTER;
+      release_region(azt_port,8);  /*IDE-interface*/
+    }
+  else
+      release_region(azt_port,4);  /*proprietary interface*/
+  printk(KERN_INFO "aztcd module released.\n");
 }   
 #endif MODULE

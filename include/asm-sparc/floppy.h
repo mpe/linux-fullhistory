@@ -344,4 +344,15 @@ no_sun_fdc:
 	return -1;
 }
 
+static int sparc_eject(void)
+{
+	set_dor(0, ~0, 0x90);
+	udelay(500);
+	set_dor(0, ~0x90, 0);
+	udelay(500);
+	return 0;
+}
+
+#define fd_eject(drive) sparc_eject()
+
 #endif /* !(__ASM_SPARC_FLOPPY_H) */

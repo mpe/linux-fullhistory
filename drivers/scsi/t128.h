@@ -95,7 +95,7 @@ int t128_abort(Scsi_Cmnd *);
 int t128_biosparam(Disk *, kdev_t, int*);
 int t128_detect(Scsi_Host_Template *);
 int t128_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
-int t128_reset(Scsi_Cmnd *);
+int t128_reset(Scsi_Cmnd *, unsigned int reset_flags);
 int t128_proc_info (char *buffer, char **start, off_t offset,
 		   int length, int hostno, int inout);
 

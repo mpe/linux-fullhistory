@@ -1,0 +1,171 @@
+
+UPDATE NEWS: version 1.28 - 27 Apr 96
+
+   Tightened up the "interrupts enabled/disabled" discipline
+   in 'in2000_queuecommand()' and maybe 1 or 2 other places.
+   I _think_ it may have been a little too lax, causing an
+   occasional crash during full moon. A fully functional
+   /proc interface is now in place - if you want to play
+   with it, start by doing 'cat /proc/scsi/in2000/0'. You
+   can also use it to change a few run-time parameters on
+   the fly, but it's mostly for debugging. The curious
+   should take a good look at 'in2000_proc_info()' in the
+   in2000.c file to get an understanding of what it's all
+   about; I figure that people who are really into it will
+   want to add features suited to their own needs...
+   Also, sync is now DISABLED by default.
+
+UPDATE NEWS: version 1.27 - 10 Apr 96
+
+   Fixed a well-hidden bug in the adapative-disconnect code
+   that would show up every now and then during extreme
+   heavy loads involving 2 or more simultaneously active
+   devices. Thanks to Joe Mack for keeping my nose to the
+   grindstone on this one.
+
+UPDATE NEWS: version 1.26 - 07 Mar 96
+
+   1.25 had a nasty bug that bit people with swap partitions
+   and tape drives. Also, in my attempt to guess my way
+   through Intel assembly language, I made an error in the
+   inline code for IO writes. Made a few other changes and
+   repairs - this version (fingers crossed) should work well.
+
+UPDATE NEWS: version 1.25 - 05 Mar 96
+
+   Kernel 1.3.70 interrupt mods added; old kernels still OK.
+   Big help from Bill Earnest and David Willmore on speed
+   testing and optimizing: I think there's a real improvement
+   in this area.
+   New! User-friendly command-line interface for LILO and
+   module loading - the old method is gone, so you'll need
+   to read the comments for 'setup_strings' near the top
+   of in2000.c. For people with CDROM's or other devices
+   that have a tough time with sync negotiation, you can
+   now selectively disable sync on individual devices -
+   search for the 'nosync' keyword in the command-line
+   comments. Some of you disable the BIOS on the card, which
+   caused the auto-detect function to fail; there is now a
+   command-line option to force detection of a ROM-less card.
+
+UPDATE NEWS: version 1.24a - 24 Feb 96
+
+   There was a bug in the synchronous transfer code. Only
+   a few people downloaded before I caught it - could have
+   been worse.
+
+UPDATE NEWS: version 1.24 - 23 Feb 96
+
+   Lots of good changes. Advice from Bill Earnest resulted
+   in much better detection of cards, more efficient usage
+   of the fifo, and (hopefully) faster data transfers. The
+   jury is still out on speed - I hope it's improved some.
+   One nifty new feature is a cool way of doing disconnect/
+   reselect. The driver defaults to what I'm calling
+   'adaptive disconnect' - meaning that each command is
+   evaluated individually as to whether or not it should be
+   run with the option to disconnect/reselect (if the device
+   chooses), or as a "SCSI-bus-hog". When several devices
+   are operating simultaneously, disconnects are usually an
+   advantage. In a single device system, or if only 1 device
+   is being accessed, transfers usually go faster if disconnects
+   are not allowed.
+   Hackers -> the positions of some of the 'setup_default' flags
+              have changed, so check your command-line args if
+              you've been using them with a previous version.
+
+
+Hi everyone:
+
+   A revamped IN2000 SCSI driver is available for download and
+   testing at my ftp site:
+
+            ftp.netcom.com/pub/js/jshiffle
+
+   in the 'in2000' directory. It has what I think are a few
+   improvements over the stock driver, including disconnect/
+   reselect, synchronous transfer, easier debugging, command-
+   line arguments for setting run-time parameters and debug
+   output, and better FIFO handling. Swap partitions work now,
+   as do tape drives and anything else that used to butt heads
+   with the old driver's 2k block size limit. See the top
+   of the 'in2000.c' file for more details.
+
+   This is a rewrite of the in2000.[ch] files for Linux. They
+   are drop-in replacements for the originals in linux/drivers/scsi
+   - just copy them over the old ones. The driver has been tested
+   in 1.2.13 with and without ELF, and in the 1.3 series somewhere
+   up into the 60's. I don't expect any problems with newer kernels.
+   It is "modular-ised" for those who prefer that route.
+
+-------  Hackers take note:   ------------------
+Anyone who wants to use LILO to pass a command line to this driver
+will have to make 2 small changes to the file 'init/main.c'. Find
+the area between lines 60-80 where all the 'xxxxx_setup()' extern
+declarations are and insert a new one like the following:
+
+extern void in2000_setup(char *str, int *ints);
+
+Then do a search for "bootsetups" - add a new entry to this array
+(somewhere in the middle) that looks like this:
+
+#ifdef CONFIG_SCSI_IN2000
+   { "in2000=", in2000_setup },
+#endif
+
+[You can skip the above if you're only loading the driver as a module
+ or if the driver defaults are OK.]
+
+The default arguments (you get these when you don't give an 'in2000'
+command-line argument, or you give a blank argument) will cause
+the driver to do adaptive disconnect, synchronous transfers, and a
+minimum of debug messages. If you want to fool with the options,
+search for 'setup_strings' near the top of the in2000.c file and
+check the 'hostdata->args' section in in2000.h - but be warned! Not
+everything is working yet (some things will never work, probably).
+I believe that disabling disconnects (DIS_NEVER) will allow you
+to choose a LEVEL2 value higher than 'L2_BASIC', but I haven't
+spent a lot of time testing this. You might try 'ENABLE_CLUSTERING'
+to see what happens: my tests showed little difference either way.
+There's also a define called 'DEFAULT_SX_PER'; this sets the data
+transfer speed for the asynchronous mode. I've put it at 500 ns
+despite the fact that the card could handle settings of 376 or
+252, because I'm not really sure if certain devices or maybe bad
+cables might have trouble at higher speeds. I couldn't find any
+info in my various SCSI references that talk about this in language
+I could understand, so decided to compromise with 500. This is still
+faster than the old driver was set at (I think). Can someone explain
+the significance of the bus transfer speed setting? Do devices on
+the bus ever care what it is? Is cable quality a factor here?
+Regardless, you can choose your own default through the command-
+line with the 'period' keyword.
+
+------------------------------------------------
+
+   I have run a LOT of tests on this driver, and it seems very solid,
+   including with up to 3 simultaneous large copy or tar commands
+   running between 6 devices at once. Synchronous transfers are
+   working fine for the devices I have to test, although others have
+   reported some failures (CDROM drives, mostly). Tape drives work
+   well (finally!) and so do CD-ROM drives.
+
+   I should mention that Drew Eckhardt's 'Generic NCR5380' sources
+   were my main inspiration, with lots of reference to the IN2000
+   driver currently distributed in the kernel source. I also owe
+   much to a driver written by Hamish Mcdonald for Linux-m68k(!).
+   And to Eric Wright for being an ALPHA guinea pig. And to Bill
+   Earnest for 2 tons of great input and information. And to David
+   Willmore for extensive 'bonnie' testing.
+
+   Be forewarned that while I've had good luck with it, this
+   is the first time it's been loose out in the wide world.
+   It wouldn't suprise me if people uncover problems that
+   I haven't caught....
+
+   Please try the driver out. Test it, beat on it. And PLEASE get back
+   to me - I really need to hear about bugs, stupid or bad code,
+   and any ideas for enhancements.
+   Thanks very much...
+
+            John Shifflett    jshiffle@netcom.com
+

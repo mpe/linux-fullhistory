@@ -72,28 +72,13 @@ NOTE!	DMA buffers are used only by /dev/audio# and /dev/dsp# devices.
 	file (sndscape.co[012]) to the card. Using large buffers doesn't
 	increase performance in these cases.
 
-Configuring device parameters when loading the driver
------------------------------------------------------
-
-The loadable version of the sound driver accepts now the same
-sound= parameter that has been available in the LILO command line.
-In this way it's possible to change I/O port, IRQ and DMA addresses
-and to enable/disable various cards at load time. Normally
-the driver uses the configuration parameters entered when compiling
-and configuring the driver.
-Look at Readme.linux for more info.
-
-NOTE!	This method is not normally required. You should use it only when
-	you have to use different configuration than normally. The sound=
-	command line parameter is error prone and not recommended.
-
 Debugging and tracing
 ---------------------
 
 Modularized sound driver doesn't display messages during initialization as
 the kernel compiled one does. This feature can be turned on by adding
-init_trace=1 to the insmod command line.
+trace_init=1 to the insmod command line.
 
 For example:
 
-	insmod sound init_trace=1
+	insmod sound trace_init=1
