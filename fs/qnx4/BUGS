@@ -1,0 +1,21 @@
+Last update: 03-07-1998
+
+- Files in a subdir can't be accessed, I think that the inode information
+  is not correctly copied at some point. Solved 06-06-1998, Richard.
+  
+- At some point the mounted device can't be unmounted. I think that somewhere
+  in the code a buffer is not given free.
+
+- Make the '..' entry work, I give it a great chance that the above bug
+  (not given free) has something to do with this one, after a 'ls -l'
+  the mounted device can't be unmounted and that's where the '..' entry
+  is accessed.
+  Seems to be solved 21-06-1998, Frank.
+
+- File read function not correct, after the first block it goes beserk.
+  Solved 21-06-1998, Frank.
+
+- This fs will not work if not built as a module.
+  Solved 25-06-1998, Frank.
+
+- Write/truncate/delete functions don't update the bitmap.

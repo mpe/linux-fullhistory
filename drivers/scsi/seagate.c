@@ -87,7 +87,6 @@
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/string.h>
-#include <linux/config.h>
 #include <linux/proc_fs.h>
 #include <linux/init.h>
 

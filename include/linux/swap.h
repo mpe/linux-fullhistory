@@ -75,6 +75,7 @@ extern int try_to_free_pages(unsigned int gfp_mask, int count);
 /* linux/mm/page_io.c */
 extern void rw_swap_page(int, unsigned long, char *, int);
 extern void rw_swap_page_nocache(int, unsigned long, char *);
+extern void swap_after_unlock_page (unsigned long entry);
 
 /* linux/mm/page_alloc.c */
 extern void swap_in(struct task_struct *, struct vm_area_struct *,
@@ -84,10 +85,15 @@ extern void swap_in(struct task_struct *, struct vm_area_struct *,
 /* linux/mm/swap_state.c */
 extern void show_swap_cache_info(void);
 extern int add_to_swap_cache(struct page *, unsigned long);
-extern void swap_duplicate(unsigned long);
-extern void swap_after_unlock_page (unsigned long entry);
+extern int swap_duplicate(unsigned long);
+extern int swap_check_entry(unsigned long);
 extern struct page * read_swap_cache_async(unsigned long, int);
 #define read_swap_cache(entry) read_swap_cache_async(entry, 1);
+/*
+ * Make these inline later once they are working properly.
+ */
+extern void delete_from_swap_cache(struct page *page);
+extern void free_page_and_swap_cache(unsigned long addr);
 
 /* linux/mm/swapfile.c */
 extern unsigned int nr_swapfiles;
@@ -100,6 +106,8 @@ struct swap_list_t {
 	int next;	/* swapfile to be used next */
 };
 extern struct swap_list_t swap_list;
+int sys_swapoff(const char *);
+int sys_swapon(const char *, int);
 
 /*
  * vm_ops not present page codes for shared memory.
@@ -147,14 +155,6 @@ static inline int is_page_shared(struct page *page)
 		count--;
 	return (count > 1);
 }
-
-/*
- * Make these inline later once they are working properly.
- */
-extern long find_in_swap_cache(struct page *page);
-extern int delete_from_swap_cache(struct page *page);
-extern void remove_from_swap_cache(struct page *page);
-extern void free_page_and_swap_cache(unsigned long addr);
 
 #endif /* __KERNEL__*/
 

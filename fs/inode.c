@@ -770,7 +770,13 @@ int fs_may_remount_ro(struct super_block *sb)
 		inode = file->f_dentry->d_inode;
 		if (!inode || inode->i_sb != sb)
 			continue;
-		if (S_ISREG(inode->i_mode) && file->f_mode & FMODE_WRITE)
+
+		/* File with pending delete? */
+		if (inode->i_nlink == 0)
+			return 0;
+
+		/* Writable file? */
+		if (S_ISREG(inode->i_mode) && (file->f_mode & FMODE_WRITE))
 			return 0;
 	}
 	return 1; /* Tis' cool bro. */

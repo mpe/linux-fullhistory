@@ -297,30 +297,36 @@ static int try_to_unuse(unsigned int type)
 {
 	struct swap_info_struct * si = &swap_info[type];
 	struct task_struct *p;
-	unsigned long page = 0;
 	struct page *page_map;
-	unsigned long entry;
+	unsigned long entry, page;
 	int i;
 
 	while (1) {
 		/*
 		 * Find a swap page in use and read it in.
 		 */
-		for (i = 1 , entry = 0; i < si->max ; i++) {
+		for (i = 1; i < si->max ; i++) {
 			if (si->swap_map[i] > 0 && si->swap_map[i] != SWAP_MAP_BAD) {
-				entry = SWP_ENTRY(type, i);
-				break;
+				goto found_entry;
 			}
 		}
-		if (!entry)
-			break;
+		break;
+
+	found_entry:
+		entry = SWP_ENTRY(type, i);
 
 		/* Get a page for the entry, using the existing swap
                    cache page if there is one.  Otherwise, get a clean
                    page and read the swap into it. */
 		page_map = read_swap_cache(entry);
-		if (!page_map)
-			return -ENOMEM;
+		if (!page_map) {
+			/*
+			 * Continue searching if the entry became unused.
+			 */
+			if (si->swap_map[i] == 0)
+				continue;
+  			return -ENOMEM;
+		}
 		page = page_address(page_map);
 		read_lock(&tasklist_lock);
 		for_each_task(p)
@@ -331,11 +337,15 @@ static int try_to_unuse(unsigned int type)
                    page we've been using. */
 		if (PageSwapCache(page_map))
 			delete_from_swap_cache(page_map);
-		free_page(page);
+		__free_page(page_map);
+		/*
+		 * Check for and clear any overflowed swap map counts.
+		 */
 		if (si->swap_map[i] != 0) {
 			if (si->swap_map[i] != SWAP_MAP_MAX)
-				printk("try_to_unuse: entry %08lx "
-				       "not in use\n", entry);
+				printk(KERN_ERR
+					"try_to_unuse: entry %08lx count=%d\n",
+					entry, si->swap_map[i]);
 			si->swap_map[i] = 0;
 			nr_swap_pages++;
 		}
@@ -376,10 +386,9 @@ asmlinkage int sys_swapoff(const char * specialfile)
 		prev = type;
 	}
 	err = -EINVAL;
-	if (type < 0){
-		dput(dentry);
-		goto out;
-	}
+	if (type < 0)
+		goto out_dput;
+
 	if (prev < 0) {
 		swap_list.head = p->next;
 	} else {
@@ -392,7 +401,6 @@ asmlinkage int sys_swapoff(const char * specialfile)
 	p->flags = SWP_USED;
 	err = try_to_unuse(type);
 	if (err) {
-		dput(dentry);
 		/* re-insert swap space back into swap_list */
 		for (prev = -1, i = swap_list.head; i >= 0; prev = i, i = swap_info[i].next)
 			if (p->prio >= swap_info[i].prio)
@@ -403,7 +411,7 @@ asmlinkage int sys_swapoff(const char * specialfile)
 		else
 			swap_info[prev].next = p - swap_info;
 		p->flags = SWP_WRITEOK;
-		goto out;
+		goto out_dput;
 	}
 	if(p->swap_device){
 		memset(&filp, 0, sizeof(filp));		
@@ -418,9 +426,9 @@ asmlinkage int sys_swapoff(const char * specialfile)
 	}
 	dput(dentry);
 
-	nr_swap_pages -= p->pages;
-	dput(p->swap_file);
+	dentry = p->swap_file;
 	p->swap_file = NULL;
+	nr_swap_pages -= p->pages;
 	p->swap_device = 0;
 	vfree(p->swap_map);
 	p->swap_map = NULL;
@@ -428,6 +436,9 @@ asmlinkage int sys_swapoff(const char * specialfile)
 	p->swap_lockmap = NULL;
 	p->flags = 0;
 	err = 0;
+
+out_dput:
+	dput(dentry);
 out:
 	unlock_kernel();
 	return err;
@@ -719,4 +730,3 @@ void si_swapinfo(struct sysinfo *val)
 	val->totalswap <<= PAGE_SHIFT;
 	return;
 }
-

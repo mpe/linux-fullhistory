@@ -1107,7 +1107,7 @@ fh_compose(struct svc_fh *fhp, struct svc_export *exp, struct dentry *dentry)
 
 	dprintk("nfsd: fh_compose(exp %x/%ld %s/%s, ino=%ld)\n",
 		exp->ex_dev, exp->ex_ino,
-		dentry->d_parent->d_name.name, dentry->d_name.name,
+		parent->d_name.name, dentry->d_name.name,
 		(inode ? inode->i_ino : 0));
 
 	/*
@@ -1115,7 +1115,12 @@ fh_compose(struct svc_fh *fhp, struct svc_export *exp, struct dentry *dentry)
 	 * may not be done on error paths, but the cleanup must call fh_put.
 	 * Fix this soon!
 	 */
+	if (fhp->fh_dverified || fhp->fh_locked || fhp->fh_dentry) {
+		printk(KERN_ERR "fh_compose: fh %s/%s not initialized!\n",
+			parent->d_name.name, dentry->d_name.name);
+	}
 	fh_init(fhp);
+
 	fhp->fh_handle.fh_dcookie = dentry;
 	if (inode) {
 		fhp->fh_handle.fh_ino = ino_t_to_u32(inode->i_ino);

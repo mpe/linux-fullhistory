@@ -195,4 +195,22 @@ static __inline__ unsigned short int csum_ipv6_magic(struct in6_addr *saddr,
 	return csum_fold(sum);
 }
 
+/* 
+ *	Copy and checksum to user
+ */
+#define HAVE_CSUM_COPY_USER
+static __inline__ unsigned int csum_and_copy_to_user (const char *src, char *dst,
+				    int len, int sum, int *err_ptr)
+{
+	int *src_err_ptr=NULL;
+
+	if (verify_area(VERIFY_WRITE, dst, len) == 0)
+		return csum_partial_copy_generic(src, dst, len, sum, src_err_ptr, err_ptr);
+
+	if (len)
+		*err_ptr = -EFAULT;
+
+	return sum;
+}
+
 #endif

@@ -288,7 +288,7 @@ asmlinkage ssize_t sys_readv(unsigned long fd, const struct iovec * vector,
 	file = fget(fd);
 	if (!file)
 		goto bad_file;
-	if (file->f_mode & FMODE_READ)
+	if (file->f_op && file->f_op->read && (file->f_mode & FMODE_READ))
 		ret = do_readv_writev(VERIFY_WRITE, file, vector, count);
 	fput(file);
 
@@ -309,7 +309,7 @@ asmlinkage ssize_t sys_writev(unsigned long fd, const struct iovec * vector,
 	file = fget(fd);
 	if (!file)
 		goto bad_file;
-	if (file->f_mode & FMODE_WRITE) {
+	if (file->f_op && file->f_op->write && (file->f_mode & FMODE_WRITE)) {
 		down(&file->f_dentry->d_inode->i_sem);
 		ret = do_readv_writev(VERIFY_READ, file, vector, count);
 		up(&file->f_dentry->d_inode->i_sem);

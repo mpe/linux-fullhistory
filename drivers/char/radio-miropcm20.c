@@ -10,7 +10,6 @@
 #include <linux/init.h>			/* Initdata			*/
 #include <asm/uaccess.h>		/* copy to/from user		*/
 #include <linux/videodev.h>		/* kernel radio structs		*/
-#include <linux/config.h>		/* CONFIG_RADIO_MIROPCM20 	*/
 #include "../sound/lowlevel/miroaci.h"	/* ACI Control by acimixer	*/
 
 static int users = 0;

@@ -125,4 +125,8 @@ asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 	return -ENOSYS;
 }
 
+void shm_unuse(unsigned long entry, unsigned long page)
+{
+}
+
 #endif /* CONFIG_SYSVIPC */

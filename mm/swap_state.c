@@ -24,14 +24,6 @@
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
 
-#ifdef SWAP_CACHE_INFO
-unsigned long swap_cache_add_total = 0;
-unsigned long swap_cache_add_success = 0;
-unsigned long swap_cache_del_total = 0;
-unsigned long swap_cache_del_success = 0;
-unsigned long swap_cache_find_total = 0;
-unsigned long swap_cache_find_success = 0;
-
 /* 
  * Keep a reserved false inode which we will use to mark pages in the
  * page cache are acting as swap cache instead of file cache. 
@@ -43,6 +35,13 @@ unsigned long swap_cache_find_success = 0;
  */
 struct inode swapper_inode;
 
+#ifdef SWAP_CACHE_INFO
+unsigned long swap_cache_add_total = 0;
+unsigned long swap_cache_add_success = 0;
+unsigned long swap_cache_del_total = 0;
+unsigned long swap_cache_del_success = 0;
+unsigned long swap_cache_find_total = 0;
+unsigned long swap_cache_find_success = 0;
 
 void show_swap_cache_info(void)
 {
@@ -63,13 +62,13 @@ int add_to_swap_cache(struct page *page, unsigned long entry)
 	       page_address(page), atomic_read(&page->count), entry);
 #endif
 	if (PageTestandSetSwapCache(page)) {
-		printk("swap_cache: replacing non-empty entry %08lx "
+		printk(KERN_ERR "swap_cache: replacing non-empty entry %08lx "
 		       "on page %08lx\n",
 		       page->offset, page_address(page));
 		return 0;
 	}
 	if (page->inode) {
-		printk("swap_cache: replacing page-cached entry "
+		printk(KERN_ERR "swap_cache: replacing page-cached entry "
 		       "on page %08lx\n", page_address(page));
 		return 0;
 	}
@@ -85,12 +84,16 @@ int add_to_swap_cache(struct page *page, unsigned long entry)
 }
 
 /*
- * If swap_map[] reaches SWAP_MAP_MAX the entries are treated as "permanent".
+ * Verify that a swap entry is valid and increment its swap map count.
+ *
+ * Note: if swap_map[] reaches SWAP_MAP_MAX the entries are treated as
+ * "permanent", but will be reclaimed by the next swapoff.
  */
-void swap_duplicate(unsigned long entry)
+int swap_duplicate(unsigned long entry)
 {
 	struct swap_info_struct * p;
 	unsigned long offset, type;
+	int result = 0;
 
 	if (!entry)
 		goto out;
@@ -105,36 +108,44 @@ void swap_duplicate(unsigned long entry)
 		goto bad_offset;
 	if (!p->swap_map[offset])
 		goto bad_unused;
+	/*
+	 * Entry is valid, so increment the map count.
+	 */
 	if (p->swap_map[offset] < SWAP_MAP_MAX)
 		p->swap_map[offset]++;
 	else {
 		static int overflow = 0;
 		if (overflow++ < 5)
-			printk("swap_duplicate: entry %08lx map count=%d\n",
+			printk(KERN_WARNING
+				"swap_duplicate: entry %08lx map count=%d\n",
 				entry, p->swap_map[offset]);
 		p->swap_map[offset] = SWAP_MAP_MAX;
 	}
+	result = 1;
 #ifdef DEBUG_SWAP
 	printk("DebugVM: swap_duplicate(entry %08lx, count now %d)\n",
 	       entry, p->swap_map[offset]);
 #endif
 out:
-	return;
+	return result;
 
 bad_file:
-	printk("swap_duplicate: Trying to duplicate nonexistent swap-page\n");
+	printk(KERN_ERR
+		"swap_duplicate: entry %08lx, nonexistent swap file\n", entry);
 	goto out;
 bad_offset:
-	printk("swap_duplicate: offset exceeds max\n");
+	printk(KERN_ERR
+		"swap_duplicate: entry %08lx, offset exceeds max\n", entry);
 	goto out;
 bad_unused:
-	printk("swap_duplicate at %8p: unused page\n", 
-	       __builtin_return_address(0));
+	printk(KERN_ERR
+		"swap_duplicate at %8p: entry %08lx, unused page\n", 
+	       __builtin_return_address(0), entry);
 	goto out;
 }
 
 
-void remove_from_swap_cache(struct page *page)
+static inline void remove_from_swap_cache(struct page *page)
 {
 	if (!page->inode) {
 		printk ("VM: Removing swap cache page with zero inode hash "
@@ -163,7 +174,7 @@ void remove_from_swap_cache(struct page *page)
 }
 
 
-int delete_from_swap_cache(struct page *page)
+void delete_from_swap_cache(struct page *page)
 {
 #ifdef SWAP_CACHE_INFO
 	swap_cache_del_total++;
@@ -180,9 +191,7 @@ int delete_from_swap_cache(struct page *page)
 #endif
 		remove_from_swap_cache (page);
 		swap_free (entry);
-		return 1;
 	}
-	return 0;
 }
 
 /* 
@@ -218,57 +227,67 @@ static struct page * lookup_swap_cache(unsigned long entry)
 		found = find_page(&swapper_inode, entry);
 		if (!found)
 			return 0;
-		if (found->inode != &swapper_inode 
-		    || !PageSwapCache(found)) {
-			__free_page(found);
-			printk ("VM: Found a non-swapper swap page!\n");
-			return 0;
-		}
+		if (found->inode != &swapper_inode || !PageSwapCache(found))
+			goto out_bad;
 		if (!PageLocked(found))
 			return found;
 		__free_page(found);
 		__wait_on_page(found);
 	}
+
+out_bad:
+	printk (KERN_ERR "VM: Found a non-swapper swap page!\n");
+	__free_page(found);
+	return 0;
 }
 
 /* 
  * Locate a page of swap in physical memory, reserving swap cache space
  * and reading the disk if it is not already cached.  If wait==0, we are
  * only doing readahead, so don't worry if the page is already locked.
+ *
+ * A failure return means that either the page allocation failed or that
+ * the swap entry is no longer in use.
  */
 
 struct page * read_swap_cache_async(unsigned long entry, int wait)
 {
-	struct page *found_page, *new_page = 0;
-	unsigned long new_page_addr = 0;
+	struct page *found_page, *new_page;
+	unsigned long new_page_addr;
 	
 #ifdef DEBUG_SWAP
 	printk("DebugVM: read_swap_cache_async entry %08lx%s\n",
 	       entry, wait ? ", wait" : "");
 #endif
-repeat:
+	/*
+	 * Look for the page in the swap cache.
+	 */
 	found_page = lookup_swap_cache(entry);
-	if (found_page) {
-		if (new_page)
-			__free_page(new_page);
-		return found_page;
-	}
+	if (found_page)
+		goto out;
 
-	/* The entry is not present.  Lock down a new page, add it to
-	 * the swap cache and read its contents. */
-	if (!new_page) {
-		new_page_addr = __get_free_page(GFP_KERNEL);
-		if (!new_page_addr)
-			return 0;	/* Out of memory */
-		new_page = mem_map + MAP_NR(new_page_addr);
-		goto repeat;		/* We might have stalled */
-	}
-	
-	if (!add_to_swap_cache(new_page, entry)) {
-		free_page(new_page_addr);
-		return 0;
-	}
-	swap_duplicate(entry);		/* Account for the swap cache */
+	new_page_addr = __get_free_page(GFP_KERNEL);
+	if (!new_page_addr)
+		goto out;	/* Out of memory */
+	new_page = mem_map + MAP_NR(new_page_addr);
+
+	/*
+	 * Check the swap cache again, in case we stalled above.
+	 */
+	found_page = lookup_swap_cache(entry);
+	if (found_page)
+		goto out_free_page;
+	/*
+	 * Make sure the swap entry is still in use.
+	 */
+	if (!swap_duplicate(entry))	/* Account for the swap cache */
+		goto out_free_page;
+	/* 
+	 * Add it to the swap cache and read its contents.
+	 */
+	if (!add_to_swap_cache(new_page, entry))
+		goto out_free_page;
+
 	set_bit(PG_locked, &new_page->flags);
 	rw_swap_page(READ, entry, (char *) new_page_addr, wait);
 #ifdef DEBUG_SWAP
@@ -277,5 +296,9 @@ repeat:
 	       entry, (char *) page_address(new_page));
 #endif
 	return new_page;
-}
 
+out_free_page:
+	__free_page(new_page);
+out:
+	return found_page;
+}

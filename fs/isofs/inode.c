@@ -130,18 +130,34 @@ struct iso9660_options{
 
 static int strnicmp(const char *s1, const char *s2, int len)
 {
-	int n = 0;
-	while (*s1 && *s2 && (tolower(*s1) == tolower(*s2))) {
-		s1++; s2++; n++;
-		if (n == len) return 0;
+	/* Yes, Virginia, it had better be unsigned */
+	unsigned char c1, c2;
+
+	while (len) {
+		c1 = *s1; c2 = *s2;
+		s1++; s2++;
+		if (!c1)
+			goto end_of_string1;
+		if (!c2)
+			goto end_of_string2;
+		if (c1 != c2) {
+			c1 = tolower(c1);
+			c2 = tolower(c2);
+			if (c1 != c2)
+				goto different;
+		}
+		len--;
 	}
-	if (*s1 == 0 && *s2 == 0) return 0;
-	if (*s1 && *s2) {
-		if (*s1 > *s2) return 1;
-		return -1;
-	}
-	if (*s1) return 1;
-	return -1;
+	return 0;
+
+end_of_string1:
+	return c2 ? -1 : 0;
+
+end_of_string2:
+	return 1;
+
+different:
+	return c1 < c2 ? -1 : 1;
 }
 
 /*

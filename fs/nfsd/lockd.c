@@ -22,12 +22,13 @@
 static u32
 nlm_fopen(struct svc_rqst *rqstp, struct knfs_fh *f, struct file *filp)
 {
-	struct svc_fh	fh;
 	u32		nfserr;
+	struct svc_fh	fh;
 
+	/* must initialize before using! */
+	fh_init(&fh);
 	fh.fh_handle = *f;
 	fh.fh_export = NULL;
-	fh.fh_dverified = 0;
 
 	nfserr = nfsd_open(rqstp, &fh, S_IFREG, 0, filp);
 	if (!nfserr)

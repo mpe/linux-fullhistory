@@ -5,7 +5,7 @@
  *
  *		The User Datagram Protocol (UDP).
  *
- * Version:	$Id: udp.c,v 1.59 1998/08/27 16:54:55 davem Exp $
+ * Version:	$Id: udp.c,v 1.61 1998/08/29 17:11:10 freitag Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -82,7 +82,7 @@
      MUST provide facility for checksumming (OK)
      MAY allow application to control checksumming (OK)
      MUST default to checksumming on (OK)
-     MUST discard silently datagrams with bad csums (OK)
+     MUST discard silently datagrams with bad csums (OK, except during debugging)
    4.1.3.5 (UDP Multihoming)
      MUST allow application to specify source address (OK)
      SHOULD be able to communicate the chosen src addr up to application
@@ -95,14 +95,12 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <linux/types.h>
-#include <linux/sched.h>
 #include <linux/fcntl.h>
 #include <linux/socket.h>
 #include <linux/sockios.h>
 #include <linux/in.h>
 #include <linux/errno.h>
 #include <linux/timer.h>
-#include <linux/termios.h>
 #include <linux/mm.h>
 #include <linux/config.h>
 #include <linux/inet.h>
@@ -110,14 +108,12 @@
 #include <net/snmp.h>
 #include <net/ip.h>
 #include <net/protocol.h>
-#include <net/tcp.h>
 #include <linux/skbuff.h>
 #include <net/sock.h>
 #include <net/udp.h>
 #include <net/icmp.h>
 #include <net/route.h>
 #include <net/checksum.h>
-#include <linux/ipsec.h>
 
 /*
  *	Snmp MIB for the UDP layer
@@ -679,21 +675,6 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		ufh.uh.dest = usin->sin_port;
 		if (ufh.uh.dest == 0)
 			return -EINVAL;
-		/* XXX: is a one-behind cache for the dst_entry worth it?
-
-		   Nope. ip_route_output is slower than nothing, but it
-		   is enough fast to forget about caching its results.
-		   Really, checking route validity in general case
-		   is not much faster complete lookup.
-		   It was main reason why I removed it from 2.1.
-		   The second reason was that idle sockets held
-		   a lot of stray destinations.		--ANK
-
-		   Look: route depends on ALL the options,
-		   checking its validity is exactly on cycle
-		   of ip_route_output(). We save only start_bh_atomic()
-		   in SMP case. On UP we save nothing. --ANK
-		 */
 	} else {
 		if (sk->state != TCP_ESTABLISHED)
 			return -ENOTCONN;
@@ -791,8 +772,7 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 
 	/* RFC1122: OK.  Provides the checksumming facility (MUST) as per */
 	/* 4.1.3.4. It's configurable by the application via setsockopt() */
-	/* (MAY) and it defaults to on (MUST).  Almost makes up for the */
-	/* violation above. -- MS */
+	/* (MAY) and it defaults to on (MUST). */
 
 	err = ip_build_xmit(sk,sk->no_check ? udp_getfrag_nosum : udp_getfrag,
 			    &ufh, ulen, &ipc, rt, msg->msg_flags);
@@ -854,43 +834,9 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 	return(0);
 }
 
-#ifdef CONFIG_FILTER
+#if defined(CONFIG_FILTER) || !defined(HAVE_CSUM_COPY_USER) 
 #undef CONFIG_UDP_DELAY_CSUM
 #endif
-
-#ifdef CONFIG_UDP_DELAY_CSUM
-
-/* Please, read comments in net/checksum.h, asm/checksum.h
-
-   I commented out csum_partial_copy_to_user there because it did not
-   verify_area. Now I am even wondered, how clever was I that time 8)8)
-   If I did not it, I would step into this hole again.   --ANK
- */
-
-#ifndef _HAVE_ARCH_COPY_AND_CSUM_TO_USER
-#ifdef __i386__
-static __inline__
-unsigned int csum_and_copy_to_user (const char *src, char *dst,
-				    int len, int sum, int *err_ptr)
-{
-	int *src_err_ptr=NULL;
-
-	if (verify_area(VERIFY_WRITE, dst, len) == 0)
-		return csum_partial_copy_generic(src, dst, len, sum, src_err_ptr, err_ptr);
-
-	if (len)
-		*err_ptr = -EFAULT;
-
-	return sum;
-}
-#elif defined(__sparc__)
-#define csum_and_copy_to_user csum_partial_copy_to_user
-#else
-#undef CONFIG_UDP_DELAY_CSUM
-#endif
-#endif
-#endif
-
 
 /*
  * 	This should be easy, if there is something there we
@@ -943,32 +889,21 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 		err = skb_copy_datagram_iovec(skb, sizeof(struct udphdr), msg->msg_iov,
 					      copied);
 	} else if (copied > msg->msg_iov[0].iov_len || (msg->msg_flags&MSG_TRUNC)) {
-		if (csum_fold(csum_partial(skb->h.raw, ntohs(skb->h.uh->len), skb->csum))) {
-			udp_statistics.UdpInErrors++;
-
-			/* Error for blocking case is chosen to masquerade
-			   as some normal condition.
-			 */
-			err = (msg->msg_flags&MSG_DONTWAIT) ? -EAGAIN : -EHOSTUNREACH;
-			goto out_free;
-		}
+		if (csum_fold(csum_partial(skb->h.raw, ntohs(skb->h.uh->len), skb->csum))) 
+			goto csum_copy_err;
 		err = skb_copy_datagram_iovec(skb, sizeof(struct udphdr), msg->msg_iov,
 					      copied);
 	} else {
-		unsigned int csum = csum_partial(skb->h.raw, sizeof(struct udphdr), skb->csum);
+		unsigned int csum;
 
 		err = 0;
-		csum = csum_and_copy_to_user((char*)&skb->h.uh[1], msg->msg_iov[0].iov_base, copied, csum, &err);
+		csum = csum_partial(skb->h.raw, sizeof(struct udphdr), skb->csum);
+		csum = csum_and_copy_to_user((char*)&skb->h.uh[1], msg->msg_iov[0].iov_base, 
+					     copied, csum, &err);
 		if (err)
 			goto out_free;
-		if (csum_fold(csum)) {
-			udp_statistics.UdpInErrors++;
-			/* Error for blocking case is chosen to masquerade
-			   as some normal condition.
-			 */
-			err = (msg->msg_flags&MSG_DONTWAIT) ? -EAGAIN : -EHOSTUNREACH;
-			goto out_free;
-		}
+		if (csum_fold(csum)) 
+			goto csum_copy_err;
 	}
 #endif
 	if (err)
@@ -1007,6 +942,18 @@ out_free:
   	skb_free_datagram(sk, skb);
 out:
   	return err;
+
+#ifdef CONFIG_UDP_DELAY_CSUM
+csum_copy_err:
+	udp_statistics.UdpInErrors++;
+	skb_free_datagram(sk, skb);
+
+	/* 
+	 * Error for blocking case is chosen to masquerade
+   	 * as some normal condition.
+	 */
+	return (msg->msg_flags&MSG_DONTWAIT) ? -EAGAIN : -EHOSTUNREACH;	
+#endif
 }
 
 int udp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
@@ -1074,16 +1021,6 @@ static void udp_close(struct sock *sk, unsigned long timeout)
 
 static int udp_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
 {
-	/*
-	 *	Check the security clearance
-	 */
-	 
-	if(!ipsec_sk_policy(sk,skb))
-	{	
-		kfree_skb(skb);
-		return(0);
-	}
-	 
 	/*
 	 *	Charge it to the socket, dropping if the queue is full.
 	 */
@@ -1209,40 +1146,14 @@ int udp_rcv(struct sk_buff *skb, unsigned short len)
 	if (uh->check &&
 	    (((skb->ip_summed==CHECKSUM_HW)&&udp_check(uh,ulen,saddr,daddr,skb->csum)) ||
 	     ((skb->ip_summed==CHECKSUM_NONE) &&
-	      (udp_check(uh,ulen,saddr,daddr, csum_partial((char*)uh, ulen, 0)))))) {
-		/* <mea@utu.fi> wants to know, who sent it, to
-		   go and stomp on the garbage sender... */
-
-		/* RFC1122: OK.  Discards the bad packet silently (as far as */
-		/* the network is concerned, anyway) as per 4.1.3.4 (MUST). */
-
-		NETDEBUG(printk(KERN_DEBUG "UDP: bad checksum. From %08lX:%d to %08lX:%d ulen %d\n",
-		       ntohl(saddr),ntohs(uh->source),
-		       ntohl(daddr),ntohs(uh->dest),
-		       ulen));
-		udp_statistics.UdpInErrors++;
-		kfree_skb(skb);
-		return(0);
-	}
+	      (udp_check(uh,ulen,saddr,daddr, csum_partial((char*)uh, ulen, 0)))))) 
+		goto csum_error;
 #else
 	if (uh->check==0)
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
 	else if (skb->ip_summed==CHECKSUM_HW) {
-		if (udp_check(uh,ulen,saddr,daddr,skb->csum)) {
-			/* <mea@utu.fi> wants to know, who sent it, to
-			   go and stomp on the garbage sender... */
-
-			/* RFC1122: OK.  Discards the bad packet silently (as far as */
-			/* the network is concerned, anyway) as per 4.1.3.4 (MUST). */
-
-			NETDEBUG(printk(KERN_DEBUG "UDP: bad checksum. From %08lX:%d to %08lX:%d ulen %d\n",
-					ntohl(saddr),ntohs(uh->source),
-					ntohl(daddr),ntohs(uh->dest),
-					ulen));
-			udp_statistics.UdpInErrors++;
-			kfree_skb(skb);
-			return(0);
-		}
+		if (udp_check(uh,ulen,saddr,daddr,skb->csum)) 
+			goto csum_error;
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
 	} else if (skb->ip_summed != CHECKSUM_UNNECESSARY)
 		skb->csum = csum_tcpudp_nofold(saddr, daddr, ulen, IPPROTO_UDP, 0);
@@ -1263,21 +1174,8 @@ int udp_rcv(struct sk_buff *skb, unsigned short len)
 	if (sk == NULL) {
 #ifdef CONFIG_UDP_DELAY_CSUM
 		if (skb->ip_summed != CHECKSUM_UNNECESSARY &&
-		    csum_fold(csum_partial((char*)uh, ulen, skb->csum))) {
-			/* <mea@utu.fi> wants to know, who sent it, to
-			   go and stomp on the garbage sender... */
-
-			/* RFC1122: OK.  Discards the bad packet silently (as far as */
-			/* the network is concerned, anyway) as per 4.1.3.4 (MUST). */
-
-			NETDEBUG(printk(KERN_DEBUG "UDP: bad checksum. From %08lX:%d to %08lX:%d ulen %d\n",
-					ntohl(saddr),ntohs(uh->source),
-					ntohl(daddr),ntohs(uh->dest),
-					ulen));
-			udp_statistics.UdpInErrors++;
-			kfree_skb(skb);
-			return(0);
-		}
+		    csum_fold(csum_partial((char*)uh, ulen, skb->csum))) 
+			goto csum_error;
 #endif
   		udp_statistics.UdpNoPorts++;
 		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0);
@@ -1291,6 +1189,19 @@ int udp_rcv(struct sk_buff *skb, unsigned short len)
   	}
 	udp_deliver(sk, skb);
 	return 0;
+
+csum_error:
+	/* 
+	 * RFC1122: OK.  Discards the bad packet silently (as far as 
+	 * the network is concerned, anyway) as per 4.1.3.4 (MUST). 
+	 */
+	NETDEBUG(printk(KERN_DEBUG "UDP: bad checksum. From %08lX:%d to %08lX:%d ulen %d\n",
+			ntohl(saddr),ntohs(uh->source),
+			ntohl(daddr),ntohs(uh->dest),
+			ulen));
+	udp_statistics.UdpInErrors++;
+	kfree_skb(skb);
+	return(0);
 }
 
 struct proto udp_prot = {
@@ -1320,7 +1231,7 @@ struct proto udp_prot = {
 	udp_v4_verify_bind,		/* verify_bind */
 	128,				/* max_header */
 	0,				/* retransmits */
-	"UDP",				/* name */
+ 	"UDP",				/* name */
 	0,				/* inuse */
 	0				/* highestinuse */
 };

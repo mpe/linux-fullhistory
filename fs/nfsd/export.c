@@ -392,14 +392,15 @@ out:
 int
 exp_rootfh(struct svc_client *clp, kdev_t dev, ino_t ino, struct knfs_fh *f)
 {
-	struct svc_export	*exp = NULL;
-	struct svc_fh		fh;
+	struct svc_export	*exp;
 	struct dentry		*dentry;
 	struct inode		*inode;
+	struct svc_fh		fh;
 
 	dprintk("nfsd: exp_rootfh(%s:%x/%ld)\n", clp->cl_ident, dev, ino);
 
-	if (!(exp = exp_get(clp, dev, ino)))
+	exp = exp_get(clp, dev, ino);
+	if (!exp)
 		return -EPERM;
 
 	dentry = exp->ex_dentry;
@@ -414,8 +415,11 @@ exp_rootfh(struct svc_client *clp, kdev_t dev, ino_t ino, struct knfs_fh *f)
 		       dev, ino, inode->i_dev, inode->i_ino);
 	}
 
-	dget(dentry);
-	fh_compose(&fh, exp, dentry);
+	/*
+	 * fh must be initialized before calling fh_compose
+	 */
+	fh_init(&fh);
+	fh_compose(&fh, exp, dget(dentry));
 	memcpy(f, &fh.fh_handle, sizeof(struct knfs_fh));
 	fh_put(&fh);
 

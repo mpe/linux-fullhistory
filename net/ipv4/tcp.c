@@ -573,11 +573,25 @@ unsigned int tcp_poll(struct file * file, struct socket *sock, poll_table *wait)
 	mask = 0;
 	if (sk->err)
 		mask = POLLERR;
+
+	/*
+	 * POLLHUP is certainly not done right. But poll() doesn't
+	 * have a notion of HUP in just one direction, and for a
+	 * socket the read side is more interesting.
+	 *
+	 * Some poll() documentation says that POLLHUP is incompatible
+	 * with the POLLOUT/POLLWR flags, so somebody should check this
+	 * all. But careful, it tends to be safer to return too many
+	 * bits than too few, and you can easily break real applications
+	 * if you don't tell them that something has hung up!
+	 *
+	 * Check-me.
+	 */
+	if (sk->shutdown & RCV_SHUTDOWN)
+		mask |= POLLHUP;
+
 	/* Connected? */
-	if ((1 << sk->state) & ~(TCPF_SYN_SENT|TCPF_SYN_RECV|TCPF_CLOSE)) {
-		if (sk->shutdown & RCV_SHUTDOWN)
-			mask |= POLLHUP;
-		
+	if ((1 << sk->state) & ~(TCPF_SYN_SENT|TCPF_SYN_RECV)) {
 		if ((tp->rcv_nxt != tp->copied_seq) &&
 		    (tp->urg_seq != tp->copied_seq ||
 		     tp->rcv_nxt != tp->copied_seq+1 ||

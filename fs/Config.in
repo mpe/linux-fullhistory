@@ -77,6 +77,10 @@ if [ "$CONFIG_UNIX98_PTYS" = "y" ]; then
 fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'ADFS filesystem support (read only) (EXPERIMENTAL)' CONFIG_ADFS_FS
+  tristate 'QNX filesystem support (EXPERIMENTAL)' CONFIG_QNX4FS_FS
+  if [ "$CONFIG_QNX4FS_FS" != "n" ]; then
+    bool '   QNXFS read-write support (FOR TESTING ONLY)' CONFIG_QNX4FS_RW
+  fi    
 fi
 bool 'Macintosh partition map support' CONFIG_MAC_PARTITION
 endmenu

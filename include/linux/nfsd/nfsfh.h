@@ -110,9 +110,9 @@ void	nfsd_fh_free(void);
 static __inline__ struct svc_fh *
 fh_copy(struct svc_fh *dst, struct svc_fh *src)
 {
-	if (src->fh_dverified) {
+	if (src->fh_dverified || src->fh_locked) {
 		struct dentry *dentry = src->fh_dentry;
-		printk("fh_copy: copying %s/%s, already verified!\n",
+		printk(KERN_ERR "fh_copy: copying %s/%s, already verified!\n",
 			dentry->d_parent->d_name.name, dentry->d_name.name);
 	}
 			
@@ -133,18 +133,24 @@ fh_init(struct svc_fh *fhp)
 static inline void
 fh_lock(struct svc_fh *fhp)
 {
-	struct inode	*inode = fhp->fh_dentry->d_inode;
+	struct dentry	*dentry = fhp->fh_dentry;
+	struct inode	*inode;
 
 	/*
 	dfprintk(FILEOP, "nfsd: fh_lock(%x/%ld) locked = %d\n",
 			SVCFH_DEV(fhp), SVCFH_INO(fhp), fhp->fh_locked);
 	 */
-	if (fhp->fh_locked) {
-		printk(KERN_WARNING "fh_lock: %s/%s already locked!\n",
-			fhp->fh_dentry->d_parent->d_name.name,
-			fhp->fh_dentry->d_name.name);
+	if (!fhp->fh_dverified) {
+		printk(KERN_ERR "fh_lock: fh not verified!\n");
 		return;
 	}
+	if (fhp->fh_locked) {
+		printk(KERN_WARNING "fh_lock: %s/%s already locked!\n",
+			dentry->d_parent->d_name.name, dentry->d_name.name);
+		return;
+	}
+
+	inode = dentry->d_inode;
 	down(&inode->i_sem);
 	if (!fhp->fh_pre_mtime)
 		fhp->fh_pre_mtime = inode->i_mtime;
@@ -157,8 +163,13 @@ fh_lock(struct svc_fh *fhp)
 static inline void
 fh_unlock(struct svc_fh *fhp)
 {
+	if (!fhp->fh_dverified)
+		printk(KERN_ERR "fh_unlock: fh not verified!\n");
+
 	if (fhp->fh_locked) {
-		struct inode *inode = fhp->fh_dentry->d_inode;
+		struct dentry *dentry = fhp->fh_dentry;
+		struct inode *inode = dentry->d_inode;
+
 		if (!fhp->fh_post_version)
 			fhp->fh_post_version = inode->i_version;
 		fhp->fh_locked = 0;
