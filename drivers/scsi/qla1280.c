@@ -182,6 +182,7 @@ END OF TERMS AND CONDITIONS
     -   Initial Beta Release.  
 *****************************************************************************/
 
+
 #ifdef MODULE
 #include <linux/module.h>
 #endif
@@ -2789,7 +2790,7 @@ qla1280_setup_chip(scsi_qla_host_t *ha)
 
         DEBUG(sprintf(debug_buff,"qla1280_setup_chip:  loading risc @ =(0x%p),%d,%d(0x%x).\n\r",risc_code_address,cnt,num,risc_address);)
         DEBUG(qla1280_print(debug_buff));
-        printk("qla1280_setup_chip:  loading risc @ =code=(0x%p),cnt=%d,seg=%d,addr=0x%x\n\r",risc_code_address,cnt,num,risc_address);
+        DEBUG(printk("qla1280_setup_chip:  loading risc @ =code=(0x%p),cnt=%d,seg=%d,addr=0x%x\n\r",risc_code_address,cnt,num,risc_address));
         BCOPY((caddr_t) risc_code_address,(caddr_t) ha->request_ring, (cnt <<1));
         mb[0] = MBC_LOAD_RAM; 
         /* mb[0] = MBC_LOAD_RAM_A64; */
@@ -2799,7 +2800,7 @@ qla1280_setup_chip(scsi_qla_host_t *ha)
         mb[2] = (uint16_t) (ha->request_dma >> 16) & 0xffff;
         mb[7] = (uint16_t) (MS_64BITS(ha->request_dma) & 0xffff);
         mb[6] = (uint16_t) (MS_64BITS(ha->request_dma) >> 16) & 0xffff;
-        printk("qla1280_setup_chip: op=%d  0x%lx = 0x%4x,0x%4x,0x%4x,0x%4x\n",mb[0],ha->request_dma,mb[6],mb[7],mb[2],mb[3]);
+        DEBUG(printk("qla1280_setup_chip: op=%d  0x%lx = 0x%4x,0x%4x,0x%4x,0x%4x\n",mb[0],ha->request_dma,mb[6],mb[7],mb[2],mb[3]));
         if( (status = qla1280_mailbox_command(ha, BIT_4|BIT_3|BIT_2|BIT_1|BIT_0,
             &mb[0]))  )
         {

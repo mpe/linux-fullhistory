@@ -235,7 +235,8 @@ static __inline__ pte_t pte_mkdirty(pte_t _pte)
 }
 
 /* to find an entry in a page-table-directory. */
-#define pgd_offset(mm, address) ((mm)->pgd + ((address >> PGDIR_SHIFT) & (PTRS_PER_PGD)))
+#define pgd_index(address)	(((address) >> PGDIR_SHIFT) & (PTRS_PER_PGD))
+#define pgd_offset(mm, address)	((mm)->pgd + pgd_index(address))
 
 /* to find an entry in a kernel page-table-directory */
 #define pgd_offset_k(address) pgd_offset(&init_mm, address)

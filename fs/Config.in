@@ -60,7 +60,9 @@ tristate 'System V and Coherent filesystem support' CONFIG_SYSV_FS
 dep_bool '  SYSV filesystem write support (DANGEROUS)' CONFIG_SYSV_FS_WRITE $CONFIG_SYSV_FS $CONFIG_EXPERIMENTAL
 
 tristate 'UDF filesystem support (read only)' CONFIG_UDF_FS
-dep_bool '  UDF write support (DANGEROUS)' CONFIG_UDF_RW $CONFIG_UDF_FS $CONFIG_EXPERIMENTAL
+if [ "$CONFIG_UDF_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  dep_bool '  UDF write support (DANGEROUS)' CONFIG_UDF_RW
+fi
 
 tristate 'UFS filesystem support (read only)' CONFIG_UFS_FS
 dep_bool '  UFS filesystem write support (DANGEROUS)' CONFIG_UFS_FS_WRITE $CONFIG_UFS_FS $CONFIG_EXPERIMENTAL

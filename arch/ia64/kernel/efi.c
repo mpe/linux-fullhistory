@@ -15,7 +15,6 @@
  *
  * Implemented EFI runtime services and virtual mode calls.  --davidm
  */
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/types.h>
@@ -166,14 +165,12 @@ efi_memmap_walk (efi_freemem_callback_t callback, void *arg)
 		      case EFI_BOOT_SERVICES_CODE:
 		      case EFI_BOOT_SERVICES_DATA:
 		      case EFI_CONVENTIONAL_MEMORY:
-#ifndef CONFIG_IA64_VIRTUAL_MEM_MAP
 			if (md->phys_addr > 1024*1024*1024UL) {
 				printk("Warning: ignoring %luMB of memory above 1GB!\n",
 				       md->num_pages >> 8);
 				md->type = EFI_UNUSABLE_MEMORY;
 				continue;
 			}
-#endif
 
 			curr.start = PAGE_OFFSET + md->phys_addr;
 			curr.end   = curr.start + (md->num_pages << 12);

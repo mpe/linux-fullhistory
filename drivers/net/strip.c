@@ -1036,9 +1036,7 @@ static void strip_unlock(struct strip *strip_info)
      */
     strip_info->idle_timer.expires = jiffies + 1*HZ;
     add_timer(&strip_info->idle_timer);
-    if (!test_and_clear_bit(0, (void *)&strip_info->dev.tbusy))
-        printk(KERN_ERR "%s: trying to unlock already unlocked device!\n",
-            strip_info->dev.name);
+    netif_wake_queue(&strip_info->dev);
 }
 
 
@@ -1355,7 +1353,8 @@ static void strip_write_some_more(struct tty_struct *tty)
     struct strip *strip_info = (struct strip *) tty->disc_data;
 
     /* First make sure we're connected. */
-    if (!strip_info || strip_info->magic != STRIP_MAGIC || !strip_info->dev.start)
+    if (!strip_info || strip_info->magic != STRIP_MAGIC || 
+    	!test_bit(LINK_STATE_START, &strip_info->dev.state))
         return;
 
     if (strip_info->tx_left > 0)
@@ -1387,7 +1386,6 @@ static void strip_write_some_more(struct tty_struct *tty)
     {
         tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
         strip_unlock(strip_info);
-        mark_bh(NET_BH);
     }
 }
 
@@ -1646,12 +1644,14 @@ static int strip_xmit(struct sk_buff *skb, struct net_device *dev)
 {
     struct strip *strip_info = (struct strip *)(dev->priv);
 
-    if (!dev->start)
+    if (!test_bit(LINK_STATE_START, &dev->state))
     {
         printk(KERN_ERR "%s: xmit call when iface is down\n", dev->name);
         return(1);
     }
-    if (test_and_set_bit(0, (void *) &strip_info->dev.tbusy)) return(1);
+
+    netif_stop_queue(dev);
+    
     del_timer(&strip_info->idle_timer);
 
     /* See if someone has been ifconfigging */
@@ -1687,7 +1687,8 @@ static int strip_xmit(struct sk_buff *skb, struct net_device *dev)
 
     strip_send(strip_info, skb);
 
-    if (skb) dev_kfree_skb(skb);
+    if (skb)
+    	dev_kfree_skb(skb);
     return(0);
 }
 
@@ -2336,7 +2337,8 @@ strip_receive_buf(struct tty_struct *tty, const unsigned char *cp, char *fp, int
     struct strip *strip_info = (struct strip *) tty->disc_data;
     const unsigned char *end = cp + count;
 
-    if (!strip_info || strip_info->magic != STRIP_MAGIC || !strip_info->dev.start)
+    if (!strip_info || strip_info->magic != STRIP_MAGIC 
+    	|| !test_bit(LINK_STATE_START, &strip_info->dev.state))
         return;
 
     /* Argh! mtu change time! - costs us the packet part received at the change */
@@ -2507,13 +2509,11 @@ static int strip_open_low(struct net_device *dev)
     if (in_dev->ifa_list->ifa_address == 0)
         in_dev->ifa_list->ifa_address = ntohl(0xC0A80001);
 #endif
-    dev->tbusy  = 0;
-    dev->start  = 1;
-
     printk(KERN_INFO "%s: Initializing Radio.\n", strip_info->dev.name);
     ResetRadio(strip_info);
     strip_info->idle_timer.expires = jiffies + 1*HZ;
     add_timer(&strip_info->idle_timer);
+    netif_wake_queue(dev);
     return(0);
 }
 
@@ -2529,9 +2529,9 @@ static int strip_close_low(struct net_device *dev)
     if (strip_info->tty == NULL)
         return -EBUSY;
     strip_info->tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
-    dev->tbusy = 1;
-    dev->start = 0;
 
+    netif_stop_queue(dev);
+    
     /*
      * Free all STRIP frame buffers.
      */

@@ -1107,7 +1107,7 @@ unsigned long __init find_available_memory(void)
  */
 void __init paging_init(void)
 {
-	unsigned int zones_size[MAX_NR_ZONES], i;
+	unsigned long zones_size[MAX_NR_ZONES], i;
 
 	/*
 	 * Grab some memory for bad_page and bad_pagetable to use.
@@ -1197,7 +1197,7 @@ unsigned long __init *pmac_find_end_of_memory(void)
 	unsigned long a, total;
 	
 	/* max amount of RAM we allow -- Cort */
-#define RAM_LIMIT (64<<20)
+#define RAM_LIMIT (768<<20)
 
 	memory_node = find_devices("memory");
 	if (memory_node == NULL) {

@@ -1,4 +1,4 @@
-/* $Id: floppy.h,v 1.25 2000/01/28 13:43:14 jj Exp $
+/* $Id: floppy.h,v 1.26 2000/02/12 23:32:35 davem Exp $
  * asm-sparc64/floppy.h: Sparc specific parts of the Floppy driver.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -727,8 +727,8 @@ static unsigned long __init sun_floppy_init(void)
 	 * which the generic floppy driver tries to do once again.
 	 */
 	sun_fdc = (struct sun_flpy_controller *)
-		(PAGE_OFFSET + fd_regs[0].phys_addr + 
-		 (((unsigned long)fd_regs[0].which_io) << 32));
+		((unsigned long)fd_regs[0].phys_addr + 
+		 (((unsigned long)fd_regs[0].which_io) << 32UL));
 
 	/* Last minute sanity check... */
 	if(sbus_readb(&sun_fdc->status1_82077) == 0xff) {

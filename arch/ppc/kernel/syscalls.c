@@ -252,14 +252,13 @@ asmlinkage int sys_pause(void)
 
 asmlinkage int sys_uname(struct old_utsname * name)
 {
-	int err;
-	
-	if (!name)
-		return -EFAULT;
+	int err = -EFAULT;
+
 	down_read(&uts_sem);
-	err = copy_to_user(name, &system_utsname, sizeof (*name));
-	up(&uts_sem);
-	return err ? -EFAULT : 0;
+	if (name && !copy_to_user(name, &system_utsname, sizeof (*name)))
+		err = 0;
+	up_read(&uts_sem);
+	return err;
 }
 
 asmlinkage int sys_olduname(struct oldold_utsname * name)
@@ -282,8 +281,8 @@ asmlinkage int sys_olduname(struct oldold_utsname * name)
 	error -= __put_user(0,name->version+__OLD_UTS_LEN);
 	error -= __copy_to_user(&name->machine,&system_utsname.machine,__OLD_UTS_LEN);
 	error = __put_user(0,name->machine+__OLD_UTS_LEN);
-	error = error ? -EFAULT : 0;
-	up(&uts_sem);
+	up_read(&uts_sem);
 
+	error = error ? -EFAULT : 0;
 	return error;
 }

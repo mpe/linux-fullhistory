@@ -11,6 +11,7 @@
 
 #include <asm/ptrace.h>
 #include <asm/residual.h>
+#include <asm/types.h>
 
 /* Machine State Register (MSR) Fields */
 
@@ -625,9 +626,11 @@ struct thread_struct {
 	double		fpr[32];	/* Complete floating point set */
 	unsigned long	fpscr_pad;	/* fpr ... fpscr must be contiguous */
 	unsigned long	fpscr;		/* Floating point status */
-	unsigned long	vrf[128];
-	unsigned long	vscr;
+#ifdef CONFIG_ALTIVEC
+	vector128	vr[32];		/* Complete AltiVec set */
+	vector128	vscr;		/* AltiVec status */
 	unsigned long	vrsave;
+#endif /* CONFIG_ALTIVEC */
 };
 
 #define INIT_SP		(sizeof(init_stack) + (unsigned long) &init_stack)

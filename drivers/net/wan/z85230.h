@@ -304,8 +304,8 @@ struct z8530_channel
 	 */
 	 
 	struct z8530_dev *dev;		/* Z85230 chip instance we are from */
-	int		ctrlio;		/* I/O ports */
-	int		dataio;
+	unsigned long	ctrlio;		/* I/O ports */
+	unsigned long	dataio;
 
 	/*
 	 *	For PC we encode this way.
@@ -395,7 +395,7 @@ extern u8 z8530_dead_port[];
 extern u8 z8530_hdlc_kilostream_85230[];
 extern u8 z8530_hdlc_kilostream[];
 extern void z8530_interrupt(int, void *, struct pt_regs *);
-extern void z8530_describe(struct z8530_dev *, char *mapping,int io);
+extern void z8530_describe(struct z8530_dev *, char *mapping, unsigned long io);
 extern int z8530_init(struct z8530_dev *);
 extern int z8530_shutdown(struct z8530_dev *);
 extern int z8530_sync_open(struct net_device *, struct z8530_channel *);

@@ -73,10 +73,6 @@ static int debug = -1;			/* The debug level */
 
 #include <linux/version.h>
 #include <linux/module.h>
-#ifdef MODVERSIONS
-#include <linux/modversions.h>
-#endif
-
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/errno.h>
@@ -84,14 +80,7 @@ static int debug = -1;			/* The debug level */
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/timer.h>
-#ifdef HAS_PCI_NETIF
-#include "pci-netif.h"
-#else
 #include <linux/pci.h>
-#if LINUX_VERSION_CODE < 0x20155
-#include <linux/bios32.h>		/* Ignore the bogus warning in 2.1.100+ */
-#endif
-#endif
 #include <linux/spinlock.h>
 #include <linux/init.h>
 #include <asm/bitops.h>
@@ -118,26 +107,6 @@ MODULE_PARM(multicast_filter_limit, "i");
 
 #define RUN_AT(x) (jiffies + (x))
 
-#if (LINUX_VERSION_CODE < 0x20123)
-#define test_and_set_bit(val, addr) set_bit(val, addr)
-#define le16_to_cpu(val) (val)
-#define cpu_to_le16(val) (val)
-#define le32_to_cpu(val) (val)
-#define cpu_to_le32(val) (val)
-#define spin_lock_irqsave(&sp->lock, flags)	save_flags(flags); cli();
-#define spin_unlock_irqrestore(&sp->lock, flags); restore_flags(flags);
-#endif
-#if LINUX_VERSION_CODE < 0x20159
-#define dev_free_skb(skb) dev_kfree_skb(skb, FREE_WRITE);
-#else
-#define dev_free_skb(skb) dev_kfree_skb(skb);
-#endif
-#if ! defined(CAP_NET_ADMIN)
-#define capable(CAP_XXX) (suser())
-#endif
-#if ! defined(HAS_NETIF_QUEUE)
-#define netif_wake_queue(dev)  mark_bh(NET_BH);
-#endif
 
 /* The total I/O port extent of the board.
    The registers beyond 0x18 only exist on the i82558. */
@@ -278,7 +247,8 @@ having to sign an Intel NDA when I'm helping Intel sell their own product!
 */
 
 /* This table drives the PCI probe routines. */
-static struct net_device *speedo_found1(int pci_bus, int pci_devfn, long ioaddr, int irq, int chip_idx, int fnd_cnt);
+static struct net_device *speedo_found1(struct pci_dev *pdev, long ioaddr,
+					int irq, int chip_idx, int fnd_cnt);
 
 #ifdef USE_IO
 #define SPEEDO_IOTYPE   PCI_USES_MASTER|PCI_USES_IO|PCI_ADDR1
@@ -288,14 +258,6 @@ static struct net_device *speedo_found1(int pci_bus, int pci_devfn, long ioaddr,
 #define SPEEDO_SIZE		0x1000
 #endif
 
-#if defined(HAS_PCI_NETIF)
-struct pci_id_info static pci_tbl[] = {
-	{ "Intel PCI EtherExpress Pro100",
-	  { 0x12298086, 0xffffffff,}, SPEEDO_IOTYPE, SPEEDO_SIZE,
-	  0, speedo_found1 },
-	{0,},						/* 0 terminated list. */
-};
-#else
 enum pci_flags_bit {
 	PCI_USES_IO=1, PCI_USES_MEM=2, PCI_USES_MASTER=4,
 	PCI_ADDR0=0x10<<0, PCI_ADDR1=0x10<<1, PCI_ADDR2=0x10<<2, PCI_ADDR3=0x10<<3,
@@ -304,13 +266,12 @@ struct pci_id_info {
 	const char *name;
 	u16	vendor_id, device_id, device_id_mask, flags;
 	int io_size;
-	struct net_device *(*probe1)(int pci_bus, int pci_devfn, long ioaddr, int irq, int chip_idx, int fnd_cnt);
+	struct net_device *(*probe1)(struct pci_dev *pdev, long ioaddr, int irq, int chip_idx, int fnd_cnt);
 } static pci_tbl[] = {
 	{ "Intel PCI EtherExpress Pro100",
 	  0x8086, 0x1229, 0xffff, PCI_USES_IO|PCI_USES_MASTER, 32, speedo_found1 },
 	{0,},						/* 0 terminated list. */
 };
-#endif
 
 #ifndef USE_IO
 #define inb readb
@@ -456,7 +417,7 @@ struct speedo_private {
 	struct enet_statistics stats;
 	struct speedo_stats *lstats;
 	int chip_id;
-	unsigned char pci_bus, pci_devfn, acpi_pwr;
+	unsigned char acpi_pwr;
 	struct pci_dev *pdev;
 	struct timer_list timer;	/* Media selection timer. */
 	int mc_setup_frm_len;			 	/* The length of an allocated.. */
@@ -529,65 +490,39 @@ static int mii_ctrl[8] = { 0x3300, 0x3100, 0x0000, 0x0100,
 /* A list of all installed Speedo devices, for removing the driver module. */
 static struct net_device *root_speedo_dev = NULL;
 
-#if ! defined(HAS_PCI_NETIF)
-int eepro100_init(void)
+static int __init eepro100_init (void)
 {
 	int cards_found = 0;
-	static int pci_index = 0;
+	struct pci_dev *pdev = NULL;
+	long ioaddr;
+	int irq;
 
-	if (! pcibios_present())
-		return cards_found;
-
-	for (; pci_index < 8; pci_index++) {
-		unsigned char pci_bus, pci_device_fn, pci_latency;
-		long ioaddr;
-		int irq;
-
-		u16 pci_command, new_command;
-
-		if (pcibios_find_device(PCI_VENDOR_ID_INTEL,
-								PCI_DEVICE_ID_INTEL_82557,
-								pci_index, &pci_bus,
-								&pci_device_fn))
-			break;
-#if LINUX_VERSION_CODE >= 0x20155  ||  PCI_SUPPORT_1
-		{
-			struct pci_dev *pdev = pci_find_slot(pci_bus, pci_device_fn);
+	while ((pdev = pci_find_device (PCI_VENDOR_ID_INTEL,
+					PCI_DEVICE_ID_INTEL_82557, pdev))) {
 #ifdef USE_IO
-			ioaddr = pdev->resource[1].start;
+		ioaddr = pdev->resource[1].start;
 #else
-			ioaddr = pdev->resource[0].start;
+		ioaddr = pdev->resource[0].start;
 #endif
-			irq = pdev->irq;
-		}
-#else
-		{
-			u32 pciaddr;
-			u8 pci_irq_line;
-			pcibios_read_config_byte(pci_bus, pci_device_fn,
-									 PCI_INTERRUPT_LINE, &pci_irq_line);
-			/* Note: BASE_ADDRESS_0 is for memory-mapping the registers. */
-#ifdef USE_IO
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-									  PCI_BASE_ADDRESS_1, &pciaddr);
-			pciaddr &= ~3UL;
-#else
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-									  PCI_BASE_ADDRESS_0, &pciaddr);
-#endif
-			ioaddr = pciaddr;
-			irq = pci_irq_line;
-		}
-#endif
+		irq = pdev->irq;
+
 		/* Remove I/O space marker in bit 0. */
 #ifdef USE_IO
-		if (check_region(ioaddr, 32))
+		if (check_region(ioaddr, 32)) {
+			printk(KERN_ERR "eepro100: %ld mem region busy\n", ioaddr);
 			continue;
+		}
 #else
 		{
 			unsigned long orig_ioaddr = ioaddr;
+			
+			if (check_mem_region(ioaddr, 32)) {
+				printk(KERN_ERR "eepro100: %ld mem region busy\n",
+				       ioaddr);
+				continue;
+			}
 
-			if ((ioaddr = (long)ioremap(ioaddr & ~0xfUL, 0x1000)) == 0) {
+			if ((ioaddr = (long)ioremap(orig_ioaddr, 0x1000)) == 0) {
 				printk(KERN_INFO "Failed to map PCI address %#lx.\n",
 					   orig_ioaddr);
 				continue;
@@ -598,53 +533,29 @@ int eepro100_init(void)
 			printk("Found Intel i82557 PCI Speedo at I/O %#lx, IRQ %d.\n",
 				   ioaddr, irq);
 
-		/* Get and check the bus-master and latency values. */
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-								 PCI_COMMAND, &pci_command);
-		new_command = pci_command | PCI_COMMAND_MASTER|PCI_COMMAND_IO;
-		if (pci_command != new_command) {
-			printk(KERN_INFO "  The PCI BIOS has not enabled this"
-				   " device!  Updating PCI command %4.4x->%4.4x.\n",
-				   pci_command, new_command);
-			pcibios_write_config_word(pci_bus, pci_device_fn,
-									  PCI_COMMAND, new_command);
-		}
-		pcibios_read_config_byte(pci_bus, pci_device_fn,
-								 PCI_LATENCY_TIMER, &pci_latency);
-		if (pci_latency < 32) {
-			printk("  PCI latency timer (CFLT) is unreasonably low at %d."
-				   "  Setting to 32 clocks.\n", pci_latency);
-			pcibios_write_config_byte(pci_bus, pci_device_fn,
-									  PCI_LATENCY_TIMER, 32);
-		} else if (speedo_debug > 1)
-			printk("  PCI latency timer (CFLT) is %#x.\n", pci_latency);
-
-		if(speedo_found1(pci_bus, pci_device_fn, ioaddr, irq, 0,cards_found))
+		if(speedo_found1(pdev, ioaddr, irq, 0,cards_found))
 			cards_found++;
 	}
 
 	return cards_found;
 }
-#endif
 
-static struct net_device *speedo_found1(int pci_bus, int pci_devfn, 
+
+static struct net_device *speedo_found1(struct pci_dev *pdev,
 			  long ioaddr, int irq, int chip_idx, int card_idx)
 {
 	struct net_device *dev;
 	struct speedo_private *sp;
-	struct pci_dev *pdev;
 	unsigned char *tx_ring;
 	dma_addr_t tx_ring_dma;
 	const char *product;
 	int i, option;
 	u16 eeprom[0x100];
-	int acpi_idle_state = 0;
+	int acpi_idle_state = 0, pm;
 
 	static int did_version = 0;			/* Already printed version info. */
 	if (speedo_debug > 0  &&  did_version++ == 0)
 		printk(version);
-
-	pdev = pci_find_slot(pci_bus, pci_devfn);
 
 	tx_ring = pci_alloc_consistent(pdev, TX_RING_SIZE * sizeof(struct TxFD)
 					     + sizeof(struct speedo_stats), &tx_ring_dma);
@@ -668,9 +579,16 @@ static struct net_device *speedo_found1(int pci_bus, int pci_devfn,
 	else
 		option = 0;
 
-#if defined(HAS_PCI_NETIF)
-	acpi_idle_state = acpi_set_pwr_state(pci_bus, pci_devfn, ACPI_D0);
-#endif
+	/* save power state b4 pci_enable_device overwrites it */
+	pm = pci_find_capability(pdev, PCI_CAP_ID_PM);
+	if (pm) {
+		u16 pwr_command;
+		pci_read_config_word(pdev, pm + PCI_PM_CTRL, &pwr_command);
+		acpi_idle_state = pwr_command & PCI_PM_CTRL_STATE_MASK;
+	}
+
+	pci_enable_device (pdev);
+	pci_set_master (pdev);
 
 	/* Read the station address EEPROM before doing the reset.
 	   Nominally his should even be done before accepting the device, but
@@ -724,7 +642,7 @@ static struct net_device *speedo_found1(int pci_bus, int pci_devfn,
 		printk("%2.2X:", dev->dev_addr[i]);
 	printk("%2.2X, IRQ %d.\n", dev->dev_addr[i], irq);
 
-#ifndef kernel_bloat
+#if 1
 	/* OK, this is pure kernel bloat.  I don't like it when other drivers
 	   waste non-pageable kernel space to emit similar messages, but I need
 	   them for bug reports. */
@@ -793,13 +711,15 @@ static struct net_device *speedo_found1(int pci_bus, int pci_devfn,
 #endif  /* kernel_bloat */
 
 	outl(PortReset, ioaddr + SCBPort);
-#if defined(HAS_PCI_NETIF)
-	/* Return the chip to its original power state. */
-	acpi_set_pwr_state(pci_bus, pci_devfn, acpi_idle_state);
-#endif
 
-	/* We do a request_region() only to register /proc/ioports info. */
+	/* Return the chip to its original power state. */
+	pci_set_power_state (pdev, acpi_idle_state);
+
+#ifdef USE_IO
 	request_region(ioaddr, SPEEDO3_TOTAL_SIZE, "Intel Speedo3 Ethernet");
+#else
+	request_mem_region(ioaddr, 0x1000, "Intel Speedo3 Ethernet");
+#endif
 
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
@@ -814,8 +734,6 @@ static struct net_device *speedo_found1(int pci_bus, int pci_devfn,
 	sp->next_module = root_speedo_dev;
 	root_speedo_dev = dev;
 
-	sp->pci_bus = pci_bus;
-	sp->pci_devfn = pci_devfn;
 	sp->pdev = pdev;
 	sp->chip_id = chip_idx;
 	sp->acpi_pwr = acpi_idle_state;
@@ -925,12 +843,10 @@ speedo_open(struct net_device *dev)
 	struct speedo_private *sp = (struct speedo_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 
-#if defined(HAS_PCI_NETIF)
-	acpi_set_pwr_state(sp->pci_bus, sp->pci_devfn, ACPI_D0);
-#endif
-
 	if (speedo_debug > 1)
 		printk(KERN_DEBUG "%s: speedo_open() irq %d.\n", dev->name, dev->irq);
+
+	pci_set_power_state(sp->pdev, 0);
 
 	/* Set up the Tx queue early.. */
 	sp->cur_tx = 0;
@@ -940,9 +856,9 @@ speedo_open(struct net_device *dev)
 	spin_lock_init(&sp->lock);
 
 	/* .. we can safely take handler calls during init. */
-	if (request_irq(dev->irq, &speedo_interrupt, SA_SHIRQ, dev->name, dev)) {
-		return -EAGAIN;
-	}
+	if (request_irq(dev->irq, &speedo_interrupt, SA_SHIRQ, dev->name, dev))
+		return -EBUSY;
+
 	MOD_INC_USE_COUNT;
 
 	dev->if_port = sp->default_port;
@@ -1059,6 +975,8 @@ static void speedo_resume(struct net_device *dev)
 	     + (sp->dirty_tx % TX_RING_SIZE) * sizeof(struct TxFD),
 		 ioaddr + SCBPointer);
 	outw(CUStart, ioaddr + SCBCmd);
+	
+	netif_start_queue (dev);
 }
 
 /* Media monitoring and control. */
@@ -1220,6 +1138,7 @@ static void speedo_tx_timeout(struct net_device *dev)
 	}
 	sp->stats.tx_errors++;
 	dev->trans_start = jiffies;
+	netif_start_queue (dev);
 	return;
 }
 
@@ -1229,6 +1148,8 @@ speedo_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct speedo_private *sp = (struct speedo_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 	int entry;
+
+	netif_stop_queue (dev);
 
 	/* Caution: the write order is important here, set the base address
 	   with the "ownership" bits last. */
@@ -1270,13 +1191,15 @@ speedo_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		}
 		if (sp->cur_tx - sp->dirty_tx >= TX_QUEUE_LIMIT) {
 			sp->tx_full = 1;
-			netif_stop_queue(dev);
 		}
 		spin_unlock_irqrestore(&sp->lock, flags);
 	}
 	wait_for_cmd_done(ioaddr + SCBCmd);
 	outw(CUResume, ioaddr + SCBCmd);
 	dev->trans_start = jiffies;
+	
+	if (! sp->tx_full)
+		netif_start_queue (dev);
 
 	return 0;
 }
@@ -1299,6 +1222,8 @@ static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 
 	ioaddr = dev->base_addr;
 	sp = (struct speedo_private *)dev->priv;
+
+	spin_lock (&sp->lock);
 
 	do {
 		status = inw(ioaddr + SCBStatus);
@@ -1330,7 +1255,6 @@ static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 		/* User interrupt, Command/Tx unit interrupt or CU not active. */
 		if (status & 0xA400) {
 			unsigned int dirty_tx;
-			spin_lock(&sp->lock);
 
 			dirty_tx = sp->dirty_tx;
 			while (sp->cur_tx - dirty_tx > 0) {
@@ -1380,10 +1304,12 @@ static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 				&&  sp->cur_tx - dirty_tx < TX_QUEUE_LIMIT - 1) {
 				/* The ring is no longer full, clear tbusy. */
 				sp->tx_full = 0;
-				spin_unlock(&sp->lock);
-				netif_wake_queue(dev);
-			} else
-				spin_unlock(&sp->lock);
+			}
+			
+			if (sp->tx_full)
+				netif_stop_queue (dev);
+			else
+				netif_wake_queue (dev);
 		}
 
 		if (--boguscnt < 0) {
@@ -1399,7 +1325,7 @@ static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 		printk(KERN_DEBUG "%s: exiting interrupt, status=%#4.4x.\n",
 			   dev->name, inw(ioaddr + SCBStatus));
 
-	return;
+	spin_unlock (&sp->lock);
 }
 
 static int
@@ -1546,7 +1472,7 @@ speedo_close(struct net_device *dev)
 #if LINUX_VERSION_CODE < 0x20100
 			skb->free = 1;
 #endif
-			dev_free_skb(skb);
+			dev_kfree_skb(skb);
 		}
 	}
 
@@ -1559,7 +1485,7 @@ speedo_close(struct net_device *dev)
 			pci_unmap_single(sp->pdev,
 							 le32_to_cpu(sp->tx_ring[i].tx_buf_addr0),
 							 skb->len);
-			dev_free_skb(skb);
+			dev_kfree_skb(skb);
 		}
 	}
 	if (sp->mc_setup_frm) {
@@ -1571,10 +1497,9 @@ speedo_close(struct net_device *dev)
 	if (speedo_debug > 3)
 		speedo_show_state(dev);
 
-#if defined(HAS_PCI_NETIF)
 	/* Alt: acpi_set_pwr_state(pci_bus, pci_devfn, sp->acpi_pwr); */
-	acpi_set_pwr_state(sp->pci_bus, sp->pci_devfn, ACPI_D2);
-#endif
+	pci_set_power_state (sp->pdev, 2);
+
 	MOD_DEC_USE_COUNT;
 
 	return 0;
@@ -1626,32 +1551,22 @@ static int speedo_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	long ioaddr = dev->base_addr;
 	u16 *data = (u16 *)&rq->ifr_data;
 	int phy = sp->phy[0] & 0x1f;
-#if defined(HAS_PCI_NETIF)
 	int saved_acpi;
-#endif
 
     switch(cmd) {
 	case SIOCDEVPRIVATE:		/* Get the address of the PHY in use. */
 		data[0] = phy;
 	case SIOCDEVPRIVATE+1:		/* Read the specified MII register. */
-#if defined(HAS_PCI_NETIF)
-		saved_acpi = acpi_set_pwr_state(sp->pci_bus, sp->pci_devfn, ACPI_D0);
-		data[3] = mdio_read(ioaddr, data[0], data[1]);
-		acpi_set_pwr_state(sp->pci_bus, sp->pci_devfn, saved_acpi);
-#else
-		data[3] = mdio_read(ioaddr, data[0], data[1]);
-#endif
+		saved_acpi = pci_set_power_state (sp->pdev, 0);
+		data[3] = mdio_read (ioaddr, data[0], data[1]);
+		pci_set_power_state (sp->pdev, saved_acpi);
 		return 0;
 	case SIOCDEVPRIVATE+2:		/* Write the specified MII register */
 		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
-#if defined(HAS_PCI_NETIF)
-		saved_acpi = acpi_set_pwr_state(sp->pci_bus, sp->pci_devfn, ACPI_D0);
+		saved_acpi = pci_set_power_state(sp->pdev, 0);
 		mdio_write(ioaddr, data[0], data[1], data[2]);
-		acpi_set_pwr_state(sp->pci_bus, sp->pci_devfn, saved_acpi);
-#else
-		mdio_write(ioaddr, data[0], data[1], data[2]);
-#endif
+		pci_set_power_state(sp->pdev, saved_acpi);
 		return 0;
 	default:
 		return -EOPNOTSUPP;
@@ -1846,18 +1761,11 @@ static int __init eepro100_init_module(void)
 	if (speedo_debug)
 		printk(KERN_INFO "%s", version);
 
-#if defined(HAS_PCI_NETIF)
-	cards_found = netif_pci_probe(pci_tbl);
-	if (cards_found < 0)
-		printk(KERN_INFO "eepro100: No cards found, driver not installed.\n");
-	return cards_found;
-#else
 	cards_found = eepro100_init();
 	if (cards_found <= 0) {
 		printk(KERN_INFO "eepro100: No cards found, driver not installed.\n");
 		return -ENODEV;
 	}
-#endif
 	return 0;
 }
 
@@ -1872,11 +1780,10 @@ static void __exit eepro100_cleanup_module(void)
 #ifdef USE_IO
 		release_region(root_speedo_dev->base_addr, SPEEDO3_TOTAL_SIZE);
 #else
+		release_mem_region(root_speedo_dev->base_addr, 0x1000);
 		iounmap((char *)root_speedo_dev->base_addr);
 #endif
-#if defined(HAS_PCI_NETIF)
-		acpi_set_pwr_state(sp->pci_bus, sp->pci_devfn, sp->acpi_pwr);
-#endif
+		pci_set_power_state(sp->pdev, sp->acpi_pwr);
 		next_dev = sp->next_module;
 		if (sp->priv_addr)
 			kfree(sp->priv_addr);

@@ -205,8 +205,7 @@ static void x25_asy_changed_mtu(struct x25_asy *sl)
 
 static inline void x25_asy_lock(struct x25_asy *sl)
 {
-	if (test_and_set_bit(0, (void *) &sl->dev->tbusy))
-		printk("%s: trying to lock already locked device!\n", sl->dev->name);
+	netif_stop_queue(sl->dev);
 }
 
 
@@ -214,8 +213,7 @@ static inline void x25_asy_lock(struct x25_asy *sl)
 
 static inline void x25_asy_unlock(struct x25_asy *sl)
 {
-	if (!test_and_clear_bit(0, (void *)&sl->dev->tbusy))
-		printk("%s: trying to unlock already unlocked device!\n", sl->dev->name);
+	netif_wake_queue(sl->dev);
 }
 
 /* Send one completely decapsulated IP datagram to the IP layer. */
@@ -303,7 +301,7 @@ static void x25_asy_write_wakeup(struct tty_struct *tty)
 	struct x25_asy *sl = (struct x25_asy *) tty->disc_data;
 
 	/* First make sure we're connected. */
-	if (!sl || sl->magic != X25_ASY_MAGIC || !sl->dev->start)
+	if (!sl || sl->magic != X25_ASY_MAGIC || !test_bit(LINK_STATE_START, &sl->dev->state))
 		return;
 
 	if (sl->xleft <= 0)  
@@ -313,13 +311,26 @@ static void x25_asy_write_wakeup(struct tty_struct *tty)
 		sl->tx_packets++;
 		tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
 		x25_asy_unlock(sl);
-		mark_bh(NET_BH);
 		return;
 	}
 
 	actual = tty->driver.write(tty, 0, sl->xhead, sl->xleft);
 	sl->xleft -= actual;
 	sl->xhead += actual;
+}
+
+static void x25_asy_timeout(struct net_device *dev)
+{
+	struct x25_asy *sl = (struct x25_asy*)(dev->priv);
+	/* May be we must check transmitter timeout here ?
+	 *      14 Oct 1994 Dmitry Gorodchanin.
+	 */
+	printk(KERN_WARNING "%s: transmit timed out, %s?\n", dev->name,
+	       (sl->tty->driver.chars_in_buffer(sl->tty) || sl->xleft) ?
+	       "bad line quality" : "driver error");
+	sl->xleft = 0;
+	sl->tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
+	x25_asy_unlock(sl);
 }
 
 /* Encapsulate an IP datagram and kick it into a TTY queue. */
@@ -329,7 +340,7 @@ static int x25_asy_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct x25_asy *sl = (struct x25_asy*)(dev->priv);
 	int err;
 
-	if (!dev->start)  
+	if (!test_bit(LINK_STATE_START, &sl->dev->state))
 	{
 		printk("%s: xmit call when iface is down\n", dev->name);
 		return 1;
@@ -361,25 +372,6 @@ static int x25_asy_xmit(struct sk_buff *skb, struct net_device *dev)
 	 * So, no queues !
 	 *        14 Oct 1994  Dmitry Gorodchanin.
 	 */
-	if (dev->tbusy) {
-		/* May be we must check transmitter timeout here ?
-		 *      14 Oct 1994 Dmitry Gorodchanin.
-		 */
-#ifdef SL_CHECK_TRANSMIT
-		if (jiffies - dev->trans_start  < 20 * HZ)  {
-			/* 20 sec timeout not reached */
-			return 1;
-		}
-		printk("%s: transmit timed out, %s?\n", dev->name,
-		       (sl->tty->driver.chars_in_buffer(sl->tty) || sl->xleft) ?
-		       "bad line quality" : "driver error");
-		sl->xleft = 0;
-		sl->tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
-		x25_asy_unlock(sl);
-#else
-		return 1;
-#endif
-	}
 	
 	if((err=lapb_data_request(sl,skb))!=LAPB_OK)
 	{
@@ -414,7 +406,7 @@ static void x25_asy_data_indication(void *token, struct sk_buff *skb)
 static void x25_asy_data_transmit(void *token, struct sk_buff *skb)
 {
 	struct x25_asy *sl=token;
-	if(sl->dev->tbusy)
+	if(test_bit(LINK_STATE_XOFF, &sl->dev->state))
 	{
 		printk(KERN_ERR "x25_asy: tbusy drop\n");
 		kfree_skb(skb);
@@ -514,10 +506,8 @@ static int x25_asy_open(struct net_device *dev)
 	sl->xleft    = 0;
 	sl->flags   &= (1 << SLF_INUSE);      /* Clear ESCAPE & ERROR flags */
 
-	dev->tbusy  = 0;
-/*	dev->flags |= IFF_UP; */
-	dev->start  = 1;
-	
+	netif_start_queue(dev);
+			
 	/*
 	 *	Now attach LAPB
 	 */
@@ -551,12 +541,9 @@ static int x25_asy_close(struct net_device *dev)
 		return -EBUSY;
 
 	sl->tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
-	dev->tbusy = 1;
-	dev->start = 0;
+	netif_stop_queue(dev);
 	if((err=lapb_unregister(sl))!=LAPB_OK)
 		printk(KERN_ERR "x25_asy_close: lapb_unregister error -%d\n",err);
-
-/*	dev->flags &= ~IFF_UP; */
 	return 0;
 }
 
@@ -576,7 +563,7 @@ static void x25_asy_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 {
 	struct x25_asy *sl = (struct x25_asy *) tty->disc_data;
 
-	if (!sl || sl->magic != X25_ASY_MAGIC || !sl->dev->start)
+	if (!sl || sl->magic != X25_ASY_MAGIC || !test_bit(LINK_STATE_START, &sl->dev->state))
 		return;
 
 	/*
@@ -876,6 +863,8 @@ int x25_asy_init(struct net_device *dev)
 	 
 	dev->mtu		= SL_MTU;
 	dev->hard_start_xmit	= x25_asy_xmit;
+	dev->tx_timeout		= x25_asy_timeout;
+	dev->watchdog_timeo	= HZ*20;
 	dev->open		= x25_asy_open_dev;
 	dev->stop		= x25_asy_close;
 	dev->get_stats	        = x25_asy_get_stats;
@@ -914,7 +903,7 @@ cleanup_module(void)
 				 * VSV = if dev->start==0, then device
 				 * unregistered while close proc.
 				 */
-				if (x25_asy_ctrls[i]->dev.start)
+				if (test_bit(LINK_STATE_START, &x25_asy_ctrls[i]->dev.state))
 					unregister_netdev(&(x25_asy_ctrls[i]->dev));
 
 				kfree(x25_asy_ctrls[i]);

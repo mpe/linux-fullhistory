@@ -68,6 +68,7 @@
 #define I2C_DRIVERID_SAA7110	22	/* 				*/
 #define I2C_DRIVERID_MGATVO	23	/* Matrox TVOut			*/
 #define I2C_DRIVERID_SAA5249	24	/* SAA5249 and compatibles	*/
+#define I2C_DRIVERID_PCF8583	25	/* real time clock		*/
 
 #define I2C_DRIVERID_EXP0	0xF0	/* experimental use id's	*/
 #define I2C_DRIVERID_EXP1	0xF1
@@ -119,6 +120,7 @@
 #define I2C_HW_B_G400	0x09	/* Matrox G400				*/
 #define I2C_HW_B_I810	0x0a	/* Intel I810 				*/
 #define I2C_HW_B_RIVA	0x10	/* Riva based graphics cards		*/
+#define I2C_HW_B_IOC	0x11	/* IOC bit-wiggling			*/
 
 /* --- PCF 8584 based algorithms					*/
 #define I2C_HW_P_LP	0x00	/* Parallel port interface		*/

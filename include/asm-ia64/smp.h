@@ -8,6 +8,7 @@
 #define _ASM_IA64_SMP_H
 
 #include <linux/config.h>
+
 #include <linux/init.h>
 #include <linux/threads.h>
 #include <linux/kernel.h>
@@ -25,9 +26,10 @@ extern unsigned long cpu_present_map;
 extern unsigned long cpu_online_map;
 extern unsigned long ipi_base_addr;
 extern int bootstrap_processor;
-extern volatile int cpu_number_map[NR_CPUS];
+extern volatile int __cpu_number_map[NR_CPUS];
 extern volatile int __cpu_logical_map[NR_CPUS];
 
+#define cpu_number_map(i)	__cpu_number_map[i]
 #define cpu_logical_map(i)	__cpu_logical_map[i]
 
 #if defined(CONFIG_KDB)

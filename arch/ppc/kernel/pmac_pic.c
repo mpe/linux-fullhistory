@@ -31,8 +31,6 @@ static int max_irqs;
 static int max_real_irqs;
 static int has_openpic = 0;
 
-#define MAXCOUNT 10000000
-
 #define GATWICK_IRQ_POOL_SIZE        10
 static struct interrupt_info gatwick_int_pool[GATWICK_IRQ_POOL_SIZE];
 
@@ -186,25 +184,6 @@ pmac_get_irq(struct pt_regs *regs)
 #endif
 		smp_message_recv();
 		return -2;	/* ignore, already handled */
-        }
-
-        {
-                unsigned int loops = MAXCOUNT;
-                while (test_bit(0, &global_irq_lock)) {
-                        if (smp_processor_id() == global_irq_holder) {
-                                printk("uh oh, interrupt while we hold global irq lock!\n");
-#ifdef CONFIG_XMON
-                                xmon(0);
-#endif
-                                break;
-                        }
-                        if (loops-- == 0) {
-                                printk("do_IRQ waiting for irq lock (holder=%d)\n", global_irq_holder);
-#ifdef CONFIG_XMON
-                                xmon(0);
-#endif
-                        }
-                }
         }
 #endif /* __SMP__ */
 

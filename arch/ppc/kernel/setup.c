@@ -221,7 +221,7 @@ int get_cpuinfo(char *buffer)
 		if ( i )
 			len += sprintf(len+buffer,"\n");
 		len += sprintf(len+buffer,"processor\t: %lu\n",i);
-		len += sprintf(len+buffer,"cpu\t\t:  ");
+		len += sprintf(len+buffer,"cpu\t\t: ");
 
 		pvr = GET_PVR;
 	
@@ -656,7 +656,6 @@ void __init setup_arch(char **cmdline_p)
 
 #ifdef CONFIG_BOOTX_TEXT
 	map_bootx_text();
-	prom_print("identify machine\n");
 #endif
 
 #ifdef CONFIG_XMON

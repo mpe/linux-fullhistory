@@ -502,12 +502,10 @@ static int if_open (struct net_device *dev)
 	x25_channel_t *chan = dev->priv;
 	cycx_t *card = chan->card;
 
-	if (dev->start)
+	if (test_bit(LINK_STATE_START, &dev->state))
 		return -EBUSY; /* only one open is allowed */ 
 
-	dev->interrupt = 0;
-	dev->tbusy = 0;
-	dev->start = 1;
+	netif_start_queue(dev);
 	cyclomx_mod_inc_use_count(card);
 
 	return 0;
@@ -521,8 +519,8 @@ static int if_close (struct net_device *dev)
 	x25_channel_t *chan = dev->priv;
 	cycx_t *card = chan->card;
 
-	dev->start = 0;
-
+	netif_stop_queue(dev);
+	
 	if (chan->state == WAN_CONNECTED || chan->state == WAN_CONNECTING)
 		chan_disconnect(dev);
 		
@@ -556,7 +554,7 @@ static int if_rebuild_hdr (struct sk_buff *skb)
 }
 
 /* Send a packet on a network interface.
- * o set tbusy flag (marks start of the transmission).
+ * o set busy flag (marks start of the transmission).
  * o check link state. If link is not up, then drop the packet.
  * o check channel status. If it's down then initiate a call.
  * o pass a packet to corresponding WAN device.
@@ -575,11 +573,6 @@ static int if_send (struct sk_buff *skb, struct net_device *dev)
 	x25_channel_t *chan = dev->priv;
 	cycx_t *card = chan->card;
 
-	if (dev->tbusy) {
-		++chan->ifstats.rx_dropped;	
-		return -EBUSY;	
-	}
-
 	if (!chan->svc)
 		chan->protocol = skb->protocol;
 
@@ -595,14 +588,14 @@ static int if_send (struct sk_buff *skb, struct net_device *dev)
 		switch (chan->state) {
 			case WAN_DISCONNECTED:
 				if (chan_connect(dev)) {
-					dev->tbusy = 1;
+					netif_stop_queue(dev);
 					return -EBUSY;
 				}
 				/* fall thru */
 			case WAN_CONNECTED:
 				reset_timer(dev);
 				dev->trans_start = jiffies;
-				dev->tbusy = 1;
+				netif_stop_queue(dev);
 
 				if (chan_send(dev, skb))
 					return -EBUSY;
@@ -632,8 +625,8 @@ static int if_send (struct sk_buff *skb, struct net_device *dev)
 		skb_pull(skb, 1); /* Remove control byte */
 		reset_timer(dev);
 		dev->trans_start = jiffies;
-		dev->tbusy = 1;
-
+		netif_stop_queue(dev);
+		
 		if (chan_send(dev, skb)) {
 			/* prepare for future retransmissions */
 			skb_push(skb, 1);
@@ -705,9 +698,6 @@ static void cyx_isr (cycx_t *card)
 	cycx_poke(&card->hw, 0, &z, sizeof(z));
 	cycx_poke(&card->hw, X25_RXMBOX_OFFS, &z, sizeof(z));
 	card->in_isr = 0;
-
-	if (card->buff_int_mode_unbusy)
-		mark_bh(NET_BH);
 }
 
 /* Transmit interrupt handler.
@@ -724,7 +714,7 @@ static void tx_intr (cycx_t *card, TX25Cmd *cmd)
 	/* unbusy device and then dev_tint(); */
 	if ((dev = get_dev_by_lcn(wandev, lcn)) != NULL) {
 		card->buff_int_mode_unbusy = 1;
-		dev->tbusy = 0;
+		netif_wake_queue(dev);
 	} else
 		printk(KERN_ERR "%s:ackvc for inexistent lcn %d\n",
 				 card->devname, lcn);
@@ -1357,7 +1347,7 @@ static void set_chan_state (struct net_device *dev, u8 state)
 			case WAN_CONNECTED:
 				string_state = "connected!";
 				*(u16*)dev->dev_addr = htons(chan->lcn);
-				dev->tbusy = 0;
+				netif_wake_queue(dev);
 				reset_timer(dev);
 
 				if (chan->protocol == ETH_P_X25)
@@ -1384,7 +1374,7 @@ static void set_chan_state (struct net_device *dev, u8 state)
 				if (chan->protocol == ETH_P_X25)
 					chan_x25_send_event(dev, 2);
 
-				dev->tbusy = 0;
+				netif_wake_queue(dev);
 				break;
 		}
 
@@ -1560,14 +1550,14 @@ static void x25_dump_devs(wan_device_t *wandev)
 	struct net_device *dev = wandev->dev;
 
 	printk(KERN_INFO "X.25 dev states\n");
-	printk(KERN_INFO "name: addr:           tbusy:  protocol:\n");
+	printk(KERN_INFO "name: addr:           txoff:  protocol:\n");
 	printk(KERN_INFO "---------------------------------------\n");
 
 	for (; dev; dev = dev->slave) {
 		x25_channel_t *chan = dev->priv;
 
-		printk(KERN_INFO "%-5.5s %-15.15s   %ld     ETH_P_%s\n",
-				 chan->name, chan->addr, dev->tbusy,
+		printk(KERN_INFO "%-5.5s %-15.15s   %d     ETH_P_%s\n",
+				 chan->name, chan->addr, test_bit(LINK_STATE_XOFF, &dev->state),
 				 chan->protocol == ETH_P_IP ? "IP" : "X25");
 	}
 }

@@ -1,6 +1,7 @@
 #ifndef _PPC_TYPES_H
 #define _PPC_TYPES_H
 
+#ifndef __ASSEMBLY__
 /*
  * __xx is ok: it doesn't pollute the POSIX namespace. Use these in the
  * header files exported to user space
@@ -41,10 +42,15 @@ typedef unsigned long long u64;
 
 #define BITS_PER_LONG 32
 
+typedef struct {
+	u32 u[4];
+} __attribute((aligned(16))) vector128;
+
 /* DMA addresses are 32-bits wide */
 
 typedef u32 dma_addr_t;
 
 #endif /* __KERNEL__ */
+#endif /* __ASSEMBLY__ */
 
 #endif

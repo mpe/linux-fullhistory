@@ -498,6 +498,7 @@ void fix_conditionals( struct kconfig * scfg )
 	    case token_define_int:
 	    case token_define_string:
 	    case token_define_tristate:
+	    case token_endmenu:
 	    case token_hex:
 	    case token_int:
 	    case token_mainmenu_option:

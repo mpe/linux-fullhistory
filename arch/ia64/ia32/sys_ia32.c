@@ -240,18 +240,29 @@ do_mmap_fake(struct file *file, unsigned long addr, unsigned long len,
 		return -EINVAL;
 	if (prot & PROT_WRITE)
 		prot |= PROT_EXEC;
+#ifdef	DDD
+#else	// DDD
+	prot |= PROT_WRITE;
+#endif	// DDD
 	front = NULL;
 	back = NULL;
 	if ((baddr = (addr & PAGE_MASK)) != addr && get_user(c, (char *)baddr) == 0) {
 		front = kmalloc(addr - baddr, GFP_KERNEL);
 		memcpy(front, (void *)baddr, addr - baddr);
 	}
-	if ((addr + len) & ~PAGE_MASK && get_user(c, (char *)(addr + len)) == 0) {
+#ifndef	DDD
+	if (addr)
+#endif
+	if (((addr + len) & ~PAGE_MASK) && get_user(c, (char *)(addr + len)) == 0) {
 		back = kmalloc(PAGE_SIZE - ((addr + len) & ~PAGE_MASK), GFP_KERNEL);
 		memcpy(back, addr + len, PAGE_SIZE - ((addr + len) & ~PAGE_MASK));
 	}
 	if ((r = do_mmap(0, baddr, len + (addr - baddr), prot, flags | MAP_ANONYMOUS, 0)) < 0)
 		return(r);
+#ifndef	DDD
+	if (addr == 0)
+		addr = r;
+#endif	// DDD
 	if (back) {
 		memcpy(addr + len, back, PAGE_SIZE - ((addr + len) & ~PAGE_MASK));
 		kfree(back);
@@ -315,7 +326,11 @@ sys32_mmap(struct mmap_arg_struct *arg)
 	}
 	a.flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 
+#ifdef	DDD
 	if ((a.flags & MAP_FIXED) && ((a.addr & ~PAGE_MASK) || (a.offset & ~PAGE_MASK))) {
+#else	// DDD
+	if (1) {
+#endif	// DDD
 		unlock_kernel();
 		up(&current->mm->mmap_sem);
 		error = do_mmap_fake(file, a.addr, a.len, a.prot, a.flags, a.offset);
@@ -665,7 +680,7 @@ struct dirent32 {
 };
 
 static void
-xlate_dirent(void *dirent, long n)
+xlate_dirent(void *dirent64, void *dirent32, long n)
 {
 	long off;
 	struct dirent *dirp;
@@ -673,9 +688,9 @@ xlate_dirent(void *dirent, long n)
 
 	off = 0;
 	while (off < n) {
-		dirp = (struct dirent *)(dirent + off);
+		dirp = (struct dirent *)(dirent64 + off);
+		dirp32 = (struct dirent32 *)(dirent32 + off);
 		off += dirp->d_reclen;
-		dirp32 = (struct dirent32 *)dirp;
 		dirp32->d_ino = dirp->d_ino;
 		dirp32->d_off = (unsigned int)dirp->d_off;
 		dirp32->d_reclen = dirp->d_reclen;
@@ -685,26 +700,27 @@ xlate_dirent(void *dirent, long n)
 }
 
 asmlinkage long
-sys32_getdents(unsigned int fd, void * dirent, unsigned int count)
+sys32_getdents(unsigned int fd, void * dirent32, unsigned int count)
 {
 	long n;
+	void *dirent64;
 
-	if ((n = sys_getdents(fd, dirent, count)) < 0)
+	dirent64 = (unsigned long)(dirent32 + (sizeof(long) - 1)) & ~(sizeof(long) - 1);
+	if ((n = sys_getdents(fd, dirent64, count - (dirent64 - dirent32))) < 0)
 		return(n);
-	xlate_dirent(dirent, n);
+	xlate_dirent(dirent64, dirent32, n);
 	return(n);
 }
 
 asmlinkage int
-sys32_readdir(unsigned int fd, void * dirent, unsigned int count)
+sys32_readdir(unsigned int fd, void * dirent32, unsigned int count)
 {
 	int n;
-	struct dirent *dirp;
+	struct dirent dirent64;
 
-	if ((n = old_readdir(fd, dirent, count)) < 0)
+	if ((n = old_readdir(fd, &dirent64, count)) < 0)
 		return(n);
-	dirp = (struct dirent *)dirent;
-	xlate_dirent(dirent, dirp->d_reclen);
+	xlate_dirent(&dirent64, dirent32, dirent64.d_reclen);
 	return(n);
 }
 
@@ -807,6 +823,23 @@ out:
 	kfree(bits);
 out_nofds:
 	return ret;
+}
+
+struct sel_arg_struct {
+	unsigned int n;
+	unsigned int inp;
+	unsigned int outp;
+	unsigned int exp;
+	unsigned int tvp;
+};
+
+asmlinkage int old_select(struct sel_arg_struct *arg)
+{
+	struct sel_arg_struct a;
+
+	if (copy_from_user(&a, arg, sizeof(a)))
+		return -EFAULT;
+	return sys32_select(a.n, a.inp, a.outp, a.exp, a.tvp);
 }
 
 struct rusage32 {

@@ -16,7 +16,6 @@
 
 
 #define DEBUG_ALLOC 0
-
 #if DEBUG_ALLOC > 0
 # define DBGA(args...)		printk(KERN_DEBUG ##args)
 #else
@@ -39,6 +38,20 @@ static inline long
 calc_npages(long bytes)
 {
 	return (bytes + PAGE_SIZE - 1) >> PAGE_SHIFT;
+}
+
+static inline long
+calc_order(long size)
+{
+	int order;
+
+	size = (size-1) >> (PAGE_SHIFT-1);
+	order = -1;
+	do {
+		size >>= 1;
+		order++;
+	} while (size);
+	return order;
 }
 
 struct pci_iommu_arena *
@@ -173,10 +186,6 @@ pci_map_single(struct pci_dev *pdev, void *cpu_addr, long size)
 	ret = arena->dma_base + dma_ofs * PAGE_SIZE;
 	ret += (unsigned long)cpu_addr & ~PAGE_MASK;
 
-	/* ??? This shouldn't have been needed, since the entries
-	   we've just modified were not in the iommu tlb.  */
-	alpha_mv.mv_pci_tbi(hose, ret, ret + size - 1);
-
 	DBGA("pci_map_single: [%p,%lx] np %ld -> sg %x from %p\n",
 	     cpu_addr, size, npages, ret, __builtin_return_address(0));
 
@@ -239,11 +248,12 @@ void *
 pci_alloc_consistent(struct pci_dev *pdev, long size, dma_addr_t *dma_addrp)
 {
 	void *cpu_addr;
+	long order = calc_order(size);
 
-	cpu_addr = kmalloc(size, GFP_ATOMIC);
+	cpu_addr = (void *)__get_free_pages(GFP_ATOMIC, order);
 	if (! cpu_addr) {
-		printk(KERN_INFO "dma_alloc_consistent: "
-		       "kmalloc failed from %p\n",
+		printk(KERN_INFO "pci_alloc_consistent: "
+		       "get_free_pages failed from %p\n",
 			__builtin_return_address(0));
 		/* ??? Really atomic allocation?  Otherwise we could play
 		   with vmalloc and sg if we can't find contiguous memory.  */
@@ -253,11 +263,11 @@ pci_alloc_consistent(struct pci_dev *pdev, long size, dma_addr_t *dma_addrp)
 
 	*dma_addrp = pci_map_single(pdev, cpu_addr, size);
 	if (*dma_addrp == 0) {
-		kfree_s(cpu_addr, size);
+		free_pages((unsigned long)cpu_addr, order);
 		return NULL;
 	}
 		
-	DBGA2("dma_alloc_consistent: %lx -> [%p,%x] from %p\n",
+	DBGA2("pci_alloc_consistent: %lx -> [%p,%x] from %p\n",
 	      size, cpu_addr, *dma_addrp, __builtin_return_address(0));
 
 	return cpu_addr;
@@ -275,32 +285,33 @@ pci_free_consistent(struct pci_dev *pdev, long size, void *cpu_addr,
 		    dma_addr_t dma_addr)
 {
 	pci_unmap_single(pdev, dma_addr, size);
-	kfree_s(cpu_addr, size);
+	free_pages((unsigned long)cpu_addr, calc_order(size));
 
-	DBGA2("dma_free_consistent: [%x,%lx] from %p\n",
+	DBGA2("pci_free_consistent: [%x,%lx] from %p\n",
 	      dma_addr, size, __builtin_return_address(0));
 }
 
 
 /* Classify the elements of the scatterlist.  Write dma_address
    of each element with:
-	0   : Not mergable.
-	1   : Followers all physically adjacent.
-	[23]: Followers all virtually adjacent.
-	-1  : Not leader.
+	0   : Followers all physically adjacent.
+	1   : Followers all virtually adjacent.
+	-1  : Not leader, physically adjacent to previous.
+	-2  : Not leader, virtually adjacent to previous.
    Write dma_length of each leader with the combined lengths of
    the mergable followers.  */
 
 static inline void
-sg_classify(struct scatterlist *sg, struct scatterlist *end)
+sg_classify(struct scatterlist *sg, struct scatterlist *end, int virt_ok)
 {
 	unsigned long next_vaddr;
 	struct scatterlist *leader;
+	long leader_flag, leader_length;
 
 	leader = sg;
-	leader->dma_address = 0;
-	leader->dma_length = leader->length;
-	next_vaddr = (unsigned long)leader->address + leader->length;
+	leader_flag = 0;
+	leader_length = leader->length;
+	next_vaddr = (unsigned long)leader->address + leader_length;
 
 	for (++sg; sg < end; ++sg) {
 		unsigned long addr, len;
@@ -309,20 +320,24 @@ sg_classify(struct scatterlist *sg, struct scatterlist *end)
 
 		if (next_vaddr == addr) {
 			sg->dma_address = -1;
-			leader->dma_address |= 1;
-			leader->dma_length += len;
-		} else if (((next_vaddr | addr) & ~PAGE_MASK) == 0) {
-			sg->dma_address = -1;
-			leader->dma_address |= 2;
-			leader->dma_length += len;
+			leader_length += len;
+		} else if (((next_vaddr | addr) & ~PAGE_MASK) == 0 && virt_ok) {
+			sg->dma_address = -2;
+			leader_flag = 1;
+			leader_length += len;
 		} else {
+			leader->dma_address = leader_flag;
+			leader->dma_length = leader_length;
 			leader = sg;
-			leader->dma_address = 0;
-			leader->dma_length = len;
+			leader_flag = 0;
+			leader_length = len;
 		}
 
 		next_vaddr = addr + len;
 	}
+
+	leader->dma_address = leader_flag;
+	leader->dma_length = leader_length;
 }
 
 /* Given a scatterlist leader, choose an allocation method and fill
@@ -334,21 +349,21 @@ sg_fill(struct scatterlist *leader, struct scatterlist *end,
 	dma_addr_t max_dma)
 {
 	unsigned long paddr = virt_to_phys(leader->address);
-	unsigned long size = leader->dma_length;
+	long size = leader->dma_length;
 	struct scatterlist *sg;
 	unsigned long *ptes;
 	long npages, dma_ofs, i;
 
 	/* If everything is physically contiguous, and the addresses
 	   fall into the direct-map window, use it.  */
-	if (leader->dma_address < 2
+	if (leader->dma_address == 0
 	    && paddr + size + __direct_map_base - 1 <= max_dma
 	    && paddr + size <= __direct_map_size) {
 		out->dma_address = paddr + __direct_map_base;
 		out->dma_length = size;
 
-		DBGA2("sg_fill: [%p,%lx] -> direct %x\n",
-		      leader->address, size, out->dma_address);
+		DBGA("    sg_fill: [%p,%lx] -> direct %x\n",
+		     leader->address, size, out->dma_address);
 
 		return 0;
 	}
@@ -365,30 +380,62 @@ sg_fill(struct scatterlist *leader, struct scatterlist *end,
 	out->dma_address = arena->dma_base + dma_ofs*PAGE_SIZE + paddr;
 	out->dma_length = size;
 
-	DBGA("sg_fill: [%p,%lx] -> sg %x\n",
-	     leader->address, size, out->dma_address);
+	DBGA("    sg_fill: [%p,%lx] -> sg %x np %ld\n",
+	     leader->address, size, out->dma_address, npages);
 
 	ptes = &arena->ptes[dma_ofs];
 	sg = leader;
-	do {
-		paddr = virt_to_phys(sg->address);
-		npages = calc_npages((paddr & ~PAGE_MASK) + sg->length);
+	if (0 && leader->dma_address == 0) {
+		/* All physically contiguous.  We already have the
+		   length, all we need is to fill in the ptes.  */
 
-		DBGA("        (%ld) [%p,%x]\n",
-		      sg - leader, sg->address, sg->length);
-
-		paddr &= PAGE_MASK;
+		paddr = virt_to_phys(sg->address) & PAGE_MASK;
 		for (i = 0; i < npages; ++i, paddr += PAGE_SIZE)
 			*ptes++ = mk_iommu_pte(paddr);
 
-		++sg;
-	} while (sg < end && sg->dma_address == -1);
+#if DEBUG_ALLOC > 0
+		DBGA("    (0) [%p,%x] np %ld\n",
+		     sg->address, sg->length, npages);
+		for (++sg; sg < end && (int) sg->dma_address < 0; ++sg)
+			DBGA("        (%ld) [%p,%x] cont\n",
+			     sg - leader, sg->address, sg->length);
+#endif
+	} else {
+		/* All virtually contiguous.  We need to find the
+		   length of each physically contiguous subsegment
+		   to fill in the ptes.  */
+		do {
+			struct scatterlist *last_sg = sg;
+
+			size = sg->length;
+			paddr = virt_to_phys(sg->address);
+
+			while (sg+1 < end && (int) sg[1].dma_address == -1) {
+				size += sg[1].length;
+				sg++;
+			}
+
+			npages = calc_npages((paddr & ~PAGE_MASK) + size);
+
+			paddr &= PAGE_MASK;
+			for (i = 0; i < npages; ++i, paddr += PAGE_SIZE)
+				*ptes++ = mk_iommu_pte(paddr);
+
+#if DEBUG_ALLOC > 0
+			DBGA("    (%ld) [%p,%x] np %ld\n",
+			     last_sg - leader, last_sg->address,
+			     last_sg->length, npages);
+			while (++last_sg <= sg) {
+				DBGA("        (%ld) [%p,%x] cont\n",
+				     last_sg - leader, last_sg->address,
+				     last_sg->length);
+			}
+#endif
+		} while (++sg < end && (int) sg->dma_address < 0);
+	}
 
 	return 1;
 }
-
-/* TODO: Only use the iommu when it helps.  Non-mergable scatterlist
-   entries might as well use direct mappings.  */
 
 int
 pci_map_sg(struct pci_dev *pdev, struct scatterlist *sg, int nents)
@@ -396,17 +443,7 @@ pci_map_sg(struct pci_dev *pdev, struct scatterlist *sg, int nents)
 	struct scatterlist *start, *end, *out;
 	struct pci_controler *hose;
 	struct pci_iommu_arena *arena;
-	dma_addr_t max_dma, fstart, fend;
-
-	/* If pci_tbi is not available, we must not be able to control
-	   an iommu.  Direct map everything, no merging.  */
-	if (! alpha_mv.mv_pci_tbi) {
-		for (end = sg + nents; sg < end; ++sg) {
-			sg->dma_address = virt_to_bus(sg->address);
-			sg->dma_length = sg->length;
-		}
-		return nents;
-	}
+	dma_addr_t max_dma;
 
 	/* Fast path single entry scatterlists.  */
 	if (nents == 1) {
@@ -416,50 +453,42 @@ pci_map_sg(struct pci_dev *pdev, struct scatterlist *sg, int nents)
 		return sg->dma_address != 0;
 	}
 
-	hose = pdev ? pdev->sysdata : pci_isa_hose;
-	max_dma = pdev ? pdev->dma_mask : 0x00ffffff;
-	arena = hose->sg_pci;
-	if (!arena || arena->dma_base + arena->size > max_dma)
-		arena = hose->sg_isa;
 	start = sg;
 	end = sg + nents;
-	fstart = -1;
-	fend = 0;
-	
-	/* First, prepare information about the entries.  */
-	sg_classify(sg, end);
 
-	/* Second, iterate over the scatterlist leaders and allocate
+	/* First, prepare information about the entries.  */
+	sg_classify(sg, end, alpha_mv.mv_pci_tbi != 0);
+
+	/* Second, figure out where we're going to map things.  */
+	if (alpha_mv.mv_pci_tbi) {
+		hose = pdev ? pdev->sysdata : pci_isa_hose;
+		max_dma = pdev ? pdev->dma_mask : 0x00ffffff;
+		arena = hose->sg_pci;
+		if (!arena || arena->dma_base + arena->size > max_dma)
+			arena = hose->sg_isa;
+	} else {
+		max_dma = -1;
+		arena = NULL;
+		hose = NULL;
+	}
+
+	/* Third, iterate over the scatterlist leaders and allocate
 	   dma space as needed.  */
 	for (out = sg; sg < end; ++sg) {
 		int ret;
 
-		if (sg->dma_address == -1)
+		if ((int) sg->dma_address < 0)
 			continue;
 
 		ret = sg_fill(sg, end, out, arena, max_dma);
 		if (ret < 0)
 			goto error;
-		else if (ret > 0) {
-			dma_addr_t ts, te;
-
-			ts = out->dma_address;
-			te = ts + out->dma_length - 1;
-			if (fstart > ts)
-				fstart = ts;
-			if (fend < te)
-				fend = te;
-		}
 		out++;
 	}
 
-	/* ??? This shouldn't have been needed, since the entries
-	   we've just modified were not in the iommu tlb.  */
-	if (fend)
-		alpha_mv.mv_pci_tbi(hose, fstart, fend);
-
 	if (out - start == 0)
 		printk(KERN_INFO "pci_map_sg failed: no entries?\n");
+	DBGA("pci_map_sg: %ld entries\n", out - start);
 
 	return out - start;
 
@@ -496,9 +525,11 @@ pci_unmap_sg(struct pci_dev *pdev, struct scatterlist *sg, int nents)
 	arena = hose->sg_pci;
 	if (!arena || arena->dma_base + arena->size > max_dma)
 		arena = hose->sg_isa;
+
+	DBGA("pci_unmap_sg: %d entries\n", nents);
+
 	fstart = -1;
 	fend = 0;
-
 	for (end = sg + nents; sg < end; ++sg) {
 		unsigned long addr, size;
 
@@ -508,7 +539,8 @@ pci_unmap_sg(struct pci_dev *pdev, struct scatterlist *sg, int nents)
 		if (addr >= __direct_map_base
 		    && addr < __direct_map_base + __direct_map_size) {
 			/* Nothing to do.  */
-			DBGA2("pci_unmap_sg: direct [%lx,%lx]\n", addr, size);
+			DBGA("    (%ld) direct [%lx,%lx]\n",
+			      sg - end + nents, addr, size);
 		} else {
 			long npages, ofs;
 			dma_addr_t tend;
@@ -523,7 +555,8 @@ pci_unmap_sg(struct pci_dev *pdev, struct scatterlist *sg, int nents)
 			if (fend < tend)
 				fend = tend;
 
-			DBGA2("pci_unmap_sg: sg [%lx,%lx]\n", addr, size);
+			DBGA("    (%ld) sg [%lx,%lx]\n",
+			      sg - end + nents, addr, size);
 		}
 	}
 	if (fend)

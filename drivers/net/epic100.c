@@ -79,7 +79,6 @@ MODULE_PARM(options, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(full_duplex, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(rx_copybreak, "i");
 MODULE_PARM(max_interrupt_work, "i");
-#define DEV_FREE_SKB(skb) dev_kfree_skb(skb);
 
 /* The I/O extent. */
 #define EPIC_TOTAL_SIZE 0x100
@@ -895,7 +894,7 @@ static void epic_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 				}
 
 				/* Free the original skb. */
-				DEV_FREE_SKB(ep->tx_skbuff[entry]);
+				dev_kfree_skb_irq(ep->tx_skbuff[entry]);
 				ep->tx_skbuff[entry] = 0;
 			}
 
@@ -1073,12 +1072,12 @@ static int epic_close(struct net_device *dev)
 		ep->rx_ring[i].buflength = 0;
 		ep->rx_ring[i].bufaddr = 0xBADF00D0; /* An invalid address. */
 		if (skb) {
-			DEV_FREE_SKB(skb);
+			dev_kfree_skb(skb);
 		}
 	}
 	for (i = 0; i < TX_RING_SIZE; i++) {
 		if (ep->tx_skbuff[i])
-			DEV_FREE_SKB(ep->tx_skbuff[i]);
+			dev_kfree_skb(ep->tx_skbuff[i]);
 		ep->tx_skbuff[i] = 0;
 	}
 
@@ -1224,13 +1223,14 @@ static dev_node_t *epic_attach(dev_locator_t *loc)
 	struct net_device *dev;
 	u16 dev_id;
 	u32 io;
-	u8 bus, devfn, irq;
+	u8 irq;
 	struct pci_dev *pdev;
 
 	if (loc->bus != LOC_PCI) return NULL;
 	pdev = pci_find_slot (loc->b.pci.bus, loc->b.pci.devfn);
 	if (!pdev) return NULL;
-	printk(KERN_DEBUG "epic_attach(bus %d, function %d)\n", bus, devfn);
+	printk(KERN_DEBUG "epic_attach(bus %d, function %d)\n",
+	       pdev->bus->number, pdev->devfn);
 	io = pdev->resource[0].start;
 	irq = pdev->irq;
 	dev_id = pdev->device;
@@ -1241,7 +1241,7 @@ static dev_node_t *epic_attach(dev_locator_t *loc)
 			   io == 0 ? "I/O address" : "IRQ");
 		return NULL;
 	}
-	dev = epic_probe1(bus, devfn, io, irq, 2, -1);
+	dev = epic_probe1(pdev, io, irq, 2, -1);
 	if (dev) {
 		dev_node_t *node = kmalloc(sizeof(dev_node_t), GFP_KERNEL);
 		strcpy(node->dev_name, dev->name);

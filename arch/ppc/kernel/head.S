@@ -460,8 +460,24 @@ SystemCall:
 	STD_EXCEPTION(0xd00, SingleStep, SingleStepException)
 
 	STD_EXCEPTION(0xe00, Trap_0e, UnknownException)
-#ifdef CONFIG_ALTIVEC	
-	STD_EXCEPTION(0xf20, AltiVec, AltiVecUnavailable)
+#ifndef CONFIG_ALTIVEC
+	STD_EXCEPTION(0xf00, Trap_0f, UnknownException)
+#else	
+/*
+ * The Altivec unavailable trap is at 0x0f20.  Foo.
+ * We effectively remap it to 0x3000.
+ */
+	. = 0xf00
+	b	Trap_0f
+trap_0f_cont:
+	addi	r3,r1,STACK_FRAME_OVERHEAD
+	li	r20,MSR_KERNEL
+	bl	transfer_to_handler
+	.long	UnknownException
+	.long	ret_from_except
+
+	. = 0xf20
+	b	AltiVecUnavailable
 #endif /* CONFIG_ALTIVEC */
 
 /*
@@ -674,6 +690,21 @@ DataStoreTLBMiss:
 
 	. = 0x3000
 
+#ifdef CONFIG_ALTIVEC
+AltiVecUnavailable:
+	EXCEPTION_PROLOG
+	bne	load_up_altivec		/* if from user, just load it up */
+	li	r20,MSR_KERNEL
+	bl	transfer_to_handler	/* if from kernel, take a trap */
+	.long	KernelAltiVec
+	.long	ret_from_except
+
+/* here are the bits of trap 0xf00 which got displaced */
+Trap_0f:
+	EXCEPTION_PROLOG
+	b	trap_0f_cont
+#endif /* CONFIG_ALTIVEC */
+	
 /*
  * This code finishes saving the registers to the exception frame
  * and jumps to the appropriate handler for the exception, turning
@@ -813,72 +844,134 @@ KernelFP:
 86:	.string	"floating point used in kernel (task=%p, pc=%x)\n"
 	.align	4
 
-/*
- * Take away the altivec regs.
- *
- * For now, ignore the vrsave regs and save them all
- *   -- Cort
- */
-	.globl giveup_altivec
-giveup_altivec:
-#ifdef CONFIG_ALTIVEC	
-	/* check for altivec */
-	mfspr	r4,PVR
-	srwi	r4,r4,16
-	cmpi	0,r4,12
-	bnelr
-	
-	/* enable altivec so we can save */
-	mfmsr	r4
-	oris	r4,r4,MSR_VEC@h
-	mtmsr	r4
-
-	/* make sure our tsk pointer is valid */
-	cmpi	0,r3,0
-	beqlr
-
-	/* save altivec regs */
-	addi	r4,r3,THREAD+THREAD_VRSAVE
-	mfspr	r5,256		/* vrsave */
-	stw	r5,0(r4)
-	
-	/* get regs for the task */
-	addi	r4,r3,THREAD+PT_REGS
-	/* turn off the altivec bit in the tasks regs */
-	lwz	r5,_MSR(r4)
-	lis	r6,MSR_VEC@h
-	andi.	r5,r5,r6
-	stw	r5,_MSR(r4)
-
-	/* we've given up the altivec - clear the pointer */
-	li	r3,0
-	lis	r4,last_task_used_altivec@h
-	stw	r3,last_task_used_altivec@l(r4)
-#endif /* CONFIG_ALTIVEC */
-	blr
-	
-	.globl load_up_altivec
+#ifdef CONFIG_ALTIVEC
+/* Note that the AltiVec support is closely modeled after the FP
+ * support.  Changes to one are likely to be applicable to the
+ * other!  */
 load_up_altivec:
-#ifdef CONFIG_ALTIVEC	
-	/* check for altivec */
-	mfspr	r4,PVR
-	srwi	r4,r4,16
-	cmpi	0,r4,12
-	bnelr
-	
-	/* restore altivec regs */
-	addi	r4,r3,THREAD+THREAD_VRSAVE
-	lwz	r5,0(r4)
-	mtspr	256,r5		/* vrsave */
-	
-	/* get regs for the task */
-	addi	r4,r3,THREAD+PT_REGS
-	/* turn on the altivec bit in the tasks regs */
-	lwz	r5,_MSR(r4)
+/*
+ * Disable AltiVec for the task which had AltiVec previously,
+ * and save its AltiVec registers in its thread_struct.
+ * Enables AltiVec for use in the kernel on return.
+ * On SMP we know the AltiVec units are free, since we give it up every
+ * switch.  -- Kumar
+ */
+	mfmsr	r5
 	oris	r5,r5,MSR_VEC@h
-	stw	r5,_MSR(r4)
-#endif /* CONFIG_ALTIVEC */
+	SYNC
+	mtmsr	r5			/* enable use of AltiVec now */
+	SYNC
+/*
+ * For SMP, we don't do lazy AltiVec switching because it just gets too
+ * horrendously complex, especially when a task switches from one CPU
+ * to another.  Instead we call giveup_altivec in switch_to.
+ */
+#ifndef __SMP__
+#ifndef CONFIG_APUS
+	lis	r6,-KERNELBASE@h
+#else
+	lis	r6,CYBERBASEp@h
+	lwz	r6,0(r6)
+#endif
+	addis	r3,r6,last_task_used_altivec@ha
+	lwz	r4,last_task_used_altivec@l(r3)
+	cmpi	0,r4,0
+	beq	1f
+	add	r4,r4,r6
+	addi	r4,r4,THREAD	/* want THREAD of last_task_used_altivec */
+	SAVE_32VR(0,r20,r4)
+	MFVSCR(vr0)
+	li	r20,THREAD_VSCR
+	STVX(vr0,r20,r4)
+	lwz	r5,PT_REGS(r4)
+	add	r5,r5,r6
+	lwz	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
+	lis	r20,MSR_VEC@h
+	andc	r4,r4,r20	/* disable altivec for previous task */
+	stw	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
+1:
+#endif /* __SMP__ */
+	/* enable use of AltiVec after return */
+	oris	r23,r23,MSR_VEC@h
+	mfspr	r5,SPRG3		/* current task's THREAD (phys) */
+	li	r20,THREAD_VSCR
+	LVX(vr0,r20,r5)
+	MTVSCR(vr0)
+	REST_32VR(0,r20,r5)
+#ifndef __SMP__
+	subi	r4,r5,THREAD
+	sub	r4,r4,r6
+	stw	r4,last_task_used_altivec@l(r3)
+#endif /* __SMP__ */
+	/* restore registers and return */
+	lwz	r3,_CCR(r21)
+	lwz	r4,_LINK(r21)
+	mtcrf	0xff,r3
+	mtlr	r4
+	REST_GPR(1, r21)
+	REST_4GPRS(3, r21)
+	/* we haven't used ctr or xer */
+	mtspr	SRR1,r23
+	mtspr	SRR0,r22
+	REST_GPR(20, r21)
+	REST_2GPRS(22, r21)
+	lwz	r21,GPR21(r21)
+	SYNC
+	rfi
+
+/*
+ * AltiVec unavailable trap from kernel - print a message, but let
+ * the task use AltiVec in the kernel until it returns to user mode.
+ */
+KernelAltiVec:
+	lwz	r3,_MSR(r1)
+	oris	r3,r3,MSR_VEC@h
+	stw	r3,_MSR(r1)	/* enable use of AltiVec after return */
+	lis	r3,87f@h
+	ori	r3,r3,87f@l
+	mr	r4,r2		/* current */
+	lwz	r5,_NIP(r1)
+	bl	printk
+	b	ret_from_except
+87:	.string	"AltiVec used in kernel  (task=%p, pc=%x)  \n"
+	.align	4
+
+/*
+ * giveup_altivec(tsk)
+ * Disable AltiVec for the task given as the argument,
+ * and save the AltiVec registers in its thread_struct.
+ * Enables AltiVec for use in the kernel on return.
+ */
+
+	.globl	giveup_altivec
+giveup_altivec:
+	mfmsr	r5
+	oris	r5,r5,MSR_VEC@h
+	SYNC
+	mtmsr	r5			/* enable use of AltiVec now */
+	SYNC
+	cmpi	0,r3,0
+	beqlr-				/* if no previous owner, done */
+	addi	r3,r3,THREAD		/* want THREAD of task */
+	lwz	r5,PT_REGS(r3)
+	cmpi	0,r5,0
+	SAVE_32VR(0, r4, r3)
+	MFVSCR(vr0)
+	li	r4,THREAD_VSCR
+	STVX(vr0, r4, r3)
+	beq	1f
+	lwz	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
+	lis	r3,MSR_VEC@h
+	andc	r4,r4,r3		/* disable AltiVec for previous task */
+	stw	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
+1:
+#ifndef __SMP__
+	li	r5,0
+	lis	r4,last_task_used_altivec@ha
+	stw	r5,last_task_used_altivec@l(r4)
+#endif /* __SMP__ */
 	blr
+#endif /* CONFIG_ALTIVEC */
 	
 /*
  * giveup_fpu(tsk)
@@ -1437,17 +1530,16 @@ mmu_off:
 
 #if 0 /* That's useful debug stuff */
 setup_screen_bat:
+	li	r3,0
+	mtspr	DBAT1U,r3
+	mtspr	IBAT1U,r3
 	lis	r3, 0x9100
-#ifdef __SMP__
-	ori	r3,r3,0x12
-#else
-	ori	r3,r3,0x2
-#endif
-	mtspr	DBAT1L, r3
-	mtspr	IBAT1L, r3
+	ori	r4,r3,0x2a
+	mtspr	DBAT1L,r4
+	mtspr	IBAT1L,r4
 	ori	r3,r3,(BL_8M<<2)|0x2	/* set up BAT registers for 604 */
-	mtspr	DBAT1U, r3
-	mtspr	IBAT1U, r3
+	mtspr	DBAT1U,r3
+	mtspr	IBAT1U,r3
 	blr
 #endif
 	

@@ -342,7 +342,16 @@ ia32_setup_frame1 (int sig, struct k_sigaction *ka, siginfo_t *info,
 }
 
 asmlinkage int
-sys32_sigreturn(int arg1, int arg2, int arg3, int arg4, int arg5, unsigned long stack)
+sys32_sigreturn(
+int arg0,
+int arg1,
+int arg2,
+int arg3,
+int arg4,
+int arg5,
+int arg6,
+int arg7,
+unsigned long stack)
 {
        struct pt_regs *regs = (struct pt_regs *) &stack;
        struct sigframe_ia32 *frame = (struct sigframe_ia32 *)(regs->r12- 8);
@@ -375,7 +384,16 @@ badframe:
 }      
 
 asmlinkage int
-sys32_rt_sigreturn(int arg1, int arg2, int arg3, int arg4, int arg5, unsigned long stack)
+sys32_rt_sigreturn(
+int arg0,
+int arg1,
+int arg2,
+int arg3,
+int arg4,
+int arg5,
+int arg6,
+int arg7,
+unsigned long stack)
 {
        struct pt_regs *regs = (struct pt_regs *) &stack;
        struct rt_sigframe_ia32 *frame = (struct rt_sigframe_ia32 *)(regs->r12 - 4);

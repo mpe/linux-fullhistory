@@ -1,4 +1,4 @@
-/* $Id: swift.S,v 1.3 1999/11/14 06:13:56 zaitcev Exp $
+/* $Id: swift.S,v 1.4 2000/02/12 03:08:47 zaitcev Exp $
  * swift.S: MicroSparc-II mmu/cache operations.
  *
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
@@ -41,10 +41,10 @@ swift_flush_chunk:
 swift_flush_page_to_ram:
 	sethi	%hi(0x2000), %o0
 1:	subcc	%o0, 0x10, %o0
-	sta	%g0, [%o0] ASI_M_TXTC_TAG
+	add	%o0, %o0, %o1
 	sta	%g0, [%o0] ASI_M_DATAC_TAG
 	bne	1b
-	 nop
+	 sta	%g0, [%o1] ASI_M_TXTC_TAG
 	retl
 	 nop
 #else

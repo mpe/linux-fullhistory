@@ -28,6 +28,7 @@
 #include <asm/iomd.h>
 #include <asm/system.h>
 
+extern struct tasklet_struct keyboard_tasklet;
 extern void kbd_reset_kdown(void);
 int kbd_read_mask;
 
@@ -318,7 +319,7 @@ static void ps2kbd_rx(int irq, void *dev_id, struct pt_regs *regs)
 
 	while (inb(IOMD_KCTRL) & (1 << 5))
 		handle_rawcode(inb(IOMD_KARTRX));
-	mark_bh(KEYBOARD_BH);
+	tasklet_schedule(&keyboard_tasklet);
 }
 
 static void ps2kbd_tx(int irq, void *dev_id, struct pt_regs *regs)

@@ -59,11 +59,6 @@
 
 #include <linux/version.h>
 
-#if LINUX_VERSION_CODE >=0x020200
-#define v22
-#endif
-
-
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -74,6 +69,7 @@
 #include <linux/malloc.h>
 #include <linux/string.h>
 #include <linux/errno.h>
+#include <linux/spinlock.h>
 
 #include <asm/io.h>
 #include <asm/types.h>
@@ -88,12 +84,8 @@
 
 #include <net/arp.h>
 
-
-
-#ifdef v22
 #include <asm/uaccess.h>
 #include <linux/init.h>
-#endif
 
 #include "sbni.h"
 
@@ -523,6 +515,7 @@ static int __init sbni_probe1(struct net_device *dev, int ioaddr)
 	dev->hard_header_cache = sbni_header_cache;
 	dev->header_cache_update = sbni_header_cache_update;
   
+  	spin_lock_init(&lp->lock);
 	lp->m=dev;
 	lp->me=dev;
 	lp->next_lp=NULL;
@@ -538,15 +531,15 @@ static int sbni_open(struct net_device *dev)
 {
 	struct net_local* lp = (struct net_local*)dev->priv;
 	struct timer_list* watchdog = &lp->watchdog;
-   
+	unsigned long flags;   
       
 	DP( printk("%s: sbni_open\n", dev->name); )
      
+     	save_flags(flags);
 	cli();
 	lp->currframe = NULL;
    
 	card_start(dev);
-	dev->start = 1;
 	/* set timer  watchdog */
 	init_timer(watchdog);
 	watchdog->expires = jiffies + SBNI_TIMEOUT;
@@ -555,8 +548,9 @@ static int sbni_open(struct net_device *dev)
 	add_timer(watchdog);
 	DP( printk("%s: sbni timer watchdog initialized\n", dev->name); );
    
-	sti();
-   
+	restore_flags(flags);
+	   
+	netif_start_queue(dev);
 	MOD_INC_USE_COUNT;
 	return 0;
 }
@@ -566,21 +560,18 @@ static int sbni_close(struct net_device *dev)
 	int ioaddr = dev->base_addr;
 	struct net_local* lp = (struct net_local*) dev->priv;
 	struct timer_list* watchdog = &lp->watchdog;
-
-   
+	unsigned long flags;
+	
 	DP( printk("%s: sbni_close\n", dev->name); )
 
+	netif_stop_queue(dev);
+
+	save_flags(flags);
 	cli();
-   
 	sbni_drop_tx_queue(dev);	
-   
-	dev->tbusy = 1;
-	dev->start = 0;
-
 	del_timer(watchdog);
-
 	outb(0, ioaddr + CSR0);
-	sti();
+	restore_flags(flags);
 
 	MOD_DEC_USE_COUNT;
 	return 0;
@@ -590,6 +581,7 @@ static int sbni_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local*)dev->priv;
 	struct sbni_hard_header *hh=(struct sbni_hard_header *)skb->data;
+	unsigned long flags;
   
 #ifdef KATYUSHA   
 	struct net_local *nl;
@@ -601,13 +593,6 @@ static int sbni_start_xmit(struct sk_buff *skb, struct net_device *dev)
   
 	if(lp->me != dev)
 		panic("sbni: lp->me != dev !!!\nMail to developer (xenon@granch.ru) if you noticed this error\n");
-  
-	if(dev->interrupt)
-	{
-		DP( printk("sbni_xmit_start: interrupt\n"); )
-		/* May be unloading, don't stamp on */	
-		return 1;	/* the packet buffer this time      */
-	}
   
 	hh->number = 1;
 	hh->reserv = 0;
@@ -623,6 +608,7 @@ static int sbni_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		       skb->len - sizeof(struct sbni_hard_header),
 		       hh->crc);
   
+  	spin_lock_irqsave(&lp->lock, flags);
 #ifdef KATYUSHA
 	/* looking for first idle device */
 	for (stop=0,nl=lp; nl && !stop; nl=nl->next_lp)
@@ -657,6 +643,7 @@ static int sbni_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	/* set request for transmit */
 	outb(inb(dev->base_addr + CSR0) | TR_REQ, dev->base_addr + CSR0);
 #endif
+	spin_unlock_irqrestore(&lp->lock, flags);
 	return 0;
 }
 
@@ -677,9 +664,6 @@ void card_start(struct net_device *dev)
 	lp->waitack=0;
 	skb_queue_head_init(&lp->queue);
 	sbni_drop_tx_queue(dev);
-	dev->tbusy = 0;
-   
-	dev->interrupt = 0;
 	/* Reset the card and set start parameters */
 	outb(PR_RES | *(char*)&lp->csr1, dev->base_addr + CSR1);
 	outb(EN_INT, dev->base_addr + CSR0);
@@ -776,8 +760,7 @@ static inline unsigned short sbni_recv(struct net_device *dev)
 					/*
 	      				 * reset output active flags
 					 */
-					dev->tbusy = 0;
-					mark_bh(NET_BH);
+					netif_wake_queue(dev);
 					/*} if */
 				}
 				case PACKET_RESEND:
@@ -920,17 +903,12 @@ static void sbni_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		return;
 	}
    
-	if(dev->interrupt)
-	{
-		printk("%s: Reentering the interrupt driver!\n", dev->name);
-		return;
-	}
-	dev->interrupt = 1;
-   
 	csr0 = inb(dev->base_addr + CSR0);
 	DP( printk("%s: entering interrupt handler, CSR0 = %02x\n", dev->name, csr0); )
      
 	lp=dev->priv;
+
+   	spin_lock(&lp->lock);
   
 	if(!lp->carrier)
 		lp->carrier=1;
@@ -971,7 +949,7 @@ static void sbni_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	 */
   
 	outb(csr0 | EN_INT, dev->base_addr + CSR0);
-	dev->interrupt = 0;
+	spin_unlock(&lp->lock);
 }
 
 static struct enet_statistics *sbni_get_stats(struct net_device *dev)
@@ -1103,7 +1081,7 @@ static void sbni_watchdog(unsigned long arg)
 	}
 	sti();
 	outb(csr0 | RC_CHK, dev->base_addr + CSR0);
-	if(dev->start)
+	if(test_bit(LINK_STATE_START, &dev->state))
 	{
 		struct timer_list* watchdog = &lp->watchdog; 
 		init_timer(watchdog);
@@ -1167,9 +1145,8 @@ static void sbni_drop_tx_queue(struct net_device *dev)
 		}
 	}
 	lp->waitack=0;
-  	dev->tbusy = 0;
-  
-	mark_bh(NET_BH);
+	netif_wake_queue(dev);
+	
 	DP( printk("%s: queue dropping stoped\n",dev->name); );	
 }
 
@@ -1194,7 +1171,7 @@ static int sbni_set_mac_address(struct net_device *dev, void *addr)
 	/* struct net_local *lp = (struct net_local *)dev->priv; */
 	struct sockaddr *saddr = addr;
 	
-	if(dev->start)
+	if(test_bit(LINK_STATE_START, &dev->state))
 	{
 		/* Only possible while card isn't started */
 		return -EBUSY;
@@ -1400,13 +1377,11 @@ static int rxl[SBNI_MAX_NUM_CARDS] = { -1, -1, -1, -1, -1, -1, -1, -1 };
 static int baud[SBNI_MAX_NUM_CARDS] = { 0 };
 static long mac[SBNI_MAX_NUM_CARDS] = { 0 };
 
-#ifdef v22
 MODULE_PARM(io, "1-" __MODULE_STRING(SBNI_MAX_NUM_CARDS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(SBNI_MAX_NUM_CARDS) "i");
 MODULE_PARM(rxl, "1-" __MODULE_STRING(SBNI_MAX_NUM_CARDS) "i");
 MODULE_PARM(baud, "1-" __MODULE_STRING(SBNI_MAX_NUM_CARDS) "i");
 MODULE_PARM(mac, "1-" __MODULE_STRING(SBNI_MAX_NUM_CARDS) "i");
-#endif
 
 
 static int sbniautodetect = -1;

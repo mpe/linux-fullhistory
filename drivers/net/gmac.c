@@ -51,6 +51,7 @@ struct gmac {
 	int		phy_addr;
 	int		full_duplex;
 	struct net_device_stats stats;
+	struct net_device *next_gmac;
 };
 
 #define GM_OUT(r, v)	out_le32(gm->regs + (r)/4, (v))
@@ -80,6 +81,7 @@ static void gmac_receive(struct net_device *dev);
 static void gmac_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static struct net_device_stats *gmac_stats(struct net_device *dev);
 static int gmac_probe(void);
+static void gmac_probe1(struct device_node *gmac);
 
 /* Stuff for talking to the physical-layer chip */
 static int
@@ -383,7 +385,7 @@ static int gmac_xmit_start(struct sk_buff *skb, struct net_device *dev)
 	i = gm->next_tx;
 	if (gm->tx_buff[i] != 0) {
 		/* buffer is full, can't send this packet at the moment */
-		dev->tbusy = 1;
+		netif_stop_queue(dev);
 		gm->tx_full = 1;
 		restore_flags(flags);
 		return 1;
@@ -421,7 +423,7 @@ static int gmac_tx_cleanup(struct gmac *gm)
 		gm->stats.tx_bytes += skb->len;
 		++gm->stats.tx_packets;
 		gm->tx_buff[i] = NULL;
-		dev_kfree_skb(skb);
+		dev_kfree_skb_irq(skb);
 		if (++i >= NTX)
 			i = 0;
 	}
@@ -452,7 +454,7 @@ static void gmac_receive(struct net_device *dev)
 			++gm->stats.rx_dropped;
 		} else if (ld_le32(&dp->status) & 0x40000000) {
 			++gm->stats.rx_errors;
-			dev_kfree_skb(skb);
+			dev_kfree_skb_irq(skb);
 		} else {
 			skb_put(skb, len);
 			skb->dev = dev;
@@ -486,14 +488,11 @@ static void gmac_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	status = GM_IN(INTR_STATUS);
 	GM_OUT(INTR_ACK, status);
 	
-	if (status & GMAC_IRQ_MIF) {
+	if (status & GMAC_IRQ_MIF)
 		mii_interrupt(gm);
-	}
 	gmac_receive(dev);
-	if (gmac_tx_cleanup(gm)){
-		dev->tbusy = 0;
-		mark_bh(NET_BH);
-	}
+	if (gmac_tx_cleanup(gm))
+		netif_wake_queue(dev);
 }
 
 static struct net_device_stats *gmac_stats(struct net_device *dev)
@@ -505,33 +504,44 @@ static struct net_device_stats *gmac_stats(struct net_device *dev)
 
 static int __init gmac_probe(void)
 {
-	static int gmacs_found;
-	static struct device_node *next_gmac;
 	struct device_node *gmac;
-	struct gmac *gm;
-	unsigned long descpage;
-	unsigned char *addr;
-	int i;
-
-	if (gmacs != NULL)
-		return -EBUSY;
 
 	/*
 	 * We could (and maybe should) do this using PCI scanning
 	 * for vendor/net_device ID 0x106b/0x21.
 	 */
-	if (!gmacs_found) {
-		next_gmac = find_compatible_devices("network", "gmac");
-		gmacs_found = 1;
-	}
-	if ((gmac = next_gmac) == 0)
-		return -ENODEV;
-	next_gmac = gmac->next;
+	for (gmac = find_compatible_devices("network", "gmac"); gmac != 0;
+	     gmac = gmac->next)
+		gmac_probe1(gmac);
+
+	return 0;
+}
+
+static void gmac_probe1(struct device_node *gmac)
+{
+	struct gmac *gm;
+	unsigned long descpage;
+	unsigned char *addr;
+	struct net_device *dev;
+	int i;
 
 	if (gmac->n_addrs < 1 || gmac->n_intrs < 1) {
 		printk(KERN_ERR "can't use GMAC %s: %d addrs and %d intrs\n",
 		       gmac->full_name, gmac->n_addrs, gmac->n_intrs);
-		return -ENODEV;
+		return;
+	}
+
+	addr = get_property(gmac, "local-mac-address", NULL);
+	if (addr == NULL) {
+		printk(KERN_ERR "Can't get mac-address for GMAC %s\n",
+		       gmac->full_name);
+		return;
+	}
+
+	descpage = get_free_page(GFP_KERNEL);
+	if (descpage == 0) {
+		printk(KERN_ERR "GMAC: can't get a page for descriptors\n");
+		return;
 	}
 
 	dev = init_etherdev(0, sizeof(struct gmac));
@@ -544,25 +554,12 @@ static int __init gmac_probe(void)
 	gm->sysregs = (volatile unsigned int *) ioremap(0xf8000000, 0x1000);
 	dev->irq = gmac->intrs[0].line;
 
-	addr = get_property(gmac, "local-mac-address", NULL);
-	if (addr == NULL) {
-		printk(KERN_ERR "Can't get mac-address for GMAC %s\n",
-		       gmac->full_name);
-		return -EAGAIN;
-	}
-
 	printk(KERN_INFO "%s: GMAC at", dev->name);
 	for (i = 0; i < 6; ++i) {
 		dev->dev_addr[i] = addr[i];
 		printk("%c%.2x", (i? ':': ' '), addr[i]);
 	}
 	printk("\n");
-
-	descpage = get_free_page(GFP_KERNEL);
-	if (descpage == 0) {
-		printk(KERN_ERR "GMAC: can't get a page for descriptors\n");
-		return -EAGAIN;
-	}
 
 	gm->desc_page = descpage;
 	gm->rxring = (volatile struct gmac_dma_desc *) descpage;
@@ -577,34 +574,29 @@ static int __init gmac_probe(void)
 
 	ether_setup(dev);
 
-	if (request_irq(dev->irq, gmac_interrupt, 0, "GMAC", dev)) {
+	if (request_irq(dev->irq, gmac_interrupt, 0, "GMAC", dev))
 		printk(KERN_ERR "GMAC: can't get irq %d\n", dev->irq);
-		return -EAGAIN;
-	}
 
+	gm->next_gmac = gmacs;
 	gmacs = dev;
-
-	return 0;
 }
 
-MODULE_AUTHOR("Paul Mackerras");
+MODULE_AUTHOR("Paul Mackerras/Ben Herrenschmidt");
 MODULE_DESCRIPTION("PowerMac GMAC driver.");
-
 
 static void __exit gmac_cleanup_module(void)
 {
 	struct gmac *gm;
+	struct net_device *dev;
 
-	/* XXX should handle more than one */
-	if (gmacs == NULL)
-		return;
-
-	gm = (struct gmac *) gmacs->priv;
-	free_irq(gmacs->irq, gmac_interrupt);
-	free_page(gm->descpage);
-	unregister_netdev(gmacs);
-	kfree(gmacs);
-	gmacs = NULL;
+	while ((dev = gmacs) != NULL) {
+		gm = (struct gmac *) dev->priv;
+		gmacs = gm->next_gmac;
+		free_irq(dev->irq, dev);
+		free_page(gm->desc_page);
+		unregister_netdev(dev);
+		kfree(dev);
+	}
 }
 
 module_init(gmac_probe);

@@ -145,10 +145,10 @@ struct pt_regs {
 	 * Floating point registers that the kernel considers
 	 * scratch:
 	 */
-	struct ia64_fpreg f6;		/* scratch*/
-	struct ia64_fpreg f7;		/* scratch*/
-	struct ia64_fpreg f8;		/* scratch*/
-	struct ia64_fpreg f9;		/* scratch*/
+	struct ia64_fpreg f6;		/* scratch */
+	struct ia64_fpreg f7;		/* scratch */
+	struct ia64_fpreg f8;		/* scratch */
+	struct ia64_fpreg f9;		/* scratch */
 };
 
 /*

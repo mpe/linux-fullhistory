@@ -911,15 +911,14 @@ static __inline__ void skb_bond(struct sk_buff *skb)
 static void net_tx_action(struct softirq_action *h)
 {
 	int cpu = smp_processor_id();
-	unsigned long flags;
 
 	if (softnet_data[cpu].completion_queue) {
 		struct sk_buff *clist;
 
-		local_irq_save(flags);
+		local_irq_disable();
 		clist = softnet_data[cpu].completion_queue;
 		softnet_data[cpu].completion_queue = NULL;
-		local_irq_restore(flags);
+		local_irq_enable();
 
 		while (clist != NULL) {
 			struct sk_buff *skb = clist;
@@ -933,10 +932,10 @@ static void net_tx_action(struct softirq_action *h)
 	if (softnet_data[cpu].output_queue) {
 		struct net_device *head;
 
-		local_irq_save(flags);
+		local_irq_disable();
 		head = softnet_data[cpu].output_queue;
 		softnet_data[cpu].output_queue = NULL;
-		local_irq_restore(flags);
+		local_irq_enable();
 
 		while (head != NULL) {
 			struct net_device *dev = head;

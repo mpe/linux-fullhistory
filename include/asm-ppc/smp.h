@@ -33,7 +33,7 @@ void smp_send_tlb_invalidate(int);
 
 /* 1 to 1 mapping on PPC -- Cort */
 #define cpu_logical_map(cpu) (cpu)
-extern int cpu_number_map[NR_CPUS];
+#define cpu_number_map(x) (x)
 extern volatile unsigned long cpu_callin_map[NR_CPUS];
 
 #define hard_smp_processor_id() (0)

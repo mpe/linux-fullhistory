@@ -410,6 +410,7 @@ typedef struct local_info_t {
     int suspended;
     unsigned last_ptr_value; /* last packets transmitted value */
     const char *manf_str;
+    spinlock_t lock;
 } local_info_t;
 
 /****************
@@ -429,6 +430,7 @@ static void do_reset(struct net_device *dev, int full);
 static int init_mii(struct net_device *dev);
 static void do_powerdown(struct net_device *dev);
 static int do_stop(struct net_device *dev);
+static void xirc_tx_timeout (struct net_device *dev);
 
 /*=============== Helper functions =========================*/
 static void
@@ -691,6 +693,8 @@ xirc2ps_attach(void)
     local = kmalloc(sizeof(*local), GFP_KERNEL);
     if (!local) return NULL;
     memset(local, 0, sizeof(*local));
+    
+    local->lock = SPIN_LOCK_UNLOCKED;
     link = &local->link; dev = &local->dev;
     link->priv = dev->priv = local;
 
@@ -717,7 +721,9 @@ xirc2ps_attach(void)
     dev->init = &do_init;
     dev->open = &do_open;
     dev->stop = &do_stop;
-    dev->tbusy = 1;
+    dev->tx_timeout = xirc_tx_timeout;
+    dev->watchdog_timeo = TX_TIMEOUT;
+    netif_start_queue (dev);
 
     /* Register with Card Services */
     link->next = dev_list;
@@ -1233,7 +1239,7 @@ xirc2ps_config(dev_link_t * link)
     /* we can now register the device with the net subsystem */
     dev->irq = link->irq.AssignedIRQ;
     dev->base_addr = link->io.BasePort1;
-    dev->tbusy = 0;
+    netif_start_queue (dev);
     if ((err=register_netdev(dev))) {
 	printk(KNOT_XIRC "register_netdev() failed\n");
 	goto config_error;
@@ -1334,7 +1340,7 @@ xirc2ps_event(event_t event, int priority,
       case CS_EVENT_CARD_REMOVAL:
 	  link->state &= ~DEV_PRESENT;
 	  if (link->state & DEV_CONFIG) {
-	      dev->tbusy = 1; dev->start = 0;
+	      netif_stop_queue (dev);
 	      link->release.expires = jiffies + HZ / 20;
 	      add_timer(&link->release);
 	  }
@@ -1349,7 +1355,7 @@ xirc2ps_event(event_t event, int priority,
       case CS_EVENT_RESET_PHYSICAL:
 	  if (link->state & DEV_CONFIG) {
 	      if (link->open) {
-		  dev->tbusy = 1; dev->start = 0;
+		  netif_stop_queue (dev);
 		  lp->suspended=1;
 		  do_powerdown(dev);
 	      }
@@ -1365,7 +1371,7 @@ xirc2ps_event(event_t event, int priority,
 	     if (link->open) {
 		 do_reset(dev,1);
 		 lp->suspended=0;
-		 dev->tbusy = 0; dev->start = 1;
+		 netif_start_queue (dev);
 	     }
 	  }
 	  break;
@@ -1393,14 +1399,8 @@ xirc2ps_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 				  * -- on a laptop?
 				  */
 
-    if (!dev->start)
-       return;
+    spin_lock (&lp->lock);
 
-    if (dev->interrupt) {
-	printk(KERR_XIRC "re-entering isr on irq %d (dev=%p)\n", irq, dev);
-	return;
-    }
-    dev->interrupt = 1;
     ioaddr = dev->base_addr;
     if (lp->mohawk) { /* must disable the interrupt */
 	PutByte(XIRCREG_CR, 0);
@@ -1555,8 +1555,7 @@ xirc2ps_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	    DEBUG(0, "PTR not changed?\n");
 	} else
 	    lp->stats.tx_packets += lp->last_ptr_value - n;
-	dev->tbusy = 0;
-	mark_bh(NET_BH);  /* Inform upper layers. */
+	netif_wake_queue (dev);
     }
     if (tx_status & 0x0002) {	/* Execessive collissions */
 	DEBUG(0, "tx restarted due to execssive collissions\n");
@@ -1595,7 +1594,9 @@ xirc2ps_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	    goto loop_entry;
     }
     SelectPage(saved_page);
-    dev->interrupt = 0;
+
+    spin_unlock (&lp->lock);
+
     PutByte(XIRCREG_CR, EnableIntr);  /* re-enable interrupts */
     /* Instead of dropping packets during a receive, we could
      * force an interrupt with this command:
@@ -1604,6 +1605,26 @@ xirc2ps_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 } /* xirc2ps_interrupt */
 
 /*====================================================================*/
+
+static void xirc_tx_timeout (struct net_device *dev)
+{
+	local_info_t *lp = dev->priv;
+
+	if (lp->suspended) {
+	    dev->trans_start = jiffies;
+	    lp->stats.tx_dropped++;
+	    netif_start_queue (dev);
+	    return;
+	}
+
+	printk(KERN_NOTICE "%s: transmit timed out\n", dev->name);
+	lp->stats.tx_errors++;
+	/* reset the card */
+	do_reset(dev,1);
+	dev->trans_start = jiffies;
+	netif_start_queue (dev);
+}
+
 
 static int
 do_start_xmit(struct sk_buff *skb, struct net_device *dev)
@@ -1617,32 +1638,7 @@ do_start_xmit(struct sk_buff *skb, struct net_device *dev)
     DEBUG(1, "do_start_xmit(skb=%p, dev=%p) len=%u\n",
 	  skb, dev, pktlen);
 
-    /* Transmitter timeout, serious problems */
-    if (dev->tbusy) {
-	int tickssofar = jiffies - dev->trans_start;
-
-	if (lp->suspended) {
-	    dev_kfree_skb (skb);
-	    dev->trans_start = jiffies;
-	    lp->stats.tx_dropped++;
-	    return 0;
-	}
-	if (tickssofar < TX_TIMEOUT)
-	    return 1;
-
-	printk(KERN_NOTICE "%s: transmit timed out\n", dev->name);
-	lp->stats.tx_errors++;
-	/* reset the card */
-	do_reset(dev,1);
-	dev->trans_start = jiffies;
-	dev->tbusy = 0;
-    }
-
-    if (test_and_set_bit(0, (void*)&dev->tbusy)) {
-	printk(KWRN_XIRC "transmitter access conflict\n");
-	dev_kfree_skb (skb);
-	return 0;
-    }
+    netif_stop_queue (dev);
 
     /* adjust the packet length to min. required
      * and hope that the buffer is large enough
@@ -1664,7 +1660,6 @@ do_start_xmit(struct sk_buff *skb, struct net_device *dev)
     DEBUG(2 + (okay ? 2 : 0), "%s: avail. tx space=%u%s\n",
 	  dev->name, freespace, okay ? " (okay)":" (not enough)");
     if (!okay) { /* not enough space */
-	dev->tbusy = 1;
 	return 1;  /* upper layer may decide to requeue this packet */
     }
     /* send the packet */
@@ -1678,7 +1673,7 @@ do_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
     dev_kfree_skb (skb);
     dev->trans_start = jiffies;
-    dev->tbusy = 0;
+    netif_start_queue (dev);
     lp->stats.tx_bytes += pktlen;
     return 0;
 }
@@ -1823,7 +1818,7 @@ do_open(struct net_device *dev)
     link->open++;
     MOD_INC_USE_COUNT;
 
-    dev->interrupt = 0; dev->tbusy = 0; dev->start = 1;
+    netif_start_queue (dev);
     lp->suspended = 0;
     do_reset(dev,1);
 
@@ -2141,8 +2136,7 @@ do_stop(struct net_device *dev)
     if (!link)
 	return -ENODEV;
 
-    dev->tbusy = 1;
-    dev->start = 0;
+    netif_stop_queue (dev);
 
     SelectPage(0);
     PutByte(XIRCREG_CR, 0);  /* disable interrupts */
@@ -2152,7 +2146,7 @@ do_stop(struct net_device *dev)
     PutByte(XIRCREG4_GPR1, 0);	/* clear bit 0: power down */
     SelectPage(0);
 
-    link->open--; dev->start = 0;
+    link->open--;
     if (link->state & DEV_STALE_CONFIG) {
 	link->release.expires = jiffies + HZ/20;
 	link->state |= DEV_RELEASE_PENDING;

@@ -155,6 +155,7 @@ static void update_stats(struct net_device *dev);
 static struct net_device_stats *el3_get_stats(struct net_device *dev);
 static int el3_rx(struct net_device *dev);
 static int el3_close(struct net_device *dev);
+static void el3_tx_timeout(struct net_device *dev);
 
 static void set_multicast_list(struct net_device *dev);
 
@@ -257,7 +258,10 @@ static dev_link_t *tc589_attach(void)
     dev->init = &tc589_init;
     dev->open = &el3_open;
     dev->stop = &el3_close;
-    dev->tbusy = 1;
+    dev->tx_timeout = el3_tx_timeout;
+    dev->watchdog_timeo = TX_TIMEOUT;
+    
+    netif_start_queue (dev);
     
     /* Register with Card Services */
     link->next = dev_list;
@@ -399,7 +403,7 @@ static void tc589_config(dev_link_t *link)
 	
     dev->irq = link->irq.AssignedIRQ;
     dev->base_addr = link->io.BasePort1;
-    dev->tbusy = 0;
+    netif_start_queue (dev);
     if (register_netdev(dev) != 0) {
 	printk(KERN_NOTICE "3c589_cs: register_netdev() failed\n");
 	goto failed;
@@ -508,7 +512,7 @@ static int tc589_event(event_t event, int priority,
     case CS_EVENT_CARD_REMOVAL:
 	link->state &= ~DEV_PRESENT;
 	if (link->state & DEV_CONFIG) {
-	    dev->tbusy = 1; dev->start = 0;
+	    netif_stop_queue (dev);
 	    link->release.expires = jiffies + HZ/20;
 	    add_timer(&link->release);
 	}
@@ -523,7 +527,7 @@ static int tc589_event(event_t event, int priority,
     case CS_EVENT_RESET_PHYSICAL:
 	if (link->state & DEV_CONFIG) {
 	    if (link->open) {
-		dev->tbusy = 1; dev->start = 0;
+		netif_stop_queue (dev);
 	    }
 	    CardServices(ReleaseConfiguration, link->handle);
 	}
@@ -536,7 +540,7 @@ static int tc589_event(event_t event, int priority,
 	    CardServices(RequestConfiguration, link->handle, &link->conf);
 	    if (link->open) {
 		tc589_reset(dev);
-		dev->tbusy = 0; dev->start = 1;
+		netif_start_queue (dev);
 	    }
 	}
 	break;
@@ -683,7 +687,7 @@ static int el3_open(struct net_device *dev)
 
     link->open++;
     MOD_INC_USE_COUNT;
-    dev->interrupt = 0; dev->tbusy = 0; dev->start = 1;
+    netif_start_queue (dev);
     
     tc589_reset(dev);
     lp->media.function = &media_check;
@@ -709,7 +713,7 @@ static void el3_tx_timeout(struct net_device *dev)
     /* Issue TX_RESET and TX_START commands. */
     wait_for_completion(dev, TxReset);
     outw(TxEnable, ioaddr + EL3_CMD);
-    dev->tbusy = 0;
+    netif_start_queue (dev);
 }
 
 static void pop_tx_status(struct net_device *dev)
@@ -739,22 +743,12 @@ static int el3_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
     ioaddr_t ioaddr = dev->base_addr;
 
-    /* Transmitter timeout, serious problems. */
-    if (dev->tbusy) {
-	if (jiffies - dev->trans_start < TX_TIMEOUT)
-	    return 1;
-	el3_tx_timeout(dev);
-    }
-
     DEBUG(3, "%s: el3_start_xmit(length = %ld) called, "
 	  "status %4.4x.\n", dev->name, (long)skb->len,
 	  inw(ioaddr + EL3_STATUS));
 
-    /* Avoid timer-based retransmission conflicts. */
-    if (test_and_set_bit(0, (void*)&dev->tbusy) != 0)
-	printk(KERN_NOTICE "%s: transmitter access conflict.\n",
-	       dev->name);
-    else {
+    netif_stop_queue (dev);
+    if (1) {
 	struct el3_private *lp = (struct el3_private *)dev->priv;
 	lp->stats.tx_bytes += skb->len;
 	/* Put out the doubleword header... */
@@ -765,7 +759,7 @@ static int el3_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	
 	dev->trans_start = jiffies;
 	if (inw(ioaddr + TX_FREE) > 1536) {
-	    dev->tbusy = 0;
+	    netif_start_queue (dev);
 	} else
 	    /* Interrupt us when the FIFO has room for max-sized packet. */
 	    outw(SetTxThreshold + 1536, ioaddr + EL3_CMD);
@@ -785,7 +779,7 @@ static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     ioaddr_t ioaddr, status;
     int i = 0;
     
-    if ((lp == NULL) || !dev->start)
+    if (lp == NULL)
 	return;
     ioaddr = dev->base_addr;
 
@@ -802,10 +796,12 @@ static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     
     while ((status = inw(ioaddr + EL3_STATUS)) &
 	(IntLatch | RxComplete | StatsFull)) {
+#if 0
 	if ((dev->start == 0) || ((status & 0xe000) != 0x2000)) {
 	    DEBUG(1, "%s: interrupt from dead card\n", dev->name);
 	    break;
 	}
+#endif
 	
 	if (status & RxComplete)
 	    el3_rx(dev);
@@ -814,8 +810,9 @@ static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	    DEBUG(3, "    TX room bit was handled.\n");
 	    /* There's room in the FIFO for a full-sized packet. */
 	    outw(AckIntr | TxAvailable, ioaddr + EL3_CMD);
-	    dev->tbusy = 0;
-	    mark_bh(NET_BH);
+	    netif_wake_queue (dev);
+	} else {
+	    netif_stop_queue (dev);
 	}
 	
 	if (status & TxComplete)
@@ -879,7 +876,9 @@ static void media_check(u_long arg)
     u_short media, errs;
     u_long flags;
 
+#if 0
     if (dev->start == 0) goto reschedule;
+#endif
 
     EL3WINDOW(1);
     /* Check for pending interrupt with expired latency timer: with
@@ -1093,6 +1092,8 @@ static int el3_close(struct net_device *dev)
     ioaddr_t ioaddr = dev->base_addr;
     
     DEBUG(1, "%s: shutting down ethercard.\n", dev->name);
+    
+    netif_stop_queue (dev);
 
     if (DEV_OK(link)) {
 	/* Turn off statistics ASAP.  We update lp->stats below. */
@@ -1122,7 +1123,6 @@ static int el3_close(struct net_device *dev)
     }
 
     link->open--;
-    dev->start = 0;
     del_timer(&lp->media);
     if (link->state & DEV_STALE_CONFIG) {
 	link->release.expires = jiffies + HZ/20;

@@ -9,7 +9,7 @@
 	.text
 
 /*
- * Use the BAT0 registers to map the 1st 8MB of RAM to
+ * Use the BAT3 registers to map the 1st 8MB of RAM to
  * the address given as the 1st argument.
  */
 	.globl	setup_bats

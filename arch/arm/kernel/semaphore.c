@@ -164,6 +164,126 @@ int __down_trylock(struct semaphore * sem)
 	return 1;
 }
 
+struct rw_semaphore *down_read_failed_biased(struct rw_semaphore *sem)
+{
+	struct task_struct *tsk = current;
+	DECLARE_WAITQUEUE(wait, tsk);
+
+	add_wait_queue(&sem->wait, &wait);	/* put ourselves at the head of the list */
+
+	for (;;) {
+		if (sem->read_bias_granted && xchg(&sem->read_bias_granted, 0))
+			break;
+		set_task_state(tsk, TASK_UNINTERRUPTIBLE);
+		if (!sem->read_bias_granted)
+			schedule();
+	}
+
+	remove_wait_queue(&sem->wait, &wait);
+	tsk->state = TASK_RUNNING;
+
+	return sem;
+}
+
+struct rw_semaphore *down_write_failed_biased(struct rw_semaphore *sem)
+{
+        struct task_struct *tsk = current;
+	DECLARE_WAITQUEUE(wait, tsk);
+
+	add_wait_queue_exclusive(&sem->write_bias_wait, &wait); /* put ourselves at the end of the list */
+
+	for (;;) {
+		if (sem->write_bias_granted && xchg(&sem->write_bias_granted, 0))
+			break;
+		set_task_state(tsk, TASK_UNINTERRUPTIBLE | TASK_EXCLUSIVE);
+		if (!sem->write_bias_granted)
+			schedule();
+	}
+
+	remove_wait_queue(&sem->write_bias_wait, &wait);
+	tsk->state = TASK_RUNNING;
+
+	/* if the lock is currently unbiased, awaken the sleepers
+	 * FIXME: this wakes up the readers early in a bit of a
+	 * stampede -> bad!
+	 */
+	if (atomic_read(&sem->count) >= 0)
+		wake_up(&sem->wait);
+
+	return sem;
+}
+
+/* Wait for the lock to become unbiased.  Readers
+ * are non-exclusive. =)
+ */
+struct rw_semaphore *down_read_failed(struct rw_semaphore *sem)
+{
+	struct task_struct *tsk = current;
+	DECLARE_WAITQUEUE(wait, tsk);
+
+	/* this takes care of granting the lock */
+	__up_op_read(sem, __rwsem_wake);
+
+	add_wait_queue(&sem->wait, &wait);
+
+	while (atomic_read(&sem->count) < 0) {
+		set_task_state(tsk, TASK_UNINTERRUPTIBLE);
+		if (atomic_read(&sem->count) >= 0)
+			break;
+		schedule();
+	}
+
+	remove_wait_queue(&sem->wait, &wait);
+	tsk->state = TASK_RUNNING;
+
+	return sem;
+}
+
+/* Wait for the lock to become unbiased. Since we're
+ * a writer, we'll make ourselves exclusive.
+ */
+struct rw_semaphore *down_write_failed(struct rw_semaphore *sem)
+{
+	struct task_struct *tsk = current;
+	DECLARE_WAITQUEUE(wait, tsk);
+
+	/* this takes care of granting the lock */
+	__up_op_write(sem, __rwsem_wake);
+
+	add_wait_queue_exclusive(&sem->wait, &wait);
+
+	while (atomic_read(&sem->count) < 0) {
+		set_task_state(tsk, TASK_UNINTERRUPTIBLE | TASK_EXCLUSIVE);
+		if (atomic_read(&sem->count) >= 0)
+			break;	/* we must attempt to aquire or bias the lock */		schedule();
+	}
+
+	remove_wait_queue(&sem->wait, &wait);
+	tsk->state = TASK_RUNNING;
+
+	return sem;
+}
+
+/* Called when someone has done an up that transitioned from
+ * negative to non-negative, meaning that the lock has been
+ * granted to whomever owned the bias.
+ */
+struct rw_semaphore *rwsem_wake_readers(struct rw_semaphore *sem)
+{
+	if (xchg(&sem->read_bias_granted, 1))
+		BUG();
+	wake_up(&sem->wait);
+	return sem;
+}
+
+struct rw_semaphore *rwsem_wake_writer(struct rw_semaphore *sem)
+{
+	if (xchg(&sem->write_bias_granted, 1))
+		BUG();
+	wake_up(&sem->write_bias_wait);
+	return sem;
+}
+
 /*
  * The semaphore operations have a special calling sequence that
  * allow us to do a simpler in-line version of them. These routines
@@ -174,30 +294,65 @@ int __down_trylock(struct semaphore * sem)
  * registers (r0 to r3, ip and lr) except r0 in the cases where it
  * is used as a return value..
  */
-asm(".align	5
+asm("	.section	.text.lock, \"ax\"
+	.align	5
 	.globl	__down_failed
 __down_failed:
 	stmfd	sp!, {r0 - r3, ip, lr}
 	bl	__down
-	ldmfd	sp!, {r0 - r3, ip, pc}");
+	ldmfd	sp!, {r0 - r3, ip, pc}
 
-asm(".align	5
+	.align	5
 	.globl	__down_interruptible_failed
 __down_interruptible_failed:
 	stmfd	sp!, {r1 - r3, ip, lr}
 	bl	__down_interruptible
-	ldmfd	sp!, {r1 - r3, ip, pc}");
+	ldmfd	sp!, {r1 - r3, ip, pc}
 
-asm(".align	5
+	.align	5
 	.globl	__down_trylock_failed
 __down_trylock_failed:
 	stmfd	sp!, {r1 - r3, ip, lr}
 	bl	__down_trylock
-	ldmfd	sp!, {r1 - r3, ip, pc}");
+	ldmfd	sp!, {r1 - r3, ip, pc}
 
-asm(".align	5
+	.align	5
 	.globl	__up_wakeup
 __up_wakeup:
 	stmfd	sp!, {r0 - r3, ip, lr}
 	bl	__up
-	ldmfd	sp!, {r0 - r3, ip, pc}");
+	ldmfd	sp!, {r0 - r3, ip, pc}
+
+	.align	5
+	.globl	__down_read_failed
+__down_read_failed:
+	stmfd	sp!, {r0 - r3, ip, lr}
+	bcc	1f
+	bl	down_read_failed_biased
+	ldmfd	sp!, {r0 - r3, ip, pc}
+1:	bl	down_read_failed
+	/***/
+
+	.align	5
+	.globl	__down_write_failed
+__down_write_failed:
+	stmfd	sp!, {r0 - r3, ip, lr}
+	bcc	1f
+	bl	down_write_failed_biased
+	ldmfd	sp!, {r0 - r3, ip, pc}
+1:	bl	down_write_failed
+	/***/
+
+	.align	5
+	.globl	__rwsem_wake
+__rwsem_wake:
+	stmfd	sp!, {r0 - r3, ip, lr}
+	beq	1f
+	bl	rwsem_wake_readers
+	ldmfd	sp!, {r0 - r3, ip, pc}
+1:	bl	rwsem_wake_writer
+	ldmfd	sp!, {r0 - r3, ip, pc}
+
+	.previous
+	");
+

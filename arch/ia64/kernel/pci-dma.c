@@ -21,7 +21,7 @@
 extern __inline__ unsigned long
 get_order (unsigned long size)
 {
-	unsigned long order = ia64_fls(size);
+	unsigned long order = ia64_fls(size - 1) + 1;
 
 	printk ("get_order: size=%lu, order=%lu\n", size, order);
 

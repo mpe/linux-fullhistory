@@ -143,7 +143,7 @@ int __init com90xx_probe(struct net_device *dev)
 		numprint %= 8;
 		if (!numprint) {
 			BUGMSG2(D_INIT, "\n");
-			BUGMSG(D_INIT, "S1: ");
+			BUGMSG2(D_INIT, "S1: ");
 		}
 		BUGMSG2(D_INIT, "%Xh ", *port);
 
@@ -151,7 +151,7 @@ int __init com90xx_probe(struct net_device *dev)
 
 		if (check_region(*port, ARCNET_TOTAL_SIZE)) {
 			BUGMSG2(D_INIT_REASONS, "(check_region)\n");
-			BUGMSG(D_INIT_REASONS, "S1: ");
+			BUGMSG2(D_INIT_REASONS, "S1: ");
 			BUGLVL(D_INIT_REASONS) numprint = 0;
 			*port = ports[numports - 1];
 			numports--;
@@ -160,7 +160,7 @@ int __init com90xx_probe(struct net_device *dev)
 		}
 		if (ASTATUS() == 0xFF) {
 			BUGMSG2(D_INIT_REASONS, "(empty)\n");
-			BUGMSG(D_INIT_REASONS, "S1: ");
+			BUGMSG2(D_INIT_REASONS, "S1: ");
 			BUGLVL(D_INIT_REASONS) numprint = 0;
 			*port = ports[numports - 1];
 			numports--;
@@ -170,13 +170,13 @@ int __init com90xx_probe(struct net_device *dev)
 		inb(_RESET);	/* begin resetting card */
 
 		BUGMSG2(D_INIT_REASONS, "\n");
-		BUGMSG(D_INIT_REASONS, "S1: ");
+		BUGMSG2(D_INIT_REASONS, "S1: ");
 		BUGLVL(D_INIT_REASONS) numprint = 0;
 	}
 	BUGMSG2(D_INIT, "\n");
 
 	if (!numports) {
-		BUGMSG(D_NORMAL, "S1: No ARCnet cards found.\n");
+		BUGMSG2(D_NORMAL, "S1: No ARCnet cards found.\n");
 		return -ENODEV;
 	}
 	/* Stage 2: we have now reset any possible ARCnet cards, so we can't
@@ -189,7 +189,7 @@ int __init com90xx_probe(struct net_device *dev)
 		numprint %= 8;
 		if (!numprint) {
 			BUGMSG2(D_INIT, "\n");
-			BUGMSG(D_INIT, "S2: ");
+			BUGMSG2(D_INIT, "S2: ");
 		}
 		BUGMSG2(D_INIT, "%Xh ", *port);
 	}
@@ -207,13 +207,13 @@ int __init com90xx_probe(struct net_device *dev)
 		numprint %= 8;
 		if (!numprint) {
 			BUGMSG2(D_INIT, "\n");
-			BUGMSG(D_INIT, "S3: ");
+			BUGMSG2(D_INIT, "S3: ");
 		}
 		BUGMSG2(D_INIT, "%lXh ", *shmem);
 
 		if (check_mem_region(*shmem, BUFFER_SIZE)) {
 			BUGMSG2(D_INIT_REASONS, "(check_mem_region)\n");
-			BUGMSG(D_INIT_REASONS, "Stage 3: ");
+			BUGMSG2(D_INIT_REASONS, "Stage 3: ");
 			BUGLVL(D_INIT_REASONS) numprint = 0;
 			*shmem = shmems[numshmems - 1];
 			numshmems--;
@@ -223,7 +223,7 @@ int __init com90xx_probe(struct net_device *dev)
 		if (isa_readb(ptr) != TESTvalue) {
 			BUGMSG2(D_INIT_REASONS, "(%02Xh != %02Xh)\n",
 				isa_readb(ptr), TESTvalue);
-			BUGMSG(D_INIT_REASONS, "S3: ");
+			BUGMSG2(D_INIT_REASONS, "S3: ");
 			BUGLVL(D_INIT_REASONS) numprint = 0;
 			*shmem = shmems[numshmems - 1];
 			numshmems--;
@@ -238,20 +238,20 @@ int __init com90xx_probe(struct net_device *dev)
 		isa_writeb(0x42, ptr);
 		if (isa_readb(ptr) != 0x42) {
 			BUGMSG2(D_INIT_REASONS, "(read only)\n");
-			BUGMSG(D_INIT_REASONS, "S3: ");
+			BUGMSG2(D_INIT_REASONS, "S3: ");
 			*shmem = shmems[numshmems - 1];
 			numshmems--;
 			shmem--;
 			continue;
 		}
 		BUGMSG2(D_INIT_REASONS, "\n");
-		BUGMSG(D_INIT_REASONS, "S3: ");
+		BUGMSG2(D_INIT_REASONS, "S3: ");
 		BUGLVL(D_INIT_REASONS) numprint = 0;
 	}
 	BUGMSG2(D_INIT, "\n");
 
 	if (!numshmems) {
-		BUGMSG(D_NORMAL, "S3: No ARCnet cards found.\n");
+		BUGMSG2(D_NORMAL, "S3: No ARCnet cards found.\n");
 		return -ENODEV;
 	}
 	/* Stage 4: something of a dummy, to report the shmems that are
@@ -263,7 +263,7 @@ int __init com90xx_probe(struct net_device *dev)
 		numprint %= 8;
 		if (!numprint) {
 			BUGMSG2(D_INIT, "\n");
-			BUGMSG(D_INIT, "S4: ");
+			BUGMSG2(D_INIT, "S4: ");
 		}
 		BUGMSG2(D_INIT, "%lXh ", *shmem);
 	}
@@ -282,7 +282,7 @@ int __init com90xx_probe(struct net_device *dev)
 		numprint %= 8;
 		if (!numprint) {
 			BUGMSG2(D_INIT, "\n");
-			BUGMSG(D_INIT, "S5: ");
+			BUGMSG2(D_INIT, "S5: ");
 		}
 		BUGMSG2(D_INIT, "%Xh ", *port);
 
@@ -292,7 +292,7 @@ int __init com90xx_probe(struct net_device *dev)
 		if ((status & 0x9D)
 		    != (NORXflag | RECONflag | TXFREEflag | RESETflag)) {
 			BUGMSG2(D_INIT_REASONS, "(status=%Xh)\n", status);
-			BUGMSG(D_INIT_REASONS, "S5: ");
+			BUGMSG2(D_INIT_REASONS, "S5: ");
 			BUGLVL(D_INIT_REASONS) numprint = 0;
 			*port = ports[numports - 1];
 			numports--;
@@ -304,7 +304,7 @@ int __init com90xx_probe(struct net_device *dev)
 		if (status & RESETflag) {
 			BUGMSG2(D_INIT_REASONS, " (eternal reset, status=%Xh)\n",
 				status);
-			BUGMSG(D_INIT_REASONS, "S5: ");
+			BUGMSG2(D_INIT_REASONS, "S5: ");
 			BUGLVL(D_INIT_REASONS) numprint = 0;
 			*port = ports[numports - 1];
 			numports--;
@@ -327,7 +327,7 @@ int __init com90xx_probe(struct net_device *dev)
 
 			if (airq <= 0) {
 				BUGMSG2(D_INIT_REASONS, "(airq=%d)\n", airq);
-				BUGMSG(D_INIT_REASONS, "S5: ");
+				BUGMSG2(D_INIT_REASONS, "S5: ");
 				BUGLVL(D_INIT_REASONS) numprint = 0;
 				*port = ports[numports - 1];
 				numports--;
@@ -398,7 +398,7 @@ int __init com90xx_probe(struct net_device *dev)
 		isa_writeb(TESTvalue, *shmem);
 
 	if (retval && dev && !numcards)
-		BUGMSG(D_NORMAL, "S5: No ARCnet cards found.\n");
+		BUGMSG2(D_NORMAL, "S5: No ARCnet cards found.\n");
 	return retval;
 }
 
@@ -416,7 +416,7 @@ static int __init com90xx_found(struct net_device *dev0, int ioaddr, int airq,
 
 	/* allocate struct net_device if we don't have one yet */
 	if (!dev && !(dev = dev_alloc("arc%d", &err))) {
-		BUGMSG(D_NORMAL, "Can't allocate device!\n");
+		BUGMSG2(D_NORMAL, "com90xx: Can't allocate device!\n");
 		return err;
 	}
 	lp = dev->priv = kmalloc(sizeof(struct arcnet_local), GFP_KERNEL);
@@ -546,8 +546,7 @@ int com90xx_reset(struct net_device *dev, int really_reset)
 	struct arcnet_local *lp = (struct arcnet_local *) dev->priv;
 	short ioaddr = dev->base_addr;
 
-	BUGMSG(D_INIT, "Resetting %s (status=%02Xh)\n",
-	       dev->name, ASTATUS());
+	BUGMSG(D_INIT, "Resetting (status=%02Xh)\n", ASTATUS());
 
 	if (really_reset) {
 		/* reset the card */
@@ -653,13 +652,11 @@ void cleanup_module(void)
 		dev = cards[count];
 		lp = (struct arcnet_local *) dev->priv;
 
-		if (dev->start)
-			dev->stop(dev);
+		unregister_netdev(dev);
 		free_irq(dev->irq, dev);
 		iounmap(lp->mem_start);
 		release_region(dev->base_addr, ARCNET_TOTAL_SIZE);
 		release_mem_region(dev->mem_start, dev->mem_end - dev->mem_start + 1);
-		unregister_netdev(dev);
 		kfree(dev->priv);
 		kfree(dev);
 	}

@@ -119,10 +119,13 @@ static unsigned int znet_debug = ZNET_DEBUG;
 #define CMD0_STAT2 (2 << 5)
 #define CMD0_STAT3 (3 << 5)
 
+#define TX_TIMEOUT	10
+
 #define net_local znet_private
 struct znet_private {
 	int rx_dma, tx_dma;
 	struct net_device_stats stats;
+	spinlock_t lock;
 	/* The starting, current, and end pointers for the packet buffers. */
 	ushort *rx_start, *rx_cur, *rx_end;
 	ushort *tx_start, *tx_cur, *tx_end;
@@ -190,6 +193,7 @@ static struct net_device_stats *net_get_stats(struct net_device *dev);
 static void set_multicast_list(struct net_device *dev);
 static void hardware_init(struct net_device *dev);
 static void update_stop_hit(short ioaddr, unsigned short rx_stop_offset);
+static void znet_tx_timeout (struct net_device *dev);
 
 #ifdef notdef
 static struct sigaction znet_sigaction = { &znet_interrupt, 0, 0, NULL, };
@@ -245,6 +249,7 @@ int __init znet_probe(struct net_device *dev)
 	dev->priv = (void *) &zn;
 	zn.rx_dma = netinfo->dma1;
 	zn.tx_dma = netinfo->dma2;
+	zn.lock = SPIN_LOCK_UNLOCKED;
 
 	/* These should never fail.  You can't add devices to a sealed box! */
 	if (request_irq(dev->irq, &znet_interrupt, 0, "ZNet", dev)
@@ -275,6 +280,8 @@ int __init znet_probe(struct net_device *dev)
 	dev->stop = &znet_close;
 	dev->get_stats	= net_get_stats;
 	dev->set_multicast_list = &set_multicast_list;
+	dev->tx_timeout = znet_tx_timeout;
+	dev->watchdog_timeo = TX_TIMEOUT;
 
 	/* Fill in the 'dev' with ethernet-generic values. */
 	ether_setup(dev);
@@ -306,41 +313,47 @@ static int znet_open(struct net_device *dev)
 		printk(KERN_WARNING "%s: Problem turning on the transceiver power.\n",
 			   dev->name);
 
-	dev->tbusy = 0;
-	dev->interrupt = 0;
 	hardware_init(dev);
-	dev->start = 1;
+	netif_start_queue (dev);
 
 	return 0;
+}
+
+
+static void znet_tx_timeout (struct net_device *dev)
+{
+	int ioaddr = dev->base_addr;
+	ushort event, tx_status, rx_offset, state;
+
+	outb (CMD0_STAT0, ioaddr);
+	event = inb (ioaddr);
+	outb (CMD0_STAT1, ioaddr);
+	tx_status = inw (ioaddr);
+	outb (CMD0_STAT2, ioaddr);
+	rx_offset = inw (ioaddr);
+	outb (CMD0_STAT3, ioaddr);
+	state = inb (ioaddr);
+	printk (KERN_WARNING "%s: transmit timed out, status %02x %04x %04x %02x,"
+	 " resetting.\n", dev->name, event, tx_status, rx_offset, state);
+	if (tx_status == 0x0400)
+		printk (KERN_WARNING "%s: Tx carrier error, check transceiver cable.\n",
+			dev->name);
+	outb (CMD0_RESET, ioaddr);
+	hardware_init (dev);
+	netif_start_queue (dev);
 }
 
 static int znet_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 	struct net_local *lp = (struct net_local *)dev->priv;
+	unsigned long flags;
 
 	if (znet_debug > 4)
-		printk(KERN_DEBUG "%s: ZNet_send_packet(%ld).\n", dev->name, dev->tbusy);
+		printk(KERN_DEBUG "%s: ZNet_send_packet.\n", dev->name);
 
-	/* Transmitter timeout, likely just recovery after suspending the machine. */
-	if (dev->tbusy) {
-		ushort event, tx_status, rx_offset, state;
-		int tickssofar = jiffies - dev->trans_start;
-		if (tickssofar < 10)
-			return 1;
-		outb(CMD0_STAT0, ioaddr); event = inb(ioaddr);
-		outb(CMD0_STAT1, ioaddr); tx_status = inw(ioaddr);
-		outb(CMD0_STAT2, ioaddr); rx_offset = inw(ioaddr);
-		outb(CMD0_STAT3, ioaddr); state = inb(ioaddr);
-		printk(KERN_WARNING "%s: transmit timed out, status %02x %04x %04x %02x,"
-			   " resetting.\n", dev->name, event, tx_status, rx_offset, state);
-		if (tx_status == 0x0400)
-		  printk(KERN_WARNING "%s: Tx carrier error, check transceiver cable.\n",
-				 dev->name);
-		outb(CMD0_RESET, ioaddr);
-		hardware_init(dev);
-	}
-
+	netif_stop_queue (dev);
+	
 	/* Check that the part hasn't reset itself, probably from suspend. */
 	outb(CMD0_STAT0, ioaddr);
 	if (inw(ioaddr) == 0x0010
@@ -348,11 +361,7 @@ static int znet_send_packet(struct sk_buff *skb, struct net_device *dev)
 		&& inw(ioaddr) == 0x0010)
 	  hardware_init(dev);
 
-	/* Block a timer-based transmit from overlapping.  This could better be
-	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0)
-		printk(KERN_WARNING "%s: Transmitter access conflict.\n", dev->name);
-	else {
+	if (1) {
 		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
 		unsigned char *buf = (void *)skb->data;
 		ushort *tx_link = zn.tx_cur - 1;
@@ -385,13 +394,18 @@ static int znet_send_packet(struct sk_buff *skb, struct net_device *dev)
 			zn.tx_cur += rnd_len;
 		}
 		*zn.tx_cur++ = 0;
-		cli(); {
+
+		spin_lock_irqsave(&lp->lock, flags);
+		{
 			*tx_link = CMD0_TRANSMIT + CMD0_CHNL_1;
 			/* Is this always safe to do? */
 			outb(CMD0_TRANSMIT + CMD0_CHNL_1,ioaddr);
-		} sti();
+		}
+		spin_unlock_irqrestore (&lp->lock, flags);
 
 		dev->trans_start = jiffies;
+		netif_start_queue (dev);
+
 		if (znet_debug > 4)
 		  printk(KERN_DEBUG "%s: Transmitter queued, length %d.\n", dev->name, length);
 	}
@@ -403,6 +417,7 @@ static int znet_send_packet(struct sk_buff *skb, struct net_device *dev)
 static void	znet_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	struct net_device *dev = dev_id;
+	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr;
 	int boguscnt = 20;
 
@@ -411,7 +426,8 @@ static void	znet_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		return;
 	}
 
-	dev->interrupt = 1;
+	spin_lock (&lp->lock);
+	
 	ioaddr = dev->base_addr;
 
 	outb(CMD0_STAT0, ioaddr);
@@ -432,7 +448,6 @@ static void	znet_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 			break;
 
 		if ((status & 0x0F) == 4) {	/* Transmit done. */
-			struct net_local *lp = (struct net_local *)dev->priv;
 			int tx_status;
 			outb(CMD0_STAT1, ioaddr);
 			tx_status = inw(ioaddr);
@@ -449,8 +464,7 @@ static void	znet_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 				if ((tx_status | 0x0760) != 0x0760)
 				  lp->stats.tx_errors++;
 			}
-			dev->tbusy = 0;
-			mark_bh(NET_BH);	/* Inform upper layers. */
+			netif_wake_queue (dev);
 		}
 
 		if ((status & 0x40)
@@ -461,7 +475,8 @@ static void	znet_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		outb(CMD0_ACK,ioaddr);
 	} while (boguscnt--);
 
-	dev->interrupt = 0;
+	spin_unlock (&lp->lock);
+	
 	return;
 }
 
@@ -594,8 +609,7 @@ static int znet_close(struct net_device *dev)
 	unsigned long flags;
 	int ioaddr = dev->base_addr;
 
-	dev->tbusy = 1;
-	dev->start = 0;
+	netif_stop_queue (dev);
 
 	outb(CMD0_RESET, ioaddr);			/* CMD0_RESET */
 
@@ -728,7 +742,7 @@ static void hardware_init(struct net_device *dev)
 	update_stop_hit(ioaddr, 8192);
 	if (znet_debug > 1)  printk("enabling Rx.\n");
 	outb(CMD0_Rx_ENABLE+CMD0_CHNL_0, ioaddr);
-	dev->tbusy = 0;
+	netif_start_queue (dev);
 }
 
 static void update_stop_hit(short ioaddr, unsigned short rx_stop_offset)

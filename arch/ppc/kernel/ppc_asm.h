@@ -44,6 +44,28 @@
 #define REST_16FPRS(n, base)	REST_8FPRS(n, base); REST_8FPRS(n+8, base)
 #define REST_32FPRS(n, base)	REST_16FPRS(n, base); REST_16FPRS(n+16, base)
 
+/*
+ * Once a version of gas that understands the AltiVec instructions
+ * is freely available, we can do this the normal way...  - paulus
+ */
+#define LVX(r,a,b)	.long	(31<<26)+((r)<<21)+((a)<<16)+((b)<<11)+(103<<1)
+#define STVX(r,a,b)	.long	(31<<26)+((r)<<21)+((a)<<16)+((b)<<11)+(231<<1)
+#define MFVSCR(r)	.long	(4<<26)+((r)<<21)+(1540<<1)
+#define MTVSCR(r)	.long	(4<<26)+((r)<<11)+(802<<1)
+
+#define SAVE_VR(n,b,base)	li b,THREAD_VR0+(16*(n)); STVX(n,b,base)
+#define SAVE_2VR(n,b,base)	SAVE_VR(n,b,base); SAVE_VR(n+1,b,base) 
+#define SAVE_4VR(n,b,base)	SAVE_2VR(n,b,base); SAVE_2VR(n+2,b,base) 
+#define SAVE_8VR(n,b,base)	SAVE_4VR(n,b,base); SAVE_4VR(n+4,b,base) 
+#define SAVE_16VR(n,b,base)	SAVE_8VR(n,b,base); SAVE_8VR(n+8,b,base)
+#define SAVE_32VR(n,b,base)	SAVE_16VR(n,b,base); SAVE_16VR(n+16,b,base)
+#define REST_VR(n,b,base)	li b,THREAD_VR0+(16*(n)); LVX(n,b,base)
+#define REST_2VR(n,b,base)	REST_VR(n,b,base); REST_VR(n+1,b,base) 
+#define REST_4VR(n,b,base)	REST_2VR(n,b,base); REST_2VR(n+2,b,base) 
+#define REST_8VR(n,b,base)	REST_4VR(n,b,base); REST_4VR(n+4,b,base) 
+#define REST_16VR(n,b,base)	REST_8VR(n,b,base); REST_8VR(n+8,b,base) 
+#define REST_32VR(n,b,base)	REST_16VR(n,b,base); REST_16VR(n+16,b,base)
+
 #define SYNC \
 	sync; \
 	isync

@@ -26,7 +26,7 @@ int global_irq_holder = NO_PROC_ID;
 spinlock_t global_irq_lock;
 atomic_t global_irq_count;
 atomic_t global_bh_count;
-atomic_t global_bh_lock;
+spinlock_t global_bh_lock;
 
 #define INIT_STUCK (1<<26)
 

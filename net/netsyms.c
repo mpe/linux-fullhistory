@@ -540,6 +540,7 @@ EXPORT_SYMBOL(unregister_hipdev);
 #ifdef CONFIG_SYSCTL
 EXPORT_SYMBOL(sysctl_wmem_max);
 EXPORT_SYMBOL(sysctl_rmem_max);
+EXPORT_SYMBOL(sysctl_ip_default_ttl);
 #endif
 
 #if defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE) 

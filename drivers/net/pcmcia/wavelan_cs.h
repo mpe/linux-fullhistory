@@ -550,6 +550,7 @@ typedef u_char		mac_addr[WAVELAN_ADDR_SIZE];	/* Hardware address */
  */
 struct net_local
 {
+  spinlock_t	lock;
   dev_node_t 	node;		/* ???? What is this stuff ???? */
   device *	dev;		/* Reverse link... */
   dev_link_t *	link;		/* pcmcia structure */
@@ -609,10 +610,6 @@ void wv_roam_cleanup(struct net_device *dev);
 #endif	/* WAVELAN_ROAMING */
 
 /* ----------------------- MISC SUBROUTINES ------------------------ */
-static inline unsigned long	/* flags */
-	wv_splhi(void);		/* Disable interrupts */
-static inline void
-	wv_splx(unsigned long);	/* ReEnable interrupts : flags */
 static void
 	cs_error(client_handle_t, /* Report error to cardmgr */
 		 int,

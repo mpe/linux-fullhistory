@@ -8,8 +8,8 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET	:= mm.o
-O_OBJS		:= init.o extable.o fault-$(PROCESSOR).o mm-$(PROCESSOR).o \
-		   small_page.o
+O_OBJS		:= consistent.o extable.o fault-$(PROCESSOR).o init.o \
+		   mm-$(PROCESSOR).o small_page.o
 
 ifeq ($(CONFIG_CPU_26),y)
   O_OBJS	+= proc-arm2,3.o

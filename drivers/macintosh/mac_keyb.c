@@ -391,16 +391,17 @@ input_keycode(int keycode, int repeat)
 		 case 0x39:
 			handle_scancode(0x39, 1);
 			handle_scancode(0x39, 0);
-		 	mark_bh(KEYBOARD_BH);
+		 	tasklet_schedule(&keyboard_tasklet);
 		 	return;
 		 case 0x47:
 		 /*case 0xc7:*/
-		 	mark_bh(KEYBOARD_BH);
+		 	tasklet_schedule(&keyboard_tasklet);
 		 	break;
 		 }
 	}
 
 	handle_scancode(keycode, !up_flag);
+	tasklet_schedule(&keyboard_tasklet);
 }
 
 static void

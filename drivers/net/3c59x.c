@@ -403,8 +403,6 @@ struct vortex_private {
 	struct sk_buff* rx_skbuff[RX_RING_SIZE];
 	struct sk_buff* tx_skbuff[TX_RING_SIZE];
 	struct net_device *next_module;
-	void *priv_addr;
-	dma_addr_t ring_dma;
 	unsigned int cur_rx, cur_tx;		/* The next free ring entry */
 	unsigned int dirty_rx, dirty_tx;	/* The ring entries to be free()ed. */
 	struct net_device_stats stats;
@@ -769,13 +767,11 @@ static struct net_device *vortex_probe1(struct pci_dev *pdev,
 	vp->pci_devfn = pdev == NULL ? 0 : pdev->devfn;
 	vp->pdev = pdev;
 
-	vp->priv_addr = pci_alloc_consistent(pdev, sizeof(struct boom_rx_desc) * RX_RING_SIZE
-					     + sizeof(struct boom_tx_desc) * TX_RING_SIZE
-					     + 15, &vp->ring_dma);
-	/* Make sure rings are 16 byte aligned. */
-	vp->rx_ring = (void *)(((long)vp->priv_addr + 15) & ~15);
+	/* Makes sure rings are at least 16 byte aligned. */
+	vp->rx_ring = pci_alloc_consistent(pdev, sizeof(struct boom_rx_desc) * RX_RING_SIZE
+					   + sizeof(struct boom_tx_desc) * TX_RING_SIZE,
+					   &vp->rx_ring_dma);
 	vp->tx_ring = (struct boom_tx_desc *)(vp->rx_ring + RX_RING_SIZE);
-	vp->rx_ring_dma = (vp->ring_dma + 15) & ~15;
 	vp->tx_ring_dma = vp->rx_ring_dma + sizeof(struct boom_rx_desc) * RX_RING_SIZE;
 
 	/* The lower four bits are the media type. */
@@ -2062,7 +2058,7 @@ static void __exit vortex_cleanup_module (void)
 		kfree(root_vortex_dev);
 		pci_free_consistent(vp->pdev, sizeof(struct boom_rx_desc) * RX_RING_SIZE
 					    + sizeof(struct boom_tx_desc) * TX_RING_SIZE
-					    + 15, vp->priv_addr, vp->ring_dma);
+					    + 15, vp->rx_ring, vp->rx_ring_dma);
 		kfree(vp);
 		root_vortex_dev = next_dev;
 	}

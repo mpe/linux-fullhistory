@@ -3,7 +3,7 @@
  * 
  * Written 1997 by David Woodhouse.
  * Written 1994-1999 by Avery Pennarun.
- * Written 1999 by Martin Mares <mj@suse.cz>.
+ * Written 1999-2000 by Martin Mares <mj@suse.cz>.
  * Derived from skeleton.c by Donald Becker.
  *
  * Special thanks to Contemporary Controls, Inc. (www.ccontrols.com)
@@ -406,20 +406,13 @@ void cleanup_module(void)
 	struct net_device *dev = my_dev;
 	int ioaddr = dev->base_addr;
 
-	if (dev->start)
-		dev->stop(dev);
-
-	/* Flush TX and disable RX */
-	AINTMASK(0);		/* disable IRQ's */
-	ACOMMAND(NOTXcmd);	/* stop transmit */
-	ACOMMAND(NORXcmd);	/* disable receive */
+	unregister_netdev(dev);
 
 	/* Set the thing back to MMAP mode, in case the old driver is loaded later */
 	outb((inb(_CONFIG) & ~IOMAPflag), _CONFIG);
 
 	free_irq(dev->irq, dev);
 	release_region(dev->base_addr, ARCNET_TOTAL_SIZE);
-	unregister_netdev(dev);
 	kfree(dev->priv);
 	kfree(dev);
 }

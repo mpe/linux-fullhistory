@@ -48,9 +48,11 @@ main(void)
 	DEFINE(NEED_RESCHED, offsetof(struct task_struct, need_resched));
 	DEFINE(THREAD_FPR0, offsetof(struct thread_struct, fpr[0]));
 	DEFINE(THREAD_FPSCR, offsetof(struct thread_struct, fpscr));
-	DEFINE(THREAD_VRF, offsetof(struct thread_struct, vrf));
-	DEFINE(THREAD_VSCR, offsetof(struct thread_struct, vscr));
+#ifdef CONFIG_ALTIVEC
+	DEFINE(THREAD_VR0, offsetof(struct thread_struct, vr[0]));
 	DEFINE(THREAD_VRSAVE, offsetof(struct thread_struct, vrsave));
+	DEFINE(THREAD_VSCR, offsetof(struct thread_struct, vscr));
+#endif /* CONFIG_ALTIVEC */
 	/* Interrupt register frame */
 	DEFINE(TASK_UNION_SIZE, sizeof(union task_union));
 	DEFINE(STACK_FRAME_OVERHEAD, STACK_FRAME_OVERHEAD);

@@ -53,7 +53,6 @@ unsigned int prof_counter[NR_CPUS];
 cycles_t cacheflush_time;
 
 /* all cpu mappings are 1-1 -- Cort */
-int cpu_number_map[NR_CPUS] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,};
 volatile unsigned long cpu_callin_map[NR_CPUS] = {0,};
 
 int start_secondary(void *);

@@ -118,11 +118,11 @@ MachineCheckException(struct pt_regs *regs)
 		default:
 			printk("Unknown values in msr\n");
 		}
+		show_regs(regs);
+		print_backtrace((unsigned long *)regs->gpr[1]);
 #if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
 		debugger(regs);
 #endif
-		show_regs(regs);
-		print_backtrace((unsigned long *)regs->gpr[1]);
 		panic("machine check");
 	}
 	_exception(SIGSEGV, regs);	
@@ -141,44 +141,6 @@ SMIException(struct pt_regs *regs)
 	print_backtrace((unsigned long *)regs->gpr[1]);
 	panic("System Management Interrupt");
 }
-
-#if defined(CONFIG_ALTIVEC)
-void
-AltiVecUnavailable(struct pt_regs *regs)
-{
-	/*
-	 * This should be changed so we don't take a trap if coming
-	 * back when last_task_used_altivec == current.  We should also
-	 * allow the kernel to use the altivec regs on UP to store tasks
-	 * regs during switch
-	 *  -- Cort
-	 */
-	if ( regs->msr & MSR_VEC )
-	{
-		show_regs(regs);
-		panic("AltiVec trap with Altivec enabled!\n");
-	}
-		
-	if ( !user_mode(regs) )
-	{
-		show_regs(regs);
-		panic("Kernel Used Altivec with MSR_VEC off!\n");
-	}
-
-	if ( last_task_used_altivec != current )
-	{
-		if ( last_task_used_altivec )
-			giveup_altivec(current);
-		load_up_altivec(current);
-		/* on SMP we always save/restore on switch */
-#ifndef __SMP__		
-		last_task_used_altivec = current;
-#endif		
-	}
-	/* enable altivec for the task on return */
-	regs->msr |= MSR_VEC;
-}
-#endif /* CONFIG_ALTIVEC */
 
 void
 UnknownException(struct pt_regs *regs)

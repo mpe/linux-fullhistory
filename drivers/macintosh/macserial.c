@@ -2796,7 +2796,6 @@ static struct console sercons = {
 void __init serial_console_init(void)
 {
 	register_console(&sercons);
-	return kmem_start;
 }
 #endif /* ifdef CONFIG_SERIAL_CONSOLE */
 

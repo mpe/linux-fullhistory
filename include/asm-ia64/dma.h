@@ -6,11 +6,11 @@
  * Copyright (C) 1998, 1999 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 
-#include <asm/io.h>		/* need byte IO */
 #include <linux/config.h>
 #include <linux/spinlock.h>	/* And spinlocks */
 #include <linux/delay.h>
 
+#include <asm/io.h>		/* need byte IO */
 
 #ifdef HAVE_REALLY_SLOW_DMA_CONTROLLER
 #define dma_outb	outb_p

@@ -122,9 +122,10 @@ extern __inline__ pte_t mk_pte_phys(unsigned long physpage, pgprot_t pgprot)
 #define page_pte(page)		mk_pte(page, __pgprot(0))
 
 /* to find an entry in a page-table-directory */
-#define __pgd_offset(addr)	((addr) >> PGDIR_SHIFT)
+#define pgd_index(addr)		((addr) >> PGDIR_SHIFT)
+#define __pgd_offset(addr)	pgd_index(addr)
 
-#define pgd_offset(mm, addr)	((mm)->pgd+__pgd_offset(addr))
+#define pgd_offset(mm, addr)	((mm)->pgd+pgd_index(addr))
 
 /* to find an entry in a kernel page-table-directory */
 #define pgd_offset_k(addr)	pgd_offset(&init_mm, addr)

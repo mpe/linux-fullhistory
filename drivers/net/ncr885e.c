@@ -11,9 +11,10 @@
  */
 
 static const char *version =
-"ncr885e.c:v0.8 11/30/98 dan@synergymicro.com\n";
+"ncr885e.c:v1.0 02/10/00 dan@synergymicro.com, cort@fsmlabs.com\n";
 
 #include <linux/config.h>
+
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/kernel.h>
@@ -81,8 +82,6 @@ static const char *chipname = "ncr885e";
 
 int ncr885e_debug = NCR885E_DEBUG;
 static int print_version = 0;
-static int debug = NCR885E_DEBUG; /* module parm */
-
 
 struct ncr885e_private {
 
@@ -426,7 +425,6 @@ ncr885e_tx( struct net_device *dev )
 	if ( xfer ) {
 
 		dev_kfree_skb( sp->tx_skbufs[i] );
-		mark_bh( NET_BH );
 
 		if ( txbits & TX_STATUS_TXOK ) {
 			sp->stats.tx_packets++;
@@ -443,7 +441,7 @@ ncr885e_tx( struct net_device *dev )
 
 	}
 
-	dev->tbusy = 0;
+	netif_start_queue(dev);
   
 	return;
 }
@@ -626,12 +624,6 @@ ncr885e_interrupt( int irq, void *dev_id, struct pt_regs *regs )
 	sp = (struct ncr885e_private *) dev->priv;
 	spin_lock( &sp->lock );
   
-	if ( dev->interrupt ) {
-		printk( KERN_ERR "%s: Re-entering interrupt handler...\n", 
-			dev->name );
-	}
-
-	dev->interrupt = 1;
 	status = inw( ioaddr + INTERRUPT_CLEAR );
 
 	if (ncr885e_debug > 2)
@@ -671,7 +663,6 @@ ncr885e_interrupt( int irq, void *dev_id, struct pt_regs *regs )
 		ncr885e_rx( dev );
 	}
   
-	dev->interrupt = 0;
 	spin_unlock( &sp->lock );
 
 	return;
@@ -779,8 +770,7 @@ ncr885e_tx_timeout( unsigned long data )
 
 	/* start anew from the beginning of the ring buffer (why not?) */
 	sp->tx_current = 0;
-	dev->tbusy = 0;
-	mark_bh( NET_BH );
+	netif_wake_queue(dev);
 
 	/* restart rx dma */
 	outl( (RX_DBDMA_ENABLE << 16) | RX_CHANNEL_RUN,
@@ -958,9 +948,7 @@ ncr885e_open( struct net_device *dev )
 	outl( (RX_DBDMA_ENABLE << 16)|RX_CHANNEL_RUN,
 	      ioaddr + RX_CHANNEL_CONTROL );
 
-	dev->start = 1;
-	dev->tbusy = 0;
-	dev->interrupt = 0;
+	netif_start_queue(dev);
 
 	MOD_INC_USE_COUNT;
 
@@ -990,7 +978,7 @@ ncr885e_xmit_start( struct sk_buff *skb, struct net_device *dev )
 		next = 0;
 
 	/* mark ourselves as busy, even if we have too many packets waiting */
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
 
 	/* see if it's necessary to defer this packet */
 	if ( sp->tx_active >= MAX_TX_ACTIVE ) {
@@ -1058,8 +1046,7 @@ ncr885e_close(struct net_device *dev)
 	struct ncr885e_private *np = (struct ncr885e_private *) dev->priv;
 	unsigned long ioaddr = dev->base_addr;
 
-	dev->start = 0;
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
 
 	spin_lock( &np->lock );
 
@@ -1148,8 +1135,7 @@ ncr885e_stats( struct net_device *dev )
  *  configuration.
  */
 
-static int
-ncr885e_probe1(unsigned long ioaddr, unsigned char irq )
+static int __init ncr885e_probe1(unsigned long ioaddr, unsigned char irq )
 
 {
 	struct net_device *dev;
@@ -1157,9 +1143,6 @@ ncr885e_probe1(unsigned long ioaddr, unsigned char irq )
 	unsigned short station_addr[3], val;
 	unsigned char *p;
 	int  i;
-
-	if (!request_region( ioaddr, NCR885E_TOTAL_SIZE, dev->name))
-		return -EBUSY;
 
 	dev = init_etherdev(NULL, 0 );
 
@@ -1413,12 +1396,16 @@ write_mii( unsigned long ioaddr, int reg, int data )
 
 #endif /* NCR885E_DEBUG_MII */
 
-MODULE_AUTHOR("dan@synergymicro.com");
-MODULE_DESCRIPTION("Symbios 53C885 Ethernet driver");
-MODULE_PARM(debug, "i");
+int
+init_module(void)
+{
+	if ( debug >= 0)
+		ncr885e_debug = debug;
 
+	return ncr885e_probe();
+}
 
-static void __exit ncr885e_cleanup (void)
+static void __exit cleanup_module(void)
 {
 	struct ncr885e_private *np;
 
@@ -1434,7 +1421,6 @@ static void __exit ncr885e_cleanup (void)
 
 module_init(ncr885e_probe);
 module_exit(ncr885e_cleanup);
-
 
 /*
  * Local variables:

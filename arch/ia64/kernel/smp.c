@@ -57,7 +57,7 @@ spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
 unsigned long cpu_online_map = 1;
 #endif
 
-volatile int cpu_number_map[NR_CPUS] = { -1, };      /* SAPIC ID -> Logical ID */
+volatile int __cpu_number_map[NR_CPUS] = { -1, };    /* SAPIC ID -> Logical ID */
 volatile int __cpu_logical_map[NR_CPUS] = { -1, };   /* logical ID -> SAPIC ID */
 int smp_num_cpus = 1;		
 int bootstrap_processor = -1;                        /* SAPIC ID of BSP */
@@ -586,7 +586,7 @@ smp_boot_one_cpu(int cpuid, int cpunum)
 
 alive:
 	/* Remember the AP data */
-	cpu_number_map[cpuid] = cpunum;
+	__cpu_number_map[cpuid] = cpunum;
 #ifdef CONFIG_KDB
         cpu_online_map |= (1<<cpunum);
         printk ("DEBUGGER: cpu_online_map = 0x%08x\n", cpu_online_map);
@@ -612,12 +612,12 @@ smp_boot_cpus(void)
 	extern int acpi_apic_map[32];
 
 	/* Take care of some initial bookkeeping.  */
-	memset(&cpu_number_map, -1, sizeof(cpu_number_map));
+	memset(&__cpu_number_map, -1, sizeof(__cpu_number_map));
 	memset(&__cpu_logical_map, -1, sizeof(__cpu_logical_map));
 	memset(&ipi_op, 0, sizeof(ipi_op));
 
 	/* Setup BSP mappings */
-	cpu_number_map[bootstrap_processor] = 0;
+	__cpu_number_map[bootstrap_processor] = 0;
 	__cpu_logical_map[0] = bootstrap_processor;
 	current->processor = bootstrap_processor;
 

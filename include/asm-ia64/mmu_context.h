@@ -60,6 +60,11 @@ extern unsigned long ia64_next_context;
 
 extern void get_new_mmu_context (struct mm_struct *mm);
 
+static inline void
+enter_lazy_tlb (struct mm_struct *mm, struct task_struct *tsk, unsigned cpu)
+{
+}
+
 extern inline unsigned long
 ia64_rid (unsigned long context, unsigned long region_addr)
 {

@@ -904,6 +904,8 @@ void vmtruncate(struct inode * inode, loff_t offset)
 	} while ((mpnt = mpnt->vm_next_share) != NULL);
 out_unlock:
 	spin_unlock(&inode->i_shared_lock);
+	if (inode->i_op && inode->i_op->truncate)
+		inode->i_op->truncate(inode);
 }
 
 
@@ -957,6 +959,7 @@ static int do_swap_page(struct task_struct * tsk,
 			return -1;
 
 		flush_page_to_ram(page);
+		flush_icache_page(vma, page);
 	}
 
 	vma->vm_mm->rss++;
@@ -1057,6 +1060,7 @@ static int do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	 * handle that later.
 	 */
 	flush_page_to_ram(new_page);
+	flush_icache_page(vma, new_page);
 	entry = mk_pte(new_page, vma->vm_page_prot);
 	if (write_access) {
 		entry = pte_mkwrite(pte_mkdirty(entry));

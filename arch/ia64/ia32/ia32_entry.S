@@ -144,7 +144,7 @@ ia32_syscall_table:
 	data8 sys32_settimeofday
 	data8 sys_getgroups	  /* 80 */
 	data8 sys_setgroups
-	data8 sys_ni_syscall
+	data8 old_select
 	data8 sys_symlink
 	data8 sys_ni_syscall
 	data8 sys_readlink	  /* 85 */

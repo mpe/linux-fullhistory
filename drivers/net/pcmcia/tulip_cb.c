@@ -128,7 +128,6 @@ static int csr0 = 0x00A00000 | 0x4800;
 /* Kernel compatibility defines, some common to David Hinds' PCMCIA package.
    This is only in the support-all-kernels source code. */
 
-#if defined(MODULE) && LINUX_VERSION_CODE > 0x20115
 MODULE_AUTHOR("Donald Becker <becker@cesdis.gsfc.nasa.gov>");
 MODULE_DESCRIPTION("Digital 21*4* Tulip ethernet driver");
 MODULE_PARM(debug, "i");
@@ -138,13 +137,11 @@ MODULE_PARM(rx_copybreak, "i");
 MODULE_PARM(csr0, "i");
 MODULE_PARM(options, "1-" __MODULE_STRING(MAX_UNITS) "i");
 MODULE_PARM(full_duplex, "1-" __MODULE_STRING(MAX_UNITS) "i");
-#endif
 
 #define RUN_AT(x) (jiffies + (x))
 
 #define NETSTATS_VER2
 #define PCI_SUPPORT_VER3
-#define dev_free_skb(skb) dev_kfree_skb(skb);
 
 #define tulip_debug debug
 #ifdef TULIP_DEBUG
@@ -438,7 +435,8 @@ struct tulip_private {
 	struct mediatable *mtable;
 	int cur_index;						/* Current media index. */
 	int saved_if_port;
-	unsigned char pci_bus, pci_devfn;
+	struct pci_dev *pdev;
+	spinlock_t lock;
 	int pad0, pad1;						/* Used for 8-byte alignment */
 };
 
@@ -515,9 +513,9 @@ static void outl_CSR6 (u32 newcsr6, long ioaddr, int chip_idx)
     restore_flags(flags);
 }
 
-static struct net_device *tulip_probe1(int pci_bus, int pci_devfn,
-								   struct net_device *dev, long ioaddr, int irq,
-								   int chip_idx, int board_idx)
+static struct net_device *tulip_probe1(struct pci_dev *pdev,
+				       struct net_device *dev, long ioaddr, int irq,
+				       int chip_idx, int board_idx)
 {
 	static int did_version = 0;			/* Already printed version info. */
 	struct tulip_private *tp;
@@ -534,11 +532,11 @@ static struct net_device *tulip_probe1(int pci_bus, int pci_devfn,
 
 	dev = init_etherdev(dev, 0);
 
-	pcibios_read_config_byte(pci_bus, pci_devfn, PCI_REVISION_ID, &chip_rev);
+	pci_read_config_byte(pdev, PCI_REVISION_ID, &chip_rev);
 	/* Bring the 21143 out of sleep mode.
 	   Caution: Snooze mode does not work with some boards! */
 	if (tulip_tbl[chip_idx].flags & HAS_ACPI)
-		pcibios_write_config_dword(pci_bus, pci_devfn, 0x40, 0x00000000);
+		pci_write_config_dword(pdev, 0x40, 0x00000000);
 
 	printk(KERN_INFO "%s: %s rev %d at %#3lx,",
 		   dev->name, tulip_tbl[chip_idx].chip_name, chip_rev, ioaddr);
@@ -691,8 +689,8 @@ static struct net_device *tulip_probe1(int pci_bus, int pci_devfn,
 	memset(tp, 0, sizeof(*tp));
 	dev->priv = tp;
 
-	tp->pci_bus = pci_bus;
-	tp->pci_devfn = pci_devfn;
+	tp->lock = SPIN_LOCK_UNLOCKED;
+	tp->pdev = pdev;
 	tp->chip_id = chip_idx;
 	tp->revision = chip_rev;
 	tp->csr0 = csr0;
@@ -807,6 +805,8 @@ static struct net_device *tulip_probe1(int pci_bus, int pci_devfn,
 #ifdef HAVE_MULTICAST
 	dev->set_multicast_list = &set_rx_mode;
 #endif
+	dev->tx_timeout = tulip_tx_timeout;
+	dev->watchdog_timeo = TX_TIMEOUT;
 
 	/* Reset the xcvr interface and turn on heartbeat. */
 	switch (chip_idx) {
@@ -1302,7 +1302,7 @@ tulip_up(struct net_device *dev)
 	udelay(2);
 
 	if (tulip_tbl[tp->chip_id].flags & HAS_ACPI)
-		pcibios_write_config_dword(tp->pci_bus, tp->pci_devfn, 0x40, 0x00000000);
+		pci_write_config_dword(tp->pdev, 0x40, 0x00000000);
 
 	/* Clear the tx ring */
 	for (i = 0; i < TX_RING_SIZE; i++) {
@@ -1461,15 +1461,13 @@ media_picked:
 	outl_CSR6(tp->csr6, ioaddr, tp->chip_id);
 	outl_CSR6(tp->csr6 | 0x2000, ioaddr, tp->chip_id);
 
-	dev->tbusy = 0;
-	tp->interrupt = 0;
-	dev->start = 1;
-
 	/* Enable interrupts by setting the interrupt mask. */
 	outl(tulip_tbl[tp->chip_id].valid_intrs, ioaddr + CSR5);
 	outl(tulip_tbl[tp->chip_id].valid_intrs, ioaddr + CSR7);
 	outl_CSR6(tp->csr6 | 0x2002, ioaddr, tp->chip_id);
 	outl(0, ioaddr + CSR2);		/* Rx poll demand */
+	
+	netif_start_queue (dev);
 
 	if (tulip_debug > 2) {
 		printk(KERN_DEBUG "%s: Done tulip_open(), CSR0 %8.8x, CSR5 %8.8x CSR6 %8.8x.\n",
@@ -2413,15 +2411,6 @@ tulip_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	int entry;
 	u32 flag;
 
-	/* Block a timer-based transmit from overlapping.  This could better be
-	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
-		if (jiffies - dev->trans_start < TX_TIMEOUT)
-			return 1;
-		tulip_tx_timeout(dev);
-		return 1;
-	}
-
 	/* Caution: the write order is important here, set the base address
 	   with the "ownership" bits last. */
 
@@ -2454,8 +2443,10 @@ tulip_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	tp->tx_ring[entry].length = skb->len | flag;
 	tp->tx_ring[entry].status = DescOwned;	/* Pass ownership to the chip. */
 	tp->cur_tx++;
-	if ( ! tp->tx_full)
-		clear_bit(0, (void*)&dev->tbusy);
+	if (tp->tx_full)
+		netif_stop_queue (dev);
+	else
+		netif_wake_queue (dev);
 
 	/* Trigger an immediate transmit demand. */
 	outl(0, dev->base_addr + CSR1);
@@ -2474,21 +2465,7 @@ static void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 	long ioaddr = dev->base_addr;
 	int csr5, work_budget = max_interrupt_work;
 
-#if defined(__i386__) && defined(SMP_CHECK)
-	if (test_and_set_bit(0, (void*)&dev->interrupt)) {
-		printk(KERN_ERR "%s: Duplicate entry of the interrupt handler by "
-			   "processor %d.\n",
-			   dev->name, smp_processor_id());
-		dev->interrupt = 0;
-		return;
-	}
-#else
-	if (dev->interrupt) {
-		printk(KERN_ERR "%s: Re-entering the interrupt handler.\n", dev->name);
-		return;
-	}
-	dev->interrupt = 1;
-#endif
+	spin_lock (&tp->lock);
 
 	do {
 		csr5 = inl(ioaddr + CSR5);
@@ -2549,7 +2526,7 @@ static void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 				}
 
 				/* Free the original skb. */
-				dev_free_skb(tp->tx_skbuff[entry]);
+				dev_kfree_skb_irq(tp->tx_skbuff[entry]);
 				tp->tx_skbuff[entry] = 0;
 			}
 
@@ -2561,13 +2538,15 @@ static void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 			}
 #endif
 
-			if (tp->tx_full && dev->tbusy
-				&& tp->cur_tx - dirty_tx  < TX_RING_SIZE - 2) {
-				/* The ring is no longer full, clear tbusy. */
+			if (tp->tx_full && 
+			    tp->cur_tx - dirty_tx  < TX_RING_SIZE - 2)
+				/* The ring is no longer full */
 				tp->tx_full = 0;
-				dev->tbusy = 0;
-				mark_bh(NET_BH);
-			}
+			
+			if (tp->tx_full)
+				netif_stop_queue (dev);
+			else
+				netif_wake_queue (dev);
 
 			tp->dirty_tx = dirty_tx;
 			if (csr5 & TxDied) {
@@ -2630,12 +2609,7 @@ static void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 		printk(KERN_DEBUG "%s: exiting interrupt, csr5=%#4.4x.\n",
 			   dev->name, inl(ioaddr + CSR5));
 
-#if defined(__i386__)
-	clear_bit(0, (void*)&dev->interrupt);
-#else
-	dev->interrupt = 0;
-#endif
-	return;
+	spin_unlock (&tp->lock);
 }
 
 static int
@@ -2751,8 +2725,7 @@ tulip_down(struct net_device *dev)
 	long ioaddr = dev->base_addr;
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 
-	dev->start = 0;
-	dev->tbusy = 1;
+	netif_stop_queue (dev);
 
 	/* Disable interrupts by clearing the interrupt mask. */
 	outl(0x00000000, ioaddr + CSR7);
@@ -2781,7 +2754,7 @@ tulip_close(struct net_device *dev)
 		printk(KERN_DEBUG "%s: Shutting down ethercard, status was %2.2x.\n",
 			   dev->name, inl(ioaddr + CSR5));
 
-	if (dev->start)
+	if (test_bit(LINK_STATE_START, &dev->state))
 		tulip_down(dev);
 
 	free_irq(dev->irq, dev);
@@ -2794,12 +2767,12 @@ tulip_close(struct net_device *dev)
 		tp->rx_ring[i].length = 0;
 		tp->rx_ring[i].buffer1 = 0xBADF00D0; /* An invalid address. */
 		if (skb) {
-			dev_free_skb(skb);
+			dev_kfree_skb(skb);
 		}
 	}
 	for (i = 0; i < TX_RING_SIZE; i++) {
 		if (tp->tx_skbuff[i])
-			dev_free_skb(tp->tx_skbuff[i]);
+			dev_kfree_skb(tp->tx_skbuff[i]);
 		tp->tx_skbuff[i] = 0;
 	}
 
@@ -2813,7 +2786,7 @@ static struct net_device_stats *tulip_get_stats(struct net_device *dev)
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 
-	if (dev->start)
+	if (test_bit(LINK_STATE_START, &dev->state))
 		tp->stats.rx_missed_errors += inl(ioaddr + CSR8) & 0xffff;
 
 	return &tp->stats;
@@ -3075,8 +3048,8 @@ static void set_rx_mode(struct net_device *dev)
 				tp->tx_ring[entry].buffer1 = virt_to_bus(tp->setup_frame);
 			tp->tx_ring[entry].status = DescOwned;
 			if (tp->cur_tx - tp->dirty_tx >= TX_RING_SIZE - 2) {
-				set_bit(0, (void*)&dev->tbusy);
 				tp->tx_full = 1;
+				netif_stop_queue (dev);
 			}
 			if (dummy >= 0)
 				tp->tx_ring[dummy].status = DescOwned;
@@ -3114,10 +3087,11 @@ static int __devinit tulip_pci_probe(struct pci_dev *pdev, const struct pci_devi
 
 	printk(KERN_INFO "tulip_attach(%s)\n", pdev->slot_name);
 
-	pci_set_master(pdev);
-	dev = tulip_probe1(pdev->bus->number, pdev->devfn, NULL,
-				       pdev->resource[0].start, pdev->irq,
-				       id->driver_data, board_idx++);
+	pci_enable_device (pdev);
+	pci_set_master (pdev);
+	dev = tulip_probe1(pdev, NULL,
+			   pci_resource_start (pdev, 0), pdev->irq,
+			   id->driver_data, board_idx++);
 	if (dev) {
 		pdev->driver_data = dev;
 		return 0;

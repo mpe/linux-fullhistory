@@ -309,7 +309,6 @@ RCfound_device(int memaddr, int irq,
 #endif
     dev->base_addr = (unsigned long)vaddr;
     dev->irq = irq;
-    dev->interrupt = 0;
 
     /*
      * Request a shared interrupt line.
@@ -430,6 +429,7 @@ RCopen(struct net_device *dev)
     printk("rc: RCopen: posted %d buffers\n", (uint)pDpa->numOutRcvBuffers);
 #endif
     MOD_INC_USE_COUNT;
+    netif_start_queue(dev);
     return 0;
 }
 
@@ -441,29 +441,26 @@ RC_xmit_packet(struct sk_buff *skb, struct net_device *dev)
     singleTCB tcb;
     psingleTCB ptcb = &tcb;
     RC_RETURN status = 0;
-    
-        if (dev->tbusy || pDpa->shutdown || pDpa->reboot)
-        {
+   
+    netif_stop_queue(dev);
+     
+    if (pDpa->shutdown || pDpa->reboot)
+    {
 #ifdef RCDEBUG
             printk("rc: RC_xmit_packet: tbusy!\n");
 #endif
-            dev->tbusy = 1;
             return 1;
-        }
-      
-    if ( skb->len <= 0 ) 
-    {
-        printk("RC_xmit_packet: skb->len less than 0!\n");
-        return 0;
     }
-
+      
     /*
      * The user is free to reuse the TCB after RCI2OSendPacket() returns, since
      * the function copies the necessary info into its own private space.  Thus,
      * our TCB can be a local structure.  The skb, on the other hand, will be
      * freed up in our interrupt handler.
      */
+
     ptcb->bcount = 1;
+
     /* 
      * we'll get the context when the adapter interrupts us to tell us that
      * the transmision is done. At that time, we can free skb.
@@ -483,13 +480,12 @@ RC_xmit_packet(struct sk_buff *skb, struct net_device *dev)
 #ifdef RCDEBUG
         printk("rc: RC send error 0x%x\n", (uint)status);
 #endif
-        dev->tbusy = 1;
         return 1;
     }
     else
     {
         dev->trans_start = jiffies;
-        //       dev->tbusy = 0;
+        netif_wake_queue(dev);
     }
     /*
      * That's it!
@@ -546,10 +542,9 @@ RCxmit_callback(U32 Status,
             printk("rc: skb = 0x%x\n", (uint)skb);
 #endif
             BufferContext++;
-            dev_kfree_skb (skb);
+            dev_kfree_skb_irq(skb);
         }
-        dev->tbusy = 0;
-
+	netif_wake_queue(dev);
 }
 
 static void
@@ -811,14 +806,8 @@ RCinterrupt(int irq, void *dev_id, struct pt_regs *regs)
            (uint)pDpa, (uint)dev, (uint)pDpa->id);
     printk("dev = 0x%x\n", (uint)dev);
 #endif
-    if (dev->interrupt)
-        printk("%s: Re-entering the interrupt handler.\n", dev->name);
-    dev->interrupt = 1;
 
     RCProcI2OMsgQ(pDpa->id);
-    dev->interrupt = 0;
-
-    return;
 }
 
 
@@ -870,7 +859,7 @@ static void rc_timer(unsigned long data)
                        (uint)pDpa->numOutRcvBuffers);
             }
             printk("rc: Initialization done.\n");
-            dev->tbusy=0;
+            netif_wake_queue(dev);
             retry=0;
             return;
         case RC_RTN_FREE_Q_EMPTY:
@@ -913,6 +902,8 @@ RCclose(struct net_device *dev)
 
     PDPA pDpa = (PDPA) dev->priv;
 
+    netif_stop_queue(dev);
+    
 #ifdef RCDEBUG
     printk("rc: RCclose\r\n");
 #endif

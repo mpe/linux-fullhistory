@@ -187,9 +187,14 @@
 #define flush_cache_page(vma, vmaddr)		do { } while (0)
 #define flush_page_to_ram(page)			do { } while (0)
 #define flush_icache_range(start, end)		do { } while (0)
+
 extern void ia64_flush_icache_page (unsigned long addr);
 
-#define flush_icache_page(pg)	ia64_flush_icache_page(page_address(pg))
+#define flush_icache_page(vma,pg)				\
+do {								\
+	if ((vma)->vm_flags & PROT_EXEC)			\
+		ia64_flush_icache_page(page_address(pg));	\
+} while (0)
 
 /*
  * Now come the defines and routines to manage and access the three-level
@@ -289,15 +294,21 @@ extern pmd_t *ia64_bad_pagetable (void);
  */
 #define pgprot_noncached(prot)	__pgprot((pgprot_val(prot) & ~_PAGE_MA_MASK) | _PAGE_MA_UC)
 
+extern __inline__ unsigned long
+pgd_index (unsigned long address)
+{
+	unsigned long region = address >> 61;
+	unsigned long l1index = (address >> PGDIR_SHIFT) & ((PTRS_PER_PGD >> 3) - 1);
+
+	return (region << (PAGE_SHIFT - 6)) | l1index;
+}
+
 /* The offset in the 1-level directory is given by the 3 region bits
    (61..63) and the seven level-1 bits (33-39).  */
 extern __inline__ pgd_t*
 pgd_offset (struct mm_struct *mm, unsigned long address)
 {
-	unsigned long region = address >> 61;
-	unsigned long l1index = (address >> PGDIR_SHIFT) & ((PTRS_PER_PGD >> 3) - 1);
-
-	return mm->pgd + ((region << (PAGE_SHIFT - 6)) | l1index);
+	return mm->pgd + pgd_index(address);
 }
 
 /* In the kernel's mapped region we have a full 43 bit space available and completely

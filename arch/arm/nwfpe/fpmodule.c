@@ -128,23 +128,41 @@ cumulative exceptions flag byte are set and we return.
 
 void float_raise(signed char flags)
 {
+  register unsigned int fpsr, cumulativeTraps;
+  
 #ifdef CONFIG_DEBUG_USER
   printk(KERN_DEBUG "NWFPE: %s[%d] takes exception %08x at %p from %08x\n",
 	 current->comm, current->pid, flags,
 	 __builtin_return_address(0), userRegisters[15]);
 #endif
 
+  /* Keep SoftFloat exception flags up to date.  */
   float_exception_flags |= flags;
-  if (readFPSR() & (flags << 16))
-  {
-    /* raise exception */
+
+  /* Read fpsr and initialize the cumulativeTraps.  */
+  fpsr = readFPSR();
+  cumulativeTraps = 0;
+  
+  /* For each type of exception, the cumulative trap exception bit is only
+     set if the corresponding trap enable bit is not set.  */
+  if ((!(fpsr & BIT_IXE)) && (flags & BIT_IXC))
+     cumulativeTraps |= BIT_IXC;  
+  if ((!(fpsr & BIT_UFE)) && (flags & BIT_UFC))
+     cumulativeTraps |= BIT_UFC;  
+  if ((!(fpsr & BIT_OFE)) && (flags & BIT_OFC))
+     cumulativeTraps |= BIT_OFC;  
+  if ((!(fpsr & BIT_DZE)) && (flags & BIT_DZC))
+     cumulativeTraps |= BIT_DZC;  
+  if ((!(fpsr & BIT_IOE)) && (flags & BIT_IOC))
+     cumulativeTraps |= BIT_IOC;  
+
+  /* Set the cumulative exceptions flags.  */
+  if (cumulativeTraps)
+    writeFPSR(fpsr | cumulativeTraps);
+
+  /* Raise an exception if necessary.  */
+  if (fpsr & (flags << 16))
     fp_send_sig(SIGFPE, current, 1);
-  }
-  else
-  {
-    /* set the cumulative exceptions flags */
-    writeFPSR(flags);
-  }
 }
 
 module_init(fpe_init);

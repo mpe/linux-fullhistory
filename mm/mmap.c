@@ -580,6 +580,7 @@ static void free_pgtables(struct mm_struct * mm, struct vm_area_struct *prev,
 {
 	unsigned long first = start & PGDIR_MASK;
 	unsigned long last = (end + PGDIR_SIZE - 1) & PGDIR_MASK;
+	unsigned long start_index, end_index;
 
 	if (!prev) {
 		prev = mm->mmap;
@@ -607,12 +608,14 @@ static void free_pgtables(struct mm_struct * mm, struct vm_area_struct *prev,
 		break;
 	}
 no_mmaps:
-	first = first >> PGDIR_SHIFT;
-	last = last >> PGDIR_SHIFT;
-	if (last > first) {
-		clear_page_tables(mm, first, last-first);
-		flush_tlb_pgtables(mm, first << PGDIR_SHIFT, last << PGDIR_SHIFT);
-	}
+	/*
+	 * If the PGD bits are not consecutive in the virtual address, the
+	 * old method of shifting the VA >> by PGDIR_SHIFT doesn't work.
+	 */
+	start_index = pgd_index(first);
+	end_index = pgd_index(last);
+	if (end_index > start_index)
+		clear_page_tables(mm, start_index, end_index - start_index);
 }
 
 /* Munmap is split into 2 main parts -- this part which finds

@@ -99,5 +99,7 @@ int notify_change(struct dentry * dentry, struct iattr * attr)
 		if (!error)
 			inode_setattr(inode, attr);
 	}
+	if (!error && (attr->ia_valid & ATTR_SIZE))
+		vmtruncate(inode, attr->ia_size);
 	return error;
 }

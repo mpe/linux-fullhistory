@@ -71,8 +71,6 @@ int StartListening(const int Port)
 
 	/* Grrr... setsockopt() does this. */
 	sock->sk->reuse   = 1;
-	/* Wow!!! */
-	sock->sk->linger  = 1;
 
 	/* Now, start listening on the socket */
 	

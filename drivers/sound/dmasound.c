@@ -116,6 +116,7 @@ History:
 #include <asm/machdep.h>
 #include <asm/io.h>
 #include <asm/dbdma.h>
+#include <asm/feature.h>
 #include "awacs_defs.h"
 #include <linux/nvram.h>
 #include <linux/vt_kern.h>
@@ -178,6 +179,7 @@ static volatile struct dbdma_regs *awacs_txdma, *awacs_rxdma;
 static int awacs_rate_index;
 static int awacs_subframe;
 static int awacs_spkr_vol;
+static struct device_node* awacs_node;
 
 static int awacs_revision;
 #define AWACS_BURGUNDY	100		/* fake revision # for burgundy */
@@ -898,7 +900,7 @@ static inline int ioctl_return(int *addr, int value)
 
 
 void dmasound_init(void);
-void dmasound_setup(char *str, int *ints);
+static int dmasound_setup(char *str);
 
 
 /*** Translations ************************************************************/
@@ -3208,9 +3210,15 @@ static void PMacIrqCleanup(void)
 	out_le32(&awacs_txdma->control, RUN<<16);
 	/* disable interrupts from awacs interface */
 	out_le32(&awacs->control, in_le32(&awacs->control) & 0xfff);
-	free_irq(awacs_irq, pmac_awacs_intr);
-	free_irq(awacs_tx_irq, pmac_awacs_tx_intr);
-	free_irq(awacs_rx_irq, pmac_awacs_rx_intr);
+#ifdef CONFIG_PMAC_PBOOK
+	if (is_pbook_G3) {
+		feature_clear(awacs_node, FEATURE_Sound_power);
+		feature_clear(awacs_node, FEATURE_Sound_CLK_enable);
+	}
+#endif
+	free_irq(awacs_irq, 0);
+	free_irq(awacs_tx_irq, 0);
+	free_irq(awacs_rx_irq, 0);
 	kfree(awacs_tx_cmd_space);
 	if (awacs_rx_cmd_space)
 		kfree(awacs_rx_cmd_space);
@@ -3281,12 +3289,10 @@ static void PMacInit(void)
 	/* We really want to execute a DMA stop command, after the AWACS
 	 * is initialized.
 	 * For reasons I don't understand, it stops the hissing noise
-	 * common to many PowerBook G3 systems (like mine :-).  Maybe it
-	 * is just the AWACS control register change......
+	 * common to many PowerBook G3 systems (like mine :-).
 	 */
 	out_le32(&awacs_txdma->control, (RUN|WAKE|FLUSH|PAUSE) << 16);
 	st_le16(&beep_dbdma_cmd->command, DBDMA_STOP);
-	out_le32(&awacs->control, (in_le32(&awacs->control) & ~0x1f00));
 	out_le32(&awacs_txdma->cmdptr, virt_to_bus(beep_dbdma_cmd));
 	out_le32(&awacs_txdma->control, RUN | (RUN << 16));
 
@@ -3544,6 +3550,11 @@ static void awacs_nosound(unsigned long xx)
 	save_flags(flags); cli();
 	if (beep_playing) {
 		st_le16(&beep_dbdma_cmd->command, DBDMA_STOP);
+		out_le32(&awacs_txdma->control, (RUN|PAUSE|FLUSH|WAKE) << 16);
+		out_le32(&awacs->control,
+			 (in_le32(&awacs->control) & ~0x1f00)
+			 | (awacs_rate_index << 8));
+		out_le32(&awacs->byteswap, sound.hard.format != AFMT_S16_BE);
 		beep_playing = 0;
 	}
 	restore_flags(flags);
@@ -3645,8 +3656,23 @@ static int awacs_sleep_notify(struct pmu_sleep_notifier *self, int when)
 		PMacSilence();
 		disable_irq(awacs_irq);
 		disable_irq(awacs_tx_irq);
+		if (is_pbook_G3) {
+			feature_clear(awacs_node, FEATURE_Sound_CLK_enable);
+			feature_clear(awacs_node, FEATURE_Sound_power);
+		}
 		break;
 	case PBOOK_WAKE:
+		/* There is still a problem on wake. Sound seems to work fine
+		   if I launch mpg123 and resumes fine if mpg123 was playing,
+		   but the console beep is dead until I do something with the
+		   mixer. Probably yet another timing issue */
+		if (!feature_test(awacs_node, FEATURE_Sound_CLK_enable)
+		    || !feature_test(awacs_node, FEATURE_Sound_power)) {
+			/* these aren't present on the 3400 AFAIK -- paulus */
+			feature_set(awacs_node, FEATURE_Sound_CLK_enable);
+			feature_set(awacs_node, FEATURE_Sound_power);
+			mdelay(1000);
+		}
 		out_le32(&awacs->control, MASK_IEPC
 			 | (awacs_rate_index << 8) | 0x11
 			 | (awacs_revision < AWACS_BURGUNDY? MASK_IEE: 0));
@@ -3663,6 +3689,16 @@ static int awacs_sleep_notify(struct pmu_sleep_notifier *self, int when)
 			mdelay(2);
 			awacs_write(awacs_reg[1] | MASK_ADDR1);
 		}
+		/* enable CD sound input */
+		if (macio_base && is_pbook_G3) {
+			out_8(macio_base + 0x37, 3);
+		} else if (is_pbook_3400) {
+			feature_set(awacs_node, FEATURE_IOBUS_enable);
+			udelay(10);
+			in_8((unsigned char *)0xf301a190);
+		}
+ 		/* Resume pending sounds. */
+ 		PMacPlay();
 	}
 	return PBOOK_SLEEP_OK;
 }
@@ -5139,6 +5175,7 @@ static int sq_ioctl(struct inode *inode, struct file *file, u_int cmd,
 	u_long fmt;
 	int data;
 	int size, nbufs;
+	audio_buf_info info;
 
 	switch (cmd) {
 	case SNDCTL_DSP_RESET:
@@ -5213,6 +5250,14 @@ static int sq_ioctl(struct inode *inode, struct file *file, u_int cmd,
 			size = bufSize << 10;
 		sq_setup(numBufs, size, sound_buffers);
 		sq.max_active = nbufs;
+		return 0;
+	case SNDCTL_DSP_GETOSPACE:
+		info.fragments = sq.max_active - sq.count;
+		info.fragstotal = sq.max_active;
+		info.fragsize = sq.block_size;
+		info.bytes = info.fragments * info.fragsize;
+		if (copy_to_user((void *)arg, &info, sizeof(info)))
+			return -EFAULT;
 		return 0;
 
 	default:
@@ -5308,7 +5353,7 @@ static int state_open(struct inode *inode, struct file *file)
 {
 	char *buffer = state.buf, *mach = "";
 #ifdef CONFIG_PPC
-	char awacs_buf[50];
+	char awacs_buf[64];
 #endif
 	int len = 0;
 
@@ -5576,6 +5621,16 @@ void __init dmasound_init(void)
 			printk(KERN_ERR "DMA sound driver: Not enough buffer memory, driver disabled!\n");
 			return;
 		}
+		awacs_node = np;
+#ifdef CONFIG_PMAC_PBOOK
+		if (machine_is_compatible("PowerBook1,1")
+		    || machine_is_compatible("AAPL,PowerBook1998")) {
+			feature_set(np, FEATURE_Sound_CLK_enable);
+			feature_set(np, FEATURE_Sound_power);
+			/* Shorter delay will not work */
+			mdelay(1000);
+		}
+#endif
 		awacs_tx_cmds = (volatile struct dbdma_cmd *)
 			DBDMA_ALIGN(awacs_tx_cmd_space);
 
@@ -5607,7 +5662,10 @@ void __init dmasound_init(void)
 			awacs_revision =
 				(in_le32(&awacs->codec_stat) >> 12) & 0xf;
 			if (awacs_revision == 3) {
+				mdelay(100);
 				awacs_write(0x6000);
+				mdelay(2);
+				awacs_write(awacs_reg[1] + MASK_ADDR1);
 				awacs_enable_amp(100 * 0x101);
 			}
 		}
@@ -5629,26 +5687,34 @@ void __init dmasound_init(void)
 		/* Powerbooks have odd ways of enabling inputs such as
 		   an expansion-bay CD or sound from an internal modem
 		   or a PC-card modem. */
-		if (machine_is_compatible("AAPL,3400/2400")) {
+		if (machine_is_compatible("AAPL,3400/2400")
+			|| machine_is_compatible("AAPL,3500")) {
 			is_pbook_3400 = 1;
 			/*
 			 * Enable CD and PC-card sound inputs.
 			 * This is done by reading from address
 			 * f301a000, + 0x10 to enable the expansion-bay
 			 * CD sound input, + 0x80 to enable the PC-card
-			 * sound input.  The 0x100 seems to enable the
-			 * MESH and/or its SCSI bus drivers.
+			 * sound input.  The 0x100 enables the SCSI bus
+			 * terminator power.
 			 */
 			in_8((unsigned char *)0xf301a190);
-		} else if (machine_is_compatible("PowerBook1,1")) {
-			np = find_devices("mac-io");
-			if (np && np->n_addrs > 0) {
-				is_pbook_G3 = 1;
-				macio_base = (unsigned char *)
-					ioremap(np->addrs[0].address, 0x40);
-				/* enable CD sound input */
-				out_8(macio_base + 0x37, 3);
+		} else if (machine_is_compatible("PowerBook1,1")
+			   || machine_is_compatible("AAPL,PowerBook1998")) {
+			struct device_node* mio;
+			macio_base = 0;
+			is_pbook_G3 = 1;
+			for (mio = np->parent; mio; mio = mio->parent) {
+				if (strcmp(mio->name, "mac-io") == 0
+				    && mio->n_addrs > 0) {
+					macio_base = (unsigned char *) ioremap
+						(mio->addrs[0].address, 0x40);
+					break;
+				}
 			}
+			/* enable CD sound input */
+			if (macio_base)
+				out_8(macio_base + 0x37, 3);
 		}
 	}
 #endif /* CONFIG_PPC */

@@ -329,21 +329,18 @@ int hpfs_unlink(struct inode *dir, struct dentry *dentry)
 		d_delete(dentry);
 	} else {	/* no space for deleting, try to truncate file */
 		struct iattr newattrs;
+		int err;
 		hpfs_unlock_2inodes(dir, inode);
 		if (rep || dentry->d_count > 1 || permission(inode, MAY_WRITE) || get_write_access(inode)) goto ret;
 		/*printk("HPFS: truncating file before delete.\n");*/
-		down(&inode->i_sem);	/* do_truncate should be called here, but it's */
-		newattrs.ia_size = 0;	/* not exported */
+		down(&inode->i_sem);
+		newattrs.ia_size = 0;
 		newattrs.ia_valid = ATTR_SIZE | ATTR_CTIME;
-		if (notify_change(dentry, &newattrs)) {
-			up(&inode->i_sem);
-			put_write_access(inode);
-			goto ret;
-		}
-		vmtruncate(inode, 0);
-		if (inode->i_op && inode->i_op->truncate) inode->i_op->truncate(inode);
+		err = notify_change(dentry, &newattrs);
 		up(&inode->i_sem);
 		put_write_access(inode);
+		if (err)
+			goto ret;
 		rep = 1;
 		goto again;
 	}

@@ -170,12 +170,14 @@ static struct net_device * rtl8129_probe1(struct pci_dev *pdev, int pci_bus,
 static struct pci_id_info pci_tbl[] =
 {{ "RealTek RTL8129 Fast Ethernet",
    0x10ec, 0x8129, 0xffff, PCI_USES_IO|PCI_USES_MASTER, 0x80, rtl8129_probe1},
+#ifdef USE_8139_SUPPORT_ALSO
  { "RealTek RTL8139 Fast Ethernet",
    0x10ec, 0x8139, 0xffff, PCI_USES_IO|PCI_USES_MASTER, 0x80, rtl8129_probe1},
  { "SMC1211TX EZCard 10/100 (RealTek RTL8139)",
    0x1113, 0x1211, 0xffff, PCI_USES_IO|PCI_USES_MASTER, 0x80, rtl8129_probe1},
  { "Accton MPX5030 (RealTek RTL8139)",
    0x1113, 0x1211, 0xffff, PCI_USES_IO|PCI_USES_MASTER, 0x80, rtl8129_probe1},
+#endif
  {0,},						/* 0 terminated list. */
 };
 
@@ -942,6 +944,7 @@ static void rtl8129_tx_timeout(struct net_device *dev)
 			tp->tx_full = 0;
 		} else {
 			tp->tx_full = 1;
+			netif_stop_queue(dev);
 		}
 	}
 

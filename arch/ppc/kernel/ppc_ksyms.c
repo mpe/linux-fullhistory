@@ -72,8 +72,8 @@ EXPORT_SYMBOL(do_lost_interrupts);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
 EXPORT_SYMBOL(disable_irq_nosync);
-EXPORT_SYMBOL(ppc_local_irq_count);
-EXPORT_SYMBOL(ppc_local_bh_count);
+EXPORT_SYMBOL(local_irq_count);
+EXPORT_SYMBOL(local_bh_count);
 #ifdef __SMP__
 EXPORT_SYMBOL(kernel_flag);
 #endif /* __SMP__ */
@@ -272,4 +272,3 @@ EXPORT_SYMBOL(ppc_irq_dispatch_handler);
 EXPORT_SYMBOL(decrementer_count);
 EXPORT_SYMBOL(get_wchan);
 EXPORT_SYMBOL(console_drivers);
-EXPORT_SYMBOL(do_bottom_half);

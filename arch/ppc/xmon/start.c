@@ -115,42 +115,41 @@ extern void pmu_poll(void);
 int
 xmon_write(void *handle, void *ptr, int nb)
 {
-    char *p = ptr;
-    int i, c, ct;
+	char *p = ptr;
+	int i, c, ct;
 
 #ifdef CONFIG_BOOTX_TEXT
-    if (use_screen) {
-	/* write it on the screen */
-	for (i = 0; i < nb; ++i)
-	    drawchar(*p++);
-	return nb;
-    }
-#endif
-    if (!scc_initialized)
-	xmon_init_scc();
-    for (i = 0; i < nb; ++i) {
-    ct = 0;
-	while ((*sccc & TXRDY) == 0)
-#ifdef CONFIG_ADB	    
-	    if (sys_ctrler == SYS_CTRLER_PMU)
-		pmu_poll();
-#else
-		;
-#endif /* CONFIG_ADB */
-	c = p[i];
-	if (c == '\n' && !ct) {
-	    c = '\r';
-		ct = 1;
-	    --i;
-	} else {
-	    if (console)
-		printk("%c", c);
-	    ct = 0;
+	if (use_screen) {
+		/* write it on the screen */
+		for (i = 0; i < nb; ++i)
+			drawchar(*p++);
+		return nb;
 	}
-	buf_access();
-	*sccd = c;
-    }
-    return i;
+#endif
+	if (!scc_initialized)
+		xmon_init_scc();
+	ct = 0;
+	for (i = 0; i < nb; ++i) {
+		while ((*sccc & TXRDY) == 0) {
+#ifdef CONFIG_ADB	    
+			if (sys_ctrler == SYS_CTRLER_PMU)
+				pmu_poll();
+#endif /* CONFIG_ADB */
+		}
+		c = p[i];
+		if (c == '\n' && !ct) {
+			c = '\r';
+			ct = 1;
+			--i;
+		} else {
+			if (console)
+				printk("%c", c);
+			ct = 0;
+		}
+		buf_access();
+		*sccd = c;
+	}
+	return i;
 }
 
 int xmon_wants_key;
@@ -285,7 +284,7 @@ xmon_init_scc()
 	{
 		int i, x;
 
-		if (macio_node != 0) {
+		if (via_modem && macio_node != 0) {
 			unsigned int t0;
 
 			feature_set(macio_node, FEATURE_Modem_power);

@@ -171,7 +171,7 @@ static void rx(struct net_device *dev, int bufnum,
 			BUGMSG(D_EXTRA, "aborting assembly (seq=%d) for unsplit packet (splitflag=%d, seq=%d)\n",
 			 in->sequence, soft->split_flag, soft->sequence);
 			lp->rfc1201.aborted_seq = soft->sequence;
-			kfree_skb(in->skb);
+			dev_kfree_skb_irq(in->skb);
 			lp->stats.rx_errors++;
 			lp->stats.rx_missed_errors++;
 			in->skb = NULL;
@@ -255,7 +255,7 @@ static void rx(struct net_device *dev, int bufnum,
 			BUGMSG(D_EXTRA, "wrong seq number (saddr=%d, expected=%d, seq=%d, splitflag=%d)\n",
 			       saddr, in->sequence, soft->sequence,
 			       soft->split_flag);
-			kfree_skb(in->skb);
+			dev_kfree_skb_irq(in->skb);
 			in->skb = NULL;
 			lp->stats.rx_errors++;
 			lp->stats.rx_missed_errors++;
@@ -271,7 +271,7 @@ static void rx(struct net_device *dev, int bufnum,
 				       soft->sequence);
 				lp->stats.rx_errors++;
 				lp->stats.rx_missed_errors++;
-				kfree_skb(in->skb);
+				dev_kfree_skb_irq(in->skb);
 			}
 			in->sequence = soft->sequence;
 			in->numpackets = ((unsigned) soft->split_flag >> 1) + 2;
@@ -332,7 +332,7 @@ static void rx(struct net_device *dev, int bufnum,
 				       "(seq=%d) aborted (splitflag=%d, seq=%d)\n",
 				       in->sequence, soft->split_flag, soft->sequence);
 				lp->rfc1201.aborted_seq = soft->sequence;
-				kfree_skb(in->skb);
+				dev_kfree_skb_irq(in->skb);
 				in->skb = NULL;
 				lp->stats.rx_errors++;
 				lp->stats.rx_missed_errors++;

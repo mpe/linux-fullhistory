@@ -1,4 +1,4 @@
-/* $Id: ioport.c,v 1.31 2000/02/06 22:55:32 zaitcev Exp $
+/* $Id: ioport.c,v 1.32 2000/02/12 03:04:48 zaitcev Exp $
  * ioport.c:  Simple io mapping allocator.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -562,7 +562,7 @@ void pci_free_consistent(struct pci_dev *pdev, size_t n, void *p, dma_addr_t ba)
 	{
 		int x;
 		for (x = 0; x < n; x += PAGE_SIZE) {
-			(*_sparc_unmapioaddr)(p + n);
+			(*_sparc_unmapioaddr)((unsigned long)p + n);
 		}
 	}
 

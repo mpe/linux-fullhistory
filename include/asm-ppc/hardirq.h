@@ -3,22 +3,24 @@
 
 #include <asm/smp.h>
 
-extern unsigned int ppc_local_irq_count[NR_CPUS];
+extern unsigned int local_irq_count[NR_CPUS];
 
 /*
  * Are we in an interrupt context? Either doing bottom half
  * or hardware interrupt processing?
  */
 #define in_interrupt() ({ int __cpu = smp_processor_id(); \
-	(ppc_local_irq_count[__cpu] + ppc_local_bh_count[__cpu] != 0); })
+	(local_irq_count[__cpu] + local_bh_count[__cpu] != 0); })
+
+#define in_irq() (local_irq_count[smp_processor_id()] != 0)
 
 #ifndef __SMP__
 
-#define hardirq_trylock(cpu)	(ppc_local_irq_count[cpu] == 0)
+#define hardirq_trylock(cpu)	(local_irq_count[cpu] == 0)
 #define hardirq_endlock(cpu)	do { } while (0)
 
-#define hardirq_enter(cpu)	(ppc_local_irq_count[cpu]++)
-#define hardirq_exit(cpu)	(ppc_local_irq_count[cpu]--)
+#define hardirq_enter(cpu)	(local_irq_count[cpu]++)
+#define hardirq_exit(cpu)	(local_irq_count[cpu]--)
 
 #define synchronize_irq()	do { } while (0)
 
@@ -41,14 +43,31 @@ static inline void release_irqlock(int cpu)
 
 static inline void hardirq_enter(int cpu)
 {
-	++ppc_local_irq_count[cpu];
+	unsigned int loops = 10000000;
+	
+	++local_irq_count[cpu];
 	atomic_inc(&global_irq_count);
+	while (test_bit(0,&global_irq_lock)) {
+		if (smp_processor_id() == global_irq_holder) {
+			printk("uh oh, interrupt while we hold global irq lock!\n");
+#ifdef CONFIG_XMON
+			xmon(0);
+#endif
+			break;
+		}
+		if (loops-- == 0) {
+			printk("do_IRQ waiting for irq lock (holder=%d)\n", global_irq_holder);
+#ifdef CONFIG_XMON
+			xmon(0);
+#endif
+		}
+	}
 }
 
 static inline void hardirq_exit(int cpu)
 {
 	atomic_dec(&global_irq_count);
-	--ppc_local_irq_count[cpu];
+	--local_irq_count[cpu];
 }
 
 static inline int hardirq_trylock(int cpu)

@@ -220,6 +220,7 @@ struct el3_private {
 	u_short media_status;
 	u_short fast_poll;
 	u_long last_irq;
+	spinlock_t lock;
 };
 
 /* Set iff a MII transceiver on any interface requires mdio preamble.
@@ -261,6 +262,7 @@ static int el3_rx(struct net_device *dev, int worklimit);
 static int el3_close(struct net_device *dev);
 static int el3_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
 static void set_rx_mode(struct net_device *dev);
+static void el3_tx_timeout(struct net_device *dev);
 
 static dev_info_t dev_info = "3c574_cs";
 
@@ -320,6 +322,8 @@ static dev_link_t *tc574_attach(void)
 	lp = kmalloc(sizeof(*lp), GFP_KERNEL);
 	if (!lp) return NULL;
 	memset(lp, 0, sizeof(*lp));
+	
+	lp->lock = SPIN_LOCK_UNLOCKED;
 	link = &lp->link; dev = &lp->dev;
 	link->priv = dev->priv = link->irq.Instance = lp;
 	
@@ -351,7 +355,10 @@ static dev_link_t *tc574_attach(void)
 	dev->init = &tc574_init;
 	dev->open = &el3_open;
 	dev->stop = &el3_close;
-	dev->tbusy = 1;
+	dev->tx_timeout = el3_tx_timeout;
+	dev->watchdog_timeo = TX_TIMEOUT;
+	
+	netif_start_queue (dev);
 
 	/* Register with Card Services */
 	link->next = dev_list;
@@ -398,13 +405,12 @@ static void tc574_detach(dev_link_t *link)
 	if (*linkp == NULL)
 	return;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&lp->lock, flags);
 	if (link->state & DEV_RELEASE_PENDING) {
 		del_timer(&link->release);
 		link->state &= ~DEV_RELEASE_PENDING;
 	}
-	restore_flags(flags);
+	spin_unlock_irqrestore(&lp->lock, flags);
 
 	if (link->state & DEV_CONFIG) {
 		tc574_release((u_long)link);
@@ -502,7 +508,7 @@ static void tc574_config(dev_link_t *link)
 	dev->irq = link->irq.AssignedIRQ;
 	dev->base_addr = link->io.BasePort1;
 
-	dev->tbusy = 0;
+	netif_start_queue (dev);
 	if (register_netdev(dev) != 0) {
 		printk(KERN_NOTICE "3c574_cs: register_netdev() failed\n");
 		goto failed;
@@ -667,7 +673,7 @@ static int tc574_event(event_t event, int priority,
 	case CS_EVENT_CARD_REMOVAL:
 		link->state &= ~DEV_PRESENT;
 		if (link->state & DEV_CONFIG) {
-			dev->tbusy = 1; dev->start = 0;
+			netif_stop_queue (dev);
 			link->release.expires = jiffies + HZ/20;
 			add_timer(&link->release);
 		}
@@ -682,7 +688,7 @@ static int tc574_event(event_t event, int priority,
 	case CS_EVENT_RESET_PHYSICAL:
 		if (link->state & DEV_CONFIG) {
 			if (link->open) {
-				dev->tbusy = 1; dev->start = 0;
+				netif_stop_queue (dev);
 			}
 			CardServices(ReleaseConfiguration, link->handle);
 		}
@@ -695,7 +701,7 @@ static int tc574_event(event_t event, int priority,
 			CardServices(RequestConfiguration, link->handle, &link->conf);
 			if (link->open) {
 				tc574_reset(dev);
-				dev->tbusy = 0; dev->start = 1;
+				netif_start_queue (dev);
 			}
 		}
 		break;
@@ -913,7 +919,7 @@ static int el3_open(struct net_device *dev)
 	
 	link->open++;
 	MOD_INC_USE_COUNT;
-	dev->interrupt = 0; dev->tbusy = 0; dev->start = 1;
+	netif_start_queue (dev);
 	
 	tc574_reset(dev);
 	lp->media.function = &media_check;
@@ -939,7 +945,7 @@ static void el3_tx_timeout(struct net_device *dev)
 	/* Issue TX_RESET and TX_START commands. */
 	wait_for_completion(dev, TxReset);
 	outw(TxEnable, ioaddr + EL3_CMD);
-	dev->tbusy = 0;
+	netif_start_queue (dev);
 }
 
 static void pop_tx_status(struct net_device *dev)
@@ -972,22 +978,16 @@ static int el3_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	long flags = 0;
 #endif
 
-	/* Transmitter timeout, serious problems. */
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
-		if (jiffies - dev->trans_start < TX_TIMEOUT)
-			return 1;
-		el3_tx_timeout(dev);
-	}
-
 	DEBUG(3, "%s: el3_start_xmit(length = %ld) called, "
 		  "status %4.4x.\n", dev->name, (long)skb->len,
 		  inw(ioaddr + EL3_STATUS));
 
+	netif_stop_queue (dev);
+	
 #ifdef BROKEN_FEATURES
 	if (use_fifo_buffer) {
 		/* Avoid other accesses to the chip while RunnerWrCtrl is non-zero. */
-		save_flags(flags);
-		cli();
+		spin_lock_irqsave(&lp->lock, flags);
 		outw((((skb->len + 7)>>2)<<1), ioaddr + RunnerWrCtrl);
 		DEBUG(0, "TxFree %x, tx length %x, RunnerWrCtrl is %4.4x.\n",
 			  inw(ioaddr+TxFree), skb->len, inw(ioaddr+RunnerWrCtrl));
@@ -1009,7 +1009,7 @@ static int el3_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		DEBUG(0, " RunnerWr/RdCtrl is %4.4x/%4.4x, TxFree %x.\n",
 			  inw(ioaddr + RunnerWrCtrl), inw(ioaddr + RunnerRdCtrl),
 			  inw(ioaddr + TxFree));
-		restore_flags(flags);
+		spin_unlock_irqrestore (&lp->lock, flags);
 	}
 #else
 	outw(skb->len, ioaddr + TX_FIFO);
@@ -1021,7 +1021,7 @@ static int el3_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	/* TxFree appears only in Window 1, not offset 0x1c. */
 	if (inw(ioaddr + TxFree) > 1536) {
-		dev->tbusy = 0;
+		netif_start_queue (dev);
 	} else
 		/* Interrupt us when the FIFO has room for max-sized packet. 
 		   The threshold is in units of dwords. */
@@ -1041,26 +1041,27 @@ static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	ioaddr_t ioaddr, status;
 	int work_budget = max_interrupt_work;
 
-	if ((lp == NULL) || !dev->start)
+	if (lp == NULL)
 		return;
+
+	spin_lock (&lp->lock);
+
 	ioaddr = dev->base_addr;
 
 #ifdef PCMCIA_DEBUG
-	if (test_and_set_bit(0, (void*)&dev->interrupt)) {
-		printk(KERN_NOTICE "%s: re-entering the interrupt handler.\n",
-			   dev->name);
-		return;
-	}
 	DEBUG(3, "%s: interrupt, status %4.4x.\n",
 		  dev->name, inw(ioaddr + EL3_STATUS));
 #endif
 
 	while ((status = inw(ioaddr + EL3_STATUS)) &
 		   (IntLatch | RxComplete | RxEarly | StatsFull)) {
+
+#if 0
 		if ((dev->start == 0) || ((status & 0xe000) != 0x2000)) {
 			DEBUG(1, "%s: Interrupt from dead card\n", dev->name);
 			break;
 		}
+#endif
 
 		if (status & RxComplete)
 			work_budget = el3_rx(dev, work_budget);
@@ -1069,8 +1070,9 @@ static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			DEBUG(3, "  TX room bit was handled.\n");
 			/* There's room in the FIFO for a full-sized packet. */
 			outw(AckIntr | TxAvailable, ioaddr + EL3_CMD);
-			dev->tbusy = 0;
-			mark_bh(NET_BH);
+			netif_wake_queue (dev);
+		} else {
+			netif_stop_queue (dev);
 		}
 
 		if (status & TxComplete)
@@ -1120,9 +1122,9 @@ static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 #ifdef PCMCIA_DEBUG
 	DEBUG(3, "%s: exiting interrupt, status %4.4x.\n",
 		  dev->name, inw(ioaddr + EL3_STATUS));
-	dev->interrupt = 0;
 #endif
-	return;
+
+	spin_unlock (&lp->lock);
 }
 
 /*
@@ -1138,7 +1140,9 @@ static void media_check(u_long arg)
     u_long flags;
 	u_short /* cable, */ media, partner;
 	
+#if 0
     if (dev->start == 0) goto reschedule;
+#endif
 	
     /* Check for pending interrupt with expired latency timer: with
        this, we can limp along even if the interrupt is blocked */
@@ -1208,7 +1212,7 @@ static struct net_device_stats *el3_get_stats(struct net_device *dev)
 {
 	struct el3_private *lp = (struct el3_private *)dev->priv;
 
-	if (dev->start)
+	if (test_bit(LINK_STATE_START, &dev->state))
 		update_stats(dev);
 	return &lp->stats;
 }
@@ -1404,6 +1408,8 @@ static int el3_close(struct net_device *dev)
 
 	DEBUG(2, "%s: shutting down ethercard.\n", dev->name);
 	
+	netif_stop_queue (dev);
+	
 	if (DEV_OK(link)) {
 		/* Turn off statistics ASAP.  We update lp->stats below. */
 		outw(StatsDisable, ioaddr + EL3_CMD);
@@ -1419,7 +1425,6 @@ static int el3_close(struct net_device *dev)
 	}
 
 	link->open--;
-	dev->start = 0;
 	del_timer(&lp->media);
 	if (link->state & DEV_STALE_CONFIG) {
 		link->release.expires = jiffies + HZ/20;

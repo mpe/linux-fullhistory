@@ -176,7 +176,7 @@ ret_from_syscall_2:
 7:	.string	"syscall %d(%x, %x, %x, %x, %x, "
 77:	.string	"%x, %x), current=%p\n"
 79:	.string	" -> %x\n"
-	.align	2
+	.align	2,0
 #endif
 
 /*
@@ -209,6 +209,9 @@ _GLOBAL(_switch)
 	mflr	r20		/* Return to switch caller */
 	mfmsr	r22
 	li	r0,MSR_FP	/* Disable floating-point */
+#ifdef CONFIG_ALTIVEC
+	oris	r0,r0,MSR_VEC@h
+#endif /* CONFIG_ALTIVEC */
 	andc	r22,r22,r0
 	stw	r20,_NIP(r1)
 	stw	r22,_MSR(r1)
@@ -274,7 +277,7 @@ _GLOBAL(_switch)
 	SYNC
 	rfi
 
-#ifdef __SMP__	
+#ifdef CONFIG_SMP	
 	.globl	ret_from_smpfork
 ret_from_smpfork:
 	bl	schedule_tail
@@ -310,22 +313,32 @@ ret_from_except:
 	lwz	r5,_MSR(r1)
 	andi.	r5,r5,MSR_EE
 	beq	2f
+	.globl	lost_irq_ret
+lost_irq_ret:
 3:	lis	r4,ppc_n_lost_interrupts@ha
 	lwz	r4,ppc_n_lost_interrupts@l(r4)
 	cmpi	0,r4,0
 	beq+	1f
 	addi	r3,r1,STACK_FRAME_OVERHEAD
 	bl	do_IRQ
-	.globl	lost_irq_ret
-lost_irq_ret:
 	b	3b
-1:	lis	r4,bh_mask@ha
-	lwz	r4,bh_mask@l(r4)
-	lis	r5,bh_active@ha
-	lwz	r5,bh_active@l(r5)
-	and.	r4,r4,r5
+1:	lis	r4,softirq_state@ha
+	addi	r4,r4,softirq_state@l
+#ifdef CONFIG_SMP
+	/* get processor # */
+	lwz	r3,PROCESSOR(r2)
+#ifndef CONFIG_PPC64
+	slwi	r3,r3,5
+#else
+#error not 64-bit ready	
+#endif
+	add	r4,r4,r3
+#endif /* CONFIG_SMP */
+	lwz	r5,0(r4)
+	lwz	r4,4(r4)
+	and.	r5,r5,r4
 	beq+	2f
-	bl	do_bottom_half
+	bl	do_softirq
 	.globl	do_bottom_half_ret
 do_bottom_half_ret:
 2:	/* disable interrupts */	

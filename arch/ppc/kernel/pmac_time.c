@@ -71,8 +71,8 @@ unsigned long pmac_get_rtc_time(void)
 		if (req.reply_len != 7)
 			printk(KERN_ERR "pmac_get_rtc_time: got %d byte reply\n",
 			       req.reply_len);
-		return (unsigned long)(req.reply[1] << 24) + (req.reply[2] << 16)
-			+ (req.reply[3] << 8) + (unsigned long)req.reply[4] - RTC_OFFSET;
+		return (req.reply[3] << 24) + (req.reply[4] << 16)
+			+ (req.reply[5] << 8) + req.reply[6] - RTC_OFFSET;
 #endif /* CONFIG_ADB_CUDA */
 #ifdef CONFIG_ADB_PMU
 	case SYS_CTRLER_PMU:

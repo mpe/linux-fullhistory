@@ -2,7 +2,7 @@
  * Linux ARCnet driver - "RIM I" (entirely mem-mapped) cards
  * 
  * Written 1994-1999 by Avery Pennarun.
- * Written 1999 by Martin Mares <mj@suse.cz>.
+ * Written 1999-2000 by Martin Mares <mj@suse.cz>.
  * Derived from skeleton.c by Donald Becker.
  *
  * Special thanks to Contemporary Controls, Inc. (www.ccontrols.com)
@@ -325,20 +325,11 @@ void cleanup_module(void)
 {
 	struct net_device *dev = my_dev;
 	struct arcnet_local *lp = (struct arcnet_local *) dev->priv;
-	void *ioaddr = lp->mem_start + 0x800;
 
-	if (dev->start)
-		dev->stop(dev);
-
-	/* Flush TX and disable RX */
-	AINTMASK(0);		/* disable IRQ's */
-	ACOMMAND(NOTXcmd);	/* stop transmit */
-	ACOMMAND(NORXcmd);	/* disable receive */
-
+	unregister_netdev(dev);
 	free_irq(dev->irq, dev);
 	iounmap(lp->mem_start);
 	release_mem_region(dev->mem_start, dev->mem_end - dev->mem_start + 1);
-	unregister_netdev(dev);
 	kfree(dev->priv);
 	kfree(dev);
 }

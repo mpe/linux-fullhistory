@@ -713,8 +713,8 @@ int __init igafb_init(void)
 	info->mmap_map = kmalloc(4 * sizeof(*info->mmap_map), GFP_ATOMIC);
 	if (!info->mmap_map) {
 		printk("igafb_init: can't alloc mmap_map\n");
-		iounmap(info->io_base);
-		iounmap((void *)info->frame_buffer);
+		iounmap((void *)info->io_base);
+		iounmap(info->frame_buffer);
                 kfree(info);
 		return -ENOMEM;
 	}
@@ -768,8 +768,8 @@ int __init igafb_init(void)
 #endif
 
 	if (!iga_init(info)) {
-		iounmap(info->io_base);
-		iounmap((void *)info->frame_buffer);
+		iounmap((void *)info->io_base);
+		iounmap(info->frame_buffer);
 		if (info->mmap_map)
 			kfree(info->mmap_map);
 		kfree(info);

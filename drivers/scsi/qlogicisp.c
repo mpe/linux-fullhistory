@@ -811,6 +811,7 @@ int isp1020_queuecommand(Scsi_Cmnd *Cmnd, void (*done)(Scsi_Cmnd *))
 		ds = cmd->dataseg;
 
 		sg_count = pci_map_sg(hostdata->pci_dev, sg, Cmnd->use_sg);
+		Cmnd->use_sg = sg_count;
 
 		cmd->segment_cnt = cpu_to_le16(sg_count);
 

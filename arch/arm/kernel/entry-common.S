@@ -15,26 +15,28 @@
 #define HARVARD_CACHE
 #endif
 
+		.macro	get_softirq, rd
+#ifdef __SMP__
+#error SMP not supported
+#else
+		ldr	\rd, __softirq_state
+#endif
+		.endm
+
 		.globl	ret_from_sys_call
 
 		.align	5
 fast_syscall_return:
-		str	r0, [sp, #S_R0 + S_OFF]		@ returned r0
+		str	r0, [sp, #S_R0 + S_OFF]	@ returned r0
 slow_syscall_return:
 		add	sp, sp, #S_OFF
-ret_from_sys_call:
-#ifdef HARVARD_CACHE
-		ldr	r0, bh_data
-		ldr	r4, bh_data+4
-#else
-		adr	r0, bh_data
-		ldmia	r0, {r0, r4}
-#endif
-		ldr	r0, [r0]
-		ldr	r1, [r4]
+ret_from_sys_call:				@ external entry
+		get_softirq r0
+		ldmia	r0, {r0, r1}
+		mov	r4, #1			@ flag this as being syscall return
 		tst	r0, r1
-		blne	SYMBOL_NAME(do_bottom_half)
-ret_with_reschedule:
+		blne	SYMBOL_NAME(do_softirq)
+ret_with_reschedule:				@ external entry (__irq_usr)
 		get_current_task r5
 		ldr	r0, [r5, #TSK_NEED_RESCHED]
 		ldr	r1, [r5, #TSK_SIGPENDING]
@@ -43,30 +45,23 @@ ret_with_reschedule:
 		teq	r1, #0			@ check for signals
 		bne	ret_signal
 
-ret_from_all:	restore_user_regs
+ret_from_all:	restore_user_regs		@ internal
 
-ret_signal:	mov	r1, sp
+ret_signal:	mov	r1, sp			@ internal
 		adrsvc	al, lr, ret_from_all
 		mov	r2, r4
 		b	SYMBOL_NAME(do_signal)
 
-ret_reschedule:	adrsvc	al, lr, ret_with_reschedule
+ret_reschedule:	adrsvc	al, lr, ret_with_reschedule	@ internal
 		b	SYMBOL_NAME(schedule)
 
 		.globl	ret_from_exception
-ret_from_exception:
-#ifdef HARVARD_CACHE
-		ldr	r0, bh_data
-		ldr	r1, bh_data + 4
-#else
-		adr	r0, bh_data
+ret_from_exception:				@ external entry
+		get_softirq r0
 		ldmia	r0, {r0, r1}
-#endif
-		ldr	r0, [r0]
-		ldr	r1, [r1]
 		mov	r4, #0
 		tst	r0, r1
-		blne	SYMBOL_NAME(do_bottom_half)
+		blne	SYMBOL_NAME(do_softirq)
 		ldr	r0, [sp, #S_PSR]
 		tst	r0, #3			@ returning to user mode?
 		beq	ret_with_reschedule
@@ -147,8 +142,8 @@ vector_swi:	save_user_regs
 
 		.align	5
 
-bh_data:	.word	SYMBOL_NAME(bh_mask)
-		.word	SYMBOL_NAME(bh_active)
+__softirq_state:
+		.word	SYMBOL_NAME(softirq_state)
 
 ENTRY(sys_call_table)
 #include "calls.S"

@@ -128,6 +128,18 @@ get_irq_list (char *buf)
 	return p - buf;
 }
 
+int usbfix;
+
+static int __init
+usbfix_option (char *str)
+{
+	printk("irq: enabling USB workaround\n");
+	usbfix = 1;
+	return 1;
+}
+
+__setup("usbfix", usbfix_option);
+
 /*
  * That's where the IVT branches when we get an external
  * interrupt. This branches to the correct hardware IRQ handler via
@@ -146,7 +158,8 @@ ia64_handle_irq (unsigned long irq, struct pt_regs *regs)
 	unsigned long eoi_ptr;
  
 # ifdef CONFIG_USB
-	disable_usb();
+	if (usbfix)
+		disable_usb();
 # endif
 	/*
 	 * Stop IPIs by getting the ivr_read_lock
@@ -170,7 +183,8 @@ ia64_handle_irq (unsigned long irq, struct pt_regs *regs)
 	spin_unlock(&ivr_read_lock);
 
 # ifdef CONFIG_USB
-	reenable_usb();
+	if (usbfix)
+		reenable_usb();
 # endif
 
 # ifndef CONFIG_SMP

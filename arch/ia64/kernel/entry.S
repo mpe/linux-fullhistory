@@ -496,18 +496,27 @@ ia64_ret_from_syscall:
 (p7)	br.cond.spnt.few handle_syscall_error	// handle potential syscall failure
 
 ia64_leave_kernel:
-	// check & deliver software interrupts (bottom half handlers):
+	// check & deliver software interrupts:
 
-	movl r2=bh_active		// sheesh, why aren't these two in
-	movl r3=bh_mask			// a struct??
+#ifdef CONFIG_SMP
+	adds	r2=IA64_TASK_PROCESSOR_OFFSET,r13
+	movl	r3=softirq_state
 	;;
-	ld8 r2=[r2]
-	ld8 r3=[r3]
+	ld4	r2=[r2]
+	;;
+	shladd	r3=r2,3,r3
+#else
+	movl r3=softirq_state
+#endif
+	;;
+	ld8 r2=[r3]		// r3 is guaranteed to be 8-byte aligned!
+	;;
+	shr r3=r2,32
 	;;
 	and r2=r2,r3
 	;;
-	cmp.ne p6,p7=r2,r0		// any soft interrupts ready for delivery?
-(p6)	br.call.dpnt.few rp=invoke_do_bottom_half
+	cmp4.ne p6,p7=r2,r0
+(p6)	br.call.spnt.many rp=invoke_do_softirq
 1:
 (pKern)	br.cond.dpnt.many restore_all	// yup -> skip check for rescheduling & signal delivery
 
@@ -751,20 +760,20 @@ invoke_schedule_tail:
 #endif /* CONFIG_SMP */
 
 	/*
-	 * Invoke do_bottom_half() while preserving in0-in7, which may be needed
+	 * Invoke do_softirq() while preserving in0-in7, which may be needed
 	 * in case a system call gets restarted.
 	 */
-	.proc invoke_do_bottom_half
-invoke_do_bottom_half:
+	.proc invoke_do_softirq
+invoke_do_softirq:
 	alloc loc0=ar.pfs,8,2,0,0
 	mov loc1=rp
 	;;
-	br.call.sptk.few rp=do_bottom_half
+	br.call.sptk.few rp=do_softirq
 .ret9:
 	mov ar.pfs=loc0
 	mov rp=loc1
 	br.ret.sptk.many rp
-	.endp invoke_do_bottom_half
+	.endp invoke_do_softirq
 
 	/*
 	 * Invoke schedule() while preserving in0-in7, which may be needed

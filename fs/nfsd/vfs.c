@@ -310,11 +310,6 @@ printk("nfsd_setattr: size change??\n");
 	if (iap->ia_valid & ATTR_SIZE) {
 		fh_lock(fhp);
 		err = notify_change(dentry, iap);
-		if (!err) {
-			vmtruncate(inode,iap->ia_size);		
-			if (inode->i_op && inode->i_op->truncate)
-				inode->i_op->truncate(inode);
-		}
 		fh_unlock(fhp);
 		put_write_access(inode);
 	}
@@ -1082,11 +1077,6 @@ nfsd_truncate(struct svc_rqst *rqstp, struct svc_fh *fhp, unsigned long size)
 		cap_clear(current->cap_effective);
 	}
 	err = notify_change(dentry, &newattrs);
-	if (!err) {
-		vmtruncate(inode, size);
-		if (inode->i_op && inode->i_op->truncate)
-			inode->i_op->truncate(inode);
-	}
 	if (current->fsuid != 0)
 		current->cap_effective = saved_cap;
 	put_write_access(inode);

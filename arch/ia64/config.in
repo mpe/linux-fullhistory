@@ -3,6 +3,8 @@ mainmenu_name "Kernel configuration of Linux for IA-64 machines"
 mainmenu_option next_comment
 comment 'General setup'
 
+define_bool CONFIG_IA64 y
+
 choice 'IA-64 system type'					\
 	"Generic		CONFIG_IA64_GENERIC		\
 	 HP-simulator		CONFIG_IA64_HP_SIM		\

@@ -15,6 +15,7 @@
 #ifndef __ASM_ARM_IO_H
 #define __ASM_ARM_IO_H
 
+#include <linux/types.h>
 #include <asm/arch/hardware.h>
 #include <asm/arch/io.h>
 #include <asm/proc/io.h>
@@ -66,21 +67,31 @@ extern __inline__ void *phys_to_virt(unsigned long x)
 /*
  * ioremap and friends
  */
-extern void * __ioremap(unsigned long offset, unsigned long size, unsigned long flags);
+extern void * __ioremap(unsigned long offset, size_t size, unsigned long flags);
 extern void __iounmap(void *addr);
 
 #define ioremap(off,sz)			__arch_ioremap((off),(sz),0)
 #define ioremap_nocache(off,sz)		__arch_ioremap((off),(sz),1)
 #define iounmap(_addr)			__iounmap(_addr)
 
+/*
+ * DMA-consistent mapping functions.  These allocate/free a region of
+ * uncached, unwrite-buffered mapped memory space for use with DMA
+ * devices.  This is the "generic" version.  The PCI specific version
+ * is in pci.h
+ */
+extern void *consistent_alloc(int gfp, size_t size, dma_addr_t *handle);
+extern void consistent_free(void *vaddr);
+extern void consistent_sync(void *vaddr, size_t size, int rw);
+
 extern void __readwrite_bug(const char *fn);
 
 /*
  * String version of IO memory access ops:
  */
-extern void _memcpy_fromio(void *, unsigned long, unsigned long);
-extern void _memcpy_toio(unsigned long, const void *, unsigned long);
-extern void _memset_io(unsigned long, int, unsigned long);
+extern void _memcpy_fromio(void *, unsigned long, size_t);
+extern void _memcpy_toio(unsigned long, const void *, size_t);
+extern void _memset_io(unsigned long, int, size_t);
 
 #define __raw_writeb(val,addr)		__arch_putb(val,addr)
 #define __raw_writew(val,addr)		__arch_putw(val,addr)

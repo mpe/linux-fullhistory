@@ -132,6 +132,7 @@ back_from_setup_rbs:
 	ld8 r8=[base0]				// restore (perhaps modified) CFM0, EC0, and CPL0
 	cmp.ne p8,p0=r14,r15			// do we need to restore the rbs?
 (p8)	br.cond.spnt.few restore_rbs		// yup -> (clobbers r14 and r16)
+	;;
 back_from_restore_rbs:
 	{
 	  and r9=0x7f,r8			// r9  <- CFM0.sof

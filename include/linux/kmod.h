@@ -3,6 +3,7 @@
 */
 
 #include <linux/config.h>
+#include <linux/errno.h>
 
 #ifdef CONFIG_KMOD
 extern int request_module(const char * name);

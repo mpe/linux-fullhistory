@@ -12,6 +12,11 @@
 #include <asm/processor.h>
 #include <asm/errno.h>
 
+CACHELINE_BYTES = 32
+LG_CACHELINE_BYTES = 5
+CACHELINE_MASK = 0x1f
+CACHELINE_WORDS = 8
+
 	.globl	strcpy
 strcpy:
 	addi	r5,r3,-1
@@ -70,6 +75,55 @@ strlen:
 	subf	r3,r3,r4
 	blr
 
+/*
+ * Use dcbz on the complete cache lines in the destination
+ * to set them to zero.  This requires that the destination
+ * area is cacheable.  -- paulus
+ */
+	.globl	cacheable_memzero
+cacheable_memzero:
+	mr	r5,r4
+	li	r4,0
+	addi	r6,r3,-4
+	cmplwi	0,r5,4
+	blt	7f
+	stwu	r4,4(r6)
+	beqlr
+	andi.	r0,r6,3
+	add	r5,r0,r5
+	subf	r6,r0,r6
+	clrlwi	r7,r6,32-LG_CACHELINE_BYTES
+	add	r8,r7,r5
+	srwi	r9,r8,LG_CACHELINE_BYTES
+	addic.	r9,r9,-1	/* total number of complete cachelines */
+	ble	2f
+	xori	r0,r7,CACHELINE_MASK & ~3
+	srwi.	r0,r0,2
+	beq	3f
+	mtctr	r0
+4:	stwu	r4,4(r6)
+	bdnz	4b
+3:	mtctr	r9
+	li	r7,4
+10:	dcbz	r7,r6
+	addi	r6,r6,CACHELINE_BYTES
+	bdnz	10b
+	clrlwi	r5,r8,32-LG_CACHELINE_BYTES
+	addi	r5,r5,4
+2:	srwi	r0,r5,2
+	mtctr	r0
+	bdz	6f
+1:	stwu	r4,4(r6)
+	bdnz	1b
+6:	andi.	r5,r5,3
+7:	cmpwi	0,r5,0
+	beqlr
+	mtctr	r5
+	addi	r6,r6,3
+8:	stbu	r4,1(r6)
+	bdnz	8b
+	blr
+
 	.globl	memset
 memset:
 	rlwimi	r4,r4,8,16,23
@@ -82,7 +136,7 @@ memset:
 	andi.	r0,r6,3
 	add	r5,r0,r5
 	subf	r6,r0,r6
-	rlwinm	r0,r5,32-2,2,31
+	srwi	r0,r5,2
 	mtctr	r0
 	bdz	6f
 1:	stwu	r4,4(r6)
@@ -103,6 +157,87 @@ bcopy:
 	mr	r4,r6
 	b	memcpy
 
+/*
+ * This version uses dcbz on the complete cache lines in the
+ * destination area to reduce memory traffic.  This requires that
+ * the destination area is cacheable.
+ * We only use this version if the source and dest don't overlap.
+ * -- paulus.
+ */
+	.global	cacheable_memcpy
+cacheable_memcpy:
+	add	r7,r3,r5		/* test if the src & dst overlap */
+	add	r8,r4,r5
+	cmplw	0,r4,r7
+	cmplw	1,r3,r8
+	crand	0,0,4			/* cr0.lt &= cr1.lt */
+	blt	memcpy			/* if regions overlap */
+
+	addi	r4,r4,-4
+	addi	r6,r3,-4
+	neg	r0,r3
+	andi.	r0,r0,CACHELINE_MASK	/* # bytes to start of cache line */
+	beq	58f
+
+	cmplw	0,r5,r0			/* is this more than total to do? */
+	blt	63f			/* if not much to do */
+	andi.	r8,r0,3			/* get it word-aligned first */
+	subf	r5,r0,r5
+	mtctr	r8
+	beq+	61f
+70:	lbz	r9,4(r4)		/* do some bytes */
+	stb	r9,4(r6)
+	addi	r4,r4,1
+	addi	r6,r6,1
+	bdnz	70b
+61:	srwi.	r0,r0,2
+	mtctr	r0
+	beq	58f
+72:	lwzu	r9,4(r4)		/* do some words */
+	stwu	r9,4(r6)
+	bdnz	72b
+
+58:	srwi.	r0,r5,LG_CACHELINE_BYTES /* # complete cachelines */
+	clrlwi	r5,r5,32-LG_CACHELINE_BYTES
+	li	r11,4
+	mtctr	r0
+	beq	63f
+53:	dcbz	r11,r6
+	lwz	r7,4(r4)
+	lwz	r8,8(r4)
+	lwz	r9,12(r4)
+	lwzu	r10,16(r4)
+	stw	r7,4(r6)
+	stw	r8,8(r6)
+	stw	r9,12(r6)
+	stwu	r10,16(r6)
+	lwz	r7,4(r4)
+	lwz	r8,8(r4)
+	lwz	r9,12(r4)
+	lwzu	r10,16(r4)
+	stw	r7,4(r6)
+	stw	r8,8(r6)
+	stw	r9,12(r6)
+	stwu	r10,16(r6)
+	bdnz	53b
+
+63:	srwi.	r0,r5,2
+	mtctr	r0
+	beq	64f
+30:	lwzu	r0,4(r4)
+	stwu	r0,4(r6)
+	bdnz	30b
+
+64:	andi.	r0,r5,3
+	mtctr	r0
+	beq+	65f
+40:	lbz	r0,4(r4)
+	stb	r0,4(r6)
+	addi	r4,r4,1
+	addi	r6,r6,1
+	bdnz	40b
+65:	blr
+
 	.globl	memmove
 memmove:
 	cmplw	0,r3,r4
@@ -111,7 +246,7 @@ memmove:
 
 	.globl	memcpy
 memcpy:
-	rlwinm.	r7,r5,32-3,3,31		/* r0 = r5 >> 3 */
+	srwi.	r7,r5,3
 	addi	r6,r3,-4
 	addi	r4,r4,-4
 	beq	2f			/* if less than 8 bytes to do */
@@ -218,106 +353,167 @@ memchr:
 
 	.globl	__copy_tofrom_user
 __copy_tofrom_user:
-	srwi.	r7,r5,3
-	addi	r6,r3,-4
 	addi	r4,r4,-4
-	li	r3,0		/* success return value */
-	beq	2f		/* if less than 8 bytes to do */
-	andi.	r0,r6,3		/* get dest word aligned */
-	mtctr	r7
-	bne	5f
-1:	lwz	r7,4(r4)
-11:	lwzu	r8,8(r4)
-12:	stw	r7,4(r6)
-13:	stwu	r8,8(r6)
-	bdnz	1b
-	andi.	r5,r5,7
-2:	cmplwi	0,r5,4
-	blt	3f
-14:	lwzu	r0,4(r4)
-	addi	r5,r5,-4
-15:	stwu	r0,4(r6)
-3:	cmpwi	0,r5,0		/* do 1 byte at a time for the remainder */
-	beqlr
-	mtctr	r5
-	addi	r4,r4,3
-	addi	r6,r6,3
-4:	lbzu	r0,1(r4)
-16:	stbu	r0,1(r6)
-	bdnz	4b
-	blr
-5:	subfic	r0,r0,4		/* copy bytes until we have the */
-	mtctr	r0		/* destination 4-byte aligned */
-	subf	r5,r0,r5
-6:	lbz	r7,4(r4)
+	addi	r6,r3,-4
+	neg	r0,r3
+	andi.	r0,r0,CACHELINE_MASK	/* # bytes to start of cache line */
+	beq	58f
+
+	cmplw	0,r5,r0			/* is this more than total to do? */
+	blt	63f			/* if not much to do */
+	andi.	r8,r0,3			/* get it word-aligned first */
+	mtctr	r8
+	beq+	61f
+70:	lbz	r9,4(r4)		/* do some bytes */
+71:	stb	r9,4(r6)
 	addi	r4,r4,1
-17:	stb	r7,4(r6)
 	addi	r6,r6,1
-	bdnz	6b
-	srwi.	r7,r5,3
-	beq	2b
-	mtctr	r7
-	b	1b
-/* we come here on a fault in the 8-byte-at-a-time loop */
-88:	subi	r4,r4,8		/* compensate for the lwzu */
-98:	mfctr	r0
-	rlwimi	r5,r0,3,0,28	/* use the byte-at-a-time loop to */
-	b	3b		/* copy up to the byte at fault */
-/* here on a write fault in the single-word copy */
-96:	subi	r4,r4,4
-	b	3b
-/* here on a read fault in the initial single-byte copy */
-90:	mfctr	r3
-	add	r3,r3,r5
-	b	70f
-/* here on a read fault in the final single-byte copy */
-99:	mfctr	r3
-	subi	r6,r6,3
-/* clear out the rest of the destination: r3 bytes starting at 4(r6) */
-70:	li	r0,0
-	mr.	r5,r3
-	beq	76f
-71:	andi.	r4,r6,3
-	beq	72f
-77:	stb	r0,4(r6)
+	bdnz	70b
+61:	subf	r5,r0,r5
+	srwi.	r0,r0,2
+	mtctr	r0
+	beq	58f
+72:	lwzu	r9,4(r4)		/* do some words */
+73:	stwu	r9,4(r6)
+	bdnz	72b
+
+58:	srwi.	r0,r5,LG_CACHELINE_BYTES /* # complete cachelines */
+	clrlwi	r5,r5,32-LG_CACHELINE_BYTES
+	li	r11,4
+	mtctr	r0
+	beq	63f
+53:	dcbz	r11,r6
+10:	lwz	r7,4(r4)
+11:	lwz	r8,8(r4)
+12:	lwz	r9,12(r4)
+13:	lwzu	r10,16(r4)
+14:	stw	r7,4(r6)
+15:	stw	r8,8(r6)
+16:	stw	r9,12(r6)
+17:	stwu	r10,16(r6)
+20:	lwz	r7,4(r4)
+21:	lwz	r8,8(r4)
+22:	lwz	r9,12(r4)
+23:	lwzu	r10,16(r4)
+24:	stw	r7,4(r6)
+25:	stw	r8,8(r6)
+26:	stw	r9,12(r6)
+27:	stwu	r10,16(r6)
+	bdnz	53b
+
+63:	srwi.	r0,r5,2
+	mtctr	r0
+	beq	64f
+30:	lwzu	r0,4(r4)
+31:	stwu	r0,4(r6)
+	bdnz	30b
+
+64:	andi.	r0,r5,3
+	mtctr	r0
+	beq+	65f
+40:	lbz	r0,4(r4)
+41:	stb	r0,4(r6)
+	addi	r4,r4,1
 	addi	r6,r6,1
-	addic.	r5,r5,-1
-	bne	71b
-72:	srwi.	r7,r5,2
-	beq	73f
-	mtctr	r7
-74:	stwu	r0,4(r6)
-	bdnz	74b
-73:	andi.	r5,r5,3
-	beq	76f
-	mtctr	r5
-	addi	r6,r6,3
-75:	stbu	r0,1(r6)
-	bdnz	75b
-76:	blr
-/* here on a write fault in the initial single-byte copy */
-80:	mfctr	r3
+	bdnz	40b
+65:	li	r3,0
+	blr
+
+/* read fault, initial single-byte copy */
+100:	li	r4,0
+	b	90f
+/* write fault, initial single-byte copy */
+101:	li	r4,1
+90:	subf	r5,r8,r5
+	li	r3,0
+	b	99f
+/* read fault, initial word copy */
+102:	li	r4,0
+	b	91f
+/* write fault, initial word copy */
+103:	li	r4,1
+91:	li	r3,2
+	b	99f
+/* read fault in 2nd half of cacheline loop */
+106:	addi	r5,r5,-16
+/* read fault in 1st half of cacheline loop */
+104:	li	r4,0
+	b	92f
+/* write fault in 2nd half of cacheline loop */
+107:	addi	r5,r5,-16
+/* fault on dcbz (effectively a write fault) */
+/* or write fault in 1st half of cacheline loop */
+105:	li	r4,1
+92:	li	r3,LG_CACHELINE_BYTES
+	b	99f
+/* read fault in final word loop */
+108:	li	r4,0
+	b	93f
+/* write fault in final word loop */
+109:	li	r4,1
+93:	andi.	r5,r5,3
+	li	r3,2
+	b	99f
+/* read fault in final byte loop */
+110:	li	r4,0
+	b	94f
+/* write fault in final byte loop */
+111:	li	r4,1
+94:	li	r5,0
+	li	r3,0
+/*
+ * At this stage the number of bytes not copied is
+ * r5 + (ctr << r3), and r4 is 0 for read or 1 for write.
+ */
+99:	mfctr	r0
+	slw	r3,r0,r3
 	add	r3,r3,r5
-	blr
-/* here on a write fault in the final single-byte copy */
-81:	mfctr	r3
-	blr
+	cmpwi	0,r4,0
+	bne	120f
+/* for read fault, clear out the destination: r3 bytes starting at 4(r6) */
+	srwi.	r0,r3,2
+	li	r9,0
+	mtctr	r0
+	beq	113f
+112:	stwu	r9,4(r6)
+	bdnz	112b
+113:	andi.	r0,r3,3
+	mtctr	r0
+	beq	120f
+114:	stb	r9,4(r6)
+	addi	r6,r6,1
+	bdnz	114b
+120:	blr
 
 .section __ex_table,"a"
 	.align	2
-	.long	1b,98b
-	.long	11b,98b
-	.long	12b,88b
-	.long	13b,88b
-	.long	14b,3b
-	.long	15b,96b
-	.long	4b,99b
-	.long	16b,81b
-	.long	6b,90b
-	.long	17b,80b
-	.long	77b,76b
-	.long	74b,76b
-	.long	75b,76b
+	.long	70b,100b
+	.long	71b,101b
+	.long	72b,102b
+	.long	73b,103b
+	.long	53b,105b
+	.long	10b,104b
+	.long	11b,104b
+	.long	12b,104b
+	.long	13b,104b
+	.long	14b,105b
+	.long	15b,105b
+	.long	16b,105b
+	.long	17b,105b
+	.long	20b,106b
+	.long	21b,106b
+	.long	22b,106b
+	.long	23b,106b
+	.long	24b,107b
+	.long	25b,107b
+	.long	26b,107b
+	.long	27b,107b
+	.long	30b,108b
+	.long	31b,109b
+	.long	40b,110b
+	.long	41b,111b
+	.long	112b,120b
+	.long	114b,120b
 .text
 
 	.globl	__clear_user
@@ -334,7 +530,6 @@ __clear_user:
 	andi.	r0,r6,3
 	add	r4,r0,r4
 	subf	r6,r0,r6
-	/*rlwinm	r0,r4,32-2,2,31*/
 	srwi	r0,r4,2
 	mtctr	r0
 	bdz	6f

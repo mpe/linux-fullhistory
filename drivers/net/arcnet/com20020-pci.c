@@ -3,7 +3,7 @@
  * 
  * Written 1994-1999 by Avery Pennarun,
  *    based on an ISA version by David Woodhouse.
- * Written 1999 by Martin Mares <mj@suse.cz>.
+ * Written 1999-2000 by Martin Mares <mj@suse.cz>.
  * Derived from skeleton.c by Donald Becker.
  *
  * Special thanks to Contemporary Controls, Inc. (www.ccontrols.com)
@@ -148,13 +148,9 @@ void cleanup_module(void)
 
 	for (count = 0; count < numcards; count++) {
 		dev = cards[count];
-
-		if (dev->start)
-			dev->stop(dev);
-
+		unregister_netdev(dev);
 		free_irq(dev->irq, dev);
 		release_region(dev->base_addr, ARCNET_TOTAL_SIZE);
-		unregister_netdev(dev);
 		kfree(dev->priv);
 		kfree(dev);
 	}

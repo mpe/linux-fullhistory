@@ -1057,8 +1057,8 @@ static void __init pcibios_irq_peer_trick(struct irq_routing_table *rt)
 static unsigned int pcibios_irq_mask = 0xfff8;
 
 static unsigned pcibios_irq_penalty[16] = {
-	1000, 1000, 1000, 10, 10, 0, 0, 10,
-	0, 0, 0, 0, 10, 100, 100, 100
+	10000, 10000, 10000, 100, 100, 0, 0, 100,
+	0, 0, 0, 0, 100, 1000, 1000, 1000
 };
 
 static char *pcibios_lookup_irq(struct pci_dev *dev, struct irq_routing_table *rt, int pin, int assign)

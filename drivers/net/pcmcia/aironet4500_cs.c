@@ -231,8 +231,7 @@ static dev_link_t *awc_attach(void)
 	dev->init = &awc_pcmcia_init;
 	dev->open = &awc_pcmcia_open;
 	dev->stop = &awc_pcmcia_close;
-	dev->tbusy = 1;
-	dev->start  = 0;
+	netif_start_queue (dev);
 	
 	link->priv = dev;
 #if CS_RELEASE_CODE > 0x2911
@@ -567,7 +566,7 @@ static int awc_event(event_t event, int priority,
 	case CS_EVENT_CARD_REMOVAL:
 		link->state &= ~DEV_PRESENT;
 		if (link->state & DEV_CONFIG) {
-			dev->tbusy = 1; dev->start = 0;
+			netif_stop_queue (dev);
 			link->release.expires = RUN_AT( HZ/20 );
 			add_timer(&link->release);
 		}
@@ -582,7 +581,7 @@ static int awc_event(event_t event, int priority,
 	case CS_EVENT_RESET_PHYSICAL:
 		if (link->state & DEV_CONFIG) {
 			if (link->open) {
-				dev->tbusy = 1; dev->start = 0;
+				netif_stop_queue (dev);
 			}
 			CardServices(ReleaseConfiguration, link->handle);
 		}
@@ -595,7 +594,7 @@ static int awc_event(event_t event, int priority,
 			CardServices(RequestConfiguration, link->handle, &link->conf);
 			if (link->open) {
 				// awc_reset(dev);
-				dev->tbusy = 0; dev->start = 1;
+				netif_start_queue (dev);
 			}
 		}
 		break;

@@ -237,16 +237,8 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 
 	irq_exit(cpu, irq);
 
-	/*
-	 * This should be conditional: we should really get
-	 * a return code from the irq handler to tell us
-	 * whether the handler wants us to do software bottom
-	 * half handling or not..
-	 */
-	if (1) {
-		if (bh_active & bh_mask)
-			do_bottom_half();
-	}
+	if (softirq_state[cpu].active & softirq_state[cpu].mask)
+		do_softirq();
 }
 
 #if defined(CONFIG_ARCH_ACORN)

@@ -44,4 +44,8 @@ static struct file_operations adfs_file_operations = {
 
 struct inode_operations adfs_file_inode_operations = {
 	&adfs_file_operations,	/* default file operations */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)
+	readpage:	generic_readpage,
+	bmap:		adfs_bmap,
+#endif
 };

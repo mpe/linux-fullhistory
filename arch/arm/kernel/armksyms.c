@@ -188,6 +188,10 @@ EXPORT_SYMBOL(uaccess_kernel);
 EXPORT_SYMBOL(uaccess_user);
 #endif
 
+EXPORT_SYMBOL(consistent_alloc);
+EXPORT_SYMBOL(consistent_free);
+EXPORT_SYMBOL(consistent_sync);
+
 	/* gcc lib functions */
 EXPORT_SYMBOL_NOVERS(__gcc_bcmp);
 EXPORT_SYMBOL_NOVERS(__ashldi3);
@@ -234,5 +238,8 @@ EXPORT_SYMBOL_NOVERS(__down_failed);
 EXPORT_SYMBOL_NOVERS(__down_interruptible_failed);
 EXPORT_SYMBOL_NOVERS(__down_trylock_failed);
 EXPORT_SYMBOL_NOVERS(__up_wakeup);
+EXPORT_SYMBOL_NOVERS(__down_read_failed);
+EXPORT_SYMBOL_NOVERS(__down_write_failed);
+EXPORT_SYMBOL_NOVERS(__rwsem_wake);
 
 EXPORT_SYMBOL(get_wchan);

@@ -1761,7 +1761,7 @@ de4x5_free_tx_buff(struct de4x5_private *lp, int entry)
     pci_unmap_single(lp->pdev, le32_to_cpu(lp->tx_ring[entry].buf),
 		     le32_to_cpu(lp->tx_ring[entry].des1) & TD_TBS1);
     if ((u_long) lp->tx_skb[entry] > 1)
-	dev_kfree_skb(lp->tx_skb[entry]);
+	dev_kfree_skb_irq(lp->tx_skb[entry]);
     lp->tx_skb[entry] = NULL;
 }
 

@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.53 2000/02/04 21:04:08 davem Exp $
+ *	$Id: af_inet6.c,v 1.54 2000/02/12 23:34:45 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -451,7 +451,7 @@ struct proto_ops inet6_dgram_ops = {
 	inet6_bind,
 	inet_dgram_connect,		/* ok		*/
 	sock_no_socketpair,		/* a do nothing	*/
-	inet_accept,			/* ok		*/
+	sock_no_accept,			/* a do nothing	*/
 	inet6_getname, 
 	datagram_poll,			/* ok		*/
 	inet6_ioctl,			/* must change  */

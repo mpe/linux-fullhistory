@@ -137,13 +137,6 @@ up (struct semaphore * sem)
  * In terms of fairness, when there is heavy use of the lock, we want
  * to see the lock being passed back and forth between readers and
  * writers (like in a producer/consumer style of communication).
- * 
-
-  For
- * liveness, it would be necessary to process the blocked readers and
- * writers in FIFO order.  However, we don't do this (yet).  I suppose
- * if you have a lock that is _that_ heavily contested, you're in big
- * trouble anyhow.
  *
  *	      -ben (with clarifications & IA-64 comments by davidm)
  */

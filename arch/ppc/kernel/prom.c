@@ -802,42 +802,19 @@ setup_disp_fake_bi(ihandle dp)
 {
 	unsigned int len;
 	int width = 640, height = 480, depth = 8, pitch;
-	unsigned  address;
+	unsigned address;
 	boot_infos_t* bi;
 	unsigned long offset = reloc_offset();
 	
-	prom_print(RELOC("Initing fake screen\n"));
+	prom_print(RELOC("Initializing fake screen\n"));
 
-	len = 0;
+	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("width"), &width, sizeof(width));
+	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("height"), &height, sizeof(height));
 	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("depth"), &len, sizeof(len));
-	if (len == 0)
-		prom_print(RELOC("Warning: assuming display depth = 8\n"));
-	else
-		depth = len;
-	width = len = 0;
-	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("width"), &len, sizeof(len));
-	width = len;
-	if (width == 0) {
-		prom_print(RELOC("Failed to get width\n"));
-		return;
-	}
-	height = len = 0;
-	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("height"), &len, sizeof(len));
-	height = len;
-	if (height == 0) {
-		prom_print(RELOC("Failed to get height\n"));
-		return;
-	}
-	pitch = len = 0;
+	pitch = width * ((depth + 7) / 8);
 	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("linebytes"), &len, sizeof(len));
-	pitch = len;
-	if (pitch == 0) {
-		prom_print(RELOC("Failed to get pitch\n"));
-		return;
-	}
-	address = len = 0;
+	address = 0;
 	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("address"), &len, sizeof(len));
-	address = len;
 	if (address == 0) {
 		prom_print(RELOC("Failed to get address\n"));
 		return;
@@ -846,22 +823,22 @@ setup_disp_fake_bi(ihandle dp)
 	/* kludge for valkyrie */
 	if (strcmp(dp->name, "valkyrie") == 0) 
 	    address += 0x1000;
-    }
 #endif
  
-    RELOC(disp_bi) = &fake_bi;
-    bi = PTRRELOC((&fake_bi));
-    RELOC(g_loc_X) = 0;
-    RELOC(g_loc_Y) = 0;
-    RELOC(g_max_loc_X) = width / 8;
-    RELOC(g_max_loc_Y) = height / 16;
-    bi->logicalDisplayBase = (unsigned char *)address;
-    bi->dispDeviceBase = (unsigned char *)address;
-    bi->dispDeviceRowBytes = pitch;
-    bi->dispDeviceDepth = depth;
-    bi->dispDeviceRect[0] = bi->dispDeviceRect[1] = 0;
-    bi->dispDeviceRect[2] = width;
-    bi->dispDeviceRect[3] = height;
+	RELOC(disp_bi) = &fake_bi;
+	bi = PTRRELOC((&fake_bi));
+	RELOC(g_loc_X) = 0;
+	RELOC(g_loc_Y) = 0;
+	RELOC(g_max_loc_X) = width / 8;
+	RELOC(g_max_loc_Y) = height / 16;
+	bi->logicalDisplayBase = (unsigned char *)address;
+	bi->dispDeviceBase = (unsigned char *)address;
+	bi->dispDeviceRowBytes = pitch;
+	bi->dispDeviceDepth = depth;
+	bi->dispDeviceRect[0] = bi->dispDeviceRect[1] = 0;
+	bi->dispDeviceRect[2] = width;
+	bi->dispDeviceRect[3] = height;
+	RELOC(disp_bi) = 0;
 }
 #endif
 

@@ -1,4 +1,4 @@
-/*  $Id: atyfb.c,v 1.138 2000/02/10 02:52:12 davem Exp $
+/*  $Id: atyfb.c,v 1.139 2000/02/12 22:47:04 davem Exp $
  *  linux/drivers/video/atyfb.c -- Frame buffer device for ATI Mach64
  *
  *	Copyright (C) 1997-1998  Geert Uytterhoeven

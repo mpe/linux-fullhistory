@@ -163,7 +163,7 @@ static int lapbeth_rcv(struct sk_buff *skb, struct net_device *dev, struct packe
 	
 	dev = lapbeth_get_x25_dev(dev);
 
-	if (dev == NULL || dev->start == 0) {
+	if (dev == NULL || test_bit(LINK_STATE_START, &dev->state) == 0) {
 		kfree_skb(skb);
 		return 0;
 	}
@@ -215,7 +215,7 @@ static int lapbeth_xmit(struct sk_buff *skb, struct net_device *dev)
 	 * Just to be *really* sure not to send anything if the interface
 	 * is down, the ethernet device may have gone.
 	 */
-	if (!dev->start) {
+	if (!test_bit(LINK_STATE_START, &dev->state)) {
 		lapbeth_check_devices(dev);
 		kfree_skb(skb);
 		return -ENODEV;
@@ -360,9 +360,6 @@ static int lapbeth_open(struct net_device *dev)
 	if (lapbeth_check_devices(dev))
 		return -ENODEV;		/* oops, it's gone */
 	
-	dev->tbusy = 0;
-	dev->start = 1;
-
 	lapbeth = (struct lapbethdev *)dev->priv;
 
 	lapbeth_callbacks.connect_confirmation    = lapbeth_connected;
@@ -374,12 +371,11 @@ static int lapbeth_open(struct net_device *dev)
 
 	if ((err = lapb_register(lapbeth, &lapbeth_callbacks)) != LAPB_OK) {
 		printk(KERN_ERR "lapbeth: lapb_register error - %d\n", err);
-		dev->tbusy = 1;
-		dev->start = 0;
 		return -ENODEV;
 	}
 
 	MOD_INC_USE_COUNT;
+	netif_start_queue(dev);
 
 	return 0;
 }
@@ -389,9 +385,8 @@ static int lapbeth_close(struct net_device *dev)
 	struct lapbethdev *lapbeth;
 	int err;
 
-	dev->tbusy = 1;
-	dev->start = 0;
-
+	netif_stop_queue(dev);
+	
 	lapbeth = (struct lapbethdev *)dev->priv;
 
 	if ((err = lapb_unregister(lapbeth)) != LAPB_OK)

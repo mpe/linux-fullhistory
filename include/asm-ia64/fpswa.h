@@ -9,7 +9,7 @@
  * Copyright (C) 1999 Goutham Rao <goutham.rao@intel.com>
  */
 
-#if 0
+#if 1
 #define FPSWA_BUG
 #endif
 

@@ -1,4 +1,4 @@
-/* $Id: pcic.c,v 1.12 2000/01/22 07:35:25 zaitcev Exp $
+/* $Id: pcic.c,v 1.13 2000/02/12 03:05:37 zaitcev Exp $
  * pcic.c: Sparc/PCI controller support
  *
  * Copyright (C) 1998 V. Roganov and G. Raiko
@@ -784,6 +784,7 @@ void __init pci_time_init(void)
 
 static __inline__ unsigned long do_gettimeoffset(void)
 {
+	struct tasklet_struct *t;
 	unsigned long offset = 0;
 
 	/* 
@@ -794,7 +795,8 @@ static __inline__ unsigned long do_gettimeoffset(void)
 	    readl(pcic0.pcic_regs+PCI_SYS_COUNTER) & ~PCI_SYS_COUNTER_OVERFLOW;
 	count = ((count/100)*USECS_PER_JIFFY) / (TICK_TIMER_LIMIT/100);
 
-	if(test_bit(TIMER_BH, &bh_active))
+	t = &bh_task_vec[TIMER_BH];
+	if (test_bit(TASKLET_STATE_SCHED, &t->state))
 		offset = 1000000;
 	return offset + count;
 }

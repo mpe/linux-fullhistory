@@ -3,7 +3,7 @@
  * 
  * Written 1997 by David Woodhouse.
  * Written 1994-1999 by Avery Pennarun.
- * Written 1999 by Martin Mares <mj@suse.cz>.
+ * Written 1999-2000 by Martin Mares <mj@suse.cz>.
  * Derived from skeleton.c by Donald Becker.
  *
  * Special thanks to Contemporary Controls, Inc. (www.ccontrols.com)
@@ -41,7 +41,7 @@
  *     <jojo@repas.de>
  */
 
-#define VERSION "arcnet: v3.91 BETA 99/12/18 - by Avery Pennarun et al.\n"
+#define VERSION "arcnet: v3.92 BETA 2000/02/13 - by Avery Pennarun et al.\n"
 
 #include <linux/module.h>
 #include <linux/config.h>
@@ -97,6 +97,7 @@ EXPORT_SYMBOL(arcnet_interrupt);
 static int arcnet_open(struct net_device *dev);
 static int arcnet_close(struct net_device *dev);
 static int arcnet_send_packet(struct sk_buff *skb, struct net_device *dev);
+static void arcnet_timeout(struct net_device *dev);
 static int arcnet_header(struct sk_buff *skb, struct net_device *dev,
 			 unsigned short type, void *daddr, void *saddr,
 			 unsigned len);
@@ -347,6 +348,7 @@ void arcdev_setup(struct net_device *dev)
 	dev->addr_len = 1;
 	dev->tx_queue_len = 30;
 	dev->broadcast[0] = 0x00;	/* for us, broadcasts are address 0 */
+	dev->watchdog_timeo = TX_TIMEOUT;
 
 	/* New-style flags. */
 	dev->flags = IFF_BROADCAST;
@@ -358,6 +360,7 @@ void arcdev_setup(struct net_device *dev)
 	dev->open = arcnet_open;
 	dev->stop = arcnet_close;
 	dev->hard_start_xmit = arcnet_send_packet;
+	dev->tx_timeout = arcnet_timeout;
 	dev->get_stats = arcnet_get_stats;
 	dev->hard_header = arcnet_header;
 	dev->rebuild_header = arcnet_rebuild_header;
@@ -396,10 +399,6 @@ static int arcnet_open(struct net_device *dev)
 	 */
 	if (ARCRESET(0) && ARCRESET(1))
 		return -ENODEV;
-
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 0;
 
 	newmtu = choose_mtu();
 	if (newmtu < dev->mtu)
@@ -441,9 +440,6 @@ static int arcnet_open(struct net_device *dev)
 	if (ASTATUS() & RESETflag)
 		ACOMMAND(CFLAGScmd | RESETclear);
 
-	/* we're started */
-	dev->start = 1;
-
 	/* make sure we're ready to receive IRQ's. */
 	AINTMASK(0);
 	udelay(1);		/* give it time to set the mask before
@@ -452,6 +448,8 @@ static int arcnet_open(struct net_device *dev)
 				 */
 	lp->intmask = NORXflag | RECONflag;
 	AINTMASK(lp->intmask);
+
+	netif_start_queue(dev);
 
 	return 0;
 }
@@ -462,15 +460,13 @@ static int arcnet_close(struct net_device *dev)
 {
 	struct arcnet_local *lp = (struct arcnet_local *) dev->priv;
 
+	netif_stop_queue(dev);
+
 	/* flush TX and disable RX */
 	AINTMASK(0);
 	ACOMMAND(NOTXcmd);	/* stop transmit */
 	ACOMMAND(NORXcmd);	/* disable receive */
 	mdelay(1);
-
-	dev->tbusy = 1;
-	dev->start = 0;
-	dev->interrupt = 0;
 
 	/* shut down the card */
 	ARCOPEN(0);
@@ -584,48 +580,6 @@ static int arcnet_send_packet(struct sk_buff *skb, struct net_device *dev)
 	       "transmit requested (status=%Xh, txbufs=%d/%d, len=%d)\n",
 	       ASTATUS(), lp->cur_tx, lp->next_tx, skb->len);
 
-	if (dev->tbusy) {
-		/*
-		 * If we get here, some higher level has decided we are broken.
-		 * There should really be a "kick me" function call instead. 
-		 */
-		unsigned long flags;
-		int tickssofar = jiffies - dev->trans_start, status = ASTATUS();
-
-		if (tickssofar < TX_TIMEOUT) {
-			BUGMSG(D_DURING, "premature kickme! (status=%Xh ticks=%d)\n",
-			       status, tickssofar);
-			return 1;	/* means "try again" */
-		}
-		save_flags(flags);
-		cli();
-
-		if (status & TXFREEflag) {	/* transmit _DID_ finish */
-			BUGMSG(D_NORMAL, "tx timeout - missed IRQ? (status=%Xh, ticks=%d, mask=%Xh, dest=%02Xh)\n",
-			       status, tickssofar, lp->intmask, lp->lasttrans_dest);
-			lp->stats.tx_errors++;
-		} else {
-			BUGMSG(D_EXTRA, "tx timed out (status=%Xh, tickssofar=%d, intmask=%Xh, dest=%02Xh)\n",
-			       status, tickssofar, lp->intmask, lp->lasttrans_dest);
-			lp->stats.tx_errors++;
-			lp->stats.tx_aborted_errors++;
-
-			ACOMMAND(NOTXcmd | (lp->cur_tx << 3));
-		}
-
-		/*
-		 * interrupt handler will set dev->tbusy = 0 when it notices the
-		 * transmit has been canceled.
-		 */
-
-		/* make sure we didn't miss a TX IRQ */
-		AINTMASK(0);
-		lp->intmask |= TXFREEflag;
-		AINTMASK(lp->intmask);
-
-		restore_flags(flags);
-		return 1;
-	}
 	pkt = (struct archdr *) skb->data;
 	soft = &pkt->soft.rfc1201;
 	proto = arc_proto_map[soft->proto];
@@ -638,18 +592,10 @@ static int arcnet_send_packet(struct sk_buff *skb, struct net_device *dev)
 		dev_kfree_skb(skb);
 		return 0;	/* don't try again */
 	}
-	/*
-	 * Block a timer-based transmit from overlapping.  This could better be
-	 * done with atomic_swap(1, dev->tbusy), but set_bit() works as well. 
-	 */
-	if (test_and_set_bit(0, (int *) &dev->tbusy)) {
-		BUGMSG(D_NORMAL, "transmitter called with busy bit set! "
-		       "(status=%Xh, tickssofar=%ld)\n",
-		       ASTATUS(), jiffies - dev->trans_start);
-		lp->stats.tx_errors++;
-		lp->stats.tx_fifo_errors++;
-		return 0;	/* don't try again */
-	}
+
+	/* We're busy transmitting a packet... */
+	netif_stop_queue(dev);
+
 	AINTMASK(0);
 
 	txbuf = get_arcbuf(dev);
@@ -718,6 +664,37 @@ static int go_tx(struct net_device *dev)
 }
 
 
+/* Called by the kernel when transmit times out */
+static void arcnet_timeout(struct net_device *dev)
+{
+	unsigned long flags;
+	struct arcnet_local *lp = (struct arcnet_local *) dev->priv;
+	int status = ASTATUS();
+
+	save_flags(flags);
+	cli();
+
+	if (status & TXFREEflag) {	/* transmit _DID_ finish */
+		BUGMSG(D_NORMAL, "tx timeout - missed IRQ? (status=%Xh, mask=%Xh, dest=%02Xh)\n",
+		       status, lp->intmask, lp->lasttrans_dest);
+		lp->stats.tx_errors++;
+	} else {
+		BUGMSG(D_EXTRA, "tx timed out (status=%Xh, intmask=%Xh, dest=%02Xh)\n",
+		       status, lp->intmask, lp->lasttrans_dest);
+		lp->stats.tx_errors++;
+		lp->stats.tx_aborted_errors++;
+		ACOMMAND(NOTXcmd | (lp->cur_tx << 3));
+	}
+
+	/* make sure we didn't miss a TX IRQ */
+	AINTMASK(0);
+	lp->intmask |= TXFREEflag;
+	AINTMASK(lp->intmask);
+
+	restore_flags(flags);
+}
+
+
 /*
  * The typical workload of the driver: Handle the network interface
  * interrupts. Establish which device needs attention, and call the correct
@@ -743,25 +720,20 @@ void arcnet_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		return;
 	}
 	/*
-	 * RESET flag was enabled - if !dev->start, we must clear it right
+	 * RESET flag was enabled - if device is not running, we must clear it right
 	 * away (but nothing else).
 	 */
-	if (!dev->start) {
+	if (!test_bit(LINK_STATE_START, &dev->state)) {
 		if (ASTATUS() & RESETflag)
 			ACOMMAND(CFLAGScmd | RESETclear);
 		AINTMASK(0);
 		return;
 	}
-	if (dev->interrupt) {
-		BUGMSG(D_NORMAL, "DRIVER PROBLEM!  Nested arcnet interrupts!\n");
-		return;		/* don't even try. */
-	}
-	dev->interrupt = 1;
 
 	BUGMSG(D_DURING, "in arcnet_inthandler (status=%Xh, intmask=%Xh)\n",
 	       ASTATUS(), lp->intmask);
 
-	boguscount = 3;
+	boguscount = 5;
 	do {
 		status = ASTATUS();
 		didsomething = 0;
@@ -839,17 +811,15 @@ void arcnet_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 					if (lp->outgoing.proto->continue_tx(dev, txbuf)) {
 						/* that was the last segment */
 						lp->stats.tx_bytes += lp->outgoing.skb->len;
-						dev_kfree_skb(lp->outgoing.skb);
+						dev_kfree_skb_irq(lp->outgoing.skb);
 						lp->outgoing.proto = NULL;
 					}
 					lp->next_tx = txbuf;
 				}
 			}
 			/* inform upper layers of idleness, if necessary */
-			if (lp->cur_tx == -1) {
-				dev->tbusy = 0;
-				mark_bh(NET_BH);
-			}
+			if (lp->cur_tx == -1)
+				netif_wake_queue(dev);
 		}
 		/* now process the received packet, if any */
 		if (recbuf != -1) {
@@ -922,8 +892,6 @@ void arcnet_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	AINTMASK(0);
 	udelay(1);
 	AINTMASK(lp->intmask);
-
-	dev->interrupt = 0;
 }
 
 
@@ -987,11 +955,6 @@ void arcnet_rx(struct net_device *dev, int bufnum)
 	}
 	/* call the protocol-specific receiver. */
 	arc_proto_map[soft->proto]->rx(dev, bufnum, &pkt, length);
-
-	/*
-	 * If any worthwhile packets have been received, a mark_bh(NET_BH) has
-	 * been done by netif_rx and Linux will handle them after we return.
-	 */
 }
 
 

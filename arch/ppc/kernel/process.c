@@ -140,14 +140,30 @@ int check_stack(struct task_struct *tsk)
 }
 #endif /* defined(CHECK_STACK) */
 
+#ifdef CONFIG_ALTIVEC
 int
-dump_fpu(struct pt_regs *regs, elf_fpregset_t *fpregs)
+dump_altivec(struct pt_regs *regs, elf_vrregset_t *vrregs)
 {
-	if (regs->msr & MSR_FP)
-		giveup_fpu(current);
-	memcpy(fpregs, &current->thread.fpr[0], sizeof(*fpregs));
+	if (regs->msr & MSR_VEC)
+		giveup_altivec(current);
+	memcpy(vrregs, &current->thread.vr[0], sizeof(*vrregs));
 	return 1;
 }
+
+void 
+enable_kernel_altivec(void)
+{
+#ifdef __SMP__
+	if (current->thread.regs && (current->thread.regs->msr & MSR_VEC))
+		giveup_altivec(current);
+	else
+		giveup_altivec(NULL):	/* just enable AltiVec for kernel - force */
+#else
+	giveup_altivec(last_task_used_altivec);
+#endif /* __SMP __ */
+	printk("MSR_VEC in enable_altivec_kernel\n");
+}
+#endif /* CONFIG_ALTIVEC */
 
 void
 enable_kernel_fp(void)
@@ -160,6 +176,15 @@ enable_kernel_fp(void)
 #else
 	giveup_fpu(last_task_used_math);
 #endif /* __SMP__ */
+}
+
+int
+dump_fpu(struct pt_regs *regs, elf_fpregset_t *fpregs)
+{
+	if (regs->msr & MSR_FP)
+		giveup_fpu(current);
+	memcpy(fpregs, &current->thread.fpr[0], sizeof(*fpregs));
+	return 1;
 }
 
 void
@@ -194,6 +219,7 @@ _switch_to(struct task_struct *prev, struct task_struct *new,
 	 */
 	if ( prev->thread.regs && (prev->thread.regs->msr & MSR_FP) )
 		giveup_fpu(prev);
+#ifdef CONFIG_ALTIVEC	
 	/*
 	 * If the previous thread 1) has some altivec regs it wants saved
 	 * (has bits in vrsave set) and 2) used altivec in the last quantum
@@ -206,6 +232,7 @@ _switch_to(struct task_struct *prev, struct task_struct *new,
 	if ( (prev->thread.regs && (prev->thread.regs->msr & MSR_VEC)) &&
 	     prev->thread.vrsave )
 		giveup_altivec(prev);
+#endif /* CONFIG_ALTIVEC */	
 	prev->last_processor = prev->processor;
 	current_set[smp_processor_id()] = new;
 #endif /* __SMP__ */
@@ -337,13 +364,18 @@ copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	p->thread.fpscr = current->thread.fpscr;
 	childregs->msr &= ~MSR_FP;
 
+#ifdef CONFIG_ALTIVEC
+	/*
+	 * copy altiVec info - assume lazy altiVec switch
+	 * - kumar
+	 */
 	if (regs->msr & MSR_VEC)
 		giveup_altivec(current);
-	if ( p->thread.vrsave )
-		memcpy(&p->thread.vrf, &current->thread.vrf, sizeof(p->thread.vrf));
+
+	memcpy(&p->thread.vr, &current->thread.vr, sizeof(p->thread.vr));
 	p->thread.vscr = current->thread.vscr;
-	p->thread.vrsave = current->thread.vrsave;
 	childregs->msr &= ~MSR_VEC;
+#endif /* CONFIG_ALTIVEC */
 
 #ifdef __SMP__
 	p->last_processor = NO_PROC_ID;
@@ -463,6 +495,10 @@ asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
 		goto out;
 	if (regs->msr & MSR_FP)
 		giveup_fpu(current);
+#ifdef CONFIG_ALTIVEC
+	if (regs->msr & MSR_VEC)
+		giveup_altivec(current);
+#endif /* CONFIG_ALTIVEC */ 
 	error = do_execve(filename, (char **) a1, (char **) a2, regs);
 	putname(filename);
 out:

@@ -20,9 +20,7 @@
 #include <asm/pgtable.h>
 #include "mace.h"
 
-#ifdef MODULE
 static struct net_device *mace_devs = NULL;
-#endif
 
 #define N_RX_RING	8
 #define N_TX_RING	6
@@ -55,6 +53,7 @@ struct mace_data {
     struct net_device_stats stats;
     struct timer_list tx_timeout;
     int timeout_active;
+    struct net_device *next_mace;
 };
 
 /*
@@ -67,6 +66,8 @@ struct mace_data {
 	+ (N_RX_RING + NCMDS_TX * N_TX_RING + 3) * sizeof(struct dbdma_cmd))
 
 static int bitrev(int);
+static int mace_probe(void);
+static void mace_probe1(struct device_node *mace);
 static int mace_open(struct net_device *dev);
 static int mace_close(struct net_device *dev);
 static int mace_xmit_start(struct sk_buff *skb, struct net_device *dev);
@@ -99,34 +100,36 @@ bitrev(int b)
     return d;
 }
 
-static int __init mace_probe (void)
+static int __init mace_probe(void)
+{
+	struct device_node *mace;
+
+	for (mace = find_devices("mace"); mace != NULL; mace = mace->next)
+		mace_probe1(mace);
+	return 0;
+}
+
+static void __init mace_probe1(struct device_node *mace)
 {
 	int j, rev;
 	struct net_device *dev;
 	struct mace_data *mp;
-	struct device_node *mace;
 	unsigned char *addr;
-	static int maces_found = 0;
-	static struct device_node *next_mace;
-
-#ifdef MODULE
-	if(mace_devs != NULL)
-		return -EBUSY;
-#endif
-
-	if (!maces_found) {
-		next_mace = find_devices("mace");
-		maces_found = 1;
-	}
-	mace = next_mace;
-	if (mace == 0)
-		return -ENODEV;
-	next_mace = mace->next;
 
 	if (mace->n_addrs != 3 || mace->n_intrs != 3) {
-		printk(KERN_ERR "can't use MACE %s: expect 3 addrs and 3 intrs\n",
+		printk(KERN_ERR "can't use MACE %s: need 3 addrs and 3 irqs\n",
 		       mace->full_name);
-		return -ENODEV;
+		return;
+	}
+
+	addr = get_property(mace, "mac-address", NULL);
+	if (addr == NULL) {
+		addr = get_property(mace, "local-mac-address", NULL);
+		if (addr == NULL) {
+			printk(KERN_ERR "Can't get mac-address for MACE %s\n",
+			       mace->full_name);
+			return;
+		}
 	}
 
 	dev = init_etherdev(0, PRIV_BYTES);
@@ -137,16 +140,6 @@ static int __init mace_probe (void)
 	mp->mace = (volatile struct mace *)
 		ioremap(mace->addrs[0].address, 0x1000);
 	dev->irq = mace->intrs[0].line;
-
-	addr = get_property(mace, "mac-address", NULL);
-	if (addr == NULL) {
-		addr = get_property(mace, "local-mac-address", NULL);
-		if (addr == NULL) {
-			printk(KERN_ERR "Can't get mac-address for MACE at %lx\n",
-			       dev->base_addr);
-			return -EAGAIN;
-		}
-	}
 
 	printk(KERN_INFO "%s: MACE at", dev->name);
 	rev = addr[0] == 0 && addr[1] == 0xA0;
@@ -186,22 +179,17 @@ static int __init mace_probe (void)
 
 	mace_reset(dev);
 
-	if (request_irq(dev->irq, mace_interrupt, 0, "MACE", dev)) {
+	if (request_irq(dev->irq, mace_interrupt, 0, "MACE", dev))
 		printk(KERN_ERR "MACE: can't get irq %d\n", dev->irq);
-		return -EAGAIN;
-	}
 	if (request_irq(mace->intrs[1].line, mace_txdma_intr, 0, "MACE-txdma",
-			dev)) {
+			dev))
 		printk(KERN_ERR "MACE: can't get irq %d\n", mace->intrs[1].line);
-		return -EAGAIN;
-	}
 	if (request_irq(mace->intrs[2].line, mace_rxdma_intr, 0, "MACE-rxdma",
-			dev)) {
+			dev))
 		printk(KERN_ERR "MACE: can't get irq %d\n", mace->intrs[2].line);
-		return -EAGAIN;
-	}
 
-	return 0;
+	mp->next_mace = mace_devs;
+	mace_devs = dev;
 }
 
 static void dbdma_reset(volatile struct dbdma_regs *dma)
@@ -365,9 +353,7 @@ static int mace_open(struct net_device *dev)
     /* enable all interrupts except receive interrupts */
     out_8(&mb->imr, RCVINT);
 
-#ifdef MOD_INC_USE_COUNT
     MOD_INC_USE_COUNT;
-#endif
     return 0;
 }
 
@@ -406,9 +392,7 @@ static int mace_close(struct net_device *dev)
 
     mace_clean_rings(mp);
 
-#ifdef MOD_DEC_USE_COUNT
     MOD_DEC_USE_COUNT;
-#endif
 
     return 0;
 }
@@ -683,7 +667,7 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	    mp->stats.tx_bytes += mp->tx_bufs[i]->len;
 	    ++mp->stats.tx_packets;
 	}
-	dev_kfree_skb(mp->tx_bufs[i]);
+	dev_kfree_skb_irq(mp->tx_bufs[i]);
 	--mp->tx_active;
 	if (++i >= N_TX_RING)
 	    i = 0;
@@ -895,23 +879,25 @@ static void mace_rxdma_intr(int irq, void *dev_id, struct pt_regs *regs)
     }
 }
 
-
 MODULE_AUTHOR("Paul Mackerras");
 MODULE_DESCRIPTION("PowerMac MACE driver.");
 
 static void __exit mace_cleanup (void)
 {
-#ifdef MODULE
-    struct mace_data *mp = (struct mace_data *) mace_devs->priv;
-    unregister_netdev(mace_devs);
+    struct net_device *dev;
+    struct mace_data *mp;
 
-    free_irq(mace_devs->irq, mace_interrupt);
-    free_irq(mp->tx_dma_intr, mace_txdma_intr);
-    free_irq(mp->rx_dma_intr, mace_rxdma_intr);
+    while ((dev = mace_devs) != 0) {
+	mp = (struct mace_data *) mace_devs->priv;
+	mace_devs = mp->next_mace;
 
-    kfree(mace_devs);
-    mace_devs = NULL;
-#endif
+	free_irq(dev->irq, dev);
+	free_irq(mp->tx_dma_intr, dev);
+	free_irq(mp->rx_dma_intr, dev);
+
+	unregister_netdev(dev);
+	kfree(dev);
+    }
 }
 
 module_init(mace_probe);

@@ -427,7 +427,7 @@ struct softnet_data
 
 extern struct softnet_data softnet_data[NR_CPUS];
 
-#define HAS_NETIF_QUEUE
+#define HAVE_NETIF_QUEUE
 
 extern __inline__ void __netif_schedule(struct net_device *dev)
 {

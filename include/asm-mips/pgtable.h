@@ -371,10 +371,12 @@ extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 /* to find an entry in a kernel page-table-directory */
 #define pgd_offset_k(address) pgd_offset(&init_mm, address)
 
+#define pgd_index(address)	((address) >> PGDIR_SHIFT)
+
 /* to find an entry in a page-table-directory */
 extern inline pgd_t *pgd_offset(struct mm_struct *mm, unsigned long address)
 {
-	return mm->pgd + (address >> PGDIR_SHIFT);
+	return mm->pgd + pgd_index(address);
 }
 
 /* Find an entry in the second-level page table.. */

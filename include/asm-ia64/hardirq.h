@@ -17,11 +17,15 @@ extern unsigned long hardirq_no[NR_CPUS];
  * or hardware interrupt processing?
  */
 
+#define in_irq() (local_irq_count[smp_processor_id()] != 0)
+
 #define in_interrupt()						\
 ({								\
 	int __cpu = smp_processor_id();				\
 	(local_irq_count[__cpu] + local_bh_count[__cpu]) != 0;	\
 })
+
+
 
 #ifndef CONFIG_SMP
 # define hardirq_trylock(cpu)		(local_irq_count[cpu] == 0)

@@ -36,7 +36,7 @@
 #include <linux/module.h>
 #include <linux/kbd_kern.h>
 
-#ifdef CONFIG_X86
+#if defined(CONFIG_X86) || defined(CONFIG_IA64)
 
 static unsigned char keybdev_x86_e0s[] = 
 	{ 0x1c, 0x1d, 0x35, 0x2a, 0x38, 0x39, 0x47, 0x48,
@@ -77,7 +77,7 @@ void keybdev_event(struct input_handle *handle, unsigned int type, unsigned int 
 {
 	if (type != EV_KEY || code > 255) return;
 
-#ifdef CONFIG_X86
+#if defined(CONFIG_X86) || defined(CONFIG_IA64)
 
 	if (code >= 189) {
   		printk(KERN_WARNING "keybdev.c: can't emulate keycode %d\n", code);

@@ -126,6 +126,7 @@ EXPORT_SYMBOL(highmem_start_page);
 #endif
 
 /* filesystem internal functions */
+EXPORT_SYMBOL(def_blk_fops);
 EXPORT_SYMBOL(in_group_p);
 EXPORT_SYMBOL(update_atime);
 EXPORT_SYMBOL(get_super);

@@ -40,10 +40,10 @@
  *   it passes the underlying device's block number instead of the
  *   offset. This makes it change for a given block when the file is 
  *   moved/restored/copied and also doesn't work over NFS. 
- * AV, Feb 11, 2000: for files we pass the page index now. It should fix the
- *   problem above. Since the granularity is PAGE_CACHE_SIZE now it seems to
- *   be correct way. OTOH, taking the thing from x86 to Alpha may become
- *   interesting, so we might want to rethink it.
+ * AV, Feb 12, 2000: we pass the logical block number now. It fixes the
+ *   problem above. Encryption modules that used to rely on the old scheme
+ *   should just call ->i_mapping->bmap() to calculate the physical block
+ *   number.
  */ 
 
 #include <linux/module.h>
@@ -164,7 +164,8 @@ static void figure_loop_size(struct loop_device *lo)
 	loop_sizes[lo->lo_number] = size;
 }
 
-static int lo_send(struct loop_device *lo, char *data, int len, loff_t pos)
+static int lo_send(struct loop_device *lo, char *data, int len, loff_t pos,
+	int blksize)
 {
 	struct file *file = lo->lo_backing_file; /* kudos to NFsckingS */
 	struct address_space *mapping = lo->lo_dentry->d_inode->i_mapping;
@@ -177,6 +178,7 @@ static int lo_send(struct loop_device *lo, char *data, int len, loff_t pos)
 	index = pos >> PAGE_CACHE_SHIFT;
 	offset = pos & (PAGE_CACHE_SIZE - 1);
 	while (len > 0) {
+		int IV = index * (PAGE_CACHE_SIZE/blksize) + offset/blksize;
 		size = PAGE_CACHE_SIZE - offset;
 		if (size > len)
 			size = len;
@@ -187,7 +189,7 @@ static int lo_send(struct loop_device *lo, char *data, int len, loff_t pos)
 		if (aops->prepare_write(page, offset, offset+size))
 			goto unlock;
 		kaddr = (char*)page_address(page);
-		if ((lo->transfer)(lo, WRITE, kaddr+offset, data, size, index))
+		if ((lo->transfer)(lo, WRITE, kaddr+offset, data, size, IV))
 			goto write_fail;
 		if (aops->commit_write(file, page, offset, offset+size))
 			goto unlock;
@@ -217,6 +219,7 @@ fail:
 struct lo_read_data {
 	struct loop_device *lo;
 	char *data;
+	int blksize;
 };
 
 static int lo_read_actor(read_descriptor_t * desc, struct page *page, unsigned long offset, unsigned long size)
@@ -225,12 +228,13 @@ static int lo_read_actor(read_descriptor_t * desc, struct page *page, unsigned l
 	unsigned long count = desc->count;
 	struct lo_read_data *p = (struct lo_read_data*)desc->buf;
 	struct loop_device *lo = p->lo;
+	int IV = page->index * (PAGE_CACHE_SIZE/p->blksize) + offset/p->blksize;
 
 	if (size > count)
 		size = count;
 
 	kaddr = (char*)kmap(page);
-	if ((lo->transfer)(lo,READ,kaddr+offset,p->data,size,page->index)) {
+	if ((lo->transfer)(lo,READ,kaddr+offset,p->data,size,IV)) {
 		size = 0;
 		printk(KERN_ERR "loop: transfer error block %ld\n",page->index);
 		desc->error = -EINVAL;
@@ -243,7 +247,8 @@ static int lo_read_actor(read_descriptor_t * desc, struct page *page, unsigned l
 	return size;
 }
 
-static int lo_receive(struct loop_device *lo, char *data, int len, loff_t pos)
+static int lo_receive(struct loop_device *lo, char *data, int len, loff_t pos,
+	int blksize)
 {
 	struct file *file = lo->lo_backing_file;
 	struct lo_read_data cookie;
@@ -251,6 +256,7 @@ static int lo_receive(struct loop_device *lo, char *data, int len, loff_t pos)
 
 	cookie.lo = lo;
 	cookie.data = data;
+	cookie.blksize = blksize;
 	desc.written = 0;
 	desc.count = len;
 	desc.buf = (char*)&cookie;
@@ -287,8 +293,6 @@ repeat:
 
 	dest_addr = current_request->buffer;
 	len = current_request->current_nr_sectors << 9;
-	if (lo->lo_flags & LO_FLAGS_DO_BMAP)
-		goto file_backed;
 
 	blksize = BLOCK_SIZE;
 	if (blksize_size[MAJOR(lo->lo_device)]) {
@@ -296,6 +300,10 @@ repeat:
 	    if (!blksize)
 	      blksize = BLOCK_SIZE;
 	}
+
+	if (lo->lo_flags & LO_FLAGS_DO_BMAP)
+		goto file_backed;
+
 	if (blksize < 512) {
 		block = current_request->sector * (512/blksize);
 		offset = 0;
@@ -357,10 +365,10 @@ file_backed:
 	pos = ((loff_t)current_request->sector << 9) + lo->lo_offset;
 	spin_unlock_irq(&io_request_lock);
 	if (current_request->cmd == WRITE) {
-		if (lo_send(lo, dest_addr, len, pos))
+		if (lo_send(lo, dest_addr, len, pos, blksize))
 			goto error_out_lock;
 	} else {
-		if (lo_receive(lo, dest_addr, len, pos))
+		if (lo_receive(lo, dest_addr, len, pos, blksize))
 			goto error_out_lock;
 	}
 done:
@@ -416,6 +424,7 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 		   a file structure */
 		lo->lo_backing_file = NULL;
 	} else if (S_ISREG(inode->i_mode)) {
+		struct address_space_operations *aops;
 		/* Backed by a regular file - we need to hold onto a file
 		   structure for this file.  Friggin' NFS can't live without
 		   it on write and for reading we use do_generic_file_read(),
@@ -444,16 +453,23 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 				lo->lo_backing_file = NULL;
 			}
 		}
+		aops = lo->lo_dentry->d_inode->i_mapping->a_ops;
+		/*
+		 * If we can't read - sorry. If we only can't write - well,
+		 * it's going to be read-only.
+		 */
+		if (!aops->readpage)
+			error = -EINVAL;
+		else if (!aops->prepare_write || !aops->commit_write)
+			lo->lo_flags |= LO_FLAGS_READ_ONLY;
 	}
 	if (error)
 		goto out_putf;
 
-	if (IS_RDONLY (inode) || is_read_only(lo->lo_device)) {
+	if (IS_RDONLY (inode) || is_read_only(lo->lo_device))
 		lo->lo_flags |= LO_FLAGS_READ_ONLY;
-		set_device_ro(dev, 1);
-	} else {
-		set_device_ro(dev, 0);
-	}
+
+	set_device_ro(dev, (lo->lo_flags & LO_FLAGS_READ_ONLY)!=0);
 
 	lo->lo_dentry = dget(file->f_dentry);
 	lo->transfer = NULL;

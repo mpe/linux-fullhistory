@@ -24,8 +24,8 @@ typedef long		__kernel_clock_t;
 typedef int		__kernel_daddr_t;
 typedef char *		__kernel_caddr_t;
 typedef short             __kernel_ipc_pid_t;
-typedef unsigned int	__kernel_uid16_t;
-typedef unsigned int	__kernel_gid16_t;
+typedef unsigned short	__kernel_uid16_t;
+typedef unsigned short	__kernel_gid16_t;
 typedef unsigned int	__kernel_uid32_t;
 typedef unsigned int	__kernel_gid32_t;
 

@@ -8,8 +8,8 @@
  * not a major issue.  However, for interoperability, libraries still
  * need to be careful to avoid a name clashes.
  *
- * Copyright (C) 1998, 1999 Hewlett-Packard Co
- * Copyright (C) 1998, 1999 David Mosberger-Tang <davidm@hpl.hp.com>
+ * Copyright (C) 1998-2000 Hewlett-Packard Co
+ * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 
 #ifdef __ASSEMBLY__
@@ -38,51 +38,27 @@ typedef unsigned short __u16;
 typedef __signed__ int __s32;
 typedef unsigned int __u32;
 
-/*
- * There are 32-bit compilers for the ia-64 out there..
- */
-# if ((~0UL) == 0xffffffff)
-#  if defined(__GNUC__) && !defined(__STRICT_ANSI__)
-typedef __signed__ long long __s64;
-typedef unsigned long long __u64;
-#  endif
-# else
 typedef __signed__ long __s64;
 typedef unsigned long __u64;
-# endif
 
 /*
  * These aren't exported outside the kernel to avoid name space clashes
  */
 # ifdef __KERNEL__
 
-typedef signed char s8;
-typedef unsigned char u8;
+typedef __s8 s8;
+typedef __u8 u8;
 
-typedef signed short s16;
-typedef unsigned short u16;
+typedef __s16 s16;
+typedef __u16 u16;
 
-typedef signed int s32;
-typedef unsigned int u32;
+typedef __s32 s32;
+typedef __u32 u32;
 
-/*
- * There are 32-bit compilers for the ia-64 out there...  (don't rely
- * on cpp because that may cause su problem in a 32->64 bit
- * cross-compilation environment).
- */
-#  ifdef __LP64__
+typedef __s64 s64;
+typedef __u64 u64;
 
-typedef signed long s64;
-typedef unsigned long u64;
 #define BITS_PER_LONG 64
-
-#  else
-
-typedef signed long long s64;
-typedef unsigned long long u64;
-#define BITS_PER_LONG 32
-
-#  endif
 
 /* DMA addresses are 64-bits wide, in general.  */
 

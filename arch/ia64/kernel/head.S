@@ -133,6 +133,7 @@ alive_msg:
 #endif /* CONFIG_IA64_EARLY_PRINTK */
 
 	alloc r2=ar.pfs,8,0,2,0
+	;;
 #ifdef CONFIG_SMP
 (isAP)	br.call.sptk.few rp=smp_callin
 .ret1:
@@ -174,7 +175,7 @@ ia64_save_debug_regs:
 	st8.nta [in0]=r16,8
 	st8.nta [r19]=r17,8
 	br.cloop.sptk.few 1b
-
+	;;
 	mov ar.lc=r20			// restore ar.lc
 	br.ret.sptk.few b0
 	.endp ia64_save_debug_regs
@@ -197,7 +198,7 @@ ia64_load_debug_regs:
 	mov dbr[r18]=r16
 	mov ibr[r18]=r17
 	br.cloop.sptk.few 1b
-
+	;;
 	mov ar.lc=r20			// restore ar.lc
 	br.ret.sptk.few b0
 	.endp ia64_load_debug_regs

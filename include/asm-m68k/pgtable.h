@@ -285,10 +285,12 @@ extern inline pte_t pte_mkcache(pte_t pte)	{ pte_val(pte) = (pte_val(pte) & _CAC
 
 #define PAGE_DIR_OFFSET(tsk,address) pgd_offset((tsk),(address))
 
+#define pgd_index(address)	((address) >> PGDIR_SHIFT)
+
 /* to find an entry in a page-table-directory */
 extern inline pgd_t * pgd_offset(struct mm_struct * mm, unsigned long address)
 {
-	return mm->pgd + (address >> PGDIR_SHIFT);
+	return mm->pgd + pgd_index(address);
 }
 
 #define swapper_pg_dir kernel_pg_dir

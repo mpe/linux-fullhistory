@@ -279,7 +279,7 @@ void __init openpic_init(int main_pic)
 		/* Initialize the spurious interrupt */
 		if ( ppc_md.progress ) ppc_md.progress("openpic spurious",0x3bd);
 		openpic_set_spurious(OPENPIC_VEC_SPURIOUS);
-		if ( !(_machine && (_MACH_gemini|_MACH_Pmac)) )
+		if ( !(_machine & (_MACH_gemini|_MACH_Pmac)) )
 		{
 			if (request_irq(IRQ_8259_CASCADE, no_action, SA_INTERRUPT,
 					"82c59 cascade", NULL))
@@ -490,7 +490,7 @@ void openpic_enable_irq(u_int irq)
 	/* make sure mask gets to controller before we return to user */
 	do {
 		mb(); /* sync is probably useless here */
-	} while(openpic_readfield(&OpenPIC->Source[irq].Vector_Priority,
+	} while(openpic_readfield(&ISU[irq - open_pic_irq_offset].Vector_Priority,
 			OPENPIC_MASK));
 }
 
@@ -501,7 +501,7 @@ void openpic_disable_irq(u_int irq)
 	/* make sure mask gets to controller before we return to user */
 	do {
 		mb();  /* sync is probably useless here */
-	} while(!openpic_readfield(&OpenPIC->Source[irq].Vector_Priority,
+	} while(!openpic_readfield(&ISU[irq - open_pic_irq_offset].Vector_Priority,
     			OPENPIC_MASK));
 }
 

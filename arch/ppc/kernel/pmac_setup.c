@@ -60,6 +60,7 @@
 #include <asm/machdep.h>
 #include <asm/keyboard.h>
 #include <asm/dma.h>
+#include <asm/bootx.h>
 
 #include "time.h"
 #include "local_irq.h"
@@ -440,6 +441,7 @@ kdev_t __init find_ide_boot(void)
 {
 	char *p;
 	int n;
+	kdev_t __init pmac_find_ide_boot(char *bootdevice, int n);
 
 	if (bootdevice == NULL)
 		return 0;
@@ -695,9 +697,12 @@ pmac_init(unsigned long r3, unsigned long r4, unsigned long r5,
 #ifdef CONFIG_BOOTX_TEXT
 extern void drawchar(char c);
 extern void drawstring(const char *c);
+extern boot_infos_t *disp_bi;
 void
 pmac_progress(char *s, unsigned short hex)
 {
+	if (disp_bi == 0)
+		return;
 	drawstring(s);
 	drawchar('\n');
 }

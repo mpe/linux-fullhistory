@@ -146,7 +146,7 @@ struct net_local {
 
 	int carrier;
 
-
+	spinlock_t lock;
 };
 
 

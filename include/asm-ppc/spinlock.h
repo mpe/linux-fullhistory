@@ -14,6 +14,7 @@ typedef struct {
 #define SPIN_LOCK_UNLOCKED	(spinlock_t) { 0, 0, 0 }
 #define spin_lock_init(lp) 	do { (lp)->lock = 0; } while(0)
 #define spin_unlock_wait(lp)	do { barrier(); } while((lp)->lock)
+#define spin_is_locked(x)	((x)->lock != 0)
 
 extern void _spin_lock(spinlock_t *lock);
 extern void _spin_unlock(spinlock_t *lock);

@@ -106,9 +106,8 @@ go:	movw	$0x4000-12, %di		# 0x4000 is an arbitrary value >=
 	pushw	%ds
 	ldsw	%fs:(%bx), %si		# ds:si is source
 	movb	$6, %cl			# copy 12 bytes
-	cld
 	pushw	%di			# di = 0x4000-12.
-	rep
+	rep				# don't need cld -> done on line 66
 	movsw
 	popw	%di
 	popw	%ds
@@ -140,20 +139,7 @@ load_setup:
 	jmp	load_setup
 
 ok_load_setup:
-# Get disk drive parameters, specifically nr of sectors/track.
-
-#if 0
-
-# bde - the Phoenix BIOS manual says function 0x08 only works for fixed
-# disks.  It doesn't work for one of my BIOS's (1987 Award).  It was
-# fatal not to check the error code.
-
-	xorb	%dl, %dl
-	movb	$0x08, %ah		# AH=8 is get drive parameters
-	int	$0x13
-	xorb	%ch, %ch
-
-#else
+# Get disk drive parameters, specifically number of sectors/track.
 
 # It seems that there is no BIOS call to get the number of sectors.
 # Guess 36 sectors if sector 36 can be read, 18 sectors if sector 18
@@ -176,7 +162,6 @@ probe_loop:
 	movw	$0x0201, %ax		# service 2, 1 sector
 	int	$0x13
 	jc	probe_loop		# try next value
-#endif
 
 got_sectors:
 	movw	$INITSEG, %ax
@@ -200,11 +185,11 @@ got_sectors:
 # Otherwise, one of /dev/fd0H2880 (2,32) or /dev/PS0 (2,28) or /dev/at0 (2,8)
 # depending on the number of sectors we pretend to know we have.
 
-	movw	%cs:root_dev, %ax
+	movw	root_dev, %ax
 	orw	%ax, %ax
 	jne	root_defined
 	
-	movw	%cs:sectors, %bx
+	movw	sectors, %bx
 	movw	$0x0208, %ax		# /dev/ps0 - 1.2Mb
 	cmpw	$15, %bx
 	je	root_defined
@@ -219,7 +204,7 @@ got_sectors:
 	
 	movb	$0, %al			# /dev/fd0 - autodetect
 root_defined:
-	movw	%ax, %cs:root_dev
+	movw	%ax, root_dev
 
 # After that (everything loaded), we jump to the setup-routine
 # loaded directly after the bootblock:

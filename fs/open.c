@@ -69,12 +69,6 @@ int do_truncate(struct dentry *dentry, loff_t length)
 	newattrs.ia_size = length;
 	newattrs.ia_valid = ATTR_SIZE | ATTR_CTIME;
 	error = notify_change(dentry, &newattrs);
-	if (!error) {
-		/* truncate virtual mappings of this file */
-		vmtruncate(inode, length);
-		if (inode->i_op && inode->i_op->truncate)
-			inode->i_op->truncate(inode);
-	}
 	up(&inode->i_sem);
 	return error;
 }

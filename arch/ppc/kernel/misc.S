@@ -272,6 +272,38 @@ _GLOBAL(clear_page)
 	blr
 
 /*
+ * Copy a whole page.  We use the dcbz instruction on the destination
+ * to reduce memory traffic (it eliminates the unnecessary reads of
+ * the destination into cache).  This requires that the destination
+ * is cacheable.
+ */
+_GLOBAL(copy_page)
+	li	r0,4096/CACHE_LINE_SIZE
+	mtctr	r0
+	addi	r3,r3,-4
+	addi	r4,r4,-4
+	li	r5,4
+1:	dcbz	r5,r3
+	lwz	r6,4(r4)
+	lwz	r7,8(r4)
+	lwz	r8,12(r4)
+	lwzu	r9,16(r4)
+	stw	r6,4(r3)
+	stw	r7,8(r3)
+	stw	r8,12(r3)
+	stwu	r9,16(r3)
+	lwz	r6,4(r4)
+	lwz	r7,8(r4)
+	lwz	r8,12(r4)
+	lwzu	r9,16(r4)
+	stw	r6,4(r3)
+	stw	r7,8(r3)
+	stw	r8,12(r3)
+	stwu	r9,16(r3)
+	bdnz	1b
+	blr
+
+/*
  * Atomic [test&set] exchange
  *
  *	unsigned long xchg_u32(void *ptr, unsigned long val)

@@ -226,14 +226,3 @@ void
 pcibios_align_resource (void *data, struct resource *res, unsigned long size)
 {
 }
-
-#if 0 /*def CONFIG_PROC_FS*/
-/*
- * This is an ugly hack to get a (weak) unresolved reference to something that is
- * in drivers/pci/proc.c.  Without this, the file does not get linked in at all
- * (I suspect the reason this isn't needed on Linux/x86 is that most people compile
- * with module support, in which case the EXPORT_SYMBOL() stuff will ensure the
- * code gets linked in.  Sigh...  --davidm 99/12/20.
- */
-asm ("data8 proc_bus_pci_add");
-#endif
