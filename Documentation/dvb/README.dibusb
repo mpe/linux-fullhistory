@@ -1,4 +1,4 @@
-Documentation for dib3000mb frontend driver and dibusb device driver
+Documentation for dib3000* frontend drivers and dibusb device driver
 ====================================================================
 
 Copyright (C) 2004-5 Patrick Boettcher (patrick.boettcher@desy.de),
@@ -74,6 +74,9 @@ Supported devices USB2.0
 
 - Artec T1 USB TVBOX (FX2) (2)
 
+- Hauppauge WinTV NOVA-T USB2
+	http://www.hauppauge.com/
+
 - DiBcom USB2.0 DVB-T reference device (non-public)
 
 1) It is working almost.
@@ -81,10 +84,11 @@ Supported devices USB2.0
 
 
 0. NEWS:
+  2004-02-02 - added support for the Hauppauge Win-TV Nova-T USB2
   2004-01-31 - distorted streaming is finally gone for USB1.1 devices
   2004-01-13 - moved the mirrored pid_filter_table back to dvb-dibusb
              - first almost working version for HanfTek UMT-010
-             - found out, that Yakumo/HAMA/Typhoon are predessors of the HanfTek
+             - found out, that Yakumo/HAMA/Typhoon are predessors of the HanfTek UMT-010
   2004-01-10 - refactoring completed, now everything is very delightful
              - tuner quirks for some weird devices (Artec T1 AN2235 device has sometimes a
                Panasonic Tuner assembled). Tunerprobing implemented. Thanks a lot to Gunnar Wittich.

@@ -55,8 +55,9 @@ MODULE_PARM_DESC(rc_query_interval, "interval in msecs for remote control query 
 #define USB_VID_DIBCOM						0x10b8
 #define USB_VID_EMPIA						0xeb1a
 #define USB_VID_GRANDTEC					0x5032
-#define USB_VID_HYPER_PALTEK				0x1025
 #define USB_VID_HANFTEK						0x15f4
+#define USB_VID_HAUPPAUGE					0x2040
+#define USB_VID_HYPER_PALTEK				0x1025
 #define USB_VID_IMC_NETWORKS				0x13d3
 #define USB_VID_TWINHAN						0x1822
 #define USB_VID_ULTIMA_ELECTRONIC			0x05d8
@@ -93,6 +94,8 @@ MODULE_PARM_DESC(rc_query_interval, "interval in msecs for remote control query 
 #define USB_PID_HANFTEK_UMT_010_WARM		0x0025
 #define USB_PID_YAKUMO_DTT200U_COLD			0x0201
 #define USB_PID_YAKUMO_DTT200U_WARM			0x0301
+#define USB_PID_WINTV_NOVA_T_USB2_COLD		0x9300
+#define USB_PID_WINTV_NOVA_T_USB2_WARM		0x9301
 
 /* USB Driver stuff
  * table of devices that this driver is working with
@@ -143,16 +146,18 @@ static struct usb_device_id dib_table [] = {
 /* 28 */	{ USB_DEVICE(USB_VID_HANFTEK,		USB_PID_HANFTEK_UMT_010_COLD) },
 /* 29 */	{ USB_DEVICE(USB_VID_HANFTEK,		USB_PID_HANFTEK_UMT_010_WARM) },
 
+/* 30 */	{ USB_DEVICE(USB_VID_HAUPPAUGE,		USB_PID_WINTV_NOVA_T_USB2_COLD) },
+/* 31 */	{ USB_DEVICE(USB_VID_HAUPPAUGE,		USB_PID_WINTV_NOVA_T_USB2_WARM) },
 /* 
  * activate the following define when you have one of the devices and want to 
  * build it from build-2.6 in dvb-kernel
  */
 // #define CONFIG_DVB_DIBUSB_MISDESIGNED_DEVICES 
 #ifdef CONFIG_DVB_DIBUSB_MISDESIGNED_DEVICES
-/* 30 */	{ USB_DEVICE(USB_VID_ANCHOR,		USB_PID_ULTIMA_TVBOX_ANCHOR_COLD) },
-/* 31 */	{ USB_DEVICE(USB_VID_CYPRESS,		USB_PID_ULTIMA_TVBOX_USB2_FX_COLD) },
-/* 32 */	{ USB_DEVICE(USB_VID_ANCHOR,		USB_PID_ULTIMA_TVBOX_USB2_FX_WARM) },
-/* 33 */	{ USB_DEVICE(USB_VID_ANCHOR,		USB_PID_DIBCOM_ANCHOR_2135_COLD) },
+/* 32 */	{ USB_DEVICE(USB_VID_ANCHOR,		USB_PID_ULTIMA_TVBOX_ANCHOR_COLD) },
+/* 33 */	{ USB_DEVICE(USB_VID_CYPRESS,		USB_PID_ULTIMA_TVBOX_USB2_FX_COLD) },
+/* 34 */	{ USB_DEVICE(USB_VID_ANCHOR,		USB_PID_ULTIMA_TVBOX_USB2_FX_WARM) },
+/* 35 */	{ USB_DEVICE(USB_VID_ANCHOR,		USB_PID_DIBCOM_ANCHOR_2135_COLD) },
 #endif
 			{ }		/* Terminating entry */
 };
@@ -287,6 +292,11 @@ static struct dibusb_usb_device dibusb_devices[] = {
 		{ &dib_table[27], NULL },
 		{ NULL },
 	},
+	{	"Hauppauge WinTV NOVA-T USB2",
+		&dibusb_device_classes[DIBUSB2_0],
+		{ &dib_table[30], NULL },
+		{ &dib_table[31], NULL },
+	},
 	{	"AVermedia/Yakumo/Hama/Typhoon DVB-T USB2.0",
 		&dibusb_device_classes[UMT2_0],
 		{ &dib_table[2], NULL },
@@ -300,17 +310,17 @@ static struct dibusb_usb_device dibusb_devices[] = {
 #ifdef CONFIG_DVB_DIBUSB_MISDESIGNED_DEVICES
 	{	"Artec T1 USB1.1 TVBOX with AN2235 (misdesigned)",
 		&dibusb_device_classes[DIBUSB1_1_AN2235],
-		{ &dib_table[30], NULL },
+		{ &dib_table[32], NULL },
 		{ NULL },
 	},
 	{	"Artec T1 USB2.0 TVBOX with FX2 IDs (misdesigned, please report the warm ID)",
 		&dibusb_device_classes[DIBUSB2_0],
-		{ &dib_table[31], NULL },
-		{ &dib_table[32], NULL }, /* undefined, it could be that the device will get another USB ID in warm state */
+		{ &dib_table[33], NULL },
+		{ &dib_table[34], NULL }, /* undefined, it could be that the device will get another USB ID in warm state */
 	},
 	{	"DiBcom USB1.1 DVB-T reference design (MOD3000) with AN2135 default IDs",
 		&dibusb_device_classes[DIBUSB1_1],
-		{ &dib_table[33], NULL },
+		{ &dib_table[35], NULL },
 		{ NULL },
 	},
 #endif
