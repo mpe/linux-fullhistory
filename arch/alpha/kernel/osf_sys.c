@@ -47,7 +47,6 @@ extern struct file_operations *get_chrfops(unsigned int);
 extern kdev_t get_unnamed_dev(void);
 extern void put_unnamed_dev(kdev_t);
 
-extern asmlinkage int sys_umount(char *, int);
 extern asmlinkage int sys_swapon(const char *specialfile, int swap_flags);
 extern asmlinkage unsigned long sys_brk(unsigned long);
 
@@ -535,16 +534,6 @@ asmlinkage int osf_mount(unsigned long typenr, char *path, int flag, void *data)
 	}
 	unlock_kernel();
 	return retval;
-}
-
-asmlinkage int osf_umount(char *path, int flag)
-{
-	int ret;
-
-	lock_kernel();
-	ret = sys_umount(path,flag);
-	unlock_kernel();
-	return ret;
 }
 
 asmlinkage int osf_utsname(char *name)

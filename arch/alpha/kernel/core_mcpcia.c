@@ -12,10 +12,13 @@
 #include <linux/pci.h>
 #include <linux/sched.h>
 #include <linux/init.h>
+#include <linux/delay.h>
 
 #include <asm/ptrace.h>
 #include <asm/system.h>
 #include <asm/pci.h>
+#include <asm/hwrpb.h>
+#include <asm/mmu_context.h>
 
 #define __EXTERN_INLINE inline
 #include <asm/io.h>
@@ -23,14 +26,13 @@
 #undef __EXTERN_INLINE
 
 #include "proto.h"
+#include "bios32.h"
 
 /*
  * NOTE: Herein lie back-to-back mb instructions.  They are magic. 
  * One plausible explanation is that the i/o controller does not properly
  * handle the system transaction.  Another involves timing.  Ho hum.
  */
-
-extern asmlinkage void wrmces(unsigned long mces);
 
 /*
  * BIOS32-style PCI interface:
@@ -44,42 +46,20 @@ extern asmlinkage void wrmces(unsigned long mces);
 # define DBG_CFG(args)
 #endif
 
-#undef DEBUG_PCI
-
-#ifdef DEBUG_PCI
-# define DBG_PCI(args)	printk args
-#else
-# define DBG_PCI(args)
-#endif
 
 #define DEBUG_MCHECK
 
 #ifdef DEBUG_MCHECK
 # define DBG_MCK(args)	printk args
-# define DEBUG_MCHECK_DUMP
 #else
 # define DBG_MCK(args)
 #endif
-
-#define vuip	volatile unsigned int  *
-#define vulp	volatile unsigned long  *
 
 static volatile unsigned int MCPCIA_mcheck_expected[NR_CPUS];
 static volatile unsigned int MCPCIA_mcheck_taken[NR_CPUS];
 static unsigned int MCPCIA_jd[NR_CPUS];
 
 #define MCPCIA_MAX_HOSES 2
-static int mcpcia_num_hoses = 0;
-
-static int pci_probe_enabled = 0; /* disable to start */
-
-static struct linux_hose_info *mcpcia_root = NULL, *mcpcia_last_hose;
-
-static inline unsigned long long_align(unsigned long addr)
-{
-	return ((addr + (sizeof(unsigned long) - 1)) &
-		~(sizeof(unsigned long) - 1));
-}
 
 
 /*
@@ -134,7 +114,7 @@ conf_read(unsigned long addr, unsigned char type1,
 
 	cpu = smp_processor_id();
 
-	save_and_cli(flags);
+	__save_and_cli(flags);
 
 	DBG_CFG(("conf_read(addr=0x%lx, type1=%d, hose=%d)\n",
 		 addr, type1, hoseno));
@@ -166,7 +146,7 @@ conf_read(unsigned long addr, unsigned char type1,
 
 	DBG_CFG(("conf_read(): finished\n"));
 
-	restore_flags(flags);
+	__restore_flags(flags);
 	return value;
 }
 
@@ -180,7 +160,7 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1,
 
 	cpu = smp_processor_id();
 
-	save_and_cli(flags);	/* avoid getting hit by machine check */
+	__save_and_cli(flags);	/* avoid getting hit by machine check */
 
 	/* Reset status register to avoid losing errors.  */
 	stat0 = *(vuip)MCPCIA_CAP_ERR(hoseno);
@@ -201,7 +181,7 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1,
 	mb();
 
 	DBG_CFG(("conf_write(): finished\n"));
-	restore_flags(flags);
+	__restore_flags(flags);
 }
 
 static int
@@ -211,7 +191,7 @@ mk_conf_addr(struct linux_hose_info *hose,
 {
 	unsigned long addr;
 
-	if (!pci_probe_enabled) /* if doing standard pci_init(), ignore */
+	if (!pci_probe_enabled)
 		return -1;
 
 	DBG_CFG(("mk_conf_addr(bus=%d ,device_fn=0x%x, where=0x%x,"
@@ -232,17 +212,12 @@ mk_conf_addr(struct linux_hose_info *hose,
 	return 0;
 }
 
-/* FIXME: At some point we should update these routines to use the new
-   PCI interface, which can jump through these hoops for us.  */
-
-static inline int
-hose_read_config_byte (u8 bus, u8 device_fn, u8 where, u8 *value,
-		       struct linux_hose_info *hose)
+int
+mcpcia_hose_read_config_byte (u8 bus, u8 device_fn, u8 where, u8 *value,
+			      struct linux_hose_info *hose)
 {
 	unsigned long addr;
 	unsigned char type1;
-
-	*value = 0xff;
 
 	if (mk_conf_addr(hose, bus, device_fn, where, &addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
@@ -252,17 +227,13 @@ hose_read_config_byte (u8 bus, u8 device_fn, u8 where, u8 *value,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-static inline int
-hose_read_config_word (u8 bus, u8 device_fn, u8 where, u16 *value,
-		       struct linux_hose_info *hose)
+int
+mcpcia_hose_read_config_word (u8 bus, u8 device_fn, u8 where, u16 *value,
+			      struct linux_hose_info *hose)
 {
 	unsigned long addr;
 	unsigned char type1;
 
-	*value = 0xffff;
-
-	if (where & 0x1)
-		return PCIBIOS_BAD_REGISTER_NUMBER;
 	if (mk_conf_addr(hose, bus, device_fn, where, &addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
@@ -271,17 +242,13 @@ hose_read_config_word (u8 bus, u8 device_fn, u8 where, u16 *value,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-static inline int
-hose_read_config_dword (u8 bus, u8 device_fn, u8 where, u32 *value,
-			struct linux_hose_info *hose)
+int
+mcpcia_hose_read_config_dword (u8 bus, u8 device_fn, u8 where, u32 *value,
+			       struct linux_hose_info *hose)
 {
 	unsigned long addr;
 	unsigned char type1;
 
-	*value = 0xffffffff;
-
-	if (where & 0x3)
-		return PCIBIOS_BAD_REGISTER_NUMBER;
 	if (mk_conf_addr(hose, bus, device_fn, where, &addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
@@ -290,9 +257,9 @@ hose_read_config_dword (u8 bus, u8 device_fn, u8 where, u32 *value,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-static inline int
-hose_write_config_byte (u8 bus, u8 device_fn, u8 where, u8 value,
-			struct linux_hose_info *hose)
+int
+mcpcia_hose_write_config_byte (u8 bus, u8 device_fn, u8 where, u8 value,
+			       struct linux_hose_info *hose)
 {
 	unsigned long addr;
 	unsigned char type1;
@@ -305,9 +272,9 @@ hose_write_config_byte (u8 bus, u8 device_fn, u8 where, u8 value,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-static inline int
-hose_write_config_word (u8 bus, u8 device_fn, u8 where, u16 value,
-			struct linux_hose_info *hose)
+int
+mcpcia_hose_write_config_word (u8 bus, u8 device_fn, u8 where, u16 value,
+			       struct linux_hose_info *hose)
 {
 	unsigned long addr;
 	unsigned char type1;
@@ -320,9 +287,9 @@ hose_write_config_word (u8 bus, u8 device_fn, u8 where, u16 value,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-static inline int
-hose_write_config_dword (u8 bus, u8 device_fn, u8 where, u32 value,
-			 struct linux_hose_info *hose)
+int
+mcpcia_hose_write_config_dword (u8 bus, u8 device_fn, u8 where, u32 value,
+				struct linux_hose_info *hose)
 {
 	unsigned long addr;
 	unsigned char type1;
@@ -335,77 +302,64 @@ hose_write_config_dword (u8 bus, u8 device_fn, u8 where, u32 value,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int
-mcpcia_pcibios_read_config_byte (u8 bus, u8 devfn, u8 where, u8 *value)
-{
-	return hose_read_config_byte(bus, devfn, where, value, bus2hose[bus]);
-}
-
-int
-mcpcia_pcibios_read_config_word (u8 bus, u8 devfn, u8 where, u16 *value)
-{
-	return hose_read_config_word(bus, devfn, where, value, bus2hose[bus]);
-}
-
-int 
-mcpcia_pcibios_read_config_dword (u8 bus, u8 devfn, u8 where, u32 *value)
-{
-	return hose_read_config_dword(bus, devfn, where, value, bus2hose[bus]);
-}
-
-int 
-mcpcia_pcibios_write_config_byte (u8 bus, u8 devfn, u8 where, u8 value)
-{
-	return hose_write_config_byte(bus, devfn, where, value, bus2hose[bus]);
-}
-
-int 
-mcpcia_pcibios_write_config_word (u8 bus, u8 devfn, u8 where, u16 value)
-{
-	return hose_write_config_word(bus, devfn, where, value, bus2hose[bus]);
-}
-
-int 
-mcpcia_pcibios_write_config_dword (u8 bus, u8 devfn, u8 where, u32 val)
-{
-	return hose_write_config_dword(bus, devfn, where, val, bus2hose[bus]);
-}
-
 void __init
 mcpcia_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 {
+	extern asmlinkage void entInt(void);
 	struct linux_hose_info *hose;
 	unsigned int mcpcia_err;
 	unsigned int pci_rev;
-	int h;
+	int h, cpu;
 
-	*mem_start = long_align(*mem_start);
+	/* Ho hum.. init_arch is called before init_IRQ, but we need to be
+	   able to handle machine checks.  So install the handler now.  */
+	wrent(entInt, 0);
 
-	for (h = 0; h < NR_CPUS; h++) {
-		MCPCIA_mcheck_expected[h] = 0;
-		MCPCIA_mcheck_taken[h] = 0;
-	}
+	/* Align memory to cache line; we'll be allocating from it.  */
+	*mem_start = (*mem_start | 31) + 1;
+
+	cpu = smp_processor_id();
 
 	/* First, find how many hoses we have.  */
 	for (h = 0; h < MCPCIA_MAX_HOSES; h++) {
+
+		/* Gotta be REAL careful.  If hose is absent, we get a
+		   machine check.  */
+
+		mb();
+		mb();
+		draina();
+		MCPCIA_mcheck_expected[cpu] = 1;
+		MCPCIA_mcheck_taken[cpu]    = 0;
+		mb();
+
+		/* Access the bus revision word. */
 		pci_rev = *(vuip)MCPCIA_REV(h);
+
+		mb();
+		mb();  /* magic */
+		if (MCPCIA_mcheck_taken[cpu]) {
+			MCPCIA_mcheck_taken[cpu] = 0;
+			pci_rev = 0xffffffff;
+			mb();
+		}
+		MCPCIA_mcheck_expected[cpu] = 0;
+		mb();
+
 #if 0
-		printk("mcpcia_init: got 0x%x for PCI_REV for hose %d\n",
+		printk("mcpcia_init_arch: got 0x%x for PCI_REV for hose %d\n",
 		       pci_rev, h);
 #endif
 		if ((pci_rev >> 16) == PCI_CLASS_BRIDGE_HOST) {
-			mcpcia_num_hoses++;
+			hose_count++;
 
 			hose = (struct linux_hose_info *)*mem_start;
-			*mem_start = long_align(*mem_start + sizeof(*hose));
+			*mem_start = (unsigned long)(hose + 1);
 
 			memset(hose, 0, sizeof(*hose));
 
-			if (mcpcia_root)
-				mcpcia_last_hose->next = hose;
-			else
-				mcpcia_root = hose;
-			mcpcia_last_hose = hose;
+			*hose_tail = hose;
+			hose_tail = &hose->next;
 
 			hose->pci_io_space = MCPCIA_IO(h);
 			hose->pci_mem_space = MCPCIA_DENSE(h);
@@ -418,14 +372,14 @@ mcpcia_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 	}
 
 #if 1
-	printk("mcpcia_init: found %d hoses\n", mcpcia_num_hoses);
+	printk("mcpcia_init_arch: found %d hoses\n", hose_count);
 #endif
 
 	/* Now do init for each hose.  */
-	for (hose = mcpcia_root; hose; hose = hose->next) {
+	for (hose = hose_head; hose; hose = hose->next) {
 		h = hose->pci_hose_index;
 #if 0
-		printk("mcpcia_init: -------- hose %d --------\n",h);
+		printk("mcpcia_init_arch: -------- hose %d --------\n",h);
 		printk("MCPCIA_REV 0x%x\n", *(vuip)MCPCIA_REV(h));
 		printk("MCPCIA_WHOAMI 0x%x\n", *(vuip)MCPCIA_WHOAMI(h));
 		printk("MCPCIA_HAE_MEM 0x%x\n", *(vuip)MCPCIA_HAE_MEM(h));
@@ -470,8 +424,8 @@ mcpcia_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 				MCPCIA_DMA_WIN_SIZE = *(vuip)MCPCIA_W0_MASK(h) & 0xfff00000U;
 				MCPCIA_DMA_WIN_SIZE += 0x00100000U;
 #if 1
-				printk("mcpcia_init: using Window 0 settings\n");
-				printk("mcpcia_init: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
+				printk("mcpcia_init_arch: using Window 0 settings\n");
+				printk("mcpcia_init_arch: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
 				       *(vuip)MCPCIA_W0_BASE(h),
 				       *(vuip)MCPCIA_W0_MASK(h),
 				       *(vuip)MCPCIA_T0_BASE(h));
@@ -487,8 +441,8 @@ mcpcia_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 				MCPCIA_DMA_WIN_SIZE = *(vuip)MCPCIA_W1_MASK(h) & 0xfff00000U;
 				MCPCIA_DMA_WIN_SIZE += 0x00100000U;
 #if 1
-				printk("mcpcia_init: using Window 1 settings\n");
-				printk("mcpcia_init: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
+				printk("mcpcia_init_arch: using Window 1 settings\n");
+				printk("mcpcia_init_arch: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
 				       *(vuip)MCPCIA_W1_BASE(h),
 				       *(vuip)MCPCIA_W1_MASK(h),
 				       *(vuip)MCPCIA_T1_BASE(h));
@@ -504,8 +458,8 @@ mcpcia_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 				MCPCIA_DMA_WIN_SIZE = *(vuip)MCPCIA_W2_MASK(h) & 0xfff00000U;
 				MCPCIA_DMA_WIN_SIZE += 0x00100000U;
 #if 1
-				printk("mcpcia_init: using Window 2 settings\n");
-				printk("mcpcia_init: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
+				printk("mcpcia_init_arch: using Window 2 settings\n");
+				printk("mcpcia_init_arch: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
 				       *(vuip)MCPCIA_W2_BASE(h),
 				       *(vuip)MCPCIA_W2_MASK(h),
 				       *(vuip)MCPCIA_T2_BASE(h));
@@ -521,8 +475,8 @@ mcpcia_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 				MCPCIA_DMA_WIN_SIZE = *(vuip)MCPCIA_W3_MASK(h) & 0xfff00000U;
 				MCPCIA_DMA_WIN_SIZE += 0x00100000U;
 #if 1
-				printk("mcpcia_init: using Window 3 settings\n");
-				printk("mcpcia_init: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
+				printk("mcpcia_init_arch: using Window 3 settings\n");
+				printk("mcpcia_init_arch: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
 				       *(vuip)MCPCIA_W3_BASE(h),
 				       *(vuip)MCPCIA_W3_MASK(h),
 				       *(vuip)MCPCIA_T3_BASE(h));
@@ -541,7 +495,7 @@ mcpcia_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 			 * future, we may want to use them to do scatter/
 			 * gather DMA.
 			 *
-			 * Window 0 goes at 1 GB and is 1 GB large.
+			 * Window 0 goes at 2 GB and is 2 GB large.
 			 */
 
 			*(vuip)MCPCIA_W0_BASE(h) = 1U | (MCPCIA_DMA_WIN_BASE_DEFAULT & 0xfff00000U);
@@ -559,7 +513,7 @@ mcpcia_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 #if 0
 		{
 			unsigned int mcpcia_int_ctl = *((vuip)MCPCIA_INT_CTL(h));
-			printk("mcpcia_init: INT_CTL was 0x%x\n", mcpcia_int_ctl);
+			printk("mcpcia_init_arch: INT_CTL was 0x%x\n", mcpcia_int_ctl);
 			*(vuip)MCPCIA_INT_CTL(h) = 1U; mb();
 			mcpcia_int_ctl = *(vuip)MCPCIA_INT_CTL(h);
 		}
@@ -750,221 +704,9 @@ mcpcia_machine_check(unsigned long type, unsigned long la_ptr,
 		else if (type == 0x630)
 			printk("MCPCIA machine check: processor CORRECTABLE!\n");
 		else
-			mcpcia_print_uncorrectable(mchk_logout);
 #endif /* DEBUG_MCHECK_DUMP */
+			mcpcia_print_uncorrectable(mchk_logout);
 	}
 #endif
 #endif
-}
-
-/*==========================================================================*/
-
-#define PRIMARY(b) ((b)&0xff)
-#define SECONDARY(b) (((b)>>8)&0xff)
-#define SUBORDINATE(b) (((b)>>16)&0xff)
-
-static int __init
-hose_scan_bridges(struct linux_hose_info *hose, unsigned char bus)
-{
-	unsigned int devfn, l, class;
-	unsigned char hdr_type = 0;
-	unsigned int found = 0;
-
-	for (devfn = 0; devfn < 0xff; ++devfn) {
-		if (PCI_FUNC(devfn) == 0) {
-			hose_read_config_byte(bus, devfn, PCI_HEADER_TYPE,
-					      &hdr_type, hose);
-		} else if (!(hdr_type & 0x80)) {
-			/* not a multi-function device */
-			continue;
-		}
-
-		/* Check if there is anything here. */
-		hose_read_config_dword(bus, devfn, PCI_VENDOR_ID, &l, hose);
-		if (l == 0xffffffff || l == 0x00000000) {
-			hdr_type = 0;
-			continue;
-		}
-
-		/* See if this is a bridge device. */
-		hose_read_config_dword(bus, devfn, PCI_CLASS_REVISION,
-				       &class, hose);
-
-		if ((class >> 16) == PCI_CLASS_BRIDGE_PCI) {
-			unsigned int busses;
-
-			found++;
-
-			hose_read_config_dword(bus, devfn, PCI_PRIMARY_BUS,
-					       &busses, hose);
-
-			DBG_PCI(("hose_scan_bridges: hose %d bus %d "
-				 "slot %d busses 0x%x\n",
-				 hose->pci_hose_index, bus, PCI_SLOT(devfn),
-				 busses));
-
-			/*
-			 * Do something with first_busno and last_busno
-			 */
-			if (hose->pci_first_busno > PRIMARY(busses)) {
-				hose->pci_first_busno = PRIMARY(busses);
-				DBG_PCI(("hose_scan_bridges: hose %d bus %d "
-					 "slot %d change first to %d\n",
-					 hose->pci_hose_index, bus,
-					 PCI_SLOT(devfn), PRIMARY(busses)));
-			}
-			if (hose->pci_last_busno < SUBORDINATE(busses)) {
-				hose->pci_last_busno = SUBORDINATE(busses);
-				DBG_PCI(("hose_scan_bridges: hose %d bus %d "
-					 "slot %d change last to %d\n",
-					 hose->pci_hose_index, bus,
-					 PCI_SLOT(devfn),
-					 SUBORDINATE(busses)));
-			}
-			/*
-			 * Now scan everything underneath the bridge.
-			 */
-			hose_scan_bridges(hose, SECONDARY(busses));
-		}
-	}
-	return found;
-}
-
-static void __init
-hose_reconfigure_bridges(struct linux_hose_info *hose, unsigned char bus)
-{
-	unsigned int devfn, l, class;
-	unsigned char hdr_type = 0;
-
-	for (devfn = 0; devfn < 0xff; ++devfn) {
-		if (PCI_FUNC(devfn) == 0) {
-			hose_read_config_byte(bus, devfn, PCI_HEADER_TYPE,
-					      &hdr_type, hose);
-		} else if (!(hdr_type & 0x80)) {
-			/* not a multi-function device */
-			continue;
-		}
-
-		/* Check if there is anything here. */
-		hose_read_config_dword(bus, devfn, PCI_VENDOR_ID, &l, hose);
-		if (l == 0xffffffff || l == 0x00000000) {
-			hdr_type = 0;
-			continue;
-		}
-
-		/* See if this is a bridge device. */
-		hose_read_config_dword(bus, devfn, PCI_CLASS_REVISION,
-				       &class, hose);
-
-		if ((class >> 16) == PCI_CLASS_BRIDGE_PCI) {
-			unsigned int busses;
-
-			hose_read_config_dword(bus, devfn, PCI_PRIMARY_BUS,
-					       &busses, hose);
-
-			/*
-			 * First reconfigure everything underneath the bridge.
-			 */
-			hose_reconfigure_bridges(hose, (busses >> 8) & 0xff);
-
-			/*
-			 * Unconfigure this bridges bus numbers,
-			 * pci_scan_bus() will fix this up properly.
-			 */
-			busses &= 0xff000000;
-			hose_write_config_dword(bus, devfn, PCI_PRIMARY_BUS,
-						busses, hose);
-		}
-	}
-}
-
-static void __init
-mcpcia_fixup_busno(struct linux_hose_info *hose, unsigned char bus)
-{
-	unsigned int nbus;
-
-	/*
-	 * First, scan for all bridge devices underneath this hose,
-	 * to determine the first and last busnos.
-	 */
-	if (!hose_scan_bridges(hose, 0)) {
-		/* none found, exit */
-		hose->pci_first_busno = bus;
-		hose->pci_last_busno = bus;
-	} else {
-		/*
-		 * Reconfigure all bridge devices underneath this hose.
-		 */
-		hose_reconfigure_bridges(hose, hose->pci_first_busno);
-	}
-
-	/*
-	 * Now reconfigure the hose to it's new bus number and set up
-	 * our bus2hose mapping for this hose.
-	 */
-	nbus = hose->pci_last_busno - hose->pci_first_busno;
-
-	hose->pci_first_busno = bus;
-
-	DBG_PCI(("mcpcia_fixup_busno: hose %d startbus %d nbus %d\n",
-		 hose->pci_hose_index, bus, nbus));
-
-	do {
-		bus2hose[bus++] = hose;
-	} while (nbus-- > 0);
-}
-
-static void __init
-mcpcia_probe(struct linux_hose_info *hose)
-{
-	static struct pci_bus *pchain = NULL;
-	struct pci_bus *pbus = &hose->pci_bus;
-	static unsigned char busno = 0;
-
-	/*
-	 * Hoses include child PCI bridges in bus-range property,
-	 * but we don't scan each of those ourselves, Linux generic PCI
-	 * probing code will find child bridges and link them into this
-	 * hose's root PCI device hierarchy.
-	 */
-
-	pbus->number = pbus->secondary = busno;
-	pbus->sysdata = hose;
-
-	mcpcia_fixup_busno(hose, busno);
-
-	pbus->subordinate = pci_scan_bus(pbus); /* the original! */
-
-	/*
-	 * Set the maximum subordinate bus of this hose.
-	 */
-	hose->pci_last_busno = pbus->subordinate;
-#if 0
-	hose_write_config_byte(busno, 0, 0x41, hose->pci_last_busno, hose);
-#endif
-	busno = pbus->subordinate + 1;
-
-	/*
-	 * Fixup the chain of primary PCI busses.
-	 */
-	if (pchain) {
-		pchain->next = &hose->pci_bus;
-		pchain = pchain->next;
-	} else {
-		pchain = &pci_root;
-		memcpy(pchain, &hose->pci_bus, sizeof(pci_root));
-	}
-}
-
-void __init
-mcpcia_pci_fixup(void)
-{
-	struct linux_hose_info *hose;
-
-	/* Turn on Config space access finally! */
-	pci_probe_enabled = 1;
-
-	/* For each hose, probe and setup the devices on the hose.  */
-	for (hose = mcpcia_root; hose; hose = hose->next)
-		mcpcia_probe(hose);
 }

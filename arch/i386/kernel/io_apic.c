@@ -514,6 +514,8 @@ static inline int IO_APIC_irq_trigger(int irq)
 	return 0;
 }
 
+int irq_vector[NR_IRQS] = { IRQ0_TRAP_VECTOR , 0 };
+
 static int __init assign_irq_vector(int irq)
 {
 	static int current_vector = IRQ0_TRAP_VECTOR, offset = 0;
@@ -957,7 +959,7 @@ static void disable_level_ioapic_irq(unsigned int irq)
 	mask_IO_APIC_irq(irq);
 }
 
-static void do_edge_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
+static void do_edge_ioapic_IRQ(unsigned int irq, struct pt_regs * regs)
 {
 	irq_desc_t *desc = irq_desc + irq;
 	struct irqaction * action;
@@ -991,14 +993,12 @@ static void do_edge_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 	if (!action)
 		return;
 
-	irq_enter(cpu, irq);
-
 	/*
 	 * Edge triggered interrupts need to remember
 	 * pending events.
 	 */
 	for (;;) {
-		handle_IRQ_event(irq, regs);
+		handle_IRQ_event(irq, regs, action);
 
 		spin_lock(&irq_controller_lock);
 		if (!(desc->status & IRQ_PENDING))
@@ -1008,12 +1008,9 @@ static void do_edge_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 	}
 	desc->status &= ~IRQ_INPROGRESS;
 	spin_unlock(&irq_controller_lock);
-
-	irq_exit(cpu, irq);
 }
 
-static void do_level_ioapic_IRQ(unsigned int irq, int cpu,
-				struct pt_regs * regs)
+static void do_level_ioapic_IRQ(unsigned int irq, struct pt_regs * regs)
 {
 	irq_desc_t *desc = irq_desc + irq;
 	struct irqaction * action;
@@ -1048,17 +1045,13 @@ static void do_level_ioapic_IRQ(unsigned int irq, int cpu,
 	if (!action)
 		return;
 
-	irq_enter(cpu, irq);
-
-	handle_IRQ_event(irq, regs);
+	handle_IRQ_event(irq, regs, action);
 
 	spin_lock(&irq_controller_lock);
 	desc->status &= ~IRQ_INPROGRESS;
 	if (!(desc->status & IRQ_DISABLED))
 		unmask_IO_APIC_irq(irq);
 	spin_unlock(&irq_controller_lock);
-
-	irq_exit(cpu, irq);
 }
 
 /*

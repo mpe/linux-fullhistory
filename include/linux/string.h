@@ -26,6 +26,7 @@ extern __kernel_size_t strnlen(const char *,__kernel_size_t);
 extern __kernel_size_t strspn(const char *,const char *);
 extern int strcmp(const char *,const char *);
 extern int strncmp(const char *,const char *,__kernel_size_t);
+extern int strnicmp(const char *, const char *, __kernel_size_t);
 
 extern void * memset(void *,int,__kernel_size_t);
 extern void * memcpy(void *,const void *,__kernel_size_t);

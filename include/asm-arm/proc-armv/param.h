@@ -7,9 +7,7 @@
 #ifndef __ASM_PROC_PARAM_H
 #define __ASM_PROC_PARAM_H
 
-#ifndef HZ
-#define HZ 100
-#endif
+#include <asm/arch/param.h>		/* for HZ */
 
 #define EXEC_PAGESIZE   4096
 

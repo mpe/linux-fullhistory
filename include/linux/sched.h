@@ -1,8 +1,6 @@
 #ifndef _LINUX_SCHED_H
 #define _LINUX_SCHED_H
 
-extern void checksignals(void);
-
 #include <asm/param.h>	/* for HZ */
 
 extern unsigned long event;

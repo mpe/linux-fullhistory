@@ -93,7 +93,7 @@ struct percpu_struct {
 	unsigned long halt_pv;
 	unsigned long halt_reason;
 	unsigned long res;
-	char ipc_buffer[168];
+	unsigned long ipc_buffer[21];
 	unsigned long palcode_avail[16];
 	unsigned long compatibility;
 };

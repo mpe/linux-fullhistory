@@ -20,7 +20,6 @@
 #include <linux/tty.h>
 #include <linux/delay.h>
 #include <linux/config.h>	/* CONFIG_ALPHA_LCA etc */
-#include <linux/ioport.h>
 #include <linux/mc146818rtc.h>
 #include <linux/console.h>
 #include <linux/errno.h>
@@ -29,6 +28,9 @@
 
 #ifdef CONFIG_RTC
 #include <linux/timex.h>
+#endif
+#ifdef CONFIG_BLK_DEV_INITRD
+#include <linux/blk.h>
 #endif
 
 #include <asm/uaccess.h>
@@ -73,10 +75,11 @@ static void get_sysnames(long, long, char **, char **);
 #define PARAM			ZERO_PAGE
 #define COMMAND_LINE		((char*)(PARAM + 0x0000))
 #define COMMAND_LINE_SIZE	256
+#define INITRD_START		(*(unsigned long *) (PARAM+0x100))
+#define INITRD_SIZE		(*(unsigned long *) (PARAM+0x108))
 
 static char command_line[COMMAND_LINE_SIZE];
 char saved_command_line[COMMAND_LINE_SIZE];
-
 
 /*
  * The format of "screen_info" is strange, and due to early
@@ -92,68 +95,6 @@ struct screen_info screen_info = {
 	orig_video_isVGA: 1,
 	orig_video_points: 16
 };
-
-
-/*
- * Initialize Programmable Interval Timers with standard values.  Some
- * drivers depend on them being initialized (e.g., joystick driver).
- */
-
-/* It is (normally) only counter 1 that presents config problems, so
-   provide this support function to do the rest of the job.  */
-
-void inline
-init_pit_rest(void)
-{
-#if 0
-	/* Leave refresh timer alone---nobody should depend on a
-	   particular value anyway. */
-	outb(0x54, 0x43);	/* counter 1: refresh timer */
-	outb(0x18, 0x41);
-#endif
-
-	outb(0xb6, 0x43);	/* counter 2: speaker */
-	outb(0x31, 0x42);
-	outb(0x13, 0x42);
-
-	if ((CMOS_READ(RTC_FREQ_SELECT) & 0x3f) != 0x26) {
-		printk("Setting RTC_FREQ to 1024 Hz\n");
-		CMOS_WRITE(0x26, RTC_FREQ_SELECT);
-	}
-}
-
-#ifdef CONFIG_RTC
-static inline void
-rtc_init_pit (void)
-{
-	/* Setup interval timer if /dev/rtc is being used */
-	outb(0x34, 0x43);		/* binary, mode 2, LSB/MSB, ch 0 */
-	outb(LATCH & 0xff, 0x40);	/* LSB */
-	outb(LATCH >> 8, 0x40);		/* MSB */
-	request_region(0x40, 0x20, "timer"); /* reserve pit */
-
-	init_pit_rest();
-}
-#endif
-
-void
-generic_init_pit (void)
-{
-	outb(0x36, 0x43);	/* counter 0: system timer */
-	outb(0x00, 0x40);
-	outb(0x00, 0x40);
-	request_region(RTC_PORT(0), 0x10, "timer"); /* reserve rtc */
-
-	init_pit_rest();
-}
-
-/* This probably isn't Right, but it is what the old code did.  */
-#if defined(CONFIG_RTC)
-# define init_pit	rtc_init_pit
-#else
-# define init_pit	alpha_mv.init_pit
-#endif
-
 
 /*
  * Declare all of the machine vectors.
@@ -278,6 +219,11 @@ setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 	}
 #endif
 
+	printk("Booting on %s%s%s using machine vector %s\n",
+	       type_name, (*var_name ? " variation " : ""),
+	       var_name, alpha_mv.vector_name);
+	printk("Command line: %s\n", command_line);
+
 	/* 
 	 * Sync with the HAE
 	 */
@@ -293,16 +239,26 @@ setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 	*memory_end_p = find_end_memory();
 	*memory_start_p = (unsigned long) _end;
 
+#ifdef CONFIG_BLK_DEV_INITRD
+	initrd_start = INITRD_START;
+	if (initrd_start) {
+		initrd_end = initrd_start+INITRD_SIZE;
+		printk("Initial ramdisk at: 0x%p (%lu bytes)\n",
+		       (void *) initrd_start, INITRD_SIZE);
+
+		if (initrd_end > *memory_end_p) {
+			printk("initrd extends beyond end of memory "
+			       "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
+			       initrd_end, memory_end_p);
+			initrd_start = initrd_end = 0;
+		}
+	}
+#endif
+
 	/* Initialize the machine.  Usually has to do with setting up
 	   DMA windows and the like.  */
 	if (alpha_mv.init_arch)
 		alpha_mv.init_arch(memory_start_p, memory_end_p);
-
-	/* Initialize the timers.  */
-	init_pit();
-
-	/* Default root filesystem to sda2.  */
-	ROOT_DEV = to_kdev_t(0x0802);
 
 	/* 
 	 * Give us a default console.  TGA users will see nothing until
@@ -317,11 +273,8 @@ setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 #endif
 #endif
 
-	/* Delayed so that we've initialized the machine first.  */
-	printk("Booting on %s%s%s using machine vector %s\n",
-	       type_name, (*var_name ? " variation " : ""),
-	       var_name, alpha_mv.vector_name);
-	printk("Command line: %s\n", command_line);
+	/* Default root filesystem to sda2.  */
+	ROOT_DEV = to_kdev_t(0x0802);
 
  	/*
 	 * Check ASN in HWRPB for validity, report if bad.

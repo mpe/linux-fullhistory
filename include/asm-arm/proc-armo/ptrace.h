@@ -44,11 +44,11 @@ struct pt_regs {
 #define CC_Z_BIT	(1 << 30)
 #define CC_N_BIT	(1 << 31)
 
-#define user_mode(regs) \
-	(((regs)->ARM_pc & MODE_MASK) == USR26_MODE)
-
 #define processor_mode(regs) \
 	((regs)->ARM_pc & MODE_MASK)
+
+#define user_mode(regs) \
+	(processor_mode(regs) == USR26_MODE)
 
 #define interrupts_enabled(regs) \
 	(!((regs)->ARM_pc & I_BIT))
@@ -59,7 +59,17 @@ struct pt_regs {
 #define condition_codes(regs) \
 	((regs)->ARM_pc & (CC_V_BIT|CC_C_BIT|CC_Z_BIT|CC_N_BIT))
 
-#define instruction_pointer(regs)	((regs)->ARM_pc & 0x03fffffc)
-#define pc_pointer(v)			((v) & 0x03fffffc)
+#define pc_pointer(v) \
+	((v) & 0x03fffffc)
+
+#define instruction_pointer(regs) \
+	(pc_pointer((regs)->ARM_pc))
+
+/* Are the current registers suitable for user mode?
+ * (used to maintain security in signal handlers)
+ */
+#define valid_user_regs(regs) \
+	(user_mode(regs) && ((regs)->ARM_sp & 3) == 0)
+
 #endif
 

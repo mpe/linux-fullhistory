@@ -312,7 +312,7 @@ USER(		ldrgtbt	r3, [r1], #1)			// May fault
 		b	.cfu_dest_aligned
 
 ENTRY(__arch_copy_from_user)
-		stmfd	sp!, {r2, r4 - r7, lr}
+		stmfd	sp!, {r0, r2, r4 - r7, lr}
 		cmp	r2, #4
 		blt	.cfu_not_enough
 		ands	ip, r0, #3
@@ -375,7 +375,8 @@ USER(		ldrgtbt	r3, [r1], #1)			// May fault
 		movs	ip, r2
 		bne	.cfu_nowords
 .cfu_finished:	mov	r0, #0
-		LOADREGS(fd,sp!,{r2, r4 - r7, pc})
+		add	sp, sp, #8
+		LOADREGS(fd,sp!,{r4 - r7, pc})
 
 .cfu_src_not_aligned:
 		bic	r1, r1, #3
@@ -548,7 +549,12 @@ USER(		ldrget	r3, [r1], #0)			// May fault
 #ifndef TESTING
 		.section .fixup,"ax"
 		.align	0
-9001:		LOADREGS(fd,sp!, {r0, r4 - r7, pc})
+		/* We took an exception.  Zero out the buffer and pretend no
+		   data was copied.  */
+9001:		ldr	r0, [sp], #4
+		ldr	r1, [sp]
+		bl	SYMBOL_NAME(memzero)
+		LOADREGS(fd,sp!, {r0, r4 - r7, pc})
 		.previous
 #endif
 
@@ -636,7 +642,11 @@ USER(		ldrbt	r3, [r1], #1)
 
 		.section .fixup,"ax"
 		.align	0
-9001:		mov	r0, #-EFAULT
+9001:		mov	ip, #0
+1:		strb	ip, [r0], #1
+		subs	r2, r2, #1
+		bpl	1b
+		mov	r0, #-EFAULT
 		LOADREGS(fd, sp!, {pc})
 		.previous
 

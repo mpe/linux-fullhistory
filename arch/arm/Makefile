@@ -157,12 +157,16 @@ HEAD		:= arch/arm/kernel/head-$(PROCESSOR).o arch/arm/kernel/init_task.o
 CORE_FILES	:= arch/arm/kernel/kernel.o arch/arm/mm/mm.o $(CORE_FILES)
 LIBS		:= arch/arm/lib/lib.a $(LIBS) $(GCCLIB)
 
-BLOCK_DRIVERS	:= arch/arm/drivers/block/block.a
+BLOCK_DRIVERS	:= drivers/block/block.a
 CDROM_DRIVERS	:= drivers/cdrom/cdrom.a
 ifeq ($(CONFIG_FB),y)
 CHAR_DRIVERS	:= arch/arm/drivers/char1/char.a
 else
+ifeq ($(CONFIG_VGA_CONSOLE),y)
+CHAR_DRIVERS	:= arch/arm/drivers/char1/char.a
+else
 CHAR_DRIVERS	:= arch/arm/drivers/char/char.a
+endif
 endif
 MISC_DRIVERS	:= drivers/misc/misc.a
 NET_DRIVERS	:= drivers/net/net.a
@@ -171,6 +175,7 @@ PCI_DRIVERS	:= drivers/pci/pci.a
 SCSI_DRIVERS	:= drivers/scsi/scsi.a
 SOUND_DRIVERS	:= drivers/sound/sound.a
 VIDEO_DRIVERS	:= drivers/video/video.a
+PNP_DRIVERS	:= drivers/pnp/pnp.a
 
 ifeq ($(CONFIG_ARCH_ACORN),y)
 BLOCK_DRIVERS	+= drivers/acorn/block/acorn-block.a
@@ -183,6 +188,10 @@ DRIVERS		:= $(BLOCK_DRIVERS) $(CHAR_DRIVERS) $(MISC_DRIVERS) $(NET_DRIVERS)
 
 ifeq ($(CONFIG_FB),y)
 DRIVERS		:= $(DRIVERS) $(VIDEO_DRIVERS)
+else
+ifeq ($(CONFIG_VGA_CONSOLE),y)
+DRIVERS		:= $(DRIVERS) $(VIDEO_DRIVERS)
+endif
 endif
 ifeq ($(CONFIG_SCSI),y)
 DRIVERS		:= $(DRIVERS) $(SCSI_DRIVERS)
@@ -198,6 +207,9 @@ DRIVERS		:= $(DRIVERS) $(SOUND_DRIVERS)
 endif
 ifeq ($(CONFIG_PARIDE),y)
 DRIVERS		:= $(DRIVERS) $(PARIDE_DRIVERS)
+endif
+ifdef CONFIG_PNP
+DRIVERS		:= $(DRIVERS) $(PNP_DRIVERS)
 endif
 
 symlinks::

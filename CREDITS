@@ -61,7 +61,7 @@ S: San Jose, California 95129
 S: USA
 
 N: Andrea Arcangeli
-E: arcangeli@mbox.queen.it
+E: andrea@e-mind.com
 W: http://e-mind.com/~andrea/
 P: 1024/CB4660B9 CC A0 71 81 F4 A0 63 AC  C0 4B 81 1D 8C 15 C8 E5
 D: Parport hacker
@@ -129,6 +129,12 @@ S: 633 South 550 East
 S: Provo, Utah 84606
 S: USA
 
+N: Paul Barton-Davis
+E: pbd@op.net
+D: Driver for WaveFront soundcards (Turtle Beach Maui, Tropez, Tropez+)
+D: Various bugfixes and changes to sound drivers
+S: USA 
+
 M: Krzysztof G. Baranowski
 E: kgb@manjak.knm.org.pl
 P: 1024/FA6F16D1 96 D1 1A CF 5F CA 69 EC  F9 4F 36 1F 6D 60 7B DA
@@ -158,7 +164,7 @@ S: Germany
 N: Donald Becker
 E: becker@cesdis.gsfc.nasa.gov
 D: General low-level networking hacker
-D: Most of the Ethernet drivers
+D: Most of the ethercard drivers
 D: Original author of the NFS server
 S: USRA Center of Excellence in Space Data and Information Sciences
 S: Code 930.5, Goddard Space Flight Center
@@ -246,6 +252,15 @@ D: Coda Filesystem
 S: Dept of Computer Science
 S: 5000 Forbes Avenue
 S: Pittsburgh, Pennsylvania 15213
+S: USA
+
+N: Derrick J. Brashear
+E: shadow@dementia.org
+W: http://www.dementia.org/~shadow
+P: 512/71EC9367 C5 29 0F BC 83 51 B9 F0  BC 05 89 A0 4F 1F 30 05
+D: Author of Sparc CS4231 audio driver, random Sparc work
+S: 403 Gilmore Avenue
+S: Trafford, Pennsylvania 15085
 S: USA
 
 N: Andries Brouwer
@@ -711,8 +726,8 @@ N: Richard Henderson
 E: rth@cygnus.com
 E: richard@gnu.org
 D: Alpha/ELF, gcc, binutils, and glibc
-S: 5450 Mayme #25
-S: San Jose, California 95129
+S: 50 E. Middlefield #10
+S: Mountain View, California 94043
 S: USA
 
 N: Sebastian Hetze
@@ -1073,9 +1088,10 @@ S: Canada K2H 6S3
 N: Jamie Lokier
 E: jamie@imbolc.ucc.ie
 D: Reboot-through-BIOS for broken 486 motherboards
-S: 26 Oatlands Road
+S: 11 Goodson Walk
+S: Marston
 S: Oxford
-S: OX2 0ET
+S: OX3 0HX
 S: United Kingdom
 
 N: Warner Losh
@@ -1711,6 +1727,13 @@ D: Original kernel hacker
 S: 1050 Woodduck Avenue
 S: Santa Clara, California 95051
 S: USA
+
+N: Stefan Traby
+E: stefan@quant-x.com
+D: Minor Alpha kernel hacks
+S: Mitterlasznitzstr. 13
+S: 8302 Nestelbach
+S: Austria
 
 N: Jeff Tranter
 E: Jeff_Tranter@Mitel.COM

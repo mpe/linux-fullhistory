@@ -68,7 +68,8 @@ unsigned long __phys_to_virt(unsigned long phys)
 	return phys + rambank[bank].phys_offset;
 }
 
-void init_dram_banks(struct param_struct *params)
+__initfunc(void
+init_dram_banks(struct param_struct *params))
 {
 	unsigned int bank;
 	unsigned int bytes = 0;

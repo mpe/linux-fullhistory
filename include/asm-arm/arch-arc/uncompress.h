@@ -102,3 +102,8 @@ static void arch_decomp_setup(void)
 
 	if (params->nr_pages * params->page_size < 4096*1024) error("<4M of mem\n");
 }
+
+/*
+ * nothing to do
+ */
+#define arch_decomp_wdog()

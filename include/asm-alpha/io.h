@@ -12,11 +12,10 @@
 /*
  * Virtual -> physical identity mapping starts at this offset
  */
-/* XXX: Do we need to conditionalize on this?  */
 #ifdef USE_48_BIT_KSEG
-#define IDENT_ADDR	(0xffff800000000000UL)
+#define IDENT_ADDR     0xffff800000000000
 #else
-#define IDENT_ADDR	(0xfffffc0000000000UL)
+#define IDENT_ADDR     0xfffffc0000000000
 #endif
 
 #ifdef __KERNEL__
@@ -52,7 +51,10 @@ static inline void set_hae(unsigned long new_hae)
  */
 static inline unsigned long virt_to_phys(volatile void * address)
 {
-	return 0xffffffffUL & (unsigned long) address;
+	/* Conditionalize this on the CPU?  This here is 40 bits,
+	   whereas EV4 only supports 34.  But KSEG is farther out
+	   so it shouldn't _really_ matter.  */
+	return 0xffffffffffUL & (unsigned long) address;
 }
 
 static inline void * phys_to_virt(unsigned long address)
@@ -322,6 +324,7 @@ out:
 #ifdef CONFIG_ALPHA_GENERIC
 # define RTC_PORT(x)	((x) + alpha_mv.rtc_port)
 # define RTC_ADDR(x)	((x) | alpha_mv.rtc_addr)
+# define RTC_ALWAYS_BCD	(alpha_mv.rtc_bcd)
 #else
 # ifdef CONFIG_ALPHA_JENSEN
 #  define RTC_PORT(x)	(0x170+(x))
@@ -330,9 +333,13 @@ out:
 #  define RTC_PORT(x)	(0x70 + (x))
 #  define RTC_ADDR(x)	(0x80 | (x))
 # endif
+# ifdef CONFIG_ALPHA_RUFFIAN
+#  define RTC_ALWAYS_BCD	1
+# else
+#  define RTC_ALWAYS_BCD	0
+# endif
 #endif
 
-#define RTC_ALWAYS_BCD	0
 
 #endif /* __KERNEL__ */
 

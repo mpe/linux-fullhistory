@@ -240,7 +240,7 @@ __initfunc(int t128_detect(Scsi_Host_Template * tpnt)) {
 	    break;
 
 	instance = scsi_register (tpnt, sizeof(struct NCR5380_hostdata));
-	instance->base = base;
+	instance->base = phys_to_virt((unsigned int)base);
 
 	NCR5380_init(instance, 0);
 

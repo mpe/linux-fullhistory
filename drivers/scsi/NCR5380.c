@@ -1628,14 +1628,18 @@ static int NCR5380_select(struct Scsi_Host *instance, Scsi_Cmnd * cmd, int tag) 
 	NCR5380_local_declare();
 	struct NCR5380_hostdata *hostdata = (struct NCR5380_hostdata *) instance->hostdata;
 	unsigned char tmp[3], phase;
-	unsigned char *data, value;
+	unsigned char *data;
 	int len;
 	unsigned long timeout;
 	unsigned long flags;
+#ifdef USLEEP
+	unsigned char value;
+#endif
 
-	 NCR5380_setup(instance);
+	NCR5380_setup(instance);
 
 #ifdef USLEEP
+
 	if (hostdata->selecting) 
 	{
 		goto part2;	/* RvC: sorry prof. Dijkstra, but it keeps the
@@ -2250,8 +2254,8 @@ static int NCR5380_transfer_dma(struct Scsi_Host *instance,
 	register unsigned char p = *phase;
 	register unsigned char *d = *data;
 	unsigned char tmp;
-	int foo;
 	unsigned long flags;
+	int foo;
 #if defined(REAL_DMA_POLL)
 	int cnt, toPIO;
 	unsigned char saved_data = 0, overrun = 0, residue;

@@ -13,7 +13,7 @@
  * lp_read (Status readback) support added by Carsten Gross,
  *                                             carsten@sol.wohnheim.uni-ulm.de
  * Support for parport by Philip Blundell <Philip.Blundell@pobox.com>
- * Parport sharing hacking by Andrea Arcangeli <arcangeli@mbox.queen.it>
+ * Parport sharing hacking by Andrea Arcangeli
  * Fixed kernel_(to/from)_user memory copy to check for errors
  * 				by Riccardo Facchetti <fizban@tin.it>
  * Interrupt handling workaround for printers with buggy handshake

@@ -21,6 +21,17 @@
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 
+void checksignals(void)
+{
+	sigset_t *blocked = &current->blocked;
+	unsigned long mask = blocked->sig[0] | sigmask(SIGKILL) | sigmask(SIGINT) | sigmask(SIGQUIT);
+	mask &= blocked->sig[1];
+	if (~mask) {
+		printk("Bad signal mask\n");
+		__backtrace();
+	}
+}
+
 #define _BLOCKABLE (~(sigmask(SIGKILL) | sigmask(SIGSTOP)))
 
 #define SWI_SYS_SIGRETURN (0xef000000|(__NR_sigreturn))
@@ -137,31 +148,35 @@ struct rt_sigframe
 static int
 restore_sigcontext(struct pt_regs *regs, struct sigcontext *sc)
 {
-	__get_user(regs->ARM_r0, &sc->arm_r0);
-	__get_user(regs->ARM_r1, &sc->arm_r1);
-	__get_user(regs->ARM_r2, &sc->arm_r2);
-	__get_user(regs->ARM_r3, &sc->arm_r3);
-	__get_user(regs->ARM_r4, &sc->arm_r4);
-	__get_user(regs->ARM_r5, &sc->arm_r5);
-	__get_user(regs->ARM_r6, &sc->arm_r6);
-	__get_user(regs->ARM_r7, &sc->arm_r7);
-	__get_user(regs->ARM_r8, &sc->arm_r8);
-	__get_user(regs->ARM_r9, &sc->arm_r9);
-	__get_user(regs->ARM_r10, &sc->arm_r10);
-	__get_user(regs->ARM_fp, &sc->arm_fp);
-	__get_user(regs->ARM_ip, &sc->arm_ip);
-	__get_user(regs->ARM_sp, &sc->arm_sp);
-	__get_user(regs->ARM_lr, &sc->arm_lr);
-	__get_user(regs->ARM_pc, &sc->arm_pc);		/* security! */
+	int err = 0;
+
+	err |= __get_user(regs->ARM_r0, &sc->arm_r0);
+	err |= __get_user(regs->ARM_r1, &sc->arm_r1);
+	err |= __get_user(regs->ARM_r2, &sc->arm_r2);
+	err |= __get_user(regs->ARM_r3, &sc->arm_r3);
+	err |= __get_user(regs->ARM_r4, &sc->arm_r4);
+	err |= __get_user(regs->ARM_r5, &sc->arm_r5);
+	err |= __get_user(regs->ARM_r6, &sc->arm_r6);
+	err |= __get_user(regs->ARM_r7, &sc->arm_r7);
+	err |= __get_user(regs->ARM_r8, &sc->arm_r8);
+	err |= __get_user(regs->ARM_r9, &sc->arm_r9);
+	err |= __get_user(regs->ARM_r10, &sc->arm_r10);
+	err |= __get_user(regs->ARM_fp, &sc->arm_fp);
+	err |= __get_user(regs->ARM_ip, &sc->arm_ip);
+	err |= __get_user(regs->ARM_sp, &sc->arm_sp);
+	err |= __get_user(regs->ARM_lr, &sc->arm_lr);
+	err |= __get_user(regs->ARM_pc, &sc->arm_pc);
 #ifdef CONFIG_CPU_32
-	__get_user(regs->ARM_cpsr, &sc->arm_cpsr);	/* security! */
+	err |= __get_user(regs->ARM_cpsr, &sc->arm_cpsr);
 #endif
+	if (!valid_user_regs(regs))
+		return 1;
 
 	/* send SIGTRAP if we're single-stepping */
 	if (ptrace_cancel_bpt (current))
 		send_sig (SIGTRAP, current, 1);
 
-	return regs->ARM_r0;
+	return err;
 }
 
 asmlinkage int sys_sigreturn(struct pt_regs *regs)
@@ -185,11 +200,14 @@ asmlinkage int sys_sigreturn(struct pt_regs *regs)
 	recalc_sigpending(current);
 	spin_unlock_irq(&current->sigmask_lock);
 
-	return restore_sigcontext(regs, &frame->sc);
+	if (restore_sigcontext(regs, &frame->sc))
+		goto badframe;
+
+	return regs->ARM_r0;
 
 badframe:
-	lock_kernel();
-	do_exit(SIGSEGV);
+	force_sig(SIGSEGV, current);
+	return 0;
 }
 
 asmlinkage int sys_rt_sigreturn(struct pt_regs *regs)
@@ -210,40 +228,47 @@ asmlinkage int sys_rt_sigreturn(struct pt_regs *regs)
 	recalc_sigpending(current);
 	spin_unlock_irq(&current->sigmask_lock);
 
-	return restore_sigcontext(regs, &frame->uc.uc_mcontext);
+	if (restore_sigcontext(regs, &frame->uc.uc_mcontext))
+		goto badframe;
+
+	return regs->ARM_r0;
 
 badframe:
-	lock_kernel();
-	do_exit(SIGSEGV);
+	force_sig(SIGSEGV, current);
+	return 0;
 }
 
-static void
+static int
 setup_sigcontext(struct sigcontext *sc, /*struct _fpstate *fpstate,*/
 		 struct pt_regs *regs, unsigned long mask)
 {
-	__put_user (regs->ARM_r0, &sc->arm_r0);
-	__put_user (regs->ARM_r1, &sc->arm_r1);
-	__put_user (regs->ARM_r2, &sc->arm_r2);
-	__put_user (regs->ARM_r3, &sc->arm_r3);
-	__put_user (regs->ARM_r4, &sc->arm_r4);
-	__put_user (regs->ARM_r5, &sc->arm_r5);
-	__put_user (regs->ARM_r6, &sc->arm_r6);
-	__put_user (regs->ARM_r7, &sc->arm_r7);
-	__put_user (regs->ARM_r8, &sc->arm_r8);
-	__put_user (regs->ARM_r9, &sc->arm_r9);
-	__put_user (regs->ARM_r10, &sc->arm_r10);
-	__put_user (regs->ARM_fp, &sc->arm_fp);
-	__put_user (regs->ARM_ip, &sc->arm_ip);
-	__put_user (regs->ARM_sp, &sc->arm_sp);
-	__put_user (regs->ARM_lr, &sc->arm_lr);
-	__put_user (regs->ARM_pc, &sc->arm_pc);		/* security! */
+	int err = 0;
+
+	err |= __put_user (regs->ARM_r0, &sc->arm_r0);
+	err |= __put_user (regs->ARM_r1, &sc->arm_r1);
+	err |= __put_user (regs->ARM_r2, &sc->arm_r2);
+	err |= __put_user (regs->ARM_r3, &sc->arm_r3);
+	err |= __put_user (regs->ARM_r4, &sc->arm_r4);
+	err |= __put_user (regs->ARM_r5, &sc->arm_r5);
+	err |= __put_user (regs->ARM_r6, &sc->arm_r6);
+	err |= __put_user (regs->ARM_r7, &sc->arm_r7);
+	err |= __put_user (regs->ARM_r8, &sc->arm_r8);
+	err |= __put_user (regs->ARM_r9, &sc->arm_r9);
+	err |= __put_user (regs->ARM_r10, &sc->arm_r10);
+	err |= __put_user (regs->ARM_fp, &sc->arm_fp);
+	err |= __put_user (regs->ARM_ip, &sc->arm_ip);
+	err |= __put_user (regs->ARM_sp, &sc->arm_sp);
+	err |= __put_user (regs->ARM_lr, &sc->arm_lr);
+	err |= __put_user (regs->ARM_pc, &sc->arm_pc);
 #ifdef CONFIG_CPU_32
-	__put_user (regs->ARM_cpsr, &sc->arm_cpsr);	/* security! */
+	err |= __put_user (regs->ARM_cpsr, &sc->arm_cpsr);
 #endif
 
-	__put_user (current->tss.trap_no, &sc->trap_no);
-	__put_user (current->tss.error_code, &sc->error_code);
-	__put_user (mask, &sc->oldmask);
+	err |= __put_user (current->tss.trap_no, &sc->trap_no);
+	err |= __put_user (current->tss.error_code, &sc->error_code);
+	err |= __put_user (mask, &sc->oldmask);
+
+	return err;
 }
 
 static void setup_frame(int sig, struct k_sigaction *ka,
@@ -251,28 +276,32 @@ static void setup_frame(int sig, struct k_sigaction *ka,
 {
 	struct sigframe *frame;
 	unsigned long retcode;
+	int err = 0;
 
 	frame = (struct sigframe *)regs->ARM_sp - 1;
 
 	if (!access_ok(VERIFT_WRITE, frame, sizeof (*frame)))
 		goto segv_and_exit;
 
-	setup_sigcontext(&frame->sc, /*&frame->fpstate,*/ regs, set->sig[0]);
+	err |= setup_sigcontext(&frame->sc, /*&frame->fpstate,*/ regs, set->sig[0]);
 
 	if (_NSIG_WORDS > 1) {
-		__copy_to_user(frame->extramask, &set->sig[1],
-			       sizeof(frame->extramask));
+		err |= __copy_to_user(frame->extramask, &set->sig[1],
+				      sizeof(frame->extramask));
 	}
 
 	/* Set up to return from userspace.  If provided, use a stub
 	   already in userspace.  */
 	if (ka->sa.sa_flags & SA_RESTORER) {
-		retcode = (unsigned long)ka->sa.sa_restorer; /* security! */
+		retcode = (unsigned long)ka->sa.sa_restorer;
 	} else {
 		retcode = (unsigned long)&frame->retcode;
-		__put_user(SWI_SYS_SIGRETURN, &frame->retcode);
+		err |= __put_user(SWI_SYS_SIGRETURN, &frame->retcode);
 		__flush_entry_to_ram (&frame->retcode);
 	}
+
+	if (err)
+		goto segv_and_exit;
 
 	if (current->exec_domain && current->exec_domain->signal_invmap && sig < 32)
 		regs->ARM_r0 = current->exec_domain->signal_invmap[sig];
@@ -280,12 +309,14 @@ static void setup_frame(int sig, struct k_sigaction *ka,
 		regs->ARM_r0 = sig;
 	regs->ARM_sp = (unsigned long)frame;
 	regs->ARM_lr = retcode;
-	regs->ARM_pc = (unsigned long)ka->sa.sa_handler;		/* security! */
-	return;
+	regs->ARM_pc = (unsigned long)ka->sa.sa_handler;
+	if (valid_user_regs(regs))
+		return;
 
 segv_and_exit:
-	lock_kernel();
-	do_exit (SIGSEGV);
+	if (sig == SIGSEGV)
+		ka->sa.sa_handler = SIG_DFL;
+	force_sig(SIGSEGV, current);
 }
 
 static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
@@ -293,31 +324,35 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 {
 	struct rt_sigframe *frame;
 	unsigned long retcode;
+	int err = 0;
 
 	frame = (struct rt_sigframe *)regs->ARM_sp - 1;
 	if (!access_ok(VERIFY_WRITE, frame, sizeof (*frame)))
 		goto segv_and_exit;
 
-	__put_user(&frame->info, &frame->pinfo);
-	__put_user(&frame->uc, &frame->puc);
-	__copy_to_user(&frame->info, info, sizeof(*info));
+	err |= __put_user(&frame->info, &frame->pinfo);
+	err |= __put_user(&frame->uc, &frame->puc);
+	err |= __copy_to_user(&frame->info, info, sizeof(*info));
 
 	/* Clear all the bits of the ucontext we don't use.  */
-	__clear_user(&frame->uc, offsetof(struct ucontext, uc_mcontext));
+	err |= __clear_user(&frame->uc, offsetof(struct ucontext, uc_mcontext));
 
-	setup_sigcontext(&frame->uc.uc_mcontext, /*&frame->fpstate,*/
-			 regs, set->sig[0]);
-	__copy_to_user(&frame->uc.uc_sigmask, set, sizeof(*set));
+	err |= setup_sigcontext(&frame->uc.uc_mcontext, /*&frame->fpstate,*/
+				regs, set->sig[0]);
+	err |= __copy_to_user(&frame->uc.uc_sigmask, set, sizeof(*set));
 
 	/* Set up to return from userspace.  If provided, use a stub
 	   already in userspace.  */
 	if (ka->sa.sa_flags & SA_RESTORER) {
-		retcode = (unsigned long)ka->sa.sa_restorer; /* security! */
+		retcode = (unsigned long)ka->sa.sa_restorer;
 	} else {
 		retcode = (unsigned long)&frame->retcode;
-		__put_user(SWI_SYS_RT_SIGRETURN, &frame->retcode);
+		err |= __put_user(SWI_SYS_RT_SIGRETURN, &frame->retcode);
 		__flush_entry_to_ram (&frame->retcode);
 	}
+
+	if (err)
+		goto segv_and_exit;
 
 	if (current->exec_domain && current->exec_domain->signal_invmap && sig < 32)
 		regs->ARM_r0 = current->exec_domain->signal_invmap[sig];
@@ -325,12 +360,14 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 		regs->ARM_r0 = sig;
 	regs->ARM_sp = (unsigned long)frame;
 	regs->ARM_lr = retcode;
-	regs->ARM_pc = (unsigned long)ka->sa.sa_handler;		/* security! */
-	return;
+	regs->ARM_pc = (unsigned long)ka->sa.sa_handler;
+	if (valid_user_regs(regs))
+		return;
 
 segv_and_exit:
-	lock_kernel();
-	do_exit (SIGSEGV);
+	if (sig == SIGSEGV)
+		ka->sa.sa_handler = SIG_DFL;
+	force_sig(SIGSEGV, current);
 }
 
 /*

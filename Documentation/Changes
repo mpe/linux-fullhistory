@@ -33,8 +33,8 @@ http://cyberbuzz.gatech.edu/kaboom/linux/ as well.
    Also, don't forget http://www.linuxhq.com/ for all your Linux kernel
 needs.
 
-Last updated: May 31, 1998
-Current Author: Chris Ricker (kaboom@gatech.edu).
+Last updated: September 3, 1998
+Current Author: Chris Ricker (kaboom@gatech.edu or chris.ricker@m.cc.utah.edu).
 
 Current Minimal Requirements
 ****************************
@@ -43,14 +43,15 @@ Current Minimal Requirements
 encountered a bug!  If you're unsure what version you're currently
 running, the suggested command should tell you.
 
-- Kernel modules	 modutils-2.1.85         ; insmod -V
+- Kernel modules	 2.1.85                  ; insmod -V
 - Gnu C 		 2.7.2.3                 ; gcc --version
 - Binutils		 2.8.1.0.23              ; ld -v
-- Linux C Library	 5.4.44                  ; ls -l /lib/libc.so.*
+- Linux C Library	 5.4.46                  ; ls -l /lib/libc.so.*
 - Dynamic Linker (ld.so) 1.9.9                   ; ldd --version or ldd -v
 - Linux C++ Library	 2.7.2.8                 ; ls -l /usr/lib/libg++.so.*
-- Procps		 1.2.7                   ; ps --version
+- Procps		 1.2.8                   ; ps --version
 - Procinfo               14                      ; procinfo -v
+- Psmisc		 17			 ; pstree -V
 - Mount                  2.7l                    ; mount --version
 - Net-tools              1.45                    ; hostname -V
 - Loadlin                1.6a
@@ -59,7 +60,7 @@ running, the suggested command should tell you.
 - NFS                    0.4.21                  ; showmount --version
 - Bash                   1.14.7                  ; bash -version
 - Ncpfs                  2.2.0                   ; ncpmount -v
-- Pcmcia-cs              3.0.1
+- Pcmcia-cs              3.0.5                   ; cardmgr -V
 - PPP                    2.3.5                   ; pppd -v
 
 Upgrade notes
@@ -83,6 +84,36 @@ against 2.1 headers for complete functionality.  Fdutils binaries
 compiled under 2.0 or earlier kernels should be replaced with ones
 compiled under 2.1, for example.
 
+   As of 2.1.115, Unix98 pty support was added as an option, and
+support for the deprecated major 4 /dev/ttyp* devices was removed.  If
+necessary (eg, you get "out of pty" error messages when you obviously
+are not out of pty's), create major 3 /dev/tty* and major 2 /dev/pty*
+devices (see Documentation/devices.txt for more information).  If you
+want to use the Unix98 ptys, you should be running at least
+glibc-2.0.9x, and you must switch completely to Unix98 pty's.  The
+general procedure for configuring Unix98 pty support is:
+
+- Compile your kernel with CONFIG_UNIX98_PTYS and CONFIG_DEVPTS_FS.
+- mknod /dev/ptmx c 5 2
+  chmod 666 /dev/ptmx
+  mkdir /dev/pts
+- Add to /etc/fstab:
+
+  none            /dev/pts        devpts	gid=5,mode=620    0 0
+
+   (Note:  gid=5 is applicable for RedHat systems for which group "tty" has
+   gid 5.  Adjust according to your distribution.  Use mode=600 if you want
+   "mesg n" to be default.)
+- Mount /dev/pts
+
+   Frame buffer consoles ("fbcon") are now in the kernel for all
+platforms, not just those non-Intel ones for which VGA text mode is
+impossible.  VGAcon is still available for those who want it, but fbcon
+has the advantage of providing a uniform graphical subsystem across all
+Linux ports, and it displays a spiffy penguin logo on boot-up ;-).  For
+more information, see the files in Documentation/fb/ ; you may also
+need to download the fbset utilities.
+
 Libc
 ====
 
@@ -95,12 +126,12 @@ accordingly.
    For modules to work, you need to be running libc-5.4.x or greater.
 Since updates to libc fix other problems as well (security flaws, for
 example) and since 5.4.7 is missing a few needed symbols, try to get
-the latest 5.4.x you can.  Currently, libc-5.4.44 is the latest public
+the latest 5.4.x you can.  Currently, libc-5.4.46 is the latest public
 release.
 
    If you upgrade to libc-5.4.x, you also have to upgrade your dynamic
-linker (ld.so) to at least 1.9.5, or all sorts of weirdness will
-happen.  Actually, ld.so-1.8.2 and later will work, but 1.9.5 is widely
+linker (ld.so) to at least 1.9.9, or all sorts of weirdness will
+happen.  Actually, ld.so-1.8.2 and later will work, but 1.9.9 is widely
 available, so if you need to upgrade, use it.  If you get a release
 later than 1.8.5, avoid 1.8.10 as it introduces a few bugs that are
 fixed in later releases.  Please make sure you don't install ld.so-2.x
@@ -109,7 +140,7 @@ unless you're running glibc2 / libc6.
    If you upgrade to libc-5.4.x, you may also need to upgrade ypbind if
 you're using NIS.
 
-   If you upgrade to libc-5.4.44, please read and pay attention to its
+   If you upgrade to libc-5.4.46, please read and pay attention to its
 accompanying release notes.  The section about it breaking make is not
 a joke.
 
@@ -135,8 +166,8 @@ to find out the proper way to upgrade it.  No, the instruction to "rm
    The last public release of the binutils 2.8.x series was 2.8.1.0.23.
 Binutils 2.8.1.0.25 to 2.9.1.0.2 are beta releases, and are known to be
 very buggy.  Binutils 2.9.1 (note the absence of a suffix) from the FSF
-should work, and binutils 2.9.1.0.3 and later releases are also good.
-Either use binutils-2.8.1.0.23 or binutils-2.9.1.0.4 or later.  Glibc2
+should work, and binutils 2.9.1.0.7 and later releases are also good.
+Either use binutils-2.8.1.0.23 or binutils-2.9.1.0.7 or later.  Glibc2
 users should especially try to use the 2.9.1.0.x releases, as they
 resolve known issues with glibc2 and binutils-2.8.x releases.
 
@@ -185,15 +216,15 @@ presence.
 something appears broken, check the /proc/sys/net/ipv4/ directory.  "1"
 generally denotes enabled, while "0" generally denotes disabled.
 
-   For support for new features like IPv6, upgrade to the latest
-net-tools.  This will also fix other problems.  For example, the format
-of /proc/net/dev changed; as a result, an older ifconfig will
-incorrectly report errors.
+   If you're experiencing reports of lots of network errors, chances
+are you need to upgrade to a more recent net-tools that understands the
+new /proc/net/dev format.  This will also provide support for new
+features like IPv6.
 
-   The IP firewalling code has been replaced: ipfwadm will no longer
-work.  You need to obtain `ipchains', available from
-http://www.adelaide.net.au/~rustcorp/ipfwchains/ipfwchains.html
-which includes an ipfwadm wrapper.
+   As of 2.1.102, the IP firewalling code has been replaced; ipfwadm
+will no longer work.  You need to optain "ipchains," available from
+http://www.adelaide.net.au/~rustcorp/ipfwchains/ipfwchains.html, and use
+that instead of ipfwadm.
 
 Memory
 ======
@@ -209,7 +240,8 @@ Mount and network file systems
 much-improved performance.  As a result, you'll need to upgrade mount
 to a recent 2.6 release.  Also, amd is being phased out in favor of the
 much better autofs.  You'll also have to get the appropriate utils to
-use autofs as well as the new NFS utils.
+use autofs as well as the new NFS utils.  In addition, you have the
+choice of user-land NFS or kernel-level NFS (knfs).
 
 RPM
 ===
@@ -267,6 +299,13 @@ Ncpfs
    To mount NetWare shares, you'll need to upgrade to a more recent
 version of the ncpfs utils.
 
+SMBfs
+=====
+
+   To mount SMB (Samba / Windows) shares, you'll need to use the
+smbmount utility included with recent Samba releases.
+Documentation/filesystems/smbfs.txt has more information about this.
+
 Pcmcia-cs
 =========
 
@@ -278,6 +317,23 @@ PPP
 
    Due to changes in the routing code, those of you using PPP
 networking will need to upgrade your pppd.
+
+iBCS
+====
+
+   A new version of iBCS is necessary for 2.1 kernels.
+
+AppleTalk
+=========
+
+   Use the Asun version of netatalk for AppleTalk support, as Umich's
+version is not compatible with 2.1 kernels.
+
+Psmisc
+======
+
+   fuser, which comes with psmisc, reads /proc/*/fd/* to do its job.
+Upgrade psmisc if 2.1 changes to /proc broke the version you're using.
 
 Where to get the files
 **********************
@@ -292,16 +348,16 @@ Installation notes:
 ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.binutils-2.8.1.0.23
 ftp://sunsite.unc.edu/pub/Linux/GCC/release.binutils-2.8.1.0.23
 
-The 2.9.1.0.4 release:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.9.1.0.4-glibc.x86.tar.gz
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.9.1.0.4-libc5.x86.tar.gz
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.9.1.0.4.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.9.1.0.4-glibc.x86.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.9.1.0.4-libc5.x86.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.9.1.0.4.tar.gz
+The 2.9.1.0.7 release:
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.9.1.0.7-glibc.x86.tar.gz
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.9.1.0.7-libc5.x86.tar.gz
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.9.1.0.7.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.9.1.0.7-glibc.x86.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.9.1.0.7-libc5.x86.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.9.1.0.7.tar.gz
 Installation notes:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.binutils-2.9.1.0.4
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.binutils-2.9.1.0.4
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.binutils-2.9.1.0.7
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.binutils-2.9.1.0.7
 
 Gnu C
 =====
@@ -329,12 +385,12 @@ ftp://sunsite.unc.edu/pub/gnu/gcc-2.7.2.3.tar.gz
 Linux C Library
 ===============
 
-The 5.4.44 release:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/libc-5.4.44.bin.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.4.44.bin.tar.gz
-Installation notes for 5.4.44:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.libc-5.4.44
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.4.44
+The 5.4.46 release:
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/libc-5.4.46.bin.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.4.46.bin.tar.gz
+Installation notes for 5.4.46:
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.libc-5.4.46
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.4.46
 
 Linux C++ Library
 =================
@@ -363,14 +419,21 @@ Procps utilities
 ================
 
 The 1.2 release:
-ftp://tsx-11.mit.edu/pub/linux/sources/usr.bin/procps-1.2.7.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/system/status/ps/procps-1.2.7.tgz
+ftp://tsx-11.mit.edu/pub/linux/sources/usr.bin/procps-1.2.8.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/system/status/ps/procps-1.2.8.tgz
 
 Procinfo utilities
 ==================
 
 The 14 release:
 ftp://ftp.cistron.nl/pub/people/svm/procinfo-14.tar.gz
+
+Psmisc utilities
+================
+
+The 17 release:
+ftp://lrcftp.epfl.ch/pub/linux/local/psmisc/psmisc-17.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/system/status/ps/psmisc-17.tar.gz
 
 RPM utilities
 =============
@@ -414,15 +477,18 @@ ftp://ftp.win.tue.nl/pub/linux/util/mount/mount-2.7l.tar.gz
 Autofs
 ======
 
-The 0.3.11 release:
-ftp://ftp.kernel.org/pub/linux/daemons/autofs/autofs-0.3.11.tar.gz
+The 3.1.1 release:
+ftp://ftp.kernel.org/pub/linux/daemons/autofs/autofs-3.1.1.tar.gz
 
 NFS
 ===
 
-The 0.4.21 release:
+The user-land 0.4.21 release:
 ftp://ftp.mathematik.th-darmstadt.de/pub/linux/okir/linux-nfs-0.4.21.tar.gz
 ftp://linux.nrao.edu/mirrors/fb0429.mathematik.th-darmstadt.de/pub/linux/okir/linux-nfs-0.4.21.tar.gz
+
+The kernel-level 8/30/98 release:
+ftp://ftp.yggdrasil.com/private/hjl/knfsd-980830.tar.gz
 
 Net-tools
 =========
@@ -449,11 +515,17 @@ Ncpfs
 The 2.2.0 release:
 ftp://ftp.gwdg.de/pub/linux/misc/ncpfs/ncpfs-2.2.0.tgz
 
+SMBfs
+=====
+
+The 1.9.18p10 release of Samba:
+ftp://samba.anu.edu.au/pub/samba/samba-1.9.18p10.tar.gz
+
 Pcmcia-cs
 =========
 
-The 3.0.1 release:
-ftp://hyper.stanford.edu/pub/pcmcia/pcmcia-cs.3.0.1.tar.gz
+The 3.0.5 release:
+ftp://hyper.stanford.edu/pub/pcmcia/pcmcia-cs.3.0.5.tar.gz
 
 PPP
 ===
@@ -467,6 +539,24 @@ IP Chains
 The 1.3.3 release:
 http://www.adelaide.net.au/~rustcorp/ipfwchains/ipchains-source-1.3.3.tar.gz
 http://www.adelaide.net.au/~rustcorp/ipfwchains/ipchains-source-1.3.3.tar.bz2
+
+iBCS
+====
+
+The 8/30/98 release:
+ftp://tsx-11.mit.edu/pub/linux/BETA/ibcs2/ibcs-2.1-980830-ALPHA.tar.gz
+
+Asun netatalk
+=============
+
+The 2.0a18.2 release:
+ftp://ftp.u.washington.edu/pub/user-supported/asun/netatalk-1.4b2+asun2.0a18.2.tar.gz
+
+Fbset
+=====
+
+The 7/13/98 release:
+http://www.cs.kuleuven.ac.be/~geert/bin/fbset-2.0-pre-19980713.tar.gz
 
 Other Info
 ==========
@@ -497,5 +587,5 @@ more information and the files.
 
 Please send info about any other packages that 2.1.x "broke" or about
 any new features of 2.1.x that require extra or new packages for use to
-Chris Ricker (kaboom@gatech.edu).
+Chris Ricker (kaboom@gatech.edu or chris.ricker@m.cc.utah.edu).
 

@@ -29,7 +29,6 @@
 
 #include <asm/io.h>
 #include <asm/hardware.h>
-#include <asm/arch/irq.h>
 #include <asm/ecard.h>
 #include <asm/irq.h>
 #include <asm/dma.h>
@@ -46,7 +45,7 @@
 #define BUS_ADDR(x) ((((unsigned long)(x)) << 2) + IO_BASE)
 
 extern unsigned long atomwide_serial_loader[], oak_scsi_loader[], noloader[];
-static const char blacklisted_str[] = "*loader blacklisted - not 32-bit compliant*";
+static const char blacklisted_str[] = "*loader s/w is not 32-bit compliant*";
 
 static const struct expcard_blacklist {
 	unsigned short	 manufacturer;
@@ -62,7 +61,7 @@ static const struct expcard_blacklist {
   BLACKLIST_LOADER(MANU_OAK,		PROD_OAK_SCSI,		oak_scsi_loader),
 
 /* Supported cards with broken loader */
-  { MANU_ALSYSTEMS, PROD_ALSYS_SCSIATAPI, noloader, "AlSystems PowerTec SCSI (loader blacklisted)" },
+  { MANU_ALSYSTEMS, PROD_ALSYS_SCSIATAPI, noloader, "AlSystems PowerTec SCSI" },
 
 /* Unsupported cards with no loader */
   BLACKLIST_NOLOADER(MANU_MCS,		PROD_MCS_CONNECT32)
@@ -125,6 +124,7 @@ static expansioncard_ops_t ecard_default_ops = {
  */
 void ecard_enableirq (unsigned int irqnr)
 {
+	irqnr &= 7;
 	if (irqnr < MAX_ECARDS && irqno_to_expcard[irqnr] != -1) {
 		ecard_t *ec = expcard + irqno_to_expcard[irqnr];
 
@@ -141,6 +141,7 @@ void ecard_enableirq (unsigned int irqnr)
 
 void ecard_disableirq (unsigned int irqnr)
 {
+	irqnr &= 7;
 	if (irqnr < MAX_ECARDS && irqno_to_expcard[irqnr] != -1) {
 		ecard_t *ec = expcard + irqno_to_expcard[irqnr];
 
@@ -154,6 +155,7 @@ void ecard_disableirq (unsigned int irqnr)
 
 void ecard_enablefiq (unsigned int fiqnr)
 {
+	fiqnr &= 7;
 	if (fiqnr < MAX_ECARDS && irqno_to_expcard[fiqnr] != -1) {
 		ecard_t *ec = expcard + irqno_to_expcard[fiqnr];
 
@@ -170,6 +172,7 @@ void ecard_enablefiq (unsigned int fiqnr)
 
 void ecard_disablefiq (unsigned int fiqnr)
 {
+	fiqnr &= 7;
 	if (fiqnr < MAX_ECARDS && irqno_to_expcard[fiqnr] != -1) {
 		ecard_t *ec = expcard + irqno_to_expcard[fiqnr];
 
@@ -186,7 +189,6 @@ static void ecard_irq_noexpmask(int intr_no, void *dev_id, struct pt_regs *regs)
 	const int num_cards = ecard_numirqcards;
 	int i, called = 0;
 
-	mask_irq (IRQ_EXPANSIONCARD);
 	for (i = 0; i < num_cards; i++) {
 		if (expcard[i].claimed && expcard[i].irq &&
 		    (!expcard[i].irqmask ||
@@ -195,8 +197,7 @@ static void ecard_irq_noexpmask(int intr_no, void *dev_id, struct pt_regs *regs)
 			called ++;
 		}
 	}
-	cli ();
-	unmask_irq (IRQ_EXPANSIONCARD);
+	cli();
 	if (called == 0)
 		printk (KERN_WARNING "Wild interrupt from backplane?\n");
 }
@@ -433,10 +434,7 @@ int ecard_readchunk (struct in_chunk_dir *cd, ecard_t *ec, int id, int num)
 unsigned int ecard_address (ecard_t *ec, card_type_t type, card_speed_t speed)
 {
 	switch (ec->slot_no) {
-	case 0:
-	case 1:
-	case 2:
-	case 3:
+	case 0 ... 3:
 		switch (type) {
 		case ECARD_MEMC:
 			return MEMCECIO_BASE + (ec->slot_no << 12);
@@ -449,20 +447,11 @@ unsigned int ecard_address (ecard_t *ec, card_type_t type, card_speed_t speed)
 		}
 
 #ifdef IOCEC4IO_BASE
-	case 4:
-	case 5:
-	case 6:
-	case 7:
-		switch (type) {
-		case ECARD_MEMC:
+	case 4 ... 7:
+		if (type != ECARD_IOC)
 			return 0;
 
-		case ECARD_IOC:
-			return IOCEC4IO_BASE + (speed << 17) + ((ec->slot_no - 4) << 12);
-
-		default:
-			return 0;
-		}
+		return IOCEC4IO_BASE + (speed << 17) + ((ec->slot_no - 4) << 12);
 #endif
 #ifdef MEMCEC8IO_BASE
 	case 8:
@@ -558,7 +547,14 @@ __initfunc(static int ecard_probe (int card, int freeslot))
 	return 1;
 }
 
-static struct irqaction irqexpansioncard = { ecard_irq_noexpmask, SA_INTERRUPT, 0, "expansion cards", NULL, NULL };
+static struct irqaction irqexpansioncard = {
+	ecard_irq_noexpmask,
+	SA_INTERRUPT,
+	0,
+	"expansion cards",
+	NULL,
+	NULL
+};
 
 /*
  * Initialise the expansion card system.
@@ -575,6 +571,7 @@ __initfunc(void ecard_init(void))
 	if (ecard_checkirqhw()) {
 		printk (KERN_DEBUG "Expansion card interrupt management hardware found\n");
 		irqexpansioncard.handler = ecard_irq_expmask;
+		irqexpansioncard.flags |= SA_IRQNOMASK;
 		have_expmask = -1;
 	}
 #endif

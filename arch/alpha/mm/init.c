@@ -16,12 +16,17 @@
 #include <linux/mman.h>
 #include <linux/mm.h>
 #include <linux/swap.h>
+#ifdef CONFIG_BLK_DEV_INITRD
+#include <linux/blk.h>
+#endif
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/hwrpb.h>
 #include <asm/dma.h>
+
+#define DEBUG_POISON 0
 
 extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void show_net_buffers(void);
@@ -259,6 +264,29 @@ printk("paging_init_secondary: KSP 0x%lx PTBR 0x%lx\n",
 }
 #endif /* __SMP__ */
 
+#if DEBUG_POISON
+static void
+kill_page(unsigned long pg)
+{
+	unsigned long *p = (unsigned long *)pg;
+	unsigned long i = PAGE_SIZE, v = 0xdeadbeefdeadbeef;
+	do {
+		p[0] = v;
+		p[1] = v;
+		p[2] = v;
+		p[3] = v;
+		p[4] = v;
+		p[5] = v;
+		p[6] = v;
+		p[7] = v;
+		i -= 64;
+		p += 8;
+	} while (i != 0);
+}
+#else
+#define kill_page(pg)
+#endif
+
 void
 mem_init(unsigned long start_mem, unsigned long end_mem)
 {
@@ -284,6 +312,11 @@ mem_init(unsigned long start_mem, unsigned long end_mem)
 		if (PageReserved(mem_map+MAP_NR(tmp)))
 			continue;
 		atomic_set(&mem_map[MAP_NR(tmp)].count, 1);
+#ifdef CONFIG_BLK_DEV_INITRD
+		if (initrd_start && tmp >= initrd_start && tmp < initrd_end)
+			continue;
+#endif
+		kill_page(tmp);
 		free_page(tmp);
 	}
 	tmp = nr_free_pages << PAGE_SHIFT;
@@ -301,6 +334,7 @@ free_initmem (void)
 	for (; addr < (unsigned long)(&__init_end); addr += PAGE_SIZE) {
 		mem_map[MAP_NR(addr)].flags &= ~(1 << PG_reserved);
 		atomic_set(&mem_map[MAP_NR(addr)].count, 1);
+		kill_page(addr);
 		free_page(addr);
 	}
 	printk ("Freeing unused kernel memory: %ldk freed\n",

@@ -176,6 +176,7 @@ extern inline unsigned long ffz(unsigned long word)
 	/* Whee.  EV6 can calculate it directly.  */
 	unsigned long result;
 	__asm__("ctlz %1,%0" : "=r"(result) : "r"(~word));
+	return result;
 #else
 	unsigned long bits, qofs, bofs;
 

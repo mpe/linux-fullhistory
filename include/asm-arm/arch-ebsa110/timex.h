@@ -1,7 +1,7 @@
 /*
  * linux/include/asm-arm/arch-ebsa110/timex.h
  *
- * RiscPC architecture timex specifications
+ * EBSA110 architecture timex specifications
  *
  * Copyright (C) 1997, 1998 Russell King
  */

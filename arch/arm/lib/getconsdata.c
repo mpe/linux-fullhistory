@@ -24,8 +24,10 @@ unsigned long DOM_USERDOMAIN = USER_DOMAIN;
 
 unsigned long TSK_STATE = OFF_TSK(state);
 unsigned long TSK_FLAGS = OFF_TSK(flags);
+unsigned long TSK_NEED_RESCHED = OFF_TSK(need_resched);
 unsigned long TSK_SIGPENDING = OFF_TSK(sigpending);
 unsigned long TSK_ADDR_LIMIT = OFF_TSK(addr_limit);
+unsigned long TSK_USED_MATH = OFF_TSK(used_math);
 
 unsigned long MM = OFF_TSK(mm);
 unsigned long PGD = OFF_MM(pgd);

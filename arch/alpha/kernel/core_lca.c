@@ -128,8 +128,7 @@ conf_read(unsigned long addr)
 	unsigned long flags, code, stat0;
 	unsigned int value;
 
-	save_flags(flags);
-	cli();
+	__save_and_cli(flags);
 
 	/* Reset status register to avoid loosing errors.  */
 	stat0 = *(vulp)LCA_IOC_STAT0;
@@ -157,7 +156,7 @@ conf_read(unsigned long addr)
 
 		value = 0xffffffff;
 	}
-	restore_flags(flags);
+	__restore_flags(flags);
 	return value;
 }
 
@@ -166,8 +165,7 @@ conf_write(unsigned long addr, unsigned int value)
 {
 	unsigned long flags, code, stat0;
 
-	save_flags(flags);	/* avoid getting hit by machine check */
-	cli();
+	__save_and_cli(flags);	/* avoid getting hit by machine check */
 
 	/* Reset status register to avoid loosing errors.  */
 	stat0 = *(vulp)LCA_IOC_STAT0;
@@ -193,16 +191,15 @@ conf_write(unsigned long addr, unsigned int value)
 		/* Reset machine check. */
 		wrmces(0x7);
 	}
-	restore_flags(flags);
+	__restore_flags(flags);
 }
 
 int
-lca_pcibios_read_config_byte (u8 bus, u8 device_fn, u8 where, u8 *value)
+lca_hose_read_config_byte (u8 bus, u8 device_fn, u8 where, u8 *value,
+			   struct linux_hose_info *hose)
 {
 	unsigned long addr = LCA_CONF;
 	unsigned long pci_addr;
-
-	*value = 0xff;
 
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr))
 		return PCIBIOS_DEVICE_NOT_FOUND;
@@ -213,15 +210,12 @@ lca_pcibios_read_config_byte (u8 bus, u8 device_fn, u8 where, u8 *value)
 }
 
 int 
-lca_pcibios_read_config_word (u8 bus, u8 device_fn, u8 where, u16 *value)
+lca_hose_read_config_word (u8 bus, u8 device_fn, u8 where, u16 *value,
+			   struct linux_hose_info *hose)
 {
 	unsigned long addr = LCA_CONF;
 	unsigned long pci_addr;
 
-	*value = 0xffff;
-
-	if (where & 0x1)
-		return PCIBIOS_BAD_REGISTER_NUMBER;
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
@@ -231,14 +225,12 @@ lca_pcibios_read_config_word (u8 bus, u8 device_fn, u8 where, u16 *value)
 }
 
 int
-lca_pcibios_read_config_dword (u8 bus, u8 device_fn, u8 where, u32 *value)
+lca_hose_read_config_dword (u8 bus, u8 device_fn, u8 where, u32 *value,
+			    struct linux_hose_info *hose)
 {
 	unsigned long addr = LCA_CONF;
 	unsigned long pci_addr;
 
-	*value = 0xffffffff;
-	if (where & 0x3)
-		return PCIBIOS_BAD_REGISTER_NUMBER;
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
@@ -248,7 +240,8 @@ lca_pcibios_read_config_dword (u8 bus, u8 device_fn, u8 where, u32 *value)
 }
 
 int 
-lca_pcibios_write_config_byte (u8 bus, u8 device_fn, u8 where, u8 value)
+lca_hose_write_config_byte (u8 bus, u8 device_fn, u8 where, u8 value,
+			    struct linux_hose_info *hose)
 {
 	unsigned long addr = LCA_CONF;
 	unsigned long pci_addr;
@@ -262,13 +255,12 @@ lca_pcibios_write_config_byte (u8 bus, u8 device_fn, u8 where, u8 value)
 }
 
 int
-lca_pcibios_write_config_word (u8 bus, u8 device_fn, u8 where, u16 value)
+lca_hose_write_config_word (u8 bus, u8 device_fn, u8 where, u16 value,
+			    struct linux_hose_info *hose)
 {
 	unsigned long addr = LCA_CONF;
 	unsigned long pci_addr;
 
-	if (where & 0x1)
-		return PCIBIOS_BAD_REGISTER_NUMBER;
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
@@ -278,13 +270,12 @@ lca_pcibios_write_config_word (u8 bus, u8 device_fn, u8 where, u16 value)
 }
 
 int 
-lca_pcibios_write_config_dword (u8 bus, u8 device_fn, u8 where, u32 value)
+lca_hose_write_config_dword (u8 bus, u8 device_fn, u8 where, u32 value,
+			     struct linux_hose_info *hose)
 {
 	unsigned long addr = LCA_CONF;
 	unsigned long pci_addr;
 
-	if (where & 0x3)
-		return PCIBIOS_BAD_REGISTER_NUMBER;
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 

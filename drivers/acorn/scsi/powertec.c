@@ -154,13 +154,10 @@ powertecscsi_invalidate(char *addr, long len, fasdmadir_t direction)
 {
 	unsigned int page;
 
-	if (direction == DMA_OUT) {
-		for (page = (unsigned int) addr; len > 0;
-		     page += PAGE_SIZE, len -= PAGE_SIZE)
-			flush_page_to_ram(page);
-	} else
-		flush_cache_range(current->mm, (unsigned long)addr,
-				  (unsigned long)addr + len);
+	if (direction == DMA_OUT)
+		dma_cache_wback((unsigned long)addr, (unsigned long)len);
+	else
+		dma_cache_inv((unsigned long)addr, (unsigned long)len);
 }
 
 /* Prototype: fasdmatype_t powertecscsi_dma_setup(host, SCpnt, direction, min_type)

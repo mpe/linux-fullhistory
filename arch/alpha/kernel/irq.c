@@ -20,6 +20,7 @@
 #include <linux/malloc.h>
 #include <linux/random.h>
 #include <linux/init.h>
+#include <linux/delay.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -35,7 +36,7 @@
 
 unsigned int local_irq_count[NR_CPUS];
 unsigned int local_bh_count[NR_CPUS];
-
+unsigned long hardirq_no[NR_CPUS];
 
 #define RTC_IRQ    8
 #ifdef CONFIG_RTC
@@ -100,7 +101,7 @@ generic_ack_irq(unsigned long irq)
 #elif defined(CONFIG_ALPHA_PYXIS)
 # define IACK_SC	PYXIS_IACK_SC
 #elif defined(CONFIG_ALPHA_TSUNAMI)
-# define IACK_SC	TSUNAMI_PCI0_IACK_SC
+# define IACK_SC	TSUNAMI_IACK_SC
 #else
   /* This is bogus but necessary to get it to compile on all platforms. */
 # define IACK_SC	1L
@@ -159,13 +160,9 @@ void
 srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 {
 	int irq, ack;
-	unsigned long flags;
 
-	__save_and_cli(flags);
 	ack = irq = (vector - 0x800) >> 4;
-
 	handle_irq(irq, ack, regs);
-	__restore_flags(flags);
 }
 
 
@@ -338,7 +335,7 @@ int get_irq_list(char *buf)
 
 #ifdef __SMP__
 /* Who has global_irq_lock. */
-unsigned char global_irq_holder = NO_PROC_ID;
+int global_irq_holder = NO_PROC_ID;
 
 /* This protects IRQ's. */
 spinlock_t global_irq_lock = SPIN_LOCK_UNLOCKED;
@@ -350,74 +347,66 @@ atomic_t global_irq_count = ATOMIC_INIT(0);
 atomic_t global_bh_lock = ATOMIC_INIT(0);
 atomic_t global_bh_count = ATOMIC_INIT(0);
 
-static unsigned long previous_irqholder = NO_PROC_ID;
+static void *previous_irqholder = NULL;
 
-#undef INIT_STUCK
-#define INIT_STUCK 100000000
+#define MAXCOUNT 100000000
 
-#undef STUCK
-#define STUCK						\
-  if (!--stuck) {					\
-    printk("wait_on_irq CPU#%d stuck at %08lx, "	\
-	   "waiting for %08lx (local=%d, global=%d)\n",	\
-	   cpu, where, previous_irqholder, local_count,	\
-	   atomic_read(&global_irq_count));		\
-    stuck = INIT_STUCK;					\
-  }
+static void show(char * str, void *where);
 
 static inline void
-wait_on_irq(int cpu, unsigned long where)
+wait_on_irq(int cpu, void *where)
 {
-	int stuck = INIT_STUCK;
-	int local_count = local_irq_count[cpu];
+	int count = MAXCOUNT;
 
-	/* Are we the only one in an interrupt context? */
-	while (local_count != atomic_read(&global_irq_count)) {
+	for (;;) {
+
 		/*
-		 * No such luck. Now we need to release the lock,
-		 * _and_ release our interrupt context, because
-		 * otherwise we'd have dead-locks and live-locks
-		 * and other fun things.
+		 * Wait until all interrupts are gone. Wait
+		 * for bottom half handlers unless we're
+		 * already executing in one..
 		 */
-		atomic_sub(local_count, &global_irq_count);
+		if (!atomic_read(&global_irq_count)) {
+			if (local_bh_count[cpu] ||
+			    !atomic_read(&global_bh_count))
+				break;
+		}
+
+		/* Duh, we have to loop. Release the lock to avoid deadlocks */
 		spin_unlock(&global_irq_lock);
+		mb();
 
-		/*
-		 * Wait for everybody else to go away and release
-		 * their things before trying to get the lock again.
-		 */
 		for (;;) {
-			STUCK;
+			if (!--count) {
+				show("wait_on_irq", where);
+				count = MAXCOUNT;
+			}
+			__sti();
+#if 0
+			SYNC_OTHER_CORES(cpu);
+#else
+			udelay(cpu+1);
+#endif
+			__cli();
+
 			if (atomic_read(&global_irq_count))
 				continue;
 			if (global_irq_lock.lock)
 				continue;
+			if (!local_bh_count[cpu] &&
+			    atomic_read(&global_bh_count))
+				continue;
 			if (spin_trylock(&global_irq_lock))
 				break;
 		}
-		atomic_add(local_count, &global_irq_count);
 	}
 }
 
-#undef INIT_STUCK
-#define INIT_STUCK 10000000
-
-#undef STUCK
-#define STUCK							\
-  if (!--stuck) {						\
-    printk("get_irqlock stuck at %08lx, waiting for %08lx\n",	\
-	   where, previous_irqholder);				\
-    stuck = INIT_STUCK;						\
-  }
-
 static inline void
-get_irqlock(int cpu, unsigned long where)
+get_irqlock(int cpu, void* where)
 {
-	int stuck = INIT_STUCK;
-
 	if (!spin_trylock(&global_irq_lock)) {
 		/* do we already hold the lock? */
-		if ((unsigned char) cpu == global_irq_holder) {
+		if (cpu == global_irq_holder) {
 #if 0
 			printk("get_irqlock: already held at %08lx\n",
 			       previous_irqholder);
@@ -425,12 +414,7 @@ get_irqlock(int cpu, unsigned long where)
 			return;
 		}
 		/* Uhhuh.. Somebody else got it. Wait.. */
-		do {
-			do {
-				STUCK;
-				barrier();
-			} while (global_irq_lock.lock);
-		} while (!spin_trylock(&global_irq_lock));
+		spin_lock(&global_irq_lock);
 	}
 	/*
 	 * Ok, we got the lock bit.
@@ -443,6 +427,8 @@ get_irqlock(int cpu, unsigned long where)
 	/*
 	 * Finally.
 	 */
+	global_irq_lock.task = current;
+	global_irq_lock.previous = where;
 	global_irq_holder = cpu;
 	previous_irqholder = where;
 }
@@ -450,14 +436,15 @@ get_irqlock(int cpu, unsigned long where)
 void
 __global_cli(void)
 {
-	int cpu = smp_processor_id();
-	unsigned long where;
+	int cpu;
+	void *where = __builtin_return_address(0);
 
-        __asm__("mov $26, %0" : "=r" (where));
-	__cli();
-
-	if (!local_irq_count[cpu])
-		get_irqlock(smp_processor_id(), where);
+	/*
+	 * Maximize ipl.  If ipl was previously 0 and if this thread
+	 * is not in an irq, then take global_irq_lock.
+	 */
+	if ((swpipl(7) == 0) && !local_irq_count[cpu = smp_processor_id()])
+		get_irqlock(cpu, where);
 }
 
 void
@@ -465,38 +452,66 @@ __global_sti(void)
 {
         int cpu = smp_processor_id();
 
-        if (!local_irq_count[cpu])
-		release_irqlock(smp_processor_id());
-
+        if (!local_irq_count[cpu]) {
+		release_irqlock(cpu);
+	}
 	__sti();
 }
 
-#if 0
+/*
+ * SMP flags value to restore to:
+ * 0 - global cli
+ * 1 - global sti
+ * 2 - local cli
+ * 3 - local sti
+ */
 unsigned long
 __global_save_flags(void)
 {
-	return global_irq_holder == (unsigned char) smp_processor_id();
+        int retval;
+        int local_enabled;
+        unsigned long flags;
+	int cpu = smp_processor_id();
+
+        __save_flags(flags);
+        local_enabled = (!(flags & 7));
+        /* default to local */
+        retval = 2 + local_enabled;
+
+        /* Check for global flags if we're not in an interrupt.  */
+        if (!local_irq_count[cpu]) {
+                if (local_enabled)
+                        retval = 1;
+                if (global_irq_holder == cpu)
+                        retval = 0;
+	}
+	return retval;
 }
-#endif
 
 void
 __global_restore_flags(unsigned long flags)
 {
-	if (flags & 1) {
-		__global_cli();
-	} else {
-		/* release_irqlock() */
-		if (global_irq_holder == smp_processor_id()) {
-			global_irq_holder = NO_PROC_ID;
-			spin_unlock(&global_irq_lock);
-		}
-		if (!(flags & 2))
-			__sti();
-	}
+        switch (flags) {
+        case 0:
+                __global_cli();
+                break;
+        case 1:
+                __global_sti();
+                break;
+        case 2:
+                __cli();
+                break;
+        case 3:
+                __sti();
+                break;
+        default:
+                printk("global_restore_flags: %08lx (%p)\n",
+                        flags, __builtin_return_address(0));
+        }
 }
 
 #undef INIT_STUCK
-#define INIT_STUCK 200000000
+#define INIT_STUCK (1<<26)
 
 #undef STUCK
 #define STUCK							\
@@ -516,10 +531,10 @@ irq_enter(int cpu, int irq)
 #endif
 	int stuck = INIT_STUCK;
 
-	hardirq_enter(cpu);
+	hardirq_enter(cpu, irq);
 	barrier();
 	while (global_irq_lock.lock) {
-		if ((unsigned char) cpu == global_irq_holder) {
+		if (cpu == global_irq_holder) {
 			int globl_locked = global_irq_lock.lock;
 			int globl_icount = atomic_read(&global_irq_count);
 			int local_count = local_irq_count[cpu];
@@ -529,11 +544,7 @@ irq_enter(int cpu, int irq)
 			   printk() as printk() could end up changing
 			   them...  */
 
-#if 0
-			printk("CPU[%d]: BAD! Local IRQ's enabled,"
-			       " global disabled interrupt\n", cpu);
-#endif
-			printk("CPU[%d]: where [%08lx] glocked[%d] gicnt[%d]"
+			printk("CPU[%d]: where [%p] glocked[%d] gicnt[%d]"
 			       " licnt[%d]\n",
 			       cpu, previous_irqholder, globl_locked,
 			       globl_icount, local_count);
@@ -552,12 +563,12 @@ irq_enter(int cpu, int irq)
 void
 irq_exit(int cpu, int irq)
 {
-	hardirq_exit(cpu);
+	hardirq_exit(cpu, irq);
 	release_irqlock(cpu);
 }
 
 static void
-show(char * str)
+show(char * str, void *where)
 {
 #if 0
 	int i;
@@ -565,10 +576,16 @@ show(char * str)
 #endif
         int cpu = smp_processor_id();
 
-        printk("\n%s, CPU %d:\n", str, cpu);
-        printk("irq:  %d [%d %d]\n",
-	       atomic_read(&global_irq_count), local_irq_count[0],
-	       local_irq_count[1]);
+	int global_count = atomic_read(&global_irq_count);
+        int local_count0 = local_irq_count[0];
+        int local_count1 = local_irq_count[1];
+        long hardirq_no0 = hardirq_no[0];
+        long hardirq_no1 = hardirq_no[1];
+
+        printk("\n%s, CPU %d: %p\n", str, cpu, where);
+        printk("irq:  %d [%d(0x%016lx) %d(0x%016lx)]\n", global_count,
+               local_count0, hardirq_no0, local_count1, hardirq_no1);
+
         printk("bh:   %d [%d %d]\n",
 	       atomic_read(&global_bh_count), local_bh_count[0],
 	       local_bh_count[1]);
@@ -584,15 +601,13 @@ show(char * str)
 #endif
 }
         
-#define MAXCOUNT 100000000
-
 static inline void
 wait_on_bh(void)
 {
 	int count = MAXCOUNT;
         do {
 		if (!--count) {
-			show("wait_on_bh");
+			show("wait_on_bh", 0);
                         count = ~0;
                 }
                 /* nothing .. wait for the other bh's to go away */
@@ -618,20 +633,36 @@ synchronize_bh(void)
         }
 }
 
-/* There has to be a better way. */
+/*
+ * From its use, I infer that synchronize_irq() stalls a thread until
+ * the effects of a command to an external device are known to have
+ * taken hold.  Typically, the command is to stop sending interrupts.
+ * The strategy here is wait until there is at most one processor
+ * (this one) in an irq.  The memory barrier serializes the write to
+ * the device and the subsequent accesses of global_irq_count.
+ * --jmartin
+ */
+#define DEBUG_SYNCHRONIZE_IRQ 0
+
 void
 synchronize_irq(void)
 {
 	int cpu = smp_processor_id();
-	int local_count = local_irq_count[cpu];
+	int local_count;
+	int global_count;
+	int countdown = 1<<24;
+	void *where = __builtin_return_address(0);
 
-	if (local_count != atomic_read(&global_irq_count)) {
-		unsigned long flags;
-
-		/* An infamously unpopular approach. */
-		save_and_cli(flags);
-		restore_flags(flags);
-	}
+	mb();
+	do {
+		local_count = local_irq_count[cpu];
+		global_count = atomic_read(&global_irq_count);
+		if (DEBUG_SYNCHRONIZE_IRQ && (--countdown == 0)) {
+			printk("%d:%d/%d\n", cpu, local_count, global_count);
+			show("synchronize_irq", where);
+			break;
+		}
+	} while (global_count != local_count);
 }
 
 #else /* !__SMP__ */
@@ -686,6 +717,26 @@ handle_irq(int irq, int ack, struct pt_regs * regs)
 		printk("device_interrupt: illegal interrupt %d\n", irq);
 		return;
 	}
+
+#if 0
+	/* A useful bit of code to find out if an interrupt is going wild.  */
+	{
+	  static unsigned int last_msg, last_cc;
+	  static int last_irq, count;
+	  unsigned int cc;
+
+	  __asm __volatile("rpcc %0" : "=r"(cc));
+	  ++count;
+	  if (cc - last_msg > 150000000 || irq != last_irq) {
+		printk("handle_irq: irq %d count %d cc %u @ %p\n",
+		       irq, count, cc-last_cc, regs->pc);
+		count = 0;
+		last_msg = cc;
+		last_irq = irq;
+	  }
+	  last_cc = cc;
+	}
+#endif
 
 	irq_enter(cpu, irq);
 	kstat.irqs[cpu][irq] += 1;
@@ -784,23 +835,31 @@ do_entInt(unsigned long type, unsigned long vector, unsigned long la_ptr,
 	  unsigned long a3, unsigned long a4, unsigned long a5,
 	  struct pt_regs regs)
 {
+	unsigned long flags;
+
 	switch (type) {
 	case 0:
 #ifdef __SMP__
+		__save_and_cli(flags);
 		handle_ipi(&regs);
+		__restore_flags(flags);
 		return;
 #else
 		printk("Interprocessor interrupt? You must be kidding\n");
 #endif
 		break;
 	case 1:
+		__save_and_cli(flags);
 		handle_irq(RTC_IRQ, -1, &regs);
+		__restore_flags(flags);
 		return;
 	case 2:
 		alpha_mv.machine_check(vector, la_ptr, &regs);
 		return;
 	case 3:
+		__save_and_cli(flags);
 		alpha_mv.device_interrupt(vector, &regs);
+		__restore_flags(flags);
 		return;
 	case 4:
 		printk("Performance counter interrupt\n");

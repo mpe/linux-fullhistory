@@ -51,56 +51,7 @@
  * JRP - Save regs 16-18 in a special area of the stack, so that
  * the palcode-provided values are available to the signal handler.
  */
-#if defined(CONFIG_ALPHA_TSUNAMI)
-/* TSUNAMI has no HAE register to save/restore */
-#define SAVE_ALL			\
-	subq	$30,184,$30;		\
-	stq	$0,0($30);		\
-	stq	$1,8($30);		\
-	stq	$2,16($30);		\
-	stq	$3,24($30);		\
-	stq	$4,32($30);		\
-	stq	$5,40($30);		\
-	stq	$6,48($30);		\
-	stq	$7,56($30);		\
-	stq	$8,64($30);		\
-	stq	$19,72($30);		\
-	stq	$20,80($30);		\
-	stq	$21,88($30);		\
-	stq	$22,96($30);		\
-	stq	$23,104($30);		\
-	stq	$24,112($30);		\
-	stq	$25,120($30);		\
-	stq	$26,128($30);		\
-	stq	$27,136($30);		\
-	stq	$28,144($30);		\
-	stq	$16,160($30);		\
-	stq	$17,168($30);		\
-	stq	$18,176($30)
 
-#define RESTORE_ALL			\
-	ldq	$0,0($30);		\
-	ldq	$1,8($30);		\
-	ldq	$2,16($30);		\
-	ldq	$3,24($30);		\
-	ldq	$4,32($30);		\
-	ldq	$5,40($30);		\
-	ldq	$6,48($30);		\
-	ldq	$7,56($30);		\
-	ldq	$8,64($30);		\
-	ldq	$19,72($30);		\
-	ldq	$20,80($30);		\
-	ldq	$21,88($30);		\
-	ldq	$22,96($30);		\
-	ldq	$23,104($30);		\
-	ldq	$24,112($30);		\
-	ldq	$25,120($30);		\
-	ldq	$26,128($30);		\
-	ldq	$27,136($30);		\
-	ldq	$28,144($30);		\
-	addq	$30,184,$30
-
-#else /* TSUNAMI */
 #define SAVE_ALL			\
 	subq	$30,184,$30;		\
 	stq	$0,0($30);		\
@@ -166,8 +117,6 @@
 	ldq	$28,144($30);		\
 	addq	$30,184,$30
 
-#endif /* TSUNAMI */
-
 .text
 .set noat
 #if defined(__linux__) && !defined(__ELF__)
@@ -181,8 +130,8 @@ entInt:
 	SAVE_ALL
 	lda	$8,0x3fff
 	bic	$30,$8,$8
-	jsr	$26,do_entInt
-	br	$31,ret_from_sys_call
+	lda	$26,ret_from_sys_call
+	jsr	$31,do_entInt
 .end entInt
 
 .align 3
@@ -224,11 +173,8 @@ entArith:
 	SAVE_ALL
 	lda	$8,0x3fff
 	bic	$30,$8,$8
-	/* How much of a win is this clockwise?  We are, after all, messing
-	   up the call/return prefetch stack.  -- rth */
-	lda	$27,do_entArith
 	lda	$26,ret_from_sys_call
-	jsr	$31,($27),do_entArith
+	jsr	$31,do_entArith
 .end entArith
 
 .align 3
@@ -238,9 +184,8 @@ entIF:
 	SAVE_ALL
 	lda	$8,0x3fff
 	bic	$30,$8,$8
-	lda	$27,do_entIF
 	lda	$26,ret_from_sys_call
-	jsr	$31,($27),do_entIF
+	jsr	$31,do_entIF
 .end entIF
 
 /*
@@ -373,7 +318,7 @@ do_switch_stack:
 	stt $f29,296($30)
 	stt $f30,304($30)
 	stt $f0,312($30)	# save fpcr in slot of $f31
-	ldt $f0,64($30)		# don't let "do_switch_stack" change any fp state.
+	ldt $f0,64($30)		# dont let "do_switch_stack" change fp state.
 	ret $31,($1),1
 .end do_switch_stack
 
@@ -744,8 +689,8 @@ signal_return:
 .ent ret_from_smpfork
 ret_from_smpfork:
 	.set at
+	mb	/* Make the changed data visible before the freed lock. */
 	stq	$31,scheduler_lock	
-	mb	/* ?????????????????? */
 	br	ret_from_sys_call
 	.set noat
 .end ret_from_smpfork
@@ -834,7 +779,7 @@ sys_call_table:
 	.quad sys_lseek
 	.quad sys_getxpid			/* 20 */
 	.quad osf_mount
-	.quad osf_umount
+	.quad sys_umount
 	.quad sys_setuid
 	.quad sys_getxuid
 	.quad alpha_ni_syscall			/* 25 */

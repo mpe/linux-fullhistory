@@ -446,14 +446,14 @@ out_bad:
  */
 static void nfs_dentry_delete(struct dentry *dentry)
 {
+	dfprintk(VFS, "NFS: dentry_delete(%s/%s, %x)\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name,
+		dentry->d_flags);
+
 	if (dentry->d_flags & DCACHE_NFSFS_RENAMED) {
 		int error;
 		
 		dentry->d_flags &= ~DCACHE_NFSFS_RENAMED;
-#ifdef NFS_DEBUG_VERBOSE
-printk("nfs_dentry_delete: unlinking %s/%s\n",
-dentry->d_parent->d_name.name, dentry->d_name.name);
-#endif
 		/* Unhash it first */
 		d_drop(dentry);
 		error = nfs_safe_remove(dentry);
@@ -486,6 +486,10 @@ inode->i_ino, inode->i_count, inode->i_nlink);
  */
 static void nfs_dentry_iput(struct dentry *dentry, struct inode *inode)
 {
+	dfprintk(VFS, "NFS: dentry_iput(%s/%s, cnt=%d, ino=%ld)\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name,
+		dentry->d_count, inode->i_ino);
+
 	if (NFS_WRITEBACK(inode)) {
 #ifdef NFS_PARANOIA
 printk("nfs_dentry_iput: pending writes for %s/%s, i_count=%d\n",
@@ -859,6 +863,10 @@ static int nfs_sillyrename(struct inode *dir, struct dentry *dentry)
 	struct dentry *sdentry;
 	int            error = -EIO;
 
+	dfprintk(VFS, "NFS: silly-rename(%s/%s, ct=%d)\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name, 
+		dentry->d_count);
+
 	/*
 	 * Note that a silly-renamed file can be deleted once it's
 	 * no longer in use -- it's just an ordinary file now.
@@ -931,6 +939,10 @@ static int nfs_safe_remove(struct dentry *dentry)
 	struct inode *inode = dentry->d_inode;
 	int error, rehash = 0;
 		
+	dfprintk(VFS, "NFS: safe_remove(%s/%s, %ld)\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name,
+		inode->i_ino);
+
 	/* N.B. not needed now that d_delete is done in advance? */
 	error = -EBUSY;
 	if (inode) {
@@ -1130,22 +1142,13 @@ static int nfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 {
 	struct inode *old_inode = old_dentry->d_inode;
 	struct inode *new_inode = new_dentry->d_inode;
+	struct dentry *dentry = NULL;
 	int error, rehash = 0, update = 1;
 
-#ifdef NFS_DEBUG_VERBOSE
-printk("nfs_rename: old %s/%s, count=%d, new %s/%s, count=%d\n",
-old_dentry->d_parent->d_name.name,old_dentry->d_name.name,old_dentry->d_count,
-new_dentry->d_parent->d_name.name,new_dentry->d_name.name,new_dentry->d_count);
-#endif
-	if (!old_dir || !S_ISDIR(old_dir->i_mode)) {
-		printk("nfs_rename: old inode is NULL or not a directory\n");
-		return -ENOENT;
-	}
-
-	if (!new_dir || !S_ISDIR(new_dir->i_mode)) {
-		printk("nfs_rename: new inode is NULL or not a directory\n");
-		return -ENOENT;
-	}
+	dfprintk(VFS, "NFS: rename(%s/%s -> %s/%s, ct=%d)\n",
+		old_dentry->d_parent->d_name.name, old_dentry->d_name.name,
+		new_dentry->d_parent->d_name.name, new_dentry->d_name.name,
+		new_dentry->d_count);
 
 	error = -ENAMETOOLONG;
 	if (old_dentry->d_name.len > NFS_MAXNAMLEN ||
@@ -1155,16 +1158,43 @@ new_dentry->d_parent->d_name.name,new_dentry->d_name.name,new_dentry->d_count);
 	/*
 	 * First check whether the target is busy ... we can't
 	 * safely do _any_ rename if the target is in use.
+	 *
+	 * For files, make a copy of the dentry and then do a 
+	 * silly-rename. If the silly-rename succeeds, the
+	 * copied dentry is hashed and becomes the new target.
+	 *
+	 * For directories, prune any unused children.
 	 */
-	if (new_dentry->d_count > 1 && !list_empty(&new_dentry->d_subdirs))
-		shrink_dcache_parent(new_dentry);
 	error = -EBUSY;
-	if (new_dentry->d_count > 1) {
+	if (new_dentry->d_count > 1 && new_inode) {
+		if (S_ISREG(new_inode->i_mode)) {
+			int err;
+			/* copy the target dentry's name */
+			dentry = d_alloc(new_dentry->d_parent,
+					 &new_dentry->d_name);
+			if (!dentry)
+				goto out;
+
+			/* silly-rename the existing target ... */
+			err = nfs_sillyrename(new_dir, new_dentry);
+			if (!err) {
+				new_dentry = dentry;
+				new_inode = NULL;
+				/* hash the replacement target */
+				d_add(new_dentry, NULL);
+			}
+		} else if (!list_empty(&new_dentry->d_subdirs)) {
+			shrink_dcache_parent(new_dentry);
+		}
+
+		/* dentry still busy? */
+		if (new_dentry->d_count > 1) {
 #ifdef NFS_PARANOIA
 printk("nfs_rename: target %s/%s busy, d_count=%d\n",
 new_dentry->d_parent->d_name.name,new_dentry->d_name.name,new_dentry->d_count);
 #endif
-		goto out;
+			goto out;
+		}
 	}
 
 	/*
@@ -1208,7 +1238,7 @@ old_dentry->d_parent->d_name.name,old_dentry->d_name.name,old_dentry->d_count);
 #endif
 		goto out;
 	}
-	if (new_dentry->d_count > 1) {
+	if (new_dentry->d_count > 1 && new_inode) {
 #ifdef NFS_PARANOIA
 printk("nfs_rename: new dentry %s/%s busy, d_count=%d\n",
 new_dentry->d_parent->d_name.name,new_dentry->d_name.name,new_dentry->d_count);
@@ -1251,7 +1281,11 @@ new_inode->i_count, new_inode->i_nlink);
 		if (update)
 			d_move(old_dentry, new_dentry);
 	}
+
 out:
+	/* new dentry created? */
+	if (dentry)
+		dput(dentry);
 	return error;
 }
 

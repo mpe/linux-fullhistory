@@ -1801,6 +1801,9 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 	        case VIDIOCSYNC:
 			if(copy_from_user((void *)&i,arg,sizeof(int)))
 				return -EFAULT;
+                        if(i>1 || i<0)
+                                return -EINVAL;
+
                         switch (btv->frame_stat[i]) {
                         case GBUFFER_UNUSED:
                                 return -EINVAL;

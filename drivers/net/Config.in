@@ -203,6 +203,10 @@ fi
 #
 # WAN drivers support
 #
+# There is no way to detect a comtrol sv11 - force it modular for now.
+#
+dep_tristate 'Comtrol Hostess SV-11 support' CONFIG_HOSTESS_SV11 m
+#
 if [ "$CONFIG_WAN_ROUTER" != "n" ]; then
   bool 'WAN drivers' CONFIG_WAN_DRIVERS
   if [ "$CONFIG_WAN_DRIVERS" = "y" ]; then

@@ -47,16 +47,8 @@ extern int init_coda(void);
 extern int init_devpts_fs(void);
 #endif
 
-extern void device_setup(void);
-extern void binfmt_setup(void);
-extern void free_initmem(void);
-
-static void __init do_sys_setup(void)
+void __init filesystem_setup(void)
 {
-	device_setup();
-
-	binfmt_setup();
-
 #ifdef CONFIG_EXT2_FS
 	init_ext2_fs();
 #endif
@@ -156,32 +148,6 @@ static void __init do_sys_setup(void)
 #ifdef CONFIG_NLS
 	init_nls();
 #endif
-
-	mount_root();
-}
-
-int initmem_freed = 0;
-
-/* This may be used only twice, enforced by 'static int callable' */
-asmlinkage int sys_setup(int magic)
-{
-	static int callable = 1;
-	int err = -1;
-
-	lock_kernel();
-	if (magic) {
-		if (!initmem_freed) {
-			initmem_freed = 1;
-			free_initmem ();
-			err = 0;
-		}
-	} else if (callable) {
-		callable = 0;
-		do_sys_setup();
-		err = 0;
-	}
-	unlock_kernel();
-	return err;
 }
 
 #ifndef CONFIG_NFSD

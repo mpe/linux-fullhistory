@@ -1,5 +1,5 @@
 /* ld script to make ARM Linux kernel
- * taken from the i386 version
+ * taken from the i386 version by Russell King
  * Written by Martin Mares <mj@atrey.karlin.mff.cuni.cz>
  */
 OUTPUT_FORMAT("elf32-arm", "elf32-arm", "elf32-arm")
@@ -28,17 +28,15 @@ SECTIONS
 
   _etext = .;			/* End of text section */
 
+  . = ALIGN(8192);
   .data : {			/* Data */
+	*(.init.task)
 	*(.data)
 	CONSTRUCTORS
 	}
 
   _edata = .;			/* End of data section */
 
-  /* This has to be aligned to a page boundary to do us any good.  This
-     alignment is overkill for ARM6 up but needed for ARM3.  Since all this
-     data will be thrown away I don't think the extra padding will hurt.
-       -- pb */
   . = ALIGN(4096);		/* Init code and data */
   __init_begin = .;
   .text.init : { *(.text.init) }

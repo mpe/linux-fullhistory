@@ -12,10 +12,13 @@
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <asm/pgtable.h>
+#include <asm/system.h>
 #include <asm/uaccess.h>
 
 extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(struct pt_regs *, struct user_fp_struct *);
+extern void inswb(unsigned int port, void *to, int len);
+extern void outswb(unsigned int port, const void *to, int len);
 
 /*
  * libgcc functions - functions that are used internally by the
@@ -40,33 +43,27 @@ extern void __udivsi3(void);
 extern void __umoddi3(void);
 extern void __umodsi3(void);
 
-extern void inswb(unsigned int port, void *to, int len);
-extern void outswb(unsigned int port, const void *to, int len);
-
-/*
- * floating point math emulator support.
- * These will not change.  If they do, then a new version
- * of the emulator will have to be compiled...
- * fp_current is never actually dereferenced - it is just
- * used as a pointer to pass back for send_sig().
- */
-extern void (*fp_save)(unsigned char *);
-extern void (*fp_restore)(unsigned char *);
-extern void fp_setup(void);
-extern void fpreturn(void);
-extern void fpundefinstr(void);
 extern void fp_enter(void);
-extern void fp_printk(void);
-extern struct task_struct *fp_current;
-extern void fp_send_sig(int);
+#define EXPORT_SYMBOL_ALIAS(sym,orig) \
+ const char __kstrtab_##sym##[] __attribute__((section(".kstrtab"))) = \
+    __MODULE_STRING(##sym##); \
+ const struct module_symbol __ksymtab_##sym __attribute__((section("__ksymtab"))) = \
+    { (unsigned long)&##orig, __kstrtab_##sym };
+	/*
+	 * floating point math emulator support.
+	 * These symbols will never change their calling convention...
+	 */
+EXPORT_SYMBOL_ALIAS(kern_fp_enter,fp_enter);
+EXPORT_SYMBOL_ALIAS(fp_printk,printk);
+EXPORT_SYMBOL_ALIAS(fp_send_sig,send_sig);
 
-/* platform dependent support */
+	/* platform dependent support */
 EXPORT_SYMBOL(dump_thread);
 EXPORT_SYMBOL(dump_fpu);
 EXPORT_SYMBOL(udelay);
 EXPORT_SYMBOL(xchg_str);
 
-/* expansion card support */
+	/* expansion card support */
 #ifdef CONFIG_ARCH_ACORN
 EXPORT_SYMBOL(ecard_startfind);
 EXPORT_SYMBOL(ecard_find);
@@ -77,16 +74,17 @@ EXPORT_SYMBOL(ecard_address);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
 
-/* processor dependencies */
+	/* processor dependencies */
 EXPORT_SYMBOL(processor);
+EXPORT_SYMBOL(machine_type);
 
-/* io */
+	/* io */
 EXPORT_SYMBOL(outswb);
 EXPORT_SYMBOL(outsw);
 EXPORT_SYMBOL(inswb);
 EXPORT_SYMBOL(insw);
 
-/* address translation */
+	/* address translation */
 #ifndef __virt_to_phys__is_a_macro
 EXPORT_SYMBOL(__virt_to_phys);
 #endif
@@ -104,27 +102,7 @@ EXPORT_SYMBOL(quicklists);
 EXPORT_SYMBOL(__bad_pmd);
 EXPORT_SYMBOL(__bad_pmd_kernel);
 
-#define EXPORT_VERS0(sym,orig) \
- const char __kstrtab_##sym##[] __attribute__((section(".kstrtab"))) = \
-    __MODULE_STRING(##sym##_R00000000); \
- const struct module_symbol __ksymtab_##sym __attribute__((section("__ksymtab"))) = \
-    { (unsigned long)&##orig, __kstrtab_##sym };
-/*
- * floating point math emulator support.
- * These symbols will never change their calling convention...
- */
-EXPORT_VERS0(fpreturn,fpreturn);
-EXPORT_VERS0(fpundefinstr,fpundefinstr);
-EXPORT_VERS0(fp_enter,fp_enter);
-EXPORT_VERS0(fp_save,fp_save);
-EXPORT_VERS0(fp_restore,fp_restore);
-EXPORT_VERS0(fp_setup,fp_setup);
-EXPORT_VERS0(fp_printk,printk);
-EXPORT_VERS0(fp_send_sig,send_sig);
-
-	/*
-	 * string / mem functions
-	 */
+	/* string / mem functions */
 EXPORT_SYMBOL_NOVERS(strcpy);
 EXPORT_SYMBOL_NOVERS(strncpy);
 EXPORT_SYMBOL_NOVERS(strcat);

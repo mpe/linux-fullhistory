@@ -3,7 +3,7 @@
  * Authors: David Campbell <campbell@torque.net>
  *          Tim Waugh <tim@cyberelk.demon.co.uk>
  *          Philip Blundell <philb@gnu.org>
- *          Andrea Arcangeli <arcangeli@mbox.queen.it>
+ *          Andrea Arcangeli
  *          Riccardo Facchetti <fizban@tin.it>
  *
  * based on work by Grant Guenther <grant@torque.net>

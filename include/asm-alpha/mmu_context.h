@@ -35,14 +35,17 @@
  */
 #define EV4_MAX_ASN 63
 #define EV5_MAX_ASN 127
+#define EV6_MAX_ASN 255
 
 #ifdef CONFIG_ALPHA_GENERIC
 # define MAX_ASN	(alpha_mv.max_asn)
 #else
 # ifdef CONFIG_ALPHA_EV4
 #  define MAX_ASN	EV4_MAX_ASN
-# else
+# elif defined(CONFIG_ALPHA_EV5)
 #  define MAX_ASN	EV5_MAX_ASN
+# else
+#  define MAX_ASN	EV6_MAX_ASN
 # endif
 #endif
 
@@ -155,7 +158,8 @@ __reload_tss(struct thread_struct *tss)
 	a0 = MASK_CONTEXT(tss);
 
 	__asm__ __volatile__(
-		"call_pal %2" : "=r"(v0), "=r"(a0)
+		"call_pal %2 #__reload_tss"
+		: "=r"(v0), "=r"(a0)
 		: "i"(PAL_swpctx), "r"(a0)
 		: "$1", "$16", "$22", "$23", "$24", "$25");
 

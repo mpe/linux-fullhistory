@@ -36,8 +36,8 @@
 #define NFSDDBG_FACILITY	NFSDDBG_SVC
 #define NFSD_BUFSIZE		(1024 + NFSSVC_MAXBLKSIZE)
 
-#define ALLOWED_SIGS	(sigmask(SIGKILL) | sigmask(SIGSTOP))
-#define SHUTDOWN_SIGS	(sigmask(SIGKILL) | sigmask(SIGINT) | sigmask(SIGTERM))
+#define ALLOWED_SIGS	(sigmask(SIGKILL))
+#define SHUTDOWN_SIGS	(sigmask(SIGKILL) | sigmask(SIGINT) | sigmask(SIGQUIT))
 
 extern struct svc_program	nfsd_program;
 static void			nfsd(struct svc_rqst *rqstp);

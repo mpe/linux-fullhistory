@@ -22,17 +22,6 @@
 #include <asm/ucontext.h>
 #include <asm/uaccess.h>
 
-void checksignals(void)
-{
-	sigset_t *blocked = &current->blocked;
-	unsigned long mask = blocked->sig[0] | sigmask(SIGKILL) | sigmask(SIGINT) | sigmask(SIGQUIT);
-	mask &= blocked->sig[1];
-	if (~mask) {
-		printk("Bad signal mask\n");
-		*(int *) 0 = 0;
-	}
-}
-
 #define DEBUG_SIG 0
 
 #define _BLOCKABLE (~(sigmask(SIGKILL) | sigmask(SIGSTOP)))

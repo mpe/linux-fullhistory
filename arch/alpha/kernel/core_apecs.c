@@ -130,8 +130,7 @@ conf_read(unsigned long addr, unsigned char type1)
 	unsigned int stat0, value;
 	unsigned int haxr2 = 0;
 
-	save_flags(flags);	/* avoid getting hit by machine check */
-	cli();
+	__save_and_cli(flags);	/* avoid getting hit by machine check */
 
 	DBG(("conf_read(addr=0x%lx, type1=%d)\n", addr, type1));
 
@@ -201,7 +200,7 @@ conf_read(unsigned long addr, unsigned char type1)
 		*(vuip)APECS_IOC_HAXR2 = haxr2 & ~1;
 		mb();
 	}
-	restore_flags(flags);
+	__restore_flags(flags);
 
 	return value;
 }
@@ -213,8 +212,8 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1)
 	unsigned int stat0;
 	unsigned int haxr2 = 0;
 
-	save_flags(flags);	/* avoid getting hit by machine check */
-	cli();
+	__save_and_cli(flags);	/* avoid getting hit by machine check */
+
 
 	/* Reset status register to avoid losing errors.  */
 	stat0 = *(vuip)APECS_IOC_DCSR;
@@ -270,17 +269,16 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1)
 		*(vuip)APECS_IOC_HAXR2 = haxr2 & ~1;
 		mb();
 	}
-	restore_flags(flags);
+	__restore_flags(flags);
 }
 
 int
-apecs_pcibios_read_config_byte (u8 bus, u8 device_fn, u8 where, u8 *value)
+apecs_hose_read_config_byte (u8 bus, u8 device_fn, u8 where, u8 *value,
+			     struct linux_hose_info *hose)
 {
 	unsigned long addr = APECS_CONF;
 	unsigned long pci_addr;
 	unsigned char type1;
-
-	*value = 0xff;
 
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
@@ -293,16 +291,13 @@ apecs_pcibios_read_config_byte (u8 bus, u8 device_fn, u8 where, u8 *value)
 }
 
 int 
-apecs_pcibios_read_config_word (u8 bus, u8 device_fn, u8 where, u16 *value)
+apecs_hose_read_config_word (u8 bus, u8 device_fn, u8 where, u16 *value,
+			     struct linux_hose_info *hose)
 {
 	unsigned long addr = APECS_CONF;
 	unsigned long pci_addr;
 	unsigned char type1;
 
-	*value = 0xffff;
-
-	if (where & 0x1)
-		return PCIBIOS_BAD_REGISTER_NUMBER;
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
@@ -313,15 +308,13 @@ apecs_pcibios_read_config_word (u8 bus, u8 device_fn, u8 where, u16 *value)
 }
 
 int
-apecs_pcibios_read_config_dword (u8 bus, u8 device_fn, u8 where, u32 *value)
+apecs_hose_read_config_dword (u8 bus, u8 device_fn, u8 where, u32 *value,
+			      struct linux_hose_info *hose)
 {
 	unsigned long addr = APECS_CONF;
 	unsigned long pci_addr;
 	unsigned char type1;
 
-	*value = 0xffffffff;
-	if (where & 0x3)
-		return PCIBIOS_BAD_REGISTER_NUMBER;
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
@@ -331,7 +324,8 @@ apecs_pcibios_read_config_dword (u8 bus, u8 device_fn, u8 where, u32 *value)
 }
 
 int
-apecs_pcibios_write_config_byte (u8 bus, u8 device_fn, u8 where, u8 value)
+apecs_hose_write_config_byte (u8 bus, u8 device_fn, u8 where, u8 value,
+			      struct linux_hose_info *hose)
 {
 	unsigned long addr = APECS_CONF;
 	unsigned long pci_addr;
@@ -346,7 +340,8 @@ apecs_pcibios_write_config_byte (u8 bus, u8 device_fn, u8 where, u8 value)
 }
 
 int 
-apecs_pcibios_write_config_word (u8 bus, u8 device_fn, u8 where, u16 value)
+apecs_hose_write_config_word (u8 bus, u8 device_fn, u8 where, u16 value,
+			      struct linux_hose_info *hose)
 {
 	unsigned long addr = APECS_CONF;
 	unsigned long pci_addr;
@@ -361,7 +356,8 @@ apecs_pcibios_write_config_word (u8 bus, u8 device_fn, u8 where, u16 value)
 }
 
 int 
-apecs_pcibios_write_config_dword (u8 bus, u8 device_fn, u8 where, u32 value)
+apecs_hose_write_config_dword (u8 bus, u8 device_fn, u8 where, u32 value,
+			       struct linux_hose_info *hose)
 {
 	unsigned long addr = APECS_CONF;
 	unsigned long pci_addr;

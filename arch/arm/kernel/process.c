@@ -38,9 +38,6 @@
 #include <asm/system.h>
 #include <asm/io.h>
 
-struct task_struct *last_task_used_math;
-
-extern void fpe_save(struct fp_soft_struct *);
 extern char *processor_modes[];
 
 asmlinkage void ret_from_sys_call(void) __asm__("ret_from_sys_call");
@@ -108,7 +105,6 @@ void machine_power_off(void)
 {
 }
 
-
 void show_regs(struct pt_regs * regs)
 {
 	unsigned long flags;
@@ -158,18 +154,14 @@ void show_regs(struct pt_regs * regs)
  */
 void exit_thread(void)
 {
-	if (last_task_used_math == current)
-    		last_task_used_math = NULL;
 }
 
 void flush_thread(void)
 {
 	int i;
 
-	for (i = 0; i < 8; i++)
-		current->debugreg[i] = 0;
-	if (last_task_used_math == current)
-		last_task_used_math = NULL;
+	for (i = 0; i < NR_DEBUGS; i++)
+		current->tss.debug[i] = 0;
 	current->used_math = 0;
 	current->flags &= ~PF_USEDFPU;
 }
@@ -189,13 +181,8 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	childregs->ARM_r0 = 0;
 
 	save = ((struct context_save_struct *)(childregs)) - 1;
-	copy_thread_css (save);
+	copy_thread_css(save);
 	p->tss.save = save;
-	/*
-	 * Save current math state in p->tss.fpe_save if not already there.
-	 */
-	if (last_task_used_math == current)
-		fpe_save (&p->tss.fpstate.soft);
 
 	return 0;
 }
@@ -207,12 +194,8 @@ int dump_fpu (struct pt_regs *regs, struct user_fp *fp)
 {
 	int fpvalid = 0;
 
-	if (current->used_math) {
-		if (last_task_used_math == current)
-			fpe_save (&current->tss.fpstate.soft);
-
+	if (current->used_math)
 		memcpy (fp, &current->tss.fpstate.soft, sizeof (fp));
-	}
 
 	return fpvalid;
 }
@@ -232,8 +215,8 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 	dump->u_dsize = (current->mm->brk - current->mm->start_data + PAGE_SIZE - 1) >> PAGE_SHIFT;
 	dump->u_ssize = 0;
 
-	for (i = 0; i < 8; i++)
-		dump->u_debugreg[i] = current->debugreg[i];  
+	for (i = 0; i < NR_DEBUGS; i++)
+		dump->u_debugreg[i] = current->tss.debug[i];  
 
 	if (dump->start_stack < 0x04000000)
 		dump->u_ssize = (0x04000000 - dump->start_stack) >> PAGE_SHIFT;

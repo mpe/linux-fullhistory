@@ -141,3 +141,7 @@ static void arch_decomp_setup(void)
 }
 #endif
 
+/*
+ * nothing to do
+ */
+#define arch_decomp_wdog()

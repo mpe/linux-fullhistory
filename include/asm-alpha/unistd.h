@@ -23,7 +23,7 @@
 #define __NR_lseek		 19
 #define __NR_getxpid		 20
 #define __NR_osf_mount		 21
-#define __NR_osf_umount		 22
+#define __NR_umount		 22
 #define __NR_setuid		 23
 #define __NR_getxuid		 24
 #define __NR_exec_with_loader	 25	/* not implemented */
@@ -258,7 +258,7 @@
 #define __NR_sysinfo		318
 #define __NR__sysctl		319
 #define __NR_idle		320
-#define __NR_umount		321
+#define __NR_oldumount		321
 #define __NR_swapon		322
 #define __NR_times		323
 #define __NR_personality	324
@@ -506,12 +506,6 @@ extern void sys_idle(void);
 static inline void idle(void)
 {
 	sys_idle();
-}
-
-extern int sys_setup(int);
-static inline int setup(int magic)
-{
-	return sys_setup(magic);
 }
 
 extern int sys_open(const char *, int, int);

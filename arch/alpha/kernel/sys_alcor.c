@@ -75,9 +75,6 @@ alcor_device_interrupt(unsigned long vector, struct pt_regs *regs)
 {
 	unsigned long pld;
 	unsigned int i;
-	unsigned long flags;
-
-	save_and_cli(flags);
 
 	/* Read the interrupt summary register of the GRU */
 	pld = (*(vuip)GRU_INT_REQ) & GRU_INT_REQ_BITS;
@@ -95,7 +92,6 @@ alcor_device_interrupt(unsigned long vector, struct pt_regs *regs)
 			handle_irq(16 + i, 16 + i, regs);
 		}
 	}
-	restore_flags(flags);
 }
 
 static void

@@ -35,7 +35,6 @@
  *				never updates the transmit status correctly.
  * TODO:
  *  When we detect a fatal error on the interface, we should restart it.
- *  Reap transmit packets after some time even if the buffer never filled.
  */
 
 static char *version = "ether3 ethernet driver (c) 1995-1998 R.M.King v1.13\n";
@@ -98,15 +97,25 @@ typedef enum {
 	buffer_read
 } buffer_rw_t;
 
+/*
+ * ether3 read/write.  Slow things down a bit...
+ */
+#define ether3_outb(v,r)	{ outb((v),(r)); udelay(1); }
+#define ether3_outw(v,r)	{ outw((v),(r)); udelay(1); }
+
+#define ether3_inb(r)		({ unsigned int __v = inb((r)); udelay(1); __v; })
+#define ether3_inw(r)		({ unsigned int __v = inw((r)); udelay(1); __v; })
+
 static int
 ether3_setbuffer(struct device *dev, buffer_rw_t read, int start)
 {
 	struct dev_priv *priv = (struct dev_priv *)dev->priv;
 	int timeout = 1000;
 
-	outw(priv->regs.config1 | CFG1_LOCBUFMEM, REG_CONFIG1);
-	outw(priv->regs.command | CMD_FIFOWRITE, REG_COMMAND);
-	while ((inw(REG_STATUS) & STAT_FIFOEMPTY) == 0) {
+	ether3_outw(priv->regs.config1 | CFG1_LOCBUFMEM, REG_CONFIG1);
+	ether3_outw(priv->regs.command | CMD_FIFOWRITE, REG_COMMAND);
+
+	while ((ether3_inw(REG_STATUS) & STAT_FIFOEMPTY) == 0) {
 		if (!timeout--) {
 			printk("%s: setbuffer broken\n", dev->name);
 			priv->broken = 1;
@@ -114,12 +123,13 @@ ether3_setbuffer(struct device *dev, buffer_rw_t read, int start)
 		}
 		udelay(1);
 	}
+
 	if (read == buffer_read) {
-		outw(start, REG_DMAADDR);
-		outw(priv->regs.command | CMD_FIFOREAD, REG_COMMAND);
+		ether3_outw(start, REG_DMAADDR);
+		ether3_outw(priv->regs.command | CMD_FIFOREAD, REG_COMMAND);
 	} else {
-		outw(priv->regs.command | CMD_FIFOWRITE, REG_COMMAND);
-		outw(start, REG_DMAADDR);
+		ether3_outw(priv->regs.command | CMD_FIFOWRITE, REG_COMMAND);
+		ether3_outw(start, REG_DMAADDR);
 	}
 	return 0;
 }
@@ -159,7 +169,7 @@ ether3_ledoff(unsigned long data)
 {
 	struct device *dev = (struct device *)data;
 	struct dev_priv *priv = (struct dev_priv *)dev->priv;
-	outw(priv->regs.config2 |= CFG2_CTRLO, REG_CONFIG2);
+	ether3_outw(priv->regs.config2 |= CFG2_CTRLO, REG_CONFIG2);
 }
 
 /*
@@ -174,7 +184,7 @@ ether3_ledon(struct device *dev, struct dev_priv *priv)
 	priv->timer.function = ether3_ledoff;
 	add_timer(&priv->timer);
 	if (priv->regs.config2 & CFG2_CTRLO)
-		outw(priv->regs.config2 &= ~CFG2_CTRLO, REG_CONFIG2);
+		ether3_outw(priv->regs.config2 &= ~CFG2_CTRLO, REG_CONFIG2);
 }
 
 /*
@@ -240,7 +250,7 @@ ether3_ramtest(struct device *dev, unsigned char byte))
 		} else {
 			if (bad != -1) {
 			    	if (bad != i - 1)
-					printk(" - 0x%04X", i - 1);
+					printk(" - 0x%04X\n", i - 1);
 				printk("\n");
 				bad = -1;
 			}
@@ -268,9 +278,9 @@ ether3_init_2(struct device *dev))
 	/*
 	 * Set up our hardware address
 	 */
-	outw(priv->regs.config1 | CFG1_BUFSELSTAT0, REG_CONFIG1);
+	ether3_outw(priv->regs.config1 | CFG1_BUFSELSTAT0, REG_CONFIG1);
 	for (i = 0; i < 6; i++)
-		outb(dev->dev_addr[i], REG_BUFWIN);
+		ether3_outb(dev->dev_addr[i], REG_BUFWIN);
 
 	if (dev->flags & IFF_PROMISC)
 		priv->regs.config1 |= CFG1_RECVPROMISC;
@@ -284,14 +294,14 @@ ether3_init_2(struct device *dev))
 	 * last two bytes.  To get round this problem, we receive the CRC as
 	 * well.  That way, if we do loose the last two, then it doesn't matter.
 	 */
-	outw(priv->regs.config1 | CFG1_TRANSEND, REG_CONFIG1);
-	outw((TX_END>>8) - 1, REG_BUFWIN);
-	outw(priv->rx_head, REG_RECVPTR);
-	outw(0, REG_TRANSMITPTR);
-	outw(priv->rx_head >> 8, REG_RECVEND);
-	outw(priv->regs.config2, REG_CONFIG2);
-	outw(priv->regs.config1 | CFG1_LOCBUFMEM, REG_CONFIG1);
-	outw(priv->regs.command, REG_COMMAND);
+	ether3_outw(priv->regs.config1 | CFG1_TRANSEND, REG_CONFIG1);
+	ether3_outw((TX_END>>8) - 1, REG_BUFWIN);
+	ether3_outw(priv->rx_head, REG_RECVPTR);
+	ether3_outw(0, REG_TRANSMITPTR);
+	ether3_outw(priv->rx_head >> 8, REG_RECVEND);
+	ether3_outw(priv->regs.config2, REG_CONFIG2);
+	ether3_outw(priv->regs.config1 | CFG1_LOCBUFMEM, REG_CONFIG1);
+	ether3_outw(priv->regs.command, REG_COMMAND);
 
 	i = ether3_ramtest(dev, 0x5A);
 	if(i)
@@ -314,16 +324,16 @@ ether3_init_for_open(struct device *dev)
 	memset(&priv->stats, 0, sizeof(struct enet_statistics));
 
 	/* Reset the chip */
-	outw(CFG2_RESET, REG_CONFIG2);
+	ether3_outw(CFG2_RESET, REG_CONFIG2);
 	udelay(4);
 
 	priv->regs.command = 0;
-	outw(CMD_RXOFF|CMD_TXOFF, REG_COMMAND);
-	while (inw(REG_STATUS) & (STAT_RXON|STAT_TXON));
+	ether3_outw(CMD_RXOFF|CMD_TXOFF, REG_COMMAND);
+	while (ether3_inw(REG_STATUS) & (STAT_RXON|STAT_TXON));
 
-	outw(priv->regs.config1 | CFG1_BUFSELSTAT0, REG_CONFIG1);
+	ether3_outw(priv->regs.config1 | CFG1_BUFSELSTAT0, REG_CONFIG1);
 	for (i = 0; i < 6; i++)
-		outb(dev->dev_addr[i], REG_BUFWIN);
+		ether3_outb(dev->dev_addr[i], REG_BUFWIN);
 
 	priv->tx_used	= 0;
 	priv->tx_head	= 0;
@@ -331,36 +341,53 @@ ether3_init_for_open(struct device *dev)
 	priv->regs.config2 |= CFG2_CTRLO;
 	priv->rx_head	= RX_START;
 
-	outw(priv->regs.config1 | CFG1_TRANSEND, REG_CONFIG1);
-	outw((TX_END>>8) - 1, REG_BUFWIN);
-	outw(priv->rx_head, REG_RECVPTR);
-	outw(priv->rx_head >> 8, REG_RECVEND);
-	outw(0, REG_TRANSMITPTR);
-	outw(priv->regs.config2, REG_CONFIG2);
-	outw(priv->regs.config1 | CFG1_LOCBUFMEM, REG_CONFIG1);
+	ether3_outw(priv->regs.config1 | CFG1_TRANSEND, REG_CONFIG1);
+	ether3_outw((TX_END>>8) - 1, REG_BUFWIN);
+	ether3_outw(priv->rx_head, REG_RECVPTR);
+	ether3_outw(priv->rx_head >> 8, REG_RECVEND);
+	ether3_outw(0, REG_TRANSMITPTR);
+	ether3_outw(priv->regs.config2, REG_CONFIG2);
+	ether3_outw(priv->regs.config1 | CFG1_LOCBUFMEM, REG_CONFIG1);
 
 	ether3_setbuffer(dev, buffer_write, 0);
 	ether3_writelong(dev, 0);
 
-	priv->regs.command = CMD_ENINTRX;
-	outw(priv->regs.command | CMD_RXON, REG_COMMAND);
+	priv->regs.command = CMD_ENINTRX | CMD_ENINTTX;
+	ether3_outw(priv->regs.command | CMD_RXON, REG_COMMAND);
 }
 
 static inline int
 ether3_probe_bus_8(struct device *dev, int val)
 {
-	outb(val & 255, REG_RECVPTR);
-	outb(val >> 8, REG_RECVPTR + 1);
+	int write_low, write_high, read_low, read_high;
 
-	return inb(REG_RECVPTR) == (val & 255) && inb(REG_RECVPTR + 1) == (val >> 8);
+	write_low = val & 255;
+	write_high = val >> 8;
+
+	printk(KERN_DEBUG "ether3_probe: write8 [%02X:%02X]", write_high, write_low);
+
+	ether3_outb(write_low, REG_RECVPTR);
+	ether3_outb(write_high, REG_RECVPTR + 1);
+
+	read_low = ether3_inb(REG_RECVPTR);
+	read_high = ether3_inb(REG_RECVPTR + 1);
+
+	printk(", read8 [%02X:%02X]\n", read_high, read_low);
+
+	return read_low == write_low && read_high == write_high;
 }
 
 static inline int
 ether3_probe_bus_16(struct device *dev, int val)
 {
-	outw(val, REG_RECVPTR);
+	int read_val;
 
-	return inw(REG_RECVPTR) == val;
+	ether3_outw(val, REG_RECVPTR);
+	read_val = ether3_inw(REG_RECVPTR);
+
+	printk(KERN_DEBUG "ether3_probe: write16 [%04X], read16 [%04X]\n", val, read_val);
+
+	return read_val == val;
 }
 
 /*
@@ -373,13 +400,15 @@ ether3_probe1(struct device *dev))
 	struct dev_priv *priv;
 	unsigned int i, bus_type, error = ENODEV;
 
-	if (net_debug  &&  version_printed++ == 0)
+	if (net_debug && version_printed++ == 0)
 		printk(version);
 
 	if (!dev->priv) {
 		dev->priv = kmalloc(sizeof (struct dev_priv), GFP_KERNEL);
-		if (!dev->priv)
+		if (!dev->priv) {
+			printk(KERN_ERR "ether3_probe1: no memory\n");
 			return -ENOMEM;
+		}
 	}
 
 	priv = (struct dev_priv *) dev->priv;
@@ -389,7 +418,7 @@ ether3_probe1(struct device *dev))
 
 	/* Reset card...
 	 */
-	outb(0x80, REG_CONFIG2 + 1);
+	ether3_outb(0x80, REG_CONFIG2 + 1);
 	bus_type = BUS_UNKNOWN;
 	udelay(4);
 
@@ -506,11 +535,11 @@ ether3_close(struct device *dev)
 
 	disable_irq(dev->irq);
 
-	outw(CMD_RXOFF|CMD_TXOFF, REG_COMMAND);
+	ether3_outw(CMD_RXOFF|CMD_TXOFF, REG_COMMAND);
 	priv->regs.command = 0;
-	while (inw(REG_STATUS) & (STAT_RXON|STAT_TXON));
-	outb(0x80, REG_CONFIG2 + 1);
-	outw(0, REG_COMMAND);
+	while (ether3_inw(REG_STATUS) & (STAT_RXON|STAT_TXON));
+	ether3_outb(0x80, REG_CONFIG2 + 1);
+	ether3_outw(0, REG_COMMAND);
 
 	free_irq(dev->irq, dev);
 
@@ -548,7 +577,34 @@ static void ether3_setmulticastlist(struct device *dev)
 	} else
 		priv->regs.config1 |= CFG1_RECVSPECBROAD;
 
-	outw(priv->regs.config1 | CFG1_LOCBUFMEM, REG_CONFIG1);
+	ether3_outw(priv->regs.config1 | CFG1_LOCBUFMEM, REG_CONFIG1);
+}
+
+/*
+ * Allocate memory in transmitter ring buffer.
+ */
+static int
+ether3_alloc_tx(struct dev_priv *priv, int length, int alloc)
+{
+	int start, head, tail;
+
+	tail = priv->tx_tail;
+	start = priv->tx_head;
+	head = start + length + 4;
+
+	if (head >= TX_END) {
+		if (tail > priv->tx_head)
+			return -1;
+		head -= TX_END - TX_START;
+		if (tail < head)
+			return -1;
+	} else if (start < tail && tail < head)
+		return -1;
+
+	if (alloc)
+		priv->tx_head = head;
+
+	return start;
 }
 
 /*
@@ -566,9 +622,9 @@ retry:
 		if (!test_and_set_bit(0, (void *)&dev->tbusy)) {
 			unsigned long flags;
 			unsigned int length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
-			unsigned int ptr, nextptr;
+			int ptr;
 
-			length = (length + 3) & ~3;
+			length = (length + 1) & ~1;
 
 			if (priv->broken) {
 				dev_kfree_skb(skb);
@@ -577,43 +633,32 @@ retry:
 				return 0;
 			}
 
-			ptr = priv->tx_head;
-			nextptr = ptr + 0x600;
-			if (nextptr >= TX_END)
-				nextptr = 0;
-			if (nextptr == priv->tx_tail)
-				return 1;		/* unable to queue */
-			priv->tx_head = nextptr;
-
 			save_flags_cli(flags);
+
+			ptr = ether3_alloc_tx(priv, length, 1);
+			if (ptr == -1)
+				return 1;	/* unable to queue */
 
 #define TXHDR_FLAGS (TXHDR_TRANSMIT|TXHDR_CHAINCONTINUE|TXHDR_DATAFOLLOWS|TXHDR_ENSUCCESS)
 
-			ether3_setbuffer(dev, buffer_write, nextptr);
+			ether3_setbuffer(dev, buffer_write, priv->tx_head);
 			ether3_writelong(dev, 0);
 
-			ether3_setbuffer(dev, buffer_write, ptr + 4);
+			ether3_setbuffer(dev, buffer_write, ptr);
+			ether3_writelong(dev, 0);
 			ether3_writebuffer(dev, skb->data, length);
-			ether3_writeword(dev, htons(nextptr));
-			ether3_writeword(dev, (TXHDR_TRANSMIT|TXHDR_CHAINCONTINUE) >> 16);
 
 			ether3_setbuffer(dev, buffer_write, ptr);
-			ether3_writeword(dev, htons(ptr + length + 4));
+			ether3_writeword(dev, htons(priv->tx_head));
 			ether3_writeword(dev, TXHDR_FLAGS >> 16);
 			ether3_ledon(dev, priv);
 
-			priv->tx_used ++;
-			if (priv->tx_used >= (MAX_TX_BUFFERED * 3 / 4)) {
-				priv->regs.command |= CMD_ENINTTX;
-				outw(priv->regs.command, REG_COMMAND);
+			if (!(ether3_inw(REG_STATUS) & STAT_TXON)) {
+				ether3_outw(ptr, REG_TRANSMITPTR);
+				ether3_outw(priv->regs.command | CMD_TXON, REG_COMMAND);
 			}
 
-			if (!(inw(REG_STATUS) & STAT_TXON)) {
-				outw(ptr, REG_TRANSMITPTR);
-				outw(priv->regs.command | CMD_TXON, REG_COMMAND);
-			}
-
-			if (priv->tx_used < MAX_TX_BUFFERED)
+			if (ether3_alloc_tx(priv, 2044, 0) != -1)
 				dev->tbusy = 0;
 
 			dev->trans_start = jiffies;
@@ -641,9 +686,9 @@ retry:
 		save_flags_cli(flags);
 		printk(KERN_ERR "%s: transmit timed out, network cable problem?\n", dev->name);
 		printk(KERN_ERR "%s: state: { status=%04X cfg1=%04X cfg2=%04X }\n", dev->name,
-			inw(REG_STATUS), inw(REG_CONFIG1), inw(REG_CONFIG2));
+			ether3_inw(REG_STATUS), ether3_inw(REG_CONFIG1), ether3_inw(REG_CONFIG2));
 		printk(KERN_ERR "%s: { rpr=%04X rea=%04X tpr=%04X }\n", dev->name,
-			inw(REG_RECVPTR), inw(REG_RECVEND), inw(REG_TRANSMITPTR));
+			ether3_inw(REG_RECVPTR), ether3_inw(REG_RECVEND), ether3_inw(REG_TRANSMITPTR));
 		printk(KERN_ERR "%s: tx head=%04X tx tail=%04X\n", dev->name,
 			priv->tx_head, priv->tx_tail);
 		ether3_setbuffer(dev, buffer_read, priv->tx_tail);
@@ -653,7 +698,7 @@ retry:
 		dev->tbusy = 0;
 		priv->regs.config2 |= CFG2_CTRLO;
 		priv->stats.tx_errors += 1;
-		outw(priv->regs.config2 , REG_CONFIG2);
+		ether3_outw(priv->regs.config2 , REG_CONFIG2);
 		dev->trans_start = jiffies;
 		goto retry;
 	}
@@ -674,31 +719,19 @@ ether3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	priv = (struct dev_priv *)dev->priv;
 
 	dev->interrupt = 1;
-	status = inw(REG_STATUS);
-	/*
-	 * Dispite we disable the TX interrupt when the packet buffer is
-	 * mostly empty, if we happen to get a RX interrupt, we might as
-	 * well handle the TX packets as well.
-	 */
-	if (status & STAT_INTTX) { /* Packets transmitted */
-		outw(CMD_ACKINTTX | priv->regs.command, REG_COMMAND);
+
+	status = ether3_inw(REG_STATUS);
+
+	if (status & STAT_INTRX) {
+		ether3_outw(CMD_ACKINTRX | priv->regs.command, REG_COMMAND);
+		ether3_rx(dev, priv, 12);
+	}
+
+	if (status & STAT_INTTX) {
+		ether3_outw(CMD_ACKINTTX | priv->regs.command, REG_COMMAND);
 		ether3_tx(dev, priv);
 	}
 
-	status = inw(REG_STATUS);
-	if (status & STAT_INTRX && ether3_rx(dev, priv, 12)) { /* Got packet(s). */
-		/*
-		 * We only acknowledge the interrupt if we have received all packets
-		 * in the buffer or else we run out of memory. This is to allow the
-		 * bh routines to run.
-		 */
-		outw(CMD_ACKINTRX | priv->regs.command, REG_COMMAND);
-		/*
-		 * Receive again if some have become available - we may have cleared
-		 * a pending IRQ
-		 */
-		ether3_rx(dev, priv, 4);
-	}
 	dev->interrupt = 0;
 
 #if NET_DEBUG > 1
@@ -741,13 +774,23 @@ ether3_rx(struct device *dev, struct dev_priv *priv, unsigned int maxcnt)
 		ether3_setbuffer(dev, buffer_read, this_ptr);
 		ether3_readbuffer(dev, addrs+2, 12);
 
+if (next_ptr < RX_START || next_ptr >= RX_END) {
+ int i;
+ printk("%s: bad next pointer @%04X: ", dev->name, priv->rx_head);
+ printk("%02X %02X %02X %02X ", next_ptr >> 8, next_ptr & 255, status & 255, status >> 8);
+ for (i = 2; i < 14; i++)
+   printk("%02X ", addrs[i]);
+ printk("\n");
+ next_ptr = priv->rx_head;
+ break;
+}
 		/*
  		 * ignore our own packets...
 	 	 */
 		if (!(*(unsigned long *)&dev->dev_addr[0] ^ *(unsigned long *)&addrs[2+6]) &&
 		    !(*(unsigned short *)&dev->dev_addr[4] ^ *(unsigned short *)&addrs[2+10])) {
 			maxcnt ++; /* compensate for loopedback packet */
-			outw(next_ptr >> 8, REG_RECVEND);
+			ether3_outw(next_ptr >> 8, REG_RECVEND);
 		} else
 		if (!(status & (RXSTAT_OVERSIZE|RXSTAT_CRCERROR|RXSTAT_DRIBBLEERROR|RXSTAT_SHORTPACKET))) {
 			unsigned int length = next_ptr - this_ptr;
@@ -764,7 +807,7 @@ ether3_rx(struct device *dev, struct dev_priv *priv, unsigned int maxcnt)
 				skb_reserve(skb, 2);
 				buf = skb_put(skb, length);
 				ether3_readbuffer(dev, buf + 12, length - 12);
-				outw(next_ptr >> 8, REG_RECVEND);
+				ether3_outw(next_ptr >> 8, REG_RECVEND);
 				*(unsigned short *)(buf + 0)	= *(unsigned short *)(addrs + 2);
 				*(unsigned long *)(buf + 2)	= *(unsigned long *)(addrs + 4);
 				*(unsigned long *)(buf + 6)	= *(unsigned long *)(addrs + 8);
@@ -776,7 +819,7 @@ ether3_rx(struct device *dev, struct dev_priv *priv, unsigned int maxcnt)
 				goto dropping;
 		} else {
 			struct enet_statistics *stats = &priv->stats;
-			outw(next_ptr >> 8, REG_RECVEND);
+			ether3_outw(next_ptr >> 8, REG_RECVEND);
 			if (status & RXSTAT_OVERSIZE)	  stats->rx_over_errors ++;
 			if (status & RXSTAT_CRCERROR)	  stats->rx_crc_errors ++;
 			if (status & RXSTAT_DRIBBLEERROR) stats->rx_fifo_errors ++;
@@ -793,10 +836,10 @@ done:
 	 * If rx went off line, then that means that the buffer may be full.  We
 	 * have dropped at least one packet.
 	 */
-	if (!(inw(REG_STATUS) & STAT_RXON)) {
+	if (!(ether3_inw(REG_STATUS) & STAT_RXON)) {
 		priv->stats.rx_dropped ++;
-    		outw(next_ptr, REG_RECVPTR);
-		outw(priv->regs.command | CMD_RXON, REG_COMMAND);
+    		ether3_outw(next_ptr, REG_RECVPTR);
+		ether3_outw(priv->regs.command | CMD_RXON, REG_COMMAND);
 	}
 
 	return maxcnt;
@@ -804,7 +847,7 @@ done:
 dropping:{
 	static unsigned long last_warned;
 
-	outw(next_ptr >> 8, REG_RECVEND);
+	ether3_outw(next_ptr >> 8, REG_RECVEND);
 	/*
 	 * Don't print this message too many times...
 	 */
@@ -852,15 +895,13 @@ ether3_tx(struct device *dev, struct dev_priv *priv)
 			if (status & TXSTAT_BABBLED) priv->stats.tx_fifo_errors ++;
 		}
 
-		/*
-		 * Get next packet address
-		 */
-		tx_tail += 0x600;
-		if (tx_tail >= TX_END)
-			tx_tail = 0;
-
-		if (priv->tx_used)
-			priv->tx_used--;
+		tx_tail = htons(status & TX_NEXT);
+		if (tx_tail < TX_START || tx_tail >= TX_END) {
+			printk("%s: transmit error: next pointer = %04X\n", dev->name, tx_tail);
+			tx_tail = TX_START;
+			priv->tx_head = TX_START;
+			priv->tx_tail = TX_END;
+		}
 	} while (1);
 
 	if (priv->tx_tail != tx_tail) {
@@ -870,8 +911,6 @@ ether3_tx(struct device *dev, struct dev_priv *priv)
 			mark_bh(NET_BH);	/* Inform upper layers. */
 		}
 	}
-	priv->regs.command &= ~CMD_ENINTTX;
-	outw(priv->regs.command, REG_COMMAND);
 }
 
 #ifdef MODULE

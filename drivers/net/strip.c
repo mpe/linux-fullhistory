@@ -2430,7 +2430,6 @@ static int strip_dev_init(struct device *dev)
     dev->tx_queue_len       = 30;         /* Drop after 30 frames queued */
 
     dev->flags              = 0;
-    dev->metric             = 0;
     dev->mtu                = DEFAULT_STRIP_MTU;
     dev->type               = ARPHRD_METRICOM;        /* dtang */
     dev->hard_header_len    = sizeof(STRIP_Header);

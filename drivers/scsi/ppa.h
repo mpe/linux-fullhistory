@@ -53,12 +53,12 @@
  *
  * Fixed all problems in the parport sharing scheme. Now ppa can be safe
  * used with lp or other parport devices on the same parallel port.
- *		1997 by Andrea Arcangeli <arcangeli@mbox.queen.it>
+ *		1997 by Andrea Arcangeli
  *							[1.39]
  *
  * Little fix in ppa engine to ensure that ppa don' t release parport
  * or disconnect in wrong cases.
- *		1997 by Andrea Arcangeli <arcangeli@mbox.queen.it>
+ *		1997 by Andrea Arcangeli
  *							[1.39a]
  */
 /* ------ END OF USER CONFIGURABLE PARAMETERS ----- */

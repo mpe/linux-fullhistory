@@ -27,12 +27,27 @@ extern unsigned long switch_to_osf_pal(unsigned long nr,
 	struct pcb_struct * pcb_va, struct pcb_struct * pcb_pa,
 	unsigned long vptb, unsigned long *kstk);
 
+extern long dispatch(long code, ...);
+
+static void
+puts(const char *str, int len)
+{
+	long written;
+
+	while (len > 0) {
+		written = dispatch(CCB_PUTS, 0, str, len);
+		if (written < 0)
+			break;
+		len -= (unsigned int) written;
+		str += (unsigned int) written;
+	}
+}
+
 int printk(const char * fmt, ...)
 {
 	va_list args;
-	int i, j, written, remaining, num_nl;
+	int i, j, remaining, num_nl;
 	static char buf[1024];
-	char * str;
 
 	va_start(args, fmt);
 	i = vsprintf(buf, fmt, args);
@@ -54,12 +69,7 @@ int printk(const char * fmt, ...)
 	    }
 	}
 
-	str = buf;
-	do {
-	    written = puts(str, remaining);
-	    remaining -= written;
-	    str += written;
-	} while (remaining > 0);
+	puts(buf, remaining);
 	return i;
 }
 

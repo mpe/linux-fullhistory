@@ -736,7 +736,6 @@ again:
 	rqstp->rq_argbuf = rqstp->rq_defbuf;
 	rqstp->rq_resbuf = rqstp->rq_defbuf;
 
-	checksignals();
 	if (signalled())
 		return -EINTR;
 
@@ -755,7 +754,6 @@ again:
 		 * We have to be able to interrupt this wait
 		 * to bring down the daemons ...
 		 */
-		checksignals();
 		current->state = TASK_INTERRUPTIBLE;
 		add_wait_queue(&rqstp->rq_wait, &wait);
 		end_bh_atomic();

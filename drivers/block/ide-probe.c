@@ -13,7 +13,7 @@
  * Version 1.00		move drive probing code from ide.c to ide-probe.c
  * Version 1.01		fix compilation problem for m68k
  * Version 1.02		increase WAIT_PIDENTIFY to avoid CD-ROM locking at boot
- *			 by Andrea Arcangeli <arcangeli@mbox.queen.it>
+ *			 by Andrea Arcangeli
  * Version 1.03		fix for (hwif->chipset == ide_4drives)
  */
 

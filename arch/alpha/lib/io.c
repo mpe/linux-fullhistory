@@ -477,7 +477,8 @@ void _memset_c_io(unsigned long to, unsigned long c, long count)
 		count -= 4;
 	}
 
-	/* Handle all full-sized quadwords: we're aligned (or have a small count) */
+	/* Handle all full-sized quadwords: we're aligned
+	   (or have a small count) */
 	count -= 8;
 	if (count >= 0) {
 		do {

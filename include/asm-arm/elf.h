@@ -30,7 +30,7 @@ typedef struct { void *null; } elf_fpregset_t;
 #define ELF_ARCH	EM_ARM
 
 #define USE_ELF_CORE_DUMP
-#define ELF_EXEC_PAGESIZE	32768
+#define ELF_EXEC_PAGESIZE	4096
 
 /* This is the location that an ET_DYN program is loaded if exec'ed.  Typical
    use of this is to invoke "./ld.so someprog" to test out a new version of
@@ -38,6 +38,11 @@ typedef struct { void *null; } elf_fpregset_t;
    that it will "exec", and that there is sufficient room for the brk.  */
 
 #define ELF_ET_DYN_BASE	(2 * TASK_SIZE / 3)
+
+/* When the program starts, a1 contains a pointer to a function to be 
+   registered with atexit, as per the SVR4 ABI.  A value of 0 means we 
+   have no such handler.  */
+#define ELF_PLAT_INIT(_r)	(_r)->ARM_r0 = 0
 
 /* This yields a mask that user programs can use to figure out what
    instruction set this cpu supports. */
@@ -64,18 +69,5 @@ extern char elf_platform[];
 #define SET_PERSONALITY(ex,ibcs2) \
 	current->personality = PER_LINUX_32BIT
 #endif
-
-#define R_ARM_NONE	(0)
-#define R_ARM_32	(1)	/* => ld 32 */
-#define R_ARM_PC26	(2)	/* => ld b/bl branches */
-#define R_ARM_PC32	(3)
-#define R_ARM_GOT32	(4)	/* -> object relocation into GOT */
-#define R_ARM_PLT32	(5)
-#define R_ARM_COPY	(6)	/* => dlink copy object */
-#define R_ARM_GLOB_DAT	(7)	/* => dlink 32bit absolute address for .got */
-#define R_ARM_JUMP_SLOT	(8)	/* => dlink 32bit absolute address for .got.plt */
-#define R_ARM_RELATIVE	(9)	/* => ld resolved 32bit absolute address requiring load address adjustment */
-#define R_ARM_GOTOFF	(10)	/* => ld calculates offset of data from base of GOT */
-#define R_ARM_GOTPC	(11)	/* => ld 32-bit relative offset */
 
 #endif

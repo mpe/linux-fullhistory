@@ -41,7 +41,4 @@
 #define ENV_LANGUAGE		0x0E
 #define ENV_TTY_DEV		0x0F
 
-extern unsigned long dispatch(unsigned long code, ...);
-#define puts(x,l) dispatch(CCB_PUTS,0,x,l)
-
 #endif

@@ -13,7 +13,9 @@
 #include <asm/io.h>
 #include <asm/segment.h>
 
-#if 0
+#define SMC_DEBUG 0
+
+#if SMC_DEBUG
 # define DBG_DEVS(args)         printk args
 #else
 # define DBG_DEVS(args)
@@ -74,8 +76,6 @@
 #define COM1_INTERRUPT		4
 #define PARP_BASE		0x3bc
 #define PARP_INTERRUPT		7
-
-#define SMC_DEBUG 0
 
 static unsigned long __init SMCConfigState(unsigned long baseAddr)
 {
@@ -241,12 +241,17 @@ int __init SMC93x_Init(void)
 		SMCReportDeviceStatus(SMCUltraBase);
 #endif
 		SMCEnableDevice(SMCUltraBase, SER1, COM1_BASE, COM1_INTERRUPT);
+		DBG_DEVS(("SMC FDC37C93X: SER1 done\n"));
 		SMCEnableDevice(SMCUltraBase, SER2, COM2_BASE, COM2_INTERRUPT);
+		DBG_DEVS(("SMC FDC37C93X: SER2 done\n"));
 		SMCEnableDevice(SMCUltraBase, PARP, PARP_BASE, PARP_INTERRUPT);
+		DBG_DEVS(("SMC FDC37C93X: PARP done\n"));
 		/* On PC164, IDE on the SMC is not enabled;
 		   CMD646 (PCI) on MB */
 		SMCEnableKYBD(SMCUltraBase);
+		DBG_DEVS(("SMC FDC37C93X: KYB done\n"));
 		SMCEnableFDC(SMCUltraBase);
+		DBG_DEVS(("SMC FDC37C93X: FDC done\n"));
 #if SMC_DEBUG
 		SMCReportDeviceStatus(SMCUltraBase);
 #endif
@@ -254,9 +259,7 @@ int __init SMC93x_Init(void)
 		return 1;
 	}
 	else {
-#if SMC_DEBUG
-		printk("No SMC FDC37C93X Ultra I/O Controller found\n");
-#endif
+		DBG_DEVS(("No SMC FDC37C93X Ultra I/O Controller found\n"));
 		return 0;
 	}
 }

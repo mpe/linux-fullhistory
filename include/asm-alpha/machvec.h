@@ -12,6 +12,7 @@ struct task_struct;
 struct mm_struct;
 struct pt_regs;
 struct vm_area_struct;
+struct linux_hose_info;
 
 struct alpha_machine_vector
 {
@@ -21,10 +22,12 @@ struct alpha_machine_vector
 	unsigned long hae_cache;
 	unsigned long *hae_register;
 
+	unsigned int nr_irqs  : 16;
+	unsigned int rtc_port : 16;
+	unsigned int rtc_addr : 15;
+	unsigned int rtc_bcd  : 1;
+	unsigned int max_asn  : 16;
 	unsigned long max_dma_address;
-	unsigned int nr_irqs;
-	unsigned int rtc_port, rtc_addr;
-	unsigned int max_asn;
 	unsigned long mmu_context_mask;
 	unsigned long irq_probe_mask;
 	unsigned long iack_sc;
@@ -52,13 +55,19 @@ struct alpha_machine_vector
 
 	unsigned long (*mv_dense_mem)(unsigned long);
 
-	int (*pci_read_config_byte)(u8, u8, u8, u8 *value);
-	int (*pci_read_config_word)(u8, u8, u8, u16 *value);
-	int (*pci_read_config_dword)(u8, u8, u8, u32 *value);
+	int (*hose_read_config_byte)(u8, u8, u8, u8 *value,
+				     struct linux_hose_info *);
+	int (*hose_read_config_word)(u8, u8, u8, u16 *value,
+				     struct linux_hose_info *);
+	int (*hose_read_config_dword)(u8, u8, u8, u32 *value,
+				      struct linux_hose_info *);
 
-	int (*pci_write_config_byte)(u8, u8, u8, u8 value);
-	int (*pci_write_config_word)(u8, u8, u8, u16 value);
-	int (*pci_write_config_dword)(u8, u8, u8, u32 value);
+	int (*hose_write_config_byte)(u8, u8, u8, u8 value,
+				      struct linux_hose_info *);
+	int (*hose_write_config_word)(u8, u8, u8, u16 value,
+				      struct linux_hose_info *);
+	int (*hose_write_config_dword)(u8, u8, u8, u32 value,
+				       struct linux_hose_info *);
 	
 	void (*mv_get_mmu_context)(struct task_struct *);
 	void (*mv_flush_tlb_current)(struct mm_struct *);

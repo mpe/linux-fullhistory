@@ -153,3 +153,9 @@ extern int common_swizzle(struct pci_dev *dev, int *pinp);
    if (slot >= min_idsel && slot <= max_idsel && pin < irqs_per_slot)	\
      _ctl_ = irq_tab[slot - min_idsel][pin];				\
    _ctl_; })
+
+
+/* The hose list.  */
+extern struct linux_hose_info *hose_head, **hose_tail;
+extern int hose_count;
+extern int pci_probe_enabled;

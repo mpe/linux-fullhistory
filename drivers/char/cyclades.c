@@ -4974,7 +4974,7 @@ cyclades_get_proc_info(char *buf, char **start, off_t offset, int length,
 
 	if (info->count)
 	    size = sprintf(buf+len,
-			"%3d %8lu %10lu %8lu %10lu %8lu %9lu %6d\n",
+			"%3d %8lu %10lu %8lu %10lu %8lu %9lu %6ld\n",
 			info->line,
 			JIFFIES_DIFF(info->idle_stats.in_use, cur_jifs) / HZ,
 			info->idle_stats.xmit_bytes,

@@ -82,6 +82,7 @@ static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
 			int i = current->tarray_ptr - &task[0];
 			mm->segments = ldt;
 			set_ldt_desc(gdt+(i<<1)+FIRST_LDT_ENTRY, ldt, LDT_ENTRIES);
+			current->tss.ldt = _LDT(i);
 			load_ldt(i);
 			if (atomic_read(&mm->count) > 1)
 				printk(KERN_WARNING

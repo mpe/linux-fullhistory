@@ -48,9 +48,6 @@ mikasa_device_interrupt(unsigned long vector, struct pt_regs *regs)
 {
 	unsigned long pld;
 	unsigned int i;
-	unsigned long flags;
-
-	save_and_cli(flags);
 
 	/* Read the interrupt summary registers */
 	pld = (((unsigned long) (~inw(0x534)) & 0x0000ffffUL) << 16) |
@@ -70,7 +67,6 @@ mikasa_device_interrupt(unsigned long vector, struct pt_regs *regs)
 			handle_irq(i, i, regs);
 		}
 	}
-	restore_flags(flags);
 }
 
 static void __init

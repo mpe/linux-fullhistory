@@ -475,7 +475,6 @@ wait_on_write_request(struct nfs_wreq *req)
 		if (!PageLocked(page))
 			break;
 		retval = -ERESTARTSYS;
-		checksignals();
 		if (signalled())
 			break;
 		schedule();

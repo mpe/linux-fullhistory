@@ -38,4 +38,3 @@
 	{ 0, BASE_BAUD, 0    ,  0, STD_COM_FLAGS },	/* ttyS13 */
 
 #endif
-

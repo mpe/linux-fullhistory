@@ -15,6 +15,7 @@
 #include <asm/hardware.h>
 #include <asm/arch/mmu.h>
 #include <asm/arch/io.h>
+#include <asm/proc/io.h>
 
 /* unsigned long virt_to_phys(void *x) */
 #define virt_to_phys(x)		(__virt_to_phys((unsigned long)(x)))

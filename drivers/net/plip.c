@@ -1178,7 +1178,7 @@ void plip_setup(char *str, int *ints)
 			/* disable driver on "parport=" or "parport=0" */
 			parport[0] = -2;
 		} else {
-			printk(KERN_WARNINGING "warning: 'plip=0x%x' ignored\n", 
+			printk(KERN_WARNING "warning: 'plip=0x%x' ignored\n", 
 			       ints[1]);
 		}
 	}

@@ -22,6 +22,7 @@
 #include <asm/bitops.h>
 #include <asm/mmu_context.h>
 #include <asm/io.h>
+#include <asm/pci.h>
 #include <asm/pgtable.h>
 #include <asm/core_tsunami.h>
 
@@ -39,12 +40,22 @@ static void
 dp264_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
 {
 	if (irq >= 16) {
-		/* Make CERTAIN none of the bogus ints get enabled */
-		*(vulp)TSUNAMI_CSR_DIM0 =
-			~(mask) & ~0x0000000000000000UL;
+		volatile unsigned long *csr;
+
+		if (TSUNAMI_bootcpu < 2)
+			if (!TSUNAMI_bootcpu)
+				csr = &TSUNAMI_cchip->dim0.csr;
+			else
+				csr = &TSUNAMI_cchip->dim1.csr;
+		else
+			if (TSUNAMI_bootcpu == 2)
+				csr = &TSUNAMI_cchip->dim2.csr;
+			else
+				csr = &TSUNAMI_cchip->dim3.csr;
+		
+		*csr = ~mask;
 		mb();
-		/* ... and read it back to make sure it got written.  */
-		*(vulp)TSUNAMI_CSR_DIM0;
+		*csr;
 	}
 	else if (irq >= 8)
 		outb(mask >> 8, 0xA1);	/* ISA PIC2 */
@@ -55,14 +66,14 @@ dp264_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
 static void
 dp264_device_interrupt(unsigned long vector, struct pt_regs * regs)
 {
+#if 1
+	printk("dp264_device_interrupt: NOT IMPLEMENTED YET!! \n");
+#else
         unsigned long pld;
         unsigned int i;
-        unsigned long flags;
-
-	__save_and_cli(flags);
 
         /* Read the interrupt summary register of TSUNAMI */
-        pld = (*(vulp)TSUNAMI_CSR_DIR0);
+        pld = TSUNAMI_cchip->dir0.csr;
 
         /*
          * Now for every possible bit set, work through them and call
@@ -77,20 +88,18 @@ dp264_device_interrupt(unsigned long vector, struct pt_regs * regs)
                         handle_irq(16 + i, 16 + i, regs);
                 }
 #if 0
-		*(vulp)TSUNAMI_CSR_DIR0 = 1UL << i; mb();
-		tmp = *(vulp)TSUNAMI_CSR_DIR0;
+		TSUNAMI_cchip->dir0.csr = 1UL << i; mb();
+		tmp = TSUNAMI_cchip->dir0.csr;
 #endif
         }
-	__restore_flags(flags);
+#endif
 }
 
 static void 
 dp264_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 {
 	int irq, ack;
-	unsigned long flags;
 
-	__save_and_cli(flags);
 	ack = irq = (vector - 0x800) >> 4;
 
         /*
@@ -104,20 +113,35 @@ dp264_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
                 ack = irq = irq - 16;
 
 	handle_irq(irq, ack, regs);
-	__restore_flags(flags);
 }
 
 static void __init
 dp264_init_irq(void)
 {
-	STANDARD_INIT_IRQ_PROLOG;
+	volatile unsigned long *csr;
+
+	outb(0, DMA1_RESET_REG);
+	outb(0, DMA2_RESET_REG);
+	outb(DMA_MODE_CASCADE, DMA2_MODE_REG);
 
 	if (alpha_using_srm)
 		alpha_mv.device_interrupt = dp264_srm_device_interrupt;
 
+	if (TSUNAMI_bootcpu < 2)
+		if (!TSUNAMI_bootcpu)
+			csr = &TSUNAMI_cchip->dim0.csr;
+		else
+			csr = &TSUNAMI_cchip->dim1.csr;
+	else
+		if (TSUNAMI_bootcpu == 2)
+			csr = &TSUNAMI_cchip->dim2.csr;
+		else
+			csr = &TSUNAMI_cchip->dim3.csr;
+		
 	/* Note invert on MASK bits.  */
-        *(vulp)TSUNAMI_CSR_DIM0 = ~(alpha_irq_mask) & ~0UL; mb();
-        *(vulp)TSUNAMI_CSR_DIM0;
+        *csr = ~(alpha_irq_mask);
+	mb();
+        *csr;
 
         enable_irq(55);     /* Enable CYPRESS interrupt controller (ISA).  */
 	enable_irq(2);
@@ -173,25 +197,29 @@ dp264_init_irq(void)
  * IdSel	
  *   5	 Cypress Bridge I/O
  *   6	 SCSI Adaptec builtin
- *   7	 64 bit PCI option slot 0
- *   8	 64 bit PCI option slot 1
- *   9	 64 bit PCI option slot 2
- * 
+ *   7	 64 bit PCI option slot 0 (all busses)
+ *   8	 64 bit PCI option slot 1 (all busses)
+ *   9	 64 bit PCI option slot 2 (all busses)
+ *  10	 64 bit PCI option slot 3 (not bus 0)
  */
 
 static int __init
 dp264_map_irq(struct pci_dev *dev, int slot, int pin)
 {
-	static char irq_tab[5][5] __initlocaldata = {
+	static char irq_tab[6][5] __initlocaldata = {
 		/*INT    INTA   INTB   INTC   INTD */
 		{    -1,    -1,    -1,    -1,    -1}, /* IdSel 5 ISA Bridge */
-		{ 16+ 2, 16+ 2, 16+ 2, 16+ 2, 16+ 2}, /* IdSel 6 SCSI builtin*/
+		{ 16+ 3, 16+ 3, 16+ 2, 16+ 2, 16+ 2}, /* IdSel 6 SCSI builtin*/
 		{ 16+15, 16+15, 16+14, 16+13, 16+12}, /* IdSel 7 slot 0 */
 		{ 16+11, 16+11, 16+10, 16+ 9, 16+ 8}, /* IdSel 8 slot 1 */
-		{ 16+ 7, 16+ 7, 16+ 6, 16+ 5, 16+ 4}  /* IdSel 9 slot 2 */
+		{ 16+ 7, 16+ 7, 16+ 6, 16+ 5, 16+ 4}, /* IdSel 9 slot 2 */
+		{ 16+ 3, 16+ 3, 16+ 2, 16+ 1, 16+ 0}  /* IdSel 10 slot 3 */
 	};
-	const long min_idsel = 5, max_idsel = 9, irqs_per_slot = 5;
-	return COMMON_TABLE_LOOKUP;
+	const long min_idsel = 5, max_idsel = 10, irqs_per_slot = 5;
+	int irq = COMMON_TABLE_LOOKUP;
+	if (irq >= 0)
+		irq += 16 * bus2hose[dev->bus->number]->pci_hose_index;
+	return irq;
 }
 
 static void __init

@@ -145,6 +145,7 @@
 #define VMALLOC_OFFSET	  (8*1024*1024)
 #define VMALLOC_START	  (((unsigned long)high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1))
 #define VMALLOC_VMADDR(x) ((unsigned long)(x))
+#define VMALLOC_END       (PAGE_OFFSET + 0x10000000)
 
 /* PMD types (actually level 1 descriptor) */
 #define PMD_TYPE_MASK		0x0003
@@ -199,7 +200,7 @@
 #define PAGE_SHARED     __pgprot(PTE_TYPE_SMALL | _PTE_YOUNG | _PTE_READ | _PTE_WRITE)
 #define PAGE_COPY       __pgprot(PTE_TYPE_SMALL | _PTE_YOUNG | _PTE_READ)
 #define PAGE_READONLY   __pgprot(PTE_TYPE_SMALL | _PTE_YOUNG | _PTE_READ)
-#define PAGE_KERNEL     __pgprot(PTE_TYPE_SMALL | _PTE_YOUNG | _PTE_DIRTY | _PTE_WRITE)
+#define PAGE_KERNEL     __pgprot(PTE_TYPE_SMALL | _PTE_READ  | _PTE_DIRTY | _PTE_WRITE)
 
 #define _PAGE_USER_TABLE	(PMD_TYPE_TABLE | PMD_DOMAIN(DOMAIN_USER))
 #define _PAGE_KERNEL_TABLE	(PMD_TYPE_TABLE | PMD_DOMAIN(DOMAIN_KERNEL))

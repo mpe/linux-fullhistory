@@ -52,9 +52,6 @@ miata_device_interrupt(unsigned long vector, struct pt_regs *regs)
 {
 	unsigned long pld, tmp;
 	unsigned int i;
-	unsigned long flags;
-
-	save_and_cli(flags);
 
 	/* Read the interrupt summary register of PYXIS */
 	pld = *(vulp)PYXIS_INT_REQ;
@@ -85,16 +82,13 @@ miata_device_interrupt(unsigned long vector, struct pt_regs *regs)
 		*(vulp)PYXIS_INT_REQ = 1UL << i; mb();
 		tmp = *(vulp)PYXIS_INT_REQ;
 	}
-	restore_flags(flags);
 }
 
 static void 
 miata_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 {
 	int irq, ack;
-	unsigned long flags;
 
-	__save_and_cli(flags);
 	ack = irq = (vector - 0x800) >> 4;
 
 	/*
@@ -115,7 +109,6 @@ miata_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 		ack = irq = irq + 8;
 
 	handle_irq(irq, ack, regs);
-	__restore_flags(flags);
 }
 
 static void __init

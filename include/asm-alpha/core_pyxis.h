@@ -182,6 +182,7 @@
 #define PYXIS_RT_COUNT			(IDENT_ADDR + 0x87A0000200UL)
 #define PYXIS_INT_TIME			(IDENT_ADDR + 0x87A0000240UL)
 #define PYXIS_IIC_CTRL			(IDENT_ADDR + 0x87A00002C0UL)
+#define PYXIS_RESET			(IDENT_ADDR + 0x8780000900UL)
 
 /*
  * Bit definitions for I/O Controller status register 0:
@@ -257,18 +258,6 @@ struct el_PYXIS_sysdata_mcheck {
  * Translate physical memory address as seen on (PCI) bus into
  * a kernel virtual address and vv.
  */
-
-/* Ruffian doesn't do 1G PCI window */
-
-static inline unsigned long pyxis_ruffian_virt_to_bus(void * address)
-{
-	return virt_to_phys(address);
-}
-
-static inline void * pyxis_ruffian_bus_to_virt(unsigned long address)
-{
-	return phys_to_virt(address);
-}
 
 __EXTERN_INLINE unsigned long pyxis_virt_to_bus(void * address)
 {
@@ -600,15 +589,10 @@ __EXTERN_INLINE unsigned long pyxis_dense_mem(unsigned long addr)
 
 #ifdef __WANT_IO_DEF
 
-#ifdef CONFIG_ALPHA_RUFFIAN
-#define virt_to_bus	pyxis_ruffian_virt_to_bus
-#define bus_to_virt	pyxis_ruffian_bus_to_virt
-#else
 #define virt_to_bus	pyxis_virt_to_bus
 #define bus_to_virt	pyxis_bus_to_virt
-#endif
 
-#ifdef BWIO_ENABLED
+#if defined(BWIO_ENABLED) && !defined(CONFIG_ALPHA_RUFFIAN)
 # define __inb		pyxis_bw_inb
 # define __inw		pyxis_bw_inw
 # define __inl		pyxis_bw_inl
@@ -649,7 +633,7 @@ __EXTERN_INLINE unsigned long pyxis_dense_mem(unsigned long addr)
 
 #define dense_mem	pyxis_dense_mem
 
-#ifdef BWIO_ENABLED
+#if defined(BWIO_ENABLED) && !defined(CONFIG_ALPHA_RUFFIAN)
 # define inb(port) __inb((port))
 # define inw(port) __inw((port))
 # define inl(port) __inl((port))

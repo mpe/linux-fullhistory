@@ -1,7 +1,8 @@
 #ifndef __ALPHA_SYSTEM_H
 #define __ALPHA_SYSTEM_H
 
-#include <asm/pal.h>	/* for backwards compatibility... */
+#include <asm/pal.h>
+#include <asm/page.h>
 
 /*
  * System defines.. Note that this is included both from .c and .S
@@ -13,23 +14,21 @@
  * the initial process structure. Also, the console eats 3 MB for
  * the initial bootloader (one of which we can reclaim later).
  * With a few other pages for various reasons, we'll use an initial
- * load address of 0xfffffc0000310000UL
+ * load address of PAGE_OFFSET+0x310000UL
  */
 #define BOOT_PCB	0x20000000
 #define BOOT_ADDR	0x20000000
 /* Remove when official MILO sources have ELF support: */
 #define BOOT_SIZE	(16*1024)
 
-#define KERNEL_START	0xfffffc0000300000
-#define SWAPPER_PGD	0xfffffc0000300000
-#define INIT_STACK	0xfffffc0000302000
-#define EMPTY_PGT	0xfffffc0000304000
-#define EMPTY_PGE	0xfffffc0000308000
-#define ZERO_PGE	0xfffffc000030A000
+#define KERNEL_START	(PAGE_OFFSET+0x300000)
+#define SWAPPER_PGD	(PAGE_OFFSET+0x300000)
+#define INIT_STACK	(PAGE_OFFSET+0x302000)
+#define EMPTY_PGT	(PAGE_OFFSET+0x304000)
+#define EMPTY_PGE	(PAGE_OFFSET+0x308000)
+#define ZERO_PGE	(PAGE_OFFSET+0x30A000)
 
-#define START_ADDR	0xfffffc0000310000
-/* Remove when official MILO sources have ELF support: */
-#define START_SIZE	(2*1024*1024)
+#define START_ADDR	(PAGE_OFFSET+0x310000)
 
 #ifndef __ASSEMBLY__
 
@@ -96,11 +95,12 @@ extern void wrmces (unsigned long);
 extern unsigned long whami(void);
 extern void wripir(unsigned long);
 
-#define halt() __asm__ __volatile__ ("call_pal %0" : : "i" (PAL_halt) : "memory")
+#define halt() \
+__asm__ __volatile__ ("call_pal %0 #halt" : : "i" (PAL_halt) : "memory")
 
-#define switch_to(prev,next) do { \
-	current = next; \
-	alpha_switch_to((unsigned long) &current->tss - IDENT_ADDR); \
+#define switch_to(prev,next) do {					\
+	current = next;							\
+	alpha_switch_to((unsigned long) &current->tss - IDENT_ADDR);	\
 } while (0)
 
 extern void alpha_switch_to(unsigned long pctxp);
@@ -112,127 +112,101 @@ __asm__ __volatile__("mb": : :"memory")
 __asm__ __volatile__("wmb": : :"memory")
 
 #define imb() \
-__asm__ __volatile__ ("call_pal %0" : : "i" (PAL_imb) : "memory")
+__asm__ __volatile__ ("call_pal %0 #imb" : : "i" (PAL_imb) : "memory")
 
 #define draina() \
-__asm__ __volatile__ ("call_pal %0" : : "i" (PAL_draina) : "memory")
+__asm__ __volatile__ ("call_pal %0 #draina" : : "i" (PAL_draina) : "memory")
 
-#define call_pal1(palno,arg) \
-({ \
-	register unsigned long __r0 __asm__("$0"); \
-	register unsigned long __r16 __asm__("$16"); __r16 = arg; \
-	__asm__ __volatile__( \
-		"call_pal %3" \
-		:"=r" (__r0),"=r" (__r16) \
-		:"1" (__r16),"i" (palno) \
-		:"$1", "$22", "$23", "$24", "$25", "memory"); \
-	__r0; \
+#define call_pal1(palno,arg)						\
+({									\
+	register unsigned long __r0 __asm__("$0");			\
+	register unsigned long __r16 __asm__("$16"); __r16 = arg;	\
+	__asm__ __volatile__(						\
+		"call_pal %3 #call_pal1"				\
+		:"=r" (__r0),"=r" (__r16)				\
+		:"1" (__r16),"i" (palno)				\
+		:"$1", "$22", "$23", "$24", "$25", "memory");		\
+	__r0;								\
 })
 
-#define getipl() \
-({ \
-	register unsigned long r0 __asm__("$0"); \
-	__asm__ __volatile__( \
-		"call_pal %1" \
-		:"=r" (r0) \
-		:"i" (PAL_rdps) \
-		:"$1", "$16", "$22", "$23", "$24", "$25", "memory"); \
-	r0; \
+#define getipl()							\
+({									\
+	register unsigned long r0 __asm__("$0");			\
+	__asm__ __volatile__(						\
+		"call_pal %1 #getipl"					\
+		:"=r" (r0)						\
+		:"i" (PAL_rdps)						\
+		:"$1", "$16", "$22", "$23", "$24", "$25", "memory");	\
+	r0;								\
 })
 
-#ifdef THE_OLD_VERSION
-#define setipl(ipl) \
-do { \
-	register unsigned long __r16 __asm__("$16") = (ipl); \
-	__asm__ __volatile__( \
-		"call_pal %2" \
-		:"=r" (__r16) \
-		:"0" (__r16),"i" (PAL_swpipl) \
-		:"$0", "$1", "$22", "$23", "$24", "$25", "memory"); \
-} while (0)
-
-#define swpipl(ipl) \
-({ \
-	register unsigned long __r0 __asm__("$0"); \
-	register unsigned long __r16 __asm__("$16") = (ipl); \
-	__asm__ __volatile__( \
-		"call_pal %3" \
-		:"=r" (__r0),"=r" (__r16) \
-		:"1" (__r16),"i" (PAL_swpipl) \
-		:"$1", "$22", "$23", "$24", "$25", "memory"); \
-	__r0; \
+#define setipl(ipl)							\
+({									\
+	register unsigned long __r16 __asm__("$16"); __r16 = (ipl);	\
+	__asm__ __volatile__(						\
+		"call_pal %2 #setipl"					\
+		:"=r" (__r16)						\
+		:"0" (__r16),"i" (PAL_swpipl)				\
+		:"$0", "$1", "$22", "$23", "$24", "$25", "memory");	\
 })
-#else
-#define setipl(ipl) \
-do { \
-	__asm__ __volatile__( \
-		"mov %0,$16; call_pal %1" \
-		: /* no output */ \
-		:"i,r" (ipl), "i,i" (PAL_swpipl) \
-		:"$0", "$1", "$16", "$22", "$23", "$24", "$25", "memory"); \
-} while (0)
 
-#define swpipl(ipl) \
-({ \
-	register unsigned long __r0 __asm__("$0"); \
-	__asm__ __volatile__( \
-		"mov %0,$16; call_pal %1" \
-		: /* no output (bound to the template) */ \
-		: "i,r" (ipl), "i,i" (PAL_swpipl) \
-		: "$0", "$1", "$16", "$22", "$23", "$24", "$25", "memory"); \
-	__r0; \
+#define swpipl(ipl)						\
+({								\
+	register unsigned long __r0 __asm__("$0");		\
+	register unsigned long __r16 __asm__("$16") = (ipl);	\
+	__asm__ __volatile__(					\
+		"call_pal %3 #swpipl"				\
+		:"=r" (__r0),"=r" (__r16)			\
+		:"1" (__r16),"i" (PAL_swpipl)			\
+		:"$1", "$22", "$23", "$24", "$25", "memory");	\
+	__r0;							\
 })
-#endif
 
 #define __cli()			setipl(7)
 #define __sti()			setipl(0)
-#define __save_flags(flags)	do { (flags) = getipl(); } while (0)
-#define __save_and_cli(flags)	do { (flags) = swpipl(7); } while (0)
+#define __save_flags(flags)	((flags) = getipl())
+#define __save_and_cli(flags)	((flags) = swpipl(7))
 #define __restore_flags(flags)	setipl(flags)
 
 #ifdef __SMP__
 
-extern unsigned char global_irq_holder;
+extern int global_irq_holder;
 
-#define save_flags(x) \
-do { \
-	(x) = ((global_irq_holder == (unsigned char) smp_processor_id()) \
-		? 1 \
-		: ((getipl() & 7) ? 2 : 0)); \
-} while (0)
-
-#define save_and_cli(flags)   do { save_flags(flags); cli(); } while(0)
+#define save_and_cli(flags)     (save_flags(flags), cli())
 
 extern void __global_cli(void);
 extern void __global_sti(void);
+extern unsigned long __global_save_flags(void);
 extern void __global_restore_flags(unsigned long flags);
 
 #define cli()                   __global_cli()
 #define sti()                   __global_sti()
+#define save_flags(flags)	((flags) = __global_save_flags())
 #define restore_flags(flags)    __global_restore_flags(flags)
 
 #else /* __SMP__ */
 
-#define cli()			setipl(7)
-#define sti()			setipl(0)
-#define save_flags(flags)	do { (flags) = getipl(); } while (0)
-#define save_and_cli(flags)	do { (flags) = swpipl(7); } while (0)
-#define restore_flags(flags)	setipl(flags)
+#define cli()			__cli()
+#define sti()			__sti()
+#define save_flags(flags)	__save_flags(flags)
+#define save_and_cli(flags)	__save_and_cli(flags)
+#define restore_flags(flags)	__restore_flags(flags)
 
 #endif /* __SMP__ */
 
 /*
  * TB routines..
  */
-#define __tbi(nr,arg,arg1...) do { \
-	register unsigned long __r16 __asm__("$16") = (nr); \
-	register unsigned long __r17 __asm__("$17"); arg; \
-	__asm__ __volatile__( \
-		"call_pal %3" \
-		:"=r" (__r16),"=r" (__r17) \
-		:"0" (__r16),"i" (PAL_tbi) ,##arg1 \
-		:"$0", "$1", "$22", "$23", "$24", "$25"); \
-} while (0)
+#define __tbi(nr,arg,arg1...)					\
+({								\
+	register unsigned long __r16 __asm__("$16") = (nr);	\
+	register unsigned long __r17 __asm__("$17"); arg;	\
+	__asm__ __volatile__(					\
+		"call_pal %3 #__tbi"				\
+		:"=r" (__r16),"=r" (__r17)			\
+		:"0" (__r16),"i" (PAL_tbi) ,##arg1		\
+		:"$0", "$1", "$22", "$23", "$24", "$25");	\
+})
 
 #define tbi(x,y)	__tbi(x,__r17=(y),"1" (__r17))
 #define tbisi(x)	__tbi(1,__r17=(x),"1" (__r17))
@@ -244,10 +218,10 @@ extern void __global_restore_flags(unsigned long flags);
 /*
  * Give prototypes to shut up gcc.
  */
-extern __inline__ unsigned long xchg_u32 (volatile int * m, unsigned long val);
-extern __inline__ unsigned long xchg_u64 (volatile long * m, unsigned long val);
+extern __inline__ unsigned long xchg_u32(volatile int *m, unsigned long val);
+extern __inline__ unsigned long xchg_u64(volatile long *m, unsigned long val);
 
-extern __inline__ unsigned long xchg_u32(volatile int * m, unsigned long val)
+extern __inline__ unsigned long xchg_u32(volatile int *m, unsigned long val)
 {
 	unsigned long dummy;
 
@@ -283,9 +257,6 @@ extern __inline__ unsigned long xchg_u64(volatile long * m, unsigned long val)
 	return val;
 }
 
-#define xchg(ptr,x) ((__typeof__(*(ptr)))__xchg((unsigned long)(x),(ptr),sizeof(*(ptr))))
-#define tas(ptr) (xchg((ptr),1))
-
 /*
  * This function doesn't exist, so you'll get a linker error
  * if something tries to do an invalid xchg().
@@ -296,7 +267,8 @@ extern __inline__ unsigned long xchg_u64(volatile long * m, unsigned long val)
  */
 extern void __xchg_called_with_bad_pointer(void);
 
-static __inline__ unsigned long __xchg(unsigned long x, volatile void * ptr, int size)
+static __inline__ unsigned long
+__xchg(unsigned long x, volatile void * ptr, int size)
 {
 	switch (size) {
 		case 4:
@@ -307,6 +279,10 @@ static __inline__ unsigned long __xchg(unsigned long x, volatile void * ptr, int
 	__xchg_called_with_bad_pointer();
 	return x;
 }
+
+#define xchg(ptr,x) \
+  ((__typeof__(*(ptr)))__xchg((unsigned long)(x),(ptr),sizeof(*(ptr))))
+#define tas(ptr) (xchg((ptr),1))
 
 #endif /* __ASSEMBLY__ */
 

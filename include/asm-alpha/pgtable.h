@@ -311,7 +311,7 @@ extern unsigned long __zero_page(void);
 
 #define BAD_PAGETABLE	__bad_pagetable()
 #define BAD_PAGE	__bad_page()
-#define ZERO_PAGE	0xfffffc000030A000
+#define ZERO_PAGE	(PAGE_OFFSET+0x30A000)
 
 /* number of bits that fit into a memory pointer */
 #define BITS_PER_PTR			(8*sizeof(unsigned long))
@@ -327,6 +327,24 @@ extern unsigned long __zero_page(void);
   ((unsigned long)(address)>>(PAGE_SHIFT-SIZEOF_PTR_LOG2)&PTR_MASK&~PAGE_MASK)
 
 /*
+ * On certain platforms whose physical address space can overlap KSEG,
+ * namely EV6 and above, we must re-twiddle the physaddr to restore the
+ * correct high-order bits.
+ */
+
+#if defined(CONFIG_ALPHA_GENERIC) && defined(USE_48_BIT_KSEG)
+#error "EV6-only feature in a generic kernel"
+#endif
+#if defined(CONFIG_ALPHA_GENERIC) || \
+    (defined(CONFIG_ALPHA_EV6) && !defined(USE_48_BIT_KSEG))
+#define PHYS_TWIDDLE(phys) \
+  ((((phys) & 0xc0000000000UL) == 0x40000000000UL) \
+  ? ((phys) ^= 0xc0000000000UL) : (phys))
+#else
+#define PHYS_TWIDDLE(phys) (phys)
+#endif
+
+/*
  * Conversion functions:  convert a page and protection to a page entry,
  * and a page entry and page directory to the page they refer to.
  */
@@ -334,7 +352,7 @@ extern inline pte_t mk_pte(unsigned long page, pgprot_t pgprot)
 { pte_t pte; pte_val(pte) = ((page-PAGE_OFFSET) << (32-PAGE_SHIFT)) | pgprot_val(pgprot); return pte; }
 
 extern inline pte_t mk_pte_phys(unsigned long physpage, pgprot_t pgprot)
-{ pte_t pte; pte_val(pte) = (physpage << (32-PAGE_SHIFT)) | pgprot_val(pgprot); return pte; }
+{ pte_t pte; pte_val(pte) = (PHYS_TWIDDLE(physpage) << (32-PAGE_SHIFT)) | pgprot_val(pgprot); return pte; }
 
 extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 { pte_val(pte) = (pte_val(pte) & _PAGE_CHG_MASK) | pgprot_val(newprot); return pte; }

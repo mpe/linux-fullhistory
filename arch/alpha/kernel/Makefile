@@ -8,9 +8,9 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 .S.s:
-	$(CPP) -D__ASSEMBLY__ $(AFLAGS) -traditional    $< -o $*.s
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) -E -o $*.s $<
 .S.o:
-	$(CC)  -D__ASSEMBLY__ $(AFLAGS) -traditional -c $< -o $*.o
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) -c -o $*.o $<
 
 all: kernel.o head.o
 
@@ -116,5 +116,14 @@ O_OBJS   += smp.o
 endif
 
 all: kernel.o head.o
+
+asm_offsets: check_asm
+	./check_asm > $(TOPDIR)/include/asm-alpha/asm_offsets.h
+
+check_asm: check_asm.c
+	gcc -o $@ $< -I$(TOPDIR)/include -D__KERNEL__ -ffixed-8
+
+clean::
+	rm -f check_asm
 
 include $(TOPDIR)/Rules.make

@@ -31,7 +31,6 @@
 #include "bios32.h"
 #include "machvec.h"
 
-
 static void
 ruffian_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
 {
@@ -75,9 +74,6 @@ ruffian_device_interrupt(unsigned long vector, struct pt_regs *regs)
 {
 	unsigned long pld;
 	unsigned int i;
-	unsigned long flags;
-
-        save_and_cli(flags);
 
 	/* Read the interrupt summary register of PYXIS */
 	pld = *(vulp)PYXIS_INT_REQ;
@@ -112,7 +108,7 @@ ruffian_device_interrupt(unsigned long vector, struct pt_regs *regs)
 			if (j == 7 && !(inb(0x20) & 0x80)) {
 				/* It's only a passive release... */
 			} else if (j == 0) {
-				timer_interrupt(regs);
+				timer_interrupt(0, NULL, regs);
 				ruffian_ack_irq(0);
 			} else {
 				handle_irq(j, j, regs);
@@ -125,7 +121,6 @@ ruffian_device_interrupt(unsigned long vector, struct pt_regs *regs)
                 *(vulp)PYXIS_INT_REQ = 1UL << i; mb();
                 *(vulp)PYXIS_INT_REQ; /* read to force the write */
 	}
-	restore_flags(flags);
 }
 
 static void __init
@@ -167,13 +162,13 @@ ruffian_init_irq(void)
 
 /*
  * For RUFFIAN, we do not want to make any modifications to the PCI
- * setup.  So just scan the busses.
+ * setup.  But we may need to do some kind of init.
  */
 
 static void __init
 ruffian_pci_fixup(void)
 {
-	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
+	/* layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE); */
 }
 
 
@@ -194,7 +189,7 @@ ruffian_get_bank_size(unsigned long offset)
     
 	/* Check BANK_ENABLE */
 	if (bank & 0x01) {
-		static unsigned long size[] __initdata = {
+		static unsigned long size[] __initlocaldata = {
 			0x40000000UL, /* 0x00,   1G */ 
 			0x20000000UL, /* 0x02, 512M */
 			0x10000000UL, /* 0x04, 256M */
@@ -227,7 +222,6 @@ ruffian_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 	pyxis_finish_init_arch();
 }
 
-
 static void
 ruffian_init_pit (void)
 {
@@ -236,20 +230,31 @@ ruffian_init_pit (void)
 	init_pit_rest();
 }
 
+static void
+ruffian_kill_arch (int mode, char *reboot_cmd)
+{
+	/* Perhaps this works for other PYXIS as well?  */
+	*(vuip) PYXIS_RESET = 0x0000dead;
+	mb();
+
+	generic_kill_arch(mode, reboot_cmd);
+}
+
 
 /*
  * The System Vector
  */
 
-#if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_RUFFIAN)
 struct alpha_machine_vector ruffian_mv __initmv = {
 	vector_name:		"Ruffian",
 	DO_EV5_MMU,
-	DO_DEFAULT_RTC,
-	DO_PYXIS_IO,
+	/* RUFFIAN always uses BCD, like a PeeCee.  */
+	rtc_port: 0x70, rtc_addr: 0x80, rtc_bcd: 1,
+	/* For the moment, do not use BWIO on RUFFIAN.  */
+	IO(PYXIS,pyxis,pyxis),
 	DO_PYXIS_BUS,
 	machine_check:		pyxis_machine_check,
-	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	max_dma_address:	ALPHA_RUFFIAN_MAX_DMA_ADDRESS,
 
 	nr_irqs:		48,
 	irq_probe_mask:		RUFFIAN_PROBE_MASK,
@@ -261,7 +266,6 @@ struct alpha_machine_vector ruffian_mv __initmv = {
 	init_irq:		ruffian_init_irq,
 	init_pit:		ruffian_init_pit,
 	pci_fixup:		ruffian_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	kill_arch:		ruffian_kill_arch,
 };
 ALIAS_MV(ruffian)
-#endif

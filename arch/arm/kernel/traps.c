@@ -24,9 +24,6 @@
 #include <asm/atomic.h>
 #include <asm/pgtable.h>
 
-extern struct task_struct *last_task_used_math;
-extern void fpe_save(struct fp_soft_struct *);
-extern void fpe_restore(struct fp_soft_struct *);
 extern void die_if_kernel(char *str, struct pt_regs *regs, int err, int ret);
 extern void c_backtrace (unsigned long fp, int pmode);
 extern int ptrace_cancel_bpt (struct task_struct *);
@@ -252,26 +249,7 @@ asmlinkage void bad_mode(struct pt_regs *regs, int reason, int proc_mode)
  */
 asmlinkage void math_state_restore (void)
 {
-	if (last_task_used_math == current)
-		return;
-	if (last_task_used_math)
-		/*
-		 * Save current fp state into last_task_used_math->tss.fpe_save
-		 */
-		fpe_save (&last_task_used_math->tss.fpstate.soft);
-	last_task_used_math = current;
-	if (current->used_math) {
-	    	/*
-    		 * Restore current fp state from current->tss.fpe_save
-	    	 */
-    		fpe_restore (&current->tss.fpstate.soft);
-	} else {
-    		/*
-	    	 * initialise fp state
-    		 */
-	    	fpe_restore (&init_task.tss.fpstate.soft);
-	    	current->used_math = 1;
-	}
+    	current->used_math = 1;
 }
 
 asmlinkage void arm_syscall (int no, struct pt_regs *regs)

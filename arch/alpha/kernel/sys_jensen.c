@@ -76,9 +76,7 @@ static void
 jensen_device_interrupt(unsigned long vector, struct pt_regs * regs)
 {
 	int irq, ack;
-	unsigned long flags;
 
-	__save_and_cli(flags);
 	ack = irq = (vector - 0x800) >> 4;
 
 	switch (vector) {
@@ -102,7 +100,6 @@ jensen_device_interrupt(unsigned long vector, struct pt_regs * regs)
 	}
 
 	handle_irq(irq, ack, regs);
-	__restore_flags(flags);
 }
 
 static void
@@ -131,6 +128,7 @@ struct alpha_machine_vector jensen_mv __initmv = {
 	BUS(jensen),
 	machine_check:		jensen_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	rtc_port: 0x170, rtc_addr: 0, rtc_bcd: 1,
 
 	nr_irqs:		16,
 	irq_probe_mask:		_PROBE_MASK(16),

@@ -11,17 +11,26 @@
 
 #define linux_logo_banner "ARM Linux version " UTS_RELEASE
 
-#define LINUX_LOGO_COLORS	0
+#define LINUX_LOGO_COLORS	221
 
-unsigned char linux_logo_red[] __initdata = { };
-unsigned char linux_logo_green[] __initdata = { };
-unsigned char linux_logo_blue[] __initdata = { };
+#ifdef INCLUDE_LINUX_LOGO_DATA
 
-unsigned char linux_logo16_red[] __initdata = { };
-unsigned char linux_logo16_green[] __initdata = { };
-unsigned char linux_logo16_blue[] __initdata = { };
+#define INCLUDE_LINUX_LOGO16
+#include <linux/linux_logo.h>
 
-unsigned char linux_logo[] __initdata = { };
-unsigned char linux_logo16[] __initdata = { };
-unsigned char linux_logo_bw[] __initdata = { };
 
+/* prototypes only */
+extern unsigned char linux_logo_red[];
+extern unsigned char linux_logo_green[];
+extern unsigned char linux_logo_blue[];
+extern unsigned char linux_logo[];
+extern unsigned char linux_logo_bw[];
+extern unsigned char linux_logo16_red[];
+extern unsigned char linux_logo16_green[];
+extern unsigned char linux_logo16_blue[];
+extern unsigned char linux_logo16[];
+extern unsigned char *linux_serial_image;
+
+extern int (*console_show_logo)(void);
+
+#endif

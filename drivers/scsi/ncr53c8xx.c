@@ -587,8 +587,12 @@ static spinlock_t driver_lock;
 #define remap_pci_mem(base, size)	((vm_offset_t) __va(base))
 #define unmap_pci_mem(vaddr, size)
 #define pcivtophys(p)			((p) & pci_dvma_mask)
-#else	/* __sparc__ */
+#else
+#if defined(__alpha__)
+#define pcivtophys(p)			((p) & 0xfffffffful)
+#else
 #define pcivtophys(p)			(p)
+#endif
 
 #ifndef NCR_IOMAPPED
 __initfunc(

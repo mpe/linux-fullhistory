@@ -484,7 +484,74 @@ __initfunc(void trap_init_f00f_bug(void))
 	__asm__ __volatile__("lidt %0": "=m" (idt_descr));
 }
 
+#define _set_gate(gate_addr,type,dpl,addr) \
+__asm__ __volatile__ ("movw %%dx,%%ax\n\t" \
+	"movw %2,%%dx\n\t" \
+	"movl %%eax,%0\n\t" \
+	"movl %%edx,%1" \
+	:"=m" (*((long *) (gate_addr))), \
+	 "=m" (*(1+(long *) (gate_addr))) \
+	:"i" ((short) (0x8000+(dpl<<13)+(type<<8))), \
+	 "d" ((char *) (addr)),"a" (__KERNEL_CS << 16) \
+	:"ax","dx")
 
+/*
+ * WARNING! If we ever start to insert IDT entries
+ * into the IDT at run-time, we need to be aware of
+ * the F0 0F bug workaround that marks the IDT
+ * read-only. It should be easy enough to just follow
+ * the page tables and set the gate directly..
+ */
+void set_intr_gate(unsigned int n, void *addr)
+{
+	_set_gate(idt+(n),14,0,addr);
+}
+
+static void __init set_trap_gate(unsigned int n, void *addr)
+{
+	_set_gate(idt+(n),15,0,addr);
+}
+
+static void __init set_system_gate(unsigned int n, void *addr)
+{
+	_set_gate(idt+(n),15,3,addr);
+}
+
+static void __init set_call_gate(void *a, void *addr)
+{
+	_set_gate(a,12,3,addr);
+}
+
+#define _set_seg_desc(gate_addr,type,dpl,base,limit) {\
+	*((gate_addr)+1) = ((base) & 0xff000000) | \
+		(((base) & 0x00ff0000)>>16) | \
+		((limit) & 0xf0000) | \
+		((dpl)<<13) | \
+		(0x00408000) | \
+		((type)<<8); \
+	*(gate_addr) = (((base) & 0x0000ffff)<<16) | \
+		((limit) & 0x0ffff); }
+
+#define _set_tssldt_desc(n,addr,limit,type) \
+__asm__ __volatile__ ("movw %3,0(%2)\n\t" \
+	"movw %%ax,2(%2)\n\t" \
+	"rorl $16,%%eax\n\t" \
+	"movb %%al,4(%2)\n\t" \
+	"movb %4,5(%2)\n\t" \
+	"movb $0,6(%2)\n\t" \
+	"movb %%ah,7(%2)\n\t" \
+	"rorl $16,%%eax" \
+	: "=m"(*(n)) : "a" (addr), "r"(n), "ir"(limit), "i"(type))
+
+void set_tss_desc(void *n, void *addr)
+{
+	_set_tssldt_desc(((char *) n),((int)addr), 235, 0x89);
+}
+
+void set_ldt_desc(void *n, void *addr, unsigned int size)
+{
+	_set_tssldt_desc(((char *) n), ((int)addr), ((size << 3) - 1), 0x82);
+}
 
 void __init trap_init(void)
 {

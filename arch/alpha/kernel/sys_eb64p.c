@@ -52,9 +52,6 @@ eb64p_device_interrupt(unsigned long vector, struct pt_regs *regs)
 {
 	unsigned long pld;
 	unsigned int i;
-	unsigned long flags;
-
-	save_and_cli(flags);
 
 	/* Read the interrupt summary registers */
 	pld = inb(0x26) | (inb(0x27) << 8);
@@ -72,12 +69,28 @@ eb64p_device_interrupt(unsigned long vector, struct pt_regs *regs)
 			handle_irq(16 + i, 16 + i, regs);
 		}
 	}
-	restore_flags(flags);
 }
 
 static void __init
 eb64p_init_irq(void)
 {
+#ifdef CONFIG_ALPHA_GENERIC
+	/*
+	 * CABRIO SRM may not set variation correctly, so here we test
+	 * the high word of the interrupt summary register for the RAZ
+	 * bits, and hope that a true EB64+ would read all ones...
+	 */
+	if (inw(0x806) != 0xffff) {
+		extern struct alpha_machine_vector cabriolet_mv;
+#if 1
+		printk("eb64p_init_irq: resetting for CABRIO\n");
+#endif
+		alpha_mv = cabriolet_mv;
+		alpha_mv.init_irq();
+		return;
+	}
+#endif /* GENERIC */
+
 	STANDARD_INIT_IRQ_PROLOG;
 
 	outb(alpha_irq_mask >> 16, 0x26);

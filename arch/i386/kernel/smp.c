@@ -113,7 +113,7 @@ spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
 
 extern __inline int max(int a,int b)
 {
-	if(a>b)
+	if (a>b)
 		return a;
 	return b;
 }
@@ -179,7 +179,7 @@ unsigned long mp_lapic_addr = 0;
  *	SMP mode to <NUM>.
  */
 
-__initfunc(void smp_setup(char *str, int *ints))
+void __init smp_setup(char *str, int *ints)
 {
 	if (ints && ints[0] > 0)
 		max_cpus = ints[1];
@@ -187,7 +187,7 @@ __initfunc(void smp_setup(char *str, int *ints))
 		max_cpus = 0;
 }
 
-void ack_APIC_irq (void)
+void ack_APIC_irq(void)
 {
 	/* Clear the IPI */
 
@@ -225,13 +225,13 @@ static char *mpc_family(int family,int model)
 		"Unknown","Unknown",
 		"80486DX/4"
 	};
-	if(family==0x6)
+	if (family==0x6)
 		return("Pentium(tm) Pro");
-	if(family==0x5)
+	if (family==0x5)
 		return("Pentium(tm)");
-	if(family==0x0F && model==0x0F)
+	if (family==0x0F && model==0x0F)
 		return("Special controller");
-	if(family==0x04 && model<9)
+	if (family==0x04 && model<9)
 		return model_defs[model];
 	sprintf(n,"Unknown CPU [%d:%d]",family, model);
 	return n;
@@ -241,14 +241,14 @@ static char *mpc_family(int family,int model)
  *	Read the MPC
  */
 
-__initfunc(static int smp_read_mpc(struct mp_config_table *mpc))
+static int __init smp_read_mpc(struct mp_config_table *mpc)
 {
 	char str[16];
 	int count=sizeof(*mpc);
 	int ioapics = 0;
 	unsigned char *mpt=((unsigned char *)mpc)+count;
 
-	if(memcmp(mpc->mpc_signature,MPC_SIGNATURE,4))
+	if (memcmp(mpc->mpc_signature,MPC_SIGNATURE,4))
 	{
 		printk("Bad signature [%c%c%c%c].\n",
 			mpc->mpc_signature[0],
@@ -257,12 +257,12 @@ __initfunc(static int smp_read_mpc(struct mp_config_table *mpc))
 			mpc->mpc_signature[3]);
 		return 1;
 	}
-	if(mpf_checksum((unsigned char *)mpc,mpc->mpc_length))
+	if (mpf_checksum((unsigned char *)mpc,mpc->mpc_length))
 	{
 		printk("Checksum error.\n");
 		return 1;
 	}
-	if(mpc->mpc_spec!=0x01 && mpc->mpc_spec!=0x04)
+	if (mpc->mpc_spec!=0x01 && mpc->mpc_spec!=0x04)
 	{
 		printk("Bad Config Table version (%d)!!\n",mpc->mpc_spec);
 		return 1;
@@ -294,7 +294,7 @@ __initfunc(static int smp_read_mpc(struct mp_config_table *mpc))
 			{
 				struct mpc_config_processor *m=
 					(struct mpc_config_processor *)mpt;
-				if(m->mpc_cpuflag&CPU_ENABLED)
+				if (m->mpc_cpuflag&CPU_ENABLED)
 				{
 					printk("Processor #%d %s APIC version %d\n",
 						m->mpc_apicid,
@@ -304,16 +304,16 @@ __initfunc(static int smp_read_mpc(struct mp_config_table *mpc))
 								CPU_MODEL_MASK)>>4),
 						m->mpc_apicver);
 #ifdef SMP_DEBUG
-					if(m->mpc_featureflag&(1<<0))
+					if (m->mpc_featureflag&(1<<0))
 						printk("    Floating point unit present.\n");
-					if(m->mpc_featureflag&(1<<7))
+					if (m->mpc_featureflag&(1<<7))
 						printk("    Machine Exception supported.\n");
-					if(m->mpc_featureflag&(1<<8))
+					if (m->mpc_featureflag&(1<<8))
 						printk("    64 bit compare & exchange supported.\n");
-					if(m->mpc_featureflag&(1<<9))
+					if (m->mpc_featureflag&(1<<9))
 						printk("    Internal APIC present.\n");
 #endif
-					if(m->mpc_cpuflag&CPU_BOOTPROCESSOR)
+					if (m->mpc_cpuflag&CPU_BOOTPROCESSOR)
 					{
 						SMP_PRINTK(("    Bootup CPU\n"));
 						boot_cpu_id=m->mpc_apicid;
@@ -321,7 +321,7 @@ __initfunc(static int smp_read_mpc(struct mp_config_table *mpc))
 					else	/* Boot CPU already counted */
 						num_processors++;
 
-					if(m->mpc_apicid>NR_CPUS)
+					if (m->mpc_apicid>NR_CPUS)
 						printk("Processor #%d unused. (Max %d processors).\n",m->mpc_apicid, NR_CPUS);
 					else
 					{
@@ -362,7 +362,7 @@ __initfunc(static int smp_read_mpc(struct mp_config_table *mpc))
 			{
 				struct mpc_config_ioapic *m=
 					(struct mpc_config_ioapic *)mpt;
-				if(m->mpc_flags&MPC_APIC_USABLE)
+				if (m->mpc_flags&MPC_APIC_USABLE)
 				{
 					ioapics++;
 					printk("I/O APIC #%d Version %d at 0x%lX.\n",
@@ -413,28 +413,28 @@ __initfunc(static int smp_read_mpc(struct mp_config_table *mpc))
  *	Scan the memory blocks for an SMP configuration block.
  */
 
-__initfunc(int smp_scan_config(unsigned long base, unsigned long length))
+int __init smp_scan_config(unsigned long base, unsigned long length)
 {
 	unsigned long *bp=phys_to_virt(base);
 	struct intel_mp_floating *mpf;
 
 	SMP_PRINTK(("Scan SMP from %p for %ld bytes.\n",
 		bp,length));
-	if(sizeof(*mpf)!=16)
+	if (sizeof(*mpf)!=16)
 		printk("Error: MPF size\n");
 
-	while(length>0)
+	while (length>0)
 	{
-		if(*bp==SMP_MAGIC_IDENT)
+		if (*bp==SMP_MAGIC_IDENT)
 		{
 			mpf=(struct intel_mp_floating *)bp;
-			if(mpf->mpf_length==1 &&
+			if (mpf->mpf_length==1 &&
 				!mpf_checksum((unsigned char *)bp,16) &&
 				(mpf->mpf_specification == 1
 				 || mpf->mpf_specification == 4) )
 			{
 				printk("Intel MultiProcessor Specification v1.%d\n", mpf->mpf_specification);
-				if(mpf->mpf_feature2&(1<<7))
+				if (mpf->mpf_feature2&(1<<7))
 					printk("    IMCR and PIC compatibility mode.\n");
 				else
 					printk("    Virtual Wire compatibility mode.\n");
@@ -442,7 +442,7 @@ __initfunc(int smp_scan_config(unsigned long base, unsigned long length))
 				/*
 				 *	Now see if we need to read further.
 				 */
-				if(mpf->mpf_feature1!=0)
+				if (mpf->mpf_feature1!=0)
 				{
 					unsigned long cfg;
 
@@ -524,7 +524,7 @@ __initfunc(int smp_scan_config(unsigned long base, unsigned long length))
 							mpf->mpf_feature1);
 						return 1;
 				}
-				if(mpf->mpf_feature1>4)
+				if (mpf->mpf_feature1>4)
 				{
 					printk("Bus #1 is PCI\n");
 
@@ -543,7 +543,7 @@ __initfunc(int smp_scan_config(unsigned long base, unsigned long length))
 				 *	Anything here will override the
 				 *	defaults.
 				 */
-				if(mpf->mpf_physptr)
+				if (mpf->mpf_physptr)
 					smp_read_mpc((void *)mpf->mpf_physptr);
 
 				__cpu_logical_map[0] = boot_cpu_id;
@@ -578,7 +578,7 @@ static unsigned char *trampoline_base;
  *	has made sure it's suitably aligned.
  */
 
-__initfunc(static unsigned long setup_trampoline(void))
+static unsigned long __init setup_trampoline(void)
 {
 	memcpy(trampoline_base, trampoline_data, trampoline_end - trampoline_data);
 	return virt_to_phys(trampoline_base);
@@ -588,7 +588,7 @@ __initfunc(static unsigned long setup_trampoline(void))
  *	We are called very early to get the low memory for the
  *	SMP bootup trampoline page.
  */
-__initfunc(unsigned long smp_alloc_memory(unsigned long mem_base))
+unsigned long __init smp_alloc_memory(unsigned long mem_base)
 {
 	if (virt_to_phys((void *)mem_base) >= 0x9F000)
 		panic("smp_alloc_memory: Insufficient low memory for kernel trampoline 0x%lx.", mem_base);
@@ -601,7 +601,7 @@ __initfunc(unsigned long smp_alloc_memory(unsigned long mem_base))
  *	a given CPU
  */
 
-__initfunc(void smp_store_cpu_info(int id))
+void __init smp_store_cpu_info(int id)
 {
 	struct cpuinfo_x86 *c=&cpu_data[id];
 
@@ -630,7 +630,7 @@ __initfunc(void smp_store_cpu_info(int id))
  *	we use to track CPUs as they power up.
  */
 
-__initfunc(void smp_commence(void))
+void __init smp_commence(void)
 {
 	/*
 	 *	Lets the callins below out of their loop.
@@ -639,7 +639,7 @@ __initfunc(void smp_commence(void))
 	smp_commenced=1;
 }
 
-__initfunc(void enable_local_APIC(void))
+void __init enable_local_APIC(void)
 {
 	unsigned long value;
 
@@ -658,7 +658,7 @@ __initfunc(void enable_local_APIC(void))
 	udelay(100);
 }
 
-__initfunc(unsigned long init_smp_mappings(unsigned long memory_start))
+unsigned long __init init_smp_mappings(unsigned long memory_start)
 {
 	unsigned long apic_phys, ioapic_phys;
 
@@ -688,7 +688,7 @@ __initfunc(unsigned long init_smp_mappings(unsigned long memory_start))
 	return memory_start;
 }
 
-__initfunc(void smp_callin(void))
+void __init smp_callin(void)
 {
 	extern void calibrate_delay(void);
 	int cpuid=GET_APIC_ID(apic_read(APIC_ID));
@@ -730,7 +730,7 @@ extern int cpu_idle(void * unused);
 /*
  *	Activate a secondary processor.
  */
-__initfunc(int start_secondary(void *unused))
+int __init start_secondary(void *unused)
 {
 #ifdef CONFIG_MTRR
 	/*  Must be done before calibration delay is computed  */
@@ -747,7 +747,7 @@ __initfunc(int start_secondary(void *unused))
  * CPUs - they just need to reload everything
  * from the task structure
  */
-__initfunc(void initialize_secondary(void))
+void __init initialize_secondary(void)
 {
 	struct thread_struct * p = &current->tss;
 
@@ -773,7 +773,7 @@ extern struct {
 	unsigned short ss;
 } stack_start;
 
-__initfunc(static void do_boot_cpu(int i))
+static void __init do_boot_cpu(int i)
 {
 	unsigned long cfg;
 	pgd_t maincfg;
@@ -925,15 +925,15 @@ __initfunc(static void do_boot_cpu(int i))
 	if (accept_status)		/* Send accept error */
 		printk("APIC delivery error (%lx).\n", accept_status);
 
-	if( !(send_status || accept_status) )
+	if ( !(send_status || accept_status) )
 	{
 		for(timeout=0;timeout<50000;timeout++)
 		{
-			if(cpu_callin_map[0]&(1<<i))
+			if (cpu_callin_map[0]&(1<<i))
 				break;				/* It has booted */
 			udelay(100);				/* Wait 5s total for a response */
 		}
-		if(cpu_callin_map[0]&(1<<i))
+		if (cpu_callin_map[0]&(1<<i))
 		{
 			/* number CPUs logically, starting from 1 (BSP is 0) */
 #if 0
@@ -946,7 +946,7 @@ __initfunc(static void do_boot_cpu(int i))
 		}
 		else
 		{
-			if(*((volatile unsigned char *)phys_to_virt(8192))==0xA5)
+			if (*((volatile unsigned char *)phys_to_virt(8192))==0xA5)
 				printk("Stuck ??\n");
 			else
 				printk("Not responding.\n");
@@ -974,7 +974,7 @@ unsigned int prof_counter[NR_CPUS];
  *	Cycle through the processors sending APIC IPIs to boot each.
  */
 
-__initfunc(void smp_boot_cpus(void))
+void __init smp_boot_cpus(void)
 {
 	int i;
 	unsigned long cfg;
@@ -1135,7 +1135,7 @@ __initfunc(void smp_boot_cpus(void))
 	 */
 
 	SMP_PRINTK(("Before bogomips.\n"));
-	if(cpucount==0)
+	if (cpucount==0)
 	{
 		printk(KERN_ERR "Error: only one processor found.\n");
 		cpu_present_map=(1<<hard_smp_processor_id());
@@ -1145,7 +1145,7 @@ __initfunc(void smp_boot_cpus(void))
 		unsigned long bogosum=0;
 		for(i=0;i<32;i++)
 		{
-			if(cpu_present_map&(1<<i))
+			if (cpu_present_map&(1<<i))
 				bogosum+=cpu_data[i].loops_per_sec;
 		}
 		printk(KERN_INFO "Total of %d processors activated (%lu.%02lu BogoMIPS).\n",
@@ -1156,7 +1156,7 @@ __initfunc(void smp_boot_cpus(void))
 		smp_activated=1;
 		smp_num_cpus=cpucount+1;
 	}
-	if(smp_b_stepping)
+	if (smp_b_stepping)
 		printk(KERN_WARNING "WARNING: SMP operation may be unreliable with B stepping processors.\n");
 	SMP_PRINTK(("Boot done.\n"));
 
@@ -1170,7 +1170,7 @@ smp_done:
 }
 
 
-void send_IPI (int dest, int vector)
+void send_IPI(int dest, int vector)
 {
 	unsigned long cfg;
 	unsigned long flags;
@@ -1225,7 +1225,7 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 	 *	During boot up send no messages
 	 */
 	
-	if(!smp_activated || !smp_commenced)
+	if (!smp_activated || !smp_commenced)
 		return;
 
 
@@ -1285,7 +1285,7 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 	while (ct<1000)
 	{
 		cfg=apic_read(APIC_ICR);
-		if(!(cfg&(1<<12)))
+		if (!(cfg&(1<<12)))
 			break;
 		ct++;
 		udelay(10);
@@ -1295,20 +1295,20 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 	 *	Just pray... there is nothing more we can do
 	 */
 	
-	if(ct==1000)
+	if (ct==1000)
 		printk("CPU #%d: previous IPI still not cleared after 10mS\n", p);
 
 	/*
 	 *	Set the target requirement
 	 */
 	
-	if(target==MSG_ALL_BUT_SELF)
+	if (target==MSG_ALL_BUT_SELF)
 	{
 		dest=APIC_DEST_ALLBUT;
 		target_map=cpu_present_map;
 		cpu_callin_map[0]=(1<<p);
 	}
-	else if(target==MSG_ALL)
+	else if (target==MSG_ALL)
 	{
 		dest=APIC_DEST_ALLINC;
 		target_map=cpu_present_map;
@@ -1444,7 +1444,7 @@ void smp_local_timer_interrupt(struct pt_regs * regs)
 	 * useful with a profiling multiplier != 1
 	 */
 	if (!user_mode(regs))
-		x86_do_profile (regs->eip);
+		x86_do_profile(regs->eip);
 
 	if (!--prof_counter[cpu]) {
 		int user=0,system=0;
@@ -1537,7 +1537,7 @@ asmlinkage void smp_invalidate_interrupt(void)
 	if (test_and_clear_bit(smp_processor_id(), &smp_invalidate_needed))
 		local_flush_tlb();
 
-	ack_APIC_irq ();
+	ack_APIC_irq();
 }
 
 /*
@@ -1547,15 +1547,15 @@ asmlinkage void smp_stop_cpu_interrupt(void)
 {
 	if (cpu_data[smp_processor_id()].hlt_works_ok)
 		for(;;) __asm__("hlt");
-	for  (;;) ;
+	for (;;) ;
 }
 
 void (*mtrr_hook) (void) = NULL;
 
 asmlinkage void smp_mtrr_interrupt(void)
 {
-	ack_APIC_irq ();
-	if (mtrr_hook) (*mtrr_hook) ();
+	ack_APIC_irq();
+	if (mtrr_hook) (*mtrr_hook)();
 }
 
 /*
@@ -1563,7 +1563,7 @@ asmlinkage void smp_mtrr_interrupt(void)
  */
 asmlinkage void smp_spurious_interrupt(void)
 {
-	/* ack_APIC_irq ();   see sw-dev-man vol 3, chapter 7.4.13.5 */
+	/* ack_APIC_irq();   see sw-dev-man vol 3, chapter 7.4.13.5 */
 	printk("spurious APIC interrupt, ayiee, should never happen.\n");
 }
 
@@ -1585,7 +1585,7 @@ asmlinkage void smp_spurious_interrupt(void)
  * but we do not accept timer interrupts yet. We only allow the BP
  * to calibrate.
  */
-__initfunc(static unsigned int get_8254_timer_count (void))
+static unsigned int __init get_8254_timer_count(void)
 {
 	unsigned int count;
 
@@ -1612,7 +1612,7 @@ __initfunc(static unsigned int get_8254_timer_count (void))
 
 #define APIC_DIVISOR 16
 
-void setup_APIC_timer (unsigned int clocks)
+void setup_APIC_timer(unsigned int clocks)
 {
 	unsigned long lvtt1_value;
 	unsigned int tmp_value;
@@ -1640,7 +1640,7 @@ void setup_APIC_timer (unsigned int clocks)
 	apic_write(APIC_TMICT, clocks/APIC_DIVISOR);
 }
 
-__initfunc(void wait_8254_wraparound (void))
+void __init wait_8254_wraparound(void)
 {
 	unsigned int curr_count, prev_count=~0;
 	int delta;
@@ -1674,7 +1674,7 @@ __initfunc(void wait_8254_wraparound (void))
  * APIC irq that way.
  */
 
-__initfunc(int calibrate_APIC_clock (void))
+int __init calibrate_APIC_clock(void)
 {
 	unsigned long long t1,t2;
 	long tt1,tt2;
@@ -1745,7 +1745,7 @@ __initfunc(int calibrate_APIC_clock (void))
 
 static unsigned int calibration_result;
 
-__initfunc(void setup_APIC_clock (void))
+void __init setup_APIC_clock(void)
 {
 	unsigned long flags;
 
@@ -1800,7 +1800,7 @@ __initfunc(void setup_APIC_clock (void))
  *
  * usually you want to run this on all CPUs ;)
  */
-int setup_profiling_timer (unsigned int multiplier)
+int setup_profiling_timer(unsigned int multiplier)
 {
 	int cpu = smp_processor_id();
 	unsigned long flags;
@@ -1815,7 +1815,7 @@ int setup_profiling_timer (unsigned int multiplier)
 
 	save_flags(flags);
 	cli();
-	setup_APIC_timer (calibration_result/multiplier);
+	setup_APIC_timer(calibration_result/multiplier);
 	prof_multiplier[cpu]=multiplier;
 	restore_flags(flags);
 

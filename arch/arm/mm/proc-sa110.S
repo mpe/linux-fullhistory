@@ -21,19 +21,22 @@ Lclean_switch:	.long	0
  */
 		.align	5
 _sa110_flush_cache_all:					@ preserves r0
+		mov	r2, #1
+_sa110_flush_cache_all_r2:
 		ldr	r3, =Lclean_switch
-		ldr	r2, [r3]
-		ands	r2, r2, #1
-		eor	r2, r2, #1
-		str	r2, [r3]
+		ldr	r1, [r3]
+		ands	r1, r1, #1
+		eor	r1, r1, #1
+		str	r1, [r3]
 		ldr	ip, =0xdf000000
 		addne	ip, ip, #32768
 		add	r1, ip, #16384			@ only necessary for 16k
-1:		ldr	r2, [ip], #32
+1:		ldr	r3, [ip], #32
 		teq	r1, ip
 		bne	1b
 		mov	ip, #0
-		mcr	p15, 0, ip, c7, c5, 0		@ flush I cache
+		tst	r2, #1
+		mcrne	p15, 0, ip, c7, c5, 0		@ flush I cache
 		mcr	p15, 0, ip, c7, c10, 4		@ drain WB
 		mov	pc, lr
 
@@ -50,7 +53,7 @@ _sa110_flush_cache_all:					@ preserves r0
 _sa110_flush_cache_area:
 		sub	r3, r1, r0
 		cmp	r3, #32768
-		bgt	_sa110_flush_cache_all
+		bgt	_sa110_flush_cache_all_r2
 1:		mcr	p15, 0, r0, c7, c10, 1		@ clean D entry
 		mcr	p15, 0, r0, c7, c6, 1		@ flush D entry
 		add	r0, r0, #32
@@ -62,6 +65,55 @@ _sa110_flush_cache_area:
 		tst	r2, #1
 		movne	r0, #0
 		mcrne	p15, 0, r0, c7, c5, 0		@ flush I cache
+		mov	pc, lr
+
+/*
+ * Function: sa110_cache_wback_area(unsigned long address, unsigned long end)
+ *
+ * Params  : address	Area start address
+ *	   : end	Area end address
+ *
+ * Purpose : ensure all dirty cachelines in the specified area have been
+ *	     written out to memory (for DMA)
+ */
+		.align	5
+_sa110_cache_wback_area:
+		sub	r3, r1, r0
+		cmp	r3, #32768
+		movgt	r2, #0
+		bgt	_sa110_flush_cache_all
+1:		mcr	p15, 0, r0, c7, c10, 1		@ clean D entry
+		add	r0, r0, #32
+		mcr	p15, 0, r0, c7, c10, 1		@ clean D entry
+		add	r0, r0, #32
+		cmp	r0, r1
+		blt	1b
+		mcr	p15, 0, r0, c7, c10, 4		@ drain WB
+		mov	pc, lr
+
+/*
+ * Function: sa110_cache_purge_area(unsigned long address, unsigned long end)
+ *
+ * Params  : address	Area start address
+ *	   : end	Area end address
+ *
+ * Purpose : throw away all D-cached data in specified region without
+ *	     an obligation to write it ack.
+ *
+ * Note    : Must clean the D-cached entries around the boundaries if the
+ *	     start and/or end address are not cache aligned.
+ */
+		.align	5
+_sa110_cache_purge_area:
+		tst	r0, #31
+		bic	r0, r0, #31
+		mcrne	p15, 0, r0, c7, c10, 1		@ clean D entry
+		tst	r1, #31
+		mcrne	p15, 0, r1, c7, c10, 1		@ clean D entry
+1:		mcr	p15, 0, r0, c7, c6, 1		@ flush D entry
+		add	r0, r0, #32
+		cmp	r0, r1
+		blt	1b
 		mov	pc, lr
 
 /*
@@ -129,7 +181,7 @@ _sa110_flush_tlb_all:
 		mov	pc, lr
 
 /*
- * Function: sa110_flush_tlb_area (unsigned long address, int end, int flags)
+ * Function: sa110_flush_tlb_area (unsigned long address, unsigned long end, int flags)
  *
  * Params  : address	Area start address
  *	   : end	Area end address
@@ -266,6 +318,7 @@ _sa110_reset:	mrs	r1, cpsr
 		orr	r1, r1, #F_BIT | I_BIT
 		msr	cpsr, r1
 		stmfd	sp!, {r1, lr}
+		mov	r2, #1
 		bl	_sa110_flush_cache_all
 		bl	_sa110_flush_tlb_all
 		mcr	p15, 0, ip, c7, c7, 0		@ flush I,D caches
@@ -297,5 +350,8 @@ ENTRY(sa110_processor_functions)
 		.word	_sa110_flush_tlb_area		@ 48
 
 		.word	_sa110_set_pmd			@ 52
-		.word	_sa110_reset			@ 54
-		.word	_sa110_flush_icache_area	@ 58
+		.word	_sa110_reset			@ 56
+		.word	_sa110_flush_icache_area	@ 60
+
+		.word	_sa110_cache_wback_area		@ 64
+		.word	_sa110_cache_purge_area		@ 68

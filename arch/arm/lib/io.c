@@ -40,4 +40,3 @@ void _memset_io(unsigned long dst, int c, unsigned long count)
 		dst++;
 	}
 }
-

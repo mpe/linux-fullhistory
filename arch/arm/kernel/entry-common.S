@@ -6,8 +6,6 @@
 
 		.globl	ret_from_sys_call
 
-		.globl	SYMBOL_NAME(fpreturn)
-SYMBOL_NAME(fpreturn):
 ret_from_exception:
 		adr	r0, 1f
 		ldmia	r0, {r0, r1}
@@ -36,12 +34,10 @@ ret_from_sys_call:
 		bne	SYMBOL_NAME(do_bottom_half)
 
 ret_with_reschedule:
-		ldr	r0, 1f + 8
-		ldr	r0, [r0]
+		get_current_task r1
+		ldr	r0, [r1, #TSK_NEED_RESCHED]
 		teq	r0, #0
 		bne	2b
-
-		get_current_task r1
 		ldr	r1, [r1, #TSK_SIGPENDING]
 		teq	r1, #0
 		bne	ret_signal
@@ -50,7 +46,6 @@ ret_from_all:	restore_user_regs
 
 1:		.word	SYMBOL_NAME(bh_mask)
 		.word	SYMBOL_NAME(bh_active)
-		.word	SYMBOL_NAME(need_resched)
 
 /*=============================================================================
  * SWI handler
@@ -211,8 +206,11 @@ sys_sigaltstack_wrapper:
  * What we need to put into 0-0x1c are ldrs to branch to 0xC0000000
  * (the kernel).
  * 0x1c onwards is reserved for FIQ, so I think that I will allocate 0xe0 onwards for
- * the actuall address to jump to.
+ * the actual address to jump to.
  */
+
+		.section ".text.init",#alloc,#execinstr
+
 #if defined(CONFIG_CPU_32)
 /*
  * these go into 0x00
@@ -281,39 +279,13 @@ ENTRY(trap_init)
 		ldmfd	sp!, {r4 - r7, pc}^
 #endif
 
+		.previous
+
 /*============================================================================
  * FP support
  */
 
-1:		.word	SYMBOL_NAME(fp_save)
-		.word	SYMBOL_NAME(fp_restore)
-
-.Lfpnull:	mov	pc, lr
-
-
-/*
- * Function to call when switching tasks to save FP state
- */
-ENTRY(fpe_save)
-		ldr	r1, 1b
-		ldr	pc, [r1]
-
-/*
- * Function to call when switching tasks to restore FP state
- */
-ENTRY(fpe_restore)
-		ldr	r1, 1b + 4
-		ldr	pc, [r1]
-
-
 		.data
 
 ENTRY(fp_enter)
-		.word	SYMBOL_NAME(fpundefinstr)
-		.word	SYMBOL_NAME(fpundefinstrsvc)
-
-ENTRY(fp_save)
-		.word	.Lfpnull
-ENTRY(fp_restore)
-		.word	.Lfpnull
-
+		.word	fpundefinstr

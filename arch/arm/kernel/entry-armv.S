@@ -320,11 +320,19 @@ irq_prio_ebsa110:
 		.macro	mask_pc, rd, rm
 		.endm
 
+		/* If we're optimising for StrongARM the resulting code won't 
+		   run on an ARM7 and we can save a couple of instructions.  
+									--pb */
+#ifdef __ARM_ARCH_4__
+		.macro	arm700_bug_check, instr, temp
+		.endm
+#else
 		.macro	arm700_bug_check, instr, temp
 		and	\temp, \instr, #0x0f000000	@ check for SWI
 		teq	\temp, #0x0f000000
 		bne	.Larm700bug
 		.endm
+#endif
 
 		.macro	enable_irqs, temp
 		mrs	\temp, cpsr
@@ -340,6 +348,7 @@ irq_prio_ebsa110:
 		.endm
 
 
+#ifndef __ARM_ARCH_4__
 .Larm700bug:	str	lr, [r8]
 		ldr	r0, [sp, #S_PSR]		@ Get calling cpsr
 		msr	spsr, r0
@@ -348,7 +357,7 @@ irq_prio_ebsa110:
 		add	sp, sp, #S_PC
 		ldr	lr, [sp], #S_FRAME_SIZE - S_PC	@ Get PC and jump over PC, PSR, OLD_R0
 		movs	pc, lr
-
+#endif
 
 		.macro	get_current_task, rd
 		mov	\rd, sp, lsr #13
@@ -672,6 +681,8 @@ __irq_invalid:	sub	sp, sp, #S_FRAME_SIZE	@ Allocate space on stack for frame
  *-----------------------------------------------------------------------------
  * Handles floating point instructions
  */
+.LC2:		.word	SYMBOL_NAME(fp_enter)
+
 __und_usr:	sub	sp, sp, #S_FRAME_SIZE		@ Allocate frame size in one go
 		stmia	sp, {r0 - r12}			@ Save r0 - r12
 		add	r8, sp, #S_PC
@@ -681,25 +692,15 @@ __und_usr:	sub	sp, sp, #S_FRAME_SIZE		@ Allocate frame size in one go
 		stmia	r8, {r5 - r7}			@ Save USR pc, cpsr, old_r0
 		mov	fp, #0
 
-		adr	r1, .LC2
-		ldmia	r1, {r1, r4}
-		ldr	r1, [r1]
-		get_current_task r2
-		teq	r1, r2
-		blne	SYMBOL_NAME(math_state_restore)
-		adrsvc	al, r9, SYMBOL_NAME(fpreturn)
-		adrsvc	al, lr, SYMBOL_NAME(fpundefinstr)
-		ldr	pc, [r4]			@ Call FP module USR entry point
+		adrsvc	al, r9, ret_from_exception	@ r9  = normal FP return
+		adrsvc	al, lr, fpundefinstr		@ lr  = undefined instr return
 
-		.globl	SYMBOL_NAME(fpundefinstr)
-SYMBOL_NAME(fpundefinstr):				@ Called by FP module on undefined instr
-		mov	r0, lr
-		mov	r1, sp
-		mrs	r4, cpsr			@ Enable interrupts
-		bic	r4, r4, #I_BIT
-		msr	cpsr, r4
-		bl	SYMBOL_NAME(do_undefinstr)
-		b	ret_from_exception		@ Normal FP exit
+1:		get_current_task r10
+		mov	lr, #1
+		strb	lr, [r10, #TSK_USED_MATH]	@ set current->used_math
+		add	r10, r10, #TSS_FPESAVE		@ r10 = workspace
+		ldr	r4, .LC2
+		ldr	pc, [r4]			@ Call FP module USR entry point
 
 __und_svc:	sub	sp, sp, #S_FRAME_SIZE
 		stmia	sp, {r0 - r12}			@ save r0 - r12
@@ -710,31 +711,24 @@ __und_svc:	sub	sp, sp, #S_FRAME_SIZE
 		add	r4, sp, #S_SP
 		stmia	r4, {r5 - r9}			@ save sp_SVC, lr_SVC, pc, cpsr, old_ro
 
-		adr	r1, .LC2
-		ldmia	r1, {r1, r4}
-		ldr	r1, [r1]
-		mov	r2, sp, lsr #13
-		mov	r2, r2, lsl #13
-		teq	r1, r2
-		blne	SYMBOL_NAME(math_state_restore)
-		adrsvc	al, r9, SYMBOL_NAME(fpreturnsvc)
-		adrsvc	al, lr, SYMBOL_NAME(fpundefinstrsvc)
-		ldr	pc, [r4]			@ Call FP module SVC entry point
+		adrsvc	al, r9, 3f			@ r9  = normal FP return
+		bl	1b				@ lr  = undefined instr return
 
-		.globl	SYMBOL_NAME(fpundefinstrsvc)
-SYMBOL_NAME(fpundefinstrsvc):
 		mov	r0, r5				@ unsigned long pc
 		mov	r1, sp				@ struct pt_regs *regs
 		bl	SYMBOL_NAME(do_undefinstr)
 
-		.globl	SYMBOL_NAME(fpreturnsvc)
-SYMBOL_NAME(fpreturnsvc):
-		ldr	lr, [sp, #S_PSR]		@ Get SVC cpsr
+3:		ldr	lr, [sp, #S_PSR]		@ Get SVC cpsr
 		msr	spsr, lr
 		ldmia	sp, {r0 - pc}^			@ Restore SVC registers
 
-.LC2:		.word	SYMBOL_NAME(last_task_used_math)
-		.word	SYMBOL_NAME(fp_enter)
+fpundefinstr:	mov	r0, lr
+		mov	r1, sp
+		mrs	r4, cpsr			@ Enable interrupts
+		bic	r4, r4, #I_BIT
+		msr	cpsr, r4
+		adrsvc	al, lr, ret_from_exception
+		b	SYMBOL_NAME(do_undefinstr)
 
 __und_invalid:	sub	sp, sp, #S_FRAME_SIZE
 		stmia	sp, {r0 - lr}

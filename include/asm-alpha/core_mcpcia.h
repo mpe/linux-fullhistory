@@ -130,6 +130,8 @@
 /*
  * Error registers
  */
+#define MCPCIA_MC_ERR0(h)	(IDENT_ADDR + 0xf9e0000800UL + HOSE(h))
+#define MCPCIA_MC_ERR1(h)	(IDENT_ADDR + 0xf9e0000840UL + HOSE(h))
 #define MCPCIA_CAP_ERR(h)	(IDENT_ADDR + 0xf9e0000880UL + HOSE(h))
 #define MCPCIA_PCI_ERR1(h)	(IDENT_ADDR + 0xf9e0001040UL + HOSE(h))
 

@@ -39,10 +39,7 @@
 static void
 takara_device_interrupt(unsigned long vector, struct pt_regs *regs)
 {
-	unsigned long flags;
 	unsigned intstatus;
-
-	save_and_cli(flags);
 
 	/*
 	 * The PALcode will have passed us vectors 0x800 or 0x810,
@@ -73,8 +70,6 @@ takara_device_interrupt(unsigned long vector, struct pt_regs *regs)
 		if (intstatus & 1) handle_irq(16+0, 16+0, regs);
 	} else
 		isa_device_interrupt (vector, regs);
-
-	restore_flags(flags);
 }
 
 static void __init

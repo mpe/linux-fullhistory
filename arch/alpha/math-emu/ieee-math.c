@@ -786,13 +786,11 @@ ieee_CVTTQ (int f, unsigned long a, unsigned long *pb)
 		break;
 
 	      case ROUND_PINF:
-		if ((temp.f[0] & 0x007fffffffffffff) != 0)
-			++b;
+		b += ((temp.f[0] & 0x007fffffffffffff) != 0 && !temp.s);
 		break;
 
 	      case ROUND_NINF:
-		if ((temp.f[0] & 0x007fffffffffffff) != 0)
-			--b;
+		b += ((temp.f[0] & 0x007fffffffffffff) != 0 && temp.s);
 		break;
 
 	      case ROUND_CHOP:

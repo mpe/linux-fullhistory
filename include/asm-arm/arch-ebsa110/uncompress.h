@@ -31,3 +31,4 @@ static void puts(const char *s)
  * nothing to do
  */
 #define arch_decomp_setup()
+#define arch_decomp_wdog()

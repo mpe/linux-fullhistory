@@ -23,6 +23,7 @@
  * Manuals are $25 each or $50 for all three, plus $7 shipping
  * within the United States, $35 abroad.
  */
+
 #include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/tasks.h>
@@ -38,11 +39,18 @@
 #include "bios32.h"
 
 #define DEBUG_DEVS 0
+#define DEBUG_HOSE 0
 
 #if DEBUG_DEVS
 # define DBG_DEVS(args)		printk args
 #else
 # define DBG_DEVS(args)
+#endif
+
+#if DEBUG_HOSE
+# define DBG_HOSE(args)		printk args
+#else
+# define DBG_HOSE(args)
 #endif
 
 #ifndef CONFIG_PCI
@@ -68,21 +76,28 @@ void reset_for_srm(void) { }
 #define MAJOR_REV	0
 #define MINOR_REV	4	/* minor revision 4, add multi-PCI handling */
 
+struct linux_hose_info *bus2hose[256];
+struct linux_hose_info *hose_head, **hose_tail = &hose_head;
+int hose_count;
+int pci_probe_enabled;
+
+static void layout_hoses(void);
 
 int
 pcibios_present(void)
 {
-	return alpha_mv.pci_read_config_byte != NULL;
+	return alpha_mv.hose_read_config_byte != NULL;
 }
 
 void __init
 pcibios_init(void)
 {
-	printk("Alpha PCI BIOS32 revision %x.%02x\n", MAJOR_REV, MINOR_REV);
+	if (!pcibios_present())
+		return;
+
+	printk("Alpha PCI BIOS32 revision %d.%02d\n", MAJOR_REV, MINOR_REV);
 	if (alpha_use_srm_setup)
 		printk("   NOT modifying existing (SRM) PCI configuration\n");
-
-	/* FIXME: Scan for multiple PCI busses here.  */
 }
 
 char * __init
@@ -106,8 +121,11 @@ int
 pcibios_read_config_byte (u8 bus, u8 dev, u8 where, u8 *value)
 {
 	int r = PCIBIOS_FUNC_NOT_SUPPORTED;
-	if (alpha_mv.pci_read_config_byte)
-		r = alpha_mv.pci_read_config_byte(bus, dev, where, value);
+	*value = 0xff;
+	if (alpha_mv.hose_read_config_byte) {
+		r = (alpha_mv.hose_read_config_byte
+		     (bus, dev, where, value, bus2hose[bus]));
+	}
 	return r;
 }
 
@@ -115,8 +133,13 @@ int
 pcibios_read_config_word (u8 bus, u8 dev, u8 where, u16 *value)
 {
 	int r = PCIBIOS_FUNC_NOT_SUPPORTED;
-	if (alpha_mv.pci_read_config_word)
-		r = alpha_mv.pci_read_config_word(bus, dev, where, value);
+	*value = 0xffff;
+	if (alpha_mv.hose_read_config_word) {
+		r = PCIBIOS_BAD_REGISTER_NUMBER;
+		if (!(where & 1))
+			r = (alpha_mv.hose_read_config_word
+			     (bus, dev, where, value, bus2hose[bus]));
+	}
 	return r;
 }
 
@@ -124,8 +147,13 @@ int
 pcibios_read_config_dword (u8 bus, u8 dev, u8 where, u32 *value)
 {
 	int r = PCIBIOS_FUNC_NOT_SUPPORTED;
-	if (alpha_mv.pci_read_config_dword)
-		r = alpha_mv.pci_read_config_dword(bus, dev, where, value);
+	*value = 0xffffffff;
+	if (alpha_mv.hose_read_config_dword) {
+		r = PCIBIOS_BAD_REGISTER_NUMBER;
+		if (!(where & 3))
+			r = (alpha_mv.hose_read_config_dword
+			     (bus, dev, where, value, bus2hose[bus]));
+	}
 	return r;
 }
 
@@ -133,8 +161,10 @@ int
 pcibios_write_config_byte (u8 bus, u8 dev, u8 where, u8 value)
 {
 	int r = PCIBIOS_FUNC_NOT_SUPPORTED;
-	if (alpha_mv.pci_write_config_byte)
-		r = alpha_mv.pci_write_config_byte(bus, dev, where, value);
+	if (alpha_mv.hose_write_config_byte) {
+		r = (alpha_mv.hose_write_config_byte
+		     (bus, dev, where, value, bus2hose[bus]));
+	}
 	return r;
 }
 
@@ -142,8 +172,12 @@ int
 pcibios_write_config_word (u8 bus, u8 dev, u8 where, u16 value)
 {
 	int r = PCIBIOS_FUNC_NOT_SUPPORTED;
-	if (alpha_mv.pci_write_config_word)
-		r = alpha_mv.pci_write_config_word(bus, dev, where, value);
+	if (alpha_mv.hose_write_config_word) {
+		r = PCIBIOS_BAD_REGISTER_NUMBER;
+		if (!(where & 1))
+			r = (alpha_mv.hose_write_config_word
+			     (bus, dev, where, value, bus2hose[bus]));
+	}
 	return r;
 }
 
@@ -151,8 +185,12 @@ int
 pcibios_write_config_dword (u8 bus, u8 dev, u8 where, u32 value)
 {
 	int r = PCIBIOS_FUNC_NOT_SUPPORTED;
-	if (alpha_mv.pci_write_config_dword)
-		r = alpha_mv.pci_write_config_dword(bus, dev, where, value);
+	if (alpha_mv.hose_write_config_dword) {
+		r = PCIBIOS_BAD_REGISTER_NUMBER;
+		if (!(where & 3))
+			r = (alpha_mv.hose_write_config_dword
+			     (bus, dev, where, value, bus2hose[bus]));
+	}
 	return r;
 }
 
@@ -171,31 +209,23 @@ sys_pciconfig_read(unsigned long bus, unsigned long dfn,
 	if (!pcibios_present())
 		return -ENOSYS;
 	
-	lock_kernel();
 	switch (len) {
 	case 1:
 		err = pcibios_read_config_byte(bus, dfn, off, &ubyte);
-		if (err != PCIBIOS_SUCCESSFUL)
-			ubyte = 0xff;
 		put_user(ubyte, buf);
 		break;
 	case 2:
 		err = pcibios_read_config_word(bus, dfn, off, &ushort);
-		if (err != PCIBIOS_SUCCESSFUL)
-			ushort = 0xffff;
 		put_user(ushort, (unsigned short *)buf);
 		break;
 	case 4:
 		err = pcibios_read_config_dword(bus, dfn, off, &uint);
-		if (err != PCIBIOS_SUCCESSFUL)
-			uint = 0xffffffff;
 		put_user(uint, (unsigned int *)buf);
 		break;
 	default:
 		err = -EINVAL;
 		break;
 	}
-	unlock_kernel();
 	return err;
 }
 
@@ -214,7 +244,6 @@ sys_pciconfig_write(unsigned long bus, unsigned long dfn,
 	if (!pcibios_present())
 		return -ENOSYS;
 
-	lock_kernel();
 	switch (len) {
 	case 1:
 		err = get_user(ubyte, buf);
@@ -247,7 +276,6 @@ sys_pciconfig_write(unsigned long bus, unsigned long dfn,
 		err = -EINVAL;
 		break;
 	}
-	unlock_kernel();
 	return err;
 }
 
@@ -255,8 +283,6 @@ sys_pciconfig_write(unsigned long bus, unsigned long dfn,
 /*
  * Gory details start here...
  */
-
-struct linux_hose_info *bus2hose[256];
 
 /*
  * Align VAL to ALIGN, which must be a power of two.
@@ -715,18 +741,7 @@ layout_all_busses(unsigned long default_io_base,
 {
 	struct pci_bus *cur;
 
-#if defined(CONFIG_ALPHA_GENERIC)
-	static struct linux_hose_info dummy_hose;
-	int i;
-
-	/*
-	 * HACK: Emulate a multi-bus machine to a limited extent
-	 * by initializing bus2hose to point to something that
-	 * has pci_hose_index & pci_first_busno zero.
-	 */
-	for (i = 0; i <= 0xff; i++)
-		bus2hose[i] = &dummy_hose;
-#endif
+	layout_hoses();
 
 	/*
 	 * Scan the tree, allocating PCI memory and I/O space.
@@ -869,6 +884,18 @@ common_pci_fixup(int (*map_irq)(struct pci_dev *dev, int slot, int pin),
 			continue;
 
 		/*
+		 * We don't have code that will init the CYPRESS bridge
+		 * correctly so we do the next best thing, and depend on
+		 * the previous console code to do the right thing, and
+		 * ignore it here... :-\
+		 */
+		if (dev->vendor == PCI_VENDOR_ID_CONTAQ &&
+		    dev->device == PCI_DEVICE_ID_CONTAQ_82C693) {
+			DBG_DEVS(("common_pci_fixup: ignoring CYPRESS bridge...\n"));
+			continue;
+		}
+
+		/*
 		 * This device is not on the primary bus, we need
 		 * to figure out which interrupt pin it will come
 		 * in on.   We know which slot it will come in on
@@ -997,4 +1024,259 @@ common_swizzle(struct pci_dev *dev, int *pinp)
 	/* The slot is the slot of the last bridge. */
 	return PCI_SLOT(dev->devfn);
 }
+
+/*
+ * On multiple bus machines, in order to cope with a somewhat deficient
+ * API, we must map the 8-bit bus identifier so that it is unique across
+ * multiple interfaces (hoses).  At the same time we do this, chain the
+ * other hoses off of pci_root so that they will be found during normal
+ * PCI probing and layout.
+ */
+
+#define PRIMARY(b)	((b)&0xff)
+#define SECONDARY(b)	(((b)>>8)&0xff)
+#define SUBORDINATE(b)	(((b)>>16)&0xff)
+
+static int __init
+hose_scan_bridges(struct linux_hose_info *hose, unsigned char bus)
+{
+	unsigned int devfn, l, class;
+	unsigned char hdr_type = 0;
+	unsigned int found = 0;
+
+	for (devfn = 0; devfn < 0xff; ++devfn) {
+		if (PCI_FUNC(devfn) == 0) {
+			alpha_mv.hose_read_config_byte(bus, devfn,
+						       PCI_HEADER_TYPE,
+						       &hdr_type, hose);
+		} else if (!(hdr_type & 0x80)) {
+			/* not a multi-function device */
+			continue;
+		}
+
+		/* Check if there is anything here. */
+		alpha_mv.hose_read_config_dword(bus, devfn, PCI_VENDOR_ID,
+						&l, hose);
+		if (l == 0xffffffff || l == 0x00000000) {
+			hdr_type = 0;
+			continue;
+		}
+
+		/* See if this is a bridge device. */
+		alpha_mv.hose_read_config_dword(bus, devfn, PCI_CLASS_REVISION,
+						&class, hose);
+
+		if ((class >> 16) == PCI_CLASS_BRIDGE_PCI) {
+			unsigned int busses;
+
+			found++;
+
+			alpha_mv.hose_read_config_dword(bus, devfn,
+							PCI_PRIMARY_BUS,
+							&busses, hose);
+
+			DBG_HOSE(("hose_scan_bridges: hose %d bus %d "
+				  "slot %d busses 0x%x\n",
+				  hose->pci_hose_index, bus, PCI_SLOT(devfn),
+				  busses));
+
+			/*
+			 * Do something with first_busno and last_busno
+			 */
+			if (hose->pci_first_busno > PRIMARY(busses)) {
+				hose->pci_first_busno = PRIMARY(busses);
+				DBG_HOSE(("hose_scan_bridges: hose %d bus %d "
+					  "slot %d change first to %d\n",
+					  hose->pci_hose_index, bus,
+					 PCI_SLOT(devfn), PRIMARY(busses)));
+			}
+			if (hose->pci_last_busno < SUBORDINATE(busses)) {
+				hose->pci_last_busno = SUBORDINATE(busses);
+				DBG_HOSE(("hose_scan_bridges: hose %d bus %d "
+					  "slot %d change last to %d\n",
+					  hose->pci_hose_index, bus,
+					  PCI_SLOT(devfn),
+					  SUBORDINATE(busses)));
+			}
+			/*
+			 * Now scan everything underneath the bridge.
+			 */
+			hose_scan_bridges(hose, SECONDARY(busses));
+		}
+	}
+	return found;
+}
+
+static void __init
+hose_reconfigure_bridges(struct linux_hose_info *hose, unsigned char bus)
+{
+	unsigned int devfn, l, class;
+	unsigned char hdr_type = 0;
+
+	for (devfn = 0; devfn < 0xff; ++devfn) {
+		if (PCI_FUNC(devfn) == 0) {
+			alpha_mv.hose_read_config_byte(bus, devfn,
+						       PCI_HEADER_TYPE,
+						       &hdr_type, hose);
+		} else if (!(hdr_type & 0x80)) {
+			/* not a multi-function device */
+			continue;
+		}
+
+		/* Check if there is anything here. */
+		alpha_mv.hose_read_config_dword(bus, devfn, PCI_VENDOR_ID,
+						&l, hose);
+		if (l == 0xffffffff || l == 0x00000000) {
+			hdr_type = 0;
+			continue;
+		}
+
+		/* See if this is a bridge device. */
+		alpha_mv.hose_read_config_dword(bus, devfn, PCI_CLASS_REVISION,
+						&class, hose);
+
+		if ((class >> 16) == PCI_CLASS_BRIDGE_PCI) {
+			unsigned int busses;
+
+			alpha_mv.hose_read_config_dword(bus, devfn,
+							PCI_PRIMARY_BUS,
+							&busses, hose);
+
+			/*
+			 * First reconfigure everything underneath the bridge.
+			 */
+			hose_reconfigure_bridges(hose, (busses >> 8) & 0xff);
+
+			/*
+			 * Unconfigure this bridges bus numbers,
+			 * pci_scan_bus() will fix this up properly.
+			 */
+			busses &= 0xff000000;
+			alpha_mv.hose_write_config_dword(bus, devfn,
+							 PCI_PRIMARY_BUS,
+							 busses, hose);
+		}
+	}
+}
+
+static void __init
+hose_fixup_busno(struct linux_hose_info *hose, unsigned char bus)
+{
+	int nbus;
+
+	/*
+	 * First, scan for all bridge devices underneath this hose,
+	 * to determine the first and last busnos.
+	 */
+	DBG_HOSE(("hose_fixup_busno: before hose_scan_bridges()\n"));
+
+	if (!hose_scan_bridges(hose, 0)) {
+		/* none found, exit */
+		hose->pci_first_busno = bus;
+		hose->pci_last_busno = bus;
+	} else {
+		/*
+		 * Reconfigure all bridge devices underneath this hose.
+		 */
+		DBG_HOSE(("hose_fixup_busno: before hose_reconfigure_bridges\n"));
+		hose_reconfigure_bridges(hose, hose->pci_first_busno);
+	}
+
+	/*
+	 * Now reconfigure the hose to it's new bus number and set up
+	 * our bus2hose mapping for this hose.
+	 */
+	nbus = hose->pci_last_busno - hose->pci_first_busno;
+
+	hose->pci_first_busno = bus;
+
+	DBG_HOSE(("hose_fixup_busno: hose %d startbus %d nbus %d\n",
+		  hose->pci_hose_index, bus, nbus));
+
+	do {
+		bus2hose[bus++] = hose;
+	} while (nbus-- > 0);
+	DBG_HOSE(("hose_fixup_busno: returning...\n"));
+}
+
+static void __init
+layout_one_hose(struct linux_hose_info *hose)
+{
+	static struct pci_bus *pchain = NULL;
+	struct pci_bus *pbus = &hose->pci_bus;
+	static unsigned char busno = 0;
+
+	DBG_HOSE(("layout_one_hose: entry\n"));
+
+	/*
+	 * Hoses include child PCI bridges in bus-range property,
+	 * but we don't scan each of those ourselves, Linux generic PCI
+	 * probing code will find child bridges and link them into this
+	 * hose's root PCI device hierarchy.
+	 */
+
+	pbus->number = pbus->secondary = busno;
+	pbus->sysdata = hose;
+
+	DBG_HOSE(("layout_one_hose: before hose_fixup_busno()\n"));
+
+	hose_fixup_busno(hose, busno);
+
+	DBG_HOSE(("layout_one_hose: before pci_scan_bus()\n"));
+
+	pbus->subordinate = pci_scan_bus(pbus); /* the original! */
+
+	/*
+	 * Set the maximum subordinate bus of this hose.
+	 */
+	hose->pci_last_busno = pbus->subordinate;
+#if 0
+	alpha_mv.hose_write_config_byte(busno, 0, 0x41, hose->pci_last_busno,
+					hose);
+#endif
+	busno = pbus->subordinate + 1;
+
+	/*
+	 * Fixup the chain of primary PCI busses.
+	 */
+	if (pchain) {
+		pchain->next = &hose->pci_bus;
+		pchain = pchain->next;
+	} else {
+		pchain = &pci_root;
+		memcpy(pchain, &hose->pci_bus, sizeof(pci_root));
+	}
+	DBG_HOSE(("layout_one_hose: returning...\n"));
+}
+
+static void __init
+layout_hoses(void)
+{
+	struct linux_hose_info * hose;
+	int i;
+
+	/* On multiple bus machines, we play games with pci_root in order
+	   that all of the busses are probed as part of the normal PCI
+	   setup.  The existance of the busses was determined in init_arch.  */
+
+	if (hose_head) {
+		/* Multi-bus machines did not yet wish to allow bus
+		   accesses.  We now do our own thing after the normal
+		   pci_scan_bus is over.  This mechanism is relatively
+		   broken but will be fixed later.  */
+		pci_probe_enabled = 1;
+
+		for (hose = hose_head; hose; hose = hose->next)
+			layout_one_hose(hose);
+	} else {
+		/* For the benefit of single-bus machines, emulate a
+		   multi-bus machine to the (limited) extent necessary. 
+		   Init all bus2hose entries to point to a dummy.  */
+		hose = kmalloc(sizeof(*hose), GFP_KERNEL);
+		memset(hose, 0, sizeof(*hose));
+		for (i = 0; i < 256; ++i)
+			bus2hose[i] = hose;
+	}
+}
+
 #endif /* CONFIG_PCI */

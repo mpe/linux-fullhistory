@@ -431,6 +431,8 @@ ENTRY(arm7_processor_functions)
 		.word	_arm6_7_flush_tlb_all		@ 44
 		.word	_arm6_7_flush_tlb_area		@ 48
 		.word	_arm7_set_pmd			@ 52
-		.word	_arm6_7_reset			@ 54
-		.word	_arm6_7_flush_cache		@ 58
+		.word	_arm6_7_reset			@ 56
+		.word	_arm6_7_flush_cache		@ 60
 
+		.word	_arm6_7_flush_cache		@ 64
+		.word	_arm6_7_flush_cache		@ 68

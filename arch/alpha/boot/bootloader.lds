@@ -1,50 +1,23 @@
-OUTPUT_FORMAT("ecoff-littlealpha")
+OUTPUT_FORMAT("elf64-alpha")
 ENTRY(__start)
 SECTIONS
 {
-  .text 0x20000000: {
-     _ftext = . ;
-     __istart = . ;
-     eprol  =  .;
-    *(.text)
-     __fstart = . ;
-     _etext  =  .;
-  }
-  .rdata : {
-    *(.rdata)
-  }
-  .pdata : {
-     _fpdata = .;
-    *(.pdata)
-  }
-  .data : {
-     _fdata = .;
-    *(.data)
-    CONSTRUCTORS
-  }
-  .xdata : {
-    *(.xdata)
-  }
-   _gp = ALIGN (16) + 0x8000;
-  .lit8 : {
-    *(.lit8)
-  }
-  .lita : {
-    *(.lita)
-  }
-  .sdata : {
-    *(.sdata)
-  }
-   _EDATA  =  .;
-   _FBSS = .;
-  .sbss : {
-    *(.sbss)
-    *(.scommon)
-    . = ALIGN(16);
-  }
-  .bss : {
-    *(.bss)
-    *(COMMON)
-  }
-   _end = .;
+  . = 0x20000000;
+  .text : { *(.text) }
+  _etext = .;
+  PROVIDE (etext = .);
+  .rodata : { *(.rodata) }
+  .data : { *(.data) CONSTRUCTORS }
+  .got : { *(.got) }
+  .sdata : { *(.sdata) }
+  _edata = .;
+  PROVIDE (edata = .);
+  .sbss : { *(.sbss) *(.scommon) }
+  .bss : { *(.bss) *(COMMON) }
+  _end = . ;
+  PROVIDE (end = .);
+
+  .mdebug 0 : { *(.mdebug) }
+  .note 0 : { *(.note) }
+  .comment 0 : { *(.comment) }
 }

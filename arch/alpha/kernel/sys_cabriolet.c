@@ -72,9 +72,6 @@ cabriolet_device_interrupt(unsigned long v, struct pt_regs *r)
 {
 	unsigned long pld;
 	unsigned int i;
-	unsigned long flags;
-
-	save_and_cli(flags);
 
 	/* Read the interrupt summary registers */
 	pld = inb(0x804) | (inb(0x805) << 8) | (inb(0x806) << 16);
@@ -92,7 +89,6 @@ cabriolet_device_interrupt(unsigned long v, struct pt_regs *r)
 			handle_irq(16 + i, 16 + i, r);
 		}
 	}
-	restore_flags(flags);
 }
 
 static void

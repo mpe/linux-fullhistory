@@ -71,5 +71,11 @@ struct pt_regs {
 #define instruction_pointer(regs)	((regs)->ARM_pc)
 #define pc_pointer(v)			(v)
 
+/* Are the current registers suitable for user mode?
+ * (used to maintain security in signal handlers)
+ */
+#define valid_user_regs(regs) \
+	(user_mode(regs) && ((regs)->ARM_sp & 3) == 0)
+
 #endif
 

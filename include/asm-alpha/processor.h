@@ -62,7 +62,7 @@ struct thread_struct {
 	long debugreg[8];
 };
 
-#define INIT_MMAP { &init_mm, 0xfffffc0000000000,  0xfffffc0010000000, \
+#define INIT_MMAP { &init_mm, PAGE_OFFSET,  PAGE_OFFSET+0x10000000, \
 	PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC, NULL, &init_mm.mmap }
 
 #define INIT_TSS  { \

@@ -163,6 +163,23 @@ static iftype_t icside_identifyif (struct expansion_card *ec)
 	return iftype;
 }
 
+static int icside_register_port(unsigned long dataport, unsigned long ctrlport, int stepping, int irq)
+{
+	hw_regs_t hw;
+	int i;
+
+	memset(&hw, 0, sizeof(hw));
+
+	for (i = IDE_DATA_OFFSET; i <= IDE_STATUS_OFFSET; i++) {
+		hw.io_ports[i] = (ide_ioreg_t)dataport;
+		dataport += 1 << stepping;
+	}
+	hw.io_ports[IDE_CONTROL_OFFSET] = ctrlport;
+	hw.irq = irq;
+
+	return ide_register_hw(&hw, NULL);
+}
+
 /* Prototype: icside_register (struct expansion_card *ec)
  * Purpose  : register an ICS IDE card with the IDE driver
  * Notes    : we make sure that interrupts are disabled from the card
@@ -189,11 +206,10 @@ static inline void icside_register (struct expansion_card *ec, int index)
 		 * Be on the safe side - disable interrupts
 		 */
 		inb (port + ICS_ARCIN_V5_INTROFFSET);
-		result[index][0] =
-			ide_register_port (port + ICS_ARCIN_V5_IDEOFFSET,
-					   port + ICS_ARCIN_V5_IDEALTOFFSET,
-					   ICS_ARCIN_V5_IDESTEPPING,
-					   ec->irq);
+		result[index][0] = icside_register_port(port + ICS_ARCIN_V5_IDEOFFSET,
+							port + ICS_ARCIN_V5_IDEALTOFFSET,
+							ICS_ARCIN_V5_IDESTEPPING,
+							ec->irq);
 		break;
 
 	case ics_if_arcin_v6:
@@ -206,16 +222,15 @@ static inline void icside_register (struct expansion_card *ec, int index)
 		 */
 		inb (port + ICS_ARCIN_V6_INTROFFSET_1);
 		inb (port + ICS_ARCIN_V6_INTROFFSET_2);
-		result[index][0] =
-			ide_register_port (port + ICS_ARCIN_V6_IDEOFFSET_1,
-					   port + ICS_ARCIN_V6_IDEALTOFFSET_1,
-					   ICS_ARCIN_V6_IDESTEPPING,
-					   ec->irq);
-		result[index][1] =
-			ide_register_port (port + ICS_ARCIN_V6_IDEOFFSET_2,
-					   port + ICS_ARCIN_V6_IDEALTOFFSET_2,
-					   ICS_ARCIN_V6_IDESTEPPING,
-					   ec->irq);
+
+		result[index][0] = icside_register_port(port + ICS_ARCIN_V6_IDEOFFSET_1,
+							port + ICS_ARCIN_V6_IDEALTOFFSET_1,
+							ICS_ARCIN_V6_IDESTEPPING,
+							ec->irq);
+		result[index][1] = icside_register_port(port + ICS_ARCIN_V6_IDEOFFSET_2,
+							port + ICS_ARCIN_V6_IDEALTOFFSET_2,
+							ICS_ARCIN_V6_IDESTEPPING,
+							ec->irq);
 		break;
 	}		
 }

@@ -9,7 +9,8 @@ HEAD_OBJ  = head-$(PROCESSOR).o
 ENTRY_OBJ = entry-$(PROCESSOR).o
 
 O_TARGET := kernel.o
-O_OBJS   := $(ENTRY_OBJ) ioport.o irq.o process.o ptrace.o signal.o sys_arm.o time.o traps.o
+O_OBJS   := $(ENTRY_OBJ) ioport.o irq.o process.o ptrace.o setup.o \
+	    signal.o sys_arm.o time.o traps.o fiq.o
 
 all: lib kernel.o $(HEAD_OBJ) init_task.o
 
@@ -20,7 +21,7 @@ O_OBJS += armksyms.o
 endif
 
 ifdef CONFIG_ARCH_ACORN
-  O_OBJS += setup.o ecard.o iic.o
+  O_OBJS += ecard.o iic.o
   ifdef CONFIG_ARCH_ARC
     O_OBJS += oldlatches.o
   endif
@@ -29,25 +30,26 @@ ifdef CONFIG_ARCH_ACORN
 endif
 
 ifeq ($(MACHINE),ebsa110)
-  O_OBJS += setup-ebsa110.o dma-dummy.o
+  O_OBJS += dma-dummy.o leds-ebsa110.o
 endif
 
 ifeq ($(MACHINE),ebsa285)
-  O_OBJS += dma-dummy.o leds-ebsa285.o setup-ebsa110.o
+  OX_OBJS += dma.o
+  O_OBJS += dma-ebsa285.o leds-ebsa285.o
   ifdef CONFIG_PCI
     O_OBJS += dec21285.o
   endif
 endif
 
 ifeq ($(MACHINE),nexuspci)
-  O_OBJS += setup-ebsa110.o dma-dummy.o
+  O_OBJS += dma-dummy.o
   ifdef CONFIG_PCI
     O_OBJS += plx9080.o
   endif
 endif
 
 $(HEAD_OBJ): $(HEAD_OBJ:.o=.S)
-	$(CC) -D__ASSEMBLY__ -traditional -c $(HEAD_OBJ:.o=.S) -o $@
+	$(CC) -D__ASSEMBLY__ -DTEXTADDR=$(TEXTADDR) -traditional -c $(HEAD_OBJ:.o=.S) -o $@
 
 $(ENTRY_OBJ): $(ENTRY_OBJ:.o=.S)
 	$(CC) $(CFLAGS) -D__ASSEMBLY__ -c $(ENTRY_OBJ:.o=.S) -o $@

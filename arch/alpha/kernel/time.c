@@ -25,6 +25,7 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/delay.h>
+#include <linux/ioport.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -33,13 +34,13 @@
 #include <linux/mc146818rtc.h>
 #include <linux/timex.h>
 
+#include "proto.h"
+
 #ifdef CONFIG_RTC 
 #define TIMER_IRQ 0  /* using pit for timer */
 #else 
 #define TIMER_IRQ 8  /* using rtc for timer */
 #endif
-
-extern struct hwrpb_struct *hwrpb;
 
 static int set_rtc_mmss(unsigned long);
 
@@ -156,13 +157,80 @@ static inline unsigned long mktime(unsigned int year, unsigned int mon,
 	  )*60 + sec; /* finally seconds */
 }
 
-void time_init(void)
+/*
+ * Initialize Programmable Interval Timers with standard values.  Some
+ * drivers depend on them being initialized (e.g., joystick driver).
+ */
+
+/* It is (normally) only counter 1 that presents config problems, so
+   provide this support function to do the rest of the job.  */
+
+void inline
+init_pit_rest(void)
+{
+#if 0
+	/* Leave refresh timer alone---nobody should depend on a
+	   particular value anyway. */
+	outb(0x54, 0x43);	/* counter 1: refresh timer */
+	outb(0x18, 0x41);
+#endif
+
+	outb(0xb6, 0x43);	/* counter 2: speaker */
+	outb(0x31, 0x42);
+	outb(0x13, 0x42);
+}
+
+#ifdef CONFIG_RTC
+static inline void
+rtc_init_pit (void)
+{
+	/* Setup interval timer if /dev/rtc is being used */
+	outb(0x34, 0x43);		/* binary, mode 2, LSB/MSB, ch 0 */
+	outb(LATCH & 0xff, 0x40);	/* LSB */
+	outb(LATCH >> 8, 0x40);		/* MSB */
+	request_region(0x40, 0x20, "timer"); /* reserve pit */
+
+	init_pit_rest();
+}
+#endif
+
+void
+generic_init_pit (void)
+{
+	int x;
+	if ((x = (CMOS_READ(RTC_FREQ_SELECT) & 0x3f)) != 0x26) {
+		printk("Setting RTC_FREQ to 1024 Hz (%x)\n", x);
+		CMOS_WRITE(0x26, RTC_FREQ_SELECT);
+	}
+	request_region(RTC_PORT(0), 0x10, "timer"); /* reserve rtc */
+
+	/* Turn off the PIT.  */
+	outb(0x36, 0x43);	/* counter 0: system timer */
+	outb(0x00, 0x40);
+	outb(0x00, 0x40);
+
+	init_pit_rest();
+}
+
+/* This probably isn't Right, but it is what the old code did.  */
+#if defined(CONFIG_RTC)
+# define init_pit	rtc_init_pit
+#else
+# define init_pit	alpha_mv.init_pit
+#endif
+
+
+void
+time_init(void)
 {
 #ifdef CONFIG_RTC
 	unsigned char save_control;
 #endif
         void (*irq_handler)(int, void *, struct pt_regs *);
 	unsigned int year, mon, day, hour, min, sec, cc1, cc2;
+
+	/* Initialize the timers.  */
+	init_pit();
 
 	/*
 	 * The Linux interpretation of the CMOS clock register contents:
@@ -179,7 +247,7 @@ void time_init(void)
 	/* If our cycle frequency isn't valid, go another round and give
 	   a guess at what it should be.  */
 	if (hwrpb->cycle_freq == 0) {
-		printk("HWPRB cycle frequency bogus.  Estimating... ");
+		printk("HWRPB cycle frequency bogus.  Estimating... ");
 
 		do { } while (!(CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP));
 		do { } while (CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP);
@@ -258,7 +326,8 @@ void time_init(void)
  * part.  So we can't do the "find absolute time in terms of cycles" thing
  * that the other ports do.
  */
-void do_gettimeofday(struct timeval *tv)
+void
+do_gettimeofday(struct timeval *tv)
 {
 	unsigned long flags, now, delta_cycles, delta_usec;
 	unsigned long sec, usec;
@@ -296,7 +365,8 @@ void do_gettimeofday(struct timeval *tv)
 	tv->tv_usec = usec;
 }
 
-void do_settimeofday(struct timeval *tv)
+void
+do_settimeofday(struct timeval *tv)
 {
 	cli();
 	xtime = *tv;
@@ -314,7 +384,8 @@ void do_settimeofday(struct timeval *tv)
  * jump to the next second precisely 500 ms later. Check the Motorola
  * MC146818A or Dallas DS12887 data sheet for details.
  */
-static int set_rtc_mmss(unsigned long nowtime)
+static int
+set_rtc_mmss(unsigned long nowtime)
 {
 	int retval = 0;
 	int real_seconds, real_minutes, cmos_minutes;

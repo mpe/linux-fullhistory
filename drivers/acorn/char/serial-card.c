@@ -1,5 +1,5 @@
 /*
- * linux/arch/arm/drivers/char/serial-module.c
+ * linux/arch/arm/drivers/char/serial-card.c
  *
  * Copyright (c) 1996 Russell King.
  *

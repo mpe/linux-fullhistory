@@ -4,16 +4,13 @@
  * Copyright (C) 1996 Russell King
  */
 
-#define IRQ_PRINTER		0
-#define IRQ_COM1		1
-#define IRQ_COM2		2
-#define IRQ_ETHERNET		3
-#define IRQ_TIMER0		4
-#define IRQ_TIMER1		5
-#define IRQ_PCMCIA		6
-#define IRQ_IMMEDIATE		7
+#define NR_IRQS			8
 
-#define IRQ_TIMER		IRQ_TIMER0
-
-#define irq_cannonicalize(i)	(i)
-
+#define IRQ_EBSA110_PRINTER	0
+#define IRQ_EBSA110_COM1	1
+#define IRQ_EBSA110_COM2	2
+#define IRQ_EBSA110_ETHERNET	3
+#define IRQ_EBSA110_TIMER0	4
+#define IRQ_EBSA110_TIMER1	5
+#define IRQ_EBSA110_PCMCIA	6
+#define IRQ_EBSA110_IMMEDIATE	7

@@ -16,5 +16,5 @@ ENTRY(abort)
 		b	SYMBOL_NAME(panic)
 
 .abort_msg:	.ascii	"Eek! Got to an abort() from %p! "
-		.ascii	"(Please report to rmk@ecs.soton.ac.uk)\n\0"
+		.ascii	"(Please report to rmk@arm.uk.linux.org)\n\0"
 		.align

@@ -3,7 +3,7 @@
 
    Copyright 1995 Kai Makisara.
 
-   Last modified: Tue May 27 22:29:15 1997 by makisara@home
+   Last modified: Wed Sep  2 21:24:07 1998 by root@home
 */
 
 #ifndef _ST_OPTIONS_H
@@ -53,6 +53,18 @@
    is also constrained by the number of drives detected. Determines the
    maximum number of concurrently active tape drives. */
 #define ST_MAX_BUFFERS (2 + ST_EXTRA_DEVS)
+
+/* Maximum number of scatter/gather segments */
+#define ST_MAX_SG      16
+
+/* The number of scatter/gather segments to allocate at first try (must be
+   smaller or equal to the maximum). */
+#define ST_FIRST_SG    8
+
+/* The size of the first scatter/gather segments (determines the maximum block
+   size for SCSI adapters not supporting scatter/gather). The default is set
+   to try to allocate the buffer as one chunk. */
+#define ST_FIRST_ORDER  5
 
 
 /* The following lines define defaults for properties that can be set

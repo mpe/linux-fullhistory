@@ -27,22 +27,22 @@
    One plausible explanation is that the I/O controller does not properly
    handle the system transaction.  Another involves timing.  Ho hum.  */
 
-extern asmlinkage void wrmces(unsigned long mces);
-
 /*
  * BIOS32-style PCI interface:
  */
 
-#ifdef DEBUG 
-# define DBG(args)	printk args
+#define DEBUG_CONFIG 0
+#define DEBUG_MCHECK 0
+
+#if DEBUG_CONFIG
+# define DBG_CNF(args)	printk args
 #else
-# define DBG(args)
+# define DBG_CNF(args)
 #endif
 
-#define DEBUG_MCHECK
-#ifdef DEBUG_MCHECK
+#if DEBUG_MCHECK
 # define DBG_MCK(args)	printk args
-#define DEBUG_MCHECK_DUMP
+# define DEBUG_MCHECK_DUMP
 #else
 # define DBG_MCK(args)
 #endif
@@ -101,9 +101,9 @@ mk_conf_addr(u8 bus, u8 device_fn, u8 where, unsigned long *pci_addr,
 {
 	unsigned long addr;
 
-	DBG(("mk_conf_addr(bus=%d ,device_fn=0x%x, where=0x%x,"
-	     " pci_addr=0x%p, type1=0x%p)\n",
-	     bus, device_fn, where, pci_addr, type1));
+	DBG_CNF(("mk_conf_addr(bus=%d ,device_fn=0x%x, where=0x%x,"
+		 " pci_addr=0x%p, type1=0x%p)\n",
+		 bus, device_fn, where, pci_addr, type1));
 
 	if (bus == 0) {
 		int device;
@@ -112,8 +112,8 @@ mk_conf_addr(u8 bus, u8 device_fn, u8 where, unsigned long *pci_addr,
 		/* Type 0 configuration cycle. */
 #if NOT_NOW
 		if (device > 20) {
-			DBG(("mk_conf_addr: device (%d) > 20, returning -1\n",
-			     device));
+			DBG_CNF(("mk_conf_addr: device (%d) > 20, return -1\n",
+				 device));
 			return -1;
 		}
 #endif
@@ -125,7 +125,7 @@ mk_conf_addr(u8 bus, u8 device_fn, u8 where, unsigned long *pci_addr,
 		addr = (bus << 16) | (device_fn << 8) | (where);
 	}
 	*pci_addr = addr;
-	DBG(("mk_conf_addr: returning pci_addr 0x%lx\n", addr));
+	DBG_CNF(("mk_conf_addr: returning pci_addr 0x%lx\n", addr));
 	return 0;
 }
 
@@ -136,22 +136,19 @@ conf_read(unsigned long addr, unsigned char type1)
 	unsigned int stat0, value, temp;
 	unsigned int pyxis_cfg = 0;
 
-	save_and_cli(flags);	/* avoid getting hit by machine check */
-
-	DBG(("conf_read(addr=0x%lx, type1=%d)\n", addr, type1));
+	__save_and_cli(flags);	/* avoid getting hit by machine check */
 
 	/* Reset status register to avoid losing errors.  */
 	stat0 = *(vuip)PYXIS_ERR;
 	*(vuip)PYXIS_ERR = stat0; mb();
 	temp = *(vuip)PYXIS_ERR;  /* re-read to force write */
-	DBG(("conf_read: PYXIS ERR was 0x%x\n", stat0));
+	DBG_CNF(("conf_read: PYXIS ERR was 0x%x\n", stat0));
 
 	/* If Type1 access, must set PYXIS CFG.  */
 	if (type1) {
 		pyxis_cfg = *(vuip)PYXIS_CFG;
 		*(vuip)PYXIS_CFG = pyxis_cfg | 1; mb();
 		temp = *(vuip)PYXIS_CFG;  /* re-read to force write */
-		DBG(("conf_read: TYPE1 access\n"));
 	}
 
 	mb();
@@ -179,9 +176,10 @@ conf_read(unsigned long addr, unsigned char type1)
 		temp = *(vuip)PYXIS_CFG;  /* re-read to force write */
 	}
 
-	DBG(("conf_read(): finished\n"));
+	DBG_CNF(("conf_read(addr=0x%lx, type1=%d) = %#x\n",
+		 addr, type1, value));
 
-	restore_flags(flags);
+	__restore_flags(flags);
 	return value;
 }
 
@@ -192,24 +190,27 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1)
 	unsigned int stat0, temp;
 	unsigned int pyxis_cfg = 0;
 
-	save_and_cli(flags);	/* avoid getting hit by machine check */
+	DBG_CNF(("conf_write(addr=%#lx, value=%#x, type1=%d)\n",
+		 addr, value, type1));
+
+	__save_and_cli(flags);	/* avoid getting hit by machine check */
 
 	/* Reset status register to avoid losing errors.  */
 	stat0 = *(vuip)PYXIS_ERR;
 	*(vuip)PYXIS_ERR = stat0; mb();
 	temp = *(vuip)PYXIS_ERR;  /* re-read to force write */
-	DBG(("conf_write: PYXIS ERR was 0x%x\n", stat0));
 
 	/* If Type1 access, must set PYXIS CFG.  */
 	if (type1) {
 		pyxis_cfg = *(vuip)PYXIS_CFG;
 		*(vuip)PYXIS_CFG = pyxis_cfg | 1; mb();
 		temp = *(vuip)PYXIS_CFG;  /* re-read to force write */
-		DBG(("conf_read: TYPE1 access\n"));
 	}
 
+	mb();
 	draina();
 	PYXIS_mcheck_expected = 1;
+	PYXIS_mcheck_taken = 0;
 	mb();
 
 	/* Access configuration space.  */
@@ -226,18 +227,17 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1)
 		temp = *(vuip)PYXIS_CFG;  /* re-read to force write */
 	}
 
-	DBG(("conf_write(): finished\n"));
-	restore_flags(flags);
+	__restore_flags(flags);
 }
 
 int
-pyxis_pcibios_read_config_byte (u8 bus, u8 device_fn, u8 where, u8 *value)
+pyxis_hose_read_config_byte (u8 bus, u8 device_fn, u8 where, u8 *value,
+			     struct linux_hose_info *hose)
 {
 	unsigned long addr = PYXIS_CONF;
 	unsigned long pci_addr;
 	unsigned char type1;
 
-	*value = 0xff;
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
@@ -247,15 +247,13 @@ pyxis_pcibios_read_config_byte (u8 bus, u8 device_fn, u8 where, u8 *value)
 }
 
 int
-pyxis_pcibios_read_config_word (u8 bus, u8 device_fn, u8 where, u16 *value)
+pyxis_hose_read_config_word (u8 bus, u8 device_fn, u8 where, u16 *value,
+			     struct linux_hose_info *hose)
 {
 	unsigned long addr = PYXIS_CONF;
 	unsigned long pci_addr;
 	unsigned char type1;
 
-	*value = 0xffff;
-	if (where & 0x1)
-		return PCIBIOS_BAD_REGISTER_NUMBER;
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
@@ -265,15 +263,13 @@ pyxis_pcibios_read_config_word (u8 bus, u8 device_fn, u8 where, u16 *value)
 }
 
 int
-pyxis_pcibios_read_config_dword (u8 bus, u8 device_fn, u8 where, u32 *value)
+pyxis_hose_read_config_dword (u8 bus, u8 device_fn, u8 where, u32 *value,
+			      struct linux_hose_info *hose)
 {
 	unsigned long addr = PYXIS_CONF;
 	unsigned long pci_addr;
 	unsigned char type1;
 
-	*value = 0xffffffff;
-	if (where & 0x3)
-		return PCIBIOS_BAD_REGISTER_NUMBER;
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
@@ -283,7 +279,8 @@ pyxis_pcibios_read_config_dword (u8 bus, u8 device_fn, u8 where, u32 *value)
 }
 
 int 
-pyxis_pcibios_write_config_byte (u8 bus, u8 device_fn, u8 where, u8 value)
+pyxis_hose_write_config_byte (u8 bus, u8 device_fn, u8 where, u8 value,
+			      struct linux_hose_info *hose)
 {
 	unsigned long addr = PYXIS_CONF;
 	unsigned long pci_addr;
@@ -298,14 +295,13 @@ pyxis_pcibios_write_config_byte (u8 bus, u8 device_fn, u8 where, u8 value)
 }
 
 int 
-pyxis_pcibios_write_config_word (u8 bus, u8 device_fn, u8 where, u16 value)
+pyxis_hose_write_config_word (u8 bus, u8 device_fn, u8 where, u16 value,
+			      struct linux_hose_info *hose)
 {
 	unsigned long addr = PYXIS_CONF;
 	unsigned long pci_addr;
 	unsigned char type1;
 
-	if (where & 0x1)
-		return PCIBIOS_BAD_REGISTER_NUMBER;
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
@@ -315,14 +311,13 @@ pyxis_pcibios_write_config_word (u8 bus, u8 device_fn, u8 where, u16 value)
 }
 
 int 
-pyxis_pcibios_write_config_dword (u8 bus, u8 device_fn, u8 where, u32 value)
+pyxis_hose_write_config_dword (u8 bus, u8 device_fn, u8 where, u32 value,
+			       struct linux_hose_info *hose)
 {
 	unsigned long addr = PYXIS_CONF;
 	unsigned long pci_addr;
 	unsigned char type1;
 
-	if (where & 0x3)
-		return PCIBIOS_BAD_REGISTER_NUMBER;
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
@@ -555,7 +550,7 @@ static int
 pyxis_pci_clr_err(void)
 {
 	PYXIS_jd = *(vuip)PYXIS_ERR;
-	DBG(("PYXIS_pci_clr_err: PYXIS ERR after read 0x%x\n", PYXIS_jd));
+	DBG_MCK(("PYXIS_pci_clr_err: PYXIS ERR after read 0x%x\n", PYXIS_jd));
 	*(vuip)PYXIS_ERR = 0x0180; mb();
 	PYXIS_jd = *(vuip)PYXIS_ERR;  /* re-read to force write */
 	return 0;
@@ -583,17 +578,6 @@ pyxis_machine_check(unsigned long vector, unsigned long la_ptr,
 		 PYXIS_mcheck_expected, mchk_sysdata->epic_dcsr,
 		 mchk_sysdata->epic_pear));
 #endif
-#ifdef DEBUG_MCHECK_DUMP
-	{
-		unsigned long *ptr;
-		int i;
-
-		ptr = (unsigned long *)la_ptr;
-		for (i = 0; i < mchk_header->size / sizeof(long); i += 2) {
-			printk(" +%lx %lx %lx\n", i*sizeof(long), ptr[i], ptr[i+1]);
-		}
-	}
-#endif /* DEBUG_MCHECK_DUMP */
 
 	/*
 	 * Check if machine check is due to a badaddr() and if so,
@@ -602,7 +586,7 @@ pyxis_machine_check(unsigned long vector, unsigned long la_ptr,
 	mb();
 	mb();  /* magic */
 	if (PYXIS_mcheck_expected) {
-		DBG(("PYXIS machine check expected\n"));
+		DBG_MCK(("PYXIS machine check expected\n"));
 		PYXIS_mcheck_expected = 0;
 		PYXIS_mcheck_taken = 1;
 		mb();
@@ -612,7 +596,6 @@ pyxis_machine_check(unsigned long vector, unsigned long la_ptr,
 		wrmces(0x7);
 		mb();
 	}
-#if 1
 	else {
 		printk("PYXIS machine check NOT expected\n") ;
 		DBG_MCK(("pyxis_machine_check: vector=0x%lx la_ptr=0x%lx\n",
@@ -629,6 +612,17 @@ pyxis_machine_check(unsigned long vector, unsigned long la_ptr,
 		pyxis_pci_clr_err();
 		wrmces(0x7);
 		mb();
-	}
+
+#ifdef DEBUG_MCHECK_DUMP
+		{
+			unsigned long *ptr = (unsigned long *)la_ptr;;
+			long n = mchk_header->size / (2*sizeof(long));
+
+			do
+				printk(" +%lx %lx %lx\n", i*sizeof(long),
+				       ptr[i], ptr[i+1]);
+			while (--i);
+		}
 #endif
+	}
 }

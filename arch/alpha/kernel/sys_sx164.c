@@ -68,9 +68,6 @@ sx164_device_interrupt(unsigned long vector, struct pt_regs *regs)
 {
 	unsigned long pld, tmp;
 	unsigned int i;
-	unsigned long flags;
-
-	save_and_cli(flags);
 
 	/* Read the interrupt summary register of PYXIS */
 	pld = *(vulp)PYXIS_INT_REQ;
@@ -101,14 +98,12 @@ sx164_device_interrupt(unsigned long vector, struct pt_regs *regs)
 		*(vulp)PYXIS_INT_REQ = 1UL << i; mb();
 		tmp = *(vulp)PYXIS_INT_REQ;
 	}
-	restore_flags(flags);
 }
 
 static void
 sx164_init_irq(void)
 {
-	outb(0, DMA1_RESET_REG);
-	outb(0, DMA2_RESET_REG);
+	STANDARD_INIT_IRQ_PROLOG;
 
 	if (alpha_using_srm) {
 		alpha_mv.update_irq_hw = sx164_srm_update_irq_hw;

@@ -8,6 +8,8 @@
 
 #ifdef __KERNEL__
 
+#ifndef __ASSEMBLY__
+
 #define STRICT_MM_TYPECHECKS
 
 /*
@@ -102,12 +104,18 @@ typedef unsigned long pgprot_t;
 #define __pgd(x)	(x)
 #define __pgprot(x)	(x)
 
-#endif
+#endif /* STRICT_MM_TYPECHECKS */
+#endif /* !ASSEMBLY */
 
 /* to align the pointer to the (next) page boundary */
-#define PAGE_ALIGN(addr)		(((addr)+PAGE_SIZE-1)&PAGE_MASK)
+#define PAGE_ALIGN(addr)	(((addr)+PAGE_SIZE-1)&PAGE_MASK)
 
-#define PAGE_OFFSET		0xFFFFFC0000000000UL
+#ifdef USE_48_BIT_KSEG
+#define PAGE_OFFSET		0xffff800000000000
+#else
+#define PAGE_OFFSET		0xfffffc0000000000
+#endif
+
 #define __pa(x)			((unsigned long) (x) - PAGE_OFFSET)
 #define __va(x)			((void *)((unsigned long) (x) + PAGE_OFFSET))
 #define MAP_NR(addr)		(__pa(addr) >> PAGE_SHIFT)

@@ -2,7 +2,7 @@ This file contains brief information about the SCSI tape driver.
 The driver is currently maintained by Kai M{kisara (email
 Kai.Makisara@metla.fi)
 
-Last modified: Tue May 27 22:29:24 1997 by makisara@home
+Last modified: Sun Sep  6 10:03:47 1998 by makisara@home
 
 
 BASICS
@@ -117,9 +117,9 @@ a filemark to truncate a read request or that don't like backspacing.
 The buffer size is defined (in 1024 byte units) by ST_BUFFER_BLOCKS or
 at boot time. If this size is not enough, the driver tries to allocate
 a large enough temporary buffer that is released when the device is
-closed. The maximum buffer size is defined by the kernel memory
-allocation (currently 256 kB for Alphas and 128 kB for other
-architectures).
+closed. Buffer allocation uses chunks of memory having sizes
+2^n * (page size). Because of this the actual buffer size may be
+larger than the buffer size specified with ST_BUFFER_BLOCKS.
 
 Allocation of the buffers is done at run-time when they are
 needed. Allocation of the specified number of buffers can be done at
@@ -142,6 +142,31 @@ The threshold for triggering asynchronous write in fixed block mode
 is defined by ST_WRITE_THRESHOLD. This may be optimized for each
 use pattern. The default triggers asynchronous write after three
 default sized writes (10 kB) from tar.
+
+Scatter/gather buffers (buffers that consist of chunks non-contiguous
+in the physical memory) are used if contiguous buffers can't be
+allocated. To support all SCSI adapters (including those not
+supporting scatter/gather), buffer allocation is using the following
+three kinds of chunks:
+1. The initial segment that is used for all SCSI adapters including
+those not supporting scatter/gather. The size of this buffer will be
+(PAGE_SIZE << ST_FIRST_ORDER) bytes if the system can give a chunk of
+this size (and it is not larger than the buffer size specified by
+ST_BUFFER_BLOCKS). If this size is not available, the driver halves
+the size and tries again until the size of one page. The default
+settings in st_options.h make the driver to try to allocate all of the
+buffer as one chunk.
+2. The scatter/gather segments to fill the specified buffer size are
+allocated so that as many segments as possible are used but the number
+of segments does not exceed ST_FIRST_SG.
+3. The remaining segments between ST_MAX_SG (or the module parameter
+max_sg_segs) and the number of segments used in phases 1 and 2
+are used to extend the buffer at run-time if this is necessary. The
+number of scatter/gather segments allowed for the SCSI adapter is not
+exceeded if it is smaller than the maximum number of scatter/gather
+segments specified. If the maximum number allowed for the SCSI adapter
+is smaller than the number of segments used in phases 1 and 2,
+extending the buffer will always fail.
 
 
 BOOT TIME CONFIGURATION
@@ -167,6 +192,9 @@ module. The keywords are:
 buffer_kbs=xxx             the buffer size in kilobytes is set to xxx
 write_threshold_kbs=xxx    the write threshold in kilobytes set to xxx
 max_buffers=xxx            the maximum number of tape buffer set to xxx
+max_sg_segs=xxx		   the maximum number of scatter/gather
+			   segments
+
 
 IOCTLS
 
@@ -357,7 +385,7 @@ DEBUGGING HINTS
 
 To enable debugging messages, edit st.c and #define DEBUG 1. As seen
 above, debugging can be switched off with an ioctl if debugging is
-compiled into the driver. The debugging output is not not voluminuous.
+compiled into the driver. The debugging output is not voluminuous.
 
 If the tape seems to hang, I would be very interested to hear where
 the driver is waiting. With the command 'ps -l' you can see the state

@@ -13,6 +13,7 @@
 typedef struct {
   unsigned char in_use;
   unsigned char dma;	/* DMA-able buffer */
+  int this_size;        /* allocated size of the structure */
   int buffer_size;
   int buffer_blocks;
   int buffer_bytes;
@@ -22,8 +23,10 @@ typedef struct {
   int last_result_fatal;
   Scsi_Cmnd *last_SCpnt;
   unsigned char *b_data;
-  int orig_size;
-  unsigned char *orig_b_data;
+  unsigned short   use_sg;     /* zero or number of segments for this adapter */
+  unsigned short sg_segs;      /* total number of allocated segments */
+  unsigned short orig_sg_segs; /* number of segments allocated at first try */
+  struct scatterlist sg[1];    /* MUST BE last item */
 } ST_buffer;
 
 

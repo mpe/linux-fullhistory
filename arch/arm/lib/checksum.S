@@ -1,5 +1,5 @@
 /*
- * linux/arch/arm/lib/iputils.S
+ * linux/arch/arm/lib/checksum.S
  *
  * Copyright (C) 1995, 1996, 1997, 1998 Russell King
  */
@@ -71,11 +71,11 @@ ENTRY(csum_partial)
 #if defined(CONFIG_CPU_32)
 
 		.macro	save_regs
-		stmfd	sp!, {r4 - r8, fp, ip, lr, pc}
+		stmfd	sp!, {r1 - r2, r4 - r8, fp, ip, lr, pc}
 		.endm
 
 #define LOAD_REGS(cond)					\
-		LOADREGS(##cond##ea,fp,{r4 - r8, fp, sp, pc})
+		LOADREGS(##cond##ea,fp,{r1 - r2, r4 - r8, fp, sp, pc})
 
 		.macro	load1b,	reg1
 9999:		ldrbt	\reg1, [r0], $1
@@ -127,7 +127,7 @@ ENTRY(csum_partial)
 #elif defined(CONFIG_CPU_26)
 
 		.macro	save_regs
-		stmfd	sp!, {r4 - r9, fp, ip, lr, pc}
+		stmfd	sp!, {r1 - r2, r4 - r9, fp, ip, lr, pc}
 		mov	r9, sp, lsr #13
 		mov	r9, r9, lsl #13
 		ldr	r9, [r9, #TSK_ADDR_LIMIT]
@@ -135,7 +135,7 @@ ENTRY(csum_partial)
 		.endm
 
 #define LOAD_REGS(cond)					\
-		LOADREGS(##cond##ea,fp,{r4 - r9, fp, sp, pc})
+		LOADREGS(##cond##ea,fp,{r1 - r2, r4 - r9, fp, sp, pc})
 
 		.macro	load1b,	reg1
 		tst	r9, #0x01
@@ -448,13 +448,23 @@ ENTRY(csum_partial_copy_from_user)
 		mov	r4, r4, lsr #8
 		b	.exit
 
+#if defined(CONFIG_CPU_32)
 		.section .fixup,"ax"
+#endif
 		.align	4
 6001:		mov	r4, #-EFAULT
 		ldr	r5, [fp, #4]
 		str	r4, [r5]
+		ldmia	sp, {r1, r2}		@ retrieve original arguments
+		add	r2, r2, r1
+		mov	r3, #0			@ zero the buffer
+6002:		teq	r2, r1
+		strneb	r3, [r1], #1
+		bne	6002b
 		LOAD_REGS(al)
+#if defined(CONFIG_CPU_32)
 		.previous
+#endif
 
 /* Function: __u32 csum_partial_copy (const char *src, char *dst, int len, __u32 sum)
  * Params  : r0 = src, r1 = dst, r2 = len, r3 = checksum
@@ -701,7 +711,7 @@ Lsrc3_aligned:	mov	r4, r4, lsr #24
 		mov	r4, r4, lsr #8
 		b	Lexit
 
-ENTRY(csum_ipv6_magic)
+ENTRY(__csum_ipv6_magic)
 		stmfd	sp!, {lr}
 		adds	ip, r2, r3
 		ldmia	r1, {r1 - r3, lr}

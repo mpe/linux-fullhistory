@@ -148,8 +148,7 @@ conf_read(unsigned long addr, unsigned char type1)
 
 	cpu = smp_processor_id();
 
-	save_flags(flags);	/* avoid getting hit by machine check */
-	cli();
+	__save_and_cli(flags);	/* avoid getting hit by machine check */
 
 	DBG(("conf_read(addr=0x%lx, type1=%d)\n", addr, type1));
 
@@ -195,7 +194,7 @@ conf_read(unsigned long addr, unsigned char type1)
 	}
 	DBG(("conf_read(): finished\n"));
 
-	restore_flags(flags);
+	__restore_flags(flags);
 	return value;
 }
 
@@ -208,8 +207,7 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1)
 
 	cpu = smp_processor_id();
 
-	save_flags(flags);	/* avoid getting hit by machine check */
-	cli();
+	__save_and_cli(flags);	/* avoid getting hit by machine check */
 
 #if 0
 	/* Reset status register to avoid losing errors.  */
@@ -246,18 +244,17 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1)
 		mb();
 	}
 	DBG(("conf_write(): finished\n"));
-	restore_flags(flags);
+	__restore_flags(flags);
 }
 
-
 int
-t2_pcibios_read_config_byte (u8 bus, u8 device_fn, u8 where, u8 *value)
+t2_hose_read_config_byte (u8 bus, u8 device_fn, u8 where, u8 *value,
+			  struct linux_hose_info *hose)
 {
 	unsigned long addr = T2_CONF;
 	unsigned long pci_addr;
 	unsigned char type1;
 
-	*value = 0xff;
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
@@ -267,15 +264,13 @@ t2_pcibios_read_config_byte (u8 bus, u8 device_fn, u8 where, u8 *value)
 }
 
 int 
-t2_pcibios_read_config_word (u8 bus, u8 device_fn, u8 where, u16 *value)
+t2_hose_read_config_word (u8 bus, u8 device_fn, u8 where, u16 *value,
+			  struct linux_hose_info *hose)
 {
 	unsigned long addr = T2_CONF;
 	unsigned long pci_addr;
 	unsigned char type1;
 
-	*value = 0xffff;
-	if (where & 0x1)
-		return PCIBIOS_BAD_REGISTER_NUMBER;
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
@@ -285,15 +280,13 @@ t2_pcibios_read_config_word (u8 bus, u8 device_fn, u8 where, u16 *value)
 }
 
 int 
-t2_pcibios_read_config_dword (u8 bus, u8 device_fn, u8 where, u32 *value)
+t2_hose_read_config_dword (u8 bus, u8 device_fn, u8 where, u32 *value,
+			   struct linux_hose_info *hose)
 {
 	unsigned long addr = T2_CONF;
 	unsigned long pci_addr;
 	unsigned char type1;
 
-	*value = 0xffffffff;
-	if (where & 0x3)
-		return PCIBIOS_BAD_REGISTER_NUMBER;
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
@@ -303,7 +296,8 @@ t2_pcibios_read_config_dword (u8 bus, u8 device_fn, u8 where, u32 *value)
 }
 
 int 
-t2_pcibios_write_config_byte (u8 bus, u8 device_fn, u8 where, u8 value)
+t2_hose_write_config_byte (u8 bus, u8 device_fn, u8 where, u8 value,
+			   struct linux_hose_info *hose)
 {
 	unsigned long addr = T2_CONF;
 	unsigned long pci_addr;
@@ -318,14 +312,13 @@ t2_pcibios_write_config_byte (u8 bus, u8 device_fn, u8 where, u8 value)
 }
 
 int
-t2_pcibios_write_config_word (u8 bus, u8 device_fn, u8 where, u16 value)
+t2_hose_write_config_word (u8 bus, u8 device_fn, u8 where, u16 value,
+			   struct linux_hose_info *hose)
 {
 	unsigned long addr = T2_CONF;
 	unsigned long pci_addr;
 	unsigned char type1;
 
-	if (where & 0x1)
-		return PCIBIOS_BAD_REGISTER_NUMBER;
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
@@ -335,14 +328,13 @@ t2_pcibios_write_config_word (u8 bus, u8 device_fn, u8 where, u16 value)
 }
 
 int 
-t2_pcibios_write_config_dword (u8 bus, u8 device_fn, u8 where, u32 value)
+t2_hose_write_config_dword (u8 bus, u8 device_fn, u8 where, u32 value,
+			    struct linux_hose_info *hose)
 {
 	unsigned long addr = T2_CONF;
 	unsigned long pci_addr;
 	unsigned char type1;
 
-	if (where & 0x3)
-		return PCIBIOS_BAD_REGISTER_NUMBER;
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 

@@ -1,3 +1,7 @@
+/*
+ *	linux/arch/alpha/kernel/smp.c
+ */
+
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/kernel_stat.h>
@@ -30,10 +34,8 @@ struct ipi_msg_flush_tb_struct ipi_msg_flush_tb;
 
 struct cpuinfo_alpha cpu_data[NR_CPUS];
 
-/* Processor holding kernel spinlock */
-klock_info_t klock_info = { KLOCK_CLEAR, 0 };
-
 spinlock_t ticker_lock = SPIN_LOCK_UNLOCKED;
+spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
 
 unsigned int boot_cpu_id = 0;
 static int smp_activated = 0;
@@ -63,11 +65,8 @@ volatile int smp_processors_ready = 0;
 volatile int cpu_number_map[NR_CPUS];
 volatile int cpu_logical_map[NR_CPUS];
 
-extern int cpu_idle(void *unused);
 extern void calibrate_delay(void);
-extern struct hwrpb_struct *hwrpb;
 extern struct thread_struct * original_pcb_ptr;
-extern void __start_cpu(unsigned long);
 
 static void smp_setup_percpu_timer(void);
 static void secondary_cpu_start(int, struct task_struct *);
@@ -170,7 +169,7 @@ asmlinkage int start_secondary(void *unused)
 printk("start_secondary: commencing CPU %d current %p\n",
        hard_smp_processor_id(), current);
 #endif
-        return cpu_idle(NULL);
+        cpu_idle(NULL);
 }
 
 /*
@@ -198,7 +197,6 @@ void smp_boot_cpus(void)
 	cpu_number_map[boot_cpu_id] = 0;
 	cpu_logical_map[0] = boot_cpu_id;
 	current->processor = boot_cpu_id; /* ??? */
-        klock_info.akp = boot_cpu_id;
 
         smp_store_cpu_info(boot_cpu_id);
 #ifdef NOT_YET
@@ -739,9 +737,8 @@ send_ipi_message(long to_whom, enum ipi_message_type operation)
 
 int smp_info(char *buffer)
 {
-        return sprintf(buffer, "CPUs probed %d active %d map 0x%x AKP %d\n",
-		       smp_num_probed, smp_num_cpus, cpu_present_map,
-		       klock_info.akp);
+        return sprintf(buffer, "CPUs probed %d active %d map 0x%x\n",
+		       smp_num_probed, smp_num_cpus, cpu_present_map);
 }
 
 /* wrapper for call from panic() */
@@ -766,12 +763,6 @@ flush_tlb_all(void)
 	unsigned int to_whom = cpu_present_map ^ (1 << smp_processor_id());
 	int timeout = 10000;
 
-#if 1
-	if (!kernel_lock_held()) {
-	  printk("flush_tlb_all: kernel_flag %d (cpu %d akp %d)!\n",
-		 klock_info.kernel_flag, smp_processor_id(), klock_info.akp);
-	}
-#endif
 	ipi_msg_flush_tb.flush_tb_mask = to_whom;
 	send_ipi_message(to_whom, TLB_ALL);
 	tbia();
@@ -794,12 +785,6 @@ flush_tlb_mm(struct mm_struct *mm)
 	unsigned int to_whom = cpu_present_map ^ (1 << smp_processor_id());
 	int timeout = 10000;
 
-#if 1
-	if (!kernel_lock_held()) {
-	  printk("flush_tlb_mm: kernel_flag %d (cpu %d akp %d)!\n",
-		 klock_info.kernel_flag, smp_processor_id(), klock_info.akp);
-	}
-#endif
 	ipi_msg_flush_tb.p.flush_mm = mm;
 	ipi_msg_flush_tb.flush_tb_mask = to_whom;
 	send_ipi_message(to_whom, TLB_MM);
@@ -829,12 +814,6 @@ flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
 	struct mm_struct * mm = vma->vm_mm;
 	int timeout = 10000;
 
-#if 1
-	if (!kernel_lock_held()) {
-	  printk("flush_tlb_page: kernel_flag %d (cpu %d akp %d)!\n",
-		 klock_info.kernel_flag, cpu, klock_info.akp);
-	}
-#endif
 	ipi_msg_flush_tb.p.flush_vma = vma;
 	ipi_msg_flush_tb.flush_addr = addr;
 	ipi_msg_flush_tb.flush_tb_mask = to_whom;
@@ -847,9 +826,9 @@ flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
 
 	while (ipi_msg_flush_tb.flush_tb_mask) {
 	  if (--timeout < 0) {
-	    printk("flush_tlb_page: STUCK on CPU %d [0x%x,0x%lx,%d,%d]\n",
+	    printk("flush_tlb_page: STUCK on CPU %d [0x%x,0x%lx,%d]\n",
 		   cpu, ipi_msg_flush_tb.flush_tb_mask, addr,
-		   klock_info.akp, global_irq_holder);
+		   global_irq_holder);
 	    ipi_msg_flush_tb.flush_tb_mask = 0;
 	    break;
 	  }
@@ -866,20 +845,10 @@ flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end)
 #else
 	unsigned int to_whom;
 	int timeout;
-        unsigned long where;
-
-        __asm__("mov $26, %0" : "=r" (where));
 
 	timeout = 10000;
 	to_whom = cpu_present_map ^ (1 << smp_processor_id());
 
-#if 1
-	if (!kernel_lock_held()) {
-	  printk("flush_tlb_range: kernel_flag %d (cpu %d akp %d) @ 0x%lx\n",
-		 klock_info.kernel_flag, smp_processor_id(), klock_info.akp,
-		 where);
-	}
-#endif
 	ipi_msg_flush_tb.p.flush_mm = mm;
 	ipi_msg_flush_tb.flush_tb_mask = to_whom;
 	send_ipi_message(to_whom, TLB_MM);
@@ -896,68 +865,17 @@ flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end)
 	    ipi_msg_flush_tb.flush_tb_mask = 0;
 	    break;
 	  }
-	  udelay(100);
-		; /* Wait for all clear from other CPUs. */
+	  udelay(100); /* Wait for all clear from other CPUs. */
 	}
 #endif
 }
 
-#ifdef DEBUG_KERNEL_LOCK
-void ___lock_kernel(klock_info_t *klip, int cpu, long ipl)
-{
-	long regx;
-	int stuck_lock;
-	unsigned long inline_pc;
-
-        __asm__("mov $26, %0" : "=r" (inline_pc));
-
- try_again:
-
-	stuck_lock = 1<<26;
-
-	__asm__ __volatile__(
-	"1:	ldl_l	%1,%0;"
-	"	blbs	%1,6f;"
-	"	or	%1,1,%1;"
-	"	stl_c	%1,%0;"
-	"	beq	%1,6f;"
-	"4:	mb\n"
-	".section .text2,\"ax\"\n"
-	"6:	mov	%5,$16;"
-	"	call_pal %4;"
-	"7:	ldl	%1,%0;"
-	"	blt	%2,4b	# debug\n"
-	"	subl	%2,1,%2	# debug\n"
-	"	blbs	%1,7b;"
-	"	bis	$31,7,$16;"
-	"	call_pal %4;"
-	"	br	1b\n"
-	".previous"
-	: "=m,=m" (__dummy_lock(klip)), "=&r,=&r" (regx),
-	  "=&r,=&r" (stuck_lock)
-	: "0,0" (__dummy_lock(klip)), "i,i" (PAL_swpipl),
-	  "i,r" (ipl), "2,2" (stuck_lock)
-	: "$0", "$1", "$16", "$22", "$23", "$24", "$25", "memory");
-
-	if (stuck_lock < 0) {
-		printk("___kernel_lock stuck at %lx(%d) held %lx(%d)\n",
-		       inline_pc, cpu, klip->pc, klip->cpu);
-		goto try_again;
-	} else {
-		klip->pc = inline_pc;
-		klip->cpu = cpu;
-	}
-}
-#endif
-
-#ifdef DEBUG_SPINLOCK
+#if DEBUG_SPINLOCK
 void spin_lock(spinlock_t * lock)
 {
 	long tmp;
 	long stuck;
-	unsigned long inline_pc;
-
-        __asm__("mov $26, %0" : "=r" (inline_pc));
+	void *inline_pc = __builtin_return_address(0);
 
  try_again:
 
@@ -987,30 +905,22 @@ void spin_lock(spinlock_t * lock)
 	: "2" (stuck));
 
 	if (stuck < 0) {
-		printk("spinlock stuck at %lx (cur=%lx, own=%lx)\n",
-		       inline_pc,
-#if 0
-		       lock->previous, lock->task
-#else
-		       (unsigned long) current, lock->task
-#endif
-		       );
+		printk("spinlock stuck at %p (cur=%p, own=%p, prev=%p)\n",
+		       inline_pc, current, lock->task, lock->previous);
 		goto try_again;
 	} else {
-		lock->previous = (unsigned long) inline_pc;
-		lock->task = (unsigned long) current;
+		lock->previous = inline_pc;
+		lock->task = current;
 	}
 }
 #endif /* DEBUG_SPINLOCK */
 
-#ifdef DEBUG_RWLOCK
+#if DEBUG_RWLOCK
 void write_lock(rwlock_t * lock)
 {
 	long regx, regy;
 	int stuck_lock, stuck_reader;
-	unsigned long inline_pc;
-
-        __asm__("mov $26, %0" : "=r" (inline_pc));
+	void *inline_pc = __builtin_return_address(0);
 
  try_again:
 
@@ -1018,24 +928,24 @@ void write_lock(rwlock_t * lock)
 	stuck_reader = 1<<26;
 
 	__asm__ __volatile__(
-	"1:	ldl_l	%1,%0;"
-	"	blbs	%1,6f;"
-	"	or	%1,1,%2;"
-	"	stl_c	%2,%0;"
-	"	beq	%2,6f;"
-	"	blt	%1,8f;"
+	"1:	ldl_l	%1,%0\n"
+	"	blbs	%1,6f\n"
+	"	or	%1,1,%2\n"
+	"	stl_c	%2,%0\n"
+	"	beq	%2,6f\n"
+	"	blt	%1,8f\n"
 	"4:	mb\n"
 	".section .text2,\"ax\"\n"
-	"6:	ldl	%1,%0;"
+	"6:	ldl	%1,%0\n"
 	"	blt	%3,4b	# debug\n"
 	"	subl	%3,1,%3	# debug\n"
-	"	blbs	%1,6b;"
-	"	br	1b;"
-	"8:	ldl	%1,%0;"
+	"	blbs	%1,6b\n"
+	"	br	1b\n"
+	"8:	ldl	%1,%0\n"
 	"	blt	%4,4b	# debug\n"
 	"	subl	%4,1,%4	# debug\n"
-	"	blt	%1,8b;"
-	"9:	br	4b\n"
+	"	blt	%1,8b\n"
+	"	br	4b\n"
 	".previous"
 	: "=m" (__dummy_lock(lock)), "=&r" (regx), "=&r" (regy)
 	, "=&r" (stuck_lock), "=&r" (stuck_reader)
@@ -1044,22 +954,20 @@ void write_lock(rwlock_t * lock)
 	);
 
 	if (stuck_lock < 0) {
-		printk("write_lock stuck at %lx\n", inline_pc);
+		printk("write_lock stuck at %p\n", inline_pc);
 		goto try_again;
 	}
 	if (stuck_reader < 0) {
-		printk("write_lock stuck on readers at %lx\n", inline_pc);
+		printk("write_lock stuck on readers at %p\n", inline_pc);
 		goto try_again;
 	}
 }
 
-void _read_lock(rwlock_t * lock)
+void read_lock(rwlock_t * lock)
 {
 	long regx;
 	int stuck_lock;
-	unsigned long inline_pc;
-
-        __asm__("mov $26, %0" : "=r" (inline_pc));
+	void *inline_pc = __builtin_return_address(0);
 
  try_again:
 
@@ -1084,7 +992,7 @@ void _read_lock(rwlock_t * lock)
 	);
 
 	if (stuck_lock < 0) {
-		printk("_read_lock stuck at %lx\n", inline_pc);
+		printk("read_lock stuck at %p\n", inline_pc);
 		goto try_again;
 	}
 }

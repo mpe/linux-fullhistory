@@ -5,15 +5,15 @@
 #
 
 L_TARGET := lib.a
-L_OBJS   := backtrace.o bitops.o checksum.o delay.o fp_support.o \
-	    loaders.o memcpy.o system.o string.o uaccess.o io.o
+L_OBJS   := backtrace.o bitops.o checksum.o delay.o io.o memcpy.o \
+	    system.o string.o uaccess.o
 
 ifeq ($(PROCESSOR),armo)
   L_OBJS += uaccess-armo.o
 endif
 
 ifdef CONFIG_ARCH_ACORN
-  L_OBJS += ll_char_wr.o io-acorn.o
+  L_OBJS += loaders.o ll_char_wr.o io-acorn.o
   ifdef CONFIG_ARCH_A5K
     L_OBJS += floppydma.o
   endif

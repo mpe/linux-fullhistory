@@ -376,7 +376,7 @@ int ptrace_set_bpt (struct task_struct *child)
 	if (res < 0)
 		return res;
 
-	child->debugreg[nsaved++] = alt = pc + 4;
+	child->tss.debug[nsaved++] = alt = pc + 4;
 printk ("ptrace_set_bpt: insn=%08lX pc=%08lX ", insn, pc);
 	switch (insn & 0x0e100000) {
 	case 0x00000000:
@@ -515,20 +515,20 @@ printk ("b/bl ");
 	}
 printk ("=%08lX\n", alt);
 	if (alt != pc + 4)
-		child->debugreg[nsaved++] = alt;
+		child->tss.debug[nsaved++] = alt;
 
 	for (i = 0; i < nsaved; i++) {
-		res = read_long (child, child->debugreg[i], &insn);
+		res = read_long (child, child->tss.debug[i], &insn);
 		if (res >= 0) {
-			child->debugreg[i + 2] = insn;
-			res = write_long (child, child->debugreg[i], BREAKINST);
+			child->tss.debug[i + 2] = insn;
+			res = write_long (child, child->tss.debug[i], BREAKINST);
 		}
 		if (res < 0) {
-			child->debugreg[4] = 0;
+			child->tss.debug[4] = 0;
 			return res;
 		}
 	}
-	child->debugreg[4] = nsaved;
+	child->tss.debug[4] = nsaved;
 	return 0;
 }
 
@@ -537,16 +537,16 @@ printk ("=%08lX\n", alt);
  */
 int ptrace_cancel_bpt (struct task_struct *child)
 {
-	int i, nsaved = child->debugreg[4];
+	int i, nsaved = child->tss.debug[4];
 
-	child->debugreg[4] = 0;
+	child->tss.debug[4] = 0;
 
 	if (nsaved > 2) {
 		printk ("ptrace_cancel_bpt: bogus nsaved: %d!\n", nsaved);
 		nsaved = 2;
 	}
 	for (i = 0; i < nsaved; i++)
-		write_long (child, child->debugreg[i], child->debugreg[i + 2]);
+		write_long (child, child->tss.debug[i], child->tss.debug[i + 2]);
 	return nsaved != 0;
 }
 
@@ -680,7 +680,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			ret = -EIO;
 			if ((unsigned long) data > _NSIG)
 				goto out;
-			child->debugreg[4] = -1;
+			child->tss.debug[4] = -1;
 			child->flags &= ~PF_TRACESYS;
 			wake_up_process(child);
 			child->exit_code = data;

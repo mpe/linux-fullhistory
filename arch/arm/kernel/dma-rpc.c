@@ -20,7 +20,7 @@
 
 #include "dma.h"
 
-static struct fiq_handler fh = { "floppydma", NULL };
+static struct fiq_handler fh = { NULL, "floppydma", NULL, NULL };
 
 #if 0
 typedef enum {
@@ -155,8 +155,8 @@ static void arch_dma_handle(int irq, void *dev_id, struct pt_regs *regs)
 		}
 	} while (dma->sg && (status & DMA_ST_INT));
 
-	if (!no_buffer)
-		enable_irq(irq);
+	if (no_buffer)
+		disable_irq(irq);
 }
 
 int arch_request_dma(dmach_t channel, dma_t *dma, const char *dev_name)
@@ -172,7 +172,8 @@ int arch_request_dma(dmach_t channel, dma_t *dma, const char *dev_name)
 	case DMA_S0:
 	case DMA_S1:
 		save_flags_cli(flags);
-		ret = request_irq(dma->dma_irq, arch_dma_handle, SA_INTERRUPT, dev_name, dma);
+		ret = request_irq(dma->dma_irq, arch_dma_handle,
+				  SA_INTERRUPT, dev_name, dma);
 		if (!ret)
 			disable_irq(dma->dma_irq);
 		restore_flags(flags);
@@ -261,8 +262,7 @@ void arch_enable_dma(dmach_t channel, dma_t *dma)
 	case DMA_VIRTUAL_FLOPPY: {
 		void *fiqhandler_start;
 		unsigned int fiqhandler_length;
-		extern void floppy_fiqsetup(unsigned long len, unsigned long addr,
-					     unsigned long port);
+		struct pt_regs regs;
 
 		if (dma->dma_mode == DMA_MODE_READ) {
 			extern unsigned char floppy_fiqin_start, floppy_fiqin_end;
@@ -273,21 +273,20 @@ void arch_enable_dma(dmach_t channel, dma_t *dma)
 			fiqhandler_start = &floppy_fiqout_start;
 			fiqhandler_length = &floppy_fiqout_end - &floppy_fiqout_start;
 		}
+
+		regs.ARM_r9  = dma->buf.length;
+		regs.ARM_r10 = __bus_to_virt(dma->buf.address);
+		regs.ARM_fp  = (int)PCIO_FLOPPYDMABASE;
+
 		if (claim_fiq(&fh)) {
 			printk("floppydma: couldn't claim FIQ.\n");
 			return;
 		}
-		/* Allow access to page 0 via domains */
-		__asm__ __volatile__("mcr	p15, 0, %0, c3, c0" :
-					: "r" (DOMAIN_USER_MANAGER |
-					       DOMAIN_KERNEL_CLIENT |
-					       DOMAIN_IO_CLIENT));
-		memcpy((void *)0x1c, fiqhandler_start, fiqhandler_length);
-		/* set domain register to normal */
-		set_fs(get_fs());
-		flush_page_to_ram(0);
-		floppy_fiqsetup(dma->buf.length, __bus_to_virt(dma->buf.address), (int)PCIO_FLOPPYDMABASE);
+
+		set_fiq_handler(fiqhandler_start, fiqhandler_length);
+		set_fiq_regs(&regs);
 		enable_irq(dma->dma_irq);
+
 		}
 		break;
 
@@ -315,6 +314,7 @@ void arch_disable_dma(dmach_t channel, dma_t *dma)
 
 	case DMA_VIRTUAL_FLOPPY:
 		disable_irq(dma->dma_irq);
+		release_fiq(&fh);
 		break;
 	}
 }

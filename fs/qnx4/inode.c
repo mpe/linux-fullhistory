@@ -134,11 +134,12 @@ static struct super_operations qnx4_sops =
 #else
 	NULL,
 #endif
-	qnx4_put_inode,
 #ifdef CONFIG_QNX4FS_RW
+	qnx4_put_inode,
 	qnx4_delete_inode,
 	NULL,			/* notify_change */
 #else
+	NULL,			/* put_inode */
 	NULL,			/* delete_inode */
 	NULL,			/* notify_change */
 #endif

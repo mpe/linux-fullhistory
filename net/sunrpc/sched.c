@@ -420,7 +420,6 @@ __rpc_execute(struct rpc_task *task)
 			 * When the task received a signal, remove from
 			 * any queues etc, and make runnable again.
 			 */
-			checksignals();
 			if (signalled())
 				__rpc_wake_up(task);
 
@@ -435,7 +434,6 @@ __rpc_execute(struct rpc_task *task)
 		 * clean up after sleeping on some queue, we don't
 		 * break the loop here, but go around once more.
 		 */
-		checksignals();
 		if (!RPC_IS_ASYNC(task) && signalled()) {
 			dprintk("RPC: %4d got signal\n", task->tk_pid);
 			rpc_exit(task, -ERESTARTSYS);
@@ -555,7 +553,6 @@ rpc_allocate(unsigned int flags, unsigned int size)
 		if (flags & RPC_TASK_ASYNC)
 			return NULL;
 		current->timeout = jiffies + (HZ >> 4);
-		checksignals();
 		current->state = TASK_INTERRUPTIBLE;
 		schedule();
 	} while (!signalled());
@@ -802,7 +799,6 @@ rpciod(void *ptr)
 
 	dprintk("RPC: rpciod starting (pid %d)\n", rpciod_pid);
 	while (rpciod_users) {
-		checksignals();
 		if (signalled()) {
 			rpciod_killall();
 			flush_signals(current);
@@ -931,7 +927,6 @@ rpciod_down(void)
 	 */
 	while (rpciod_pid) {
 		dprintk("rpciod_down: waiting for pid %d to exit\n", rpciod_pid);
-		checksignals();
 		if (signalled()) {
 			dprintk("rpciod_down: caught signal\n");
 			break;

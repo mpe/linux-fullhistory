@@ -117,9 +117,7 @@ sable_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 	   normal IRQs.  */
 
 	int irq, ack;
-	unsigned long flags;
 
-	__save_and_cli(flags);
 	ack = irq = (vector - 0x800) >> 4;
 
 	irq = sable_irq_swizzle.mask_to_irq[(ack)];
@@ -131,7 +129,6 @@ sable_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 #endif
 
 	handle_irq(irq, ack, regs);
-	__restore_flags(flags);
 }
 
 static void __init

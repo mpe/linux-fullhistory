@@ -166,6 +166,13 @@ ENTRY(outswb)
 		bgt	3b
 		LOADREGS(ea, fp, {r4 - r8, fp, sp, pc})
 
+/*
+ * These make no sense on Acorn machines atm.
+ */
+ENTRY(insl)
+ENTRY(outsl)
+		RETINSTR(mov,pc,lr)
+
 @ Purpose: write a memc register
 @ Proto  : void memc_write(int register, int value);
 @ Returns: nothing

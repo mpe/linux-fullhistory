@@ -13,6 +13,7 @@
 #include <linux/blkdev.h>
 #include <linux/errno.h>
 #include <asm/ecard.h>
+#include <asm/ide.h>
 
 #include "../../block/ide.h"
 
@@ -27,8 +28,14 @@ static int result[MAX_ECARDS];
 static inline int rapide_register(struct expansion_card *ec)
 {
 	unsigned long port = ecard_address (ec, ECARD_MEMC, 0);
+	ide_ioregspec_t spec;
 
-	return ide_register_port(port, port + 0x206, 4, ec->irq);
+	spec.base = port;
+	spec.ctrl = port + 0x206;
+	spec.offset = 1 << 4;
+	spec.irq = ec->irq;
+
+	return ide_register_port(&spec);
 }
 
 int rapide_init(void)

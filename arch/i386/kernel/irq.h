@@ -9,7 +9,7 @@
  */
 struct hw_interrupt_type {
 	const char * typename;
-	void (*handle)(unsigned int irq, int cpu, struct pt_regs * regs);
+	void (*handle)(unsigned int irq, struct pt_regs * regs);
 	void (*enable)(unsigned int irq);
 	void (*disable)(unsigned int irq);
 };
@@ -42,9 +42,10 @@ typedef struct {
 
 extern irq_desc_t irq_desc[NR_IRQS];
 extern int irq_vector[NR_IRQS];
+#define IO_APIC_VECTOR(irq)	irq_vector[irq]
 
 extern void init_IRQ_SMP(void);
-extern int handle_IRQ_event(unsigned int, struct pt_regs *);
+extern int handle_IRQ_event(unsigned int, struct pt_regs *, struct irqaction *);
 
 /*
  * Various low-level irq details needed by irq.c, process.c,
@@ -56,18 +57,16 @@ extern int handle_IRQ_event(unsigned int, struct pt_regs *);
 void mask_irq(unsigned int irq);
 void unmask_irq(unsigned int irq);
 void disable_8259A_irq(unsigned int irq);
-int i8259A_irq_pending (unsigned int irq);
-void ack_APIC_irq (void);
-void setup_IO_APIC (void);
-int IO_APIC_get_PCI_irq_vector (int bus, int slot, int fn);
-void make_8259A_irq (unsigned int irq);
-void send_IPI (int dest, int vector);
-void init_pic_mode (void);
-void print_IO_APIC (void);
+int i8259A_irq_pending(unsigned int irq);
+void ack_APIC_irq(void);
+void setup_IO_APIC(void);
+int IO_APIC_get_PCI_irq_vector(int bus, int slot, int fn);
+void make_8259A_irq(unsigned int irq);
+void send_IPI(int dest, int vector);
+void init_pic_mode(void);
+void print_IO_APIC(void);
 
 extern unsigned long long io_apic_irqs;
-
-#define IO_APIC_VECTOR(irq)	irq_vector[irq]
 
 #define MAX_IRQ_SOURCES 128
 #define MAX_MP_BUSSES 32
@@ -101,7 +100,6 @@ static inline void irq_enter(int cpu, unsigned int irq)
 static inline void irq_exit(int cpu, unsigned int irq)
 {
 	hardirq_exit(cpu);
-	release_irqlock(cpu);
 }
 
 #define IO_APIC_IRQ(x) ((1<<x) & io_apic_irqs)

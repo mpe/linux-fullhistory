@@ -227,54 +227,9 @@ extern void __global_restore_flags(unsigned long);
 
 #endif
 
-#define _set_gate(gate_addr,type,dpl,addr) \
-__asm__ __volatile__ ("movw %%dx,%%ax\n\t" \
-	"movw %2,%%dx\n\t" \
-	"movl %%eax,%0\n\t" \
-	"movl %%edx,%1" \
-	:"=m" (*((long *) (gate_addr))), \
-	 "=m" (*(1+(long *) (gate_addr))) \
-	:"i" ((short) (0x8000+(dpl<<13)+(type<<8))), \
-	 "d" ((char *) (addr)),"a" (__KERNEL_CS << 16) \
-	:"ax","dx")
-
-#define set_intr_gate(n,addr) \
-	_set_gate(idt+(n),14,0,addr)
-
-#define set_trap_gate(n,addr) \
-	_set_gate(idt+(n),15,0,addr)
-
-#define set_system_gate(n,addr) \
-	_set_gate(idt+(n),15,3,addr)
-
-#define set_call_gate(a,addr) \
-	_set_gate(a,12,3,addr)
-
-#define _set_seg_desc(gate_addr,type,dpl,base,limit) {\
-	*((gate_addr)+1) = ((base) & 0xff000000) | \
-		(((base) & 0x00ff0000)>>16) | \
-		((limit) & 0xf0000) | \
-		((dpl)<<13) | \
-		(0x00408000) | \
-		((type)<<8); \
-	*(gate_addr) = (((base) & 0x0000ffff)<<16) | \
-		((limit) & 0x0ffff); }
-
-#define _set_tssldt_desc(n,addr,limit,type) \
-__asm__ __volatile__ ("movw %3,0(%2)\n\t" \
-	"movw %%ax,2(%2)\n\t" \
-	"rorl $16,%%eax\n\t" \
-	"movb %%al,4(%2)\n\t" \
-	"movb %4,5(%2)\n\t" \
-	"movb $0,6(%2)\n\t" \
-	"movb %%ah,7(%2)\n\t" \
-	"rorl $16,%%eax" \
-	: "=m"(*(n)) : "a" (addr), "r"(n), "ir"(limit), "i"(type))
-
-#define set_tss_desc(n,addr) \
-	_set_tssldt_desc(((char *) (n)),((int)(addr)),235,0x89)
-#define set_ldt_desc(n,addr,size) \
-	_set_tssldt_desc(((char *) (n)),((int)(addr)),((size << 3) - 1),0x82)
+extern void set_intr_gate(unsigned int irq, void * addr);
+void set_ldt_desc(void *n, void *addr, unsigned int size);
+void set_tss_desc(void *n, void *addr);
 
 /*
  * This is the ldt that every process will get unless we need

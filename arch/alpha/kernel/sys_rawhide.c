@@ -60,9 +60,7 @@ static void
 rawhide_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 {
 	int irq, ack;
-	unsigned long flags;
 
-	__save_and_cli(flags);
 	ack = irq = (vector - 0x800) >> 4;
 
         /*
@@ -84,7 +82,6 @@ rawhide_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 	}
 
 	handle_irq(irq, ack, regs);
-	__restore_flags(flags);
 }
 
 static void __init
@@ -162,7 +159,7 @@ rawhide_map_irq(struct pci_dev *dev, int slot, int pin)
 static void __init
 rawhide_pci_fixup(void)
 {
-	mcpcia_pci_fixup();
+	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
 	common_pci_fixup(rawhide_map_irq, common_swizzle);
 }
 

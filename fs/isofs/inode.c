@@ -128,30 +128,6 @@ struct iso9660_options{
 	unsigned char utf8;
 };
 
-static int strnicmp(const char *s1, const char *s2, int len)
-{
-	/* Yes, Virginia, it had better be unsigned */
-	unsigned char c1, c2;
-
-	c1 = 0;	c2 = 0;
-	while (len > 0) {
-		c1 = *s1; c2 = *s2;
-		s1++; s2++;
-		if (!c1)
-			break;
-		if (!c2)
-			break;
-		if (c1 == c2)
-			continue;
-		c1 = tolower(c1);
-		c2 = tolower(c2);
-		if (c1 != c2)
-			break;
-		len--;
-	}
-	return (int)c1 - (int)c2;
-}
-
 /*
  * Compute the hash for the isofs name corresponding to the dentry.
  */

@@ -10,9 +10,6 @@
 #ifndef __ASM_ARCH_MMU_H
 #define __ASM_ARCH_MMU_H
 
-/*
- * On ebsa, the dram is contiguous
- */
 #define __virt_to_phys__is_a_macro
 #define __virt_to_phys(vpage) ((vpage) - PAGE_OFFSET)
 #define __phys_to_virt__is_a_macro

@@ -68,4 +68,3 @@ __initfunc(unsigned long setup_io_pagetables(unsigned long start_mem))
 
 	return start_mem;
 }
-

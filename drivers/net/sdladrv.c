@@ -437,7 +437,7 @@ int sdla_setup (sdlahw_t* hw, void* sfm, unsigned len)
 		return -EINVAL;
 	} 
 	printk(KERN_INFO "%s: dual-port memory window is set at 0x%lX.\n",
-		modname, virt_to_phys(hw->dpmbase))
+		modname, virt_to_phys((void *)hw->dpmbase))
 	;
 	printk(KERN_INFO "%s: found %luK bytes of on-board memory.\n",
 		modname, hw->memory / 1024)

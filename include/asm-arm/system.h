@@ -1,6 +1,16 @@
 #ifndef __ASM_ARM_SYSTEM_H
 #define __ASM_ARM_SYSTEM_H
 
+/* The type of machine we're running on */
+extern unsigned int machine_type;
+#define MACH_TYPE_EBSA110	0
+#define MACH_TYPE_RISCPC	1
+#define MACH_TYPE_NEXUSPCI	3
+#define MACH_TYPE_EBSA285	4
+#define MACH_TYPE_NETWINDER	5
+#define MACH_TYPE_CATS		6
+#define MACH_TYPE_TBOX		7
+
 #include <linux/kernel.h>
 #include <asm/proc-fns.h>
 

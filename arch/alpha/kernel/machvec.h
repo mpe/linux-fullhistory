@@ -28,7 +28,7 @@
 #define CAT(x,y)   CAT1(x,y)
 
 #define DO_DEFAULT_RTC				\
-	rtc_port: 0x70, rtc_addr: 0x80
+	rtc_port: 0x70, rtc_addr: 0x80, rtc_bcd: 0
 
 #define DO_EV4_MMU							\
 	max_asn:			EV4_MAX_ASN,			\
@@ -47,7 +47,7 @@
 	mv_flush_tlb_current_page:	ev5_flush_tlb_current_page
 
 #define DO_EV6_MMU							\
-	max_asn:			EV5_MAX_ASN,			\
+	max_asn:			EV6_MAX_ASN,			\
 	mmu_context_mask:		0xfffffffffful,			\
 	mv_get_mmu_context:		ev5_get_mmu_context,		\
 	mv_flush_tlb_current:		ev5_flush_tlb_current,		\
@@ -75,12 +75,12 @@
 
 #define IO(UP,low1,low2)						\
 	IO_LITE(UP,low1,low2),						\
-	pci_read_config_byte:	CAT(low2,_pcibios_read_config_byte),	\
-	pci_read_config_word:	CAT(low2,_pcibios_read_config_word),	\
-	pci_read_config_dword:	CAT(low2,_pcibios_read_config_dword),	\
-	pci_write_config_byte:	CAT(low2,_pcibios_write_config_byte),	\
-	pci_write_config_word:	CAT(low2,_pcibios_write_config_word),	\
-	pci_write_config_dword:	CAT(low2,_pcibios_write_config_dword),	\
+	hose_read_config_byte:	CAT(low2,_hose_read_config_byte),	\
+	hose_read_config_word:	CAT(low2,_hose_read_config_word),	\
+	hose_read_config_dword:	CAT(low2,_hose_read_config_dword),	\
+	hose_write_config_byte:	CAT(low2,_hose_write_config_byte),	\
+	hose_write_config_word:	CAT(low2,_hose_write_config_word),	\
+	hose_write_config_dword: CAT(low2,_hose_write_config_dword),	\
 	dma_win_base:		CAT(UP,_DMA_WIN_BASE_DEFAULT),		\
         dma_win_size:		CAT(UP,_DMA_WIN_SIZE_DEFAULT)
 

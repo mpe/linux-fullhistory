@@ -1,7 +1,7 @@
 /*
  * linux/include/asm-arm/arch-ebsa110/system.h
  *
- * Copyright (c) 1996,1997,1998 Russell King.
+ * Copyright (c) 1996-1998 Russell King.
  */
 #ifndef __ASM_ARCH_SYSTEM_H
 #define __ASM_ARCH_SYSTEM_H

@@ -1044,24 +1044,20 @@ __initfunc(void pcibios_fixup_devices(void))
 #ifdef __SMP__
 		/*
 		 * Recalculate IRQ numbers if we use the I/O APIC
-		 *
-		 * NOTE! If the "original" interrupt is marked as an old-fashioned
-		 * irq, we have to keep it old-fashioned even if it's a PCI device
-		 * and we could have found it in the MP-table transform.
 		 */
-		if (IO_APIC_IRQ(dev->irq)) {
+		{
 			int irq;
 			unsigned char pin;
 
 			pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
 			if (pin) {
 				pin--;		/* interrupt pins are numbered starting from 1 */
-				irq = IO_APIC_get_PCI_irq_vector (dev->bus->number, PCI_SLOT(dev->devfn), pin);
+				irq = IO_APIC_get_PCI_irq_vector(dev->bus->number, PCI_SLOT(dev->devfn), pin);
 				if (irq >= 0) {
 					printk("PCI->APIC IRQ transform: (B%d,I%d,P%d) -> %d\n",
 						dev->bus->number, PCI_SLOT(dev->devfn), pin, irq);
 					dev->irq = irq;
-					}
+				}
 			}
 		}
 #endif

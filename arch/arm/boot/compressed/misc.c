@@ -203,11 +203,13 @@ static void free(void *where)
 
 static void gzip_mark(void **ptr)
 {
+	arch_decomp_wdog();
 	*ptr = (void *) free_mem_ptr;
 }
 
 static void gzip_release(void **ptr)
 {
+	arch_decomp_wdog();
 	free_mem_ptr = (long) *ptr;
 }
 #else

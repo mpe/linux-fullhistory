@@ -7,19 +7,21 @@
  *  27-06-1996	RMK	Created
  *  13-04-1997	RMK	Made functions atomic!
  *  07-12-1997	RMK	Upgraded for v2.1.
+ *  26-08-1998	PJB	Added #ifdef __KERNEL__
  */
 #ifndef __ASM_ARM_ATOMIC_H
 #define __ASM_ARM_ATOMIC_H
 
+typedef struct { int counter; } atomic_t;
+
+#define ATOMIC_INIT(i)	{ (i) }
+
+#ifdef __KERNEL__
 #include <asm/system.h>
 
 #ifdef __SMP__
 #error SMP not supported
 #endif
-
-typedef struct { int counter; } atomic_t;
-
-#define ATOMIC_INIT(i)	{ (i) }
 
 #define atomic_read(v)	((v)->counter)
 #define atomic_set(v,i)	(((v)->counter) = (i))
@@ -82,4 +84,5 @@ static __inline__ void atomic_clear_mask(unsigned long mask, unsigned long *addr
 	restore_flags (flags);
 }
 
+#endif
 #endif

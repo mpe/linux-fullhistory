@@ -1,5 +1,5 @@
 /*
- * arch/arm/kernel/leds-285.c
+ * arch/arm/kernel/leds-ebsa285.c
  *
  * Copyright (C) 1998 Russell King
  *

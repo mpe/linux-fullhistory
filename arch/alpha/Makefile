@@ -10,7 +10,7 @@
 
 NM := nm -B
 
-LINKFLAGS = -static -T arch/alpha/vmlinux.lds -N
+LINKFLAGS = -static -T arch/alpha/vmlinux.lds #-N -relax
 CFLAGS := $(CFLAGS) -pipe -mno-fp-regs -ffixed-8
 
 # Determine if we can use the BWX instructions with GAS.
@@ -79,6 +79,7 @@ srmboot:
 	@$(MAKEBOOT) srmboot
 
 archclean:
+	@$(MAKE) -C arch/$(ARCH)/kernel clean
 	@$(MAKEBOOT) clean
 
 archmrproper:

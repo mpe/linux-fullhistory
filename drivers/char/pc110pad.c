@@ -18,7 +18,6 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/busmouse.h>
 #include <linux/signal.h>
 #include <linux/errno.h>
 #include <linux/mm.h>

@@ -1106,6 +1106,10 @@ static int isp1020_reset_hardware(struct Scsi_Host *host)
 	DEBUG(printk("qlogicisp : loading risc ram\n"));
 
 #if RELOAD_FIRMWARE
+	/* Do not reload firmware if 1040B, i.e. revision 5 chip.  */
+	if (((struct isp1020_hostdata *) host->hostdata)->revision == 5)
+		printk("qlogicisp : 1040B chip, firmware not (re)loaded\n");
+	else
 	{
 		int i;
 		for (i = 0; i < risc_code_length01; i++) {
@@ -1213,7 +1217,8 @@ static int isp1020_init(struct Scsi_Host *sh)
 	if (inw(io_base + PCI_ID_LOW) != PCI_VENDOR_ID_QLOGIC
 	    || inw(io_base + PCI_ID_HIGH) != PCI_DEVICE_ID_QLOGIC_ISP1020)
 	{
-		printk("qlogicisp : can't decode i/o address space\n");
+		printk("qlogicisp : can't decode i/o address space 0x%lx\n",
+		       io_base);
 		return 1;
 	}
 

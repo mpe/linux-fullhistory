@@ -8,19 +8,40 @@ define_bool CONFIG_ARM y
 
 mainmenu_option next_comment
 comment 'System and processor type'
+
 choice 'ARM system type'	\
 	"Archimedes		CONFIG_ARCH_ARC \
 	 A5000			CONFIG_ARCH_A5K \
 	 RiscPC			CONFIG_ARCH_RPC \
 	 EBSA-110		CONFIG_ARCH_EBSA110 \
 	 EBSA-285		CONFIG_ARCH_EBSA285 \
-	 NexusPCI		CONFIG_ARCH_NEXUSPCI" RiscPC
-if [ "$CONFIG_ARCH_ARC" = "y" -o "$CONFIG_ARCH_A5K" = "y" -o "$CONFIG_ARCH_RPC" = "y" ]; then
+	 NexusPCI		CONFIG_ARCH_NEXUSPCI \
+	 Corel-VNC		CONFIG_ARCH_VNC \
+	 Tbox			CONFIG_ARCH_TBOX" RiscPC
+
+if [ "$CONFIG_ARCH_EBSA285" = "y" ]; then
+  bool '  Include support for CATS boards' CONFIG_CATS
+fi
+
+# Select various configuration options depending on the machine type
+#  Easy check for Acorn-style architectures
+
+if [ "$CONFIG_ARCH_ARC" = "y" -o \
+     "$CONFIG_ARCH_A5K" = "y" -o \
+     "$CONFIG_ARCH_RPC" = "y" ]; then
   define_bool CONFIG_ARCH_ACORN y
 else
   define_bool CONFIG_ARCH_ACORN n
 fi
-if [ "$CONFIG_ARCH_NEXUSPCI" = "y" ]; then
+
+if [ "$CONFIG_ARCH_TBOX" = "y" ]; then
+  define_bool CONFIG_BUS_I2C y
+fi
+
+#  These machines have PCI/may have PCI
+
+if [ "$CONFIG_ARCH_NEXUSPCI" = "y" -o \
+     "$CONFIG_ARCH_VNC" = "y" ]; then
   define_bool CONFIG_PCI y
 else
   if [ "$CONFIG_ARCH_EBSA285" = "y" ]; then
@@ -32,20 +53,19 @@ fi
 # ever built a machine that can take both, and now that ARM3 is obsolete
 # nobody is likely to either.
 
-if [ "$CONFIG_ARCH_RPC" = "y" -o "$CONFIG_ARCH_NEXUSPCI" = "y" -o "$CONFIG_ARCH_EBSA110" = "y" -o "$CONFIG_ARCH_EBSA285" = "y" ]; then
+if [ "$CONFIG_ARCH_ARC" = "y" -o \
+     "$CONFIG_ARCH_A5K" = "y" ]; then
+  define_bool CONFIG_CPU_32 n
+  define_bool CONFIG_CPU_26 y
+else
   define_bool CONFIG_CPU_32 y
   define_bool CONFIG_CPU_26 n
-else
-  if [ "$CONFIG_ARCH_ARC" = "y" -o "$CONFIG_ARCH_A5K" = "y" ]; then
-    define_bool CONFIG_CPU_32 n
-    define_bool CONFIG_CPU_26 y
-  fi
 fi
 
 # Now allow the user to choose a more precise CPU.  This is only used to set
 # the flags we pass to GCC, not in any code.
 
-choice 'Optimise for CPU'		\
+choice 'Optimise for CPU'				\
 	"ARM2		CONFIG_CPU_ARM2 \
 	 ARM3		CONFIG_CPU_ARM3 \
 	 ARM6		CONFIG_CPU_ARM6 \
@@ -92,8 +112,8 @@ tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 
 tristate 'Parallel port support' CONFIG_PARPORT
 if [ "$CONFIG_PARPORT" != "n" ]; then
-  dep_tristate '  PC-style hardware' CONFIG_PARPORT_PC $CONFIG_PARPORT
   dep_tristate '  Archimedes hardware' CONFIG_PARPORT_ARC $CONFIG_PARPORT
+  dep_tristate '  PC-style hardware' CONFIG_PARPORT_PC $CONFIG_PARPORT
 # If exactly one hardware type is selected then parport will optimise away
 # support for loading any others.  Defeat this if the user is keen.
   if [ "$CONFIG_PARPORT_PC" = "n" -o "$CONFIG_PARPORT_ARC" = "n" ]; then
@@ -104,16 +124,29 @@ if [ "$CONFIG_PARPORT" != "n" ]; then
 fi
 endmenu
 
-source arch/arm/drivers/block/Config.in
-source drivers/acorn/block/Config.in
+source drivers/pnp/Config.in
+
+source drivers/block/Config.in
+
+if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
+  source drivers/acorn/block/Config.in
+fi
 
 source arch/arm/drivers/char/Config.in
 
-mainmenu_option next_comment
-comment 'Console drivers'
-bool 'Support Frame buffer devices' CONFIG_FB
-source drivers/video/Config.in
-endmenu
+if [ "$CONFIG_VT" = "y" ]; then
+  mainmenu_option next_comment
+  comment 'Console drivers'
+  if [ "$CONFIG_ARCH_ACORN" != "y" -a "$CONFIG_ARCH_EBSA110" != "y" ]; then
+    bool 'VGA text console' CONFIG_VGA_CONSOLE
+    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      bool 'Video mode selection support' CONFIG_VIDEO_SELECT
+    fi
+  fi
+  bool 'Support Frame buffer devices' CONFIG_FB
+  source drivers/video/Config.in
+  endmenu
+fi
 
 if [ "$CONFIG_NET" = "y" ]; then
   source net/Config.in
@@ -140,7 +173,7 @@ if [ "$CONFIG_SCSI" != "n" ]; then
 fi
 endmenu
 
-if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
+if [ "$CONFIG_ARCH_ACORN" = "y" -o "$CONFIG_PCI" = "y" ]; then
   mainmenu_option next_comment
   comment 'Sound'
 

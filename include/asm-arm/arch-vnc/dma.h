@@ -26,4 +26,3 @@ typedef enum {
 #define MAX_DMA_CHANNELS	8
 
 #endif /* _ASM_ARCH_DMA_H */
-

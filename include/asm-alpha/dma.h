@@ -78,13 +78,18 @@
    due to a hardware SIO (PCI<->ISA bus bridge) chip limitation, is 64MB.
    See <asm/apecs.h> for more info.
 */
+/* The maximum address that we can perform a DMA transfer to on RUFFIAN,
+   due to a hardware SIO (PCI<->ISA bus bridge) chip limitation, is 16MB.
+   See <asm/pyxis.h> for more info.
+*/
 /* NOTE: we must define the maximum as something less than 64Mb, to prevent 
    virt_to_bus() from returning an address in the first window, for a
    data area that goes beyond the 64Mb first DMA window. Sigh...
    We MUST coordinate the maximum with <asm/apecs.h> for consistency.
    For now, this limit is set to 48Mb...
 */
-#define ALPHA_XL_MAX_DMA_ADDRESS	(0xfffffc0003000000UL)
+#define ALPHA_XL_MAX_DMA_ADDRESS	(IDENT_ADDR+0x3000000UL)
+#define ALPHA_RUFFIAN_MAX_DMA_ADDRESS	(IDENT_ADDR+0x1000000UL)
 #define ALPHA_MAX_DMA_ADDRESS		(~0UL)
 
 #ifdef CONFIG_ALPHA_GENERIC
@@ -92,6 +97,8 @@
 #else
 # ifdef CONFIG_ALPHA_XL
 #  define MAX_DMA_ADDRESS		ALPHA_XL_MAX_DMA_ADDRESS
+# elif defined(CONFIG_ALPHA_RUFFIAN)
+#  define MAX_DMA_ADDRESS		ALPHA_RUFFIAN_MAX_DMA_ADDRESS
 # else
 #  define MAX_DMA_ADDRESS		ALPHA_MAX_DMA_ADDRESS
 # endif

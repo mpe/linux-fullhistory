@@ -4,7 +4,7 @@
 #
 
 L_TARGET := acorn-net.a
-L_OBJS   := net-probe.o
+L_OBJS   :=
 M_OBJS   :=
 MOD_LIST_NAME := ACORN_NET_MODULES
 

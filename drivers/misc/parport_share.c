@@ -5,7 +5,7 @@
  *          Tim Waugh <tim@cyberelk.demon.co.uk>
  *          Jose Renau <renau@acm.org>
  *          Philip Blundell <philb@gnu.org>
- *	    Andrea Arcangeli <arcangeli@mbox.queen.it>
+ *	    Andrea Arcangeli
  *
  * based on work by Grant Guenther <grant@torque.net>
  *          and Philip Blundell

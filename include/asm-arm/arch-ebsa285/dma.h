@@ -1,29 +1,35 @@
 /*
- * linux/include/asm-arm/arch-ebsa110/dma.h
+ * linux/include/asm-arm/arch-ebsa285/dma.h
  *
- * Architecture DMA routes
+ * Architecture DMA routines
  *
- * Copyright (C) 1997.1998 Russell King
+ * Copyright (C) 1998 Russell King
+ * Copyright (C) 1998 Philip Blundell
  */
 #ifndef __ASM_ARCH_DMA_H
 #define __ASM_ARCH_DMA_H
 
 /*
  * This is the maximum DMA address that can be DMAd to.
- * There should not be more than (0xd0000000 - 0xc0000000)
- * bytes of RAM.
  */
-#define MAX_DMA_ADDRESS		0xd0000000
+#define MAX_DMA_ADDRESS		0xffffffff
 
 /*
  * DMA modes - we have two, IN and OUT
  */
-typedef enum {
-	DMA_MODE_READ,
-	DMA_MODE_WRITE
-} dmamode_t;
 
-#define MAX_DMA_CHANNELS	8
+typedef int dmamode_t;
+#define DMA_MODE_READ		0x44
+#define DMA_MODE_WRITE		0x48
+
+/*
+ * The 21285 has two internal DMA channels; we call these 0 and 1.
+ * On CATS hardware we have an additional eight ISA dma channels
+ * numbered 2..9.
+ */
+#define MAX_DMA_CHANNELS	10
+
+#define DMA_ISA_BASE		2
+#define DMA_FLOPPY		(DMA_ISA_BASE + 2)
 
 #endif /* _ASM_ARCH_DMA_H */
-

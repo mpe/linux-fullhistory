@@ -198,6 +198,7 @@ CONFIG_EEXPRESS_PRO100=y
 # CONFIG_SLIP is not set
 # CONFIG_NET_RADIO is not set
 # CONFIG_TR is not set
+# CONFIG_HOSTESS_SV11 is not set
 # CONFIG_WAN_DRIVERS is not set
 # CONFIG_LAPBETHER is not set
 # CONFIG_X25_ASY is not set

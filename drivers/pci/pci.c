@@ -1,5 +1,5 @@
 /*
- *	$Id: pci.c,v 1.88 1998/08/15 10:37:12 mj Exp $
+ *	$Id: pci.c,v 1.90 1998/09/05 12:39:39 mj Exp $
  *
  *	PCI Bus Services, see include/linux/pci.h for further explanation.
  *
@@ -138,7 +138,8 @@ __initfunc(void pci_read_bases(struct pci_dev *dev, unsigned int howmany))
 		if (l == 0xffffffff)
 			continue;
 		dev->base_address[reg] = l;
-		if ((l & PCI_MEMORY_RANGE_TYPE_MASK) == PCI_BASE_ADDRESS_MEM_TYPE_64) {
+		if ((l & (PCI_BASE_ADDRESS_SPACE | PCI_BASE_ADDRESS_MEM_TYPE_MASK))
+		    == (PCI_BASE_ADDRESS_SPACE_MEMORY | PCI_BASE_ADDRESS_MEM_TYPE_64)) {
 			reg++;
 			pci_read_config_dword(dev, PCI_BASE_ADDRESS_0 + (reg << 2), &l);
 			if (l) {

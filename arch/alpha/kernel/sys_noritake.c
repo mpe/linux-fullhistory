@@ -53,9 +53,6 @@ noritake_device_interrupt(unsigned long vector, struct pt_regs *regs)
 {
 	unsigned long pld;
 	unsigned int i;
-	unsigned long flags;
-
-	save_and_cli(flags);
 
 	/* Read the interrupt summary registers of NORITAKE */
 	pld = ((unsigned long) inw(0x54c) << 32) |
@@ -76,16 +73,13 @@ noritake_device_interrupt(unsigned long vector, struct pt_regs *regs)
 			handle_irq(i, i, regs);
 		}
 	}
-	restore_flags(flags);
 }
 
 static void 
 noritake_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 {
 	int irq, ack;
-	unsigned long flags;
 
-	__save_and_cli(flags);
 	ack = irq = (vector - 0x800) >> 4;
 
 	/*
@@ -101,7 +95,6 @@ noritake_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 		ack = irq = irq + 1;
 
 	handle_irq(irq, ack, regs);
-	__restore_flags(flags);
 }
 
 static void __init

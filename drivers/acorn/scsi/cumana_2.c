@@ -9,6 +9,7 @@
  *  15-04-1998	RMK	0.0.1	Only do PIO if FAS216 will allow it.
  *  02-05-1998	RMK	0.0.2	Updated & added DMA support
  *  27-06-1998	RMK		Changed asm/delay.h to linux/delay.h
+ *  18-08-1998	RMK	0.0.3	Fixed synchronous transfer depth
  */
 
 #include <linux/module.h>
@@ -35,7 +36,7 @@
 /* Configuration */
 #define CUMANASCSI2_XTALFREQ		40
 #define CUMANASCSI2_ASYNC_PERIOD	200
-#define CUMANASCSI2_SYNC_DEPTH		8
+#define CUMANASCSI2_SYNC_DEPTH		7
 
 /*
  * List of devices that the driver will recognise
@@ -69,7 +70,7 @@
  */
 #define VER_MAJOR	0
 #define VER_MINOR	0
-#define VER_PATCH	2
+#define VER_PATCH	3
 
 static struct expansion_card *ecs[MAX_ECARDS];
 
@@ -157,13 +158,10 @@ cumanascsi_2_invalidate(char *addr, long len, fasdmadir_t direction)
 {
 	unsigned int page;
 
-	if (direction == DMA_OUT) {
-		for (page = (unsigned int) addr; len > 0;
-		     page += PAGE_SIZE, len -= PAGE_SIZE)
-			flush_page_to_ram(page);
-	} else
-		flush_cache_range(current->mm, (unsigned long)addr,
-				  (unsigned long)addr + len);
+	if (direction == DMA_OUT)
+		dma_cache_wback((unsigned long)addr, (unsigned long)len);
+	else
+		dma_cache_inv((unsigned long)addr, (unsigned long)len);
 }
 
 /* Prototype: fasdmatype_t cumanascsi_2_dma_setup(host, SCpnt, direction, min_type)

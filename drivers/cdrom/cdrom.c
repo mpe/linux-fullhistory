@@ -76,7 +76,7 @@
   of the drive.  Thanks to Tobias Ringstr|m <tori@prosolvia.se> for pointing
   this out and providing a simple fix.
   -- Fixed the procfs-unload-module bug with the fill_inode procfs callback.
-  thanks to Andrea Arcangeli <arcangeli@mbox.queen.it>
+  thanks to Andrea Arcangeli
   -- Fixed it so that the /proc entry now also shows up when cdrom is
   compiled into the kernel.  Before it only worked when loaded as a module.
 

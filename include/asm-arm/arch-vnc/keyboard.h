@@ -34,4 +34,3 @@ static unsigned char kbd_sysrq_xlate[NR_SCANCODES];
 //#define kbd_sysrq_xlate			ps2kbd_sysrq_xlate
 #define kbd_disable_irq()
 #define kbd_enable_irq()
-

@@ -363,14 +363,6 @@ asmlinkage int sys_olduname(struct oldold_utsname * name)
 
 asmlinkage int sys_pause(void)
 {
-	static int warned = 0;
-
-	if (warned == 0) {
-		warned ++;
-		printk (KERN_NOTICE "%s (%d): obsolete pause call\n",
-			current->comm, current->pid);
-	}
-
 	current->state = TASK_INTERRUPTIBLE;
 	schedule();
 	return -ERESTARTNOHAND;

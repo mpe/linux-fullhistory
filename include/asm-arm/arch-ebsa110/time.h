@@ -7,8 +7,13 @@
  *
  * Changelog:
  *  10-Oct-1996	RMK	Created
- *  04-Dec-1997	RMK	Updated for new arch/arm/time.c
+ *  04-Dec-1997	RMK	Updated for new arch/arm/kernel/time.c
+ *  07-Aug-1998	RMK	Updated for arch/arm/kernel/leds.c
  */
+
+#include <asm/leds.h>
+
+#define IRQ_TIMER IRQ_EBSA110_TIMER0
 
 #define MCLK_47_8
 
@@ -49,7 +54,7 @@ extern __inline__ int reset_timer (void)
 
 	if (--count == 0) {
 		count = 50;
-		*(volatile unsigned char *)0xf2400000 ^= 128;
+		leds_event(led_timer);
 	}
 
 	if (divisor == 0) {

@@ -2,6 +2,9 @@
  * include/asm-arm/arch-vnc/irq.h
  *
  * Copyright (C) 1998 Russell King
+ *
+ * Changelog:
+ *   22-08-1998	RMK	Restructured IRQ routines
  */
 
 #include <asm/irq.h>
@@ -29,67 +32,48 @@ static int fb_irq_mask[16] = {
 	IRQ_MASK_PCI_ERR
 };
 
-static __inline__ void mask_and_ack_irq(unsigned int irq)
+static void vnc_mask_csr_irq(unsigned int irq)
 {
-	if (irq < 16)
-		*CSR_IRQ_DISABLE = fb_irq_mask[irq];
-	else {
-		unsigned int pic_mask, mask;
-
-		if (irq < 24)
-			pic_mask = PIC_MASK_LO;
-		else
-			pic_mask = PIC_MASK_HI;
-
-		mask = 1 << (irq & 7);
-
-		outb(inb(pic_mask) | mask, pic_mask);
-	}
+	*CSR_IRQ_DISABLE = fb_irq_mask[irq];
 }
 
-static __inline__ void mask_irq(unsigned int irq)
+static void vnc_unmask_csr_irq(unsigned int irq)
 {
-	if (irq < 16)
-		*CSR_IRQ_DISABLE = fb_irq_mask[irq];
-	else {
-		unsigned int pic_mask, mask;
-
-		if (irq < 24)
-			pic_mask = PIC_MASK_LO;
-		else
-			pic_mask = PIC_MASK_HI;
-
-		mask = 1 << (irq & 7);
-
-		outb(inb(pic_mask) | mask, pic_mask);
-	}
+	*CSR_IRQ_DISABLE = fb_irq_mask[irq];
 }
 
-static __inline__ void unmask_irq(unsigned int irq)
+static void vnc_mask_pic_lo_irq(unsigned int irq)
 {
-	if (irq < 16)
-		*CSR_IRQ_ENABLE = fb_irq_mask[irq];
-	else {
-		unsigned int pic_mask, mask;
+	unsigned int mask = 1 << (irq & 7);
 
-		if (irq < 24)
-			pic_mask = PIC_MASK_LO;
-		else
-			pic_mask = PIC_MASK_HI;
-
-		mask = 1 << (irq & 7);
-
-		outb(inb(pic_mask) & ~mask, pic_mask);
-	}
+	outb(inb(PIC_MASK_LO) | mask, PIC_MASK_LO);
 }
- 
-static __inline__ unsigned long get_enabled_irqs(void)
+
+static void vnc_unmask_pic_lo_irq(unsigned int irq)
 {
-	return 0;
+	unsigned int mask = 1 << (irq & 7);
+
+	outb(inb(PIC_MASK_LO) & ~mask, PIC_MASK_LO);
+}
+
+static void vnc_mask_pic_hi_irq(unsigned int irq)
+{
+	unsigned int mask = 1 << (irq & 7);
+
+	outb(inb(PIC_MASK_HI) | mask, PIC_MASK_HI);
+}
+
+static void vnc_unmask_pic_hi_irq(unsigned int irq)
+{
+	unsigned int mask = 1 << (irq & 7);
+
+	outb(inb(PIC_MASK_HI) & ~mask, PIC_MASK_HI);
 }
 
 static __inline__ void irq_init_irq(void)
 {
+	unsigned int irq;
+
 	outb(0x11, PIC_LO);
 	outb(0x10, PIC_MASK_LO);
 	outb(0x04, PIC_MASK_LO);
@@ -103,4 +87,23 @@ static __inline__ void irq_init_irq(void)
 	*CSR_IRQ_DISABLE = ~IRQ_MASK_EXTERN_IRQ;
 	*CSR_IRQ_ENABLE  = IRQ_MASK_EXTERN_IRQ;
 	*CSR_FIQ_DISABLE = -1;
+
+	for (irq = 0; irq < NR_IRQS; irq++) {
+		irq_desc[irq].valid	= 1;
+		irq_desc[irq].probe_ok	= 1;
+
+		if (irq < 16) {
+			irq_desc[irq].mask_ack	= vnc_mask_csr_irq;
+			irq_desc[irq].mask	= vnc_mask_csr_irq;
+			irq_desc[irq].unmask	= vnc_unmask_csr_irq;
+		} else if (irq < 24) {
+			irq_desc[irq].mask_ack	= vnc_mask_pic_lo_irq;
+			irq_desc[irq].mask	= vnc_mask_pic_lo_irq;
+			irq_desc[irq].unmask	= vnc_unmask_pic_lo_irq;
+		} else {
+			irq_desc[irq].mask_ack	= vnc_mask_pic_hi_irq;
+			irq_desc[irq].mask	= vnc_mask_pic_hi_irq;
+			irq_desc[irq].unmask	= vnc_unmask_pic_hi_irq;
+		}
+	}
 }

@@ -1,58 +1,54 @@
 /*
  * linux/arch/arm/kernel/head32.S
  *
- * Copyright (C) 1994, 1995, 1996, 1997 Russell King
+ * Copyright (C) 1994-1998 Russell King
  *
  * Kernel 32 bit startup code for ARM6 / ARM7 / StrongARM
  */
 #include <linux/config.h>
 #include <linux/linkage.h>
 
+#if (TEXTADDR & 0xffff) != 0x8000
+#error TEXTADDR must start at 0xXXXX8000
+#endif
+
 #define DEBUG
 
-		.text
-		.align
-
 		.globl	SYMBOL_NAME(swapper_pg_dir)
-		.equ	SYMBOL_NAME(swapper_pg_dir),	0xc0004000
+		.equ	SYMBOL_NAME(swapper_pg_dir),	TEXTADDR - 0x4000
 
-		.globl	__stext
+		.text
 /*
  * Entry point and restart point.  Entry *must* be called with r0 == 0,
  * MMU off.  Note! These should be unique!!! Please read Documentation/ARM-README
  * for more information.
  *
- *  r1 = 0 -> ebsa110
- *  r1 = 1 -> RPC
+ *  r1 = 0 -> DEC EBSA-110
+ *  r1 = 1 -> Acorn RiscPC
  *  r1 = 2 -> ebsit
  *  r1 = 3 -> nexuspci
- *  r1 = 4 -> ebsa285
- *  r1 = 5 -> vnc
+ *  r1 = 4 -> DEC EBSA-285
+ *  r1 = 5 -> Corel Netwinder
  *  r1 = 6 -> CATS
+ *  r1 = 7 -> tbox
  */
+
 ENTRY(stext)
 ENTRY(_stext)
-__entry:
-		teq	r0, #0					@ check for illegal entry...
+__entry:	teq	r0, #0					@ check for illegal entry...
 		bne	.Lerror					@ loop indefinitely
-		cmp	r1, #7					@ Unknown machine architecture
+		cmp	r1, #8					@ Unknown machine architecture
 		bge	.Lerror
-@
-@ First thing to do is to get the page tables set up so that we can call the kernel
-@ in the correct place.  This is relocatable code...
-@
+/* First thing to do is to get the page tables set up so that we can call the kernel
+ * in the correct place.  This is relocatable code...
+ * - Read processor ID register (CP#15, CR0).
+ */
 		mrc	p15, 0, r9, c0, c0			@ get Processor ID
-@
-@ Read processor ID register (CP#15, CR0).
-@ NOTE: ARM2 & ARM250 cause an undefined instruction exception...
-@ Values are:
-@		XX01XXXX = ARMv4 architecture (StrongARM)
-@		XX00XXXX = ARMv3 architecture
-@		4156061X = ARM 610
-@ 		4156030X = ARM 3
-@		4156025X = ARM 250
-@		4156020X = ARM 2
-@
+/* Values are:
+ *		XX01XXXX = ARMv4 architecture (StrongARM)
+ *		XX00XXXX = ARMv3 architecture
+ *		4156061X = ARM 610
+ */
 		adr	r10, .LCProcTypes
 1:		ldmia	r10!, {r5, r6, r8}			@ Get Set, Mask, MMU Flags
 		teq	r5, #0					@ End of list?
@@ -71,44 +67,51 @@ __entry:
  * r6 = I/O address
  */
 		mov	r0, r4
-		mov	r1, #0
+		mov	r3, #0
 		add	r2, r0, #0x4000
-1:		str	r1, [r0], #4				@ Clear page table
+1:		str	r3, [r0], #4				@ Clear page table
 		teq	r0, r2
 		bne	1b
 /*
  * Add enough entries to allow the kernel to be called.
  * It will sort out the real mapping in paging_init.
- * We map in 2MB of memory into 0xC0000000 - 0xC0200000
+ * We map in 2MB of memory into (TEXTADDR-0x8000) + 2MB
  */
-		add	r0, r4, #0x3000
-		mov	r1, #0x0000000c				@ SECT_CACHEABLE | SECT_BUFFERABLE
-		orr	r1, r1, r8
-		add	r1, r1, r5
-		str	r1, [r0], #4
-		add	r1, r1, #1 << 20
-		str	r1, [r0], #4
-		add	r1, r1, #1 << 20
-@
-@ Map in IO space
-@
+		add	r0, r4, #(TEXTADDR - 0x8000) >> 18
+		mov	r3, #0x0000000c				@ SECT_CACHEABLE | SECT_BUFFERABLE
+		orr	r3, r3, r8
+		add	r3, r3, r5
+		str	r3, [r0], #4
+		add	r3, r3, #1 << 20
+		str	r3, [r0], #4
+		add	r3, r3, #1 << 20
+#ifdef DEBUG
+/* Map in IO space
+ * This allows debug messages to be output via a serial
+ * before/while paging_init.
+ */
 		add	r0, r4, #0x3800
-		orr	r1, r6, r8
+		orr	r3, r6, r8
 		add	r2, r0, #0x0800
-1:		str	r1, [r0], #4
-		add	r1, r1, #1 << 20
+1:		str	r3, [r0], #4
+		add	r3, r3, #1 << 20
 		teq	r0, r2
 		bne	1b
-@
-@ Map in screen at 0x02000000 & SCREEN2_BASE
-@
+#endif
+#ifdef CONFIG_ARCH_RPC
+/* Map in screen at 0x02000000 & SCREEN2_BASE
+ * Similar reasons here - for debug, and when things go
+ * wrong to a certain extent.  This is of limited use to
+ * non-Acorn RiscPC architectures though.
+ */
 		teq	r5, #0
 		addne	r0, r4, #0x80				@ 02000000
-		movne	r1, #0x02000000
-		orrne	r1, r1, r8
-		strne	r1, [r0]
+		movne	r3, #0x02000000
+		orrne	r3, r3, r8
+		strne	r3, [r0]
 		addne	r0, r4, #0x3600				@ d8000000
-		strne	r1, [r0]
+		strne	r3, [r0]
+#endif
 @
 @ The following should work on both v3 and v4 implementations
 @
@@ -122,25 +125,29 @@ __entry:
 		mov	pc, lr
 
 .Lerror:
+#ifdef CONFIG_ARCH_RPC
+/* Turn the screen red on a error - RiscPC only.
+ */
 1:		mov	r0, #0x02000000
-		mov	r1, #0x11
-		orr	r1, r1, r1, lsl #8
-		orr	r1, r1, r1, lsl #16
-		str	r1, [r0], #4
-		str	r1, [r0], #4
-		str	r1, [r0], #4
-		str	r1, [r0], #4
+		mov	r3, #0x11
+		orr	r3, r3, r3, lsl #8
+		orr	r3, r3, r3, lsl #16
+		str	r3, [r0], #4
+		str	r3, [r0], #4
+		str	r3, [r0], #4
+		str	r3, [r0], #4
+#endif
 		b	1b
 
 .Lbranch:	.long	.Lalready_done_mmap			@ Real address of routine
 
-		@ EBSA110 (pg dir phys, phys ram start, phys i/o)
+		@ DEC EBSA110 (pg dir phys, phys ram start, phys i/o)
 .LCMachTypes:	.long	SYMBOL_NAME(swapper_pg_dir) - 0xc0000000	@ Address of page tables (physical)
 		.long	0					@ Address of RAM
 		.long	0xe0000000				@ I/O address
 		.long	0
 
-		@ RPC
+		@ Acorn RiscPC
 		.long	SYMBOL_NAME(swapper_pg_dir) - 0xc0000000 + 0x10000000
 		.long	0x10000000
 		.long	0x03000000
@@ -158,7 +165,7 @@ __entry:
 		.long	0x10000000
 		.long	0
 
-		@ EBSA285
+		@ DEC EBSA285
 		.long	SYMBOL_NAME(swapper_pg_dir) - 0xc0000000 @ Address of page tables (physical)
 		.long	0					@ Address of RAM
 		.long	0x24000000				@ I/O base address (0x42000000 -> 0xFE000000)
@@ -174,6 +181,12 @@ __entry:
 		.long	SYMBOL_NAME(swapper_pg_dir) - 0xc0000000 @ Address of page tables (physical)
 		.long	0					@ Address of RAM
 		.long	0x24000000				@ I/O base address (0x42000000 -> 0xfe000000)
+		.long	0
+
+		@ tbox
+		.long	SYMBOL_NAME(swapper_pg_dir) - 0xc0000000 + 0x80000000
+		.long	0x80000000				@ Address of RAM
+		.long	0x00400000				@ Uart
 		.long	0
 
 .LCProcTypes:	@ ARM6 / 610
@@ -205,11 +218,6 @@ __entry:
 		b	.Lsa_fastclock
 
 		.long	0
-
-.LC0:		.long	SYMBOL_NAME(__bss_start)
-		.long	SYMBOL_NAME(arm_id)
-		.long	SYMBOL_NAME(_end)
-		.long	SYMBOL_NAME(init_task_union)+8192
 		.align
 
 .Larmv3_flush_early:
@@ -249,25 +257,36 @@ __entry:
 		orr	r0, r0, #0x1100				@ v4 supports separate I cache
 		mov	pc, lr
 
+		.section ".text.init",#alloc,#execinstr
+
 .Lsa_fastclock:	mcr	p15, 0, r4, c15, c1, 2			@ Enable clock switching
 		mov	pc, lr
 
+.LC0:		.long	SYMBOL_NAME(__entry)
+		.long	SYMBOL_NAME(machine_type)
+		.long	SYMBOL_NAME(__bss_start)
+		.long	SYMBOL_NAME(processor_id)
+		.long	SYMBOL_NAME(_end)
+		.long	SYMBOL_NAME(init_task_union)+8192
+		.align
+
 .Lalready_done_mmap:
-		adr	r5, __entry				@ Add base back in
-		add	r10, r10, r5
-		adr	r5, .LC0
-		ldmia	r5, {r5, r6, r8, sp}			@ Setup stack
-		mov	r4, #0
+		adr	r4, .LC0
+		ldmia	r4, {r3, r4, r5, r6, r8, sp}		@ Setup stack
+		add	r10, r10, r3				@ Add base back in
+		mov	fp, #0
 1:		cmp	r5, r8					@ Clear BSS
-		strcc	r4, [r5],#4
+		strcc	fp, [r5],#4
 		bcc	1b
 
+		str	r1, [r4]				@ Save machine type
 		str	r9, [r6]				@ Save processor ID
 		mov	lr, pc
 		add	pc, r10, #4				@ Call post-processor init
 		mov	fp, #0
 		b	SYMBOL_NAME(start_kernel)
 
+		.text
 #ifdef DEBUG
 /*
  * Some debugging routines (useful if you've got MM problems and
@@ -385,6 +404,9 @@ printhex:	ldr	r2, =hexbuf
 		teq	r3, r2
 		bne	1b
 		mov	r0, r2
+		b	printascii
+
+		.ltorg
 
 ENTRY(printascii)
 		addruart r3
@@ -413,7 +435,3 @@ ENTRY(printch)
 hexbuf:		.space 16
 
 #endif
-
-		.text
-		.align	13
-ENTRY(this_must_match_init_task)

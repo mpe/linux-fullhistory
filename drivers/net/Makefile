@@ -24,6 +24,10 @@ CONFIG_7990_BUILTIN :=
 CONFIG_7990_MODULE :=
 CONFIG_82596_BUILTIN :=
 CONFIG_82596_MODULE :=
+CONFIG_85230_BUILTIN :=
+CONFIG_85230_MODULE  :=
+CONFIG_SYNCPPP_BUILTIN :=
+CONFIG_SYNCPPP_MODULE  :=
 
 ifeq ($(CONFIG_ISDN),y)
   ifeq ($(CONFIG_ISDN_PPP),y)
@@ -283,8 +287,8 @@ else
   endif
 endif
 
-# bsd_comp.o is *always* a module, for some undocumented reason
-# (perhaps licensing).
+# bsd_comp.o is *always* a module, for some documented reason
+# (licensing).
 ifeq ($(CONFIG_PPP),y)
 LX_OBJS += ppp.o
 M_OBJS += bsd_comp.o
@@ -689,6 +693,40 @@ L_OBJS += epic100.o
 else
   ifeq ($(CONFIG_EPIC100),m)
   M_OBJS += epic100.o
+  endif
+endif
+
+ifeq ($(CONFIG_HOSTESS_SV11),y)
+L_OBJS += hostess_sv11.o
+CONFIG_85230_BUILTIN = y
+CONFIG_SYNCPPP_BUILTIN = y
+else
+  ifeq ($(CONFIG_HOSTESS_SV11),m)
+  CONFIG_85230_MODULE = y
+  CONFIG_SYNCPPP_MODULE = y
+  M_OBJS += hostess_sv11.o
+  endif
+endif
+
+# If anything built-in uses syncppp, then build it into the kernel also.
+# If not, but a module uses it, build as a module.
+
+ifdef CONFIG_SYNCPPP_BUILTIN
+LX_OBJS += syncppp.o
+else
+  ifdef CONFIG_SYNCPPP_MODULE
+  MX_OBJS += syncppp.o
+  endif
+endif
+
+# If anything built-in uses Z85230, then build it into the kernel also.
+# If not, but a module uses it, build as a module.
+
+ifdef CONFIG_85230_BUILTIN
+LX_OBJS += z85230.o
+else
+  ifdef CONFIG_85230_MODULE
+  MX_OBJS += z85230.o
   endif
 endif
 

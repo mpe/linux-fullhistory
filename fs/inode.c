@@ -8,6 +8,7 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/dcache.h>
+#include <linux/init.h>
 #include <linux/quotaops.h>
 
 /*
@@ -734,11 +735,11 @@ int bmap(struct inode * inode, int block)
 
 /*
  * Initialize the hash tables and default
- * value for max inodes..
+ * value for max inodes
  */
 #define MAX_INODE (8192)
 
-void inode_init(void)
+void __init inode_init(void)
 {
 	int i, max;
 	struct list_head *head = inode_hashtable;

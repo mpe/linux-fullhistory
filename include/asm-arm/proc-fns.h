@@ -83,6 +83,14 @@ extern struct processor {
 			 * flush an icached page
 			 */
 			void (*_flush_icache_area)(unsigned long start, unsigned long end);
+			/*
+			 * write back dirty cached data
+			 */
+			void (*_cache_wback_area)(unsigned long start, unsigned long end);
+			/*
+			 * purge cached data without (necessarily) writing it back
+			 */
+			void (*_cache_purge_area)(unsigned long start, unsigned long end);
 		} armv3v4;
 		struct {
 			/* MEMC

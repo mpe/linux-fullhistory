@@ -8,17 +8,7 @@
 # Copyright (C) 1994 by Linus Torvalds
 #
 
-ifdef CONFIG_CROSSCOMPILE
-# enable this for linking under OSF/1:
-LINKFLAGS = -non_shared -T 0x20000000 -N
-else
- elf=$(shell if $(LD) --help | grep elf64alpha >/dev/null; then echo yes; fi)
- ifeq ($(elf),yes)
-  LINKFLAGS = -static -Ttext 0x20000000 -N
- else
-  LINKFLAGS = -static -T bootloader.lds -N
- endif
-endif
+LINKFLAGS = -static -T bootloader.lds #-N -relax
 
 .S.s:
 	$(CC) -D__ASSEMBLY__ -traditional -E -o $*.o $<
@@ -56,7 +46,7 @@ bootdevice:
 	@test "$(BOOTDEV)" != ""  || (echo You must specify BOOTDEV ; exit -1)
 
 vmlinux.gz: vmlinux
-	gzip -fv vmlinux
+	gzip -fv9 vmlinux
 
 #
 # A raw binary without header.  Used by raw boot.
@@ -69,18 +59,10 @@ ksize.h: $(OBJSTRIP) vmlinux.nh
 	echo "#define KERNEL_SIZE `$(OBJSTRIP) -p vmlinux.nh /dev/null`" > $@
 
 vmlinux.nh: $(VMLINUX) $(OBJSTRIP)
-ifeq ($(elf),yes)
-	cp $(VMLINUX) vmlinux.stripped
-	strip vmlinux.stripped		# work around ELF binutils bug...
-	$(OBJSTRIP) -v vmlinux.stripped vmlinux.nh
-	rm -f vmlinux.stripped
-else
 	$(OBJSTRIP) -v $(VMLINUX) vmlinux.nh
-endif
 
 vmlinux: $(TOPDIR)/vmlinux
-	cp $(TOPDIR)/vmlinux vmlinux
-	strip vmlinux
+	strip -o vmlinux $(VMLINUX)
 
 tools/lxboot: $(OBJSTRIP) bootloader
 	$(OBJSTRIP) -p bootloader tools/lxboot
@@ -98,21 +80,14 @@ tools/mkbb: tools/mkbb.c
 	$(HOSTCC) tools/mkbb.c -o tools/mkbb
 
 bootloader: $(OBJECTS)
-	$(LD) $(LINKFLAGS) \
-		$(OBJECTS) \
-		$(LIBS) \
-		-o bootloader && strip bootloader || \
-		(rm -f bootloader && exit 1)
+	$(LD) $(LINKFLAGS) $(OBJECTS) $(LIBS) -o bootloader
 
 bootpheader: $(BPOBJECTS)
-	$(LD) $(LINKFLAGS) \
-		$(BPOBJECTS) \
-		$(LIBS) \
-		-o bootpheader && strip bootpheader || \
-		(rm -f bootpheader && exit 1)
+	$(LD) $(LINKFLAGS) $(BPOBJECTS) $(LIBS) -o bootpheader
 
 clean:
-	rm -f $(TARGETS) bootloader bootimage vmlinux.nh \
-		tools/mkbb tools/bootlx tools/lxboot ksize.h
+	rm -f $(TARGETS) bootloader bootimage bootpfile bootpheader
+	rm -f tools/mkbb tools/bootlx tools/lxboot tools/bootph
+	rm -f vmlinux.nh ksize.h
 
 dep:

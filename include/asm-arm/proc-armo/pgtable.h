@@ -128,6 +128,7 @@ extern __inline__ void update_memc_addr(struct mm_struct *mm, unsigned long addr
  */
 #define VMALLOC_START	0x01a00000
 #define VMALLOC_VMADDR(x) ((unsigned long)(x))
+#define VMALLOC_END	0x01c00000
 
 #define _PAGE_PRESENT		0x01
 #define _PAGE_READONLY		0x02

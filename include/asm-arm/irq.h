@@ -3,6 +3,8 @@
 
 #include <asm/arch/irqs.h>
 
+#define irq_cannonicalize(i)	(i)
+
 #ifndef NR_IRQS
 #define NR_IRQS	128
 #endif

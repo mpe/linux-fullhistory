@@ -52,8 +52,8 @@ static int FDC2 = -1;
 
 /*
  * Most Alphas have no problems with floppy DMA crossing 64k borders,
- * except for XL.  It is also the only one with DMA limits, so we use
- * that to test in the generic kernel.
+ * except for XL and RUFFIAN.  They are also the only one with DMA
+ * limits, so we use that to test in the generic kernel.
  */
 
 #define __CROSS_64KB(a,s)					\
@@ -64,7 +64,7 @@ static int FDC2 = -1;
 #ifdef CONFIG_ALPHA_GENERIC
 # define CROSS_64KB(a,s)   (__CROSS_64KB(a,s) && ~alpha_mv.max_dma_address)
 #else
-# ifdef CONFIG_ALPHA_XL
+# if defined(CONFIG_ALPHA_XL) || defined(CONFIG_ALPHA_RUFFIAN)
 #  define CROSS_64KB(a,s)  __CROSS_64KB(a,s)
 # else
 #  define CROSS_64KB(a,s)  (0)

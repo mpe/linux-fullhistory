@@ -75,58 +75,34 @@ sys_sethae(unsigned long hae, unsigned long a1, unsigned long a2,
 	return 0;
 }
 
-#ifdef __SMP__
-/* This is being executed in task 0 'user space'. */
-#define resched_needed() 1
-int
-cpu_idle(void *unused)
+static void __attribute__((noreturn))
+do_cpu_idle(void)
 {
-	extern volatile int smp_commenced;
-
-	current->priority = -100;
+	/* An endless idle loop with no priority at all.  */
+	current->priority = 0;
 	while (1) {
-		run_task_queue(&tq_scheduler);
-		/* endless idle loop with no priority at all */
-		current->counter = -100;
-		if (!smp_commenced || resched_needed()) {
-			schedule();
-		}
-	}
-}
-
-asmlinkage int
-sys_idle(void)
-{
-        if(current->pid != 0)
-                return -EPERM;
-
-        cpu_idle(NULL);
-        return 0;
-}
-
-#else /* __SMP__ */
-
-asmlinkage int
-sys_idle(void)
-{
-	int ret = -EPERM;
-
-	lock_kernel();
-	if (current->pid != 0)
-		goto out;
-
-	/* endless idle loop with no priority at all */
-	current->counter = -100;
-	for (;;) {
 		check_pgt_cache();
+		run_task_queue(&tq_scheduler);
+		current->counter = 0;
 		schedule();
 	}
-	ret = 0;
-out:
-	unlock_kernel();
-	return ret;
 }
-#endif /* __SMP__ */
+
+#ifdef __SMP__
+void
+cpu_idle(void *unused)
+{
+	do_cpu_idle();
+}
+#endif
+
+asmlinkage int
+sys_idle(void)
+{
+	if (current->pid == 0)
+        	do_cpu_idle();
+	return -EPERM;
+}
 
 void
 generic_kill_arch (int mode, char *restart_cmd)
@@ -154,7 +130,7 @@ generic_kill_arch (int mode, char *restart_cmd)
 				cpup->ipc_buffer[0] = 0;
 			} else {
 				flags |=  0x00030000UL; /* "warm bootstrap" */
-				strncpy(cpup->ipc_buffer, restart_cmd,
+				strncpy((char *)cpup->ipc_buffer, restart_cmd,
 					sizeof(cpup->ipc_buffer));
 			}
 		}

@@ -4,7 +4,7 @@
  *          Tim Waugh <tim@cyberelk.demon.co.uk>
  *	    Jose Renau <renau@acm.org>
  *          David Campbell <campbell@torque.net>
- *          Andrea Arcangeli <arcangeli@mbox.queen.it>
+ *          Andrea Arcangeli
  *
  * based on work by Grant Guenther <grant@torque.net> and Phil Blundell.
  */

@@ -8,15 +8,15 @@
  * with the IRQ handling routines in irq.c.
  */
 
-
-/* FIXME FIXME FIXME FIXME FIXME */
-/* We need to figure out why these fail on the DP264 & SX164.  Otherwise
-   we'd just do this in init_IRQ().  */
 #define STANDARD_INIT_IRQ_PROLOG	\
 	outb(0, DMA1_RESET_REG);	\
 	outb(0, DMA2_RESET_REG);	\
+	outb(0, DMA1_MASK_REG);		\
+	outb(0, DMA2_MASK_REG);		\
 	outb(0, DMA1_CLR_MASK_REG);	\
-	outb(0, DMA2_CLR_MASK_REG)
+	outb(0, DMA2_CLR_MASK_REG);	\
+	outb(DMA_MODE_CASCADE, DMA2_MODE_REG)
+
 
 extern unsigned long alpha_irq_mask;
 
