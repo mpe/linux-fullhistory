@@ -505,6 +505,7 @@ void __release_region(struct resource *parent, unsigned long start, unsigned lon
 			*p = res->sibling;
 			write_unlock(&resource_lock);
 			kfree(res);
+			res = NULL;
 			return;
 		}
 		p = &res->sibling;
