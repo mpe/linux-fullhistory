@@ -8,3 +8,67 @@ Thu Oct 20 23:44:22 1994  Theodore Y. Ts'o  (tytso@rt-11)
 	* fcntl.c (sys_fcntl): Add more of a security check to the
 		F_SETOWN fcntl().
 
+[Tons of changes missed, indeed. This list is worth restarting since
+at least some fixes WILL break third-party filesystems. Sorry, but
+there was no other way to fix rmdir/rename deadlock, for one.]
+
+Wed Dec  2 (Linus, fill the rest, please)
+
+	* namei.c (do_rmdir) and rmdir method in filesystems:
+		Locking of directory we remove was taken to VFS.
+		See comments in do_rmdir(). Unfixed filesystems
+		will bloody likely deadlock in rmdir().
+
+Thu Dec  3 17:25:31 1998  Al Viro (viro@math.psu.edu)
+
+	* namei.c (do_rmdir):
+		Reject non-directories here.
+		Two (probably) obsolete checks moved here too: we fail if
+		the directory we remove is the same as parent (BUG: we
+		serve mountpoints later) or if it lives on a different
+		device.
+	* sysvfs/namei.c (sysv_rmdir):
+		Bugectomy: old check for victim being busy (inode->i_count)
+		wasn't replaced (with checking dentry->d_count) and escaped
+		Linus in the last round of changes. Shot and buried.
+
+Fri Dec  4 00:54:12 1998  AV
+
+	* namei.c (check_sticky): New function check_sticky(dir, inode).
+		If dir is sticky check whether we can unlink/rmdir/rename
+		the inode. Returns 1 if we can't. If dir isn't sticky -
+		return 0 (i.e. no objections). Some filesystems require
+		suser() here; some are fine with CAP_FOWNER. The later
+		seems more reasonable.
+	* namei.c (do_rmdir):
+		Moved the check for sticky bit here.
+	* affs/{inode,namei}.c:
+		All AFFS directories have sticky semantics (i.e. non-owner
+		having write permisssions on directory can unlink/rmdir/rename
+		only the files he owns), but AFFS didn't set S_ISVTX on them.
+		Fixed. NB: maybe this behaviour should be controlled by mount
+		option. Obvious values being 'sticky' (current behaviour),
+		'nonsticky' (normal behaviour) and maybe some play on 'D'
+		permissions bit. FIXME.
+	* qnx4/namei.c (qnx4_rmdir):
+		Plugged inode leak.
+	* ufs/namei.c (ufs_rmdir):
+		Changed handling of busy directory to new scheme.
+
+Fri Dec  4 10:30:58 1998  AV
+
+	* namei.c (VFS_rmdir): New function. It gets inode of the parent and
+		dentry of the victim, does all checks and applies fs-specific
+		rmdir() method. It should be called with semaphores down
+		on both the victim and its parent and with bumped d_count on
+		victim (see comments in do_rmdir).
+	* include/linux/fs.h: Added VFS_rmdir
+	* kernel/ksyms.c: Added VFS_rmdir to export list (for NFSD).
+	* nfsd/vfs.c: Fixed rmdir handling.
+
+	Remaining problems with rmdir:
+		UMSDOS_rename is broken. Call it with the dest. existing and
+		being an empty directory and you've got EBUSY. At least it
+		doesn't do any harm, so that will wait several days till rename
+		cleanup.
+	TODO: unlink handling in NFSD does no tests.

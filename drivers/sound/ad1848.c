@@ -442,10 +442,6 @@ static int ad1848_mixer_set(ad1848_info * devc, int dev, int value)
 	left = mix_cvt[left];
 	right = mix_cvt[right];
 
-	/* Scale it again */
-	left = mix_cvt[left];
-	right = mix_cvt[right];
-
 	if (devc->mix_devices[dev][LEFT_CHN].nbits == 0)
 		return -EINVAL;
 
@@ -1205,15 +1201,17 @@ static void ad1848_halt_input(int dev)
 
 	{
 		int             tmout;
-
-		disable_dma(audio_devs[dev]->dmap_in->dma);
+		
+		if(!isa_dma_bridge_buggy)
+		        disable_dma(audio_devs[dev]->dmap_in->dma);
 
 		for (tmout = 0; tmout < 100000; tmout++)
 			if (ad_read(devc, 11) & 0x10)
 				break;
 		ad_write(devc, 9, ad_read(devc, 9) & ~0x02);	/* Stop capture */
 
-		enable_dma(audio_devs[dev]->dmap_in->dma);
+		if(!isa_dma_bridge_buggy)
+		        enable_dma(audio_devs[dev]->dmap_in->dma);
 		devc->audio_mode &= ~PCM_ENABLE_INPUT;
 	}
 
@@ -1240,14 +1238,17 @@ static void ad1848_halt_output(int dev)
 	{
 		int             tmout;
 
-		disable_dma(audio_devs[dev]->dmap_out->dma);
+		if(!isa_dma_bridge_buggy)
+		        disable_dma(audio_devs[dev]->dmap_out->dma);
 
 		for (tmout = 0; tmout < 100000; tmout++)
 			if (ad_read(devc, 11) & 0x10)
 				break;
 		ad_write(devc, 9, ad_read(devc, 9) & ~0x01);	/* Stop playback */
 
-		enable_dma(audio_devs[dev]->dmap_out->dma);
+		if(!isa_dma_bridge_buggy)
+		       enable_dma(audio_devs[dev]->dmap_out->dma);
+
 		devc->audio_mode &= ~PCM_ENABLE_OUTPUT;
 	}
 

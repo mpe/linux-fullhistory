@@ -15,6 +15,12 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
      bool 'Joystick support at boot time' CONFIG_SOUND_ES1370_JOYPORT_BOOT
   fi  
   dep_tristate 'Creative Ensoniq AudioPCI 97 (ES1371)' CONFIG_SOUND_ES1371 $CONFIG_SOUND
+  if [ "$CONFIG_SOUND_ES1371" = "y" ]; then
+     bool 'Joystick support at boot time' CONFIG_SOUND_ES1371_JOYPORT_BOOT
+     if [ "$CONFIG_SOUND_ES1371_JOYPORT_BOOT" = "y" ]; then
+        hex 'Gameport I/O 200,208,210,218' CONFIG_SOUND_ES1371_GAMEPORT 200
+     fi
+  fi
   dep_tristate 'S3 SonicVibes' CONFIG_SOUND_SONICVIBES $CONFIG_SOUND
 fi
 
@@ -224,6 +230,17 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
       int 'SGALAXY second (duplex) DMA 0, 1 or 3' CONFIG_SGALAXY_DMA2 3
       hex 'SGALAXY SB I/O base 220 or 240' CONFIG_SGALAXY_SGBASE 220
   fi
+
+  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+    dep_tristate 'Support for AD1816(A) based cards (EXPERIMENTAL)' CONFIG_SOUND_AD1816 $CONFIG_SOUND
+    if [ "$CONFIG_SOUND_AD1816" = "y" ]; then
+      hex 'AD1816 audio I/O base 530, 604, E80 or F40' CONFIG_AD1816_BASE 530
+      int 'AD1816 audio IRQ 5, 7, 9, 11, 12 or 15' CONFIG_AD1816_IRQ 7
+      int 'AD1816 audio DMA 0, 1 or 3' CONFIG_AD1816_DMA 0
+      int 'AD1816 second (duplex) DMA 0, 1 or 3' CONFIG_AD1816_DMA2 3
+      int 'AD1816 clock chip frequency' CONFIG_AD1816_CLOCK 33000
+    fi
+  fi
   
   dep_tristate 'Yamaha OPL3-SA1 audio controller' CONFIG_SOUND_OPL3SA1 $CONFIG_SOUND_OSS
   if [ "$CONFIG_SOUND_OPL3SA1" = "y" ]; then
@@ -252,7 +269,14 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
   fi
   
   if [ "$CONFIG_ARM" = "y" ]; then
-      bool 'VIDC 16-bit sound' CONFIG_VIDC_SOUND
+    dep_tristate 'VIDC 16-bit sound' CONFIG_SOUND_VIDC $CONFIG_SOUND_OSS
+    dep_tristate 'Netwinder WaveArtist' CONFIG_SOUND_WAVEARTIST $CONFIG_SOUND_OSS
+    if [ "$CONFIG_SOUND_WAVEARTIST" != "n" ]; then
+      hex '  WaveArtist I/O base' CONFIG_WAVEARTIST_BASE 250
+      int '  WaveArtist IRQ' CONFIG_WAVEARTIST_IRQ 28
+      int '  WaveArtist DMA' CONFIG_WAVEARTIST_DMA 3
+      int '  WaveArtist second DMA' CONFIG_WAVEARTIST_DMA2 7
+    fi
   fi
   
   

@@ -23,12 +23,10 @@
  *
  *
  * Module command line parameters:
- *   joystick if 1 enables the joystick interface on the card; but it still
- *            needs a separate joystick driver (presumably PC standard, although
- *            the chip doc doesn't say anything and it looks slightly fishy from
- *            the PCI standpoint...)
- *
- *
+ *   joystick must be set to the base I/O-Port to be used for
+ *   the gameport. Legal values are 0x200, 0x208, 0x210 and 0x218.         
+ *   The gameport is mirrored eight times.
+ *        
  *  Supported devices:
  *  /dev/dsp    standard /dev/dsp device, (mostly) OSS compatible
  *  /dev/mixer  standard /dev/mixer device, (mostly) OSS compatible
@@ -49,11 +47,14 @@
  *                     Now mixer behaviour can basically be selected between
  *                     "OSS documented" and "OSS actual" behaviour
  *    31.08.98   0.4   Fix realplayer problems - dac.count issues
+ *    27.10.98   0.5   Fix joystick support
+ *                     -- Oliver Neukum (c188@org.chemie.uni-muenchen.de)
  *
  */
 
 /*****************************************************************************/
       
+#include <linux/config.h>
 #include <linux/version.h>
 #include <linux/module.h>
 #include <linux/string.h>
@@ -2672,7 +2673,13 @@ static /*const*/ struct file_operations es1371_midi_fops = {
 /* maximum number of devices */
 #define NR_DEVICE 5
 
+#if CONFIG_SOUND_ES1371_JOYPORT_BOOT
+static int joystick[NR_DEVICE] = { 
+CONFIG_SOUND_ES1371_GAMEPORT
+, 0, };
+#else
 static int joystick[NR_DEVICE] = { 0, };
+#endif
 
 /* --------------------------------------------------------------------- */
 
@@ -2758,7 +2765,6 @@ __initfunc(int init_es1371(void))
 				printk(KERN_ERR "es1371: joystick address 0x%x already in use\n", joystick[index]);
 			else {
 				s->ctrl |= CTRL_JYSTK_EN | (((joystick[index] >> 3) & CTRL_JOY_MASK) << CTRL_JOY_SHIFT);
-				request_region(joystick[index], JOY_EXTENT, "es1371");
 			}
 		}
 		s->sctrl = 0;
@@ -2880,8 +2886,6 @@ void cleanup_module(void)
 		synchronize_irq();
 		free_irq(s->irq, s);
 		release_region(s->io, ES1371_EXTENT);
-		if (s->ctrl & CTRL_JYSTK_EN)
-			release_region(((((s->ctrl >> CTRL_JOY_SHIFT) & CTRL_JOY_MASK) << 3) | 0x200), JOY_EXTENT);
 		unregister_sound_dsp(s->dev_audio);
 		unregister_sound_mixer(s->dev_mixer);
 		unregister_sound_dsp(s->dev_dac);

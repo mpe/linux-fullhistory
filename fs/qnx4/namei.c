@@ -168,29 +168,9 @@ int qnx4_rmdir(struct inode *dir, struct dentry *dentry)
 	if (bh == NULL) {
 		return -ENOENT;
 	}
-	if ((inode = iget(dir->i_sb, ino)) == NULL) {
-		QNX4DEBUG(("qnx4: lookup->iget -> NULL\n"));
-		retval = -EACCES;
-		goto end_rmdir;
-	}
-	retval = -EPERM;
-	if ((dir->i_mode & S_ISVTX) &&
-	    current->fsuid != inode->i_uid &&
-	    current->fsuid != dir->i_uid && !capable(CAP_FOWNER)) {
-		QNX4DEBUG(("qnx4: rmdir->capabilities\n"));
-		goto end_rmdir;
-	}
-	if (inode->i_dev != dir->i_dev) {
-		QNX4DEBUG(("qnx4: rmdir->different devices\n"));
-		goto end_rmdir;
-	}
-	if (inode == dir) {	/* we may not delete ".", but "../dir" is ok */
-		QNX4DEBUG(("qnx4: inode==dir\n"));
-		goto end_rmdir;
-	}
-	if (!S_ISDIR(inode->i_mode)) {
-		QNX4DEBUG(("qnx4: rmdir->not a directory\n"));
-		retval = -ENOTDIR;
+	inode = dentry->d_inode;
+	if (inode->i_ino != ino) {
+		retval = -EIO;
 		goto end_rmdir;
 	}
 #if 0

@@ -157,13 +157,13 @@
 #  
 #  * MultiSound Classic/Monterey/Tahiti:
 #  
-#  insmod soundcore
+#  modprobe soundcore
 #  insmod msnd
 #  insmod msnd_classic io=0x290 irq=7 mem=0xd0000
 #  
 #  * MultiSound Pinnacle in PnP mode:
 #  
-#  insmod soundcore
+#  modprobe soundcore
 #  insmod msnd
 #  isapnp mypinnacle.conf
 #  insmod msnd_pinnacle io=0x210 irq=5 mem=0xd8000 <-- match mypinnacle.conf values
@@ -359,8 +359,8 @@
 #  attempting to record at a sampling rate other than the DAT rate may
 #  be problematic (i.e. trying to record at 8000Hz when the DAT signal
 #  is 44100Hz).  If you have a problem with this, set the recording
-#  input to the line in if you need to record at a rate other than
-#  that of the DAT rate.
+#  input to analog if you need to record at a rate other than that of
+#  the DAT rate.
 #
 #
 #  -- Shell archive attached below, just run `sh MultiSound' to extract.
@@ -373,7 +373,7 @@
 # To extract the files from this archive, save it to some FILE, remove
 # everything before the `!/bin/sh' line above, then type `sh FILE'.
 #
-# Made on 1998-09-05 08:26 EDT by <andrewtv@ztransform.velsoft.com>.
+# Made on 1998-12-04 10:07 EST by <andrewtv@ztransform.velsoft.com>.
 # Source directory was `/home/andrewtv/programming/pinnacle/pinnacle'.
 #
 # Existing files will *not* be overwritten unless `-c' is specified.
@@ -381,10 +381,11 @@
 # This shar contains:
 # length mode       name
 # ------ ---------- ------------------------------------------
-#   2111 -rw-rw-r-- MultiSound.d/setdigital.c
-#  10301 -rw-rw-r-- MultiSound.d/pinnaclecfg.c
-#     96 -rw-rw-r-- MultiSound.d/Makefile
+#   2046 -rw-rw-r-- MultiSound.d/setdigital.c
+#  10235 -rw-rw-r-- MultiSound.d/pinnaclecfg.c
+#    106 -rw-rw-r-- MultiSound.d/Makefile
 #    141 -rw-rw-r-- MultiSound.d/conv.l
+#   1472 -rw-rw-r-- MultiSound.d/msndreset.c
 #
 save_IFS="${IFS}"
 IFS="${IFS}:"
@@ -431,7 +432,7 @@ else
 fi
 rm -f 1231235999 $$.touch
 #
-if mkdir _sh21233; then
+if mkdir _sh01426; then
   $echo 'x -' 'creating lock directory'
 else
   $echo 'failed to create lock directory'
@@ -466,8 +467,6 @@ X *
 X * You should have received a copy of the GNU General Public License
 X * along with this program; if not, write to the Free Software
 X * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
-X *
-X * $Id: setdigital.c,v 1.1 1998/08/29 03:32:33 andrewtv Exp $
 X *
 X ********************************************************************/
 X
@@ -528,19 +527,19 @@ X
 X	return 0;
 }
 SHAR_EOF
-  $shar_touch -am 0828233298 'MultiSound.d/setdigital.c' &&
+  $shar_touch -am 1204092598 'MultiSound.d/setdigital.c' &&
   chmod 0664 'MultiSound.d/setdigital.c' ||
   $echo 'restore of' 'MultiSound.d/setdigital.c' 'failed'
   if ( md5sum --help 2>&1 | grep 'sage: md5sum \[' ) >/dev/null 2>&1 \
   && ( md5sum --version 2>&1 | grep -v 'textutils 1.12' ) >/dev/null; then
     md5sum -c << SHAR_EOF >/dev/null 2>&1 \
     || $echo 'MultiSound.d/setdigital.c:' 'MD5 check failed'
-47720746d4367bae9954787c311c56fd  MultiSound.d/setdigital.c
+e87217fc3e71288102ba41fd81f71ec4  MultiSound.d/setdigital.c
 SHAR_EOF
   else
     shar_count="`LC_ALL= LC_CTYPE= LANG= wc -c < 'MultiSound.d/setdigital.c'`"
-    test 2111 -eq "$shar_count" ||
-    $echo 'MultiSound.d/setdigital.c:' 'original size' '2111,' 'current size' "$shar_count!"
+    test 2046 -eq "$shar_count" ||
+    $echo 'MultiSound.d/setdigital.c:' 'original size' '2046,' 'current size' "$shar_count!"
   fi
 fi
 # ============= MultiSound.d/pinnaclecfg.c ==============
@@ -574,8 +573,6 @@ X *
 X * You should have received a copy of the GNU General Public License
 X * along with this program; if not, write to the Free Software
 X * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
-X *
-X * $Id: pinnaclecfg.c,v 1.3 1998/08/29 03:32:32 andrewtv Exp $
 X *
 X ********************************************************************/
 X
@@ -984,19 +981,19 @@ X
 X	return 0;
 }
 SHAR_EOF
-  $shar_touch -am 0905082598 'MultiSound.d/pinnaclecfg.c' &&
+  $shar_touch -am 1204092598 'MultiSound.d/pinnaclecfg.c' &&
   chmod 0664 'MultiSound.d/pinnaclecfg.c' ||
   $echo 'restore of' 'MultiSound.d/pinnaclecfg.c' 'failed'
   if ( md5sum --help 2>&1 | grep 'sage: md5sum \[' ) >/dev/null 2>&1 \
   && ( md5sum --version 2>&1 | grep -v 'textutils 1.12' ) >/dev/null; then
     md5sum -c << SHAR_EOF >/dev/null 2>&1 \
     || $echo 'MultiSound.d/pinnaclecfg.c:' 'MD5 check failed'
-71f99b834a2845daae8ae034623e313e  MultiSound.d/pinnaclecfg.c
+366bdf27f0db767a3c7921d0a6db20fe  MultiSound.d/pinnaclecfg.c
 SHAR_EOF
   else
     shar_count="`LC_ALL= LC_CTYPE= LANG= wc -c < 'MultiSound.d/pinnaclecfg.c'`"
-    test 10301 -eq "$shar_count" ||
-    $echo 'MultiSound.d/pinnaclecfg.c:' 'original size' '10301,' 'current size' "$shar_count!"
+    test 10235 -eq "$shar_count" ||
+    $echo 'MultiSound.d/pinnaclecfg.c:' 'original size' '10235,' 'current size' "$shar_count!"
   fi
 fi
 # ============= MultiSound.d/Makefile ==============
@@ -1007,26 +1004,26 @@ else
   sed 's/^X//' << 'SHAR_EOF' > 'MultiSound.d/Makefile' &&
 CC	= gcc
 CFLAGS	= -O
-PROGS	= setdigital pinnaclecfg conv
+PROGS	= setdigital msndreset pinnaclecfg conv
 X
 all: $(PROGS)
 X
 clean:
 X	rm -f $(PROGS)
 SHAR_EOF
-  $shar_touch -am 0828231798 'MultiSound.d/Makefile' &&
+  $shar_touch -am 1204092398 'MultiSound.d/Makefile' &&
   chmod 0664 'MultiSound.d/Makefile' ||
   $echo 'restore of' 'MultiSound.d/Makefile' 'failed'
   if ( md5sum --help 2>&1 | grep 'sage: md5sum \[' ) >/dev/null 2>&1 \
   && ( md5sum --version 2>&1 | grep -v 'textutils 1.12' ) >/dev/null; then
     md5sum -c << SHAR_EOF >/dev/null 2>&1 \
     || $echo 'MultiSound.d/Makefile:' 'MD5 check failed'
-ab95a049d10611a5e5d559a56965b33f  MultiSound.d/Makefile
+76ca8bb44e3882edcf79c97df6c81845  MultiSound.d/Makefile
 SHAR_EOF
   else
     shar_count="`LC_ALL= LC_CTYPE= LANG= wc -c < 'MultiSound.d/Makefile'`"
-    test 96 -eq "$shar_count" ||
-    $echo 'MultiSound.d/Makefile:' 'original size' '96,' 'current size' "$shar_count!"
+    test 106 -eq "$shar_count" ||
+    $echo 'MultiSound.d/Makefile:' 'original size' '106,' 'current size' "$shar_count!"
   fi
 fi
 # ============= MultiSound.d/conv.l ==============
@@ -1059,5 +1056,82 @@ SHAR_EOF
     $echo 'MultiSound.d/conv.l:' 'original size' '141,' 'current size' "$shar_count!"
   fi
 fi
-rm -fr _sh21233
+# ============= MultiSound.d/msndreset.c ==============
+if test -f 'MultiSound.d/msndreset.c' && test "$first_param" != -c; then
+  $echo 'x -' SKIPPING 'MultiSound.d/msndreset.c' '(file already exists)'
+else
+  $echo 'x -' extracting 'MultiSound.d/msndreset.c' '(text)'
+  sed 's/^X//' << 'SHAR_EOF' > 'MultiSound.d/msndreset.c' &&
+/*********************************************************************
+X *
+X * msndreset.c - resets the MultiSound card
+X *
+X * Copyright (C) 1998 Andrew Veliath
+X *
+X * This program is free software; you can redistribute it and/or modify
+X * it under the terms of the GNU General Public License as published by
+X * the Free Software Foundation; either version 2 of the License, or
+X * (at your option) any later version.
+X *
+X * This program is distributed in the hope that it will be useful,
+X * but WITHOUT ANY WARRANTY; without even the implied warranty of
+X * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+X * GNU General Public License for more details.
+X *
+X * You should have received a copy of the GNU General Public License
+X * along with this program; if not, write to the Free Software
+X * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+X *
+X ********************************************************************/
+X
+#include <stdio.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/ioctl.h>
+#include <sys/soundcard.h>
+X
+int main(int argc, char *argv[])
+{
+X	int fd;
+X
+X	if (argc != 2) {
+X		fprintf(stderr, "usage: msndreset <mixer device>\n");
+X		exit(1);
+X	}
+X
+X	if ((fd = open(argv[1], O_RDWR)) < 0) {
+X		perror(argv[1]);
+X		exit(1);
+X	}
+X
+X	if (ioctl(fd, SOUND_MIXER_PRIVATE1, 0) < 0) {
+X		fprintf(stderr, "error: msnd ioctl reset failed\n");
+X		perror("ioctl");
+X		close(fd);
+X		exit(1);
+X	}
+X
+X	close(fd);
+X	
+X	return 0;
+}
+SHAR_EOF
+  $shar_touch -am 1204100698 'MultiSound.d/msndreset.c' &&
+  chmod 0664 'MultiSound.d/msndreset.c' ||
+  $echo 'restore of' 'MultiSound.d/msndreset.c' 'failed'
+  if ( md5sum --help 2>&1 | grep 'sage: md5sum \[' ) >/dev/null 2>&1 \
+  && ( md5sum --version 2>&1 | grep -v 'textutils 1.12' ) >/dev/null; then
+    md5sum -c << SHAR_EOF >/dev/null 2>&1 \
+    || $echo 'MultiSound.d/msndreset.c:' 'MD5 check failed'
+c52f876521084e8eb25e12e01dcccb8a  MultiSound.d/msndreset.c
+SHAR_EOF
+  else
+    shar_count="`LC_ALL= LC_CTYPE= LANG= wc -c < 'MultiSound.d/msndreset.c'`"
+    test 1472 -eq "$shar_count" ||
+    $echo 'MultiSound.d/msndreset.c:' 'original size' '1472,' 'current size' "$shar_count!"
+  fi
+fi
+rm -fr _sh01426
 exit 0

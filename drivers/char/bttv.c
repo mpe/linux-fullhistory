@@ -31,7 +31,7 @@
     * fix RAW Composite grabbing for NTSC 
     * fix VBI reading double frames when grabbing is active
     * allow for different VDELAYs
-    * extra modules for tda9850, tda8425, any volunteers???
+    * handle tda8425 properly
 */
 
 #include <linux/module.h>
@@ -98,7 +98,8 @@ static int bttv_num;			/* number of Bt848s in use */
 static struct bttv bttvs[BTTV_MAX];
 
 #define I2C_TIMING (0x7<<4)
-#define I2C_DELAY   10
+#define I2C_DELAY   50		/* Was 10 - some reports that more is needed
+				   regardless of what the spec says */
 #define I2C_SET(CTRL,DATA) \
     { btwrite((CTRL<<1)|(DATA), BT848_I2C); udelay(I2C_DELAY); }
 #define I2C_GET()   (btread(BT848_I2C)&1)
@@ -1460,6 +1461,12 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			v.rangelow=0;
 			v.rangehigh=0xFFFFFFFF;
 			v.flags=VIDEO_TUNER_PAL|VIDEO_TUNER_NTSC|VIDEO_TUNER_SECAM;
+			if (btv->audio_chip == TDA9850) {
+				unsigned char ALR1;
+				ALR1 = I2CRead(&(btv->i2c), I2C_TDA9850|1);
+				if (ALR1 & 32)
+					v.flags |= VIDEO_TUNER_STEREO_ON;
+			}
 			v.mode = btv->win.norm;
 			v.signal = (btread(BT848_DSTATUS)&BT848_DSTATUS_HLOC) ? 0xFFFF : 0;
 			if(copy_to_user(arg,&v,sizeof(v)))
@@ -1687,8 +1694,17 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			v.flags&=~(VIDEO_AUDIO_MUTE|VIDEO_AUDIO_MUTABLE);
 			v.flags|=VIDEO_AUDIO_MUTABLE;
 			strcpy(v.name,"TV");
-			if (btv->have_msp3400) 
-			{
+			if (btv->audio_chip == TDA9850) {
+				unsigned char ALR1;
+				v.flags|=VIDEO_AUDIO_VOLUME;
+				ALR1 = I2CRead(&(btv->i2c), I2C_TDA9850|1);
+				v.mode = VIDEO_SOUND_MONO;
+				v.mode |= (ALR1 & 32) ? VIDEO_SOUND_STEREO:0;
+				v.mode |= (ALR1 & 32) ? VIDEO_SOUND_LANG1:0;
+				v.volume = 32768;       /* fixme */
+				v.step = 4096;
+			}
+			else if (btv->have_msp3400) {
                                 v.flags|=VIDEO_AUDIO_VOLUME |
                                 	VIDEO_AUDIO_BASS |
                                 	VIDEO_AUDIO_TREBLE;
@@ -1726,8 +1742,20 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			bt848_muxsel(btv,v.audio);
 			if(!(v.flags&VIDEO_AUDIO_MUTE))
 				audio(btv, AUDIO_UNMUTE);
-			if (btv->have_msp3400) 
-			{
+			if (btv->audio_chip == TDA9850) {
+				unsigned char con3 = 0;
+				if (v.mode & VIDEO_SOUND_LANG1)
+					con3 = 0x80;	/* sap */
+				if (v.mode & VIDEO_SOUND_STEREO)
+					con3 = 0x40;	/* stereo */
+				I2CWrite(&(btv->i2c), I2C_TDA9850,
+					TDA9850_CON3, con3, 1);
+				if (v.flags & VIDEO_AUDIO_VOLUME)
+					I2CWrite(&(btv->i2c), I2C_TDA9850,
+						TDA9850_CON4,
+						(v.volume>>12) & 15, 1);
+			}
+			else if (btv->have_msp3400) {
                                 i2c_control_device(&(btv->i2c),
                                                 I2C_DRIVERID_MSP3400,
                                                 MSP_SET_VOLUME,&(v.volume));
@@ -2389,7 +2417,11 @@ static void idcard(int i)
     
 		if (I2CRead(&(btv->i2c), I2C_HAUPEE)>=0) {
 			if(btv->id>849)
+			{
 				btv->type=BTTV_HAUPPAUGE878;
+				btv->pll.pll_ifreq = 28636363;
+				btv->pll.pll_crystal = BT848_IFORM_XT0;
+			}
 			else
 				btv->type=BTTV_HAUPPAUGE;
 		}
@@ -2397,7 +2429,7 @@ static void idcard(int i)
 		        if (I2CRead(&(btv->i2c), I2C_STBEE)>=0)
 			        btv->type=BTTV_STB;
 
-                if (btv->type == BTTV_MIRO) {
+                if (btv->type == BTTV_MIRO || btv->type == BTTV_MIROPRO) {
                         /* auto detect tuner for MIRO cards */
                         btv->tuner_type=((btread(BT848_GPIO_DATA)>>10)-1)&7;
                 }
@@ -2582,10 +2614,13 @@ static int init_bt848(int i)
 	btv->grabcount=0;
 	btv->grab=0;
 	btv->lastgrab=0;
-	btv->field=btv->last_field=0;
-	btv->video_dev.minor = -1;
-	btv->vbi_dev.minor = -1;
-	btv->radio_dev.minor = -1;
+        btv->field=btv->last_field=0;
+        /* cevans - prevents panic if initialization bails due to memory
+         * alloc failures!
+         */
+        btv->video_dev.minor = -1;
+        btv->vbi_dev.minor = -1;
+        btv->radio_dev.minor = -1;
 
 	/* i2c */
 	memcpy(&(btv->i2c),&bttv_i2c_bus_template,sizeof(struct i2c_bus));

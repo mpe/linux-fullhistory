@@ -975,9 +975,11 @@ void sb_dsp_unload(struct address_info *hw_config, int sbmpu)
 			if (devc->dma16 >= 0)
 				sound_free_dma(devc->dma16);
 		}
-		if (!(devc->caps & SB_NO_AUDIO && devc->caps & SB_NO_MIDI) && devc->irq > 0)
+		if (!(devc->caps & SB_NO_AUDIO && devc->caps & SB_NO_MIDI))
 		{
-			free_irq(devc->irq, devc);
+			if (devc->irq > 0);
+				free_irq(devc->irq, devc);
+
 			sound_unload_mixerdev(devc->my_mixerdev);
 			/* We don't have to do this bit any more the UART401 is its own
 				master  -- Krzysztof Halasa */

@@ -607,9 +607,7 @@ void scsi_old_done (Scsi_Cmnd * SCpnt)
 	if ((++SCpnt->retries) < SCpnt->allowed)
 	{
 	    if ((SCpnt->retries >= (SCpnt->allowed >> 1))
-		/* FIXME: last_reset == 0 is allowed */
-                && time_after(jiffies, SCpnt->host->last_reset
-                              + MIN_RESET_PERIOD)
+		&& !(SCpnt->host->resetting && time_before(jiffies, SCpnt->host->last_reset + MIN_RESET_PERIOD))
 		&& !(SCpnt->flags & WAS_RESET))
 	    {
 		printk("scsi%d channel %d : resetting for second half of retries.\n",
@@ -617,7 +615,6 @@ void scsi_old_done (Scsi_Cmnd * SCpnt)
 		scsi_reset(SCpnt, SCSI_RESET_SYNCHRONOUS);
 		break;
 	    }
-
 	}
 	else
 	{
@@ -935,6 +932,12 @@ static int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
                 }
 
 		host->last_reset = jiffies;
+		host->resetting = 1;
+		/*
+		 * I suppose that the host reset callback will not play
+		 * with the resetting field. We have just set the resetting
+		 * flag here. -arca
+		 */
 		temp = host->hostt->reset(SCpnt, reset_flags);
 		/*
 		  This test allows the driver to introduce an additional bus
@@ -953,7 +956,13 @@ static int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 	    {
 		if (!host->block) host->host_busy++;
 		host->last_reset = jiffies;
-	        SCpnt->flags |= (WAS_RESET | IS_RESETTING);
+		host->resetting = 1;
+		SCpnt->flags |= (WAS_RESET | IS_RESETTING);
+		/*
+		 * I suppose that the host reset callback will not play
+		 * with the resetting field. We have just set the resetting
+		 * flag here. -arca
+		 */
 		temp = host->hostt->reset(SCpnt, reset_flags);
 		if (time_before(host->last_reset, jiffies) ||
 		    (time_after(host->last_reset, jiffies + 20 * HZ)))

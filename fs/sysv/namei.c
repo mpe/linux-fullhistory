@@ -416,21 +416,8 @@ int sysv_rmdir(struct inode * dir, struct dentry * dentry)
 	retval = -ENOENT;
 	if (!bh)
 		goto end_rmdir;
-	retval = -EPERM;
 	inode = dentry->d_inode;
 
-        if ((dir->i_mode & S_ISVTX) &&
-            current->fsuid != inode->i_uid &&
-            current->fsuid != dir->i_uid && !capable(CAP_FOWNER))
-		goto end_rmdir;
-	if (inode->i_dev != dir->i_dev)
-		goto end_rmdir;
-	if (inode == dir)	/* we may not delete ".", but "../dir" is ok */
-		goto end_rmdir;
-	if (!S_ISDIR(inode->i_mode)) {
-		retval = -ENOTDIR;
-		goto end_rmdir;
-	}
 	if (!empty_dir(inode)) {
 		retval = -ENOTEMPTY;
 		goto end_rmdir;
@@ -439,7 +426,7 @@ int sysv_rmdir(struct inode * dir, struct dentry * dentry)
 		retval = -ENOENT;
 		goto end_rmdir;
 	}
-	if (inode->i_count > 1) {
+	if (!list_empty(&dentry->d_hash)) {
 		retval = -EBUSY;
 		goto end_rmdir;
 	}

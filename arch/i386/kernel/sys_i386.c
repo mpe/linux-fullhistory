@@ -108,108 +108,94 @@ asmlinkage int old_select(struct sel_arg_struct *arg)
  *
  * This is really horribly ugly.
  */
-asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, long fifth)
+asmlinkage int sys_ipc (uint call, int first, int second,
+                        int third, void *ptr, long fifth)
 {
 	int version, ret;
 
-	lock_kernel();
-	version = call >> 16; /* hack for backward compatibility */
 	call &= 0xffff;
 
 	if (call <= SEMCTL)
 		switch (call) {
 		case SEMOP:
-			ret = sys_semop (first, (struct sembuf *)ptr, second);
-			goto out;
+			return sys_semop (first, (struct sembuf *)ptr, second);
 		case SEMGET:
-			ret = sys_semget (first, second, third);
-			goto out;
+			return sys_semget (first, second, third);
 		case SEMCTL: {
 			union semun fourth;
-			ret = -EINVAL;
 			if (!ptr)
-				goto out;
-			ret = -EFAULT;
+				return -EINVAL;
 			if (get_user(fourth.__pad, (void **) ptr))
-				goto out;	
-			ret = sys_semctl (first, second, third, fourth);
-			goto out;
+                            return -EFAULT;
+			return sys_semctl (first, second, third, fourth);
 			}
 		default:
-			ret = -EINVAL;
-			goto out;
+			return -EINVAL;
 		}
+
+	version = call >> 16; /* hack for backward compatibility      */
 	if (call <= MSGCTL) 
 		switch (call) {
 		case MSGSND:
-			ret = sys_msgsnd (first, (struct msgbuf *) ptr, 
+			return sys_msgsnd (first, (struct msgbuf *) ptr, 
 					  second, third);
-			goto out;
 		case MSGRCV:
 			switch (version) {
 			case 0: {
 				struct ipc_kludge tmp;
-				ret = -EINVAL;
 				if (!ptr)
-					goto out;
-				ret = -EFAULT;
-				if (copy_from_user(&tmp,(struct ipc_kludge *) ptr, 
-								   sizeof (tmp)))
-					goto out; 	
-				ret = sys_msgrcv (first, tmp.msgp, second, tmp.msgtyp, third);
-				goto out;
+                                        return -EINVAL;
+				
+				if (copy_from_user(&tmp,
+                                                   (struct ipc_kludge *) ptr, 
+                                                   sizeof (tmp)))
+					return -EFAULT;
+				return sys_msgrcv (first, tmp.msgp, second,
+                                                   tmp.msgtyp, third);
 				}
-			case 1: default:
-				ret = sys_msgrcv (first, (struct msgbuf *) ptr, second, fifth, third);
-				goto out;
+			default:
+				return sys_msgrcv (first,
+                                                   (struct msgbuf *) ptr,
+                                                   second, fifth, third);
 			}
 		case MSGGET:
-			ret = sys_msgget ((key_t) first, second);
-			goto out;
+			return sys_msgget ((key_t) first, second);
 		case MSGCTL:
-			ret = sys_msgctl (first, second, (struct msqid_ds *) ptr);
-			goto out;
+			return sys_msgctl (first, second,
+                                           (struct msqid_ds *) ptr);
 		default:
-			ret = -EINVAL;
-			goto out;
+			return -EINVAL;
 		}
 	if (call <= SHMCTL) 
 		switch (call) {
 		case SHMAT:
 			switch (version) {
-			case 0: default: {
+                        default: {
 				ulong raddr;
-				ret = sys_shmat (first, (char *) ptr, second, &raddr);
+				ret = sys_shmat (first, (char *) ptr,
+                                                 second, &raddr);
 				if (ret)
-					goto out;
-				ret = put_user (raddr, (ulong *) third);
-				goto out;
+					return ret;
+				return put_user (raddr, (ulong *) third);
 			}
 			case 1:	/* iBCS2 emulator entry point */
-				ret = -EINVAL;
 				if (!segment_eq(get_fs(), get_ds()))
-					goto out;
-				ret = sys_shmat (first, (char *) ptr, second, (ulong *) third);
-				goto out;
+					return -EINVAL;
+				return sys_shmat (first, (char *) ptr,
+                                                  second, (ulong *) third);
 			}
 		case SHMDT: 
-			ret = sys_shmdt ((char *)ptr);
-			goto out;
+			return sys_shmdt ((char *)ptr);
 		case SHMGET:
-			ret = sys_shmget (first, second, third);
-			goto out;
+			return sys_shmget (first, second, third);
 		case SHMCTL:
-			ret = sys_shmctl (first, second, (struct shmid_ds *) ptr);
-			goto out;
+			return sys_shmctl (first, second,
+                                           (struct shmid_ds *) ptr);
 		default:
-			ret = -EINVAL;
-			goto out;
+			return -EINVAL;
 		}
-	else
-		ret = -EINVAL;
-out:
-	unlock_kernel();
-	return ret;
+        
+        return -EINVAL;
 }
 
 /*

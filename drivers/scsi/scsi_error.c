@@ -142,7 +142,6 @@ scsi_delete_timer(Scsi_Cmnd * SCset)
   SCSI_LOG_ERROR_RECOVERY(5,printk("Clearing timer for command %p\n", SCset));
 
   SCset->eh_timeout.data = (unsigned long) NULL;
-  SCset->eh_timeout.expires = 0;
   SCset->eh_timeout.function = NULL;
 
   return rtn;

@@ -469,10 +469,6 @@ smb_rmdir(struct inode *dir, struct dentry *dentry)
 	struct inode *inode = dentry->d_inode;
 	int error;
 
-	error = -ENOTDIR;
-	if (!S_ISDIR(inode->i_mode))
-		goto out;
-
 	/*
 	 * Close the directory if it's open.
 	 */

@@ -68,8 +68,9 @@ static const char *version =
 
 /* A zero-terminated list of I/O addresses to be probed at boot. */
 #ifndef MODULE
-static unsigned int netcard_portlist[] __initdata =
-{ 0x300, 0x280, 0x320, 0x340, 0x360, 0x380, 0};
+static unsigned int netcard_portlist[] __initdata = { 
+	0x300, 0x280, 0x320, 0x340, 0x360, 0x380, 0
+};
 #endif
 
 #ifdef CONFIG_PCI
@@ -85,6 +86,8 @@ pci_clone_list[] __initdata = {
 	{PCI_VENDOR_ID_SURECOM,		PCI_DEVICE_ID_SURECOM_NE34,		"SureCom NE34"},
 	{0,}
 };
+
+static int probe_pci = 1;
 #endif
 
 #ifdef SUPPORT_NE_BAD_CLONES
@@ -175,32 +178,32 @@ struct netdev_entry netcard_drv =
 
 __initfunc(int ne_probe(struct device *dev))
 {
-    int base_addr = dev ? dev->base_addr : 0;
+	int base_addr = dev ? dev->base_addr : 0;
 
-    /* First check any supplied i/o locations. User knows best. <cough> */
-    if (base_addr > 0x1ff)	/* Check a single specified location. */
-	return ne_probe1(dev, base_addr);
-    else if (base_addr != 0)	/* Don't probe at all. */
-	return ENXIO;
+	/* First check any supplied i/o locations. User knows best. <cough> */
+	if (base_addr > 0x1ff)	/* Check a single specified location. */
+		return ne_probe1(dev, base_addr);
+	else if (base_addr != 0)	/* Don't probe at all. */
+		return ENXIO;
 
 #ifdef CONFIG_PCI
-    /* Then look for any installed PCI clones */
-    if (pci_present() && (ne_probe_pci(dev) == 0))
-	return 0;
+	/* Then look for any installed PCI clones */
+	if (probe_pci && pci_present() && (ne_probe_pci(dev) == 0))
+		return 0;
 #endif
 
 #ifndef MODULE
-    /* Last resort. The semi-risky ISA auto-probe. */
-    for (base_addr = 0; netcard_portlist[base_addr] != 0; base_addr++) {
-	int ioaddr = netcard_portlist[base_addr];
-	if (check_region(ioaddr, NE_IO_EXTENT))
-	    continue;
-	if (ne_probe1(dev, ioaddr) == 0)
-	    return 0;
-    }
+	/* Last resort. The semi-risky ISA auto-probe. */
+	for (base_addr = 0; netcard_portlist[base_addr] != 0; base_addr++) {
+		int ioaddr = netcard_portlist[base_addr];
+		if (check_region(ioaddr, NE_IO_EXTENT))
+			continue;
+		if (ne_probe1(dev, ioaddr) == 0)
+			return 0;
+	}
 #endif
 
-    return ENODEV;
+	return ENODEV;
 }
 #endif
 
@@ -223,7 +226,7 @@ __initfunc(static int ne_probe_pci(struct device *dev))
 		}
 		if (!pdev)
 			continue;
-		printk("ne.c: PCI BIOS reports %s at i/o %#x, irq %d.\n",
+		printk(KERN_INFO "ne.c: PCI BIOS reports %s at i/o %#x, irq %d.\n",
 				pci_clone_list[i].name,
 				pci_ioaddr, pci_irq_line);
 		printk("*\n* Use of the PCI-NE2000 driver with this card is recommended!\n*\n");
@@ -241,61 +244,65 @@ __initfunc(static int ne_probe_pci(struct device *dev))
 
 __initfunc(static int ne_probe1(struct device *dev, int ioaddr))
 {
-    int i;
-    unsigned char SA_prom[32];
-    int wordlength = 2;
-    const char *name = NULL;
-    int start_page, stop_page;
-    int neX000, ctron, bad_card;
-    int reg0 = inb_p(ioaddr);
-    static unsigned version_printed = 0;
+	int i;
+	unsigned char SA_prom[32];
+	int wordlength = 2;
+	const char *name = NULL;
+	int start_page, stop_page;
+	int neX000, ctron, copam, bad_card;
+	int reg0 = inb_p(ioaddr);
+	static unsigned version_printed = 0;
 
-    if (reg0 == 0xFF)
-	return ENODEV;
+	if (reg0 == 0xFF)
+		return ENODEV;
 
-    /* Do a preliminary verification that we have a 8390. */
-    {	int regd;
-	outb_p(E8390_NODMA+E8390_PAGE1+E8390_STOP, ioaddr + E8390_CMD);
-	regd = inb_p(ioaddr + 0x0d);
-	outb_p(0xff, ioaddr + 0x0d);
-	outb_p(E8390_NODMA+E8390_PAGE0, ioaddr + E8390_CMD);
-	inb_p(ioaddr + EN0_COUNTER0); /* Clear the counter by reading. */
-	if (inb_p(ioaddr + EN0_COUNTER0) != 0) {
-	    outb_p(reg0, ioaddr);
-	    outb_p(regd, ioaddr + 0x0d);	/* Restore the old values. */
-	    return ENODEV;
+	/* Do a preliminary verification that we have a 8390. */
+	{
+		int regd;
+		outb_p(E8390_NODMA+E8390_PAGE1+E8390_STOP, ioaddr + E8390_CMD);
+		regd = inb_p(ioaddr + 0x0d);
+		outb_p(0xff, ioaddr + 0x0d);
+		outb_p(E8390_NODMA+E8390_PAGE0, ioaddr + E8390_CMD);
+		inb_p(ioaddr + EN0_COUNTER0); /* Clear the counter by reading. */
+		if (inb_p(ioaddr + EN0_COUNTER0) != 0) {
+			outb_p(reg0, ioaddr);
+			outb_p(regd, ioaddr + 0x0d);	/* Restore the old values. */
+			return ENODEV;
+		}
 	}
-    }
 
-    if (load_8390_module("ne.c"))
-	return -ENOSYS;
+	if (load_8390_module("ne.c"))
+		return -ENOSYS;
 
-    /* We should have a "dev" from Space.c or the static module table. */
-    if (dev == NULL) {
-	printk(KERN_ERR "ne.c: Passed a NULL device.\n");
-	dev = init_etherdev(0, 0);
-    }
+	/* We should have a "dev" from Space.c or the static module table. */
+	if (dev == NULL) 
+	{
+		printk(KERN_ERR "ne.c: Passed a NULL device.\n");
+		dev = init_etherdev(0, 0);
+	}
 
-    if (ei_debug  &&  version_printed++ == 0)
-	printk(version);
+	if (ei_debug  &&  version_printed++ == 0)
+		printk(version);
 
-    printk("NE*000 ethercard probe at %#3x:", ioaddr);
+	printk(KERN_INFO "NE*000 ethercard probe at %#3x:", ioaddr);
 
-    /* A user with a poor card that fails to ack the reset, or that
-       does not have a valid 0x57,0x57 signature can still use this
-       without having to recompile. Specifying an i/o address along
-       with an otherwise unused dev->mem_end value of "0xBAD" will
-       cause the driver to skip these parts of the probe. */
+	/* A user with a poor card that fails to ack the reset, or that
+	   does not have a valid 0x57,0x57 signature can still use this
+	   without having to recompile. Specifying an i/o address along
+	   with an otherwise unused dev->mem_end value of "0xBAD" will
+	   cause the driver to skip these parts of the probe. */
 
-    bad_card = ((dev->base_addr != 0) && (dev->mem_end == 0xbad));
+	bad_card = ((dev->base_addr != 0) && (dev->mem_end == 0xbad));
 
-    /* Reset card. Who knows what dain-bramaged state it was left in. */
-    {	unsigned long reset_start_time = jiffies;
+	/* Reset card. Who knows what dain-bramaged state it was left in. */
 
-	/* DON'T change these to inb_p/outb_p or reset will fail on clones. */
-	outb(inb(ioaddr + NE_RESET), ioaddr + NE_RESET);
+	{
+		unsigned long reset_start_time = jiffies;
 
-	while ((inb_p(ioaddr + EN0_ISR) & ENISR_RESET) == 0)
+		/* DON'T change these to inb_p/outb_p or reset will fail on clones. */
+		outb(inb(ioaddr + NE_RESET), ioaddr + NE_RESET);
+
+		while ((inb_p(ioaddr + EN0_ISR) & ENISR_RESET) == 0)
 		if (jiffies - reset_start_time > 2*HZ/100) {
 			if (bad_card) {
 				printk(" (warning: no reset ack)");
@@ -305,252 +312,265 @@ __initfunc(static int ne_probe1(struct device *dev, int ioaddr))
 				return ENODEV;
 			}
 		}
+	
+		outb_p(0xff, ioaddr + EN0_ISR);		/* Ack all intr. */
+	}
 
-	outb_p(0xff, ioaddr + EN0_ISR);		/* Ack all intr. */
-    }
+	/* Read the 16 bytes of station address PROM.
+	   We must first initialize registers, similar to NS8390_init(eifdev, 0).
+	   We can't reliably read the SAPROM address without this.
+	   (I learned the hard way!). */
+	{
+		struct {unsigned char value, offset; } program_seq[] = 
+		{
+			{E8390_NODMA+E8390_PAGE0+E8390_STOP, E8390_CMD}, /* Select page 0*/
+			{0x48,	EN0_DCFG},	/* Set byte-wide (0x48) access. */
+			{0x00,	EN0_RCNTLO},	/* Clear the count regs. */
+			{0x00,	EN0_RCNTHI},
+			{0x00,	EN0_IMR},	/* Mask completion irq. */
+			{0xFF,	EN0_ISR},
+			{E8390_RXOFF, EN0_RXCR},	/* 0x20  Set to monitor */
+			{E8390_TXOFF, EN0_TXCR},	/* 0x02  and loopback mode. */
+			{32,	EN0_RCNTLO},
+			{0x00,	EN0_RCNTHI},
+			{0x00,	EN0_RSARLO},	/* DMA starting at 0x0000. */
+			{0x00,	EN0_RSARHI},
+			{E8390_RREAD+E8390_START, E8390_CMD},
+		};
 
-    /* Read the 16 bytes of station address PROM.
-       We must first initialize registers, similar to NS8390_init(eifdev, 0).
-       We can't reliably read the SAPROM address without this.
-       (I learned the hard way!). */
-    {
-	struct {unsigned char value, offset; } program_seq[] = {
-	    {E8390_NODMA+E8390_PAGE0+E8390_STOP, E8390_CMD}, /* Select page 0*/
-	    {0x48,	EN0_DCFG},	/* Set byte-wide (0x48) access. */
-	    {0x00,	EN0_RCNTLO},	/* Clear the count regs. */
-	    {0x00,	EN0_RCNTHI},
-	    {0x00,	EN0_IMR},	/* Mask completion irq. */
-	    {0xFF,	EN0_ISR},
-	    {E8390_RXOFF, EN0_RXCR},	/* 0x20  Set to monitor */
-	    {E8390_TXOFF, EN0_TXCR},	/* 0x02  and loopback mode. */
-	    {32,	EN0_RCNTLO},
-	    {0x00,	EN0_RCNTHI},
-	    {0x00,	EN0_RSARLO},	/* DMA starting at 0x0000. */
-	    {0x00,	EN0_RSARHI},
-	    {E8390_RREAD+E8390_START, E8390_CMD},
-	};
-	for (i = 0; i < sizeof(program_seq)/sizeof(program_seq[0]); i++)
-	    outb_p(program_seq[i].value, ioaddr + program_seq[i].offset);
+		for (i = 0; i < sizeof(program_seq)/sizeof(program_seq[0]); i++)
+			outb_p(program_seq[i].value, ioaddr + program_seq[i].offset);
 
-    }
-    for(i = 0; i < 32 /*sizeof(SA_prom)*/; i+=2) {
-	SA_prom[i] = inb(ioaddr + NE_DATAPORT);
-	SA_prom[i+1] = inb(ioaddr + NE_DATAPORT);
-	if (SA_prom[i] != SA_prom[i+1])
-	    wordlength = 1;
-    }
+	}
+	for(i = 0; i < 32 /*sizeof(SA_prom)*/; i+=2) {
+		SA_prom[i] = inb(ioaddr + NE_DATAPORT);
+		SA_prom[i+1] = inb(ioaddr + NE_DATAPORT);
+		if (SA_prom[i] != SA_prom[i+1])
+			wordlength = 1;
+	}
 
-    /*	At this point, wordlength *only* tells us if the SA_prom is doubled
-	up or not because some broken PCI cards don't respect the byte-wide
-	request in program_seq above, and hence don't have doubled up values.
-	These broken cards would otherwise be detected as an ne1000.  */
+	/* At this point, wordlength *only* tells us if the SA_prom is doubled
+	   up or not because some broken PCI cards don't respect the byte-wide
+	   request in program_seq above, and hence don't have doubled up values.
+	   These broken cards would otherwise be detected as an ne1000.  */
 
-    if (wordlength == 2)
-	for (i = 0; i < 16; i++)
-		SA_prom[i] = SA_prom[i+i];
+	if (wordlength == 2)
+		for (i = 0; i < 16; i++)
+			SA_prom[i] = SA_prom[i+i];
 
-    if (pci_irq_line || ioaddr >= 0x400)
-	wordlength = 2;		/* Catch broken PCI cards mentioned above. */
+	if (pci_irq_line || ioaddr >= 0x400)
+		wordlength = 2;		/* Catch broken PCI cards mentioned above. */
 
-    if (wordlength == 2) {
-	/* We must set the 8390 for word mode. */
-	outb_p(0x49, ioaddr + EN0_DCFG);
-	start_page = NESM_START_PG;
-	stop_page = NESM_STOP_PG;
-    } else {
-	start_page = NE1SM_START_PG;
-	stop_page = NE1SM_STOP_PG;
-    }
+	if (wordlength == 2) 
+	{
+		/* We must set the 8390 for word mode. */
+		outb_p(0x49, ioaddr + EN0_DCFG);
+		start_page = NESM_START_PG;
+		stop_page = NESM_STOP_PG;
+	} else {
+		start_page = NE1SM_START_PG;
+		stop_page = NE1SM_STOP_PG;
+	}
 
-    neX000 = (SA_prom[14] == 0x57  &&  SA_prom[15] == 0x57);
-    ctron =  (SA_prom[0] == 0x00 && SA_prom[1] == 0x00 && SA_prom[2] == 0x1d);
+	neX000 = (SA_prom[14] == 0x57  &&  SA_prom[15] == 0x57);
+	ctron =  (SA_prom[0] == 0x00 && SA_prom[1] == 0x00 && SA_prom[2] == 0x1d);
+	copam =  (SA_prom[14] == 0x49 && SA_prom[15] == 0x00);
+	
 
-    /* Set up the rest of the parameters. */
-    if (neX000 || bad_card) {
-	name = (wordlength == 2) ? "NE2000" : "NE1000";
-    } else if (ctron) {
-	name = (wordlength == 2) ? "Ctron-8" : "Ctron-16";
-	start_page = 0x01;
-	stop_page = (wordlength == 2) ? 0x40 : 0x20;
-    } else {
+	/* Set up the rest of the parameters. */
+	if (neX000 || bad_card || copam) {
+		name = (wordlength == 2) ? "NE2000" : "NE1000";
+	}
+	else if (ctron) 
+	{
+		name = (wordlength == 2) ? "Ctron-8" : "Ctron-16";
+		start_page = 0x01;
+		stop_page = (wordlength == 2) ? 0x40 : 0x20;
+	}
+	else
+	{
 #ifdef SUPPORT_NE_BAD_CLONES
-	/* Ack!  Well, there might be a *bad* NE*000 clone there.
-	   Check for total bogus addresses. */
-	for (i = 0; bad_clone_list[i].name8; i++) {
-	    if (SA_prom[0] == bad_clone_list[i].SAprefix[0] &&
-		SA_prom[1] == bad_clone_list[i].SAprefix[1] &&
-		SA_prom[2] == bad_clone_list[i].SAprefix[2]) {
-		if (wordlength == 2) {
-		    name = bad_clone_list[i].name16;
-		} else {
-		    name = bad_clone_list[i].name8;
+		/* Ack!  Well, there might be a *bad* NE*000 clone there.
+		   Check for total bogus addresses. */
+		for (i = 0; bad_clone_list[i].name8; i++) 
+		{
+			if (SA_prom[0] == bad_clone_list[i].SAprefix[0] &&
+				SA_prom[1] == bad_clone_list[i].SAprefix[1] &&
+				SA_prom[2] == bad_clone_list[i].SAprefix[2]) 
+			{
+				if (wordlength == 2) 
+				{
+					name = bad_clone_list[i].name16;
+				} else {
+					name = bad_clone_list[i].name8;
+				}
+				break;
+			}
 		}
-		break;
-	    }
-	}
-	if (bad_clone_list[i].name8 == NULL) {
-	    printk(" not found (invalid signature %2.2x %2.2x).\n",
-		   SA_prom[14], SA_prom[15]);
-	    return ENXIO;
-	}
+		if (bad_clone_list[i].name8 == NULL) 
+		{
+			printk(" not found (invalid signature %2.2x %2.2x).\n",
+				SA_prom[14], SA_prom[15]);
+			return ENXIO;
+		}
 #else
-	printk(" not found.\n");
-	return ENXIO;
+		printk(" not found.\n");
+		return ENXIO;
 #endif
-
-    }
-
-    if (pci_irq_line)
-	dev->irq = pci_irq_line;
-
-    if (dev->irq < 2) {
-	autoirq_setup(0);
-	outb_p(0x50, ioaddr + EN0_IMR);	/* Enable one interrupt. */
-	outb_p(0x00, ioaddr + EN0_RCNTLO);
-	outb_p(0x00, ioaddr + EN0_RCNTHI);
-	outb_p(E8390_RREAD+E8390_START, ioaddr); /* Trigger it... */
-	mdelay(10);		/* wait 10ms for interrupt to propagate */
-	outb_p(0x00, ioaddr + EN0_IMR); 		/* Mask it again. */
-	dev->irq = autoirq_report(0);
-	if (ei_debug > 2)
-	    printk(" autoirq is %d\n", dev->irq);
-    } else if (dev->irq == 2)
-	/* Fixup for users that don't know that IRQ 2 is really IRQ 9,
-	   or don't know which one to set. */
-	dev->irq = 9;
-
-    if (! dev->irq) {
-	printk(" failed to detect IRQ line.\n");
-	return EAGAIN;
-    }
-
-    /* Allocate dev->priv and fill in 8390 specific dev fields. */
-    if (ethdev_init(dev)) {
-        printk (" unable to get memory for dev->priv.\n");
-        return -ENOMEM;
-    }
-   
-    /* Snarf the interrupt now.  There's no point in waiting since we cannot
-       share and the board will usually be enabled. */
-    {
-	int irqval = request_irq(dev->irq, ei_interrupt,
-				 pci_irq_line ? SA_SHIRQ : 0, name, dev);
-	if (irqval) {
-	    printk (" unable to get IRQ %d (irqval=%d).\n", dev->irq, irqval);
-
-            kfree(dev->priv);
-	    dev->priv = NULL;
-	    return EAGAIN;
 	}
-    }
-    dev->base_addr = ioaddr;
-    request_region(ioaddr, NE_IO_EXTENT, name);
 
-    for(i = 0; i < ETHER_ADDR_LEN; i++) {
-	printk(" %2.2x", SA_prom[i]);
-	dev->dev_addr[i] = SA_prom[i];
-    }
+	if (pci_irq_line)
+		dev->irq = pci_irq_line;
 
-    printk("\n%s: %s found at %#x, using IRQ %d.\n",
-	   dev->name, name, ioaddr, dev->irq);
+	if (dev->irq < 2) 
+	{
+		autoirq_setup(0);
+		outb_p(0x50, ioaddr + EN0_IMR);	/* Enable one interrupt. */
+		outb_p(0x00, ioaddr + EN0_RCNTLO);
+		outb_p(0x00, ioaddr + EN0_RCNTHI);
+		outb_p(E8390_RREAD+E8390_START, ioaddr); /* Trigger it... */
+		mdelay(10);		/* wait 10ms for interrupt to propagate */
+		outb_p(0x00, ioaddr + EN0_IMR); 		/* Mask it again. */
+		dev->irq = autoirq_report(0);
+		if (ei_debug > 2)
+			printk(" autoirq is %d\n", dev->irq);
+	} else if (dev->irq == 2)
+		/* Fixup for users that don't know that IRQ 2 is really IRQ 9,
+		   or don't know which one to set. */
+		dev->irq = 9;
 
-    ei_status.name = name;
-    ei_status.tx_start_page = start_page;
-    ei_status.stop_page = stop_page;
-    ei_status.word16 = (wordlength == 2);
+	if (! dev->irq) {
+		printk(" failed to detect IRQ line.\n");
+		return EAGAIN;
+	}
 
-    ei_status.rx_start_page = start_page + TX_PAGES;
+	/* Allocate dev->priv and fill in 8390 specific dev fields. */
+	if (ethdev_init(dev)) 
+	{
+        	printk (" unable to get memory for dev->priv.\n");
+        	return -ENOMEM;
+	}
+   
+	/* Snarf the interrupt now.  There's no point in waiting since we cannot
+	   share and the board will usually be enabled. */
+
+	{
+		int irqval = request_irq(dev->irq, ei_interrupt,
+				 pci_irq_line ? SA_SHIRQ : 0, name, dev);
+		if (irqval) {
+			printk (" unable to get IRQ %d (irqval=%d).\n", dev->irq, irqval);
+			kfree(dev->priv);
+			dev->priv = NULL;
+			return EAGAIN;
+		}
+	}
+	dev->base_addr = ioaddr;
+	request_region(ioaddr, NE_IO_EXTENT, name);
+
+	for(i = 0; i < ETHER_ADDR_LEN; i++) {
+		printk(" %2.2x", SA_prom[i]);
+		dev->dev_addr[i] = SA_prom[i];
+	}
+
+	printk("\n%s: %s found at %#x, using IRQ %d.\n",
+		dev->name, name, ioaddr, dev->irq);
+
+	ei_status.name = name;
+	ei_status.tx_start_page = start_page;
+	ei_status.stop_page = stop_page;
+	ei_status.word16 = (wordlength == 2);
+
+	ei_status.rx_start_page = start_page + TX_PAGES;
 #ifdef PACKETBUF_MEMSIZE
-    /* Allow the packet buffer size to be overridden by know-it-alls. */
-    ei_status.stop_page = ei_status.tx_start_page + PACKETBUF_MEMSIZE;
+	 /* Allow the packet buffer size to be overridden by know-it-alls. */
+	ei_status.stop_page = ei_status.tx_start_page + PACKETBUF_MEMSIZE;
 #endif
 
-    ei_status.reset_8390 = &ne_reset_8390;
-    ei_status.block_input = &ne_block_input;
-    ei_status.block_output = &ne_block_output;
-    ei_status.get_8390_hdr = &ne_get_8390_hdr;
-    dev->open = &ne_open;
-    dev->stop = &ne_close;
-    NS8390_init(dev, 0);
-    return 0;
+	ei_status.reset_8390 = &ne_reset_8390;
+	ei_status.block_input = &ne_block_input;
+	ei_status.block_output = &ne_block_output;
+	ei_status.get_8390_hdr = &ne_get_8390_hdr;
+	dev->open = &ne_open;
+	dev->stop = &ne_close;
+	NS8390_init(dev, 0);
+	return 0;
 }
 
-static int
-ne_open(struct device *dev)
+static int ne_open(struct device *dev)
 {
-    ei_open(dev);
-    MOD_INC_USE_COUNT;
-    return 0;
+	ei_open(dev);
+	MOD_INC_USE_COUNT;
+	return 0;
 }
 
-static int
-ne_close(struct device *dev)
+static int ne_close(struct device *dev)
 {
-    if (ei_debug > 1)
-	printk("%s: Shutting down ethercard.\n", dev->name);
-    ei_close(dev);
-    MOD_DEC_USE_COUNT;
-    return 0;
+	if (ei_debug > 1)
+		printk(KERN_DEBUG "%s: Shutting down ethercard.\n", dev->name);
+	ei_close(dev);
+	MOD_DEC_USE_COUNT;
+	return 0;
 }
 
 /* Hard reset the card.  This used to pause for the same period that a
    8390 reset command required, but that shouldn't be necessary. */
-static void
-ne_reset_8390(struct device *dev)
+
+static void ne_reset_8390(struct device *dev)
 {
-    unsigned long reset_start_time = jiffies;
+	unsigned long reset_start_time = jiffies;
 
-    if (ei_debug > 1) printk("resetting the 8390 t=%ld...", jiffies);
+	if (ei_debug > 1)
+		printk(KERN_DEBUG "resetting the 8390 t=%ld...", jiffies);
 
-    /* DON'T change these to inb_p/outb_p or reset will fail on clones. */
-    outb(inb(NE_BASE + NE_RESET), NE_BASE + NE_RESET);
+	/* DON'T change these to inb_p/outb_p or reset will fail on clones. */
+	outb(inb(NE_BASE + NE_RESET), NE_BASE + NE_RESET);
 
-    ei_status.txing = 0;
-    ei_status.dmaing = 0;
+	ei_status.txing = 0;
+	ei_status.dmaing = 0;
 
-    /* This check _should_not_ be necessary, omit eventually. */
-    while ((inb_p(NE_BASE+EN0_ISR) & ENISR_RESET) == 0)
-	if (jiffies - reset_start_time > 2*HZ/100) {
-	    printk("%s: ne_reset_8390() did not complete.\n", dev->name);
-	    break;
-	}
-    outb_p(ENISR_RESET, NE_BASE + EN0_ISR);	/* Ack intr. */
+	/* This check _should_not_ be necessary, omit eventually. */
+	while ((inb_p(NE_BASE+EN0_ISR) & ENISR_RESET) == 0)
+		if (jiffies - reset_start_time > 2*HZ/100) {
+			printk(KERN_WARNING "%s: ne_reset_8390() did not complete.\n", dev->name);
+			break;
+		}
+	outb_p(ENISR_RESET, NE_BASE + EN0_ISR);	/* Ack intr. */
 }
 
 /* Grab the 8390 specific header. Similar to the block_input routine, but
    we don't need to be concerned with ring wrap as the header will be at
    the start of a page, so we optimize accordingly. */
 
-static void
-ne_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+static void ne_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
+	int nic_base = dev->base_addr;
 
-    int nic_base = dev->base_addr;
+	/* This *shouldn't* happen. If it does, it's the last thing you'll see */
 
-    /* This *shouldn't* happen. If it does, it's the last thing you'll see */
-    if (ei_status.dmaing) {
-	printk("%s: DMAing conflict in ne_get_8390_hdr "
-	   "[DMAstat:%d][irqlock:%d][intr:%ld].\n",
-	   dev->name, ei_status.dmaing, ei_status.irqlock,
-	   dev->interrupt);
-	return;
-    }
+	if (ei_status.dmaing) 
+	{
+		printk(KERN_EMERG "%s: DMAing conflict in ne_get_8390_hdr "
+			"[DMAstat:%d][irqlock:%d][intr:%ld].\n",
+			dev->name, ei_status.dmaing, ei_status.irqlock,
+			dev->interrupt);
+		return;
+	}
 
-    ei_status.dmaing |= 0x01;
-    outb_p(E8390_NODMA+E8390_PAGE0+E8390_START, nic_base+ NE_CMD);
-    outb_p(sizeof(struct e8390_pkt_hdr), nic_base + EN0_RCNTLO);
-    outb_p(0, nic_base + EN0_RCNTHI);
-    outb_p(0, nic_base + EN0_RSARLO);		/* On page boundary */
-    outb_p(ring_page, nic_base + EN0_RSARHI);
-    outb_p(E8390_RREAD+E8390_START, nic_base + NE_CMD);
+	ei_status.dmaing |= 0x01;
+	outb_p(E8390_NODMA+E8390_PAGE0+E8390_START, nic_base+ NE_CMD);
+	outb_p(sizeof(struct e8390_pkt_hdr), nic_base + EN0_RCNTLO);
+	outb_p(0, nic_base + EN0_RCNTHI);
+	outb_p(0, nic_base + EN0_RSARLO);		/* On page boundary */
+	outb_p(ring_page, nic_base + EN0_RSARHI);
+	outb_p(E8390_RREAD+E8390_START, nic_base + NE_CMD);
 
-    if (ei_status.word16)
-	insw(NE_BASE + NE_DATAPORT, hdr, sizeof(struct e8390_pkt_hdr)>>1);
-    else
-	insb(NE_BASE + NE_DATAPORT, hdr, sizeof(struct e8390_pkt_hdr));
+	if (ei_status.word16)
+		insw(NE_BASE + NE_DATAPORT, hdr, sizeof(struct e8390_pkt_hdr)>>1);
+	else
+		insb(NE_BASE + NE_DATAPORT, hdr, sizeof(struct e8390_pkt_hdr));
 
-    outb_p(ENISR_RDC, nic_base + EN0_ISR);	/* Ack intr. */
-    ei_status.dmaing &= ~0x01;
+	outb_p(ENISR_RDC, nic_base + EN0_ISR);	/* Ack intr. */
+	ei_status.dmaing &= ~0x01;
 }
 
 /* Block input and output, similar to the Crynwr packet driver.  If you
@@ -558,164 +578,176 @@ ne_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
    The NEx000 doesn't share the on-board packet memory -- you have to put
    the packet out through the "remote DMA" dataport using outb. */
 
-static void
-ne_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
+static void ne_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
 {
 #ifdef NE_SANITY_CHECK
-    int xfer_count = count;
+	int xfer_count = count;
 #endif
-    int nic_base = dev->base_addr;
-    char *buf = skb->data;
+	int nic_base = dev->base_addr;
+	char *buf = skb->data;
 
-    /* This *shouldn't* happen. If it does, it's the last thing you'll see */
-    if (ei_status.dmaing) {
-	printk("%s: DMAing conflict in ne_block_input "
-	   "[DMAstat:%d][irqlock:%d][intr:%ld].\n",
-	   dev->name, ei_status.dmaing, ei_status.irqlock,
-	   dev->interrupt);
-	return;
-    }
-    ei_status.dmaing |= 0x01;
-    outb_p(E8390_NODMA+E8390_PAGE0+E8390_START, nic_base+ NE_CMD);
-    outb_p(count & 0xff, nic_base + EN0_RCNTLO);
-    outb_p(count >> 8, nic_base + EN0_RCNTHI);
-    outb_p(ring_offset & 0xff, nic_base + EN0_RSARLO);
-    outb_p(ring_offset >> 8, nic_base + EN0_RSARHI);
-    outb_p(E8390_RREAD+E8390_START, nic_base + NE_CMD);
-    if (ei_status.word16) {
-      insw(NE_BASE + NE_DATAPORT,buf,count>>1);
-      if (count & 0x01) {
-	buf[count-1] = inb(NE_BASE + NE_DATAPORT);
+	/* This *shouldn't* happen. If it does, it's the last thing you'll see */
+	if (ei_status.dmaing) 
+	{
+		printk(KERN_EMERG "%s: DMAing conflict in ne_block_input "
+			"[DMAstat:%d][irqlock:%d][intr:%ld].\n",
+			dev->name, ei_status.dmaing, ei_status.irqlock,
+			dev->interrupt);
+		return;
+	}
+	ei_status.dmaing |= 0x01;
+	outb_p(E8390_NODMA+E8390_PAGE0+E8390_START, nic_base+ NE_CMD);
+	outb_p(count & 0xff, nic_base + EN0_RCNTLO);
+	outb_p(count >> 8, nic_base + EN0_RCNTHI);
+	outb_p(ring_offset & 0xff, nic_base + EN0_RSARLO);
+	outb_p(ring_offset >> 8, nic_base + EN0_RSARHI);
+	outb_p(E8390_RREAD+E8390_START, nic_base + NE_CMD);
+	if (ei_status.word16) 
+	{
+		insw(NE_BASE + NE_DATAPORT,buf,count>>1);
+		if (count & 0x01) 
+		{
+			buf[count-1] = inb(NE_BASE + NE_DATAPORT);
 #ifdef NE_SANITY_CHECK
-	xfer_count++;
+			xfer_count++;
 #endif
-      }
-    } else {
-	insb(NE_BASE + NE_DATAPORT, buf, count);
-    }
+		}
+	} else {
+		insb(NE_BASE + NE_DATAPORT, buf, count);
+	}
 
 #ifdef NE_SANITY_CHECK
-    /* This was for the ALPHA version only, but enough people have
-       been encountering problems so it is still here.  If you see
-       this message you either 1) have a slightly incompatible clone
-       or 2) have noise/speed problems with your bus. */
-    if (ei_debug > 1) {		/* DMA termination address check... */
-	int addr, tries = 20;
-	do {
-	    /* DON'T check for 'inb_p(EN0_ISR) & ENISR_RDC' here
-	       -- it's broken for Rx on some cards! */
-	    int high = inb_p(nic_base + EN0_RSARHI);
-	    int low = inb_p(nic_base + EN0_RSARLO);
-	    addr = (high << 8) + low;
-	    if (((ring_offset + xfer_count) & 0xff) == low)
-		break;
-	} while (--tries > 0);
-	if (tries <= 0)
-	    printk("%s: RX transfer address mismatch,"
-		   "%#4.4x (expected) vs. %#4.4x (actual).\n",
-		   dev->name, ring_offset + xfer_count, addr);
-    }
+	/* This was for the ALPHA version only, but enough people have
+	   been encountering problems so it is still here.  If you see
+	   this message you either 1) have a slightly incompatible clone
+	   or 2) have noise/speed problems with your bus. */
+
+	if (ei_debug > 1) 
+	{
+		/* DMA termination address check... */
+		int addr, tries = 20;
+		do {
+			/* DON'T check for 'inb_p(EN0_ISR) & ENISR_RDC' here
+			   -- it's broken for Rx on some cards! */
+			int high = inb_p(nic_base + EN0_RSARHI);
+			int low = inb_p(nic_base + EN0_RSARLO);
+			addr = (high << 8) + low;
+			if (((ring_offset + xfer_count) & 0xff) == low)
+				break;
+		} while (--tries > 0);
+	 	if (tries <= 0)
+			printk(KERN_WARNING "%s: RX transfer address mismatch,"
+				"%#4.4x (expected) vs. %#4.4x (actual).\n",
+				dev->name, ring_offset + xfer_count, addr);
+	}
 #endif
-    outb_p(ENISR_RDC, nic_base + EN0_ISR);	/* Ack intr. */
-    ei_status.dmaing &= ~0x01;
+	outb_p(ENISR_RDC, nic_base + EN0_ISR);	/* Ack intr. */
+	ei_status.dmaing &= ~0x01;
 }
 
-static void
-ne_block_output(struct device *dev, int count,
+static void ne_block_output(struct device *dev, int count,
 		const unsigned char *buf, const int start_page)
 {
-    int nic_base = NE_BASE;
-    unsigned long dma_start;
+	int nic_base = NE_BASE;
+	unsigned long dma_start;
 #ifdef NE_SANITY_CHECK
-    int retries = 0;
+	int retries = 0;
 #endif
 
-    /* Round the count up for word writes.  Do we need to do this?
-       What effect will an odd byte count have on the 8390?
-       I should check someday. */
-    if (ei_status.word16 && (count & 0x01))
-      count++;
+	/* Round the count up for word writes.  Do we need to do this?
+	   What effect will an odd byte count have on the 8390?
+	   I should check someday. */
+	   
+	if (ei_status.word16 && (count & 0x01))
+		count++;
 
-    /* This *shouldn't* happen. If it does, it's the last thing you'll see */
-    if (ei_status.dmaing) {
-	printk("%s: DMAing conflict in ne_block_output."
-	   "[DMAstat:%d][irqlock:%d][intr:%ld]\n",
-	   dev->name, ei_status.dmaing, ei_status.irqlock,
-	   dev->interrupt);
-	return;
-    }
-    ei_status.dmaing |= 0x01;
-    /* We should already be in page 0, but to be safe... */
-    outb_p(E8390_PAGE0+E8390_START+E8390_NODMA, nic_base + NE_CMD);
+	/* This *shouldn't* happen. If it does, it's the last thing you'll see */
+	if (ei_status.dmaing) 
+	{
+		printk(KERN_EMERG "%s: DMAing conflict in ne_block_output."
+			"[DMAstat:%d][irqlock:%d][intr:%ld]\n",
+			dev->name, ei_status.dmaing, ei_status.irqlock,
+			dev->interrupt);
+		return;
+	}
+	ei_status.dmaing |= 0x01;
+	/* We should already be in page 0, but to be safe... */
+	outb_p(E8390_PAGE0+E8390_START+E8390_NODMA, nic_base + NE_CMD);
 
 #ifdef NE_SANITY_CHECK
- retry:
+retry:
 #endif
 
 #ifdef NE8390_RW_BUGFIX
-    /* Handle the read-before-write bug the same way as the
-       Crynwr packet driver -- the NatSemi method doesn't work.
-       Actually this doesn't always work either, but if you have
-       problems with your NEx000 this is better than nothing! */
-    outb_p(0x42, nic_base + EN0_RCNTLO);
-    outb_p(0x00,   nic_base + EN0_RCNTHI);
-    outb_p(0x42, nic_base + EN0_RSARLO);
-    outb_p(0x00, nic_base + EN0_RSARHI);
-    outb_p(E8390_RREAD+E8390_START, nic_base + NE_CMD);
-    /* Make certain that the dummy read has occurred. */
-    udelay(6);
+	/* Handle the read-before-write bug the same way as the
+	   Crynwr packet driver -- the NatSemi method doesn't work.
+	   Actually this doesn't always work either, but if you have
+	   problems with your NEx000 this is better than nothing! */
+	   
+	outb_p(0x42, nic_base + EN0_RCNTLO);
+	outb_p(0x00,   nic_base + EN0_RCNTHI);
+	outb_p(0x42, nic_base + EN0_RSARLO);
+	outb_p(0x00, nic_base + EN0_RSARHI);
+	outb_p(E8390_RREAD+E8390_START, nic_base + NE_CMD);
+	/* Make certain that the dummy read has occurred. */
+	udelay(6);
 #endif
 
-    outb_p(ENISR_RDC, nic_base + EN0_ISR);
+	outb_p(ENISR_RDC, nic_base + EN0_ISR);
 
-   /* Now the normal output. */
-    outb_p(count & 0xff, nic_base + EN0_RCNTLO);
-    outb_p(count >> 8,   nic_base + EN0_RCNTHI);
-    outb_p(0x00, nic_base + EN0_RSARLO);
-    outb_p(start_page, nic_base + EN0_RSARHI);
+	/* Now the normal output. */
+	outb_p(count & 0xff, nic_base + EN0_RCNTLO);
+	outb_p(count >> 8,   nic_base + EN0_RCNTHI);
+	outb_p(0x00, nic_base + EN0_RSARLO);
+	outb_p(start_page, nic_base + EN0_RSARHI);
 
-    outb_p(E8390_RWRITE+E8390_START, nic_base + NE_CMD);
-    if (ei_status.word16) {
-	outsw(NE_BASE + NE_DATAPORT, buf, count>>1);
-    } else {
-	outsb(NE_BASE + NE_DATAPORT, buf, count);
-    }
+	outb_p(E8390_RWRITE+E8390_START, nic_base + NE_CMD);
+	if (ei_status.word16) {
+		outsw(NE_BASE + NE_DATAPORT, buf, count>>1);
+	} else {
+		outsb(NE_BASE + NE_DATAPORT, buf, count);
+	}
 
-    dma_start = jiffies;
+	dma_start = jiffies;
 
 #ifdef NE_SANITY_CHECK
-    /* This was for the ALPHA version only, but enough people have
-       been encountering problems so it is still here. */
-    if (ei_debug > 1) {		/* DMA termination address check... */
-	int addr, tries = 20;
-	do {
-	    int high = inb_p(nic_base + EN0_RSARHI);
-	    int low = inb_p(nic_base + EN0_RSARLO);
-	    addr = (high << 8) + low;
-	    if ((start_page << 8) + count == addr)
-		break;
-	} while (--tries > 0);
-	if (tries <= 0) {
-	    printk("%s: Tx packet transfer address mismatch,"
-		   "%#4.4x (expected) vs. %#4.4x (actual).\n",
-		   dev->name, (start_page << 8) + count, addr);
-	    if (retries++ == 0)
-		goto retry;
+	/* This was for the ALPHA version only, but enough people have
+	   been encountering problems so it is still here. */
+	
+	if (ei_debug > 1) 
+	{
+		/* DMA termination address check... */
+		int addr, tries = 20;
+		do {
+			int high = inb_p(nic_base + EN0_RSARHI);
+			int low = inb_p(nic_base + EN0_RSARLO);
+			addr = (high << 8) + low;
+			if ((start_page << 8) + count == addr)
+				break;
+		} while (--tries > 0);
+
+		if (tries <= 0) 
+		{
+			printk(KERN_WARNING "%s: Tx packet transfer address mismatch,"
+				"%#4.4x (expected) vs. %#4.4x (actual).\n",
+				dev->name, (start_page << 8) + count, addr);
+			if (retries++ == 0)
+				goto retry;
+		}
 	}
-    }
 #endif
 
-    while ((inb_p(nic_base + EN0_ISR) & ENISR_RDC) == 0)
-	if (jiffies - dma_start > 2*HZ/100) {		/* 20ms */
-		printk("%s: timeout waiting for Tx RDC.\n", dev->name);
-		ne_reset_8390(dev);
-		NS8390_init(dev,1);
-		break;
-	}
+	while ((inb_p(nic_base + EN0_ISR) & ENISR_RDC) == 0)
+		if (jiffies - dma_start > 2*HZ/100) {		/* 20ms */
+			printk(KERN_WARNING "%s: timeout waiting for Tx RDC.\n", dev->name);
+			ne_reset_8390(dev);
+			NS8390_init(dev,1);
+			break;
+		}
 
-    outb_p(ENISR_RDC, nic_base + EN0_ISR);	/* Ack intr. */
-    ei_status.dmaing &= ~0x01;
-    return;
+	outb_p(ENISR_RDC, nic_base + EN0_ISR);	/* Ack intr. */
+	ei_status.dmaing &= ~0x01;
+	return;
 }
 
 
@@ -740,13 +772,16 @@ MODULE_PARM(io, "1-" __MODULE_STRING(MAX_NE_CARDS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_NE_CARDS) "i");
 MODULE_PARM(bad, "1-" __MODULE_STRING(MAX_NE_CARDS) "i");
 
+#ifdef CONFIG_PCI
+MODULE_PARM(probe_pci, "i");
+#endif
+
 /* This is set up so that no ISA autoprobe takes place. We can't guarantee
 that the ne2k probe is the last 8390 based probe to take place (as it
 is at boot) and so the probe will get confused by any other 8390 cards.
 ISA device autoprobes on a running machine are not recommended anyway. */
 
-int
-init_module(void)
+int init_module(void)
 {
 	int this_dev, found = 0;
 
@@ -775,8 +810,7 @@ init_module(void)
 	return 0;
 }
 
-void
-cleanup_module(void)
+void cleanup_module(void)
 {
 	int this_dev;
 
@@ -786,7 +820,6 @@ cleanup_module(void)
 			void *priv = dev->priv;
 			free_irq(dev->irq, dev);
 			release_region(dev->base_addr, NE_IO_EXTENT);
-			dev->priv = NULL;
 			unregister_netdev(dev);
 			kfree(priv);
 		}

@@ -135,7 +135,7 @@ static void pss_write(pss_confdata *devc, int data)
 	 * loops.
 	 */
 
-	for (i = 0; i < 5000000 && jiffies < limit; i++)
+	for (i = 0; i < 5000000 && time_before(jiffies, limit); i++)
  	{
  		if (inw(REG(PSS_STATUS)) & PSS_WRITE_EMPTY)
  		{
@@ -285,7 +285,7 @@ static int pss_download_boot(pss_confdata * devc, unsigned char *block, int size
 		outw(0x00fe, REG(PSS_DATA));
 
 		limit = jiffies + HZ/10;
-		for (i = 0; i < 32768 && jiffies < limit; i++)
+		for (i = 0; i < 32768 && time_before(jiffies, limit); i++)
 			if (inw(REG(PSS_DATA)) == 0x5500)
 				break;
 

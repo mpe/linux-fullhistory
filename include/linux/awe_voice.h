@@ -2,10 +2,10 @@
  * sound/awe_voice.h
  *
  * Voice information definitions for the low level driver for the 
- * AWE32/Sound Blaster 32 wave table synth.
- *   version 0.4.2c; Oct. 7, 1997
+ * AWE32/SB32/AWE64 wave table synth.
+ *   version 0.4.3; Mar. 1, 1998
  *
- * Copyright (C) 1996,1997 Takashi Iwai
+ * Copyright (C) 1996-1998 Takashi Iwai
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -55,6 +55,8 @@ typedef struct awe_patch_info {
 #define AWE_UNLOAD_PATCH	4	/* none */
 #define AWE_REPLACE_DATA	5	/* awe_sample_info (optarg=#channels)*/
 #define AWE_MAP_PRESET		6	/* awe_voice_map */
+/*#define AWE_PROBE_INFO	7*/	/* awe_voice_map (pat only) */
+#define AWE_PROBE_DATA		8	/* optarg=sample */
 #define AWE_LOAD_CHORUS_FX	0x10	/* awe_chorus_fx_rec (optarg=mode) */
 #define AWE_LOAD_REVERB_FX	0x11	/* awe_reverb_fx_rec (optarg=mode) */
 
@@ -88,6 +90,7 @@ typedef struct _awe_open_parm {
 #define AWE_PAT_TYPE_MAP	7
 
 #define AWE_PAT_LOCKED		0x100	/* lock the samples */
+#define AWE_PAT_SHARED		0x200	/* sample is shared */
 
 	short reserved;
 	char name[AWE_PATCH_NAME_LEN];
@@ -125,6 +128,30 @@ typedef struct _awe_voice_parm {
 	unsigned char reverb;		/* reverb send (0x00) */
 	unsigned short reserved[4];	/* not used */
 } awe_voice_parm;
+
+typedef struct _awe_voice_parm_block {
+	unsigned short moddelay;	/* modulation delay (0x8000) */
+	unsigned char modatk, modhld;
+	unsigned char moddcy, modsus;
+	unsigned short modrel, moddummy;
+	short modkeyhold, modkeydecay;	/* envelope change per key (not used) */
+	unsigned short voldelay;	/* volume delay (0x8000) */
+	unsigned char volatk, volhld;
+	unsigned char voldcy, volsus;
+	unsigned char volrel, voldummy;
+	short volkeyhold, volkeydecay;	/* envelope change per key (not used) */
+	unsigned short lfo1delay;	/* LFO1 delay (0x8000) */
+	unsigned short lfo2delay;	/* LFO2 delay (0x8000) */
+	unsigned char env1fc, env1pit;
+	unsigned char lfo1fc, lfo1pit;
+	unsigned char lfo1freq, lfo1vol;
+	unsigned char lfo2freq, lfo2pit;
+	unsigned char cutoff;		/* initial cutoff (0xff) */
+	unsigned char filterQ;		/* initial filter Q [0-15] (0x0) */
+	unsigned char chorus;		/* chorus send (0x00) */
+	unsigned char reverb;		/* reverb send (0x00) */
+	unsigned short reserved[4];	/* not used */
+} awe_voice_parm_block;
 
 #define AWE_VOICE_PARM_SIZE	48
 
@@ -419,7 +446,7 @@ enum {
 /* 0*/	AWE_MD_EXCLUSIVE_OFF,	/* obsolete */
 /* 1*/	AWE_MD_EXCLUSIVE_ON,	/* obsolete */
 /* 2*/	AWE_MD_VERSION,		/* read only */
-/* 3*/	AWE_MD_EXCLUSIVE_SOUND,	/* ignored */
+/* 3*/	AWE_MD_EXCLUSIVE_SOUND,	/* 0/1: exclusive note on (default=1) */
 /* 4*/	AWE_MD_REALTIME_PAN,	/* 0/1: do realtime pan change (default=1) */
 /* 5*/	AWE_MD_GUS_BANK,	/* bank number for GUS patches (default=0) */
 /* 6*/	AWE_MD_KEEP_EFFECT,	/* 0/1: keep effect values, (default=0) */
@@ -430,6 +457,13 @@ enum {
 /*11*/	AWE_MD_DEF_BANK,	/* integer: default bank number (def=0) */
 /*12*/	AWE_MD_DEF_DRUM,	/* integer: default drumset number (def=0) */
 /*13*/	AWE_MD_TOGGLE_DRUM_BANK, /* 0/1: toggle drum flag with bank# (def=0) */
+/*14*/	AWE_MD_NEW_VOLUME_CALC,	/* 0/1: volume calculation mode (def=1) */
+/*15*/	AWE_MD_CHORUS_MODE,	/* integer: chorus mode (def=2) */
+/*16*/	AWE_MD_REVERB_MODE,	/* integer: chorus mode (def=4) */
+/*17*/	AWE_MD_BASS_LEVEL,	/* integer: bass level (def=5) */
+/*18*/	AWE_MD_TREBLE_LEVEL,	/* integer: treble level (def=9) */
+/*19*/	AWE_MD_DEBUG_MODE,	/* integer: debug level (def=0) */
+/*20*/	AWE_MD_PAN_EXCHANGE,	/* 0/1: exchange panning direction (def=0) */
 	AWE_MD_END,
 };
 

@@ -33,7 +33,7 @@ http://cyberbuzz.gatech.edu/kaboom/linux/ as well.
    Also, don't forget http://www.linuxhq.com/ for all your Linux kernel
 needs.
 
-Last updated: October 9, 1998
+Last updated: December 12, 1998
 Current Author: Chris Ricker (kaboom@gatech.edu or chris.ricker@m.cc.utah.edu).
 
 Current Minimal Requirements
@@ -51,19 +51,18 @@ running, the suggested command should tell you.
 - Dynamic Linker (ld.so) 1.9.9                   ; ldd --version or ldd -v
 - Linux C++ Library	 2.7.2.8                 ; ls -l /usr/lib/libg++.so.*
 - Procps		 1.2.9                   ; ps --version
-- Procinfo               14                      ; procinfo -v
+- Procinfo               15                      ; procinfo -v
 - Psmisc		 17			 ; pstree -V
-- Mount                  2.7l                    ; mount --version
-- Net-tools              1.45                    ; hostname -V
+- Net-tools              1.49                    ; hostname -V
 - Loadlin                1.6a
 - Sh-utils               1.16                    ; basename --v
-- Autofs                 0.3.11                  ; automount --version
+- Autofs                 3.1.1                   ; automount --version
 - NFS                    2.2beta37               ; showmount --version
 - Bash                   1.14.7                  ; bash -version
 - Ncpfs                  2.2.0                   ; ncpmount -v
-- Pcmcia-cs              3.0.5                   ; cardmgr -V
+- Pcmcia-cs              3.0.6                   ; cardmgr -V
 - PPP                    2.3.5                   ; pppd -v
-- PCI Utilities          1.08                    ; lspci --version
+- Util-linux             2.9                     ; chsh -v
 
 Upgrade notes
 *************
@@ -122,7 +121,7 @@ Libc (libc5)
    Linux-2.1.x is ELF-only.  You can still compile a.out apps if you
 really want, but your kernel must be compiled ELF.  If you can't
 currently compile ELF, consult the ELF howto at
-http://sunsite.unc.edu/mdw/HOWTO/ELF-HOWTO.html and upgrade your system
+http://metalab.unc.edu/mdw/HOWTO/ELF-HOWTO.html and upgrade your system
 accordingly.
 
    For modules to work, you need to be running libc-5.4.x or greater.
@@ -143,8 +142,8 @@ unless you're running glibc2 / libc6.
 you're using NIS.
 
    If you upgrade to libc-5.4.46, please read and pay attention to its
-accompanying release notes.  The section about it breaking make is not
-a joke.
+accompanying release notes.  The section about it breaking make is not a
+joke.
 
 GNU libc (libc6)
 ================
@@ -225,9 +224,6 @@ presence.
    To turn on IP forwarding, issue the following command:   echo 1 >
 /proc/sys/net/ipv4/ip_forward
 
-   To run bootpd, you'll need to issue the following command:   echo 1
->/proc/sys/net/ipv4/ip_boot_agent
-
    Similar procedures are necessary to turn on other features.  If
 something appears broken, check the /proc/sys/net/ipv4/ directory.  "1"
 generally denotes enabled, while "0" generally denotes disabled.
@@ -239,11 +235,11 @@ features like IPv6.
 
    As of 2.1.102, the IP firewalling code has been replaced; ipfwadm
 will no longer work.  You need to obtain "ipchains," available from
-http://www.adelaide.net.au/~rustcorp/ipfwchains/ipfwchains.html, and use
-that instead of ipfwadm.
+http://www.rustcorp.com/linux/ipchains/ , and use that instead of
+ipfwadm.
 
-   To use port forwarding and auto forwarding you will need to obtain
-"ipmasqadm," available from http://juanjox.home.ml.org/.
+   To use masq forwarding you will need to obtain "ipmasqadm,"
+available from http://juanjox.linuxhq.com/
 
 Memory
 ======
@@ -252,15 +248,22 @@ Memory
 many memory utils, which have to be upgraded.  Get the new procps-1.2
 and you should be set.
 
-Mount and network file systems
-==============================
+Network File System
+===================
 
    The NFS code in the kernel is currently being revised, resulting in
-much-improved performance.  As a result, you'll need to upgrade mount
-to a recent 2.6 release.  Also, amd is being phased out in favor of the
-much better autofs.  You'll also have to get the appropriate utils to
-use autofs as well as the new NFS utils.  In addition, you have the
+much-improved performance.  Also, amd is being phased out in favor of
+the much better autofs.  You'll also have to get the appropriate utils
+to use autofs as well as the new NFS utils.  In addition, you have the
 choice of user-land NFS or kernel-level NFS (knfs).
+
+Util-linux (including mount)
+============================
+
+   Among other changes in the 2.1.x development, the 128 meg limit on
+IA32 swap partition sizes has been eliminated.  To use larger swap
+spaces, you need the new mkswap found in util-linux.  You also need to
+upgrade this to get the latest version of mount.
 
 RPM
 ===
@@ -272,7 +275,7 @@ DOSEMU
 ======
 
    A new "stable" version of DOSEMU is available for 2.1.x kernels.
-Upgrade to 0.66.7 or later.
+Upgrade to 0.98.4 or later.
 
 Loadlin
 =======
@@ -295,7 +298,9 @@ driver.  Be aware that with Plug-and-Play support turned on, your
 parallel port may no longer be where you expect it; for example, LPT1
 (under DOS) was sometimes /dev/lp1 in Linux, but will probably be
 /dev/lp0 with the new Plug-and-Play driver.  If printing breaks with
-the new driver, try checking your lpd configuration.
+the new driver, try checking your lpd configuration.  A good source of
+more information is the Documentation/parport.txt file included with
+the kernel.
 
 Setserial
 =========
@@ -331,6 +336,11 @@ SMBfs
    To mount SMB (Samba / Windows) shares, you'll need to use the
 smbmount utility included with recent Samba releases.
 Documentation/filesystems/smbfs.txt has more information about this.
+Note that smbmount must have been built against 2.1.x headers to work
+with 2.1.x; if all else fails, recompile it and hope it works ;-).  In
+addition, Mike Warfield has a script and some information at
+http://www.wittsend.com/mhw/smbmount.html that you will probably find
+useful.
 
 Pcmcia-cs
 =========
@@ -361,6 +371,52 @@ Psmisc
    fuser, which comes with psmisc, reads /proc/*/fd/* to do its job.
 Upgrade psmisc if 2.1 changes to /proc broke the version you're using.
 
+Tunelp
+======
+
+   A new version of tunelp is available which will allow you to enable
+"trustirq" mode, improving printing while using IRQ-driven lp ports.
+
+PCI utils
+=========
+
+   Linux PCI utils are available; these include lspci, which displays
+the detailed information about your system's PCI devices which used to
+be in /proc/pci, and setpci, which allws you to read and write
+configuration registers on your PCI devices.
+
+Xosview
+=======
+
+   /proc interface changes require a recent xosview.
+
+RealPlayer
+==========
+
+   Current releases of Real Player 5.0 depend on a bug in the sound
+sub-system which is no longer there.  Consequently, they don't work.
+Real is aware of the problem and should have an updated version of the
+software available shortly.  In the mean time, you can always try
+backing up your copy of rvplayer, and then editing it by:
+
+   dd if=/dev/zero of=rvplayer bs=1 count=1 seek=657586 conv=notrunc dd
+if=/dev/zero of=rvplayer bs=1 count=1 seek=665986 conv=notrunc
+
+   If you're lucky, you'll then have sound....
+
+Quotas
+======
+
+   If you are using large quotas, you should upgrade your quota utils;
+newer versions count file sizes in blocks instead of bytes, providing
+an upper limit of terabytes instead of 4 GB.
+
+Ping
+====
+
+   Most distributed ping clients are buggy.  Get an updated one from the
+iputils package.
+
 Where to get the files
 **********************
 
@@ -369,21 +425,21 @@ Binutils
 
 The 2.8.1.0.23 release:
 ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.8.1.0.23.bin.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.8.1.0.23.bin.tar.gz
+ftp://metalab.unc.edu/pub/Linux/GCC/binutils-2.8.1.0.23.bin.tar.gz
 Installation notes:
 ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.binutils-2.8.1.0.23
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.binutils-2.8.1.0.23
+ftp://metalab.unc.edu/pub/Linux/GCC/release.binutils-2.8.1.0.23
 
-The 2.9.1.0.12 release:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.9.1.0.12-glibc.x86.tar.gz
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.9.1.0.12-libc5.x86.tar.gz
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.9.1.0.12.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.9.1.0.12-glibc.x86.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.9.1.0.12-libc5.x86.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.9.1.0.12.tar.gz
+The 2.9.1.0.15 release:
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.9.1.0.15-glibc.x86.tar.gz
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.9.1.0.15-libc5.x86.tar.gz
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.9.1.0.15.tar.gz
+ftp://metalab.unc.edu/pub/Linux/GCC/binutils-2.9.1.0.15-glibc.x86.tar.gz
+ftp://metalab.unc.edu/pub/Linux/GCC/binutils-2.9.1.0.15-libc5.x86.tar.gz
+ftp://metalab.unc.edu/pub/Linux/GCC/binutils-2.9.1.0.15.tar.gz
 Installation notes:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.binutils-2.9.1.0.12
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.binutils-2.9.1.0.12
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.binutils-2.9.1.0.15
+ftp://metalab.unc.edu/pub/Linux/GCC/release.binutils-2.9.1.0.15
 
 Gnu C
 =====
@@ -391,25 +447,25 @@ Gnu C
 The egcs-1.0.3 release:
 ftp://tsx-11.mit.edu/pub/linux/packages/GCC/egcs-1.0.3-glibc.x86.tar.bz2
 ftp://tsx-11.mit.edu/pub/linux/packages/GCC/egcs-1.0.3-libc5.x86.tar.bz2
-ftp://sunsite.unc.edu/pub/Linux/GCC/egcs-1.0.3-glibc.x86.tar.bz2
-ftp://sunsite.unc.edu/pub/Linux/GCC/egcs-1.0.3-libc5.x86.tar.bz2
+ftp://metalab.unc.edu/pub/Linux/GCC/egcs-1.0.3-glibc.x86.tar.bz2
+ftp://metalab.unc.edu/pub/Linux/GCC/egcs-1.0.3-libc5.x86.tar.bz2
 Installation notes:
 ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.egcs-1.0.3
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.egcs-1.0.3
+ftp://metalab.unc.edu/pub/Linux/GCC/release.egcs-1.0.3
 
 Gnu C 2.7.2.3 source:
 ftp://prep.ai.mit.edu/pub/gnu/gcc-2.7.2.3.tar.gz
-ftp://sunsite.unc.edu/pub/gnu/gcc-2.7.2.3.tar.gz
+ftp://metalab.unc.edu/pub/gnu/gcc-2.7.2.3.tar.gz
 
 Linux C Library
 ===============
 
 The (libc5) 5.4.46 release:
 ftp://tsx-11.mit.edu/pub/linux/packages/GCC/libc-5.4.46.bin.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.4.46.bin.tar.gz
+ftp://metalab.unc.edu/pub/Linux/GCC/libc-5.4.46.bin.tar.gz
 Installation notes for 5.4.46:
 ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.libc-5.4.46
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.4.46
+ftp://metalab.unc.edu/pub/Linux/GCC/release.libc-5.4.46
 
 The (libc6) GNU libc 2.0.7pre6 release:
 ftp://ftp.kernel.org/pub/software/libs/glibc/glibc-2.0.7pre6.tar.gz
@@ -420,17 +476,17 @@ Linux C++ Library
 
 The 2.7.2.8 release:
 ftp://tsx-11.mit.edu/pub/linux/packages/GCC/libg++-2.7.2.8.bin.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/GCC/libg++-2.7.2.8.bin.tar.gz
+ftp://metalab.unc.edu/pub/Linux/GCC/libg++-2.7.2.8.bin.tar.gz
 Installation notes:
 ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.libg++-2.7.2.8
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.libg++-2.7.2.8
+ftp://metalab.unc.edu/pub/Linux/GCC/release.libg++-2.7.2.8
 
 Dynamic Linker
 ==============
 
 The 1.9.9 release:
 ftp://tsx-11.mit.edu/pub/linux/packages/GCC/ld.so-1.9.9.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/GCC/ld.so-1.9.9.tar.gz
+ftp://metalab.unc.edu/pub/Linux/GCC/ld.so-1.9.9.tar.gz
 
 Modules utilities
 =================
@@ -443,20 +499,20 @@ Procps utilities
 
 The 1.2 release:
 ftp://tsx-11.mit.edu/pub/linux/sources/usr.bin/procps-1.2.9.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/system/status/ps/procps-1.2.9.tgz
+ftp://metalab.unc.edu/pub/Linux/system/status/ps/procps-1.2.9.tgz
 
 Procinfo utilities
 ==================
 
-The 14 release:
-ftp://ftp.cistron.nl/pub/people/svm/procinfo-14.tar.gz
+The 15 release:
+ftp://ftp.cistron.nl/pub/people/svm/procinfo-15.tar.gz
 
 Psmisc utilities
 ================
 
 The 17 release:
 ftp://lrcftp.epfl.ch/pub/linux/local/psmisc/psmisc-17.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/system/status/ps/psmisc-17.tar.gz
+ftp://metalab.unc.edu/pub/Linux/system/status/ps/psmisc-17.tar.gz
 
 RPM utilities
 =============
@@ -475,8 +531,8 @@ DOSEMU
 ======
 
 The 0.98.1 release:
-ftp://tsx-11.mit.edu/pub/linux/ALPHA/dosemu/dosemu-0.98.1.tgz
-ftp://ftp.dosemu.org/dosemu/dosemu-0.98.1.tgz
+ftp://tsx-11.mit.edu/pub/linux/ALPHA/dosemu/dosemu-0.98.4.tgz
+ftp://ftp.dosemu.org/dosemu/dosemu-0.98.4.tgz
 
 Loadlin
 =======
@@ -489,14 +545,14 @@ Sh-utils
 ========
 
 The 1.16 release:
-ftp://sunsite.unc.edu/pub/gnu/sh-utils-1.16.tar.gz
+ftp://metalab.unc.edu/pub/gnu/sh-utils-1.16.tar.gz
 ftp://prep.ai.mit.edu/pub/gnu/sh-utils-1.16.tar.gz
 
-Mount
-=====
+Util-linux
+==========
 
-The 2.7l release:
-ftp://ftp.win.tue.nl/pub/linux/util/mount/mount-2.7l.tar.gz
+The 2.9 release:
+ftp://ftp.win.tue.nl/pub/linux/util/util-linux-2.9.tar.gz
 
 Autofs
 ======
@@ -511,28 +567,31 @@ The user-land 2.2beta37 release:
 ftp://ftp.mathematik.th-darmstadt.de/pub/linux/okir/nfs-server-2.2beta37.tar.gz
 ftp://linux.nrao.edu/mirrors/fb0429.mathematik.th-darmstadt.de/pub/linux/okir/nfs-server-2.2beta37.tar.gz
 
-The kernel-level 9/30/98 release:
-ftp://ftp.yggdrasil.com/private/hjl/knfsd-980930.tar.gz
-ftp://ftp.kernel.org/pub/linux/devel/gcc/knfsd-980930.tar.gz
+The kernel-level 12/04/98 release:
+ftp://ftp.yggdrasil.com/private/hjl/knfsd-981204.tar.gz
+ftp://ftp.kernel.org/pub/linux/devel/gcc/knfsd-981204.tar.gz
 
 Net-tools
 =========
 
-The 1.45 release:
-ftp://ftp.cs-ipv6.lancs.ac.uk/pub/Code/Linux/Net_Tools/net-tools-1.45.tar.gz
-http://www.tazenda.demon.co.uk/phil/net-tools/net-tools-1.45.tar.gz
+The 1.49 release:
+ftp://ftp.cs-ipv6.lancs.ac.uk/pub/Code/Linux/Net_Tools/net-tools-1.49.tar.gz
+http://www.tazenda.demon.co.uk/phil/net-tools/net-tools-1.49.tar.gz
 
 Ypbind
 ======
 
-The 3.2 release:
-ftp://ftp.uni-paderborn.de/pub/linux/local/yp/ypbind-3.2.tar.gz
+The 3.3 release:
+ftp://ftp.uni-paderborn.de/pub/linux/local/yp/ypbind-3.3.tar.gz
 
 Bash
 ====
 
 The 1.14.7 release:
 ftp://prep.ai.mit.edu/pub/gnu/bash-1.14.7.tar.gz
+
+The 2.02.1 release:
+ftp://prep.ai.mit.edu/pub/gnu/bash-2.02.1.tar.gz
 
 Ncpfs
 =====
@@ -544,20 +603,20 @@ SMBfs
 =====
 
 The 1.9.18p10 release of Samba:
-ftp://samba.anu.edu.au/pub/samba/samba-1.9.18p10.tar.gz
+ftp://ftp.samba.org/pub/samba/samba-1.9.18p10.tar.gz
 
 Pcmcia-cs
 =========
 
-The 3.0.5 release:
-ftp://hyper.stanford.edu/pub/pcmcia/pcmcia-cs.3.0.5.tar.gz
+The 3.0.6 release:
+ftp://hyper.stanford.edu/pub/pcmcia/pcmcia-cs.3.0.6.tar.gz
 
 Setserial
 =========
 
-The 2.14 release:
-ftp://tsx-11.mit.edu/pub/linux/sources/sbin/setserial-2.14.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/system/serial/setserial-2.14.tar.gz
+The 2.15 release:
+ftp://tsx-11.mit.edu/pub/linux/sources/sbin/setserial-2.15.tar.gz
+ftp://metalab.unc.edu/pub/Linux/system/serial/setserial-2.15.tar.gz
 
 PPP
 ===
@@ -568,21 +627,21 @@ ftp://cs.anu.edu.au/pub/software/ppp/ppp-2.3.5.tar.gz
 IP Chains
 =========
 
-The 1.3.3 release:
-http://www.adelaide.net.au/~rustcorp/ipfwchains/ipchains-source-1.3.3.tar.gz
-http://www.adelaide.net.au/~rustcorp/ipfwchains/ipchains-source-1.3.3.tar.bz2
+The 1.3.8 release:
+ftp://ftp.rustcorp.com/ipchains/ipchains-1.3.8.tar.gz
+ftp://ftp.rustcorp.com/ipchains/ipchains-1.3.8.tar.bz2
 
 IP Masq Adm
 ===========
 
-The 0.4.1 release:
-http://juanjox.home.ml.org/ipmasqadm-0.4.1.tar.gz
+The 0.4.2 release:
+http://juanjox.linuxhq.com/ipmasqadm-0.4.2.tar.gz
 
 iBCS
 ====
 
-The 8/30/98 release:
-ftp://tsx-11.mit.edu/pub/linux/BETA/ibcs2/ibcs-2.1-980830-ALPHA.tar.gz
+The 11/05/98 release:
+ftp://tsx-11.mit.edu/pub/linux/BETA/ibcs2/ibcs-2.1-981105-ALPHA.tar.gz
 
 Asun netatalk
 =============
@@ -593,22 +652,47 @@ ftp://ftp.u.washington.edu/pub/user-supported/asun/netatalk-1.4b2+asun2.0a18.2.t
 Fbset
 =====
 
-The 7/13/98 release:
-http://www.cs.kuleuven.ac.be/~geert/bin/fbset-2.0-pre-19980713.tar.gz
+The 11/04/98 release:
+http://www.cs.kuleuven.ac.be/~geert/bin/fbset-2.0-pre-19981104.tar.gz
 
-PCIutils
+PCI utils
+=========
+
+The 1.09 release:
+ftp://atrey.karlin.mff.cuni.cz/pub/linux/pci/pciutils-1.09.tar.gz
+ftp://metalab.unc.edu/pub/Linux/hardware/pciutils-1.09.tar.gz
+
+Tunelp
+======
+
+The 0-2.1.131 release:
+ftp://e-mind.com/pub/linux/tunelp/tunelp-0-2.1.131.tar.gz
+
+Xosview
+=======
+
+The 1.6.1 release:
+ftp://metalab.unc.edu/pub/Linux/system/status/xstatus/xosview-1.6.1.tar.gz
+
+Quota utils
+===========
+
+The 1.55 release:
+ftp://ftp.uk.linux.org/pub/linux/sct/quota/quota-1.55-10.i386.rpm
+ftp://ftp.uk.linux.org/pub/linux/sct/quota/quota-1.55-10.src.rpm
+
+IP utils
 ========
 
-The 1.08 release:
-ftp://atrey.karlin.mff.cuni.cz/pub/linux/pci/pciutils-1.08.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/hardware/pciutils-1.08.tar.gz
+The 11/01/98 release:
+ftp://ftp.inr.ac.ru/pub/ip-routing/iputils-ss981101.tar.gz
 
 Other Info
 ==========
 
    Please remember that most of these utils are available on your
 favorite local linux mirror.  If you can, please get them from a closer
-site before checking sunsite.
+site before checking metalab.
 
    You may also want to check for updated versions of this software in a
 package format for the distribution you use.
@@ -616,9 +700,9 @@ package format for the distribution you use.
    For those of you running Red Hat (or RPM on a different
 distribution), most of these are available in RPM format.  Check around
 your favorite Red Hat mirror site before installing the non-RPM
-version.  Remember, you might need to use the -force option to get the
-upgrade to install.  ftp://ftp.redhat.com/pub/contrib/ will have almost
-everything you need, and Red Hat 5.1 ships with most necessary software.
+version.  Remember, you might need to use the --force option to get the
+upgrade to install.  ftp://contrib.redhat.com/ will have almost
+everything you need, and Red Hat 5.2 ships with most necessary software.
 
    Those of you running Debian (or a different distribution that
 supports .deb packages) can look in the "unstable" and

@@ -677,10 +677,7 @@ void cleanup_module(void)
 			mca_mark_as_unused(ei_status.priv);
 			mca_set_adapter_procfn( ei_status.priv, NULL, NULL);
 			kfree(dev->priv);
-			dev->priv = NULL;
 			free_irq(dev->irq, dev);
-			/* removed (temporary) fot */
-			/* irq2dev_map[dev->irq] = NULL; */
 			release_region(dev->base_addr, NE_IO_EXTENT);
 			unregister_netdev(dev);
 		}

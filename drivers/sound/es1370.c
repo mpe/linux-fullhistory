@@ -2401,8 +2401,6 @@ void cleanup_module(void)
 		synchronize_irq();
 		free_irq(s->irq, s);
 		release_region(s->io, ES1370_EXTENT);
-		if (s->ctrl & CTRL_JYSTK_EN)
-			release_region(0x200, JOY_EXTENT);
 		unregister_sound_dsp(s->dev_audio);
 		unregister_sound_mixer(s->dev_mixer);
 		unregister_sound_dsp(s->dev_dac);

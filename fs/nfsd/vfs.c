@@ -1076,25 +1076,49 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	 * FIXME!!
 	 *
 	 * This should do a double-lock on both rdentry and the parent
+	 *
+	 * Moreover, it should do checks *both* for unlink and rmdir
+	 * cases. AV
 	 */
-	err = fh_lock_parent(fhp, rdentry);
-	if (err)
-		goto out;
+	if (type != S_IFDIR) {
+		/* It's UNLINK */
+		err = fh_lock_parent(fhp, rdentry);
+		if (err)
+			goto out;
 
-	DQUOT_INIT(dirp);
-	if (type == S_IFDIR) {
-		err = -ENOTDIR;
-		if (dirp->i_op && dirp->i_op->rmdir)
-			err = dirp->i_op->rmdir(dirp, rdentry);
-	} else {
+		DQUOT_INIT(dirp);
 		err = -EPERM;
 		if (dirp->i_op && dirp->i_op->unlink)
 			err = dirp->i_op->unlink(dirp, rdentry);
-	}
-	DQUOT_DROP(dirp);
-	fh_unlock(fhp);
+		DQUOT_DROP(dirp);
+		fh_unlock(fhp);
 
-	dput(rdentry);
+		dput(rdentry);
+
+	} else {
+		/* It's RMDIR */
+		/* See comments in fs/namei.c:do_rmdir */
+		rdentry->d_count++;
+		nfsd_double_down(&dirp->i_sem, &rdentry->d_inode->i_sem);
+		if (!fhp->fh_pre_mtime)
+			fhp->fh_pre_mtime = dirp->i_mtime;
+		fhp->fh_locked = 1;
+		/* CHECKME: Should we do something with the child? */
+
+		err = -ENOENT;
+		if (rdentry->d_parent->d_inode == dirp)
+			err = VFS_rmdir(dirp, rdentry);
+
+		rdentry->d_count--;
+		DQUOT_DROP(dirp);
+		if (!fhp->fh_post_version)
+			fhp->fh_post_version = dirp->i_version;
+		fhp->fh_locked = 0;
+		nfsd_double_up(&dirp->i_sem, &rdentry->d_inode->i_sem);
+
+		dput(rdentry);
+	}
+
 	if (err)
 		goto out_nfserr;
 	if (EX_ISSYNC(fhp->fh_export))

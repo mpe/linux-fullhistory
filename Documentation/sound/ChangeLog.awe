@@ -1,3 +1,27 @@
+ver.0.4.3p4
+	- Bug fix for invalid memory detection when initialized twice
+	- Add sample sharing function - works together with awesfx-0.4.3p3
+	- Add AWE_PROBE_DATA for probing sample id
+
+ver.0.4.3p3
+	- Replace memset to MEMSET (for FreeBSD)
+	- Add PAN_EXCHANGE switch
+
+ver.0.4.3p2
+	- MIDI emulation device is added
+	- Controls volume and filter targets
+	- Include chorus/reverb/equalizer values in MISC_MODE
+
+ver.0.4.3p1
+	- Change the volume calculation method
+	- Support for Tom Lees' PnP driver (v0.3)
+
+ver.0.4.2d
+	- Support for OSS/Free 3.8 on 2.0 kernels.
+	- Support for Linux PnP driver
+	- Support for module (for recent 2.1 kernels and RH5.0)
+	- Support for FreeBSD-3.0 system
+
 ver.0.4.2c
 	- Add a mode to enable drum channel toggle via bank number
 	  change.

@@ -421,7 +421,6 @@ void cleanup_module(void)
 			release_region(dev->base_addr, NE3210_IO_EXTENT);
 			if (ei_status.reg0)
 				iounmap((void *)dev->mem_start);
-			dev->priv = NULL;
 			unregister_netdev(dev);
 			kfree(priv);
 		}

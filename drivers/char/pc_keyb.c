@@ -64,7 +64,7 @@ static volatile unsigned char acknowledge = 0;
 static volatile unsigned char resend = 0;
 
 
-#if defined CONFIG_PSMOUSE
+#if defined(CONFIG_PSMOUSE)
 /*
  *	PS/2 Auxiliary Device
  */

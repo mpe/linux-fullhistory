@@ -166,6 +166,7 @@ struct ucred {
 #define AF_ECONET	19	/* Acorn Econet			*/
 #define AF_ATMSVC	20	/* ATM SVCs			*/
 #define AF_SNA		22	/* Linux SNA Project (nutters!) */
+#define AF_IRDA		23	/* IRDA sockets			*/
 #define AF_MAX		32	/* For now.. */
 
 /* Protocol families, same as address families. */
@@ -193,6 +194,7 @@ struct ucred {
 #define PF_ECONET	AF_ECONET
 #define PF_ATMSVC	AF_ATMSVC
 #define PF_SNA		AF_SNA
+#define PF_IRDA		AF_IRDA
 
 #define PF_MAX		AF_MAX
 
@@ -206,6 +208,7 @@ struct ucred {
 #define MSG_OOB		1
 #define MSG_PEEK	2
 #define MSG_DONTROUTE	4
+#define MSG_TRYHARD     4       /* Synonym for MSG_DONTROUTE for DECnet */
 #define MSG_CTRUNC	8
 #define MSG_PROXY	0x10	/* Supply or ask second address. */
 #define MSG_TRUNC	0x20

@@ -776,6 +776,7 @@ extern int get_write_access(struct inode *inode);
 extern void put_write_access(struct inode *inode);
 extern struct dentry * open_namei(const char * pathname, int flag, int mode);
 extern struct dentry * do_mknod(const char * filename, int mode, dev_t dev);
+extern int VFS_rmdir(struct inode *dir, struct dentry *dentry);
 extern int do_pipe(int *);
 
 /* fs/dcache.c -- generic fs support functions */

@@ -16,14 +16,18 @@ extern int vidc_busy;
  * Filler routines for different channels and sample sizes
  */
 
-extern unsigned long vidc_fill_1x8(unsigned long ibuf, unsigned long iend,
-				   unsigned long obuf, int mask);
-extern unsigned long vidc_fill_2x8(unsigned long ibuf, unsigned long iend,
-				   unsigned long obuf, int mask);
-extern unsigned long vidc_fill_1x16(unsigned long ibuf, unsigned long iend,
-				    unsigned long obuf, int mask);
-extern unsigned long vidc_fill_2x16(unsigned long ibuf, unsigned long iend,
-				    unsigned long obuf, int mask);
+extern unsigned long vidc_fill_1x8_u(unsigned long ibuf, unsigned long iend,
+				     unsigned long obuf, int mask);
+extern unsigned long vidc_fill_2x8_u(unsigned long ibuf, unsigned long iend,
+				     unsigned long obuf, int mask);
+extern unsigned long vidc_fill_1x8_s(unsigned long ibuf, unsigned long iend,
+				     unsigned long obuf, int mask);
+extern unsigned long vidc_fill_2x8_s(unsigned long ibuf, unsigned long iend,
+				     unsigned long obuf, int mask);
+extern unsigned long vidc_fill_1x16_s(unsigned long ibuf, unsigned long iend,
+				      unsigned long obuf, int mask);
+extern unsigned long vidc_fill_2x16_s(unsigned long ibuf, unsigned long iend,
+				      unsigned long obuf, int mask);
 
 /*
  * DMA Interrupt handler

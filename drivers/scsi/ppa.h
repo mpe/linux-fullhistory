@@ -159,10 +159,8 @@ int ppa_biosparam(Disk *, kdev_t, int *);
 		release:			ppa_release,		\
 		command:			ppa_command,		\
 		queuecommand:			ppa_queuecommand,	\
-		eh_abort_handler:		ppa_abort,		\
-		eh_device_reset_handler:	NULL,			\
-		eh_bus_reset_handler:		ppa_reset,		\
-		eh_host_reset_handler:		ppa_reset,		\
+		abort:				ppa_abort,		\
+		reset:				ppa_reset,		\
 		bios_param:			ppa_biosparam,		\
 		this_id:			-1,			\
 		sg_tablesize:			SG_ALL,			\

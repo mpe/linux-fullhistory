@@ -8,6 +8,8 @@
 
 #include <asm/hardware.h>
 #include <asm/io.h>
+#include <asm/system.h>
+
 #include "sound_config.h"
 #include "vidc.h"
 
@@ -22,7 +24,7 @@ static int      vidc_adev;
 
 static int      vidc_audio_volume;
 static int      vidc_audio_rate;
-static char     vidc_audio_bits;
+static char     vidc_audio_format;
 static char     vidc_audio_channels;
 
 extern void     vidc_update_filler(int bits, int channels);
@@ -38,23 +40,25 @@ int vidc_audio_set_volume(int newvol)
 	return vidc_audio_volume;
 }
 
-static int vidc_audio_set_bits(int bits)
+static int vidc_audio_set_bits(int fmt)
 {
-	switch (bits)
+printk("setting format: %d\n", fmt);
+	switch (fmt)
 	{
 		case AFMT_QUERY:
 			break;
 		case AFMT_U8:
+		case AFMT_S8:
 		case AFMT_S16_LE:
-			vidc_audio_bits = bits;
-			vidc_update_filler(vidc_audio_bits, vidc_audio_channels);
+			vidc_audio_format = fmt;
+			vidc_update_filler(vidc_audio_format, vidc_audio_channels);
 			break;
 		default:
-			vidc_audio_bits = 16;
-			vidc_update_filler(vidc_audio_bits, vidc_audio_channels);
+			vidc_audio_format = AFMT_S16_LE;
+			vidc_update_filler(vidc_audio_format, vidc_audio_channels);
 			break;
 	}
-	return vidc_audio_bits;
+	return vidc_audio_format;
 }
 
 static int vidc_audio_set_rate(int rate)
@@ -68,8 +72,8 @@ static int vidc_audio_set_rate(int rate)
 			vidc_audio_rate = 3;
 		if (vidc_audio_rate > 255)
 			vidc_audio_rate = 255;
-		outl((vidc_audio_rate - 2) | 0xb0000000, VIDC_BASE);
-		outl(0xb1000003, VIDC_BASE);
+		outl((vidc_audio_rate - 2) | 0xb0000000, IO_VIDC_BASE);
+		outl(0xb1000003, IO_VIDC_BASE);
 		newsize = (10000 / vidc_audio_rate) & ~3;
 		if (newsize < 208)
 			newsize = 208;
@@ -92,11 +96,11 @@ static int vidc_audio_set_channels(int channels)
 		case 1:
 		case 2:
 			vidc_audio_channels = channels;
-			vidc_update_filler(vidc_audio_bits, vidc_audio_channels);
+			vidc_update_filler(vidc_audio_format, vidc_audio_channels);
 			break;
 		default:
 			vidc_audio_channels = 2;
-			vidc_update_filler(vidc_audio_bits, vidc_audio_channels);
+			vidc_update_filler(vidc_audio_format, vidc_audio_channels);
 			break;
 	}
 	return vidc_audio_channels;
@@ -110,7 +114,6 @@ static int vidc_audio_set_channels(int channels)
  *
  * Called when opening the DMAbuf               (dmabuf.c:259)
  */
-
 static int vidc_audio_open(int dev, int mode)
 {
 	if (vidc_busy)
@@ -133,7 +136,6 @@ static int vidc_audio_open(int dev, int mode)
  * Called when closing the DMAbuf               (dmabuf.c:477)
  *      after halt_xfer
  */
-
 static void vidc_audio_close(int dev)
 {
 	vidc_busy = 0;
@@ -205,23 +207,23 @@ static int vidc_audio_ioctl(int dev, unsigned int cmd, caddr_t arg)
  *  2.                                                  (dmabuf.c:1504)
  *  3. A new buffer needs to be sent to the device      (dmabuf.c:1579)
  */
- 
-static void vidc_audio_dma_interrupt(void)
-{
-	DMAbuf_outputintr(vidc_adev, 1);
-}
-
 static void vidc_audio_output_block(int dev, unsigned long buf, int total_count,
 			int intrflag)
 {
-	dma_start = buf;
+	struct audio_operations *adev = audio_devs[dev];
+	struct dma_buffparms *dmap = adev->dmap_out;
+
+	dma_start = buf - (unsigned long)dmap->raw_buf_phys + (unsigned long)dmap->raw_buf;
 	dma_count = total_count;
 
-	if (!intrflag)
+	if (!(adev->flags & DMA_ACTIVE))
 	{
-		dma_interrupt = vidc_audio_dma_interrupt;
+		unsigned long flags;
+printk("kicking output: %lX+%lX [%lX]\n", dma_start, dma_count, *(unsigned long *)dma_start);
+		save_flags_cli(flags);
 		vidc_sound_dma_irq(0, NULL, NULL);
-		outb(DMA_CR_D | DMA_CR_E, IOMD_SD0CR);
+		outb(DMA_CR_E | 0x10, IOMD_SD0CR);
+		restore_flags(flags);
 	}
 }
 
@@ -235,6 +237,11 @@ static int vidc_audio_prepare_for_input(int dev, int bsize, int bcount)
 	return -EINVAL;
 }
 
+static void vidc_audio_dma_interrupt(void)
+{
+	DMAbuf_outputintr(vidc_adev, 1);
+}
+
 /*
  * Prepare for outputting samples to `dev'
  *
@@ -246,34 +253,27 @@ static int vidc_audio_prepare_for_input(int dev, int bsize, int bcount)
  *  2. We get a write buffer without dma_mode setup     (dmabuf.c:1152)
  *  3. We restart a transfer                            (dmabuf.c:1324)
  */
-
 static int vidc_audio_prepare_for_output(int dev, int bsize, int bcount)
 {
+	audio_devs[dev]->dmap_out->flags |= DMA_NODMA;
+	dma_interrupt = vidc_audio_dma_interrupt;
 	return 0;
 }
 
+/*
+ * Stop our current operation.
+ */
 static void vidc_audio_reset(int dev)
 {
-}
-
-/*
- * Halt a DMA transfer to `dev'
- *
- * Called when:
- *  1. We close the DMAbuf                                      (dmabuf.c:476)
- *  2. We run out of output buffers to output to the device.    (dmabuf.c:1456)
- *  3. We run out of output buffers and we're closing down.     (dmabuf.c:1546)
- *  4. We run out of input buffers in AUTOMODE.                 (dmabuf.c:1651)
- */
- 
-static void vidc_audio_halt_xfer(int dev)
-{
-	dma_count = 0;
+	/* stop interrupts.  Our real interrupt routine
+	 * will close DMA down for us
+	 */
+	dma_interrupt = NULL;
 }
 
 static int vidc_audio_local_qlen(int dev)
 {
-	return dma_count != 0;
+	return /*dma_count !=*/ 0;
 }
 
 static struct audio_driver vidc_audio_driver =
@@ -286,35 +286,28 @@ static struct audio_driver vidc_audio_driver =
 	vidc_audio_prepare_for_input,	/* prepare_for_input    */
 	vidc_audio_prepare_for_output,	/* prepare_for_output   */
 	vidc_audio_reset,		/* reset                */
-	vidc_audio_halt_xfer,		/* halt_xfer            */
 	vidc_audio_local_qlen,		/*+local_qlen           */
 	NULL,				/*+copy_from_user       */
 	NULL,				/*+halt_input           */
-	NULL,				/*+halt_output          */
+	NULL,				/* halt_output          */
 	NULL,				/*+trigger              */
 	NULL,				/*+set_speed            */
 	NULL,				/*+set_bits             */
 	NULL,				/*+set_channels         */
 };
 
-static struct audio_operations vidc_audio_operations =
-{
-	"VIDCsound",
-	0,
-	AFMT_U8 | AFMT_S16_LE,
-	NULL,
-	&vidc_audio_driver
-};
-
 void vidc_audio_init(struct address_info *hw_config)
 {
 	vidc_audio_volume = 100 | (100 << 8);
-	if ((vidc_adev = sound_alloc_audiodev())!=-1)
+
+	if ((vidc_adev = sound_install_audiodrv(AUDIO_DRIVER_VERSION,
+				"VIDCsound", &vidc_audio_driver,
+				sizeof(struct audio_driver),
+				DMA_AUTOMODE, AFMT_U8 | AFMT_S8 | AFMT_S16_LE,
+				NULL, hw_config->dma, hw_config->dma2)) >= 0)
 	{
-		audio_devs[vidc_adev] = &vidc_audio_operations;
 		audio_devs[vidc_adev]->min_fragment = 10;	/* 1024 bytes => 64 buffers */
 		audio_devs[vidc_adev]->mixer_dev = num_mixers;
-		audio_devs[vidc_adev]->flags |= 0;
 	}
 	else printk(KERN_ERR "VIDCsound: Too many PCM devices available\n");
 }

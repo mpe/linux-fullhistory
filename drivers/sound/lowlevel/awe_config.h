@@ -1,10 +1,10 @@
 /*
  * sound/awe_config.h
  *
- * Configuration of AWE32 sound driver
- *   version 0.4.2; Sep. 15, 1997
+ * Configuration of AWE32/SB32/AWE64 wave table synth driver.
+ *   version 0.4.3; Mar. 1, 1998
  *
- * Copyright (C) 1996 Takashi Iwai
+ * Copyright (C) 1996-1998 Takashi Iwai
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,60 +28,12 @@
  * system configuration
  *----------------------------------------------------------------*/
 
-/* if you're using obsolete VoxWare 3.0.x on Linux 1.2.x (or FreeBSD),
- * define the following line.
+/* if your kernel support module for each soundcard, define this.
+ * NOTE: it will be automatically set on linux-2.1.x kernels.
+ *       only define here if you have moduler sound system on
+ *       2.0.x kernel (like RedHat).
  */
-#undef AWE_OBSOLETE_VOXWARE
-
-#ifdef __FreeBSD__
-#  define AWE_OBSOLETE_VOXWARE
-#endif
-
-/* if you're using OSS-Lite on Linux 2.1.6 or later, define the
- * following line.
- */
-#define AWE_NEW_KERNEL_INTERFACE
-
-/* if you have lowlevel.h in the lowlevel directory (OSS-Lite), define
- * the following line.
- */
-#define HAS_LOWLEVEL_H
-
-/* if your system doesn't support patch manager (OSS 3.7 or newer),
- * define the following line.
- */
-#define AWE_NO_PATCHMGR
- 
-/* if your system has an additional parameter (OSS 3.8b5 or newer),
- * define this.
- */
-#define AWE_OSS38
-
-/*----------------------------------------------------------------
- * AWE32 card configuration:
- * uncomment the following lines only when auto detection doesn't
- * work properly on your machine.
- *----------------------------------------------------------------*/
-
-/*#define AWE_DEFAULT_BASE_ADDR	0x620*/	/* base port address */
-/*#define AWE_DEFAULT_MEM_SIZE	512*/	/* kbytes */
-
-
-/*----------------------------------------------------------------
- * maximum size of soundfont list table:
- * you usually don't need to touch this value.
- *----------------------------------------------------------------*/
-
-#define AWE_MAX_SF_LISTS 16
-
-
-/*----------------------------------------------------------------
- * chunk size of sample and voice tables:
- * you usually don't need to touch these values.
- *----------------------------------------------------------------*/
-
-#define AWE_MAX_SAMPLES 400
-#define AWE_MAX_INFOS 800
+#undef AWE_MODULE_SUPPORT
 
 
 /*----------------------------------------------------------------
@@ -106,40 +58,45 @@
 /* GUS compatible mode */
 #define AWE_HAS_GUS_COMPATIBILITY
 
-/* accept all notes/sounds off controls */
-#define AWE_ACCEPT_ALL_SOUNDS_CONTROL
+/* add MIDI emulation by wavetable */
+#define CONFIG_AWE32_MIDIEMU
 
 /* add mixer control of emu8000 equalizer */
-#define CONFIG_AWE32_MIXER
+#undef CONFIG_AWE32_MIXER
 
-/* look up voices according to MIDI channel priority */
-#define AWE_LOOKUP_MIDI_PRIORITY
+/* use new volume calculation method as default */
+#define AWE_USE_NEW_VOLUME_CALC
 
-/*----------------------------------------------------------------*/
+/* check current volume target for searching empty voices */
+#define AWE_CHECK_VTARGET
 
-/* reading configuration of sound driver */
+/* allow sample sharing */
+#define AWE_ALLOW_SAMPLE_SHARING
 
-#ifdef AWE_OBSOLETE_VOXWARE
+/*================================================================
+ * Usually, you don't have to touch the following options.
+ *================================================================*/
 
-#ifdef __FreeBSD__
-#  include <i386/isa/sound/sound_config.h>
-#else
-#  include "sound_config.h"
-#endif
+/*----------------------------------------------------------------
+ * AWE32 card configuration:
+ * uncomment the following lines *ONLY* when auto detection doesn't
+ * work properly on your machine.
+ *----------------------------------------------------------------*/
 
-#if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_AWE32)
-#define CONFIG_AWE32_SYNTH
-#endif
+/*#define AWE_DEFAULT_BASE_ADDR	0x620*/	/* base port address */
+/*#define AWE_DEFAULT_MEM_SIZE	512*/	/* kbytes */
 
-#else /* AWE_OBSOLETE_VOXWARE */
+/*----------------------------------------------------------------
+ * maximum size of soundfont list table
+ *----------------------------------------------------------------*/
 
-#ifdef HAS_LOWLEVEL_H
-#include "lowlevel.h"
-#endif
+#define AWE_MAX_SF_LISTS 16
 
-#include "../sound_config.h"
+/*----------------------------------------------------------------
+ * chunk size of sample and voice tables
+ *----------------------------------------------------------------*/
 
-#endif /* AWE_OBSOLETE_VOXWARE */
-
+#define AWE_MAX_SAMPLES 400
+#define AWE_MAX_INFOS 800
 
 #endif  /* AWE_CONFIG_H_DEF */

@@ -44,8 +44,9 @@
 
 #define LO_MAGIC 0x68797548
 
-static int nbd_blksizes[MAX_NBD] = {1024, 1024,};
-static int nbd_sizes[MAX_NBD] = {0x7fffffff, 0x7fffffff,};
+static int nbd_blksizes[MAX_NBD];
+static int nbd_sizes[MAX_NBD];
+static int nbd_bytesizes[MAX_NBD];
 
 static struct nbd_device nbd_dev[MAX_NBD];
 
@@ -382,9 +383,11 @@ static int nbd_ioctl(struct inode *inode, struct file *file,
 		if ((arg & 511) || (arg > PAGE_SIZE))
 			return -EINVAL;
 		nbd_blksizes[dev] = arg;
+		nbd_sizes[dev] = arg/nbd_blksizes[dev];
 		return 0;
 	case NBD_SET_SIZE:
-		nbd_sizes[dev] = arg;
+		nbd_bytesizes[dev] = arg;
+		nbd_sizes[dev] = arg/nbd_blksizes[dev];
 		return 0;
 	case NBD_DO_IT:
 		if (!lo->file)
@@ -400,6 +403,8 @@ static int nbd_ioctl(struct inode *inode, struct file *file,
 		       dev, (long) lo->head, (long) lo->tail, requests_in, requests_out);
 		return 0;
 #endif
+	case BLKGETSIZE:
+		return put_user(nbd_bytesizes[dev]/512, (long *) arg);
 	}
 	return -EINVAL;
 }
@@ -472,6 +477,9 @@ int nbd_init(void)
 		nbd_dev[i].file = NULL;
 		nbd_dev[i].magic = LO_MAGIC;
 		nbd_dev[i].flags = 0;
+		nbd_blksizes[i] = 1024;
+		nbd_bytesizes[i] = 0x7fffffff;
+		nbd_sizes[i] = nbd_bytesizes[i]/nbd_blksizes[i];
 	}
 	return 0;
 }

@@ -155,7 +155,7 @@ ENTRY(lcall7)
 ret_from_fork:
 	GET_CURRENT(%ebx)
 #ifdef __SMP__
-	btrl	$0, SYMBOL_NAME(scheduler_lock)
+	lock ; btrl $0, SYMBOL_NAME(scheduler_lock)
 #endif /* __SMP__ */
 	jmp	ret_from_sys_call
 
@@ -193,6 +193,7 @@ restore_all:
 
 	ALIGN
 signal_return:
+	sti				# we can get here from an interrupt handler
 	testl $(VM_MASK),EFLAGS(%esp)
 	movl %esp,%eax
 	jne v86_signal_return

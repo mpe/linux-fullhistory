@@ -147,7 +147,7 @@ int ppa_detect(Scsi_Host_Template * host)
 	    while (ppa_hosts[i].p_busy)
 	    {
 		schedule();	/* We are safe to schedule here */
-		if (jiffies > now + 3*HZ)
+		if (time_after(jiffies,now + 3*HZ))
 		{
 		    printk(KERN_ERR "ppa%d: failed to claim parport because a "
 			   "pardevice is owning the port for too longtime!\n",
@@ -867,7 +867,7 @@ static int ppa_completion(Scsi_Cmnd * cmd)
 	 * If we have been running for more than a full timer tick
 	 * then take a rest.
 	 */
-	if (jiffies > start_jiffies + 1)
+	if (time_after(jiffies,start_jiffies + 1))
 	    return 0;
 
 	if (((r & 0xc0) != 0xc0) || (cmd->SCp.this_residual <= 0)) {

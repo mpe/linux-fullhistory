@@ -439,7 +439,6 @@ cleanup_module(void)
 			void *priv = dev->priv;
 			free_irq(dev->irq, dev);
 			release_region(dev->base_addr, ES_IO_EXTENT);
-			dev->priv = NULL;
 			unregister_netdev(dev);
 			kfree(priv);
 		}

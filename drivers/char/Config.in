@@ -35,10 +35,13 @@ if [ "$CONFIG_SERIAL_NONSTANDARD" = "y" ]; then
    fi
    tristate 'SDL RISCom/8 card support' CONFIG_RISCOM8
    tristate 'Specialix IO8+ card support' CONFIG_SPECIALIX
-   if [ "$CONFIG_SPECIALIX" = "y" -o  "$CONFIG_SPECIALIX" = "m" ]; then
+   if [ "$CONFIG_SPECIALIX" != "n" ]; then
      bool 'Specialix DTR/RTS pin is RTS' CONFIG_SPECIALIX_RTSCTS
    fi 
    tristate 'Hayes ESP serial port support' CONFIG_ESPSERIAL
+   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+	dep_tristate 'Multi-Tech multiport card support' CONFIG_ISI m
+   fi
 fi
 bool 'Unix98 PTY support' CONFIG_UNIX98_PTYS
 if [ "$CONFIG_UNIX98_PTYS" = "y" ]; then
@@ -107,10 +110,12 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
     hex '  Aztech/Packard Bell I/O port (0x350 or 0x358)' CONFIG_RADIO_AZTECH_PORT 350
   fi
   dep_tristate 'Miro PCM20 Radio' CONFIG_RADIO_MIROPCM20 $CONFIG_VIDEO_DEV
-  dep_tristate 'BT848 Video For Linux' CONFIG_VIDEO_BT848 $CONFIG_VIDEO_DEV
+  if [ "$CONFIG_PCI" != "n" ]; then
+    dep_tristate 'BT848 Video For Linux' CONFIG_VIDEO_BT848 $CONFIG_VIDEO_DEV
+  fi
   if [ "$CONFIG_PARPORT" != "n" ]; then
-    dep_tristate 'Quickcam BW Video For Linux' CONFIG_VIDEO_BWQCAM $CONFIG_VIDEO_DEV
-    dep_tristate 'Colour QuickCam Video For Linux (EXPERIMENTAL)' CONFIG_VIDEO_CQCAM $CONFIG_VIDEO_DEV
+    dep_tristate 'Quickcam BW Video For Linux' CONFIG_VIDEO_BWQCAM $CONFIG_VIDEO_DEV $CONFIG_PARPORT
+    dep_tristate 'Colour QuickCam Video For Linux (EXPERIMENTAL)' CONFIG_VIDEO_CQCAM $CONFIG_VIDEO_DEV $CONFIG_PARPORT
   fi
   dep_tristate 'Mediavision Pro Movie Studio Video For Linux' CONFIG_VIDEO_PMS $CONFIG_VIDEO_DEV
   dep_tristate 'SAA5249 Teletext processor' CONFIG_VIDEO_SAA5249 $CONFIG_VIDEO_DEV

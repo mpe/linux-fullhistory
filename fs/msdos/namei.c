@@ -439,11 +439,6 @@ int msdos_rmdir(struct inode *dir, struct dentry *dentry)
 				&bh, &de, &ino);
 	if (res < 0)
 		goto rmdir_done;
-	res = -ENOTDIR;
-	if (!S_ISDIR(inode->i_mode))
-		goto rmdir_done;
-	if (dir->i_dev != inode->i_dev || dir == inode)
-		printk("msdos_rmdir: impossible condition\n");
 	/*
 	 * Check whether the directory is empty, then prune
 	 * any child dentries and make sure it's not in use.

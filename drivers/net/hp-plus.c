@@ -474,7 +474,6 @@ cleanup_module(void)
 			void *priv = dev->priv;
 			/* NB: hpp_close() handles free_irq */
 			release_region(ioaddr, HP_IO_EXTENT);
-			dev->priv = NULL;
 			unregister_netdev(dev);
 			kfree(priv);
 		}

@@ -199,6 +199,9 @@ int audio_write(int dev, struct file *file, const char *buf, int count)
 
 	p = 0;
 	c = count;
+	
+	if(count < 0)
+		return -EINVAL;
 
 	if (!(audio_devs[dev]->open_mode & OPEN_WRITE))
 		return -EPERM;
@@ -810,8 +813,10 @@ int dma_ioctl(int dev, unsigned int cmd, caddr_t arg)
 			{
 				reorganize_buffers(dev, dmap_in, 1);
 				if ((err = audio_devs[dev]->d->prepare_for_input(dev,
-					     dmap_in->fragment_size, dmap_in->nbufs)) < 0)
+					     dmap_in->fragment_size, dmap_in->nbufs)) < 0) {
+					restore_flags(flags);
 					return -err;
+				}
 				dmap_in->dma_mode = DMODE_INPUT;
 				audio_devs[dev]->enable_bits = bits;
 				DMAbuf_activate_recording(dev, dmap_in);

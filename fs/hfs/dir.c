@@ -337,9 +337,6 @@ int hfs_rmdir(struct inode * parent, struct dentry *dentry)
 	struct hfs_cat_key key;
 	int error;
 
-	if (parent == inode) /* can't delete . */
-		return -EPERM;
-
 	if (build_key(&key, parent, dentry->d_name.name,
 		      dentry->d_name.len))
 		return -EPERM;

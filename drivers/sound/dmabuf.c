@@ -474,7 +474,7 @@ int DMAbuf_release(int dev, int mode)
 		adev->dmap_in->closing = 1;
 
 	if (adev->open_mode & OPEN_WRITE)
-		if (!(adev->dmap_in->mapping_flags & DMA_MAP_MAPPED))
+		if (!(adev->dmap_out->mapping_flags & DMA_MAP_MAPPED))
 			if (!signal_pending(current) && (adev->dmap_out->dma_mode == DMODE_OUTPUT))
 				DMAbuf_sync(dev);
 	if (adev->dmap_out->dma_mode == DMODE_OUTPUT)
@@ -630,7 +630,10 @@ int DMAbuf_get_buffer_pointer(int dev, struct dma_buffparms *dmap, int direction
 		
 		f=claim_dma_lock();
 		clear_dma_ff(chan);
-		disable_dma(dmap->dma);
+		
+		if(!isa_dma_bridge_buggy)
+			disable_dma(dmap->dma);
+		
 		pos = get_dma_residue(chan);
 		
 		pos = dmap->bytes_in_use - pos;
@@ -650,7 +653,10 @@ int DMAbuf_get_buffer_pointer(int dev, struct dma_buffparms *dmap, int direction
 			pos = 0;
 		if (pos >= dmap->bytes_in_use)
 			pos = 0;
-		enable_dma(dmap->dma);
+		
+		if(!isa_dma_bridge_buggy)
+			enable_dma(dmap->dma);
+			
 		release_dma_lock(f);
 	}
 	restore_flags(flags);
@@ -727,7 +733,7 @@ static int output_sleep(int dev, int dontblock)
 	struct audio_operations *adev = audio_devs[dev];
 	int err = 0;
 	struct dma_buffparms *dmap = adev->dmap_out;
-	int timeout;
+	long timeout;
 	long timeout_value;
 
 	if (dontblock)
@@ -1016,10 +1022,13 @@ void DMAbuf_outputintr(int dev, int notify_only)
 		unsigned long f;
 		
 		f=claim_dma_lock();
-		disable_dma(dmap->dma);
+		
+		if(!isa_dma_bridge_buggy)
+			disable_dma(dmap->dma);
 		clear_dma_ff(chan);
 		pos = dmap->bytes_in_use - get_dma_residue(chan);
-		enable_dma(dmap->dma);
+		if(!isa_dma_bridge_buggy)
+			enable_dma(dmap->dma);
 		release_dma_lock(f);
 		
 		pos = pos / dmap->fragment_size;	/* Actual qhead */
@@ -1111,10 +1120,12 @@ void DMAbuf_inputintr(int dev)
 		unsigned long f;
 		
 		f=claim_dma_lock();
-		disable_dma(dmap->dma);
+		if(!isa_dma_bridge_buggy)
+			disable_dma(dmap->dma);
 		clear_dma_ff(chan);
 		pos = dmap->bytes_in_use - get_dma_residue(chan);
-		enable_dma(dmap->dma);
+		if(!isa_dma_bridge_buggy)
+			enable_dma(dmap->dma);
 		release_dma_lock(f);
 
 		pos = pos / dmap->fragment_size;	/* Actual qhead */

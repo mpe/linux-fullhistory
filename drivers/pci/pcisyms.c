@@ -9,6 +9,7 @@
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <asm/dma.h>	/* isa_dma_bridge_buggy */
 
 EXPORT_SYMBOL(pcibios_present);
 EXPORT_SYMBOL(pcibios_read_config_byte);
@@ -38,3 +39,10 @@ EXPORT_SYMBOL(pci_proc_detach_device);
 
 EXPORT_SYMBOL(pcibios_find_class);
 EXPORT_SYMBOL(pcibios_find_device);
+
+/* Quirk info */
+
+#ifdef CONFIG_PCI_QUIRKS
+EXPORT_SYMBOL(isa_dma_bridge_buggy);
+#endif
+

@@ -1,3 +1,16 @@
+1998-12-04  Andrew T. Veliath  <andrewtv@usa.net>
+
+	* Update version to 0.8.2.2
+
+	* Add msndreset program to shell archive.
+
+1998-11-11  Andrew T. Veliath  <andrewv@usa.net>
+
+	* msnd_pinnacle.c (mixer_ioctl): Add a mixer ioctl for
+	SOUND_MIXER_PRIVATE1 which does a full reset on the card.
+	(mixer_set): Move line in recording source to input monitor, aux
+	input level added, some mixer fixes.
+
 1998-09-10  Andrew Veliath  <andrewtv@usa.net>
 
 	* Update version to 0.8.2

@@ -1,12 +1,8 @@
 /*
- *	Video4Linux: Colour QuickCam driver
+ *	Video4Linux Colour QuickCam driver
+ *	Copyright 1997-1998 Philip Blundell <philb@gnu.org>
  *
- *	Philip Blundell <philb@gnu.org>, December 30 1997
- *
- *	Largely untested (seems to work at 24bpp with a bidirectional port,
- *	though). 
  */
-
 
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -22,27 +18,47 @@
 #include <linux/videodev.h>
 #include <asm/uaccess.h>
 
-#include "c-qcam.h"
+struct qcam_device {
+	struct video_device vdev;
+	struct pardevice *pdev;
+	struct parport *pport;
+	int width, height;
+	int ccd_width, ccd_height;
+	int mode;
+	int contrast, brightness, whitebal;
+	int top, left;
+	unsigned int bidirectional;
+};
 
-static __inline__ void qcam_set_ack(struct qcam_device *qcam, unsigned int i)
+/* The three possible QuickCam modes */
+#define QC_MILLIONS	0x18
+#define QC_BILLIONS	0x10
+#define QC_THOUSANDS	0x08	/* with VIDEC compression (not supported) */
+
+/* The three possible decimations */
+#define QC_DECIMATION_1		0
+#define QC_DECIMATION_2		2
+#define QC_DECIMATION_4		4
+
+static inline void qcam_set_ack(struct qcam_device *qcam, unsigned int i)
 {
 	/* note: the QC specs refer to the PCAck pin by voltage, not
 	   software level.  PC ports have builtin inverters. */
 	parport_frob_control(qcam->pport, 8, i?8:0);
 }
 
-static __inline__ unsigned int qcam_ready1(struct qcam_device *qcam)
+static inline unsigned int qcam_ready1(struct qcam_device *qcam)
 {
 	return (parport_read_status(qcam->pport) & 0x8)?1:0;
-
 }
 
-static __inline__ unsigned int qcam_ready2(struct qcam_device *qcam)
+static inline unsigned int qcam_ready2(struct qcam_device *qcam)
 {
 	return (parport_read_data(qcam->pport) & 0x1)?1:0;
 }
 
-static inline unsigned int qcam_await_ready1(struct qcam_device *qcam, int value)
+static unsigned int qcam_await_ready1(struct qcam_device *qcam, 
+					     int value)
 {
 	unsigned long oldjiffies = jiffies;
 	unsigned int i;
@@ -68,7 +84,7 @@ static inline unsigned int qcam_await_ready1(struct qcam_device *qcam, int value
 	return 1;
 }
 
-static inline unsigned int qcam_await_ready2(struct qcam_device *qcam, int value)
+static unsigned int qcam_await_ready2(struct qcam_device *qcam, int value)
 {
 	unsigned long oldjiffies = jiffies;
 	unsigned int i;
@@ -95,7 +111,7 @@ static inline unsigned int qcam_await_ready2(struct qcam_device *qcam, int value
 	return 1;
 }
 
-static inline int qcam_read_data(struct qcam_device *qcam)
+static int qcam_read_data(struct qcam_device *qcam)
 {
 	unsigned int idata;
 	qcam_set_ack(qcam, 0);
@@ -179,11 +195,10 @@ static void qc_setup(struct qcam_device *q)
 	/* Set the brightness.  */
        	qcam_set(q, 11, q->brightness);
 
-	/* Set the height.  */
-	qcam_set(q, 17, q->height);
-
-	/* Set the width.  */
-	qcam_set(q, 19, q->width/2);
+	/* Set the height and width.  These refer to the actual
+	   CCD area *before* applying the selected decimation.  */
+	qcam_set(q, 17, q->ccd_height);
+	qcam_set(q, 19, q->ccd_width / 2);
 
 	/* Set top and left.  */
 	qcam_set(q, 0xd, q->top);
@@ -236,53 +251,24 @@ static unsigned int qcam_read_bytes(struct qcam_device *q, unsigned char *buf, u
 			if (qcam_await_ready1(q, 0)) return bytes;
 			lo = (parport_read_status(q->pport) & 0xf0);
 			qcam_set_ack(q, 0);
-			/* flip some bits; cqcam gets this wrong */
-			buf[bytes++] = (hi | lo) ^ 0x88;
+			/* flip some bits */
+			buf[bytes++] = (hi | (lo >> 4)) ^ 0x88;
 		}
 	}
 	return bytes;
 }
 
-/* Convert the data the camera gives us into the desired output format. 
-   At the moment this is a no-op because read_bytes() does all the 
-   required stuff, for 24bpp at least.  */
-static size_t qcam_munge_buffer(struct qcam_device *q, char *inbuf, size_t inlen, char *outbuf, size_t outlen)
-{
-	size_t outptr = 0;
-	switch (q->bpp)
-	{
-	case 24:
-		while (inlen && (outptr <= (outlen-3)))
-		{
-			unsigned char r, g, b;
-			r = inbuf[0];
-			g = inbuf[1];
-			b = inbuf[2];
-			put_user(r, outbuf+(outptr++));
-			put_user(g, outbuf+(outptr++));
-			put_user(b, outbuf+(outptr++));
-			inlen -= 3;
-			inbuf += 3;
-		}
-		break;
-	default:
-		printk("c-qcam: can't convert this format (%d).\n", q->bpp);
-		return 0;
-	}
-	return outptr;
-}
+#define BUFSZ	150
 
 static long qc_capture(struct qcam_device *q, char *buf, unsigned long len)
 {
-	unsigned int tbpp = 0, tdecimation = 0, lines, pixelsperline, bitsperxfer;
+	unsigned lines, pixelsperline, bitsperxfer;
 	unsigned int is_bi_dir = q->bidirectional;
 	size_t wantlen, outptr = 0;
-	char *tmpbuf = kmalloc(768, GFP_KERNEL);
-	if (tmpbuf == NULL)
-	{
-		printk(KERN_ERR "cqcam: couldn't allocate a buffer.\n");
-		return -ENOMEM;
-	}
+	char tmpbuf[BUFSZ];
+
+	if (verify_area(VERIFY_WRITE, buf, len))
+		return -EFAULT;
 
 	/* Wait for camera to become ready */
 	for (;;)
@@ -290,33 +276,19 @@ static long qc_capture(struct qcam_device *q, char *buf, unsigned long len)
 		int i = qcam_get(q, 41);
 		if (i == -1) {
 			qc_setup(q);
-			kfree(tmpbuf);
 			return -EIO;
 		}
-		if (i & 0x80)
-			schedule();
-		else
+		if ((i & 0x80) == 0)
 			break;
+		else
+			schedule();
 	}
 
-	switch (q->bpp) 
-	{
-	case 24: tbpp = QC_24BPP; break;
-	case 32: tbpp = QC_32BPP; break;
-	case 16: tbpp = QC_16BPP; break;
-	default: printk("qcam: Bad bpp.\n");
-	}
-	switch (q->transfer_scale) {
-	case 1: tdecimation = QC_1_1; break;
-	case 2: tdecimation = QC_2_1; break;
-	case 4: tdecimation = QC_4_1; break;
-	default: printk("qcam: Bad decimation.\n");
-	}
+	if (qcam_set(q, 7, (q->mode | (is_bi_dir?1:0)) + 1))
+		return -EIO;
 	
-	qcam_set(q, 7, (tbpp | tdecimation) + ((is_bi_dir)?1:0) + 1);
-	
-	lines = q->height / q->transfer_scale;
-	pixelsperline = q->width / q->transfer_scale;
+	lines = q->height;
+	pixelsperline = q->width;
 	bitsperxfer = (is_bi_dir) ? 24 : 8;
 
 	if (is_bi_dir)
@@ -326,33 +298,33 @@ static long qc_capture(struct qcam_device *q, char *buf, unsigned long len)
 		mdelay(3);
 		qcam_set_ack(q, 0);
 		if (qcam_await_ready1(q, 1)) {
-			kfree(tmpbuf);
 			qc_setup(q);
 			return -EIO;
 		}
 		qcam_set_ack(q, 1);
 		if (qcam_await_ready1(q, 0)) {
-			kfree(tmpbuf);
 			qc_setup(q);
 			return -EIO;
 		}
 	}
 
-	wantlen = lines * pixelsperline * q->bpp / 8;
+	wantlen = lines * pixelsperline * 24 / 8;
 
 	while (wantlen)
 	{
-		size_t t, s, o;
-		s = (wantlen > 768)?768:wantlen;
+		size_t t, s;
+		s = (wantlen > BUFSZ)?BUFSZ:wantlen;
 		t = qcam_read_bytes(q, tmpbuf, s);
 		if (outptr < len)
 		{
-			o = qcam_munge_buffer(q, tmpbuf, t, buf + outptr, 
-					      len - outptr);
-			outptr += o;
+			size_t sz = len - outptr;
+			if (sz > t) sz = t;
+			if (__copy_to_user(buf+outptr, tmpbuf, sz))
+				break;
+			outptr += sz;
 		}
 		wantlen -= t;
-		if (t < s) 
+		if (t < s)
 			break;
 		if (current->need_resched)
 			schedule();
@@ -366,7 +338,6 @@ static long qc_capture(struct qcam_device *q, char *buf, unsigned long len)
 		if (is_bi_dir)
 			parport_frob_control(q->pport, 0x20, 0);
 		qc_setup(q);
-		kfree(tmpbuf);
 		return len;
 	}
 
@@ -386,7 +357,6 @@ static long qc_capture(struct qcam_device *q, char *buf, unsigned long len)
 			printk("qcam: no ack after EOF\n");
 			parport_frob_control(q->pport, 0x20, 0);
 			qc_setup(q);
-			kfree(tmpbuf);
 			return len;
 		}
 		parport_frob_control(q->pport, 0x20, 0);
@@ -396,7 +366,6 @@ static long qc_capture(struct qcam_device *q, char *buf, unsigned long len)
 		{
 			printk("qcam: no ack to port turnaround\n");
 			qc_setup(q);
-			kfree(tmpbuf);
 			return len;
 		}
 	}
@@ -413,10 +382,7 @@ static long qc_capture(struct qcam_device *q, char *buf, unsigned long len)
 			printk("qcam: bad EOF\n");
 	}
 
-	kfree(tmpbuf);
-
 	qcam_write_data(q, 0);
-
 	return len;
 }
 
@@ -526,7 +492,7 @@ static int qcam_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			p.brightness=qcam->brightness<<8;
 			p.contrast=qcam->contrast<<8;
 			p.whiteness=qcam->whitebal<<8;
-			p.depth=qcam->bpp;
+			p.depth=24;
 			p.palette=VIDEO_PALETTE_RGB24;
 			if(copy_to_user(arg, &p, sizeof(p)))
 				return -EFAULT;
@@ -538,7 +504,10 @@ static int qcam_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			if(copy_from_user(&p, arg, sizeof(p)))
 				return -EFAULT;
 
-			if (p.palette != VIDEO_PALETTE_RGB24)
+			/*
+			 *	Sanity check args
+			 */
+			if (p.depth != 24 || p.palette != VIDEO_PALETTE_RGB24)
 				return -EINVAL;
 			
 			/*
@@ -547,7 +516,6 @@ static int qcam_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			qcam->brightness = p.brightness>>8;
 			qcam->contrast = p.contrast>>8;
 			qcam->whitebal = p.whiteness>>8;
-			qcam->bpp = p.depth;
 			
 			parport_claim_or_block(qcam->pdev);
 			qc_setup(qcam); 
@@ -557,6 +525,7 @@ static int qcam_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 		case VIDIOCSWIN:
 		{
 			struct video_window vw;
+
 			if(copy_from_user(&vw, arg,sizeof(vw)))
 				return -EFAULT;
 			if(vw.flags)
@@ -568,21 +537,33 @@ static int qcam_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			if(vw.width<80||vw.width>320)
 				return -EINVAL;
 				
-			qcam->width = 320;
-			qcam->height = 240;
-			qcam->transfer_scale = 4;
+			qcam->width = 80;
+			qcam->height = 60;
+			qcam->mode = QC_DECIMATION_4;
 			
 			if(vw.width>=160 && vw.height>=120)
 			{
-				qcam->transfer_scale = 2;
+				qcam->width = 160;
+				qcam->height = 120;
+				qcam->mode = QC_DECIMATION_2;
 			}
 			if(vw.width>=320 && vw.height>=240)
 			{
 				qcam->width = 320;
 				qcam->height = 240;
-				qcam->transfer_scale = 1;
+				qcam->mode = QC_DECIMATION_1;
 			}
-			/* Ok we figured out what to use from our wide choice */
+			qcam->mode |= QC_MILLIONS;
+#if 0
+			if(vw.width>=640 && vw.height>=480)
+			{
+				qcam->width = 640;
+				qcam->height = 480;
+				qcam->mode = QC_BILLIONS | QC_DECIMATION_1;
+			}
+#endif
+			/* Ok we figured out what to use from our 
+			   wide choice */
 			parport_claim_or_block(qcam->pdev);
 			qc_setup(qcam);
 			parport_release(qcam->pdev);
@@ -593,8 +574,8 @@ static int qcam_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			struct video_window vw;
 			vw.x=0;
 			vw.y=0;
-			vw.width=qcam->width/qcam->transfer_scale;
-			vw.height=qcam->height/qcam->transfer_scale;
+			vw.width=qcam->width;
+			vw.height=qcam->height;
 			vw.chromakey=0;
 			vw.flags=0;
 			if(copy_to_user(arg, &vw, sizeof(vw)))
@@ -677,10 +658,9 @@ static struct qcam_device *qcam_init(struct parport *port)
 	
 	memcpy(&q->vdev, &qcam_template, sizeof(qcam_template));
 
-	q->width = 320;
-	q->height = 240;
-	q->bpp = 32;
-	q->transfer_scale = 1;
+	q->width = q->ccd_width = 320;
+	q->height = q->ccd_height = 240;
+	q->mode = QC_MILLIONS | QC_DECIMATION_1;
 	q->contrast = 192;
 	q->brightness = 240;
 	q->whitebal = 128;
@@ -723,7 +703,7 @@ int init_cqcam(struct parport *port)
 
 	parport_release(qcam->pdev);
 	
-	printk(KERN_INFO "Connectix Colour Quickcam on %s\n", 
+	printk(KERN_INFO "Colour Quickcam found on %s\n", 
 	       qcam->pport->name);
 	
 	if (video_register_device(&qcam->vdev, VFL_TYPE_GRABBER)==-1)
@@ -745,10 +725,14 @@ void close_cqcam(struct qcam_device *qcam)
 	kfree(qcam);
 }
 
+#define BANNER "Connectix Colour Quickcam driver v0.02\n"
+
 #ifdef MODULE
 int init_module(void)
 {
 	struct parport *port;
+
+	printk(BANNER);
 
 	for (port = parport_enumerate(); port; port=port->next)
 		init_cqcam(port);
@@ -766,6 +750,8 @@ void cleanup_module(void)
 __initfunc(int init_colour_qcams(struct video_init *unused))
 {
 	struct parport *port;
+
+	printk(BANNER);
 
 	for (port = parport_enumerate(); port; port=port->next)
 		init_cqcam(port);

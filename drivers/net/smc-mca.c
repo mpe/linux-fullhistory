@@ -375,7 +375,6 @@ void cleanup_module(void)
 			/* NB: ultra_close_card() does free_irq */
 			int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET;
 			release_region(ioaddr, ULTRA_IO_EXTENT);
-			dev->priv = NULL;
 			unregister_netdev(dev);
 			kfree(priv);
 		}

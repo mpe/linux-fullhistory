@@ -63,9 +63,7 @@ static void CS_OUT(unsigned char a)
 #define CS_OUT3(a, b, c)	{CS_OUT(a);CS_OUT(b);CS_OUT(c);}
 
 static int mpu_base = 0, mpu_irq = 0;
-#ifdef CONFIG_SOUND_WAVEFRONT_MODULE
 static int synth_base = 0, synth_irq = 0;
-#endif CONFIG_SOUND_WAVEFRONT_MODULE
 static int mpu_detected = 0;
 
 int probe_cs4232_mpu(struct address_info *hw_config)
@@ -188,7 +186,7 @@ int probe_cs4232(struct address_info *hw_config)
 		}
 #endif
 
-#if defined(CONFIG_SOUND_WAVEFRONT) || defined(CONFIG_SOUND_WAVEFRONT_MODULE)
+		if(synth_base != 0)
 		{
 		    CS_OUT2 (0x15, 0x04);	        /* logical device 4 (WaveFront) */
 		    CS_OUT3 (0x47, (synth_base >> 8) & 0xff,
@@ -196,7 +194,7 @@ int probe_cs4232(struct address_info *hw_config)
 		    CS_OUT2 (0x22, synth_irq);     	/* IRQ */
 		    CS_OUT2 (0x33, 0x01);	        /* Activate logical dev 4 */
 		}
-#endif
+
 		/*
 		 * Finally activate the chip
 		 */
@@ -331,12 +329,10 @@ MODULE_PARM(dma2,"i");
 MODULE_PARM(mpuio,"i");
 MODULE_PARM(mpuirq,"i");
 
-#ifdef CONFIG_SOUND_WAVEFRONT_MODULE
 int             synthio = -1;
 int             synthirq = -1;
 MODULE_PARM(synthio,"i");
 MODULE_PARM(synthirq,"i");
-#endif CONFIG_SOUND_WAVEFRONT_MODULE
 
 EXPORT_NO_SYMBOLS;
 
@@ -350,34 +346,28 @@ struct address_info mpu_cfg;
 
 int init_module(void)
 {
-
-#ifndef CONFIG_SOUND_WAVEFRONT_MODULE
-
 	if (io == -1 || irq == -1 || dma == -1 || dma2 == -1)
 	{
 		printk(KERN_ERR "cs4232: dma, dma2, irq and io must be set.\n");
 		return -EINVAL;
 	}
-#else 
-	if (synthio == -1 || synthirq == -1 ||
-	    io == -1 || irq == -1 || dma == -1 || dma2 == -1)
+#ifdef CONFIG_SOUND_WAVEFRONT_MODULE
+	if(synthio == -1)
+		printk(KERN_WARNING "cs4232: set synthio and synthirq to use the wavefront facilities.\n");
+	else
 	{
-		printk(KERN_ERR "cs4232: synthio, synthirq, dma, dma2, "
-		       "irq and io must be set.\n");
-		return -EINVAL;
+		synth_base = synthio;
+		synth_irq =  synthirq;	
 	}
-
-#endif CONFIG_SOUND_WAVEFRONT_MODULE
+#else
+	if(synthio != -1)
+		printk(KERN_WARNING "cs4232: wavefront support not enabled in this driver.\n");
+#endif
 
 	cfg.io_base = io;
 	cfg.irq = irq;
 	cfg.dma = dma;
 	cfg.dma2 = dma2;
-
-#ifdef CONFIG_SOUND_WAVEFRONT_MODULE
-	synth_base = synthio;
-	synth_irq =  synthirq;
-#endif CONFIG_SOUND_WAVEFRONT_MODULE	
 
 	if (probe_cs4232(&cfg) == 0)
 		return -ENODEV;
@@ -386,15 +376,15 @@ int init_module(void)
 	mpu_cfg.irq = -1;
 
 	if (mpuio != -1 && mpuirq != -1) {
-	    mpu_cfg.io_base = mpuio;
-	    mpu_cfg.irq = mpuirq;
-	    probe_cs4232_mpu(&mpu_cfg); /* Bug always returns 0 not OK -- AC */
+		mpu_cfg.io_base = mpuio;
+		mpu_cfg.irq = mpuirq;
+		probe_cs4232_mpu(&mpu_cfg); /* Bug always returns 0 not OK -- AC */
 	}
 
 	attach_cs4232(&cfg);
 
 	if (mpuio != -1 && mpuirq != -1) {
-	    attach_cs4232_mpu(&mpu_cfg);
+		attach_cs4232_mpu(&mpu_cfg);
 	}
 
 	SOUND_LOCK;

@@ -25,7 +25,7 @@ endif
 export-objs	:=  ad1848.o audio_syms.o midi_syms.o mpu401.o \
 		    msnd.o opl3.o sb_card.o sequencer_syms.o \
 		    sound_core.o sound_firmware.o sound_syms.o \
-		    uart401.o
+		    uart401.o ad1816.o
 
 
 
@@ -66,13 +66,16 @@ obj-$(CONFIG_SOUND_PSS)		+= pss.o ad1848.o mpu401.o
 obj-$(CONFIG_SOUND_SB)		+= sb.o uart401.o
 obj-$(CONFIG_SOUND_SOFTOSS)	+= softoss2.o
 obj-$(CONFIG_SOUND_SGALAXY)	+= sgalaxy.o
+obj-$(CONFIG_SOUND_AD1816)      += ad1816.o
 obj-$(CONFIG_SOUND_SSCAPE)	+= sscape.o ad1848.o mpu401.o
 obj-$(CONFIG_SOUND_TRIX)	+= trix.o ad1848.o sb.o uart401.o
 obj-$(CONFIG_SOUND_UART6850)	+= uart6850.o
 obj-$(CONFIG_SOUND_VMIDI)	+= v_midi.o
 obj-$(CONFIG_SOUND_YM3812)	+= adlib_card.o opl3.o
-obj-$(CONFIG_VIDC_SOUND)	+= vidc_mod.o
+obj-$(CONFIG_SOUND_VIDC)	+= vidc_mod.o
+obj-$(CONFIG_SOUND_WAVEARTIST)	+= waveartist.o
 obj-$(CONFIG_SOUND_WAVEFRONT)   += wavefront.o
+
 #jnx
 obj-$(CONFIG_SOUND_ES1370)	+= es1370.o
 obj-$(CONFIG_SOUND_ES1371)	+= es1371.o

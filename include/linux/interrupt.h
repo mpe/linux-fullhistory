@@ -43,7 +43,8 @@ enum {
 	CYCLADES_BH,
 	CM206_BH,
 	JS_BH,
-	MACSERIAL_BH
+	MACSERIAL_BH,
+	ISICOM_BH
 };
 
 #include <asm/hardirq.h>

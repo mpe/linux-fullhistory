@@ -24,13 +24,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: msnd.h,v 1.32 1998/10/09 19:54:39 andrewtv Exp $
+ * $Id: msnd.h,v 1.33 1998/11/05 20:26:18 andrewtv Exp $
  *
  ********************************************************************/
 #ifndef __MSND_H
 #define __MSND_H
 
-#define VERSION			"0.8.2.1"
+#define VERSION			"0.8.2.2"
 
 #define DEFSAMPLERATE		DSP_DEFAULT_SPEED
 #define DEFSAMPLESIZE		AFMT_U8

@@ -643,21 +643,7 @@ int ext2_rmdir (struct inode * dir, struct dentry *dentry)
 	inode = dentry->d_inode;
 	DQUOT_INIT(inode);
 
-	retval = -EPERM;
-	if ((dir->i_mode & S_ISVTX) && 
-	    current->fsuid != inode->i_uid &&
-	    current->fsuid != dir->i_uid && !capable(CAP_FOWNER))
-		goto end_rmdir;
-	if (inode == dir)	/* we may not delete ".", but "../dir" is ok */
-		goto end_rmdir;
-
-	retval = -ENOTDIR;
-	if (!S_ISDIR(inode->i_mode))
-		goto end_rmdir;
-
 	retval = -EIO;
-	if (inode->i_dev != dir->i_dev)
-		goto end_rmdir;
 	if (le32_to_cpu(de->inode) != inode->i_ino)
 		goto end_rmdir;
 

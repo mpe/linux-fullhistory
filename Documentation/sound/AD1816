@@ -1,0 +1,118 @@
+Documentation for the AD1816(A) sound driver
+============================================
+
+NOTE: This driver is still EXPERIMENTAL, so don't use it on production
+systems!
+
+
+Installation:
+-------------
+
+To get your AD1816(A) based sound card work, you'll have to enable
+module support ("Enable loadable module support") and support for
+experimental code ("Prompt for development and/or incomplete
+code/drivers") during kernel configuration. Enable "Sound card
+support", "OSS modules support" and "Support for AD1816(A) based cards
+(EXPERIMENTAL)" in the sound configuration menu, too. Be sure, that
+you build "Support for AD1816(A) based cards (EXPERIMENTAL)" as a MODULE,
+otherwise you may run into problems later.
+Now build, install and reboot the new kernel as usual.
+
+Since the AD1816(A) is a P'n'P sound chip you'll usually have to
+configure it using the isapnptools. See isapnptools documentation for
+details on configuring P'n'P cards.
+
+After you have successfully configured the card using isapnp, you may
+load the AD1816 driver using modprobe. A typical modprobe call should
+look like this:
+
+  modprobe ad1816 io=0x530 irq=5 dma=1 dma2=3 ad1816_clockfreq=33000
+
+if your isapnp.conf file looks like this (relevant lines only):
+
+ (INT 0 (IRQ 5 (MODE +E)))
+ (DMA 0 (CHANNEL 1))
+ (DMA 1 (CHANNEL 3))
+ (IO 0 (BASE 0x0220))
+ (IO 1 (BASE 0x0388))
+ (IO 2 (BASE 0x0530))
+
+NOTE: Be sure, that you use the address IO 2 (in our example 0x530) when
+loading the module!
+
+If your setup was correct, you should see the following messages in  
+/var/log/messages (numbers may be different):
+
+Nov  6 17:07:26 tek01 kernel: ad1816_detect(530)
+Nov  6 17:07:26 tek01 kernel: ad1816_detect() - Detected OK
+Nov  6 17:07:26 tek01 kernel: AD1816 Version: 3
+
+
+Features:
+---------
+
+List of features supported by this driver:
+- full-duplex support
+- supported audio formats: unsigned 8bit, signed 16bit little endian, 
+                           signed 16bit big endian, µ-law, A-law
+- supported channels: mono and stereo
+- supported recording sources: Master, CD, Line, Line1, Line2, Mic
+- supports phat 3d stereo circuit (Line 3)
+
+
+Supported cards:
+----------------
+
+The following cards are known to work with this driver:
+- Terratec Base 1 
+- Terratec Base 64 
+- HP Kayak 
+- Acer FX-3D
+- SY-1816 
+- Highscreen Sound-Boostar 32 Wave 3D
+- ...
+
+
+Troubleshooting:
+----------------
+
+First of all you should check, if the driver has been loaded
+properly. If you get the following message in your /var/log/messages:
+
+Nov  6 17:06:31 tek01 kernel: ad1816_detect(530)
+Nov  6 17:06:31 tek01 kernel: Chip is not an AD1816 or chip is not active 
+
+you either used the wrong address for loading the driver, your chip is
+not an AD1816 or you forgot to initialize the card with isapnp.
+
+If loading of the driver succeeds, but playback/capture fails, check
+if you used the correct values for irq, dma and dma2 when loading the module.
+If one of them is wrong you usually get the following error message:
+
+Nov  6 17:06:13 tek01 kernel: Sound: DMA (output) timed out - IRQ/DRQ config error?
+
+If playback/capture is too fast or to slow, you should have a look at
+the clock chip of your sound card. The AD1816 was designed for a 33MHz
+oscillator, however most sound card manufacturer use slightly
+different oscillators as they are cheaper than 33MHz oscillators. If
+you have such a card you have to adjust the ad1816_clockfreq parameter
+above. For example: For a card using a 32.875MHz oscillator use
+ad1816_clockfreq=32875 instead of ad1816_clockfreq=33000.
+
+
+Updates, bugfixes and bugreports:
+--------------------------------
+
+As the driver is still experimental and under development, you should
+watch out for updates.  Updates of the driver are available on the
+internet from one of my home pages:
+  http://www.student.informatik.tu-darmstadt.de/~tek/projects/linux.html
+or:
+  http://www.tu-darmstadt.de/~tek01/projects/linux.html
+
+Bugreports, bugfixes and related questions should be sent via E-Mail to:
+  tek@rbg.informatik.tu-darmstadt.de
+
+
+Thorsten Knabe <tek@rbg.informatik.tu-darmstadt.de>
+          Last modified: 1998/11/06

@@ -1416,12 +1416,6 @@ static int vfat_rmdir_free_ino(struct inode *dir,struct buffer_head *bh,
 	struct super_block *sb = dir->i_sb;
 	int res;
 
-	if (!S_ISDIR(dentry->d_inode->i_mode)) {
-		return -ENOTDIR;
-	}
-	if (dir->i_dev != dentry->d_inode->i_dev || dir == dentry->d_inode) {
-		return -EBUSY;
-	}
 	if (!list_empty(&dentry->d_hash))
 		return -EBUSY;
 

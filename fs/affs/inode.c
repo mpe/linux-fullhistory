@@ -170,8 +170,11 @@ affs_read_inode(struct inode *inode)
 		} else {
 			inode->i_op = &affs_file_inode_operations;
 		}
-	} else if (S_ISDIR(inode->i_mode))
+	} else if (S_ISDIR(inode->i_mode)) {
+		/* Maybe it should be controlled by mount parameter? */
+		inode->i_mode |= S_ISVTX;
 		inode->i_op = &affs_dir_inode_operations;
+	}
 	else if (S_ISLNK(inode->i_mode))
 		inode->i_op = &affs_symlink_inode_operations;
 }

@@ -91,6 +91,14 @@ static void sb_audio_close(int dev)
 {
 	sb_devc *devc = audio_devs[dev]->devc;
 
+	/* if we did dma juggling put the right dmap in the right place */
+	if(devc->duplex && audio_devs[dev]->dmap_out->dma != devc->dma8)
+	{
+		struct dma_buffparms *dmap_temp;
+		dmap_temp = audio_devs[dev]->dmap_out;
+		audio_devs[dev]->dmap_out = audio_devs[dev]->dmap_in;
+		audio_devs[dev]->dmap_in = dmap_temp;
+	}
 	audio_devs[dev]->dmap_out->dma = devc->dma8;
 	audio_devs[dev]->dmap_in->dma = ( devc->duplex ) ?
 		devc->dma16 : devc->dma8;
@@ -1136,6 +1144,12 @@ sb16_copy_from_user(int dev,
 	}
 }
 
+static void
+sb16_audio_mmap(int dev)
+{
+	sb_devc       *devc = audio_devs[dev]->devc;
+	devc->fullduplex = 0;
+}
 
 static struct audio_driver sb1_audio_driver =	/* SB1.x */
 {
@@ -1254,7 +1268,10 @@ static struct audio_driver sb16_audio_driver =	/* SB16 */
 	sb16_audio_trigger,
 	sb16_audio_set_speed,
 	sb16_audio_set_bits,
-	sbpro_audio_set_channels
+	sbpro_audio_set_channels,
+	NULL,
+	NULL,
+	sb16_audio_mmap
 };
 
 static struct audio_driver ess_audio_driver =	/* ESS ES688/1688 */

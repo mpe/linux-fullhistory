@@ -718,6 +718,9 @@ out:
  *
  * We update inode->i_nlink and free the inode prior to the operation
  * to avoid possible races if the server reuses the inode.
+ *
+ * FIXME! We don't do it anymore (2.1.131) - it interacts badly with
+ * new rmdir().  -- AV
  */
 static int nfs_rmdir(struct inode *dir, struct dentry *dentry)
 {

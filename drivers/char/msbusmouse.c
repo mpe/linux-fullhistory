@@ -51,6 +51,10 @@
 static struct mouse_status mouse;
 static int mouse_irq = MOUSE_IRQ;
 
+#ifdef MODULE
+MODULE_PARM(mouse_irq, "i");
+#endif
+
 __initfunc(void msmouse_setup(char *str, int *ints))
 {
 	if (ints[0] > 0)

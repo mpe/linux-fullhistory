@@ -342,5 +342,13 @@ extern void free_dma(unsigned int dmanr);	/* release it again */
 #define KERNEL_HAVE_CHECK_DMA
 extern int check_dma(unsigned int dmanr);
 
+/* From PCI */
+
+#ifdef CONFIG_PCI_QUIRKS
+extern int isa_dma_bridge_buggy;
+#else
+#define isa_dma_bridge_buggy 	(0)
+#endif
+
 
 #endif /* _ASM_DMA_H */

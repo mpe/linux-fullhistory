@@ -205,6 +205,11 @@ void attach_sscape (struct address_info *hw_config);
 int probe_ss_ms_sound (struct address_info *hw_config);
 void attach_ss_ms_sound(struct address_info * hw_config);
 
+/* From ad1816.c */
+void unload_ad1816(struct address_info *hw_info);
+int probe_ad1816 (struct address_info *hw_config);
+void attach_ad1816 (struct address_info *hw_config);
+
 /* From aedsp16.c */
 int InitAEDSP16_SBPRO(struct address_info *hw_config);
 int InitAEDSP16_MSS(struct address_info *hw_config);
@@ -281,29 +286,10 @@ void attach_vidc(struct address_info *hw_config);
 int probe_vidc(struct address_info *hw_config);
 void unload_vidc(struct address_info *hw_config);
 
-/*      From wavefront.c */
-void attach_wavefront (struct address_info *hw_config);
-int probe_wavefront (struct address_info *hw_config);
-void unload_wavefront (struct address_info *hw_config);
-
-/*      From wf_midi.c */
-void attach_wf_mpu(struct address_info * hw_config);
-int probe_wf_mpu(struct address_info *hw_config);
-void unload_wf_mpu(struct address_info *hw_config);
-int virtual_midi_enable (int mididev, struct address_info *);
-void virtual_midi_disable (int mididev);
-
-/*      From wavefront.c */
-void attach_wavefront (struct address_info *hw_config);
-int probe_wavefront (struct address_info *hw_config);
-void unload_wavefront (struct address_info *hw_config);
-
-/*      From wf_midi.c */
-void attach_wf_mpu(struct address_info * hw_config);
-int probe_wf_mpu(struct address_info *hw_config);
-void unload_wf_mpu(struct address_info *hw_config);
-int virtual_midi_enable (int mididev, struct address_info *);
-void virtual_midi_disable (int mididev);
+/*	From waveartist.c */
+void attach_waveartist(struct address_info *hw_config);
+int probe_waveartist(struct address_info *hw_config);
+void unload_waveartist(struct address_info *hw_config);
 
 /*      From wavefront.c */
 void attach_wavefront (struct address_info *hw_config);

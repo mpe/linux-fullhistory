@@ -136,9 +136,9 @@ struct video_audio
 	char    name[16];
 #define VIDEO_SOUND_MONO	1
 #define VIDEO_SOUND_STEREO	2
-#define VIDEO_SOUND_LANG1	3
-#define VIDEO_SOUND_LANG2	4
-        __u16   mode;
+#define VIDEO_SOUND_LANG1	4
+#define VIDEO_SOUND_LANG2	8
+        __u16   mode;		/* detected audio carriers or one to set */
         __u16	balance;	/* Stereo balance */
         __u16	step;		/* Step actual volume uses */
 };

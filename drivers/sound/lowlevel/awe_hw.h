@@ -2,10 +2,10 @@
  * sound/awe_hw.h
  *
  * Access routines and definitions for the low level driver for the 
- * AWE32/Sound Blaster 32 wave table synth.
- *   version 0.4.2; Sep. 15, 1997
+ * Creative AWE32/SB32/AWE64 wave table synth.
+ *   version 0.4.3; Mar. 1, 1998
  *
- * Copyright (C) 1996,1997 Takashi Iwai
+ * Copyright (C) 1996-1998 Takashi Iwai
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -32,16 +32,18 @@
 
 #define awe_cmd_idx(reg,ch)	(((reg)<< 5) | (ch))
 
-#define Data0    0x620	/* doubleword r/w */
-#define Data1    0xA20	/* doubleword r/w */
-#define Data2    0xA22	/* word r/w */
-#define Data3    0xE20	/* word r/w */
-#define Pointer  0xE22	/* register pointer r/w */
+#define Data0    0		/* 0x620: doubleword r/w */
+#define Data1    1		/* 0xA20: doubleword r/w */
+#define Data2    2		/* 0xA22: word r/w */
+#define Data3    3		/* 0xE20: word r/w */
+#define Pointer  4		/* 0xE22 register pointer r/w */
 
 #define AWE_CPF(ch)	awe_cmd_idx(0,ch), Data0	/* DW: current pitch and fractional address */
 #define AWE_PTRX(ch)	awe_cmd_idx(1,ch), Data0	/* DW: pitch target and reverb send */
 #define AWE_CVCF(ch)	awe_cmd_idx(2,ch), Data0	/* DW: current volume and filter cutoff */
 #define AWE_VTFT(ch)	awe_cmd_idx(3,ch), Data0	/* DW: volume and filter cutoff targets */
+#define AWE_0080(ch)	awe_cmd_idx(4,ch), Data0	/* DW: ?? */
+#define AWE_00A0(ch)	awe_cmd_idx(5,ch), Data0	/* DW: ?? */
 #define AWE_PSST(ch)	awe_cmd_idx(6,ch), Data0	/* DW: pan send and loop start address */
 #define AWE_CSL(ch)	awe_cmd_idx(7,ch), Data0	/* DW: chorus send and loop end address */
 #define AWE_CCCA(ch)	awe_cmd_idx(0,ch), Data1	/* DW: Q, control bits, and current address */
@@ -93,8 +95,5 @@
 
 #define AWE_DRAM_OFFSET		0x200000
 #define AWE_MAX_DRAM_SIZE	(28 * 1024)	/* 28 MB is max onboard memory */
-
-#define AWE_DEFAULT_ATTENUATION	32	/* 12dB below */
-#define AWE_DEFAULT_MOD_SENSE	18
 
 #endif

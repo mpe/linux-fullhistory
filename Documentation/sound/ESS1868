@@ -40,7 +40,7 @@ the sound modules with the proper I/O information.  Here is my setup:
 
 # ESS1868F AudioDrive initialization
 
-/sbin/insmod sound
+/sbin/modprobe sound
 /sbin/insmod uart401
 /sbin/insmod sb io=0x220 irq=5 dma=1 dma16=-1
 /sbin/insmod mpu401 io=0x330

@@ -1,7 +1,7 @@
 /* fc.c: Generic Fibre Channel and FC4 SCSI driver.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
- * Copyright (C) 1997,1998 Jiri Hanika (geo@ff.cuni.cz)
+ * Copyright (C) 1997,1998 Jirka Hanika (geo@ff.cuni.cz)
  *
  * Sources:
  *	Fibre Channel Physical & Signaling Interface (FC-PH), dpANS, 1994

@@ -684,7 +684,6 @@ cleanup_module(void)
 			void *priv = dev->priv;
 			/* NB: el2_close() handles free_irq */
 			release_region(dev->base_addr, EL2_IO_EXTENT);
-			dev->priv = NULL;
 			unregister_netdev(dev);
 			kfree(priv);
 		}

@@ -33,6 +33,7 @@
 #define CONFIG_SB
 #define CONFIG_SOFTOSS
 #define CONFIG_SSCAPE
+#define CONFIG_AD1816
 #define CONFIG_TRIX
 #define CONFIG_VMIDI
 #define CONFIG_YM3812

@@ -118,6 +118,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_ISI),y)
+L_OBJS += isicom.o
+else
+  ifeq ($(CONFIG_ISI),m)
+  M_OBJS += isicom.o
+  endif
+endif
+
 ifeq ($(CONFIG_ESPSERIAL),y)
 L_OBJS += esp.o
 else

@@ -760,6 +760,9 @@ static int sound_mmap(struct file *file, struct vm_area_struct *vma)
 
 	dmap->mapping_flags |= DMA_MAP_MAPPED;
 
+	if( audio_devs[dev]->d->mmap)
+		audio_devs[dev]->d->mmap(dev);
+
 	memset(dmap->raw_buf,
 	       dmap->neutral_byte,
 	       dmap->bytes_in_use);

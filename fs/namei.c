@@ -865,58 +865,67 @@ static inline void double_unlock(struct dentry *d1, struct dentry *d2)
 	dput(d2);
 }
 
-static inline int do_rmdir(const char * name)
+/*
+ * It's inline, so penalty for filesystems that don't use sticky bit is
+ * minimal.
+ */
+
+static inline int check_sticky(struct inode *dir, struct inode *inode)
+{
+	if (!(dir->i_mode & S_ISVTX))
+		return 0;
+	if (inode->i_uid == current->fsuid)
+		return 0;
+	if (dir->i_uid == current->fsuid)
+		return 0;
+	return !capable(CAP_FOWNER);
+}
+
+int VFS_rmdir(struct inode *dir, struct dentry *dentry)
 {
 	int error;
-	struct dentry *dir;
-	struct dentry *dentry;
 
-	dentry = lookup_dentry(name, NULL, 0);
-	error = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
-		goto exit;
+	if (IS_RDONLY(dir))
+		return -EROFS;
 
-	dir = dget(dentry->d_parent);
-
-	error = -ENOENT;
-	if (!dentry->d_inode)
-		goto exit;
-	/*
-	 * The dentry->d_count stuff confuses d_delete() enough to
-	 * not kill the inode from under us while it is locked. This
-	 * wouldn't be needed, except the dentry semaphore is really
-	 * in the inode, not in the dentry..
-	 */
-	dentry->d_count++;
-	double_lock(dir, dentry);
-	if (dentry->d_parent != dir)
-		goto exit_lock;
-
-	error = -EROFS;
-	if (IS_RDONLY(dir->d_inode))
-		goto exit_lock;
-
-	error = permission(dir->d_inode,MAY_WRITE | MAY_EXEC);
+	error = permission(dir,MAY_WRITE | MAY_EXEC);
 	if (error)
-		goto exit_lock;
+		return error;
 
 	/*
 	 * A subdirectory cannot be removed from an append-only directory.
 	 */
-	error = -EPERM;
-	if (IS_APPEND(dir->d_inode))
-		goto exit_lock;
+	if (IS_APPEND(dir))
+		return -EPERM;
+	/*
+	 * Check the sticky bit.
+	 */
+	if (check_sticky(dir, dentry->d_inode))
+		return -EPERM;
 
 	/* Disallow removals of mountpoints. */
-	error = -EBUSY;
 	if (dentry->d_mounts != dentry->d_covers)
-		goto exit_lock;
+		return -EBUSY;
 
-	error = -EPERM;
-	if (!dir->d_inode->i_op || !dir->d_inode->i_op->rmdir)
-		goto exit_lock;
-
-	DQUOT_INIT(dir->d_inode);
+	if (!dir->i_op || !dir->i_op->rmdir)
+		return -EPERM;
+	/*
+	 * I suspect that these two checks are atavisms copied from minixfs
+	 * and it looks like they can be dropped. Anyway, it will be simpler
+	 * to drop them from here and even if those checks are needed they
+	 * belong to VFS.
+	 */
+	if (dir == dentry->d_inode)
+		return -EPERM;
+	if (dir->i_dev != dentry->d_inode->i_dev)
+		return -EPERM;
+	/*
+	 * Non-directories can't be rmdir'd. It may confuse the heck of
+	 * NFS and CODA. Testing it in VFS is the Right Thing (tm), anyway.
+	 */
+	if (!S_ISDIR(dentry->d_inode->i_mode))
+		return -ENOTDIR;
+	DQUOT_INIT(dir);
 
 	/*
 	 * We try to drop the dentry early: we should have
@@ -942,11 +951,44 @@ static inline int do_rmdir(const char * name)
 		d_drop(dentry);
 	}
 
-	error = dir->d_inode->i_op->rmdir(dir->d_inode, dentry);
+	error = dir->i_op->rmdir(dir, dentry);
 
-exit_lock:
-	dentry->d_count--;
+	return error;
+}
+
+static inline int do_rmdir(const char * name)
+{
+	int error;
+	struct dentry *dir;
+	struct dentry *dentry;
+
+	dentry = lookup_dentry(name, NULL, 0);
+	error = PTR_ERR(dentry);
+	if (IS_ERR(dentry))
+		goto exit;
+
+	error = -ENOENT;
+	if (!dentry->d_inode)
+		goto exit_dput;
+	/*
+	 * The dentry->d_count stuff confuses d_delete() enough to
+	 * not kill the inode from under us while it is locked. This
+	 * wouldn't be needed, except the dentry semaphore is really
+	 * in the inode, not in the dentry..
+	 */
+	dentry->d_count++;
+	dir = dget(dentry->d_parent);
+	double_lock(dir, dentry);
+
+	/*
+	 * Check that dentry still sits where it did and do the real stuff.
+	 */
+	if (dentry->d_parent == dir)
+		error = VFS_rmdir(dir->d_inode, dentry);
+
 	double_unlock(dentry, dir);
+exit_dput:
+	dput(dentry);
 exit:
 	return error;
 }

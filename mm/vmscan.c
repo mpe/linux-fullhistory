@@ -424,35 +424,21 @@ out:
  */
 static int do_try_to_free_page(int gfp_mask)
 {
-	static int state = 0;
 	int i=6;
 
 	/* Always trim SLAB caches when memory gets low. */
 	kmem_cache_reap(gfp_mask);
 
-	if (buffer_over_borrow() || pgcache_over_borrow())
-		state = 0;
-
-	switch (state) {
-		do {
-		case 0:
-			if (shrink_mmap(i, gfp_mask))
-				return 1;
-			state = 1;
-		case 1:
-			if (shm_swap(i, gfp_mask))
-				return 1;
-			state = 2;
-		case 2:
-			if (swap_out(i, gfp_mask))
-				return 1;
-			state = 3;
-		case 3:
-			shrink_dcache_memory(i, gfp_mask);
-			state = 0;
+	do {
+		if (shrink_mmap(i, gfp_mask))
+			return 1;
+		if (shm_swap(i, gfp_mask))
+			return 1;
+		if (swap_out(i, gfp_mask))
+			return 1;
+		shrink_dcache_memory(i, gfp_mask);
 		i--;
-		} while (i >= 0);
-	}
+	} while (i >= 0);
 	return 0;
 }
 

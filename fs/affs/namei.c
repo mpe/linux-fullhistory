@@ -319,7 +319,7 @@ affs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	error       = affs_add_entry(dir,NULL,inode,dentry,ST_USERDIR);
 	if (error)
 		goto out_iput;
-	inode->i_mode = S_IFDIR | (mode & 0777 & ~current->fs->umask);
+	inode->i_mode = S_IFDIR | S_ISVTX | (mode & 0777 & ~current->fs->umask);
 	inode->u.affs_i.i_protect = mode_to_prot(inode->i_mode);
 	d_instantiate(dentry,inode);
 	mark_inode_dirty(inode);
@@ -360,17 +360,6 @@ affs_rmdir(struct inode *dir, struct dentry *dentry)
 	if (!(bh = affs_find_entry(dir,dentry,&ino)))
 		goto rmdir_done;
 
-	retval = -EPERM;
-        if (current->fsuid != inode->i_uid &&
-            current->fsuid != dir->i_uid && !capable(CAP_FOWNER))
-		goto rmdir_done;
-	if (inode->i_dev != dir->i_dev)
-		goto rmdir_done;
-	if (inode == dir)	/* we may not delete ".", but "../dir" is ok */
-		goto rmdir_done;
-	retval = -ENOTDIR;
-	if (!S_ISDIR(inode->i_mode))
-		goto rmdir_done;
 	/*
 	 * Make sure the directory is empty and the dentry isn't busy.
 	 */

@@ -683,46 +683,15 @@ int ufs_rmdir (struct inode * dir, struct dentry *dentry)
 	if (inode->i_sb->dq_op)
 		inode->i_sb->dq_op->initialize (inode, -1);
 
-	retval = -EPERM;
-	if ((dir->i_mode & S_ISVTX) && 
-	    current->fsuid != inode->i_uid &&
-	    current->fsuid != dir->i_uid && !fsuser())
-		goto end_rmdir;
-	if (inode == dir)	/* we may not delete ".", but "../dir" is ok */
-		goto end_rmdir;
-
-	retval = -ENOTDIR;
-	if (!S_ISDIR(inode->i_mode))
-		goto end_rmdir;
-
 	retval = -EIO;
-	if (inode->i_dev != dir->i_dev)
-		goto end_rmdir;
 	if (SWAB32(de->d_ino) != inode->i_ino)
 		goto end_rmdir;
 
-	/*
-	 * Prune any child dentries so that this dentry becomes negative.
-	 */
-	if (dentry->d_count > 1) {
-		ufs_warning (sb, "ufs_rmdir", "d_count=%d, pruning\n", dentry->d_count);
-		shrink_dcache_parent(dentry);
-	}
 	if (!ufs_empty_dir (inode))
 		retval = -ENOTEMPTY;
 	else if (SWAB32(de->d_ino) != inode->i_ino)
 		retval = -ENOENT;
 	else {
-		if (dentry->d_count > 1) {
-		/*
-		 * Are we deleting the last instance of a busy directory?
-		 * Better clean up if so.
-		 *
-		 * Make directory empty (it will be truncated when finally
-		 * dereferenced).  This also inhibits ufs_add_entry.
-		 */
-			inode->i_size = 0;
-		}
 		retval = ufs_delete_entry (dir, de, bh);
 		dir->i_version = ++event;
 	}
@@ -739,6 +708,7 @@ int ufs_rmdir (struct inode * dir, struct dentry *dentry)
 			      inode->i_nlink);
 	inode->i_version = ++event;
 	inode->i_nlink = 0;
+	inode->i_size = 0;
 	mark_inode_dirty(inode);
 	dir->i_nlink--;
 	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;

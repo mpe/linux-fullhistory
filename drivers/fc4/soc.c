@@ -1,7 +1,7 @@
 /* soc.c: Sparc SUNW,soc (Serial Optical Channel) Fibre Channel Sbus adapter support.
  *
  * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
- * Copyright (C) 1997,1998 Jiri Hanika (geo@ff.cuni.cz)
+ * Copyright (C) 1997,1998 Jirka Hanika (geo@ff.cuni.cz)
  *
  * Sources:
  *	Fibre Channel Physical & Signaling Interface (FC-PH), dpANS, 1994
@@ -20,7 +20,7 @@
  */
 
 static char *version =
-        "soc.c:v1.2 27/Feb/98 Jakub Jelinek (jj@sunsite.mff.cuni.cz), Jiri Hanika (geo@ff.cuni.cz)\n";
+        "soc.c:v1.2 27/Feb/98 Jakub Jelinek (jj@sunsite.mff.cuni.cz), Jirka Hanika (geo@ff.cuni.cz)\n";
 
 #include <linux/module.h>
 #include <linux/kernel.h>

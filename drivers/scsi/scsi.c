@@ -30,6 +30,8 @@
  *  Leonard N. Zubkoff <lnz@dandelion.com>
  *
  *  Converted cli() code to spinlocks, Ingo Molnar
+ *
+ *  Jiffies wrap fixes (host->resetting), 3 Dec 1998 Andrea Arcangeli
  */
 
 #include <linux/config.h>
@@ -1297,7 +1299,7 @@ inline int internal_cmnd (Scsi_Cmnd * SCpnt)
      */
     timeout = host->last_reset + MIN_RESET_DELAY;
 
-    if (jiffies < timeout) {
+    if (host->resetting && time_before(jiffies, timeout)) {
 	int ticks_remaining = timeout - jiffies;
 	/*
 	 * NOTE: This may be executed from within an interrupt
@@ -1310,7 +1312,7 @@ inline int internal_cmnd (Scsi_Cmnd * SCpnt)
 	 */
 	spin_unlock_irq(&io_request_lock);
 	while (--ticks_remaining >= 0) mdelay(1+999/HZ);
-	host->last_reset = jiffies - MIN_RESET_DELAY;
+	host->resetting = 0;
 	spin_lock_irq(&io_request_lock);
     }
 
@@ -1367,7 +1369,7 @@ inline int internal_cmnd (Scsi_Cmnd * SCpnt)
 #ifdef DEBUG_DELAY
 	clock = jiffies + 4 * HZ;
 	spin_unlock_irq(&io_request_lock);
-	while (jiffies < clock) barrier();
+	while (time_before(jiffies, clock)) barrier();
 	spin_lock_irq(&io_request_lock);
 	printk("done(host = %d, result = %04x) : routine at %p\n",
 	       host->host_no, temp, host->hostt->command);

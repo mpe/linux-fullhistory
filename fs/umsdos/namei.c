@@ -1011,14 +1011,6 @@ int UMSDOS_rmdir (struct inode *dir, struct dentry *dentry)
 	if (!list_empty(&dentry->d_hash))
 		goto out;
 
-	/* check the sticky bit */
-	ret = -EPERM;
-	if (is_sticky(dir, dentry->d_inode->i_uid)) {
-printk("umsdos_rmdir: %s/%s is sticky\n",
-dentry->d_parent->d_name.name, dentry->d_name.name);
-		goto out;
-	}
-
 	/* check whether the EMD is empty */
 	ret = -ENOTEMPTY;
 	empty = umsdos_isempty (dentry);

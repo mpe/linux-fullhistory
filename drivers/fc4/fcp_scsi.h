@@ -1,7 +1,7 @@
 /* fcp_scsi.h: Generic SCSI on top of FC4 - interface defines.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
- * Copyright (C) 1998 Jiri Hanika (geo@ff.cuni.cz)
+ * Copyright (C) 1998 Jirka Hanika (geo@ff.cuni.cz)
  */
 
 #ifndef _FCP_SCSI_H

@@ -749,52 +749,45 @@ nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr)
 	if ((inode->i_mode & S_IFMT) != (fattr->mode & S_IFMT))
 		goto out_changed;
 
-	/*
-	 * If we have pending write-back entries, we don't want
-	 * to look at the size the server sends us too closely..
-	 * In particular, ignore the server if it tells us that
-	 * the file is smaller or older than we locally think it
-	 * is.. 
-	 */
-	if (NFS_WRITEBACK(inode)) {
-		if (inode->i_size > fattr->size)
-			fattr->size = inode->i_size;
-		if (inode->i_mtime > fattr->mtime.seconds)
-			fattr->mtime.seconds = inode->i_mtime;
-	}
-
-	/*
-	 * If the size or mtime changed from outside, we want
-	 * to invalidate the local caches immediately.
-	 */
-	if (inode->i_size != fattr->size) {
-#ifdef NFS_DEBUG_VERBOSE
-printk("NFS: size change on %x/%ld\n", inode->i_dev, inode->i_ino);
-#endif
-		invalid = 1;
-	}
-	if (inode->i_mtime != fattr->mtime.seconds) {
-#ifdef NFS_DEBUG_VERBOSE
-printk("NFS: mtime change on %x/%ld\n", inode->i_dev, inode->i_ino);
-#endif
-		invalid = 1;
-	}
-
 	inode->i_mode = fattr->mode;
 	inode->i_nlink = fattr->nlink;
 	inode->i_uid = fattr->uid;
 	inode->i_gid = fattr->gid;
 
-	inode->i_size = fattr->size;
 	inode->i_blocks = fattr->blocks;
 	inode->i_atime = fattr->atime.seconds;
-	inode->i_mtime = fattr->mtime.seconds;
 	inode->i_ctime = fattr->ctime.seconds;
+
 	/*
 	 * Update the read time so we don't revalidate too often.
 	 */
 	NFS_READTIME(inode) = jiffies;
 	error = 0;
+
+	/*
+	 * If we have pending write-back entries, we don't want
+	 * to look at the size or the mtime the server sends us
+	 * too closely, as we're in the middle of modifying them.
+	 */
+	if (NFS_WRITEBACK(inode))
+		goto out;
+
+	if (inode->i_size != fattr->size) {
+#ifdef NFS_DEBUG_VERBOSE
+printk("NFS: size change on %x/%ld\n", inode->i_dev, inode->i_ino);
+#endif
+		inode->i_size = fattr->size;
+		invalid = 1;
+	}
+
+	if (inode->i_mtime != fattr->mtime.seconds) {
+#ifdef NFS_DEBUG_VERBOSE
+printk("NFS: mtime change on %x/%ld\n", inode->i_dev, inode->i_ino);
+#endif
+		inode->i_mtime = fattr->mtime.seconds;
+		invalid = 1;
+	}
+
 	if (invalid)
 		goto out_invalid;
 out:
@@ -810,6 +803,7 @@ inode->i_ino, inode->i_mode, fattr->mode);
 #endif
 	fattr->mode = inode->i_mode; /* save mode */
 	make_bad_inode(inode);
+	nfs_inval(inode);
 	inode->i_mode = fattr->mode; /* restore mode */
 	/*
 	 * No need to worry about unhashing the dentry, as the
@@ -824,12 +818,9 @@ out_invalid:
 #ifdef NFS_DEBUG_VERBOSE
 printk("nfs_refresh_inode: invalidating %ld pages\n", inode->i_nrpages);
 #endif
-	if (!S_ISDIR(inode->i_mode)) {
-		/* This sends off all dirty pages off to the server.
-		 * Note that this function must not sleep. */
-		nfs_inval(inode);
+	if (!S_ISDIR(inode->i_mode))
 		invalidate_inode_pages(inode);
-	} else
+	else
 		nfs_invalidate_dircache(inode);
 	NFS_CACHEINV(inode);
 	NFS_ATTRTIMEO(inode) = NFS_MINATTRTIMEO(inode);

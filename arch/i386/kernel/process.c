@@ -105,19 +105,24 @@ static void hard_idle(void)
  */ 
 static int cpu_idle(void *unused)
 {
-	unsigned long start_idle = jiffies;
+	int work = 1;
+	unsigned long start_idle = 0;
 
 	/* endless idle loop with no priority at all */
+	current->priority = 0;
+	current->counter = -100;
 	for (;;) {
+		if (work)
+			start_idle = jiffies;
+
 		if (jiffies - start_idle > HARD_IDLE_TIMEOUT) 
 			hard_idle();
 		else  {
 			if (boot_cpu_data.hlt_works_ok && !hlt_counter && !current->need_resched)
 		        	__asm__("hlt");
 		}
-		if (current->need_resched) 
-			start_idle = jiffies;
-		current->policy = SCHED_YIELD;
+
+		work = current->need_resched;
 		schedule();
 		check_pgt_cache();
 	}
@@ -131,12 +136,12 @@ static int cpu_idle(void *unused)
 
 int cpu_idle(void *unused)
 {
-
 	/* endless idle loop with no priority at all */
+	current->priority = 0;
+	current->counter = -100;
 	while(1) {
 		if (current_cpu_data.hlt_works_ok && !hlt_counter && !current->need_resched)
 			__asm__("hlt");
-		current->policy = SCHED_YIELD;
 		schedule();
 		check_pgt_cache();
 	}
@@ -579,7 +584,6 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	*childregs = *regs;
 	childregs->eax = 0;
 	childregs->esp = esp;
-	childregs->eflags = regs->eflags & 0xffffcfff;  /* iopl always 0 for a new process */	
 
 	p->tss.esp = (unsigned long) childregs;
 	p->tss.esp0 = (unsigned long) (childregs+1);

@@ -7,6 +7,8 @@
  *      Subsequent revisions: Eric Youngdale
  *
  *  <drew@colorado.edu>
+ *
+ *  Jiffies wrap fixes (host->resetting), 3 Dec 1998 Andrea Arcangeli
  */
 
 
@@ -581,6 +583,7 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
     next_scsi_host++;
     retval->host_queue = NULL;
     retval->host_wait = NULL;
+    retval->resetting = 0;
     retval->last_reset = 0;
     retval->irq = 0;
     retval->dma_channel = 0xff;

@@ -125,6 +125,25 @@ __initfunc(static void quirk_passive_release(struct pci_dev *dev, int arg))
 	}
 }
 
+/*  The VIA VP2/VP3/MVP3 seem to have some 'features'. There may be a workaround
+    but VIA don't answer queries. If you happen to have good contacts at VIA
+    ask them for me please -- Alan 
+    
+    This appears to be BIOS not version dependant. So presumably there is a 
+    chipset level fix */
+    
+
+int isa_dma_bridge_buggy = 0;		/* Exported */
+    
+__initfunc(static void quirk_isa_dma_hangs(struct pci_dev *dev, int arg))
+{
+	if(!isa_dma_bridge_buggy)
+	{
+		isa_dma_bridge_buggy=1;
+		printk(KERN_INFO "Activating ISA DMA hang workarounds.\n");
+	}
+}
+
 
 typedef void (*quirk_handler)(struct pci_dev *, int);
 
@@ -141,7 +160,8 @@ static struct quirk_name quirk_names[] __initdata = {
 #ifdef CONFIG_PCI_OPTIMIZE
 	{ quirk_bridge,		"Bridge optimization" },
 #endif
-	{ quirk_passive_release, "Passive release enable" },
+	{ quirk_passive_release,"Passive release enable" },
+	{ quirk_isa_dma_hangs,	"Work around ISA DMA hangs" },
 };
 
 
@@ -176,6 +196,12 @@ static struct quirk_info quirk_list[] __initdata = {
 	{ PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82430,	quirk_bridge,	0x00 },
 #endif
 	{ PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82441,	quirk_passive_release,	0x00 },
+	/*
+	 * Its not totally clear which chipsets are the problematic ones
+	 * This is the 82C586 variants. At the moment the 596 is an unknown
+	 * quantity 
+	 */
+	{ PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C586_0,	quirk_isa_dma_hangs,	0x00 },
 };
 
 __initfunc(void pci_quirks_init(void))

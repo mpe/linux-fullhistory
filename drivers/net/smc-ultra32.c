@@ -413,7 +413,6 @@ void cleanup_module(void)
 			void *priv = dev->priv;
 			/* NB: ultra32_close_card() does free_irq */
 			release_region(ioaddr, ULTRA32_IO_EXTENT);
-			dev->priv = NULL;
 			unregister_netdev(dev);
 			kfree(priv);
 		}

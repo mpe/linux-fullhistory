@@ -1059,14 +1059,14 @@ __initfunc(int ltpc_probe_dma(int base))
 
 	inb_p(io+1);
 	inb_p(io+0);
-	timeout = jiffies+100;
-	while(timeout>jiffies) {
+	timeout = jiffies+100*HZ/100;
+	while(time_before(jiffies, timeout)) {
 		if ( 0xfa == inb_p(io+6) ) break;
 	}
 
 	inb_p(io+3);
 	inb_p(io+2);
-	while(timeout>jiffies) {
+	while(time_before(jiffies, timeout)) {
 		if ( 0xfb == inb_p(io+6) ) break;
 	}
 
@@ -1161,8 +1161,8 @@ __initfunc(int ltpc_probe(struct device *dev))
 
 	inb_p(io+1);
 	inb_p(io+3);
-	timeout = jiffies+2;
-	while(timeout>jiffies) ; /* hold it in reset for a coupla jiffies */
+	timeout = jiffies+2*HZ/100;
+	while(time_before(jiffies, timeout)) ; /* hold it in reset for a coupla jiffies */
 	inb_p(io+0);
 	inb_p(io+2);
 	inb_p(io+7); /* clear reset */
@@ -1171,9 +1171,9 @@ __initfunc(int ltpc_probe(struct device *dev))
 	inb_p(io+5); /* enable dma */
 	inb_p(io+6); /* tri-state interrupt line */
 
-	timeout = jiffies+100;
+	timeout = jiffies+100*HZ/100;
 	
-	while(timeout>jiffies) {
+	while(time_before(jiffies, timeout)) {
 		/* wait for the card to complete initialization */
 	}
  
@@ -1220,8 +1220,8 @@ __initfunc(int ltpc_probe(struct device *dev))
 
 	(void) inb_p(io+3);
 	(void) inb_p(io+2);
-	timeout = jiffies+100;
-	while(timeout>jiffies) {
+	timeout = jiffies+100*HZ/100;
+	while(time_before(jiffies, timeout)) {
 		if( 0xf9 == inb_p(io+6)) break;
 	}
 

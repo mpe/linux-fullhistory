@@ -5,6 +5,10 @@
  *
  * Scott Murray, Jun 14, 1998
  *
+ *
+ * Changes
+ *      Paul J.Y. Lahaie        Changed probing / attach code order
+ *
  */
 
 /* Based on the CS4232 driver:
@@ -196,12 +200,14 @@ int init_module(void)
 	{
 	    return -ENODEV;
 	}
+
+        if (probe_opl3sa2_mss(&mss_cfg) == 0)
+        {
+            return -ENODEV;
+        }
+
 	attach_opl3sa2(&cfg);
 
-	if (probe_opl3sa2_mss(&mss_cfg) == 0)
-	{
-	    return -ENODEV;
-	}
 	attach_opl3sa2_mss(&mss_cfg);
 
 #if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)

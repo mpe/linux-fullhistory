@@ -12,11 +12,12 @@
 
 		.text
 
-ENTRY(vidc_fill_1x8)
+ENTRY(vidc_fill_1x8_u)
 		mov	ip, #0xff00
 1:		cmp	r0, r1
 		bge	SYMBOL_NAME(vidc_clear)
 		ldrb	r4, [r0], #1
+		eor	r4, r4, #0x80
 		and	r4, ip, r4, lsl #8
 		orr	r4, r4, r4, lsl #16
 		str	r4, [r2], #4
@@ -24,7 +25,7 @@ ENTRY(vidc_fill_1x8)
 		blt	1b
 		mov	pc, lr
 
-ENTRY(vidc_fill_2x8)
+ENTRY(vidc_fill_2x8_u)
 		mov	ip, #0xff00
 1:		cmp	r0, r1
 		bge	SYMBOL_NAME(vidc_clear)
@@ -38,7 +39,33 @@ ENTRY(vidc_fill_2x8)
 		blt	1b
 		mov	pc, lr
 
-ENTRY(vidc_fill_1x16)
+ENTRY(vidc_fill_1x8_s)
+		mov	ip, #0xff00
+1:		cmp	r0, r1
+		bge	SYMBOL_NAME(vidc_clear)
+		ldrb	r4, [r0], #1
+		and	r4, ip, r4, lsl #8
+		orr	r4, r4, r4, lsl #16
+		str	r4, [r2], #4
+		cmp	r2, r3
+		blt	1b
+		mov	pc, lr
+
+ENTRY(vidc_fill_2x8_s)
+		mov	ip, #0xff00
+1:		cmp	r0, r1
+		bge	SYMBOL_NAME(vidc_clear)
+		ldr	r4, [r0], #2
+		and	r5, r4, ip
+		and	r4, ip, r4, lsl #8
+		orr	r4, r4, r5, lsl #16
+		orr	r4, r4, r4, lsr #8
+		str	r4, [r2], #4
+		cmp	r2, r3
+		blt	1b
+		mov	pc, lr
+
+ENTRY(vidc_fill_1x16_s)
 		mov	ip, #0xff00
 		orr	ip, ip, ip, lsr #8
 1:		cmp	r0, r1
@@ -56,7 +83,7 @@ ENTRY(vidc_fill_1x16)
 		blt	1b
 		mov	pc, lr
 
-ENTRY(vidc_fill_2x16)
+ENTRY(vidc_fill_2x16_s)
 		mov	ip, #0xff00
 		orr	ip, ip, ip, lsr #8
 1:		cmp	r0, r1
@@ -103,26 +130,26 @@ ENTRY(vidc_clear)
  */
 
 ENTRY(vidc_sound_dma_irq)
-		stmfd	sp!, {r4 - r9, lr}
-		ldr	r9, =SYMBOL_NAME(dma_start)
-		ldmia	r9, {r0, r1, r2, r3, r4, r5}
+		stmfd	sp!, {r4 - r8, lr}
+		ldr	r8, =SYMBOL_NAME(dma_start)
+		ldmia	r8, {r0, r1, r2, r3, r4, r5}
 		teq	r1, #0
 		adreq	r4, SYMBOL_NAME(vidc_fill_noaudio)
-		moveq	r8, #1 << 31
-		movne	r8, #0
+		moveq	r7, #1 << 31
+		movne	r7, #0
 		mov	ip, #IOMD_BASE & 0xff000000
 		orr	ip, ip, #IOMD_BASE & 0x00ff0000
-		ldrb	r7, [ip, #IOMD_SD0ST]
-		tst	r7, #DMA_ST_OFL			@ Check for overrun
-		eorne	r7, r7, #DMA_ST_AB
-		tst	r7, #DMA_ST_AB
+		ldrb	r6, [ip, #IOMD_SD0ST]
+		tst	r6, #DMA_ST_OFL			@ Check for overrun
+		eorne	r6, r6, #DMA_ST_AB
+		tst	r6, #DMA_ST_AB
 		moveq	r2, r3				@ DMAing A, update B
 		add	r3, r2, r5			@ End of DMA buffer
 		add	r1, r1, r0			@ End of virtual DMA buffer
 		mov	lr, pc
-		mov	pc, r4				@ Call fill routine
+		mov	pc, r4				@ Call fill routine (uses r4, ip)
 		sub	r1, r1, r0			@ Remaining length
-		stmia	r9, {r0, r1}
+		stmia	r8, {r0, r1}
 		mov	r0, #0
 		tst	r2, #4				@ Round buffer up to 4 words
 		strne	r0, [r2], #4
@@ -133,29 +160,31 @@ ENTRY(vidc_sound_dma_irq)
 		mov	r2, r2, lsl #20
 		movs	r2, r2, lsr #20
 		orreq	r2, r2, #1 << 30		@ Set L bit
-		orr	r2, r2, r8
-		ldmdb	r9, {r3, r4, r5}
-		tst	r7, #DMA_ST_AB
+		orr	r2, r2, r7
+		ldmdb	r8, {r3, r4, r5}
+		tst	r6, #DMA_ST_AB
 		mov	ip, #IOMD_BASE & 0xff000000
 		orr	ip, ip, #IOMD_BASE & 0x00ff0000
 		streq	r4, [ip, #IOMD_SD0CURB]
 		strne	r5, [ip, #IOMD_SD0CURA]
 		streq	r2, [ip, #IOMD_SD0ENDB]
 		strne	r2, [ip, #IOMD_SD0ENDA]
-		ldr	r6, [ip, #IOMD_SD0ST]
-		tst	r6, #DMA_ST_OFL
+		ldr	lr, [ip, #IOMD_SD0ST]
+		tst	lr, #DMA_ST_OFL
 		bne	1f
-		tst	r7, #DMA_ST_AB
+		tst	r6, #DMA_ST_AB
 		strne	r4, [ip, #IOMD_SD0CURB]
 		streq	r5, [ip, #IOMD_SD0CURA]
 		strne	r2, [ip, #IOMD_SD0ENDB]
 		streq	r2, [ip, #IOMD_SD0ENDA]
-1:		teq	r8, #0
+1:		teq	r7, #0
 		mov	r0, #0x10
 		strneb	r0, [ip, #IOMD_SD0CR]
-		teqeq	r1, #0
-		ldmfd	sp!, {r4 - r9, lr}
-		moveq	pc, r3				@ Call interrupt routine
+		ldmfd	sp!, {r4 - r8, lr}
+		teq	r1, #0				@ If we have no more
+		movne	pc, lr
+		teq	r3, #0
+		movne	pc, r3				@ Call interrupt routine
 		mov	pc, lr
 
 		.data

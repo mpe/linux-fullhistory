@@ -1173,7 +1173,6 @@ static int guswave_kill_note(int dev, int voice, int note, int velocity)
 		gus_voice_fade(voice);
 	}
 
-	restore_flags(flags);
 	return 0;
 }
 

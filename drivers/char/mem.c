@@ -21,6 +21,7 @@
 #include <linux/random.h>
 #include <linux/init.h>
 #include <linux/joystick.h>
+#include <linux/i2c.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>

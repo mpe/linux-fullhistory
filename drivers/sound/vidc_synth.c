@@ -8,7 +8,7 @@
 
 #include "sound_config.h"
 #include "vidc.h"
-
+#if 0
 static struct synth_info vidc_info =
 {
 	"VIDCsound",		/* name                 */
@@ -42,31 +42,32 @@ static void vidc_synth_close(int dev)
 
 static struct synth_operations vidc_synth_operations =
 {
-	&vidc_info,		/* info                 */
-	0,			/* midi_dev             */
-	SYNTH_TYPE_SAMPLE,	/* synth_type           */
-				/*SAMPLE_TYPE_XXX */ 0,
-				/* SAMPLE_TYPE GUS *//* synth_subtype                */
-	vidc_synth_open,	/* open                 */
-	vidc_synth_close,	/* close                */
-	NULL,			/* ioctl                */
-	NULL,			/* kill_note            */
-	NULL,			/* start_note           */
-	NULL,			/* set_instr            */
-	NULL,			/* reset                */
-	NULL,			/* hw_control           */
-	NULL,			/* load_patch           */
-	NULL,			/* aftertouch           */
-	NULL,			/* controller           */
-	NULL,			/* panning              */
-	NULL,			/* volume_method        */
-	NULL,			/* patchmgr             */
-	NULL,			/* bender               */
-	NULL,			/* alloc                */
-	NULL,			/* setup_voice          */
-	NULL,			/* send_sysex           */
-				/* alloc                */
-				/* chn_info[16]         */
+	"VIDC Synth",		/* name			*/
+	&vidc_info,		/* info 		*/
+	0,			/* midi_dev		*/
+	SYNTH_TYPE_SAMPLE,	/* synth_type		*/
+	/*SAMPLE_TYPE_XXX */ 0, /* synth_subtype	*/
+	vidc_synth_open,	/* open 		*/
+	vidc_synth_close,	/* close		*/
+	NULL,			/* ioctl		*/
+	NULL,			/* kill_note		*/
+	NULL,			/* start_note		*/
+	NULL,			/* set_instr		*/
+	NULL,			/* reset		*/
+	NULL,			/* hw_control		*/
+	NULL,			/* load_patch		*/
+	NULL,			/* aftertouch		*/
+	NULL,			/* controller		*/
+	NULL,			/* panning		*/
+	NULL,			/* volume_method	*/
+	NULL,			/* bender		*/
+	NULL,			/* alloc_voice		*/
+	NULL,			/* setup_voice		*/
+	NULL,			/* send_sysex		*/
+				/* alloc		*/
+				/* chn_info[16] 	*/
+				/* syex_buf		*/
+				/* syex_ptr		*/
 };
 
 int  vidc_synth_get_volume(void)
@@ -87,3 +88,4 @@ void vidc_synth_init(struct address_info *hw_config)
 	else
 		printk(KERN_ERR "VIDCsound: Too many synthesizers\n");
 }
+#endif

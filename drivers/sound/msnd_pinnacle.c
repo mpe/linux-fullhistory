@@ -29,7 +29,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: msnd_pinnacle.c,v 1.66 1998/10/09 19:54:39 andrewtv Exp $
+ * $Id: msnd_pinnacle.c,v 1.73 1998/12/04 14:41:02 andrewtv Exp $
  *
  ********************************************************************/
 
@@ -67,7 +67,7 @@
 #endif
 
 #ifndef CONFIG_MSND_WRITE_NDELAY
-#  define CONFIG_MSND_WRITE_NDELAY	0
+#  define CONFIG_MSND_WRITE_NDELAY	1
 #endif
 
 #define get_play_delay_jiffies(size)	((size) * HZ *			\
@@ -379,14 +379,14 @@ static int mixer_get(int d)
 
 	switch (d) {
 	case SOUND_MIXER_VOLUME:
-	case SOUND_MIXER_SYNTH:
 	case SOUND_MIXER_PCM:
 	case SOUND_MIXER_LINE:
-#ifndef MSND_CLASSIC
-	case SOUND_MIXER_MIC:
-#endif
 	case SOUND_MIXER_IMIX:
 	case SOUND_MIXER_LINE1:
+#ifndef MSND_CLASSIC
+	case SOUND_MIXER_MIC:
+	case SOUND_MIXER_SYNTH:
+#endif
 		return (dev.left_levels[d] >> 8) * 100 / 0xff | 
 			(((dev.right_levels[d] >> 8) * 100 / 0xff) << 8);
 	default:
@@ -394,16 +394,30 @@ static int mixer_get(int d)
 	}
 }
 
-#define update_vol(a,b,s)									\
-	writew(dev.left_levels[a] * readw(dev.SMA + SMA_wCurrMastVolLeft) / 0xffff / s,		\
-	       dev.SMA + SMA_##b##Left);							\
-	writew(dev.right_levels[a] * readw(dev.SMA + SMA_wCurrMastVolRight) / 0xffff / s,	\
+#define update_volm(a,b)					\
+	writew((dev.left_levels[a] >> 1) *			\
+	       readw(dev.SMA + SMA_wCurrMastVolLeft) / 0xffff,	\
+	       dev.SMA + SMA_##b##Left);			\
+	writew((dev.right_levels[a] >> 1)  *			\
+	       readw(dev.SMA + SMA_wCurrMastVolRight) / 0xffff,	\
 	       dev.SMA + SMA_##b##Right);
 
-#define update_pot(d,s,ar)						\
-	writeb(dev.left_levels[d] >> 8, dev.SMA + SMA_##s##Left);	\
-	writeb(dev.right_levels[d] >> 8, dev.SMA + SMA_##s##Right);	\
-	if (msnd_send_word(&dev, 0, 0, ar) == 0)			\
+#define update_potm(d,s,ar)					\
+	writeb((dev.left_levels[d] >> 8) *			\
+	       readw(dev.SMA + SMA_wCurrMastVolLeft) / 0xffff,	\
+	       dev.SMA + SMA_##s##Left);			\
+	writeb((dev.right_levels[d] >> 8) *			\
+	       readw(dev.SMA + SMA_wCurrMastVolRight) / 0xffff,	\
+	       dev.SMA + SMA_##s##Right);			\
+	if (msnd_send_word(&dev, 0, 0, ar) == 0)		\
+		chk_send_dsp_cmd(&dev, HDEX_AUX_REQ);
+
+#define update_pot(d,s,ar)				\
+	writeb(dev.left_levels[d] >> 8,			\
+	       dev.SMA + SMA_##s##Left);		\
+	writeb(dev.right_levels[d] >> 8,		\
+	       dev.SMA + SMA_##s##Right);		\
+	if (msnd_send_word(&dev, 0, 0, ar) == 0)	\
 		chk_send_dsp_cmd(&dev, HDEX_AUX_REQ);
 
 static int mixer_set(int d, int value)
@@ -412,6 +426,7 @@ static int mixer_set(int d, int value)
 	int right = (value & 0x0000ff00) >> 8;
 	int bLeft, bRight;
 	int wLeft, wRight;
+	int updatemaster = 0;
 
 	if (d > 31)
 		return -EINVAL;
@@ -426,66 +441,66 @@ static int mixer_set(int d, int value)
 	dev.right_levels[d] = wRight;
 
 	switch (d) {
-	case SOUND_MIXER_VOLUME:		/* master volume */
-		writew(wLeft / 2, dev.SMA + SMA_wCurrMastVolLeft);
-		writew(wRight / 2, dev.SMA + SMA_wCurrMastVolRight);
-		break;
-
-		/* pot controls */
-	case SOUND_MIXER_LINE:			/* aux pot control */
+		/* master volume unscaled controls */
+	case SOUND_MIXER_LINE:			/* line pot control */
+		/* scaled by IMIX in digital mix */
 		writeb(bLeft, dev.SMA + SMA_bInPotPosLeft);
 		writeb(bRight, dev.SMA + SMA_bInPotPosRight);
 		if (msnd_send_word(&dev, 0, 0, HDEXAR_IN_SET_POTS) == 0)
 			chk_send_dsp_cmd(&dev, HDEX_AUX_REQ);
 		break;
-
 #ifndef MSND_CLASSIC
 	case SOUND_MIXER_MIC:			/* mic pot control */
+		/* scaled by IMIX in digital mix */
 		writeb(bLeft, dev.SMA + SMA_bMicPotPosLeft);
 		writeb(bRight, dev.SMA + SMA_bMicPotPosRight);
 		if (msnd_send_word(&dev, 0, 0, HDEXAR_MIC_SET_POTS) == 0)
 			chk_send_dsp_cmd(&dev, HDEX_AUX_REQ);
 		break;
 #endif
+	case SOUND_MIXER_VOLUME:		/* master volume */
+		writew(wLeft, dev.SMA + SMA_wCurrMastVolLeft);
+		writew(wRight, dev.SMA + SMA_wCurrMastVolRight);
+		/* fall through */
 
-	case SOUND_MIXER_LINE1:			/* line pot control */
-		writeb(bLeft, dev.SMA + SMA_bAuxPotPosLeft);
-		writeb(bRight, dev.SMA + SMA_bAuxPotPosRight);
-		if (msnd_send_word(&dev, 0, 0, HDEXAR_AUX_SET_POTS) == 0)
-			chk_send_dsp_cmd(&dev, HDEX_AUX_REQ);
-		break;
+	case SOUND_MIXER_LINE1:			/* aux pot control */
+		/* scaled by master volume */
+		/* fall through */
 
 		/* digital controls */
 	case SOUND_MIXER_SYNTH:			/* synth vol (dsp mix) */
 	case SOUND_MIXER_PCM:			/* pcm vol (dsp mix) */
 	case SOUND_MIXER_IMIX:			/* input monitor (dsp mix) */
+		/* scaled by master volume */
+		updatemaster = 1;
 		break;
 
 	default:
 		return 0;
 	}
 
-	/* update digital controls for master volume */
-	update_vol(SOUND_MIXER_PCM, wCurrPlayVol, 1);
-	update_vol(SOUND_MIXER_IMIX, wCurrInVol, 1);
+	if (updatemaster) {
+		/* update master volume scaled controls */
+		update_volm(SOUND_MIXER_PCM, wCurrPlayVol);
+		update_volm(SOUND_MIXER_IMIX, wCurrInVol);
 #ifndef MSND_CLASSIC
-	update_vol(SOUND_MIXER_SYNTH, wCurrMHdrVol, 1);
+		update_volm(SOUND_MIXER_SYNTH, wCurrMHdrVol);
 #endif
-	
+		update_potm(SOUND_MIXER_LINE1, bAuxPotPos, HDEXAR_AUX_SET_POTS);
+	}
+
 	return mixer_get(d);
 }
 
 static void mixer_setup(void)
 {
 	update_pot(SOUND_MIXER_LINE, bInPotPos, HDEXAR_IN_SET_POTS);
+	update_potm(SOUND_MIXER_LINE1, bAuxPotPos, HDEXAR_AUX_SET_POTS);
+	update_volm(SOUND_MIXER_PCM, wCurrPlayVol);
+	update_volm(SOUND_MIXER_IMIX, wCurrInVol);
 #ifndef MSND_CLASSIC
 	update_pot(SOUND_MIXER_MIC, bMicPotPos, HDEXAR_MIC_SET_POTS);
-#endif
-	update_pot(SOUND_MIXER_LINE1, bAuxPotPos, HDEXAR_AUX_SET_POTS);
-	update_vol(SOUND_MIXER_PCM, wCurrPlayVol, 1);
-	update_vol(SOUND_MIXER_IMIX, wCurrInVol, 1);
-#ifndef MSND_CLASSIC
-	update_vol(SOUND_MIXER_SYNTH, wCurrMHdrVol, 1);
+	update_volm(SOUND_MIXER_SYNTH, wCurrMHdrVol);
 #endif
 }
 
@@ -501,7 +516,7 @@ static unsigned long set_recsrc(unsigned long recsrc)
 		dev.recsrc ^= recsrc;
 
 #ifndef MSND_CLASSIC
-	if (dev.recsrc & SOUND_MASK_LINE) {
+	if (dev.recsrc & SOUND_MASK_IMIX) {
 		if (msnd_send_word(&dev, 0, 0, HDEXAR_SET_ANA_IN) == 0)
 			chk_send_dsp_cmd(&dev, HDEX_AUX_REQ);
 	}
@@ -518,7 +533,7 @@ static unsigned long set_recsrc(unsigned long recsrc)
 		/* Select no input (?) */
 		dev.recsrc = 0;
 #else
-		dev.recsrc = SOUND_MASK_LINE;
+		dev.recsrc = SOUND_MASK_IMIX;
 		if (msnd_send_word(&dev, 0, 0, HDEXAR_SET_ANA_IN) == 0)
 			chk_send_dsp_cmd(&dev, HDEX_AUX_REQ);
 #endif
@@ -545,13 +560,15 @@ static int mixer_ioctl(unsigned int cmd, unsigned long arg)
 		set_mixer_info();
 		info.modify_counter = dev.mixer_mod_count;
 		return copy_to_user((void *)arg, &info, sizeof(info));
-	}
-	else if (cmd == SOUND_OLD_MIXER_INFO) {
+	} else if (cmd == SOUND_OLD_MIXER_INFO) {
 		_old_mixer_info info;
 		set_mixer_info();
 		return copy_to_user((void *)arg, &info, sizeof(info));
-	}
-	else if (((cmd >> 8) & 0xff) == 'M') {
+	} else if (cmd == SOUND_MIXER_PRIVATE1) {
+		dev.nresets = 0;
+		dsp_full_reset();
+		return 0;
+	} else if (((cmd >> 8) & 0xff) == 'M') {
 		int val = 0;
 		
 		if (_SIOC_DIR(cmd) & _SIOC_WRITE) {
@@ -570,8 +587,7 @@ static int mixer_ioctl(unsigned int cmd, unsigned long arg)
 			}
 			++dev.mixer_mod_count;
 			return put_user(val, (int *)arg);
-		}
-		else {
+		} else {
 			switch (cmd & 0xff) {
 			case SOUND_MIXER_RECSRC:
 				val = dev.recsrc;
@@ -579,21 +595,22 @@ static int mixer_ioctl(unsigned int cmd, unsigned long arg)
 				
 			case SOUND_MIXER_DEVMASK:
 			case SOUND_MIXER_STEREODEVS:
-				val =   SOUND_MASK_VOLUME |
-#ifndef MSND_CLASSIC
-					SOUND_MASK_SYNTH |
-					SOUND_MASK_MIC |
-#endif
-					SOUND_MASK_PCM |
+				val =   SOUND_MASK_PCM |
 					SOUND_MASK_LINE |
-					SOUND_MASK_IMIX;
+					SOUND_MASK_IMIX |
+					SOUND_MASK_LINE1 |
+#ifndef MSND_CLASSIC
+					SOUND_MASK_MIC |
+					SOUND_MASK_SYNTH |
+#endif
+					SOUND_MASK_VOLUME;
 				break;
 				  
 			case SOUND_MIXER_RECMASK:
 #ifdef MSND_CLASSIC
 				val =   0;
 #else
-				val =   SOUND_MASK_LINE |
+				val =   SOUND_MASK_IMIX |
 					SOUND_MASK_SYNTH;
 				if (test_bit(F_HAVEDIGITAL, &dev.flags))
 					val |= SOUND_MASK_DIGITAL1;
@@ -639,7 +656,9 @@ static void dsp_write_flush(void)
 	if (!(dev.mode & FMODE_WRITE) || !test_bit(F_WRITING, &dev.flags))
 		return;
 	set_bit(F_WRITEFLUSH, &dev.flags);
-	interruptible_sleep_on_timeout(&dev.writeflush, get_play_delay_jiffies(dev.DAPF.len) + HZ / 8);
+	interruptible_sleep_on_timeout(
+		&dev.writeflush,
+		get_play_delay_jiffies(dev.DAPF.len));
 	clear_bit(F_WRITEFLUSH, &dev.flags);
 	if (!signal_pending(current)) {
 		current->state = TASK_INTERRUPTIBLE;
@@ -727,6 +746,16 @@ static void set_default_audio_parameters(void)
 	set_default_rec_audio_parameters();
 }
 
+static void mod_inc_ref(void)
+{
+	MOD_INC_USE_COUNT;
+}
+
+static void mod_dec_ref(void)
+{
+	MOD_DEC_USE_COUNT;
+}
+
 static int dev_open(struct inode *inode, struct file *file)
 {
 	int minor = MINOR(inode->i_rdev);
@@ -760,7 +789,7 @@ static int dev_open(struct inode *inode, struct file *file)
 		err = -EINVAL;
 	
 	if (err >= 0)
-		MOD_INC_USE_COUNT;
+		mod_inc_ref();
 
 	return err;
 }
@@ -791,7 +820,7 @@ static int dev_release(struct inode *inode, struct file *file)
 
 	if (err >= 0)
 #endif
-		MOD_DEC_USE_COUNT;
+		mod_dec_ref();
 
 #ifndef LINUX20	
 	return err;
@@ -919,7 +948,9 @@ static int dsp_read(char *buf, size_t len)
 
 		if (count > 0) {
 			set_bit(F_READBLOCK, &dev.flags);
-			if (!interruptible_sleep_on_timeout(&dev.readblock, get_rec_delay_jiffies(DAR_BUFF_SIZE)))
+			if (!interruptible_sleep_on_timeout(
+				&dev.readblock,
+				get_rec_delay_jiffies(DAR_BUFF_SIZE)))
 				clear_bit(F_READING, &dev.flags);
 			clear_bit(F_READBLOCK, &dev.flags);
 			if (signal_pending(current))
@@ -960,7 +991,9 @@ static int dsp_write(const char *buf, size_t len)
 
 		if (count > 0) {
 			set_bit(F_WRITEBLOCK, &dev.flags);
-			interruptible_sleep_on_timeout(&dev.writeblock, get_play_delay_jiffies(DAP_BUFF_SIZE));
+			interruptible_sleep_on_timeout(
+				&dev.writeblock,
+				get_play_delay_jiffies(DAP_BUFF_SIZE));
 			clear_bit(F_WRITEBLOCK, &dev.flags);
 			if (signal_pending(current))
 				return -EINTR;
@@ -1054,7 +1087,8 @@ static __inline__ void eval_dsp_msg(register WORD wMessage)
 			break;
 
 		default:
-/*			printk(KERN_DEBUG LOGNAME ": DSP message %d 0x%02x\n", LOBYTE(wMessage), LOBYTE(wMessage)); */
+/*			printk(KERN_DEBUG LOGNAME ": DSP message %d 0x%02x\n",
+			LOBYTE(wMessage), LOBYTE(wMessage)); */
 			break;
 		}
 		break;
@@ -1150,11 +1184,9 @@ __initfunc(static int probe_multisound(void))
 		return -ENODEV;
 	}
 
-	printk(KERN_INFO LOGNAME ": DSP reset successful\n");
-
 #ifdef MSND_CLASSIC
 	dev.name = "Classic/Tahiti/Monterey";
-	printk(KERN_INFO LOGNAME ": Turtle Beach %s, "
+	printk(KERN_INFO LOGNAME ": %s, "
 #else
 	switch (dev.info >> 4) {
 	case 0xf: xv = "<= 1.15"; break;
@@ -1177,7 +1209,7 @@ __initfunc(static int probe_multisound(void))
 		dev.name = pinfiji;
 		break;
 	}
-	printk(KERN_INFO LOGNAME ": Turtle Beach %s revision %s, Xilinx version %s, "
+	printk(KERN_INFO LOGNAME ": %s revision %s, Xilinx version %s, "
 #endif /* MSND_CLASSIC */
 	       "I/O 0x%x-0x%x, IRQ %d, memory mapped to 0x%p-0x%p\n",
 	       dev.name,
@@ -1275,26 +1307,20 @@ static int init_sma(void)
 
 __initfunc(static int calibrate_adc(WORD srate))
 {
-	if (!dev.calibrate_signal) {
-		printk(KERN_INFO LOGNAME ": ADC calibration to board ground ");
+	writew(srate, dev.SMA + SMA_wCalFreqAtoD);
+	if (dev.calibrate_signal == 0)
 		writew(readw(dev.SMA + SMA_wCurrHostStatusFlags)
 		       | 0x0001, dev.SMA + SMA_wCurrHostStatusFlags);
-	} else {
-		printk(KERN_INFO LOGNAME ": ADC calibration to signal ground ");
+	else
 		writew(readw(dev.SMA + SMA_wCurrHostStatusFlags)
 		       & ~0x0001, dev.SMA + SMA_wCurrHostStatusFlags);
-	}
-	
-	writew(srate, dev.SMA + SMA_wCalFreqAtoD);
-
 	if (msnd_send_word(&dev, 0, 0, HDEXAR_CAL_A_TO_D) == 0 &&
 	    chk_send_dsp_cmd(&dev, HDEX_AUX_REQ) == 0) {
 		current->state = TASK_INTERRUPTIBLE;
 		schedule_timeout(HZ / 3);
-		printk("successful\n");
 		return 0;
 	}
-	printk("failed\n");
+	printk(KERN_WARNING LOGNAME ": ADC calibration failed\n");
 
 	return -EIO;
 }
@@ -1302,11 +1328,7 @@ __initfunc(static int calibrate_adc(WORD srate))
 static int upload_dsp_code(void)
 {
 	outb(HPBLKSEL_0, dev.io + HP_BLKS);
-
-#ifdef HAVE_DSPCODEH
-	printk(KERN_INFO LOGNAME ": Using resident Turtle Beach DSP code\n");
-#else	
-	printk(KERN_INFO LOGNAME ": Loading Turtle Beach DSP code\n");
+#ifndef HAVE_DSPCODEH
 	INITCODESIZE = mod_firmware_load(INITCODEFILE, &INITCODE);
 	if (!INITCODE) {
 		printk(KERN_ERR LOGNAME ": Error loading " INITCODEFILE);
@@ -1325,6 +1347,11 @@ static int upload_dsp_code(void)
 		printk(KERN_WARNING LOGNAME ": Error uploading to DSP\n");
 		return -ENODEV;
 	}
+#ifdef HAVE_DSPCODEH
+	printk(KERN_INFO LOGNAME ": DSP firmware uploaded (resident)\n");
+#else
+	printk(KERN_INFO LOGNAME ": DSP firmware uploaded\n");
+#endif
 
 #ifndef HAVE_DSPCODEH
 	vfree(INITCODE);
@@ -1365,9 +1392,7 @@ static int initialize(void)
 	if ((err = upload_dsp_code()) < 0) {
 		printk(KERN_WARNING LOGNAME ": Cannot upload DSP code\n");
 		return err;
-
-	} else
-		printk(KERN_INFO LOGNAME ": DSP upload successful\n");
+	}
 
 	timeout = 200;
 	while (readw(dev.base)) {
@@ -1390,8 +1415,8 @@ static int dsp_full_reset(void)
 	if (test_bit(F_RESETTING, &dev.flags) || ++dev.nresets > 10)
 		return 0;
 
-	printk(KERN_INFO LOGNAME ": Resetting DSP\n");
 	set_bit(F_RESETTING, &dev.flags);
+	printk(KERN_INFO LOGNAME ": DSP reset\n");
 	dsp_halt(NULL);			/* Unconditionally halt */
 	if ((rv = initialize()))
 		printk(KERN_WARNING LOGNAME ": DSP reset failed\n");
@@ -1441,13 +1466,11 @@ __initfunc(static int attach_multisound(void))
 		free_irq(dev.irq, &dev);
 		return dev.mixer_minor;
 	}
-	printk(KERN_INFO LOGNAME ": Using DSP minor %d, mixer minor %d\n", dev.dsp_minor, dev.mixer_minor);
 
 	disable_irq(dev.irq);
 	calibrate_adc(dev.play_sample_rate);
 #ifndef MSND_CLASSIC
-	printk(KERN_INFO LOGNAME ": Setting initial recording source to Line In\n");
-	force_recsrc(SOUND_MASK_LINE);
+	force_recsrc(SOUND_MASK_IMIX);
 #endif
 	
 	return 0;
@@ -1463,16 +1486,6 @@ static void unload_multisound(void)
 	msnd_unregister(&dev);
 }
 #endif
-
-static void mod_inc_ref(void)
-{
-	MOD_INC_USE_COUNT;
-}
-
-static void mod_dec_ref(void)
-{
-	MOD_DEC_USE_COUNT;
-}
 
 #ifndef MSND_CLASSIC
 
@@ -1896,14 +1909,10 @@ __initfunc(int msnd_pinnacle_init(void))
 		clear_bit(F_DISABLE_WRITE_NDELAY, &dev.flags);
 	else
 		set_bit(F_DISABLE_WRITE_NDELAY, &dev.flags);
-
 #ifndef MSND_CLASSIC
-	if (digital) {
+	if (digital)
 		set_bit(F_HAVEDIGITAL, &dev.flags);
-		printk(KERN_INFO LOGNAME ": Digital I/O access enabled\n");
-	}
 #endif
-
 	init_waitqueue(&dev.writeblock);
 	init_waitqueue(&dev.readblock);
 	init_waitqueue(&dev.writeflush);
@@ -1912,9 +1921,7 @@ __initfunc(int msnd_pinnacle_init(void))
 #ifndef LINUX20
 	spin_lock_init(&dev.lock);
 #endif
-
-	printk(KERN_INFO LOGNAME ": Using %u byte digital audio FIFOs (x2)\n", dev.fifosize);
-
+	printk(KERN_INFO LOGNAME ": %u byte audio FIFOs (x2)\n", dev.fifosize);
 	if ((err = msnd_fifo_alloc(&dev.DAPF, dev.fifosize)) < 0) {
 		printk(KERN_ERR LOGNAME ": Couldn't allocate write FIFO\n");
 		return err;
@@ -1946,10 +1953,7 @@ __initfunc(int msnd_pinnacle_init(void))
 #ifdef MODULE
 void cleanup_module(void)
 {
-	printk(KERN_INFO LOGNAME ": Unloading\n");
-
 	unload_multisound();
-
 	msnd_fifo_free(&dev.DAPF);
 	msnd_fifo_free(&dev.DARF);
 }

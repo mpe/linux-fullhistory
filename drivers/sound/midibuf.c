@@ -40,7 +40,7 @@ struct midi_buf
 
 struct midi_parms
 {
-	int prech_timeout;	/*
+	long prech_timeout;	/*
 				 * Timeout before the first ch
 				 */
 };
@@ -282,8 +282,14 @@ int MIDIbuf_write(int dev, struct file *file, const char *buf, int count)
 		n = SPACE_AVAIL(midi_out_buf[dev]);
 
 		if (n == 0) {	/*
-				 * No space just now. We have to sleep
+				 * No space just now.
 				 */
+
+			if (file->f_flags & O_NONBLOCK) {
+				restore_flags(flags);
+				return -EAGAIN;
+			}
+
 			interruptible_sleep_on(&midi_sleeper[dev]);
 			if (signal_pending(current)) 
 			{
@@ -322,6 +328,10 @@ int MIDIbuf_read(int dev, struct file *file, char *buf, int count)
 	if (!DATA_AVAIL(midi_in_buf[dev])) {	/*
 						 * No data yet, wait
 						 */
+ 		if (file->f_flags & O_NONBLOCK) {
+ 			restore_flags(flags);
+ 			return -EAGAIN;
+ 		}
 		interruptible_sleep_on_timeout(&input_sleeper[dev],
 					       parms[dev].prech_timeout);
 

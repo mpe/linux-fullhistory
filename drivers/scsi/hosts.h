@@ -14,6 +14,8 @@
  *
  *  Further modified by Eric Youngdale to support multiple host adapters
  *  of the same type.
+ *
+ *  Jiffies wrap fixes (host->resetting), 3 Dec 1998 Andrea Arcangeli
  */
 
 #ifndef _HOSTS_H
@@ -320,6 +322,7 @@ struct Scsi_Host
 /* public: */
     unsigned short extra_bytes;
     unsigned short host_no;  /* Used for IOCTL_GET_IDLUN, /proc/scsi et al. */
+    int resetting; /* if set, it means that last_reset is a valid value */
     unsigned long last_reset;
 
 

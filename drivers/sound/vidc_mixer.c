@@ -47,13 +47,15 @@ static int vidc_default_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 			break;
 
 		case SOUND_MIXER_READ_SYNTH:
-			ret = vidc_synth_get_volume();
+//			ret = vidc_synth_get_volume();
+			ret = 0;
 			break;
 
 		case SOUND_MIXER_WRITE_SYNTH:
 			if (get_user(ret, (int *) arg))
 				return -EINVAL;
-			ret = vidc_synth_set_volume(ret);
+//			ret = vidc_synth_set_volume(ret);
+			ret = 0;
 			break;
 
 		case SOUND_MIXER_READ_PCM:
