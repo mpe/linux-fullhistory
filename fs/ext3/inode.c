@@ -1016,7 +1016,10 @@ retry:
 		ret = PTR_ERR(handle);
 		goto out;
 	}
-	ret = block_prepare_write(page, from, to, ext3_get_block);
+	if (test_opt(inode->i_sb, NOBH))
+		ret = nobh_prepare_write(page, from, to, ext3_get_block);
+	else
+		ret = block_prepare_write(page, from, to, ext3_get_block);
 	if (ret)
 		goto prepare_write_failed;
 
@@ -1100,7 +1103,12 @@ static int ext3_writeback_commit_write(struct file *file, struct page *page,
 	new_i_size = ((loff_t)page->index << PAGE_CACHE_SHIFT) + to;
 	if (new_i_size > EXT3_I(inode)->i_disksize)
 		EXT3_I(inode)->i_disksize = new_i_size;
-	ret = generic_commit_write(file, page, from, to);
+
+	if (test_opt(inode->i_sb, NOBH))
+		ret = nobh_commit_write(file, page, from, to);
+	else
+		ret = generic_commit_write(file, page, from, to);
+
 	ret2 = ext3_journal_stop(handle);
 	if (!ret)
 		ret = ret2;
@@ -1385,7 +1393,11 @@ static int ext3_writeback_writepage(struct page *page,
 		goto out_fail;
 	}
 
-	ret = block_write_full_page(page, ext3_get_block, wbc);
+	if (test_opt(inode->i_sb, NOBH))
+		ret = nobh_writepage(page, ext3_get_block, wbc);
+	else
+		ret = block_write_full_page(page, ext3_get_block, wbc);
+
 	err = ext3_journal_stop(handle);
 	if (!ret)
 		ret = err;
@@ -1484,6 +1496,8 @@ static int ext3_releasepage(struct page *page, int wait)
 	journal_t *journal = EXT3_JOURNAL(page->mapping->host);
 
 	WARN_ON(PageChecked(page));
+	if (!page_has_buffers(page))
+		return 0;
 	return journal_try_to_free_buffers(journal, page, wait);
 }
 
@@ -1646,12 +1660,27 @@ static int ext3_block_truncate_page(handle_t *handle, struct page *page,
 	unsigned blocksize, iblock, length, pos;
 	struct inode *inode = mapping->host;
 	struct buffer_head *bh;
-	int err;
+	int err = 0;
 	void *kaddr;
 
 	blocksize = inode->i_sb->s_blocksize;
 	length = blocksize - (offset & (blocksize - 1));
 	iblock = index << (PAGE_CACHE_SHIFT - inode->i_sb->s_blocksize_bits);
+
+	/*
+	 * For "nobh" option,  we can only work if we don't need to
+	 * read-in the page - otherwise we create buffers to do the IO.
+	 */
+	if (!page_has_buffers(page) && test_opt(inode->i_sb, NOBH)) {
+		if (PageUptodate(page)) {
+			kaddr = kmap_atomic(page, KM_USER0);
+			memset(kaddr + offset, 0, length);
+			flush_dcache_page(page);
+			kunmap_atomic(kaddr, KM_USER0);
+			set_page_dirty(page);
+			goto unlock;
+		}
+	}
 
 	if (!page_has_buffers(page))
 		create_empty_buffers(page, blocksize, 0);
