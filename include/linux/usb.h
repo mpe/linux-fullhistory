@@ -412,7 +412,7 @@ typedef struct urb
 	struct usb_device *dev;		// pointer to associated USB device
 	unsigned int pipe;		// pipe information
 	int status;			// returned status
-	unsigned int transfer_flags;	// USB_DISABLE_SPD | USB_ISO_ASAP | USB_URB_EARLY_COMPLETE
+	unsigned int transfer_flags;	// USB_DISABLE_SPD | USB_ISO_ASAP | etc.
 	void *transfer_buffer;		// associated data buffer
 	int transfer_buffer_length;	// data buffer length
 	int actual_length;              // actual data buffer length	
@@ -428,7 +428,7 @@ typedef struct urb
 	void *context;			// context for completion routine
 	usb_complete_t complete;	// pointer to completion routine
 	//
-	iso_packet_descriptor_t	 iso_frame_desc[0];
+	iso_packet_descriptor_t iso_frame_desc[0];
 } urb_t, *purb_t;
 
 #define FILL_CONTROL_URB(a,aa,b,c,d,e,f,g) \

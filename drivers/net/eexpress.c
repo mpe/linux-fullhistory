@@ -344,6 +344,8 @@ int __init express_probe(struct net_device *dev)
 	static unsigned short ports[] = { 0x300,0x310,0x270,0x320,0x340,0 };
 	unsigned short ioaddr = dev->base_addr;
 
+	SET_MODULE_OWNER(dev);
+
 	dev->if_port = 0xff; /* not set */
 
 #ifdef CONFIG_MCA
@@ -420,7 +422,7 @@ int __init express_probe(struct net_device *dev)
 
 static int eexp_open(struct net_device *dev)
 {
-	int irq = dev->irq;
+	int ret;
 	unsigned short ioaddr = dev->base_addr;
 	struct net_local *lp = (struct net_local *)dev->priv;
 
@@ -428,11 +430,11 @@ static int eexp_open(struct net_device *dev)
 	printk(KERN_DEBUG "%s: eexp_open()\n", dev->name);
 #endif
 
-	if (!irq || !irqrmap[irq])
+	if (!dev->irq || !irqrmap[dev->irq])
 		return -ENXIO;
 
-	if (request_irq(irq,&eexp_irq,0,"EtherExpress",dev))
-		return -EAGAIN;
+	ret = request_irq(dev->irq,&eexp_irq,0,dev->name,dev);
+	if (ret) return ret;
 
 	request_region(ioaddr, EEXP_IO_EXTENT, "EtherExpress");
 	request_region(ioaddr+0x4000, 16, "EtherExpress shadow");
@@ -445,7 +447,6 @@ static int eexp_open(struct net_device *dev)
 	}
 
 	eexp_hw_init586(dev);
-	MOD_INC_USE_COUNT;
 	netif_start_queue(dev);
 #if NET_DEBUG > 6
 	printk(KERN_DEBUG "%s: leaving eexp_open()\n", dev->name);
@@ -477,7 +478,6 @@ static int eexp_close(struct net_device *dev)
 	release_region(ioaddr+0x8000, 16);
 	release_region(ioaddr+0xc000, 16);
 
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -1625,14 +1625,9 @@ eexp_set_multicast(struct net_device *dev)
 
 #define EEXP_MAX_CARDS     4    /* max number of cards to support */
 
-static struct net_device dev_eexp[EEXP_MAX_CARDS] =
-{
-        { "",
-	  0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, express_probe },
-};
-
-static int irq[EEXP_MAX_CARDS] = {0, };
-static int io[EEXP_MAX_CARDS] = {0, };
+static struct net_device dev_eexp[EEXP_MAX_CARDS];
+static int irq[EEXP_MAX_CARDS];
+static int io[EEXP_MAX_CARDS];
 
 MODULE_PARM(io, "1-" __MODULE_STRING(EEXP_MAX_CARDS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(EEXP_MAX_CARDS) "i");
@@ -1649,6 +1644,7 @@ int init_module(void)
 		struct net_device *dev = &dev_eexp[this_dev];
 		dev->irq = irq[this_dev];
 		dev->base_addr = io[this_dev];
+		dev->init = express_probe;
 		if (io[this_dev] == 0) {
 			if (this_dev) break;
 			printk(KERN_NOTICE "eexpress.c: Module autoprobe not recommended, give io=xx.\n");

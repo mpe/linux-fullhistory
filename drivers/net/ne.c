@@ -157,7 +157,9 @@ static void ne_block_output(struct net_device *dev, const int count,
 
 int __init ne_probe(struct net_device *dev)
 {
-	unsigned int base_addr = dev ? dev->base_addr : 0;
+	unsigned int base_addr = dev->base_addr;
+
+	SET_MODULE_OWNER(dev);
 
 	/* First check any supplied i/o locations. User knows best. <cough> */
 	if (base_addr > 0x1ff)	/* Check a single specified location. */
@@ -469,7 +471,6 @@ err_out:
 static int ne_open(struct net_device *dev)
 {
 	ei_open(dev);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -478,7 +479,6 @@ static int ne_close(struct net_device *dev)
 	if (ei_debug > 1)
 		printk(KERN_DEBUG "%s: Shutting down ethercard.\n", dev->name);
 	ei_close(dev);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 

@@ -19,12 +19,12 @@
  *  Modification History:
  *	30-Dec-99	AF	Split off from the tms380tr driver.
  *	22-Jan-00	AF	Updated to use indirect read/writes
+ *	23-Nov-00	JG	New PCI API, cleanups
  *
  *  TODO:
  *	1. See if we can use MMIO instead of port accesses
  *
  */
-static const char *version = "tmspci.c: v1.01 22/01/2000 by Adam Fritzler\n";
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -41,33 +41,32 @@ static const char *version = "tmspci.c: v1.01 22/01/2000 by Adam Fritzler\n";
 #include <linux/trdevice.h>
 #include "tms380tr.h"
 
+static char version[] __initdata =
+"tmspci.c: v1.02 23/11/2000 by Adam Fritzler\n";
+
 #define TMS_PCI_IO_EXTENT 32
 
-struct cardinfo_table {
-	int vendor_id; /* PCI info */
-	int device_id;
-	int registeroffset; /* SIF offset from dev->base_addr */
+struct card_info {
 	unsigned char nselout[2]; /* NSELOUT vals for 4mb([0]) and 16mb([1]) */
 	char *name;
 };
 
-struct cardinfo_table probelist[] = {
-	{ 0, 0,
-	  0x0000, {0x00, 0x00}, "Unknown TMS380 Token Ring Adapter"},
-	{ PCI_VENDOR_ID_COMPAQ, PCI_DEVICE_ID_COMPAQ_TOKENRING, 
-	  0x0000, {0x03, 0x01}, "Compaq 4/16 TR PCI"},
-	{ PCI_VENDOR_ID_SYSKONNECT, PCI_DEVICE_ID_SYSKONNECT_TR, 
-	  0x0000, {0x03, 0x01}, "SK NET TR 4/16 PCI"},
-	{ PCI_VENDOR_ID_TCONRAD, PCI_DEVICE_ID_TCONRAD_TOKENRING,
-	  0x0000, {0x03, 0x01}, "Thomas-Conrad TC4048 PCI 4/16"},
-	{ PCI_VENDOR_ID_3COM, PCI_DEVICE_ID_3COM_3C339,
-	  0x0000, {0x03, 0x01}, "3Com Token Link Velocity"},
-	{ 0, 0, 0, {0x00, 0x00}, NULL}
+static struct card_info card_info_table[] = {
+	{ {0x03, 0x01}, "Compaq 4/16 TR PCI"},
+	{ {0x03, 0x01}, "SK NET TR 4/16 PCI"},
+	{ {0x03, 0x01}, "Thomas-Conrad TC4048 PCI 4/16"},
+	{ {0x03, 0x01}, "3Com Token Link Velocity"},
 };
 
-int tms_pci_probe(void);
-static int tms_pci_open(struct net_device *dev);
-static int tms_pci_close(struct net_device *dev);
+static struct pci_device_id tmspci_pci_tbl[] __initdata = {
+	{ PCI_VENDOR_ID_COMPAQ, PCI_DEVICE_ID_COMPAQ_TOKENRING, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+	{ PCI_VENDOR_ID_SYSKONNECT, PCI_DEVICE_ID_SYSKONNECT_TR, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 1 },
+	{ PCI_VENDOR_ID_TCONRAD, PCI_DEVICE_ID_TCONRAD_TOKENRING, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 2 },
+	{ PCI_VENDOR_ID_3COM, PCI_DEVICE_ID_3COM_3C339, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 3 },
+	{ }			/* Terminating entry */
+};
+MODULE_DEVICE_TABLE(pci, tmspci_pci_tbl);
+
 static void tms_pci_read_eeprom(struct net_device *dev);
 static unsigned short tms_pci_setnselout_pins(struct net_device *dev);
 
@@ -91,145 +90,97 @@ static void tms_pci_sifwritew(struct net_device *dev, unsigned short val, unsign
 	outw(val, dev->base_addr + reg);
 }
 
-struct tms_pci_card {
-	struct net_device *dev;
-	struct pci_dev *pci_dev;
-	struct cardinfo_table *cardinfo;
-	struct tms_pci_card *next;
-};
-static struct tms_pci_card *tms_pci_card_list = NULL;
-
-
-struct cardinfo_table * __init tms_pci_getcardinfo(unsigned short vendor, 
-						   unsigned short device)
-{
-	int cur;
-	for (cur = 1; probelist[cur].name != NULL; cur++) {
-		if ((probelist[cur].vendor_id == vendor) && 
-		    (probelist[cur].device_id == device))
-			return &probelist[cur];
-	}
-	
-	return NULL;
-}
-
-int __init tms_pci_probe(void)
+static int __init tms_pci_attach(struct pci_dev *pdev, const struct pci_device_id *ent)
 {	
-	static int versionprinted = 0;
-	struct pci_dev *pdev = NULL ; 
+	static int versionprinted;
 	struct net_device *dev;
 	struct net_local *tp;
-	int i;
-
-	if (!pci_present())
-		return (-1);	/* No PCI present. */
-  
-	while ( (pdev=pci_find_class(PCI_CLASS_NETWORK_TOKEN_RING<<8, pdev))) { 
-		unsigned int pci_irq_line;
-		unsigned long pci_ioaddr;
-		struct tms_pci_card *card;
-		struct cardinfo_table *cardinfo;
+	int i, ret;
+	unsigned int pci_irq_line;
+	unsigned long pci_ioaddr;
+	struct card_info *cardinfo = &card_info_table[ent->driver_data];
 		
-		if ((cardinfo = 
-		     tms_pci_getcardinfo(pdev->vendor, pdev->device)) == NULL)
-			continue;	
+	if (versionprinted++ == 0)
+		printk("%s", version);
 
-		if (versionprinted++ == 0)
-			printk("%s", version);
+	if (pci_enable_device(pdev))
+		return -EIO;
 
-		if (pci_enable_device(pdev))
-			continue;
+	/* Remove I/O space marker in bit 0. */
+	pci_irq_line = pdev->irq;
+	pci_ioaddr = pci_resource_start (pdev, 0);
 
-		/* Remove I/O space marker in bit 0. */
-		pci_irq_line = pdev->irq;
-		pci_ioaddr = pci_resource_start (pdev, 0);
+	/* At this point we have found a valid card. */
+	dev = init_trdev(NULL, 0);
+	if (!dev)
+		return -ENOMEM;
+	SET_MODULE_OWNER(dev);
 		
-		if(check_region(pci_ioaddr, TMS_PCI_IO_EXTENT))
-			continue;
-    
-		/* At this point we have found a valid card. */
-    
-		dev = init_trdev(NULL, 0);
-		if (!dev) {
-			continue; /*return (-ENOMEM);*/ /* continue; ?? */
-		}
-		
-		request_region(pci_ioaddr, TMS_PCI_IO_EXTENT, cardinfo->name); /* XXX check return */
-		if(request_irq(pdev->irq, tms380tr_interrupt, SA_SHIRQ,
-			       cardinfo->name, dev)) { 
-			release_region(pci_ioaddr, TMS_PCI_IO_EXTENT); 
-			/* XXX free trdev */
-			continue; /*return (-ENODEV);*/ /* continue; ?? */
-		}
-
-		/*
-		  if (load_tms380_module("tmspci.c")) {
-		  return 0;
-		  }
-		*/
-
-		pci_ioaddr &= ~3 ; 
-		dev->base_addr	= pci_ioaddr;
-		dev->irq 		= pci_irq_line;
-		dev->dma		= 0;
-		
-		printk("%s: %s\n", dev->name, cardinfo->name);
-		printk("%s:    IO: %#4lx  IRQ: %d\n",
-		       dev->name, dev->base_addr, dev->irq);
-		/*
-		 * Some cards have their TMS SIF registers offset from
-		 * their given base address.  Account for that here. 
-		 */
-		dev->base_addr += cardinfo->registeroffset;
-		
-		tms_pci_read_eeprom(dev);
-
-		printk("%s:    Ring Station Address: ", dev->name);
-		printk("%2.2x", dev->dev_addr[0]);
-		for (i = 1; i < 6; i++)
-			printk(":%2.2x", dev->dev_addr[i]);
-		printk("\n");
-		
-		if (tmsdev_init(dev)) {
-			printk("%s: unable to get memory for dev->priv.\n", dev->name);
-			return 0;
-		}
-
-		tp = (struct net_local *)dev->priv;
-		tp->dmalimit = 0; /* XXX: should be the max PCI32 DMA max */
-		tp->setnselout = tms_pci_setnselout_pins;
-		
-		tp->sifreadb = tms_pci_sifreadb;
-		tp->sifreadw = tms_pci_sifreadw;
-		tp->sifwriteb = tms_pci_sifwriteb;
-		tp->sifwritew = tms_pci_sifwritew;
-		
-		memcpy(tp->ProductID, cardinfo->name, PROD_ID_SIZE + 1);
-
-		tp->tmspriv = cardinfo;
-
-		dev->open = tms_pci_open;
-		dev->stop = tms_pci_close;
-
-		if (register_trdev(dev) == 0) {
-			/* Enlist in the card list */
-			card = kmalloc(sizeof(struct tms_pci_card), GFP_KERNEL);
-			card->next = tms_pci_card_list;
-			tms_pci_card_list = card;
-			card->dev = dev;
-			card->pci_dev = pdev;
-			card->cardinfo = cardinfo;
-		} else {
-			printk("%s: register_trdev() returned non-zero.\n", dev->name);
-			kfree(dev->priv);
-			kfree(dev);
-			return -1;
-		}
+	if (!request_region(pci_ioaddr, TMS_PCI_IO_EXTENT, dev->name)) {
+		ret = -EBUSY;
+		goto err_out_trdev;
 	}
+
+	ret = request_irq(pdev->irq, tms380tr_interrupt, SA_SHIRQ,
+			  dev->name, dev);
+	if (ret)
+		goto err_out_region;
+
+	dev->base_addr	= pci_ioaddr;
+	dev->irq 	= pci_irq_line;
+	dev->dma	= 0;
+
+	printk("%s: %s\n", dev->name, cardinfo->name);
+	printk("%s:    IO: %#4lx  IRQ: %d\n",
+	       dev->name, dev->base_addr, dev->irq);
+		
+	tms_pci_read_eeprom(dev);
+
+	printk("%s:    Ring Station Address: ", dev->name);
+	printk("%2.2x", dev->dev_addr[0]);
+	for (i = 1; i < 6; i++)
+		printk(":%2.2x", dev->dev_addr[i]);
+	printk("\n");
+		
+	ret = tmsdev_init(dev);
+	if (ret) {
+		printk("%s: unable to get memory for dev->priv.\n", dev->name);
+		goto err_out_irq;
+	}
+
+	tp = dev->priv;
+	tp->dmalimit = 0; /* XXX: should be the max PCI32 DMA max */
+	tp->setnselout = tms_pci_setnselout_pins;
+		
+	tp->sifreadb = tms_pci_sifreadb;
+	tp->sifreadw = tms_pci_sifreadw;
+	tp->sifwriteb = tms_pci_sifwriteb;
+	tp->sifwritew = tms_pci_sifwritew;
+		
+	memcpy(tp->ProductID, cardinfo->name, PROD_ID_SIZE + 1);
+
+	tp->tmspriv = cardinfo;
+
+	dev->open = tms380tr_open;
+	dev->stop = tms380tr_close;
+
+	ret = register_trdev(dev);
+	if (!ret)
+		goto err_out_tmsdev;
 	
-	if (tms_pci_card_list)
-		return 0;
-	return (-1);
+	pci_set_drvdata(pdev, dev);
+	return 0;
+
+err_out_tmsdev:
+	kfree(dev->priv);
+err_out_irq:
+	free_irq(pdev->irq, dev);
+err_out_region:
+	release_region(pci_ioaddr, TMS_PCI_IO_EXTENT);
+err_out_trdev:
+	unregister_netdev(dev);
+	kfree(dev);
+	return ret;
 }
 
 /*
@@ -255,11 +206,11 @@ static void tms_pci_read_eeprom(struct net_device *dev)
 		dev->dev_addr[i] = tms_pci_sifreadw(dev, SIFINC) >> 8;
 }
 
-unsigned short tms_pci_setnselout_pins(struct net_device *dev)
+static unsigned short tms_pci_setnselout_pins(struct net_device *dev)
 {
 	unsigned short val = 0;
-	struct net_local *tp = (struct net_local *)dev->priv;
-	struct cardinfo_table *cardinfo = (struct cardinfo_table *)tp->tmspriv;
+	struct net_local *tp = dev->priv;
+	struct card_info *cardinfo = tp->tmspriv;
   
 	if(tp->DataRate == SPEED_4)
 		val |= cardinfo->nselout[0];	/* Set 4Mbps */
@@ -268,65 +219,46 @@ unsigned short tms_pci_setnselout_pins(struct net_device *dev)
 	return val;
 }
 
-static int tms_pci_open(struct net_device *dev)
-{  
-	tms380tr_open(dev);
-	MOD_INC_USE_COUNT;
+static void __exit tms_pci_detach (struct pci_dev *pdev)
+{
+	struct net_device *dev = pci_get_drvdata(pdev);
+
+	if (!dev)
+		BUG();
+	unregister_netdev(dev);
+	release_region(dev->base_addr, TMS_PCI_IO_EXTENT);
+	free_irq(dev->irq, dev);
+	kfree(dev->priv);
+	kfree(dev);
+	pci_set_drvdata(pdev, NULL);
+}
+
+static struct pci_driver tms_pci_driver = {
+	name:		"tmspci",
+	id_table:	tmspci_pci_tbl,
+	probe:		tms_pci_attach,
+	remove:		tms_pci_detach,
+};
+
+static int __init tms_pci_init (void)
+{
+	int rc = pci_register_driver (&tms_pci_driver);
+	if (rc < 0)
+		return rc;
+	if (rc == 0) {
+		pci_unregister_driver (&tms_pci_driver);
+		return -ENODEV;
+	}
 	return 0;
 }
 
-static int tms_pci_close(struct net_device *dev)
+static void __exit tms_pci_rmmod (void)
 {
-	tms380tr_close(dev);
-	MOD_DEC_USE_COUNT;
-	return 0;
+	pci_unregister_driver (&tms_pci_driver);
 }
 
-#ifdef MODULE
-
-int init_module(void)
-{
-	/* Probe for cards. */
-	if (tms_pci_probe()) {
-		printk(KERN_NOTICE "tmspci.c: No cards found.\n");
-	}
-	/* lock_tms380_module(); */
-	return (0);
-}
-
-void cleanup_module(void)
-{
-	struct net_device *dev;
-	struct tms_pci_card *this_card;
-
-	while (tms_pci_card_list) {
-		dev = tms_pci_card_list->dev;
-		
-		/*
-		 * If we used a register offset, revert here.
-		 */
-		if (dev->priv)
-		{	
-			struct net_local *tp;
-			struct cardinfo_table *cardinfo;
-
-			tp = (struct net_local *)dev->priv;
-			cardinfo = (struct cardinfo_table *)tp->tmspriv;
-			
-			dev->base_addr -= cardinfo->registeroffset;
-		}
-		unregister_netdev(dev);
-		release_region(dev->base_addr, TMS_PCI_IO_EXTENT);
-		free_irq(dev->irq, dev);
-		kfree(dev->priv);
-		kfree(dev);
-		this_card = tms_pci_card_list;
-		tms_pci_card_list = this_card->next;
-		kfree(this_card);
-	}
-	/* unlock_tms380_module(); */
-}
-#endif /* MODULE */
+module_init(tms_pci_init);
+module_exit(tms_pci_rmmod);
 
 
 /*

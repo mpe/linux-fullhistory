@@ -244,6 +244,7 @@ static int __devinit ne2k_pci_init_one (struct pci_dev *pdev,
 		printk (KERN_ERR "ne2k-pci: cannot allocate ethernet device\n");
 		goto err_out_free_res;
 	}
+	SET_MODULE_OWNER(dev);
 
 	/* Reset card. Who knows what dain-bramaged state it was left in. */
 	{
@@ -358,11 +359,10 @@ err_out_free_res:
 
 static int ne2k_pci_open(struct net_device *dev)
 {
-	MOD_INC_USE_COUNT;
-	if (request_irq(dev->irq, ei_interrupt, SA_SHIRQ, dev->name, dev)) {
-		MOD_DEC_USE_COUNT;
-		return -EAGAIN;
-	}
+	int ret = request_irq(dev->irq, ei_interrupt, SA_SHIRQ, dev->name, dev);
+	if (ret)
+		return ret;
+
 	/* Set full duplex for the chips that we know about. */
 	if (ei_status.ne2k_flags & FORCE_FDX) {
 		long ioaddr = dev->base_addr;
@@ -380,7 +380,6 @@ static int ne2k_pci_close(struct net_device *dev)
 {
 	ei_close(dev);
 	free_irq(dev->irq, dev);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 

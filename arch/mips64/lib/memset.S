@@ -1,15 +1,16 @@
-/* $Id: memset.S,v 1.3 2000/01/15 23:48:55 ralf Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1998, 1999 by Ralf Baechle
- * Copyright (C) 1999 Silicon Graphics, Inc.
+ * Copyright (C) 1998, 1999, 2000 by Ralf Baechle
+ * Copyright (C) 1999, 2000 Silicon Graphics, Inc.
  */
 #include <asm/asm.h>
 #include <asm/offset.h>
 #include <asm/regdef.h>
+#include <asm/mipsregs.h>
+#include <asm/stackframe.h>
 
 #define EX(insn,reg,addr,handler)			\
 9:	insn	reg, addr;				\
@@ -34,8 +35,6 @@
  * a1: char to fill with
  * a2: size of area to clear
  */
-#include <asm/mipsregs.h>
-#include <asm/stackframe.h>
 	.set	noreorder
 	.align	5
 LEAF(memset)

@@ -116,6 +116,7 @@ static int __init hplance_init(struct net_device *dev, int scode)
 		return -ENOMEM;
 	memset(dev->priv, 0, sizeof(struct hplance_private));
 #endif
+	SET_MODULE_OWNER(dev);
 
         printk("%s: HP LANCE; select code %d, addr", dev->name, scode);
 
@@ -212,7 +213,6 @@ static int hplance_open(struct net_device *dev)
         /* enable interrupts at board level. */
         writeb(LE_IE, &(hpregs->status));
 
-        MOD_INC_USE_COUNT;
         return 0;
 }
 
@@ -222,7 +222,6 @@ static int hplance_close(struct net_device *dev)
         struct hplance_reg *hpregs = (struct hplance_reg *)lp->base;
         writeb(0,&(hpregs->status));              /* disable interrupts at boardlevel */
         lance_close(dev);
-        MOD_DEC_USE_COUNT;
         return 0;
 }
 

@@ -1487,7 +1487,7 @@ struct awc_private {
 	volatile int		ejected;
 	volatile int		bh_running;
 	volatile int		bh_active;
-	volatile int		tx_chain_active;
+	volatile long		tx_chain_active;
 	volatile u16		enabled_interrupts;
 	volatile u16		waiting_interrupts;
 	volatile int		interrupt_count;

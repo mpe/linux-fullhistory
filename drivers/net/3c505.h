@@ -284,7 +284,7 @@ typedef struct {
 
 	/* flags */
 	unsigned long send_pcb_semaphore;
-	unsigned int dmaing;
+	unsigned long dmaing;
 	unsigned long busy;
 
 	unsigned int rx_active;  /* number of receive PCBs */

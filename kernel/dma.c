@@ -13,6 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/spinlock.h>
+#include <linux/string.h>
 #include <asm/dma.h>
 #include <asm/system.h>
 

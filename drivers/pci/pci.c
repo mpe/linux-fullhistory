@@ -573,10 +573,10 @@ static void pci_read_bases(struct pci_dev *dev, unsigned int howmany, int rom)
 			res->start |= ((unsigned long) l) << 32;
 			res->end = res->start + sz;
 			pci_write_config_dword(dev, reg+4, ~0);
-			pci_read_config_dword(dev, reg+4, &tmp);
+			pci_read_config_dword(dev, reg+4, &sz);
 			pci_write_config_dword(dev, reg+4, l);
-			if (l)
-				res->end = res->start + (((unsigned long) ~l) << 32);
+			if (sz)
+				res->end = res->start + (((unsigned long) ~sz) << 32);
 #else
 			if (l) {
 				printk(KERN_ERR "PCI: Unable to handle 64-bit address for device %s\n", dev->slot_name);

@@ -205,7 +205,7 @@ int arlan_command(struct net_device *dev, int command_p)
 		priv->card_polling_interval = 1;
 
 	if (arlan_debug & ARLAN_DEBUG_CHAIN_LOCKS)
-		printk(KERN_DEBUG "arlan_command, %lx lock %x  commandByte %x waiting %x incoming %x \n",
+		printk(KERN_DEBUG "arlan_command, %lx lock %lx  commandByte %x waiting %x incoming %x \n",
 		jiffies, priv->command_lock, READSHMB(arlan->commandByte),
 		       priv->waiting_command_mask, command_p);
 

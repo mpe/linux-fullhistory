@@ -13,6 +13,7 @@
 
 #ifdef __KERNEL__
 
+#include <linux/config.h>
 #include <asm/machdep.h>
 
 #ifdef CONFIG_Q40

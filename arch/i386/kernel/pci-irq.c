@@ -424,9 +424,12 @@ static int pcibios_lookup_irq(struct pci_dev *dev, int assign)
 	DBG(" -> PIRQ %02x, mask %04x, excl %04x", pirq, mask, pirq_table->exclusive_irqs);
 	mask &= pcibios_irq_mask;
 
-	/* Find the best IRQ to assign */
-	newirq = 0;
-	if (assign) {
+	/*
+	 * Find the best IRQ to assign: use the one
+	 * reported by the device if possible.
+	 */
+	newirq = dev->irq;
+	if (!newirq && assign) {
 		for (i = 0; i < 16; i++) {
 			if (!(mask & (1 << i)))
 				continue;
@@ -436,13 +439,18 @@ static int pcibios_lookup_irq(struct pci_dev *dev, int assign)
 				newirq = i;
 			}
 		}
-		DBG(" -> newirq=%d", newirq);
 	}
+	DBG(" -> newirq=%d", newirq);
 
 	/* Try to get current IRQ */
 	if (r->get && (irq = r->get(pirq_router_dev, d, pirq))) {
 		DBG(" -> got IRQ %d\n", irq);
 		msg = "Found";
+		/* We refuse to override the dev->irq information. Give a warning! */
+	    	if (dev->irq && dev->irq != irq) {
+	    		printk("IRQ routing conflict in pirq table! Try 'pci=autoirq'\n");
+	    		return 0;
+	    	}
 	} else if (newirq && r->set && (dev->class >> 8) != PCI_CLASS_DISPLAY_VGA) {
 		DBG(" -> assigning IRQ %d", newirq);
 		if (r->set(pirq_router_dev, d, pirq, newirq)) {
@@ -576,19 +584,17 @@ void pcibios_penalize_isa_irq(int irq)
 
 void pcibios_enable_irq(struct pci_dev *dev)
 {
-	if (!dev->irq) {
-		u8 pin;
-		pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
-		if (pin && !pcibios_lookup_irq(dev, 1)) {
-			char *msg;
-			if (io_apic_assign_pci_irqs)
-				msg = " Probably buggy MP table.";
-			else if (pci_probe & PCI_BIOS_IRQ_SCAN)
-				msg = "";
-			else
-				msg = " Please try using pci=biosirq.";
-			printk(KERN_WARNING "PCI: No IRQ known for interrupt pin %c of device %s.%s\n",
-			       'A' + pin - 1, dev->slot_name, msg);
-		}
+	u8 pin;
+	pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
+	if (pin && !pcibios_lookup_irq(dev, 1) && !dev->irq) {
+		char *msg;
+		if (io_apic_assign_pci_irqs)
+			msg = " Probably buggy MP table.";
+		else if (pci_probe & PCI_BIOS_IRQ_SCAN)
+			msg = "";
+		else
+			msg = " Please try using pci=biosirq.";
+		printk(KERN_WARNING "PCI: No IRQ known for interrupt pin %c of device %s.%s\n",
+		       'A' + pin - 1, dev->slot_name, msg);
 	}
 }

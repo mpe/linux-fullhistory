@@ -62,7 +62,7 @@ static const char *version =
 #include "8390.h"
 
 int es_probe(struct net_device *dev);
-int es_probe1(struct net_device *dev, int ioaddr);
+static int es_probe1(struct net_device *dev, int ioaddr);
 
 static int es_open(struct net_device *dev);
 static int es_close(struct net_device *dev);
@@ -128,6 +128,8 @@ int __init es_probe(struct net_device *dev)
 {
 	unsigned short ioaddr = dev->base_addr;
 
+	SET_MODULE_OWNER(dev);
+
 	if (ioaddr > 0x1ff)		/* Check a single specified location. */
 		return es_probe1(dev, ioaddr);
 	else if (ioaddr > 0)		/* Don't probe at all. */
@@ -148,7 +150,7 @@ int __init es_probe(struct net_device *dev)
 	return -ENODEV;
 }
 
-int __init es_probe1(struct net_device *dev, int ioaddr)
+static int __init es_probe1(struct net_device *dev, int ioaddr)
 {
 	int i, retval;
 	unsigned long eisa_id;
@@ -357,9 +359,6 @@ static void es_block_output(struct net_device *dev, int count,
 static int es_open(struct net_device *dev)
 {
 	ei_open(dev);
-
-	MOD_INC_USE_COUNT;
-
 	return 0;
 }
 
@@ -370,24 +369,13 @@ static int es_close(struct net_device *dev)
 		printk("%s: Shutting down ethercard.\n", dev->name);
 
 	ei_close(dev);
-
-	MOD_DEC_USE_COUNT;
-
 	return 0;
 }
 
 #ifdef MODULE
 #define MAX_ES_CARDS	4	/* Max number of ES3210 cards per module */
 #define NAMELEN		8	/* # of chars for storing dev->name */
-static struct net_device dev_es3210[MAX_ES_CARDS] = {
-	{
-		"",		/* device name is inserted by net_init.c */
-		0, 0, 0, 0,
-		0, 0,
-		0, 0, 0, NULL, NULL
-	},
-};
-
+static struct net_device dev_es3210[MAX_ES_CARDS];
 static int io[MAX_ES_CARDS];
 static int irq[MAX_ES_CARDS];
 static int mem[MAX_ES_CARDS];

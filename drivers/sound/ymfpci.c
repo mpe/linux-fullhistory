@@ -2264,10 +2264,13 @@ ymf_install(struct pci_dev *pcidev, int instance, int devx)
 	codec->inst = instance;
 	codec->irq = pcidev->irq;
 	codec->device_id = pcidev->device;
+
+	pci_enable_device(pcidev);
+	pci_set_master(pcidev);
+
 	pci_read_config_byte(pcidev, PCI_REVISION_ID, (u8 *)&codec->rev);
 	codec->reg_area_phys = pci_resource_start(pcidev, 0);
 	codec->reg_area_virt = (unsigned long)ioremap(codec->reg_area_phys, 0x8000);
-	pci_set_master(pcidev);
 
 	/* XXX KERN_INFO */
 	printk("ymfpci%d: %s at 0x%lx IRQ %d\n", instance,

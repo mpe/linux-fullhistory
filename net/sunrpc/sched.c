@@ -82,7 +82,7 @@ spinlock_t rpc_sched_lock = SPIN_LOCK_UNLOCKED;
  * This is the last-ditch buffer for NFS swap requests
  */
 static u32			swap_buffer[PAGE_SIZE >> 2];
-static int			swap_buffer_used;
+static long			swap_buffer_used;
 
 /*
  * Make allocation of the swap_buffer SMP-safe

@@ -15,6 +15,7 @@
  *  Modification History:
  *	30-Dec-99	AF	Split off from the tms380tr driver.
  *	22-Jan-00	AF	Updated to use indirect read/writes 
+ *	23-Nov-00	JG	New PCI API, cleanups
  *
  *
  *  TODO:
@@ -23,7 +24,6 @@
  *		config registers)
  *
  */
-static const char *version = "abyss.c: v1.01 22/01/2000 by Adam Fritzler\n";
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -41,9 +41,18 @@ static const char *version = "abyss.c: v1.01 22/01/2000 by Adam Fritzler\n";
 #include "tms380tr.h"
 #include "abyss.h"            /* Madge-specific constants */
 
+static char version[] __initdata =
+"abyss.c: v1.02 23/11/2000 by Adam Fritzler\n";
+
 #define ABYSS_IO_EXTENT 64
 
-int abyss_probe(void);
+static struct pci_device_id abyss_pci_tbl[] __initdata = {
+	{ PCI_VENDOR_ID_MADGE, PCI_DEVICE_ID_MADGE_MK2,
+	  PCI_ANY_ID, PCI_ANY_ID, PCI_CLASS_NETWORK_TOKEN_RING << 8, 0x00ffffff, },
+	{ }			/* Terminating entry */
+};
+MODULE_DEVICE_TABLE(pci, abyss_pci_tbl);
+
 static int abyss_open(struct net_device *dev);
 static int abyss_close(struct net_device *dev);
 static void abyss_enable(struct net_device *dev);
@@ -51,17 +60,16 @@ static int abyss_chipset_init(struct net_device *dev);
 static void abyss_read_eeprom(struct net_device *dev);
 static unsigned short abyss_setnselout_pins(struct net_device *dev);
 
-void at24_writedatabyte(unsigned long regaddr, unsigned char byte);
-int at24_sendfullcmd(unsigned long regaddr, unsigned char cmd, unsigned char addr);
-int at24_sendcmd(unsigned long regaddr, unsigned char cmd);
-unsigned char at24_readdatabit(unsigned long regaddr);
-unsigned char at24_readdatabyte(unsigned long regaddr);
-int at24_waitforack(unsigned long regaddr);
-int at24_waitfornack(unsigned long regaddr);
-void at24_setlines(unsigned long regaddr, unsigned char clock, unsigned char data);
-void at24_start(unsigned long regaddr);
-void at24_stop(unsigned long regaddr);
-unsigned char at24_readb(unsigned long regaddr, unsigned char addr);
+static void at24_writedatabyte(unsigned long regaddr, unsigned char byte);
+static int at24_sendfullcmd(unsigned long regaddr, unsigned char cmd, unsigned char addr);
+static int at24_sendcmd(unsigned long regaddr, unsigned char cmd);
+static unsigned char at24_readdatabit(unsigned long regaddr);
+static unsigned char at24_readdatabyte(unsigned long regaddr);
+static int at24_waitforack(unsigned long regaddr);
+static int at24_waitfornack(unsigned long regaddr);
+static void at24_setlines(unsigned long regaddr, unsigned char clock, unsigned char data);
+static void at24_start(unsigned long regaddr);
+static unsigned char at24_readb(unsigned long regaddr, unsigned char addr);
 
 static unsigned short abyss_sifreadb(struct net_device *dev, unsigned short reg)
 {
@@ -83,129 +91,100 @@ static void abyss_sifwritew(struct net_device *dev, unsigned short val, unsigned
 	outw(val, dev->base_addr + reg);
 }
 
-struct tms_abyss_card {
-	struct net_device *dev;
-	struct pci_dev *pci_dev;
-	struct tms_abyss_card *next;
-};
-static struct tms_abyss_card *abyss_card_list = NULL;
-
-int __init abyss_probe(void)
+static int __init abyss_attach(struct pci_dev *pdev, const struct pci_device_id *ent)
 {	
-	static int versionprinted = 0;
-	struct pci_dev *pdev = NULL ; 
+	static int versionprinted;
 	struct net_device *dev;
 	struct net_local *tp;
-	int i;
+	int i, ret, pci_irq_line;
+	unsigned long pci_ioaddr;
 	
-	if (!pci_present())
-		return (-1);	/* No PCI present. */
-	
-	while ( (pdev=pci_find_class(PCI_CLASS_NETWORK_TOKEN_RING<<8, pdev))) { 
-		unsigned int pci_irq_line;
-		unsigned long pci_ioaddr;
-		struct tms_abyss_card *card;
-		
-		/* We only support Madge Smart 16/4 PCI Mk2 (Abyss) cards */
-		if ( (pdev->vendor != PCI_VENDOR_ID_MADGE) ||
-		     (pdev->device != PCI_DEVICE_ID_MADGE_MK2) )
-			continue;
-		
-		if (versionprinted++ == 0)
-			printk("%s", version);
+	if (versionprinted++ == 0)
+		printk("%s", version);
 
-		if (pci_enable_device(pdev))
-			continue;
+	if (pci_enable_device(pdev))
+		return -EIO;
 
-		/* Remove I/O space marker in bit 0. */
-		pci_irq_line = pdev->irq;
-		pci_ioaddr = pci_resource_start (pdev, 0);
+	/* Remove I/O space marker in bit 0. */
+	pci_irq_line = pdev->irq;
+	pci_ioaddr = pci_resource_start (pdev, 0);
 		
-		if(!request_region(pci_ioaddr, ABYSS_IO_EXTENT, "abyss"))
-			continue;
+	/* At this point we have found a valid card. */
 		
-		/* At this point we have found a valid card. */
-		
-		dev = init_trdev(NULL, 0);
-		if (!dev) {
-			release_region(pci_ioaddr, ABYSS_IO_EXTENT);
-			continue;
-		}
-		
-		if(request_irq(pdev->irq, tms380tr_interrupt, SA_SHIRQ,
-			       "abyss", dev)) { 
-			release_region(pci_ioaddr, ABYSS_IO_EXTENT) ; 
-			/* XXX free trdev */
-			continue; /*return (-ENODEV);*/ /* continue; ?? */
-		}
-		
-		/*
-		  if (load_tms380_module("abyss.c")) {
-		  return 0;
-		  }
-		*/
+	dev = init_trdev(NULL, 0);
+	if (!dev)
+		return -ENOMEM;
+	SET_MODULE_OWNER(dev);
 
-		dev->base_addr	= pci_ioaddr;
-		dev->irq 		= pci_irq_line;
-		dev->dma		= 0;
-		
-		printk("%s: Madge Smart 16/4 PCI Mk2 (Abyss)\n", dev->name);
-		printk("%s:    IO: %#4lx  IRQ: %d\n",
-		       dev->name, pci_ioaddr, dev->irq);
-		/*
-		 * The TMS SIF registers lay 0x10 above the card base address.
-		 */
-		dev->base_addr += 0x10;
-		
-		if (tmsdev_init(dev)) {
-			printk("%s: unable to get memory for dev->priv.\n", 
-			       dev->name);
-			return 0;
-		}
-
-		abyss_read_eeprom(dev);
-		
-		printk("%s:    Ring Station Address: ", dev->name);
-		printk("%2.2x", dev->dev_addr[0]);
-		for (i = 1; i < 6; i++)
-			printk(":%2.2x", dev->dev_addr[i]);
-		printk("\n");
-
-		tp = (struct net_local *)dev->priv;
-		tp->dmalimit = 0; /* XXX: should be the max PCI32 DMA max */
-		tp->setnselout = abyss_setnselout_pins;
-		tp->sifreadb = abyss_sifreadb;
-		tp->sifreadw = abyss_sifreadw;
-		tp->sifwriteb = abyss_sifwriteb;
-		tp->sifwritew = abyss_sifwritew;
-
-		memcpy(tp->ProductID, "Madge PCI 16/4 Mk2", PROD_ID_SIZE + 1);
-		
-		dev->open = abyss_open;
-		dev->stop = abyss_close;
-		
-		if (register_trdev(dev) == 0) {
-			/* Enlist in the card list */
-			card = kmalloc(sizeof(struct tms_abyss_card), 
-				       GFP_KERNEL);
-			card->next = abyss_card_list;
-			abyss_card_list = card;
-			card->dev = dev;
-			card->pci_dev = pdev;
-		} else {
-			printk("abyss: register_trdev() returned non-zero.\n");
-			kfree(dev->priv);
-			kfree(dev);
-			return -1;
-		}
+	if (!request_region(pci_ioaddr, ABYSS_IO_EXTENT, dev->name)) {
+		ret = -EBUSY;
+		goto err_out_trdev;
 	}
-	
-	if (abyss_card_list)
-		return 0;
-	return (-1);
+		
+	ret = request_irq(pdev->irq, tms380tr_interrupt, SA_SHIRQ,
+			  dev->name, dev);
+	if (ret)
+		goto err_out_region;
+		
+	dev->base_addr	= pci_ioaddr;
+	dev->irq	= pci_irq_line;
+		
+	printk("%s: Madge Smart 16/4 PCI Mk2 (Abyss)\n", dev->name);
+	printk("%s:    IO: %#4lx  IRQ: %d\n",
+	       dev->name, pci_ioaddr, dev->irq);
+	/*
+	 * The TMS SIF registers lay 0x10 above the card base address.
+	 */
+	dev->base_addr += 0x10;
+		
+	ret = tmsdev_init(dev);
+	if (ret) {
+		printk("%s: unable to get memory for dev->priv.\n", 
+		       dev->name);
+		goto err_out_irq;
+	}
+
+	abyss_read_eeprom(dev);
+		
+	printk("%s:    Ring Station Address: ", dev->name);
+	printk("%2.2x", dev->dev_addr[0]);
+	for (i = 1; i < 6; i++)
+		printk(":%2.2x", dev->dev_addr[i]);
+	printk("\n");
+
+	tp = dev->priv;
+	tp->dmalimit = 0; /* XXX: should be the max PCI32 DMA max */
+	tp->setnselout = abyss_setnselout_pins;
+	tp->sifreadb = abyss_sifreadb;
+	tp->sifreadw = abyss_sifreadw;
+	tp->sifwriteb = abyss_sifwriteb;
+	tp->sifwritew = abyss_sifwritew;
+
+	memcpy(tp->ProductID, "Madge PCI 16/4 Mk2", PROD_ID_SIZE + 1);
+		
+	dev->open = abyss_open;
+	dev->stop = abyss_close;
+
+	ret = register_trdev(dev);
+	if (ret)
+		goto err_out_tmsdev;
+
+	pci_set_drvdata(pdev, dev);
+	return 0;
+
+err_out_tmsdev:
+	kfree(dev->priv);
+err_out_irq:
+	free_irq(pdev->irq, dev);
+err_out_region:
+	release_region(pci_ioaddr, ABYSS_IO_EXTENT);
+err_out_trdev:
+	unregister_netdev(dev);
+	kfree(dev);
+	return ret;
 }
 
-unsigned short abyss_setnselout_pins(struct net_device *dev)
+static unsigned short abyss_setnselout_pins(struct net_device *dev)
 {
 	unsigned short val = 0;
 	struct net_local *tp = (struct net_local *)dev->priv;
@@ -228,7 +207,7 @@ unsigned short abyss_setnselout_pins(struct net_device *dev)
  * These access an Atmel AT24 SEEPROM using their glue chip registers. 
  *
  */
-void at24_writedatabyte(unsigned long regaddr, unsigned char byte)
+static void at24_writedatabyte(unsigned long regaddr, unsigned char byte)
 {
 	int i;
 	
@@ -239,7 +218,7 @@ void at24_writedatabyte(unsigned long regaddr, unsigned char byte)
 	}
 }
 
-int at24_sendfullcmd(unsigned long regaddr, unsigned char cmd, unsigned char addr)
+static int at24_sendfullcmd(unsigned long regaddr, unsigned char cmd, unsigned char addr)
 {
 	if (at24_sendcmd(regaddr, cmd)) {
 		at24_writedatabyte(regaddr, addr);
@@ -248,7 +227,7 @@ int at24_sendfullcmd(unsigned long regaddr, unsigned char cmd, unsigned char add
 	return 0;
 }
 
-int at24_sendcmd(unsigned long regaddr, unsigned char cmd)
+static int at24_sendcmd(unsigned long regaddr, unsigned char cmd)
 {
 	int i;
 	
@@ -261,7 +240,7 @@ int at24_sendcmd(unsigned long regaddr, unsigned char cmd)
 	return 0;
 }
 
-unsigned char at24_readdatabit(unsigned long regaddr)
+static unsigned char at24_readdatabit(unsigned long regaddr)
 {
 	unsigned char val;
 
@@ -273,7 +252,7 @@ unsigned char at24_readdatabit(unsigned long regaddr)
 	return val;
 }
 
-unsigned char at24_readdatabyte(unsigned long regaddr)
+static unsigned char at24_readdatabyte(unsigned long regaddr)
 {
 	unsigned char data = 0;
 	int i;
@@ -286,7 +265,7 @@ unsigned char at24_readdatabyte(unsigned long regaddr)
 	return data;
 }
 
-int at24_waitforack(unsigned long regaddr)
+static int at24_waitforack(unsigned long regaddr)
 {
 	int i;
 	
@@ -297,7 +276,7 @@ int at24_waitforack(unsigned long regaddr)
 	return 0;
 }
 
-int at24_waitfornack(unsigned long regaddr)
+static int at24_waitfornack(unsigned long regaddr)
 {
 	int i;
 	for (i = 0; i < 10; i++) {
@@ -307,10 +286,9 @@ int at24_waitfornack(unsigned long regaddr)
 	return 0;
 }
 
-void at24_setlines(unsigned long regaddr, unsigned char clock, unsigned char data)
+static void at24_setlines(unsigned long regaddr, unsigned char clock, unsigned char data)
 {
-	unsigned char val;
-	val = AT24_ENABLE;
+	unsigned char val = AT24_ENABLE;
 	if (clock)
 		val |= AT24_CLOCK;
 	if (data)
@@ -320,25 +298,15 @@ void at24_setlines(unsigned long regaddr, unsigned char clock, unsigned char dat
 	tms380tr_wait(20); /* Very necessary. */
 }
 
-void at24_start(unsigned long regaddr)
+static void at24_start(unsigned long regaddr)
 {
 	at24_setlines(regaddr, 0, 1);
 	at24_setlines(regaddr, 1, 1);
 	at24_setlines(regaddr, 1, 0);
 	at24_setlines(regaddr, 0, 1);
-	return;
 }
 
-void at24_stop(unsigned long regaddr)
-{
-	at24_setlines(regaddr, 0, 0);
-	at24_setlines(regaddr, 1, 0);
-	at24_setlines(regaddr, 1, 1);
-	at24_setlines(regaddr, 0, 1);
-	return;
-}
-     
-unsigned char at24_readb(unsigned long regaddr, unsigned char addr)
+static unsigned char at24_readb(unsigned long regaddr, unsigned char addr)
 {
 	unsigned char data = 0xff;
 	
@@ -367,7 +335,6 @@ static void abyss_enable(struct net_device *dev)
 	reset_reg |= PCIBM2_RESET_REG_CHIP_NRES;
 	outb(reset_reg, ioaddr + PCIBM2_RESET_REG);
 	tms380tr_wait(100);
-	return;
 }
 
 /*
@@ -411,14 +378,12 @@ static int abyss_chipset_init(struct net_device *dev)
 	return 0;
 }
 
-void abyss_chipset_close(struct net_device *dev)
+static inline void abyss_chipset_close(struct net_device *dev)
 {
 	unsigned long ioaddr;
 	
 	ioaddr = dev->base_addr;
 	outb(0, ioaddr + PCIBM2_RESET_REG);
-	
-	return;
 }
 
 /*
@@ -451,15 +416,12 @@ static void abyss_read_eeprom(struct net_device *dev)
 	for (i = 0; i < 6; i++) 
 		dev->dev_addr[i] = at24_readb(ioaddr + PCIBM2_SEEPROM_REG, 
 					      PCIBM2_SEEPROM_BIA+i);
-	
-	return;
 }
 
 static int abyss_open(struct net_device *dev)
 {  
 	abyss_chipset_init(dev);
 	tms380tr_open(dev);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -467,41 +429,49 @@ static int abyss_close(struct net_device *dev)
 {
 	tms380tr_close(dev);
 	abyss_chipset_close(dev);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
-#ifdef MODULE
-
-int init_module(void)
+static void __exit abyss_detach (struct pci_dev *pdev)
 {
-	/* Probe for cards. */
-	if (abyss_probe()) {
-		printk(KERN_NOTICE "abyss.c: No cards found.\n");
-	}
-	/* lock_tms380_module(); */
-	return (0);
-}
-
-void cleanup_module(void)
-{
-	struct net_device *dev;
-	struct tms_abyss_card *this_card;
+	struct net_device *dev = pci_get_drvdata(pdev);
 	
-	while (abyss_card_list) {
-		dev = abyss_card_list->dev;
-		unregister_netdev(dev);
-		release_region(dev->base_addr-0x10, ABYSS_IO_EXTENT);
-		free_irq(dev->irq, dev);
-		kfree(dev->priv);
-		kfree(dev);
-		this_card = abyss_card_list;
-		abyss_card_list = this_card->next;
-		kfree(this_card);
-	}
-	/* unlock_tms380_module(); */
+	if (!dev)
+		BUG();
+	unregister_netdev(dev);
+	release_region(dev->base_addr-0x10, ABYSS_IO_EXTENT);
+	free_irq(dev->irq, dev);
+	kfree(dev->priv);
+	kfree(dev);
+	pci_set_drvdata(pdev, NULL);
 }
-#endif /* MODULE */
+
+static struct pci_driver abyss_driver = {
+	name:		"abyss",
+	id_table:	abyss_pci_tbl,
+	probe:		abyss_attach,
+	remove:		abyss_detach,
+};
+
+static int __init abyss_init (void)
+{
+	int rc = pci_register_driver (&abyss_driver);
+	if (rc < 0)
+		return rc;
+	if (rc == 0) {
+		pci_unregister_driver (&abyss_driver);
+		return -ENODEV;
+	}
+	return 0;
+}
+
+static void __exit abyss_rmmod (void)
+{
+	pci_unregister_driver (&abyss_driver);
+}
+
+module_init(abyss_init);
+module_exit(abyss_rmmod);
 
 
 /*

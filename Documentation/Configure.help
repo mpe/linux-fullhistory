@@ -10372,6 +10372,9 @@ CONFIG_USB_SERIAL_DIGI_ACCELEPORT
   parallel port on the USB 2 appears as a third serial port on Linux.
   The Digi Acceleport USB 8 is not yet supported by this driver.
 
+  This driver works under SMP with the usb-uhci driver.  It does not
+  work under SMP with the uhci driver.
+
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
   The module will be called digi_acceleport.o. If you want to compile 
@@ -10380,7 +10383,9 @@ CONFIG_USB_SERIAL_DIGI_ACCELEPORT
 USB Empeg empeg-car Mark I/II Driver
 CONFIG_USB_SERIAL_EMPEG
   Say Y here if you want to connect to your Empeg empeg-car Mark I/II
-  mp3 player via USB.
+  mp3 player via USB.  The driver uses a single ttyUSB{0,1,2,...}
+  device node.  See Documentation/usb/usb-serial.txt for more
+  tidbits of information.
 
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).

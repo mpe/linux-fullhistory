@@ -88,7 +88,7 @@ int usb_register(struct usb_driver *new_driver)
 	init_MUTEX(&new_driver->serialize);
 
 	/* Add it to the list of known drivers */
-	list_add(&new_driver->driver_list, &usb_driver_list);
+	list_add_tail(&new_driver->driver_list, &usb_driver_list);
 
 	usb_scan_devices();
 
@@ -560,7 +560,7 @@ usb_match_id(struct usb_device *dev, struct usb_interface *interface,
 			continue;
 
 		if (id->bDeviceSubClass &&
-		    id->bDeviceSubClass!= dev->descriptor.bDeviceClass)
+		    id->bDeviceSubClass!= dev->descriptor.bDeviceSubClass)
 			continue;
 
 		if (id->bDeviceProtocol &&

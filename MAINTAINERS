@@ -1325,7 +1325,7 @@ M:	pberger@brimson.com
 M:	alborchers@steinerpoint.com
 L:	linux-usb-users@lists.sourceforge.net
 L:	linux-usb-devel@lists.sourceforge.net
-S:	Supported
+S:	Maintained
 
 USB SERIAL KEYSPAN DRIVER
 P:	Hugh Blemings
@@ -1347,6 +1347,13 @@ USB SERIAL BELKIN F5U103 DRIVER
 P:	William Greathouse
 M:	wgreathouse@smva.com
 M:	wgreathouse@myfavoritei.com
+L:	linux-usb-users@lists.sourceforge.net
+L:	linux-usb-devel@lists.sourceforge.net
+S:	Maintained
+
+USB SERIAL EMPEG EMPEG-CAR MARK I/II DRIVER
+P:	Gary Brubaker
+M:	xavyer@ix.netcom.com
 L:	linux-usb-users@lists.sourceforge.net
 L:	linux-usb-devel@lists.sourceforge.net
 S:	Maintained

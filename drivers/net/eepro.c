@@ -533,8 +533,9 @@ static unsigned eeprom_reg = EEPROM_REG_PRO;
 int __init eepro_probe(struct net_device *dev)
 {
 	int i;
-	int base_addr = dev ? dev->base_addr : 0;
+	int base_addr = dev->base_addr;
 
+	SET_MODULE_OWNER(dev);
 
 #ifdef PnPWakeup
 	/* XXXX for multiple cards should this only be run once? */
@@ -643,7 +644,7 @@ void printEEPROMInfo(short ioaddr, struct net_device *dev)
    probes on the ISA bus.  A good device probe avoids doing writes, and
    verifies that the correct device exists and functions.  */
 
-int eepro_probe1(struct net_device *dev, short ioaddr)
+static int eepro_probe1(struct net_device *dev, short ioaddr)
 {
 	unsigned short station_addr[6], id, counter;
 	int i,j, irqMask;
@@ -1078,7 +1079,6 @@ static int eepro_open(struct net_device *dev)
 	/* enabling rx */
 	eepro_en_rx(ioaddr);
 
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -1234,7 +1234,6 @@ static int eepro_close(struct net_device *dev)
 
 	/* Update the statistics here. What statistics? */
 
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -1732,7 +1731,7 @@ eepro_transmit_interrupt(struct net_device *dev)
 static struct net_device dev_eepro[MAX_EEPRO];
 
 static int io[MAX_EEPRO];
-static int irq[MAX_EEPRO] = { [0 ... MAX_EEPRO-1] = 0 };
+static int irq[MAX_EEPRO];
 static int mem[MAX_EEPRO] = {	/* Size of the rx buffer in KB */
   [0 ... MAX_EEPRO-1] = RCV_DEFAULT_RAM/1024
 };

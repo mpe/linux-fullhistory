@@ -199,7 +199,7 @@ struct hdlcdrv_state {
 
 	struct hdlcdrv_hdlcrx {
 		struct hdlcdrv_hdlcbuffer hbuf;
-		int in_hdlc_rx;
+		long in_hdlc_rx;
 		/* 0 = sync hunt, != 0 receiving */
 		int rx_state;	
 		unsigned int bitstream;

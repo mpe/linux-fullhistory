@@ -88,7 +88,7 @@ el2_probe(struct net_device *dev)
     int base_addr = dev->base_addr;
 
     SET_MODULE_OWNER(dev);
-
+    
     if (base_addr > 0x1ff)	/* Check a single specified location. */
 	return el2_probe1(dev, base_addr);
     else if (base_addr != 0)		/* Don't probe at all. */
@@ -319,6 +319,7 @@ out:
 static int
 el2_open(struct net_device *dev)
 {
+    int retval = -EAGAIN;
 
     if (dev->irq < 2) {
 	int irqlist[] = {5, 9, 3, 4, 0};
@@ -331,18 +332,19 @@ el2_open(struct net_device *dev)
 		unsigned long cookie = probe_irq_on();
 		outb_p(0x04 << ((*irqp == 9) ? 2 : *irqp), E33G_IDCFR);
 		outb_p(0x00, E33G_IDCFR);
-		if (*irqp == probe_irq_off(cookie)	 /* It's a good IRQ line! */
-		    && request_irq (dev->irq = *irqp, ei_interrupt, 0, ei_status.name, dev) == 0)
+		if (*irqp == probe_irq_off(cookie)	/* It's a good IRQ line! */
+		    && ((retval = request_irq(dev->irq = *irqp, 
+		    ei_interrupt, 0, dev->name, dev)) == 0))
 		    break;
 	    }
 	} while (*++irqp);
 	if (*irqp == 0) {
 	    outb(EGACFR_IRQOFF, E33G_GACFR);	/* disable interrupts. */
-	    return -EAGAIN;
+	    return retval;
 	}
     } else {
-	if (request_irq(dev->irq, ei_interrupt, 0, ei_status.name, dev)) {
-	    return -EAGAIN;
+	if ((retval = request_irq(dev->irq, ei_interrupt, 0, dev->name, dev))) {
+	    return retval;
 	}
     }
 

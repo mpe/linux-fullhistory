@@ -130,6 +130,14 @@ typedef unsigned int bool;
 #include "dgrs_asstruct.h"
 #include "dgrs_bcomm.h"
 
+#if LINUX_VERSION_CODE >= 0x20400
+static struct pci_device_id dgrs_pci_tbl[] __initdata = {
+	{ SE6_PCI_VENDOR_ID, SE6_PCI_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID, },
+	{ }			/* Terminating entry */
+};
+MODULE_DEVICE_TABLE(pci, dgrs_pci_tbl);
+#endif /* LINUX_VERSION_CODE >= 0x20400 */
+
 /*
  *	Firmware.  Compiled separately for local compilation,
  *	but #included for Linux distribution.
@@ -788,9 +796,6 @@ static int
 dgrs_open( struct net_device *dev )
 {
 	netif_start_queue(dev);
-
-	MOD_INC_USE_COUNT;
-
 	return (0);
 }
 
@@ -800,9 +805,6 @@ dgrs_open( struct net_device *dev )
 static int dgrs_close( struct net_device *dev )
 {
 	netif_stop_queue(dev);
-
-	MOD_DEC_USE_COUNT;
-
 	return (0);
 }
 
@@ -1268,6 +1270,7 @@ dgrs_found_device(
 	priv->devtbl[0] = dev;
 
 	dev->init = dgrs_probe1;
+	SET_MODULE_OWNER(dev);
 	ether_setup(dev);
 	priv->next_dev = dgrs_root_dev;
 	dgrs_root_dev = dev;
@@ -1303,6 +1306,7 @@ dgrs_found_device(
 		privN->chan = i+1;
 		priv->devtbl[i] = devN;
 		devN->init = dgrs_initclone;
+		SET_MODULE_OWNER(dev);
 		ether_setup(devN);
 		privN->next_dev = dgrs_root_dev;
 		dgrs_root_dev = devN;

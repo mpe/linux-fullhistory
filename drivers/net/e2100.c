@@ -96,7 +96,7 @@ extern inline void mem_off(short port)
 #define E21_TX_START_PG		E21_RX_STOP_PG	/* First page of TX buffer */
 
 int e2100_probe(struct net_device *dev);
-int e21_probe1(struct net_device *dev, int ioaddr);
+static int e21_probe1(struct net_device *dev, int ioaddr);
 
 static int e21_open(struct net_device *dev);
 static void e21_reset_8390(struct net_device *dev);
@@ -122,6 +122,8 @@ int  __init e2100_probe(struct net_device *dev)
 	int *port;
 	int base_addr = dev->base_addr;
 
+	SET_MODULE_OWNER(dev);
+
 	if (base_addr > 0x1ff)		/* Check a single specified location. */
 		return e21_probe1(dev, base_addr);
 	else if (base_addr != 0)	/* Don't probe at all. */
@@ -134,14 +136,14 @@ int  __init e2100_probe(struct net_device *dev)
 	return -ENODEV;
 }
 
-int __init e21_probe1(struct net_device *dev, int ioaddr)
+static int __init e21_probe1(struct net_device *dev, int ioaddr)
 {
 	int i, status, retval;
 	unsigned char *station_addr = dev->dev_addr;
 	static unsigned version_printed = 0;
 
-	if (!request_region(ioaddr, E21_IO_EXTENT, "e2100"))
-		return -ENODEV;
+	if (!request_region(ioaddr, E21_IO_EXTENT, dev->name))
+		return -EBUSY;
 
 	/* First check the station address for the Ctron prefix. */
 	if (inb(ioaddr + E21_SAPROM + 0) != 0x00
@@ -255,10 +257,10 @@ static int
 e21_open(struct net_device *dev)
 {
 	short ioaddr = dev->base_addr;
+	int retval;
 
-	if (request_irq(dev->irq, ei_interrupt, 0, "e2100", dev)) {
-		return -EBUSY;
-	}
+	if ((retval = request_irq(dev->irq, ei_interrupt, 0, dev->name, dev)))
+		return retval;
 
 	/* Set the interrupt line and memory base on the hardware. */
 	inb(ioaddr + E21_IRQ_LOW);
@@ -270,7 +272,6 @@ e21_open(struct net_device *dev)
 	outb(0, ioaddr + E21_ASIC + ((dev->mem_start >> 17) & 7));
 
 	ei_open(dev);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -368,8 +369,6 @@ e21_close(struct net_device *dev)
 	/* Double-check that the memory has been turned off, because really
 	   really bad things happen if it isn't. */
 	mem_off(ioaddr);
-
-	MOD_DEC_USE_COUNT;
 
 	return 0;
 }

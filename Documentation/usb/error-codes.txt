@@ -1,12 +1,12 @@
-$Id: README.error-codes,v 1.1 1999/12/14 14:03:02 fliegl Exp $
+Revised: 2000-Dec-05.
 
 This is the documentation of (hopefully) all possible error codes (and
-their interpretation) that can be returned from the hostcontroller driver 
+their interpretation) that can be returned from the host controller drivers 
 and from usbcore.
 
 NOTE:
-The USB_ST_* codes are deferred and are only listed for compatibility, new
-software should use only -E* instead!
+The USB_ST_* codes are deprecated and are only listed for compatibility;
+new software should use only -E* instead!
 
 
 
@@ -25,12 +25,16 @@ USB-specific:
 
 -ENODEV		specified USB-device or bus doesn't exist
 
--ENXIO		specified endpoint doesn't exist on the device
+USB_ST_REQUEST_ERROR
+-ENXIO		a) specified endpoint doesn't exist on the device
+		b) an URB is already queued to this endpoint and
+		   USB_QUEUE_BULK wasn't used (UHCI HCDs only)
 
 USB_ST_URB_INVALID_ERROR
 -EINVAL		a) Invalid transfer type specified (or not supported)
 		b) Invalid interrupt interval (0<=n<256)
 		c) more than one interrupt packet requested
+		d) ISO: number_of_packets is < 0
 
 -EAGAIN		a) specified ISO start frame too early
 		b) (using ISO-ASAP) too much scheduled for the future
@@ -38,6 +42,7 @@ USB_ST_URB_INVALID_ERROR
 
 -EFBIG		too much ISO frames requested (currently uhci>900)
 
+USB_ST_STALL
 -EPIPE		specified pipe-handle is already stalled
 
 -EMSGSIZE	endpoint message size is zero, do interface/alternate setting
@@ -59,7 +64,7 @@ USB_ST_NOERROR
 0			Transfer completed successfully
 
 USB_ST_URB_KILLED
--ENOENT			URB was canceled by unlink_urb
+-ENOENT			URB was canceled by usb_unlink_urb
 
 USB_ST_URB_PENDING
 -EINPROGRESS		URB still pending, no results yet
@@ -73,12 +78,28 @@ USB_ST_INTERNALERROR
 USB_ST_CRC
 -EILSEQ			CRC mismatch
 
+USB_ST_STALL
 -EPIPE			a) babble detect
 			b) endpoint stalled
 
-USB_ST_BUFFERUNDERRUN
--ENOST			buffer error
+USB_ST_BUFFEROVERRUN
+-ECOMM			During an IN transfer, the host controller
+			received data from an endpoint faster than it
+			could be written to system memory
 
+USB_ST_BUFFERUNDERRUN
+-ENOSR			During an OUT transfer, the host controller
+			could not retrieve data from system memory fast
+			enough to keep up with the USB data rate
+
+USB_ST_DATAOVERRUN
+-EOVERFLOW		The amount of data returned by the endpoint was
+			greater than either the max packet size of the
+			endpoint or the remaining buffer size
+
+USB_ST_DATAUNDERRUN
+-EREMOTEIO		The endpoint returned less than max packet size
+			and that amount did not fill the specified buffer
 USB_ST_NORESPONSE
 USB_ST_TIMEOUT
 -ETIMEDOUT		transfer timed out, NAK
@@ -104,14 +125,7 @@ USB_ST_URB_INVALID_ERROR
 **************************************************************************
 
 usb_register():
-USB_ST_NOTSUPPORTED
 -EINVAL			error during registering new driver
-
-usb_terminate_bulk():
-USB_ST_REMOVED
--ENODEV			urb already removed
 
 usb_get_*/usb_set_*():
 			All USB errors (submit/status) can occur
-
-

@@ -24,7 +24,6 @@
 #include "isdnl3.h"
 #include "l3ni1.h"
 #include <linux/ctype.h>
-#include <linux/config.h>
 
 extern char *HiSax_getrev(const char *revision);
 const char *ni1_revision = "$Revision: 2.5 $";

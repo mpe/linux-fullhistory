@@ -99,6 +99,8 @@ int __init ne3210_probe(struct net_device *dev)
 {
 	unsigned short ioaddr = dev->base_addr;
 
+	SET_MODULE_OWNER(dev);
+
 	if (ioaddr > 0x1ff)		/* Check a single specified location. */
 		return ne3210_probe1(dev, ioaddr);
 	else if (ioaddr > 0)		/* Don't probe at all. */
@@ -345,7 +347,6 @@ static void ne3210_block_output(struct net_device *dev, int count,
 static int ne3210_open(struct net_device *dev)
 {
 	ei_open(dev);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -356,7 +357,6 @@ static int ne3210_close(struct net_device *dev)
 		printk("%s: Shutting down ethercard.\n", dev->name);
 
 	ei_close(dev);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 

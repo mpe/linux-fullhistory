@@ -1298,7 +1298,7 @@ HiSax_reportcard(int cardnr, int sel)
 	printk(KERN_DEBUG "HiSax: HiSax_reportcard address 0x%lX\n",
 		(ulong) & HiSax_reportcard);
 	printk(KERN_DEBUG "HiSax: cs 0x%lX\n", (ulong) cs);
-	printk(KERN_DEBUG "HiSax: HW_Flags %x bc0 flg %x bc1 flg %x\n",
+	printk(KERN_DEBUG "HiSax: HW_Flags %lx bc0 flg %lx bc1 flg %lx\n",
 		cs->HW_Flags, cs->bcs[0].Flag, cs->bcs[1].Flag);
 	printk(KERN_DEBUG "HiSax: bcs 0 mode %d ch%d\n",
 		cs->bcs[0].mode, cs->bcs[0].channel);

@@ -75,7 +75,7 @@ typedef struct stlport {
 	int			ioaddr;
 	int			uartaddr;
 	int			pagenr;
-	int			istate;
+	long			istate;
 	int			flags;
 	int			baud_base;
 	int			custom_divisor;

@@ -224,9 +224,9 @@ struct lance_private {
 						/* copy function */
 	void				*(*memcpy_f)( void *, const void *, size_t );
 	struct net_device_stats stats;
-/* These two must be ints for set_bit() */
-	int					tx_full;
-	int					lock;
+/* These two must be longs for set_bit() */
+	long				tx_full;
+	long				lock;
 };
 
 /* I/O register access macros */

@@ -388,7 +388,7 @@ struct arlan_private {
       volatile int	tx_chain_active;
       volatile int 	timer_chain_active;
       volatile int 	interrupt_ack_requested;
-      volatile int	command_lock;
+      volatile long	command_lock;
       volatile int	rx_command_needed;
       volatile int	tx_command_needed;
       volatile int 	waiting_command_mask;
@@ -398,8 +398,8 @@ struct arlan_private {
       volatile int 	under_reset;
       volatile int 	under_config;
       volatile int 	rx_command_given;
-      volatile int 	tx_command_given;
-      volatile int	interrupt_processing_active;
+      volatile long 	tx_command_given;
+      volatile long	interrupt_processing_active;
       volatile long long 	last_tx_time;
       volatile long long	last_rx_time;
       volatile long long	last_rx_int_ack_time;

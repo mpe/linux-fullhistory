@@ -73,9 +73,9 @@ static int rx_copybreak = 100;
 
 #if defined(__alpha__)
 static int csr0 = 0x01A00000 | 0xE000;
-#elif defined(__i386__) || defined(__powerpc__) || defined(__hppa__)
+#elif defined(__i386__) || defined(__powerpc__)
 static int csr0 = 0x01A00000 | 0x8000;
-#elif defined(__sparc__)
+#elif defined(__sparc__) || defined(__hppa__)
 /* The UltraSparc PCI controllers will disconnect at every 64-byte
  * crossing anyways so it makes no sense to tell Tulip to burst
  * any more than that.

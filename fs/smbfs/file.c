@@ -82,7 +82,7 @@ io_error:
 }
 
 /*
- * We are called with the page locked and the caller unlocks.
+ * We are called with the page locked and we unlock it when done.
  */
 static int
 smb_readpage(struct file *file, struct page *page)
@@ -147,16 +147,32 @@ smb_writepage_sync(struct dentry *dentry, struct page *page,
  * Write a page to the server. This will be used for NFS swapping only
  * (for now), and we currently do this synchronously only.
  *
- * We are called with the page locked and the caller unlocks.
+ * We are called with the page locked and we unlock it when done.
  */
 static int
-smb_writepage(struct file *file, struct page *page)
+smb_writepage(struct page *page)
 {
-	struct dentry *dentry = file->f_dentry;
-	struct inode *inode = dentry->d_inode;
-	unsigned long end_index = inode->i_size >> PAGE_CACHE_SHIFT;
+	struct address_space *mapping = page->mapping;
+	struct dentry *dentry;
+	struct inode *inode;
+	struct list_head *head;
+	unsigned long end_index;
 	unsigned offset = PAGE_CACHE_SIZE;
 	int err;
+
+	if (!mapping)
+		BUG();
+	inode = (struct inode *)mapping->host;
+	if (!inode)
+		BUG();
+
+	/* Pick the first dentry for this inode. */
+	head = &inode->i_dentry;
+	if (list_empty(head))
+		BUG();	/* We need one, are we guaranteed to have one?  */
+	dentry = list_entry(head->next, struct dentry, d_alias);
+
+	end_index = inode->i_size >> PAGE_CACHE_SHIFT;
 
 	/* easy case */
 	if (page->index < end_index)
@@ -170,6 +186,7 @@ do_it:
 	get_page(page);
 	err = smb_writepage_sync(dentry, page, 0, offset);
 	SetPageUptodate(page);
+	UnlockPage(page);
 	put_page(page);
 	return err;
 }
@@ -264,7 +281,7 @@ static int smb_commit_write(struct file *file, struct page *page,
 
 struct address_space_operations smb_file_aops = {
 	readpage: smb_readpage,
-	writepage: smb_writepage,
+	/* writepage: smb_writepage, */
 	prepare_write: smb_prepare_write,
 	commit_write: smb_commit_write
 };

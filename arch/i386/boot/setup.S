@@ -631,43 +631,39 @@ end_move_self:					# now we are at the right place
 						# appropriate
 
 # that was painless, now we enable a20
-
-#
-# First, try the "fast A20 gate".
-#
-	inb	$0x92,%al
-	orb	$0x02,%al			# Fast A20 on
-	andb	$0xfe,%al			# Don't reset CPU!
-	outb	%al,$0x92
-
-#
-# Now comes the tricky part: some machines don't have a KBC and thus
-# would end up looping almost indefinitely here.  HOWEVER, once we
-# have done the first command write, we must not stop the sequence.
-# Therefore, the first empty_8042 should check to see if the fast A20
-# did the trick and stop its probing at that stage; but subsequent ones
-# must not do so.
-#
-	movb	$0x01,%dl			# A20-sensitive
 	call	empty_8042
-	jnz	a20_wait			# A20 already on?
 
 	movb	$0xD1, %al			# command write
 	outb	%al, $0x64
-	call	empty_8042_no_a20_exit
+	call	empty_8042
 
 	movb	$0xDF, %al			# A20 on
 	outb	%al, $0x60
-	call	empty_8042_no_a20_exit
+	call	empty_8042
+
+#
+#	You must preserve the other bits here. Otherwise embarrasing things
+#	like laptops powering off on boot happen. Corrected version by Kira
+#	Brown from Linux 2.2
+#
+	inb	$0x92, %al			# 
+	orb	$02, %al			# "fast A20" version
+	outb	%al, $0x92			# some chips have only this
 
 # wait until a20 really *is* enabled; it can take a fair amount of
 # time on certain systems; Toshiba Tecras are known to have this
 # problem.  The memory location used here (0x200) is the int 0x80
 # vector, which should be safe to use.
 
+	xorw	%ax, %ax			# segment 0x0000
+	movw	%ax, %fs
+	decw	%ax				# segment 0xffff (HMA)
+	movw	%ax, %gs
 a20_wait:
-	call	a20_test
-	jz	a20_wait
+	incw	%ax				# unused memory location <0xfff0
+	movw	%ax, %fs:(0x200)		# we use the "int 0x80" vector
+	cmpw	%gs:(0x210), %ax		# and its corresponding HMA addr
+	je	a20_wait			# loop until no longer aliased
 
 # make sure any possible coprocessor is properly reset..
 	xorw	%ax, %ax
@@ -830,25 +826,21 @@ bootsect_panic_mess:
 # Some machines have delusions that the keyboard buffer is always full
 # with no keyboard attached...
 #
-# If %dl is nonzero on entry, terminate with ZF=0 if A20 becomes alive,
-# otherwise terminate with ZF=1.
+# If there is no keyboard controller, we will usually get 0xff
+# to all the reads.  With each IO taking a microsecond and
+# a timeout of 100,000 iterations, this can take about half a
+# second ("delay" == outb to port 0x80). That should be ok,
+# and should also be plenty of time for a real keyboard controller
+# to empty.
+#
 
-empty_8042_no_a20_exit:
-	xorb	%dl,%dl				# Not A20-sensitive
 empty_8042:
 	pushl	%ecx
-	movl	$0x000FFFFF, %ecx
+	movl	$100000, %ecx
 
 empty_8042_loop:
 	decl	%ecx
-	jz	empty_8042_end_loop		# ZF=1
-
-	# Always call the test routine to keep delays constant
-	call	a20_test
-	jz	ignore_a20
-	and	%dl,%dl
-	jnz	empty_8042_end_loop		# ZF=0
-ignore_a20:
+	jz	empty_8042_end_loop
 
 	call	delay
 
@@ -863,37 +855,9 @@ ignore_a20:
 no_output:
 	testb	$2, %al				# is input buffer full?
 	jnz	empty_8042_loop			# yes - loop
-	# ZF=1
-
 empty_8042_end_loop:
 	popl	%ecx
 	ret
-
-a20_test:
-	pushw	%ax
-	pushw	%cx
-	pushw	%fs
-	pushw	%gs
-	xorw	%ax, %ax			# segment 0x0000
-	movw	%ax, %fs
-	decw	%ax				# segment 0xffff (HMA)
-	movw	%ax, %gs
-	movw	0x100,%cx
-	movw	%fs:(0x200),%ax			# So we keep cycling...
-	pushw	%ax				# Be extra paranoid...
-a20_loop:
-	incw	%ax				# unused memory location <0xfff0
-	movw	%ax, %fs:(0x200)		# we use the "int 0x80" vector
-	cmpw	%gs:(0x210), %ax		# and its corresponding HMA addr
-	jnz	a20_ret				# if ZF not set A20 is functional
-	loop	a20_loop
-a20_ret:
-	popw	%fs:(0x200)
-	popw	%gs
-	popw	%fs
-	popw	%cx
-	popw	%ax
-	ret					# if ZF set A20 is not operational
 
 # Read the cmos clock. Return the seconds in al
 gettime:
@@ -911,7 +875,6 @@ gettime:
 
 # Delay is needed after doing I/O
 delay:
-	outb	%al,$0x80			# What the main kernel uses
 	outb	%al,$0x80
 	ret
 

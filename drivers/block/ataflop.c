@@ -317,7 +317,7 @@ static volatile int fdc_busy = 0;
 static DECLARE_WAIT_QUEUE_HEAD(fdc_wait);
 static DECLARE_WAIT_QUEUE_HEAD(format_wait);
 
-static unsigned int changed_floppies = 0xff, fake_change = 0;
+static unsigned long changed_floppies = 0xff, fake_change = 0;
 #define	CHECK_CHANGE_DELAY	HZ/2
 
 #define	FD_MOTOR_OFF_DELAY	(3*HZ)

@@ -234,7 +234,6 @@
 #include <linux/kernelcapi.h>
 #include <linux/init.h>
 #include <linux/devfs_fs_kernel.h>
-#include <linux/init.h>
 #include "capiutil.h"
 #include "capicmd.h"
 #ifdef CONFIG_ISDN_CAPI_MIDDLEWARE

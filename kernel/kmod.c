@@ -165,7 +165,7 @@ static int exec_modprobe(void * module_name)
  
 int request_module(const char * module_name)
 {
-	int pid;
+	pid_t pid;
 	int waitpid_result;
 	sigset_t tmpsig;
 	int i;
@@ -259,40 +259,121 @@ EXPORT_SYMBOL(hotplug_path);
 
 static int exec_helper (void *arg)
 {
+	long ret;
 	void **params = (void **) arg;
 	char *path = (char *) params [0];
 	char **argv = (char **) params [1];
 	char **envp = (char **) params [2];
-	return exec_usermodehelper (path, argv, envp);
+
+	ret = exec_usermodehelper (path, argv, envp);
+	if (ret < 0)
+		ret = -ret;
+	do_exit(ret);
 }
 
+struct subprocess_info {
+	struct semaphore *sem;
+	char *path;
+	char **argv;
+	char **envp;
+	int retval;
+};
 
+/*
+ * This is a standalone child of keventd.  It forks off another thread which
+ * is the desired usermode helper and then waits for the child to exit.
+ * We return the usermode process's exit code, or some -ve error code.
+ */
+static int ____call_usermodehelper(void *data)
+{
+	struct subprocess_info *sub_info = data;
+	struct task_struct *curtask = current;
+	void *params [3] = { sub_info->path, sub_info->argv, sub_info->envp };
+	pid_t pid, pid2;
+	mm_segment_t fs;
+	int retval = 0;
+
+	if (!curtask->fs->root) {
+		printk(KERN_ERR "call_usermodehelper[%s]: no root fs\n", sub_info->path);
+		retval = -EPERM;
+		goto up_and_out;
+	}
+	if ((pid = kernel_thread(exec_helper, (void *) params, 0)) < 0) {
+		printk(KERN_ERR "failed fork2 %s, errno = %d", sub_info->argv[0], -pid);
+		retval = pid;
+		goto up_and_out;
+	}
+
+	if (retval >= 0) {
+		/* Block everything but SIGKILL/SIGSTOP */
+		spin_lock_irq(&curtask->sigmask_lock);
+		siginitsetinv(&curtask->blocked, sigmask(SIGKILL) | sigmask(SIGSTOP));
+		recalc_sigpending(curtask);
+		spin_unlock_irq(&curtask->sigmask_lock);
+
+		/* Allow the system call to access kernel memory */
+		fs = get_fs();
+		set_fs(KERNEL_DS);
+		pid2 = waitpid(pid, &retval, __WCLONE);
+		if (pid2 == -1 && errno < 0)
+			pid2 = errno;
+		set_fs(fs);
+
+		if (pid2 != pid) {
+			printk(KERN_ERR "waitpid(%d) failed, %d\n", pid, pid2);
+			retval = (pid2 < 0) ? pid2 : -1;
+		}
+	}
+
+up_and_out:
+	sub_info->retval = retval;
+	curtask->exit_signal = SIGCHLD;		/* Wake up parent */
+	up_and_exit(sub_info->sem, retval);
+}
+
+/*
+ * This is a schedule_task function, so we must not sleep for very long at all.
+ * But the exec'ed process could do anything at all.  So we launch another
+ * kernel thread.
+ */
+static void __call_usermodehelper(void *data)
+{
+	struct subprocess_info *sub_info = data;
+	pid_t pid;
+
+	if ((pid = kernel_thread (____call_usermodehelper, (void *)sub_info, 0)) < 0) {
+		printk(KERN_ERR "failed fork1 %s, errno = %d", sub_info->argv[0], -pid);
+		sub_info->retval = pid;
+		up(sub_info->sem);
+	}
+}
+
+/*
+ * This function can be called via do_exit->__exit_files, which means that
+ * we're partway through exitting and things break if we fork children.
+ * So we use keventd to parent the usermode helper.
+ * We return the usermode application's exit code or some -ve error.
+ */
 int call_usermodehelper (char *path, char **argv, char **envp)
 {
-	void *params [3] = { path, argv, envp };
-	int pid, pid2, retval;
-	mm_segment_t fs;
+	DECLARE_MUTEX_LOCKED(sem);
+	struct subprocess_info sub_info = {
+		sem:	&sem,
+		path:	path,
+		argv:	argv,
+		envp:	envp,
+		retval:	0,
+	};
+	struct tq_struct tqs = {
+		next:		0,
+		sync:		0,
+		routine:	__call_usermodehelper,
+		data:		&sub_info,
+	};
 
-	if ( ! current->fs->root ) {
-		printk(KERN_ERR "call_usermodehelper[%s]: no root fs\n",
-			path);
-		return -EPERM;
-	}
-	if ((pid = kernel_thread (exec_helper, (void *) params, 0)) < 0) {
-		printk(KERN_ERR "failed fork %s, errno = %d", argv [0], -pid);
-		return -1;
-	}
-
-	fs = get_fs ();
-	set_fs (KERNEL_DS);
-	pid2 = waitpid (pid, &retval, __WCLONE);
-	set_fs (fs);
-
-	if (pid2 != pid) {
-		printk(KERN_ERR "waitpid(%d) failed, %d\n", pid, pid2);
-			return -1;
-	}
-	return retval;
+	schedule_task(&tqs);
+	down(&sem);		/* Wait for an error or completion */
+	return sub_info.retval;
 }
 
 EXPORT_SYMBOL(exec_usermodehelper);

@@ -393,6 +393,7 @@ static int __init dmfe_init_one (struct pci_dev *pdev,
 	dev = init_etherdev(NULL, sizeof(*db));
 	if (dev == NULL)
 		goto err_out;
+	SET_MODULE_OWNER(dev);
 
 	/* IO range check */
 	if (!request_region(pci_iobase, CHK_IO_SIZE(pdev, dev_rev), dev->name)) {
@@ -461,12 +462,14 @@ static void __exit dmfe_remove_one (struct pci_dev *pdev)
  
 static int dmfe_open(struct net_device *dev)
 {
+	int ret;
 	struct dmfe_board_info *db = dev->priv;
 
 	DMFE_DBUG(0, "dmfe_open", 0);
 
-	if (request_irq(dev->irq, &dmfe_interrupt, SA_SHIRQ, dev->name, dev))
-		return -EAGAIN;
+	ret = request_irq(dev->irq, &dmfe_interrupt, SA_SHIRQ, dev->name, dev);
+	if (ret)
+		return ret;
 
 	/* Allocated Tx/Rx descriptor memory */
 	db->desc_pool_ptr = kmalloc(sizeof(struct tx_desc) * DESC_ALL_CNT + 0x20, GFP_KERNEL | GFP_DMA);
@@ -510,9 +513,6 @@ static int dmfe_open(struct net_device *dev)
 
 	/* Initilize DM910X board */
 	dmfe_init_dm910x(dev);
-
-	/* Active System Interface */
-	MOD_INC_USE_COUNT;
 
 	/* set and active a timer process */
 	init_timer(&db->timer);
@@ -657,7 +657,7 @@ static int dmfe_stop(struct net_device *dev)
 	DELAY_5US;
 
 	/* deleted timer */
-	del_timer(&db->timer);
+	del_timer_sync(&db->timer);
 
 	/* free interrupt */
 	free_irq(dev->irq, dev);
@@ -668,8 +668,6 @@ static int dmfe_stop(struct net_device *dev)
 	/* free all descriptor memory and buffer memory */
 	kfree(db->desc_pool_ptr);
 	kfree(db->buf_pool_ptr);
-
-	MOD_DEC_USE_COUNT;
 
 	return 0;
 }

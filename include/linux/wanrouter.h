@@ -442,7 +442,7 @@ typedef struct wan_device
 	char api_status;		/* device api status */
 	struct net_device_stats stats; 	/* interface statistics */
 	unsigned reserved[16];		/* reserved for future use */
-	unsigned critical;		/* critical section flag */
+	unsigned long critical;		/* critical section flag */
 					/****** device management methods ***/
 	int (*setup) (struct wan_device *wandev, wandev_conf_t *conf);
 	int (*shutdown) (struct wan_device *wandev);

@@ -220,6 +220,70 @@ void __init setup_local_APIC (void)
 		BUG();
 
 	/*
+	 * Intel recommends to set DFR, LDR and TPR before enabling
+	 * an APIC.  See e.g. "AP-388 82489DX User's Manual" (Intel
+	 * document number 292116).  So here it goes...
+	 */
+
+	/*
+	 * Put the APIC into flat delivery mode.
+	 * Must be "all ones" explicitly for 82489DX.
+	 */
+	apic_write_around(APIC_DFR, 0xffffffff);
+
+	/*
+	 * Set up the logical destination ID.
+	 */
+	value = apic_read(APIC_LDR);
+	value &= ~APIC_LDR_MASK;
+	value |= (1<<(smp_processor_id()+24));
+	apic_write_around(APIC_LDR, value);
+
+	/*
+	 * Set Task Priority to 'accept all'. We never change this
+	 * later on.
+	 */
+	value = apic_read(APIC_TASKPRI);
+	value &= ~APIC_TPRI_MASK;
+	apic_write_around(APIC_TASKPRI, value);
+
+	/*
+	 * Now that we are all set up, enable the APIC
+	 */
+	value = apic_read(APIC_SPIV);
+	value &= ~APIC_VECTOR_MASK;
+	/*
+	 * Enable APIC
+	 */
+	value |= (1<<8);
+
+	/*
+	 * Some unknown Intel IO/APIC (or APIC) errata is biting us with
+	 * certain networking cards. If high frequency interrupts are
+	 * happening on a particular IOAPIC pin, plus the IOAPIC routing
+	 * entry is masked/unmasked at a high rate as well then sooner or
+	 * later IOAPIC line gets 'stuck', no more interrupts are received
+	 * from the device. If focus CPU is disabled then the hang goes
+	 * away, oh well :-(
+	 *
+	 * [ This bug can be reproduced easily with a level-triggered
+	 *   PCI Ne2000 networking cards and PII/PIII processors, dual
+	 *   BX chipset. ]
+	 */
+#if 0
+	/* Enable focus processor (bit==0) */
+	value &= ~(1<<9);
+#else
+	/* Disable focus processor (bit==1) */
+	value |= (1<<9);
+#endif
+	/*
+	 * Set spurious IRQ vector
+	 */
+	value |= SPURIOUS_APIC_VECTOR;
+	apic_write_around(APIC_SPIV, value);
+
+	/*
 	 * Set up LVT0, LVT1:
 	 *
 	 * set up through-local-APIC on the BP's LINT0. This is not
@@ -268,64 +332,6 @@ void __init setup_local_APIC (void)
 		printk("ESR value after enabling vector: %08lx\n", value);
 	} else
 		printk("No ESR for 82489DX.\n");
-
-	/*
-	 * Set Task Priority to 'accept all'. We never change this
-	 * later on.
-	 */
-	value = apic_read(APIC_TASKPRI);
-	value &= ~APIC_TPRI_MASK;
-	apic_write_around(APIC_TASKPRI, value);
-
-	/*
-	 * Set up the logical destination ID and put the
-	 * APIC into flat delivery mode.
-	 */
-	value = apic_read(APIC_LDR);
-	value &= ~APIC_LDR_MASK;
-	value |= (1<<(smp_processor_id()+24));
-	apic_write_around(APIC_LDR, value);
-
-	/*
-	 * Must be "all ones" explicitly for 82489DX.
-	 */
-	apic_write_around(APIC_DFR, 0xffffffff);
-
-	/*
-	 * Now that we are all set up, enable the APIC
-	 */
-	value = apic_read(APIC_SPIV);
-	value &= ~APIC_VECTOR_MASK;
-	/*
-	 * Enable APIC
-	 */
-	value |= (1<<8);
-
-	/*
-	 * Some unknown Intel IO/APIC (or APIC) errata is biting us with
-	 * certain networking cards. If high frequency interrupts are
-	 * happening on a particular IOAPIC pin, plus the IOAPIC routing
-	 * entry is masked/unmasked at a high rate as well then sooner or
-	 * later IOAPIC line gets 'stuck', no more interrupts are received
-	 * from the device. If focus CPU is disabled then the hang goes
-	 * away, oh well :-(
-	 *
-	 * [ This bug can be reproduced easily with a level-triggered
-	 *   PCI Ne2000 networking cards and PII/PIII processors, dual
-	 *   BX chipset. ]
-	 */
-#if 0
-	/* Enable focus processor (bit==0) */
-	value &= ~(1<<9);
-#else
-	/* Disable focus processor (bit==1) */
-	value |= (1<<9);
-#endif
-	/*
-	 * Set spurious IRQ vector
-	 */
-	value |= SPURIOUS_APIC_VECTOR;
-	apic_write_around(APIC_SPIV, value);
 }
 
 void __init init_apic_mappings(void)

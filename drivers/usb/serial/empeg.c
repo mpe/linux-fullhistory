@@ -13,6 +13,10 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (12/03/2000) gb
+ *	Added port->tty->ldisc.set_termios(port->tty, NULL) to empeg_open()
+ *      This notifies the tty driver that the termios have changed.
+ * 
  * (11/13/2000) gb
  *	Moved tty->low_latency = 1 from empeg_read_bulk_callback() to empeg_open()
  *	(It only needs to be set once - Doh!)
@@ -161,6 +165,15 @@ static int empeg_open (struct usb_serial_port *port, struct file *filp)
 
 	port->tty->termios->c_cflag
 		|= CS8;
+
+	/* gb - 2000/12/03
+	 *
+	 * Contributed by Borislav Deianov
+	 *
+	 * Notify the tty driver that the termios have changed!!
+	 *
+	 */
+        port->tty->ldisc.set_termios(port->tty, NULL);
 
 	/* gb - 2000/11/05
 	 *

@@ -341,6 +341,7 @@ D: Texas Instruments PCILynx IEEE 1394 driver
 N: Al Borchers
 E: alborchers@steinerpoint.com
 D: Author/maintainer of Digi AccelePort USB driver
+D: work on usbserial and keyspan_pda drivers
 S: 4912 Zenith Ave. S.
 S: Minneapolis, MN  55410
 S: USA
@@ -409,6 +410,10 @@ S: The Netherlands
 N: Zach Brown
 E: zab@zabbo.net
 D: maestro pci sound
+
+N: Gary Brubaker
+E: xavyer@ix.netcom.com
+D: USB Serial Empeg Empeg-car Mark I/II Driver
 
 N: Ray Burr
 E: ryb@nightmare.com

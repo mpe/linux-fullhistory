@@ -20,6 +20,9 @@
 #if defined(__arm__)
 #define DUMMY_COLUMNS	ORIG_VIDEO_COLS
 #define DUMMY_ROWS	ORIG_VIDEO_LINES
+#elif defined(__hppa__)
+#define DUMMY_COLUMNS	80	/* fixme ! (mine uses 160x64 at 1280x1024) */
+#define DUMMY_ROWS	25
 #else
 #define DUMMY_COLUMNS	80
 #define DUMMY_ROWS	25

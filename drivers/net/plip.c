@@ -286,6 +286,7 @@ plip_init_dev(struct net_device *dev, struct parport *pb)
 	struct net_local *nl;
 	struct pardevice *pardev;
 
+	SET_MODULE_OWNER(dev);
 	dev->irq = pb->irq;
 	dev->base_addr = pb->base;
 
@@ -1164,7 +1165,6 @@ plip_open(struct net_device *dev)
 
 	netif_start_queue (dev);
 
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -1212,7 +1212,6 @@ plip_close(struct net_device *dev)
 	/* Reset. */
 	outb(0x00, PAR_CONTROL(dev));
 #endif
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 

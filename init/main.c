@@ -700,6 +700,7 @@ static void __init do_basic_setup(void)
 	else mount_initrd =0;
 #endif
 
+	start_context_thread();
 	do_initcalls();
 
 	/* .. filesystems .. */
@@ -712,16 +713,16 @@ static void __init do_basic_setup(void)
 	init_pcmcia_ds();		/* Do this last */
 #endif
 
-#ifdef CONFIG_HOTPLUG
+	/* Mount the root filesystem.. */
+	mount_root();
+
+#if defined(CONFIG_HOTPLUG) && defined(CONFIG_NET)
 	/* do this after other 'do this last' stuff, because we want
 	 * to minimize spurious executions of /sbin/hotplug
 	 * during boot-up
 	 */
 	net_notifier_init();
 #endif
-
-	/* Mount the root filesystem.. */
-	mount_root();
 
 	mount_devfs_fs ();
 

@@ -101,6 +101,13 @@
 static char *version = 
 "Olympic.c v0.5.0 3/10/00 - Peter De Schrijver & Mike Phillips" ; 
 
+static struct pci_device_id olympic_pci_tbl[] __initdata = {
+	{ PCI_VENDOR_ID_IBM, PCI_DEVICE_ID_IBM_TR_WAKE, PCI_ANY_ID, PCI_ANY_ID, },
+	{ }			/* Terminating entry */
+};
+MODULE_DEVICE_TABLE(pci, olympic_pci_tbl);
+
+
 static char *open_maj_error[]  = {"No error", "Lobe Media Test", "Physical Insertion",
 				   "Address Verification", "Neighbor Notification (Ring Poll)",
 				   "Request Parameters","FDX Registration Request",

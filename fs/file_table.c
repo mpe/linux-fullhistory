@@ -40,13 +40,11 @@ struct file * get_empty_filp(void)
 		list_del(&f->f_list);
 		files_stat.nr_free_files--;
 	new_one:
-		file_list_unlock();
 		memset(f, 0, sizeof(*f));
 		atomic_set(&f->f_count,1);
 		f->f_version = ++event;
 		f->f_uid = current->fsuid;
 		f->f_gid = current->fsgid;
-		file_list_lock();
 		list_add(&f->f_list, &anon_list);
 		file_list_unlock();
 		return f;

@@ -152,6 +152,8 @@ int __init ne2_probe(struct net_device *dev)
 	int i;
 	int adapter_found = 0;
 
+	SET_MODULE_OWNER(dev);
+
 	/* Do not check any supplied i/o locations. 
 	   POS registers usually don't fail :) */
 
@@ -371,7 +373,6 @@ out:
 static int ne_open(struct net_device *dev)
 {
 	ei_open(dev);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -380,7 +381,6 @@ static int ne_close(struct net_device *dev)
 	if (ei_debug > 1)
 		printk("%s: Shutting down ethercard.\n", dev->name);
 	ei_close(dev);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 

@@ -13,6 +13,7 @@
  * enhanced by Bjoern Brauel and Roman Hodek
  */
 
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
