@@ -132,20 +132,12 @@ static int parse_options(char *options, struct iso9660_options * popt)
 
 #ifdef CONFIG_JOLIET
 		if (!strcmp(this_char,"iocharset")) {
-			char *p;
-			int len;
-
-			p = value;
-			while (*value && *value != ',') value++;
-			len = value - p;
-			if (len) {
-				popt->iocharset = kmalloc(len+1, GFP_KERNEL);
-				memcpy(popt->iocharset, p, len);
-				popt->iocharset[len] = 0;
-			} else {
-				popt->iocharset = NULL;
+			popt->iocharset = value;
+			while (*value && *value != ',')
+				value++;
+			if (value == popt->iocharset)
 				return 0;
-			}
+			*value = 0;
 		} else
 #endif
 		if (!strcmp(this_char,"map") && value) {
@@ -266,32 +258,28 @@ static unsigned int isofs_get_last_session(kdev_t dev)
 struct super_block *isofs_read_super(struct super_block *s, void *data,
 				     int silent)
 {
-	struct buffer_head	      * bh = NULL;
+	struct buffer_head	      * bh = NULL, *pri_bh = NULL;
 	unsigned int			blocksize;
 	unsigned int			blocksize_bits;
 	kdev_t				dev = s->s_dev;
-	struct hs_volume_descriptor   * hdp;
 	struct hs_primary_descriptor  * h_pri = NULL;
-	int				high_sierra;
-	int				iso_blknum;
-	int				joliet_level = 0;
-	struct iso9660_options		opt;
-	int				orig_zonesize;
 	struct iso_primary_descriptor * pri = NULL;
-	struct iso_directory_record   * rootp;
 	struct iso_supplementary_descriptor *sec = NULL;
-	struct iso_volume_descriptor  * vdp;
+	struct iso_directory_record   * rootp;
+	int				high_sierra;
+	int				iso_blknum, block;
+	int				joliet_level = 0;
+	int				orig_zonesize;
 	unsigned int			vol_desc_start;
 	struct inode		      * inode;
-
+	struct iso9660_options		opt;
 
 	MOD_INC_USE_COUNT;
+	/* lock before any blocking operations */
+	lock_super(s);
 
-	if (!parse_options((char *) data,&opt)) {
-		s->s_dev = 0;
-		MOD_DEC_USE_COUNT;
-		return NULL;
-	}
+	if (!parse_options((char *) data, &opt))
+		goto out_unlock;
 
 #if 0
 	printk("map = %c\n", opt.map);
@@ -303,6 +291,7 @@ struct super_block *isofs_read_super(struct super_block *s, void *data,
 	printk("blocksize = %d\n", opt.blocksize);
 	printk("gid = %d\n", opt.gid);
 	printk("uid = %d\n", opt.uid);
+	printk("iocharset = %s\n", opt.iocharset);
 #endif
 
  	/*
@@ -333,8 +322,6 @@ struct super_block *isofs_read_super(struct super_block *s, void *data,
 
 	set_blocksize(dev, opt.blocksize);
 
-	lock_super(s);
-
 	s->u.isofs_sb.s_high_sierra = high_sierra = 0; /* default is iso9660 */
 
 	vol_desc_start = isofs_get_last_session(dev);
@@ -342,32 +329,25 @@ struct super_block *isofs_read_super(struct super_block *s, void *data,
   	for (iso_blknum = vol_desc_start+16;
              iso_blknum < vol_desc_start+100; iso_blknum++)
 	{
-	    int b = iso_blknum << (ISOFS_BLOCK_BITS-blocksize_bits);
+	    struct hs_volume_descriptor   * hdp;
+	    struct iso_volume_descriptor  * vdp;
 
-	    if (!(bh = bread(dev,b,opt.blocksize))) {
-		s->s_dev = 0;
-		printk("isofs_read_super: bread failed, dev "
-		       "%s iso_blknum %d block %d\n",
-		       kdevname(dev), iso_blknum, b);
-		unlock_super(s);
-		MOD_DEC_USE_COUNT;
-		return NULL;
-	    }
+	    block = iso_blknum << (ISOFS_BLOCK_BITS-blocksize_bits);
+	    if (!(bh = bread(dev, block, opt.blocksize)))
+		goto out_no_read;		
 
 	    vdp = (struct iso_volume_descriptor *)bh->b_data;
 	    hdp = (struct hs_volume_descriptor *)bh->b_data;
 	    
 	    if (strncmp (hdp->id, HS_STANDARD_ID, sizeof hdp->id) == 0) {
 		if (isonum_711 (hdp->type) != ISO_VD_PRIMARY)
-		    goto out;
-		if (isonum_711 (hdp->type) == ISO_VD_END)
-		    goto out;
+		    goto out_freebh;
 		
 		s->u.isofs_sb.s_high_sierra = 1;
 		high_sierra = 1;
 		opt.rock = 'n';
 		h_pri = (struct hs_primary_descriptor *)vdp;
-		break;
+		goto root_found;
 	    }
 
 	    if (strncmp (vdp->id, ISO_STANDARD_ID, sizeof vdp->id) == 0) {
@@ -376,9 +356,13 @@ struct super_block *isofs_read_super(struct super_block *s, void *data,
 		if (isonum_711 (vdp->type) == ISO_VD_PRIMARY) {
 		    if (pri == NULL) {
 			pri = (struct iso_primary_descriptor *)vdp;
+			/* Save the buffer in case we need it ... */
+			pri_bh = bh;
+			bh = NULL;
 		    }
+		}
 #ifdef CONFIG_JOLIET
-		} else if (isonum_711 (vdp->type) == ISO_VD_SUPPLEMENTARY) {
+		else if (isonum_711 (vdp->type) == ISO_VD_SUPPLEMENTARY) {
 		    sec = (struct iso_supplementary_descriptor *)vdp;
 		    if (sec->escape[0] == 0x25 && sec->escape[1] == 0x2f) {
 			if (opt.joliet == 'y') {
@@ -392,27 +376,31 @@ struct super_block *isofs_read_super(struct super_block *s, void *data,
 			    printk("ISO9660 Extensions: Microsoft Joliet Level %d\n",
 				   joliet_level);
 			}
-			break;
+			goto root_found;
 		    } else {
 			/* Unknown supplementary volume descriptor */
 			sec = NULL;
 		    }
-#endif
 		}
+#endif
 		/* Just skip any volume descriptors we don't recognize */
 	    }
 
 	    brelse(bh);
+	    bh = NULL;
 	}
-	if ((pri == NULL) && (sec == NULL) && (h_pri == NULL)) {
-	    if (!silent)
-		printk("Unable to identify CD-ROM format.\n");
-	    s->s_dev = 0;
-	    unlock_super(s);
-	    MOD_DEC_USE_COUNT;
-	    return NULL;
-	}
+	/*
+	 * If we fall through, either no volume descriptor was found,
+	 * or else we passed a primary descriptor looking for others.
+	 */
+	if (!pri)
+		goto out_unknown_format;
+	brelse(bh);
+	bh = pri_bh;
+	pri_bh = NULL;
 
+root_found:
+	brelse(pri_bh);
 	s->u.isofs_sb.s_joliet_level = joliet_level;
 
 	if (joliet_level && opt.rock == 'n') {
@@ -425,10 +413,8 @@ struct super_block *isofs_read_super(struct super_block *s, void *data,
 	if(high_sierra){
 	  rootp = (struct iso_directory_record *) h_pri->root_directory_record;
 #ifndef IGNORE_WRONG_MULTI_VOLUME_SPECS
-	  if (isonum_723 (h_pri->volume_set_size) != 1) {
-	    printk("Multi-volume disks not supported.\n");
-	    goto out;
-	  }
+	  if (isonum_723 (h_pri->volume_set_size) != 1)
+		goto out_no_support;
 #endif IGNORE_WRONG_MULTI_VOLUME_SPECS
 	  s->u.isofs_sb.s_nzones = isonum_733 (h_pri->volume_space_size);
 	  s->u.isofs_sb.s_log_zone_size = isonum_723 (h_pri->logical_block_size);
@@ -436,10 +422,8 @@ struct super_block *isofs_read_super(struct super_block *s, void *data,
 	} else {
 	  rootp = (struct iso_directory_record *) pri->root_directory_record;
 #ifndef IGNORE_WRONG_MULTI_VOLUME_SPECS
-	  if (isonum_723 (pri->volume_set_size) != 1) {
-	    printk("Multi-volume disks not supported.\n");
-	    goto out;
-	  }
+	  if (isonum_723 (pri->volume_set_size) != 1)
+		goto out_no_support;
 #endif IGNORE_WRONG_MULTI_VOLUME_SPECS
 	  s->u.isofs_sb.s_nzones = isonum_733 (pri->volume_space_size);
 	  s->u.isofs_sb.s_log_zone_size = isonum_723 (pri->logical_block_size);
@@ -454,20 +438,13 @@ struct super_block *isofs_read_super(struct super_block *s, void *data,
 
 	/*
 	 * If the zone size is smaller than the hardware sector size,
-	 * this is a fatal error.  This would occur if the
-	 * disc drive had sectors that were 2048 bytes, but the filesystem
-	 * had blocks that were 512 bytes (which should only very rarely
-	 * happen.
+	 * this is a fatal error.  This would occur if the disc drive
+	 * had sectors that were 2048 bytes, but the filesystem had
+	 * blocks that were 512 bytes (which should only very rarely
+	 * happen.)
 	 */
-	if(    (blocksize != 0)
-	    && (orig_zonesize < blocksize) )
-	  {
-	      printk("Logical zone size(%d) < hardware blocksize(%u)\n",
-		     orig_zonesize, blocksize);
-	      goto out;
-
-	  }
-
+	if(blocksize != 0 && orig_zonesize < blocksize)
+		goto out_bad_size;
 
 	switch (s -> u.isofs_sb.s_log_zone_size)
 	  { case  512: s -> u.isofs_sb.s_log_zone_size =  9; break;
@@ -475,8 +452,7 @@ struct super_block *isofs_read_super(struct super_block *s, void *data,
 	    case 2048: s -> u.isofs_sb.s_log_zone_size = 11; break;
 
 	    default:
-	      printk("Bad logical zone size %ld\n", s -> u.isofs_sb.s_log_zone_size);
-	      goto out;
+		goto out_bad_zone_size;
 	  }
 
 	s->s_magic = ISOFS_SUPER_MAGIC;
@@ -488,8 +464,6 @@ struct super_block *isofs_read_super(struct super_block *s, void *data,
 
 	s->s_flags |= MS_RDONLY /* | MS_NODEV | MS_NOSUID */;
 
-	brelse(bh);
-	
 	/* RDE: data zone now byte offset! */
 
 	s->u.isofs_sb.s_firstdatazone = ((isonum_733 (rootp->extent) +
@@ -502,10 +476,9 @@ struct super_block *isofs_read_super(struct super_block *s, void *data,
 	printk(KERN_DEBUG "First datazone:%ld   Root inode number %d\n",
 	       s->u.isofs_sb.s_firstdatazone >> s -> u.isofs_sb.s_log_zone_size,
 	       s->u.isofs_sb.s_firstdatazone);
-	if(high_sierra) printk(KERN_DEBUG "Disc in High Sierra format.\n");
+	if(high_sierra)
+		printk(KERN_DEBUG "Disc in High Sierra format.\n");
 #endif
-	unlock_super(s);
-	/* set up enough so that it can read an inode */
 
 	/*
 	 * Force the blocksize to 512 for 512 byte sectors.  The file
@@ -544,27 +517,17 @@ struct super_block *isofs_read_super(struct super_block *s, void *data,
 	s->u.isofs_sb.s_nls_iocharset = NULL;
 
 #ifdef CONFIG_JOLIET
-	if (joliet_level == 0) {
-		if (opt.iocharset) {
-			kfree(opt.iocharset);
-			opt.iocharset = NULL;
-		}
-	} else if (opt.utf8 == 0) {
-		char * p;
-		p = opt.iocharset ? opt.iocharset : "iso8859-1";
+	if (joliet_level && opt.utf8 == 0) {
+		char * p = opt.iocharset ? opt.iocharset : "iso8859-1";
 		s->u.isofs_sb.s_nls_iocharset = load_nls(p);
 		if (! s->u.isofs_sb.s_nls_iocharset) {
 			/* Fail only if explicit charset specified */
-			if (opt.iocharset) {
-				kfree(opt.iocharset);
-				goto out;
-			} else {
-				s->u.isofs_sb.s_nls_iocharset = load_nls_default();
-			}
+			if (opt.iocharset)
+				goto out_freebh;
+			s->u.isofs_sb.s_nls_iocharset = load_nls_default();
 		}
 	}
 #endif
-	s->s_dev = dev;
 	s->s_op = &isofs_sops;
 	s->u.isofs_sb.s_mapping = opt.map;
 	s->u.isofs_sb.s_rock = (opt.rock == 'y' ? 2 : 0);
@@ -605,31 +568,62 @@ struct super_block *isofs_read_super(struct super_block *s, void *data,
 	}
 
 	s->s_root = d_alloc_root(inode, NULL);
-	unlock_super(s);
+	if (!(s->s_root))
+		goto out_no_root;
 
-	if (!(s->s_root)) {
-		s->s_dev = 0;
-		printk("get root inode failed\n");
-#ifdef CONFIG_JOLIET
-		if (s->u.isofs_sb.s_nls_iocharset)
-			unload_nls(s->u.isofs_sb.s_nls_iocharset);
-		if (opt.iocharset) kfree(opt.iocharset);
-#endif
-		MOD_DEC_USE_COUNT;
-		return NULL;
-	}
-
-	if(!check_disk_change(s->s_dev)) {
+	if(!check_disk_change(dev)) {
+		brelse(bh);
+		unlock_super(s);
 		return s;
 	}
+	/*
+	 * Disk changed? Free the root dentry and clean up ...
+	 */
+	dput(s->s_root);
+	goto out_freechar;
+
+	/*
+	 * Display error message
+	 */
+out_no_root:
+	printk(KERN_ERR "isofs_read_super: get root inode failed\n");
+	goto out_iput;
+out_bad_zone_size:
+	printk(KERN_WARNING "Bad logical zone size %ld\n",
+		s->u.isofs_sb.s_log_zone_size);
+	goto out_freebh;
+out_bad_size:
+	printk(KERN_WARNING "Logical zone size(%d) < hardware blocksize(%u)\n",
+		orig_zonesize, blocksize);
+	goto out_freebh;
+#ifndef IGNORE_WRONG_MULTI_VOLUME_SPECS
+out_no_support:
+	printk(KERN_WARNING "Multi-volume disks not supported.\n");
+	goto out_freebh;
+#endif
+out_unknown_format:
+	if (!silent)
+		printk(KERN_WARNING "Unable to identify CD-ROM format.\n");
+	goto out_freebh;
+out_no_read:
+	printk(KERN_WARNING "isofs_read_super: "
+		"bread failed, dev=%s, iso_blknum=%d, block=%d\n",
+		kdevname(dev), iso_blknum, block);
+	goto out_unlock;
+
+ 	/*
+	 * Cascaded error cleanup to ensure all resources are freed.
+	 */
+out_iput:
+	iput(inode);
+out_freechar:
 #ifdef CONFIG_JOLIET
 	if (s->u.isofs_sb.s_nls_iocharset)
 		unload_nls(s->u.isofs_sb.s_nls_iocharset);
 #endif
-	if (opt.iocharset) kfree(opt.iocharset);
-
- out: /* Kick out for various error conditions */
+out_freebh:
 	brelse(bh);
+out_unlock:
 	s->s_dev = 0;
 	unlock_super(s);
 	MOD_DEC_USE_COUNT;

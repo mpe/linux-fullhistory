@@ -87,6 +87,7 @@ spinlock_t irq_controller_lock;
 unsigned int io_apic_irqs = 0;
 
 struct hw_interrupt_type {
+	const char * typename;
 	void (*handle)(unsigned int irq, int cpu, struct pt_regs * regs);
 	void (*enable)(unsigned int irq);
 	void (*disable)(unsigned int irq);
@@ -98,6 +99,7 @@ static void enable_8259A_irq (unsigned int irq);
 static void disable_8259A_irq (unsigned int irq);
 
 static struct hw_interrupt_type i8259A_irq_type = {
+	"XT-PIC",
 	do_8259A_IRQ,
 	enable_8259A_irq,
 	disable_8259A_irq
@@ -121,6 +123,7 @@ static void enable_edge_ioapic_irq (unsigned int irq);
 static void disable_edge_ioapic_irq (unsigned int irq);
 
 static struct hw_interrupt_type ioapic_edge_irq_type = {
+	"IO-APIC-edge",
 	do_edge_ioapic_IRQ,
 	enable_edge_ioapic_irq,
 	disable_edge_ioapic_irq
@@ -132,6 +135,7 @@ static void enable_level_ioapic_irq (unsigned int irq);
 static void disable_level_ioapic_irq (unsigned int irq);
 
 static struct hw_interrupt_type ioapic_level_irq_type = {
+	"IO-APIC-level",
 	do_level_ioapic_IRQ,
 	enable_level_ioapic_irq,
 	disable_level_ioapic_irq
@@ -350,16 +354,7 @@ int get_irq_list(char *buf)
 			p += sprintf(p, "%10u ",
 				kstat.irqs[cpu_logical_map(j)][i]);
 #endif
-		if (IO_APIC_IRQ(i)) {
-			p += sprintf(p, " IO-APIC");
-#ifdef __SMP__
-			if (irq_desc[i].handler == &ioapic_level_irq_type)
-				p += sprintf(p, "-level ");
-			else
-				p += sprintf(p, "-edge  ");
-#endif
-		} else
-			p += sprintf(p, "  XT-PIC       ");
+		p += sprintf(p, " %14s", irq_desc[i].handler->typename);
 		p += sprintf(p, "  %s", action->name);
 
 		for (action=action->next; action; action = action->next) {
@@ -370,7 +365,6 @@ int get_irq_list(char *buf)
 	p += sprintf(p, "NMI: %10u\n", atomic_read(&nmi_counter));
 #ifdef __SMP__
 	p += sprintf(p, "IPI: %10lu\n", ipi_count);
-	print_IO_APIC();
 #endif		
 	return p - buf;
 }
@@ -1050,6 +1044,7 @@ int setup_x86_irq(unsigned int irq, struct irqaction * new)
 			}
 		}
 #endif
+		irq_desc[irq].status = 0;
 		irq_desc[irq].handler->enable(irq);
 	}
 	spin_unlock_irqrestore(&irq_controller_lock,flags);

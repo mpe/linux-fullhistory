@@ -6016,15 +6016,19 @@ CONFIG_SOLARIS_X86_PARTITION
 
 ADFS filesystem support (read only) (EXPERIMENTAL)
 CONFIG_ADFS_FS
-  Acorn Disc Filing System is the standard filesystem of the Risc OS
-  operating system which runs on Acorn's ARM based Risc PC computers.
-  If you say Y here, Linux will be able to read from ADFS partitions
-  on hard drives and from ADFS-formatted floppy disks. 
+  The Acorn Disc Filing System is the standard filesystem of the RiscOS
+  operating system which runs on Acorn's ARM based Risc PC systems and
+  the Acorn Archimedes range of machines. These should be the first
+  partition (ie, /dev/[hs]d?1) on each of your drives. If you say Y
+  here, Linux will be able to read from ADFS partitions on hard drives
+  and from ADFS-formatted floppy discs.
 
   This code is also available as a module called adfs.o ( = code which
   can be inserted in and removed from the running kernel whenever you
   want). If you want to compile it as a module, say M here and read
   Documentation/modules.txt.
+
+  If unsure, say N.
 
 /dev/pts filesystem (experimental)
 CONFIG_DEVPTS_FS
@@ -6505,13 +6509,6 @@ CONFIG_SOFTCURSOR
   non-blinking block cursors which are more visible on laptop screens,
   or change their color depending on the virtual console you're on.
   See Documentation/VGA-softcursor.txt for more information.
-
-Acorn's ADFS filesystem support (read only) (EXPERIMENTAL)
-CONFIG_ADFS_FS
-  The Advanced Disk File System is the filesystem used on floppy and
-  hard disks by Acorn Systems.  Currently in development, as a read-
-  only driver for hard disks.  These should be the first partition
-  (eg. /dev/[sh]d?1) on each of your drives.  If unsure, say N.
 
 Standard/generic serial support
 CONFIG_SERIAL
