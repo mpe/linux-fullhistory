@@ -441,10 +441,10 @@ cleanup_module(void)
 		struct device *dev = &dev_e21[this_dev];
 		if (dev->priv != NULL) {
 			/* NB: e21_close() handles free_irq */
+			unregister_netdev(dev);
 			kfree(dev->priv);
 			dev->priv = NULL;
 			release_region(dev->base_addr, E21_IO_EXTENT);
-			unregister_netdev(dev);
 		}
 	}
 }

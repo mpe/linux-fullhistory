@@ -42,6 +42,7 @@
  *					NEW_LISTEN for now)
  *	Juan Jose Ciarlante:		ip_dynaddr bits
  *		Andi Kleen:		various fixes.
+ *	Vitaly E. Lavrov	:	Transparent proxy revived after year coma.
  */
 
 #include <linux/config.h>
@@ -1082,7 +1083,12 @@ static void tcp_v4_send_synack(struct sock *sk, struct open_request *req)
 	memset(th, 0, sizeof(struct tcphdr));
 	th->syn = 1;
 	th->ack = 1;
+	th->source =
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+	req->lcl_port; /* LVE */
+#else
 	th->source = sk->dummy_th.source;
+#endif
 	th->dest = req->rmt_port;
 	skb->seq = req->snt_isn;
 	skb->end_seq = skb->seq + 1;
@@ -1239,6 +1245,9 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 	req->snd_wscale = tp.snd_wscale;
 	req->wscale_ok = tp.wscale_ok;
 	req->rmt_port = th->source;
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+	req->lcl_port = th->dest ; /* LVE */
+#endif
 	req->af.v4_req.loc_addr = daddr;
 	req->af.v4_req.rmt_addr = saddr;
 
@@ -1361,7 +1370,12 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 
 	tcp_init_xmit_timers(newsk);
 
-	newsk->dummy_th.source = sk->dummy_th.source;
+	newsk->dummy_th.source = 
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+	req->lcl_port; /* LVE */
+#else
+	sk->dummy_th.source;
+#endif
 	newsk->dummy_th.dest = req->rmt_port;
 	newsk->sock_readers=0;
 
@@ -1371,6 +1385,13 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 
 	newsk->socket = NULL;
 
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+	/*
+	*      Deal with possibly redirected traffic by setting num to
+	*      the intended destination port of the received packet.
+        */
+	newsk->num = ntohs(skb->h.th->dest);
+#endif
 	newsk->daddr = req->af.v4_req.rmt_addr;
 	newsk->saddr = req->af.v4_req.loc_addr;
 	newsk->rcv_saddr = req->af.v4_req.loc_addr;

@@ -675,10 +675,10 @@ cleanup_module(void)
 		struct device *dev = &dev_el2[this_dev];
 		if (dev->priv != NULL) {
 			/* NB: el2_close() handles free_irq */
+			unregister_netdev(dev);
 			kfree(dev->priv);
 			dev->priv = NULL;
 			release_region(dev->base_addr, EL2_IO_EXTENT);
-			unregister_netdev(dev);
 		}
 	}
 }

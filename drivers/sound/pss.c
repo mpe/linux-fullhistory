@@ -546,7 +546,7 @@ static int pss_coproc_ioctl(void *dev_info, unsigned int cmd, caddr_t arg, int l
 				mbuf->len = i;	/* feed back number of WORDs sent */
 				err = __copy_to_user(arg, mbuf, sizeof(copr_msg));
 				vfree(mbuf);
-				return err ? err : -EIO;
+				return err ? -EFAULT : -EIO;
 			}
 		}
 		restore_flags(flags);
@@ -594,7 +594,9 @@ static int pss_coproc_ioctl(void *dev_info, unsigned int cmd, caddr_t arg, int l
 		}
 		dbuf.parm1 = tmp;
 		restore_flags(flags);
-		return __copy_to_user(arg, &dbuf, sizeof(dbuf));
+		if (__copy_to_user(arg, &dbuf, sizeof(dbuf)))
+			return -EFAULT;
+		return 0;
 		
 	case SNDCTL_COPR_WDATA:
 		if (__copy_from_user(&dbuf, arg, sizeof(dbuf)))
@@ -667,7 +669,9 @@ static int pss_coproc_ioctl(void *dev_info, unsigned int cmd, caddr_t arg, int l
 		}
 		dbuf.parm1 |= tmp & 0x00ff;
 		restore_flags(flags);
-		return __copy_to_user(arg, &dbuf, sizeof(dbuf));
+		if (__copy_to_user(arg, &dbuf, sizeof(dbuf)))
+			return -EFAULT;
+		return 0;
 
 	default:
 		return -EINVAL;

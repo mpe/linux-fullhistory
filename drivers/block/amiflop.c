@@ -219,8 +219,8 @@ static struct wait_queue *ms_wait = NULL;
 static int probing = 0;
 
 /* Prevent "aliased" accesses. */
-static fd_ref[4] = { 0,0,0,0 };
-static fd_device[4] = { 0,0,0,0 };
+static int fd_ref[4] = { 0,0,0,0 };
+static int fd_device[4] = { 0,0,0,0 };
 
 /*
  * Current device number. Taken either from the block header or from the
@@ -678,7 +678,7 @@ static unsigned long *putsec(int disk, unsigned long *raw, int track, int cnt,
 static void amiga_write(int disk, unsigned long raw, unsigned char *data,
 			int track)
 {
-	int cnt;
+	unsigned int cnt;
 	unsigned long *ptr = (unsigned long *)raw;
 
 	disk&=3;
@@ -1376,8 +1376,8 @@ unsigned long flags;
 
 static void redo_fd_request(void)
 {
-	unsigned int block, track, sector;
-	int device, drive, cnt;
+	unsigned int cnt, block, track, sector;
+	int device, drive;
 	struct amiga_floppy_struct *floppy;
 	char *data;
 	unsigned long flags;
@@ -1511,7 +1511,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 {
 	int drive = inode->i_rdev & 3;
 	static struct floppy_struct getprm;
-	int error;
+	struct super_block * sb;
 	unsigned long flags;
 
 	switch(cmd){
@@ -1522,9 +1522,9 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 		loc.sectors = unit[drive].sects;
 		loc.cylinders = unit[drive].type->tracks;
 		loc.start = 0;
-		if ((error = copy_to_user((void *)param, (void *)&loc,
-					  sizeof(struct hd_geometry))))
-			return error;
+		if (copy_to_user((void *)param, (void *)&loc,
+				 sizeof(struct hd_geometry)))
+			return -EFAULT;
 		break;
 	}
 	case FDFMTBEG:
@@ -1566,7 +1566,9 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 		break;
 	case FDFMTEND:
 		floppy_off(drive);
-		invalidate_inodes(inode->i_rdev);
+		sb = get_super(inode->i_rdev);
+		if (sb)
+			invalidate_inodes(sb);
 		invalidate_buffers(inode->i_rdev);
 		break;
 	case FDGETPRM:
@@ -1575,15 +1577,13 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 		getprm.head=unit[drive].type->heads;
 		getprm.sect=unit[drive].sects;
 		getprm.size=unit[drive].blocks;
-		if ((error = copy_to_user((void *)param,
-					  (void *)&getprm,
-					  sizeof(struct floppy_struct))))
-			return error;
+		if (copy_to_user((void *)param,
+				 (void *)&getprm,
+				 sizeof(struct floppy_struct)))
+			return -EFAULT;
 	    break;
 	case BLKGETSIZE:
-		if (put_user(unit[drive].blocks,(long *)param))
-			return -EFAULT;
-		break;
+		return put_user(unit[drive].blocks,(long *)param);
 	case FDSETPRM:
 	case FDDEFPRM:
 		return -EINVAL;
@@ -1600,10 +1600,9 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 		break;
 #ifdef RAW_IOCTL
 	case IOCTL_RAW_TRACK:
-		error = copy_to_user((void *)param, raw_buf,
-				     unit[drive].type->read_size);
-		if (error)
-			return error;
+		if (copy_to_user((void *)param, raw_buf,
+				 unit[drive].type->read_size))
+			return -EFAULT;
 		else
 			return unit[drive].type->read_size;
 #endif
@@ -1691,6 +1690,7 @@ static void fd_probe(int dev)
 	if (type >= num_dr_types) {
 		printk(KERN_WARNING "fd_probe: unsupported drive type %08lx found\n",
 		       code);
+		unit[drive].type = &drive_types[num_dr_types-1]; /* FD_NODRIVE */
 		return;
 	}
 
@@ -1795,9 +1795,12 @@ printk(KERN_INFO "fd%d: accessing %s-disk with %s-layout\n",drive,unit[drive].ty
 static int floppy_release(struct inode * inode, struct file * filp)
 {
   unsigned long flags;
+  struct super_block * sb;
 
   fsync_dev(inode->i_rdev);
-  invalidate_inodes(inode->i_rdev);
+  sb = get_super(inode->i_rdev);
+  if (sb)
+	  invalidate_inodes(sb);
   invalidate_buffers(inode->i_rdev);
   save_flags (flags);
   cli();
@@ -1819,10 +1822,10 @@ static int floppy_release(struct inode * inode, struct file * filp)
   return 0;
 }
 
-void amiga_floppy_setup (char *str, int *ints)
+__initfunc(void amiga_floppy_setup (char *str, int *ints))
 {
-printk ("amiflop: Setting default df0 to %x\n", ints[1]);
-fd_def_df0 = ints[1];
+	printk ("amiflop: Setting default df0 to %x\n", ints[1]);
+	fd_def_df0 = ints[1];
 }
 
 static struct file_operations floppy_fops = {

@@ -141,6 +141,8 @@ extern unsigned long get_cmos_time(void);
  * U: ACER 486DX4/75: uses dseg 0040, in violation of APM specification
  *                    [Confirmed by BIOS disassembly]
  * P: Toshiba 1950S: battery life information only gets updated after resume
+ * P: Midwest Micro Soundbook Elite DX2/66 monochrome: screen blanking
+ * 	broken in BIOS [Reported by Garst R. Reese <reese@isn.net>]
  *
  * Legend: U = unusable with APM patches
  *         P = partially usable with APM patches
@@ -279,9 +281,15 @@ extern unsigned long get_cmos_time(void);
 	: "a" (0x530a), "b" (1) \
 	APM_BIOS_CALL_END
 
-#define APM_GET_EVENT(event, error)	\
+#define APM_GET_BATTERY_STATUS(which, bx, cx, dx, si, error) \
 	APM_BIOS_CALL(al) \
-	: "=a" (error), "=b" (event) \
+	: "=a" (error), "=b" (bx), "=c" (cx), "=d" (dx), "=S" (si) \
+	: "a" (0x530a), "b" (0x8000 | (which)) \
+	APM_BIOS_CALL_END
+
+#define APM_GET_EVENT(event, info, error)	\
+	APM_BIOS_CALL(al) \
+	: "=a" (error), "=b" (event), "=c" (info) \
 	: "a" (0x530b) \
 	APM_BIOS_CALL_END
 
@@ -356,7 +364,8 @@ static char *	apm_event_name[] = {
 	"critical suspend",
 	"user standby",
 	"user suspend",
-	"system standby resume"
+	"system standby resume",
+	"capabilities change"
 };
 #define NR_APM_EVENT_NAME	\
 		(sizeof(apm_event_name) / sizeof(apm_event_name[0]))
@@ -406,6 +415,8 @@ static const lookup_t error_table[] = {
 	{ APM_BAD_DEVICE,	"Unrecognized device ID" },
 	{ APM_BAD_PARAM,	"Parameter out of range" },
 	{ APM_NOT_ENGAGED,	"Interface not engaged" },
+	{ APM_BAD_FUNCTION,     "Function not supported" },
+	{ APM_RESUME_DISABLED,	"Resume timer disabled" },
 	{ APM_BAD_STATE,	"Unable to enter requested state" },
 /* N/A	{ APM_NO_EVENTS,	"No events pending" }, */
 	{ APM_NOT_PRESENT,	"No APM present" }
@@ -423,13 +434,15 @@ static int apm_driver_version(u_short *val)
 	return APM_SUCCESS;
 }
 
-static int apm_get_event(apm_event_t *event)
+static int apm_get_event(apm_event_t *event, apm_eventinfo_t *info)
 {
 	u_short	error;
 
-	APM_GET_EVENT(*event, error);
+	APM_GET_EVENT(*event, *info, error);
 	if (error & 0xff)
 		return (error >> 8);
+	if (apm_bios_info.version < 0x0102)
+		*info = ~0; /* indicate info not valid */
 	return APM_SUCCESS;
 }
 
@@ -476,6 +489,24 @@ static int apm_get_power_status(u_short *status, u_short *bat, u_short *life)
 	u_short	error;
 
 	APM_GET_POWER_STATUS(*status, *bat, *life, error);
+	if (error & 0xff)
+		return (error >> 8);
+	return APM_SUCCESS;
+}
+
+static int apm_get_battery_status(u_short which, 
+				  u_short *bat, u_short *life, u_short *nbat)
+{
+	u_short status, error;
+
+	if (apm_bios_info.version < 0x0102) {
+		/* pretend we only have one battery. */
+		if (which!=1) return APM_BAD_DEVICE;
+		*nbat = 1;
+		return apm_get_power_status(&status, bat, life);
+	}
+
+	APM_GET_BATTERY_STATUS(which, status, *bat, *life, *nbat, error);
 	if (error & 0xff)
 		return (error >> 8);
 	return APM_SUCCESS;
@@ -652,10 +683,12 @@ static apm_event_t get_event(void)
 {
 	int		error;
 	apm_event_t	event;
+	apm_eventinfo_t	info;
 
 	static int notified = 0;
 
-	error = apm_get_event(&event);
+	/* we don't use the eventinfo */
+	error = apm_get_event(&event, &info);
 	if (error == APM_SUCCESS)
 		return event;
 
@@ -718,6 +751,7 @@ static void check_events(void)
 
 		case APM_LOW_BATTERY:
 		case APM_POWER_STATUS_CHANGE:
+		case APM_CAPABILITY_CHANGE:
 			send_event(event, 0, NULL);
 			break;
 
@@ -1106,12 +1140,17 @@ __initfunc(void apm_bios_init(void))
 	if (apm_bios_info.version == 0x001)
 		apm_bios_info.version = 0x100;
 
+	/* BIOS < 1.2 doesn't set cseg_16_len */
+	if (apm_bios_info.version < 0x102)
+		apm_bios_info.cseg_16_len = 0xFFFF; /* 64k */
+
 	printk(KERN_INFO "    Entry %x:%lx cseg16 %x dseg %x",
 	       apm_bios_info.cseg, apm_bios_info.offset,
 	       apm_bios_info.cseg_16, apm_bios_info.dseg);
 	if (apm_bios_info.version > 0x100)
-		printk(" cseg len %x, dseg len %x",
-		       apm_bios_info.cseg_len, apm_bios_info.dseg_len);
+		printk(" cseg len %x, cseg16 len %x, dseg len %x",
+		       apm_bios_info.cseg_len, apm_bios_info.cseg_16_len,
+		       apm_bios_info.dseg_len);
 	printk("\n");
 
 	/*
@@ -1146,19 +1185,25 @@ __initfunc(void apm_bios_init(void))
 		set_limit(gdt[APM_DS >> 3], 64 * 1024);
 #else
 		set_limit(gdt[APM_CS >> 3], apm_bios_info.cseg_len);
-		set_limit(gdt[APM_CS_16 >> 3], 64 * 1024);
+		set_limit(gdt[APM_CS_16 >> 3], apm_bios_info.cseg_16_len);
 		set_limit(gdt[APM_DS >> 3], apm_bios_info.dseg_len);
 #endif
-		apm_bios_info.version = 0x0101;
+		/* The APM 1.2 docs state that the apm_driver_version
+		 * call can fail if we try to connect as 1.2 to a 1.1 bios.
+		 */
+		apm_bios_info.version = 0x0102;
 		error = apm_driver_version(&apm_bios_info.version);
-		if (error != 0)
+		if (error != 0) { /* Fall back to an APM 1.1 connection. */
+			apm_bios_info.version = 0x0101;
+			error = apm_driver_version(&apm_bios_info.version);
+		}
+		if (error != 0) /* Fall back to an APM 1.0 connection. */
 			apm_bios_info.version = 0x100;
 		else {
 			apm_engage_power_management(0x0001);
 			printk( "    Connection version %d.%d\n",
 				(apm_bios_info.version >> 8) & 0xff,
 				apm_bios_info.version & 0xff );
-			apm_bios_info.version = 0x0101;
 		}
 	}
 

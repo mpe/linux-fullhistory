@@ -67,17 +67,19 @@ static unsigned char crystal_key[] =	/* A 32 byte magic key sequence */
 	0x09, 0x84, 0x42, 0xa1, 0xd0, 0x68, 0x34, 0x1a
 };
 
+static void sleep(unsigned howlong)
+{
+	current->state = TASK_INTERRUPTIBLE;
+	current->timeout = jiffies + howlong;
+	schedule();
+	current->timeout = 0;
+}
+
 int probe_cs4232(struct address_info *hw_config)
 {
 	int i, n;
 	int base = hw_config->io_base, irq = hw_config->irq;
 	int dma1 = hw_config->dma, dma2 = hw_config->dma2;
-	unsigned long tlimit;
-
-	static struct wait_queue *cs_sleeper = NULL;
-	static volatile struct snd_wait cs_sleep_flag = {
-		0
-	};
 
 	/*
 	 * Verify that the I/O port range is free.
@@ -104,9 +106,7 @@ int probe_cs4232(struct address_info *hw_config)
 	 * first time.
 	 */
 
-	for (n = 0; n < 4; n++)
-	{
-		cs_sleep_flag.opts = WK_NONE;
+	for (n = 0; n < 4; n++) {
 		
 		/*
 		 *	Wake up the card by sending a 32 byte Crystal key to the key port.
@@ -115,15 +115,7 @@ int probe_cs4232(struct address_info *hw_config)
 		for (i = 0; i < 32; i++)
 			CS_OUT(crystal_key[i]);
 
-		current->timeout = tlimit = jiffies + (HZ / 10);
-		cs_sleep_flag.opts = WK_SLEEP;
-		interruptible_sleep_on(&cs_sleeper);
-		if (!(cs_sleep_flag.opts & WK_WAKEUP))
-		{
-			if (jiffies >= tlimit)
-				cs_sleep_flag.opts |= WK_TIMEOUT;
-		}
-		cs_sleep_flag.opts &= ~WK_SLEEP;
+		sleep(HZ / 10);
 
 		/*
 		 *	Now set the CSN (Card Select Number).
@@ -154,15 +146,7 @@ int probe_cs4232(struct address_info *hw_config)
 
 		CS_OUT2(0x33, 0x01);	/* Activate logical dev 0 */
 
-		current->timeout = tlimit = jiffies + (HZ / 10);
-		cs_sleep_flag.opts = WK_SLEEP;
-		interruptible_sleep_on(&cs_sleeper);
-		if (!(cs_sleep_flag.opts & WK_WAKEUP))
-		{
-			if (jiffies >= tlimit)
-				cs_sleep_flag.opts |= WK_TIMEOUT;
-		}
-		cs_sleep_flag.opts &= ~WK_SLEEP;
+		sleep(HZ / 10);
 
 		/*
 		 * Initialize logical device 3 (MPU)
@@ -184,15 +168,7 @@ int probe_cs4232(struct address_info *hw_config)
 		
 		CS_OUT(0x79);
 
-		current->timeout = tlimit = jiffies + (HZ / 5);
-		cs_sleep_flag.opts = WK_SLEEP;
-		interruptible_sleep_on(&cs_sleeper);
-		if (!(cs_sleep_flag.opts & WK_WAKEUP))
-		{
-			if (jiffies >= tlimit)
-				cs_sleep_flag.opts |= WK_TIMEOUT;
-		}
-		cs_sleep_flag.opts &= ~WK_SLEEP;
+		sleep(HZ / 5);
 
 		/*
 		 * Then try to detect the codec part of the chip
@@ -200,16 +176,8 @@ int probe_cs4232(struct address_info *hw_config)
 
 		if (ad1848_detect(hw_config->io_base, NULL, hw_config->osp))
 			return 1;
-
-		current->timeout = tlimit = jiffies + (HZ);
-		cs_sleep_flag.opts = WK_SLEEP;
-		interruptible_sleep_on(&cs_sleeper);
-		if (!(cs_sleep_flag.opts & WK_WAKEUP))
-		{
-			if (jiffies >= tlimit)
-				cs_sleep_flag.opts |= WK_TIMEOUT;
-		}
-		cs_sleep_flag.opts &= ~WK_SLEEP;
+		
+		sleep(HZ);
 	}
 	return 0;
 }

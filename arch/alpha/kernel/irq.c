@@ -423,6 +423,16 @@ static inline void ack_irq(int irq)
 #endif /* CONFIG_ALPHA_SABLE */
 }
 
+int check_irq(unsigned int irq)
+{
+	struct irqaction **p;
+
+	p = irq_action + irq;
+	if (*p == NULL)
+		return 0;
+	return -EBUSY;
+}
+
 int request_irq(unsigned int irq, 
 		void (*handler)(int, void *, struct pt_regs *),
 		unsigned long irqflags, 

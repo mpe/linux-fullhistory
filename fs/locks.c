@@ -441,30 +441,32 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	return (posix_lock_file(filp, &file_lock, cmd == F_SETLKW));
 }
 
-/* This function is called when the file is closed.
+/*
+ * This function is called when the file is being removed
+ * from the task's fd array.
  */
-void locks_remove_locks(struct task_struct *task, struct file *filp)
+void locks_remove_posix(struct task_struct *task, struct file *filp)
 {
+	struct inode * inode = filp->f_dentry->d_inode;
 	struct file_lock file_lock, *fl;
 	struct file_lock **before;
-	struct inode * inode;
 
-	/* For POSIX locks we free all locks on this file for the given task.
-	 * For FLOCK we only free locks on this *open* file if it is the last
-	 * close on that file.
+	/*
+	 * For POSIX locks we free all locks on this file for the given task.
 	 */
-	inode = filp->f_dentry->d_inode;
 repeat:
 	before = &inode->i_flock;
 	while ((fl = *before) != NULL) {
-		if (((fl->fl_flags & FL_POSIX) && (fl->fl_owner == task)) ||
-		    ((fl->fl_flags & FL_FLOCK) && (fl->fl_file == filp) &&
-		     (filp->f_count == 1))) {
-			file_lock = *fl;
-			locks_delete_lock(before, 0);
-			if (filp->f_op->lock) {
+		if ((fl->fl_flags & FL_POSIX) && fl->fl_owner == task) {
+			int (*lock)(struct file *, int, struct file_lock *);
+			lock = filp->f_op->lock;
+			if (lock) {
+				file_lock = *fl;
 				file_lock.fl_type = F_UNLCK;
-				filp->f_op->lock(filp, F_SETLK, &file_lock);
+			}
+			locks_delete_lock(before, 0);
+			if (lock) {
+				lock(filp, F_SETLK, &file_lock);
 				/* List may have changed: */
 				goto repeat;
 			}
@@ -472,8 +474,37 @@ repeat:
 		}
 		before = &fl->fl_next;
 	}
+}
 
-	return;
+/*
+ * This function is called on the last close of an open file.
+ */
+void locks_remove_flock(struct file *filp)
+{
+	struct inode * inode = filp->f_dentry->d_inode; 
+	struct file_lock file_lock, *fl;
+	struct file_lock **before;
+
+repeat:
+	before = &inode->i_flock;
+	while ((fl = *before) != NULL) {
+		if ((fl->fl_flags & FL_FLOCK) && fl->fl_file == filp) {
+			int (*lock)(struct file *, int, struct file_lock *);
+			lock = filp->f_op->lock;
+			if (lock) {
+				file_lock = *fl;
+				file_lock.fl_type = F_UNLCK;
+			}
+			locks_delete_lock(before, 0);
+			if (lock) {
+				lock(filp, F_SETLK, &file_lock);
+				/* List may have changed: */
+				goto repeat;
+			}
+			continue;
+		}
+		before = &fl->fl_next;
+	}
 }
 
 struct file_lock *

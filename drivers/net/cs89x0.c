@@ -44,7 +44,6 @@ static char *version =
 
 /* Always include 'config.h' first in case the user wants to turn on
    or override something. */
-#include <linux/config.h>
 #ifdef MODULE
 #include <linux/module.h>
 #include <linux/version.h>
@@ -1078,11 +1077,11 @@ cleanup_module(void)
 
         if (dev_cs89x0.priv != NULL) {
                 /* Free up the private structure, or leak memory :-)  */
+                unregister_netdev(&dev_cs89x0);
                 kfree(dev_cs89x0.priv);
                 dev_cs89x0.priv = NULL;	/* gets re-allocated by cs89x0_probe1 */
                 /* If we don't do this, we can't re-insmod it later. */
                 release_region(dev_cs89x0.base_addr, NETCARD_IO_EXTENT);
-                unregister_netdev(&dev_cs89x0);
         }
 }
 #endif /* MODULE */

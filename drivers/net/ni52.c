@@ -1338,9 +1338,9 @@ int init_module(void)
 void cleanup_module(void)
 {
 	release_region(dev_ni52.base_addr, NI52_TOTAL_SIZE);
+	unregister_netdev(&dev_ni52);
 	kfree(dev_ni52.priv);
 	dev_ni52.priv = NULL;
-	unregister_netdev(&dev_ni52);
 }
 #endif /* MODULE */
 

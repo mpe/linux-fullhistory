@@ -475,10 +475,10 @@ cleanup_module(void)
 		if (dev->priv != NULL) {
 			/* NB: ultra_close_card() does free_irq */
 			int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET;
+			unregister_netdev(dev);
 			kfree(dev->priv);
 			dev->priv = NULL;
 			release_region(ioaddr, ULTRA_IO_EXTENT);
-			unregister_netdev(dev);
 		}
 	}
 }

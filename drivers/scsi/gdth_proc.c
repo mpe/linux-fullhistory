@@ -620,12 +620,12 @@ static int gdth_update_timeout(Scsi_Cmnd *scp, int timeout)
     oldto = scp->timeout;
     scp->timeout = timeout;
     if (timeout > 0) {
-        if (timer_table[SCSI_TIMER].expires == 0) {
-            timer_table[SCSI_TIMER].expires = jiffies + timeout;
-            timer_active |= 1 << SCSI_TIMER;
+        if (timer_table[GDTH_TIMER].expires == 0) {
+            timer_table[GDTH_TIMER].expires = jiffies + timeout;
+            timer_active |= 1 << GDTH_TIMER;
         } else {
-            if (jiffies + timeout < timer_table[SCSI_TIMER].expires)
-                timer_table[SCSI_TIMER].expires = jiffies + timeout;
+            if (jiffies + timeout < timer_table[GDTH_TIMER].expires)
+                timer_table[GDTH_TIMER].expires = jiffies + timeout;
         }
     }
 

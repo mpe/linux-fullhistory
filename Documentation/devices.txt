@@ -1,7 +1,7 @@
 		       LINUX ALLOCATED DEVICES
 	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		    Last revised: December 4, 1997
+		   Last revised: February 17, 1998
 
 This list is the Linux Device List, the official registry of allocated
 device numbers and /dev directory nodes for the Linux operating
@@ -91,16 +91,17 @@ Your cooperation is appreciated.
 		  the 1st through 16th series of 16 pseudo-ttys each, and
 		* the fifth letter is one of 0123456789abcdef indicating
 		  the position within the series.
+
+		In the future, it is likely that the PTY master
+		multiplex (/dev/ptmx) device will be used to acquire a
+		PTY on demand.  If so, the actual PTY masters will be
+		unnamed devices.
   
     block	Floppy disks
-		  0 = /dev/fd0		Controller 1, drive 1 autodetect
-		  1 = /dev/fd1		Controller 1, drive 2 autodetect
-		  2 = /dev/fd2		Controller 1, drive 3 autodetect
-		  3 = /dev/fd3		Controller 1, drive 4 autodetect
-		128 = /dev/fd4		Controller 2, drive 1 autodetect
-		129 = /dev/fd5		Controller 2, drive 2 autodetect
-		130 = /dev/fd6		Controller 2, drive 3 autodetect
-		131 = /dev/fd7		Controller 2, drive 4 autodetect
+		  0 = /dev/fd0		First floppy disk autodetect
+		  1 = /dev/fd1		Second floppy disk autodetect
+		  2 = /dev/fd2		Third floppy disk autodetect
+		  3 = /dev/fd3		Fourth floppy disk autodetect
 
 		To specify format, add to the autodetect device number:
 		  0 = /dev/fd?		Autodetect format
@@ -116,9 +117,10 @@ Your cooperation is appreciated.
 		 72 = /dev/fd?h1494	5.25" 1494K in a 1200K drive
 		 92 = /dev/fd?h1600	5.25" 1600K in a 1200K drive(1)
 
-		 12 = /dev/fd?u360	3.5"   360K Double Density
-		120 = /dev/fd?u800	3.5"   800K Double Density(1)
-		 52 = /dev/fd?u820	3.5"   820K Double Density(2)
+		 12 = /dev/fd?u360	3.5"   360K Double Density(2)
+		 16 = /dev/fd?u720	3.5"   720K Double Density(1)
+		120 = /dev/fd?u800	3.5"   800K Double Density(2)
+		 52 = /dev/fd?u820	3.5"   820K Double Density
 		 68 = /dev/fd?u830	3.5"   830K Double Density
 		 84 = /dev/fd?u1040	3.5"  1040K Double Density(1)
 		 88 = /dev/fd?u1120	3.5"  1120K Double Density(1)
@@ -152,12 +154,15 @@ Your cooperation is appreciated.
 		  0 = /dev/ttyp0	First PTY slave
 		  1 = /dev/ttyp1	Second PTY slave
 		    ...
-		256 = /dev/ttyef	256th PTY slave
+		255 = /dev/ttyef	256th PTY slave
+
+		In the future, Linux may adopt the Unix98 naming
+		scheme (/dev/pts/0, /dev/pts/1, ...)
 
     block	First MFM, RLL and IDE hard disk/CD-ROM interface
 		  0 = /dev/hda		Master: whole disk (or CD-ROM)
 		 64 = /dev/hdb		Slave: whole disk (or CD-ROM)
-		
+
 		For partitions, add to the whole disk device number:
 		  0 = /dev/hd?		Whole disk
 		  1 = /dev/hd?1		First partition
@@ -169,7 +174,7 @@ Your cooperation is appreciated.
 		partitions, and 5 and above are logical partitions.
 		Other versions of Linux use partitioning schemes
 		appropriate to their respective architectures.
-		
+
   4 char	TTY devices
 		  0 = /dev/tty0		Current virtual console
 
@@ -196,6 +201,7 @@ Your cooperation is appreciated.
   5 char	Alternate TTY devices
 		  0 = /dev/tty		Current TTY device
 		  1 = /dev/console	System console
+		  2 = /dev/ptmx		PTY master multiplex
 		 64 = /dev/cua0		Callout device corresponding to ttyS0
 		      ...
 		127 = /dev/cua63	Callout device corresponding to ttyS63
@@ -742,6 +748,9 @@ Your cooperation is appreciated.
     block	Syquest EZ135 parallel port removable drive
 		  0 = /dev/eza		Parallel EZ135 drive, whole disk
 
+		This device is obsolete and will be removed in a
+		future version of Linux.  It has been replaced with
+		the parallel port IDE disk driver at major number 45.
 		Partitions are handled in the same way as IDE disks
 		(see major number 3).
 
@@ -749,6 +758,10 @@ Your cooperation is appreciated.
 		  0 = /dev/yamm		Yet Another Micro Monitor
     block	MicroSolutions BackPack parallel port CD-ROM
 		  0 = /dev/bpcd		BackPack CD-ROM
+
+		This device is obsolete and will be removed in a
+		future version of Linux.  It has been replaced with
+		the parallel port ATAPI CD-ROM driver at major number 46.
 
  42		Demo/sample use
 
@@ -807,39 +820,66 @@ Your cooperation is appreciated.
 		191 = /dev/ippp63	64th SyncPPP device
 
 		255 = /dev/isdninfo	ISDN monitor interface
+    block	Parallel port IDE disk devices
+		  0 = /dev/pda		First parallel port IDE disk
+		 16 = /dev/pdb		Second parallel port IDE disk
+		 32 = /dev/pdc		Third parallel port IDE disk
+		 48 = /dev/pdd		Fourth parallel port IDE disk
+
+		Partitions are handled in the same way as for IDE
+		disks (see major number 3) except that the partition
+		limit is 15 rather than 63 per disk.
 
  46 char	Comtrol Rocketport serial card
 		  0 = /dev/ttyR0	First Rocketport port
 		  1 = /dev/ttyR1	Second Rocketport port
 		      ...
+    block	Parallel port ATAPI CD-ROM devices
+		  0 = /dev/pcd0		First parallel port ATAPI CD-ROM
+		  1 = /dev/pcd1		Second parallel port ATAPI CD-ROM
+		  2 = /dev/pcd2		Third parallel port ATAPI CD-ROM
+		  3 = /dev/pcd3		Fourth parallel port ATAPI CD-ROM
 
  47 char	Comtrol Rocketport serial card - alternate devices
 		  0 = /dev/cur0		Callout device corresponding to ttyR0
 		  1 = /dev/cur1		Callout device corresponding to ttyR1
 		      ...
+    block	Parallel port ATAPI disk devices
+		  0 = /dev/pf0		First parallel port ATAPI disk
+		  1 = /dev/pf1		Second parallel port ATAPI disk
+		  2 = /dev/pf2		Third parallel port ATAPI disk
+		  3 = /dev/pf3		Fourth parallel port ATAPI disk
+
+		This driver is intended for floppy disks and similar
+		devices and hence does not support partitioning.
 
  48 char	SDL RISCom serial card
 		  0 = /dev/ttyL0	First RISCom port
 		  1 = /dev/ttyL1	Second RISCom port
 		      ...
+    block	Reserved for Mylex DAC960 PCI RAID controller
 
  49 char	SDL RISCom serial card - alternate devices
 		  0 = /dev/cul0		Callout device corresponding to ttyL0
 		  1 = /dev/cul1		Callout device corresponding to ttyL1
 		      ...
+    block	Reserved for Mylex DAC960 PCI RAID controller
 
  50 char	Reserved for GLINT
+    block	Reserved for Mylex DAC960 PCI RAID controller
 
  51 char	Baycom radio modem
 		  0 = /dev/bc0		First Baycom radio modem
 		  1 = /dev/bc1		Second Baycom radio modem
 		      ...
+    block	Reserved for Mylex DAC960 PCI RAID controller
 
  52 char	Spellcaster DataComm/BRI ISDN card
 		  0 = /dev/dcbri0	First DataComm card
 		  1 = /dev/dcbri1	Second DataComm card
 		  2 = /dev/dcbri2	Third DataComm card
 		  3 = /dev/dcbri3	Fourth DataComm card
+    block	Reserved for Mylex DAC960 PCI RAID controller
 
  53 char	BDM interface for remote debugging MC683xx microcontrollers
 		  0 = /dev/pd_bdm0	PD BDM interface on lp0
@@ -855,6 +895,8 @@ Your cooperation is appreciated.
 		Domain Interface and ICD is the commercial interface
 		by P&E.
 
+    block	Reserved for Mylex DAC960 PCI RAID controller
+
  54 char	Electrocardiognosis Holter serial card
 		  0 = /dev/holter0	First Holter port
 		  1 = /dev/holter1	Second Holter port
@@ -864,8 +906,11 @@ Your cooperation is appreciated.
 		<mseritan@ottonel.pub.ro> to transfer data from Holter
 		24-hour heart monitoring equipment.
 
+    block	Reserved for Mylex DAC960 PCI RAID controller
+
  55 char	DSP56001 digital signal processor
 		  0 = /dev/dsp56k	First DSP56001
+    block	Reserved for Mylex DAC960 PCI RAID controller
 
  56 char	Apple Desktop Bus
 		  0 = /dev/adb		ADB bus control
@@ -1120,7 +1165,33 @@ Your cooperation is appreciated.
 		  2 = /dev/ipstate	State information log file
 		  3 = /dev/ipauth	Authentication control device/log file
 
- 96-119		UNALLOCATED
+ 96 char	Parallel port ATAPI tape devices
+		  0 = /dev/pt0		First parallel port ATAPI tape
+		  1 = /dev/pt1		Second parallel port ATAPI tape
+		  2 = /dev/pt2		Third parallel port ATAPI tape
+		  3 = /dev/pt3		Fourth parallel port ATAPI tape
+		128 = /dev/npt0		First p.p. ATAPI tape, no rewind
+		129 = /dev/npt1		Second p.p. ATAPI tape, no rewind
+		130 = /dev/npt2		Third p.p. ATAPI tape, no rewind
+		131 = /dev/npt3		Fourth p.p. ATAPI tape, no rewind
+
+ 97 char	Parallel port generic ATAPI interface
+		  0 = /dev/pg0		First parallel port ATAPI device
+		  1 = /dev/pg1		Second parallel port ATAPI device
+		  2 = /dev/pg2		Third parallel port ATAPI device
+		  3 = /dev/pg3		Fourth parallel port ATAPI device
+
+		These devices support the same API as the generic SCSI
+		devices.
+
+ 98 char	Control and Measurement Device (comedi)
+		  0 = /dev/comedi0	First comedi device
+		  1 = /dev/comedi1	Second comedi device
+		    ...
+
+		See http://stm.lbl.gov/comedi or http://www.llp.fu-berlin.de/.
+
+ 99-119		UNALLOCATED
 
 120-127		LOCAL/EXPERIMENTAL USE
 

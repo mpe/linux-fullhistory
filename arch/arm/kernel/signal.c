@@ -4,6 +4,7 @@
  *  Copyright (C) 1995, 1996 Russell King
  */
 
+#include <linux/config.h> /* for CONFIG_CPU_ARM6 and CONFIG_CPU_SA110 */
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/smp.h>

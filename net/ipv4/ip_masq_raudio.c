@@ -62,7 +62,6 @@
  *	
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <asm/system.h>
 #include <linux/types.h>

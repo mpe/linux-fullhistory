@@ -275,6 +275,9 @@ struct open_request {
 		struct tcp_v6_open_req v6_req;
 #endif
 	} af;
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+	__u16			lcl_port; /* LVE */
+#endif
 };
 
 /* SLAB cache for open requests. */

@@ -16,6 +16,7 @@
  * Michael A. Griffith <grif@acm.org>
  */
 
+#include <linux/config.h> /* for CONFIG_PROC_FS */
 #define __NO_VERSION__
 #include <linux/module.h>
 
@@ -291,7 +292,7 @@ void proc_print_scsidevice(Scsi_Device *scd, char *buffer, int *size, int len)
     *size = y; 
     return;
 }
-#endif /* CONFIG_SCSI_PROC */
+#endif /* CONFIG_PROC_FS */
 
 /*
  * Overrides for Emacs so that we get a uniform tabbing style.

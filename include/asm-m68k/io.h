@@ -3,6 +3,7 @@
 
 #ifdef __KERNEL__
 
+#include <linux/config.h> /* CONFIG_ATARI, CONFIG_HADES */
 #include <asm/byteorder.h>
 
 #ifdef CONFIG_ATARI

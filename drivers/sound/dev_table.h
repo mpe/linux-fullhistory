@@ -221,6 +221,27 @@ struct audio_operations
 	int min_fragment;	/* 0 == unlimited */
 	int max_fragment;	/* 0 == unlimited */
 	int parent_dev;		/* 0 -> no parent, 1 to n -> parent=parent_dev+1 */
+
+	/* fields formerly in dmabuf.c */
+	struct wait_queue *in_sleeper;
+	struct wait_queue *out_sleeper;
+
+	/* fields formerly in audio.c */
+	int audio_mode;
+	/* why dont we use file->f_flags & O_NONBLOCK for the following? - ts */
+	int dev_nblock;	/* 1 if in nonblocking mode */
+
+#define		AM_NONE		0
+#define		AM_WRITE	OPEN_WRITE
+#define 	AM_READ		OPEN_READ
+
+	int local_format;
+	int audio_format;
+	int local_conversion;
+#define CNV_MU_LAW	0x00000001
+
+	/* large structures at the end to keep offsets small */
+	struct dma_buffparms dmaps[2];
 };
 
 int *load_mixer_volumes(char *name, int *levels, int present);
@@ -367,7 +388,7 @@ struct driver_info sound_drivers[] =
 #ifdef CONFIG_GUS16
 	{"GUS16", 0, SNDCARD_GUS16,	"Ultrasound 16-bit opt.",	attach_gus_db16, probe_gus_db16, unload_gus_db16},
 #endif
-#ifdef CONFIG_GUSHW
+#ifdef CONFIG_GUS
 	{"GUS", 0, SNDCARD_GUS,	"Gravis Ultrasound",	attach_gus_card, probe_gus, unload_gus},
 	{"GUSPNP", 1, SNDCARD_GUSPNP,	"GUS PnP",	attach_gus_card, probe_gus, unload_gus},
 #endif
@@ -418,7 +439,7 @@ struct driver_info sound_drivers[] =
 #endif
 #endif
 
-#ifdef CONFIG_SSCAPEHW
+#ifdef CONFIG_SSCAPE
 	{"SSCAPE", 0, SNDCARD_SSCAPE, "Ensoniq SoundScape",	attach_sscape, probe_sscape, unload_sscape},
 	{"SSCAPEMSS", 0, SNDCARD_SSCAPE_MSS,	"MS Sound System (SoundScape)",	attach_ss_ms_sound, probe_ss_ms_sound, unload_ss_ms_sound},
 #endif
@@ -633,15 +654,11 @@ void sound_unload_driver(int type);
 int sndtable_identify_card(char *name);
 void sound_setup (char *str, int *ints);
 
-int sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan);
-void sound_free_dmap (int dev, struct dma_buffparms *dmap, int chn);
 extern int sound_map_buffer (int dev, struct dma_buffparms *dmap, buffmem_desc *info);
 int sndtable_probe (int unit, struct address_info *hw_config);
 int sndtable_init_card (int unit, struct address_info *hw_config);
 int sndtable_start_card (int unit, struct address_info *hw_config);
 void sound_timer_init (struct sound_lowlev_timer *t, char *name);
-int sound_start_dma(int dev, struct dma_buffparms *dmap, int chan,
-			unsigned long physaddr, int count, int dma_mode, int autoinit);
 void sound_dma_intr (int dev, struct dma_buffparms *dmap, int chan);
 
 #define AUDIO_DRIVER_VERSION	2

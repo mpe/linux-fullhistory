@@ -377,7 +377,7 @@ struct Scsi_Host
      * alignment to a 4-byte boundary.
      */
     unsigned long hostdata[0]  /* Used for storage of host specific stuff */
-        __attribute__ ((aligned (4)));
+        __attribute__ ((aligned (sizeof(unsigned long))));
 };
 
 extern struct Scsi_Host * scsi_hostlist;

@@ -853,9 +853,7 @@ static int do_ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 	struct ext2_dir_entry * old_de, * new_de;
 	int retval;
 
-	old_inode = new_inode = NULL;
 	old_bh = new_bh = dir_bh = NULL;
-	new_de = NULL;
 	retval = -ENAMETOOLONG;
 	if (old_dentry->d_name.len > EXT2_NAME_LEN)
 		goto end_rename;
@@ -875,7 +873,8 @@ static int do_ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 		goto end_rename;
 
 	new_inode = new_dentry->d_inode;
-	new_bh = ext2_find_entry (new_dir, new_dentry->d_name.name, new_dentry->d_name.len, &new_de);
+	new_bh = ext2_find_entry (new_dir, new_dentry->d_name.name,
+				new_dentry->d_name.len, &new_de);
 	if (new_bh) {
 		if (!new_inode) {
 			brelse (new_bh);
@@ -895,6 +894,9 @@ static int do_ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 		retval = -EINVAL;
 		if (is_subdir(new_dentry, old_dentry))
 			goto end_rename;
+		/* Prune any children before testing for busy */
+		if (new_dentry->d_count > 1)
+			shrink_dcache_parent(new_dentry);
 		retval = -ENOTEMPTY;
 		if (!empty_dir (new_inode))
 			goto end_rename;
@@ -927,11 +929,13 @@ static int do_ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 		if (!new_inode && new_dir->i_nlink >= EXT2_LINK_MAX)
 			goto end_rename;
 	}
-	if (!new_bh)
-		new_bh = ext2_add_entry (new_dir, new_dentry->d_name.name, new_dentry->d_name.len, &new_de,
-					 &retval);
-	if (!new_bh)
-		goto end_rename;
+	if (!new_bh) {
+		new_bh = ext2_add_entry (new_dir, new_dentry->d_name.name,
+					new_dentry->d_name.len, &new_de,
+					&retval);
+		if (!new_bh)
+			goto end_rename;
+	}
 	new_dir->i_version = ++event;
 
 	/*
@@ -975,6 +979,7 @@ static int do_ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 	/* Update the dcache */
 	d_move(old_dentry, new_dentry);
 	retval = 0;
+
 end_rename:
 	brelse (dir_bh);
 	brelse (old_bh);

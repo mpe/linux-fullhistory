@@ -22,6 +22,7 @@
 ! read errors will result in a unbreakable loop. Reboot by hand. It
 ! loads pretty fast by getting whole tracks at a time whenever possible.
 
+#include <linux/config.h> /* for CONFIG_ROOT_RDONLY */
 #include <asm/boot.h>
 
 .text

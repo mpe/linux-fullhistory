@@ -11,7 +11,6 @@
  *	checksum routines from ppp.c
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 
 #include <asm/system.h>

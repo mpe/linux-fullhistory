@@ -129,18 +129,6 @@ CONFIG_UART401=y
 endif
 endif
 
-ifdef CONFIG_GUS
-ifneq ($(CONFIG_GUSHW),Y)
-CONFIG_GUSHW=y
-endif
-endif
-
-ifdef CONFIG_SSCAPE
-ifneq ($(CONFIG_SSCAPEHW),Y)
-CONFIG_SSCAPEHW=y
-endif
-endif
-
 ifdef CONFIG_PAS
 ifneq ($(CONFIG_SEQUENCER),Y)
 CONFIG_SEQUENCER=y

@@ -6,7 +6,6 @@
  * 07/06/96: Now support tasks running in SVC mode.
  */
 #include <linux/linkage.h>
-#include <linux/config.h>
 #include <asm/assembler.h>
 
 		.text

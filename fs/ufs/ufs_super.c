@@ -32,7 +32,6 @@
 /*#define DEBUG_UFS_SUPER 1*/
 /* Uncomment the line above when hacking ufs superblock code */
 
-#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/kernel.h>

@@ -41,10 +41,6 @@
 #define FALSE	0
 #define TRUE	1
 
-struct snd_wait {
-	  volatile int opts;
-	};
-
 extern int sound_alloc_dma(int chn, char *deviceID);
 extern int sound_open_dma(int chn, char *deviceID);
 extern void sound_free_dma(int chn);

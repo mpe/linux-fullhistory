@@ -7,6 +7,7 @@
   */
 /* routines to control the AP1000 timer chip */   
 
+#include <linux/config.h> /* for CONFIG_PROFILE */
 #include <linux/time.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>

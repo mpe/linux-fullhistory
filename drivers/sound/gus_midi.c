@@ -17,7 +17,7 @@
 
 #include "gus_hw.h"
 
-#if ( defined(CONFIG_GUSHW) && defined(CONFIG_MIDI) ) || defined (MODULE)
+#if ( defined(CONFIG_GUS) && defined(CONFIG_MIDI) ) || defined (MODULE)
 
 static int      midi_busy = 0, input_opened = 0;
 static int      my_dev;

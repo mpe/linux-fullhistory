@@ -22,7 +22,7 @@
 #include "sound_config.h"
 #include "soundmodule.h"
 
-#if defined(CONFIG_SSCAPEHW) || defined(MODULE)
+#if defined(CONFIG_SSCAPE) || defined(MODULE)
 
 #include "coproc.h"
 
@@ -101,11 +101,6 @@ static struct sscape_info adev_info = {
 static struct sscape_info *devc = &adev_info;
 static int sscape_mididev = -1;
 
-static struct wait_queue *sscape_sleeper = NULL;
-static volatile struct snd_wait sscape_sleep_flag = {
-	0
-};
-
 /* Some older cards have assigned interrupt bits differently than new ones */
 static char valid_interrupts_old[] = {
 	9, 7, 5, 15
@@ -126,6 +121,14 @@ static char old_hardware = 1;
 #else
 static char old_hardware = 0;
 #endif
+
+static void sleep(unsigned howlong)
+{
+	current->timeout = jiffies + 1;
+	current->state = TASK_INTERRUPTIBLE;
+	schedule();
+	current->timeout = 0;
+}
 
 static unsigned char sscape_read(struct sscape_info *devc, int reg)
 {
@@ -317,7 +320,6 @@ static int sscape_coproc_open(void *dev_info, int sub_device)
 		if (!verify_mpu(devc))
 			return -EIO;
 	}
-	sscape_sleep_flag.opts = WK_NONE;
 	return 0;
 }
 
@@ -333,7 +335,6 @@ static void sscape_coproc_close(void *dev_info, int sub_device)
 		sscape_write(devc, GA_DMAA_REG, 0x20);	/* DMA channel disabled */
 		devc->dma_allocated = 0;
 	}
-	sscape_sleep_flag.opts = WK_NONE;
 	restore_flags(flags);
 	return;
 }
@@ -398,27 +399,17 @@ static int sscape_download_boot(struct sscape_info *devc, unsigned char *block, 
 	 * Wait until transfer completes.
 	 */
 	
-	sscape_sleep_flag.opts = WK_NONE;
 	done = 0;
 	timeout_val = 30;
 	while (!done && timeout_val-- > 0)
 	{
 		int resid;
-		unsigned long   tlimit;
-		current->timeout = tlimit = jiffies + (HZ / 50);
-		sscape_sleep_flag.opts = WK_SLEEP;
-		interruptible_sleep_on(&sscape_sleeper);
-		if (!(sscape_sleep_flag.opts & WK_WAKEUP))
-		{
-			if (jiffies >= tlimit)
-				sscape_sleep_flag.opts |= WK_TIMEOUT;
-		}
-		sscape_sleep_flag.opts &= ~WK_SLEEP;
+
+		if (HZ / 50)
+			sleep(HZ / 50);
 		clear_dma_ff(devc->dma);
 		if ((resid = get_dma_residue(devc->dma)) == 0)
-		{
 			done = 1;
-		}
 	}
 
 	restore_flags(flags);
@@ -448,18 +439,8 @@ static int sscape_download_boot(struct sscape_info *devc, unsigned char *block, 
 		while (!done && timeout_val-- > 0)
 		{
 			unsigned char x;
-			unsigned long tlimit;
-
-			current->timeout = tlimit = jiffies + 1;
-			sscape_sleep_flag.opts = WK_SLEEP;
-			interruptible_sleep_on(&sscape_sleeper);
-			if (!(sscape_sleep_flag.opts & WK_WAKEUP))
-			{
-				if (jiffies >= tlimit)
-					sscape_sleep_flag.opts |= WK_TIMEOUT;
-			}
-			sscape_sleep_flag.opts &= ~WK_SLEEP;
 			
+			sleep(1);
 			x = inb(PORT(HOST_DATA));
 			if (x == 0xff || x == 0xfe)		/* OBP startup acknowledge */
 			{
@@ -481,16 +462,7 @@ static int sscape_download_boot(struct sscape_info *devc, unsigned char *block, 
 		timeout_val = 5 * HZ;
 		while (!done && timeout_val-- > 0)
 		{
-			unsigned long   tlimit;
-			current->timeout = tlimit = jiffies + (1);
-			sscape_sleep_flag.opts = WK_SLEEP;
-			interruptible_sleep_on(&sscape_sleeper);
-			if (!(sscape_sleep_flag.opts & WK_WAKEUP))
-			{
-				if (jiffies >= tlimit)
-					sscape_sleep_flag.opts |= WK_TIMEOUT;
-			}
-			sscape_sleep_flag.opts &= ~WK_SLEEP;
+			sleep(1);
 			if (inb(PORT(HOST_DATA)) == 0xfe)	/* Host startup acknowledge */
 				done = 1;
 		}

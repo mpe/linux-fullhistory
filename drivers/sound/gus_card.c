@@ -16,7 +16,7 @@
 #include "sound_config.h"
 #include "soundmodule.h"
 
-#if defined(CONFIG_GUSHW) || defined(MODULE)
+#if defined(CONFIG_GUS) || defined(MODULE)
 
 #include "gus_hw.h"
 
@@ -167,7 +167,7 @@ int probe_gus_db16(struct address_info *hw_config)
 
 void attach_gus_db16(struct address_info *hw_config)
 {
-#if defined(CONFIG_GUSHW) || defined(MODULE)
+#if defined(CONFIG_GUS) || defined(MODULE)
 	gus_pcm_volume = 100;
 	gus_wave_volume = 90;
 #endif

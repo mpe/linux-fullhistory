@@ -92,6 +92,22 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_ARM_AM79C961A),y)
+L_OBJS += am79c961a.o
+else
+  ifeq ($(CONFIG_ARM_AM79C961A),m)
+  M_OBJS += am79c961a.o
+  endif
+endif
+
+ifeq ($(CONFIG_ARM_ETHERH),y)
+CONFIG_8390_BUILTIN = y
+else
+  ifeq ($(CONFIG_ARM_ETHERH),m)
+  CONFIG_8390_MODULE = y
+  endif
+endif
+
 
 ifeq ($(CONFIG_WD80x3),y)
 L_OBJS += wd.o

@@ -50,7 +50,7 @@ struct rif_cache_s {
 	unsigned char addr[TR_ALEN];
 	unsigned char iface[5];
 	__u16 rcf;
-	__u8 rseg[8];
+	__u16 rseg[8];
 	rif_cache next;
 	unsigned long last_used;
 	unsigned char local_ring;
@@ -441,7 +441,7 @@ int rif_get_info(char *buffer,char **start, off_t offset, int length, int dummy)
 	int len=0;
 	off_t begin=0;
 	off_t pos=0;
-	int size,i,j,rcf_len;
+	int size,i,j,rcf_len,segment,brdgnmb;
 	unsigned long now=jiffies;
 
 	rif_cache entry;
@@ -466,10 +466,18 @@ int rif_get_info(char *buffer,char **start, off_t offset, int length, int dummy)
 				rcf_len = ((ntohs(entry->rcf) & TR_RCF_LEN_MASK)>>8)-2; 
 				if (rcf_len)
 				        rcf_len >>= 1;
-				for(j = 0; j < rcf_len; j++) {
-				        len+=size;
-				        pos=begin+len;
-			                size=sprintf(buffer+len," %04X",ntohs(entry->rseg[j]));
+				for(j = 1; j < rcf_len; j++) {
+					if(j==1) {
+						segment=ntohs(entry->rseg[j-1])>>4;
+						len+=size;
+						pos=begin+len;
+						size=sprintf(buffer+len,"  %03X",segment);
+					};
+					segment=ntohs(entry->rseg[j])>>4;
+					brdgnmb=ntohs(entry->rseg[j-1])&0x00f;
+					len+=size;
+					pos=begin+len;
+					size=sprintf(buffer+len,"-%01X-%03X",brdgnmb,segment);
 				}
 				len+=size;
 				pos=begin+len;

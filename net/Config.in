@@ -27,7 +27,7 @@ fi
 comment ' '
 tristate 'The IPX protocol' CONFIG_IPX
 if [ "$CONFIG_IPX" != "n" ]; then
-  bool 'Full internal IPX network' CONFIG_IPX_INTERN
+  source net/ipx/Config.in
 fi
 tristate 'Appletalk DDP' CONFIG_ATALK
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then

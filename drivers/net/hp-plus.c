@@ -466,10 +466,10 @@ cleanup_module(void)
 		if (dev->priv != NULL) {
 			/* NB: hpp_close() handles free_irq */
 			int ioaddr = dev->base_addr - NIC_OFFSET;
+			unregister_netdev(dev);
 			kfree(dev->priv);
 			dev->priv = NULL;
 			release_region(ioaddr, HP_IO_EXTENT);
-			unregister_netdev(dev);
 		}
 	}
 }

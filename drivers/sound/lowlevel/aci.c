@@ -58,6 +58,7 @@
  *
  */
 
+#include <linux/config.h> /* for CONFIG_ACI_MIXER */
 #include "lowlevel.h"
 #include "../sound_config.h"
 #include "lowlevel.h"

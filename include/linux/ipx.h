@@ -76,5 +76,12 @@ struct ipx_route_def
 #define SIOCAIPXITFCRT		(SIOCPROTOPRIVATE)
 #define SIOCAIPXPRISLT		(SIOCPROTOPRIVATE+1)
 #define SIOCIPXCFGDATA		(SIOCPROTOPRIVATE+2)
-#endif
 
+#ifdef __KERNEL__
+#include <linux/skbuff.h>
+
+extern int ipxrtr_route_skb(struct sk_buff *);
+extern int ipx_if_offset(unsigned long ipx_net_number);
+#endif /* def __KERNEL__ */
+
+#endif /* def _IPX_H_ */

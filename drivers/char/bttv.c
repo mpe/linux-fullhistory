@@ -24,7 +24,6 @@
 
 #include <linux/module.h>
 #include <linux/bios32.h>
-#include <linux/config.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
@@ -1684,7 +1683,7 @@ static int init_bt848(struct bttv *btv)
 		return -1;
 	if (!(btv->risc_even=(dword *) kmalloc(RISCMEM_LEN/2, GFP_KERNEL)))
 		return -1;
-	if (!(btv->risc_jmp =(dword *) kmalloc(1024, GFP_KERNEL)))
+	if (!(btv->risc_jmp =(dword *) kmalloc(2048, GFP_KERNEL)))
 		return -1;
 	btv->vbi_odd=btv->risc_jmp+12;
 	btv->vbi_even=btv->vbi_odd+256;

@@ -14,7 +14,6 @@
  */
 
 #include <linux/errno.h>
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>

@@ -27,7 +27,6 @@
 
 #include <linux/stddef.h>	/* offsetof(), etc. */
 #include <linux/errno.h>	/* return codes */
-#include <linux/config.h>	/* OS configuration options */
 #include <linux/kernel.h>
 #include <linux/module.h>	/* support for loadable modules */
 #include <linux/malloc.h>	/* kmalloc(), kfree() */

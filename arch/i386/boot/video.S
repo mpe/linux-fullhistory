@@ -5,6 +5,8 @@
 !	Based on the original setup.S code (C) Linus Torvalds and Mats Anderson
 !
 
+#include <linux/config.h> /* for CONFIG_VIDEO_* */
+
 ! Enable autodetection of SVGA adapters and modes. If you really need this
 ! feature, drop me a mail as I think of removing it some day...
 #undef CONFIG_VIDEO_SVGA

@@ -969,11 +969,12 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 
 	switch(cmd) {
 	 case SIOCGIFNAME:
-		err = verify_area(VERIFY_WRITE, arg, strlen(sl->dev->name) + 1);
-		if (err)  {
-			return err;
-		}
-		copy_to_user(arg, sl->dev->name, strlen(sl->dev->name) + 1);
+		/* Please, do not put this line under copy_to_user,
+		   it breaks my old poor gcc on alpha --ANK
+		 */
+		tmp = strlen(sl->dev->name) + 1;
+		if (copy_to_user(arg, sl->dev->name, tmp) < 0)
+			return -EFAULT;
 		return 0;
 
 	case SIOCGIFENCAP:

@@ -16,7 +16,6 @@
  *	0.4 1997-11-09 Alan Cox <alan@cymru.net> - Single Unix VFS API changes
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/busmouse.h>

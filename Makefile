@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 87
+SUBLEVEL = 88
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/)
 
@@ -402,7 +402,7 @@ endif
 depend dep: dep-files $(MODVERFILE)
 
 checkconfig:
-	perl -w scripts/checkconfig.pl `find $(FINDHPATH) $(SUBDIRS) -name '*.[hcS]' -print | sort`
+	perl -w scripts/checkconfig.pl `find * -name '*.[hcS]' -print | sort`
 
 ifdef CONFIGURATION
 ..$(CONFIGURATION):

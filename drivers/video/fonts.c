@@ -9,6 +9,7 @@
  */
 
 
+#include <linux/config.h> /* for CONFIG_AMIGA */
 #include <linux/types.h>
 #include <linux/string.h>
 #ifdef __mc68000__

@@ -7,6 +7,7 @@
  * Most of the stuff is located in the machine specific files.
  */
 
+#include <linux/config.h> /* CONFIG_HEARTBEAT */
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>

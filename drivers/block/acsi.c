@@ -59,8 +59,11 @@
 #include <linux/major.h>
 #include <linux/blk.h>
 #include <linux/malloc.h>
-
 #include <linux/interrupt.h>
+#include <scsi/scsi.h> /* for SCSI_IOCTL_GET_IDLUN */
+typedef void Scsi_Device; /* hack to avoid including scsi.h */
+#include <scsi/scsi_ioctl.h>
+#include <linux/hdreg.h> /* for HDIO_GETGEO */
 
 #include <asm/setup.h>
 #include <asm/pgtable.h>
@@ -70,7 +73,7 @@
 #include <asm/atariints.h>
 #include <asm/atari_acsi.h>
 #include <asm/atari_stdma.h>
-#include <asm/atari_rootsec.h>
+#include <asm/atari_stram.h>
 
 
 #define DEBUG
@@ -386,7 +389,7 @@ struct timer_list acsi_timer = { NULL, NULL, 0, 0, acsi_times_out };
 
 #ifdef CONFIG_ATARI_SLM
 
-extern void attach_slm( int target, int lun );
+extern int attach_slm( int target, int lun );
 extern int slm_init( void );
 
 #endif
@@ -1121,12 +1124,30 @@ static int acsi_ioctl( struct inode *inode, struct file *file,
 	if (dev >= NDevices)
 		return -EINVAL;
 	switch (cmd) {
-		/* I left out the GETGEO cmd; This doesn't make much sense for
-		 * ACSI disks...
-		 */
+	  case HDIO_GETGEO:
+		/* HDIO_GETGEO is supported more for getting the partition's start
+		 * sector... */
+	  { struct hd_geometry *geo = (struct hd_geometry *)arg;
+	    /* just fake some geometry here, it's nonsense anyway; to make it
+		 * easy, use Adaptec's usual 64/32 mapping */
+	    put_user( 64, &geo->heads );
+	    put_user( 32, &geo->sectors );
+	    put_user( acsi_info[dev].size >> 11, &geo->cylinders );
+		put_user( acsi_part[MINOR(inode->i_rdev)].start_sect, &geo->start );
+		return 0;
+	  }
+		
+	  case SCSI_IOCTL_GET_IDLUN:
+		/* SCSI compatible GET_IDLUN call to get target's ID and LUN number */
+		put_user( acsi_info[dev].target | (acsi_info[dev].lun << 8),
+				  &((Scsi_Idlun *) arg)->dev_id );
+		put_user( 0, &((Scsi_Idlun *) arg)->host_unique_id );
+		return 0;
+		
 	  case BLKGETSIZE:   /* Return device size */
 		return put_user(acsi_part[MINOR(inode->i_rdev)].nr_sects,
 				(long *) arg);
+		
 	  case BLKFLSBUF:
 		if(!suser())  return -EACCES;
 		if(!inode->i_rdev) return -EINVAL;
@@ -1784,8 +1805,8 @@ int acsi_init( void )
 		return -EBUSY;
 	}
 
-	if (!(acsi_buffer = (char *)__get_free_pages(GFP_KERNEL | GFP_DMA,
-						     ACSI_BUFFER_ORDER))) {
+	if (!(acsi_buffer =
+		  (char *)atari_stram_alloc( ACSI_BUFFER_SIZE, NULL, "acsi" ))) {
 		printk( KERN_ERR "Unable to get ACSI ST-Ram buffer.\n" );
 		unregister_blkdev( MAJOR_NR, "ad" );
 		return -ENOMEM;
@@ -1824,14 +1845,17 @@ void cleanup_module(void)
 
 	del_timer( &acsi_timer );
 	blk_dev[MAJOR_NR].request_fn = 0;
-	free_pages( (unsigned long)acsi_buffer, ACSI_BUFFER_ORDER );
+	atari_stram_free( acsi_buffer );
 
 	if (unregister_blkdev( MAJOR_NR, "ad" ) != 0)
 		printk( KERN_ERR "acsi: cleanup_module failed\n");
+	
 	for (gdp = &gendisk_head; *gdp; gdp = &((*gdp)->next))
 		if (*gdp == &acsi_gendisk)
 			break;
-	if (*gdp)
+	if (!*gdp)
+		printk( KERN_ERR "acsi: entry in disk chain missing!\n" );
+	else
 		*gdp = (*gdp)->next;
 }
 #endif
@@ -1861,7 +1885,7 @@ void cleanup_module(void)
 
 static int revalidate_acsidisk( int dev, int maxusage )
 {
-	int device, major;
+	int device;
 	struct gendisk * gdev;
 	int max_p, start, i;
 	struct acsi_info_struct *aip;
@@ -1880,14 +1904,19 @@ static int revalidate_acsidisk( int dev, int maxusage )
 
 	max_p = gdev->max_p;
 	start = device << gdev->minor_shift;
-	major = MAJOR_NR << 8;
 
 	for( i = max_p - 1; i >= 0 ; i-- ) {
-		sync_dev( major | start | i );
-		invalidate_inodes( major | start | i );
-		invalidate_buffers( major | start | i );
+		if (gdev->part[start + i].nr_sects != 0) {
+			kdev_t devp = MKDEV(MAJOR_NR, start + i);
+			struct super_block *sb = get_super(devp);
+
+			fsync_dev(devp);
+			if (sb)
+				invalidate_inodes(sb);
+			invalidate_buffers(devp);
+			gdev->part[start + i].nr_sects = 0;
+		}
 		gdev->part[start+i].start_sect = 0;
-		gdev->part[start+i].nr_sects = 0;
 	};
 
 	stdma_lock( NULL, NULL );

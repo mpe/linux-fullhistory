@@ -418,6 +418,7 @@ int devinet_ioctl(unsigned int cmd, void *arg)
 		break;
 
 	case SIOCSIFFLAGS:
+	case SIOCSIFPFLAGS:	/* Set per device sysctl controls */	
 		if (!suser())
 			return -EACCES;
 		rtnl_lock();
@@ -427,7 +428,6 @@ int devinet_ioctl(unsigned int cmd, void *arg)
 	case SIOCSIFBRDADDR:	/* Set the broadcast address */
 	case SIOCSIFDSTADDR:	/* Set the destination address */
 	case SIOCSIFNETMASK: 	/* Set the netmask for the interface */
-	case SIOCSIFPFLAGS:	/* Set per device sysctl controls */	
 		if (!suser())
 			return -EACCES;
 		if (sin->sin_family != AF_INET)

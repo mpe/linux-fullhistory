@@ -3,6 +3,7 @@
  *
  * Copyright (C) 1995, 1996 Russell King
  */
+#include <linux/config.h> /* for CONFIG_CPU_ARM2 and CONFIG_CPU_ARM3 */
 #include <linux/autoconf.h>
 #include <linux/linkage.h>
 #include <asm/assembler.h>

@@ -12,7 +12,7 @@
  * is mucked around with in interrupts on potentially
  * multiple CPU's..
  */
-extern spinlock_t current_lock;
+extern spinlock_t io_request_lock;
 
 /*
  * NR_REQUEST is the number of entries in the request-queue.
@@ -445,6 +445,11 @@ static void (DEVICE_REQUEST)(void);
 
 #if ! SCSI_BLK_MAJOR(MAJOR_NR)
 
+/*
+ * The [*_]end_request() handler has to be called with the request queue
+ * spinlock aquired. All functions called within end_request() _must be_
+ * atomic.
+ */
 #if defined(IDE_DRIVER) && !defined(_IDE_C) /* shared copy for IDE modules */
 void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup);
 #else

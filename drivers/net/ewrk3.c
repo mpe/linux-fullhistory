@@ -1904,13 +1904,13 @@ int init_module(void)
 
 void cleanup_module(void)
 {
+	unregister_netdev(&thisEthwrk);
 	if (thisEthwrk.priv) {
 		kfree(thisEthwrk.priv);
 		thisEthwrk.priv = NULL;
 	}
 	thisEthwrk.irq = 0;
 
-	unregister_netdev(&thisEthwrk);
 	release_region(thisEthwrk.base_addr, EWRK3_TOTAL_SIZE);
 }
 #endif				/* MODULE */

@@ -22,6 +22,9 @@
 #include <asm/io.h>
 #include <linux/blk.h>
 
+#define ATOMIC_ON()	do { } while (0)
+#define ATOMIC_OFF()	do { } while (0)
+
 /*
  * The request-struct contains all necessary data
  * to load a nr of sectors into memory
@@ -37,7 +40,7 @@ DECLARE_TASK_QUEUE(tq_disk);
 /*
  * Protect the request list against multiple users..
  */
-spinlock_t current_lock = SPIN_LOCK_UNLOCKED;
+spinlock_t io_request_lock = SPIN_LOCK_UNLOCKED;
 
 /*
  * used to wait on when there are no free requests
@@ -340,6 +343,7 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	unsigned int sector, count;
 	struct request * req;
 	int rw_ahead, max_req, max_sectors;
+	unsigned long flags;
 
 	count = bh->b_size >> 9;
 	sector = bh->b_rsector;
@@ -407,13 +411,20 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	 * Try to coalesce the new request with old requests
 	 */
 	max_sectors = get_max_sectors(bh->b_rdev);
-	cli();
+
+	/*
+	 * Now we acquire the request spinlock, we have to be mega careful
+	 * not to schedule or do something nonatomic
+	 */
+	spin_lock_irqsave(&io_request_lock,flags);
+	ATOMIC_ON();
+
 	req = *get_queue(bh->b_rdev);
 	if (!req) {
 		/* MD and loop can't handle plugging without deadlocking */
 		if (major != MD_MAJOR && major != LOOP_MAJOR && 
 		    major != DDV_MAJOR)
-			plug_device(blk_dev + major);
+			plug_device(blk_dev + major); /* is atomic */
 	} else switch (major) {
 	     case IDE0_MAJOR:	/* same as HD_MAJOR */
 	     case IDE1_MAJOR:
@@ -467,14 +478,18 @@ void make_request(int major,int rw, struct buffer_head * bh)
 				continue;
 
 			mark_buffer_clean(bh);
-		    	sti();
+			ATOMIC_OFF();
+			spin_unlock_irqrestore(&io_request_lock,flags);
 		    	return;
+
 		} while ((req = req->next) != NULL);
 	}
 
 /* find an unused request. */
 	req = get_request(max_req, bh->b_rdev);
-	sti();
+
+	ATOMIC_OFF();
+	spin_unlock_irqrestore(&io_request_lock,flags);
 
 /* if no request available: if rw_ahead, forget it; otherwise try again blocking.. */
 	if (!req) {
@@ -646,9 +661,12 @@ void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
 			if (j == 0) {
 				req[j] = get_request_wait(max_req, rdev);
 			} else {
-				cli();
+				unsigned long flags;
+				spin_lock_irqsave(&io_request_lock,flags);
+				ATOMIC_ON();
 				req[j] = get_request(max_req, rdev);
-				sti();
+				ATOMIC_OFF();
+				spin_unlock_irqrestore(&io_request_lock,flags);
 				if (req[j] == NULL)
 					break;
 			}

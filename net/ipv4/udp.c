@@ -55,6 +55,7 @@
  *		Olaf Kirch	:	Don't linearise iovec on sendmsg.
  *		Andi Kleen	:	Some cleanups, cache destination entry
  *					for connect. 
+ *	Vitaly E. Lavrov	:	Transparent proxy revived after year coma.
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -360,14 +361,14 @@ __inline__ struct sock *udp_v4_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 #define secondlist(hpnum, sk, fpass) \
 ({ struct sock *s1; if(!(sk) && (fpass)--) \
-	s1 = udp_hash[(hpnum) & (TCP_HTABLE_SIZE - 1)]; \
+	s1 = udp_hash[(hpnum) & (UDP_HTABLE_SIZE - 1)]; \
    else \
 	s1 = (sk); \
    s1; \
 })
 
 #define udp_v4_proxy_loop_init(hnum, hpnum, sk, fpass) \
-	secondlist((hpnum), udp_hash[(hnum)&(TCP_HTABLE_SIZE-1)],(fpass))
+	secondlist((hpnum), udp_hash[(hnum)&(UDP_HTABLE_SIZE-1)],(fpass))
 
 #define udp_v4_proxy_loop_next(hnum, hpnum, sk, fpass) \
 	secondlist((hpnum),(sk)->next,(fpass))
@@ -641,8 +642,15 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	if (msg->msg_flags&MSG_OOB)	/* Mirror BSD error message compatibility */
 		return -EOPNOTSUPP;
 
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+	if (msg->msg_flags&~(MSG_DONTROUTE|MSG_DONTWAIT|MSG_PROXY))
+	  	return -EINVAL;
+	if ((msg->msg_flags&MSG_PROXY) && !suser() )
+	  	return -EPERM;
+#else
 	if (msg->msg_flags&~(MSG_DONTROUTE|MSG_DONTWAIT))
 	  	return -EINVAL;
+#endif
 
 	/*
 	 *	Get and verify the address. 
@@ -685,8 +693,27 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		 */
 		rt = (struct rtable *)dst_check(&sk->dst_cache, 0);
   	}
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+	if (msg->msg_flags&MSG_PROXY) {
+		/*
+		 * We map the first 8 bytes of a second sockaddr_in
+		 * into the last 8 (unused) bytes of a sockaddr_in.
+		 */
+		struct sockaddr_in *from = (struct sockaddr_in *)msg->msg_name;
+		from = (struct sockaddr_in *)&from->sin_zero;
+		if (from->sin_family != AF_INET)
+			return -EINVAL;
+		ipc.addr = from->sin_addr.s_addr;
+		ufh.uh.source = from->sin_port;
+		if (ipc.addr == 0)
+			ipc.addr = sk->saddr;
+	} else
+#endif
+	{
+		ipc.addr = sk->saddr;
+		ufh.uh.source = sk->dummy_th.source;
+	}
 
-	ipc.addr = sk->saddr;
 	ipc.opt = NULL;
 	ipc.oif = sk->bound_dev_if;
 	if (msg->msg_controllen) {
@@ -710,7 +737,7 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	tos = RT_TOS(sk->ip_tos);
 	if (sk->localroute || (msg->msg_flags&MSG_DONTROUTE) || 
 	    (ipc.opt && ipc.opt->is_strictroute)) {
-		tos |= 1;
+		tos |= RTO_ONLINK;
 		rt = NULL; /* sorry */
 	}
 
@@ -722,7 +749,11 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	}
 
 	if (rt == NULL) {
-		err = ip_route_output(&rt, daddr, ufh.saddr, tos, ipc.oif);
+		err = ip_route_output(&rt, daddr, ufh.saddr,
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+			(msg->msg_flags&MSG_PROXY ? RTO_TPROXY : 0) |
+#endif
+			 tos, ipc.oif);
 		if (err) 
 			goto out;
 		localroute = 1;
@@ -735,7 +766,6 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	ufh.saddr = rt->rt_src;
 	if (!ipc.addr)
 		ufh.daddr = ipc.addr = rt->rt_dst;
-	ufh.uh.source = sk->dummy_th.source;
 	ufh.uh.len = htons(ulen);
 	ufh.uh.check = 0;
 	ufh.other = (htons(ulen) << 16) + IPPROTO_UDP*256;

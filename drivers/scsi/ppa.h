@@ -15,6 +15,7 @@
 /* Use the following to enable certain chipset support
  * Default is PEDANTIC = 3
  */
+#include <linux/config.h> /* for CONFIG_SCSI_PPA_HAVE_PEDANTIC */
 #ifndef CONFIG_SCSI_PPA_HAVE_PEDANTIC
 #define CONFIG_SCSI_PPA_HAVE_PEDANTIC	3
 #endif

@@ -46,6 +46,7 @@
  *	Alexey Kuznetsov	:	End of old history. Splitted to fib.c and
  *					route.c and rewritten from scratch.
  *		Andi Kleen	:	Load-limit warning messages.
+ *	Vitaly E. Lavrov	:	Transparent proxy revived after year coma.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -161,7 +162,7 @@ static int rt_cache_get_info(char *buffer, char **start, off_t offset, int lengt
 	pos = 128;
 
 	if (offset<128)	{
-		sprintf(buffer,"%-127s\n", "Iface\tDestination\tGateway \tFlags\t\tRefCnt\tUse\tMetric\tSource\t\tMTU\tWindow\tIRTT\tTOS\tHHRef\tHHUptod\tSpecDst\tHash");
+		sprintf(buffer,"%-127s\n", "Iface\tDestination\tGateway \tFlags\t\tRefCnt\tUse\tMetric\tSource\t\tMTU\tWindow\tIRTT\tTOS\tHHRef\tHHUptod\tSpecDst");
 		len = 128;
   	}
 	
@@ -179,8 +180,7 @@ static int rt_cache_get_info(char *buffer, char **start, off_t offset, int lengt
 				len = 0;
 				continue;
 			}
-					
-			sprintf(temp, "%s\t%08lX\t%08lX\t%8X\t%d\t%u\t%d\t%08lX\t%d\t%u\t%u\t%02X\t%d\t%1d\t%08X\t%02X",
+			sprintf(temp, "%s\t%08lX\t%08lX\t%8X\t%d\t%u\t%d\t%08lX\t%d\t%u\t%u\t%02X\t%d\t%1d\t%08X",
 				r->u.dst.dev ? r->u.dst.dev->name : "*",
 				(unsigned long)r->rt_dst,
 				(unsigned long)r->rt_gateway,
@@ -193,8 +193,7 @@ static int rt_cache_get_info(char *buffer, char **start, off_t offset, int lengt
 				(int)r->u.dst.rtt, r->key.tos,
 				r->u.dst.hh ? atomic_read(&r->u.dst.hh->hh_refcnt) : -1,
 				r->u.dst.hh ? (r->u.dst.hh->hh_output == ip_acct_output) : 0,
-				r->rt_spec_dst,
-				i);
+				r->rt_spec_dst);
 			sprintf(buffer+len,"%-127s\n",temp);
 			len += 128;
 			if (pos >= offset+length)
@@ -278,14 +277,8 @@ static void rt_run_flush(unsigned long dummy)
 	for (i=0; i<RT_HASH_DIVISOR; i++) {
 		int nr=0;
 
-		cli();
-		if (!(rth = rt_hash_table[i])) {
-			sti();
+		if ((rth = xchg(&rt_hash_table[i], NULL)) == NULL)
 			continue;
-		}
-
-		rt_hash_table[i] = NULL;
-		sti();
 
 		for (; rth; rth=next) {
 			next = rth->u.rt_next;
@@ -1110,7 +1103,7 @@ int ip_route_input(struct sk_buff *skb, u32 daddr, u32 saddr,
  * Major route resolver routine.
  */
 
-int ip_route_output_slow(struct rtable **rp, u32 daddr, u32 saddr, u8 tos, int oif)
+int ip_route_output_slow(struct rtable **rp, u32 daddr, u32 saddr, u32 tos, int oif)
 {
 	struct rt_key key;
 	struct fib_result res;
@@ -1118,14 +1111,17 @@ int ip_route_output_slow(struct rtable **rp, u32 daddr, u32 saddr, u8 tos, int o
 	struct rtable *rth;
 	struct device *dev_out = NULL;
 	unsigned hash;
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+	u32 nochecksrc = (tos & RTO_TPROXY);
+#endif
 
-	tos &= IPTOS_TOS_MASK|1;
+	tos &= IPTOS_TOS_MASK|RTO_ONLINK;
 	key.dst = daddr;
 	key.src = saddr;
 	key.tos = tos&IPTOS_TOS_MASK;
 	key.iif = loopback_dev.ifindex;
 	key.oif = oif;
-	key.scope = (tos&1) ? RT_SCOPE_LINK : RT_SCOPE_UNIVERSE;
+	key.scope = (tos&RTO_ONLINK) ? RT_SCOPE_LINK : RT_SCOPE_UNIVERSE;
 	res.fi = NULL;
 
 	if (saddr) {
@@ -1134,8 +1130,19 @@ int ip_route_output_slow(struct rtable **rp, u32 daddr, u32 saddr, u8 tos, int o
 
 		/* It is equivalent to inet_addr_type(saddr) == RTN_LOCAL */
 		dev_out = ip_dev_find(saddr);
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+		/* If address is not local, test for transparent proxy flag;
+		   if address is local --- clear the flag.
+		 */
+		if (dev_out == NULL) {
+			if (nochecksrc == 0)
+				return -EINVAL;
+			flags |= RTCF_TPROXY;
+		}
+#else
 		if (dev_out == NULL)
 			return -EINVAL;
+#endif
 
 		/* I removed check for oif == dev_out->oif here.
 		   It was wrong by three reasons:
@@ -1145,7 +1152,11 @@ int ip_route_output_slow(struct rtable **rp, u32 daddr, u32 saddr, u8 tos, int o
 		      of another iface. --ANK
 		 */
 
-		if (oif == 0 && (MULTICAST(daddr) || daddr == 0xFFFFFFFF)) {
+		if (oif == 0 &&
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+			dev_out &&
+#endif
+			(MULTICAST(daddr) || daddr == 0xFFFFFFFF)) {
 			/* Special hack: user can direct multicasts
 			   and limited broadcast via necessary interface
 			   without fiddling with IP_MULTICAST_IF or IP_TXINFO.
@@ -1343,7 +1354,7 @@ make_route:
 	return 0;
 }
 
-int ip_route_output(struct rtable **rp, u32 daddr, u32 saddr, u8 tos, int oif)
+int ip_route_output(struct rtable **rp, u32 daddr, u32 saddr, u32 tos, int oif)
 {
 	unsigned hash;
 	struct rtable *rth;
@@ -1356,7 +1367,13 @@ int ip_route_output(struct rtable **rp, u32 daddr, u32 saddr, u8 tos, int oif)
 		    rth->key.src == saddr &&
 		    rth->key.iif == 0 &&
 		    rth->key.oif == oif &&
-		    rth->key.tos == tos) {
+#ifndef CONFIG_IP_TRANSPARENT_PROXY
+		    rth->key.tos == tos
+#else
+		    !((rth->key.tos^tos)&(IPTOS_TOS_MASK|RTO_ONLINK)) &&
+		    ((tos&RTO_TPROXY) || !(rth->rt_flags&RTCF_TPROXY))
+#endif
+		) {
 			rth->u.dst.lastuse = jiffies;
 			atomic_inc(&rth->u.dst.use);
 			atomic_inc(&rth->u.dst.refcnt);

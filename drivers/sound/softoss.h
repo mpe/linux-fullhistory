@@ -105,7 +105,7 @@ typedef struct softsyn_devc
 	int bits;
 	int default_max_voices;
 	int max_playahead;
-	struct fileinfo finfo;
+	struct file finfo;
 	int fragsize;
 	int samples_per_fragment;
 	

@@ -23,7 +23,6 @@
  * for more details.
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/malloc.h>	/* for kmalloc() and kfree() */
@@ -207,9 +206,10 @@ static int dsp56k_upload(u_char *bin, int len)
 	return 0;
 }
 
-static long dsp56k_read(struct inode *inode, struct file *file,
-			char *buf, unsigned long count)
+static ssize_t dsp56k_read(struct file *file, char *buf, size_t count,
+			   loff_t *ppos)
 {
+	struct inode *inode = file->f_dentry->d_inode;
 	int dev = MINOR(inode->i_rdev) & 0x0f;
 
 	switch(dev)
@@ -269,9 +269,10 @@ static long dsp56k_read(struct inode *inode, struct file *file,
 	}
 }
 
-static long dsp56k_write(struct inode *inode, struct file *file,
-			 const char *buf, unsigned long count)
+static ssize_t dsp56k_write(struct file *file, const char *buf, size_t count,
+			    loff_t *ppos)
 {
+	struct inode *inode = file->f_dentry->d_inode;
 	int dev = MINOR(inode->i_rdev) & 0x0f;
 
 	switch(dev)

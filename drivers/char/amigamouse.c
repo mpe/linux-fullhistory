@@ -44,17 +44,17 @@
 #include <linux/random.h>
 #include <linux/poll.h>
 #include <linux/init.h>
+#include <linux/busmouse.h>
 
 #include <asm/setup.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/irq.h>
-#include <asm/amigamouse.h>
 #include <asm/amigahw.h>
 #include <asm/amigaints.h>
 
-#define MSE_INT_ON()	mouseint_allowed = 1
-#define MSE_INT_OFF()	mouseint_allowed = 0
+#define AMI_MSE_INT_ON()	mouseint_allowed = 1
+#define AMI_MSE_INT_OFF()	mouseint_allowed = 0
 
 
 static struct mouse_status mouse;
@@ -72,7 +72,7 @@ static void mouse_interrupt(int irq, void *dummy, struct pt_regs *fp)
 
 	if(!mouseint_allowed)
 		return;
-	MSE_INT_OFF();
+	AMI_MSE_INT_OFF();
 
 	/*
 	 *  This routine assumes, just like Kickstart, that the mouse
@@ -156,7 +156,7 @@ static void mouse_interrupt(int irq, void *dummy, struct pt_regs *fp)
 	  if (mouse.fasyncptr)
 	      kill_fasync(mouse.fasyncptr, SIGIO);
 	}
-	MSE_INT_ON();
+	AMI_MSE_INT_ON();
 }
 
 static int fasync_mouse(struct file *filp, int on)
@@ -178,7 +178,7 @@ static int release_mouse(struct inode * inode, struct file * file)
 	if (--mouse.active)
 		return 0;
 	free_irq(IRQ_AMIGA_VERTB, mouse_interrupt);
-	MSE_INT_OFF();
+	AMI_MSE_INT_OFF();
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
@@ -211,7 +211,7 @@ static int open_mouse(struct inode * inode, struct file * file)
 	mouse.buttons = 0x87;
 	mouse.active = 1;
 	MOD_INC_USE_COUNT;
-	MSE_INT_ON();
+	AMI_MSE_INT_ON();
 	return 0;
 }
 
@@ -219,8 +219,8 @@ static int open_mouse(struct inode * inode, struct file * file)
  * writes are disallowed
  */
 
-static long write_mouse(struct inode * inode, struct file * file,
-			const char * buffer, unsigned long count)
+static ssize_t write_mouse(struct file * file, const char * buffer,
+			   size_t count, loff_t *ppos)
 {
 	return -EINVAL;
 }
@@ -229,18 +229,15 @@ static long write_mouse(struct inode * inode, struct file * file,
  * read mouse data.  Currently never blocks.
  */
 
-static long read_mouse(struct inode * inode, struct file * file,
-		       char * buffer, unsigned long count)
+static ssize_t read_mouse(struct file * file, char * buffer,
+			  size_t count, loff_t *ppos)
 {
-	int r;
 	int dx;
 	int dy;
 	unsigned char buttons; 
 
 	if (count < 3)
 		return -EINVAL;
-	if ((r = verify_area(VERIFY_WRITE, buffer, count)))
-		return r;
 	if (!mouse.ready)
 		return -EAGAIN;
 
@@ -251,7 +248,7 @@ static long read_mouse(struct inode * inode, struct file * file,
 	 * so paging in put_user() does not effect mouse tracking.
 	 */
 
-	MSE_INT_OFF();
+	AMI_MSE_INT_OFF();
 	dx = mouse.dx;
 	dy = mouse.dy;
 	if (dx < -127)
@@ -268,14 +265,17 @@ static long read_mouse(struct inode * inode, struct file * file,
 	mouse.dx -= dx;
 	mouse.dy -= dy;
 	mouse.ready = 0;
-	MSE_INT_ON();
+	AMI_MSE_INT_ON();
 
-	put_user(buttons | 0x80, buffer);
-	put_user((char)dx, buffer + 1);
-	put_user((char)dy, buffer + 2);
-	for (r = 3; r < count; r++)
-	    put_user(0x00, buffer + r);
-	return r;
+	if ((put_user(buttons | 0x80, buffer++)) ||
+	    put_user((char)dx, buffer++) ||
+	    put_user((char)dy, buffer++))
+		return -EINVAL;
+
+	if (count > 3)
+		if (clear_user(buffer, count - 3))
+			return -EFAULT;
+	return count;
 }
 
 /*
@@ -315,7 +315,7 @@ __initfunc(int amiga_mouse_init(void))
 
 	custom.joytest = 0;	/* reset counters */
 
-	MSE_INT_OFF();
+	AMI_MSE_INT_OFF();
 
 	mouse.active = 0;
 	mouse.ready = 0;

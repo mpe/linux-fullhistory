@@ -52,15 +52,7 @@ static int      max_synthdev = 0;
 static int      seq_mode = SEQ_1;
 
 static struct wait_queue *seq_sleeper = NULL;
-
-static volatile struct snd_wait seq_sleep_flag = {
-	0
-};
-
 static struct wait_queue *midi_sleeper = NULL;
-static volatile struct snd_wait midi_sleep_flag = {
-	0
-};
 
 static int      midi_opened[MAX_MIDI_DEV] = {
 	0
@@ -98,7 +90,7 @@ static void     seq_reset(void);
 #error Too many synthesizer devices enabled.
 #endif
 
-int sequencer_read(int dev, struct fileinfo *file, char *buf, int count)
+int sequencer_read(int dev, struct file *file, char *buf, int count)
 {
 	int c = count, p = 0;
 	int ev_len;
@@ -113,25 +105,13 @@ int sequencer_read(int dev, struct fileinfo *file, char *buf, int count)
 
 	if (!iqlen)
 	{
-		unsigned long   tlimit;
-		if ((file->flags & (O_NONBLOCK) ? 1 : 0))
-		{
-			restore_flags(flags);
-			return -EAGAIN;
-		}
-		if (pre_event_timeout)
-			current->timeout = tlimit = jiffies + (pre_event_timeout);
-		else
-			tlimit = (unsigned long) -1;
-		midi_sleep_flag.opts = WK_SLEEP;
-		interruptible_sleep_on(&midi_sleeper);
-		if (!(midi_sleep_flag.opts & WK_WAKEUP))
-		{
-			if (jiffies >= tlimit)
-				midi_sleep_flag.opts |= WK_TIMEOUT;
-		}
-		midi_sleep_flag.opts &= ~WK_SLEEP;
-
+ 		if (file->f_flags & O_NONBLOCK) {
+  			restore_flags(flags);
+  			return -EAGAIN;
+  		}
+ 		current->timeout = pre_event_timeout ? jiffies + pre_event_timeout : 0;
+ 		interruptible_sleep_on(&midi_sleeper);
+ 		current->timeout = 0;
 		if (!iqlen)
 		{
 			restore_flags(flags);
@@ -180,12 +160,7 @@ void seq_copy_to_input(unsigned char *event_rec, int len)
 	memcpy(&iqueue[iqtail * IEV_SZ], event_rec, len);
 	iqlen++;
 	iqtail = (iqtail + 1) % SEQ_MAX_QUEUE;
-
-	if ((midi_sleep_flag.opts & WK_SLEEP))
-	{
-		midi_sleep_flag.opts = WK_WAKEUP;
-		wake_up(&midi_sleeper);
-	}
+	wake_up(&midi_sleeper);
 	restore_flags(flags);
 }
 
@@ -243,12 +218,12 @@ void seq_input_event(unsigned char *event_rec, int len)
 	seq_copy_to_input(event_rec, len);
 }
 
-int sequencer_write(int dev, struct fileinfo *file, const char *buf, int count)
+int sequencer_write(int dev, struct file *file, const char *buf, int count)
 {
 	unsigned char event_rec[EV_SZ], ev_code;
 	int p = 0, c, ev_size;
 	int err;
-	int mode = file->mode & O_ACCMODE;
+	int mode = translate_mode(file);
 
 	dev = dev >> 4;
 
@@ -325,7 +300,7 @@ int sequencer_write(int dev, struct fileinfo *file, const char *buf, int count)
 					/*printk("Sequencer Error: Nonexistent MIDI device %d\n", dev);*/
 					return -ENXIO;
 				}
-				mode = file->mode & O_ACCMODE;
+				mode = translate_mode(file);
 
 				if ((err = midi_devs[dev]->open(dev, mode,
 								sequencer_midi_input, sequencer_midi_output)) < 0)
@@ -337,14 +312,14 @@ int sequencer_write(int dev, struct fileinfo *file, const char *buf, int count)
 				midi_opened[dev] = 1;
 			}
 		}
-		if (!seq_queue(event_rec, (file->flags & (O_NONBLOCK) ? 1 : 0)))
+		if (!seq_queue(event_rec, (file->f_flags & (O_NONBLOCK) ? 1 : 0)))
 		{
 			int processed = count - c;
 
 			if (!seq_playing)
 				seq_startplay();
 
-			if (!processed && (file->flags & (O_NONBLOCK) ? 1 : 0))
+			if (!processed && (file->f_flags & O_NONBLOCK))
 				return -EAGAIN;
 			else
 				return processed;
@@ -372,15 +347,12 @@ static int seq_queue(unsigned char *note, char nonblock)
 						 * Give chance to drain the queue
 						 */
 
-	if (!nonblock && qlen >= SEQ_MAX_QUEUE && !(seq_sleep_flag.opts & WK_SLEEP))
-	{
+	if (!nonblock && qlen >= SEQ_MAX_QUEUE && !waitqueue_active(&seq_sleeper)) {
 		/*
 		 * Sleep until there is enough space on the queue
 		 */
-
-		seq_sleep_flag.opts = WK_SLEEP;
+		current->timeout = 0;
 		interruptible_sleep_on(&seq_sleeper);
-		seq_sleep_flag.opts &= ~WK_SLEEP;;
 	}
 	if (qlen >= SEQ_MAX_QUEUE)
 	{
@@ -667,20 +639,8 @@ static int seq_timing_event(unsigned char *event_rec)
 		int ret;
 
 		if ((ret = tmr->event(tmr_no, event_rec)) == TIMER_ARMED)
-		{
 			if ((SEQ_MAX_QUEUE - qlen) >= output_threshold)
-			{
-				unsigned long   flags;
-				save_flags(flags);
-				cli();
-				if ((seq_sleep_flag.opts & WK_SLEEP))
-				{
-					seq_sleep_flag.opts = WK_WAKEUP;
-					wake_up(&seq_sleeper);
-				}
-				restore_flags(flags);
-			}
-		}
+				wake_up(&seq_sleeper);
 		return ret;
 	}
 	switch (cmd)
@@ -708,18 +668,7 @@ static int seq_timing_event(unsigned char *event_rec)
 					request_sound_timer(time);
 
 				if ((SEQ_MAX_QUEUE - qlen) >= output_threshold)
-				{
-					unsigned long flags;
-
-					save_flags(flags);
-					cli();
-					if ((seq_sleep_flag.opts & WK_SLEEP))
-					{
-						seq_sleep_flag.opts = WK_WAKEUP;
-						wake_up(&seq_sleeper);
-					}
-					restore_flags(flags);
-				}
+					wake_up(&seq_sleeper);
 				return TIMER_ARMED;
 			}
 			break;
@@ -847,20 +796,7 @@ static int play_event(unsigned char *q)
 					request_sound_timer(time);
 
 				if ((SEQ_MAX_QUEUE - qlen) >= output_threshold)
-				{
-					unsigned long   flags;
-
-					save_flags(flags);
-					cli();
-					if ((seq_sleep_flag.opts & WK_SLEEP))
-					{
-						{
-							seq_sleep_flag.opts = WK_WAKEUP;
-							wake_up(&seq_sleeper);
-						};
-					}
-					restore_flags(flags);
-				}
+					wake_up(&seq_sleeper);
 				/*
 				 * The timer is now active and will reinvoke this function
 				 * after the timer expires. Return to the caller now.
@@ -991,20 +927,7 @@ static void seq_startplay(void)
 	seq_playing = 0;
 
 	if ((SEQ_MAX_QUEUE - qlen) >= output_threshold)
-	{
-		unsigned long   flags;
-
-		save_flags(flags);
-		cli();
-		if ((seq_sleep_flag.opts & WK_SLEEP))
-		{
-			{
-				seq_sleep_flag.opts = WK_WAKEUP;
-				wake_up(&seq_sleeper);
-			};
-		}
-		restore_flags(flags);
-	}
+		wake_up(&seq_sleeper);
 }
 
 static void reset_controllers(int dev, unsigned char *controller, int update_dev)
@@ -1048,7 +971,7 @@ static void setup_mode2(void)
 	seq_mode = SEQ_2;
 }
 
-int sequencer_open(int dev, struct fileinfo *file)
+int sequencer_open(int dev, struct file *file)
 {
 	int retval, mode, i;
 	int level, tmp;
@@ -1060,7 +983,7 @@ int sequencer_open(int dev, struct fileinfo *file)
 	level = ((dev & 0x0f) == SND_DEV_SEQ2) ? 2 : 1;
 
 	dev = dev >> 4;
-	mode = file->mode & O_ACCMODE;
+	mode = translate_mode(file);
 
 	DEB(printk("sequencer_open(dev=%d)\n", dev));
 
@@ -1187,8 +1110,8 @@ int sequencer_open(int dev, struct fileinfo *file)
 	if (seq_mode == SEQ_2)
 		tmr->open(tmr_no, seq_mode);
 
-	seq_sleep_flag.opts = WK_NONE;
-	midi_sleep_flag.opts = WK_NONE;
+ 	init_waitqueue(&seq_sleeper);
+ 	init_waitqueue(&midi_sleeper);
 	output_threshold = SEQ_MAX_QUEUE / 2;
 
 	return 0;
@@ -1218,27 +1141,18 @@ void seq_drain_midi_queues(void)
 		 * Let's have a delay
 		 */
 		
-		if (n)
-		{
-			unsigned long   tlimit;
-
-			current->timeout = tlimit = jiffies + (HZ / 10);
-			seq_sleep_flag.opts = WK_SLEEP;
-			interruptible_sleep_on(&seq_sleeper);
-			if (!(seq_sleep_flag.opts & WK_WAKEUP))
-			{
-				if (jiffies >= tlimit)
-					seq_sleep_flag.opts |= WK_TIMEOUT;
-			}
-			seq_sleep_flag.opts &= ~WK_SLEEP;
-		}
+ 		if (n) {
+ 			current->timeout = jiffies + HZ / 10;
+ 			interruptible_sleep_on(&seq_sleeper);
+ 			current->timeout = 0;
+  		}
 	}
 }
 
-void sequencer_release(int dev, struct fileinfo *file)
+void sequencer_release(int dev, struct file *file)
 {
 	int i;
-	int mode = file->mode & O_ACCMODE;
+	int mode = translate_mode(file);
 
 	dev = dev >> 4;
 
@@ -1248,21 +1162,15 @@ void sequencer_release(int dev, struct fileinfo *file)
 	 * Wait until the queue is empty (if we don't have nonblock)
 	 */
 
-	if (mode != OPEN_READ && !(file->flags & (O_NONBLOCK) ? 1 : 0))
+	if (mode != OPEN_READ && !(file->f_flags & O_NONBLOCK))
 	{
 		while (!signal_pending(current) && qlen > 0)
 		{
-			unsigned long   tlimit;
-			seq_sync();
-			current->timeout = tlimit = jiffies + (3 * HZ);
-			seq_sleep_flag.opts = WK_SLEEP;
-			interruptible_sleep_on(&seq_sleeper);
-			if (!(seq_sleep_flag.opts & WK_WAKEUP))
-			{
-				if (jiffies >= tlimit)
-					seq_sleep_flag.opts |= WK_TIMEOUT;
-			}
-			seq_sleep_flag.opts &= ~WK_SLEEP;
+  			seq_sync();
+ 			current->timeout = jiffies + 3 * HZ;
+ 			interruptible_sleep_on(&seq_sleeper);
+ 			current->timeout = 0;
+ 			/* Extra delay */
 		}
 	}
 		  
@@ -1313,21 +1221,11 @@ static int seq_sync(void)
 
 	save_flags(flags);
 	cli();
-	if (qlen > 0)
-	{
-		unsigned long   tlimit;
-
-		if (HZ)
-			current->timeout = tlimit = jiffies + (HZ);
-		seq_sleep_flag.opts = WK_SLEEP;
-		interruptible_sleep_on(&seq_sleeper);
-		if (!(seq_sleep_flag.opts & WK_WAKEUP))
-		{
-			if (jiffies >= tlimit)
-				seq_sleep_flag.opts |= WK_TIMEOUT;
-		}
-		seq_sleep_flag.opts &= ~WK_SLEEP;
-	}
+ 	if (qlen > 0) {
+ 		current->timeout = jiffies + HZ;
+ 		interruptible_sleep_on(&seq_sleeper);
+ 		current->timeout = 0;
+  	}
 	restore_flags(flags);
 	return qlen;
 }
@@ -1351,21 +1249,12 @@ static void midi_outc(int dev, unsigned char data)
 
 	save_flags(flags);
 	cli();
-	while (n && !midi_devs[dev]->outputc(dev, data))
-	{
-		unsigned long   tlimit;
-
-		current->timeout = tlimit = jiffies + (4);
-		seq_sleep_flag.opts = WK_SLEEP;
-		interruptible_sleep_on(&seq_sleeper);
-		if (!(seq_sleep_flag.opts & WK_WAKEUP))
-		{
-			if (jiffies >= tlimit)
-				seq_sleep_flag.opts |= WK_TIMEOUT;
-		}
-		seq_sleep_flag.opts &= ~WK_SLEEP;
-		n--;
-	}
+ 	while (n && !midi_devs[dev]->outputc(dev, data)) {
+ 		current->timeout = jiffies + 4;
+ 		interruptible_sleep_on(&seq_sleeper);
+ 		current->timeout = 0;
+  		n--;
+  	}
 	restore_flags(flags);
 }
 
@@ -1441,13 +1330,9 @@ static void seq_reset(void)
 	save_flags(flags);
 	cli();
 	
-	if ((seq_sleep_flag.opts & WK_SLEEP))
-	{
+	if (waitqueue_active(&seq_sleeper)) {
 		/*      printk( "Sequencer Warning: Unexpected sleeping process - Waking up\n"); */
-		{
-			seq_sleep_flag.opts = WK_WAKEUP;
-			wake_up(&seq_sleeper);
-		};
+		wake_up(&seq_sleeper);
 	}
 	restore_flags(flags);
 }
@@ -1473,11 +1358,10 @@ static void seq_panic(void)
 	 */
 }
 
-int sequencer_ioctl(int dev, struct fileinfo *file,
-		    unsigned int cmd, caddr_t arg)
+int sequencer_ioctl(int dev, struct file *file, unsigned int cmd, caddr_t arg)
 {
 	int midi_dev, orig_dev, val, err;
-	int mode = file->mode & O_ACCMODE;
+	int mode = translate_mode(file);
 	struct synth_info inf;
 	struct seq_event_rec event_rec;
 	unsigned long flags;
@@ -1684,44 +1568,26 @@ int sequencer_ioctl(int dev, struct fileinfo *file,
 	return put_user(val, (int *)arg);
 }
 
-int sequencer_select(int dev, struct fileinfo *file, int sel_type, poll_table * wait)
+unsigned int sequencer_poll(int dev, struct file *file, poll_table * wait)
 {
-	unsigned long   flags;
+	unsigned long flags;
+	unsigned int mask = 0;
 
 	dev = dev >> 4;
 
-	switch (sel_type)
-	{
-		case SEL_IN:
-			save_flags(flags);
-			cli();
-			if (!iqlen)
-			{
-				midi_sleep_flag.opts = WK_SLEEP;
-				poll_wait(&midi_sleeper, wait);
-				restore_flags(flags);
-				return 0;
-			}
-			restore_flags(flags);
-			return 1;
+	save_flags(flags);
+	cli();
+	/* input */
+	poll_wait(&midi_sleeper, wait);
+	if (iqlen)
+		mask |= POLLIN | POLLRDNORM;
 
-		case SEL_OUT:
-			save_flags(flags);
-			cli();
-			if ((SEQ_MAX_QUEUE - qlen) < output_threshold)
-			{
-				seq_sleep_flag.opts = WK_SLEEP;
-				poll_wait(&seq_sleeper, wait);
-				restore_flags(flags);
-				return 0;
-			}
-			restore_flags(flags);
-			return 1;
-
-		case SEL_EX:
-			return 0;
-	}
-	return 0;
+	/* output */
+	poll_wait(&seq_sleeper, wait);
+	if ((SEQ_MAX_QUEUE - qlen) >= output_threshold) 
+		mask |= POLLOUT | POLLWRNORM;
+	restore_flags(flags);
+	return mask;
 }
 
 

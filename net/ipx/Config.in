@@ -1,0 +1,6 @@
+#
+# IPX configuration
+#
+
+comment 'IPX options'
+bool 'Full internal IPX network' CONFIG_IPX_INTERN

@@ -782,11 +782,11 @@ cleanup_module(void)
 	for (this_dev = 0; this_dev < MAX_NE_CARDS; this_dev++) {
 		struct device *dev = &dev_ne[this_dev];
 		if (dev->priv != NULL) {
+			unregister_netdev(dev);
 			kfree(dev->priv);
 			dev->priv = NULL;
 			free_irq(dev->irq, dev);
 			release_region(dev->base_addr, NE_IO_EXTENT);
-			unregister_netdev(dev);
 		}
 	}
 }

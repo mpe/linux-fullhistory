@@ -7,9 +7,6 @@
  *
  */
 
-#ifdef NTFS_IN_LINUX_KERNEL
-#include <linux/config.h>
-#endif
 #include "types.h"
 #include "struct.h"
 #include "support.h"

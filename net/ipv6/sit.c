@@ -14,7 +14,6 @@
  *      2 of the License, or (at your option) any later version.
  */
 
-#include <linux/config.h>
 #define __NO_VERSION__
 #include <linux/module.h>
 #include <linux/errno.h>
@@ -404,7 +403,7 @@ static int ipip6_tunnel_xmit(struct sk_buff *skb, struct device *dev)
 		}
 
 		addr6 = (struct in6_addr*)&neigh->primary_key;
-		addr_type = neigh->type;
+		addr_type = ipv6_addr_type(addr6);
 
 		if (addr_type == IPV6_ADDR_ANY) {
 			addr6 = &skb->nh.ipv6h->daddr;

@@ -5,8 +5,6 @@
  * Copyright (C) 1996 Paul Mackerras.
  */
 
-#include <linux/config.h>
-
 typedef void *phandle;
 typedef void *ihandle;
 

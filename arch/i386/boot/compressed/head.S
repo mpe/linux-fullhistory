@@ -28,7 +28,6 @@
 .text
 
 #define __ASSEMBLY__
-#include <linux/config.h>
 #include <linux/linkage.h>
 #include <asm/segment.h>
 

@@ -762,7 +762,9 @@ static int softsyn_ioctl(int dev, unsigned int cmd, caddr_t arg)
 
 	case SNDCTL_SYNTH_INFO:
 		softsyn_info.nr_voices = devc->maxvoice;
-		return __copy_to_user(arg, &softsyn_info, sizeof(softsyn_info));
+		if (__copy_to_user(arg, &softsyn_info, sizeof(softsyn_info)))
+			return -EFAULT;
+		return 0;
 
 	case SNDCTL_SEQ_RESETSAMPLES:
 		stop_engine(devc);
@@ -992,8 +994,8 @@ static int softsyn_open(int synthdev, int mode)
 		return 0;
 
 	softsynth_disabled = 0;
-	devc->finfo.mode = OPEN_WRITE;
-	devc->finfo.flags = 0;
+	devc->finfo.f_mode = FMODE_WRITE;
+	devc->finfo.f_flags = 0;
 
 	if (softoss_dev >= num_audiodevs)
 		softoss_dev = num_audiodevs - 1;

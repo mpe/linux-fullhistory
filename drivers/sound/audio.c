@@ -13,9 +13,15 @@
  */
 /*
  * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
+ * Thomas Sailer   : moved several static variables into struct audio_operations
+ *                   (which is grossly misnamed btw.) because they have the same
+ *                   lifetime as the rest in there and dynamic allocation saves
+ *                   12k or so
  */
 
 #include <linux/config.h>
+#include <linux/stddef.h>
+#include <linux/kerneld.h>
 
 #include "sound_config.h"
 
@@ -26,51 +32,40 @@
 #define NEUTRAL8	0x80
 #define NEUTRAL16	0x00
 
-static int      audio_mode[MAX_AUDIO_DEV];
-static int      dev_nblock[MAX_AUDIO_DEV];	/* 1 if in nonblocking mode */
 
-#define		AM_NONE		0
-#define		AM_WRITE	OPEN_WRITE
-#define 	AM_READ		OPEN_READ
 int             dma_ioctl(int dev, unsigned int cmd, caddr_t arg);
-
-
-static int      local_format[MAX_AUDIO_DEV], audio_format[MAX_AUDIO_DEV];
-static int      local_conversion[MAX_AUDIO_DEV];
-
-#define CNV_MU_LAW	0x00000001
 
 static int set_format(int dev, int fmt)
 {
 	if (fmt != AFMT_QUERY)
 	{
-		local_conversion[dev] = 0;
+		audio_devs[dev]->local_conversion = 0;
 
 		if (!(audio_devs[dev]->format_mask & fmt))	/* Not supported */
 		{
 			if (fmt == AFMT_MU_LAW)
 			{
 				fmt = AFMT_U8;
-				local_conversion[dev] = CNV_MU_LAW;
+				audio_devs[dev]->local_conversion = CNV_MU_LAW;
 			}
 			else
 				fmt = AFMT_U8;	/* This is always supported */
 		}
-		audio_format[dev] = audio_devs[dev]->d->set_bits(dev, fmt);
-		local_format[dev] = fmt;
+		audio_devs[dev]->audio_format = audio_devs[dev]->d->set_bits(dev, fmt);
+		audio_devs[dev]->local_format = fmt;
 	}
 	else
-		return local_format[dev];
+		return audio_devs[dev]->local_format;
 
-	return local_format[dev];
+	return audio_devs[dev]->local_format;
 }
 
-int audio_open(int dev, struct fileinfo *file)
+int audio_open(int dev, struct file *file)
 {
 	int ret;
 	int bits;
 	int dev_type = dev & 0x0f;
-	int mode = file->mode & O_ACCMODE;
+	int mode = translate_mode(file);
 
 	dev = dev >> 4;
 
@@ -96,15 +91,15 @@ int audio_open(int dev, struct fileinfo *file)
 		}
 	}
 	
-	local_conversion[dev] = 0;
+	audio_devs[dev]->local_conversion = 0;
 
 	if (dev_type == SND_DEV_AUDIO)
-		  set_format(dev, AFMT_MU_LAW);
+		set_format(dev, AFMT_MU_LAW);
 	else 
 		set_format(dev, bits);
 
-	audio_mode[dev] = AM_NONE;
-	dev_nblock[dev] = 0;
+	audio_devs[dev]->audio_mode = AM_NONE;
+	audio_devs[dev]->dev_nblock = 0;
 
 
 	return ret;
@@ -154,12 +149,11 @@ static void sync_output(int dev)
 	dmap->flags |= DMA_DIRTY;
 }
 
-void audio_release(int dev, struct fileinfo *file)
+void audio_release(int dev, struct file *file)
 {
-	int             mode;
+	int             mode = translate_mode(file);
 
 	dev = dev >> 4;
-	mode = file->mode & O_ACCMODE;
 
 	audio_devs[dev]->dmap_out->closing = 1;
 	audio_devs[dev]->dmap_in->closing = 1;
@@ -202,7 +196,7 @@ translate_bytes(const void *table, void *buff, int n)
 
 #endif
 
-int audio_write(int dev, struct fileinfo *file, const char *buf, int count)
+int audio_write(int dev, struct file *file, const char *buf, int count)
 {
 	int c, p, l, buf_size;
 	int err;
@@ -217,9 +211,9 @@ int audio_write(int dev, struct fileinfo *file, const char *buf, int count)
 		return -EPERM;
 
 	if (audio_devs[dev]->flags & DMA_DUPLEX)
-		audio_mode[dev] |= AM_WRITE;
+		audio_devs[dev]->audio_mode |= AM_WRITE;
 	else
-		audio_mode[dev] = AM_WRITE;
+		audio_devs[dev]->audio_mode = AM_WRITE;
 
 	if (!count)		/* Flush output */
 	{
@@ -229,10 +223,10 @@ int audio_write(int dev, struct fileinfo *file, const char *buf, int count)
 	
 	while (c)
 	{
-		if ((err = DMAbuf_getwrbuffer(dev, &dma_buf, &buf_size, dev_nblock[dev])) < 0)
+		if ((err = DMAbuf_getwrbuffer(dev, &dma_buf, &buf_size, audio_devs[dev]->dev_nblock)) < 0)
 		{
 			    /* Handle nonblocking mode */
-			if (dev_nblock[dev] && err == -EAGAIN)
+			if (audio_devs[dev]->dev_nblock && err == -EAGAIN)
 				return p;	/* No more space. Return # of accepted bytes */
 			return err;
 		}
@@ -259,7 +253,7 @@ int audio_write(int dev, struct fileinfo *file, const char *buf, int count)
 		} 
 		else audio_devs[dev]->d->copy_user(dev, dma_buf, 0, buf, p, l);
 
-		if (local_conversion[dev] & CNV_MU_LAW)
+		if (audio_devs[dev]->local_conversion & CNV_MU_LAW)
 		{
 			/*
 			 * This just allows interrupts while the conversion is running
@@ -276,7 +270,7 @@ int audio_write(int dev, struct fileinfo *file, const char *buf, int count)
 	return count;
 }
 
-int audio_read(int dev, struct fileinfo *file, char *buf, int count)
+int audio_read(int dev, struct file *file, char *buf, int count)
 {
 	int             c, p, l;
 	char           *dmabuf;
@@ -289,24 +283,24 @@ int audio_read(int dev, struct fileinfo *file, char *buf, int count)
 	if (!(audio_devs[dev]->open_mode & OPEN_READ))
 		return -EPERM;
 
-	if ((audio_mode[dev] & AM_WRITE) && !(audio_devs[dev]->flags & DMA_DUPLEX))
+	if ((audio_devs[dev]->audio_mode & AM_WRITE) && !(audio_devs[dev]->flags & DMA_DUPLEX))
 		sync_output(dev);
 
 	if (audio_devs[dev]->flags & DMA_DUPLEX)
-		audio_mode[dev] |= AM_READ;
+		audio_devs[dev]->audio_mode |= AM_READ;
 	else
-		audio_mode[dev] = AM_READ;
+		audio_devs[dev]->audio_mode = AM_READ;
 
 	while(c)
 	{
 		if ((buf_no = DMAbuf_getrdbuffer(dev, &dmabuf, &l,
-			dev_nblock[dev])) < 0)
+			audio_devs[dev]->dev_nblock)) < 0)
 		{
 			/*
 			 *	Nonblocking mode handling. Return current # of bytes
 			 */
 
-			if (dev_nblock[dev] && buf_no == -EAGAIN)
+			if (audio_devs[dev]->dev_nblock && buf_no == -EAGAIN)
 				return p;
 
 			if (p > 0) 		/* Avoid throwing away data */
@@ -321,7 +315,7 @@ int audio_read(int dev, struct fileinfo *file, char *buf, int count)
 		 * Insert any local processing here.
 		 */
 
-		if (local_conversion[dev] & CNV_MU_LAW)
+		if (audio_devs[dev]->local_conversion & CNV_MU_LAW)
 		{
 			/*
 			 * This just allows interrupts while the conversion is running
@@ -347,8 +341,7 @@ int audio_read(int dev, struct fileinfo *file, char *buf, int count)
 	return count - c;
 }
 
-int audio_ioctl(int dev, struct fileinfo *file_must_not_be_used,
-		unsigned int cmd, caddr_t arg)
+int audio_ioctl(int dev, struct file *file, unsigned int cmd, caddr_t arg)
 {
 	int val, count;
 	unsigned long flags;
@@ -356,7 +349,7 @@ int audio_ioctl(int dev, struct fileinfo *file_must_not_be_used,
 
 	dev = dev >> 4;
 
-	if (((cmd >> 8) & 0xff) == 'C')	{
+	if (_IOC_TYPE(cmd) == 'C')	{
 		if (audio_devs[dev]->coproc)	/* Coprocessor ioctl */
 			return audio_devs[dev]->coproc->ioctl(audio_devs[dev]->coproc->devc, cmd, arg, 0);
 		/* else
@@ -386,7 +379,7 @@ int audio_ioctl(int dev, struct fileinfo *file_must_not_be_used,
 			return 0;
 
 		case SNDCTL_DSP_RESET:
-			audio_mode[dev] = AM_NONE;
+			audio_devs[dev]->audio_mode = AM_NONE;
 			DMAbuf_reset(dev);
 			return 0;
 
@@ -403,19 +396,19 @@ int audio_ioctl(int dev, struct fileinfo *file_must_not_be_used,
 		case SNDCTL_DSP_GETISPACE:
 			if (!(audio_devs[dev]->open_mode & OPEN_READ))
 				return 0;
-			if ((audio_mode[dev] & AM_WRITE) && !(audio_devs[dev]->flags & DMA_DUPLEX))
-				return -EBUSY;
+  			if ((audio_devs[dev]->audio_mode & AM_WRITE) && !(audio_devs[dev]->flags & DMA_DUPLEX))
+  				return -EBUSY;
 			return dma_ioctl(dev, cmd, arg);
 
 		case SNDCTL_DSP_GETOSPACE:
 			if (!(audio_devs[dev]->open_mode & OPEN_WRITE))
 				return -EPERM;
-			if ((audio_mode[dev] & AM_READ) && !(audio_devs[dev]->flags & DMA_DUPLEX))
-				return -EBUSY;
+  			if ((audio_devs[dev]->audio_mode & AM_READ) && !(audio_devs[dev]->flags & DMA_DUPLEX))
+  				return -EBUSY;
 			return dma_ioctl(dev, cmd, arg);
 		
 		case SNDCTL_DSP_NONBLOCK:
-			dev_nblock[dev] = 1;
+  			audio_devs[dev]->dev_nblock = 1;
 			return 0;
 
 		case SNDCTL_DSP_GETCAPS:
@@ -797,7 +790,9 @@ int dma_ioctl(int dev, unsigned int cmd, caddr_t arg)
 				info.fragments = info.bytes / dmap->fragment_size;
 				info.bytes -= dmap->user_counter % dmap->fragment_size;
 			}
-			return copy_to_user(arg, &info, sizeof(info));
+			if (copy_to_user(arg, &info, sizeof(info)))
+				return -EFAULT;
+			return 0;
 
 		case SNDCTL_DSP_SETTRIGGER:
 			if (get_user(bits, (int *)arg))
@@ -863,7 +858,9 @@ int dma_ioctl(int dev, unsigned int cmd, caddr_t arg)
 			if (dmap_in->mapping_flags & DMA_MAP_MAPPED)
 				dmap_in->qlen = 0;	/* Reset interrupt counter */
 			restore_flags(flags);
-			return copy_to_user(arg, &cinfo, sizeof(cinfo));
+			if (copy_to_user(arg, &cinfo, sizeof(cinfo)))
+				return -EFAULT;
+			return 0;
 
 		case SNDCTL_DSP_GETOPTR:
 			if (!(audio_devs[dev]->open_mode & OPEN_WRITE))
@@ -880,7 +877,9 @@ int dma_ioctl(int dev, unsigned int cmd, caddr_t arg)
 			if (dmap_out->mapping_flags & DMA_MAP_MAPPED)
 				dmap_out->qlen = 0;	/* Reset interrupt counter */
 			restore_flags(flags);
-			return copy_to_user(arg, &cinfo, sizeof(cinfo));
+			if (copy_to_user(arg, &cinfo, sizeof(cinfo)))
+				return -EFAULT;
+			return 0;
 
 		case SNDCTL_DSP_GETODELAY:
 			if (!(audio_devs[dev]->open_mode & OPEN_WRITE))

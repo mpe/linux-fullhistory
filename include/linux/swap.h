@@ -81,7 +81,7 @@ extern void FASTCALL(swap_free(unsigned long));
  *
  * Will go away eventually..
  */
-#define SHM_SWP_TYPE 0x40
+#define SHM_SWP_TYPE 0x20
 
 /*
  * swap cache stuff (in linux/mm/swap_state.c)

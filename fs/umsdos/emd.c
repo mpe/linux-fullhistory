@@ -28,15 +28,15 @@
  *
  */
  
-struct dentry *creat_dentry (const char *name, const int len, const struct inode *inode)
+struct dentry *creat_dentry (const char *name, const int len, struct inode *inode)
 {
     struct dentry *ret, *parent=NULL;	/* FIXME /mn/: whatis parent ?? */
     struct qstr qname;
     
     if (inode)
-      Printk (("/mn/ creat_dentry: creating dentry with inode=%d for %20s\n", inode->i_ino, name));
+      Printk (("/mn/ creat_dentry: creating dentry with inode=%lu for %.*s\n", inode->i_ino, len, name));
     else
-      Printk (("/mn/ creat_dentry: creating empty dentry for %20s\n", name));
+      Printk (("/mn/ creat_dentry: creating empty dentry for %.*s\n", len, name));
 
     qname.name = name;
     qname.len = len;
@@ -44,6 +44,7 @@ struct dentry *creat_dentry (const char *name, const int len, const struct inode
 
     ret = d_alloc (parent,&qname);	/* create new dentry */
     ret->d_inode = inode;
+    return ret;
 }
 
 
@@ -71,20 +72,20 @@ ssize_t umsdos_file_read_kmem (struct inode *emd_dir,
     filp->f_dentry = creat_dentry (UMSDOS_EMD_FILE, UMSDOS_EMD_NAMELEN, emd_dir);
     *offs = filp->f_pos;
     
-    Printk ((KERN_DEBUG "umsdos_file_read_kmem /mn/: Checkin: filp=%p, buf=%p, size=%ld, offs=%p\n", filp, buf, count, offs));
-    Printk ((KERN_DEBUG "  using emd=%d\n", emd_dir->i_ino));
-    Printk ((KERN_DEBUG "  inode=%d, i_size=%d\n", filp->f_dentry->d_inode->i_ino,filp->f_dentry->d_inode->i_size));
-    Printk ((KERN_DEBUG "  ofs=%ld\n", *offs));
-    Printk ((KERN_DEBUG "  f_pos=%ld\n", filp->f_pos));
-    Printk ((KERN_DEBUG "  name=%12s\n", filp->f_dentry->d_name.name));
-    Printk ((KERN_DEBUG "  i_binary(sb)=%d\n", MSDOS_I(filp->f_dentry->d_inode)->i_binary ));
-    Printk ((KERN_DEBUG "  f_count=%d, f_flags=%d\n", filp->f_count, filp->f_flags));
-    Printk ((KERN_DEBUG "  f_owner=%d\n", filp->f_owner));
-    Printk ((KERN_DEBUG "  f_version=%ld\n", filp->f_version));
-    Printk ((KERN_DEBUG "  f_reada=%ld, f_ramax=%ld, f_raend=%ld, f_ralen=%ld, f_rawin=%ld\n", filp->f_reada, filp->f_ramax, filp->f_raend, filp->f_ralen, filp->f_rawin));
+    PRINTK ((KERN_DEBUG "umsdos_file_read_kmem /mn/: Checkin: filp=%p, buf=%p, size=%d, offs=%p\n", filp, buf, count, offs));
+    PRINTK ((KERN_DEBUG "  using emd=%ld\n", emd_dir->i_ino));
+    PRINTK ((KERN_DEBUG "  inode=%lu, i_size=%lu\n", filp->f_dentry->d_inode->i_ino, filp->f_dentry->d_inode->i_size));
+    PRINTK ((KERN_DEBUG "  ofs=%ld\n",(unsigned long) *offs));
+    PRINTK ((KERN_DEBUG "  f_pos=%Lu\n", filp->f_pos));
+    PRINTK ((KERN_DEBUG "  name=%.*s\n", (int) filp->f_dentry->d_name.len, filp->f_dentry->d_name.name));
+    PRINTK ((KERN_DEBUG "  i_binary(sb)=%d\n", MSDOS_I(filp->f_dentry->d_inode)->i_binary ));
+    PRINTK ((KERN_DEBUG "  f_count=%d, f_flags=%d\n", filp->f_count, filp->f_flags));
+    PRINTK ((KERN_DEBUG "  f_owner=%d\n", filp->f_owner.uid));
+    PRINTK ((KERN_DEBUG "  f_version=%ld\n", filp->f_version));
+    PRINTK ((KERN_DEBUG "  f_reada=%ld, f_ramax=%ld, f_raend=%ld, f_ralen=%ld, f_rawin=%ld\n", filp->f_reada, filp->f_ramax, filp->f_raend, filp->f_ralen, filp->f_rawin));
 
     ret = fat_file_read(filp,buf,count,offs);
-    Printk ((KERN_DEBUG "fat_file_read returned with %ld!\n", ret));
+    PRINTK ((KERN_DEBUG "fat_file_read returned with %d!\n", ret));
 
     filp->f_pos = *offs;	/* we needed *filp only for this? grrrr... /mn/ */
     				/* FIXME: I have no idea what f_pos is used for. It seems to be used this way before offs was introduced.
@@ -98,24 +99,24 @@ ssize_t umsdos_file_read_kmem (struct inode *emd_dir,
     						 /* FIXME: we probably need to destroy originl filp->f_dentry first ? Do we ? And how ? this way we leave all sorts of dentries, inodes etc. lying around */
     						 /* Also FIXME: all the same problems in umsdos_file_write_kmem */
 
-    Printk ((KERN_DEBUG "  (ret) using emd=%d\n", emd_dir->i_ino));
-    Printk ((KERN_DEBUG "  (ret) inode=%d, i_size=%d\n", filp->f_dentry->d_inode->i_ino,filp->f_dentry->d_inode->i_size));
-    Printk ((KERN_DEBUG "  (ret) ofs=%ld\n", *offs));
-    Printk ((KERN_DEBUG "  (ret) f_pos=%ld\n", filp->f_pos));
-    Printk ((KERN_DEBUG "  (ret) name=%12s\n", filp->f_dentry->d_name.name));
-    Printk ((KERN_DEBUG "  (ret) i_binary(sb)=%d\n", MSDOS_I(filp->f_dentry->d_inode)->i_binary ));
-    Printk ((KERN_DEBUG "  (ret) f_count=%d, f_flags=%d\n", filp->f_count, filp->f_flags));
-    Printk ((KERN_DEBUG "  (ret) f_owner=%d\n", filp->f_owner));
-    Printk ((KERN_DEBUG "  (ret) f_version=%ld\n", filp->f_version));
-    Printk ((KERN_DEBUG "  (ret) f_reada=%ld, f_ramax=%ld, f_raend=%ld, f_ralen=%ld, f_rawin=%ld\n", filp->f_reada, filp->f_ramax, filp->f_raend, filp->f_ralen, filp->f_rawin));
+    PRINTK ((KERN_DEBUG "  (ret) using emd=%lu\n", emd_dir->i_ino));
+    PRINTK ((KERN_DEBUG "  (ret) inode=%lu, i_size=%lu\n", filp->f_dentry->d_inode->i_ino, filp->f_dentry->d_inode->i_size));
+    PRINTK ((KERN_DEBUG "  (ret) ofs=%Lu\n", *offs));
+    PRINTK ((KERN_DEBUG "  (ret) f_pos=%Lu\n", filp->f_pos));
+    PRINTK ((KERN_DEBUG "  (ret) name=%.*s\n", (int) filp->f_dentry->d_name.len, filp->f_dentry->d_name.name));
+    PRINTK ((KERN_DEBUG "  (ret) i_binary(sb)=%d\n", MSDOS_I(filp->f_dentry->d_inode)->i_binary ));
+    PRINTK ((KERN_DEBUG "  (ret) f_count=%d, f_flags=%d\n", filp->f_count, filp->f_flags));
+    PRINTK ((KERN_DEBUG "  (ret) f_owner=%d\n", filp->f_owner.uid));
+    PRINTK ((KERN_DEBUG "  (ret) f_version=%ld\n", filp->f_version));
+    PRINTK ((KERN_DEBUG "  (ret) f_reada=%ld, f_ramax=%ld, f_raend=%ld, f_ralen=%ld, f_rawin=%ld\n", filp->f_reada, filp->f_ramax, filp->f_raend, filp->f_ralen, filp->f_rawin));
 
 #if 0
     {
       struct umsdos_dirent *mydirent=buf;
 
-      Printk ((KERN_DEBUG "  (DDD) uid=%d\n",mydirent->uid));
-      Printk ((KERN_DEBUG "  (DDD) gid=%d\n",mydirent->gid));
-      Printk ((KERN_DEBUG "  (DDD) name=>%20s<\n",mydirent->name));
+      PRINTK ((KERN_DEBUG "  (DDD) uid=%d\n",mydirent->uid));
+      PRINTK ((KERN_DEBUG "  (DDD) gid=%d\n",mydirent->gid));
+      PRINTK ((KERN_DEBUG "  (DDD) name=>%.20s<\n",mydirent->name));
     }
 #endif  
     
@@ -136,18 +137,29 @@ ssize_t umsdos_file_write_kmem (struct inode *emd_dir,
 {
 	int ret;
 	mm_segment_t old_fs = get_fs();
-	struct dentry *old_dentry;	/* FIXME /mn/: whatis parent ?? */
+	struct dentry *old_dentry;
+	
+	Printk ((KERN_ERR " STARTED WRITE_KMEM /mn/\n"));
+
+        Printk ((KERN_ERR "umsdos_file_write_kmem /mn/: Checkin: filp=%p, buf=%p, size=%d, offs=%p\n", filp, buf, count, offs));
+        Printk ((KERN_ERR "  using emd=%ld\n", emd_dir->i_ino));
+        Printk ((KERN_ERR "  inode=%lu, i_size=%lu\n", filp->f_dentry->d_inode->i_ino, filp->f_dentry->d_inode->i_size));
+        Printk ((KERN_ERR "  ofs=%ld\n",(unsigned long) *offs));
+        Printk ((KERN_ERR "  f_pos=%Lu\n", filp->f_pos));
+        Printk ((KERN_ERR "  name=%.*s\n", (int) filp->f_dentry->d_name.len, filp->f_dentry->d_name.name));
+        Printk ((KERN_ERR "  i_binary(sb)=%d\n", MSDOS_I(filp->f_dentry->d_inode)->i_binary ));
+        Printk ((KERN_ERR "  f_count=%d, f_flags=%d\n", filp->f_count, filp->f_flags));
+        Printk ((KERN_ERR "  f_owner=%d\n", filp->f_owner.uid));
+        Printk ((KERN_ERR "  f_version=%ld\n", filp->f_version));
+        Printk ((KERN_ERR "  f_reada=%ld, f_ramax=%ld, f_raend=%ld, f_ralen=%ld, f_rawin=%ld\n", filp->f_reada, filp->f_ramax, filp->f_raend, filp->f_ralen, filp->f_rawin));
 	
 	set_fs (KERNEL_DS);
-	ret = fat_file_write(filp,buf,count,offs);
-
 	old_dentry=filp->f_dentry;	/* save it */
 	filp->f_dentry = creat_dentry (UMSDOS_EMD_FILE, UMSDOS_EMD_NAMELEN, emd_dir);
-
 	*offs = filp->f_pos;
 
-	ret = fat_file_write (filp,buf,count,offs);
-	PRINTK ((KERN_DEBUG "fat_file_write returned with %ld!\n", ret));
+	ret = fat_file_write (filp, buf, count, offs);
+	PRINTK ((KERN_ERR "fat_file_write returned with %ld!\n", ret));
 
 	filp->f_pos = *offs;
 	filp->f_dentry=old_dentry;
@@ -189,7 +201,9 @@ ssize_t umsdos_emd_dir_write (struct inode *emd_dir,
 #endif	
 	
 	if (offs) myofs=*offs;	/* if offs is not NULL, read it */
+	Printk (("umsdos_emd_dir_write /mn/: calling write_kmem with %p, %p, %p, %ld, %Ld\n", emd_dir, filp, buf, count, myofs));
 	written = umsdos_file_write_kmem (emd_dir, filp, buf, count, &myofs);
+	Printk (("umsdos_emd_dir_write /mn/: write_kmem returned\n"));
 	if (offs) *offs=myofs;	/* if offs is not NULL, store myofs there */
 	
 #ifdef __BIG_ENDIAN	
@@ -264,32 +278,32 @@ struct inode *umsdos_emd_dir_lookup (struct inode *dir, int creat)
 {
     struct inode *ret = NULL;
     int res;
-    Printk (("Entering umsdos_emd_dir_lookup\n"));
+    PRINTK ((KERN_DEBUG "Entering umsdos_emd_dir_lookup\n"));
     if (dir->u.umsdos_i.i_emd_dir != 0){
 	ret = iget (dir->i_sb,dir->u.umsdos_i.i_emd_dir);
 	Printk (("umsdos_emd_dir_lookup: deja trouve %ld %p\n"
 		 ,dir->u.umsdos_i.i_emd_dir,ret));
     } else {
-      Printk ((KERN_DEBUG "umsdos /mn/: Looking for %20s -", UMSDOS_EMD_FILE));
+      PRINTK ((KERN_DEBUG "umsdos /mn/: Looking for %.*s -", UMSDOS_EMD_NAMELEN, UMSDOS_EMD_FILE));
       res = compat_umsdos_real_lookup (dir, UMSDOS_EMD_FILE, UMSDOS_EMD_NAMELEN, &ret);
-      Printk ((KERN_DEBUG "-returned %d\n", res));
-	Printk ((KERN_DEBUG "emd_dir_lookup "));
+      PRINTK ((KERN_DEBUG "-returned %d\n", res));
+	Printk ((KERN_INFO "emd_dir_lookup "));
 	if (ret != NULL){
-	    Printk ((KERN_DEBUG "Found --linux "));
+	    Printk (("Found --linux "));
 	    dir->u.umsdos_i.i_emd_dir = ret->i_ino;
 	} else if (creat) {
                         int code;
-                        Printk ((KERN_ERR " * ERROR * /mn/: creat not yet implemented!!!!" ));
+                        Printk ((" * ERROR * /mn/: creat not yet implemented!!!!" ));
                         Printk ((KERN_DEBUG "avant create "));
-                        atomic_inc(&dir->i_count);
+                        dir->i_count++;
 
                         code = compat_msdos_create (dir,UMSDOS_EMD_FILE,UMSDOS_EMD_NAMELEN
                                 ,S_IFREG|0777,&ret);
-                        Printk ((KERN_DEBUG "Creat EMD code %d ret %x ",code,ret));
+                        Printk ((KERN_WARNING "Creat EMD code %d ret %p ", code, ret));
                         if (ret != NULL){
                                 dir->u.umsdos_i.i_emd_dir = ret->i_ino;
                         }else{
-                                printk ("UMSDOS: Can't create EMD file\n");
+                                printk (KERN_WARNING "UMSDOS: Can't create EMD file\n");
                         }
 	}
 	
@@ -300,8 +314,10 @@ struct inode *umsdos_emd_dir_lookup (struct inode *dir, int creat)
 
     }
     
-    Printk ((KERN_DEBUG "umsdos_emd_dir_lookup returning %p /mn/\n", ret));
-    if (ret != NULL) Printk ((KERN_DEBUG " debug : returning ino=%d\n",ret->i_ino));
+#if 0
+    PRINTK ((KERN_DEBUG "umsdos_emd_dir_lookup returning %p /mn/\n", ret));
+    if (ret != NULL) PRINTK ((KERN_DEBUG " debug : returning ino=%lu\n", ret->i_ino));
+#endif    
     return ret;
 }
 
@@ -316,7 +332,7 @@ struct inode *umsdos_emd_dir_create(struct inode *dir, struct dentry *dentry,int
 	struct inode *ret = NULL;
 	if (dir->u.umsdos_i.i_emd_dir != 0){
 		ret = iget (dir->i_sb,dir->u.umsdos_i.i_emd_dir);
-		Printk (("deja trouve %d %x",dir->u.umsdos_i.i_emd_dir,ret));
+		Printk (("deja trouve %lu %p", dir->u.umsdos_i.i_emd_dir, ret));
 	}else{
 	    
 	    int code;
@@ -329,7 +345,7 @@ struct inode *umsdos_emd_dir_create(struct inode *dir, struct dentry *dentry,int
 	       FIXME, I think I need a new dentry here
 	    */
 	    code = compat_msdos_create (dir,UMSDOS_EMD_FILE,UMSDOS_EMD_NAMELEN, S_IFREG|0777, &ret);
-	    Printk (("Creat EMD code %d ret %x ",code,ret));
+	    Printk (("Creat EMD code %d ret %p ", code, ret));
 	    if (ret != NULL){
 		dir->u.umsdos_i.i_emd_dir = ret->i_ino;
 	    }else{
@@ -358,7 +374,7 @@ int umsdos_emd_dir_readentry (
 {
 	int ret;
 	Printk ((KERN_DEBUG "umsdos_emd_dir_readentry /mn/: entering.\n"));
-	Printk (("umsdos_emd_dir_readentry /mn/: trying to lookup %12s (ino=%d) using EMD %d\n", filp->f_dentry->d_name.name, filp->f_dentry->d_inode->i_ino, emd_dir->i_ino));
+	Printk (("umsdos_emd_dir_readentry /mn/: trying to lookup %.*s (ino=%lu) using EMD %lu\n", (int) filp->f_dentry->d_name.len, filp->f_dentry->d_name.name, filp->f_dentry->d_inode->i_ino, emd_dir->i_ino));
     
 	ret = umsdos_emd_dir_read(emd_dir, filp, (char*)entry, UMSDOS_REC_SIZE, NULL);
 	if (ret == 0){ /* note /mn/: is this wrong? ret is allways 0 or -EIO. but who knows. It used to work this way... */
@@ -389,14 +405,13 @@ int umsdos_writeentry (
 	int free_entry)		/* This entry is deleted, so Write all 0's */
 {
 	int ret = 0;
+	struct dentry *emd_dentry;
 	struct file filp;
 	struct umsdos_dirent *entry = &info->entry;
 	struct umsdos_dirent entry0;
 	
 	Printk (("umsdos_writeentry /mn/: entering...\n"));
-	
-	Printk ((KERN_ERR "umsdos_writeentry /mn/: FIXME! this is READ ONLY FOR NOW. RETURNING...\n"));
-	return -EIO;
+	emd_dentry=creat_dentry ("wremd_mn", 8, emd_dir);
 	
 	if (free_entry){
 		/* #Specification: EMD file / empty entries
@@ -421,9 +436,15 @@ int umsdos_writeentry (
 
 	Printk (("umsdos_writeentry /mn/: if passed...\n"));
 
+	if (!info) printk (KERN_ERR "umsdosfs: /mn/ info is empty ! ooops...\n");
 	filp.f_pos = info->f_pos;
 	filp.f_reada = 0;
-	ret = umsdos_emd_dir_write(emd_dir, &filp,(char*)entry,info->recsize,NULL);
+	filp.f_flags = O_RDWR;
+	filp.f_dentry = emd_dentry;
+       	filp.f_op = &umsdos_file_operations;	/* /mn/ - we have to fill it with dummy values so we won't segfault */
+       	
+	ret = umsdos_emd_dir_write (emd_dir, &filp, (char*)entry, info->recsize, NULL);
+	Printk (("emd_dir_write returned !\n"));
 	if (ret != 0){
 		printk ("UMSDOS: problem with EMD file. Can't write\n");
 	}else{
@@ -434,6 +455,8 @@ int umsdos_writeentry (
 	Printk (("umsdos_writeentry /mn/: returning...\n"));
 	return ret;
 }
+
+
 
 #define CHUNK_SIZE (8*UMSDOS_REC_SIZE)
 struct find_buffer{
@@ -462,7 +485,7 @@ static int umsdos_fillbuf (
 	int mustread;
 	int remain;
 	
-	Printk ((KERN_DEBUG "Entering umsdos_fillbuf, for inode %d, buf=%p\n",inode->i_ino, buf));
+	PRINTK ((KERN_DEBUG "Entering umsdos_fillbuf, for inode %lu, buf=%p\n", inode->i_ino, buf));
 	
 	if (mustmove > 0){
 		memcpy (buf->buffer,buf->buffer+buf->pos,mustmove);
@@ -518,8 +541,8 @@ static int umsdos_find (
 		record, multiple contiguous record are allocated.
 	*/
 	int ret = -ENOENT;
-	/* FIXME */
-	struct inode *emd_dir = umsdos_emd_dir_lookup(dir,1);
+	/* FIXME  -- /mn/ fixed ? */
+	struct inode *emd_dir = umsdos_emd_dir_lookup (dir, 1);
 	if (emd_dir != NULL){
 		struct umsdos_dirent *entry = &info->entry;
 		int recsize = info->recsize;

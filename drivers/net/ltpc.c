@@ -180,7 +180,6 @@ static int debug=0;
 #define DEBUG_UPPER 2
 #define DEBUG_LOWER 4
 
-#include <linux/config.h> /* for CONFIG_MAX_16M */
 
 #ifdef MODULE
 #include <linux/module.h>

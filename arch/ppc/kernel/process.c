@@ -30,7 +30,6 @@
 #include <linux/malloc.h>
 #include <linux/user.h>
 #include <linux/elf.h>
-#include <linux/config.h>
 #include <linux/elf.h>
 
 #include <asm/pgtable.h>

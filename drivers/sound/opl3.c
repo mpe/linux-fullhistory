@@ -15,6 +15,7 @@
  */
 #include <linux/config.h>
 #include <linux/module.h>
+#include <linux/delay.h>
 
 /*
  * Major improvements to the FM handling 30AUG92 by Rob Hooft,
@@ -120,7 +121,9 @@ static int opl3_ioctl(int dev, unsigned int cmd, caddr_t arg)
 
 	case SNDCTL_SYNTH_INFO:
 		devc->fm_info.nr_voices = (devc->nr_voice == 12) ? 6 : devc->nr_voice;
-		return __copy_to_user(arg, &devc->fm_info, sizeof(devc->fm_info));
+		if (__copy_to_user(arg, &devc->fm_info, sizeof(devc->fm_info)))
+			return -EFAULT;
+		return 0;
 
 	case SNDCTL_SYNTH_MEMAVL:
 		return 0x7fffffff;
@@ -215,17 +218,17 @@ int opl3_detect(int ioaddr, int *osp)
 			int tmp;
 
 			outb((0x02), ioaddr - 8);	/* Select OPL4 ID register */
-			tenmicrosec(devc->osp);
+			udelay(10);
 			tmp = inb(ioaddr - 7);		/* Read it */
-			tenmicrosec(devc->osp);
+			udelay(10);
 
 			if (tmp == 0x20)	/* OPL4 should return 0x20 here */
 			{
 				detected_model = 4;
 				outb((0xF8), ioaddr - 8);	/* Select OPL4 FM mixer control */
-				tenmicrosec(devc->osp);
+				udelay(10);
 				outb((0x1B), ioaddr - 7);	/* Write value */
-				tenmicrosec(devc->osp);
+				udelay(10);
 			}
 			else
 				detected_model = 3;
@@ -707,7 +710,7 @@ static void opl3_command    (int io_addr, unsigned int addr, unsigned int val)
 	outb(((unsigned char) (addr & 0xff)), io_addr);
 
 	if (devc->model != 2)
-		tenmicrosec(devc->osp);
+		udelay(10);
 	else
 		for (i = 0; i < 2; i++)
 			inb(io_addr);
@@ -715,11 +718,7 @@ static void opl3_command    (int io_addr, unsigned int addr, unsigned int val)
 	outb(((unsigned char) (val & 0xff)), io_addr + 1);
 
 	if (devc->model != 2)
-	{
-		tenmicrosec(devc->osp);
-		tenmicrosec(devc->osp);
-		tenmicrosec(devc->osp);
-	}
+		udelay(30);
 	else
 		for (i = 0; i < 2; i++)
 			inb(io_addr);

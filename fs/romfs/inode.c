@@ -48,7 +48,6 @@
  * to squeeze some more bytes out of this code.. :)
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/errno.h>

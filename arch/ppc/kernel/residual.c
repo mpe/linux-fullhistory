@@ -7,7 +7,6 @@
  * Improved _greatly_ and rewritten by Gabriel Paubert (paubert@iram.es)
  */
 #if 0
-#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>

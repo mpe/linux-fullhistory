@@ -8,6 +8,7 @@
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
  */
 
+#include <linux/config.h> /* for CONFIG_CHIP_ID */
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/pci.h>

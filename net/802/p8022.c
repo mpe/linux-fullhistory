@@ -16,7 +16,6 @@
  *		4 entries at most). The current demux assumes this.
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>

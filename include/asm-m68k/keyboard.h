@@ -8,6 +8,7 @@
  *  This file contains the m68k architecture specific keyboard definitions
  */
 
+#include <linux/config.h> /* CONFIG_MAGIC_SYSRQ */
 #ifndef __M68K_KEYBOARD_H
 #define __M68K_KEYBOARD_H
 

@@ -15,7 +15,6 @@
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/ptrace.h>
-#include <linux/config.h>
 #include <linux/timer.h>
 #include <linux/mm.h>
 #include <linux/smp.h>

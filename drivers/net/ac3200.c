@@ -366,12 +366,12 @@ cleanup_module(void)
 	for (this_dev = 0; this_dev < MAX_AC32_CARDS; this_dev++) {
 		struct device *dev = &dev_ac32[this_dev];
 		if (dev->priv != NULL) {
+			unregister_netdev(dev);
 			kfree(dev->priv);
 			dev->priv = NULL;
 			/* Someday free_irq may be in ac_close_card() */
 			free_irq(dev->irq, dev);
 			release_region(dev->base_addr, AC_IO_EXTENT);
-			unregister_netdev(dev);
 		}
 	}
 }

@@ -80,7 +80,6 @@ static const char *version = "NET3 PLIP version 2.3-parport gniibe@mri.co.jp\n";
 */
 
 #include <linux/module.h>
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>

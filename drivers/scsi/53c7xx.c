@@ -100,8 +100,6 @@
  *  the fourth byte from 50 to 25.
  */
 
-#include <linux/config.h>
-
 /*
  * Sponsored by 
  *	iX Multiuser Multitasking Magazine
@@ -233,7 +231,6 @@
 #endif
 
 #include <linux/config.h>
-
 #include <asm/dma.h>
 #include <asm/io.h>
 #include <asm/system.h>

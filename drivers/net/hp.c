@@ -433,11 +433,11 @@ cleanup_module(void)
 		struct device *dev = &dev_hp[this_dev];
 		if (dev->priv != NULL) {
 			int ioaddr = dev->base_addr - NIC_OFFSET;
+			unregister_netdev(dev);
 			kfree(dev->priv);
 			dev->priv = NULL;
 			free_irq(dev->irq, dev);
 			release_region(ioaddr, HP_IO_EXTENT);
-			unregister_netdev(dev);
 		}
 	}
 }

@@ -59,6 +59,7 @@
 #error	This code MUST be compiled as a kernel module!
 #endif
 
+#include <linux/config.h>	/* CONFIG_SANGOMA_MANAGER */
 #include <linux/kernel.h>	/* printk(), and other useful stuff */
 #include <linux/stddef.h>	/* offsetof(), etc. */
 #include <linux/errno.h>	/* return codes */

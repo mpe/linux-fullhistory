@@ -10,7 +10,6 @@
  * and Memory Controller (MC+).
  *
  */
-#include <linux/config.h>
 #define _APLIB_
 #include <asm/ap1000/apreg.h>
 #include <linux/mm.h>

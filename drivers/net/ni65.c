@@ -1202,10 +1202,10 @@ void cleanup_module(void)
 	}
 	disable_dma(dev_ni65.dma);
 	free_dma(dev_ni65.dma);
+	unregister_netdev(&dev_ni65);
 	release_region(dev_ni65.base_addr,cards[p->cardno].total_size);
 	ni65_free_buffer(p);
 	dev_ni65.priv = NULL;
-	unregister_netdev(&dev_ni65);
 }
 #endif /* MODULE */
 

@@ -10,7 +10,6 @@
  * misc. keyboard stuff (everything not in adb-bus.c or keyb_m68k.c)
  */
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/mm.h>
 #include <linux/kd.h>

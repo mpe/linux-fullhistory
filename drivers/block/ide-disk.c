@@ -105,12 +105,15 @@ static void read_intr (ide_drive_t *drive)
 	int i;
 	unsigned int msect, nsect;
 	struct request *rq;
+	unsigned long flags;
 
 	if (!OK_STAT(stat=GET_STAT(),DATA_READY,BAD_R_STAT)) {
 		ide_error(drive, "read_intr", stat);
 		return;
 	}
 	msect = drive->mult_count;
+	
+	spin_lock_irqsave(&io_request_lock,flags);
 read_next:
 	rq = HWGROUP(drive)->rq;
 	if (msect) {
@@ -119,6 +122,12 @@ read_next:
 		msect -= nsect;
 	} else
 		nsect = 1;
+	/*
+	 * PIO input can take longish times, so we drop the spinlock.
+	 * On SMP, bad things might happen if syscall level code adds
+	 * a new request while we do this PIO, so we just freeze all
+	 * request queue handling while doing the PIO. FIXME
+	 */
 	idedisk_input_data(drive, rq->buffer, nsect * SECTOR_WORDS);
 #ifdef DEBUG
 	printk("%s:  read: sectors(%ld-%ld), buffer=0x%08lx, remaining=%ld\n",
@@ -136,6 +145,7 @@ read_next:
 			goto read_next;
 		ide_set_handler (drive, &read_intr, WAIT_CMD);
 	}
+	spin_unlock_irqrestore(&io_request_lock,flags);
 }
 
 /*
@@ -147,7 +157,10 @@ static void write_intr (ide_drive_t *drive)
 	int i;
 	ide_hwgroup_t *hwgroup = HWGROUP(drive);
 	struct request *rq = hwgroup->rq;
+	unsigned long flags;
+	int error = 0;
 
+	spin_lock_irqsave(&io_request_lock,flags);
 	if (OK_STAT(stat=GET_STAT(),DRIVE_READY,drive->bad_wstat)) {
 #ifdef DEBUG
 		printk("%s: write: sector %ld, buffer=0x%08lx, remaining=%ld\n",
@@ -166,10 +179,16 @@ static void write_intr (ide_drive_t *drive)
 				idedisk_output_data (drive, rq->buffer, SECTOR_WORDS);
 				ide_set_handler (drive, &write_intr, WAIT_CMD);
 			}
-			return;
+			goto out;
 		}
-	}
-	ide_error(drive, "write_intr", stat);
+	} else
+		error = 1;
+
+out:
+	spin_unlock_irqrestore(&io_request_lock,flags);
+
+	if (error)
+		ide_error(drive, "write_intr", stat);
 }
 
 /*
@@ -217,13 +236,16 @@ static void multwrite_intr (ide_drive_t *drive)
 	int i;
 	ide_hwgroup_t *hwgroup = HWGROUP(drive);
 	struct request *rq = &hwgroup->wrq;
+	unsigned long flags;
+	int error = 0;
 
+	spin_lock_irqsave(&io_request_lock,flags);
 	if (OK_STAT(stat=GET_STAT(),DRIVE_READY,drive->bad_wstat)) {
 		if (stat & DRQ_STAT) {
 			if (rq->nr_sectors) {
 				ide_multwrite(drive, drive->mult_count);
 				ide_set_handler (drive, &multwrite_intr, WAIT_CMD);
-				return;
+				goto out;
 			}
 		} else {
 			if (!rq->nr_sectors) {	/* all done? */
@@ -232,11 +254,17 @@ static void multwrite_intr (ide_drive_t *drive)
 					i -= rq->current_nr_sectors;
 					ide_end_request(1, hwgroup);
 				}
-				return;
+				goto out;
 			}
 		}
-	}
-	ide_error(drive, "multwrite_intr", stat);
+	} else
+		error = 1;
+
+out:
+	spin_unlock_irqrestore(&io_request_lock,flags);
+
+	if (error)
+		ide_error(drive, "multwrite_intr", stat);
 }
 
 /*
@@ -354,7 +382,7 @@ static void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned long bl
 			return;
 		}
 		if (!drive->unmask)
-			cli();
+			__cli();
 		if (drive->mult_count) {
 			HWGROUP(drive)->wrq = *rq; /* scratchpad */
 			ide_set_handler (drive, &multwrite_intr, WAIT_CMD);

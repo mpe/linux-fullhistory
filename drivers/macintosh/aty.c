@@ -11,6 +11,7 @@
  * as published by the Free Software Foundation; either version
  * 2 of the License, or (at your option) any later version.
  */
+#include <linux/config.h> /* for CONFIG_CHIP_ID and CONFIG_STAT0 */
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/delay.h>

@@ -214,7 +214,6 @@ static void ipx_destroy_socket(struct sock *sk)
 	}
 
 	sk_free(sk);
-	MOD_DEC_USE_COUNT;
 }
 
 /* The following code is used to support IPX Interfaces (IPXITF).  An
@@ -682,7 +681,6 @@ static int ipxitf_add_local_route(ipx_interface *intrfc)
 
 static const char * ipx_frame_name(unsigned short);
 static const char * ipx_device_name(ipx_interface *);
-static int ipxrtr_route_skb(struct sk_buff *);
 
 static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 {
@@ -1391,7 +1389,7 @@ static int ipxrtr_route_packet(struct sock *sk, struct sockaddr_ipx *usipx, stru
 				rt->ir_router_node : ipx->ipx_dest.node);
 }
 	
-static int ipxrtr_route_skb(struct sk_buff *skb)
+int ipxrtr_route_skb(struct sk_buff *skb)
 {
 	struct ipxhdr	*ipx = skb->nh.ipxh;
 	ipx_route	*r;
@@ -1720,8 +1718,11 @@ static int ipx_create(struct socket *sock, int protocol)
 	switch(sock->type)
 	{
 		case SOCK_DGRAM:
-			sock->ops = &ipx_dgram_ops;
-			break;
+                        sock->ops = &ipx_dgram_ops;
+                        break;
+		case SOCK_STREAM:	/* Allow higher levels to piggyback */
+		case SOCK_SEQPACKET:
+			printk(KERN_CRIT "IPX: _create-ing non_DGRAM socket\n");
 		default:
 			sk_free(sk);
 			return(-ESOCKTNOSUPPORT);
@@ -1744,6 +1745,9 @@ static int ipx_release(struct socket *sock, struct socket *peer)
 	sk->dead=1;
 	sock->sk=NULL;
 	ipx_destroy_socket(sk);
+	if ( sock->type == SOCK_DGRAM ) {
+		MOD_DEC_USE_COUNT;
+	}
 	return(0);
 }
 
@@ -1819,7 +1823,9 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 			sk->protinfo.af_ipx.node,
 			sk->protinfo.af_ipx.port) != NULL)
 		{
-			SOCK_DEBUG(sk, "IPX: bind failed because port %X in use.\n", (int)addr->sipx_port);
+			SOCK_DEBUG(sk,
+				"IPX: bind failed because port %X in use.\n",
+				ntohs((int)addr->sipx_port));
 			return -EADDRINUSE;
 		}
 	}
@@ -1834,7 +1840,9 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 			IPX_NODE_LEN);
 
 		if(ipxitf_find_socket(intrfc, addr->sipx_port)!=NULL) {
-			SOCK_DEBUG(sk, "IPX: bind failed because port %X in use.\n", (int)addr->sipx_port);
+			SOCK_DEBUG(sk,
+				"IPX: bind failed because port %X in use.\n",
+				ntohs((int)addr->sipx_port));
 			return -EADDRINUSE;
 		}
 	}
@@ -1845,7 +1853,8 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	   an interface routed to IPX with the ipx routing ioctl() */
 
 	if(ipxitf_find_socket(intrfc, addr->sipx_port)!=NULL) {
-		SOCK_DEBUG(sk, "IPX: bind failed because port %X in use.\n", (int)addr->sipx_port);
+		SOCK_DEBUG(sk, "IPX: bind failed because port %X in use.\n",
+				ntohs((int)addr->sipx_port));
 		return -EADDRINUSE;
 	}
 
@@ -1853,7 +1862,8 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 
 	ipxitf_insert_socket(intrfc, sk);
 	sk->zapped=0;
-	SOCK_DEBUG(sk, "IPX: socket is bound.\n");
+	SOCK_DEBUG(sk, "IPX: bound socket 0x%04X.\n", ntohs(addr->sipx_port) );
+
 	return 0;
 }
 
@@ -1894,8 +1904,10 @@ static int ipx_connect(struct socket *sock, struct sockaddr *uaddr,
 	memcpy(sk->protinfo.af_ipx.dest_addr.node,
 		addr->sipx_node,IPX_NODE_LEN);
 	sk->protinfo.af_ipx.type=addr->sipx_type;
-	sock->state = SS_CONNECTED;
-	sk->state=TCP_ESTABLISHED;
+	if(sock->type == SOCK_DGRAM ) {
+		sock->state = SS_CONNECTED;
+		sk->state=TCP_ESTABLISHED;
+	}
 	return 0;
 }
 
@@ -2346,6 +2358,19 @@ ipx_proto_init(struct net_proto *pro)
 	printk(KERN_INFO "IPX Portions Copyright (c) 1995 Caldera, Inc.\n");
 }
 
+/* Higher layers need this info to prep tx pkts */
+int ipx_if_offset(unsigned long ipx_net_number)
+{
+	ipx_route *rt = NULL;
+
+	rt = ipxrtr_lookup(ipx_net_number);
+	return ( rt ? rt->ir_intrfc->if_ipx_offset : -ENETUNREACH );
+}
+
+/* Export symbols for higher layers */
+EXPORT_SYMBOL(ipxrtr_route_skb);
+EXPORT_SYMBOL(ipx_if_offset);
+
 #ifdef MODULE
 /* Note on MOD_{INC,DEC}_USE_COUNT:
  *
@@ -2399,8 +2424,6 @@ __initfunc(static void ipx_proto_finito(void))
 
 	return;
 }
-
-EXPORT_NO_SYMBOLS;
 
 int init_module(void)
 {

@@ -745,17 +745,14 @@ int __fput(struct file *filp)
 
 int close_fp(struct file *filp)
 {
-	struct dentry *dentry;
-	struct inode *inode;
+	struct dentry *dentry = filp->f_dentry;
 
 	if (filp->f_count == 0) {
 		printk("VFS: Close: file count is 0\n");
 		return 0;
 	}
-	dentry = filp->f_dentry;
-	inode = dentry->d_inode;
-	if (inode)
-		locks_remove_locks(current, filp);
+	if (dentry->d_inode)
+		locks_remove_posix(current, filp);
 	return fput(filp);
 }
 

@@ -10,7 +10,6 @@
  *    the problem, send a script that demonstrates it.
  */
 
-#include <linux/config.h>
 #define __NO_VERSION__
 #include <linux/module.h>
 

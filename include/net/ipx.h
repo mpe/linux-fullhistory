@@ -1,4 +1,3 @@
-
 /*
  *	The following information is in its entirety obtained from:
  *
@@ -12,7 +11,6 @@
 #define _NET_INET_IPX_H_
 
 #include <linux/netdevice.h>
-#include <linux/skbuff.h>
 #include <net/datalink.h>
 #include <linux/ipx.h>
 
@@ -44,8 +42,6 @@ struct ipxhdr
 };
 
 #include <net/ipxcall.h>
-extern int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt);
-extern void ipxrtr_device_down(struct device *dev);
 
 typedef struct ipx_interface {
 	/* IPX address */
@@ -80,4 +76,4 @@ typedef struct ipx_route {
 #define IPX_MIN_EPHEMERAL_SOCKET	0x4000
 #define IPX_MAX_EPHEMERAL_SOCKET	0x7fff
 
-#endif
+#endif /* def _NET_INET_IPX_H_ */

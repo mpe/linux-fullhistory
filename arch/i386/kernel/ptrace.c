@@ -2,6 +2,7 @@
 /* By Ross Biro 1/23/92 */
 /* edited by Linus Torvalds */
 
+#include <linux/config.h> /* for CONFIG_MATH_EMULATION */
 #include <linux/head.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>

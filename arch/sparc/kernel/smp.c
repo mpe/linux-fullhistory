@@ -3,6 +3,7 @@
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
  */
 
+#include <linux/config.h> /* for CONFIG_PROFILE */
 #include <asm/head.h>
 
 #include <linux/kernel.h>

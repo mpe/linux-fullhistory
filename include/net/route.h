@@ -61,6 +61,9 @@
 
 #include <linux/route.h>
 
+#define RTO_ONLINK	0x01
+#define RTO_TPROXY	0x80000000
+
 struct rt_key
 {
 	__u32			dst;
@@ -111,7 +114,7 @@ extern void		ip_rt_redirect(u32 old_gw, u32 dst, u32 new_gw,
 				       u32 src, u8 tos, struct device *dev);
 extern void		ip_rt_advice(struct rtable **rp, int advice);
 extern void		rt_cache_flush(int how);
-extern int		ip_route_output(struct rtable **, u32 dst, u32 src, u8 tos, int oif);
+extern int		ip_route_output(struct rtable **, u32 dst, u32 src, u32 tos, int oif);
 extern int		ip_route_input(struct sk_buff*, u32 dst, u32 src, u8 tos, struct device *devin);
 extern unsigned short	ip_rt_frag_needed(struct iphdr *iph, unsigned short new_mtu);
 extern void		ip_rt_send_redirect(struct sk_buff *skb);

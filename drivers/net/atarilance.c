@@ -819,6 +819,7 @@ static int lance_start_xmit( struct sk_buff *skb, struct device *dev )
 	head->flag = TMD1_OWN_CHIP | TMD1_ENP | TMD1_STP;
 	dev_kfree_skb( skb );
 	lp->cur_tx++;
+	lp->stats.tx_bytes += skb->len;
 	while( lp->cur_tx >= TX_RING_SIZE && lp->dirty_tx >= TX_RING_SIZE ) {
 		lp->cur_tx -= TX_RING_SIZE;
 		lp->dirty_tx -= TX_RING_SIZE;
@@ -1027,6 +1028,7 @@ static int lance_rx( struct device *dev )
 				skb->protocol = eth_type_trans( skb, dev );
 				netif_rx( skb );
 				lp->stats.rx_packets++;
+				lp->stats.rx_bytes += skb->len;
 			}
 		}
 

@@ -331,7 +331,7 @@ __initfunc(int init_adfs_fs (void))
 #ifdef MODULE
 int init_module (void)
 {
-	return (init_adfs_fs());
+	return init_adfs_fs();
 }
 
 void cleanup_module (void)

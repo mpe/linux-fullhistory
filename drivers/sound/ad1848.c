@@ -1716,7 +1716,7 @@ int ad1848_init(char *name, int io_base, int irq, int dma_playback, int dma_capt
 	char dev_name[100];
 	int e;
 
-	ad1848_info    *devc = &adev_info[nr_ad1848_devs];
+	ad1848_info  *devc = &adev_info[nr_ad1848_devs];
 
 	ad1848_port_info *portc = NULL;
 

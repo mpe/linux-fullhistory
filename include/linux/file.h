@@ -29,6 +29,7 @@ extern inline int fput(struct file *file)
 	int error = 0;
 
 	if (!count) {
+		locks_remove_flock(file);
 		error = __fput(file);
 		file->f_count = 0;
 		remove_filp(file);

@@ -836,7 +836,7 @@ restart:
 				if (fn->fn_flags & RTN_ROOT)
 					break;
 				if (fn->fn_flags & RTN_RTINFO) {
-					rt = rt6_device_match(rt, dev, RTF_LINKRT);
+					rt = rt6_device_match(fn->leaf, dev, RTF_LINKRT);
 					goto restart;
 				}
 			}
@@ -1743,7 +1743,7 @@ void inet6_rt_notify(int event, struct rt6_info *rt)
 	struct sk_buff *skb;
 	int size = NLMSG_SPACE(sizeof(struct rtmsg)+256);
 
-	skb = alloc_skb(size, GFP_KERNEL);
+	skb = alloc_skb(size, GFP_ATOMIC);
 	if (!skb) {
 		netlink_set_err(rtnl, 0, RTMGRP_IPV6_ROUTE, ENOBUFS);
 		return;

@@ -15,6 +15,8 @@
 #ifndef _SCSI_H
 #define _SCSI_H
 
+#include <linux/config.h> /* for CONFIG_SCSI_LOGGING */
+
 /*
  * Some of the public constants are being moved to this file.
  * We include it here so that what came from where is transparent.
@@ -685,7 +687,7 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
 #define INIT_SCSI_REQUEST       \
     if (!CURRENT) {             \
 	CLEAR_INTR;             \
-	spin_unlock_irqrestore(&current_lock,flags);	\
+	spin_unlock_irqrestore(&io_request_lock,flags);	\
 	return;                 \
     }                           \
     if (MAJOR(CURRENT->rq_dev) != MAJOR_NR)           \

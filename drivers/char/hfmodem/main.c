@@ -31,6 +31,7 @@
 /*****************************************************************************/
       
 
+#include <linux/config.h> /* for CONFIG_HFMODEM_WSS and CONFIG_HFMODEM_SBC */
 #include <linux/module.h>
 
 #include <linux/kernel.h>

@@ -73,6 +73,7 @@ not be guaranteed. There are several ways to assure this:
 #include <asm/atariints.h>
 #include <asm/atari_acsi.h>
 #include <asm/atari_stdma.h>
+#include <asm/atari_stram.h>
 #include <asm/atari_SLM.h>
 
 
@@ -252,15 +253,15 @@ static struct {
 
 static char *slm_errstr( int stat );
 static int slm_getstats( char *buffer, int device );
-static long slm_read( struct inode *node, struct file* file, char *buf,
-                      unsigned long count );
+static ssize_t slm_read( struct file* file, char *buf, size_t count, loff_t
+                         *ppos );
 static void start_print( int device );
 static void slm_interrupt(int irc, void *data, struct pt_regs *fp);
 static void slm_test_ready( unsigned long dummy );
 static void set_dma_addr( unsigned long paddr );
 static unsigned long get_dma_addr( void );
-static long slm_write( struct inode *node, struct file *file, const char *buf,
-                       unsigned long count );
+static ssize_t slm_write( struct file *file, const char *buf, size_t count,
+                          loff_t *ppos );
 static int slm_ioctl( struct inode *inode, struct file *file, unsigned int
                       cmd, unsigned long arg );
 static int slm_open( struct inode *inode, struct file *file );
@@ -372,10 +373,12 @@ static int slm_getstats( char *buffer, int device )
 }
 
 
-static long slm_read( struct inode *node, struct file* file,
-					  char *buf, unsigned long count )
+static ssize_t slm_read( struct file *file, char *buf, size_t count,
+						 loff_t *ppos )
 
-{	unsigned long page;
+{
+	struct inode *node = file->f_dentry->d_inode;
+	unsigned long page;
 	int length;
 	int end;
 
@@ -625,10 +628,12 @@ static unsigned long get_dma_addr( void )
 }
 
 
-static long slm_write( struct inode *node, struct file *file,
-					   const char *buf, unsigned long count )
+static ssize_t slm_write( struct file *file, const char *buf, size_t count,
+						  loff_t *ppos )
 
-{	int		device = MINOR( node->i_rdev );
+{
+	struct inode *node = file->f_dentry->d_inode;
+	int		device = MINOR( node->i_rdev );
 	int		n, filled, w, h;
 
 	while( SLMState == PRINTING ||
@@ -1005,7 +1010,7 @@ int slm_init( void )
 		return -EBUSY;
 	}
 	
-	if (!(SLMBuffer = kmalloc( SLM_BUFFER_SIZE,  GFP_KERNEL | GFP_DMA))) {
+	if (!(SLMBuffer = atari_stram_alloc( SLM_BUFFER_SIZE, NULL, "SLM" ))) {
 		printk( KERN_ERR "Unable to get SLM ST-Ram buffer.\n" );
 		unregister_chrdev( MAJOR_NR, "slm" );
 		return -ENOMEM;
@@ -1037,5 +1042,6 @@ void cleanup_module(void)
 {
 	if (unregister_chrdev( MAJOR_NR, "slm" ) != 0)
 		printk( KERN_ERR "acsi_slm: cleanup_module failed\n");
+	atari_stram_free( SLMBuffer );
 }
 #endif

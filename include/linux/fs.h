@@ -446,7 +446,10 @@ extern struct file_lock		*file_lock_table;
 
 extern int fcntl_getlk(unsigned int fd, struct flock *l);
 extern int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l);
-extern void locks_remove_locks(struct task_struct *task, struct file *filp);
+
+/* fs/locks.c */
+extern void locks_remove_posix(struct task_struct *, struct file *);
+extern void locks_remove_flock(struct file *);
 extern struct file_lock *posix_test_lock(struct file *, struct file_lock *);
 extern int posix_lock_file(struct file *, struct file_lock *, unsigned int);
 extern void posix_block_lock(struct file_lock *, struct file_lock *);

@@ -10,7 +10,6 @@
  * for more details.
  */
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/mc146818rtc.h>
 #include <linux/kd.h>

@@ -772,7 +772,9 @@ static int mpu401_ioctl(int dev, unsigned cmd, caddr_t arg)
 			return -EFAULT;
 		if ((ret = mpu401_command(dev, &rec)) < 0)
 			return ret;
-		return __copy_to_user(arg, &rec, sizeof(rec));
+		if (__copy_to_user(arg, &rec, sizeof(rec)))
+			return -EFAULT;
+		return 0;
 
 	default:
 		return -EINVAL;

@@ -24,10 +24,6 @@
 
 #define _MIDI_SYNTH_C_
 
-static struct wait_queue *sysex_sleeper = NULL;
-static volatile struct snd_wait sysex_sleep_flag =
-{0};
-
 #include "midi_synth.h"
 
 static int      midi2synth[MAX_MIDI_DEV];
@@ -270,7 +266,9 @@ int midi_synth_ioctl(int dev, unsigned int cmd, caddr_t arg)
 	switch (cmd) {
 
 	case SNDCTL_SYNTH_INFO:
-		return __copy_to_user(arg, synth_devs[dev]->info, sizeof(struct synth_info));
+		if (__copy_to_user(arg, synth_devs[dev]->info, sizeof(struct synth_info)))
+			return -EFAULT;
+		return 0;
 		
 	case SNDCTL_SYNTH_MEMAVL:
 		return 0x7fffffff;
@@ -448,8 +446,6 @@ midi_synth_open(int dev, int mode)
 	inc->m_prev_status = 0x00;
 	restore_flags(flags);
 
-	sysex_sleep_flag.opts = WK_NONE;
-
 	return 1;
 }
 
@@ -521,8 +517,6 @@ midi_synth_load_patch(int dev, int format, const char *addr,
   	left = sysex.len;
   	src_offs = 0;
 
-	sysex_sleep_flag.opts = WK_NONE;
-
 	for (i = 0; i < left && !signal_pending(current); i++)
 	{
 		unsigned char   data;
@@ -544,23 +538,7 @@ midi_synth_load_patch(int dev, int format, const char *addr,
 		}
 		while (!midi_devs[orig_dev]->outputc(orig_dev, (unsigned char) (data & 0xff)) &&
 			!signal_pending(current))
-
-		{
-			unsigned long   tlimit;
-
-			if (1)
-				current->timeout = tlimit = jiffies + (1);
-			else
-				tlimit = (unsigned long) -1;
-			sysex_sleep_flag.opts = WK_SLEEP;
-			interruptible_sleep_on(&sysex_sleeper);
-			if (!(sysex_sleep_flag.opts & WK_WAKEUP))
-			{
-				if (jiffies >= tlimit)
-					sysex_sleep_flag.opts |= WK_TIMEOUT;
-			}
-			sysex_sleep_flag.opts &= ~WK_SLEEP;
-		};		/* Wait for timeout */
+			schedule();
 
 		if (!first_byte && data & 0x80)
 			return 0;

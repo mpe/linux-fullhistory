@@ -52,10 +52,14 @@ static char buffersize_index[17] =
 #define NR_RESERVED (2*MAX_BUF_PER_PAGE)
 #define MAX_UNUSED_BUFFERS NR_RESERVED+20 /* don't ever have more than this 
 					     number of unused buffer heads */
-#define HASH_PAGES         4  /* number of pages to use for the hash table */
-#define HASH_PAGES_ORDER   2
-#define NR_HASH (HASH_PAGES*PAGE_SIZE/sizeof(struct buffer_head *))
-#define HASH_MASK (NR_HASH-1)
+
+/*
+ * How large a hash table do we need?
+ */
+#define HASH_PAGES_ORDER	4
+#define HASH_PAGES		(1UL << HASH_PAGES_ORDER)
+#define NR_HASH			(HASH_PAGES*PAGE_SIZE/sizeof(struct buffer_head *))
+#define HASH_MASK		(NR_HASH-1)
 
 static int grow_buffers(int pri, int size);
 

@@ -899,7 +899,6 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 	int len=0;
 	off_t pos=0;
 	int size;
-	struct neighbour *n;
 	char hbuffer[HBUFFERLEN];
 	int i,j,k;
 	const char hexbuf[] =  "0123456789ABCDEF";
@@ -912,6 +911,7 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 	neigh_table_lock(&arp_tbl);
 
 	for(i=0; i<=NEIGH_HASHMASK; i++)	{
+		struct neighbour *n;
 		for (n=arp_tbl.hash_buckets[i]; n; n=n->next) {
 			struct device *dev = n->dev;
 			int hatype = dev->type;
@@ -957,6 +957,32 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 			size += sprintf(buffer+len+size,
 				 "     %-17s %s\n",
 				 "*", dev->name);
+
+			len += size;
+			pos += size;
+		  
+			if (pos <= offset)
+				len=0;
+			if (pos >= offset+length)
+				goto done;
+		}
+	}
+
+	for (i=0; i<=PNEIGH_HASHMASK; i++) {
+		struct pneigh_entry *n;
+		for (n=arp_tbl.phash_buckets[i]; n; n=n->next) {
+			struct device *dev = n->dev;
+			int hatype = dev ? dev->type : 0;
+
+			size = sprintf(buffer+len,
+				"%-17s0x%-10x0x%-10x%s",
+				in_ntoa(*(u32*)n->key),
+				hatype,
+				ATF_PUBL|ATF_PERM,       
+				"00:00:00:00:00:00");
+			size += sprintf(buffer+len+size,
+				 "     %-17s %s\n",
+				 "*", dev ? dev->name : "*");
 
 			len += size;
 			pos += size;

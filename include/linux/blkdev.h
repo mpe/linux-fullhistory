@@ -38,6 +38,9 @@ typedef struct request ** (queue_proc) (kdev_t dev);
 
 struct blk_dev_struct {
 	request_fn_proc		*request_fn;
+	/*
+	 * queue_proc has to be atomic
+	 */
 	queue_proc		*queue;
 	void			*data;
 	struct request		*current_request;

@@ -33,7 +33,6 @@
 #include <sys/sysmacros.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <linux/config.h>
 #include <asm/boot.h>
 
 typedef unsigned char byte;

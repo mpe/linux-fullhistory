@@ -3,6 +3,7 @@
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  */
 
+#include <linux/config.h> /* for CONFIG_REMOTE_DEBUG */
 #include <linux/errno.h>
 #include <linux/signal.h>
 #include <linux/sched.h>

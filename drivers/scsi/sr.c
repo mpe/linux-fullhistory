@@ -32,7 +32,6 @@
 #include <linux/errno.h>
 #include <linux/cdrom.h>
 #include <linux/interrupt.h>
-#include <linux/config.h>
 #include <asm/system.h>
 #include <asm/io.h>
 
@@ -432,10 +431,10 @@ static void do_sr_request (void)
     int flag = 0;
 
     while (1==1){
-	save_flags(flags);
-	cli();
+    	spin_lock_irqsave(&io_request_lock, flags);
+
 	if (CURRENT != NULL && CURRENT->rq_status == RQ_INACTIVE) {
-	    restore_flags(flags);
+	    spin_unlock_irqrestore(&io_request_lock, flags);
 	    return;
 	};
 
@@ -451,6 +450,7 @@ static void do_sr_request (void)
          */
         if( SDev->host->in_recovery )
           {
+	    spin_unlock_irqrestore(&io_request_lock, flags);
             return;
           }
 
@@ -469,7 +469,11 @@ static void do_sr_request (void)
  	     */
  	    if( SDev->removable && !in_interrupt() )
  	    {
+		spin_unlock_irqrestore(&io_request_lock, flags);
 		scsi_ioctl(SDev, SCSI_IOCTL_DOORLOCK, 0);
+		/* scsi_ioctl may allow CURRENT to change, so start over. *
+		SDev->was_reset = 0;
+		continue;
  	    }
  	    SDev->was_reset = 0;
 	}
@@ -489,7 +493,7 @@ static void do_sr_request (void)
 	    SCpnt = scsi_allocate_device(&CURRENT,
 				    scsi_CDs[DEVICE_NR(CURRENT->rq_dev)].device, 0);
 	else SCpnt = NULL;
-	restore_flags(flags);
+	spin_unlock_irqrestore(&io_request_lock, flags);
 
 	/* This is a performance enhancement.  We dig down into the request list and
 	 * try to find a queueable request (i.e. device not busy, and host able to
@@ -501,8 +505,7 @@ static void do_sr_request (void)
 	if (!SCpnt && sr_template.nr_dev > 1){
 	    struct request *req1;
 	    req1 = NULL;
-	    save_flags(flags);
-	    cli();
+	    spin_lock_irqsave(&io_request_lock, flags);
 	    req = CURRENT;
 	    while(req){
 		SCpnt = scsi_request_queueable(req,
@@ -510,15 +513,15 @@ static void do_sr_request (void)
 		if(SCpnt) break;
 		req1 = req;
 		req = req->next;
-	    };
+	    }
 	    if (SCpnt && req->rq_status == RQ_INACTIVE) {
 		if (req == CURRENT)
 		    CURRENT = CURRENT->next;
 		else
 		    req1->next = req->next;
-	    };
-	    restore_flags(flags);
-	};
+	    }
+	    spin_unlock_irqrestore(&io_request_lock, flags);
+	}
 
 	if (!SCpnt)
 	    return; /* Could not find anything to do */
@@ -527,7 +530,7 @@ static void do_sr_request (void)
 
 	/* Queue command */
 	requeue_sr_request(SCpnt);
-    };  /* While */
+    }  /* While */
 }
 
 void requeue_sr_request (Scsi_Cmnd * SCpnt)

@@ -2,6 +2,7 @@
  * 	IP masquerading functionality definitions
  */
 
+#include <linux/config.h> /* for CONFIG_IP_MASQ_NDEBUG */
 #ifndef _IP_MASQ_H
 #define _IP_MASQ_H
 

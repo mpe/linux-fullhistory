@@ -29,6 +29,7 @@
  *		Alexey Kuznetsov:	use new route cache
  *		Andi Kleen:		Fix broken PMTU recovery and remove
  *					some redundant tests.
+ *	Vitaly E. Lavrov	:	Transparent proxy revived after year coma.
  */
 
 #include <asm/uaccess.h>
@@ -91,6 +92,13 @@ int ip_build_pkt(struct sk_buff *skb, struct sock *sk, u32 saddr, u32 daddr,
 		daddr = opt->faddr;
 
 	err = ip_route_output(&rt, daddr, saddr, RT_TOS(sk->ip_tos) |
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+			      /* Rationale: this routine is used only
+				 by TCP, so that validity of saddr is already
+				 checked and we can safely use RTO_TPROXY.
+			       */
+			      RTO_TPROXY |
+#endif
 			      (sk->localroute||0), sk->bound_dev_if);
 	if (err)
 	{

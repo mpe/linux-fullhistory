@@ -55,12 +55,10 @@
 #include <linux/modversions.h>
 #endif
 #include <linux/module.h>
-#include <linux/config.h>
 #else /* !NEW_MODULES */
 #ifdef MODVERSIONS
 #define MODULE
 #endif
-#include <linux/config.h>
 #include <linux/module.h>
 #endif /* NEW_MODULES */
 

@@ -238,8 +238,8 @@ static int umsdos_create_any (
 	  struct inode *inode = dentry->d_inode;
 	  umsdos_lookup_patch (dir,inode,&info.entry,info.f_pos);
 	  Printk (("inode %p[%d] ",inode,inode->i_count));
-	  Printk (("Creation OK: [%d] %s %d pos %d\n",dir->i_ino
-		   ,info.fake.fname,current->pid,info.f_pos));
+	  Printk (("Creation OK: [%lu] %.*s %d pos %ld\n", dir->i_ino,
+		   info.fake.len, info.fake.fname, current->pid, info.f_pos));
 	}else{
 	  /* #Specification: create / file exist in DOS
 	     Here is a situation. Trying to create a file with
@@ -265,13 +265,13 @@ static int umsdos_create_any (
 	  */
 	  if (ret == -EEXIST){
 	    printk ("UMSDOS: out of sync, Creation error [%ld], "
-		    "deleting %s %d %d pos %ld\n",dir->i_ino
-		    ,info.fake.fname,-ret,current->pid,info.f_pos);
+		    "deleting %.*s %d %d pos %ld\n",dir->i_ino
+		    ,info.fake.len,info.fake.fname,-ret,current->pid,info.f_pos);
 	  }
 	  umsdos_delentry (dir,&info,0);
 	}
-	Printk (("umsdos_create %s ret = %d pos %d\n"
-		 ,info.fake.fname,ret,info.f_pos));
+	Printk (("umsdos_create %.*s ret = %d pos %ld\n",
+		 info.fake.len, info.fake.fname, ret, info.f_pos));
       }
       umsdos_unlockcreate(dir);
     }
@@ -379,7 +379,7 @@ static int umsdos_rename_f(
 	      chkstk();
 	      if (ret == 0){
 		/*
-		  This UMSDOS_lookup does not look very useful.
+		  This umsdos_lookup_x does not look very useful.
 		  It makes sure that the inode of the file will
 		  be correctly setup (umsdos_patch_inode()) in
 		  case it is already in use.
@@ -388,13 +388,13 @@ static int umsdos_rename_f(
 		*/
 		struct inode *inode;
 		new_dir->i_count++;
-		PRINTK (("rename lookup len %d %d -- ",new_len,new_info.entry.flags));
-		ret = UMSDOS_lookup (new_dir,new_dentry);
+		PRINTK ((KERN_DEBUG "rename lookup len %d %d -- ",new_len,new_info.entry.flags));
+		ret = umsdos_lookup_x (new_dir, new_dentry, 0);
 		inode = new_dentry->d_inode;
 		chkstk();
 		if (ret != 0){
-		  printk ("UMSDOS: partial rename for file %s\n"
-			  ,new_info.entry.name);
+		  printk ("UMSDOS: partial rename for file %.*s\n"
+			  ,new_info.entry.name_len,new_info.entry.name);
 		}else{
 		  /*
 		    Update f_pos so notify_change will succeed
@@ -459,7 +459,8 @@ static int umsdos_symlink_x(
     filp.f_pos = 0;
     /* Make the inode acceptable to MSDOS FIXME */
     Printk ((KERN_ERR "umsdos_symlink_x: FIXME /mn/ Here goes the crash.. known wrong code...\n"));
-    ret = umsdos_file_write_kmem (dentry->d_inode->i_ino, &filp,symname,ret,NULL);	/* FIXME /mn/: dentry->d_inode->i_ino is totaly wrong, just put in to compile the beast... */
+    ret = umsdos_file_write_kmem (dentry->d_inode, &filp,symname,ret,NULL);	/* FIXME /mn/: dentry->d_inode->i_ino is totaly wrong, just put in to compile the beast...
+ PTW dentry->d_inode is "less incorrect" 										 */
     /* dput(dentry); ?? where did this come from FIXME */
     if (ret >= 0){
       if (ret != len){
@@ -580,16 +581,16 @@ int UMSDOS_link (
   }else if ((ret = umsdos_nevercreat(dir,dentry,-EPERM))==0){
     struct inode *olddir;
     ret = umsdos_get_dirowner(oldinode,&olddir);
-    Printk (("umsdos_link dir_owner = %d -> %p [%d] "
-	     ,oldinode->u.umsdos_i.i_dir_owner,olddir,olddir->i_count));
+    Printk (("umsdos_link dir_owner = %lu -> %p [%d] ",
+	     oldinode->u.umsdos_i.i_dir_owner, olddir, olddir->i_count));
     if (ret == 0){
       struct umsdos_dirent entry;
       umsdos_lockcreate2(dir,olddir);
       ret = umsdos_inode2entry (olddir,oldinode,&entry);
       if (ret == 0){
-	Printk (("umsdos_link :%s: ino %d flags %d "
-		 ,entry.name
-		 ,oldinode->i_ino,entry.flags));
+	Printk (("umsdos_link :%.*s: ino %lu flags %d "
+		 ,entry.name_len, entry.name
+		 ,oldinode->i_ino, entry.flags));
 	if (!(entry.flags & UMSDOS_HIDDEN)){
 	  /* #Specification: hard link / first hard link
 	     The first time a hard link is done on a file, this
@@ -882,7 +883,7 @@ int UMSDOS_rmdir(
   if (ret == 0){
     volatile struct inode *sdir;
     dir->i_count++;
-    ret = UMSDOS_lookup (dir, dentry);
+    ret = umsdos_lookup_x (dir, dentry, 0);
     sdir = dentry->d_inode;
     Printk (("rmdir lookup %d ",ret));
     if (ret == 0){
@@ -892,7 +893,7 @@ int UMSDOS_rmdir(
 	ret = -EBUSY;
       }else if ((empty = umsdos_isempty (sdir)) != 0){
 	struct dentry *tdentry;
-	tdentry = creat_dentry (UMSDOS_EMD_FILE, UMSDOS_EMD_FILE, NULL);
+	tdentry = creat_dentry (UMSDOS_EMD_FILE, UMSDOS_EMD_NAMELEN, NULL);
 	Printk (("isempty %d i_count %d ",empty,sdir->i_count));
 				/* check sticky bit */
 	if ( !(dir->i_mode & S_ISVTX) || fsuser() ||
@@ -959,7 +960,7 @@ int UMSDOS_unlink (
       umsdos_lockcreate(dir);
       ret = umsdos_findentry(dir,&info,1);
       if (ret == 0){
-	Printk (("UMSDOS_unlink %s ",info.fake.fname));
+	Printk (("UMSDOS_unlink %.*s ",info.fake.len,info.fake.fname));
 				/* check sticky bit */
 	if ( !(dir->i_mode & S_ISVTX) || fsuser() ||
 	     current->fsuid == info.entry.uid ||
@@ -979,7 +980,7 @@ int UMSDOS_unlink (
 	    */
 	    struct inode *inode;
 	    dir->i_count++;
-	    ret = UMSDOS_lookup (dir,dentry);
+	    ret = umsdos_lookup_x (dir, dentry, 0);
 	    inode = dentry->d_inode;
 	    if (ret == 0){
 	      Printk (("unlink nlink = %d ",inode->i_nlink));
@@ -1006,11 +1007,11 @@ int UMSDOS_unlink (
 	    ret = umsdos_delentry (dir,&info,0);
 	    if (ret == 0){
 	      struct dentry *temp;
-	      Printk (("Avant msdos_unlink %s ",info.fake.fname));
+	      Printk (("Avant msdos_unlink %.*s ",info.fake.len,info.fake.fname));
 	      dir->i_count++;
 	      temp = creat_dentry (info.fake.fname, info.fake.len, NULL);
 	      ret = msdos_unlink_umsdos (dir, temp);
-	      Printk (("msdos_unlink %s %o ret %d ",info.fake.fname
+	      Printk (("msdos_unlink %.*s %o ret %d ",info.fake.len,info.fake.fname
 		       ,info.entry.mode,ret));
 	    }
 	  }

@@ -27,6 +27,7 @@
 #include <linux/hfs_fs_i.h>
 #include <linux/hfs_fs.h>
 
+#include <linux/config.h> /* for CONFIG_MAC_PARTITION */
 #include <linux/blkdev.h>
 #include <linux/module.h>
 #include <linux/init.h>

@@ -836,6 +836,12 @@ S: Erbacher Strasse 6
 S: D-64283 Darmstadt
 S: Germany
 
+N: Russell King
+E: rmk@arm.uk.linux.org
+D: Linux/arm integrater, maintainer & hacker
+S: Burgh Heath, Tadworth, Surrey.
+S: England
+
 N: Olaf Kirch
 E: okir@monad.swb.de
 D: Author of the Linux Network Administrators' Guide

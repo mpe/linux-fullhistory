@@ -1,3 +1,4 @@
+#include <linux/config.h> /* for CONFIG_NET_PROFILE */
 #ifndef _NET_PROFILE_H_
 #define _NET_PROFILE_H_ 1
 

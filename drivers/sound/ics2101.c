@@ -17,7 +17,7 @@
 
 
 #include "sound_config.h"
-#if defined(CONFIG_GUSHW) || defined(MODULE)
+#if defined(CONFIG_GUS) || defined(MODULE)
 
 #include <linux/ultrasound.h>
 #include "gus_hw.h"

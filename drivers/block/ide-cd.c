@@ -194,7 +194,6 @@
 
 #define IDECD_VERSION "4.10"
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/kernel.h>

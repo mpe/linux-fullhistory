@@ -19,6 +19,7 @@
  */
 
 typedef unsigned short	apm_event_t;
+typedef unsigned short	apm_eventinfo_t;
 
 #ifdef __KERNEL__
 
@@ -35,6 +36,7 @@ struct apm_bios_info {
 	unsigned short	dseg;
 	unsigned short	flags;
 	unsigned short	cseg_len;
+	unsigned short	cseg_16_len;
 	unsigned short	dseg_len;
 };
 
@@ -111,6 +113,7 @@ extern int		apm_display_unblank(void);
 #define APM_USER_STANDBY	0x0009
 #define APM_USER_SUSPEND	0x000a
 #define APM_STANDBY_RESUME	0x000b
+#define APM_CAPABILITY_CHANGE   0x000c
 
 /*
  * Error codes
@@ -126,6 +129,8 @@ extern int		apm_display_unblank(void);
 #define APM_BAD_DEVICE		0x09
 #define APM_BAD_PARAM		0x0a
 #define APM_NOT_ENGAGED		0x0b
+#define APM_BAD_FUNCTION        0x0c
+#define APM_RESUME_DISABLED	0x0d
 #define APM_BAD_STATE		0x60
 #define APM_NO_EVENTS		0x80
 #define APM_NOT_PRESENT		0x86

@@ -410,8 +410,8 @@ no_psmouse:
 	mov	[68],ebx	! BIOS entry point offset
 	mov	[72],cx		! BIOS 16 bit code segment
 	mov	[74],dx		! BIOS data segment
-	mov	[78],si		! BIOS code segment length
-	mov	[80],di		! BIOS data segment length
+	mov	[78],esi	! BIOS code segment length
+	mov	[82],di		! BIOS data segment length
 	jmp	done_apm_bios
 
 no_32_apm_bios:

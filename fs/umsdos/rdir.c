@@ -39,9 +39,9 @@ static int rdir_filldir(
 {
   int ret = 0;
   struct RDIR_FILLDIR *d = (struct RDIR_FILLDIR*) buf;
-  Printk ((KERN_DEBUG "rdir_filldir /mn/: entering\n"));
+  PRINTK ((KERN_DEBUG "rdir_filldir /mn/: entering\n"));
   if (d->real_root){
-    Printk ((KERN_DEBUG "rdir_filldir /mn/: real root!\n"));
+    PRINTK ((KERN_DEBUG "rdir_filldir /mn/: real root!\n"));
     /* real root of a pseudo_rooted partition */
     if (name_len != UMSDOS_PSDROOT_LEN
 	|| memcmp(name,UMSDOS_PSDROOT_NAME,UMSDOS_PSDROOT_LEN)!=0){
@@ -56,8 +56,8 @@ static int rdir_filldir(
     }
   }else{
     /* Any DOS directory */
-    Printk ((KERN_DEBUG "rdir_filldir /mn/: calling d->filldir (%p) for %12s (%d)\n",d->filldir,name,ino));
-    ret = d->filldir (d->dirbuf,name,name_len,offset,ino);
+    PRINTK ((KERN_DEBUG "rdir_filldir /mn/: calling d->filldir (%p) for %.*s (%lu)\n", d->filldir, name_len, name, ino));
+    ret = d->filldir (d->dirbuf, name, name_len, offset, ino);
   }
   return ret;
 }
@@ -71,7 +71,7 @@ static int UMSDOS_rreaddir (
   struct RDIR_FILLDIR bufk;
   struct inode *dir = filp->f_dentry->d_inode;
   
-  Printk ((KERN_DEBUG "UMSDOS_rreaddir /mn/: entering %p %p\n", filldir, dirbuf));
+  PRINTK ((KERN_DEBUG "UMSDOS_rreaddir /mn/: entering %p %p\n", filldir, dirbuf));
 
   
   bufk.filldir = filldir;
@@ -79,7 +79,7 @@ static int UMSDOS_rreaddir (
   bufk.real_root = pseudo_root
     && dir == iget(dir->i_sb,UMSDOS_ROOT_INO)
     && dir == iget(pseudo_root->i_sb,UMSDOS_ROOT_INO);
-  Printk ((KERN_DEBUG "UMSDOS_rreaddir /mn/: calling fat_readdir with filldir=%p and exiting\n",filldir));
+  PRINTK ((KERN_DEBUG "UMSDOS_rreaddir /mn/: calling fat_readdir with filldir=%p and exiting\n",filldir));
   return fat_readdir(filp, &bufk, rdir_filldir);
 }
 
@@ -106,7 +106,7 @@ int umsdos_rlookup_x(
       && dir == iget(dir->i_sb,UMSDOS_ROOT_INO)
       && dir == iget(pseudo_root->i_sb,UMSDOS_ROOT_INO) ){
     /*    *result = pseudo_root;*/
-    Printk (("umsdos_rlookup_x: we are at pseudo-root thingy?\n"));
+    Printk ((KERN_WARNING "umsdos_rlookup_x: we are at pseudo-root thingy?\n"));
     pseudo_root->i_count++;
     ret = 0;
     /* #Specification: pseudo root / DOS/..
@@ -115,13 +115,17 @@ int umsdos_rlookup_x(
     */
   }else{
     ret = umsdos_real_lookup (dir, dentry); inode=dentry->d_inode;
-    Printk ((KERN_DEBUG "umsdos_rlookup_x: umsdos_real_lookup for %s in %d returned %d\n", name, dir->i_ino, ret));
+
+#if 0
+    Printk ((KERN_DEBUG "umsdos_rlookup_x: umsdos_real_lookup for %.*s in %lu returned %d\n", len, name, dir->i_ino, ret));
     Printk ((KERN_DEBUG "umsdos_rlookup_x: umsdos_real_lookup: inode is %p resolving to ", inode));
     if (inode) {	/* /mn/ FIXME: DEL_ME */
-        Printk ((KERN_DEBUG "i_ino=%d\n",inode->i_ino));
+        Printk ((KERN_DEBUG "i_ino=%lu\n", inode->i_ino));
     } else {
         Printk ((KERN_DEBUG "NONE!\n"));
     }
+#endif
+    
     if ((ret == 0) && inode){
       
       if (pseudo_root && inode == pseudo_root && !nopseudo){
@@ -129,20 +133,20 @@ int umsdos_rlookup_x(
 	 Even in the real root directory (c:\), the directory
 	 /linux won't show
       */
-        Printk (("umsdos_rlookup_x: do the pseudo-thingy...\n"));
+        Printk ((KERN_WARNING "umsdos_rlookup_x: do the pseudo-thingy...\n"));
 	ret = -ENOENT;
 	iput (pseudo_root);
        
       }else if (S_ISDIR(inode->i_mode)){
 	/* We must place the proper function table */
 	/* depending if this is a MsDOS directory or an UMSDOS directory */
-        Printk (("umsdos_rlookup_x: setting up setup_dir_inode %d...\n", inode->i_ino));
+        Printk ((KERN_DEBUG "umsdos_rlookup_x: setting up setup_dir_inode %lu...\n", inode->i_ino));
 	umsdos_setup_dir_inode (inode);
       }
     }
   }
   iput (dir);
-  Printk ((KERN_DEBUG "umsdos_rlookup_x: returning %d\n", ret));
+  PRINTK ((KERN_DEBUG "umsdos_rlookup_x: returning %d\n", ret));
   return ret;
 }
 
@@ -152,7 +156,7 @@ int UMSDOS_rlookup(
 	struct dentry *dentry
 	)
 {
-  Printk ((KERN_DEBUG "UMSDOS_rlookup /mn/: executing umsdos_rlookup_x for ino=%d in %20s\n",dir->i_ino,dentry->d_name.name));
+  PRINTK ((KERN_DEBUG "UMSDOS_rlookup /mn/: executing umsdos_rlookup_x for ino=%lu in %.*s\n", dir->i_ino, (int) dentry->d_name.len, dentry->d_name.name));
   return umsdos_rlookup_x(dir,dentry,0);
 }
 

@@ -89,6 +89,7 @@
 #include <asm/atarihw.h>
 #include <asm/atariints.h>
 #include <asm/atari_stdma.h>
+#include <asm/atari_stram.h>
 
 #define MAJOR_NR FLOPPY_MAJOR
 #include <linux/blk.h>
@@ -278,7 +279,6 @@ static int BufferSize[] = {
 	15*512, 30*512, 60*512
 };
 
-#define	MAX_SECTORS	(MaxSectors[DriveType])
 #define	BUFFER_SIZE	(BufferSize[DriveType])
 
 unsigned char *DMABuffer;			  /* buffer for writes */
@@ -395,6 +395,7 @@ static void fd_seek_done( int status );
 static void fd_rwsec( void );
 static void fd_readtrack_check( unsigned long dummy );
 static void fd_rwsec_done( int status );
+static void fd_rwsec_done1(int status);
 static void fd_writetrack( void );
 static void fd_writetrack_done( int status );
 static void fd_times_out( unsigned long dummy );
@@ -459,6 +460,7 @@ static void fd_select_drive( int drive )
 	sound_ym.rd_data_reg_sel = 14; /* Select PSG Port A */
 	tmp = sound_ym.rd_data_reg_sel;
 	sound_ym.wd_data = (tmp | DSKDRVNONE) & ~(drive == 0 ? DSKDRV0 : DSKDRV1);
+	atari_dont_touch_floppy_select = 1;
 	restore_flags(flags);
 
 	/* restore track register to saved value */
@@ -482,8 +484,12 @@ static void fd_deselect( void )
 
 	save_flags(flags);
 	cli(); /* protect against various other ints mucking around with the PSG */
+	atari_dont_touch_floppy_select = 0;
 	sound_ym.rd_data_reg_sel=14;	/* Select PSG Port A */
-	sound_ym.wd_data = sound_ym.rd_data_reg_sel | 7; /* no drives selected */
+	sound_ym.wd_data = (sound_ym.rd_data_reg_sel |
+			    (MACH_IS_FALCON ? 3 : 7)); /* no drives selected */
+	/* On Falcon, the drive B select line is used on the printer port, so
+	 * leave it alone... */
 	SelectedDrive = -1;
 	restore_flags(flags);
 }
@@ -977,11 +983,12 @@ static void fd_rwsec( void )
 		 * search for the first non-existent sector and need 1 sec to
 		 * recognise that it isn't present :-(
 		 */
+		del_timer (&readtrack_timer);
 		readtrack_timer.expires =
 		  jiffies + HZ/5 + (old_motoron ? 0 : HZ);
 		       /* 1 rot. + 5 rot.s if motor was off  */
-		add_timer( &readtrack_timer );
 		MultReadInProgress = 1;
+		add_timer( &readtrack_timer );
 	}
 	START_TIMEOUT();
 }
@@ -1028,6 +1035,7 @@ static void fd_readtrack_check( unsigned long dummy )
 		 * the read operation
 		 */
 		SET_IRQ_HANDLER( NULL );
+		MultReadInProgress = 0;
 		restore_flags(flags);
 		DPRINT(("fd_readtrack_check(): done\n"));
 		FDC_WRITE( FDCREG_CMD, FDCCMD_FORCI );
@@ -1036,7 +1044,7 @@ static void fd_readtrack_check( unsigned long dummy )
 		/* No error until now -- the FDC would have interrupted
 		 * otherwise!
 		 */
-		fd_rwsec_done( 0 );
+		fd_rwsec_done1(0);
 	}
 	else {
 		/* not yet finished, wait another tenth rotation */
@@ -1050,19 +1058,23 @@ static void fd_readtrack_check( unsigned long dummy )
 
 static void fd_rwsec_done( int status )
 {
-	unsigned int track;
-
 	DPRINT(("fd_rwsec_done()\n"));
 
-	STOP_TIMEOUT();
-	
 	if (read_track) {
+		del_timer(&readtrack_timer);
 		if (!MultReadInProgress)
 			return;
 		MultReadInProgress = 0;
-		del_timer( &readtrack_timer );
 	}
+	fd_rwsec_done1(status);
+}
 
+static void fd_rwsec_done1(int status)
+{
+	unsigned int track;
+
+	STOP_TIMEOUT();
+	
 	/* Correct the track if stretch != 0 */
 	if (SUDT->stretch) {
 		track = FDC_READ( FDCREG_TRACK);
@@ -1147,7 +1159,7 @@ static void fd_rwsec_done( int status )
 			if (!ATARIHW_PRESENT( EXTD_DMA ))
 				copy_buffer (addr, ReqData);
 		} else {
-			dma_cache_maintenance( PhysTrackBuffer, MAX_SECTORS * 512, 0 );
+			dma_cache_maintenance( PhysTrackBuffer, MaxSectors[DriveType] * 512, 0 );
 			BufferDrive = SelectedDrive;
 			BufferSide  = ReqSide;
 			BufferTrack = ReqTrack;
@@ -1802,7 +1814,7 @@ __initfunc(static void fd_probe( int drive ))
 		UD.steprate = FDCSTEP_12;
 		break;
 	default: /* should be -1 for "not set by user" */
-		if (ATARIHW_PRESENT( FDCSPEED ) || is_medusa)
+		if (ATARIHW_PRESENT( FDCSPEED ) || MACH_IS_MEDUSA)
 			UD.steprate = FDCSTEP_3;
 		else
 			UD.steprate = FDCSTEP_6;
@@ -1827,7 +1839,7 @@ __initfunc(static int fd_test_drive_present( int drive ))
 	unsigned char status;
 	int ok;
 	
-	if (drive > 1) return( 0 );
+	if (drive >= (MACH_IS_FALCON ? 1 : 2)) return( 0 );
 	fd_select_drive( drive );
 
 	/* disable interrupt temporarily */
@@ -2019,6 +2031,14 @@ __initfunc(int atari_floppy_init (void))
 {
 	int i;
 
+	if (!MACH_IS_ATARI)
+		/* Amiga, Mac, ... don't have Atari-compatible floppy :-) */
+		return -ENXIO;
+
+	if (MACH_IS_HADES)
+		/* Hades doesn't have Atari-compatible floppy */
+		return -ENXIO;
+
 	if (register_blkdev(MAJOR_NR,"fd",&floppy_fops)) {
 		printk(KERN_ERR "Unable to get major %d for floppy\n",MAJOR_NR);
 		return -EBUSY;
@@ -2029,7 +2049,7 @@ __initfunc(int atari_floppy_init (void))
 		   track buffering off for all Medusas, though it
 		   could be used with ones that have a counter
 		   card. But the test is too hard :-( */
-		UseTrackbuffer = !is_medusa;
+		UseTrackbuffer = !MACH_IS_MEDUSA;
 
 	/* initialize variables */
 	SelectedDrive = -1;
@@ -2039,7 +2059,7 @@ __initfunc(int atari_floppy_init (void))
 	timer_table[FLOPPY_TIMER].fn = check_change;
 	timer_active &= ~(1 << FLOPPY_TIMER);
 
-	DMABuffer = kmalloc(BUFFER_SIZE + 512, GFP_KERNEL | GFP_DMA);
+	DMABuffer = atari_stram_alloc( BUFFER_SIZE+512, NULL, "ataflop" );
 	if (!DMABuffer) {
 		printk(KERN_ERR "atari_floppy_init: cannot get dma buffer\n");
 		unregister_blkdev(MAJOR_NR, "fd");
@@ -2071,6 +2091,7 @@ __initfunc(int atari_floppy_init (void))
 	       UseTrackbuffer ? "" : "no ");
 	config_types();
 
+	(void)do_floppy; /* avoid warning about unused variable */
 	return 0;
 }
 
@@ -2118,7 +2139,7 @@ void cleanup_module (void)
 	blk_dev[MAJOR_NR].request_fn = 0;
 	timer_active &= ~(1 << FLOPPY_TIMER);
 	timer_table[FLOPPY_TIMER].fn = 0;
-	kfree (DMABuffer);
+	atari_stram_free( DMABuffer );
 }
 #endif
 

@@ -1091,8 +1091,12 @@ int addrconf_notify(struct notifier_block *this, unsigned long event,
 		}
 
 		break;
+	case NETDEV_CHANGEMTU:
+	case NETDEV_CHANGE:
+		/* BUGGG... Should scan FIB to change pmtu on routes. --ANK */
+		break;
 	};
-	
+
 	return NOTIFY_OK;
 }
 

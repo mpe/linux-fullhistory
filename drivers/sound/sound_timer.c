@@ -239,9 +239,6 @@ static int timer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 			break;
 		
 		case SNDCTL_TMR_METRONOME:
-			/* NOP */
-			break;
-		
 		default:
 			return -EINVAL;
 	}

@@ -25,6 +25,8 @@
 #include <linux/signal.h>
 #include <linux/fcntl.h>
 #include <linux/ctype.h>
+#include <linux/stddef.h>
+#include <linux/kerneld.h>
 #ifdef __KERNEL__
 #include <asm/io.h>
 #include <asm/segment.h>
@@ -59,8 +61,6 @@ int             sound_mem_sizes[1024];
 int             sound_nblocks = 0;
 
 static int      soundcard_configured = 0;
-
-static struct fileinfo files[SND_NDEVS];
 
 static char     dma_alloc_map[8] =
 {0};
@@ -118,7 +118,9 @@ static int set_mixer_levels(caddr_t arg)
 	if (__copy_from_user(&buf, arg, sizeof(buf)))
 		return -EFAULT;
 	load_mixer_volumes(buf.name, buf.levels, 0);
-	return __copy_to_user(arg, &buf, sizeof(buf));
+	if (__copy_to_user(arg, &buf, sizeof(buf)))
+		return -EFAULT;
+	return 0;
 }
 
 static int get_mixer_levels(caddr_t arg)
@@ -129,7 +131,9 @@ static int get_mixer_levels(caddr_t arg)
 		return -EFAULT;
 	if (n < 0 || n >= num_mixer_volumes)
 		return -EINVAL;
-	return __copy_to_user(arg, &mixer_vols[n], sizeof(mixer_vol_table));
+	if (__copy_to_user(arg, &mixer_vols[n], sizeof(mixer_vol_table)))
+		return -EFAULT;
+	return 0;
 }
 
 static int sound_proc_get_info(char *buffer, char **start, off_t offset, int length, int inout)
@@ -351,7 +355,6 @@ static ssize_t sound_read(struct file *file, char *buf, size_t count, loff_t *pp
 {
 	int dev = MINOR(file->f_dentry->d_inode->i_rdev);
 
-	files[dev].flags = file->f_flags;
 	DEB(printk("sound_read(dev=%d, count=%d)\n", dev, count));
 	switch (dev & 0x0f) {
 	case SND_DEV_STATUS:
@@ -361,18 +364,18 @@ static ssize_t sound_read(struct file *file, char *buf, size_t count, loff_t *pp
 	case SND_DEV_DSP:
 	case SND_DEV_DSP16:
 	case SND_DEV_AUDIO:
-		return audio_read(dev, &files[dev], buf, count);
+		return audio_read(dev, file, buf, count);
 #endif
 
 #ifdef CONFIG_SEQUENCER
 	case SND_DEV_SEQ:
 	case SND_DEV_SEQ2:
-		return sequencer_read(dev, &files[dev], buf, count);
+		return sequencer_read(dev, file, buf, count);
 #endif
 
 #ifdef CONFIG_MIDI
 	case SND_DEV_MIDIN:
-		return MIDIbuf_read(dev, &files[dev], buf, count);
+		return MIDIbuf_read(dev, file, buf, count);
 #endif
 
 	default:;
@@ -384,25 +387,24 @@ static ssize_t sound_write(struct file *file, const char *buf, size_t count, lof
 {
 	int dev = MINOR(file->f_dentry->d_inode->i_rdev);
 
-	files[dev].flags = file->f_flags;
 	DEB(printk("sound_write(dev=%d, count=%d)\n", dev, count));
 	switch (dev & 0x0f) {
 #ifdef CONFIG_SEQUENCER
 	case SND_DEV_SEQ:
 	case SND_DEV_SEQ2:
-		return sequencer_write(dev, &files[dev], buf, count);
+		return sequencer_write(dev, file, buf, count);
 #endif
 
 #ifdef CONFIG_AUDIO
 	case SND_DEV_DSP:
 	case SND_DEV_DSP16:
 	case SND_DEV_AUDIO:
-		return audio_write(dev, &files[dev], buf, count);
+		return audio_write(dev, file, buf, count);
 #endif
 
 #ifdef CONFIG_MIDI
 	case SND_DEV_MIDIN:
-		return MIDIbuf_write(dev, &files[dev], buf, count);
+		return MIDIbuf_write(dev, file, buf, count);
 #endif
 	}
 	return -EINVAL;
@@ -416,7 +418,6 @@ static long long sound_lseek(struct file *file, long long offset, int orig)
 static int sound_open(struct inode *inode, struct file *file)
 {
 	int dev, retval;
-	struct fileinfo tmp_file;
 
 	if (is_unloading) {
 		/* printk(KERN_ERR "Sound: Driver partially removed. Can't open device\n");*/
@@ -427,15 +428,6 @@ static int sound_open(struct inode *inode, struct file *file)
 		/* printk("SoundCard Error: The soundcard system has not been configured\n");*/
 		return -ENXIO;
 	}
-	tmp_file.mode = 0;
-	tmp_file.flags = file->f_flags;
-
-	if ((tmp_file.flags & O_ACCMODE) == O_RDWR)
-		tmp_file.mode = OPEN_READWRITE;
-	if ((tmp_file.flags & O_ACCMODE) == O_RDONLY)
-		tmp_file.mode = OPEN_READ;
-	if ((tmp_file.flags & O_ACCMODE) == O_WRONLY)
-		tmp_file.mode = OPEN_WRITE;
 	DEB(printk("sound_open(dev=%d)\n", dev));
 	if ((dev >= SND_NDEVS) || (dev < 0)) {
 		printk(KERN_ERR "Invalid minor device %d\n", dev);
@@ -446,21 +438,29 @@ static int sound_open(struct inode *inode, struct file *file)
 		break;
 
 	case SND_DEV_CTL:
-		if ((dev & 0xf0) && ((dev & 0xf0) >> 4) >= num_mixers)
+		dev >>= 4;
+#ifdef CONFIG_KERNELD
+	if (dev >= 0 && dev < MAX_MIXER_DEV && mixer_devs[dev] == NULL) {
+		char modname[20];
+		sprintf(modname, "mixer%d", dev);
+		request_module(modname);
+	}
+#endif
+		if (dev && (dev >= num_mixers || mixer_devs[dev] == NULL))
 			return -ENXIO;
 		break;
 
 #ifdef CONFIG_SEQUENCER
 	case SND_DEV_SEQ:
 	case SND_DEV_SEQ2:
-		if ((retval = sequencer_open(dev, &tmp_file)) < 0)
+		if ((retval = sequencer_open(dev, file)) < 0)
 			return retval;
 		break;
 #endif
 
 #ifdef CONFIG_MIDI
 	case SND_DEV_MIDIN:
-		if ((retval = MIDIbuf_open(dev, &tmp_file)) < 0)
+		if ((retval = MIDIbuf_open(dev, file)) < 0)
 			return retval;
 		break;
 #endif
@@ -469,7 +469,7 @@ static int sound_open(struct inode *inode, struct file *file)
 	case SND_DEV_DSP:
 	case SND_DEV_DSP16:
 	case SND_DEV_AUDIO:
-		if ((retval = audio_open(dev, &tmp_file)) < 0)
+		if ((retval = audio_open(dev, file)) < 0)
 			return retval;
 		break;
 #endif
@@ -482,7 +482,6 @@ static int sound_open(struct inode *inode, struct file *file)
 #ifdef MODULE
 	SOUND_INC_USE_COUNT;
 #endif
-	memcpy(&files[dev], &tmp_file, sizeof(tmp_file));
 	return 0;
 }
 
@@ -490,7 +489,6 @@ static int sound_release(struct inode *inode, struct file *file)
 {
 	int dev = MINOR(inode->i_rdev);
 
-	files[dev].flags = file->f_flags;
 	DEB(printk("sound_release(dev=%d)\n", dev));
 	switch (dev & 0x0f) {
 	case SND_DEV_STATUS:
@@ -500,13 +498,13 @@ static int sound_release(struct inode *inode, struct file *file)
 #ifdef CONFIG_SEQUENCER
 	case SND_DEV_SEQ:
 	case SND_DEV_SEQ2:
-		sequencer_release(dev, &files[dev]);
+		sequencer_release(dev, file);
 		break;
 #endif
 
 #ifdef CONFIG_MIDI
 	case SND_DEV_MIDIN:
-		MIDIbuf_release(dev, &files[dev]);
+		MIDIbuf_release(dev, file);
 		break;
 #endif
 
@@ -514,7 +512,7 @@ static int sound_release(struct inode *inode, struct file *file)
 	case SND_DEV_DSP:
 	case SND_DEV_DSP16:
 	case SND_DEV_AUDIO:
-		audio_release(dev, &files[dev]);
+		audio_release(dev, file);
 		break;
 #endif
 
@@ -531,14 +529,10 @@ static int sound_release(struct inode *inode, struct file *file)
 static int get_mixer_info(int dev, caddr_t arg)
 {
 	mixer_info info;
-	int i;
 
-	if (dev < 0 || dev >= num_mixers)
-		return -ENXIO;
-	strcpy(info.id, mixer_devs[dev]->id);
-	for (i = 0; i < 32 && mixer_devs[dev]->name; i++)
-		info.name[i] = mixer_devs[dev]->name[i];
-	info.name[i] = 0;
+	strncpy(info.id, mixer_devs[dev]->id, sizeof(info.id));
+	strncpy(info.name, mixer_devs[dev]->name, sizeof(info.name));
+	info.name[sizeof(info.name)-1] = 0;
 	info.modify_counter = mixer_devs[dev]->modify_counter;
 	if (__copy_to_user(arg, &info,  sizeof(info)))
 		return -EFAULT;
@@ -548,21 +542,29 @@ static int get_mixer_info(int dev, caddr_t arg)
 static int get_old_mixer_info(int dev, caddr_t arg)
 {
 	_old_mixer_info info;
-	int             i;
 
-	if (dev < 0 || dev >= num_mixers)
-		return -ENXIO;
-	strcpy(info.id, mixer_devs[dev]->id);
-	for (i = 0; i < 32 && mixer_devs[dev]->name; i++)
-		info.name[i] = mixer_devs[dev]->name[i];
-	info.name[i] = 0;
-	if (__copy_to_user(arg, &info,  sizeof(info)))
+ 	strncpy(info.id, mixer_devs[dev]->id, sizeof(info.id));
+ 	strncpy(info.name, mixer_devs[dev]->name, sizeof(info.name));
+ 	info.name[sizeof(info.name)-1] = 0;	
+ 	if (copy_to_user(arg, &info,  sizeof(info)))
 		return -EFAULT;
 	return 0;
 }
 
 static int sound_mixer_ioctl(int mixdev, unsigned int cmd, caddr_t arg)
 {
+ 	if (mixdev < 0 || mixdev >= MAX_MIXER_DEV)
+ 		return -ENXIO;
+#ifdef CONFIG_KERNELD
+ 	/* Try to load the mixer... */
+ 	if (mixer_devs[mixdev] == NULL) {
+ 		char modname[20];
+ 		sprintf(modname, "mixer%d", mixdev);
+ 		request_module(modname);
+ 	}
+#endif	/* CONFIG_KERNELD */
+ 	if (mixdev >= num_mixers || !mixer_devs[mixdev])
+ 		return -ENXIO;
 	if (cmd == SOUND_MIXER_INFO)
 		return get_mixer_info(mixdev, arg);
 	if (cmd == SOUND_OLD_MIXER_INFO)
@@ -577,10 +579,9 @@ static int sound_mixer_ioctl(int mixdev, unsigned int cmd, caddr_t arg)
 static int sound_ioctl(struct inode *inode, struct file *file,
 		       unsigned int cmd, unsigned long arg)
 {
-	int err, len = 0, dtype, mixdev;
+	int err, len = 0, dtype;
 	int dev = MINOR(inode->i_rdev);
 
-	files[dev].flags = file->f_flags;
 	if (_SIOC_DIR(cmd) != _SIOC_NONE && _SIOC_DIR(cmd) != 0) {
 		/*
 		 * Have to validate the address given by the process.
@@ -599,55 +600,47 @@ static int sound_ioctl(struct inode *inode, struct file *file,
 	if (cmd == OSS_GETVERSION)
 		return __put_user(SOUND_VERSION, (int *)arg);
 	
-	if (((cmd >> 8) & 0xff) == 'M' && num_mixers > 0)	/* Mixer ioctl */
-		if ((dev & 0x0f) != SND_DEV_CTL) {
-			dtype = dev & 0x0f;
-			switch (dtype) {
+	if (_IOC_TYPE(cmd) == 'M' && num_mixers > 0 &&   /* Mixer ioctl */
+	    (dev & 0x0f) != SND_DEV_CTL) {              
+		dtype = dev & 0x0f;
+		switch (dtype) {
 #ifdef CONFIG_AUDIO
-			case SND_DEV_DSP:
-			case SND_DEV_DSP16:
-			case SND_DEV_AUDIO:
-				mixdev = audio_devs[dev >> 4]->mixer_dev;
-				if (mixdev < 0 || mixdev >= num_mixers)
-					return -ENXIO;
-				return sound_mixer_ioctl(mixdev, cmd, (caddr_t)arg);
+		case SND_DEV_DSP:
+		case SND_DEV_DSP16:
+		case SND_DEV_AUDIO:
+			return sound_mixer_ioctl(audio_devs[dev >> 4]->mixer_dev,
+						 cmd, (caddr_t)arg);
 #endif
-				
-			default:
-				return sound_mixer_ioctl(dev, cmd, (caddr_t)arg);
-			}
+			
+		default:
+			return sound_mixer_ioctl(dev >> 4, cmd, (caddr_t)arg);
 		}
+	}
 	switch (dev & 0x0f) {
 	case SND_DEV_CTL:
 		if (cmd == SOUND_MIXER_GETLEVELS)
 			return get_mixer_levels((caddr_t)arg);
 		if (cmd == SOUND_MIXER_SETLEVELS)
 			return set_mixer_levels((caddr_t)arg);
-		if (!num_mixers)
-			return -ENXIO;
-		dev = dev >> 4;
-		if (dev >= num_mixers)
-			return -ENXIO;
-		return sound_mixer_ioctl(dev, cmd, (caddr_t)arg);
-		break;
+		return sound_mixer_ioctl(dev >> 4, cmd, (caddr_t)arg);
 
 #ifdef CONFIG_SEQUENCER
 	case SND_DEV_SEQ:
 	case SND_DEV_SEQ2:
-		return sequencer_ioctl(dev, &files[dev], cmd, (caddr_t)arg);
+		return sequencer_ioctl(dev, file, cmd, (caddr_t)arg);
 #endif
 
 #ifdef CONFIG_AUDIO
 	case SND_DEV_DSP:
 	case SND_DEV_DSP16:
 	case SND_DEV_AUDIO:
-		return audio_ioctl(dev, &files[dev], cmd, (caddr_t)arg);
+		return audio_ioctl(dev, file, cmd, (caddr_t)arg);
 		break;
 #endif
 
 #ifdef CONFIG_MIDI
 	case SND_DEV_MIDIN:
-		return MIDIbuf_ioctl(dev, &files[dev], cmd, (caddr_t)arg);
+		return MIDIbuf_ioctl(dev, file, cmd, (caddr_t)arg);
 		break;
 #endif
 
@@ -655,45 +648,32 @@ static int sound_ioctl(struct inode *inode, struct file *file,
 	return -EINVAL;
 }
 
-static int sound_select(struct inode *inode, struct file *file, int sel_type, poll_table * wait)
+static unsigned int sound_poll(struct file *file, poll_table * wait)
 {
+	struct inode *inode = file->f_dentry->d_inode;
 	int dev = MINOR(inode->i_rdev);
 
-	files[dev].flags = file->f_flags;
-	DEB(printk("sound_select(dev=%d, type=0x%x)\n", dev, sel_type));
+	DEB(printk("sound_poll(dev=%d)\n", dev));
 	switch (dev & 0x0f) {
 #if defined(CONFIG_SEQUENCER) || defined(MODULE)
 	case SND_DEV_SEQ:
 	case SND_DEV_SEQ2:
-		return sequencer_select(dev, &files[dev], sel_type, wait);
+		return sequencer_poll(dev, file, wait);
 #endif
 
 #if defined(CONFIG_MIDI)
 	case SND_DEV_MIDIN:
-		return MIDIbuf_select(dev, &files[dev], sel_type, wait);
+		return MIDIbuf_poll(dev, file, wait);
 #endif
 
 #if defined(CONFIG_AUDIO) || defined(MODULE)
 	case SND_DEV_DSP:
 	case SND_DEV_DSP16:
 	case SND_DEV_AUDIO:
-		return DMAbuf_select(dev >> 4, &files[dev], sel_type, wait);
+		return DMAbuf_poll(dev >> 4, wait);
 #endif
 	}
 	return 0;
-}
-
-static unsigned int sound_poll(struct file *file, poll_table * wait)
-{
-	struct inode *inode;
-	int ret = 0;
-
-	inode = file->f_dentry->d_inode;
-	if (sound_select(inode, file, SEL_IN, wait))
-		ret |= POLLIN;
-	if (sound_select(inode, file, SEL_OUT, wait))
-		ret |= POLLOUT;
-	return ret;
 }
 
 static int sound_mmap(struct file *file, struct vm_area_struct *vma)
@@ -702,8 +682,6 @@ static int sound_mmap(struct file *file, struct vm_area_struct *vma)
 	unsigned long size;
 	struct dma_buffparms *dmap = NULL;
 	int dev = MINOR(file->f_dentry->d_inode->i_rdev);
-
-	files[dev].flags = file->f_flags;
 
 	dev_class = dev & 0x0f;
 	dev >>= 4;
@@ -832,8 +810,6 @@ char            kernel_version[] = UTS_RELEASE;
 
 #endif
 
-static int      debugmem = 0;	/* switched off by default */
-
 static int      sound[20] =
 {0};
 
@@ -917,11 +893,6 @@ void cleanup_module(void)
 
 }
 #endif
-
-void tenmicrosec(int *osp)
-{
-	udelay(10);
-}
 
 int snd_set_irq_handler(int interrupt_level, void (*iproc) (int, void *, struct pt_regs *), char *name, int *osp)
 {
@@ -1053,143 +1024,6 @@ void sound_stop_timer(void)
 }
 #endif
 
-#ifdef CONFIG_AUDIO
-
-static int dma_buffsize = DSP_BUFFSIZE;
-
-int sound_alloc_dmap(int dev, struct dma_buffparms *dmap, int chan)
-{
-	char *start_addr, *end_addr;
-	int i, dma_pagesize;
-
-	dmap->mapping_flags &= ~DMA_MAP_MAPPED;
-
-	if (dmap->raw_buf != NULL)
-		return 0;	/* Already done */
-
-	if (dma_buffsize < 4096)
-		dma_buffsize = 4096;
-
-	if (chan < 4)
-		dma_pagesize = 64 * 1024;
-	else
-		dma_pagesize = 128 * 1024;
-
-	dmap->raw_buf = NULL;
-
-	dmap->buffsize = dma_buffsize;
-
-	if (dmap->buffsize > dma_pagesize)
-		dmap->buffsize = dma_pagesize;
-
-	start_addr = NULL;
-
-/*
- * Now loop until we get a free buffer. Try to get smaller buffer if
- * it fails. Don't accept smaller than 8k buffer for performance
- * reasons.
- */
-
-	while (start_addr == NULL && dmap->buffsize > PAGE_SIZE)
-	{
-		int sz, size;
-
-		for (sz = 0, size = PAGE_SIZE;
-			size < dmap->buffsize;
-			sz++, size <<= 1);
-
-		dmap->buffsize = PAGE_SIZE * (1 << sz);
-
-		if ((start_addr = (char *) __get_free_pages(GFP_ATOMIC|GFP_DMA, sz)) == NULL)
-			dmap->buffsize /= 2;
-	}
-
-	if (start_addr == NULL)
-	{
-		printk(KERN_WARNING "Sound error: Couldn't allocate DMA buffer\n");
-		return -ENOMEM;
-	}
-	else
-	{
-		/* make some checks */
-		end_addr = start_addr + dmap->buffsize - 1;
-
-		if (debugmem)
-			printk(KERN_DEBUG "sound: start 0x%lx, end 0x%lx\n", (long) start_addr, (long) end_addr);
-
-		/* now check if it fits into the same dma-pagesize */
-
-		if (((long) start_addr & ~(dma_pagesize - 1))
-		      != ((long) end_addr & ~(dma_pagesize - 1))
-		      || end_addr >= (char *) (MAX_DMA_ADDRESS))
-		{
-			printk(KERN_ERR "sound: Got invalid address 0x%lx for %db DMA-buffer\n", (long) start_addr, dmap->buffsize);
-			return -EFAULT;
-		}
-	}
-	dmap->raw_buf = start_addr;
-	dmap->raw_buf_phys = virt_to_bus(start_addr);
-
-	for (i = MAP_NR(start_addr); i <= MAP_NR(end_addr); i++)
-	{
-		set_bit(PG_reserved, &mem_map[i].flags);;
-	}
-
-	return 0;
-}
-
-void sound_free_dmap(int dev, struct dma_buffparms *dmap, int chan)
-{
-	int sz, size, i;
-	unsigned long start_addr, end_addr;
-
-	if (dmap->raw_buf == NULL)
-		return;
-
-	if (dmap->mapping_flags & DMA_MAP_MAPPED)
-		return;		/* Don't free mmapped buffer. Will use it next time */
-
-	for (sz = 0, size = PAGE_SIZE; size < dmap->buffsize; sz++, size <<= 1);
-
-	start_addr = (unsigned long) dmap->raw_buf;
-	end_addr = start_addr + dmap->buffsize;
-
-	for (i = MAP_NR(start_addr); i <= MAP_NR(end_addr); i++)
-	{
-		clear_bit(PG_reserved, &mem_map[i].flags);;
-	}
-
-	free_pages((unsigned long) dmap->raw_buf, sz);
-	dmap->raw_buf = NULL;
-}
-
-
-/* Intel version !!!!!!!!! */
-
-int sound_start_dma(int dev, struct dma_buffparms *dmap, int chan,
-		unsigned long physaddr,
-		int count, int dma_mode, int autoinit)
-{
-	unsigned long   flags;
-
-	/* printk( "Start DMA%d %d, %d\n",  chan,  (int)(physaddr-dmap->raw_buf_phys),  count); */
-	if (autoinit)
-		dma_mode |= DMA_AUTOINIT;
-	save_flags(flags);
-	cli();
-	disable_dma(chan);
-	clear_dma_ff(chan);
-	set_dma_mode(chan, dma_mode);
-	set_dma_addr(chan, physaddr);
-	set_dma_count(chan, count);
-	enable_dma(chan);
-	restore_flags(flags);
-
-	return 0;
-}
-
-#endif
-
 void conf_printf(char *name, struct address_info *hw_config)
 {
 	if (!trace_init)
@@ -1258,4 +1092,3 @@ void sound_notifier_chain_register(struct notifier_block *bl)
 		ct++;
 	}
 }
-

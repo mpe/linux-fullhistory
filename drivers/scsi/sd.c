@@ -517,10 +517,10 @@ static void do_sd_request (void)
     int flag = 0;
 
     while (1==1){
-	spin_lock_irqsave(&current_lock, flags);
+	spin_lock_irqsave(&io_request_lock, flags);
 
 	if (CURRENT != NULL && CURRENT->rq_status == RQ_INACTIVE) {
-            spin_unlock_irqrestore(&current_lock, flags);
+            spin_unlock_irqrestore(&io_request_lock, flags);
 	    return;
 	}
 
@@ -535,7 +535,7 @@ static void do_sd_request (void)
          */
         if( SDev->host->in_recovery )
           {
-            spin_unlock_irqrestore(&current_lock, flags);
+            spin_unlock_irqrestore(&io_request_lock, flags);
             return;
           }
 
@@ -555,7 +555,7 @@ static void do_sd_request (void)
 	     */
 	    if( SDev->removable && !in_interrupt() )
 	    {
-                spin_unlock(&current_lock);
+                spin_unlock_irqrestore(&io_request_lock, flags);
                 scsi_ioctl(SDev, SCSI_IOCTL_DOORLOCK, 0);
 		/* scsi_ioctl may allow CURRENT to change, so start over. */
 		SDev->was_reset = 0;
@@ -587,7 +587,7 @@ static void do_sd_request (void)
 	 * Using a "sti()" gets rid of the latency problems but causes
 	 * race conditions and crashes.
 	 */
-        spin_unlock_irqrestore(&current_lock, flags);
+        spin_unlock_irqrestore(&io_request_lock, flags);
 
 	/* This is a performance enhancement. We dig down into the request
 	 * list and try to find a queueable request (i.e. device not busy,
@@ -605,7 +605,7 @@ static void do_sd_request (void)
 	if (!SCpnt && sd_template.nr_dev > 1){
 	    struct request *req1;
 	    req1 = NULL;
-	    spin_lock_irqsave(&current_lock, flags);
+	    spin_lock_irqsave(&io_request_lock, flags);
 	    req = CURRENT;
 	    while(req){
 		SCpnt = scsi_request_queueable(req,
@@ -620,7 +620,7 @@ static void do_sd_request (void)
 		else
 		    req1->next = req->next;
 	    }
-            spin_unlock_irqrestore(&current_lock, flags);
+            spin_unlock_irqrestore(&io_request_lock, flags);
 	}
 
 	if (!SCpnt) return; /* Could not find anything to do */

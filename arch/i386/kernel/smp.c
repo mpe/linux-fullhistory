@@ -878,8 +878,14 @@ __initfunc(static void do_boot_cpu(int i))
 			else
 				printk("Not responding.\n");
 		}
-	}
 	SMP_PRINTK(("CPU has booted.\n"));
+	}
+	else
+	{
+		__cpu_logical_map[cpucount] = -1;
+		cpu_number_map[i] = -1;
+		cpucount--;
+	}
 
 	swapper_pg_dir[0]=maincfg;
 	local_flush_tlb();
@@ -1031,9 +1037,11 @@ __initfunc(void smp_boot_cpus(void))
 		 *	Make sure we unmap all failed CPUs
 		 */
 		
-		if (cpu_number_map[i] == -1)
+		if (cpu_number_map[i] == -1 && (cpu_present_map & (1 << i))) {
+			printk("CPU #%d not responding. Removing from cpu_present_map.\n",i);
 			cpu_present_map &= ~(1 << i);
-	}
+                }
+        }
 
 	/*
 	 *	Cleanup possible dangling ends...

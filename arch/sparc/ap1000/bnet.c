@@ -8,7 +8,6 @@
 /* routines to control the AP1000 bif interface. This is the interface
    used to talk to the front end processor */
 
-#include <linux/config.h>
 #include <linux/sched.h>
 #include <asm/ap1000/apservice.h>
 #include <asm/ap1000/apreg.h>

@@ -22,7 +22,7 @@
 #include <linux/ultrasound.h>
 #include "gus_hw.h"
 
-#if defined(CONFIG_GUSHW) || defined(MODULE)
+#if defined(CONFIG_GUS) || defined(MODULE)
 
 #define GUS_BANK_SIZE (((iw_mode) ? 256*1024*1024 : 256*1024))
 
@@ -115,9 +115,6 @@ static int      gus_audio_bsize;
 static char     bounce_buf[8 * 1024];	/* Must match value set to max_fragment */
 
 static struct wait_queue *dram_sleeper = NULL;
-static volatile struct snd_wait dram_sleep_flag = {
-	0
-};
 
 /*
  * Variables and buffers for PCM output
@@ -1102,7 +1099,9 @@ static int guswave_ioctl(int dev, unsigned int cmd, caddr_t arg)
 	{
 		case SNDCTL_SYNTH_INFO:
 			gus_info.nr_voices = nr_voices;
-			return copy_to_user(arg, &gus_info, sizeof(gus_info));
+			if (copy_to_user(arg, &gus_info, sizeof(gus_info)))
+				return -EFAULT;
+			return 0;
 
 		case SNDCTL_SEQ_RESETSAMPLES:
 			reset_sample_memory();
@@ -1658,7 +1657,7 @@ static int guswave_open(int dev, int mode)
 	else
 		gus_no_dma = 0;
 
-	dram_sleep_flag.opts = WK_NONE;
+	init_waitqueue(&dram_sleeper);
 	gus_busy = 1;
 	active_device = GUS_DEV_WAVE;
 
@@ -1848,7 +1847,6 @@ static int guswave_load_patch(int dev, int format, const char *addr,
 			unsigned long address, hold_address;
 			unsigned char dma_command;
 			unsigned long flags;
-			unsigned long tlimit;
 
 			if (audio_devs[gus_devnum]->dmap_out->raw_buf == NULL)
 			{
@@ -1921,17 +1919,11 @@ static int guswave_load_patch(int dev, int format, const char *addr,
 			 */
 			active_device = GUS_DEV_WAVE;
 
-			current->timeout = tlimit = jiffies + HZ;
-			dram_sleep_flag.opts = WK_SLEEP;
+			current->timeout = jiffies + HZ;
 			interruptible_sleep_on(&dram_sleeper);
-			if (!(dram_sleep_flag.opts & WK_WAKEUP))
-			{
-				if (jiffies >= tlimit)
-					dram_sleep_flag.opts |= WK_TIMEOUT;
-			}
-			dram_sleep_flag.opts &= ~WK_SLEEP;
-			if ((dram_sleep_flag.opts & WK_TIMEOUT))
-				printk(KERN_WARNING "GUS: DMA Transfer timed out\n");
+			if (!current->timeout)
+				printk("GUS: DMA Transfer timed out\n");
+			current->timeout = 0;
 			restore_flags(flags);
 		}
 
@@ -3405,11 +3397,7 @@ void guswave_dma_irq(void)
 		switch (active_device)
 		{
 			case GUS_DEV_WAVE:
-				if ((dram_sleep_flag.opts & WK_SLEEP))
-				{
-					dram_sleep_flag.opts = WK_WAKEUP;
-					wake_up(&dram_sleeper);
-				}
+				wake_up(&dram_sleeper);
 				break;
 
 			case GUS_DEV_PCM_CONTINUE:	/* Left channel data transferred */

@@ -28,6 +28,7 @@
  *		2 of the License, or (at your option) any later version.
  */
 
+#include <linux/config.h> /* for CONFIG_DLCI_COUNT */
 #include <linux/module.h>
 
 #include <linux/kernel.h>

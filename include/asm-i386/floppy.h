@@ -60,7 +60,7 @@ static void floppy_hardint(int irq, void *dev_id, struct pt_regs * regs)
 	register unsigned char st;
 
 #undef TRACE_FLPY_INT
-#undef NO_FLOPPY_ASSEMBLER
+#define NO_FLOPPY_ASSEMBLER
 
 #ifdef TRACE_FLPY_INT
 	static int calls=0;
@@ -123,10 +123,10 @@ static void floppy_hardint(int irq, void *dev_id, struct pt_regs * regs)
 				outb_p(*lptr, virtual_dma_port+5);
 			else
 				*lptr = inb_p(virtual_dma_port+5);
-			st = inb(virtual_dma_port+4);
 		}
 		virtual_dma_count = lcount;
 		virtual_dma_addr = lptr;
+		st = inb(virtual_dma_port+4);
 	}
 #endif
 
@@ -223,7 +223,7 @@ static void _fd_chose_dma_mode(char *addr, unsigned long size)
 		   _CROSS_64KB(addr, size, 0))
 			use_virtual_dma = 1;
 		else
-			use_virtual_dma = 1;
+			use_virtual_dma = 0;
 	} else {
 		use_virtual_dma = can_use_virtual_dma & 1;
 	}

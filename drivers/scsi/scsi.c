@@ -51,6 +51,7 @@
 #include <asm/system.h>
 #include <asm/irq.h>
 #include <asm/dma.h>
+#include <asm/spinlock.h>
 
 #include "scsi.h"
 #include "hosts.h"
@@ -122,6 +123,8 @@ const unsigned char       scsi_command_size[8] = { 6, 10, 10, 12,
                                                    12, 12, 10, 10 };
 static unsigned long      serial_number = 0;
 static Scsi_Cmnd        * scsi_bh_queue_head = NULL;
+static Scsi_Cmnd	* scsi_bh_queue_tail = NULL;
+static spinlock_t	  scsi_bh_queue_spin = SPIN_LOCK_UNLOCKED;
 static FreeSectorBitmap * dma_malloc_freelist = NULL;
 static int                need_isa_bounce_buffers;
 static unsigned int       dma_sectors = 0;
@@ -1523,7 +1526,6 @@ void
 scsi_done (Scsi_Cmnd * SCpnt)
 {
   unsigned long      flags;
-  Scsi_Cmnd        * SCswap;
 
   /*
    * We don't have to worry about this one timing out any more.
@@ -1551,35 +1553,20 @@ scsi_done (Scsi_Cmnd * SCpnt)
    * If it was NULL before, then everything is fine, and we are done
    * (this is the normal case).  If it was not NULL, then we block interrupts,
    * and link them together.
+   * We need a spinlock here, or compare and exchange if we can reorder incoming
+   * Scsi_Cmnds, as it happens pretty often scsi_done is called multiple times
+   * before bh is serviced. -jj
    */
-  
-  SCswap = (Scsi_Cmnd *) xchg(&scsi_bh_queue_head, SCpnt);
-  if( SCswap != NULL )
-  {
-      /*
-       * If we assume that the interrupt handler doesn't dawdle, then it is safe to
-       * say that we should come in here extremely rarely.  Under very heavy load,
-       * the requests might not be removed from the list fast enough so that we
-       * *do* end up stacking them, and that would be bad.
-       */
-      save_flags(flags);
-      cli();
-      
-      /*
-       * See if the pointer is NULL - it might have been serviced already
-       */
-      if( scsi_bh_queue_head == NULL )
-      {
-          scsi_bh_queue_head = SCswap;
-      }
-      else
-      {
-          SCswap->bh_next = scsi_bh_queue_head;
-          scsi_bh_queue_head = SCswap;
-      }
-      
-      restore_flags(flags);
+
+  spin_lock_irqsave(&scsi_bh_queue_spin, flags);
+  if (!scsi_bh_queue_head) {
+  	scsi_bh_queue_head = SCpnt;
+  	scsi_bh_queue_tail = SCpnt;
+  } else {
+  	scsi_bh_queue_tail->bh_next = SCpnt;
+  	scsi_bh_queue_tail = SCpnt;
   }
+  spin_unlock_irqrestore(&scsi_bh_queue_spin, flags);
 
   /*
    * Mark the bottom half handler to be run.
@@ -1603,7 +1590,7 @@ void scsi_bottom_half_handler(void)
   Scsi_Cmnd        * SCpnt;
   Scsi_Cmnd        * SCnext;
   static atomic_t    recursion_depth;
-
+  unsigned long      flags;
   
   while(1==1)
   {
@@ -1622,15 +1609,17 @@ void scsi_bottom_half_handler(void)
       }
       
       /*
-       * This is an atomic operation - swap the pointer with a NULL pointer
+       * We need to hold the spinlock, so that nobody is tampering with the queue. -jj
        * We will process everything we find in the list here.
        */
-      SCpnt = xchg(&scsi_bh_queue_head, NULL);
+      
+      spin_lock_irqsave(&scsi_bh_queue_spin, flags);
+      SCpnt = scsi_bh_queue_head;
+      scsi_bh_queue_head = NULL;
+      spin_unlock_irqrestore(&scsi_bh_queue_spin, flags);
       
       if( SCpnt == NULL )
-      {
           return;
-      }
       
       atomic_inc(&recursion_depth);
       

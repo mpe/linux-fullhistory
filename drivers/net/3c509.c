@@ -34,7 +34,7 @@ static char *version = "3c509.c:1.07 6/15/95 becker@cesdis.gsfc.nasa.gov\n";
 
 #include <linux/module.h>
 
-#include <linux/config.h>
+#include <linux/config.h>	/* for CONFIG_MCA */
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -47,7 +47,6 @@ static char *version = "3c509.c:1.07 6/15/95 becker@cesdis.gsfc.nasa.gov\n";
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
-#include <linux/config.h>	/* for CONFIG_MCA */
 #include <linux/delay.h>	/* for udelay() */
 #include <linux/init.h>
 
@@ -864,11 +863,11 @@ cleanup_module(void)
 	for (this_dev = 0; this_dev < MAX_3C_CARDS; this_dev++) {
 		struct device *dev = &dev_3c509[this_dev];
 		if (dev->priv != NULL) {
+			unregister_netdev(dev);
 			kfree_s(dev->priv,sizeof(struct el3_private));
 			dev->priv = NULL;
 			free_irq(dev->irq, dev);
 			release_region(dev->base_addr, EL3_IO_EXTENT);
-			unregister_netdev(dev);
 		}
 	}
 }
