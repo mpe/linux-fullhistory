@@ -482,6 +482,7 @@ S:      Supported
 IDE DRIVER [GENERAL]
 P:	Andre Hedrick
 M:	andre@linux-ide.org
+M:	ahedrick@atipa.com
 M:	andre@suse.com
 L:	linux-kernel@vger.rutgers.edu
 W:	http://www.kernel.org/pub/linux/kernel/people/hedrick/

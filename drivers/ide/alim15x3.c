@@ -333,6 +333,7 @@ static int ali15x3_tune_chipset (ide_drive_t *drive, byte speed)
 
 	err = ide_config_drive_speed(drive, speed);
 
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	if (speed >= XFER_SW_DMA_0) {
 		unsigned long dma_base = hwif->dma_base;
 
@@ -353,6 +354,9 @@ static int ali15x3_tune_chipset (ide_drive_t *drive, byte speed)
 			pci_write_config_byte(dev, 0x4b, tmpbyte);
 		}
 	}
+#endif /* CONFIG_BLK_DEV_IDEDMA */
+
+	drive->current_speed = speed;
 
 	return (err);
 }
@@ -398,6 +402,9 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra33)
 	}
 
 	(void) ali15x3_tune_chipset(drive, speed);
+
+	if (!drive->init_speed)
+		drive->init_speed = speed;
 
 	rval = (int)(	((id->dma_ultra >> 11) & 3) ? ide_dma_on :
 			((id->dma_ultra >> 8) & 7) ? ide_dma_on :
@@ -629,7 +636,7 @@ unsigned int __init ata66_ali15x3 (ide_hwif_t *hwif)
 	 * has 80-pin (from host view)
 	 */
 	pci_read_config_byte(dev, 0x4a, &tmpbyte);
-	ata66 = (!(tmpbyte & ata66mask)) ? 0 : 1;
+	ata66 = (!(tmpbyte & ata66mask)) ? 1 : 0;
 	__restore_flags(flags);
 
 	return(ata66);
@@ -673,6 +680,7 @@ void __init ide_init_ali15x3 (ide_hwif_t *hwif)
 	hwif->tuneproc = &ali15x3_tune_drive;
 	hwif->drives[0].autotune = 1;
 	hwif->drives[1].autotune = 1;
+	hwif->speedproc = &ali15x3_tune_chipset;
 #ifndef CONFIG_BLK_DEV_IDEDMA
 	hwif->autodma = 0;
 	return;

@@ -17,6 +17,7 @@
 #include <asm/prom.h>
 #include <asm/gg2.h>
 #include <asm/machdep.h>
+#include <asm/init.h>
 
 #include "pci.h"
 
@@ -31,7 +32,7 @@ volatile struct Hydra *Hydra = NULL;
  * limit the bus number to 3 bits
  */
 
-int gg2_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
+int __chrp gg2_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
 				 unsigned char offset, unsigned char *val)
 {
 	if (bus > 7) {
@@ -42,7 +43,7 @@ int gg2_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int gg2_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
+int __chrp gg2_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
 				 unsigned char offset, unsigned short *val)
 {
 	if (bus > 7) {
@@ -54,7 +55,7 @@ int gg2_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
 }
 
 
-int gg2_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
+int __chrp gg2_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
 				  unsigned char offset, unsigned int *val)
 {
 	if (bus > 7) {
@@ -65,7 +66,7 @@ int gg2_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int gg2_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
+int __chrp gg2_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
 				  unsigned char offset, unsigned char val)
 {
 	if (bus > 7)
@@ -74,7 +75,7 @@ int gg2_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int gg2_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
+int __chrp gg2_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
 				  unsigned char offset, unsigned short val)
 {
 	if (bus > 7)
@@ -83,7 +84,7 @@ int gg2_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int gg2_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
+int __chrp gg2_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
 				   unsigned char offset, unsigned int val)
 {
 	if (bus > 7)
@@ -98,7 +99,7 @@ int gg2_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
 				 | (((o) & ~3) << 24))
 unsigned int python_busnr = 0;
 
-int python_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
+int __chrp python_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
 				    unsigned char offset, unsigned char *val)
 {
 	if (bus > python_busnr) {
@@ -110,7 +111,7 @@ int python_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int python_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
+int __chrp python_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
 				    unsigned char offset, unsigned short *val)
 {
 	if (bus > python_busnr) {
@@ -123,7 +124,7 @@ int python_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
 }
 
 
-int python_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
+int __chrp python_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
 				     unsigned char offset, unsigned int *val)
 {
 	if (bus > python_busnr) {
@@ -135,7 +136,7 @@ int python_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int python_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
+int __chrp python_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
 				     unsigned char offset, unsigned char val)
 {
 	if (bus > python_busnr)
@@ -145,7 +146,7 @@ int python_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int python_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
+int __chrp python_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
 				     unsigned char offset, unsigned short val)
 {
 	if (bus > python_busnr)
@@ -156,7 +157,7 @@ int python_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int python_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
+int __chrp python_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
 				      unsigned char offset, unsigned int val)
 {
 	if (bus > python_busnr)
@@ -167,7 +168,7 @@ int python_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
 }
 
 
-int rtas_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
+int __chrp rtas_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
 				    unsigned char offset, unsigned char *val)
 {
 	unsigned long addr = (offset&0xff) | ((dev_fn&0xff)<<8) | ((bus & 0xff)<<16);
@@ -176,7 +177,7 @@ int rtas_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int rtas_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
+int __chrp rtas_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
 				    unsigned char offset, unsigned short *val)
 {
 	unsigned long addr = (offset&0xff) | ((dev_fn&0xff)<<8) | ((bus & 0xff)<<16);
@@ -186,7 +187,7 @@ int rtas_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
 }
 
 
-int rtas_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
+int __chrp rtas_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
 				     unsigned char offset, unsigned int *val)
 {
 	unsigned long addr = (offset&0xff) | ((dev_fn&0xff)<<8) | ((bus & 0xff)<<16);
@@ -195,7 +196,7 @@ int rtas_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int rtas_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
+int __chrp rtas_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
 				     unsigned char offset, unsigned char val)
 {
 	unsigned long addr = (offset&0xff) | ((dev_fn&0xff)<<8) | ((bus & 0xff)<<16);
@@ -204,7 +205,7 @@ int rtas_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int rtas_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
+int __chrp rtas_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
 				     unsigned char offset, unsigned short val)
 {
 	unsigned long addr = (offset&0xff) | ((dev_fn&0xff)<<8) | ((bus & 0xff)<<16);
@@ -213,7 +214,7 @@ int rtas_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int rtas_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
+int __chrp rtas_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
 				      unsigned char offset, unsigned int val)
 {
 	unsigned long addr = (offset&0xff) | ((dev_fn&0xff)<<8) | ((bus & 0xff)<<16);

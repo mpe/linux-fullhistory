@@ -54,11 +54,4 @@ struct nfs_mount_data {
 #define NFS_MOUNT_NONLM		0x0200	/* 3 */
 #define NFS_MOUNT_FLAGMASK	0xFFFF
 
-/*
- * Private flags - not to be set by mount program
- */
-#ifdef __KERNEL__
-#define NFS_NONMONOTONE_COOKIES	0x00010000
-#endif /* __KERNEL__ */
- 
 #endif

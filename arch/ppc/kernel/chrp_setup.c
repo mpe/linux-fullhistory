@@ -49,6 +49,7 @@
 #include <asm/irq.h>
 #include <asm/hydra.h>
 #include <asm/keyboard.h>
+#include <asm/init.h>
 
 #include "time.h"
 #include "local_irq.h"
@@ -112,7 +113,7 @@ static const char *gg2_cachemodes[4] = {
 	"Disabled", "Write-Through", "Copy-Back", "Transparent Mode"
 };
 
-int
+int __chrp
 chrp_get_cpuinfo(char *buffer)
 {
 	int i, len, sdramen;
@@ -306,7 +307,7 @@ chrp_setup_arch(void)
 	}
 }
 
-void
+void __chrp
 chrp_event_scan(void)
 {
 	unsigned char log[1024];
@@ -317,7 +318,7 @@ chrp_event_scan(void)
 	ppc_md.heartbeat_count = ppc_md.heartbeat_reset;
 }
 	
-void
+void __chrp
 chrp_restart(char *cmd)
 {
 	printk("RTAS system-reboot returned %d\n",
@@ -325,7 +326,7 @@ chrp_restart(char *cmd)
 	for (;;);
 }
 
-void
+void __chrp
 chrp_power_off(void)
 {
 	/* allow power on only with power button press */
@@ -334,13 +335,13 @@ chrp_power_off(void)
 	for (;;);
 }
 
-void
+void __chrp
 chrp_halt(void)
 {
 	chrp_power_off();
 }
 
-u_int
+u_int __chrp
 chrp_irq_cannonicalize(u_int irq)
 {
 	if (irq == 2)
@@ -353,7 +354,7 @@ chrp_irq_cannonicalize(u_int irq)
 	}
 }
 
-int chrp_get_irq( struct pt_regs *regs )
+int __chrp chrp_get_irq( struct pt_regs *regs )
 {
         int irq;
 
@@ -383,7 +384,7 @@ int chrp_get_irq( struct pt_regs *regs )
 	return irq;
 }
 
-void chrp_post_irq(struct pt_regs* regs, int irq)
+void __chrp chrp_post_irq(struct pt_regs* regs, int irq)
 {
 	/*
 	 * If it's an i8259 irq then we've already done the
@@ -445,7 +446,7 @@ int chrp_ide_ports_known = 0;
 ide_ioreg_t chrp_ide_regbase[MAX_HWIFS];
 ide_ioreg_t chrp_idedma_regbase;
 
-void
+void __chrp
 chrp_ide_probe(void)
 {
         struct pci_dev *pdev = pci_find_device(PCI_VENDOR_ID_WINBOND, PCI_DEVICE_ID_WINBOND_82C105, NULL);
@@ -460,19 +461,19 @@ chrp_ide_probe(void)
         }
 }
 
-void
+void __chrp
 chrp_ide_insw(ide_ioreg_t port, void *buf, int ns)
 {
 	ide_insw(port+_IO_BASE, buf, ns);
 }
 
-void
+void __chrp
 chrp_ide_outsw(ide_ioreg_t port, void *buf, int ns)
 {
 	ide_outsw(port+_IO_BASE, buf, ns);
 }
 
-int
+int __chrp
 chrp_ide_default_irq(ide_ioreg_t base)
 {
         if (chrp_ide_ports_known == 0)
@@ -480,7 +481,7 @@ chrp_ide_default_irq(ide_ioreg_t base)
 	return chrp_ide_irq;
 }
 
-ide_ioreg_t
+ide_ioreg_t __chrp
 chrp_ide_default_io_base(int index)
 {
         if (chrp_ide_ports_known == 0)
@@ -488,13 +489,13 @@ chrp_ide_default_io_base(int index)
 	return chrp_ide_regbase[index];
 }
 
-int
+int __chrp
 chrp_ide_check_region(ide_ioreg_t from, unsigned int extent)
 {
         return check_region(from, extent);
 }
 
-void
+void __chrp
 chrp_ide_request_region(ide_ioreg_t from,
 			unsigned int extent,
 			const char *name)
@@ -502,20 +503,20 @@ chrp_ide_request_region(ide_ioreg_t from,
         request_region(from, extent, name);
 }
 
-void
+void __chrp
 chrp_ide_release_region(ide_ioreg_t from,
 			unsigned int extent)
 {
         release_region(from, extent);
 }
 
-void
+void __chrp
 chrp_ide_fix_driveid(struct hd_driveid *id)
 {
         ppc_generic_ide_fix_driveid(id);
 }
 
-void
+void __chrp
 chrp_ide_init_hwif_ports(hw_regs_t *hw, ide_ioreg_t data_port, ide_ioreg_t ctrl_port, int *irq)
 {
 	ide_ioreg_t reg = data_port;
@@ -629,7 +630,7 @@ void __init
 	if ( ppc_md.progress ) ppc_md.progress("Linux/PPC "UTS_RELEASE"\n", 0x0);
 }
 
-void
+void __chrp
 chrp_progress(char *s, unsigned short hex)
 {
 	extern unsigned int rtas_data;

@@ -233,10 +233,20 @@ nlmclnt_call(struct nlm_rqst *req, u32 proc)
 	struct rpc_clnt	*clnt;
 	struct nlm_args	*argp = &req->a_args;
 	struct nlm_res	*resp = &req->a_res;
+	struct file	*filp = argp->lock.fl.fl_file;
+	struct rpc_message msg;
 	int		status;
 
 	dprintk("lockd: call procedure %s on %s\n",
 			nlm_procname(proc), host->h_name);
+
+	msg.rpc_proc = proc;
+	msg.rpc_argp = argp;
+	msg.rpc_resp = resp;
+	if (filp)
+		msg.rpc_cred = nfs_file_cred(filp);
+	else
+		msg.rpc_cred = NULL;
 
 	do {
 		if (host->h_reclaiming && !argp->reclaim) {
@@ -249,7 +259,7 @@ nlmclnt_call(struct nlm_rqst *req, u32 proc)
 			return -ENOLCK;
 
 		/* Perform the RPC call. If an error occurs, try again */
-		if ((status = rpc_call(clnt, proc, argp, resp, 0)) < 0) {
+		if ((status = rpc_call_sync(clnt, &msg, 0)) < 0) {
 			dprintk("lockd: rpc_call returned error %d\n", -status);
 			switch (status) {
 			case -EPROTONOSUPPORT:
@@ -330,11 +340,31 @@ int
 nlmclnt_async_call(struct nlm_rqst *req, u32 proc, rpc_action callback)
 {
 	struct nlm_host	*host = req->a_host;
-	int status;
+	struct rpc_clnt	*clnt;
+	struct nlm_args	*argp = &req->a_args;
+	struct nlm_res	*resp = &req->a_res;
+	struct file	*file = argp->lock.fl.fl_file;
+	struct rpc_message msg;
+	int		status;
 
+	dprintk("lockd: call procedure %s on %s (async)\n",
+			nlm_procname(proc), host->h_name);
+
+	/* If we have no RPC client yet, create one. */
+	if ((clnt = nlm_bind_host(host)) == NULL)
+		return -ENOLCK;
+
+        /* bootstrap and kick off the async RPC call */
+	msg.rpc_proc = proc;
+	msg.rpc_argp = argp;
+	msg.rpc_resp =resp;
+	if (file)
+		msg.rpc_cred = nfs_file_cred(file);
+	else
+		msg.rpc_cred = NULL;
 	/* Increment host refcount */
 	nlm_get_host(host);
-	status = nlmsvc_async_call(req, proc, callback);
+        status = rpc_call_async(clnt, &msg, RPC_TASK_ASYNC, callback, req);
 	if (status < 0)
 		nlm_release_host(host);
 	return status;

@@ -3,7 +3,7 @@
 # Makefile for the Acorn ethercard network device drivers
 #
 
-L_TARGET := acorn-net.a
+O_TARGET := acorn-net.o
 MOD_LIST_NAME := ACORN_NET_MODULES
 
 obj-y	:=
@@ -11,11 +11,11 @@ obj-m	:=
 obj-n	:=
 obj-	:=
 
-obj-$(CONFIG_ARM_ETHER1)	+= ether1.o
-obj-$(CONFIG_ARM_ETHER3)	+= ether3.o
 obj-$(CONFIG_ARM_ETHERH)	+= etherh.o
+obj-$(CONFIG_ARM_ETHER3)	+= ether3.o
+obj-$(CONFIG_ARM_ETHER1)	+= ether1.o
 
-L_OBJS	:= $(obj-y)
+O_OBJS	:= $(obj-y)
 M_OBJS	:= $(obj-m)
 
 include $(TOPDIR)/Rules.make

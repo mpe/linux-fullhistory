@@ -232,7 +232,8 @@ else
   endif
 endif
 
-obj-$(CONFIG_VIDEO_BT848) += bttv.o msp3400.o tda8425.o tda985x.o tea6300.o
+obj-$(CONFIG_VIDEO_BT848) += bttv.o msp3400.o \
+	tda7432.o tda8425.o tda985x.o tda9875.o tea6300.o tea6420.o
 ifeq ($(CONFIG_VIDEO_BT848),y)
 L_TUNERS=y
 else

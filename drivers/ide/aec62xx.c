@@ -176,6 +176,7 @@ struct chipset_bus_clock_list_entry {
 };
 
 struct chipset_bus_clock_list_entry aec62xx_base [] = {
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	{	XFER_UDMA_4,	0x41,	0x04,	0x31,	0x05	},
 	{	XFER_UDMA_3,	0x41,	0x03,	0x31,	0x04	},
 	{	XFER_UDMA_2,	0x41,	0x02,	0x31,	0x03	},
@@ -185,7 +186,7 @@ struct chipset_bus_clock_list_entry aec62xx_base [] = {
 	{	XFER_MW_DMA_2,	0x41,	0x00,	0x31,	0x00	},
 	{	XFER_MW_DMA_1,	0x42,	0x00,	0x31,	0x00	},
 	{	XFER_MW_DMA_0,	0x7a,	0x00,	0x0a,	0x00	},
-
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 	{	XFER_PIO_4,	0x41,	0x00,	0x31,	0x00	},
 	{	XFER_PIO_3,	0x43,	0x00,	0x33,	0x00	},
 	{	XFER_PIO_2,	0x78,	0x00,	0x08,	0x00	},
@@ -202,18 +203,22 @@ extern char *ide_xfer_verbose (byte xfer_rate);
 
 static byte pci_bus_clock_list (byte speed, struct chipset_bus_clock_list_entry * chipset_table)
 {
+	int bus_speed = system_bus_clock();
+
 	for ( ; chipset_table->xfer_speed ; chipset_table++)
 		if (chipset_table->xfer_speed == speed) {
-			return ((byte) ((1) ? chipset_table->chipset_settings_33 : chipset_table->chipset_settings_34));
+			return ((byte) ((bus_speed <= 33) ? chipset_table->chipset_settings_33 : chipset_table->chipset_settings_34));
 		}
 	return 0x00;
 }
 
 static byte pci_bus_clock_list_ultra (byte speed, struct chipset_bus_clock_list_entry * chipset_table)
 {
+	int bus_speed = system_bus_clock();
+
 	for ( ; chipset_table->xfer_speed ; chipset_table++)
 		if (chipset_table->xfer_speed == speed) {
-			return ((byte) ((1) ? chipset_table->ultra_settings_33 : chipset_table->ultra_settings_34));
+			return ((byte) ((bus_speed <= 33) ? chipset_table->ultra_settings_33 : chipset_table->ultra_settings_34));
 		}
 	return 0x00;
 }
@@ -222,8 +227,6 @@ static int aec6210_tune_chipset (ide_drive_t *drive, byte speed)
 {
 	ide_hwif_t *hwif	= HWIF(drive);
 	struct pci_dev *dev	= hwif->pci_dev;
-	byte unit		= (drive->select.b.unit & 0x01);
-	int drive_number	= ((hwif->channel ? 2 : 0) + unit);
 	int err			= 0;
 	unsigned short d_conf	= 0x0000;
 	byte ultra		= 0x00;
@@ -236,18 +239,18 @@ static int aec6210_tune_chipset (ide_drive_t *drive, byte speed)
 	__save_flags(flags);	/* local CPU only */
 	__cli();		/* local CPU only */
 
-	pci_read_config_word(dev, 0x40|(2*drive_number), &d_conf);
+	pci_read_config_word(dev, 0x40|(2*drive->dn), &d_conf);
 	tmp0 = pci_bus_clock_list(speed, aec62xx_base);
 	SPLIT_BYTE(tmp0,tmp1,tmp2);
 	MAKE_WORD(d_conf,tmp1,tmp2);
-	pci_write_config_word(dev, 0x40|(2*drive_number), d_conf);
+	pci_write_config_word(dev, 0x40|(2*drive->dn), d_conf);
 
 	tmp1 = 0x00;
 	tmp2 = 0x00;
 	pci_read_config_byte(dev, 0x54, &ultra);
-	tmp1 = ((0x00 << (2*drive_number)) | (ultra & ~(3 << (2*drive_number))));
+	tmp1 = ((0x00 << (2*drive->dn)) | (ultra & ~(3 << (2*drive->dn))));
 	ultra_conf = pci_bus_clock_list_ultra(speed, aec62xx_base);
-	tmp2 = ((ultra_conf << (2*drive_number)) | (tmp1 & ~(3 << (2*drive_number))));
+	tmp2 = ((ultra_conf << (2*drive->dn)) | (tmp1 & ~(3 << (2*drive->dn))));
 	pci_write_config_byte(dev, 0x54, tmp2);
 
 	__restore_flags(flags);	/* local CPU only */
@@ -261,7 +264,6 @@ static int aec6260_tune_chipset (ide_drive_t *drive, byte speed)
 	ide_hwif_t *hwif	= HWIF(drive);
 	struct pci_dev *dev	= hwif->pci_dev;
 	byte unit		= (drive->select.b.unit & 0x01);
-	int drive_number	= ((hwif->channel ? 2 : 0) + unit);
 	byte ultra_pci		= hwif->channel ? 0x45 : 0x44;
 	int err			= 0;
 	byte drive_conf		= 0x00;
@@ -269,15 +271,14 @@ static int aec6260_tune_chipset (ide_drive_t *drive, byte speed)
 	byte ultra		= 0x00;
 	byte tmp1		= 0x00;
 	byte tmp2		= 0x00;
-
 	unsigned long flags;
 
 	__save_flags(flags);	/* local CPU only */
 	__cli();		/* local CPU only */
 
-	pci_read_config_byte(dev, 0x40|drive_number, &drive_conf);
+	pci_read_config_byte(dev, 0x40|drive->dn, &drive_conf);
 	drive_conf = pci_bus_clock_list(speed, aec62xx_base);
-	pci_write_config_byte(dev, 0x40|drive_number, drive_conf);
+	pci_write_config_byte(dev, 0x40|drive->dn, drive_conf);
 
 	pci_read_config_byte(dev, ultra_pci, &ultra);
 	tmp1 = ((0x00 << (4*unit)) | (ultra & ~(7 << (4*unit))));
@@ -286,8 +287,22 @@ static int aec6260_tune_chipset (ide_drive_t *drive, byte speed)
 	pci_write_config_byte(dev, ultra_pci, tmp2);
 	__restore_flags(flags);	/* local CPU only */
 
+	if (!drive->init_speed)
+		drive->init_speed = speed;
+
 	err = ide_config_drive_speed(drive, speed);
+	drive->current_speed = speed;
 	return(err);
+}
+
+
+static int aec62xx_tune_chipset (ide_drive_t *drive, byte speed)
+{
+	if (HWIF(drive)->pci_dev->device == PCI_DEVICE_ID_ARTOP_ATP850UF) {
+		return ((int) aec6210_tune_chipset(drive, speed));
+	} else {
+		return ((int) aec6260_tune_chipset(drive, speed));
+	}
 }
 
 #ifdef CONFIG_BLK_DEV_IDEDMA
@@ -524,7 +539,7 @@ void __init ide_init_aec62xx (ide_hwif_t *hwif)
 {
 #ifdef CONFIG_AEC62XX_TUNING
 	hwif->tuneproc = &aec62xx_tune_drive;
-
+	hwif->speedproc = &aec62xx_tune_chipset;
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	if (hwif->dma_base)
 		hwif->dmaproc = &aec62xx_dmaproc;

@@ -25,6 +25,7 @@
 #include <asm/processor.h>
 #include <asm/nvram.h>
 #include <asm/prom.h>
+#include <asm/init.h>
 #include "time.h"
 
 static int nvram_as1 = NVRAM_AS1;
@@ -45,7 +46,7 @@ void __init chrp_time_init(void)
 	nvram_data = base + 1;
 }
 
-int chrp_cmos_clock_read(int addr)
+int __chrp chrp_cmos_clock_read(int addr)
 {
 	if (nvram_as1 != 0)
 		outb(addr>>8, nvram_as1);
@@ -53,7 +54,7 @@ int chrp_cmos_clock_read(int addr)
 	return (inb(nvram_data));
 }
 
-void chrp_cmos_clock_write(unsigned long val, int addr)
+void __chrp chrp_cmos_clock_write(unsigned long val, int addr)
 {
 	if (nvram_as1 != 0)
 		outb(addr>>8, nvram_as1);
@@ -65,7 +66,7 @@ void chrp_cmos_clock_write(unsigned long val, int addr)
 /*
  * Set the hardware clock. -- Cort
  */
-int chrp_set_rtc_time(unsigned long nowtime)
+int __chrp chrp_set_rtc_time(unsigned long nowtime)
 {
 	unsigned char save_control, save_freq_select;
 	struct rtc_time tm;
@@ -111,7 +112,7 @@ int chrp_set_rtc_time(unsigned long nowtime)
 	return 0;
 }
 
-unsigned long chrp_get_rtc_time(void)
+unsigned long __chrp chrp_get_rtc_time(void)
 {
 	unsigned int year, mon, day, hour, min, sec;
 	int i;

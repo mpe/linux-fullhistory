@@ -19,6 +19,7 @@
 #include <linux/errno.h>
 #include <linux/hdreg.h>
 #include <linux/ide.h>
+#include <linux/pci.h>
 #include <linux/init.h>
 
 #include <asm/dma.h>
@@ -219,60 +220,87 @@ static iftype_t icside_identifyif (struct expansion_card *ec)
  * here, but we rely on the main IDE driver spotting that both
  * interfaces use the same IRQ, which should guarantee this.
  */
-#define TABLE_SIZE 2048
+#define NR_ENTRIES 256
+#define TABLE_SIZE (NR_ENTRIES * 8)
+
+static int ide_build_sglist(ide_hwif_t *hwif, struct request *rq)
+{
+	struct buffer_head *bh;
+	struct scatterlist *sg = hwif->sg_table;
+	int nents = 0;
+
+	if (rq->cmd == READ)
+		hwif->sg_dma_direction = PCI_DMA_FROMDEVICE;
+	else
+		hwif->sg_dma_direction = PCI_DMA_TODEVICE;
+	bh = rq->bh;
+	do {
+		unsigned char *virt_addr = bh->b_data;
+		unsigned int size = bh->b_size;
+
+		while ((bh = bh->b_reqnext) != NULL) {
+			if ((virt_addr + size) != (unsigned char *)bh->b_data)
+				break;
+			size += bh->b_size;
+		}
+		memset(&sg[nents], 0, sizeof(*sg));
+		sg[nents].address = virt_addr;
+		sg[nents].length = size;
+		nents++;
+	} while (bh != NULL);
+
+	return pci_map_sg(NULL, sg, nents, hwif->sg_dma_direction);
+}
 
 static int
 icside_build_dmatable(ide_drive_t *drive, int reading)
 {
-	struct request *rq = HWGROUP(drive)->rq;
-	struct buffer_head *bh = rq->bh;
-	unsigned long addr, size;
-	unsigned char *virt_addr;
+	dmasg_t *ide_sg = (dmasg_t *)HWIF(drive)->dmatable_cpu;
 	unsigned int count = 0;
-	dmasg_t *sg = (dmasg_t *)HWIF(drive)->dmatable_cpu;
+	int i;
+	struct scatterlist *sg;
 
-	do {
-		if (bh == NULL) {
-			/* paging requests have (rq->bh == NULL) */
-			virt_addr = rq->buffer;
-			addr = virt_to_bus (virt_addr);
-			size = rq->nr_sectors << 9;
+	HWIF(drive)->sg_nents = i = ide_build_sglist(HWIF(drive), HWGROUP(drive)->rq);
+
+	sg = HWIF(drive)->sg_table;
+	while (i && sg_dma_len(sg)) {
+		u32 cur_addr;
+		u32 cur_len;
+
+		cur_addr = sg_dma_address(sg);
+		cur_len  = sg_dma_len(sg);
+
+		if (count >= (TABLE_SIZE / sizeof(dmasg_t))) {
+			printk("%s: DMA table too small\n",
+				drive->name);
+			pci_unmap_sg(NULL,
+				     HWIF(drive)->sg_table,
+				     HWIF(drive)->sg_nents,
+				     HWIF(drive)->sg_dma_direction);
+			return 0;
 		} else {
-			/* group sequential buffers into one large buffer */
-			virt_addr = bh->b_data;
-			addr = virt_to_bus (virt_addr);
-			size = bh->b_size;
-			while ((bh = bh->b_reqnext) != NULL) {
-				if ((addr + size) != virt_to_bus (bh->b_data))
-					break;
-				size += bh->b_size;
-			}
+			ide_sg[count].address = cur_addr;
+			ide_sg[count].length  = cur_len;
 		}
 
-		if (addr & 3) {
-			printk("%s: misaligned DMA buffer\n", drive->name);
-			return 0;
-		}
-
-		if (size) {
-			if (reading)
-				dma_cache_inv((unsigned int)virt_addr, size);
-			else
-				dma_cache_wback((unsigned int)virt_addr, size);
-		}
-
-		sg[count].address = addr;
-		sg[count].length = size;
-		if (++count >= (TABLE_SIZE / sizeof(dmasg_t))) {
-			printk("%s: DMA table too small\n", drive->name);
-			return 0;
-		}
-	} while (bh != NULL);
+		count++;
+		sg++;
+		i--;
+	}
 
 	if (!count)
 		printk("%s: empty DMA table?\n", drive->name);
 
 	return count;
+}
+
+/* Teardown mappings after DMA has completed.  */
+static void icside_destroy_dmatable(ide_drive_t *drive)
+{
+	struct scatterlist *sg = HWIF(drive)->sg_table;
+	int nents = HWIF(drive)->sg_nents;
+
+	pci_unmap_sg(NULL, sg, nents, HWIF(drive)->sg_dma_direction);
 }
 
 static int
@@ -303,6 +331,9 @@ icside_config_if(ide_drive_t *drive, int xfer_mode)
 		break;
 	}
 
+	if (!drive->init_speed)
+		drive->init_speed = (byte) xfer_mode;
+
 	if (drive->drive_data &&
 	    ide_config_drive_speed(drive, (byte) xfer_mode) == 0)
 		func = ide_dma_on;
@@ -312,7 +343,15 @@ icside_config_if(ide_drive_t *drive, int xfer_mode)
 	printk("%s: %s selected (peak %dMB/s)\n", drive->name,
 		ide_xfer_verbose(xfer_mode), 2000 / drive->drive_data);
 
+	drive->current_speed = (byte) xfer_mode;
+
 	return func;
+}
+
+static int
+icside_set_speed(ide_drive_t *drive, byte speed)
+{
+	return ((int) icside_config_if(drive, (int) speed));
 }
 
 static int
@@ -415,6 +454,7 @@ icside_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 	case ide_dma_end:
 		drive->waiting_for_dma = 0;
 		disable_dma(hwif->hw.dma);
+		icside_destroy_dmatable(drive);
 		return get_dma_residue(hwif->hw.dma) != 0;
 
 	case ide_dma_test_irq:
@@ -425,8 +465,7 @@ icside_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 	}
 }
 
-static unsigned long
-icside_alloc_dmatable(void)
+static void *icside_alloc_dmatable(void)
 {
 	static unsigned long dmatable;
 	static unsigned int leftover;
@@ -448,28 +487,39 @@ icside_alloc_dmatable(void)
 		leftover -= TABLE_SIZE;
 	}
 
-	return table;
+	return (void *)table;
 }
 
 static int
 icside_setup_dma(ide_hwif_t *hwif, int autodma)
 {
-	unsigned long table = icside_alloc_dmatable();
-
 	printk("    %s: SG-DMA", hwif->name);
 
-	if (!table)
-		printk(" -- ERROR, unable to allocate DMA table\n");
-	else {
-		hwif->dmatable_cpu = (void *)table;
-		hwif->dmaproc = icside_dmaproc;
-		hwif->autodma = autodma;
+	hwif->sg_table = kmalloc(sizeof(struct scatterlist) * NR_ENTRIES,
+				 GFP_KERNEL);
+	if (!hwif->sg_table)
+		goto failed;
 
-		printk(" capable%s\n", autodma ?
-			", auto-enable" : "");
+	hwif->dmatable_cpu = icside_alloc_dmatable();
+
+	if (!hwif->dmatable_cpu) {
+		kfree(hwif->sg_table);
+		hwif->sg_table = NULL;
+		goto failed;
 	}
 
-	return hwif->dmatable_cpu != NULL;
+	hwif->dmaproc = &icside_dmaproc;
+	hwif->autodma = autodma;
+	hwif->speedproc = &icside_set_speed;
+
+	printk(" capable%s\n", autodma ?
+		", auto-enable" : "");
+
+	return 1;
+
+failed:
+	printk(" -- ERROR, unable to allocate DMA table\n");
+	return 0;
 }
 #endif
 

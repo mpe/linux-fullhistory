@@ -3,6 +3,7 @@
  * Copytight (C) 1999 Ralf Baechle (ralf@gnu.org)
  * Copytight (C) 1999 Silicon Graphics, Inc.
  */
+#include <linux/config.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>

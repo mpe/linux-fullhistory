@@ -3,6 +3,7 @@
  *
  * Integraphics Cyber2000 frame buffer device
  */
+#include <linux/config.h>
 
 #define cyber2000_outb(dat,reg)	writeb(dat, CyberRegs + reg)
 #define cyber2000_outw(dat,reg)	writew(dat, CyberRegs + reg)

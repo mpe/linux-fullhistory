@@ -18,6 +18,9 @@ db2ps db2pdf:
 	 (echo "*** You need to install DocBook stylesheets ***"; \
 	  exit 1)
 
+%.eps: %.fig
+	-fig2dev -Leps $< $@
+
 $(TOPDIR)/scripts/docproc:
 	$(MAKE) -C $(TOPDIR)/scripts docproc
 
@@ -67,12 +70,15 @@ TEX	:=	$(patsubst %.sgml, %.tex, $(BOOKS))
 LOG	:=	$(patsubst %.sgml, %.log, $(BOOKS))
 
 clean:
-	$(RM) core *~
-	$(RM) $(BOOKS)
-	$(RM) $(DVI) $(AUX) $(TEX) $(LOG)
+	-$(RM) core *~
+	-$(RM) $(BOOKS)
+	-$(RM) $(DVI) $(AUX) $(TEX) $(LOG)
+	-$(RM) parport-share.eps parport-multi.eps parport-structure.eps
 
 mrproper: clean
-	$(RM) $(PS) $(PDF)
+	-$(RM) $(PS) $(PDF)
+
+parportbook.ps: parport-share.eps parport-multi.eps parport-structure.eps
 
 %.ps : %.sgml db2ps
 	db2ps $<

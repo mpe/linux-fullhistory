@@ -3,6 +3,7 @@
 
 #include <linux/sched.h>
 #include <linux/mm.h>
+#include <linux/spinlock.h>
 
 #include <asm/pgtable.h>
 
@@ -24,6 +25,11 @@ long vread(char *buf, char *addr, unsigned long count);
 void vmfree_area_pages(unsigned long address, unsigned long size);
 int vmalloc_area_pages(unsigned long address, unsigned long size);
 
+/* vmlist_lock is a read-write spinlock that protects vmlist 
+ * Used in mm/vmalloc.c (get_vm_area() and vfree()) and fs/proc/kcore.c.
+ */
+extern rwlock_t vmlist_lock;
+ 
 extern struct vm_struct * vmlist;
 #endif
 

@@ -77,7 +77,7 @@ struct old_pmap {
 		hfs_lword_t	pdSize;
 		hfs_lword_t	pdFSID;
 	}	pdEntry[42];
-};
+} __attribute__((packed));
 
 /*================ File-local functions ================*/
 

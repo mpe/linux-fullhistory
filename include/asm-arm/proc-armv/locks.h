@@ -12,18 +12,18 @@
 	({					\
 	__asm__ __volatile__(			\
 	"@ down_op\n"				\
-"	mrs	r0, cpsr\n"			\
-"	orr	lr, r0, #128\n"			\
+"	mrs	ip, cpsr\n"			\
+"	orr	lr, ip, #128\n"			\
 "	msr	cpsr_c, lr\n"			\
 "	ldr	lr, [%0]\n"			\
 "	subs	lr, lr, %1\n"			\
 "	str	lr, [%0]\n"			\
-"	msr	cpsr_c, r0\n"			\
-"	movmi	r0, %0\n"			\
+"	msr	cpsr_c, ip\n"			\
+"	movmi	ip, %0\n"			\
 "	blmi	" SYMBOL_NAME_STR(fail)		\
 	:					\
 	: "r" (ptr), "I" (1)			\
-	: "r0", "lr", "cc");			\
+	: "ip", "lr", "cc");			\
 	})
 
 #define __down_op_ret(ptr,fail)			\
@@ -31,20 +31,20 @@
 		unsigned int ret;		\
 	__asm__ __volatile__(			\
 	"@ down_op_ret\n"			\
-"	mrs	r0, cpsr\n"			\
-"	orr	lr, r0, #128\n"			\
+"	mrs	ip, cpsr\n"			\
+"	orr	lr, ip, #128\n"			\
 "	msr	cpsr_c, lr\n"			\
 "	ldr	lr, [%1]\n"			\
 "	subs	lr, lr, %2\n"			\
 "	str	lr, [%1]\n"			\
-"	msr	cpsr_c, r0\n"			\
-"	movmi	r0, %1\n"			\
-"	movpl	r0, #0\n"			\
+"	msr	cpsr_c, ip\n"			\
+"	movmi	ip, %1\n"			\
+"	movpl	ip, #0\n"			\
 "	blmi	" SYMBOL_NAME_STR(fail) "\n"	\
-"	mov	%0, r0"				\
+"	mov	%0, ip"				\
 	: "=&r" (ret)				\
 	: "r" (ptr), "I" (1)			\
-	: "r0", "lr", "cc");			\
+	: "ip", "lr", "cc");			\
 	ret;					\
 	})
 
@@ -52,18 +52,18 @@
 	({					\
 	__asm__ __volatile__(			\
 	"@ up_op\n"				\
-"	mrs	r0, cpsr\n"			\
-"	orr	lr, r0, #128\n"			\
+"	mrs	ip, cpsr\n"			\
+"	orr	lr, ip, #128\n"			\
 "	msr	cpsr_c, lr\n"			\
 "	ldr	lr, [%0]\n"			\
 "	adds	lr, lr, %1\n"			\
 "	str	lr, [%0]\n"			\
-"	msr	cpsr_c, r0\n"			\
-"	movle	r0, %0\n"			\
+"	msr	cpsr_c, ip\n"			\
+"	movle	ip, %0\n"			\
 "	blle	" SYMBOL_NAME_STR(wake)		\
 	:					\
 	: "r" (ptr), "I" (1)			\
-	: "r0", "lr", "cc");			\
+	: "ip", "lr", "cc");			\
 	})
 
 /*
@@ -78,36 +78,36 @@
 	({					\
 	__asm__ __volatile__(			\
 	"@ down_op_write\n"			\
-"	mrs	r0, cpsr\n"			\
-"	orr	lr, r0, #128\n"			\
+"	mrs	ip, cpsr\n"			\
+"	orr	lr, ip, #128\n"			\
 "	msr	cpsr_c, lr\n"			\
 "	ldr	lr, [%0]\n"			\
 "	subs	lr, lr, %1\n"			\
 "	str	lr, [%0]\n"			\
-"	msr	cpsr_c, r0\n"			\
-"	movne	r0, %0\n"			\
+"	msr	cpsr_c, ip\n"			\
+"	movne	ip, %0\n"			\
 "	blne	" SYMBOL_NAME_STR(fail)		\
 	:					\
 	: "r" (ptr), "I" (RW_LOCK_BIAS)		\
-	: "r0", "lr", "cc");			\
+	: "ip", "lr", "cc");			\
 	})
 
 #define __up_op_write(ptr,wake)			\
 	({					\
 	__asm__ __volatile__(			\
 	"@ up_op_read\n"			\
-"	mrs	r0, cpsr\n"			\
-"	orr	lr, r0, #128\n"			\
+"	mrs	ip, cpsr\n"			\
+"	orr	lr, ip, #128\n"			\
 "	msr	cpsr_c, lr\n"			\
 "	ldr	lr, [%0]\n"			\
 "	adds	lr, lr, %1\n"			\
 "	str	lr, [%0]\n"			\
-"	msr	cpsr_c, r0\n"			\
-"	movcs	r0, %0\n"			\
+"	msr	cpsr_c, ip\n"			\
+"	movcs	ip, %0\n"			\
 "	blcs	" SYMBOL_NAME_STR(wake)		\
 	:					\
 	: "r" (ptr), "I" (RW_LOCK_BIAS)		\
-	: "r0", "lr", "cc");			\
+	: "ip", "lr", "cc");			\
 	})
 
 #define __down_op_read(ptr,fail)		\
@@ -117,18 +117,18 @@
 	({					\
 	__asm__ __volatile__(			\
 	"@ up_op_read\n"			\
-"	mrs	r0, cpsr\n"			\
-"	orr	lr, r0, #128\n"			\
+"	mrs	ip, cpsr\n"			\
+"	orr	lr, ip, #128\n"			\
 "	msr	cpsr_c, lr\n"			\
 "	ldr	lr, [%0]\n"			\
 "	adds	lr, lr, %1\n"			\
 "	str	lr, [%0]\n"			\
-"	msr	cpsr_c, r0\n"			\
-"	moveq	r0, %0\n"			\
+"	msr	cpsr_c, ip\n"			\
+"	moveq	ip, %0\n"			\
 "	bleq	" SYMBOL_NAME_STR(wake)		\
 	:					\
 	: "r" (ptr), "I" (1)			\
-	: "r0", "lr", "cc");			\
+	: "ip", "lr", "cc");			\
 	})
 
 #endif

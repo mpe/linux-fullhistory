@@ -20,7 +20,6 @@
  */
 #define current_text_addr() ({ __label__ _l; _l: &&_l;})
 
-#include <linux/config.h>
 #if !defined (_LANGUAGE_ASSEMBLY)
 #include <asm/cachectl.h>
 #include <asm/mipsregs.h>

@@ -25,6 +25,15 @@
 #endif
 
 /*
+ * The following references are needed to cause the linker to pull in the
+ * gzimage.o and rdimage.o files.  These object files are special,
+ * since they get placed into the .gzimage and .rdimage ELF sections 
+ * of the zvmlinux and zvmlinux.initrd files.
+ */
+extern char dummy_for_gzimage;
+extern char dummy_for_rdimage;
+
+/*
  * Please send me load/board info and such data for hardware not
  * listed here so I can keep track since things are getting tricky
  * with the different load addrs with different firmware.  This will

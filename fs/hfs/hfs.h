@@ -130,7 +130,7 @@
 struct hfs_name {
 	hfs_byte_t	Len;
 	hfs_byte_t	Name[31];
-};
+} __attribute__((packed));
 
 typedef struct {
 	hfs_word_t	v;
@@ -150,21 +150,21 @@ typedef struct {
 	hfs_word_t	 fdFlags;
 	hfs_point_t	 fdLocation;
 	hfs_word_t	 fdFldr;
-} hfs_finfo_t;
+} __attribute__((packed)) hfs_finfo_t;
 
 typedef struct {
 	hfs_word_t	fdIconID;
 	hfs_byte_t	fdUnused[8];
 	hfs_word_t	fdComment;
 	hfs_lword_t	fdPutAway;
-} hfs_fxinfo_t;
+} __attribute__((packed)) hfs_fxinfo_t;
 
 typedef struct {
 	hfs_rect_t	frRect;
 	hfs_word_t	frFlags;
 	hfs_point_t	frLocation;
 	hfs_word_t	frView;
-} hfs_dinfo_t;
+} __attribute__((packed)) hfs_dinfo_t;
 
 typedef struct {
 	hfs_point_t	frScroll;
@@ -172,7 +172,7 @@ typedef struct {
 	hfs_word_t	frUnused;
 	hfs_word_t	frComment;
 	hfs_lword_t	frPutAway;
-} hfs_dxinfo_t;
+} __attribute__((packed)) hfs_dxinfo_t;
 
 union hfs_finder_info {
 	struct {
@@ -189,7 +189,7 @@ union hfs_finder_info {
 struct hfs_bkey {
 	hfs_byte_t	KeyLen;		/* number of bytes in the key */
 	hfs_byte_t	value[1];	/* (KeyLen) bytes of key */
-};
+} __attribute__((packed));
 
 /* Cast to a pointer to a generic bkey */
 #define	HFS_BKEY(X)	(((void)((X)->KeyLen)), ((struct hfs_bkey *)(X)))
@@ -200,7 +200,7 @@ struct hfs_cat_key {
 	hfs_byte_t	Resrv1;	/* padding */
 	hfs_lword_t	ParID;	/* CNID of the parent dir */
 	struct hfs_name	CName;	/* The filename of the entry */
-};
+} __attribute__((packed));
 
 /* The key used in the extents b-tree: */
 struct hfs_ext_key {
@@ -208,7 +208,7 @@ struct hfs_ext_key {
 	hfs_byte_t	FkType;	/* HFS_FK_{DATA,RSRC} */
 	hfs_lword_t	FNum;	/* The File ID of the file */
 	hfs_word_t	FABN;	/* allocation blocks number*/
-};
+} __attribute__((packed));
 
 /*======== Data structures kept in memory ========*/
 

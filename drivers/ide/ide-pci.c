@@ -30,6 +30,7 @@
 #define DEVID_PIIX3	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371SB_1})
 #define DEVID_PIIX4	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371AB})
 #define DEVID_PIIX4E	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82801AB_1})
+#define DEVID_PIIX4E2	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82443MX_1})
 #define DEVID_PIIX4U	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82801AA_1})
 #define DEVID_PIIX4U2	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82372FB_1})
 #define DEVID_VIA_IDE	((ide_pci_devid_t){PCI_VENDOR_ID_VIA,     PCI_DEVICE_ID_VIA_82C561})
@@ -303,6 +304,7 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 	{DEVID_PIIX3,	"PIIX3",	PCI_PIIX,	NULL,		INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}}, 	ON_BOARD,	0 },
 	{DEVID_PIIX4,	"PIIX4",	PCI_PIIX,	NULL,		INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}}, 	ON_BOARD,	0 },
 	{DEVID_PIIX4E,	"PIIX4",	PCI_PIIX,	NULL,		INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}},	ON_BOARD,	0 },
+	{DEVID_PIIX4E2,	"PIIX4",	PCI_PIIX,	NULL,		INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}},	ON_BOARD,	0 },
 	{DEVID_PIIX4U,	"PIIX4",	PCI_PIIX,	ATA66_PIIX,	INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}},	ON_BOARD,	0 },
 	{DEVID_PIIX4U2,	"PIIX4",	PCI_PIIX,	ATA66_PIIX,	INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}},	ON_BOARD,	0 },
 	{DEVID_VIA_IDE,	"VIA_IDE",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
@@ -476,6 +478,7 @@ static void __init ide_setup_pci_device (struct pci_dev *dev, ide_pci_device_t *
 	unsigned short pcicmd = 0, tried_config = 0;
 	byte tmp = 0;
 	ide_hwif_t *hwif, *mate = NULL;
+	unsigned int class_rev;
 
 #ifdef CONFIG_IDEDMA_AUTO
 	autodma = 1;
@@ -504,6 +507,11 @@ check_if_enabled:
 	}
 	if (tried_config)
 		printk("%s: device enabled (Linux)\n", d->name);
+
+	pci_read_config_dword(dev, PCI_CLASS_REVISION, &class_rev);
+	class_rev &= 0xff;
+	printk("%s: chipset revision %d\n", d->name, class_rev);
+
 	/*
 	 * Can we trust the reported IRQ?
 	 */
@@ -545,7 +553,7 @@ check_if_enabled:
 		ide_pci_enablebit_t *e = &(d->enablebits[port]);
 		if (e->reg && (pci_read_config_byte(dev, e->reg, &tmp) || (tmp & e->mask) != e->val))
 			continue;	/* port not enabled */
-		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT366) && (port))
+		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT366) && (port) && (class_rev != 0x03))
 			return;
 		if ((dev->class >> 8) != PCI_CLASS_STORAGE_IDE || (dev->class & (port ? 4 : 1)) != 0) {
 			ctl  = dev->resource[(2*port)+1].start;
@@ -656,9 +664,19 @@ static void __init hpt366_device_order_fixup (struct pci_dev *dev, ide_pci_devic
 	struct pci_dev *dev2 = NULL, *findev;
 	ide_pci_device_t *d2;
 	unsigned char pin1 = 0, pin2 = 0;
+	unsigned int class_rev;
 
 	if (PCI_FUNC(dev->devfn) & 1)
 		return;
+
+	pci_read_config_dword(dev, PCI_CLASS_REVISION, &class_rev);
+	class_rev &= 0xff;
+
+	switch(class_rev) {
+		case 3:		return;
+		default:	break;
+	}
+
 	pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin1);
 	pci_for_each_dev(findev) {
 		if ((findev->vendor == dev->vendor) &&

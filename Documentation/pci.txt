@@ -96,6 +96,9 @@ Tips:
 	The ID table array should be marked __devinitdata.
 	The probe() and remove() functions (and all initialization
 	functions called only from these) should be marked __devinit/exit.
+	If you are sure the driver is not a hotplug driver then use only 
+	__init/exit __initdata/exitdata.
+
 
 2. How to find PCI devices manually (the old style)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

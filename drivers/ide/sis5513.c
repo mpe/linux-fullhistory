@@ -227,9 +227,8 @@ static void config_drive_art_rwp (ide_drive_t *drive)
 	ide_hwif_t *hwif	= HWIF(drive);
 	struct pci_dev *dev	= hwif->pci_dev;
 
-	int drive_number	= ((hwif->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
 	byte reg4bh		= 0;
-	byte rw_prefetch	= (0x11 << drive_number);
+	byte rw_prefetch	= (0x11 << drive->dn);
 
 	pci_read_config_byte(dev, 0x4b, &reg4bh);
 	if (drive->media != ide_disk)
@@ -248,12 +247,8 @@ static void config_art_rwp_pio (ide_drive_t *drive, byte pio)
 
 	unsigned short eide_pio_timing[6] = {600, 390, 240, 180, 120, 90};
 	unsigned short xfer_pio = drive->id->eide_pio_modes;
-	int drive_number	= ((hwif->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
 
-#if 0
 	config_drive_art_rwp(drive);
-#endif
-
 	pio = ide_get_best_pio_mode(drive, 255, pio, NULL);
 
 	if (xfer_pio> 4)
@@ -281,7 +276,7 @@ static void config_art_rwp_pio (ide_drive_t *drive, byte pio)
  * Cycle time    20T (600ns) 13T (390ns) 8T (240ns) 6T (180ns) 4T (120ns)
  */
 
-	switch(drive_number) {
+	switch(drive->dn) {
 		case 0:		drive_pci = 0x40; break;
 		case 1:		drive_pci = 0x42; break;
 		case 2:		drive_pci = 0x44; break;
@@ -329,7 +324,7 @@ static int config_chipset_for_pio (ide_drive_t *drive, byte pio)
 	return err;
 }
 
-#undef SIS5513_TUNEPROC
+#define SIS5513_TUNEPROC
 
 #ifdef SIS5513_TUNEPROC
 static void sis5513_tune_drive (ide_drive_t *drive, byte pio)
@@ -354,7 +349,6 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 	unsigned long dma_base	= hwif->dma_base;
 	byte unit		= (drive->select.b.unit & 0x01);
 	byte speed		= 0x00, unmask = 0xE0, four_two = 0x00;
-	int drive_number	= ((hwif->channel ? 2 : 0) + unit);
 	byte udma_66		= ((id->hw_config & 0x2000) && (hwif->udma_four)) ? 1 : 0;
 
 	if (host_dev) {
@@ -370,7 +364,7 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 		}
 	}
 
-	switch(drive_number) {
+	switch(drive->dn) {
 		case 0:		drive_pci = 0x40;break;
 		case 1:		drive_pci = 0x42;break;
 		case 2:		drive_pci = 0x44;break;
@@ -438,7 +432,7 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 	err = ide_config_drive_speed(drive, speed);
 
 #if SIS5513_DEBUG_DRIVE_INFO
-	printk("%s: %s drive%d\n", drive->name, ide_xfer_verbose(speed), drive_number);
+	printk("%s: %s drive%d\n", drive->name, ide_xfer_verbose(speed), drive->dn);
 #endif /* SIS5513_DEBUG_DRIVE_INFO */
 
 	return ((int)	((id->dma_ultra >> 11) & 3) ? ide_dma_on :

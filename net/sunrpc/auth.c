@@ -84,6 +84,11 @@ rpcauth_init_credcache(struct rpc_auth *auth)
 static inline void
 rpcauth_crdestroy(struct rpc_auth *auth, struct rpc_cred *cred)
 {
+#ifdef RPC_DEBUG
+	if (cred->cr_magic != RPCAUTH_CRED_MAGIC)
+		BUG();
+	cred->cr_magic = 0;
+#endif
 	if (auth->au_ops->crdestroy)
 		auth->au_ops->crdestroy(cred);
 	else
@@ -190,8 +195,13 @@ rpcauth_lookup_credcache(struct rpc_auth *auth, int taskflags)
 	}
 	spin_unlock(&rpc_credcache_lock);
 
-	if (!cred)
+	if (!cred) {
 		cred = auth->au_ops->crcreate(taskflags);
+#ifdef RPC_DEBUG
+		if (cred)
+			cred->cr_magic = RPCAUTH_CRED_MAGIC;
+#endif
+	}
 
 	if (cred)
 		rpcauth_insert_credcache(auth, cred);

@@ -37,9 +37,10 @@
  * 1.15	RMK	30/04/1999	More fixes to the transmit routine for buggy
  *				hardware.
  * 1.16	RMK	10/02/2000	Updated for 2.3.43
+ * 1.17	RMK	13/05/2000	Updated for 2.3.99-pre8
  */
 
-static char *version = "ether3 ethernet driver (c) 1995-2000 R.M.King v1.16\n";
+static char *version = "ether3 ethernet driver (c) 1995-2000 R.M.King v1.17\n";
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -78,7 +79,6 @@ static const card_ids __init ether3_cids[] = {
 static void	ether3_setmulticastlist(struct net_device *dev);
 static int	ether3_rx(struct net_device *dev, struct dev_priv *priv, unsigned int maxcnt);
 static void	ether3_tx(struct net_device *dev, struct dev_priv *priv);
-static int	ether3_probe1 (struct net_device *dev);
 static int	ether3_open (struct net_device *dev);
 static int	ether3_sendpacket (struct sk_buff *skb, struct net_device *dev);
 static void	ether3_interrupt (int irq, void *dev_id, struct pt_regs *regs);
@@ -405,132 +405,6 @@ ether3_probe_bus_16(struct net_device *dev, int val)
 
 	return read_val == val;
 }
-
-/*
- * This is the real probe routine.
- */
-static int __init
-ether3_probe1(struct net_device *dev)
-{
-	static unsigned version_printed = 0;
-	struct dev_priv *priv;
-	unsigned int i, bus_type, error = ENODEV;
-	const char *name = "ether3";
-
-	if (net_debug && version_printed++ == 0)
-		printk(version);
-
-	if (!dev->priv) {
-		dev->priv = kmalloc(sizeof (struct dev_priv), GFP_KERNEL);
-		if (!dev->priv) {
-			printk(KERN_ERR "ether3_probe1: no memory\n");
-			return -ENOMEM;
-		}
-	}
-
-	priv = (struct dev_priv *) dev->priv;
-	memset(priv, 0, sizeof(struct dev_priv));
-
-	request_region(dev->base_addr, 128, name);
-
-	/* Reset card...
-	 */
-	ether3_outb(0x80, REG_CONFIG2 + 1);
-	bus_type = BUS_UNKNOWN;
-	udelay(4);
-
-	/* Test using Receive Pointer (16-bit register) to find out
-	 * how the ether3 is connected to the bus...
-	 */
-	if (ether3_probe_bus_8(dev, 0x100) &&
-	    ether3_probe_bus_8(dev, 0x201))
-		bus_type = BUS_8;
-
-	if (bus_type == BUS_UNKNOWN &&
-	    ether3_probe_bus_16(dev, 0x101) &&
-	    ether3_probe_bus_16(dev, 0x201))
-		bus_type = BUS_16;
-
-	switch (bus_type) {
-	case BUS_UNKNOWN:
-		printk(KERN_ERR "%s: unable to identify bus width\n", dev->name);
-		goto failed;
-
-	case BUS_8:
-		printk(KERN_ERR "%s: %s found, but is an unsupported "
-			"8-bit card\n", dev->name, name);
-		goto failed;
-
-	default:
-		break;
-	}
-
-	printk("%s: %s at %lx, IRQ%d, ether address ",
-		dev->name, name, dev->base_addr, dev->irq);
-	for (i = 0; i < 6; i++)
-		printk(i == 5 ? "%2.2x\n" : "%2.2x:", dev->dev_addr[i]);
-
-	if (ether3_init_2(dev))
-		goto failed;
-
-	dev->open		= ether3_open;
-	dev->stop		= ether3_close;
-	dev->hard_start_xmit	= ether3_sendpacket;
-	dev->get_stats		= ether3_getstats;
-	dev->set_multicast_list	= ether3_setmulticastlist;
-	dev->tx_timeout		= ether3_timeout;
-	dev->watchdog_timeo	= 5 * HZ / 100;
-
-	/* Fill in the fields of the device structure with ethernet values. */
-	ether_setup(dev);
-
-	return 0;
-
-failed:
-	kfree(dev->priv);
-	dev->priv = NULL;
-	release_region(dev->base_addr, 128);
-	return error;
-}
-
-static void __init
-ether3_get_dev(struct net_device *dev, struct expansion_card *ec)
-{
-	ecard_claim(ec);
-
-	dev->base_addr = ecard_address(ec, ECARD_MEMC, 0);
-	dev->irq = ec->irq;
-
-	if (ec->cid.manufacturer == MANU_ANT &&
-	    ec->cid.product == PROD_ANT_ETHERB) {
-		dev->base_addr += 0x200;
-	}
-
-	ec->irqaddr = (volatile unsigned char *)ioaddr(dev->base_addr);
-	ec->irqmask = 0xf0;
-
-	ether3_addr(dev->dev_addr, ec);
-}
-
-#ifndef MODULE
-int __init
-ether3_probe(struct net_device *dev)
-{
-	struct expansion_card *ec;
-
-	if (!dev)
-		return ENODEV;
-
-	ecard_startfind();
-
-	if ((ec = ecard_find(0, ether3_cids)) == NULL)
-		return ENODEV;
-
-	ether3_get_dev(dev, ec);
-
-	return ether3_probe1(dev);
-}
-#endif
 
 /*
  * Open/initialize the board.  This is called (in the current kernel)
@@ -903,63 +777,163 @@ ether3_tx(struct net_device *dev, struct dev_priv *priv)
 	}
 }
 
-#ifdef MODULE
-
-static struct ether_dev {
-	struct expansion_card	*ec;
-	char			name[9];
-	struct net_device	dev;
-} ether_devs[MAX_ECARDS];
-
-int
-init_module(void)
+static void __init ether3_banner(void)
 {
-	struct expansion_card *ec;
-	int i, ret = -ENODEV;
+	static unsigned version_printed = 0;
 
-	memset(ether_devs, 0, sizeof(ether_devs));
-
-	ecard_startfind ();
-	ec = ecard_find(0, ether3_cids);
-	i = 0;
-
-	while (ec && i < MAX_ECARDS) {
-		ecard_claim(ec);
-
-		ether_devs[i].ec	    = ec;
-		ether_devs[i].dev.init	    = ether3_probe1;
-		ether_devs[i].dev.name	    = ether_devs[i].name;
-		ether3_get_dev(&ether_devs[i].dev, ec);
-
-		ret = register_netdev(&ether_devs[i].dev);
-
-		if (ret) {
-			ecard_release(ec);
-			ether_devs[i].ec = NULL;
-		} else
-			i += 1;
-
-		ec = ecard_find(0, ether3_cids);
-	}
-
-	return i != 0 ? 0 : ret;
+	if (net_debug && version_printed++ == 0)
+		printk(version);
 }
 
-void
-cleanup_module(void)
+static const char * __init
+ether3_get_dev(struct net_device *dev, struct expansion_card *ec)
+{
+	const char *name = "ether3";
+	dev->base_addr = ecard_address(ec, ECARD_MEMC, 0);
+	dev->irq = ec->irq;
+
+	if (ec->cid.manufacturer == MANU_ANT &&
+	    ec->cid.product == PROD_ANT_ETHERB) {
+		dev->base_addr += 0x200;
+		name = "etherb";
+	}
+
+	ec->irqaddr = (volatile unsigned char *)ioaddr(dev->base_addr);
+	ec->irqmask = 0xf0;
+
+	ether3_addr(dev->dev_addr, ec);
+
+	return name;
+}
+
+static struct net_device * __init ether3_init_one(struct expansion_card *ec)
+{
+	struct net_device *dev;
+	struct dev_priv *priv;
+	const char *name;
+	int i, bus_type;
+
+	ether3_banner();
+
+	ecard_claim(ec);
+
+	dev = init_etherdev(NULL, sizeof(struct dev_priv));
+	if (!dev)
+		goto out;
+
+	name = ether3_get_dev(dev, ec);
+
+	/*
+	 * this will not fail - the nature of the bus ensures this
+	 */
+	request_region(dev->base_addr, 128, dev->name);
+
+	priv = (struct dev_priv *) dev->priv;
+
+	/* Reset card...
+	 */
+	ether3_outb(0x80, REG_CONFIG2 + 1);
+	bus_type = BUS_UNKNOWN;
+	udelay(4);
+
+	/* Test using Receive Pointer (16-bit register) to find out
+	 * how the ether3 is connected to the bus...
+	 */
+	if (ether3_probe_bus_8(dev, 0x100) &&
+	    ether3_probe_bus_8(dev, 0x201))
+		bus_type = BUS_8;
+
+	if (bus_type == BUS_UNKNOWN &&
+	    ether3_probe_bus_16(dev, 0x101) &&
+	    ether3_probe_bus_16(dev, 0x201))
+		bus_type = BUS_16;
+
+	switch (bus_type) {
+	case BUS_UNKNOWN:
+		printk(KERN_ERR "%s: unable to identify bus width\n", dev->name);
+		goto failed;
+
+	case BUS_8:
+		printk(KERN_ERR "%s: %s found, but is an unsupported "
+			"8-bit card\n", dev->name, name);
+		goto failed;
+
+	default:
+		break;
+	}
+
+	printk("%s: %s at %lx, IRQ%d, ether address ",
+		dev->name, name, dev->base_addr, dev->irq);
+	for (i = 0; i < 6; i++)
+		printk(i == 5 ? "%2.2x\n" : "%2.2x:", dev->dev_addr[i]);
+
+	if (ether3_init_2(dev))
+		goto failed;
+
+	dev->open		= ether3_open;
+	dev->stop		= ether3_close;
+	dev->hard_start_xmit	= ether3_sendpacket;
+	dev->get_stats		= ether3_getstats;
+	dev->set_multicast_list	= ether3_setmulticastlist;
+	dev->tx_timeout		= ether3_timeout;
+	dev->watchdog_timeo	= 5 * HZ / 100;
+	return 0;
+
+failed:
+	release_region(dev->base_addr, 128);
+	unregister_netdev(dev);
+	kfree(dev);
+out:
+	ecard_release(ec);
+	return NULL;
+}
+
+static struct expansion_card	*e_card[MAX_ECARDS];
+static struct net_device	*e_dev[MAX_ECARDS];
+
+static int ether3_init(void)
+{
+	int i, ret = -ENODEV;
+
+	ecard_startfind();
+
+	for (i = 0; i < MAX_ECARDS; i++) {
+		struct net_device *dev;
+		struct expansion_card *ec;
+
+		ec = ecard_find(0, ether3_cids);
+		if (!ec)
+			break;
+
+		dev = ether3_init_one(ec);
+		if (!dev)
+			break;
+
+		e_card[i] = ec;
+		e_dev[i]  = dev;
+		ret = 0;
+	}
+
+	return ret;
+}
+
+static void ether3_exit(void)
 {
 	int i;
 
 	for (i = 0; i < MAX_ECARDS; i++) {
-		if (ether_devs[i].ec) {
-			unregister_netdev(&ether_devs[i].dev);
-
-			release_region(ether_devs[i].dev.base_addr, 128);
-
-			ecard_release(ether_devs[i].ec);
-
-			ether_devs[i].ec = NULL;
+		if (e_dev[i]) {
+			unregister_netdev(e_dev[i]);
+			release_region(e_dev[i]->base_addr, 128);
+			kfree(e_dev[i]);
+			e_dev[i] = NULL;
+		}
+		if (e_card[i]) {
+			ecard_release(e_card[i]);
+			e_card[i] = NULL;
 		}
 	}
 }
-#endif /* MODULE */
+
+module_init(ether3_init);
+module_exit(ether3_exit);

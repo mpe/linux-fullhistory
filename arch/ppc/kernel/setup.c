@@ -776,8 +776,11 @@ void ppc_generic_ide_fix_driveid(struct hd_driveid *id)
 	id->word127        = __le16_to_cpu(id->word127);
 	id->dlf            = __le16_to_cpu(id->dlf);
 	id->csfo           = __le16_to_cpu(id->csfo);
-	for (i = 0; i < 30; i++)
-		id->words130_159[i] = __le16_to_cpu(id->words130_159[i]);
+	for (i = 0; i < 26; i++)
+		id->words130_155[i] = __le16_to_cpu(id->words130_155[i]);
+	id->word156        = __le16_to_cpu(id->word156);
+	for (i = 0; i < 4; i++)
+		id->words157_159[i] = __le16_to_cpu(id->words157_159[i]);
 	for (i = 0; i < 96; i++)
 		id->words160_255[i] = __le16_to_cpu(id->words160_255[i]);
 }

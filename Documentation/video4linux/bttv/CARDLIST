@@ -38,6 +38,10 @@ bttv.o
   card=36 - Typhoon TView TV/FM Tuner
   card=37 - PixelView PlayTV pro
   card=38 - TView99 CPH063
+  card=39 - Pinnacle PCTV Rave
+  card=40 - STB2
+  card=41 - AVerMedia TVPhone 98
+  card=42 - ProVideo PV951
 
 tuner.o
   type=0 - Temic PAL

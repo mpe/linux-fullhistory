@@ -1496,7 +1496,7 @@ CONFIG_MD_RAID0
 
   If unsure, say Y.
 
-DANGEROUS! RAID-1/RAID-5 code
+RAID-1/RAID-5 code (DANGEROUS)
 CONFIG_RAID15_DANGEROUS
   This new RAID1/RAID5 code has been freshly merged, and has not seen
   enough testing yet. While there are no known bugs in it, it might
@@ -10430,7 +10430,7 @@ CONFIG_NFSD
 Provide NFSv3 server support
 CONFIG_NFSD_V3
   If you would like to include the NFSv3 server as well as the NFSv2
-  server, say Y here.  In unsure, say Y.
+  server, say Y here.  If unsure, say Y.
 
 OS/2 HPFS file system support
 CONFIG_HPFS_FS

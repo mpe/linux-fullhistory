@@ -1,3 +1,39 @@
+2000-05-15  Gunther Mayer  <gunther.mayer@braunschweig.okersurf.de>
+
+	* parport_pc.c (parport_pc_compat_write_block_pio): Check for
+	timeouts.
+	(parport_pc_ecp_write_block_pio): Likewise.
+	(parport_pc_ecp_read_block_pio): Likewise.
+
+2000-05-02  Gunther Mayer  <gunther.mayer@braunschweig.okersurf.de>
+
+	* parport_pc.c: PCI SYBA patch and verbose PCI detection.
+
+2000-05-02  Gunther Mayer  <gunther.mayer@braunschweig.okersurf.de>
+
+	* parport_pc.c (decode_smsc): Fix SMSC 665/666 identification.
+
+2000-04-28  Tim Waugh  <twaugh@redhat.com>
+
+	* ieee1284.c: Short function descriptions can't be multiline.
+
+	* daisy.c: Short function descriptions can't be multiline.
+
+2000-04-19  Tim Waugh  <twaugh@redhat.com>
+
+	* parport_pc.c (parport_pc_fifo_write_block_dma): Make maxlen
+	calculation a bit clearer.
+
+	* ieee1284.c (parport_negotiate): Turn on data line drivers.
+
+	* ieee1284_ops.c (parport_ieee1284_read_byte): Turn off data line
+	drivers.
+	(parport_ieee1284_write_compat): Turn on data line drivers.
+
+	* daisy.c (assign_addrs): Turn on data line drivers.
+	(cpp_mux): Likewise.
+	(cpp_daisy): Likewise.
+
 2000-04-04  Tim Waugh  <twaugh@redhat.com>
 
 	* parport_pc.c: Add support for another PCI card.

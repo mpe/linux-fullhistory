@@ -83,6 +83,7 @@ extern char _start[], _end[];
 extern char etext[], _stext[];
 extern char __init_begin, __init_end;
 extern char __prep_begin, __prep_end;
+extern char __chrp_begin, __chrp_end;
 extern char __pmac_begin, __pmac_end;
 extern char __apus_begin, __apus_end;
 extern char __openfirmware_begin, __openfirmware_end;
@@ -777,7 +778,7 @@ void __init free_initmem(void)
 	unsigned long a;
 	unsigned long num_freed_pages = 0, num_prep_pages = 0,
 		num_pmac_pages = 0, num_openfirmware_pages = 0,
-		num_apus_pages = 0;
+		num_apus_pages = 0, num_chrp_pages = 0;
 #define FREESEC(START,END,CNT) do { \
 	a = (unsigned long)(&START); \
 	for (; a < (unsigned long)(&END); a += PAGE_SIZE) { \
@@ -794,6 +795,7 @@ void __init free_initmem(void)
 	case _MACH_Pmac:
 		FREESEC(__apus_begin,__apus_end,num_apus_pages);
 		FREESEC(__prep_begin,__prep_end,num_prep_pages);
+		FREESEC(__chrp_begin,__chrp_end,num_chrp_pages);
 		break;
 	case _MACH_chrp:
 		FREESEC(__apus_begin,__apus_end,num_apus_pages);
@@ -803,20 +805,24 @@ void __init free_initmem(void)
 	case _MACH_prep:
 		FREESEC(__apus_begin,__apus_end,num_apus_pages);
 		FREESEC(__pmac_begin,__pmac_end,num_pmac_pages);
+		FREESEC(__chrp_begin,__chrp_end,num_chrp_pages);
 		break;
 	case _MACH_mbx:
 		FREESEC(__apus_begin,__apus_end,num_apus_pages);
 		FREESEC(__pmac_begin,__pmac_end,num_pmac_pages);
 		FREESEC(__prep_begin,__prep_end,num_prep_pages);
+		FREESEC(__chrp_begin,__chrp_end,num_chrp_pages);
 		break;
 	case _MACH_apus:
 		FREESEC(__pmac_begin,__pmac_end,num_pmac_pages);
 		FREESEC(__prep_begin,__prep_end,num_prep_pages);
+		FREESEC(__chrp_begin,__chrp_end,num_chrp_pages);
 		break;
 	case _MACH_gemini:
 		FREESEC(__apus_begin,__apus_end,num_apus_pages);
 		FREESEC(__pmac_begin,__pmac_end,num_pmac_pages);
 		FREESEC(__prep_begin,__prep_end,num_prep_pages);
+		FREESEC(__chrp_begin,__chrp_end,num_chrp_pages);
 		break;
 	}
 
@@ -829,6 +835,8 @@ void __init free_initmem(void)
 
 	if ( num_prep_pages )
 		printk(" %ldk prep", PGTOKB(num_prep_pages));
+	if ( num_chrp_pages )
+		printk(" %ldk chrp", PGTOKB(num_chrp_pages));
 	if ( num_pmac_pages )
 		printk(" %ldk pmac", PGTOKB(num_pmac_pages));
 	if ( num_openfirmware_pages )

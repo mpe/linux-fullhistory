@@ -56,6 +56,11 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 	ide_input_data(drive, id, SECTOR_WORDS);		/* read 512 bytes of id info */
 	ide__sti();	/* local CPU only */
 	ide_fix_driveid(id);
+
+	if (id->word156 == 0x4d42) {
+		printk("%s: drive->id->word156 == 0x%04x \n", drive->name, drive->id->word156);
+	}
+
 	if (!drive->forced_lun)
 		drive->last_lun = id->last_lun & 0x7;
 #if defined (CONFIG_SCSI_EATA_DMA) || defined (CONFIG_SCSI_EATA_PIO) || defined (CONFIG_SCSI_EATA)
@@ -764,9 +769,10 @@ static void init_gendisk (ide_hwif_t *hwif)
 			char name[64];
 
 			ide_add_generic_settings(hwif->drives + unit);
+			hwif->drives[unit].dn = ((hwif->channel ? 2 : 0) + unit);
 			sprintf (name, "host%d/bus%d/target%d/lun%d",
 				 (hwif->channel && hwif->mate) ? hwif->mate->index : hwif->index,
-				 hwif->channel, unit, 0);
+				 hwif->channel, unit, hwif->drives[unit].lun);
 			hwif->drives[unit].de =
 				devfs_mk_dir (ide_devfs_handle, name, 0, NULL);
 		}
@@ -775,9 +781,9 @@ static void init_gendisk (ide_hwif_t *hwif)
 
 static int hwif_init (ide_hwif_t *hwif)
 {
-	ide_drive_t *drive;
-	void (*rfn)(request_queue_t *);
-	
+	request_queue_t *q;
+	unsigned int unit;
+
 	if (!hwif->present)
 		return 0;
 	if (!hwif->irq) {
@@ -795,39 +801,7 @@ static int hwif_init (ide_hwif_t *hwif)
 #endif /* CONFIG_BLK_DEV_HD */
 	
 	hwif->present = 0; /* we set it back to 1 if all is ok below */
-	switch (hwif->major) {
-	case IDE0_MAJOR: rfn = &do_ide0_request; break;
-#if MAX_HWIFS > 1
-	case IDE1_MAJOR: rfn = &do_ide1_request; break;
-#endif
-#if MAX_HWIFS > 2
-	case IDE2_MAJOR: rfn = &do_ide2_request; break;
-#endif
-#if MAX_HWIFS > 3
-	case IDE3_MAJOR: rfn = &do_ide3_request; break;
-#endif
-#if MAX_HWIFS > 4
-	case IDE4_MAJOR: rfn = &do_ide4_request; break;
-#endif
-#if MAX_HWIFS > 5
-	case IDE5_MAJOR: rfn = &do_ide5_request; break;
-#endif
-#if MAX_HWIFS > 6
-	case IDE6_MAJOR: rfn = &do_ide6_request; break;
-#endif
-#if MAX_HWIFS > 7
-	case IDE7_MAJOR: rfn = &do_ide7_request; break;
-#endif
-#if MAX_HWIFS > 8
-	case IDE8_MAJOR: rfn = &do_ide8_request; break;
-#endif
-#if MAX_HWIFS > 9
-	case IDE9_MAJOR: rfn = &do_ide9_request; break;
-#endif
-	default:
-		printk("%s: request_fn NOT DEFINED\n", hwif->name);
-		return (hwif->present = 0);
-	}
+
 	if (devfs_register_blkdev (hwif->major, hwif->name, ide_fops)) {
 		printk("%s: UNABLE TO GET MAJOR NUMBER %d\n", hwif->name, hwif->major);
 		return (hwif->present = 0);
@@ -860,19 +834,11 @@ static int hwif_init (ide_hwif_t *hwif)
 	read_ahead[hwif->major] = 8;	/* (4kB) */
 	hwif->present = 1;	/* success */
 
-	/*
-	 * FIXME(eric) - This needs to be tested.  I *think* that this
-	 * is correct.   Also, I believe that there is no longer any
-	 * reason to have multiple functions (do_ide[0-7]_request)
-	 * functions - the queuedata field could be used to indicate
-	 * the correct hardware group - either this, or we could add
-	 * a new field to request_queue_t to hold this information.
-	 */
-	drive = &hwif->drives[0];
-	blk_init_queue(&drive->queue, rfn);
-
-	drive = &hwif->drives[1];
-	blk_init_queue(&drive->queue, rfn);
+	for (unit = 0; unit < MAX_DRIVES; ++unit) {
+		q = &hwif->drives[unit].queue;
+		q->queuedata = hwif->hwgroup;
+		blk_init_queue(q, do_ide_request);
+	}
 
 #if (DEBUG_SPINLOCK > 0)
 {

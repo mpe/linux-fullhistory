@@ -60,7 +60,7 @@ struct page * prepare_highmem_swapout(struct page * page)
 	 * ok, we can just forget about our highmem page since 
 	 * we stored its data into the new regular_page.
 	 */
-	__free_page(page);
+	page_cache_release(page);
 	new_page = mem_map + MAP_NR(regular_page);
 	LockPage(new_page);
 	return new_page;
@@ -78,7 +78,7 @@ struct page * replace_with_highmem(struct page * page)
 	if (!highpage)
 		return page;
 	if (!PageHighMem(highpage)) {
-		__free_page(highpage);
+		page_cache_release(highpage);
 		return page;
 	}
 
@@ -94,7 +94,7 @@ struct page * replace_with_highmem(struct page * page)
 	 * We can just forget the old page since 
 	 * we stored its data into the new highmem-page.
 	 */
-	__free_page(page);
+	page_cache_release(page);
 
 	return highpage;
 }

@@ -91,7 +91,7 @@ MachineCheckException(struct pt_regs *regs)
 	{
 #if defined(CONFIG_8xx) && defined(CONFIG_PCI)
 		/* the qspan pci read routines can cause machine checks -- Cort */
-		bad_page_fault(regs,regs->dar);
+		bad_page_fault(regs, regs->dar);
 		return;
 #endif
 #if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
@@ -214,8 +214,6 @@ AlignmentException(struct pt_regs *regs)
 {
 	int fixed;
 
-	if (regs->msr & MSR_FP)
-		giveup_fpu(current);
 	fixed = fix_alignment(regs);
 	if (fixed == 1) {
 		regs->nip += 4;	/* skip over emulated instruction */
@@ -223,7 +221,10 @@ AlignmentException(struct pt_regs *regs)
 	}
 	if (fixed == -EFAULT) {
 		/* fixed == -EFAULT means the operand address was bad */
-		bad_page_fault(regs, regs->dar);
+		if (user_mode(regs))
+			force_sig(SIGSEGV, current);
+		else
+			bad_page_fault(regs, regs->dar);
 		return;
 	}
 	_exception(SIGBUS, regs);	

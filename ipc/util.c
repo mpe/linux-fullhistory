@@ -159,25 +159,19 @@ struct kern_ipc_perm* ipc_rmid(struct ipc_ids* ids, int id)
 void* ipc_alloc(int size)
 {
 	void* out;
-	if(size > PAGE_SIZE) {
-		lock_kernel();
+	if(size > PAGE_SIZE)
 		out = vmalloc(size);
-		unlock_kernel();
-	} else {
+	else
 		out = kmalloc(size, GFP_KERNEL);
-	}
 	return out;
 }
 
 void ipc_free(void* ptr, int size)
 {
-	if(size > PAGE_SIZE) {
-		lock_kernel();
+	if(size > PAGE_SIZE)
 		vfree(ptr);
-		unlock_kernel();
-	} else {
+	else
 		kfree(ptr);
-	}
 }
 
 /* 

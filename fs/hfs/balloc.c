@@ -86,6 +86,8 @@ static struct hfs_bnode_ref hfs_bnode_init(struct hfs_btree * tree,
 	retval.bn->magic = HFS_BNODE_MAGIC;
 	retval.bn->tree = tree;
 	retval.bn->node = node;
+	hfs_init_waitqueue(&retval.bn->wqueue);
+	hfs_init_waitqueue(&retval.bn->rqueue);
 	hfs_bnode_lock(&retval, HFS_LOCK_WRITE);
 
 	retval.bn->buf = get_new_node(tree, node);

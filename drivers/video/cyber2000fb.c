@@ -1636,3 +1636,5 @@ static void __exit cyberpro_exit(void)
 module_init(cyber2000fb_init);
 #endif
 module_exit(cyberpro_exit);
+
+MODULE_DEVICE_TABLE(pci, cyberpro_pci_table);

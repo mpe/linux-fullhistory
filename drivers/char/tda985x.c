@@ -13,6 +13,7 @@
  *
  * OPTIONS:
  * debug   - set to 1 if you'd like to see debug messages
+ *         - set to 2 if you'd like to be flooded with debug messages
  * chip    - set to 9850 or 9855 to select your chip (default 9855)
  *
  * TODO:
@@ -20,7 +21,8 @@
  *                            and unmote to fix. - Is this still here?
  *   Fine tune sound
  *   Get rest of capabilities into video_audio struct...
- * 
+ *
+ *  Revision  0.5 - cleaned up debugging messages, added debug level=2 
  *  Revision: 0.4 - check for correct chip= insmod value
  *                  also cleaned up comments a bit
  *  Revision: 0.3 - took out extraneous tda985x_write in tda985x_command
@@ -55,9 +57,10 @@ static int chip = 9855;	/* insmod parameter */
 #define I2C_TDA985x_H        0xb6
 static unsigned short normal_i2c[] = {I2C_CLIENT_END};
 static unsigned short normal_i2c_range[] = {
-    I2C_TDA985x_L >> 1,
-    I2C_TDA985x_H >> 1,
-    I2C_CLIENT_END};
+	I2C_TDA985x_L >> 1,
+	I2C_TDA985x_H >> 1,
+	I2C_CLIENT_END
+};
 static unsigned short probe[2]        = { I2C_CLIENT_END, I2C_CLIENT_END };
 static unsigned short probe_range[2]  = { I2C_CLIENT_END, I2C_CLIENT_END };
 static unsigned short ignore[2]       = { I2C_CLIENT_END, I2C_CLIENT_END };
@@ -84,6 +87,7 @@ static struct i2c_driver driver;
 static struct i2c_client client_template;
 
 #define dprintk  if (debug) printk
+#define d2printk if (debug == 2) printk
 
 /* The TDA9850 and TDA9855 are both made by Philips Semiconductor
  * http://www.semiconductors.philips.com
@@ -154,9 +158,9 @@ static struct i2c_client client_template;
 #define TDA9855_AVL	1<<6 /* AVL, Automatic Volume Level */
 #define TDA9855_LOUD	1<<5 /* Loudness, 1==off */
 #define TDA9855_SUR	1<<3 /* Surround / Subwoofer 1==.5(L-R) 0==.5(L+R) */
-				/* Bits 0 to 3 select various combinations
-                                 * of line in and line out, only the 
-                                 * interesting ones are defined */
+			     /* Bits 0 to 3 select various combinations
+                              * of line in and line out, only the 
+                              * interesting ones are defined */
 #define TDA9855_EXT	1<<2 /* Selects inputs LIR and LIL.  Pins 41 & 12 */
 #define TDA9855_INT	0    /* Selects inputs LOR and LOL.  (internal) */
 
@@ -213,8 +217,8 @@ static struct i2c_client client_template;
 static int tda985x_write(struct i2c_client *client, int subaddr, int val)
 {
 	unsigned char buffer[2];
-	dprintk("In tda985x_write\n");
-	dprintk("Writing %d 0x%x\n", subaddr, val);
+	d2printk("tda985x: In tda985x_write\n");
+	dprintk("tda985x: Writing %d 0x%x\n", subaddr, val);
 	buffer[0] = subaddr;
 	buffer[1] = val;
 	if (2 != i2c_master_send(client,buffer,2)) {
@@ -228,12 +232,12 @@ static int tda985x_write(struct i2c_client *client, int subaddr, int val)
 static int tda985x_read(struct i2c_client *client)
 {
 	unsigned char buffer;
-	dprintk("In tda985x_read\n");
+	d2printk("tda985x: In tda985x_read\n");
 	if (1 != i2c_master_recv(client,&buffer,1)) {
 		printk(KERN_WARNING "tda985x: I/O error, trying (read)\n");
 		return -1;
 	}
-	dprintk("Read 0x%02x\n", buffer); 
+	dprintk("tda985x: Read 0x%02x\n", buffer); 
 	return buffer;
 }
 
@@ -241,12 +245,12 @@ static int tda985x_set(struct i2c_client *client)
 {
 	struct tda985x *t = client->data;
 	unsigned char buf[16];
-	dprintk("In tda985x_set\n");
+	d2printk("tda985x: In tda985x_set\n");
 	
 	if (chip == 9855)
 	{
 		dprintk(KERN_INFO 
-			"tda985x_set(0x%02x,0x%02x,0x%02x,0x%02x,0x%02x,0x%02x,0x%02x,0x%02x,0x%02x,0x%02x,0x%02x)\n",
+			"tda985x: tda985x_set(0x%02x,0x%02x,0x%02x,0x%02x,0x%02x,0x%02x,0x%02x,0x%02x,0x%02x,0x%02x,0x%02x)\n",
 			t->rvol,t->lvol,t->bass,t->treble,t->sub,
 			t->c5,t->c6,t->c7,t->a1,t->a2,t->a3);
 		buf[0]  = TDA9855_VR;
@@ -262,7 +266,7 @@ static int tda985x_set(struct i2c_client *client)
 		buf[10] = t->a2;
 		buf[11] = t->a3;
 		if (12 != i2c_master_send(client,buf,12)) {
-			printk(KERN_WARNING "tda9855: I/O error, trying tda985x_set\n");
+			printk(KERN_WARNING "tda985x: I/O error, trying tda985x_set\n");
 			return -1;
 		}
 	}
@@ -270,7 +274,7 @@ static int tda985x_set(struct i2c_client *client)
 	else if (chip == 9850)
 	{
         	dprintk(KERN_INFO 
-			"tda985x_set(0x%02x,0x%02x,0x%02x,0x%02x,0x%02x,0x%02x,0x%02x)\n",
+			"tda986x: tda985x_set(0x%02x,0x%02x,0x%02x,0x%02x,0x%02x,0x%02x,0x%02x)\n",
 	               	 t->c4,t->c5,t->c6,t->c7,t->a1,t->a2,t->a3);
 		buf[0]  = TDA9850_C4;
 		buf[1]  = t->c4;
@@ -281,7 +285,7 @@ static int tda985x_set(struct i2c_client *client)
 		buf[6]  = t->a2;
 		buf[7]  = t->a3;
 		if (8 != i2c_master_send(client,buf,8)) {
-			printk(KERN_WARNING "tda9850: I/O error, trying tda985x_set\n");
+			printk(KERN_WARNING "tda985x: I/O error, trying tda985x_set\n");
 			return -1;
 	        }
 	}
@@ -292,11 +296,11 @@ static int tda985x_set(struct i2c_client *client)
 static void do_tda985x_init(struct i2c_client *client)
 {
 	struct tda985x *t = client->data;
-	dprintk("In tda985x_init\n");
+	d2printk("tda985x: In tda985x_init\n");
 
 	if (chip == 9855)
 	{
-		printk("Using tda9855 options\n");
+		printk("tda985x: Using tda9855 options\n");
 		t->rvol = 0x6f;		/* 0dB */
 		t->lvol = 0x6f;		/* 0dB */
 		t->bass = 0x0e;		/* 0dB */
@@ -313,7 +317,7 @@ static void do_tda985x_init(struct i2c_client *client)
 
 	else if (chip == 9850)
 	{
-		printk("Using tda9850 options\n");
+		printk("tda985x: Using tda9850 options\n");
 		t->c4 = 0x08;		/* Set stereo noise thresh to nominal */
 		t->c5 = 0x08;		/* Set SAP noise threshold to nominal */
 		t->c6 = TDA985x_STEREO;	/* Select Stereo mode for decoder */
@@ -337,7 +341,7 @@ static int tda985x_attach(struct i2c_adapter *adap, int addr,
 {
 	struct tda985x *t;
 	struct i2c_client *client;
-	dprintk("In tda985x_attach\n");
+	d2printk("tda985x: In tda985x_attach\n");
 	client = kmalloc(sizeof *client,GFP_KERNEL);
 	if (!client)
 		return -ENOMEM;		
@@ -382,7 +386,7 @@ static int tda985x_command(struct i2c_client *client,
 			   unsigned int cmd, void *arg)
 {
 	struct tda985x *t = client->data;
-	dprintk("In tda985x_command...\n");
+	d2printk("tda985x: In tda985x_command\n");
 #if 0
 	__u16 *sarg = arg;
 #endif
@@ -394,7 +398,7 @@ static int tda985x_command(struct i2c_client *client,
 	case VIDIOCGAUDIO:
 	{
 		struct video_audio *va = arg;
-		dprintk("VIDIOCGAUDIO\n");
+		dprintk("tda985x: VIDIOCGAUDIO\n");
 		if (chip == 9855)
 		{
 			int left,right;
@@ -430,7 +434,7 @@ static int tda985x_command(struct i2c_client *client,
 	case VIDIOCSAUDIO:
 	{
 		struct video_audio *va = arg;
-		dprintk("VIDEOCSAUDIO...\n");
+		dprintk("tda985x: VIDEOCSAUDIO\n");
 		if (chip == 9855)
 		{
 			int left,right;
@@ -453,17 +457,17 @@ static int tda985x_command(struct i2c_client *client,
 
 		switch (va->mode) {
 			case VIDEO_SOUND_MONO:
-				dprintk("VIDEO_SOUND_MONO\n");
+				dprintk("tda985x: VIDEO_SOUND_MONO\n");
 				t->c6= TDA985x_MONO | (t->c6 & 0x3f);
 				tda985x_write(client,TDA985x_C6,t->c6);
 				break;
 			case VIDEO_SOUND_STEREO:
-				dprintk("VIDEO_SOUND_STEREO\n");
+				dprintk("tda985x: VIDEO_SOUND_STEREO\n");
 				t->c6= TDA985x_STEREO | (t->c6 & 0x3f);
 				tda985x_write(client,TDA985x_C6,t->c6); 
 				break;
 			case VIDEO_SOUND_LANG1:
-				dprintk("VIDEO_SOUND_LANG1\n");
+				dprintk("tda985x: VIDEO_SOUND_LANG1\n");
 				t->c6= TDA985x_SAP | (t->c6 & 0x3f);
 				tda985x_write(client,TDA985x_C6,t->c6);
 				break;
@@ -476,7 +480,7 @@ static int tda985x_command(struct i2c_client *client,
 	default: /* Not VIDEOCGAUDIO or VIDEOCSAUDIO */
 
 		/* nothing */
-		dprintk("Default\n");
+		d2printk("tda985x: Default\n");
 
 	} /* end of (cmd) switch */
 

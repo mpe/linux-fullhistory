@@ -40,7 +40,7 @@ struct nfs_page {
 
 #define NFS_WBACK_BUSY(req)	((req)->wb_flags & PG_BUSY)
 
-extern	struct nfs_page *nfs_create_request(struct dentry *dentry,
+extern	struct nfs_page *nfs_create_request(struct file *file,
 					    struct page *page,
 					    unsigned int offset,
 					    unsigned int count);

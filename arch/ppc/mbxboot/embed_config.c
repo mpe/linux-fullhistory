@@ -3,7 +3,7 @@
  * not have boot monitor support for board information.
  */
 #include <sys/types.h>
-#include <linux/config.h>
+#include <linux/autoconf.h>
 #ifdef CONFIG_8xx
 #include <asm/mpc8xx.h>
 #endif
@@ -236,12 +236,12 @@ embed_config(bd_t *bd)
 	 * here for those people that may load the kernel with
 	 * a JTAG/COP tool and not the rom monitor.
 	 */
-	bd->bi_baudrate = 115200;
-	bd->bi_intfreq = 200;
-	bd->bi_busfreq = 66;
-	bd->bi_cpmfreq = 66;
-	bd->bi_brgfreq = 33;
-	bd->bi_memsize = 16 * 1024 * 1024;
+	bd->bi_baudrate = 19200;
+	bd->bi_intfreq  = 165;
+	bd->bi_busfreq  = 33;
+	bd->bi_cpmfreq  = 132;
+	bd->bi_brgfreq  = bd->bi_cpmfreq / 2; /* BRGCLK = (CPM*2/4) */
+	bd->bi_memsize  = 16 * 1024 * 1024;
 #endif
 
 	cp = (u_char *)def_enet_addr;
@@ -250,3 +250,4 @@ embed_config(bd_t *bd)
 	}
 }
 #endif /* EST8260 */
+

@@ -485,13 +485,6 @@ nfs_xdr_readdirres(struct rpc_rqst *req, u32 *p, struct nfs_readdirres *res)
 			break;
 		}
 	}
-	p++; /* EOF flag */
-
-	if (p > end) {
-		printk(KERN_NOTICE
-			"NFS: short packet in readdir reply!\n");
-		return -errno_NFSERR_IO;
-	}
 	return nr;
 }
 

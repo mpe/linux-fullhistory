@@ -252,8 +252,7 @@ void parport_close (struct pardevice *dev)
 }
 
 /**
- *	parport_device_num - convert device coordinates into a
- *			     canonical device number
+ *	parport_device_num - convert device coordinates
  *	@parport: parallel port number
  *	@mux: multiplexor port number (-1 for no multiplexor)
  *	@daisy: daisy chain address (-1 for no daisy chain address)
@@ -279,8 +278,7 @@ int parport_device_num (int parport, int mux, int daisy)
 }
 
 /**
- *	parport_device_coords - convert a canonical device number into
- *				device coordinates
+ *	parport_device_coords - convert canonical device number
  *	@devnum: device number
  *	@parport: pointer to storage for parallel port number
  *	@mux: pointer to storage for multiplexor port number
@@ -325,6 +323,7 @@ static int cpp_daisy (struct parport *port, int cmd)
 {
 	unsigned char s;
 
+	parport_data_forward (port);
 	parport_write_data (port, 0xaa); udelay (2);
 	parport_write_data (port, 0x55); udelay (2);
 	parport_write_data (port, 0x00); udelay (2);
@@ -373,6 +372,7 @@ static int cpp_mux (struct parport *port, int cmd)
 	unsigned char s;
 	int rc;
 
+	parport_data_forward (port);
 	parport_write_data (port, 0xaa); udelay (2);
 	parport_write_data (port, 0x55); udelay (2);
 	parport_write_data (port, 0xf0); udelay (2);
@@ -430,6 +430,7 @@ static int assign_addrs (struct parport *port)
 	int thisdev = numdevs;
 	char *deviceid;
 
+	parport_data_forward (port);
 	parport_write_data (port, 0xaa); udelay (2);
 	parport_write_data (port, 0x55); udelay (2);
 	parport_write_data (port, 0x00); udelay (2);
@@ -502,8 +503,7 @@ static int assign_addrs (struct parport *port)
    'from' itself is skipped. */
 
 /**
- *	parport_find_device - find a device with a specified
- *			      manufacturer and model string
+ *	parport_find_device - find a specific device
  *	@mfg: required manufacturer string
  *	@mdl: required model string
  *	@from: previous device number found in search, or %NULL for

@@ -377,7 +377,7 @@ static int try_to_unuse(unsigned int type)
                    page we've been using. */
 		if (PageSwapCache(page))
 			delete_from_swap_cache(page);
-		__free_page(page);
+		page_cache_release(page);
 		/*
 		 * Check for and clear any overflowed swap map counts.
 		 */

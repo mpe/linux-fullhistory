@@ -377,7 +377,7 @@ static int invalidate_list(struct list_head *head, struct super_block * sb, stru
  *
  *	Discard all of the inodes for a given superblock. If the discard
  *	fails because there are busy inodes then a non zero value is returned.
- *	If the discard is successful all the inodes are dicarded.
+ *	If the discard is successful all the inodes have been discarded.
  */
  
 int invalidate_inodes(struct super_block * sb)
@@ -470,7 +470,7 @@ int shrink_icache_memory(int priority, int gfp_mask)
 /*
  * Called with the inode lock held.
  * NOTE: we are not increasing the inode-refcount, you must call __iget()
- * by hand after calling find_inode now! This simplify iunique and won't
+ * by hand after calling find_inode now! This simplifies iunique and won't
  * add any additional branch in the common code.
  */
 static struct inode * find_inode(struct super_block * sb, unsigned long ino, struct list_head *head, find_inode_t find_actor, void *opaque)

@@ -289,7 +289,8 @@ repeat:
 		if (lo->lo_flags & LO_FLAGS_READ_ONLY)
 			goto error_out;
 	} else if (current_request->cmd != READ) {
-		printk(KERN_ERR "unknown loop device command (%d)?!?", current_request->cmd);
+		printk(KERN_ERR "unknown loop device command (%d)?!?",
+		       current_request->cmd);
 		goto error_out;
 	}
 
@@ -423,8 +424,28 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 		/* Backed by a block device - don't need to hold onto
 		   a file structure */
 		lo->lo_backing_file = NULL;
+
+		if (error)
+			goto out_putf;
 	} else if (S_ISREG(inode->i_mode)) {
 		struct address_space_operations *aops;
+
+		aops = inode->i_mapping->a_ops;
+		/*
+		 * If we can't read - sorry. If we only can't write - well,
+		 * it's going to be read-only.
+		 */
+		error = -EINVAL;
+		if (!aops->readpage)
+			goto out_putf;
+
+		if (!aops->prepare_write || !aops->commit_write)
+			lo->lo_flags |= LO_FLAGS_READ_ONLY;
+
+		error = get_write_access(inode);
+		if (error)
+			goto out_putf;
+
 		/* Backed by a regular file - we need to hold onto a file
 		   structure for this file.  Friggin' NFS can't live without
 		   it on write and for reading we use do_generic_file_read(),
@@ -437,35 +458,23 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 
 		error = -ENFILE;
 		lo->lo_backing_file = get_empty_filp();
-		if (lo->lo_backing_file) {
-			lo->lo_backing_file->f_mode = file->f_mode;
-			lo->lo_backing_file->f_pos = file->f_pos;
-			lo->lo_backing_file->f_flags = file->f_flags;
-			lo->lo_backing_file->f_owner = file->f_owner;
-			lo->lo_backing_file->f_dentry = file->f_dentry;
-			lo->lo_backing_file->f_vfsmnt = file->f_vfsmnt;
-			lo->lo_backing_file->f_op = file->f_op;
-			lo->lo_backing_file->private_data = file->private_data;
-			file_moveto(lo->lo_backing_file, file);
-
-			error = get_write_access(inode);
-			if (error) {
-				put_filp(lo->lo_backing_file);
-				lo->lo_backing_file = NULL;
-			}
+		if (lo->lo_backing_file == NULL) {
+			put_write_access(inode);
+			goto out_putf;
 		}
-		aops = inode->i_mapping->a_ops;
-		/*
-		 * If we can't read - sorry. If we only can't write - well,
-		 * it's going to be read-only.
-		 */
-		if (!aops->readpage)
-			error = -EINVAL;
-		else if (!aops->prepare_write || !aops->commit_write)
-			lo->lo_flags |= LO_FLAGS_READ_ONLY;
+
+		lo->lo_backing_file->f_mode = file->f_mode;
+		lo->lo_backing_file->f_pos = file->f_pos;
+		lo->lo_backing_file->f_flags = file->f_flags;
+		lo->lo_backing_file->f_owner = file->f_owner;
+		lo->lo_backing_file->f_dentry = file->f_dentry;
+		lo->lo_backing_file->f_vfsmnt = mntget(file->f_vfsmnt);
+		lo->lo_backing_file->f_op = file->f_op;
+		lo->lo_backing_file->private_data = file->private_data;
+		file_moveto(lo->lo_backing_file, file);
+
+		error = 0;
 	}
-	if (error)
-		goto out_putf;
 
 	if (IS_RDONLY (inode) || is_read_only(lo->lo_device))
 		lo->lo_flags |= LO_FLAGS_READ_ONLY;
@@ -477,9 +486,9 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 	lo->ioctl = NULL;
 	figure_loop_size(lo);
 
-out_putf:
+ out_putf:
 	fput(file);
-out:
+ out:
 	if (error)
 		MOD_DEC_USE_COUNT;
 	return error;
@@ -530,6 +539,7 @@ static int loop_clr_fd(struct loop_device *lo, kdev_t dev)
 	lo->lo_dentry = NULL;
 
 	if (lo->lo_backing_file != NULL) {
+		put_write_access(lo->lo_backing_file->f_dentry->d_inode);
 		fput(lo->lo_backing_file);
 		lo->lo_backing_file = NULL;
 	} else {

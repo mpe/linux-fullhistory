@@ -231,9 +231,10 @@ static ssize_t read_kmem(struct file *file, char *buf,
 {
 	unsigned long p = *ppos;
 	ssize_t read = 0;
-	ssize_t virtr;
+	ssize_t virtr = 0;
+	char * kbuf; /* k-addr because vread() takes vmlist_lock rwlock */
 		
-	if (p < (unsigned long) high_memory) { 
+	if (p < (unsigned long) high_memory) {
 		read = count;
 		if (count > (unsigned long) high_memory - p)
 			read = (unsigned long) high_memory - p;
@@ -258,11 +259,27 @@ static ssize_t read_kmem(struct file *file, char *buf,
 		count -= read;
 	}
 
-	virtr = vread(buf, (char *)p, count);
-	if (virtr < 0)
-		return virtr;
-	*ppos += p + virtr;
-	return virtr + read;
+	kbuf = (char *)__get_free_page(GFP_KERNEL);
+	if (!kbuf)
+		return -ENOMEM;
+	while (count > 0) {
+		int len = count;
+
+		if (len > PAGE_SIZE)
+			len = PAGE_SIZE;
+		len = vread(kbuf, (char *)p, len);
+		if (len && copy_to_user(buf, kbuf, len)) {
+			free_page((unsigned long)kbuf);
+			return -EFAULT;
+		}
+		count -= len;
+		buf += len;
+		virtr += len;
+		p += len;
+	}
+	free_page((unsigned long)kbuf);
+ 	*ppos = p;
+ 	return virtr + read;
 }
 
 /*

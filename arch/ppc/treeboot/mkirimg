@@ -1,4 +1,4 @@
-#!/usr/local/bin/perl
+#!/usr/bin/perl
 #
 #    Copyright (c) 1998-1999 TiVo, Inc.
 #      Original ELF parsing code.
@@ -332,7 +332,7 @@ require 'elf.pl';
   syswrite(OUTPUT, $ibuf, $initialOffset);
 
   if ($imageFound) {
-    $testN = pack ("I2", $bss_addr + $bss_size, $image_size);
+    $testN = pack ("N2", $bss_addr + $bss_size, $image_size);
     syswrite(OUTPUT, $testN, length($testN));
     printf("Updated symbol \"imageSect_start\" to 0x%08x\n",
 	   $bss_addr + $bss_size);
@@ -342,7 +342,7 @@ require 'elf.pl';
   }
 
   if ($initrdFound) {
-    $testN = pack ("I2", $bss_addr + $bss_size + $image_size, $initrd_size);
+    $testN = pack ("N2", $bss_addr + $bss_size + $image_size, $initrd_size);
     syswrite(OUTPUT, $testN, length($testN));
     printf("Updated symbol \"initrdSect_start\" to 0x%08x\n",
 	   $bss_addr + $bss_size + $image_size);

@@ -62,10 +62,21 @@ void do_page_fault(struct pt_regs *regs, unsigned long address,
 {
 	struct vm_area_struct * vma;
 	struct mm_struct *mm = current->mm;
+	siginfo_t info;
+	int code = SEGV_MAPERR;
 #if defined(CONFIG_4xx)
 	int is_write = error_code & ESR_DST;
 #else
 	int is_write = error_code & 0x02000000;
+
+	/*
+	 * Fortunately the bit assignments in SRR1 for an instruction
+	 * fault and DSISR for a data fault are mostly the same for the
+	 * bits we are interested in.  But there are some bits which
+	 * indicate errors in DSISR but can validly be set in SRR1.
+	 */
+	if (regs->trap == 0x400)
+		error_code &= 0x48200000;
 #endif /* CONFIG_4xx */
 
 #if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
@@ -82,16 +93,7 @@ void do_page_fault(struct pt_regs *regs, unsigned long address,
 #endif /* !CONFIG_4xx */
 #endif /* CONFIG_XMON || CONFIG_KGDB */
 
-	if (in_interrupt()) {
-		static int complained;
-		if (complained < 20) {
-			++complained;
-			printk("page fault in interrupt handler, addr=%lx\n",
-			       address);
-			show_regs(regs);
-		}
-	}
-	if (current == NULL || mm == NULL) {
+	if (in_interrupt() || mm == NULL) {
 		bad_page_fault(regs, address);
 		return;
 	}
@@ -107,10 +109,12 @@ void do_page_fault(struct pt_regs *regs, unsigned long address,
 		goto bad_area;
 
 good_area:
+	code = SEGV_ACCERR;
 #if defined(CONFIG_6xx)
 	if (error_code & 0x95700000)
 		/* an error such as lwarx to I/O controller space,
 		   address matching DABR, eciwx, etc. */
+		goto bad_area;
 #endif /* CONFIG_6xx */
 #if defined(CONFIG_8xx)
         /* The MPC8xx seems to always set 0x80000000, which is
@@ -119,9 +123,8 @@ good_area:
          */
 	if (error_code & 0x10000000)
                 /* Guarded storage error. */
-#endif /* CONFIG_8xx */
 		goto bad_area;
-	
+#endif /* CONFIG_8xx */
 	
 	/* a write */
 	if (is_write) {
@@ -135,8 +138,25 @@ good_area:
 		if (!(vma->vm_flags & (VM_READ | VM_EXEC)))
 			goto bad_area;
 	}
-	if (!handle_mm_fault(mm, vma, address, is_write))
-		goto bad_area;
+
+	/*
+	 * If for any reason at all we couldn't handle the fault,
+	 * make sure we exit gracefully rather than endlessly redo
+	 * the fault.
+	 */
+        switch (handle_mm_fault(mm, vma, address, is_write)) {
+        case 1:
+                current->min_flt++;
+                break;
+        case 2:
+                current->maj_flt++;
+                break;
+        case 0:
+                goto do_sigbus;
+        default:
+                goto out_of_memory;
+	}
+
 	up(&mm->mmap_sem);
 	/*
 	 * keep track of tlb+htab misses that are good addrs but
@@ -147,22 +167,55 @@ good_area:
 	return;
 
 bad_area:
-
 	up(&mm->mmap_sem);
 	pte_errors++;	
+
+	/* User mode accesses cause a SIGSEGV */
+	if (user_mode(regs)) {
+		info.si_signo = SIGSEGV;
+		info.si_errno = 0;
+		info.si_code = code;
+		info.si_addr = (void *) address;
+		force_sig_info(SIGSEGV, &info, current);
+		return;
+	}
+
 	bad_page_fault(regs, address);
+	return;
+
+/*
+ * We ran out of memory, or some other thing happened to us that made
+ * us unable to handle the page fault gracefully.
+ */
+out_of_memory:
+	up(&mm->mmap_sem);
+	printk("VM: killing process %s\n", current->comm);
+	if (user_mode(regs))
+		do_exit(SIGKILL);
+	bad_page_fault(regs, address);
+	return;
+
+do_sigbus:
+	up(&mm->mmap_sem);
+	info.si_signo = SIGBUS;
+	info.si_errno = 0;
+	info.si_code = BUS_ADRERR;
+	info.si_addr = (void *)address;
+	force_sig_info (SIGBUS, &info, current);
+	if (!user_mode(regs))
+		bad_page_fault(regs, address);
 }
 
+/*
+ * bad_page_fault is called when we have a bad access from the kernel.
+ * It is called from do_page_fault above and from some of the procedures
+ * in traps.c.
+ */
 void
 bad_page_fault(struct pt_regs *regs, unsigned long address)
 {
 	unsigned long fixup;
 
-	if (user_mode(regs)) {
-		force_sig(SIGSEGV, current);
-		return;
-	}
-	
 	/* Are we prepared to handle this fault?  */
 	if ((fixup = search_exception_table(regs->nip)) != 0) {
 		regs->nip = fixup;

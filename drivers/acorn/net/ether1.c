@@ -29,6 +29,7 @@
  *				TDR time-distance.
  * 1.05	RMK	31/12/1997	Removed calls to dev_tint for 2.1
  * 1.06	RMK	10/02/2000	Updated for 2.3.43
+ * 1.07	RMK	13/05/2000	Updated for 2.3.99-pre8
  */
 
 #include <linux/module.h>
@@ -74,7 +75,7 @@ static void ether1_setmulticastlist(struct net_device *dev);
 static void ether1_timeout(struct net_device *dev);
 
 /* ------------------------------------------------------------------------- */
-static char *version = "ether1 ethernet driver (c) 2000 Russell King v1.06\n";
+static char *version = "ether1 ethernet driver (c) 2000 Russell King v1.07\n";
 
 #define BUS_16 16
 #define BUS_8  8
@@ -620,95 +621,6 @@ ether1_init_for_open (struct net_device *dev)
 	return failures ? 1 : 0;
 }
 
-static int __init
-ether1_probe1(struct net_device *dev)
-{
-	static unsigned int version_printed = 0;
-	struct ether1_priv *priv;
-	int i;
-
-	if (!dev->priv)
-		dev->priv = kmalloc (sizeof (struct ether1_priv), GFP_KERNEL);
-
-	if (!dev->priv)
-	    	return 1;
-
-	priv = (struct ether1_priv *)dev->priv;
-	memset (priv, 0, sizeof (struct ether1_priv));
-
-	if ((priv->bus_type = ether1_reset (dev)) == 0) {
-		kfree (dev->priv);
-		return 1;
-	}
-
-	if (net_debug && version_printed++ == 0)
-		printk (KERN_INFO "%s", version);
-
-	request_region (dev->base_addr, 16, "ether1");
-	request_region (dev->base_addr + 0x800, 4096, "ether1(ram)");
-
-	printk (KERN_INFO "%s: ether1 at %lx, IRQ%d, ether address ",
-		dev->name, dev->base_addr, dev->irq);
-
-	for (i = 0; i < 6; i++)
-		printk (i==0?" %02x":i==5?":%02x\n":":%02x", dev->dev_addr[i]);
-
-	if (ether1_init_2 (dev)) {
-		kfree (dev->priv);
-		return 1;
-	}
-
-	dev->open		= ether1_open;
-	dev->stop		= ether1_close;
-	dev->hard_start_xmit    = ether1_sendpacket;
-	dev->get_stats		= ether1_getstats;
-	dev->set_multicast_list = ether1_setmulticastlist;
-	dev->tx_timeout		= ether1_timeout;
-	dev->watchdog_timeo	= 5 * HZ / 100;
-
-	/* Fill in the fields of the device structure with ethernet values */
-	ether_setup (dev);
-
-	return 0;
-}	
-    
-/* ------------------------------------------------------------------------- */
-
-static void __init
-ether1_addr(struct net_device *dev)
-{
-	int i;
-    
-	for (i = 0; i < 6; i++)
-		dev->dev_addr[i] = inb (IDPROM_ADDRESS + i);
-}
-
-int __init
-ether1_probe(struct net_device *dev)
-{
-#ifndef MODULE
-	struct expansion_card *ec;
-
-	if (!dev)
-		return ENODEV;
-
-	ecard_startfind ();
-	if ((ec = ecard_find (0, ether1_cids)) == NULL)
-		return ENODEV;
-
-	dev->base_addr = ecard_address (ec, ECARD_IOC, ECARD_FAST);
-	dev->irq       = ec->irq;
-
-	ecard_claim (ec);
-
-#endif
-	ether1_addr (dev);
-
-	if (ether1_probe1 (dev) == 0)
-		return 0;
-	return ENODEV;
-}
-
 /* ------------------------------------------------------------------------- */
 
 static int
@@ -1087,66 +999,118 @@ ether1_setmulticastlist (struct net_device *dev)
 
 /* ------------------------------------------------------------------------- */
 
-#ifdef MODULE
-
-static struct ether_dev {
-	struct expansion_card	*ec;
-	char			name[9];
-	struct net_device	dev;
-} ether_devs[MAX_ECARDS];
-
-int
-init_module (void)
+static void __init ether1_banner(void)
 {
-	struct expansion_card *ec;
-	int i, ret = -ENODEV;
+	static unsigned int version_printed = 0;
 
-	memset(ether_devs, 0, sizeof(ether_devs));
-
-	ecard_startfind ();
-	ec = ecard_find(0, ether1_cids);
-	i = 0;
-
-	while (ec && i < MAX_ECARDS) {
-		ecard_claim(ec);
-
-		ether_devs[i].ec	    = ec;
-		ether_devs[i].dev.irq	    = ec->irq;
-		ether_devs[i].dev.base_addr = ecard_address(ec, ECARD_IOC, ECARD_FAST);
-		ether_devs[i].dev.init	    = ether1_probe;
-		ether_devs[i].dev.name	    = ether_devs[i].name;
-
-		ret = register_netdev(&ether_devs[i].dev);
-
-		if (ret) {
-			ecard_release(ec);
-			ether_devs[i].ec = NULL;
-			break;
-		}
-
-		i += 1;
-		ec = ecard_find(0, ether1_cids);
-	}
-
-	return i != 0 ? 0 : ret;
+	if (net_debug && version_printed++ == 0)
+		printk (KERN_INFO "%s", version);
 }
 
-void
-cleanup_module (void)
+static struct net_device * __init ether1_init_one(struct expansion_card *ec)
+{
+	struct net_device *dev;
+	struct ether1_priv *priv;
+	int i;
+
+	ether1_banner();
+
+	ecard_claim(ec);
+	
+	dev = init_etherdev(NULL, sizeof(struct ether1_priv));
+	if (!dev)
+		goto out;
+
+	dev->base_addr	= ecard_address(ec, ECARD_IOC, ECARD_FAST);
+	dev->irq	= ec->irq;
+
+	/*
+	 * these will not fail - the nature of the bus ensures this
+	 */
+	request_region(dev->base_addr, 16, dev->name);
+	request_region(dev->base_addr + 0x800, 4096, dev->name);
+
+	priv = (struct ether1_priv *)dev->priv;
+	if ((priv->bus_type = ether1_reset(dev)) == 0)
+		goto free_dev;
+
+	printk(KERN_INFO "%s: ether1 at %lx, IRQ%d, ether address ",
+		dev->name, dev->base_addr, dev->irq);
+    
+	for (i = 0; i < 6; i++) {
+		dev->dev_addr[i] = inb(IDPROM_ADDRESS + i);
+		printk (i==0?" %02x":i==5?":%02x\n":":%02x", dev->dev_addr[i]);
+	}
+
+	if (ether1_init_2(dev))
+		goto free_dev;
+
+	dev->open		= ether1_open;
+	dev->stop		= ether1_close;
+	dev->hard_start_xmit    = ether1_sendpacket;
+	dev->get_stats		= ether1_getstats;
+	dev->set_multicast_list = ether1_setmulticastlist;
+	dev->tx_timeout		= ether1_timeout;
+	dev->watchdog_timeo	= 5 * HZ / 100;
+	return 0;
+
+free_dev:
+	release_region(dev->base_addr, 16);
+	release_region(dev->base_addr + 0x800, 4096);
+	unregister_netdev(dev);
+	kfree(dev);
+out:
+	ecard_release(ec);
+	return dev;
+}
+
+static struct expansion_card	*e_card[MAX_ECARDS];
+static struct net_device	*e_dev[MAX_ECARDS];
+
+static int __init ether1_init(void)
+{
+	int i, ret = -ENODEV;
+
+	ecard_startfind();
+
+	for (i = 0; i < MAX_ECARDS; i++) {
+		struct expansion_card *ec;
+		struct net_device *dev;
+
+		ec = ecard_find(0, ether1_cids);
+		if (!ec)
+			break;
+
+		dev = ether1_init_one(ec);
+		if (!dev)
+			break;
+
+		e_card[i] = ec;
+		e_dev[i]  = dev;
+		ret = 0;
+	}
+
+	return ret;
+}
+
+static void __exit ether1_exit(void)
 {
 	int i;
 
 	for (i = 0; i < MAX_ECARDS; i++) {
-		if (ether_devs[i].ec) {
-			unregister_netdev(&ether_devs[i].dev);
-
-			release_region(ether_devs[i].dev.base_addr, 16);
-			release_region(ether_devs[i].dev.base_addr + 0x800, 4096);
-
-			ecard_release(ether_devs[i].ec);
-
-			ether_devs[i].ec = NULL;
+		if (e_dev[i]) {
+			unregister_netdev(e_dev[i]);
+			release_region(e_dev[i]->base_addr, 16);
+			release_region(e_dev[i]->base_addr + 0x800, 4096);
+			kfree(e_dev[i]);
+			e_dev[i] = NULL;
+		}
+		if (e_card[i]) {
+			ecard_release(e_card[i]);
+			e_card[i] = NULL;
 		}
 	}
 }
-#endif /* MODULE */
+
+module_init(ether1_init);
+module_exit(ether1_exit);

@@ -79,7 +79,7 @@ drop_pte:
 		mm->swap_cnt--;
 		vma->vm_mm->rss--;
 		flush_tlb_page(vma, address);
-		__free_page(page);
+		page_cache_release(page);
 		goto out_failed;
 	}
 
@@ -151,7 +151,7 @@ drop_pte:
 		if (file) fput(file);
 		if (!error)
 			goto out_free_success;
-		__free_page(page);
+		page_cache_release(page);
 		return error;
 	}
 
@@ -184,7 +184,7 @@ drop_pte:
 	rw_swap_page(WRITE, page, 0);
 
 out_free_success:
-	__free_page(page);
+	page_cache_release(page);
 	return 1;
 out_swap_free:
 	swap_free(entry);

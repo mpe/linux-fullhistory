@@ -10,7 +10,7 @@ CONFIG_UID16=y
 CONFIG_EXPERIMENTAL=y
 
 #
-# System and processor type
+# System and Processor Type
 #
 # CONFIG_ARCH_ARC is not set
 # CONFIG_ARCH_A5K is not set
@@ -25,6 +25,8 @@ CONFIG_CPU_SA110=y
 # CONFIG_PCI is not set
 # CONFIG_ISA is not set
 # CONFIG_ISA_DMA is not set
+# CONFIG_SBUS is not set
+# CONFIG_PCMCIA is not set
 
 #
 # Loadable module support
@@ -69,7 +71,6 @@ CONFIG_LEDS=y
 # I2O device support
 #
 # CONFIG_I2O is not set
-# CONFIG_I2O_PCI is not set
 # CONFIG_I2O_BLOCK is not set
 # CONFIG_I2O_LAN is not set
 # CONFIG_I2O_SCSI is not set
@@ -87,13 +88,19 @@ CONFIG_LEDS=y
 # CONFIG_BLK_DEV_FD is not set
 # CONFIG_BLK_DEV_XD is not set
 # CONFIG_PARIDE is not set
+# CONFIG_BLK_CPQ_DA is not set
+# CONFIG_BLK_DEV_DAC960 is not set
 
 #
 # Additional Block Devices
 #
 # CONFIG_BLK_DEV_LOOP is not set
 CONFIG_BLK_DEV_NBD=m
+# CONFIG_BLK_DEV_LVM is not set
 # CONFIG_BLK_DEV_MD is not set
+# CONFIG_MD_LINEAR is not set
+# CONFIG_MD_RAID0 is not set
+# CONFIG_RAID15_DANGEROUS is not set
 CONFIG_BLK_DEV_RAM=y
 # CONFIG_BLK_DEV_INITRD is not set
 
@@ -124,7 +131,7 @@ CONFIG_PRINTER=m
 # Mice
 #
 # CONFIG_BUSMOUSE is not set
-CONFIG_MOUSE=y
+# CONFIG_MOUSE is not set
 # CONFIG_PSMOUSE is not set
 # CONFIG_82C710_MOUSE is not set
 # CONFIG_PC110_PAD is not set
@@ -141,6 +148,7 @@ CONFIG_MOUSE=y
 CONFIG_WATCHDOG=y
 # CONFIG_WATCHDOG_NOWAYOUT is not set
 # CONFIG_WDT is not set
+# CONFIG_WDTPCI is not set
 CONFIG_SOFT_WATCHDOG=y
 # CONFIG_PCWATCHDOG is not set
 # CONFIG_ACQUIRE_WDT is not set
@@ -173,6 +181,7 @@ CONFIG_NETLINK=y
 CONFIG_RTNETLINK=y
 # CONFIG_NETLINK_DEV is not set
 CONFIG_NETFILTER=y
+# CONFIG_NETFILTER_DEBUG is not set
 # CONFIG_FILTER is not set
 CONFIG_UNIX=y
 CONFIG_INET=y
@@ -222,6 +231,7 @@ CONFIG_IP_NF_FILTER=y
 CONFIG_IP_NF_TARGET_REJECT=y
 # CONFIG_IP_NF_TARGET_MIRROR is not set
 CONFIG_IP_NF_NAT=y
+CONFIG_IP_NF_NAT_NEEDED=y
 CONFIG_IP_NF_TARGET_MASQUERADE=y
 CONFIG_IP_NF_TARGET_REDIRECT=y
 CONFIG_IP_NF_MANGLE=y
@@ -302,10 +312,12 @@ CONFIG_ARM_AM79C961A=y
 # CONFIG_HIPPI is not set
 # CONFIG_PLIP is not set
 CONFIG_PPP=y
+# CONFIG_PPP_MULTILINK is not set
 CONFIG_PPP_ASYNC=y
 # CONFIG_PPP_SYNC_TTY is not set
 CONFIG_PPP_DEFLATE=m
 CONFIG_PPP_BSDCOMP=m
+CONFIG_PPPOE=m
 # CONFIG_SLIP is not set
 
 #
@@ -342,9 +354,10 @@ CONFIG_PPP_BSDCOMP=m
 # File systems
 #
 # CONFIG_QUOTA is not set
-CONFIG_AUTOFS_FS=y
+# CONFIG_AUTOFS_FS is not set
 CONFIG_AUTOFS4_FS=y
 # CONFIG_ADFS_FS is not set
+# CONFIG_ADFS_FS_RW is not set
 # CONFIG_AFFS_FS is not set
 # CONFIG_HFS_FS is not set
 # CONFIG_BFS_FS is not set
@@ -354,10 +367,12 @@ CONFIG_AUTOFS4_FS=y
 # CONFIG_VFAT_FS is not set
 # CONFIG_EFS_FS is not set
 # CONFIG_CRAMFS is not set
+# CONFIG_RAMFS is not set
 # CONFIG_ISO9660_FS is not set
 # CONFIG_JOLIET is not set
-CONFIG_MINIX_FS=y
+# CONFIG_MINIX_FS is not set
 # CONFIG_NTFS_FS is not set
+# CONFIG_NTFS_RW is not set
 # CONFIG_HPFS_FS is not set
 CONFIG_PROC_FS=y
 # CONFIG_DEVFS_FS is not set
@@ -365,23 +380,39 @@ CONFIG_PROC_FS=y
 # CONFIG_DEVFS_DEBUG is not set
 # CONFIG_DEVPTS_FS is not set
 # CONFIG_QNX4FS_FS is not set
+# CONFIG_QNX4FS_RW is not set
 # CONFIG_ROMFS_FS is not set
 # CONFIG_EXT2_FS is not set
 # CONFIG_SYSV_FS is not set
+# CONFIG_SYSV_FS_WRITE is not set
 # CONFIG_UDF_FS is not set
+# CONFIG_UDF_RW is not set
 # CONFIG_UFS_FS is not set
+# CONFIG_UFS_FS_WRITE is not set
 
 #
 # Network File Systems
 #
 # CONFIG_CODA_FS is not set
 CONFIG_NFS_FS=y
+# CONFIG_NFS_V3 is not set
 CONFIG_ROOT_NFS=y
 # CONFIG_NFSD is not set
+# CONFIG_NFSD_V3 is not set
 CONFIG_SUNRPC=y
 CONFIG_LOCKD=y
 # CONFIG_SMB_FS is not set
 # CONFIG_NCP_FS is not set
+# CONFIG_NCPFS_PACKET_SIGNING is not set
+# CONFIG_NCPFS_IOCTL_LOCKING is not set
+# CONFIG_NCPFS_STRONG is not set
+# CONFIG_NCPFS_NFS_NS is not set
+# CONFIG_NCPFS_OS2_NS is not set
+# CONFIG_NCPFS_SMALLDOS is not set
+# CONFIG_NCPFS_MOUNT_SUBDIR is not set
+# CONFIG_NCPFS_NDS_DOMAINS is not set
+# CONFIG_NCPFS_NLS is not set
+# CONFIG_NCPFS_EXTRAS is not set
 
 #
 # Partition Types

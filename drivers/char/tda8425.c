@@ -31,7 +31,6 @@
 #include "audiochip.h"
 
 /* Addresses to scan */
-#define I2C_TDA8425        0x82
 static unsigned short normal_i2c[] = {
     I2C_TDA8425 >> 1,
     I2C_CLIENT_END};

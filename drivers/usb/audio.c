@@ -3,7 +3,7 @@
 /*
  *	audio.c  --  USB Audio Class driver
  *
- *	Copyright (C) 1999
+ *	Copyright (C) 1999, 2000
  *	    Alan Cox (alan@lxorguk.ukuu.org.uk)
  *	    Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
@@ -59,6 +59,21 @@
  * 1999-12-20:  Fix bad bug in conversion to per interface probing.
  *		disconnect was called multiple times for the audio device,
  *		leading to a premature freeing of the audio structures
+ * 2000-05-13:  I don't remember who changed the find_format routine,
+ *              but the change was completely broken for the Dallas
+ *              chip. Anyway taking sampling rate into account in find_format
+ *              is bad and should not be done unless there are devices with
+ *              completely broken audio descriptors. Unless someone shows
+ *              me such a descriptor, I will not allow find_format to
+ *              take the sampling rate into account.
+ *              Also, the former find_format made:
+ *              - mpg123 play mono instead of stereo
+ *              - sox completely fail for wav's with sample rates < 44.1kHz
+ *                  for the Dallas chip.
+ *              Also fix a rather long standing problem with applications that
+ *              use "small" writes producing no sound at all.
+ * 2000-05-15:  My fears came true, the Philips camera indeed has pretty stupid
+ *              audio descriptors.
  *
  */
 
@@ -441,9 +456,9 @@ static int dmabuf_init(struct dmabuf *db)
 	db->bufsize = nr << PAGE_SHIFT;
 	db->ready = 1;
 	printk(KERN_DEBUG "dmabuf_init: bytepersec %d bufs %d ossfragshift %d ossmaxfrags %d "
-	       "fragshift %d fragsize %d numfrag %d dmasize %d bufsize %d\n",
+	       "fragshift %d fragsize %d numfrag %d dmasize %d bufsize %d fmt 0x%x\n",
 	       bytepersec, bufs, db->ossfragshift, db->ossmaxfrags, db->fragshift, db->fragsize,
-	       db->numfrag, db->dmasize, db->bufsize);
+	       db->numfrag, db->dmasize, db->bufsize, db->format);
 	return 0;
 }
 
@@ -973,6 +988,8 @@ static int usbin_start(struct usb_audiodev *as)
 		}
 		spin_lock_irqsave(&as->lock, flags);
 	}
+	if (u->dma.count <= 0 && !u->dma.mapped)
+		return 0;
 	u->flags |= FLG_RUNNING;
 	if (!(u->flags & FLG_URB0RUNNING)) {
 		urb = &u->durb[0].urb;
@@ -1332,6 +1349,8 @@ static int usbout_start(struct usb_audiodev *as)
 		}
 		spin_lock_irqsave(&as->lock, flags);
 	}
+	if (u->dma.count <= 0 && !u->dma.mapped)
+		return 0;
        	u->flags |= FLG_RUNNING;
 	if (!(u->flags & FLG_URB0RUNNING)) {
 		urb = &u->durb[0].urb;
@@ -1395,30 +1414,39 @@ static int usbout_start(struct usb_audiodev *as)
 
 /* --------------------------------------------------------------------- */
 
-static unsigned int find_format(struct audioformat *afp, unsigned int nr, unsigned int fmt, unsigned int rate)
+static unsigned int format_goodness(struct audioformat *afp, unsigned int fmt, unsigned int srate)
 {
-	unsigned int i;
+	unsigned int g = 0;
 
-	/* first find an exact match, taking both format and sample rate into account,
-	   but ignore stereo bit */
+	if (srate < afp->sratelo)
+		g += afp->sratelo - srate;
+	if (srate > afp->sratehi)
+		g += srate - afp->sratehi;
+	if (AFMT_ISSTEREO(afp->format) && !AFMT_ISSTEREO(fmt))
+		g += 0x100000;
+	if (!AFMT_ISSTEREO(afp->format) && AFMT_ISSTEREO(fmt))
+		g += 0x400000;
+	if (AFMT_IS16BIT(afp->format) && !AFMT_IS16BIT(fmt))
+		g += 0x100000;
+	if (!AFMT_IS16BIT(afp->format) && AFMT_IS16BIT(fmt))
+		g += 0x400000;
+	return g;
+}
+
+static int find_format(struct audioformat *afp, unsigned int nr, unsigned int fmt, unsigned int srate)
+{
+	unsigned int i, g, gb = ~0;
+	int j = -1; /* default to failure */
+
+	/* find "best" format (according to format_goodness) */
 	for (i = 0; i < nr; i++) {
-		if (afp[i].format == (fmt & ~AFMT_STEREO) && rate >= afp[i].sratelo && rate <= afp[i].sratehi)
-			return i;
+		g = format_goodness(&afp[i], fmt, srate);
+		if (g >= gb) 
+			continue;
+		j = i;
+		gb = g;
 	}
-		
-	/* second find a match with the same stereo/mono and 8bit/16bit property */
-	for (i = 0; i < nr; i++)
-		if (!AFMT_ISSTEREO(afp[i].format) == !AFMT_ISSTEREO(fmt) &&
-		    !AFMT_IS16BIT(afp[i].format) == !AFMT_IS16BIT(fmt) && 
-		    rate >= afp[i].sratelo && rate <= afp[i].sratehi)
-			return i;
-	/* third find a match with the same number of channels */
-	for (i = 0; i < nr; i++)
-		if (!AFMT_ISSTEREO(afp[i].format) == !AFMT_ISSTEREO(fmt) && 
-		    rate >= afp[i].sratelo && rate <= afp[i].sratehi)
-			return i;
-	/* return failure */
-	return -1;
+       	return j;
 }
 
 static int set_format_in(struct usb_audiodev *as)
@@ -1430,9 +1458,9 @@ static int set_format_in(struct usb_audiodev *as)
 	struct usbin *u = &as->usbin;
 	struct dmabuf *d = &u->dma;
 	struct audioformat *fmt;
-	unsigned int fmtnr, ep;
+	unsigned int ep;
 	unsigned char data[3];
-	int ret;
+	int fmtnr, ret;
 
 	if (u->interface < 0 || u->interface >= config->bNumInterfaces)
 		return 0;
@@ -1465,7 +1493,9 @@ static int set_format_in(struct usb_audiodev *as)
 		d->srate = fmt->sratelo;
 	if (d->srate > fmt->sratehi)
 		d->srate = fmt->sratehi;
-printk(KERN_DEBUG "usb_audio: set_format_in: usb_set_interface %u %u\n", alts->bInterfaceNumber, fmt->altsetting);
+#if 1
+	printk(KERN_DEBUG "usb_audio: set_format_in: usb_set_interface %u %u\n", alts->bInterfaceNumber, fmt->altsetting);
+#endif
 	if (usb_set_interface(dev, alts->bInterfaceNumber, fmt->altsetting) < 0) {
 		printk(KERN_WARNING "usbaudio: usb_set_interface failed, device %d interface %d altsetting %d\n",
 		       dev->devnum, u->interface, fmt->altsetting);
@@ -1517,9 +1547,9 @@ static int set_format_out(struct usb_audiodev *as)
 	struct usbout *u = &as->usbout;
 	struct dmabuf *d = &u->dma;
 	struct audioformat *fmt;
-	unsigned int fmtnr, ep;
+	unsigned int ep;
 	unsigned char data[3];
-	int ret;
+	int fmtnr, ret;
 
 	if (u->interface < 0 || u->interface >= config->bNumInterfaces)
 		return 0;
@@ -1559,7 +1589,9 @@ static int set_format_out(struct usb_audiodev *as)
 		d->srate = fmt->sratelo;
 	if (d->srate > fmt->sratehi)
 		d->srate = fmt->sratehi;
-printk(KERN_DEBUG "usb_audio: set_format_out: usb_set_interface %u %u\n", alts->bInterfaceNumber, fmt->altsetting);
+#if 1
+	printk(KERN_DEBUG "usb_audio: set_format_out: usb_set_interface %u %u\n", alts->bInterfaceNumber, fmt->altsetting);
+#endif
 	if (usb_set_interface(dev, u->interface, fmt->altsetting) < 0) {
 		printk(KERN_WARNING "usbaudio: usb_set_interface failed, device %d interface %d altsetting %d\n",
 		       dev->devnum, u->interface, fmt->altsetting);
@@ -1927,6 +1959,7 @@ static int drain_out(struct usb_audiodev *as, int nonblock)
 	
 	if (as->usbout.dma.mapped || !as->usbout.dma.ready)
 		return 0;
+	usbout_start(as);
 	add_wait_queue(&as->usbout.dma.wait, &wait);
 	for (;;) {
 		__set_current_state(TASK_INTERRUPTIBLE);
@@ -2033,6 +2066,7 @@ static ssize_t usb_audio_write(struct file *file, const char *buffer, size_t cou
 	ssize_t ret = 0;
 	unsigned long flags;
 	unsigned int ptr;
+	unsigned int start_thr;
 	int cnt, err;
 
 	if (ppos != &file->f_pos)
@@ -2043,10 +2077,11 @@ static ssize_t usb_audio_write(struct file *file, const char *buffer, size_t cou
 		return ret;
 	if (!access_ok(VERIFY_READ, buffer, count))
 		return -EFAULT;
+	start_thr = (as->usbout.dma.srate << AFMT_BYTESSHIFT(as->usbout.dma.format)) / (1000 / (3 * DESCFRAMES));
 	add_wait_queue(&as->usbout.dma.wait, &wait);
 	while (count > 0) {
 #if 0
-		printk(KERN_DEBUG "usb_audio_write: count %u dma: count %u rdptr %u wrptr %u dmasize %u fragsize %u flags 0x%02x taskst 0x%x\n",
+		printk(KERN_DEBUG "usb_audio_write: count %u dma: count %u rdptr %u wrptr %u dmasize %u fragsize %u flags 0x%02x taskst 0x%lx\n",
 		       count, as->usbout.dma.count, as->usbout.dma.rdptr, as->usbout.dma.wrptr, as->usbout.dma.dmasize, as->usbout.dma.fragsize,
 		       as->usbout.flags, current->state);
 #endif
@@ -2097,7 +2132,7 @@ static ssize_t usb_audio_write(struct file *file, const char *buffer, size_t cou
 		count -= cnt;
 		buffer += cnt;
 		ret += cnt;
-		if (usbout_start(as)) {
+		if (as->usbout.dma.count >= start_thr && usbout_start(as)) {
 			if (!ret)
 				ret = -ENODEV;
 			break;
@@ -2525,17 +2560,6 @@ static /*const*/ struct file_operations usb_audio_fops = {
 
 /* --------------------------------------------------------------------- */
 
-/*
- *	TO DO in order to get to the point of building an OSS interface
- *	structure, let alone playing music..
- *
- *	Use kmalloc/kfree for the descriptors we build
- *	Write the descriptor->OSS convertor code
- *	Figure how we deal with mixers
- *	Check alternate configurations. For now assume we will find one
- *	zero bandwidth (idle) config and one or more live one pers interface.
- */
-
 static void * usb_audio_probe(struct usb_device *dev, unsigned int ifnum);
 static void usb_audio_disconnect(struct usb_device *dev, void *ptr);
 
@@ -2543,24 +2567,10 @@ static struct usb_driver usb_audio_driver = {
 	"audio",
 	usb_audio_probe,
 	usb_audio_disconnect,
-	/*{ NULL, NULL }, */ LIST_HEAD_INIT(usb_audio_driver.driver_list), 
+	LIST_HEAD_INIT(usb_audio_driver.driver_list), 
 	NULL,
 	0
 };
-
-
-#if 0
-static int usb_audio_irq(int state, void *buffer, int len, void *dev_id)
-{
-#if 0
-	struct usb_audio_device *aud = (struct usb_audio_device *)dev_id;
-
-	printk(KERN_DEBUG "irq on %p\n", aud);
-#endif
-
-	return 1;
-}
-#endif
 
 static void *find_descriptor(void *descstart, unsigned int desclen, void *after, 
 			     u8 dtype, int iface, int altsetting)
@@ -3559,11 +3569,6 @@ static void usb_audio_disconnect(struct usb_device *dev, void *ptr)
 			unregister_sound_mixer(ms->dev_mixer);
 		ms->dev_mixer = -1;
 	}
-#if 0
-	if(aud->irq_handle)
-		usb_release_irq(dev, aud->irq_handle, aud->irqpipe);
-	aud->irq_handle = NULL;
-#endif
 	release(s);
 	wake_up(&open_wait);
 }

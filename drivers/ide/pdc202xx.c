@@ -262,59 +262,99 @@ static void decode_registers (byte registers, byte value)
 
 #endif /* PDC202XX_DECODE_REGISTER_INFO */
 
-/*   0    1    2    3    4    5    6   7   8
- * 960, 480, 390, 300, 240, 180, 120, 90, 60
- *           180, 150, 120,  90,  60
- * DMA_Speed
- * 180, 120,  90,  90,  90,  60,  30
- *  11,   5,   4,   3,   2,   1,   0
- */
-static int config_chipset_for_pio (ide_drive_t *drive, byte pio)
+static int pdc202xx_tune_chipset (ide_drive_t *drive, byte speed)
 {
 	ide_hwif_t *hwif	= HWIF(drive);
 	struct pci_dev *dev	= hwif->pci_dev;
-	byte			drive_pci, speed;
-	byte			AP, BP, TA, TB;
 
-	int drive_number	= ((hwif->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
-	int err;
+	unsigned int		drive_conf;
+	int			err;
+	byte			drive_pci, AP, BP, CP, DP;
+	byte			TA = 0, TB = 0, TC = 0;
 
-	switch (drive_number) {
+	switch (drive->dn) {
 		case 0: drive_pci = 0x60; break;
 		case 1: drive_pci = 0x64; break;
 		case 2: drive_pci = 0x68; break;
 		case 3: drive_pci = 0x6c; break;
-		default: return 1;
+		default: return -1;
+	}
+
+	if ((drive->media != ide_disk) && (speed < XFER_SW_DMA_0))	return -1;
+
+	pci_read_config_dword(dev, drive_pci, &drive_conf);
+	pci_read_config_byte(dev, (drive_pci), &AP);
+	pci_read_config_byte(dev, (drive_pci)|0x01, &BP);
+	pci_read_config_byte(dev, (drive_pci)|0x02, &CP);
+	pci_read_config_byte(dev, (drive_pci)|0x03, &DP);
+
+#ifdef CONFIG_BLK_DEV_IDEDMA
+	if (speed >= XFER_SW_DMA_0) {
+		if ((BP & 0xF0) && (CP & 0x0F)) {
+			/* clear DMA modes of upper 842 bits of B Register */
+			/* clear PIO forced mode upper 1 bit of B Register */
+			pci_write_config_byte(dev, (drive_pci)|0x01, BP & ~0xF0);
+			pci_read_config_byte(dev, (drive_pci)|0x01, &BP);
+
+			/* clear DMA modes of lower 8421 bits of C Register */
+			pci_write_config_byte(dev, (drive_pci)|0x02, CP & ~0x0F);
+			pci_read_config_byte(dev, (drive_pci)|0x02, &CP);
+		}
+	} else {
+#else
+	{
+#endif /* CONFIG_BLK_DEV_IDEDMA */
+		if ((AP & 0x0F) || (BP & 0x07)) {
+			/* clear PIO modes of lower 8421 bits of A Register */
+			pci_write_config_byte(dev, (drive_pci), AP & ~0x0F);
+			pci_read_config_byte(dev, (drive_pci), &AP);
+
+			/* clear PIO modes of lower 421 bits of B Register */
+			pci_write_config_byte(dev, (drive_pci)|0x01, BP & ~0x07);
+			pci_read_config_byte(dev, (drive_pci)|0x01, &BP);
+
+			pci_read_config_byte(dev, (drive_pci), &AP);
+			pci_read_config_byte(dev, (drive_pci)|0x01, &BP);
+		}
 	}
 
 	pci_read_config_byte(dev, (drive_pci), &AP);
 	pci_read_config_byte(dev, (drive_pci)|0x01, &BP);
+	pci_read_config_byte(dev, (drive_pci)|0x02, &CP);
 
-
-	if ((AP & 0x0F) || (BP & 0x07)) {
-		/* clear PIO modes of lower 8421 bits of A Register */
-		pci_write_config_byte(dev, (drive_pci), AP & ~0x0F);
-		pci_read_config_byte(dev, (drive_pci), &AP);
-
-		/* clear PIO modes of lower 421 bits of B Register */
-		pci_write_config_byte(dev, (drive_pci)|0x01, BP & ~0x07);
-		pci_read_config_byte(dev, (drive_pci)|0x01, &BP);
-
-		pci_read_config_byte(dev, (drive_pci), &AP);
-		pci_read_config_byte(dev, (drive_pci)|0x01, &BP);
+	switch(speed) {
+#ifdef CONFIG_BLK_DEV_IDEDMA
+		case XFER_UDMA_4:	TB = 0x20; TC = 0x01; break;	/* speed 8 == UDMA mode 4 */
+		case XFER_UDMA_3:	TB = 0x40; TC = 0x02; break;	/* speed 7 == UDMA mode 3 */
+		case XFER_UDMA_2:	TB = 0x20; TC = 0x01; break;	/* speed 6 == UDMA mode 2 */
+		case XFER_UDMA_1:	TB = 0x40; TC = 0x02; break;	/* speed 5 == UDMA mode 1 */
+		case XFER_UDMA_0:	TB = 0x60; TC = 0x03; break;	/* speed 4 == UDMA mode 0 */
+		case XFER_MW_DMA_2:	TB = 0x60; TC = 0x03; break;	/* speed 4 == MDMA mode 2 */
+		case XFER_MW_DMA_1:	TB = 0x60; TC = 0x04; break;	/* speed 3 == MDMA mode 1 */
+		case XFER_MW_DMA_0:	TB = 0x60; TC = 0x05; break;	/* speed 2 == MDMA mode 0 */
+		case XFER_SW_DMA_2:	TB = 0x60; TC = 0x05; break;	/* speed 0 == SDMA mode 2 */
+		case XFER_SW_DMA_1:	TB = 0x80; TC = 0x06; break;	/* speed 1 == SDMA mode 1 */
+		case XFER_SW_DMA_0:	TB = 0xC0; TC = 0x0B; break;	/* speed 0 == SDMA mode 0 */
+#endif /* CONFIG_BLK_DEV_IDEDMA */
+		case XFER_PIO_4:	TA = 0x01; TB = 0x04; break;
+		case XFER_PIO_3:	TA = 0x02; TB = 0x06; break;
+		case XFER_PIO_2:	TA = 0x03; TB = 0x08; break;
+		case XFER_PIO_1:	TA = 0x05; TB = 0x0C; break;
+		case XFER_PIO_0:
+		default:		TA = 0x09; TB = 0x13; break;
 	}
 
-	pio = (pio == 5) ? 4 : pio;
-	switch (ide_get_best_pio_mode(drive, 255, pio, NULL)) {
-		case 4:speed = XFER_PIO_4; TA=0x01; TB=0x04; break;
-		case 3:speed = XFER_PIO_3; TA=0x02; TB=0x06; break;
-		case 2:speed = XFER_PIO_2; TA=0x03; TB=0x08; break;
-		case 1:speed = XFER_PIO_1; TA=0x05; TB=0x0C; break;
-		case 0:
-		default:speed = XFER_PIO_0; TA=0x09; TB=0x13; break;
+#ifdef CONFIG_BLK_DEV_IDEDMA
+        if (speed >= XFER_SW_DMA_0) {
+		pci_write_config_byte(dev, (drive_pci)|0x01, BP|TB);
+		pci_write_config_byte(dev, (drive_pci)|0x02, CP|TC);
+	} else {
+#else
+	{
+#endif /* CONFIG_BLK_DEV_IDEDMA */
+		pci_write_config_byte(dev, (drive_pci), AP|TA);
+		pci_write_config_byte(dev, (drive_pci)|0x01, BP|TB);
 	}
-	pci_write_config_byte(dev, (drive_pci), AP|TA);
-	pci_write_config_byte(dev, (drive_pci)|0x01, BP|TB);
 
 #if PDC202XX_DECODE_REGISTER_INFO
 	pci_read_config_byte(dev, (drive_pci), &AP);
@@ -333,11 +373,28 @@ static int config_chipset_for_pio (ide_drive_t *drive, byte pio)
 #if PDC202XX_DEBUG_DRIVE_INFO
 	printk("%s: %s drive%d 0x%08x ",
 		drive->name, ide_xfer_verbose(speed),
-		drive_number, drive_conf);
+		drive->dn, drive_conf);
 		pci_read_config_dword(dev, drive_pci, &drive_conf);
 	printk("0x%08x\n", drive_conf);
 #endif /* PDC202XX_DEBUG_DRIVE_INFO */
 	return err;
+}
+
+/*   0    1    2    3    4    5    6   7   8
+ * 960, 480, 390, 300, 240, 180, 120, 90, 60
+ *           180, 150, 120,  90,  60
+ * DMA_Speed
+ * 180, 120,  90,  90,  90,  60,  30
+ *  11,   5,   4,   3,   2,   1,   0
+ */
+static int config_chipset_for_pio (ide_drive_t *drive, byte pio)
+{
+	byte speed = 0x00;
+
+	pio = (pio == 5) ? 4 : pio;
+	speed = XFER_PIO_0 + ide_get_best_pio_mode(drive, 255, pio, NULL);
+        
+	return ((int) pdc202xx_tune_chipset(drive, speed));
 }
 
 static void pdc202xx_tune_drive (ide_drive_t *drive, byte pio)
@@ -352,15 +409,15 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 	ide_hwif_t *hwif	= HWIF(drive);
 	struct pci_dev *dev	= hwif->pci_dev;
 	unsigned long high_16	= dev->resource[4].start & PCI_BASE_ADDRESS_IO_MASK;
+	unsigned long dma_base  = hwif->dma_base;
+	byte unit		= (drive->select.b.unit & 0x01);
 
-	int			err;
 	unsigned int		drive_conf;
 	byte			drive_pci;
 	byte			test1, test2, speed = -1;
-	byte			AP, BP, CP, DP, TB, TC;
+	byte			AP;
 	unsigned short		EP;
 	byte CLKSPD		= IN_BYTE(high_16 + 0x11);
-	int drive_number	= ((hwif->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
 	byte udma_66		= ((id->hw_config & 0x2000) && (hwif->udma_four)) ? 1 : 0;
 	byte udma_33		= ultra ? (inb(high_16 + 0x001f) & 1) : 0;
 
@@ -397,9 +454,9 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 			 * check to make sure drive on same channel
 			 * is u66 capable
 			 */
-			if (hwif->drives[!(drive_number%2)].id) {
-				if ((hwif->drives[!(drive_number%2)].id->dma_ultra & 0x0010) ||
-				    (hwif->drives[!(drive_number%2)].id->dma_ultra & 0x0008)) {
+			if (hwif->drives[!(drive->dn%2)].id) {
+				if ((hwif->drives[!(drive->dn%2)].id->dma_ultra & 0x0010) ||
+				    (hwif->drives[!(drive->dn%2)].id->dma_ultra & 0x0008)) {
 					OUT_BYTE(CLKSPD | mask, (high_16 + 0x11));
 				} else {
 					OUT_BYTE(CLKSPD & ~mask, (high_16 + 0x11));
@@ -410,7 +467,7 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 		}
 	}
 
-	switch(drive_number) {
+	switch(drive->dn) {
 		case 0:	drive_pci = 0x60;
 			pci_read_config_dword(dev, drive_pci, &drive_conf);
 			if ((drive_conf != 0x004ff304) && (drive_conf != 0x004ff3c4))
@@ -451,101 +508,34 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 
 chipset_is_set:
 
-	if (drive->media != ide_disk)
-		return ide_dma_off_quietly;
+	if (drive->media != ide_disk)	return ide_dma_off_quietly;
 
 	pci_read_config_byte(dev, (drive_pci), &AP);
-	pci_read_config_byte(dev, (drive_pci)|0x01, &BP);
-	pci_read_config_byte(dev, (drive_pci)|0x02, &CP);
-	pci_read_config_byte(dev, (drive_pci)|0x03, &DP);
-
-	if (id->capability & 4) {		/* IORDY_EN */
+	if (id->capability & 4)	/* IORDY_EN */
 		pci_write_config_byte(dev, (drive_pci), AP|IORDY_EN);
-		pci_read_config_byte(dev, (drive_pci), &AP);
-	}
-
-	if (drive->media == ide_disk) {		/* PREFETCH_EN */
-		pci_write_config_byte(dev, (drive_pci), AP|PREFETCH_EN);
-		pci_read_config_byte(dev, (drive_pci), &AP);
-	}
-
-	if ((BP & 0xF0) && (CP & 0x0F)) {
-		/* clear DMA modes of upper 842 bits of B Register */
-		/* clear PIO forced mode upper 1 bit of B Register */
-		pci_write_config_byte(dev, (drive_pci)|0x01, BP & ~0xF0);
-		pci_read_config_byte(dev, (drive_pci)|0x01, &BP);
-
-		/* clear DMA modes of lower 8421 bits of C Register */
-		pci_write_config_byte(dev, (drive_pci)|0x02, CP & ~0x0F);
-		pci_read_config_byte(dev, (drive_pci)|0x02, &CP);
-	}
-
 	pci_read_config_byte(dev, (drive_pci), &AP);
-	pci_read_config_byte(dev, (drive_pci)|0x01, &BP);
-	pci_read_config_byte(dev, (drive_pci)|0x02, &CP);
+	if (drive->media == ide_disk)	/* PREFETCH_EN */
+		pci_write_config_byte(dev, (drive_pci), AP|PREFETCH_EN);
 
-	if ((id->dma_ultra & 0x0010) && (udma_66) && (udma_33)) {
-		/* speed 8 == UDMA mode 4 == speed 6 plus cable */
-		speed = XFER_UDMA_4; TB = 0x20; TC = 0x01;
-	} else if ((id->dma_ultra & 0x0008) && (udma_66) && (udma_33)) {
-		/* speed 7 == UDMA mode 3 == speed 5 plus cable */
-		speed = XFER_UDMA_3; TB = 0x40; TC = 0x02;
-	} else if ((id->dma_ultra & 0x0004) && (udma_33)) {
-		/* speed 6 == UDMA mode 2 */
-		speed = XFER_UDMA_2; TB = 0x20; TC = 0x01;
-	} else if ((id->dma_ultra & 0x0002) && (udma_33)) {
-		/* speed 5 == UDMA mode 1 */
-		speed = XFER_UDMA_1; TB = 0x40; TC = 0x02;
-	} else if ((id->dma_ultra & 0x0001) && (udma_33)) {
-		/* speed 4 == UDMA mode 0 */
-		speed = XFER_UDMA_0; TB = 0x60; TC = 0x03;
-	} else if (id->dma_mword & 0x0004) {
-		/* speed 4 == DMA mode 2 multi-word */
-		speed = XFER_MW_DMA_2; TB = 0x60; TC = 0x03;
-	} else if (id->dma_mword & 0x0002) {
-		/* speed 3 == DMA mode 1 multi-word */
-		speed = XFER_MW_DMA_1; TB = 0x60; TC = 0x04;
-	} else if (id->dma_mword & 0x0001) {
-		/* speed 2 == DMA mode 0 multi-word */
-		speed = XFER_MW_DMA_0; TB = 0x60; TC = 0x05;
-	} else if (id->dma_1word & 0x0004) {
-		/* speed 2 == DMA mode 2 single-word */
-		speed = XFER_SW_DMA_2; TB = 0x60; TC = 0x05;
-	} else if (id->dma_1word & 0x0002) {
-		/* speed 1 == DMA mode 1 single-word */
-		speed = XFER_SW_DMA_1; TB = 0x80; TC = 0x06;
-	} else if (id->dma_1word & 0x0001) {
-		/* speed 0 == DMA mode 0 single-word */
-		speed = XFER_SW_DMA_0; TB = 0xC0; TC = 0x0B;
-	} else {
+	if ((id->dma_ultra & 0x0010) && (udma_66) && (udma_33))		speed = XFER_UDMA_4;
+	else if ((id->dma_ultra & 0x0008) && (udma_66) && (udma_33))	speed = XFER_UDMA_3;
+	else if ((id->dma_ultra & 0x0004) && (udma_33)) 		speed = XFER_UDMA_2;
+	else if ((id->dma_ultra & 0x0002) && (udma_33))			speed = XFER_UDMA_1;
+	else if ((id->dma_ultra & 0x0001) && (udma_33))			speed = XFER_UDMA_0;
+	else if (id->dma_mword & 0x0004)				speed = XFER_MW_DMA_2;
+	else if (id->dma_mword & 0x0002)				speed = XFER_MW_DMA_1;
+	else if (id->dma_mword & 0x0001)				speed = XFER_MW_DMA_0;
+	else if (id->dma_1word & 0x0004)				speed = XFER_SW_DMA_2;
+	else if (id->dma_1word & 0x0002)				speed = XFER_SW_DMA_1;
+	else if (id->dma_1word & 0x0001)				speed = XFER_SW_DMA_0;
+	else {
 		/* restore original pci-config space */
 		pci_write_config_dword(dev, drive_pci, drive_conf);
 		return ide_dma_off_quietly;
 	}
 
-	pci_write_config_byte(dev, (drive_pci)|0x01, BP|TB);
-	pci_write_config_byte(dev, (drive_pci)|0x02, CP|TC);
-
-#if PDC202XX_DECODE_REGISTER_INFO
-	pci_read_config_byte(dev, (drive_pci), &AP);
-	pci_read_config_byte(dev, (drive_pci)|0x01, &BP);
-	pci_read_config_byte(dev, (drive_pci)|0x02, &CP);
-
-	decode_registers(REG_A, AP);
-	decode_registers(REG_B, BP);
-	decode_registers(REG_C, CP);
-	decode_registers(REG_D, DP);
-#endif /* PDC202XX_DECODE_REGISTER_INFO */
-
-	err = ide_config_drive_speed(drive, speed);
-
-#if PDC202XX_DEBUG_DRIVE_INFO
-	printk("%s: %s drive%d 0x%08x ",
-		drive->name, ide_xfer_verbose(speed),
-		drive_number, drive_conf);
-	pci_read_config_dword(dev, drive_pci, &drive_conf);
-	printk("0x%08x\n", drive_conf);
-#endif /* PDC202XX_DEBUG_DRIVE_INFO */
+	outb(inb(dma_base+2) & ~(1<<(5+unit)), dma_base+2);
+	(void) pdc202xx_tune_chipset(drive, speed);
 
 	return ((int)	((id->dma_ultra >> 11) & 3) ? ide_dma_on :
 			((id->dma_ultra >> 8) & 7) ? ide_dma_on :
@@ -716,6 +706,7 @@ unsigned int __init ata66_pdc202xx (ide_hwif_t *hwif)
 void __init ide_init_pdc202xx (ide_hwif_t *hwif)
 {
 	hwif->tuneproc = &pdc202xx_tune_drive;
+	hwif->speedproc = &pdc202xx_tune_chipset;
 
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	if (hwif->dma_base) {

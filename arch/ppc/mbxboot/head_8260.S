@@ -9,10 +9,17 @@
  * $Id: head.S,v 1.33 1999/09/08 01:06:58 cort Exp $
  *	
  * Boot loader philosophy:
+ *
  *      ROM loads us to some arbitrary location
- *      Move the boot code to the link address (8M)
+ *      ROM loads these registers:
+ *	
+ *          R3 = Pointer to the board configuration data
+ *          R5 = Pointer to Open Firmware data 	
+ *		 	
+ *      ROM jumps to start/start_
+ *      Move the boot code to the link address (4 MB)
  *      Call decompress_kernel()
- *         Relocate the initrd, zimage and residual data to 8M
+ *         Relocate the initrd, zimage and residual data to 4 MB
  *         Decompress the kernel to 0
  *      Jump to the kernel entry
  *            -- Cort

@@ -1459,7 +1459,8 @@ start_here:
 /*
  * Set up the segment registers for a new context.
  */
-_GLOBAL(set_context)
+	.globl set_context
+set_context:	
 	rlwinm	r3,r3,4,8,27	/* VSID = context << 4 */
 	addis	r3,r3,0x6000	/* Set Ks, Ku bits */
 	li	r0,12		/* TASK_SIZE / SEGMENT_SIZE */

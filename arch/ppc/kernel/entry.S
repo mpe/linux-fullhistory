@@ -291,25 +291,9 @@ ret_from_intercept:
 	 * -- Cort
 	 */
 	cmpi	0,r3,0
-	bne	ret_from_except
-	/*
-	 * If we're returning from user mode we do things differently
-	 * -- Cort
-	 */
-	lwz	r3,_MSR(r1)
-	andi.	r3,r3,MSR_PR
-	beq+	10f
-	b	8f
-
+	beq	restore
 	.globl	ret_from_except
 ret_from_except:
-0:	/* disable interrupts */
-	lis	r30,int_control@h
-	ori	r30,r30,int_control@l
-	lwz	r30,0(r30)
-	mtlr	r30
-	blrl
-	
 	lwz	r5,_MSR(r1)
 	andi.	r5,r5,MSR_EE
 	beq	2f
@@ -341,65 +325,58 @@ lost_irq_ret:
 	bl	do_softirq
 	.globl	do_bottom_half_ret
 do_bottom_half_ret:
-2:	/* disable interrupts */	
-	lis	r30,int_control@h
-	ori	r30,r30,int_control@l
-	lwz	r30,0(r30)
-	mtlr	r30
-	blrl
-	lwz	r3,_MSR(r1)	/* Returning to user mode? */
+2:	lwz	r3,_MSR(r1)	/* Returning to user mode? */
 	andi.	r3,r3,MSR_PR
-	beq+	10f		/* if so, check need_resched and signals */
+	beq+	restore		/* if so, check need_resched and signals */
+	.globl ret_to_user_hook	
+ret_to_user_hook:
+	nop
 	lwz	r3,NEED_RESCHED(r2)
 	cmpi	0,r3,0		/* check need_resched flag */
 	beq+	7f
 	bl	schedule
-	b	0b
 7:	lwz	r5,SIGPENDING(r2) /* Check for pending unblocked signals */
 	cmpwi	0,r5,0
-	beq+	8f
+	beq+	restore
 	li	r3,0
 	addi	r4,r1,STACK_FRAME_OVERHEAD
 	bl	do_signal
 	.globl	do_signal_ret
 do_signal_ret:
-	b	0b
-8:	/* 
-	 * We need to hard disable here even if RTL is active since
-	 * being interrupted after here trashes the SPRG2
-	 *  -- Cort
-	 */ 
-	mfmsr	r0		/* Get current interrupt state */
-	rlwinm	r0,r0,0,17,15	/* clear MSR_EE in r0 */
-	mtmsr	r0		/* Update machine state */
-	
-	addi	r4,r1,INT_FRAME_SIZE	/* size of frame */
-	stw	r4,THREAD+KSP(r2)	/* save kernel stack pointer */
-	tophys(r3,r1)
-	mtspr	SPRG2,r3	/* phys exception stack pointer */
-	b	11f
-10:	/* make sure we hard disable here, even if rtl is active -- Cort */
-	mfmsr	r0		/* Get current interrupt state */
-	rlwinm	r0,r0,0,17,15	/* clear MSR_EE in r0 */
-	sync			/* Some chip revs have problems here... */
-	mtmsr	r0		/* Update machine state */
-11: 
-	lwz	r2,_CTR(r1)
+restore:	
+	lwz	r3,_CTR(r1)
 	lwz	r0,_LINK(r1)
-	mtctr	r2
+	mtctr	r3
 	mtlr	r0
-	lwz	r2,_XER(r1)
-	lwz	r0,_CCR(r1)
-	mtspr	XER,r2
-	mtcrf	0xFF,r0
+	lwz	r3,_XER(r1)
+	mtspr	XER,r3
 	REST_10GPRS(3, r1)
 	REST_10GPRS(13, r1)
 	REST_8GPRS(23, r1)
 	REST_GPR(31, r1)
-	lwz	r2,_NIP(r1)	/* Restore environment */
+	
+	/* make sure we hard disable here, even if rtl is active, to protect
+	 * SRR[01] and SPRG2 -- Cort 
+	 */
+	mfmsr	r0		/* Get current interrupt state */
+	rlwinm	r0,r0,0,17,15	/* clear MSR_EE in r0 */
+	sync			/* Some chip revs have problems here... */
+	mtmsr	r0		/* Update machine state */
+	
+	/* if returning to user mode, set new sprg2 and save kernel SP */
 	lwz	r0,_MSR(r1)
-	mtspr	SRR0,r2
 	mtspr	SRR1,r0
+	andi.	r0,r0,MSR_PR
+	beq+	1f
+	addi	r0,r1,INT_FRAME_SIZE	/* size of frame */
+	stw	r0,THREAD+KSP(r2)	/* save kernel stack pointer */
+	tophys(r2,r1)
+	mtspr	SPRG2,r2	/* phys exception stack pointer */
+1:	
+	lwz	r2,_CCR(r1)
+	mtcrf	0xFF,r2
+	lwz	r2,_NIP(r1)
+	mtspr	SRR0,r2
 	lwz	r0,GPR0(r1)
 	lwz	r2,GPR2(r1)
 	lwz	r1,GPR1(r1)

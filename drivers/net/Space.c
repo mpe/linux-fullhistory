@@ -95,10 +95,6 @@ extern int bionet_probe(struct net_device *);
 extern int pamsnet_probe(struct net_device *);
 extern int cs89x0_probe(struct net_device *dev);
 extern int ethertap_probe(struct net_device *dev);
-extern int ether1_probe (struct net_device *dev);
-extern int ether3_probe (struct net_device *dev);
-extern int etherh_probe (struct net_device *dev);
-extern int am79c961_probe(struct net_device *dev);
 extern int hplance_probe(struct net_device *dev);
 extern int bagetlance_probe(struct net_device *);
 extern int dec_lance_probe(struct net_device *);
@@ -401,22 +397,6 @@ struct devprobe mips_probes[] __initdata = {
 	{NULL, 0},
 };
 
-struct devprobe arm_probes[] __initdata = {
-#ifdef CONFIG_ARM_ETHERH
-	{etherh_probe , 0},
-#endif
-#ifdef CONFIG_ARM_ETHER3
-	{ether3_probe , 0},
-#endif
-#ifdef CONFIG_ARM_ETHER1
-	{ether1_probe , 0},
-#endif
-#ifdef CONFIG_ARM_AM79C961A
-	{am79c961_probe, 0},
-#endif
-	{NULL, 0},
-};
-
 /*
  * Unified ethernet device probe, segmented per architecture and
  * per bus interface. This drives the legacy devices only for now.
@@ -437,8 +417,6 @@ static int __init ethif_probe(struct net_device *dev)
 	 * The arch specific probes are 1st so that any on-board ethernet
 	 * will be probed before other ISA/EISA/MCA/PCI bus cards.
 	 */
-	if (probe_list(dev, arm_probes) == 0)
-		return 0;
 	if (probe_list(dev, m68k_probes) == 0)
 		return 0;
 	if (probe_list(dev, mips_probes) == 0)

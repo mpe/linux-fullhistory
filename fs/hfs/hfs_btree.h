@@ -90,7 +90,7 @@ struct BTHdrRec {
         hfs_byte_t  bthResv2;   /* reserved */
         hfs_lword_t bthAtrb;    /* (F) attributes */
         hfs_lword_t bthResv3[16]; /* Reserved */
-};
+} __attribute__((packed));
 
 /*
  * struct NodeDescriptor
@@ -112,7 +112,7 @@ struct NodeDescriptor {
 	hfs_byte_t  ndNHeight;	/* (F) The level of this node (leaves=1) */
 	hfs_word_t  ndNRecs;	/* (V) The number of records in this node */
 	hfs_word_t  ndResv2;	/* Reserved */
-};
+} __attribute__((packed));
 
 /*
  * typedef hfs_cmpfn

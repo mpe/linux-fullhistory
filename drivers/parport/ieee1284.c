@@ -380,6 +380,7 @@ int parport_negotiate (struct parport *port, int mode)
 	udelay(1);
 
 	/* Event 0: Set data */
+	parport_data_forward (port);
 	parport_write_data (port, m);
 	udelay (400); /* Shouldn't need to wait this long. */
 
@@ -734,7 +735,6 @@ ssize_t parport_read (struct parport *port, void *buffer, size_t len)
 
 /**
  *	parport_set_timeout - set the inactivity timeout for a device
- *	                      on a port
  *	@dev: device on a port
  *	@inactivity: inactivity timeout (in jiffies)
  *

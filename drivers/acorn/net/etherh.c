@@ -14,6 +14,7 @@
  *  23-11-1997	RMK	1.04	Added media autodetection
  *  16-04-1998	RMK	1.05	Improved media autodetection
  *  10-02-2000	RMK	1.06	Updated for 2.3.43
+ *  13-05-2000	RMK	1.07	Updated for 2.3.99-pre8
  *
  * Insmod Module Parameters
  * ------------------------
@@ -62,7 +63,8 @@ static const card_ids __init etherh_cids[] = {
 MODULE_AUTHOR("Russell King");
 MODULE_DESCRIPTION("i3 EtherH driver");
 
-static char *version = "etherh [500/600/600A] ethernet driver (c) 2000 R.M.King v1.06\n";
+static char *version __initdata =
+	"etherh [500/600/600A] ethernet driver (c) 2000 R.M.King v1.07\n";
 
 #define ETHERH500_DATAPORT	0x200	/* MEMC */
 #define ETHERH500_NS8390	0x000	/* MEMC */
@@ -81,34 +83,10 @@ static char *version = "etherh [500/600/600A] ethernet driver (c) 2000 R.M.King 
 
 /* --------------------------------------------------------------------------- */
 
-/*
- * Read the ethernet address string from the on board rom.
- * This is an ascii string...
- */
-static int __init
-etherh_addr(char *addr, struct expansion_card *ec)
-{
-	struct in_chunk_dir cd;
-	char *s;
-	
-	if (ecard_readchunk(&cd, ec, 0xf5, 0) && (s = strchr(cd.d.string, '('))) {
-		int i;
-		for (i = 0; i < 6; i++) {
-			addr[i] = simple_strtoul(s + 1, &s, 0x10);
-			if (*s != (i == 5? ')' : ':'))
-				break;
-		}
-		if (i == 6)
-			return 0;
-	}
-	return ENODEV;
-}
-
 static void
 etherh_setif(struct net_device *dev)
 {
-	unsigned long addr;
-	unsigned long flags;
+	unsigned long addr, flags;
 
 	save_flags_cli(flags);
 
@@ -118,19 +96,27 @@ etherh_setif(struct net_device *dev)
 	case PROD_I3_ETHERLAN600A:
 		addr = dev->base_addr + EN0_RCNTHI;
 
-		if (ei_status.interface_num)	/* 10b2 */
+		switch (dev->if_port) {
+		case IF_PORT_10BASE2:
 			outb((inb(addr) & 0xf8) | 1, addr);
-		else				/* 10bT */
+			break;
+		case IF_PORT_10BASET:
 			outb((inb(addr) & 0xf8), addr);
+			break;
+		}
 		break;
 
 	case PROD_I3_ETHERLAN500:
 		addr = dev->rmem_start;
 
-		if (ei_status.interface_num)	/* 10b2 */
+		switch (dev->if_port) {
+		case IF_PORT_10BASE2:
 			outb(inb(addr) & ~ETHERH_CP_IF, addr);
-		else				/* 10bT */
+			break;
+		case IF_PORT_10BASET:
 			outb(inb(addr) | ETHERH_CP_IF, addr);
+			break;
+		}
 		break;
 
 	default:
@@ -143,22 +129,30 @@ etherh_setif(struct net_device *dev)
 static int
 etherh_getifstat(struct net_device *dev)
 {
-	int stat;
+	int stat = 0;
 
 	switch (dev->mem_end) {
 	case PROD_I3_ETHERLAN600:
 	case PROD_I3_ETHERLAN600A:
-		if (ei_status.interface_num)	/* 10b2 */
+		switch (dev->if_port) {
+		case IF_PORT_10BASE2:
 			stat = 1;
-		else				/* 10bT */
+			break;
+		case IF_PORT_10BASET:
 			stat = inb(dev->base_addr+EN0_RCNTHI) & 4;
+			break;
+		}
 		break;
 
 	case PROD_I3_ETHERLAN500:
-		if (ei_status.interface_num)	/* 10b2 */
+		switch (dev->if_port) {
+		case IF_PORT_10BASE2:
 			stat = 1;
-		else				/* 10bT */
+			break;
+		case IF_PORT_10BASET:
 			stat = inb(dev->rmem_start) & ETHERH_CP_HEARTBEAT;
+			break;
+		}
 		break;
 
 	default:
@@ -170,14 +164,54 @@ etherh_getifstat(struct net_device *dev)
 }
 
 /*
- * Reset the 8390 (hard reset)
+ * Configure the interface.  Note that we ignore the other
+ * parts of ifmap, since its mostly meaningless for this driver.
+ */
+static int etherh_set_config(struct net_device *dev, struct ifmap *map)
+{
+	switch (map->port) {
+	case IF_PORT_10BASE2:
+	case IF_PORT_10BASET:
+		/*
+		 * If the user explicitly sets the interface
+		 * media type, turn off automedia detection.
+		 */
+		dev->flags &= ~IFF_AUTOMEDIA;
+		dev->if_port = map->port;
+		break;
+
+	default:
+		return -EINVAL;
+	}
+
+	etherh_setif(dev);
+
+	return 0;
+}
+
+/*
+ * Reset the 8390 (hard reset).  Note that we can't actually do this.
  */
 static void
 etherh_reset(struct net_device *dev)
 {
 	outb_p(E8390_NODMA+E8390_PAGE0+E8390_STOP, dev->base_addr);
 
-	etherh_setif(dev);
+	/*
+	 * See if we need to change the interface type.
+	 * Note that we use 'interface_num' as a flag
+	 * to indicate that we need to change the media.
+	 */
+	if (dev->flags & IFF_AUTOMEDIA && ei_status.interface_num) {
+		ei_status.interface_num = 0;
+
+		if (dev->if_port == IF_PORT_10BASET)
+			dev->if_port = IF_PORT_10BASE2;
+		else
+			dev->if_port = IF_PORT_10BASET;
+
+		etherh_setif(dev);
+	}
 }
 
 /*
@@ -332,8 +366,31 @@ etherh_open(struct net_device *dev)
 		return -EAGAIN;
 	}
 
+	/*
+	 * Make sure that we aren't going to change the
+	 * media type on the next reset - we are about to
+	 * do automedia manually now.
+	 */
+	ei_status.interface_num = 0;
+
+	/*
+	 * If we are doing automedia detection, do it now.
+	 * This is more reliable than the 8390's detection.
+	 */
+	if (dev->flags & IFF_AUTOMEDIA) {
+		dev->if_port = IF_PORT_10BASET;
+		etherh_setif(dev);
+		mdelay(1);
+		if (!etherh_getifstat(dev)) {
+			dev->if_port = IF_PORT_10BASE2;
+			etherh_setif(dev);
+		}
+	} else
+		etherh_setif(dev);
+
 	etherh_reset(dev);
 	ei_open(dev);
+
 	return 0;
 }
 
@@ -347,102 +404,6 @@ etherh_close(struct net_device *dev)
 	free_irq (dev->irq, dev);
 
 	MOD_DEC_USE_COUNT;
-	return 0;
-}
-
-/*
- * This is the real probe routine.
- */
-static int __init
-etherh_probe1(struct net_device *dev)
-{
-	static int version_printed;
-	unsigned int addr, i, reg0, tmp;
-	const char *dev_type;
-	const char *if_type;
-	const char *name = "etherh";
-
-	addr = dev->base_addr;
-
-	if (net_debug && version_printed++ == 0)
-		printk(version);
-
-	switch (dev->mem_end) {
-	case PROD_I3_ETHERLAN500:
-		dev_type = "500";
-		break;
-	case PROD_I3_ETHERLAN600:
-		dev_type = "600";
-		break;
-	case PROD_I3_ETHERLAN600A:
-		dev_type = "600A";
-		break;
-	default:
-		dev_type = "";
-	}
-
-	reg0 = inb (addr);
-	if (reg0 == 0xff) {
-		if (net_debug & DEBUG_INIT)
-			printk("%s: %s error: NS8390 command register wrong\n",
-				dev->name, name);
-		return -ENODEV;
-	}
-
- 	outb (E8390_NODMA | E8390_PAGE1 | E8390_STOP, addr + E8390_CMD);
-	tmp = inb (addr + 13);
-	outb (0xff, addr + 13);
-	outb (E8390_NODMA | E8390_PAGE0, addr + E8390_CMD);
-	inb (addr + EN0_COUNTER0);
-	if (inb (addr + EN0_COUNTER0) != 0) {
-		if (net_debug & DEBUG_INIT)
-			printk("%s: %s error: NS8390 not found\n",
-				dev->name, name);
-		outb (reg0, addr);
-		outb (tmp, addr + 13);
-		return -ENODEV;
-	}
-
-	if (ethdev_init(dev))
-		return -ENOMEM;
-
-	request_region(addr, 16, name);
-
-	printk("%s: %s %s at %lx, IRQ%d, ether address ",
-		dev->name, name, dev_type, dev->base_addr, dev->irq);
-
-	for (i = 0; i < 6; i++)
-		printk (i == 5 ? "%2.2x " : "%2.2x:", dev->dev_addr[i]);
-
-	ei_status.name		= name;
-	ei_status.word16	= 1;
-	ei_status.tx_start_page	= ETHERH_TX_START_PAGE;
-	ei_status.rx_start_page	= ei_status.tx_start_page + TX_PAGES;
-	ei_status.stop_page	= ETHERH_STOP_PAGE;
-	ei_status.reset_8390	= etherh_reset;
-	ei_status.block_input	= etherh_block_input;
-	ei_status.block_output	= etherh_block_output;
-	ei_status.get_8390_hdr	= etherh_get_header;
-	dev->open		= etherh_open;
-	dev->stop		= etherh_close;
-
-	/* select 10bT */
-	ei_status.interface_num = 0;
-	if_type = "10BaseT";
-	etherh_setif(dev);
-	mdelay(1);
-	if (!etherh_getifstat(dev)) {
-		if_type = "10Base2";
-		ei_status.interface_num = 1;
-		etherh_setif(dev);
-	}
-	if (!etherh_getifstat(dev))
-		if_type = "UNKNOWN";
-
-	printk("%s\n", if_type);
-
-	etherh_reset(dev);
-	NS8390_init (dev, 0);
 	return 0;
 }
 
@@ -467,164 +428,245 @@ static expansioncard_ops_t etherh_ops = {
 	NULL
 };
 
-static void __init
-etherh_initdev(ecard_t *ec, struct net_device *dev)
+/*
+ * Initialisation
+ */
+
+static void __init etherh_banner(void)
 {
-	ecard_claim (ec);
+	static int version_printed;
+
+	if (net_debug && version_printed++ == 0)
+		printk(version);
+}
+
+static int __init etherh_check_presence(struct net_device *dev)
+{
+	unsigned int addr = dev->base_addr, reg0, tmp;
+
+	reg0 = inb(addr);
+	if (reg0 == 0xff) {
+		if (net_debug & DEBUG_INIT)
+			printk("%s: etherh error: NS8390 command register wrong\n",
+				dev->name);
+		return -ENODEV;
+	}
+
+ 	outb(E8390_NODMA | E8390_PAGE1 | E8390_STOP, addr + E8390_CMD);
+	tmp = inb(addr + 13);
+	outb(0xff, addr + 13);
+	outb(E8390_NODMA | E8390_PAGE0, addr + E8390_CMD);
+	inb(addr + EN0_COUNTER0);
+	if (inb(addr + EN0_COUNTER0) != 0) {
+		if (net_debug & DEBUG_INIT)
+			printk("%s: etherh error: NS8390 not found\n",
+				dev->name);
+		outb(reg0, addr);
+		outb(tmp, addr + 13);
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
+/*
+ * Read the ethernet address string from the on board rom.
+ * This is an ascii string...
+ */
+static int __init etherh_addr(char *addr, struct expansion_card *ec)
+{
+	struct in_chunk_dir cd;
+	char *s;
 	
-	dev->irq = ec->irq;
-	dev->mem_end = ec->cid.product;
+	if (ecard_readchunk(&cd, ec, 0xf5, 0) && (s = strchr(cd.d.string, '('))) {
+		int i;
+		for (i = 0; i < 6; i++) {
+			addr[i] = simple_strtoul(s + 1, &s, 0x10);
+			if (*s != (i == 5? ')' : ':'))
+				break;
+		}
+		if (i == 6)
+			return 0;
+	}
+	return ENODEV;
+}
+
+static struct net_device * __init etherh_init_one(struct expansion_card *ec)
+{
+	struct net_device *dev;
+	const char *dev_type;
+	int i;
+
+	etherh_banner();
+
+	ecard_claim(ec);
+	
+	dev = init_etherdev(NULL, 0);
+	if (!dev)
+		goto out;
+
+	etherh_addr(dev->dev_addr, ec);
+
+	dev->open	= etherh_open;
+	dev->stop	= etherh_close;
+	dev->set_config	= etherh_set_config;
+	dev->irq	= ec->irq;
+	dev->base_addr	= ecard_address(ec, ECARD_MEMC, 0);
+	dev->mem_end	= ec->cid.product;
+	ec->ops		= &etherh_ops;
 
 	switch (ec->cid.product) {
 	case PROD_I3_ETHERLAN500:
-		dev->base_addr = ecard_address (ec, ECARD_MEMC, 0) + ETHERH500_NS8390;
-		dev->mem_start = dev->base_addr + ETHERH500_DATAPORT;
+		dev->base_addr += ETHERH500_NS8390;
+		dev->mem_start  = dev->base_addr + ETHERH500_DATAPORT;
 		dev->rmem_start = (unsigned long)
-		ec->irq_data   = (void *)ecard_address (ec, ECARD_IOC, ECARD_FAST)
+		ec->irq_data    = (void *)ecard_address (ec, ECARD_IOC, ECARD_FAST)
 				  + ETHERH500_CTRLPORT;
 		break;
 
 	case PROD_I3_ETHERLAN600:
 	case PROD_I3_ETHERLAN600A:
-		dev->base_addr = ecard_address (ec, ECARD_MEMC, 0) + ETHERH600_NS8390;
+		dev->base_addr += ETHERH600_NS8390;
 		dev->mem_start = dev->base_addr + ETHERH600_DATAPORT;
-		ec->irq_data = (void *)(dev->base_addr + ETHERH600_CTRLPORT);
+		ec->irq_data   = (void *)(dev->base_addr + ETHERH600_CTRLPORT);
 		break;
 
 	default:
-		printk ("%s: etherh error: unknown card type\n", dev->name);
+		printk("%s: etherh error: unknown card type %x\n",
+		       dev->name, ec->cid.product);
+		goto out;
 	}
-	ec->ops = &etherh_ops;
 
-	etherh_addr(dev->dev_addr, ec);
+	if (!request_region(dev->base_addr, 16, dev->name))
+		goto region_not_free;
+
+	if (etherh_check_presence(dev) || ethdev_init(dev))
+		goto release;
+
+	switch (ec->cid.product) {
+	case PROD_I3_ETHERLAN500:
+		dev_type = "500";
+		break;
+
+	case PROD_I3_ETHERLAN600:
+		dev_type = "600";
+		break;
+
+	case PROD_I3_ETHERLAN600A:
+		dev_type = "600A";
+		break;
+
+	default:
+		dev_type = "unknown";
+		break;
+	}
+
+	printk("%s: etherh %s at %lx, IRQ%d, ether address ",
+		dev->name, dev_type, dev->base_addr, dev->irq);
+
+	for (i = 0; i < 6; i++)
+		printk(i == 5 ? "%2.2x\n" : "%2.2x:", dev->dev_addr[i]);
+
+	/*
+	 * Unfortunately, ethdev_init eventually calls
+	 * ether_setup, which re-writes dev->flags.
+	 */
+	switch (ec->cid.product) {
+	case PROD_I3_ETHERLAN500:
+		dev->if_port   = IF_PORT_UNKNOWN;
+		break;
+
+	case PROD_I3_ETHERLAN600:
+	case PROD_I3_ETHERLAN600A:
+		dev->flags    |= IFF_PORTSEL | IFF_AUTOMEDIA;
+		dev->if_port   = IF_PORT_10BASET;
+		break;
+	}
+
+	ei_status.name		= dev->name;
+	ei_status.word16	= 1;
+	ei_status.tx_start_page	= ETHERH_TX_START_PAGE;
+	ei_status.rx_start_page	= ei_status.tx_start_page + TX_PAGES;
+	ei_status.stop_page	= ETHERH_STOP_PAGE;
+
+	ei_status.reset_8390	= etherh_reset;
+	ei_status.block_input	= etherh_block_input;
+	ei_status.block_output	= etherh_block_output;
+	ei_status.get_8390_hdr	= etherh_get_header;
+	ei_status.interface_num = 0;
+
+	etherh_reset(dev);
+	NS8390_init(dev, 0);
+	return dev;
+
+release:
+	release_region(dev->base_addr, 16);
+region_not_free:
+	unregister_netdev(dev);
+	kfree(dev);
+out:
+	ecard_release(ec);
+	return NULL;
 }
 
-#ifndef MODULE
-int __init
-etherh_probe(struct net_device *dev)
-{
-	if (!dev)
-		return ENODEV;
-
-	if (!dev->base_addr || dev->base_addr == 0xffe0) {
-		struct expansion_card *ec;
-
-		ecard_startfind();
-
-		if ((ec = ecard_find (0, etherh_cids)) == NULL)
-			return ENODEV;
-
-		etherh_initdev(ec, dev);
-	}
-	return etherh_probe1(dev);
-}
-#endif
-
-#ifdef MODULE
 #define MAX_ETHERH_CARDS 2
 
-static int io[MAX_ETHERH_CARDS];
-static int irq[MAX_ETHERH_CARDS];
-static char ethernames[MAX_ETHERH_CARDS][9];
-static struct net_device *my_ethers[MAX_ETHERH_CARDS];
-static struct expansion_card *ec[MAX_ETHERH_CARDS];
+static struct net_device *e_dev[MAX_ETHERH_CARDS];
+static struct expansion_card *e_card[MAX_ETHERH_CARDS];
 
-static int
-init_all_cards(void)
+static int __init etherh_init(void)
 {
-	struct net_device *dev = NULL;
-	int i, found = 0;
+	int i, ret = -ENODEV;
 
-	for (i = 0; i < MAX_ETHERH_CARDS; i++) {
-		my_ethers[i] = NULL;
-		ec[i] = NULL;
-		strcpy (ethernames[i], "        ");
-	}
-
-	ecard_startfind();
-
-	for (i = 0; i < MAX_ETHERH_CARDS; i++) {
-		if (!dev)
-			dev = (struct net_device *)kmalloc (sizeof (struct net_device), GFP_KERNEL);
-		if (dev)
-			memset (dev, 0, sizeof (struct net_device));
-
-		if (!io[i]) {
-			if ((ec[i] = ecard_find (0, etherh_cids)) == NULL)
-				continue;
-
-			if (!dev)
-				return -ENOMEM;
-
-			etherh_initdev (ec[i], dev);
-		} else {
-			ec[i] = NULL;
-			if (!dev)
-				return -ENOMEM;
-			dev->base_addr = io[i];
-			dev->irq = irq[i];
-		}
-
-		dev->init = etherh_probe1;
-		dev->name = ethernames[i];
-
-		my_ethers[i] = dev;
-
-		if (register_netdev(dev) != 0) {
-			printk(KERN_ERR "No etherh card found at %08lX\n",
-				dev->base_addr);
-			if (ec[i]) {
-				ecard_release(ec[i]);
-				ec[i] = NULL;
-			}
-			continue;
-		}
-		found ++;
-		dev = NULL;
-	}
-
-	if (dev)
-		kfree (dev);
-
-	return found ? 0 : -ENODEV;
-}
-
-int
-init_module(void)
-{
-	int ret;
-
-	if (load_8390_module(__FILE__))
+	if (load_8390_module("etherh.c"))
 		return -ENOSYS;
 
 	lock_8390_module();
 
-	ret = init_all_cards();
+	ecard_startfind();
 
-	if (ret) {
-		unlock_8390_module();
+	for (i = 0; i < MAX_ECARDS; i++) {
+		struct expansion_card *ec;
+		struct net_device *dev;
+
+		ec = ecard_find(0, etherh_cids);
+		if (!ec)
+			break;
+
+		dev = etherh_init_one(ec);
+		if (!dev)
+			break;
+
+		e_card[i] = ec;
+		e_dev[i]  = dev;
+		ret = 0;
 	}
+
+	if (ret)
+		unlock_8390_module();
 
 	return ret;
 }
 
-void
-cleanup_module(void)
+static void __exit etherh_exit(void)
 {
 	int i;
+
 	for (i = 0; i < MAX_ETHERH_CARDS; i++) {
-		if (my_ethers[i]) {
-			unregister_netdev(my_ethers[i]);
-			release_region (my_ethers[i]->base_addr, 16);
-			kfree (my_ethers[i]);
-			my_ethers[i] = NULL;
+		if (e_dev[i]) {
+			unregister_netdev(e_dev[i]);
+			release_region(e_dev[i]->base_addr, 16);
+			kfree(e_dev[i]);
+			e_dev[i] = NULL;
 		}
-		if (ec[i]) {
-			ec[i]->ops = NULL;
-			ecard_release(ec[i]);
-			ec[i] = NULL;
+		if (e_card[i]) {
+			e_card[i]->ops = NULL;
+			ecard_release(e_card[i]);
+			e_card[i] = NULL;
 		}
 	}
 	unlock_8390_module();
 }
-#endif /* MODULE */
+
+module_init(etherh_init);
+module_exit(etherh_exit);

@@ -41,10 +41,7 @@
 #include <asm/processor.h>
 #include <asm/nvram.h>
 #include <asm/cache.h>
-/* Fixme - Why is this here? - Corey */
-#ifdef CONFIG_8xx
 #include <asm/8xx_immap.h>
-#endif
 #include <asm/machdep.h>
 
 #include "time.h"
@@ -62,6 +59,7 @@ time_t last_rtc_update = 0;
 unsigned decrementer_count;	/* count value for 1e6/HZ microseconds */
 unsigned count_period_num;	/* 1 decrementer count equals */
 unsigned count_period_den;	/* count_period_num / count_period_den us */
+unsigned long last_tb;
 
 /*
  * timer_interrupt - gets called when the decrementer overflows,
@@ -103,6 +101,8 @@ int timer_interrupt(struct pt_regs * regs)
 	 */
 	while ((d = get_dec()) == dval)
 		;
+	asm volatile("mftb 	%0" : "=r" (last_tb) );
+	
 	/*
 	 * Don't play catchup between the call to time_init()
 	 * and sti() in init/main.c.
@@ -149,20 +149,21 @@ int timer_interrupt(struct pt_regs * regs)
  */
 void do_gettimeofday(struct timeval *tv)
 {
-	unsigned long flags;
+	unsigned long flags, diff;
 
 	save_flags(flags);
 	cli();
 	*tv = xtime;
 	/* XXX we don't seem to have the decrementers synced properly yet */
 #ifndef CONFIG_SMP
-	tv->tv_usec += (decrementer_count - get_dec())
-	    * count_period_num / count_period_den;
-	if (tv->tv_usec >= 1000000) {
-		tv->tv_usec -= 1000000;
-		tv->tv_sec++;
-	}
+	asm volatile("mftb %0" : "=r" (diff) );
+	diff -= last_tb;
+	
+	tv->tv_usec += diff * count_period_num / count_period_den;
+	tv->tv_sec += tv->tv_usec / 1000000;
+	tv->tv_usec = tv->tv_usec % 1000000;
 #endif
+
 	restore_flags(flags);
 }
 
@@ -334,6 +335,3 @@ void to_tm(int tim, struct rtc_time * tm)
 	 */
 	GregorianDay(tm);
 }
-
-
-

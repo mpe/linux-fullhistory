@@ -121,6 +121,19 @@ pcibios_update_resource(struct pci_dev *dev, struct resource *root,
 	}
 }
 
+/*
+ * We need to avoid collisions with `mirrored' VGA ports
+ * and other strange ISA hardware, so we always want the
+ * addresses to be allocated in the 0x000-0x0ff region
+ * modulo 0x400.
+ *
+ * Why? Because some silly external IO cards only decode
+ * the low 10 bits of the IO address. The 0x00-0xff region
+ * is reserved for motherboard devices that decode all 16
+ * bits, so it's ok to allocate at, say, 0x2800-0x28ff,
+ * but we want to try to avoid allocating at 0x2900-0x2bff
+ * which might have be mirrored at 0x0100-0x03ff..
+ */
 void
 pcibios_align_resource(void *data, struct resource *res, unsigned long size)
 {
@@ -129,17 +142,16 @@ pcibios_align_resource(void *data, struct resource *res, unsigned long size)
 	if (res->flags & IORESOURCE_IO) {
 		unsigned long start = res->start;
 
-		/* We need to avoid collisions with `mirrored' VGA ports
-		   and other strange ISA hardware, so we always want the
-		   addresses kilobyte aligned.  */
 		if (size > 0x100) {
 			printk(KERN_ERR "PCI: I/O Region %s/%d too large"
 			       " (%ld bytes)\n", dev->slot_name,
 			       dev->resource - res, size);
 		}
 
-		start = (start + 1024 - 1) & ~(1024 - 1);
-		res->start = start;
+		if (start & 0x300) {
+			start = (start + 0x3ff) & ~0x3ff;
+			res->start = start;
+		}
 	}
 }
 

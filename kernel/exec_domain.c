@@ -23,7 +23,7 @@ struct exec_domain default_exec_domain = {
 };
 
 static struct exec_domain *exec_domains = &default_exec_domain;
-static spinlock_t exec_domains_lock = SPIN_LOCK_UNLOCKED;
+static rwlock_t exec_domains_lock = RW_LOCK_UNLOCKED;
 
 static asmlinkage void no_lcall7(int segment, struct pt_regs * regs)
 {
@@ -48,15 +48,15 @@ static struct exec_domain *lookup_exec_domain(unsigned long personality)
 	unsigned long pers = personality & PER_MASK;
 	struct exec_domain *it;
 
-	spin_lock(&exec_domains_lock);
+	read_lock(&exec_domains_lock);
 	for (it=exec_domains; it; it=it->next)
 		if (pers >= it->pers_low && pers <= it->pers_high) {
 			if (!try_inc_mod_count(it->module))
 				continue;
-			spin_unlock(&exec_domains_lock);
+			read_unlock(&exec_domains_lock);
 			return it;
 		}
-	spin_unlock(&exec_domains_lock);
+	read_unlock(&exec_domains_lock);
 
 	/* Should never get this far. */
 	printk(KERN_ERR "No execution domain for personality 0x%02lx\n", pers);
@@ -71,15 +71,15 @@ int register_exec_domain(struct exec_domain *it)
 		return -EINVAL;
 	if (it->next)
 		return -EBUSY;
-	spin_lock(&exec_domains_lock);
+	write_lock(&exec_domains_lock);
 	for (tmp=exec_domains; tmp; tmp=tmp->next)
 		if (tmp == it) {
-			spin_unlock(&exec_domains_lock);
+			write_unlock(&exec_domains_lock);
 			return -EBUSY;
 		}
 	it->next = exec_domains;
 	exec_domains = it;
-	spin_unlock(&exec_domains_lock);
+	write_unlock(&exec_domains_lock);
 	return 0;
 }
 
@@ -88,17 +88,17 @@ int unregister_exec_domain(struct exec_domain *it)
 	struct exec_domain ** tmp;
 
 	tmp = &exec_domains;
-	spin_lock(&exec_domains_lock);
+	write_lock(&exec_domains_lock);
 	while (*tmp) {
 		if (it == *tmp) {
 			*tmp = it->next;
 			it->next = NULL;
-			spin_unlock(&exec_domains_lock);
+			write_unlock(&exec_domains_lock);
 			return 0;
 		}
 		tmp = &(*tmp)->next;
 	}
-	spin_unlock(&exec_domains_lock);
+	write_unlock(&exec_domains_lock);
 	return -EINVAL;
 }
 
@@ -148,11 +148,11 @@ int get_exec_domain_list(char * page)
 	int len = 0;
 	struct exec_domain * e;
 
-	spin_lock(&exec_domains_lock);
+	read_lock(&exec_domains_lock);
 	for (e=exec_domains; e && len < PAGE_SIZE - 80; e=e->next)
 		len += sprintf(page+len, "%d-%d\t%-16s\t[%s]\n",
 			e->pers_low, e->pers_high, e->name,
 			e->module ? e->module->name : "kernel");
-	spin_unlock(&exec_domains_lock);
+	read_unlock(&exec_domains_lock);
 	return len;
 }

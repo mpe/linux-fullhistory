@@ -156,7 +156,7 @@ int copy_page_range(struct mm_struct *dst, struct mm_struct *src,
 	unsigned long address = vma->vm_start;
 	unsigned long end = vma->vm_end;
 	unsigned long cow = (vma->vm_flags & (VM_SHARED | VM_MAYWRITE)) == VM_MAYWRITE;
-	
+
 	src_pgd = pgd_offset(src, address)-1;
 	dst_pgd = pgd_offset(dst, address)-1;
 	
@@ -878,7 +878,7 @@ static int do_wp_page(struct mm_struct *mm, struct vm_area_struct * vma,
 		new_page = old_page;
 	}
 	spin_unlock(&mm->page_table_lock);
-	__free_page(new_page);
+	page_cache_release(new_page);
 	return 1;	/* Minor fault */
 
 bad_wp_page:
@@ -1022,7 +1022,7 @@ void swapin_readahead(swp_entry_t entry)
 		/* Ok, do the async read-ahead now */
 		new_page = read_swap_cache_async(SWP_ENTRY(SWP_TYPE(entry), offset), 0);
 		if (new_page != NULL)
-			__free_page(new_page);
+			page_cache_release(new_page);
 		swap_free(SWP_ENTRY(SWP_TYPE(entry), offset));
 	}
 	return;

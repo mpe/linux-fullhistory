@@ -2536,8 +2536,8 @@ int __init rs_8xx_init(void)
 				/* Set up the uart parameters in the
 				 * parameter ram.
 				 */
-				up->smc_rfcr = SMC_EB;
-				up->smc_tfcr = SMC_EB;
+				up->smc_rfcr = CPMFCR_GBL | CPMFCR_EB;
+				up->smc_tfcr = CPMFCR_GBL | CPMFCR_EB;
 
 				/* Set this to 1 for now, so we get single
 				 * character interrupts.  Using idle charater
@@ -2579,8 +2579,8 @@ int __init rs_8xx_init(void)
 				/* Set up the uart parameters in the
 				 * parameter ram.
 				 */
-				sup->scc_genscc.scc_rfcr = SMC_EB;
-				sup->scc_genscc.scc_tfcr = SMC_EB;
+				sup->scc_genscc.scc_rfcr = CPMFCR_GBL | CPMFCR_EB;
+				sup->scc_genscc.scc_tfcr = CPMFCR_GBL | CPMFCR_EB;
 
 				/* Set this to 1 for now, so we get single
 				 * character interrupts.  Using idle charater
@@ -2741,8 +2741,8 @@ static int __init serial_console_setup(struct console *co, char *options)
 	*/
 	up->smc_rbase = dp_addr;	/* Base of receive buffer desc. */
 	up->smc_tbase = dp_addr+sizeof(cbd_t);	/* Base of xmt buffer desc. */
-	up->smc_rfcr = SMC_EB;
-	up->smc_tfcr = SMC_EB;
+	up->smc_rfcr = CPMFCR_GBL | CPMFCR_EB;
+	up->smc_tfcr = CPMFCR_GBL | CPMFCR_EB;
 
 	/* Set this to 1 for now, so we get single character interrupts.
 	*/

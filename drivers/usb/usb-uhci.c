@@ -12,7 +12,7 @@
  * (C) Copyright 1999 Johannes Erdfelt
  * (C) Copyright 1999 Randy Dunlap
  *
- * $Id: usb-uhci.c,v 1.228 2000/04/02 19:55:51 acher Exp $
+ * $Id: usb-uhci.c,v 1.231 2000/05/13 15:34:17 acher Exp $
  */
 
 #include <linux/config.h>
@@ -48,7 +48,7 @@
 /* This enables an extra UHCI slab for memory debugging */
 #define DEBUG_SLAB
 
-#define VERSTR "$Revision: 1.228 $ time " __TIME__ " " __DATE__
+#define VERSTR "$Revision: 1.231 $ time " __TIME__ " " __DATE__
 
 #include <linux/usb.h>
 #include "usb-uhci.h"
@@ -109,10 +109,10 @@ void clean_descs(uhci_t *s, int force)
 
 	while (q != &s->free_desc) {
 		qh = list_entry (q, uhci_desc_t, horizontal);
+		q=qh->horizontal.prev;
+
 		if ((qh->last_used!=now) || force)
 			delete_qh(s,qh);
-
-		q=qh->horizontal.prev;
 	}
 }
 /*-------------------------------------------------------------------*/
@@ -1142,6 +1142,12 @@ _static void uhci_cleanup_unlink(uhci_t *s, int force)
 
 			if (!(urb->transfer_flags & USB_TIMEOUT_KILLED))
 				urb->status = -ENOENT;  // now the urb is really dead
+			switch (usb_pipetype (pipe)) {
+			case PIPE_ISOCHRONOUS:
+			case PIPE_INTERRUPT:
+				uhci_clean_iso_step2(s, urb_priv);
+				break;
+			}
 	
 			usb_dec_dev_use (dev);
 #ifdef DEBUG_SLAB
@@ -1149,12 +1155,7 @@ _static void uhci_cleanup_unlink(uhci_t *s, int force)
 #else
 			kfree (urb_priv);
 #endif
-			switch (usb_pipetype (pipe)) {
-			case PIPE_ISOCHRONOUS:
-			case PIPE_INTERRUPT:
-				uhci_clean_iso_step2(s, urb_priv);
-				break;
-			}
+
 			list_del (&urb->urb_list);
 		}
 	}
@@ -1168,7 +1169,9 @@ _static int uhci_unlink_urb_async (uhci_t *s,urb_t *urb)
 	
 	async_dbg("unlink_urb_async called %p",urb);
 
-	if (urb->status == -EINPROGRESS) {
+	if ((urb->status == -EINPROGRESS) ||
+	    ((usb_pipetype (urb->pipe) ==  PIPE_INTERRUPT) && ((urb_priv_t*)urb->hcpriv)->flags))
+	{
 		((urb_priv_t*)urb->hcpriv)->started = ~0;
 
 		dequeue_urb (s, urb);
@@ -1560,7 +1563,7 @@ _static int uhci_submit_urb (urb_t *urb)
 
 	urb->hcpriv = urb_priv;
 	INIT_LIST_HEAD (&urb_priv->desc_list);
-	urb_priv->short_control_packet = 0;
+	urb_priv->flags = 0;
 	dbg("submit_urb: scheduling %p", urb);
 	urb_priv->next_queued_urb = NULL;
 	urb_priv->prev_queued_urb = NULL;
@@ -2151,7 +2154,7 @@ _static int process_transfer (uhci_t *s, urb_t *urb, int mode)
 	   status stage is completed
 	 */
 
-	if (urb_priv->short_control_packet && 
+	if (urb_priv->flags && 
 		((qh->hw.qh.element == UHCI_PTR_TERM) ||(!(last_desc->hw.td.status & TD_CTRL_ACTIVE)))) 
 		goto transfer_finished;
 
@@ -2199,7 +2202,7 @@ _static int process_transfer (uhci_t *s, urb_t *urb, int mode)
 					dbg("short packet during control transfer, retrigger status stage @ %p",last_desc);
 					//uhci_show_td (desc);
 					//uhci_show_td (last_desc);
-					urb_priv->short_control_packet=1;
+					urb_priv->flags = 1; // mark as short control packet
 					return 0;
 				}
 			}
@@ -2280,35 +2283,43 @@ _static int process_interrupt (uhci_t *s, urb_t *urb)
 		if (urb->complete) {
 			//dbg("process_interrupt: calling completion, status %i",status);
 			urb->status = status;
-			
+			((urb_priv_t*)urb->hcpriv)->flags=1; // if unlink_urb is called during completion
+
 			spin_unlock(&s->urb_list_lock);
 			
 			urb->complete ((struct urb *) urb);
 			
 			spin_lock(&s->urb_list_lock);
-			
+
+			((urb_priv_t*)urb->hcpriv)->flags=0;		       			
+		}
+		
+		if ((urb->status != -ECONNABORTED) && (urb->status != ECONNRESET) &&
+			    (urb->status != -ENOENT)) {
+
 			urb->status = -EINPROGRESS;
-		}
 
-		// Recycle INT-TD if interval!=0, else mark TD as one-shot
-		if (urb->interval) {
-
-			desc->hw.td.info &= ~(1 << TD_TOKEN_TOGGLE);
-			if (status==0) {
-				((urb_priv_t*)urb->hcpriv)->started=jiffies;
-				desc->hw.td.info |= (usb_gettoggle (urb->dev, usb_pipeendpoint (urb->pipe),
-				      usb_pipeout (urb->pipe)) << TD_TOKEN_TOGGLE);
-				usb_dotoggle (urb->dev, usb_pipeendpoint (urb->pipe), usb_pipeout (urb->pipe));
-			} else {
-				desc->hw.td.info |= (!usb_gettoggle (urb->dev, usb_pipeendpoint (urb->pipe),
-				      usb_pipeout (urb->pipe)) << TD_TOKEN_TOGGLE);
+			// Recycle INT-TD if interval!=0, else mark TD as one-shot
+			if (urb->interval) {
+				
+				desc->hw.td.info &= ~(1 << TD_TOKEN_TOGGLE);
+				if (status==0) {
+					((urb_priv_t*)urb->hcpriv)->started=jiffies;
+					desc->hw.td.info |= (usb_gettoggle (urb->dev, usb_pipeendpoint (urb->pipe),
+									    usb_pipeout (urb->pipe)) << TD_TOKEN_TOGGLE);
+					usb_dotoggle (urb->dev, usb_pipeendpoint (urb->pipe), usb_pipeout (urb->pipe));
+				} else {
+					desc->hw.td.info |= (!usb_gettoggle (urb->dev, usb_pipeendpoint (urb->pipe),
+									     usb_pipeout (urb->pipe)) << TD_TOKEN_TOGGLE);
+				}
+				desc->hw.td.status= (urb->pipe & TD_CTRL_LS) | TD_CTRL_ACTIVE | TD_CTRL_IOC |
+					(urb->transfer_flags & USB_DISABLE_SPD ? 0 : TD_CTRL_SPD) | (3 << 27);
+				mb();
 			}
-			desc->hw.td.status= (urb->pipe & TD_CTRL_LS) | TD_CTRL_ACTIVE | TD_CTRL_IOC |
-				(urb->transfer_flags & USB_DISABLE_SPD ? 0 : TD_CTRL_SPD) | (3 << 27);
-			mb();
-		}
-		else {
-			desc->hw.td.status &= ~TD_CTRL_IOC; // inactivate TD
+			else {
+				uhci_unlink_urb_async(s, urb);
+				desc->hw.td.status &= ~TD_CTRL_IOC; // inactivate TD
+			}
 		}
 	}
 
@@ -2334,7 +2345,7 @@ _static int process_iso (uhci_t *s, urb_t *urb, int mode)
 	dbg("process iso urb %p, %li, %i, %i, %i %08x",urb,jiffies,UHCI_GET_CURRENT_FRAME(s),
 	    urb->number_of_packets,mode,desc->hw.td.status);
 
-	for (i = 0; p != &urb_priv->desc_list; p = p->next, i++) {
+	for (i = 0; p != &urb_priv->desc_list;  i++) {
 		desc = list_entry (p, uhci_desc_t, desc_list);
 		
 		//uhci_show_td(desc);
@@ -2378,8 +2389,9 @@ _static int process_iso (uhci_t *s, urb_t *urb, int mode)
 		dbg("process_iso: %i: len:%d %08x status:%x",
 		     i, urb->iso_frame_desc[i].actual_length, desc->hw.td.status,urb->iso_frame_desc[i].status);
 
-		delete_desc (desc);
 		list_del (p);
+		p = p->next;
+		delete_desc (desc);
 	}
 	
 	dbg("process_iso: exit %i (%d), actual_len %i", i, ret,urb->actual_length);
@@ -2823,7 +2835,6 @@ int __init uhci_init (void)
 		pci_read_config_byte (dev, PCI_CLASS_PROG, &type);
 		if (type != 0)
 			continue;
-
 
 		if (pci_enable_device (dev) < 0)
 			continue;

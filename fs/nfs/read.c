@@ -83,8 +83,9 @@ static void nfs_readdata_release(struct rpc_task *task)
  * Read a page synchronously.
  */
 static int
-nfs_readpage_sync(struct dentry *dentry, struct page *page)
+nfs_readpage_sync(struct file *file, struct page *page)
 {
+	struct dentry	*dentry = file->f_dentry;
 	struct inode	*inode = dentry->d_inode;
 	struct nfs_fattr fattr;
 	loff_t		offset = page_offset(page);
@@ -112,7 +113,7 @@ nfs_readpage_sync(struct dentry *dentry, struct page *page)
 			(long long)offset, rsize, buffer);
 
 		lock_kernel();
-		result = NFS_PROTO(inode)->read(dentry, &fattr, flags, offset,
+		result = NFS_PROTO(inode)->read(file, &fattr, flags, offset,
 						rsize, buffer, &eof);
 		unlock_kernel();
 		nfs_refresh_inode(inode, &fattr);
@@ -195,9 +196,9 @@ nfs_mark_request_read(struct nfs_page *req)
 }
 
 static int
-nfs_readpage_async(struct dentry *dentry, struct page *page)
+nfs_readpage_async(struct file *file, struct page *page)
 {
-	struct inode	*inode = dentry->d_inode;
+	struct inode	*inode = file->f_dentry->d_inode;
 	struct nfs_page	*req, *new = NULL;
 	int		result;
 
@@ -227,7 +228,7 @@ nfs_readpage_async(struct dentry *dentry, struct page *page)
 		}
 
 		result = -ENOMEM;
-		new = nfs_create_request(dentry, page, 0, PAGE_CACHE_SIZE);
+		new = nfs_create_request(file, page, 0, PAGE_CACHE_SIZE);
 		if (!new)
 			break;
 	}
@@ -462,20 +463,16 @@ nfs_readpage_result(struct rpc_task *task)
 /*
  * Read a page over NFS.
  * We read the page synchronously in the following cases:
- *  -	The file is a swap file. Swap-ins are always sync operations,
- *	so there's no need bothering to make async reads 100% fail-safe.
  *  -	The NFS rsize is smaller than PAGE_CACHE_SIZE. We could kludge our way
  *	around this by creating several consecutive read requests, but
  *	that's hardly worth it.
  *  -	The error flag is set for this page. This happens only when a
  *	previous async read operation failed.
- *  -	The server is congested.
  */
 int
 nfs_readpage(struct file *file, struct page *page)
 {
-	struct dentry *dentry = file->f_dentry;
-	struct inode *inode = dentry->d_inode;
+	struct inode *inode = file->f_dentry->d_inode;
 	int		error;
 
 	dprintk("NFS: nfs_readpage (%p %ld@%lu)\n",
@@ -493,11 +490,11 @@ nfs_readpage(struct file *file, struct page *page)
 
 	error = -1;
 	if (!PageError(page) && NFS_SERVER(inode)->rsize >= PAGE_CACHE_SIZE)
-		error = nfs_readpage_async(dentry, page);
+		error = nfs_readpage_async(file, page);
 	if (error >= 0)
 		goto out;
 
-	error = nfs_readpage_sync(dentry, page);
+	error = nfs_readpage_sync(file, page);
 	if (error < 0 && IS_SWAPFILE(inode))
 		printk("Aiee.. nfs swap-in of page failed!\n");
 out:

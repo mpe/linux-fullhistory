@@ -57,6 +57,7 @@ size_t parport_ieee1284_write_compat (struct parport *port,
 
 	port->physport->ieee1284.phase = IEEE1284_PH_FWD_DATA;
 	parport_write_control (port, ctl);
+	parport_data_forward (port);
 	while (count < len) {
 		long expire = jiffies + dev->timeout;
 		long wait = (HZ + 99) / 100;
@@ -267,6 +268,9 @@ size_t parport_ieee1284_read_byte (struct parport *port,
 			port->physport->ieee1284.phase = IEEE1284_PH_REV_IDLE;
 			break;
 		}
+
+		/* Event 14: Place data bus in high impedance state. */
+		parport_data_reverse (port);
 
 		/* Event 7: Set nAutoFd low. */
 		parport_frob_control (port,

@@ -1,5 +1,5 @@
 /*
- * printer.c  Version 0.3
+ * printer.c  Version 0.4
  *
  * Copyright (c) 1999 Michael Gee 	<michael@linuxspecific.com>
  * Copyright (c) 1999 Pavel Machek      <pavel@suse.cz>
@@ -13,6 +13,7 @@
  *	v0.1 - thorough cleaning, URBification, almost a rewrite
  *	v0.2 - some more cleanups
  *	v0.3 - cleaner again, waitqueue fixes
+ *	v0.4 - fixes in unidirectional mode
  */
 
 /*
@@ -102,7 +103,7 @@ static void usblp_bulk(struct urb *urb)
 		return;
 
 	if (urb->status)
-		warn("nonzero read bulk status received: %d", urb->status);
+		warn("nonzero read/write bulk status received: %d", urb->status);
 
 	wake_up_interruptible(&usblp->wait);
 }
@@ -172,9 +173,12 @@ static int usblp_open(struct inode *inode, struct file *file)
 
 	usblp->writeurb.transfer_buffer_length = 0;
 	usblp->writeurb.status = 0;
-	usblp->readcount = 0;
 
-	usb_submit_urb(&usblp->readurb);
+	if (usblp->bidir) {
+		usblp->readcount = 0;
+		usb_submit_urb(&usblp->readurb);
+	}
+
 	return 0;
 }
 
@@ -185,7 +189,8 @@ static int usblp_release(struct inode *inode, struct file *file)
 	usblp->used = 0;
 			
 	if (usblp->dev) {
-        	usb_unlink_urb(&usblp->readurb);
+		if (usblp->bidir)
+        		usb_unlink_urb(&usblp->readurb);
         	usb_unlink_urb(&usblp->writeurb);
 		MOD_DEC_USE_COUNT;
 		return 0;
@@ -203,8 +208,8 @@ static unsigned int usblp_poll(struct file *file, struct poll_table_struct *wait
 {
 	struct usblp *usblp = file->private_data;
 	poll_wait(file, &usblp->wait, wait);
-	return (usblp->readurb.status  == -EINPROGRESS ? 0 : POLLIN  | POLLRDNORM)
-	     | (usblp->writeurb.status == -EINPROGRESS ? 0 : POLLOUT | POLLWRNORM);
+	return ((usblp->bidir || usblp->readurb.status  == -EINPROGRESS) ? 0 : POLLIN  | POLLRDNORM)
+	     		      | (usblp->writeurb.status == -EINPROGRESS  ? 0 : POLLOUT | POLLWRNORM);
 }
 
 static ssize_t usblp_write(struct file *file, const char *buffer, size_t count, loff_t *ppos)
@@ -315,7 +320,6 @@ static void *usblp_probe(struct usb_device *dev, unsigned int ifnum)
 	int minor, i, alts = -1, bidir = 0;
 	char *buf;
 
-
 	for (i = 0; i < dev->actconfig->interface[ifnum].num_altsetting; i++) {
 
 		interface = &dev->actconfig->interface[ifnum].altsetting[i];
@@ -342,20 +346,19 @@ static void *usblp_probe(struct usb_device *dev, unsigned int ifnum)
 		err("can't set desired altsetting %d on interface %d", alts, ifnum);
 
 	epwrite = interface->endpoint + 0;
-	epread = NULL;
+	epread = bidir ? interface->endpoint + 1 : NULL;
 
-	if (bidir) {
-		epread  = interface->endpoint + 1;
-		if ((epread->bEndpointAddress & 0x80) != 0x80) {
-			epwrite = interface->endpoint + 1;
-			epread  = interface->endpoint + 0;
-
-			if ((epread->bEndpointAddress & 0x80) != 0x80)
-				return NULL;
-		}
+	if ((epwrite->bEndpointAddress & 0x80) == 0x80) {
+		if (interface->bNumEndpoints == 1)
+			return NULL;
+		epwrite = interface->endpoint + 1;
+		epread = bidir ? interface->endpoint + 0 : NULL;
 	}
 
 	if ((epwrite->bEndpointAddress & 0x80) == 0x80)
+		return NULL;
+
+	if (bidir && (epread->bEndpointAddress & 0x80) != 0x80)
 		return NULL;
 
 	for (minor = 0; minor < USBLP_MINORS && usblp_table[minor]; minor++);
@@ -386,10 +389,9 @@ static void *usblp_probe(struct usb_device *dev, unsigned int ifnum)
 	FILL_BULK_URB(&usblp->writeurb, dev, usb_sndbulkpipe(dev, epwrite->bEndpointAddress),
 		buf, 0, usblp_bulk, usblp);
 
-	if (bidir) {
+	if (bidir)
 		FILL_BULK_URB(&usblp->readurb, dev, usb_rcvbulkpipe(dev, epread->bEndpointAddress),
 			buf + USBLP_BUF_SIZE, USBLP_BUF_SIZE, usblp_bulk, usblp);
-	}
 
 	info("usblp%d: USB %sdirectional printer dev %d if %d alt %d",
 		minor, bidir ? "Bi" : "Uni", dev->devnum, ifnum, alts);
@@ -408,8 +410,9 @@ static void usblp_disconnect(struct usb_device *dev, void *ptr)
 
 	usblp->dev = NULL;
 
-	usb_unlink_urb(&usblp->readurb);
 	usb_unlink_urb(&usblp->writeurb);
+	if (usblp->bidir)
+		usb_unlink_urb(&usblp->readurb);
 
 	kfree(usblp->writeurb.transfer_buffer);
 

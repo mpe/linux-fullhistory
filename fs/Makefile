@@ -21,13 +21,21 @@ ALL_SUB_DIRS = coda minix ext2 fat msdos vfat proc isofs nfs umsdos ntfs \
 		nfsd nls devpts devfs adfs partitions qnx4 udf bfs cramfs \
 		openpromfs autofs4 ramfs
 
-SUB_DIRS := partitions
+SUB_DIRS :=
 
 ifeq ($(CONFIG_QUOTA),y)
 O_OBJS += dquot.o
 else
 O_OBJS += noquot.o
 endif
+
+ifdef CONFIG_PROC_FS
+SUB_DIRS += proc
+endif
+
+SUB_DIRS += partitions
+
+# Do not add any filesystems before this line
 
 ifeq ($(CONFIG_EXT2_FS),y)
 SUB_DIRS += ext2
@@ -91,10 +99,6 @@ else
   ifeq ($(CONFIG_VFAT_FS),m)
   MOD_SUB_DIRS += vfat
   endif
-endif
-
-ifdef CONFIG_PROC_FS
-SUB_DIRS += proc
 endif
 
 ifeq ($(CONFIG_BFS_FS),y)

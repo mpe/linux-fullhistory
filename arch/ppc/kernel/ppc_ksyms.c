@@ -58,6 +58,7 @@ long long __ashrdi3(long long, int);
 long long __ashldi3(long long, int);
 long long __lshrdi3(long long, int);
 int abs(int);
+extern unsigned long ret_to_user_hook;
 
 EXPORT_SYMBOL(clear_page);
 EXPORT_SYMBOL(do_signal);
@@ -284,3 +285,5 @@ EXPORT_SYMBOL(debugger_sstep);
 EXPORT_SYMBOL(debugger_iabr_match);
 EXPORT_SYMBOL(debugger_dabr_match);
 EXPORT_SYMBOL(debugger_fault_handler);
+
+EXPORT_SYMBOL(ret_to_user_hook);

@@ -704,6 +704,7 @@ size_t parport_pc_compat_write_block_pio (struct parport *port,
 					  int flags)
 {
 	size_t written;
+	int r;
 
 	/* Special case: a timeout of zero means we cannot call schedule(). */
 	if (!port->physport->cad->timeout)
@@ -745,9 +746,14 @@ size_t parport_pc_compat_write_block_pio (struct parport *port,
 		frob_econtrol (port, 0xe0, ECR_PS2 << 5);
 	}
 
-	parport_wait_peripheral (port,
-				 PARPORT_STATUS_BUSY,
-				 PARPORT_STATUS_BUSY);
+	r = parport_wait_peripheral (port,
+				     PARPORT_STATUS_BUSY,
+				     PARPORT_STATUS_BUSY);
+	if (r)
+		printk (KERN_DEBUG
+			"%s: BUSY timeout (%d) in compat_write_block_pio\n", 
+			port->name, r);
+
 	port->physport->ieee1284.phase = IEEE1284_PH_FWD_IDLE;
 
 	return written;
@@ -760,6 +766,7 @@ size_t parport_pc_ecp_write_block_pio (struct parport *port,
 				       int flags)
 {
 	size_t written;
+	int r;
 
 	/* Special case: a timeout of zero means we cannot call schedule(). */
 	if (!port->physport->cad->timeout)
@@ -772,9 +779,12 @@ size_t parport_pc_ecp_write_block_pio (struct parport *port,
 		parport_frob_control (port, PARPORT_CONTROL_INIT, 0);
 
 		/* Event 40: PError goes high. */
-		parport_wait_peripheral (port,
-					 PARPORT_STATUS_PAPEROUT,
-					 PARPORT_STATUS_PAPEROUT);
+		r = parport_wait_peripheral (port,
+					     PARPORT_STATUS_PAPEROUT,
+					     PARPORT_STATUS_PAPEROUT);
+		if (r)
+			printk (KERN_DEBUG "%s: PError timeout (%d) "
+				"in ecp_write_block_pio\n", port->name, r);
 	}
 
 	/* Set up ECP parallel port mode.*/
@@ -818,18 +828,30 @@ size_t parport_pc_ecp_write_block_pio (struct parport *port,
 		parport_pc_data_reverse (port); /* Must be in PS2 mode */
 		udelay (5);
 		parport_frob_control (port, PARPORT_CONTROL_INIT, 0);
-		parport_wait_peripheral (port, PARPORT_STATUS_PAPEROUT, 0);
+		r = parport_wait_peripheral (port, PARPORT_STATUS_PAPEROUT, 0);
+		if (r)
+			printk (KERN_DEBUG "%s: PE,1 timeout (%d) "
+				"in ecp_write_block_pio\n", port->name, r);
+
 		parport_frob_control (port,
 				      PARPORT_CONTROL_INIT,
 				      PARPORT_CONTROL_INIT);
-		parport_wait_peripheral (port,
-					 PARPORT_STATUS_PAPEROUT,
-					 PARPORT_STATUS_PAPEROUT);
+		r = parport_wait_peripheral (port,
+					     PARPORT_STATUS_PAPEROUT,
+					     PARPORT_STATUS_PAPEROUT);
+                if (r)
+                        printk (KERN_DEBUG "%s: PE,2 timeout (%d) "
+				"in ecp_write_block_pio\n", port->name, r);
 	}
 
-	parport_wait_peripheral (port,
-				 PARPORT_STATUS_BUSY, 
-				 PARPORT_STATUS_BUSY);
+	r = parport_wait_peripheral (port,
+				     PARPORT_STATUS_BUSY, 
+				     PARPORT_STATUS_BUSY);
+	if(r)
+		printk (KERN_DEBUG
+			"%s: BUSY timeout (%d) in ecp_write_block_pio\n",
+			port->name, r);
+
 	port->physport->ieee1284.phase = IEEE1284_PH_FWD_IDLE;
 
 	return written;
@@ -840,6 +862,7 @@ size_t parport_pc_ecp_read_block_pio (struct parport *port,
 {
 	size_t left = length;
 	size_t fifofull;
+	int r;
 	const int fifo = FIFO(port);
 	const struct parport_pc_private *priv = port->physport->private_data;
 	const int fifo_depth = priv->fifo_depth;
@@ -882,7 +905,10 @@ size_t parport_pc_ecp_read_block_pio (struct parport *port,
 				      0);
 
 		/* Event 40: PError goes low */
-		parport_wait_peripheral (port, PARPORT_STATUS_PAPEROUT, 0);
+		r = parport_wait_peripheral (port, PARPORT_STATUS_PAPEROUT, 0);
+                if (r)
+                        printk (KERN_DEBUG "%s: PE timeout Event 40 (%d) "
+				"in ecp_read_block_pio\n", port->name, r);
 	}
 
 	/* Set up ECP FIFO mode.*/
@@ -961,9 +987,14 @@ size_t parport_pc_ecp_read_block_pio (struct parport *port,
 
 	/* Go to forward idle mode to shut the peripheral up. */
 	parport_frob_control (port, PARPORT_CONTROL_INIT, 0);
-	parport_wait_peripheral (port,
-				 PARPORT_STATUS_PAPEROUT,
-				 PARPORT_STATUS_PAPEROUT);
+	r = parport_wait_peripheral (port,
+				     PARPORT_STATUS_PAPEROUT,
+				     PARPORT_STATUS_PAPEROUT);
+	if (r)
+		printk (KERN_DEBUG
+			"%s: PE timeout FWDIDLE (%d) in ecp_read_block_pio\n",
+			port->name, r);
+
 	port->ieee1284.phase = IEEE1284_PH_FWD_IDLE;
 
 	/* Finish up. */
@@ -1218,7 +1249,7 @@ static void __devinit decode_smsc(int efer, int key, int devid, int devrev)
 
         if (devid == devrev)
 		/* simple heuristics, we happened to read some
-                   non-winbond register */
+                   non-smsc register */
 		return;
 
 	func=NULL;
@@ -1228,8 +1259,8 @@ static void __devinit decode_smsc(int efer, int key, int devid, int devrev)
 
 	if	(id==0x0302) {type="37c669"; func=show_parconfig_smsc37c669;}
 	else if	(id==0x6582) type="37c665IR";
-	else if	((id==0x6502) && (key==0x44)) type="37c665GT";
-	else if	((id==0x6502) && (key==0x55)) type="37c666GT";
+	else if	(devid==0x65) type="37c665GT";
+	else if	(devid==0x66) type="37c666GT";
 
 	if(type==NULL)
                 printk("SMSC unknown chip type\n");
@@ -2263,6 +2294,7 @@ enum parport_pc_pci_cards {
 	plx_9050,
 	afavlab_tk9902,
 	timedia_1889,
+	syba_2p_epp,
 };
 
 
@@ -2270,9 +2302,11 @@ enum parport_pc_pci_cards {
  * (but offset by last_sio) */
 static struct parport_pc_pci {
 	int numports;
-	struct {
+	struct { /* BAR (base address registers) numbers in the config
+                    space header */
 		int lo;
-		int hi; /* -ve if not there */
+		int hi; /* -1 if not there, >6 for offset-method (max
+                           BAR is 6) */
 	} addr[4];
 } cards[] __devinitdata = {
 	/* siig_1s1p_10x_550 */		{ 1, { { 3, 4 }, } },
@@ -2301,6 +2335,9 @@ static struct parport_pc_pci {
 	/* plx_9050 */			{ 2, { { 4, -1 }, { 5, -1 }, } },
 	/* afavlab_tk9902 */		{ 1, { { 0, 1 }, } },
 	/* timedia_1889 */		{ 1, { { 2, -1 }, } },
+					/* SYBA uses fixed offsets in
+                                           a 1K io window */
+	/* syba_2p_epp */		{ 2, { { 0, 0x078 }, { 0, 0x178 }, } },
 };
 
 static struct pci_device_id parport_pc_pci_tbl[] __devinitdata = {
@@ -2360,6 +2397,7 @@ static struct pci_device_id parport_pc_pci_tbl[] __devinitdata = {
 	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, afavlab_tk9902 },
 	{ PCI_VENDOR_ID_TIMEDIA, PCI_DEVICE_ID_TIMEDIA_1889,
 	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, timedia_1889 },
+	{ 0x1592, 0x0782, PCI_ANY_ID, PCI_ANY_ID, 0, 0, syba_2p_epp },
 	{ 0, } /* terminate list */
 };
 MODULE_DEVICE_TABLE(pci,parport_pc_pci_tbl);
@@ -2384,9 +2422,16 @@ static int __devinit parport_pc_pci_probe (struct pci_dev *dev,
 		unsigned long io_lo, io_hi;
 		io_lo = pci_resource_start (dev, lo);
 		io_hi = 0;
-		if (hi >= 0)
+		if ((hi >= 0) && (hi <= 6))
 			io_hi = pci_resource_start (dev, hi);
+		else if (hi > 6)
+			io_lo += hi; /* Reinterpret the meaning of
+                                        "hi" as an offset (see SYBA
+                                        def.) */
 		/* TODO: test if sharing interrupts works */
+		printk (KERN_DEBUG "PCI parallel port detected: %04x:%04x, "
+			"I/O at %#lx(%#lx)\n", parport_pc_pci_tbl[i].vendor,
+			parport_pc_pci_tbl[i].device, io_lo, io_hi);
 		if (parport_pc_probe_port (io_lo, io_hi, PARPORT_IRQ_NONE,
 					   PARPORT_DMA_NONE, dev))
 			count++;

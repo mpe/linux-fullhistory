@@ -3,7 +3,10 @@
  *
  * Derived from various things including skeleton.c
  *
- * R.M.King 1995.
+ * Russell King 1995-2000.
+ *
+ * This is a special driver for the am79c961A Lance chip used in the
+ * Intel (formally Digital Equipment Corp) EBSA110 platform.
  */
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -21,9 +24,11 @@
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/delay.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/bitops.h>
+#include <asm/irq.h>
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <asm/ecard.h>
@@ -33,26 +38,13 @@
 
 #include "am79c961a.h"
 
-static int am79c961_probe1 (struct net_device *dev);
-static int am79c961_open (struct net_device *dev);
-static int am79c961_sendpacket (struct sk_buff *skb, struct net_device *dev);
 static void am79c961_interrupt (int irq, void *dev_id, struct pt_regs *regs);
 static void am79c961_rx (struct net_device *dev, struct dev_priv *priv);
 static void am79c961_tx (struct net_device *dev, struct dev_priv *priv);
-static int am79c961_close (struct net_device *dev);
-static struct enet_statistics *am79c961_getstats (struct net_device *dev);
-static void am79c961_setmulticastlist (struct net_device *dev);
-static void am79c961_timeout(struct net_device *dev);
 
 static unsigned int net_debug = NET_DEBUG;
 
-static void
-am79c961_setmulticastlist (struct net_device *dev);
-
-static char *version = "am79c961 ethernet driver (c) 1995 R.M.King v0.01\n";
-
-#define FUNC_PROLOGUE \
-	struct dev_priv *priv = (struct dev_priv *)dev->priv
+static char *version = "am79c961 ethernet driver (c) 1995 R.M.King v0.02\n";
 
 /* --------------------------------------------------------------------------- */
 
@@ -270,109 +262,6 @@ am79c961_init_for_open(struct net_device *dev)
 	write_rreg (dev->base_addr, CSR0, CSR0_IENA|CSR0_STRT);
 }
 
-static int
-am79c961_init(struct net_device *dev)
-{
-	unsigned long flags;
-
-	am79c961_ramtest(dev, 0x66);
-	am79c961_ramtest(dev, 0x99);
-
-	save_flags_cli (flags);
-
-	write_ireg (dev->base_addr, 2, 0x4000); /* autoselect media */
-	write_rreg (dev->base_addr, CSR0, CSR0_STOP);
-	write_rreg (dev->base_addr, CSR3, CSR3_MASKALL);
-
-	restore_flags (flags);
-
-	return 0;
-}
-
-/*
- * This is the real probe routine.
- */
-static int
-am79c961_probe1(struct net_device *dev)
-{
-	static unsigned version_printed = 0;
-	struct dev_priv *priv;
-	int i;
-
-	if (!dev->priv) {
-		dev->priv = kmalloc (sizeof (struct dev_priv), GFP_KERNEL);
-		if (!dev->priv)
-			return -ENOMEM;
-	}
-
-	priv = (struct dev_priv *) dev->priv;
-	memset (priv, 0, sizeof(struct dev_priv));
-
-	/*
-	 * The PNP initialisation should have been done by the ether bootp loader.
-	 */
-	inb((dev->base_addr + NET_RESET) >> 1);	/* reset the device */
-
-	udelay (5);
-
-	if (inb (dev->base_addr >> 1) != 0x08 ||
-	    inb ((dev->base_addr >> 1) + 1) != 00 ||
-	    inb ((dev->base_addr >> 1) + 2) != 0x2b) {
-		kfree (dev->priv);
-		dev->priv = NULL;
-		return -ENODEV;
-	}
-
-	/*
-	 * Ok, we've found a valid hw ID
-	 */
-
-	if (net_debug  &&  version_printed++ == 0)
-		printk (KERN_INFO "%s", version);
-
-	printk(KERN_INFO "%s: am79c961 found [%04lx, %d] ", dev->name, dev->base_addr, dev->irq);
-	request_region (dev->base_addr, 0x18, "am79c961");
-
-	/* Retrive and print the ethernet address. */
-	for (i = 0; i < 6; i++) {
-		dev->dev_addr[i] = inb ((dev->base_addr >> 1) + i) & 0xff;
-		printk (i == 5 ? "%02x\n" : "%02x:", dev->dev_addr[i]);
-	}
-
-	if (am79c961_init(dev)) {
-		kfree (dev->priv);
-		dev->priv = NULL;
-		return -ENODEV;
-	}
-
-	dev->open = am79c961_open;
-	dev->stop = am79c961_close;
-	dev->hard_start_xmit = am79c961_sendpacket;
-	dev->get_stats = am79c961_getstats;
-	dev->set_multicast_list = am79c961_setmulticastlist;
-	dev->tx_timeout = am79c961_timeout;
-
-	/* Fill in the fields of the device structure with ethernet values. */
-	ether_setup(dev);
-
-	return 0;
-}
-
-int
-am79c961_probe(struct net_device *dev)
-{
-	static int initialised = 0;
-
-	if (initialised)
-		return -ENODEV;
-	initialised = 1;
-
-	dev->base_addr = 0x220;
-	dev->irq = 3;
-
-	return am79c961_probe1(dev);
-}
-
 /*
  * Open/initialize the board.  This is called (in the current kernel)
  * sometime after booting when the 'ifconfig' program is run.
@@ -408,9 +297,17 @@ am79c961_open(struct net_device *dev)
 static int
 am79c961_close(struct net_device *dev)
 {
+	unsigned long flags;
+
 	netif_stop_queue(dev);
 
-	am79c961_init(dev);
+	save_flags_cli (flags);
+
+	write_ireg (dev->base_addr, 2, 0x4000); /* autoselect media */
+	write_rreg (dev->base_addr, CSR0, CSR0_STOP);
+	write_rreg (dev->base_addr, CSR3, CSR3_MASKALL);
+
+	restore_flags (flags);
 
 	free_irq (dev->irq, dev);
 
@@ -709,3 +606,103 @@ am79c961_tx(struct net_device *dev, struct dev_priv *priv)
 
 	netif_wake_queue(dev);
 }
+
+static int
+am79c961_hw_init(struct net_device *dev)
+{
+	unsigned long flags;
+
+	am79c961_ramtest(dev, 0x66);
+	am79c961_ramtest(dev, 0x99);
+
+	save_flags_cli (flags);
+
+	write_ireg (dev->base_addr, 2, 0x4000); /* autoselect media */
+	write_rreg (dev->base_addr, CSR0, CSR0_STOP);
+	write_rreg (dev->base_addr, CSR3, CSR3_MASKALL);
+
+	restore_flags (flags);
+
+	return 0;
+}
+
+static void __init am79c961_banner(void)
+{
+	static unsigned version_printed = 0;
+
+	if (net_debug && version_printed++ == 0)
+		printk(KERN_INFO "%s", version);
+}
+
+static int __init am79c961_init(void)
+{
+	struct net_device *dev;
+	struct dev_priv *priv;
+	int i, ret;
+
+	dev = init_etherdev(NULL, sizeof(struct dev_priv));
+	ret = -ENOMEM;
+	if (!dev)
+		goto out;
+
+	priv = (struct dev_priv *) dev->priv;
+
+	/*
+	 * Fixed address and IRQ lines here.
+	 * The PNP initialisation should have been
+	 * done by the ether bootp loader.
+	 */
+	dev->base_addr = 0x220;
+	dev->irq = IRQ_EBSA110_ETHERNET;
+
+	/*
+	 * Reset the device.
+	 */
+	inb((dev->base_addr + NET_RESET) >> 1);
+	udelay(5);
+
+	/*
+	 * Check the manufacturer part of the
+	 * ether address.
+	 */
+    	ret = -ENODEV;
+	if (inb(dev->base_addr >> 1) != 0x08 ||
+	    inb((dev->base_addr >> 1) + 1) != 00 ||
+	    inb((dev->base_addr >> 1) + 2) != 0x2b)
+	    	goto nodev;
+
+	if (!request_region(dev->base_addr, 0x18, dev->name))
+		goto nodev;
+
+	am79c961_banner();
+	printk(KERN_INFO "%s: am79c961 found at %08lx, IRQ%d, ether address ",
+		dev->name, dev->base_addr, dev->irq);
+
+	/* Retrive and print the ethernet address. */
+	for (i = 0; i < 6; i++) {
+		dev->dev_addr[i] = inb((dev->base_addr >> 1) + i) & 0xff;
+		printk (i == 5 ? "%02x\n" : "%02x:", dev->dev_addr[i]);
+	}
+
+	if (am79c961_hw_init(dev))
+		goto release;
+
+	dev->open		= am79c961_open;
+	dev->stop		= am79c961_close;
+	dev->hard_start_xmit	= am79c961_sendpacket;
+	dev->get_stats		= am79c961_getstats;
+	dev->set_multicast_list	= am79c961_setmulticastlist;
+	dev->tx_timeout		= am79c961_timeout;
+
+	return 0;
+
+release:
+	release_region(dev->base_addr, 0x18);
+nodev:
+	unregister_netdev(dev);
+	kfree(dev);
+out:
+	return ret;
+}
+
+module_init(am79c961_init);

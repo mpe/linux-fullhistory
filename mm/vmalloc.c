@@ -3,14 +3,17 @@
  *
  *  Copyright (C) 1993  Linus Torvalds
  *  Support of BIGMEM added by Gerhard Wichert, Siemens AG, July 1999
+ *  SMP-safe vmalloc/vfree/ioremap, Tigran Aivazian <tigran@veritas.com>, May 2000
  */
 
 #include <linux/malloc.h>
 #include <linux/vmalloc.h>
+#include <linux/spinlock.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgalloc.h>
 
+rwlock_t vmlist_lock = RW_LOCK_UNLOCKED;
 struct vm_struct * vmlist = NULL;
 
 static inline void free_area_pte(pmd_t * pmd, unsigned long address, unsigned long size)
@@ -163,11 +166,13 @@ struct vm_struct * get_vm_area(unsigned long size, unsigned long flags)
 	if (!area)
 		return NULL;
 	addr = VMALLOC_START;
+	write_lock(&vmlist_lock);
 	for (p = &vmlist; (tmp = *p) ; p = &tmp->next) {
 		if (size + addr < (unsigned long) tmp->addr)
 			break;
 		addr = tmp->size + (unsigned long) tmp->addr;
 		if (addr > VMALLOC_END-size) {
+			write_unlock(&vmlist_lock);
 			kfree(area);
 			return NULL;
 		}
@@ -177,6 +182,7 @@ struct vm_struct * get_vm_area(unsigned long size, unsigned long flags)
 	area->size = size + PAGE_SIZE;
 	area->next = *p;
 	*p = area;
+	write_unlock(&vmlist_lock);
 	return area;
 }
 
@@ -190,14 +196,17 @@ void vfree(void * addr)
 		printk(KERN_ERR "Trying to vfree() bad address (%p)\n", addr);
 		return;
 	}
+	write_lock(&vmlist_lock);
 	for (p = &vmlist ; (tmp = *p) ; p = &tmp->next) {
 		if (tmp->addr == addr) {
 			*p = tmp->next;
 			vmfree_area_pages(VMALLOC_VMADDR(tmp->addr), tmp->size);
 			kfree(tmp);
+			write_unlock(&vmlist_lock);
 			return;
 		}
 	}
+	write_unlock(&vmlist_lock);
 	printk(KERN_ERR "Trying to vfree() nonexistent vm area (%p)\n", addr);
 }
 
@@ -235,6 +244,7 @@ long vread(char *buf, char *addr, unsigned long count)
 	if ((unsigned long) addr + count < count)
 		count = -(unsigned long) addr;
 
+	read_lock(&vmlist_lock);
 	for (tmp = vmlist; tmp; tmp = tmp->next) {
 		vaddr = (char *) tmp->addr;
 		if (addr >= vaddr + tmp->size - PAGE_SIZE)
@@ -242,7 +252,7 @@ long vread(char *buf, char *addr, unsigned long count)
 		while (addr < vaddr) {
 			if (count == 0)
 				goto finished;
-			put_user('\0', buf);
+			*buf = '\0';
 			buf++;
 			addr++;
 			count--;
@@ -251,12 +261,13 @@ long vread(char *buf, char *addr, unsigned long count)
 		do {
 			if (count == 0)
 				goto finished;
-			put_user(*addr, buf);
+			*buf = *addr;
 			buf++;
 			addr++;
 			count--;
 		} while (--n > 0);
 	}
 finished:
+	read_unlock(&vmlist_lock);
 	return buf - buf_start;
 }

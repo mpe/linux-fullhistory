@@ -25,6 +25,9 @@ struct rpc_cred {
 	unsigned long		cr_expire;	/* when to gc */
 	unsigned short		cr_count;	/* ref count */
 	unsigned short		cr_flags;	/* various flags */
+#ifdef RPC_DEBUG
+	unsigned long		cr_magic;	/* 0x0f4aa4f0 */
+#endif
 
 	uid_t			cr_uid;
 
@@ -33,6 +36,8 @@ struct rpc_cred {
 #define RPCAUTH_CRED_LOCKED	0x0001
 #define RPCAUTH_CRED_UPTODATE	0x0002
 #define RPCAUTH_CRED_DEAD	0x0004
+
+#define RPCAUTH_CRED_MAGIC	0x0f4aa4f0
 
 /*
  * Client authentication handle

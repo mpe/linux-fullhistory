@@ -244,6 +244,7 @@ void input_unregister_device(struct input_dev *dev)
 {
 	struct input_handle *handle = dev->handle;
 	struct input_dev **devptr = &input_dev;
+	struct input_handle *dnext;
 
 /*
  * Kill any pending repeat timers.
@@ -256,9 +257,10 @@ void input_unregister_device(struct input_dev *dev)
  */
 
 	while (handle) {
+		dnext = handle->dnext;
 		input_unlink_handle(handle);
 		handle->handler->disconnect(handle);
-		handle = handle->dnext;
+		handle = dnext;
 	}
 
 /*
@@ -309,15 +311,17 @@ void input_unregister_handler(struct input_handler *handler)
 {
 	struct input_handler **handlerptr = &input_handler;
 	struct input_handle *handle = handler->handle;
+	struct input_handle *hnext;
 
 /*
  * Tell the handler to disconnect from all devices it keeps open.
  */
 
 	while (handle) {
+		hnext = handle->hnext;
 		input_unlink_handle(handle);
 		handler->disconnect(handle);
-		handle = handle->hnext;
+		handle = hnext;
 	}
 
 /*

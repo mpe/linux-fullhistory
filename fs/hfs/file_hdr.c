@@ -158,7 +158,7 @@ struct hdr_hdr {
         hfs_byte_t	filler[16];
         hfs_word_t	entries;
         hfs_byte_t	descrs[12*HFS_HDR_MAX];
-};
+}  __attribute__((packed));
 
 /*================ File-local functions ================*/
 

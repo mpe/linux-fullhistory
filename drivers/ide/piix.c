@@ -112,6 +112,7 @@ static int piix_get_info (char *buffer, char **addr, off_t offset, int count)
 			p += sprintf(p, "\n                                Intel PIIX4 Ultra 66 Chipset.\n");
 			break;
 		case PCI_DEVICE_ID_INTEL_82801AB_1:
+		case PCI_DEVICE_ID_INTEL_82443MX_1:
 		case PCI_DEVICE_ID_INTEL_82371AB:
 			p += sprintf(p, "\n                                Intel PIIX4 Ultra 33 Chipset.\n");
 			break;
@@ -258,28 +259,18 @@ static void piix_tune_drive (ide_drive_t *drive, byte pio)
 }
 
 #if defined(CONFIG_BLK_DEV_IDEDMA) && defined(CONFIG_PIIX_TUNING)
-static int piix_config_drive_for_dma (ide_drive_t *drive)
+static int piix_tune_chipset (ide_drive_t *drive, byte speed)
 {
-	struct hd_driveid *id	= drive->id;
 	ide_hwif_t *hwif	= HWIF(drive);
 	struct pci_dev *dev	= hwif->pci_dev;
-
+	byte maslave		= hwif->channel ? 0x42 : 0x40;
+	int a_speed		= 2 << (drive->dn * 4);
+	int u_flag		= 1 << drive->dn;
+	int v_flag		= 0x10 << drive->dn;
+	int u_speed		= 0;
+	int err			= 0;
 	int			sitre;
 	short			reg4042, reg44, reg48, reg4a, reg54;
-	byte			speed;
-
-	byte maslave		= hwif->channel ? 0x42 : 0x40;
-	byte udma_66		= ((id->hw_config & 0x2000) && (hwif->udma_four)) ? 1 : 0;
-	int ultra66		= ((dev->device == PCI_DEVICE_ID_INTEL_82801AA_1) ||
-				   (dev->device == PCI_DEVICE_ID_INTEL_82372FB_1)) ? 1 : 0;
-	int ultra		= ((ultra66) ||
-				   (dev->device == PCI_DEVICE_ID_INTEL_82371AB) ||
-				   (dev->device == PCI_DEVICE_ID_INTEL_82801AB_1)) ? 1 : 0;
-	int drive_number	= ((hwif->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
-	int a_speed		= 2 << (drive_number * 4);
-	int u_flag		= 1 << drive_number;
-	int v_flag		= 0x10 << drive_number;
-	int u_speed		= 0;
 
 	pci_read_config_word(dev, maslave, &reg4042);
 	sitre = (reg4042 & 0x4000) ? 1 : 0;
@@ -288,29 +279,16 @@ static int piix_config_drive_for_dma (ide_drive_t *drive)
 	pci_read_config_word(dev, 0x4a, &reg4a);
 	pci_read_config_word(dev, 0x54, &reg54);
 
-	if ((id->dma_ultra & 0x0010) && (ultra)) {
-		u_speed = 2 << (drive_number * 4);
-		speed = ((udma_66) && (ultra66)) ? XFER_UDMA_4 : XFER_UDMA_2;
-	} else if ((id->dma_ultra & 0x0008) && (ultra)) {
-		u_speed = 1 << (drive_number * 4);
-		speed = ((udma_66) && (ultra66)) ? XFER_UDMA_3 : XFER_UDMA_1;
-	} else if ((id->dma_ultra & 0x0004) && (ultra)) {
-		u_speed = 2 << (drive_number * 4);
-		speed = XFER_UDMA_2;
-	} else if ((id->dma_ultra & 0x0002) && (ultra)) {
-		u_speed = 1 << (drive_number * 4);
-		speed = XFER_UDMA_1;
-	} else if ((id->dma_ultra & 0x0001) && (ultra)) {
-		u_speed = 0 << (drive_number * 4);
-		speed = XFER_UDMA_0;
-	} else if (id->dma_mword & 0x0004) {
-		speed = XFER_MW_DMA_2;
-	} else if (id->dma_mword & 0x0002) {
-		speed = XFER_MW_DMA_1;
-	} else if (id->dma_1word & 0x0004) {
-		speed = XFER_SW_DMA_2;
-        } else {
-		speed = XFER_PIO_0 + ide_get_best_pio_mode(drive, 255, 5, NULL);
+	switch(speed) {
+		case XFER_UDMA_4:
+		case XFER_UDMA_2:	u_speed = 2 << (drive->dn * 4); break;
+		case XFER_UDMA_3:
+		case XFER_UDMA_1:	u_speed = 1 << (drive->dn * 4); break;
+		case XFER_UDMA_0:	u_speed = 0 << (drive->dn * 4); break;
+		case XFER_MW_DMA_2:
+		case XFER_MW_DMA_1:
+		case XFER_SW_DMA_2:	break;
+		default:		return -1;
 	}
 
 	if (speed >= XFER_UDMA_0) {
@@ -328,7 +306,6 @@ static int piix_config_drive_for_dma (ide_drive_t *drive)
 			pci_write_config_word(dev, 0x54, reg54 & ~v_flag);
 		}
 	}
-
 	if (speed < XFER_UDMA_0) {
 		if (reg48 & u_flag)
 			pci_write_config_word(dev, 0x48, reg48 & ~u_flag);
@@ -340,11 +317,52 @@ static int piix_config_drive_for_dma (ide_drive_t *drive)
 
 	piix_tune_drive(drive, piix_dma_2_pio(speed));
 
-	(void) ide_config_drive_speed(drive, speed);
-
 #if PIIX_DEBUG_DRIVE_INFO
-	printk("%s: %s drive%d\n", drive->name, ide_xfer_verbose(speed), drive_number);
+	printk("%s: %s drive%d\n", drive->name, ide_xfer_verbose(speed), drive->dn);
 #endif /* PIIX_DEBUG_DRIVE_INFO */
+	if (!drive->init_speed)
+		drive->init_speed = speed;
+	err = ide_config_drive_speed(drive, speed);
+	drive->current_speed = speed;
+	return err;
+}
+
+static int piix_config_drive_for_dma (ide_drive_t *drive)
+{
+	struct hd_driveid *id	= drive->id;
+	ide_hwif_t *hwif	= HWIF(drive);
+	struct pci_dev *dev	= hwif->pci_dev;
+	byte			speed;
+
+	byte udma_66		= ((id->hw_config & 0x2000) && (hwif->udma_four)) ? 1 : 0;
+	int ultra66		= ((dev->device == PCI_DEVICE_ID_INTEL_82801AA_1) ||
+				   (dev->device == PCI_DEVICE_ID_INTEL_82372FB_1)) ? 1 : 0;
+	int ultra		= ((ultra66) ||
+				   (dev->device == PCI_DEVICE_ID_INTEL_82371AB) ||
+				   (dev->device == PCI_DEVICE_ID_INTEL_82443MX_1) ||
+				   (dev->device == PCI_DEVICE_ID_INTEL_82801AB_1)) ? 1 : 0;
+
+	if ((id->dma_ultra & 0x0010) && (ultra)) {
+		speed = ((udma_66) && (ultra66)) ? XFER_UDMA_4 : XFER_UDMA_2;
+	} else if ((id->dma_ultra & 0x0008) && (ultra)) {
+		speed = ((udma_66) && (ultra66)) ? XFER_UDMA_3 : XFER_UDMA_1;
+	} else if ((id->dma_ultra & 0x0004) && (ultra)) {
+		speed = XFER_UDMA_2;
+	} else if ((id->dma_ultra & 0x0002) && (ultra)) {
+		speed = XFER_UDMA_1;
+	} else if ((id->dma_ultra & 0x0001) && (ultra)) {
+		speed = XFER_UDMA_0;
+	} else if (id->dma_mword & 0x0004) {
+		speed = XFER_MW_DMA_2;
+	} else if (id->dma_mword & 0x0002) {
+		speed = XFER_MW_DMA_1;
+	} else if (id->dma_1word & 0x0004) {
+		speed = XFER_SW_DMA_2;
+        } else {
+		speed = XFER_PIO_0 + ide_get_best_pio_mode(drive, 255, 5, NULL);
+	}
+
+	(void) piix_tune_chipset(drive, speed);
 
 	return ((int)	((id->dma_ultra >> 11) & 3) ? ide_dma_on :
 			((id->dma_ultra >> 8) & 7) ? ide_dma_on :
@@ -413,6 +431,7 @@ void __init ide_init_piix (ide_hwif_t *hwif)
 #ifdef CONFIG_PIIX_TUNING
 	hwif->autodma = 1;
 	hwif->dmaproc = &piix_dmaproc;
+	hwif->speedproc = &piix_tune_chipset;
 #endif /* CONFIG_PIIX_TUNING */
 #endif /* !CONFIG_BLK_DEV_IDEDMA */
 }

@@ -942,14 +942,20 @@ D: Selection mechanism
 
 N: Andre Hedrick
 E: andre@linux-ide.org
+E: ahedrick@atipa.com
 E: andre@suse.com
+W: http://www.linux-ide.org/
 D: Random SMP kernel hacker...
 D: Uniform Multi-Platform E-IDE driver
 D: Active-ATA-Chipset maddness..........
 D: Ultra DMA 66/33
 D: ATA-Smart Kernel Daemon
-S: 580 Second Street, Suite 2
-S: Oakland, CA
+S: Linux ATA Development (LAD)
+S: Concord, CA
+S: Atipa Linux Solutions
+S: 6000 Connecticut  Kansas City, MO  64120
+S: SuSE Linux, Inc.
+S: 580 Second Street, Suite 210  Oakland, CA  94607
 S: USA
 
 N: Jochen Hein

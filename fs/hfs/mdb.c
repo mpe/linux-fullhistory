@@ -71,7 +71,7 @@ struct raw_mdb {
 	hfs_byte_t	drXTExtRec[12];	/* extents B-tree's first 3 extents */
 	hfs_lword_t	drCTFlSize;	/* bytes in the catalog B-tree */
 	hfs_byte_t	drCTExtRec[12];	/* catalog B-tree's first 3 extents */
-};
+} __attribute__((packed));
 
 /*================ Global functions ================*/
 

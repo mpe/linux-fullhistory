@@ -1,17 +1,12 @@
-/**************************************************************************
- *                                                                        *
- *               Copyright (C) 1992-1997, Silicon Graphics, Inc.          *
- *                                                                        *
- *  These coded instructions, statements, and computer programs  contain  *
- *  unpublished  proprietary  information of Silicon Graphics, Inc., and  *
- *  are protected by Federal copyright law.  They  may  not be disclosed  *
- *  to  third  parties  or copied or duplicated in any form, in whole or  *
- *  in part, without the prior written consent of Silicon Graphics, Inc.  *
- *                                                                        *
- **************************************************************************/
-
-#ifndef __SYS_SN_NMI_H__
-#define __SYS_SN_NMI_H__
+/* 
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
+ *
+ * Copyright (C) 1992 - 1997 Silicon Graphics, Inc.
+ */
+#ifndef __ASM_SN_NMI_H
+#define __ASM_SN_NMI_H
 
 #ident "$Revision: 1.1 $"
 
@@ -127,5 +122,4 @@ struct reg_struct {
 #define CACHE_ERR_OFF	0x128
 #define NMISR_OFF	0x130
 
-
-#endif /* __SYS_SN_NMI_H__ */
+#endif /* __ASM_SN_NMI_H */

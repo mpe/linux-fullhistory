@@ -104,6 +104,13 @@ SECTIONS
   __prep_end = .;
 
   . = ALIGN(4096);
+  __chrp_begin = .;
+  .text.chrp : { *(.text.chrp) }
+  .data.chrp : { *(.data.chrp) }
+  . = ALIGN(4096);
+  __chrp_end = .;
+
+  . = ALIGN(4096);
   __apus_begin = .;
   .text.apus : { *(.text.apus) }
   .data.apus : { *(.data.apus) }
@@ -135,4 +142,3 @@ SECTIONS
   _end = . ;
   PROVIDE (end = .);
 }
-

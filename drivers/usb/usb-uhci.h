@@ -2,7 +2,7 @@
 #define __LINUX_UHCI_H
 
 /*
-   $Id: usb-uhci.h,v 1.54 2000/04/02 19:55:53 acher Exp $
+   $Id: usb-uhci.h,v 1.55 2000/05/13 12:50:30 acher Exp $
  */
 #define MODNAME "usb-uhci"
 #define UHCI_LATENCY_TIMER 0
@@ -160,7 +160,7 @@ typedef struct {
 	uhci_desc_t *bottom_qh;
 	uhci_desc_t *next_qh;       	// next helper QH
 	char use_loop;
-	char short_control_packet;
+	char flags;
 } urb_priv_t, *purb_priv_t;
 
 struct virt_root_hub {

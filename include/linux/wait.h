@@ -27,7 +27,7 @@
 extern int printk(const char *fmt, ...);
 #define WQ_BUG() do { \
 	printk("wq bug, forcing oops.\n"); \
-	*(int*)0 = 0; \
+	BUG(); \
 } while (0)
 
 #define CHECK_MAGIC(x) if (x != (long)&(x)) \

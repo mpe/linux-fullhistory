@@ -533,8 +533,10 @@ callback:
 	nlmsvc_insert_block(block, jiffies + 30 * HZ);
 
 	/* Call the client */
-	nlmclnt_async_call(&block->b_call, NLMPROC_GRANTED_MSG,
-						nlmsvc_grant_callback);
+	nlm_get_host(block->b_call.a_host);
+	if (nlmsvc_async_call(&block->b_call, NLMPROC_GRANTED_MSG,
+						nlmsvc_grant_callback) < 0)
+		nlm_release_host(block->b_call.a_host);
 	up(&file->f_sema);
 }
 

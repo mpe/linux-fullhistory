@@ -81,21 +81,22 @@ static int amd7409_tune_chipset (ide_drive_t *drive, byte speed)
 	struct pci_dev *dev	= hwif->pci_dev;
 	int err			= 0;
 	byte unit		= (drive->select.b.unit & 0x01);
-	int drive_number	= ((HWIF(drive)->channel ? 2 : 0) + unit);
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	unsigned long dma_base	= hwif->dma_base;
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 	byte drive_pci		= 0x00;
 	byte drive_pci2		= 0x00;
 	byte ultra_timing	= 0x00;
 	byte dma_pio_timing	= 0x00;
 	byte pio_timing		= 0x00;
 
-        switch (drive_number) {
+        switch (drive->dn) {
 		case 0: drive_pci = 0x53; drive_pci2 = 0x4b; break;
 		case 1: drive_pci = 0x52; drive_pci2 = 0x4a; break;
 		case 2: drive_pci = 0x51; drive_pci2 = 0x49; break;
 		case 3: drive_pci = 0x50; drive_pci2 = 0x48; break;
 		default:
-                        return ((int) ide_dma_off_quietly);
+                        return -1;
         }
 
 	pci_read_config_byte(dev, drive_pci, &ultra_timing);
@@ -109,7 +110,7 @@ static int amd7409_tune_chipset (ide_drive_t *drive, byte speed)
 
 	ultra_timing &= ~0xC7;
 	dma_pio_timing &= ~0xFF;
-	pio_timing &= ~(0x03 << drive_number);
+	pio_timing &= ~(0x03 << drive->dn);
 
 #ifdef DEBUG
 	printk(":: UDMA 0x%02x DMAPIO 0x%02x PIO 0x%02x ",
@@ -117,67 +118,74 @@ static int amd7409_tune_chipset (ide_drive_t *drive, byte speed)
 #endif
 
 	switch(speed) {
+#ifdef CONFIG_BLK_DEV_IDEDMA
 		case XFER_UDMA_4:
 			ultra_timing |= 0x45;
 			dma_pio_timing |= 0x20;
-			pio_timing |= (0x03 << drive_number);
+			pio_timing |= (0x03 << drive->dn);
 			break;
 		case XFER_UDMA_3:
 			ultra_timing |= 0x44;
 			dma_pio_timing |= 0x20;
-			pio_timing |= (0x03 << drive_number);
+			pio_timing |= (0x03 << drive->dn);
 			break;
 		case XFER_UDMA_2:
 			ultra_timing |= 0x40;
 			dma_pio_timing |= 0x20;
-			pio_timing |= (0x03 << drive_number);
+			pio_timing |= (0x03 << drive->dn);
 			break;
 		case XFER_UDMA_1:
 			ultra_timing |= 0x41;
 			dma_pio_timing |= 0x20;
-			pio_timing |= (0x03 << drive_number);
+			pio_timing |= (0x03 << drive->dn);
 			break;
 		case XFER_UDMA_0:
 			ultra_timing |= 0x42;
 			dma_pio_timing |= 0x20;
-			pio_timing |= (0x03 << drive_number);
+			pio_timing |= (0x03 << drive->dn);
 			break;
 		case XFER_MW_DMA_2:
 			dma_pio_timing |= 0x20;
-			pio_timing |= (0x03 << drive_number);
+			pio_timing |= (0x03 << drive->dn);
 			break;
 		case XFER_MW_DMA_1:
 			dma_pio_timing |= 0x21;
-			pio_timing |= (0x03 << drive_number);
+			pio_timing |= (0x03 << drive->dn);
 			break;
 		case XFER_MW_DMA_0:
 			dma_pio_timing |= 0x77;
-			pio_timing |= (0x03 << drive_number);
+			pio_timing |= (0x03 << drive->dn);
 			break;
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 		case XFER_PIO_4:
 			dma_pio_timing |= 0x20;
-			pio_timing |= (0x03 << drive_number);
+			pio_timing |= (0x03 << drive->dn);
 			break;
 		case XFER_PIO_3:
 			dma_pio_timing |= 0x22;
-			pio_timing |= (0x03 << drive_number);
+			pio_timing |= (0x03 << drive->dn);
 			break;
 		case XFER_PIO_2:
 			dma_pio_timing |= 0x42;
-			pio_timing |= (0x03 << drive_number);
+			pio_timing |= (0x03 << drive->dn);
 			break;
 		case XFER_PIO_1:
 			dma_pio_timing |= 0x65;
-			pio_timing |= (0x03 << drive_number);
+			pio_timing |= (0x03 << drive->dn);
 			break;
 		case XFER_PIO_0:
 		default:
 			dma_pio_timing |= 0xA8;
-			pio_timing |= (0x03 << drive_number);
+			pio_timing |= (0x03 << drive->dn);
 			break;
         }
 
+	if (!drive->init_speed)
+		drive->init_speed = speed;
+
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	pci_write_config_byte(dev, drive_pci, ultra_timing);
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 	pci_write_config_byte(dev, drive_pci2, dma_pio_timing);
 	pci_write_config_byte(dev, 0x4c, pio_timing);
 
@@ -186,12 +194,16 @@ static int amd7409_tune_chipset (ide_drive_t *drive, byte speed)
 		ultra_timing, dma_pio_timing, pio_timing);
 #endif
 
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	if (speed > XFER_PIO_4) {
 		outb(inb(dma_base+2)|(1<<(5+unit)), dma_base+2);
 	} else {
 		outb(inb(dma_base+2) & ~(1<<(5+unit)), dma_base+2);
 	}
+#endif /* CONFIG_BLK_DEV_IDEDMA */
+
 	err = ide_config_drive_speed(drive, speed);
+	drive->current_speed = speed;
 	return (err);
 }
 
@@ -231,6 +243,7 @@ static void config_chipset_for_pio (ide_drive_t *drive)
 			break;
 	}
 	(void) amd7409_tune_chipset(drive, speed);
+	drive->current_speed = speed;
 }
 
 static void amd7409_tune_drive (ide_drive_t *drive, byte pio)
@@ -403,13 +416,14 @@ unsigned int __init ata66_amd7409 (ide_hwif_t *hwif)
 void __init ide_init_amd7409 (ide_hwif_t *hwif)
 {
 	hwif->tuneproc = &amd7409_tune_drive;
+	hwif->speedproc = &amd7409_tune_chipset;
 
 #ifndef CONFIG_BLK_DEV_IDEDMA
 	hwif->drives[0].autotune = 1;
 	hwif->drives[1].autotune = 1;
 	hwif->autodma = 0;
 	return;
-#endif /* CONFIG_BLK_DEV_IDEDMA */
+#else
 
 	if (hwif->dma_base) {
 		hwif->dmaproc = &amd7409_dmaproc;
@@ -419,6 +433,7 @@ void __init ide_init_amd7409 (ide_hwif_t *hwif)
 		hwif->drives[0].autotune = 1;
 		hwif->drives[1].autotune = 1;
 	}
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 }
 
 void ide_dmacapable_amd7409 (ide_hwif_t *hwif, unsigned long dmabase)

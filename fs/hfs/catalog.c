@@ -60,7 +60,7 @@ typedef struct {
 	hfs_byte_t	RExtRec[12];	/* first extent record
 					   for the resource fork */
 	hfs_lword_t	Resrv;		/* reserved by Apple */
-} FIL_REC;
+} __attribute__((packed)) FIL_REC;
 
 /* the catalog record for a directory */
 typedef struct {
@@ -74,14 +74,14 @@ typedef struct {
 	hfs_dinfo_t	UsrInfo;	/* data used by the Finder */
 	hfs_dxinfo_t	FndrInfo;	/* more data used by Finder */
 	hfs_byte_t	Resrv[16];	/* reserved by Apple */
-} DIR_REC;
+} __attribute__((packed)) DIR_REC;
 
 /* the catalog record for a thread */
 typedef struct {
 	hfs_byte_t		Reserv[8];	/* reserved by Apple */
 	hfs_lword_t		ParID;		/* CNID of parent directory */
 	struct hfs_name		CName;		/* The name of this entry */
-} THD_REC;
+}  __attribute__((packed)) THD_REC;
 
 /* A catalog tree record */
 struct hfs_cat_rec {
@@ -92,7 +92,7 @@ struct hfs_cat_rec {
 		DIR_REC dir;
 		THD_REC thd;
 	} u;
-};
+} __attribute__((packed));
 
 /*================ File-local variables ================*/
  

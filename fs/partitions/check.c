@@ -134,6 +134,9 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 		case IDE0_MAJOR:
 			maj = "hd";
 			break;
+		case MD_MAJOR:
+			unit -= 'a'-'0';
+			break;
 	}
 	if (hd->major >= SCSI_DISK1_MAJOR && hd->major <= SCSI_DISK7_MAJOR) {
 		unit = unit + (hd->major - SCSI_DISK1_MAJOR + 1) * 16;

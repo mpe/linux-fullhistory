@@ -12,6 +12,15 @@ if [ "$CONFIG_BLK_DEV_IDE" != "n" ]; then
 
    dep_tristate '  Include IDE/ATA-2 DISK support' CONFIG_BLK_DEV_IDEDISK $CONFIG_BLK_DEV_IDE
    dep_mbool '    Use multi-mode by default' CONFIG_IDEDISK_MULTI_MODE $CONFIG_BLK_DEV_IDEDISK
+
+   define_bool CONFIG_BLK_DEV_IDEDISK_VENDOR n
+   dep_mbool '    Fujitsu Vendor Specific' CONFIG_BLK_DEV_IDEDISK_FUJITSU $CONFIG_BLK_DEV_IDEDISK_VENDOR
+   dep_mbool '    IMB Vendor Specific' CONFIG_BLK_DEV_IDEDISK_IBM $CONFIG_BLK_DEV_IDEDISK_VENDOR
+   dep_mbool '    Maxtor Vendor Specific' CONFIG_BLK_DEV_IDEDISK_MAXTOR $CONFIG_BLK_DEV_IDEDISK_VENDOR
+   dep_mbool '    Quantum Vendor Specific' CONFIG_BLK_DEV_IDEDISK_QUANTUM $CONFIG_BLK_DEV_IDEDISK_VENDOR
+   dep_mbool '    Seagate Vendor Specific' CONFIG_BLK_DEV_IDEDISK_SEAGATE $CONFIG_BLK_DEV_IDEDISK_VENDOR
+   dep_mbool '    Western Digital Vendor Specific' CONFIG_BLK_DEV_IDEDISK_WD $CONFIG_BLK_DEV_IDEDISK_VENDOR
+
    dep_tristate '  PCMCIA IDE support' CONFIG_BLK_DEV_IDECS $CONFIG_BLK_DEV_IDE $CONFIG_PCMCIA
    dep_tristate '  Include IDE/ATAPI CDROM support' CONFIG_BLK_DEV_IDECD $CONFIG_BLK_DEV_IDE
    dep_tristate '  Include IDE/ATAPI TAPE support' CONFIG_BLK_DEV_IDETAPE $CONFIG_BLK_DEV_IDE

@@ -1,4 +1,4 @@
-/* 
+/*
     bttv - Bt848 frame grabber driver
 
     Copyright (C) 1996,97 Ralph Metzler (rjkm@thp.uni-koeln.de)
@@ -21,7 +21,7 @@
 #ifndef _BTTV_H_
 #define _BTTV_H_
 
-#define BTTV_VERSION_CODE KERNEL_VERSION(0,7,25) 
+#define BTTV_VERSION_CODE KERNEL_VERSION(0,7,28) 
 
 #include <linux/types.h>
 #include <linux/wait.h>
@@ -183,7 +183,7 @@ struct bttv {
 
 	struct bttv_gbuf *gbuf;
 	int gqueue[MAX_GBUFFERS];
-	int gq_in,gq_out,gq_grab;
+	int gq_in,gq_out,gq_grab,gq_start;
         char *fbuffer;
 
 	struct bttv_pll_info pll;
@@ -272,7 +272,13 @@ extern __inline__ void io_st_le32(volatile unsigned *addr, unsigned val)
 #define BTTV_PXELVWPLTVPRO 0x25
 #define BTTV_MAGICTVIEW063 0x26
 #define BTTV_PINNACLERAVE  0x27
+#define BTTV_STB2          0x28
+#define BTTV_AVPHONE98     0x29
+#define BTTV_PV951         0x2a
 
+#define PLL_NONE 0
+#define PLL_28   1
+#define PLL_35   2
 
 #define AUDIO_TUNER        0x00
 #define AUDIO_RADIO        0x01
@@ -289,9 +295,11 @@ extern __inline__ void io_st_le32(volatile unsigned *addr, unsigned val)
 #define TEA6300            0x04
 
 #define I2C_TSA5522        0xc2
+#define I2C_TDA7432        0x8a
+#define I2C_TDA8425        0x82
 #define I2C_TDA9840        0x84
 #define I2C_TDA9850        0xb6
-#define I2C_TDA8425        0x82
+#define I2C_TDA9875        0xb0
 #define I2C_HAUPEE         0xa0
 #define I2C_STBEE          0xae
 #define I2C_VHX            0xc0

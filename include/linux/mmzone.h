@@ -70,6 +70,7 @@ typedef struct zone_struct {
 typedef struct zonelist_struct {
 	zone_t * zones [MAX_NR_ZONES+1]; // NULL delimited
 	int gfp_mask;
+	atomic_t free_before_allocate;
 } zonelist_t;
 
 #define NR_GFPINDEX		0x100

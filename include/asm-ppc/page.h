@@ -1,4 +1,7 @@
 #include <linux/config.h>
+#ifndef __ASSEMBLY__
+#include <asm/system.h> /* for xmon definition */
+#endif /* ndef __ASSEMBLY__ */
 
 #ifndef _PPC_PAGE_H
 #define _PPC_PAGE_H

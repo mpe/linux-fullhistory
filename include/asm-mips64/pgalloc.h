@@ -12,8 +12,6 @@
 
 #include <linux/config.h>
 
-#include <linux/config.h>
-
 /* TLB flushing:
  *
  *  - flush_tlb_all() flushes all processes TLB entries

@@ -871,7 +871,7 @@ static int msp3400c_thread(void *data)
 		/* unmute */
 		msp3400c_setvolume(client, msp->left, msp->right);
 
-		if (msp->watch_stereo) 
+		if (msp->watch_stereo)
 			mod_timer(&msp->wake_stereo, jiffies+5*HZ);
 
 		if (debug)
@@ -1086,7 +1086,7 @@ static int msp3410d_thread(void *data)
 		msp3400c_settreble(client, msp->treble);
 		msp3400c_setvolume(client, msp->left, msp->right);
 
-		if (msp->watch_stereo) 
+		if (msp->watch_stereo)
 			mod_timer(&msp->wake_stereo, jiffies+HZ);
 
 		msp->active = 0;
@@ -1236,7 +1236,7 @@ static int
 msp3400c_mixer_open(struct inode *inode, struct file *file)
 {
         int minor = MINOR(inode->i_rdev);
-	struct i2c_client *client = NULL;
+	struct i2c_client *client;
 	struct msp3400c *msp;
 	int i;
 
@@ -1246,12 +1246,12 @@ msp3400c_mixer_open(struct inode *inode, struct file *file)
 		if (msp->mixer_num == minor) {
 			client = msps[i];
 			file->private_data = client;
-			goto match;
+			break;
 		}
 	}
-	return -ENODEV;
+	if (MSP3400_MAX == i)
+		return -ENODEV;
 
-match:
 	/* lock bttv in memory while the mixer is in use  */
 	if (client->adapter->inc_use)
 		client->adapter->inc_use(client->adapter);
@@ -1265,8 +1265,8 @@ msp3400c_mixer_release(struct inode *inode, struct file *file)
 {
 	struct i2c_client *client = file->private_data;
 
-	if (client->adapter->inc_use) 
-		client->adapter->inc_use(client->adapter);
+	if (client->adapter->dec_use) 
+		client->adapter->dec_use(client->adapter);
         MOD_DEC_USE_COUNT;
         return 0;
 }

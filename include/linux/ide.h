@@ -64,6 +64,12 @@ void cmd640_dump_regs (void);
 #define IDE_DRIVE_CMD		99	/* (magic) undef to reduce kernel size*/
 
 /*
+ * IDE_DRIVE_TASK is used to implement many features needed for raw tasks
+ */
+#define IDE_DRIVE_TASK		98
+#define IDE_DRIVE_CMD_AEB	98
+
+/*
  *  "No user-serviceable parts" beyond this point  :)
  *****************************************************************************/
 
@@ -302,6 +308,10 @@ typedef struct ide_drive_s {
 	char		driver_req[10];	/* requests specific driver */
 	int		last_lun;	/* last logical unit */
 	int		forced_lun;	/* if hdxlun was given at boot */
+	int		lun;		/* logical unit */
+	byte		init_speed;	/* transfer rate set at boot */
+	byte		current_speed;	/* current transfer rate set */
+	byte		dn;		/* now wide spread use */
 } ide_drive_t;
 
 /*
@@ -336,7 +346,8 @@ typedef int (ide_dmaproc_t)(ide_dma_action_t, ide_drive_t *);
  * support all possible PIO settings.  They may silently ignore
  * or round values as they see fit.
  */
-typedef void (ide_tuneproc_t)(ide_drive_t *, byte);
+typedef void (ide_tuneproc_t) (ide_drive_t *, byte);
+typedef int (ide_speedproc_t) (ide_drive_t *, byte);
 
 /*
  * This is used to provide support for strange interfaces
@@ -374,6 +385,7 @@ typedef struct hwif_s {
 	ide_drive_t	drives[MAX_DRIVES];	/* drive info */
 	struct gendisk	*gd;		/* gendisk structure */
 	ide_tuneproc_t	*tuneproc;	/* routine to tune PIO mode for drives */
+	ide_speedproc_t	*speedproc;	/* routine to retune DMA modes for drives */
 	ide_selectproc_t *selectproc;	/* tweaks hardware to select drive */
 	ide_resetproc_t	*resetproc;	/* routine to reset controller after a disk reset */
 	ide_dmaproc_t	*dmaproc;	/* dma read/write/abort routine */
@@ -409,6 +421,7 @@ typedef struct hwif_s {
 	unsigned long	last_time;	/* time when previous rq was done */
 #endif
 	byte		straight8;	/* Alan's straight 8 check */
+	void		*hwif_data;	/* extra hwif data */
 } ide_hwif_t;
 
 /*
@@ -728,14 +741,16 @@ void ide_end_drive_cmd (ide_drive_t *drive, byte stat, byte err);
  * Issue ATA command and wait for completion.
  */
 int ide_wait_cmd (ide_drive_t *drive, int cmd, int nsect, int feature, int sectors, byte *buf);
+int ide_wait_cmd_task (ide_drive_t *drive, byte *buf);
 
 void ide_delay_50ms (void);
 int system_bus_clock(void);
 
+byte ide_auto_reduce_xfer (ide_drive_t *drive);
 int ide_driveid_update (ide_drive_t *drive);
-int ide_ata66_check (ide_drive_t *drive, int cmd, int nsect, int feature);
+int ide_ata66_check (ide_drive_t *drive, byte cmd, byte nsect, byte feature);
 int ide_config_drive_speed (ide_drive_t *drive, byte speed);
-int set_transfer (ide_drive_t *drive, int cmd, int nsect, int feature);
+int set_transfer (ide_drive_t *drive, byte cmd, byte nsect, byte feature);
 
 /*
  * ide_system_bus_speed() returns what we think is the system VESA/PCI
@@ -769,37 +784,10 @@ request_queue_t *ide_get_queue (kdev_t dev);
  */
 int drive_is_flashcard (ide_drive_t *drive);
 
-int  ide_spin_wait_hwgroup(ide_drive_t *drive, unsigned long *flags);
+int ide_spin_wait_hwgroup (ide_drive_t *drive);
 void ide_timer_expiry (unsigned long data);
 void ide_intr (int irq, void *dev_id, struct pt_regs *regs);
-void do_ide0_request (request_queue_t * q);
-#if MAX_HWIFS > 1
-void do_ide1_request (request_queue_t * q);
-#endif
-#if MAX_HWIFS > 2
-void do_ide2_request (request_queue_t * q);
-#endif
-#if MAX_HWIFS > 3
-void do_ide3_request (request_queue_t * q);
-#endif
-#if MAX_HWIFS > 4
-void do_ide4_request (request_queue_t * q);
-#endif
-#if MAX_HWIFS > 5
-void do_ide5_request (request_queue_t * q);
-#endif
-#if MAX_HWIFS > 6
-void do_ide6_request (request_queue_t * q);
-#endif
-#if MAX_HWIFS > 7
-void do_ide7_request (request_queue_t * q);
-#endif
-#if MAX_HWIFS > 8
-void do_ide8_request (request_queue_t * q);
-#endif
-#if MAX_HWIFS > 9
-void do_ide9_request (request_queue_t * q);
-#endif
+void do_ide_request (request_queue_t * q);
 void ide_init_subdrivers (void);
 
 #ifndef _IDE_C

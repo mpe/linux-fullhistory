@@ -16,6 +16,12 @@
 	__argprep __prep; \
 	__argprep
 
+#define __chrp __attribute__ ((__section__ (".text.chrp")))
+#define __chrpdata __attribute__ ((__section__ (".data.chrp")))
+#define __chrpfunc(__argchrp) \
+	__argchrp __chrp; \
+	__argchrp
+
 #define __apus __attribute__ ((__section__ (".text.apus")))
 #define __apusdata __attribute__ ((__section__ (".data.apus")))
 #define __apusfunc(__argapus) \

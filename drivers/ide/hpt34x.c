@@ -96,14 +96,13 @@ extern char *ide_xfer_verbose (byte xfer_rate);
 
 static void hpt34x_clear_chipset (ide_drive_t *drive)
 {
-	int drive_number	= ((HWIF(drive)->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
 	unsigned int reg1	= 0, tmp1 = 0;
 	unsigned int reg2	= 0, tmp2 = 0;
 
 	pci_read_config_dword(HWIF(drive)->pci_dev, 0x44, &reg1);
 	pci_read_config_dword(HWIF(drive)->pci_dev, 0x48, &reg2);
-	tmp1 = ((0x00 << (3*drive_number)) | (reg1 & ~(7 << (3*drive_number))));
-	tmp2 = (reg2 & ~(0x11 << drive_number));
+	tmp1 = ((0x00 << (3*drive->dn)) | (reg1 & ~(7 << (3*drive->dn))));
+	tmp2 = (reg2 & ~(0x11 << drive->dn));
 	pci_write_config_dword(HWIF(drive)->pci_dev, 0x44, tmp1);
 	pci_write_config_dword(HWIF(drive)->pci_dev, 0x48, tmp2);
 }
@@ -112,7 +111,6 @@ static int hpt34x_tune_chipset (ide_drive_t *drive, byte speed)
 {
 	int			err;
 	byte			hi_speed, lo_speed;
-	int drive_number	= ((HWIF(drive)->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
 	unsigned int reg1	= 0, tmp1 = 0;
 	unsigned int reg2	= 0, tmp2 = 0;
 
@@ -127,20 +125,24 @@ static int hpt34x_tune_chipset (ide_drive_t *drive, byte speed)
 
 	pci_read_config_dword(HWIF(drive)->pci_dev, 0x44, &reg1);
 	pci_read_config_dword(HWIF(drive)->pci_dev, 0x48, &reg2);
-	tmp1 = ((lo_speed << (3*drive_number)) | (reg1 & ~(7 << (3*drive_number))));
-	tmp2 = ((hi_speed << drive_number) | reg2);
+	tmp1 = ((lo_speed << (3*drive->dn)) | (reg1 & ~(7 << (3*drive->dn))));
+	tmp2 = ((hi_speed << drive->dn) | reg2);
 	err = ide_config_drive_speed(drive, speed);
 	pci_write_config_dword(HWIF(drive)->pci_dev, 0x44, tmp1);
 	pci_write_config_dword(HWIF(drive)->pci_dev, 0x48, tmp2);
+
+	if (!drive->init_speed)
+		drive->init_speed = speed;
 
 #if HPT343_DEBUG_DRIVE_INFO
 	printk("%s: %s drive%d (0x%04x 0x%04x) (0x%04x 0x%04x)" \
 		" (0x%02x 0x%02x) 0x%04x\n",
 		drive->name, ide_xfer_verbose(speed),
-		drive_number, reg1, tmp1, reg2, tmp2,
+		drive->dn, reg1, tmp1, reg2, tmp2,
 		hi_speed, lo_speed, err);
 #endif /* HPT343_DEBUG_DRIVE_INFO */
 
+	drive->current_speed = speed;
 	return(err);
 }
 
@@ -410,6 +412,7 @@ unsigned int __init pci_init_hpt34x (struct pci_dev *dev, const char *name)
 void __init ide_init_hpt34x (ide_hwif_t *hwif)
 {
 	hwif->tuneproc = &hpt34x_tune_drive;
+	hwif->speedproc = &hpt34x_tune_chipset;
 
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	if (hwif->dma_base) {

@@ -689,8 +689,8 @@ int __init scc_enet_init(void)
 	cep->dirty_tx = cep->cur_tx = cep->tx_bd_base;
 	cep->cur_rx = cep->rx_bd_base;
 
-	ep->sen_genscc.scc_rfcr = SCC_EB;
-	ep->sen_genscc.scc_tfcr = SCC_EB;
+	ep->sen_genscc.scc_rfcr = CPMFCR_GBL | CPMFCR_EB;
+	ep->sen_genscc.scc_tfcr = CPMFCR_GBL | CPMFCR_EB;
 
 	/* Set maximum bytes per receive buffer.
 	 * This appears to be an Ethernet frame size, not the buffer

@@ -27,6 +27,7 @@
 #include <linux/malloc.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
+#include <linux/hdreg.h>
 #include <linux/ide.h>
 
 #include <asm/byteorder.h>
@@ -109,6 +110,46 @@ char *ide_dmafunc_verbose (ide_dma_action_t dmafunc)
 }
 
 /*
+ *
+ */
+byte ide_auto_reduce_xfer (ide_drive_t *drive)
+{
+	switch(drive->current_speed) {
+		case XFER_UDMA_7:	return XFER_UDMA_6;
+		case XFER_UDMA_6:	return XFER_UDMA_5;
+		case XFER_UDMA_5:	return XFER_UDMA_4;
+		case XFER_UDMA_4:	return XFER_UDMA_3;
+		case XFER_UDMA_3:	return XFER_UDMA_2;
+		case XFER_UDMA_2:	return XFER_UDMA_1;
+		case XFER_UDMA_1:	return XFER_UDMA_0;
+		case XFER_UDMA_0:
+			if (drive->id->dma_mword & 0x0004) return XFER_MW_DMA_2;
+			else if (drive->id->dma_mword & 0x0002) return XFER_MW_DMA_1;
+			else if (drive->id->dma_mword & 0x0001) return XFER_MW_DMA_0;
+			else return XFER_PIO_4;
+		case XFER_MW_DMA_2:	return XFER_MW_DMA_1;
+		case XFER_MW_DMA_1:	return XFER_MW_DMA_0;
+		case XFER_MW_DMA_0:
+			if (drive->id->dma_1word & 0x0004) return XFER_SW_DMA_2;
+			else if (drive->id->dma_1word & 0x0002) return XFER_SW_DMA_1;
+			else if (drive->id->dma_1word & 0x0001) return XFER_SW_DMA_0;
+			else return XFER_PIO_4;
+		case XFER_SW_DMA_2:	return XFER_SW_DMA_1;
+		case XFER_SW_DMA_1:	return XFER_SW_DMA_0;
+		case XFER_SW_DMA_0:
+			{
+				return XFER_PIO_4;
+			}
+		case XFER_PIO_4:	return XFER_PIO_3;
+		case XFER_PIO_3:	return XFER_PIO_2;
+		case XFER_PIO_2:	return XFER_PIO_1;
+		case XFER_PIO_1:	return XFER_PIO_0;
+		case XFER_PIO_0:
+		default:		return XFER_PIO_SLOW;
+	}
+}
+
+/*
  * Update the 
  */
 int ide_driveid_update (ide_drive_t *drive)
@@ -136,8 +177,10 @@ int ide_driveid_update (ide_drive_t *drive)
 		ide_delay_50ms();	/* give drive a breather */
 	} while (IN_BYTE(IDE_ALTSTATUS_REG) & BUSY_STAT);
 	ide_delay_50ms();	/* wait for IRQ and DRQ_STAT */
-	if (!OK_STAT(GET_STAT(),DRQ_STAT,BAD_R_STAT))
+	if (!OK_STAT(GET_STAT(),DRQ_STAT,BAD_R_STAT)) {
+		printk("%s: CHECK for good STATUS\n", drive->name);
 		return 0;
+	}
 	__save_flags(flags);	/* local CPU only */
 	__cli();		/* local CPU only; some systems need this */
 	id = kmalloc(SECTOR_WORDS*4, GFP_ATOMIC);
@@ -146,17 +189,14 @@ int ide_driveid_update (ide_drive_t *drive)
 	ide__sti();		/* local CPU only */
 	__restore_flags(flags);	/* local CPU only */
 	ide_fix_driveid(id);
-	if (id && id->cyls) {
+	if (id) {
 		drive->id->dma_ultra = id->dma_ultra;
 		drive->id->dma_mword = id->dma_mword;
 		drive->id->dma_1word = id->dma_1word;
 		/* anything more ? */
-#ifdef DEBUG
-		printk("%s: dma_ultra=%04X, dma_mword=%04X, dma_1word=%04X\n",
-			drive->name, id->dma_ultra, id->dma_mword, id->dma_1word);
-#endif
 		kfree(id);
 	}
+
 	return 1;
 }
 
@@ -167,7 +207,7 @@ int ide_driveid_update (ide_drive_t *drive)
  * in combination with the device (usually a disk) properly detect
  * and acknowledge each end of the ribbon.
  */
-int ide_ata66_check (ide_drive_t *drive, int cmd, int nsect, int feature)
+int ide_ata66_check (ide_drive_t *drive, byte cmd, byte nsect, byte feature)
 {
 	if ((cmd == WIN_SETFEATURES) &&
 	    (nsect > XFER_UDMA_2) &&
@@ -189,15 +229,16 @@ int ide_ata66_check (ide_drive_t *drive, int cmd, int nsect, int feature)
  * 1 : Safe to update drive->id DMA registers.
  * 0 : OOPs not allowed.
  */
-int set_transfer (ide_drive_t *drive, int cmd, int nsect, int feature)
+int set_transfer (ide_drive_t *drive, byte cmd, byte nsect, byte feature)
 {
-	struct hd_driveid *id = drive->id;
-
 	if ((cmd == WIN_SETFEATURES) &&
 	    (nsect >= XFER_SW_DMA_0) &&
 	    (feature == SETFEATURES_XFER) &&
-	    (id->dma_ultra || id->dma_mword || id->dma_1word))
+	    (drive->id->dma_ultra ||
+	     drive->id->dma_mword ||
+	     drive->id->dma_1word))
 		return 1;
+
 	return 0;
 }
 
@@ -218,6 +259,8 @@ int ide_config_drive_speed (ide_drive_t *drive, byte speed)
 	int	i, error = 1;
 	byte unit = (drive->select.b.unit & 0x01);
 	byte stat;
+
+	outb(inb(hwif->dma_base+2) & ~(1<<(5+unit)), hwif->dma_base+2);
 
 	/*
 	 * Don't use ide_wait_cmd here - it will
@@ -307,6 +350,7 @@ int ide_config_drive_speed (ide_drive_t *drive, byte speed)
 	return error;
 }
 
+EXPORT_SYMBOL(ide_auto_reduce_xfer);
 EXPORT_SYMBOL(ide_driveid_update);
 EXPORT_SYMBOL(ide_ata66_check);
 EXPORT_SYMBOL(set_transfer);

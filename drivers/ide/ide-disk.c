@@ -33,8 +33,6 @@
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
 
-#define _IDE_DISK_C		/* Tell linux/hdsmart.h it's really us */
-
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/types.h>
@@ -688,13 +686,12 @@ static int set_multcount(ide_drive_t *drive, int arg)
 
 static int set_nowerr(ide_drive_t *drive, int arg)
 {
-	unsigned long flags;
-
-	if (ide_spin_wait_hwgroup(drive, &flags))
+	if (ide_spin_wait_hwgroup(drive))
 		return -EBUSY;
+
 	drive->nowerr = arg;
 	drive->bad_wstat = arg ? BAD_R_STAT : BAD_W_STAT;
-	spin_unlock_irqrestore(&io_request_lock, flags);
+	spin_unlock_irq(&io_request_lock);
 	return 0;
 }
 
@@ -713,7 +710,7 @@ static void idedisk_add_settings(ide_drive_t *drive)
 	ide_add_setting(drive,	"breada_readahead",	SETTING_RW,					BLKRAGET,		BLKRASET,		TYPE_INT,	0,	255,				1,	2,	&read_ahead[major],		NULL);
 	ide_add_setting(drive,	"file_readahead",	SETTING_RW,					BLKFRAGET,		BLKFRASET,		TYPE_INTA,	0,	INT_MAX,			1,	1024,	&max_readahead[major][minor],	NULL);
 	ide_add_setting(drive,	"max_kb_per_request",	SETTING_RW,					BLKSECTGET,		BLKSECTSET,		TYPE_INTA,	1,	255,				1,	2,	&max_sectors[major][minor],	NULL);
-
+	ide_add_setting(drive,	"lun",			SETTING_RW,					-1,			-1,			TYPE_INT,	0,	7,				1,	1,	&drive->lun,			NULL);
 }
 
 /*

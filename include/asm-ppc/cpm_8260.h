@@ -124,6 +124,14 @@ typedef struct cpm_buf_desc {
 #define BD_SC_OV	((ushort)0x0002)	/* Overrun */
 #define BD_SC_CD	((ushort)0x0001)	/* ?? */
 
+/* Function code bits, usually generic to devices.
+*/
+#define CPMFCR_GBL	((u_char)0x20)	/* Set memory snooping */
+#define CPMFCR_EB	((u_char)0x10)	/* Set big endian byte order */
+#define CPMFCR_TC2	((u_char)0x04)	/* Transfer code 2 value */
+#define CPMFCR_DTB	((u_char)0x02)	/* Use local bus for data when set */
+#define CPMFCR_BDB	((u_char)0x01)	/* Use local bus for BD when set */
+
 /* Parameter RAM offsets from the base.
 */
 #define PROFF_SCC1		((uint)0x8000)
@@ -183,13 +191,6 @@ typedef struct smc_uart {
 	ushort	smc_rmask;	/* Temporary bit mask */
 	uint	smc_stmp;	/* SDMA Temp */
 } smc_uart_t;
-
-/* Function code bits.
-*/
-#define SMC_GBL	((u_char)0x20)	/* Set memory snooping */
-#define SMC_EB	((u_char)0x10)	/* Set big endian byte order */
-#define SMC_TC2	((u_char)0x04)	/* Transfer code 2 value */
-#define SMC_DTB	((u_char)0x02)	/* Use local bus when set */
 
 /* SMC uart mode register (Internal memory map).
 */
@@ -336,10 +337,6 @@ typedef struct scc_param {
 	uint	scc_rcrc;	/* Internal */
 	uint	scc_tcrc;	/* Internal */
 } sccp_t;
-
-/* Function code bits.
-*/
-#define SCC_EB	((u_char)0x10)	/* Set big endian byte order */
 
 /* CPM Ethernet through SCC1.
  */

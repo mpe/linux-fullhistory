@@ -182,7 +182,7 @@ ifeq ($(CONFIG_ARCH_ACORN),y)
 SUBDIRS		+= drivers/acorn
 DRIVERS		+= drivers/acorn/block/acorn-block.a
 DRIVERS		+= drivers/acorn/char/acorn-char.o
-DRIVERS		+= drivers/acorn/net/acorn-net.a
+DRIVERS		+= drivers/acorn/net/acorn-net.o
 DRIVERS		+= drivers/acorn/scsi/acorn-scsi.a
 endif
 

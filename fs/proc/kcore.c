@@ -315,13 +315,12 @@ static ssize_t read_kcore(struct file *file, char *buffer, size_t buflen, loff_t
 	size_t elf_buflen;
 	int num_vma;
 
-	/* XXX we need to somehow lock vmlist between here
-	 * and after elf_kcore_store_hdr() returns.
-	 * For now assume that num_vma does not change (TA)
-	 */
+	read_lock(&vmlist_lock);
 	proc_root_kcore->size = size = get_kcore_size(&num_vma, &elf_buflen);
-	if (buflen == 0 || *fpos >= size)
+	if (buflen == 0 || *fpos >= size) {
+		read_unlock(&vmlist_lock);
 		return 0;
+	}
 
 	/* trim buflen to not go beyond EOF */
 	if (buflen > size - *fpos)
@@ -335,10 +334,13 @@ static ssize_t read_kcore(struct file *file, char *buffer, size_t buflen, loff_t
 		if (buflen < tsz)
 			tsz = buflen;
 		elf_buf = kmalloc(elf_buflen, GFP_ATOMIC);
-		if (!elf_buf)
+		if (!elf_buf) {
+			read_unlock(&vmlist_lock);
 			return -ENOMEM;
+		}
 		memset(elf_buf, 0, elf_buflen);
 		elf_kcore_store_hdr(elf_buf, num_vma, elf_buflen);
+		read_unlock(&vmlist_lock);
 		if (copy_to_user(buffer, elf_buf + *fpos, tsz)) {
 			kfree(elf_buf);
 			return -EFAULT;
@@ -352,7 +354,8 @@ static ssize_t read_kcore(struct file *file, char *buffer, size_t buflen, loff_t
 		/* leave now if filled buffer already */
 		if (buflen == 0)
 			return acc;
-	}
+	} else
+		read_unlock(&vmlist_lock);
 
 	/* where page 0 not mapped, write zeros into buffer */
 #if defined (__i386__) || defined (__mc68000__)

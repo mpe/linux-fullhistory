@@ -181,6 +181,8 @@ struct hd_geometry {
 #define HDIO_GET_DMA		0x030b	/* get use-dma flag */
 #define HDIO_GET_NICE		0x030c	/* get nice flags */
 #define HDIO_GET_IDENTITY	0x030d	/* get IDE identification info */
+#define HDIO_DRIVE_CMD_AEB	0x031e
+#define HDIO_DRIVE_TASK		0x031e
 #define HDIO_DRIVE_CMD		0x031f	/* execute a special drive command */
 
 /* hd/ide ctl's that pass (arg) non-ptr values are numbered 0x032n/0x033n */
@@ -206,7 +208,6 @@ struct hd_big_geometry {
 /* hd/ide ctl's that pass (arg) ptrs to user space are numbered 0x033n/0x033n */
 #define HDIO_GETGEO_BIG		0x0330	/* */
 #define HDIO_GETGEO_BIG_RAW	0x0331	/* */
-
 
 #define __NEW_HD_DRIVE_ID
 /* structure returned by HDIO_GET_IDENTITY, as per ANSI ATA2 rev.2f spec */
@@ -272,7 +273,7 @@ struct hd_driveid {
 	unsigned short	CurAPMvalues;	/* current APM values */
 	unsigned short	word92;		/* reserved (word 92) */
 	unsigned short	hw_config;	/* hardware config */
-	unsigned short  words94_125[31];/* reserved words 94-125 */
+	unsigned short  words94_125[32];/* reserved words 94-125 */
 	unsigned short	last_lun;	/* reserved (word 126) */
 	unsigned short	word127;	/* reserved (word 127) */
 	unsigned short	dlf;		/* device lock function
@@ -293,8 +294,10 @@ struct hd_driveid {
 					 * 1	read-look-ahead
 					 * 0	write cache
 					 */
-	unsigned short	words130_159[30];/* reserved vendor words 130-159 */
-	unsigned short	words160_255[96];/* reserved words 160-255 */
+	unsigned short	words130_155[26];/* reserved vendor words 130-155 */
+	unsigned short	word156;
+	unsigned short	words157_159[3];/* reserved vendor words 157-159 */
+	unsigned short	words160_255[95];/* reserved words 160-255 */
 };
 
 /*

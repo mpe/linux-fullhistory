@@ -34,7 +34,7 @@ obj-			:=
 
 export-objs		:= armksyms.o dma.o ecard.o hw-footbridge.o leds-$(MACHINE).o
 
-obj-$(CONFIG_ARCH_ACORN) += dma.o ecard.o iic.o fiq.o time-acorn.o
+obj-$(CONFIG_ARCH_ACORN) += dma.o ecard.o fiq.o time-acorn.o
 obj-$(CONFIG_DEBUG_LL)	+= debug-$(PROCESSOR).o
 obj-$(CONFIG_MODULES)	+= armksyms.o
 obj-$(CONFIG_LEDS)	+= leds-$(MACHINE).o

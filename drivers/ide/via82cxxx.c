@@ -115,6 +115,7 @@ static struct chipset_bus_clock_list_entry * via82cxxx_table = NULL;
 
 struct chipset_bus_clock_list_entry via82cxxx_type_one [] = {
 		/* speed */	/* 25 */	/* 33 */	/* 37.5 */	/* 41.5 */	
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	{	XFER_UDMA_4,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00	},
 	{	XFER_UDMA_3,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00	},
 	{	XFER_UDMA_2,	0x60,	0x20,	0x60,	0x20,	0x60,	0x21,	0x00,	0x00	},
@@ -124,7 +125,7 @@ struct chipset_bus_clock_list_entry via82cxxx_type_one [] = {
 	{	XFER_MW_DMA_2,	0x03,	0x20,	0x03,	0x20,	0x03,	0x21,	0x00,	0x00	},
 	{	XFER_MW_DMA_1,	0x03,	0x31,	0x03,	0x31,	0x03,	0x32,	0x00,	0x00	},
 	{	XFER_MW_DMA_0,	0x03,	0x31,	0x03,	0x31,	0x03,	0x32,	0x00,	0x00	},
-
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 	{	XFER_PIO_4,	0x03,	0x20,	0x03,	0x20,	0x03,	0x21,	0x00,	0x00	},
 	{	XFER_PIO_3,	0x03,	0x31,	0x03,	0x31,	0x03,	0x32,	0x00,	0x00	},
 	{	XFER_PIO_2,	0x03,	0x65,	0x03,	0x65,	0x03,	0x76,	0x00,	0x00	},
@@ -135,6 +136,7 @@ struct chipset_bus_clock_list_entry via82cxxx_type_one [] = {
 
 struct chipset_bus_clock_list_entry via82cxxx_type_two [] = {
 		/* speed */	/* 25 */	/* 33 */	/* 37.5 */	/* 41.5 */
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	{	XFER_UDMA_4,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00	},
 	{	XFER_UDMA_3,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00	},
 	{	XFER_UDMA_2,	0xE0,	0x20,	0xE0,	0x20,	0xE1,	0x31,	0xE1,	0x32	},
@@ -144,7 +146,7 @@ struct chipset_bus_clock_list_entry via82cxxx_type_two [] = {
 	{	XFER_MW_DMA_2,	0x03,	0x20,	0x03,	0x20,	0x03,	0x31,	0x03,	0x32	},
 	{	XFER_MW_DMA_1,	0x03,	0x31,	0x03,	0x31,	0x03,	0x42,	0x03,	0x53	},
 	{	XFER_MW_DMA_0,	0x03,	0x31,	0x03,	0x31,	0x03,	0x42,	0x03,	0x53	},
-
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 	{	XFER_PIO_4,	0x03,	0x20,	0x03,	0x20,	0x03,	0x31,	0x03,	0x32	},
 	{	XFER_PIO_3,	0x03,	0x31,	0x03,	0x31,	0x03,	0x42,	0x03,	0x53	},
 	{	XFER_PIO_2,	0x03,	0x65,	0x03,	0x65,	0x03,	0x87,	0x03,	0xA8	},
@@ -155,6 +157,7 @@ struct chipset_bus_clock_list_entry via82cxxx_type_two [] = {
 
 struct chipset_bus_clock_list_entry via82cxxx_type_three [] = {
 		/* speed */	/* 25 */	/* 33 */	/* 37.5 */	/* 41.5 */
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	{	XFER_UDMA_4,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00	},
 	{	XFER_UDMA_3,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00	},
 	{	XFER_UDMA_2,	0xE0,	0x20,	0xE0,	0x20,	0xE1,	0x31,	0xE1,	0x32	},
@@ -164,7 +167,7 @@ struct chipset_bus_clock_list_entry via82cxxx_type_three [] = {
 	{	XFER_MW_DMA_2,	0x03,	0x20,	0x03,	0x20,	0x03,	0x31,	0x03,	0x32	},
 	{	XFER_MW_DMA_1,	0x03,	0x31,	0x03,	0x31,	0x03,	0x42,	0x03,	0x53	},
 	{	XFER_MW_DMA_0,	0x03,	0x31,	0x03,	0x31,	0x03,	0x42,	0x03,	0x53	},
-
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 	{	XFER_PIO_4,	0x03,	0x20,	0x03,	0x20,	0x03,	0x31,	0x03,	0x32	},
 	{	XFER_PIO_3,	0x03,	0x31,	0x03,	0x31,	0x03,	0x42,	0x03,	0x53	},
 	{	XFER_PIO_2,	0x03,	0x65,	0x03,	0x65,	0x03,	0x87,	0x03,	0xA8	},
@@ -175,6 +178,7 @@ struct chipset_bus_clock_list_entry via82cxxx_type_three [] = {
 
 struct chipset_bus_clock_list_entry via82cxxx_type_four [] = {
 		/* speed */	/* 25 */	/* 33 */	/* 37.5 */	/* 41.5 */
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	{	XFER_UDMA_4,	0x00,	0x00,	0xE0,	0x20,	0xE1,	0x31,	0x00,	0x00	},
 	{	XFER_UDMA_3,	0x00,	0x00,	0xE1,	0x20,	0xE2,	0x31,	0x00,	0x00	},
 	{	XFER_UDMA_2,	0x00,	0x00,	0xE2,	0x20,	0xE4,	0x31,	0x00,	0x00	},
@@ -184,7 +188,7 @@ struct chipset_bus_clock_list_entry via82cxxx_type_four [] = {
 	{	XFER_MW_DMA_2,	0x00,	0x00,	0x03,	0x20,	0x03,	0x31,	0x00,	0x00	},
 	{	XFER_MW_DMA_1,	0x00,	0x00,	0x03,	0x31,	0x03,	0x42,	0x00,	0x00	},
 	{	XFER_MW_DMA_0,	0x00,	0x00,	0x03,	0x31,	0x03,	0x42,	0x00,	0x00	},
-
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 	{	XFER_PIO_4,	0x00,	0x00,	0x03,	0x20,	0x03,	0x31,	0x00,	0x00	},
 	{	XFER_PIO_3,	0x00,	0x00,	0x03,	0x31,	0x03,	0x42,	0x00,	0x00	},
 	{	XFER_PIO_2,	0x00,	0x00,	0x03,	0x65,	0x03,	0x87,	0x00,	0x00	},
@@ -651,8 +655,7 @@ static int via82cxxx_tune_chipset (ide_drive_t *drive, byte speed)
 {
 	ide_hwif_t *hwif	= HWIF(drive);
 	struct pci_dev *dev	= hwif->pci_dev;
-	byte unit		= (drive->select.b.unit & 0x01);
-	int drive_number	= ((hwif->channel ? 2 : 0) + unit);
+	struct chipset_bus_clock_list_entry * temp_table = NULL;
 
 	byte ata2_pci		= 0x00;
 	byte ata3_pci		= 0x00;
@@ -662,7 +665,10 @@ static int via82cxxx_tune_chipset (ide_drive_t *drive, byte speed)
 
 	int bus_speed		= system_bus_clock();
 
-	switch(drive_number) {
+	if (via82cxxx_table == NULL)
+		return -1;
+
+	switch(drive->dn) {
 		case 0: ata2_pci = 0x4b; ata3_pci = 0x53; break;
 		case 1: ata2_pci = 0x4a; ata3_pci = 0x52; break;
 		case 2: ata2_pci = 0x49; ata3_pci = 0x51; break;
@@ -671,16 +677,26 @@ static int via82cxxx_tune_chipset (ide_drive_t *drive, byte speed)
 			return -1;
 	}
 
+	if ((via82cxxx_table == via82cxxx_type_four) && (speed <= XFER_UDMA_2)) {
+		temp_table = via82cxxx_type_three;
+	} else {
+		temp_table = via82cxxx_table;
+	}
+
 	pci_read_config_byte(dev, ata2_pci, &timing);
-	timing = pci_bus_clock_list(speed, bus_speed, via82cxxx_table);
+	timing = pci_bus_clock_list(speed, bus_speed, temp_table);
 	pci_write_config_byte(dev, ata2_pci, timing);
 
 	pci_read_config_byte(dev, ata3_pci, &ultra);
-	ultra = pci_bus_clock_list_ultra(speed, bus_speed, via82cxxx_table);
+	ultra = pci_bus_clock_list_ultra(speed, bus_speed, temp_table);
 	pci_write_config_byte(dev, ata3_pci, ultra);
+
+	if (!drive->init_speed)
+		drive->init_speed = speed;
 
 	err = ide_config_drive_speed(drive, speed);
 
+	drive->current_speed = speed;
 	return(err);
 }
 
@@ -845,6 +861,7 @@ unsigned int __init pci_init_via82cxxx (struct pci_dev *dev, const char *name)
 	struct pci_dev *isa;
 	int i, j, ata33, ata66;
 
+	int bus_speed = system_bus_clock();
 	byte revision = 0;
 
 	for (i = 0; i < arraysize (ApolloHostChipInfo) && !host_dev; i++) {
@@ -873,18 +890,26 @@ unsigned int __init pci_init_via82cxxx (struct pci_dev *dev, const char *name)
 			ata33 = 1;
 			ata66 = 0;
 
+			via82cxxx_table = ApolloISAChipInfo[j].chipset_table;
+
 			if (ApolloISAChipInfo[j].flags & VIA_FLAG_CHECK_REV) {
 				pci_read_config_byte(isa_dev, 0x0d, &revision);
 				ata33 = (revision >= 0x20) ? 1 : 0;
 			} else if (ApolloISAChipInfo[j].flags & VIA_FLAG_ATA_66) {
+				byte ata66_0 = 0, ata66_1 = 0;
 				ata33 = 0;
 				ata66 = 1;
+				pci_read_config_byte(dev, 0x50, &ata66_1);
+				pci_read_config_byte(dev, 0x52, &ata66_0);
+				if ((ata66_0 & 0x04) || (ata66_1 & 0x04)) {
+					via82cxxx_table = (bus_speed == 33 || bus_speed == 37) ?
+						via82cxxx_type_four :
+						via82cxxx_type_three;
+				}
 			}
 
 			if (ata33 | ata66)
 				printk(" Chipset Core ATA-%s", ata66 ? "66" : "33");
-
-			via82cxxx_table = ApolloISAChipInfo[j].chipset_table;
 		}
 		printk("\n");
 	}
@@ -915,6 +940,7 @@ void __init ide_init_via82cxxx (ide_hwif_t *hwif)
 
 #ifdef CONFIG_VIA82CXXX_TUNING
 	hwif->tuneproc = &via82cxxx_tune_drive;
+	hwif->speedproc = &via82cxxx_tune_chipset;
 	hwif->drives[0].autotune = 1;
 	hwif->drives[1].autotune = 1;
 	hwif->autodma = 0;

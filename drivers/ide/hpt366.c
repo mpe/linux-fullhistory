@@ -173,6 +173,14 @@ extern char *ide_xfer_verbose (byte xfer_rate);
 byte hpt363_shared_irq = 0;
 byte hpt363_shared_pin = 0;
 
+static unsigned int pci_rev_check_hpt366 (struct pci_dev *dev)
+{
+	unsigned int class_rev;
+	pci_read_config_dword(dev, PCI_CLASS_REVISION, &class_rev);
+	class_rev &= 0xff;
+	return ((int) (class_rev == 0x03) ? 1 : 0);
+}
+
 static int check_in_drive_lists (ide_drive_t *drive, const char **list)
 {
 	struct hd_driveid *id = drive->id;
@@ -212,9 +220,6 @@ static unsigned int pci_bus_clock_list (byte speed, struct chipset_bus_clock_lis
 static int hpt366_tune_chipset (ide_drive_t *drive, byte speed)
 {
 	int			err;
-#if HPT366_DEBUG_DRIVE_INFO
-	int drive_number	= ((HWIF(drive)->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
-#endif /* HPT366_DEBUG_DRIVE_INFO */
 	byte regtime		= (drive->select.b.unit & 0x01) ? 0x44 : 0x40;
 	unsigned int reg1	= 0;
 	unsigned int reg2	= 0;
@@ -251,11 +256,15 @@ static int hpt366_tune_chipset (ide_drive_t *drive, byte speed)
 	pci_write_config_dword(HWIF(drive)->pci_dev, regtime, reg2);
 	err = ide_config_drive_speed(drive, speed);
 
+	if (!drive->init_speed)
+		drive->init_speed = speed;
+
 #if HPT366_DEBUG_DRIVE_INFO
 	printk("%s: speed=0x%02x(%s), drive%d, old=0x%08x, new=0x%08x, err=0x%04x\n",
 		drive->name, speed, ide_xfer_verbose(speed),
-		drive_number, reg1, reg2, err);
+		drive->dn, reg1, reg2, err);
 #endif /* HPT366_DEBUG_DRIVE_INFO */
+	drive->current_speed = speed;
 	return(err);
 }
 
@@ -469,10 +478,12 @@ int hpt366_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 		case ide_dma_check:
 			return config_drive_xfer_rate(drive);
 		case ide_dma_lostirq:
+#if 0
 			pci_read_config_byte(HWIF(drive)->pci_dev, 0x50, &reg50h);
 			pci_write_config_byte(HWIF(drive)->pci_dev, 0x50, reg50h|0x03);
 			pci_read_config_byte(HWIF(drive)->pci_dev, 0x50, &reg50h);
 			/* ide_set_handler(drive, &ide_dma_intr, WAIT_CMD, NULL); */
+#endif
 		case ide_dma_timeout:
 		default:
 			break;
@@ -508,6 +519,8 @@ unsigned int __init pci_init_hpt366 (struct pci_dev *dev, const char *name)
 	if (!hpt366_proc) {
 		hpt366_proc = 1;
 		bmide_dev = dev;
+		if (pci_rev_check_hpt366(dev))
+			bmide2_dev = dev;
 		hpt366_display_info = &hpt366_get_info;
 	}
 	if ((hpt366_proc) && ((dev->devfn - bmide_dev->devfn) == 1)) {
@@ -533,7 +546,11 @@ unsigned int __init ata66_hpt366 (ide_hwif_t *hwif)
 
 void __init ide_init_hpt366 (ide_hwif_t *hwif)
 {
+	if (pci_rev_check_hpt366(hwif->pci_dev)) return;
+
 	hwif->tuneproc = &hpt366_tune_drive;
+	hwif->speedproc = &hpt366_tune_chipset;
+
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	if (hwif->dma_base) {
 		hwif->dmaproc = &hpt366_dmaproc;
@@ -555,6 +572,11 @@ void ide_dmacapable_hpt366 (ide_hwif_t *hwif, unsigned long dmabase)
 	byte masterdma = 0, slavedma = 0;
 	byte dma_new = 0, dma_old = inb(dmabase+2);
 	unsigned long flags;
+
+	if (pci_rev_check_hpt366(hwif->pci_dev)) {
+		ide_setup_dma(hwif, dmabase, 8);
+		return;
+	}
 
 	__save_flags(flags);	/* local CPU only */
 	__cli();		/* local CPU only */

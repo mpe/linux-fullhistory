@@ -15,6 +15,7 @@
 #include <linux/pagemap.h>
 
 #include <linux/sunrpc/debug.h>
+#include <linux/sunrpc/auth.h>
 
 #include <linux/nfs.h>
 #include <linux/nfs2.h>
@@ -98,7 +99,6 @@ do { \
 
 /* Inode Flags */
 #define NFS_USE_READDIRPLUS(inode)	((NFS_FLAGS(inode) & NFS_INO_ADVISE_RDPLUS) ? 1 : 0)
-#define NFS_MONOTONE_COOKIES(inode)	((NFS_SERVER(inode)->flags & NFS_NONMONOTONE_COOKIES) ? 0 : 1)
 
 /*
  * These are the default flags for swap requests
@@ -154,6 +154,17 @@ extern int nfs_notify_change(struct dentry *, struct iattr *);
 extern struct inode_operations nfs_file_inode_operations;
 extern struct file_operations nfs_file_operations;
 extern struct address_space_operations nfs_file_aops;
+
+static __inline__ struct rpc_cred *
+nfs_file_cred(struct file *file)
+{
+	struct rpc_cred *cred = (struct rpc_cred *)(file->private_data);
+#ifdef RPC_DEBUG
+	if (cred && cred->cr_magic != RPCAUTH_CRED_MAGIC)
+		BUG();
+#endif
+	return cred;
+}
 
 /*
  * linux/fs/nfs/dir.c

@@ -20,6 +20,7 @@ L_OBJS_rpc		:= io-acorn.o floppydma.o
 L_OBJS_clps7500		:= io-acorn.o
 L_OBJS_ebsa110		:= io-ebsa110.o
 L_OBJS_footbridge	:= io-footbridge.o
+L_OBJS_l7200     	:= io-acorn.o
 L_OBJS_nexuspci		:= io-footbridge.o
 L_OBJS_sa1100		:= io-footbridge.o
 L_OBJS_shark		:= io-shark.o

@@ -49,10 +49,12 @@ fi
 bool 'Multiple devices driver support' CONFIG_BLK_DEV_MD
 dep_tristate '  Linear (append) mode' CONFIG_MD_LINEAR $CONFIG_BLK_DEV_MD
 dep_tristate '  RAID-0 (striping) mode' CONFIG_MD_RAID0 $CONFIG_BLK_DEV_MD
-bool         '   DANGEROUS! RAID1/RAID5 code' CONFIG_RAID15_DANGEROUS
-if [ "$CONFIG_RAID15_DANGEROUS" = "y" ]; then
- dep_tristate '    RAID-1 (mirroring) mode' CONFIG_MD_RAID1 $CONFIG_BLK_DEV_MD
- dep_tristate '    RAID-4/RAID-5 mode' CONFIG_MD_RAID5 $CONFIG_BLK_DEV_MD
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  bool '    RAID-1/RAID-5 code (DANGEROUS)' CONFIG_RAID15_DANGEROUS
+  if [ "$CONFIG_RAID15_DANGEROUS" = "y" ]; then
+    dep_tristate '      RAID-1 (mirroring) mode' CONFIG_MD_RAID1 $CONFIG_BLK_DEV_MD
+    dep_tristate '      RAID-4/RAID-5 mode' CONFIG_MD_RAID5 $CONFIG_BLK_DEV_MD
+  fi
 fi
 tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
 dep_bool '  Initial RAM disk (initrd) support' CONFIG_BLK_DEV_INITRD $CONFIG_BLK_DEV_RAM

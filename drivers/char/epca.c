@@ -4075,7 +4075,7 @@ err_out:
 }
 
 
-static struct pci_device_id epca_pci_tbl[] __devinitdata = {
+static struct pci_device_id epca_pci_tbl[] __initdata = {
 	{ PCI_VENDOR_DIGI, PCI_DEVICE_XR, PCI_ANY_ID, PCI_ANY_ID, 0, 0, brd_xr },
 	{ PCI_VENDOR_DIGI, PCI_DEVICE_XEM, PCI_ANY_ID, PCI_ANY_ID, 0, 0, brd_xem },
 	{ PCI_VENDOR_DIGI, PCI_DEVICE_CX, PCI_ANY_ID, PCI_ANY_ID, 0, 0, brd_cx },

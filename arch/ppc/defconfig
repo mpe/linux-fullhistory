@@ -15,10 +15,11 @@ CONFIG_PPC=y
 CONFIG_6xx=y
 # CONFIG_4xx is not set
 # CONFIG_PPC64 is not set
-# CONFIG_82xx is not set
+# CONFIG_8260 is not set
 # CONFIG_8xx is not set
 CONFIG_ALL_PPC=y
 # CONFIG_GEMINI is not set
+# CONFIG_EST8260 is not set
 # CONFIG_APUS is not set
 # CONFIG_SMP is not set
 CONFIG_ALTIVEC=y
@@ -159,10 +160,10 @@ CONFIG_BLK_DEV_IDESCSI=y
 # CONFIG_BLK_DEV_RZ1000 is not set
 CONFIG_BLK_DEV_IDEPCI=y
 # CONFIG_IDEPCI_SHARE_IRQ is not set
-# CONFIG_BLK_DEV_IDEDMA_PCI is not set
+CONFIG_BLK_DEV_IDEDMA_PCI=y
 # CONFIG_BLK_DEV_OFFBOARD is not set
-# CONFIG_IDEDMA_PCI_AUTO is not set
-# CONFIG_BLK_DEV_IDEDMA is not set
+CONFIG_IDEDMA_PCI_AUTO=y
+CONFIG_BLK_DEV_IDEDMA=y
 CONFIG_IDEDMA_PCI_EXPERIMENTAL=y
 # CONFIG_IDEDMA_PCI_WIP is not set
 # CONFIG_IDEDMA_NEW_DRIVE_LISTINGS is not set
@@ -375,6 +376,11 @@ CONFIG_PPP=y
 # Amateur Radio support
 #
 # CONFIG_HAMRADIO is not set
+
+#
+# IrDA (infrared) support
+#
+# CONFIG_IRDA is not set
 
 #
 # ISDN subsystem
@@ -608,6 +614,7 @@ CONFIG_SOUND=y
 CONFIG_DMASOUND_AWACS=y
 CONFIG_DMASOUND=y
 # CONFIG_SOUND_CMPCI is not set
+# CONFIG_SOUND_EMU10K1 is not set
 # CONFIG_SOUND_ES1370 is not set
 # CONFIG_SOUND_ES1371 is not set
 # CONFIG_SOUND_ESSSOLO1 is not set
