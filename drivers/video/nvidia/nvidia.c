@@ -1353,8 +1353,6 @@ static int __devinit nvidia_set_fbinfo(struct fb_info *info)
 	if (!hwcur)
 		info->fbops->fb_cursor = soft_cursor;
 	info->var.accel_flags = (!noaccel);
-	par->FpScale = (!noscale);
-	par->paneltweak = paneltweak;
 
 	switch (par->Architecture) {
 	case NV_ARCH_04:
@@ -1486,6 +1484,8 @@ static int __devinit nvidiafb_probe(struct pci_dev *pd,
 		printk(KERN_INFO PFX "flatpanel support enabled\n");
 
 	par->CRTCnumber = forceCRTC;
+	par->FpScale = (!noscale);
+	par->paneltweak = paneltweak;
 
 	/* enable IO and mem if not already done */
 	pci_read_config_word(pd, PCI_COMMAND, &cmd);
