@@ -263,11 +263,11 @@ Nodes when using hotplug to add or remove such resources.
 
 There is a second exception to the above.  GFP_ATOMIC requests are
 kernel internal allocations that must be satisfied, immediately.
-The kernel may panic if such a requested page is not allocated.
-If such a request cannot be satisfied within the cpusets allowed
-memory, then we relax the cpuset boundaries and allow any page in
-the system to satisfy a GFP_ATOMIC request.  It is better to violate
-the cpuset constraints than it is to panic the kernel.
+The kernel may drop some request, in rare cases even panic, if a
+GFP_ATOMIC alloc fails.  If the request cannot be satisfied within
+the current tasks cpuset, then we relax the cpuset, and look for
+memory anywhere we can find it.  It's better to violate the cpuset
+than stress the kernel.
 
 To start a new job that is to be contained within a cpuset, the steps are:
 

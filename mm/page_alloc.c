@@ -782,7 +782,7 @@ __alloc_pages(unsigned int __nocast gfp_mask, unsigned int order,
 	 * coming from realtime tasks to go deeper into reserves
 	 *
 	 * This is the last chance, in general, before the goto nopage.
-	 * Ignore cpuset if GFP_ATOMIC (!wait) - better that than panic.
+	 * Ignore cpuset if GFP_ATOMIC (!wait) rather than fail alloc.
 	 */
 	for (i = 0; (z = zones[i]) != NULL; i++) {
 		if (!zone_watermark_ok(z, order, z->pages_min,
