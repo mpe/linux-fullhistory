@@ -1809,7 +1809,7 @@ sl811h_resume(struct device *dev, u32 phase)
 		return 0;
 	}
 
-	dev->power.power_state = PM_SUSPEND_ON;
+	dev->power.power_state = PMSG_ON;
 	return sl811h_hub_resume(hcd);
 }
 

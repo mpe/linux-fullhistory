@@ -1492,7 +1492,7 @@ static struct fb_ops i810fb_ops __devinitdata = {
 /***********************************************************************
  *                         Power Management                            *
  ***********************************************************************/
-static int i810fb_suspend(struct pci_dev *dev, u32 state)
+static int i810fb_suspend(struct pci_dev *dev, pm_message_t state)
 {
 	struct fb_info *info = pci_get_drvdata(dev);
 	struct i810fb_par *par = (struct i810fb_par *) info->par;
@@ -1538,7 +1538,7 @@ static int i810fb_resume(struct pci_dev *dev)
 		return 0;
 
 	pci_restore_state(dev);
-	pci_set_power_state(dev, 0);
+	pci_set_power_state(dev, PCI_D0);
 	pci_enable_device(dev);
 	agp_bind_memory(par->i810_gtt.i810_fb_memory,
 			par->fb.offset);
