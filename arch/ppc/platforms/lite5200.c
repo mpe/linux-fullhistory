@@ -55,7 +55,7 @@ EXPORT_SYMBOL(__res);	/* For modules */
  * driver ( eg drivers/serial/mpc52xx_uart.c for the PSC in uart mode )
  */
 
-struct ocp_def board_ocp[] = {
+static struct ocp_def board_ocp[] = {
 	{
 		.vendor		= OCP_VENDOR_FREESCALE,
 		.function	= OCP_FUNC_PSC_UART,
@@ -92,15 +92,14 @@ lite5200_map_irq(struct pci_dev *dev, unsigned char idsel, unsigned char pin)
 static void __init
 lite5200_setup_cpu(void)
 {
+	struct mpc52xx_intr __iomem *intr;
 	struct mpc52xx_xlb  __iomem *xlb;
-	struct mpc52xx_intr *intr;
 
 	u32 intr_ctrl;
 
 	/* Map zones */
 	xlb  = ioremap(MPC52xx_XLB,sizeof(struct mpc52xx_xlb));
-	intr = (struct mpc52xx_intr *)
-		ioremap(MPC52xx_INTR,sizeof(struct mpc52xx_intr));
+	intr = ioremap(MPC52xx_INTR,sizeof(struct mpc52xx_intr));
 
 	if (!xlb || !intr) {
 		printk("lite5200.c: Error while mapping XLB/INTR during "
