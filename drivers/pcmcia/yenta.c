@@ -851,22 +851,3 @@ struct pci_socket_ops yenta_operations = {
 	yenta_proc_setup
 };
 EXPORT_SYMBOL(yenta_operations);
-
-/*
- * Ricoh cardbus bridge: standard cardbus, except it needs
- * some extra init code to set timings etc.
- */
-struct pci_socket_ops ricoh_operations = {
-	yenta_open,
-	yenta_close,
-	ricoh_init,
-	yenta_suspend,
-	yenta_get_status,
-	yenta_get_socket,
-	yenta_set_socket,
-	yenta_get_io_map,
-	yenta_set_io_map,
-	yenta_get_mem_map,
-	yenta_set_mem_map,
-	yenta_proc_setup
-};

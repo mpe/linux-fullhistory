@@ -137,12 +137,28 @@
 #ifdef CONFIG_CARDBUS
 
 /*
- * Generic TI open - TI has an extension for the
+ * Generic TI init - TI has an extension for the
  * INTCTL register that sets the PCI CSC interrupt.
  * Make sure we set it correctly at open and init
- * time.
+ * time
+ * - open: disable the PCI CSC interrupt. This makes
+ *   it possible to use the CSC interrupt to probe the
+ *   ISA interrupts.
+ * - init: set the interrupt to match our PCI state.
+ *   This makes us correctly get PCI CSC interrupt
+ *   events.
  */
 static int ti_open(pci_socket_t *socket)
+{
+	u8 new, reg = exca_readb(socket, I365_INTCTL);
+
+	new = reg & ~I365_INTR_ENA;
+	if (new != reg)
+		exca_writeb(socket, I365_INTCTL, new);
+	return 0;
+}
+
+static int ti_intctl(pci_socket_t *socket)
 {
 	u8 new, reg = exca_readb(socket, I365_INTCTL);
 
@@ -157,7 +173,7 @@ static int ti_open(pci_socket_t *socket)
 static int ti_init(pci_socket_t *socket)
 {
 	yenta_init(socket);
-	ti_open(socket);
+	ti_intctl(socket);
 	return 0;
 }
 
@@ -200,7 +216,7 @@ static int ti113x_init(pci_socket_t *socket)
 	config_writel(socket, TI113X_SYSTEM_CONTROL, ti_sysctl(socket));
 	config_writeb(socket, TI113X_CARD_CONTROL, ti_cardctl(socket));
 	config_writeb(socket, TI113X_DEVICE_CONTROL, ti_devctl(socket));
-	ti_open(socket);
+	ti_intctl(socket);
 	return 0;
 }
 
@@ -237,7 +253,7 @@ static int ti1250_init(pci_socket_t *socket)
 	yenta_init(socket);
 
 	config_writeb(socket, TI1250_DIAGNOSTIC, ti_diag(socket));
-	ti_open(socket);
+	ti_intctl(socket);
 	return 0;
 }
 
