@@ -76,6 +76,8 @@ struct sk_buff {
 				urg_used;
   unsigned char			tries,lock;	/* Lock is now unused */
   unsigned short		users;		/* User count - see datagram.c (and soon seqpacket.c/stream.c) */
+  unsigned long			padding[0];
+  unsigned char			data[0];
 };
 
 #define SK_WMEM_MAX	8192

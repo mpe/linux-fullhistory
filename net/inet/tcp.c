@@ -99,6 +99,8 @@
 #include <asm/segment.h>
 #include <linux/mm.h>
 
+#define USE_NAGLE
+
 #define SEQ_TICK 3
 unsigned long seq_offset;
 
@@ -601,7 +603,7 @@ tcp_send_partial(struct sock *sk)
   skb = sk->send_tmp;
   
   /* If we have queued a header size packet.. */
-  if(skb->len-(unsigned long)skb->h.th + (unsigned long)(skb+1)==sizeof(struct tcphdr))
+  if(skb->len-(unsigned long)skb->h.th + (unsigned long)skb->data == sizeof(struct tcphdr))
   {
   	/* If its got a syn or fin its notionally included in the size..*/
   	if(!skb->h.th->syn && !skb->h.th->fin)
@@ -616,11 +618,11 @@ tcp_send_partial(struct sock *sk)
   /* We need to complete and send the packet. */
   tcp_send_check(skb->h.th, sk->saddr, sk->daddr,
 		 skb->len-(unsigned long)skb->h.th +
-		(unsigned long)(skb+1), sk);
+		(unsigned long)skb->data, sk);
   
   skb->h.seq = sk->send_seq;
   if (after(sk->send_seq , sk->window_seq) ||
-      sk->retransmits ||
+      (sk->retransmits && sk->timeout == TIME_WRITE) ||
       sk->packets_out >= sk->cong_window) {
 	DPRINTF((DBG_TCP, "sk->cong_window = %d, sk->packets_out = %d\n",
 					sk->cong_window, sk->packets_out));
@@ -673,7 +675,7 @@ if (inet_debug == DBG_SLIP) printk("\rtcp_ack: malloc failed\n");
   buff->mem_len = MAX_ACK_SIZE;
   buff->len = sizeof(struct tcphdr);
   buff->sk = sk;
-  t1 =(struct tcphdr *)(buff + 1);
+  t1 =(struct tcphdr *) buff->data;
 
   /* Put in the IP header and routing stuff. */
   tmp = sk->prot->build_header(buff, sk->saddr, daddr, &dev,
@@ -846,7 +848,7 @@ tcp_write(struct sock *sk, unsigned char *from,
 		skb = sk->send_tmp;
 
 		         /* IP header + TCP header */
-		hdrlen = ((unsigned long)skb->h.th - (unsigned long)(skb+1))
+		hdrlen = ((unsigned long)skb->h.th - (unsigned long)skb->data)
 		         + sizeof(struct tcphdr);
 
 		/* If sk->mtu has been changed this could cause problems. */
@@ -860,8 +862,7 @@ tcp_write(struct sock *sk, unsigned char *from,
 			  copy = 0;
 			}
 	  
-			memcpy_fromfs((unsigned char *)(skb+1) + skb->len, 
-				      from, copy);
+			memcpy_fromfs(skb->data + skb->len, from, copy);
 			skb->len += copy;
 			from += copy;
 			copied += copy;
@@ -869,7 +870,7 @@ tcp_write(struct sock *sk, unsigned char *from,
 			sk->send_seq += copy;
 		      }
 
-		if ((skb->len - hdrlen) > sk->mtu || (flags & MSG_OOB)) {
+		if ((skb->len - hdrlen) >= sk->mtu || (flags & MSG_OOB)) {
 		  tcp_send_partial(sk);
 		}
 		continue;
@@ -947,7 +948,7 @@ tcp_write(struct sock *sk, unsigned char *from,
 	skb->sk = sk;
 	skb->free = 0;
 
-	buff =(unsigned char *)(skb+1);
+	buff = skb->data;
 
 	/*
 	 * FIXME: we need to optimize this.
@@ -996,7 +997,7 @@ tcp_write(struct sock *sk, unsigned char *from,
 
 	skb->h.seq = sk->send_seq;
 	if (after(sk->send_seq , sk->window_seq) ||
-	          sk->retransmits ||
+	          (sk->retransmits && sk->timeout == TIME_WRITE) ||
 		  sk->packets_out >= sk->cong_window) {
 		DPRINTF((DBG_TCP, "sk->cong_window = %d, sk->packets_out = %d\n",
 					sk->cong_window, sk->packets_out));
@@ -1099,7 +1100,7 @@ tcp_read_wakeup(struct sock *sk)
   }
 
   buff->len += tmp;
-  t1 =(struct tcphdr *)((char *)(buff+1) +tmp);
+  t1 =(struct tcphdr *)(buff->data +tmp);
 
   memcpy(t1,(void *) &sk->dummy_th, sizeof(*t1));
   t1->seq = ntohl(sk->send_seq);
@@ -1562,7 +1563,7 @@ tcp_shutdown(struct sock *sk, int how)
   buff->mem_len = MAX_RESET_SIZE;
   buff->sk = sk;
   buff->len = sizeof(*t1);
-  t1 =(struct tcphdr *)(buff + 1);
+  t1 =(struct tcphdr *) buff->data;
 
   /* Put in the IP header and routing stuff. */
   tmp = prot->build_header(buff,sk->saddr, sk->daddr, &dev,
@@ -1577,7 +1578,7 @@ tcp_shutdown(struct sock *sk, int how)
   }
 
   t1 =(struct tcphdr *)((char *)t1 +tmp);
-  buff ->len += tmp;
+  buff->len += tmp;
   buff->dev = dev;
   memcpy(t1, th, sizeof(*t1));
   t1->seq = ntohl(sk->send_seq);
@@ -1673,7 +1674,7 @@ tcp_reset(unsigned long saddr, unsigned long daddr, struct tcphdr *th,
   buff->sk = NULL;
   buff->dev = dev;
 
-  t1 =(struct tcphdr *)(buff + 1);
+  t1 =(struct tcphdr *) buff->data;
 
   /* Put in the IP header and routing stuff. */
   tmp = prot->build_header(buff, saddr, daddr, &dev, IPPROTO_TCP, opt,
@@ -1908,7 +1909,7 @@ tcp_conn_request(struct sock *sk, struct sk_buff *skb,
   buff->len = sizeof(struct tcphdr)+4;
   buff->sk = newsk;
   
-  t1 =(struct tcphdr *)(buff + 1);
+  t1 =(struct tcphdr *) buff->data;
 
   /* Put in the IP header and routing stuff. */
   tmp = sk->prot->build_header(buff, newsk->saddr, newsk->daddr, &dev,
@@ -2058,7 +2059,7 @@ tcp_close(struct sock *sk, int timeout)
 		buff->sk = sk;
 		buff->free = 1;
 		buff->len = sizeof(*t1);
-		t1 =(struct tcphdr *)(buff + 1);
+		t1 =(struct tcphdr *) buff->data;
 
 		/* Put in the IP header and routing stuff. */
 		tmp = prot->build_header(buff,sk->saddr, sk->daddr, &dev,
@@ -2072,7 +2073,7 @@ tcp_close(struct sock *sk, int timeout)
 		}
 
 		t1 =(struct tcphdr *)((char *)t1 +tmp);
-		buff ->len += tmp;
+		buff->len += tmp;
 		buff->dev = dev;
 		memcpy(t1, th, sizeof(*t1));
 		t1->seq = ntohl(sk->send_seq);
@@ -2132,7 +2133,9 @@ tcp_write_xmit(struct sock *sk)
 
   while(sk->wfront != NULL &&
         before(sk->wfront->h.seq, sk->window_seq) &&
-	(sk->retransmits == 0 || before(sk->wfront->h.seq, sk->rcv_ack_seq +1))
+	(sk->retransmits == 0 ||
+	 sk->timeout != TIME_WRITE ||
+	 before(sk->wfront->h.seq, sk->rcv_ack_seq +1))
         && sk->packets_out < sk->cong_window) {
 		skb = sk->wfront;
 		IS_SKB(skb);
@@ -2207,6 +2210,9 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
   DPRINTF((DBG_TCP, "tcp_ack ack=%d, window=%d, "
 	  "sk->rcv_ack_seq=%d, sk->window_seq = %d\n",
 	  ack, ntohs(th->window), sk->rcv_ack_seq, sk->window_seq));
+
+  if (sk->retransmits && sk->timeout == TIME_KEEPOPEN)
+  	sk->retransmits = 0;
 
   if (after(ack, sk->send_seq+1) || before(ack, sk->rcv_ack_seq-1)) {
 	if (after(ack, sk->send_seq) ||
@@ -2391,6 +2397,7 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
   if (sk->wfront != NULL) {
 	if (after (sk->window_seq, sk->wfront->h.seq) &&
 	        (sk->retransmits == 0 || 
+		 sk->timeout != TIME_WRITE ||
 		 before(sk->wfront->h.seq, sk->rcv_ack_seq +1))
 		&& sk->packets_out < sk->cong_window) {
 		flag |= 1;
@@ -2891,7 +2898,7 @@ tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
   buff->len = 24;
   buff->sk = sk;
   buff->free = 1;
-  t1 = (struct tcphdr *)(buff + 1);
+  t1 = (struct tcphdr *) buff->data;
 
   /* Put in the IP header and routing stuff. */
   /* We need to build the routing stuff fromt the things saved in skb. */
@@ -2995,10 +3002,19 @@ tcp_sequence(struct sock *sk, struct tcphdr *th, short len,
 	return(0);
   }
 
+#ifdef undef
+/*
+ * if we do this, we won't respond to keepalive packets, since those
+ * are slightly out of window, and we have to generate an ack
+ * a late ack out still not to have a sequence number less than
+ * one we've seen before.  Berkeley doesn't seem to do this, but it's
+ * always hard to be sure.
+ */
   /* In case it's just a late ack, let it through. */
   if (th->ack && len == (th->doff * 4) &&
       after(th->seq, sk->acked_seq - 32767) &&
       !th->fin && !th->syn) return(1);
+#endif
 
   if (!th->rst) {
 	/* Try to resync things. */
@@ -3159,9 +3175,12 @@ if (inet_debug == DBG_SLIP) printk("\rtcp_rcv: bad checksum\n");
 	case TCP_TIME_WAIT:
 		if (!tcp_sequence(sk, th, len, opt, saddr,dev)) {
 if (inet_debug == DBG_SLIP) printk("\rtcp_rcv: not in seq\n");
+#ifdef undef
+/* nice idea, but tcp_sequence already does this.  Maybe it shouldn't?? */
 			if(!th->rst)
 				tcp_send_ack(sk->send_seq, sk->acked_seq, 
 				     sk, th, saddr);
+#endif
 			kfree_skb(skb, FREE_READ);
 			release_sock(sk);
 			return(0);
@@ -3453,7 +3472,7 @@ tcp_write_wakeup(struct sock *sk)
   buff->free = 1;
   buff->sk = sk;
   DPRINTF((DBG_TCP, "in tcp_write_wakeup\n"));
-  t1 = (struct tcphdr *)(buff + 1);
+  t1 = (struct tcphdr *) buff->data;
 
   /* Put in the IP header and routing stuff. */
   tmp = sk->prot->build_header(buff, sk->saddr, sk->daddr, &dev,

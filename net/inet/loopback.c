@@ -61,7 +61,7 @@ loopback_xmit(struct sk_buff *skb, struct device *dev)
   dev->tbusy = 1;
   sti();
 
-  done = dev_rint((unsigned char *)(skb+1), skb->len, 0, dev);
+  done = dev_rint(skb->data, skb->len, 0, dev);
   if (skb->free) kfree_skb(skb, FREE_WRITE);
 
   while (done != 1) {

@@ -131,7 +131,7 @@ packet_sendto(struct sock *sk, unsigned char *from, int len,
   skb->mem_len = len + sizeof(*skb);
   skb->sk = sk;
   skb->free = 1;
-  memcpy_fromfs (skb+1, from, len);
+  memcpy_fromfs(skb->data, from, len);
   skb->len = len;
   skb->next = NULL;
   if (dev->flags & IFF_UP) dev->queue_xmit(skb, dev, sk->priority);
@@ -214,7 +214,7 @@ packet_recvfrom(struct sock *sk, unsigned char *to, int len,
   	return err;
   copied = min(len, skb->len);
 
-  memcpy_tofs(to, skb+1, copied);	/* Don't use skb_copy_datagram here: We can't get frag chains */
+  memcpy_tofs(to, skb->data, copied);	/* Don't use skb_copy_datagram here: We can't get frag chains */
 
   /* Copy the address. */
   if (saddr) {

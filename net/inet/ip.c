@@ -178,7 +178,7 @@ ip_send(struct sk_buff *skb, unsigned long daddr, int len, struct device *dev,
   unsigned char *ptr;
   int mac;
 
-  ptr = (unsigned char *)(skb + 1);
+  ptr = skb->data;
   mac = 0;
   skb->arp = 1;
   if (dev->hard_header) {
@@ -218,7 +218,7 @@ ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long daddr,
 	   "                 type=%d, opt=%X, len = %d)\n",
 	   skb, saddr, daddr, *dev, type, opt, len));
 	   
-  buff = (unsigned char *)(skb + 1);
+  buff = skb->data;
 
   /* See if we need to look up the device. */
   if (*dev == NULL) {
@@ -666,7 +666,7 @@ static struct ipq *ip_create(struct sk_buff *skb, struct iphdr *iph, struct devi
  	memset(qp, 0, sizeof(struct ipq));
 
   	/* Allocate memory for the MAC header. */
-  	maclen = ((unsigned long) iph) - ((unsigned long) (skb + 1));
+  	maclen = ((unsigned long) iph) - ((unsigned long) skb->data);
   	qp->mac = (unsigned char *) kmalloc(maclen, GFP_ATOMIC);
   	if (qp->mac == NULL) 
   	{
@@ -687,7 +687,7 @@ static struct ipq *ip_create(struct sk_buff *skb, struct iphdr *iph, struct devi
   	}
 
   	/* Fill in the structure. */
-  	memcpy(qp->mac, (skb + 1), maclen);
+  	memcpy(qp->mac, skb->data, maclen);
  	memcpy(qp->iph, iph, ihlen + 8);
   	qp->len = 0;
   	qp->ihlen = ihlen;
@@ -760,7 +760,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
  
    	/* Fill in the basic details. */
    	skb->len = (len - qp->maclen);
-   	skb->h.raw = (unsigned char *) (skb + 1);
+   	skb->h.raw = skb->data;
    	skb->free = 1;
    	skb->lock = 1;
  
@@ -855,7 +855,7 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
    	end = offset + ntohs(iph->tot_len) - ihl;
  
    	/* Point into the IP datagram 'data' part. */
-   	ptr = ((unsigned char *) (skb + 1)) + dev->hard_header_len + ihl;
+   	ptr = skb->data + dev->hard_header_len + ihl;
  
    	/* Is this the final fragment? */
    	if ((flags & IP_MF) == 0) 
@@ -967,7 +967,7 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
    	int offset;
  
    	/* Point into the IP datagram header. */
-   	raw = (unsigned char *) (skb + 1);
+   	raw = skb->data;
    	iph = (struct iphdr *) (raw + dev->hard_header_len);
  	
    	/* Setup starting values. */
@@ -1026,7 +1026,7 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
  		skb2->arp = skb->arp;
  		skb2->free = skb->free;
  		skb2->len = len + hlen;
- 		skb2->h.raw=(char *)(skb2+1);
+ 		skb2->h.raw=(char *) skb2->data;
  
  		if (sk) 
  			sk->wmem_alloc += skb2->mem_len;
@@ -1155,7 +1155,7 @@ ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
 		printk("\nIP: No memory available for IP forward\n");
 		return;
 	}
-	ptr = (unsigned char *)(skb2 + 1);
+	ptr = skb2->data;
 	skb2->sk = NULL;
 	skb2->free = 1;
 	skb2->len = skb->len + dev2->hard_header_len;
@@ -1199,6 +1199,7 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
   DPRINTF((DBG_IP, "<<\n"));
 
+  skb->ip_hdr = iph;		/* Fragments can cause ICMP errors too! */
   /* Is the datagram acceptable? */
   if (skb->len<sizeof(struct iphdr) || iph->ihl<5 || iph->version != 4 || ip_fast_csum((unsigned char *)iph, iph->ihl) !=0) {
 	DPRINTF((DBG_IP, "\nIP: *** datagram error ***\n"));
@@ -1363,7 +1364,7 @@ ip_queue_xmit(struct sock *sk, struct device *dev,
   skb->when = jiffies;
   
   DPRINTF((DBG_IP, ">>\n"));
-  ptr = (unsigned char *)(skb + 1);
+  ptr = skb->data;
   ptr += dev->hard_header_len;
   iph = (struct iphdr *)ptr;
   iph->tot_len = ntohs(skb->len-dev->hard_header_len);
@@ -1450,7 +1451,7 @@ ip_retransmit(struct sock *sk, int all)
 		   the frame in twice. Because of the technique used this
 		   would be a little sad */
 	if (!skb->arp) {
-		if (dev->rebuild_header(skb+1, dev)) {
+		if (dev->rebuild_header(skb->data, dev)) {
 			sti();	/* Failed to rebuild - next */
 			if (!all) break;
 			skb = (struct sk_buff *)skb->link3;

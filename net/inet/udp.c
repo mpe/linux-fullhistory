@@ -244,7 +244,7 @@ udp_send(struct sock *sk, struct sockaddr_in *sin,
   skb->arp      = 0;
 
   /* Now build the IP and MAC header. */
-  buff = (unsigned char *) (skb+1);
+  buff = skb->data;
   saddr = 0;
   dev = NULL;
   DPRINTF((DBG_UDP, "UDP: >> IP_Header: %X -> %X dev=%X prot=%X len=%d\n",

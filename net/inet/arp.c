@@ -238,7 +238,7 @@ arp_send_q(void)
 
 	/* Can we now complete this packet? */
 	sti();
-	if (skb->arp || !skb->dev->rebuild_header(skb+1, skb->dev)) {
+	if (skb->arp || !skb->dev->rebuild_header(skb->data, skb->dev)) {
 		skb->arp  = 1;
 		skb->dev->queue_xmit(skb, skb->dev, 0);
 	} else {
@@ -287,8 +287,7 @@ arp_response(struct arphdr *arp1, struct device *dev,  int addrtype)
   skb->len      = sizeof(struct arphdr) + (2 * arp1->ar_hln) + 
 		  (2 * arp1->ar_pln) + dev->hard_header_len;
   skb->mem_len  = sizeof(struct sk_buff) + skb->len;
-  hlen = dev->hard_header((unsigned char *)(skb+1), dev,
-			 ETH_P_ARP, src, dst, skb->len);
+  hlen = dev->hard_header(skb->data, dev, ETH_P_ARP, src, dst, skb->len);
   if (hlen < 0) {
 	printk("ARP: cannot create HW frame header for REPLY !\n");
 	kfree_skb(skb, FREE_WRITE);
@@ -300,7 +299,7 @@ arp_response(struct arphdr *arp1, struct device *dev,  int addrtype)
    * This looks ugly, but we have to deal with the variable-length
    * ARP packets and such.  It is not as bad as it looks- FvK
    */
-  arp2 = (struct arphdr *) ((unsigned char *) (skb+1) + hlen);
+  arp2 = (struct arphdr *) (skb->data + hlen);
   ptr2 = ((unsigned char *) &arp2->ar_op) + sizeof(u_short);
   arp2->ar_hrd = arp1->ar_hrd;
   arp2->ar_pro = arp1->ar_pro;
@@ -617,13 +616,12 @@ arp_send(unsigned long paddr, struct device *dev, unsigned long saddr)
   skb->dev = dev;
   skb->next = NULL;
   skb->free = 1;
-  tmp = dev->hard_header((unsigned char *)(skb+1), dev,
-			  ETH_P_ARP, 0, saddr, skb->len);
+  tmp = dev->hard_header(skb->data, dev, ETH_P_ARP, 0, saddr, skb->len);
   if (tmp < 0) {
 	kfree_skb(skb,FREE_WRITE);
 	return;
   }
-  arp = (struct arphdr *) ((unsigned char *) (skb+1) + tmp);
+  arp = (struct arphdr *) (skb->data + tmp);
   arp->ar_hrd = htons(dev->type);
   if(dev->type!=3)	/* AX.25 */
   	arp->ar_pro = htons(ETH_P_IP);

@@ -490,6 +490,19 @@ asmlinkage int sys_setpgid(pid_t pid, pid_t pgid)
 	return -ESRCH;
 }
 
+asmlinkage int sys_getpgid(pid_t pid)
+{
+	struct task_struct * p;
+
+	if (!pid)
+		pid = current->pid;
+	for_each_task(p) {
+		if (p->pid == pid)
+			return p->pgrp;
+	}
+	return -ESRCH;
+}
+
 asmlinkage int sys_getpgrp(void)
 {
 	return current->pgrp;

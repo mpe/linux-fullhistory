@@ -168,7 +168,7 @@ eth_add_arp(unsigned long addr, struct sk_buff *skb, struct device *dev)
 {
   struct ethhdr *eth;
 
-  eth = (struct ethhdr *) (skb + 1);
+  eth = (struct ethhdr *) skb->data;
   arp_add(addr, eth->h_source, dev);
 }
 
@@ -179,7 +179,7 @@ eth_type_trans(struct sk_buff *skb, struct device *dev)
 {
   struct ethhdr *eth;
 
-  eth = (struct ethhdr *) (skb + 1);
+  eth = (struct ethhdr *) skb->data;
 
   if(ntohs(eth->h_proto)<1536)
   	return(htons(ETH_P_802_3));

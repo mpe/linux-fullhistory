@@ -537,7 +537,7 @@ dev_rint(unsigned char *buff, long len, int flags, struct device *dev)
 	skb->mem_addr = (struct sk_buff *) skb;
 
 	/* First we copy the packet into a buffer, and save it for later. */
-	to = (unsigned char *) (skb + 1);
+	to = skb->data;
 	left = len;
 	len2 = len;
 	while (len2 > 0) {
@@ -614,7 +614,7 @@ inet_bh(void *tmp)
 	* the MAC header, if any (as indicated by its "length"
 	* field).  Take care now!
 	*/
-       skb->h.raw = (unsigned char *) (skb + 1) + skb->dev->hard_header_len;
+       skb->h.raw = skb->data + skb->dev->hard_header_len;
        skb->len -= skb->dev->hard_header_len;
 
        /*

@@ -137,6 +137,8 @@
 #define __NR_init_module	128
 #define __NR_delete_module	129
 #define __NR_get_kernel_syms	130
+#define __NR_quotactl		131
+#define __NR_getpgid		132
 
 extern int errno;
 

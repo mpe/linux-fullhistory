@@ -227,7 +227,7 @@ raw_sendto(struct sock *sk, unsigned char *from, int len,
   }
 
   /* verify_area(VERIFY_WRITE, from, len);*/
-  memcpy_fromfs ((unsigned char *)(skb+1)+tmp, from, len);
+  memcpy_fromfs(skb->data + tmp, from, len);
 
   /* If we are using IPPROTO_RAW, we need to fill in the source address in
      the IP header */
@@ -236,7 +236,7 @@ raw_sendto(struct sock *sk, unsigned char *from, int len,
     unsigned char *buff;
     struct iphdr *iph;
 
-    buff = (unsigned char *)(skb + 1);
+    buff = skb->data;
     buff += tmp;
     iph = (struct iphdr *)buff;
     iph->saddr = sk->saddr;

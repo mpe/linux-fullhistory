@@ -104,8 +104,7 @@ icmp_send(struct sk_buff *skb_in, int type, int code, struct device *dev)
   len -= sizeof(struct sk_buff);
 
   /* Find the IP header. */
-  iph = (struct iphdr *) (skb_in + 1);
-  iph = (struct iphdr *) ((unsigned char *) iph + dev->hard_header_len);
+  iph = (struct iphdr *) (skb_in->data + dev->hard_header_len);
 
   /* Build Layer 2-3 headers for message back to source. */
   offset = ip_build_header(skb, dev->pa_addr, iph->saddr,
@@ -118,7 +117,7 @@ icmp_send(struct sk_buff *skb_in, int type, int code, struct device *dev)
 
   /* Re-adjust length according to actual IP header size. */
   skb->len = offset + sizeof(struct icmphdr) + sizeof(struct iphdr) + 8;
-  icmph = (struct icmphdr *) ((unsigned char *) (skb + 1) + offset);
+  icmph = (struct icmphdr *) (skb->data + offset);
   icmph->type = type;
   icmph->code = code;
   icmph->checksum = 0;
@@ -269,7 +268,7 @@ icmp_echo(struct icmphdr *icmph, struct sk_buff *skb, struct device *dev,
   skb2->len = offset + len;
 
   /* Build ICMP_ECHO Response message. */
-  icmphr = (struct icmphdr *) ((char *) (skb2 + 1) + offset);
+  icmphr = (struct icmphdr *) (skb2->data + offset);
   memcpy((char *) icmphr, (char *) icmph, len);
   icmphr->type = ICMP_ECHOREPLY;
   icmphr->code = 0;
@@ -333,7 +332,7 @@ icmp_address(struct icmphdr *icmph, struct sk_buff *skb, struct device *dev,
   skb2->len = offset + len;
 
   /* Build ICMP ADDRESS MASK Response message. */
-  icmphr = (struct icmphdr *) ((char *) (skb2 + 1) + offset);
+  icmphr = (struct icmphdr *) (skb2->data + offset);
   icmphr->type = ICMP_ADDRESSREPLY;
   icmphr->code = 0;
   icmphr->checksum = 0;
