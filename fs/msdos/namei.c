@@ -13,6 +13,8 @@
 #include <linux/string.h>
 #include <linux/stat.h>
 
+#define PRINTK(x)
+
 /* MS-DOS "device special files" */
 
 static char *reserved_names[] = {
@@ -109,6 +111,8 @@ int msdos_lookup(struct inode *dir,const char *name,int len,
 	struct msdos_dir_entry *de;
 	struct buffer_head *bh;
 	struct inode *next;
+	
+	PRINTK (("msdos_lookup\n"));
 
 	*result = NULL;
 	if (!dir) return -ENOENT;
@@ -116,6 +120,7 @@ int msdos_lookup(struct inode *dir,const char *name,int len,
 		iput(dir);
 		return -ENOENT;
 	}
+	PRINTK (("msdos_lookup 2\n"));
 	if (len == 1 && name[0] == '.') {
 		*result = dir;
 		return 0;
@@ -127,21 +132,26 @@ int msdos_lookup(struct inode *dir,const char *name,int len,
 		if (!(*result = iget(dir->i_sb,ino))) return -EACCES;
 		return 0;
 	}
+	PRINTK (("msdos_lookup 3\n"));
 	if ((res = msdos_find(dir,name,len,&bh,&de,&ino)) < 0) {
 		iput(dir);
 		return res;
 	}
+	PRINTK (("msdos_lookup 4\n"));
 	if (bh) brelse(bh);
+	PRINTK (("msdos_lookup 4.5\n"));
 /* printk("lookup: ino=%d\n",ino); */
 	if (!(*result = iget(dir->i_sb,ino))) {
 		iput(dir);
 		return -EACCES;
 	}
+	PRINTK (("msdos_lookup 5\n"));
 	if (MSDOS_I(*result)->i_busy) { /* mkdir in progress */
 		iput(*result);
 		iput(dir);
 		return -ENOENT;
 	}
+	PRINTK (("msdos_lookup 6\n"));
 	while (MSDOS_I(*result)->i_old) {
 		next = MSDOS_I(*result)->i_old;
 		iput(*result);
@@ -151,7 +161,9 @@ int msdos_lookup(struct inode *dir,const char *name,int len,
 			return -ENOENT;
 		}
 	}
+	PRINTK (("msdos_lookup 7\n"));
 	iput(dir);
+	PRINTK (("msdos_lookup 8\n"));
 	return 0;
 }
 

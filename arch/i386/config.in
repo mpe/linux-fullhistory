@@ -51,7 +51,9 @@ comment 'SCSI low-level drivers'
 bool 'Adaptec AHA152X support' CONFIG_SCSI_AHA152X n
 bool 'Adaptec AHA1542 support' CONFIG_SCSI_AHA1542 y
 bool 'Adaptec AHA1740 support' CONFIG_SCSI_AHA1740 n
+bool 'Adaptec AHA274X/284X support' CONFIG_SCSI_AHA274X n
 bool 'BusLogic SCSI support' CONFIG_SCSI_BUSLOGIC n
+bool 'UltraStor 14F/34F support' CONFIG_SCSI_U14_34F n
 bool 'Future Domain 16xx SCSI support' CONFIG_SCSI_FUTURE_DOMAIN n
 bool 'Generic NCR5380 SCSI support' CONFIG_SCSI_GENERIC_NCR5380 n
 bool 'NCR53c7,8xx SCSI support'  CONFIG_SCSI_NCR53C7xx n

@@ -197,6 +197,7 @@ int umsdos_writeentry (
 		memset (entry->spare,0,sizeof(entry->spare));
 	}
 	filp.f_pos = info->f_pos;
+	filp.f_reada = 0;
 	ret = umsdos_emd_dir_write(emd_dir,&filp,(char*)entry,info->recsize);
 	if (ret != 0){
 		printk ("UMSDOS: problem with EMD file. Can't write\n");
@@ -296,6 +297,7 @@ static int umsdos_find (
 		buf.pos = 0;
 		buf.size = 0;
 		buf.filp.f_pos = 0;
+		buf.filp.f_reada = 1;
 		empty.found = 0;
 		empty.posok = emd_dir->i_size;
 		empty.onesize = 0;
@@ -454,6 +456,7 @@ int umsdos_isempty (struct inode *dir)
 		struct file filp;
 		/* Find an empty slot */
 		filp.f_pos = 0;
+		filp.f_reada = 1;
 		filp.f_flags = O_RDONLY;
 		ret = 1;
 		while (filp.f_pos < emd_dir->i_size){

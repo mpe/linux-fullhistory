@@ -31,6 +31,8 @@
 #define SWP_OFFSET(entry) ((entry) >> PAGE_SHIFT)
 #define SWP_ENTRY(type,offset) (((type) << 1) | ((offset) << PAGE_SHIFT))
 
+static int min_free_pages = 20;
+
 static int nr_swapfiles = 0;
 static struct wait_queue * lock_queue = NULL;
 
@@ -626,7 +628,7 @@ unsigned long __get_free_pages(int priority, unsigned long order)
 	save_flags(flags);
 repeat:
 	cli();
-	if ((priority==GFP_ATOMIC) || nr_free_pages > MAX_SECONDARY_PAGES) {
+	if ((priority==GFP_ATOMIC) || nr_free_pages > min_free_pages) {
 		RMQUEUE(order);
 		restore_flags(flags);
 		return 0;
@@ -958,6 +960,14 @@ unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
 	unsigned long mask = PAGE_MASK;
 	int i;
 
+	/*
+	 * select nr of pages we try to keep free for important stuff
+	 * with a minimum of 16 pages. This is totally arbitrary
+	 */
+	i = end_mem >> (PAGE_SHIFT+6);
+	if (i < 16)
+		i = 16;
+	min_free_pages = i;
 	start_mem = init_swap_cache(start_mem, end_mem);
 	mem_map = (unsigned short *) start_mem;
 	p = mem_map + MAP_NR(end_mem);

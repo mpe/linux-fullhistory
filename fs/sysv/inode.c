@@ -722,14 +722,13 @@ extern int sysv_notify_change(struct inode *inode, struct iattr *attr)
 	if ((error = inode_change_ok(inode, attr)) != 0)
 		return error;
 
-	inode_setattr(inode, attr);
-
 	if (attr->ia_valid & ATTR_MODE)
 		if (inode->i_sb->sv_kludge_symlinks)
-			if (inode->i_mode == COH_KLUDGE_SYMLINK_MODE) {
-				inode->i_mode = COH_KLUDGE_NOT_SYMLINK;
-				inode->i_dirt = 1;
-			}
+			if (attr->ia_mode == COH_KLUDGE_SYMLINK_MODE)
+				attr->ia_mode = COH_KLUDGE_NOT_SYMLINK;
+
+	inode_setattr(inode, attr);
+
 	return 0;
 }
 

@@ -93,10 +93,14 @@ extern void t128_setup(char *str, int *ints);
 extern void pas16_setup(char *str, int *ints);
 extern void generic_NCR5380_setup(char *str, int *intr);
 extern void aha152x_setup(char *str, int *ints);
+extern void aha274x_setup(char *str, int *ints);
 extern void scsi_luns_setup(char *str, int *ints);
 extern void sound_setup(char *str, int *ints);
 #ifdef CONFIG_SBPCD
 extern void sbpcd_setup(char *str, int *ints);
+#endif CONFIG_SBPCD
+#ifdef CONFIG_CDU31A
+extern void cdu31a_setup(char *str, int *ints);
 #endif CONFIG_SBPCD
 void ramdisk_setup(char *str, int *ints);
 
@@ -208,6 +212,9 @@ struct {
 #ifdef CONFIG_SCSI_AHA152X
         { "aha152x=", aha152x_setup},
 #endif
+#ifdef CONFIG_SCSI_AHA274X
+        { "aha274x=", aha274x_setup},
+#endif
 #ifdef CONFIG_BLK_DEV_XD
 	{ "xd=", xd_setup },
 #endif
@@ -220,6 +227,9 @@ struct {
 #ifdef CONFIG_SBPCD
 	{ "sbpcd=", sbpcd_setup },
 #endif CONFIG_SBPCD
+#ifdef CONFIG_CDU31A
+	{ "cdu31a=", cdu31a_setup },
+#endif CONFIG_CDU31A
 	{ 0, 0 }
 };
 

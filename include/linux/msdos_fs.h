@@ -11,8 +11,8 @@
 #define MSDOS_ROOT_INO  1 /* == MINIX_ROOT_INO */
 #define SECTOR_SIZE     512 /* sector size (bytes) */
 #define SECTOR_BITS	9 /* log2(SECTOR_SIZE) */
-#define MSDOS_DPB	(MSDOS_DPS*2) /* dir entries per block */
-#define MSDOS_DPB_BITS	5 /* log2(MSDOS_DPB) */
+#define MSDOS_DPB	(MSDOS_DPS) /* dir entries per block */
+#define MSDOS_DPB_BITS	4 /* log2(MSDOS_DPB) */
 #define MSDOS_DPS	(SECTOR_SIZE/sizeof(struct msdos_dir_entry))
 #define MSDOS_DPS_BITS	4 /* log2(MSDOS_DPS) */
 #define MSDOS_DIR_BITS	5 /* log2(sizeof(struct msdos_dir_entry)) */
@@ -112,11 +112,10 @@ struct fat_cache {
 
 static inline struct buffer_head *msdos_sread(int dev,int sector,void **start)
 {
- 	struct buffer_head *bh;
-
-	if (!(bh = bread(dev,sector >> 1, 1024)))
-		return NULL;
-    	*start = bh->b_data+((sector & 1) << SECTOR_BITS);
+ 	struct buffer_head *bh = bread(dev,sector, 512);
+	if (bh != NULL){
+		*start = bh->b_data;	/* From the time of 1024 bytes block */
+	}
 	return bh;
 }
 

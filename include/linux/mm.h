@@ -117,7 +117,6 @@ struct page_info {
 extern int nr_swap_pages;
 extern int nr_free_pages;
 
-#define MAX_SECONDARY_PAGES 20
 #define NR_MEM_LISTS 6
 
 struct mem_list {

@@ -24,6 +24,8 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
+#undef TTY_DEBUG_WAIT_UNTIL_SENT
+
 #undef	DEBUG
 #ifdef DEBUG
 # define	PRINTK(x)	printk (x)
@@ -42,6 +44,9 @@ void wait_until_sent(struct tty_struct * tty, int timeout)
 {
 	struct wait_queue wait = { current, NULL };
 
+#ifdef TTY_DEBUG_WAIT_UNTIL_SENT
+	printk("%s wait until sent...\n", tty_name(tty));
+#endif
 	if (!tty->driver.chars_in_buffer ||
 	    !tty->driver.chars_in_buffer(tty))
 		return;
@@ -52,6 +57,9 @@ void wait_until_sent(struct tty_struct * tty, int timeout)
 	else
 		current->timeout = (unsigned) -1;
 	do {
+#ifdef TTY_DEBUG_WAIT_UNTIL_SENT
+		printk("waiting %s...(%d)\n", tty_name(tty), tty->driver.chars_in_buffer(tty));
+#endif
 		current->state = TASK_INTERRUPTIBLE;
 		if (current->signal & ~current->blocked)
 			break;

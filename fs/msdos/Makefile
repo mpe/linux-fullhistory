@@ -7,6 +7,10 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
+ifndef CONFIG_MSDOS_FS
+CFLAGS := $(CFLAGS) -DMODULE
+endif
+
 .c.s:
 	$(CC) $(CFLAGS) -S $<
 .c.o:
@@ -14,7 +18,7 @@
 .s.o:
 	$(AS) -o $*.o $<
 
-OBJS=	namei.o inode.o file.o dir.o misc.o fat.o mmap.o
+OBJS=	namei.o inode.o file.o dir.o misc.o fat.o
 
 msdos.o: $(OBJS)
 	$(LD) -r -o msdos.o $(OBJS)

@@ -20,6 +20,8 @@ FS_SUBDIRS := $(FS_SUBDIRS) ext2
 endif
 ifdef CONFIG_MSDOS_FS
 FS_SUBDIRS := $(FS_SUBDIRS) msdos
+else
+MODULE_FS_SUBDIRS := $(MODULE_FS_SUBDIRS) msdos
 endif
 ifdef CONFIG_PROC_FS
 FS_SUBDIRS := $(FS_SUBDIRS) proc
@@ -35,6 +37,8 @@ FS_SUBDIRS := $(FS_SUBDIRS) xiafs
 endif
 ifdef CONFIG_UMSDOS_FS
 FS_SUBDIRS := $(FS_SUBDIRS) umsdos
+else
+MODULE_FS_SUBDIRS := $(MODULE_FS_SUBDIRS) umsdos
 endif
 ifdef CONFIG_SYSV_FS
 FS_SUBDIRS := $(FS_SUBDIRS) sysv
@@ -76,6 +80,10 @@ ifdef MODULES
 modules:
 	$(MAKE) CFLAGS="$(CFLAGS) -DMODULE" $(MODULES)
 	(cd ../modules;for i in $(MODULES); do ln -sf ../fs/$$i .; done)
+	set -e; for i in $(MODULE_FS_SUBDIRS); do \
+	  test ! -d $$i || \
+	    { $(MAKE) -C $$i; }; done
+
 
 else
 

@@ -549,7 +549,7 @@ static int sock_fasync(struct inode *inode, struct file *filp, int on)
 
 int sock_wake_async(struct socket *sock)
 {
-	if(sock->fasync_list==NULL)
+	if (!sock || !sock->fasync_list)
 		return -1;
 	kill_fasync(sock->fasync_list, SIGIO);
 	return 0;

@@ -75,7 +75,7 @@ struct file_operations umsdos_file_operations = {
 	NULL,				/* readdir - bad */
 	NULL,				/* select - default */
 	NULL,				/* ioctl - default */
-	msdos_mmap,			/* mmap */
+	generic_mmap,			/* mmap */
 	NULL,				/* no special open is needed */
 	NULL,				/* release */
 	file_fsync			/* fsync */

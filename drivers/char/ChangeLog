@@ -1,3 +1,28 @@
+Sat Oct 29 18:17:34 1994  Theodore Y. Ts'o  (tytso@rt-11)
+
+	* serial.c (rs_ioctl, get_lsr_info): Added patch suggested by Arne
+		Riiber so that user mode programs can tell when the
+		transmitter shift register is empty.
+
+Thu Oct 27 23:14:29 1994  Theodore Y. Ts'o  (tytso@rt-11)
+
+	* tty_ioctl.c (wait_until_sent): Added debugging printk statements
+		(under the #ifdef TTY_DEBUG_WAIT_UNTL_SENT)  
+
+	* serial.c (rs_interrupt, rs_interrupt_single, receive_chars,
+		change_speed, rs_close): rs_close now disables receiver
+		interrupts when closing the serial port.  This allows the
+		serial port to close quickly when Linux and a modem (or a
+		mouse) are engaged in an echo war; when closing the serial
+		port, we now first stop listening to incoming characters,
+		and *then* wait for the transmit buffer to drain.  
+
+		In order to make this change, the info->read_status_mask
+		is now used to control what bits of the line status
+		register are looked at in the interrupt routine in all
+		cases; previously it was only used in receive_chars to
+		select a few of the status bits.
+
 Mon Oct 24 23:36:21 1994  Theodore Y. Ts'o  (tytso@rt-11)
 
 	* serial.c (rs_close): Add a timeout to the transmitter flush

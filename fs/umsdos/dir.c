@@ -350,6 +350,7 @@ int umsdos_inode2entry (
 		if (emddir == NULL){
 			/* This is a DOS directory */
 			struct file filp;
+			filp.f_reada = 1;
 			filp.f_pos = 0;
 			while (1){
 				struct dirent dirent;
@@ -370,6 +371,7 @@ int umsdos_inode2entry (
 		}else{
 			/* skip . and .. see umsdos_readdir_x() */
 			struct file filp;
+			filp.f_reada = 1;
 			filp.f_pos = UMSDOS_SPECIAL_DIRFPOS;
 			while (1){
 				struct dirent dirent;
@@ -623,6 +625,7 @@ int umsdos_hlink2inode (struct inode *hlink, struct inode **result)
 		iput (hlink);
 	}else{
 		struct file filp;
+		filp.f_reada = 1;
 		filp.f_pos = 0;
 		PRINTK (("hlink2inode "));
 		if (umsdos_file_read_kmem (hlink,&filp,path,hlink->i_size)

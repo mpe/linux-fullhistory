@@ -373,27 +373,27 @@ static _INLINE_ void receive_chars(struct async_struct *info,
 	do {
 		ch = serial_inp(info, UART_RX);
 		if (*status & info->ignore_status_mask)
-			continue;
+			goto ignore_char;
 		if (tty->flip.count >= TTY_FLIPBUF_SIZE)
 			break;
 		tty->flip.count++;
-		if (*status & info->read_status_mask) {
-			if (*status & (UART_LSR_BI)) {
-				*tty->flip.flag_buf_ptr++ = TTY_BREAK;
-				if (info->flags & ASYNC_SAK)
-					do_SAK(tty);
-			} else if (*status & UART_LSR_PE)
-				*tty->flip.flag_buf_ptr++ = TTY_PARITY;
-			else if (*status & UART_LSR_FE)
-				*tty->flip.flag_buf_ptr++ = TTY_FRAME;
-			else if (*status & UART_LSR_OE) 
-				*tty->flip.flag_buf_ptr++ = TTY_OVERRUN;
-			else
-				*tty->flip.flag_buf_ptr++ = 0;
-		} else
+		if (*status & (UART_LSR_BI)) {
+			printk("handling break....");
+			*tty->flip.flag_buf_ptr++ = TTY_BREAK;
+			if (info->flags & ASYNC_SAK)
+				do_SAK(tty);
+		} else if (*status & UART_LSR_PE)
+			*tty->flip.flag_buf_ptr++ = TTY_PARITY;
+		else if (*status & UART_LSR_FE)
+			*tty->flip.flag_buf_ptr++ = TTY_FRAME;
+		else if (*status & UART_LSR_OE) 
+			*tty->flip.flag_buf_ptr++ = TTY_OVERRUN;
+		else
 			*tty->flip.flag_buf_ptr++ = 0;
 		*tty->flip.char_buf_ptr++ = ch;
-	} while ((*status = serial_inp(info, UART_LSR)) & UART_LSR_DR);
+	ignore_char:
+		*status = serial_inp(info, UART_LSR) & info->read_status_mask;
+	} while (*status & UART_LSR_DR);
 	queue_task_irq_off(&tty->flip.tqueue, &tq_timer);
 #ifdef SERIAL_DEBUG_INTR
 	printk("DR...");
@@ -525,7 +525,10 @@ static void rs_interrupt(int irq)
 
 		info->last_active = jiffies;
 
-		status = serial_inp(info, UART_LSR);
+		status = serial_inp(info, UART_LSR) & info->read_status_mask;
+#ifdef SERIAL_DEBUG_INTR
+		printk("status = %x...", status);
+#endif
 		if (status & UART_LSR_DR)
 			receive_chars(info, &status);
 		check_modem_status(info);
@@ -545,6 +548,9 @@ static void rs_interrupt(int irq)
 			continue;
 		}
 	} while (end_mark != info);
+#ifdef SERIAL_DEBUG_INTR
+	printk("end.\n");
+#endif
 }
 
 /*
@@ -565,7 +571,10 @@ static void rs_interrupt_single(int irq)
 		return;
 
 	do {
-		status = serial_inp(info, UART_LSR);
+		status = serial_inp(info, UART_LSR) & info->read_status_mask;
+#ifdef SERIAL_DEBUG_INTR
+		printk("status = %x...", status);
+#endif
 		if (status & UART_LSR_DR)
 			receive_chars(info, &status);
 		check_modem_status(info);
@@ -579,6 +588,9 @@ static void rs_interrupt_single(int irq)
 		}
 	} while (!(serial_in(info, UART_IIR) & UART_IIR_NO_INT));
 	info->last_active = jiffies;
+#ifdef SERIAL_DEBUG_INTR
+	printk("end.\n");
+#endif
 }
 
 #else /* CONFIG_SERIAL_NEW_ISR */
@@ -606,7 +618,7 @@ static void rs_interrupt(int irq)
 			goto next;
 
 		serial_outp(info, UART_IER, 0);
-		status = serial_inp(info, UART_LSR);
+		status = serial_inp(info, UART_LSR) & info->read_status_mask;
 		if (status & UART_LSR_DR) {
 			receive_chars(info, &status);
 			done = 0;
@@ -658,7 +670,7 @@ static void rs_interrupt_single(int irq)
 		return;
 
 	serial_outp(info, UART_IER, 0);
-	status = serial_inp(info, UART_LSR);
+	status = serial_inp(info, UART_LSR) & info->read_status_mask;
 	if (status & UART_LSR_DR)
 		receive_chars(info, &status);
 	check_modem_status(info);
@@ -1140,23 +1152,28 @@ static void change_speed(struct async_struct *info)
 	/*
 	 * Set up parity check flag
 	 */
-	info->read_status_mask = UART_LSR_OE;
+	info->read_status_mask = UART_LSR_OE | UART_LSR_THRE | UART_LSR_DR;
 	if (I_INPCK(info->tty))
 		info->read_status_mask |= UART_LSR_FE | UART_LSR_PE;
 	if (I_BRKINT(info->tty) || I_PARMRK(info->tty))
 		info->read_status_mask |= UART_LSR_BI;
 	
 	info->ignore_status_mask = 0;
-	if (I_IGNPAR(info->tty))
+	if (I_IGNPAR(info->tty)) {
 		info->ignore_status_mask |= UART_LSR_PE | UART_LSR_FE;
+		info->read_status_mask |= UART_LSR_PE | UART_LSR_FE;
+	}
 	if (I_IGNBRK(info->tty)) {
 		info->ignore_status_mask |= UART_LSR_BI;
+		info->read_status_mask |= UART_LSR_BI;
 		/*
 		 * If we're ignore parity and break indicators, ignore 
 		 * overruns too.  (For real raw support).
 		 */
-		if (I_IGNPAR(info->tty))
+		if (I_IGNPAR(info->tty)) {
 			info->ignore_status_mask |= UART_LSR_OE;
+			info->read_status_mask |= UART_LSR_OE;
+		}
 	}
 	
 	cli();
@@ -1462,6 +1479,31 @@ check_and_exit:
 	return retval;
 }
 
+
+/*
+ * get_lsr_info - get line status register info
+ *
+ * Purpose: Let user call ioctl() to get info when the UART physically
+ * 	    is emptied.  On bus types like RS485, the transmitter must
+ * 	    release the bus after transmitting. This must be done when
+ * 	    the transmit shift register is empty, not be done when the
+ * 	    transmit holding register is empty.  This functionality
+ * 	    allows RS485 driver to be written in user space. 
+ */
+static int get_lsr_info(struct async_struct * info, unsigned int *value)
+{
+	unsigned char status;
+	unsigned int result;
+
+	cli();
+	status = serial_in(info, UART_LSR);
+	sti();
+	result = ((status & UART_LSR_TEMT) ? TIOCSER_TEMT : 0);
+	put_fs_long(result,(unsigned long *) value);
+	return 0;
+}
+
+
 static int get_modem_info(struct async_struct * info, unsigned int *value)
 {
 	unsigned char control, status;
@@ -1678,6 +1720,14 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 			put_fs_long(rs_wild_int_mask, (unsigned long *) arg);
 			return 0;
 
+		case TIOCSERGETLSR: /* Get line status register */
+			error = verify_area(VERIFY_WRITE, (void *) arg,
+				sizeof(unsigned int));
+			if (error)
+				return error;
+			else
+			    return get_lsr_info(info, (unsigned int *) arg);
+
 		case TIOCSERSWILD:
 			if (!suser())
 				return -EPERM;
@@ -1780,6 +1830,15 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 		info->normal_termios = *tty->termios;
 	if (info->flags & ASYNC_CALLOUT_ACTIVE)
 		info->callout_termios = *tty->termios;
+	/*
+	 * At this point we stop accepting input.  To do this, we
+	 * disable the receive line status interrupts, and tell the
+	 * interrut driver to stop checking the data ready bit in the
+	 * line status register.
+	 */
+	info->IER &= ~UART_IER_RLSI;
+	serial_out(info, UART_IER, info->IER);
+	info->read_status_mask &= ~UART_LSR_DR;
 	if (info->flags & ASYNC_INITIALIZED) {
 		wait_until_sent(tty, 3000); /* 30 seconds timeout */
 		/*

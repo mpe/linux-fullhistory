@@ -11,6 +11,13 @@ N: Werner Almesberger
 E: almesber@bernina.ethz.ch
 D: dosfs, LILO, some fd features, various other hacks here and there
 
+N: John Aycock
+E: aycock@cpsc.ucalgary.ca
+D: Adaptec 274x driver
+S: Department of Computer Science
+S: University of Calgary
+S: Calgary, Alberta, Canada
+
 N: Krishna Balasubramanian
 E: balasub@cis.ohio-state.edu
 D: Wrote SYS V IPC (part of standard kernel since 0.99.10)
@@ -375,6 +382,14 @@ D: Smail binary packages for Slackware and Debian
 S: 2200 Monroe Street #1509
 S: Santa Clara, California 95050-3452
 S: USA
+
+N: Alain L. Knaff
+E: Alain.Knaff@imag.fr
+D: floppy driver
+S: Appartement 310B
+S: 11, rue General Mangin
+S: 38100 Grenoble
+S: France
 
 N: Rudolf Koenig
 E: rfkoenig@immd4.informatik.uni-erlangen.de

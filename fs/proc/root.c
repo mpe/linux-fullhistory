@@ -94,11 +94,11 @@ static int proc_lookuproot(struct inode * dir,const char * name, int len,
 		/* nothing */;
 	if (i >= 0) {
 		ino = root_dir[i].low_ino;
-		if (ino == 1) {
+		if (ino == PROC_ROOT_INO) {
 			*result = dir;
 			return 0;
 		}
-		if (ino == 7) /* self modifying inode ... */
+		if (ino == PROC_SELF) /* self modifying inode ... */
 			ino = (current->pid << 16) + 2;
 	} else {
 		pid = 0;

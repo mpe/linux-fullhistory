@@ -90,7 +90,7 @@ static int parse_options(char *options, struct iso9660_options * popt)
 			else return 0;
 		}
 		else if (!strcmp(this_char,"conv") && value) {
-			if (value[0] && !value[1] && strchr("bta",*value))
+			if (value[0] && !value[1] && strchr("btma",*value))
 				popt->conversion = *value;
 			else if (!strcmp(value,"binary")) popt->conversion = 'b';
 			else if (!strcmp(value,"text")) popt->conversion = 't';
@@ -116,10 +116,10 @@ static int parse_options(char *options, struct iso9660_options * popt)
 		    if (ivalue != 1024 && ivalue != 2048) return 0;
 		    popt->blocksize = ivalue;
 		    break;
-		  case 'g':
+		  case 'u':
 		    popt->uid = ivalue;
 		    break;
-		  case 'u':
+		  case 'g':
 		    popt->gid = ivalue;
 		    break;
 		  }

@@ -52,6 +52,7 @@
 #define TIOCGLCKTRMIOS	0x5456
 #define TIOCSLCKTRMIOS	0x5457
 #define TIOCSERGSTRUCT	0x5458 /* For debugging only */
+#define TIOCSERGETLSR   0x5459 /* Get line status register */
 
 /* Used for packet mode */
 #define TIOCPKT_DATA		 0
@@ -220,6 +221,10 @@ struct termios {
 #define TIOCM_DSR	0x100
 #define TIOCM_CD	TIOCM_CAR
 #define TIOCM_RI	TIOCM_RNG
+
+/* ioctl (fd, TIOCSERGTLSR, &result) where result may be as below */
+#define TIOCSER_TEMT    0x01	/* Transmitter physically empty */
+
 
 /* tcflow() and TCXONC use these */
 #define	TCOOFF		0

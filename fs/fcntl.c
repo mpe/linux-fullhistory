@@ -139,7 +139,7 @@ asmlinkage int sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			 * Changed to make the security checks more
 			 * liberal.  -- TYT
 			 */
-			if (current->pgrp == -arg || current->pid != arg)
+			if (current->pgrp == -arg || current->pid == arg)
 				goto fasync_ok;
 			
 			for_each_task(p) {

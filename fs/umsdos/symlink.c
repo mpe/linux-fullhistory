@@ -34,6 +34,7 @@ static int umsdos_readlink_x (
 	int ret = inode->i_size;
 	struct file filp;
 	filp.f_pos = 0;
+	filp.f_reada = 0;
 	if (ret > bufsiz) ret = bufsiz;
 	if ((*msdos_read) (inode, &filp, buffer,ret) != ret){
 		ret = -EIO;

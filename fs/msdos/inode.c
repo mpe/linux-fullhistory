@@ -10,11 +10,19 @@
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/ctype.h>
+#include <linux/major.h>
+#include <linux/fs.h>
 #include <linux/stat.h>
 #include <linux/locks.h>
 
+#ifdef MODULE
+	#include <linux/module.h>
+	#include "../../tools/version.h"
+#endif
+
 #include <asm/segment.h>
 
+extern int *blksize_size[];
 
 void msdos_put_inode(struct inode *inode)
 {
@@ -47,9 +55,13 @@ void msdos_put_inode(struct inode *inode)
 void msdos_put_super(struct super_block *sb)
 {
 	cache_inval_dev(sb->s_dev);
+	set_blocksize (sb->s_dev,BLOCK_SIZE);
 	lock_super(sb);
 	sb->s_dev = 0;
 	unlock_super(sb);
+	#ifdef MODULE
+		MOD_DEC_USE_COUNT;
+	#endif
 	return;
 }
 
@@ -160,7 +172,21 @@ struct super_block *msdos_read_super(struct super_block *s,void *data,
 	}
 	cache_init();
 	lock_super(s);
-	bh = bread(s->s_dev, 0, BLOCK_SIZE);
+	if (MAJOR(s->s_dev) == FLOPPY_MAJOR){
+		/* Patch for floppy which lacks a table ??? */
+		static int tbdef[]={
+			1024,1024,1024,1024,1024,
+			1024,1024,1024,1024,1024,
+			1024,1024,1024,1024,1024,
+			1024,1024,1024,1024,1024,
+			1024,1024,1024,1024,1024,
+			1024,1024,1024,1024,1024,
+			1024,1024,1024,1024,1024,
+		};
+		blksize_size[FLOPPY_MAJOR] = tbdef;
+	}
+	set_blocksize (s->s_dev,SECTOR_SIZE);
+	bh = bread(s->s_dev, 0, SECTOR_SIZE);
 	unlock_super(s);
 	if (bh == NULL) {
 		s->s_dev = 0;
@@ -168,9 +194,11 @@ struct super_block *msdos_read_super(struct super_block *s,void *data,
 		return NULL;
 	}
 	b = (struct msdos_boot_sector *) bh->b_data;
-	s->s_blocksize = 1024;	/* we cannot handle anything else yet */
-	s->s_blocksize_bits = 10;	/* we cannot handle anything else yet */
-
+	s->s_blocksize = 512;	/* Using this small block size solve the */
+				/* the misfit with buffer cache and cluster */
+				/* because cluster (DOS) are often aligned */
+				/* on odd sector */
+	s->s_blocksize_bits = 9;	/* we cannot handle anything else yet */
 /*
  * The DOS3 partition size limit is *not* 32M as many people think.  
  * Instead, it is 64K sectors (with the usual sector size being
@@ -219,6 +247,7 @@ struct super_block *msdos_read_super(struct super_block *s,void *data,
 	}
 	brelse(bh);
 	if (error || debug) {
+		/* The MSDOS_CAN_BMAP is obsolete, but left just to remember */
 		printk("[MS-DOS FS Rel. 12,FAT %d,check=%c,conv=%c,"
 		    "uid=%d,gid=%d,umask=%03o%s]\n",MSDOS_SB(s)->fat_bits,check,
 		    conversion,uid,gid,umask,MSDOS_CAN_BMAP(MSDOS_SB(s)) ?
@@ -255,6 +284,9 @@ struct super_block *msdos_read_super(struct super_block *s,void *data,
 		printk("get root inode failed\n");
 		return NULL;
 	}
+	#ifdef MODULE
+		MOD_INC_USE_COUNT;
+	#endif
 	return s;
 }
 
@@ -290,15 +322,13 @@ int msdos_bmap(struct inode *inode,int block)
 	int cluster,offset;
 
 	sb = MSDOS_SB(inode->i_sb);
-	if ((sb->cluster_size & 1) || (sb->data_start & 1)) return 0;
 	if (inode->i_ino == MSDOS_ROOT_INO) {
-		if (sb->dir_start & 1) return 0;
-		return (sb->dir_start >> 1)+block;
+		return sb->dir_start + block;
 	}
-	cluster = (block*2)/sb->cluster_size;
-	offset = (block*2) % sb->cluster_size;
+	cluster = block/sb->cluster_size;
+	offset = block % sb->cluster_size;
 	if (!(cluster = get_cluster(inode,cluster))) return 0;
-	return ((cluster-2)*sb->cluster_size+sb->data_start+offset) >> 1;
+	return (cluster-2)*sb->cluster_size+sb->data_start+offset;
 }
 
 
@@ -332,7 +362,7 @@ void msdos_read_inode(struct inode *inode)
 		return;
 	}
 	if (!(bh = bread(inode->i_dev,inode->i_ino >> MSDOS_DPB_BITS,
-	    BLOCK_SIZE))) {
+	    SECTOR_SIZE))) {
 		printk("dev = 0x%04X, ino = %ld\n",inode->i_dev,inode->i_ino);
 		panic("msdos_read_inode: unable to read i-node block");
 	}
@@ -367,9 +397,7 @@ void msdos_read_inode(struct inode *inode)
 		inode->i_mode = MSDOS_MKMODE(raw_entry->attr,(IS_NOEXEC(inode)
 		    ? S_IRUGO|S_IWUGO : S_IRWXUGO) & ~MSDOS_SB(inode->i_sb)->fs_umask) |
 		    S_IFREG;
-		inode->i_op = MSDOS_CAN_BMAP(MSDOS_SB(inode->i_sb)) ? 
-		    &msdos_file_inode_operations :
-		    &msdos_file_inode_operations_no_bmap;
+		inode->i_op = &msdos_file_inode_operations;	/* Now can always bmap */
 		MSDOS_I(inode)->i_start = CF_LE_W(raw_entry->start);
 		inode->i_nlink = 1;
 		inode->i_size = CF_LE_L(raw_entry->size);
@@ -395,7 +423,7 @@ void msdos_write_inode(struct inode *inode)
 	inode->i_dirt = 0;
 	if (inode->i_ino == MSDOS_ROOT_INO || !inode->i_nlink) return;
 	if (!(bh = bread(inode->i_dev,inode->i_ino >> MSDOS_DPB_BITS,
-	    BLOCK_SIZE))) {
+	    SECTOR_SIZE))) {
 		printk("dev = 0x%04X, ino = %ld\n",inode->i_dev,inode->i_ino);
 		panic("msdos_write_inode: unable to read i-node block");
 	}
@@ -451,3 +479,32 @@ int msdos_notify_change(struct inode * inode,struct iattr * attr)
 	    ~MSDOS_SB(inode->i_sb)->fs_umask;
 	return 0;
 }
+#ifdef MODULE
+
+char kernel_version[] = UTS_RELEASE;
+
+static struct file_system_type msdos_fs_type = {
+	msdos_read_super, "msdos", 1, NULL
+};
+
+int init_module(void)
+{
+	register_filesystem(&msdos_fs_type);
+	return 0;
+}
+
+void cleanup_module(void)
+{
+	if (MOD_IN_USE)
+		printk("ne: device busy, remove delayed\n");
+	else
+	{
+		unregister_filesystem(&msdos_fs_type);
+		/* This is not clear why the floppy drivers does not initialise */
+		/* the table, but we left it the way we saw it first */
+		blksize_size[FLOPPY_MAJOR] = NULL;
+	}
+}
+
+#endif
+

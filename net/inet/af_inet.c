@@ -1288,13 +1288,13 @@ struct sock *get_sock(struct proto *prot, unsigned short num,
 			continue;
 		if(s->dead && (s->state == TCP_CLOSE))
 			continue;
+		if(ip_addr_match(s->saddr,laddr) == 0)
+			continue;
 		if(prot == &udp_prot)
 			return s;
 		if(ip_addr_match(s->daddr,raddr)==0)
 			continue;
 		if (s->dummy_th.dest != rnum && s->dummy_th.dest != 0) 
-			continue;
-		if(ip_addr_match(s->saddr,laddr) == 0)
 			continue;
 		return(s);
   	}
