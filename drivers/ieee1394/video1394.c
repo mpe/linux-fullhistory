@@ -982,10 +982,9 @@ static int __video1394_ioctl(struct file *file,
 				}
 			}
 #else
-			if (wait_event_interruptible(d->waitq,
-						     d->buffer_status[v.buffer]
-						     == VIDEO1394_BUFFER_READY)
-			    == -ERESTARTSYS)
+			wait_event_interruptible(d->waitq,
+					(d->buffer_status[v.buffer] == VIDEO1394_BUFFER_READY));
+			if (signal_pending(current))
 				return -EINTR;
 #endif
 			d->buffer_status[v.buffer]=VIDEO1394_BUFFER_FREE;
@@ -1144,19 +1143,10 @@ static int __video1394_ioctl(struct file *file,
 			d->buffer_status[v.buffer]=VIDEO1394_BUFFER_FREE;
 			return 0;
 		case VIDEO1394_BUFFER_QUEUED:
-#if 1
-			while (d->buffer_status[v.buffer]!=
-			      VIDEO1394_BUFFER_READY) {
-				interruptible_sleep_on(&d->waitq);
-				if (signal_pending(current)) return -EINTR;
-			}
-#else
-			if (wait_event_interruptible(d->waitq,
-						     d->buffer_status[v.buffer]
-						     == VIDEO1394_BUFFER_READY)
-			    == -ERESTARTSYS)
+			wait_event_interruptible(d->waitq,
+					(d->buffer_status[v.buffer] == VIDEO1394_BUFFER_READY));
+			if (signal_pending(current))
 				return -EINTR;
-#endif
 			d->buffer_status[v.buffer]=VIDEO1394_BUFFER_FREE;
 			return 0;
 		default:

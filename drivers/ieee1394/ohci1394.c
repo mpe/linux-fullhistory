@@ -3512,7 +3512,7 @@ static int ohci1394_pci_resume (struct pci_dev *pdev)
 }
 
 
-static int ohci1394_pci_suspend (struct pci_dev *pdev, u32 state)
+static int ohci1394_pci_suspend (struct pci_dev *pdev, pm_message_t state)
 {
 #ifdef CONFIG_PMAC_PBOOK
 	{
