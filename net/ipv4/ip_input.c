@@ -97,6 +97,7 @@
  *		Alan Cox	:	Multicast routing hooks
  *		Jos Vos		:	Do accounting *before* call_in_firewall
  *	Willy Konynenberg	:	Transparent proxying support
+ *	Mike McLagan		:	Routing by source
  *
  *  
  *
@@ -464,18 +465,18 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
 		opt = &(IPCB(skb)->opt);
 		if (opt->srr) {
-			if (!ipv4_config.source_route) {
-				if (ipv4_config.log_martians && net_ratelimit())
+			struct in_device *in_dev = dev->ip_ptr;
+			if (in_dev && !IN_DEV_SOURCE_ROUTE(in_dev)) {
+				if (IN_DEV_LOG_MARTIANS(in_dev) && net_ratelimit())
 					printk(KERN_INFO "source route option %08lx -> %08lx\n",
 					       ntohl(iph->saddr), ntohl(iph->daddr));
 				goto drop;
 			}
-			if (((struct rtable*)skb->dst)->rt_type == RTN_LOCAL &&
-			    ip_options_rcv_srr(skb))
+			if (ip_options_rcv_srr(skb))
 				goto drop;
 		}
 	}
-	
+
 	/*
 	 *	See if the firewall wants to dispose of the packet. 
 	 */

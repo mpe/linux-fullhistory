@@ -36,6 +36,7 @@ struct dst_entry
 	int			obsolete;
 	__u32			priority;
 	unsigned long		lastuse;
+	unsigned		mxlock;
 	unsigned		window;
 	unsigned		pmtu;
 	unsigned		rtt;
@@ -60,11 +61,17 @@ struct dst_ops
 {
 	unsigned short		family;
 	unsigned short		protocol;
+	unsigned		gc_thresh;
+
+	int			(*gc)(void);
 	struct dst_entry *	(*check)(struct dst_entry *, __u32 cookie);
 	struct dst_entry *	(*reroute)(struct dst_entry *,
 					   struct sk_buff *);
 	void			(*destroy)(struct dst_entry *);
 	struct dst_entry *	(*negative_advice)(struct dst_entry *);
+	void			(*link_failure)(struct sk_buff *);
+
+	atomic_t		entries;
 };
 
 #ifdef __KERNEL__
@@ -131,6 +138,13 @@ extern __inline__ void dst_negative_advice(struct dst_entry **dst_p)
 	struct dst_entry * dst = *dst_p;
 	if (dst && dst->ops->negative_advice)
 		*dst_p = dst->ops->negative_advice(dst);
+}
+
+extern __inline__ void dst_link_failure(struct sk_buff *skb)
+{
+	struct dst_entry * dst = skb->dst;
+	if (dst && dst->ops && dst->ops->link_failure)
+		dst->ops->link_failure(skb);
 }
 #endif
 

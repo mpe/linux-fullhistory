@@ -2826,6 +2826,7 @@ EXPORT_SYMBOL(ide_end_drive_cmd);
 EXPORT_SYMBOL(ide_end_request);
 EXPORT_SYMBOL(ide_revalidate_disk);
 EXPORT_SYMBOL(ide_cmd);
+EXPORT_SYMBOL(ide_wait_cmd);
 EXPORT_SYMBOL(ide_stall_queue);
 EXPORT_SYMBOL(ide_add_proc_entries);
 EXPORT_SYMBOL(ide_remove_proc_entries);

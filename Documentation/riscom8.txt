@@ -1,5 +1,5 @@
 	This is the README for RISCom/8 multi-port serial driver
-	(C) 1994-1996 D.Gorodchanin (begemot@bgm.rosrpint.net)
+	(C) 1994-1996 D.Gorodchanin (pgmdsg@ibi.com)
 	See file LICENSE for terms and conditions.
 
 NOTE: English is not my native language. 

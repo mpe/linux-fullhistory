@@ -131,7 +131,8 @@ struct neigh_table nd_tbl =
 	pndisc_constructor,
 	pndisc_destructor,
 	pndisc_redo,
-        { NULL, NULL, 30*HZ, 1*HZ, 60*HZ, 30*HZ, 5*HZ, 3, 3, 0, 3, 1*HZ, (8*HZ)/10, 0, 64 },
+        { NULL, NULL, &nd_tbl, 0, NULL, NULL,
+		  30*HZ, 1*HZ, 60*HZ, 30*HZ, 5*HZ, 3, 3, 0, 3, 1*HZ, (8*HZ)/10, 0, 64 },
 	30*HZ, 128, 512, 1024,
 };
 
@@ -558,7 +559,9 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 		ND_PRINTK1("RA: can't find in6 device\n");
 		return;
 	}
-	
+	if (in6_dev->cnf.forwarding || !in6_dev->cnf.accept_ra)
+		return;
+
 	if (in6_dev->if_flags & IF_RS_SENT) {
 		/*
 		 *	flag that an RA was received after an RS was sent
@@ -602,7 +605,7 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 		rt->rt6i_expires = jiffies + (HZ * lifetime);
 
 	if (ra_msg->icmph.icmp6_hop_limit)
-		ipv6_config.hop_limit = ra_msg->icmph.icmp6_hop_limit;
+		in6_dev->cnf.hop_limit = ra_msg->icmph.icmp6_hop_limit;
 
 	/*
 	 *	Update Reachable Time and Retrans Timer
@@ -651,32 +654,29 @@ static void ndisc_router_discovery(struct sk_buff *skb)
                         break;
 
                 case ND_OPT_MTU:
-			if (rt) {
+			{
 				int mtu;
-				struct device *dev;
 				
 				mtu = htonl(*(__u32 *)(opt+4));
-				dev = rt->rt6i_dev;
 
-				if (dev == NULL)
-					break;
-
-				if (mtu < 576) {
+				if (mtu < 576 || mtu > skb->dev->mtu) {
 					ND_PRINTK0("NDISC: router "
 						   "announcement with mtu = %d\n",
 						   mtu);
 					break;
 				}
 
-#if 0
-				/* Bad idea. Sorry, this thing is not
-				   so easy to implement		--ANK
-				 */
-				if (dev->change_mtu)
-					dev->change_mtu(dev, mtu);
-				else
-					dev->mtu = mtu;
-#endif
+				if (in6_dev->cnf.mtu6 != mtu) {
+					in6_dev->cnf.mtu6 = mtu;
+
+					if (rt)
+						rt->u.dst.pmtu = mtu;
+
+					/* BUGGG... Scan routing tables and
+					   adjust mtu on routes going
+					   via this device
+					 */
+				}
 			}
                         break;
 
@@ -692,25 +692,9 @@ static void ndisc_router_discovery(struct sk_buff *skb)
         }
 }
 
-void ndisc_forwarding_on(void)
-{
-
-	/*
-	 *	Forwarding was turned on.
-	 */
-
-	rt6_purge_dflt_routers(0);
-}
-
-void ndisc_forwarding_off(void)
-{
-	/*
-	 *	Forwarding was turned off.
-	 */
-}
-
 static void ndisc_redirect_rcv(struct sk_buff *skb)
 {
+	struct inet6_dev *in6_dev;
 	struct icmp6hdr *icmph;
 	struct in6_addr *dest;
 	struct in6_addr *target;	/* new first hop to destination */
@@ -752,6 +736,10 @@ static void ndisc_redirect_rcv(struct sk_buff *skb)
 		printk(KERN_WARNING "ICMP redirect: target address is not linklocal\n");
 		return;
 	}
+
+	in6_dev = ipv6_get_idev(skb->dev);
+	if (!in6_dev || in6_dev->cnf.forwarding || !in6_dev->cnf.accept_redirects)
+		return;
 
 	/* passed validation tests
 
@@ -943,7 +931,7 @@ int ndisc_rcv(struct sk_buff *skb, struct device *dev,
 
 				ipv6_addr_all_nodes(&maddr);
 				ndisc_send_na(dev, NULL, &maddr, &ifp->addr, 
-					      ifp->idev->router, 0, 1, 1);
+					      ifp->idev->cnf.forwarding, 0, 1, 1);
 				return 0;
 			}
 
@@ -964,7 +952,7 @@ int ndisc_rcv(struct sk_buff *skb, struct device *dev,
 
 				if (neigh) {
 					ndisc_send_na(dev, neigh, saddr, &ifp->addr, 
-						      ifp->idev->router, 1, inc, inc);
+						      ifp->idev->cnf.forwarding, 1, inc, inc);
 					neigh_release(neigh);
 				}
 			}
@@ -972,7 +960,7 @@ int ndisc_rcv(struct sk_buff *skb, struct device *dev,
 			struct inet6_dev *in6_dev = ipv6_get_idev(dev);
 			int addr_type = ipv6_addr_type(saddr);
 
-			if (in6_dev && in6_dev->router &&
+			if (in6_dev && in6_dev->cnf.forwarding &&
 			    (addr_type & IPV6_ADDR_UNICAST) &&
 			    pneigh_lookup(&nd_tbl, &msg->target, dev, 0)) {
 				int inc = ipv6_addr_type(daddr)&IPV6_ADDR_MULTICAST;
@@ -1053,21 +1041,15 @@ int ndisc_rcv(struct sk_buff *skb, struct device *dev,
 			neigh_release(neigh);
 		}
 		break;
+
+	case NDISC_ROUTER_ADVERTISEMENT:
+		ndisc_router_discovery(skb);
+		break;
+
+	case NDISC_REDIRECT:
+		ndisc_redirect_rcv(skb);
+		break;
 	};
-
-	if (ipv6_config.forwarding == 0) {
-		switch (msg->icmph.icmp6_type) {
-		case NDISC_ROUTER_ADVERTISEMENT:
-			if (ipv6_config.accept_ra)
-				ndisc_router_discovery(skb);
-			break;
-
-		case NDISC_REDIRECT:
-			if (ipv6_config.accept_redirects)
-				ndisc_redirect_rcv(skb);
-			break;
-		};
-	}
 
 	return 0;
 }
@@ -1177,6 +1159,8 @@ __initfunc(void ndisc_init(struct net_proto_family *ops))
 	sk->allocation = GFP_ATOMIC;
 	sk->net_pinfo.af_inet6.hop_limit = 255;
 	sk->net_pinfo.af_inet6.priority  = 15;
+	/* Do not loopback ndisc messages */
+	sk->net_pinfo.af_inet6.mc_loop = 0;
 	sk->num = 256;
 
         /*
@@ -1191,7 +1175,7 @@ __initfunc(void ndisc_init(struct net_proto_family *ops))
 #endif
 #endif
 #ifdef CONFIG_SYSCTL
-	nd_tbl.parms.sysctl_table = neigh_sysctl_register(NULL, &nd_tbl.parms, NET_IPV6, NET_IPV6_NEIGH, "ipv6");
+	neigh_sysctl_register(NULL, &nd_tbl.parms, NET_IPV6, NET_IPV6_NEIGH, "ipv6");
 #endif
 }
 

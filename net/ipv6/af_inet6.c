@@ -116,8 +116,8 @@ static int inet6_create(struct socket *sock, int protocol)
 	sk->timer.data		= (unsigned long)sk;
 	sk->timer.function	= &net_timer;
 
-	sk->net_pinfo.af_inet6.hop_limit  = ipv6_config.hop_limit;
-	sk->net_pinfo.af_inet6.mcast_hops = IPV6_DEFAULT_MCASTHOPS;
+	sk->net_pinfo.af_inet6.hop_limit  = -1;
+	sk->net_pinfo.af_inet6.mcast_hops = -1;
 	sk->net_pinfo.af_inet6.mc_loop	  = 1;
 
 	/* Init the ipv4 part of the socket since we can have sockets

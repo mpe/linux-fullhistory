@@ -74,81 +74,29 @@ struct rtnetlink_link * rtnetlink_links[NPROTO];
 #define _X	2	/* exclusive access to tables required */
 #define _G	4	/* GET request */
 
-static unsigned char rtm_properties[RTM_MAX-RTM_BASE+1] =
+static const int rtm_min[(RTM_MAX+1-RTM_BASE)/4] =
 {
-	_S|_X,		/* RTM_NEWLINK */
-	_S|_X,		/* RTM_DELLINK */
-	_G,		/* RTM_GETLINK */
-	0,
-
-	_S|_X,		/* RTM_NEWADDR */
-	_S|_X,		/* RTM_DELADDR */
-	_G,		/* RTM_GETADDR */
-	0,
-
-	_S|_X,		/* RTM_NEWROUTE */
-	_S|_X,		/* RTM_DELROUTE */
-	_G,		/* RTM_GETROUTE */
-	0,
-
-	_S|_X,		/* RTM_NEWNEIGH */
-	_S|_X,		/* RTM_DELNEIGH */
-	_G,		/* RTM_GETNEIGH */
-	0,
-
-	_S|_X, 		/* RTM_NEWRULE */
-	_S|_X,		/* RTM_DELRULE */
-	_G,		/* RTM_GETRULE */
-	0
+	NLMSG_LENGTH(sizeof(struct ifinfomsg)),
+	NLMSG_LENGTH(sizeof(struct ifaddrmsg)),
+	NLMSG_LENGTH(sizeof(struct rtmsg)),
+	NLMSG_LENGTH(sizeof(struct ndmsg)),
+	NLMSG_LENGTH(sizeof(struct rtmsg)),
+	NLMSG_LENGTH(sizeof(struct tcmsg)),
+	NLMSG_LENGTH(sizeof(struct tcmsg)),
+	NLMSG_LENGTH(sizeof(struct tcmsg))
 };
 
-static int rtnetlink_get_rta(struct kern_rta *rta, struct rtattr *attr, int attrlen)
+static const int rta_max[(RTM_MAX+1-RTM_BASE)/4] =
 {
-	void **rta_data = (void**)rta;
-
-	while (RTA_OK(attr, attrlen)) {
-		int type = attr->rta_type;
-		if (type != RTA_UNSPEC) {
-			if (type > RTA_MAX)
-				return -EINVAL;
-			rta_data[type-1] = RTA_DATA(attr);
-		}
-		attr = RTA_NEXT(attr, attrlen);
-	}
-	return 0;
-}
-
-static int rtnetlink_get_ifa(struct kern_ifa *ifa, struct rtattr *attr, int attrlen)
-{
-	void **ifa_data = (void**)ifa;
-
-	while (RTA_OK(attr, attrlen)) {
-		int type = attr->rta_type;
-		if (type != IFA_UNSPEC) {
-			if (type > IFA_MAX)
-				return -EINVAL;
-			ifa_data[type-1] = RTA_DATA(attr);
-		}
-		attr = RTA_NEXT(attr, attrlen);
-	}
-	return 0;
-}
-
-static int rtnetlink_get_ga(struct rtattr **rta, int sz,
-			    struct rtattr *attr, int attrlen)
-{
-	while (RTA_OK(attr, attrlen)) {
-		int type = attr->rta_type;
-		if (type > 0) {
-			if (type > sz)
-				return -EINVAL;
-			rta[type-1] = attr;
-		}
-		attr = RTA_NEXT(attr, attrlen);
-	}
-	return 0;
-}
-
+	IFLA_MAX,
+	IFA_MAX,
+	RTA_MAX,
+	NDA_MAX,
+	RTA_MAX,
+	TCA_MAX,
+	TCA_MAX,
+	TCA_MAX
+};
 
 void __rta_fill(struct sk_buff *skb, int attrtype, int attrlen, const void *data)
 {
@@ -161,6 +109,7 @@ void __rta_fill(struct sk_buff *skb, int attrtype, int attrlen, const void *data
 	memcpy(RTA_DATA(rta), data, attrlen);
 }
 
+#ifdef CONFIG_RTNL_OLD_IFINFO
 static int rtnetlink_fill_ifinfo(struct sk_buff *skb, struct device *dev,
 				 int type, pid_t pid, u32 seq)
 {
@@ -195,9 +144,55 @@ static int rtnetlink_fill_ifinfo(struct sk_buff *skb, struct device *dev,
 
 nlmsg_failure:
 rtattr_failure:
-	skb_put(skb, b - skb->tail);
+	skb_trim(skb, b - skb->data);
 	return -1;
 }
+#else
+static int rtnetlink_fill_ifinfo(struct sk_buff *skb, struct device *dev,
+				 int type, pid_t pid, u32 seq)
+{
+	struct ifinfomsg *r;
+	struct nlmsghdr  *nlh;
+	unsigned char	 *b = skb->tail;
+
+	nlh = NLMSG_PUT(skb, pid, seq, type, sizeof(*r));
+	if (pid) nlh->nlmsg_flags |= NLM_F_MULTI;
+	r = NLMSG_DATA(nlh);
+	r->ifi_family = AF_UNSPEC;
+	r->ifi_type = dev->type;
+	r->ifi_index = dev->ifindex;
+	r->ifi_flags = dev->flags;
+	r->ifi_change = ~0U;
+
+	RTA_PUT(skb, IFLA_IFNAME, strlen(dev->name)+1, dev->name);
+	if (dev->addr_len) {
+		RTA_PUT(skb, IFLA_ADDRESS, dev->addr_len, dev->dev_addr);
+		RTA_PUT(skb, IFLA_BROADCAST, dev->addr_len, dev->broadcast);
+	}
+	if (1) {
+		unsigned mtu = dev->mtu;
+		RTA_PUT(skb, IFLA_MTU, sizeof(mtu), &mtu);
+	}
+	if (dev->ifindex != dev->iflink)
+		RTA_PUT(skb, IFLA_LINK, sizeof(int), &dev->iflink);
+	if (dev->qdisc_sleeping->ops)
+		RTA_PUT(skb, IFLA_QDISC,
+			strlen(dev->qdisc_sleeping->ops->id) + 1,
+			dev->qdisc_sleeping->ops->id);
+	if (dev->get_stats) {
+		struct net_device_stats *stats = dev->get_stats(dev);
+		if (stats)
+			RTA_PUT(skb, IFLA_STATS, sizeof(*stats), stats);
+	}
+	nlh->nlmsg_len = skb->tail - b;
+	return skb->len;
+
+nlmsg_failure:
+rtattr_failure:
+	skb_trim(skb, b - skb->data);
+	return -1;
+}
+#endif
 
 int rtnetlink_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb)
 {
@@ -242,12 +237,15 @@ int rtnetlink_dump_all(struct sk_buff *skb, struct netlink_callback *cb)
 	return skb->len;
 }
 
-
 void rtmsg_ifinfo(int type, struct device *dev)
 {
 	struct sk_buff *skb;
+#ifdef CONFIG_RTNL_OLD_IFINFO
 	int size = NLMSG_SPACE(sizeof(struct ifinfomsg)+
 			       RTA_LENGTH(sizeof(struct net_device_stats)));
+#else
+	int size = NLMSG_GOODSIZE;
+#endif
 
 	skb = alloc_skb(size, GFP_KERNEL);
 	if (!skb)
@@ -273,49 +271,68 @@ static int rtnetlink_done(struct netlink_callback *cb)
 extern __inline__ int
 rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh, int *errp)
 {
-	union {
-		struct kern_rta rta;
-		struct kern_ifa ifa;
-		struct rtattr	*ga[RTA_MAX-1];
-	} u;
-	struct rtmsg *rtm;
-	struct ifaddrmsg *ifm;
-	struct ndmsg *ndm;
+	struct rtnetlink_link *link;
+	struct rtnetlink_link *link_tab;
+	struct rtattr	*rta[RTATTR_MAX];
+
 	int exclusive = 0;
+	int sz_idx, kind;
+	int min_len;
 	int family;
 	int type;
 	int err;
 
+	/* Only requests are handled by kernel now */
 	if (!(nlh->nlmsg_flags&NLM_F_REQUEST))
 		return 0;
+
 	type = nlh->nlmsg_type;
+
+	/* A control message: ignore them */
 	if (type < RTM_BASE)
 		return 0;
+
+	/* Unknown message: reply with EINVAL */
 	if (type > RTM_MAX)
 		goto err_inval;
 
+	type -= RTM_BASE;
+
+	/* All the messages must have at least 1 byte length */
 	if (nlh->nlmsg_len < NLMSG_LENGTH(sizeof(struct rtgenmsg)))
 		return 0;
+
 	family = ((struct rtgenmsg*)NLMSG_DATA(nlh))->rtgen_family;
-	if (family > NPROTO || rtnetlink_links[family] == NULL) {
+	if (family > NPROTO) {
 		*errp = -EAFNOSUPPORT;
 		return -1;
 	}
-	if (rtm_properties[type-RTM_BASE]&_S) {
-		if (NETLINK_CREDS(skb)->uid) {
-			*errp = -EPERM;
-			return -1;
-		}
+
+	link_tab = rtnetlink_links[family];
+	if (link_tab == NULL)
+		link_tab = rtnetlink_links[AF_UNSPEC];
+	link = &link_tab[type];
+
+	sz_idx = type>>2;
+	kind = type&3;
+
+	if (kind != 2 && NETLINK_CREDS(skb)->uid) {
+		*errp = -EPERM;
+		return -1;
 	}
-	if (rtm_properties[type-RTM_BASE]&_G && nlh->nlmsg_flags&NLM_F_DUMP) {
-		if (rtnetlink_links[family][type-RTM_BASE].dumpit == NULL)
+
+	if (kind == 2 && nlh->nlmsg_flags&NLM_F_DUMP) {
+		if (link->dumpit == NULL)
+			link = &(rtnetlink_links[AF_UNSPEC][type]);
+
+		if (link->dumpit == NULL)
 			goto err_inval;
 
 		/* Super-user locks all the tables to get atomic snapshot */
 		if (NETLINK_CREDS(skb)->uid == 0 && nlh->nlmsg_flags&NLM_F_ATOMIC)
 			atomic_inc(&rtnl_rlockct);
 		if ((*errp = netlink_dump_start(rtnl, skb, nlh,
-						rtnetlink_links[family][type-RTM_BASE].dumpit,
+						link->dumpit,
 						rtnetlink_done)) != 0) {
 			if (NETLINK_CREDS(skb)->uid == 0 && nlh->nlmsg_flags&NLM_F_ATOMIC)
 				atomic_dec(&rtnl_rlockct);
@@ -324,68 +341,41 @@ rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh, int *errp)
 		skb_pull(skb, NLMSG_ALIGN(nlh->nlmsg_len));
 		return -1;
 	}
-	if (rtm_properties[type-RTM_BASE]&_X) {
+
+	if (kind != 2) {
 		if (rtnl_exlock_nowait()) {
 			*errp = 0;
 			return -1;
 		}
 		exclusive = 1;
 	}
-	
-	memset(&u, 0, sizeof(u));
 
-	switch (nlh->nlmsg_type) {
-	case RTM_NEWROUTE:
-	case RTM_DELROUTE:
-	case RTM_GETROUTE:
-	case RTM_NEWRULE:
-	case RTM_DELRULE:
-	case RTM_GETRULE:
-		rtm = NLMSG_DATA(nlh);
-		if (nlh->nlmsg_len < sizeof(*rtm))
-			goto err_inval;
+	memset(&rta, 0, sizeof(rta));
 
-		if (rtm->rtm_optlen &&
-		    rtnetlink_get_rta(&u.rta, RTM_RTA(rtm), rtm->rtm_optlen) < 0)
-			goto err_inval;
-		break;
-
-	case RTM_NEWADDR:
-	case RTM_DELADDR:
-	case RTM_GETADDR:
-		ifm = NLMSG_DATA(nlh);
-		if (nlh->nlmsg_len < sizeof(*ifm))
-			goto err_inval;
-
-		if (nlh->nlmsg_len > NLMSG_LENGTH(sizeof(*ifm)) &&
-		    rtnetlink_get_ifa(&u.ifa, IFA_RTA(ifm),
-				      nlh->nlmsg_len - NLMSG_LENGTH(sizeof(*ifm))) < 0)
-			goto err_inval;
-		break;
-	case RTM_NEWNEIGH:
-	case RTM_DELNEIGH:
-	case RTM_GETNEIGH:
-		ndm = NLMSG_DATA(nlh);
-		if (nlh->nlmsg_len < sizeof(*ndm))
-			goto err_inval;
-
-		if (nlh->nlmsg_len > NLMSG_LENGTH(sizeof(*ndm)) &&
-		    rtnetlink_get_ga(u.ga, NDA_MAX, NDA_RTA(ndm),
-				      nlh->nlmsg_len - NLMSG_LENGTH(sizeof(*ndm))) < 0)
-			goto err_inval;
-		break;
-
-	case RTM_NEWLINK:
-	case RTM_DELLINK:
-	case RTM_GETLINK:
-		/* Not urgent and even not necessary */
-	default:
+	min_len = rtm_min[sz_idx];
+	if (nlh->nlmsg_len < min_len)
 		goto err_inval;
+
+	if (nlh->nlmsg_len > min_len) {
+		int attrlen = nlh->nlmsg_len - NLMSG_ALIGN(min_len);
+		struct rtattr *attr = (void*)nlh + NLMSG_ALIGN(min_len);
+
+		while (RTA_OK(attr, attrlen)) {
+			unsigned flavor = attr->rta_type;
+			if (flavor) {
+				if (flavor > rta_max[sz_idx])
+					goto err_inval;
+				rta[flavor-1] = attr;
+			}
+			attr = RTA_NEXT(attr, attrlen);
+		}
 	}
 
-	if (rtnetlink_links[family][type-RTM_BASE].doit == NULL)
+	if (link->doit == NULL)
+		link = &(rtnetlink_links[AF_UNSPEC][type]);
+	if (link->doit == NULL)
 		goto err_inval;
-	err = rtnetlink_links[family][type-RTM_BASE].doit(skb, nlh, (void *)&u);
+	err = link->doit(skb, nlh, (void *)&rta);
 
 	if (exclusive)
 		rtnl_exunlock();
@@ -480,8 +470,8 @@ static struct rtnetlink_link link_rtnetlink_table[RTM_MAX-RTM_BASE+1] =
 	{ NULL,			rtnetlink_dump_all,	},
 	{ NULL,			NULL,			},
 
-	{ NULL,			NULL,			},
-	{ NULL,			NULL,			},
+	{ neigh_add,		NULL,			},
+	{ neigh_delete,		NULL,			},
 	{ NULL,			neigh_dump_info,	},
 	{ NULL,			NULL,			},
 

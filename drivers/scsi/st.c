@@ -2846,11 +2846,18 @@ st_ioctl(struct inode * inode,struct file * file,
 	 }
        }
 
-       i = flush_buffer(inode, file, /* mtc.mt_op == MTSEEK || */
-			mtc.mt_op == MTREW || mtc.mt_op == MTOFFL ||
-			mtc.mt_op == MTRETEN || mtc.mt_op == MTEOM ||
-			mtc.mt_op == MTLOCK || mtc.mt_op == MTLOAD ||
-			mtc.mt_op == MTCOMPRESSION);
+       if (mtc.mt_op == MTSEEK) {
+	   /* Old position must be restored if partition will be changed */
+	   i = !STp->can_partitions ||
+	       (STp->new_partition != STp->partition);
+       }
+       else {
+	   i = mtc.mt_op == MTREW || mtc.mt_op == MTOFFL ||
+	       mtc.mt_op == MTRETEN || mtc.mt_op == MTEOM ||
+	       mtc.mt_op == MTLOCK || mtc.mt_op == MTLOAD ||
+	       mtc.mt_op == MTCOMPRESSION;
+       }
+       i = flush_buffer(inode, file, i);
        if (i < 0)
 	 return i;
      }

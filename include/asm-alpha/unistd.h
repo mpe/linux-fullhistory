@@ -303,7 +303,7 @@
 #define __NR_utimes			363
 #define __NR_getrusage			364
 #define __NR_wait4			365
-
+#define __NR_adjtimex			366
 
 
 #if defined(__LIBRARY__) && defined(__GNUC__)

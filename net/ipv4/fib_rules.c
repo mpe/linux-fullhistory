@@ -45,10 +45,14 @@
 
 #define FRprintk(a...)
 
+#ifndef CONFIG_RTNL_OLD_IFINFO
+#define RTA_IFNAME RTA_IIF
+#endif
+
 struct fib_rule
 {
 	struct fib_rule *r_next;
-	unsigned	r_preference;
+	u32		r_preference;
 	unsigned char	r_table;
 	unsigned char	r_action;
 	unsigned char	r_dst_len;
@@ -72,19 +76,19 @@ static struct fib_rule *fib_rules = &local_rule;
 
 int inet_rtm_delrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 {
-	struct kern_rta *rta = arg;
+	struct rtattr **rta = arg;
 	struct rtmsg *rtm = NLMSG_DATA(nlh);
 	struct fib_rule *r, **rp;
 
 	for (rp=&fib_rules; (r=*rp) != NULL; rp=&r->r_next) {
-		if ((!rta->rta_src || memcmp(rta->rta_src, &r->r_src, 4) == 0) &&
+		if ((!rta[RTA_SRC-1] || memcmp(RTA_DATA(rta[RTA_SRC-1]), &r->r_src, 4) == 0) &&
 		    rtm->rtm_src_len == r->r_src_len &&
 		    rtm->rtm_dst_len == r->r_dst_len &&
-		    (!rta->rta_dst || memcmp(rta->rta_dst, &r->r_dst, 4) == 0) &&
+		    (!rta[RTA_DST-1] || memcmp(RTA_DATA(rta[RTA_DST-1]), &r->r_dst, 4) == 0) &&
 		    rtm->rtm_tos == r->r_tos &&
 		    rtm->rtm_type == r->r_action &&
-		    (!rta->rta_priority || *rta->rta_priority == r->r_preference) &&
-		    (!rta->rta_ifname || strcmp(rta->rta_ifname, r->r_ifname) == 0) &&
+		    (!rta[RTA_PRIORITY-1] || memcmp(RTA_DATA(rta[RTA_PRIORITY-1]), &r->r_preference, 4) == 0) &&
+		    (!rta[RTA_IFNAME-1] || strcmp(RTA_DATA(rta[RTA_IFNAME-1]), r->r_ifname) == 0) &&
 		    (!rtm->rtm_table || (r && rtm->rtm_table == r->r_table))) {
 			*rp = r->r_next;
 			if (r != &default_rule && r != &main_rule && r != &local_rule)
@@ -110,13 +114,16 @@ static struct fib_table *fib_empty_table(void)
 
 int inet_rtm_newrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 {
-	struct kern_rta *rta = arg;
+	struct rtattr **rta = arg;
 	struct rtmsg *rtm = NLMSG_DATA(nlh);
 	struct fib_rule *r, *new_r, **rp;
 	unsigned char table_id;
 
 	if (rtm->rtm_src_len > 32 || rtm->rtm_dst_len > 32 ||
 	    (rtm->rtm_tos & ~IPTOS_TOS_MASK))
+		return -EINVAL;
+
+	if (rta[RTA_IFNAME-1] && RTA_PAYLOAD(rta[RTA_IFNAME-1]) > IFNAMSIZ)
 		return -EINVAL;
 
 	table_id = rtm->rtm_table;
@@ -133,12 +140,12 @@ int inet_rtm_newrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 	if (!new_r)
 		return -ENOMEM;
 	memset(new_r, 0, sizeof(*new_r));
-	if (rta->rta_src)
-		memcpy(&new_r->r_src, rta->rta_src, 4);
-	if (rta->rta_dst)
-		memcpy(&new_r->r_dst, rta->rta_dst, 4);
-	if (rta->rta_gw)
-		memcpy(&new_r->r_srcmap, rta->rta_gw, 4);
+	if (rta[RTA_SRC-1])
+		memcpy(&new_r->r_src, RTA_DATA(rta[RTA_SRC-1]), 4);
+	if (rta[RTA_DST-1])
+		memcpy(&new_r->r_dst, RTA_DATA(rta[RTA_DST-1]), 4);
+	if (rta[RTA_GATEWAY-1])
+		memcpy(&new_r->r_srcmap, RTA_DATA(rta[RTA_GATEWAY-1]), 4);
 	new_r->r_src_len = rtm->rtm_src_len;
 	new_r->r_dst_len = rtm->rtm_dst_len;
 	new_r->r_srcmask = inet_make_mask(rtm->rtm_src_len);
@@ -146,14 +153,15 @@ int inet_rtm_newrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 	new_r->r_tos = rtm->rtm_tos;
 	new_r->r_action = rtm->rtm_type;
 	new_r->r_flags = rtm->rtm_flags;
-	if (rta->rta_priority)
-		new_r->r_preference = *rta->rta_priority;
+	if (rta[RTA_PRIORITY-1])
+		memcpy(&new_r->r_preference, RTA_DATA(rta[RTA_PRIORITY-1]), 4);
 	new_r->r_table = table_id;
-	if (rta->rta_ifname) {
+	if (rta[RTA_IFNAME-1]) {
 		struct device *dev;
-		memcpy(new_r->r_ifname, rta->rta_ifname, IFNAMSIZ);
+		memcpy(new_r->r_ifname, RTA_DATA(rta[RTA_IFNAME-1]), IFNAMSIZ);
+		new_r->r_ifname[IFNAMSIZ-1] = 0;
 		new_r->r_ifindex = -1;
-		dev = dev_get(rta->rta_ifname);
+		dev = dev_get(new_r->r_ifname);
 		if (dev)
 			new_r->r_ifindex = dev->ifindex;
 	}
@@ -314,9 +322,11 @@ extern __inline__ int inet_fill_rule(struct sk_buff *skb,
 	rtm->rtm_table = r->r_table;
 	rtm->rtm_protocol = 0;
 	rtm->rtm_scope = 0;
+#ifdef CONFIG_RTNL_OLD_IFINFO
 	rtm->rtm_nhs = 0;
-	rtm->rtm_type = r->r_action;
 	rtm->rtm_optlen = 0;
+#endif
+	rtm->rtm_type = r->r_action;
 	rtm->rtm_flags = r->r_flags;
 
 	if (r->r_dst_len)

@@ -9,10 +9,11 @@
  *             by Riccardo Facchetti
  */
 
-#include <linux/fs.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/malloc.h>
+#include <linux/fs.h>
+#include <linux/file.h>
 #include <linux/stat.h>
 #include <linux/fcntl.h>
 #include <linux/dcache.h>
@@ -621,31 +622,26 @@ smb_newconn(struct smb_sb_info *server, struct smb_conn_opt *opt)
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_newconn: fd=%d, pid=%d\n", opt->fd, current->pid);
 #endif
-	error = -EBADF;
-	if (opt->fd < 0 || opt->fd >= NR_OPEN)
-		goto out;
-	if (!(filp = current->files->fd[opt->fd]))
-		goto out;
-	if (!smb_valid_socket(filp->f_dentry->d_inode))
-		goto out;
-
-	error = -EACCES;
-	if ((current->uid != server->mnt->mounted_uid) && !suser())
-		goto out;
-
 	/*
 	 * Make sure we don't already have a pid ...
 	 */
 	error = -EINVAL;
 	if (server->conn_pid)
-	{
-		printk("SMBFS: invalid ioctl call\n");
 		goto out;
-	}
-	server->conn_pid = current->pid;
 
-	filp->f_count += 1;
+	error = -EACCES;
+	if (current->uid != server->mnt->mounted_uid && !suser())
+		goto out;
+
+	error = -EBADF;
+	filp = fget(opt->fd);
+	if (!filp)
+		goto out;
+	if (!smb_valid_socket(filp->f_dentry->d_inode))
+		goto out_putf;
+
 	server->sock_file = filp;
+	server->conn_pid = current->pid;
 	smb_catch_keepalive(server);
 	server->opt = *opt;
 	server->generation += 1;
@@ -659,6 +655,10 @@ server->opt.protocol, server->opt.max_xmit, server->conn_pid);
 out:
 	wake_up_interruptible(&server->wait);
 	return error;
+
+out_putf:
+	fput(filp);
+	goto out;
 }
 
 /* smb_setup_header: We completely set up the packet. You only have to

@@ -613,8 +613,12 @@ void ide_add_proc_entries(ide_drive_t *drive, ide_proc_entry_t *p)
 	if (!drive->proc || !p)
 		return;
 	while (p->name != NULL) {
-		ent = create_proc_entry(p->name, 0, drive->proc);
+		mode_t mode = S_IFREG|S_IRUSR;
+		if (!strcmp(p->name,"settings"))
+			mode |= S_IWUSR;
+		ent = create_proc_entry(p->name, mode, drive->proc);
 		if (!ent) return;
+		ent->nlink = 1;
 		ent->data = drive;
 		ent->read_proc = p->read_proc;
 		ent->write_proc = p->write_proc;
@@ -674,8 +678,9 @@ static void create_proc_ide_interfaces (struct proc_dir_entry *parent)
 		if (!hwif_ent) return;
 #ifdef CONFIG_PCI
 		if (!IDE_PCI_DEVID_EQ(hwif->pci_devid, IDE_PCI_DEVID_NULL)) {
-			ent = create_proc_entry("config", 0, hwif_ent);
+			ent = create_proc_entry("config", S_IFREG|S_IRUSR|S_IWUSR, hwif_ent);
 			if (!ent) return;
+			ent->nlink = 1;
 			ent->data = hwif;
 			ent->read_proc  = proc_ide_read_config;
 			ent->write_proc = proc_ide_write_config;;

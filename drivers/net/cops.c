@@ -113,8 +113,8 @@ static int irq = 0;		/* Default IRQ */
  *	the same and just have different names or only have minor differences
  *	such as more IO ports. As this driver is tested it will
  *	become more clear on exactly what cards are supported. The driver
- *	defaults to using Dayna mode. To change the drivers mode adjust
- *	drivers/net/CONFIG, and the line COPS_OPTS = -DDAYNA to -DTANGENT.
+ *	defaults to using Dayna mode. To change the drivers mode, simply
+ *	select Dayna or Tangent mode when configuring the kernel.
  *
  *      This driver should support:
  *      TANGENT driver mode:

@@ -108,20 +108,36 @@ static spinlock_t page_alloc_lock;
  * but this had better return false if any reasonable "get_free_page()"
  * allocation could currently fail..
  *
- * Right now we just require that the highest memory order should
- * have at least two entries. Whether this makes sense or not
- * under real load is to be tested, but it also gives us some
- * guarantee about memory fragmentation (essentially, it means
- * that there should be at least two large areas available).
+ * Currently we approve of the following situations:
+ * - the highest memory order has two entries
+ * - the highest memory order has one free entry and:
+ *	- the next-highest memory order has two free entries
+ * - the highest memory order has one free entry and:
+ *	- the next-highest memory order has one free entry
+ *	- the next-next-highest memory order has two free entries
+ *
+ * [previously, there had to be two entries of the highest memory
+ *  order, but this lead to problems on large-memory machines.]
  */
 int free_memory_available(void)
 {
-	int retval;
+	int i, retval = 0;
 	unsigned long flags;
-	struct free_area_struct * last = free_area + NR_MEM_LISTS - 1;
+	struct free_area_struct * list = NULL;
 
 	spin_lock_irqsave(&page_alloc_lock, flags);
-	retval =  (last->next != memory_head(last)) && (last->next->next != memory_head(last));
+	/* We fall through the loop if the list contains one
+	 * item. -- thanks to Colin Plumb <colin@nyx.net>
+	 */
+	for (i = 1; i < 4; ++i) {
+		list = free_area + NR_MEM_LISTS - i;
+		if (list->next == memory_head(list))
+			break;
+		if (list->next->next == memory_head(list))
+			continue;
+		retval = 1;
+		break;
+	}
 	spin_unlock_irqrestore(&page_alloc_lock, flags);
 	return retval;
 }

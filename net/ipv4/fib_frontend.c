@@ -93,7 +93,7 @@ void fib_flush(void)
 #endif /* CONFIG_IP_MULTIPLE_TABLES */
 
 	if (flushed)
-		rt_cache_flush(RT_FLUSH_DELAY);
+		rt_cache_flush(-1);
 }
 
 
@@ -290,27 +290,51 @@ int ip_rt_ioctl(unsigned int cmd, void *arg)
 
 #ifdef CONFIG_RTNETLINK
 
+static int inet_check_attr(struct rtmsg *r, struct rtattr **rta)
+{
+	int i;
+
+	for (i=1; i<=RTA_MAX; i++) {
+		struct rtattr *attr = rta[i-1];
+		if (attr) {
+			if (RTA_PAYLOAD(attr) < 4)
+				return -EINVAL;
+#ifndef	CONFIG_RTNL_OLD_IFINFO
+			if (i != RTA_MULTIPATH && i != RTA_METRICS)
+#endif
+			rta[i-1] = (struct rtattr*)RTA_DATA(attr);
+		}
+	}
+	return 0;
+}
+
 int inet_rtm_delroute(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 {
 	struct fib_table * tb;
-	struct kern_rta *rta = arg;
+	struct rtattr **rta = arg;
 	struct rtmsg *r = NLMSG_DATA(nlh);
+
+	if (inet_check_attr(r, rta))
+		return -EINVAL;
 
 	tb = fib_get_table(r->rtm_table);
 	if (tb)
-		return tb->tb_delete(tb, r, rta, nlh, &NETLINK_CB(skb));
+		return tb->tb_delete(tb, r, (struct kern_rta*)rta, nlh, &NETLINK_CB(skb));
 	return -ESRCH;
 }
 
 int inet_rtm_newroute(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 {
 	struct fib_table * tb;
-	struct kern_rta *rta = arg;
+	struct rtattr **rta = arg;
 	struct rtmsg *r = NLMSG_DATA(nlh);
+
+	if (inet_check_attr(r, rta))
+		return -EINVAL;
 
 	tb = fib_new_table(r->rtm_table);
 	if (tb)
-		return tb->tb_insert(tb, r, rta, nlh, &NETLINK_CB(skb));
+		return tb->tb_insert(tb, r, (struct kern_rta*)rta, nlh, &NETLINK_CB(skb));
 	return -ENOBUFS;
 }
 
@@ -370,7 +394,7 @@ static void fib_magic(int cmd, int type, u32 dst, int dst_len, struct in_ifaddr 
 
 	req.nlh.nlmsg_len = sizeof(req);
 	req.nlh.nlmsg_type = cmd;
-	req.nlh.nlmsg_flags = NLM_F_REQUEST|NLM_F_CREATE;
+	req.nlh.nlmsg_flags = NLM_F_REQUEST|NLM_F_CREATE|NLM_F_APPEND;
 	req.nlh.nlmsg_pid = 0;
 	req.nlh.nlmsg_seq = 0;
 
@@ -494,11 +518,11 @@ static int fib_inetaddr_event(struct notifier_block *this, unsigned long event, 
 	switch (event) {
 	case NETDEV_UP:
 		fib_add_ifaddr(ifa);
-		rt_cache_flush(2*HZ);
+		rt_cache_flush(-1);
 		break;
 	case NETDEV_DOWN:
 		fib_del_ifaddr(ifa);
-		rt_cache_flush(1*HZ);
+		rt_cache_flush(-1);
 		break;
 	}
 	return NOTIFY_DONE;
@@ -520,7 +544,7 @@ static int fib_netdev_event(struct notifier_block *this, unsigned long event, vo
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
 		fib_sync_up(dev);
 #endif
-		rt_cache_flush(2*HZ);
+		rt_cache_flush(-1);
 		break;
 	case NETDEV_DOWN:
 		if (fib_sync_down(0, dev, 0))
@@ -538,7 +562,7 @@ static int fib_netdev_event(struct notifier_block *this, unsigned long event, vo
 		break;
 	case NETDEV_CHANGEMTU:
 	case NETDEV_CHANGE:
-		rt_cache_flush(1*HZ);
+		rt_cache_flush(0);
 		break;
 	}
 	return NOTIFY_DONE;

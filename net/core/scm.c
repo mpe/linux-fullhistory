@@ -106,6 +106,7 @@ static int scm_fp_copy(struct cmsghdr *cmsg, struct scm_fp_list **fplp)
 void __scm_destroy(struct scm_cookie *scm)
 {
 	struct scm_fp_list *fpl = scm->fp;
+	struct file *file;
 	int i;
 
 	if (fpl) {
@@ -113,6 +114,13 @@ void __scm_destroy(struct scm_cookie *scm)
 		for (i=fpl->count-1; i>=0; i--)
 			fput(fpl->fp[i]);
 		kfree(fpl);
+	}
+
+	file = scm->file;
+	if (file) {
+		scm->sock = NULL;
+		scm->file = NULL;
+		fput(file);
 	}
 }
 
@@ -126,11 +134,10 @@ extern __inline__ int not_one_bit(unsigned val)
 
 int __scm_send(struct socket *sock, struct msghdr *msg, struct scm_cookie *p)
 {
-	int err;
 	struct cmsghdr *cmsg;
 	struct file *file;
-	int acc_fd;
-	unsigned scm_flags=0;
+	int acc_fd, err;
+	unsigned int scm_flags=0;
 
 	for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg))
 	{
@@ -162,14 +169,19 @@ int __scm_send(struct socket *sock, struct msghdr *msg, struct scm_cookie *p)
 			memcpy(&acc_fd, CMSG_DATA(cmsg), sizeof(int));
 			p->sock = NULL;
 			if (acc_fd != -1) {
-				if (acc_fd < 0 || acc_fd >= NR_OPEN ||
-				    (file=current->files->fd[acc_fd])==NULL)
-					return -EBADF;
-				if (!file->f_dentry->d_inode || !file->f_dentry->d_inode->i_sock)
-					return -ENOTSOCK;
+				err = -EBADF;
+				file = fget(acc_fd);
+				if (!file)
+					goto error;
+				p->file = file;
+				err = -ENOTSOCK;
+				if (!file->f_dentry->d_inode ||
+				    !file->f_dentry->d_inode->i_sock)
+					goto error;
 				p->sock = &file->f_dentry->d_inode->u.socket_i;
+				err = -EINVAL;
 				if (p->sock->state != SS_UNCONNECTED) 
-					return -EINVAL;
+					goto error;
 			}
 			scm_flags |= MSG_SYN;
 			break;

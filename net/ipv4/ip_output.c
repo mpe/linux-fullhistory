@@ -26,6 +26,7 @@
  *		Alexander Demenshin:	Missing sk/skb free in ip_queue_xmit
  *					(in case if packet not accepted by
  *					output firewall rules)
+ *		Mike McLagan	:	Routing by source
  *		Alexey Kuznetsov:	use new route cache
  *		Andi Kleen:		Fix broken PMTU recovery and remove
  *					some redundant tests.
@@ -92,14 +93,7 @@ int ip_build_pkt(struct sk_buff *skb, struct sock *sk, u32 saddr, u32 daddr,
 		daddr = opt->faddr;
 
 	err = ip_route_output(&rt, daddr, saddr, RT_TOS(sk->ip_tos) |
-#ifdef CONFIG_IP_TRANSPARENT_PROXY
-			      /* Rationale: this routine is used only
-				 by TCP, so that validity of saddr is already
-				 checked and we can safely use RTO_TPROXY.
-			       */
-			      RTO_TPROXY |
-#endif
-			      (sk->localroute||0), sk->bound_dev_if);
+			      RTO_CONN | sk->localroute, sk->bound_dev_if);
 	if (err)
 	{
 		ip_statistics.IpOutNoRoutes++;
@@ -133,7 +127,7 @@ int ip_build_pkt(struct sk_buff *skb, struct sock *sk, u32 saddr, u32 daddr,
 	iph->tos      = sk->ip_tos;
 	iph->frag_off = 0;
 	if (sk->ip_pmtudisc == IP_PMTUDISC_WANT && 
-		!(rt->rt_flags & RTCF_NOPMTUDISC))
+		!(rt->u.dst.mxlock&(1<<RTAX_MTU)))
 		iph->frag_off |= htons(IP_DF);
 	iph->ttl      = sk->ip_ttl;
 	iph->daddr    = rt->rt_dst;
@@ -175,7 +169,7 @@ int ip_build_header(struct sk_buff *skb, struct sock *sk)
 		sk->dst_cache = NULL;
 		ip_rt_put(rt);
 		err = ip_route_output(&rt, daddr, sk->saddr, RT_TOS(sk->ip_tos) |
-				      (sk->localroute||0), sk->bound_dev_if);
+				      RTO_CONN | sk->localroute, sk->bound_dev_if);
 		if (err)
 			return err;
 		sk->dst_cache = &rt->u.dst;
@@ -209,7 +203,7 @@ int ip_build_header(struct sk_buff *skb, struct sock *sk)
 	iph->tos      = sk->ip_tos;
 	iph->frag_off = 0;
 	if (sk->ip_pmtudisc == IP_PMTUDISC_WANT &&
-		!(rt->rt_flags & RTCF_NOPMTUDISC))
+		!(rt->u.dst.mxlock&(1<<RTAX_MTU)))
 		iph->frag_off |= htons(IP_DF);
 	iph->ttl      = sk->ip_ttl;
 	iph->daddr    = rt->rt_dst;
@@ -249,6 +243,7 @@ int ip_mc_output(struct sk_buff *skb)
 #endif
 
 	skb->dev = dev;
+	skb->protocol = __constant_htons(ETH_P_IP);
 
 	/*
 	 *	Multicasts are looped back for other local users
@@ -362,7 +357,8 @@ void ip_queue_xmit(struct sk_buff *skb)
 		   Essentially it is "ip_reroute_output" function. --ANK
 		*/
 		struct rtable *nrt;
-		if (ip_route_output(&nrt, rt->key.dst, rt->key.src, rt->key.tos, 
+		if (ip_route_output(&nrt, rt->key.dst, rt->key.src,
+				    rt->key.tos | RTO_CONN, 
 				    sk?sk->bound_dev_if:0)) 
 			goto drop;
 		skb->dst = &nrt->u.dst;
@@ -488,7 +484,7 @@ int ip_build_xmit(struct sock *sk,
 #endif	
 
 	if (sk->ip_pmtudisc == IP_PMTUDISC_DONT ||
-	     rt->rt_flags&RTCF_NOPMTUDISC)
+	     (rt->u.dst.mxlock&(1<<RTAX_MTU)))
 		df = 0;
 
 	 

@@ -530,7 +530,7 @@ static int ipip_tunnel_xmit(struct sk_buff *skb, struct device *dev)
 	if (tunnel->err_count > 0) {
 		if (jiffies - tunnel->err_time < IPTUNNEL_ERR_TIMEO) {
 			tunnel->err_count--;
-			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0);
+			dst_link_failure(skb);
 		} else
 			tunnel->err_count = 0;
 	}
@@ -587,7 +587,7 @@ static int ipip_tunnel_xmit(struct sk_buff *skb, struct device *dev)
 	return 0;
 
 tx_error_icmp:
-	icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0);
+	dst_link_failure(skb);
 tx_error:
 	stats->tx_errors++;
 	dev_kfree_skb(skb);

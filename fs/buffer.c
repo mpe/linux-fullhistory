@@ -867,8 +867,7 @@ repeat:
 	/*
 	 * Convert a reserved page into buffers ... should happen only rarely.
 	 */
-	if (nr_free_pages > (min_free_pages >> 1) &&
-	    grow_buffers(GFP_ATOMIC, size)) {
+	if (grow_buffers(GFP_ATOMIC, size)) {
 #ifdef BUFFER_DEBUG
 printk("refill_freelist: used reserve page\n");
 #endif

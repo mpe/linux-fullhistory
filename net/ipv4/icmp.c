@@ -877,9 +877,9 @@ static void icmp_address_reply(struct icmphdr *icmph, struct sk_buff *skb, int l
 	struct in_ifaddr *ifa;
 	u32 mask;
 
-	if (!ipv4_config.log_martians ||
-	    !IS_ROUTER ||
-	    !in_dev || !in_dev->ifa_list ||
+	if (!in_dev || !in_dev->ifa_list ||
+	    !IN_DEV_LOG_MARTIANS(in_dev) ||
+	    !IN_DEV_FORWARD(in_dev) ||
 	    len < 4 ||
 	    !(rt->rt_flags&RTCF_DIRECTSRC))
 		return;

@@ -23,6 +23,8 @@
 #define SIOCGKEEPALIVE	(SIOCDEVPRIVATE+1)		/* Get keepalive timeout */
 #define SIOCSOUTFILL	(SIOCDEVPRIVATE+2)		/* Set outfill timeout */
 #define	SIOCGOUTFILL	(SIOCDEVPRIVATE+3)		/* Get outfill timeout */
+#define SIOCSLEASE	(SIOCDEVPRIVATE+4)		/* Set "leased" line type */
+#define	SIOCGLEASE	(SIOCDEVPRIVATE+5)		/* Get line type */
 
 
 #endif

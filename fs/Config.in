@@ -47,6 +47,9 @@ if [ "$CONFIG_INET" = "y" ]; then
 fi
 if [ "$CONFIG_IPX" != "n" ]; then
   tristate 'NCP filesystem support (to mount NetWare volumes)' CONFIG_NCP_FS
+  if [ "$CONFIG_NCP_FS" != "n" ]; then
+    source fs/ncpfs/Config.in
+  fi
 fi
 tristate 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS
 

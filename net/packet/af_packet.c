@@ -66,8 +66,8 @@
 #include <linux/module.h>
 #include <linux/init.h>
 
-#if defined(CONFIG_DLCI) || defined(CONFIG_DLCI_MODULE)
-#include <linux/if_frad.h>
+#ifdef CONFIG_INET
+#include <net/inet_common.h>
 #endif
 
 #ifdef CONFIG_BRIDGE
@@ -778,9 +778,8 @@ static int packet_recvmsg(struct socket *sock, struct msghdr *msg, int len,
 			  int flags, struct scm_cookie *scm)
 {
 	struct sock *sk = sock->sk;
-	int copied=0;
 	struct sk_buff *skb;
-	int err;
+	int copied, err;
 
 #if 0
 	/* What error should we return now? EUNATTACH? */
@@ -816,7 +815,7 @@ static int packet_recvmsg(struct socket *sock, struct msghdr *msg, int len,
 	 */
 
 	if(skb==NULL)
-		return err;
+		goto out;
 
 	/*
 	 *	You lose any data beyond the buffer you gave. If it worries a
@@ -824,7 +823,7 @@ static int packet_recvmsg(struct socket *sock, struct msghdr *msg, int len,
 	 */
 
 	copied = skb->len;
-	if(copied>len)
+	if (copied > len)
 	{
 		copied=len;
 		msg->msg_flags|=MSG_TRUNC;
@@ -833,9 +832,7 @@ static int packet_recvmsg(struct socket *sock, struct msghdr *msg, int len,
 	/* We can't use skb_copy_datagram here */
 	err = memcpy_toiovec(msg->msg_iov, skb->data, copied);
 	if (err)
-	{
-		return -EFAULT;
-	}
+		goto out_free;
 
 	sk->stamp=skb->stamp;
 
@@ -843,13 +840,15 @@ static int packet_recvmsg(struct socket *sock, struct msghdr *msg, int len,
 		memcpy(msg->msg_name, skb->cb, msg->msg_namelen);
 
 	/*
-	 *	Free or return the buffer as appropriate. Again this hides all the
-	 *	races and re-entrancy issues from us.
+	 *	Free or return the buffer as appropriate. Again this
+	 *	hides all the races and re-entrancy issues from us.
 	 */
+	err = copied;
 
+out_free:
 	skb_free_datagram(sk, skb);
-
-	return(copied);
+out:
+	return err;
 }
 
 #ifdef CONFIG_SOCK_PACKET
@@ -1117,7 +1116,9 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg
 				err = -EFAULT;
 			return err;
 		case SIOCGIFFLAGS:
+#ifndef CONFIG_INET
 		case SIOCSIFFLAGS:
+#endif
 		case SIOCGIFCONF:
 		case SIOCGIFMETRIC:
 		case SIOCSIFMETRIC:
@@ -1146,23 +1147,28 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg
 			return -ENOPKG;
 #endif						
 			
+#ifdef CONFIG_INET
+		case SIOCADDRT:
+		case SIOCDELRT:
+		case SIOCDARP:
+		case SIOCGARP:
+		case SIOCSARP:
+		case SIOCDRARP:
+		case SIOCGRARP:
+		case SIOCSRARP:
+		case SIOCGIFADDR:
+		case SIOCSIFADDR:
+		case SIOCGIFBRDADDR:
+		case SIOCSIFBRDADDR:
+		case SIOCGIFNETMASK:
+		case SIOCSIFNETMASK:
+		case SIOCGIFDSTADDR:
+		case SIOCSIFDSTADDR:
+		case SIOCSIFFLAGS:
 		case SIOCADDDLCI:
 		case SIOCDELDLCI:
-#ifdef CONFIG_DLCI
-			return(dlci_ioctl(cmd, (void *) arg));
+			return inet_dgram_ops.ioctl(sock, cmd, arg);
 #endif
-
-#ifdef CONFIG_DLCI_MODULE
-
-#ifdef CONFIG_KERNELD
-			if (dlci_ioctl_hook == NULL)
-				request_module("dlci");
-#endif
-
-			if (dlci_ioctl_hook)
-				return((*dlci_ioctl_hook)(cmd, (void *) arg));
-#endif
-			return -ENOPKG;
 
 		default:
 			if ((cmd >= SIOCDEVPRIVATE) &&

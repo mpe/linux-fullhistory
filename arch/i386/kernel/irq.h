@@ -22,8 +22,6 @@ void make_8259A_irq (unsigned int irq);
 
 extern unsigned int io_apic_irqs;
 
-#define IO_APIC_IRQ(x) ((1<<x) & io_apic_irqs)
-
 #define MAX_IRQ_SOURCES 128
 #define MAX_MP_BUSSES 32
 enum mp_bustype {
@@ -58,10 +56,18 @@ static inline void irq_exit(int cpu, unsigned int irq)
 	release_irqlock(cpu);
 }
 
+#define IO_APIC_IRQ(x) ((1<<x) & io_apic_irqs)
+
 #else
 
 #define irq_enter(cpu, irq)	(++local_irq_count[cpu])
 #define irq_exit(cpu, irq)	(--local_irq_count[cpu])
+
+/* Make these no-ops when not using SMP */
+#define enable_IO_APIC_irq(x)	do { } while (0)
+#define disable_IO_APIC_irq(x)	do { } while (0)
+
+#define IO_APIC_IRQ(x)	(0)
 
 #endif
 

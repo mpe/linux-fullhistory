@@ -8,6 +8,8 @@
  *
  */
 
+#include <linux/config.h>
+
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/socket.h>
@@ -23,10 +25,15 @@
 #include <net/sock.h>
 #include <linux/ipx.h>
 #include <linux/poll.h>
+#include <linux/file.h>
 
 #include <linux/ncp.h>
 #include <linux/ncp_fs.h>
 #include <linux/ncp_fs_sb.h>
+
+#ifdef CONFIG_NCPFS_PACKET_SIGNING
+#include "ncpsign_kernel.h"
+#endif
 
 static int _recv(struct socket *sock, unsigned char *ubuf, int size,
 		 unsigned flags)
@@ -178,6 +185,7 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size)
 			current->timeout = jiffies + timeout;
 			schedule();
 			remove_wait_queue(entry.wait_address, &entry.wait);
+			fput(file);
 			current->state = TASK_RUNNING;
 			if (signal_pending(current)) {
 				current->timeout = 0;
@@ -202,8 +210,10 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size)
 				continue;
 			} else
 				current->timeout = 0;
-		} else if (wait_table.nr)
+		} else if (wait_table.nr) {
 			remove_wait_queue(entry.wait_address, &entry.wait);
+			fput(file);
+		}
 		current->state = TASK_RUNNING;
 
 		/* Get the header from the next packet using a peek, so keep it
@@ -302,6 +312,12 @@ static int ncp_do_request(struct ncp_server *server, int size)
 	if (!ncp_conn_valid(server)) {
 		return -EIO;
 	}
+#ifdef CONFIG_NCPFS_PACKET_SIGNING
+	if (server->sign_active)
+	{
+		sign_packet(server, &size);
+	}
+#endif /* CONFIG_NCPFS_PACKET_SIGNING */
 	result = do_ncp_rpc_call(server, size);
 
 	DDPRINTK(KERN_DEBUG "do_ncp_rpc_call returned %d\n", result);

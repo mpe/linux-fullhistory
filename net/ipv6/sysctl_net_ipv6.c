@@ -11,83 +11,12 @@
 #include <net/ipv6.h>
 #include <net/addrconf.h>
 
-struct ipv6_config ipv6_config =
-{
-	0,				/* forwarding		*/
-	IPV6_DEFAULT_HOPLIMIT,		/* hop limit		*/
-	1,				/* accept RAs		*/
-	1,				/* accept redirects	*/
-
-	1,				/* autoconfiguration	*/
-	1,				/* dad transmits	*/
-	MAX_RTR_SOLICITATIONS,		/* router solicits	*/
-	RTR_SOLICITATION_INTERVAL,	/* rtr solicit interval	*/
-	MAX_RTR_SOLICITATION_DELAY,	/* rtr solicit delay	*/
-
-	60*HZ,				/* rt cache timeout	*/
-	30*HZ,				/* rt gc period		*/
-};
+extern ctl_table ipv6_route_table[];
 
 #ifdef CONFIG_SYSCTL
 
-int ipv6_sysctl_forwarding(ctl_table *ctl, int write, struct file * filp,
-			   void *buffer, size_t *lenp)
-{
-	int val = ipv6_config.forwarding;
-	int retv;
-
-	retv = proc_dointvec(ctl, write, filp, buffer, lenp);
-
-	if (write) {
-		if (ipv6_config.forwarding && val == 0) {
-			printk(KERN_DEBUG "sysctl: IPv6 forwarding enabled\n");
-			ndisc_forwarding_on();
-			addrconf_forwarding_on();		       
-		}
-
-		if (ipv6_config.forwarding == 0 && val)
-			ndisc_forwarding_off();
-	}
-	return retv;
-}
-
 ctl_table ipv6_table[] = {
-        {NET_IPV6_FORWARDING, "forwarding",
-         &ipv6_config.forwarding, sizeof(int), 0644, NULL,
-         &ipv6_sysctl_forwarding},
-
-	{NET_IPV6_HOPLIMIT, "hop_limit",
-         &ipv6_config.hop_limit, sizeof(int), 0644, NULL,
-         &proc_dointvec},
-
-	{NET_IPV6_ACCEPT_RA, "accept_ra",
-         &ipv6_config.accept_ra, sizeof(int), 0644, NULL,
-         &proc_dointvec},
-
-	{NET_IPV6_ACCEPT_REDIRECTS, "accept_redirects",
-         &ipv6_config.accept_redirects, sizeof(int), 0644, NULL,
-         &proc_dointvec},
-
-	{NET_IPV6_AUTOCONF, "autoconf",
-         &ipv6_config.autoconf, sizeof(int), 0644, NULL,
-         &proc_dointvec},
-
-	{NET_IPV6_DAD_TRANSMITS, "dad_transmits",
-         &ipv6_config.dad_transmits, sizeof(int), 0644, NULL,
-         &proc_dointvec},
-
-	{NET_IPV6_RTR_SOLICITS, "router_solicitations",
-         &ipv6_config.rtr_solicits, sizeof(int), 0644, NULL,
-         &proc_dointvec},
-
-	{NET_IPV6_RTR_SOLICIT_INTERVAL, "router_solicitation_interval",
-         &ipv6_config.rtr_solicit_interval, sizeof(int), 0644, NULL,
-         &proc_dointvec},
-
-	{NET_IPV6_RTR_SOLICIT_DELAY, "router_solicitation_delay",
-         &ipv6_config.rtr_solicit_delay, sizeof(int), 0644, NULL,
-         &proc_dointvec},
-
+	{NET_IPV6_ROUTE, "route", NULL, 0, 0555, ipv6_route_table},
 	{0}
 };
 

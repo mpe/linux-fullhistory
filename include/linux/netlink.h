@@ -46,6 +46,7 @@ struct nlmsghdr
 #define NLM_F_REPLACE	0x100	/* Override existing		*/
 #define NLM_F_EXCL	0x200	/* Do not touch, if it exists	*/
 #define NLM_F_CREATE	0x400	/* Create, if it does not exist	*/
+#define NLM_F_APPEND	0x800	/* Add to end of list		*/
 
 /*
    4.4BSD ADD		NLM_F_CREATE|NLM_F_EXCL
@@ -65,6 +66,7 @@ struct nlmsghdr
 				  (struct nlmsghdr*)(((char*)(nlh)) + NLMSG_ALIGN((nlh)->nlmsg_len)))
 #define NLMSG_OK(nlh,len) ((nlh)->nlmsg_len >= sizeof(struct nlmsghdr) && \
 			   (nlh)->nlmsg_len <= (len))
+#define NLMSG_PAYLOAD(nlh,len) ((nlh)->nlmsg_len - NLMSG_SPACE((len)))
 
 #define NLMSG_NOOP		0x1	/* Nothing.		*/
 #define NLMSG_ERROR		0x2	/* Error		*/

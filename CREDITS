@@ -211,6 +211,14 @@ S: 101 Curl Drive #591
 S: Columbus, Ohio 43210
 S: USA
 
+N: Peter Braam
+E: braam@cs.cmu.edu
+W: http://coda.cs.cmu.edu/~braam
+D: Coda Filesystem
+S: Dept of Computer Science
+S: 5000 Forbes Ave
+S: Pittsburgh PA 15213
+
 N: Andries Brouwer
 E: aeb@cwi.nl
 D: random Linux hacker
@@ -560,11 +568,11 @@ S: N.S.W., 2121
 S: Australia
 
 N: Dmitry S. Gorodchanin
-E: begemot@bgm.rosprint.net
+E: pgmdsg@ibi.com
 D: RISCom/8 driver, misc kernel fixes.
-S: 6/1 M.Koneva bl, apt #125 
-S: Poltava 314023
-S: Ukraine
+S: 4 Main Street
+S: Woodbridge, Connecticut 06525
+S: USA
 
 N: Paul Gortmaker
 E: gpg109@rsphy1.anu.edu.au
@@ -1730,6 +1738,13 @@ D: Playing with Streams, ISDN, and BSD networking code for Linux
 S: Schleiermacherstrasse 12
 S: 90491 Nuernberg
 S: Germany
+
+N: Petr Vandrovec
+E: vandrove@vc.cvut.cz
+D: Small contributions to ncpfs
+S: Chudenicka 8
+S: 10200 Prague 10, Hostivar
+S: Czech Republic
 
 N: Dirk Verworner
 D: Co-author of german book ``Linux-Kernel-Programmierung''

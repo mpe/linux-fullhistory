@@ -88,24 +88,6 @@ struct frag_hdr {
 
 extern struct ipv6_mib	ipv6_statistics;
 
-struct ipv6_config {
-	int		forwarding;
-	int		hop_limit;
-	int		accept_ra;
-	int		accept_redirects;
-	
-	int		autoconf;
-	int		dad_transmits;
-	int		rtr_solicits;
-	int		rtr_solicit_interval;
-	int		rtr_solicit_delay;
-
-	int		rt_cache_timeout;
-	int		rt_gc_period;
-};
-
-extern struct ipv6_config ipv6_config;
-
 struct ipv6_frag {
 	__u16			offset;
 	__u16			len;

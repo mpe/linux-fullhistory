@@ -53,7 +53,13 @@
 struct neigh_parms
 {
 	struct neigh_parms *next;
+	int	(*neigh_setup)(struct neighbour *);
+	struct neigh_table *tbl;
+	int	entries;
+	void	*priv;
+
 	void	*sysctl_table;
+
 	int	base_reachable_time;
 	int	retrans_time;
 	int	gc_staletime;
@@ -173,7 +179,7 @@ extern struct neighbour 	*neigh_event_ns(struct neigh_table *tbl,
 						u8 *lladdr, void *saddr,
 						struct device *dev);
 
-extern struct neigh_parms	*neigh_parms_alloc(struct neigh_table *tbl);
+extern struct neigh_parms	*neigh_parms_alloc(struct device *dev, struct neigh_table *tbl);
 extern void			neigh_parms_release(struct neigh_table *tbl, struct neigh_parms *parms);
 extern unsigned long		neigh_rand_reach_time(unsigned long base);
 
@@ -189,8 +195,8 @@ extern int neigh_add(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg);
 extern int neigh_delete(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg);
 extern void neigh_app_ns(struct neighbour *n);
 
-extern void 			*neigh_sysctl_register(struct device *dev, struct neigh_parms *p,
-						       int p_id, int pdev_id, char *p_name);
+extern int			neigh_sysctl_register(struct device *dev, struct neigh_parms *p,
+						      int p_id, int pdev_id, char *p_name);
 extern void			neigh_sysctl_unregister(struct neigh_parms *p);
 
 /*

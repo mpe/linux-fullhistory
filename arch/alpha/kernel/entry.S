@@ -318,6 +318,7 @@ do_switch_stack:
 	stt $f29,296($30)
 	stt $f30,304($30)
 	stt $f0,312($30)	# save fpcr in slot of $f31
+	ldt $f0,64($30)		# don't let "do_switch_stack" change any fp state.
 	ret $31,($1),1
 .end do_switch_stack
 
@@ -1109,7 +1110,7 @@ sys_call_table:
 	.quad sys_utimes
 	.quad sys_getrusage
 	.quad sys_wait4				/* 365 */
-	.quad sys_ni_syscall
+	.quad sys_adjtimex
 	.quad sys_ni_syscall
 	.quad sys_ni_syscall
 	.quad sys_ni_syscall			/* 369 */

@@ -26,6 +26,7 @@
 #include <linux/smp_lock.h>
 #include <linux/blkdev.h>
 #include <linux/file.h>
+#include <linux/swapctl.h>
 
 #include <asm/system.h>
 #include <asm/pgtable.h>
@@ -159,12 +160,15 @@ int shrink_mmap(int priority, int gfp_mask)
 
 		switch (atomic_read(&page->count)) {
 			case 1:
-				/* If it has been referenced recently, don't free it */
-				if (test_and_clear_bit(PG_referenced, &page->flags))
-					break;
-
 				/* is it a swap-cache or page-cache page? */
 				if (page->inode) {
+					if (test_and_clear_bit(PG_referenced, &page->flags)) {
+						touch_page(page);
+						break;
+					}
+					age_page(page);
+					if (page->age)
+						break;
 					if (PageSwapCache(page)) {
 						delete_from_swap_cache(page);
 						return 1;
@@ -174,6 +178,10 @@ int shrink_mmap(int priority, int gfp_mask)
 					__free_page(page);
 					return 1;
 				}
+				/* It's not a cache page, so we don't do aging.
+				 * If it has been referenced recently, don't free it */
+				if (test_and_clear_bit(PG_referenced, &page->flags))
+					break;
 
 				/* is it a buffer cache page? */
 				if ((gfp_mask & __GFP_IO) && bh && try_to_free_buffer(bh, &bh, 6))

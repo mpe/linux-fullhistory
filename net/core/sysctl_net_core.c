@@ -13,6 +13,8 @@
 
 extern int netdev_max_backlog;
 extern int netdev_fastroute;
+extern int net_msg_cost;
+extern int net_msg_burst;
 
 extern __u32 sysctl_wmem_max;
 extern __u32 sysctl_rmem_max;
@@ -45,6 +47,12 @@ ctl_table core_table[] = {
 	 &netdev_fastroute, sizeof(int), 0644, NULL,
 	 &proc_dointvec},
 #endif
+	{NET_CORE_MSG_COST, "message_cost",
+	 &net_msg_cost, sizeof(int), 0644, NULL,
+	 &proc_dointvec_jiffies},
+	{NET_CORE_MSG_BURST, "message_burst",
+	 &net_msg_burst, sizeof(int), 0644, NULL,
+	 &proc_dointvec_jiffies},
 	{ 0 }
 };
 #endif

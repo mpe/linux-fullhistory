@@ -394,6 +394,8 @@ FTprint("fib_create_info err=%d\n", err);
 	    && f->fn_tos == tos
 #endif
 	    ) {
+		struct fib_node **ins_fp;
+
 		state = f->fn_state;
 		if (n->nlmsg_flags&NLM_F_EXCL && !(state&FN_S_ZOMBIE))
 			return -EEXIST;
@@ -412,9 +414,12 @@ FTprint("fib_create_info err=%d\n", err);
 			f->fn_state = 0;
 			fib_release_info(old_fi);
 			if (state&FN_S_ACCESSED)
-				rt_cache_flush(RT_FLUSH_DELAY);
+				rt_cache_flush(-1);
 			return 0;
 		}
+
+		ins_fp = fp;
+
 		for ( ; (f = *fp) != NULL && fn_key_eq(f->fn_key, key)
 #ifdef CONFIG_IP_ROUTE_TOS
 		     && f->fn_tos == tos
@@ -428,11 +433,15 @@ FTprint("fib_create_info err=%d\n", err);
 					f->fn_state = 0;
 					rtmsg_fib(RTM_NEWROUTE, f, z, tb->tb_id, n, req);
 					if (state&FN_S_ACCESSED)
-						rt_cache_flush(RT_FLUSH_DELAY);
+						rt_cache_flush(-1);
 					return 0;
 				}
 				return -EEXIST;
 			}
+		}
+		if (!(n->nlmsg_flags&NLM_F_APPEND)) {
+			fp = ins_fp;
+			f = *fp;
 		}
 	} else {
 		if (!(n->nlmsg_flags&NLM_F_CREATE))
@@ -459,14 +468,13 @@ FTprint("fib_create_info err=%d\n", err);
 	 * Insert new entry to the list.
 	 */
 
-	start_bh_atomic();
 	new_f->fn_next = f;
+	/* ATOMIC_SET */
 	*fp = new_f;
-	end_bh_atomic();
 	fz->fz_nent++;
 
 	rtmsg_fib(RTM_NEWROUTE, new_f, z, tb->tb_id, n, req);
-	rt_cache_flush(RT_FLUSH_DELAY);
+	rt_cache_flush(-1);
 	return 0;
 }
 
@@ -541,7 +549,7 @@ FTprint("tb(%d)_delete: %d %08x/%d %d\n", tb->tb_id, r->rtm_type, rta->rta_dst ?
 	rtmsg_fib(RTM_DELROUTE, f, z, tb->tb_id, n, req);
 	if (f->fn_state&FN_S_ACCESSED) {
 		f->fn_state &= ~FN_S_ACCESSED;
-		rt_cache_flush(RT_FLUSH_DELAY);
+		rt_cache_flush(-1);
 	}
 	if (++fib_hash_zombies > 128)
 		fib_flush();

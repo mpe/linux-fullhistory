@@ -69,6 +69,7 @@ struct rt6_info {
 
 	u32				rt6i_flags;
 	u32				rt6i_metric;
+	u8				rt6i_hoplimit;
 	unsigned long			rt6i_expires;
 
 	union {
@@ -139,6 +140,8 @@ extern int			fib6_add(struct fib6_node *root,
 extern int			fib6_del(struct rt6_info *rt);
 
 extern void			inet6_rt_notify(int event, struct rt6_info *rt);
+
+extern	void			fib6_run_gc(unsigned long dummy);
 
 #endif
 #endif

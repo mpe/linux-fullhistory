@@ -38,6 +38,11 @@ struct pol_chain {
 
 extern struct rt6_info	ip6_null_entry;
 
+extern int ip6_rt_max_size;
+extern int ip6_rt_gc_min;
+extern int ip6_rt_gc_timeout;
+extern int ip6_rt_gc_interval;
+
 extern void			ip6_route_input(struct sk_buff *skb);
 
 extern struct dst_entry *	ip6_route_output(struct sock *sk,

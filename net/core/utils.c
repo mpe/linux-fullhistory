@@ -35,6 +35,8 @@ void net_srandom(unsigned long entropy)
 	net_random();
 }
 
+int net_msg_cost = 5*HZ;
+int net_msg_burst = 10*5*HZ;
 
 /* 
  * This enforces a rate limit: not more than one kernel message
@@ -44,16 +46,21 @@ void net_srandom(unsigned long entropy)
  */ 
 int net_ratelimit(void)
 {
+	static unsigned long toks = 10*5*HZ;
 	static unsigned long last_msg; 
 	static int missed;
-	
-	if ((jiffies - last_msg) >= 5*HZ) {
-		if (missed)	
-			printk(KERN_WARNING "ipv4: (%d messages suppressed. Flood?)\n", missed);
-		missed = 0; 
-		last_msg = jiffies;
+	unsigned long now = jiffies;
+
+	toks += now - xchg(&last_msg, now);
+	if (toks > net_msg_burst)
+		toks = net_msg_burst;
+	if (toks >= net_msg_cost) {
+		toks -= net_msg_cost;
+		if (missed)
+			printk(KERN_WARNING "NET: %d messages suppressed.\n", missed);
+		missed = 0;
 		return 1;
 	}
 	missed++; 
-	return 0; 
+	return 0;
 }

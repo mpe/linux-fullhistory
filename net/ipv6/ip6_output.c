@@ -44,6 +44,22 @@ int ip6_output(struct sk_buff *skb)
 	skb->protocol = __constant_htons(ETH_P_IPV6);
 	skb->dev = dev;
 
+	if (ipv6_addr_is_multicast(&skb->nh.ipv6h->daddr)) {
+		if (!(dev->flags&IFF_LOOPBACK) &&
+		    (skb->sk == NULL || skb->sk->net_pinfo.af_inet6.mc_loop) &&
+		    ipv6_chk_mcast_addr(dev, &skb->nh.ipv6h->daddr)) {
+			/* Do not check for IFF_ALLMULTI; multicast routing
+			   is not supported in any case.
+			 */
+			dev_loopback_xmit(skb);
+
+			if (skb->nh.ipv6h->hop_limit == 0) {
+				kfree_skb(skb);
+				return 0;
+			}
+		}
+	}
+
 	if (hh) {
 #ifdef __alpha__
 		/* Alpha has disguisting memcpy. Help it. */
@@ -120,8 +136,11 @@ int ip6_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 
 	hdr->payload_len = htons(seg_len - sizeof(struct ipv6hdr));
 	hdr->nexthdr = fl->proto;
-	hdr->hop_limit = np ? np->hop_limit : ipv6_config.hop_limit;
-	
+	if (np == NULL || np->hop_limit < 0)
+		hdr->hop_limit = ((struct rt6_info*)dst)->rt6i_hoplimit;
+	else
+		hdr->hop_limit = np->hop_limit;
+
 	ipv6_addr_copy(&hdr->saddr, fl->nl_u.ip6_u.saddr);
 	ipv6_addr_copy(&hdr->daddr, fl->nl_u.ip6_u.daddr);
 
@@ -424,8 +443,14 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 	
 	pktlength = length;
 
-	if (hlimit < 0)
-		hlimit = np->hop_limit;
+	if (hlimit < 0) {
+		if (ipv6_addr_is_multicast(fl->nl_u.ip6_u.daddr))
+			hlimit = np->mcast_hops;
+		else
+			hlimit = np->hop_limit;
+		if (hlimit < 0)
+			hlimit = ((struct rt6_info*)dst)->rt6i_hoplimit;
+	}
 
 	if (!sk->ip_hdrincl) {
 		pktlength += sizeof(struct ipv6hdr);
@@ -466,7 +491,7 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 
 		hdr = (struct ipv6hdr *) skb->tail;
 		skb->nh.ipv6h = hdr;
-		
+
 		if (!sk->ip_hdrincl) {
 			ip6_bld_1(sk, skb, fl, hlimit, pktlength);
 #if 0
@@ -528,7 +553,7 @@ int ip6_forward(struct sk_buff *skb)
 	struct ipv6hdr *hdr = skb->nh.ipv6h;
 	int size;
 	
-	if (ipv6_config.forwarding == 0) {
+	if (ipv6_devconf.forwarding == 0) {
 		kfree_skb(skb);
 		return -EINVAL;
 	}

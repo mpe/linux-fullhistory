@@ -3,10 +3,6 @@
 # Makefile for the Linux network (ethercard) device drivers.
 #
 
-# This will go away in some future future: hidden configuration files
-# are difficult for users to deal with.
-include CONFIG
-
 SUB_DIRS     := 
 MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS) hamradio

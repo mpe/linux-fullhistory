@@ -132,7 +132,7 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 		break;
 
 	case IPV6_UNICAST_HOPS:
-		if (val > 255)
+		if (val > 255 || val < -1)
 			retv = -EINVAL;
 		else {
 			np->hop_limit = val;
@@ -141,16 +141,18 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 		break;
 
 	case IPV6_MULTICAST_HOPS:
-		if (val > 255)
+		if (val > 255 || val < -1)
 			retv = -EINVAL;
 		else {
 			np->mcast_hops = val;
 			retv = 0;
 		}
 		break;
+		break;
 
 	case IPV6_MULTICAST_LOOP:
-		np->mc_loop = val;
+		np->mc_loop = (val != 0);
+		retv = 0;
 		break;
 
 	case IPV6_MULTICAST_IF:

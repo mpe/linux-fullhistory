@@ -100,7 +100,6 @@ static const char *version =
 
 /*
  * Enable debugging by "-DDE620_DEBUG=3" when compiling,
- * OR in "./CONFIG"
  * OR by enabling the following #define
  *
  * use 0 for production, 1 for verification, >2 for debug

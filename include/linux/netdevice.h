@@ -66,6 +66,7 @@
 #endif
 
 struct neighbour;
+struct neigh_parms;
 struct sk_buff;
 
 /*
@@ -288,7 +289,7 @@ struct device
 
 	int			(*hard_header_parse)(struct sk_buff *skb,
 						     unsigned char *haddr);
-	int			(*neigh_setup)(struct neighbour *n);
+	int			(*neigh_setup)(struct device *dev, struct neigh_parms *);
 	int			(*accept_fastpath)(struct device *, struct dst_entry*);
 
 #ifdef CONFIG_NET_FASTROUTE
@@ -339,8 +340,14 @@ extern int 		register_netdevice_notifier(struct notifier_block *nb);
 extern int		unregister_netdevice_notifier(struct notifier_block *nb);
 extern int		dev_new_index(void);
 extern struct device	*dev_get_by_index(int ifindex);
-extern int		register_gifconf(int family, int (*func)(struct device *dev, char *bufptr, int len));
 extern int		dev_restart(struct device *dev);
+
+typedef int gifconf_func_t(struct device * dev, char * bufptr, int len);
+extern int		register_gifconf(unsigned int family, gifconf_func_t * gifconf);
+extern __inline__ int unregister_gifconf(unsigned int family)
+{
+	return register_gifconf(family, 0);
+}
 
 #define HAVE_NETIF_RX 1
 extern void		netif_rx(struct sk_buff *skb);

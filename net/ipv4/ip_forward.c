@@ -18,6 +18,7 @@
  *					use output device for accounting.
  *		Jos Vos		:	Call forward firewall after routing
  *					(always use output device).
+ *		Mike McLagan	:	Routing by source
  */
 
 #include <linux/config.h>

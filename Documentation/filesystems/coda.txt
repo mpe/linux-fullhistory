@@ -1,3 +1,27 @@
+
+NOTE: 
+This is one of the technical documents describing a component of
+Coda -- this document describes the client kernel-Venus interface.
+
+For more information:
+  http://www.coda.cs.cmu.edu
+For user level software needed to run Coda:
+  ftp://ftp.coda.cs.cmu.edu
+
+To run Coda you need to get a user level cache manager for the client,
+named Venus, as well as tools to manipulate ACL's, to log in etc.  The
+client needs to have the Coda filesystem selected in the kernel
+configuration.
+
+The server needs a user level server and at present does not depend on
+kernel support.
+
+
+
+
+
+
+
   The Venus kernel interface
   Peter J. Braam
   v1.0, Nov 9, 1997

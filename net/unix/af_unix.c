@@ -1033,8 +1033,9 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		 
 		size=len-sent;
 
-		if (size>(sk->sndbuf-sizeof(struct sk_buff))/2)	/* Keep two messages in the pipe so it schedules better */
-			size=(sk->sndbuf-sizeof(struct sk_buff))/2;
+		/* Keep two messages in the pipe so it schedules better */
+		if (size > (sk->sndbuf - sizeof(struct sk_buff)) / 2)
+			size = (sk->sndbuf - sizeof(struct sk_buff)) / 2;
 
 		/*
 		 *	Keep to page sized kmalloc()'s as various people
@@ -1056,7 +1057,7 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		if (skb==NULL)
 		{
 			if (sent)
-				return sent;
+				goto out;
 			return err;
 		}
 
@@ -1074,6 +1075,7 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		if (scm->fp)
 			unix_attach_fds(scm, skb);
 
+		/* N.B. this could fail with -EFAULT */
 		memcpy_fromiovec(skb_put(skb,size), msg->msg_iov, size);
 
 		other=unix_peer(sk);
@@ -1082,7 +1084,7 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		{
 			kfree_skb(skb);
 			if(sent)
-				return sent;
+				goto out;
 			send_sig(SIGPIPE,current,0);
 			return -EPIPE;
 		}
@@ -1091,6 +1093,7 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		other->data_ready(other,size);
 		sent+=size;
 	}
+out:
 	return sent;
 }
 
@@ -1121,20 +1124,20 @@ static int unix_dgram_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 
 	msg->msg_namelen = 0;
 
-	skb=skb_recv_datagram(sk, flags, noblock, &err);
-	if(skb==NULL)
-		return err;
+	skb = skb_recv_datagram(sk, flags, noblock, &err);
+	if (!skb)
+		goto out;
 
 	if (msg->msg_name)
 	{
+		msg->msg_namelen = sizeof(short);
 		if (skb->sk->protinfo.af_unix.addr)
 		{
-			memcpy(msg->msg_name, skb->sk->protinfo.af_unix.addr->name,
-			       skb->sk->protinfo.af_unix.addr->len);
 			msg->msg_namelen=skb->sk->protinfo.af_unix.addr->len;
+			memcpy(msg->msg_name,
+				skb->sk->protinfo.af_unix.addr->name,
+				skb->sk->protinfo.af_unix.addr->len);
 		}
-		else
-			msg->msg_namelen=sizeof(short);
 	}
 
 	if (size > skb->len)
@@ -1142,8 +1145,9 @@ static int unix_dgram_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 	else if (size < skb->len)
 		msg->msg_flags |= MSG_TRUNC;
 
-	if (skb_copy_datagram_iovec(skb, 0, msg->msg_iov, size))
-		return -EFAULT;
+	err = skb_copy_datagram_iovec(skb, 0, msg->msg_iov, size);
+	if (err)
+		goto out_free;
 
 	scm->creds = *UNIXCREDS(skb);
 
@@ -1169,8 +1173,12 @@ static int unix_dgram_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 		if (UNIXCB(skb).fp)
 			scm->fp = scm_fp_dup(UNIXCB(skb).fp);
 	}
+	err = size;
+
+out_free:
 	skb_free_datagram(sk,skb);
-	return size;
+out:
+	return err;
 }
 
 
@@ -1189,7 +1197,7 @@ static int unix_stream_recvmsg(struct socket *sock, struct msghdr *msg, int size
 
 	if (flags&MSG_OOB)
 		return -EOPNOTSUPP;
-	if(flags&MSG_WAITALL)
+	if (flags&MSG_WAITALL)
 		target = size;
 		
 		
@@ -1245,18 +1253,19 @@ static int unix_stream_recvmsg(struct socket *sock, struct msghdr *msg, int size
 		/* Copy address just once */
 		if (sunaddr)
 		{
+			msg->msg_namelen = sizeof(short);
 			if (skb->sk->protinfo.af_unix.addr)
 			{
-				memcpy(sunaddr, skb->sk->protinfo.af_unix.addr->name,
-				       skb->sk->protinfo.af_unix.addr->len);
 				msg->msg_namelen=skb->sk->protinfo.af_unix.addr->len;
+				memcpy(sunaddr,
+					skb->sk->protinfo.af_unix.addr->name,
+					skb->sk->protinfo.af_unix.addr->len);
 			}
-			else
-				msg->msg_namelen=sizeof(short);
 			sunaddr = NULL;
 		}
 
 		chunk = min(skb->len, size);
+		/* N.B. This could fail with -EFAULT */
 		memcpy_toiovec(msg->msg_iov, skb->data, chunk);
 		copied += chunk;
 		size -= chunk;

@@ -610,14 +610,19 @@ static inline char * task_name(struct task_struct *p, char * buf)
 	return buf+1;
 }
 
+/*
+ * The task state array is a strange "bitmap" of
+ * reasons to sleep. Thus "running" is zero, and
+ * you can test for combinations of others with
+ * simple bit tests.
+ */
 static const char *task_state_array[] = {
-	". Huh?",
-	"R (running)",
-	"S (sleeping)",
-	"D (disk sleep)",
-	"Z (zombie)",
-	"T (stopped)",
-	"W (paging)"
+	"R (running)",		/*  0 */
+	"S (sleeping)",		/*  1 */
+	"D (disk sleep)",	/*  2 */
+	"Z (zombie)",		/*  4 */
+	"T (stopped)",		/*  8 */
+	"W (paging)"		/* 16 */
 };
 
 static inline const char * get_task_state(struct task_struct *tsk)

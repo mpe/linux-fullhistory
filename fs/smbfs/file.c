@@ -102,8 +102,9 @@ io_error:
 }
 
 int
-smb_readpage(struct dentry *dentry, struct page *page)
+smb_readpage(struct file *file, struct page *page)
 {
+	struct dentry *dentry = file->f_dentry;
 	int		error;
 
 	pr_debug("SMB: smb_readpage %08lx\n", page_address(page));
@@ -177,8 +178,9 @@ io_error:
  * (for now), and we currently do this synchronously only.
  */
 static int
-smb_writepage(struct dentry *dentry, struct page *page)
+smb_writepage(struct file *file, struct page *page)
 {
+	struct dentry *dentry = file->f_dentry;
 	int 	result;
 
 #ifdef SMBFS_PARANOIA
@@ -193,9 +195,10 @@ smb_writepage(struct dentry *dentry, struct page *page)
 }
 
 static int
-smb_updatepage(struct dentry *dentry, struct page *page, const char *buffer,
+smb_updatepage(struct file *file, struct page *page, const char *buffer,
 	       unsigned long offset, unsigned int count, int sync)
 {
+	struct dentry *dentry = file->f_dentry;
 	unsigned long page_addr = page_address(page);
 	int result;
 

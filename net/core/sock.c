@@ -298,31 +298,19 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 				sk->bound_dev_if = 0;
 			}
 			else {
-				if (copy_from_user(&req, optval, sizeof(req)) < 0)
+				if (copy_from_user(&req, optval, sizeof(req)))
 					return -EFAULT;
 
 				/* Remove any cached route for this socket. */
-				if (sk->dst_cache) {
-					ip_rt_put((struct rtable*)sk->dst_cache);
-					sk->dst_cache = NULL;
-				}
+				dst_release(xchg(&sk->dst_cache, NULL));
 
 				if (req.ifr_ifrn.ifrn_name[0] == '\0') {
 					sk->bound_dev_if = 0;
-				}
-				else {
+				} else {
 					struct device *dev = dev_get(req.ifr_ifrn.ifrn_name);
 					if (!dev)
 						return -EINVAL;
 					sk->bound_dev_if = dev->ifindex;
-					if (sk->daddr) {
-						int ret;
-						ret = ip_route_output((struct rtable**)&sk->dst_cache,
-								     sk->daddr, sk->saddr,
-								     sk->ip_tos, sk->bound_dev_if);
-						if (ret)
-							return ret;
-					}
 				}
 			}
 			return 0;
@@ -580,12 +568,8 @@ void *sock_kmalloc(struct sock *sk, int size, int priority)
 		 */
 		atomic_add(size, &sk->wmem_alloc);
 		mem = kmalloc(size, priority);
-		if (mem) {
-			/* Recheck because kmalloc might sleep */
-			if (atomic_read(&sk->wmem_alloc)+size < sk->sndbuf)
-				return mem; 
-			kfree_s(mem, size);
-		} 
+		if (mem)
+			return mem; 
 		atomic_sub(size, &sk->wmem_alloc);
 	}
 	return mem;

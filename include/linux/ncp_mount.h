@@ -18,12 +18,15 @@
 /* Values for flags */
 #define NCP_MOUNT_SOFT 0x0001
 #define NCP_MOUNT_INTR 0x0002
+#define NCP_MOUNT_STRONG 0x0004   /* enable delete/rename of r/o files */
+#define NCP_MOUNT_NO_OS2 0x0008
+#define NCP_MOUNT_NO_NFS 0x0010
 
 struct ncp_mount_data {
 	int version;
 	unsigned int ncp_fd;	/* The socket to the ncp port */
-	uid_t mounted_uid;	/* Who may umount() this filesystem? */
-	pid_t wdog_pid;		/* Who cares for our watchdog packets? */
+	__kernel_uid_t mounted_uid;	/* Who may umount() this filesystem? */
+	__kernel_pid_t wdog_pid;		/* Who cares for our watchdog packets? */
 
 	unsigned char mounted_vol[NCP_VOLNAME_LEN + 1];
 	unsigned int time_out;	/* How long should I wait after
@@ -31,10 +34,10 @@ struct ncp_mount_data {
 	unsigned int retry_count;	/* And how often should I retry? */
 	unsigned int flags;
 
-	uid_t uid;
-	gid_t gid;
-	mode_t file_mode;
-	mode_t dir_mode;
+	__kernel_uid_t uid;
+	__kernel_gid_t gid;
+	__kernel_mode_t file_mode;
+	__kernel_mode_t dir_mode;
 };
 
 #endif

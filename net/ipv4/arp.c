@@ -53,6 +53,7 @@
  *              Jonathan Layes  :       Added arpd support through kerneld 
  *                                      message queue (960314)
  *		Mike Shaver	:	/proc/sys/net/ipv4/arp_* support
+ *		Mike McLagan    :	Routing by source
  *		Stuart Cheshire	:	Metricom and grat arp fixes
  *					*** FOR 2.1 clean this up ***
  *		Lawrence V. Stefani: (08/12/96) Added FDDI support.
@@ -162,17 +163,18 @@ static struct neigh_ops arp_direct_ops =
 	ip_acct_output
 };
 
-#if defined(CONFIG_AX25) || defined(CONFIG_AX25)
-static struct neigh_ops arp_broken_ops =
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25) || \
+    defined(CONFIG_SHAPER) || defined(CONFIG_SHAPER_MODULE)
+struct neigh_ops arp_broken_ops =
 {
 	AF_INET,
 	NULL,
-	NULL,
-	NULL,
+	arp_solicit,
+	arp_error_report,
 	neigh_compat_output,
 	neigh_compat_output,
-	neigh_compat_output,
-	neigh_compat_output,
+	ip_acct_output,
+	ip_acct_output,
 };
 #endif
 
@@ -186,7 +188,8 @@ struct neigh_table arp_tbl =
 	NULL,
 	NULL,
 	parp_redo,
-        { NULL, NULL, 30*HZ, 1*HZ, 60*HZ, 30*HZ, 5*HZ, 3, 3, 0, 3, 1*HZ, (8*HZ)/10, 1*HZ, 64 },
+        { NULL, NULL, &arp_tbl, 0, NULL, NULL,
+		  30*HZ, 1*HZ, 60*HZ, 30*HZ, 5*HZ, 3, 3, 0, 3, 1*HZ, (8*HZ)/10, 1*HZ, 64 },
 	30*HZ, 128, 512, 1024,
 };
 
@@ -542,7 +545,8 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
  *	is not from an IP number.  We can't currently handle this, so toss
  *	it. 
  */  
-	if (arp->ar_hln != dev->addr_len    || 
+	if (in_dev == NULL ||
+	    arp->ar_hln != dev->addr_len    || 
 	    dev->flags & IFF_NOARP          ||
 	    skb->pkt_type == PACKET_OTHERHOST ||
 	    skb->pkt_type == PACKET_LOOPBACK ||
@@ -588,6 +592,12 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 #endif
 	}
 
+	/* Undertsand only these message types */
+
+	if (arp->ar_op != __constant_htons(ARPOP_REPLY) &&
+	    arp->ar_op != __constant_htons(ARPOP_REQUEST))
+		goto out;
+
 /*
  *	Extract fields
  */
@@ -621,21 +631,29 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
  *  and in the case of requests for us we add the requester to the arp 
  *  cache.
  */
-	switch (arp->ar_op) {
-	case __constant_htons(ARPOP_REQUEST):
-		if (ip_route_input(skb, tip, sip, 0, dev))
-			goto out;
+
+	/* Special case: IPv4 duplicate address detection packet (RFC2131) */
+	if (sip == 0) {
+		if (arp->ar_op == __constant_htons(ARPOP_REQUEST) &&
+		    inet_addr_type(tip) == RTN_LOCAL)
+			arp_send(ARPOP_REPLY,ETH_P_ARP,tip,dev,tip,sha,dev->dev_addr,dev->dev_addr);
+		goto out;
+	}
+
+	if (arp->ar_op == __constant_htons(ARPOP_REQUEST) &&
+	    ip_route_input(skb, tip, sip, 0, dev) == 0) {
+
 		rt = (struct rtable*)skb->dst;
 		addr_type = rt->rt_type;
 
 		if (addr_type == RTN_LOCAL) {
-			struct neighbour *n;
 			n = neigh_event_ns(&arp_tbl, sha, &sip, dev);
 			if (n) {
 				arp_send(ARPOP_REPLY,ETH_P_ARP,sip,dev,tip,sha,dev->dev_addr,sha);
 				neigh_release(n);
 			}
-		} else if (in_dev && IN_DEV_FORWARD(in_dev)) {
+			goto out;
+		} else if (IN_DEV_FORWARD(in_dev)) {
 			if ((rt->rt_flags&RTCF_DNAT) ||
 			    (addr_type == RTN_UNICAST  && rt->u.dst.dev != dev &&
 			     (IN_DEV_PROXY_ARP(in_dev) || pneigh_lookup(&arp_tbl, &tip, dev, 0)))) {
@@ -650,26 +668,46 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 					pneigh_enqueue(&arp_tbl, in_dev->arp_parms, skb);
 					return 0;
 				}
+				goto out;
 			}
 		}
-		break;
+	}
 
-	case __constant_htons(ARPOP_REPLY):
-		if (inet_addr_type(sip) != RTN_UNICAST)
-			goto out;
+	/* Update our ARP tables */
+
+	n = __neigh_lookup(&arp_tbl, &sip, dev, 0);
+
+#ifdef CONFIG_IP_ACCEPT_UNSOLICITED_ARP
+	/* Unsolicited ARP is not accepted by default.
+	   It is possible, that this option should be enabled for some
+	   devices (strip is candidate)
+	 */
+	if (n == NULL &&
+	    arp->ar_op == __constant_htons(ARPOP_REPLY) &&
+	    inet_addr_type(sip) == RTN_UNICAST)
 		n = __neigh_lookup(&arp_tbl, &sip, dev, -1);
-		if (n) {
-			int state = NUD_REACHABLE;
-			int override = 1;
-			if (jiffies - n->updated < n->parms->locktime &&
-			    jiffies - n->updated >= 0)
-				override = 0;
-			if (skb->pkt_type != PACKET_HOST)
-				state = NUD_STALE;
-			neigh_update(n, sha, state, override, 1);
-			neigh_release(n);
-		}
-		break;
+#endif
+
+	if (n) {
+		int state = NUD_REACHABLE;
+		int override = 0;
+
+		/* If several different ARP replies follows back-to-back,
+		   use the FIRST one. It is possible, if several proxy
+		   agents are active. Taking the first reply prevents
+		   arp trashing and chooses the fastest router.
+		 */
+		if (jiffies - n->updated >= n->parms->locktime)
+			override = 1;
+
+		/* Broadcast replies and request packets
+		   do not assert neighbour reachability.
+		 */
+		if (arp->ar_op != __constant_htons(ARPOP_REPLY) ||
+		    skb->pkt_type != PACKET_HOST)
+			state = NUD_STALE;
+		neigh_update(n, sha, state, override, 1);
+		neigh_release(n);
 	}
 
 out:
@@ -708,11 +746,11 @@ int arp_req_set(struct arpreq *r, struct device * dev)
 			return 0;
 		}
 		if (dev == NULL) {
-			ipv4_config.proxy_arp = 1;
+			ipv4_devconf.proxy_arp = 1;
 			return 0;
 		}
 		if (dev->ip_ptr) {
-			((struct in_device*)dev->ip_ptr)->flags |= IFF_IP_PROXYARP;
+			((struct in_device*)dev->ip_ptr)->cnf.proxy_arp = 1;
 			return 0;
 		}
 		return -ENXIO;
@@ -751,7 +789,7 @@ static unsigned arp_state_to_flags(struct neighbour *neigh)
 {
 	unsigned flags = 0;
 	if (neigh->nud_state&NUD_PERMANENT)
-		flags = ATF_PERM;
+		flags = ATF_PERM|ATF_COM;
 	else if (neigh->nud_state&NUD_VALID)
 		flags = ATF_COM;
 	return flags;
@@ -793,11 +831,11 @@ int arp_req_delete(struct arpreq *r, struct device * dev)
 			return pneigh_delete(&arp_tbl, &ip, dev);
 		if (mask == 0) {
 			if (dev == NULL) {
-				ipv4_config.proxy_arp = 0;
+				ipv4_devconf.proxy_arp = 0;
 				return 0;
 			}
 			if (dev->ip_ptr) {
-				((struct in_device*)dev->ip_ptr)->flags &= ~IFF_IP_PROXYARP;
+				((struct in_device*)dev->ip_ptr)->cnf.proxy_arp = 0;
 				return 0;
 			}
 			return -ENXIO;
@@ -1049,7 +1087,7 @@ __initfunc(void arp_init (void))
 	proc_net_register(&proc_net_arp);
 #endif
 #ifdef CONFIG_SYSCTL
-	arp_tbl.parms.sysctl_table = neigh_sysctl_register(NULL, &arp_tbl.parms, NET_IPV4, NET_IPV4_NEIGH, "ipv4");
+	neigh_sysctl_register(NULL, &arp_tbl.parms, NET_IPV4, NET_IPV4_NEIGH, "ipv4");
 #endif
 }
 

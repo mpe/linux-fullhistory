@@ -279,12 +279,8 @@ static int zft_mmap(struct inode *ino,
 		static struct vm_operations_struct dummy = { NULL, };
 		vma->vm_ops = &dummy;
 #endif
-#if LINUX_VERSION_CODE >= KERNEL_VER(2,1,45)
-		vma->vm_dentry = dget(filep->f_dentry);
-#else
-		vma_set_inode (vma, ino);
-		inode_inc_count (ino);
-#endif
+		vma->vm_file = filep;
+		filep->f_count++;
 	}
 	current->blocked = old_sigmask; /* restore mask */
 	TRACE_EXIT result;

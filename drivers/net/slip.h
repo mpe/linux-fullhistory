@@ -97,6 +97,9 @@ struct slip {
 #define SLF_OUTWAIT	4		/* is outpacket was flag	*/
 
   unsigned char		mode;		/* SLIP mode			*/
+  unsigned char		leased;
+  kdev_t		line;
+  pid_t			pid;
 #define SL_MODE_SLIP	0
 #define SL_MODE_CSLIP	1
 #define SL_MODE_SLIP6	2		/* Matt Dillon's printable slip */

@@ -40,6 +40,7 @@
  *					Added tail drop and some other bugfixes.
  *					Added new listen sematics (ifdefed by
  *					NEW_LISTEN for now)
+ *		Mike McLagan	:	Routing by source
  *	Juan Jose Ciarlante:		ip_dynaddr bits
  *		Andi Kleen:		various fixes.
  *	Vitaly E. Lavrov	:	Transparent proxy revived after year coma.
@@ -565,13 +566,10 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 			printk(KERN_DEBUG "%s forgot to set AF_INET in " __FUNCTION__ "\n", current->comm);
 	}
 
-	if (sk->dst_cache) {
-		dst_release(sk->dst_cache);
-		sk->dst_cache = NULL;
-	}
+	dst_release(xchg(&sk->dst_cache, NULL));
 
 	tmp = ip_route_connect(&rt, usin->sin_addr.s_addr, sk->saddr,
-			       RT_TOS(sk->ip_tos)|(sk->localroute || 0), sk->bound_dev_if);
+			       RT_TOS(sk->ip_tos)|sk->localroute, sk->bound_dev_if);
 	if (tmp < 0)
 		return tmp;
 
@@ -651,7 +649,7 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	sk->mtu = rt->u.dst.pmtu;
 	if ((sk->ip_pmtudisc == IP_PMTUDISC_DONT ||
 	     (sk->ip_pmtudisc == IP_PMTUDISC_WANT &&
-	      rt->rt_flags&RTCF_NOPMTUDISC)) &&
+	      (rt->u.dst.mxlock&(1<<RTAX_MTU)))) &&
 	    rt->u.dst.pmtu > 576)
 		sk->mtu = 576;
 
@@ -1403,7 +1401,7 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 		if (ip_route_output(&rt,
 				    newsk->opt && newsk->opt->srr ? 
 				    newsk->opt->faddr : newsk->daddr,
-				    newsk->saddr, newsk->ip_tos, 0)) {
+				    newsk->saddr, newsk->ip_tos|RTO_CONN, 0)) {
 			sk_free(newsk);
 			return NULL;
 		}
@@ -1668,7 +1666,7 @@ int tcp_v4_rebuild_header(struct sock *sk, struct sk_buff *skb)
 
 		/* Query new route */
 		tmp = ip_route_connect(&rt, rt->rt_dst, 0, 
-					RT_TOS(sk->ip_tos)|(sk->localroute||0),
+					RT_TOS(sk->ip_tos)|sk->localroute,
 					sk->bound_dev_if);
 
 		/* Only useful if different source addrs */
@@ -1682,7 +1680,7 @@ int tcp_v4_rebuild_header(struct sock *sk, struct sk_buff *skb)
 	} else 
 	if (rt->u.dst.obsolete) {
 		int err;
-		err = ip_route_output(&rt, rt->rt_dst, rt->rt_src, rt->key.tos, rt->key.oif);
+		err = ip_route_output(&rt, rt->rt_dst, rt->rt_src, rt->key.tos|RTO_CONN, rt->key.oif);
 		if (err) {
 			sk->err_soft=-err;
 			sk->error_report(skb->sk);

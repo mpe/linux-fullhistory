@@ -333,14 +333,15 @@ static int swap_out_process(struct task_struct * p, int gfp_mask)
 	 * Go through process' page directory.
 	 */
 	address = p->swap_address;
-	p->swap_address = 0;
 
 	/*
 	 * Find the proper vm-area
 	 */
 	vma = find_vma(p->mm, address);
-	if (!vma)
+	if (!vma) {
+		p->swap_address = 0;
 		return 0;
+	}
 	if (address < vma->vm_start)
 		address = vma->vm_start;
 
@@ -539,7 +540,7 @@ int kswapd(void *unused)
 	init_swap_timer();
 	add_wait_queue(&kswapd_wait, &wait);
 	while (1) {
-		int async;
+		int tries;
 
 		kswapd_awake = 0;
 		flush_signals(current);
@@ -549,32 +550,47 @@ int kswapd(void *unused)
 		kswapd_awake = 1;
 		swapstats.wakeups++;
 		/* Do the background pageout: 
-		 * We now only swap out as many pages as needed.
-		 * When we are truly low on memory, we swap out
-		 * synchronously (WAIT == 1).  -- Rik.
-		 * If we've had too many consecutive failures,
-		 * go back to sleep to let other tasks run.
+		 * When we've got loads of memory, we try
+		 * (free_pages_high - nr_free_pages) times to
+		 * free memory. As memory gets tighter, kswapd
+		 * gets more and more agressive. -- Rik.
 		 */
-		async = 1;
-		for (;;) {
+		tries = free_pages_high - nr_free_pages;
+		if (tries < min_free_pages) {
+			tries = min_free_pages;
+		}
+		else if (nr_free_pages < (free_pages_high + free_pages_low) / 2) {
+			tries <<= 1;
+			if (nr_free_pages < free_pages_low) {
+				tries <<= 1;
+				if (nr_free_pages <= min_free_pages) {
+					tries <<= 1;
+				}
+			}
+		}
+		while (tries--) {
 			int gfp_mask;
 
 			if (free_memory_available())
 				break;
 			gfp_mask = __GFP_IO;
-			if (!async)
-				gfp_mask |= __GFP_WAIT;
-			async = try_to_free_page(gfp_mask);
-			if (!(gfp_mask & __GFP_WAIT) || async)
-				continue;
-
+			try_to_free_page(gfp_mask);
 			/*
-			 * Not good. We failed to free a page even though
-			 * we were synchronous. Complain and give up..
+			 * Syncing large chunks is faster than swapping
+			 * synchronously (less head movement). -- Rik.
 			 */
-			printk("kswapd: failed to free page\n");
-			break;
+			if (atomic_read(&nr_async_pages) >= SWAP_CLUSTER_MAX)
+				run_task_queue(&tq_disk);
+
 		}
+#if 0
+	/*
+	 * Report failure if we couldn't even reach min_free_pages.
+	 */
+	if (nr_free_pages < min_free_pages)
+		printk("kswapd: failed, got %d of %d\n",
+			nr_free_pages, min_free_pages);
+#endif
 	}
 	/* As if we could ever get here - maybe we want to make this killable */
 	remove_wait_queue(&kswapd_wait, &wait);

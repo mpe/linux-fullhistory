@@ -14,6 +14,7 @@
 #ifdef __KERNEL__
 
 #define NCP_DEFAULT_BUFSIZE 1024
+#define NCP_DEFAULT_OPTIONS 0		/* 2 for packet signatures */
 
 struct ncp_server {
 
@@ -21,7 +22,7 @@ struct ncp_server {
 					   interest for us later, so we store
 					   it completely. */
 
-	__u8 name_space[NCP_NUMBER_OF_VOLUMES];
+	__u8 name_space[NCP_NUMBER_OF_VOLUMES + 2];
 
 	struct file *ncp_filp;	/* File pointer to ncp socket */
 
@@ -50,7 +51,30 @@ struct ncp_server {
 	int ncp_reply_size;
 
 	struct ncp_inode_info root;
+#if 0
 	char root_path;		/* '\0' */
+#else
+	struct dentry* root_dentry;
+#endif
+
+/* info for packet signing */
+	int sign_wanted;        /* 1=Server needs signed packets */
+	int sign_active;        /* 0=don't do signing, 1=do */
+	char sign_root[8];	/* generated from password and encr. key */
+	char sign_last[16];	
+
+	/* Authentication info: NDS or BINDERY, username */
+	struct {
+		int    auth_type;
+		size_t object_name_len;
+		void*  object_name;
+		int    object_type;
+	} auth;
+	/* Password info */
+	struct {
+		size_t len;
+		void*  data;
+	} priv;
 };
 
 static inline int ncp_conn_valid(struct ncp_server *server)
@@ -66,3 +90,4 @@ static inline void ncp_invalidate_conn(struct ncp_server *server)
 #endif				/* __KERNEL__ */
 
 #endif
+ 

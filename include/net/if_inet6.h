@@ -86,21 +86,36 @@ struct ifmcaddr6
 #define	IFA_SITE	IPV6_ADDR_SITELOCAL
 #define	IFA_GLOBAL	0x0000U
 
+struct ipv6_devconf
+{
+	int		forwarding;
+	int		hop_limit;
+	int		mtu6;
+	int		accept_ra;
+	int		accept_redirects;
+	int		autoconf;
+	int		dad_transmits;
+	int		rtr_solicits;
+	int		rtr_solicit_interval;
+	int		rtr_solicit_delay;
+
+	void		*sysctl;
+};
+
 struct inet6_dev 
 {
 	struct device		*dev;
 
 	struct inet6_ifaddr	*addr_list;
 	struct ifmcaddr6	*mc_list;
-
 	__u32			if_flags;
-	__u32			router:1,
-				unused:31;
 
 	struct neigh_parms	*nd_parms;
 	struct inet6_dev	*next;
+	struct ipv6_devconf	cnf;
 };
 
+extern struct ipv6_devconf ipv6_devconf;
 
 extern __inline__ void ipv6_eth_mc_map(struct in6_addr *addr, char *buf)
 {

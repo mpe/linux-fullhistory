@@ -22,6 +22,8 @@
 #include <asm/io.h>
 #include <linux/blk.h>
 
+#include <linux/module.h>
+
 #define ATOMIC_ON()	do { } while (0)
 #define ATOMIC_OFF()	do { } while (0)
 
@@ -797,4 +799,6 @@ __initfunc(int blk_dev_init(void))
 	ddv_init();
 #endif
 	return 0;
-}
+};
+
+EXPORT_SYMBOL(io_request_lock);

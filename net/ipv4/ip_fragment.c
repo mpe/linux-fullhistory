@@ -263,6 +263,7 @@ static struct ipq *ip_create(struct sk_buff *skb, struct iphdr *iph)
 	qp->dev = skb->dev;
 
 	/* Start a timer for this entry. */
+	init_timer(&qp->timer);
 	qp->timer.expires = jiffies + sysctl_ipfrag_time;	/* about 30 seconds	*/
 	qp->timer.data = (unsigned long) qp;		/* pointer to queue	*/
 	qp->timer.function = ip_expire;			/* expire function	*/

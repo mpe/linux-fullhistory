@@ -359,6 +359,7 @@ retry:
 
 #ifdef NL_EMULATE_DEV
 		if (sk->protinfo.af_netlink.handler) {
+			skb_orphan(skb);
 			len = sk->protinfo.af_netlink.handler(protocol, skb);
 			netlink_unlock(sk);
 			return len;
@@ -400,6 +401,7 @@ static __inline__ int netlink_broadcast_deliver(struct sock *sk, struct sk_buff 
 {
 #ifdef NL_EMULATE_DEV
 	if (sk->protinfo.af_netlink.handler) {
+		skb_orphan(skb);
 		sk->protinfo.af_netlink.handler(sk->protocol, skb);
 		return 0;
 	} else
@@ -758,15 +760,12 @@ void netlink_detach(int unit)
 int netlink_post(int unit, struct sk_buff *skb)
 {
 	if (netlink_kernel[unit]) {
+		memset(skb->cb, 0, sizeof(skb->cb));
 		netlink_broadcast(netlink_kernel[unit]->sk, skb, 0, ~0, GFP_ATOMIC);
 		return 0;
 	}
 	return -EUNATCH;;
 }
-
-EXPORT_SYMBOL(netlink_attach);
-EXPORT_SYMBOL(netlink_detach);
-EXPORT_SYMBOL(netlink_post);
 
 #endif
 

@@ -14,6 +14,7 @@
  *		Martin Mares	:	TOS setting fixed.
  *		Alan Cox	:	Fixed a couple of oopses in Martin's 
  *					TOS tweaks.
+ *		Mike McLagan	:	Routing by source
  */
 
 #include <linux/config.h>
@@ -313,14 +314,9 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			if (IPTOS_PREC(val) >= IPTOS_PREC_CRITIC_ECP && !suser())
 				return -EPERM;
 			if (sk->ip_tos != val) {
-				start_bh_atomic(); 
 				sk->ip_tos=val;
 				sk->priority = rt_tos2priority(val);
-				if (sk->dst_cache) {
-					dst_release(sk->dst_cache); 
-					sk->dst_cache = NULL;
-				}
-				end_bh_atomic();
+				dst_release(xchg(&sk->dst_cache, NULL)); 
 			}
 			sk->priority = rt_tos2priority(val);
 			return 0;

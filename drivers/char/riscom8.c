@@ -1,7 +1,7 @@
 /*
  *      linux/drivers/char/riscom.c  -- RISCom/8 multiport serial driver.
  *
- *      Copyright (C) 1994-1996  Dmitry Gorodchanin (begemot@bgm.rosprint.net)
+ *      Copyright (C) 1994-1996  Dmitry Gorodchanin (pgmdsg@ibi.com)
  *
  *      This code is loosely based on the Linux serial driver, written by
  *      Linus Torvalds, Theodore T'so and others. The RISCom/8 card 

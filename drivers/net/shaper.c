@@ -70,6 +70,7 @@
 #include <linux/if_arp.h>
 #include <linux/init.h>
 #include <net/dst.h>
+#include <net/arp.h>
 #include <linux/if_shaper.h>
 
 int sh_debug;		/* Debug flag */
@@ -447,6 +448,7 @@ static int shaper_rebuild_header(struct sk_buff *skb)
 	return v;
 }
 
+#if 0
 static int shaper_cache(struct neighbour *neigh, struct hh_cache *hh)
 {
 	struct shaper *sh=neigh->dev->priv;
@@ -468,6 +470,26 @@ static void shaper_cache_update(struct hh_cache *hh, struct device *dev,
 	if(sh_debug)
 		printk("Shaper cache update\n");
 	sh->header_cache_update(hh, sh->dev, haddr);
+}
+#endif
+
+static int shaper_neigh_setup(struct neighbour *n)
+{
+	if (n->nud_state == NUD_NONE) {
+		n->ops = &arp_broken_ops;
+		n->output = n->ops->output;
+	}
+	return 0;
+}
+
+static int shaper_neigh_setup_dev(struct device *dev, struct neigh_parms *p)
+{
+	if (p->tbl->family == AF_INET) {
+		p->neigh_setup = shaper_neigh_setup;
+		p->ucast_probes = 0;
+		p->mcast_probes = 0;
+	}
+	return 0;
 }
 
 static int shaper_attach(struct device *shdev, struct shaper *sh, struct device *dev)
@@ -512,7 +534,8 @@ static int shaper_attach(struct device *shdev, struct shaper *sh, struct device 
 #else
 	shdev->header_cache_update = NULL;
 	shdev->hard_header_cache = NULL;
-#endif		
+#endif
+	shdev->neigh_setup = shaper_neigh_setup_dev;
 	
 	shdev->hard_header_len=dev->hard_header_len;
 	shdev->type=dev->type;
@@ -587,8 +610,11 @@ __initfunc(int shaper_probe(struct device *dev))
 
 	dev->hard_header 	= shaper_header;
 	dev->rebuild_header 	= shaper_rebuild_header;
+#if 0
 	dev->hard_header_cache	= shaper_cache;
 	dev->header_cache_update= shaper_cache_update;
+#endif
+	dev->neigh_setup	= shaper_neigh_setup_dev;
 	dev->do_ioctl		= shaper_ioctl;
 	dev->hard_header_len	= 0;
 	dev->type		= ARPHRD_ETHER;	/* initially */

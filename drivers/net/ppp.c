@@ -684,13 +684,6 @@ ppp_release (struct ppp *ppp)
 	if (tty != NULL && tty->disc_data == ppp)
 		tty->disc_data = NULL;	/* Break the tty->ppp link */
 
-	rtnl_lock();
-	/* Strong layering violation. */
-	if (dev && dev->flags & IFF_UP) {
-		dev_close (dev); /* close the device properly */
-	}
-	rtnl_unlock();
-
 	ppp_free_buf (ppp->rbuf);
 	ppp_free_buf (ppp->wbuf);
 	ppp_free_buf (ppp->cbuf);
@@ -3021,6 +3014,25 @@ ppp_find (int pid_value)
 	return ppp;
 }
 
+/* Collect hanged up channels */
+
+static void ppp_sync(void)
+{
+	struct device	*dev;
+	struct ppp	*ppp;
+
+	rtnl_lock();
+	for (ppp = ppp_list; ppp != 0; ppp = ppp->next) {
+		if (!ppp->inuse) {
+			dev = ppp2dev(ppp);
+			if (dev->flags&IFF_UP)
+				dev_close(dev);
+		}
+	}
+	rtnl_unlock();
+}
+
+
 /* allocate or create a PPP channel */
 static struct ppp *
 ppp_alloc (void)
@@ -3030,11 +3042,24 @@ ppp_alloc (void)
 	struct device	*dev;
 	struct ppp	*ppp;
 
+	ppp_sync();
+
 	/* try to find an free device */
 	if_num = 0;
 	for (ppp = ppp_list; ppp != 0; ppp = ppp->next) {
-		if (!test_and_set_bit(0, &ppp->inuse))
+		if (!test_and_set_bit(0, &ppp->inuse)) {
+
+			/* Reregister device */
+
+			dev = ppp2dev(ppp);
+			unregister_netdev (dev);
+
+			if (register_netdev (dev)) {
+				printk(KERN_DEBUG "cannot reregister ppp device\n");
+				return NULL;
+			}
 			return ppp;
+		}
 		++if_num;
 	}
 /*

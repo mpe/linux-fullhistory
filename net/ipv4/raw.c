@@ -342,7 +342,9 @@ static int raw_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 			daddr = ipc.opt->faddr;
 		}
 	}
-	tos = RT_TOS(sk->ip_tos) | (sk->localroute || (msg->msg_flags&MSG_DONTROUTE));
+	tos = RT_TOS(sk->ip_tos) | sk->localroute;
+	if (msg->msg_flags&MSG_DONTROUTE)
+		tos |= RTO_ONLINK;
 
 	if (MULTICAST(daddr)) {
 		if (!ipc.oif)
@@ -403,8 +405,7 @@ static int raw_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	sk->rcv_saddr = sk->saddr = addr->sin_addr.s_addr;
 	if(chk_addr_ret == RTN_MULTICAST || chk_addr_ret == RTN_BROADCAST)
 		sk->saddr = 0;  /* Use device */
-	dst_release(sk->dst_cache);
-	sk->dst_cache = NULL;
+	dst_release(xchg(&sk->dst_cache, NULL));
 	return 0;
 }
 
@@ -453,6 +454,9 @@ int raw_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	}
 	
 	err = skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
+	if (err)
+		goto done;
+
 	sk->stamp=skb->stamp;
 
 	/* Copy the address. */
@@ -462,8 +466,9 @@ int raw_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	}
 	if (sk->ip_cmsg_flags)
 		ip_cmsg_recv(msg, skb);
+done:
 	skb_free_datagram(sk, skb);
-	return err ? err : (copied);
+	return (err ? : copied);
 }
 
 static int raw_init(struct sock *sk)

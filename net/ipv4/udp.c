@@ -49,6 +49,7 @@
  *		Mike Shaver	:	RFC1122 checks.
  *		Alan Cox	:	Nonblocking error fix.
  *	Willy Konynenberg	:	Transparent proxying support.
+ *		Mike McLagan	:	Routing by source
  *		David S. Miller	:	New socket lookup architecture.
  *					Last socket cache retained as it
  *					does have a high hit rate.
@@ -816,8 +817,10 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 			struct sk_buff *skb;
 			unsigned long amount;
 
-			if (sk->state == TCP_LISTEN) return(-EINVAL);
+			if (sk->state == TCP_LISTEN)
+				return(-EINVAL);
 			amount = 0;
+			/* N.B. Is this interrupt safe?? */
 			skb = skb_peek(&sk->receive_queue);
 			if (skb != NULL) {
 				/*
@@ -843,13 +846,11 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
  */
 
 int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
-	     int noblock, int flags,int *addr_len)
+	     int noblock, int flags, int *addr_len)
 {
-  	int copied = 0;
-  	int truesize;
+  	struct sockaddr_in *sin = (struct sockaddr_in *)msg->msg_name;
   	struct sk_buff *skb;
-  	int er;
-  	struct sockaddr_in *sin=(struct sockaddr_in *)msg->msg_name;
+  	int copied, err;
 
 	/*
 	 *	Check any passed addresses
@@ -859,14 +860,12 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
   		*addr_len=sizeof(*sin);
 
 	if (sk->ip_recverr && (skb = skb_dequeue(&sk->error_queue)) != NULL) {
-		er = sock_error(sk);
-		if (msg->msg_controllen == 0) {
-			skb_free_datagram(sk, skb);
-			return er;
+		err = sock_error(sk);
+		if (msg->msg_controllen != 0) {
+			put_cmsg(msg, SOL_IP, IP_RECVERR, skb->len, skb->data);
+			err = 0;
 		}
-		put_cmsg(msg, SOL_IP, IP_RECVERR, skb->len, skb->data);
-		skb_free_datagram(sk, skb);
-		return 0;
+		goto out_free;
 	}
   
 	/*
@@ -874,25 +873,25 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	 *	the finished NET3, it will do _ALL_ the work!
 	 */
 	 	
-	skb=skb_recv_datagram(sk,flags,noblock,&er);
-	if(skb==NULL)
-  		return er;
+	skb = skb_recv_datagram(sk, flags, noblock, &err);
+	if (!skb)
+		goto out;
   
-  	truesize = skb->len - sizeof(struct udphdr);
-	copied = truesize;
-	if (len < truesize)
+  	copied = skb->len - sizeof(struct udphdr);
+	if (copied > len)
 	{
-		msg->msg_flags |= MSG_TRUNC;
 		copied = len;
+		msg->msg_flags |= MSG_TRUNC;
 	}
 
   	/*
   	 *	FIXME : should use udp header size info value 
   	 */
   	 
-	er = skb_copy_datagram_iovec(skb,sizeof(struct udphdr),msg->msg_iov,copied);
-	if (er)
-		return er; 
+	err = skb_copy_datagram_iovec(skb, sizeof(struct udphdr), msg->msg_iov,
+					copied);
+	if (err)
+		goto out_free;
 	sk->stamp=skb->stamp;
 
 	/* Copy the address. */
@@ -921,9 +920,12 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
   	}
 	if (sk->ip_cmsg_flags)
 		ip_cmsg_recv(msg, skb);
+	err = copied;
   
+out_free:
   	skb_free_datagram(sk, skb);
-  	return(copied);
+out:
+  	return err;
 }
 
 int udp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
@@ -954,8 +956,7 @@ int udp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	if (usin->sin_family && usin->sin_family != AF_INET) 
 	  	return(-EAFNOSUPPORT);
 
-	dst_release(sk->dst_cache);
-	sk->dst_cache = NULL;
+	dst_release(xchg(&sk->dst_cache, NULL));
 
 	err = ip_route_connect(&rt, usin->sin_addr.s_addr, sk->saddr,
 			       sk->ip_tos|sk->localroute, sk->bound_dev_if);

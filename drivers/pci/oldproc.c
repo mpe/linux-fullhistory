@@ -383,6 +383,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( CYCLADES,	CYCLOM_Z_Hi,	"Cyclom-Z above 1Mbyte"),
 	DEVICE( O2,		O2_6832,	"6832"),
 	DEVICE( 3DFX,		3DFX_VOODOO,	"Voodoo"),
+	DEVICE( 3DFX,		3DFX_VOODOO2,	"Voodoo2"),	
 	DEVICE( SIGMADES,	SIGMADES_6425,	"REALmagic64/GX"),
 	DEVICE( STALLION,	STALLION_ECHPCI832,"EasyConnection 8/32"),
 	DEVICE( STALLION,	STALLION_ECHPCI864,"EasyConnection 8/64"),

@@ -8,6 +8,8 @@
  */
 
 
+#include <linux/config.h>
+
 #include "ncplib_kernel.h"
 
 static inline int min(int a, int b)
@@ -135,6 +137,33 @@ ncp_negotiate_buffersize(struct ncp_server *server, int size, int *target)
 	return 0;
 }
 
+
+/* options: 
+ *	bit 0	ipx checksum
+ *	bit 1	packet signing
+ */
+int
+ncp_negotiate_size_and_options(struct ncp_server *server, 
+	int size, int options, int *ret_size, int *ret_options) {
+	int result;
+
+	ncp_init_request(server);
+	ncp_add_word(server, htons(size));
+	ncp_add_byte(server, options);
+	
+	if ((result = ncp_request(server, 0x61)) != 0)
+	{
+		ncp_unlock_server(server);
+		return result;
+	}
+
+	*ret_size = min(ntohs(ncp_reply_word(server, 0)), size);
+	*ret_options = ncp_reply_byte(server, 4);
+
+	ncp_unlock_server(server);
+	return 0;
+}
+
 int
 ncp_get_volume_info_with_number(struct ncp_server *server, int n,
 				    struct ncp_volume_info *target)
@@ -252,7 +281,7 @@ int ncp_obtain_info(struct ncp_server *server, struct inode *dir, char *path,
 	ncp_add_byte(server, 6);	/* subfunction */
 	ncp_add_byte(server, server->name_space[volnum]);
 	ncp_add_byte(server, server->name_space[volnum]); /* N.B. twice ?? */
-	ncp_add_word(server, htons(0xff00));	/* get all */
+	ncp_add_word(server, htons(0x0680));	/* get all */
 	ncp_add_dword(server, RIM_ALL);
 	ncp_add_handle_path(server, volnum, dirent, 1, path);
 
@@ -265,9 +294,34 @@ out:
 	return result;
 }
 
-static inline int
-ncp_has_os2_namespace(struct ncp_server *server, __u8 volume)
+static int
+ncp_obtain_DOS_dir_base(struct ncp_server *server,
+		__u8 volnum, __u32 dirent,
+		char *path, /* At most 1 component */
+		__u32 *DOS_dir_base)
 {
+	int result;
+
+	ncp_init_request(server);
+	ncp_add_byte(server, 6); /* subfunction */
+	ncp_add_byte(server, server->name_space[volnum]);
+	ncp_add_byte(server, server->name_space[volnum]);
+	ncp_add_word(server, htons(0x0680)); /* get all */
+	ncp_add_dword(server, RIM_DIRECTORY);
+	ncp_add_handle_path(server, volnum, dirent, 1, path);
+
+	if ((result = ncp_request(server, 87)) == 0)
+	{
+	   	if (DOS_dir_base) *DOS_dir_base=ncp_reply_dword(server, 0x34);
+	}
+	ncp_unlock_server(server);
+	return result;
+}
+
+static inline int
+ncp_get_known_namespace(struct ncp_server *server, __u8 volume)
+{
+#if defined(CONFIG_NCPFS_OS2_NS) || defined(CONFIG_NCPFS_NFS_NS)
 	int result;
 	__u8 *namespace;
 	__u16 no_namespaces;
@@ -279,26 +333,92 @@ ncp_has_os2_namespace(struct ncp_server *server, __u8 volume)
 
 	if ((result = ncp_request(server, 87)) != 0) {
 		ncp_unlock_server(server);
-		return 0; /* not result ?? */
+		return NW_NS_DOS; /* not result ?? */
 	}
+
+	result = NW_NS_DOS;
 	no_namespaces = ncp_reply_word(server, 0);
 	namespace = ncp_reply_data(server, 2);
 
-	result = 1;
 	while (no_namespaces > 0) {
 		DPRINTK(KERN_DEBUG "get_namespaces: found %d on %d\n", *namespace, volume);
 
-		if (*namespace == 4) {
-			DPRINTK(KERN_DEBUG "get_namespaces: found OS2\n");
-			goto out;
+#ifdef CONFIG_NCPFS_NFS_NS
+		if ((*namespace == NW_NS_NFS) && !(server->m.flags&NCP_MOUNT_NO_NFS)) 
+		{
+			result = NW_NS_NFS;
+			break;
 		}
+#endif	/* CONFIG_NCPFS_NFS_NS */
+#ifdef CONFIG_NCPFS_OS2_NS
+		if ((*namespace == NW_NS_OS2) && !(server->m.flags&NCP_MOUNT_NO_OS2))
+		{
+			result = NW_NS_OS2;
+		}
+#endif	/* CONFIG_NCPFS_OS2_NS */
 		namespace += 1;
 		no_namespaces -= 1;
 	}
-	result = 0;
-out:
 	ncp_unlock_server(server);
 	return result;
+#else	/* neither OS2 nor NFS - only DOS */
+	return NW_NS_DOS;
+#endif	/* defined(CONFIG_NCPFS_OS2_NS) || defined(CONFIG_NCPFS_NFS_NS) */
+}
+
+static int
+ncp_ObtainSpecificDirBase(struct ncp_server *server,
+		__u8 nsSrc, __u8 nsDst, __u8 vol_num, __u32 dir_base,
+		char *path, /* At most 1 component */
+		__u32 *dirEntNum, __u32 *DosDirNum)
+{
+	int result;
+
+	ncp_init_request(server);
+	ncp_add_byte(server, 6); /* subfunction */
+	ncp_add_byte(server, nsSrc);
+	ncp_add_byte(server, nsDst);
+	ncp_add_word(server, 0x8006); /* get all */
+	ncp_add_dword(server, RIM_ALL);
+	ncp_add_handle_path(server, vol_num, dir_base, 1, path);
+
+	if ((result = ncp_request(server, 87)) != 0)
+	{
+		ncp_unlock_server(server);
+		return result;
+	}
+
+	if (dirEntNum)
+		*dirEntNum = ncp_reply_dword(server, 0x30);
+	if (DosDirNum)
+		*DosDirNum = ncp_reply_dword(server, 0x34);
+	ncp_unlock_server(server);
+	return 0;
+}
+
+int
+ncp_mount_subdir(struct ncp_server *server,
+		__u8 volNumber,
+		__u8 srcNS, __u32 dirEntNum)
+{
+	int dstNS;
+	int result;
+	__u32 newDirEnt;
+	__u32 newDosEnt;
+	
+	dstNS = ncp_get_known_namespace(server, volNumber);
+	if ((result = ncp_ObtainSpecificDirBase(server, srcNS, dstNS, volNumber, 
+				      dirEntNum, NULL, &newDirEnt, &newDosEnt)) != 0)
+	{
+		return result;
+	}
+	server->name_space[volNumber] = dstNS;
+	server->root.finfo.i.volNumber = volNumber;
+	server->root.finfo.i.dirEntNum = newDirEnt;
+	server->root.finfo.i.DosDirNum = newDosEnt;
+	server->m.mounted_vol[1] = 0;
+	server->m.mounted_vol[0] = 'X';
+	return 0;
 }
 
 int 
@@ -332,7 +452,7 @@ ncp_lookup_volume(struct ncp_server *server, char *volname,
 	target->volNumber = volnum = ncp_reply_byte(server, 8);
 	ncp_unlock_server(server);
 
-	server->name_space[volnum] = ncp_has_os2_namespace(server, volnum) ? 4 : 0;
+	server->name_space[volnum] = ncp_get_known_namespace(server, volnum);
 
 	DPRINTK(KERN_DEBUG "lookup_vol: namespace[%d] = %d\n",
 		volnum, server->name_space[volnum]);
@@ -366,23 +486,63 @@ int ncp_modify_file_or_subdir_dos_info(struct ncp_server *server,
 	return result;
 }
 
-int ncp_del_file_or_subdir(struct ncp_server *server,
-			   struct inode *dir, char *name)
+static int
+ncp_DeleteNSEntry(struct ncp_server *server,
+		  __u8 have_dir_base, __u8 volnum, __u32 dirent,
+		  char* name, __u8 ns, int attr)
 {
-	__u8  volnum = NCP_FINFO(dir)->volNumber;
-	__u32 dirent = NCP_FINFO(dir)->dirEntNum;
 	int result;
 
 	ncp_init_request(server);
 	ncp_add_byte(server, 8);	/* subfunction */
-	ncp_add_byte(server, server->name_space[volnum]);
+	ncp_add_byte(server, ns);
 	ncp_add_byte(server, 0);	/* reserved */
-	ncp_add_word(server, ntohs(0x0680));	/* search attribs: all */
-	ncp_add_handle_path(server, volnum, dirent, 1, name);
+	ncp_add_word(server, attr);	/* search attribs: all */
+	ncp_add_handle_path(server, volnum, dirent, have_dir_base, name);
 
 	result = ncp_request(server, 87);
 	ncp_unlock_server(server);
 	return result;
+}
+
+int
+ncp_del_file_or_subdir2(struct ncp_server *server,
+			struct dentry *dentry)
+{
+	struct inode *inode = dentry->d_inode;
+	__u8  volnum;
+	__u32 dirent;
+
+	if (!inode) {
+#if CONFIG_NCPFS_DEBUGDENTRY
+		printk(KERN_DEBUG "ncpfs: ncpdel2: dentry->d_inode == NULL\n");
+#endif
+		return 0xFF;	/* Any error */
+	}
+	volnum = NCP_FINFO(inode)->volNumber;
+	dirent = NCP_FINFO(inode)->DosDirNum;
+	return ncp_DeleteNSEntry(server, 1, volnum, dirent, NULL, NW_NS_DOS, htons(0x0680));
+}
+
+int
+ncp_del_file_or_subdir(struct ncp_server *server,
+		       struct inode *dir, char *name)
+{
+	__u8  volnum = NCP_FINFO(dir)->volNumber;
+	__u32 dirent = NCP_FINFO(dir)->dirEntNum;
+
+#ifdef CONFIG_NCPFS_NFS_NS
+	if (server->name_space[volnum]==NW_NS_NFS)
+ 	{
+ 		int result;
+ 
+ 		result=ncp_obtain_DOS_dir_base(server, volnum, dirent, name, &dirent);
+ 		if (result) return result;
+ 		return ncp_DeleteNSEntry(server, 1, volnum, dirent, NULL, NW_NS_DOS, htons(0x0680));
+ 	}
+ 	else
+#endif	/* CONFIG_NCPFS_NFS_NS */
+ 		return ncp_DeleteNSEntry(server, 1, volnum, dirent, name, server->name_space[volnum], htons(0x0680));
 }
 
 static inline void ConvertToNWfromDWORD(__u32 sfd, __u8 ret[6])
@@ -480,13 +640,20 @@ int ncp_search_for_file_or_subdir(struct ncp_server *server,
 	ncp_add_byte(server, 3);	/* subfunction */
 	ncp_add_byte(server, server->name_space[seq->volNumber]);
 	ncp_add_byte(server, 0);	/* data stream (???) */
-	ncp_add_word(server, 0xffff);	/* Search attribs */
+	ncp_add_word(server, htons(0x0680));	/* Search attribs */
 	ncp_add_dword(server, RIM_ALL);		/* return info mask */
 	ncp_add_mem(server, seq, 9);
-	ncp_add_byte(server, 2);	/* 2 byte pattern */
-	ncp_add_byte(server, 0xff);	/* following is a wildcard */
-	ncp_add_byte(server, '*');
-
+#ifdef CONFIG_NCPFS_NFS_NS
+	if (server->name_space[seq->volNumber] == NW_NS_NFS) {
+		ncp_add_byte(server, 0);	/* 0 byte pattern */
+	} else 
+#endif
+	{
+		ncp_add_byte(server, 2);	/* 2 byte pattern */
+		ncp_add_byte(server, 0xff);	/* following is a wildcard */
+		ncp_add_byte(server, '*');
+	}
+	
 	if ((result = ncp_request(server, 87)) != 0)
 		goto out;
 	memcpy(seq, ncp_reply_data(server, 0), sizeof(*seq));
@@ -497,9 +664,10 @@ out:
 	return result;
 }
 
-int ncp_ren_or_mov_file_or_subdir(struct ncp_server *server,
-				struct inode *old_dir, char *old_name,
-				struct inode *new_dir, char *new_name)
+int
+ncp_RenameNSEntry(struct ncp_server *server,
+		  struct inode *old_dir, char *old_name, int old_type,
+		  struct inode *new_dir, char *new_name)
 {
 	int result = -EINVAL;
 
@@ -511,7 +679,7 @@ int ncp_ren_or_mov_file_or_subdir(struct ncp_server *server,
 	ncp_add_byte(server, 4);	/* subfunction */
 	ncp_add_byte(server, server->name_space[NCP_FINFO(old_dir)->volNumber]);
 	ncp_add_byte(server, 1);	/* rename flag */
-	ncp_add_word(server, ntohs(0x0680));	/* search attributes */
+	ncp_add_word(server, old_type);	/* search attributes */
 
 	/* source Handle Path */
 	ncp_add_byte(server, NCP_FINFO(old_dir)->volNumber);
@@ -536,6 +704,30 @@ out:
 	return result;
 }
 
+int ncp_ren_or_mov_file_or_subdir(struct ncp_server *server,
+				struct inode *old_dir, char *old_name,
+				struct inode *new_dir, char *new_name)
+{
+        int result;
+        int old_type = htons(0x0600);
+
+/* If somebody can do it atomic, call me... vandrove@vc.cvut.cz */
+	result = ncp_RenameNSEntry(server, old_dir, old_name, old_type,
+	                                   new_dir, new_name);
+        if (result == 0xFF)	/* File Not Found, try directory */
+	{
+		old_type = htons(0x1600);
+		result = ncp_RenameNSEntry(server, old_dir, old_name, old_type,
+						   new_dir, new_name);
+	}
+	if (result != 0x92) return result;	/* All except NO_FILES_RENAMED */
+	result = ncp_del_file_or_subdir(server, new_dir, new_name);
+	if (result != 0) return -EACCES;
+	result = ncp_RenameNSEntry(server, old_dir, old_name, old_type,
+					   new_dir, new_name);
+	return result;
+}
+	
 
 /* We have to transfer to/from user space */
 int
@@ -587,3 +779,49 @@ out:
 	ncp_unlock_server(server);
 	return result;
 }
+
+#ifdef CONFIG_NCPFS_IOCTL_LOCKING
+int
+ncp_LogPhysicalRecord(struct ncp_server *server, const char *file_id,
+	  __u8 locktype, __u32 offset, __u32 length, __u16 timeout)
+{
+	int result;
+
+	ncp_init_request(server);
+	ncp_add_byte(server, locktype);
+	ncp_add_mem(server, file_id, 6);
+	ncp_add_dword(server, htonl(offset));
+	ncp_add_dword(server, htonl(length));
+	ncp_add_word(server, htons(timeout));
+
+	if ((result = ncp_request(server, 0x1A)) != 0)
+	{
+		ncp_unlock_server(server);
+		return result;
+	}
+	ncp_unlock_server(server);
+	return 0;
+}
+
+int
+ncp_ClearPhysicalRecord(struct ncp_server *server, const char *file_id,
+	  __u32 offset, __u32 length)
+{
+	int result;
+
+	ncp_init_request(server);
+	ncp_add_byte(server, 0);	/* who knows... lanalyzer says that */
+	ncp_add_mem(server, file_id, 6);
+	ncp_add_dword(server, htonl(offset));
+	ncp_add_dword(server, htonl(length));
+
+	if ((result = ncp_request(server, 0x1E)) != 0)
+	{
+		ncp_unlock_server(server);
+		return result;
+	}
+	ncp_unlock_server(server);
+	return 0;
+}
+#endif	/* CONFIG_NCPFS_IOCTL_LOCKING */
+

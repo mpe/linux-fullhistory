@@ -65,7 +65,7 @@ static __inline__ int tcp_bhashfn(__u16 lport)
  * break TCP port selection. This function must also NOT wrap around
  * when the next number exceeds the largest possible port (2^16-1).
  */
-static __inline__ int tcp_bhashnext(__u16 short lport, __u16 h)
+static __inline__ int tcp_bhashnext(__u16 lport, __u16 h)
 {
         __u32 s;	/* don't change this to a smaller type! */
 

@@ -15,14 +15,46 @@
 #include <sys/types.h>
 #endif 
 
-#ifdef __linux__
+#ifdef DJGPP
+#ifdef KERNEL
+typedef unsigned long u_long;
+typedef unsigned int u_int;
+typedef unsigned short u_short;
+typedef u_long ino_t;
+typedef u_long dev_t;
+typedef void * caddr_t;
+typedef u_long u_quad_t;
+
+#define inline
+
+struct timespec {
+        long       ts_sec;
+        long       ts_nsec;
+};
+#else  /* DJGPP but not KERNEL */
+#include <sys/types.h>
+#include <sys/time.h>
+typedef u_long u_quad_t;
+#endif /* !KERNEL */
+#endif /* !DJGPP */
+
+
+#if defined(__linux__) || defined(__CYGWIN32__)
 #define cdev_t u_quad_t
 #if !defined(_UQUAD_T_) && (!defined(__GLIBC__) || __GLIBC__ < 2)
 #define _UQUAD_T_ 1
 typedef unsigned long long u_quad_t;
-#endif 
+#endif
 #else
 #define cdev_t dev_t
+#endif
+
+#ifdef __CYGWIN32__
+typedef unsigned char u_int8_t;
+struct timespec {
+        time_t  tv_sec;         /* seconds */
+        long    tv_nsec;        /* nanoseconds */
+};
 #endif
 
 
@@ -69,21 +101,21 @@ struct venus_dirent {
 /*
  * File types
  */
-#define	DT_UNKNOWN	 0
-#define	DT_FIFO		 1
-#define	DT_CHR		 2
-#define	DT_DIR		 4
-#define	DT_BLK		 6
-#define	DT_REG		 8
-#define	DT_LNK		10
-#define	DT_SOCK		12
-#define	DT_WHT		14
+#define	CDT_UNKNOWN	 0
+#define	CDT_FIFO		 1
+#define	CDT_CHR		 2
+#define	CDT_DIR		 4
+#define	CDT_BLK		 6
+#define	CDT_REG		 8
+#define	CDT_LNK		10
+#define	CDT_SOCK		12
+#define	CDT_WHT		14
 
 /*
  * Convert between stat structure types and directory types.
  */
-#define	IFTODT(mode)	(((mode) & 0170000) >> 12)
-#define	DTTOIF(dirtype)	((dirtype) << 12)
+#define	IFTOCDT(mode)	(((mode) & 0170000) >> 12)
+#define	CDTTOIF(dirtype)	((dirtype) << 12)
 
 #endif
 
@@ -124,7 +156,11 @@ typedef u_long vgid_t;
 #define _CODACRED_T_
 struct coda_cred {
     vuid_t cr_uid, cr_euid, cr_suid, cr_fsuid; /* Real, efftve, set, fs uid*/
-    vgid_t cr_gid, cr_egid, cr_sgid, cr_fsgid; /* same for groups */
+#if	defined(__NetBSD__) || defined(__FreeBSD__)
+    vgid_t cr_groupid, cr_egid, cr_sgid, cr_fsgid; /* same for groups */
+#else
+    vgid_t cr_gid,     cr_egid, cr_sgid, cr_fsgid; /* same for groups */
+#endif
 };
 #endif 
 
@@ -189,7 +225,8 @@ struct coda_vattr {
 #define CFS_ZAPDIR      ((u_long) 28)
 #define CFS_ZAPVNODE    ((u_long) 29)
 #define CFS_PURGEFID    ((u_long) 30)
-#define CFS_NCALLS 31
+#define CFS_OPEN_BY_PATH ((u_long) 31)
+#define CFS_NCALLS 32
 
 #define DOWNCALL(opcode) (opcode >= CFS_REPLACE && opcode <= CFS_PURGEFID)
 
@@ -537,6 +574,18 @@ struct cfs_replace_out { /* cfs_replace is a venus->kernel call */
     ViceFid OldFid;
 };
 
+/* cfs_open_by_path: */
+struct cfs_open_by_path_in {
+    struct cfs_in_hdr ih;
+    ViceFid	VFid;
+    int	flags;
+};
+
+struct cfs_open_by_path_out {
+    struct cfs_out_hdr oh;
+	int path;
+};
+
 /* 
  * Occasionally, don't cache the fid returned by CFS_LOOKUP. For instance, if
  * the fid is inconsistent. This case is handled by setting the top bit of the
@@ -566,6 +615,7 @@ union inputArgs {
     struct cfs_inactive_in cfs_inactive;
     struct cfs_vget_in cfs_vget;
     struct cfs_rdwr_in cfs_rdwr;
+	struct cfs_open_by_path_in cfs_open_by_path;
 };
 
 union outputArgs {
@@ -587,6 +637,7 @@ union outputArgs {
     struct cfs_purgefid_out cfs_purgefid;
     struct cfs_rdwr_out cfs_rdwr;
     struct cfs_replace_out cfs_replace;
+	struct cfs_open_by_path_out cfs_open_by_path;
 };    
 
 union cfs_downcalls {

@@ -17,7 +17,7 @@
  * 
  * Author:  Marco van Wieringen <mvw@mcs.ow.nl> <mvw@tnix.net>
  * 
- * Fixes:   Dmitry Gorodchanin <begemot@bgm.rosprint.net>, 11 Feb 96
+ * Fixes:   Dmitry Gorodchanin <pgmdsg@ibi.com>, 11 Feb 96
  *	    removed race conditions in dqput(), dqget() and iput(). 
  *          Andi Kleen removed all verify_area() calls, 31 Dec 96  
  *          Nick Kralevich <nickkral@cal.alumni.berkeley.edu>, 21 Jul 97

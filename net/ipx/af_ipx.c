@@ -998,7 +998,8 @@ static int ipxitf_delete(ipx_interface_definition *idef)
 		return -EPROTONOSUPPORT;
 
 	dev=dev_get(idef->ipx_device);
-	if(dev==NULL) return -ENODEV;
+	if (dev==NULL)
+		return -ENODEV;
 
 	intrfc = ipxitf_find_using_phys(dev, dlink_type);
 	if (intrfc != NULL) {
@@ -1107,9 +1108,9 @@ static int ipxitf_ioctl_real(unsigned int cmd, void *arg)
 			sipx->sipx_family=AF_IPX;
 			sipx->sipx_network=ipxif->if_netnum;
 			memcpy(sipx->sipx_node, ipxif->if_node, sizeof(sipx->sipx_node));
-			err = copy_to_user(arg,&ifr,sizeof(ifr));
-			if (err)
-				return -EFAULT;
+			err = -EFAULT;
+			if (!copy_to_user(arg, &ifr, sizeof(ifr)))
+				err = 0;
 			return err;
 		}
 		case SIOCAIPXITFCRT: 
@@ -2134,32 +2135,28 @@ static int ipx_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 	struct sock *sk=sock->sk;
 	struct sockaddr_ipx *sipx=(struct sockaddr_ipx *)msg->msg_name;
 	struct ipxhdr *ipx = NULL;
-	int copied = 0;
-	int truesize;
 	struct sk_buff *skb;
-	int err;
+	int copied, err;
 
 	if (sk->zapped)
 		return -ENOTCONN;
 
 	skb=skb_recv_datagram(sk,flags&~MSG_DONTWAIT,flags&MSG_DONTWAIT,&err);
-	if(skb==NULL)
-		return err;
+	if (!skb)
+		goto out;
 
 	ipx = skb->nh.ipxh;
-	truesize=ntohs(ipx->ipx_pktsize) - sizeof(struct ipxhdr);
-	
-	copied = truesize;
+	copied = ntohs(ipx->ipx_pktsize) - sizeof(struct ipxhdr);
 	if(copied > size)
 	{
 		copied=size;
 		msg->msg_flags|=MSG_TRUNC;
 	}
 
-	err = skb_copy_datagram_iovec(skb,sizeof(struct ipxhdr),msg->msg_iov,copied);
-	
+	err = skb_copy_datagram_iovec(skb, sizeof(struct ipxhdr), msg->msg_iov,
+					copied);
 	if (err)
-		return err;
+		goto out_free;
 
 	msg->msg_namelen = sizeof(*sipx);
 
@@ -2171,9 +2168,12 @@ static int ipx_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 		sipx->sipx_network=ipx->ipx_source.net;
 		sipx->sipx_type = ipx->ipx_type;
 	}
-	skb_free_datagram(sk, skb);
+	err = copied;
 
-	return(copied);
+out_free:
+	skb_free_datagram(sk, skb);
+out:
+	return err;
 }
 
 /*
@@ -2228,11 +2228,12 @@ static int ipx_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 			{
 				if(sk->stamp.tv_sec==0)
 					return -ENOENT;
-				ret = copy_to_user((void *)arg,&sk->stamp,sizeof(struct timeval));
-				if (ret)
-					ret = -EFAULT;
+				ret = -EFAULT;
+				if (!copy_to_user((void *)arg, &sk->stamp,
+						sizeof(struct timeval)))
+					ret = 0;
 			}
-			return 0;
+			return ret;
 		}
 		case SIOCGIFDSTADDR:
 		case SIOCSIFDSTADDR:

@@ -170,7 +170,7 @@ static struct neighbour *neigh_alloc(struct neigh_table *tbl, int creat)
 		return NULL;
 
 	memset(n, 0, tbl->entry_size);
-	
+
 	skb_queue_head_init(&n->arp_queue);
 	n->updated = n->used = jiffies;
 	n->nud_state = NUD_NONE;
@@ -222,7 +222,7 @@ struct neighbour * __neigh_lookup(struct neigh_table *tbl, const void *pkey,
 	}
 
 	/* Device specific setup. */
-	if (dev->neigh_setup && dev->neigh_setup(n) < 0) {
+	if (n->parms && n->parms->neigh_setup && n->parms->neigh_setup(n) < 0) {
 		neigh_destroy(n);
 		return NULL;
 	}
@@ -632,7 +632,6 @@ int neigh_update(struct neighbour *neigh, u8 *lladdr, u8 new, int override, int 
 		lladdr = neigh->ha;
 	}
 
-	neigh->used = jiffies;
 	neigh_sync(neigh);
 	old = neigh->nud_state;
 	if (new&NUD_CONNECTED)
@@ -839,17 +838,23 @@ void pneigh_enqueue(struct neigh_table *tbl, struct neigh_parms *p,
 }
 
 
-struct neigh_parms *neigh_parms_alloc(struct neigh_table *tbl)
+struct neigh_parms *neigh_parms_alloc(struct device *dev, struct neigh_table *tbl)
 {
 	struct neigh_parms *p;
 	p = kmalloc(sizeof(*p), GFP_KERNEL);
 	if (p) {
 		memcpy(p, &tbl->parms, sizeof(*p));
+		p->tbl = tbl;
 		p->reachable_time = neigh_rand_reach_time(p->base_reachable_time);
-		start_bh_atomic();
+		if (dev && dev->neigh_setup) {
+			if (dev->neigh_setup(dev, p)) {
+				kfree(p);
+				return NULL;
+			}
+		}
 		p->next = tbl->parms.next;
+		/* ATOMIC_SET */
 		tbl->parms.next = p;
-		end_bh_atomic();
 	}
 	return p;
 }
@@ -862,9 +867,8 @@ void neigh_parms_release(struct neigh_table *tbl, struct neigh_parms *parms)
 		return;
 	for (p = &tbl->parms.next; *p; p = &(*p)->next) {
 		if (*p == parms) {
-			start_bh_atomic();
+			/* ATOMIC_SET */
 			*p = parms->next;
-			end_bh_atomic();
 #ifdef CONFIG_SYSCTL
 			neigh_sysctl_unregister(parms);
 #endif
@@ -1055,7 +1059,7 @@ static int neigh_fill_info(struct sk_buff *skb, struct neighbour *n,
 
 nlmsg_failure:
 rtattr_failure:
-	skb_put(skb, b - skb->tail);
+	skb_trim(skb, b - skb->data);
 	return -1;
 }
 
@@ -1188,13 +1192,13 @@ struct neigh_sysctl_table
          &proc_dointvec},
 	{NET_NEIGH_REACHABLE_TIME, "base_reachable_time",
          NULL, sizeof(int), 0644, NULL,
-         &proc_dointvec},
+         &proc_dointvec_jiffies},
 	{NET_NEIGH_DELAY_PROBE_TIME, "delay_first_probe_time",
          NULL, sizeof(int), 0644, NULL,
-         &proc_dointvec},
+         &proc_dointvec_jiffies},
 	{NET_NEIGH_GC_STALE_TIME, "gc_stale_time",
          NULL, sizeof(int), 0644, NULL,
-         &proc_dointvec},
+         &proc_dointvec_jiffies},
 	{NET_NEIGH_UNRES_QLEN, "unres_qlen",
          NULL, sizeof(int), 0644, NULL,
          &proc_dointvec},
@@ -1212,7 +1216,7 @@ struct neigh_sysctl_table
          &proc_dointvec},
 	{NET_NEIGH_GC_INTERVAL, "gc_interval",
          NULL, sizeof(int), 0644, NULL,
-         &proc_dointvec},
+         &proc_dointvec_jiffies},
 	{NET_NEIGH_GC_THRESH1, "gc_thresh1",
          NULL, sizeof(int), 0644, NULL,
          &proc_dointvec},
@@ -1230,16 +1234,15 @@ struct neigh_sysctl_table
 	{{CTL_NET, "net", NULL, 0, 0555, NULL},{0}}
 };
 
-void * neigh_sysctl_register(struct device *dev, struct neigh_parms *p,
-			     int p_id, int pdev_id, char *p_name)
+int neigh_sysctl_register(struct device *dev, struct neigh_parms *p,
+			  int p_id, int pdev_id, char *p_name)
 {
 	struct neigh_sysctl_table *t;
 
 	t = kmalloc(sizeof(*t), GFP_KERNEL);
 	if (t == NULL)
-		return NULL;
+		return -ENOBUFS;
 	memcpy(t, &neigh_sysctl_template, sizeof(*t));
-	t->neigh_vars[0].data = &p->mcast_probes;
 	t->neigh_vars[1].data = &p->ucast_probes;
 	t->neigh_vars[2].data = &p->app_probes;
 	t->neigh_vars[3].data = &p->retrans_time;
@@ -1274,9 +1277,10 @@ void * neigh_sysctl_register(struct device *dev, struct neigh_parms *p,
 	t->sysctl_header = register_sysctl_table(t->neigh_root_dir, 0);
 	if (t->sysctl_header == NULL) {
 		kfree(t);
-		return NULL;
+		return -ENOBUFS;
 	}
-	return t;
+	p->sysctl_table = t;
+	return 0;
 }
 
 void neigh_sysctl_unregister(struct neigh_parms *p)

@@ -17,6 +17,7 @@ struct scm_cookie
 	struct ucred		creds;		/* Skb credentials	*/
 	struct scm_fp_list	*fp;		/* Passed files		*/
 	unsigned long		seq;		/* Connection seqno	*/
+	struct file 		*file;		/* file for socket	*/
 	struct socket 		*sock;		/* Passed socket	*/
 };
 

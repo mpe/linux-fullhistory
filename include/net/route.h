@@ -13,6 +13,7 @@
  *		Alan Cox	:	Reformatted. Added ip_rt_local()
  *		Alan Cox	:	Support for TCP parameters.
  *		Alexey Kuznetsov:	Major changes for new routing code.
+ *		Mike McLagan    :	Routing by source
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -28,30 +29,6 @@
 #include <linux/rtnetlink.h>
 
 #define RT_HASH_DIVISOR	    	256
-#define RT_CACHE_MAX_SIZE    	256
-
-/*
- * Maximal time to live for unused entry.
- */
-#define RT_CACHE_TIMEOUT		(HZ*300)
-
-/*
- * Periodic timer frequency
- */
-#define RT_GC_INTERVAL			(HZ*60)
-
-/*
- * Cache invalidations can be delayed by:
- */
-#define RT_FLUSH_DELAY (5*HZ)
-
-#define RT_REDIRECT_NUMBER		9
-#define RT_REDIRECT_LOAD		(HZ/50)	/* 20 msec */
-#define RT_REDIRECT_SILENCE		(RT_REDIRECT_LOAD<<(RT_REDIRECT_NUMBER+1))
-/* 20sec */
-
-#define RT_ERROR_LOAD			(1*HZ)
-
 
 /*
  * Prevents LRU trashing, entries considered equivalent,
@@ -63,6 +40,12 @@
 
 #define RTO_ONLINK	0x01
 #define RTO_TPROXY	0x80000000
+
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+#define RTO_CONN	RTO_TPROXY
+#else
+#define RTO_CONN	0
+#endif
 
 struct rt_key
 {
@@ -102,10 +85,6 @@ struct rtable
 	__u32			rt_src_map;
 	__u32			rt_dst_map;
 #endif
-
-	/* ICMP statistics */
-	unsigned long		last_error;
-	unsigned long		errors;
 };
 
 #ifdef __KERNEL__

@@ -49,7 +49,7 @@
  *	    Thomas Bogendoerfer :	Return ENODEV for dev_open, if there
  *					is no device open function.
  *		Andi Kleen	:	Fix error reporting for SIOCGIFCONF
- *		Régis Duchesne	:	Fix the argument check in dev_ioctl()
+ *	    Michael Chastain	:	Fix signed/unsigned for SIOCGIFCONF
  *
  */
 
@@ -81,9 +81,7 @@
 #include <net/pkt_sched.h>
 #include <net/profile.h>
 #include <linux/init.h>
-#ifdef CONFIG_KERNELD
 #include <linux/kerneld.h>
-#endif
 #ifdef CONFIG_NET_RADIO
 #include <linux/wireless.h>
 #endif	/* CONFIG_NET_RADIO */
@@ -322,14 +320,17 @@ struct device *dev_alloc(const char *name, int *err)
 
 void dev_load(const char *name)
 {
-	if(!dev_get(name))
+	if(!dev_get(name) && suser())
 		request_module(name);
 }
 
+#else
+
+extern inline void dev_load(const char *unused){;}
+
 #endif
 
-static int
-default_rebuild_header(struct sk_buff *skb)
+static int default_rebuild_header(struct sk_buff *skb)
 {
 	printk(KERN_DEBUG "%s: default_rebuild_header called -- BUG!\n", skb->dev ? skb->dev->name : "NULL!!!");
 	kfree_skb(skb);
@@ -965,13 +966,13 @@ net_bh_break:
 
 /* Protocol dependent address dumping routines */
 
-static int (*gifconf[NPROTO])(struct device *dev, char *bufptr, int len);
+static gifconf_func_t * gifconf_list [NPROTO];
 
-int register_gifconf(int family, int (*func)(struct device *dev, char *bufptr, int len))
+int register_gifconf(unsigned int family, gifconf_func_t * gifconf)
 {
-	if (family<0 || family>=NPROTO)
+	if (family>=NPROTO)
 		return -EINVAL;
-	gifconf[family] = func;
+	gifconf_list[family] = gifconf;
 	return 0;
 }
 
@@ -1058,49 +1059,45 @@ static int dev_ifconf(char *arg)
 	struct ifconf ifc;
 	struct device *dev;
 	char *pos;
-	unsigned int len;
-	int err;
+	int len;
+	int total;
+	int i;
 
 	/*
 	 *	Fetch the caller's info block. 
 	 */
 	
-	err = copy_from_user(&ifc, arg, sizeof(struct ifconf));
-	if (err)
+	if (copy_from_user(&ifc, arg, sizeof(struct ifconf)))
 		return -EFAULT;
 
 	pos = ifc.ifc_buf;
-	if (pos==NULL)
-		ifc.ifc_len=0;
 	len = ifc.ifc_len;
 
 	/*
 	 *	Loop over the interfaces, and write an info block for each. 
 	 */
 
+	total = 0;
 	for (dev = dev_base; dev != NULL; dev = dev->next) {
-		int i;
 		for (i=0; i<NPROTO; i++) {
-			int done;
-
-			if (gifconf[i] == NULL)
-				continue;
-
-			done = gifconf[i](dev, pos, len);
-
-			if (done<0)
-				return -EFAULT;
-
-			len -= done;
-			if (pos)
-				pos += done;
+			if (gifconf_list[i]) {
+				int done;
+				if (pos==NULL) {
+					done = gifconf_list[i](dev, NULL, 0);
+				} else {
+					done = gifconf_list[i](dev, pos+total, len-total);
+				}
+				if (done<0)
+					return -EFAULT;
+				total += done;
+			}
 		}
   	}
 
 	/*
 	 *	All done.  Write the updated control block back to the caller. 
 	 */
-	ifc.ifc_len -= len;
+	ifc.ifc_len = total;
 
 	if (copy_to_user(arg, &ifc, sizeof(struct ifconf)))
 		return -EFAULT; 
@@ -1535,6 +1532,7 @@ static int dev_ifsioc(struct ifreq *ifr, unsigned int cmd)
 	return -EINVAL;
 }
 
+
 /*
  *	This function handles all "interface"-type I/O control requests. The actual
  *	'doing' part of this is dev_ifsioc above.
@@ -1544,9 +1542,7 @@ int dev_ioctl(unsigned int cmd, void *arg)
 {
 	struct ifreq ifr;
 	int ret;
-#ifdef CONFIG_NET_ALIAS
 	char *colon;
-#endif
 
 	/* One special case: SIOCGIFCONF takes ifconf argument
 	   and requires shared lock, because it sleeps writing
@@ -1566,19 +1562,19 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		return dev_ifname((struct ifreq *)arg);
 	}
 
-	/*
-	 *	Fetch the interface name from the info block. 
-	 */
-
 	if (copy_from_user(&ifr, arg, sizeof(struct ifreq)))
 		return -EFAULT;
+
 	ifr.ifr_name[IFNAMSIZ-1] = 0;
-#ifdef CONFIG_NET_ALIAS
+
 	colon = strchr(ifr.ifr_name, ':');
 	if (colon)
 		*colon = 0;
-#endif
 
+	/*
+	 *	See which interface the caller is talking about. 
+	 */
+	 
 	switch(cmd) 
 	{
 		/*
@@ -1596,15 +1592,11 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		case SIOCGIFMAP:
 		case SIOCGIFINDEX:
 		case SIOCGIFTXQLEN:
-#ifdef CONFIG_KERNELD
 			dev_load(ifr.ifr_name);
-#endif	
 			ret = dev_ifsioc(&ifr, cmd);
 			if (!ret) {
-#ifdef CONFIG_NET_ALIAS
 				if (colon)
 					*colon = ':';
-#endif
 				if (copy_to_user(arg, &ifr, sizeof(struct ifreq)))
 					return -EFAULT;
 			}
@@ -1629,9 +1621,7 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		case SIOCSIFTXQLEN:
 			if (!suser())
 				return -EPERM;
-#ifdef CONFIG_KERNELD
 			dev_load(ifr.ifr_name);
-#endif	
 			rtnl_lock();
 			ret = dev_ifsioc(&ifr, cmd);
 			rtnl_unlock();
@@ -1652,9 +1642,7 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		default:
 			if (cmd >= SIOCDEVPRIVATE &&
 			    cmd <= SIOCDEVPRIVATE + 15) {
-#ifdef CONFIG_KERNELD
 				dev_load(ifr.ifr_name);
-#endif	
 				rtnl_lock();
 				ret = dev_ifsioc(&ifr, cmd);
 				rtnl_unlock();
@@ -1664,18 +1652,12 @@ int dev_ioctl(unsigned int cmd, void *arg)
 			}
 #ifdef CONFIG_NET_RADIO
 			if (cmd >= SIOCIWFIRST && cmd <= SIOCIWLAST) {
+				dev_load(ifr.ifr_name);
 				if (IW_IS_SET(cmd)) {
 					if (!suser())
 						return -EPERM;
-#ifdef CONFIG_KERNELD
-					dev_load(ifr.ifr_name);
-#endif	
 					rtnl_lock();
 				}
-#ifdef CONFIG_KERNELD
-				else
-					dev_load(ifr.ifr_name);
-#endif	
 				ret = dev_ifsioc(&ifr, cmd);
 				if (IW_IS_SET(cmd))
 					rtnl_unlock();
@@ -1689,7 +1671,7 @@ int dev_ioctl(unsigned int cmd, void *arg)
 	}
 }
 
-int dev_new_index()
+int dev_new_index(void)
 {
 	static int ifindex;
 	for (;;) {
@@ -1938,7 +1920,7 @@ __initfunc(int net_dev_init(void))
 
 #ifdef CONFIG_PROC_FS
 	proc_net_register(&proc_net_dev);
-	if (1) {
+	{
 		struct proc_dir_entry *ent = create_proc_entry("net/dev_stat", 0, 0);
 		ent->read_proc = dev_proc_stats;
 	}

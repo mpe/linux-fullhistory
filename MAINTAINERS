@@ -373,6 +373,8 @@ L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
 NCP FILESYSTEM:
+P:	Petr Vandrovec
+M:	vandrove@vc.cvut.cz
 P:	Volker Lendecke
 M:	lendecke@Math.Uni-Goettingen.de
 L:	linware@sh.cvut.cz
@@ -478,7 +480,7 @@ S:	Maintained
 
 RISCOM8 DRIVER:
 P:	Dmitry Gorodchanin
-M:	begemot@bgm.rosprint.net
+M:	pgmdsg@ibi.com
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 

@@ -776,25 +776,25 @@ ieee_CVTTQ (int f, unsigned long a, unsigned long *b)
 			midway = (temp.f[0] & 0x003fffffffffffff) == 0;
 			if ((midway && (temp.f[0] & 0x0080000000000000)) ||
 			    !midway)
-				++b;
+				++*b;
 		}
 		break;
 
 	      case ROUND_PINF:
-		if ((temp.f[0] & 0x003fffffffffffff) != 0)
-			++b;
+		if ((temp.f[0] & 0x007fffffffffffff) != 0)
+			++*b;
 		break;
 
 	      case ROUND_NINF:
-		if ((temp.f[0] & 0x003fffffffffffff) != 0)
-			--b;
+		if ((temp.f[0] & 0x007fffffffffffff) != 0)
+			--*b;
 		break;
 
 	      case ROUND_CHOP:
 		/* no action needed */
 		break;
 	}
-	if ((temp.f[0] & 0x003fffffffffffff) != 0)
+	if ((temp.f[0] & 0x007fffffffffffff) != 0)
 		res |= FPCR_INE;
 
 	if (temp.s) {

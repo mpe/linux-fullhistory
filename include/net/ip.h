@@ -11,6 +11,9 @@
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Alan Cox, <gw4pts@gw4pts.ampr.org>
  *
+ * Changes:
+ *		Mike McLagan    :       Routing by source
+ *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
@@ -117,29 +120,17 @@ extern int		ip_build_xmit(struct sock *sk,
 
 extern int __ip_finish_output(struct sk_buff *skb);
 
-
-extern struct ip_mib	ip_statistics;
-
 struct ipv4_config
 {
-	int	accept_redirects;
-	int	secure_redirects;
-	int	rfc1620_redirects;
-	int	rfc1812_filter;
-	int	send_redirects;
 	int	log_martians;
-	int	source_route;
-	int	multicast_route;
-	int	proxy_arp;
-	int	bootp_relay;
 	int	autoconfig;
 	int	no_pmtu_disc;
 };
 
 extern struct ipv4_config ipv4_config;
-extern int sysctl_local_port_range[2];
+extern struct ip_mib	ip_statistics;
 
-#define IS_ROUTER	(ip_statistics.IpForwarding == 1)
+extern int sysctl_local_port_range[2];
 
 extern __inline__ int ip_finish_output(struct sk_buff *skb)
 {

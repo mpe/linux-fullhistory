@@ -214,7 +214,7 @@ extern __inline__ int tcp_paws_discard(struct tcp_opt *tp)
 	/* FIXME: must check that ts_recent is not
  	 * more than 24 days old here. Yuck.
  	 */
-	return (tp->rcv_tsval-tp->ts_recent < 0);
+	return ((s32)(tp->rcv_tsval-tp->ts_recent) < 0);
 }
 
 

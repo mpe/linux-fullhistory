@@ -21,7 +21,7 @@
 #include <linux/coda.h>
 #include <linux/coda_linux.h>
 #include <linux/coda_psdev.h>
-#include <linux/coda_cnode.h>
+#include <linux/coda_fs_i.h>
 #include <linux/coda_cache.h>
 
 static int coda_readlink(struct dentry *de, char *buffer, int length);
@@ -39,41 +39,41 @@ struct inode_operations coda_symlink_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	coda_readlink,		/* readlink */
-	coda_follow_link,	/* follow_link */
+	coda_follow_link,     	/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
 	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL,			/* smap */
-	NULL,			/* update page */
-	NULL			/* revalidate */
+	NULL,            	/* permission */
+	NULL,                   /* smap */
+	NULL,                   /* update page */
+        NULL                    /* revalidate */
 };
 
 static int coda_readlink(struct dentry *de, char *buffer, int length)
 {
 	struct inode *inode = de->d_inode;
-	int len;
+        int len;
 	int error;
-	char *buf;
-	struct cnode *cp;
-	ENTRY;
+        char *buf;
+	struct coda_inode_info *cp;
+        ENTRY;
 
-	cp = ITOC(inode);
-	CHECK_CNODE(cp);
+        cp = ITOC(inode);
+        CHECK_CNODE(cp);
 
-	/* the maximum length we receive is len */
-	if ( length > CFS_MAXPATHLEN ) 
-		len = CFS_MAXPATHLEN;
+        /* the maximum length we receive is len */
+        if ( length > CFS_MAXPATHLEN ) 
+	        len = CFS_MAXPATHLEN;
 	else
-		len = length;
+	        len = length;
 	CODA_ALLOC(buf, char *, len);
 	if ( !buf ) 
-		return -ENOMEM;
+	        return -ENOMEM;
 	
 	error = venus_readlink(inode->i_sb, &(cp->c_fid), buf, &len);
 
-	CDEBUG(D_INODE, "result %s\n", buf);
+        CDEBUG(D_INODE, "result %s\n", buf);
 	if (! error) {
 		copy_to_user(buffer, buf, len);
 		put_user('\0', buffer + len);
@@ -89,15 +89,15 @@ static struct dentry *coda_follow_link(struct dentry *de,
 {
 	struct inode *inode = de->d_inode;
 	int error;
-	struct cnode *cnp;
+	struct coda_inode_info *cnp;
 	unsigned int len;
 	char mem[CFS_MAXPATHLEN];
 	char *path;
 ENTRY;
-	CDEBUG(D_INODE, "(%s/%ld)\n", kdevname(inode->i_dev), inode->i_ino);
+	CDEBUG(D_INODE, "(%x/%ld)\n", inode->i_dev, inode->i_ino);
 	
-	cnp = ITOC(inode);
-	CHECK_CNODE(cnp);
+        cnp = ITOC(inode);
+        CHECK_CNODE(cnp);
 
 	len = CFS_MAXPATHLEN;
 	error = venus_readlink(inode->i_sb, &(cnp->c_fid), mem, &len);

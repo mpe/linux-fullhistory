@@ -198,6 +198,9 @@ EXPORT_SYMBOL(ip_route_output);
 EXPORT_SYMBOL(icmp_send);
 EXPORT_SYMBOL(ip_options_compile);
 EXPORT_SYMBOL(arp_send);
+#ifdef CONFIG_SHAPER_MODULE
+EXPORT_SYMBOL(arp_broken_ops);
+#endif
 EXPORT_SYMBOL(ip_id_count);
 EXPORT_SYMBOL(ip_send_check);
 EXPORT_SYMBOL(ip_fragment);
@@ -206,6 +209,7 @@ EXPORT_SYMBOL(in_aton);
 EXPORT_SYMBOL(ip_mc_inc_group);
 EXPORT_SYMBOL(ip_mc_dec_group);
 EXPORT_SYMBOL(__ip_finish_output);
+EXPORT_SYMBOL(inet_dgram_ops);
 
 /* needed for ip_gre -cw */
 EXPORT_SYMBOL(ip_statistics);
@@ -213,7 +217,6 @@ EXPORT_SYMBOL(ip_statistics);
 #ifdef CONFIG_IPV6_MODULE
 /* inet functions common to v4 and v6 */
 EXPORT_SYMBOL(inet_stream_ops);
-EXPORT_SYMBOL(inet_dgram_ops);
 EXPORT_SYMBOL(inet_release);
 EXPORT_SYMBOL(inet_stream_connect);
 EXPORT_SYMBOL(inet_dgram_connect);
@@ -289,12 +292,24 @@ EXPORT_SYMBOL(tcp_simple_retransmit);
 EXPORT_SYMBOL(xrlim_allow);
 #endif
 
+#ifdef CONFIG_NETLINK
+EXPORT_SYMBOL(netlink_set_err);
+EXPORT_SYMBOL(netlink_broadcast);
+EXPORT_SYMBOL(netlink_unicast);
+EXPORT_SYMBOL(netlink_kernel_create);
+EXPORT_SYMBOL(netlink_dump_start);
+EXPORT_SYMBOL(netlink_ack);
+#if defined(CONFIG_NETLINK_DEV) || defined(CONFIG_NETLINK_DEV_MODULE)
+EXPORT_SYMBOL(netlink_attach);
+EXPORT_SYMBOL(netlink_detach);
+EXPORT_SYMBOL(netlink_post);
+#endif
+#endif
+
 #ifdef CONFIG_RTNETLINK
 EXPORT_SYMBOL(rtnetlink_links);
 EXPORT_SYMBOL(__rta_fill);
 EXPORT_SYMBOL(rtnetlink_dump_ifinfo);
-EXPORT_SYMBOL(netlink_set_err);
-EXPORT_SYMBOL(netlink_broadcast);
 EXPORT_SYMBOL(rtnl_wlockct);
 EXPORT_SYMBOL(rtnl);
 EXPORT_SYMBOL(neigh_delete);
@@ -375,8 +390,14 @@ EXPORT_SYMBOL(dev_alloc);
 EXPORT_SYMBOL(dev_alloc_name);
 EXPORT_SYMBOL(dev_ioctl);
 EXPORT_SYMBOL(dev_queue_xmit);
+EXPORT_SYMBOL(netdev_dropping);
 #ifdef CONFIG_NET_FASTROUTE
 EXPORT_SYMBOL(dev_fastroute_stat);
+#endif
+#ifdef CONFIG_NET_HW_FLOWCONTROL
+EXPORT_SYMBOL(netdev_register_fc);
+EXPORT_SYMBOL(netdev_unregister_fc);
+EXPORT_SYMBOL(netdev_fc_xoff);
 #endif
 #ifdef CONFIG_IP_ACCT
 EXPORT_SYMBOL(ip_acct_output);
@@ -415,5 +436,7 @@ EXPORT_SYMBOL(qdisc_head);
 EXPORT_SYMBOL(register_qdisc);
 EXPORT_SYMBOL(unregister_qdisc);
 EXPORT_SYMBOL(noop_qdisc);
+
+EXPORT_SYMBOL(register_gifconf);
 
 #endif  /* CONFIG_NET */

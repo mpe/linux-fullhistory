@@ -29,7 +29,7 @@ struct ncp_ioctl_request {
 struct ncp_fs_info {
 	int version;
 	struct sockaddr_ipx addr;
-	uid_t mounted_uid;
+	__kernel_uid_t mounted_uid;
 	int connection;		/* Connection number the server assigned us */
 	int buffer_size;	/* The negotiated buffer size, to be
 				   used for read/write requests! */
@@ -38,12 +38,71 @@ struct ncp_fs_info {
 	__u32 directory_id;
 };
 
+struct ncp_sign_init
+{
+	char sign_root[8];
+	char sign_last[16];
+};
+
+struct ncp_lock_ioctl
+{
+#define NCP_LOCK_LOG	0
+#define NCP_LOCK_SH	1
+#define NCP_LOCK_EX	2
+#define NCP_LOCK_CLEAR	256
+	int		cmd;
+	int		origin;
+	unsigned int	offset;
+	unsigned int	length;
+#define NCP_LOCK_DEFAULT_TIMEOUT	18
+#define NCP_LOCK_MAX_TIMEOUT		180
+	int		timeout;
+};
+
+struct ncp_setroot_ioctl
+{
+	int		volNumber;
+	int		namespace;
+	__u32		dirEntNum;
+};
+
+struct ncp_objectname_ioctl
+{
+#define NCP_AUTH_NONE	0x00
+#define NCP_AUTH_BIND	0x31
+#define NCP_AUTH_NDS	0x32
+	int		auth_type;
+	size_t		object_name_len;
+	void*		object_name;	/* an userspace data, in most cases user name */
+};
+
+struct ncp_privatedata_ioctl
+{
+	size_t		len;
+	void*		data;		/* ~1000 for NDS */
+};
+
 #define	NCP_IOC_NCPREQUEST		_IOR('n', 1, struct ncp_ioctl_request)
 #define	NCP_IOC_GETMOUNTUID		_IOW('n', 2, uid_t)
+#define NCP_IOC_GETMOUNTUID_INT		_IOW('n', 2, unsigned int)
 #define NCP_IOC_CONN_LOGGED_IN          _IO('n', 3)
 
 #define NCP_GET_FS_INFO_VERSION (1)
 #define NCP_IOC_GET_FS_INFO             _IOWR('n', 4, struct ncp_fs_info)
+
+#define NCP_IOC_SIGN_INIT		_IOR('n', 5, struct ncp_sign_init)
+#define NCP_IOC_SIGN_WANTED		_IOR('n', 6, int)
+#define NCP_IOC_SET_SIGN_WANTED		_IOW('n', 6, int)
+
+#define NCP_IOC_LOCKUNLOCK		_IOR('n', 7, struct ncp_lock_ioctl)
+
+#define NCP_IOC_GETROOT			_IOW('n', 8, struct ncp_setroot_ioctl)
+#define NCP_IOC_SETROOT			_IOR('n', 8, struct ncp_setroot_ioctl)
+
+#define NCP_IOC_GETOBJECTNAME		_IOWR('n', 9, struct ncp_objectname_ioctl)
+#define NCP_IOC_SETOBJECTNAME		_IOR('n', 9, struct ncp_objectname_ioctl)
+#define NCP_IOC_GETPRIVATEDATA		_IOWR('n', 10, struct ncp_privatedata_ioctl)
+#define NCP_IOC_SETPRIVATEDATA		_IOR('n', 10, struct ncp_privatedata_ioctl)
 
 /*
  * The packet size to allocate. One page should be enough.
@@ -55,8 +114,12 @@ struct ncp_fs_info {
 
 #ifdef __KERNEL__
 
+#include <linux/config.h>
+
 #undef NCPFS_PARANOIA
+#ifndef DEBUG_NCP
 #define DEBUG_NCP 0
+#endif
 #if DEBUG_NCP > 0
 #define DPRINTK(format, args...) printk(format , ## args)
 #else
@@ -140,9 +203,11 @@ static inline void ncp_kfree_s(void *obj, int size)
 #endif				/* DEBUG_NCP_MALLOC */
 
 /* linux/fs/ncpfs/inode.c */
+int ncp_notify_change(struct dentry *, struct iattr *attr);
 struct super_block *ncp_read_super(struct super_block *, void *, int);
 struct inode *ncp_iget(struct super_block *, struct ncpfs_inode_info *);
 void ncp_update_inode(struct inode *, struct nw_file_info *);
+void ncp_update_inode2(struct inode *, struct nw_file_info *);
 extern int init_ncp_fs(void);
 
 /* linux/fs/ncpfs/dir.c */
@@ -202,12 +267,26 @@ static inline int ncp_namespace(struct inode *inode)
 
 static inline int ncp_preserve_case(struct inode *i)
 {
-       	return (ncp_namespace(i) == NW_NS_OS2);
+#if defined(CONFIG_NCPFS_NFS_NS) || defined(CONFIG_NCPFS_OS2_NS)
+	int ns = ncp_namespace(i);
+#endif
+	return
+#ifdef CONFIG_NCPFS_OS2_NS
+	(ns == NW_NS_OS2) ||
+#endif	/* CONFIG_NCPFS_OS2_NS */
+#ifdef CONFIG_NCPFS_NFS_NS
+	(ns == NW_NS_NFS) ||
+#endif	/* CONFIG_NCPFS_NFS_NS */
+	0;
 }
 
 static inline int ncp_case_sensitive(struct inode *i)
 {
+#ifdef CONFIG_NCPFS_NFS_NS
+	return ncp_namespace(i) == NW_NS_NFS;
+#else
 	return 0;
+#endif	/* CONFIG_NCPFS_NFS_NS */
 } 
 
 #endif				/* __KERNEL__ */

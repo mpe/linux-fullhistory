@@ -148,6 +148,10 @@ extern __inline__ void ipv6_addr_all_routers(struct in6_addr *addr)
 		      __constant_htonl(0x2));
 }
 
+extern __inline__ int ipv6_addr_is_multicast(struct in6_addr *addr)
+{
+	return (addr->s6_addr32[0] & __constant_htonl(0xFF000000)) == __constant_htonl(0xFF000000);
+}
 
 #endif
 #endif

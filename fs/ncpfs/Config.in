@@ -1,0 +1,10 @@
+#
+# NCP Filesystem configuration
+#
+# bool     '   Packet singatures' CONFIG_NCPFS_PACKET_SIGNING
+bool     '   Proprietary file locking' CONFIG_NCPFS_IOCTL_LOCKING
+bool     '   Clear remove/delete inhibit when needed' CONFIG_NCPFS_STRONG
+bool     '   Use NFS namespace if available' CONFIG_NCPFS_NFS_NS
+bool     '   Use LONG (OS/2) namespace if available' CONFIG_NCPFS_OS2_NS
+bool     '   Allow mounting of volume subdirectories' CONFIG_NCPFS_MOUNT_SUBDIR
+# bool     '   NDS interserver authentication support' CONFIG_NCPFS_NDS_DOMAINS

@@ -148,10 +148,10 @@ struct ipv6_pinfo
 	struct in6_addr		daddr;
 
 	__u32			flow_lbl;
+	int			hop_limit;
+	int			mcast_hops;
 	__u8			priority;
-	__u8			hop_limit;
 
-	__u8			mcast_hops;
 
 	/* sockopt flags */
 
@@ -879,7 +879,10 @@ extern __inline__ void skb_set_owner_r(struct sk_buff *skb, struct sock *sk)
 
 extern __inline__ int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 {
-	if (atomic_read(&sk->rmem_alloc) + skb->truesize >= sk->rcvbuf)
+	/* Cast skb->rcvbuf to unsigned... It's pointless, but reduces
+	   number of warnings when compiling with -W --ANK
+	 */
+	if (atomic_read(&sk->rmem_alloc) + skb->truesize >= (unsigned)sk->rcvbuf)
                 return -ENOMEM;
         skb_set_owner_r(skb, sk);
 
@@ -899,7 +902,10 @@ extern __inline__ int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 
 extern __inline__ int __sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 {
-	if (atomic_read(&sk->rmem_alloc) + skb->truesize >= sk->rcvbuf)
+	/* Cast skb->rcvbuf to unsigned... It's pointless, but reduces
+	   number of warnings when compiling with -W --ANK
+	 */
+	if (atomic_read(&sk->rmem_alloc) + skb->truesize >= (unsigned)sk->rcvbuf)
 		return -ENOMEM;
 	skb_set_owner_r(skb, sk);
 	__skb_queue_tail(&sk->receive_queue,skb);
@@ -910,7 +916,10 @@ extern __inline__ int __sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 
 extern __inline__ int sock_queue_err_skb(struct sock *sk, struct sk_buff *skb)
 {
-	if (atomic_read(&sk->rmem_alloc) + skb->truesize >= sk->rcvbuf)
+	/* Cast skb->rcvbuf to unsigned... It's pointless, but reduces
+	   number of warnings when compiling with -W --ANK
+	 */
+	if (atomic_read(&sk->rmem_alloc) + skb->truesize >= (unsigned)sk->rcvbuf)
 		return -ENOMEM;
 	skb_set_owner_r(skb, sk);
 	__skb_queue_tail(&sk->error_queue,skb);

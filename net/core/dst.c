@@ -79,6 +79,11 @@ static int dst_blackhole(struct sk_buff *skb)
 void * dst_alloc(int size, struct dst_ops * ops)
 {
 	struct dst_entry * dst;
+
+	if (ops->gc && atomic_read(&ops->entries) > ops->gc_thresh) {
+		if (ops->gc())
+			return NULL;
+	}
 	dst = kmalloc(size, GFP_ATOMIC);
 	if (!dst)
 		return NULL;
@@ -89,6 +94,7 @@ void * dst_alloc(int size, struct dst_ops * ops)
 	dst->input = dst_discard;
 	dst->output = dst_blackhole;
 	atomic_inc(&dst_total);
+	atomic_inc(&ops->entries);
 	return dst;
 }
 
@@ -121,6 +127,8 @@ void dst_destroy(struct dst_entry * dst)
 		dst->neighbour = NULL;
 		neigh_release(neigh);
 	}
+
+	atomic_dec(&dst->ops->entries);
 
 	if (dst->ops->destroy)
 		dst->ops->destroy(dst);

@@ -73,42 +73,27 @@ int tcp_retr1_max = 255;
 extern int tcp_sysctl_congavoid(ctl_table *ctl, int write, struct file * filp,
 				void *buffer, size_t *lenp);
 
-struct ipv4_config ipv4_config = { 1, 1, 1, 0, };
+struct ipv4_config ipv4_config;
+
+extern ctl_table ipv4_route_table[];
 
 #ifdef CONFIG_SYSCTL
 
-struct ipv4_config ipv4_def_router_config = { 0, 1, 1, 1, 1, 1, 1, };
-struct ipv4_config ipv4_def_host_config = { 1, 1, 1, 0, };
-
 static
-int ipv4_sysctl_forwarding(ctl_table *ctl, int write, struct file * filp,
-			   void *buffer, size_t *lenp)
+int ipv4_sysctl_forward(ctl_table *ctl, int write, struct file * filp,
+			void *buffer, size_t *lenp)
 {
-	int val = IS_ROUTER;
+	int val = ipv4_devconf.forwarding;
 	int ret;
 
 	ret = proc_dointvec(ctl, write, filp, buffer, lenp);
 
-	if (write && IS_ROUTER != val) {
-		if (IS_ROUTER)
-			ipv4_config = ipv4_def_router_config;
-		else
-			ipv4_config = ipv4_def_host_config;
-		rt_cache_flush(0);
-        }
+	if (write && ipv4_devconf.forwarding != val)
+		inet_forward_change();
+
         return ret;
 }
 
-static
-int ipv4_sysctl_rtcache_flush(ctl_table *ctl, int write, struct file * filp,
-			      void *buffer, size_t *lenp)
-{
-	if (write) {
-		rt_cache_flush(0);
-		return 0;
-	} else
-		return -EINVAL;
-}
 
 ctl_table ipv4_table[] = {
         {NET_IPV4_TCP_HOE_RETRANSMITS, "tcp_hoe_retransmits",
@@ -129,55 +114,25 @@ ctl_table ipv4_table[] = {
 	{NET_IPV4_TCP_VEGAS_CONG_AVOID, "tcp_vegas_cong_avoid",
 	 &sysctl_tcp_cong_avoidance, sizeof(int), 0644,
 	 NULL, &tcp_sysctl_congavoid },
-        {NET_IPV4_FORWARDING, "ip_forwarding",
-         &ip_statistics.IpForwarding, sizeof(int), 0644, NULL,
-         &ipv4_sysctl_forwarding},
+        {NET_IPV4_FORWARD, "ip_forward",
+         &ipv4_devconf.forwarding, sizeof(int), 0644, NULL,
+         &ipv4_sysctl_forward},
         {NET_IPV4_DEFAULT_TTL, "ip_default_ttl",
          &ip_statistics.IpDefaultTTL, sizeof(int), 0644, NULL,
-         &proc_dointvec},
-        {NET_IPV4_RFC1812_FILTER, "ip_rfc1812_filter",
-         &ipv4_config.rfc1812_filter, sizeof(int), 0644, NULL,
-         &proc_dointvec},
-        {NET_IPV4_LOG_MARTIANS, "ip_log_martians",
-         &ipv4_config.log_martians, sizeof(int), 0644, NULL,
-         &proc_dointvec},
-        {NET_IPV4_SOURCE_ROUTE, "ip_source_route",
-         &ipv4_config.source_route, sizeof(int), 0644, NULL,
-         &proc_dointvec},
-        {NET_IPV4_SEND_REDIRECTS, "ip_send_redirects",
-         &ipv4_config.send_redirects, sizeof(int), 0644, NULL,
          &proc_dointvec},
         {NET_IPV4_AUTOCONFIG, "ip_autoconfig",
          &ipv4_config.autoconfig, sizeof(int), 0644, NULL,
          &proc_dointvec},
-        {NET_IPV4_BOOTP_RELAY, "ip_bootp_relay",
-         &ipv4_config.bootp_relay, sizeof(int), 0644, NULL,
-         &proc_dointvec},
-        {NET_IPV4_PROXY_ARP, "ip_proxy_arp",
-         &ipv4_config.proxy_arp, sizeof(int), 0644, NULL,
-         &proc_dointvec},
         {NET_IPV4_NO_PMTU_DISC, "ip_no_pmtu_disc",
          &ipv4_config.no_pmtu_disc, sizeof(int), 0644, NULL,
          &proc_dointvec},
-        {NET_IPV4_ACCEPT_REDIRECTS, "ip_accept_redirects",
-         &ipv4_config.accept_redirects, sizeof(int), 0644, NULL,
-         &proc_dointvec},
-        {NET_IPV4_SECURE_REDIRECTS, "ip_secure_redirects",
-         &ipv4_config.secure_redirects, sizeof(int), 0644, NULL,
-         &proc_dointvec},
-        {NET_IPV4_RFC1620_REDIRECTS, "ip_rfc1620_redirects",
-         &ipv4_config.rfc1620_redirects, sizeof(int), 0644, NULL,
-         &proc_dointvec},
-        {NET_IPV4_RTCACHE_FLUSH, "ip_rtcache_flush",
-         NULL, sizeof(int), 0644, NULL,
-         &ipv4_sysctl_rtcache_flush},
 	{NET_IPV4_TCP_SYN_RETRIES, "tcp_syn_retries",
 	 &sysctl_tcp_syn_retries, sizeof(int), 0644, NULL, &proc_dointvec},
 	{NET_IPV4_IPFRAG_HIGH_THRESH, "ipfrag_high_thresh",
 	 &sysctl_ipfrag_high_thresh, sizeof(int), 0644, NULL, &proc_dointvec},
 	{NET_IPV4_IPFRAG_LOW_THRESH, "ipfrag_low_thresh",
 	 &sysctl_ipfrag_low_thresh, sizeof(int), 0644, NULL, &proc_dointvec},
-	{NET_IPV4_IP_DYNADDR, "ip_dynaddr",
+	{NET_IPV4_DYNADDR, "ip_dynaddr",
 	 &sysctl_ip_dynaddr, sizeof(int), 0644, NULL, &proc_dointvec},
 #ifdef CONFIG_IP_MASQUERADE
 	{NET_IPV4_IP_MASQ_DEBUG, "ip_masq_debug",
@@ -230,6 +185,7 @@ ctl_table ipv4_table[] = {
 	 &sysctl_icmp_paramprob_time, sizeof(int), 0644, NULL, &proc_dointvec},
 	{NET_IPV4_ICMP_ECHOREPLY_RATE, "icmp_echoreply_rate",
 	 &sysctl_icmp_echoreply_time, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_IPV4_ROUTE, "route", NULL, 0, 0555, ipv4_route_table},
 	{0}
 };
 

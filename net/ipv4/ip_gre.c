@@ -554,7 +554,7 @@ int ipgre_rcv(struct sk_buff *skb, unsigned short len)
 		}
 		if (tunnel->parms.i_flags&GRE_SEQ) {
 			if (!(flags&GRE_SEQ) ||
-			    (tunnel->i_seqno && seqno - tunnel->i_seqno < 0)) {
+			    (tunnel->i_seqno && (s32)(seqno - tunnel->i_seqno) < 0)) {
 				tunnel->stat.rx_fifo_errors++;
 				tunnel->stat.rx_errors++;
 				goto drop;
@@ -704,12 +704,7 @@ static int ipgre_tunnel_xmit(struct sk_buff *skb, struct device *dev)
 		if (jiffies - tunnel->err_time < IPTUNNEL_ERR_TIMEO) {
 			tunnel->err_count--;
 
-			if (skb->protocol == __constant_htons(ETH_P_IP))
-				icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0);
-#ifdef CONFIG_IPV6
-			else if (skb->protocol == __constant_htons(ETH_P_IPV6))
-				icmpv6_send(skb, ICMPV6_DEST_UNREACH, ICMPV6_ADDR_UNREACH, 0, dev);
-#endif
+			dst_link_failure(skb);
 		} else
 			tunnel->err_count = 0;
 	}
@@ -792,12 +787,7 @@ static int ipgre_tunnel_xmit(struct sk_buff *skb, struct device *dev)
 	return 0;
 
 tx_error_icmp:
-	if (skb->protocol == __constant_htons(ETH_P_IP))
-		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0);
-#ifdef CONFIG_IPV6
-	else if (skb->protocol == __constant_htons(ETH_P_IPV6))
-		icmpv6_send(skb, ICMPV6_DEST_UNREACH, ICMPV6_ADDR_UNREACH, 0, dev);
-#endif
+	dst_link_failure(skb);
 
 tx_error:
 	stats->tx_errors++;

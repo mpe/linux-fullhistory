@@ -5330,6 +5330,55 @@ CONFIG_NCP_FS
   read Documentation/modules.txt. The module will be called
   ncpfs.o. Say N unless you are connected to a Novell network.
 
+Packet signatures
+CONFIG_NCPFS_PACKET_SIGNING
+  NCP allows to sign packets for stronger security. If you want
+  security, say Y. Normal users can leave it off. To be able to use
+  packet signing you must use ncpfs > 2.0.12.
+
+Proprietary file locking
+CONFIG_NCPFS_IOCTL_LOCKING
+  Allows locking of records on remote volumes. Say N unless you have special
+  applications which are able to utilize this locking scheme.
+
+Clear remove/delete inhibit when needed
+CONFIG_NCPFS_STRONG
+  Allows manipulation of files flagged as Delete or Rename Inhibit.
+  To use this feature you must mount volumes with the ncpmount parameter
+  "-s" (ncpfs-2.0.12 and newer). Say Y unless you are not mounting
+  volumes with -f 444.
+
+Use NFS namespace when available
+CONFIG_NCPFS_NFS_NS
+  Allows you to utilize NFS namespace on NetWare servers. It brings you
+  case sensitive filesystems. Say Y. You can disable it at mount-time with
+  the -N nfs parameter of ncpmount.
+
+Use OS2/LONG namespace when available
+CONFIG_NCPFS_OS2_NS
+  Allows you to utilize OS2/LONG namespace on NetWare servers. Filenames 
+  in this namespace are limited to 255 characters, they are case 
+  insensitive, and case in names is preserved. 
+  Say Y. You can disable it at mount time with the -N os2 parameter of 
+  ncpmount.
+
+Allow mounting of volume subdirectories
+CONFIG_NCPFS_MOUNT_SUBDIR
+  Allows you to mount not only whole servers or whole volumes, but also
+  subdirectory from a volume. It can be used to reexport data and so on.
+  There is no reason why to say N, so Y is recommended unless you count
+  every byte. 
+  To utilize this feature you must use ncpfs-2.0.12 or newer.
+
+NDS interserver authentication domains
+CONFIG_NCPFS_NDS_DOMAINS
+  This allows storing NDS private keys into kernel space where it can be
+  used to authenticate another server as interserver NDS accesses need
+  it. You must use ncpfs-2.0.12.1 or newer to utilize this feature.
+  Say Y if you are using NDS connections to NetWare servers. Do not say Y
+  if security is primary for you because root can read your session
+  key (from /proc/kcore).
+
 Amiga FFS filesystem support
 CONFIG_AFFS_FS
   The Fast File System (FFS) is the common filesystem used on

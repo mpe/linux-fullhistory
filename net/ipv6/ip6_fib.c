@@ -45,8 +45,6 @@ struct rt6_statistics	rt6_stats;
 
 static __u32	rt_sernum	= 0;
 
-static void fib6_run_gc(unsigned long);
-
 static struct timer_list ip6_fib_timer = {
 	NULL, NULL,
 	0,
@@ -421,7 +419,7 @@ static int fib6_add_rt2node(struct fib6_node *fn, struct rt6_info *rt)
 			    (ipv6_addr_cmp(&iter->rt6i_gateway,
 					   &rt->rt6i_gateway) == 0)) {
 				if (rt->rt6i_expires == 0 ||
-				    rt->rt6i_expires - iter->rt6i_expires > 0)
+				    (long)(rt->rt6i_expires - iter->rt6i_expires) > 0)
 					rt->rt6i_expires = iter->rt6i_expires;
 				return -EEXIST;
 			}
@@ -457,7 +455,8 @@ static __inline__ void fib6_start_gc(struct rt6_info *rt)
 {
 	if ((ip6_fib_timer.expires == 0) &&
 	    (rt->rt6i_flags & (RTF_ADDRCONF | RTF_CACHE))) {
-		ip6_fib_timer.expires = jiffies + ipv6_config.rt_gc_period;
+		del_timer(&ip6_fib_timer);
+		ip6_fib_timer.expires = jiffies + ip6_rt_gc_interval;
 		add_timer(&ip6_fib_timer);
 	}
 }
@@ -904,7 +903,7 @@ static int fib6_gc_node(struct fib6_node *fn, int timeout)
 
 	for (rt = fn->leaf; rt;) {
 		if ((rt->rt6i_flags & RTF_CACHE) && atomic_read(&rt->rt6i_use) == 0) {
-			if (now - rt->rt6i_tstamp > timeout) {
+			if ((long)(now - rt->rt6i_tstamp) >= timeout) {
 				struct rt6_info *old;
 
 				old = rt;
@@ -932,7 +931,7 @@ static int fib6_gc_node(struct fib6_node *fn, int timeout)
 		 *	Seems, radix tree walking is absolutely broken,
 		 *	but we will try in any case --ANK
 		 */
-		if (rt->rt6i_expires && now - rt->rt6i_expires < 0) {
+		if (rt->rt6i_expires && (long)(now - rt->rt6i_expires) < 0) {
 			struct rt6_info *old;
 
 			old = rt;
@@ -1042,12 +1041,17 @@ static void fib6_garbage_collect(struct fib6_node *fn, void *p_arg)
 	}
 }
 
-static void fib6_run_gc(unsigned long dummy)
+void fib6_run_gc(unsigned long dummy)
 {
 	struct fib6_gc_args arg = {
-		ipv6_config.rt_cache_timeout,
+		ip6_rt_gc_timeout,
 		0
 	};
+
+	del_timer(&ip6_fib_timer);
+
+	if (dummy)
+		arg.timeout = dummy;
 
 	if (fib6_walk_count == 0)
 		fib6_walk_tree(&ip6_routing_table, fib6_garbage_collect, &arg, 0);
@@ -1055,7 +1059,7 @@ static void fib6_run_gc(unsigned long dummy)
 		arg.more = 1;
 
 	if (arg.more) {
-		ip6_fib_timer.expires = jiffies + ipv6_config.rt_gc_period;
+		ip6_fib_timer.expires = jiffies + ip6_rt_gc_interval;
 		add_timer(&ip6_fib_timer);
 	} else {
 		ip6_fib_timer.expires = 0;

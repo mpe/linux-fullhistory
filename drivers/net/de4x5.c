@@ -213,8 +213,8 @@
 
         insmod de4x5 args='eth1:fdx autosense=BNC eth0:autosense=100Mb'.
 
-    For a compiled in driver, in linux/drivers/net/CONFIG, place e.g.
-	DE4X5_OPTS = -DDE4X5_PARM='"eth0:fdx autosense=AUI eth2:autosense=TP"' 
+    For a compiled in driver, somewhere in this file, place e.g.
+	#define DE4X5_PARM "eth0:fdx autosense=AUI eth2:autosense=TP"
 
     Yes,  I know full duplex  isn't permissible on BNC  or AUI; they're just
     examples. By default, full duplex is turned  off and AUTO is the default
@@ -538,8 +538,8 @@ static int de4x5_debug = (DEBUG_MEDIA | DEBUG_VERSION);
 ** insmod de4x5 args='eth1:fdx autosense=BNC eth0:autosense=100Mb'.
 **
 ** For a compiled in driver, place e.g.
-** DE4X5_OPTS = -DDE4X5_PARM='"eth0:fdx autosense=AUI eth2:autosense=TP"' 
-** in linux/drivers/net/CONFIG
+** #define DE4X5_PARM "eth0:fdx autosense=AUI eth2:autosense=TP"
+** somewhere in this file above this point.
 */
 #ifdef DE4X5_PARM
 static char *args = DE4X5_PARM;

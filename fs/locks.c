@@ -51,7 +51,7 @@
  *
  *  Removed some race conditions in flock_lock_file(), marked other possible
  *  races. Just grep for FIXME to see them. 
- *  Dmitry Gorodchanin (begemot@bgm.rosprint.net), February 09, 1996.
+ *  Dmitry Gorodchanin (pgmdsg@ibi.com), February 09, 1996.
  *
  *  Addressed Dmitry's concerns. Deadlock checking no longer recursive.
  *  Lock allocation changed to GFP_ATOMIC as we can't afford to sleep

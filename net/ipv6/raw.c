@@ -99,7 +99,7 @@ static void raw_v6_rehash(struct sock *sk)
 	SOCKHASH_UNLOCK();
 }
 
-static int __inline__ inet6_mc_check(struct sock *sk, struct in6_addr *addr)
+static __inline__ int inet6_mc_check(struct sock *sk, struct in6_addr *addr)
 {
 	struct ipv6_mc_socklist *mc;
 		
@@ -236,13 +236,11 @@ int rawv6_rcv(struct sk_buff *skb, struct device *dev,
  */
 
 int rawv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
-		  int noblock, int flags,int *addr_len)
+		  int noblock, int flags, int *addr_len)
 {
-	struct sockaddr_in6 *sin6=(struct sockaddr_in6 *)msg->msg_name;
+	struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)msg->msg_name;
 	struct sk_buff *skb;
-	int copied=0;
-	int err;
-
+	int copied, err;
 
 	if (flags & MSG_OOB)
 		return -EOPNOTSUPP;
@@ -253,32 +251,32 @@ int rawv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	if (addr_len) 
 		*addr_len=sizeof(*sin6);
 
-	skb=skb_recv_datagram(sk, flags, noblock, &err);
-	if(skb==NULL)
- 		return err;
+	skb = skb_recv_datagram(sk, flags, noblock, &err);
+	if (!skb)
+		goto out;
 	
 	copied = min(len, skb->tail - skb->h.raw);
 	
 	err = skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
 	sk->stamp=skb->stamp;
-
 	if (err)
-		return err;
+		goto out_free;
 
 	/* Copy the address. */
 	if (sin6) {
 		sin6->sin6_family = AF_INET6;
 		memcpy(&sin6->sin6_addr, &skb->nh.ipv6h->saddr, 
 		       sizeof(struct in6_addr));
-
-		*addr_len = sizeof(struct sockaddr_in6);
 	}
 
 	if (msg->msg_controllen)
 		datagram_recv_ctl(sk, msg, skb);
+	err = copied;
 
+out_free:
 	skb_free_datagram(sk, skb);
-	return (copied);
+out:
+	return err;
 }
 
 /*

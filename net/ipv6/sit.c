@@ -454,7 +454,7 @@ static int ipip6_tunnel_xmit(struct sk_buff *skb, struct device *dev)
 	if (tunnel->err_count > 0) {
 		if (jiffies - tunnel->err_time < IPTUNNEL_ERR_TIMEO) {
 			tunnel->err_count--;
-			icmpv6_send(skb, ICMPV6_DEST_UNREACH, ICMPV6_ADDR_UNREACH, 0, skb->dev);
+			dst_link_failure(skb);
 		} else
 			tunnel->err_count = 0;
 	}
@@ -516,7 +516,7 @@ static int ipip6_tunnel_xmit(struct sk_buff *skb, struct device *dev)
 	return 0;
 
 tx_error_icmp:
-	icmpv6_send(skb, ICMPV6_DEST_UNREACH, ICMPV6_ADDR_UNREACH, 0, dev);
+	dst_link_failure(skb);
 tx_error:
 	stats->tx_errors++;
 	dev_kfree_skb(skb);

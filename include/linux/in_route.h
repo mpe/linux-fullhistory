@@ -6,6 +6,7 @@
 #define RTCF_DEAD	RTNH_F_DEAD
 #define RTCF_ONLINK	RTNH_F_ONLINK
 
+/* Obsolete flag. About to be deleted */
 #define RTCF_NOPMTUDISC RTM_F_NOPMTUDISC
 
 #define RTCF_NOTIFY	0x00010000

@@ -44,8 +44,8 @@
 /* And dynamically-tunable limits and defaults: */
 extern int max_inodes;
 extern int max_files, nr_files, nr_free_files;
-#define NR_INODE 4096	/* this should be bigger than NR_FILE */
-#define NR_FILE 1024	/* this can well be larger on a larger system */
+#define NR_INODE 4096	/* This should no longer be bigger than NR_FILE */
+#define NR_FILE  4096	/* this can well be larger on a larger system */
 #define NR_RESERVED_FILES 10 /* reserved for root */
 
 #define MAY_EXEC 1
@@ -264,6 +264,7 @@ static inline int buffer_protected(struct buffer_head * bh)
 #include <linux/sysv_fs_i.h>
 #include <linux/affs_fs_i.h>
 #include <linux/ufs_fs_i.h>
+#include <linux/coda_fs_i.h>
 #include <linux/romfs_fs_i.h>
 #include <linux/smb_fs_i.h>
 #include <linux/hfs_fs_i.h>
@@ -369,6 +370,7 @@ struct inode {
 		struct affs_inode_info		affs_i;
 		struct ufs_inode_info		ufs_i;
 		struct romfs_inode_info		romfs_i;
+		struct coda_inode_info		coda_i;
 		struct smb_inode_info		smbfs_i;
 		struct hfs_inode_info		hfs_i;
 		struct adfs_inode_info		adfs_i;

@@ -117,7 +117,7 @@
  * contradict to specs provided this delay is small enough.
  */
 
-#define IGMP_V1_SEEN(in_dev) ((in_dev)->mr_v1_seen && jiffies - (in_dev)->mr_v1_seen < 0)
+#define IGMP_V1_SEEN(in_dev) ((in_dev)->mr_v1_seen && (long)(jiffies - (in_dev)->mr_v1_seen) < 0)
 
 /*
  *	Timer management
@@ -286,7 +286,7 @@ static void igmp_heard_query(struct in_device *in_dev, unsigned char max_resp_ti
 		if (LOCAL_MCAST(im->multiaddr))
 			continue;
 		im->unsolicit_count = 0;
-		if (im->tm_running && im->timer.expires-jiffies > max_delay)
+		if (im->tm_running && (long)(im->timer.expires-jiffies) > max_delay)
 			igmp_stop_timer(im);
 		igmp_start_timer(im, max_delay);
 	}

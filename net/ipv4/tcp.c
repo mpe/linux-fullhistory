@@ -196,6 +196,7 @@
  *					improvement.
  *	Stefan Magdalinski	:	adjusted tcp_readable() to fix FIONREAD
  *	Willy Konynenberg	:	Transparent proxying support.
+ *	Mike McLagan		:	Routing by source
  *		Keith Owens	:	Do proper meging with partial SKB's in
  *					tcp_do_sendmsg to avoid burstiness.
  *		Eric Schenk	:	Fix fast close down bug with

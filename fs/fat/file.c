@@ -317,7 +317,13 @@ ssize_t fat_file_read(
 		return MSDOS_SB(inode->i_sb)->cvf_format
 			->cvf_file_read(filp,buf,count,ppos);
 
-	if (!MSDOS_I(inode)->i_binary)
+	/*
+	 * MS-DOS filesystems with a blocksize > 512 may have blocks
+	 * spread over several hardware sectors (unaligned), which
+	 * is not something the generic routines can (or would want
+	 * to) handle).
+	 */
+	if (!MSDOS_I(inode)->i_binary || inode->i_sb->s_blocksize > 512)
 		return fat_file_read_text(filp, buf, count, ppos);
 	return generic_file_read(filp, buf, count, ppos);
 }

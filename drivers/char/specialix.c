@@ -2,7 +2,7 @@
  *      specialix.c  -- specialix IO8+ multiport serial driver.
  *
  *      Copyright (C) 1997  Roger Wolff (R.E.Wolff@BitWizard.nl)
- *      Copyright (C) 1994-1996  Dmitry Gorodchanin (begemot@bgm.rosprint.net)
+ *      Copyright (C) 1994-1996  Dmitry Gorodchanin (pgmdsg@ibi.com)
  *
  *      Specialix pays for the development and support of this driver.
  *      Please DO contact io8-linux@specialix.co.uk if you require
