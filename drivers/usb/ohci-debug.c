@@ -131,7 +131,18 @@ void show_ohci_td(struct ohci_td *td)
 	printk(KERN_DEBUG "      next_td  =  0x%x\n", le32_to_cpup(&td->next_td));
 	printk(KERN_DEBUG "      buf_end  =  0x%x\n", le32_to_cpup(&td->buf_end));
 	printk(KERN_DEBUG "   ohci TD driver fields:\n");
+	printk(KERN_DEBUG "      flags    =  %x {", td->hcd_flags);
+	if (td_allocated(*td))
+		printk(" alloc");
+	if (td_dummy(*td))
+		printk(" dummy");
+	if (td_endofchain(*td))
+		printk(" endofchain");
+	if (!can_auto_free(*td))
+		printk(" noautofree");
+	printk("}\n");
 	printk(KERN_DEBUG "      data     =  %p\n", td->data);
+	printk(KERN_DEBUG "      cmpltd   =  %p\n", td->completed);
 	printk(KERN_DEBUG "      dev_id   =  %p\n", td->dev_id);
 	printk(KERN_DEBUG "      ed       =  %p\n", td->ed);
 	if (td->data != NULL) {

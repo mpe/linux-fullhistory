@@ -336,15 +336,15 @@ int usb_mouse_init(void)
 {
 	struct mouse_state *mouse = &static_mouse_state;
 
-	misc_register(&usb_mouse);
-
 	mouse->present = mouse->active = 0;
 	mouse->irq_handle = NULL;
 	init_waitqueue_head(&mouse->wait);
 	mouse->fasync = NULL;
 
+	misc_register(&usb_mouse);
+
 	usb_register(&mouse_driver);
-	printk(KERN_INFO "USB HID boot protocol mouse registered.\n");
+	printk(KERN_INFO "USB HID boot protocol mouse driver registered.\n");
 	return 0;
 }
 

@@ -41,8 +41,7 @@ struct ohci_td {
 		/* bit0: Is this TD allocated? */
 		/* bit1: Is this a dummy (end of list) TD? */
 		/* bit2: do NOT automatically free this TD on completion */
-		/* bit3: this is NOT the last TD in a contiguious TD chain
-		 *       on the indicated ED.  (0 means it is the last) */
+		/* bit3: this is the last TD in a contiguious TD chain */
 
 	struct usb_device *usb_dev;	/* the owning device */
 
@@ -86,9 +85,9 @@ struct ohci_td {
 #define make_dumb_td(td)	((td)->hcd_flags |= 2)
 #define clear_dumb_td(td)	((td)->hcd_flags &= ~(__u32)2)
 
-#define td_endofchain(td)	(!((td).hcd_flags & (1 << 3)))
-#define set_td_endofchain(td)	((td)->hcd_flags &= ~(1 << 3))
-#define clear_td_endofchain(td)	((td)->hcd_flags |= (1 << 3))
+#define td_endofchain(td)	((td).hcd_flags & (1 << 3))
+#define clear_td_endofchain(td)	((td)->hcd_flags &= ~(1 << 3))
+#define set_td_endofchain(td)	((td)->hcd_flags |= (1 << 3))
 
 /*
  * These control if the IRQ will call ohci_free_td after taking the TDs
@@ -109,6 +108,10 @@ struct ohci_ed {
 	__u32 tail_td;	/* TD Queue tail pointer */
 	__u32 _head_td;	/* TD Queue head pointer, toggle carry & halted bits */
 	__u32 next_ed;	/* Next ED */
+
+	/* driver fields */
+	struct ohci_device *ohci_dev;
+	struct ohci_ed	*ed_chain;
 } __attribute((aligned(16)));
 
 /* get the head_td */
@@ -119,10 +122,13 @@ struct ohci_ed {
 #define set_ed_head_td(ed, td)	((ed)->_head_td = cpu_to_le32((td)) \
 				 | ((ed)->_head_td & cpu_to_le32(3)))
 
-/* Control the ED's halted flag */
+/* Control the ED's halted and carry flags */
 #define ohci_halt_ed(ed)	((ed)->_head_td |= cpu_to_le32(1))
 #define ohci_unhalt_ed(ed)	((ed)->_head_td &= cpu_to_le32(~(__u32)1))
 #define ohci_ed_halted(ed)	((ed)->_head_td & cpu_to_le32(1))
+#define ohci_ed_set_carry(ed)	((ed)->_head_td |= cpu_to_le32(2))
+#define ohci_ed_clr_carry(ed)	((ed)->_head_td &= ~cpu_to_le32(2))
+#define ohci_ed_carry(ed)	((le32_to_cpup(&(ed)->_head_td) >> 1) & 1)
 
 #define OHCI_ED_SKIP	(1 << 14)
 #define OHCI_ED_MPS	(0x7ff << 16)
@@ -142,6 +148,8 @@ struct ohci_ed {
 #define OHCI_ED_EN	(0xf << 7)
 #define OHCI_ED_FA	(0x7f)
 
+#define ed_get_en(ed)	((le32_to_cpup(&(ed)->status) & OHCI_ED_EN) >> 7)
+#define ed_get_fa(ed)	(le32_to_cpup(&(ed)->status) & OHCI_ED_FA)
 
 /* NOTE: bits 27-31 of the status dword are reserved for the HCD */
 /*

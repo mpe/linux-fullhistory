@@ -69,17 +69,28 @@ extern void set_intr_gate(unsigned int irq, void * addr);
 extern void set_ldt_desc(unsigned int n, void *addr, unsigned int size);
 extern void set_tss_desc(unsigned int n, void *addr);
 
+extern inline void clear_LDT(void)
+{
+	int cpu = smp_processor_id();
+	set_ldt_desc(cpu, &default_ldt, 1);
+	__load_LDT(cpu);
+}
+
 /*
  * load one particular LDT into the current CPU
  */
 extern inline void load_LDT (struct mm_struct *mm)
 {
 	int cpu = smp_processor_id();
+	void *segments = mm->segments;
+	int count = LDT_ENTRIES;
 
-	if (mm->segments)
-		set_ldt_desc(cpu, mm->segments, LDT_ENTRIES);
-	else
-		set_ldt_desc(cpu, &default_ldt, 1);
+	if (!segments) {
+		segments = &default_ldt;
+		count = 1;
+	}
+		
+	set_ldt_desc(cpu, segments, count);
 	__load_LDT(cpu);
 }
 

@@ -384,7 +384,7 @@ static int exec_mmap(void)
 		mm->cpu_vm_mask = (1UL << smp_processor_id());
 		current->mm = mm;
 		current->active_mm = mm;
-		activate_context();
+		switch_mm(active_mm, mm);
 		mm_release();
 		if (old_mm) {
 			if (active_mm != old_mm) BUG();
