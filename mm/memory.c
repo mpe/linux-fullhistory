@@ -475,19 +475,23 @@ int map_user_kiobuf(int rw, struct kiobuf *iobuf, unsigned long va, size_t len)
 			if (!vma) 
 				goto out_unlock;
 		}
-		if (!handle_mm_fault(current, vma, ptr, (rw==READ))) 
+		if (handle_mm_fault(current, vma, ptr, (rw==READ)) <= 0) 
 			goto out_unlock;
+		spin_lock(&mm->page_table_lock);
 		page = follow_page(ptr);
 		if (!page) {
-			printk (KERN_ERR "Missing page in map_user_kiobuf\n");
-			goto out_unlock;
+			dprintk (KERN_ERR "Missing page in map_user_kiobuf\n");
+			map = NULL;
+			goto retry;
 		}
 		map = get_page_map(page);
 		if (map) {
-			if (TryLockPage(map))
+			if (TryLockPage(map)) {
 				goto retry;
+			}
 			atomic_inc(&map->count);
 		}
+		spin_unlock(&mm->page_table_lock);
 		dprintk ("Installing page %p %p: %d\n", (void *)page, map, i);
 		iobuf->pagelist[i] = page;
 		iobuf->maplist[i] = map;
@@ -511,26 +515,31 @@ int map_user_kiobuf(int rw, struct kiobuf *iobuf, unsigned long va, size_t len)
 	/* 
 	 * Undo the locking so far, wait on the page we got to, and try again.
 	 */
+	spin_unlock(&mm->page_table_lock);
 	unmap_kiobuf(iobuf);
 	up(&mm->mmap_sem);
 
 	/* 
 	 * Did the release also unlock the page we got stuck on?
 	 */
-	if (!PageLocked(map)) {
-		/* If so, we may well have the page mapped twice in the
-		 * IO address range.  Bad news.  Of course, it _might_
-		 * just be a coincidence, but if it happens more than
-		 * once, chances are we have a double-mapped page. */
-		if (++doublepage >= 3) {
-			return -EINVAL;
+	if (map) {
+		if (!PageLocked(map)) {
+			/* If so, we may well have the page mapped twice
+			 * in the IO address range.  Bad news.  Of
+			 * course, it _might_ * just be a coincidence,
+			 * but if it happens more than * once, chances
+			 * are we have a double-mapped page. */
+			if (++doublepage >= 3) {
+				return -EINVAL;
+			}
 		}
+	
+		/*
+		 * Try again...
+		 */
+		wait_on_page(map);
 	}
 	
-	/*
-	 * Try again...
-	 */
-	wait_on_page(map);
 	if (++repeat < 16)
 		goto repeat;
 	return -EAGAIN;

@@ -69,7 +69,7 @@
  * increased.  The larger it is, though, the longer it will be between
  * necessary transmits - don't set this too large.
  */
-#define TX_TIMEOUT 20
+#define TX_TIMEOUT (20*HZ/100)
 
 
 /* Display warnings about the driver being an ALPHA version.

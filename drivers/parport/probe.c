@@ -163,17 +163,15 @@ ssize_t parport_device_id (int devnum, char *buffer, size_t len)
 			len = idlen;
 		retval = parport_read (dev->port, buffer, len);
 
-		if (retval != len) {
+		if (retval != len)
 			printk (KERN_DEBUG "%s: only read %d of %d ID bytes\n",
 				dev->port->name, retval, len);
-			goto restore_fs;
-		}
 
 		/* Some printer manufacturers mistakenly believe that
                    the length field is supposed to be _exclusive_. */
 		/* In addition, there are broken devices out there
                    that don't even finish off with a semi-colon. */
-		if (idlen == len && buffer[len - 1] != ';') {
+		if (buffer[len - 1] != ';') {
 			ssize_t diff;
 			diff = parport_read (dev->port, buffer + len, 2);
 			retval += diff;
@@ -186,7 +184,6 @@ ssize_t parport_device_id (int devnum, char *buffer, size_t len)
 			else {
 				/* One semi-colon short of a device ID. */
 				buffer[len++] = ';';
-				buffer[len] = '\0';
 				printk (KERN_DEBUG "%s: faking semi-colon\n",
 					dev->port->name);
 
@@ -199,12 +196,13 @@ ssize_t parport_device_id (int devnum, char *buffer, size_t len)
 		}
 
 	restore_fs:
+		buffer[len] = '\0';
 		set_fs (oldfs);
 		parport_negotiate (dev->port, IEEE1284_MODE_COMPAT);
 	}
 	parport_release (dev);
 
-	if (retval > 0)
+	if (retval > 2)
 		parse_data (dev->port, dev->daisy, buffer);
 
 	parport_close (dev);
