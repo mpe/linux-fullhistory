@@ -161,7 +161,16 @@ good_area:
 bad_area:
 	up(&mm->mmap_sem);
 
-	/* Are we prepared to handle this fault?  */
+	/* User mode accesses just cause a SIGSEGV */
+	if (error_code & 4) {
+		tsk->tss.cr2 = address;
+		tsk->tss.error_code = error_code;
+		tsk->tss.trap_no = 14;
+		force_sig(SIGSEGV, tsk);
+		goto out;
+	}
+
+	/* Are we prepared to handle this kernel fault?  */
 	if ((fixup = search_exception_table(regs->eip)) != 0) {
 		printk(KERN_DEBUG "%s: Exception at [<%lx>] (%lx)\n",
 			current->comm,
@@ -171,13 +180,6 @@ bad_area:
 		goto out;
 	}
 
-	if (error_code & 4) {
-		tsk->tss.cr2 = address;
-		tsk->tss.error_code = error_code;
-		tsk->tss.trap_no = 14;
-		force_sig(SIGSEGV, tsk);
-		goto out;
-	}
 /*
  * Oops. The kernel tried to access some bad page. We'll have to
  * terminate things with extreme prejudice.

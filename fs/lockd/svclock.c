@@ -274,8 +274,8 @@ nlmsvc_lock(struct svc_rqst *rqstp, struct nlm_file *file,
 	int			error;
 
 	dprintk("lockd: nlmsvc_lock(%04x/%ld, ty=%d, pi=%d, %ld-%ld, bl=%d)\n",
-				file->f_file.f_inode->i_dev,
-				file->f_file.f_inode->i_ino,
+				file->f_file.f_dentry->d_inode->i_dev,
+				file->f_file.f_dentry->d_inode->i_ino,
 				lock->fl.fl_type, lock->fl.fl_pid,
 				lock->fl.fl_start,
 				lock->fl.fl_end,
@@ -344,8 +344,8 @@ nlmsvc_testlock(struct nlm_file *file, struct nlm_lock *lock,
 	struct file_lock	*fl;
 
 	dprintk("lockd: nlmsvc_testlock(%04x/%ld, ty=%d, %ld-%ld)\n",
-				file->f_file.f_inode->i_dev,
-				file->f_file.f_inode->i_ino,
+				file->f_file.f_dentry->d_inode->i_dev,
+				file->f_file.f_dentry->d_inode->i_ino,
 				lock->fl.fl_type,
 				lock->fl.fl_start,
 				lock->fl.fl_end);
@@ -375,8 +375,8 @@ nlmsvc_unlock(struct nlm_file *file, struct nlm_lock *lock)
 	int	error;
 
 	dprintk("lockd: nlmsvc_unlock(%04x/%ld, pi=%d, %ld-%ld)\n",
-				file->f_file.f_inode->i_dev,
-				file->f_file.f_inode->i_ino,
+				file->f_file.f_dentry->d_inode->i_dev,
+				file->f_file.f_dentry->d_inode->i_ino,
 				lock->fl.fl_pid,
 				lock->fl.fl_start,
 				lock->fl.fl_end);
@@ -403,8 +403,8 @@ nlmsvc_cancel_blocked(struct nlm_file *file, struct nlm_lock *lock)
 	struct nlm_block	*block;
 
 	dprintk("lockd: nlmsvc_cancel(%04x/%ld, pi=%d, %ld-%ld)\n",
-				file->f_file.f_inode->i_dev,
-				file->f_file.f_inode->i_ino,
+				file->f_file.f_dentry->d_inode->i_dev,
+				file->f_file.f_dentry->d_inode->i_ino,
 				lock->fl.fl_pid,
 				lock->fl.fl_start,
 				lock->fl.fl_end);

@@ -623,8 +623,9 @@ asmlinkage int sys_execve(struct pt_regs regs)
 	char * filename;
 
 	lock_kernel();
-	error = getname((char *) regs.ebx, &filename);
-	if (error)
+	filename = getname((char *) regs.ebx);
+	error = PTR_ERR(filename);
+	if (IS_ERR(filename)
 		goto out;
 	error = do_execve(filename, (char **) regs.ecx, (char **) regs.edx, &regs);
 	putname(filename);

@@ -79,6 +79,7 @@ if (file.f_op->llseek) { \
 static inline int
 do_aout_core_dump(long signr, struct pt_regs * regs)
 {
+	struct dentry * dentry = NULL;
 	struct inode * inode = NULL;
 	struct file file;
 	unsigned short fs;
@@ -114,10 +115,12 @@ do_aout_core_dump(long signr, struct pt_regs * regs)
 #else
 	corefile[4] = '\0';
 #endif
-	if (open_namei(corefile,O_CREAT | 2 | O_TRUNC,0600,&inode)) {
-		inode = NULL;
+	dentry = open_namei(corefile,O_CREAT | 2 | O_TRUNC, 0600);
+	if (IS_ERR(dentry)) {
+		dentry = NULL;
 		goto end_coredump;
 	}
+	inode = dentry->d_inode;
 	if (!S_ISREG(inode->i_mode))
 		goto end_coredump;
 	if (!inode->i_op || !inode->i_op->default_file_ops)
@@ -127,7 +130,7 @@ do_aout_core_dump(long signr, struct pt_regs * regs)
 	file.f_mode = 3;
 	file.f_flags = 0;
 	file.f_count = 1;
-	file.f_inode = inode;
+	file.f_dentry = dentry;
 	file.f_pos = 0;
 	file.f_reada = 0;
 	file.f_op = inode->i_op->default_file_ops;
@@ -221,7 +224,7 @@ done_coredump:
 	put_write_access(inode);
 end_coredump:
 	set_fs(fs);
-	iput(inode);
+	dput(dentry);
 	return has_dumped;
 }
 
@@ -317,7 +320,7 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != OMAGIC &&
 	     N_MAGIC(ex) != QMAGIC && N_MAGIC(ex) != NMAGIC) ||
 	    N_TRSIZE(ex) || N_DRSIZE(ex) ||
-	    bprm->inode->i_size < ex.a_text+ex.a_data+N_SYMSIZE(ex)+N_TXTOFF(ex)) {
+	    bprm->dentry->d_inode->i_size < ex.a_text+ex.a_data+N_SYMSIZE(ex)+N_TXTOFF(ex)) {
 		return -ENOEXEC;
 	}
 
@@ -331,7 +334,7 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 	}
 
 	if (N_MAGIC(ex) == ZMAGIC && ex.a_text &&
-	    (fd_offset < bprm->inode->i_sb->s_blocksize)) {
+	    (fd_offset < bprm->dentry->d_inode->i_sb->s_blocksize)) {
 		printk(KERN_NOTICE "N_TXTOFF < BLOCK_SIZE. Please convert binary.\n");
 		return -ENOEXEC;
 	}
@@ -371,12 +374,12 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 		error = do_mmap(NULL, N_TXTADDR(ex), ex.a_text,
 				PROT_READ|PROT_WRITE|PROT_EXEC,
 				MAP_FIXED|MAP_PRIVATE, 0);
-		read_exec(bprm->inode, fd_offset, (char *) N_TXTADDR(ex),
+		read_exec(bprm->dentry, fd_offset, (char *) N_TXTADDR(ex),
 			  ex.a_text, 0);
 		error = do_mmap(NULL, N_DATADDR(ex), ex.a_data,
 				PROT_READ|PROT_WRITE|PROT_EXEC,
 				MAP_FIXED|MAP_PRIVATE, 0);
-		read_exec(bprm->inode, fd_offset + ex.a_text, (char *) N_DATADDR(ex),
+		read_exec(bprm->dentry, fd_offset + ex.a_text, (char *) N_DATADDR(ex),
 			  ex.a_data, 0);
 		goto beyond_if;
 	}
@@ -388,20 +391,20 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 			ex.a_text+ex.a_data + PAGE_SIZE - 1,
 			PROT_READ|PROT_WRITE|PROT_EXEC,
 			MAP_FIXED|MAP_PRIVATE, 0);
-		read_exec(bprm->inode, fd_offset, (char *) N_TXTADDR(ex),
+		read_exec(bprm->dentry, fd_offset, (char *) N_TXTADDR(ex),
 			  ex.a_text+ex.a_data, 0);
 #else
 		do_mmap(NULL, 0, ex.a_text+ex.a_data,
 			PROT_READ|PROT_WRITE|PROT_EXEC,
 			MAP_FIXED|MAP_PRIVATE, 0);
-		read_exec(bprm->inode, 32, (char *) 0, ex.a_text+ex.a_data, 0);
+		read_exec(bprm->dentry, 32, (char *) 0, ex.a_text+ex.a_data, 0);
 #endif
 	} else {
 		if ((ex.a_text & 0xfff || ex.a_data & 0xfff) &&
 		    (N_MAGIC(ex) != NMAGIC))
 			printk(KERN_NOTICE "executable not page aligned\n");
 
-		fd = open_inode(bprm->inode, O_RDONLY);
+		fd = open_dentry(bprm->dentry, O_RDONLY);
 
 		if (fd < 0)
 			return fd;
@@ -411,7 +414,7 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 			do_mmap(NULL, 0, ex.a_text+ex.a_data,
 				PROT_READ|PROT_WRITE|PROT_EXEC,
 				MAP_FIXED|MAP_PRIVATE, 0);
-			read_exec(bprm->inode, fd_offset,
+			read_exec(bprm->dentry, fd_offset,
 				  (char *) N_TXTADDR(ex), ex.a_text+ex.a_data, 0);
 			goto beyond_if;
 		}
@@ -481,17 +484,20 @@ do_load_aout_library(int fd)
 {
         struct file * file;
 	struct exec ex;
-	struct  inode * inode;
+	struct dentry * dentry;
+	struct inode * inode;
 	unsigned int len;
 	unsigned int bss;
 	unsigned int start_addr;
 	unsigned long error;
 
 	file = current->files->fd[fd];
-	inode = file->f_inode;
 
 	if (!file || !file->f_op)
 		return -EACCES;
+
+	dentry = file->f_dentry;
+	inode = dentry->d_inode;
 
 	/* Seek into the file */
 	if (file->f_op->llseek) {

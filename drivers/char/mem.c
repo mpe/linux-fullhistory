@@ -134,8 +134,7 @@ static int mmap_mem(struct inode * inode, struct file * file, struct vm_area_str
 #endif
 	if (remap_page_range(vma->vm_start, offset, vma->vm_end - vma->vm_start, vma->vm_page_prot))
 		return -EAGAIN;
-	vma->vm_inode = inode;
-	atomic_inc(&inode->i_count);
+	vma->vm_dentry = dget(file->f_dentry);
 	return 0;
 }
 

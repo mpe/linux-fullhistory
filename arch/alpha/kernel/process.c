@@ -308,8 +308,9 @@ asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
 	char * filename;
 
 	lock_kernel();
-	error = getname((char *) a0, &filename);
-	if (error)
+	filename = getname((char *) a0);
+	error = PTR_ERR(filename);
+	if (IS_ERR(filename))
 		goto out;
 	error = do_execve(filename, (char **) a1, (char **) a2, &regs);
 	putname(filename);

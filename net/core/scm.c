@@ -172,9 +172,9 @@ int __scm_send(struct socket *sock, struct msghdr *msg, struct scm_cookie *p)
 				if (acc_fd < 0 || acc_fd >= NR_OPEN ||
 				    (file=current->files->fd[acc_fd])==NULL)
 					return -EBADF;
-				if (!file->f_inode || !file->f_inode->i_sock)
+				if (!file->f_dentry->d_inode || !file->f_dentry->d_inode->i_sock)
 					return -ENOTSOCK;
-				p->sock = &file->f_inode->u.socket_i;
+				p->sock = &file->f_dentry->d_inode->u.socket_i;
 				if (p->sock->state != SS_UNCONNECTED) 
 					return -EINVAL;
 			}

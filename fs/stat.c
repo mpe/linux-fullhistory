@@ -116,6 +116,7 @@ static int cp_new_stat(struct inode * inode, struct stat * statbuf)
 	return copy_to_user(statbuf,&tmp,sizeof(tmp)) ? -EFAULT : 0;
 }
 
+
 #if !defined(__alpha__) && !defined(__sparc__)
 /*
  * For backward compatibility?  Maybe this should be moved
@@ -123,17 +124,21 @@ static int cp_new_stat(struct inode * inode, struct stat * statbuf)
  */
 asmlinkage int sys_stat(char * filename, struct __old_kernel_stat * statbuf)
 {
-	struct inode * inode;
+	struct dentry * dentry;
 	int error;
 
 	lock_kernel();
-	error = namei(filename, &inode);
-	if (error)
-		goto out;
-	if ((error = do_revalidate(inode)) == 0)
-		error = cp_old_stat(inode,statbuf);
-	iput(inode);
-out:
+	dentry = namei(filename);
+
+	error = PTR_ERR(dentry);
+	if (!IS_ERR(dentry)) {
+		struct inode * inode = dentry->d_inode;
+		error = do_revalidate(inode);
+		if (!error)
+			error = cp_old_stat(inode, statbuf);
+
+		dput(dentry);
+	}
 	unlock_kernel();
 	return error;
 }
@@ -141,17 +146,21 @@ out:
 
 asmlinkage int sys_newstat(char * filename, struct stat * statbuf)
 {
-	struct inode * inode;
+	struct dentry * dentry;
 	int error;
 
 	lock_kernel();
-	error = namei(filename, &inode);
-	if (error)
-		goto out;
-	if ((error = do_revalidate(inode)) == 0)
-		error = cp_new_stat(inode,statbuf);
-	iput(inode);
-out:
+	dentry = namei(filename);
+
+	error = PTR_ERR(dentry);
+	if (!IS_ERR(dentry)) {
+		struct inode * inode = dentry->d_inode;
+		error = do_revalidate(inode);
+		if (!error)
+			error = cp_new_stat(inode,statbuf);
+
+		dput(dentry);
+	}
 	unlock_kernel();
 	return error;
 }
@@ -164,17 +173,21 @@ out:
  */
 asmlinkage int sys_lstat(char * filename, struct __old_kernel_stat * statbuf)
 {
-	struct inode * inode;
+	struct dentry * dentry;
 	int error;
 
 	lock_kernel();
-	error = lnamei(filename, &inode);
-	if (error)
-		goto out;
-	if ((error = do_revalidate(inode)) == 0)
-		error = cp_old_stat(inode,statbuf);
-	iput(inode);
-out:
+	dentry = lnamei(filename);
+
+	error = PTR_ERR(dentry);
+	if (!IS_ERR(dentry)) {
+		struct inode * inode = dentry->d_inode;
+		error = do_revalidate(inode);
+		if (!error)
+			error = cp_old_stat(inode, statbuf);
+
+		dput(dentry);
+	}
 	unlock_kernel();
 	return error;
 }
@@ -183,17 +196,21 @@ out:
 
 asmlinkage int sys_newlstat(char * filename, struct stat * statbuf)
 {
-	struct inode * inode;
+	struct dentry * dentry;
 	int error;
 
 	lock_kernel();
-	error = lnamei(filename, &inode);
-	if (error)
-		goto out;
-	if ((error = do_revalidate(inode)) == 0)
-		error = cp_new_stat(inode,statbuf);
-	iput(inode);
-out:
+	dentry = lnamei(filename);
+
+	error = PTR_ERR(dentry);
+	if (!IS_ERR(dentry)) {
+		struct inode * inode = dentry->d_inode;
+		error = do_revalidate(inode);
+		if (!error)
+			error = cp_new_stat(inode,statbuf);
+
+		dput(dentry);
+	}
 	unlock_kernel();
 	return error;
 }
@@ -207,17 +224,19 @@ out:
 asmlinkage int sys_fstat(unsigned int fd, struct __old_kernel_stat * statbuf)
 {
 	struct file * f;
-	struct inode * inode;
-	int ret = -EBADF;
+	int err = -EBADF;
 
 	lock_kernel();
-	if (fd >= NR_OPEN || !(f=current->files->fd[fd]) || !(inode=f->f_inode))
-		goto out;
-	if ((ret = do_revalidate(inode)) == 0)
-		ret = cp_old_stat(inode,statbuf);
-out:
+	if (fd < NR_OPEN && (f = current->files->fd[fd]) != NULL) {
+		struct dentry * dentry = f->f_dentry;
+		struct inode * inode = dentry->d_inode;
+
+		err = do_revalidate(inode);
+		if (!err)
+			err = cp_old_stat(inode,statbuf);
+	}
 	unlock_kernel();
-	return ret;
+	return err;
 }
 
 #endif
@@ -225,41 +244,43 @@ out:
 asmlinkage int sys_newfstat(unsigned int fd, struct stat * statbuf)
 {
 	struct file * f;
-	struct inode * inode;
 	int err = -EBADF;
 
 	lock_kernel();
-	if (fd >= NR_OPEN || !(f=current->files->fd[fd]) || !(inode=f->f_inode))
-		goto out;
-	if ((err = do_revalidate(inode)) == 0)
-		err = cp_new_stat(inode,statbuf);
-out:
+	if (fd < NR_OPEN && (f = current->files->fd[fd]) != NULL) {
+		struct dentry * dentry = f->f_dentry;
+		struct inode * inode = dentry->d_inode;
+
+		err = do_revalidate(inode);
+		if (!err)
+			err = cp_new_stat(inode,statbuf);
+	}
 	unlock_kernel();
 	return err;
 }
 
 asmlinkage int sys_readlink(const char * path, char * buf, int bufsiz)
 {
-	struct inode * inode;
+	struct dentry * dentry;
 	int error;
 
 	if (bufsiz <= 0)
 		return -EINVAL;
 
 	lock_kernel();
-	error = lnamei(path, &inode);
-	if (error)
-		goto out;
-	error = -EINVAL;
-	if (!inode->i_op || !inode->i_op->readlink ||
-	    !S_ISLNK(inode->i_mode) || (error = do_revalidate(inode)) < 0) {
-		iput(inode);
-		goto out;
+	dentry = lnamei(path);
+
+	error = PTR_ERR(dentry);
+	if (!IS_ERR(dentry)) {
+		struct inode * inode = dentry->d_inode;
+
+		error = -EINVAL;
+		if (inode->i_op && inode->i_op->readlink && !(error = do_revalidate(inode))) {
+			UPDATE_ATIME(inode);
+			error = inode->i_op->readlink(inode,buf,bufsiz);
+		}
+		dput(dentry);
 	}
-	UPDATE_ATIME(inode);
-	error = inode->i_op->readlink(inode,buf,bufsiz);
-	iput(inode);
-out:
 	unlock_kernel();
 	return error;
 }

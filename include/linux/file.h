@@ -12,7 +12,7 @@ extern inline struct file * fget(unsigned long fd)
 	return file;
 }
 
-extern int __fput(struct file *, struct inode *);
+extern int __fput(struct file *);
 extern void insert_file_free(struct file *file);
 
 /* It does not matter which list it is on. */
@@ -23,13 +23,13 @@ extern inline void remove_filp(struct file *file)
 	*file->f_pprev = file->f_next;
 }
 
-extern inline int fput(struct file *file, struct inode *inode)
+extern inline int fput(struct file *file)
 {
 	int count = file->f_count-1;
 	int error = 0;
 
 	if (!count) {
-		error = __fput(file, inode);
+		error = __fput(file);
 		file->f_count = 0;
 		remove_filp(file);
 		insert_file_free(file);

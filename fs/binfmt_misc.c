@@ -197,7 +197,7 @@ static int load_misc_binary(struct linux_binprm *bprm, struct pt_regs *regs)
 	}
 	bprm->filename = iname;	/* for binfmt_script */
 
-	if ((retval = open_namei(iname, 0, 0, &bprm->inode, NULL)))
+	if ((retval = open_namei(iname, 0, 0, &bprm->inode)))
 		goto _ret;
 	bprm->dont_iput = 0;
 

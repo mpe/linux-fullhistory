@@ -130,22 +130,24 @@ int unregister_binfmt(struct linux_binfmt * fmt)
 }
 #endif	/* CONFIG_MODULES */
 
-int open_inode(struct inode * inode, int mode)
+int open_dentry(struct dentry * dentry, int mode)
 {
 	int fd;
+	struct inode * inode = dentry->d_inode;
 
 	if (!inode->i_op || !inode->i_op->default_file_ops)
 		return -EINVAL;
 	fd = get_unused_fd();
 	if (fd >= 0) {
 		struct file * f = get_empty_filp();
+
 		if (!f) {
 			put_unused_fd(fd);
 			return -ENFILE;
 		}
 		f->f_flags = mode;
 		f->f_mode = (mode+1) & O_ACCMODE;
-		f->f_inode = inode;
+		f->f_dentry = dentry;
 		f->f_pos = 0;
 		f->f_reada = 0;
 		f->f_op = inode->i_op->default_file_ops;
@@ -158,7 +160,7 @@ int open_inode(struct inode * inode, int mode)
 			}
 		}
 		current->files->fd[fd] = f;
-		atomic_inc(&inode->i_count);
+		dget(dentry);
 	}
 	return fd;
 }
@@ -182,7 +184,7 @@ asmlinkage int sys_uselib(const char * library)
 		goto out;
 	file = current->files->fd[fd];
 	retval = -ENOEXEC;
-	if (file && file->f_inode && file->f_op && file->f_op->read) {
+	if (file && file->f_dentry && file->f_op && file->f_op->read) {
 		for (fmt = formats ; fmt ; fmt = fmt->next) {
 			int (*fn)(int) = fmt->load_shlib;
 			if (!fn)
@@ -316,7 +318,7 @@ unsigned long setup_arg_pages(unsigned long p, struct linux_binprm * bprm)
 		mpnt->vm_flags = VM_STACK_FLAGS;
 		mpnt->vm_ops = NULL;
 		mpnt->vm_offset = 0;
-		mpnt->vm_inode = NULL;
+		mpnt->vm_dentry = NULL;
 		mpnt->vm_pte = 0;
 		insert_vm_struct(current->mm, mpnt);
 		current->mm->total_vm = (mpnt->vm_end - mpnt->vm_start) >> PAGE_SHIFT;
@@ -337,10 +339,11 @@ unsigned long setup_arg_pages(unsigned long p, struct linux_binprm * bprm)
  * that aren't on a block boundary, and for files on filesystems
  * without bmap support.
  */
-int read_exec(struct inode *inode, unsigned long offset,
+int read_exec(struct dentry *dentry, unsigned long offset,
 	char * addr, unsigned long count, int to_kmem)
 {
 	struct file file;
+	struct inode * inode = dentry->d_inode;
 	int result = -ENOEXEC;
 
 	if (!inode->i_op || !inode->i_op->default_file_ops)
@@ -348,7 +351,7 @@ int read_exec(struct inode *inode, unsigned long offset,
 	file.f_mode = 1;
 	file.f_flags = 0;
 	file.f_count = 1;
-	file.f_inode = inode;
+	file.f_dentry = dentry;
 	file.f_pos = 0;
 	file.f_reada = 0;
 	file.f_op = inode->i_op->default_file_ops;
@@ -477,7 +480,7 @@ void flush_old_exec(struct linux_binprm * bprm)
 	flush_thread();
 
 	if (bprm->e_uid != current->euid || bprm->e_gid != current->egid || 
-	    permission(bprm->inode,MAY_READ))
+	    permission(bprm->dentry->d_inode,MAY_READ))
 		current->dumpable = 0;
 
 	flush_old_signals(current->sig);
@@ -492,20 +495,21 @@ int prepare_binprm(struct linux_binprm *bprm)
 {
 	int mode;
 	int retval,id_change;
+	struct inode * inode = bprm->dentry->d_inode;
 
-	mode = bprm->inode->i_mode;
+	mode = inode->i_mode;
 	if (!S_ISREG(mode))			/* must be regular file */
 		return -EACCES;
 	if (!(mode & 0111))			/* with at least _one_ execute bit set */
 		return -EACCES;
-	if (IS_NOEXEC(bprm->inode))		/* FS mustn't be mounted noexec */
+	if (IS_NOEXEC(inode))			/* FS mustn't be mounted noexec */
 		return -EACCES;
-	if (!bprm->inode->i_sb)
+	if (!inode->i_sb)
 		return -EACCES;
-	if ((retval = permission(bprm->inode, MAY_EXEC)) != 0)
+	if ((retval = permission(inode, MAY_EXEC)) != 0)
 		return retval;
 	/* better not execute files which are being written to */
-	if (bprm->inode->i_writecount > 0)
+	if (inode->i_writecount > 0)
 		return -ETXTBSY;
 
 	bprm->e_uid = current->euid;
@@ -514,7 +518,7 @@ int prepare_binprm(struct linux_binprm *bprm)
 
 	/* Set-uid? */
 	if (mode & S_ISUID) {
-		bprm->e_uid = bprm->inode->i_uid;
+		bprm->e_uid = inode->i_uid;
 		if (bprm->e_uid != current->euid)
 			id_change = 1;
 	}
@@ -526,7 +530,7 @@ int prepare_binprm(struct linux_binprm *bprm)
 	 * executable.
 	 */
 	if ((mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP)) {
-		bprm->e_gid = bprm->inode->i_gid;
+		bprm->e_gid = inode->i_gid;
 		if (!in_group_p(bprm->e_gid))
 			id_change = 1;
 	}
@@ -535,7 +539,7 @@ int prepare_binprm(struct linux_binprm *bprm)
 		/* We can't suid-execute if we're sharing parts of the executable */
 		/* or if we're being traced (or if suid execs are not allowed)    */
 		/* (current->mm->count > 1 is ok, as we'll get a new mm anyway)   */
-		if (IS_NOSUID(bprm->inode)
+		if (IS_NOSUID(inode)
 		    || (current->flags & PF_PTRACED)
 		    || (current->fs->count > 1)
 		    || (atomic_read(&current->sig->count) > 1)
@@ -546,7 +550,7 @@ int prepare_binprm(struct linux_binprm *bprm)
 	}
 
 	memset(bprm->buf,0,sizeof(bprm->buf));
-	return read_exec(bprm->inode,0,bprm->buf,128,1);
+	return read_exec(bprm->dentry,0,bprm->buf,128,1);
 }
 
 void remove_arg_zero(struct linux_binprm *bprm)
@@ -581,16 +585,19 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 		(eh->fh.f_flags & 0x3000) == 0x3000)
 	    {
 		char * dynloader[] = { "/sbin/loader" };
-		iput(bprm->inode);
-		bprm->dont_iput = 1;
+		struct dentry * dentry;
+
+		dput(bprm->dentry);
+		bprm->dentry = NULL;
 		remove_arg_zero(bprm);
 		bprm->p = copy_strings(1, dynloader, bprm->page, bprm->p, 2);
 		bprm->argc++;
 		bprm->loader = bprm->p;
-		retval = open_namei(dynloader[0], 0, 0, &bprm->inode);
-		if (retval)
+		dentry = open_namei(dynloader[0], 0, 0);
+		retval = PTR_ERR(dentry);
+		if (IS_ERR(dentry))
 			return retval;
-		bprm->dont_iput = 0;
+		bprm->dentry = dentry;
 		retval = prepare_binprm(bprm);
 		if (retval<0)
 			return retval;
@@ -606,15 +613,15 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 				continue;
 			retval = fn(bprm, regs);
 			if (retval >= 0) {
-				if(!bprm->dont_iput)
-					iput(bprm->inode);
-				bprm->dont_iput=1;
+				if (bprm->dentry)
+					dput(bprm->dentry);
+				bprm->dentry = NULL;
 				current->did_exec = 1;
 				return retval;
 			}
 			if (retval != -ENOEXEC)
 				break;
-			if (bprm->dont_iput) /* We don't have the inode anymore*/
+			if (!bprm->dentry) /* We don't have the dentry anymore */
 				return retval;
 		}
 		if (retval != -ENOEXEC) {
@@ -643,29 +650,38 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs)
 {
 	struct linux_binprm bprm;
+	struct dentry * dentry;
 	int retval;
 	int i;
 
 	bprm.p = PAGE_SIZE*MAX_ARG_PAGES-sizeof(void *);
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)	/* clear page-table */
 		bprm.page[i] = 0;
-	retval = open_namei(filename, 0, 0, &bprm.inode);
-	if (retval)
+
+	dentry = open_namei(filename, 0, 0);
+	retval = PTR_ERR(dentry);
+	if (IS_ERR(dentry))
 		return retval;
+
+	bprm.dentry = dentry;
 	bprm.filename = filename;
 	bprm.sh_bang = 0;
 	bprm.java = 0;
 	bprm.loader = 0;
 	bprm.exec = 0;
-	bprm.dont_iput = 0;
-	if ((bprm.argc = count(argv)) < 0)
+	if ((bprm.argc = count(argv)) < 0) {
+		dput(dentry);
 		return bprm.argc;
-	if ((bprm.envc = count(envp)) < 0)
+	}
+
+	if ((bprm.envc = count(envp)) < 0) {
+		dput(dentry);
 		return bprm.envc;
+	}
 
 	retval = prepare_binprm(&bprm);
 	
-	if(retval>=0) {
+	if (retval >= 0) {
 		bprm.p = copy_strings(1, &bprm.filename, bprm.page, bprm.p, 2);
 		bprm.exec = bprm.p;
 		bprm.p = copy_strings(bprm.envc,envp,bprm.page,bprm.p,0);
@@ -674,16 +690,18 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 			retval = -E2BIG;
 	}
 
-	if(retval>=0)
+	if (retval >= 0)
 		retval = search_binary_handler(&bprm,regs);
-	if(retval>=0)
+	if (retval >= 0)
 		/* execve success */
 		return retval;
 
 	/* Something went wrong, return the inode and free the argument pages*/
-	if(!bprm.dont_iput)
-		iput(bprm.inode);
+	if (bprm.dentry)
+		dput(bprm.dentry);
+
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)
 		free_page(bprm.page[i]);
-	return(retval);
+
+	return retval;
 }

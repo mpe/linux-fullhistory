@@ -101,13 +101,13 @@ struct vfsmount *add_vfsmnt(kdev_t dev, const char *dev_name, const char *dir_na
 
 	lptr->mnt_dev = dev;
 	sema_init(&lptr->mnt_sem, 1);
-	if (dev_name && !getname(dev_name, &tmp)) {
+	if (dev_name && !IS_ERR(tmp = getname(dev_name))) {
 		if ((lptr->mnt_devname =
 		    (char *) kmalloc(strlen(tmp)+1, GFP_KERNEL)) != (char *)NULL)
 			strcpy(lptr->mnt_devname, tmp);
 		putname(tmp);
 	}
-	if (dir_name && !getname(dir_name, &tmp)) {
+	if (dir_name && !IS_ERR(tmp = getname(dir_name))) {
 		if ((lptr->mnt_dirname =
 		    (char *) kmalloc(strlen(tmp)+1, GFP_KERNEL)) != (char *)NULL)
 			strcpy(lptr->mnt_dirname, tmp);
@@ -197,9 +197,11 @@ static int fs_index(const char * __name)
 	char * name;
 	int err, index;
 
-	err = getname(__name, &name);
-	if (err)
+	name = getname(__name);
+	err = PTR_ERR(name);
+	if (IS_ERR(name))
 		return err;
+
 	index = 0;
 	for (tmp = file_systems ; tmp ; tmp = tmp->next) {
 		if (strcmp(tmp->name, name) == 0) {
@@ -659,36 +661,43 @@ static int do_umount(kdev_t dev,int unmount_root)
 
 asmlinkage int sys_umount(char * name)
 {
+	struct dentry * dentry;
 	struct inode * inode;
 	kdev_t dev;
 	struct inode * dummy_inode = NULL;
-	int retval = -EPERM;
+	int retval;
+
+	if (!suser())
+		return -EPERM;
 
 	lock_kernel();
-	if (!suser())
+	dentry = namei(name);
+	retval = PTR_ERR(dentry);
+	if (IS_ERR(dentry))
 		goto out;
-	retval = namei(name, &inode);
+
+	inode = dentry->d_inode;
 	if (S_ISBLK(inode->i_mode)) {
 		dev = inode->i_rdev;
 		retval = -EACCES;
 		if (IS_NODEV(inode)) {
-			iput(inode);
+			dput(dentry);
 			goto out;
 		}
 	} else {
 		retval = -EINVAL;
 		if (!inode->i_sb || inode != inode->i_sb->s_root->d_inode) {
-			iput(inode);
+			dput(dentry);
 			goto out;
 		}
 		dev = inode->i_sb->s_dev;
-		iput(inode);
+		dput(dentry);
 		inode = dummy_inode = get_empty_inode();
 		inode->i_rdev = dev;
 	}
 	retval = -ENXIO;
 	if (MAJOR(dev) >= MAX_BLKDEV) {
-		iput(inode);
+		dput(dentry);
 		goto out;
 	}
 	retval = do_umount(dev,0);
@@ -699,7 +708,7 @@ asmlinkage int sys_umount(char * name)
 			put_unnamed_dev(dev);
 		}
 	}
-	iput(inode);
+	dput(dentry);
 	if (!retval)
 		fsync_dev(dev);
 out:
@@ -814,18 +823,19 @@ static int do_remount_sb(struct super_block *sb, int flags, char *data)
 
 static int do_remount(const char *dir,int flags,char *data)
 {
-	struct inode *dir_i;
+	struct dentry *dentry;
 	int retval;
 
-	retval = namei(dir, &dir_i);
-	if (retval)
-		return retval;
-	if (dir_i != dir_i->i_sb->s_root->d_inode) {
-		iput(dir_i);
-		return -EINVAL;
+	dentry = namei(dir);
+	retval = PTR_ERR(dentry);
+	if (!IS_ERR(dentry)) {
+		struct super_block * sb = dentry->d_inode->i_sb;
+
+		retval = -EINVAL;
+		if (dentry == sb->s_root)
+			retval = do_remount_sb(sb, flags, data);
+		dput(dentry);
 	}
-	retval = do_remount_sb(dir_i->i_sb, flags, data);
-	iput(dir_i);
 	return retval;
 }
 
@@ -876,7 +886,8 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 	unsigned long new_flags, void * data)
 {
 	struct file_system_type * fstype;
-	struct inode * inode;
+	struct dentry * dentry = NULL;
+	struct inode * inode = NULL;
 	struct file_operations * fops;
 	kdev_t dev;
 	int retval = -EPERM;
@@ -908,58 +919,54 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 		goto out;
 	t = fstype->name;
 	fops = NULL;
-	if ((fstype->fs_flags & FS_REQUIRES_DEV)) {
-		retval = namei(dev_name, &inode);
-		if (retval)
+	if (fstype->fs_flags & FS_REQUIRES_DEV) {
+		dentry = namei(dev_name);
+		retval = PTR_ERR(dentry);
+		if (IS_ERR(dentry))
 			goto out;
+
+		inode = dentry->d_inode;
 		retval = -ENOTBLK;
-		if (!S_ISBLK(inode->i_mode)) {
-			iput(inode);
-			goto out;
-		}
+		if (!S_ISBLK(inode->i_mode))
+			goto dput_and_out;
+
 		retval = -EACCES;
-		if (IS_NODEV(inode)) {
-			iput(inode);
-			goto out;
-		}
+		if (IS_NODEV(inode))
+			goto dput_and_out;
+
 		dev = inode->i_rdev;
 		retval = -ENXIO;
-		if (MAJOR(dev) >= MAX_BLKDEV) {
-			iput(inode);
-			goto out;
-		}
+		if (MAJOR(dev) >= MAX_BLKDEV)
+			goto dput_and_out;
+
 		fops = get_blkfops(MAJOR(dev));
 		retval = -ENOTBLK;
-		if (!fops) {
-			iput(inode);
-			goto out;
-		}
+		if (!fops)
+			goto dput_and_out;
+
 		if (fops->open) {
 			struct file dummy;	/* allows read-write or read-only flag */
 			memset(&dummy, 0, sizeof(dummy));
-			dummy.f_inode = inode;
+			dummy.f_dentry = dentry;
 			dummy.f_mode = (new_flags & MS_RDONLY) ? 1 : 3;
 			retval = fops->open(inode, &dummy);
-			if (retval) {
-				iput(inode);
-				goto out;
-			}
+			if (retval)
+				goto dput_and_out;
 		}
 
 	} else {
 		retval = -EMFILE;
 		if (!(dev = get_unnamed_dev()))
 			goto out;
-		inode = NULL;
 	}
+
 	page = 0;
 	if ((new_flags & MS_MGC_MSK) == MS_MGC_VAL) {
 		flags = new_flags & ~MS_MGC_MSK;
 		retval = copy_mount_options(data, &page);
 		if (retval < 0) {
 			put_unnamed_dev(dev);
-			iput(inode);
-			goto out;
+			goto dput_and_out;
 		}
 	}
 	retval = do_mount(dev,dev_name,dir_name,t,flags,(void *) page);
@@ -968,7 +975,8 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 		fops->release(inode, NULL);
 		put_unnamed_dev(dev);
 	}
-	iput(inode);
+dput_and_out:
+	dput(dentry);
 out:
 	unlock_kernel();
 	return retval;
@@ -1035,7 +1043,7 @@ __initfunc(static void do_mount_root(void))
 	memset(&filp, 0, sizeof(filp));
 	d_inode = get_empty_inode();
 	d_inode->i_rdev = ROOT_DEV;
-	filp.f_inode = d_inode;
+	filp.f_dentry = NULL;
 	if ( root_mountflags & MS_RDONLY)
 		filp.f_mode = 1; /* read only */
 	else

@@ -20,28 +20,27 @@ static int file_ioctl(struct file *filp,unsigned int cmd,unsigned long arg)
 {
 	int error;
 	int block;
+	struct inode * inode = filp->f_dentry->d_inode;
 
 	switch (cmd) {
 		case FIBMAP:
-			if (filp->f_inode->i_op == NULL)
+			if (inode->i_op == NULL)
 				return -EBADF;
-		    	if (filp->f_inode->i_op->bmap == NULL)
+		    	if (inode->i_op->bmap == NULL)
 				return -EINVAL;
 			if ((error = get_user(block, (int *) arg)) != 0)
 				return error;
-			block = filp->f_inode->i_op->bmap(filp->f_inode,block);
+			block = inode->i_op->bmap(inode,block);
 			return put_user(block, (int *) arg);
 		case FIGETBSZ:
-			if (filp->f_inode->i_sb == NULL)
+			if (inode->i_sb == NULL)
 				return -EBADF;
-			return put_user(filp->f_inode->i_sb->s_blocksize,
-					(int *) arg);
+			return put_user(inode->i_sb->s_blocksize, (int *) arg);
 		case FIONREAD:
-			return put_user(filp->f_inode->i_size - filp->f_pos,
-					(int *) arg);
+			return put_user(inode->i_size - filp->f_pos, (int *) arg);
 	}
 	if (filp->f_op && filp->f_op->ioctl)
-		return filp->f_op->ioctl(filp->f_inode, filp, cmd, arg);
+		return filp->f_op->ioctl(inode, filp, cmd, arg);
 	return -ENOTTY;
 }
 
@@ -91,10 +90,10 @@ asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			break;
 
 		default:
-			if (filp->f_inode && S_ISREG(filp->f_inode->i_mode))
+			if (filp->f_dentry && filp->f_dentry->d_inode && S_ISREG(filp->f_dentry->d_inode->i_mode))
 				error = file_ioctl(filp, cmd, arg);
 			else if (filp->f_op && filp->f_op->ioctl)
-				error = filp->f_op->ioctl(filp->f_inode, filp, cmd, arg);
+				error = filp->f_op->ioctl(filp->f_dentry->d_inode, filp, cmd, arg);
 			else
 				error = -ENOTTY;
 	}

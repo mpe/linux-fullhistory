@@ -186,6 +186,7 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 
     /* Mask interrupts from the ethercard. */
     outb_p(0x00, e8390_base + EN0_IMR);
+    synchronize_irq();
     if (dev->interrupt) {
 	printk("%s: Tx request while isr active.\n",dev->name);
 	outb_p(ENISR_ALL, e8390_base + EN0_IMR);

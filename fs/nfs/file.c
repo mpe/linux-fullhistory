@@ -180,11 +180,11 @@ nfs_lock(struct inode *inode, struct file *filp, int cmd, struct file_lock *fl)
 	int	status;
 
 	dprintk("NFS: nfs_lock(f=%4x/%ld, t=%x, fl=%x, r=%ld:%ld)\n",
-			filp->f_inode->i_dev, filp->f_inode->i_ino,
+			filp->f_dentry->d_inode->i_dev, filp->f_dentry->d_inode->i_ino,
 			fl->fl_type, fl->fl_flags,
 			fl->fl_start, fl->fl_end);
 
-	if (!(inode = filp->f_inode))
+	if (!(inode = filp->f_dentry->d_inode))
 		return -EINVAL;
 
 	/* No mandatory locks over NFS */

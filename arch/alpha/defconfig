@@ -66,7 +66,7 @@ CONFIG_BLK_DEV_FD=y
 #
 # CONFIG_BLK_DEV_LOOP is not set
 # CONFIG_BLK_DEV_MD is not set
-CONFIG_BLK_DEV_RAM=y
+# CONFIG_BLK_DEV_RAM is not set
 # CONFIG_BLK_DEV_INITRD is not set
 # CONFIG_BLK_DEV_XD is not set
 # CONFIG_BLK_DEV_EZ is not set

@@ -772,7 +772,7 @@ static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long 
 {
 	unsigned long offset;
 	struct page * page, **hash;
-	struct inode * inode = area->vm_inode;
+	struct inode * inode = area->vm_dentry->d_inode;
 	unsigned long old_page, new_page;
 
 	new_page = 0;
@@ -926,6 +926,7 @@ static int filemap_write_page(struct vm_area_struct * vma,
 {
 	int result;
 	struct file file;
+	struct dentry * dentry;
 	struct inode * inode;
 	struct buffer_head * bh;
 
@@ -940,14 +941,15 @@ static int filemap_write_page(struct vm_area_struct * vma,
 		return 0;
 	}
 
-	inode = vma->vm_inode;
+	dentry = vma->vm_dentry;
+	inode = dentry->d_inode;
 	file.f_op = inode->i_op->default_file_ops;
 	if (!file.f_op->write)
 		return -EIO;
 	file.f_mode = 3;
 	file.f_flags = 0;
 	file.f_count = 1;
-	file.f_inode = inode;
+	file.f_dentry = dentry;
 	file.f_pos = offset;
 	file.f_reada = 0;
 
@@ -1186,8 +1188,7 @@ int generic_file_mmap(struct inode * inode, struct file * file, struct vm_area_s
 	if (!inode->i_op || !inode->i_op->readpage)
 		return -ENOEXEC;
 	UPDATE_ATIME(inode);
-	vma->vm_inode = inode;
-	atomic_inc(&inode->i_count);
+	vma->vm_dentry = dget(file->f_dentry);
 	vma->vm_ops = ops;
 	return 0;
 }
@@ -1200,7 +1201,7 @@ int generic_file_mmap(struct inode * inode, struct file * file, struct vm_area_s
 static int msync_interval(struct vm_area_struct * vma,
 	unsigned long start, unsigned long end, int flags)
 {
-	if (!vma->vm_inode)
+	if (!vma->vm_dentry)
 		return 0;
 	if (vma->vm_ops->sync) {
 		int error;
@@ -1208,7 +1209,7 @@ static int msync_interval(struct vm_area_struct * vma,
 		if (error)
 			return error;
 		if (flags & MS_SYNC)
-			return file_fsync(vma->vm_inode, NULL);
+			return file_fsync(vma->vm_dentry->d_inode, NULL);
 		return 0;
 	}
 	return 0;

@@ -762,7 +762,7 @@ void cleanup_module(void)
 
 #endif
 
-void ext2_statfs (struct super_block * sb, struct statfs * buf, int bufsiz)
+int ext2_statfs (struct super_block * sb, struct statfs * buf, int bufsiz)
 {
 	unsigned long overhead;
 	unsigned long overhead_per_group;
@@ -793,5 +793,5 @@ void ext2_statfs (struct super_block * sb, struct statfs * buf, int bufsiz)
 	tmp.f_files = le32_to_cpu(sb->u.ext2_sb.s_es->s_inodes_count);
 	tmp.f_ffree = ext2_count_free_inodes (sb);
 	tmp.f_namelen = EXT2_NAME_LEN;
-	copy_to_user(buf, &tmp, bufsiz);
+	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
 }

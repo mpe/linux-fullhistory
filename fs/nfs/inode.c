@@ -38,7 +38,7 @@ static int nfs_notify_change(struct inode *, struct iattr *);
 static void nfs_put_inode(struct inode *);
 static void nfs_put_super(struct super_block *);
 static void nfs_read_inode(struct inode *);
-static void nfs_statfs(struct super_block *, struct statfs *, int bufsiz);
+static int nfs_statfs(struct super_block *, struct statfs *, int bufsiz);
 
 static struct super_operations nfs_sops = { 
 	nfs_read_inode,		/* read inode */
@@ -249,7 +249,7 @@ failure:
 	return NULL;
 }
 
-static void
+static int
 nfs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 {
 	int error;
@@ -270,7 +270,7 @@ nfs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 	tmp.f_files = 0;
 	tmp.f_ffree = 0;
 	tmp.f_namelen = NAME_MAX;
-	copy_to_user(buf, &tmp, bufsiz);
+	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
 }
 
 /*

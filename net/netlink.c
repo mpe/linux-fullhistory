@@ -68,7 +68,7 @@ int netlink_donothing(int minor, struct sk_buff *skb)
 static unsigned int netlink_poll(struct file *file, poll_table * wait)
 {
 	unsigned int mask;
-	unsigned int minor = MINOR(file->f_inode->i_rdev);
+	unsigned int minor = MINOR(file->f_dentry->d_inode->i_rdev);
 
 	poll_wait(&read_space_wait[minor], wait);
 	mask = POLLOUT | POLLWRNORM;

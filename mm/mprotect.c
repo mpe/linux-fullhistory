@@ -110,8 +110,7 @@ static inline int mprotect_fixup_start(struct vm_area_struct * vma,
 	vma->vm_offset += vma->vm_start - n->vm_start;
 	n->vm_flags = newflags;
 	n->vm_page_prot = prot;
-	if (n->vm_inode)
-		atomic_inc(&n->vm_inode->i_count);
+	n->vm_dentry = dget(n->vm_dentry);
 	if (n->vm_ops && n->vm_ops->open)
 		n->vm_ops->open(n);
 	insert_vm_struct(current->mm, n);
@@ -133,8 +132,7 @@ static inline int mprotect_fixup_end(struct vm_area_struct * vma,
 	n->vm_offset += n->vm_start - vma->vm_start;
 	n->vm_flags = newflags;
 	n->vm_page_prot = prot;
-	if (n->vm_inode)
-		atomic_inc(&n->vm_inode->i_count);
+	n->vm_dentry = dget(n->vm_dentry);
 	if (n->vm_ops && n->vm_ops->open)
 		n->vm_ops->open(n);
 	insert_vm_struct(current->mm, n);
@@ -165,8 +163,8 @@ static inline int mprotect_fixup_middle(struct vm_area_struct * vma,
 	right->vm_offset += right->vm_start - left->vm_start;
 	vma->vm_flags = newflags;
 	vma->vm_page_prot = prot;
-	if (vma->vm_inode)
-		atomic_add(2, &vma->vm_inode->i_count);
+	if (vma->vm_dentry)
+		vma->vm_dentry->d_count += 2;
 	if (vma->vm_ops && vma->vm_ops->open) {
 		vma->vm_ops->open(left);
 		vma->vm_ops->open(right);

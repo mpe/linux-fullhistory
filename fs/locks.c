@@ -297,25 +297,34 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 {
 	struct flock flock;
 	struct file *filp;
+	struct dentry *dentry;
+	struct inode *inode;
 	struct file_lock *fl,file_lock;
 	int error;
 
 	if ((fd >= NR_OPEN) || !(filp = current->files->fd[fd]))
-		return (-EBADF);
+		return -EBADF;
 	if (copy_from_user(&flock, l, sizeof(flock)))
-		return (-EFAULT);
+		return -EFAULT;
 
 	if ((flock.l_type != F_RDLCK) && (flock.l_type != F_WRLCK))
-		return (-EINVAL);
+		return -EINVAL;
 
-	if (!filp->f_inode || !posix_make_lock(filp, &file_lock, &flock))
-		return (-EINVAL);
+	dentry = filp->f_dentry;
+	if (!dentry)
+		return -EINVAL;
+
+	inode = dentry->d_inode;
+	if (!inode)
+		return -EINVAL;
+
+	if (!posix_make_lock(filp, &file_lock, &flock))
+		return -EINVAL;
 
 	if (filp->f_op->lock) {
-		error = filp->f_op->lock(filp->f_inode, filp,
-					 F_GETLK, &file_lock);
+		error = filp->f_op->lock(inode, filp, F_GETLK, &file_lock);
 		if (error < 0)
-			return (error);
+			return error;
 		fl = &file_lock;
 	} else {
 		fl = posix_test_lock(filp, &file_lock);
@@ -344,6 +353,7 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	struct file *filp;
 	struct file_lock file_lock;
 	struct flock flock;
+	struct dentry * dentry;
 	struct inode *inode;
 	int error;
 
@@ -351,10 +361,13 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	 */
 
 	if ((fd >= NR_OPEN) || !(filp = current->files->fd[fd]))
-		return (-EBADF);
-	
-	if (!(inode = filp->f_inode))
-		return (-EINVAL);
+		return -EBADF;
+
+	if (!(dentry = filp->f_dentry))
+		return -EINVAL;
+
+	if (!(inode = dentry->d_inode))
+		return -EINVAL;
 	
 	/* Don't allow mandatory locks on files that may be memory mapped
 	 * and shared.
@@ -407,7 +420,7 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	}
 
 	if (filp->f_op->lock != NULL) {
-		error = filp->f_op->lock(filp->f_inode, filp, cmd, &file_lock);
+		error = filp->f_op->lock(inode, filp, cmd, &file_lock);
 		if (error < 0)
 			return (error);
 	}
@@ -421,12 +434,14 @@ void locks_remove_locks(struct task_struct *task, struct file *filp)
 {
 	struct file_lock file_lock, *fl;
 	struct file_lock **before;
+	struct inode * inode;
 
 	/* For POSIX locks we free all locks on this file for the given task.
 	 * For FLOCK we only free locks on this *open* file if it is the last
 	 * close on that file.
 	 */
-	before = &filp->f_inode->i_flock;
+	inode = filp->f_dentry->d_inode;
+	before = &inode->i_flock;
 
 	while ((fl = *before) != NULL) {
 		if (((fl->fl_flags & FL_POSIX) && (fl->fl_owner == task)) ||
@@ -436,10 +451,9 @@ void locks_remove_locks(struct task_struct *task, struct file *filp)
 			locks_delete_lock(before, 0);
 			if (filp->f_op->lock) {
 				file_lock.fl_type = F_UNLCK;
-				filp->f_op->lock(filp->f_inode, filp,
-						 F_SETLK, &file_lock);
+				filp->f_op->lock(inode, filp, F_SETLK, &file_lock);
 				/* List may have changed: */
-				before = &filp->f_inode->i_flock;
+				before = &inode->i_flock;
 			}
 		} else {
 			before = &fl->fl_next;
@@ -454,7 +468,7 @@ posix_test_lock(struct file *filp, struct file_lock *fl)
 {
 	struct file_lock *cfl;
 
-	for (cfl = filp->f_inode->i_flock; cfl; cfl = cfl->fl_next) {
+	for (cfl = filp->f_dentry->d_inode->i_flock; cfl; cfl = cfl->fl_next) {
 		if (!(cfl->fl_flags & FL_POSIX))
 			continue;
 		if (posix_locks_conflict(cfl, fl))
@@ -585,7 +599,7 @@ static int posix_make_lock(struct file *filp, struct file_lock *fl,
 		start = filp->f_pos;
 		break;
 	case 2: /*SEEK_END*/
-		start = filp->f_inode->i_size;
+		start = filp->f_dentry->d_inode->i_size;
 		break;
 	default:
 		return (0);
@@ -612,7 +626,7 @@ static int flock_make_lock(struct file *filp, struct file_lock *fl,
 {
 	memset(fl, 0, sizeof(*fl));
 
-	if (!filp->f_inode)	/* just in case */
+	if (!filp->f_dentry)	/* just in case */
 		return (0);
 
 	switch (cmd & ~LOCK_NB) {
@@ -750,9 +764,10 @@ static int flock_lock_file(struct file *filp, struct file_lock *caller,
 	struct file_lock *fl;
 	struct file_lock *new_fl;
 	struct file_lock **before;
+	struct inode * inode = filp->f_dentry->d_inode;
 	int change = 0;
 
-	before = &filp->f_inode->i_flock;
+	before = &inode->i_flock;
 	while (((fl = *before) != NULL) && (fl->fl_flags & FL_FLOCK)) {
 		if (caller->fl_file == fl->fl_file) {
 			if (caller->fl_type == fl->fl_type)
@@ -772,7 +787,7 @@ static int flock_lock_file(struct file *filp, struct file_lock *caller,
 	if ((new_fl = locks_alloc_lock(caller)) == NULL)
 		return (-ENOLCK);
 repeat:
-	for (fl = filp->f_inode->i_flock; (fl != NULL) && (fl->fl_flags & FL_FLOCK);
+	for (fl = inode->i_flock; (fl != NULL) && (fl->fl_flags & FL_FLOCK);
 	     fl = fl->fl_next) {
 		if (!flock_locks_conflict(new_fl, fl))
 			continue;
@@ -801,7 +816,7 @@ repeat:
 		}
 		goto repeat;
 	}
-	locks_insert_lock(&filp->f_inode->i_flock, new_fl);
+	locks_insert_lock(&inode->i_flock, new_fl);
 	return (0);
 }
 
@@ -825,11 +840,12 @@ int posix_lock_file(struct file *filp, struct file_lock *caller,
 	struct file_lock *left = NULL;
 	struct file_lock *right = NULL;
 	struct file_lock **before;
+	struct inode * inode = filp->f_dentry->d_inode;
 	int added = 0;
 
 	if (caller->fl_type != F_UNLCK) {
   repeat:
-		for (fl = filp->f_inode->i_flock; fl != NULL; fl = fl->fl_next) {
+		for (fl = inode->i_flock; fl != NULL; fl = fl->fl_next) {
 			if (!(fl->fl_flags & FL_POSIX))
 				continue;
 			if (!posix_locks_conflict(caller, fl))
@@ -852,7 +868,7 @@ int posix_lock_file(struct file *filp, struct file_lock *caller,
 	/* Find the first old lock with the same owner as the new lock.
 	 */
 	
-	before = &filp->f_inode->i_flock;
+	before = &inode->i_flock;
 
 	/* First skip locks owned by other processes.
 	 */
@@ -1054,7 +1070,7 @@ static char *lock_get_status(struct file_lock *fl, int id, char *pfx)
 	char *p = temp;
 	struct inode *inode;
 
-	inode = fl->fl_file->f_inode;
+	inode = fl->fl_file->f_dentry->d_inode;
 
 	p += sprintf(p, "%d:%s ", id, pfx);
 	if (fl->fl_flags & FL_POSIX) {

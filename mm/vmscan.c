@@ -369,6 +369,9 @@ static inline int do_try_to_free_page(int priority, int dma, int wait)
 			if (shm_swap(i, dma))
 				return 1;
 			state = 3;
+		case 3:
+			shrink_dcache(i);
+			state = 4;
 		default:
 			if (swap_out(i, dma, wait))
 				return 1;

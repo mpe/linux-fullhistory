@@ -104,7 +104,7 @@ static struct dentry * proc_follow_link(struct inode *inode, struct dentry *base
 			vma = p->mm->mmap;
 			while (vma) {
 				if (vma->vm_flags & VM_EXECUTABLE)
-					return dget(i_dentry(vma->vm_inode));
+					return dget(vma->vm_dentry);
 
 				vma = vma->vm_next;
 			}
@@ -120,9 +120,9 @@ static struct dentry * proc_follow_link(struct inode *inode, struct dentry *base
 					break;
 				if (!p->files->fd[ino])
 					break;
-				if (!p->files->fd[ino]->f_inode)
+				if (!p->files->fd[ino]->f_dentry)
 					break;
-				result = dget(i_dentry(p->files->fd[ino]->f_inode));
+				result = dget(p->files->fd[ino]->f_dentry);
 				break;
 			}
 	}

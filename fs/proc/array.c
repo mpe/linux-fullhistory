@@ -591,7 +591,7 @@ static inline char * task_mem(struct task_struct *p, char *buffer)
 
 		for (vma = mm->mmap; vma; vma = vma->vm_next) {
 			unsigned long len = (vma->vm_end - vma->vm_start) >> 10;
-			if (!vma->vm_inode) {
+			if (!vma->vm_dentry) {
 				data += len;
 				if (vma->vm_flags & VM_GROWSDOWN)
 					stack += len;
@@ -949,12 +949,11 @@ static long read_maps (int pid, struct file * file,
 		*cp++ = flags & VM_MAYSHARE ? 's' : 'p';
 		*cp++ = 0;
 
-		if (map->vm_inode != NULL) {
-			dev = map->vm_inode->i_dev;
-			ino = map->vm_inode->i_ino;
-		} else {
-			dev = 0;
-			ino = 0;
+		dev = 0;
+		ino = 0;
+		if (map->vm_dentry != NULL) {
+			dev = map->vm_dentry->d_inode->i_dev;
+			ino = map->vm_dentry->d_inode->i_ino;
 		}
 
 		len = sprintf(line,

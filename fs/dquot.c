@@ -227,7 +227,7 @@ static void write_dquot(struct dquot *dquot)
 	lock_dquot(dquot);
 	down(&dquot->dq_mnt->mnt_sem);
 	if (filp->f_op->llseek) {
-		if (filp->f_op->llseek(filp->f_inode, filp,
+		if (filp->f_op->llseek(filp->f_dentry->d_inode, filp,
 		    dqoff(dquot->dq_id), 0) != dqoff(dquot->dq_id)) {
 			up(&dquot->dq_mnt->mnt_sem);
 			unlock_dquot(dquot);
@@ -238,7 +238,7 @@ static void write_dquot(struct dquot *dquot)
 	fs = get_fs();
 	set_fs(KERNEL_DS);
 
-	if (filp->f_op->write(filp->f_inode, filp,
+	if (filp->f_op->write(filp->f_dentry->d_inode, filp,
 	   (char *)&dquot->dq_dqb, sizeof(struct dqblk)) == sizeof(struct dqblk))
 		dquot->dq_flags &= ~DQ_MOD;
 
@@ -259,7 +259,7 @@ static void read_dquot(struct dquot *dquot)
 	lock_dquot(dquot);
 	down(&dquot->dq_mnt->mnt_sem);
 	if (filp->f_op->llseek) {
-		if (filp->f_op->llseek(filp->f_inode, filp,
+		if (filp->f_op->llseek(filp->f_dentry->d_inode, filp,
 		    dqoff(dquot->dq_id), 0) != dqoff(dquot->dq_id)) {
 			up(&dquot->dq_mnt->mnt_sem);
 			unlock_dquot(dquot);
@@ -269,7 +269,7 @@ static void read_dquot(struct dquot *dquot)
 		filp->f_pos = dqoff(dquot->dq_id);
 	fs = get_fs();
 	set_fs(KERNEL_DS);
-	filp->f_op->read(filp->f_inode, filp, (char *)&dquot->dq_dqb, sizeof(struct dqblk));
+	filp->f_op->read(filp->f_dentry->d_inode, filp, (char *)&dquot->dq_dqb, sizeof(struct dqblk));
 	up(&dquot->dq_mnt->mnt_sem);
 	set_fs(fs);
 	if (dquot->dq_bhardlimit == 0 && dquot->dq_bsoftlimit == 0 &&
@@ -946,39 +946,53 @@ int quota_off(kdev_t dev, short type)
 
 int quota_on(kdev_t dev, short type, char *path)
 {
-	struct file *filp = (struct file *)NULL;
+	struct file *filp = NULL;
+	struct dentry *dentry;
 	struct vfsmount *vfsmnt;
 	struct inode *inode;
 	struct dquot *dquot;
 	char *tmp;
 	int error;
 
-	if ((vfsmnt = lookup_vfsmnt(dev)) == (struct vfsmount *)NULL)
-		return(-ENODEV);
-	if (vfsmnt->mnt_quotas[type] != (struct file *)NULL)
-		return(-EBUSY);
-	if ((error = getname(path, &tmp)) != 0)
-		return(error);
-	error = open_namei(tmp, O_RDWR, 0600, &inode);
+	vfsmnt = lookup_vfsmnt(dev);
+	if (vfsmnt == NULL)
+		return -ENODEV;
+
+	if (vfsmnt->mnt_quotas[type] != NULL)
+		return -EBUSY;
+
+	tmp = getname(path);
+	error = PTR_ERR(tmp);
+	if (IS_ERR(tmp))
+		return error;
+
+	dentry = open_namei(tmp, O_RDWR, 0600);
 	putname(tmp);
-	if (error)
-		return(error);
+
+	error = PTR_ERR(dentry);
+	if (IS_ERR(dentry))
+		return error;
+	inode = dentry->d_inode;
+
 	if (!S_ISREG(inode->i_mode)) {
-		iput(inode);
-		return(-EACCES);
+		dput(dentry);
+		return -EACCES;
 	}
-	if ((filp = get_empty_filp()) != (struct file *)NULL) {
+
+	filp = get_empty_filp();
+	if (filp != NULL) {
 		filp->f_mode = (O_RDWR + 1) & O_ACCMODE;
 		filp->f_flags = O_RDWR;
-		filp->f_inode = inode;
+		filp->f_dentry = dentry;
 		filp->f_pos = 0;
 		filp->f_reada = 0;
 		filp->f_op = inode->i_op->default_file_ops;
 		if (filp->f_op->read || filp->f_op->write) {
-			if ((error = get_write_access(inode)) == 0) {
+			error = get_write_access(inode);
+			if (!error) {
 				if (filp->f_op && filp->f_op->open)
 					error = filp->f_op->open(inode, filp);
-				if (error == 0) {
+				if (!error) {
 					vfsmnt->mnt_quotas[type] = filp;
 					dquot = dqget(dev, 0, type);
 					vfsmnt->mnt_iexp[type] = (dquot) ? dquot->dq_itime : MAX_IQ_TIME;
@@ -986,7 +1000,7 @@ int quota_on(kdev_t dev, short type, char *path)
 					dqput(dquot);
 					vfsmnt->mnt_sb->dq_op = &dquot_operations;
 					add_dquot_ref(dev, type);
-					return(0);
+					return 0;
 				}
 				put_write_access(inode);
 			}
@@ -995,8 +1009,8 @@ int quota_on(kdev_t dev, short type, char *path)
 		put_filp(filp);
 	} else
 		error = -EMFILE;
-	iput(inode);
-	return(error);
+	dput(dentry);
+	return error;
 }
 
 /*
@@ -1008,7 +1022,6 @@ int quota_on(kdev_t dev, short type, char *path)
 asmlinkage int sys_quotactl(int cmd, const char *special, int id, caddr_t addr)
 {
 	int cmds = 0, type = 0, flags = 0;
-	struct inode *ino;
 	kdev_t dev;
 	int ret = -EINVAL;
 
@@ -1034,19 +1047,22 @@ asmlinkage int sys_quotactl(int cmd, const char *special, int id, caddr_t addr)
 	}
 
 	ret = -EINVAL;
-	if (special == (char *)NULL && (cmds == Q_SYNC || cmds == Q_GETSTATS))
-		dev = 0;
-	else {
-		int error = namei(special, &ino);
-		if(error)
+	dev = 0;
+	if (special != NULL || (cmds != Q_SYNC && cmds != Q_GETSTATS)) {
+		mode_t mode;
+		struct dentry * dentry;
+
+		dentry = namei(special);
+		if (IS_ERR(dentry))
 			goto out;
-		dev = ino->i_rdev;
+
+		dev = dentry->d_inode->i_rdev;
+		mode = dentry->d_inode->i_mode;
+		dput(dentry);
+
 		ret = -ENOTBLK;
-		if (!S_ISBLK(ino->i_mode)) {
-			iput(ino);
+		if (!S_ISBLK(mode))
 			goto out;
-		}
-		iput(ino);
 	}
 
 	ret = -EINVAL;

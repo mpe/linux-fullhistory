@@ -58,14 +58,10 @@ extern void d_instantiate(struct dentry *, struct inode *);
 extern void d_delete(struct dentry *);
 
 
-/* Note that all these routines must be called with vfs_lock() held */
-
-/* get inode, if necessary retrieve it with iget() */
-extern struct inode * d_inode(struct dentry ** changing_entry);
-
 /* allocate/de-allocate */
 extern void d_free(struct dentry *);
 extern struct dentry * d_alloc(struct dentry * parent, const struct qstr *name);
+extern void shrink_dcache(int);
 
 /* only used at mount-time */
 extern struct dentry * d_alloc_root(struct inode * root_inode, struct dentry * old_root);

@@ -165,7 +165,7 @@ static int pipe_ioctl(struct inode *pino, struct file * filp,
 static unsigned int pipe_poll(struct file * filp, poll_table * wait)
 {
 	unsigned int mask;
-	struct inode * inode = filp->f_inode;
+	struct inode * inode = filp->f_dentry->d_inode;
 
 	poll_wait(&PIPE_WAIT(*inode), wait);
 	mask = POLLIN | POLLRDNORM;
@@ -186,7 +186,7 @@ static unsigned int pipe_poll(struct file * filp, poll_table * wait)
 static unsigned int fifo_poll(struct file * filp, poll_table * wait)
 {
 	unsigned int mask;
-	struct inode * inode = filp->f_inode;
+	struct inode * inode = filp->f_dentry->d_inode;
 
 	poll_wait(&PIPE_WAIT(*inode), wait);
 	mask = POLLIN | POLLRDNORM;
@@ -218,7 +218,7 @@ static long connect_read(struct inode * inode, struct file * filp,
 
 static unsigned int connect_poll(struct file * filp, poll_table * wait)
 {
-	struct inode * inode = filp->f_inode;
+	struct inode * inode = filp->f_dentry->d_inode;
 
 	poll_wait(&PIPE_WAIT(*inode), wait);
 	if (!PIPE_EMPTY(*inode)) {
@@ -419,7 +419,7 @@ int do_pipe(int *fd)
 		goto close_f12_inode_i;
 	j = error;
 
-	f1->f_inode = f2->f_inode = inode;
+	f1->f_dentry = f2->f_dentry = d_alloc_root(inode, NULL);
 
 	/* read file */
 	f1->f_pos = f2->f_pos = 0;
@@ -440,7 +440,6 @@ int do_pipe(int *fd)
 close_f12_inode_i:
 	put_unused_fd(i);
 close_f12_inode:
-	atomic_dec(&inode->i_count);
 	iput(inode);
 close_f12:
 	put_filp(f2);

@@ -396,7 +396,7 @@ int acct_process(long exitcode)
       fs = get_fs();
       set_fs(KERNEL_DS);
 
-      acct_file.f_op->write(acct_file.f_inode, &acct_file,
+      acct_file.f_op->write(acct_file.f_dentry->d_inode, &acct_file,
                              (char *)&ac, sizeof(struct acct));
       set_fs(fs);
    }
@@ -405,8 +405,6 @@ int acct_process(long exitcode)
 
 asmlinkage int sys_acct(const char *name)
 {
-	struct inode *inode = (struct inode *)0;
-	char *tmp;
 	int error = -EPERM;
 
 	lock_kernel();
@@ -416,10 +414,10 @@ asmlinkage int sys_acct(const char *name)
 	if (name == (char *)0) {
 		if (acct_active) {
 			if (acct_file.f_op->release)
-				acct_file.f_op->release(acct_file.f_inode, &acct_file);
+				acct_file.f_op->release(acct_file.f_dentry->d_inode, &acct_file);
 
-			if (acct_file.f_inode != (struct inode *) 0)
-				iput(acct_file.f_inode);
+			if (acct_file.f_dentry != NULL)
+				dput(acct_file.f_dentry);
 
 			acct_active = 0;
 		}
@@ -427,40 +425,51 @@ asmlinkage int sys_acct(const char *name)
 	} else {
 		error = -EBUSY;
 		if (!acct_active) {
-			if ((error = getname(name, &tmp)) != 0)
+			struct dentry *dentry;
+			struct inode *inode;
+			char *tmp;
+
+			tmp = getname(name);
+			error = PTR_ERR(tmp);
+			if (IS_ERR(tmp))
 				goto out;
 
-			error = open_namei(tmp, O_RDWR, 0600, &inode);
+			dentry = open_namei(tmp, O_RDWR, 0600);
 			putname(tmp);
-			if (error)
+
+			error = PTR_ERR(dentry);
+			if (IS_ERR(dentry))
 				goto out;
+			inode = dentry->d_inode;
 
 			error = -EACCES;
 			if (!S_ISREG(inode->i_mode)) {
-				iput(inode);
+				dput(dentry);
 				goto out;
 			}
 
 			error = -EIO;
 			if (!inode->i_op || !inode->i_op->default_file_ops || 
 			    !inode->i_op->default_file_ops->write) {
-				iput(inode);
+				dput(dentry);
 				goto out;
 			}
 
 			acct_file.f_mode = 3;
 			acct_file.f_flags = 0;
 			acct_file.f_count = 1;
-			acct_file.f_inode = inode;
+			acct_file.f_dentry = dentry;
 			acct_file.f_pos = inode->i_size;
 			acct_file.f_reada = 0;
 			acct_file.f_op = inode->i_op->default_file_ops;
 
-			if(acct_file.f_op->open)
-				if(acct_file.f_op->open(acct_file.f_inode, &acct_file)) {
-					iput(inode);
+			if(acct_file.f_op->open) {
+				error = acct_file.f_op->open(inode, &acct_file);
+				if (error) {
+					dput(dentry);
 					goto out;
 				}
+			}
 
 			acct_active = 1;
 			error = 0;

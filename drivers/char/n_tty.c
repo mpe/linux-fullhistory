@@ -854,7 +854,7 @@ do_it_again:
 	/* NOTE: not yet done after every sleep pending a thorough
 	   check of the logic of this change. -- jlc */
 	/* don't stop on /dev/console */
-	if (file->f_inode->i_rdev != CONSOLE_DEV &&
+	if (file->f_dentry->d_inode->i_rdev != CONSOLE_DEV &&
 	    current->tty == tty) {
 		if (tty->pgrp <= 0)
 			printk("read_chan: tty->pgrp <= 0!\n");
@@ -1013,7 +1013,7 @@ static int write_chan(struct tty_struct * tty, struct file * file,
 	int retval = 0;
 
 	/* Job control check -- must be done at start (POSIX.1 7.1.1.4). */
-	if (L_TOSTOP(tty) && file->f_inode->i_rdev != CONSOLE_DEV) {
+	if (L_TOSTOP(tty) && file->f_dentry->d_inode->i_rdev != CONSOLE_DEV) {
 		retval = tty_check_change(tty);
 		if (retval)
 			return retval;

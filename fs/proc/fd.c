@@ -100,7 +100,7 @@ static int proc_lookupfd(struct inode * dir, struct qstr *str, struct inode ** r
  	if (fd >= NR_OPEN	||
 	    !p->files		||
 	    !p->files->fd[fd]	||
-	    !p->files->fd[fd]->f_inode)
+	    !p->files->fd[fd]->f_dentry)
 		return -ENOENT;
 
 	ino = (pid << 16) + (PROC_PID_FD_DIR << 8) + fd;
@@ -144,7 +144,7 @@ static int proc_readfd(struct inode * inode, struct file * filp,
 	for (fd -= 2 ; fd < NR_OPEN; fd++, filp->f_pos++) {
 		if (!p->files)
 			break;
-		if (!p->files->fd[fd] || !p->files->fd[fd]->f_inode)
+		if (!p->files->fd[fd] || !p->files->fd[fd]->f_dentry)
 			continue;
 
 		j = NUMBUF;

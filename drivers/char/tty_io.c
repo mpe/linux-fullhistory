@@ -373,13 +373,15 @@ void do_tty_hangup(struct tty_struct * tty, struct file_operations *fops)
 	for (filp = inuse_filps; filp; filp = filp->f_next) {
 		if (filp->private_data != tty)
 			continue;
-		if (!filp->f_inode)
+		if (!filp->f_dentry)
 			continue;
-		if (filp->f_inode->i_rdev == CONSOLE_DEV)
+		if (!filp->f_dentry->d_inode)
+			continue;
+		if (filp->f_dentry->d_inode->i_rdev == CONSOLE_DEV)
 			continue;
 		if (filp->f_op != &tty_fops)
 			continue;
-		tty_fasync(filp->f_inode, filp, 0);
+		tty_fasync(filp->f_dentry->d_inode, filp, 0);
 		filp->f_op = fops;
 	}
 	
@@ -919,12 +921,12 @@ static void release_dev(struct file * filp)
 	int	idx;
 	
 	tty = (struct tty_struct *)filp->private_data;
-	if (tty_paranoia_check(tty, filp->f_inode->i_rdev, "release_dev"))
+	if (tty_paranoia_check(tty, filp->f_dentry->d_inode->i_rdev, "release_dev"))
 		return;
 
 	check_tty_count(tty, "release_dev");
 
-	tty_fasync(filp->f_inode, filp, 0);
+	tty_fasync(filp->f_dentry->d_inode, filp, 0);
 
 	idx = MINOR(tty->device) - tty->driver.minor_start;
 	pty_master = (tty->driver.type == TTY_DRIVER_TYPE_PTY &&
@@ -1248,7 +1250,7 @@ static unsigned int tty_poll(struct file * filp, poll_table * wait)
 	struct tty_struct * tty;
 
 	tty = (struct tty_struct *)filp->private_data;
-	if (tty_paranoia_check(tty, filp->f_inode->i_rdev, "tty_poll"))
+	if (tty_paranoia_check(tty, filp->f_dentry->d_inode->i_rdev, "tty_poll"))
 		return 0;
 
 	if (tty->ldisc.poll)

@@ -24,13 +24,14 @@ void die_if_kernel(char * str, struct pt_regs * regs, long err,
 		   unsigned long *r9_15)
 {
 	long i;
-	unsigned long sp, ra;
+	unsigned long ra;
 	unsigned int * pc;
+	unsigned long * sp;
 
 	if (regs->ps & 8)
 		return;
 	printk("%s(%d): %s %ld\n", current->comm, current->pid, str, err);
-	sp = (unsigned long) (regs+1);
+	sp = (unsigned long *) (regs+1);
 	__get_user(ra, (unsigned long *)sp);
 	printk("pc = [<%016lx>] ps = %04lx\n", regs->pc, regs->ps);
 	printk("rp = [<%016lx>] ra = [<%016lx>]\n", regs->r26, ra);
@@ -54,7 +55,7 @@ void die_if_kernel(char * str, struct pt_regs * regs, long err,
 	printk("r22= %016lx  r23= %016lx\n", regs->r22, regs->r23);
 	printk("r24= %016lx  r25= %016lx\n", regs->r24, regs->r25);
 	printk("r27= %016lx  r28= %016lx\n", regs->r27, regs->r28);
-	printk("gp = %016lx  sp = %016lx\n", regs->gp, sp);
+	printk("gp = %016lx  sp = %p\n", regs->gp, sp);
 
 	printk("Code:");
 	pc = (unsigned int *) regs->pc;
@@ -65,6 +66,19 @@ void die_if_kernel(char * str, struct pt_regs * regs, long err,
 		printk("%c%08x%c",i?' ':'<',insn,i?' ':'>');
 	}
 	printk("\n");
+	printk("Trace:");
+	while (0x1ff8 & (unsigned long) sp) {
+		extern unsigned long _stext, _etext;
+		unsigned long tmp = *sp;
+		sp++;
+		if (tmp < (unsigned long) &_stext)
+			continue;
+		if (tmp >= (unsigned long) &_etext)
+			continue;
+		printk(" [<%lx>]", tmp);
+	}
+	printk("\n");
+		    
 	do_exit(SIGSEGV);
 }
 

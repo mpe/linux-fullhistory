@@ -135,30 +135,46 @@ asmlinkage int osf_getdirentries(unsigned int fd, struct osf_dirent *dirent,
 {
 	int error;
 	struct file *file;
+	struct dentry *dentry;
+	struct inode *inode;
 	struct osf_dirent_callback buf;
 
-	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
-		return -EBADF;
-	if (!file->f_op || !file->f_op->readdir)
-		return -ENOTDIR;
-	error = verify_area(VERIFY_WRITE, dirent, count);
-	if (error)
-		return error;
-	if (basep) {
-		error = verify_area(VERIFY_WRITE, basep, sizeof(long));
-		if (error)
-			return error;
-	}
+	error = -EBADF;
+	if (fd >= NR_OPEN)
+		goto out;
+
+	file = current->files->fd[fd];
+	if (!file)
+		goto out;
+
+	dentry = file->f_dentry;
+	if (!dentry)
+		goto out;
+
+	inode = dentry->d_inode;
+	if (!inode)
+		goto out;
+
 	buf.dirent = dirent;
 	buf.basep = basep;
 	buf.count = count;
 	buf.error = 0;
-	error = file->f_op->readdir(file->f_inode, file, &buf, osf_filldir);
+
+	error = -ENOTDIR;
+	if (!file->f_op || !file->f_op->readdir)
+		goto out;
+
+	error = file->f_op->readdir(inode, file, &buf, osf_filldir);
 	if (error < 0)
-		return error;
+		goto out;
+
+	error = buf.error;
 	if (count == buf.count)
-		return buf.error;
-	return count - buf.count;
+		goto out;
+
+	error = count - buf.count;
+out:
+	return error;
 }
 
 /*
@@ -267,76 +283,73 @@ struct osf_statfs {
 	__kernel_fsid_t f_fsid;
 } *osf_stat;
 
-static void linux_to_osf_statfs(struct statfs *linux_stat, struct osf_statfs *osf_stat)
+static int linux_to_osf_statfs(struct statfs *linux_stat, struct osf_statfs *osf_stat, unsigned long bufsiz)
 {
-	osf_stat->f_type = linux_stat->f_type;
-	osf_stat->f_flags = 0;	/* mount flags */
+	struct osf_statfs tmp_stat;
+
+	tmp_stat.f_type = linux_stat->f_type;
+	tmp_stat.f_flags = 0;	/* mount flags */
 	/* Linux doesn't provide a "fundamental filesystem block size": */
-	osf_stat->f_fsize = linux_stat->f_bsize;
-	osf_stat->f_bsize = linux_stat->f_bsize;
-	osf_stat->f_blocks = linux_stat->f_blocks;
-	osf_stat->f_bfree = linux_stat->f_bfree;
-	osf_stat->f_bavail = linux_stat->f_bavail;
-	osf_stat->f_files = linux_stat->f_files;
-	osf_stat->f_ffree = linux_stat->f_ffree;
-	osf_stat->f_fsid = linux_stat->f_fsid;
+	tmp_stat.f_fsize = linux_stat->f_bsize;
+	tmp_stat.f_bsize = linux_stat->f_bsize;
+	tmp_stat.f_blocks = linux_stat->f_blocks;
+	tmp_stat.f_bfree = linux_stat->f_bfree;
+	tmp_stat.f_bavail = linux_stat->f_bavail;
+	tmp_stat.f_files = linux_stat->f_files;
+	tmp_stat.f_ffree = linux_stat->f_ffree;
+	tmp_stat.f_fsid = linux_stat->f_fsid;
+	if (bufsiz > sizeof(tmp_stat))
+		bufsiz = sizeof(tmp_stat);
+	return copy_to_user(osf_stat, &tmp_stat, bufsiz) ? -EFAULT : 0;
 }
 
+static int do_osf_statfs(struct dentry * dentry, struct osf_statfs *buffer, unsigned long bufsiz)
+{
+	struct statfs linux_stat;
+	struct inode * inode = dentry->d_inode;
+	struct super_block * sb = inode->i_sb;
+	int error;
+
+	error = -ENOSYS;
+	if (sb->s_op->statfs) {
+		set_fs(KERNEL_DS);
+		error = sb->s_op->statfs(sb, &linux_stat, sizeof(linux_stat));
+		set_fs(USER_DS);
+		if (!error)
+			error = linux_to_osf_statfs(&linux_stat, buffer, bufsiz);
+	}
+	return error;	
+}
 
 asmlinkage int osf_statfs(char *path, struct osf_statfs *buffer, unsigned long bufsiz)
 {
-	struct statfs linux_stat;
-	struct inode *inode;
+	struct dentry *dentry;
 	int retval;
 
 	lock_kernel();
-	if (bufsiz > sizeof(struct osf_statfs))
-		 bufsiz = sizeof(struct osf_statfs);
-	retval = verify_area(VERIFY_WRITE, buffer, bufsiz);
-	if (retval)
-		goto out;
-	retval = namei(path, &inode);
-	if (retval)
-		goto out;
-	retval = -ENOSYS;
-	if (!inode->i_sb->s_op->statfs) {
-		iput(inode);
-		goto out;
+	dentry = namei(path);
+	retval = PTR_ERR(dentry);
+	if (!IS_ERR(dentry)) {
+		retval = do_osf_statfs(dentry, buffer, bufsiz);
+		dput(dentry);
 	}
-	inode->i_sb->s_op->statfs(inode->i_sb, &linux_stat, sizeof(linux_stat));
-	linux_to_osf_statfs(&linux_stat, buffer);
-	iput(inode);
-	retval = 0;
-out:
 	unlock_kernel();
 	return retval;
 }
 
 asmlinkage int osf_fstatfs(unsigned long fd, struct osf_statfs *buffer, unsigned long bufsiz)
 {
-	struct statfs linux_stat;
 	struct file *file;
-	struct inode *inode;
+	struct dentry *dentry;
 	int retval;
 
 	lock_kernel();
-	retval = verify_area(VERIFY_WRITE, buffer, bufsiz);
-	if (retval)
-		goto out;
-	if (bufsiz > sizeof(struct osf_statfs))
-		 bufsiz = sizeof(struct osf_statfs);
 	retval = -EBADF;
 	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 		goto out;
-	retval = -ENOENT;
-	if (!(inode = file->f_inode))
-		goto out;
-	retval = -ENOSYS;
-	if (!inode->i_sb->s_op->statfs)
-		goto out;
-	inode->i_sb->s_op->statfs(inode->i_sb, &linux_stat, sizeof(linux_stat));
-	linux_to_osf_statfs(&linux_stat, buffer);
-	retval = 0;
+	dentry = file->f_dentry;
+	if (dentry)
+		retval = do_osf_statfs(dentry, buffer, bufsiz);
 out:
 	unlock_kernel();
 	return retval;
@@ -369,56 +382,60 @@ struct procfs_args {
 	uid_t exroot;
 };
 
-static int getdev(const char *name, int rdonly, struct inode **ino)
+static int getdev(const char *name, int rdonly, struct dentry **dp)
 {
 	kdev_t dev;
+	struct dentry *dentry;
 	struct inode *inode;
 	struct file_operations *fops;
 	int retval;
 
-	retval = namei(name, &inode);
-	if (retval)
+	dentry = namei(name);
+	retval = PTR_ERR(dentry);
+	if (IS_ERR(dentry))
 		return retval;
+
+	inode = dentry->d_inode;
 	if (!S_ISBLK(inode->i_mode)) {
-		iput(inode);
+		dput(dentry);
 		return -ENOTBLK;
 	}
 	if (IS_NODEV(inode)) {
-		iput(inode);
+		dput(dentry);
 		return -EACCES;
 	}
 	dev = inode->i_rdev;
 	if (MAJOR(dev) >= MAX_BLKDEV) {
-		iput(inode);
+		dput(dentry);
 		return -ENXIO;
 	}
 	fops = get_blkfops(MAJOR(dev));
 	if (!fops) {
-		iput(inode);
+		dput(dentry);
 		return -ENODEV;
 	}
 	if (fops->open) {
 		struct file dummy;
 		memset(&dummy, 0, sizeof(dummy));
-		dummy.f_inode = inode;
+		dummy.f_dentry = dentry;
 		dummy.f_mode = rdonly ? 1 : 3;
 		retval = fops->open(inode, &dummy);
 		if (retval) {
-			iput(inode);
+			dput(dentry);
 			return retval;
 		}
 	}
-	*ino = inode;
+	*dp = dentry;
 	return 0;
 }
 
-static void putdev(struct inode *inode)
+static void putdev(struct dentry *dentry)
 {
 	struct file_operations *fops;
 
-	fops = get_blkfops(MAJOR(inode->i_rdev));
+	fops = get_blkfops(MAJOR(dentry->d_inode->i_rdev));
 	if (fops->release)
-		fops->release(inode, NULL);
+		fops->release(dentry->d_inode, NULL);
 }
 
 /*
@@ -429,40 +446,40 @@ static void putdev(struct inode *inode)
 static int osf_ufs_mount(char *dirname, struct ufs_args *args, int flags)
 {
 	int retval;
-	struct inode *inode;
+	struct dentry *dentry;
 	struct cdfs_args tmp;
 
 	retval = verify_area(VERIFY_READ, args, sizeof(*args));
 	if (retval)
 		return retval;
 	copy_from_user(&tmp, args, sizeof(tmp));
-	retval = getdev(tmp.devname, 0, &inode);
+	retval = getdev(tmp.devname, 0, &dentry);
 	if (retval)
 		return retval;
-	retval = do_mount(inode->i_rdev, tmp.devname, dirname, "ext2", flags, NULL);
+	retval = do_mount(dentry->d_inode->i_rdev, tmp.devname, dirname, "ext2", flags, NULL);
 	if (retval)
-		putdev(inode);
-	iput(inode);
+		putdev(dentry);
+	dput(dentry);
 	return retval;
 }
 
 static int osf_cdfs_mount(char *dirname, struct cdfs_args *args, int flags)
 {
 	int retval;
-	struct inode *inode;
+	struct dentry * dentry;
 	struct cdfs_args tmp;
 
 	retval = verify_area(VERIFY_READ, args, sizeof(*args));
 	if (retval)
 		return retval;
 	copy_from_user(&tmp, args, sizeof(tmp));
-	retval = getdev(tmp.devname, 1, &inode);
+	retval = getdev(tmp.devname, 1, &dentry);
 	if (retval)
 		return retval;
-	retval = do_mount(inode->i_rdev, tmp.devname, dirname, "iso9660", flags, NULL);
+	retval = do_mount(dentry->d_inode->i_rdev, tmp.devname, dirname, "iso9660", flags, NULL);
 	if (retval)
-		putdev(inode);
-	iput(inode);
+		putdev(dentry);
+	dput(dentry);
 	return retval;
 }
 

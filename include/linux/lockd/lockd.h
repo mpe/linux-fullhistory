@@ -166,7 +166,7 @@ void		  nlmsvc_free_host_resources(struct nlm_host *);
 extern __inline__ struct inode *
 nlmsvc_file_inode(struct nlm_file *file)
 {
-	return file->f_file.f_inode;
+	return file->f_file.f_dentry->d_inode;
 }
 
 /*

@@ -164,7 +164,7 @@ extern struct super_block *isofs_read_super(struct super_block *,void *,int);
 extern int init_iso9660_fs(void);
 extern void isofs_read_inode(struct inode *);
 extern void isofs_put_inode(struct inode *);
-extern void isofs_statfs(struct super_block *, struct statfs *, int);
+extern int isofs_statfs(struct super_block *, struct statfs *, int);
 
 extern int isofs_lseek(struct inode *, struct file *, off_t, int);
 extern int isofs_read(struct inode *, struct file *, char *, int);

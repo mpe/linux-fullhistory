@@ -326,7 +326,7 @@ again:
 asmlinkage int sys_swapoff(const char * specialfile)
 {
 	struct swap_info_struct * p = NULL;
-	struct inode * inode;
+	struct dentry * dentry;
 	struct file filp;
 	int i, type, prev;
 	int err = -EPERM;
@@ -334,19 +334,22 @@ asmlinkage int sys_swapoff(const char * specialfile)
 	lock_kernel();
 	if (!suser())
 		goto out;
-	err = namei(specialfile, &inode);
-	if (err)
+
+	dentry = namei(specialfile);
+	err = PTR_ERR(dentry);
+	if (IS_ERR(dentry))
 		goto out;
+
 	prev = -1;
 	for (type = swap_list.head; type >= 0; type = swap_info[type].next) {
 		p = swap_info + type;
 		if ((p->flags & SWP_WRITEOK) == SWP_WRITEOK) {
 			if (p->swap_file) {
-				if (p->swap_file == inode)
+				if (p->swap_file == dentry)
 				  break;
 			} else {
-				if (S_ISBLK(inode->i_mode)
-				    && (p->swap_device == inode->i_rdev))
+				if (S_ISBLK(dentry->d_inode->i_mode)
+				    && (p->swap_device == dentry->d_inode->i_rdev))
 				  break;
 			}
 		}
@@ -354,7 +357,7 @@ asmlinkage int sys_swapoff(const char * specialfile)
 	}
 	err = -EINVAL;
 	if (type < 0){
-		iput(inode);
+		dput(dentry);
 		goto out;
 	}
 	if (prev < 0) {
@@ -369,7 +372,7 @@ asmlinkage int sys_swapoff(const char * specialfile)
 	p->flags = SWP_USED;
 	err = try_to_unuse(type);
 	if (err) {
-		iput(inode);
+		dput(dentry);
 		/* re-insert swap space back into swap_list */
 		for (prev = -1, i = swap_list.head; i >= 0; prev = i, i = swap_info[i].next)
 			if (p->prio >= swap_info[i].prio)
@@ -384,21 +387,19 @@ asmlinkage int sys_swapoff(const char * specialfile)
 	}
 	if(p->swap_device){
 		memset(&filp, 0, sizeof(filp));		
-		filp.f_inode = inode;
+		filp.f_dentry = dentry;
 		filp.f_mode = 3; /* read write */
 		/* open it again to get fops */
-		if( !blkdev_open(inode, &filp) &&
+		if( !blkdev_open(dentry->d_inode, &filp) &&
 		   filp.f_op && filp.f_op->release){
-			filp.f_op->release(inode,&filp);
-			filp.f_op->release(inode,&filp);
+			filp.f_op->release(dentry->d_inode,&filp);
+			filp.f_op->release(dentry->d_inode,&filp);
 		}
 	}
-	iput(inode);
+	dput(dentry);
 
 	nr_swap_pages -= p->pages;
-	iput(p->swap_file);
-	if (p->swap_filename)
-		kfree(p->swap_filename);
+	dput(p->swap_file);
 	p->swap_file = NULL;
 	p->swap_device = 0;
 	vfree(p->swap_map);
@@ -420,10 +421,8 @@ int get_swaparea_info(char *buf)
 	len += sprintf(buf, "Filename\t\t\tType\t\tSize\tUsed\tPriority\n");
 	for (i = 0 ; i < nr_swapfiles ; i++, ptr++)
 		if (ptr->flags & SWP_USED) {
-			if (ptr->swap_filename)
-				len += sprintf(buf + len, "%-31s ", ptr->swap_filename);
-			else
-				len += sprintf(buf + len, "(null)\t\t\t");
+			len += sprintf(buf + len, "%-31s ", ptr->swap_file->d_name.name);
+
 			if (ptr->swap_file)
 				len += sprintf(buf + len, "file\t\t");
 			else
@@ -451,11 +450,10 @@ int get_swaparea_info(char *buf)
 asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 {
 	struct swap_info_struct * p;
-	struct inode * swap_inode;
+	struct dentry * swap_dentry;
 	unsigned int type;
 	int i, j, prev;
 	int error = -EPERM;
-	char *tmp;
 	struct file filp;
 	static int least_priority = 0;
 
@@ -472,7 +470,6 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 	if (type >= nr_swapfiles)
 		nr_swapfiles = type+1;
 	p->flags = SWP_USED;
-	p->swap_filename = NULL;
 	p->swap_file = NULL;
 	p->swap_device = 0;
 	p->swap_map = NULL;
@@ -488,22 +485,22 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 	} else {
 		p->prio = --least_priority;
 	}
-	error = namei(specialfile, &swap_inode);
-	if (error)
+	swap_dentry = namei(specialfile);
+	error = PTR_ERR(swap_dentry);
+	if (IS_ERR(swap_dentry))
 		goto bad_swap_2;
-	p->swap_file = swap_inode;
+
+	p->swap_file = swap_dentry;
 	error = -EINVAL;
 
-	if (S_ISBLK(swap_inode->i_mode)) {
-		p->swap_device = swap_inode->i_rdev;
+	if (S_ISBLK(swap_dentry->d_inode->i_mode)) {
+		p->swap_device = swap_dentry->d_inode->i_rdev;
 		set_blocksize(p->swap_device, PAGE_SIZE);
 		
-		filp.f_inode = swap_inode;
+		filp.f_dentry = swap_dentry;
 		filp.f_mode = 3; /* read write */
-		error = blkdev_open(swap_inode, &filp);
-		p->swap_file = NULL;
-		iput(swap_inode);
-		if(error)
+		error = blkdev_open(swap_dentry->d_inode, &filp);
+		if (error)
 			goto bad_swap_2;
 		error = -ENODEV;
 		if (!p->swap_device ||
@@ -517,7 +514,7 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 			if (p->swap_device == swap_info[i].swap_device)
 				goto bad_swap;
 		}
-	} else if (!S_ISREG(swap_inode->i_mode))
+	} else if (!S_ISREG(swap_dentry->d_inode->i_mode))
 		goto bad_swap;
 	p->swap_lockmap = (unsigned char *) get_free_page(GFP_USER);
 	if (!p->swap_lockmap) {
@@ -577,12 +574,6 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 		prev = i;
 	}
 	p->next = i;
-	if (!getname(specialfile, &tmp)) {
-		if ((p->swap_filename =
-		    (char *) kmalloc(strlen(tmp)+1, GFP_KERNEL)) != (char *)NULL)
-			strcpy(p->swap_filename, tmp);
-		putname(tmp);
-	}
 	if (prev < 0) {
 		swap_list.head = swap_list.next = p - swap_info;
 	} else {
@@ -592,11 +583,11 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 	goto out;
 bad_swap:
 	if(filp.f_op && filp.f_op->release)
-		filp.f_op->release(filp.f_inode,&filp);
+		filp.f_op->release(filp.f_dentry->d_inode,&filp);
 bad_swap_2:
 	free_page((long) p->swap_lockmap);
 	vfree(p->swap_map);
-	iput(p->swap_file);
+	dput(p->swap_file);
 	p->swap_device = 0;
 	p->swap_file = NULL;
 	p->swap_map = NULL;

@@ -141,7 +141,7 @@ struct super_block *proc_read_super(struct super_block *s,void *data,
 	return s;
 }
 
-void proc_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
+int proc_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 {
 	struct statfs tmp;
 
@@ -153,7 +153,7 @@ void proc_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 	tmp.f_files = 0;
 	tmp.f_ffree = 0;
 	tmp.f_namelen = NAME_MAX;
-	copy_to_user(buf, &tmp, bufsiz);
+	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
 }
 
 void proc_read_inode(struct inode * inode)

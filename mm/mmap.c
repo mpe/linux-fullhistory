@@ -74,11 +74,11 @@ static inline int vm_enough_memory(long pages)
 /* Remove one vm structure from the inode's i_mmap ring. */
 static inline void remove_shared_vm_struct(struct vm_area_struct *vma)
 {
-	struct inode * inode = vma->vm_inode;
+	struct dentry * dentry = vma->vm_dentry;
 
-	if (inode) {
+	if (dentry) {
 		if (vma->vm_flags & VM_DENYWRITE)
-			inode->i_writecount++;
+			dentry->d_inode->i_writecount++;
 		if(vma->vm_next_share)
 			vma->vm_next_share->vm_pprev_share = vma->vm_pprev_share;
 		*vma->vm_pprev_share = vma->vm_next_share;
@@ -194,7 +194,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 				return -EACCES;
 
 			/* make sure there are no mandatory locks on the file. */
-			if (locks_verify_locked(file->f_inode))
+			if (locks_verify_locked(file->f_dentry->d_inode))
 				return -EAGAIN;
 			/* fall through */
 		case MAP_PRIVATE:
@@ -259,7 +259,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	vma->vm_page_prot = protection_map[vma->vm_flags & 0x0f];
 	vma->vm_ops = NULL;
 	vma->vm_offset = off;
-	vma->vm_inode = NULL;
+	vma->vm_dentry = NULL;
 	vma->vm_pte = 0;
 
 	do_munmap(addr, len);	/* Clear old maps */
@@ -283,7 +283,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	if (file) {
 		int error = 0;
 		if (vma->vm_flags & VM_DENYWRITE) {
-			if (file->f_inode->i_writecount > 0)
+			if (file->f_dentry->d_inode->i_writecount > 0)
 				error = -ETXTBSY;
 			else {
 	        		/* f_op->mmap might possibly sleep
@@ -291,16 +291,16 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 				 * might). In any case, this takes care of any
 				 * race that this might cause.
 				 */
-				file->f_inode->i_writecount--;
+				file->f_dentry->d_inode->i_writecount--;
 				correct_wcount = 1;
 			}
 		}
 		if (!error)
-			error = file->f_op->mmap(file->f_inode, file, vma);
+			error = file->f_op->mmap(file->f_dentry->d_inode, file, vma);
 	
 		if (error) {
 			if (correct_wcount)
-				file->f_inode->i_writecount++;
+				file->f_dentry->d_inode->i_writecount++;
 			kmem_cache_free(vm_area_cachep, vma);
 			return error;
 		}
@@ -309,7 +309,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	flags = vma->vm_flags;
 	insert_vm_struct(mm, vma);
 	if (correct_wcount)
-		file->f_inode->i_writecount++;
+		file->f_dentry->d_inode->i_writecount++;
 	merge_segments(mm, vma->vm_start, vma->vm_end);
 	
 	addr = vma->vm_start;
@@ -389,8 +389,8 @@ static void unmap_fixup(struct vm_area_struct *area,
 	if (addr == area->vm_start && end == area->vm_end) {
 		if (area->vm_ops && area->vm_ops->close)
 			area->vm_ops->close(area);
-		if (area->vm_inode)
-			iput(area->vm_inode);
+		if (area->vm_dentry)
+			dput(area->vm_dentry);
 		return;
 	}
 
@@ -407,11 +407,14 @@ static void unmap_fixup(struct vm_area_struct *area,
 
 		if (!mpnt)
 			return;
-		*mpnt = *area;
-		mpnt->vm_offset += (end - area->vm_start);
+		mpnt->vm_mm = area->vm_mm;
 		mpnt->vm_start = end;
-		if (mpnt->vm_inode)
-			atomic_inc(&mpnt->vm_inode->i_count);
+		mpnt->vm_end = area->vm_end;
+		mpnt->vm_page_prot = area->vm_page_prot;
+		mpnt->vm_flags = area->vm_flags;
+		mpnt->vm_ops = area->vm_ops;
+		mpnt->vm_offset += (end - area->vm_start);
+		mpnt->vm_dentry = dget(area->vm_dentry);
 		if (mpnt->vm_ops && mpnt->vm_ops->open)
 			mpnt->vm_ops->open(mpnt);
 		area->vm_end = addr;	/* Truncate area */
@@ -544,8 +547,8 @@ void exit_mmap(struct mm_struct * mm)
 		}
 		remove_shared_vm_struct(mpnt);
 		zap_page_range(mm, start, size);
-		if (mpnt->vm_inode)
-			iput(mpnt->vm_inode);
+		if (mpnt->vm_dentry)
+			dput(mpnt->vm_dentry);
 		kmem_cache_free(vm_area_cachep, mpnt);
 		mpnt = next;
 	}
@@ -557,7 +560,7 @@ void exit_mmap(struct mm_struct * mm)
 void insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vmp)
 {
 	struct vm_area_struct **pprev = &mm->mmap;
-	struct inode * inode;
+	struct dentry * dentry;
 
 	/* Find where to link it in. */
 	while(*pprev && (*pprev)->vm_start <= vmp->vm_start)
@@ -569,8 +572,9 @@ void insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vmp)
 	*pprev = vmp;
 	vmp->vm_pprev = pprev;
 
-	inode = vmp->vm_inode;
-	if (inode) {
+	dentry = vmp->vm_dentry;
+	if (dentry) {
+		struct inode * inode = dentry->d_inode;
 		if (vmp->vm_flags & VM_DENYWRITE)
 			inode->i_writecount--;
       
@@ -617,16 +621,19 @@ void merge_segments (struct mm_struct * mm, unsigned long start_addr, unsigned l
 	for ( ; mpnt && prev->vm_start < end_addr ; prev = mpnt, mpnt = next) {
 		next = mpnt->vm_next;
 
-		/* To share, we must have the same inode, operations.. */
-		if ((mpnt->vm_inode != prev->vm_inode)	||
+		/* To share, we must have the same dentry, operations.. */
+		if ((mpnt->vm_dentry != prev->vm_dentry)||
 		    (mpnt->vm_pte != prev->vm_pte)	||
 		    (mpnt->vm_ops != prev->vm_ops)	||
 		    (mpnt->vm_flags != prev->vm_flags)	||
 		    (prev->vm_end != mpnt->vm_start))
 			continue;
 
-		/* and if we have an inode, the offsets must be contiguous.. */
-		if ((mpnt->vm_inode != NULL) || (mpnt->vm_flags & VM_SHM)) {
+		/*
+		 * If we have a dentry or it's a shared memory area
+		 * the offsets must be contiguous..
+		 */
+		if ((mpnt->vm_dentry != NULL) || (mpnt->vm_flags & VM_SHM)) {
 			unsigned long off = prev->vm_offset+prev->vm_end-prev->vm_start;
 			if (off != mpnt->vm_offset)
 				continue;
@@ -647,8 +654,8 @@ void merge_segments (struct mm_struct * mm, unsigned long start_addr, unsigned l
 			mpnt->vm_ops->close(mpnt);
 		}
 		remove_shared_vm_struct(mpnt);
-		if (mpnt->vm_inode)
-			atomic_dec(&mpnt->vm_inode->i_count);
+		if (mpnt->vm_dentry)
+			dput(mpnt->vm_dentry);
 		kmem_cache_free(vm_area_cachep, mpnt);
 		mpnt = prev;
 	}

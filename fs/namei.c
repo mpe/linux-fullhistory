@@ -158,20 +158,22 @@ static inline int do_getname(const char *filename, char *page)
 	return retval;
 }
 
-int getname(const char * filename, char **result)
+char * getname(const char * filename)
 {
-	char *tmp;
-	int retval;
+	char *tmp, *result;
 
+	result = ERR_PTR(-ENOMEM);
 	tmp = get_page();
-	if (!tmp)
-		return -ENOMEM;
-	retval = do_getname(filename, tmp);
-	if (retval < 0)
-		putname(tmp);
-	else
-		*result = tmp;
-	return retval;
+	if (tmp)  {
+		int retval = do_getname(filename, tmp);
+
+		result = tmp;
+		if (retval < 0) {
+			putname(tmp);
+			result = ERR_PTR(retval);
+		}
+	}
+	return result;
 }
 
 /*
@@ -262,6 +264,7 @@ static struct dentry * real_lookup(struct dentry * parent, struct qstr * name)
 		result = d_lookup(parent, name);
 		if (result) {
 			d_free(new);
+			iput(inode);
 		} else {
 			d_add(new, inode);
 			result = new;
@@ -294,7 +297,7 @@ static inline struct dentry * cached_lookup(struct dentry * parent, struct qstr 
 		 */
 		if (parent->d_count <= 1) {
 			printk("lookup of %s success in %s, but parent count is %d\n",
-				dentry->d_name, parent->d_name, parent->d_count);
+				dentry->d_name.name, parent->d_name.name, parent->d_count);
 		}
 	}
 	return dentry;
@@ -466,32 +469,24 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, int follo
  * namei exists in two versions: namei/lnamei. The only difference is
  * that namei follows links, while lnamei does not.
  */
-int __namei(const char *pathname, struct inode **res_inode, int follow_link)
+struct dentry * __namei(const char *pathname, int follow_link)
 {
-	int error;
-	char * name;
+	char *name;
+	struct dentry *dentry;
 
-	error = getname(pathname, &name);
-	if (!error) {
-		struct dentry * dentry;
-
+	name = getname(pathname);
+	dentry = (struct dentry *) name;
+	if (!IS_ERR(name)) {
 		dentry = lookup_dentry(name, NULL, follow_link);
 		putname(name);
-		error = PTR_ERR(dentry);
 		if (!IS_ERR(dentry)) {
-			error = -ENOENT;
-			if (dentry) {
-				struct inode *inode = dentry->d_inode;
-				if (inode) {
-					atomic_inc(&inode->i_count);
-					*res_inode = inode;
-					error = 0;
-				}
+			if (!dentry->d_inode) {
 				dput(dentry);
+				dentry = ERR_PTR(-ENOENT);
 			}
 		}
 	}
-	return error;
+	return dentry;
 }
 
 static inline struct inode *get_parent(struct dentry *dentry)
@@ -524,10 +519,9 @@ static inline struct inode *lock_parent(struct dentry *dentry)
  * which is a lot more logical, and also allows the "no perm" needed
  * for symlinks (where the permissions are checked later).
  */
-int open_namei(const char * pathname, int flag, int mode, struct inode ** res_inode)
+struct dentry * open_namei(const char * pathname, int flag, int mode)
 {
-	int error;
-	int acc_mode;
+	int acc_mode, error;
 	struct inode *inode;
 	struct dentry *dentry;
 
@@ -536,7 +530,7 @@ int open_namei(const char * pathname, int flag, int mode, struct inode ** res_in
 
 	dentry = lookup_dentry(pathname, NULL, 1);
 	if (IS_ERR(dentry))
-		return PTR_ERR(dentry);
+		return dentry;
 
 	acc_mode = ACC_MODE(flag);
 	if (flag & O_CREAT) {
@@ -629,56 +623,55 @@ int open_namei(const char * pathname, int flag, int mode, struct inode ** res_in
 			if (inode->i_sb && inode->i_sb->dq_op)
 				inode->i_sb->dq_op->initialize(inode, -1);
 
-	*res_inode = inode;
-	atomic_inc(&inode->i_count);
-	error = 0;
+	return dentry;
 
 exit:
 	dput(dentry);
-	return error;
+	return ERR_PTR(error);
 }
 
-int do_mknod(const char * filename, int mode, dev_t dev)
+struct dentry * do_mknod(const char * filename, int mode, dev_t dev)
 {
 	int error;
 	struct inode *dir;
-	struct dentry *dentry;
+	struct dentry *dentry, *retval;
 
 	mode &= ~current->fs->umask;
 	dentry = lookup_dentry(filename, NULL, 1);
-
-	error = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
-		goto exit;
+		return dentry;
 
 	dir = lock_parent(dentry);
 
-	error = -EEXIST;
+	retval = ERR_PTR(-EEXIST);
 	if (dentry->d_inode)
 		goto exit_lock;
 
-	error = -EROFS;
+	retval = ERR_PTR(-EROFS);
 	if (IS_RDONLY(dir))
 		goto exit_lock;
 
 	error = permission(dir,MAY_WRITE | MAY_EXEC);
+	retval = ERR_PTR(error);
 	if (error)
 		goto exit_lock;
 
-	error = -EPERM;
+	retval = ERR_PTR(-EPERM);
 	if (!dir->i_op || !dir->i_op->mknod)
 		goto exit_lock;
 
 	if (dir->i_sb && dir->i_sb->dq_op)
 		dir->i_sb->dq_op->initialize(dir, -1);
 	error = dir->i_op->mknod(dir, dentry, mode, dev);
+	retval = ERR_PTR(error);
+	if (!error)
+		retval = dget(dentry);
 
 exit_lock:
 	up(&dir->i_sem);
 	iput(dir);
 	dput(dentry);
-exit:
-	return error;
+	return retval;
 }
 
 asmlinkage int sys_mknod(const char * filename, int mode, dev_t dev)
@@ -700,10 +693,16 @@ asmlinkage int sys_mknod(const char * filename, int mode, dev_t dev)
 	default:
 		goto out;
 	}
-	error = getname(filename,&tmp);
-	if (!error) {
-		error = do_mknod(tmp,mode,dev);
+	tmp = getname(filename);
+	error = PTR_ERR(tmp);
+	if (!IS_ERR(tmp)) {
+		struct dentry * dentry = do_mknod(tmp,mode,dev);
 		putname(tmp);
+		error = PTR_ERR(dentry);
+		if (!IS_ERR(dentry)) {
+			dput(dentry);
+			error = 0;
+		}
 	}
 out:
 	unlock_kernel();
@@ -762,8 +761,9 @@ asmlinkage int sys_mkdir(const char * pathname, int mode)
 	char * tmp;
 
 	lock_kernel();
-	error = getname(pathname,&tmp);
-	if (!error) {
+	tmp = getname(pathname);
+	error = PTR_ERR(tmp);
+	if (!IS_ERR(tmp)) {
 		error = do_mkdir(tmp,mode);
 		putname(tmp);
 	}
@@ -830,8 +830,9 @@ asmlinkage int sys_rmdir(const char * pathname)
 	char * tmp;
 
 	lock_kernel();
-	error = getname(pathname,&tmp);
-	if (!error) {
+	tmp = getname(pathname);
+	error = PTR_ERR(tmp);
+	if (!IS_ERR(tmp)) {
 		error = do_rmdir(tmp);
 		putname(tmp);
 	}
@@ -890,8 +891,9 @@ asmlinkage int sys_unlink(const char * pathname)
 	char * tmp;
 
 	lock_kernel();
-	error = getname(pathname,&tmp);
-	if (!error) {
+	tmp = getname(pathname);
+	error = PTR_ERR(tmp);
+	if (!IS_ERR(tmp)) {
 		error = do_unlink(tmp);
 		putname(tmp);
 	}
@@ -944,13 +946,16 @@ exit:
 asmlinkage int sys_symlink(const char * oldname, const char * newname)
 {
 	int error;
-	char * from, * to;
+	char * from;
 
 	lock_kernel();
-	error = getname(oldname,&from);
-	if (!error) {
-		error = getname(newname,&to);
-		if (!error) {
+	from = getname(oldname);
+	error = PTR_ERR(from);
+	if (!IS_ERR(from)) {
+		char * to;
+		to = getname(newname);
+		error = PTR_ERR(to);
+		if (!IS_ERR(to)) {
 			error = do_symlink(from,to);
 			putname(to);
 		}
@@ -1027,13 +1032,16 @@ exit:
 asmlinkage int sys_link(const char * oldname, const char * newname)
 {
 	int error;
-	char * from, * to;
+	char * from;
 
 	lock_kernel();
-	error = getname(oldname,&from);
-	if (!error) {
-		error = getname(newname,&to);
-		if (!error) {
+	from = getname(oldname);
+	error = PTR_ERR(from);
+	if (!IS_ERR(from)) {
+		char * to;
+		to = getname(newname);
+		error = PTR_ERR(to);
+		if (!IS_ERR(to)) {
 			error = do_link(from,to);
 			putname(to);
 		}
@@ -1142,13 +1150,16 @@ exit:
 asmlinkage int sys_rename(const char * oldname, const char * newname)
 {
 	int error;
-	char * from, * to;
+	char * from;
 
 	lock_kernel();
-	error = getname(oldname,&from);
-	if (!error) {
-		error = getname(newname,&to);
-		if (!error) {
+	from = getname(oldname);
+	error = PTR_ERR(from);
+	if (!IS_ERR(from)) {
+		char * to;
+		to = getname(newname);
+		error = PTR_ERR(to);
+		if (!IS_ERR(to)) {
 			error = do_rename(from,to);
 			putname(to);
 		}

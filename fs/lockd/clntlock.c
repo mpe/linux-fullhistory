@@ -172,7 +172,7 @@ reclaimer(void *ptr)
 	/* First, reclaim all locks that have been granted previously. */
 	do {
 		for (fl = file_lock_table; fl; fl = fl->fl_next) {
-			inode = fl->fl_file->f_inode;
+			inode = fl->fl_file->f_dentry->d_inode;
 			if (inode->i_sb->s_magic == NFS_SUPER_MAGIC
 			 && nlm_cmp_addr(NFS_ADDR(inode), &host->h_addr)
 			 && fl->fl_u.nfs_fl.state != host->h_state

@@ -108,6 +108,11 @@ good_area:
 bad_area:
 	up(&mm->mmap_sem);
 
+	if (user_mode(regs)) {
+		force_sig(SIGSEGV, tsk);
+		return;
+	}
+
 	/* Are we prepared to handle this fault as an exception?  */
 	if ((fixup = search_exception_table(regs->pc)) != 0) {
 		unsigned long newpc;
@@ -117,14 +122,6 @@ bad_area:
 		return;
 	}
 
-	if (user_mode(regs)) {
-		printk("%s: memory violation at pc=%08lx ra=%08lx "
-		       "(bad address = %08lx)\n",
-			tsk->comm, regs->pc, regs->r26, address);
-		die_if_kernel("oops", regs, cause, (unsigned long*)regs - 16);
-		force_sig(SIGSEGV, tsk);
-		return;
-	}
 /*
  * Oops. The kernel tried to access some bad page. We'll have to
  * terminate things with extreme prejudice.

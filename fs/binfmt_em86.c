@@ -23,6 +23,7 @@
 static int do_load_em86(struct linux_binprm *bprm,struct pt_regs *regs)
 {
 	char *interp, *i_name, *i_arg;
+	struct dentry * dentry;
 	int retval;
 	struct elfhdr	elf_ex;
 
@@ -39,14 +40,14 @@ static int do_load_em86(struct linux_binprm *bprm,struct pt_regs *regs)
         if ((elf_ex.e_type != ET_EXEC &&
             elf_ex.e_type != ET_DYN) ||
            (!((elf_ex.e_machine == EM_386) || (elf_ex.e_machine == EM_486))) ||
-           (!bprm->inode->i_op || !bprm->inode->i_op->default_file_ops ||
-            !bprm->inode->i_op->default_file_ops->mmap)){
+           (!bprm->dentry->d_inode->i_op || !bprm->dentry->d_inode->i_op->default_file_ops ||
+            !bprm->dentry->d_inode->i_op->default_file_ops->mmap)){
                 return -ENOEXEC;
         }
 
 	bprm->sh_bang++;	/* Well, the bang-shell is implicit... */
-	iput(bprm->inode);
-	bprm->dont_iput = 1;
+	dput(bprm->dentry);
+	bprm->dentry = NULL;
 
 	/* Unlike in the script case, we don't have to do any hairy
 	 * parsing to find our interpreter... it's hardcoded!
@@ -79,14 +80,17 @@ static int do_load_em86(struct linux_binprm *bprm,struct pt_regs *regs)
 	 * Note that we use open_namei() as the name is now in kernel
 	 * space, and we don't need to copy it.
 	 */
-	retval = open_namei(interp, 0, 0, &bprm->inode);
-	if (retval)
+	dentry = open_namei(interp, 0, 0);
+	if (IS_ERR(dentry))
+		return PTR_ERR(dentry);
+
+	bprm->dentry = dentry;
+
+	retval = prepare_binprm(bprm);
+	if (retval < 0)
 		return retval;
-	bprm->dont_iput=0;
-	retval=prepare_binprm(bprm);
-	if(retval<0)
-		return retval;
-	return search_binary_handler(bprm,regs);
+
+	return search_binary_handler(bprm, regs);
 }
 
 static int load_em86(struct linux_binprm *bprm,struct pt_regs *regs)

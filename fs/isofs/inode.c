@@ -504,7 +504,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	return NULL;
 }
 
-void isofs_statfs (struct super_block *sb, struct statfs *buf, int bufsiz)
+int isofs_statfs (struct super_block *sb, struct statfs *buf, int bufsiz)
 {
 	struct statfs tmp;
 
@@ -517,7 +517,7 @@ void isofs_statfs (struct super_block *sb, struct statfs *buf, int bufsiz)
 	tmp.f_files = sb->u.isofs_sb.s_ninodes;
 	tmp.f_ffree = 0;
 	tmp.f_namelen = NAME_MAX;
-	copy_to_user(buf, &tmp, bufsiz);
+	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
 }
 
 int isofs_bmap(struct inode * inode,int block)

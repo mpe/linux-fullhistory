@@ -98,7 +98,7 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 			return;
 		wait_on_page(page);
 	} else if (p->swap_file) {
-		struct inode *swapf = p->swap_file;
+		struct inode *swapf = p->swap_file->d_inode;
 		unsigned int zones[PAGE_SIZE/512];
 		int i;
 		if (swapf->i_op->bmap == NULL

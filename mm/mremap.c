@@ -140,8 +140,7 @@ static inline unsigned long move_vma(struct vm_area_struct * vma,
 			new_vma->vm_start = new_addr;
 			new_vma->vm_end = new_addr+new_len;
 			new_vma->vm_offset = vma->vm_offset + (addr - vma->vm_start);
-			if (new_vma->vm_inode)
-				atomic_inc(&new_vma->vm_inode->i_count);
+			new_vma->vm_dentry = dget(vma->vm_dentry);
 			if (new_vma->vm_ops && new_vma->vm_ops->open)
 				new_vma->vm_ops->open(new_vma);
 			insert_vm_struct(current->mm, new_vma);

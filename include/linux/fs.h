@@ -368,7 +368,7 @@ static inline void mark_inode_dirty(struct inode *inode)
 
 struct file {
 	struct file		*f_next, **f_pprev;
-	struct inode		*f_inode;
+	struct dentry		*f_dentry;
 	struct file_operations	*f_op;
 	mode_t			f_mode;
 	loff_t			f_pos;
@@ -570,7 +570,7 @@ struct super_operations {
 	void (*put_inode) (struct inode *);
 	void (*put_super) (struct super_block *);
 	void (*write_super) (struct super_block *);
-	void (*statfs) (struct super_block *, struct statfs *, int);
+	int (*statfs) (struct super_block *, struct statfs *, int);
 	int (*remount_fs) (struct super_block *, int *, char *);
 };
 
@@ -599,7 +599,7 @@ asmlinkage int sys_close(unsigned int);		/* yes, it's really unsigned */
 
 extern void kill_fasync(struct fasync_struct *fa, int sig);
 
-extern int getname(const char * filename, char **result);
+extern char * getname(const char * filename);
 extern void putname(char * name);
 extern int do_truncate(struct inode *, unsigned long);
 extern int register_blkdev(unsigned int, const char *, struct file_operations *);
@@ -681,8 +681,8 @@ extern int notify_change(struct inode *, struct iattr *);
 extern int permission(struct inode * inode,int mask);
 extern int get_write_access(struct inode *inode);
 extern void put_write_access(struct inode *inode);
-extern int open_namei(const char * pathname, int flag, int mode, struct inode ** res_inode);
-extern int do_mknod(const char * filename, int mode, dev_t dev);
+extern struct dentry * open_namei(const char * pathname, int flag, int mode);
+extern struct dentry * do_mknod(const char * filename, int mode, dev_t dev);
 extern int do_pipe(int *);
 
 /*
@@ -698,10 +698,10 @@ extern int do_pipe(int *);
 #define IS_ERR(ptr)	((unsigned long)(ptr) > (unsigned long)(-1000))
 
 extern struct dentry * lookup_dentry(const char *, struct dentry *, int);
-extern int __namei(const char *, struct inode **, int);
+extern struct dentry * __namei(const char *, int);
 
-#define namei(pathname, inode_p)	__namei(pathname, inode_p, 1)
-#define lnamei(pathname, inode_p)	__namei(pathname, inode_p, 0)
+#define namei(pathname)		__namei(pathname, 1)
+#define lnamei(pathname)	__namei(pathname, 0)
 
 #include <asm/semaphore.h>
 

@@ -60,13 +60,15 @@ asmlinkage long sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
 {
 	long retval;
 	struct file * file;
+	struct dentry * dentry;
 	struct inode * inode;
 
 	lock_kernel();
 	retval = -EBADF;
 	if (fd >= NR_OPEN ||
 	    !(file = current->files->fd[fd]) ||
-	    !(inode = file->f_inode))
+	    !(dentry = file->f_dentry) ||
+	    !(inode = dentry->d_inode))
 		goto bad;
 	retval = -EINVAL;
 	if (origin > 2)
@@ -83,6 +85,7 @@ asmlinkage int sys_llseek(unsigned int fd, unsigned long offset_high,
 {
 	long retval;
 	struct file * file;
+	struct dentry * dentry;
 	struct inode * inode;
 	long long offset;
 
@@ -90,7 +93,8 @@ asmlinkage int sys_llseek(unsigned int fd, unsigned long offset_high,
 	retval = -EBADF;
 	if (fd >= NR_OPEN ||
 	    !(file = current->files->fd[fd]) ||
-	    !(inode = file->f_inode))
+	    !(dentry = file->f_dentry) ||
+	    !(inode = dentry->d_inode))
 		goto bad;
 	retval = -EINVAL;
 	if (origin > 2)
@@ -115,6 +119,7 @@ asmlinkage long sys_read(unsigned int fd, char * buf, unsigned long count)
 {
 	int error;
 	struct file * file;
+	struct dentry * dentry;
 	struct inode * inode;
 	long (*read)(struct inode *, struct file *, char *, unsigned long);
 
@@ -123,7 +128,10 @@ asmlinkage long sys_read(unsigned int fd, char * buf, unsigned long count)
 	file = fget(fd);
 	if (!file)
 		goto bad_file;
-	inode = file->f_inode;
+	dentry = file->f_dentry;
+	if (!dentry)
+		goto bad_file;
+	inode = dentry->d_inode;
 	if (!inode)
 		goto out;
 	error = -EBADF;
@@ -137,7 +145,7 @@ asmlinkage long sys_read(unsigned int fd, char * buf, unsigned long count)
 		goto out;
 	error = read(inode,file,buf,count);
 out:
-	fput(file, inode);
+	fput(file);
 bad_file:
 	unlock_kernel();
 	return error;
@@ -147,6 +155,7 @@ asmlinkage long sys_write(unsigned int fd, const char * buf, unsigned long count
 {
 	int error;
 	struct file * file;
+	struct dentry * dentry;
 	struct inode * inode;
 	long (*write)(struct inode *, struct file *, const char *, unsigned long);
 
@@ -155,7 +164,10 @@ asmlinkage long sys_write(unsigned int fd, const char * buf, unsigned long count
 	file = fget(fd);
 	if (!file)
 		goto bad_file;
-	inode = file->f_inode;
+	dentry = file->f_dentry;
+	if (!dentry)
+		goto out;
+	inode = dentry->d_inode;
 	if (!inode)
 		goto out;
 	if (!(file->f_mode & 2))
@@ -170,7 +182,7 @@ asmlinkage long sys_write(unsigned int fd, const char * buf, unsigned long count
 	error = write(inode,file,buf,count);
 	up(&inode->i_sem);
 out:
-	fput(file, inode);
+	fput(file);
 bad_file:
 	unlock_kernel();
 	return error;
@@ -271,14 +283,30 @@ static long do_readv_writev(int type, struct inode * inode, struct file * file,
 asmlinkage long sys_readv(unsigned long fd, const struct iovec * vector, unsigned long count)
 {
 	struct file * file;
+	struct dentry * dentry;
 	struct inode * inode;
-	long err = -EBADF;
+	long err;
 
 	lock_kernel();
-	if (fd >= NR_OPEN || !(file = current->files->fd[fd]) || !(inode=file->f_inode))
+	err = -EBADF;
+	if (fd >= NR_OPEN)
 		goto out;
+
+	file = current->files->fd[fd];
+	if (!file)
+		goto out;
+
 	if (!(file->f_mode & 1))
 		goto out;
+
+	dentry = file->f_dentry;
+	if (!dentry)
+		goto out;
+
+	inode = dentry->d_inode;
+	if (!inode)
+		goto out;
+
 	err = do_readv_writev(VERIFY_WRITE, inode, file, vector, count);
 out:
 	unlock_kernel();
@@ -287,15 +315,32 @@ out:
 
 asmlinkage long sys_writev(unsigned long fd, const struct iovec * vector, unsigned long count)
 {
-	int error = -EBADF;
+	long error;
 	struct file * file;
+	struct dentry * dentry;
 	struct inode * inode;
 
 	lock_kernel();
-	if (fd >= NR_OPEN || !(file = current->files->fd[fd]) || !(inode=file->f_inode))
+	error = -EBADF;
+
+	if (fd >= NR_OPEN)
 		goto out;
+
+	file = current->files->fd[fd];
+	if (!file)
+		goto out;
+
 	if (!(file->f_mode & 2))
 		goto out;
+
+	dentry = file->f_dentry;
+	if (!dentry)
+		goto out;
+
+	inode = dentry->d_inode;
+	if (!inode)
+		goto out;
+
 	down(&inode->i_sem);
 	error = do_readv_writev(VERIFY_READ, inode, file, vector, count);
 	up(&inode->i_sem);

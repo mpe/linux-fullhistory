@@ -19,12 +19,11 @@ struct linux_binprm{
 	unsigned long p;
 	int sh_bang;
 	int java;		/* Java binary, prevent recursive invocation */
-	struct inode * inode;
+	struct dentry * dentry;
 	int e_uid, e_gid;
 	int argc, envc;
 	char * filename;	/* Name of binary */
 	unsigned long loader, exec;
-	int dont_iput;		/* binfmt handler has put inode */
 };
 
 /*
@@ -42,10 +41,10 @@ struct linux_binfmt {
 extern int register_binfmt(struct linux_binfmt *);
 extern int unregister_binfmt(struct linux_binfmt *);
 
-extern int read_exec(struct inode *inode, unsigned long offset,
+extern int read_exec(struct dentry *, unsigned long offset,
 	char * addr, unsigned long count, int to_kmem);
 
-extern int open_inode(struct inode * inode, int mode);
+extern int open_dentry(struct dentry *, int mode);
 
 extern int init_elf_binfmt(void);
 extern int init_elf32_binfmt(void);

@@ -57,22 +57,37 @@ static int fillonedir(void * __buf, const char * name, int namlen, off_t offset,
 
 asmlinkage int old_readdir(unsigned int fd, void * dirent, unsigned int count)
 {
-	int error = -EBADF;
+	int error;
 	struct file * file;
+	struct dentry * dentry;
+	struct inode * inode;
 	struct readdir_callback buf;
 
 	lock_kernel();
-	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
+	error = -EBADF;
+	if (fd >= NR_OPEN)
 		goto out;
+
+	file = current->files->fd[fd];
+	if (!file)
+		goto out;
+
+	dentry = file->f_dentry;
+	if (!dentry)
+		goto out;
+
+	inode = dentry->d_inode;
+	if (!inode)
+		goto out;
+
+	buf.count = 0;
+	buf.dirent = dirent;
+
 	error = -ENOTDIR;
 	if (!file->f_op || !file->f_op->readdir)
 		goto out;
-	error = verify_area(VERIFY_WRITE, dirent, sizeof(struct old_linux_dirent));
-	if (error)
-		goto out;
-	buf.count = 0;
-	buf.dirent = dirent;
-	error = file->f_op->readdir(file->f_inode, file, &buf, fillonedir);
+
+	error = file->f_op->readdir(inode, file, &buf, fillonedir);
 	if (error < 0)
 		goto out;
 	error = buf.count;
@@ -126,30 +141,44 @@ static int filldir(void * __buf, const char * name, int namlen, off_t offset, in
 asmlinkage int sys_getdents(unsigned int fd, void * dirent, unsigned int count)
 {
 	struct file * file;
+	struct dentry * dentry;
+	struct inode * inode;
 	struct linux_dirent * lastdirent;
 	struct getdents_callback buf;
-	int error = -EBADF;
+	int error;
 
 	lock_kernel();
-	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
+	error = -EBADF;
+	if (fd >= NR_OPEN)
 		goto out;
-	error = -ENOTDIR;
-	if (!file->f_op || !file->f_op->readdir)
+
+	file = current->files->fd[fd];
+	if (!file)
 		goto out;
-	error = verify_area(VERIFY_WRITE, dirent, count);
-	if (error)
+
+	dentry = file->f_dentry;
+	if (!dentry)
 		goto out;
+
+	inode = dentry->d_inode;
+	if (!inode)
+		goto out;
+
 	buf.current_dir = (struct linux_dirent *) dirent;
 	buf.previous = NULL;
 	buf.count = count;
 	buf.error = 0;
-	error = file->f_op->readdir(file->f_inode, file, &buf, filldir);
+
+	error = -ENOTDIR;
+	if (!file->f_op || !file->f_op->readdir)
+		goto out;
+
+	error = file->f_op->readdir(inode, file, &buf, filldir);
 	if (error < 0)
 		goto out;
 	lastdirent = buf.previous;
-	if (!lastdirent) {
-		error = buf.error;
-	} else {
+	error = buf.error;
+	if (lastdirent) {
 		put_user(file->f_pos, &lastdirent->d_off);
 		error = count - buf.count;
 	}

@@ -67,6 +67,34 @@ asmlinkage int sys_dup(unsigned int fildes)
 	return ret;
 }
 
+#define SETFL_MASK (O_APPEND | O_NONBLOCK | O_NDELAY | FASYNC)
+
+static int setfl(struct file * filp, unsigned long arg)
+{
+	struct inode * inode = filp->f_dentry->d_inode;
+
+	/*
+	 * In the case of an append-only file, O_APPEND
+	 * cannot be cleared
+	 */
+	if (!(arg & O_APPEND) && IS_APPEND(inode))
+		return -EPERM;
+
+	/* Did FASYNC state change? */
+	if ((arg ^ filp->f_flags) & FASYNC) {
+		if (filp->f_op->fasync)
+			filp->f_op->fasync(inode, filp, (arg & FASYNC) != 0);
+	}
+
+	/* required for strict SunOS emulation */
+	if (O_NONBLOCK != O_NDELAY)
+	       if (arg & O_NDELAY)
+		   arg |= O_NONBLOCK;
+
+	filp->f_flags = (arg & SETFL_MASK) | (filp->f_flags & ~SETFL_MASK);
+	return 0;
+}
+
 asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {	
 	struct file * filp;
@@ -95,28 +123,7 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			err = filp->f_flags;
 			break;
 		case F_SETFL:
-			/*
-			 * In the case of an append-only file, O_APPEND
-			 * cannot be cleared
-			 */
-			err = -EPERM;
-			if (IS_APPEND(filp->f_inode) && !(arg & O_APPEND))
-				break;
-			err = 0;
-			if ((arg & FASYNC) && !(filp->f_flags & FASYNC) &&
-			    filp->f_op->fasync)
-				filp->f_op->fasync(filp->f_inode, filp, 1);
-			if (!(arg & FASYNC) && (filp->f_flags & FASYNC) &&
-			    filp->f_op->fasync)
-				filp->f_op->fasync(filp->f_inode, filp, 0);
-			/* required for strict SunOS emulation */
-			if (O_NONBLOCK != O_NDELAY)
-			       if (arg & O_NDELAY)
-				   arg |= O_NONBLOCK;
-			filp->f_flags &= ~(O_APPEND | O_NONBLOCK | 
-					   O_NDELAY | FASYNC);
-			filp->f_flags |= arg & (O_APPEND | O_NONBLOCK |
-						O_NDELAY | FASYNC);
+			err = setfl(filp, arg);
 			break;
 		case F_GETLK:
 			err = fcntl_getlk(fd, (struct flock *) arg);
@@ -186,12 +193,12 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 		fasync_ok:
 			err = 0;
 			filp->f_owner = arg;
-			if (S_ISSOCK (filp->f_inode->i_mode))
+			if (S_ISSOCK (filp->f_dentry->d_inode->i_mode))
 				err = sock_fcntl (filp, F_SETOWN, arg);
 			break;
 		default:
 			/* sockets need a few special fcntls. */
-			if (S_ISSOCK (filp->f_inode->i_mode))
+			if (S_ISSOCK (filp->f_dentry->d_inode->i_mode))
 				err = sock_fcntl (filp, cmd, arg);
 			else
 				err = -EINVAL;

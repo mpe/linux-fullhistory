@@ -33,22 +33,6 @@
 static struct list_head dentry_hashtable[D_HASHSIZE];
 static LIST_HEAD(dentry_unused);
 
-void dput(struct dentry *dentry)
-{
-	if (dentry) {
-		dentry->d_count--;
-		if (dentry->d_count < 0) {
-			printk("dentry->count = %d for %s\n",
-				dentry->d_count, dentry->d_name.name);
-			return;
-		}
-		if (!dentry->d_count) {
-			list_del(&dentry->d_lru);
-			list_add(&dentry->d_lru, &dentry_unused);
-		}
-	}
-}
-
 void d_free(struct dentry *dentry)
 {
 	kfree(dentry->d_name.name);
@@ -56,91 +40,116 @@ void d_free(struct dentry *dentry)
 }
 
 /*
- * Note! This tries to free the last entry on the dentry
- * LRU list. The dentries are put on the LRU list when
- * they are free'd, but that doesn't actually mean that
- * all LRU entries have d_count == 0 - it might have been
- * re-allocated. If so we delete it from the LRU list
- * here.
+ * dput()
  *
- * Rationale:
- * - keep "dget()" extremely simple
- * - if there have been a lot of lookups in the LRU list
- *   we want to make freeing more unlikely anyway, and
- *   keeping used dentries on the LRU list in that case
- *   will make the algorithm less likely to free an entry.
+ * This is complicated by the fact that we do not want to put
+ * dentries that are no longer on any hash chain on the unused
+ * list: we'd much rather just get rid of them immediately.
+ *
+ * However, that implies that we have to traverse the dentry
+ * tree upwards to the parents which might _also_ now be
+ * scheduled for deletion (it may have been only waiting for
+ * its last child to go away).
+ *
+ * This tail recursion is done by hand as we don't want to depend
+ * on the compiler to always get this right (gcc generally doesn't).
+ * Real recursion would eat up our stack space.
  */
-static inline struct dentry * free_one_dentry(struct dentry * dentry)
+void dput(struct dentry *dentry)
 {
-	struct dentry * parent;
-
-	list_del(&dentry->d_hash);
-	parent = dentry->d_parent;
-	if (parent != dentry)
-		dput(parent);
-	return dentry;
-}
-
-static inline struct dentry * try_free_one_dentry(struct dentry * dentry)
-{
-	struct inode * inode = dentry->d_inode;
-
-	if (inode) {
-		if (atomic_read(&inode->i_count) != 1) {
-			list_add(&dentry->d_lru, &dentry_unused);
-			return NULL;
+	if (dentry) {
+		int count;
+repeat:
+		count = dentry->d_count-1;
+		if (count < 0) {
+			printk("Negative d_count (%d) for %s/%s\n",
+				count,
+				dentry->d_parent->d_name.name,
+				dentry->d_name.name);
+			*(int *)0 = 0;
 		}
-		list_del(&dentry->d_alias);
-		iput(inode);
-		dentry->d_inode = NULL;
+		dentry->d_count = count;
+		if (!count) {
+			list_del(&dentry->d_lru);
+			if (list_empty(&dentry->d_hash)) {
+				struct inode *inode = dentry->d_inode;
+				struct dentry * parent;
+				if (inode) {
+					list_del(&dentry->d_alias);
+					iput(inode);
+				}
+				parent = dentry->d_parent;
+				d_free(dentry);
+				if (dentry == parent)
+					return;
+				dentry = parent;
+				goto repeat;
+			}
+			list_add(&dentry->d_lru, &dentry_unused);
+		}
 	}
-	return free_one_dentry(dentry);
 }
 
-static struct dentry * try_free_dentries(void)
+/*
+ * Shrink the dcache. This is done when we need
+ * more memory, or simply when we need to unmount
+ * something (at which point we need to unuse
+ * all dentries).
+ *
+ * "priority" is a value between 0-6, 0 means that
+ * we should work really hard on releasing stuff..
+ */
+void shrink_dcache(int priority)
 {
-	struct list_head * tmp = dentry_unused.next;
+	int nr = 42;	/* "random" number */
 
-	if (tmp != &dentry_unused) {
-		struct dentry * dentry;
+	nr <<= 6; nr >>= priority;
+	do {
+		struct dentry *dentry;
+		struct list_head *tmp = dentry_unused.prev;
 
+		if (tmp == &dentry_unused)
+			break;
 		list_del(tmp);
+		INIT_LIST_HEAD(tmp);
 		dentry = list_entry(tmp, struct dentry, d_lru);
-		if (dentry->d_count == 0)
-			return try_free_one_dentry(dentry);
-	}
-	return NULL;
+		if (!dentry->d_count) {
+			struct dentry * parent;
+
+			list_del(&dentry->d_hash);
+			if (dentry->d_inode) {
+				struct inode * inode = dentry->d_inode;
+
+				list_del(&dentry->d_alias);
+				dentry->d_inode = NULL;
+				iput(inode);
+			}
+			parent = dentry->d_parent;
+			d_free(dentry);
+			dput(parent);
+		}
+	} while (--nr);
 }
 
 #define NAME_ALLOC_LEN(len)	((len+16) & ~15)
 
 struct dentry * d_alloc(struct dentry * parent, const struct qstr *name)
 {
-	int len;
 	char * str;
 	struct dentry *dentry;
 
-	dentry = try_free_dentries();
-	len = NAME_ALLOC_LEN(name->len);
-	if (dentry) {
-		str = (char *) dentry->d_name.name;
-		if (len == NAME_ALLOC_LEN(dentry->d_name.len))
-			goto right_size;
-		kfree(dentry->d_name.name);
-	} else {
-		dentry = kmalloc(sizeof(struct dentry), GFP_KERNEL);
-		if (!dentry)
-			return NULL;
-	}
-	str = kmalloc(len, GFP_KERNEL);
+	dentry = kmalloc(sizeof(struct dentry), GFP_KERNEL);
+	if (!dentry)
+		return NULL;
+
+	str = kmalloc(NAME_ALLOC_LEN(name->len), GFP_KERNEL);
 	if (!str) {
 		kfree(dentry);
 		return NULL;
 	}
-right_size:
-	len = name->len;
-	memcpy(str, name->name, len);
-	str[len] = 0;
+
+	memcpy(str, name->name, name->len);
+	str[name->len] = 0;
 
 	dentry->d_count = 0;
 	dentry->d_flags = 0;
@@ -237,22 +246,38 @@ static inline void d_remove_from_parent(struct dentry * dentry, struct dentry * 
 }
 
 /*
- * Remove the inode from the dentry.. This removes
- * it from the parent hashes but otherwise leaves it
- * around - it may be a "zombie", part of a path
- * that is still in use...
+ * When a file is deleted, we have two options:
+ * - turn this dentry into a negative dentry
+ * - unhash this dentry and free it.
  *
- * "The Night of the Living Dead IV - the Dentry"
+ * Usually, we want to just turn this into
+ * a negative dentry, but if anybody else is
+ * currently using the dentry or the inode
+ * we can't do that and we fall back on removing
+ * it from the hash queues and waiting for
+ * it to be deleted later when it has no users
  */
 void d_delete(struct dentry * dentry)
 {
-	list_del(&dentry->d_hash);
 	/*
-	 * Make the hash lists point to itself.. When we
-	 * later dput this, we want the list_del() there
-	 * to not do anything strange..
+	 * Are we the only user?
 	 */
+	if (dentry->d_count == 1) {
+		struct inode * inode = dentry->d_inode;
+
+		dentry->d_inode = NULL;
+		list_del(&dentry->d_alias);
+		iput(inode);
+		return;
+	}
+
+	/*
+	 * If not, just unhash us and wait for dput()
+	 * to pick up the tab..
+	 */
+	list_del(&dentry->d_hash);
 	INIT_LIST_HEAD(&dentry->d_hash);
+
 }
 
 void d_add(struct dentry * entry, struct inode * inode)

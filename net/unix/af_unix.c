@@ -450,24 +450,18 @@ retry:
 static unix_socket *unix_find_other(struct sockaddr_un *sunname, int len,
 				    int type, unsigned hash, int *error)
 {
-	unsigned long old_fs;
-	int err;
-	struct inode *inode;
 	unix_socket *u;
 	
 	if (sunname->sun_path[0])
 	{
-		old_fs=get_fs();
-		set_fs(get_ds());
-		err = open_namei(sunname->sun_path, 2, S_IFSOCK, &inode);
-		set_fs(old_fs);
-		if(err<0)
-		{
-			*error=err;
+		struct dentry *dentry;
+		dentry = open_namei(sunname->sun_path, 2, S_IFSOCK);
+		if (IS_ERR(dentry)) {
+			*error = PTR_ERR(dentry);
 			return NULL;
 		}
-		u=unix_find_socket_byinode(inode);
-		iput(inode);
+		u=unix_find_socket_byinode(dentry->d_inode);
+		dput(dentry);
 		if (u && u->type != type)
 		{
 			*error=-EPROTOTYPE;
@@ -491,8 +485,8 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 {
 	struct sock *sk = sock->sk;
 	struct sockaddr_un *sunaddr=(struct sockaddr_un *)uaddr;
-	struct inode * inode;
-	int old_fs;
+	struct dentry * dentry;
+	struct inode * inode = NULL;
 	int err;
 	unsigned hash;
 	struct unix_address *addr;
@@ -545,15 +539,16 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	addr->hash = UNIX_HASH_SIZE;
 	sk->protinfo.af_unix.addr = addr;
 	
-	old_fs=get_fs();
-	set_fs(get_ds());
 
-	err=do_mknod(sunaddr->sun_path, S_IFSOCK|S_IRWXUGO, 0);
-	if (!err)
-		err=open_namei(sunaddr->sun_path, 2, S_IFSOCK, &inode);
-	
-	set_fs(old_fs);
-	
+	dentry = do_mknod(sunaddr->sun_path, S_IFSOCK|S_IRWXUGO, 0);
+	err = PTR_ERR(dentry);
+	if (!IS_ERR(dentry)) {
+		inode = dentry->d_inode;
+		atomic_inc(&inode->i_count);
+		dput(dentry);
+		err = 0;
+	}
+
 	if(err<0)
 	{
 		unix_release_addr(addr);

@@ -289,16 +289,35 @@ int file_fsync (struct inode *inode, struct file *filp)
 asmlinkage int sys_fsync(unsigned int fd)
 {
 	struct file * file;
+	struct dentry * dentry;
 	struct inode * inode;
-	int err = 0;
+	int err;
 
 	lock_kernel();
-	if (fd>=NR_OPEN || !(file=current->files->fd[fd]) || !(inode=file->f_inode))
-		err = -EBADF;
-	else if (!file->f_op || !file->f_op->fsync)
-		err = -EINVAL;
-	else if (file->f_op->fsync(inode,file))
-		err = -EIO;
+	err = -EBADF;
+
+	if (fd >= NR_OPEN)
+		goto out;
+
+	file = current->files->fd[fd];
+	if (!file)
+		goto out;
+
+	dentry = file->f_dentry;
+	if (!dentry)
+		goto out;
+
+	inode = dentry->d_inode;
+	if (!inode)
+		goto out;
+
+	err = -EINVAL;
+	if (!file->f_op || !file->f_op->fsync)
+		goto out;
+
+	err = file->f_op->fsync(inode,file);
+
+out:
 	unlock_kernel();
 	return err;
 }
@@ -306,20 +325,35 @@ asmlinkage int sys_fsync(unsigned int fd)
 asmlinkage int sys_fdatasync(unsigned int fd)
 {
 	struct file * file;
+	struct dentry * dentry;
 	struct inode * inode;
-	int err = -EBADF;
+	int err;
 
 	lock_kernel();
-	if (fd>=NR_OPEN || !(file=current->files->fd[fd]) || !(inode=file->f_inode))
+	err = -EBADF;
+
+	if (fd >= NR_OPEN)
 		goto out;
+
+	file = current->files->fd[fd];
+	if (!file)
+		goto out;
+
+	dentry = file->f_dentry;
+	if (!dentry)
+		goto out;
+
+	inode = dentry->d_inode;
+	if (!inode)
+		goto out;
+
 	err = -EINVAL;
 	if (!file->f_op || !file->f_op->fsync)
 		goto out;
+
 	/* this needs further work, at the moment it is identical to fsync() */
-	if (file->f_op->fsync(inode,file))
-		err = -EIO;
-	else
-		err = 0;
+	err = file->f_op->fsync(inode,file);
+
 out:
 	unlock_kernel();
 	return err;

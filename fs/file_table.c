@@ -109,11 +109,15 @@ void add_dquot_ref(kdev_t dev, short type)
 	struct file *filp;
 
 	for (filp = inuse_filps; filp; filp = filp->f_next) {
-		if (!filp->f_inode || filp->f_inode->i_dev != dev)
+		struct inode * inode;
+		if (!filp->f_dentry)
 			continue;
-		if (filp->f_mode & FMODE_WRITE && filp->f_inode->i_sb->dq_op) {
-			filp->f_inode->i_sb->dq_op->initialize(filp->f_inode, type);
-			filp->f_inode->i_flags |= S_WRITE;
+		inode = filp->f_dentry->d_inode;
+		if (!inode || inode->i_dev != dev)
+			continue;
+		if (filp->f_mode & FMODE_WRITE && inode->i_sb->dq_op) {
+			inode->i_sb->dq_op->initialize(inode, type);
+			inode->i_flags |= S_WRITE;
 		}
 	}
 }
@@ -123,11 +127,15 @@ void reset_dquot_ptrs(kdev_t dev, short type)
 	struct file *filp;
 
 	for (filp = inuse_filps; filp; filp = filp->f_next) {
-		if (!filp->f_inode || filp->f_inode->i_dev != dev)
+		struct inode * inode;
+		if (!filp->f_dentry)
 			continue;
-		if (IS_WRITABLE(filp->f_inode)) {
-			filp->f_inode->i_dquot[type] = NODQUOT;
-			filp->f_inode->i_flags &= ~S_WRITE;
+		inode = filp->f_dentry->d_inode;
+		if (!inode || inode->i_dev != dev)
+			continue;
+		if (IS_WRITABLE(inode)) {
+			inode->i_dquot[type] = NODQUOT;
+			inode->i_flags &= ~S_WRITE;
 		}
 	}
 }

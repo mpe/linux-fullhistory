@@ -15,8 +15,10 @@
 static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 {
 	char *cp, *i_name, *i_name_start, *i_arg;
+	struct dentry * dentry;
 	char interp[128];
 	int retval;
+
 	if ((bprm->buf[0] != '#') || (bprm->buf[1] != '!') || (bprm->sh_bang)) 
 		return -ENOEXEC;
 	/*
@@ -25,8 +27,8 @@ static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 	 */
 
 	bprm->sh_bang++;
-	iput(bprm->inode);
-	bprm->dont_iput=1;
+	dput(bprm->dentry);
+	bprm->dentry = NULL;
 
 	bprm->buf[127] = '\0';
 	if ((cp = strchr(bprm->buf, '\n')) == NULL)
@@ -75,14 +77,15 @@ static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 	if (!bprm->p) 
 		return -E2BIG;
 	/*
-	 * OK, now restart the process with the interpreter's inode.
+	 * OK, now restart the process with the interpreter's dentry.
 	 */
-	retval = open_namei(interp, 0, 0, &bprm->inode);
-	if (retval)
-		return retval;
-	bprm->dont_iput=0;
-	retval=prepare_binprm(bprm);
-	if(retval<0)
+	dentry = open_namei(interp, 0, 0);
+	if (IS_ERR(dentry))
+		return PTR_ERR(dentry);
+
+	bprm->dentry = dentry;
+	retval = prepare_binprm(bprm);
+	if (retval < 0)
 		return retval;
 	return search_binary_handler(bprm,regs);
 }
