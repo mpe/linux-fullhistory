@@ -2,7 +2,8 @@
 	contributed to the linux project.  It is sorted by name, and
 	formatted in a format that allows for easy grepping and
 	beautification by scripts.  The fields are: name (N), email (E),
-	web-address (W), description (D) and snail-mail address (S).
+	web-address (W), PGP key ID and fingerprint (P), description (D)
+	and snail-mail address (S). 
 	Thanks,
 
 			Linus
@@ -570,6 +571,8 @@ S: United Kingdom
 
 N: Michael K. Johnson
 E: johnsonm@redhat.com
+W: http://www.redhat.com/~johnsonm
+P: 1024/4536A8DD 2A EC 88 08 40 64 CE D8  DD F8 12 2B 61 43 83 15
 D: The Linux Documentation Project
 D: Kernel Hackers' Guide
 D: Procps

@@ -762,7 +762,7 @@ void get_rtc_alm_time(struct rtc_time *alm_tm)
  * ensure you actually start getting interrupts. Probably for
  * compatibility with older/broken chipset RTC implementations.
  * We also clear out any old irq data after an ioctl() that
- * meddles the interrupt enable/disable bits.
+ * meddles with the interrupt enable/disable bits.
  */
 void mask_rtc_irq_bit(unsigned char bit)
 {

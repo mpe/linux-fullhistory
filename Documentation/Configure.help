@@ -623,6 +623,7 @@ CONFIG_BINFMT_JAVA
   don't know what to answer at this point then answer Y. You may answer
   M for module support and later load the module when you install the
   JDK or find a interesting Java program that you can't live without.
+
 Processor type
 CONFIG_M386
   This is the processor type of your CPU. It is used for optimizing

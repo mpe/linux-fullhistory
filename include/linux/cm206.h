@@ -2,6 +2,9 @@
    Copyright (c) 1995 David van Leeuwen 
 */
 
+#ifndef LINUX_CM206_H
+#define LINUX_CM206_H
+
 /* First, the cm260 stuff */
 /* The ports and irq used. Although CM206_BASE and CM206_IRQ are defined
    below, the values are not used unless autoprobing is turned off and 
@@ -48,11 +51,12 @@
 #define dc_mask_transmit_ready 0x100
 #define dc_flag_enable 0x80
 
+/* Define the default data control register flags here */
 #define dc_normal (dc_mask_sync_error | dc_no_stop_on_error | \
 		   dc_mask_transmit_ready)
 
 /* now some constants related to the cm206 */
-/* another drive status byte, echoed by the cm206 on most commands */
+/* another drive status byte, echoed by the cm206 on most commmands */
 
 #define dsb_error_condition 0x1
 #define dsb_play_in_progress 0x4
@@ -126,3 +130,46 @@
 
 #define CM206CTL_GET_STAT 0x2000
 #define CM206CTL_GET_LAST_STAT 0x2001
+
+/* for kernel 1.2.n */
+#if !defined(CDROM_GET_UPC)
+#define CDROM_GET_UPC 0x5311
+#define CDROMRESET 0x5312
+#endif
+
+#ifdef STATISTICS
+
+/* This is an ugly way to guarantee that the names of the statistics
+ * are the same in the code and in the diagnostics program.  */
+
+#ifdef __KERNEL__
+#define x(a) st_ ## a
+#define y enum
+#else
+#define x(a) #a
+#define y char * stats_name[] = 
+#endif
+
+y {x(interrupt), x(data_ready), x(fifo_overflow), x(data_error),
+     x(crc_error), x(sync_error), x(lost_intr), x(echo),
+     x(write_timeout), x(receive_timeout), x(read_timeout),
+     x(dsb_timeout), x(stop_0xff), x(back_read_timeout),
+     x(sector_transferred), x(read_restarted), x(read_background),
+     x(bh), x(open), x(ioctl_multisession), x(attention)
+#ifdef __KERNEL__
+     , x(last_entry)
+#endif
+ };
+
+#ifdef __KERNEL__
+#define NR_STATS st_last_entry
+#else
+#define NR_STATS (sizeof(stats_name)/sizeof(char*))
+#endif
+
+#undef y
+#undef x
+
+#endif STATISTICS
+
+#endif LINUX_CM206_H

@@ -6,7 +6,7 @@ The main trick is having 5 years of experience with those pesky oops
 messages ;-)
 
 Actually, there are things you can do that make this easier. I have two 
-separate approached:
+separate approaches:
 
 	gdb /usr/src/linux/vmlinux
 	gdb> disassemble <offending_function>

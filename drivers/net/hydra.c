@@ -7,8 +7,8 @@
 /* and Peter De Schrijver (Peter.DeSchrijver@linux.cc.kuleuven.ac.be)       */
 
 /* This file is subject to the terms and conditions of the GNU General      */
-/* Public License.  See the file README.legal in the main directory of the  */
-/* Linux/68k distribution for more details.                                 */
+/* Public License.  See the file COPYING in the main directory of the       */
+/* Linux distribution for more details.                                     */
 
 /* The Amiganet is a Zorro-II board made by Hydra Systems. It contains a    */
 /* NS8390 NIC (network interface controller) clone, 16 or 64K on-board RAM  */
@@ -100,9 +100,9 @@ static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
 #endif
 
 
-/* this is now coherent to the C version below, */
-/* compile the source with -D__USE_ASM__ if you */
-/* want it - it'll only be some 10% faster thou */
+/* this is now coherent with the C version below, */
+/* compile the source with -D__USE_ASM__ if you   */
+/* want it - it'll only be some 10% faster though */
 
 #if defined (__GNUC__) && defined (__mc68000__) && defined (USE_ASM)
 

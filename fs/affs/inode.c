@@ -308,7 +308,7 @@ affs_read_super(struct super_block *s,void *data, int silent)
 	s->u.affs_sb.s_partition_size = size;
 	s->u.affs_sb.s_reserved       = reserved;
 
-	/* Try to find root block. It's location may depend on the block size. */
+	/* Try to find root block. Its location may depend on the block size. */
 
 	s->u.affs_sb.s_hashsize = 0;
 	if (blocksize > 0) {

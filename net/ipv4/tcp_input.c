@@ -195,7 +195,7 @@ static void bad_tcp_sequence(struct sock *sk, struct tcphdr *th, u32 end_seq,
  
 extern __inline__ int tcp_sequence(struct sock *sk, u32 seq, u32 end_seq)
 {
-	u32 end_window = sk->acked_seq + sk->window;
+	u32 end_window = sk->lastwin_seq + sk->window;
 	return	/* if start is at end of window, end must be too (zero window) */
 		(seq == end_window && seq == end_seq) ||
 		/* if start is before end of window, check for interest */

@@ -165,6 +165,9 @@ tx_full and tbusy flags.
  *	- added support for Linux/Alpha, but removed most of it, because
  *        it worked only for the PCI chip. 
  *      - added hook for the 32bit lance driver
+ *
+ *	Paul Gortmaker (gpg109@rsphy1.anu.edu.au):
+ *	- hopefully fix above so Linux/Alpha can use ISA cards too.
  */
 
 /* Set the number of Tx and Rx buffers, using Log_2(# buffers).
@@ -298,9 +301,7 @@ static void set_multicast_list(struct device *dev);
 
 int lance_init(void)
 {
-#ifndef __alpha__    
 	int *port;
-#endif    
 
 	if (high_memory <= 16*1024*1024)
 		lance_need_isa_bounce_buffers = 0;
@@ -344,8 +345,6 @@ int lance_init(void)
 	}
 #endif  /* defined(CONFIG_PCI) */
 
-/* On the Alpha don't look for PCnet chips on the ISA bus */
-#ifndef __alpha__
 	for (port = lance_portlist; *port; port++) {
 		int ioaddr = *port;
 
@@ -359,8 +358,6 @@ int lance_init(void)
 				lance_probe1(ioaddr);
 		}
 	}
-#endif
-
 	return 0;
 }
 
@@ -376,15 +373,14 @@ void lance_probe1(int ioaddr)
 	int hp_builtin = 0;					/* HP on-board ethernet. */
 	static int did_version = 0;			/* Already printed version info. */
 
-#ifndef __alpha__
 	/* First we look for special cases.
 	   Check for HP's on-board ethernet by looking for 'HP' in the BIOS.
 	   There are two HP versions, check the BIOS for the configuration port.
 	   This method provided by L. Julliard, Laurent_Julliard@grenoble.hp.com.
 	   */
-	if ( *((unsigned short *) 0x000f0102) == 0x5048)  {
+	if (readw(0x000f0102) == 0x5048)  {
 		static const short ioaddr_table[] = { 0x300, 0x320, 0x340, 0x360};
-		int hp_port = ( *((unsigned char *) 0x000f00f1) & 1)  ? 0x499 : 0x99;
+		int hp_port = (readl(0x000f00f1) & 1)  ? 0x499 : 0x99;
 		/* We can have boards other than the built-in!  Verify this is on-board. */
 		if ((inb(hp_port) & 0xc0) == 0x80
 			&& ioaddr_table[inb(hp_port) & 3] == ioaddr)
@@ -393,7 +389,6 @@ void lance_probe1(int ioaddr)
 	/* We also recognize the HP Vectra on-board here, but check below. */
 	hpJ2405A = (inb(ioaddr) == 0x08 && inb(ioaddr+1) == 0x00
 				&& inb(ioaddr+2) == 0x09);
-#endif
 
 	/* Reset the LANCE.	 */
 	reset_val = inw(ioaddr+LANCE_RESET); /* Reset the LANCE */

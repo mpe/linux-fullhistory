@@ -3,14 +3,20 @@ cm206 in combination with the cm260 host adapter card.
 
 				(c) 1995 David A. van Leeuwen
    
-Features as of version 0.33
+Changes since version 0.99
+--------------------------
+- Interfacing to the kernel is routed though an extra interface layer, 
+  cdrom.c. This allows runtime-configurable `bahavior' of the cdrom-drive, 
+  independent of the driver. 
+
+Features since version 0.33
 ---------------------------
 - Full audio support, that is, both  workman, workbone and cdp work
   now reasonably. Reading TOC still takes some time. xmcd has been
   reported to run successfully. 
 - Made auto-probe code a little better, i hope
 
-Features as of version 0.28
+Features since version 0.28
 ---------------------------
 - Full speed transfer rate (300 kB/s).
 - Minimum kernel memory usage for buffering (less than 3 kB).
@@ -20,12 +26,6 @@ Features as of version 0.28
 - Module support.
 - Auto-probing of adapter card's base port and irq line,
   also configurable at boot time or module load time.
-
-Features still lacking
-----------------------
-- cm205ms+cm250 support. (I do have cm205ms docs now. I still have to
-  study Kai Petzke's cm205 drives to understand the workings of the
-  cm250 adapter card. Don't bet on me, write a driver yourself!)
 
 
 Decide how you are going to use the driver. There are two
@@ -66,9 +66,16 @@ Using the driver as a module
 ----------------------------
 If you will only seldomly use the cd-rom driver, you can choose for
 option (b), install as a loadable module. You may have to re-compile
-the module when you upgrade the kernel to a new version. Read the file
-`README.modules' in /usr/src/linux. To install the module, you use the 
-command, as root
+the module when you upgrade the kernel to a new version. 
+
+Since version 0.96, much of the functionality has been transferred to
+a generic cdrom interface in the file cdrom.c. The module cm206.o
+depends on cdrom.o. If the latter is not compiled in in the kernel,
+you must explicitly load it before cm206.o:
+
+	 insmod /usr/src/linux/modules/cdrom.o
+
+To install the module, you use the command, as root
 
 	insmod /usr/src/linux/modules/cm206.o
 
@@ -80,16 +87,8 @@ line to be used, e.g.
 The order of base port and irq line don't matter; you may specify only
 one, the other will have the value of the compiled-in default.  You
 may also have to install the file-system module `iso9660.o', if you
-didn't compile that into the kernel. (If you use `tcsh' as shell, you
-might consider defining
+didn't compile that into the kernel. 
 
-	alias listinstalledmodules 'cat /proc/modules | awk \{print\$1\}'
-	complete rmmod		'p/1/`listinstalledmodules`/'
-	alias listcompiledmodules '(cd /usr/src/linux/modules; \ls -o *.o)'
-	alias insmod		'insmod /usr/src/linux/modules/\!:1 \!:2*'
-	complete insmod		'p/1/`listcompiledmodules`/'
-
-which makes typing insmod and rmmod somewhat easier.)
 
 Using the driver as part of the kernel
 --------------------------------------
@@ -103,13 +102,22 @@ If you may specify either IRQ (3--11) or base port (0x300--0x370),
 auto probing is turned off for both settings, thus setting the 
 other value to the compiled-in default.
 
+Note that you can put these parameters also in the lilo configuration file:
+
+# linux config
+image = /vmlinuz
+   root = /dev/hda1
+   label = Linux
+   append = "cm206=0x340,11"
+   read-only
+
+
 If module parameters and LILO config options don't work
 -------------------------------------------------------
 If autoprobing does not work, you can hard-wire the default values
 of the base port address (CM206_BASE) and interrupt request line
 (CM206_IRQ) into the file ./include/linux/cm206.h. Change
 the defines of CM206_IRQ and CM206_BASE.
-
 
 
 Mounting the cdrom
@@ -138,15 +146,14 @@ Mounting the cdrom
 If things don't work
 --------------------
 
-- Try to do a `tail /var/adm/messages' to find out if the driver
-  said anything about what is going wrong during the initialization.
+- Try to do a `dmesg' to find out if the driver said anything about
+  what is going wrong during the initialization.
 
 - Try to do a `dd if=/dev/cm206cd | od -tc | less' to read from the
   CD.
 
-- Look in the /proc directory to see if `cm206' shows up under
-  one of `interrupts', `ioports', `devices' or `modules' (if
-  applicable). 
+- Look in the /proc directory to see if `cm206' shows up under one of
+  `interrupts', `ioports', `devices' or `modules' (if applicable).
 
 
 DISCLAIMER 
@@ -173,5 +180,6 @@ The copyright of the cm206 driver for Linux is
 
     (c) 1995 David A. van Leeuwen
 
-The driver is released, like most Linux software, under the conditions 
-of the GNU general public license.
+The driver is released under the conditions of the GNU general public
+license, that can be found in the file COPYING in the root of this
+source tree.

@@ -20,6 +20,16 @@ L_OBJS   :=
 M_OBJS   :=
 MOD_LIST_NAME := CDROM_MODULES
 
+# The following if's should be generalized (ORed) for all drivers that 
+# use the generic interface of cdrom.c 
+ifeq ($(CONFIG_CM206),y)
+L_OBJS += cdrom.o
+else
+  ifeq ($(CONFIG_CM206),m)
+  M_OBJS += cdrom.o
+  endif
+endif 
+
 ifeq ($(CONFIG_AZTCD),y)
 L_OBJS += aztcd.o
 else

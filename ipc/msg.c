@@ -49,7 +49,7 @@ void msg_init (void)
 
 /*
  * If the send queue is full, try to free any old messages.
- * These are most probably unwanted, since noone has picked them up...
+ * These are most probably unwanted, since no one has picked them up...
  */
 #define MSG_FLUSH_TIME 10 /* seconds */
 static void flush_msg(struct msqid_ds *msq)

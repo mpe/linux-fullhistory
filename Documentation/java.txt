@@ -51,7 +51,7 @@ Set the executable permissions of the binary file, with:
 
 And then execute it:
 
-	./HellowWorld.class
+	./HelloWorld.class
 
 
 Yes, it's JUST THAT EASY! ;-)

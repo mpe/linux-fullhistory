@@ -211,13 +211,15 @@ static __inline__ int tcp_raise_window(struct sock * sk)
 static __inline__ unsigned short tcp_select_window(struct sock *sk)
 {
 	int window = tcp_new_window(sk);
+	int oldwin = tcp_old_window(sk);
 
 	/* Don't allow a shrinking window */
-	if (window > tcp_old_window(sk)) {
+	if (window > oldwin) {
 		sk->window = window;
 		sk->lastwin_seq = sk->acked_seq;
+		oldwin = window;
 	}
-	return sk->window;
+	return oldwin;
 }
 
 /*

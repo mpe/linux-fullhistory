@@ -1,15 +1,23 @@
 This document contains a list of the latest releases of the most
 important packages for Linux as well as instructions for newcomers to
-the 1.3.x series of kernels.
+the 1.3.x series of kernels.  By glancing through it, you should be
+able to find out what you need to upgrade to successfully run the
+latest kernels.
 
-Last updated: Apr 29, 1996.
-Author: Chris Ricker (gt1355b@prism.gatech.edu), based on the original by
-Alessandro Sigala (ssigala@globalnet.it).
+   It was originally based on material from the linux-kernel mailing
+list, Jared Mauch's web page "Software Victims of the 1.3 Kernel
+Development" (http://www2.nether.net/~jared/victim.html), and Axel
+Boldt's (boldt@math.ucsb.edu) Configure.help file, among other sources,
+and was originally written and maintained by Alessandro Sigala
+(ssigala@globalnet.it).
+
+Last updated: May 10, 1996.
+Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
 
 Current Releases
 ****************
 
-- Kernel modules	 Stable: 1.3.57, Exp: 1.3.69f
+- Kernel modules	 Stable: 1.3.57, Exp: 1.3.69g
 - PPP daemon		 Stable: 2.2.0f
 - Dynamic linker (ld.so) 1.7.14
 - GNU CC		 2.7.2
@@ -22,66 +30,28 @@ Current Releases
 - SysVinit		 2.60
 - Util-linux		 2.5
 
-What you really need to upgrade
-*******************************
-
-Dynamic linker
-==============
-
-   You might upgrade the dynamic linker to the latest release, but only
-to solve some bugs.
-
-SysVinit
-========
-
-   The FIFO behavior is changed in the latest 1.3.x kernel releases.
-Upgrade to 2.60 if the older version seems broken.
-
-PPP daemon and utilities
-========================
-
-   To use the PPP protocol with the 1.3.x linux kernel, you need to
-upgrade the PPP package to version 2.2.0f.
-
-Procps utilities
-================
-
-   In the latest 1.3.x kernel releases the /proc filesystem structure
-was changed, so you need to upgrade the Procps package to version
-0.99a.  In the very latest kernels, /proc has changed again.  There's
-not yet an officially updated version of procps, so make due with
-0.99a; you might want to look for one of the patches floating around to
-update 0.99a for use with 1.3.94 and later kernels.
-
-Installation notes
-******************
-
-Kernel Modules
-==============
-
-   The current kernel modules release is 1.3.57, but you need the
-experimental release 1.3.69 to use newer binutils 2.6.0.x, because
-modules compiled with new binutils can't be loaded by modules 1.3.57.
+Upgrade notes
+*************
 
 The Linux C Library
 ===================
 
    The latest stable Linux C Library release is 5.2.18.  If you upgrade
-to this from 5.0.9 or earlier, be sure to read the `release.libc-5.2.18'
-file, since GNU make and a few other fairly important utils can be
-broken by the upgrade.
+to this from 5.0.9 or earlier, be sure to read the
+`release.libc-5.2.18' file, since GNU make and a few other fairly
+important utils can be broken by the upgrade.
 
    The current (beta) Linux C Library release is 5.3.12. In this
 release there are some important changes that may cause troubles to
 buggy programs (programs that call free() on a pointer not returned by
-malloc() work with previous libc, but not with this release) then read
-the `release.libc-5.3.9' file carefully!  In the latest libc releases a
+malloc() work with previous libc, but not with this release) so read the
+`release.libc-5.3.9' file carefully!  In the latest libc releases a
 dirent bug, which erroneously defined d->reclen to d->namlen if USE_GNU
-was defined, has been fixed.  Unfortunately, some GNU packages depend on
-this bug.  GNU make 3.xx is one of them.  To fix that you need to patch
-and recompile those programs (a patch for make is included in the file
-`release.libc-.5.3.9', and the address to obtain a precompiled binary
-is at the end of this file).
+was defined, has been fixed.  Unfortunately, some GNU packages depend
+on this bug.  GNU make 3.xx is one of them.  To fix that you need to
+patch and recompile those programs (a patch for make is included in the
+file `release.libc-.5.3.9', and the address to obtain a precompiled
+binary is at the end of this file).
 
    Also, the libc-5.3.x line has a known security hole relating to
 rlogin.  Libc-5.3.12 fixes this, so if you're going to run an
@@ -102,7 +72,9 @@ the old libc).  If you're feeling lazy, just comment out
 "fcntl_setlk() called by process %d with broken flock()
   emulation\n",                        current->pid);'
 
-   in linux/fs/locks.c and recompile.
+   in linux/fs/locks.c and recompile.  If you're still running a.out,
+there's an unofficial libc-4.7.6 release out to which you can upgrade
+to fix this problem.
 
 The Termcap Library
 ===================
@@ -111,38 +83,23 @@ The Termcap Library
 read the `README' file contained into the package to get some important
 information about the `tgetent' function changes!
 
-Upgrading to 1.3.x kernel from 1.2.13
-*************************************
+Procps utilities
+================
 
-   This section was based on material from the linux-kernel mailing
-list, Jared Mauch's web page "Software Victims of the 1.3 Kernel
-Development" (http://www2.nether.net/~jared/victim.html), and Axel
-Boldt's (boldt@math.ucsb.edu) Configure.help file, among other sources.
+   In the latest 1.3.x kernel releases the /proc file system structure
+was changed, so you need to upgrade the procps package to version
+0.99a.  In the very latest kernels, /proc has changed again.  There's
+not yet an officially updated version of procps, so make due with
+0.99a; you might want to look for one of the patches floating around to
+update 0.99a for use with 1.3.94 and later kernels.
 
-   This section is intended primarily to help those that are new to the
-1.3.x series of Linux kernels.  In the ongoing effort to make a faster,
-better kernel and eventually achieve total world domination, several
-features of the Linux kernel have been improved.  As a result, when you
-first upgrade to 1.3.x from 1.2.13, you will also have to upgrade
-several utilities that are closely associated with the kernel and make
-use of these features.
-
-Proc filesystem
-===============
-
-   Various changes in the /proc filesystem have been made, affecting
-ps, top, etc.  Running `top' or `ps -auwwx' will now give you a floating
-point exception. To fix the problem, upgrade to procps-0.99a.tar.gz,
-available at
-ftp://tsx-11.mit.edu/pub/linux/BETA/procps/procps-0.99a.tar.gz.
-
-Modules
-=======
+Kernel Modules
+==============
 
    1.3.x is almost completely modularized, and kerneld is now
 incorporated into the kernel.  To take advantage of this, you'll need
 the latest version of the module support apps.  The latest non-beta is
-modules-1.3.57.tar.gz, and the latest beta is modules-1.3.69f.tar.gz.
+modules-1.3.57.tar.gz, and the latest beta is modules-1.3.69g.tar.gz.
 These should be available at the same place you picked up your kernel
 (ftp://ftp.cc.gatech.edu/pub/linux/kernel/) and the home page is
 http://www.pi.se/blox/modules/index.html.  Note:  If you try to load a
@@ -151,12 +108,12 @@ module and get a message like
    `gcc2_compiled, undefined Failed to load module!  The symbols from
 kernel 1.3.foo don't match 1.3.foo'
 
-   where `foo' is a number between 1 and 89, then it's time to upgrade
-module utilities from 1.3.57 to 1.3.69f; you'll only get this error if
-you're running the latest binutils, so most people don't need to
-upgrade.
+   where `foo' is a number between 1 and 100, then it's time to upgrade
+module utilities from 1.3.57 to 1.3.69g; you'll only get this error if
+you're running the latest binutils, so most people don't need to upgrade
+past 1.3.57.
 
-   Another little tip:  you can't have both a.out *and* ELF support
+   Another little tip: you can't have both a.out *and* ELF support
 compiled as modules.  Otherwise, you get a nice Catch-22 when you try
 to run insmod to install a.out/ELF support so you can run insmod ;-).
 If you have an all-ELF system, but need a.out for the occasional
@@ -218,9 +175,9 @@ ftp://sunsite.unc.edu/pub/Linux/system/Serial/getty_ps-2.0.7h.tar.gz.
 Console
 =======
 
-   The Linux console type has changed.  If your setup is old enough that
-you have problems, you'll need to update your termcap.  To fix, add
-linux to one of the types in /etc/termcap or snoop around
+   The Linux console type has changed.  If your setup is old enough
+that you have problems, you'll need to update your termcap.  To fix,
+add linux to one of the types in /etc/termcap or snoop around
 http://www.ccil.org/~esr/ncurses.html (reputedly the latest universal
 termcap maintainer).  You may also need to update terminfo by running
 the following as root:
@@ -344,8 +301,8 @@ ever works ;-), get
 ftp://tsx-11.mit.edu/pub/linux/ALPHA/dosemu/Development/dosemu-0.63.1.8.tgz.
 
 Please send info about any other packages that 1.3.x "broke" or about
-any new features of 1.3.x that require extra packages for use to Chris
-Ricker (gt1355b@prism.gatech.edu).
+any new features of 1.3.x that require extra or new packages for use to
+Chris Ricker (gt1355b@prism.gatech.edu).
 
 How to know the version of the installed programs
 *************************************************
@@ -358,7 +315,7 @@ PPP: pppd -h (wrong but it show the version)
 Libc: ls -l /lib/libc.so.5
 LibC++: ls -l /usr/lib/libg++.so
 Binutils: ld -v
-dld: ldd -v and ldd -V
+ldd: ldd -v and ldd -V
 termcap: ls -l /lib/libtermcap.so.*
 modules: insmod -V
 procps: ps --version

@@ -437,7 +437,7 @@ problem. [See the LiS project]
 10.	Frame Relay/WAN/ISDN drivers [I'm working on the sonix EuroISDN board
 driver but that's for an internal project and its general release is still
 a maybe (so is finishing it ;))][Jim Freeman is working on Frame Relay as is
-Mike McLagan][Friz Elfert is doing the isdn4linux kit].
+Mike McLagan][Fritz Elfert is doing the isdn4linux kit].
  
 11.	IP over SCSI.
 

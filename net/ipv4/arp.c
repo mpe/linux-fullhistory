@@ -788,9 +788,9 @@ done:
 }
 
 /*
- *	Check if there are too old entries and remove them. If the ATF_PERM
- *	flag is set, they are always left in the arp cache (permanent entry).
- *      If an entry was not be confirmed  for ARP_CONFIRM_INTERVAL,
+ *	Check if there are entries that are too old and remove them. If the
+ *	ATF_PERM flag is set, they are always left in the arp cache (permanent
+ *      entries). If an entry was not confirmed for ARP_CONFIRM_INTERVAL,
  *	send point-to-point ARP request.
  *	If it will not be confirmed for ARP_CONFIRM_TIMEOUT,
  *	give it to shred by arp_expire_entry.
@@ -1390,7 +1390,7 @@ int arp_find(unsigned char *haddr, u32 paddr, struct device *dev,
 		}
 
 		/*
-		 *	A request was already send, but no reply yet. Thus
+		 *	A request was already sent, but no reply yet. Thus
 		 *	queue the packet with the previous attempt
 		 */
 			

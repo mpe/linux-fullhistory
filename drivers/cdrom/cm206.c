@@ -1,5 +1,5 @@
 /* cm206.c. A linux-driver for the cm206 cdrom player with cm260 adapter card.
-   Copyright (c) 1995 David van Leeuwen.
+   Copyright (c) 1995, 1996 David van Leeuwen.
    
      This program is free software; you can redistribute it and/or modify
      it under the terms of the GNU General Public License as published by
@@ -54,11 +54,30 @@ History:
  10 jun 1995: 0.33 Workman still behaves funny, but you should be
               able to eject and substitute another disc.
 
- An adaption of 0.33 is included in linux-1.3.7 by Eberhard Moenkeberg
+ An adaptation of 0.33 is included in linux-1.3.7 by Eberhard Moenkeberg
 
- 18 jul 1996: 0.34 Patch by Heiko Eissfeldt included, mainly considering 
+ 18 jul 1995: 0.34 Patch by Heiko Eissfeldt included, mainly considering 
               verify_area's in the ioctls. Some bugs introduced by 
 	      EM considering the base port and irq fixed. 
+
+ 18 dec 1995: 0.35 Add some code for error checking... no luck...
+
+ We jump to reach our goal: version 1.0 in the next stable linux kernel.
+
+ 19 mar 1996: 0.95 Different implementation of CDROM_GET_UPC, on
+	      request of Thomas Quinot. 
+ 25 mar 1996: 0.96 Interpretation of opening with O_WRONLY or O_RDWR:
+	      open only for ioctl operation, e.g., for operation of
+	      tray etc.
+ 4 apr 1996:  0.97 First implementation of layer between VFS and cdrom
+              driver, a generic interface. Much of the functionality
+	      of cm206_open() and cm206_ioctl() is transferred to a
+	      new file cdrom.c and its header ucdrom.h. 
+
+	      Upgrade to Linux kernel 1.3.78. 
+
+ 11 apr 1996  0.98 Upgrade to Linux kernel 1.3.85
+              More uniformization stuff.
  * 
  * Parts of the code are based upon lmscd.c written by Kai Petzke,
  * sbpcd.c written by Eberhard Moenkeberg, and mcd.c by Martin
@@ -73,13 +92,13 @@ History:
  * with `cm206' in it, as this stuff is too series-dependent. 
  * 
  * Currently, my limited knowledge is based on:
- * - The Linux Kernel Hacker's guide, v. 0.5 , by Michael J. Johnson
+ * - The Linux Kernel Hacker's guide, v. 0.5, by Michael J. Johnson
  * - Linux Kernel Programmierung, by Michael Beck and others
  * - Philips/LMS cm206 and cm226 product specification
  * - Philips/LMS cm260 product specification
  *
  *                       David van Leeuwen, david@tm.tno.nl.  */
-#define VERSION "0.34"
+#define VERSION "$Id: cm206.c,v 0.99 1996/04/14 20:26:26 david Exp $"
 
 #include <linux/module.h>	
 
@@ -94,10 +113,18 @@ History:
 #include <linux/mm.h>
 #include <linux/malloc.h>
 
+#include <linux/ucdrom.h>
+
 #include <asm/io.h>
 
 #define MAJOR_NR CM206_CDROM_MAJOR
 #include <linux/blk.h>
+
+#undef DEBUG
+#define STATISTICS		/* record times and frequencies of events */
+#undef AUTO_PROBE_MODULE
+#define USE_INSW
+
 #include <linux/cm206.h>
 
 /* This variable defines whether or not to probe for adapter base port 
@@ -109,11 +136,6 @@ static int auto_probe=1;	/* Yes, why not? */
 static int cm206_base = CM206_BASE;
 static int cm206_irq = CM206_IRQ; 
 
-#undef DEBUG
-#undef DEBUG_SECTORS
-#define STATISTICS
-#undef AUTO_PROBE_MODULE
-
 #define POLLOOP 10000
 #define READ_AHEAD 1		/* defines private buffer, waste! */
 #define BACK_AHEAD 1		/* defines adapter-read ahead */
@@ -121,13 +143,16 @@ static int cm206_irq = CM206_IRQ;
 #define UART_TIMEOUT (5*HZ/100)
 #define DSB_TIMEOUT (7*HZ)	/* time for the slowest command to finish */
 
+#define LINUX_BLOCK_SIZE 512	/* WHERE is this defined? */
 #define RAW_SECTOR_SIZE 2352	/* ok, is also defined in cdrom.h */
 #define ISO_SECTOR_SIZE 2048
+#define BLOCKS_ISO (ISO_SECTOR_SIZE/LINUX_BLOCK_SIZE) /* 4 */
+#define CD_SYNC_HEAD 16		/* CD_SYNC + CD_HEAD */
 
 #ifdef STATISTICS		/* keep track of errors in counters */
-#include <linux/stats206.h>
-#define stats(i) ++cd->stats[st_ ## i]; \
-                 cd->last_stat[st_ ## i] = cd->stat_counter++;
+#define stats(i) { ++cd->stats[st_ ## i]; \
+		     cd->last_stat[st_ ## i] = cd->stat_counter++; \
+		 }
 #else
 #define stats(i) (void) 0
 #endif
@@ -141,7 +166,7 @@ static int cm206_irq = CM206_IRQ;
 typedef unsigned char uch;	/* 8-bits */
 typedef unsigned short ush;	/* 16-bits */
 
-struct toc_struct{
+struct toc_struct{		/* private copy of Table of Contents */
   uch track, fsm[3], q0;
 };
 
@@ -174,6 +199,7 @@ struct cm206_struct {
   struct toc_struct toc[101];	/* The whole table of contents + lead-out */
   uch q[10];			/* Last read q-channel info */
   uch audio_status[5];		/* last read position on pause */
+  uch media_changed;		/* record if media changed */
 };
 
 #define DISC_STATUS cd->disc_status[0]
@@ -182,7 +208,7 @@ struct cm206_struct {
 #define PAUSED cd->audio_status[0] /* misuse this memory byte! */
 #define PLAY_TO cd->toc[0]	/* toc[0] records end-time in play */
 
-static struct cm206_struct * cd;
+static struct cm206_struct * cd; /* the main memory structure */
 
 /* First, we define some polling functions. These are actually
    only being used in the initialization. */
@@ -221,62 +247,64 @@ uch send_receive_polled(int command)
    as there seems so reason for this to happen.
 */
 
-static void cm206_interrupt(int sig, void *dev_id, struct pt_regs * regs) /* you rang? */
+static void cm206_interrupt(int sig, void *dev_id, struct pt_regs * regs) 
+/* you rang? */
 {
   volatile ush fool;
-    cd->intr_ds = inw(r_data_status); /* resets data_ready, data_error,
-					 crc_error, sync_error, toc_ready 
-					 interrupts */
-    cd->intr_ls = inw(r_line_status); /* resets overrun bit */
-    /* receive buffer full? */
-    if (cd->intr_ls & ls_receive_buffer_full) {	
-      cd->intr_ur = inb(r_uart_receive); /* get order right! */
-      cd->intr_ls = inw(r_line_status); /* resets rbf interrupt */
-      if (!cd->background && cd->uart) wake_up_interruptible(&cd->uart);
-    }
-    /* data ready in fifo? */
-    else if (cd->intr_ds & ds_data_ready) { 
-      if (cd->background) ++cd->adapter_last;
-      if ((cd->wait_back || !cd->background) && cd->data) 
-	  wake_up_interruptible(&cd->data);
-      stats(data_ready);
-    }
-    /* ready to issue a write command? */
-    else if (cd->command && cd->intr_ls & ls_transmitter_buffer_empty) {
-      outw(dc_normal | (inw(r_data_status) & 0x7f), r_data_control);
-      outw(cd->command, r_uart_transmit);
-      cd->command=0;
-      if (!cd->background) wake_up_interruptible(&cd->uart);
-    }
-    /* now treat errors (at least, identify them for debugging) */
-    else if (cd->intr_ds & ds_fifo_overflow) {
-      debug(("Fifo overflow at sectors 0x%x\n", cd->sector_first));
-      fool = inw(r_fifo_output_buffer);	/* de-assert the interrupt */
-      cd->fifo_overflowed=1;	/* signal one word less should be read */
-      stats(fifo_overflow);
-    }
-    else if (cd->intr_ds & ds_data_error) {
-      debug(("Data error at sector 0x%x\n", cd->sector_first));
-      stats(data_error);
-    }
-    else if (cd->intr_ds & ds_crc_error) {
-      debug(("CRC error at sector 0x%x\n", cd->sector_first));
-      stats(crc_error);
-    }
-    else if (cd->intr_ds & ds_sync_error) {
-      debug(("Sync at sector 0x%x\n", cd->sector_first));
-      stats(sync_error);
-    }
-    else if (cd->intr_ds & ds_toc_ready) {
-				/* do something appropriate */
-    }
-    /* couldn't see why this interrupt, maybe due to init */
-    else {			
-      outw(dc_normal | READ_AHEAD, r_data_control);
-      stats(lost_intr);
-    }
+  cd->intr_ds = inw(r_data_status); /* resets data_ready, data_error,
+				       crc_error, sync_error, toc_ready 
+				       interrupts */
+  cd->intr_ls = inw(r_line_status); /* resets overrun bit */
+  if (cd->intr_ls & ls_attention) stats(attention);
+  /* receive buffer full? */
+  if (cd->intr_ls & ls_receive_buffer_full) {	
+    cd->intr_ur = inb(r_uart_receive); /* get order right! */
+    cd->intr_ls = inw(r_line_status); /* resets rbf interrupt */
+    if (!cd->background && cd->uart) wake_up_interruptible(&cd->uart);
+  }
+  /* data ready in fifo? */
+  else if (cd->intr_ds & ds_data_ready) { 
+    if (cd->background) ++cd->adapter_last;
+    if ((cd->wait_back || !cd->background) && cd->data) 
+      wake_up_interruptible(&cd->data);
+    stats(data_ready);
+  }
+  /* ready to issue a write command? */
+  else if (cd->command && cd->intr_ls & ls_transmitter_buffer_empty) {
+    outw(dc_normal | (inw(r_data_status) & 0x7f), r_data_control);
+    outw(cd->command, r_uart_transmit);
+    cd->command=0;
+    if (!cd->background) wake_up_interruptible(&cd->uart);
+  }
+  /* now treat errors (at least, identify them for debugging) */
+  else if (cd->intr_ds & ds_fifo_overflow) {
+    debug(("Fifo overflow at sectors 0x%x\n", cd->sector_first));
+    fool = inw(r_fifo_output_buffer);	/* de-assert the interrupt */
+    cd->fifo_overflowed=1;	/* signal one word less should be read */
+    stats(fifo_overflow);
+  }
+  else if (cd->intr_ds & ds_data_error) {
+    debug(("Data error at sector 0x%x\n", cd->sector_first));
+    stats(data_error);
+  }
+  else if (cd->intr_ds & ds_crc_error) {
+    debug(("CRC error at sector 0x%x\n", cd->sector_first));
+    stats(crc_error);
+  }
+  else if (cd->intr_ds & ds_sync_error) {
+    debug(("Sync at sector 0x%x\n", cd->sector_first));
+    stats(sync_error);
+  }
+  else if (cd->intr_ds & ds_toc_ready) {
+    /* do something appropiate */
+  }
+  /* couldn't see why this interrupt, maybe due to init */
+  else {			
+    outw(dc_normal | READ_AHEAD, r_data_control);
+    stats(lost_intr);
+  }
   if (cd->background && (cd->adapter_last-cd->adapter_first == cd->max_sectors
-      || cd->fifo_overflowed))
+			 || cd->fifo_overflowed))
     mark_bh(CM206_BH);	/* issue a stop read command */
   stats(interrupt);
 }
@@ -446,6 +474,20 @@ int read_background(int start, int reading)
   return 0;
 }
 
+#ifdef USE_INSW
+#define transport_data insw
+#else
+/* this routine implements insw(,,). There was a time i had the
+   impression that there would be any difference in error-behaviour. */
+void transport_data(int port, ush * dest, int count) 
+{
+  int i;
+  ush * d;
+  for (i=0, d=dest; i<count; i++, d++) 
+    *d = inw(port);
+}
+#endif
+
 int read_sector(int start)
 {
   if (cd->background) {
@@ -462,7 +504,8 @@ int read_sector(int start)
     stop_read();
     return -3;		
   }
-  insw(r_fifo_output_buffer, cd->sector, READ_AHEAD*RAW_SECTOR_SIZE/2);
+  transport_data(r_fifo_output_buffer, cd->sector, 
+		 READ_AHEAD*RAW_SECTOR_SIZE/2);
   if (read_background(start+READ_AHEAD,1)) stats(read_background);
   cd->sector_first = start; cd->sector_last = start+READ_AHEAD;
   stats(read_restarted);
@@ -514,12 +557,18 @@ void cm206_bh(void)
   }
 }
 
+/* This command clears the dsb_possible_media_change flag, so we must 
+ * retain it.
+ */
 void get_drive_status(void)
 {
   uch status[2];
   type_1_command(c_drive_status, 2, status); /* this might be done faster */
   cd->dsb=status[0];
   cd->cc=status[1];
+  cd->media_changed |= 
+    !!(cd->dsb & (dsb_possible_media_change | 
+		  dsb_drive_not_ready | dsb_tray_not_closed));
 }
 
 void get_disc_status(void)
@@ -529,55 +578,30 @@ void get_disc_status(void)
   }
 }
 
-static int cm206_open(struct inode *ip, struct file *fp)
+/* The new open. The real opeining strategy is defined in cdrom.c. */
+
+static int cm206_open(dev_t dev, int purpose) 
 {
-  if (!cd->openfiles) {
+  if (!cd->openfiles) {		/* reset only first time */
     cd->background=0;
     reset_cm260();
     cd->adapter_last = -1;	/* invalidate adapter memory */
     cd->sector_last = -1;
-    get_drive_status();
-    if (cd->dsb & dsb_tray_not_closed) {
-      int i=0;
-      type_0_command(c_close_tray, 1);
-      while (i++<10 && cd->dsb & dsb_drive_not_ready) {
-	cm206_delay(100);
-	get_drive_status();
-      }
-    }
-    if (cd->dsb & (dsb_not_useful)) return -EIO;
-    if (!(cd->dsb & dsb_disc_present)) return -ENODATA;
-    if (cd->dsb & dsb_possible_media_change) {
-      memset(cd->toc, 0, sizeof(cd->toc));
-      memset(cd->audio_status, 0, sizeof(cd->audio_status));
-    }
-    get_disc_status();
-    type_0_command(c_lock_tray,1);
-    if (!(cd->dsb & dsb_tray_locked)) {
-      debug(("Couldn't lock tray\n"));
-    }
-#if 0
-    if (!(DISC_STATUS & cds_all_audio))
-      read_background(16,0);	/* do something useful */
-#endif
   }
   ++cd->openfiles; MOD_INC_USE_COUNT;
   stats(open);
   return 0;
 }
 
-static void cm206_release(struct inode *ip, struct file *fp)
+static void cm206_release(dev_t dev)
 {
   if (cd->openfiles==1) {
     if (cd->background) {
       cd->background=0;
       stop_read();
     }
-    type_0_command(c_unlock_tray,1);
     cd->sector_last = -1;	/* Make our internal buffer invalid */
-    FIRST_TRACK = 0;	/* No valid disc status */
-    sync_dev(ip -> i_rdev);	/* These two lines are stolen */
-    invalidate_buffers(ip -> i_rdev);
+    FIRST_TRACK = 0;		/* No valid disc status */
   }
   --cd->openfiles; MOD_DEC_USE_COUNT;
 }
@@ -587,7 +611,7 @@ static void cm206_release(struct inode *ip, struct file *fp)
 void empty_buffer(int sectors) 
 {
   while (sectors>=0) {
-    insw(r_fifo_output_buffer, cd->sector + cd->fifo_overflowed, 
+    transport_data(r_fifo_output_buffer, cd->sector + cd->fifo_overflowed, 
 	 RAW_SECTOR_SIZE/2 - cd->fifo_overflowed);
     --sectors;
     ++cd->adapter_first;	/* update the current adapter sector */
@@ -598,7 +622,7 @@ void empty_buffer(int sectors)
   cd->sector_last=cd->adapter_first; /* update the buffer sector */
 }
 
-/* try_adapter. This function determines of the requested sector is is
+/* try_adapter. This function determines if the requested sector is is
    in adapter memory, or will appear there soon. Returns 0 upon
    success */
 int try_adapter(int sector)
@@ -648,18 +672,18 @@ static void do_cm206_request(void)
     }
     error=0;
     for (i=0; i<CURRENT->nr_sectors; i++) {
-      cd_sec_no = (CURRENT->sector+i)/4; /* 4 times 512 bytes */
-      quarter = (CURRENT->sector+i) % 4; 
-      dest = CURRENT->buffer + i*512;
+      cd_sec_no = (CURRENT->sector+i)/BLOCKS_ISO; /* 4 times 512 bytes */
+      quarter = (CURRENT->sector+i) % BLOCKS_ISO; 
+      dest = CURRENT->buffer + i*LINUX_BLOCK_SIZE;
       /* is already in buffer memory? */
       if (cd->sector_first <= cd_sec_no && cd_sec_no < cd->sector_last) {
-	source = ((uch *) cd->sector) + 16 + 
-	  quarter*512 + (cd_sec_no-cd->sector_first)*RAW_SECTOR_SIZE;
- 	memcpy(dest, source, 512); 
+	source = ((uch *) cd->sector) + 16 + quarter*LINUX_BLOCK_SIZE 
+	  + (cd_sec_no-cd->sector_first)*RAW_SECTOR_SIZE;
+ 	memcpy(dest, source, LINUX_BLOCK_SIZE); 
       }
       else if (!try_adapter(cd_sec_no) || !read_sector(cd_sec_no)) {
-	source =  ((uch *) cd->sector)+16+quarter*512;
-	memcpy(dest, source, 512); 
+	source =  ((uch *) cd->sector)+16+quarter*LINUX_BLOCK_SIZE;
+	memcpy(dest, source, LINUX_BLOCK_SIZE); 
       }
       else {
 	error=1;
@@ -667,27 +691,6 @@ static void do_cm206_request(void)
     }
     end_request(!error);
   }
-}
-
-int get_multi_session_info(struct cdrom_multisession * mssp)
-{
-  if (!FIRST_TRACK) get_disc_status();
-  if (mssp) {
-    if (DISC_STATUS & cds_multi_session) { /* multi-session */
-      if (mssp->addr_format == CDROM_LBA)
-      	mssp->addr.lba = fsm2lba(&cd->disc_status[3]);
-      else {
-      	mssp->addr.msf.frame = cd->disc_status[3];
-      	mssp->addr.msf.second = cd->disc_status[4];
-      	mssp->addr.msf.minute = cd->disc_status[5];
-      }
-      mssp->xa_flag = 1;
-    } else {
-      mssp->xa_flag = 0;
-    }
-    return 1;
-  }
-  return 0;
 }
 
 /* Audio support. I've tried very hard, but the cm206 drive doesn't 
@@ -753,11 +756,6 @@ int get_toc_lba(uch track)
       cd->toc[ct].track=q[1];	/* lead out still 0xaa */
       fsm(l, cd->toc[ct].fsm);
       cd->toc[ct].q0 = q[0];	/* contains adr and ctrl info */
-/*
-      if (ct==LAST_TRACK+1) 
-	printk("Leadout %x %x %x %x %d %d %d \n", q[1], q[3], q[4], q[5],
-	       q[7], q[8], q[9]);
-*/
       if (ct==track) return l;
     }
     old_lba=lba;
@@ -782,6 +780,7 @@ void update_toc_entry(uch track)
   if (!cd->toc[track].track) get_toc_lba(track);
 }
 
+/* return 0 upon success */
 int read_toc_header(struct cdrom_tochdr * hp)
 {
   if (!FIRST_TRACK) get_disc_status();
@@ -792,9 +791,9 @@ int read_toc_header(struct cdrom_tochdr * hp)
     cd->toc[1].track=1;		/* fill in first track position */
     for (i=0; i<3; i++) cd->toc[1].fsm[i] = cd->disc_status[3+i];
     update_toc_entry(LAST_TRACK+1);		/* find most entries */
-    return 1;
+    return 0;
   }
-  return 0;
+  return -1;
 }  
 
 void play_from_to_msf(struct cdrom_msf* msfp)
@@ -859,120 +858,54 @@ int get_current_q(struct cdrom_subchnl * qp)
   else if (PAUSED) 
     qp->cdsc_audiostatus = CDROM_AUDIO_PAUSED;
   else qp->cdsc_audiostatus = CDROM_AUDIO_NO_STATUS;
-  return 1;
+  return 0;
 }
 
+void invalidate_toc(void)
+{
+  memset(cd->toc, 0, sizeof(cd->toc));
+  memset(cd->disc_status, 0, sizeof(cd->disc_status));
+}
+
+/* cdrom.c guarantees that cdte_format == CDROM_MSF */
 void get_toc_entry(struct cdrom_tocentry * ep)
 {
   uch track = normalize_track(ep->cdte_track);
   update_toc_entry(track);
-  if (ep->cdte_format == CDROM_MSF) {
-    ep->cdte_addr.msf.frame = cd->toc[track].fsm[0];
-    ep->cdte_addr.msf.second = cd->toc[track].fsm[1];
-    ep->cdte_addr.msf.minute = cd->toc[track].fsm[2];
-  } 
-  else ep->cdte_addr.lba = fsm2lba(cd->toc[track].fsm);
+  ep->cdte_addr.msf.frame = cd->toc[track].fsm[0];
+  ep->cdte_addr.msf.second = cd->toc[track].fsm[1];
+  ep->cdte_addr.msf.minute = cd->toc[track].fsm[2];
   ep->cdte_adr = cd->toc[track].q0 & 0xf; 
   ep->cdte_ctrl = cd->toc[track].q0 >> 4;
   ep->cdte_datamode=0;
 }
-  
-/* Ioctl. I have made the statistics accessible through an ioctl
-   call. The constant is defined in cm206.h, it shouldn't clash with
-   the standard Linux ioctls. Multisession info is gathered at
-   run-time, this may turn out to be slow. */
 
-static int cm206_ioctl(struct inode * inode, struct file * file, 
-		       unsigned int cmd, unsigned long arg)
+/* Audio ioctl.  Ioctl commands connected to audio are in such an
+ * idiosyncratic i/o format, that we leave these untouched. Return 0
+ * upon success. Memory checking has been done by cdrom_ioctl(), the
+ * calling function, as well as LBA/MSF sanatization.
+*/
+int cm206_audio_ioctl(dev_t dev, unsigned int cmd, void * arg)
 {
   switch (cmd) {
-#ifdef STATISTICS
-  case CM206CTL_GET_STAT:
-    if (arg >= NR_STATS) return -EINVAL;
-    else return cd->stats[arg];
-  case CM206CTL_GET_LAST_STAT:
-    if (arg >= NR_STATS) return -EINVAL;
-    else return cd->last_stat[arg];
-#endif    
-  case CDROMMULTISESSION: {
-    struct cdrom_multisession ms_info;
-    int st;
-    stats(ioctl_multisession);
-
-    st=verify_area(VERIFY_WRITE, (void *) arg, 
-		   sizeof(struct cdrom_multisession));
-    if (st) return (st);
-    memcpy_fromfs(&ms_info, (struct cdrom_multisession *) arg,
-		  sizeof(struct cdrom_multisession));
-    get_multi_session_info(&ms_info);
-    memcpy_tofs((struct cdrom_multisession *) arg, &ms_info, 
-		  sizeof(struct cdrom_multisession));
+  case CDROMREADTOCHDR: 
+    return read_toc_header((struct cdrom_tochdr *) arg);
+  case CDROMREADTOCENTRY: 	
+    get_toc_entry((struct cdrom_tocentry *) arg);
     return 0;
-  }
-  case CDROMRESET:		/* If needed, it's probably too late anyway */
-    stop_read();
-    reset_cm260();
-    outw(dc_normal | dc_break | READ_AHEAD, r_data_control);
-    udelay(1000);		/* 750 musec minimum */
-    outw(dc_normal | READ_AHEAD, r_data_control);
-    cd->sector_last = -1;	/* flag no data buffered */
-    cd->adapter_last = -1;    
+  case CDROMPLAYMSF: 
+    play_from_to_msf((struct cdrom_msf *) arg);
     return 0;
-  }
-
-  get_drive_status();
-  if (cd->dsb & (dsb_drive_not_ready | dsb_tray_not_closed) )
-    return -EAGAIN; 
-
-  switch (cmd) {
-  case CDROMREADTOCHDR: {
-    struct cdrom_tochdr header;
-    int st;
-
-    st=verify_area(VERIFY_WRITE, (void *) arg, sizeof(header));
-    if (st) return (st);
-    if (read_toc_header(&header)) {
-      memcpy_tofs((struct cdrom_tochdr *) arg, &header, sizeof(header));
-      return 0;
-    }
-    else return -ENODATA;
-  }
-  case CDROMREADTOCENTRY: {	
-    struct cdrom_tocentry entry;
-    int st;
-
-    st=verify_area(VERIFY_WRITE, (void *) arg, sizeof(entry));
-    if (st) return (st);
-    memcpy_fromfs(&entry, (struct cdrom_tocentry *) arg, sizeof entry);
-    get_toc_entry(&entry);
-    memcpy_tofs((struct cdrom_tocentry *) arg, &entry, sizeof entry);
+  case CDROMPLAYTRKIND:		/* admittedly, not particulary beautiful */
+    play_from_to_track(((struct cdrom_ti *)arg)->cdti_trk0, 
+		       ((struct cdrom_ti *)arg)->cdti_trk1);
     return 0;
-  }
-  case CDROMPLAYMSF: {
-    struct cdrom_msf msf;
-    int st;
-
-    st=verify_area(VERIFY_READ, (void *) arg, sizeof(msf));
-    if (st) return (st);
-    memcpy_fromfs(&msf, (struct cdrom_mdf *) arg, sizeof msf);
-    play_from_to_msf(&msf);
-    return 0;
-  }
-  case CDROMPLAYTRKIND: {
-    struct cdrom_ti track_index;
-    int st;
-
-    st=verify_area(VERIFY_READ, (void *) arg, sizeof(track_index));
-    if (st) return (st);
-    memcpy_fromfs(&track_index, (struct cdrom_ti *) arg, sizeof(track_index));
-    play_from_to_track(track_index.cdti_trk0, track_index.cdti_trk1);
-    return 0;
-  }
   case CDROMSTOP: 
     PAUSED=0;
     if (cd->dsb & dsb_play_in_progress) return type_0_command(c_stop, 1);
-    return 0;
+    else return 0;
   case CDROMPAUSE: 
+    get_drive_status();
     if (cd->dsb & dsb_play_in_progress) {
       type_0_command(c_stop, 1);
       type_1_command(c_audio_status, 5, cd->audio_status);
@@ -983,62 +916,181 @@ static int cm206_ioctl(struct inode * inode, struct file * file,
     if (PAUSED) play_from_to_track(0,0);
     PAUSED=0;
     return 0;
-  case CDROMEJECT:
-    PAUSED=0;
-    if (cd->openfiles == 1) {	/* Must do an open before an eject! */
-      type_0_command(c_open_tray,1);
-      memset(cd->toc, 0, sizeof(cd->toc));
-      memset(cd->disc_status, 0, sizeof(cd->disc_status));
-      return 0;
-    }
-    else return -EBUSY;
   case CDROMSTART:
   case CDROMVOLCTRL:
     return 0;
-  case CDROMSUBCHNL: {
-    struct cdrom_subchnl q;
-    int st;
-
-    st=verify_area(VERIFY_WRITE, (void *) arg, sizeof(q));
-    if (st) return (st);
-    memcpy_fromfs(&q, (struct cdrom_subchnl *) arg, sizeof q);
-    if (get_current_q(&q)) {
-      memcpy_tofs((struct cdrom_subchnl *) arg, &q, sizeof q);
-      return 0;
-    }
-    else return -cmd;
+  case CDROMSUBCHNL: 
+    return get_current_q((struct cdrom_subchnl *)arg);
+  default:
+    return -EINVAL;
   }
-  case CDROM_GET_UPC: {
-    uch upc[10];
-    int st;
+}
 
-    st=verify_area(VERIFY_WRITE, (void *) arg, 8);
-    if (st) return (st);
-    if (type_1_command(c_read_upc, 10, upc)) return -EIO;
-    memcpy_tofs((uch *) arg, &upc[1], 8);
-    return 0;
-  } 
+/* Ioctl. These ioctls are specific to the cm206 driver. I have made
+   some driver statistics accessible through ioctl calls.
+ */
+
+static int cm206_ioctl(dev_t dev, unsigned int cmd, unsigned long arg)
+{
+  switch (cmd) {
+#ifdef STATISTICS
+  case CM206CTL_GET_STAT:
+    if (arg >= NR_STATS) return -EINVAL;
+    else return cd->stats[arg];
+  case CM206CTL_GET_LAST_STAT:
+    if (arg >= NR_STATS) return -EINVAL;
+    else return cd->last_stat[arg];
+#endif    
   default:
     debug(("Unknown ioctl call 0x%x\n", cmd));
     return -EINVAL;
   }
 }     
 
-/* from lmscd.c */
-static struct file_operations cm206_fops = {
-	NULL,			/* lseek */
-	block_read,		/* read - general block-dev read */
-	block_write,		/* write - general block-dev write */
-	NULL,			/* readdir */
-	NULL,			/* select */
-	cm206_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	cm206_open,		/* open */
-	cm206_release,		/* release */
-	NULL,			/* fsync */
-	NULL,			/* fasync */
-	NULL,			/* media_change */
-	NULL			/* revalidate */
+int cm206_media_changed(dev_t dev) 
+{
+  if (cd != NULL) {
+    int r;
+    get_drive_status();		/* ensure cd->media_changed OK */
+    r = cd->media_changed;
+    cd->media_changed = 0;	/* clear bit */
+    return r;
+  }
+  else return -EIO;
+}
+
+/* The new generic cdrom support. Routines should be consice, most of
+   the logic should be in cdrom.c */
+
+/* returns number of times device is in use */
+int cm206_open_files(dev_t dev)	
+{
+  if (cd) return cd->openfiles;
+  return -1;
+}
+
+/* controls tray movement */
+int cm206_tray_move(dev_t dev, int position) 
+{
+  if (position) {		/* 1: eject */
+    type_0_command(c_open_tray,1);
+    invalidate_toc();
+  } 
+  else type_0_command(c_close_tray, 1);	/* 0: close */
+  return 0;
+}
+
+/* gives current state of the drive */
+int cm206_drive_status(dev_t dev)
+{
+  get_drive_status();
+  if (cd->dsb & dsb_tray_not_closed) return CDS_TRAY_OPEN;
+  if (!(cd->dsb & dsb_disc_present)) return CDS_NO_DISC; 
+  if (cd->dsb & dsb_drive_not_ready) return CDS_DRIVE_NOT_READY;
+  return CDS_DISC_OK;
+}
+ 
+/* gives current state of disc in drive */
+int cm206_disc_status(dev_t dev)
+{
+  uch xa;
+  get_drive_status();
+  if ((cd->dsb & dsb_not_useful) | !(cd->dsb & dsb_disc_present))
+    return CDS_NO_DISC;
+  get_disc_status();
+  if (DISC_STATUS & cds_all_audio) return CDS_AUDIO;
+  xa = DISC_STATUS >> 4;
+  switch (xa) {
+  case 0: return CDS_DATA_1;	/* can we detect CDS_DATA_2? */
+  case 1: return CDS_XA_2_1;	/* untested */
+  case 2: return CDS_XA_2_2;
+  }
+  return 0;
+}
+
+/* locks or unlocks door lock==1: lock; return 0 upon success */
+int cm206_lock_door(dev_t dev, int lock)
+{
+  uch command = (lock) ? c_lock_tray : c_unlock_tray;
+  type_0_command(command, 1);	/* wait and get dsb */
+  /* the logic calculates the success, 0 means successful */
+  return lock ^ ((cd->dsb & dsb_tray_locked) != 0);
+}
+  
+/* Although a session start should be in LBA format, we return it in 
+   MSF format because it is slightly easier, and the new generic ioctl
+   will take care of the necessary conversion. */
+int cm206_get_last_session(dev_t dev, struct cdrom_multisession * mssp) 
+{
+  if (!FIRST_TRACK) get_disc_status();
+  if (mssp != NULL) {
+    if (DISC_STATUS & cds_multi_session) { /* multi-session */
+      mssp->addr.msf.frame = cd->disc_status[3];
+      mssp->addr.msf.second = cd->disc_status[4];
+      mssp->addr.msf.minute = cd->disc_status[5];
+      mssp->addr_format = CDROM_MSF;
+      mssp->xa_flag = 1;
+    } else {
+      mssp->xa_flag = 0;
+    }
+    return 1;
+  }
+  return 0;
+}
+
+int cm206_get_upc(dev_t dev, struct cdrom_mcn * mcn)
+{
+  uch upc[10];
+  char * ret = mcn->medium_catalog_number;
+  int i;
+  
+  if (type_1_command(c_read_upc, 10, upc)) return -EIO;
+  for (i=0; i<13; i++) {
+    int w=i/2+1, r=i%2;
+    if (r) ret[i] = 0x30 | (upc[w] & 0x0f);
+    else ret[i] = 0x30 | ((upc[w] >> 4) & 0x0f);
+  }
+  ret[13] = '\0';
+  return 0;
+} 
+
+int cm206_reset(dev_t dev)
+{
+  stop_read();
+  reset_cm260();
+  outw(dc_normal | dc_break | READ_AHEAD, r_data_control);
+  udelay(1000);			/* 750 musec minimum */
+  outw(dc_normal | READ_AHEAD, r_data_control);
+  cd->sector_last = -1;		/* flag no data buffered */
+  cd->adapter_last = -1;    
+  invalidate_toc();
+  return 0;
+}
+
+static struct cdrom_device_ops cm206_dops = {
+  cm206_open,			/* open */
+  cm206_release,		/* release */
+  cm206_open_files,		/* number of open_files */
+  cm206_drive_status,		/* drive status */
+  cm206_disc_status,		/* disc status */
+  cm206_media_changed,		/* media changed */
+  cm206_tray_move,		/* tray move */
+  cm206_lock_door,		/* lock door */
+  NULL,				/* select speed */
+  NULL,				/* select disc */
+  cm206_get_last_session,	/* get last session */
+  cm206_get_upc,		/* get universal product code */
+  cm206_reset,			/* hard reset */
+  cm206_audio_ioctl,		/* audio ioctl */
+  cm206_ioctl,			/* device-specific ioctl */
+  CDC_CLOSE_TRAY | CDC_OPEN_TRAY | CDC_LOCK | CDC_MULTI_SESSION |
+    CDC_MEDIA_CHANGED | CDC_MCN | CDC_PLAY_AUDIO, /* capability */
+  0,				/* mask flags */
+  2.0,				/* maximum speed */
+  1,				/* number of minor devices */
+  1,				/* number of discs */
+  0,				/* options, ignored */
+  0				/* mc_flags, ignored */
 };
 
 /* This routine gets called during init if thing go wrong, can be used
@@ -1047,8 +1099,12 @@ void cleanup(int level)
 {
   switch (level) {
   case 4: 
+    if (unregister_cdrom(MAJOR_NR, "cm206")) {
+      printk("Can't unregister cdrom cm206\n");
+      return;
+    }
     if (unregister_blkdev(MAJOR_NR, "cm206")) {
-      printk("Can't unregister cm206\n");
+      printk("Can't unregister major cm206\n");
       return;
     }
   case 3: 
@@ -1074,25 +1130,16 @@ void cleanup(int level)
 int probe_base_port(int base)
 {
   int b=0x300, e=0x370;		/* this is the range of start addresses */
-  volatile int fool;
-#if 0
-  const pattern1=0x65, pattern2=0x1a;
-#endif
+  volatile int fool, i;
 
   if (base) b=e=base;
   for (base=b; base<=e; base += 0x10) {
     if (check_region(base, 0x10)) continue;
-    fool = inw(base+2);		/* empty possibly uart_receive_buffer */
+    for (i=0; i<3; i++) 
+      fool = inw(base+2); /* empty possibly uart_receive_buffer */
     if((inw(base+6) & 0xffef) != 0x0001 || /* line_status */
        (inw(base) & 0xad00) != 0) /* data status */
       continue;
-#if 0				/* writes... dangerous... */
-    outw(dc_normal | pattern1, base+8); 
-    if ((inw(base) & 0x7f) != pattern1) continue;
-    outw(dc_normal | pattern2, base+8);
-    if ((inw(base) & 0x7f) != pattern2) continue;
-    outw(dc_normal | READ_AHEAD, base+8);
-#endif
     return(base);
   }
   return 0;
@@ -1106,7 +1153,7 @@ int probe_irq(int nr) {
   sti(); 
   irqs = probe_irq_on();
   reset_cm260();		/* causes interrupt */
-  udelay(10);			/* wait for it */
+  udelay(100);			/* wait for it */
   irq = probe_irq_off(irqs);
   outw(dc_normal | READ_AHEAD, r_data_control);	/* services interrupt */
   if (nr && irq!=nr && irq>0) return 0;	/* wrong interrupt happened */
@@ -1119,7 +1166,7 @@ int cm206_init(void)
   uch e=0;
   long int size=sizeof(struct cm206_struct);
 
-  printk(KERN_INFO "cm206: v" VERSION);
+  printk(KERN_INFO VERSION);
   cm206_base = probe_base_port(auto_probe ? 0 : cm206_base);
   if (!cm206_base) {
     printk(" can't find adapter!\n");
@@ -1162,11 +1209,16 @@ int cm206_init(void)
     return -EIO;
   }
   printk(".\n");
-  if (register_blkdev(MAJOR_NR, "cm206", &cm206_fops) != 0) {
+  if (register_blkdev(MAJOR_NR, "cm206", &cdrom_fops) != 0) {
     printk("Cannot register for major %d!\n", MAJOR_NR);
     cleanup(3);
     return -EIO;
   }
+  if (register_cdrom(MAJOR_NR, "cm206", &cm206_dops) != 0) {
+    printk("Cannot register for cdrom %d!\n", MAJOR_NR);
+    cleanup(3);
+    return -EIO;
+  }    
   blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
   read_ahead[MAJOR_NR] = 16;	/* reads ahead what? */
   init_bh(CM206_BH, cm206_bh);
@@ -1235,3 +1287,8 @@ void cm206_setup(char *s, int *p)
   }
 }
 #endif /* MODULE */
+/*
+ * Local variables:
+ * compile-command: "gcc -DMODULE -D__KERNEL__ -I/usr/src/linux/include/linux -Wall -Wstrict-prototypes -O2 -m486 -c cm206.c -o cm206.o"
+ * End:
+ */

@@ -879,8 +879,8 @@ static inline int extract_entropy(struct random_bucket *r, char * buf,
 		HASH_TRANSFORM(tmp, r->pool);
 
 		/*
-		 * In case the hash function has some recognizeable
-		 * output pattern, we fold it half.
+		 * In case the hash function has some recognizable
+		 * output pattern, we fold it in half.
 		 */
 		cp = (char *) tmp;
 		dp = cp + (HASH_BUFFER_SIZE*sizeof(__u32)) - 1;

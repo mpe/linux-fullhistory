@@ -12,7 +12,7 @@
 
 /*
  * Uncomment the following line for the new kerneld protocol
- * This includes the pid of the kernel level requestor into the kerneld header
+ * This includes the pid of the kernel level requester into the kerneld header
  */
 /*
 #define NEW_KERNELD_PROTOCOL
